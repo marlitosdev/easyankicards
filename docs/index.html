@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a7f37">
+<title>EasyAnkiCards · by MarlitosDev</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#fff; --texto:#1a1a2e; --sutil:#5b6472;
+  --verde:#1a7f37; --verde-claro:#eaf6ea; --verde-borda:#4caf50;
+  --laranja:#b45309; --laranja-claro:#fdf2df; --laranja-borda:#e8940a;
+  --azul:#2563eb; --cinza:#6b7280; --roxo:#7c3aed; --ciano:#0e7490;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#15171c; --panel:#1f2229; --texto:#e8e8ec; --sutil:#9aa4b2;
+         --verde-claro:#1c2a1c; --laranja-claro:#33291a; --laranja:#f0a04b; }
+}
+*{box-sizing:border-box} html,body{margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);
+     color:var(--texto);padding-bottom:84px}
+header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--panel);
+       box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:5}
+header h1{font-size:19px;margin:0;flex:1}
+header h1 small{display:block;font-size:11px;font-weight:400;color:var(--sutil);font-style:italic}
+select,button,input,textarea{font:inherit;color:inherit}
+.btn{border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:600;color:#fff}
+.btn:active{transform:scale(.97)}
+.btn-cinza{background:var(--cinza)} .btn-verde{background:var(--verde)}
+.btn-azul{background:var(--azul)} .btn-roxo{background:var(--roxo)} .btn-ciano{background:var(--ciano)}
+main{max-width:840px;margin:0 auto;padding:12px}
+.grupo{background:var(--panel);border-radius:12px;padding:12px;margin-bottom:12px;
+       box-shadow:0 1px 3px rgba(0,0,0,.06)}
+label{font-size:13px;color:var(--sutil);display:block;margin-bottom:3px}
+input[type=text]{width:100%;border:1px solid #c8ccd4;border-radius:8px;padding:9px;
+                 background:transparent}
+#destino{font-size:12px;color:var(--sutil);margin:6px 0 2px;line-height:1.4}
+textarea{width:100%;min-height:180px;border:1px solid #c8ccd4;border-radius:8px;
+         padding:10px;background:transparent;font-family:ui-monospace,Consolas,monospace;
+         font-size:13px;resize:vertical}
+.linha{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+#resumo{font-size:12.5px;color:var(--sutil);margin:4px 0 8px}
+.card{border:2px solid var(--verde-borda);background:var(--verde-claro);border-radius:10px;
+      padding:9px 11px;margin-bottom:8px}
+.card.suspeito{border-color:var(--laranja-borda);background:var(--laranja-claro)}
+.card .cab{display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;
+           color:var(--sutil);gap:8px;align-items:center}
+.card.suspeito .cab .titulo{color:var(--laranja)}
+.card .frente{font-weight:700;font-size:14px;margin-top:3px;word-break:break-word}
+.card .verso{font-size:13.5px;margin-top:2px;word-break:break-word}
+.card .tags{font-size:11.5px;color:var(--sutil);margin-top:3px}
+.card .issue{font-size:11.5px;color:var(--laranja);font-style:italic;margin-top:3px}
+.card.ignorado{border-color:var(--laranja-borda);background:var(--laranja-claro);
+               color:var(--laranja);font-size:12.5px}
+.rodape{position:fixed;left:0;right:0;bottom:0;background:var(--panel);
+        box-shadow:0 -2px 8px rgba(0,0,0,.1);padding:10px 14px;display:flex;gap:8px;
+        justify-content:center;z-index:5}
+#status{font-size:11.5px;color:var(--sutil);text-align:center;margin-top:6px}
+dialog{border:0;border-radius:14px;max-width:640px;width:92%;padding:0;color:var(--texto);
+       background:var(--panel)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dlg-corpo{padding:16px;max-height:65vh;overflow:auto;white-space:pre-wrap;
+           font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.45}
+.dlg-rodape{display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap;justify-content:center;
+            border-top:1px solid rgba(128,128,128,.25)}
+@media(min-width:760px){ .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px} }
+</style>
+</head>
+<body>
+<header>
+  <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
+  <h1>EasyAnkiCards <small>by MarlitosDev · <span id="versao"></span></small></h1>
+  <select id="selIdioma" aria-label="Idioma">
+    <option value="pt">Português</option>
+    <option value="en">English</option>
+  </select>
+  <button class="btn btn-cinza" id="btnAjuda" data-i18n="help_btn"></button>
+</header>
+
+<main>
+  <div class="grupo">
+    <label for="deck" data-i18n="deck_label"></label>
+    <input type="text" id="deck" value="Meu Baralho">
+    <div id="destino"></div>
+    <div class="linha">
+      <button class="btn btn-cinza" id="btnCaminho" data-i18n="copy_path_btn"></button>
+    </div>
+    <label for="tags" style="margin-top:10px" data-i18n="tags_label"></label>
+    <input type="text" id="tags">
+  </div>
+
+  <div class="duas-colunas">
+    <div class="grupo">
+      <label data-i18n="editor_label"></label>
+      <textarea id="editor" spellcheck="false"></textarea>
+      <div class="linha">
+        <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
+      </div>
+    </div>
+    <div class="grupo">
+      <label data-i18n="preview_label"></label>
+      <div id="resumo">—</div>
+      <div id="cartoes"></div>
+    </div>
+  </div>
+</main>
+
+<div class="rodape">
+  <div style="width:100%;max-width:600px">
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
+      <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
+    </div>
+    <div id="status"></div>
+  </div>
+</div>
+
+<dialog id="dlgAjuda">
+  <div class="dlg-corpo" id="ajudaTexto"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
+    <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
+    <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+<script>
+window.__sqlPromise = initSqlJs({
+  locateFile: f => "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/" + f
+});
+</script>
+<script src="i18n.js"></script>
+<script src="parser.js"></script>
+<script src="anki.js"></script>
+<script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
