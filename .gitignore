@@ -1,0 +1,13 @@
+# Artefatos de build do PyInstaller
+.build_tmp/
+build/
+dist/
+release/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+
+# Saídas geradas pelo app durante testes
+*.apkg
