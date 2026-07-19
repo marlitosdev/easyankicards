@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "5.6.0";
+const VERSAO = "5.7.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -695,6 +695,46 @@ $("btnInserir").onclick = () => {
 document.querySelectorAll(".ic-ajuda[data-hint]").forEach((b) => {
   b.onclick = () => { $("dicaCampo").textContent = t(b.dataset.hint); };
 });
+
+
+/* -------------- prompt de IA na tela principal ---------------------- */
+
+let promptAtivo = "prompt_full";
+
+function mostrarPrompt(tipo) {
+  promptAtivo = tipo;
+  $("promptTexto").value = t(tipo);              // usuário VÊ o texto que copiará
+  $("btnTabFull").classList.toggle("ativa", tipo === "prompt_full");
+  $("btnTabMini").classList.toggle("ativa", tipo === "prompt_mini");
+}
+
+$("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); $("dlgPrompt").showModal(); };
+$("btnTabFull").onclick = () => mostrarPrompt("prompt_full");
+$("btnTabMini").onclick = () => mostrarPrompt("prompt_mini");
+$("btnPromptFechar").onclick = () => $("dlgPrompt").close();
+$("btnPromptCopiar").onclick = async () => {
+  await navigator.clipboard.writeText($("promptTexto").value);
+  $("btnPromptCopiar").textContent = t("copied");
+  setTimeout(() => { $("btnPromptCopiar").textContent = t("prompt_copy"); }, 2000);
+  $("status").textContent = t("prompt_copied_status");
+};
+
+/* ------- embaralhar alternativas (a correta acompanha a troca) ------- */
+
+$("btnEmbaralhar").onclick = () => {
+  const ids = ["mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"];
+  const preenchidos = ids.map((id) => $(id).value.trim()).filter(Boolean);
+  if (preenchidos.length < 2) return;
+  const corretaTxt = preenchidos[Math.min(parseInt($("mcCorreta").value, 10),
+                                          preenchidos.length - 1)];
+  for (let i = preenchidos.length - 1; i > 0; i--) {   // Fisher-Yates
+    const j = Math.floor(Math.random() * (i + 1));
+    [preenchidos[i], preenchidos[j]] = [preenchidos[j], preenchidos[i]];
+  }
+  ids.forEach((id, i) => { $(id).value = preenchidos[i] || ""; });
+  $("mcCorreta").value = preenchidos.indexOf(corretaTxt);   // segue a correta
+  atualizarNovoPreview();
+};
 
 /* ----------------------------- eventos ----------------------------- */
 
