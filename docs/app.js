@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "5.8.0";
+const VERSAO = "5.9.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -337,52 +337,129 @@ function botoesSalvar(div, salvar, r, idx) {
   div.append(acoes);
 }
 
+/* Lista as lacunas {{cN::...}} presentes num texto (uma entrada por N). */
+function listarLacunas(txt) {
+  const out = [];
+  const re = /\{\{c(\d+)::([\s\S]*?)\}\}/g;
+  let m;
+  while ((m = re.exec(txt)) !== null) {
+    if (out.some((l) => l.n === m[1])) continue;
+    const inner = m[2].split("::");
+    out.push({ n: m[1], ans: (inner[0] || "").trim(), hint: (inner[1] || "").trim() });
+  }
+  return out;
+}
+
 function montarEdicao(div, c, r, idx) {
   const inFrente = campoEditavel(div, "field_front", "hint_front", c.front, true);
   botoesLacuna(div, inFrente);          // marcar/limpar {{c1::...}} na seleção
 
-  // Lacuna existente pode virar múltipla escolha: campos para as erradas.
-  // (pré-preenche com as alternativas já embutidas, se houver)
-  let inputsErr = [];
-  if (CLOZE_RE.test(c.front)) {
-    const lbl = document.createElement("span");
-    lbl.className = "mini-lbl";
-    lbl.textContent = t("edit_mc_label") + " ";
+  /* ---- Editor estruturado de lacunas: UM painel por cN ----
+     Cada painel tem a resposta correta (editável) e o comportamento:
+     ocultação simples OU múltipla escolha (com campos das erradas).
+     Os painéis se reconstroem quando o texto da frente muda; o que o
+     usuário digitou em cada painel é preservado pelo número da lacuna. */
+  const estado = {};        // n -> {ans, mode, wrongs[], tocado}
+  const lacWrap = document.createElement("div");
+  div.append(lacWrap);
+  let lacTimer = null;
+
+  function construirPaineis() {
+    lacWrap.innerHTML = "";
+    const lacs = listarLacunas(inFrente.value);
+    if (!lacs.length) return;
+    const cab = document.createElement("span");
+    cab.className = "mini-lbl";
+    cab.textContent = t("edit_mc_label") + " ";
     const aj = document.createElement("button");
     aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
     aj.onclick = () => alert(t("hint_mc_cloze"));
-    lbl.append(aj);
-    div.append(lbl);
-    const m = c.front.match(/\{\{c\d+::([\s\S]*?)\}\}/);
-    const inner = m ? m[1].split("::") : [""];
-    const ans = (inner[0] || "").trim();
-    const atuais = (inner[1] || "").split("/").map((s) => s.trim())
-      .filter((o) => o && o !== ans);
-    for (let i = 0; i < 4; i++) {
-      const inp = document.createElement("input");
-      inp.type = "text"; inp.value = atuais[i] || "";
-      inp.placeholder = (i + 1);
-      div.append(inp);
-      inputsErr.push(inp);
-    }
+    cab.append(aj);
+    lacWrap.append(cab);
+
+    lacs.forEach((l) => {
+      let st = estado[l.n];
+      if (!st || !st.tocado) {
+        st = estado[l.n] = {
+          ans: l.ans,
+          mode: l.hint.includes("/") ? "mc" : "occ",
+          wrongs: l.hint ? l.hint.split("/").map((s) => s.trim())
+                             .filter((o) => o && o !== l.ans) : [],
+          tocado: st ? st.tocado : false,
+        };
+      }
+      const box = document.createElement("div");
+      box.className = "lac-box";
+      const tit = document.createElement("div");
+      tit.className = "titulo-lac";
+      tit.textContent = t("lacuna_label", { n: l.n });
+      box.append(tit);
+
+      const lblAns = document.createElement("span");
+      lblAns.className = "mini-lbl";
+      lblAns.textContent = t("lacuna_answer");
+      const inAns = document.createElement("input");
+      inAns.type = "text"; inAns.value = st.ans;
+      inAns.oninput = () => { st.ans = inAns.value; st.tocado = true; };
+      box.append(lblAns, inAns);
+
+      const lblModo = document.createElement("span");
+      lblModo.className = "mini-lbl";
+      lblModo.textContent = t("lacuna_mode");
+      const sel = document.createElement("select");
+      sel.style.cssText = "width:100%;padding:6px;border-radius:6px;margin-top:2px";
+      [["occ", t("mode_occ")], ["mc", t("mode_mc")]].forEach(([v, rot]) => {
+        const op = document.createElement("option");
+        op.value = v; op.textContent = rot;
+        sel.append(op);
+      });
+      sel.value = st.mode;
+      box.append(lblModo, sel);
+
+      const wrongsDiv = document.createElement("div");
+      wrongsDiv.style.display = st.mode === "mc" ? "" : "none";
+      for (let i = 0; i < 4; i++) {
+        const inp = document.createElement("input");
+        inp.type = "text"; inp.placeholder = (i + 1);
+        inp.value = st.wrongs[i] || "";
+        inp.oninput = () => { st.wrongs[i] = inp.value; st.tocado = true; };
+        wrongsDiv.append(inp);
+      }
+      box.append(wrongsDiv);
+      sel.onchange = () => {
+        st.mode = sel.value; st.tocado = true;
+        wrongsDiv.style.display = st.mode === "mc" ? "" : "none";
+      };
+      lacWrap.append(box);
+    });
   }
+  construirPaineis();
+  inFrente.addEventListener("input", () => {
+    clearTimeout(lacTimer);
+    lacTimer = setTimeout(construirPaineis, 500);
+  });
 
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
   const inTags = campoEditavel(div, "field_tags", "hint_tags", c.tags.join(", "), false);
+
   botoesSalvar(div, () => {
     let front = inFrente.value.trim();
-    // reconstrói a 1ª lacuna com (ou sem) alternativas
-    const m = front.match(/\{\{c(\d+)::([\s\S]*?)\}\}/);
-    if (m && inputsErr.length) {
-      const ans = m[2].split("::")[0].trim();
-      const erradas = inputsErr.map((i) => i.value.trim())
-        .filter((o) => o && o !== ans);
-      const nova = erradas.length
-        ? "{{c" + m[1] + "::" + ans + "::" +
-          shuffleSeeded([ans].concat(erradas), hashStr(ans + "|" + erradas.join("|"))).join("/") + "}}"
-        : "{{c" + m[1] + "::" + ans + "}}";
-      front = front.replace(m[0], nova);
-    }
+    // reescreve CADA lacuna conforme o painel correspondente
+    front = front.replace(/\{\{c(\d+)::([\s\S]*?)\}\}/g, (m0, n, inner) => {
+      const st = estado[n];
+      if (!st) return m0;
+      const ans = (st.ans || inner.split("::")[0]).trim();
+      if (!ans) return m0;
+      if (st.mode === "mc") {
+        const wr = (st.wrongs || []).map((w) => (w || "").trim())
+          .filter((w) => w && w !== ans);
+        if (wr.length)
+          return "{{c" + n + "::" + ans + "::" +
+                 shuffleSeeded([ans].concat(wr),
+                               hashStr(ans + "|" + wr.join("|"))).join("/") + "}}";
+      }
+      return "{{c" + n + "::" + ans + "}}";
+    });
     r.cards[idx] = Object.assign({}, c, {
       kind: CLOZE_RE.test(front) ? "cloze" : "basic",
       front, back: inVerso.value.trim(), tags: parseTags(inTags.value),
