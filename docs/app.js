@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "5.7.0";
+const VERSAO = "5.8.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -340,10 +340,49 @@ function botoesSalvar(div, salvar, r, idx) {
 function montarEdicao(div, c, r, idx) {
   const inFrente = campoEditavel(div, "field_front", "hint_front", c.front, true);
   botoesLacuna(div, inFrente);          // marcar/limpar {{c1::...}} na seleção
+
+  // Lacuna existente pode virar múltipla escolha: campos para as erradas.
+  // (pré-preenche com as alternativas já embutidas, se houver)
+  let inputsErr = [];
+  if (CLOZE_RE.test(c.front)) {
+    const lbl = document.createElement("span");
+    lbl.className = "mini-lbl";
+    lbl.textContent = t("edit_mc_label") + " ";
+    const aj = document.createElement("button");
+    aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
+    aj.onclick = () => alert(t("hint_mc_cloze"));
+    lbl.append(aj);
+    div.append(lbl);
+    const m = c.front.match(/\{\{c\d+::([\s\S]*?)\}\}/);
+    const inner = m ? m[1].split("::") : [""];
+    const ans = (inner[0] || "").trim();
+    const atuais = (inner[1] || "").split("/").map((s) => s.trim())
+      .filter((o) => o && o !== ans);
+    for (let i = 0; i < 4; i++) {
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.value = atuais[i] || "";
+      inp.placeholder = (i + 1);
+      div.append(inp);
+      inputsErr.push(inp);
+    }
+  }
+
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
   const inTags = campoEditavel(div, "field_tags", "hint_tags", c.tags.join(", "), false);
   botoesSalvar(div, () => {
-    const front = inFrente.value.trim();
+    let front = inFrente.value.trim();
+    // reconstrói a 1ª lacuna com (ou sem) alternativas
+    const m = front.match(/\{\{c(\d+)::([\s\S]*?)\}\}/);
+    if (m && inputsErr.length) {
+      const ans = m[2].split("::")[0].trim();
+      const erradas = inputsErr.map((i) => i.value.trim())
+        .filter((o) => o && o !== ans);
+      const nova = erradas.length
+        ? "{{c" + m[1] + "::" + ans + "::" +
+          shuffleSeeded([ans].concat(erradas), hashStr(ans + "|" + erradas.join("|"))).join("/") + "}}"
+        : "{{c" + m[1] + "::" + ans + "}}";
+      front = front.replace(m[0], nova);
+    }
     r.cards[idx] = Object.assign({}, c, {
       kind: CLOZE_RE.test(front) ? "cloze" : "basic",
       front, back: inVerso.value.trim(), tags: parseTags(inTags.value),
@@ -576,14 +615,28 @@ const MODELOS = {
            en: ["Case N (Supreme Court): what is the holding?", "The holding, in plain language.", "case_law"] },
   mc:    { pt: ["Qual alternativa está correta sobre ... ?", "Explicação da resposta (opcional).", "tema"],
            en: ["Which option is correct about ... ?", "Answer explanation (optional).", "topic"] },
-  mc_cloze: { pt: ["A capital da França é Paris.", "", "geografia"],
-              en: ["The capital of France is Paris.", "", "geography"] },
+  mc_cloze: { pt: ["A capital da França é ___.", "", "geografia"],
+              en: ["The capital of France is ___.", "", "geography"] },
 };
 
 function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h;
+}
+
+/* Embaralhamento com semente: a ordem só muda quando o usuário pede. */
+let mcClozeSeed = 0;
+
+function shuffleSeeded(arr, seed) {
+  const a = arr.slice();
+  let s = (seed >>> 0) || 1;
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 1103515245 + 12345) >>> 0;
+    const j = s % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 function aplicarModelo() {
@@ -595,14 +648,17 @@ function aplicarModelo() {
   $("mcArea").style.display = chaveM === "mc" ? "" : "none";
   $("mcClozeArea").style.display = chaveM === "mc_cloze" ? "" : "none";
   $("lacunaArea").style.display = chaveM === "cloze" ? "" : "none";
+  $("lblFrente").textContent = chaveM === "mc_cloze" ? t("mc_sentence_label") : t("field_front");
   $("dicaCampo").textContent = chaveM === "mc" ? t("hint_mc")
     : (chaveM === "mc_cloze" ? t("hint_mc_cloze") : "");
   if (chaveM === "mc_cloze") {
     $("mcCerta").value = "Paris";
-    $("mcErr0").value = LANG === "pt" ? "Lyon" : "Lyon";
+    $("mcErr0").value = "Lyon";
     $("mcErr1").value = LANG === "pt" ? "Marselha" : "Marseille";
     $("mcErr2").value = ""; $("mcErr3").value = "";
+    mcClozeSeed = 0;
   }
+  if (chaveM === "mc") { $("mcR0").checked = true; }
   atualizarNovoPreview();
 }
 
@@ -613,8 +669,28 @@ function rotularModelos() {
   [...$("selModelo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
 }
 
-/* Monta a linha de texto que o diálogo vai inserir no editor.
- * Retorna {linha} ou {erro} — usada pelo preview ao vivo E pelo Inserir. */
+/* Alternativas preenchidas da lista + índice da marcada como correta. */
+function lerAlternativas() {
+  const preench = [];
+  let correct = 0;
+  for (let i = 0; i < 5; i++) {
+    const v = $("mcOp" + i).value.trim();
+    if (!v) continue;
+    if ($("mcR" + i).checked) correct = preench.length;
+    preench.push(v);
+  }
+  return { options: preench, correct };
+}
+
+/* Ordem das opções da MC na frase (correta + erradas, semeada). */
+function opcoesCloze() {
+  const certa = $("mcCerta").value.trim();
+  const erradas = ["mcErr0", "mcErr1", "mcErr2", "mcErr3"]
+    .map((id) => $(id).value.trim()).filter(Boolean);
+  const seed = mcClozeSeed || hashStr(certa + "|" + erradas.join("|"));
+  return { certa, erradas, ops: shuffleSeeded([certa].concat(erradas), seed) };
+}
+
 function montarLinhaNovo() {
   const modelo = $("selModelo").value;
   const verso = $("novoVerso").value.trim();
@@ -622,14 +698,13 @@ function montarLinhaNovo() {
 
   if (modelo === "mc_cloze") {
     const frase = $("novoFrente").value;
-    const certa = $("mcCerta").value.trim();
-    const erradas = ["mcErr0", "mcErr1", "mcErr2", "mcErr3"]
-      .map((id) => $(id).value.trim()).filter(Boolean);
-    if (!certa || !frase.includes(certa)) return { erro: t("mc_term_missing") };
-    // posição da correta é estável (hash) para o preview não "dançar"
-    const ops = erradas.slice();
-    ops.splice(hashStr(certa + "|" + erradas.join("|")) % (erradas.length + 1), 0, certa);
-    const front = frase.replace(certa, "{{c1::" + certa + "::" + ops.join("/") + "}}");
+    const { certa, ops } = opcoesCloze();
+    if (!certa) return { erro: t("mc_term_missing") };
+    const lacuna = "{{c1::" + certa + "::" + ops.join("/") + "}}";
+    let front;
+    if (frase.includes("___")) front = frase.replace("___", lacuna);
+    else if (frase.includes(certa)) front = frase.replace(certa, lacuna);
+    else return { erro: t("mc_term_missing") };
     const campos = [front];
     if (verso) campos.push(verso);
     else if (tags.length) campos.push("");
@@ -638,11 +713,9 @@ function montarLinhaNovo() {
   }
 
   if (modelo === "mc") {
-    const ops = ["mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"]
-      .map((id) => $(id).value.trim()).filter(Boolean);
-    const correta = Math.min(parseInt($("mcCorreta").value, 10), Math.max(ops.length - 1, 0));
-    const card = { kind: "mc", front: $("novoFrente").value.trim(), options: ops,
-                   correct: correta, back: verso, tags };
+    const { options, correct } = lerAlternativas();
+    const card = { kind: "mc", front: $("novoFrente").value.trim(), options,
+                   correct, back: verso, tags };
     return { linha: cardToLine(card) };
   }
 
@@ -652,7 +725,6 @@ function montarLinhaNovo() {
   return { linha: campos.join(" :: ") };
 }
 
-/* Pré-visualização em tempo real dentro do diálogo. */
 function atualizarNovoPreview() {
   const alvo = $("novoPreview");
   alvo.innerHTML = "";
@@ -674,6 +746,25 @@ function atualizarNovoPreview() {
   alvo.append(div);
 }
 
+/* Embaralhar (lista): valores trocam de campo e o rádio segue a correta. */
+$("btnEmbaralhar").onclick = () => {
+  const { options, correct } = lerAlternativas();
+  if (options.length < 2) return;
+  const corretaTxt = options[correct];
+  const novaOrdem = shuffleSeeded(options, (Math.random() * 2 ** 31) | 0);
+  for (let i = 0; i < 5; i++) {
+    $("mcOp" + i).value = novaOrdem[i] || "";
+    $("mcR" + i).checked = novaOrdem[i] === corretaTxt;
+  }
+  atualizarNovoPreview();
+};
+
+/* Embaralhar (MC na frase): troca a semente da ordem das opções. */
+$("btnEmbaralharCloze").onclick = () => {
+  mcClozeSeed = (Math.random() * 2 ** 31) | 0;
+  atualizarNovoPreview();
+};
+
 $("btnNovoCartao").onclick = () => { rotularModelos(); aplicarModelo(); $("dlgNovo").showModal(); };
 $("selModelo").onchange = aplicarModelo;
 $("btnNovoFechar").onclick = () => $("dlgNovo").close();
@@ -683,8 +774,20 @@ $("btnLimparNovo").onclick = () => { limparLacunas($("novoFrente")); atualizarNo
  "mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"].forEach((id) => {
   $(id).addEventListener("input", atualizarNovoPreview);
 });
-$("mcCorreta").addEventListener("change", atualizarNovoPreview);
+for (let i = 0; i < 5; i++) $("mcR" + i).addEventListener("change", atualizarNovoPreview);
+
 $("btnInserir").onclick = () => {
+  const modelo = $("selModelo").value;
+  // Sugestão ao finalizar: correta em 1º lugar? Oferece embaralhar.
+  if (modelo === "mc") {
+    const { options, correct } = lerAlternativas();
+    if (options.length >= 2 && correct === 0 && confirm(t("shuffle_suggest")))
+      $("btnEmbaralhar").onclick();
+  } else if (modelo === "mc_cloze") {
+    const { certa, ops } = opcoesCloze();
+    if (ops.length >= 2 && ops[0] === certa && confirm(t("shuffle_suggest")))
+      $("btnEmbaralharCloze").onclick();
+  }
   const res = montarLinhaNovo();
   if (res.erro) { alert(res.erro); return; }
   const atual = $("editor").value.replace(/\s+$/, "");
@@ -695,7 +798,6 @@ $("btnInserir").onclick = () => {
 document.querySelectorAll(".ic-ajuda[data-hint]").forEach((b) => {
   b.onclick = () => { $("dicaCampo").textContent = t(b.dataset.hint); };
 });
-
 
 /* -------------- prompt de IA na tela principal ---------------------- */
 
@@ -717,23 +819,6 @@ $("btnPromptCopiar").onclick = async () => {
   $("btnPromptCopiar").textContent = t("copied");
   setTimeout(() => { $("btnPromptCopiar").textContent = t("prompt_copy"); }, 2000);
   $("status").textContent = t("prompt_copied_status");
-};
-
-/* ------- embaralhar alternativas (a correta acompanha a troca) ------- */
-
-$("btnEmbaralhar").onclick = () => {
-  const ids = ["mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"];
-  const preenchidos = ids.map((id) => $(id).value.trim()).filter(Boolean);
-  if (preenchidos.length < 2) return;
-  const corretaTxt = preenchidos[Math.min(parseInt($("mcCorreta").value, 10),
-                                          preenchidos.length - 1)];
-  for (let i = preenchidos.length - 1; i > 0; i--) {   // Fisher-Yates
-    const j = Math.floor(Math.random() * (i + 1));
-    [preenchidos[i], preenchidos[j]] = [preenchidos[j], preenchidos[i]];
-  }
-  ids.forEach((id, i) => { $(id).value = preenchidos[i] || ""; });
-  $("mcCorreta").value = preenchidos.indexOf(corretaTxt);   // segue a correta
-  atualizarNovoPreview();
 };
 
 /* ----------------------------- eventos ----------------------------- */

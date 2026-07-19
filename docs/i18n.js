@@ -123,8 +123,8 @@ const UI = {
   "tpl_mc_cloze": "Múltipla escolha na frase (nativa)",
   "mc_correct_label": "Resposta correta (como está na frase)",
   "mc_wrong_label": "Alternativas erradas (um campo para cada)",
-  "hint_mc_cloze": "Gera a sintaxe nativa do Anki: {{c1::certa::opção/opção}}. Na frente, as opções aparecem dentro da própria frase; ao virar, somente a correta permanece. Funciona com o modelo Cloze padrão do Anki, sem nada extra.",
-  "mc_term_missing": "Não encontrei a resposta correta dentro da frase. Escreva a frase com a resposta correta no lugar dela.",
+  "hint_mc_cloze": "Escreva a frase com ___ no lugar da resposta. Preencha a resposta correta e as erradas em campos separados. O app gera a sintaxe nativa do Anki {{c1::correta::opções}}: na frente, as opções aparecem dentro da frase; ao virar, só a correta permanece.",
+  "mc_term_missing": "Coloque ___ na frase onde a resposta entra (ou escreva a frase contendo a resposta correta).",
   "preview_live": "Pré-visualização em tempo real",
   "prompt_main_btn": "Prompt IA",
   "prompt_dlg_title": "Prompt para gerar cartões com IA",
@@ -133,7 +133,11 @@ const UI = {
   "prompt_copy": "Copiar este texto",
   "prompt_copied_status": "Prompt copiado — cole no chat da IA junto com seu material.",
   "shuffle_btn": "Embaralhar alternativas",
-  "shuffle_hint": "Reordena as alternativas aleatoriamente (a correta acompanha) para a resposta não ficar sempre na mesma posição."
+  "shuffle_hint": "Reordena as alternativas aleatoriamente (a correta acompanha) para a resposta não ficar sempre na mesma posição.",
+  "mc_mark_correct": "Alternativas — marque ⦿ na CORRETA",
+  "mc_sentence_label": "Frase (use ___ no lugar da resposta)",
+  "shuffle_suggest": "A resposta correta está na 1ª posição. Embaralhar as alternativas antes de inserir?",
+  "edit_mc_label": "Múltipla escolha na lacuna — alternativas erradas (opcional)"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -258,8 +262,8 @@ const UI = {
   "tpl_mc_cloze": "In-sentence multiple choice (native)",
   "mc_correct_label": "Correct answer (as written in the sentence)",
   "mc_wrong_label": "Wrong options (one field each)",
-  "hint_mc_cloze": "Generates Anki's native syntax: {{c1::correct::option/option}}. The options appear inside the sentence on the front; when flipped, only the correct one remains. Works with Anki's standard Cloze model, nothing extra needed.",
-  "mc_term_missing": "Could not find the correct answer inside the sentence. Write the sentence with the correct answer in place.",
+  "hint_mc_cloze": "Write the sentence with ___ where the answer goes. Fill the correct answer and the wrong ones in separate fields. The app generates Anki's native syntax {{c1::correct::options}}: options show inside the sentence on the front; when flipped, only the correct one remains.",
+  "mc_term_missing": "Put ___ in the sentence where the answer goes (or write the sentence containing the correct answer).",
   "preview_live": "Live preview",
   "prompt_main_btn": "AI Prompt",
   "prompt_dlg_title": "Prompt to generate cards with AI",
@@ -268,7 +272,11 @@ const UI = {
   "prompt_copy": "Copy this text",
   "prompt_copied_status": "Prompt copied — paste it in the AI chat with your material.",
   "shuffle_btn": "Shuffle options",
-  "shuffle_hint": "Randomly reorders the options (the correct one follows) so the answer is not always in the same position."
+  "shuffle_hint": "Randomly reorders the options (the correct one follows) so the answer is not always in the same position.",
+  "mc_mark_correct": "Options — mark ⦿ on the CORRECT one",
+  "mc_sentence_label": "Sentence (use ___ where the answer goes)",
+  "shuffle_suggest": "The correct answer is in the 1st position. Shuffle the options before inserting?",
+  "edit_mc_label": "Multiple choice on the blank — wrong options (optional)"
  }
 };
 const PARSER_MSG = {

@@ -79,6 +79,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 .toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .toolbar .btn{flex:1 1 30%;min-width:120px;padding:8px 6px;font-size:12.5px;white-space:nowrap}
 .toolbar .btn.ativa{outline:3px solid rgba(37,99,235,.45)}
+.dlg-grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:700px){.dlg-grid{grid-template-columns:1fr 1fr}}
+.mc-row{display:flex;gap:8px;align-items:center;margin-top:4px}
+.mc-row input[type=radio]{width:18px;height:18px;flex:none;accent-color:#1a7f37}
+.mc-row input[type=text]{flex:1;margin-top:0}
 .editor-wrap{position:relative}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
   color:transparent;caret-color:var(--texto);line-height:1.45}
@@ -205,56 +210,62 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   </div>
 </dialog>
 
-<dialog id="dlgNovo">
+<dialog id="dlgNovo" style="max-width:920px;width:94%">
   <div style="padding:16px">
     <h3 style="margin:0 0 10px" data-i18n="add_title"></h3>
-    <label data-i18n="tpl_label"></label>
-    <select id="selModelo" style="width:100%;padding:8px;border-radius:8px;margin-bottom:10px">
-      <option value="qa"></option><option value="def"></option>
-      <option value="cloze"></option><option value="law"></option>
-      <option value="juris"></option><option value="mc"></option><option value="mc_cloze"></option>
-    </select>
-    <label><span data-i18n="field_front"></span>
-      <button type="button" class="ic-ajuda" data-hint="hint_front">?</button></label>
-    <textarea id="novoFrente" style="min-height:64px"></textarea>
-    <div id="lacunaArea" style="display:none;margin-top:4px">
-      <button type="button" class="btn btn-ciano" id="btnMarcarNovo" data-i18n="btn_mark_blank"></button>
-      <button type="button" class="btn btn-cinza" id="btnLimparNovo" data-i18n="btn_clear_blanks"></button>
-      <button type="button" class="ic-ajuda" data-hint="hint_mark_blank">?</button>
+    <div class="dlg-grid">
+      <div>
+        <label data-i18n="tpl_label"></label>
+        <select id="selModelo" style="width:100%;padding:8px;border-radius:8px;margin-bottom:10px">
+          <option value="qa"></option><option value="def"></option>
+          <option value="cloze"></option><option value="law"></option>
+          <option value="juris"></option><option value="mc"></option>
+          <option value="mc_cloze"></option>
+        </select>
+        <label><span id="lblFrente" data-i18n="field_front"></span>
+          <button type="button" class="ic-ajuda" data-hint="hint_front">?</button></label>
+        <textarea id="novoFrente" style="min-height:64px"></textarea>
+        <div id="lacunaArea" style="display:none;margin-top:4px">
+          <button type="button" class="btn btn-ciano" id="btnMarcarNovo" data-i18n="btn_mark_blank"></button>
+          <button type="button" class="btn btn-cinza" id="btnLimparNovo" data-i18n="btn_clear_blanks"></button>
+          <button type="button" class="ic-ajuda" data-hint="hint_mark_blank">?</button>
+        </div>
+        <div id="mcClozeArea" style="display:none;margin-top:6px">
+          <label><span data-i18n="mc_correct_label"></span>
+            <button type="button" class="ic-ajuda" data-hint="hint_mc_cloze">?</button></label>
+          <input type="text" id="mcCerta">
+          <label><span data-i18n="mc_wrong_label"></span></label>
+          <input type="text" id="mcErr0" placeholder="1">
+          <input type="text" id="mcErr1" placeholder="2">
+          <input type="text" id="mcErr2" placeholder="3">
+          <input type="text" id="mcErr3" placeholder="4">
+          <button type="button" class="btn btn-ciano" id="btnEmbaralharCloze"
+                  style="margin-top:6px" data-i18n="shuffle_btn"></button>
+        </div>
+        <div id="mcArea" style="display:none;margin-top:6px">
+          <label><span data-i18n="mc_mark_correct"></span>
+            <button type="button" class="ic-ajuda" data-hint="hint_mc">?</button></label>
+          <div class="mc-row"><input type="radio" name="mcRadio" id="mcR0" checked><input type="text" id="mcOp0" placeholder="A"></div>
+          <div class="mc-row"><input type="radio" name="mcRadio" id="mcR1"><input type="text" id="mcOp1" placeholder="B"></div>
+          <div class="mc-row"><input type="radio" name="mcRadio" id="mcR2"><input type="text" id="mcOp2" placeholder="C"></div>
+          <div class="mc-row"><input type="radio" name="mcRadio" id="mcR3"><input type="text" id="mcOp3" placeholder="D"></div>
+          <div class="mc-row"><input type="radio" name="mcRadio" id="mcR4"><input type="text" id="mcOp4" placeholder="E"></div>
+          <button type="button" class="btn btn-ciano" id="btnEmbaralhar"
+                  style="margin-top:6px" data-i18n="shuffle_btn"></button>
+        </div>
+        <label style="margin-top:8px"><span data-i18n="field_back"></span>
+          <button type="button" class="ic-ajuda" data-hint="hint_back">?</button></label>
+        <textarea id="novoVerso" style="min-height:52px"></textarea>
+        <label style="margin-top:8px"><span data-i18n="field_tags"></span>
+          <button type="button" class="ic-ajuda" data-hint="hint_tags">?</button></label>
+        <input type="text" id="novoTags">
+      </div>
+      <div>
+        <label data-i18n="preview_live"></label>
+        <div id="novoPreview"></div>
+        <div id="dicaCampo" style="font-size:12px;color:var(--sutil);margin-top:8px;min-height:16px"></div>
+      </div>
     </div>
-    <div id="mcClozeArea" style="display:none;margin-top:6px">
-      <label><span data-i18n="mc_correct_label"></span>
-        <button type="button" class="ic-ajuda" data-hint="hint_mc_cloze">?</button></label>
-      <input type="text" id="mcCerta">
-      <label><span data-i18n="mc_wrong_label"></span></label>
-      <input type="text" id="mcErr0" placeholder="1">
-      <input type="text" id="mcErr1" placeholder="2">
-      <input type="text" id="mcErr2" placeholder="3">
-      <input type="text" id="mcErr3" placeholder="4">
-    </div>
-    <div id="mcArea" style="display:none;margin-top:6px">
-      <label><span data-i18n="mc_options_label"></span>
-        <button type="button" class="ic-ajuda" data-hint="hint_mc">?</button></label>
-      <input type="text" id="mcOp0" placeholder="A"> <input type="text" id="mcOp1" placeholder="B">
-      <input type="text" id="mcOp2" placeholder="C"> <input type="text" id="mcOp3" placeholder="D">
-      <input type="text" id="mcOp4" placeholder="E">
-      <button type="button" class="btn btn-ciano" id="btnEmbaralhar"
-              style="margin-top:6px" data-i18n="shuffle_btn"></button>
-      <label data-i18n="mc_correct"></label>
-      <select id="mcCorreta" style="width:100%;padding:8px;border-radius:8px">
-        <option value="0">A</option><option value="1">B</option><option value="2">C</option>
-        <option value="3">D</option><option value="4">E</option>
-      </select>
-    </div>
-    <label style="margin-top:8px"><span data-i18n="field_back"></span>
-      <button type="button" class="ic-ajuda" data-hint="hint_back">?</button></label>
-    <textarea id="novoVerso" style="min-height:52px"></textarea>
-    <label style="margin-top:8px"><span data-i18n="field_tags"></span>
-      <button type="button" class="ic-ajuda" data-hint="hint_tags">?</button></label>
-    <input type="text" id="novoTags">
-    <div id="dicaCampo" style="font-size:12px;color:var(--sutil);margin-top:8px;min-height:16px"></div>
-    <label style="margin-top:6px" data-i18n="preview_live"></label>
-    <div id="novoPreview"></div>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnInserir" data-i18n="insert_btn"></button>

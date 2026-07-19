@@ -1,5 +1,5 @@
 /* EasyAnkiCards — service worker: funciona offline após a 1ª visita. */
-const CACHE = "easyankicards-v5.7.0";
+const CACHE = "easyankicards-v5.8.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
