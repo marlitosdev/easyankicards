@@ -96,6 +96,104 @@ function clozeOrds(text) {
   return ords.size ? [...ords].sort((a, b) => a - b) : [0];
 }
 
+
+/* ------------------------------------------------------------------
+ * ESTILOS VISUAIS (facultativos) — v6.2
+ * O CSS vive no modelo de nota do Anki, então o estilo escolhido vale
+ * para o baralho exportado inteiro. Cabeçalhos automáticos usam os
+ * campos especiais do Anki: {{Subdeck}} (pasta) e {{Tags}}.
+ * Cada estilo tem IDs de modelo próprios para não conflitar entre si.
+ * ------------------------------------------------------------------ */
+
+const EST_HEAD = '<div class="materia">{{Subdeck}}</div>' +
+                 '<div class="assunto">{{Tags}}</div>';
+
+const EST_TMPLS = {
+  basicQ: EST_HEAD + '<div class="box">{{Frente}}</div>',
+  basicA: EST_HEAD + '<div class="box">{{Frente}}</div>' +
+          '<div class="resposta">{{Verso}}</div>',
+  clozeQ: EST_HEAD + '<div class="box">{{cloze:Texto}}</div>',
+  clozeA: EST_HEAD + '<div class="box">{{cloze:Texto}}</div>' +
+          '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}',
+  mcQ: EST_HEAD + '<div class="box">{{Pergunta}}<br><br>{{Alternativas}}</div>',
+  mcA: EST_HEAD + '<div class="box">{{Pergunta}}</div>' +
+       '<div class="resposta">{{Correta}}</div>' +
+       '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}',
+};
+
+function cssEstilo(p) {
+  return `
+.card{background:${p.fundo};font-family:Arial,sans-serif;font-size:18px;
+  color:${p.texto};padding:14px 6px}
+.materia{max-width:480px;margin:0 auto 10px;background:${p.cab};color:${p.cabTexto};
+  font-weight:bold;font-size:21px;text-align:center;padding:10px;
+  border-radius:14px;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+.assunto{max-width:480px;margin:0 auto;background:${p.sub};color:${p.texto};
+  font-style:italic;font-size:13px;letter-spacing:1px;text-align:center;
+  padding:7px;border-radius:14px 14px 0 0;box-shadow:1px 3px 4px ${p.sombra};
+  box-sizing:border-box}
+.box{max-width:480px;margin:0 auto;background:${p.caixa};color:${p.texto};
+  text-align:justify;padding:18px;box-shadow:1px 3px 4px ${p.sombra};
+  box-sizing:border-box}
+.resposta{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.destaque};
+  font-weight:bold;font-size:21px;text-align:center;padding:12px;
+  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+.justificativa{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.texto};
+  text-align:justify;padding:16px;border-radius:0 0 14px 14px;
+  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+.cloze{font-weight:bold;color:${p.destaque}}
+.mc-correta{color:${p.destaque};font-weight:bold}
+`;
+}
+
+const ESTILOS = {
+  classic: { ids: [1607392319, 1607392320, 1607392321], css: null },
+  esquema: { ids: [1698100011, 1698100012, 1698100013],
+    css: cssEstilo({ fundo: "#f2f3f6", texto: "#26344f", cab: "#26344f",
+      cabTexto: "#f7f7f7", sub: "#d9d9d9", caixa: "#ffffff",
+      destaque: "#4eaed9", sombra: "#abb2b9" }) },
+  dark: { ids: [1698100021, 1698100022, 1698100023],
+    css: cssEstilo({ fundo: "#14161b", texto: "#e9ebf0", cab: "#3350a5",
+      cabTexto: "#ffffff", sub: "#2a2e37", caixa: "#1f232b",
+      destaque: "#7cc4ff", sombra: "#00000088" }) },
+  paper: { ids: [1698100031, 1698100032, 1698100033],
+    css: cssEstilo({ fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34",
+      cabTexto: "#fdf6e3", sub: "#e7dcc3", caixa: "#fffaf0",
+      destaque: "#b45309", sombra: "#c9b895" }) },
+};
+
+/* Monta os 3 modelos (básico, cloze, MC) para o estilo pedido. */
+function modelosParaEstilo(estilo) {
+  const cfg = ESTILOS[estilo] || ESTILOS.classic;
+  const base = JSON.parse(JSON.stringify(COL_MODELS));
+  const models = montarModeloMC(base);          // garante o MC clássico
+  if (!cfg.css) return models;                  // clássico: como sempre foi
+
+  const [idB, idC, idM] = cfg.ids;
+  const out = {};
+  const b = JSON.parse(JSON.stringify(models["1607392319"]));
+  b.id = idB; b.name = "EasyAnkiCards " + estilo + " - Básico";
+  b.css = cfg.css;
+  b.tmpls[0].qfmt = EST_TMPLS.basicQ;
+  b.tmpls[0].afmt = EST_TMPLS.basicA;
+  out[String(idB)] = b;
+
+  const c = JSON.parse(JSON.stringify(models["1607392320"]));
+  c.id = idC; c.name = "EasyAnkiCards " + estilo + " - Cloze";
+  c.css = cfg.css;
+  c.tmpls[0].qfmt = EST_TMPLS.clozeQ;
+  c.tmpls[0].afmt = EST_TMPLS.clozeA;
+  out[String(idC)] = c;
+
+  const m = JSON.parse(JSON.stringify(models["1607392321"]));
+  m.id = idM; m.name = "EasyAnkiCards " + estilo + " - Múltipla Escolha";
+  m.css = cfg.css;
+  m.tmpls[0].qfmt = EST_TMPLS.mcQ;
+  m.tmpls[0].afmt = EST_TMPLS.mcA;
+  out[String(idM)] = m;
+  return out;
+}
+
 /* Monta o modelo de Múltipla Escolha clonando o Básico.
  * O template da RESPOSTA não usa {{FrontSide}}: mostra a pergunta e
  * SOMENTE a alternativa correta (as demais desaparecem), + explicação. */
@@ -117,7 +215,8 @@ function montarModeloMC(models) {
 }
 
 /* cards: [{kind:"basic"|"cloze"|"mc", front, back, tags, options?, correct?}] */
-async function buildApkg(cards, deckName) {
+async function buildApkg(cards, deckName, estilo) {
+  estilo = estilo || "classic";
   const SQL = await window.__sqlPromise;   /* initSqlJs, ver index.html */
   const db = new SQL.Database();
   db.run(ANKI_SCHEMA);
@@ -129,7 +228,8 @@ async function buildApkg(cards, deckName) {
   deck.id = deckId; deck.name = deckName; deck.mod = nowSec;
   const decks = {}; decks["1"] = DECK_DEFAULT; decks[String(deckId)] = deck;
 
-  const models = montarModeloMC(JSON.parse(JSON.stringify(COL_MODELS)));
+  const models = modelosParaEstilo(estilo);
+  const [MID_B, MID_C, MID_M] = (ESTILOS[estilo] || ESTILOS.classic).ids;
   db.run(
     "INSERT INTO col VALUES (1,?,?,?,11,0,0,0,?,?,?,?,'{}')",
     [nowSec, now, now, JSON.stringify(COL_CONF), JSON.stringify(models),
@@ -140,12 +240,12 @@ async function buildApkg(cards, deckName) {
   for (const c of cards) {
     let mid, campos;
     if (c.kind === "mc") {
-      mid = 1607392321;
+      mid = MID_M;
       const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
       const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
       campos = [c.front, alts, correta, c.back || ""];
     } else {
-      mid = c.kind === "cloze" ? 1607392320 : 1607392319;
+      mid = c.kind === "cloze" ? MID_C : MID_B;
       campos = [c.front, c.back || ""];
     }
     const noteId = id++;

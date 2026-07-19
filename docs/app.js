@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.1.0";
+const VERSAO = "6.2.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -742,7 +742,7 @@ async function exportarApkg() {
   const r = validar(); if (!r) return;
   $("status").textContent = "…";
   try {
-    const bytes = await buildApkg(r.cards, nomeDeck());
+    const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value);
     await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
     const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
@@ -1094,9 +1094,54 @@ $("btnMCRapido").onclick = () => {
 /* Baralho e tags são pedidos NA HORA de exportar (diálogo), e lembrados. */
 let exportTipo = "apkg";
 
+/* Paletas dos estilos (apenas para o mini-preview dentro do diálogo). */
+const PALETAS = {
+  classic: { fundo: "#fdfdfd", texto: "#1a1a2e", cab: null, caixa: "#fdfdfd", destaque: "#0b6bcb", sub: null },
+  esquema: { fundo: "#f2f3f6", texto: "#26344f", cab: "#26344f", caixa: "#ffffff", destaque: "#4eaed9", sub: "#d9d9d9" },
+  dark:    { fundo: "#14161b", texto: "#e9ebf0", cab: "#3350a5", caixa: "#1f232b", destaque: "#7cc4ff", sub: "#2a2e37" },
+  paper:   { fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34", caixa: "#fffaf0", destaque: "#b45309", sub: "#e7dcc3" },
+};
+
+function rotularEstilos() {
+  const nomes = { classic: "style_classic", esquema: "style_esquema",
+                  dark: "style_dark", paper: "style_paper" };
+  [...$("selEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
+}
+
+function previewEstilo() {
+  const p = PALETAS[$("selEstilo").value] || PALETAS.classic;
+  const box = $("stylePreview");
+  box.style.background = p.fundo;
+  box.innerHTML = "";
+  const mk = (txt, css) => {
+    const d = document.createElement("div");
+    d.textContent = txt;
+    d.style.cssText = css;
+    box.append(d);
+  };
+  if (p.cab) mk(nomeDeck().split("::").pop(),
+    "background:" + p.cab + ";color:#fff;font-weight:700;text-align:center;" +
+    "padding:5px;border-radius:9px;font-size:13px;margin-bottom:5px;");
+  if (p.sub) mk("tags", "background:" + p.sub + ";color:" + p.texto +
+    ";font-style:italic;text-align:center;font-size:10px;padding:3px;" +
+    "border-radius:8px 8px 0 0;");
+  const frase = document.createElement("div");
+  frase.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
+    ";padding:9px;font-size:12.5px;box-shadow:1px 2px 3px rgba(0,0,0,.25);";
+  frase.append(document.createTextNode("A capital da França é "));
+  const lac = document.createElement("b");
+  lac.textContent = "[...]";
+  lac.style.color = p.destaque;
+  frase.append(lac, document.createTextNode("."));
+  box.append(frase);
+  $("styleHintTxt").textContent = t("style_hint");
+}
+
 function abrirExport(tipo) {
   exportTipo = tipo;
   atualizarDestino();
+  rotularEstilos();
+  previewEstilo();
   $("dlgExport").showModal();
 }
 
@@ -1106,6 +1151,7 @@ $("btnExportFechar").onclick = () => $("dlgExport").close();
 $("btnExportConfirm").onclick = () => {
   localStorage.setItem("eac_deck", $("deckExp").value);
   localStorage.setItem("eac_tags", $("tagsExp").value);
+  localStorage.setItem("eac_style", $("selEstilo").value);
   $("dlgExport").close();
   (exportTipo === "txt" ? exportarTxt : exportarApkg)();
 };
@@ -1117,6 +1163,9 @@ $("btnCaminhoExp").onclick = async () => {
 };
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
 $("tagsExp").value = localStorage.getItem("eac_tags") || "";
+$("selEstilo").value = localStorage.getItem("eac_style") || "classic";
+$("selEstilo").onchange = previewEstilo;
+$("ajudaEstilo").onclick = () => alert(t("style_hint"));
 
 $("btnAjuda").onclick = () => $("dlgAjuda").showModal();
 $("btnFechar").onclick = () => $("dlgAjuda").close();

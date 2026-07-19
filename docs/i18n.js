@@ -167,7 +167,13 @@ const UI = {
   "norm_before": "como está",
   "norm_after": "como ficará",
   "norm_apply": "Aplicar marcadas",
-  "norm_comment_warn": "Transformar linhas não reconhecidas em comentários (#)"
+  "norm_comment_warn": "Transformar linhas não reconhecidas em comentários (#)",
+  "style_label": "Estilo visual dos cartões (facultativo)",
+  "style_classic": "Clássico (simples)",
+  "style_esquema": "Esquematizado (concurso)",
+  "style_dark": "Escuro",
+  "style_paper": "Papel (sépia)",
+  "style_hint": "Aplica um visual pronto a TODOS os cartões do .apkg: cabeçalho com o nome da pasta, linha de tags, caixas com sombra e lacunas coloridas. Só vale para o .apkg (o .txt usa os modelos que você já tem no Anki). Reexportar com o mesmo estilo atualiza os cartões."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -336,7 +342,13 @@ const UI = {
   "norm_before": "current",
   "norm_after": "will become",
   "norm_apply": "Apply checked",
-  "norm_comment_warn": "Turn unrecognized lines into comments (#)"
+  "norm_comment_warn": "Turn unrecognized lines into comments (#)",
+  "style_label": "Card visual style (optional)",
+  "style_classic": "Classic (plain)",
+  "style_esquema": "Schematic (exam prep)",
+  "style_dark": "Dark",
+  "style_paper": "Paper (sepia)",
+  "style_hint": "Applies a ready-made look to ALL cards in the .apkg: header with the folder name, tags line, shadowed boxes and colored blanks. Only affects the .apkg (the .txt uses the note types you already have in Anki). Re-exporting with the same style updates the cards."
  }
 };
 const PARSER_MSG = {
