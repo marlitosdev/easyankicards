@@ -142,7 +142,20 @@ const UI = {
   "lacuna_answer": "Resposta correta desta lacuna",
   "lacuna_mode": "Comportamento:",
   "mode_occ": "Ocultação simples",
-  "mode_mc": "Múltipla escolha"
+  "mode_mc": "Múltipla escolha",
+  "chip_hidden": "oculto",
+  "chip_options": "alternativas",
+  "chip_hidden_title": "Este trecho fica OCULTO no cartão (lacuna cloze) — o aluno precisa lembrá-lo.",
+  "chip_options_title": "Alternativas exibidas na frente do cartão; a verde sublinhada é a correta.",
+  "export_dlg_title": "Exportar baralho",
+  "export_confirm": "Exportar agora",
+  "tip_new": "Criar um cartão guiado por modelos: pergunta/resposta, definição, lacuna, lei seca, jurisprudência.",
+  "tip_mc": "Criar questão de múltipla escolha — em lista (A-E) ou embutida na frase.",
+  "tip_prompt": "Ver e copiar o prompt pronto para gerar cartões com IA (ChatGPT, Claude, Gemini, Gemini Notebook).",
+  "tip_review": "Conferir os cartões virando-os como no Anki, antes de exportar.",
+  "tip_lang": "Idioma da interface (português/inglês).",
+  "tip_editar": "Abrir os campos deste cartão para alterar frente, verso, tags e lacunas.",
+  "tip_incluir": "Desmarque para deixar este cartão fora da exportação."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -286,7 +299,20 @@ const UI = {
   "lacuna_answer": "Correct answer for this blank",
   "lacuna_mode": "Behavior:",
   "mode_occ": "Simple occlusion",
-  "mode_mc": "Multiple choice"
+  "mode_mc": "Multiple choice",
+  "chip_hidden": "hidden",
+  "chip_options": "options",
+  "chip_hidden_title": "This part is HIDDEN on the card (cloze blank) — the student must recall it.",
+  "chip_options_title": "Options shown on the front of the card; the underlined green one is correct.",
+  "export_dlg_title": "Export deck",
+  "export_confirm": "Export now",
+  "tip_new": "Create a guided card from templates: Q&A, definition, blank, statute, case law.",
+  "tip_mc": "Create a multiple-choice question — as a list (A-E) or inside the sentence.",
+  "tip_prompt": "View and copy the ready prompt to generate cards with AI (ChatGPT, Claude, Gemini, Gemini Notebook).",
+  "tip_review": "Check your cards by flipping them like in Anki, before exporting.",
+  "tip_lang": "Interface language (Portuguese/English).",
+  "tip_editar": "Open this card's fields to change front, back, tags and blanks.",
+  "tip_incluir": "Untick to leave this card out of the export."
  }
 };
 const PARSER_MSG = {

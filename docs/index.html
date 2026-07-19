@@ -86,6 +86,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 .mc-row{display:flex;gap:8px;align-items:center;margin-top:4px}
 .mc-row input[type=radio]{width:18px;height:18px;flex:none;accent-color:#1a7f37}
 .mc-row input[type=text]{flex:1;margin-top:0}
+@keyframes flashCard{0%{box-shadow:0 0 0 4px rgba(37,99,235,.75)}100%{box-shadow:none}}
+.card.flash{animation:flashCard 1.4s ease-out}
+.chip-tag{font-size:9px;text-transform:uppercase;letter-spacing:.4px;opacity:.75;
+  margin-right:4px;font-weight:800}
+.tipbox{position:fixed;z-index:99;background:#2b2b2b;color:#f2f2f2;font-size:12px;
+  padding:6px 9px;border-radius:7px;max-width:280px;line-height:1.35;
+  box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
 .editor-wrap{position:relative}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
   color:transparent;caret-color:var(--texto);line-height:1.45}
@@ -128,17 +135,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 </header>
 
 <main>
-  <div class="grupo">
-    <label for="deck" data-i18n="deck_label"></label>
-    <input type="text" id="deck" value="Meu Baralho">
-    <div id="destino"></div>
-    <div class="linha">
-      <button class="btn btn-cinza" id="btnCaminho" data-i18n="copy_path_btn"></button>
-    </div>
-    <label for="tags" style="margin-top:10px" data-i18n="tags_label"></label>
-    <input type="text" id="tags">
-  </div>
-
   <div class="duas-colunas">
     <div class="grupo">
       <label data-i18n="editor_label"></label>
@@ -179,6 +175,23 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
     <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
     <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
     <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgExport">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="export_dlg_title"></h3>
+    <label for="deckExp" data-i18n="deck_label"></label>
+    <input type="text" id="deckExp">
+    <div id="destinoExp" style="font-size:12px;color:var(--sutil);margin:6px 0"></div>
+    <button type="button" class="btn btn-cinza" id="btnCaminhoExp"
+            style="margin-bottom:10px" data-i18n="copy_path_btn"></button>
+    <label for="tagsExp" data-i18n="tags_label"></label>
+    <input type="text" id="tagsExp">
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnExportConfirm" data-i18n="export_confirm"></button>
+    <button class="btn btn-cinza" id="btnExportFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
