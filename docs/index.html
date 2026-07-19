@@ -108,11 +108,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   60%{box-shadow:0 0 0 6px rgba(255,120,0,.9)}
   100%{box-shadow:none}}
 .card.flash{animation:flashCard 1.8s ease-out}
-#flashToast{position:fixed;left:10px;right:10px;bottom:88px;z-index:60;
-  pointer-events:none;opacity:0;transition:opacity .25s}
-#flashToast.on{opacity:1}
-#flashToast .card{box-shadow:0 0 0 4px rgba(255,120,0,.95),0 6px 22px rgba(0,0,0,.4);
-  max-height:34vh;overflow:hidden}
+#cartoes{position:relative;overflow-y:auto;max-height:46vh;
+  overscroll-behavior:contain;padding-right:2px}
+.toolbar-sec{margin-top:10px}
+.toolbar-sec .cap{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--sutil);font-weight:700;margin-bottom:2px}
+.toolbar-sec .toolbar{margin-top:2px}
+.lado-rotulo{font-size:9.5px;letter-spacing:.6px;font-weight:800;opacity:.6;margin:8px 0 2px}
 .chip-tag{font-size:9px;text-transform:uppercase;letter-spacing:.4px;opacity:.75;
   margin-right:4px;font-weight:800}
 .norm-item{border:1px solid rgba(128,128,128,.35);border-radius:8px;
@@ -153,7 +155,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 #novoPreview .card{margin-top:4px}
 .rev-mask{background:#2563eb22;color:#2563eb;font-weight:700;border-radius:4px;padding:0 4px}
 .rev-certa{color:var(--verde);font-weight:700}
-@media(min-width:760px){ .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px} }
+@media(min-width:760px){
+  .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .duas-colunas .grupo:nth-child(2){position:sticky;top:8px}
+  #cartoes{max-height:calc(100vh - 250px)}
+}
 </style>
 </head>
 <body>
@@ -180,23 +186,37 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
         <textarea id="editor" spellcheck="false"></textarea>
       </div>
       <div id="sugestoes"></div>
-      <div class="toolbar">
-        <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
-        <button class="btn btn-roxo" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
-        <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
-        <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
-        <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
+      <div class="toolbar-sec"><div class="cap" data-i18n="group_create"></div>
+        <div class="toolbar">
+          <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
+          <button class="btn btn-roxo" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
+        </div>
+      </div>
+      <div class="toolbar-sec"><div class="cap" data-i18n="group_ai"></div>
+        <div class="toolbar">
+          <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
+        </div>
+      </div>
+      <div class="toolbar-sec"><div class="cap" data-i18n="group_tools"></div>
+        <div class="toolbar">
+          <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
+          <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
+        </div>
       </div>
     </div>
     <div class="grupo">
       <label data-i18n="preview_label"></label>
+      <div style="display:flex;gap:6px;align-items:center;margin:2px 0 4px">
+        <span style="font-size:11.5px;color:var(--sutil)" data-i18n="preview_mode"></span>
+        <select id="selPrevia" style="flex:1;padding:5px;border-radius:7px;font-size:12px">
+          <option value="app"></option><option value="anki"></option>
+        </select>
+      </div>
       <div id="resumo">—</div>
       <div id="cartoes"></div>
     </div>
   </div>
 </main>
-
-<div id="flashToast"></div>
 
 <div class="rodape">
   <div style="width:100%;max-width:600px">
@@ -263,6 +283,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
     <div class="toolbar" style="margin-bottom:8px">
       <button class="btn btn-roxo" id="btnTabFull" data-i18n="prompt_full_tab"></button>
       <button class="btn btn-ciano" id="btnTabMini" data-i18n="prompt_mini_tab"></button>
+      <button class="btn btn-verde" id="btnTabMeu" data-i18n="prompt_my_tab"></button>
     </div>
     <textarea id="promptTexto" readonly
       style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
@@ -270,6 +291,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnPromptCopiar" data-i18n="prompt_copy"></button>
+    <button class="btn btn-roxo" id="btnPromptSalvar" style="display:none" data-i18n="prompt_save"></button>
     <button class="btn btn-cinza" id="btnPromptFechar" data-i18n="help_close"></button>
   </div>
 </dialog>

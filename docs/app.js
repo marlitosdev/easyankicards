@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.2.0";
+const VERSAO = "6.3.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -75,6 +75,7 @@ function aplicarTextos() {
   $("deckExp").placeholder = t("deck_placeholder");
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
+  rotularPrevia();
   atualizarDestino();
 }
 
@@ -323,7 +324,12 @@ function preview() {
     if (editando === chave(c)) {
       c.kind === "mc" ? montarEdicaoMC(div, c, r, idx) : montarEdicao(div, c, r, idx);
     } else {
-      renderCorpoCartao(div, c);
+      if (modoPrevia() === "anki") {
+        renderCartaoEstilizado(div, c);
+        c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
+      } else {
+        renderCorpoCartao(div, c);
+      }
       const acoes = document.createElement("div");
       acoes.className = "acoes";
       const bEd = document.createElement("button");
@@ -357,32 +363,15 @@ function preview() {
     let alvo = null, alvoCard = null;
     cardDivs.forEach((cd) => { if (cd.line <= flashLinha) alvo = cd; });
     r.cards.forEach((c) => { if (c.line <= flashLinha) alvoCard = c; });
-    const mobile = matchMedia("(max-width: 759px)").matches;
-    if (mobile && alvoCard) {
-      // Celular: toast fixo com o cartão — nada de rolar a página
-      mostrarToastCartao(alvoCard);
-    } else if (alvo) {
+    if (alvo) {
+      // rola apenas a barra de cartões (a página e o editor ficam parados)
       alvo.div.classList.add("flash");
-      alvo.div.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      const cont = $("cartoes");
+      cont.scrollTo({ top: Math.max(0, alvo.div.offsetTop - 24), behavior: "smooth" });
       setTimeout(() => alvo.div.classList.remove("flash"), 1900);
     }
     flashLinha = null;
   }
-}
-
-let toastTimer = null;
-
-function mostrarToastCartao(c) {
-  const box = $("flashToast");
-  box.innerHTML = "";
-  const div = document.createElement("div");
-  div.className = "card" + (c.issues.length ? " suspeito" : "");
-  div.style.padding = "8px 11px";
-  renderCorpoCartao(div, c);
-  box.append(div);
-  box.classList.add("on");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => box.classList.remove("on"), 2400);
 }
 
 function selecionados(r) { return r.cards.filter((c) => !excluidos.has(chave(c))); }
@@ -392,6 +381,86 @@ function resumo(r) {
   if (r.nSuspicious) s += t("summary_verify", { n: r.nSuspicious });
   $("resumo").textContent = s;
   $("status").textContent = t("status_auto", { n: r.cards.length });
+}
+
+
+/* --------- prévia completa "como no Anki" (estilo escolhido) --------- */
+
+function modoPrevia() { return localStorage.getItem("eac_previa") || "app"; }
+
+function textoClozeResolvido(pai, texto, cor) {
+  const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
+  partes.forEach((p) => {
+    const m = p.match(/^\{\{c\d+::([\s\S]*?)\}\}$/);
+    if (!m) { pai.append(document.createTextNode(p)); return; }
+    const ans = m[1].split("::")[0].trim();
+    const b = document.createElement("b");
+    b.style.color = cor;
+    b.textContent = ans;
+    pai.append(b);
+  });
+}
+
+function renderCartaoEstilizado(div, c) {
+  const p = PALETAS[localStorage.getItem("eac_style") || "classic"] || PALETAS.classic;
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
+  const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
+  const deckNome = (localStorage.getItem("eac_deck") || "Meu Baralho").split("::").pop().trim();
+
+  if (p.cab) {
+    const pill = document.createElement("div");
+    pill.textContent = deckNome;
+    pill.style.cssText = "background:" + p.cab + ";color:#fff;font-weight:700;" +
+      "text-align:center;padding:6px;border-radius:11px;font-size:13.5px;margin-bottom:6px;" + sombra;
+    wrap.append(pill);
+  }
+  if (p.sub && c.tags.length) {
+    const sub = document.createElement("div");
+    sub.textContent = c.tags.join("  ·  ");
+    sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +
+      ";font-style:italic;text-align:center;font-size:10.5px;padding:4px;" +
+      "border-radius:9px 9px 0 0;" + sombra;
+    wrap.append(sub);
+  }
+
+  const rot1 = document.createElement("div");
+  rot1.className = "lado-rotulo"; rot1.textContent = t("lado_frente");
+  rot1.style.color = p.texto;
+  wrap.append(rot1);
+  const frente = document.createElement("div");
+  frente.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
+    ";padding:12px;text-align:justify;font-size:13.5px;" + sombra;
+  textoClozeResolvido(frente, c.front, p.destaque);
+  if (c.kind === "mc") {
+    c.options.forEach((o, i) => {
+      const li = document.createElement("div");
+      li.textContent = letra(i) + ") " + o;
+      frente.append(document.createElement("br"), li);
+    });
+  }
+  wrap.append(frente);
+
+  const rot2 = document.createElement("div");
+  rot2.className = "lado-rotulo"; rot2.textContent = t("lado_verso");
+  rot2.style.color = p.texto;
+  wrap.append(rot2);
+  const verso = document.createElement("div");
+  verso.style.cssText = "background:" + p.caixa + ";padding:10px;text-align:center;" +
+    "font-weight:700;font-size:14px;color:" + p.destaque + ";" + sombra;
+  if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
+  else if (CLOZE_RE.test(c.front)) verso.textContent = "…";
+  else verso.textContent = c.back;
+  if (c.kind === "mc" || !CLOZE_RE.test(c.front)) wrap.append(verso);
+  if ((c.kind === "mc" || CLOZE_RE.test(c.front)) && c.back) {
+    const just = document.createElement("div");
+    just.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
+      ";padding:10px;text-align:justify;font-size:12.5px;margin-top:6px;" +
+      "border-radius:0 0 11px 11px;" + sombra;
+    just.textContent = c.back;
+    wrap.append(just);
+  }
+  div.append(wrap);
 }
 
 /* --------------------------- edição inline -------------------------- */
@@ -1045,14 +1114,27 @@ let promptAtivo = "prompt_full";
 
 function mostrarPrompt(tipo) {
   promptAtivo = tipo;
-  $("promptTexto").value = t(tipo);              // usuário VÊ o texto que copiará
+  const meu = tipo === "meu";
+  // "Meu prompt": editável e guardado no aparelho; começa com o modelo completo
+  $("promptTexto").value = meu
+    ? (localStorage.getItem("eac_myprompt") || t("prompt_full"))
+    : t(tipo);
+  $("promptTexto").readOnly = !meu;
+  $("btnPromptSalvar").style.display = meu ? "" : "none";
   $("btnTabFull").classList.toggle("ativa", tipo === "prompt_full");
   $("btnTabMini").classList.toggle("ativa", tipo === "prompt_mini");
+  $("btnTabMeu").classList.toggle("ativa", meu);
 }
 
 $("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); $("dlgPrompt").showModal(); };
 $("btnTabFull").onclick = () => mostrarPrompt("prompt_full");
 $("btnTabMini").onclick = () => mostrarPrompt("prompt_mini");
+$("btnTabMeu").onclick = () => mostrarPrompt("meu");
+$("btnPromptSalvar").onclick = () => {
+  localStorage.setItem("eac_myprompt", $("promptTexto").value);
+  $("btnPromptSalvar").textContent = t("prompt_saved");
+  setTimeout(() => { $("btnPromptSalvar").textContent = t("prompt_save"); }, 2200);
+};
 $("btnPromptFechar").onclick = () => $("dlgPrompt").close();
 $("btnPromptCopiar").onclick = async () => {
   await navigator.clipboard.writeText($("promptTexto").value);
@@ -1084,6 +1166,16 @@ const temaSalvo = localStorage.getItem("eac_theme") || "auto";
 aplicarTema(temaSalvo);
 $("selTema").value = temaSalvo;
 $("selTema").onchange = () => aplicarTema($("selTema").value);
+function rotularPrevia() {
+  const nomes = { app: "preview_simple", anki: "preview_anki" };
+  [...$("selPrevia").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
+}
+$("selPrevia").value = modoPrevia();
+$("selPrevia").onchange = () => {
+  localStorage.setItem("eac_previa", $("selPrevia").value);
+  preview();
+};
+attachTip($("selPrevia"), "preview_anki_hint");
 attachTip($("selTema"), "tip_theme");
 $("btnMCRapido").onclick = () => {
   rotularModelos();
