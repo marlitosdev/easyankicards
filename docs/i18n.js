@@ -108,7 +108,23 @@ const UI = {
   "crit_dup": "Frente duplicada nas linhas {a} e {b} — o Anki tratará como o mesmo cartão.",
   "crit_bullets": "O texto tem numeração ou marcadores (1., -, •) no início das linhas — use \"Remover numeração/marcadores\" para limpar.",
   "crit_pairs": "Há perguntas terminadas em \"?\" seguidas da resposta na linha de baixo, sem \"::\" — use \"Emparelhar Pergunta/Resposta\" para converter.",
-  "applied_status": "Correção aplicada — confira a pré-visualização."
+  "applied_status": "Correção aplicada — confira a pré-visualização.",
+  "sug_none": "✓ Nenhuma observação — texto pronto para exportar.",
+  "sug_ignored": "{n} linha(s) ignorada(s) — em vermelho no editor e na lista.",
+  "sug_verify": "{n} cartão(ões) para VERIFICAR — linhas laranjas no editor.",
+  "sug_pairs": "{n} par(es) Pergunta/Resposta juntados automaticamente (nota azul no cartão) — confira.",
+  "review_btn": "Revisar cartões",
+  "review_show": "Mostrar resposta",
+  "review_next": "Próximo ›",
+  "review_prev": "‹ Anterior",
+  "review_counter": "{i} de {n}",
+  "review_empty": "Nenhum cartão para revisar.",
+  "mc_quick_btn": "+ Múltipla escolha",
+  "tpl_mc_cloze": "Múltipla escolha na frase (nativa)",
+  "mc_correct_label": "Resposta correta (como está na frase)",
+  "mc_wrong_label": "Alternativas erradas (separe com | )",
+  "hint_mc_cloze": "Gera a sintaxe nativa do Anki: {{c1::certa::opção/opção}}. Na frente, as opções aparecem dentro da própria frase; ao virar, somente a correta permanece. Funciona com o modelo Cloze padrão do Anki, sem nada extra.",
+  "mc_term_missing": "Não encontrei a resposta correta dentro da frase. Escreva a frase com a resposta correta no lugar dela."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -218,7 +234,23 @@ const UI = {
   "crit_dup": "Duplicate front at lines {a} and {b} — Anki will treat them as the same card.",
   "crit_bullets": "The text has numbering or bullets (1., -, •) at line starts — use \"Remove numbering/bullets\" to clean.",
   "crit_pairs": "There are questions ending in \"?\" followed by the answer on the next line, without \"::\" — use \"Pair Question/Answer\" to convert.",
-  "applied_status": "Fix applied — check the preview."
+  "applied_status": "Fix applied — check the preview.",
+  "sug_none": "✓ No remarks — text ready to export.",
+  "sug_ignored": "{n} skipped line(s) — shown in red in the editor and list.",
+  "sug_verify": "{n} card(s) to CHECK — orange lines in the editor.",
+  "sug_pairs": "{n} Question/Answer pair(s) joined automatically (blue note on the card) — please check.",
+  "review_btn": "Review cards",
+  "review_show": "Show answer",
+  "review_next": "Next ›",
+  "review_prev": "‹ Previous",
+  "review_counter": "{i} of {n}",
+  "review_empty": "No cards to review.",
+  "mc_quick_btn": "+ Multiple choice",
+  "tpl_mc_cloze": "In-sentence multiple choice (native)",
+  "mc_correct_label": "Correct answer (as written in the sentence)",
+  "mc_wrong_label": "Wrong options (separate with | )",
+  "hint_mc_cloze": "Generates Anki's native syntax: {{c1::correct::option/option}}. The options appear inside the sentence on the front; when flipped, only the correct one remains. Works with Anki's standard Cloze model, nothing extra needed.",
+  "mc_term_missing": "Could not find the correct answer inside the sentence. Write the sentence with the correct answer in place."
  }
 };
 const PARSER_MSG = {
@@ -242,7 +274,8 @@ const PARSER_MSG = {
   "r_more": "... e mais {n} problema(s).",
   "p_mc": "MÚLT. ESCOLHA",
   "i_mc_fewopts": "múltipla escolha com menos de 2 alternativas",
-  "i_mc_nocorrect": "nenhuma alternativa marcada com * como correta — assumi a primeira; toque em Editar para escolher"
+  "i_mc_nocorrect": "nenhuma alternativa marcada com * como correta — assumi a primeira; toque em Editar para escolher",
+  "i_pair": "par Pergunta/Resposta detectado sem '::' — juntei automaticamente, confira"
  },
  "en": {
   "w_cloze_empty": "Line {n}: empty cloze card — skipped.",
@@ -264,7 +297,8 @@ const PARSER_MSG = {
   "r_more": "... and {n} more issue(s).",
   "p_mc": "MULT. CHOICE",
   "i_mc_fewopts": "multiple choice with fewer than 2 options",
-  "i_mc_nocorrect": "no option marked with * as correct — assumed the first; tap Edit to choose"
+  "i_mc_nocorrect": "no option marked with * as correct — assumed the first; tap Edit to choose",
+  "i_pair": "Question/Answer pair detected without '::' — joined automatically, please check"
  }
 };
 

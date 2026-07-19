@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "5.4.0";
+const VERSAO = "5.5.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -65,6 +65,85 @@ function botoesLacuna(pai, campo) {
   aj.onclick = () => alert(t("hint_mark_blank"));
   linha.append(bM, bL, aj);
   pai.append(linha);
+}
+
+
+/* -------------- destaque de sintaxe e erros no editor --------------- */
+
+let hlWarnLines = new Set();   // linhas ignoradas (vermelho)
+let hlIssueLines = new Set();  // linhas de cartões VERIFICAR (laranja)
+
+function escHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function destacarTrecho(texto) {
+  // separa lacunas cloze do resto para colorir sem conflito com '::'
+  const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
+  return partes.map((p) => {
+    if (/^\{\{c\d+::/.test(p)) return '<span class="hl-cloze">' + escHtml(p) + "</span>";
+    return escHtml(p).replace(/::/g, '<span class="hl-delim">::</span>');
+  }).join("");
+}
+
+function renderDestaque() {
+  const linhas = $("editor").value.split("\n");
+  const html = linhas.map((l, i) => {
+    const n = i + 1;
+    let corpo;
+    if (l.trim().startsWith("#")) corpo = '<span class="hl-com">' + escHtml(l) + "</span>";
+    else if (l.startsWith("[MC]"))
+      corpo = '<span class="hl-mc">[MC]</span>' + destacarTrecho(l.slice(4));
+    else corpo = destacarTrecho(l);
+    const cls = hlWarnLines.has(n) ? "hl-err" : (hlIssueLines.has(n) ? "hl-warn" : "");
+    return cls ? '<span class="' + cls + '">' + corpo + "</span>" : corpo;
+  }).join("\n");
+  $("editorHl").innerHTML = html + "\n";
+  $("editorHl").scrollTop = $("editor").scrollTop;
+}
+
+/* ---------------- sugestões automáticas (sem botão) ----------------- */
+
+function renderSugestoes(r, raw) {
+  const box = $("sugestoes");
+  box.innerHTML = "";
+  const itens = [];
+  if (r.warnings.length) itens.push({ dot: "dot-red", txt: t("sug_ignored", { n: r.warnings.length }) });
+  if (r.nSuspicious) itens.push({ dot: "dot-org", txt: t("sug_verify", { n: r.nSuspicious }) });
+  if (r.nPares) itens.push({ dot: "dot-blue", txt: t("sug_pairs", { n: r.nPares }) });
+  const vistos = {};
+  let longos = 0, dups = 0;
+  r.cards.forEach((c) => {
+    if ((c.front + c.back).length > 220 && longos < 2) { itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }) }); longos++; }
+    const k = c.front.toLowerCase().trim();
+    if (vistos[k] && dups < 2) { itens.push({ dot: "dot-org", txt: t("crit_dup", { a: vistos[k], b: c.line }) }); dups++; }
+    else if (!vistos[k]) vistos[k] = c.line;
+  });
+  if (temMarcadores(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_bullets"),
+                 fixTxt: t("fix_bullets"), fix: removerMarcadoresTexto });
+  if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
+
+  itens.slice(0, 6).forEach((it) => {
+    const div = document.createElement("div");
+    div.className = "sug";
+    const dot = document.createElement("span");
+    dot.className = "dot " + it.dot;
+    const sp = document.createElement("span");
+    sp.textContent = it.txt;
+    div.append(dot, sp);
+    if (it.fix) {
+      const b = document.createElement("button");
+      b.className = "btn btn-azul"; b.textContent = it.fixTxt;
+      b.onclick = () => {
+        $("editor").value = it.fix($("editor").value);
+        $("status").textContent = t("applied_status");
+        preview();
+      };
+      div.append(b);
+    }
+    box.append(div);
+  });
 }
 
 /* ------------------------- pré-visualização ------------------------- */
@@ -140,6 +219,7 @@ function preview() {
       }
       if (c.tags.length) { const tg = document.createElement("div"); tg.className = "tags"; tg.textContent = t("tags_prefix") + c.tags.join(", "); div.append(tg); }
       c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
+      (c.infos || []).forEach((i) => { const e = document.createElement("div"); e.className = "info"; e.textContent = "ℹ " + i; div.append(e); });
       const acoes = document.createElement("div");
       acoes.className = "acoes";
       const bEd = document.createElement("button");
@@ -158,6 +238,12 @@ function preview() {
     box.append(div);
   });
   resumo(r);
+
+  // análise automática: cores no editor + faixa de sugestões
+  hlWarnLines = new Set(r.warnLines || []);
+  hlIssueLines = new Set(r.cards.filter((c) => c.issues.length).map((c) => c.line));
+  renderDestaque();
+  renderSugestoes(r, $("editor").value);
 }
 
 function selecionados(r) { return r.cards.filter((c) => !excluidos.has(chave(c))); }
@@ -288,35 +374,6 @@ function normalizar() {
   preview();
 }
 
-function analisar() {
-  const raw = $("editor").value;
-  const r = parseAtual();
-  const crit = [];
-  r.warnings.forEach((w) => crit.push("• " + w));
-  const vistos = {};
-  r.cards.forEach((c) => {
-    if ((c.front + c.back).length > 220) crit.push("• " + t("crit_long", { n: c.line }));
-    const k = c.front.toLowerCase().trim();
-    if (vistos[k]) crit.push("• " + t("crit_dup", { a: vistos[k], b: c.line }));
-    else vistos[k] = c.line;
-    c.issues.forEach((i) => crit.push("• " + t("card_line") + " " + c.line + ": " + i));
-  });
-  if (temMarcadores(raw)) crit.push("• " + t("crit_bullets"));
-  if (temParesSoltos(raw)) crit.push("• " + t("crit_pairs"));
-
-  $("analiseLista").textContent = crit.length ? crit.join("\n\n") : t("analyze_ok");
-  $("btnFixBullets").style.display = temMarcadores(raw) ? "" : "none";
-  $("btnFixPairs").style.display = temParesSoltos(raw) ? "" : "none";
-  $("dlgAnalise").showModal();
-}
-
-function aplicarFix(fn) {
-  $("editor").value = fn($("editor").value);
-  $("status").textContent = t("applied_status");
-  preview();
-  analisar();   // reabre com a situação atualizada
-}
-
 /* --------------------------- exportação ---------------------------- */
 
 function validar() {
@@ -377,6 +434,76 @@ async function exportarApkg() {
   }
 }
 
+
+/* ------------------------ modo revisão rápida ----------------------- */
+
+let revIdx = 0, revMostra = false;
+
+function clozeMascarado(texto, mostrar) {
+  const frag = document.createElement("span");
+  const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
+  partes.forEach((p) => {
+    const m = p.match(/^\{\{c\d+::([\s\S]*?)\}\}$/);
+    if (!m) { frag.append(document.createTextNode(p)); return; }
+    const inner = m[1].split("::");            // [resposta, dica?]
+    const sp = document.createElement("span");
+    sp.className = mostrar ? "rev-certa" : "rev-mask";
+    sp.textContent = mostrar ? inner[0] : (inner[1] ? "[ " + inner[1] + " ]" : "[...]");
+    frag.append(sp);
+  });
+  return frag;
+}
+
+function revRender() {
+  const cards = ultimoResult ? selecionados(ultimoResult) : [];
+  const alvo = $("revCartao");
+  alvo.innerHTML = "";
+  if (!cards.length) { alvo.textContent = t("review_empty"); $("revContador").textContent = ""; return; }
+  revIdx = Math.max(0, Math.min(revIdx, cards.length - 1));
+  const c = cards[revIdx];
+  $("revContador").textContent = t("review_counter", { i: revIdx + 1, n: cards.length })
+    + "  ·  " + tipoRotulo(c);
+
+  const frente = document.createElement("div");
+  frente.style.fontWeight = "700";
+  frente.append(clozeMascarado(c.front, false));
+  alvo.append(frente);
+  if (c.kind === "mc") {
+    c.options.forEach((o, i) => {
+      const li = document.createElement("div");
+      li.textContent = letra(i) + ") " + o;
+      if (revMostra && i === c.correct) li.className = "rev-certa";
+      alvo.append(li);
+    });
+  }
+  if (revMostra) {
+    const hr = document.createElement("hr");
+    alvo.append(hr);
+    if (CLOZE_RE.test(c.front)) {
+      const resp = document.createElement("div");
+      resp.append(clozeMascarado(c.front, true));
+      alvo.append(resp);
+    }
+    if (c.kind === "mc") {
+      const ok = document.createElement("div");
+      ok.className = "rev-certa";
+      ok.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
+      alvo.append(ok);
+    }
+    if (c.back) {
+      const v = document.createElement("div");
+      v.textContent = c.back;
+      alvo.append(v);
+    }
+  }
+}
+
+$("btnRevisar").onclick = () => { revIdx = 0; revMostra = false; revRender(); $("dlgRevisao").showModal(); };
+$("btnRevMostrar").onclick = () => { revMostra = true; revRender(); };
+$("btnRevProx").onclick = () => { revIdx++; revMostra = false; revRender(); };
+$("btnRevPrev").onclick = () => { revIdx--; revMostra = false; revRender(); };
+$("btnRevFechar").onclick = () => $("dlgRevisao").close();
+
 /* ------------------- novo cartão guiado (modelos) ------------------- */
 
 const MODELOS = {
@@ -392,6 +519,8 @@ const MODELOS = {
            en: ["Case N (Supreme Court): what is the holding?", "The holding, in plain language.", "case_law"] },
   mc:    { pt: ["Qual alternativa está correta sobre ... ?", "Explicação da resposta (opcional).", "tema"],
            en: ["Which option is correct about ... ?", "Answer explanation (optional).", "topic"] },
+  mc_cloze: { pt: ["A capital da França é Paris.", "", "geografia"],
+              en: ["The capital of France is Paris.", "", "geography"] },
 };
 
 function aplicarModelo() {
@@ -401,13 +530,18 @@ function aplicarModelo() {
   $("novoVerso").value = m[1];
   $("novoTags").value = m[2];
   $("mcArea").style.display = chaveM === "mc" ? "" : "none";
+  $("mcClozeArea").style.display = chaveM === "mc_cloze" ? "" : "none";
   $("lacunaArea").style.display = chaveM === "cloze" ? "" : "none";
-  $("dicaCampo").textContent = chaveM === "mc" ? t("hint_mc") : "";
+  $("dicaCampo").textContent = chaveM === "mc" ? t("hint_mc")
+    : (chaveM === "mc_cloze" ? t("hint_mc_cloze") : "");
+  if (chaveM === "mc_cloze") { $("mcCerta").value = LANG === "pt" ? "Paris" : "Paris";
+                               $("mcErradas").value = LANG === "pt" ? "Lyon | Marselha" : "Lyon | Marseille"; }
 }
 
 function rotularModelos() {
   const nomes = { qa: "tpl_qa", def: "tpl_def", cloze: "tpl_cloze",
-                  law: "tpl_law", juris: "tpl_juris", mc: "tpl_mc" };
+                  law: "tpl_law", juris: "tpl_juris", mc: "tpl_mc",
+                  mc_cloze: "tpl_mc_cloze" };
   [...$("selModelo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
 }
 
@@ -418,7 +552,23 @@ $("btnMarcarNovo").onclick = () => marcarLacuna($("novoFrente"));
 $("btnLimparNovo").onclick = () => limparLacunas($("novoFrente"));
 $("btnInserir").onclick = () => {
   let linha;
-  if ($("selModelo").value === "mc") {
+  if ($("selModelo").value === "mc_cloze") {
+    // Sintaxe nativa do Anki: {{c1::certa::op/op}} — na resposta só a certa fica
+    const frase = $("novoFrente").value;
+    const certa = $("mcCerta").value.trim();
+    const erradas = $("mcErradas").value.split("|").map((s) => s.trim()).filter(Boolean);
+    if (!certa || !frase.includes(certa)) { alert(t("mc_term_missing")); return; }
+    const ops = erradas.slice();
+    ops.splice(Math.floor(Math.random() * (ops.length + 1)), 0, certa);
+    const front = frase.replace(certa, "{{c1::" + certa + "::" + ops.join("/") + "}}");
+    const campos = [front];
+    const verso = $("novoVerso").value.trim();
+    const tags = parseTags($("novoTags").value);
+    if (verso) campos.push(verso);
+    else if (tags.length) campos.push("");
+    if (tags.length) campos.push(tags.join(", "));
+    linha = campos.join(" :: ");
+  } else if ($("selModelo").value === "mc") {
     const ops = ["mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"]
       .map((id) => $(id).value.trim()).filter(Boolean);
     const correta = Math.min(parseInt($("mcCorreta").value, 10), Math.max(ops.length - 1, 0));
@@ -454,12 +604,15 @@ $("selIdioma").onchange = () => {
 };
 $("deck").oninput = () => { atualizarDestino(); };
 $("tags").oninput = agendarPreview;
-$("editor").oninput = agendarPreview;
+$("editor").oninput = () => { renderDestaque(); agendarPreview(); };
+$("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
 $("btnNormalizar").onclick = normalizar;
-$("btnAnalisar").onclick = analisar;
-$("btnAnaliseFechar").onclick = () => $("dlgAnalise").close();
-$("btnFixBullets").onclick = () => aplicarFix(removerMarcadoresTexto);
-$("btnFixPairs").onclick = () => aplicarFix(emparelharTexto);
+$("btnMCRapido").onclick = () => {
+  rotularModelos();
+  $("selModelo").value = "mc_cloze";
+  aplicarModelo();
+  $("dlgNovo").showModal();
+};
 $("btnTxt").onclick = exportarTxt;
 $("btnApkg").onclick = exportarApkg;
 $("btnAjuda").onclick = () => $("dlgAjuda").showModal();

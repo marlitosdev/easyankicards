@@ -42,7 +42,7 @@ function looksLikeTags(raw) {
 }
 
 function agruparLinhas(rawText) {
-  const blocos = [];
+  const blocos = [];   // itens: {linha, texto, par?}
   let atual = null;
   const linhas = rawText.split(/\r?\n/);
   for (let i = 0; i < linhas.length; i++) {
@@ -54,7 +54,15 @@ function agruparLinhas(rawText) {
     } else if (atual !== null && s.startsWith(DELIM)) {
       atual.texto += " " + s;
     } else if (atual !== null && !hasDelim(atual.texto) && !CLOZE_RE.test(atual.texto)) {
-      atual.texto += " " + s;
+      // Cartão anterior incompleto. Se ele termina em "?" e esta linha
+      // parece a resposta, infere o par Pergunta :: Resposta sozinho.
+      if (atual.texto.trim().endsWith("?") && !hasDelim(s)
+          && !CLOZE_START_RE.test(s) && !s.endsWith("?")) {
+        atual.texto += " :: " + s;
+        atual.par = true;
+      } else {
+        atual.texto += " " + s;
+      }
     } else if (hasDelim(s) || CLOZE_START_RE.test(s)) {
       atual = { linha: i + 1, texto: s };
       blocos.push(atual);
@@ -86,8 +94,9 @@ function checarSuspeitas(card, rawParts) {
 
 function parseText(rawText, globalTags) {
   globalTags = globalTags || [];
-  const result = { cards: [], warnings: [] };
-  for (const { linha, texto } of agruparLinhas(rawText)) {
+  const result = { cards: [], warnings: [], warnLines: [] };
+  const avisar = (msg, n) => { result.warnings.push(msg); result.warnLines.push(n); };
+  for (const { linha, texto, par } of agruparLinhas(rawText)) {
     /* Múltipla escolha: [MC] Pergunta :: op1 | op2 * | op3 :: explicação :: tags
        (o * marca a alternativa correta). Vira cartão Básico na exportação. */
     if (texto.startsWith("[MC]")) {
@@ -107,9 +116,10 @@ function parseText(rawText, globalTags) {
       const card = { kind: "mc", front: question, back, options,
                      correct: correct === -1 ? 0 : correct,
                      tags: globalTags.concat(tags), line: linha, issues: [] };
-      if (!question) { result.warnings.push(pm("w_empty_field", { n: linha })); continue; }
+      if (!question) { avisar(pm("w_empty_field", { n: linha }), linha); continue; }
       if (options.length < 2) card.issues.push(pm("i_mc_fewopts"));
       if (correct === -1) card.issues.push(pm("i_mc_nocorrect"));
+      card.infos = par ? [pm("i_pair")] : [];
       result.cards.push(card);
       continue;
     }
@@ -136,23 +146,25 @@ function parseText(rawText, globalTags) {
 
     let card;
     if (isCloze) {
-      if (!front) { result.warnings.push(pm("w_cloze_empty", { n: linha })); continue; }
+      if (!front) { avisar(pm("w_cloze_empty", { n: linha }), linha); continue; }
       card = { kind: "cloze", front, back, tags: globalTags.concat(tags), line: linha, issues: [] };
     } else {
       if (parts.length < 2) {
-        result.warnings.push(pm("w_no_delim", { n: linha, c: "'" + texto.slice(0, 60) + "'" }));
+        avisar(pm("w_no_delim", { n: linha, c: "'" + texto.slice(0, 60) + "'" }), linha);
         continue;
       }
-      if (!front || !back) { result.warnings.push(pm("w_empty_field", { n: linha })); continue; }
+      if (!front || !back) { avisar(pm("w_empty_field", { n: linha }), linha); continue; }
       card = { kind: "basic", front, back, tags: globalTags.concat(tags), line: linha, issues: [] };
     }
     card.issues = checarSuspeitas(card, parts);
     if (extraIssue) card.issues.push(extraIssue);
+    card.infos = par ? [pm("i_pair")] : [];
     result.cards.push(card);
   }
   result.nBasic = result.cards.filter((c) => c.kind === "basic").length;
   result.nCloze = result.cards.filter((c) => c.kind === "cloze").length;
   result.nSuspicious = result.cards.filter((c) => c.issues.length).length;
+  result.nPares = result.cards.filter((c) => c.infos && c.infos.length).length;
   result.hasProblems = result.warnings.length > 0 || result.nSuspicious > 0;
   return result;
 }

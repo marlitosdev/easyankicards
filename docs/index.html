@@ -76,6 +76,28 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .card .btn{padding:5px 10px;font-size:12.5px}
 dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   border-radius:6px;padding:7px;background:transparent;font-size:13px;margin-top:3px}
+.editor-wrap{position:relative}
+.editor-wrap textarea{position:relative;z-index:1;background:transparent;
+  color:transparent;caret-color:var(--texto);line-height:1.45}
+#editorHl{position:absolute;inset:0;margin:0;overflow:hidden;pointer-events:none;
+  white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;
+  border-radius:8px;padding:10px;font-family:ui-monospace,Consolas,monospace;
+  font-size:13px;line-height:1.45;color:var(--texto)}
+.hl-delim{color:#e8940a;font-weight:700}
+.hl-cloze{color:#2563eb;font-weight:600}
+.hl-mc{color:#7c3aed;font-weight:700}
+.hl-com{color:var(--sutil)}
+.hl-err{background:rgba(220,38,38,.18);border-radius:3px}
+.hl-warn{background:rgba(232,148,10,.18);border-radius:3px}
+#sugestoes{margin-top:8px;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.sug{display:flex;gap:7px;align-items:flex-start}
+.sug .dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex:none}
+.dot-red{background:#dc2626}.dot-org{background:#e8940a}
+.dot-blue{background:#2563eb}.dot-green{background:#4caf50}
+.sug .btn{padding:3px 9px;font-size:11.5px;margin-left:6px}
+.card .info{font-size:11.5px;color:#2563eb;margin-top:3px}
+.rev-mask{background:#2563eb22;color:#2563eb;font-weight:700;border-radius:4px;padding:0 4px}
+.rev-certa{color:var(--verde);font-weight:700}
 @media(min-width:760px){ .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px} }
 </style>
 </head>
@@ -105,10 +127,15 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   <div class="duas-colunas">
     <div class="grupo">
       <label data-i18n="editor_label"></label>
-      <textarea id="editor" spellcheck="false"></textarea>
+      <div class="editor-wrap">
+        <pre id="editorHl" aria-hidden="true"></pre>
+        <textarea id="editor" spellcheck="false"></textarea>
+      </div>
+      <div id="sugestoes"></div>
       <div class="linha">
         <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
-        <button class="btn btn-azul" id="btnAnalisar" data-i18n="analyze_btn"></button>
+        <button class="btn btn-roxo" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
+        <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
       </div>
     </div>
@@ -139,15 +166,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   </div>
 </dialog>
 
-<dialog id="dlgAnalise">
+<dialog id="dlgRevisao">
   <div style="padding:16px">
-    <h3 style="margin:0 0 10px" data-i18n="analyze_title"></h3>
-    <div class="dlg-corpo" id="analiseLista" style="padding:0;max-height:45vh"></div>
+    <div id="revContador" style="font-size:12px;color:var(--sutil);margin-bottom:8px"></div>
+    <div id="revCartao" style="min-height:140px;font-size:15px;line-height:1.5"></div>
   </div>
   <div class="dlg-rodape">
-    <button class="btn btn-azul" id="btnFixBullets" data-i18n="fix_bullets"></button>
-    <button class="btn btn-ciano" id="btnFixPairs" data-i18n="fix_pairs"></button>
-    <button class="btn btn-cinza" id="btnAnaliseFechar" data-i18n="help_close"></button>
+    <button class="btn btn-cinza" id="btnRevPrev" data-i18n="review_prev"></button>
+    <button class="btn btn-verde" id="btnRevMostrar" data-i18n="review_show"></button>
+    <button class="btn btn-cinza" id="btnRevProx" data-i18n="review_next"></button>
+    <button class="btn btn-cinza" id="btnRevFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
@@ -158,7 +186,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
     <select id="selModelo" style="width:100%;padding:8px;border-radius:8px;margin-bottom:10px">
       <option value="qa"></option><option value="def"></option>
       <option value="cloze"></option><option value="law"></option>
-      <option value="juris"></option>
+      <option value="juris"></option><option value="mc"></option><option value="mc_cloze"></option>
     </select>
     <label><span data-i18n="field_front"></span>
       <button type="button" class="ic-ajuda" data-hint="hint_front">?</button></label>
@@ -167,6 +195,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
       <button type="button" class="btn btn-ciano" id="btnMarcarNovo" data-i18n="btn_mark_blank"></button>
       <button type="button" class="btn btn-cinza" id="btnLimparNovo" data-i18n="btn_clear_blanks"></button>
       <button type="button" class="ic-ajuda" data-hint="hint_mark_blank">?</button>
+    </div>
+    <div id="mcClozeArea" style="display:none;margin-top:6px">
+      <label><span data-i18n="mc_correct_label"></span>
+        <button type="button" class="ic-ajuda" data-hint="hint_mc_cloze">?</button></label>
+      <input type="text" id="mcCerta">
+      <label><span data-i18n="mc_wrong_label"></span></label>
+      <input type="text" id="mcErradas" placeholder="Lyon | Marselha">
     </div>
     <div id="mcArea" style="display:none;margin-top:6px">
       <label><span data-i18n="mc_options_label"></span>
