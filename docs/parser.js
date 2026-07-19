@@ -94,8 +94,12 @@ function checarSuspeitas(card, rawParts) {
 
 function parseText(rawText, globalTags) {
   globalTags = globalTags || [];
-  const result = { cards: [], warnings: [], warnLines: [] };
-  const avisar = (msg, n) => { result.warnings.push(msg); result.warnLines.push(n); };
+  const result = { cards: [], warnings: [], warnLines: [], ignorados: [] };
+  const avisar = (msg, n, texto) => {
+    result.warnings.push(msg);
+    result.warnLines.push(n);
+    if (texto !== undefined) result.ignorados.push({ line: n, texto });
+  };
   for (const { linha, texto, par } of agruparLinhas(rawText)) {
     /* Múltipla escolha: [MC] Pergunta :: op1 | op2 * | op3 :: explicação :: tags
        (o * marca a alternativa correta). Vira cartão Básico na exportação. */
@@ -116,10 +120,11 @@ function parseText(rawText, globalTags) {
       const card = { kind: "mc", front: question, back, options,
                      correct: correct === -1 ? 0 : correct,
                      tags: globalTags.concat(tags), line: linha, issues: [] };
-      if (!question) { avisar(pm("w_empty_field", { n: linha }), linha); continue; }
+      if (!question) { avisar(pm("w_empty_field", { n: linha }), linha, texto); continue; }
       if (options.length < 2) card.issues.push(pm("i_mc_fewopts"));
       if (correct === -1) card.issues.push(pm("i_mc_nocorrect"));
       card.infos = par ? [pm("i_pair")] : [];
+      card.raw = texto;
       result.cards.push(card);
       continue;
     }
@@ -146,19 +151,20 @@ function parseText(rawText, globalTags) {
 
     let card;
     if (isCloze) {
-      if (!front) { avisar(pm("w_cloze_empty", { n: linha }), linha); continue; }
+      if (!front) { avisar(pm("w_cloze_empty", { n: linha }), linha, texto); continue; }
       card = { kind: "cloze", front, back, tags: globalTags.concat(tags), line: linha, issues: [] };
     } else {
       if (parts.length < 2) {
-        avisar(pm("w_no_delim", { n: linha, c: "'" + texto.slice(0, 60) + "'" }), linha);
+        avisar(pm("w_no_delim", { n: linha, c: "'" + texto.slice(0, 60) + "'" }), linha, texto);
         continue;
       }
-      if (!front || !back) { avisar(pm("w_empty_field", { n: linha }), linha); continue; }
+      if (!front || !back) { avisar(pm("w_empty_field", { n: linha }), linha, texto); continue; }
       card = { kind: "basic", front, back, tags: globalTags.concat(tags), line: linha, issues: [] };
     }
     card.issues = checarSuspeitas(card, parts);
     if (extraIssue) card.issues.push(extraIssue);
     card.infos = par ? [pm("i_pair")] : [];
+    card.raw = texto;
     result.cards.push(card);
   }
   result.nBasic = result.cards.filter((c) => c.kind === "basic").length;

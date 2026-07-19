@@ -22,7 +22,7 @@ const UI = {
   "editor_label": "1. Cole o texto — a leitura acontece automaticamente",
   "editor_tooltip": "Formato: Frente :: Verso :: tags(opcional)\nCloze: A água ferve a {{c1::100 °C}}.\nLinha em branco separa cartões; # comenta a linha.",
   "normalize_btn": "Normalizar texto",
-  "normalize_tooltip": "Reescreve o editor no formato padrão: um cartão por linha,\nlinha em branco entre cartões, campos na ordem certa.\nLinhas não reconhecidas viram comentários (#) no final.",
+  "normalize_tooltip": "Mostra, item a item, o que seria ajustado no formato do texto — você decide o que aplicar.",
   "normalize_status": "Texto normalizado: {n} cartões.",
   "norm_ignored_header": "# --- Linhas não reconhecidas (corrija e remova o #) ---",
   "preview_label": "2. Confira os cartões (laranja = verificar)",
@@ -155,7 +155,19 @@ const UI = {
   "tip_review": "Conferir os cartões virando-os como no Anki, antes de exportar.",
   "tip_lang": "Idioma da interface (português/inglês).",
   "tip_editar": "Abrir os campos deste cartão para alterar frente, verso, tags e lacunas.",
-  "tip_incluir": "Desmarque para deixar este cartão fora da exportação."
+  "tip_incluir": "Desmarque para deixar este cartão fora da exportação.",
+  "theme_label": "Aparência",
+  "theme_auto": "Auto (sistema)",
+  "theme_light": "Claro",
+  "theme_dark": "Escuro",
+  "theme_black": "Preto (alto contraste)",
+  "tip_theme": "Cor de fundo e das letras do aplicativo. \"Preto (alto contraste)\" maximiza a legibilidade.",
+  "norm_dlg_title": "Normalizar texto — revise antes de aplicar",
+  "norm_none": "O texto já está no formato padrão — nada a alterar.",
+  "norm_before": "como está",
+  "norm_after": "como ficará",
+  "norm_apply": "Aplicar marcadas",
+  "norm_comment_warn": "Transformar linhas não reconhecidas em comentários (#)"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -179,7 +191,7 @@ const UI = {
   "editor_label": "1. Paste your text — it is read automatically",
   "editor_tooltip": "Format: Front :: Back :: tags(optional)\nCloze: Water boils at {{c1::100 °C}}.\nA blank line separates cards; # comments out a line.",
   "normalize_btn": "Normalize text",
-  "normalize_tooltip": "Rewrites the editor in the standard format: one card per line,\nblank line between cards, fields in the right order.\nUnrecognized lines become comments (#) at the end.",
+  "normalize_tooltip": "Shows, item by item, what would be adjusted in the text format — you decide what to apply.",
   "normalize_status": "Text normalized: {n} cards.",
   "norm_ignored_header": "# --- Unrecognized lines (fix and remove the #) ---",
   "preview_label": "2. Review the cards (orange = check)",
@@ -312,7 +324,19 @@ const UI = {
   "tip_review": "Check your cards by flipping them like in Anki, before exporting.",
   "tip_lang": "Interface language (Portuguese/English).",
   "tip_editar": "Open this card's fields to change front, back, tags and blanks.",
-  "tip_incluir": "Untick to leave this card out of the export."
+  "tip_incluir": "Untick to leave this card out of the export.",
+  "theme_label": "Appearance",
+  "theme_auto": "Auto (system)",
+  "theme_light": "Light",
+  "theme_dark": "Dark",
+  "theme_black": "Black (high contrast)",
+  "tip_theme": "App background and letter colors. \"Black (high contrast)\" maximizes readability.",
+  "norm_dlg_title": "Normalize text — review before applying",
+  "norm_none": "The text is already in the standard format — nothing to change.",
+  "norm_before": "current",
+  "norm_after": "will become",
+  "norm_apply": "Apply checked",
+  "norm_comment_warn": "Turn unrecognized lines into comments (#)"
  }
 };
 const PARSER_MSG = {
