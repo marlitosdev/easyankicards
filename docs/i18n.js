@@ -173,7 +173,19 @@ const UI = {
   "style_esquema": "Esquematizado (concurso)",
   "style_dark": "Escuro",
   "style_paper": "Papel (sépia)",
-  "style_hint": "Aplica um visual pronto a TODOS os cartões do .apkg: cabeçalho com o nome da pasta, linha de tags, caixas com sombra e lacunas coloridas. Só vale para o .apkg (o .txt usa os modelos que você já tem no Anki). Reexportar com o mesmo estilo atualiza os cartões."
+  "style_hint": "Aplica um visual pronto a TODOS os cartões do .apkg: cabeçalho com o nome da pasta, linha de tags, caixas com sombra e lacunas coloridas. Só vale para o .apkg (o .txt usa os modelos que você já tem no Anki). Reexportar com o mesmo estilo atualiza os cartões.",
+  "group_create": "Criar cartões",
+  "group_ai": "Inteligência artificial",
+  "group_tools": "Ferramentas",
+  "prompt_my_tab": "Meu prompt (editável)",
+  "prompt_save": "Salvar meu prompt",
+  "prompt_saved": "Prompt salvo! Ele fica guardado neste aparelho.",
+  "preview_mode": "Visualização:",
+  "preview_simple": "Prévia simples",
+  "preview_anki": "Como no Anki (estilo escolhido)",
+  "preview_anki_hint": "Renderiza cada cartão com o estilo visual escolhido na exportação (frente e verso). Troque o estilo no diálogo Exportar.",
+  "lado_frente": "FRENTE",
+  "lado_verso": "VERSO"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -348,7 +360,19 @@ const UI = {
   "style_esquema": "Schematic (exam prep)",
   "style_dark": "Dark",
   "style_paper": "Paper (sepia)",
-  "style_hint": "Applies a ready-made look to ALL cards in the .apkg: header with the folder name, tags line, shadowed boxes and colored blanks. Only affects the .apkg (the .txt uses the note types you already have in Anki). Re-exporting with the same style updates the cards."
+  "style_hint": "Applies a ready-made look to ALL cards in the .apkg: header with the folder name, tags line, shadowed boxes and colored blanks. Only affects the .apkg (the .txt uses the note types you already have in Anki). Re-exporting with the same style updates the cards.",
+  "group_create": "Create cards",
+  "group_ai": "Artificial intelligence",
+  "group_tools": "Tools",
+  "prompt_my_tab": "My prompt (editable)",
+  "prompt_save": "Save my prompt",
+  "prompt_saved": "Prompt saved! It is stored on this device.",
+  "preview_mode": "View:",
+  "preview_simple": "Simple preview",
+  "preview_anki": "As in Anki (chosen style)",
+  "preview_anki_hint": "Renders each card with the visual style chosen at export (front and back). Change the style in the Export dialog.",
+  "lado_frente": "FRONT",
+  "lado_verso": "BACK"
  }
 };
 const PARSER_MSG = {
