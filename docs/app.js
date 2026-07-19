@@ -3,12 +3,51 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "5.9.0";
+const VERSAO = "6.0.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
 let previewTimer = null;
 let editando = null;
+let cardDivs = [];            // [{line, div}] da última renderização
+let flashLinha = null;        // linha do editor que deve piscar no painel direito
+
+
+/* ------------- balão de dica universal (hover / toque longo) -------- */
+
+let tipBox = null;
+
+function tipShow(el, texto) {
+  tipHide();
+  tipBox = document.createElement("div");
+  tipBox.className = "tipbox";
+  tipBox.textContent = texto();
+  document.body.append(tipBox);
+  const r = el.getBoundingClientRect();
+  const top = r.bottom + 8 + tipBox.offsetHeight > innerHeight
+    ? r.top - tipBox.offsetHeight - 8 : r.bottom + 8;
+  tipBox.style.top = Math.max(6, top) + "px";
+  tipBox.style.left = Math.max(6, Math.min(r.left, innerWidth - tipBox.offsetWidth - 8)) + "px";
+}
+
+function tipHide() { if (tipBox) { tipBox.remove(); tipBox = null; } }
+
+function attachTip(el, keyOrFn) {
+  const texto = typeof keyOrFn === "function" ? keyOrFn : () => t(keyOrFn);
+  let hoverTimer = null, pressTimer = null;
+  el.addEventListener("mouseenter", () => {
+    hoverTimer = setTimeout(() => tipShow(el, texto), 420);
+  });
+  el.addEventListener("mouseleave", () => { clearTimeout(hoverTimer); tipHide(); });
+  el.addEventListener("mousedown", () => { clearTimeout(hoverTimer); tipHide(); });
+  el.addEventListener("touchstart", () => {
+    pressTimer = setTimeout(() => tipShow(el, texto), 500);
+  }, { passive: true });
+  el.addEventListener("touchend", () => {
+    clearTimeout(pressTimer);
+    setTimeout(tipHide, 1600);
+  });
+}
 
 /* ------------------------- textos estáticos ------------------------- */
 
@@ -17,19 +56,19 @@ function aplicarTextos() {
     el.textContent = t(el.dataset.i18n);
   });
   $("versao").textContent = "v" + VERSAO;
-  $("tags").placeholder = t("tags_placeholder");
-  $("deck").placeholder = t("deck_placeholder");
+  $("tagsExp").placeholder = t("tags_placeholder");
+  $("deckExp").placeholder = t("deck_placeholder");
   $("ajudaTexto").textContent = t("help_text");
   atualizarDestino();
 }
 
 /* --------------------------- destino Anki --------------------------- */
 
-function nomeDeck() { return $("deck").value.trim() || "Deck"; }
+function nomeDeck() { return $("deckExp").value.trim() || "Meu Baralho"; }
 
 function atualizarDestino() {
   const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
-  $("destino").textContent = partes.length > 1
+  $("destinoExp").textContent = partes.length > 1
     ? t("dest_path", { path: partes.join("  >  "), last: partes[partes.length - 1] })
     : t("dest_root", { name: nomeDeck() });
 }
@@ -161,8 +200,13 @@ function formatFrente(c) {
     const inner = m[1].split("::");
     const ans = inner[0].trim(), hint = (inner[1] || "").trim();
     const chip = document.createElement("span");
+    const etiqueta = document.createElement("span");
+    etiqueta.className = "chip-tag";
     if (hint && hint.includes("/")) {
       chip.className = "chip-ops";
+      chip.title = t("chip_options_title");
+      etiqueta.textContent = t("chip_options") + ":";
+      chip.append(etiqueta);
       const ops = hint.split("/").map((s) => s.trim()).filter(Boolean);
       ops.forEach((op, i) => {
         const so = document.createElement("span");
@@ -173,7 +217,9 @@ function formatFrente(c) {
       });
     } else {
       chip.className = "chip-cloze";
-      chip.textContent = ans + (hint ? "  (" + hint + ")" : "");
+      chip.title = t("chip_hidden_title");
+      etiqueta.textContent = t("chip_hidden") + ":";
+      chip.append(etiqueta, document.createTextNode(ans + (hint ? "  (" + hint + ")" : "")));
     }
     frag.append(chip);
   });
@@ -212,7 +258,7 @@ function agendarPreview() {
 }
 
 function parseAtual() {
-  const globais = $("tags").value.trim() ? parseTags($("tags").value) : [];
+  const globais = $("tagsExp").value.trim() ? parseTags($("tagsExp").value) : [];
   return parseText($("editor").value, globais);
 }
 
@@ -234,6 +280,7 @@ function preview() {
   ultimoResult = r;
   const box = $("cartoes");
   box.innerHTML = "";
+  cardDivs = [];
 
   r.cards.forEach((c, idx) => {
     const div = document.createElement("div");
@@ -248,6 +295,7 @@ function preview() {
     lbl.style.cssText = "display:flex;align-items:center;gap:4px;font-weight:400";
     const chk = document.createElement("input");
     chk.type = "checkbox"; chk.checked = !excluidos.has(chave(c));
+    chk.title = t("tip_incluir");
     chk.onchange = () => {
       chk.checked ? excluidos.delete(chave(c)) : excluidos.add(chave(c));
       resumo(r);
@@ -264,11 +312,13 @@ function preview() {
       acoes.className = "acoes";
       const bEd = document.createElement("button");
       bEd.className = "btn btn-cinza"; bEd.textContent = t("edit_btn");
+      bEd.title = t("tip_editar");
       bEd.onclick = () => { editando = chave(c); preview(); };
       acoes.append(bEd);
       div.append(acoes);
     }
     box.append(div);
+    cardDivs.push({ line: c.line, div });
   });
 
   r.warnings.forEach((w) => {
@@ -284,6 +334,19 @@ function preview() {
   hlIssueLines = new Set(r.cards.filter((c) => c.issues.length).map((c) => c.line));
   renderDestaque();
   renderSugestoes(r, $("editor").value);
+
+  // pisca o cartão correspondente à posição de edição, para o usuário
+  // ver imediatamente como a alteração ficou
+  if (flashLinha !== null) {
+    let alvo = null;
+    cardDivs.forEach((cd) => { if (cd.line <= flashLinha) alvo = cd; });
+    if (alvo) {
+      alvo.div.classList.add("flash");
+      alvo.div.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      setTimeout(() => alvo.div.classList.remove("flash"), 1500);
+    }
+    flashLinha = null;
+  }
 }
 
 function selecionados(r) { return r.cards.filter((c) => !excluidos.has(chave(c))); }
@@ -466,6 +529,9 @@ function montarEdicao(div, c, r, idx) {
     });
     editando = null;
     reescreverEditor(r.cards, r.warnings);
+    flashLinha = 10 ** 9;   // será limitado ao último cartão <= linha
+    flashLinha = r.cards[Math.min(idx, r.cards.length - 1)]
+      ? r.cards[Math.min(idx, r.cards.length - 1)].line : null;
     $("status").textContent = t("edited_status");
     preview();
   }, r, idx);
@@ -907,9 +973,12 @@ $("selIdioma").onchange = () => {
   if ($("editor").value.trim() === exemploAntigo) $("editor").value = t("example");
   aplicarTextos(); preview();
 };
-$("deck").oninput = () => { atualizarDestino(); };
-$("tags").oninput = agendarPreview;
-$("editor").oninput = () => { renderDestaque(); agendarPreview(); };
+$("tagsExp").addEventListener("input", agendarPreview);
+$("editor").oninput = () => {
+  flashLinha = $("editor").value.slice(0, $("editor").selectionStart).split("\n").length;
+  renderDestaque();
+  agendarPreview();
+};
 $("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
 $("btnNormalizar").onclick = normalizar;
 $("btnMCRapido").onclick = () => {
@@ -918,16 +987,50 @@ $("btnMCRapido").onclick = () => {
   aplicarModelo();
   $("dlgNovo").showModal();
 };
-$("btnTxt").onclick = exportarTxt;
-$("btnApkg").onclick = exportarApkg;
+/* Baralho e tags são pedidos NA HORA de exportar (diálogo), e lembrados. */
+let exportTipo = "apkg";
+
+function abrirExport(tipo) {
+  exportTipo = tipo;
+  atualizarDestino();
+  $("dlgExport").showModal();
+}
+
+$("btnTxt").onclick = () => abrirExport("txt");
+$("btnApkg").onclick = () => abrirExport("apkg");
+$("btnExportFechar").onclick = () => $("dlgExport").close();
+$("btnExportConfirm").onclick = () => {
+  localStorage.setItem("eac_deck", $("deckExp").value);
+  localStorage.setItem("eac_tags", $("tagsExp").value);
+  $("dlgExport").close();
+  (exportTipo === "txt" ? exportarTxt : exportarApkg)();
+};
+$("deckExp").addEventListener("input", atualizarDestino);
+$("btnCaminhoExp").onclick = async () => {
+  await navigator.clipboard.writeText(nomeDeck());
+  $("btnCaminhoExp").textContent = t("copy_path_done");
+  setTimeout(() => { $("btnCaminhoExp").textContent = t("copy_path_btn"); }, 2000);
+};
+$("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
+$("tagsExp").value = localStorage.getItem("eac_tags") || "";
+
 $("btnAjuda").onclick = () => $("dlgAjuda").showModal();
 $("btnFechar").onclick = () => $("dlgAjuda").close();
-$("btnCaminho").onclick = async () => {
-  await navigator.clipboard.writeText(nomeDeck());
-  $("btnCaminho").textContent = t("copy_path_done");
-  setTimeout(() => { $("btnCaminho").textContent = t("copy_path_btn"); }, 2000);
-  $("status").textContent = t("copy_path_status");
-};
+
+/* Dicas de funcionamento em TODOS os botões principais */
+attachTip($("btnNovoCartao"), "tip_new");
+attachTip($("btnMCRapido"), "tip_mc");
+attachTip($("btnPromptIA"), "tip_prompt");
+attachTip($("btnRevisar"), "tip_review");
+attachTip($("btnNormalizar"), "normalize_tooltip");
+attachTip($("btnTxt"), "export_txt_tooltip");
+attachTip($("btnApkg"), "export_apkg_tooltip");
+attachTip($("btnAjuda"), "help_tooltip");
+attachTip($("selIdioma"), "tip_lang");
+attachTip($("btnCaminhoExp"), "copy_path_tooltip");
+attachTip($("btnEmbaralhar"), "shuffle_hint");
+attachTip($("btnEmbaralharCloze"), "shuffle_hint");
+attachTip($("btnMarcarNovo"), "hint_mark_blank");
 function copiarPrompt(btn, key) {
   navigator.clipboard.writeText(t(key));
   const rotulo = btn.textContent;
