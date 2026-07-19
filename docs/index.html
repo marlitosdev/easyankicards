@@ -66,6 +66,14 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
            font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.45}
 .dlg-rodape{display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap;justify-content:center;
             border-top:1px solid rgba(128,128,128,.25)}
+.ic-ajuda{border:0;border-radius:50%;width:18px;height:18px;font-size:11px;
+  font-weight:700;background:var(--cinza);color:#fff;cursor:pointer;margin-left:4px;
+  vertical-align:middle;line-height:1}
+.card textarea,.card input[type=text]{width:100%;border:1px solid #c8ccd4;border-radius:6px;
+  padding:6px;background:var(--panel);font-size:13px;margin-top:2px}
+.card .mini-lbl{font-size:11px;color:var(--sutil);margin-top:6px;display:block}
+.card .acoes{display:flex;gap:6px;margin-top:8px}
+.card .btn{padding:5px 10px;font-size:12.5px}
 @media(min-width:760px){ .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px} }
 </style>
 </head>
@@ -97,6 +105,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
       <label data-i18n="editor_label"></label>
       <textarea id="editor" spellcheck="false"></textarea>
       <div class="linha">
+        <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
       </div>
     </div>
@@ -124,6 +133,32 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
     <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
     <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgNovo">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="add_title"></h3>
+    <label data-i18n="tpl_label"></label>
+    <select id="selModelo" style="width:100%;padding:8px;border-radius:8px;margin-bottom:10px">
+      <option value="qa"></option><option value="def"></option>
+      <option value="cloze"></option><option value="law"></option>
+      <option value="juris"></option>
+    </select>
+    <label><span data-i18n="field_front"></span>
+      <button type="button" class="ic-ajuda" data-hint="hint_front">?</button></label>
+    <textarea id="novoFrente" style="min-height:64px"></textarea>
+    <label style="margin-top:8px"><span data-i18n="field_back"></span>
+      <button type="button" class="ic-ajuda" data-hint="hint_back">?</button></label>
+    <textarea id="novoVerso" style="min-height:52px"></textarea>
+    <label style="margin-top:8px"><span data-i18n="field_tags"></span>
+      <button type="button" class="ic-ajuda" data-hint="hint_tags">?</button></label>
+    <input type="text" id="novoTags">
+    <div id="dicaCampo" style="font-size:12px;color:var(--sutil);margin-top:8px;min-height:16px"></div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnInserir" data-i18n="insert_btn"></button>
+    <button class="btn btn-cinza" id="btnNovoFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
