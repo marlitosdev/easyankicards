@@ -88,6 +88,31 @@ function parseText(rawText, globalTags) {
   globalTags = globalTags || [];
   const result = { cards: [], warnings: [] };
   for (const { linha, texto } of agruparLinhas(rawText)) {
+    /* Múltipla escolha: [MC] Pergunta :: op1 | op2 * | op3 :: explicação :: tags
+       (o * marca a alternativa correta). Vira cartão Básico na exportação. */
+    if (texto.startsWith("[MC]")) {
+      const parts = splitLine(texto.slice(4).trim());
+      const question = parts[0] || "";
+      const rawOps = (parts[1] || "").split("|").map((s) => s.trim()).filter(Boolean);
+      let correct = -1;
+      const options = rawOps.map((o, i) => {
+        if (/\*\s*$/.test(o) || o.startsWith("*")) {
+          if (correct === -1) correct = i;
+          return o.replace(/^\*\s*/, "").replace(/\s*\*\s*$/, "");
+        }
+        return o;
+      });
+      const back = parts[2] || "";
+      const tags = parts.length >= 4 ? parseTags(parts[3]) : [];
+      const card = { kind: "mc", front: question, back, options,
+                     correct: correct === -1 ? 0 : correct,
+                     tags: globalTags.concat(tags), line: linha, issues: [] };
+      if (!question) { result.warnings.push(pm("w_empty_field", { n: linha })); continue; }
+      if (options.length < 2) card.issues.push(pm("i_mc_fewopts"));
+      if (correct === -1) card.issues.push(pm("i_mc_nocorrect"));
+      result.cards.push(card);
+      continue;
+    }
     const isCloze = CLOZE_RE.test(texto);
     const parts = splitLine(texto);
     let front, back, tags, extraIssue = null;
@@ -138,9 +163,84 @@ function exportTxtString(result, deckName) {
   const campo = (s) => s.replace(/\t/g, " ").replace(/\n/g, "<br>");
   const lines = ["#separator:tab", "#html:true", "#notetype column:1",
                  "#deck column:2", "#deck:" + deckName, "#tags column:5"];
-  for (const c of result.cards) {
+  for (const c of cardsParaExportar(result.cards)) {
     lines.push([c.kind === "cloze" ? "Cloze" : "Basic", deckName,
                 campo(c.front), campo(c.back), c.tags.join(" ")].join("\t"));
   }
   return lines.join("\n") + "\n";
+}
+
+
+/* ----------------- serialização e utilidades (v5.4) ----------------- */
+
+function letra(i) { return String.fromCharCode(65 + i); }
+
+/* Converte um cartão MC nos campos frente/verso do modelo Básico. */
+function mcFields(c) {
+  const front = c.front + "<br><br>" +
+    c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
+  let back = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
+  if (c.back) back += "<br>" + c.back;
+  return { front, back };
+}
+
+/* Cartão -> linha de texto do editor (fonte única de verdade). */
+function cardToLine(c) {
+  if (c.kind === "mc") {
+    const ops = c.options.map((o, i) => (i === c.correct ? o + " *" : o)).join(" | ");
+    const campos = ["[MC] " + c.front, ops];
+    if (c.back || c.tags.length) campos.push(c.back);
+    if (c.tags.length) campos.push(c.tags.join(", "));
+    return campos.join(" :: ");
+  }
+  const campos = [c.front];
+  if (c.back || c.kind === "basic") campos.push(c.back);
+  if (c.tags.length) campos.push(c.tags.join(", "));
+  return campos.join(" :: ");
+}
+
+/* Cartões prontos para exportação (MC vira Básico com HTML). */
+function cardsParaExportar(cards) {
+  return cards.map((c) => c.kind === "mc"
+    ? Object.assign({}, c, { kind: "basic" }, mcFields(c))
+    : c);
+}
+
+/* --------- correções automáticas sugeridas pelo "Analisar" ---------- */
+
+function removerMarcadoresTexto(raw) {
+  return raw.split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:[-•▪*]|\d+[.)\]]|[a-eA-E][.)])\s+/, ""))
+    .join("\n");
+}
+
+/* Junta "Pergunta?\nResposta" (linhas adjacentes sem '::') em pares. */
+function emparelharTexto(raw) {
+  const linhas = raw.split(/\r?\n/);
+  const out = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const a = linhas[i].trim();
+    const b = i + 1 < linhas.length ? linhas[i + 1].trim() : "";
+    if (a.endsWith("?") && !hasDelim(a) && !a.startsWith("#")
+        && b && !hasDelim(b) && !b.endsWith("?") && !b.startsWith("#")) {
+      out.push(a + " :: " + b);
+      out.push("");
+      i++;
+    } else out.push(linhas[i]);
+  }
+  return out.join("\n");
+}
+
+function temParesSoltos(raw) {
+  const linhas = raw.split(/\r?\n/).map((l) => l.trim());
+  for (let i = 0; i + 1 < linhas.length; i++) {
+    if (linhas[i].endsWith("?") && !hasDelim(linhas[i]) && !linhas[i].startsWith("#")
+        && linhas[i + 1] && !hasDelim(linhas[i + 1]) && !linhas[i + 1].endsWith("?")
+        && !linhas[i + 1].startsWith("#")) return true;
+  }
+  return false;
+}
+
+function temMarcadores(raw) {
+  return /^\s*(?:[-•▪*]|\d+[.)\]])\s+/m.test(raw);
 }

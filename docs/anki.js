@@ -96,7 +96,27 @@ function clozeOrds(text) {
   return ords.size ? [...ords].sort((a, b) => a - b) : [0];
 }
 
-/* cards: [{kind:"basic"|"cloze", front, back, tags:[]}] */
+/* Monta o modelo de Múltipla Escolha clonando o Básico.
+ * O template da RESPOSTA não usa {{FrontSide}}: mostra a pergunta e
+ * SOMENTE a alternativa correta (as demais desaparecem), + explicação. */
+function montarModeloMC(models) {
+  const basic = models["1607392319"];
+  const mc = JSON.parse(JSON.stringify(basic));
+  mc.id = 1607392321;
+  mc.name = "EasyAnkiCards - Múltipla Escolha";
+  const f0 = basic.flds[0];
+  mc.flds = ["Pergunta", "Alternativas", "Correta", "Extra"].map((nome, i) =>
+    Object.assign(JSON.parse(JSON.stringify(f0)), { name: nome, ord: i }));
+  mc.tmpls[0].name = "Cartão MC";
+  mc.tmpls[0].qfmt = "{{Pergunta}}<br><br>{{Alternativas}}";
+  mc.tmpls[0].afmt = "{{Pergunta}}<br><br><span class='mc-correta'>{{Correta}}</span>" +
+                     "{{#Extra}}<hr id='answer'>{{Extra}}{{/Extra}}";
+  mc.css = (mc.css || "") + "\n.mc-correta{color:#1a7f37;font-weight:bold}";
+  models["1607392321"] = mc;
+  return models;
+}
+
+/* cards: [{kind:"basic"|"cloze"|"mc", front, back, tags, options?, correct?}] */
 async function buildApkg(cards, deckName) {
   const SQL = await window.__sqlPromise;   /* initSqlJs, ver index.html */
   const db = new SQL.Database();
@@ -109,21 +129,31 @@ async function buildApkg(cards, deckName) {
   deck.id = deckId; deck.name = deckName; deck.mod = nowSec;
   const decks = {}; decks["1"] = DECK_DEFAULT; decks[String(deckId)] = deck;
 
+  const models = montarModeloMC(JSON.parse(JSON.stringify(COL_MODELS)));
   db.run(
     "INSERT INTO col VALUES (1,?,?,?,11,0,0,0,?,?,?,?,'{}')",
-    [nowSec, now, now, JSON.stringify(COL_CONF), JSON.stringify(COL_MODELS),
+    [nowSec, now, now, JSON.stringify(COL_CONF), JSON.stringify(models),
      JSON.stringify(decks), JSON.stringify(COL_DCONF)]
   );
 
   let id = now;
   for (const c of cards) {
-    const mid = c.kind === "cloze" ? 1607392320 : 1607392319;
+    let mid, campos;
+    if (c.kind === "mc") {
+      mid = 1607392321;
+      const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
+      const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
+      campos = [c.front, alts, correta, c.back || ""];
+    } else {
+      mid = c.kind === "cloze" ? 1607392320 : 1607392319;
+      campos = [c.front, c.back || ""];
+    }
     const noteId = id++;
-    const flds = c.front + "\x1f" + (c.back || "");
+    const flds = campos.join("\x1f");
     const tags = c.tags.length ? " " + c.tags.join(" ") + " " : "";
     db.run(
       "INSERT INTO notes VALUES (?,?,?,?,-1,?,?,?,0,0,'')",
-      [noteId, guidFor(c.front, c.back || ""), mid, nowSec, tags, flds, c.front]
+      [noteId, guidFor(c.front, flds), mid, nowSec, tags, flds, c.front]
     );
     const ords = c.kind === "cloze" ? clozeOrds(c.front) : [0];
     for (const ord of ords) {
