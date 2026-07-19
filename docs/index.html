@@ -76,6 +76,9 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .card .btn{padding:5px 10px;font-size:12.5px}
 dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   border-radius:6px;padding:7px;background:transparent;font-size:13px;margin-top:3px}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.toolbar .btn{flex:1 1 30%;min-width:120px;padding:8px 6px;font-size:12.5px;white-space:nowrap}
+.toolbar .btn.ativa{outline:3px solid rgba(37,99,235,.45)}
 .editor-wrap{position:relative}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
   color:transparent;caret-color:var(--texto);line-height:1.45}
@@ -137,9 +140,10 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
         <textarea id="editor" spellcheck="false"></textarea>
       </div>
       <div id="sugestoes"></div>
-      <div class="linha">
+      <div class="toolbar">
         <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
         <button class="btn btn-roxo" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
+        <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
         <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
       </div>
@@ -168,6 +172,23 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
     <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
     <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
     <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgPrompt">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="prompt_dlg_title"></h3>
+    <div class="toolbar" style="margin-bottom:8px">
+      <button class="btn btn-roxo" id="btnTabFull" data-i18n="prompt_full_tab"></button>
+      <button class="btn btn-ciano" id="btnTabMini" data-i18n="prompt_mini_tab"></button>
+    </div>
+    <textarea id="promptTexto" readonly
+      style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
+             font-size:12px;line-height:1.4"></textarea>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnPromptCopiar" data-i18n="prompt_copy"></button>
+    <button class="btn btn-cinza" id="btnPromptFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
@@ -217,6 +238,8 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
       <input type="text" id="mcOp0" placeholder="A"> <input type="text" id="mcOp1" placeholder="B">
       <input type="text" id="mcOp2" placeholder="C"> <input type="text" id="mcOp3" placeholder="D">
       <input type="text" id="mcOp4" placeholder="E">
+      <button type="button" class="btn btn-ciano" id="btnEmbaralhar"
+              style="margin-top:6px" data-i18n="shuffle_btn"></button>
       <label data-i18n="mc_correct"></label>
       <select id="mcCorreta" style="width:100%;padding:8px;border-radius:8px">
         <option value="0">A</option><option value="1">B</option><option value="2">C</option>
