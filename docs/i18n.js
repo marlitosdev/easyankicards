@@ -137,7 +137,12 @@ const UI = {
   "mc_mark_correct": "Alternativas — marque ⦿ na CORRETA",
   "mc_sentence_label": "Frase (use ___ no lugar da resposta)",
   "shuffle_suggest": "A resposta correta está na 1ª posição. Embaralhar as alternativas antes de inserir?",
-  "edit_mc_label": "Múltipla escolha na lacuna — alternativas erradas (opcional)"
+  "edit_mc_label": "Lacunas do cartão (edite cada uma abaixo)",
+  "lacuna_label": "Lacuna c{n}",
+  "lacuna_answer": "Resposta correta desta lacuna",
+  "lacuna_mode": "Comportamento:",
+  "mode_occ": "Ocultação simples",
+  "mode_mc": "Múltipla escolha"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -276,7 +281,12 @@ const UI = {
   "mc_mark_correct": "Options — mark ⦿ on the CORRECT one",
   "mc_sentence_label": "Sentence (use ___ where the answer goes)",
   "shuffle_suggest": "The correct answer is in the 1st position. Shuffle the options before inserting?",
-  "edit_mc_label": "Multiple choice on the blank — wrong options (optional)"
+  "edit_mc_label": "Card blanks (edit each one below)",
+  "lacuna_label": "Blank c{n}",
+  "lacuna_answer": "Correct answer for this blank",
+  "lacuna_mode": "Behavior:",
+  "mode_occ": "Simple occlusion",
+  "mode_mc": "Multiple choice"
  }
 };
 const PARSER_MSG = {
