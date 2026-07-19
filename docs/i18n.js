@@ -122,9 +122,10 @@ const UI = {
   "mc_quick_btn": "+ Múltipla escolha",
   "tpl_mc_cloze": "Múltipla escolha na frase (nativa)",
   "mc_correct_label": "Resposta correta (como está na frase)",
-  "mc_wrong_label": "Alternativas erradas (separe com | )",
+  "mc_wrong_label": "Alternativas erradas (um campo para cada)",
   "hint_mc_cloze": "Gera a sintaxe nativa do Anki: {{c1::certa::opção/opção}}. Na frente, as opções aparecem dentro da própria frase; ao virar, somente a correta permanece. Funciona com o modelo Cloze padrão do Anki, sem nada extra.",
-  "mc_term_missing": "Não encontrei a resposta correta dentro da frase. Escreva a frase com a resposta correta no lugar dela."
+  "mc_term_missing": "Não encontrei a resposta correta dentro da frase. Escreva a frase com a resposta correta no lugar dela.",
+  "preview_live": "Pré-visualização em tempo real"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -248,9 +249,10 @@ const UI = {
   "mc_quick_btn": "+ Multiple choice",
   "tpl_mc_cloze": "In-sentence multiple choice (native)",
   "mc_correct_label": "Correct answer (as written in the sentence)",
-  "mc_wrong_label": "Wrong options (separate with | )",
+  "mc_wrong_label": "Wrong options (one field each)",
   "hint_mc_cloze": "Generates Anki's native syntax: {{c1::correct::option/option}}. The options appear inside the sentence on the front; when flipped, only the correct one remains. Works with Anki's standard Cloze model, nothing extra needed.",
-  "mc_term_missing": "Could not find the correct answer inside the sentence. Write the sentence with the correct answer in place."
+  "mc_term_missing": "Could not find the correct answer inside the sentence. Write the sentence with the correct answer in place.",
+  "preview_live": "Live preview"
  }
 };
 const PARSER_MSG = {

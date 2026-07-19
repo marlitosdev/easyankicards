@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "5.5.0";
+const VERSAO = "5.6.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -146,6 +146,62 @@ function renderSugestoes(r, raw) {
   });
 }
 
+
+/* --------- renderizador de cartão com marcadores visuais ------------ */
+
+/* Frente com chips: lacuna simples = chip azul com a resposta;
+ * lacuna com alternativas ({{c1::certa::op/op}}) = chip roxo listando
+ * as opções, com a CORRETA verde e sublinhada. */
+function formatFrente(c) {
+  const frag = document.createDocumentFragment();
+  const partes = c.front.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
+  partes.forEach((p) => {
+    const m = p.match(/^\{\{c\d+::([\s\S]*?)\}\}$/);
+    if (!m) { frag.append(document.createTextNode(p)); return; }
+    const inner = m[1].split("::");
+    const ans = inner[0].trim(), hint = (inner[1] || "").trim();
+    const chip = document.createElement("span");
+    if (hint && hint.includes("/")) {
+      chip.className = "chip-ops";
+      const ops = hint.split("/").map((s) => s.trim()).filter(Boolean);
+      ops.forEach((op, i) => {
+        const so = document.createElement("span");
+        so.textContent = op;
+        if (op === ans) so.className = "certa";
+        chip.append(so);
+        if (i < ops.length - 1) chip.append(document.createTextNode(" / "));
+      });
+    } else {
+      chip.className = "chip-cloze";
+      chip.textContent = ans + (hint ? "  (" + hint + ")" : "");
+    }
+    frag.append(chip);
+  });
+  return frag;
+}
+
+/* Corpo do cartão (frente, alternativas, verso, tags, avisos) —
+ * usado na lista de pré-visualização E no preview ao vivo do diálogo. */
+function renderCorpoCartao(div, c) {
+  const f = document.createElement("div");
+  f.className = "frente"; f.append(formatFrente(c)); div.append(f);
+  if (c.kind === "mc") {
+    c.options.forEach((o, i) => {
+      const li = document.createElement("div");
+      li.className = "verso";
+      li.textContent = letra(i) + ") " + o + (i === c.correct ? "  ✔" : "");
+      if (i === c.correct) li.style.cssText = "color:var(--verde);font-weight:700";
+      div.append(li);
+    });
+    if (c.back) { const v = document.createElement("div"); v.className = "tags"; v.textContent = c.back; div.append(v); }
+  } else if (c.back) {
+    const v = document.createElement("div"); v.className = "verso"; v.textContent = c.back; div.append(v);
+  }
+  if (c.tags.length) { const tg = document.createElement("div"); tg.className = "tags"; tg.textContent = t("tags_prefix") + c.tags.join(", "); div.append(tg); }
+  c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
+  (c.infos || []).forEach((i) => { const e = document.createElement("div"); e.className = "info"; e.textContent = "ℹ " + i; div.append(e); });
+}
+
 /* ------------------------- pré-visualização ------------------------- */
 
 function chave(c) { return c.line + "|" + c.front; }
@@ -203,23 +259,7 @@ function preview() {
     if (editando === chave(c)) {
       c.kind === "mc" ? montarEdicaoMC(div, c, r, idx) : montarEdicao(div, c, r, idx);
     } else {
-      const f = document.createElement("div");
-      f.className = "frente"; f.textContent = c.front; div.append(f);
-      if (c.kind === "mc") {
-        c.options.forEach((o, i) => {
-          const li = document.createElement("div");
-          li.className = "verso";
-          li.textContent = letra(i) + ") " + o + (i === c.correct ? "  ✔" : "");
-          if (i === c.correct) li.style.cssText = "color:var(--verde);font-weight:700";
-          div.append(li);
-        });
-        if (c.back) { const v = document.createElement("div"); v.className = "tags"; v.textContent = c.back; div.append(v); }
-      } else if (c.back) {
-        const v = document.createElement("div"); v.className = "verso"; v.textContent = c.back; div.append(v);
-      }
-      if (c.tags.length) { const tg = document.createElement("div"); tg.className = "tags"; tg.textContent = t("tags_prefix") + c.tags.join(", "); div.append(tg); }
-      c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
-      (c.infos || []).forEach((i) => { const e = document.createElement("div"); e.className = "info"; e.textContent = "ℹ " + i; div.append(e); });
+      renderCorpoCartao(div, c);
       const acoes = document.createElement("div");
       acoes.className = "acoes";
       const bEd = document.createElement("button");
@@ -454,6 +494,13 @@ function clozeMascarado(texto, mostrar) {
   return frag;
 }
 
+/* Alternativas embutidas numa lacuna nativa (para listar antes do flip). */
+function opcoesLacuna(front) {
+  const m = front.match(/\{\{c\d+::([\s\S]*?)::([\s\S]*?)\}\}/);
+  if (!m || !m[2].includes("/")) return null;
+  return { ans: m[1].trim(), ops: m[2].split("/").map((s) => s.trim()).filter(Boolean) };
+}
+
 function revRender() {
   const cards = ultimoResult ? selecionados(ultimoResult) : [];
   const alvo = $("revCartao");
@@ -468,6 +515,16 @@ function revRender() {
   frente.style.fontWeight = "700";
   frente.append(clozeMascarado(c.front, false));
   alvo.append(frente);
+  // MC nativa (cloze com opções): alternativas visíveis antes do flip
+  const mcx = c.kind !== "mc" ? opcoesLacuna(c.front) : null;
+  if (mcx) {
+    mcx.ops.forEach((o, i) => {
+      const li = document.createElement("div");
+      li.textContent = letra(i) + ") " + o;
+      if (revMostra && o === mcx.ans) li.className = "rev-certa";
+      alvo.append(li);
+    });
+  }
   if (c.kind === "mc") {
     c.options.forEach((o, i) => {
       const li = document.createElement("div");
@@ -523,6 +580,12 @@ const MODELOS = {
               en: ["The capital of France is Paris.", "", "geography"] },
 };
 
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 function aplicarModelo() {
   const chaveM = $("selModelo").value;
   const m = MODELOS[chaveM][LANG] || MODELOS[chaveM].en;
@@ -534,8 +597,13 @@ function aplicarModelo() {
   $("lacunaArea").style.display = chaveM === "cloze" ? "" : "none";
   $("dicaCampo").textContent = chaveM === "mc" ? t("hint_mc")
     : (chaveM === "mc_cloze" ? t("hint_mc_cloze") : "");
-  if (chaveM === "mc_cloze") { $("mcCerta").value = LANG === "pt" ? "Paris" : "Paris";
-                               $("mcErradas").value = LANG === "pt" ? "Lyon | Marselha" : "Lyon | Marseille"; }
+  if (chaveM === "mc_cloze") {
+    $("mcCerta").value = "Paris";
+    $("mcErr0").value = LANG === "pt" ? "Lyon" : "Lyon";
+    $("mcErr1").value = LANG === "pt" ? "Marselha" : "Marseille";
+    $("mcErr2").value = ""; $("mcErr3").value = "";
+  }
+  atualizarNovoPreview();
 }
 
 function rotularModelos() {
@@ -545,47 +613,82 @@ function rotularModelos() {
   [...$("selModelo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
 }
 
-$("btnNovoCartao").onclick = () => { rotularModelos(); aplicarModelo(); $("dlgNovo").showModal(); };
-$("selModelo").onchange = aplicarModelo;
-$("btnNovoFechar").onclick = () => $("dlgNovo").close();
-$("btnMarcarNovo").onclick = () => marcarLacuna($("novoFrente"));
-$("btnLimparNovo").onclick = () => limparLacunas($("novoFrente"));
-$("btnInserir").onclick = () => {
-  let linha;
-  if ($("selModelo").value === "mc_cloze") {
-    // Sintaxe nativa do Anki: {{c1::certa::op/op}} — na resposta só a certa fica
+/* Monta a linha de texto que o diálogo vai inserir no editor.
+ * Retorna {linha} ou {erro} — usada pelo preview ao vivo E pelo Inserir. */
+function montarLinhaNovo() {
+  const modelo = $("selModelo").value;
+  const verso = $("novoVerso").value.trim();
+  const tags = parseTags($("novoTags").value);
+
+  if (modelo === "mc_cloze") {
     const frase = $("novoFrente").value;
     const certa = $("mcCerta").value.trim();
-    const erradas = $("mcErradas").value.split("|").map((s) => s.trim()).filter(Boolean);
-    if (!certa || !frase.includes(certa)) { alert(t("mc_term_missing")); return; }
+    const erradas = ["mcErr0", "mcErr1", "mcErr2", "mcErr3"]
+      .map((id) => $(id).value.trim()).filter(Boolean);
+    if (!certa || !frase.includes(certa)) return { erro: t("mc_term_missing") };
+    // posição da correta é estável (hash) para o preview não "dançar"
     const ops = erradas.slice();
-    ops.splice(Math.floor(Math.random() * (ops.length + 1)), 0, certa);
+    ops.splice(hashStr(certa + "|" + erradas.join("|")) % (erradas.length + 1), 0, certa);
     const front = frase.replace(certa, "{{c1::" + certa + "::" + ops.join("/") + "}}");
     const campos = [front];
-    const verso = $("novoVerso").value.trim();
-    const tags = parseTags($("novoTags").value);
     if (verso) campos.push(verso);
     else if (tags.length) campos.push("");
     if (tags.length) campos.push(tags.join(", "));
-    linha = campos.join(" :: ");
-  } else if ($("selModelo").value === "mc") {
+    return { linha: campos.join(" :: ") };
+  }
+
+  if (modelo === "mc") {
     const ops = ["mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"]
       .map((id) => $(id).value.trim()).filter(Boolean);
     const correta = Math.min(parseInt($("mcCorreta").value, 10), Math.max(ops.length - 1, 0));
     const card = { kind: "mc", front: $("novoFrente").value.trim(), options: ops,
-                   correct: correta, back: $("novoVerso").value.trim(),
-                   tags: parseTags($("novoTags").value) };
-    linha = cardToLine(card);
-  } else {
-    const campos = [$("novoFrente").value.trim()];
-    const verso = $("novoVerso").value.trim();
-    const tags = parseTags($("novoTags").value);
-    if (verso || !CLOZE_RE.test(campos[0])) campos.push(verso);
-    if (tags.length) campos.push(tags.join(", "));
-    linha = campos.join(" :: ");
+                   correct: correta, back: verso, tags };
+    return { linha: cardToLine(card) };
   }
+
+  const campos = [$("novoFrente").value.trim()];
+  if (verso || !CLOZE_RE.test(campos[0])) campos.push(verso);
+  if (tags.length) campos.push(tags.join(", "));
+  return { linha: campos.join(" :: ") };
+}
+
+/* Pré-visualização em tempo real dentro do diálogo. */
+function atualizarNovoPreview() {
+  const alvo = $("novoPreview");
+  alvo.innerHTML = "";
+  const res = montarLinhaNovo();
+  if (res.erro) {
+    const e = document.createElement("div");
+    e.className = "card suspeito";
+    e.style.padding = "8px 11px";
+    e.textContent = "(!) " + res.erro;
+    alvo.append(e);
+    return;
+  }
+  const r = parseText(res.linha, []);
+  if (!r.cards.length) return;
+  const div = document.createElement("div");
+  div.className = "card" + (r.cards[0].issues.length ? " suspeito" : "");
+  div.style.padding = "8px 11px";
+  renderCorpoCartao(div, r.cards[0]);
+  alvo.append(div);
+}
+
+$("btnNovoCartao").onclick = () => { rotularModelos(); aplicarModelo(); $("dlgNovo").showModal(); };
+$("selModelo").onchange = aplicarModelo;
+$("btnNovoFechar").onclick = () => $("dlgNovo").close();
+$("btnMarcarNovo").onclick = () => { marcarLacuna($("novoFrente")); atualizarNovoPreview(); };
+$("btnLimparNovo").onclick = () => { limparLacunas($("novoFrente")); atualizarNovoPreview(); };
+["novoFrente", "novoVerso", "novoTags", "mcCerta", "mcErr0", "mcErr1", "mcErr2", "mcErr3",
+ "mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"].forEach((id) => {
+  $(id).addEventListener("input", atualizarNovoPreview);
+});
+$("mcCorreta").addEventListener("change", atualizarNovoPreview);
+$("btnInserir").onclick = () => {
+  const res = montarLinhaNovo();
+  if (res.erro) { alert(res.erro); return; }
   const atual = $("editor").value.replace(/\s+$/, "");
-  $("editor").value = (atual ? atual + "\n\n" : "") + linha + "\n";
+  $("editor").value = (atual ? atual + "\n\n" : "") + res.linha + "\n";
   $("dlgNovo").close();
   preview();
 };
