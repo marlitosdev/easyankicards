@@ -15,8 +15,24 @@
   --laranja:#b45309; --laranja-claro:#fdf2df; --laranja-borda:#e8940a;
   --azul:#2563eb; --cinza:#6b7280; --roxo:#7c3aed; --ciano:#0e7490;
 }
+/* Temas explícitos (selecionáveis) — vencem o modo automático do sistema */
+:root[data-theme="light"]{ --bg:#f5f6f8; --panel:#fff; --texto:#1a1a2e; --sutil:#5b6472;
+  --verde-claro:#eaf6ea; --laranja-claro:#fdf2df; --laranja:#b45309; }
+:root[data-theme="dark"]{ --bg:#15171c; --panel:#22252d; --texto:#f2f2f6; --sutil:#aab3c0;
+  --verde-claro:#1d2f1d; --laranja-claro:#3a2e1c; --laranja:#ffb45e; }
+:root[data-theme="black"]{ --bg:#000; --panel:#101014; --texto:#fff; --sutil:#c4cbd6;
+  --verde-claro:#0f2413; --verde-borda:#22c55e; --laranja-claro:#2b2110;
+  --laranja-borda:#ffa726; --laranja:#ffc069; }
+:root[data-theme="dark"] .chip-cloze, :root[data-theme="black"] .chip-cloze{
+  background:#1d4ed8; color:#fff }
+:root[data-theme="dark"] .chip-ops, :root[data-theme="black"] .chip-ops{
+  background:#6d28d9; color:#fff }
+:root[data-theme="dark"] .chip-ops .certa, :root[data-theme="black"] .chip-ops .certa{
+  color:#4ade80 }
+:root[data-theme="black"] input[type=text], :root[data-theme="black"] textarea,
+:root[data-theme="black"] select{ border-color:#5a616d }
 @media (prefers-color-scheme: dark){
-  :root{ --bg:#15171c; --panel:#1f2229; --texto:#e8e8ec; --sutil:#9aa4b2;
+  :root:not([data-theme]){ --bg:#15171c; --panel:#22252d; --texto:#f2f2f6; --sutil:#aab3c0;
          --verde-claro:#1c2a1c; --laranja-claro:#33291a; --laranja:#f0a04b; }
 }
 *{box-sizing:border-box} html,body{margin:0;padding:0}
@@ -86,10 +102,27 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 .mc-row{display:flex;gap:8px;align-items:center;margin-top:4px}
 .mc-row input[type=radio]{width:18px;height:18px;flex:none;accent-color:#1a7f37}
 .mc-row input[type=text]{flex:1;margin-top:0}
-@keyframes flashCard{0%{box-shadow:0 0 0 4px rgba(37,99,235,.75)}100%{box-shadow:none}}
-.card.flash{animation:flashCard 1.4s ease-out}
+@keyframes flashCard{
+  0%{box-shadow:0 0 0 6px rgba(255,120,0,.95);background-color:rgba(255,140,0,.22)}
+  45%{box-shadow:0 0 0 2px rgba(255,120,0,.55)}
+  60%{box-shadow:0 0 0 6px rgba(255,120,0,.9)}
+  100%{box-shadow:none}}
+.card.flash{animation:flashCard 1.8s ease-out}
+#flashToast{position:fixed;left:10px;right:10px;bottom:88px;z-index:60;
+  pointer-events:none;opacity:0;transition:opacity .25s}
+#flashToast.on{opacity:1}
+#flashToast .card{box-shadow:0 0 0 4px rgba(255,120,0,.95),0 6px 22px rgba(0,0,0,.4);
+  max-height:34vh;overflow:hidden}
 .chip-tag{font-size:9px;text-transform:uppercase;letter-spacing:.4px;opacity:.75;
   margin-right:4px;font-weight:800}
+.norm-item{border:1px solid rgba(128,128,128,.35);border-radius:8px;
+  padding:8px;margin-bottom:8px;font-size:12.5px}
+.norm-item .cab-n{display:flex;gap:8px;align-items:center;font-weight:700;margin-bottom:4px}
+.norm-item .antes{background:rgba(255,140,0,.16);border-left:3px solid #ff8c00;
+  padding:4px 7px;border-radius:4px;margin-top:3px;white-space:pre-wrap}
+.norm-item .depois{background:rgba(76,175,80,.16);border-left:3px solid #4caf50;
+  padding:4px 7px;border-radius:4px;margin-top:3px;white-space:pre-wrap}
+.norm-item .rot{font-size:10px;text-transform:uppercase;letter-spacing:.4px;opacity:.7}
 .tipbox{position:fixed;z-index:99;background:#2b2b2b;color:#f2f2f2;font-size:12px;
   padding:6px 9px;border-radius:7px;max-width:280px;line-height:1.35;
   box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
@@ -127,6 +160,10 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small>by MarlitosDev · <span id="versao"></span></small></h1>
+  <select id="selTema" aria-label="Tema">
+    <option value="auto"></option><option value="light"></option>
+    <option value="dark"></option><option value="black"></option>
+  </select>
   <select id="selIdioma" aria-label="Idioma">
     <option value="pt">Português</option>
     <option value="en">English</option>
@@ -159,6 +196,8 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
   </div>
 </main>
 
+<div id="flashToast"></div>
+
 <div class="rodape">
   <div style="width:100%;max-width:600px">
     <div style="display:flex;gap:8px;justify-content:center">
@@ -175,6 +214,21 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
     <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
     <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
     <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgNormalizar" style="max-width:760px;width:94%">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="norm_dlg_title"></h3>
+    <div id="normLista" style="max-height:52vh;overflow:auto"></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px">
+      <input type="checkbox" id="chkNormWarn" checked style="width:17px;height:17px">
+      <span data-i18n="norm_comment_warn"></span>
+    </label>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnNormAplicar" data-i18n="norm_apply"></button>
+    <button class="btn btn-cinza" id="btnNormFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.0.0";
+const VERSAO = "6.1.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -49,6 +49,21 @@ function attachTip(el, keyOrFn) {
   });
 }
 
+
+/* ------------------------------ temas ------------------------------- */
+
+function aplicarTema(v) {
+  if (v === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = v;
+  localStorage.setItem("eac_theme", v);
+}
+
+function rotularTemas() {
+  const nomes = { auto: "theme_auto", light: "theme_light",
+                  dark: "theme_dark", black: "theme_black" };
+  [...$("selTema").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
+}
+
 /* ------------------------- textos estáticos ------------------------- */
 
 function aplicarTextos() {
@@ -59,6 +74,7 @@ function aplicarTextos() {
   $("tagsExp").placeholder = t("tags_placeholder");
   $("deckExp").placeholder = t("deck_placeholder");
   $("ajudaTexto").textContent = t("help_text");
+  rotularTemas();
   atualizarDestino();
 }
 
@@ -338,15 +354,35 @@ function preview() {
   // pisca o cartão correspondente à posição de edição, para o usuário
   // ver imediatamente como a alteração ficou
   if (flashLinha !== null) {
-    let alvo = null;
+    let alvo = null, alvoCard = null;
     cardDivs.forEach((cd) => { if (cd.line <= flashLinha) alvo = cd; });
-    if (alvo) {
+    r.cards.forEach((c) => { if (c.line <= flashLinha) alvoCard = c; });
+    const mobile = matchMedia("(max-width: 759px)").matches;
+    if (mobile && alvoCard) {
+      // Celular: toast fixo com o cartão — nada de rolar a página
+      mostrarToastCartao(alvoCard);
+    } else if (alvo) {
       alvo.div.classList.add("flash");
       alvo.div.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      setTimeout(() => alvo.div.classList.remove("flash"), 1500);
+      setTimeout(() => alvo.div.classList.remove("flash"), 1900);
     }
     flashLinha = null;
   }
+}
+
+let toastTimer = null;
+
+function mostrarToastCartao(c) {
+  const box = $("flashToast");
+  box.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "card" + (c.issues.length ? " suspeito" : "");
+  div.style.padding = "8px 11px";
+  renderCorpoCartao(div, c);
+  box.append(div);
+  box.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.classList.remove("on"), 2400);
 }
 
 function selecionados(r) { return r.cards.filter((c) => !excluidos.has(chave(c))); }
@@ -588,11 +624,72 @@ function montarEdicaoMC(div, c, r, idx) {
 
 /* ----------------------- normalizar / analisar ---------------------- */
 
-function normalizar() {
+/* Normalizar v6.1: PROPÕE as mudanças com antes/depois e o usuário
+ * marca o que quer aplicar — nada muda sem decisão explícita. */
+let normPlano = [];   // [{card, canon, mudou, chk}]
+
+function abrirNormalizar() {
   const r = parseText($("editor").value, []);
-  if (!r.cards.length && !r.warnings.length) return;
-  reescreverEditor(r.cards, r.warnings);
-  $("status").textContent = t("normalize_status", { n: r.cards.length });
+  const lista = $("normLista");
+  lista.innerHTML = "";
+  normPlano = [];
+  let mudancas = 0;
+
+  r.cards.forEach((c) => {
+    const canon = cardToLine(c);
+    const mudou = (c.raw || "").replace(/\s+/g, " ").trim()
+               !== canon.replace(/\s+/g, " ").trim();
+    const item = { card: c, canon, mudou, chk: null };
+    normPlano.push(item);
+    if (!mudou) return;
+    mudancas++;
+    const div = document.createElement("div");
+    div.className = "norm-item";
+    const cab = document.createElement("div");
+    cab.className = "cab-n";
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.checked = true;
+    chk.style.cssText = "width:17px;height:17px";
+    item.chk = chk;
+    cab.append(chk, document.createTextNode(
+      t("card_line") + " " + c.line));
+    div.append(cab);
+    const r1 = document.createElement("div");
+    r1.className = "rot"; r1.textContent = t("norm_before");
+    const antes = document.createElement("div");
+    antes.className = "antes"; antes.textContent = c.raw || "";
+    const r2 = document.createElement("div");
+    r2.className = "rot"; r2.textContent = t("norm_after");
+    const depois = document.createElement("div");
+    depois.className = "depois"; depois.textContent = canon;
+    div.append(r1, antes, r2, depois);
+    lista.append(div);
+  });
+
+  normIgnorados = r.ignorados || [];
+  if (!mudancas && !normIgnorados.length) {
+    const ok = document.createElement("div");
+    ok.style.cssText = "color:var(--sutil);font-size:13px";
+    ok.textContent = t("norm_none");
+    lista.append(ok);
+  }
+  $("dlgNormalizar").showModal();
+}
+
+let normIgnorados = [];
+
+function aplicarNormalizacao() {
+  const blocos = normPlano.map((it) =>
+    (it.mudou && it.chk && it.chk.checked) ? it.canon : (it.card.raw || it.canon));
+  let texto = blocos.join("\n\n");
+  if (normIgnorados.length) {
+    const comentar = $("chkNormWarn").checked;
+    texto += "\n\n" + (comentar ? t("norm_ignored_header") + "\n" : "")
+      + normIgnorados.map((i) => (comentar ? "# " : "") + i.texto).join("\n");
+  }
+  $("editor").value = texto + "\n";
+  $("dlgNormalizar").close();
+  $("status").textContent = t("applied_status");
   preview();
 }
 
@@ -980,7 +1077,14 @@ $("editor").oninput = () => {
   agendarPreview();
 };
 $("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
-$("btnNormalizar").onclick = normalizar;
+$("btnNormalizar").onclick = abrirNormalizar;
+$("btnNormAplicar").onclick = aplicarNormalizacao;
+$("btnNormFechar").onclick = () => $("dlgNormalizar").close();
+const temaSalvo = localStorage.getItem("eac_theme") || "auto";
+aplicarTema(temaSalvo);
+$("selTema").value = temaSalvo;
+$("selTema").onchange = () => aplicarTema($("selTema").value);
+attachTip($("selTema"), "tip_theme");
 $("btnMCRapido").onclick = () => {
   rotularModelos();
   $("selModelo").value = "mc_cloze";
