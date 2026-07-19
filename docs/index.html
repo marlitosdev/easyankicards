@@ -96,6 +96,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
 .dot-blue{background:#2563eb}.dot-green{background:#4caf50}
 .sug .btn{padding:3px 9px;font-size:11.5px;margin-left:6px}
 .card .info{font-size:11.5px;color:#2563eb;margin-top:3px}
+.chip-cloze{background:#2563eb22;color:#2563eb;font-weight:700;
+  border-radius:4px;padding:0 4px}
+.chip-ops{background:#7c3aed22;color:#7c3aed;border-radius:4px;padding:0 4px;font-weight:600}
+.chip-ops .certa{color:var(--verde);font-weight:800;text-decoration:underline}
+#novoPreview .card{margin-top:4px}
 .rev-mask{background:#2563eb22;color:#2563eb;font-weight:700;border-radius:4px;padding:0 4px}
 .rev-certa{color:var(--verde);font-weight:700}
 @media(min-width:760px){ .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px} }
@@ -201,7 +206,10 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
         <button type="button" class="ic-ajuda" data-hint="hint_mc_cloze">?</button></label>
       <input type="text" id="mcCerta">
       <label><span data-i18n="mc_wrong_label"></span></label>
-      <input type="text" id="mcErradas" placeholder="Lyon | Marselha">
+      <input type="text" id="mcErr0" placeholder="1">
+      <input type="text" id="mcErr1" placeholder="2">
+      <input type="text" id="mcErr2" placeholder="3">
+      <input type="text" id="mcErr3" placeholder="4">
     </div>
     <div id="mcArea" style="display:none;margin-top:6px">
       <label><span data-i18n="mc_options_label"></span>
@@ -222,6 +230,8 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
       <button type="button" class="ic-ajuda" data-hint="hint_tags">?</button></label>
     <input type="text" id="novoTags">
     <div id="dicaCampo" style="font-size:12px;color:var(--sutil);margin-top:8px;min-height:16px"></div>
+    <label style="margin-top:6px" data-i18n="preview_live"></label>
+    <div id="novoPreview"></div>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnInserir" data-i18n="insert_btn"></button>
