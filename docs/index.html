@@ -74,6 +74,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .card .mini-lbl{font-size:11px;color:var(--sutil);margin-top:6px;display:block}
 .card .acoes{display:flex;gap:6px;margin-top:8px}
 .card .btn{padding:5px 10px;font-size:12.5px}
+dialog textarea,dialog input[type=text]{width:100%;border:1px solid #c8ccd4;
+  border-radius:6px;padding:7px;background:transparent;font-size:13px;margin-top:3px}
 @media(min-width:760px){ .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px} }
 </style>
 </head>
@@ -106,6 +108,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
       <textarea id="editor" spellcheck="false"></textarea>
       <div class="linha">
         <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
+        <button class="btn btn-azul" id="btnAnalisar" data-i18n="analyze_btn"></button>
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
       </div>
     </div>
@@ -136,6 +139,18 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   </div>
 </dialog>
 
+<dialog id="dlgAnalise">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="analyze_title"></h3>
+    <div class="dlg-corpo" id="analiseLista" style="padding:0;max-height:45vh"></div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnFixBullets" data-i18n="fix_bullets"></button>
+    <button class="btn btn-ciano" id="btnFixPairs" data-i18n="fix_pairs"></button>
+    <button class="btn btn-cinza" id="btnAnaliseFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgNovo">
   <div style="padding:16px">
     <h3 style="margin:0 0 10px" data-i18n="add_title"></h3>
@@ -148,6 +163,23 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     <label><span data-i18n="field_front"></span>
       <button type="button" class="ic-ajuda" data-hint="hint_front">?</button></label>
     <textarea id="novoFrente" style="min-height:64px"></textarea>
+    <div id="lacunaArea" style="display:none;margin-top:4px">
+      <button type="button" class="btn btn-ciano" id="btnMarcarNovo" data-i18n="btn_mark_blank"></button>
+      <button type="button" class="btn btn-cinza" id="btnLimparNovo" data-i18n="btn_clear_blanks"></button>
+      <button type="button" class="ic-ajuda" data-hint="hint_mark_blank">?</button>
+    </div>
+    <div id="mcArea" style="display:none;margin-top:6px">
+      <label><span data-i18n="mc_options_label"></span>
+        <button type="button" class="ic-ajuda" data-hint="hint_mc">?</button></label>
+      <input type="text" id="mcOp0" placeholder="A"> <input type="text" id="mcOp1" placeholder="B">
+      <input type="text" id="mcOp2" placeholder="C"> <input type="text" id="mcOp3" placeholder="D">
+      <input type="text" id="mcOp4" placeholder="E">
+      <label data-i18n="mc_correct"></label>
+      <select id="mcCorreta" style="width:100%;padding:8px;border-radius:8px">
+        <option value="0">A</option><option value="1">B</option><option value="2">C</option>
+        <option value="3">D</option><option value="4">E</option>
+      </select>
+    </div>
     <label style="margin-top:8px"><span data-i18n="field_back"></span>
       <button type="button" class="ic-ajuda" data-hint="hint_back">?</button></label>
     <textarea id="novoVerso" style="min-height:52px"></textarea>

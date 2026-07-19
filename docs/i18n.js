@@ -90,7 +90,25 @@ const UI = {
   "tpl_juris": "Jurisprudência (tese)",
   "insert_btn": "Adicionar ao editor",
   "edited_status": "Cartão atualizado — o texto do editor foi reescrito.",
-  "deleted_status": "Cartão removido do texto."
+  "deleted_status": "Cartão removido do texto.",
+  "tpl_mc": "Múltipla escolha",
+  "mc_options_label": "Alternativas",
+  "mc_correct": "Correta:",
+  "mc_answer_prefix": "Resposta:",
+  "hint_mc": "Preencha 2 a 5 alternativas e escolha a correta. No .apkg, a frente mostra todas as alternativas e, ao revelar a resposta, SOMENTE a correta permanece (+ explicação). No .txt o cartão vira Básico comum.",
+  "btn_mark_blank": "Marcar lacuna",
+  "btn_clear_blanks": "Limpar lacunas",
+  "hint_mark_blank": "Selecione com o dedo/mouse a palavra ou trecho no campo Frente e toque em \"Marcar lacuna\" para transformá-lo em {{c1::...}}. Cada nova marcação vira uma lacuna nova (c2, c3...).",
+  "analyze_btn": "Analisar texto",
+  "analyze_title": "Críticas e sugestões",
+  "analyze_ok": "Nenhum problema encontrado — o texto está pronto para exportar.",
+  "fix_bullets": "Remover numeração/marcadores",
+  "fix_pairs": "Emparelhar Pergunta/Resposta",
+  "crit_long": "Cartão da linha {n}: muito longo (>220 caracteres) — divida em dois para memorizar melhor.",
+  "crit_dup": "Frente duplicada nas linhas {a} e {b} — o Anki tratará como o mesmo cartão.",
+  "crit_bullets": "O texto tem numeração ou marcadores (1., -, •) no início das linhas — use \"Remover numeração/marcadores\" para limpar.",
+  "crit_pairs": "Há perguntas terminadas em \"?\" seguidas da resposta na linha de baixo, sem \"::\" — use \"Emparelhar Pergunta/Resposta\" para converter.",
+  "applied_status": "Correção aplicada — confira a pré-visualização."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -182,7 +200,25 @@ const UI = {
   "tpl_juris": "Case law (holding)",
   "insert_btn": "Add to editor",
   "edited_status": "Card updated — the editor text was rewritten.",
-  "deleted_status": "Card removed from the text."
+  "deleted_status": "Card removed from the text.",
+  "tpl_mc": "Multiple choice",
+  "mc_options_label": "Options",
+  "mc_correct": "Correct:",
+  "mc_answer_prefix": "Answer:",
+  "hint_mc": "Fill in 2 to 5 options and pick the correct one. In the .apkg, the front shows all options and, when the answer is revealed, ONLY the correct one remains (+ explanation). In .txt the card becomes a regular Basic.",
+  "btn_mark_blank": "Mark blank",
+  "btn_clear_blanks": "Clear blanks",
+  "hint_mark_blank": "Select a word or passage in the Front field and tap \"Mark blank\" to turn it into {{c1::...}}. Each new mark becomes a new blank (c2, c3...).",
+  "analyze_btn": "Analyze text",
+  "analyze_title": "Critiques and suggestions",
+  "analyze_ok": "No problems found — the text is ready to export.",
+  "fix_bullets": "Remove numbering/bullets",
+  "fix_pairs": "Pair Question/Answer",
+  "crit_long": "Card at line {n}: too long (>220 chars) — split it in two for better recall.",
+  "crit_dup": "Duplicate front at lines {a} and {b} — Anki will treat them as the same card.",
+  "crit_bullets": "The text has numbering or bullets (1., -, •) at line starts — use \"Remove numbering/bullets\" to clean.",
+  "crit_pairs": "There are questions ending in \"?\" followed by the answer on the next line, without \"::\" — use \"Pair Question/Answer\" to convert.",
+  "applied_status": "Fix applied — check the preview."
  }
 };
 const PARSER_MSG = {
@@ -203,7 +239,10 @@ const PARSER_MSG = {
   "p_total": "Total: {t} cartões ({b} básicos, {c} cloze)",
   "p_verify_count": "  |  {n} cartão(ões) marcados com VERIFICAR",
   "r_line": "Cartão da linha {n}: {msg}",
-  "r_more": "... e mais {n} problema(s)."
+  "r_more": "... e mais {n} problema(s).",
+  "p_mc": "MÚLT. ESCOLHA",
+  "i_mc_fewopts": "múltipla escolha com menos de 2 alternativas",
+  "i_mc_nocorrect": "nenhuma alternativa marcada com * como correta — assumi a primeira; toque em Editar para escolher"
  },
  "en": {
   "w_cloze_empty": "Line {n}: empty cloze card — skipped.",
@@ -222,7 +261,10 @@ const PARSER_MSG = {
   "p_total": "Total: {t} cards ({b} basic, {c} cloze)",
   "p_verify_count": "  |  {n} card(s) flagged CHECK",
   "r_line": "Card at line {n}: {msg}",
-  "r_more": "... and {n} more issue(s)."
+  "r_more": "... and {n} more issue(s).",
+  "p_mc": "MULT. CHOICE",
+  "i_mc_fewopts": "multiple choice with fewer than 2 options",
+  "i_mc_nocorrect": "no option marked with * as correct — assumed the first; tap Edit to choose"
  }
 };
 
