@@ -138,6 +138,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .norm-item .depois{background:rgba(76,175,80,.16);border-left:3px solid #4caf50;
   padding:4px 7px;border-radius:4px;margin-top:3px;white-space:pre-wrap}
 .norm-item .rot{font-size:10px;text-transform:uppercase;letter-spacing:.4px;opacity:.7}
+#barraUpdate{position:fixed;left:8px;right:8px;top:8px;z-index:90;display:none;
+  gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  background:#1d4ed8;color:#fff;padding:10px 14px;border-radius:12px;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);font-size:13px}
+#barraUpdate.on{display:flex}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:80;
   background:#1f2937;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;
   border-radius:20px;box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;
@@ -249,6 +254,17 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   </div>
 </main>
 
+<div id="barraUpdate">
+  <div>
+    <strong id="updTitulo"></strong>
+    <div id="updTexto" style="font-size:12px;opacity:.9"></div>
+  </div>
+  <div style="display:flex;gap:6px;flex:none">
+    <button class="btn btn-verde" id="btnAtualizar"></button>
+    <button class="btn btn-cinza" id="btnDepois"></button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <div class="rodape">
@@ -266,6 +282,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div class="dlg-rodape">
     <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
     <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
+    <button class="btn btn-azul" id="btnCheckUpdate" data-i18n="check_update_btn"></button>
     <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
@@ -417,8 +434,5 @@ window.__sqlPromise = initSqlJs({
 <script src="parser.js"></script>
 <script src="anki.js"></script>
 <script src="app.js"></script>
-<script>
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
-</script>
 </body>
 </html>
