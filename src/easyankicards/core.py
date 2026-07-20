@@ -40,7 +40,7 @@ import html
 import re
 from dataclasses import dataclass, field
 
-__version__ = "5.2.0"
+__version__ = "6.4.0"
 
 # ---------------------------------------------------------------------------
 # Internacionalização das mensagens do parser (pt/en/es).

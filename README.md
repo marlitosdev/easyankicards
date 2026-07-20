@@ -1,4 +1,4 @@
-# EasyAnkiCards (v6.0.0) · by MarlitosDev
+# EasyAnkiCards (v6.4.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -42,7 +42,7 @@ easy-anki-cards/
 ├── docs/                  # PWA (web/celular) v6.0 — servida pelo GitHub Pages
 │   ├── index.html · app.js · parser.js · anki.js · i18n.js
 │   └── manifest.webmanifest · sw.js · icon-192/512.png
-├── src/easyankicards/     # app desktop em Python/CustomTkinter (v5.2)
+├── src/easyankicards/     # desktop (janela nativa que carrega docs/) + CLI
 ├── scripts/build_exe.bat  # gera release\EasyAnkiCards.exe (build autolimpo)
 ├── examples/exemplo.txt
 ├── iniciar_app.bat        # dois cliques para rodar o desktop do código
@@ -54,7 +54,12 @@ Regra de manutenção: lógica de negócio em `parser.js`/`anki.js` (e `core.py`
 ## Como usar
 
 - **Web/celular (recomendado)**: abra o link, cole o texto e exporte. No celular, use "Adicionar à tela inicial" para instalar; funciona offline após a primeira visita.
-- **Desktop (Python)**: `pip install -r requirements.txt` e dois cliques em `iniciar_app.bat`. Executável: `scripts\build_exe.bat` → `release\EasyAnkiCards.exe`.
+- **Desktop (Windows/Linux/macOS)**: `pip install -r requirements.txt` e dois cliques em `iniciar_app.bat`. Executável: `scripts\build_exe.bat` → `release\EasyAnkiCards.exe` (arquivo único, com a interface embutida, sem precisar de Python).
+- **Linha de comando**: `python src/easyankicards/cli.py examples/exemplo.txt --deck "Meu Baralho"`.
+
+### Uma base de código para tudo
+
+Até a v5.2 o desktop tinha interface própria em Python/CustomTkinter e a web outra em JavaScript — manter as duas em paralelo fez o desktop ficar para trás. Desde a v6.4, o aplicativo de desktop é uma **janela nativa que carrega os mesmos arquivos de `docs/`** (via pywebview): mesma interface, mesmos recursos, tudo offline e local. Cada melhoria da versão web chega ao desktop automaticamente, sem reescrita. O `core.py`/`cli.py` em Python seguem disponíveis para automação por linha de comando.
 
 ## Licença
 

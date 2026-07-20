@@ -4,6 +4,6 @@ cd /d "%~dp0"
 python src\easyankicards\app.py
 if errorlevel 1 (
     echo.
-    echo [ERRO/ERROR] Python + dependencias:  pip install -r requirements.txt
+    echo [ERRO/ERROR] Instale as dependencias:  pip install -r requirements.txt
     pause
 )
