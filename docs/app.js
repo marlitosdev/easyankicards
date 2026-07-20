@@ -3,14 +3,14 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.4.0";
+const VERSAO = "6.6.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
 let previewTimer = null;
 let editando = null;
 let cardDivs = [];            // [{line, div}] da última renderização
-let respostasAbertas = new Set();   // chaves de cartões com o verso revelado
+let respostasFechadas = new Set();  // por padrão TODOS mostram a resposta
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
 
 
@@ -70,6 +70,14 @@ function aplicarTema(v) {
   if (v === "auto") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = v;
   localStorage.setItem("eac_theme", v);
+  aplicarCorLetra(localStorage.getItem("eac_cor") || "");   // preserva a escolha
+}
+
+/* Cor da letra definida pelo usuário: sobrepõe a cor do tema em todo o
+ * app (inclusive na camada colorida do editor, que herda --texto). */
+function aplicarCorLetra(cor) {
+  if (cor) document.documentElement.style.setProperty("--texto", cor);
+  else document.documentElement.style.removeProperty("--texto");
 }
 
 function rotularTemas() {
@@ -340,10 +348,10 @@ function preview() {
       c.kind === "mc" ? montarEdicaoMC(div, c, r, idx) : montarEdicao(div, c, r, idx);
     } else {
       if (modoPrevia() === "anki") {
-        renderCartaoEstilizado(div, c, respostasAbertas.has(chave(c)));
+        renderCartaoEstilizado(div, c, !respostasFechadas.has(chave(c)));
         c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
       } else {
-        c.ocultarVerso = !respostasAbertas.has(chave(c));
+        c.ocultarVerso = respostasFechadas.has(chave(c));
         renderCorpoCartao(div, c);
         delete c.ocultarVerso;
       }
@@ -354,11 +362,11 @@ function preview() {
       bEd.title = t("tip_editar");
       bEd.onclick = () => { editando = chave(c); preview(); };
       const bVer = document.createElement("button");
-      const aberto = respostasAbertas.has(chave(c));
+      const aberto = !respostasFechadas.has(chave(c));
       bVer.className = "btn btn-ciano";
       bVer.textContent = t(aberto ? "hide_answer_btn" : "show_answer_btn");
       bVer.onclick = () => {
-        aberto ? respostasAbertas.delete(chave(c)) : respostasAbertas.add(chave(c));
+        aberto ? respostasFechadas.add(chave(c)) : respostasFechadas.delete(chave(c));
         preview();
       };
       acoes.append(bEd, bVer);
@@ -1205,6 +1213,28 @@ const temaSalvo = localStorage.getItem("eac_theme") || "auto";
 aplicarTema(temaSalvo);
 $("selTema").value = temaSalvo;
 $("selTema").onchange = () => { aplicarTema($("selTema").value); toast("toast_theme"); };
+
+const corSalva = localStorage.getItem("eac_cor") || "";
+if (corSalva) { aplicarCorLetra(corSalva); $("corLetra").value = corSalva; }
+else {
+  // mostra no seletor a cor atual do tema, para o usuário partir dela
+  $("corLetra").value = getComputedStyle(document.documentElement)
+    .getPropertyValue("--texto").trim() || "#000000";
+}
+$("corLetra").oninput = () => {
+  localStorage.setItem("eac_cor", $("corLetra").value);
+  aplicarCorLetra($("corLetra").value);
+};
+$("corLetra").onchange = () => toast("toast_textcolor");
+$("btnCorReset").onclick = () => {
+  localStorage.removeItem("eac_cor");
+  aplicarCorLetra("");
+  $("corLetra").value = getComputedStyle(document.documentElement)
+    .getPropertyValue("--texto").trim() || "#000000";
+  toast("toast_textcolor_reset");
+};
+attachTip($("corLetra"), "tip_textcolor");
+attachTip($("btnCorReset"), "textcolor_reset");
 function rotularPrevia() {
   const nomes = { app: "preview_simple", anki: "preview_anki" };
   [...$("selPrevia").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
@@ -1340,3 +1370,78 @@ $("btnPromptMini").onclick = () => copiarPrompt($("btnPromptMini"), "prompt_mini
 $("editor").value = t("example");
 aplicarTextos();
 preview();
+
+
+/* ==================================================================
+ * ATUALIZAÇÃO DO APLICATIVO (PWA instalada)
+ * Detecta que uma versão nova foi publicada, avisa o usuário numa
+ * faixa no topo e só troca quando ele confirmar — assim ninguém perde
+ * o texto que está escrevendo. Verifica ao abrir, ao voltar para o
+ * app e a cada 30 minutos.
+ * ================================================================== */
+
+let swReg = null;
+let swEsperando = null;
+
+function mostrarBarraUpdate(worker) {
+  swEsperando = worker;
+  $("updTitulo").textContent = t("update_title");
+  $("updTexto").textContent = t("update_text");
+  $("btnAtualizar").textContent = t("update_btn");
+  $("btnDepois").textContent = t("update_later");
+  $("barraUpdate").classList.add("on");
+}
+
+$("btnAtualizar").onclick = () => {
+  $("barraUpdate").classList.remove("on");
+  if (swEsperando) swEsperando.postMessage("SKIP_WAITING");
+  else location.reload();
+};
+$("btnDepois").onclick = () => $("barraUpdate").classList.remove("on");
+
+function vigiarInstalacao(reg) {
+  const novo = reg.installing;
+  if (!novo) return;
+  novo.addEventListener("statechange", () => {
+    // "installed" com controller existente = atualização pronta e esperando
+    if (novo.state === "installed" && navigator.serviceWorker.controller)
+      mostrarBarraUpdate(novo);
+  });
+}
+
+async function procurarAtualizacao(manual) {
+  if (!swReg) return;
+  if (manual) toast("update_checking");
+  try {
+    await swReg.update();
+    setTimeout(() => {
+      if (swReg.waiting) mostrarBarraUpdate(swReg.waiting);
+      else if (manual) toast("update_none");
+    }, 1200);
+  } catch (e) { /* offline: silencioso */ }
+}
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    swReg = reg;
+    if (reg.waiting && navigator.serviceWorker.controller) mostrarBarraUpdate(reg.waiting);
+    vigiarInstalacao(reg);
+    reg.addEventListener("updatefound", () => vigiarInstalacao(reg));
+    setInterval(() => procurarAtualizacao(false), 30 * 60 * 1000);
+  }).catch(() => {});
+
+  // troca concluída: recarrega uma única vez para carregar a versão nova
+  let recarregando = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (recarregando) return;
+    recarregando = true;
+    location.reload();
+  });
+
+  // ao voltar para o app (muito comum na PWA instalada), confere de novo
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") procurarAtualizacao(false);
+  });
+}
+
+$("btnCheckUpdate").onclick = () => procurarAtualizacao(true);

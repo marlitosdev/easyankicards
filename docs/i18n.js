@@ -205,7 +205,20 @@ const UI = {
   "toast_exported": "Arquivo gerado",
   "show_answer_btn": "Ver resposta",
   "hide_answer_btn": "Ocultar resposta",
-  "style_panel_label": "Estilo:"
+  "style_panel_label": "Estilo:",
+  "textcolor_label": "Cor da letra",
+  "tip_textcolor": "Muda a cor do texto de todo o aplicativo. Use o botão ao lado para voltar à cor automática do tema.",
+  "textcolor_reset": "Cor automática",
+  "toast_textcolor": "Cor da letra alterada",
+  "toast_textcolor_reset": "Cor automática restaurada",
+  "update_title": "Nova versão disponível",
+  "update_text": "Uma atualização do EasyAnkiCards foi publicada. Seus textos não serão perdidos.",
+  "update_btn": "Atualizar agora",
+  "update_later": "Depois",
+  "update_checking": "Procurando atualizações…",
+  "update_none": "Você já está na versão mais recente",
+  "check_update_btn": "Procurar atualizações",
+  "toast_updated": "Aplicativo atualizado"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -412,7 +425,20 @@ const UI = {
   "toast_exported": "File created",
   "show_answer_btn": "Show answer",
   "hide_answer_btn": "Hide answer",
-  "style_panel_label": "Style:"
+  "style_panel_label": "Style:",
+  "textcolor_label": "Text color",
+  "tip_textcolor": "Changes the text color across the app. Use the button beside it to return to the theme's automatic color.",
+  "textcolor_reset": "Automatic color",
+  "toast_textcolor": "Text color changed",
+  "toast_textcolor_reset": "Automatic color restored",
+  "update_title": "New version available",
+  "update_text": "An EasyAnkiCards update has been published. Your text will not be lost.",
+  "update_btn": "Update now",
+  "update_later": "Later",
+  "update_checking": "Checking for updates…",
+  "update_none": "You are already on the latest version",
+  "check_update_btn": "Check for updates",
+  "toast_updated": "App updated"
  }
 };
 const PARSER_MSG = {
