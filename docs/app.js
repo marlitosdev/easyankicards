@@ -3,15 +3,29 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.3.0";
+const VERSAO = "6.4.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
 let previewTimer = null;
 let editando = null;
 let cardDivs = [];            // [{line, div}] da última renderização
+let respostasAbertas = new Set();   // chaves de cartões com o verso revelado
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
 
+
+
+/* --------------- aviso curto de confirmação (toast) ----------------- */
+
+let toastTimer = null;
+
+function toast(chave) {
+  const el = $("toast");
+  el.textContent = t(chave);
+  el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), 1800);
+}
 
 /* ------------- balão de dica universal (hover / toque longo) -------- */
 
@@ -76,6 +90,7 @@ function aplicarTextos() {
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
   rotularPrevia();
+  rotularEstilos();
   atualizarDestino();
 }
 
@@ -257,7 +272,7 @@ function renderCorpoCartao(div, c) {
       div.append(li);
     });
     if (c.back) { const v = document.createElement("div"); v.className = "tags"; v.textContent = c.back; div.append(v); }
-  } else if (c.back) {
+  } else if (c.back && (!c.ocultarVerso)) {
     const v = document.createElement("div"); v.className = "verso"; v.textContent = c.back; div.append(v);
   }
   if (c.tags.length) { const tg = document.createElement("div"); tg.className = "tags"; tg.textContent = t("tags_prefix") + c.tags.join(", "); div.append(tg); }
@@ -325,10 +340,12 @@ function preview() {
       c.kind === "mc" ? montarEdicaoMC(div, c, r, idx) : montarEdicao(div, c, r, idx);
     } else {
       if (modoPrevia() === "anki") {
-        renderCartaoEstilizado(div, c);
+        renderCartaoEstilizado(div, c, respostasAbertas.has(chave(c)));
         c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
       } else {
+        c.ocultarVerso = !respostasAbertas.has(chave(c));
         renderCorpoCartao(div, c);
+        delete c.ocultarVerso;
       }
       const acoes = document.createElement("div");
       acoes.className = "acoes";
@@ -336,7 +353,15 @@ function preview() {
       bEd.className = "btn btn-cinza"; bEd.textContent = t("edit_btn");
       bEd.title = t("tip_editar");
       bEd.onclick = () => { editando = chave(c); preview(); };
-      acoes.append(bEd);
+      const bVer = document.createElement("button");
+      const aberto = respostasAbertas.has(chave(c));
+      bVer.className = "btn btn-ciano";
+      bVer.textContent = t(aberto ? "hide_answer_btn" : "show_answer_btn");
+      bVer.onclick = () => {
+        aberto ? respostasAbertas.delete(chave(c)) : respostasAbertas.add(chave(c));
+        preview();
+      };
+      acoes.append(bEd, bVer);
       div.append(acoes);
     }
     box.append(div);
@@ -388,20 +413,21 @@ function resumo(r) {
 
 function modoPrevia() { return localStorage.getItem("eac_previa") || "app"; }
 
-function textoClozeResolvido(pai, texto, cor) {
+function textoClozeResolvido(pai, texto, cor, mascarar) {
   const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
   partes.forEach((p) => {
     const m = p.match(/^\{\{c\d+::([\s\S]*?)\}\}$/);
     if (!m) { pai.append(document.createTextNode(p)); return; }
-    const ans = m[1].split("::")[0].trim();
+    const inner = m[1].split("::");
+    const ans = inner[0].trim(), dica = (inner[1] || "").trim();
     const b = document.createElement("b");
     b.style.color = cor;
-    b.textContent = ans;
+    b.textContent = mascarar ? (dica ? "[" + dica + "]" : "[...]") : ans;
     pai.append(b);
   });
 }
 
-function renderCartaoEstilizado(div, c) {
+function renderCartaoEstilizado(div, c, mostrarResposta) {
   const p = PALETAS[localStorage.getItem("eac_style") || "classic"] || PALETAS.classic;
   const wrap = document.createElement("div");
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
@@ -431,7 +457,7 @@ function renderCartaoEstilizado(div, c) {
   const frente = document.createElement("div");
   frente.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
     ";padding:12px;text-align:justify;font-size:13.5px;" + sombra;
-  textoClozeResolvido(frente, c.front, p.destaque);
+  textoClozeResolvido(frente, c.front, p.destaque, !mostrarResposta);
   if (c.kind === "mc") {
     c.options.forEach((o, i) => {
       const li = document.createElement("div");
@@ -441,6 +467,7 @@ function renderCartaoEstilizado(div, c) {
   }
   wrap.append(frente);
 
+  if (!mostrarResposta) return;   // verso só quando o usuário pedir
   const rot2 = document.createElement("div");
   rot2.className = "lado-rotulo"; rot2.textContent = t("lado_verso");
   rot2.style.color = p.texto;
@@ -449,7 +476,7 @@ function renderCartaoEstilizado(div, c) {
   verso.style.cssText = "background:" + p.caixa + ";padding:10px;text-align:center;" +
     "font-weight:700;font-size:14px;color:" + p.destaque + ";" + sombra;
   if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
-  else if (CLOZE_RE.test(c.front)) verso.textContent = "…";
+  else if (CLOZE_RE.test(c.front)) verso.textContent = "";
   else verso.textContent = c.back;
   if (c.kind === "mc" || !CLOZE_RE.test(c.front)) wrap.append(verso);
   if ((c.kind === "mc" || CLOZE_RE.test(c.front)) && c.back) {
@@ -500,6 +527,7 @@ function botoesSalvar(div, salvar, r, idx) {
     reescreverEditor(r.cards, r.warnings);
     $("status").textContent = t("deleted_status");
     preview();
+    toast("toast_deleted");
   };
   acoes.append(bS, bC, bX);
   div.append(acoes);
@@ -639,6 +667,7 @@ function montarEdicao(div, c, r, idx) {
       ? r.cards[Math.min(idx, r.cards.length - 1)].line : null;
     $("status").textContent = t("edited_status");
     preview();
+    toast("toast_edited");
   }, r, idx);
 }
 
@@ -760,6 +789,7 @@ function aplicarNormalizacao() {
   $("dlgNormalizar").close();
   $("status").textContent = t("applied_status");
   preview();
+  toast("toast_normalized");
 }
 
 /* --------------------------- exportação ---------------------------- */
@@ -804,6 +834,7 @@ async function exportarTxt() {
   const txt = exportTxtString(r, nomeDeck());
   await entregar(new TextEncoder().encode(txt), nomeArquivo() + ".txt", "text/plain");
   $("status").textContent = t("status_saved", { f: nomeArquivo() + ".txt" });
+  toast("toast_exported");
   alert(t("txt_done_msg"));
 }
 
@@ -814,6 +845,7 @@ async function exportarApkg() {
     const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value);
     await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
+    toast("toast_exported");
     const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
     alert(t("apkg_done_msg", { dest: partes.join("  >  ") }));
   } catch (e) {
@@ -1066,19 +1098,21 @@ $("btnEmbaralhar").onclick = () => {
     $("mcR" + i).checked = novaOrdem[i] === corretaTxt;
   }
   atualizarNovoPreview();
+  toast("toast_shuffled");
 };
 
 /* Embaralhar (MC na frase): troca a semente da ordem das opções. */
 $("btnEmbaralharCloze").onclick = () => {
   mcClozeSeed = (Math.random() * 2 ** 31) | 0;
   atualizarNovoPreview();
+  toast("toast_shuffled");
 };
 
 $("btnNovoCartao").onclick = () => { rotularModelos(); aplicarModelo(); $("dlgNovo").showModal(); };
 $("selModelo").onchange = aplicarModelo;
 $("btnNovoFechar").onclick = () => $("dlgNovo").close();
-$("btnMarcarNovo").onclick = () => { marcarLacuna($("novoFrente")); atualizarNovoPreview(); };
-$("btnLimparNovo").onclick = () => { limparLacunas($("novoFrente")); atualizarNovoPreview(); };
+$("btnMarcarNovo").onclick = () => { marcarLacuna($("novoFrente")); atualizarNovoPreview(); toast("toast_blank"); };
+$("btnLimparNovo").onclick = () => { limparLacunas($("novoFrente")); atualizarNovoPreview(); toast("toast_blank_clear"); };
 ["novoFrente", "novoVerso", "novoTags", "mcCerta", "mcErr0", "mcErr1", "mcErr2", "mcErr3",
  "mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"].forEach((id) => {
   $(id).addEventListener("input", atualizarNovoPreview);
@@ -1103,6 +1137,7 @@ $("btnInserir").onclick = () => {
   $("editor").value = (atual ? atual + "\n\n" : "") + res.linha + "\n";
   $("dlgNovo").close();
   preview();
+  toast("toast_added");
 };
 document.querySelectorAll(".ic-ajuda[data-hint]").forEach((b) => {
   b.onclick = () => { $("dicaCampo").textContent = t(b.dataset.hint); };
@@ -1112,34 +1147,38 @@ document.querySelectorAll(".ic-ajuda[data-hint]").forEach((b) => {
 
 let promptAtivo = "prompt_full";
 
+/* Os dois prompts são EDITÁVEIS. Se houver versão salva do usuário,
+ * ela é carregada; "Restaurar" volta ao texto original do app. */
+function chaveSalva(tipo) { return "eac_prompt_" + tipo; }
+
 function mostrarPrompt(tipo) {
   promptAtivo = tipo;
-  const meu = tipo === "meu";
-  // "Meu prompt": editável e guardado no aparelho; começa com o modelo completo
-  $("promptTexto").value = meu
-    ? (localStorage.getItem("eac_myprompt") || t("prompt_full"))
-    : t(tipo);
-  $("promptTexto").readOnly = !meu;
-  $("btnPromptSalvar").style.display = meu ? "" : "none";
+  const salvo = localStorage.getItem(chaveSalva(tipo));
+  $("promptTexto").value = salvo || t(tipo);
+  $("promptDica").textContent = t("prompt_edit_hint")
+    + (salvo ? "  (" + t("prompt_saved_badge") + ")" : "");
+  $("btnPromptRestaurar").style.display = salvo ? "" : "none";
   $("btnTabFull").classList.toggle("ativa", tipo === "prompt_full");
   $("btnTabMini").classList.toggle("ativa", tipo === "prompt_mini");
-  $("btnTabMeu").classList.toggle("ativa", meu);
 }
 
 $("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); $("dlgPrompt").showModal(); };
 $("btnTabFull").onclick = () => mostrarPrompt("prompt_full");
 $("btnTabMini").onclick = () => mostrarPrompt("prompt_mini");
-$("btnTabMeu").onclick = () => mostrarPrompt("meu");
 $("btnPromptSalvar").onclick = () => {
-  localStorage.setItem("eac_myprompt", $("promptTexto").value);
-  $("btnPromptSalvar").textContent = t("prompt_saved");
-  setTimeout(() => { $("btnPromptSalvar").textContent = t("prompt_save"); }, 2200);
+  localStorage.setItem(chaveSalva(promptAtivo), $("promptTexto").value);
+  mostrarPrompt(promptAtivo);
+  toast("toast_saved");
+};
+$("btnPromptRestaurar").onclick = () => {
+  localStorage.removeItem(chaveSalva(promptAtivo));
+  mostrarPrompt(promptAtivo);
+  toast("toast_restored");
 };
 $("btnPromptFechar").onclick = () => $("dlgPrompt").close();
 $("btnPromptCopiar").onclick = async () => {
   await navigator.clipboard.writeText($("promptTexto").value);
-  $("btnPromptCopiar").textContent = t("copied");
-  setTimeout(() => { $("btnPromptCopiar").textContent = t("prompt_copy"); }, 2000);
+  toast("toast_copied");
   $("status").textContent = t("prompt_copied_status");
 };
 
@@ -1165,7 +1204,7 @@ $("btnNormFechar").onclick = () => $("dlgNormalizar").close();
 const temaSalvo = localStorage.getItem("eac_theme") || "auto";
 aplicarTema(temaSalvo);
 $("selTema").value = temaSalvo;
-$("selTema").onchange = () => aplicarTema($("selTema").value);
+$("selTema").onchange = () => { aplicarTema($("selTema").value); toast("toast_theme"); };
 function rotularPrevia() {
   const nomes = { app: "preview_simple", anki: "preview_anki" };
   [...$("selPrevia").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
@@ -1198,6 +1237,7 @@ function rotularEstilos() {
   const nomes = { classic: "style_classic", esquema: "style_esquema",
                   dark: "style_dark", paper: "style_paper" };
   [...$("selEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
+  [...$("selEstiloPainel").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
 }
 
 function previewEstilo() {
@@ -1256,7 +1296,17 @@ $("btnCaminhoExp").onclick = async () => {
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
 $("tagsExp").value = localStorage.getItem("eac_tags") || "";
 $("selEstilo").value = localStorage.getItem("eac_style") || "classic";
-$("selEstilo").onchange = previewEstilo;
+$("selEstiloPainel").value = $("selEstilo").value;
+function aplicarEstilo(v) {
+  localStorage.setItem("eac_style", v);
+  $("selEstilo").value = v;
+  $("selEstiloPainel").value = v;
+  previewEstilo();
+  preview();
+  toast("toast_style");
+}
+$("selEstilo").onchange = () => aplicarEstilo($("selEstilo").value);
+$("selEstiloPainel").onchange = () => aplicarEstilo($("selEstiloPainel").value);
 $("ajudaEstilo").onclick = () => alert(t("style_hint"));
 
 $("btnAjuda").onclick = () => $("dlgAjuda").showModal();
