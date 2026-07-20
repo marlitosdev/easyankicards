@@ -5,7 +5,7 @@ rem Trabalha sempre a partir da RAIZ do projeto (pasta acima de scripts\)
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  EasyAnkiCards para Anki - Compilacao do .exe
+echo  EasyAnkiCards - Compilacao do .exe
 echo ============================================================
 echo.
 
@@ -20,7 +20,7 @@ if errorlevel 1 (
 
 echo [1/4] Instalando dependencias...
 python -m pip install --upgrade pip >nul
-python -m pip install customtkinter genanki pyinstaller
+python -m pip install pywebview pyinstaller
 if errorlevel 1 (
     echo [ERRO] Falha ao instalar dependencias.
     pause
@@ -29,11 +29,12 @@ if errorlevel 1 (
 
 echo.
 echo [2/4] Compilando (pode levar alguns minutos)...
-rem --distpath release   : o .exe final vai para a pasta release\
-rem --workpath/--specpath: temporarios concentrados em .build_tmp\
+rem --add-data "docs;docs" : embute a interface (a mesma da versao web)
+rem --distpath release      : o .exe final vai para a pasta release\
+rem --workpath/--specpath   : temporarios concentrados em .build_tmp\
 python -m PyInstaller --noconfirm --onefile --windowed ^
     --name "EasyAnkiCards" ^
-    --collect-all customtkinter ^
+    --add-data "docs;docs" ^
     --distpath release ^
     --workpath .build_tmp ^
     --specpath .build_tmp ^
@@ -51,8 +52,7 @@ rmdir /s /q .build_tmp 2>nul
 echo [4/4] Pronto!
 echo.
 echo Executavel unico gerado em:  release\EasyAnkiCards.exe
-echo Nenhuma outra pasta foi deixada para tras.
-echo Para distribuir: envie apenas esse .exe (ou anexe-o em um
-echo Release do GitHub - o codigo-fonte fica no repositorio).
+echo Ele ja contem a interface completa (mesma da versao web) e
+echo funciona sem internet. Para distribuir: envie apenas esse .exe.
 echo.
 pause

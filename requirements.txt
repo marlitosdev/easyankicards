@@ -1,2 +1,4 @@
-customtkinter>=5.2
+# Interface de desktop (janela nativa). Opcional: sem ela, o app abre no navegador.
+pywebview>=5.0
+# Uso por linha de comando (cli.py) — geracao de .apkg em Python
 genanki>=0.13
