@@ -146,13 +146,15 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .tipbox{position:fixed;z-index:99;background:#2b2b2b;color:#f2f2f2;font-size:12px;
   padding:6px 9px;border-radius:7px;max-width:280px;line-height:1.35;
   box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
-.editor-wrap{position:relative}
-.editor-wrap textarea{position:relative;z-index:1;background:var(--campo);
+.editor-wrap{position:relative;background:var(--campo);border-radius:8px}
+.editor-wrap textarea{position:relative;z-index:1;background:transparent;
   color:transparent;caret-color:var(--texto);line-height:1.45}
 #editorHl{position:absolute;inset:0;margin:0;overflow:hidden;pointer-events:none;
   white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;
   border-radius:8px;padding:10px;font-family:ui-monospace,Consolas,monospace;
-  font-size:13px;line-height:1.45;color:var(--texto)}
+  font-size:13px;line-height:1.45;color:var(--texto);z-index:0}
+#editor::selection{background:rgba(37,99,235,.35)}
+#editor::-moz-selection{background:rgba(37,99,235,.35)}
 .hl-delim{color:#ff9d2e;font-weight:700}
 :root[data-theme="light"] .hl-delim{color:#c2410c}
 :root[data-theme="light"] .hl-cloze{color:#1d4ed8}
@@ -191,6 +193,9 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     <option value="auto"></option><option value="light"></option>
     <option value="dark"></option><option value="black"></option>
   </select>
+  <input type="color" id="corLetra" aria-label="Cor da letra"
+         style="width:34px;height:30px;border:0;background:none;padding:0;cursor:pointer">
+  <button class="btn btn-cinza" id="btnCorReset" style="padding:6px 8px;font-size:11px">↺</button>
   <select id="selIdioma" aria-label="Idioma">
     <option value="pt">Português</option>
     <option value="en">English</option>
