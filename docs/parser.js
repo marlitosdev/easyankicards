@@ -1,10 +1,37 @@
-/* EasyAnkiCards PWA — parser (porte fiel do core.py v5.1).
- * Mesmas regras da versão desktop:
+/* EasyAnkiCards PWA — parser (núcleo de interpretação do texto).
+ *
+ * ┌── MAPA DO ARQUIVO ───────────────────────────────────────────────┐
+ * │ agruparLinhas()      junta linhas soltas em "cartões lógicos" e  │
+ * │                      recolhe metadados "@" (título) e "+"        │
+ * │                      (Saiba mais), aceitos ANTES ou DEPOIS       │
+ * │                      do cartão                                   │
+ * │ splitLine()          divide por "::" protegendo {{c1::...}}      │
+ * │ parseText()          monta os Card{} e aplica as tolerâncias     │
+ * │ checarSuspeitas()    heurísticas que geram os avisos laranja     │
+ * │ cardToLine()         Card{} -> texto (o texto é a fonte única)   │
+ * │ exportTxtString()    .txt com coluna de deck                     │
+ * │ corrigir*()          correções de um toque oferecidas na tela    │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * REGRAS DE OURO ao mexer aqui:
+ *  1. O TEXTO do editor é a única fonte de verdade. Todo recurso novo
+ *     precisa de ida e volta: parseText(cardToLine(c)) == c.
+ *  2. Tags globais NUNCA entram em cardToLine (usar ownTags), senão
+ *     elas se multiplicam a cada reescrita.
+ *  3. Lacuna cloze precisa estar no 1º campo, ou o Anki não gera
+ *     cartão para a nota.
+ *  4. Ao adicionar tolerância, prefira AVISAR (issues/infos) a
+ *     transformar em silêncio.
+ *
+ * TOLERÂNCIAS já implementadas (não remover sem motivo):
  *  - linha sem "::"/cloze continua o cartão anterior (colagem de PDF/IA);
  *  - linha começando com "::" continua; cloze aberto {{c1:: continua;
+ *  - "Pergunta?" + "Resposta" em linhas seguidas viram um cartão;
  *  - linha em branco separa cartões; "#" comenta;
- *  - >3 campos "::": reorganiza (pontuação descartada, último campo
- *    vira tags se parecer tags); heurísticas marcam cartões suspeitos.
+ *  - ">3 campos "::"" é reorganizado (pontuação descartada, último campo
+ *    vira tags se parecer tags);
+ *  - "@" e "+" valem antes ou depois do cartão;
+ *  - cloze só no verso é movido para a frente.
  */
 
 const CLOZE_RE = /\{\{c\d+::[\s\S]+?\}\}/;
@@ -35,6 +62,14 @@ function clozeAberto(text) {
 
 function hasDelim(line) { return splitLine(line).length > 1; }
 
+/* Uma palavra só (ou lista separada por vírgula), sem espaços internos
+ * nem pontuação de frase — o formato típico de etiqueta do Anki. */
+function ehTagSolta(txt) {
+  const s = (txt || "").trim();
+  if (!s || s.length > 60 || /[.!?;:]/.test(s)) return false;
+  return s.split(",").every((p) => p.trim() && !/\s/.test(p.trim()));
+}
+
 function looksLikeTags(raw) {
   raw = raw.trim();
   return !!raw && !raw.includes("{{") && !raw.includes(":")
@@ -42,8 +77,10 @@ function looksLikeTags(raw) {
 }
 
 function agruparLinhas(rawText) {
-  const blocos = [];   // itens: {linha, texto, par?}
+  const blocos = [];   // itens: {linha, texto, par?, titulo?, more?}
   let atual = null;
+  let pendenteTitulo = null;   // "@" visto antes do cartão
+  let pendenteMore = null;     // "+" visto antes do cartão
   const linhas = rawText.split(/\r?\n/);
   for (let i = 0; i < linhas.length; i++) {
     const s = linhas[i].trim();
@@ -51,14 +88,36 @@ function agruparLinhas(rawText) {
     if (s.startsWith("#")) continue;
     /* Linha começando com "+" = explicação extra ("Saiba mais") do cartão
        anterior. No Anki vira um link que o aluno clica para expandir. */
-    /* Linha começando com "@" = título impresso no topo DESTE cartão. */
-    if (s.startsWith("@") && atual !== null) {
-      atual.titulo = s.replace(/^@\s*/, "");
+    /* Linhas de METADADO: "@" título e "+" explicação.
+       Elas podem vir DEPOIS do cartão (forma canônica) ou ANTES dele —
+       modelos de IA costumam escrever o título na linha de cima. Quando
+       vêm antes, ficam "pendentes" e são aplicadas ao próximo cartão. */
+    if (s.startsWith("@")) {
+      const txt = s.replace(/^@\s*/, "");
+      // Olha a próxima linha com conteúdo: se for um cartão, o título é
+      // DELE (padrão "@ título" acima do cartão); senão, é do atual.
+      let prox = "";
+      for (let k = i + 1; k < linhas.length; k++) {
+        const p = linhas[k].trim();
+        if (!p) break;
+        if (p.startsWith("#")) continue;
+        prox = p;
+        break;
+      }
+      const proxEhCartao = prox && !prox.startsWith("+") && !prox.startsWith("@") &&
+                           (hasDelim(prox) || CLOZE_START_RE.test(prox));
+      if (proxEhCartao || atual === null) {
+        pendenteTitulo = txt;
+        atual = null;          // encerra o cartão anterior
+      } else {
+        atual.titulo = txt;
+      }
       continue;
     }
-    if (s.startsWith("+") && atual !== null) {
+    if (s.startsWith("+")) {
       const txt = s.replace(/^\+\s*/, "");
-      atual.more = atual.more ? atual.more + "<br>" + txt : txt;
+      if (atual !== null) atual.more = atual.more ? atual.more + "<br>" + txt : txt;
+      else pendenteMore = pendenteMore ? pendenteMore + "<br>" + txt : txt;
       continue;
     }
     if (atual !== null && clozeAberto(atual.texto)) {
@@ -77,11 +136,15 @@ function agruparLinhas(rawText) {
       }
     } else if (hasDelim(s) || CLOZE_START_RE.test(s)) {
       atual = { linha: i + 1, texto: s };
+      if (pendenteTitulo) { atual.titulo = pendenteTitulo; pendenteTitulo = null; }
+      if (pendenteMore) { atual.more = pendenteMore; pendenteMore = null; }
       blocos.push(atual);
     } else if (atual !== null) {
       atual.texto += " " + s;
     } else {
       atual = { linha: i + 1, texto: s };
+      if (pendenteTitulo) { atual.titulo = pendenteTitulo; pendenteTitulo = null; }
+      if (pendenteMore) { atual.more = pendenteMore; pendenteMore = null; }
       blocos.push(atual);
     }
   }
@@ -95,7 +158,7 @@ function checarSuspeitas(card, rawParts) {
     if (limpo(card.front).length < 2) issues.push(pm("i_front_short", { v: card.front }));
     if (limpo(card.back).length < 2) issues.push(pm("i_back_short"));
   }
-  if (rawParts.length === 3) {
+  if (rawParts.length === 3 && card.kind !== "mc") {
     const rt = rawParts[2];
     if (rt.includes("{{") || rt.includes(":") || rt.length > 60 || parseTags(rt).length > 6)
       issues.push(pm("i_tags_text"));
@@ -172,13 +235,30 @@ function parseText(rawText, globalTags) {
       back = parts.length >= 2 ? parts[1] : "";
       if (isCloze && back && !back.replace(/[.!?,;\- ]+/g, "").length) back = "";
       tags = parts.length >= 3 ? parseTags(parts[2]) : [];
+      /* Cloze com apenas 2 campos e o 2º parecendo etiqueta
+         (uma só palavra, sem espaços, típico de "Materia_Assunto"):
+         o autor queria uma TAG, não uma observação. */
+      if (isCloze && parts.length === 2 && back && ehTagSolta(back)) {
+        tags = parseTags(back);
+        back = "";
+      }
     }
 
     let card;
     if (isCloze) {
       if (!front) { avisar(pm("w_cloze_empty", { n: linha }), linha, texto); continue; }
+      /* A lacuna precisa estar na FRENTE (campo "Texto" do Anki). Quando
+         ela aparece só no verso — padrão "Pergunta? :: {{c1::Resposta}}" —
+         as duas partes viram uma frase só, senão o Anki não gera cartão. */
+      let clozeMovido = false;
+      if (!CLOZE_RE.test(front) && CLOZE_RE.test(back)) {
+        front = front.replace(/\s+$/, "") + " " + back.trim();
+        back = "";
+        clozeMovido = true;
+      }
       card = { kind: "cloze", front, back, tags: globalTags.concat(tags),
                ownTags: tags, line: linha, issues: [] };
+      if (clozeMovido) card.avisoCloze = true;
     } else {
       if (parts.length < 2) {
         avisar(pm("w_no_delim", { n: linha, c: "'" + texto.slice(0, 60) + "'" }), linha, texto);
@@ -191,6 +271,7 @@ function parseText(rawText, globalTags) {
     card.issues = checarSuspeitas(card, parts);
     if (extraIssue) card.issues.push(extraIssue);
     card.infos = par ? [pm("i_pair")] : [];
+    if (card.avisoCloze) { card.infos.push(pm("i_cloze_moved")); delete card.avisoCloze; }
     card.raw = texto;
     card.more = more || "";
     card.titulo = titulo || "";
@@ -307,4 +388,48 @@ function temParesSoltos(raw) {
 
 function temMarcadores(raw) {
   return /^\s*(?:[-•▪*]|\d+[.)\]])\s+/m.test(raw);
+}
+
+
+/* ------------------------------------------------------------------
+ * CORREÇÕES AUTOMÁTICAS sugeridas ao usuário (aplicadas com um toque).
+ * Cada função recebe o texto inteiro do editor e devolve o texto já
+ * corrigido — nunca altera nada sozinha: quem decide é a interface.
+ * ------------------------------------------------------------------ */
+
+/* Move para uma linha "+" o 3º campo que é claramente uma explicação
+ * (frase longa/com pontuação) e não uma lista de tags. */
+function corrigirTagsQueSaoTexto(raw) {
+  return raw.split(/\r?\n/).map((linha) => {
+    const s = linha.trim();
+    if (!s || s.startsWith("#") || s.startsWith("+") || s.startsWith("@")) return linha;
+    const parts = splitLine(s);
+    if (parts.length !== 3) return linha;
+    if (looksLikeTags(parts[2])) return linha;
+    // 3º campo é texto: vira explicação na linha de baixo
+    return parts[0] + " :: " + parts[1] + "\n+ " + parts[2];
+  }).join("\n");
+}
+
+/* Separa um título "@..." que ficou grudado no início do cartão. */
+function corrigirTituloGrudado(raw) {
+  return raw.split(/\r?\n/).map((linha) => {
+    const m = linha.match(/^\s*@([^\n]*?)\s+(\[MC\]|[A-ZÀ-Ú].*?::)/);
+    if (!m) return linha;
+    const resto = linha.slice(linha.indexOf(m[2]));
+    return "@ " + m[1].trim() + "\n" + resto;
+  }).join("\n");
+}
+
+function temTagsQueSaoTexto(raw) {
+  return raw.split(/\r?\n/).some((linha) => {
+    const s = linha.trim();
+    if (!s || s.startsWith("#") || s.startsWith("+") || s.startsWith("@")) return false;
+    const parts = splitLine(s);
+    return parts.length === 3 && !looksLikeTags(parts[2]);
+  });
+}
+
+function temTituloGrudado(raw) {
+  return /^\s*@[^\n]*?\s+(\[MC\]|[A-ZÀ-Ú].*?::)/m.test(raw);
 }

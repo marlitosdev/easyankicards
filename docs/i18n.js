@@ -259,7 +259,17 @@ const UI = {
   "lac_pos_after": "{n}ª — depois de «{op}»",
   "lac_pos_preview": "Ordem final:",
   "lac_ok": "Tamanho bom para alternativa ({n} caracteres).",
-  "lac_warn_mid": "Resposta um pouco longa ({n} caracteres). O ideal é até 40 — encurte ou passe o detalhe para \"Saiba mais\"."
+  "lac_warn_mid": "Resposta um pouco longa ({n} caracteres). O ideal é até 40 — encurte ou passe o detalhe para \"Saiba mais\".",
+  "goto_error": "Ver no texto",
+  "fix_now": "Corrigir",
+  "fix_tags_text": "Mover explicação para \"Saiba mais\"",
+  "fix_title_glued": "Separar título grudado",
+  "nav_next_problem": "Ir para o próximo problema",
+  "nav_none": "Nenhum problema para corrigir",
+  "toast_fixed": "Correção aplicada",
+  "toast_goto": "Linha destacada no editor",
+  "crit_pairs_tags": "Há linhas em que o 3º campo é uma explicação, não etiquetas — ela deve ir para uma linha \"+\".",
+  "crit_title_glued": "Há um título \"@\" grudado no início de um cartão — precisa ficar em linha própria."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -520,7 +530,17 @@ const UI = {
   "lac_pos_after": "{n}th — after «{op}»",
   "lac_pos_preview": "Final order:",
   "lac_ok": "Good length for an option ({n} characters).",
-  "lac_warn_mid": "Answer is a bit long ({n} characters). Aim for up to 40 — shorten it or move details to \"Learn more\"."
+  "lac_warn_mid": "Answer is a bit long ({n} characters). Aim for up to 40 — shorten it or move details to \"Learn more\".",
+  "goto_error": "Show in text",
+  "fix_now": "Fix",
+  "fix_tags_text": "Move explanation to \"Learn more\"",
+  "fix_title_glued": "Split glued title",
+  "nav_next_problem": "Go to next problem",
+  "nav_none": "No problems to fix",
+  "toast_fixed": "Fix applied",
+  "toast_goto": "Line highlighted in the editor",
+  "crit_pairs_tags": "Some lines have an explanation in the 3rd field instead of tags — it should go on a \"+\" line.",
+  "crit_title_glued": "There is an \"@\" title glued to the start of a card — it must be on its own line."
  }
 };
 const PARSER_MSG = {
@@ -546,7 +566,8 @@ const PARSER_MSG = {
   "i_mc_fewopts": "múltipla escolha com menos de 2 alternativas",
   "i_mc_nocorrect": "nenhuma alternativa marcada com * como correta — assumi a primeira; toque em Editar para escolher",
   "i_pair": "par Pergunta/Resposta detectado sem '::' — juntei automaticamente, confira",
-  "i_mc_inline_long": "alternativa de {n} caracteres numa lacuna com opções — no Anki tudo aparece entre colchetes na mesma frase e fica ilegível; converta para múltipla escolha em LISTA ou encurte as alternativas"
+  "i_mc_inline_long": "alternativa de {n} caracteres numa lacuna com opções — no Anki tudo aparece entre colchetes na mesma frase e fica ilegível; converta para múltipla escolha em LISTA ou encurte as alternativas",
+  "i_cloze_moved": "a lacuna estava no campo da resposta; juntei à pergunta para o Anki conseguir gerar o cartão"
  },
  "en": {
   "w_cloze_empty": "Line {n}: empty cloze card — skipped.",
@@ -570,7 +591,8 @@ const PARSER_MSG = {
   "i_mc_fewopts": "multiple choice with fewer than 2 options",
   "i_mc_nocorrect": "no option marked with * as correct — assumed the first; tap Edit to choose",
   "i_pair": "Question/Answer pair detected without '::' — joined automatically, please check",
-  "i_mc_inline_long": "{n}-character option inside an in-sentence blank — Anki prints everything in brackets on the same line, which becomes unreadable; convert to LIST multiple choice or shorten the options"
+  "i_mc_inline_long": "{n}-character option inside an in-sentence blank — Anki prints everything in brackets on the same line, which becomes unreadable; convert to LIST multiple choice or shorten the options",
+  "i_cloze_moved": "the blank was in the answer field; merged it into the question so Anki can generate the card"
  }
 };
 

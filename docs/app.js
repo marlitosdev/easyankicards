@@ -1,9 +1,35 @@
-/* EasyAnkiCards PWA — camada de interface (v5.4).
- * Lógica de negócio em parser.js/anki.js; textos em i18n.js.
- * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
- * seleção, análise do texto com críticas e correções automáticas. */
+/* EasyAnkiCards PWA — camada de interface.
+ *
+ * ┌── MAPA DO ARQUIVO (na ordem em que aparece) ─────────────────────┐
+ * │ temas/cores          aplicarTema, aplicarCorLetra                │
+ * │ avisos               toast(), attachTip() (dica por hover/toque) │
+ * │ destino do baralho   nomeDeck, tituloCartao, atualizarDestino    │
+ * │ destaque do editor   renderDestaque() pinta "::", cloze, [MC] e  │
+ * │                      as linhas com erro (vermelho/laranja)       │
+ * │ sugestões            renderSugestoes() + irParaLinha() (atalho   │
+ * │                      "Ver no texto") + correções de um toque     │
+ * │ pré-visualização     preview(), renderCorpoCartao(),             │
+ * │                      renderCartaoEstilizado() ("como no Anki")   │
+ * │ edição               montarEdicao / montarEdicaoMC, barraTipo    │
+ * │                      (conversão entre tipos), painéis por lacuna │
+ * │ criação              MODELOS + montarLinhaNovo + preview ao vivo │
+ * │ revisão              revRender() (mini-Anki de conferência)      │
+ * │ exportação           validar, exportarTxt, exportarApkg          │
+ * │ atualização          faixa "nova versão" (service worker)        │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * REGRAS DE OURO ao mexer aqui:
+ *  1. Nenhuma regra de negócio nesta camada — ela mora em parser.js
+ *     e anki.js. Aqui é só tela.
+ *  2. Todo texto visível vem de t("chave") no i18n.js, nos DOIS
+ *     idiomas (há teste de paridade de chaves).
+ *  3. Editar um cartão = reescrever o TEXTO do editor
+ *     (reescreverEditor) e reprocessar; nunca manter estado paralelo.
+ *  4. Ao criar um id novo no HTML, lembre que há verificação
+ *     automática de que todo $("id") existe no index.html.
+ */
 
-const VERSAO = "7.4.1";
+const VERSAO = "7.5.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -189,6 +215,41 @@ function renderDestaque() {
   $("editorHl").scrollTop = $("editor").scrollTop;
 }
 
+
+/* ------------------------------------------------------------------
+ * NAVEGAÇÃO ATÉ O PROBLEMA
+ * Leva o cursor do editor à linha com defeito, seleciona-a e rola a
+ * caixa até ela — o usuário vê exatamente onde precisa mexer, sem
+ * procurar. Usado pelos botões "Ver no texto" das sugestões e dos
+ * cartões marcados como VERIFICAR.
+ * ------------------------------------------------------------------ */
+
+function irParaLinha(n) {
+  const ed = $("editor");
+  const linhas = ed.value.split("\n");
+  if (n < 1 || n > linhas.length) return;
+  let ini = 0;
+  for (let i = 0; i < n - 1; i++) ini += linhas[i].length + 1;
+  const fim = ini + linhas[n - 1].length;
+  ed.focus();
+  ed.setSelectionRange(ini, fim);
+  // rola a caixa deixando a linha por volta do terço superior
+  const alturaLinha = parseFloat(getComputedStyle(ed).lineHeight) || 19;
+  ed.scrollTop = Math.max(0, (n - 3) * alturaLinha);
+  renderDestaque();
+  toast("toast_goto");
+}
+
+/* Botão pequeno reaproveitado nas sugestões e nos cartões. */
+function botaoMini(rotuloKey, cor, acao) {
+  const b = document.createElement("button");
+  b.className = "btn " + cor;
+  b.style.cssText = "padding:2px 8px;font-size:11px;margin-left:6px";
+  b.textContent = t(rotuloKey);
+  b.onclick = acao;
+  return b;
+}
+
 /* ---------------- sugestões automáticas (sem botão) ----------------- */
 
 function renderSugestoes(r, raw) {
@@ -201,14 +262,30 @@ function renderSugestoes(r, raw) {
   const vistos = {};
   let longos = 0, dups = 0;
   r.cards.forEach((c) => {
-    if ((c.front + c.back).length > 220 && longos < 2) { itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }) }); longos++; }
+    if ((c.front + c.back).length > 220 && longos < 2) {
+      itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }), linha: c.line }); longos++;
+    }
     const k = c.front.toLowerCase().trim();
-    if (vistos[k] && dups < 2) { itens.push({ dot: "dot-org", txt: t("crit_dup", { a: vistos[k], b: c.line }) }); dups++; }
-    else if (!vistos[k]) vistos[k] = c.line;
+    if (vistos[k] && dups < 2) {
+      itens.push({ dot: "dot-org", txt: t("crit_dup", { a: vistos[k], b: c.line }), linha: c.line }); dups++;
+    } else if (!vistos[k]) vistos[k] = c.line;
+  });
+  // cartões marcados como VERIFICAR entram na lista com atalho
+  r.cards.filter((c) => c.issues.length).slice(0, 3).forEach((c) => {
+    itens.push({ dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line });
+  });
+  (r.warnLines || []).slice(0, 3).forEach((n, i) => {
+    itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n });
   });
   if (temMarcadores(raw))
     itens.push({ dot: "dot-org", txt: t("crit_bullets"),
                  fixTxt: t("fix_bullets"), fix: removerMarcadoresTexto });
+  if (temTagsQueSaoTexto(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_pairs_tags") || t("crit_bullets"),
+                 fixTxt: t("fix_tags_text"), fix: corrigirTagsQueSaoTexto });
+  if (temTituloGrudado(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
+                 fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
 
   itens.slice(0, 6).forEach((it) => {
@@ -219,15 +296,17 @@ function renderSugestoes(r, raw) {
     const sp = document.createElement("span");
     sp.textContent = it.txt;
     div.append(dot, sp);
+    if (it.linha) div.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(it.linha)));
     if (it.fix) {
-      const b = document.createElement("button");
-      b.className = "btn btn-azul"; b.textContent = it.fixTxt;
-      b.onclick = () => {
+      div.append(botaoMini("fix_now", "btn-azul", () => {
         $("editor").value = it.fix($("editor").value);
-        $("status").textContent = t("applied_status");
         preview();
-      };
-      div.append(b);
+        toast("toast_fixed");
+      }));
+      const rot = document.createElement("span");
+      rot.style.cssText = "font-size:10.5px;opacity:.75;margin-left:5px";
+      rot.textContent = it.fixTxt;
+      div.append(rot);
     }
     box.append(div);
   });
@@ -379,6 +458,7 @@ function preview() {
       bEd.className = "btn btn-cinza"; bEd.textContent = t("edit_btn");
       bEd.title = t("tip_editar");
       bEd.onclick = () => { editando = chave(c); preview(); };
+      if (c.issues.length) acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(c.line)));
       const bVer = document.createElement("button");
       const aberto = !respostasFechadas.has(chave(c));
       bVer.className = "btn btn-ciano";

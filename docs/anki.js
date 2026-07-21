@@ -1,7 +1,27 @@
 /* EasyAnkiCards — gerador de .apkg no navegador.
- * Schema e estruturas JSON extraídos de um pacote gerado pela genanki
- * (Python) e validados contra o Anki. Requer sql.js e JSZip (CDN).
- * Fluxo: buildApkg(cards, deckName) -> Uint8Array do arquivo .apkg
+ *
+ * ┌── MAPA DO ARQUIVO ───────────────────────────────────────────────┐
+ * │ ANKI_SCHEMA/COL_*    schema e JSONs extraídos de um pacote real  │
+ * │                      gerado pela genanki (Python) e validados    │
+ * │ ESTILOS/cssEstilo()  4 estilos visuais; cada um com IDs de       │
+ * │                      modelo próprios                             │
+ * │ comSaibaMais()       acrescenta os campos "Saiba mais" e         │
+ * │                      "Título" ao FIM (compatível com decks já    │
+ * │                      importados: campos novos entram vazios)     │
+ * │ buildApkg()          monta o SQLite e compacta em .apkg          │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * CUIDADOS ao mexer aqui:
+ *  - Campos novos SEMPRE no fim da lista (mudar a ordem quebra notas
+ *    já importadas pelo usuário).
+ *  - O ID do baralho vem de hash do nome: reimportar atualiza em vez
+ *    de duplicar. Não trocar por número aleatório.
+ *  - Blocos condicionais {{#Campo}}...{{/Campo}} evitam faixas vazias
+ *    no cartão.
+ *
+ * Origem dos dados: schema e JSONs extraídos de um pacote gerado pela
+ * genanki (Python) e validados contra o Anki real. Requer sql.js e
+ * JSZip (CDN). Fluxo: buildApkg(cards, deck, estilo, titulo) -> bytes.
  */
 
 const ANKI_SCHEMA = "CREATE TABLE col (\n    id              integer primary key,\n    crt             integer not null,\n    mod             integer not null,\n    scm             integer not null,\n    ver             integer not null,\n    dty             integer not null,\n    usn             integer not null,\n    ls              integer not null,\n    conf            text not null,\n    models          text not null,\n    decks           text not null,\n    dconf           text not null,\n    tags            text not null\n);\nCREATE TABLE notes (\n    id              integer primary key,   /* 0 */\n    guid            text not null,         /* 1 */\n    mid             integer not null,      /* 2 */\n    mod             integer not null,      /* 3 */\n    usn             integer not null,      /* 4 */\n    tags            text not null,         /* 5 */\n    flds            text not null,         /* 6 */\n    sfld            integer not null,      /* 7 */\n    csum            integer not null,      /* 8 */\n    flags           integer not null,      /* 9 */\n    data            text not null          /* 10 */\n);\nCREATE TABLE cards (\n    id              integer primary key,   /* 0 */\n    nid             integer not null,      /* 1 */\n    did             integer not null,      /* 2 */\n    ord             integer not null,      /* 3 */\n    mod             integer not null,      /* 4 */\n    usn             integer not null,      /* 5 */\n    type            integer not null,      /* 6 */\n    queue           integer not null,      /* 7 */\n    due             integer not null,      /* 8 */\n    ivl             integer not null,      /* 9 */\n    factor          integer not null,      /* 10 */\n    reps            integer not null,      /* 11 */\n    lapses          integer not null,      /* 12 */\n    left            integer not null,      /* 13 */\n    odue            integer not null,      /* 14 */\n    odid            integer not null,      /* 15 */\n    flags           integer not null,      /* 16 */\n    data            text not null          /* 17 */\n);\nCREATE TABLE revlog (\n    id              integer primary key,\n    cid             integer not null,\n    usn             integer not null,\n    ease            integer not null,\n    ivl             integer not null,\n    lastIvl         integer not null,\n    factor          integer not null,\n    time            integer not null,\n    type            integer not null\n);\nCREATE TABLE graves (\n    usn             integer not null,\n    oid             integer not null,\n    type            integer not null\n);\nCREATE INDEX ix_notes_usn on notes (usn);\nCREATE INDEX ix_cards_usn on cards (usn);\nCREATE INDEX ix_revlog_usn on revlog (usn);\nCREATE INDEX ix_cards_nid on cards (nid);\nCREATE INDEX ix_cards_sched on cards (did, queue, due);\nCREATE INDEX ix_revlog_cid on revlog (cid);\nCREATE INDEX ix_notes_csum on notes (csum);";
