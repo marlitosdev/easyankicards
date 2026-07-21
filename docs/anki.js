@@ -105,7 +105,10 @@ function clozeOrds(text) {
  * Cada estilo tem IDs de modelo próprios para não conflitar entre si.
  * ------------------------------------------------------------------ */
 
-const EST_HEAD = '<div class="materia">{{Subdeck}}</div>' +
+/* O título do topo é um CAMPO da nota ("Título"), preenchido na
+ * exportação — assim o usuário pode escrever o que quiser, em vez de
+ * ficar preso ao nome do baralho. Vazio = cabeçalho não aparece. */
+const EST_HEAD = '{{#Título}}<div class="materia">{{Título}}</div>{{/Título}}' +
                  '<div class="assunto">{{Tags}}</div>';
 
 /* Bloco "Saiba mais": {{hint:...}} vira um link clicável no Anki que
@@ -220,11 +223,13 @@ function modelosParaEstilo(estilo) {
  * importou versões anteriores recebe o campo novo vazio, sem perder nada. */
 function comSaibaMais(m) {
   const modelo = JSON.parse(JSON.stringify(m));
-  if (modelo.flds.some((f) => f.name === "Saiba mais")) return modelo;
-  const novo = JSON.parse(JSON.stringify(modelo.flds[0]));
-  novo.name = "Saiba mais";
-  novo.ord = modelo.flds.length;
-  modelo.flds.push(novo);
+  ["Saiba mais", "Título"].forEach((nome) => {
+    if (modelo.flds.some((f) => f.name === nome)) return;
+    const novo = JSON.parse(JSON.stringify(modelo.flds[0]));
+    novo.name = nome;
+    novo.ord = modelo.flds.length;
+    modelo.flds.push(novo);
+  });
   return modelo;
 }
 
@@ -246,8 +251,9 @@ function montarModeloMC(models) {
 }
 
 /* cards: [{kind:"basic"|"cloze"|"mc", front, back, tags, options?, correct?}] */
-async function buildApkg(cards, deckName, estilo) {
+async function buildApkg(cards, deckName, estilo, titulo) {
   estilo = estilo || "classic";
+  titulo = titulo === undefined ? "" : titulo;
   const SQL = await window.__sqlPromise;   /* initSqlJs, ver index.html */
   const db = new SQL.Database();
   db.run(ANKI_SCHEMA);
@@ -274,10 +280,11 @@ async function buildApkg(cards, deckName, estilo) {
       mid = MID_M;
       const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
       const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
-      campos = [c.front, alts, correta, c.back || "", c.more || ""];
+      campos = [c.front, alts, correta, c.back || "", c.more || "",
+                c.titulo || titulo];
     } else {
       mid = c.kind === "cloze" ? MID_C : MID_B;
-      campos = [c.front, c.back || "", c.more || ""];
+      campos = [c.front, c.back || "", c.more || "", c.titulo || titulo];
     }
     const noteId = id++;
     const flds = campos.join("\x1f");

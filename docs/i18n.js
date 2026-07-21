@@ -227,7 +227,18 @@ const UI = {
   "header_demo_label": "Assim ficará o topo do cartão:",
   "header_tags_note": "As tags globais aparecem na linha logo abaixo.",
   "header_no_style": "O estilo Clássico não imprime cabeçalho — o nome do baralho serve apenas para organizar as pastas no Anki.",
-  "header_empty": "(sem nome)"
+  "header_empty": "(sem nome)",
+  "convert_label": "Tipo deste cartão",
+  "type_basic": "Básico",
+  "type_cloze": "Lacuna (cloze)",
+  "type_mc": "Múltipla escolha",
+  "convert_hint": "Trocar o tipo converte o cartão na hora, aproveitando o que você já escreveu.",
+  "toast_converted": "Tipo convertido",
+  "convert_need_back": "Escreva o verso (a resposta) antes de converter em lacuna.",
+  "title_label": "Título no topo dos cartões",
+  "title_ph": "Ex.: Direito Administrativo (deixe vazio para não exibir)",
+  "title_hint": "Texto impresso na faixa do topo de cada cartão. Começa igual à última parte do nome do baralho, mas você pode escrever o que quiser — ou apagar para não exibir cabeçalho.",
+  "title_use_deck": "Usar o nome do baralho"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -456,7 +467,18 @@ const UI = {
   "header_demo_label": "This is how the card top will look:",
   "header_tags_note": "Global tags appear on the line right below.",
   "header_no_style": "The Classic style prints no header — the deck name only organizes folders in Anki.",
-  "header_empty": "(no name)"
+  "header_empty": "(no name)",
+  "convert_label": "Card type",
+  "type_basic": "Basic",
+  "type_cloze": "Cloze (blank)",
+  "type_mc": "Multiple choice",
+  "convert_hint": "Switching the type converts the card right away, reusing what you already wrote.",
+  "toast_converted": "Type converted",
+  "convert_need_back": "Write the back (the answer) before converting to a blank.",
+  "title_label": "Title at the top of the cards",
+  "title_ph": "E.g.: Administrative Law (leave empty to hide)",
+  "title_hint": "Text printed on the top banner of every card. It starts as the last part of the deck name, but you can write anything — or clear it to hide the header.",
+  "title_use_deck": "Use the deck name"
  }
 };
 const PARSER_MSG = {
