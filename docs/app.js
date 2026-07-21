@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "7.3.0";
+const VERSAO = "7.4.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -676,6 +676,30 @@ function reabrirEditor(idx) {
   preview();
 }
 
+
+/* Agrupa campos secundários num bloco recolhível — o editor cabe na tela
+ * sem rolagem; o estado (aberto/fechado) fica lembrado. */
+function grupoRecolhivel(div, temConteudo) {
+  const cab = document.createElement("button");
+  cab.type = "button";
+  cab.className = "btn btn-cinza grupo-tog";
+  const cont = document.createElement("div");
+  const salvo = localStorage.getItem("eac_maisCampos");
+  let aberto = salvo === null ? !!temConteudo : salvo === "1";
+  const pintar = () => {
+    cont.style.display = aberto ? "" : "none";
+    cab.textContent = (aberto ? "▾  " : "▸  ") + t("more_fields");
+  };
+  cab.onclick = () => {
+    aberto = !aberto;
+    localStorage.setItem("eac_maisCampos", aberto ? "1" : "0");
+    pintar();
+  };
+  pintar();
+  div.append(cab, cont);
+  return cont;
+}
+
 /* --------------------------- edição inline -------------------------- */
 
 /* Faz o campo crescer conforme o usuário escreve, sempre com uma linha
@@ -830,26 +854,48 @@ function montarEdicao(div, c, r, idx) {
         const inp = document.createElement("input");
         inp.type = "text"; inp.placeholder = (i + 1);
         inp.value = st.wrongs[i] || "";
-        inp.oninput = () => { st.wrongs[i] = inp.value; st.tocado = true; };
+        inp.oninput = () => { st.wrongs[i] = inp.value; st.tocado = true; montarPos(); };
         wrongsDiv.append(inp);
       }
-      // escolha explícita de onde a resposta correta aparece
+      // escolha explícita de onde a resposta correta aparece — com o
+      // TEXTO real das alternativas, atualizando conforme o usuário digita
       const posLbl = document.createElement("span");
       posLbl.className = "mini-lbl"; posLbl.textContent = t("lac_pos");
       const posSel = document.createElement("select");
       posSel.style.cssText = "width:100%;padding:6px;border-radius:6px;margin-top:2px";
+      const ordemPrev = document.createElement("div");
+      ordemPrev.className = "lac-ordem";
+
       const montarPos = () => {
-        const total = (st.wrongs.filter(Boolean).length) + 1;
+        const wr = st.wrongs.map((w) => (w || "").trim()).filter(Boolean);
+        const total = wr.length + 1;
+        st.pos = Math.max(0, Math.min(st.pos || 0, total - 1));
         posSel.innerHTML = "";
         for (let i = 0; i < total; i++) {
           const op = document.createElement("option");
-          op.value = i; op.textContent = letra(i);
+          op.value = i;
+          op.textContent = i === 0
+            ? t("lac_pos_first", { op: wr[0] || "…" })
+            : t("lac_pos_after", { n: i + 1, op: wr[i - 1] || "…" });
           posSel.append(op);
         }
-        posSel.value = Math.min(st.pos || 0, total - 1);
+        posSel.value = st.pos;
+        // prévia da ordem final, com a correta destacada
+        const lista = wr.slice();
+        lista.splice(st.pos, 0, "\u0000");
+        ordemPrev.innerHTML = "";
+        ordemPrev.append(document.createTextNode(t("lac_pos_preview") + " "));
+        lista.forEach((o, i) => {
+          if (o === "\u0000") {
+            const b = document.createElement("b");
+            b.textContent = (st.ans || "…");
+            ordemPrev.append(b);
+          } else ordemPrev.append(document.createTextNode(o));
+          if (i < lista.length - 1) ordemPrev.append(document.createTextNode("  /  "));
+        });
       };
-      montarPos();
-      posSel.onchange = () => { st.pos = parseInt(posSel.value, 10); st.tocado = true; };
+
+      posSel.onchange = () => { st.pos = parseInt(posSel.value, 10); st.tocado = true; montarPos(); };
       const bSort = document.createElement("button");
       bSort.type = "button"; bSort.className = "btn btn-ciano";
       bSort.style.cssText = "margin-top:5px;padding:4px 9px;font-size:11px";
@@ -861,18 +907,29 @@ function montarEdicao(div, c, r, idx) {
         montarPos();
         toast("toast_shuffled");
       };
-      wrongsDiv.append(posLbl, posSel, bSort);
-      // aviso quando a resposta é longa demais para alternativa
-      if ((st.ans || "").length > 60) {
-        const av = document.createElement("div");
-        av.className = "issue";
-        av.textContent = "(!) " + t("lac_long_warn", { n: (st.ans || "").length });
-        box.append(av);
-      }
+      wrongsDiv.append(posLbl, posSel, bSort, ordemPrev);
+      montarPos();
       box.append(wrongsDiv);
+
+      // aviso de tamanho — recalculado a cada tecla digitada na resposta
+      const aviso = document.createElement("div");
+      aviso.className = "lac-aviso";
+      const atualizarAviso = () => {
+        const n = (st.ans || "").length;
+        if (st.mode !== "mc") { aviso.style.display = "none"; return; }
+        aviso.style.display = "";
+        if (n > 60) { aviso.className = "lac-aviso bad"; aviso.textContent = "(!) " + t("lac_long_warn", { n }); }
+        else if (n > 40) { aviso.className = "lac-aviso mid"; aviso.textContent = "(!) " + t("lac_warn_mid", { n }); }
+        else { aviso.className = "lac-aviso ok"; aviso.textContent = "✓ " + t("lac_ok", { n }); }
+      };
+      box.insertBefore(aviso, wrongsDiv);
+      atualizarAviso();
+      inAns.addEventListener("input", () => { st.ans = inAns.value; atualizarAviso(); montarPos(); });
+      st.atualizarAviso = atualizarAviso;
       sel.onchange = () => {
         st.mode = sel.value; st.tocado = true;
         wrongsDiv.style.display = st.mode === "mc" ? "" : "none";
+        if (st.atualizarAviso) st.atualizarAviso();
       };
       lacWrap.append(box);
     });
@@ -883,12 +940,14 @@ function montarEdicao(div, c, r, idx) {
     lacTimer = setTimeout(construirPaineis, 500);
   });
 
-  const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
-  const inMais = campoEditavel(div, "field_more", "hint_more",
+  const sec = grupoRecolhivel(div,
+    c.back || c.more || c.titulo || (c.ownTags !== undefined ? c.ownTags : c.tags).length);
+  const inVerso = campoEditavel(sec, "field_back", "hint_back", c.back, true);
+  const inMais = campoEditavel(sec, "field_more", "hint_more",
     (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
-  const inTitulo = campoEditavel(div, "field_title", "hint_title", c.titulo || "", false);
+  const inTitulo = campoEditavel(sec, "field_title", "hint_title", c.titulo || "", false);
   // tags PRÓPRIAS (as globais entram na exportação, não são editadas aqui)
-  const inTags = campoEditavel(div, "field_tags", "hint_tags",
+  const inTags = campoEditavel(sec, "field_tags", "hint_tags",
     (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {
@@ -981,12 +1040,14 @@ function montarEdicaoMC(div, c, r, idx) {
     get value() { const i = radios.findIndex((rd) => rd.checked); return i < 0 ? 0 : i; },
   };
 
-  const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
-  const inMais = campoEditavel(div, "field_more", "hint_more",
+  const sec = grupoRecolhivel(div,
+    c.back || c.more || c.titulo || (c.ownTags !== undefined ? c.ownTags : c.tags).length);
+  const inVerso = campoEditavel(sec, "field_back", "hint_back", c.back, true);
+  const inMais = campoEditavel(sec, "field_more", "hint_more",
     (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
-  const inTitulo = campoEditavel(div, "field_title", "hint_title", c.titulo || "", false);
+  const inTitulo = campoEditavel(sec, "field_title", "hint_title", c.titulo || "", false);
   // tags PRÓPRIAS (as globais entram na exportação, não são editadas aqui)
-  const inTags = campoEditavel(div, "field_tags", "hint_tags",
+  const inTags = campoEditavel(sec, "field_tags", "hint_tags",
     (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {

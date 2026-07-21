@@ -253,7 +253,13 @@ const UI = {
   "conv_mc_need_ops": "Preencha ao menos duas alternativas antes de converter em lacuna com alternativas.",
   "lac_pos": "Posição da resposta entre as alternativas",
   "lac_shuffle": "Sortear posição",
-  "lac_long_warn": "A resposta desta lacuna é longa ({n} caracteres). Em múltipla escolha, o aluno acerta pelo tamanho — prefira uma resposta curta e mova a explicação para o campo \"Saiba mais\"."
+  "lac_long_warn": "A resposta desta lacuna é longa ({n} caracteres). Em múltipla escolha, o aluno acerta pelo tamanho — prefira uma resposta curta e mova a explicação para o campo \"Saiba mais\".",
+  "more_fields": "Mais campos (verso, saiba mais, título, tags)",
+  "lac_pos_first": "1ª — antes de «{op}»",
+  "lac_pos_after": "{n}ª — depois de «{op}»",
+  "lac_pos_preview": "Ordem final:",
+  "lac_ok": "Tamanho bom para alternativa ({n} caracteres).",
+  "lac_warn_mid": "Resposta um pouco longa ({n} caracteres). O ideal é até 40 — encurte ou passe o detalhe para \"Saiba mais\"."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -508,7 +514,13 @@ const UI = {
   "conv_mc_need_ops": "Fill in at least two options before converting to cloze with options.",
   "lac_pos": "Answer position among the options",
   "lac_shuffle": "Shuffle position",
-  "lac_long_warn": "This blank's answer is long ({n} characters). In multiple choice the student guesses by length — prefer a short answer and move the explanation to the \"Learn more\" field."
+  "lac_long_warn": "This blank's answer is long ({n} characters). In multiple choice the student guesses by length — prefer a short answer and move the explanation to the \"Learn more\" field.",
+  "more_fields": "More fields (back, learn more, title, tags)",
+  "lac_pos_first": "1st — before «{op}»",
+  "lac_pos_after": "{n}th — after «{op}»",
+  "lac_pos_preview": "Final order:",
+  "lac_ok": "Good length for an option ({n} characters).",
+  "lac_warn_mid": "Answer is a bit long ({n} characters). Aim for up to 40 — shorten it or move details to \"Learn more\"."
  }
 };
 const PARSER_MSG = {
