@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.6.0";
+const VERSAO = "7.7.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -253,6 +253,18 @@ function botaoMini(rotuloKey, cor, acao) {
 
 /* ---------------- sugestões automáticas (sem botão) ----------------- */
 
+/* Guarda o ajuste estrutural detectado para o botão "Corrigir erros"
+ * (o mesmo que as sugestões oferecem), ou null quando não há nada. */
+let correcaoPendente = null;
+
+/* Liga/desliga e destaca o botão conforme exista ou não algo a corrigir. */
+function atualizarBotaoCorrigir(temAlgo) {
+  const b = $("btnNormalizar");
+  b.disabled = !temAlgo;
+  b.classList.toggle("ativo", !!temAlgo);
+  b.textContent = temAlgo ? t("normalize_btn") : t("normalize_none");
+}
+
 function renderSugestoes(r, raw) {
   const box = $("sugestoes");
   box.innerHTML = "";
@@ -288,6 +300,15 @@ function renderSugestoes(r, raw) {
     itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
                  fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
+
+  // o botão só fica ativo se houver correção automática OU cartão/linha
+  // com problema — evita o usuário clicar e não encontrar nada
+  correcaoPendente = temTituloGrudado(raw) ? corrigirTituloGrudado
+    : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
+    : (temMarcadores(raw) ? removerMarcadoresTexto : null));
+  const temProblema = !!correcaoPendente || r.warnings.length > 0 ||
+                      r.nSuspicious > 0 || precisaNormalizar(r);
+  atualizarBotaoCorrigir(temProblema);
 
   itens.slice(0, 6).forEach((it) => {
     const div = document.createElement("div");
@@ -783,6 +804,14 @@ function grupoRecolhivel(div, temConteudo) {
   pintar();
   div.append(cab, cont);
   return cont;
+}
+
+
+/* Há cartões cuja escrita difere da forma canônica? (é o que o
+ * "Corrigir erros" arruma além dos ajustes estruturais) */
+function precisaNormalizar(r) {
+  return r.cards.some((c) => (c.raw || "").replace(/\s+/g, " ").trim()
+                          !== cardToLine(c).replace(/\s+/g, " ").trim());
 }
 
 /* --------------------------- edição inline -------------------------- */
@@ -1703,7 +1732,21 @@ $("editor").oninput = () => {
   agendarPreview();
 };
 $("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
-$("btnNormalizar").onclick = () => abrirNormalizar();
+$("btnNormalizar").onclick = () => abrirNormalizar(correcaoPendente);
+$("btnSelecionarTudo").onclick = () => {
+  $("editor").focus();
+  $("editor").select();
+  toast("toast_selected");
+};
+$("btnApagarTudo").onclick = () => {
+  if (!$("editor").value.trim()) return;
+  if (!confirm(t("clear_confirm"))) return;
+  $("editor").value = "";
+  respostasFechadas.clear();
+  excluidos.clear();
+  preview();
+  toast("toast_cleared");
+};
 $("btnCopiarTudo").onclick = async () => {
   await navigator.clipboard.writeText($("editor").value);
   toast("toast_copied_all");
@@ -1720,6 +1763,10 @@ aplicarDestaque($("chkDestaque").checked);
 $("chkDestaque").onchange = () => aplicarDestaque($("chkDestaque").checked);
 attachTip($("chkDestaque"), "tip_highlight");
 attachTip($("btnCopiarTudo"), "copy_all");
+attachTip($("btnSelecionarTudo"), "select_all");
+attachTip($("btnApagarTudo"), "clear_all");
+attachTip($("btnNormalizar"), () => $("btnNormalizar").disabled
+  ? t("tip_normalize_off") : t("normalize_tooltip"));
 $("btnNormAplicar").onclick = aplicarNormalizacao;
 $("btnNormFechar").onclick = () => $("dlgNormalizar").close();
 const temaSalvo = localStorage.getItem("eac_theme") || "auto";
@@ -1932,7 +1979,6 @@ attachTip($("btnNovoCartao"), "tip_new");
 attachTip($("btnMCRapido"), "tip_mc");
 attachTip($("btnPromptIA"), "tip_prompt");
 attachTip($("btnRevisar"), "tip_review");
-attachTip($("btnNormalizar"), "normalize_tooltip");
 attachTip($("btnTxt"), "export_txt_tooltip");
 attachTip($("btnApkg"), "export_apkg_tooltip");
 attachTip($("btnAjuda"), "help_tooltip");
