@@ -162,6 +162,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 #avisoTopo .av-txt{font-size:11.5px;color:var(--texto);opacity:.9;line-height:1.35}
 #avisoTopo .av-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;
   color:var(--sutil);font-weight:700;margin:7px 0 3px}
+.linha-corrigir{margin:6px 0 2px}
+.linha-corrigir .btn{width:100%;padding:9px}
+@keyframes pulsoCorrigir{
+  0%,100%{box-shadow:0 0 0 0 rgba(232,148,10,.65)}
+  50%{box-shadow:0 0 0 7px rgba(232,148,10,0)}}
+#btnNormalizar.ativo{background:#e8940a;animation:pulsoCorrigir 1.8s ease-out infinite}
+#btnNormalizar:disabled{opacity:.45;cursor:default;animation:none}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:80;
   background:#1f2937;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;
   border-radius:20px;box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;
@@ -177,13 +184,19 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
    senão a seleção do texto aparece deslocada ao copiar. */
 #editorHl, .editor-wrap textarea{
   font-family:ui-monospace,Consolas,"Courier New",monospace;
-  font-size:13px;line-height:1.5;letter-spacing:0;tab-size:2;
+  font-size:13px;line-height:1.5;letter-spacing:0;word-spacing:0;tab-size:2;
+  text-indent:0;text-rendering:auto;font-kerning:none;
   padding:10px;border:1px solid transparent;border-radius:8px;
   white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;
-  box-sizing:border-box;margin:0}
-#editorHl{position:absolute;inset:0;overflow:hidden;pointer-events:none;
-  color:var(--texto);z-index:0}
-.editor-wrap textarea{border-color:var(--borda)}
+  box-sizing:border-box;margin:0;
+  /* a MESMA calha de rolagem nos dois: sem isso a camada de trás fica
+     mais larga que o campo e as quebras de linha (e a seleção) saem
+     deslocadas */
+  overflow-y:scroll;scrollbar-gutter:stable}
+#editorHl{position:absolute;inset:0;pointer-events:none;
+  color:var(--texto);z-index:0;scrollbar-width:none}
+#editorHl::-webkit-scrollbar{width:0;height:0}
+.editor-wrap textarea{border-color:var(--borda);resize:vertical}
 .editor-wrap.sem-destaque #editorHl{display:none}
 .editor-wrap.sem-destaque textarea{color:var(--texto);caret-color:var(--texto)}
 .linha-editor{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
@@ -253,7 +266,9 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     <div class="grupo">
       <label data-i18n="editor_label"></label>
       <div class="linha-editor">
+        <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
         <button class="btn btn-cinza" id="btnCopiarTudo" data-i18n="copy_all"></button>
+        <button class="btn" id="btnApagarTudo" style="background:#b91c1c" data-i18n="clear_all"></button>
         <label class="chk-hl"><input type="checkbox" id="chkDestaque" checked>
           <span data-i18n="highlight_toggle"></span></label>
       </div>
@@ -262,6 +277,9 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
         <textarea id="editor" spellcheck="false"></textarea>
       </div>
       <div id="sugestoes"></div>
+      <div class="linha-corrigir">
+        <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
+      </div>
       <div class="toolbar-sec"><div class="cap" data-i18n="group_create"></div>
         <div class="toolbar">
           <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
@@ -276,7 +294,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
       <div class="toolbar-sec"><div class="cap" data-i18n="group_tools"></div>
         <div class="toolbar">
           <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
-          <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
         </div>
       </div>
     </div>

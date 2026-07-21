@@ -21,7 +21,7 @@ const UI = {
   "copy_path_status": "Caminho copiado — cole no campo Baralho nas próximas exportações.",
   "editor_label": "1. Cole aqui o resultado do prompt de IA (ou digite seus cartões) — a leitura é automática",
   "editor_tooltip": "Formato: Frente :: Verso :: tags(opcional)\nCloze: A água ferve a {{c1::100 °C}}.\nLinha em branco separa cartões; # comenta a linha.",
-  "normalize_btn": "Normalizar texto",
+  "normalize_btn": "Corrigir erros",
   "normalize_tooltip": "Mostra, item a item, o que seria ajustado no formato do texto — você decide o que aplicar.",
   "normalize_status": "Texto normalizado: {n} cartões.",
   "norm_ignored_header": "# --- Linhas não reconhecidas (corrija e remova o #) ---",
@@ -276,7 +276,14 @@ const UI = {
   "paste_here": "Cole aqui o texto (ou o resultado da IA)",
   "highlight_toggle": "Destaque colorido",
   "tip_highlight": "Desligue se a seleção de texto estiver difícil de enxergar ao copiar. Sem o destaque, o texto fica em cor única, mas a seleção funciona perfeitamente.",
-  "norm_struct_title": "Ajustes de estrutura"
+  "norm_struct_title": "Ajustes de estrutura",
+  "select_all": "Selecionar tudo",
+  "clear_all": "Apagar tudo",
+  "clear_confirm": "Apagar todo o texto do editor?\n\nOs cartões da direita desaparecerão. Esta ação não pode ser desfeita.",
+  "toast_selected": "Texto selecionado",
+  "toast_cleared": "Editor limpo",
+  "normalize_none": "Nada a corrigir",
+  "tip_normalize_off": "Nenhum problema encontrado no texto — nada a corrigir por enquanto."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -299,7 +306,7 @@ const UI = {
   "copy_path_status": "Path copied — paste it into the Deck field on future exports.",
   "editor_label": "1. Paste the AI prompt result here (or type your cards) — reading is automatic",
   "editor_tooltip": "Format: Front :: Back :: tags(optional)\nCloze: Water boils at {{c1::100 °C}}.\nA blank line separates cards; # comments out a line.",
-  "normalize_btn": "Normalize text",
+  "normalize_btn": "Fix problems",
   "normalize_tooltip": "Shows, item by item, what would be adjusted in the text format — you decide what to apply.",
   "normalize_status": "Text normalized: {n} cards.",
   "norm_ignored_header": "# --- Unrecognized lines (fix and remove the #) ---",
@@ -554,7 +561,14 @@ const UI = {
   "paste_here": "Paste your text here (or the AI's result)",
   "highlight_toggle": "Color highlight",
   "tip_highlight": "Turn off if text selection is hard to see when copying. Without highlighting the text is single-colored, but selection works perfectly.",
-  "norm_struct_title": "Structure fixes"
+  "norm_struct_title": "Structure fixes",
+  "select_all": "Select all",
+  "clear_all": "Clear all",
+  "clear_confirm": "Clear all the editor text?\n\nThe cards on the right will disappear. This cannot be undone.",
+  "toast_selected": "Text selected",
+  "toast_cleared": "Editor cleared",
+  "normalize_none": "Nothing to fix",
+  "tip_normalize_off": "No problems found in the text — nothing to fix right now."
  }
 };
 const PARSER_MSG = {
