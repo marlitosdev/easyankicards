@@ -238,7 +238,16 @@ const UI = {
   "title_label": "Título no topo dos cartões",
   "title_ph": "Ex.: Direito Administrativo (deixe vazio para não exibir)",
   "title_hint": "Texto impresso na faixa do topo de cada cartão. Começa igual à última parte do nome do baralho, mas você pode escrever o que quiser — ou apagar para não exibir cabeçalho.",
-  "title_use_deck": "Usar o nome do baralho"
+  "title_use_deck": "Usar o nome do baralho",
+  "conv_to_cloze": "Converter em LACUNA?\n\nA frente continua igual e a resposta abaixo vira a parte oculta:\n\n{antes}\n\nficará assim:\n\n{depois}",
+  "conv_to_mc": "Converter em MÚLTIPLA ESCOLHA?\n\nA pergunta continua igual e a resposta atual vira a alternativa CORRETA (A). Você preenche as demais alternativas depois.\n\nResposta correta: {resposta}",
+  "conv_to_basic": "Converter em BÁSICO (pergunta e resposta)?\n\n{explica}",
+  "conv_basic_from_cloze": "O conteúdo da lacuna volta a ser o verso, e a frase fica completa na frente.",
+  "conv_basic_from_mc": "A alternativa correta vira o verso; as demais alternativas serão descartadas.",
+  "conv_need_back": "Para converter em lacuna, escreva antes a resposta no campo Verso — é ela que ficará oculta.",
+  "conv_need_answer": "Escreva a resposta (Verso) antes de converter em múltipla escolha.",
+  "field_title": "Título deste cartão (topo)",
+  "hint_title": "Aparece na faixa do topo deste cartão. Deixe vazio para usar o título geral definido na exportação. No editor, escreva numa linha logo abaixo do cartão começando com \"@\"."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -478,7 +487,16 @@ const UI = {
   "title_label": "Title at the top of the cards",
   "title_ph": "E.g.: Administrative Law (leave empty to hide)",
   "title_hint": "Text printed on the top banner of every card. It starts as the last part of the deck name, but you can write anything — or clear it to hide the header.",
-  "title_use_deck": "Use the deck name"
+  "title_use_deck": "Use the deck name",
+  "conv_to_cloze": "Convert to CLOZE?\n\nThe front stays the same and the answer below becomes the hidden part:\n\n{antes}\n\nwill become:\n\n{depois}",
+  "conv_to_mc": "Convert to MULTIPLE CHOICE?\n\nThe question stays the same and the current answer becomes the CORRECT option (A). You fill in the other options afterwards.\n\nCorrect answer: {resposta}",
+  "conv_to_basic": "Convert to BASIC (question and answer)?\n\n{explica}",
+  "conv_basic_from_cloze": "The blank's content goes back to the back field, and the sentence becomes complete on the front.",
+  "conv_basic_from_mc": "The correct option becomes the back; the other options will be discarded.",
+  "conv_need_back": "To convert to a blank, first write the answer in the Back field — that is what will be hidden.",
+  "conv_need_answer": "Write the answer (Back) before converting to multiple choice.",
+  "field_title": "Title for this card (top)",
+  "hint_title": "Appears on the top banner of this card. Leave empty to use the general title set at export. In the editor, write it on a line right below the card starting with \"@\"."
  }
 };
 const PARSER_MSG = {
