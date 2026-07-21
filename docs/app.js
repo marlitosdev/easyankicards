@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "7.1.1";
+const VERSAO = "7.1.2";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -446,6 +446,28 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
     if (!m) { pai.append(document.createTextNode(p)); return; }
     const inner = m[1].split("::");
     const ans = inner[0].trim(), dica = (inner[1] || "").trim();
+    const opcoes = dica.includes("/")
+      ? dica.split("/").map((s) => s.trim()).filter(Boolean) : null;
+
+    // Lacuna COM alternativas: mostra todas as opções (como no Anki).
+    // Ao revelar a resposta, a correta fica destacada e as outras apagadas.
+    if (opcoes) {
+      const cx = document.createElement("span");
+      cx.style.cssText = "border:1px dashed " + cor + ";border-radius:6px;" +
+        "padding:1px 5px;margin:0 2px;white-space:normal";
+      opcoes.forEach((op, i) => {
+        const so = document.createElement("span");
+        so.textContent = op;
+        if (mascarar) so.style.color = cor;
+        else if (op === ans) { so.style.cssText = "color:" + cor + ";font-weight:800;text-decoration:underline"; }
+        else so.style.cssText = "opacity:.35;text-decoration:line-through";
+        cx.append(so);
+        if (i < opcoes.length - 1) cx.append(document.createTextNode("  /  "));
+      });
+      pai.append(cx);
+      return;
+    }
+
     const b = document.createElement("b");
     b.style.color = cor;
     b.textContent = mascarar ? (dica ? "[" + dica + "]" : "[...]") : ans;
@@ -472,7 +494,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     sub.textContent = c.tags.join("  ·  ");
     sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +
       ";font-style:italic;text-align:center;font-size:10.5px;padding:4px;" +
-      "border-radius:9px 9px 0 0;" + sombra;
+      "border-radius:" + (deckNome ? "9px 9px 0 0" : "9px") + ";" + sombra;
     wrap.append(sub);
   }
 
@@ -494,17 +516,18 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   wrap.append(frente);
 
   if (!mostrarResposta) return;   // verso só quando o usuário pedir
+  const temVerso = c.kind === "mc" || (!CLOZE_RE.test(c.front) && c.back);
   const rot2 = document.createElement("div");
   rot2.className = "lado-rotulo"; rot2.textContent = t("lado_verso");
   rot2.style.color = p.texto;
-  wrap.append(rot2);
+  if (temVerso) wrap.append(rot2);
   const verso = document.createElement("div");
   verso.style.cssText = "background:" + p.caixa + ";padding:10px;text-align:center;" +
     "font-weight:700;font-size:14px;color:" + p.destaque + ";" + sombra;
   if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
   else if (CLOZE_RE.test(c.front)) verso.textContent = "";
   else verso.textContent = c.back;
-  if (c.kind === "mc" || !CLOZE_RE.test(c.front)) wrap.append(verso);
+  if (temVerso) wrap.append(verso);
   if (c.more) {
     const sm = document.createElement("div");
     sm.style.cssText = "background:" + (p.sub || p.caixa) + ";color:" + p.destaque +
