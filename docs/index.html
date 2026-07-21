@@ -179,7 +179,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
 .editor-wrap{position:relative;background:var(--campo);border-radius:8px}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
-  color:transparent;caret-color:var(--texto);line-height:1.45}
+  color:var(--texto);caret-color:var(--texto)}
 /* A camada colorida e o campo precisam ter EXATAMENTE as mesmas métricas,
    senão a seleção do texto aparece deslocada ao copiar. */
 #editorHl, .editor-wrap textarea{
@@ -194,24 +194,23 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
      deslocadas */
   overflow-y:scroll;scrollbar-gutter:stable}
 #editorHl{position:absolute;inset:0;pointer-events:none;
-  color:var(--texto);z-index:0;scrollbar-width:none}
+  color:transparent;z-index:0;scrollbar-width:none}
 #editorHl::-webkit-scrollbar{width:0;height:0}
 .editor-wrap textarea{border-color:var(--borda);resize:vertical}
 .editor-wrap.sem-destaque #editorHl{display:none}
-.editor-wrap.sem-destaque textarea{color:var(--texto);caret-color:var(--texto)}
 .linha-editor{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
 .linha-editor .btn{padding:4px 10px;font-size:11.5px}
 .chk-hl{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--sutil)}
 .chk-hl input{width:15px;height:15px}
 #editor::selection{background:rgba(37,99,235,.45)}
 #editor::-moz-selection{background:rgba(37,99,235,.35)}
-.hl-delim{color:#ff9d2e;font-weight:700}
-:root[data-theme="light"] .hl-delim{color:#c2410c}
-:root[data-theme="light"] .hl-cloze{color:#1d4ed8}
-:root[data-theme="light"] .hl-mc{color:#6d28d9}
-.hl-cloze{color:#63a4ff;font-weight:600}
-.hl-mc{color:#b48bff;font-weight:700}
-.hl-com{color:var(--sutil)}
+.hl-delim{background:rgba(255,157,46,.30);border-radius:3px}
+:root[data-theme="light"] .hl-delim{background:rgba(194,65,12,.20)}
+:root[data-theme="light"] .hl-cloze{background:rgba(29,78,216,.16)}
+:root[data-theme="light"] .hl-mc{background:rgba(109,40,217,.16)}
+.hl-cloze{background:rgba(99,164,255,.25);border-radius:3px}
+.hl-mc{background:rgba(180,139,255,.30);border-radius:3px}
+.hl-com{opacity:.55}
 .hl-err{background:rgba(220,38,38,.18);border-radius:3px}
 .hl-warn{background:rgba(232,148,10,.18);border-radius:3px}
 #sugestoes{margin-top:8px;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
