@@ -95,7 +95,7 @@ const UI = {
   "mc_options_label": "Alternativas",
   "mc_correct": "Correta:",
   "mc_answer_prefix": "Resposta:",
-  "hint_mc": "Preencha 2 a 5 alternativas e escolha a correta. No .apkg, a frente mostra todas as alternativas e, ao revelar a resposta, SOMENTE a correta permanece (+ explicação). No .txt o cartão vira Básico comum.",
+  "hint_mc": "Duas formas de múltipla escolha, com resultados diferentes no Anki:\n\n• LISTA ([MC]): a frente mostra as alternativas uma por linha (A, B, C) e a resposta revela só a correta. Use quando as alternativas forem longas.\n\n• NA FRASE (lacuna com opções): o Anki imprime as opções entre colchetes dentro da própria frase, como [Lyon / Paris / Marselha]. Fica elegante com alternativas CURTAS; com frases longas o cartão fica ilegível.",
   "btn_mark_blank": "Marcar lacuna",
   "btn_clear_blanks": "Limpar lacunas",
   "hint_mark_blank": "Selecione com o dedo/mouse a palavra ou trecho no campo Frente e toque em \"Marcar lacuna\" para transformá-lo em {{c1::...}}. Cada nova marcação vira uma lacuna nova (c2, c3...).",
@@ -123,7 +123,7 @@ const UI = {
   "tpl_mc_cloze": "Múltipla escolha na frase (nativa)",
   "mc_correct_label": "Resposta correta (como está na frase)",
   "mc_wrong_label": "Alternativas erradas (um campo para cada)",
-  "hint_mc_cloze": "Escreva a frase com ___ no lugar da resposta. Preencha a resposta correta e as erradas em campos separados. O app gera a sintaxe nativa do Anki {{c1::correta::opções}}: na frente, as opções aparecem dentro da frase; ao virar, só a correta permanece.",
+  "hint_mc_cloze": "Escreva a frase com ___ no lugar da resposta. Preencha a resposta correta e as erradas em campos separados. Gera a sintaxe nativa {{c1::correta::opções}}: o Anki mostra as opções entre colchetes na frase e, ao virar, só a correta permanece. Prefira alternativas curtas (até ~40 caracteres) — para alternativas longas, use a múltipla escolha em LISTA.",
   "mc_term_missing": "Coloque ___ na frase onde a resposta entra (ou escreva a frase contendo a resposta correta).",
   "preview_live": "Pré-visualização em tempo real",
   "prompt_main_btn": "Prompt IA",
@@ -250,7 +250,10 @@ const UI = {
   "hint_title": "Aparece na faixa do topo deste cartão. Deixe vazio para usar o título geral definido na exportação. No editor, escreva numa linha logo abaixo do cartão começando com \"@\".",
   "conv_mc_to_cloze": "Converter em LACUNA COM ALTERNATIVAS?\n\nA resposta correta fica oculta e TODAS as alternativas aparecem como opções dentro da frase — o aluno escolhe entre elas antes de virar o cartão.\n\nFicará assim:\n\n{depois}",
   "mc_mark_correct_inline": "Alternativas — marque ⦿ na correta",
-  "conv_mc_need_ops": "Preencha ao menos duas alternativas antes de converter em lacuna com alternativas."
+  "conv_mc_need_ops": "Preencha ao menos duas alternativas antes de converter em lacuna com alternativas.",
+  "lac_pos": "Posição da resposta entre as alternativas",
+  "lac_shuffle": "Sortear posição",
+  "lac_long_warn": "A resposta desta lacuna é longa ({n} caracteres). Em múltipla escolha, o aluno acerta pelo tamanho — prefira uma resposta curta e mova a explicação para o campo \"Saiba mais\"."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -347,7 +350,7 @@ const UI = {
   "mc_options_label": "Options",
   "mc_correct": "Correct:",
   "mc_answer_prefix": "Answer:",
-  "hint_mc": "Fill in 2 to 5 options and pick the correct one. In the .apkg, the front shows all options and, when the answer is revealed, ONLY the correct one remains (+ explanation). In .txt the card becomes a regular Basic.",
+  "hint_mc": "Two multiple-choice styles, with different results in Anki:\n\n• LIST ([MC]): the front shows options one per line (A, B, C) and the answer reveals only the correct one. Use it when options are long.\n\n• IN-SENTENCE (cloze with options): Anki prints the options in brackets inside the sentence, like [Lyon / Paris / Marseille]. Elegant with SHORT options; long sentences become unreadable.",
   "btn_mark_blank": "Mark blank",
   "btn_clear_blanks": "Clear blanks",
   "hint_mark_blank": "Select a word or passage in the Front field and tap \"Mark blank\" to turn it into {{c1::...}}. Each new mark becomes a new blank (c2, c3...).",
@@ -375,7 +378,7 @@ const UI = {
   "tpl_mc_cloze": "In-sentence multiple choice (native)",
   "mc_correct_label": "Correct answer (as written in the sentence)",
   "mc_wrong_label": "Wrong options (one field each)",
-  "hint_mc_cloze": "Write the sentence with ___ where the answer goes. Fill the correct answer and the wrong ones in separate fields. The app generates Anki's native syntax {{c1::correct::options}}: options show inside the sentence on the front; when flipped, only the correct one remains.",
+  "hint_mc_cloze": "Write the sentence with ___ where the answer goes. Fill the correct and wrong answers in separate fields. It generates the native {{c1::correct::options}} syntax: Anki shows the options in brackets inside the sentence and, when flipped, only the correct one remains. Prefer short options (up to ~40 characters) — for long options, use the LIST multiple choice.",
   "mc_term_missing": "Put ___ in the sentence where the answer goes (or write the sentence containing the correct answer).",
   "preview_live": "Live preview",
   "prompt_main_btn": "AI Prompt",
@@ -502,7 +505,10 @@ const UI = {
   "hint_title": "Appears on the top banner of this card. Leave empty to use the general title set at export. In the editor, write it on a line right below the card starting with \"@\".",
   "conv_mc_to_cloze": "Convert to CLOZE WITH OPTIONS?\n\nThe correct answer is hidden and ALL options appear as choices inside the sentence — the student picks one before flipping the card.\n\nIt will look like this:\n\n{depois}",
   "mc_mark_correct_inline": "Options — mark ⦿ on the correct one",
-  "conv_mc_need_ops": "Fill in at least two options before converting to cloze with options."
+  "conv_mc_need_ops": "Fill in at least two options before converting to cloze with options.",
+  "lac_pos": "Answer position among the options",
+  "lac_shuffle": "Shuffle position",
+  "lac_long_warn": "This blank's answer is long ({n} characters). In multiple choice the student guesses by length — prefer a short answer and move the explanation to the \"Learn more\" field."
  }
 };
 const PARSER_MSG = {
@@ -527,7 +533,8 @@ const PARSER_MSG = {
   "p_mc": "MÚLT. ESCOLHA",
   "i_mc_fewopts": "múltipla escolha com menos de 2 alternativas",
   "i_mc_nocorrect": "nenhuma alternativa marcada com * como correta — assumi a primeira; toque em Editar para escolher",
-  "i_pair": "par Pergunta/Resposta detectado sem '::' — juntei automaticamente, confira"
+  "i_pair": "par Pergunta/Resposta detectado sem '::' — juntei automaticamente, confira",
+  "i_mc_inline_long": "alternativa de {n} caracteres numa lacuna com opções — no Anki tudo aparece entre colchetes na mesma frase e fica ilegível; converta para múltipla escolha em LISTA ou encurte as alternativas"
  },
  "en": {
   "w_cloze_empty": "Line {n}: empty cloze card — skipped.",
@@ -550,7 +557,8 @@ const PARSER_MSG = {
   "p_mc": "MULT. CHOICE",
   "i_mc_fewopts": "multiple choice with fewer than 2 options",
   "i_mc_nocorrect": "no option marked with * as correct — assumed the first; tap Edit to choose",
-  "i_pair": "Question/Answer pair detected without '::' — joined automatically, please check"
+  "i_pair": "Question/Answer pair detected without '::' — joined automatically, please check",
+  "i_mc_inline_long": "{n}-character option inside an in-sentence blank — Anki prints everything in brackets on the same line, which becomes unreadable; convert to LIST multiple choice or shorten the options"
  }
 };
 

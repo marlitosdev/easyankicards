@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "7.1.2";
+const VERSAO = "7.3.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -452,17 +452,20 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
     // Lacuna COM alternativas: mostra todas as opções (como no Anki).
     // Ao revelar a resposta, a correta fica destacada e as outras apagadas.
     if (opcoes) {
-      const cx = document.createElement("span");
-      cx.style.cssText = "border:1px dashed " + cor + ";border-radius:6px;" +
-        "padding:1px 5px;margin:0 2px;white-space:normal";
+      // alternativas longas ficam ilegíveis em linha: viram lista A) B) C)
+      const longas = opcoes.some((o) => o.length > 24);
+      const cx = document.createElement(longas ? "div" : "span");
+      cx.style.cssText = longas
+        ? "border:1px dashed " + cor + ";border-radius:6px;padding:5px 8px;margin:4px 0"
+        : "border:1px dashed " + cor + ";border-radius:6px;padding:1px 5px;margin:0 2px;white-space:normal";
       opcoes.forEach((op, i) => {
-        const so = document.createElement("span");
-        so.textContent = op;
+        const so = document.createElement(longas ? "div" : "span");
+        so.textContent = (longas ? letra(i) + ") " : "") + op;
         if (mascarar) so.style.color = cor;
-        else if (op === ans) { so.style.cssText = "color:" + cor + ";font-weight:800;text-decoration:underline"; }
+        else if (op === ans) so.style.cssText = "color:" + cor + ";font-weight:800;text-decoration:underline";
         else so.style.cssText = "opacity:.35;text-decoration:line-through";
         cx.append(so);
-        if (i < opcoes.length - 1) cx.append(document.createTextNode("  /  "));
+        if (!longas && i < opcoes.length - 1) cx.append(document.createTextNode("  /  "));
       });
       pai.append(cx);
       return;
@@ -606,7 +609,7 @@ function converterTipo(c, r, idx, destino, campos) {
       const ops = (novo.options || []).map((o) => (o || "").trim()).filter(Boolean);
       if (ops.length < 2) { alert(t("conv_mc_need_ops")); return; }
       const certa = ops[Math.min(novo.correct || 0, ops.length - 1)];
-      const lacuna = "{{c1::" + certa + "::" + ops.join("/") + "}}";
+      const lacuna = "{{c1::" + certa + "::" + ops.join(" / ") + "}}";
       const base = semLacunas(novo.front).trim();
       const frente = base.includes(certa)
         ? base.replace(certa, lacuna)
@@ -782,11 +785,14 @@ function montarEdicao(div, c, r, idx) {
     lacs.forEach((l) => {
       let st = estado[l.n];
       if (!st || !st.tocado) {
+        const ops = l.hint ? l.hint.split("/").map((s) => s.trim()).filter(Boolean) : [];
         st = estado[l.n] = {
           ans: l.ans,
           mode: l.hint.includes("/") ? "mc" : "occ",
-          wrongs: l.hint ? l.hint.split("/").map((s) => s.trim())
-                             .filter((o) => o && o !== l.ans) : [],
+          wrongs: ops.filter((o) => o !== l.ans),
+          // posição da correta PRESERVADA (antes era re-sorteada a cada
+          // gravação, mudando a ordem sem o usuário pedir)
+          pos: Math.max(0, ops.indexOf(l.ans)),
           tocado: st ? st.tocado : false,
         };
       }
@@ -827,6 +833,42 @@ function montarEdicao(div, c, r, idx) {
         inp.oninput = () => { st.wrongs[i] = inp.value; st.tocado = true; };
         wrongsDiv.append(inp);
       }
+      // escolha explícita de onde a resposta correta aparece
+      const posLbl = document.createElement("span");
+      posLbl.className = "mini-lbl"; posLbl.textContent = t("lac_pos");
+      const posSel = document.createElement("select");
+      posSel.style.cssText = "width:100%;padding:6px;border-radius:6px;margin-top:2px";
+      const montarPos = () => {
+        const total = (st.wrongs.filter(Boolean).length) + 1;
+        posSel.innerHTML = "";
+        for (let i = 0; i < total; i++) {
+          const op = document.createElement("option");
+          op.value = i; op.textContent = letra(i);
+          posSel.append(op);
+        }
+        posSel.value = Math.min(st.pos || 0, total - 1);
+      };
+      montarPos();
+      posSel.onchange = () => { st.pos = parseInt(posSel.value, 10); st.tocado = true; };
+      const bSort = document.createElement("button");
+      bSort.type = "button"; bSort.className = "btn btn-ciano";
+      bSort.style.cssText = "margin-top:5px;padding:4px 9px;font-size:11px";
+      bSort.textContent = t("lac_shuffle");
+      bSort.onclick = () => {
+        const total = st.wrongs.filter(Boolean).length + 1;
+        st.pos = Math.floor(Math.random() * total);
+        st.tocado = true;
+        montarPos();
+        toast("toast_shuffled");
+      };
+      wrongsDiv.append(posLbl, posSel, bSort);
+      // aviso quando a resposta é longa demais para alternativa
+      if ((st.ans || "").length > 60) {
+        const av = document.createElement("div");
+        av.className = "issue";
+        av.textContent = "(!) " + t("lac_long_warn", { n: (st.ans || "").length });
+        box.append(av);
+      }
       box.append(wrongsDiv);
       sel.onchange = () => {
         st.mode = sel.value; st.tocado = true;
@@ -860,10 +902,13 @@ function montarEdicao(div, c, r, idx) {
       if (st.mode === "mc") {
         const wr = (st.wrongs || []).map((w) => (w || "").trim())
           .filter((w) => w && w !== ans);
-        if (wr.length)
-          return "{{c" + n + "::" + ans + "::" +
-                 shuffleSeeded([ans].concat(wr),
-                               hashStr(ans + "|" + wr.join("|"))).join("/") + "}}";
+        if (wr.length) {
+          // insere a correta exatamente na posição escolhida pelo usuário
+          const lista = wr.slice();
+          const pos = Math.max(0, Math.min(st.pos || 0, lista.length));
+          lista.splice(pos, 0, ans);
+          return "{{c" + n + "::" + ans + "::" + lista.join(" / ") + "}}";
+        }
       }
       return "{{c" + n + "::" + ans + "}}";
     });

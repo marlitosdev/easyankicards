@@ -101,6 +101,16 @@ function checarSuspeitas(card, rawParts) {
       issues.push(pm("i_tags_text"));
   }
   if (card.kind === "cloze" && clozeAberto(card.front)) issues.push(pm("i_cloze_open"));
+  // Lacuna com opções: o Anki imprime tudo entre colchetes na mesma frase.
+  // Alternativas longas deixam o cartão ilegível — melhor usar [MC] em lista.
+  if (card.kind === "cloze") {
+    const m = card.front.match(/\{\{c\d+::([\s\S]*?)::([\s\S]*?)\}\}/);
+    if (m && m[2].includes("/")) {
+      const ops = m[2].split("/").map((s) => s.trim()).filter(Boolean);
+      const maior = ops.reduce((a, o) => Math.max(a, o.length), 0);
+      if (maior > 40) issues.push(pm("i_mc_inline_long", { n: maior }));
+    }
+  }
   return issues;
 }
 
