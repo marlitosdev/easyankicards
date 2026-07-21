@@ -173,11 +173,24 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .editor-wrap{position:relative;background:var(--campo);border-radius:8px}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
   color:transparent;caret-color:var(--texto);line-height:1.45}
-#editorHl{position:absolute;inset:0;margin:0;overflow:hidden;pointer-events:none;
-  white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;
-  border-radius:8px;padding:10px;font-family:ui-monospace,Consolas,monospace;
-  font-size:13px;line-height:1.45;color:var(--texto);z-index:0}
-#editor::selection{background:rgba(37,99,235,.35)}
+/* A camada colorida e o campo precisam ter EXATAMENTE as mesmas métricas,
+   senão a seleção do texto aparece deslocada ao copiar. */
+#editorHl, .editor-wrap textarea{
+  font-family:ui-monospace,Consolas,"Courier New",monospace;
+  font-size:13px;line-height:1.5;letter-spacing:0;tab-size:2;
+  padding:10px;border:1px solid transparent;border-radius:8px;
+  white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;
+  box-sizing:border-box;margin:0}
+#editorHl{position:absolute;inset:0;overflow:hidden;pointer-events:none;
+  color:var(--texto);z-index:0}
+.editor-wrap textarea{border-color:var(--borda)}
+.editor-wrap.sem-destaque #editorHl{display:none}
+.editor-wrap.sem-destaque textarea{color:var(--texto);caret-color:var(--texto)}
+.linha-editor{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
+.linha-editor .btn{padding:4px 10px;font-size:11.5px}
+.chk-hl{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--sutil)}
+.chk-hl input{width:15px;height:15px}
+#editor::selection{background:rgba(37,99,235,.45)}
 #editor::-moz-selection{background:rgba(37,99,235,.35)}
 .hl-delim{color:#ff9d2e;font-weight:700}
 :root[data-theme="light"] .hl-delim{color:#c2410c}
@@ -193,7 +206,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .sug .dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex:none}
 .dot-red{background:#dc2626}.dot-org{background:#e8940a}
 .dot-blue{background:#2563eb}.dot-green{background:#4caf50}
-.sug .btn{padding:3px 9px;font-size:11.5px;margin-left:6px}
+.sug{flex-wrap:wrap}
+.sug .btn{padding:4px 10px;font-size:11.5px;margin-left:0}
+.sug-acao{flex-basis:100%;display:flex;gap:6px;align-items:center;
+  margin:4px 0 2px 16px;flex-wrap:wrap}
+.sug-acao .rot{font-size:10.5px;opacity:.8}
 .card .mais{font-size:12px;margin-top:5px;background:rgba(37,99,235,.10);
   border-left:3px solid #2563eb;padding:6px 8px;border-radius:5px}
 .card .mais-cab{font-size:9.5px;font-weight:800;letter-spacing:.5px;
@@ -235,6 +252,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div class="duas-colunas">
     <div class="grupo">
       <label data-i18n="editor_label"></label>
+      <div class="linha-editor">
+        <button class="btn btn-cinza" id="btnCopiarTudo" data-i18n="copy_all"></button>
+        <label class="chk-hl"><input type="checkbox" id="chkDestaque" checked>
+          <span data-i18n="highlight_toggle"></span></label>
+      </div>
       <div class="editor-wrap">
         <pre id="editorHl" aria-hidden="true"></pre>
         <textarea id="editor" spellcheck="false"></textarea>

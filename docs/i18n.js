@@ -19,7 +19,7 @@ const UI = {
   "copy_path_done": "Copiado!",
   "copy_path_tooltip": "Copia o caminho completo do baralho (ex.: Curso::Matéria::Tema).\nCole-o no campo Baralho nas PRÓXIMAS exportações: a importação\njá coloca os cartões na pasta certa, sem movê-los depois.",
   "copy_path_status": "Caminho copiado — cole no campo Baralho nas próximas exportações.",
-  "editor_label": "1. Cole o texto — a leitura acontece automaticamente",
+  "editor_label": "1. Cole aqui o resultado do prompt de IA (ou digite seus cartões) — a leitura é automática",
   "editor_tooltip": "Formato: Frente :: Verso :: tags(opcional)\nCloze: A água ferve a {{c1::100 °C}}.\nLinha em branco separa cartões; # comenta a linha.",
   "normalize_btn": "Normalizar texto",
   "normalize_tooltip": "Mostra, item a item, o que seria ajustado no formato do texto — você decide o que aplicar.",
@@ -269,7 +269,14 @@ const UI = {
   "toast_fixed": "Correção aplicada",
   "toast_goto": "Linha destacada no editor",
   "crit_pairs_tags": "Há linhas em que o 3º campo é uma explicação, não etiquetas — ela deve ir para uma linha \"+\".",
-  "crit_title_glued": "Há um título \"@\" grudado no início de um cartão — precisa ficar em linha própria."
+  "crit_title_glued": "Há um título \"@\" grudado no início de um cartão — precisa ficar em linha própria.",
+  "use_normalize": "Use \"Normalizar texto\" para revisar e aplicar",
+  "copy_all": "Copiar tudo",
+  "toast_copied_all": "Texto copiado",
+  "paste_here": "Cole aqui o texto (ou o resultado da IA)",
+  "highlight_toggle": "Destaque colorido",
+  "tip_highlight": "Desligue se a seleção de texto estiver difícil de enxergar ao copiar. Sem o destaque, o texto fica em cor única, mas a seleção funciona perfeitamente.",
+  "norm_struct_title": "Ajustes de estrutura"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -290,7 +297,7 @@ const UI = {
   "copy_path_done": "Copied!",
   "copy_path_tooltip": "Copies the full deck path (e.g.: Course::Subject::Topic).\nPaste it into the Deck field on FUTURE exports: the import\nwill drop the cards straight into the right folder.",
   "copy_path_status": "Path copied — paste it into the Deck field on future exports.",
-  "editor_label": "1. Paste your text — it is read automatically",
+  "editor_label": "1. Paste the AI prompt result here (or type your cards) — reading is automatic",
   "editor_tooltip": "Format: Front :: Back :: tags(optional)\nCloze: Water boils at {{c1::100 °C}}.\nA blank line separates cards; # comments out a line.",
   "normalize_btn": "Normalize text",
   "normalize_tooltip": "Shows, item by item, what would be adjusted in the text format — you decide what to apply.",
@@ -540,7 +547,14 @@ const UI = {
   "toast_fixed": "Fix applied",
   "toast_goto": "Line highlighted in the editor",
   "crit_pairs_tags": "Some lines have an explanation in the 3rd field instead of tags — it should go on a \"+\" line.",
-  "crit_title_glued": "There is an \"@\" title glued to the start of a card — it must be on its own line."
+  "crit_title_glued": "There is an \"@\" title glued to the start of a card — it must be on its own line.",
+  "use_normalize": "Use \"Normalize text\" to review and apply",
+  "copy_all": "Copy all",
+  "toast_copied_all": "Text copied",
+  "paste_here": "Paste your text here (or the AI's result)",
+  "highlight_toggle": "Color highlight",
+  "tip_highlight": "Turn off if text selection is hard to see when copying. Without highlighting the text is single-colored, but selection works perfectly.",
+  "norm_struct_title": "Structure fixes"
  }
 };
 const PARSER_MSG = {
