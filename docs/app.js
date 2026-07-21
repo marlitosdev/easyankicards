@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.6.1";
+const VERSAO = "6.8.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -284,6 +284,16 @@ function renderCorpoCartao(div, c) {
     const v = document.createElement("div"); v.className = "verso"; v.textContent = c.back; div.append(v);
   }
   if (c.tags.length) { const tg = document.createElement("div"); tg.className = "tags"; tg.textContent = t("tags_prefix") + c.tags.join(", "); div.append(tg); }
+  if (c.more) {
+    const m = document.createElement("div");
+    m.className = "mais";
+    const cab = document.createElement("div");
+    cab.className = "mais-cab"; cab.textContent = t("more_label");
+    const txt = document.createElement("div");
+    txt.textContent = c.more.replace(/<br>/g, "  ");
+    m.append(cab, txt);
+    div.append(m);
+  }
   c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
   (c.infos || []).forEach((i) => { const e = document.createElement("div"); e.className = "info"; e.textContent = "ℹ " + i; div.append(e); });
 }
@@ -487,6 +497,18 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   else if (CLOZE_RE.test(c.front)) verso.textContent = "";
   else verso.textContent = c.back;
   if (c.kind === "mc" || !CLOZE_RE.test(c.front)) wrap.append(verso);
+  if (c.more) {
+    const sm = document.createElement("div");
+    sm.style.cssText = "background:" + (p.sub || p.caixa) + ";color:" + p.destaque +
+      ";text-align:center;padding:8px;border-radius:20px;margin-top:10px;" +
+      "font-weight:700;font-size:12px;letter-spacing:.5px;" + sombra;
+    sm.textContent = "✚ " + t("more_label");
+    const cont = document.createElement("div");
+    cont.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
+      ";padding:10px;text-align:justify;font-size:12px;margin-top:5px;border-radius:9px;" + sombra;
+    cont.textContent = c.more.replace(/<br>/g, "  ");
+    wrap.append(sm, cont);
+  }
   if ((c.kind === "mc" || CLOZE_RE.test(c.front)) && c.back) {
     const just = document.createElement("div");
     just.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
@@ -500,20 +522,24 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
 
 /* --------------------------- edição inline -------------------------- */
 
-function campoEditavel(pai, rotuloKey, hintKey, valor, multiline) {
+function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
+  opcoes = opcoes || {};
   const lbl = document.createElement("span");
   lbl.className = "mini-lbl";
   lbl.textContent = t(rotuloKey) + " ";
   const aj = document.createElement("button");
   aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
   const dica = document.createElement("div");
-  dica.style.cssText = "display:none;font-size:11.5px;color:var(--sutil);margin-top:2px";
+  // dicaVisivel: recursos menos óbvios (ex.: "Saiba mais") explicam-se sozinhos
+  dica.style.cssText = "display:" + (opcoes.dicaVisivel ? "block" : "none") +
+    ";font-size:11.5px;color:var(--sutil);margin-top:2px;line-height:1.35";
   dica.textContent = t(hintKey);
   aj.onclick = () => { dica.style.display = dica.style.display === "none" ? "block" : "none"; };
   lbl.append(aj);
   const campo = document.createElement(multiline ? "textarea" : "input");
   if (!multiline) campo.type = "text";
   campo.value = valor;
+  if (opcoes.grande) campo.classList.add("campo-grande");
   pai.append(lbl, dica, campo);
   return campo;
 }
@@ -644,6 +670,8 @@ function montarEdicao(div, c, r, idx) {
   });
 
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
+  const inMais = campoEditavel(div, "field_more", "hint_more",
+    (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
   const inTags = campoEditavel(div, "field_tags", "hint_tags", c.tags.join(", "), false);
 
   botoesSalvar(div, () => {
@@ -667,6 +695,7 @@ function montarEdicao(div, c, r, idx) {
     r.cards[idx] = Object.assign({}, c, {
       kind: CLOZE_RE.test(front) ? "cloze" : "basic",
       front, back: inVerso.value.trim(), tags: parseTags(inTags.value),
+      more: inMais.value.trim().replace(/\n+/g, "<br>"),
     });
     editando = null;
     reescreverEditor(r.cards, r.warnings);
@@ -712,6 +741,8 @@ function montarEdicaoMC(div, c, r, idx) {
   div.append(selLbl, sel);
 
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
+  const inMais = campoEditavel(div, "field_more", "hint_more",
+    (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
   const inTags = campoEditavel(div, "field_tags", "hint_tags", c.tags.join(", "), false);
 
   botoesSalvar(div, () => {
@@ -720,6 +751,7 @@ function montarEdicaoMC(div, c, r, idx) {
     r.cards[idx] = Object.assign({}, c, {
       front: inFrente.value.trim(), options, correct,
       back: inVerso.value.trim(), tags: parseTags(inTags.value),
+      more: inMais.value.trim().replace(/\n+/g, "<br>"),
     });
     editando = null;
     reescreverEditor(r.cards, r.warnings);
@@ -994,6 +1026,7 @@ function aplicarModelo() {
   $("novoFrente").value = m[0];
   $("novoVerso").value = m[1];
   $("novoTags").value = m[2];
+  $("novoMais").value = "";
   $("mcArea").style.display = chaveM === "mc" ? "" : "none";
   $("mcClozeArea").style.display = chaveM === "mc_cloze" ? "" : "none";
   $("lacunaArea").style.display = chaveM === "cloze" ? "" : "none";
@@ -1044,6 +1077,8 @@ function montarLinhaNovo() {
   const modelo = $("selModelo").value;
   const verso = $("novoVerso").value.trim();
   const tags = parseTags($("novoTags").value);
+  const mais = $("novoMais").value.trim().replace(/\n+/g, "<br>");
+  const comMais = (linha) => mais ? linha + "\n+ " + mais.replace(/<br>/g, "\n+ ") : linha;
 
   if (modelo === "mc_cloze") {
     const frase = $("novoFrente").value;
@@ -1058,20 +1093,20 @@ function montarLinhaNovo() {
     if (verso) campos.push(verso);
     else if (tags.length) campos.push("");
     if (tags.length) campos.push(tags.join(", "));
-    return { linha: campos.join(" :: ") };
+    return { linha: comMais(campos.join(" :: ")) };
   }
 
   if (modelo === "mc") {
     const { options, correct } = lerAlternativas();
     const card = { kind: "mc", front: $("novoFrente").value.trim(), options,
                    correct, back: verso, tags };
-    return { linha: cardToLine(card) };
+    return { linha: comMais(cardToLineBase(card)) };
   }
 
   const campos = [$("novoFrente").value.trim()];
   if (verso || !CLOZE_RE.test(campos[0])) campos.push(verso);
   if (tags.length) campos.push(tags.join(", "));
-  return { linha: campos.join(" :: ") };
+  return { linha: comMais(campos.join(" :: ")) };
 }
 
 function atualizarNovoPreview() {
@@ -1121,7 +1156,7 @@ $("selModelo").onchange = aplicarModelo;
 $("btnNovoFechar").onclick = () => $("dlgNovo").close();
 $("btnMarcarNovo").onclick = () => { marcarLacuna($("novoFrente")); atualizarNovoPreview(); toast("toast_blank"); };
 $("btnLimparNovo").onclick = () => { limparLacunas($("novoFrente")); atualizarNovoPreview(); toast("toast_blank_clear"); };
-["novoFrente", "novoVerso", "novoTags", "mcCerta", "mcErr0", "mcErr1", "mcErr2", "mcErr3",
+["novoFrente", "novoVerso", "novoTags", "novoMais", "mcCerta", "mcErr0", "mcErr1", "mcErr2", "mcErr3",
  "mcOp0", "mcOp1", "mcOp2", "mcOp3", "mcOp4"].forEach((id) => {
   $(id).addEventListener("input", atualizarNovoPreview);
 });
@@ -1270,6 +1305,53 @@ function rotularEstilos() {
   [...$("selEstiloPainel").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
 }
 
+/* Mostra, em tempo real, o cabeçalho que será IMPRESSO em cada cartão:
+ * a última parte do nome do baralho vira o título no topo. */
+function atualizarAvisoTopo() {
+  const estilo = $("selEstilo").value;
+  const p = PALETAS[estilo] || PALETAS.classic;
+  const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
+  const titulo = partes.length ? partes[partes.length - 1] : "";
+  const box = $("avisoTopo");
+
+  if (!p.cab) {   // estilo Clássico: não imprime cabeçalho
+    $("avisoTopoTitulo").textContent = "";
+    $("avisoTopoTexto").textContent = t("header_no_style");
+    $("avisoTopoDemoLbl").textContent = "";
+    $("avisoTopoDemo").innerHTML = "";
+    $("avisoTopoTags").textContent = "";
+    box.style.borderColor = "var(--borda)";
+    box.style.background = "transparent";
+    return;
+  }
+
+  box.style.borderColor = "var(--laranja-borda)";
+  box.style.background = "var(--laranja-claro)";
+  $("avisoTopoTitulo").textContent = t("header_warn_title");
+  $("avisoTopoTexto").textContent = t("header_warn_text");
+  $("avisoTopoDemoLbl").textContent = t("header_demo_label");
+
+  const demo = $("avisoTopoDemo");
+  demo.innerHTML = "";
+  demo.style.cssText = "background:" + p.fundo + ";padding:8px;border-radius:8px";
+  const pill = document.createElement("div");
+  pill.textContent = titulo || t("header_empty");
+  pill.style.cssText = "background:" + p.cab + ";color:#fff;font-weight:700;" +
+    "text-align:center;padding:6px;border-radius:10px;font-size:13px;" +
+    "box-shadow:1px 2px 3px rgba(0,0,0,.3);word-break:break-word";
+  demo.append(pill);
+  const tagsTxt = $("tagsExp").value.trim();
+  if (p.sub) {
+    const sub = document.createElement("div");
+    sub.textContent = tagsTxt ? parseTags(tagsTxt).join("  ·  ") : "tags";
+    sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +
+      ";font-style:italic;text-align:center;font-size:10px;padding:4px;" +
+      "border-radius:8px 8px 0 0;margin-top:4px";
+    demo.append(sub);
+  }
+  $("avisoTopoTags").textContent = t("header_tags_note");
+}
+
 function previewEstilo() {
   const p = PALETAS[$("selEstilo").value] || PALETAS.classic;
   const box = $("stylePreview");
@@ -1297,6 +1379,7 @@ function previewEstilo() {
   frase.append(lac, document.createTextNode("."));
   box.append(frase);
   $("styleHintTxt").textContent = t("style_hint");
+  atualizarAvisoTopo();
 }
 
 function abrirExport(tipo) {
@@ -1317,7 +1400,8 @@ $("btnExportConfirm").onclick = () => {
   $("dlgExport").close();
   (exportTipo === "txt" ? exportarTxt : exportarApkg)();
 };
-$("deckExp").addEventListener("input", atualizarDestino);
+$("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
+$("tagsExp").addEventListener("input", atualizarAvisoTopo);
 $("btnCaminhoExp").onclick = async () => {
   await navigator.clipboard.writeText(nomeDeck());
   $("btnCaminhoExp").textContent = t("copy_path_done");
