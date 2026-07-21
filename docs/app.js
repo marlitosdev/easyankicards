@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.6.0";
+const VERSAO = "6.6.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -1331,6 +1331,12 @@ function aplicarEstilo(v) {
   localStorage.setItem("eac_style", v);
   $("selEstilo").value = v;
   $("selEstiloPainel").value = v;
+  // O estilo só é visível na prévia "Como no Anki" — troca sozinho para
+  // que a escolha tenha efeito imediato (antes parecia não funcionar).
+  if (v !== "classic" && modoPrevia() !== "anki") {
+    localStorage.setItem("eac_previa", "anki");
+    $("selPrevia").value = "anki";
+  }
   previewEstilo();
   preview();
   toast("toast_style");
