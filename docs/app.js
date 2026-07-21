@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "7.0.0";
+const VERSAO = "7.1.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -107,13 +107,11 @@ function aplicarTextos() {
 
 function nomeDeck() { return $("deckExp").value.trim() || "Meu Baralho"; }
 
-/* Título impresso no topo dos cartões. Por padrão acompanha a última
- * parte do nome do baralho, mas o usuário pode escrever outro. */
+/* Título impresso no topo dos cartões. Vazio = sem cabeçalho.
+ * Não herda o nome do baralho: quem quiser usá-lo tem o botão
+ * "Usar o nome do baralho" ao lado do campo. */
 function tituloCartao() {
-  const t0 = $("tituloExp").value;
-  if (t0.trim() !== "" || $("tituloExp").dataset.tocado === "1") return t0.trim();
-  const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
-  return partes.length ? partes[partes.length - 1] : "";
+  return $("tituloExp").value.trim();
 }
 
 function atualizarDestino() {
@@ -460,9 +458,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   const wrap = document.createElement("div");
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
-  const guardado = localStorage.getItem("eac_titulo");
-  const deckNome = c.titulo || (guardado !== null ? guardado
-    : (localStorage.getItem("eac_deck") || "Meu Baralho").split("::").pop().trim());
+  const deckNome = c.titulo || (localStorage.getItem("eac_titulo") || "");
 
   if (p.cab && deckNome) {
     const pill = document.createElement("div");
@@ -580,6 +576,29 @@ function converterTipo(c, r, idx, destino, campos) {
   const novo = Object.assign({}, c, campos);
 
   if (destino === "cloze") {
+    // Múltipla escolha -> lacuna COM as alternativas embutidas:
+    // {{c1::correta::op1/op2/op3}} — o aluno vê as opções na frente e,
+    // ao virar, só a correta permanece (sintaxe nativa do Anki).
+    if (novo.kind === "mc") {
+      const ops = (novo.options || []).map((o) => (o || "").trim()).filter(Boolean);
+      if (ops.length < 2) { alert(t("conv_mc_need_ops")); return; }
+      const certa = ops[Math.min(novo.correct || 0, ops.length - 1)];
+      const lacuna = "{{c1::" + certa + "::" + ops.join("/") + "}}";
+      const base = semLacunas(novo.front).trim();
+      const frente = base.includes(certa)
+        ? base.replace(certa, lacuna)
+        : base.replace(/\s*[.?!]+\s*$/, "") + " " + lacuna + ".";
+      if (!confirm(t("conv_mc_to_cloze", { depois: frente }))) return;
+      novo.front = frente;
+      novo.back = novo.back || "";
+      novo.kind = "cloze";
+      delete novo.options; delete novo.correct;
+      r.cards[idx] = novo;
+      reescreverEditor(r.cards, r.warnings);
+      reabrirEditor(idx);
+      toast("toast_converted");
+      return;
+    }
     if (!CLOZE_RE.test(novo.front)) {
       const resp = (novo.back || "").trim();
       if (!resp) { alert(t("conv_need_back")); return; }
@@ -850,39 +869,49 @@ function montarEdicaoMC(div, c, r, idx) {
     ownTags: parseTags(inTags.value), tags: parseTags(inTags.value),
     titulo: inTitulo.value.trim(),
     options: inputs.map((i) => i.value.trim()).filter(Boolean),
-    correct: Math.min(parseInt(sel.value, 10) || 0,
-                      Math.max(inputs.filter((i) => i.value.trim()).length - 1, 0)),
+    correct: (() => {
+      let k = 0, achou = 0;
+      inputs.forEach((inp, i) => {
+        if (!inp.value.trim()) return;
+        if (radios[i].checked) achou = k;
+        k++;
+      });
+      return achou;
+    })(),
   }));
   const inFrente = campoEditavel(div, "field_front", "hint_front", c.front, true);
   const lbl = document.createElement("span");
-  lbl.className = "mini-lbl"; lbl.textContent = t("mc_options_label") + " ";
+  lbl.className = "mini-lbl"; lbl.textContent = t("mc_mark_correct_inline") + " ";
   const aj = document.createElement("button");
   aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
   aj.onclick = () => alert(t("hint_mc"));
   lbl.append(aj);
   div.append(lbl);
 
+  /* Marcador ⦿ ao lado de cada alternativa: quem cria aponta a correta
+     no próprio campo, sem seletor separado (evita descompasso). */
   const inputs = [];
+  const radios = [];
+  const grupo = "mcr" + idx + "_" + Date.now();
   const ops = c.options.slice();
   while (ops.length < 4) ops.push("");
-  ops.slice(0, 5).forEach((o) => {
-    const i = document.createElement("input");
-    i.type = "text"; i.value = o;
-    div.append(i);
-    inputs.push(i);
+  ops.slice(0, 5).forEach((o, i) => {
+    const linha = document.createElement("div");
+    linha.className = "mc-row";
+    const rd = document.createElement("input");
+    rd.type = "radio"; rd.name = grupo;
+    rd.checked = i === (c.correct || 0);
+    rd.title = t("mc_correct");
+    const tx = document.createElement("input");
+    tx.type = "text"; tx.value = o; tx.placeholder = letra(i);
+    linha.append(rd, tx);
+    div.append(linha);
+    inputs.push(tx);
+    radios.push(rd);
   });
-
-  const selLbl = document.createElement("span");
-  selLbl.className = "mini-lbl"; selLbl.textContent = t("mc_correct");
-  const sel = document.createElement("select");
-  sel.style.cssText = "width:100%;padding:6px;border-radius:6px;margin-top:2px";
-  inputs.forEach((_, i) => {
-    const op = document.createElement("option");
-    op.value = i; op.textContent = letra(i);
-    sel.append(op);
-  });
-  sel.value = c.correct;
-  div.append(selLbl, sel);
+  const sel = {   // compatível com o restante do código
+    get value() { const i = radios.findIndex((rd) => rd.checked); return i < 0 ? 0 : i; },
+  };
 
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
   const inMais = campoEditavel(div, "field_more", "hint_more",
@@ -893,8 +922,16 @@ function montarEdicaoMC(div, c, r, idx) {
     (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {
-    const options = inputs.map((i) => i.value.trim()).filter(Boolean);
-    let correct = Math.min(parseInt(sel.value, 10), Math.max(options.length - 1, 0));
+    // índice da correta considerando apenas as alternativas preenchidas
+    const preenchidas = [];
+    let correct = 0;
+    inputs.forEach((inp, i) => {
+      const v = inp.value.trim();
+      if (!v) return;
+      if (radios[i].checked) correct = preenchidas.length;
+      preenchidas.push(v);
+    });
+    const options = preenchidas;
     r.cards[idx] = Object.assign({}, c, {
       front: inFrente.value.trim(), options, correct,
       back: inVerso.value.trim(),
@@ -1519,7 +1556,7 @@ function previewEstilo() {
     d.style.cssText = css;
     box.append(d);
   };
-  if (p.cab) mk(nomeDeck().split("::").pop(),
+  if (p.cab && tituloCartao()) mk(tituloCartao(),
     "background:" + p.cab + ";color:#fff;font-weight:700;text-align:center;" +
     "padding:5px;border-radius:9px;font-size:13px;margin-bottom:5px;");
   if (p.sub) mk("tags", "background:" + p.sub + ";color:" + p.texto +
@@ -1560,7 +1597,6 @@ $("btnExportConfirm").onclick = () => {
 $("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
 $("tagsExp").addEventListener("input", atualizarAvisoTopo);
 $("tituloExp").addEventListener("input", () => {
-  $("tituloExp").dataset.tocado = "1";
   localStorage.setItem("eac_titulo", $("tituloExp").value.trim());
   atualizarAvisoTopo();
   if (modoPrevia() === "anki") preview();
@@ -1568,7 +1604,6 @@ $("tituloExp").addEventListener("input", () => {
 $("btnTituloDeck").onclick = () => {
   const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
   $("tituloExp").value = partes.length ? partes[partes.length - 1] : "";
-  $("tituloExp").dataset.tocado = "1";
   localStorage.setItem("eac_titulo", $("tituloExp").value);
   atualizarAvisoTopo();
   if (modoPrevia() === "anki") preview();
@@ -1583,7 +1618,7 @@ $("btnCaminhoExp").onclick = async () => {
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
 $("tagsExp").value = localStorage.getItem("eac_tags") || "";
 const tituloSalvo = localStorage.getItem("eac_titulo");
-if (tituloSalvo !== null) { $("tituloExp").value = tituloSalvo; $("tituloExp").dataset.tocado = "1"; }
+if (tituloSalvo !== null) $("tituloExp").value = tituloSalvo;
 $("selEstilo").value = localStorage.getItem("eac_style") || "classic";
 $("selEstiloPainel").value = $("selEstilo").value;
 function aplicarEstilo(v) {

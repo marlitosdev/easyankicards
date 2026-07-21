@@ -247,7 +247,10 @@ const UI = {
   "conv_need_back": "Para converter em lacuna, escreva antes a resposta no campo Verso — é ela que ficará oculta.",
   "conv_need_answer": "Escreva a resposta (Verso) antes de converter em múltipla escolha.",
   "field_title": "Título deste cartão (topo)",
-  "hint_title": "Aparece na faixa do topo deste cartão. Deixe vazio para usar o título geral definido na exportação. No editor, escreva numa linha logo abaixo do cartão começando com \"@\"."
+  "hint_title": "Aparece na faixa do topo deste cartão. Deixe vazio para usar o título geral definido na exportação. No editor, escreva numa linha logo abaixo do cartão começando com \"@\".",
+  "conv_mc_to_cloze": "Converter em LACUNA COM ALTERNATIVAS?\n\nA resposta correta fica oculta e TODAS as alternativas aparecem como opções dentro da frase — o aluno escolhe entre elas antes de virar o cartão.\n\nFicará assim:\n\n{depois}",
+  "mc_mark_correct_inline": "Alternativas — marque ⦿ na correta",
+  "conv_mc_need_ops": "Preencha ao menos duas alternativas antes de converter em lacuna com alternativas."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -496,7 +499,10 @@ const UI = {
   "conv_need_back": "To convert to a blank, first write the answer in the Back field — that is what will be hidden.",
   "conv_need_answer": "Write the answer (Back) before converting to multiple choice.",
   "field_title": "Title for this card (top)",
-  "hint_title": "Appears on the top banner of this card. Leave empty to use the general title set at export. In the editor, write it on a line right below the card starting with \"@\"."
+  "hint_title": "Appears on the top banner of this card. Leave empty to use the general title set at export. In the editor, write it on a line right below the card starting with \"@\".",
+  "conv_mc_to_cloze": "Convert to CLOZE WITH OPTIONS?\n\nThe correct answer is hidden and ALL options appear as choices inside the sentence — the student picks one before flipping the card.\n\nIt will look like this:\n\n{depois}",
+  "mc_mark_correct_inline": "Options — mark ⦿ on the correct one",
+  "conv_mc_need_ops": "Fill in at least two options before converting to cloze with options."
  }
 };
 const PARSER_MSG = {
