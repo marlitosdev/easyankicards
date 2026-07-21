@@ -109,7 +109,7 @@ function clozeOrds(text) {
  * exportação — assim o usuário pode escrever o que quiser, em vez de
  * ficar preso ao nome do baralho. Vazio = cabeçalho não aparece. */
 const EST_HEAD = '{{#Título}}<div class="materia">{{Título}}</div>{{/Título}}' +
-                 '<div class="assunto">{{Tags}}</div>';
+                 '{{#Tags}}<div class="assunto">{{Tags}}</div>{{/Tags}}';
 
 /* Bloco "Saiba mais": {{hint:...}} vira um link clicável no Anki que
  * expande a explicação. Só aparece se o campo estiver preenchido. */
@@ -118,13 +118,13 @@ const EST_MORE = '{{#Saiba mais}}<div class="saibamais">{{hint:Saiba mais}}</div
 const EST_TMPLS = {
   basicQ: EST_HEAD + '<div class="box">{{Frente}}</div>',
   basicA: EST_HEAD + '<div class="box">{{Frente}}</div>' +
-          '<div class="resposta">{{Verso}}</div>' + EST_MORE,
+          '{{#Verso}}<div class="resposta">{{Verso}}</div>{{/Verso}}' + EST_MORE,
   clozeQ: EST_HEAD + '<div class="box">{{cloze:Texto}}</div>',
   clozeA: EST_HEAD + '<div class="box">{{cloze:Texto}}</div>' +
           '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}' + EST_MORE,
   mcQ: EST_HEAD + '<div class="box">{{Pergunta}}<br><br>{{Alternativas}}</div>',
   mcA: EST_HEAD + '<div class="box">{{Pergunta}}</div>' +
-       '<div class="resposta">{{Correta}}</div>' +
+       '{{#Correta}}<div class="resposta">{{Correta}}</div>{{/Correta}}' +
        '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}' + EST_MORE,
 };
 
