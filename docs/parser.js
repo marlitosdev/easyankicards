@@ -412,13 +412,23 @@ function corrigirTagsQueSaoTexto(raw) {
 }
 
 /* Separa um título "@..." que ficou grudado no início do cartão. */
+/* Título "@" grudado no cartão. Só corrigimos automaticamente o caso
+ * INEQUÍVOCO — quando existe o marcador "[MC]" ou "::" e dá para saber
+ * exatamente onde o título termina. Em casos ambíguos preferimos avisar
+ * e deixar o usuário separar, em vez de cortar a frase no lugar errado. */
+const RE_TITULO_MC = /^[ \t]*@[ \t]*([^\n]*?)[ \t]+(\[MC\][\s\S]*)$/;
+const RE_TITULO_CARTAO = /^[ \t]*@[ \t]*([^\n]*?)[ \t]+((?:[^:\n]|:(?!:))*::[\s\S]*)$/;
+
 function corrigirTituloGrudado(raw) {
   return raw.split(/\r?\n/).map((linha) => {
-    const m = linha.match(/^\s*@([^\n]*?)\s+(\[MC\]|[A-ZÀ-Ú].*?::)/);
-    if (!m) return linha;
-    const resto = linha.slice(linha.indexOf(m[2]));
-    return "@ " + m[1].trim() + "\n" + resto;
+    const m = linha.match(RE_TITULO_MC) || linha.match(RE_TITULO_CARTAO);
+    if (!m || !m[1].trim()) return linha;
+    return "@ " + m[1].trim() + "\n" + m[2].trim();
   }).join("\n");
+}
+
+function temTituloGrudado(raw) {
+  return raw.split(/\r?\n/).some((l) => RE_TITULO_MC.test(l) || RE_TITULO_CARTAO.test(l));
 }
 
 function temTagsQueSaoTexto(raw) {
@@ -430,6 +440,4 @@ function temTagsQueSaoTexto(raw) {
   });
 }
 
-function temTituloGrudado(raw) {
-  return /^\s*@[^\n]*?\s+(\[MC\]|[A-ZÀ-Ú].*?::)/m.test(raw);
-}
+

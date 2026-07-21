@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.5.0";
+const VERSAO = "7.6.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -122,6 +122,7 @@ function aplicarTextos() {
   $("tagsExp").placeholder = t("tags_placeholder");
   $("deckExp").placeholder = t("deck_placeholder");
   $("tituloExp").placeholder = t("title_ph");
+  $("editor").placeholder = t("paste_here");
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
   rotularPrevia();
@@ -296,17 +297,21 @@ function renderSugestoes(r, raw) {
     const sp = document.createElement("span");
     sp.textContent = it.txt;
     div.append(dot, sp);
-    if (it.linha) div.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(it.linha)));
-    if (it.fix) {
-      div.append(botaoMini("fix_now", "btn-azul", () => {
-        $("editor").value = it.fix($("editor").value);
-        preview();
-        toast("toast_fixed");
-      }));
-      const rot = document.createElement("span");
-      rot.style.cssText = "font-size:10.5px;opacity:.75;margin-left:5px";
-      rot.textContent = it.fixTxt;
-      div.append(rot);
+    // Ações em linha própria (antes ficavam espremidas ao lado do texto)
+    if (it.linha || it.fix) {
+      const acoes = document.createElement("div");
+      acoes.className = "sug-acao";
+      if (it.linha) acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(it.linha)));
+      if (it.fix) {
+        // NÃO corrige direto: abre o Normalizar, onde o usuário vê
+        // antes/depois de cada mudança e escolhe o que aplicar.
+        acoes.append(botaoMini("fix_now", "btn-azul", () => abrirNormalizar(it.fix)));
+        const rot = document.createElement("span");
+        rot.className = "rot";
+        rot.textContent = t("use_normalize");
+        acoes.append(rot);
+      }
+      div.append(acoes);
     }
     box.append(div);
   });
@@ -1161,13 +1166,59 @@ function montarEdicaoMC(div, c, r, idx) {
 /* Normalizar v6.1: PROPÕE as mudanças com antes/depois e o usuário
  * marca o que quer aplicar — nada muda sem decisão explícita. */
 let normPlano = [];   // [{card, canon, mudou, chk}]
+let normAjuste = null;   // ajuste estrutural pendente (título grudado etc.)
 
-function abrirNormalizar() {
+/* Devolve as primeiras linhas que diferem entre dois textos — é o que
+ * o usuário precisa ver para decidir, sem despejar o texto inteiro. */
+function primeiraDiferenca(a, b, querAntes) {
+  const la = a.split("\n"), lb = b.split("\n");
+  const saida = [];
+  for (let i = 0, j = 0; i < la.length && saida.length < 4; i++, j++) {
+    if (la[i] !== lb[j]) {
+      saida.push(querAntes ? la[i] : (lb[j] || "") + (lb[j + 1] ? "\n" + lb[j + 1] : ""));
+      if (!querAntes) j++;
+    }
+  }
+  return saida.join("\n") || (querAntes ? a.slice(0, 160) : b.slice(0, 160));
+}
+
+/* ajusteEstrutural (opcional): função que reescreve o texto inteiro
+ * (ex.: separar título grudado). Entra na lista como item revisável,
+ * com antes/depois, e só é aplicada se ficar marcada. */
+function abrirNormalizar(ajusteEstrutural) {
+  normAjuste = null;
+  if (typeof ajusteEstrutural === "function") {
+    const antes = $("editor").value;
+    const depois = ajusteEstrutural(antes);
+    if (depois !== antes) normAjuste = { antes, depois, fn: ajusteEstrutural, chk: null };
+  }
   const r = parseText($("editor").value, []);
   const lista = $("normLista");
   lista.innerHTML = "";
   normPlano = [];
   let mudancas = 0;
+
+  // primeiro item: ajuste de estrutura (quando houver), com antes/depois
+  if (normAjuste) {
+    mudancas++;
+    const div = document.createElement("div");
+    div.className = "norm-item";
+    const cab = document.createElement("div");
+    cab.className = "cab-n";
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.checked = true;
+    chk.style.cssText = "width:17px;height:17px";
+    normAjuste.chk = chk;
+    cab.append(chk, document.createTextNode(t("norm_struct_title")));
+    const difA = document.createElement("div");
+    difA.className = "antes";
+    difA.textContent = primeiraDiferenca(normAjuste.antes, normAjuste.depois, true);
+    const difB = document.createElement("div");
+    difB.className = "depois";
+    difB.textContent = primeiraDiferenca(normAjuste.antes, normAjuste.depois, false);
+    div.append(cab, difA, difB);
+    lista.append(div);
+  }
 
   r.cards.forEach((c) => {
     const canon = cardToLine(c);
@@ -1213,6 +1264,15 @@ function abrirNormalizar() {
 let normIgnorados = [];
 
 function aplicarNormalizacao() {
+  // ajuste estrutural primeiro (muda o texto todo) e reabre para revisão
+  if (normAjuste && normAjuste.chk && normAjuste.chk.checked) {
+    $("editor").value = normAjuste.fn($("editor").value);
+    normAjuste = null;
+    $("dlgNormalizar").close();
+    preview();
+    toast("toast_fixed");
+    return;
+  }
   const blocos = normPlano.map((it) =>
     (it.mudou && it.chk && it.chk.checked) ? it.canon : (it.card.raw || it.canon));
   let texto = blocos.join("\n\n");
@@ -1643,7 +1703,23 @@ $("editor").oninput = () => {
   agendarPreview();
 };
 $("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
-$("btnNormalizar").onclick = abrirNormalizar;
+$("btnNormalizar").onclick = () => abrirNormalizar();
+$("btnCopiarTudo").onclick = async () => {
+  await navigator.clipboard.writeText($("editor").value);
+  toast("toast_copied_all");
+};
+/* Destaque colorido opcional: sem ele o texto fica em cor única e a
+ * seleção/cópia fica perfeitamente visível em qualquer navegador. */
+function aplicarDestaque(ligado) {
+  document.querySelector(".editor-wrap").classList.toggle("sem-destaque", !ligado);
+  localStorage.setItem("eac_destaque", ligado ? "1" : "0");
+  if (ligado) renderDestaque();
+}
+$("chkDestaque").checked = localStorage.getItem("eac_destaque") !== "0";
+aplicarDestaque($("chkDestaque").checked);
+$("chkDestaque").onchange = () => aplicarDestaque($("chkDestaque").checked);
+attachTip($("chkDestaque"), "tip_highlight");
+attachTip($("btnCopiarTudo"), "copy_all");
 $("btnNormAplicar").onclick = aplicarNormalizacao;
 $("btnNormFechar").onclick = () => $("dlgNormalizar").close();
 const temaSalvo = localStorage.getItem("eac_theme") || "auto";
