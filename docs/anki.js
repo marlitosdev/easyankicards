@@ -108,17 +108,21 @@ function clozeOrds(text) {
 const EST_HEAD = '<div class="materia">{{Subdeck}}</div>' +
                  '<div class="assunto">{{Tags}}</div>';
 
+/* Bloco "Saiba mais": {{hint:...}} vira um link clicável no Anki que
+ * expande a explicação. Só aparece se o campo estiver preenchido. */
+const EST_MORE = '{{#Saiba mais}}<div class="saibamais">{{hint:Saiba mais}}</div>{{/Saiba mais}}';
+
 const EST_TMPLS = {
   basicQ: EST_HEAD + '<div class="box">{{Frente}}</div>',
   basicA: EST_HEAD + '<div class="box">{{Frente}}</div>' +
-          '<div class="resposta">{{Verso}}</div>',
+          '<div class="resposta">{{Verso}}</div>' + EST_MORE,
   clozeQ: EST_HEAD + '<div class="box">{{cloze:Texto}}</div>',
   clozeA: EST_HEAD + '<div class="box">{{cloze:Texto}}</div>' +
-          '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}',
+          '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}' + EST_MORE,
   mcQ: EST_HEAD + '<div class="box">{{Pergunta}}<br><br>{{Alternativas}}</div>',
   mcA: EST_HEAD + '<div class="box">{{Pergunta}}</div>' +
        '<div class="resposta">{{Correta}}</div>' +
-       '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}',
+       '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}' + EST_MORE,
 };
 
 function cssEstilo(p) {
@@ -141,6 +145,10 @@ function cssEstilo(p) {
 .justificativa{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.texto};
   text-align:justify;padding:16px;border-radius:0 0 14px 14px;
   box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+.saibamais{max-width:480px;margin:14px auto 0;background:${p.sub || p.caixa};
+  color:${p.texto};text-align:center;padding:9px;border-radius:22px;
+  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box;letter-spacing:1px}
+.saibamais a{color:${p.destaque};text-decoration:none;font-weight:bold}
 .cloze{font-weight:bold;color:${p.destaque}}
 .mc-correta{color:${p.destaque};font-weight:bold}
 `;
@@ -167,25 +175,35 @@ function modelosParaEstilo(estilo) {
   const cfg = ESTILOS[estilo] || ESTILOS.classic;
   const base = JSON.parse(JSON.stringify(COL_MODELS));
   const models = montarModeloMC(base);          // garante o MC clássico
-  if (!cfg.css) return models;                  // clássico: como sempre foi
+  if (!cfg.css) {
+    // estilo clássico: mesmo layout simples, mas com o link "Saiba mais"
+    const saida = {};
+    Object.keys(models).forEach((k) => {
+      const m = comSaibaMais(models[k]);
+      m.tmpls[0].afmt += "<br>" + EST_MORE;
+      m.css = (m.css || "") + "\n.saibamais a{color:#0b6bcb;font-weight:bold;text-decoration:none}";
+      saida[k] = m;
+    });
+    return saida;
+  }
 
   const [idB, idC, idM] = cfg.ids;
   const out = {};
-  const b = JSON.parse(JSON.stringify(models["1607392319"]));
+  const b = comSaibaMais(models["1607392319"]);
   b.id = idB; b.name = "EasyAnkiCards " + estilo + " - Básico";
   b.css = cfg.css;
   b.tmpls[0].qfmt = EST_TMPLS.basicQ;
   b.tmpls[0].afmt = EST_TMPLS.basicA;
   out[String(idB)] = b;
 
-  const c = JSON.parse(JSON.stringify(models["1607392320"]));
+  const c = comSaibaMais(models["1607392320"]);
   c.id = idC; c.name = "EasyAnkiCards " + estilo + " - Cloze";
   c.css = cfg.css;
   c.tmpls[0].qfmt = EST_TMPLS.clozeQ;
   c.tmpls[0].afmt = EST_TMPLS.clozeA;
   out[String(idC)] = c;
 
-  const m = JSON.parse(JSON.stringify(models["1607392321"]));
+  const m = comSaibaMais(models["1607392321"]);
   m.id = idM; m.name = "EasyAnkiCards " + estilo + " - Múltipla Escolha";
   m.css = cfg.css;
   m.tmpls[0].qfmt = EST_TMPLS.mcQ;
@@ -197,6 +215,19 @@ function modelosParaEstilo(estilo) {
 /* Monta o modelo de Múltipla Escolha clonando o Básico.
  * O template da RESPOSTA não usa {{FrontSide}}: mostra a pergunta e
  * SOMENTE a alternativa correta (as demais desaparecem), + explicação. */
+/* Acrescenta o campo "Saiba mais" ao final de um modelo.
+ * Adicionar no FIM preserva a ordem dos campos existentes, então quem já
+ * importou versões anteriores recebe o campo novo vazio, sem perder nada. */
+function comSaibaMais(m) {
+  const modelo = JSON.parse(JSON.stringify(m));
+  if (modelo.flds.some((f) => f.name === "Saiba mais")) return modelo;
+  const novo = JSON.parse(JSON.stringify(modelo.flds[0]));
+  novo.name = "Saiba mais";
+  novo.ord = modelo.flds.length;
+  modelo.flds.push(novo);
+  return modelo;
+}
+
 function montarModeloMC(models) {
   const basic = models["1607392319"];
   const mc = JSON.parse(JSON.stringify(basic));
@@ -243,10 +274,10 @@ async function buildApkg(cards, deckName, estilo) {
       mid = MID_M;
       const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
       const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
-      campos = [c.front, alts, correta, c.back || ""];
+      campos = [c.front, alts, correta, c.back || "", c.more || ""];
     } else {
       mid = c.kind === "cloze" ? MID_C : MID_B;
-      campos = [c.front, c.back || ""];
+      campos = [c.front, c.back || "", c.more || ""];
     }
     const noteId = id++;
     const flds = campos.join("\x1f");

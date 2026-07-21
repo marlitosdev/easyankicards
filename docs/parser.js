@@ -49,6 +49,13 @@ function agruparLinhas(rawText) {
     const s = linhas[i].trim();
     if (!s) { atual = null; continue; }
     if (s.startsWith("#")) continue;
+    /* Linha começando com "+" = explicação extra ("Saiba mais") do cartão
+       anterior. No Anki vira um link que o aluno clica para expandir. */
+    if (s.startsWith("+") && atual !== null) {
+      const txt = s.replace(/^\+\s*/, "");
+      atual.more = atual.more ? atual.more + "<br>" + txt : txt;
+      continue;
+    }
     if (atual !== null && clozeAberto(atual.texto)) {
       atual.texto += " " + s;
     } else if (atual !== null && s.startsWith(DELIM)) {
@@ -100,7 +107,7 @@ function parseText(rawText, globalTags) {
     result.warnLines.push(n);
     if (texto !== undefined) result.ignorados.push({ line: n, texto });
   };
-  for (const { linha, texto, par } of agruparLinhas(rawText)) {
+  for (const { linha, texto, par, more } of agruparLinhas(rawText)) {
     /* Múltipla escolha: [MC] Pergunta :: op1 | op2 * | op3 :: explicação :: tags
        (o * marca a alternativa correta). Vira cartão Básico na exportação. */
     if (texto.startsWith("[MC]")) {
@@ -125,6 +132,7 @@ function parseText(rawText, globalTags) {
       if (correct === -1) card.issues.push(pm("i_mc_nocorrect"));
       card.infos = par ? [pm("i_pair")] : [];
       card.raw = texto;
+      card.more = more || "";
       result.cards.push(card);
       continue;
     }
@@ -165,6 +173,7 @@ function parseText(rawText, globalTags) {
     if (extraIssue) card.issues.push(extraIssue);
     card.infos = par ? [pm("i_pair")] : [];
     card.raw = texto;
+    card.more = more || "";
     result.cards.push(card);
   }
   result.nBasic = result.cards.filter((c) => c.kind === "basic").length;
@@ -180,10 +189,11 @@ function parseText(rawText, globalTags) {
 function exportTxtString(result, deckName) {
   const campo = (s) => s.replace(/\t/g, " ").replace(/\n/g, "<br>");
   const lines = ["#separator:tab", "#html:true", "#notetype column:1",
-                 "#deck column:2", "#deck:" + deckName, "#tags column:5"];
+                 "#deck column:2", "#deck:" + deckName, "#tags column:6"];
   for (const c of cardsParaExportar(result.cards)) {
     lines.push([c.kind === "cloze" ? "Cloze" : "Basic", deckName,
-                campo(c.front), campo(c.back), c.tags.join(" ")].join("\t"));
+                campo(c.front), campo(c.back), campo(c.more || ""),
+                c.tags.join(" ")].join("\t"));
   }
   return lines.join("\n") + "\n";
 }
@@ -202,8 +212,14 @@ function mcFields(c) {
   return { front, back };
 }
 
-/* Cartão -> linha de texto do editor (fonte única de verdade). */
+/* Cartão -> linha(s) de texto do editor (fonte única de verdade).
+   A explicação "Saiba mais" volta como uma linha iniciada por "+". */
 function cardToLine(c) {
+  const base = cardToLineBase(c);
+  return c.more ? base + "\n+ " + c.more.replace(/<br>/g, "\n+ ") : base;
+}
+
+function cardToLineBase(c) {
   if (c.kind === "mc") {
     const ops = c.options.map((o, i) => (i === c.correct ? o + " *" : o)).join(" | ");
     const campos = ["[MC] " + c.front, ops];
@@ -220,7 +236,7 @@ function cardToLine(c) {
 /* Cartões prontos para exportação (MC vira Básico com HTML). */
 function cardsParaExportar(cards) {
   return cards.map((c) => c.kind === "mc"
-    ? Object.assign({}, c, { kind: "basic" }, mcFields(c))
+    ? Object.assign({}, c, { kind: "basic" }, mcFields(c), { more: c.more || "" })
     : c);
 }
 
