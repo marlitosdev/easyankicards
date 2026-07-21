@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.9.1";
+const VERSAO = "7.0.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -461,8 +461,8 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
   const guardado = localStorage.getItem("eac_titulo");
-  const deckNome = guardado !== null ? guardado
-    : (localStorage.getItem("eac_deck") || "Meu Baralho").split("::").pop().trim();
+  const deckNome = c.titulo || (guardado !== null ? guardado
+    : (localStorage.getItem("eac_deck") || "Meu Baralho").split("::").pop().trim());
 
   if (p.cab && deckNome) {
     const pill = document.createElement("div");
@@ -564,16 +564,30 @@ function tipoAtual(c) {
   return CLOZE_RE.test(c.front) ? "cloze" : "basic";
 }
 
+function semLacunas(txt) {
+  return txt.replace(/\{\{c\d+::([\s\S]*?)\}\}/g, (m, i) => i.split("::")[0]);
+}
+
+function primeiraLacuna(txt) {
+  const m = txt.match(/\{\{c\d+::([\s\S]*?)\}\}/);
+  return m ? m[1].split("::")[0].trim() : "";
+}
+
+/* Conversão entre tipos: mostra em palavras simples o que vai acontecer
+ * (com o antes/depois quando cabe) e só converte após confirmação. */
 function converterTipo(c, r, idx, destino, campos) {
   if (destino === tipoAtual(c)) return;
   const novo = Object.assign({}, c, campos);
 
   if (destino === "cloze") {
     if (!CLOZE_RE.test(novo.front)) {
-      // usa a resposta como lacuna: "A capital é" + "Paris" -> "A capital é {{c1::Paris}}"
       const resp = (novo.back || "").trim();
-      if (!resp) { alert(t("convert_need_back")); return; }
-      novo.front = novo.front.trim().replace(/[.?!]*$/, "") + " {{c1::" + resp + "}}.";
+      if (!resp) { alert(t("conv_need_back")); return; }
+      const antes = novo.front.trim() + "  ::  " + resp;
+      const frente = novo.front.trim().replace(/\s*[.?!]+\s*$/, "") +
+                     " {{c1::" + resp + "}}.";
+      if (!confirm(t("conv_to_cloze", { antes, depois: frente }))) return;
+      novo.front = frente;
       novo.back = "";
     }
     novo.kind = "cloze";
@@ -581,24 +595,24 @@ function converterTipo(c, r, idx, destino, campos) {
 
   } else if (destino === "mc") {
     const correta = novo.kind === "mc"
-      ? (novo.options || [])[novo.correct] || ""
-      : (novo.back || "").trim() ||
-        (novo.front.match(/\{\{c\d+::([\s\S]*?)\}\}/) || [])[1] || "";
-    novo.front = novo.front.replace(/\{\{c\d+::([\s\S]*?)\}\}/g,
-      (m, i) => i.split("::")[0]);
-    novo.options = [correta.split("::")[0].trim(), ""];
+      ? ((novo.options || [])[novo.correct] || "")
+      : ((novo.back || "").trim() || primeiraLacuna(novo.front));
+    if (!correta) { alert(t("conv_need_answer")); return; }
+    if (!confirm(t("conv_to_mc", { resposta: correta }))) return;
+    novo.front = semLacunas(novo.front);
+    novo.options = [correta, ""];
     novo.correct = 0;
     novo.back = "";
     novo.kind = "mc";
 
-  } else {   // básico
-    if (novo.kind === "mc")
+  } else {
+    const explica = t(novo.kind === "mc" ? "conv_basic_from_mc" : "conv_basic_from_cloze");
+    if (!confirm(t("conv_to_basic", { explica }))) return;
+    if (novo.kind === "mc") {
       novo.back = (novo.options || [])[novo.correct] || novo.back || "";
-    else if (CLOZE_RE.test(novo.front)) {
-      const m = novo.front.match(/\{\{c\d+::([\s\S]*?)\}\}/);
-      if (m && !novo.back) novo.back = m[1].split("::")[0].trim();
-      novo.front = novo.front.replace(/\{\{c\d+::([\s\S]*?)\}\}/g,
-        (m0, i) => i.split("::")[0]);
+    } else if (CLOZE_RE.test(novo.front)) {
+      if (!novo.back) novo.back = primeiraLacuna(novo.front);
+      novo.front = semLacunas(novo.front);
     }
     novo.kind = "basic";
     delete novo.options; delete novo.correct;
@@ -693,7 +707,9 @@ function listarLacunas(txt) {
 function montarEdicao(div, c, r, idx) {
   barraTipo(div, c, r, idx, () => ({
     front: inFrente.value.trim(), back: inVerso.value.trim(),
-    more: inMais.value.trim().replace(/\n+/g, "<br>"), tags: parseTags(inTags.value),
+    more: inMais.value.trim().replace(/\n+/g, "<br>"),
+    ownTags: parseTags(inTags.value), tags: parseTags(inTags.value),
+    titulo: inTitulo.value.trim(),
   }));
   const inFrente = campoEditavel(div, "field_front", "hint_front", c.front, true);
   botoesLacuna(div, inFrente);          // marcar/limpar {{c1::...}} na seleção
@@ -786,7 +802,10 @@ function montarEdicao(div, c, r, idx) {
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
   const inMais = campoEditavel(div, "field_more", "hint_more",
     (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
-  const inTags = campoEditavel(div, "field_tags", "hint_tags", c.tags.join(", "), false);
+  const inTitulo = campoEditavel(div, "field_title", "hint_title", c.titulo || "", false);
+  // tags PRÓPRIAS (as globais entram na exportação, não são editadas aqui)
+  const inTags = campoEditavel(div, "field_tags", "hint_tags",
+    (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {
     let front = inFrente.value.trim();
@@ -808,8 +827,10 @@ function montarEdicao(div, c, r, idx) {
     });
     r.cards[idx] = Object.assign({}, c, {
       kind: CLOZE_RE.test(front) ? "cloze" : "basic",
-      front, back: inVerso.value.trim(), tags: parseTags(inTags.value),
+      front, back: inVerso.value.trim(),
+      ownTags: parseTags(inTags.value), tags: parseTags(inTags.value),
       more: inMais.value.trim().replace(/\n+/g, "<br>"),
+      titulo: inTitulo.value.trim(),
     });
     editando = null;
     reescreverEditor(r.cards, r.warnings);
@@ -825,7 +846,9 @@ function montarEdicao(div, c, r, idx) {
 function montarEdicaoMC(div, c, r, idx) {
   barraTipo(div, c, r, idx, () => ({
     front: inFrente.value.trim(), back: inVerso.value.trim(),
-    more: inMais.value.trim().replace(/\n+/g, "<br>"), tags: parseTags(inTags.value),
+    more: inMais.value.trim().replace(/\n+/g, "<br>"),
+    ownTags: parseTags(inTags.value), tags: parseTags(inTags.value),
+    titulo: inTitulo.value.trim(),
     options: inputs.map((i) => i.value.trim()).filter(Boolean),
     correct: Math.min(parseInt(sel.value, 10) || 0,
                       Math.max(inputs.filter((i) => i.value.trim()).length - 1, 0)),
@@ -864,15 +887,20 @@ function montarEdicaoMC(div, c, r, idx) {
   const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
   const inMais = campoEditavel(div, "field_more", "hint_more",
     (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
-  const inTags = campoEditavel(div, "field_tags", "hint_tags", c.tags.join(", "), false);
+  const inTitulo = campoEditavel(div, "field_title", "hint_title", c.titulo || "", false);
+  // tags PRÓPRIAS (as globais entram na exportação, não são editadas aqui)
+  const inTags = campoEditavel(div, "field_tags", "hint_tags",
+    (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {
     const options = inputs.map((i) => i.value.trim()).filter(Boolean);
     let correct = Math.min(parseInt(sel.value, 10), Math.max(options.length - 1, 0));
     r.cards[idx] = Object.assign({}, c, {
       front: inFrente.value.trim(), options, correct,
-      back: inVerso.value.trim(), tags: parseTags(inTags.value),
+      back: inVerso.value.trim(),
+      ownTags: parseTags(inTags.value), tags: parseTags(inTags.value),
       more: inMais.value.trim().replace(/\n+/g, "<br>"),
+      titulo: inTitulo.value.trim(),
     });
     editando = null;
     reescreverEditor(r.cards, r.warnings);

@@ -51,6 +51,11 @@ function agruparLinhas(rawText) {
     if (s.startsWith("#")) continue;
     /* Linha começando com "+" = explicação extra ("Saiba mais") do cartão
        anterior. No Anki vira um link que o aluno clica para expandir. */
+    /* Linha começando com "@" = título impresso no topo DESTE cartão. */
+    if (s.startsWith("@") && atual !== null) {
+      atual.titulo = s.replace(/^@\s*/, "");
+      continue;
+    }
     if (s.startsWith("+") && atual !== null) {
       const txt = s.replace(/^\+\s*/, "");
       atual.more = atual.more ? atual.more + "<br>" + txt : txt;
@@ -107,7 +112,7 @@ function parseText(rawText, globalTags) {
     result.warnLines.push(n);
     if (texto !== undefined) result.ignorados.push({ line: n, texto });
   };
-  for (const { linha, texto, par, more } of agruparLinhas(rawText)) {
+  for (const { linha, texto, par, more, titulo } of agruparLinhas(rawText)) {
     /* Múltipla escolha: [MC] Pergunta :: op1 | op2 * | op3 :: explicação :: tags
        (o * marca a alternativa correta). Vira cartão Básico na exportação. */
     if (texto.startsWith("[MC]")) {
@@ -126,13 +131,15 @@ function parseText(rawText, globalTags) {
       const tags = parts.length >= 4 ? parseTags(parts[3]) : [];
       const card = { kind: "mc", front: question, back, options,
                      correct: correct === -1 ? 0 : correct,
-                     tags: globalTags.concat(tags), line: linha, issues: [] };
+                     tags: globalTags.concat(tags), ownTags: tags,
+                     line: linha, issues: [] };
       if (!question) { avisar(pm("w_empty_field", { n: linha }), linha, texto); continue; }
       if (options.length < 2) card.issues.push(pm("i_mc_fewopts"));
       if (correct === -1) card.issues.push(pm("i_mc_nocorrect"));
       card.infos = par ? [pm("i_pair")] : [];
       card.raw = texto;
       card.more = more || "";
+      card.titulo = titulo || "";
       result.cards.push(card);
       continue;
     }
@@ -160,20 +167,23 @@ function parseText(rawText, globalTags) {
     let card;
     if (isCloze) {
       if (!front) { avisar(pm("w_cloze_empty", { n: linha }), linha, texto); continue; }
-      card = { kind: "cloze", front, back, tags: globalTags.concat(tags), line: linha, issues: [] };
+      card = { kind: "cloze", front, back, tags: globalTags.concat(tags),
+               ownTags: tags, line: linha, issues: [] };
     } else {
       if (parts.length < 2) {
         avisar(pm("w_no_delim", { n: linha, c: "'" + texto.slice(0, 60) + "'" }), linha, texto);
         continue;
       }
       if (!front || !back) { avisar(pm("w_empty_field", { n: linha }), linha, texto); continue; }
-      card = { kind: "basic", front, back, tags: globalTags.concat(tags), line: linha, issues: [] };
+      card = { kind: "basic", front, back, tags: globalTags.concat(tags),
+               ownTags: tags, line: linha, issues: [] };
     }
     card.issues = checarSuspeitas(card, parts);
     if (extraIssue) card.issues.push(extraIssue);
     card.infos = par ? [pm("i_pair")] : [];
     card.raw = texto;
     card.more = more || "";
+    card.titulo = titulo || "";
     result.cards.push(card);
   }
   result.nBasic = result.cards.filter((c) => c.kind === "basic").length;
@@ -215,21 +225,31 @@ function mcFields(c) {
 /* Cartão -> linha(s) de texto do editor (fonte única de verdade).
    A explicação "Saiba mais" volta como uma linha iniciada por "+". */
 function cardToLine(c) {
-  const base = cardToLineBase(c);
-  return c.more ? base + "\n+ " + c.more.replace(/<br>/g, "\n+ ") : base;
+  let s = cardToLineBase(c);
+  if (c.titulo) s += "\n@ " + c.titulo;
+  if (c.more) s += "\n+ " + c.more.replace(/<br>/g, "\n+ ");
+  return s;
+}
+
+/* Tags que pertencem ao cartão (as globais NÃO são gravadas no texto,
+ * senão elas se duplicariam a cada reescrita). */
+function tagsProprias(c) {
+  return c.ownTags !== undefined ? c.ownTags : c.tags;
 }
 
 function cardToLineBase(c) {
   if (c.kind === "mc") {
+    const tg = tagsProprias(c);
     const ops = c.options.map((o, i) => (i === c.correct ? o + " *" : o)).join(" | ");
     const campos = ["[MC] " + c.front, ops];
-    if (c.back || c.tags.length) campos.push(c.back);
-    if (c.tags.length) campos.push(c.tags.join(", "));
+    if (c.back || tg.length) campos.push(c.back);
+    if (tg.length) campos.push(tg.join(", "));
     return campos.join(" :: ");
   }
+  const tg = tagsProprias(c);
   const campos = [c.front];
   if (c.back || c.kind === "basic") campos.push(c.back);
-  if (c.tags.length) campos.push(c.tags.join(", "));
+  if (tg.length) campos.push(tg.join(", "));
   return campos.join(" :: ");
 }
 
