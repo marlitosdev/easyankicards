@@ -99,8 +99,11 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   vertical-align:middle;line-height:1}
 .card textarea,.card input[type=text]{width:100%;border:1px solid var(--borda);border-radius:6px;
   padding:6px;background:var(--campo);color:var(--texto);font-size:13px;margin-top:2px}
-.card textarea.campo-grande{min-height:190px;resize:vertical;
-  border-color:#2563eb;background:var(--campo)}
+.card textarea{min-height:54px;overflow:hidden;resize:vertical}
+.card textarea.campo-grande{min-height:64px;border-color:#2563eb;background:var(--campo)}
+.tipo-linha{display:flex;gap:5px;margin:4px 0 2px;flex-wrap:wrap}
+.tipo-linha .btn{flex:1 1 auto;padding:5px 8px;font-size:11.5px;opacity:.55}
+.tipo-linha .btn.ativa{opacity:1;outline:2px solid rgba(255,255,255,.35)}
 .card .mini-lbl{font-size:11px;color:var(--sutil);margin-top:6px;display:block}
 .card .acoes{display:flex;gap:6px;margin-top:8px}
 .card .btn{padding:5px 10px;font-size:12.5px}
@@ -323,6 +326,14 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     <div id="avisoTopo">
       <div id="avisoTopoTitulo" class="av-tit"></div>
       <div id="avisoTopoTexto" class="av-txt"></div>
+      <label for="tituloExp" style="font-size:11.5px;margin-top:7px;display:block">
+        <span data-i18n="title_label"></span>
+        <button type="button" class="ic-ajuda" id="ajudaTitulo">?</button>
+      </label>
+      <input type="text" id="tituloExp">
+      <button type="button" class="btn btn-cinza" id="btnTituloDeck"
+              style="margin-top:5px;padding:4px 9px;font-size:11px"
+              data-i18n="title_use_deck"></button>
       <div id="avisoTopoDemoLbl" class="av-lbl"></div>
       <div id="avisoTopoDemo"></div>
       <div id="avisoTopoTags" class="av-txt" style="margin-top:5px"></div>
@@ -393,7 +404,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
         </select>
         <label><span id="lblFrente" data-i18n="field_front"></span>
           <button type="button" class="ic-ajuda" data-hint="hint_front">?</button></label>
-        <textarea id="novoFrente" style="min-height:64px"></textarea>
+        <textarea id="novoFrente" style="min-height:60px;overflow:hidden"></textarea>
         <div id="lacunaArea" style="display:none;margin-top:4px">
           <button type="button" class="btn btn-ciano" id="btnMarcarNovo" data-i18n="btn_mark_blank"></button>
           <button type="button" class="btn btn-cinza" id="btnLimparNovo" data-i18n="btn_clear_blanks"></button>
@@ -424,10 +435,10 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
         </div>
         <label style="margin-top:8px"><span data-i18n="field_back"></span>
           <button type="button" class="ic-ajuda" data-hint="hint_back">?</button></label>
-        <textarea id="novoVerso" style="min-height:52px"></textarea>
+        <textarea id="novoVerso" style="min-height:54px;overflow:hidden"></textarea>
         <label style="margin-top:8px"><span data-i18n="field_more"></span>
           <button type="button" class="ic-ajuda" data-hint="hint_more">?</button></label>
-        <textarea id="novoMais" style="min-height:150px;resize:vertical"></textarea>
+        <textarea id="novoMais" style="min-height:60px;overflow:hidden;resize:vertical"></textarea>
         <label style="margin-top:8px"><span data-i18n="field_tags"></span>
           <button type="button" class="ic-ajuda" data-hint="hint_tags">?</button></label>
         <input type="text" id="novoTags">

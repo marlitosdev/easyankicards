@@ -3,7 +3,7 @@
  * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
  * seleção, análise do texto com críticas e correções automáticas. */
 
-const VERSAO = "6.8.1";
+const VERSAO = "6.9.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -95,6 +95,7 @@ function aplicarTextos() {
   $("versao").textContent = "v" + VERSAO;
   $("tagsExp").placeholder = t("tags_placeholder");
   $("deckExp").placeholder = t("deck_placeholder");
+  $("tituloExp").placeholder = t("title_ph");
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
   rotularPrevia();
@@ -105,6 +106,15 @@ function aplicarTextos() {
 /* --------------------------- destino Anki --------------------------- */
 
 function nomeDeck() { return $("deckExp").value.trim() || "Meu Baralho"; }
+
+/* Título impresso no topo dos cartões. Por padrão acompanha a última
+ * parte do nome do baralho, mas o usuário pode escrever outro. */
+function tituloCartao() {
+  const t0 = $("tituloExp").value;
+  if (t0.trim() !== "" || $("tituloExp").dataset.tocado === "1") return t0.trim();
+  const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
+  return partes.length ? partes[partes.length - 1] : "";
+}
 
 function atualizarDestino() {
   const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
@@ -450,9 +460,11 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   const wrap = document.createElement("div");
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
-  const deckNome = (localStorage.getItem("eac_deck") || "Meu Baralho").split("::").pop().trim();
+  const guardado = localStorage.getItem("eac_titulo");
+  const deckNome = guardado !== null ? guardado
+    : (localStorage.getItem("eac_deck") || "Meu Baralho").split("::").pop().trim();
 
-  if (p.cab) {
+  if (p.cab && deckNome) {
     const pill = document.createElement("div");
     pill.textContent = deckNome;
     pill.style.cssText = "background:" + p.cab + ";color:#fff;font-weight:700;" +
@@ -520,7 +532,104 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   div.append(wrap);
 }
 
+
+/* ---------------- conversão de tipo durante a edição ---------------- */
+
+/* Mostra os três tipos como botões; o atual fica destacado. Trocar
+ * converte o cartão na hora, aproveitando o texto já escrito, e reabre
+ * o editor no formato novo (o texto do editor continua sendo a fonte). */
+function barraTipo(div, c, r, idx, lerCampos) {
+  const lbl = document.createElement("span");
+  lbl.className = "mini-lbl";
+  lbl.textContent = t("convert_label") + " ";
+  const aj = document.createElement("button");
+  aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
+  aj.onclick = () => alert(t("convert_hint"));
+  lbl.append(aj);
+  const linha = document.createElement("div");
+  linha.className = "tipo-linha";
+  [["basic", "type_basic", "btn-cinza"], ["cloze", "type_cloze", "btn-azul"],
+   ["mc", "type_mc", "btn-roxo"]].forEach(([tipo, chaveRot, cor]) => {
+    const b = document.createElement("button");
+    b.className = "btn " + cor + (tipoAtual(c) === tipo ? " ativa" : "");
+    b.textContent = t(chaveRot);
+    b.onclick = () => converterTipo(c, r, idx, tipo, lerCampos());
+    linha.append(b);
+  });
+  div.append(lbl, linha);
+}
+
+function tipoAtual(c) {
+  if (c.kind === "mc") return "mc";
+  return CLOZE_RE.test(c.front) ? "cloze" : "basic";
+}
+
+function converterTipo(c, r, idx, destino, campos) {
+  if (destino === tipoAtual(c)) return;
+  const novo = Object.assign({}, c, campos);
+
+  if (destino === "cloze") {
+    if (!CLOZE_RE.test(novo.front)) {
+      // usa a resposta como lacuna: "A capital é" + "Paris" -> "A capital é {{c1::Paris}}"
+      const resp = (novo.back || "").trim();
+      if (!resp) { alert(t("convert_need_back")); return; }
+      novo.front = novo.front.trim().replace(/[.?!]*$/, "") + " {{c1::" + resp + "}}.";
+      novo.back = "";
+    }
+    novo.kind = "cloze";
+    delete novo.options; delete novo.correct;
+
+  } else if (destino === "mc") {
+    const correta = novo.kind === "mc"
+      ? (novo.options || [])[novo.correct] || ""
+      : (novo.back || "").trim() ||
+        (novo.front.match(/\{\{c\d+::([\s\S]*?)\}\}/) || [])[1] || "";
+    novo.front = novo.front.replace(/\{\{c\d+::([\s\S]*?)\}\}/g,
+      (m, i) => i.split("::")[0]);
+    novo.options = [correta.split("::")[0].trim(), ""];
+    novo.correct = 0;
+    novo.back = "";
+    novo.kind = "mc";
+
+  } else {   // básico
+    if (novo.kind === "mc")
+      novo.back = (novo.options || [])[novo.correct] || novo.back || "";
+    else if (CLOZE_RE.test(novo.front)) {
+      const m = novo.front.match(/\{\{c\d+::([\s\S]*?)\}\}/);
+      if (m && !novo.back) novo.back = m[1].split("::")[0].trim();
+      novo.front = novo.front.replace(/\{\{c\d+::([\s\S]*?)\}\}/g,
+        (m0, i) => i.split("::")[0]);
+    }
+    novo.kind = "basic";
+    delete novo.options; delete novo.correct;
+  }
+
+  r.cards[idx] = novo;
+  reescreverEditor(r.cards, r.warnings);
+  reabrirEditor(idx);
+  toast("toast_converted");
+}
+
+/* Reabre o editor no mesmo cartão depois que o texto foi reescrito. */
+function reabrirEditor(idx) {
+  const novoR = parseAtual();
+  editando = novoR.cards[idx] ? chave(novoR.cards[idx]) : null;
+  preview();
+}
+
 /* --------------------------- edição inline -------------------------- */
+
+/* Faz o campo crescer conforme o usuário escreve, sempre com uma linha
+ * de folga — começa compacto e nunca precisa de barra de rolagem. */
+function autoCrescer(el) {
+  const ajustar = () => {
+    el.style.height = "auto";
+    el.style.height = (el.scrollHeight + 22) + "px";   // ~1 linha de margem
+  };
+  el.addEventListener("input", ajustar);
+  requestAnimationFrame(ajustar);
+  return el;
+}
 
 function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
   opcoes = opcoes || {};
@@ -541,6 +650,7 @@ function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
   campo.value = valor;
   if (opcoes.grande) campo.classList.add("campo-grande");
   pai.append(lbl, dica, campo);
+  if (multiline) autoCrescer(campo);
   return campo;
 }
 
@@ -581,6 +691,10 @@ function listarLacunas(txt) {
 }
 
 function montarEdicao(div, c, r, idx) {
+  barraTipo(div, c, r, idx, () => ({
+    front: inFrente.value.trim(), back: inVerso.value.trim(),
+    more: inMais.value.trim().replace(/\n+/g, "<br>"), tags: parseTags(inTags.value),
+  }));
   const inFrente = campoEditavel(div, "field_front", "hint_front", c.front, true);
   botoesLacuna(div, inFrente);          // marcar/limpar {{c1::...}} na seleção
 
@@ -709,6 +823,13 @@ function montarEdicao(div, c, r, idx) {
 }
 
 function montarEdicaoMC(div, c, r, idx) {
+  barraTipo(div, c, r, idx, () => ({
+    front: inFrente.value.trim(), back: inVerso.value.trim(),
+    more: inMais.value.trim().replace(/\n+/g, "<br>"), tags: parseTags(inTags.value),
+    options: inputs.map((i) => i.value.trim()).filter(Boolean),
+    correct: Math.min(parseInt(sel.value, 10) || 0,
+                      Math.max(inputs.filter((i) => i.value.trim()).length - 1, 0)),
+  }));
   const inFrente = campoEditavel(div, "field_front", "hint_front", c.front, true);
   const lbl = document.createElement("span");
   lbl.className = "mini-lbl"; lbl.textContent = t("mc_options_label") + " ";
@@ -757,6 +878,7 @@ function montarEdicaoMC(div, c, r, idx) {
     reescreverEditor(r.cards, r.warnings);
     $("status").textContent = t("edited_status");
     preview();
+    toast("toast_edited");
   }, r, idx);
 }
 
@@ -882,7 +1004,7 @@ async function exportarApkg() {
   const r = validar(); if (!r) return;
   $("status").textContent = "…";
   try {
-    const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value);
+    const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value, tituloCartao());
     await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
     toast("toast_exported");
@@ -1151,7 +1273,13 @@ $("btnEmbaralharCloze").onclick = () => {
   toast("toast_shuffled");
 };
 
-$("btnNovoCartao").onclick = () => { rotularModelos(); aplicarModelo(); $("dlgNovo").showModal(); };
+["novoFrente", "novoVerso", "novoMais"].forEach((id) => autoCrescer($(id)));
+$("btnNovoCartao").onclick = () => {
+  rotularModelos(); aplicarModelo(); $("dlgNovo").showModal();
+  ["novoFrente", "novoVerso", "novoMais"].forEach((id) => {
+    const el = $(id); el.style.height = "auto"; el.style.height = (el.scrollHeight + 22) + "px";
+  });
+};
 $("selModelo").onchange = aplicarModelo;
 $("btnNovoFechar").onclick = () => $("dlgNovo").close();
 $("btnMarcarNovo").onclick = () => { marcarLacuna($("novoFrente")); atualizarNovoPreview(); toast("toast_blank"); };
@@ -1310,8 +1438,7 @@ function rotularEstilos() {
 function atualizarAvisoTopo() {
   const estilo = $("selEstilo").value;
   const p = PALETAS[estilo] || PALETAS.classic;
-  const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
-  const titulo = partes.length ? partes[partes.length - 1] : "";
+  const titulo = tituloCartao();
   const box = $("avisoTopo");
 
   if (!p.cab) {   // estilo Clássico: não imprime cabeçalho
@@ -1336,6 +1463,7 @@ function atualizarAvisoTopo() {
   demo.style.cssText = "background:" + p.fundo + ";padding:8px;border-radius:8px";
   const pill = document.createElement("div");
   pill.textContent = titulo || t("header_empty");
+  if (!titulo) pill.style.opacity = ".55";
   pill.style.cssText = "background:" + p.cab + ";color:#fff;font-weight:700;" +
     "text-align:center;padding:6px;border-radius:10px;font-size:13px;" +
     "box-shadow:1px 2px 3px rgba(0,0,0,.3);word-break:break-word";
@@ -1397,11 +1525,28 @@ $("btnExportConfirm").onclick = () => {
   localStorage.setItem("eac_deck", $("deckExp").value);
   localStorage.setItem("eac_tags", $("tagsExp").value);
   localStorage.setItem("eac_style", $("selEstilo").value);
+  localStorage.setItem("eac_titulo", tituloCartao());
   $("dlgExport").close();
   (exportTipo === "txt" ? exportarTxt : exportarApkg)();
 };
 $("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
 $("tagsExp").addEventListener("input", atualizarAvisoTopo);
+$("tituloExp").addEventListener("input", () => {
+  $("tituloExp").dataset.tocado = "1";
+  localStorage.setItem("eac_titulo", $("tituloExp").value.trim());
+  atualizarAvisoTopo();
+  if (modoPrevia() === "anki") preview();
+});
+$("btnTituloDeck").onclick = () => {
+  const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
+  $("tituloExp").value = partes.length ? partes[partes.length - 1] : "";
+  $("tituloExp").dataset.tocado = "1";
+  localStorage.setItem("eac_titulo", $("tituloExp").value);
+  atualizarAvisoTopo();
+  if (modoPrevia() === "anki") preview();
+};
+$("ajudaTitulo").onclick = () => alert(t("title_hint"));
+attachTip($("tituloExp"), "title_hint");
 $("btnCaminhoExp").onclick = async () => {
   await navigator.clipboard.writeText(nomeDeck());
   $("btnCaminhoExp").textContent = t("copy_path_done");
@@ -1409,6 +1554,8 @@ $("btnCaminhoExp").onclick = async () => {
 };
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
 $("tagsExp").value = localStorage.getItem("eac_tags") || "";
+const tituloSalvo = localStorage.getItem("eac_titulo");
+if (tituloSalvo !== null) { $("tituloExp").value = tituloSalvo; $("tituloExp").dataset.tocado = "1"; }
 $("selEstilo").value = localStorage.getItem("eac_style") || "classic";
 $("selEstiloPainel").value = $("selEstilo").value;
 function aplicarEstilo(v) {
