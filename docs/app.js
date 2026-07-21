@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.7.0";
+const VERSAO = "7.7.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -306,8 +306,12 @@ function renderSugestoes(r, raw) {
   correcaoPendente = temTituloGrudado(raw) ? corrigirTituloGrudado
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
     : (temMarcadores(raw) ? removerMarcadoresTexto : null));
-  const temProblema = !!correcaoPendente || r.warnings.length > 0 ||
-                      r.nSuspicious > 0 || precisaNormalizar(r);
+  // Ativa só o que "Corrigir erros" REALMENTE arruma:
+  //  - uma correção estrutural detectada, ou
+  //  - linhas ignoradas (podem virar comentário), ou
+  //  - cartões fora da forma canônica (reformatação).
+  // Cartão longo/duplicado é apenas AVISO — não acende o botão.
+  const temProblema = !!correcaoPendente || r.warnings.length > 0 || precisaNormalizar(r);
   atualizarBotaoCorrigir(temProblema);
 
   itens.slice(0, 6).forEach((it) => {
