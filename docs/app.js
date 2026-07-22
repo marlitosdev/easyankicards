@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.8.1";
+const VERSAO = "7.9.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -591,7 +591,7 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
 function renderCartaoEstilizado(div, c, mostrarResposta) {
   const p = PALETAS[localStorage.getItem("eac_style") || "classic"] || PALETAS.classic;
   const wrap = document.createElement("div");
-  wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
+  wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
   const deckNome = c.titulo || (localStorage.getItem("eac_titulo") || "");
 
@@ -2042,13 +2042,33 @@ $("btnAtualizar").onclick = () => {
 };
 $("btnDepois").onclick = () => $("barraUpdate").classList.remove("on");
 
+/* Pergunta a versão de um worker (com timeout). null se não responder. */
+function pedirVersaoSW(worker) {
+  return new Promise((resolve) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => resolve(e.data);
+    try { worker.postMessage("GET_VERSION", [ch.port2]); }
+    catch (e) { resolve(null); }
+    setTimeout(() => resolve(null), 1200);
+  });
+}
+
+/* Decide se mostra a faixa: SÓ quando o worker em espera tem versão
+ * DIFERENTE da que está rodando. Se for a mesma (espera redundante,
+ * causa do aviso repetido), ativa em silêncio sem incomodar. */
+async function avaliarWaiting(worker) {
+  if (!worker) return;
+  const v = await pedirVersaoSW(worker);
+  if (v && v !== VERSAO) mostrarBarraUpdate(worker);
+  else worker.postMessage("SKIP_WAITING");   // redundante: ativa calado
+}
+
 function vigiarInstalacao(reg) {
   const novo = reg.installing;
   if (!novo) return;
   novo.addEventListener("statechange", () => {
-    // "installed" com controller existente = atualização pronta e esperando
     if (novo.state === "installed" && navigator.serviceWorker.controller)
-      mostrarBarraUpdate(novo);
+      avaliarWaiting(novo);
   });
 }
 
@@ -2058,7 +2078,7 @@ async function procurarAtualizacao(manual) {
   try {
     await swReg.update();
     setTimeout(() => {
-      if (swReg.waiting) mostrarBarraUpdate(swReg.waiting);
+      if (swReg.waiting) avaliarWaiting(swReg.waiting);
       else if (manual) toast("update_none");
     }, 1200);
   } catch (e) { /* offline: silencioso */ }
@@ -2067,7 +2087,7 @@ async function procurarAtualizacao(manual) {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").then((reg) => {
     swReg = reg;
-    if (reg.waiting && navigator.serviceWorker.controller) mostrarBarraUpdate(reg.waiting);
+    if (reg.waiting && navigator.serviceWorker.controller) avaliarWaiting(reg.waiting);
     vigiarInstalacao(reg);
     reg.addEventListener("updatefound", () => vigiarInstalacao(reg));
     setInterval(() => procurarAtualizacao(false), 30 * 60 * 1000);
