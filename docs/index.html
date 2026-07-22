@@ -100,6 +100,18 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .card textarea,.card input[type=text]{width:100%;border:1px solid var(--borda);border-radius:6px;
   padding:6px;background:var(--campo);color:var(--texto);font-size:13px;margin-top:2px}
 .card textarea{min-height:54px;overflow:hidden;resize:vertical}
+/* Cada campo do cartão ganha uma faixa colorida à esquerda e uma
+   etiqueta com bolinha, para o usuário identificar o tipo num relance. */
+.campo-box{border-left:4px solid var(--cc, #999);padding-left:8px;margin-top:7px;
+  border-radius:0 6px 6px 0}
+.campo-box .mini-lbl{font-weight:700}
+.campo-box .pino{width:9px;height:9px;border-radius:50%;background:var(--cc);
+  display:inline-block;flex:none}
+.campo-frente{--cc:#2563eb}
+.campo-verso{--cc:#1a7f37}
+.campo-mais{--cc:#7c3aed}
+.campo-titulo{--cc:#e8940a}
+.campo-tags{--cc:#0e7490}
 .card textarea.campo-grande{min-height:64px;border-color:#2563eb;background:var(--campo)}
 .grupo-tog{width:100%;text-align:left;margin-top:8px;font-size:12px;
   background:var(--cinza);opacity:.9}
@@ -112,7 +124,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .tipo-linha{display:flex;gap:5px;margin:4px 0 2px;flex-wrap:wrap}
 .tipo-linha .btn{flex:1 1 auto;padding:5px 8px;font-size:11.5px;opacity:.55}
 .tipo-linha .btn.ativa{opacity:1;outline:2px solid rgba(255,255,255,.35)}
-.card .mini-lbl{font-size:11px;color:var(--sutil);margin-top:6px;display:block}
+.card .mini-lbl{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sutil);margin-top:6px;display:block}
 .card .acoes{display:flex;gap:6px;margin-top:8px}
 .card .btn{padding:5px 10px;font-size:12.5px}
 dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda);
@@ -386,8 +398,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     </div>
     <button type="button" class="btn btn-cinza" id="btnCaminhoExp"
             style="margin-bottom:10px" data-i18n="copy_path_btn"></button>
-    <label for="tagsExp" data-i18n="tags_label"></label>
-    <input type="text" id="tagsExp">
     <label for="selEstilo" style="margin-top:10px"><span data-i18n="style_label"></span>
       <button type="button" class="ic-ajuda" id="ajudaEstilo">?</button></label>
     <select id="selEstilo" style="width:100%;padding:8px;border-radius:8px">

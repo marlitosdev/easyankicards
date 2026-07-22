@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.7.1";
+const VERSAO = "7.8.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -119,7 +119,6 @@ function aplicarTextos() {
     el.textContent = t(el.dataset.i18n);
   });
   $("versao").textContent = "v" + VERSAO;
-  $("tagsExp").placeholder = t("tags_placeholder");
   $("deckExp").placeholder = t("deck_placeholder");
   $("tituloExp").placeholder = t("title_ph");
   $("editor").placeholder = t("paste_here");
@@ -425,8 +424,9 @@ function agendarPreview() {
 }
 
 function parseAtual() {
-  const globais = $("tagsExp").value.trim() ? parseTags($("tagsExp").value) : [];
-  return parseText($("editor").value, globais);
+  // Tags globais foram removidas: cada cartão usa apenas as PRÓPRIAS
+  // tags (o 3º campo do texto). Isso elimina tags "fantasma" no topo.
+  return parseText($("editor").value, []);
 }
 
 function reescreverEditor(cards, warnings) {
@@ -832,11 +832,23 @@ function autoCrescer(el) {
   return el;
 }
 
+const CAMPO_CLASSE = {
+  field_front: "campo-frente", field_back: "campo-verso",
+  field_more: "campo-mais", field_title: "campo-titulo", field_tags: "campo-tags",
+};
+
 function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
   opcoes = opcoes || {};
+  const paiReal = pai;
+  // cada campo vive num "box" com faixa colorida à esquerda e etiqueta
+  const box = document.createElement("div");
+  box.className = "campo-box " + (CAMPO_CLASSE[rotuloKey] || "");
+  pai = box;
   const lbl = document.createElement("span");
   lbl.className = "mini-lbl";
-  lbl.textContent = t(rotuloKey) + " ";
+  const pino = document.createElement("span");
+  pino.className = "pino";
+  lbl.append(pino, document.createTextNode(t(rotuloKey) + " "));
   const aj = document.createElement("button");
   aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
   const dica = document.createElement("div");
@@ -851,6 +863,7 @@ function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
   campo.value = valor;
   if (opcoes.grande) campo.classList.add("campo-grande");
   pai.append(lbl, dica, campo);
+  paiReal.append(box);
   if (multiline) autoCrescer(campo);
   return campo;
 }
@@ -1729,7 +1742,6 @@ $("selIdioma").onchange = () => {
   if ($("editor").value.trim() === exemploAntigo) $("editor").value = t("example");
   aplicarTextos(); preview();
 };
-$("tagsExp").addEventListener("input", agendarPreview);
 $("editor").oninput = () => {
   flashLinha = $("editor").value.slice(0, $("editor").selectionStart).split("\n").length;
   renderDestaque();
@@ -1869,10 +1881,9 @@ function atualizarAvisoTopo() {
     "text-align:center;padding:6px;border-radius:10px;font-size:13px;" +
     "box-shadow:1px 2px 3px rgba(0,0,0,.3);word-break:break-word";
   demo.append(pill);
-  const tagsTxt = $("tagsExp").value.trim();
   if (p.sub) {
     const sub = document.createElement("div");
-    sub.textContent = tagsTxt ? parseTags(tagsTxt).join("  ·  ") : "tags";
+    sub.textContent = "tags";
     sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +
       ";font-style:italic;text-align:center;font-size:10px;padding:4px;" +
       "border-radius:8px 8px 0 0;margin-top:4px";
@@ -1924,14 +1935,12 @@ $("btnApkg").onclick = () => abrirExport("apkg");
 $("btnExportFechar").onclick = () => $("dlgExport").close();
 $("btnExportConfirm").onclick = () => {
   localStorage.setItem("eac_deck", $("deckExp").value);
-  localStorage.setItem("eac_tags", $("tagsExp").value);
   localStorage.setItem("eac_style", $("selEstilo").value);
   localStorage.setItem("eac_titulo", tituloCartao());
   $("dlgExport").close();
   (exportTipo === "txt" ? exportarTxt : exportarApkg)();
 };
 $("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
-$("tagsExp").addEventListener("input", atualizarAvisoTopo);
 $("tituloExp").addEventListener("input", () => {
   localStorage.setItem("eac_titulo", $("tituloExp").value.trim());
   atualizarAvisoTopo();
@@ -1952,7 +1961,6 @@ $("btnCaminhoExp").onclick = async () => {
   setTimeout(() => { $("btnCaminhoExp").textContent = t("copy_path_btn"); }, 2000);
 };
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
-$("tagsExp").value = localStorage.getItem("eac_tags") || "";
 const tituloSalvo = localStorage.getItem("eac_titulo");
 if (tituloSalvo !== null) $("tituloExp").value = tituloSalvo;
 $("selEstilo").value = localStorage.getItem("eac_style") || "classic";
