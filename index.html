@@ -100,11 +100,35 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .card textarea,.card input[type=text]{width:100%;border:1px solid var(--borda);border-radius:6px;
   padding:6px;background:var(--campo);color:var(--texto);font-size:13px;margin-top:2px}
 .card textarea{min-height:54px;overflow:hidden;resize:vertical}
+/* Cada campo do cartão ganha uma faixa colorida à esquerda e uma
+   etiqueta com bolinha, para o usuário identificar o tipo num relance. */
+/* Cada campo do cartão em edição ganha uma faixa colorida à esquerda,
+   um fundo bem leve na cor do campo e uma etiqueta com bolinha, para
+   identificar o tipo (frente/verso/etc.) num relance. */
+.campo-box{border-left:5px solid var(--cc, #999);padding:5px 8px;margin-top:8px;
+  border-radius:0 7px 7px 0;background:var(--cc-bg, transparent)}
+.campo-box .mini-lbl{font-weight:800;color:var(--cc);font-size:11px;
+  text-transform:uppercase;letter-spacing:.4px}
+.campo-box .pino{width:10px;height:10px;border-radius:50%;background:var(--cc);
+  display:inline-block;flex:none}
+.campo-frente{--cc:#2563eb;--cc-bg:rgba(37,99,235,.07)}
+.campo-verso{--cc:#1a7f37;--cc-bg:rgba(26,127,55,.07)}
+.campo-mais{--cc:#7c3aed;--cc-bg:rgba(124,58,237,.07)}
+.campo-titulo{--cc:#e8940a;--cc-bg:rgba(232,148,10,.07)}
+.campo-tags{--cc:#0e7490;--cc-bg:rgba(14,116,144,.07)}
 .card textarea.campo-grande{min-height:64px;border-color:#2563eb;background:var(--campo)}
+.grupo-tog{width:100%;text-align:left;margin-top:8px;font-size:12px;
+  background:var(--cinza);opacity:.9}
+.lac-aviso{font-size:11px;font-style:italic;margin:4px 0;line-height:1.35}
+.lac-aviso.ok{color:#4caf50}
+.lac-aviso.mid{color:#e8940a}
+.lac-aviso.bad{color:#dc2626;font-weight:600}
+.lac-ordem{font-size:11px;color:var(--sutil);margin-top:4px;line-height:1.4}
+.lac-ordem b{color:#4caf50}
 .tipo-linha{display:flex;gap:5px;margin:4px 0 2px;flex-wrap:wrap}
 .tipo-linha .btn{flex:1 1 auto;padding:5px 8px;font-size:11.5px;opacity:.55}
 .tipo-linha .btn.ativa{opacity:1;outline:2px solid rgba(255,255,255,.35)}
-.card .mini-lbl{font-size:11px;color:var(--sutil);margin-top:6px;display:block}
+.card .mini-lbl{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sutil);margin-top:6px;display:block}
 .card .acoes{display:flex;gap:6px;margin-top:8px}
 .card .btn{padding:5px 10px;font-size:12.5px}
 dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda);
@@ -154,6 +178,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 #avisoTopo .av-txt{font-size:11.5px;color:var(--texto);opacity:.9;line-height:1.35}
 #avisoTopo .av-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;
   color:var(--sutil);font-weight:700;margin:7px 0 3px}
+.linha-corrigir{margin:6px 0 2px}
+.linha-corrigir .btn{width:100%;padding:9px}
+@keyframes pulsoCorrigir{
+  0%,100%{box-shadow:0 0 0 0 rgba(232,148,10,.65)}
+  50%{box-shadow:0 0 0 7px rgba(232,148,10,0)}}
+#btnNormalizar.ativo{background:#e8940a;animation:pulsoCorrigir 1.8s ease-out infinite}
+#btnNormalizar:disabled{opacity:.45;cursor:default;animation:none}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:80;
   background:#1f2937;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;
   border-radius:20px;box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;
@@ -164,20 +195,38 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
 .editor-wrap{position:relative;background:var(--campo);border-radius:8px}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
-  color:transparent;caret-color:var(--texto);line-height:1.45}
-#editorHl{position:absolute;inset:0;margin:0;overflow:hidden;pointer-events:none;
-  white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;
-  border-radius:8px;padding:10px;font-family:ui-monospace,Consolas,monospace;
-  font-size:13px;line-height:1.45;color:var(--texto);z-index:0}
-#editor::selection{background:rgba(37,99,235,.35)}
+  color:var(--texto);caret-color:var(--texto)}
+/* A camada colorida e o campo precisam ter EXATAMENTE as mesmas métricas,
+   senão a seleção do texto aparece deslocada ao copiar. */
+#editorHl, .editor-wrap textarea{
+  font-family:ui-monospace,Consolas,"Courier New",monospace;
+  font-size:13px;line-height:1.5;letter-spacing:0;word-spacing:0;tab-size:2;
+  text-indent:0;text-rendering:auto;font-kerning:none;
+  padding:10px;border:1px solid transparent;border-radius:8px;
+  white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;
+  box-sizing:border-box;margin:0;
+  /* a MESMA calha de rolagem nos dois: sem isso a camada de trás fica
+     mais larga que o campo e as quebras de linha (e a seleção) saem
+     deslocadas */
+  overflow-y:scroll;scrollbar-gutter:stable}
+#editorHl{position:absolute;inset:0;pointer-events:none;
+  color:transparent;z-index:0;scrollbar-width:none}
+#editorHl::-webkit-scrollbar{width:0;height:0}
+.editor-wrap textarea{border-color:var(--borda);resize:vertical}
+.editor-wrap.sem-destaque #editorHl{display:none}
+.linha-editor{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
+.linha-editor .btn{padding:4px 10px;font-size:11.5px}
+.chk-hl{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--sutil)}
+.chk-hl input{width:15px;height:15px}
+#editor::selection{background:rgba(37,99,235,.45)}
 #editor::-moz-selection{background:rgba(37,99,235,.35)}
-.hl-delim{color:#ff9d2e;font-weight:700}
-:root[data-theme="light"] .hl-delim{color:#c2410c}
-:root[data-theme="light"] .hl-cloze{color:#1d4ed8}
-:root[data-theme="light"] .hl-mc{color:#6d28d9}
-.hl-cloze{color:#63a4ff;font-weight:600}
-.hl-mc{color:#b48bff;font-weight:700}
-.hl-com{color:var(--sutil)}
+.hl-delim{background:rgba(255,157,46,.30);border-radius:3px}
+:root[data-theme="light"] .hl-delim{background:rgba(194,65,12,.20)}
+:root[data-theme="light"] .hl-cloze{background:rgba(29,78,216,.16)}
+:root[data-theme="light"] .hl-mc{background:rgba(109,40,217,.16)}
+.hl-cloze{background:rgba(99,164,255,.25);border-radius:3px}
+.hl-mc{background:rgba(180,139,255,.30);border-radius:3px}
+.hl-com{opacity:.55}
 .hl-err{background:rgba(220,38,38,.18);border-radius:3px}
 .hl-warn{background:rgba(232,148,10,.18);border-radius:3px}
 #sugestoes{margin-top:8px;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
@@ -185,7 +234,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .sug .dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex:none}
 .dot-red{background:#dc2626}.dot-org{background:#e8940a}
 .dot-blue{background:#2563eb}.dot-green{background:#4caf50}
-.sug .btn{padding:3px 9px;font-size:11.5px;margin-left:6px}
+.sug{flex-wrap:wrap}
+.sug .btn{padding:4px 10px;font-size:11.5px;margin-left:0}
+.sug-acao{flex-basis:100%;display:flex;gap:6px;align-items:center;
+  margin:4px 0 2px 16px;flex-wrap:wrap}
+.sug-acao .rot{font-size:10.5px;opacity:.8}
 .card .mais{font-size:12px;margin-top:5px;background:rgba(37,99,235,.10);
   border-left:3px solid #2563eb;padding:6px 8px;border-radius:5px}
 .card .mais-cab{font-size:9.5px;font-weight:800;letter-spacing:.5px;
@@ -199,10 +252,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .rev-mask{background:#2563eb22;color:#2563eb;font-weight:700;border-radius:4px;padding:0 4px}
 .rev-certa{color:var(--verde);font-weight:700}
 @media(min-width:760px){
-  .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .duas-colunas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:12px;align-items:start}
   .duas-colunas .grupo:nth-child(2){position:sticky;top:8px}
   #cartoes{max-height:calc(100vh - 250px)}
 }
+.duas-colunas > *{min-width:0}          /* impede o grid de estourar */
+#cartoes{overflow-x:hidden}
+#cartoes .card, #cartoes .card *{max-width:100%;overflow-wrap:anywhere;
+  word-break:break-word}
+#novoPreview *{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
 </style>
 </head>
 <body>
@@ -227,11 +286,21 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div class="duas-colunas">
     <div class="grupo">
       <label data-i18n="editor_label"></label>
+      <div class="linha-editor">
+        <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
+        <button class="btn btn-cinza" id="btnCopiarTudo" data-i18n="copy_all"></button>
+        <button class="btn" id="btnApagarTudo" style="background:#b91c1c" data-i18n="clear_all"></button>
+        <label class="chk-hl"><input type="checkbox" id="chkDestaque" checked>
+          <span data-i18n="highlight_toggle"></span></label>
+      </div>
       <div class="editor-wrap">
         <pre id="editorHl" aria-hidden="true"></pre>
         <textarea id="editor" spellcheck="false"></textarea>
       </div>
       <div id="sugestoes"></div>
+      <div class="linha-corrigir">
+        <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
+      </div>
       <div class="toolbar-sec"><div class="cap" data-i18n="group_create"></div>
         <div class="toolbar">
           <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
@@ -246,7 +315,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
       <div class="toolbar-sec"><div class="cap" data-i18n="group_tools"></div>
         <div class="toolbar">
           <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
-          <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
         </div>
       </div>
     </div>
@@ -340,8 +408,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     </div>
     <button type="button" class="btn btn-cinza" id="btnCaminhoExp"
             style="margin-bottom:10px" data-i18n="copy_path_btn"></button>
-    <label for="tagsExp" data-i18n="tags_label"></label>
-    <input type="text" id="tagsExp">
     <label for="selEstilo" style="margin-top:10px"><span data-i18n="style_label"></span>
       <button type="button" class="ic-ajuda" id="ajudaEstilo">?</button></label>
     <select id="selEstilo" style="width:100%;padding:8px;border-radius:8px">
