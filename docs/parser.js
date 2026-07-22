@@ -93,7 +93,26 @@ function agruparLinhas(rawText) {
        modelos de IA costumam escrever o título na linha de cima. Quando
        vêm antes, ficam "pendentes" e são aplicadas ao próximo cartão. */
     if (s.startsWith("@")) {
-      const txt = s.replace(/^@\s*/, "");
+      const semArroba = s.replace(/^@\s*/, "");
+      // A linha do título contém também um cartão? (":: " ou lacuna)
+      const temCartaoJunto = hasDelim(semArroba) || CLOZE_START_RE.test(semArroba);
+      if (temCartaoJunto) {
+        const mMC = semArroba.match(/^([^\n]*?)\s+(\[MC\][\s\S]*)$/);
+        if (mMC && mMC[1].trim()) {
+          // separação exata: título antes do marcador [MC]
+          pendenteTitulo = mMC[1].trim();
+          atual = { linha: i + 1, texto: mMC[2].trim(), titulo: pendenteTitulo };
+          pendenteTitulo = null;
+          blocos.push(atual);
+          continue;
+        }
+        // ambíguo: preserva TUDO como cartão (nada se perde) e sinaliza
+        atual = { linha: i + 1, texto: semArroba, tituloGrudado: true };
+        if (pendenteMore) { atual.more = pendenteMore; pendenteMore = null; }
+        blocos.push(atual);
+        continue;
+      }
+      const txt = semArroba;
       // Olha a próxima linha com conteúdo: se for um cartão, o título é
       // DELE (padrão "@ título" acima do cartão); senão, é do atual.
       let prox = "";
@@ -114,9 +133,12 @@ function agruparLinhas(rawText) {
       }
       continue;
     }
-    if (s.startsWith("+")) {
-      const txt = s.replace(/^\+\s*/, "");
-      if (atual !== null) atual.more = atual.more ? atual.more + "<br>" + txt : txt;
+    if (s.startsWith("+") || /^\*\s+\S/.test(s)) {
+      const txt = s.replace(/^[+*]\s*/, "");
+      const dono = atual !== null ? atual
+                 : (blocos.length ? blocos[blocos.length - 1] : null);
+      // sem cartão anterior, guarda para o próximo (explicação escrita acima)
+      if (dono) dono.more = dono.more ? dono.more + "<br>" + txt : txt;
       else pendenteMore = pendenteMore ? pendenteMore + "<br>" + txt : txt;
       continue;
     }
@@ -190,7 +212,7 @@ function parseText(rawText, globalTags) {
     result.warnLines.push(n);
     if (texto !== undefined) result.ignorados.push({ line: n, texto });
   };
-  for (const { linha, texto, par, more, titulo } of agruparLinhas(rawText)) {
+  for (const { linha, texto, par, more, titulo, tituloGrudado } of agruparLinhas(rawText)) {
     /* Múltipla escolha: [MC] Pergunta :: op1 | op2 * | op3 :: explicação :: tags
        (o * marca a alternativa correta). Vira cartão Básico na exportação. */
     if (texto.startsWith("[MC]")) {
@@ -277,6 +299,7 @@ function parseText(rawText, globalTags) {
     if (extraIssue) card.issues.push(extraIssue);
     card.infos = par ? [pm("i_pair")] : [];
     if (card.avisoCloze) { card.infos.push(pm("i_cloze_moved")); delete card.avisoCloze; }
+    if (tituloGrudado) card.issues.push(pm("i_titulo_grudado"));
     card.raw = texto;
     card.more = more || "";
     card.titulo = titulo || "";
@@ -422,18 +445,17 @@ function corrigirTagsQueSaoTexto(raw) {
  * exatamente onde o título termina. Em casos ambíguos preferimos avisar
  * e deixar o usuário separar, em vez de cortar a frase no lugar errado. */
 const RE_TITULO_MC = /^[ \t]*@[ \t]*([^\n]*?)[ \t]+(\[MC\][\s\S]*)$/;
-const RE_TITULO_CARTAO = /^[ \t]*@[ \t]*([^\n]*?)[ \t]+((?:[^:\n]|:(?!:))*::[\s\S]*)$/;
 
 function corrigirTituloGrudado(raw) {
   return raw.split(/\r?\n/).map((linha) => {
-    const m = linha.match(RE_TITULO_MC) || linha.match(RE_TITULO_CARTAO);
+    const m = linha.match(RE_TITULO_MC);
     if (!m || !m[1].trim()) return linha;
     return "@ " + m[1].trim() + "\n" + m[2].trim();
   }).join("\n");
 }
 
 function temTituloGrudado(raw) {
-  return raw.split(/\r?\n/).some((l) => RE_TITULO_MC.test(l) || RE_TITULO_CARTAO.test(l));
+  return raw.split(/\r?\n/).some((l) => RE_TITULO_MC.test(l));
 }
 
 function temTagsQueSaoTexto(raw) {
