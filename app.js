@@ -1,9 +1,35 @@
-/* EasyAnkiCards PWA — camada de interface (v5.4).
- * Lógica de negócio em parser.js/anki.js; textos em i18n.js.
- * Novidades: múltipla escolha [MC], marcar/limpar lacunas cloze por
- * seleção, análise do texto com críticas e correções automáticas. */
+/* EasyAnkiCards PWA — camada de interface.
+ *
+ * ┌── MAPA DO ARQUIVO (na ordem em que aparece) ─────────────────────┐
+ * │ temas/cores          aplicarTema, aplicarCorLetra                │
+ * │ avisos               toast(), attachTip() (dica por hover/toque) │
+ * │ destino do baralho   nomeDeck, tituloCartao, atualizarDestino    │
+ * │ destaque do editor   renderDestaque() pinta "::", cloze, [MC] e  │
+ * │                      as linhas com erro (vermelho/laranja)       │
+ * │ sugestões            renderSugestoes() + irParaLinha() (atalho   │
+ * │                      "Ver no texto") + correções de um toque     │
+ * │ pré-visualização     preview(), renderCorpoCartao(),             │
+ * │                      renderCartaoEstilizado() ("como no Anki")   │
+ * │ edição               montarEdicao / montarEdicaoMC, barraTipo    │
+ * │                      (conversão entre tipos), painéis por lacuna │
+ * │ criação              MODELOS + montarLinhaNovo + preview ao vivo │
+ * │ revisão              revRender() (mini-Anki de conferência)      │
+ * │ exportação           validar, exportarTxt, exportarApkg          │
+ * │ atualização          faixa "nova versão" (service worker)        │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * REGRAS DE OURO ao mexer aqui:
+ *  1. Nenhuma regra de negócio nesta camada — ela mora em parser.js
+ *     e anki.js. Aqui é só tela.
+ *  2. Todo texto visível vem de t("chave") no i18n.js, nos DOIS
+ *     idiomas (há teste de paridade de chaves).
+ *  3. Editar um cartão = reescrever o TEXTO do editor
+ *     (reescreverEditor) e reprocessar; nunca manter estado paralelo.
+ *  4. Ao criar um id novo no HTML, lembre que há verificação
+ *     automática de que todo $("id") existe no index.html.
+ */
 
-const VERSAO = "7.2.0";
+const VERSAO = "7.8.2";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -93,9 +119,9 @@ function aplicarTextos() {
     el.textContent = t(el.dataset.i18n);
   });
   $("versao").textContent = "v" + VERSAO;
-  $("tagsExp").placeholder = t("tags_placeholder");
   $("deckExp").placeholder = t("deck_placeholder");
   $("tituloExp").placeholder = t("title_ph");
+  $("editor").placeholder = t("paste_here");
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
   rotularPrevia();
@@ -189,7 +215,54 @@ function renderDestaque() {
   $("editorHl").scrollTop = $("editor").scrollTop;
 }
 
+
+/* ------------------------------------------------------------------
+ * NAVEGAÇÃO ATÉ O PROBLEMA
+ * Leva o cursor do editor à linha com defeito, seleciona-a e rola a
+ * caixa até ela — o usuário vê exatamente onde precisa mexer, sem
+ * procurar. Usado pelos botões "Ver no texto" das sugestões e dos
+ * cartões marcados como VERIFICAR.
+ * ------------------------------------------------------------------ */
+
+function irParaLinha(n) {
+  const ed = $("editor");
+  const linhas = ed.value.split("\n");
+  if (n < 1 || n > linhas.length) return;
+  let ini = 0;
+  for (let i = 0; i < n - 1; i++) ini += linhas[i].length + 1;
+  const fim = ini + linhas[n - 1].length;
+  ed.focus();
+  ed.setSelectionRange(ini, fim);
+  // rola a caixa deixando a linha por volta do terço superior
+  const alturaLinha = parseFloat(getComputedStyle(ed).lineHeight) || 19;
+  ed.scrollTop = Math.max(0, (n - 3) * alturaLinha);
+  renderDestaque();
+  toast("toast_goto");
+}
+
+/* Botão pequeno reaproveitado nas sugestões e nos cartões. */
+function botaoMini(rotuloKey, cor, acao) {
+  const b = document.createElement("button");
+  b.className = "btn " + cor;
+  b.style.cssText = "padding:2px 8px;font-size:11px;margin-left:6px";
+  b.textContent = t(rotuloKey);
+  b.onclick = acao;
+  return b;
+}
+
 /* ---------------- sugestões automáticas (sem botão) ----------------- */
+
+/* Guarda o ajuste estrutural detectado para o botão "Corrigir erros"
+ * (o mesmo que as sugestões oferecem), ou null quando não há nada. */
+let correcaoPendente = null;
+
+/* Liga/desliga e destaca o botão conforme exista ou não algo a corrigir. */
+function atualizarBotaoCorrigir(temAlgo) {
+  const b = $("btnNormalizar");
+  b.disabled = !temAlgo;
+  b.classList.toggle("ativo", !!temAlgo);
+  b.textContent = temAlgo ? t("normalize_btn") : t("normalize_none");
+}
 
 function renderSugestoes(r, raw) {
   const box = $("sugestoes");
@@ -201,15 +274,44 @@ function renderSugestoes(r, raw) {
   const vistos = {};
   let longos = 0, dups = 0;
   r.cards.forEach((c) => {
-    if ((c.front + c.back).length > 220 && longos < 2) { itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }) }); longos++; }
+    if ((c.front + c.back).length > 220 && longos < 2) {
+      itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }), linha: c.line }); longos++;
+    }
     const k = c.front.toLowerCase().trim();
-    if (vistos[k] && dups < 2) { itens.push({ dot: "dot-org", txt: t("crit_dup", { a: vistos[k], b: c.line }) }); dups++; }
-    else if (!vistos[k]) vistos[k] = c.line;
+    if (vistos[k] && dups < 2) {
+      itens.push({ dot: "dot-org", txt: t("crit_dup", { a: vistos[k], b: c.line }), linha: c.line }); dups++;
+    } else if (!vistos[k]) vistos[k] = c.line;
+  });
+  // cartões marcados como VERIFICAR entram na lista com atalho
+  r.cards.filter((c) => c.issues.length).slice(0, 3).forEach((c) => {
+    itens.push({ dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line });
+  });
+  (r.warnLines || []).slice(0, 3).forEach((n, i) => {
+    itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n });
   });
   if (temMarcadores(raw))
     itens.push({ dot: "dot-org", txt: t("crit_bullets"),
                  fixTxt: t("fix_bullets"), fix: removerMarcadoresTexto });
+  if (temTagsQueSaoTexto(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_pairs_tags") || t("crit_bullets"),
+                 fixTxt: t("fix_tags_text"), fix: corrigirTagsQueSaoTexto });
+  if (temTituloGrudado(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
+                 fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
+
+  // o botão só fica ativo se houver correção automática OU cartão/linha
+  // com problema — evita o usuário clicar e não encontrar nada
+  correcaoPendente = temTituloGrudado(raw) ? corrigirTituloGrudado
+    : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
+    : (temMarcadores(raw) ? removerMarcadoresTexto : null));
+  // Ativa só o que "Corrigir erros" REALMENTE arruma:
+  //  - uma correção estrutural detectada, ou
+  //  - linhas ignoradas (podem virar comentário), ou
+  //  - cartões fora da forma canônica (reformatação).
+  // Cartão longo/duplicado é apenas AVISO — não acende o botão.
+  const temProblema = !!correcaoPendente || r.warnings.length > 0 || precisaNormalizar(r);
+  atualizarBotaoCorrigir(temProblema);
 
   itens.slice(0, 6).forEach((it) => {
     const div = document.createElement("div");
@@ -219,15 +321,21 @@ function renderSugestoes(r, raw) {
     const sp = document.createElement("span");
     sp.textContent = it.txt;
     div.append(dot, sp);
-    if (it.fix) {
-      const b = document.createElement("button");
-      b.className = "btn btn-azul"; b.textContent = it.fixTxt;
-      b.onclick = () => {
-        $("editor").value = it.fix($("editor").value);
-        $("status").textContent = t("applied_status");
-        preview();
-      };
-      div.append(b);
+    // Ações em linha própria (antes ficavam espremidas ao lado do texto)
+    if (it.linha || it.fix) {
+      const acoes = document.createElement("div");
+      acoes.className = "sug-acao";
+      if (it.linha) acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(it.linha)));
+      if (it.fix) {
+        // NÃO corrige direto: abre o Normalizar, onde o usuário vê
+        // antes/depois de cada mudança e escolhe o que aplicar.
+        acoes.append(botaoMini("fix_now", "btn-azul", () => abrirNormalizar(it.fix)));
+        const rot = document.createElement("span");
+        rot.className = "rot";
+        rot.textContent = t("use_normalize");
+        acoes.append(rot);
+      }
+      div.append(acoes);
     }
     box.append(div);
   });
@@ -316,8 +424,9 @@ function agendarPreview() {
 }
 
 function parseAtual() {
-  const globais = $("tagsExp").value.trim() ? parseTags($("tagsExp").value) : [];
-  return parseText($("editor").value, globais);
+  // Tags globais foram removidas: cada cartão usa apenas as PRÓPRIAS
+  // tags (o 3º campo do texto). Isso elimina tags "fantasma" no topo.
+  return parseText($("editor").value, []);
 }
 
 function reescreverEditor(cards, warnings) {
@@ -379,6 +488,7 @@ function preview() {
       bEd.className = "btn btn-cinza"; bEd.textContent = t("edit_btn");
       bEd.title = t("tip_editar");
       bEd.onclick = () => { editando = chave(c); preview(); };
+      if (c.issues.length) acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(c.line)));
       const bVer = document.createElement("button");
       const aberto = !respostasFechadas.has(chave(c));
       bVer.className = "btn btn-ciano";
@@ -481,7 +591,7 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
 function renderCartaoEstilizado(div, c, mostrarResposta) {
   const p = PALETAS[localStorage.getItem("eac_style") || "classic"] || PALETAS.classic;
   const wrap = document.createElement("div");
-  wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto;
+  wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
   const deckNome = c.titulo || (localStorage.getItem("eac_titulo") || "");
 
@@ -609,7 +719,7 @@ function converterTipo(c, r, idx, destino, campos) {
       const ops = (novo.options || []).map((o) => (o || "").trim()).filter(Boolean);
       if (ops.length < 2) { alert(t("conv_mc_need_ops")); return; }
       const certa = ops[Math.min(novo.correct || 0, ops.length - 1)];
-      const lacuna = "{{c1::" + certa + "::" + ops.join("/") + "}}";
+      const lacuna = "{{c1::" + certa + "::" + ops.join(" / ") + "}}";
       const base = semLacunas(novo.front).trim();
       const frente = base.includes(certa)
         ? base.replace(certa, lacuna)
@@ -676,6 +786,38 @@ function reabrirEditor(idx) {
   preview();
 }
 
+
+/* Agrupa campos secundários num bloco recolhível — o editor cabe na tela
+ * sem rolagem; o estado (aberto/fechado) fica lembrado. */
+function grupoRecolhivel(div, temConteudo) {
+  const cab = document.createElement("button");
+  cab.type = "button";
+  cab.className = "btn btn-cinza grupo-tog";
+  const cont = document.createElement("div");
+  const salvo = localStorage.getItem("eac_maisCampos");
+  let aberto = salvo === null ? !!temConteudo : salvo === "1";
+  const pintar = () => {
+    cont.style.display = aberto ? "" : "none";
+    cab.textContent = (aberto ? "▾  " : "▸  ") + t("more_fields");
+  };
+  cab.onclick = () => {
+    aberto = !aberto;
+    localStorage.setItem("eac_maisCampos", aberto ? "1" : "0");
+    pintar();
+  };
+  pintar();
+  div.append(cab, cont);
+  return cont;
+}
+
+
+/* Há cartões cuja escrita difere da forma canônica? (é o que o
+ * "Corrigir erros" arruma além dos ajustes estruturais) */
+function precisaNormalizar(r) {
+  return r.cards.some((c) => (c.raw || "").replace(/\s+/g, " ").trim()
+                          !== cardToLine(c).replace(/\s+/g, " ").trim());
+}
+
 /* --------------------------- edição inline -------------------------- */
 
 /* Faz o campo crescer conforme o usuário escreve, sempre com uma linha
@@ -690,11 +832,23 @@ function autoCrescer(el) {
   return el;
 }
 
+const CAMPO_CLASSE = {
+  field_front: "campo-frente", field_back: "campo-verso",
+  field_more: "campo-mais", field_title: "campo-titulo", field_tags: "campo-tags",
+};
+
 function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
   opcoes = opcoes || {};
+  const paiReal = pai;
+  // cada campo vive num "box" com faixa colorida à esquerda e etiqueta
+  const box = document.createElement("div");
+  box.className = "campo-box " + (CAMPO_CLASSE[rotuloKey] || "");
+  pai = box;
   const lbl = document.createElement("span");
   lbl.className = "mini-lbl";
-  lbl.textContent = t(rotuloKey) + " ";
+  const pino = document.createElement("span");
+  pino.className = "pino";
+  lbl.append(pino, document.createTextNode(t(rotuloKey) + " "));
   const aj = document.createElement("button");
   aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
   const dica = document.createElement("div");
@@ -709,6 +863,7 @@ function campoEditavel(pai, rotuloKey, hintKey, valor, multiline, opcoes) {
   campo.value = valor;
   if (opcoes.grande) campo.classList.add("campo-grande");
   pai.append(lbl, dica, campo);
+  paiReal.append(box);
   if (multiline) autoCrescer(campo);
   return campo;
 }
@@ -830,26 +985,48 @@ function montarEdicao(div, c, r, idx) {
         const inp = document.createElement("input");
         inp.type = "text"; inp.placeholder = (i + 1);
         inp.value = st.wrongs[i] || "";
-        inp.oninput = () => { st.wrongs[i] = inp.value; st.tocado = true; };
+        inp.oninput = () => { st.wrongs[i] = inp.value; st.tocado = true; montarPos(); };
         wrongsDiv.append(inp);
       }
-      // escolha explícita de onde a resposta correta aparece
+      // escolha explícita de onde a resposta correta aparece — com o
+      // TEXTO real das alternativas, atualizando conforme o usuário digita
       const posLbl = document.createElement("span");
       posLbl.className = "mini-lbl"; posLbl.textContent = t("lac_pos");
       const posSel = document.createElement("select");
       posSel.style.cssText = "width:100%;padding:6px;border-radius:6px;margin-top:2px";
+      const ordemPrev = document.createElement("div");
+      ordemPrev.className = "lac-ordem";
+
       const montarPos = () => {
-        const total = (st.wrongs.filter(Boolean).length) + 1;
+        const wr = st.wrongs.map((w) => (w || "").trim()).filter(Boolean);
+        const total = wr.length + 1;
+        st.pos = Math.max(0, Math.min(st.pos || 0, total - 1));
         posSel.innerHTML = "";
         for (let i = 0; i < total; i++) {
           const op = document.createElement("option");
-          op.value = i; op.textContent = letra(i);
+          op.value = i;
+          op.textContent = i === 0
+            ? t("lac_pos_first", { op: wr[0] || "…" })
+            : t("lac_pos_after", { n: i + 1, op: wr[i - 1] || "…" });
           posSel.append(op);
         }
-        posSel.value = Math.min(st.pos || 0, total - 1);
+        posSel.value = st.pos;
+        // prévia da ordem final, com a correta destacada
+        const lista = wr.slice();
+        lista.splice(st.pos, 0, "\u0000");
+        ordemPrev.innerHTML = "";
+        ordemPrev.append(document.createTextNode(t("lac_pos_preview") + " "));
+        lista.forEach((o, i) => {
+          if (o === "\u0000") {
+            const b = document.createElement("b");
+            b.textContent = (st.ans || "…");
+            ordemPrev.append(b);
+          } else ordemPrev.append(document.createTextNode(o));
+          if (i < lista.length - 1) ordemPrev.append(document.createTextNode("  /  "));
+        });
       };
-      montarPos();
-      posSel.onchange = () => { st.pos = parseInt(posSel.value, 10); st.tocado = true; };
+
+      posSel.onchange = () => { st.pos = parseInt(posSel.value, 10); st.tocado = true; montarPos(); };
       const bSort = document.createElement("button");
       bSort.type = "button"; bSort.className = "btn btn-ciano";
       bSort.style.cssText = "margin-top:5px;padding:4px 9px;font-size:11px";
@@ -861,18 +1038,29 @@ function montarEdicao(div, c, r, idx) {
         montarPos();
         toast("toast_shuffled");
       };
-      wrongsDiv.append(posLbl, posSel, bSort);
-      // aviso quando a resposta é longa demais para alternativa
-      if ((st.ans || "").length > 60) {
-        const av = document.createElement("div");
-        av.className = "issue";
-        av.textContent = "(!) " + t("lac_long_warn", { n: (st.ans || "").length });
-        box.append(av);
-      }
+      wrongsDiv.append(posLbl, posSel, bSort, ordemPrev);
+      montarPos();
       box.append(wrongsDiv);
+
+      // aviso de tamanho — recalculado a cada tecla digitada na resposta
+      const aviso = document.createElement("div");
+      aviso.className = "lac-aviso";
+      const atualizarAviso = () => {
+        const n = (st.ans || "").length;
+        if (st.mode !== "mc") { aviso.style.display = "none"; return; }
+        aviso.style.display = "";
+        if (n > 60) { aviso.className = "lac-aviso bad"; aviso.textContent = "(!) " + t("lac_long_warn", { n }); }
+        else if (n > 40) { aviso.className = "lac-aviso mid"; aviso.textContent = "(!) " + t("lac_warn_mid", { n }); }
+        else { aviso.className = "lac-aviso ok"; aviso.textContent = "✓ " + t("lac_ok", { n }); }
+      };
+      box.insertBefore(aviso, wrongsDiv);
+      atualizarAviso();
+      inAns.addEventListener("input", () => { st.ans = inAns.value; atualizarAviso(); montarPos(); });
+      st.atualizarAviso = atualizarAviso;
       sel.onchange = () => {
         st.mode = sel.value; st.tocado = true;
         wrongsDiv.style.display = st.mode === "mc" ? "" : "none";
+        if (st.atualizarAviso) st.atualizarAviso();
       };
       lacWrap.append(box);
     });
@@ -883,12 +1071,14 @@ function montarEdicao(div, c, r, idx) {
     lacTimer = setTimeout(construirPaineis, 500);
   });
 
-  const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
-  const inMais = campoEditavel(div, "field_more", "hint_more",
+  const sec = grupoRecolhivel(div,
+    c.back || c.more || c.titulo || (c.ownTags !== undefined ? c.ownTags : c.tags).length);
+  const inVerso = campoEditavel(sec, "field_back", "hint_back", c.back, true);
+  const inMais = campoEditavel(sec, "field_more", "hint_more",
     (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
-  const inTitulo = campoEditavel(div, "field_title", "hint_title", c.titulo || "", false);
+  const inTitulo = campoEditavel(sec, "field_title", "hint_title", c.titulo || "", false);
   // tags PRÓPRIAS (as globais entram na exportação, não são editadas aqui)
-  const inTags = campoEditavel(div, "field_tags", "hint_tags",
+  const inTags = campoEditavel(sec, "field_tags", "hint_tags",
     (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {
@@ -907,7 +1097,7 @@ function montarEdicao(div, c, r, idx) {
           const lista = wr.slice();
           const pos = Math.max(0, Math.min(st.pos || 0, lista.length));
           lista.splice(pos, 0, ans);
-          return "{{c" + n + "::" + ans + "::" + lista.join("/") + "}}";
+          return "{{c" + n + "::" + ans + "::" + lista.join(" / ") + "}}";
         }
       }
       return "{{c" + n + "::" + ans + "}}";
@@ -981,12 +1171,14 @@ function montarEdicaoMC(div, c, r, idx) {
     get value() { const i = radios.findIndex((rd) => rd.checked); return i < 0 ? 0 : i; },
   };
 
-  const inVerso = campoEditavel(div, "field_back", "hint_back", c.back, true);
-  const inMais = campoEditavel(div, "field_more", "hint_more",
+  const sec = grupoRecolhivel(div,
+    c.back || c.more || c.titulo || (c.ownTags !== undefined ? c.ownTags : c.tags).length);
+  const inVerso = campoEditavel(sec, "field_back", "hint_back", c.back, true);
+  const inMais = campoEditavel(sec, "field_more", "hint_more",
     (c.more || "").replace(/<br>/g, "\n"), true, { dicaVisivel: true, grande: true });
-  const inTitulo = campoEditavel(div, "field_title", "hint_title", c.titulo || "", false);
+  const inTitulo = campoEditavel(sec, "field_title", "hint_title", c.titulo || "", false);
   // tags PRÓPRIAS (as globais entram na exportação, não são editadas aqui)
-  const inTags = campoEditavel(div, "field_tags", "hint_tags",
+  const inTags = campoEditavel(sec, "field_tags", "hint_tags",
     (c.ownTags !== undefined ? c.ownTags : c.tags).join(", "), false);
 
   botoesSalvar(div, () => {
@@ -1020,13 +1212,59 @@ function montarEdicaoMC(div, c, r, idx) {
 /* Normalizar v6.1: PROPÕE as mudanças com antes/depois e o usuário
  * marca o que quer aplicar — nada muda sem decisão explícita. */
 let normPlano = [];   // [{card, canon, mudou, chk}]
+let normAjuste = null;   // ajuste estrutural pendente (título grudado etc.)
 
-function abrirNormalizar() {
+/* Devolve as primeiras linhas que diferem entre dois textos — é o que
+ * o usuário precisa ver para decidir, sem despejar o texto inteiro. */
+function primeiraDiferenca(a, b, querAntes) {
+  const la = a.split("\n"), lb = b.split("\n");
+  const saida = [];
+  for (let i = 0, j = 0; i < la.length && saida.length < 4; i++, j++) {
+    if (la[i] !== lb[j]) {
+      saida.push(querAntes ? la[i] : (lb[j] || "") + (lb[j + 1] ? "\n" + lb[j + 1] : ""));
+      if (!querAntes) j++;
+    }
+  }
+  return saida.join("\n") || (querAntes ? a.slice(0, 160) : b.slice(0, 160));
+}
+
+/* ajusteEstrutural (opcional): função que reescreve o texto inteiro
+ * (ex.: separar título grudado). Entra na lista como item revisável,
+ * com antes/depois, e só é aplicada se ficar marcada. */
+function abrirNormalizar(ajusteEstrutural) {
+  normAjuste = null;
+  if (typeof ajusteEstrutural === "function") {
+    const antes = $("editor").value;
+    const depois = ajusteEstrutural(antes);
+    if (depois !== antes) normAjuste = { antes, depois, fn: ajusteEstrutural, chk: null };
+  }
   const r = parseText($("editor").value, []);
   const lista = $("normLista");
   lista.innerHTML = "";
   normPlano = [];
   let mudancas = 0;
+
+  // primeiro item: ajuste de estrutura (quando houver), com antes/depois
+  if (normAjuste) {
+    mudancas++;
+    const div = document.createElement("div");
+    div.className = "norm-item";
+    const cab = document.createElement("div");
+    cab.className = "cab-n";
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.checked = true;
+    chk.style.cssText = "width:17px;height:17px";
+    normAjuste.chk = chk;
+    cab.append(chk, document.createTextNode(t("norm_struct_title")));
+    const difA = document.createElement("div");
+    difA.className = "antes";
+    difA.textContent = primeiraDiferenca(normAjuste.antes, normAjuste.depois, true);
+    const difB = document.createElement("div");
+    difB.className = "depois";
+    difB.textContent = primeiraDiferenca(normAjuste.antes, normAjuste.depois, false);
+    div.append(cab, difA, difB);
+    lista.append(div);
+  }
 
   r.cards.forEach((c) => {
     const canon = cardToLine(c);
@@ -1072,6 +1310,15 @@ function abrirNormalizar() {
 let normIgnorados = [];
 
 function aplicarNormalizacao() {
+  // ajuste estrutural primeiro (muda o texto todo) e reabre para revisão
+  if (normAjuste && normAjuste.chk && normAjuste.chk.checked) {
+    $("editor").value = normAjuste.fn($("editor").value);
+    normAjuste = null;
+    $("dlgNormalizar").close();
+    preview();
+    toast("toast_fixed");
+    return;
+  }
   const blocos = normPlano.map((it) =>
     (it.mudou && it.chk && it.chk.checked) ? it.canon : (it.card.raw || it.canon));
   let texto = blocos.join("\n\n");
@@ -1495,14 +1742,47 @@ $("selIdioma").onchange = () => {
   if ($("editor").value.trim() === exemploAntigo) $("editor").value = t("example");
   aplicarTextos(); preview();
 };
-$("tagsExp").addEventListener("input", agendarPreview);
 $("editor").oninput = () => {
   flashLinha = $("editor").value.slice(0, $("editor").selectionStart).split("\n").length;
   renderDestaque();
   agendarPreview();
 };
 $("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
-$("btnNormalizar").onclick = abrirNormalizar;
+$("btnNormalizar").onclick = () => abrirNormalizar(correcaoPendente);
+$("btnSelecionarTudo").onclick = () => {
+  $("editor").focus();
+  $("editor").select();
+  toast("toast_selected");
+};
+$("btnApagarTudo").onclick = () => {
+  if (!$("editor").value.trim()) return;
+  if (!confirm(t("clear_confirm"))) return;
+  $("editor").value = "";
+  respostasFechadas.clear();
+  excluidos.clear();
+  preview();
+  toast("toast_cleared");
+};
+$("btnCopiarTudo").onclick = async () => {
+  await navigator.clipboard.writeText($("editor").value);
+  toast("toast_copied_all");
+};
+/* Destaque colorido opcional: sem ele o texto fica em cor única e a
+ * seleção/cópia fica perfeitamente visível em qualquer navegador. */
+function aplicarDestaque(ligado) {
+  document.querySelector(".editor-wrap").classList.toggle("sem-destaque", !ligado);
+  localStorage.setItem("eac_destaque", ligado ? "1" : "0");
+  if (ligado) renderDestaque();
+}
+$("chkDestaque").checked = localStorage.getItem("eac_destaque") !== "0";
+aplicarDestaque($("chkDestaque").checked);
+$("chkDestaque").onchange = () => aplicarDestaque($("chkDestaque").checked);
+attachTip($("chkDestaque"), "tip_highlight");
+attachTip($("btnCopiarTudo"), "copy_all");
+attachTip($("btnSelecionarTudo"), "select_all");
+attachTip($("btnApagarTudo"), "clear_all");
+attachTip($("btnNormalizar"), () => $("btnNormalizar").disabled
+  ? t("tip_normalize_off") : t("normalize_tooltip"));
 $("btnNormAplicar").onclick = aplicarNormalizacao;
 $("btnNormFechar").onclick = () => $("dlgNormalizar").close();
 const temaSalvo = localStorage.getItem("eac_theme") || "auto";
@@ -1601,10 +1881,9 @@ function atualizarAvisoTopo() {
     "text-align:center;padding:6px;border-radius:10px;font-size:13px;" +
     "box-shadow:1px 2px 3px rgba(0,0,0,.3);word-break:break-word";
   demo.append(pill);
-  const tagsTxt = $("tagsExp").value.trim();
   if (p.sub) {
     const sub = document.createElement("div");
-    sub.textContent = tagsTxt ? parseTags(tagsTxt).join("  ·  ") : "tags";
+    sub.textContent = "tags";
     sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +
       ";font-style:italic;text-align:center;font-size:10px;padding:4px;" +
       "border-radius:8px 8px 0 0;margin-top:4px";
@@ -1656,14 +1935,12 @@ $("btnApkg").onclick = () => abrirExport("apkg");
 $("btnExportFechar").onclick = () => $("dlgExport").close();
 $("btnExportConfirm").onclick = () => {
   localStorage.setItem("eac_deck", $("deckExp").value);
-  localStorage.setItem("eac_tags", $("tagsExp").value);
   localStorage.setItem("eac_style", $("selEstilo").value);
   localStorage.setItem("eac_titulo", tituloCartao());
   $("dlgExport").close();
   (exportTipo === "txt" ? exportarTxt : exportarApkg)();
 };
 $("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
-$("tagsExp").addEventListener("input", atualizarAvisoTopo);
 $("tituloExp").addEventListener("input", () => {
   localStorage.setItem("eac_titulo", $("tituloExp").value.trim());
   atualizarAvisoTopo();
@@ -1684,7 +1961,6 @@ $("btnCaminhoExp").onclick = async () => {
   setTimeout(() => { $("btnCaminhoExp").textContent = t("copy_path_btn"); }, 2000);
 };
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
-$("tagsExp").value = localStorage.getItem("eac_tags") || "";
 const tituloSalvo = localStorage.getItem("eac_titulo");
 if (tituloSalvo !== null) $("tituloExp").value = tituloSalvo;
 $("selEstilo").value = localStorage.getItem("eac_style") || "classic";
@@ -1715,7 +1991,6 @@ attachTip($("btnNovoCartao"), "tip_new");
 attachTip($("btnMCRapido"), "tip_mc");
 attachTip($("btnPromptIA"), "tip_prompt");
 attachTip($("btnRevisar"), "tip_review");
-attachTip($("btnNormalizar"), "normalize_tooltip");
 attachTip($("btnTxt"), "export_txt_tooltip");
 attachTip($("btnApkg"), "export_apkg_tooltip");
 attachTip($("btnAjuda"), "help_tooltip");
