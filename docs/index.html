@@ -102,16 +102,20 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .card textarea{min-height:54px;overflow:hidden;resize:vertical}
 /* Cada campo do cartão ganha uma faixa colorida à esquerda e uma
    etiqueta com bolinha, para o usuário identificar o tipo num relance. */
-.campo-box{border-left:4px solid var(--cc, #999);padding-left:8px;margin-top:7px;
-  border-radius:0 6px 6px 0}
-.campo-box .mini-lbl{font-weight:700}
-.campo-box .pino{width:9px;height:9px;border-radius:50%;background:var(--cc);
+/* Cada campo do cartão em edição ganha uma faixa colorida à esquerda,
+   um fundo bem leve na cor do campo e uma etiqueta com bolinha, para
+   identificar o tipo (frente/verso/etc.) num relance. */
+.campo-box{border-left:5px solid var(--cc, #999);padding:5px 8px;margin-top:8px;
+  border-radius:0 7px 7px 0;background:var(--cc-bg, transparent)}
+.campo-box .mini-lbl{font-weight:800;color:var(--cc);font-size:11px;
+  text-transform:uppercase;letter-spacing:.4px}
+.campo-box .pino{width:10px;height:10px;border-radius:50%;background:var(--cc);
   display:inline-block;flex:none}
-.campo-frente{--cc:#2563eb}
-.campo-verso{--cc:#1a7f37}
-.campo-mais{--cc:#7c3aed}
-.campo-titulo{--cc:#e8940a}
-.campo-tags{--cc:#0e7490}
+.campo-frente{--cc:#2563eb;--cc-bg:rgba(37,99,235,.07)}
+.campo-verso{--cc:#1a7f37;--cc-bg:rgba(26,127,55,.07)}
+.campo-mais{--cc:#7c3aed;--cc-bg:rgba(124,58,237,.07)}
+.campo-titulo{--cc:#e8940a;--cc-bg:rgba(232,148,10,.07)}
+.campo-tags{--cc:#0e7490;--cc-bg:rgba(14,116,144,.07)}
 .card textarea.campo-grande{min-height:64px;border-color:#2563eb;background:var(--campo)}
 .grupo-tog{width:100%;text-align:left;margin-top:8px;font-size:12px;
   background:var(--cinza);opacity:.9}
@@ -248,10 +252,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .rev-mask{background:#2563eb22;color:#2563eb;font-weight:700;border-radius:4px;padding:0 4px}
 .rev-certa{color:var(--verde);font-weight:700}
 @media(min-width:760px){
-  .duas-colunas{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .duas-colunas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:12px;align-items:start}
   .duas-colunas .grupo:nth-child(2){position:sticky;top:8px}
   #cartoes{max-height:calc(100vh - 250px)}
 }
+.duas-colunas > *{min-width:0}          /* impede o grid de estourar */
+#cartoes{overflow-x:hidden}
+#cartoes .card, #cartoes .card *{max-width:100%;overflow-wrap:anywhere;
+  word-break:break-word}
+#novoPreview *{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
 </style>
 </head>
 <body>

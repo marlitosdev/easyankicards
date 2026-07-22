@@ -9,7 +9,8 @@
  * As bibliotecas externas (sql.js/JSZip) seguem "cache primeiro", pois
  * têm versão fixa na URL e são pesadas.
  */
-const CACHE = "easyankicards-v7.8.1";
+const CACHE = "easyankicards-v7.9.0";
+const SW_VERSION = "7.9.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
@@ -28,6 +29,9 @@ self.addEventListener("install", (e) => {
 /* A página pede a troca quando o usuário clica em "Atualizar agora". */
 self.addEventListener("message", (e) => {
   if (e.data === "SKIP_WAITING") self.skipWaiting();
+  // a página pergunta a versão deste worker para decidir se avisa
+  if (e.data === "GET_VERSION" && e.ports && e.ports[0])
+    e.ports[0].postMessage(SW_VERSION);
 });
 
 self.addEventListener("activate", (e) => {
