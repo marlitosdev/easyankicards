@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.9.1";
+const VERSAO = "7.9.2";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -815,7 +815,7 @@ function grupoRecolhivel(div, temConteudo) {
  * "Corrigir erros" arruma além dos ajustes estruturais) */
 function precisaNormalizar(r) {
   return r.cards.some((c) => (c.raw || "").replace(/\s+/g, " ").trim()
-                          !== cardToLine(c).replace(/\s+/g, " ").trim());
+                          !== cardToLineBase(c).replace(/\s+/g, " ").trim());
 }
 
 /* --------------------------- edição inline -------------------------- */
