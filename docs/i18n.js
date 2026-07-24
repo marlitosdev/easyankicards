@@ -283,7 +283,20 @@ const UI = {
   "toast_selected": "Texto selecionado",
   "toast_cleared": "Editor limpo",
   "normalize_none": "Nada a corrigir",
-  "tip_normalize_off": "Nenhum problema encontrado no texto — nada a corrigir por enquanto."
+  "tip_normalize_off": "Nenhum problema encontrado no texto — nada a corrigir por enquanto.",
+  "ignored_edit": "Editar",
+  "ignored_delete": "Excluir",
+  "ignored_view": "Ver / editar",
+  "ignored_title": "Conteúdo ignorado (linha {n})",
+  "ignored_help": "Este trecho não virou cartão. Ajuste os campos abaixo e salve para transformá-lo num cartão, ou exclua se não precisar dele.",
+  "toast_ignored_saved": "Cartão criado a partir do trecho",
+  "toast_ignored_deleted": "Trecho removido",
+  "paste_more": "Colar mais texto",
+  "undo_paste": "Desfazer última colagem",
+  "toast_pasted": "Texto colado ao final",
+  "toast_paste_undone": "Última colagem desfeita",
+  "paste_empty": "Não há nada na área de transferência para colar.",
+  "paste_denied": "O navegador não liberou a colagem automática. Cole manualmente com Ctrl+V no editor."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -568,7 +581,20 @@ const UI = {
   "toast_selected": "Text selected",
   "toast_cleared": "Editor cleared",
   "normalize_none": "Nothing to fix",
-  "tip_normalize_off": "No problems found in the text — nothing to fix right now."
+  "tip_normalize_off": "No problems found in the text — nothing to fix right now.",
+  "ignored_edit": "Edit",
+  "ignored_delete": "Delete",
+  "ignored_view": "View / edit",
+  "ignored_title": "Ignored content (line {n})",
+  "ignored_help": "This snippet didn't become a card. Fill the fields below and save to turn it into a card, or delete it if you don't need it.",
+  "toast_ignored_saved": "Card created from the snippet",
+  "toast_ignored_deleted": "Snippet removed",
+  "paste_more": "Paste more text",
+  "undo_paste": "Undo last paste",
+  "toast_pasted": "Text appended",
+  "toast_paste_undone": "Last paste undone",
+  "paste_empty": "There is nothing in the clipboard to paste.",
+  "paste_denied": "The browser did not allow automatic pasting. Paste manually with Ctrl+V in the editor."
  }
 };
 const PARSER_MSG = {

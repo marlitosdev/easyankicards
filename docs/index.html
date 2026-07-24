@@ -66,7 +66,7 @@ label{font-size:13px;color:var(--sutil);display:block;margin-bottom:3px}
 input[type=text]{width:100%;border:1px solid var(--borda);border-radius:8px;padding:9px;
                  background:var(--campo)}
 #destino{font-size:12px;color:var(--sutil);margin:6px 0 2px;line-height:1.4}
-textarea{width:100%;min-height:180px;border:1px solid var(--borda);border-radius:8px;
+textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius:8px;
          padding:10px;background:var(--campo);font-family:ui-monospace,Consolas,monospace;
          font-size:13px;resize:vertical}
 .linha{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
@@ -82,7 +82,9 @@ textarea{width:100%;min-height:180px;border:1px solid var(--borda);border-radius
 .card .tags{font-size:11.5px;color:var(--sutil);margin-top:3px}
 .card .issue{font-size:11.5px;color:var(--laranja);font-style:italic;margin-top:3px}
 .card.ignorado{border-color:var(--laranja-borda);background:var(--laranja-claro);
-               color:var(--laranja);font-size:12.5px}
+  color:var(--laranja);font-size:12.5px;padding:9px 11px}
+.card.ignorado .ig-acoes{display:flex;gap:6px;margin-top:7px}
+.card.ignorado .ig-acoes .btn{padding:4px 10px;font-size:11.5px}
 .rodape{position:fixed;left:0;right:0;bottom:0;background:var(--panel);
         box-shadow:0 -2px 8px rgba(0,0,0,.1);padding:10px 14px;display:flex;gap:8px;
         justify-content:center;z-index:5}
@@ -178,7 +180,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 #avisoTopo .av-txt{font-size:11.5px;color:var(--texto);opacity:.9;line-height:1.35}
 #avisoTopo .av-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;
   color:var(--sutil);font-weight:700;margin:7px 0 3px}
+.linha-colar{display:flex;gap:8px;margin:8px 0 2px;flex-wrap:wrap}
+.linha-colar .btn{flex:1 1 auto;padding:9px;font-size:12.5px}
 .linha-corrigir{margin:6px 0 2px}
+@keyframes brilhoColagem{
+  0%{background:rgba(26,127,55,.45)}
+  100%{background:transparent}}
+#editorHl .hl-novo{animation:brilhoColagem 2.2s ease-out;border-radius:3px}
 .linha-corrigir .btn{width:100%;padding:9px}
 @keyframes pulsoCorrigir{
   0%,100%{box-shadow:0 0 0 0 rgba(232,148,10,.65)}
@@ -194,6 +202,17 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   padding:6px 9px;border-radius:7px;max-width:280px;line-height:1.35;
   box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
 .editor-wrap{position:relative;background:var(--campo);border-radius:8px}
+/* Numeração das linhas: coluna fixa à esquerda, mesma métrica do texto,
+   rolando junto com o editor. Fica FORA da área de digitação. */
+#editorNums{position:absolute;left:0;top:0;bottom:0;width:38px;z-index:2;
+  overflow:hidden;padding:10px 6px 10px 0;box-sizing:border-box;
+  font-family:ui-monospace,Consolas,"Courier New",monospace;font-size:13px;
+  line-height:1.5;text-align:right;color:var(--sutil);opacity:.7;
+  border-right:1px solid var(--borda);background:var(--campo);
+  pointer-events:none;user-select:none}
+#editorNums .lnum{white-space:pre}
+#editorNums .lnum.err{color:#dc2626;opacity:1;font-weight:800}
+#editorNums .lnum.warn{color:#e8940a;opacity:1;font-weight:700}
 .editor-wrap textarea{position:relative;z-index:1;background:transparent;
   color:var(--texto);caret-color:var(--texto)}
 /* A camada colorida e o campo precisam ter EXATAMENTE as mesmas métricas,
@@ -202,7 +221,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   font-family:ui-monospace,Consolas,"Courier New",monospace;
   font-size:13px;line-height:1.5;letter-spacing:0;word-spacing:0;tab-size:2;
   text-indent:0;text-rendering:auto;font-kerning:none;
-  padding:10px;border:1px solid transparent;border-radius:8px;
+  padding:10px 10px 10px 44px;border:1px solid transparent;border-radius:8px;
   white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;
   box-sizing:border-box;margin:0;
   /* a MESMA calha de rolagem nos dois: sem isso a camada de trás fica
@@ -294,10 +313,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
           <span data-i18n="highlight_toggle"></span></label>
       </div>
       <div class="editor-wrap">
+        <div id="editorNums" aria-hidden="true"></div>
         <pre id="editorHl" aria-hidden="true"></pre>
         <textarea id="editor" spellcheck="false"></textarea>
       </div>
       <div id="sugestoes"></div>
+      <div class="linha-colar">
+        <button class="btn btn-verde" id="btnColarMais" data-i18n="paste_more"></button>
+        <button class="btn btn-cinza" id="btnDesfazerColagem" style="display:none"
+                data-i18n="undo_paste"></button>
+      </div>
       <div class="linha-corrigir">
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
       </div>

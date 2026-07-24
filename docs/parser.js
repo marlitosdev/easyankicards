@@ -146,10 +146,11 @@ function agruparLinhas(rawText) {
       atual.texto += " " + s;
     } else if (atual !== null && s.startsWith(DELIM)) {
       atual.texto += " " + s;
-    } else if (atual !== null && /^[.,;:)\]}\u00bb\u2026-]/.test(s)) {
-      // Continuacao de frase: a linha comeca com pontuacao (a IA quebrou a
-      // resposta em varias linhas). NAO e cartao novo, mesmo contendo "::"
-      // da tag no fim. Junta tudo; os campos sao separados depois.
+    } else if (atual !== null && /^[.,;:)\]}\u00bb\u2026]/.test(s)
+               && /[a-zA-Z\u00c0-\u017f0-9]/.test(s)) {
+      // Continuacao de frase: a linha comeca com pontuacao E tem palavras
+      // (a IA quebrou a resposta). Junta ao cartao. Linhas so de pontuacao
+      // ou separadores ("---") NAO entram aqui -> viram bloco ignorado.
       atual.texto += " " + s;
     } else if (atual !== null && !hasDelim(atual.texto) && !CLOZE_RE.test(atual.texto)) {
       // Cartão anterior incompleto. Se ele termina em "?" e esta linha

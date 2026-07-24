@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "7.9.2";
+const VERSAO = "8.1.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -37,6 +37,8 @@ let previewTimer = null;
 let editando = null;
 let cardDivs = [];            // [{line, div}] da última renderização
 let respostasFechadas = new Set();  // por padrão TODOS mostram a resposta
+let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
+let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
 
 
@@ -199,6 +201,17 @@ function destacarTrecho(texto) {
   }).join("");
 }
 
+function renderNumeros(linhas, marcadas, avisadas) {
+  const gutter = $("editorNums");
+  const html = linhas.map((_, i) => {
+    const n = i + 1;
+    const cls = marcadas.has(n) ? "err" : (avisadas.has(n) ? "warn" : "");
+    return '<div class="lnum ' + cls + '">' + n + "</div>";
+  }).join("");
+  gutter.innerHTML = html;
+  gutter.scrollTop = $("editor").scrollTop;
+}
+
 function renderDestaque() {
   const linhas = $("editor").value.split("\n");
   const html = linhas.map((l, i) => {
@@ -208,11 +221,13 @@ function renderDestaque() {
     else if (l.startsWith("[MC]"))
       corpo = '<span class="hl-mc">[MC]</span>' + destacarTrecho(l.slice(4));
     else corpo = destacarTrecho(l);
-    const cls = hlWarnLines.has(n) ? "hl-err" : (hlIssueLines.has(n) ? "hl-warn" : "");
+    let cls = hlWarnLines.has(n) ? "hl-err" : (hlIssueLines.has(n) ? "hl-warn" : "");
+    if (n === linhaNovaColada) cls = (cls ? cls + " " : "") + "hl-novo";
     return cls ? '<span class="' + cls + '">' + corpo + "</span>" : corpo;
   }).join("\n");
   $("editorHl").innerHTML = html + "\n";
   $("editorHl").scrollTop = $("editor").scrollTop;
+  renderNumeros(linhas, hlWarnLines, hlIssueLines);
 }
 
 
@@ -504,7 +519,12 @@ function preview() {
     cardDivs.push({ line: c.line, div });
   });
 
-  r.warnings.forEach((w) => {
+  (r.ignorados || []).forEach((ig) => box.append(cartaoIgnorado(ig, r)));
+  // avisos que não são "linha ignorada com texto" (raros) continuam simples
+  const linhasIgnoradas = new Set((r.ignorados || []).map((i) => i.line));
+  r.warnings.forEach((w, idx) => {
+    const nLinha = (r.warnLines || [])[idx];
+    if (linhasIgnoradas.has(nLinha)) return;
     const div = document.createElement("div");
     div.className = "card ignorado";
     div.textContent = t("ignored_prefix") + w;
@@ -816,6 +836,56 @@ function grupoRecolhivel(div, temConteudo) {
 function precisaNormalizar(r) {
   return r.cards.some((c) => (c.raw || "").replace(/\s+/g, " ").trim()
                           !== cardToLineBase(c).replace(/\s+/g, " ").trim());
+}
+
+
+/* -------- trecho IGNORADO: ver / editar (vira cartão) / excluir ------ */
+
+function cartaoIgnorado(ig, r) {
+  const div = document.createElement("div");
+  div.className = "card ignorado";
+  const txt = document.createElement("div");
+  txt.textContent = t("ignored_prefix") + t("card_line") + " " + ig.line + " — " +
+                    (ig.texto || "").slice(0, 80);
+  div.append(txt);
+  const acoes = document.createElement("div");
+  acoes.className = "ig-acoes";
+  acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(ig.line)));
+  acoes.append(botaoMini("ignored_view", "btn-azul", () => abrirIgnorado(ig)));
+  acoes.append(botaoMini("ignored_delete", "btn-cinza", () => excluirLinha(ig.line)));
+  acoes.querySelector(".btn:last-child").style.background = "#b91c1c";
+  div.append(acoes);
+  return div;
+}
+
+/* Remove a linha do editor (e as linhas @/+ imediatamente ligadas a ela). */
+function excluirLinha(n) {
+  const linhas = $("editor").value.split("\n");
+  if (n >= 1 && n <= linhas.length) {
+    linhas.splice(n - 1, 1);
+    $("editor").value = linhas.join("\n");
+    preview();
+    toast("toast_ignored_deleted");
+  }
+}
+
+/* Abre o trecho ignorado nos MESMOS campos da criação, pré-preenchendo
+ * o que der para aproveitar. Salvar substitui a linha por um cartão. */
+let ignoradoAlvo = null;
+function abrirIgnorado(ig) {
+  ignoradoAlvo = ig;
+  rotularModelos();
+  $("selModelo").value = "qa";
+  aplicarModelo();
+  // aproveita o conteúdo: se tiver "::", separa; senão joga tudo na frente
+  const partes = (ig.texto || "").split("::").map((s) => s.trim());
+  $("novoFrente").value = partes[0] || "";
+  $("novoVerso").value = partes[1] || "";
+  $("novoMais").value = "";
+  $("novoTags").value = partes[2] || "";
+  $("dicaCampo").textContent = t("ignored_help");
+  atualizarNovoPreview();
+  $("dlgNovo").showModal();
 }
 
 /* --------------------------- edição inline -------------------------- */
@@ -1684,6 +1754,18 @@ $("btnInserir").onclick = () => {
   }
   const res = montarLinhaNovo();
   if (res.erro) { alert(res.erro); return; }
+  if (ignoradoAlvo) {
+    // substitui a linha ignorada pelo cartão montado
+    const linhas = $("editor").value.split("\n");
+    if (ignoradoAlvo.line >= 1 && ignoradoAlvo.line <= linhas.length)
+      linhas[ignoradoAlvo.line - 1] = res.linha;
+    $("editor").value = linhas.join("\n");
+    ignoradoAlvo = null;
+    $("dlgNovo").close();
+    preview();
+    toast("toast_ignored_saved");
+    return;
+  }
   const atual = $("editor").value.replace(/\s+$/, "");
   $("editor").value = (atual ? atual + "\n\n" : "") + res.linha + "\n";
   $("dlgNovo").close();
@@ -1733,6 +1815,51 @@ $("btnPromptCopiar").onclick = async () => {
   $("status").textContent = t("prompt_copied_status");
 };
 
+
+/* ------------------- colar mais texto / desfazer -------------------- */
+
+async function colarMaisTexto() {
+  let novo = "";
+  try { novo = await navigator.clipboard.readText(); }
+  catch (e) { alert(t("paste_denied")); return; }
+  if (!novo || !novo.trim()) { alert(t("paste_empty")); return; }
+
+  const ed = $("editor");
+  colagemAnterior = { texto: ed.value };   // guarda para o "desfazer"
+  const tinha = ed.value.replace(/\s+$/, "");
+  // insere ao final (ou no início se estava vazio), com linha em branco
+  // de separação para não colar no meio de um cartão existente
+  const juntado = tinha ? tinha + "\n\n" + novo.replace(/^\s+/, "") : novo.replace(/^\s+/, "");
+  ed.value = juntado;
+
+  // 1ª linha do trecho novo (para rolar até lá e brilhar)
+  linhaNovaColada = tinha ? tinha.split("\n").length + 2 : 1;
+  $("btnDesfazerColagem").style.display = "";
+  preview();
+  irParaLinha(linhaNovaColada);
+  ed.setSelectionRange(  // posiciona o cursor no início do novo texto
+    juntado.length - novo.replace(/^\s+/, "").length,
+    juntado.length - novo.replace(/^\s+/, "").length);
+  toast("toast_pasted");
+  // remove o brilho depois da animação, mas mantém o realce durante ela
+  setTimeout(() => { linhaNovaColada = null; }, 2400);
+}
+
+function desfazerColagem() {
+  if (!colagemAnterior) return;
+  $("editor").value = colagemAnterior.texto;
+  colagemAnterior = null;
+  linhaNovaColada = null;
+  $("btnDesfazerColagem").style.display = "none";
+  preview();
+  toast("toast_paste_undone");
+}
+
+$("btnColarMais").onclick = colarMaisTexto;
+$("btnDesfazerColagem").onclick = desfazerColagem;
+attachTip($("btnColarMais"), "paste_more");
+attachTip($("btnDesfazerColagem"), "undo_paste");
+
 /* ----------------------------- eventos ----------------------------- */
 
 $("selIdioma").value = LANG;
@@ -1747,7 +1874,11 @@ $("editor").oninput = () => {
   renderDestaque();
   agendarPreview();
 };
-$("editor").onscroll = () => { $("editorHl").scrollTop = $("editor").scrollTop; $("editorHl").scrollLeft = $("editor").scrollLeft; };
+$("editor").onscroll = () => {
+  const y = $("editor").scrollTop, x = $("editor").scrollLeft;
+  $("editorHl").scrollTop = y; $("editorHl").scrollLeft = x;
+  $("editorNums").scrollTop = y;
+};
 $("btnNormalizar").onclick = () => abrirNormalizar(correcaoPendente);
 $("btnSelecionarTudo").onclick = () => {
   $("editor").focus();
