@@ -53,8 +53,15 @@ header h1 small{display:block;font-size:11px;font-weight:400;color:var(--sutil);
 select,button,input,textarea{font:inherit;color:var(--texto)}
 input[type=text],textarea,select{background:var(--campo);border-color:var(--borda)}
 .btn{color:#fff}
-.btn{border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:600;color:#fff;
-  white-space:normal;overflow-wrap:anywhere;line-height:1.2;max-width:100%}
+.btn{border:1px solid rgba(0,0,0,.12);border-radius:9px;padding:9px 14px;cursor:pointer;
+  font-family:inherit;font-weight:600;font-size:13px;letter-spacing:.2px;color:#fff;
+  white-space:normal;overflow-wrap:anywhere;line-height:1.25;max-width:100%;
+  transition:filter .15s, transform .05s, box-shadow .15s;
+  box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.btn:hover{filter:brightness(1.07)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:default;box-shadow:none;filter:none}
+.btn-cinza{background:var(--cinza)}
 .dlg-rodape .btn{flex:0 1 auto}
 .btn:active{transform:scale(.97)}
 .btn-cinza{background:var(--cinza)} .btn-verde{background:var(--verde)}
@@ -152,6 +159,18 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   60%{box-shadow:0 0 0 6px rgba(255,120,0,.9)}
   100%{box-shadow:none}}
 .card.flash{animation:flashCard 1.8s ease-out}
+/* Controles do topo do painel direito em grade fluida: cada seletor
+   ocupa no máximo a largura disponível e quebra de linha se faltar
+   espaço, em vez de estourar o painel. */
+.prev-controles{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:2px 0 6px}
+.prev-controles label{display:flex;align-items:center;gap:5px;font-size:11.5px;
+  color:var(--sutil);min-width:0}
+.prev-controles select{max-width:150px;min-width:0;padding:5px;border-radius:7px;
+  font-size:12px;background:var(--campo);color:var(--texto);border:1px solid var(--borda)}
+.prev-controles .chk-2col input{width:15px;height:15px}
+/* Duas colunas de cartões (opcional, telas largas) */
+#cartoes.duas{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start}
+#cartoes.duas .card{margin:0}
 #cartoes{position:relative;overflow-y:auto;max-height:46vh;
   overscroll-behavior:contain;padding-right:2px}
 .toolbar-sec{margin-top:10px}
@@ -193,6 +212,19 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   50%{box-shadow:0 0 0 7px rgba(232,148,10,0)}}
 #btnNormalizar.ativo{background:#e8940a;animation:pulsoCorrigir 1.8s ease-out infinite}
 #btnNormalizar:disabled{opacity:.45;cursor:default;animation:none}
+.ui-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;
+  justify-content:center;padding:18px;background:rgba(0,0,0,0);
+  opacity:0;pointer-events:none;transition:opacity .22s ease, background .22s ease}
+.ui-modal.on{opacity:1;pointer-events:auto;background:rgba(0,0,0,.42)}
+.ui-modal .ui-box{background:var(--panel);color:var(--texto);border-radius:14px;
+  max-width:440px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.4);
+  padding:18px;transform:translateY(12px) scale(.97);opacity:.6;
+  transition:transform .24s cubic-bezier(.2,.9,.3,1.2), opacity .2s ease}
+.ui-modal.on .ui-box{transform:translateY(0) scale(1);opacity:1}
+.ui-modal .ui-msg{font-size:14px;line-height:1.5;white-space:pre-wrap;
+  max-height:60vh;overflow:auto;margin-bottom:16px}
+.ui-modal .ui-acoes{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.ui-modal .ui-acoes .btn{min-width:96px}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:80;
   background:#1f2937;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;
   border-radius:20px;box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;
@@ -317,12 +349,12 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
         <pre id="editorHl" aria-hidden="true"></pre>
         <textarea id="editor" spellcheck="false"></textarea>
       </div>
-      <div id="sugestoes"></div>
       <div class="linha-colar">
-        <button class="btn btn-verde" id="btnColarMais" data-i18n="paste_more"></button>
-        <button class="btn btn-cinza" id="btnDesfazerColagem" style="display:none"
+        <button class="btn btn-cinza" id="btnColarMais" data-i18n="paste_more"></button>
+        <button class="btn btn-cinza" id="btnDesfazerColagem" disabled
                 data-i18n="undo_paste"></button>
       </div>
+      <div id="sugestoes"></div>
       <div class="linha-corrigir">
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
       </div>
@@ -345,16 +377,20 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     </div>
     <div class="grupo">
       <label data-i18n="preview_label"></label>
-      <div style="display:flex;gap:6px;align-items:center;margin:2px 0 4px">
-        <span style="font-size:11.5px;color:var(--sutil)" data-i18n="preview_mode"></span>
-        <select id="selPrevia" style="flex:1;padding:5px;border-radius:7px;font-size:12px">
-          <option value="app"></option><option value="anki"></option>
-        </select>
-        <span style="font-size:11.5px;color:var(--sutil)" data-i18n="style_panel_label"></span>
-        <select id="selEstiloPainel" style="flex:1;padding:5px;border-radius:7px;font-size:12px">
-          <option value="classic"></option><option value="esquema"></option>
-          <option value="dark"></option><option value="paper"></option>
-        </select>
+      <div class="prev-controles">
+        <label><span data-i18n="preview_mode"></span>
+          <select id="selPrevia">
+            <option value="app"></option><option value="anki"></option>
+          </select>
+        </label>
+        <label><span data-i18n="style_panel_label"></span>
+          <select id="selEstiloPainel">
+            <option value="classic"></option><option value="esquema"></option>
+            <option value="dark"></option><option value="paper"></option>
+          </select>
+        </label>
+        <label class="chk-2col"><input type="checkbox" id="chk2col">
+          <span data-i18n="two_cols"></span></label>
       </div>
       <div id="resumo">—</div>
       <div id="cartoes"></div>
@@ -370,6 +406,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div style="display:flex;gap:6px;flex:none">
     <button class="btn btn-verde" id="btnAtualizar"></button>
     <button class="btn btn-cinza" id="btnDepois"></button>
+  </div>
+</div>
+
+<div id="uiModal" class="ui-modal" role="dialog" aria-modal="true">
+  <div class="ui-box">
+    <div class="ui-msg" id="uiModalMsg"></div>
+    <div class="ui-acoes">
+      <button class="btn btn-cinza" id="uiModalCancel"></button>
+      <button class="btn btn-verde" id="uiModalOk"></button>
+    </div>
   </div>
 </div>
 
