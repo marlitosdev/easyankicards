@@ -46,10 +46,23 @@
 *{box-sizing:border-box} html,body{margin:0;padding:0}
 body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);
      color:var(--texto);padding-bottom:84px}
-header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--panel);
+header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--panel);
        box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:5}
 header h1{font-size:19px;margin:0;flex:1}
 header h1 small{display:block;font-size:11px;font-weight:400;color:var(--sutil);font-style:italic}
+header .hdr-ctls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+header select, header .hdr-btn{height:34px;border-radius:9px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font-size:12.5px;font-family:inherit;
+  padding:0 10px;cursor:pointer;transition:filter .15s, box-shadow .15s}
+header select:hover, header .hdr-btn:hover{filter:brightness(1.06);
+  box-shadow:0 1px 4px rgba(0,0,0,.12)}
+header .hdr-btn{display:inline-flex;align-items:center;gap:5px;font-weight:600}
+header .hdr-cor{position:relative;width:34px;height:34px;border-radius:9px;
+  border:1px solid var(--borda);overflow:hidden;padding:0;cursor:pointer;background:none}
+header .hdr-cor input{position:absolute;inset:-4px;width:calc(100% + 8px);
+  height:calc(100% + 8px);border:0;padding:0;cursor:pointer}
+header .hdr-reset{width:34px;justify-content:center;padding:0;font-size:15px}
+header .hdr-ajuda{background:var(--azul);color:#fff;border-color:transparent}
 select,button,input,textarea{font:inherit;color:var(--texto)}
 input[type=text],textarea,select{background:var(--campo);border-color:var(--borda)}
 .btn{color:#fff}
@@ -66,7 +79,7 @@ input[type=text],textarea,select{background:var(--campo);border-color:var(--bord
 .btn:active{transform:scale(.97)}
 .btn-cinza{background:var(--cinza)} .btn-verde{background:var(--verde)}
 .btn-azul{background:var(--azul)} .btn-roxo{background:var(--roxo)} .btn-ciano{background:var(--ciano)}
-main{max-width:840px;margin:0 auto;padding:12px}
+main{max-width:1320px;margin:0 auto;padding:12px}
 .grupo{background:var(--panel);border-radius:12px;padding:12px;margin-bottom:12px;
        box-shadow:0 1px 3px rgba(0,0,0,.06)}
 label{font-size:13px;color:var(--sutil);display:block;margin-bottom:3px}
@@ -169,10 +182,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   font-size:12px;background:var(--campo);color:var(--texto);border:1px solid var(--borda)}
 .prev-controles .chk-2col input{width:15px;height:15px}
 /* Duas colunas de cartões (opcional, telas largas) */
-#cartoes.duas{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start}
+/* Colunas automáticas: cada cartão tem no MÍNIMO 260px; o painel encaixa
+   quantas colunas couberem no espaço disponível (1 no estreito, 2+ no
+   largo) — nunca achata o texto. */
+#cartoes.duas{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:8px;align-content:start}
 #cartoes.duas .card{margin:0}
 #cartoes{position:relative;overflow-y:auto;max-height:46vh;
-  overscroll-behavior:contain;padding-right:2px}
+  overscroll-behavior:contain;padding-right:2px;
+  /* arrastar a alça inferior para ver mais cartões de uma vez */
+  resize:vertical;min-height:200px}
 .toolbar-sec{margin-top:10px}
 .toolbar-sec .cap{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;
   color:var(--sutil);font-weight:700;margin-bottom:2px}
@@ -303,7 +322,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .rev-mask{background:#2563eb22;color:#2563eb;font-weight:700;border-radius:4px;padding:0 4px}
 .rev-certa{color:var(--verde);font-weight:700}
 @media(min-width:760px){
-  .duas-colunas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  .duas-colunas{display:grid;grid-template-columns:minmax(320px,460px) minmax(0,1fr);
     gap:12px;align-items:start}
   .duas-colunas .grupo:nth-child(2){position:sticky;top:8px}
   #cartoes{max-height:calc(100vh - 250px)}
@@ -319,18 +338,21 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small>by MarlitosDev · <span id="versao"></span></small></h1>
-  <select id="selTema" aria-label="Tema">
-    <option value="auto"></option><option value="light"></option>
-    <option value="dark"></option><option value="black"></option>
-  </select>
-  <input type="color" id="corLetra" aria-label="Cor da letra"
-         style="width:34px;height:30px;border:0;background:none;padding:0;cursor:pointer">
-  <button class="btn btn-cinza" id="btnCorReset" style="padding:6px 8px;font-size:11px">↺</button>
-  <select id="selIdioma" aria-label="Idioma">
-    <option value="pt">Português</option>
-    <option value="en">English</option>
-  </select>
-  <button class="btn btn-cinza" id="btnAjuda" data-i18n="help_btn"></button>
+  <div class="hdr-ctls">
+    <select id="selTema" aria-label="Tema">
+      <option value="auto"></option><option value="light"></option>
+      <option value="dark"></option><option value="black"></option>
+    </select>
+    <label class="hdr-cor" title="Cor da letra">
+      <input type="color" id="corLetra" aria-label="Cor da letra">
+    </label>
+    <button class="hdr-btn hdr-reset" id="btnCorReset" title="Cor automática">↺</button>
+    <select id="selIdioma" aria-label="Idioma">
+      <option value="pt">Português</option>
+      <option value="en">English</option>
+    </select>
+    <button class="hdr-btn hdr-ajuda" id="btnAjuda" data-i18n="help_btn"></button>
+  </div>
 </header>
 
 <main>
