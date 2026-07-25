@@ -175,6 +175,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 /* Controles do topo do painel direito em grade fluida: cada seletor
    ocupa no máximo a largura disponível e quebra de linha se faltar
    espaço, em vez de estourar o painel. */
+.nota-export{font-size:11.5px;color:var(--sutil);margin:4px 0 2px;line-height:1.4}
 .prev-controles{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:2px 0 6px}
 .prev-controles label{display:flex;align-items:center;gap:5px;font-size:11.5px;
   color:var(--sutil);min-width:0}
@@ -284,6 +285,19 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 #editorHl::-webkit-scrollbar{width:0;height:0}
 .editor-wrap textarea{border-color:var(--borda);resize:vertical}
 .editor-wrap.sem-destaque #editorHl{display:none}
+.grupo-titulo-geral{margin-bottom:10px}
+.grupo-titulo-geral input{width:100%;border:1px solid var(--borda);border-radius:8px;
+  padding:8px;background:var(--campo);color:var(--texto)}
+.grupo-titulo-geral .nota{font-size:11px;color:var(--sutil);margin-top:3px;line-height:1.35}
+.card-cab-edit{cursor:pointer;position:relative}
+.card-cab-edit:hover::after{content:"✎";position:absolute;right:8px;top:50%;
+  transform:translateY(-50%);font-size:12px;opacity:.8}
+.card-cab-inherit{opacity:.85;font-style:italic;border:1px dashed rgba(255,255,255,.5)}
+.card-badge-titulo{font-size:10.5px;margin-top:4px;padding:2px 6px;border-radius:5px;
+  display:inline-block;line-height:1.35}
+.card-badge-own{background:rgba(26,127,55,.14);color:var(--verde)}
+.card-badge-gen{background:rgba(37,99,235,.12);color:#2563eb}
+.card-badge-none{background:rgba(232,148,10,.14);color:var(--laranja)}
 .linha-editor{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
 .linha-editor .btn{padding:4px 10px;font-size:11.5px}
 .chk-hl{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--sutil)}
@@ -358,6 +372,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 <main>
   <div class="duas-colunas">
     <div class="grupo">
+      <div class="grupo-titulo-geral">
+        <label for="tituloGeral"><span data-i18n="gen_title_label"></span></label>
+        <input type="text" id="tituloGeral">
+        <div class="nota" data-i18n="gen_title_note"></div>
+      </div>
       <label data-i18n="editor_label"></label>
       <div class="linha-editor">
         <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
@@ -491,6 +510,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
         <span data-i18n="title_label"></span>
         <button type="button" class="ic-ajuda" id="ajudaTitulo">?</button>
       </label>
+      <div id="tituloExpNota" class="nota-export"></div>
       <input type="text" id="tituloExp">
       <button type="button" class="btn btn-cinza" id="btnTituloDeck"
               style="margin-top:5px;padding:4px 9px;font-size:11px"

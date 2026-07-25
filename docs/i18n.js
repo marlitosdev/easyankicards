@@ -298,7 +298,18 @@ const UI = {
   "paste_empty": "Não há nada na área de transferência para colar.",
   "paste_denied": "O navegador não liberou a colagem automática. Cole manualmente com Ctrl+V no editor.",
   "two_cols": "Duas colunas",
-  "tip_two_cols": "Mostra os cartões em duas colunas nas telas maiores, para conferir mais de uma vez. Em telas estreitas continua em coluna única."
+  "tip_two_cols": "Mostra os cartões em duas colunas nas telas maiores, para conferir mais de uma vez. Em telas estreitas continua em coluna única.",
+  "gen_title_label": "Título geral (opcional)",
+  "gen_title_ph": "Ex.: Direito Administrativo — vazio = sem título geral",
+  "gen_title_note": "Aparece no topo APENAS dos cartões que não têm título próprio (@).",
+  "card_own_title": "título próprio deste cartão",
+  "card_using_general": "sem título próprio — usará o título geral “{t}”",
+  "card_using_general_none": "sem título próprio e sem título geral — este cartão sai SEM cabeçalho",
+  "card_title_edit": "Clique para dar um título só a este cartão",
+  "card_title_placeholder": "título deste cartão",
+  "gen_in_use_here": "Este cartão está usando o TÍTULO GERAL. Para um título só dele, clique no cabeçalho na visualização “Como no Anki” ou use o campo Título ao Editar.",
+  "export_title_reword": "Última chance de ajustar o TÍTULO GERAL. Ele é impresso no topo apenas dos cartões que NÃO têm título próprio (linha @). Deixe vazio para esses cartões saírem sem cabeçalho.",
+  "toast_title_set": "Título do cartão definido"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -598,7 +609,18 @@ const UI = {
   "paste_empty": "There is nothing in the clipboard to paste.",
   "paste_denied": "The browser did not allow automatic pasting. Paste manually with Ctrl+V in the editor.",
   "two_cols": "Two columns",
-  "tip_two_cols": "Shows cards in two columns on wider screens, to review more at a glance. On narrow screens it stays single-column."
+  "tip_two_cols": "Shows cards in two columns on wider screens, to review more at a glance. On narrow screens it stays single-column.",
+  "gen_title_label": "General title (optional)",
+  "gen_title_ph": "E.g.: Administrative Law — empty = no general title",
+  "gen_title_note": "Shows at the top ONLY of cards that have no own title (@).",
+  "card_own_title": "this card's own title",
+  "card_using_general": "no own title — will use the general title “{t}”",
+  "card_using_general_none": "no own title and no general title — this card exports WITHOUT a header",
+  "card_title_edit": "Click to give a title to this card only",
+  "card_title_placeholder": "this card's title",
+  "gen_in_use_here": "This card is using the GENERAL TITLE. For its own title, click the header in the “As in Anki” view or use the Title field when Editing.",
+  "export_title_reword": "Last chance to adjust the GENERAL TITLE. It is printed at the top only of cards that have NO own title (@ line). Leave empty for those cards to export without a header.",
+  "toast_title_set": "Card title set"
  }
 };
 const PARSER_MSG = {
