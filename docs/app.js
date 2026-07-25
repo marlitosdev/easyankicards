@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.5.0";
+const VERSAO = "8.6.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -966,18 +966,52 @@ function abrirIgnorado(ig) {
  * O valor é escrito como "@ título" no texto (fonte única), então persiste
  * e o cartão deixa de herdar o título geral. */
 function editarTituloCartao(cardRef) {
-  const r = parseAtual();
-  const alvo = r.cards.find((x) => x.line === cardRef.line);
-  if (!alvo) return;
-  const atualTit = alvo.titulo || "";
-  // usa o diálogo animado com um campo de texto embutido
+  const atualTit = (cardRef.titulo || "");
   uiPrompt(t("field_title"), atualTit).then((val) => {
     if (val === null) return;
-    alvo.titulo = val.trim();
-    reescreverEditor(r.cards, r.warnings);
-    preview();
-    toast("toast_title_set");
+    aplicarTituloCirurgico(cardRef.line, val.trim());
   });
+}
+
+/* Altera o título de UM cartão mexendo apenas nas linhas dele, sem
+ * reescrever o texto inteiro. Remove um "@" existente (acima OU abaixo,
+ * cobrindo textos antigos) e insere "@ Título" ACIMA da linha do cartão.
+ * Depois rola até a linha e a destaca. */
+function aplicarTituloCirurgico(linhaCartao, novoTitulo) {
+  const linhas = $("editor").value.split("\n");
+  let idx = linhaCartao - 1;                 // linha principal do cartão (0-based)
+  if (idx < 0 || idx >= linhas.length) return;
+
+  const ehArroba = (l) => l != null && l.trim().startsWith("@");
+  const ehCartaoLinha = (l) => {
+    if (l == null) return false;
+    const s = l.trim();
+    return s.length > 0 && !s.startsWith("#") && !s.startsWith("+") && !s.startsWith("@")
+      && (splitLine(s).length > 1 || CLOZE_START_RE.test(s) || s.startsWith("[MC]"));
+  };
+
+  // 1) remove o título atual deste cartão
+  if (ehArroba(linhas[idx - 1])) {
+    linhas.splice(idx - 1, 1); idx--;         // título estava ACIMA
+  } else if (ehArroba(linhas[idx + 1]) && !ehCartaoLinha(linhas[idx + 2])) {
+    linhas.splice(idx + 1, 1);                // título estava ABAIXO (formato antigo)
+  }
+
+  // 2) insere o novo título ACIMA (se não for vazio)
+  let linhaDestaque = idx + 1;
+  if (novoTitulo) {
+    linhas.splice(idx, 0, "@ " + novoTitulo);
+    linhaDestaque = idx + 1;                  // nº (1-based) da linha do título
+  } else {
+    linhaDestaque = idx + 1;                  // sem título: destaca a própria linha do cartão
+  }
+
+  $("editor").value = linhas.join("\n");
+  linhaNovaColada = linhaDestaque;            // reaproveita o brilho da colagem
+  preview();
+  irParaLinha(linhaDestaque);
+  setTimeout(() => { linhaNovaColada = null; }, 2400);
+  toast("toast_title_set");
 }
 
 /* Diálogo com UMA caixa de texto (reaproveita o modal animado). */

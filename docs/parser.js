@@ -346,8 +346,10 @@ function mcFields(c) {
    A explicação "Saiba mais" volta como uma linha iniciada por "+". */
 function cardToLine(c) {
   let s = cardToLineBase(c);
-  if (c.titulo) s += "\n@ " + c.titulo;
   if (c.more) s += "\n+ " + c.more.replace(/<br>/g, "\n+ ");
+  // Título ACIMA do cartão (mesmo lugar do formato de entrada/prompt),
+  // separado dos cartões vizinhos pela linha em branco entre blocos.
+  if (c.titulo) s = "@ " + c.titulo + "\n" + s;
   return s;
 }
 
