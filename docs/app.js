@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.1.0";
+const VERSAO = "8.3.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -42,6 +42,54 @@ let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
 
 
+
+
+/* ------------------------------------------------------------------
+ * DIÁLOGO ANIMADO (substitui alert/confirm nativos, que travam a aba)
+ * uiAlert(texto)   -> Promise<void>  (só botão OK)
+ * uiConfirm(texto) -> Promise<bool>  (Cancelar / OK)
+ * Aparece e some com transição; fecha por OK, Cancelar, clique fora ou Esc.
+ * ------------------------------------------------------------------ */
+
+let _uiResolve = null;
+
+function _uiFechar(valor) {
+  const m = document.getElementById("uiModal");
+  m.classList.remove("on");
+  const r = _uiResolve; _uiResolve = null;
+  if (r) setTimeout(() => r(valor), 180);   // resolve após a animação
+}
+
+function uiDialog(texto, comCancelar) {
+  return new Promise((resolve) => {
+    // se já houver um aberto, encerra o anterior sem valor
+    if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(false); }
+    _uiResolve = resolve;
+    const m = document.getElementById("uiModal");
+    document.getElementById("uiModalMsg").textContent = texto;
+    document.getElementById("uiModalOk").textContent = "OK";
+    const cancel = document.getElementById("uiModalCancel");
+    cancel.textContent = t("cancel_btn");
+    cancel.style.display = comCancelar ? "" : "none";
+    m.classList.add("on");
+    document.getElementById("uiModalOk").focus();
+  });
+}
+
+function uiAlert(texto) { return uiDialog(String(texto), false); }
+function uiConfirm(texto) { return uiDialog(String(texto), true); }
+
+// ligações dos botões do modal (uma vez)
+document.getElementById("uiModalOk").onclick = () => _uiFechar(true);
+document.getElementById("uiModalCancel").onclick = () => _uiFechar(false);
+document.getElementById("uiModal").addEventListener("click", (e) => {
+  if (e.target.id === "uiModal") _uiFechar(false);   // clique fora
+});
+document.addEventListener("keydown", (e) => {
+  if (!_uiResolve) return;
+  if (e.key === "Escape") _uiFechar(false);
+  else if (e.key === "Enter") _uiFechar(true);
+});
 
 /* --------------- aviso curto de confirmação (toast) ----------------- */
 
@@ -153,7 +201,7 @@ function atualizarDestino() {
 
 function marcarLacuna(campo) {
   const ini = campo.selectionStart, fim = campo.selectionEnd;
-  if (ini === fim) { alert(t("hint_mark_blank")); return; }
+  if (ini === fim) { uiAlert(t("hint_mark_blank")); return; }
   const v = campo.value;
   const n = (v.match(/\{\{c(\d+)::/g) || [])
     .reduce((m, s) => Math.max(m, parseInt(s.slice(3), 10)), 0) + 1;
@@ -177,7 +225,7 @@ function botoesLacuna(pai, campo) {
   bL.onclick = () => limparLacunas(campo);
   const aj = document.createElement("button");
   aj.type = "button"; aj.className = "ic-ajuda"; aj.textContent = "?";
-  aj.onclick = () => alert(t("hint_mark_blank"));
+  aj.onclick = () => uiAlert(t("hint_mark_blank"));
   linha.append(bM, bL, aj);
   pai.append(linha);
 }
@@ -463,6 +511,8 @@ function preview() {
   const box = $("cartoes");
   box.innerHTML = "";
   cardDivs = [];
+  box.classList.toggle("duas",
+    $("chk2col").checked && matchMedia("(min-width:760px)").matches);
 
   r.cards.forEach((c, idx) => {
     const div = document.createElement("div");
@@ -696,7 +746,7 @@ function barraTipo(div, c, r, idx, lerCampos) {
   lbl.textContent = t("convert_label") + " ";
   const aj = document.createElement("button");
   aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
-  aj.onclick = () => alert(t("convert_hint"));
+  aj.onclick = () => uiAlert(t("convert_hint"));
   lbl.append(aj);
   const linha = document.createElement("div");
   linha.className = "tipo-linha";
@@ -727,7 +777,7 @@ function primeiraLacuna(txt) {
 
 /* Conversão entre tipos: mostra em palavras simples o que vai acontecer
  * (com o antes/depois quando cabe) e só converte após confirmação. */
-function converterTipo(c, r, idx, destino, campos) {
+async function converterTipo(c, r, idx, destino, campos) {
   if (destino === tipoAtual(c)) return;
   const novo = Object.assign({}, c, campos);
 
@@ -737,14 +787,14 @@ function converterTipo(c, r, idx, destino, campos) {
     // ao virar, só a correta permanece (sintaxe nativa do Anki).
     if (novo.kind === "mc") {
       const ops = (novo.options || []).map((o) => (o || "").trim()).filter(Boolean);
-      if (ops.length < 2) { alert(t("conv_mc_need_ops")); return; }
+      if (ops.length < 2) { uiAlert(t("conv_mc_need_ops")); return; }
       const certa = ops[Math.min(novo.correct || 0, ops.length - 1)];
       const lacuna = "{{c1::" + certa + "::" + ops.join(" / ") + "}}";
       const base = semLacunas(novo.front).trim();
       const frente = base.includes(certa)
         ? base.replace(certa, lacuna)
         : base.replace(/\s*[.?!]+\s*$/, "") + " " + lacuna + ".";
-      if (!confirm(t("conv_mc_to_cloze", { depois: frente }))) return;
+      if (!(await uiConfirm(t("conv_mc_to_cloze", { depois: frente })))) return;
       novo.front = frente;
       novo.back = novo.back || "";
       novo.kind = "cloze";
@@ -757,11 +807,11 @@ function converterTipo(c, r, idx, destino, campos) {
     }
     if (!CLOZE_RE.test(novo.front)) {
       const resp = (novo.back || "").trim();
-      if (!resp) { alert(t("conv_need_back")); return; }
+      if (!resp) { uiAlert(t("conv_need_back")); return; }
       const antes = novo.front.trim() + "  ::  " + resp;
       const frente = novo.front.trim().replace(/\s*[.?!]+\s*$/, "") +
                      " {{c1::" + resp + "}}.";
-      if (!confirm(t("conv_to_cloze", { antes, depois: frente }))) return;
+      if (!(await uiConfirm(t("conv_to_cloze", { antes, depois: frente })))) return;
       novo.front = frente;
       novo.back = "";
     }
@@ -772,8 +822,8 @@ function converterTipo(c, r, idx, destino, campos) {
     const correta = novo.kind === "mc"
       ? ((novo.options || [])[novo.correct] || "")
       : ((novo.back || "").trim() || primeiraLacuna(novo.front));
-    if (!correta) { alert(t("conv_need_answer")); return; }
-    if (!confirm(t("conv_to_mc", { resposta: correta }))) return;
+    if (!correta) { uiAlert(t("conv_need_answer")); return; }
+    if (!(await uiConfirm(t("conv_to_mc", { resposta: correta })))) return;
     novo.front = semLacunas(novo.front);
     novo.options = [correta, ""];
     novo.correct = 0;
@@ -782,7 +832,7 @@ function converterTipo(c, r, idx, destino, campos) {
 
   } else {
     const explica = t(novo.kind === "mc" ? "conv_basic_from_mc" : "conv_basic_from_cloze");
-    if (!confirm(t("conv_to_basic", { explica }))) return;
+    if (!(await uiConfirm(t("conv_to_basic", { explica })))) return;
     if (novo.kind === "mc") {
       novo.back = (novo.options || [])[novo.correct] || novo.back || "";
     } else if (CLOZE_RE.test(novo.front)) {
@@ -1003,7 +1053,7 @@ function montarEdicao(div, c, r, idx) {
     cab.textContent = t("edit_mc_label") + " ";
     const aj = document.createElement("button");
     aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
-    aj.onclick = () => alert(t("hint_mc_cloze"));
+    aj.onclick = () => uiAlert(t("hint_mc_cloze"));
     cab.append(aj);
     lacWrap.append(cab);
 
@@ -1212,7 +1262,7 @@ function montarEdicaoMC(div, c, r, idx) {
   lbl.className = "mini-lbl"; lbl.textContent = t("mc_mark_correct_inline") + " ";
   const aj = document.createElement("button");
   aj.className = "ic-ajuda"; aj.type = "button"; aj.textContent = "?";
-  aj.onclick = () => alert(t("hint_mc"));
+  aj.onclick = () => uiAlert(t("hint_mc"));
   lbl.append(aj);
   div.append(lbl);
 
@@ -1406,17 +1456,17 @@ function aplicarNormalizacao() {
 
 /* --------------------------- exportação ---------------------------- */
 
-function validar() {
+async function validar() {
   const r = parseAtual();
   const sel = selecionados(r);
-  if (!sel.length) { alert(t("none_msg")); return null; }
+  if (!sel.length) { uiAlert(t("none_msg")); return null; }
   const rSel = Object.assign({}, r, { cards: sel });
   rSel.nSuspicious = sel.filter((c) => c.issues.length).length;
   if (rSel.nSuspicious || r.warnings.length) {
     const itens = [];
     sel.forEach((c) => c.issues.forEach((i) => itens.push("• " + t("card_line") + " " + c.line + ": " + i)));
     r.warnings.forEach((w) => itens.push("• " + w));
-    const ok = confirm(t("problems_msg", { resumo: itens.slice(0, 6).join("\n") }));
+    const ok = await uiConfirm(t("problems_msg", { resumo: itens.slice(0, 6).join("\n") }));
     if (!ok) { $("status").textContent = t("status_cancel"); return null; }
   }
   return rSel;
@@ -1442,16 +1492,16 @@ async function entregar(bytes, nome, mime) {
 }
 
 async function exportarTxt() {
-  const r = validar(); if (!r) return;
+  const r = await validar(); if (!r) return;
   const txt = exportTxtString(r, nomeDeck());
   await entregar(new TextEncoder().encode(txt), nomeArquivo() + ".txt", "text/plain");
   $("status").textContent = t("status_saved", { f: nomeArquivo() + ".txt" });
   toast("toast_exported");
-  alert(t("txt_done_msg"));
+  uiAlert(t("txt_done_msg"));
 }
 
 async function exportarApkg() {
-  const r = validar(); if (!r) return;
+  const r = await validar(); if (!r) return;
   $("status").textContent = "…";
   try {
     const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value, tituloCartao());
@@ -1459,9 +1509,9 @@ async function exportarApkg() {
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
     toast("toast_exported");
     const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
-    alert(t("apkg_done_msg", { dest: partes.join("  >  ") }));
+    uiAlert(t("apkg_done_msg", { dest: partes.join("  >  ") }));
   } catch (e) {
-    alert(t("apkg_err_title") + "\n\n" + e);
+    uiAlert(t("apkg_err_title") + "\n\n" + e);
     $("status").textContent = "";
   }
 }
@@ -1740,20 +1790,20 @@ $("btnLimparNovo").onclick = () => { limparLacunas($("novoFrente")); atualizarNo
 });
 for (let i = 0; i < 5; i++) $("mcR" + i).addEventListener("change", atualizarNovoPreview);
 
-$("btnInserir").onclick = () => {
+$("btnInserir").onclick = async () => {
   const modelo = $("selModelo").value;
   // Sugestão ao finalizar: correta em 1º lugar? Oferece embaralhar.
   if (modelo === "mc") {
     const { options, correct } = lerAlternativas();
-    if (options.length >= 2 && correct === 0 && confirm(t("shuffle_suggest")))
+    if (options.length >= 2 && correct === 0 && await uiConfirm(t("shuffle_suggest")))
       $("btnEmbaralhar").onclick();
   } else if (modelo === "mc_cloze") {
     const { certa, ops } = opcoesCloze();
-    if (ops.length >= 2 && ops[0] === certa && confirm(t("shuffle_suggest")))
+    if (ops.length >= 2 && ops[0] === certa && await uiConfirm(t("shuffle_suggest")))
       $("btnEmbaralharCloze").onclick();
   }
   const res = montarLinhaNovo();
-  if (res.erro) { alert(res.erro); return; }
+  if (res.erro) { uiAlert(res.erro); return; }
   if (ignoradoAlvo) {
     // substitui a linha ignorada pelo cartão montado
     const linhas = $("editor").value.split("\n");
@@ -1821,8 +1871,8 @@ $("btnPromptCopiar").onclick = async () => {
 async function colarMaisTexto() {
   let novo = "";
   try { novo = await navigator.clipboard.readText(); }
-  catch (e) { alert(t("paste_denied")); return; }
-  if (!novo || !novo.trim()) { alert(t("paste_empty")); return; }
+  catch (e) { uiAlert(t("paste_denied")); return; }
+  if (!novo || !novo.trim()) { uiAlert(t("paste_empty")); return; }
 
   const ed = $("editor");
   colagemAnterior = { texto: ed.value };   // guarda para o "desfazer"
@@ -1834,7 +1884,7 @@ async function colarMaisTexto() {
 
   // 1ª linha do trecho novo (para rolar até lá e brilhar)
   linhaNovaColada = tinha ? tinha.split("\n").length + 2 : 1;
-  $("btnDesfazerColagem").style.display = "";
+  $("btnDesfazerColagem").disabled = false;
   preview();
   irParaLinha(linhaNovaColada);
   ed.setSelectionRange(  // posiciona o cursor no início do novo texto
@@ -1850,7 +1900,7 @@ function desfazerColagem() {
   $("editor").value = colagemAnterior.texto;
   colagemAnterior = null;
   linhaNovaColada = null;
-  $("btnDesfazerColagem").style.display = "none";
+  $("btnDesfazerColagem").disabled = true;
   preview();
   toast("toast_paste_undone");
 }
@@ -1885,9 +1935,9 @@ $("btnSelecionarTudo").onclick = () => {
   $("editor").select();
   toast("toast_selected");
 };
-$("btnApagarTudo").onclick = () => {
+$("btnApagarTudo").onclick = async () => {
   if (!$("editor").value.trim()) return;
-  if (!confirm(t("clear_confirm"))) return;
+  if (!(await uiConfirm(t("clear_confirm")))) return;
   $("editor").value = "";
   respostasFechadas.clear();
   excluidos.clear();
@@ -1951,6 +2001,17 @@ $("selPrevia").onchange = () => {
   localStorage.setItem("eac_previa", $("selPrevia").value);
   preview();
 };
+/* Duas colunas: só faz efeito em telas largas (o CSS/grid cuida disso).
+   O estado fica salvo; o contador do resumo mostra o total normalmente. */
+function aplicar2col() {
+  const ligado = $("chk2col").checked;
+  $("cartoes").classList.toggle("duas", ligado && matchMedia("(min-width:760px)").matches);
+  localStorage.setItem("eac_2col", ligado ? "1" : "0");
+}
+$("chk2col").checked = localStorage.getItem("eac_2col") === "1";
+$("chk2col").onchange = () => { aplicar2col(); preview(); };
+matchMedia("(min-width:760px)").addEventListener("change", aplicar2col);
+attachTip($("chk2col"), "tip_two_cols");
 attachTip($("selPrevia"), "preview_anki_hint");
 attachTip($("selTema"), "tip_theme");
 $("btnMCRapido").onclick = () => {
@@ -2084,7 +2145,7 @@ $("btnTituloDeck").onclick = () => {
   atualizarAvisoTopo();
   if (modoPrevia() === "anki") preview();
 };
-$("ajudaTitulo").onclick = () => alert(t("title_hint"));
+$("ajudaTitulo").onclick = () => uiAlert(t("title_hint"));
 attachTip($("tituloExp"), "title_hint");
 $("btnCaminhoExp").onclick = async () => {
   await navigator.clipboard.writeText(nomeDeck());
@@ -2112,7 +2173,7 @@ function aplicarEstilo(v) {
 }
 $("selEstilo").onchange = () => aplicarEstilo($("selEstilo").value);
 $("selEstiloPainel").onchange = () => aplicarEstilo($("selEstiloPainel").value);
-$("ajudaEstilo").onclick = () => alert(t("style_hint"));
+$("ajudaEstilo").onclick = () => uiAlert(t("style_hint"));
 
 $("btnAjuda").onclick = () => $("dlgAjuda").showModal();
 $("btnFechar").onclick = () => $("dlgAjuda").close();

@@ -296,7 +296,9 @@ const UI = {
   "toast_pasted": "Texto colado ao final",
   "toast_paste_undone": "Última colagem desfeita",
   "paste_empty": "Não há nada na área de transferência para colar.",
-  "paste_denied": "O navegador não liberou a colagem automática. Cole manualmente com Ctrl+V no editor."
+  "paste_denied": "O navegador não liberou a colagem automática. Cole manualmente com Ctrl+V no editor.",
+  "two_cols": "Duas colunas",
+  "tip_two_cols": "Mostra os cartões em duas colunas nas telas maiores, para conferir mais de uma vez. Em telas estreitas continua em coluna única."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -594,7 +596,9 @@ const UI = {
   "toast_pasted": "Text appended",
   "toast_paste_undone": "Last paste undone",
   "paste_empty": "There is nothing in the clipboard to paste.",
-  "paste_denied": "The browser did not allow automatic pasting. Paste manually with Ctrl+V in the editor."
+  "paste_denied": "The browser did not allow automatic pasting. Paste manually with Ctrl+V in the editor.",
+  "two_cols": "Two columns",
+  "tip_two_cols": "Shows cards in two columns on wider screens, to review more at a glance. On narrow screens it stays single-column."
  }
 };
 const PARSER_MSG = {
