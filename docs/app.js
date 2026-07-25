@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.4.0";
+const VERSAO = "8.5.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -171,6 +171,7 @@ function aplicarTextos() {
   $("versao").textContent = "v" + VERSAO;
   $("deckExp").placeholder = t("deck_placeholder");
   $("tituloExp").placeholder = t("title_ph");
+  if ($("tituloExpNota")) $("tituloExpNota").textContent = t("export_title_reword");
   $("editor").placeholder = t("paste_here");
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
@@ -186,9 +187,19 @@ function nomeDeck() { return $("deckExp").value.trim() || "Meu Baralho"; }
 /* Título impresso no topo dos cartões. Vazio = sem cabeçalho.
  * Não herda o nome do baralho: quem quiser usá-lo tem o botão
  * "Usar o nome do baralho" ao lado do campo. */
-function tituloCartao() {
-  return $("tituloExp").value.trim();
+/* Título GERAL (único valor). Dois campos o editam — o do painel esquerdo
+ * (sempre visível) e o do diálogo de exportar — mantidos em sincronia e
+ * salvos em eac_titulo. Vazio = cartões sem título próprio ficam sem topo. */
+function tituloGeral() {
+  return (localStorage.getItem("eac_titulo") || "").trim();
 }
+function setTituloGeral(v) {
+  v = (v || "").trim();
+  localStorage.setItem("eac_titulo", v);
+  if ($("tituloGeral").value !== v) $("tituloGeral").value = v;
+  if ($("tituloExp") && $("tituloExp").value !== v) $("tituloExp").value = v;
+}
+function tituloCartao() { return tituloGeral(); }   // usado na exportação
 
 function atualizarDestino() {
   const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
@@ -663,15 +674,27 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   const wrap = document.createElement("div");
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
-  const deckNome = c.titulo || (localStorage.getItem("eac_titulo") || "");
+  const proprio = (c.titulo || "").trim();
+  const geral = tituloGeral();
+  const deckNome = proprio || geral;
 
-  if (p.cab && deckNome) {
+  if (p.cab) {
     const pill = document.createElement("div");
-    pill.textContent = deckNome;
+    pill.className = "card-cab-edit" + (proprio ? "" : " card-cab-inherit");
+    pill.textContent = deckNome || t("card_title_placeholder");
+    pill.title = t("card_title_edit");
     pill.style.cssText = "background:" + p.cab + ";color:#fff;font-weight:700;" +
-      "text-align:center;padding:6px;border-radius:11px;font-size:13.5px;margin-bottom:6px;" + sombra;
+      "text-align:center;padding:6px 22px;border-radius:11px;font-size:13.5px;margin-bottom:4px;" + sombra;
+    // clicar no cabeçalho cria/edita o título PRÓPRIO deste cartão
+    pill.onclick = () => editarTituloCartao(c);
     wrap.append(pill);
   }
+  // badge deixando claro de onde vem o título deste cartão
+  const badge = document.createElement("div");
+  if (proprio) { badge.className = "card-badge-titulo card-badge-own"; badge.textContent = "● " + t("card_own_title"); }
+  else if (geral) { badge.className = "card-badge-titulo card-badge-gen"; badge.textContent = "● " + t("card_using_general", { t: geral }); }
+  else { badge.className = "card-badge-titulo card-badge-none"; badge.textContent = "● " + t("card_using_general_none"); }
+  wrap.append(badge);
   if (p.sub && c.tags.length) {
     const sub = document.createElement("div");
     sub.textContent = c.tags.join("  ·  ");
@@ -936,6 +959,51 @@ function abrirIgnorado(ig) {
   $("dicaCampo").textContent = t("ignored_help");
   atualizarNovoPreview();
   $("dlgNovo").showModal();
+}
+
+
+/* Cria/edita o título PRÓPRIO de um cartão a partir da visualização.
+ * O valor é escrito como "@ título" no texto (fonte única), então persiste
+ * e o cartão deixa de herdar o título geral. */
+function editarTituloCartao(cardRef) {
+  const r = parseAtual();
+  const alvo = r.cards.find((x) => x.line === cardRef.line);
+  if (!alvo) return;
+  const atualTit = alvo.titulo || "";
+  // usa o diálogo animado com um campo de texto embutido
+  uiPrompt(t("field_title"), atualTit).then((val) => {
+    if (val === null) return;
+    alvo.titulo = val.trim();
+    reescreverEditor(r.cards, r.warnings);
+    preview();
+    toast("toast_title_set");
+  });
+}
+
+/* Diálogo com UMA caixa de texto (reaproveita o modal animado). */
+function uiPrompt(rotulo, valorInicial) {
+  return new Promise((resolve) => {
+    if (_uiResolve) { const rr = _uiResolve; _uiResolve = null; rr(false); }
+    const m = document.getElementById("uiModal");
+    document.getElementById("uiModalMsg").textContent = rotulo;
+    // injeta um input logo abaixo da mensagem
+    let inp = document.getElementById("uiPromptInput");
+    if (!inp) {
+      inp = document.createElement("input");
+      inp.id = "uiPromptInput"; inp.type = "text";
+      inp.style.cssText = "width:100%;margin-top:8px;padding:8px;border-radius:8px;" +
+        "border:1px solid var(--borda);background:var(--campo);color:var(--texto)";
+      document.getElementById("uiModalMsg").after(inp);
+    }
+    inp.style.display = "";
+    inp.value = valorInicial || "";
+    document.getElementById("uiModalOk").textContent = "OK";
+    const cancel = document.getElementById("uiModalCancel");
+    cancel.textContent = t("cancel_btn"); cancel.style.display = "";
+    _uiResolve = (ok) => { inp.style.display = "none"; resolve(ok ? inp.value : null); };
+    m.classList.add("on");
+    setTimeout(() => inp.focus(), 60);
+  });
 }
 
 /* --------------------------- edição inline -------------------------- */
@@ -2134,14 +2202,13 @@ $("btnExportConfirm").onclick = () => {
 };
 $("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
 $("tituloExp").addEventListener("input", () => {
-  localStorage.setItem("eac_titulo", $("tituloExp").value.trim());
+  setTituloGeral($("tituloExp").value);
   atualizarAvisoTopo();
   if (modoPrevia() === "anki") preview();
 });
 $("btnTituloDeck").onclick = () => {
   const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
-  $("tituloExp").value = partes.length ? partes[partes.length - 1] : "";
-  localStorage.setItem("eac_titulo", $("tituloExp").value);
+  setTituloGeral(partes.length ? partes[partes.length - 1] : "");
   atualizarAvisoTopo();
   if (modoPrevia() === "anki") preview();
 };
@@ -2153,8 +2220,12 @@ $("btnCaminhoExp").onclick = async () => {
   setTimeout(() => { $("btnCaminhoExp").textContent = t("copy_path_btn"); }, 2000);
 };
 $("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
-const tituloSalvo = localStorage.getItem("eac_titulo");
-if (tituloSalvo !== null) $("tituloExp").value = tituloSalvo;
+// título geral aparece nos DOIS campos (esquerdo sempre visível + export)
+$("tituloGeral").value = tituloGeral();
+$("tituloGeral").placeholder = t("gen_title_ph");
+$("tituloGeral").oninput = () => { setTituloGeral($("tituloGeral").value);
+  atualizarAvisoTopo(); if (modoPrevia() === "anki") preview(); };
+$("tituloExp").value = tituloGeral();
 $("selEstilo").value = localStorage.getItem("eac_style") || "classic";
 $("selEstiloPainel").value = $("selEstilo").value;
 function aplicarEstilo(v) {
