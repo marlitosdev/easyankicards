@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.7.0";
+const VERSAO = "8.8.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -37,6 +37,8 @@ let previewTimer = null;
 let editando = null;
 let cardDivs = [];            // [{line, div}] da última renderização
 let respostasFechadas = new Set();  // por padrão TODOS mostram a resposta
+let marcados = new Set();     // chaves de cartões marcados para revisão
+let modoRevisao = false;      // barra de revisão visível
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
 let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
@@ -492,6 +494,14 @@ function renderCorpoCartao(div, c) {
 
 function chave(c) { return c.line + "|" + c.front; }
 
+let saveTimer = null;
+function autoSalvar() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem("eac_texto", $("editor").value); } catch (e) {}
+  }, 400);
+}
+
 function agendarPreview() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(preview, 500);
@@ -525,9 +535,12 @@ function preview() {
   box.classList.toggle("duas",
     $("chk2col").checked && matchMedia("(min-width:760px)").matches);
 
+  const filtrando = $("chkFiltro") && $("chkFiltro").checked;
   r.cards.forEach((c, idx) => {
+    if (filtrando && !marcados.has(chave(c))) return;   // mostra só marcados
     const div = document.createElement("div");
-    div.className = "card" + (c.issues.length ? " suspeito" : "");
+    div.className = "card" + (c.issues.length ? " suspeito" : "")
+      + (marcados.has(chave(c)) ? " marcado" : "");
     const titulo = "#" + (idx + 1) + " · " + tipoRotulo(c) + " · " + t("card_line") + " " + c.line
       + (c.issues.length ? " — " + t("card_verify") : "");
     const cab = document.createElement("div");
@@ -545,6 +558,19 @@ function preview() {
     };
     lbl.append(chk, document.createTextNode(t("include_chk")));
     cab.append(sp, lbl);
+    if (modoRevisao) {
+      const lblR = document.createElement("label");
+      lblR.className = "chk-rev";
+      const chkR = document.createElement("input");
+      chkR.type = "checkbox"; chkR.checked = marcados.has(chave(c));
+      chkR.onchange = () => {
+        chkR.checked ? marcados.add(chave(c)) : marcados.delete(chave(c));
+        atualizarContagemRevisao();
+        preview();
+      };
+      lblR.append(chkR, document.createTextNode(t("review_mark")));
+      cab.append(lblR);
+    }
     div.append(cab);
 
     if (editando === chave(c)) {
@@ -1039,6 +1065,74 @@ function uiPrompt(rotulo, valorInicial) {
     setTimeout(() => inp.focus(), 60);
   });
 }
+
+
+/* --------------------- revisão por marcação ------------------------- */
+
+function atualizarContagemRevisao() {
+  const el = $("revContagem");
+  if (el) el.textContent = marcados.size
+    ? t("marked_count", { n: marcados.size }) : t("marked_none");
+}
+
+/* Marca todos os cartões do resultado atual que atendem a um critério. */
+function marcarPor(criterio) {
+  if (!ultimoResult) return;
+  ultimoResult.cards.forEach((c) => { if (criterio(c)) marcados.add(chave(c)); });
+  atualizarContagemRevisao();
+  preview();
+}
+
+// critérios objetivos (forma) + risco de conteúdo (números/datas/artigos)
+const CRIT = {
+  curtos:  (c) => (c.front + " " + (c.back || "")).replace(/\{\{c\d+::|\}\}/g, "").trim().length < 25,
+  semResp: (c) => c.kind !== "cloze" && c.kind !== "mc" && !(c.back || "").trim(),
+  semPerg: (c) => c.kind === "basic" && !/\?\s*$/.test((c.front || "").trim()),
+  longos:  (c) => (c.front + (c.back || "")).length > 220,
+  risco:   (c) => /\b(art\.?|artigo|s[úu]mula|lei|§|inciso)\b|\d{2,}|\d+\s*%|R\$|\b(19|20)\d{2}\b/i.test(c.front + " " + (c.back || "") + " " + (c.more || "")),
+};
+
+function marcarDuplicados() {
+  if (!ultimoResult) return;
+  const vistos = {};
+  ultimoResult.cards.forEach((c) => {
+    const k = c.front.toLowerCase().trim();
+    if (vistos[k]) { marcados.add(chave(c)); marcados.add(vistos[k]); }
+    else vistos[k] = chave(c);
+  });
+  atualizarContagemRevisao();
+  preview();
+}
+
+/* Copia os cartões marcados no formato do texto (pronto para colar numa IA). */
+async function copiarMarcados() {
+  if (!ultimoResult || !marcados.size) return;
+  const linhas = ultimoResult.cards
+    .filter((c) => marcados.has(chave(c)))
+    .map(cardToLine).join("\n\n");
+  const prompt = t("prompt_full").replace("[cole aqui o material de estudo]", linhas)
+    .replace("[paste your study material here]", linhas);
+  try { await navigator.clipboard.writeText(prompt); toast("toast_copied_marked"); }
+  catch (e) { uiAlert(t("paste_denied")); }
+}
+
+$("btnRevisar").onclick = () => {
+  modoRevisao = !modoRevisao;
+  $("barraRevisao").style.display = modoRevisao ? "" : "none";
+  if (!modoRevisao) { $("chkFiltro").checked = false; }
+  atualizarContagemRevisao();
+  preview();
+};
+$("selCurtos").onclick = () => marcarPor(CRIT.curtos);
+$("selSemResp").onclick = () => marcarPor(CRIT.semResp);
+$("selSemPerg").onclick = () => marcarPor(CRIT.semPerg);
+$("selLongos").onclick = () => marcarPor(CRIT.longos);
+$("selRisco").onclick = () => marcarPor(CRIT.risco);
+$("selDup").onclick = marcarDuplicados;
+$("selLimpar").onclick = () => { marcados.clear(); atualizarContagemRevisao(); preview(); };
+$("chkFiltro").onchange = () => preview();
+$("btnCopiarMarcados").onclick = copiarMarcados;
+attachTip($("btnRevisar"), "tip_review_btn");
 
 /* --------------------------- edição inline -------------------------- */
 
@@ -2025,6 +2119,7 @@ $("editor").oninput = () => {
   flashLinha = $("editor").value.slice(0, $("editor").selectionStart).split("\n").length;
   renderDestaque();
   agendarPreview();
+  autoSalvar();
 };
 $("editor").onscroll = () => {
   const y = $("editor").scrollTop, x = $("editor").scrollLeft;
@@ -2043,6 +2138,8 @@ $("btnApagarTudo").onclick = async () => {
   $("editor").value = "";
   respostasFechadas.clear();
   excluidos.clear();
+  marcados.clear();
+  localStorage.removeItem("eac_texto");
   preview();
   toast("toast_cleared");
 };
@@ -2292,7 +2389,9 @@ $("btnPromptMini").onclick = () => copiarPrompt($("btnPromptMini"), "prompt_mini
 
 /* ------------------------------ start ------------------------------ */
 
-$("editor").value = t("example");
+// recupera o último texto (auto-save); se não houver, usa o exemplo
+const textoSalvo = localStorage.getItem("eac_texto");
+$("editor").value = (textoSalvo !== null && textoSalvo.trim()) ? textoSalvo : t("example");
 aplicarTextos();
 preview();
 
