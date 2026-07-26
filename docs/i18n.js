@@ -309,7 +309,25 @@ const UI = {
   "card_title_placeholder": "título deste cartão",
   "gen_in_use_here": "Este cartão está usando o TÍTULO GERAL. Para um título só dele, clique no cabeçalho na visualização “Como no Anki” ou use o campo Título ao Editar.",
   "export_title_reword": "Última chance de ajustar o TÍTULO GERAL. Ele é impresso no topo apenas dos cartões que NÃO têm título próprio (linha @). Deixe vazio para esses cartões saírem sem cabeçalho.",
-  "toast_title_set": "Título do cartão definido"
+  "toast_title_set": "Título do cartão definido",
+  "review_mark": "marcar p/ revisão",
+  "review_bar": "Revisão de conteúdo",
+  "sel_short": "Curtos",
+  "sel_noanswer": "Sem resposta",
+  "sel_noquestion": "Sem pergunta",
+  "sel_long": "Longos",
+  "sel_dup": "Frente repetida",
+  "sel_risky": "Com números/datas/artigos",
+  "sel_clear": "Limpar marcações",
+  "filter_marked": "Mostrar só os marcados",
+  "copy_marked": "Copiar os marcados (formato IA)",
+  "marked_count": "{n} marcado(s) para revisão",
+  "marked_none": "Nenhum cartão marcado",
+  "toast_copied_marked": "Cartões marcados copiados",
+  "toast_saved_auto": "",
+  "restore_title": "Texto recuperado",
+  "restore_msg": "Recuperei o texto da última vez que você usou o app. Se quiser começar do zero, use \"Apagar tudo\".",
+  "tip_review_btn": "Ativa a marcação de cartões para revisão: botões para marcar os fracos de uma vez, filtro para ver só eles e copiar os marcados para corrigir na IA. Nada é movido nem apagado."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -620,7 +638,25 @@ const UI = {
   "card_title_placeholder": "this card's title",
   "gen_in_use_here": "This card is using the GENERAL TITLE. For its own title, click the header in the “As in Anki” view or use the Title field when Editing.",
   "export_title_reword": "Last chance to adjust the GENERAL TITLE. It is printed at the top only of cards that have NO own title (@ line). Leave empty for those cards to export without a header.",
-  "toast_title_set": "Card title set"
+  "toast_title_set": "Card title set",
+  "review_mark": "mark for review",
+  "review_bar": "Content review",
+  "sel_short": "Short ones",
+  "sel_noanswer": "No answer",
+  "sel_noquestion": "No question",
+  "sel_long": "Long ones",
+  "sel_dup": "Repeated front",
+  "sel_risky": "With numbers/dates/articles",
+  "sel_clear": "Clear marks",
+  "filter_marked": "Show only marked",
+  "copy_marked": "Copy marked (AI format)",
+  "marked_count": "{n} marked for review",
+  "marked_none": "No card marked",
+  "toast_copied_marked": "Marked cards copied",
+  "toast_saved_auto": "",
+  "restore_title": "Text recovered",
+  "restore_msg": "I recovered the text from the last time you used the app. To start fresh, use \"Clear all\".",
+  "tip_review_btn": "Turns on review marking: buttons to mark weak cards at once, a filter to see only them, and copy the marked ones to fix in an AI. Nothing is moved or deleted."
  }
 };
 const PARSER_MSG = {
