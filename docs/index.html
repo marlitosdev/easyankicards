@@ -372,11 +372,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 <main>
   <div class="duas-colunas">
     <div class="grupo">
-      <div class="grupo-titulo-geral">
-        <label for="tituloGeral"><span data-i18n="gen_title_label"></span></label>
-        <input type="text" id="tituloGeral">
-        <div class="nota" data-i18n="gen_title_note"></div>
-      </div>
       <label data-i18n="editor_label"></label>
       <div class="linha-editor">
         <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
@@ -418,12 +413,12 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
     </div>
     <div class="grupo">
       <label data-i18n="preview_label"></label>
+      <div class="grupo-titulo-geral">
+        <label for="tituloGeral"><span data-i18n="gen_title_label"></span></label>
+        <input type="text" id="tituloGeral">
+        <div class="nota" data-i18n="gen_title_note"></div>
+      </div>
       <div class="prev-controles">
-        <label><span data-i18n="preview_mode"></span>
-          <select id="selPrevia">
-            <option value="app"></option><option value="anki"></option>
-          </select>
-        </label>
         <label><span data-i18n="style_panel_label"></span>
           <select id="selEstiloPainel">
             <option value="classic"></option><option value="esquema"></option>
