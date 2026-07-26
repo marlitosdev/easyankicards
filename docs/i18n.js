@@ -327,7 +327,10 @@ const UI = {
   "toast_saved_auto": "",
   "restore_title": "Texto recuperado",
   "restore_msg": "Recuperei o texto da última vez que você usou o app. Se quiser começar do zero, use \"Apagar tudo\".",
-  "tip_review_btn": "Ativa a marcação de cartões para revisão: botões para marcar os fracos de uma vez, filtro para ver só eles e copiar os marcados para corrigir na IA. Nada é movido nem apagado."
+  "tip_review_btn": "Ativa a marcação de cartões para revisão: botões para marcar os fracos de uma vez, filtro para ver só eles e copiar os marcados para corrigir na IA. Nada é movido nem apagado.",
+  "replace_marked": "Colar correção (substitui os marcados)",
+  "toast_replaced": "{n} marcado(s) substituído(s) pela correção",
+  "replace_help": "Cole aqui a correção da IA: os cartões marcados saem e a versão corrigida entra no lugar, sem duplicar."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -656,7 +659,10 @@ const UI = {
   "toast_saved_auto": "",
   "restore_title": "Text recovered",
   "restore_msg": "I recovered the text from the last time you used the app. To start fresh, use \"Clear all\".",
-  "tip_review_btn": "Turns on review marking: buttons to mark weak cards at once, a filter to see only them, and copy the marked ones to fix in an AI. Nothing is moved or deleted."
+  "tip_review_btn": "Turns on review marking: buttons to mark weak cards at once, a filter to see only them, and copy the marked ones to fix in an AI. Nothing is moved or deleted.",
+  "replace_marked": "Paste fix (replaces the marked)",
+  "toast_replaced": "{n} marked card(s) replaced by the fix",
+  "replace_help": "Paste the AI's fix here: the marked cards are removed and the corrected version takes their place, no duplicates."
  }
 };
 const PARSER_MSG = {

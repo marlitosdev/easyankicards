@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.8.1";
+const VERSAO = "8.9.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -1132,6 +1132,55 @@ $("selDup").onclick = marcarDuplicados;
 $("selLimpar").onclick = () => { marcados.clear(); atualizarContagemRevisao(); preview(); };
 $("chkFiltro").onchange = () => preview();
 $("btnCopiarMarcados").onclick = copiarMarcados;
+
+/* Remove o BLOCO de um cartão (título @ acima + linha + explicação +)
+ * do array de linhas, sem tocar nos vizinhos. */
+function removerBlocoCartao(linhas, linhaCartao) {
+  let idx = linhaCartao - 1;
+  if (idx < 0 || idx >= linhas.length) return;
+  let fim = idx;
+  while (fim + 1 < linhas.length && linhas[fim + 1].trim().startsWith("+")) fim++;
+  let ini = idx;
+  if (ini - 1 >= 0 && linhas[ini - 1].trim().startsWith("@")) ini--;
+  linhas.splice(ini, fim - ini + 1);
+}
+
+/* Fecha o ciclo com a IA: cola a correção, REMOVE os cartões marcados e
+ * insere a versão corrigida no lugar — sem duplicar nem sobrar os antigos. */
+async function substituirMarcados() {
+  if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
+  let correcao = "";
+  try { correcao = await navigator.clipboard.readText(); }
+  catch (e) { uiAlert(t("paste_denied")); return; }
+  if (!correcao || !correcao.trim()) { uiAlert(t("replace_help")); return; }
+
+  // linhas dos cartões marcados, de baixo para cima (índices não se deslocam)
+  const linhasMarcadas = ultimoResult.cards
+    .filter((c) => marcados.has(chave(c)))
+    .map((c) => c.line)
+    .sort((a, b) => b - a);
+  const qtd = linhasMarcadas.length;
+
+  colagemAnterior = { texto: $("editor").value };   // permite "desfazer"
+  const linhas = $("editor").value.split("\n");
+  linhasMarcadas.forEach((ln) => removerBlocoCartao(linhas, ln));
+  // limpa linhas em branco repetidas deixadas pela remoção
+  let base = linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
+  const juntado = base ? base + "\n\n" + correcao.replace(/^\s+/, "")
+                       : correcao.replace(/^\s+/, "");
+  $("editor").value = juntado;
+
+  marcados.clear();
+  atualizarContagemRevisao();
+  $("btnDesfazerColagem").disabled = false;
+  linhaNovaColada = base ? base.split("\n").length + 2 : 1;   // 1ª linha nova
+  autoSalvar();
+  preview();
+  irParaLinha(linhaNovaColada);
+  setTimeout(() => { linhaNovaColada = null; }, 2400);
+  toast(t("toast_replaced", { n: qtd }));
+}
+$("btnSubstituirMarcados").onclick = substituirMarcados;
 attachTip($("btnRevisar"), "tip_review_btn");
 
 /* --------------------------- edição inline -------------------------- */
