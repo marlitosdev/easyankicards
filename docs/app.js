@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.9.0";
+const VERSAO = "8.10.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -1105,16 +1105,38 @@ function marcarDuplicados() {
 }
 
 /* Copia os cartões marcados no formato do texto (pronto para colar numa IA). */
-async function copiarMarcados() {
-  if (!ultimoResult || !marcados.size) return;
-  const linhas = ultimoResult.cards
-    .filter((c) => marcados.has(chave(c)))
+/* Cartões marcados como texto (para embutir no prompt de revisão). */
+function textoMarcados() {
+  return ultimoResult.cards.filter((c) => marcados.has(chave(c)))
     .map(cardToLine).join("\n\n");
-  const prompt = t("prompt_full").replace("[cole aqui o material de estudo]", linhas)
-    .replace("[paste your study material here]", linhas);
-  try { await navigator.clipboard.writeText(prompt); toast("toast_copied_marked"); }
-  catch (e) { uiAlert(t("paste_denied")); }
 }
+
+let revCopyTipo = "rev_prompt_full";
+function montarRevCopy() {
+  const cards = textoMarcados();
+  $("revCopyTexto").value = t(revCopyTipo).replace("{cards}", cards);
+  $("btnRevTabFull").classList.toggle("ativa", revCopyTipo === "rev_prompt_full");
+  $("btnRevTabShort").classList.toggle("ativa", revCopyTipo === "rev_prompt_short");
+  $("revCopyDone").textContent = "";
+}
+
+/* Abre a janela EDITÁVEL com o prompt + cartões marcados. */
+function copiarMarcados() {
+  if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
+  revCopyTipo = "rev_prompt_full";
+  montarRevCopy();
+  $("dlgRevCopiar").showModal();
+}
+$("btnRevTabFull").onclick = () => { revCopyTipo = "rev_prompt_full"; montarRevCopy(); };
+$("btnRevTabShort").onclick = () => { revCopyTipo = "rev_prompt_short"; montarRevCopy(); };
+$("btnRevCopyFechar").onclick = () => $("dlgRevCopiar").close();
+$("btnRevCopyCopiar").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("revCopyTexto").value);
+    $("revCopyDone").textContent = t("revcopy_done");   // mensagem: copiado + próximo passo
+    toast("toast_copied_marked");
+  } catch (e) { uiAlert(t("paste_denied")); }
+};
 
 $("btnRevisar").onclick = () => {
   modoRevisao = !modoRevisao;
@@ -1154,12 +1176,14 @@ async function substituirMarcados() {
   catch (e) { uiAlert(t("paste_denied")); return; }
   if (!correcao || !correcao.trim()) { uiAlert(t("replace_help")); return; }
 
+  const qtd = marcados.size;
+  if (!(await uiConfirm(t("replace_confirm", { n: qtd })))) return;   // confirma antes
+
   // linhas dos cartões marcados, de baixo para cima (índices não se deslocam)
   const linhasMarcadas = ultimoResult.cards
     .filter((c) => marcados.has(chave(c)))
     .map((c) => c.line)
     .sort((a, b) => b - a);
-  const qtd = linhasMarcadas.length;
 
   colagemAnterior = { texto: $("editor").value };   // permite "desfazer"
   const linhas = $("editor").value.split("\n");
@@ -1182,6 +1206,16 @@ async function substituirMarcados() {
 }
 $("btnSubstituirMarcados").onclick = substituirMarcados;
 attachTip($("btnRevisar"), "tip_review_btn");
+attachTip($("selCurtos"), "tip_sel_short");
+attachTip($("selSemResp"), "tip_sel_noanswer");
+attachTip($("selSemPerg"), "tip_sel_noquestion");
+attachTip($("selLongos"), "tip_sel_long");
+attachTip($("selDup"), "tip_sel_dup");
+attachTip($("selRisco"), "tip_sel_risky");
+attachTip($("selLimpar"), "tip_sel_clear");
+attachTip($("chkFiltro"), "tip_filter");
+attachTip($("btnCopiarMarcados"), "tip_copy_marked");
+attachTip($("btnSubstituirMarcados"), "tip_replace_marked");
 
 /* --------------------------- edição inline -------------------------- */
 
