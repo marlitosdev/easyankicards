@@ -562,6 +562,25 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   </div>
 </dialog>
 
+<dialog id="dlgRevCopiar">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="revcopy_title"></h3>
+    <div class="toolbar" style="margin-bottom:8px">
+      <button class="btn btn-roxo" id="btnRevTabFull" data-i18n="revcopy_full_tab"></button>
+      <button class="btn btn-ciano" id="btnRevTabShort" data-i18n="revcopy_short_tab"></button>
+    </div>
+    <div class="nota" data-i18n="revcopy_note" style="margin-bottom:6px"></div>
+    <textarea id="revCopyTexto"
+      style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
+             font-size:12px;line-height:1.4"></textarea>
+    <div id="revCopyDone" style="font-size:12px;color:var(--verde);margin-top:6px;min-height:16px"></div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnRevCopyCopiar" data-i18n="revcopy_copy"></button>
+    <button class="btn btn-cinza" id="btnRevCopyFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgPrompt">
   <div style="padding:16px">
     <h3 style="margin:0 0 10px" data-i18n="prompt_dlg_title"></h3>
