@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.6.0";
+const VERSAO = "8.7.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -628,7 +628,7 @@ function resumo(r) {
 
 /* --------- prévia completa "como no Anki" (estilo escolhido) --------- */
 
-function modoPrevia() { return localStorage.getItem("eac_previa") || "app"; }
+function modoPrevia() { return "anki"; }   // sempre renderiza como no Anki
 
 function textoClozeResolvido(pai, texto, cor, mascarar) {
   const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
@@ -2094,15 +2094,7 @@ $("btnCorReset").onclick = () => {
 };
 attachTip($("corLetra"), "tip_textcolor");
 attachTip($("btnCorReset"), "textcolor_reset");
-function rotularPrevia() {
-  const nomes = { app: "preview_simple", anki: "preview_anki" };
-  [...$("selPrevia").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
-}
-$("selPrevia").value = modoPrevia();
-$("selPrevia").onchange = () => {
-  localStorage.setItem("eac_previa", $("selPrevia").value);
-  preview();
-};
+function rotularPrevia() {}   // seletor de modo removido: sempre "como no Anki"
 /* Duas colunas: só faz efeito em telas largas (o CSS/grid cuida disso).
    O estado fica salvo; o contador do resumo mostra o total normalmente. */
 function aplicar2col() {
@@ -2114,7 +2106,6 @@ $("chk2col").checked = localStorage.getItem("eac_2col") === "1";
 $("chk2col").onchange = () => { aplicar2col(); preview(); };
 matchMedia("(min-width:760px)").addEventListener("change", aplicar2col);
 attachTip($("chk2col"), "tip_two_cols");
-attachTip($("selPrevia"), "preview_anki_hint");
 attachTip($("selTema"), "tip_theme");
 $("btnMCRapido").onclick = () => {
   rotularModelos();
@@ -2266,12 +2257,6 @@ function aplicarEstilo(v) {
   localStorage.setItem("eac_style", v);
   $("selEstilo").value = v;
   $("selEstiloPainel").value = v;
-  // O estilo só é visível na prévia "Como no Anki" — troca sozinho para
-  // que a escolha tenha efeito imediato (antes parecia não funcionar).
-  if (v !== "classic" && modoPrevia() !== "anki") {
-    localStorage.setItem("eac_previa", "anki");
-    $("selPrevia").value = "anki";
-  }
   previewEstilo();
   preview();
   toast("toast_style");
