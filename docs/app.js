@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.8.0";
+const VERSAO = "8.8.1";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -1793,7 +1793,6 @@ function revRender() {
   }
 }
 
-$("btnRevisar").onclick = () => { revIdx = 0; revMostra = false; revRender(); $("dlgRevisao").showModal(); };
 $("btnRevMostrar").onclick = () => { revMostra = true; revRender(); };
 $("btnRevProx").onclick = () => { revIdx++; revMostra = false; revRender(); };
 $("btnRevPrev").onclick = () => { revIdx--; revMostra = false; revRender(); };
@@ -2369,7 +2368,6 @@ $("btnFechar").onclick = () => $("dlgAjuda").close();
 attachTip($("btnNovoCartao"), "tip_new");
 attachTip($("btnMCRapido"), "tip_mc");
 attachTip($("btnPromptIA"), "tip_prompt");
-attachTip($("btnRevisar"), "tip_review");
 attachTip($("btnTxt"), "export_txt_tooltip");
 attachTip($("btnApkg"), "export_apkg_tooltip");
 attachTip($("btnAjuda"), "help_tooltip");
