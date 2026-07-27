@@ -113,7 +113,7 @@ const UI = {
   "sug_ignored": "{n} linha(s) ignorada(s) — em vermelho no editor e na lista.",
   "sug_verify": "{n} cartão(ões) para VERIFICAR — linhas laranjas no editor.",
   "sug_pairs": "{n} par(es) Pergunta/Resposta juntados automaticamente (nota azul no cartão) — confira.",
-  "review_btn": "Revisar cartões",
+  "review_btn": "Selecionar cartões para melhorar conteúdo",
   "review_show": "Mostrar resposta",
   "review_next": "Próximo ›",
   "review_prev": "‹ Anterior",
@@ -349,7 +349,21 @@ const UI = {
   "tip_sel_clear": "Desmarca todos os cartões.",
   "tip_filter": "Mostra na lista apenas os cartões marcados, para você focar neles.",
   "tip_copy_marked": "Abre uma janela com o prompt e os cartões marcados (editável) para copiar e corrigir numa IA. Nada é removido.",
-  "tip_replace_marked": "Cola a correção da IA no lugar dos cartões marcados: remove os marcados e insere a versão corrigida. Pede confirmação."
+  "tip_replace_marked": "Cola a correção da IA no lugar dos cartões marcados: remove os marcados e insere a versão corrigida. Pede confirmação.",
+  "review_finish": "Finalizar revisão de conteúdo",
+  "review_cancel": "Cancelar revisão de conteúdo",
+  "review_cancel_confirm": "Cancelar a revisão? As alterações feitas durante esta revisão serão descartadas.",
+  "review_locked": "Você está em revisão de conteúdo. Finalize ou cancele para voltar a usar as demais funções.",
+  "badge_selected": "cartão selecionado para revisão",
+  "badge_reviewed": "cartão já revisado",
+  "pastepanel_title": "Revisar o conteúdo colado",
+  "pastepanel_note": "Confira e corrija o texto colado abaixo. Só será possível finalizar quando não houver erros.",
+  "pastepanel_finish": "Finalizar edição destes cartões",
+  "pastepanel_clean": "✓ Sem erros — pronto para finalizar.",
+  "pastepanel_haserr": "Há {n} ponto(s) a corrigir antes de finalizar.",
+  "toast_review_started": "Revisão de conteúdo iniciada",
+  "toast_review_finished": "Revisão finalizada",
+  "toast_review_cancelled": "Revisão cancelada — alterações descartadas"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -464,7 +478,7 @@ const UI = {
   "sug_ignored": "{n} skipped line(s) — shown in red in the editor and list.",
   "sug_verify": "{n} card(s) to CHECK — orange lines in the editor.",
   "sug_pairs": "{n} Question/Answer pair(s) joined automatically (blue note on the card) — please check.",
-  "review_btn": "Review cards",
+  "review_btn": "Select cards to improve content",
   "review_show": "Show answer",
   "review_next": "Next ›",
   "review_prev": "‹ Previous",
@@ -700,7 +714,21 @@ const UI = {
   "tip_sel_clear": "Unmarks all cards.",
   "tip_filter": "Shows only the marked cards in the list, so you can focus on them.",
   "tip_copy_marked": "Opens a window with the prompt and the marked cards (editable) to copy and fix in an AI. Nothing is removed.",
-  "tip_replace_marked": "Pastes the AI's fix in place of the marked cards: removes the marked ones and inserts the corrected version. Asks for confirmation."
+  "tip_replace_marked": "Pastes the AI's fix in place of the marked cards: removes the marked ones and inserts the corrected version. Asks for confirmation.",
+  "review_finish": "Finish content review",
+  "review_cancel": "Cancel content review",
+  "review_cancel_confirm": "Cancel the review? Changes made during this review will be discarded.",
+  "review_locked": "You are in content review. Finish or cancel to use the other functions again.",
+  "badge_selected": "card selected for review",
+  "badge_reviewed": "card already reviewed",
+  "pastepanel_title": "Review the pasted content",
+  "pastepanel_note": "Check and fix the pasted text below. You can only finish when there are no errors.",
+  "pastepanel_finish": "Finish editing these cards",
+  "pastepanel_clean": "✓ No errors — ready to finish.",
+  "pastepanel_haserr": "{n} issue(s) to fix before finishing.",
+  "toast_review_started": "Content review started",
+  "toast_review_finished": "Review finished",
+  "toast_review_cancelled": "Review cancelled — changes discarded"
  }
 };
 const PARSER_MSG = {

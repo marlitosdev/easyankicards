@@ -185,7 +185,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .barra-revisao .rev-linha2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
   margin-top:8px;font-size:11.5px;color:var(--texto)}
 .barra-revisao .rev-contagem{color:var(--laranja);font-weight:700;flex:1;min-width:0}
-.card.marcado{outline:3px solid #e8940a;outline-offset:1px}
+.rev-topo{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
+.rev-topo .btn{flex:1 1 auto}
+/* selos de revisão (só visual; não vão para o cartão exportado) */
+.card-badge-rev{font-size:11px;font-weight:800;margin:2px 0 4px;display:inline-block;
+  padding:2px 8px;border-radius:6px;letter-spacing:.2px}
+.card-badge-sel{color:#dc2626;background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.35)}
+.card-badge-rev-ok{color:var(--verde);background:rgba(26,127,55,.10);border:1px solid rgba(26,127,55,.35)}
+/* trava visual das demais funções durante a revisão */
+.em-revisao .trava{opacity:.4;pointer-events:none;filter:grayscale(.4)}
+#colarRevSug .sug{margin-bottom:4px}
 .card .chk-rev{display:flex;align-items:center;gap:4px;font-weight:400;font-size:11px;
   color:var(--laranja)}
 .prev-controles{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:2px 0 6px}
@@ -417,14 +426,14 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
           <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
         </div>
       </div>
-      <div class="toolbar-sec"><div class="cap" data-i18n="group_tools"></div>
-        <div class="toolbar">
-          <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
-        </div>
-      </div>
     </div>
     <div class="grupo">
       <label data-i18n="preview_label"></label>
+      <div class="rev-topo">
+        <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
+        <button class="btn btn-verde" id="btnRevFinalizar" style="display:none" data-i18n="review_finish"></button>
+        <button class="btn" id="btnRevCancelar" style="display:none;background:#b91c1c" data-i18n="review_cancel"></button>
+      </div>
       <div class="grupo-titulo-geral">
         <label for="tituloGeral"><span data-i18n="gen_title_label"></span></label>
         <input type="text" id="tituloGeral">
@@ -559,6 +568,22 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnExportConfirm" data-i18n="export_confirm"></button>
     <button class="btn btn-cinza" id="btnExportFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgColarRev" style="max-width:720px;width:94%">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 6px" data-i18n="pastepanel_title"></h3>
+    <div class="nota" data-i18n="pastepanel_note" style="margin-bottom:8px"></div>
+    <textarea id="colarRevTexto"
+      style="width:100%;min-height:180px;font-family:ui-monospace,Consolas,monospace;
+             font-size:12px;line-height:1.4"></textarea>
+    <div id="colarRevSug" style="margin-top:8px"></div>
+    <div id="colarRevStatus" style="font-size:12px;margin-top:6px;min-height:16px"></div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnColarRevFinalizar" data-i18n="pastepanel_finish"></button>
+    <button class="btn btn-cinza" id="btnColarRevFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

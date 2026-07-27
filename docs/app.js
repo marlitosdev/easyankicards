@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.10.0";
+const VERSAO = "8.11.0";
 const $ = (id) => document.getElementById(id);
 let excluidos = new Set();
 let ultimoResult = null;
@@ -39,6 +39,8 @@ let cardDivs = [];            // [{line, div}] da última renderização
 let respostasFechadas = new Set();  // por padrão TODOS mostram a resposta
 let marcados = new Set();     // chaves de cartões marcados para revisão
 let modoRevisao = false;      // barra de revisão visível
+let revisaoSnapshot = null;   // texto do editor ao ENTRAR (para cancelar)
+let revisados = new Set();     // chaves de cartões já revisados (verde)
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
 let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
@@ -540,7 +542,7 @@ function preview() {
     if (filtrando && !marcados.has(chave(c))) return;   // mostra só marcados
     const div = document.createElement("div");
     div.className = "card" + (c.issues.length ? " suspeito" : "")
-      + (marcados.has(chave(c)) ? " marcado" : "");
+;
     const titulo = "#" + (idx + 1) + " · " + tipoRotulo(c) + " · " + t("card_line") + " " + c.line
       + (c.issues.length ? " — " + t("card_verify") : "");
     const cab = document.createElement("div");
@@ -558,13 +560,15 @@ function preview() {
     };
     lbl.append(chk, document.createTextNode(t("include_chk")));
     cab.append(sp, lbl);
+    // durante a revisão: checkbox "marcar" + selo de texto (só visual)
     if (modoRevisao) {
       const lblR = document.createElement("label");
       lblR.className = "chk-rev";
       const chkR = document.createElement("input");
       chkR.type = "checkbox"; chkR.checked = marcados.has(chave(c));
       chkR.onchange = () => {
-        chkR.checked ? marcados.add(chave(c)) : marcados.delete(chave(c));
+        if (chkR.checked) { marcados.add(chave(c)); revisados.delete(chave(c)); }
+        else marcados.delete(chave(c));
         atualizarContagemRevisao();
         preview();
       };
@@ -572,6 +576,13 @@ function preview() {
       cab.append(lblR);
     }
     div.append(cab);
+    if (modoRevisao && (marcados.has(chave(c)) || revisados.has(chave(c)))) {
+      const rev = revisados.has(chave(c));
+      const selo = document.createElement("div");
+      selo.className = "card-badge-rev " + (rev ? "card-badge-rev-ok" : "card-badge-sel");
+      selo.textContent = "● " + t(rev ? "badge_reviewed" : "badge_selected");
+      div.append(selo);
+    }
 
     if (editando === chave(c)) {
       c.kind === "mc" ? montarEdicaoMC(div, c, r, idx) : montarEdicao(div, c, r, idx);
@@ -1138,12 +1149,51 @@ $("btnRevCopyCopiar").onclick = async () => {
   } catch (e) { uiAlert(t("paste_denied")); }
 };
 
-$("btnRevisar").onclick = () => {
-  modoRevisao = !modoRevisao;
-  $("barraRevisao").style.display = modoRevisao ? "" : "none";
-  if (!modoRevisao) { $("chkFiltro").checked = false; }
+// elementos que ficam TRAVADOS durante a revisão (só o painel de revisão fica ativo)
+const TRAVAR = ["btnNovoCartao","btnMCRapido","btnPromptIA","btnNormalizar",
+  "btnColarMais","btnDesfazerColagem","btnSelecionarTudo","btnCopiarTudo",
+  "btnApagarTudo","btnTxt","btnApkg","tituloGeral","selEstiloPainel","chk2col"];
+
+function travarFuncoes(travar) {
+  document.body.classList.toggle("em-revisao", travar);
+  TRAVAR.forEach((id) => { const el = $(id); if (el) el.disabled = travar; });
+  $("editor").readOnly = travar;   // editor só-leitura durante a revisão
+}
+
+function entrarRevisao() {
+  modoRevisao = true;
+  revisaoSnapshot = $("editor").value;   // ponto de restauração p/ cancelar
+  marcados.clear(); revisados.clear();
+  $("barraRevisao").style.display = "";
+  $("btnRevisar").style.display = "none";
+  $("btnRevFinalizar").style.display = "";
+  $("btnRevCancelar").style.display = "";
+  travarFuncoes(true);
   atualizarContagemRevisao();
   preview();
+  toast("toast_review_started");
+}
+
+function sairRevisao() {
+  modoRevisao = false;
+  revisaoSnapshot = null;
+  marcados.clear(); revisados.clear();
+  $("chkFiltro").checked = false;
+  $("barraRevisao").style.display = "none";
+  $("btnRevisar").style.display = "";
+  $("btnRevFinalizar").style.display = "none";
+  $("btnRevCancelar").style.display = "none";
+  travarFuncoes(false);
+  preview();
+}
+
+$("btnRevisar").onclick = entrarRevisao;
+$("btnRevFinalizar").onclick = () => { sairRevisao(); toast("toast_review_finished"); };
+$("btnRevCancelar").onclick = async () => {
+  if (!(await uiConfirm(t("review_cancel_confirm")))) return;
+  if (revisaoSnapshot !== null) { $("editor").value = revisaoSnapshot; autoSalvar(); }
+  sairRevisao();
+  toast("toast_review_cancelled");
 };
 $("selCurtos").onclick = () => marcarPor(CRIT.curtos);
 $("selSemResp").onclick = () => marcarPor(CRIT.semResp);
@@ -1175,35 +1225,106 @@ async function substituirMarcados() {
   try { correcao = await navigator.clipboard.readText(); }
   catch (e) { uiAlert(t("paste_denied")); return; }
   if (!correcao || !correcao.trim()) { uiAlert(t("replace_help")); return; }
+  abrirColarRev(correcao);
+}
 
-  const qtd = marcados.size;
-  if (!(await uiConfirm(t("replace_confirm", { n: qtd })))) return;   // confirma antes
+/* Painel temporário: mostra a correção colada, faz as MESMAS críticas do
+ * editor (linhas ignoradas, cartões a verificar, marcadores, título grudado,
+ * tags que são texto), com "Ver no texto" e "Corrigir" — e só libera o
+ * "Finalizar" quando o texto está sem erros. */
+let colarRevMarcados = null;   // linhas dos marcados no editor (para remover)
 
-  // linhas dos cartões marcados, de baixo para cima (índices não se deslocam)
-  const linhasMarcadas = ultimoResult.cards
-    .filter((c) => marcados.has(chave(c)))
-    .map((c) => c.line)
-    .sort((a, b) => b - a);
+function abrirColarRev(correcao) {
+  colarRevMarcados = ultimoResult.cards
+    .filter((c) => marcados.has(chave(c))).map((c) => c.line).sort((a, b) => b - a);
+  $("colarRevTexto").value = correcao.replace(/^\s+/, "");
+  analisarColarRev();
+  $("dlgColarRev").showModal();
+}
 
-  colagemAnterior = { texto: $("editor").value };   // permite "desfazer"
+/* Corrige um trecho e reanalisa (usada pelos botões do painel). */
+function corrigirColarRev(fn) {
+  $("colarRevTexto").value = fn($("colarRevTexto").value);
+  analisarColarRev();
+}
+
+/* Leva à linha dentro do textarea do painel. */
+function irLinhaColarRev(n) {
+  const ta = $("colarRevTexto");
+  const linhas = ta.value.split("\n");
+  if (n < 1 || n > linhas.length) return;
+  let ini = 0; for (let i = 0; i < n - 1; i++) ini += linhas[i].length + 1;
+  ta.focus(); ta.setSelectionRange(ini, ini + linhas[n - 1].length);
+}
+
+function analisarColarRev() {
+  const raw = $("colarRevTexto").value;
+  const r = parseText(raw, []);
+  const box = $("colarRevSug");
+  box.innerHTML = "";
+  const itens = [];
+  (r.warnLines || []).forEach((n, i) =>
+    itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n }));
+  r.cards.filter((c) => c.issues.length).forEach((c) =>
+    itens.push({ dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line }));
+  const correcao = temTituloGrudado(raw) ? corrigirTituloGrudado
+    : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
+    : (temMarcadores(raw) ? removerMarcadoresTexto : null));
+  if (correcao) itens.push({ dot: "dot-org", txt: t("crit_bullets"),
+    fixTxt: t("fix_now"), fix: correcao });
+
+  itens.slice(0, 8).forEach((it) => {
+    const div = document.createElement("div");
+    div.className = "sug";
+    const dot = document.createElement("span"); dot.className = "dot " + it.dot;
+    const sp = document.createElement("span"); sp.textContent = it.txt;
+    div.append(dot, sp);
+    if (it.linha) div.append(botaoMini("goto_error", "btn-cinza", () => irLinhaColarRev(it.linha)));
+    if (it.fix) div.append(botaoMini("fix_now", "btn-azul", () => corrigirColarRev(it.fix)));
+    box.append(div);
+  });
+
+  // pode finalizar? (sem linhas ignoradas e sem cartões a verificar)
+  const problemas = r.warnings.length + r.nSuspicious + (correcao ? 1 : 0);
+  const podeFinalizar = problemas === 0 && r.cards.length > 0;
+  $("btnColarRevFinalizar").disabled = !podeFinalizar;
+  const st = $("colarRevStatus");
+  st.textContent = podeFinalizar ? t("pastepanel_clean") : t("pastepanel_haserr", { n: problemas });
+  st.style.color = podeFinalizar ? "var(--verde)" : "var(--laranja)";
+}
+
+/* Só ao finalizar: remove os marcados e insere a correção; marca os novos
+ * cartões como "já revisado" (verde). */
+function finalizarColarRev() {
+  const correcao = $("colarRevTexto").value;
+  const rNovo = parseText(correcao, []);
+  colagemAnterior = { texto: $("editor").value };
   const linhas = $("editor").value.split("\n");
-  linhasMarcadas.forEach((ln) => removerBlocoCartao(linhas, ln));
-  // limpa linhas em branco repetidas deixadas pela remoção
+  (colarRevMarcados || []).forEach((ln) => removerBlocoCartao(linhas, ln));
   let base = linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
-  const juntado = base ? base + "\n\n" + correcao.replace(/^\s+/, "")
-                       : correcao.replace(/^\s+/, "");
+  const juntado = base ? base + "\n\n" + correcao.replace(/^\s+/, "") : correcao.replace(/^\s+/, "");
   $("editor").value = juntado;
 
+  const qtd = (colarRevMarcados || []).length;
   marcados.clear();
-  atualizarContagemRevisao();
+  // marca os cartões vindos da correção como "já revisado"
+  parseAtual().cards.forEach((c) => {
+    if (rNovo.cards.some((n) => n.front === c.front)) revisados.add(chave(c));
+  });
   $("btnDesfazerColagem").disabled = false;
-  linhaNovaColada = base ? base.split("\n").length + 2 : 1;   // 1ª linha nova
+  linhaNovaColada = base ? base.split("\n").length + 2 : 1;
   autoSalvar();
+  $("dlgColarRev").close();
+  atualizarContagemRevisao();
   preview();
   irParaLinha(linhaNovaColada);
   setTimeout(() => { linhaNovaColada = null; }, 2400);
   toast(t("toast_replaced", { n: qtd }));
 }
+
+$("colarRevTexto").addEventListener("input", analisarColarRev);
+$("btnColarRevFinalizar").onclick = finalizarColarRev;
+$("btnColarRevFechar").onclick = () => $("dlgColarRev").close();
 $("btnSubstituirMarcados").onclick = substituirMarcados;
 attachTip($("btnRevisar"), "tip_review_btn");
 attachTip($("selCurtos"), "tip_sel_short");
