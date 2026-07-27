@@ -364,7 +364,9 @@ const UI = {
   "toast_review_started": "Revisão de conteúdo iniciada",
   "toast_review_finished": "Revisão finalizada",
   "toast_review_cancelled": "Revisão cancelada — alterações descartadas",
-  "colarrev_ph": "Cole aqui (Ctrl+V) a correção da IA. Você pode editar antes de finalizar."
+  "colarrev_ph": "Cole aqui (Ctrl+V) a correção da IA. Você pode editar antes de finalizar.",
+  "crit_orphans": "Há linhas soltas depois de um cartão (provável explicação sem o \"+\") — o app pode transformá-las em explicação.",
+  "fix_orphans": "Transformar linhas soltas em explicação"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -730,7 +732,9 @@ const UI = {
   "toast_review_started": "Content review started",
   "toast_review_finished": "Review finished",
   "toast_review_cancelled": "Review cancelled — changes discarded",
-  "colarrev_ph": "Paste the AI's fix here (Ctrl+V). You can edit before finishing."
+  "colarrev_ph": "Paste the AI's fix here (Ctrl+V). You can edit before finishing.",
+  "crit_orphans": "There are loose lines after a card (likely an explanation missing the \"+\") — the app can turn them into an explanation.",
+  "fix_orphans": "Turn loose lines into explanation"
  }
 };
 const PARSER_MSG = {

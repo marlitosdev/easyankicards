@@ -471,3 +471,40 @@ function temTagsQueSaoTexto(raw) {
 }
 
 
+
+
+/* Detecta linhas soltas (não são cartão, título, comentário nem já são
+ * explicação) que aparecem DEPOIS de um cartão — provável explicação que
+ * perdeu o "+"/"*". */
+function _ehLinhaCartao(s) {
+  return s.length > 0 && !s.startsWith("#") && !s.startsWith("+")
+    && !s.startsWith("*") && !s.startsWith("@")
+    && (splitLine(s).length > 1 || CLOZE_START_RE.test(s) || s.startsWith("[MC]"));
+}
+
+function temOrfaosExplicacao(raw) {
+  let cartaoAntes = false;
+  for (const linha of raw.split(/\r?\n/)) {
+    const s = linha.trim();
+    if (!s) continue;
+    if (s.startsWith("@") || _ehLinhaCartao(s)) { cartaoAntes = true; continue; }
+    if (s.startsWith("#") || s.startsWith("+") || (/^\*\s+\S/).test(s)) continue;
+    // linha sem "::"/cloze, não é metadado: se veio depois de um cartão, é órfã
+    if (cartaoAntes && splitLine(s).length === 1 && !CLOZE_START_RE.test(s)) return true;
+  }
+  return false;
+}
+
+/* Transforma cada linha órfã (após um cartão) em explicação "+" dele. */
+function corrigirOrfaosExplicacao(raw) {
+  let cartaoAntes = false;
+  return raw.split(/\r?\n/).map((linha) => {
+    const s = linha.trim();
+    if (!s) return linha;
+    if (s.startsWith("@") || _ehLinhaCartao(s)) { cartaoAntes = true; return linha; }
+    if (s.startsWith("#") || s.startsWith("+") || (/^\*\s+\S/).test(s)) return linha;
+    if (cartaoAntes && splitLine(s).length === 1 && !CLOZE_START_RE.test(s))
+      return "+ " + s;                 // órfã vira explicação do cartão anterior
+    return linha;
+  }).join("\n");
+}
