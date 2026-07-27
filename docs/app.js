@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.13.0";
+const VERSAO = "8.14.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2301,6 +2301,84 @@ $("btnColarMais").onclick = colarMaisTexto;
 $("btnDesfazerColagem").onclick = desfazerColagem;
 attachTip($("btnColarMais"), "paste_more");
 attachTip($("btnDesfazerColagem"), "undo_paste");
+
+
+/* ---------------- Importar arquivo (gaveta retrátil) ---------------- */
+
+/* Desktop (pywebview) expõe window.pywebview.api; no navegador não existe. */
+function ehDesktop() { return !!(window.pywebview && window.pywebview.api); }
+
+/* Abre/fecha a gaveta (a alça). Fica escondida por padrão. */
+function toggleGaveta(forcar) {
+  const corpo = $("gavetaImportar");
+  const aberto = forcar !== undefined ? forcar : corpo.hidden;
+  corpo.hidden = !aberto;
+  $("alcaImportar").setAttribute("aria-expanded", aberto ? "true" : "false");
+  localStorage.setItem("eac_gaveta", aberto ? "1" : "0");
+}
+$("alcaImportar").onclick = () => toggleGaveta();
+
+/* Ajusta a aparência conforme desktop ou navegador. */
+function configurarImportar() {
+  const desktop = ehDesktop();
+  $("alcaImportar").classList.toggle("desktop-ok", desktop);   // esconde o selo no desktop
+  $("importAviso").textContent = desktop ? "" : t("import_notice");
+  $("importAviso").style.display = desktop ? "none" : "";
+}
+
+$("btnImportar").onclick = async () => {
+  if (!ehDesktop()) { uiAlert(t("import_notice")); return; }   // navegador: só o aviso
+  try {
+    toast("import_converting");
+    const res = await window.pywebview.api.converter_arquivo();  // {nome, tamIn, tamOut, texto}
+    if (!res || res.cancelado) return;
+    if (res.erro) { uiAlert(t("import_error") + "\n\n" + res.erro); return; }
+    abrirImportResultado(res);
+  } catch (e) { uiAlert(t("import_error") + "\n\n" + e); }
+};
+
+/* Painel de resultado: prévia editável + copiar / salvar / gerar cartões. */
+let importNome = "documento";
+function abrirImportResultado(res) {
+  importNome = (res.nome || "documento").replace(/\.[^.]+$/, "");
+  $("importInfo").innerHTML = "";
+  const ic = document.createElement("span");
+  ic.textContent = "📄 " + (res.nome || "");
+  const tam = document.createElement("span");
+  tam.style.cssText = "color:var(--sutil);margin-left:auto";
+  tam.textContent = t("import_size", { ina: res.tamIn || "", out: res.tamOut || "" });
+  $("importInfo").append(ic, tam);
+  $("importTexto").value = res.texto || "";
+  $("dlgImportar").showModal();
+}
+
+function baixarArquivo(conteudo, nome, mime) {
+  const blob = new Blob([conteudo], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = nome; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+$("btnImpCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("importTexto").value); toast("toast_import_copied"); }
+  catch (e) { uiAlert(t("paste_denied")); }
+};
+$("btnImpMd").onclick = () => { baixarArquivo($("importTexto").value, importNome + ".md", "text/markdown"); toast("toast_import_saved"); };
+$("btnImpTxt").onclick = () => { baixarArquivo($("importTexto").value, importNome + ".txt", "text/plain"); toast("toast_import_saved"); };
+$("btnImpGerar").onclick = async () => {
+  const prompt = t("prompt_full").replace("[cole aqui o material de estudo]", $("importTexto").value)
+    .replace("[paste your study material here]", $("importTexto").value);
+  try { await navigator.clipboard.writeText(prompt); toast("toast_import_gen"); }
+  catch (e) { uiAlert(t("paste_denied")); }
+};
+$("btnImpFechar").onclick = () => $("dlgImportar").close();
+
+// estado inicial: escondida por padrão (navegador); lembra a escolha
+configurarImportar();
+toggleGaveta(localStorage.getItem("eac_gaveta") === "1");
+// pywebview pode ficar pronto depois do load
+window.addEventListener("pywebviewready", configurarImportar);
 
 /* ----------------------------- eventos ----------------------------- */
 

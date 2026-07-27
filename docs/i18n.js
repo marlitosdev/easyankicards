@@ -366,7 +366,23 @@ const UI = {
   "toast_review_cancelled": "Revisão cancelada — alterações descartadas",
   "colarrev_ph": "Cole aqui (Ctrl+V) a correção da IA. Você pode editar antes de finalizar.",
   "crit_orphans": "Há linhas soltas depois de um cartão (provável explicação sem o \"+\") — o app pode transformá-las em explicação.",
-  "fix_orphans": "Transformar linhas soltas em explicação"
+  "fix_orphans": "Transformar linhas soltas em explicação",
+  "import_handle": "Importar arquivo (PDF, Word, Excel…)",
+  "import_choose": "Escolher arquivo",
+  "import_desktop_only": "só no computador",
+  "import_notice": "Este recurso converte arquivos (PDF, Word, Excel, PowerPoint…) em texto e funciona apenas na versão para COMPUTADOR do EasyAnkiCards. Baixe o app de desktop para usá-lo.",
+  "import_result_title": "Converter arquivo para texto",
+  "import_extracted": "Texto extraído (editável)",
+  "import_copy": "Copiar texto",
+  "import_save_md": "Salvar .md",
+  "import_save_txt": "Salvar .txt",
+  "import_gen": "Gerar cartões (copiar prompt)",
+  "import_converting": "Convertendo…",
+  "import_error": "Não consegui converter este arquivo.",
+  "toast_import_copied": "Texto copiado",
+  "toast_import_saved": "Arquivo salvo",
+  "toast_import_gen": "Prompt copiado — cole na IA para gerar os cartões",
+  "import_size": "{ina} → texto {out}"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -734,7 +750,23 @@ const UI = {
   "toast_review_cancelled": "Review cancelled — changes discarded",
   "colarrev_ph": "Paste the AI's fix here (Ctrl+V). You can edit before finishing.",
   "crit_orphans": "There are loose lines after a card (likely an explanation missing the \"+\") — the app can turn them into an explanation.",
-  "fix_orphans": "Turn loose lines into explanation"
+  "fix_orphans": "Turn loose lines into explanation",
+  "import_handle": "Import file (PDF, Word, Excel…)",
+  "import_choose": "Choose file",
+  "import_desktop_only": "desktop only",
+  "import_notice": "This feature converts files (PDF, Word, Excel, PowerPoint…) into text and works only in the DESKTOP version of EasyAnkiCards. Download the desktop app to use it.",
+  "import_result_title": "Convert file to text",
+  "import_extracted": "Extracted text (editable)",
+  "import_copy": "Copy text",
+  "import_save_md": "Save .md",
+  "import_save_txt": "Save .txt",
+  "import_gen": "Generate cards (copy prompt)",
+  "import_converting": "Converting…",
+  "import_error": "Couldn't convert this file.",
+  "toast_import_copied": "Text copied",
+  "toast_import_saved": "File saved",
+  "toast_import_gen": "Prompt copied — paste it in the AI to generate the cards",
+  "import_size": "{ina} → text {out}"
  }
 };
 const PARSER_MSG = {

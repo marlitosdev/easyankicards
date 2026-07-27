@@ -240,6 +240,22 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 #avisoTopo .av-txt{font-size:11.5px;color:var(--texto);opacity:.9;line-height:1.35}
 #avisoTopo .av-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;
   color:var(--sutil);font-weight:700;margin:7px 0 3px}
+/* Gaveta retrátil "Importar arquivo": alça sempre visível, corpo oculto
+   por padrão (principalmente no navegador). */
+.gaveta-importar{margin-bottom:10px;border:1px solid var(--borda);border-radius:9px;
+  background:var(--campo);overflow:hidden}
+.gaveta-alca{width:100%;display:flex;align-items:center;gap:8px;background:transparent;
+  border:0;color:var(--texto);font:inherit;font-size:12.5px;font-weight:600;
+  padding:9px 11px;cursor:pointer;text-align:left}
+.gaveta-alca:hover{background:rgba(128,128,128,.08)}
+.gaveta-alca .gv-icone{transition:transform .18s;display:inline-block;color:var(--sutil)}
+.gaveta-alca[aria-expanded="true"] .gv-icone{transform:rotate(90deg)}
+.gaveta-alca .gv-selo{margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--laranja);background:var(--laranja-claro);
+  border:1px solid var(--laranja-borda);border-radius:6px;padding:1px 7px}
+.gaveta-alca.desktop-ok .gv-selo{display:none}
+.gaveta-corpo{padding:0 11px 11px;display:flex;flex-direction:column;gap:8px}
+.gaveta-corpo .nota{font-size:11.5px;color:var(--sutil);line-height:1.4}
 .linha-colar{display:flex;gap:8px;margin:8px 0 2px;flex-wrap:wrap}
 .linha-colar .btn{flex:1 1 auto;padding:9px;font-size:12.5px}
 .linha-corrigir{margin:6px 0 2px}
@@ -393,6 +409,17 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 <main>
   <div class="duas-colunas">
     <div class="grupo">
+      <div class="gaveta-importar">
+        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
+          <span class="gv-icone">▸</span>
+          <span data-i18n="import_handle"></span>
+          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
+        </button>
+        <div class="gaveta-corpo" id="gavetaImportar" hidden>
+          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <div class="nota" id="importAviso"></div>
+        </div>
+      </div>
       <label data-i18n="editor_label"></label>
       <div class="linha-editor">
         <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
@@ -568,6 +595,25 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnExportConfirm" data-i18n="export_confirm"></button>
     <button class="btn btn-cinza" id="btnExportFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgImportar" style="max-width:640px;width:94%">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="import_result_title"></h3>
+    <div id="importInfo" style="display:flex;align-items:center;gap:8px;background:var(--campo);
+      border:1px solid var(--borda);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12.5px"></div>
+    <div class="nota" data-i18n="import_extracted" style="margin-bottom:4px"></div>
+    <textarea id="importTexto"
+      style="width:100%;min-height:200px;font-family:ui-monospace,Consolas,monospace;
+             font-size:12px;line-height:1.4"></textarea>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnImpCopiar" data-i18n="import_copy"></button>
+    <button class="btn btn-cinza" id="btnImpMd" data-i18n="import_save_md"></button>
+    <button class="btn btn-cinza" id="btnImpTxt" data-i18n="import_save_txt"></button>
+    <button class="btn btn-azul" id="btnImpGerar" data-i18n="import_gen"></button>
+    <button class="btn btn-cinza" id="btnImpFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
