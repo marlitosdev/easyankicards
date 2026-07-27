@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.12.0";
+const VERSAO = "8.13.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -380,8 +380,9 @@ function renderSugestoes(r, raw) {
   // o botão só fica ativo se houver correção automática OU cartão/linha
   // com problema — evita o usuário clicar e não encontrar nada
   correcaoPendente = temTituloGrudado(raw) ? corrigirTituloGrudado
+    : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
-    : (temMarcadores(raw) ? removerMarcadoresTexto : null));
+    : (temMarcadores(raw) ? removerMarcadoresTexto : null)));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -1258,11 +1259,12 @@ function analisarColarRev() {
     itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n }));
   r.cards.filter((c) => c.issues.length).forEach((c) =>
     itens.push({ dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line }));
-  const correcao = temTituloGrudado(raw) ? corrigirTituloGrudado
-    : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
-    : (temMarcadores(raw) ? removerMarcadoresTexto : null));
-  if (correcao) itens.push({ dot: "dot-org", txt: t("crit_bullets"),
-    fixTxt: t("fix_now"), fix: correcao });
+  let correcao = null, critTxt = t("crit_bullets");
+  if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
+  else if (temOrfaosExplicacao(raw)) { correcao = corrigirOrfaosExplicacao; critTxt = t("crit_orphans"); }
+  else if (temTagsQueSaoTexto(raw)) { correcao = corrigirTagsQueSaoTexto; critTxt = t("crit_pairs_tags"); }
+  else if (temMarcadores(raw)) { correcao = removerMarcadoresTexto; critTxt = t("crit_bullets"); }
+  if (correcao) itens.push({ dot: "dot-org", txt: critTxt, fixTxt: t("fix_now"), fix: correcao });
 
   itens.slice(0, 8).forEach((it) => {
     const div = document.createElement("div");
