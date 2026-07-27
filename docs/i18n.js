@@ -26,7 +26,7 @@ const UI = {
   "normalize_status": "Texto normalizado: {n} cartões.",
   "norm_ignored_header": "# --- Linhas não reconhecidas (corrija e remova o #) ---",
   "preview_label": "2. Confira os cartões (laranja = verificar)",
-  "summary": "{n} cartões ({b} básicos, {c} cloze) | {sel} selecionados para exportar",
+  "summary": "{n} cartões ({b} básicos, {c} cloze)",
   "summary_verify": " | {n} para VERIFICAR",
   "card_basic": "BÁSICO",
   "card_cloze": "CLOZE",
@@ -357,13 +357,14 @@ const UI = {
   "badge_selected": "cartão selecionado para revisão",
   "badge_reviewed": "cartão já revisado",
   "pastepanel_title": "Revisar o conteúdo colado",
-  "pastepanel_note": "Confira e corrija o texto colado abaixo. Só será possível finalizar quando não houver erros.",
+  "pastepanel_note": "Cole aqui (Ctrl+V) a correção da IA e ajuste o que precisar. Os cartões marcados serão substituídos por este texto. Só dá para finalizar quando não houver erros.",
   "pastepanel_finish": "Finalizar edição destes cartões",
   "pastepanel_clean": "✓ Sem erros — pronto para finalizar.",
   "pastepanel_haserr": "Há {n} ponto(s) a corrigir antes de finalizar.",
   "toast_review_started": "Revisão de conteúdo iniciada",
   "toast_review_finished": "Revisão finalizada",
-  "toast_review_cancelled": "Revisão cancelada — alterações descartadas"
+  "toast_review_cancelled": "Revisão cancelada — alterações descartadas",
+  "colarrev_ph": "Cole aqui (Ctrl+V) a correção da IA. Você pode editar antes de finalizar."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -391,7 +392,7 @@ const UI = {
   "normalize_status": "Text normalized: {n} cards.",
   "norm_ignored_header": "# --- Unrecognized lines (fix and remove the #) ---",
   "preview_label": "2. Review the cards (orange = check)",
-  "summary": "{n} cards ({b} basic, {c} cloze) | {sel} selected for export",
+  "summary": "{n} cards ({b} basic, {c} cloze)",
   "summary_verify": " | {n} to CHECK",
   "card_basic": "BASIC",
   "card_cloze": "CLOZE",
@@ -722,13 +723,14 @@ const UI = {
   "badge_selected": "card selected for review",
   "badge_reviewed": "card already reviewed",
   "pastepanel_title": "Review the pasted content",
-  "pastepanel_note": "Check and fix the pasted text below. You can only finish when there are no errors.",
+  "pastepanel_note": "Paste the AI's fix here (Ctrl+V) and adjust what you need. The marked cards will be replaced by this text. You can only finish when there are no errors.",
   "pastepanel_finish": "Finish editing these cards",
   "pastepanel_clean": "✓ No errors — ready to finish.",
   "pastepanel_haserr": "{n} issue(s) to fix before finishing.",
   "toast_review_started": "Content review started",
   "toast_review_finished": "Review finished",
-  "toast_review_cancelled": "Review cancelled — changes discarded"
+  "toast_review_cancelled": "Review cancelled — changes discarded",
+  "colarrev_ph": "Paste the AI's fix here (Ctrl+V). You can edit before finishing."
  }
 };
 const PARSER_MSG = {

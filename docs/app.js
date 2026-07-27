@@ -29,9 +29,8 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.11.0";
+const VERSAO = "8.12.0";
 const $ = (id) => document.getElementById(id);
-let excluidos = new Set();
 let ultimoResult = null;
 let previewTimer = null;
 let editando = null;
@@ -549,17 +548,7 @@ function preview() {
     cab.className = "cab";
     const sp = document.createElement("span");
     sp.className = "titulo"; sp.textContent = titulo;
-    const lbl = document.createElement("label");
-    lbl.style.cssText = "display:flex;align-items:center;gap:4px;font-weight:400";
-    const chk = document.createElement("input");
-    chk.type = "checkbox"; chk.checked = !excluidos.has(chave(c));
-    chk.title = t("tip_incluir");
-    chk.onchange = () => {
-      chk.checked ? excluidos.delete(chave(c)) : excluidos.add(chave(c));
-      resumo(r);
-    };
-    lbl.append(chk, document.createTextNode(t("include_chk")));
-    cab.append(sp, lbl);
+    cab.append(sp);
     // durante a revisão: checkbox "marcar" + selo de texto (só visual)
     if (modoRevisao) {
       const lblR = document.createElement("label");
@@ -653,10 +642,10 @@ function preview() {
   }
 }
 
-function selecionados(r) { return r.cards.filter((c) => !excluidos.has(chave(c))); }
+function selecionados(r) { return r.cards; }   // "incluir" removido: exporta todos
 
 function resumo(r) {
-  let s = t("summary", { n: r.cards.length, b: r.nBasic, c: r.nCloze, sel: selecionados(r).length });
+  let s = t("summary", { n: r.cards.length, b: r.nBasic, c: r.nCloze });
   if (r.nSuspicious) s += t("summary_verify", { n: r.nSuspicious });
   $("resumo").textContent = s;
   $("status").textContent = t("status_auto", { n: r.cards.length });
@@ -1221,11 +1210,11 @@ function removerBlocoCartao(linhas, linhaCartao) {
  * insere a versão corrigida no lugar — sem duplicar nem sobrar os antigos. */
 async function substituirMarcados() {
   if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
+  // tenta pré-preencher com a área de transferência; se não der, abre vazio
+  // para o usuário colar (Ctrl+V) e editar dentro do próprio painel.
   let correcao = "";
-  try { correcao = await navigator.clipboard.readText(); }
-  catch (e) { uiAlert(t("paste_denied")); return; }
-  if (!correcao || !correcao.trim()) { uiAlert(t("replace_help")); return; }
-  abrirColarRev(correcao);
+  try { correcao = await navigator.clipboard.readText(); } catch (e) { correcao = ""; }
+  abrirColarRev(correcao || "");
 }
 
 /* Painel temporário: mostra a correção colada, faz as MESMAS críticas do
@@ -1238,8 +1227,10 @@ function abrirColarRev(correcao) {
   colarRevMarcados = ultimoResult.cards
     .filter((c) => marcados.has(chave(c))).map((c) => c.line).sort((a, b) => b - a);
   $("colarRevTexto").value = correcao.replace(/^\s+/, "");
+  $("colarRevTexto").placeholder = t("colarrev_ph");
   analisarColarRev();
   $("dlgColarRev").showModal();
+  setTimeout(() => $("colarRevTexto").focus(), 60);
 }
 
 /* Corrige um trecho e reanalisa (usada pelos botões do painel). */
@@ -2340,7 +2331,6 @@ $("btnApagarTudo").onclick = async () => {
   if (!(await uiConfirm(t("clear_confirm")))) return;
   $("editor").value = "";
   respostasFechadas.clear();
-  excluidos.clear();
   marcados.clear();
   localStorage.removeItem("eac_texto");
   preview();
