@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.14.0";
+const VERSAO = "8.15.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2305,10 +2305,13 @@ attachTip($("btnDesfazerColagem"), "undo_paste");
 
 /* ---------------- Importar arquivo (gaveta retrátil) ---------------- */
 
-/* Desktop (pywebview) expõe window.pywebview.api; no navegador não existe. */
+/* Desktop (pywebview) expõe window.pywebview.api — inclusive quando a
+ * interface é carregada do SITE (o pywebview injeta a ponte em qualquer
+ * página). Então o MarkItDown funciona mesmo mostrando a versão da web. */
 function ehDesktop() { return !!(window.pywebview && window.pywebview.api); }
 
-/* Abre/fecha a gaveta (a alça). Fica escondida por padrão. */
+let ultimosImportados = null;   // [{nome, tamIn, tamOut, texto}] do último import
+
 function toggleGaveta(forcar) {
   const corpo = $("gavetaImportar");
   const aberto = forcar !== undefined ? forcar : corpo.hidden;
@@ -2318,39 +2321,48 @@ function toggleGaveta(forcar) {
 }
 $("alcaImportar").onclick = () => toggleGaveta();
 
-/* Ajusta a aparência conforme desktop ou navegador. */
 function configurarImportar() {
   const desktop = ehDesktop();
-  $("alcaImportar").classList.toggle("desktop-ok", desktop);   // esconde o selo no desktop
+  $("alcaImportar").classList.toggle("desktop-ok", desktop);
   $("importAviso").textContent = desktop ? "" : t("import_notice");
   $("importAviso").style.display = desktop ? "none" : "";
 }
 
+/* Barra de progresso da conversão (arquivo a arquivo). */
+function progresso(i, n, nome) {
+  const box = $("importProgresso");
+  if (i === null) { box.style.display = "none"; return; }
+  box.style.display = "";
+  $("importProgTxt").textContent = t("import_progress", { i, n, nome });
+  $("importProgFill").style.width = Math.round((i / n) * 100) + "%";
+}
+
 $("btnImportar").onclick = async () => {
-  if (!ehDesktop()) { uiAlert(t("import_notice")); return; }   // navegador: só o aviso
-  try {
-    toast("import_converting");
-    const res = await window.pywebview.api.converter_arquivo();  // {nome, tamIn, tamOut, texto}
-    if (!res || res.cancelado) return;
-    if (res.erro) { uiAlert(t("import_error") + "\n\n" + res.erro); return; }
-    abrirImportResultado(res);
-  } catch (e) { uiAlert(t("import_error") + "\n\n" + e); }
+  if (!ehDesktop()) { uiAlert(t("import_notice")); return; }
+  let caminhos = [];
+  try { caminhos = await window.pywebview.api.escolher_arquivos(); }
+  catch (e) { uiAlert(t("import_error") + "\n\n" + e); return; }
+  if (!caminhos || !caminhos.length) return;
+
+  const resultados = [];
+  for (let i = 0; i < caminhos.length; i++) {
+    const nome = caminhos[i].split(/[\\/]/).pop();
+    progresso(i, caminhos.length, nome);       // barra 0→100%, arquivo por arquivo
+    try {
+      const r = await window.pywebview.api.converter_um(caminhos[i]);
+      resultados.push(r && r.erro ? { nome, erro: r.erro } : r);
+    } catch (e) { resultados.push({ nome, erro: String(e) }); }
+  }
+  progresso(caminhos.length, caminhos.length, "");
+  setTimeout(() => progresso(null), 300);
+  ultimosImportados = resultados;
+  $("btnImportarReabrir").style.display = "";
+  abrirImportResultado(resultados);
 };
 
-/* Painel de resultado: prévia editável + copiar / salvar / gerar cartões. */
-let importNome = "documento";
-function abrirImportResultado(res) {
-  importNome = (res.nome || "documento").replace(/\.[^.]+$/, "");
-  $("importInfo").innerHTML = "";
-  const ic = document.createElement("span");
-  ic.textContent = "📄 " + (res.nome || "");
-  const tam = document.createElement("span");
-  tam.style.cssText = "color:var(--sutil);margin-left:auto";
-  tam.textContent = t("import_size", { ina: res.tamIn || "", out: res.tamOut || "" });
-  $("importInfo").append(ic, tam);
-  $("importTexto").value = res.texto || "";
-  $("dlgImportar").showModal();
-}
+$("btnImportarReabrir").onclick = () => {
+  if (ultimosImportados) abrirImportResultado(ultimosImportados);
+};
 
 function baixarArquivo(conteudo, nome, mime) {
   const blob = new Blob([conteudo], { type: mime });
@@ -2360,25 +2372,84 @@ function baixarArquivo(conteudo, nome, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-$("btnImpCopiar").onclick = async () => {
-  try { await navigator.clipboard.writeText($("importTexto").value); toast("toast_import_copied"); }
+function nomeBase(nome) { return (nome || "documento").replace(/\.[^.]+$/, ""); }
+
+/* Painel de resultado: cada arquivo isolado num bloco próprio, com sua
+ * prévia editável e botões de copiar/salvar; + ações globais no rodapé. */
+function abrirImportResultado(lista) {
+  const box = $("importLista");
+  box.innerHTML = "";
+  lista.forEach((r, idx) => {
+    const arq = document.createElement("div");
+    arq.className = "imp-arq";
+    const cab = document.createElement("div");
+    cab.className = "imp-cab";
+    const nome = document.createElement("span");
+    nome.className = "imp-nome"; nome.textContent = "📄 " + (r.nome || "arquivo");
+    const tam = document.createElement("span");
+    tam.className = "imp-tam";
+    tam.textContent = r.erro ? "erro" : t("import_size", { ina: r.tamIn || "", out: r.tamOut || "" });
+    cab.append(nome, tam);
+    arq.append(cab);
+    const corpo = document.createElement("div");
+    corpo.className = "imp-corpo";
+    if (r.erro) {
+      const e = document.createElement("div");
+      e.className = "issue"; e.textContent = "(!) " + t("import_error") + " " + r.erro;
+      corpo.append(e);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = r.texto || "";
+      r._el = ta;
+      const acoes = document.createElement("div");
+      acoes.className = "imp-acoes";
+      const bC = document.createElement("button");
+      bC.className = "btn btn-cinza"; bC.textContent = t("import_file_copy");
+      bC.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); toast("toast_import_copied"); } catch (e) { uiAlert(t("paste_denied")); } };
+      const bM = document.createElement("button");
+      bM.className = "btn btn-cinza"; bM.textContent = t("import_file_md");
+      bM.onclick = () => { baixarArquivo(ta.value, nomeBase(r.nome) + ".md", "text/markdown"); toast("toast_import_saved"); };
+      const bT = document.createElement("button");
+      bT.className = "btn btn-cinza"; bT.textContent = t("import_file_txt");
+      bT.onclick = () => { baixarArquivo(ta.value, nomeBase(r.nome) + ".txt", "text/plain"); toast("toast_import_saved"); };
+      acoes.append(bC, bM, bT);
+      corpo.append(ta, acoes);
+    }
+    arq.append(corpo);
+    box.append(arq);
+  });
+  $("dlgImportar").showModal();
+}
+
+/* junta o texto de todos os arquivos válidos. */
+function textoTodosImportados() {
+  return (ultimosImportados || [])
+    .filter((r) => !r.erro)
+    .map((r) => "# " + (r.nome || "") + "\n" + (r._el ? r._el.value : r.texto || ""))
+    .join("\n\n");
+}
+
+$("btnImpCopiarTudo").onclick = async () => {
+  try { await navigator.clipboard.writeText(textoTodosImportados()); toast("toast_import_copied"); }
   catch (e) { uiAlert(t("paste_denied")); }
 };
-$("btnImpMd").onclick = () => { baixarArquivo($("importTexto").value, importNome + ".md", "text/markdown"); toast("toast_import_saved"); };
-$("btnImpTxt").onclick = () => { baixarArquivo($("importTexto").value, importNome + ".txt", "text/plain"); toast("toast_import_saved"); };
-$("btnImpGerar").onclick = async () => {
-  const prompt = t("prompt_full").replace("[cole aqui o material de estudo]", $("importTexto").value)
-    .replace("[paste your study material here]", $("importTexto").value);
+$("btnImpGerarTudo").onclick = async () => {
+  const txt = textoTodosImportados();
+  const prompt = t("prompt_full").replace("[cole aqui o material de estudo]", txt)
+    .replace("[paste your study material here]", txt);
   try { await navigator.clipboard.writeText(prompt); toast("toast_import_gen"); }
   catch (e) { uiAlert(t("paste_denied")); }
 };
 $("btnImpFechar").onclick = () => $("dlgImportar").close();
 
-// estado inicial: escondida por padrão (navegador); lembra a escolha
+// estado inicial: no desktop abre (recurso principal); no navegador fica fechada
 configurarImportar();
-toggleGaveta(localStorage.getItem("eac_gaveta") === "1");
-// pywebview pode ficar pronto depois do load
-window.addEventListener("pywebviewready", configurarImportar);
+const gavetaSalva = localStorage.getItem("eac_gaveta");
+toggleGaveta(gavetaSalva !== null ? gavetaSalva === "1" : ehDesktop());
+window.addEventListener("pywebviewready", () => {
+  configurarImportar();
+  if (localStorage.getItem("eac_gaveta") === null) toggleGaveta(true);
+});
 
 /* ----------------------------- eventos ----------------------------- */
 

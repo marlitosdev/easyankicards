@@ -255,7 +255,22 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   border:1px solid var(--laranja-borda);border-radius:6px;padding:1px 7px}
 .gaveta-alca.desktop-ok .gv-selo{display:none}
 .gaveta-corpo{padding:0 11px 11px;display:flex;flex-direction:column;gap:8px}
-.gaveta-corpo .nota{font-size:11.5px;color:var(--sutil);line-height:1.4}
+.gaveta-corpo[hidden]{display:none}
+" .gaveta-corpo .nota{font-size:11.5px;color:var(--sutil);line-height:1.4}
+#importProgresso .ip-txt{font-size:11.5px;color:var(--sutil);margin-bottom:4px}
+#importProgresso .ip-barra{height:8px;background:var(--borda);border-radius:5px;overflow:hidden}
+#importProgresso .ip-fill{height:100%;width:0;background:var(--verde);transition:width .2s}
+.imp-arq{border:1px solid var(--borda);border-radius:9px;margin-bottom:10px;overflow:hidden}
+.imp-arq .imp-cab{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--campo);
+  font-size:12.5px;cursor:pointer}
+.imp-arq .imp-cab .imp-nome{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-arq .imp-cab .imp-tam{color:var(--sutil);font-size:11px;flex:none}
+.imp-arq .imp-corpo{padding:8px 10px}
+.imp-arq textarea{width:100%;min-height:120px;font-family:ui-monospace,Consolas,monospace;
+  font-size:12px;line-height:1.4;border:1px solid var(--borda);border-radius:6px;padding:8px;
+  background:var(--campo);color:var(--texto)}
+.imp-arq .imp-acoes{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.imp-arq .imp-acoes .btn{padding:3px 9px;font-size:11px}
 .linha-colar{display:flex;gap:8px;margin:8px 0 2px;flex-wrap:wrap}
 .linha-colar .btn{flex:1 1 auto;padding:9px;font-size:12.5px}
 .linha-corrigir{margin:6px 0 2px}
@@ -417,7 +432,12 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
         </button>
         <div class="gaveta-corpo" id="gavetaImportar" hidden>
           <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
           <div class="nota" id="importAviso"></div>
+          <div id="importProgresso" style="display:none">
+            <div class="ip-txt" id="importProgTxt"></div>
+            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
+          </div>
         </div>
       </div>
       <label data-i18n="editor_label"></label>
@@ -598,21 +618,14 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   </div>
 </dialog>
 
-<dialog id="dlgImportar" style="max-width:640px;width:94%">
+<dialog id="dlgImportar" style="max-width:680px;width:94%">
   <div style="padding:16px">
     <h3 style="margin:0 0 10px" data-i18n="import_result_title"></h3>
-    <div id="importInfo" style="display:flex;align-items:center;gap:8px;background:var(--campo);
-      border:1px solid var(--borda);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12.5px"></div>
-    <div class="nota" data-i18n="import_extracted" style="margin-bottom:4px"></div>
-    <textarea id="importTexto"
-      style="width:100%;min-height:200px;font-family:ui-monospace,Consolas,monospace;
-             font-size:12px;line-height:1.4"></textarea>
+    <div id="importLista"></div>
   </div>
   <div class="dlg-rodape">
-    <button class="btn btn-cinza" id="btnImpCopiar" data-i18n="import_copy"></button>
-    <button class="btn btn-cinza" id="btnImpMd" data-i18n="import_save_md"></button>
-    <button class="btn btn-cinza" id="btnImpTxt" data-i18n="import_save_txt"></button>
-    <button class="btn btn-azul" id="btnImpGerar" data-i18n="import_gen"></button>
+    <button class="btn btn-cinza" id="btnImpCopiarTudo" data-i18n="import_copy_all"></button>
+    <button class="btn btn-azul" id="btnImpGerarTudo" data-i18n="import_gen_all"></button>
     <button class="btn btn-cinza" id="btnImpFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
