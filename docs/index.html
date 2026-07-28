@@ -618,6 +618,25 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   </div>
 </dialog>
 
+<dialog id="dlgGerar" style="max-width:680px;width:94%">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 10px" data-i18n="gen_title"></h3>
+    <div class="toolbar" style="margin-bottom:8px">
+      <button class="btn btn-roxo" id="btnGenFull" data-i18n="gen_full_tab"></button>
+      <button class="btn btn-ciano" id="btnGenShort" data-i18n="gen_short_tab"></button>
+    </div>
+    <div class="nota" data-i18n="gen_note" style="margin-bottom:6px"></div>
+    <textarea id="genTexto"
+      style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
+             font-size:12px;line-height:1.4"></textarea>
+    <div id="genDone" style="font-size:12px;color:var(--verde);margin-top:6px;min-height:16px"></div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnGenCopiar" data-i18n="gen_copy"></button>
+    <button class="btn btn-cinza" id="btnGenFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgImportar" style="max-width:680px;width:94%">
   <div style="padding:16px">
     <h3 style="margin:0 0 10px" data-i18n="import_result_title"></h3>
@@ -626,6 +645,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnImpCopiarTudo" data-i18n="import_copy_all"></button>
     <button class="btn btn-azul" id="btnImpGerarTudo" data-i18n="import_gen_all"></button>
+    <button class="btn" id="btnImpLimpar" style="background:#b91c1c" data-i18n="import_clear"></button>
     <button class="btn btn-cinza" id="btnImpFechar" data-i18n="help_close"></button>
   </div>
 </dialog>

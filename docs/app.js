@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.15.0";
+const VERSAO = "8.16.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2355,14 +2355,43 @@ $("btnImportar").onclick = async () => {
   }
   progresso(caminhos.length, caminhos.length, "");
   setTimeout(() => progresso(null), 300);
-  ultimosImportados = resultados;
+  ultimosImportados = (ultimosImportados || []).concat(resultados);   // soma, não apaga
   $("btnImportarReabrir").style.display = "";
-  abrirImportResultado(resultados);
+  abrirImportResultado(ultimosImportados);
 };
 
 $("btnImportarReabrir").onclick = () => {
   if (ultimosImportados) abrirImportResultado(ultimosImportados);
 };
+
+/* Janela de prompt editável para gerar cartões a partir de um texto.
+ * Usa os prompts de geração já existentes (completo / curto Gemini). */
+let genTipo = "prompt_full";
+let genTextoBase = "";
+function montarGen() {
+  const p = t(genTipo).replace("[cole aqui o material de estudo]", genTextoBase)
+    .replace("[paste your study material here]", genTextoBase);
+  $("genTexto").value = p;
+  $("btnGenFull").classList.toggle("ativa", genTipo === "prompt_full");
+  $("btnGenShort").classList.toggle("ativa", genTipo === "prompt_mini");
+  $("genDone").textContent = "";
+}
+function abrirGerar(texto) {
+  genTextoBase = texto || "";
+  genTipo = "prompt_full";
+  montarGen();
+  $("dlgGerar").showModal();
+}
+$("btnGenFull").onclick = () => { genTipo = "prompt_full"; montarGen(); };
+$("btnGenShort").onclick = () => { genTipo = "prompt_mini"; montarGen(); };
+$("btnGenFechar").onclick = () => $("dlgGerar").close();
+$("btnGenCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("genTexto").value);
+    $("genDone").textContent = t("gen_copied"); toast("toast_import_gen"); }
+  catch (e) { uiAlert(t("paste_denied")); }
+};
+attachTip($("btnImportar"), "tip_import_choose");
+attachTip($("btnImportarReabrir"), "tip_import_reopen");
 
 function baixarArquivo(conteudo, nome, mime) {
   const blob = new Blob([conteudo], { type: mime });
@@ -2393,6 +2422,10 @@ function abrirImportResultado(lista) {
     arq.append(cab);
     const corpo = document.createElement("div");
     corpo.className = "imp-corpo";
+    const rot = document.createElement("div");
+    rot.style.cssText = "font-size:11px;color:var(--sutil);margin-bottom:3px";
+    rot.textContent = r.nome || "";
+    if (!r.erro) corpo.append(rot);
     if (r.erro) {
       const e = document.createElement("div");
       e.className = "issue"; e.textContent = "(!) " + t("import_error") + " " + r.erro;
@@ -2405,14 +2438,21 @@ function abrirImportResultado(lista) {
       acoes.className = "imp-acoes";
       const bC = document.createElement("button");
       bC.className = "btn btn-cinza"; bC.textContent = t("import_file_copy");
-      bC.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); toast("toast_import_copied"); } catch (e) { uiAlert(t("paste_denied")); } };
+      bC.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); toast("toast_copied_txt"); } catch (e) { uiAlert(t("paste_denied")); } };
+      attachTip(bC, "tip_import_copy");
       const bM = document.createElement("button");
       bM.className = "btn btn-cinza"; bM.textContent = t("import_file_md");
-      bM.onclick = () => { baixarArquivo(ta.value, nomeBase(r.nome) + ".md", "text/markdown"); toast("toast_import_saved"); };
+      bM.onclick = () => { baixarArquivo(ta.value, nomeBase(r.nome) + ".md", "text/markdown"); toast("toast_saved_md"); };
+      attachTip(bM, "tip_import_md");
       const bT = document.createElement("button");
       bT.className = "btn btn-cinza"; bT.textContent = t("import_file_txt");
-      bT.onclick = () => { baixarArquivo(ta.value, nomeBase(r.nome) + ".txt", "text/plain"); toast("toast_import_saved"); };
-      acoes.append(bC, bM, bT);
+      bT.onclick = () => { baixarArquivo(ta.value, nomeBase(r.nome) + ".txt", "text/plain"); toast("toast_saved_txt"); };
+      attachTip(bT, "tip_import_txt");
+      const bG = document.createElement("button");
+      bG.className = "btn btn-azul"; bG.textContent = t("import_gen");
+      bG.onclick = () => abrirGerar(ta.value);          // gerar cartões DESTE arquivo
+      attachTip(bG, "tip_import_gen");
+      acoes.append(bC, bM, bT, bG);
       corpo.append(ta, acoes);
     }
     arq.append(corpo);
@@ -2430,17 +2470,19 @@ function textoTodosImportados() {
 }
 
 $("btnImpCopiarTudo").onclick = async () => {
-  try { await navigator.clipboard.writeText(textoTodosImportados()); toast("toast_import_copied"); }
+  try { await navigator.clipboard.writeText(textoTodosImportados()); toast("toast_copied_txt"); }
   catch (e) { uiAlert(t("paste_denied")); }
 };
-$("btnImpGerarTudo").onclick = async () => {
-  const txt = textoTodosImportados();
-  const prompt = t("prompt_full").replace("[cole aqui o material de estudo]", txt)
-    .replace("[paste your study material here]", txt);
-  try { await navigator.clipboard.writeText(prompt); toast("toast_import_gen"); }
-  catch (e) { uiAlert(t("paste_denied")); }
+$("btnImpGerarTudo").onclick = () => abrirGerar(textoTodosImportados());
+$("btnImpLimpar").onclick = () => {
+  ultimosImportados = null;
+  $("btnImportarReabrir").style.display = "none";
+  $("dlgImportar").close();
 };
 $("btnImpFechar").onclick = () => $("dlgImportar").close();
+attachTip($("btnImpCopiarTudo"), "tip_import_copy_all");
+attachTip($("btnImpGerarTudo"), "tip_import_gen_all");
+attachTip($("btnImpLimpar"), "tip_import_clear");
 
 // estado inicial: no desktop abre (recurso principal); no navegador fica fechada
 configurarImportar();
