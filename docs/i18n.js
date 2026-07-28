@@ -382,7 +382,14 @@ const UI = {
   "toast_import_copied": "Texto copiado",
   "toast_import_saved": "Arquivo salvo",
   "toast_import_gen": "Prompt copiado — cole na IA para gerar os cartões",
-  "import_size": "{ina} → texto {out}"
+  "import_size": "{ina} → texto {out}",
+  "import_reopen": "Ver arquivos importados",
+  "import_progress": "Convertendo {i} de {n}: {nome}",
+  "import_copy_all": "Copiar tudo",
+  "import_gen_all": "Gerar cartões de todos",
+  "import_file_copy": "Copiar",
+  "import_file_md": ".md",
+  "import_file_txt": ".txt"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -766,7 +773,14 @@ const UI = {
   "toast_import_copied": "Text copied",
   "toast_import_saved": "File saved",
   "toast_import_gen": "Prompt copied — paste it in the AI to generate the cards",
-  "import_size": "{ina} → text {out}"
+  "import_size": "{ina} → text {out}",
+  "import_reopen": "View imported files",
+  "import_progress": "Converting {i} of {n}: {nome}",
+  "import_copy_all": "Copy all",
+  "import_gen_all": "Generate cards from all",
+  "import_file_copy": "Copy",
+  "import_file_md": ".md",
+  "import_file_txt": ".txt"
  }
 };
 const PARSER_MSG = {
