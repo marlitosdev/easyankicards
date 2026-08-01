@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.16.0";
+const VERSAO = "8.17.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2391,6 +2391,36 @@ $("btnGenCopiar").onclick = async () => {
   catch (e) { uiAlert(t("paste_denied")); }
 };
 attachTip($("btnImportar"), "tip_import_choose");
+
+/* ---------- Importar baralho do Anki (.apkg) — web e desktop ---------- */
+$("btnApkgImport").onclick = () => $("apkgFile").click();
+attachTip($("btnApkgImport"), "tip_apkg_import");
+$("apkgFile").onchange = async (ev) => {
+  const arq = ev.target.files && ev.target.files[0];
+  ev.target.value = "";                    // permite reimportar o mesmo arquivo
+  if (!arq) return;
+  toast("apkg_reading");
+  let r;
+  try { r = await lerApkg(await arq.arrayBuffer()); }
+  catch (e) { uiAlert(t("apkg_error") + "\n\n" + e); return; }
+  if (!r.cards.length) { uiAlert(t("apkg_none")); return; }
+  const deck = r.deck || arq.name.replace(/\.apkg$/i, "");
+  if (!(await uiConfirm(t("apkg_confirm", { n: r.cards.length, deck })))) return;
+
+  // acrescenta ao final do texto (nada é apagado) e destaca o início
+  colagemAnterior = { texto: $("editor").value };
+  const novo = r.cards.map(cardToLine).join("\n\n");
+  const base = $("editor").value.replace(/\s+$/, "");
+  $("editor").value = (base ? base + "\n\n" : "") + novo + "\n";
+  linhaNovaColada = base ? base.split("\n").length + 2 : 1;
+  $("btnDesfazerColagem").disabled = false;
+  if (deck && !$("deckExp").value.trim()) { $("deckExp").value = deck; atualizarDestino(); }
+  autoSalvar();
+  preview();
+  irParaLinha(linhaNovaColada);
+  setTimeout(() => { linhaNovaColada = null; }, 2400);
+  toast(t("apkg_done", { n: r.cards.length, deck }));
+};
 attachTip($("btnImportarReabrir"), "tip_import_reopen");
 
 function baixarArquivo(conteudo, nome, mime) {

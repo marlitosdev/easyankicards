@@ -408,7 +408,14 @@ const UI = {
   "gen_short_tab": "Curto (Gemini Notebook)",
   "gen_note": "Edite o texto se quiser. Copie e cole no chat da IA para receber os cartões.",
   "gen_copy": "Copiar este texto",
-  "gen_copied": "Copiado! Cole no chat da IA para gerar os cartões."
+  "gen_copied": "Copiado! Cole no chat da IA para gerar os cartões.",
+  "apkg_import": "Importar baralho do Anki (.apkg)",
+  "tip_apkg_import": "Abre um pacote .apkg do Anki e traz os cartões para o editor, prontos para editar com as ferramentas do app. Os cartões atuais são mantidos.",
+  "apkg_reading": "Lendo o baralho…",
+  "apkg_done": "{n} cartão(ões) importado(s) do baralho “{deck}”",
+  "apkg_none": "Nenhum cartão encontrado neste pacote.",
+  "apkg_error": "Não consegui ler este .apkg.",
+  "apkg_confirm": "Importar {n} cartão(ões) do baralho “{deck}”?\\n\\nEles serão acrescentados ao final do texto atual (nada é apagado).\\n\\nObservação: o histórico de estudo do Anki não vem junto — ao exportar, será um baralho novo."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -818,7 +825,14 @@ const UI = {
   "gen_short_tab": "Short (Gemini Notebook)",
   "gen_note": "Edit the text if you want. Copy and paste it in the AI chat to get the cards.",
   "gen_copy": "Copy this text",
-  "gen_copied": "Copied! Paste it in the AI chat to generate the cards."
+  "gen_copied": "Copied! Paste it in the AI chat to generate the cards.",
+  "apkg_import": "Import Anki deck (.apkg)",
+  "tip_apkg_import": "Opens an Anki .apkg package and brings its cards into the editor, ready to edit with the app's tools. Current cards are kept.",
+  "apkg_reading": "Reading the deck…",
+  "apkg_done": "{n} card(s) imported from deck “{deck}”",
+  "apkg_none": "No cards found in this package.",
+  "apkg_error": "Couldn't read this .apkg.",
+  "apkg_confirm": "Import {n} card(s) from deck “{deck}”?\\n\\nThey will be appended to the current text (nothing is deleted).\\n\\nNote: Anki study history does not come along — exporting creates a new deck."
  }
 };
 const PARSER_MSG = {

@@ -329,3 +329,147 @@ async function buildApkg(cards, deckName, estilo, titulo) {
   zip.file("media", "{}");
   return await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }
+
+
+/* ------------------------------------------------------------------
+ * IMPORTAR .apkg — lê um pacote do Anki e devolve cartões no formato
+ * do app: [{kind, front, back, tags, more, titulo}]
+ *
+ * Formatos: pacotes novos (Anki 2.1.50+) trazem collection.anki21b
+ * comprimido em zstd; os antigos trazem collection.anki2 direto.
+ * ------------------------------------------------------------------ */
+
+async function _descompactarZstd(bytes) {
+  if (!window.fzstd) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/fzstd/0.1.1/index.min.js";
+      s.onload = resolve; s.onerror = reject;
+      document.head.append(s);
+    });
+  }
+  return window.fzstd.decompress(bytes);
+}
+
+/* Remove HTML deixando texto legível (o Anki guarda os campos em HTML). */
+function _limparHtml(s) {
+  return (s || "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(div|p|li|tr)>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function lerApkg(arrayBuffer) {
+  const SQL = await window.__sqlPromise;
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  // escolhe a melhor fonte de dados dentro do pacote
+  let bytes = null;
+  if (zip.file("collection.anki21b")) {
+    const raw = await zip.file("collection.anki21b").async("uint8array");
+    try { bytes = await _descompactarZstd(raw); } catch (e) { bytes = null; }
+  }
+  if (!bytes && zip.file("collection.anki21"))
+    bytes = await zip.file("collection.anki21").async("uint8array");
+  if (!bytes && zip.file("collection.anki2"))
+    bytes = await zip.file("collection.anki2").async("uint8array");
+  if (!bytes) throw new Error("collection não encontrada no pacote");
+
+  const db = new SQL.Database(bytes);
+
+  // modelos: id -> {tipo (0 basico / 1 cloze), campos[]}
+  const modelos = {};
+  try {
+    const col = db.exec("SELECT models FROM col")[0];
+    const js = JSON.parse(col.values[0][0]);
+    Object.keys(js).forEach((k) => {
+      modelos[k] = { tipo: js[k].type, campos: (js[k].flds || []).map((f) => f.name) };
+    });
+  } catch (e) { /* formato novo: tabela notetypes */ }
+  if (!Object.keys(modelos).length) {
+    try {
+      const r = db.exec("SELECT ntid, ord, name FROM fields ORDER BY ntid, ord")[0];
+      (r ? r.values : []).forEach(([ntid, ord, nome]) => {
+        modelos[ntid] = modelos[ntid] || { tipo: 0, campos: [] };
+        modelos[ntid].campos[ord] = nome;
+      });
+      const t = db.exec("SELECT id, config FROM notetypes")[0];
+      (t ? t.values : []).forEach(([id, cfg]) => {
+        const txt = new TextDecoder("utf-8", { fatal: false }).decode(cfg);
+        if (modelos[id]) modelos[id].tipo = /cloze/i.test(txt) ? 1 : 0;
+      });
+    } catch (e) { /* segue com heurística */ }
+  }
+
+  // nome do baralho (primeiro que não seja Default)
+  let deckNome = "";
+  try {
+    const d = db.exec("SELECT decks FROM col")[0];
+    const js = JSON.parse(d.values[0][0]);
+    deckNome = (Object.values(js).map((x) => x.name).find((n) => n && n !== "Default")) || "";
+  } catch (e) {
+    try {
+      const r = db.exec("SELECT name FROM decks")[0];
+      deckNome = (r ? r.values.map((v) => String(v[0]).replace(/\x1f/g, "::")) : [])
+        .find((n) => n && n !== "Default") || "";
+    } catch (e2) { /* sem nome */ }
+  }
+
+  const res = db.exec("SELECT mid, flds, tags FROM notes");
+  const linhas = res.length ? res[0].values : [];
+  const cards = [];
+  linhas.forEach(([mid, flds, tags]) => {
+    const campos = String(flds).split("\x1f").map(_limparHtml);
+    const m = modelos[mid] || {};
+    const nomes = (m.campos || []).map((n) => String(n || "").toLowerCase());
+    const tagArr = String(tags || "").trim().split(/\s+/).filter(Boolean);
+
+    /* Modelos personalizados (muito comuns em baralhos de concurso) põem
+     * matéria/assunto nos primeiros campos e a pergunta mais adiante.
+     * Escolhemos os campos por HEURÍSTICA, na ordem:
+     *  1. nomes conhecidos (pergunta/frente/texto/afirmação...)
+     *  2. o primeiro campo que contenha lacuna {{c1::}}
+     *  3. o campo mais longo (costuma ser o enunciado) */
+    const iPor = (chaves) => nomes.findIndex((n) => chaves.some((k) => n.includes(k)));
+    let iFrente = iPor(["pergunta", "frente", "front", "texto", "text", "afirma", "enunciado", "questão", "questao"]);
+    if (iFrente < 0) iFrente = campos.findIndex((c) => /\{\{c\d+::/.test(c));
+    if (iFrente < 0) {
+      let melhor = 0;
+      campos.forEach((c, i) => { if ((c || "").length > (campos[melhor] || "").length) melhor = i; });
+      iFrente = melhor;
+    }
+    let iVerso = iPor(["resposta", "verso", "back", "correta", "gabarito"]);
+    if (iVerso === iFrente) iVerso = -1;
+    if (iVerso < 0) {
+      // primeiro campo com texto depois da frente
+      for (let i = 0; i < campos.length; i++)
+        if (i !== iFrente && (campos[i] || "").length > 1) { iVerso = i; break; }
+    }
+    let iMais = iPor(["extra", "saiba", "embasamento", "justificativa", "coment", "explica"]);
+    if (iMais === iFrente || iMais === iVerso) iMais = -1;
+    // cabeçalhos (matéria/assunto) viram TÍTULO do cartão
+    let iTitulo = iPor(["matéria", "materia", "assunto", "tópico", "topico", "título", "titulo", "header"]);
+    if (iTitulo === iFrente || iTitulo === iVerso) iTitulo = -1;
+
+    let frente = campos[iFrente] || "";
+    if (!frente) return;
+    // "#" no início vira comentário no editor; "@ + *" são metadados.
+    // Preserva o conteúdo trocando por uma forma equivalente e visível.
+    frente = frente.replace(/^\s*#\s*/, "nº ").replace(/^\s*[@+*]\s*/, "");
+    const ehCloze = m.tipo === 1 || /\{\{c\d+::/.test(frente);
+    cards.push({
+      kind: ehCloze ? "cloze" : "basic",
+      front: frente,
+      back: ehCloze ? "" : (campos[iVerso] || ""),
+      tags: tagArr, ownTags: tagArr,
+      more: iMais >= 0 ? (campos[iMais] || "") : (ehCloze && iVerso >= 0 ? (campos[iVerso] || "") : ""),
+      titulo: iTitulo >= 0 ? (campos[iTitulo] || "") : "",
+    });
+  });
+  db.close();
+  return { deck: deckNome, cards };
+}
