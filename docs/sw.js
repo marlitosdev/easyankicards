@@ -16,7 +16,8 @@ const SHELL = [
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.wasm"
+  "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.wasm",
+  "https://cdnjs.cloudflare.com/ajax/libs/fzstd/0.1.1/index.min.js"
 ];
 
 /* NÃO assume o controle sozinho: fica "esperando" e a página avisa o
