@@ -126,8 +126,8 @@ const UI = {
   "hint_mc_cloze": "Escreva a frase com ___ no lugar da resposta. Preencha a resposta correta e as erradas em campos separados. Gera a sintaxe nativa {{c1::correta::opções}}: o Anki mostra as opções entre colchetes na frase e, ao virar, só a correta permanece. Prefira alternativas curtas (até ~40 caracteres) — para alternativas longas, use a múltipla escolha em LISTA.",
   "mc_term_missing": "Coloque ___ na frase onde a resposta entra (ou escreva a frase contendo a resposta correta).",
   "preview_live": "Pré-visualização em tempo real",
-  "prompt_main_btn": "Prompt IA",
-  "prompt_dlg_title": "Prompt para gerar cartões com IA",
+  "prompt_main_btn": "Prompt para criar cartões com IA",
+  "prompt_dlg_title": "Prompt para criar cartões com IA",
   "prompt_full_tab": "Completo (ChatGPT / Claude / Gemini)",
   "prompt_mini_tab": "Curto (Gemini Notebook)",
   "prompt_copy": "Copiar este texto",
@@ -151,7 +151,7 @@ const UI = {
   "export_confirm": "Exportar agora",
   "tip_new": "Criar um cartão guiado por modelos: pergunta/resposta, definição, lacuna, lei seca, jurisprudência.",
   "tip_mc": "Criar questão de múltipla escolha — em lista (A-E) ou embutida na frase.",
-  "tip_prompt": "Ver e copiar o prompt pronto para gerar cartões com IA (ChatGPT, Claude, Gemini, Gemini Notebook).",
+  "tip_prompt": "Abre o prompt pronto para colar numa IA (ChatGPT, Claude, Gemini, Gemini Notebook) e receber os cartões já no formato do app.",
   "tip_review": "Conferir os cartões virando-os como no Anki, antes de exportar.",
   "tip_lang": "Idioma da interface (português/inglês).",
   "tip_editar": "Abrir os campos deste cartão para alterar frente, verso, tags e lacunas.",
@@ -186,7 +186,7 @@ const UI = {
   "preview_anki_hint": "Renderiza cada cartão com o estilo visual escolhido na exportação (frente e verso). Troque o estilo no diálogo Exportar.",
   "lado_frente": "FRENTE",
   "lado_verso": "VERSO",
-  "prompt_edit_hint": "Edite o texto abaixo se quiser. \"Salvar\" guarda sua versão neste aparelho; \"Restaurar\" volta ao original.",
+  "prompt_edit_hint": "Cole este texto no chat da IA junto com seu material de estudo — ela devolve os cartões prontos para colar no editor. Você pode editar o prompt e salvar sua versão.",
   "prompt_restore": "Restaurar original",
   "prompt_saved_badge": "sua versão",
   "toast_copied": "Prompt copiado",
@@ -415,7 +415,9 @@ const UI = {
   "apkg_done": "{n} cartão(ões) importado(s) do baralho “{deck}”",
   "apkg_none": "Nenhum cartão encontrado neste pacote.",
   "apkg_error": "Não consegui ler este .apkg.",
-  "apkg_confirm": "Importar {n} cartão(ões) do baralho “{deck}”?\\n\\nEles serão acrescentados ao final do texto atual (nada é apagado).\\n\\nObservação: o histórico de estudo do Anki não vem junto — ao exportar, será um baralho novo."
+  "apkg_confirm": "Importar {n} cartão(ões) do baralho “{deck}”?\\n\\nEles serão acrescentados ao final do texto atual (nada é apagado).\\n\\nObservação: o histórico de estudo do Anki não vem junto — ao exportar, será um baralho novo.",
+  "group_import": "Importar",
+  "tip_editor_group": "Ferramentas de importação e de IA."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -543,8 +545,8 @@ const UI = {
   "hint_mc_cloze": "Write the sentence with ___ where the answer goes. Fill the correct and wrong answers in separate fields. It generates the native {{c1::correct::options}} syntax: Anki shows the options in brackets inside the sentence and, when flipped, only the correct one remains. Prefer short options (up to ~40 characters) — for long options, use the LIST multiple choice.",
   "mc_term_missing": "Put ___ in the sentence where the answer goes (or write the sentence containing the correct answer).",
   "preview_live": "Live preview",
-  "prompt_main_btn": "AI Prompt",
-  "prompt_dlg_title": "Prompt to generate cards with AI",
+  "prompt_main_btn": "Prompt to create cards with AI",
+  "prompt_dlg_title": "Prompt to create cards with AI",
   "prompt_full_tab": "Full (ChatGPT / Claude / Gemini)",
   "prompt_mini_tab": "Short (Gemini Notebook)",
   "prompt_copy": "Copy this text",
@@ -568,7 +570,7 @@ const UI = {
   "export_confirm": "Export now",
   "tip_new": "Create a guided card from templates: Q&A, definition, blank, statute, case law.",
   "tip_mc": "Create a multiple-choice question — as a list (A-E) or inside the sentence.",
-  "tip_prompt": "View and copy the ready prompt to generate cards with AI (ChatGPT, Claude, Gemini, Gemini Notebook).",
+  "tip_prompt": "Opens the ready-made prompt to paste into an AI (ChatGPT, Claude, Gemini, Gemini Notebook) and get cards already in the app's format.",
   "tip_review": "Check your cards by flipping them like in Anki, before exporting.",
   "tip_lang": "Interface language (Portuguese/English).",
   "tip_editar": "Open this card's fields to change front, back, tags and blanks.",
@@ -603,7 +605,7 @@ const UI = {
   "preview_anki_hint": "Renders each card with the visual style chosen at export (front and back). Change the style in the Export dialog.",
   "lado_frente": "FRONT",
   "lado_verso": "BACK",
-  "prompt_edit_hint": "Edit the text below if you want. \"Save\" keeps your version on this device; \"Restore\" brings back the original.",
+  "prompt_edit_hint": "Paste this text in the AI chat along with your study material — it returns cards ready to paste in the editor. You can edit the prompt and save your version.",
   "prompt_restore": "Restore original",
   "prompt_saved_badge": "your version",
   "toast_copied": "Prompt copied",
@@ -832,7 +834,9 @@ const UI = {
   "apkg_done": "{n} card(s) imported from deck “{deck}”",
   "apkg_none": "No cards found in this package.",
   "apkg_error": "Couldn't read this .apkg.",
-  "apkg_confirm": "Import {n} card(s) from deck “{deck}”?\\n\\nThey will be appended to the current text (nothing is deleted).\\n\\nNote: Anki study history does not come along — exporting creates a new deck."
+  "apkg_confirm": "Import {n} card(s) from deck “{deck}”?\\n\\nThey will be appended to the current text (nothing is deleted).\\n\\nNote: Anki study history does not come along — exporting creates a new deck.",
+  "group_import": "Import",
+  "tip_editor_group": "Import and AI tools."
  }
 };
 const PARSER_MSG = {
