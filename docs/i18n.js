@@ -417,7 +417,8 @@ const UI = {
   "apkg_error": "Não consegui ler este .apkg.",
   "apkg_confirm": "Importar {n} cartão(ões) do baralho “{deck}”?\\n\\nEles serão acrescentados ao final do texto atual (nada é apagado).\\n\\nObservação: o histórico de estudo do Anki não vem junto — ao exportar, será um baralho novo.",
   "group_import": "Importar",
-  "tip_editor_group": "Ferramentas de importação e de IA."
+  "tip_editor_group": "Ferramentas de importação e de IA.",
+  "apkg_zstd": "Este pacote usa a compactação nova do Anki e o componente de leitura não pôde ser baixado (é preciso internet na primeira vez).\n\nTente novamente com internet ativa. Se persistir, no Anki exporte o baralho DESMARCANDO a opção \"Suporte para versões mais antigas do Anki\" desativada — ou exporte como .colpkg/.apkg mais compatível."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -836,7 +837,8 @@ const UI = {
   "apkg_error": "Couldn't read this .apkg.",
   "apkg_confirm": "Import {n} card(s) from deck “{deck}”?\\n\\nThey will be appended to the current text (nothing is deleted).\\n\\nNote: Anki study history does not come along — exporting creates a new deck.",
   "group_import": "Import",
-  "tip_editor_group": "Import and AI tools."
+  "tip_editor_group": "Import and AI tools.",
+  "apkg_zstd": "This package uses Anki's new compression and the reader component couldn't be downloaded (internet is needed the first time).\n\nTry again with internet on. If it persists, re-export the deck from Anki with the legacy-support option adjusted."
  }
 };
 const PARSER_MSG = {
