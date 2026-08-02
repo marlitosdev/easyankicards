@@ -1,0 +1,107 @@
+{
+  "01-formato-canonico.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 5,
+    "titulos": 2,
+    "tags": 5,
+    "detectores": []
+  },
+  "02-explicacao-asterisco.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 1,
+    "tags": 3,
+    "detectores": []
+  },
+  "03-bullets-de-pdf.txt": {
+    "cartoes": 3,
+    "avisos": 0,
+    "suspeitos": 3,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 3,
+    "detectores": [
+      "marcadores"
+    ]
+  },
+  "04-titulo-grudado.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 2,
+    "detectores": []
+  },
+  "05-lacuna-opcoes-longas.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 4,
+    "detectores": [
+      "lacuna_opcoes_longas"
+    ]
+  },
+  "06-tags-longas-legitimas.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 4,
+    "detectores": [
+      "tags_que_sao_texto"
+    ]
+  },
+  "07-terceiro-campo-e-explicacao.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 15,
+    "detectores": [
+      "tags_que_sao_texto"
+    ]
+  },
+  "08-gemini-resposta-multilinha.txt": {
+    "cartoes": 7,
+    "avisos": 0,
+    "suspeitos": 3,
+    "saibaMais": 13,
+    "titulos": 4,
+    "tags": 12,
+    "detectores": [
+      "marcadores",
+      "orfaos_explicacao",
+      "tags_que_sao_texto",
+      "markdown"
+    ]
+  },
+  "09-cloze-repetida.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 1,
+    "detectores": []
+  },
+  "10-markdown-da-ia.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 1,
+    "titulos": 1,
+    "tags": 2,
+    "detectores": [
+      "markdown"
+    ]
+  }
+}

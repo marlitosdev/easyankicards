@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.10.0) · by MarlitosDev
+# EasyAnkiCards (v8.23.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -35,6 +35,8 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - **Destaque de sintaxe** (grifos em `::`, lacunas e `[MC]`) com o texto real editável por cima — seleção do mouse sempre alinhada; interruptor para desligar.
 - Tolerante a texto colado de PDF/Word/IA: recupera quebras de linha no meio do cartão, une pares `Pergunta?` / `Resposta` sem `::`, aceita `@` e `+`/`*` antes ou depois do cartão e separa títulos grudados.
 - **Análise automática** enquanto digita, com **"Ver no texto"** (foca a linha do problema) e o botão **"Corrigir erros"**, que só acende quando há algo a corrigir e abre revisão com antes/depois.
+- **"Prompt de correção"**: quando o texto da IA vem torto de um jeito que o app não conserta sozinho (resposta quebrada em várias linhas, markdown, cartão sem `::`), gera um prompt com cada problema ancorado no número da linha + o trecho literal + as regras do formato. Cole na IA, traga a resposta de volta.
+- **"Copiar diagnóstico"**: um clique copia versão, ambiente, o que a última correção fez (antes/depois) e o texto da tela — o suficiente para reproduzir um problema sem print nem explicação.
 
 **Tipos de cartão**
 - Básico, **Cloze** (`{{c1::resposta}}`, com marcação de lacuna por seleção), **múltipla escolha em lista** (`[MC]`) e **múltipla escolha na frase** (`{{c1::correta::opção / opção}}`, opções curtas).
@@ -53,7 +55,7 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 
 **Exportação**
 - Nome do baralho e **título geral** definidos na hora de exportar (o geral também aparece no topo do painel direito); subpastas via `::` com destino em tempo real.
-- Quatro **estilos visuais** (Clássico, Esquematizado, Escuro, Papel) aplicados a todos os cartões do `.apkg`, com campos **"Saiba mais"** (link expansível) e **Título**.
+- Três **estilos visuais** (Esquematizado, Escuro, Papel) aplicados a todos os cartões do `.apkg`, com campos **"Saiba mais"** (link expansível) e **Título**.
 - `.apkg` gerado no aparelho (SQLite/WebAssembly); no celular abre a folha de compartilhamento → AnkiDroid importa direto. Reexportar o mesmo baralho atualiza, não duplica.
 - `.txt` com coluna de deck (Anki 23.10+): a pasta é criada na importação.
 - **Prompts prontos para IA** (completo e curto para Gemini Notebook), editáveis e salvos.
@@ -73,6 +75,7 @@ easy-anki-cards/
 │   └── manifest.webmanifest · sw.js · icon-192/512.png · .nojekyll
 ├── src/easyankicards/     # desktop (janela nativa que carrega docs/) + CLI
 ├── scripts/build_exe.bat  # gera release\EasyAnkiCards.exe
+├── tests/                 # casos reais + invariantes (node tests/rodar.js)
 ├── examples/exemplo.txt
 ├── iniciar_app.bat · requirements.txt · README.md · LICENSE · .gitignore
 ```
@@ -82,6 +85,28 @@ Cada módulo tem um cabeçalho "MAPA DO ARQUIVO" e "regras de ouro" de manutenç
 ### Uma base de código para tudo
 
 Desde a v6.4 o aplicativo de desktop é uma **janela nativa que carrega os mesmos arquivos de `docs/`** (via pywebview): mesma interface, mesmos recursos, offline e local. Cada melhoria da versão web chega ao desktop automaticamente. O `core.py`/`cli.py` em Python seguem para automação por linha de comando.
+
+## Testes
+
+```
+node tests/rodar.js            roda tudo
+node tests/rodar.js --gravar   congela os números atuais em esperado.json
+```
+(no Windows, dois cliques em `tests\rodar.bat`)
+
+**Para adicionar um caso**: salve o texto problemático como `tests/casos/NN-nome.txt`. Só isso — as invariantes já passam a valer para ele; rode `--gravar` para congelar os números.
+
+São dois tipos de teste. As **invariantes** valem para qualquer texto e pegam o bug que ninguém imaginou:
+
+| | regra | veio do bug |
+|---|---|---|
+| I1 | ler um texto nunca quebra o app | — |
+| I2 | nenhuma correção apaga cartões | v8.19 |
+| I3 | nenhuma correção apaga o "Saiba mais" | v8.22 |
+| I4 | corrigir 2x = corrigir 1x (idempotência) | v8.19 |
+| I5 | ida e volta (texto → cartões → texto) não muda nada | — |
+
+O **esperado.json** congela os números de cada caso conhecido e pega a regressão: o bug que já foi corrigido uma vez e voltou. As duas primeiras regras também rodam dentro do app, na rede de segurança que cancela qualquer correção que fosse perder conteúdo.
 
 ## Como usar
 

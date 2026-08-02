@@ -1,0 +1,5 @@
+@ NBASP 100 - As Três Partes da Auditoria
+Quais são as três partes envolvidas na auditoria do setor público? :: São {{c1::o auditor}}, {{c2::a parte responsável}} e {{c3::os usuários previstos}} :: NBASP_100, ISSAI, Auditoria_Governamental
+* Auditor — titular da unidade de auditoria e auditores encarregados do trabalho.
+* Parte responsável — quem responde pela gestão e pela elaboração da informação.
+* Usuários previstos — para quem o relatório é elaborado.
