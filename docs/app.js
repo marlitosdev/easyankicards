@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.19.2";
+const VERSAO = "8.20.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -708,7 +708,7 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
 }
 
 function renderCartaoEstilizado(div, c, mostrarResposta) {
-  const p = PALETAS[localStorage.getItem("eac_style") || "classic"] || PALETAS.classic;
+  const p = PALETAS[localStorage.getItem("eac_style") || "esquema"] || PALETAS.esquema;
   const wrap = document.createElement("div");
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
@@ -1129,6 +1129,7 @@ function montarRevCopy() {
   $("revCopyTexto").value = t(revCopyTipo).replace("{cards}", cards);
   $("btnRevTabFull").classList.toggle("ativa", revCopyTipo === "rev_prompt_full");
   $("btnRevTabShort").classList.toggle("ativa", revCopyTipo === "rev_prompt_short");
+  mostrarTamanho("revCopyTam", $("revCopyTexto").value);
   $("revCopyDone").textContent = "";
 }
 
@@ -1151,9 +1152,11 @@ $("btnRevCopyCopiar").onclick = async () => {
 };
 
 // elementos que ficam TRAVADOS durante a revisão (só o painel de revisão fica ativo)
+/* Travados durante a revisão: só o que ALTERA o conteúdo. Controles de
+ * visualização (colunas, estilo) continuam livres — travá-los era um bug. */
 const TRAVAR = ["btnNovoCartao","btnMCRapido","btnPromptIA","btnNormalizar",
   "btnColarMais","btnDesfazerColagem","btnSelecionarTudo","btnCopiarTudo",
-  "btnApagarTudo","btnTxt","btnApkg","tituloGeral","selEstiloPainel","chk2col"];
+  "btnApagarTudo","btnTxt","btnApkg","tituloGeral","btnApkgImport","btnImportar"];
 
 function travarFuncoes(travar) {
   document.body.classList.toggle("em-revisao", travar);
@@ -1196,6 +1199,7 @@ $("btnRevCancelar").onclick = async () => {
   sairRevisao();
   toast("toast_review_cancelled");
 };
+$("selTodos").onclick = () => marcarPor(() => true);
 $("selCurtos").onclick = () => marcarPor(CRIT.curtos);
 $("selSemResp").onclick = () => marcarPor(CRIT.semResp);
 $("selSemPerg").onclick = () => marcarPor(CRIT.semPerg);
@@ -1359,6 +1363,7 @@ $("btnColarRevFinalizar").onclick = finalizarColarRev;
 $("btnColarRevFechar").onclick = () => $("dlgColarRev").close();
 $("btnSubstituirMarcados").onclick = substituirMarcados;
 attachTip($("btnRevisar"), "tip_review_btn");
+attachTip($("selTodos"), "tip_sel_all");
 attachTip($("selCurtos"), "tip_sel_short");
 attachTip($("selSemResp"), "tip_sel_noanswer");
 attachTip($("selSemPerg"), "tip_sel_noquestion");
@@ -2257,6 +2262,21 @@ document.querySelectorAll(".ic-ajuda[data-hint]").forEach((b) => {
   b.onclick = () => { $("dicaCampo").textContent = t(b.dataset.hint); };
 });
 
+/* Limite prático do Gemini Notebook (referência: 10.000 caracteres do
+ * limite documentado de personalização; acima disso costuma falhar). */
+const LIMITE_NOTEBOOK = 10000;
+
+function mostrarTamanho(idEl, texto) {
+  const el = $(idEl);
+  if (!el) return;
+  const n = (texto || "").length;
+  const grande = n > LIMITE_NOTEBOOK;
+  el.textContent = t("size_label") + " " + t(grande ? "size_warn" : "size_ok",
+    { n: n.toLocaleString() });
+  el.style.color = grande ? "var(--laranja)" : "var(--sutil)";
+  el.style.fontWeight = grande ? "700" : "400";
+}
+
 /* -------------- prompt de IA na tela principal ---------------------- */
 
 let promptAtivo = "prompt_full";
@@ -2274,6 +2294,7 @@ function mostrarPrompt(tipo) {
   $("btnPromptRestaurar").style.display = salvo ? "" : "none";
   $("btnTabFull").classList.toggle("ativa", tipo === "prompt_full");
   $("btnTabMini").classList.toggle("ativa", tipo === "prompt_mini");
+  mostrarTamanho("promptTam", $("promptTexto").value);
 }
 
 $("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); $("dlgPrompt").showModal(); };
@@ -2290,6 +2311,9 @@ $("btnPromptRestaurar").onclick = () => {
   toast("toast_restored");
 };
 $("btnPromptFechar").onclick = () => $("dlgPrompt").close();
+$("promptTexto").addEventListener("input", () => mostrarTamanho("promptTam", $("promptTexto").value));
+$("revCopyTexto").addEventListener("input", () => mostrarTamanho("revCopyTam", $("revCopyTexto").value));
+$("genTexto").addEventListener("input", () => mostrarTamanho("genTam", $("genTexto").value));
 $("btnPromptCopiar").onclick = async () => {
   await navigator.clipboard.writeText($("promptTexto").value);
   toast("toast_copied");
@@ -2413,6 +2437,7 @@ function montarGen() {
   $("genTexto").value = p;
   $("btnGenFull").classList.toggle("ativa", genTipo === "prompt_full");
   $("btnGenShort").classList.toggle("ativa", genTipo === "prompt_mini");
+  mostrarTamanho("genTam", $("genTexto").value);
   $("genDone").textContent = "";
 }
 function abrirGerar(texto) {
@@ -2705,7 +2730,7 @@ function rotularEstilos() {
  * a última parte do nome do baralho vira o título no topo. */
 function atualizarAvisoTopo() {
   const estilo = $("selEstilo").value;
-  const p = PALETAS[estilo] || PALETAS.classic;
+  const p = PALETAS[estilo] || PALETAS.esquema;
   const titulo = tituloCartao();
   const box = $("avisoTopo");
 
@@ -2748,7 +2773,7 @@ function atualizarAvisoTopo() {
 }
 
 function previewEstilo() {
-  const p = PALETAS[$("selEstilo").value] || PALETAS.classic;
+  const p = PALETAS[$("selEstilo").value] || PALETAS.esquema;
   const box = $("stylePreview");
   box.style.background = p.fundo;
   box.innerHTML = "";
@@ -2821,7 +2846,9 @@ $("tituloGeral").placeholder = t("gen_title_ph");
 $("tituloGeral").oninput = () => { setTituloGeral($("tituloGeral").value);
   atualizarAvisoTopo(); if (modoPrevia() === "anki") preview(); };
 $("tituloExp").value = tituloGeral();
-$("selEstilo").value = localStorage.getItem("eac_style") || "classic";
+// "classic" foi removido: migra quem o tinha salvo
+if ((localStorage.getItem("eac_style") || "") === "classic") localStorage.setItem("eac_style", "esquema");
+$("selEstilo").value = localStorage.getItem("eac_style") || "esquema";
 $("selEstiloPainel").value = $("selEstilo").value;
 function aplicarEstilo(v) {
   localStorage.setItem("eac_style", v);

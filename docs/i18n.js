@@ -424,7 +424,12 @@ const UI = {
   "panel_expand": "Expandir",
   "panel_collapse": "Recolher",
   "tip_panel_expand": "Aumenta a área de texto para revisar com mais conforto.",
-  "fix_would_lose": "Cancelei esta correção: ela reduziria os cartões de {a} para {d}. Nenhuma correção automática deve apagar conteúdo. Ajuste manualmente o trecho apontado."
+  "fix_would_lose": "Cancelei esta correção: ela reduziria os cartões de {a} para {d}. Nenhuma correção automática deve apagar conteúdo. Ajuste manualmente o trecho apontado.",
+  "sel_all": "Marcar todos",
+  "tip_sel_all": "Marca todos os cartões da lista para revisão.",
+  "size_ok": "{n} caracteres — cabe no Gemini Notebook (referência: 10.000).",
+  "size_warn": "ATENÇÃO: {n} caracteres. O Gemini Notebook costuma travar acima de ~10.000 — prefira ChatGPT, Claude ou Gemini para este texto, ou marque menos cartões por vez.",
+  "size_label": "Tamanho do texto:"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -850,7 +855,12 @@ const UI = {
   "panel_expand": "Expand",
   "panel_collapse": "Collapse",
   "tip_panel_expand": "Enlarges the text area for a more comfortable review.",
-  "fix_would_lose": "This fix was cancelled: it would reduce cards from {a} to {d}. No automatic fix should delete content. Please adjust the flagged part manually."
+  "fix_would_lose": "This fix was cancelled: it would reduce cards from {a} to {d}. No automatic fix should delete content. Please adjust the flagged part manually.",
+  "sel_all": "Mark all",
+  "tip_sel_all": "Marks every card in the list for review.",
+  "size_ok": "{n} characters — fits Gemini Notebook (reference: 10,000).",
+  "size_warn": "WARNING: {n} characters. Gemini Notebook usually fails above ~10,000 — prefer ChatGPT, Claude or Gemini for this text, or mark fewer cards at a time.",
+  "size_label": "Text size:"
  }
 };
 const PARSER_MSG = {
