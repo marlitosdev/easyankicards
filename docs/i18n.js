@@ -418,7 +418,12 @@ const UI = {
   "apkg_confirm": "Importar {n} cartão(ões) do baralho “{deck}”?\\n\\nEles serão acrescentados ao final do texto atual (nada é apagado).\\n\\nObservação: o histórico de estudo do Anki não vem junto — ao exportar, será um baralho novo.",
   "group_import": "Importar",
   "tip_editor_group": "Ferramentas de importação e de IA.",
-  "apkg_zstd": "Este pacote usa a compactação nova do Anki e o componente de leitura não pôde ser baixado (é preciso internet na primeira vez).\n\nTente novamente com internet ativa. Se persistir, no Anki exporte o baralho DESMARCANDO a opção \"Suporte para versões mais antigas do Anki\" desativada — ou exporte como .colpkg/.apkg mais compatível."
+  "apkg_zstd": "Este pacote usa a compactação nova do Anki e o componente de leitura não pôde ser baixado (é preciso internet na primeira vez).\n\nTente novamente com internet ativa. Se persistir, no Anki exporte o baralho DESMARCANDO a opção \"Suporte para versões mais antigas do Anki\" desativada — ou exporte como .colpkg/.apkg mais compatível.",
+  "fix_lacuna_ops": "Transformar em lacuna simples (remove as alternativas longas)",
+  "crit_lacuna_ops": "Há lacunas com alternativas longas — no Anki elas aparecem entre colchetes na mesma frase e ficam ilegíveis.",
+  "panel_expand": "Expandir",
+  "panel_collapse": "Recolher",
+  "tip_panel_expand": "Aumenta a área de texto para revisar com mais conforto."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -838,7 +843,12 @@ const UI = {
   "apkg_confirm": "Import {n} card(s) from deck “{deck}”?\\n\\nThey will be appended to the current text (nothing is deleted).\\n\\nNote: Anki study history does not come along — exporting creates a new deck.",
   "group_import": "Import",
   "tip_editor_group": "Import and AI tools.",
-  "apkg_zstd": "This package uses Anki's new compression and the reader component couldn't be downloaded (internet is needed the first time).\n\nTry again with internet on. If it persists, re-export the deck from Anki with the legacy-support option adjusted."
+  "apkg_zstd": "This package uses Anki's new compression and the reader component couldn't be downloaded (internet is needed the first time).\n\nTry again with internet on. If it persists, re-export the deck from Anki with the legacy-support option adjusted.",
+  "fix_lacuna_ops": "Turn into a simple blank (removes the long options)",
+  "crit_lacuna_ops": "There are blanks with long options — in Anki they show in brackets on the same line and become unreadable.",
+  "panel_expand": "Expand",
+  "panel_collapse": "Collapse",
+  "tip_panel_expand": "Enlarges the text area for a more comfortable review."
  }
 };
 const PARSER_MSG = {

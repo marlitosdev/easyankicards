@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.18.2";
+const VERSAO = "8.19.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1238,6 +1238,7 @@ function abrirColarRev(correcao) {
 function corrigirColarRev(fn) {
   $("colarRevTexto").value = fn($("colarRevTexto").value);
   analisarColarRev();
+  toast("toast_fixed");
 }
 
 /* Leva à linha dentro do textarea do painel. */
@@ -1249,7 +1250,18 @@ function irLinhaColarRev(n) {
   ta.focus(); ta.setSelectionRange(ini, ini + linhas[n - 1].length);
 }
 
+function renderNumsColarRev() {
+  const ta = $("colarRevTexto"), nums = $("colarRevNums");
+  if (!ta || !nums) return;
+  const n = ta.value.split("\n").length;
+  let html = "";
+  for (let i = 1; i <= n; i++) html += i + "\n";
+  nums.textContent = html;
+  nums.scrollTop = ta.scrollTop;
+}
+
 function analisarColarRev() {
+  renderNumsColarRev();
   const raw = $("colarRevTexto").value;
   const r = parseText(raw, []);
   const box = $("colarRevSug");
@@ -1257,11 +1269,18 @@ function analisarColarRev() {
   const itens = [];
   (r.warnLines || []).forEach((n, i) =>
     itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n }));
-  r.cards.filter((c) => c.issues.length).forEach((c) =>
-    itens.push({ dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line }));
+  r.cards.filter((c) => c.issues.length).forEach((c) => {
+    const item = { dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line };
+    // avisos de "alternativa longa na lacuna" têm correção automática
+    if (temLacunaOpcoesLongas(cardToLine(c))) {
+      item.fix = corrigirLacunaOpcoesLongas; item.fixTxt = t("fix_lacuna_ops");
+    }
+    itens.push(item);
+  });
   let correcao = null, critTxt = t("crit_bullets");
   if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
   else if (temOrfaosExplicacao(raw)) { correcao = corrigirOrfaosExplicacao; critTxt = t("crit_orphans"); }
+  else if (temLacunaOpcoesLongas(raw)) { correcao = corrigirLacunaOpcoesLongas; critTxt = t("crit_lacuna_ops"); }
   else if (temTagsQueSaoTexto(raw)) { correcao = corrigirTagsQueSaoTexto; critTxt = t("crit_pairs_tags"); }
   else if (temMarcadores(raw)) { correcao = removerMarcadoresTexto; critTxt = t("crit_bullets"); }
   if (correcao) itens.push({ dot: "dot-org", txt: critTxt, fixTxt: t("fix_now"), fix: correcao });
@@ -1316,6 +1335,15 @@ function finalizarColarRev() {
 }
 
 $("colarRevTexto").addEventListener("input", analisarColarRev);
+$("colarRevTexto").addEventListener("scroll", () => {
+  $("colarRevNums").scrollTop = $("colarRevTexto").scrollTop;
+});
+$("btnColarRevExpandir").onclick = () => {
+  const w = $("colarRevWrap");
+  const exp = w.classList.toggle("expandido");
+  $("btnColarRevExpandir").textContent = t(exp ? "panel_collapse" : "panel_expand");
+};
+attachTip($("btnColarRevExpandir"), "tip_panel_expand");
 $("btnColarRevFinalizar").onclick = finalizarColarRev;
 $("btnColarRevFechar").onclick = () => $("dlgColarRev").close();
 $("btnSubstituirMarcados").onclick = substituirMarcados;
