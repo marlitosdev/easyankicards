@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.19.1";
+const VERSAO = "8.19.2";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -325,6 +325,17 @@ function botaoMini(rotuloKey, cor, acao) {
   b.textContent = t(rotuloKey);
   b.onclick = acao;
   return b;
+}
+
+/* Envolve qualquer correção automática numa rede de segurança: se o
+ * resultado tiver MENOS cartões que o original, a mudança é descartada
+ * (nenhuma correção deve apagar conteúdo do usuário). */
+function corrigirComSeguranca(fn, texto) {
+  const antes = parseText(texto, []).cards.length;
+  const novo = fn(texto);
+  const depois = parseText(novo, []).cards.length;
+  if (depois < antes) { uiAlert(t("fix_would_lose", { a: antes, d: depois })); return texto; }
+  return novo;
 }
 
 /* ---------------- sugestões automáticas (sem botão) ----------------- */
@@ -1236,7 +1247,7 @@ function abrirColarRev(correcao) {
 
 /* Corrige um trecho e reanalisa (usada pelos botões do painel). */
 function corrigirColarRev(fn) {
-  $("colarRevTexto").value = fn($("colarRevTexto").value);
+  $("colarRevTexto").value = corrigirComSeguranca(fn, $("colarRevTexto").value);
   analisarColarRev();
   toast("toast_fixed");
 }
@@ -2588,7 +2599,8 @@ $("editor").onscroll = () => {
   $("editorHl").scrollTop = y; $("editorHl").scrollLeft = x;
   $("editorNums").scrollTop = y;
 };
-$("btnNormalizar").onclick = () => abrirNormalizar(correcaoPendente);
+$("btnNormalizar").onclick = () => abrirNormalizar(
+  correcaoPendente ? ((txt) => corrigirComSeguranca(correcaoPendente, txt)) : null);
 $("btnSelecionarTudo").onclick = () => {
   $("editor").focus();
   $("editor").select();
