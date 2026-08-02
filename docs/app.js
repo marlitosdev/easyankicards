@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.21.0";
+const VERSAO = "8.23.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -330,11 +330,28 @@ function botaoMini(rotuloKey, cor, acao) {
 /* Envolve qualquer correção automática numa rede de segurança: se o
  * resultado tiver MENOS cartões que o original, a mudança é descartada
  * (nenhuma correção deve apagar conteúdo do usuário). */
+/* Rede de segurança das correções. Duas regras que NENHUMA correção pode
+ * violar (as duas nasceram de bugs reais):
+ *   1. não pode sobrar menos cartão do que entrou      (v8.19)
+ *   2. não pode sobrar menos "Saiba mais" do que entrou (v8.22)
+ * Guarda também o antes/depois para o relatório de diagnóstico. */
+let ultimoAjuste = null;   // { acao, antes, depois } da última correção
+
 function corrigirComSeguranca(fn, texto) {
-  const antes = parseText(texto, []).cards.length;
+  const antes = resumoTexto(texto);
   const novo = fn(texto);
-  const depois = parseText(novo, []).cards.length;
-  if (depois < antes) { uiAlert(t("fix_would_lose", { a: antes, d: depois })); return texto; }
+  const depois = resumoTexto(novo);
+  ultimoAjuste = { acao: fn.name || "correcao", antes, depois };
+  if (depois.cartoes < antes.cartoes) {
+    uiAlert(t("fix_would_lose", { a: antes.cartoes, d: depois.cartoes }));
+    ultimoAjuste.bloqueado = "cartoes";
+    return texto;
+  }
+  if (depois.saibaMais < antes.saibaMais) {
+    uiAlert(t("fix_would_lose_more", { a: antes.saibaMais, d: depois.saibaMais }));
+    ultimoAjuste.bloqueado = "saibaMais";
+    return texto;
+  }
   return novo;
 }
 
@@ -386,6 +403,9 @@ function renderSugestoes(r, raw) {
   if (temTituloGrudado(raw))
     itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
                  fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
+  if (temMarkdown(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_markdown"),
+                 fixTxt: t("fix_markdown"), fix: corrigirMarkdown });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
@@ -393,7 +413,8 @@ function renderSugestoes(r, raw) {
   correcaoPendente = temTituloGrudado(raw) ? corrigirTituloGrudado
     : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
-    : (temMarcadores(raw) ? removerMarcadoresTexto : null)));
+    : (temMarcadores(raw) ? removerMarcadoresTexto
+    : (temMarkdown(raw) ? corrigirMarkdown : null))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -1361,6 +1382,8 @@ $("btnColarRevExpandir").onclick = () => {
 attachTip($("btnColarRevExpandir"), "tip_panel_expand");
 $("btnColarRevFinalizar").onclick = finalizarColarRev;
 $("btnColarRevFechar").onclick = () => $("dlgColarRev").close();
+$("btnColarRevPrompt").onclick = () => abrirPromptCorrecao($("colarRevTexto").value);
+attachTip($("btnColarRevPrompt"), "tip_fixprompt");
 $("btnSubstituirMarcados").onclick = substituirMarcados;
 attachTip($("btnRevisar"), "tip_review_btn");
 attachTip($("selTodos"), "tip_sel_all");
@@ -2988,3 +3011,106 @@ if ("serviceWorker" in navigator) {
 }
 
 $("btnCheckUpdate").onclick = () => procurarAtualizacao(true);
+
+
+/* ===================================================================
+ * PROMPT DE CORREÇÃO  (v8.22)
+ * O app conserta sozinho o que é seguro consertar. O resto — resposta
+ * quebrada em várias linhas, cartão sem "::", conteúdo que só a IA sabe
+ * reescrever — vira um prompt objetivo: cada problema com o número da
+ * linha e o trecho literal, mais as regras e o texto numerado.
+ * Fluxo: gerar -> copiar -> colar na IA -> trazer a resposta de volta.
+ * =================================================================== */
+function abrirPromptCorrecao(raw) {
+  const txt = (raw || "").trim();
+  if (!txt) { uiAlert(t("fixprompt_none")); return; }
+  const r = parseText(txt, []);
+  const { achados, gerais } = problemasDoTexto(txt, r);
+  if (!achados.length && !gerais.length && !precisaNormalizar(r)) {
+    uiAlert(t("fixprompt_none")); return;
+  }
+  $("fixPromptTexto").value = montarPromptCorrecao(txt, r);
+  mostrarTamanho("fixPromptTam", $("fixPromptTexto").value);
+  $("fixPromptDone").textContent = "";
+  $("dlgFixPrompt").showModal();
+}
+
+$("btnPromptCorrigir").onclick = () => abrirPromptCorrecao($("editor").value);
+attachTip($("btnPromptCorrigir"), "tip_fixprompt");
+$("fixPromptTexto").addEventListener("input", () =>
+  mostrarTamanho("fixPromptTam", $("fixPromptTexto").value));
+$("btnFixPromptCopiar").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("fixPromptTexto").value);
+    $("fixPromptDone").textContent = t("fixprompt_done");
+    toast("toast_copied_marked");
+  } catch (e) { uiAlert(t("paste_denied")); }
+};
+$("btnFixPromptFechar").onclick = () => $("dlgFixPrompt").close();
+
+
+/* ===================================================================
+ * DIAGNÓSTICO  (v8.23)
+ * Um clique gera o relatório que descreve o problema inteiro: versão,
+ * ambiente, última correção aplicada (antes/depois), quais detectores
+ * acenderam e o texto que estava na tela. Substitui print + explicação:
+ * com esse bloco dá para reproduzir o caso e transformá-lo em teste.
+ * =================================================================== */
+const DIAG_MAX = 30000;   // texto muito grande vai cortado, com aviso
+
+function textoEmFoco() {
+  return $("dlgColarRev") && $("dlgColarRev").open
+    ? { onde: "painel de colagem", txt: $("colarRevTexto").value }
+    : { onde: "editor", txt: $("editor").value };
+}
+
+function montarDiagnostico() {
+  const foco = textoEmFoco();
+  const raw = foco.txt || "";
+  const r = resumoTexto(raw);
+  const nav = navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg|SamsungBrowser)\/[\d.]+/);
+  const pwa = matchMedia("(display-mode: standalone)").matches ? "PWA instalado" : "navegador";
+  const L = [];
+  L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
+    + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa);
+  L.push("Onde: " + foco.onde);
+  if (ultimoAjuste) {
+    const f = (s) => s.cartoes + " cartões, " + s.avisos + " avisos, "
+      + s.suspeitos + " a verificar, " + s.saibaMais + " linhas de Saiba mais";
+    L.push("Última correção: " + ultimoAjuste.acao);
+    L.push("  antes:  " + f(ultimoAjuste.antes));
+    L.push("  depois: " + f(ultimoAjuste.depois)
+      + (ultimoAjuste.bloqueado ? "  [BLOQUEADA: perderia " + ultimoAjuste.bloqueado + "]" : ""));
+  } else L.push("Última correção: nenhuma nesta sessão");
+  L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
+    + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
+    + " títulos, " + r.tags + " tags");
+  const det = detectoresAtivos(raw);
+  L.push("Detectores acesos: " + (det.length ? det.join(", ") : "nenhum"));
+  const p = parseText(raw, []);
+  (p.warnings || []).slice(0, 6).forEach((w, i) =>
+    L.push("  aviso L" + (p.warnLines || [])[i] + ": " + w));
+  p.cards.filter((c) => c.issues.length).slice(0, 6).forEach((c) =>
+    L.push("  cartão L" + c.line + ": " + c.issues[0]));
+  L.push("");
+  L.push("--- TEXTO (" + r.linhas + " linhas, " + r.chars + " caracteres) ---");
+  L.push(raw.length > DIAG_MAX
+    ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
+    : raw);
+  return L.join("\n");
+}
+
+$("btnDiagnostico").onclick = async () => {
+  const txt = montarDiagnostico();
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast("toast_diag_copied");
+  } catch (e) {
+    // sem permissão de área de transferência: mostra para copiar à mão
+    $("fixPromptTexto").value = txt;
+    mostrarTamanho("fixPromptTam", txt);
+    $("fixPromptDone").textContent = "";
+    $("dlgFixPrompt").showModal();
+  }
+};
+attachTip($("btnDiagnostico"), "tip_diag");

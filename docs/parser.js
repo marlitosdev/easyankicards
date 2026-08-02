@@ -188,10 +188,29 @@ function checarSuspeitas(card, rawParts) {
   }
   if (rawParts.length === 3 && card.kind !== "mc") {
     const rt = rawParts[2];
-    if (rt.includes("{{") || rt.includes(":") || rt.length > 60 || parseTags(rt).length > 6)
+    // Etiquetas de verdade: partes separadas por vírgula, sem espaço interno
+    // e sem pontuação de frase — o tamanho total não importa (nomes como
+    // "Auditoria_Governamental, Conceitos_Iniciais" passam de 60 caracteres).
+    const pareceTags = rt.trim().length <= 200 && !/[.!?;]/.test(rt)
+      && parseTags(rt).length <= 8
+      && rt.split(",").every((x) => x.trim() && !/\s/.test(x.trim()));
+    if (rt.includes("{{") || (!pareceTags && (rt.includes(":") || rt.length > 60))
+        || parseTags(rt).length > 8)
       issues.push(pm("i_tags_text"));
   }
   if (card.kind === "cloze" && clozeAberto(card.front)) issues.push(pm("i_cloze_open"));
+  // Mesmo número de lacuna na pergunta E na resposta: o Anki esconde as duas
+  // ao mesmo tempo e o cartão fica impossível de responder. Repetir o número
+  // dentro do MESMO campo é legítimo (esconde os dois juntos de propósito).
+  if (card.kind === "cloze") {
+    const nums = (s) => new Set(((s || "").match(/\{\{c(\d+)::/g) || [])
+      .map((x) => x.replace(/\D/g, "")));
+    const nf = nums(card.front), nb = nums(card.back);
+    if ([...nf].some((n) => nb.has(n))) issues.push(pm("i_cloze_repetida"));
+  }
+  // frente começando por marcador de lista => quase sempre é a resposta do
+  // cartão anterior que a IA quebrou em várias linhas
+  if (ehLinhaContinuacao(card.front)) issues.push(pm("i_continuacao"));
   // Lacuna com opções: o Anki imprime tudo entre colchetes na mesma frase.
   // Alternativas longas deixam o cartão ilegível — melhor usar [MC] em lista.
   if (card.kind === "cloze") {
@@ -384,9 +403,21 @@ function cardsParaExportar(cards) {
 
 /* --------- correções automáticas sugeridas pelo "Analisar" ---------- */
 
+const RE_MARCADOR = /^\s*(?:[-•▪*]|\d+[.)\]]|[a-eA-E][.)])\s+/;
+
+/* REGRA DE OURO: só tiramos o marcador de linhas que REALMENTE são cartão
+ * (têm "::" fora da lacuna, ou abrem uma lacuna). Uma linha sem "::" pode ser
+ * explicacao ("* texto" / "+ texto") ou continuacao da resposta — apagar o
+ * marcador dela transforma o conteudo em linha orfa e o cartao perde o
+ * "Saiba mais". Foi o que quebrou o baralho da NBASP 100 (v8.21). */
+function marcadorRemovivel(l) {
+  if (/^\s*[@+]/.test(l)) return false;
+  return hasDelim(l) || CLOZE_START_RE.test(l);
+}
+
 function removerMarcadoresTexto(raw) {
   return raw.split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(?:[-•▪*]|\d+[.)\]]|[a-eA-E][.)])\s+/, ""))
+    .map((l) => (marcadorRemovivel(l) ? l.replace(RE_MARCADOR, "") : l))
     .join("\n");
 }
 
@@ -418,8 +449,21 @@ function temParesSoltos(raw) {
 }
 
 function temMarcadores(raw) {
-  return /^\s*(?:[-•▪*]|\d+[.)\]])\s+/m.test(raw);
+  return raw.split(/\r?\n/).some((l) => marcadorRemovivel(l) && RE_MARCADOR.test(l));
 }
+
+/* Markdown que a IA insiste em usar: o Anki mostra os asteriscos literais.
+ * Converter para <b> preserva o destaque sem sujar o cartao. */
+const RE_NEGRITO_MD = /\*\*([^*\n]{1,120})\*\*/g;
+function temMarkdown(raw) { RE_NEGRITO_MD.lastIndex = 0; return RE_NEGRITO_MD.test(raw); }
+function corrigirMarkdown(raw) { return raw.replace(RE_NEGRITO_MD, "<b>$1</b>"); }
+
+/* Resposta quebrada em varias linhas: a IA escreveu "• item" / "1. item" em
+ * linhas soltas e cada uma virou um cartao torto. Nao ha conserto automatico
+ * seguro (nao da para adivinhar onde a resposta terminava) — por isso o
+ * aplicativo APONTA e oferece o prompt de correcao para a IA. */
+const RE_CONTINUACAO = /^\s*(?:[•▪·]|[-–—]\s|\d+[.)]\s|\*\*)/;
+function ehLinhaContinuacao(front) { return RE_CONTINUACAO.test(front || ""); }
 
 
 /* ------------------------------------------------------------------
@@ -536,4 +580,86 @@ function corrigirLacunaOpcoesLongas(raw) {
     if (maior <= 40) return todo;                    // dica curta: preserva
     return "{{c" + n + "::" + resp.trim() + "}}";    // remove só a dica longa
   });
+}
+
+/* ===================================================================
+ * PROMPT DE CORREÇÃO  (v8.22)
+ * Quando o texto da IA vem torto de um jeito que o app NÃO consegue
+ * consertar sozinho (resposta quebrada em várias linhas, cartão sem "::",
+ * markdown), montamos um prompt objetivo: lista dos problemas COM o número
+ * da linha e o trecho literal + as regras do formato + o texto numerado.
+ * A IA devolve o texto inteiro corrigido, que o usuário cola de volta.
+ * =================================================================== */
+
+/* Reúne, sem repetir linha, tudo que o app critica no texto. */
+function problemasDoTexto(raw, r) {
+  const linhas = raw.split(/\r?\n/);
+  const achados = [];
+  const jaTem = (n) => achados.some((p) => p.n === n);
+  const add = (n, msg) => {
+    if (!n || jaTem(n)) return;
+    achados.push({ n, msg: String(msg), txt: (linhas[n - 1] || "").trim() });
+  };
+  (r.warnLines || []).forEach((n, i) => add(n, r.warnings[i]));
+  r.cards.forEach((c) => { if (c.issues && c.issues.length) add(c.line, c.issues[0]); });
+  achados.sort((a, b) => a.n - b.n);
+  const gerais = [];
+  if (temTituloGrudado(raw)) gerais.push(t("fixg_title_glued"));
+  if (temMarcadores(raw)) gerais.push(t("fixg_bullets"));
+  if (temTagsQueSaoTexto(raw)) gerais.push(t("fixg_tags_text"));
+  if (temMarkdown(raw)) gerais.push(t("fixg_markdown"));
+  return { achados, gerais };
+}
+
+/* Monta o texto do prompt pronto para colar na IA. */
+function montarPromptCorrecao(raw, r) {
+  const { achados, gerais } = problemasDoTexto(raw, r);
+  const corta = (s) => (s.length > 150 ? s.slice(0, 150) + "…" : s);
+  let lista = achados.map((p, i) =>
+    (i + 1) + ". " + t("fixp_line") + " " + p.n + " — " + p.msg
+    + "\n   " + t("fixp_content") + ' "' + corta(p.txt) + '"').join("\n");
+  gerais.forEach((g, i) => {
+    lista += (lista ? "\n" : "") + (achados.length + i + 1) + ". " + g;
+  });
+  if (!lista) lista = "— " + t("fixp_generic");
+  const numerado = raw.split(/\r?\n/).map((l, i) => (i + 1) + "| " + l).join("\n");
+  return t("fix_prompt").replace("{problemas}", lista).replace("{texto}", numerado);
+}
+
+/* ===================================================================
+ * RESUMO DO TEXTO  (v8.23)
+ * Números que descrevem um texto em uma linha. Servem para três coisas:
+ * o relatório de diagnóstico, a rede de segurança das correções e os
+ * testes automáticos (tests/rodar.js). Um mesmo resumo em toda parte
+ * evita que "antes/depois" signifique coisas diferentes em cada tela.
+ * =================================================================== */
+function resumoTexto(raw) {
+  const r = parseText(raw || "", []);
+  return {
+    cartoes: r.cards.length,
+    avisos: r.warnings.length,
+    suspeitos: r.nSuspicious,
+    // linhas de "Saiba mais" somadas: é o conteúdo que some sem ninguém
+    // perceber quando uma correção mexe demais no texto
+    saibaMais: r.cards.reduce(
+      (s, c) => s + (c.more ? c.more.split("<br>").filter(Boolean).length : 0), 0),
+    titulos: r.cards.filter((c) => c.titulo).length,
+    tags: r.cards.reduce((s, c) => s + (c.ownTags || []).length, 0),
+    linhas: (raw || "").split(/\r?\n/).length,
+    chars: (raw || "").length,
+  };
+}
+
+/* Marca quais detectores acendem — o "painel de instrumentos" do texto. */
+function detectoresAtivos(raw) {
+  const d = {
+    marcadores: temMarcadores(raw),
+    titulo_grudado: temTituloGrudado(raw),
+    orfaos_explicacao: temOrfaosExplicacao(raw),
+    tags_que_sao_texto: temTagsQueSaoTexto(raw),
+    lacuna_opcoes_longas: temLacunaOpcoesLongas(raw),
+    markdown: temMarkdown(raw),
+    pares_soltos: temParesSoltos(raw),
+  };
+  return Object.keys(d).filter((k) => d[k]);
 }
