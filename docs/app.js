@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.17.0";
+const VERSAO = "8.18.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2522,6 +2522,18 @@ window.addEventListener("pywebviewready", () => {
   configurarImportar();
   if (localStorage.getItem("eac_gaveta") === null) toggleGaveta(true);
 });
+
+
+/* Dicas de funcionamento — cobertura completa dos botões visíveis. */
+[["btnSelecionarTudo","select_all"],["btnCopiarTudo","copy_all"],["btnApagarTudo","clear_all"],
+ ["btnColarMais","paste_more"],["btnDesfazerColagem","undo_paste"],["btnNovoCartao","tip_new"],
+ ["btnMCRapido","tip_mc"],["btnPromptIA","tip_prompt"],["btnApkgImport","tip_apkg_import"],
+ ["btnRevisar","tip_review_btn"],["btnNormalizar","normalize_tooltip"],
+ ["btnTxt","export_txt_tooltip"],["btnApkg","export_apkg_tooltip"],["btnAjuda","help_tooltip"],
+ ["chkDestaque","tip_highlight"],["selTema","tip_theme"],["corLetra","tip_textcolor"],
+ ["btnCorReset","textcolor_reset"],["selIdioma","tip_lang"],["chk2col","tip_two_cols"],
+ ["tituloGeral","gen_title_note"],["selEstiloPainel","style_hint"]
+].forEach(([id, chave]) => { const el = $(id); if (el) attachTip(el, chave); });
 
 /* ----------------------------- eventos ----------------------------- */
 
