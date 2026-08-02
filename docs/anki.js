@@ -339,15 +339,35 @@ async function buildApkg(cards, deckName, estilo, titulo) {
  * comprimido em zstd; os antigos trazem collection.anki2 direto.
  * ------------------------------------------------------------------ */
 
-async function _descompactarZstd(bytes) {
-  if (!window.fzstd) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/fzstd/0.1.1/index.min.js";
-      s.onload = resolve; s.onerror = reject;
-      document.head.append(s);
-    });
+/* Carrega o fzstd (descompactação zstd dos pacotes modernos do Anki).
+ * Tenta dois CDNs; sem ele, pacotes novos não podem ser lidos. */
+const _FZSTD_CDNS = [
+  "https://cdnjs.cloudflare.com/ajax/libs/fzstd/0.1.1/index.min.js",
+  "https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js",
+  "https://unpkg.com/fzstd@0.1.1/umd/index.js",
+];
+
+async function _carregarFzstd() {
+  if (window.fzstd) return true;
+  for (const url of _FZSTD_CDNS) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("falhou " + url));
+        document.head.append(s);
+        setTimeout(() => reject(new Error("timeout " + url)), 8000);
+      });
+      if (window.fzstd) return true;
+    } catch (e) { /* tenta o próximo */ }
   }
+  return false;
+}
+
+async function _descompactarZstd(bytes) {
+  if (!(await _carregarFzstd()))
+    throw new Error("ZSTD_INDISPONIVEL");
   return window.fzstd.decompress(bytes);
 }
 
@@ -368,16 +388,20 @@ async function lerApkg(arrayBuffer) {
   const zip = await JSZip.loadAsync(arrayBuffer);
 
   // escolhe a melhor fonte de dados dentro do pacote
-  let bytes = null;
-  if (zip.file("collection.anki21b")) {
+  let bytes = null, erroZstd = null;
+  const temModerno = !!zip.file("collection.anki21b");
+  if (temModerno) {
     const raw = await zip.file("collection.anki21b").async("uint8array");
-    try { bytes = await _descompactarZstd(raw); } catch (e) { bytes = null; }
+    try { bytes = await _descompactarZstd(raw); }
+    catch (e) { bytes = null; erroZstd = e; }
   }
   if (!bytes && zip.file("collection.anki21"))
     bytes = await zip.file("collection.anki21").async("uint8array");
   if (!bytes && zip.file("collection.anki2"))
     bytes = await zip.file("collection.anki2").async("uint8array");
   if (!bytes) throw new Error("collection não encontrada no pacote");
+  // guarda o contexto para detectar a "cópia de aviso" mais abaixo
+  var _pacoteModerno = temModerno, _falhouZstd = !!erroZstd;
 
   const db = new SQL.Database(bytes);
 
@@ -461,15 +485,34 @@ async function lerApkg(arrayBuffer) {
     // Preserva o conteúdo trocando por uma forma equivalente e visível.
     frente = frente.replace(/^\s*#\s*/, "nº ").replace(/^\s*[@+*]\s*/, "");
     const ehCloze = m.tipo === 1 || /\{\{c\d+::/.test(frente);
+    let verso = ehCloze ? "" : (campos[iVerso] || "");
+    let mais = iMais >= 0 ? (campos[iMais] || "") : (ehCloze && iVerso >= 0 ? (campos[iVerso] || "") : "");
+    // Cartão básico SEM verso seria descartado pelo parser ("verso vazio").
+    // Usa a explicação como resposta; se não houver, deixa um marcador
+    // para o usuário completar — nenhum cartão importado se perde.
+    if (!ehCloze && !verso.trim()) {
+      if (mais.trim()) { verso = mais; mais = ""; }
+      else verso = "(sem resposta no baralho original)";
+    }
     cards.push({
       kind: ehCloze ? "cloze" : "basic",
       front: frente,
-      back: ehCloze ? "" : (campos[iVerso] || ""),
+      back: verso,
       tags: tagArr, ownTags: tagArr,
-      more: iMais >= 0 ? (campos[iMais] || "") : (ehCloze && iVerso >= 0 ? (campos[iVerso] || "") : ""),
+      more: mais,
       titulo: iTitulo >= 0 ? (campos[iTitulo] || "") : "",
     });
   });
   db.close();
+  /* Pacotes modernos trazem uma cópia antiga contendo APENAS um aviso
+   * ("Atualize para a versão mais recente do Anki..."). Se caímos nela
+   * porque o zstd falhou, avisamos em vez de importar o aviso. */
+  const soAviso = cards.length <= 1 &&
+    cards.every((c) => /atualize para a vers|update to the latest/i.test(c.front || ""));
+  if (soAviso) {
+    const err = new Error(_falhouZstd ? "ZSTD_INDISPONIVEL" : "PACOTE_SO_AVISO");
+    err.code = _falhouZstd ? "ZSTD" : "AVISO";
+    throw err;
+  }
   return { deck: deckNome, cards };
 }

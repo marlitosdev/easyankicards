@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.18.0";
+const VERSAO = "8.18.2";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2402,7 +2402,12 @@ $("apkgFile").onchange = async (ev) => {
   toast("apkg_reading");
   let r;
   try { r = await lerApkg(await arq.arrayBuffer()); }
-  catch (e) { uiAlert(t("apkg_error") + "\n\n" + e); return; }
+  catch (e) {
+    const msg = String(e && e.message || e);
+    if (msg.indexOf("ZSTD") >= 0 || msg.indexOf("SO_AVISO") >= 0) uiAlert(t("apkg_zstd"));
+    else uiAlert(t("apkg_error") + "\n\n" + msg);
+    return;
+  }
   if (!r.cards.length) { uiAlert(t("apkg_none")); return; }
   const deck = r.deck || arq.name.replace(/\.apkg$/i, "");
   if (!(await uiConfirm(t("apkg_confirm", { n: r.cards.length, deck })))) return;
