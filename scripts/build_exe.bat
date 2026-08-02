@@ -20,7 +20,7 @@ if errorlevel 1 (
 
 echo [1/4] Instalando dependencias...
 python -m pip install --upgrade pip >nul
-python -m pip install pywebview pyinstaller
+python -m pip install pywebview "markitdown[all]" pyinstaller
 if errorlevel 1 (
     echo [ERRO] Falha ao instalar dependencias.
     pause

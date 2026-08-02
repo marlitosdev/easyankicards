@@ -1,0 +1,10 @@
+@ NBASP 100 - Tipos de Opinião
+Quais são os três tipos de {{c1::opinião modificada}}? :: São {{c2::qualificada, adversa e abstenção}} :: NBASP_100, ISSAI, Auditoria
++ Qualificada (exceto por) — há distorções relevantes, mas NÃO generalizadas.
++ Adversa — as distorções são relevantes E generalizadas.
++ ---
++ Dica de prova — a diferença está na generalização.
+
+@ Direito Constitucional - Remédios
+Qual remédio protege o direito líquido e certo não amparado por habeas corpus? :: O mandado de segurança :: Constitucional, Remedios
++ Base legal — art. 5º, LXIX, da Constituição Federal.
