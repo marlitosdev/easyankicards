@@ -423,7 +423,8 @@ const UI = {
   "crit_lacuna_ops": "Há lacunas com alternativas longas — no Anki elas aparecem entre colchetes na mesma frase e ficam ilegíveis.",
   "panel_expand": "Expandir",
   "panel_collapse": "Recolher",
-  "tip_panel_expand": "Aumenta a área de texto para revisar com mais conforto."
+  "tip_panel_expand": "Aumenta a área de texto para revisar com mais conforto.",
+  "fix_would_lose": "Cancelei esta correção: ela reduziria os cartões de {a} para {d}. Nenhuma correção automática deve apagar conteúdo. Ajuste manualmente o trecho apontado."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -848,7 +849,8 @@ const UI = {
   "crit_lacuna_ops": "There are blanks with long options — in Anki they show in brackets on the same line and become unreadable.",
   "panel_expand": "Expand",
   "panel_collapse": "Collapse",
-  "tip_panel_expand": "Enlarges the text area for a more comfortable review."
+  "tip_panel_expand": "Enlarges the text area for a more comfortable review.",
+  "fix_would_lose": "This fix was cancelled: it would reduce cards from {a} to {d}. No automatic fix should delete content. Please adjust the flagged part manually."
  }
 };
 const PARSER_MSG = {
