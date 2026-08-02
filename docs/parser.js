@@ -508,3 +508,28 @@ function corrigirOrfaosExplicacao(raw) {
     return linha;
   }).join("\n");
 }
+
+
+/* Detecta lacunas com ALTERNATIVAS longas (>40 caracteres), que no Anki
+ * aparecem todas entre colchetes na mesma linha e ficam ilegíveis. */
+function temLacunaOpcoesLongas(raw) {
+  const re = /\{\{c\d+::([\s\S]*?)::([\s\S]*?)\}\}/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    // vale para alternativas (a/b/c) E para dica única longa — nos dois
+    // casos o Anki imprime tudo entre colchetes na mesma linha
+    const maior = m[2].split("/").reduce((a, o) => Math.max(a, o.trim().length), 0);
+    if (maior > 40) return true;
+  }
+  return false;
+}
+
+/* Remove as alternativas dessas lacunas, mantendo a resposta correta.
+ * O cartão vira ocultação simples — legível e válido no Anki. */
+function corrigirLacunaOpcoesLongas(raw) {
+  return raw.replace(/\{\{c(\d+)::([\s\S]*?)::([\s\S]*?)\}\}/g, (todo, n, resp, ops) => {
+    const maior = ops.split("/").reduce((a, o) => Math.max(a, o.trim().length), 0);
+    if (maior <= 40) return todo;               // dica curta: preserva
+    return "{{c" + n + "::" + resp.trim() + "}}";   // remove a dica longa
+  });
+}

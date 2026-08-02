@@ -195,6 +195,19 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 /* trava visual das demais funções durante a revisão */
 .em-revisao .trava{opacity:.4;pointer-events:none;filter:grayscale(.4)}
 #colarRevSug .sug{margin-bottom:4px}
+/* área de revisão com numeração de linhas, rolagem e expansão */
+.rev-wrap{position:relative;background:var(--campo);border:1px solid var(--borda);
+  border-radius:8px;overflow:hidden}
+.rev-wrap .rev-nums{position:absolute;left:0;top:0;bottom:0;width:36px;z-index:2;
+  overflow:hidden;padding:8px 5px 8px 0;box-sizing:border-box;text-align:right;
+  font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.5;
+  color:var(--sutil);opacity:.7;border-right:1px solid var(--borda);
+  background:var(--campo);pointer-events:none;user-select:none}
+.rev-wrap textarea{width:100%;height:220px;resize:vertical;display:block;
+  font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.5;
+  padding:8px 8px 8px 42px;border:0;background:transparent;color:var(--texto);
+  overflow-y:auto;box-sizing:border-box}
+.rev-wrap.expandido textarea{height:62vh}
 .card .chk-rev{display:flex;align-items:center;gap:4px;font-weight:400;font-size:11px;
   color:var(--laranja)}
 .prev-controles{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:2px 0 6px}
@@ -660,9 +673,14 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   <div style="padding:16px">
     <h3 style="margin:0 0 6px" data-i18n="pastepanel_title"></h3>
     <div class="nota" data-i18n="pastepanel_note" style="margin-bottom:8px"></div>
-    <textarea id="colarRevTexto"
-      style="width:100%;min-height:180px;font-family:ui-monospace,Consolas,monospace;
-             font-size:12px;line-height:1.4"></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+      <button type="button" class="btn btn-cinza" id="btnColarRevExpandir"
+              style="padding:3px 10px;font-size:11px" data-i18n="panel_expand"></button>
+    </div>
+    <div class="rev-wrap" id="colarRevWrap">
+      <div class="rev-nums" id="colarRevNums" aria-hidden="true"></div>
+      <textarea id="colarRevTexto" spellcheck="false"></textarea>
+    </div>
     <div id="colarRevSug" style="margin-top:8px"></div>
     <div id="colarRevStatus" style="font-size:12px;margin-top:6px;min-height:16px"></div>
   </div>
