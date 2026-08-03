@@ -1,0 +1,148 @@
+{
+  "01-formato-canonico.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 4,
+    "titulos": 2,
+    "tags": 5,
+    "detectores": []
+  },
+  "02-explicacao-asterisco.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 1,
+    "tags": 3,
+    "detectores": []
+  },
+  "03-bullets-de-pdf.txt": {
+    "cartoes": 3,
+    "avisos": 0,
+    "suspeitos": 3,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 3,
+    "detectores": [
+      "marcadores"
+    ]
+  },
+  "04-titulo-grudado.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 2,
+    "detectores": []
+  },
+  "05-lacuna-opcoes-longas.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 4,
+    "detectores": [
+      "lacuna_opcoes_longas"
+    ]
+  },
+  "06-tags-longas-legitimas.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 4,
+    "detectores": []
+  },
+  "07-terceiro-campo-e-explicacao.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 0,
+    "detectores": [
+      "tags_que_sao_texto"
+    ]
+  },
+  "08-gemini-resposta-multilinha.txt": {
+    "cartoes": 7,
+    "avisos": 0,
+    "suspeitos": 3,
+    "saibaMais": 12,
+    "titulos": 4,
+    "tags": 12,
+    "detectores": [
+      "marcadores",
+      "orfaos_explicacao",
+      "markdown"
+    ]
+  },
+  "09-cloze-repetida.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 0,
+    "titulos": 0,
+    "tags": 1,
+    "detectores": [
+      "cloze_repetida"
+    ]
+  },
+  "10-markdown-da-ia.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 1,
+    "titulos": 1,
+    "tags": 2,
+    "detectores": [
+      "markdown"
+    ]
+  },
+  "11-tags-longas-viravam-explicacao.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 2,
+    "tags": 9,
+    "detectores": []
+  },
+  "12-tags-viraram-explicacao.txt": {
+    "cartoes": 3,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 3,
+    "tags": 4,
+    "detectores": [
+      "tags_na_explicacao"
+    ]
+  },
+  "13-lacuna-repetida-pergunta-resposta.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 1,
+    "titulos": 2,
+    "tags": 5,
+    "detectores": [
+      "cloze_repetida"
+    ]
+  },
+  "14-espacamento-e-tipografia.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 2,
+    "titulos": 1,
+    "tags": 2,
+    "detectores": [
+      "espacos"
+    ]
+  }
+}
