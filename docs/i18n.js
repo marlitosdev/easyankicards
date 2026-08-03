@@ -295,7 +295,7 @@ const UI = {
   "undo_paste": "Desfazer última colagem",
   "toast_pasted": "Texto colado ao final",
   "toast_paste_undone": "Última colagem desfeita",
-  "paste_empty": "Não há nada na área de transferência para colar.",
+  "paste_empty": "Não há nada copiado. Copie a resposta da IA e tente de novo.",
   "paste_denied": "O navegador não liberou a colagem automática. Cole manualmente com Ctrl+V no editor.",
   "two_cols": "Visualizar múltiplas colunas",
   "tip_two_cols": "Mostra os cartões em duas colunas nas telas maiores, para conferir mais de uma vez. Em telas estreitas continua em coluna única.",
@@ -357,7 +357,7 @@ const UI = {
   "badge_selected": "cartão selecionado para revisão",
   "badge_reviewed": "cartão já revisado",
   "pastepanel_title": "Revisar o conteúdo colado",
-  "pastepanel_note": "Cole aqui (Ctrl+V) a correção da IA e ajuste o que precisar. Os cartões marcados serão substituídos por este texto. Só dá para finalizar quando não houver erros.",
+  "pastepanel_note": "Cole aqui (Ctrl+V) a correção da IA e ajuste o que precisar. Os cartões marcados serão substituídos por este texto. Só dá para finalizar quando não houver erros. Se o texto vier torto, use \"Prompt de correção\", leve à IA e volte com \"Colar resposta da IA\".",
   "pastepanel_finish": "Finalizar edição destes cartões",
   "pastepanel_clean": "✓ Sem erros — pronto para finalizar.",
   "pastepanel_haserr": "Há {n} ponto(s) a corrigir antes de finalizar.",
@@ -450,7 +450,15 @@ const UI = {
   "diag_btn": "Copiar diagnóstico",
   "tip_diag": "Copia um relatório com a versão, o que a última correção fez e o texto da tela — cole ao relatar um problema",
   "toast_diag_copied": "Diagnóstico copiado. Cole ao relatar o problema.",
-  "fix_would_lose_more": "A correção foi cancelada: ela apagaria explicações do \"Saiba mais\" ({a} linhas viraram {d})."
+  "fix_would_lose_more": "A correção foi cancelada: ela apagaria explicações do \"Saiba mais\" ({a} linhas viraram {d}).",
+  "pastepanel_paste": "Colar resposta da IA",
+  "tip_pastepanel_paste": "Substitui o texto desta caixa pelo que estiver na área de transferência (a correção que a IA devolveu)",
+  "pastepanel_replace_confirm": "Substituir o texto desta caixa pelo conteúdo copiado?",
+  "paste_denied_manual": "O navegador não deixou ler a área de transferência. Clique dentro da caixa e use Ctrl+A e depois Ctrl+V.",
+  "toast_pasted_fix": "Correção colada. Confira os avisos e finalize.",
+  "fix_would_lose_tags": "A correção foi cancelada: ela apagaria etiquetas dos cartões ({a} tags virariam {d}).",
+  "crit_tags_in_more": "Há linhas \"+\" que na verdade são as etiquetas do cartão — elas devem voltar para o fim da linha do cartão.",
+  "fix_tags_in_more": "Devolver as etiquetas"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -747,7 +755,7 @@ const UI = {
   "undo_paste": "Undo last paste",
   "toast_pasted": "Text appended",
   "toast_paste_undone": "Last paste undone",
-  "paste_empty": "There is nothing in the clipboard to paste.",
+  "paste_empty": "Nothing copied. Copy the AI answer and try again.",
   "paste_denied": "The browser did not allow automatic pasting. Paste manually with Ctrl+V in the editor.",
   "two_cols": "Show multiple columns",
   "tip_two_cols": "Shows cards in two columns on wider screens, to review more at a glance. On narrow screens it stays single-column.",
@@ -809,7 +817,7 @@ const UI = {
   "badge_selected": "card selected for review",
   "badge_reviewed": "card already reviewed",
   "pastepanel_title": "Review the pasted content",
-  "pastepanel_note": "Paste the AI's fix here (Ctrl+V) and adjust what you need. The marked cards will be replaced by this text. You can only finish when there are no errors.",
+  "pastepanel_note": "Paste the AI fix here (Ctrl+V) and adjust what you need. The marked cards will be replaced by this text. You can only finish when there are no errors. If the text comes out wrong, use \"Fix prompt\", take it to the AI and come back with \"Paste AI answer\".",
   "pastepanel_finish": "Finish editing these cards",
   "pastepanel_clean": "✓ No errors — ready to finish.",
   "pastepanel_haserr": "{n} issue(s) to fix before finishing.",
@@ -902,7 +910,15 @@ const UI = {
   "diag_btn": "Copy diagnostics",
   "tip_diag": "Copies a report with the version, what the last fix did and the on-screen text — paste it when reporting a problem",
   "toast_diag_copied": "Diagnostics copied. Paste it when reporting the problem.",
-  "fix_would_lose_more": "Fix cancelled: it would delete \"Learn more\" explanations ({a} lines would become {d})."
+  "fix_would_lose_more": "Fix cancelled: it would delete \"Learn more\" explanations ({a} lines would become {d}).",
+  "pastepanel_paste": "Paste AI answer",
+  "tip_pastepanel_paste": "Replaces the text in this box with whatever is on the clipboard (the fix the AI returned)",
+  "pastepanel_replace_confirm": "Replace the text in this box with the copied content?",
+  "paste_denied_manual": "The browser blocked clipboard access. Click inside the box and press Ctrl+A then Ctrl+V.",
+  "toast_pasted_fix": "Fix pasted. Check the warnings and finish.",
+  "fix_would_lose_tags": "Fix cancelled: it would delete card tags ({a} tags would become {d}).",
+  "crit_tags_in_more": "Some \"+\" lines are actually the card tags — they should go back to the end of the card line.",
+  "fix_tags_in_more": "Restore the tags"
  }
 };
 const PARSER_MSG = {

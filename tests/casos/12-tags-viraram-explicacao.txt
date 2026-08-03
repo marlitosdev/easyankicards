@@ -1,0 +1,11 @@
+@ NBASP_100 - As Três Partes da Auditoria
+Quais são as três partes envolvidas em uma auditoria do setor público segundo a NBASP 100? São {{c1::o auditor}}, {{c2::a parte responsável}} e {{c3::os usuários previstos}}.
++ NBASP_100, ISSAI, Auditoria_Governamental, Conceitos_Iniciais
++ Auditor — titular da unidade de auditoria governamental e pessoas encarregadas de conduzir os trabalhos.
+@ NBASP_100 - Objeto da Auditoria
+O que é o objeto da auditoria no setor público e qual a sua condição essencial de aceitabilidade? É a {{c1::informação, condição ou atividade mensurada ou avaliada segundo critérios}}, devendo ser {{c2::identificável e passível de avaliação consistente}}. :: NBASP_100, ISSAI, Objeto, Auditoria
++ Definição — informação, atividade ou condição submetida à avaliação em relação a critérios definidos.
+@ NBASP_200/400 - Aplicação de Testes Substantivos
+Os testes substantivos (procedimentos analíticos e testes de detalhes) são obrigatoriamente aplicados em qual tipo específico de trabalho? São obrigatoriamente aplicados nos {{c1::trabalhos de certificação}}, sendo essenciais nas {{c2::auditorias financeiras}} (NBASP 200).
++ NBASP_200, NBASP_400, ISSAI, Testes_Substantivos, Certificação
++ Testes substantivos — visam obter evidências sobre distorções relevantes no nível de afirmações.

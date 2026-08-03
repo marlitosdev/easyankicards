@@ -49,7 +49,8 @@ function carregarApp() {
   const exportar = "return {parseText,cardToLine,cardToLineBase,resumoTexto,"
     + "detectoresAtivos,montarPromptCorrecao,setLanguage,t,"
     + "removerMarcadoresTexto,corrigirTagsQueSaoTexto,corrigirTituloGrudado,"
-    + "corrigirOrfaosExplicacao,corrigirLacunaOpcoesLongas,corrigirMarkdown};";
+    + "corrigirOrfaosExplicacao,corrigirLacunaOpcoesLongas,corrigirMarkdown,"
+    + "temTagsNaExplicacao,corrigirTagsNaExplicacao};";
   const api = new Function(codigo + "\n" + exportar)();
   api.setLanguage("pt");
   return api;
@@ -66,6 +67,7 @@ const CORRECOES = {
   corrigirOrfaosExplicacao: app.corrigirOrfaosExplicacao,
   corrigirLacunaOpcoesLongas: app.corrigirLacunaOpcoesLongas,
   corrigirMarkdown: app.corrigirMarkdown,
+  corrigirTagsNaExplicacao: app.corrigirTagsNaExplicacao,
 };
 
 /* --------------------------------------------------------------------
@@ -103,6 +105,11 @@ function invariantes(nome, texto) {
     //     botão removia o "*" das explicações e o conteúdo virava lixo)
     if (dep.saibaMais < base.saibaMais)
       falhas.push(`I3 ${fn} perdeu Saiba mais: ${base.saibaMais} -> ${dep.saibaMais}`);
+
+    // I3b. Nenhuma correção pode apagar etiquetas.  (bug v8.23: tags com
+    //      mais de 60 caracteres eram confundidas com texto e viravam "+")
+    if (dep.tags < base.tags)
+      falhas.push(`I6 ${fn} perdeu etiquetas: ${base.tags} -> ${dep.tags}`);
 
     // I4. Corrigir duas vezes tem de dar no mesmo que corrigir uma vez.
     //     Sem isso, cada clique repetido come um pedaço do texto.
@@ -178,7 +185,7 @@ function main() {
 
   console.log(falhasTotal
     ? `\n${falhasTotal} FALHA(S).\n`
-    : `\nTudo certo: ${arquivos.length} casos, invariantes I1-I5 respeitadas.\n`);
+    : `\nTudo certo: ${arquivos.length} casos, invariantes I1-I6 respeitadas.\n`);
   return falhasTotal ? 1 : 0;
 }
 
