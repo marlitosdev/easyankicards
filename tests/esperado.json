@@ -144,5 +144,17 @@
     "detectores": [
       "espacos"
     ]
+  },
+  "15-prompt-vazado-no-cartao.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 4,
+    "titulos": 1,
+    "tags": 2,
+    "detectores": [
+      "prompt_vazado",
+      "mais_repetido"
+    ]
   }
 }

@@ -1,0 +1,6 @@
+@ Monitoramento na Auditoria de Conformidade
+De que depende a necessidade de monitoramento segundo a NBASP 400? :: Varia conforme a natureza do objeto e a gravidade da não conformidade :: auditoria_setor_publico, nbasp_400
++ Dependência — inexistência de regra fixa; varia de acordo com a gravidade e o objeto.
++ Validade — o monitoramento é válido por si só, podendo ou não envolver decisões judiciais.
++ Responda SOMENTE com os trechos corrigidos, cada um começando pela sua linha "@@ N". Sem comentários, sem explicações, sem cercas de código.
++ Responda SOMENTE com os trechos corrigidos, cada um começando pela sua linha "@@ N". Sem comentários, sem explicações, sem cercas de código.

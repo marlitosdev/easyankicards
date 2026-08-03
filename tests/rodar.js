@@ -56,7 +56,8 @@ function carregarApp() {
     + "corrigirOrfaosExplicacao,corrigirLacunaOpcoesLongas,corrigirMarkdown,"
     + "temTagsNaExplicacao,corrigirTagsNaExplicacao,"
     + "temClozeRepetida,corrigirClozeRepetida,"
-    + "temEspacosRuins,corrigirEspacos};";
+    + "temEspacosRuins,corrigirEspacos,"
+    + "temPromptVazado,corrigirPromptVazado,temMaisRepetido,corrigirMaisRepetido};";
   const api = new Function(codigo + "\n" + exportar)();
   api.setLanguage("pt");
   return api;
@@ -76,6 +77,9 @@ const CORRECOES = {
   corrigirTagsNaExplicacao: app.corrigirTagsNaExplicacao,
   corrigirClozeRepetida: app.corrigirClozeRepetida,
   corrigirEspacos: app.corrigirEspacos,
+  // as duas de LIMPEZA saem das invariantes I2/I3/I6 de propósito:
+  // elas existem para remover lixo, então reduzir contagem é o esperado
+
 };
 
 /* --------------------------------------------------------------------
