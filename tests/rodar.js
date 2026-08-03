@@ -25,6 +25,9 @@
  *   invariantes()  - as 5 regras que nenhum texto pode quebrar
  *   conferir()     - compara com tests/esperado.json
  *   main()         - roda, imprime e devolve código de saída
+ *
+ * Além dos casos de texto, roda tests/fumaca.js (o app carrega sem erro num
+ * DOM mínimo) e tests/tela.js (fluxo de revisão de conteúdo).
  * ===================================================================== */
 
 const fs = require("fs");
@@ -174,6 +177,17 @@ function main() {
     falhas.forEach((f) => console.log("          -> " + f));
   }
 
+  // testes de interface (DOM mínimo): carregamento do app e fluxo de revisão
+  const fumaca = require("./fumaca.js").rodar().falhas;
+  const tela = require("./tela.js").testes();
+  const extras = [["carregamento do app", fumaca], ["fluxo de revisão", tela]];
+  console.log("");
+  extras.forEach(([nome, fs2]) => {
+    falhasTotal += fs2.length;
+    console.log(`  ${fs2.length ? "FALHOU" : "ok    "}  ${nome}`);
+    fs2.forEach((f) => console.log("          -> " + f));
+  });
+
   if (GRAVAR) {
     fs.writeFileSync(ARQ_ESPERADO, JSON.stringify(novoEsperado, null, 2) + "\n");
     console.log("\nesperado.json gravado com os números atuais.");
@@ -185,7 +199,7 @@ function main() {
 
   console.log(falhasTotal
     ? `\n${falhasTotal} FALHA(S).\n`
-    : `\nTudo certo: ${arquivos.length} casos, invariantes I1-I6 respeitadas.\n`);
+    : `\nTudo certo: ${arquivos.length} casos de texto + interface, invariantes I1-I6.\n`);
   return falhasTotal ? 1 : 0;
 }
 

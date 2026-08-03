@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.23.2) · by MarlitosDev
+# EasyAnkiCards (v8.24.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -50,6 +50,7 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 **Revisão de conteúdo** (botão "Revisar cartões")
 - Liga o modo de marcação: **caixa "marcar p/ revisão"** por cartão e botões de seleção automática — **Curtos, Sem resposta, Sem pergunta, Longos, Frente repetida** e **Com números/datas/artigos** (maior risco factual).
 - Filtro **"Mostrar só os marcados"** para focar e editar no lugar (nada é movido nem apagado).
+- Filtro **"Ocultar já revisados"**: some da tela o que já passou por uma rodada (selo verde), deixando visível só o que ainda falta conferir. A marca é por frente do cartão e fica salva no navegador, então sobrevive a edições e ao recarregar; **"Limpar 'já revisados'"** recomeça o ciclo.
 - **"Copiar os marcados"** abre uma janela **editável** com o prompt + cartões, em duas versões: *Corrigir forma* (ChatGPT/Claude/Gemini) e *Verificar nas fontes* (Gemini Notebook, prompt curto). Os prompts pedem para **aprimorar os cartões existentes, sem criar novos**.
 - **"Colar correção"** substitui os cartões marcados pela versão corrigida da IA (remove os antigos e insere os novos, sem duplicar), com confirmação e possibilidade de desfazer.
 
@@ -106,6 +107,8 @@ São dois tipos de teste. As **invariantes** valem para qualquer texto e pegam o
 | I6 | nenhuma correção apaga etiquetas | v8.23 |
 | I4 | corrigir 2x = corrigir 1x (idempotência) | v8.19 |
 | I5 | ida e volta (texto → cartões → texto) não muda nada | — |
+
+Rodam junto dois testes de interface, num DOM mínimo escrito à mão (sem dependência): `fumaca.js` verifica que o app carrega sem erro, e `tela.js` exercita o fluxo de revisão de conteúdo.
 
 O **esperado.json** congela os números de cada caso conhecido e pega a regressão: o bug que já foi corrigido uma vez e voltou. As duas primeiras regras também rodam dentro do app, na rede de segurança que cancela qualquer correção que fosse perder conteúdo.
 
