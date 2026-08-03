@@ -458,7 +458,16 @@ const UI = {
   "toast_pasted_fix": "Correção colada. Confira os avisos e finalize.",
   "fix_would_lose_tags": "A correção foi cancelada: ela apagaria etiquetas dos cartões ({a} tags virariam {d}).",
   "crit_tags_in_more": "Há linhas \"+\" que na verdade são as etiquetas do cartão — elas devem voltar para o fim da linha do cartão.",
-  "fix_tags_in_more": "Devolver as etiquetas"
+  "fix_tags_in_more": "Devolver as etiquetas",
+  "hide_reviewed": "Ocultar já revisados",
+  "clear_reviewed": "Limpar 'já revisados'",
+  "rev_hidden_count": "{n} já revisado(s) oculto(s)",
+  "rev_clear_none": "Nenhum cartão está marcado como já revisado.",
+  "rev_clear_confirm": "Apagar a marca 'já revisado' de {n} cartão(ões)? Eles voltam a aparecer na revisão.",
+  "toast_rev_cleared": "Marcas de 'já revisado' apagadas.",
+  "tip_hide_reviewed": "Some da tela os cartões com a marca verde 'já revisado', deixando só o que falta conferir",
+  "tip_clear_reviewed": "Apaga o histórico de 'já revisado' — útil ao começar uma nova rodada de revisão do baralho",
+  "toast_review_started_hint": "Revisão iniciada. {n} cartão(ões) já revisado(s) — marque \"Ocultar já revisados\" para ver só o que falta."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -918,7 +927,16 @@ const UI = {
   "toast_pasted_fix": "Fix pasted. Check the warnings and finish.",
   "fix_would_lose_tags": "Fix cancelled: it would delete card tags ({a} tags would become {d}).",
   "crit_tags_in_more": "Some \"+\" lines are actually the card tags — they should go back to the end of the card line.",
-  "fix_tags_in_more": "Restore the tags"
+  "fix_tags_in_more": "Restore the tags",
+  "hide_reviewed": "Hide already reviewed",
+  "clear_reviewed": "Clear 'already reviewed'",
+  "rev_hidden_count": "{n} reviewed hidden",
+  "rev_clear_none": "No card is marked as already reviewed.",
+  "rev_clear_confirm": "Clear the 'already reviewed' mark from {n} card(s)? They will show up in the review again.",
+  "toast_rev_cleared": "'Already reviewed' marks cleared.",
+  "tip_hide_reviewed": "Hides cards with the green 'already reviewed' badge, leaving only what still needs checking",
+  "tip_clear_reviewed": "Clears the 'already reviewed' history — useful when starting a new review round of the deck",
+  "toast_review_started_hint": "Review started. {n} card(s) already reviewed — check \"Hide already reviewed\" to see only what's left."
  }
 };
 const PARSER_MSG = {

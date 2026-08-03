@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.23.2";
+const VERSAO = "8.24.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -39,7 +39,8 @@ let respostasFechadas = new Set();  // por padrão TODOS mostram a resposta
 let marcados = new Set();     // chaves de cartões marcados para revisão
 let modoRevisao = false;      // barra de revisão visível
 let revisaoSnapshot = null;   // texto do editor ao ENTRAR (para cancelar)
-let revisados = new Set();     // chaves de cartões já revisados (verde)
+let revisados = new Set();     // frentes de cartões já revisados (verde, persistente)
+let ocultosRevisao = 0;        // quantos o filtro "ocultar já revisados" escondeu
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
 let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
@@ -539,6 +540,23 @@ function renderCorpoCartao(div, c) {
 
 function chave(c) { return c.line + "|" + c.front; }
 
+/* A marca "já revisado" precisa sobreviver a edições e ao recarregar a
+ * página, então NÃO pode depender do número da linha: usa só a frente,
+ * normalizada. É guardada no navegador (eac_revisados). */
+function chaveRev(c) {
+  return (c.front || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function carregarRevisados() {
+  try {
+    const g = JSON.parse(localStorage.getItem("eac_revisados") || "[]");
+    return new Set(Array.isArray(g) ? g : []);
+  } catch (e) { return new Set(); }
+}
+function salvarRevisados() {
+  try { localStorage.setItem("eac_revisados", JSON.stringify([...revisados])); }
+  catch (e) {}
+}
+
 let saveTimer = null;
 function autoSalvar() {
   clearTimeout(saveTimer);
@@ -557,6 +575,9 @@ function parseAtual() {
   // tags (o 3º campo do texto). Isso elimina tags "fantasma" no topo.
   return parseText($("editor").value, []);
 }
+
+/* recupera as marcas de "já revisado" da sessão anterior */
+revisados = carregarRevisados();
 
 function reescreverEditor(cards, warnings) {
   let texto = cards.map(cardToLine).join("\n\n");
@@ -581,8 +602,15 @@ function preview() {
     $("chk2col").checked && matchMedia("(min-width:760px)").matches);
 
   const filtrando = $("chkFiltro") && $("chkFiltro").checked;
+  const ocultandoRev = modoRevisao && $("chkOcultarRev") && $("chkOcultarRev").checked;
+  ocultosRevisao = 0;
   r.cards.forEach((c, idx) => {
     if (filtrando && !marcados.has(chave(c))) return;   // mostra só marcados
+    // esconde o que já passou por uma rodada de revisão (a marca verde),
+    // para sobrar na tela apenas o que ainda não foi conferido
+    if (ocultandoRev && revisados.has(chaveRev(c)) && !marcados.has(chave(c))) {
+      ocultosRevisao++; return;
+    }
     const div = document.createElement("div");
     div.className = "card" + (c.issues.length ? " suspeito" : "")
 ;
@@ -600,7 +628,7 @@ function preview() {
       const chkR = document.createElement("input");
       chkR.type = "checkbox"; chkR.checked = marcados.has(chave(c));
       chkR.onchange = () => {
-        if (chkR.checked) { marcados.add(chave(c)); revisados.delete(chave(c)); }
+        if (chkR.checked) { marcados.add(chave(c)); revisados.delete(chaveRev(c)); salvarRevisados(); }
         else marcados.delete(chave(c));
         atualizarContagemRevisao();
         preview();
@@ -609,8 +637,8 @@ function preview() {
       cab.append(lblR);
     }
     div.append(cab);
-    if (modoRevisao && (marcados.has(chave(c)) || revisados.has(chave(c)))) {
-      const rev = revisados.has(chave(c));
+    if (modoRevisao && (marcados.has(chave(c)) || revisados.has(chaveRev(c)))) {
+      const rev = revisados.has(chaveRev(c));
       const selo = document.createElement("div");
       selo.className = "card-badge-rev " + (rev ? "card-badge-rev-ok" : "card-badge-sel");
       selo.textContent = "● " + t(rev ? "badge_reviewed" : "badge_selected");
@@ -1115,8 +1143,10 @@ function uiPrompt(rotulo, valorInicial) {
 
 function atualizarContagemRevisao() {
   const el = $("revContagem");
-  if (el) el.textContent = marcados.size
-    ? t("marked_count", { n: marcados.size }) : t("marked_none");
+  if (!el) return;
+  let txt = marcados.size ? t("marked_count", { n: marcados.size }) : t("marked_none");
+  if (ocultosRevisao) txt += " · " + t("rev_hidden_count", { n: ocultosRevisao });
+  el.textContent = txt;
 }
 
 /* Marca todos os cartões do resultado atual que atendem a um critério. */
@@ -1199,7 +1229,7 @@ function travarFuncoes(travar) {
 function entrarRevisao() {
   modoRevisao = true;
   revisaoSnapshot = $("editor").value;   // ponto de restauração p/ cancelar
-  marcados.clear(); revisados.clear();
+  marcados.clear();   // "já revisado" NÃO é apagado: é o histórico entre rodadas
   $("barraRevisao").style.display = "";
   $("btnRevisar").style.display = "none";
   $("btnRevFinalizar").style.display = "";
@@ -1207,14 +1237,18 @@ function entrarRevisao() {
   travarFuncoes(true);
   atualizarContagemRevisao();
   preview();
-  toast("toast_review_started");
+  // se já houve rodadas anteriores, avisa que dá para esconder o que já foi
+  // conferido — é o que deixa a tela só com o que ainda falta
+  const jaRev = parseAtual().cards.filter((c) => revisados.has(chaveRev(c))).length;
+  toast(jaRev ? t("toast_review_started_hint", { n: jaRev }) : t("toast_review_started"));
 }
 
 function sairRevisao() {
   modoRevisao = false;
   revisaoSnapshot = null;
-  marcados.clear(); revisados.clear();
+  marcados.clear();
   $("chkFiltro").checked = false;
+  $("chkOcultarRev").checked = false;
   $("barraRevisao").style.display = "none";
   $("btnRevisar").style.display = "";
   $("btnRevFinalizar").style.display = "none";
@@ -1240,6 +1274,15 @@ $("selRisco").onclick = () => marcarPor(CRIT.risco);
 $("selDup").onclick = marcarDuplicados;
 $("selLimpar").onclick = () => { marcados.clear(); atualizarContagemRevisao(); preview(); };
 $("chkFiltro").onchange = () => preview();
+$("chkOcultarRev").onchange = () => { preview(); atualizarContagemRevisao(); };
+$("btnLimparRevisados").onclick = async () => {
+  if (!revisados.size) { uiAlert(t("rev_clear_none")); return; }
+  if (!(await uiConfirm(t("rev_clear_confirm", { n: revisados.size })))) return;
+  revisados.clear(); salvarRevisados();
+  $("chkOcultarRev").checked = false;
+  preview(); atualizarContagemRevisao();
+  toast("toast_rev_cleared");
+};
 $("btnCopiarMarcados").onclick = copiarMarcados;
 
 /* Remove o BLOCO de um cartão (título @ acima + linha + explicação +)
@@ -1369,8 +1412,9 @@ function finalizarColarRev() {
   marcados.clear();
   // marca os cartões vindos da correção como "já revisado"
   parseAtual().cards.forEach((c) => {
-    if (rNovo.cards.some((n) => n.front === c.front)) revisados.add(chave(c));
+    if (rNovo.cards.some((n) => n.front === c.front)) revisados.add(chaveRev(c));
   });
+  salvarRevisados();
   $("btnDesfazerColagem").disabled = false;
   linhaNovaColada = base ? base.split("\n").length + 2 : 1;
   autoSalvar();
@@ -1425,6 +1469,8 @@ attachTip($("selDup"), "tip_sel_dup");
 attachTip($("selRisco"), "tip_sel_risky");
 attachTip($("selLimpar"), "tip_sel_clear");
 attachTip($("chkFiltro"), "tip_filter");
+attachTip($("chkOcultarRev"), "tip_hide_reviewed");
+attachTip($("btnLimparRevisados"), "tip_clear_reviewed");
 attachTip($("btnCopiarMarcados"), "tip_copy_marked");
 attachTip($("btnSubstituirMarcados"), "tip_replace_marked");
 
