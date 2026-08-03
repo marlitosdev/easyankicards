@@ -708,6 +708,7 @@ function detectoresAtivos(raw) {
     markdown: temMarkdown(raw),
     tags_na_explicacao: temTagsNaExplicacao(raw),
     cloze_repetida: temClozeRepetida(raw),
+    espacos: temEspacosRuins(raw),
     pares_soltos: temParesSoltos(raw),
   };
   return Object.keys(d).filter((k) => d[k]);
@@ -948,3 +949,28 @@ function _varrerClozeRepetida(raw, aplicar) {
 }
 function temClozeRepetida(raw) { return _varrerClozeRepetida(raw, false); }
 function corrigirClozeRepetida(raw) { return _varrerClozeRepetida(raw, true); }
+
+/* ===================================================================
+ * HIGIENE DE ESPAÇAMENTO  (v8.28)
+ * Miudezas que a IA e o PDF deixam para trás e que só aparecem depois,
+ * no cartão: dois espaços seguidos, espaço antes da vírgula, travessão
+ * grudado nas palavras. Nada aqui muda o SENTIDO do texto — só o
+ * espaçamento — por isso é seguro aplicar em bloco.
+ * =================================================================== */
+function _higienizarLinha(l) {
+  if (/^\s*#/.test(l)) return l;                    // comentário fica como está
+  return l
+    .replace(/[ \t]{2,}/g, " ")                     // espaços repetidos
+    .replace(/\s+([,;.!?])/g, "$1")                 // espaço antes de pontuação
+    .replace(/([^\s—])—([^\s—])/g, "$1 — $2")       // travessão grudado
+    .replace(/\s*\.\.\.\s*/g, "… ")                 // reticências
+    .replace(/\s+$/, "");                           // espaço no fim da linha
+}
+function _varrerEspacos(raw, aplicar) {
+  const L = raw.split(/\r?\n/);
+  const novo = L.map(_higienizarLinha);
+  if (!aplicar) return novo.some((l, i) => l !== L[i]);
+  return novo.join("\n");
+}
+function temEspacosRuins(raw) { return _varrerEspacos(raw, false); }
+function corrigirEspacos(raw) { return _varrerEspacos(raw, true); }

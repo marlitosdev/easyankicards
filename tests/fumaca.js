@@ -20,7 +20,7 @@ function novoEl(id) {
     children: [], dataset: {}, options: [], files: [], firstChild: null, parentNode: null, scrollTop: 0, selectionStart: 0, selectionEnd: 0,
     // style aceita leitura, escrita e os métodos de CSS custom property
     style: new Proxy({ setProperty() {}, removeProperty() {}, getPropertyValue: () => "" },
-      { get: (o, k) => (k in o ? o[k] : ""), set: () => true }),
+      { get: (o, k) => (k in o ? o[k] : ""), set: (o, k, v) => { o[k] = v; return true; } }),
     classList: {
       add() {}, remove() {}, toggle: () => false, contains: () => false,
     },
@@ -79,12 +79,17 @@ function rodar() {
   const { doc, ids } = montarDocumento(html);
   const falhas = [];
 
-  const janela = {
+  const janela = { __area: "" };
+  Object.assign(janela, {
     document: doc,
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: {
       language: "pt-BR", userAgent: "node", platform: "node",
-      clipboard: { writeText: async () => {}, readText: async () => "" },
+      // controlável pelos testes: janela.__area guarda o "conteúdo copiado"
+      clipboard: {
+        writeText: async (v) => { janela.__area = v; },
+        readText: async () => janela.__area || "",
+      },
       serviceWorker: {
         register: async () => ({}), addEventListener() {},
         controller: null, getRegistration: async () => null,
@@ -108,7 +113,7 @@ function rodar() {
     ResizeObserver: function () { return { observe() {}, disconnect() {} }; },
     IntersectionObserver: function () { return { observe() {}, disconnect() {} }; },
     console: { log() {}, warn() {}, error() {}, info() {} },
-  };
+  });
   janela.window = janela;
   janela.self = janela;
 
@@ -122,6 +127,10 @@ function rodar() {
     get revisados() { return revisados; },
     get ocultos() { return ocultosRevisao; },
     get modoRevisao() { return modoRevisao; },
+    abrirPromptCorrecao, montarFixPrompt, limparConferencia, registroTexto, reg,
+    get fixPendente() { return fixPendente; },
+    get fixBlocos() { return fixBlocos; },
+    get fixModo() { return fixModo; },
   };`;
   let api = null;
   try {
@@ -130,7 +139,7 @@ function rodar() {
     falhas.push("o app não carregou: " + e.message);
     if (process.env.PILHA) console.log(e.stack);
   }
-  return { falhas, ids: ids.size, api, doc };
+  return { falhas, ids: ids.size, api, doc, janela };
 }
 
 module.exports = { rodar };

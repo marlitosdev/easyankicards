@@ -105,6 +105,12 @@ textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius
   color:var(--laranja);font-size:12.5px;padding:9px 11px}
 .card.ignorado .ig-acoes{display:flex;gap:6px;margin-top:7px}
 .card.ignorado .ig-acoes .btn{padding:4px 10px;font-size:11.5px}
+/* linha técnica do rodapé: diagnóstico e registro. Discreta de propósito —
+   servem para relatar problema, não fazem parte do uso normal. */
+.rodape-tec{display:flex;gap:14px;justify-content:center;margin-top:6px}
+.link-tec{background:none;border:0;padding:2px 4px;cursor:pointer;
+  font-size:11px;color:var(--sutil);opacity:.65;text-decoration:underline}
+.link-tec:hover{opacity:1;color:var(--texto)}
 .rodape{position:fixed;left:0;right:0;bottom:0;background:var(--panel);
         box-shadow:0 -2px 8px rgba(0,0,0,.1);padding:10px 14px;display:flex;gap:8px;
         justify-content:center;z-index:5}
@@ -297,15 +303,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   50%{box-shadow:0 0 0 7px rgba(232,148,10,0)}}
 #btnNormalizar.ativo{background:#e8940a;animation:pulsoCorrigir 1.8s ease-out infinite}
 #btnNormalizar:disabled{opacity:.45;cursor:default;animation:none}
-.ui-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;
-  justify-content:center;padding:18px;background:rgba(0,0,0,0);
-  opacity:0;pointer-events:none;transition:opacity .22s ease, background .22s ease}
-.ui-modal.on{opacity:1;pointer-events:auto;background:rgba(0,0,0,.42)}
-.ui-modal .ui-box{background:var(--panel);color:var(--texto);border-radius:14px;
-  max-width:440px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.4);
-  padding:18px;transform:translateY(12px) scale(.97);opacity:.6;
-  transition:transform .24s cubic-bezier(.2,.9,.3,1.2), opacity .2s ease}
-.ui-modal.on .ui-box{transform:translateY(0) scale(1);opacity:1}
+/* Diálogo de aviso/confirmação. É um <dialog> de propósito: elemento
+   comum não consegue aparecer acima de um <dialog> já aberto (o navegador
+   coloca <dialog> numa camada própria), e o alerta ficava invisível até o
+   usuário fechar a janela de baixo. */
+dialog.ui-modal{max-width:440px;width:calc(100% - 36px);background:var(--panel);
+  color:var(--texto);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.4);padding:18px}
+dialog.ui-modal::backdrop{background:rgba(0,0,0,.42)}
+dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes uiEntra{from{transform:translateY(12px) scale(.97);opacity:.5}
+  to{transform:none;opacity:1}}
 .ui-modal .ui-msg{font-size:14px;line-height:1.5;white-space:pre-wrap;
   max-height:60vh;overflow:auto;margin-bottom:16px}
 .ui-modal .ui-acoes{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
@@ -475,7 +482,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
       <div class="linha-corrigir">
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
         <button class="btn btn-roxo" id="btnPromptCorrigir" data-i18n="fixprompt_btn"></button>
-        <button class="btn btn-cinza" id="btnDiagnostico" data-i18n="diag_btn"></button>
       </div>
       <div class="toolbar-sec"><div class="cap" data-i18n="group_create"></div>
         <div class="toolbar">
@@ -537,6 +543,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
             <option value="dark"></option><option value="paper"></option>
           </select>
         </label>
+        <label><span data-i18n="align_label"></span>
+          <select id="selAlinha">
+            <option value="justify"></option><option value="left"></option>
+          </select>
+        </label>
         <label class="chk-2col"><input type="checkbox" id="chk2col">
           <span data-i18n="two_cols"></span></label>
       </div>
@@ -557,7 +568,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   </div>
 </div>
 
-<div id="uiModal" class="ui-modal" role="dialog" aria-modal="true">
+<dialog id="uiModal" class="ui-modal">
   <div class="ui-box">
     <div class="ui-msg" id="uiModalMsg"></div>
     <div class="ui-acoes">
@@ -565,7 +576,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
       <button class="btn btn-verde" id="uiModalOk"></button>
     </div>
   </div>
-</div>
+</dialog>
 
 <div id="toast"></div>
 
@@ -576,6 +587,10 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
       <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
     </div>
     <div id="status"></div>
+    <div class="rodape-tec">
+      <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
+      <button type="button" id="btnRegistro" class="link-tec" data-i18n="log_btn"></button>
+    </div>
   </div>
 </div>
 
@@ -712,11 +727,15 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
       style="width:100%;min-height:280px;font-family:ui-monospace,Consolas,monospace;
              font-size:12px;line-height:1.4"></textarea>
     <div id="fixPromptTam" style="font-size:11.5px;margin-top:6px"></div>
+    <div id="fixPromptConf" style="font-size:12px;margin-top:6px;line-height:1.5;
+         max-height:26vh;overflow:auto"></div>
     <div id="fixPromptDone" style="font-size:12px;color:var(--verde);margin-top:6px;min-height:16px"></div>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnFixPromptCopiar" data-i18n="fixprompt_copy"></button>
     <button class="btn btn-azul" id="btnFixPromptColar" data-i18n="fixpart_paste"></button>
+    <button class="btn btn-verde" id="btnFixPromptAplicar" style="display:none"
+            data-i18n="fixpart_apply"></button>
     <button class="btn btn-cinza" id="btnFixPromptFechar" data-i18n="help_close"></button>
   </div>
 </dialog>

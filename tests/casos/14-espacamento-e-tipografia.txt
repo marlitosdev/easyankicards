@@ -1,0 +1,4 @@
+@ NBASP 100 - Espaçamento
+Qual  é a regra principal ? :: A regra—principal , aplicada sempre... :: NBASP_100, Tipografia
++ Termo—explicação com  espaços duplos .
++ Segundo item — este já está correto.

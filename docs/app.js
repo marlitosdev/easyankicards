@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.26.0";
+const VERSAO = "8.28.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -41,6 +41,49 @@ let modoRevisao = false;      // barra de revisão visível
 let revisaoSnapshot = null;   // texto do editor ao ENTRAR (para cancelar)
 let revisados = new Set();     // frentes de cartões já revisados (verde, persistente)
 let ocultosRevisao = 0;        // quantos o filtro "ocultar já revisados" escondeu
+
+/* ===================================================================
+ * REGISTRO DE EVENTOS  (v8.27)
+ * Um caderninho circular com as últimas 200 coisas que aconteceram:
+ * ações do usuário, o antes/depois de cada correção e QUALQUER erro de
+ * JavaScript. Fica só na memória e no navegador do próprio usuário —
+ * nada é enviado a lugar nenhum. Serve para responder "o que você fez
+ * antes do problema aparecer?" sem depender da memória de ninguém.
+ * =================================================================== */
+const REG_MAX = 200;
+let registro = [];
+try {
+  const g = JSON.parse(localStorage.getItem("eac_registro") || "[]");
+  if (Array.isArray(g)) registro = g.slice(-REG_MAX);
+} catch (e) {}
+
+function reg(tipo, msg, extra) {
+  const agora = new Date();
+  registro.push({
+    h: agora.toISOString().slice(11, 19),
+    d: agora.toISOString().slice(0, 10),
+    tipo, msg: String(msg).slice(0, 300),
+    extra: extra === undefined ? undefined : extra,
+  });
+  if (registro.length > REG_MAX) registro = registro.slice(-REG_MAX);
+  try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
+}
+
+/* Erro de JavaScript entra no registro sozinho — é o tipo de falha que o
+ * usuário não sabe descrever e que some no console sem ninguém ver. */
+window.addEventListener("error", (e) => {
+  reg("ERRO", (e.message || "erro") + " @ "
+    + String(e.filename || "").split("/").pop() + ":" + (e.lineno || "?"));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  reg("ERRO", "promessa rejeitada: " + ((e.reason && e.reason.message) || e.reason));
+});
+
+function registroTexto() {
+  if (!registro.length) return t("log_empty");
+  return registro.map((r) => r.d + " " + r.h + "  [" + r.tipo + "] " + r.msg
+    + (r.extra ? "  " + r.extra : "")).join("\n");
+}
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
 let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
 let flashLinha = null;        // linha do editor que deve piscar no painel direito
@@ -59,9 +102,9 @@ let _uiResolve = null;
 
 function _uiFechar(valor) {
   const m = document.getElementById("uiModal");
-  m.classList.remove("on");
+  if (m.open) m.close();
   const r = _uiResolve; _uiResolve = null;
-  if (r) setTimeout(() => r(valor), 180);   // resolve após a animação
+  if (r) r(valor);
 }
 
 function uiDialog(texto, comCancelar) {
@@ -75,7 +118,9 @@ function uiDialog(texto, comCancelar) {
     const cancel = document.getElementById("uiModalCancel");
     cancel.textContent = t("cancel_btn");
     cancel.style.display = comCancelar ? "" : "none";
-    m.classList.add("on");
+    // showModal() põe o aviso na camada de topo: ele aparece mesmo com
+    // outro <dialog> aberto embaixo (bug do alerta invisível, v8.26)
+    if (!m.open) m.showModal();
     document.getElementById("uiModalOk").focus();
   });
 }
@@ -87,7 +132,11 @@ function uiConfirm(texto) { return uiDialog(String(texto), true); }
 document.getElementById("uiModalOk").onclick = () => _uiFechar(true);
 document.getElementById("uiModalCancel").onclick = () => _uiFechar(false);
 document.getElementById("uiModal").addEventListener("click", (e) => {
-  if (e.target.id === "uiModal") _uiFechar(false);   // clique fora
+  if (e.target.id === "uiModal") _uiFechar(false);   // clique no fundo
+});
+// Esc fecha o <dialog> por conta própria: resolve a promessa junto
+document.getElementById("uiModal").addEventListener("cancel", (e) => {
+  e.preventDefault(); _uiFechar(false);
 });
 document.addEventListener("keydown", (e) => {
   if (!_uiResolve) return;
@@ -344,20 +393,27 @@ function corrigirComSeguranca(fn, texto) {
   const novo = fn(texto);
   const depois = resumoTexto(novo);
   ultimoAjuste = { acao: fn.name || "correcao", antes, depois };
+  reg("CORRIGIR", fn.name || "correcao",
+    antes.cartoes + "→" + depois.cartoes + " cartões, "
+    + antes.saibaMais + "→" + depois.saibaMais + " saiba+, "
+    + antes.tags + "→" + depois.tags + " tags");
   if (depois.cartoes < antes.cartoes) {
     uiAlert(t("fix_would_lose", { a: antes.cartoes, d: depois.cartoes }));
     ultimoAjuste.bloqueado = "cartoes";
+    reg("BLOQUEIO", "correção cancelada: perderia cartões");
     return texto;
   }
   if (depois.saibaMais < antes.saibaMais) {
     uiAlert(t("fix_would_lose_more", { a: antes.saibaMais, d: depois.saibaMais }));
     ultimoAjuste.bloqueado = "saibaMais";
+    reg("BLOQUEIO", "correção cancelada: perderia Saiba mais");
     return texto;
   }
   // 3. não pode sobrar menos etiqueta do que entrou   (v8.23)
   if (depois.tags < antes.tags) {
     uiAlert(t("fix_would_lose_tags", { a: antes.tags, d: depois.tags }));
     ultimoAjuste.bloqueado = "tags";
+    reg("BLOQUEIO", "correção cancelada: perderia etiquetas");
     return texto;
   }
   return novo;
@@ -414,6 +470,9 @@ function renderSugestoes(r, raw) {
   if (temClozeRepetida(raw))
     itens.push({ dot: "dot-org", txt: t("crit_cloze_rep"),
                  fixTxt: t("fix_cloze_rep"), fix: corrigirClozeRepetida });
+  if (temEspacosRuins(raw))
+    itens.push({ dot: "dot-blue", txt: t("crit_espacos"),
+                 fixTxt: t("fix_espacos"), fix: corrigirEspacos });
   if (temTagsNaExplicacao(raw))
     itens.push({ dot: "dot-org", txt: t("crit_tags_in_more"),
                  fixTxt: t("fix_tags_in_more"), fix: corrigirTagsNaExplicacao });
@@ -430,7 +489,8 @@ function renderSugestoes(r, raw) {
     : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
     : (temMarcadores(raw) ? removerMarcadoresTexto
-    : (temMarkdown(raw) ? corrigirMarkdown : null))))));
+    : (temMarkdown(raw) ? corrigirMarkdown
+    : (temEspacosRuins(raw) ? corrigirEspacos : null)))))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -773,6 +833,8 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
 
 function renderCartaoEstilizado(div, c, mostrarResposta) {
   const p = PALETAS[localStorage.getItem("eac_style") || "esquema"] || PALETAS.esquema;
+  // a prévia tem de mostrar o MESMO alinhamento que vai para o .apkg
+  const al = ($("selAlinha") && $("selAlinha").value) === "left" ? "left" : "justify";
   const wrap = document.createElement("div");
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
@@ -812,7 +874,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   wrap.append(rot1);
   const frente = document.createElement("div");
   frente.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
-    ";padding:12px;text-align:justify;font-size:13.5px;" + sombra;
+    ";padding:12px;text-align:" + al + ";font-size:13.5px;" + sombra;
   textoClozeResolvido(frente, c.front, p.destaque, !mostrarResposta);
   if (c.kind === "mc") {
     c.options.forEach((o, i) => {
@@ -830,8 +892,11 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   rot2.style.color = p.texto;
   if (temVerso) wrap.append(rot2);
   const verso = document.createElement("div");
-  verso.style.cssText = "background:" + p.caixa + ";padding:10px;text-align:center;" +
-    "font-weight:700;font-size:14px;color:" + p.destaque + ";" + sombra;
+  const longa = (c.back || "").length > 90;
+  verso.style.cssText = "background:" + p.caixa + ";padding:10px;" +
+    "text-align:" + (longa ? al : "center") + ";" +
+    "font-weight:" + (longa ? "600" : "700") + ";" +
+    "font-size:" + (longa ? "13" : "14") + "px;color:" + p.destaque + ";" + sombra;
   if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
   else if (CLOZE_RE.test(c.front)) verso.textContent = "";
   else verso.textContent = c.back;
@@ -844,14 +909,31 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     sm.textContent = "✚ " + t("more_label");
     const cont = document.createElement("div");
     cont.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
-      ";padding:10px;text-align:justify;font-size:12px;margin-top:5px;border-radius:9px;" + sombra;
-    cont.textContent = c.more.replace(/<br>/g, "  ");
+      ";padding:10px;text-align:" + al + ";font-size:12px;margin-top:5px;border-radius:9px;" + sombra;
+    // mesmo tratamento do .apkg: um conceito por bloco, termo em destaque
+    c.more.split("<br>").map((s) => s.trim()).filter(Boolean).forEach((linha) => {
+      if (/^-{2,}$/.test(linha)) {
+        const hr = document.createElement("hr");
+        hr.style.cssText = "border:0;border-top:1px dashed " + p.texto
+          + ";opacity:.4;margin:8px 0";
+        cont.append(hr); return;
+      }
+      const it = document.createElement("div");
+      it.style.margin = "0 0 7px";
+      const m = linha.match(/^([^—:]{2,60})\s+—\s+([\s\S]+)$/);
+      if (m) {
+        const b = document.createElement("b");
+        b.textContent = m[1].trim(); b.style.color = p.destaque;
+        it.append(b, document.createTextNode(" — " + m[2].trim()));
+      } else it.textContent = linha;
+      cont.append(it);
+    });
     wrap.append(sm, cont);
   }
   if ((c.kind === "mc" || CLOZE_RE.test(c.front)) && c.back) {
     const just = document.createElement("div");
     just.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
-      ";padding:10px;text-align:justify;font-size:12.5px;margin-top:6px;" +
+      ";padding:10px;text-align:" + al + ";font-size:12.5px;margin-top:6px;" +
       "border-radius:0 0 11px 11px;" + sombra;
     just.textContent = c.back;
     wrap.append(just);
@@ -2045,7 +2127,8 @@ async function exportarApkg() {
   const r = await validar(); if (!r) return;
   $("status").textContent = "…";
   try {
-    const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value, tituloCartao());
+    const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value,
+                                  tituloCartao(), $("selAlinha").value);
     await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
     toast("toast_exported");
@@ -2705,7 +2788,8 @@ window.addEventListener("pywebviewready", () => {
  ["btnTxt","export_txt_tooltip"],["btnApkg","export_apkg_tooltip"],["btnAjuda","help_tooltip"],
  ["chkDestaque","tip_highlight"],["selTema","tip_theme"],["corLetra","tip_textcolor"],
  ["btnCorReset","textcolor_reset"],["selIdioma","tip_lang"],["chk2col","tip_two_cols"],
- ["tituloGeral","gen_title_note"],["selEstiloPainel","style_hint"]
+ ["tituloGeral","gen_title_note"],["selEstiloPainel","style_hint"],
+ ["selAlinha","align_hint"]
 ].forEach(([id, chave]) => { const el = $(id); if (el) attachTip(el, chave); });
 
 /* ----------------------------- eventos ----------------------------- */
@@ -2828,6 +2912,7 @@ function rotularEstilos() {
                   dark: "style_dark", paper: "style_paper" };
   [...$("selEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
   [...$("selEstiloPainel").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
+  [...$("selAlinha").options].forEach((o) => { o.textContent = t("align_" + o.value); });
 }
 
 /* Mostra, em tempo real, o cabeçalho que será IMPRESSO em cada cartão:
@@ -2964,6 +3049,13 @@ function aplicarEstilo(v) {
 }
 $("selEstilo").onchange = () => aplicarEstilo($("selEstilo").value);
 $("selEstiloPainel").onchange = () => aplicarEstilo($("selEstiloPainel").value);
+// alinhamento: vale para a prévia e para o .apkg, e fica guardado
+$("selAlinha").value = localStorage.getItem("eac_alinha") || "justify";
+$("selAlinha").onchange = () => {
+  localStorage.setItem("eac_alinha", $("selAlinha").value);
+  reg("ESTILO", "alinhamento: " + $("selAlinha").value);
+  preview();
+};
 $("ajudaEstilo").onclick = () => uiAlert(t("style_hint"));
 
 $("btnAjuda").onclick = () => $("dlgAjuda").showModal();
@@ -3146,12 +3238,15 @@ function abrirPromptCorrecao() {
   // começa no modo parcial quando há blocos isoláveis; senão, texto inteiro
   fixModo = achados.length ? "parcial" : "inteiro";
   $("fixPromptDone").textContent = "";
+  limparConferencia();
+  reg("PROMPT", "prompt de correção aberto",
+    achados.length + " problema(s), origem: " + fixOrigem);
   montarFixPrompt();
   $("dlgFixPrompt").showModal();
 }
 
-$("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; montarFixPrompt(); };
-$("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; montarFixPrompt(); };
+$("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
+$("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnPromptCorrigir").onclick = abrirPromptCorrecao;
 attachTip($("btnPromptCorrigir"), "tip_fixprompt");
 attachTip($("btnFixPromptColar"), "tip_fixpart_paste");
@@ -3165,40 +3260,73 @@ $("btnFixPromptCopiar").onclick = async () => {
   } catch (e) { uiAlert(t("paste_denied")); }
 };
 
-/* Recebe a resposta da IA, CONFERE antes de mexer no texto e aplica só os
- * trechos reconhecidos. Nada é alterado se a conferência falhar. */
+/* Recebe a resposta da IA e CONFERE dentro da própria janela: a lista de
+ * avisos aparece ali mesmo e o botão verde "Aplicar" só então surge. Antes
+ * havia uma confirmação por cima, que ficava escondida atrás desta janela.
+ * Nada é alterado enquanto o usuário não clicar em Aplicar. */
+let fixPendente = null;   // { aplicar, novo, a0, a1 } aguardando o Aplicar
+
+function limparConferencia() {
+  $("fixPromptConf").innerHTML = "";
+  $("btnFixPromptAplicar").style.display = "none";
+  fixPendente = null;
+}
+
+function mostrarConferencia(itens, cor) {
+  const box = $("fixPromptConf");
+  box.innerHTML = "";
+  itens.forEach((it) => {
+    const d = document.createElement("div");
+    d.textContent = "• " + it;
+    d.style.color = cor;
+    box.append(d);
+  });
+}
+
 $("btnFixPromptColar").onclick = async () => {
   let resp = "";
   try { resp = await navigator.clipboard.readText(); }
   catch (e) { uiAlert(t("paste_denied_manual")); return; }
   if (!resp.trim()) { uiAlert(t("paste_empty")); return; }
   const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+  limparConferencia();
 
   if (fixModo === "inteiro") {
-    if (!(await uiConfirm(t("fixwhole_confirm")))) return;
-    aplicarTextoCorrigido(el, resp.replace(/^\s+/, ""), 0);
+    const a0 = resumoTexto(el.value), a1 = resumoTexto(resp);
+    fixPendente = { aplicar: [], novo: resp.replace(/^\s+/, ""), a0, a1, trechos: 0 };
+    mostrarConferencia([t("fixwhole_ready", { a: a0.cartoesReais, d: a1.cartoesReais })],
+      "var(--texto)");
+    $("btnFixPromptAplicar").style.display = "";
+    reg("COLAR", "resposta da IA (texto inteiro)", a0.cartoesReais + "→" + a1.cartoesReais);
     return;
   }
 
   const { erros, avisos, aplicar } = conferirCorrecaoParcial(resp, fixBlocos);
-  const linhas = [];
-  erros.forEach((x) => linhas.push("• " + x));
-  avisos.forEach((x) => linhas.push("• " + x));
+  const linhas = [...erros, ...avisos];
   $("fixPromptDone").textContent =
     t("fixpart_check", { ok: aplicar.length, av: avisos.length, er: erros.length });
   $("fixPromptDone").style.color = erros.length ? "var(--laranja)" : "var(--verde)";
-  if (!aplicar.length) { uiAlert((linhas.join("\n") || "") + "\n\n" + t("fixpart_nothing")); return; }
-  // calcula o resultado ANTES de confirmar: o usuário decide vendo o saldo
-  // de cartões. Crescer é legítimo — é o que acontece quando a IA divide um
-  // cartão longo, que era justamente o pedido.
-  const novo = aplicarCorrecaoParcial(el.value, aplicar);
-  const a0 = resumoTexto(el.value), a1 = resumoTexto(novo);
+  reg("COLAR", "resposta da IA (parcial)",
+    aplicar.length + " ok, " + avisos.length + " avisos, " + erros.length + " erros");
+  if (!aplicar.length) {
+    mostrarConferencia(linhas.concat([t("fixpart_nothing")]), "var(--laranja)");
+    return;
+  }
+  const novoTexto = aplicarCorrecaoParcial(el.value, aplicar);
+  const a0 = resumoTexto(el.value), a1 = resumoTexto(novoTexto);
   if (a1.cartoesReais > a0.cartoesReais)
-    linhas.push("• " + t("fixpart_grew", { a: a0.cartoesReais, d: a1.cartoesReais }));
-  const aviso = linhas.length ? linhas.join("\n") + "\n\n" : "";
-  if (!(await uiConfirm(aviso
-      + t("fixpart_confirm", { n: aplicar.length, a: a0.cartoesReais, d: a1.cartoesReais })))) return;
-  aplicarTextoCorrigido(el, novo, aplicar.length);
+    linhas.push(t("fixpart_grew", { a: a0.cartoesReais, d: a1.cartoesReais }));
+  linhas.push(t("fixpart_confirm", { n: aplicar.length, a: a0.cartoesReais, d: a1.cartoesReais }));
+  mostrarConferencia(linhas, erros.length ? "var(--laranja)" : "var(--texto)");
+  fixPendente = { aplicar, novo: novoTexto, a0, a1, trechos: aplicar.length };
+  $("btnFixPromptAplicar").style.display = "";
+};
+
+$("btnFixPromptAplicar").onclick = () => {
+  if (!fixPendente) return;
+  const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+  aplicarTextoCorrigido(el, fixPendente.novo, fixPendente.trechos);
+  limparConferencia();
 };
 
 /* Grava o texto novo com a mesma rede de segurança das correções: se o
@@ -3218,6 +3346,8 @@ function aplicarTextoCorrigido(el, novo, nTrechos) {
     autoSalvar(); preview();
   } else analisarColarRev();
   $("dlgFixPrompt").close();
+  reg("APLICAR", nTrechos ? nTrechos + " trecho(s) substituído(s)" : "texto inteiro substituído",
+    antes.cartoesReais + "→" + depois.cartoesReais + " cartões");
   toast(nTrechos ? t("fixpart_done", { n: nTrechos }) : t("toast_pasted_fix"));
 }
 
@@ -3268,6 +3398,9 @@ function montarDiagnostico() {
   p.cards.filter((c) => c.issues.length).slice(0, 6).forEach((c) =>
     L.push("  cartão L" + c.line + ": " + c.issues[0]));
   L.push("");
+  L.push("--- REGISTRO (" + registro.length + " eventos) ---");
+  L.push(registroTexto());
+  L.push("");
   L.push("--- TEXTO (" + r.linhas + " linhas, " + r.chars + " caracteres) ---");
   L.push(raw.length > DIAG_MAX
     ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
@@ -3289,3 +3422,22 @@ $("btnDiagnostico").onclick = async () => {
   }
 };
 attachTip($("btnDiagnostico"), "tip_diag");
+
+
+/* Janela do registro: reaproveita a caixa do prompt (mesmo formato de
+ * texto longo + copiar), sem inventar mais uma tela. */
+$("btnRegistro").onclick = async () => {
+  const txt = registroTexto();
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast("toast_log_copied");
+  } catch (e) {
+    $("fixPromptTexto").value = txt;
+    mostrarTamanho("fixPromptTam", txt);
+    limparConferencia();
+    $("fixPromptDone").textContent = "";
+    $("dlgFixPrompt").showModal();
+  }
+};
+attachTip($("btnRegistro"), "tip_log");
+reg("INICIO", "aplicativo aberto", "v" + VERSAO);
