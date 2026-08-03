@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.24.0";
+const VERSAO = "8.25.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3097,22 +3097,59 @@ $("btnCheckUpdate").onclick = () => procurarAtualizacao(true);
  * linha e o trecho literal, mais as regras e o texto numerado.
  * Fluxo: gerar -> copiar -> colar na IA -> trazer a resposta de volta.
  * =================================================================== */
-function abrirPromptCorrecao(raw) {
-  const txt = (raw || "").trim();
-  if (!txt) { uiAlert(t("fixprompt_none")); return; }
-  const r = parseText(txt, []);
-  const { achados, gerais } = problemasDoTexto(txt, r);
+let fixModo = "parcial";       // "parcial" (só os trechos) ou "inteiro"
+let fixBlocos = [];            // blocos enviados no modo parcial (com âncora)
+let fixOrigem = "editor";      // onde a correção será aplicada
+
+/* Onde está o texto em foco: o painel de colagem, se aberto; senão o editor. */
+function alvoDoTexto() {
+  const noPainel = $("dlgColarRev") && $("dlgColarRev").open;
+  return {
+    onde: noPainel ? "colarRev" : "editor",
+    el: noPainel ? $("colarRevTexto") : $("editor"),
+  };
+}
+
+function montarFixPrompt() {
+  const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+  const raw = (el.value || "").trim();
+  const r = parseText(raw, []);
+  if (fixModo === "parcial") {
+    const { texto, blocos } = montarPromptCorrecaoParcial(raw, r);
+    fixBlocos = blocos;
+    $("fixPromptTexto").value = texto || "";
+    if (!texto) $("fixPromptDone").textContent = t("fixpart_none");
+  } else {
+    fixBlocos = [];
+    $("fixPromptTexto").value = montarPromptCorrecao(raw, r);
+  }
+  $("btnFixTabParcial").classList.toggle("ativa", fixModo === "parcial");
+  $("btnFixTabInteiro").classList.toggle("ativa", fixModo === "inteiro");
+  mostrarTamanho("fixPromptTam", $("fixPromptTexto").value);
+}
+
+function abrirPromptCorrecao() {
+  const alvo = alvoDoTexto();
+  const raw = (alvo.el.value || "").trim();
+  if (!raw) { uiAlert(t("fixprompt_none")); return; }
+  fixOrigem = alvo.onde;
+  const r = parseText(raw, []);
+  const { achados, gerais } = problemasDoTexto(raw, r);
   if (!achados.length && !gerais.length && !precisaNormalizar(r)) {
     uiAlert(t("fixprompt_none")); return;
   }
-  $("fixPromptTexto").value = montarPromptCorrecao(txt, r);
-  mostrarTamanho("fixPromptTam", $("fixPromptTexto").value);
+  // começa no modo parcial quando há blocos isoláveis; senão, texto inteiro
+  fixModo = achados.length ? "parcial" : "inteiro";
   $("fixPromptDone").textContent = "";
+  montarFixPrompt();
   $("dlgFixPrompt").showModal();
 }
 
-$("btnPromptCorrigir").onclick = () => abrirPromptCorrecao($("editor").value);
+$("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; montarFixPrompt(); };
+$("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; montarFixPrompt(); };
+$("btnPromptCorrigir").onclick = abrirPromptCorrecao;
 attachTip($("btnPromptCorrigir"), "tip_fixprompt");
+attachTip($("btnFixPromptColar"), "tip_fixpart_paste");
 $("fixPromptTexto").addEventListener("input", () =>
   mostrarTamanho("fixPromptTam", $("fixPromptTexto").value));
 $("btnFixPromptCopiar").onclick = async () => {
@@ -3122,6 +3159,63 @@ $("btnFixPromptCopiar").onclick = async () => {
     toast("toast_copied_marked");
   } catch (e) { uiAlert(t("paste_denied")); }
 };
+
+/* Recebe a resposta da IA, CONFERE antes de mexer no texto e aplica só os
+ * trechos reconhecidos. Nada é alterado se a conferência falhar. */
+$("btnFixPromptColar").onclick = async () => {
+  let resp = "";
+  try { resp = await navigator.clipboard.readText(); }
+  catch (e) { uiAlert(t("paste_denied_manual")); return; }
+  if (!resp.trim()) { uiAlert(t("paste_empty")); return; }
+  const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+
+  if (fixModo === "inteiro") {
+    if (!(await uiConfirm(t("fixwhole_confirm")))) return;
+    aplicarTextoCorrigido(el, resp.replace(/^\s+/, ""), 0);
+    return;
+  }
+
+  const { erros, avisos, aplicar } = conferirCorrecaoParcial(resp, fixBlocos);
+  const linhas = [];
+  erros.forEach((x) => linhas.push("• " + x));
+  avisos.forEach((x) => linhas.push("• " + x));
+  $("fixPromptDone").textContent =
+    t("fixpart_check", { ok: aplicar.length, av: avisos.length, er: erros.length });
+  $("fixPromptDone").style.color = erros.length ? "var(--laranja)" : "var(--verde)";
+  if (!aplicar.length) { uiAlert((linhas.join("\n") || "") + "\n\n" + t("fixpart_nothing")); return; }
+  // calcula o resultado ANTES de confirmar: o usuário decide vendo o saldo
+  // de cartões. Crescer é legítimo — é o que acontece quando a IA divide um
+  // cartão longo, que era justamente o pedido.
+  const novo = aplicarCorrecaoParcial(el.value, aplicar);
+  const a0 = resumoTexto(el.value), a1 = resumoTexto(novo);
+  if (a1.cartoesReais > a0.cartoesReais)
+    linhas.push("• " + t("fixpart_grew", { a: a0.cartoesReais, d: a1.cartoesReais }));
+  const aviso = linhas.length ? linhas.join("\n") + "\n\n" : "";
+  if (!(await uiConfirm(aviso
+      + t("fixpart_confirm", { n: aplicar.length, a: a0.cartoesReais, d: a1.cartoesReais })))) return;
+  aplicarTextoCorrigido(el, novo, aplicar.length);
+};
+
+/* Grava o texto novo com a mesma rede de segurança das correções: se o
+ * resultado perder cartões, nada é aplicado. */
+function aplicarTextoCorrigido(el, novo, nTrechos) {
+  const antes = resumoTexto(el.value), depois = resumoTexto(novo);
+  // compara cartões REAIS: unir linhas de continuação diminui a contagem
+  // bruta sem perder conteúdo — era exatamente o conserto pedido
+  if (depois.cartoesReais < antes.cartoesReais) {
+    uiAlert(t("fix_would_lose", { a: antes.cartoesReais, d: depois.cartoesReais }));
+    return;
+  }
+  if (el.id === "editor") colagemAnterior = { texto: el.value };
+  el.value = novo;
+  if (el.id === "editor") {
+    $("btnDesfazerColagem").disabled = false;
+    autoSalvar(); preview();
+  } else analisarColarRev();
+  $("dlgFixPrompt").close();
+  toast(nTrechos ? t("fixpart_done", { n: nTrechos }) : t("toast_pasted_fix"));
+}
+
 $("btnFixPromptFechar").onclick = () => $("dlgFixPrompt").close();
 
 

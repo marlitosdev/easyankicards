@@ -703,6 +703,10 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 <dialog id="dlgFixPrompt" style="max-width:760px;width:94%">
   <div style="padding:16px">
     <h3 style="margin:0 0 6px" data-i18n="fixprompt_title"></h3>
+    <div class="toolbar" style="margin-bottom:8px">
+      <button class="btn btn-roxo" id="btnFixTabParcial" data-i18n="fixpart_tab"></button>
+      <button class="btn btn-ciano" id="btnFixTabInteiro" data-i18n="fixwhole_tab"></button>
+    </div>
     <div class="nota" data-i18n="fixprompt_note" style="margin-bottom:8px"></div>
     <textarea id="fixPromptTexto" spellcheck="false"
       style="width:100%;min-height:280px;font-family:ui-monospace,Consolas,monospace;
@@ -712,6 +716,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnFixPromptCopiar" data-i18n="fixprompt_copy"></button>
+    <button class="btn btn-azul" id="btnFixPromptColar" data-i18n="fixpart_paste"></button>
     <button class="btn btn-cinza" id="btnFixPromptFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
