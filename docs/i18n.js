@@ -479,7 +479,7 @@ const UI = {
   "fixpart_missing": "Âncora \"@@ {n}\" não voltou — esse trecho fica como está.",
   "fixpart_empty": "O trecho \"@@ {n}\" voltou vazio — nada foi aplicado nele.",
   "fixpart_nocard": "O trecho \"@@ {n}\" não forma nenhum cartão válido — nada foi aplicado nele.",
-  "fixpart_confirm": "Aplicar a correção em {n} trecho(s)? Os cartões passam de {a} para {d}. O resto do texto não será tocado.",
+  "fixpart_confirm": "Aplicar em {n} trecho(s): os cartões passam de {a} para {d}. O resto do texto não será tocado.",
   "fixpart_done": "{n} trecho(s) substituído(s).",
   "fixpart_nothing": "Nenhum trecho pôde ser aplicado.",
   "fixwhole_confirm": "Substituir TODO o texto pela resposta da IA?",
@@ -489,7 +489,19 @@ const UI = {
   "fixpart_grew": "A IA dividiu cartões: {a} → {d}. Isso é esperado quando o aviso era \"cartão muito longo\".",
   "fixpart_lostcard": "O trecho \"@@ {n}\" voltou com menos cartões ({a} → {d}) — recusado para não perder conteúdo.",
   "crit_cloze_rep": "Há cartões com a mesma lacuna ({{c1::...}}) na pergunta e na resposta — o Anki esconde as duas juntas.",
-  "fix_cloze_rep": "Renumerar as lacunas"
+  "fix_cloze_rep": "Renumerar as lacunas",
+  "fixpart_apply": "Aplicar",
+  "fixwhole_ready": "Pronto para substituir todo o texto. Os cartões passam de {a} para {d}.",
+  "log_btn": "Registro",
+  "log_empty": "Nenhum evento registrado nesta sessão.",
+  "tip_log": "Copia o histórico das últimas ações e erros do aplicativo — útil ao relatar um problema",
+  "toast_log_copied": "Registro copiado.",
+  "align_label": "Alinhamento: ",
+  "align_justify": "Justificado",
+  "align_left": "À esquerda",
+  "align_hint": "Como o texto longo se alinha no cartão do Anki. Justificado usa separação silábica automática; à esquerda deixa a margem direita irregular, que muitos acham mais fácil de ler no celular.",
+  "crit_espacos": "Há espaços duplos, espaço antes de pontuação ou travessão sem espaço — atrapalham a leitura no cartão.",
+  "fix_espacos": "Arrumar espaçamento"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -970,7 +982,7 @@ const UI = {
   "fixpart_missing": "Anchor \"@@ {n}\" did not come back — that excerpt stays as it is.",
   "fixpart_empty": "Excerpt \"@@ {n}\" came back empty — nothing was applied to it.",
   "fixpart_nocard": "Excerpt \"@@ {n}\" does not form a valid card — nothing was applied to it.",
-  "fixpart_confirm": "Apply the fix to {n} excerpt(s)? Cards go from {a} to {d}. The rest of the text will not be touched.",
+  "fixpart_confirm": "Applying to {n} excerpt(s): cards go from {a} to {d}. The rest of the text stays untouched.",
   "fixpart_done": "{n} excerpt(s) replaced.",
   "fixpart_nothing": "No excerpt could be applied.",
   "fixwhole_confirm": "Replace the WHOLE text with the AI answer?",
@@ -980,7 +992,19 @@ const UI = {
   "fixpart_grew": "The AI split cards: {a} → {d}. That is expected when the warning was \"card too long\".",
   "fixpart_lostcard": "Excerpt \"@@ {n}\" came back with fewer cards ({a} → {d}) — rejected to avoid losing content.",
   "crit_cloze_rep": "Some cards have the same blank ({{c1::...}}) in question and answer — Anki hides both together.",
-  "fix_cloze_rep": "Renumber the blanks"
+  "fix_cloze_rep": "Renumber the blanks",
+  "fixpart_apply": "Apply",
+  "fixwhole_ready": "Ready to replace the whole text. Cards go from {a} to {d}.",
+  "log_btn": "Log",
+  "log_empty": "No events recorded in this session.",
+  "tip_log": "Copies the history of the app's last actions and errors — useful when reporting a problem",
+  "toast_log_copied": "Log copied.",
+  "align_label": "Alignment: ",
+  "align_justify": "Justified",
+  "align_left": "Left",
+  "align_hint": "How long text aligns on the Anki card. Justified uses automatic hyphenation; left leaves a ragged right edge, which many find easier to read on a phone.",
+  "crit_espacos": "There are double spaces, spaces before punctuation or dashes without spacing — they hurt readability on the card.",
+  "fix_espacos": "Fix spacing"
  }
 };
 const PARSER_MSG = {

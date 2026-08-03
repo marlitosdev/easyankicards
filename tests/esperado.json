@@ -133,5 +133,16 @@
     "detectores": [
       "cloze_repetida"
     ]
+  },
+  "14-espacamento-e-tipografia.txt": {
+    "cartoes": 1,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 2,
+    "titulos": 1,
+    "tags": 2,
+    "detectores": [
+      "espacos"
+    ]
   }
 }

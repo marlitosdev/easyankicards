@@ -148,10 +148,34 @@ const EST_TMPLS = {
        '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}' + EST_MORE,
 };
 
+/* Transforma a explicação em blocos legíveis, na hora de exportar:
+ *   - uma linha "+" vira um bloco com espaço embaixo (antes era só <br>,
+ *     e o texto saía num parágrafo único, sem respiro entre conceitos);
+ *   - "Termo — texto" ganha o termo em negrito, que é o que o olho procura;
+ *   - a linha "---" vira um traço separando blocos de assunto.
+ * O texto do usuário NÃO muda: isto acontece só no arquivo gerado. */
+function maisEmBlocos(more) {
+  const partes = String(more || "").split(/<br\s*\/?>/i)
+    .map((s) => s.trim()).filter(Boolean);
+  if (!partes.length) return "";
+  return partes.map((p) => {
+    if (/^-{2,}$/.test(p) || p === "—") return '<hr class="mais-sep">';
+    const m = p.match(/^([^—:]{2,60})\s+—\s+([\s\S]+)$/);
+    const corpo = m ? "<b>" + m[1].trim() + "</b> — " + m[2].trim() : p;
+    return '<div class="mais-item">' + corpo + "</div>";
+  }).join("");
+}
+
 function cssEstilo(p) {
+  p = Object.assign({ alinha: "justify" }, p);
   return `
 .card{background:${p.fundo};font-family:Arial,sans-serif;font-size:18px;
-  color:${p.texto};padding:14px 6px}
+  line-height:1.6;color:${p.texto};padding:14px 6px}
+/* Blocos de texto corrido: justificado COM separação silábica. Justificar
+   sem hifenização abre "rios" de espaço em branco e piora a leitura no
+   celular, que é onde o cartão é revisado. */
+.box,.justificativa,.saibamais div.hint{text-align:${p.alinha};
+  hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
 .materia{max-width:480px;margin:0 auto 10px;background:${p.cab};color:${p.cabTexto};
   font-weight:bold;font-size:21px;text-align:center;padding:10px;
   border-radius:14px;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
@@ -160,45 +184,72 @@ function cssEstilo(p) {
   padding:7px;border-radius:14px 14px 0 0;box-shadow:1px 3px 4px ${p.sombra};
   box-sizing:border-box}
 .box{max-width:480px;margin:0 auto;background:${p.caixa};color:${p.texto};
-  text-align:justify;padding:18px;box-shadow:1px 3px 4px ${p.sombra};
-  box-sizing:border-box}
+  padding:18px;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
 .resposta{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.destaque};
-  font-weight:bold;font-size:21px;text-align:center;padding:12px;
-  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+  font-weight:bold;font-size:21px;line-height:1.4;text-align:center;padding:12px;
+  text-wrap:balance;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+/* Resposta longa não cabe no formato "manchete": vira texto corrido, no
+   tamanho normal, alinhada como o resto. Quem decide é o app, na hora de
+   exportar, porque só ele sabe o tamanho do texto. */
+.resposta .longa,.resposta.longa{font-size:18px;font-weight:600;text-align:${p.alinha};
+  padding:16px;text-wrap:initial;hyphens:auto;-webkit-hyphens:auto}
 .justificativa{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.texto};
-  text-align:justify;padding:16px;border-radius:0 0 14px 14px;
+  padding:16px;border-radius:0 0 14px 14px;
   box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+/* "Saiba mais": a pílula vale para o LINK. O conteúdo revelado é o texto
+   mais longo do cartão e antes herdava "centralizado + letter-spacing" —
+   era o que deixava a leitura difícil. Ele agora tem tratamento próprio. */
 .saibamais{max-width:480px;margin:14px auto 0;background:${p.sub || p.caixa};
-  color:${p.texto};text-align:center;padding:9px;border-radius:22px;
-  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box;letter-spacing:1px}
-.saibamais a{color:${p.destaque};text-decoration:none;font-weight:bold}
+  color:${p.texto};text-align:center;padding:11px 14px;border-radius:16px;
+  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+.saibamais a{color:${p.destaque};text-decoration:none;font-weight:bold;letter-spacing:1px}
+.saibamais div.hint{margin-top:11px;padding-top:11px;letter-spacing:normal;
+  border-top:1px solid ${p.sombra};font-size:16px;line-height:1.65}
+/* um conceito por bloco, com respiro entre eles */
+.mais-item{margin:0 0 9px}
+.mais-item:last-child{margin-bottom:0}
+.mais-item b{color:${p.destaque}}
+.mais-sep{border:0;border-top:1px dashed ${p.sombra};margin:12px 0}
 .cloze{font-weight:bold;color:${p.destaque}}
 .mc-correta{color:${p.destaque};font-weight:bold}
 `;
 }
 
-const ESTILOS = {
-  classic: { ids: [1607392319, 1607392320, 1607392321], css: null },
-  esquema: { ids: [1698100011, 1698100012, 1698100013],
-    css: cssEstilo({ fundo: "#f2f3f6", texto: "#26344f", cab: "#26344f",
-      cabTexto: "#f7f7f7", sub: "#d9d9d9", caixa: "#ffffff",
-      destaque: "#4eaed9", sombra: "#abb2b9" }) },
-  dark: { ids: [1698100021, 1698100022, 1698100023],
-    css: cssEstilo({ fundo: "#14161b", texto: "#e9ebf0", cab: "#3350a5",
-      cabTexto: "#ffffff", sub: "#2a2e37", caixa: "#1f232b",
-      destaque: "#7cc4ff", sombra: "#00000088" }) },
-  paper: { ids: [1698100031, 1698100032, 1698100033],
-    css: cssEstilo({ fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34",
-      cabTexto: "#fdf6e3", sub: "#e7dcc3", caixa: "#fffaf0",
-      destaque: "#b45309", sombra: "#c9b895" }) },
+/* Cores de cada estilo. O CSS é montado na hora, porque o alinhamento do
+ * texto é escolhido pelo usuário na exportação. */
+/* (o app.js tem a sua própria tabela, só para o mini-preview do diálogo;
+   esta aqui é a que vai para o .apkg — nomes diferentes de propósito) */
+const CORES_APKG = {
+  esquema: { fundo: "#f2f3f6", texto: "#26344f", cab: "#26344f",
+    cabTexto: "#f7f7f7", sub: "#d9d9d9", caixa: "#ffffff",
+    destaque: "#4eaed9", sombra: "#abb2b9" },
+  dark: { fundo: "#14161b", texto: "#e9ebf0", cab: "#3350a5",
+    cabTexto: "#ffffff", sub: "#2a2e37", caixa: "#1f232b",
+    destaque: "#7cc4ff", sombra: "#00000088" },
+  paper: { fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34",
+    cabTexto: "#fdf6e3", sub: "#e7dcc3", caixa: "#fffaf0",
+    destaque: "#b45309", sombra: "#c9b895" },
 };
 
+const ESTILOS = {
+  classic: { ids: [1607392319, 1607392320, 1607392321], paleta: null },
+  esquema: { ids: [1698100011, 1698100012, 1698100013], paleta: "esquema" },
+  dark: { ids: [1698100021, 1698100022, 1698100023], paleta: "dark" },
+  paper: { ids: [1698100031, 1698100032, 1698100033], paleta: "paper" },
+};
+
+
 /* Monta os 3 modelos (básico, cloze, MC) para o estilo pedido. */
-function modelosParaEstilo(estilo) {
+function modelosParaEstilo(estilo, alinha) {
   const cfg = ESTILOS[estilo] || ESTILOS.classic;
+  // "justify" só compensa junto com hifenização; "left" fica disponível
+  // para quem prefere a margem direita irregular (mais comum em telas)
+  const al = alinha === "left" ? "left" : "justify";
+  const css = cfg.paleta
+    ? cssEstilo(Object.assign({ alinha: al }, CORES_APKG[cfg.paleta])) : null;
   const base = JSON.parse(JSON.stringify(COL_MODELS));
   const models = montarModeloMC(base);          // garante o MC clássico
-  if (!cfg.css) {
+  if (!css) {
     // estilo clássico: mesmo layout simples, mas com o link "Saiba mais"
     const saida = {};
     Object.keys(models).forEach((k) => {
@@ -214,23 +265,27 @@ function modelosParaEstilo(estilo) {
   const out = {};
   const b = comSaibaMais(models["1607392319"]);
   b.id = idB; b.name = "EasyAnkiCards " + estilo + " - Básico";
-  b.css = cfg.css;
-  b.tmpls[0].qfmt = EST_TMPLS.basicQ;
-  b.tmpls[0].afmt = EST_TMPLS.basicA;
+  b.css = css;
+  const idioma = (typeof LANG !== "undefined" && LANG === "en") ? "en" : "pt-BR";
+  // sem lang o navegador não sabe onde separar as sílabas, e o texto
+  // justificado volta a abrir buracos entre as palavras
+  const env = (s) => '<div class="eac" lang="' + idioma + '">' + s + "</div>";
+  b.tmpls[0].qfmt = env(EST_TMPLS.basicQ);
+  b.tmpls[0].afmt = env(EST_TMPLS.basicA);
   out[String(idB)] = b;
 
   const c = comSaibaMais(models["1607392320"]);
   c.id = idC; c.name = "EasyAnkiCards " + estilo + " - Cloze";
-  c.css = cfg.css;
-  c.tmpls[0].qfmt = EST_TMPLS.clozeQ;
-  c.tmpls[0].afmt = EST_TMPLS.clozeA;
+  c.css = css;
+  c.tmpls[0].qfmt = env(EST_TMPLS.clozeQ);
+  c.tmpls[0].afmt = env(EST_TMPLS.clozeA);
   out[String(idC)] = c;
 
   const m = comSaibaMais(models["1607392321"]);
   m.id = idM; m.name = "EasyAnkiCards " + estilo + " - Múltipla Escolha";
-  m.css = cfg.css;
-  m.tmpls[0].qfmt = EST_TMPLS.mcQ;
-  m.tmpls[0].afmt = EST_TMPLS.mcA;
+  m.css = css;
+  m.tmpls[0].qfmt = env(EST_TMPLS.mcQ);
+  m.tmpls[0].afmt = env(EST_TMPLS.mcA);
   out[String(idM)] = m;
   return out;
 }
@@ -271,7 +326,7 @@ function montarModeloMC(models) {
 }
 
 /* cards: [{kind:"basic"|"cloze"|"mc", front, back, tags, options?, correct?}] */
-async function buildApkg(cards, deckName, estilo, titulo) {
+async function buildApkg(cards, deckName, estilo, titulo, alinha) {
   estilo = estilo || "classic";
   titulo = titulo === undefined ? "" : titulo;
   const SQL = await window.__sqlPromise;   /* initSqlJs, ver index.html */
@@ -285,7 +340,7 @@ async function buildApkg(cards, deckName, estilo, titulo) {
   deck.id = deckId; deck.name = deckName; deck.mod = nowSec;
   const decks = {}; decks["1"] = DECK_DEFAULT; decks[String(deckId)] = deck;
 
-  const models = modelosParaEstilo(estilo);
+  const models = modelosParaEstilo(estilo, alinha);
   const [MID_B, MID_C, MID_M] = (ESTILOS[estilo] || ESTILOS.classic).ids;
   db.run(
     "INSERT INTO col VALUES (1,?,?,?,11,0,0,0,?,?,?,?,'{}')",
@@ -300,11 +355,15 @@ async function buildApkg(cards, deckName, estilo, titulo) {
       mid = MID_M;
       const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
       const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
-      campos = [c.front, alts, correta, c.back || "", c.more || "",
+      campos = [c.front, alts, correta, c.back || "", maisEmBlocos(c.more),
                 c.titulo || titulo];
     } else {
       mid = c.kind === "cloze" ? MID_C : MID_B;
-      campos = [c.front, c.back || "", c.more || "", c.titulo || titulo];
+      // resposta comprida não funciona no formato "manchete" centralizado:
+      // marcamos aqui, que é onde se conhece o tamanho do texto
+      const verso = (c.back || "").length > 90
+        ? '<div class="longa">' + c.back + "</div>" : (c.back || "");
+      campos = [c.front, verso, maisEmBlocos(c.more), c.titulo || titulo];
     }
     const noteId = id++;
     const flds = campos.join("\x1f");

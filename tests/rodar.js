@@ -55,7 +55,8 @@ function carregarApp() {
     + "removerMarcadoresTexto,corrigirTagsQueSaoTexto,corrigirTituloGrudado,"
     + "corrigirOrfaosExplicacao,corrigirLacunaOpcoesLongas,corrigirMarkdown,"
     + "temTagsNaExplicacao,corrigirTagsNaExplicacao,"
-    + "temClozeRepetida,corrigirClozeRepetida};";
+    + "temClozeRepetida,corrigirClozeRepetida,"
+    + "temEspacosRuins,corrigirEspacos};";
   const api = new Function(codigo + "\n" + exportar)();
   api.setLanguage("pt");
   return api;
@@ -74,6 +75,7 @@ const CORRECOES = {
   corrigirMarkdown: app.corrigirMarkdown,
   corrigirTagsNaExplicacao: app.corrigirTagsNaExplicacao,
   corrigirClozeRepetida: app.corrigirClozeRepetida,
+  corrigirEspacos: app.corrigirEspacos,
 };
 
 /* --------------------------------------------------------------------
@@ -182,16 +184,20 @@ function main() {
 
   // testes de interface (DOM mínimo): carregamento do app e fluxo de revisão
   const fumaca = require("./fumaca.js").rodar().falhas;
-  const tela = require("./tela.js").testes();
   const parcial = require("./parcial.js").testes();
-  const extras = [["carregamento do app", fumaca], ["fluxo de revisão", tela],
-                  ["prompt e colagem parcial", parcial]];
-  console.log("");
-  extras.forEach(([nome, fs2]) => {
-    falhasTotal += fs2.length;
-    console.log(`  ${fs2.length ? "FALHOU" : "ok    "}  ${nome}`);
-    fs2.forEach((f) => console.log("          -> " + f));
+  return Promise.resolve(require("./tela.js").testes()).then((tela) => {
+    const extras = [["carregamento do app", fumaca], ["prompt e colagem parcial", parcial],
+                    ["tela: revisão, correção e registro", tela]];
+    console.log("");
+    extras.forEach(([nome, fs2]) => {
+      falhasTotal += fs2.length;
+      console.log(`  ${fs2.length ? "FALHOU" : "ok    "}  ${nome}`);
+      fs2.forEach((f) => console.log("          -> " + f));
+    });
+    return fim();
   });
+
+  function fim() {
 
   if (GRAVAR) {
     fs.writeFileSync(ARQ_ESPERADO, JSON.stringify(novoEsperado, null, 2) + "\n");
@@ -206,6 +212,7 @@ function main() {
     ? `\n${falhasTotal} FALHA(S).\n`
     : `\nTudo certo: ${arquivos.length} casos de texto + interface, invariantes I1-I6.\n`);
   return falhasTotal ? 1 : 0;
+  }
 }
 
-process.exit(main());
+Promise.resolve(main()).then((c) => process.exit(c));

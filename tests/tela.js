@@ -19,7 +19,7 @@ const TEXTO = [
 ].join("\n");
 
 function testes() {
-  const { falhas: erroCarga, api } = rodar();
+  const { falhas: erroCarga, api, janela } = rodar();
   const falhas = [...erroCarga];
   if (!api) return falhas;
 
@@ -66,16 +66,55 @@ function testes() {
   // sair da revisão NÃO apaga o histórico: é ele que sustenta a próxima rodada
   ok(api.revisados.size === 2, `T11 histórico devia sobreviver, tem ${api.revisados.size}`);
 
-  return falhas;
+  // --- prompt de correção: a conferência acontece DENTRO da janela ---
+  // (antes havia uma confirmação por cima, invisível atrás do diálogo)
+  api.$("editor").value = [
+    "@ Cartão com markdown",
+    "Qual conceito **importante** aparece? :: A **resposta** destacada :: tag_m",
+  ].join("\n");
+  api.preview();
+  api.abrirPromptCorrecao();
+  ok(api.$("dlgFixPrompt").open, "T12 a janela do prompt não abriu");
+  ok(api.fixModo === "parcial", "T13 devia abrir no modo parcial");
+  ok(api.fixBlocos.length === 1, `T14 esperava 1 âncora, veio ${api.fixBlocos.length}`);
+
+  const antesDoColar = api.$("editor").value;
+  janela.__area = "@@ " + api.fixBlocos[0].id + "\n@ Cartão corrigido\n"
+    + "Qual conceito <b>importante</b> aparece? :: A <b>resposta</b> destacada :: tag_m";
+  return Promise.resolve(api.$("btnFixPromptColar").onclick()).then(() => {
+    ok(api.$("fixPromptConf").children.length > 0,
+       "T15 a conferência não apareceu dentro da janela");
+    ok(!!api.fixPendente, "T16 não ficou nada pendente para aplicar");
+    ok(api.$("btnFixPromptAplicar").style.display === "",
+       "T17 o botão Aplicar continuou escondido");
+    ok(api.$("editor").value === antesDoColar,
+       "T18 o texto mudou ANTES de o usuário clicar em Aplicar");
+
+    api.$("btnFixPromptAplicar").onclick();
+    ok(api.$("editor").value.includes("<b>importante</b>"),
+       "T19 a correção não foi aplicada ao clicar em Aplicar");
+    ok(!api.$("editor").value.includes("@@"), "T20 sobrou âncora no texto");
+    ok(!api.$("dlgFixPrompt").open, "T21 a janela devia fechar após aplicar");
+    ok(!api.fixPendente, "T22 sobrou pendência depois de aplicar");
+
+    // --- registro ---
+    const log = api.registroTexto();
+    ok(/\[INICIO\]/.test(log), "T23 o registro não anotou a abertura do app");
+    ok(/\[PROMPT\]/.test(log), "T24 o registro não anotou o prompt de correção");
+    ok(/\[COLAR\]/.test(log), "T25 o registro não anotou a colagem");
+    ok(/\[APLICAR\]/.test(log), "T26 o registro não anotou a aplicação");
+    return falhas;
+  });
 }
 
 module.exports = { testes };
 
 if (require.main === module) {
-  const falhas = testes();
-  falhas.forEach((f) => console.log("  FALHA  " + f));
-  console.log(falhas.length
-    ? `\ntela: ${falhas.length} FALHA(S)\n`
-    : "\ntela: fluxo de revisão ok (11 verificações)\n");
-  process.exit(falhas.length ? 1 : 0);
+  Promise.resolve(testes()).then((falhas) => {
+    falhas.forEach((f) => console.log("  FALHA  " + f));
+    console.log(falhas.length
+      ? `\ntela: ${falhas.length} FALHA(S)\n`
+      : "\ntela: revisão, prompt de correção e registro ok (26 verificações)\n");
+    process.exit(falhas.length ? 1 : 0);
+  });
 }
