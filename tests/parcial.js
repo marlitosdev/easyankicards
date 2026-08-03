@@ -137,6 +137,20 @@ function testes() {
        "P24 algum bloco corrigido se perdeu ou duplicou");
   }
 
+  // P31. a IA ecoou a instrução final do prompt junto com a resposta.
+  //      Ela vinha DEPOIS da última âncora e caía dentro do último bloco,
+  //      virando conteúdo do cartão (bug do cartão 24, v8.30).
+  {
+    const eco = bom + "\n\nResponda SOMENTE com os trechos corrigidos, cada um "
+      + 'começando pela sua linha "@@ N". Sem comentários, sem cercas de código.';
+    const c = api.conferirCorrecaoParcial(eco, blocos);
+    ok(c.erros.length === 0, "P31 recusou a resposta por causa do eco: " + c.erros.join(" | "));
+    ok(c.avisos.some((x) => /instru/i.test(x)), "P32 não avisou sobre o eco do prompt");
+    const novo = api.aplicarCorrecaoParcial(TEXTO, c.aplicar);
+    ok(!/Responda SOMENTE/i.test(novo), "P33 a instrução do prompt entrou no baralho");
+    ok(!/@@/.test(novo), "P34 sobrou âncora no texto");
+  }
+
   // P25. a IA DIVIDIU um cartão longo: 2 cartões dentro da mesma âncora.
   //      Tem de ser aceito, e o total de cartões cresce.
   {

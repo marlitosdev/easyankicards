@@ -128,6 +128,7 @@ function rodar() {
     get ocultos() { return ocultosRevisao; },
     get modoRevisao() { return modoRevisao; },
     abrirPromptCorrecao, montarFixPrompt, limparConferencia, registroTexto, reg,
+    atualizarContagemRevisao,
     get fixPendente() { return fixPendente; },
     get fixBlocos() { return fixBlocos; },
     get fixModo() { return fixModo; },

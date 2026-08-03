@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.28.0";
+const VERSAO = "8.30.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -392,6 +392,16 @@ function corrigirComSeguranca(fn, texto) {
   const antes = resumoTexto(texto);
   const novo = fn(texto);
   const depois = resumoTexto(novo);
+  // correções marcadas como "limpeza" existem justamente para TIRAR coisa
+  // (instrução do prompt que vazou, linha repetida): as três travas abaixo
+  // as bloqueariam sempre
+  if (fn.limpeza) {
+    ultimoAjuste = { acao: fn.name || "limpeza", antes, depois };
+    reg("LIMPAR", fn.name || "limpeza",
+      antes.saibaMais + "→" + depois.saibaMais + " saiba+, "
+      + antes.cartoes + "→" + depois.cartoes + " cartões");
+    return novo;
+  }
   ultimoAjuste = { acao: fn.name || "correcao", antes, depois };
   reg("CORRIGIR", fn.name || "correcao",
     antes.cartoes + "→" + depois.cartoes + " cartões, "
@@ -467,6 +477,12 @@ function renderSugestoes(r, raw) {
   if (temTituloGrudado(raw))
     itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
                  fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
+  if (temPromptVazado(raw))
+    itens.push({ dot: "dot-red", txt: t("crit_prompt_leak"),
+                 fixTxt: t("fix_prompt_leak"), fix: corrigirPromptVazado });
+  if (temMaisRepetido(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_mais_rep"),
+                 fixTxt: t("fix_mais_rep"), fix: corrigirMaisRepetido });
   if (temClozeRepetida(raw))
     itens.push({ dot: "dot-org", txt: t("crit_cloze_rep"),
                  fixTxt: t("fix_cloze_rep"), fix: corrigirClozeRepetida });
@@ -483,14 +499,16 @@ function renderSugestoes(r, raw) {
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
   // com problema — evita o usuário clicar e não encontrar nada
-  correcaoPendente = temClozeRepetida(raw) ? corrigirClozeRepetida
+  correcaoPendente = temPromptVazado(raw) ? corrigirPromptVazado
+    : (temMaisRepetido(raw) ? corrigirMaisRepetido
+    : (temClozeRepetida(raw) ? corrigirClozeRepetida
     : (temTagsNaExplicacao(raw) ? corrigirTagsNaExplicacao
     : (temTituloGrudado(raw) ? corrigirTituloGrudado
     : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
     : (temMarcadores(raw) ? removerMarcadoresTexto
     : (temMarkdown(raw) ? corrigirMarkdown
-    : (temEspacosRuins(raw) ? corrigirEspacos : null)))))));
+    : (temEspacosRuins(raw) ? corrigirEspacos : null)))))))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -1228,6 +1246,9 @@ function uiPrompt(rotulo, valorInicial) {
 /* --------------------- revisão por marcação ------------------------- */
 
 function atualizarContagemRevisao() {
+  // link de limpar histórico: só aparece quando há histórico para limpar
+  const lim = $("btnLimparRevisados");
+  if (lim) lim.style.display = revisados.size ? "" : "none";
   const el = $("revContagem");
   if (!el) return;
   let txt = marcados.size ? t("marked_count", { n: marcados.size }) : t("marked_none");
@@ -1365,6 +1386,7 @@ $("btnLimparRevisados").onclick = async () => {
   if (!revisados.size) { uiAlert(t("rev_clear_none")); return; }
   if (!(await uiConfirm(t("rev_clear_confirm", { n: revisados.size })))) return;
   revisados.clear(); salvarRevisados();
+  reg("REVISAO", "histórico de 'já revisado' apagado");
   $("chkOcultarRev").checked = false;
   preview(); atualizarContagemRevisao();
   toast("toast_rev_cleared");
@@ -1454,7 +1476,15 @@ function analisarColarRev() {
     itens.push(item);
   });
   let correcao = null, critTxt = t("crit_bullets");
-  if (temClozeRepetida(raw)) { correcao = corrigirClozeRepetida; critTxt = t("crit_cloze_rep"); }
+  if (temPromptVazado(raw))
+    itens.push({ dot: "dot-red", txt: t("crit_prompt_leak"),
+                 fixTxt: t("fix_prompt_leak"), fix: corrigirPromptVazado });
+  if (temMaisRepetido(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_mais_rep"),
+                 fixTxt: t("fix_mais_rep"), fix: corrigirMaisRepetido });
+  if (temPromptVazado(raw)) { correcao = corrigirPromptVazado; critTxt = t("crit_prompt_leak"); }
+  else if (temMaisRepetido(raw)) { correcao = corrigirMaisRepetido; critTxt = t("crit_mais_rep"); }
+  else if (temClozeRepetida(raw)) { correcao = corrigirClozeRepetida; critTxt = t("crit_cloze_rep"); }
   else if (temTagsNaExplicacao(raw)) { correcao = corrigirTagsNaExplicacao; critTxt = t("crit_tags_in_more"); }
   else if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
   else if (temOrfaosExplicacao(raw)) { correcao = corrigirOrfaosExplicacao; critTxt = t("crit_orphans"); }

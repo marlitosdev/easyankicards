@@ -66,6 +66,16 @@ function testes() {
   // sair da revisão NÃO apaga o histórico: é ele que sustenta a próxima rodada
   ok(api.revisados.size === 2, `T11 histórico devia sobreviver, tem ${api.revisados.size}`);
 
+  // o link de limpar histórico só existe quando há histórico
+  api.entrarRevisao();
+  ok(api.$("btnLimparRevisados").style.display === "",
+     "T11b com histórico, o link de limpar devia aparecer");
+  api.revisados.clear();
+  api.atualizarContagemRevisao();
+  ok(api.$("btnLimparRevisados").style.display === "none",
+     "T11c sem histórico, o link de limpar devia sumir");
+  api.sairRevisao();
+
   // --- prompt de correção: a conferência acontece DENTRO da janela ---
   // (antes havia uma confirmação por cima, invisível atrás do diálogo)
   api.$("editor").value = [

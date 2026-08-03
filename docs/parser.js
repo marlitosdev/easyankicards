@@ -709,6 +709,8 @@ function detectoresAtivos(raw) {
     tags_na_explicacao: temTagsNaExplicacao(raw),
     cloze_repetida: temClozeRepetida(raw),
     espacos: temEspacosRuins(raw),
+    prompt_vazado: temPromptVazado(raw),
+    mais_repetido: temMaisRepetido(raw),
     pares_soltos: temParesSoltos(raw),
   };
   return Object.keys(d).filter((k) => d[k]);
@@ -874,9 +876,17 @@ function conferirCorrecaoParcial(resposta, blocos) {
     erros.push(t("fixpart_no_anchor"));
     return { erros, avisos, aplicar, recebidos };
   }
-  recebidos.forEach((txt, id) => {
+  recebidos.forEach((txtOrig, id) => {
+    let txt = txtOrig;
     if (!enviados.has(id)) { avisos.push(t("fixpart_unknown", { n: id })); return; }
     if (!txt.trim()) { erros.push(t("fixpart_empty", { n: id })); return; }
+    // a IA costuma ecoar a instrução final junto com a resposta; ela cai
+    // dentro do último bloco e viraria conteúdo do cartão (v8.30)
+    if (temPromptVazado(txt)) {
+      txt = corrigirPromptVazado(txt).trim();
+      avisos.push(t("fixpart_eco", { n: id }));
+      if (!txt) { erros.push(t("fixpart_empty", { n: id })); return; }
+    }
     const r = parseText(txt, []);
     if (!r.cards.length) { erros.push(t("fixpart_nocard", { n: id })); return; }
     const b = blocos.find((x) => x.id === id);
@@ -974,3 +984,66 @@ function _varrerEspacos(raw, aplicar) {
 }
 function temEspacosRuins(raw) { return _varrerEspacos(raw, false); }
 function corrigirEspacos(raw) { return _varrerEspacos(raw, true); }
+
+/* ===================================================================
+ * TEXTO DE PROMPT QUE VAZOU PARA O BARALHO  (v8.30)
+ * A IA às vezes ecoa a instrução final ("Responda SOMENTE com os
+ * trechos corrigidos...") junto com a resposta. Como esse trecho vem
+ * DEPOIS da última âncora, ele caía dentro do último bloco, e daí o
+ * "Corrigir órfãos" o promovia a linha "+" — virava conteúdo do cartão.
+ * Foi assim que o cartão 24 ganhou três cópias da mesma instrução.
+ * Estas linhas nunca são conteúdo: são reconhecidas e removidas.
+ * =================================================================== */
+const RE_PROMPT_VAZADO = [
+  /responda\s+somente\s+com/i, /reply\s+only\s+with/i,
+  /sem\s+cercas\s+de\s+c[óo]digo/i, /no\s+code\s+fences/i,
+  /regras\s+do\s+formato/i, /format\s+rules/i,
+  /corretor\s+de\s+formato/i, /format\s+fixer/i,
+  /problemas\s+(apontados|de\s+cada\s+trecho)/i, /problems\s+(reported|per\s+excerpt)/i,
+  /trechos\s+a\s+corrigir/i, /excerpts\s+to\s+fix/i,
+  /texto\s+a\s+corrigir/i, /text\s+to\s+fix/i,
+  /regra\s+mais\s+importante/i, /most\s+important\s+rule/i,
+  /^\s*@@\s*\d+\s*$/,
+  /cart[õo]es?\s+a\s+corrigir\s*:/i,
+];
+
+function _ehLinhaDePrompt(l) {
+  const s = l.replace(/^\s*[+*@]\s*/, "").trim();
+  if (!s) return false;
+  return RE_PROMPT_VAZADO.some((re) => re.test(s));
+}
+
+function _varrerPromptVazado(raw, aplicar) {
+  const L = raw.split(/\r?\n/);
+  const fica = L.filter((l) => !_ehLinhaDePrompt(l));
+  if (!aplicar) return fica.length !== L.length;
+  return fica.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+function temPromptVazado(raw) { return _varrerPromptVazado(raw, false); }
+function corrigirPromptVazado(raw) { return _varrerPromptVazado(raw, true); }
+corrigirPromptVazado.limpeza = true;   // pode reduzir contagens: é lixo saindo
+
+/* Explicação repetida dentro do MESMO cartão: quando a resposta da IA
+ * é colada mais de uma vez, a mesma linha "+" entra várias vezes. */
+function _varrerMaisRepetido(raw, aplicar) {
+  const L = raw.split(/\r?\n/);
+  const saida = [];
+  let vistos = new Set();
+  let achou = false;
+  for (const l of L) {
+    const s = l.trim();
+    if (s.startsWith("+")) {
+      const chave = s.replace(/^\+\s*/, "").toLowerCase();
+      if (chave && chave !== "---" && vistos.has(chave)) { achou = true; continue; }
+      vistos.add(chave);
+    } else if (!s.startsWith("@")) {
+      vistos = new Set();          // outro cartão: recomeça a contagem
+    }
+    saida.push(l);
+  }
+  if (!aplicar) return achou;
+  return saida.join("\n");
+}
+function temMaisRepetido(raw) { return _varrerMaisRepetido(raw, false); }
+function corrigirMaisRepetido(raw) { return _varrerMaisRepetido(raw, true); }
+corrigirMaisRepetido.limpeza = true;

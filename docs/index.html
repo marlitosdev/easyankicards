@@ -188,9 +188,19 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
 .barra-revisao .rev-botoes{display:flex;flex-wrap:wrap;gap:5px}
 .barra-revisao .rev-botoes .btn{padding:4px 9px;font-size:11px}
-.barra-revisao .rev-linha2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-  margin-top:8px;font-size:11.5px;color:var(--texto)}
-.barra-revisao .rev-contagem{color:var(--laranja);font-weight:700;flex:1;min-width:0}
+/* Três grupos com papéis diferentes: MARCAR (critérios), VER (estados) e
+   AÇÕES (o que leva o trabalho adiante). Mesma forma dentro de cada grupo;
+   o que só desfaz virou link, para não disputar atenção com o resto. */
+.barra-revisao .rev-grupo{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  margin-top:7px;font-size:11.5px;color:var(--texto)}
+.barra-revisao .rev-rot{font-size:10.5px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;opacity:.65;min-width:52px}
+.barra-revisao .rev-ver{gap:12px}
+.barra-revisao .rev-contagem{color:var(--laranja);font-weight:700;
+  margin-left:auto;text-align:right}
+.barra-revisao .rev-acoes{display:flex;gap:6px;margin-top:9px}
+.barra-revisao .rev-acoes .btn{flex:1 1 0;min-width:0;padding:7px 8px;font-size:12px}
+.barra-revisao .rev-links{display:flex;gap:14px;justify-content:center;margin-top:7px}
 .rev-topo{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
 .rev-topo .btn{flex:1 1 auto}
 /* selos de revisão (só visual; não vão para o cartão exportado) */
@@ -515,26 +525,45 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
       </div>
       <div id="barraRevisao" class="barra-revisao" style="display:none">
         <div class="rev-titulo" data-i18n="review_bar"></div>
-        <div class="rev-botoes">
-          <button class="btn btn-cinza" id="selTodos" data-i18n="sel_all"></button>
-          <button class="btn btn-cinza" id="selCurtos" data-i18n="sel_short"></button>
-          <button class="btn btn-cinza" id="selSemResp" data-i18n="sel_noanswer"></button>
-          <button class="btn btn-cinza" id="selSemPerg" data-i18n="sel_noquestion"></button>
-          <button class="btn btn-cinza" id="selLongos" data-i18n="sel_long"></button>
-          <button class="btn btn-cinza" id="selDup" data-i18n="sel_dup"></button>
-          <button class="btn btn-cinza" id="selRisco" data-i18n="sel_risky"></button>
-          <button class="btn btn-cinza" id="selLimpar" data-i18n="sel_clear"></button>
+
+        <!-- 1. MARCAR: critérios que selecionam cartões. Todos com a mesma
+             forma e o mesmo peso — são alternativas entre si. -->
+        <div class="rev-grupo">
+          <span class="rev-rot" data-i18n="rev_group_mark"></span>
+          <div class="rev-botoes">
+            <button class="btn btn-cinza" id="selTodos" data-i18n="sel_all"></button>
+            <button class="btn btn-cinza" id="selCurtos" data-i18n="sel_short"></button>
+            <button class="btn btn-cinza" id="selSemResp" data-i18n="sel_noanswer"></button>
+            <button class="btn btn-cinza" id="selSemPerg" data-i18n="sel_noquestion"></button>
+            <button class="btn btn-cinza" id="selLongos" data-i18n="sel_long"></button>
+            <button class="btn btn-cinza" id="selDup" data-i18n="sel_dup"></button>
+            <button class="btn btn-cinza" id="selRisco" data-i18n="sel_risky"></button>
+          </div>
         </div>
-        <div class="rev-linha2">
+
+        <!-- 2. VER: o que aparece na tela. Caixas de seleção, não botões,
+             porque são estados que ficam ligados. -->
+        <div class="rev-grupo rev-ver">
+          <span class="rev-rot" data-i18n="rev_group_view"></span>
           <label class="chk-2col"><input type="checkbox" id="chkFiltro">
             <span data-i18n="filter_marked"></span></label>
           <label class="chk-2col"><input type="checkbox" id="chkOcultarRev">
             <span data-i18n="hide_reviewed"></span></label>
-          <button class="btn btn-cinza" id="btnLimparRevisados" data-i18n="clear_reviewed"></button>
           <span id="revContagem" class="rev-contagem"></span>
+        </div>
+
+        <!-- 3. AÇÕES: as duas que movem o trabalho adiante, mesma largura.
+             O que apenas desfaz marcação virou link, para não competir. -->
+        <div class="rev-acoes">
           <button class="btn btn-azul" id="btnCopiarMarcados" data-i18n="copy_marked"></button>
           <button class="btn btn-verde" id="btnSubstituirMarcados" data-i18n="replace_marked"></button>
         </div>
+        <div class="rev-links">
+          <button type="button" class="link-tec" id="selLimpar" data-i18n="sel_clear"></button>
+          <button type="button" class="link-tec" id="btnLimparRevisados"
+                  data-i18n="clear_reviewed" style="display:none"></button>
+        </div>
+      </div>
       </div>
       <div class="prev-controles">
         <label><span data-i18n="style_panel_label"></span>
