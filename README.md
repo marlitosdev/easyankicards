@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.23.0) · by MarlitosDev
+# EasyAnkiCards (v8.23.2) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -103,6 +103,7 @@ São dois tipos de teste. As **invariantes** valem para qualquer texto e pegam o
 | I1 | ler um texto nunca quebra o app | — |
 | I2 | nenhuma correção apaga cartões | v8.19 |
 | I3 | nenhuma correção apaga o "Saiba mais" | v8.22 |
+| I6 | nenhuma correção apaga etiquetas | v8.23 |
 | I4 | corrigir 2x = corrigir 1x (idempotência) | v8.19 |
 | I5 | ida e volta (texto → cartões → texto) não muda nada | — |
 

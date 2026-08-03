@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.23.0";
+const VERSAO = "8.23.2";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -334,6 +334,7 @@ function botaoMini(rotuloKey, cor, acao) {
  * violar (as duas nasceram de bugs reais):
  *   1. não pode sobrar menos cartão do que entrou      (v8.19)
  *   2. não pode sobrar menos "Saiba mais" do que entrou (v8.22)
+ *   3. não pode sobrar menos etiqueta do que entrou     (v8.23)
  * Guarda também o antes/depois para o relatório de diagnóstico. */
 let ultimoAjuste = null;   // { acao, antes, depois } da última correção
 
@@ -350,6 +351,12 @@ function corrigirComSeguranca(fn, texto) {
   if (depois.saibaMais < antes.saibaMais) {
     uiAlert(t("fix_would_lose_more", { a: antes.saibaMais, d: depois.saibaMais }));
     ultimoAjuste.bloqueado = "saibaMais";
+    return texto;
+  }
+  // 3. não pode sobrar menos etiqueta do que entrou   (v8.23)
+  if (depois.tags < antes.tags) {
+    uiAlert(t("fix_would_lose_tags", { a: antes.tags, d: depois.tags }));
+    ultimoAjuste.bloqueado = "tags";
     return texto;
   }
   return novo;
@@ -403,6 +410,9 @@ function renderSugestoes(r, raw) {
   if (temTituloGrudado(raw))
     itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
                  fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
+  if (temTagsNaExplicacao(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_tags_in_more"),
+                 fixTxt: t("fix_tags_in_more"), fix: corrigirTagsNaExplicacao });
   if (temMarkdown(raw))
     itens.push({ dot: "dot-org", txt: t("crit_markdown"),
                  fixTxt: t("fix_markdown"), fix: corrigirMarkdown });
@@ -410,11 +420,12 @@ function renderSugestoes(r, raw) {
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
   // com problema — evita o usuário clicar e não encontrar nada
-  correcaoPendente = temTituloGrudado(raw) ? corrigirTituloGrudado
+  correcaoPendente = temTagsNaExplicacao(raw) ? corrigirTagsNaExplicacao
+    : (temTituloGrudado(raw) ? corrigirTituloGrudado
     : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
     : (temMarcadores(raw) ? removerMarcadoresTexto
-    : (temMarkdown(raw) ? corrigirMarkdown : null))));
+    : (temMarkdown(raw) ? corrigirMarkdown : null)))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -1314,7 +1325,8 @@ function analisarColarRev() {
     itens.push(item);
   });
   let correcao = null, critTxt = t("crit_bullets");
-  if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
+  if (temTagsNaExplicacao(raw)) { correcao = corrigirTagsNaExplicacao; critTxt = t("crit_tags_in_more"); }
+  else if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
   else if (temOrfaosExplicacao(raw)) { correcao = corrigirOrfaosExplicacao; critTxt = t("crit_orphans"); }
   else if (temLacunaOpcoesLongas(raw)) { correcao = corrigirLacunaOpcoesLongas; critTxt = t("crit_lacuna_ops"); }
   else if (temTagsQueSaoTexto(raw)) { correcao = corrigirTagsQueSaoTexto; critTxt = t("crit_pairs_tags"); }
@@ -1382,6 +1394,24 @@ $("btnColarRevExpandir").onclick = () => {
 attachTip($("btnColarRevExpandir"), "tip_panel_expand");
 $("btnColarRevFinalizar").onclick = finalizarColarRev;
 $("btnColarRevFechar").onclick = () => $("dlgColarRev").close();
+/* Fecha o ciclo do "Prompt de correção": o usuário sai daqui com o prompt,
+ * vai à IA e volta com o texto corrigido. Este botão troca o conteúdo do
+ * painel pela resposta da IA sem precisar selecionar tudo à mão. */
+$("btnColarRevColar").onclick = async () => {
+  let novo = "";
+  try { novo = await navigator.clipboard.readText(); }
+  catch (e) { uiAlert(t("paste_denied_manual")); return; }
+  if (!novo.trim()) { uiAlert(t("paste_empty")); return; }
+  const atual = $("colarRevTexto").value.trim();
+  if (atual && atual !== novo.trim()
+      && !(await uiConfirm(t("pastepanel_replace_confirm")))) return;
+  $("colarRevTexto").value = novo.replace(/^\s+/, "");
+  analisarColarRev();
+  $("colarRevTexto").focus();
+  toast("toast_pasted_fix");
+};
+attachTip($("btnColarRevColar"), "tip_pastepanel_paste");
+
 $("btnColarRevPrompt").onclick = () => abrirPromptCorrecao($("colarRevTexto").value);
 attachTip($("btnColarRevPrompt"), "tip_fixprompt");
 $("btnSubstituirMarcados").onclick = substituirMarcados;

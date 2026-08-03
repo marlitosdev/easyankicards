@@ -3,7 +3,7 @@
     "cartoes": 2,
     "avisos": 0,
     "suspeitos": 0,
-    "saibaMais": 5,
+    "saibaMais": 4,
     "titulos": 2,
     "tags": 5,
     "detectores": []
@@ -55,9 +55,7 @@
     "saibaMais": 0,
     "titulos": 0,
     "tags": 4,
-    "detectores": [
-      "tags_que_sao_texto"
-    ]
+    "detectores": []
   },
   "07-terceiro-campo-e-explicacao.txt": {
     "cartoes": 1,
@@ -65,7 +63,7 @@
     "suspeitos": 1,
     "saibaMais": 0,
     "titulos": 0,
-    "tags": 15,
+    "tags": 0,
     "detectores": [
       "tags_que_sao_texto"
     ]
@@ -74,13 +72,12 @@
     "cartoes": 7,
     "avisos": 0,
     "suspeitos": 3,
-    "saibaMais": 13,
+    "saibaMais": 12,
     "titulos": 4,
     "tags": 12,
     "detectores": [
       "marcadores",
       "orfaos_explicacao",
-      "tags_que_sao_texto",
       "markdown"
     ]
   },
@@ -102,6 +99,26 @@
     "tags": 2,
     "detectores": [
       "markdown"
+    ]
+  },
+  "11-tags-longas-viravam-explicacao.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 2,
+    "tags": 9,
+    "detectores": []
+  },
+  "12-tags-viraram-explicacao.txt": {
+    "cartoes": 3,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 3,
+    "tags": 4,
+    "detectores": [
+      "tags_na_explicacao"
     ]
   }
 }

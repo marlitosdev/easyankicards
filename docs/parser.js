@@ -64,16 +64,24 @@ function hasDelim(line) { return splitLine(line).length > 1; }
 
 /* Uma palavra só (ou lista separada por vírgula), sem espaços internos
  * nem pontuação de frase — o formato típico de etiqueta do Anki. */
-function ehTagSolta(txt) {
-  const s = (txt || "").trim();
-  if (!s || s.length > 60 || /[.!?;:]/.test(s)) return false;
-  return s.split(",").every((p) => p.trim() && !/\s/.test(p.trim()));
-}
+/* Era uma segunda cópia da regra de "isto são etiquetas?", com um limite de
+ * 60 caracteres próprio — foi por ela que as tags do cartão cloze de 61
+ * caracteres viravam observação. Agora existe UMA regra só. */
+function ehTagSolta(txt) { return looksLikeTags(txt); }
 
+/* REGRA DE OURO: esta função decide se o 3º campo são ETIQUETAS ou TEXTO.
+ * Quem responde "texto" manda o conteúdo para uma linha "+", então um erro
+ * aqui APAGA as tags do cartão. Não use tamanho como critério: nomes como
+ * "NBASP_100, ISSAI, Auditoria_Governamental, Conceitos_Iniciais" passam de
+ * 60 caracteres e são etiquetas perfeitamente válidas (bug v8.23).
+ * O que distingue etiqueta de frase é a FORMA: partes separadas por vírgula,
+ * cada uma sem espaço interno (o Anki separa tags por espaço) e sem
+ * pontuação de fim de frase. */
 function looksLikeTags(raw) {
-  raw = raw.trim();
-  return !!raw && !raw.includes("{{") && !raw.includes(":")
-    && raw.length <= 60 && parseTags(raw).length <= 6;
+  const s = (raw || "").trim();
+  if (!s || s.includes("{{") || s.includes(":") || /[.!?;]/.test(s)) return false;
+  if (s.length > 200 || parseTags(s).length > 8) return false;
+  return s.split(",").every((x) => x.trim() && !/\s/.test(x.trim()));
 }
 
 function agruparLinhas(rawText) {
@@ -188,15 +196,14 @@ function checarSuspeitas(card, rawParts) {
   }
   if (rawParts.length === 3 && card.kind !== "mc") {
     const rt = rawParts[2];
-    // Etiquetas de verdade: partes separadas por vírgula, sem espaço interno
-    // e sem pontuação de frase — o tamanho total não importa (nomes como
-    // "Auditoria_Governamental, Conceitos_Iniciais" passam de 60 caracteres).
-    const pareceTags = rt.trim().length <= 200 && !/[.!?;]/.test(rt)
-      && parseTags(rt).length <= 8
-      && rt.split(",").every((x) => x.trim() && !/\s/.test(x.trim()));
-    if (rt.includes("{{") || (!pareceTags && (rt.includes(":") || rt.length > 60))
-        || parseTags(rt).length > 8)
+    // uma única regra para todo o app: looksLikeTags
+    if (!looksLikeTags(rt)) {
       issues.push(pm("i_tags_text"));
+      // marca para o resumo NÃO contar isto como etiqueta: mover uma frase
+      // dessas para uma linha "+" é o comportamento certo, e a rede de
+      // segurança não pode confundir isso com perda de tags
+      card.tagsSuspeitas = true;
+    }
   }
   if (card.kind === "cloze" && clozeAberto(card.front)) issues.push(pm("i_cloze_open"));
   // Mesmo número de lacuna na pergunta E na resposta: o Anki esconde as duas
@@ -641,10 +648,15 @@ function resumoTexto(raw) {
     suspeitos: r.nSuspicious,
     // linhas de "Saiba mais" somadas: é o conteúdo que some sem ninguém
     // perceber quando uma correção mexe demais no texto
-    saibaMais: r.cards.reduce(
-      (s, c) => s + (c.more ? c.more.split("<br>").filter(Boolean).length : 0), 0),
+    // linha "+" que contém só etiquetas não é explicação: contá-la faria a
+    // rede de segurança acusar perda de conteúdo ao devolvê-las ao cartão
+    saibaMais: r.cards.reduce((s, c) => s + (c.more
+      ? c.more.split("<br>").filter((x) => x.trim() && !looksLikeTags(x)).length
+      : 0), 0),
     titulos: r.cards.filter((c) => c.titulo).length,
-    tags: r.cards.reduce((s, c) => s + (c.ownTags || []).length, 0),
+    // só etiquetas de verdade: um 3º campo que na verdade é frase não conta
+    tags: r.cards.reduce(
+      (s, c) => s + (c.tagsSuspeitas ? 0 : (c.ownTags || []).length), 0),
     linhas: (raw || "").split(/\r?\n/).length,
     chars: (raw || "").length,
   };
@@ -659,7 +671,40 @@ function detectoresAtivos(raw) {
     tags_que_sao_texto: temTagsQueSaoTexto(raw),
     lacuna_opcoes_longas: temLacunaOpcoesLongas(raw),
     markdown: temMarkdown(raw),
+    tags_na_explicacao: temTagsNaExplicacao(raw),
     pares_soltos: temParesSoltos(raw),
   };
   return Object.keys(d).filter((k) => d[k]);
 }
+
+/* ===================================================================
+ * TAGS QUE VIRARAM EXPLICAÇÃO  (v8.23.2)
+ * Conserto do estrago que a v8.23 fazia: uma linha "+" logo abaixo do
+ * cartão contendo APENAS etiquetas (palavras separadas por vírgula, sem
+ * espaço interno e sem pontuação) era, na verdade, o campo de tags. Aqui
+ * ela volta para o fim da linha do cartão. Só age quando o cartão ainda
+ * NÃO tem etiquetas — por isso é idempotente.
+ * =================================================================== */
+function _varrerTagsNaExplicacao(raw, aplicar) {
+  const L = raw.split(/\r?\n/);
+  let achou = false;
+  for (let i = 0; i < L.length; i++) {
+    const s = L[i].trim();
+    if (!s || s.startsWith("@") || s.startsWith("+") || s.startsWith("#")) continue;
+    if (!(hasDelim(s) || CLOZE_START_RE.test(s))) continue;
+    const partes = splitLine(s);
+    // já tem etiquetas no último campo? então não há o que trazer de volta
+    if (partes.length > 1 && looksLikeTags(partes[partes.length - 1])) continue;
+    const prox = (L[i + 1] || "").trim();
+    if (!prox.startsWith("+")) continue;
+    const conteudo = prox.replace(/^\+\s*/, "");
+    if (!conteudo || !looksLikeTags(conteudo)) continue;
+    achou = true;
+    if (!aplicar) return true;
+    L[i] = L[i].replace(/\s+$/, "") + " :: " + conteudo;
+    L.splice(i + 1, 1);
+  }
+  return aplicar ? L.join("\n") : achou;
+}
+function temTagsNaExplicacao(raw) { return _varrerTagsNaExplicacao(raw, false); }
+function corrigirTagsNaExplicacao(raw) { return _varrerTagsNaExplicacao(raw, true); }

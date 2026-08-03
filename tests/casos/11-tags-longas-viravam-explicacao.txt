@@ -1,0 +1,8 @@
+@ NBASP_100 - As Três Partes da Auditoria
+Quais são as três partes envolvidas em uma auditoria do setor público segundo a NBASP 100? :: São {{c1::o auditor}}, {{c2::a parte responsável}} e {{c3::os usuários previstos}}. :: NBASP_100, ISSAI, Auditoria_Governamental, Conceitos_Iniciais
++ Auditor — titular da unidade de auditoria governamental e pessoas encarregadas de conduzir os trabalhos.
++ Parte responsável — quem responde pela gestão e pela informação sobre o objeto.
+
+@ NBASP_200/400 - Aplicação de Testes Substantivos
+Os testes substantivos são obrigatoriamente aplicados em qual tipo de trabalho? :: Nos {{c1::trabalhos de certificação}}, sendo essenciais nas {{c2::auditorias financeiras}} :: NBASP_200, NBASP_400, ISSAI, Testes_Substantivos, Certificação
++ Testes substantivos — evidências sobre distorções relevantes no nível de afirmações.
