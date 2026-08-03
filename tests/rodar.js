@@ -54,7 +54,8 @@ function carregarApp() {
     + "detectoresAtivos,montarPromptCorrecao,setLanguage,t,"
     + "removerMarcadoresTexto,corrigirTagsQueSaoTexto,corrigirTituloGrudado,"
     + "corrigirOrfaosExplicacao,corrigirLacunaOpcoesLongas,corrigirMarkdown,"
-    + "temTagsNaExplicacao,corrigirTagsNaExplicacao};";
+    + "temTagsNaExplicacao,corrigirTagsNaExplicacao,"
+    + "temClozeRepetida,corrigirClozeRepetida};";
   const api = new Function(codigo + "\n" + exportar)();
   api.setLanguage("pt");
   return api;
@@ -72,6 +73,7 @@ const CORRECOES = {
   corrigirLacunaOpcoesLongas: app.corrigirLacunaOpcoesLongas,
   corrigirMarkdown: app.corrigirMarkdown,
   corrigirTagsNaExplicacao: app.corrigirTagsNaExplicacao,
+  corrigirClozeRepetida: app.corrigirClozeRepetida,
 };
 
 /* --------------------------------------------------------------------

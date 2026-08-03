@@ -707,6 +707,7 @@ function detectoresAtivos(raw) {
     lacuna_opcoes_longas: temLacunaOpcoesLongas(raw),
     markdown: temMarkdown(raw),
     tags_na_explicacao: temTagsNaExplicacao(raw),
+    cloze_repetida: temClozeRepetida(raw),
     pares_soltos: temParesSoltos(raw),
   };
   return Object.keys(d).filter((k) => d[k]);
@@ -901,3 +902,49 @@ function aplicarCorrecaoParcial(raw, aplicar) {
   });
   return linhas.join("\n");
 }
+
+/* ===================================================================
+ * LACUNA REPETIDA ENTRE PERGUNTA E RESPOSTA  (v8.26)
+ * "P {{c1::x}}? :: R {{c1::y}}" — o Anki esconde as duas ao mesmo tempo,
+ * e o cartão fica sem como ser respondido. O conserto é renumerar só as
+ * lacunas do lado da RESPOSTA, aproveitando o primeiro número livre.
+ * A troca é posicional (por índice no texto), não por remontagem da
+ * linha: assim nada mais na linha muda, nem um espaço.
+ * =================================================================== */
+
+/* Índice do primeiro "::" que está FORA de uma lacuna. -1 se não houver. */
+function posSeparadorTopo(l) {
+  let dentro = 0;
+  for (let i = 0; i < l.length - 1; i++) {
+    if (l[i] === "{" && l[i + 1] === "{") { dentro++; i++; continue; }
+    if (l[i] === "}" && l[i + 1] === "}") { dentro = Math.max(0, dentro - 1); i++; continue; }
+    if (dentro === 0 && l[i] === ":" && l[i + 1] === ":") return i;
+  }
+  return -1;
+}
+
+function _varrerClozeRepetida(raw, aplicar) {
+  const L = raw.split(/\r?\n/);
+  let achou = false;
+  for (let i = 0; i < L.length; i++) {
+    const l = L[i];
+    if (!CLOZE_START_RE.test(l)) continue;
+    const pos = posSeparadorTopo(l);
+    if (pos < 0) continue;                       // sem resposta: nada a fazer
+    const frente = l.slice(0, pos), resto = l.slice(pos);
+    const numsDe = (s) => ((s.match(/\{\{c(\d+)::/g) || []).map((x) => x.replace(/\D/g, "")));
+    const naFrente = new Set(numsDe(frente));
+    const repetidos = [...new Set(numsDe(resto))].filter((n) => naFrente.has(n));
+    if (!repetidos.length) continue;
+    achou = true;
+    if (!aplicar) return true;
+    let livre = Math.max(0, ...numsDe(l).map(Number)) + 1;
+    const troca = {};
+    repetidos.forEach((n) => { troca[n] = String(livre++); });
+    L[i] = frente + resto.replace(/\{\{c(\d+)::/g,
+      (m, n) => (troca[n] ? "{{c" + troca[n] + "::" : m));
+  }
+  return aplicar ? L.join("\n") : achou;
+}
+function temClozeRepetida(raw) { return _varrerClozeRepetida(raw, false); }
+function corrigirClozeRepetida(raw) { return _varrerClozeRepetida(raw, true); }

@@ -1,0 +1,6 @@
+@ NBASP_100 - Emissão de Opinião Modificada
+Em quais situações o auditor emite uma {{c1::opinião modificada}}? :: Quando constatar {{c1::distorções relevantes}} ou quando houver {{c2::incapacidade de obter evidência suficiente e apropriada}}. :: NBASP_100, ISSAI, Auditoria, Opinião
++ Modificada — emitida quando constatadas distorções relevantes ou quando houver limitação de escopo.
+
+@ Repetição legítima dentro do mesmo campo
+Os dois itens {{c1::primeiro}} e {{c1::segundo}} devem sumir juntos de propósito. :: Observação do cartão :: exemplo
