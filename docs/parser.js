@@ -602,19 +602,50 @@ function corrigirLacunaOpcoesLongas(raw) {
 function problemasDoTexto(raw, r) {
   const linhas = raw.split(/\r?\n/);
   const achados = [];
-  const jaTem = (n) => achados.some((p) => p.n === n);
   const add = (n, msg) => {
-    if (!n || jaTem(n)) return;
+    if (!n) return;
+    const ja = achados.find((p) => p.n === n);
+    // mesma linha com mais de um problema: junta as mensagens em vez de
+    // descartar — o prompt precisa contar tudo que há de errado ali
+    if (ja) { if (!ja.msg.includes(msg)) ja.msg += " " + msg; return; }
     achados.push({ n, msg: String(msg), txt: (linhas[n - 1] || "").trim() });
   };
   (r.warnLines || []).forEach((n, i) => add(n, r.warnings[i]));
   r.cards.forEach((c) => { if (c.issues && c.issues.length) add(c.line, c.issues[0]); });
+  // críticas que aparecem no painel de sugestões e também são acionáveis
+  // pela IA (cartão longo demais, frente repetida)
+  const vistos = {};
+  r.cards.forEach((c) => {
+    if ((c.front + c.back).length > 220) add(c.line, t("crit_long_msg"));
+    const k = c.front.toLowerCase().trim();
+    if (vistos[k]) add(c.line, t("crit_dup_msg", { a: vistos[k] }));
+    else vistos[k] = c.line;
+  });
+  // Os detectores estruturais valem para o texto inteiro, mas dá para achar
+  // a LINHA culpada aplicando cada um a uma linha de cada vez. Sem isso, o
+  // modo parcial não conseguiria isolar o bloco (bug encontrado no teste
+  // P11: o cartão com markdown ficava de fora do prompt).
+  const porLinha = [
+    [temMarkdown, "fixg_markdown"],
+    [temTituloGrudado, "fixg_title_glued"],
+    [temMarcadores, "fixg_bullets"],
+    [temTagsQueSaoTexto, "fixg_tags_text"],
+  ];
+  linhas.forEach((l, i) => {
+    if (!l.trim()) return;
+    porLinha.forEach(([detector, chave]) => {
+      try { if (detector(l)) add(i + 1, t(chave)); } catch (e) {}
+    });
+    // este precisa da linha seguinte para decidir
+    try {
+      if (temTagsNaExplicacao(l + "\n" + (linhas[i + 1] || "")))
+        add(i + 1, t("crit_tags_in_more"));
+    } catch (e) {}
+  });
   achados.sort((a, b) => a.n - b.n);
+  // sobra para o prompt do texto inteiro: o que não coube em nenhuma linha
   const gerais = [];
-  if (temTituloGrudado(raw)) gerais.push(t("fixg_title_glued"));
-  if (temMarcadores(raw)) gerais.push(t("fixg_bullets"));
-  if (temTagsQueSaoTexto(raw)) gerais.push(t("fixg_tags_text"));
-  if (temMarkdown(raw)) gerais.push(t("fixg_markdown"));
+  if (temLacunaOpcoesLongas(raw) && !achados.length) gerais.push(t("crit_lacuna_ops"));
   return { achados, gerais };
 }
 
@@ -644,6 +675,10 @@ function resumoTexto(raw) {
   const r = parseText(raw || "", []);
   return {
     cartoes: r.cards.length,
+    // sem as linhas de continuação, que são cartões só na aparência.
+    // É esta a contagem que vale como "conteúdo": juntar linhas tortas
+    // reduz `cartoes` sem perder nada, e não pode disparar alarme falso.
+    cartoesReais: r.cards.filter((c) => !ehLinhaContinuacao(c.front)).length,
     avisos: r.warnings.length,
     suspeitos: r.nSuspicious,
     // linhas de "Saiba mais" somadas: é o conteúdo que some sem ninguém
@@ -708,3 +743,161 @@ function _varrerTagsNaExplicacao(raw, aplicar) {
 }
 function temTagsNaExplicacao(raw) { return _varrerTagsNaExplicacao(raw, false); }
 function corrigirTagsNaExplicacao(raw) { return _varrerTagsNaExplicacao(raw, true); }
+
+/* ===================================================================
+ * CORREÇÃO PARCIAL  (v8.25)
+ * Mandar o texto inteiro para a IA a cada erro é caro e arriscado: ela
+ * reescreve o que estava certo. Aqui isolamos SÓ os blocos com problema
+ * e marcamos cada um com uma âncora "@@ N" (N = linha em que o bloco
+ * começa). A IA devolve os mesmos blocos com as mesmas âncoras, e o app
+ * troca cada bloco no lugar certo — o resto do texto não é tocado.
+ * A âncora é o que torna a colagem VERIFICÁVEL: dá para conferir se
+ * voltou tudo, se voltou coisa que não foi enviada e se algum bloco
+ * deixou de gerar cartão.
+ * =================================================================== */
+
+/* Faixa de linhas de um cartão: "@" acima, a linha do cartão, "+" abaixo.
+ * Índices 0-based, inclusivos nas duas pontas. */
+function blocoDoCartao(linhas, linhaCartao) {
+  const i = linhaCartao - 1;
+  let fim = i;
+  while (fim + 1 < linhas.length && linhas[fim + 1].trim().startsWith("+")) fim++;
+  let ini = i;
+  if (ini - 1 >= 0 && linhas[ini - 1].trim().startsWith("@")) ini--;
+  return { ini, fim };
+}
+
+/* Junta os problemas por bloco de cartão. Devolve os blocos em ordem. */
+function blocosComProblema(raw, r) {
+  const linhas = raw.split(/\r?\n/);
+  const { achados } = problemasDoTexto(raw, r);
+  const mapa = new Map();
+  achados.forEach((p) => {
+    const dono = r.cards.find((c) => {
+      const b = blocoDoCartao(linhas, c.line);
+      return p.n - 1 >= b.ini && p.n - 1 <= b.fim;
+    });
+    const b = dono ? blocoDoCartao(linhas, dono.line) : { ini: p.n - 1, fim: p.n - 1 };
+    if (!mapa.has(b.ini)) mapa.set(b.ini, { ini: b.ini, fim: b.fim, probs: [] });
+    mapa.get(b.ini).probs.push(p);
+  });
+  // Uma linha de continuação sozinha não diz nada à IA: ela precisa do
+  // cartão dono para saber o que remontar. Puxa o bloco do cartão anterior
+  // (com o título "@") para dentro deste.
+  mapa.forEach((b) => {
+    let guarda = 0;
+    while (b.ini > 0 && ehLinhaContinuacao((linhas[b.ini] || "").trim()) && guarda++ < 20) {
+      const anteriores = r.cards.filter((c) => c.line - 1 < b.ini);
+      if (!anteriores.length) break;
+      const ba = blocoDoCartao(linhas, anteriores[anteriores.length - 1].line);
+      if (ba.ini >= b.ini) break;
+      b.ini = ba.ini;
+    }
+  });
+
+  // Funde blocos colados. Quando a IA quebra a resposta em várias linhas,
+  // cada linha vira um "cartão" torto e ganharia uma âncora só sua — a IA
+  // receberia pedaços sem contexto e não teria como remontar o cartão.
+  // Blocos vizinhos (sem linha de conteúdo entre eles) viram UMA âncora.
+  const ordenados = [...mapa.values()].sort((a, b) => a.ini - b.ini);
+  const fundidos = [];
+  ordenados.forEach((b) => {
+    const ult = fundidos[fundidos.length - 1];
+    const soBrancoEntre = ult && linhas.slice(ult.fim + 1, b.ini).every((l) => !l.trim());
+    if (ult && b.ini <= ult.fim + 1 && soBrancoEntre !== false) {
+      ult.fim = Math.max(ult.fim, b.fim);
+      ult.probs.push(...b.probs);
+    } else if (ult && b.ini <= ult.fim + 1) {
+      ult.fim = Math.max(ult.fim, b.fim);
+      ult.probs.push(...b.probs);
+    } else fundidos.push({ ...b, probs: [...b.probs] });
+  });
+  return fundidos.map((b) => {
+    const texto = linhas.slice(b.ini, b.fim + 1).join("\n");
+    return {
+      id: b.ini + 1,                                 // âncora = linha inicial
+      ini: b.ini, fim: b.fim, probs: b.probs, texto,
+      // Quantos cartões DE VERDADE havia aqui. As linhas de continuação
+      // viram "cartões" tortos na leitura, mas juntá-las de volta em um só
+      // é justamente o conserto pedido — contá-las faria a conferência
+      // recusar a resposta certa. Por isso ficam de fora.
+      cartoesOriginais: Math.max(1, parseText(texto, []).cards
+        .filter((c) => !ehLinhaContinuacao(c.front)).length),
+    };
+  });
+}
+
+/* Monta o prompt que pede a correção SÓ dos blocos com problema. */
+function montarPromptCorrecaoParcial(raw, r) {
+  const blocos = blocosComProblema(raw, r);
+  if (!blocos.length) return { texto: "", blocos: [] };
+  const corta = (s) => (s.length > 150 ? s.slice(0, 150) + "…" : s);
+  const lista = blocos.map((b) => {
+    const p = b.probs.map((x) => "   - " + t("fixp_line") + " " + x.n + ": " + x.msg
+      + "\n     " + t("fixp_content") + ' "' + corta(x.txt) + '"').join("\n");
+    return "@@ " + b.id + "\n" + p;
+  }).join("\n");
+  const trechos = blocos.map((b) => "@@ " + b.id + "\n" + b.texto).join("\n\n");
+  return {
+    texto: t("fix_prompt_partial")
+      .replace("{problemas}", lista).replace("{trechos}", trechos),
+    blocos,
+  };
+}
+
+/* Lê a resposta da IA e separa os blocos pelas âncoras "@@ N". */
+function separarBlocosMarcados(resposta) {
+  const mapa = new Map();
+  let atual = null, buf = [];
+  const fechar = () => {
+    if (atual !== null) mapa.set(atual, buf.join("\n").replace(/^\s*\n+/, "").replace(/\s+$/, ""));
+    buf = [];
+  };
+  for (const l of (resposta || "").split(/\r?\n/)) {
+    const m = l.match(/^\s*@@\s*(\d+)\s*$/);
+    if (m) { fechar(); atual = Number(m[1]); continue; }
+    if (atual !== null) buf.push(l);
+  }
+  fechar();
+  return mapa;
+}
+
+/* Confere a resposta da IA ANTES de mexer no texto do usuário.
+ * Devolve o que dá para aplicar e a lista de problemas encontrados. */
+function conferirCorrecaoParcial(resposta, blocos) {
+  const recebidos = separarBlocosMarcados(resposta);
+  const enviados = new Set(blocos.map((b) => b.id));
+  const erros = [], avisos = [], aplicar = [];
+  if (!recebidos.size) {
+    erros.push(t("fixpart_no_anchor"));
+    return { erros, avisos, aplicar, recebidos };
+  }
+  recebidos.forEach((txt, id) => {
+    if (!enviados.has(id)) { avisos.push(t("fixpart_unknown", { n: id })); return; }
+    if (!txt.trim()) { erros.push(t("fixpart_empty", { n: id })); return; }
+    const r = parseText(txt, []);
+    if (!r.cards.length) { erros.push(t("fixpart_nocard", { n: id })); return; }
+    const b = blocos.find((x) => x.id === id);
+    // o bloco pode CRESCER (a IA dividiu um cartão longo — isso é o pedido),
+    // mas nunca encolher: menos cartões significa conteúdo perdido
+    if (r.cards.length < (b.cartoesOriginais || 1)) {
+      erros.push(t("fixpart_lostcard",
+        { n: id, a: b.cartoesOriginais, d: r.cards.length }));
+      return;
+    }
+    aplicar.push({ ...b, novo: txt, cartoes: r.cards.length });
+  });
+  blocos.filter((b) => !recebidos.has(b.id))
+    .forEach((b) => avisos.push(t("fixpart_missing", { n: b.id })));
+  return { erros, avisos, aplicar, recebidos };
+}
+
+/* Troca os blocos no texto. De baixo para cima, para os índices das linhas
+ * de cima não mudarem no meio do caminho. */
+function aplicarCorrecaoParcial(raw, aplicar) {
+  const linhas = raw.split(/\r?\n/);
+  [...aplicar].sort((a, b) => b.ini - a.ini).forEach((b) => {
+    linhas.splice(b.ini, b.fim - b.ini + 1, ...b.novo.split(/\r?\n/));
+  });
+  return linhas.join("\n");
+}

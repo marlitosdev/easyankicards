@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.24.0) · by MarlitosDev
+# EasyAnkiCards (v8.25.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -35,7 +35,8 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - **Destaque de sintaxe** (grifos em `::`, lacunas e `[MC]`) com o texto real editável por cima — seleção do mouse sempre alinhada; interruptor para desligar.
 - Tolerante a texto colado de PDF/Word/IA: recupera quebras de linha no meio do cartão, une pares `Pergunta?` / `Resposta` sem `::`, aceita `@` e `+`/`*` antes ou depois do cartão e separa títulos grudados.
 - **Análise automática** enquanto digita, com **"Ver no texto"** (foca a linha do problema) e o botão **"Corrigir erros"**, que só acende quando há algo a corrigir e abre revisão com antes/depois.
-- **"Prompt de correção"**: quando o texto da IA vem torto de um jeito que o app não conserta sozinho (resposta quebrada em várias linhas, markdown, cartão sem `::`), gera um prompt com cada problema ancorado no número da linha + o trecho literal + as regras do formato. Cole na IA, traga a resposta de volta.
+- **"Prompt de correção"**, em duas formas: **só os trechos com erro** (padrão) ou o **texto inteiro**. No modo parcial, cada trecho vai marcado com uma âncora `@@ N` e leva junto o cartão dono e o título — a IA devolve os mesmos trechos com as mesmas âncoras e o botão **"Colar correção da IA"** troca só aqueles blocos, sem encostar no resto do baralho.
+- A colagem é **conferida antes de aplicar**: âncora ausente, âncora inventada, trecho vazio, trecho que não forma cartão e trecho que voltou com menos cartões são recusados um a um, com aviso. Dividir um cartão longo em dois é permitido (era o pedido) e a confirmação mostra o saldo antes/depois.
 - **"Copiar diagnóstico"**: um clique copia versão, ambiente, o que a última correção fez (antes/depois) e o texto da tela — o suficiente para reproduzir um problema sem print nem explicação.
 
 **Tipos de cartão**

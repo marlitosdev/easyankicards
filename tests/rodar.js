@@ -27,7 +27,8 @@
  *   main()         - roda, imprime e devolve código de saída
  *
  * Além dos casos de texto, roda tests/fumaca.js (o app carrega sem erro num
- * DOM mínimo) e tests/tela.js (fluxo de revisão de conteúdo).
+ * DOM mínimo), tests/tela.js (fluxo de revisão) e tests/parcial.js (prompt
+ * de correção parcial e a conferência da colagem de volta).
  * ===================================================================== */
 
 const fs = require("fs");
@@ -180,7 +181,9 @@ function main() {
   // testes de interface (DOM mínimo): carregamento do app e fluxo de revisão
   const fumaca = require("./fumaca.js").rodar().falhas;
   const tela = require("./tela.js").testes();
-  const extras = [["carregamento do app", fumaca], ["fluxo de revisão", tela]];
+  const parcial = require("./parcial.js").testes();
+  const extras = [["carregamento do app", fumaca], ["fluxo de revisão", tela],
+                  ["prompt e colagem parcial", parcial]];
   console.log("");
   extras.forEach(([nome, fs2]) => {
     falhasTotal += fs2.length;
