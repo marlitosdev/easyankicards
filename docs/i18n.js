@@ -487,7 +487,9 @@ const UI = {
   "fixpart_check": "Conferência: {ok} trecho(s) ok, {av} aviso(s), {er} erro(s).",
   "tip_fixpart_paste": "Lê a resposta da IA, confere as âncoras e troca apenas os trechos correspondentes",
   "fixpart_grew": "A IA dividiu cartões: {a} → {d}. Isso é esperado quando o aviso era \"cartão muito longo\".",
-  "fixpart_lostcard": "O trecho \"@@ {n}\" voltou com menos cartões ({a} → {d}) — recusado para não perder conteúdo."
+  "fixpart_lostcard": "O trecho \"@@ {n}\" voltou com menos cartões ({a} → {d}) — recusado para não perder conteúdo.",
+  "crit_cloze_rep": "Há cartões com a mesma lacuna ({{c1::...}}) na pergunta e na resposta — o Anki esconde as duas juntas.",
+  "fix_cloze_rep": "Renumerar as lacunas"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -976,7 +978,9 @@ const UI = {
   "fixpart_check": "Check: {ok} excerpt(s) ok, {av} warning(s), {er} error(s).",
   "tip_fixpart_paste": "Reads the AI answer, checks the anchors and replaces only the matching excerpts",
   "fixpart_grew": "The AI split cards: {a} → {d}. That is expected when the warning was \"card too long\".",
-  "fixpart_lostcard": "Excerpt \"@@ {n}\" came back with fewer cards ({a} → {d}) — rejected to avoid losing content."
+  "fixpart_lostcard": "Excerpt \"@@ {n}\" came back with fewer cards ({a} → {d}) — rejected to avoid losing content.",
+  "crit_cloze_rep": "Some cards have the same blank ({{c1::...}}) in question and answer — Anki hides both together.",
+  "fix_cloze_rep": "Renumber the blanks"
  }
 };
 const PARSER_MSG = {

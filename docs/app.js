@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.25.0";
+const VERSAO = "8.26.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -411,6 +411,9 @@ function renderSugestoes(r, raw) {
   if (temTituloGrudado(raw))
     itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
                  fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
+  if (temClozeRepetida(raw))
+    itens.push({ dot: "dot-org", txt: t("crit_cloze_rep"),
+                 fixTxt: t("fix_cloze_rep"), fix: corrigirClozeRepetida });
   if (temTagsNaExplicacao(raw))
     itens.push({ dot: "dot-org", txt: t("crit_tags_in_more"),
                  fixTxt: t("fix_tags_in_more"), fix: corrigirTagsNaExplicacao });
@@ -421,12 +424,13 @@ function renderSugestoes(r, raw) {
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
   // com problema — evita o usuário clicar e não encontrar nada
-  correcaoPendente = temTagsNaExplicacao(raw) ? corrigirTagsNaExplicacao
+  correcaoPendente = temClozeRepetida(raw) ? corrigirClozeRepetida
+    : (temTagsNaExplicacao(raw) ? corrigirTagsNaExplicacao
     : (temTituloGrudado(raw) ? corrigirTituloGrudado
     : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
     : (temMarcadores(raw) ? removerMarcadoresTexto
-    : (temMarkdown(raw) ? corrigirMarkdown : null)))));
+    : (temMarkdown(raw) ? corrigirMarkdown : null))))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -1368,7 +1372,8 @@ function analisarColarRev() {
     itens.push(item);
   });
   let correcao = null, critTxt = t("crit_bullets");
-  if (temTagsNaExplicacao(raw)) { correcao = corrigirTagsNaExplicacao; critTxt = t("crit_tags_in_more"); }
+  if (temClozeRepetida(raw)) { correcao = corrigirClozeRepetida; critTxt = t("crit_cloze_rep"); }
+  else if (temTagsNaExplicacao(raw)) { correcao = corrigirTagsNaExplicacao; critTxt = t("crit_tags_in_more"); }
   else if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
   else if (temOrfaosExplicacao(raw)) { correcao = corrigirOrfaosExplicacao; critTxt = t("crit_orphans"); }
   else if (temLacunaOpcoesLongas(raw)) { correcao = corrigirLacunaOpcoesLongas; critTxt = t("crit_lacuna_ops"); }

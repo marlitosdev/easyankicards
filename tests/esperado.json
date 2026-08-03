@@ -88,7 +88,9 @@
     "saibaMais": 0,
     "titulos": 0,
     "tags": 1,
-    "detectores": []
+    "detectores": [
+      "cloze_repetida"
+    ]
   },
   "10-markdown-da-ia.txt": {
     "cartoes": 1,
@@ -119,6 +121,17 @@
     "tags": 4,
     "detectores": [
       "tags_na_explicacao"
+    ]
+  },
+  "13-lacuna-repetida-pergunta-resposta.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 1,
+    "saibaMais": 1,
+    "titulos": 2,
+    "tags": 5,
+    "detectores": [
+      "cloze_repetida"
     ]
   }
 }
