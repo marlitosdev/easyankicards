@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.30.0) · by MarlitosDev
+# EasyAnkiCards (v8.31.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -45,6 +45,7 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - Criação guiada por modelos (P&R, definição, lacuna, lei seca, jurisprudência, múltipla escolha) com **pré-visualização em tempo real**, correta marcada por rádio ⦿ e embaralhar.
 
 **Conferência e edição**
+- Bloco muito longo (acima de 600 caracteres) é **cortado na prévia**, com véu no rodapé e botão "Mostrar tudo" — um cartão importado com um artigo inteiro deixa de ocupar a área toda. O corte é só visual: texto e `.apkg` seguem completos.
 - Prévia sempre no estilo **"Como no Anki"**, com **múltiplas colunas** (opcional, telas largas), altura ajustável e botão "Ver/Ocultar resposta" por cartão.
 - Título do cartão editável direto no cabeçalho da prévia (edição **cirúrgica**: mexe só naquele cartão, grava `@` acima e rola/destaca a linha alterada). Selo em cada cartão indicando se usa **título próprio**, o **título geral** ou nenhum.
 - Edição inline em **campos coloridos** por tipo (frente, verso, saiba mais, título, tags), que crescem com o texto, com os secundários recolhíveis; **conversão de tipo** (básico ↔ cloze ↔ múltipla escolha) com confirmação.

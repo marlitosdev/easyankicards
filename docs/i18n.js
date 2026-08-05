@@ -508,7 +508,9 @@ const UI = {
   "fix_prompt_leak": "Remover texto do prompt",
   "crit_mais_rep": "Há linhas \"+\" repetidas dentro do mesmo cartão.",
   "fix_mais_rep": "Remover repetidas",
-  "fixpart_eco": "O trecho \"@@ {n}\" trazia a instrução do prompt junto — ela foi descartada."
+  "fixpart_eco": "O trecho \"@@ {n}\" trazia a instrução do prompt junto — ela foi descartada.",
+  "show_all": "▾ Mostrar tudo ({n} caracteres)",
+  "show_less": "▴ Mostrar menos"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1018,7 +1020,9 @@ const UI = {
   "fix_prompt_leak": "Remove prompt text",
   "crit_mais_rep": "Some \"+\" lines are repeated inside the same card.",
   "fix_mais_rep": "Remove duplicates",
-  "fixpart_eco": "Excerpt \"@@ {n}\" echoed the prompt instruction — it was discarded."
+  "fixpart_eco": "Excerpt \"@@ {n}\" echoed the prompt instruction — it was discarded.",
+  "show_all": "▾ Show all ({n} characters)",
+  "show_less": "▴ Show less"
  }
 };
 const PARSER_MSG = {

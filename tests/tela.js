@@ -76,6 +76,17 @@ function testes() {
      "T11c sem histórico, o link de limpar devia sumir");
   api.sairRevisao();
 
+  // cartão gigante (artigo inteiro importado) não pode ocupar a prévia toda
+  {
+    const artigo = "Artigo 145: " + "texto muito longo. ".repeat(120);
+    api.$("editor").value = "Pergunta curta? :: " + artigo + " :: tag_l";
+    api.preview();
+    const cartao = api.$("cartoes").children[0];
+    const achaBotao = (n) => (n.children || []).some((f) =>
+      f.className === "ver-tudo" || achaBotao(f));
+    ok(achaBotao(cartao), "T11d bloco longo não ganhou o botão 'mostrar tudo'");
+  }
+
   // --- prompt de correção: a conferência acontece DENTRO da janela ---
   // (antes havia uma confirmação por cima, invisível atrás do diálogo)
   api.$("editor").value = [
