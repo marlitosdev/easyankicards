@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.31.0) · by MarlitosDev
+# EasyAnkiCards (v8.31.1) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -113,7 +113,9 @@ São dois tipos de teste. As **invariantes** valem para qualquer texto e pegam o
 | I4 | corrigir 2x = corrigir 1x (idempotência) | v8.19 |
 | I5 | ida e volta (texto → cartões → texto) não muda nada | — |
 
-Rodam junto dois testes de interface, num DOM mínimo escrito à mão (sem dependência): `fumaca.js` verifica que o app carrega sem erro, e `tela.js` exercita o fluxo de revisão de conteúdo.
+`estrutura.js` confere que as tags do HTML fecham na ordem certa e que cada elemento continua dentro do painel a que pertence — uma tag sobrando não quebra nada visivelmente, o navegador "conserta" e o resultado é um pedaço da tela na coluna errada.
+
+Rodam junto três testes de interface, num DOM mínimo escrito à mão (sem dependência): `fumaca.js` verifica que o app carrega sem erro, e `tela.js` exercita o fluxo de revisão de conteúdo.
 
 O **esperado.json** congela os números de cada caso conhecido e pega a regressão: o bug que já foi corrigido uma vez e voltou. As duas primeiras regras também rodam dentro do app, na rede de segurança que cancela qualquer correção que fosse perder conteúdo.
 
