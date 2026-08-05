@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.31.1";
+const VERSAO = "8.32.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3383,11 +3383,19 @@ $("btnFixPromptColar").onclick = async () => {
     t("fixpart_check", { ok: aplicar.length, av: avisos.length, er: erros.length });
   $("fixPromptDone").style.color = erros.length ? "var(--laranja)" : "var(--verde)";
   reg("COLAR", "resposta da IA (parcial)",
-    aplicar.length + " ok, " + avisos.length + " avisos, " + erros.length + " erros");
+    aplicar.length + " ok, " + avisos.length + " avisos, " + erros.length + " erros"
+    + (aplicar.length ? ", cobertura "
+       + Math.round(aplicar.reduce((s, x) => s + (x.cobertura ?? 100), 0) / aplicar.length)
+       + "%" : ""));
   if (!aplicar.length) {
     mostrarConferencia(linhas.concat([t("fixpart_nothing")]), "var(--laranja)");
     return;
   }
+  // cobertura do conjunto: quanto do texto original sobreviveu
+  const cobs = aplicar.map((x) => x.cobertura).filter((x) => x !== undefined);
+  const cobMedia = cobs.length
+    ? Math.round(cobs.reduce((s, x) => s + x, 0) / cobs.length) : 100;
+  linhas.push(t("cobertura_ok", { p: cobMedia }));
   const novoTexto = aplicarCorrecaoParcial(el.value, aplicar);
   const a0 = resumoTexto(el.value), a1 = resumoTexto(novoTexto);
   if (a1.cartoesReais > a0.cartoesReais)
