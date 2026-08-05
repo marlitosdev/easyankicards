@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.32.0";
+const VERSAO = "8.34.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -78,6 +78,10 @@ window.addEventListener("error", (e) => {
 window.addEventListener("unhandledrejection", (e) => {
   reg("ERRO", "promessa rejeitada: " + ((e.reason && e.reason.message) || e.reason));
 });
+
+// a abertura entra ANTES de qualquer análise, senão o registro começa
+// pelo meio da história
+reg("INICIO", "aplicativo aberto", "v" + VERSAO);
 
 function registroTexto() {
   if (!registro.length) return t("log_empty");
@@ -304,11 +308,21 @@ function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/* Pinta a ESTRUTURA, não o conteúdo. Antes a lacuna inteira levava fundo
+ * azul — e como a lacuna costuma ser a maior parte da linha, metade do
+ * editor ficava manchada, sem dizer nada. Agora só os marcadores
+ * ("{{c1::" e "}}") têm fundo; o texto da lacuna leva um sublinhado fino,
+ * que mostra a extensão sem competir com a leitura. */
 function destacarTrecho(texto) {
-  // separa lacunas cloze do resto para colorir sem conflito com '::'
   const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
   return partes.map((p) => {
-    if (/^\{\{c\d+::/.test(p)) return '<span class="hl-cloze">' + escHtml(p) + "</span>";
+    if (/^\{\{c\d+::/.test(p)) {
+      const m = p.match(/^(\{\{c\d+::)([\s\S]*?)(\}\})$/);
+      if (!m) return '<span class="hl-cloze">' + escHtml(p) + "</span>";
+      return '<span class="hl-cz-marca">' + escHtml(m[1]) + "</span>"
+        + '<span class="hl-cz-txt">' + escHtml(m[2]) + "</span>"
+        + '<span class="hl-cz-marca">' + escHtml(m[3]) + "</span>";
+    }
     return escHtml(p).replace(/::/g, '<span class="hl-delim">::</span>');
   }).join("");
 }
@@ -2913,6 +2927,8 @@ $("btnCopiarTudo").onclick = async () => {
  * seleção/cópia fica perfeitamente visível em qualquer navegador. */
 function aplicarDestaque(ligado) {
   document.querySelector(".editor-wrap").classList.toggle("sem-destaque", !ligado);
+  const leg = $("hlLegenda");
+  if (leg) leg.style.display = ligado ? "" : "none";
   localStorage.setItem("eac_destaque", ligado ? "1" : "0");
   if (ligado) renderDestaque();
 }
@@ -3341,8 +3357,10 @@ $("btnFixPromptCopiar").onclick = async () => {
  * havia uma confirmação por cima, que ficava escondida atrás desta janela.
  * Nada é alterado enquanto o usuário não clicar em Aplicar. */
 let fixPendente = null;   // { aplicar, novo, a0, a1 } aguardando o Aplicar
+let fixFaltando = [];     // termos do original que não voltaram na resposta
 
 function limparConferencia() {
+  fixFaltando = [];
   $("fixPromptConf").innerHTML = "";
   $("btnFixPromptAplicar").style.display = "none";
   fixPendente = null;
@@ -3396,12 +3414,33 @@ $("btnFixPromptColar").onclick = async () => {
   const cobMedia = cobs.length
     ? Math.round(cobs.reduce((s, x) => s + x, 0) / cobs.length) : 100;
   linhas.push(t("cobertura_ok", { p: cobMedia }));
+  // guarda os termos ausentes para o link "ver o que sumiu": mesmo com
+  // cobertura boa, o usuário é quem sabe se o termo que faltou importava
+  fixFaltando = [...new Set(aplicar.flatMap((x) => x.faltando || []))];
   const novoTexto = aplicarCorrecaoParcial(el.value, aplicar);
   const a0 = resumoTexto(el.value), a1 = resumoTexto(novoTexto);
   if (a1.cartoesReais > a0.cartoesReais)
     linhas.push(t("fixpart_grew", { a: a0.cartoesReais, d: a1.cartoesReais }));
   linhas.push(t("fixpart_confirm", { n: aplicar.length, a: a0.cartoesReais, d: a1.cartoesReais }));
   mostrarConferencia(linhas, erros.length ? "var(--laranja)" : "var(--texto)");
+  if (fixFaltando.length) {
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "ver-tudo";
+    link.style.textAlign = "left";
+    link.textContent = t("ver_sumiram", { n: fixFaltando.length });
+    const lista = document.createElement("div");
+    lista.style.cssText = "display:none;font-size:11.5px;color:var(--sutil);"
+      + "margin:2px 0 4px;line-height:1.6";
+    lista.textContent = fixFaltando.join(", ");
+    link.onclick = () => {
+      const aberto = lista.style.display !== "none";
+      lista.style.display = aberto ? "none" : "";
+      link.textContent = t(aberto ? "ver_sumiram" : "ocultar_sumiram",
+        { n: fixFaltando.length });
+    };
+    $("fixPromptConf").append(link, lista);
+  }
   fixPendente = { aplicar, novo: novoTexto, a0, a1, trechos: aplicar.length };
   $("btnFixPromptAplicar").style.display = "";
 };
@@ -3524,4 +3563,3 @@ $("btnRegistro").onclick = async () => {
   }
 };
 attachTip($("btnRegistro"), "tip_log");
-reg("INICIO", "aplicativo aberto", "v" + VERSAO);

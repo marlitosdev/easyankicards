@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.32.0) · by MarlitosDev
+# EasyAnkiCards (v8.34.1) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -32,15 +32,15 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - Cole o resultado do prompt de IA ou digite. Botões **Selecionar tudo**, **Copiar tudo**, **Apagar tudo**, **Colar mais texto** (anexa ao final, rola e destaca a primeira linha nova) e **Desfazer última colagem**.
 - **Auto-save**: o texto é salvo automaticamente no navegador e recuperado ao reabrir — recarregar/fechar não perde nada.
 - **Numeração de linhas** ao lado do editor, com os números das linhas problemáticas em vermelho/laranja.
-- **Destaque de sintaxe** (grifos em `::`, lacunas e `[MC]`) com o texto real editável por cima — seleção do mouse sempre alinhada; interruptor para desligar.
+- **Destaque de sintaxe** com **legenda** embaixo do editor. Pinta a estrutura, não o conteúdo: só os marcadores da lacuna (`{{c1::` e `}}`) levam fundo, e o texto dentro leva um sublinhado fino — antes a lacuna inteira ficava colorida e metade da tela virava mancha. Grifos em `::`, lacunas e `[MC]` com o texto real editável por cima — seleção do mouse sempre alinhada; interruptor para desligar.
 - Tolerante a texto colado de PDF/Word/IA: recupera quebras de linha no meio do cartão, une pares `Pergunta?` / `Resposta` sem `::`, aceita `@` e `+`/`*` antes ou depois do cartão e separa títulos grudados.
 - **Análise automática** enquanto digita, com **"Ver no texto"** (foca a linha do problema) e o botão **"Corrigir erros"**, que só acende quando há algo a corrigir e abre revisão com antes/depois.
 - **"Prompt de correção"**, em duas formas: **só os trechos com erro** (padrão) ou o **texto inteiro**. No modo parcial, cada trecho vai marcado com uma âncora `@@ N` e leva junto o cartão dono e o título — a IA devolve os mesmos trechos com as mesmas âncoras e o botão **"Colar correção da IA"** troca só aqueles blocos, sem encostar no resto do baralho.
 - **Eco do prompt**: se a IA devolver junto a própria instrução ("Responda SOMENTE com..."), ela é reconhecida e descartada antes de virar cartão — e o app detecta e remove esse texto se ele já estiver no baralho.
-- **Cobertura de conteúdo**: ao colar, o app compara os termos do trecho original com os do trecho devolvido e avisa quando a IA "melhorou" resumindo ("voltou com apenas 41% do conteúdo original. Sumiram: …"). Contagem de cartões não pega isso.
+- **Cobertura de conteúdo**: ao colar, o app compara os termos do trecho original com os do trecho devolvido e avisa quando a IA "melhorou" resumindo ("voltou com apenas 41% do conteúdo original. Sumiram: …"). Contagem de cartões não pega isso. Um link mostra quais termos não voltaram, mesmo quando a cobertura está boa — quem sabe se o termo importava é você.
 - O aviso de cartão longo **escala com o tamanho**: um cartão de 2.000 caracteres pede ~10 cartões, não dois de 1.000.
 - A colagem é **conferida antes de aplicar**: âncora ausente, âncora inventada, trecho vazio, trecho que não forma cartão e trecho que voltou com menos cartões são recusados um a um, com aviso. Dividir um cartão longo em dois é permitido (era o pedido) e a confirmação mostra o saldo antes/depois.
-- No rodapé, discretos, dois recursos para relatar problemas: **"Diagnóstico"** (versão, ambiente, o que a última correção fez, o texto da tela) e **"Registro"** (as últimas 200 ações e todos os erros de JavaScript, com hora). Ficam só no navegador do usuário; nada é enviado a lugar nenhum.
+- No rodapé, discretos, dois recursos para relatar problemas: **"Diagnóstico"** (versão, ambiente, o que a última correção fez, o texto da tela) e **"Registro"** (as últimas 200 ações, os erros de JavaScript). Ficam só no navegador do usuário; nada é enviado a lugar nenhum.
 
 **Tipos de cartão**
 - Básico, **Cloze** (`{{c1::resposta}}`, com marcação de lacuna por seleção), **múltipla escolha em lista** (`[MC]`) e **múltipla escolha na frase** (`{{c1::correta::opção / opção}}`, opções curtas).
