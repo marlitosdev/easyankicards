@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.30.0";
+const VERSAO = "8.31.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -849,6 +849,42 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
   });
 }
 
+/* ===================================================================
+ * BLOCO LONGO NA PRÉVIA  (v8.31)
+ * Um cartão importado pode trazer um artigo inteiro na frente (2.000
+ * caracteres não é raro em baralho vindo de PDF). Sem limite, ele sozinho
+ * ocupa toda a área de prévia e esconde os outros cartões. Aqui o bloco
+ * ganha altura máxima e um botão "mostrar tudo" — o conteúdo continua
+ * inteiro no texto e no .apkg; o corte é só visual.
+ * =================================================================== */
+const PREV_MAX_PX = 170;
+const PREV_LIMITE = 600;      // a partir daqui vale a pena cortar
+
+function limitarAltura(el, texto, fundo) {
+  if ((texto || "").length <= PREV_LIMITE) return null;
+  el.style.maxHeight = PREV_MAX_PX + "px";
+  el.style.overflow = "hidden";
+  el.style.position = "relative";
+  // véu no rodapé do bloco, deixando claro que há mais texto embaixo
+  const veu = document.createElement("div");
+  veu.style.cssText = "position:absolute;left:0;right:0;bottom:0;height:34px;"
+    + "pointer-events:none;background:linear-gradient(to bottom,transparent," + fundo + ")";
+  el.append(veu);
+  const bt = document.createElement("button");
+  bt.type = "button";
+  bt.className = "ver-tudo";
+  bt.textContent = t("show_all", { n: (texto || "").length.toLocaleString() });
+  bt.onclick = (e) => {
+    e.stopPropagation();
+    const aberto = el.style.maxHeight === "none";
+    el.style.maxHeight = aberto ? PREV_MAX_PX + "px" : "none";
+    veu.style.display = aberto ? "" : "none";
+    bt.textContent = t(aberto ? "show_all" : "show_less",
+      { n: (texto || "").length.toLocaleString() });
+  };
+  return bt;
+}
+
 function renderCartaoEstilizado(div, c, mostrarResposta) {
   const p = PALETAS[localStorage.getItem("eac_style") || "esquema"] || PALETAS.esquema;
   // a prévia tem de mostrar o MESMO alinhamento que vai para o .apkg
@@ -902,6 +938,8 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     });
   }
   wrap.append(frente);
+  const btF = limitarAltura(frente, c.front, p.caixa);
+  if (btF) wrap.append(btF);
 
   if (!mostrarResposta) return;   // verso só quando o usuário pedir
   const temVerso = c.kind === "mc" || (!CLOZE_RE.test(c.front) && c.back);
@@ -918,7 +956,11 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
   else if (CLOZE_RE.test(c.front)) verso.textContent = "";
   else verso.textContent = c.back;
-  if (temVerso) wrap.append(verso);
+  if (temVerso) {
+    wrap.append(verso);
+    const btV = limitarAltura(verso, c.back, p.caixa);
+    if (btV) wrap.append(btV);
+  }
   if (c.more) {
     const sm = document.createElement("div");
     sm.style.cssText = "background:" + (p.sub || p.caixa) + ";color:" + p.destaque +
@@ -947,6 +989,8 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
       cont.append(it);
     });
     wrap.append(sm, cont);
+    const btM = limitarAltura(cont, (c.more || "").replace(/<br>/g, " "), p.caixa);
+    if (btM) wrap.append(btM);
   }
   if ((c.kind === "mc" || CLOZE_RE.test(c.front)) && c.back) {
     const just = document.createElement("div");
@@ -955,6 +999,8 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
       "border-radius:0 0 11px 11px;" + sombra;
     just.textContent = c.back;
     wrap.append(just);
+    const btJ = limitarAltura(just, c.back, p.caixa);
+    if (btJ) wrap.append(btJ);
   }
   div.append(wrap);
 }
