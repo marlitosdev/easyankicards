@@ -908,7 +908,8 @@ function conferirCorrecaoParcial(resposta, blocos) {
       avisos.push(t("fixpart_perdeu", { n: id, p: cob.pct,
         termos: cob.faltando.slice(0, 6).join(", ") }));
     }
-    aplicar.push({ ...b, novo: txt, cartoes: r.cards.length, cobertura: cob.pct });
+    aplicar.push({ ...b, novo: txt, cartoes: r.cards.length,
+                   cobertura: cob.pct, faltando: cob.faltando });
   });
   blocos.filter((b) => !recebidos.has(b.id))
     .forEach((b) => avisos.push(t("fixpart_missing", { n: b.id })));

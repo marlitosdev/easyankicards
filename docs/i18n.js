@@ -512,7 +512,14 @@ const UI = {
   "show_all": "▾ Mostrar tudo ({n} caracteres)",
   "show_less": "▴ Mostrar menos",
   "fixpart_perdeu": "ATENÇÃO — o trecho \"@@ {n}\" voltou com apenas {p}% do conteúdo original. Sumiram: {termos}…",
-  "cobertura_ok": "Conteúdo preservado: {p}% dos termos do original."
+  "cobertura_ok": "Conteúdo preservado: {p}% dos termos do original.",
+  "ver_sumiram": "▾ Ver os {n} termos do original que não voltaram",
+  "ocultar_sumiram": "▴ Ocultar os termos",
+  "leg_delim": "separa os campos (::)",
+  "leg_cloze": "lacuna {{c1::…}}",
+  "leg_mc": "múltipla escolha",
+  "leg_err": "linha ignorada",
+  "leg_warn": "cartão a verificar"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1026,7 +1033,14 @@ const UI = {
   "show_all": "▾ Show all ({n} characters)",
   "show_less": "▴ Show less",
   "fixpart_perdeu": "WARNING — excerpt \"@@ {n}\" came back with only {p}% of the original content. Missing: {termos}…",
-  "cobertura_ok": "Content preserved: {p}% of the original terms."
+  "cobertura_ok": "Content preserved: {p}% of the original terms.",
+  "ver_sumiram": "▾ Show the {n} original terms that did not come back",
+  "ocultar_sumiram": "▴ Hide the terms",
+  "leg_delim": "field separator (::)",
+  "leg_cloze": "blank {{c1::…}}",
+  "leg_mc": "multiple choice",
+  "leg_err": "ignored line",
+  "leg_warn": "card to check"
  }
 };
 const PARSER_MSG = {

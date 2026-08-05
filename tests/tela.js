@@ -87,6 +87,18 @@ function testes() {
     ok(achaBotao(cartao), "T11d bloco longo não ganhou o botão 'mostrar tudo'");
   }
 
+  // destaque: pinta a ESTRUTURA (marcadores), não o conteúdo da lacuna
+  {
+    api.$("editor").value = "P? :: {{c1::resposta longa da lacuna}} :: tag";
+    api.preview();
+    const hl = api.$("editorHl").innerHTML;
+    const conta = (c) => (hl.match(new RegExp("hl-" + c, "g")) || []).length;
+    ok(conta("cz-marca") === 2, "T11e devia pintar os 2 marcadores da lacuna");
+    ok(conta("cz-txt") === 1, "T11f o conteúdo da lacuna devia levar sublinhado");
+    ok(conta("cloze") === 0, "T11g voltou a pintar a lacuna inteira de fundo");
+    ok(conta("delim") === 2, "T11h os separadores :: não foram destacados");
+  }
+
   // --- prompt de correção: a conferência acontece DENTRO da janela ---
   // (antes havia uma confirmação por cima, invisível atrás do diálogo)
   api.$("editor").value = [
@@ -124,6 +136,8 @@ function testes() {
     ok(/\[PROMPT\]/.test(log), "T24 o registro não anotou o prompt de correção");
     ok(/\[COLAR\]/.test(log), "T25 o registro não anotou a colagem");
     ok(/\[APLICAR\]/.test(log), "T26 o registro não anotou a aplicação");
+    ok(log.startsWith(log.match(/^\S+ \S+  \[INICIO\]/m) ? log.split("\n")[0] : ""),
+       "T27 a abertura devia ser o primeiro evento do registro");
     return falhas;
   });
 }
@@ -135,7 +149,7 @@ if (require.main === module) {
     falhas.forEach((f) => console.log("  FALHA  " + f));
     console.log(falhas.length
       ? `\ntela: ${falhas.length} FALHA(S)\n`
-      : "\ntela: revisão, prompt de correção e registro ok (26 verificações)\n");
+      : "\ntela: revisão, prompt de correção e registro ok (27 verificações)\n");
     process.exit(falhas.length ? 1 : 0);
   });
 }
