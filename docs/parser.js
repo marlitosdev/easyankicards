@@ -616,7 +616,12 @@ function problemasDoTexto(raw, r) {
   // pela IA (cartão longo demais, frente repetida)
   const vistos = {};
   r.cards.forEach((c) => {
-    if ((c.front + c.back).length > 220) add(c.line, t("crit_long_msg"));
+    const tam = (c.front + c.back).length;
+    if (tam > 220) {
+      // um cartão de 2.000 caracteres não vira dois de 1.000: vira uma dezena.
+      // A sugestão acompanha o tamanho, senão a IA divide ao meio e para.
+      add(c.line, t("crit_long_msg", { n: Math.max(2, Math.round(tam / 200)), t: tam }));
+    }
     const k = c.front.toLowerCase().trim();
     if (vistos[k]) add(c.line, t("crit_dup_msg", { a: vistos[k] }));
     else vistos[k] = c.line;
@@ -897,7 +902,13 @@ function conferirCorrecaoParcial(resposta, blocos) {
         { n: id, a: b.cartoesOriginais, d: r.cards.length }));
       return;
     }
-    aplicar.push({ ...b, novo: txt, cartoes: r.cards.length });
+    // o teste que faltava: o texto sobreviveu, ou a IA "melhorou" resumindo?
+    const cob = coberturaConteudo(b.texto, txt);
+    if (cob.pct < COBERTURA_MIN) {
+      avisos.push(t("fixpart_perdeu", { n: id, p: cob.pct,
+        termos: cob.faltando.slice(0, 6).join(", ") }));
+    }
+    aplicar.push({ ...b, novo: txt, cartoes: r.cards.length, cobertura: cob.pct });
   });
   blocos.filter((b) => !recebidos.has(b.id))
     .forEach((b) => avisos.push(t("fixpart_missing", { n: b.id })));
@@ -1047,3 +1058,44 @@ function _varrerMaisRepetido(raw, aplicar) {
 function temMaisRepetido(raw) { return _varrerMaisRepetido(raw, false); }
 function corrigirMaisRepetido(raw) { return _varrerMaisRepetido(raw, true); }
 corrigirMaisRepetido.limpeza = true;
+
+/* ===================================================================
+ * COBERTURA DE CONTEÚDO  (v8.32)
+ * A conferência da colagem checava quantidade de cartões, de tags e de
+ * linhas de explicação — nunca se o TEXTO sobreviveu. Uma IA que
+ * "melhora" resumindo passava por todas as travas: 5 cartões no lugar
+ * de 2, e metade do conteúdo pelo caminho.
+ * Aqui comparamos os termos de conteúdo (palavras longas, números,
+ * siglas) do trecho original com os do trecho devolvido.
+ * =================================================================== */
+const PARADAS = new Set(("para como este esta esse essa pelo pela pelos pelas "
+  + "dos das uma umas uns com sem sobre quando onde mais menos também entre "
+  + "cada todos todas toda todo pode podem deve devem ser são sendo seja "
+  + "que qual quais isso isto aquilo muito pouco assim ainda depois antes "
+  + "the that this with from which when where they their have been will "
+  + "shall must into over under about")
+  .split(" ").filter(Boolean));
+
+function termosDeConteudo(txt) {
+  const s = String(txt || "").toLowerCase()
+    .replace(/\{\{c\d+::/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[{}]/g, " ");
+  const brutos = s.match(/[\p{L}\p{N}_]{4,}/gu) || [];
+  return new Set(brutos.filter((w) => !PARADAS.has(w)));
+}
+
+/* Quanto do conteúdo original sobreviveu, em % de termos distintos. */
+function coberturaConteudo(original, novo) {
+  const a = termosDeConteudo(original);
+  if (!a.size) return { pct: 100, faltando: [] };
+  const b = termosDeConteudo(novo);
+  const faltando = [...a].filter((w) => !b.has(w));
+  return {
+    pct: Math.round((100 * (a.size - faltando.length)) / a.size),
+    faltando,
+    total: a.size,
+  };
+}
+
+const COBERTURA_MIN = 70;   // abaixo disto, avisa: a IA resumiu demais

@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.31.1) · by MarlitosDev
+# EasyAnkiCards (v8.32.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -37,6 +37,8 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - **Análise automática** enquanto digita, com **"Ver no texto"** (foca a linha do problema) e o botão **"Corrigir erros"**, que só acende quando há algo a corrigir e abre revisão com antes/depois.
 - **"Prompt de correção"**, em duas formas: **só os trechos com erro** (padrão) ou o **texto inteiro**. No modo parcial, cada trecho vai marcado com uma âncora `@@ N` e leva junto o cartão dono e o título — a IA devolve os mesmos trechos com as mesmas âncoras e o botão **"Colar correção da IA"** troca só aqueles blocos, sem encostar no resto do baralho.
 - **Eco do prompt**: se a IA devolver junto a própria instrução ("Responda SOMENTE com..."), ela é reconhecida e descartada antes de virar cartão — e o app detecta e remove esse texto se ele já estiver no baralho.
+- **Cobertura de conteúdo**: ao colar, o app compara os termos do trecho original com os do trecho devolvido e avisa quando a IA "melhorou" resumindo ("voltou com apenas 41% do conteúdo original. Sumiram: …"). Contagem de cartões não pega isso.
+- O aviso de cartão longo **escala com o tamanho**: um cartão de 2.000 caracteres pede ~10 cartões, não dois de 1.000.
 - A colagem é **conferida antes de aplicar**: âncora ausente, âncora inventada, trecho vazio, trecho que não forma cartão e trecho que voltou com menos cartões são recusados um a um, com aviso. Dividir um cartão longo em dois é permitido (era o pedido) e a confirmação mostra o saldo antes/depois.
 - No rodapé, discretos, dois recursos para relatar problemas: **"Diagnóstico"** (versão, ambiente, o que a última correção fez, o texto da tela) e **"Registro"** (as últimas 200 ações e todos os erros de JavaScript, com hora). Ficam só no navegador do usuário; nada é enviado a lugar nenhum.
 

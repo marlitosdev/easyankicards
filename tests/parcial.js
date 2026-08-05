@@ -107,7 +107,11 @@ function testes() {
       Array.from({ length: b0.cartoesOriginais }, (_, i) => cartaoFake(b0.id, i + 1)).join("\n\n")]]);
     const c = api.conferirCorrecaoParcial(meio, blocos);
     ok(c.aplicar.length === 1, "P18 devia aplicar só o bloco que voltou");
-    ok(c.avisos.length === blocos.length - 1, "P19 faltou avisar dos blocos que não voltaram");
+    // conta só os avisos de "não voltou" — outros avisos (cobertura, eco)
+    // podem aparecer junto e não devem quebrar esta verificação
+    const naoVoltaram = c.avisos.filter((x) => /não voltou|did not come back/i.test(x));
+    ok(naoVoltaram.length === blocos.length - 1,
+       `P19 esperava ${blocos.length - 1} avisos de bloco ausente, veio ${naoVoltaram.length}`);
     const novo = api.aplicarCorrecaoParcial(TEXTO, c.aplicar);
     ok(novo.includes("**importante**"), "P20 mexeu num bloco que a IA não devolveu");
   }
@@ -135,6 +139,21 @@ function testes() {
     const esperados = blocos.reduce((n, b) => n + b.cartoesOriginais, 0);
     ok(linhas.filter((l) => l.startsWith("@ Bloco corrigido")).length === esperados,
        "P24 algum bloco corrigido se perdeu ou duplicou");
+  }
+
+  // P35. a IA "melhorou" resumindo: mesmos cartões, metade do conteúdo.
+  //      Passava por todas as travas antigas (contagem de cartões, tags,
+  //      Saiba mais) — só a cobertura de termos pega (v8.32).
+  {
+    const resumido = resp(blocos.map((b) => [b.id,
+      Array.from({ length: b.cartoesOriginais },
+        (_, i) => "@ Curto\nE aí? :: Sim :: tag_x").join("\n\n")]));
+    const c = api.conferirCorrecaoParcial(resumido, blocos);
+    ok(c.avisos.some((x) => /% do conteúdo original/i.test(x)),
+       "P35 não avisou que a IA resumiu e perdeu conteúdo");
+    ok(c.aplicar.every((x) => typeof x.cobertura === "number"),
+       "P36 a cobertura não foi calculada por trecho");
+    ok(c.aplicar.some((x) => x.cobertura < 70), "P37 a cobertura ficou alta demais");
   }
 
   // P31. a IA ecoou a instrução final do prompt junto com a resposta.
