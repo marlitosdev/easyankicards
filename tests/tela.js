@@ -99,6 +99,72 @@ function testes() {
     ok(conta("delim") === 2, "T11h os separadores :: não foram destacados");
   }
 
+  // uma operação de correção = UM evento no registro. A janela de revisão
+  // chamava a correção só para montar a prévia, e isso deixava rastro —
+  // parecia que o botão rodava duas vezes (v8.35).
+  {
+    api.$("editor").value = "@ Tema\nPergunta bem formada e clara? :: Resposta :: tag_a\nlinha solta que vira explicacao";
+    api.preview();
+    const conta = () => (api.registroTexto().match(/CORRIGIR/g) || []).length;
+    const antes = conta();
+    api.$("btnNormalizar").onclick();
+    ok(conta() === antes, "T11i abrir a janela de revisão não pode registrar correção");
+    api.$("btnNormAplicar").onclick();
+    ok(conta() === antes + 1, "T11j aplicar devia registrar exatamente um evento");
+  }
+
+  // recortar e excluir cartão direto na prévia (v8.36)
+  {
+    api.$("editor").value = [
+      "@ Tributário — Taxas",
+      "Qual é o fato gerador das taxas? :: O exercício do poder de polícia :: tributario",
+      "+ Base — art. 77 do CTN.",
+      "",
+      "@ Penal — Documento",
+      "O que se equipara a documento público? :: O testamento particular :: penal",
+      "+ Base — art. 297 do CP.",
+      "",
+      "@ Tributário — Impostos",
+      "Imposto tem destinação específica? :: Não, é tributo não vinculado :: tributario",
+    ].join("\n");
+    api.preview();
+    const cards = () => api.parseAtual().cards;
+    ok(cards().length === 3, `R1 esperava 3 cartões, veio ${cards().length}`);
+
+    const penal = cards().find((c) => /documento público/.test(c.front));
+    api.recortarCartao(penal);
+    ok(cards().length === 2, `R2 o cartão devia sair do texto, sobraram ${cards().length}`);
+    ok(api.recortes.length === 1, "R3 o cartão não foi para a gaveta");
+    // o bloco tem de ir INTEIRO: sem título e explicação ele chega mutilado
+    ok(/@ Penal/.test(api.recortes[0]), "R4 o título não foi junto");
+    ok(/art\. 297/.test(api.recortes[0]), "R5 a explicação não foi junto");
+    ok(!/documento público/.test(api.$("editor").value),
+       "R6 o cartão continuou no texto depois de recortado");
+    ok(/Taxas/.test(api.$("editor").value) && /Impostos/.test(api.$("editor").value),
+       "R7 recortar mexeu nos cartões vizinhos");
+    ok(!api.$("btnDesfazerColagem").disabled, "R8 recortar devia habilitar o desfazer");
+
+    // outro baralho: a gaveta atravessa
+    api.$("editor").value = "@ Penal — Outro\nUma pergunta de penal? :: Uma resposta :: penal";
+    api.preview();
+    api.colarRecortes();
+    ok(cards().length === 2, `R9 devia colar 1 cartão, ficaram ${cards().length}`);
+    ok(api.recortes.length === 0, "R10 a gaveta devia esvaziar após colar");
+    ok(/art\. 297/.test(api.$("editor").value), "R11 o cartão chegou sem a explicação");
+
+    // excluir: confirma e some
+    const antesEx = cards().length;
+    const p = api.excluirCartao(cards()[0]);
+    api._uiFechar(true);
+    return Promise.resolve(p).then(() => {
+      ok(cards().length === antesEx - 1,
+         `R12 excluir devia tirar 1 cartão, ficaram ${cards().length}`);
+      ok(api.recortes.length === 0, "R13 excluir não pode encher a gaveta");
+      return segundaParte();
+    });
+  }
+
+  function segundaParte() {
   // --- prompt de correção: a conferência acontece DENTRO da janela ---
   // (antes havia uma confirmação por cima, invisível atrás do diálogo)
   api.$("editor").value = [
@@ -138,8 +204,11 @@ function testes() {
     ok(/\[APLICAR\]/.test(log), "T26 o registro não anotou a aplicação");
     ok(log.startsWith(log.match(/^\S+ \S+  \[INICIO\]/m) ? log.split("\n")[0] : ""),
        "T27 a abertura devia ser o primeiro evento do registro");
+    ok(/\[RECORTAR\]/.test(log), "T28 o registro não anotou o recorte");
+    ok(/\[EXCLUIR\]/.test(log), "T29 o registro não anotou a exclusão");
     return falhas;
   });
+  }
 }
 
 module.exports = { testes };
@@ -149,7 +218,7 @@ if (require.main === module) {
     falhas.forEach((f) => console.log("  FALHA  " + f));
     console.log(falhas.length
       ? `\ntela: ${falhas.length} FALHA(S)\n`
-      : "\ntela: revisão, prompt de correção e registro ok (27 verificações)\n");
+      : "\ntela: revisão, prompt de correção e recortes ok (44 verificações)\n");
     process.exit(falhas.length ? 1 : 0);
   });
 }

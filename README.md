@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.34.1) · by MarlitosDev
+# EasyAnkiCards (v8.36.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -50,6 +50,7 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - Bloco muito longo (acima de 600 caracteres) é **cortado na prévia**, com véu no rodapé e botão "Mostrar tudo" — um cartão importado com um artigo inteiro deixa de ocupar a área toda. O corte é só visual: texto e `.apkg` seguem completos.
 - Prévia sempre no estilo **"Como no Anki"**, com **múltiplas colunas** (opcional, telas largas), altura ajustável e botão "Ver/Ocultar resposta" por cartão.
 - Título do cartão editável direto no cabeçalho da prévia (edição **cirúrgica**: mexe só naquele cartão, grava `@` acima e rola/destaca a linha alterada). Selo em cada cartão indicando se usa **título próprio**, o **título geral** ou nenhum.
+- **Recortar** e **Excluir** cartão direto na prévia, ao lado de "Editar" e "Ocultar resposta". Recortar tira o cartão do texto e guarda numa **gaveta que fica no navegador** — sobrevive a fechar o app; depois é só abrir o baralho certo e clicar em "Colar aqui". O bloco vai inteiro (título `@` e explicações `+`). Ambos são desfazíveis pelo "Desfazer última colagem".
 - Edição inline em **campos coloridos** por tipo (frente, verso, saiba mais, título, tags), que crescem com o texto, com os secundários recolhíveis; **conversão de tipo** (básico ↔ cloze ↔ múltipla escolha) com confirmação.
 
 **Revisão de conteúdo** (botão "Revisar cartões")

@@ -251,6 +251,13 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   background:none;cursor:pointer;font-size:11px;font-weight:700;
   color:var(--azul);text-decoration:underline;letter-spacing:.2px}
 .ver-tudo:hover{opacity:.75}
+.btn-min{padding:4px 9px;font-size:11px}
+.btn-del{background:#b91c1c}
+.barra-recortes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  background:var(--laranja-claro);border:1px solid var(--laranja-borda);
+  border-radius:9px;padding:7px 10px;margin:0 0 8px;font-size:12px;
+  color:var(--laranja);font-weight:600}
+.barra-recortes #recortesTexto{flex:1;min-width:0}
 .lado-rotulo{font-size:9.5px;letter-spacing:.6px;font-weight:800;opacity:.6;margin:8px 0 2px}
 .chip-tag{font-size:9px;text-transform:uppercase;letter-spacing:.4px;opacity:.75;
   margin-right:4px;font-weight:800}
@@ -606,6 +613,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
           <span data-i18n="two_cols"></span></label>
       </div>
       <div id="resumo">—</div>
+      <!-- gaveta: só aparece quando há cartão recortado esperando destino -->
+      <div class="barra-recortes" id="barraRecortes" style="display:none">
+        <span id="recortesTexto"></span>
+        <button class="btn btn-verde btn-min" id="btnRecortesColar" data-i18n="recortes_colar"></button>
+        <button class="btn btn-cinza btn-min" id="btnRecortesVer" data-i18n="recortes_ver"></button>
+      </div>
       <div id="cartoes"></div>
     </div>
   </div>
@@ -766,6 +779,20 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
     <button class="btn btn-verde" id="btnColarRevFinalizar" data-i18n="pastepanel_finish"></button>
     <button class="btn btn-roxo" id="btnColarRevPrompt" data-i18n="fixprompt_btn"></button>
     <button class="btn btn-cinza" id="btnColarRevFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgRecortes" style="max-width:640px;width:94%">
+  <div style="padding:16px">
+    <h3 style="margin:0 0 6px" data-i18n="recortes_titulo"></h3>
+    <div class="nota" data-i18n="recortes_nota" style="margin-bottom:8px"></div>
+    <textarea id="recortesTexto2" readonly spellcheck="false"
+      style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
+             font-size:12px;line-height:1.4"></textarea>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnRecortesDescartar" data-i18n="recortes_descartar"></button>
+    <button class="btn btn-cinza" id="btnRecortesFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

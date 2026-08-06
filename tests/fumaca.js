@@ -123,12 +123,14 @@ function rodar() {
   // devolve o que os testes funcionais precisam manipular. Os "let" do app
   // viram getters/setters para o teste ver o estado ao vivo.
   const exportar = `return {
-    $, preview, entrarRevisao, sairRevisao, chaveRev, chave, parseAtual,
+    $, preview, entrarRevisao, sairRevisao, chaveRev, chave,
     get revisados() { return revisados; },
     get ocultos() { return ocultosRevisao; },
     get modoRevisao() { return modoRevisao; },
     abrirPromptCorrecao, montarFixPrompt, limparConferencia, registroTexto, reg,
-    atualizarContagemRevisao,
+    atualizarContagemRevisao, recortarCartao, excluirCartao, colarRecortes,
+    _uiFechar, parseAtual,
+    get recortes() { return recortes; },
     get fixPendente() { return fixPendente; },
     get fixBlocos() { return fixBlocos; },
     get fixModo() { return fixModo; },

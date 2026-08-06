@@ -519,7 +519,24 @@ const UI = {
   "leg_cloze": "lacuna {{c1::…}}",
   "leg_mc": "múltipla escolha",
   "leg_err": "linha ignorada",
-  "leg_warn": "cartão a verificar"
+  "leg_warn": "cartão a verificar",
+  "cut_btn": "✂ Recortar",
+  "del_btn": "Excluir",
+  "tip_cut": "Tira o cartão daqui e guarda na gaveta, para colar depois no baralho certo. O título e a explicação vão junto.",
+  "tip_del": "Apaga o cartão do texto. Dá para voltar atrás com \"Desfazer última colagem\".",
+  "confirm_excluir": "Excluir este cartão?\n\n{f}…\n\nO título e a explicação saem junto. Dá para desfazer.",
+  "toast_excluido": "Cartão excluído. Use \"Desfazer última colagem\" se foi engano.",
+  "toast_recortado": "Recortado. {n} cartão(ões) na gaveta, esperando o baralho certo.",
+  "recortes_conta": "✂ {n} cartão(ões) recortado(s) esperando destino",
+  "recortes_colar": "Colar aqui",
+  "recortes_ver": "Ver",
+  "recortes_titulo": "Cartões recortados",
+  "recortes_nota": "Ficam guardados no seu navegador, mesmo se você fechar o aplicativo. Abra o baralho certo e use \"Colar aqui\".",
+  "recortes_descartar": "Descartar todos",
+  "confirm_descartar": "Descartar os {n} cartões recortados? Isso não tem volta.",
+  "toast_recortes_descartados": "Gaveta esvaziada.",
+  "toast_recortes_colados": "{n} cartão(ões) colado(s) aqui. A gaveta está vazia.",
+  "tip_recortes_colar": "Insere os cartões da gaveta no fim deste texto e esvazia a gaveta"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1040,7 +1057,24 @@ const UI = {
   "leg_cloze": "blank {{c1::…}}",
   "leg_mc": "multiple choice",
   "leg_err": "ignored line",
-  "leg_warn": "card to check"
+  "leg_warn": "card to check",
+  "cut_btn": "✂ Cut",
+  "del_btn": "Delete",
+  "tip_cut": "Removes the card from here and keeps it in the drawer, to paste later into the right deck. Title and explanation go with it.",
+  "tip_del": "Deletes the card from the text. You can undo it with \"Undo last paste\".",
+  "confirm_excluir": "Delete this card?\n\n{f}…\n\nTitle and explanation go with it. You can undo.",
+  "toast_excluido": "Card deleted. Use \"Undo last paste\" if it was a mistake.",
+  "toast_recortado": "Cut. {n} card(s) in the drawer, waiting for the right deck.",
+  "recortes_conta": "✂ {n} card(s) cut, waiting for a destination",
+  "recortes_colar": "Paste here",
+  "recortes_ver": "View",
+  "recortes_titulo": "Cut cards",
+  "recortes_nota": "They stay in your browser even if you close the app. Open the right deck and use \"Paste here\".",
+  "recortes_descartar": "Discard all",
+  "confirm_descartar": "Discard the {n} cut cards? This cannot be undone.",
+  "toast_recortes_descartados": "Drawer emptied.",
+  "toast_recortes_colados": "{n} card(s) pasted here. The drawer is empty.",
+  "tip_recortes_colar": "Inserts the drawer cards at the end of this text and empties the drawer"
  }
 };
 const PARSER_MSG = {
