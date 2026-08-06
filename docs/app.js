@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.34.1";
+const VERSAO = "8.36.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -41,6 +41,87 @@ let modoRevisao = false;      // barra de revisão visível
 let revisaoSnapshot = null;   // texto do editor ao ENTRAR (para cancelar)
 let revisados = new Set();     // frentes de cartões já revisados (verde, persistente)
 let ocultosRevisao = 0;        // quantos o filtro "ocultar já revisados" escondeu
+
+/* ===================================================================
+ * GAVETA DE RECORTES  (v8.36)
+ * Cartão do assunto errado no meio do baralho. Apagar perde o trabalho;
+ * deixar mistura as matérias na exportação. A gaveta é o meio-termo: o
+ * cartão sai do texto e fica guardado NO NAVEGADOR — sobrevive a fechar
+ * o app — até você abrir o baralho certo e colá-lo lá.
+ * Guarda o BLOCO inteiro (título "@", linha do cartão e explicações "+"),
+ * porque um cartão sem o título e a explicação chega mutilado do outro lado.
+ * =================================================================== */
+let recortes = [];
+try {
+  const g = JSON.parse(localStorage.getItem("eac_recortes") || "[]");
+  if (Array.isArray(g)) recortes = g.filter((x) => typeof x === "string");
+} catch (e) {}
+
+function salvarRecortes() {
+  try { localStorage.setItem("eac_recortes", JSON.stringify(recortes)); } catch (e) {}
+  atualizarBarraRecortes();
+}
+
+/* Texto do bloco de um cartão, do jeito que está escrito no editor. */
+function blocoDoTexto(linhaCartao) {
+  const linhas = $("editor").value.split("\n");
+  const b = blocoDoCartao(linhas, linhaCartao);
+  return linhas.slice(b.ini, b.fim + 1).join("\n");
+}
+
+/* Tira o bloco do editor. Guarda o texto anterior para o "Desfazer". */
+function tirarBlocoDoEditor(linhaCartao) {
+  colagemAnterior = { texto: $("editor").value };
+  const linhas = $("editor").value.split("\n");
+  removerBlocoCartao(linhas, linhaCartao);
+  $("editor").value = linhas.join("\n")
+    .replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
+  $("btnDesfazerColagem").disabled = false;
+  autoSalvar();
+  preview();
+}
+
+function recortarCartao(c) {
+  recortes.push(blocoDoTexto(c.line));
+  reg("RECORTAR", "cartão da linha " + c.line, recortes.length + " na gaveta");
+  tirarBlocoDoEditor(c.line);
+  salvarRecortes();
+  toast(t("toast_recortado", { n: recortes.length }));
+}
+
+async function excluirCartao(c) {
+  const resumo = (c.front || "").slice(0, 70);
+  if (!(await uiConfirm(t("confirm_excluir", { f: resumo })))) return;
+  reg("EXCLUIR", "cartão da linha " + c.line, resumo);
+  tirarBlocoDoEditor(c.line);
+  toast("toast_excluido");
+}
+
+function colarRecortes() {
+  if (!recortes.length) return;
+  const base = $("editor").value.replace(/\s+$/, "");
+  colagemAnterior = { texto: $("editor").value };
+  $("editor").value = (base ? base + "\n\n" : "") + recortes.join("\n\n") + "\n";
+  linhaNovaColada = base ? base.split("\n").length + 2 : 1;
+  const n = recortes.length;
+  reg("COLAR-RECORTES", n + " cartão(ões) da gaveta");
+  recortes = [];
+  salvarRecortes();
+  $("btnDesfazerColagem").disabled = false;
+  autoSalvar();
+  preview();
+  irParaLinha(linhaNovaColada);
+  setTimeout(() => { linhaNovaColada = null; }, 2400);
+  toast(t("toast_recortes_colados", { n }));
+}
+
+function atualizarBarraRecortes() {
+  const barra = $("barraRecortes");
+  if (!barra) return;
+  barra.style.display = recortes.length ? "" : "none";
+  const rot = $("recortesTexto");
+  if (rot) rot.textContent = t("recortes_conta", { n: recortes.length });
+}
 
 /* ===================================================================
  * REGISTRO DE EVENTOS  (v8.27)
@@ -402,10 +483,23 @@ function botaoMini(rotuloKey, cor, acao) {
  * Guarda também o antes/depois para o relatório de diagnóstico. */
 let ultimoAjuste = null;   // { acao, antes, depois } da última correção
 
-function corrigirComSeguranca(fn, texto) {
+/* `simular` = só quero ver o resultado, não estou aplicando. A janela de
+ * revisão chamava esta função só para MOSTRAR o antes/depois, e cada
+ * abertura deixava um [CORRIGIR] no registro — dois eventos idênticos por
+ * operação, um da prévia e outro da aplicação. O registro passava a
+ * impressão de que o botão rodava duas vezes (v8.35). */
+function corrigirComSeguranca(fn, texto, simular) {
   const antes = resumoTexto(texto);
   const novo = fn(texto);
   const depois = resumoTexto(novo);
+  if (simular) {
+    // as travas continuam valendo: a prévia mostra o texto SEM a mudança
+    // que seria bloqueada, para não prometer o que não vai acontecer
+    if (fn.limpeza) return novo;
+    if (depois.cartoes < antes.cartoes || depois.saibaMais < antes.saibaMais
+        || depois.tags < antes.tags) return texto;
+    return novo;
+  }
   // correções marcadas como "limpeza" existem justamente para TIRAR coisa
   // (instrução do prompt que vazou, linha repetida): as três travas abaixo
   // as bloqueariam sempre
@@ -767,7 +861,17 @@ function preview() {
         aberto ? respostasFechadas.add(chave(c)) : respostasFechadas.delete(chave(c));
         preview();
       };
-      acoes.append(bEd, bVer);
+      const bRec = document.createElement("button");
+      bRec.className = "btn btn-cinza btn-min";
+      bRec.textContent = t("cut_btn");
+      bRec.title = t("tip_cut");
+      bRec.onclick = () => recortarCartao(c);
+      const bDel = document.createElement("button");
+      bDel.className = "btn btn-min btn-del";
+      bDel.textContent = t("del_btn");
+      bDel.title = t("tip_del");
+      bDel.onclick = () => excluirCartao(c);
+      acoes.append(bEd, bVer, bRec, bDel);
       div.append(acoes);
     }
     box.append(div);
@@ -2068,7 +2172,7 @@ function abrirNormalizar(ajusteEstrutural) {
   normAjuste = null;
   if (typeof ajusteEstrutural === "function") {
     const antes = $("editor").value;
-    const depois = ajusteEstrutural(antes);
+    const depois = ajusteEstrutural(antes, true);   // prévia: não registra
     if (depois !== antes) normAjuste = { antes, depois, fn: ajusteEstrutural, chk: null };
   }
   const r = parseText($("editor").value, []);
@@ -2145,7 +2249,7 @@ let normIgnorados = [];
 function aplicarNormalizacao() {
   // ajuste estrutural primeiro (muda o texto todo) e reabre para revisão
   if (normAjuste && normAjuste.chk && normAjuste.chk.checked) {
-    $("editor").value = normAjuste.fn($("editor").value);
+    $("editor").value = normAjuste.fn($("editor").value, false);   // agora vale
     normAjuste = null;
     $("dlgNormalizar").close();
     preview();
@@ -2903,7 +3007,9 @@ $("editor").onscroll = () => {
   $("editorNums").scrollTop = y;
 };
 $("btnNormalizar").onclick = () => abrirNormalizar(
-  correcaoPendente ? ((txt) => corrigirComSeguranca(correcaoPendente, txt)) : null);
+  correcaoPendente
+    ? ((txt, simular) => corrigirComSeguranca(correcaoPendente, txt, simular))
+    : null);
 $("btnSelecionarTudo").onclick = () => {
   $("editor").focus();
   $("editor").select();
@@ -3339,6 +3445,22 @@ function abrirPromptCorrecao() {
 
 $("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
+$("btnRecortesColar").onclick = colarRecortes;
+$("btnRecortesVer").onclick = () => {
+  $("recortesTexto2").value = recortes.join("\n\n");
+  $("dlgRecortes").showModal();
+};
+$("btnRecortesFechar").onclick = () => $("dlgRecortes").close();
+$("btnRecortesDescartar").onclick = async () => {
+  if (!(await uiConfirm(t("confirm_descartar", { n: recortes.length })))) return;
+  reg("RECORTES", "gaveta descartada", recortes.length + " cartão(ões)");
+  recortes = []; salvarRecortes();
+  $("dlgRecortes").close();
+  toast("toast_recortes_descartados");
+};
+attachTip($("btnRecortesColar"), "tip_recortes_colar");
+atualizarBarraRecortes();
+
 $("btnPromptCorrigir").onclick = abrirPromptCorrecao;
 attachTip($("btnPromptCorrigir"), "tip_fixprompt");
 attachTip($("btnFixPromptColar"), "tip_fixpart_paste");
