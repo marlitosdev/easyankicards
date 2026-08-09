@@ -105,7 +105,7 @@ const UI = {
   "fix_bullets": "Remover numeração/marcadores",
   "fix_pairs": "Emparelhar Pergunta/Resposta",
   "crit_long": "Cartão da linha {n}: muito longo (>220 caracteres) — divida em dois para memorizar melhor.",
-  "crit_dup": "Frente duplicada nas linhas {a} e {b} — o Anki tratará como o mesmo cartão.",
+  "crit_dup": "Mesma pergunta em {n} cartões (linhas {linhas}): «{f}…»",
   "crit_bullets": "O texto tem numeração ou marcadores (1., -, •) no início das linhas — use \"Remover numeração/marcadores\" para limpar.",
   "crit_pairs": "Há perguntas terminadas em \"?\" seguidas da resposta na linha de baixo, sem \"::\" — use \"Emparelhar Pergunta/Resposta\" para converter.",
   "applied_status": "Correção aplicada — confira a pré-visualização.",
@@ -536,7 +536,11 @@ const UI = {
   "confirm_descartar": "Descartar os {n} cartões recortados? Isso não tem volta.",
   "toast_recortes_descartados": "Gaveta esvaziada.",
   "toast_recortes_colados": "{n} cartão(ões) colado(s) aqui. A gaveta está vazia.",
-  "tip_recortes_colar": "Insere os cartões da gaveta no fim deste texto e esvazia a gaveta"
+  "tip_recortes_colar": "Insere os cartões da gaveta no fim deste texto e esvazia a gaveta",
+  "crit_dup_total": "{g} pergunta(s) repetida(s), {n} cartão(ões) a mais. Vão TODOS para o Anki — você responderá a mesma coisa várias vezes.",
+  "fix_dup_cut": "Recortar as repetidas",
+  "confirm_dup_cut": "Guardar na gaveta {n} cartão(ões) repetido(s) de {g} pergunta(s)?\\n\\nA primeira de cada grupo fica no texto. As demais vão para a gaveta, onde você compara as explicações com calma e decide qual vale a pena. Dá para desfazer.",
+  "toast_dup_cut": "{n} repetida(s) na gaveta. Compare as explicações antes de descartar."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -643,7 +647,7 @@ const UI = {
   "fix_bullets": "Remove numbering/bullets",
   "fix_pairs": "Pair Question/Answer",
   "crit_long": "Card at line {n}: too long (>220 chars) — split it in two for better recall.",
-  "crit_dup": "Duplicate front at lines {a} and {b} — Anki will treat them as the same card.",
+  "crit_dup": "Same question in {n} cards (lines {linhas}): «{f}…»",
   "crit_bullets": "The text has numbering or bullets (1., -, •) at line starts — use \"Remove numbering/bullets\" to clean.",
   "crit_pairs": "There are questions ending in \"?\" followed by the answer on the next line, without \"::\" — use \"Pair Question/Answer\" to convert.",
   "applied_status": "Fix applied — check the preview.",
@@ -1074,7 +1078,11 @@ const UI = {
   "confirm_descartar": "Discard the {n} cut cards? This cannot be undone.",
   "toast_recortes_descartados": "Drawer emptied.",
   "toast_recortes_colados": "{n} card(s) pasted here. The drawer is empty.",
-  "tip_recortes_colar": "Inserts the drawer cards at the end of this text and empties the drawer"
+  "tip_recortes_colar": "Inserts the drawer cards at the end of this text and empties the drawer",
+  "crit_dup_total": "{g} repeated question(s), {n} extra card(s). ALL of them go to Anki — you will answer the same thing several times.",
+  "fix_dup_cut": "Cut the repeats",
+  "confirm_dup_cut": "Move {n} repeated card(s) from {g} question(s) to the drawer?\\n\\nThe first of each group stays in the text. The others go to the drawer, where you can compare the explanations and decide which is worth keeping. You can undo.",
+  "toast_dup_cut": "{n} repeat(s) in the drawer. Compare the explanations before discarding."
  }
 };
 const PARSER_MSG = {
