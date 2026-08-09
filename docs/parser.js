@@ -1100,3 +1100,25 @@ function coberturaConteudo(original, novo) {
 }
 
 const COBERTURA_MIN = 70;   // abaixo disto, avisa: a IA resumiu demais
+
+/* ===================================================================
+ * FRENTES REPETIDAS  (v8.37)
+ * Gerar cartões da mesma fonte em rodadas diferentes produz perguntas
+ * idênticas com explicações diferentes. Como o identificador do cartão
+ * no .apkg é calculado sobre TODOS os campos, explicações diferentes
+ * geram identificadores diferentes: o Anki importa todos e você
+ * responde a mesma pergunta várias vezes. Não há perda — há repetição,
+ * que para memorização é pior, porque o mesmo item ocupa três posições
+ * na fila de revisão.
+ * =================================================================== */
+function gruposDuplicados(r) {
+  const mapa = new Map();
+  (r.cards || []).forEach((c) => {
+    const k = (c.front || "").toLowerCase().replace(/\s+/g, " ").trim();
+    if (!k) return;
+    if (!mapa.has(k)) mapa.set(k, []);
+    mapa.get(k).push(c);
+  });
+  return [...mapa.values()].filter((g) => g.length > 1)
+    .sort((a, b) => a[0].line - b[0].line);
+}

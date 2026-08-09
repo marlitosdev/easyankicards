@@ -1,0 +1,155 @@
+@ Apresentação das Demonstrações - Materialidade
+Como regra geral, a entidade deve apresentar separadamente itens de natureza ou função distinta, a menos que sejam {{c1::imateriais::materiais / imateriais}} :: imateriais
++ Patrimonial / Materialidade
++ Apresentação separada — Entidades do setor público devem evidenciar em contas distintas os ativos que possuem naturezas ou funções diferentes
++ Imaterialidade — Itens que não possuem relevância financeira ou operacional individual podem ser agrupados para simplificar o balanço
++ Exemplo prático — O acervo de livros didáticos de uma escola pública é composto por itens individualmente de baixo valor mas relevantes em conjunto
+@ Imobilizado - Critério do Valor do Conjunto
+O critério utilizado para agregar itens individualmente insignificantes como livros de biblioteca e periféricos de computador é o {{c1::Critério do Valor do Conjunto}} :: Critério do Valor do Conjunto
++ Patrimonial / Imobilizado
++ Critério do Valor do Conjunto — Permite a agregação de ativos imobilizados individualmente insignificantes facilitando o reconhecimento em grupo
++ Julgamento profissional — A aplicação desse critério exige a avaliação de circunstâncias específicas de cada entidade pública
++ Exemplo prático — Computadores e periféricos de baixo custo como mouses e teclados adquiridos conjuntamente podem ser ativados em lote
+@ Imobilizado - Avaliação de Custos no Conjunto
+Ao aplicar o critério do valor do conjunto, a entidade avalia todos os seus custos de imobilizado no momento em que eles são {{c1::incorridos}} :: incorridos
++ Patrimonial / Imobilizado
++ Momento de incorporação — Os custos de aquisição ou construção do conjunto são mensurados e incorporados quando efetivamente ocorrem
++ Custos incluídos — Englobam tanto os desembolsos iniciais para aquisição quanto gastos posteriores para renovação ou substituição de partes
++ Exemplo de aplicação — A substituição de 500 livros danificados de uma biblioteca pública tem seus custos agregados ao valor contábil do acervo
+@ Imobilizado - Custos Posteriores no Conjunto
+No critério do valor do conjunto, os custos avaliados incluem os gastos iniciais de aquisição ou construção e os custos subsequentes para {{c1::renová-los}} e substituir suas partes :: renová-los
++ Patrimonial / Imobilizado
++ Custos subsequentes — Gastos posteriores à aquisição inicial são incorporados ao valor do ativo coletivo para manter seu potencial de serviço
++ Manutenção usual vs Renovação — Custos de manutenção rotineira são reconhecidos como VPD mas as renovações de partes do conjunto são ativadas
++ Exemplo prático — A restauração de capas e páginas de um lote de obras raras de uma biblioteca de tribunal é integrada ao valor do ativo
+@ MCASP - Registro de Itens Insignificantes
+[MC] De acordo com o MCASP, como devem ser registrados itens de biblioteca e periféricos de computador que possuem valor individual insignificante? :: Como despesa corrente no momento do empenho | Ativados individualmente no imobilizado | Agregados pelo critério do valor do conjunto * :: Explicação: Itens insignificantes podem ser agrupados sob o critério do valor do conjunto para fins de reconhecimento simplificado como ativo imobilizado no balanço patrimonial. :: Patrimonial, /, Imobilizado
++ Critério do valor do conjunto — Permite agregar bens insignificantes individualmente sob um mesmo lote patrimonial
++ Reconhecimento patrimonial — A agregação facilita o controle físico e contábil de itens de pequena monta como acervos e softwares simples
++ Exemplo prático — A aquisição de centenas de livros para uma biblioteca escolar é tratada como um único ativo imobilizado de valor conjunto
+@ FGV - TCE-ES 2023 - Valor do Conjunto
+[MC] Em situações como o registro de acervo de livros de uma biblioteca escolar, o critério do valor do conjunto do MCASP permite: :: o uso de custo corrente de reposição nas mensurações subsequentes | o reconhecimento de um ativo a partir da agregação dos custos incorridos * | a consideração de eventuais encargos financeiros de pagamentos a prazo :: Explicação: O critério do valor do conjunto permite agregar itens individualmente insignificantes, reconhecendo o ativo a partir da agregação de todos os seus custos no momento em que são incorridos. :: Patrimonial
++ Valor do Conjunto — Permite o reconhecimento de ativos a partir da agregação de custos de itens individualmente insignificantes
++ Julgamento profissional — Exige a avaliação de circunstâncias específicas da entidade no reconhecimento dessas circunstâncias
++ Custos avaliados — Inclui os custos iniciais de aquisição ou construção e os custos subsequentes para renovação e substituição
+@ Imobilizado - Critério do Valor do Conjunto
+Pode ser apropriado agregar itens individualmente insignificantes, tais como livros de biblioteca e periféricos de computadores, aplicando o {{c1::critério do valor do conjunto}} :: critério do valor do conjunto :: Patrimonial
++ Valor do Conjunto — Agrega itens individualmente insignificantes para facilitar o processo de reconhecimento do ativo imobilizado no balanço
++ Exemplos de itens — Livros de biblioteca, periféricos de computadores e pequenos itens de equipamentos são exemplos típicos citados pelo MCASP
++ Custos subsequentes — O critério abrange tanto a aquisição inicial quanto gastos posteriores para renovação e substituição de partes
+@ Imobilizado - Momento de Avaliação do Conjunto
+Ao aplicar o critério do valor do conjunto, a entidade avalia todos os seus custos de ativos imobilizados no momento em que eles são {{c1::incorridos}} :: incorridos :: Patrimonial
++ Custos incorridos — A entidade deve avaliar os gastos no exato momento da ocorrência do fato gerador do custo do imobilizado
++ Custos iniciais — Inclui os gastos com a aquisição ou construção inicial dos itens insignificantes que compõem o grupo
++ Custos posteriores — Abrange também os desembolsos futuros necessários para renovar ou substituir as partes integrantes do conjunto
+@ Apresentação das Demonstrações - Materialidade
+Como regra geral, a entidade deve apresentar separadamente os itens de natureza ou função distinta, a menos que sejam {{c1::imateriais}} :: imateriais :: Patrimonial
++ Apresentação separada — Itens com naturezas ou funções distintas devem ser evidenciados de forma individualizada para garantir a transparência
++ Imaterialidade — Itens que não possuem relevância financeira ou operacional individual podem ser agrupados para simplificar o balanço
++ Agregação — Se um item não for individualmente material ele deve ser agregado a outros itens nas demonstrações ou notas explicativas
+@ FGV - MPU 2025 - Classificação de Despesa
+[MC] De acordo com o MCASP, a contratação de uma licença ANUAL recorrente de software de controle de acervo de biblioteca é classificada como: :: Investimento | Outras Despesas Correntes * | Inversão Financeira :: Explicação: Licenças de software recorrentes como anuais são despesas correntes denominadas outras despesas correntes, enquanto a aquisição definitiva é despesa de capital denominada investimento. :: Despesa_Pública
++ Licença recorrente — Custos de software com pagamentos periódicos anuais configuram despesa corrente por não representarem aquisição definitiva
++ Aquisição de livros — A compra de material bibliográfico técnico permanente para uso dos servidores classifica-se como despesa de capital
++ Mobiliário e computadores — Bens móveis permanentes adquiridos para instalação de biblioteca são classificados no grupo investimentos
+@ DFC - Classificação de Juros e Encargos
+No modelo de DFC recomendado pelo MCASP, o pagamento e o recebimento de juros são classificados como fluxos das atividades {{c1::operacionais}} :: operacionais :: DFC
++ Atividades operacionais — O MCASP recomenda a classificação dos juros no fluxo operacional porque eles afetam diretamente o resultado patrimonial
++ Atividades de financiamento — A amortização do principal da dívida tomada continua sendo classificada como fluxo de financiamento
++ Exemplo de aplicação — O pagamento de juros decorrentes de empréstimos contraídos pelo ente é registrado como desembolso operacional
+@ Provisões vs Passivos Contingentes - Critérios
+Uma obrigação presente com saída de recursos {{c1::provável}} deve ser reconhecida como provisão, enquanto uma saída {{c2::possível}} caracteriza um passivo contingente :: provável / possível :: Patrimonial
++ Provisão — Exige obrigação presente decorrente de evento passado com saída de recursos provável e estimativa confiável do valor
++ Passivo contingente — Representa obrigações cuja saída de recursos é apenas possível ou cuja estimativa de valor não é confiável
++ Divulgação em notas — Provisões são reconhecidas no balanço enquanto passivos contingentes são apenas divulgados em notas explicativas
+@ Estágios da Receita Orçamentária - Sequência
+A sequência correta dos estágios da receita pública orçamentária é {{c1::Previsão}}, {{c2::Lançamento}}, {{c3::Arrecadação}} e {{c4::Recolhimento}} :: Previsão / Lançamento / Arrecadação / Recolhimento :: Receita_Pública
++ Estágios da receita — O ciclo completo orçamentário é resumido pelas fases sequenciais de previsão lançamento arrecadação e recolhimento
++ Arrecadação — Consiste no momento em que os contribuintes realizam o pagamento dos tributos junto aos agentes arrecadadores credenciados
++ Recolhimento — Representa a transferência dos valores arrecadados pelos bancos para a conta única do Tesouro sob o princípio da unidade de caixa
+@ Estágios da Despesa Orçamentária - Sequência
+A sequência legal dos estágios da despesa orçamentária compreende as fases de {{c1::Fixação}}, {{c2::Empenho}}, {{c3::Liquidação}} e {{c4::Pagamento}} :: Fixação / Empenho / Liquidação / Pagamento :: Despesa_Pública
++ Estágios da despesa — O ciclo orçamentário compreende a fixação na LOA seguida das fases de execução empenho liquidação e pagamento
++ Empenho — Cria a obrigação de pagamento pendente ou não do implemento de condição nos termos da Lei 4320 de 1964
++ Liquidação — Consiste na verificação do direito adquirido pelo credor com base nos títulos e documentos comprobatórios do serviço ou entrega
+@ Apresentação de Itens - Regra Geral de Agregação
+Como regra geral, a entidade deve apresentar separadamente os itens de natureza ou função distinta, a menos que sejam {{c1::imateriais}} :: imateriais
++ Patrimonial / Materialidade
++ Apresentação separada — A entidade deve apresentar de forma individualizada contas de ativos com diferentes naturezas ou funções para assegurar a transparência.
++ Imaterialidade — Itens insignificantes de forma individual podem ser agrupados com itens de natureza ou função semelhante no balanço ou notas explicativas.
++ Exemplo prático — O acervo de livros e periódicos de uma biblioteca escolar apresenta itens individualmente imateriais que devem ser registrados de forma conjunta.
+@ Ativo Imobilizado - Critério do Valor do Conjunto
+O critério do MCASP que viabiliza a agregação de ativos imobilizados individualmente insignificantes como livros de biblioteca e periféricos de computadores é o {{c1::critério do valor do conjunto}} :: critério do valor do conjunto
++ Patrimonial / Imobilizado
++ Valor do conjunto — É o critério que permite o agrupamento de itens de pequeno valor individual para simplificar o controle patrimonial no balanço.
++ Julgamento profissional — A aplicação deste critério pela administração pública exige análise crítica quanto às circunstâncias específicas de cada entidade.
++ Exemplo prático — Um laboratório de informática de uma escola pública pode registrar mouses, teclados e cabos sob uma única rubrica contábil coletiva.
+@ Ativo Imobilizado - Momento de Avaliação do Conjunto
+Ao aplicar o critério do valor do conjunto, a entidade avalia todos os seus custos de ativos imobilizados no momento em que eles são {{c1::incorridos}} :: incorridos
++ Patrimonial / Imobilizado
++ Custos incorridos — Corresponde ao momento em que ocorrem os fatos geradores dos gastos que devem ser agregados de forma unificada ao imobilizado.
++ Custos iniciais — Abrange os desembolsos realizados no momento de aquisição ou construção inicial dos itens de pequena monta do grupo.
++ Custos posteriores — Compreende os desembolsos futuros direcionados para renovar os bens do conjunto ou proceder à devida substituição de partes.
+@ Questão FGV - Instalação de Biblioteca e Classificação
+[MC] De acordo com as regras de classificação da despesa orçamentária do MCASP, a contratação de licença anual recorrente de software de controle de acervo e a aquisição de material bibliográfico definitivo classificam-se, respectivamente, como: :: Outras Despesas Correntes e Investimentos * | Investimentos e Inversões Financeiras | Outras Despesas Correntes e Inversões Financeiras :: Explicação: Licenças de software com pagamentos recorrentes anuais são despesas correntes do grupo Outras Despesas Correntes. A aquisição definitiva de livros para acervos permanentes constitui despesa de capital do grupo Investimentos. :: Despesa_Pública
++ Despesa corrente — Despesas orçamentárias que não contribuem para a criação ou aquisição direta de novos bens de capital duráveis.
++ Despesa de capital — Despesas destinadas ao acréscimo patrimonial definitivo do ente público como obras instaladas e materiais permanentes.
++ Exemplo prático — Em concurso da banca FGV a licença anual de software foi tratada como despesa corrente e o acervo de livros permanente como investimento.
+@ Questão FGV - TCE-ES - Aplicação do Valor do Conjunto
+[MC] Conforme entendimento da FGV e orientações do MCASP para registrar de forma apropriada itens individualmente insignificantes, o critério do valor do conjunto: :: permite o reconhecimento de um ativo a partir da agregação dos custos incorridos * | requer o uso de custo corrente de reposição nas mensurações subsequentes | deve ser aplicado exclusivamente no reconhecimento inicial de um ativo :: Explicação: O critério permite agregar itens individualmente insignificantes (como livros de biblioteca) e reconhecer o ativo imobilizado pela soma de todos os seus custos no momento de sua ocorrência. :: Patrimonial, /, Imobilizado
++ Reconhecimento por agregação — Método pelo qual diversos bens de pequeno valor econômico individual são tratados de forma unificada no balanço patrimonial.
++ Aplicação temporal — Este critério é aplicável tanto no momento da aquisição inicial quanto nos gastos subsequentes de renovação e substituição.
++ Exemplo prático — Uma biblioteca de tribunal registra seu acervo histórico unificando os valores de compra e de restauração posterior de suas obras.
+@ Materialidade - Limite Quantitativo Uniforme
+Segundo a Estrutura Conceitual, ao se determinar se um item é material, {{c1::não é possível}} especificar um limite quantitativo uniforme aplicável a todas as entidades :: não é possível
++ Estrutura_Conceitual / Materialidade
++ Materialidade — Representa a relevância da informação contábil cujo erro ou omissão pode distorcer as avaliações e decisões dos usuários dos relatórios.
++ Limite uniforme — Não existe um padrão ou valor matemático aplicável a todos os entes por depender do contexto e da sensibilidade de cada jurisdição.
++ Exemplo prático — Um erro de dez mil reais pode ser imaterial para o balanço do Governo Federal mas extremamente material para um pequeno município.
+@ Ativo Imobilizado - Custos Subsequentes de Manutenção
+Os custos da manutenção periódica rotineira de um ativo imobilizado devem ser reconhecidos como {{c1::variação patrimonial diminutiva}} no resultado do exercício :: variação patrimonial diminutiva
++ Patrimonial / Imobilizado
++ Manutenção periódica — Gastos recorrentes com mão de obra direta e materiais consumíveis efetuados para manter o ativo em condições normais de funcionamento.
++ Tratamento contábil — Devem ser registrados diretamente no resultado como variações patrimoniais diminutivas no período de sua ocorrência sem agregar valor ao bem.
++ Exemplo prático — A contratação de serviços de pintura preventiva para as dependências de um órgão público é tratada integralmente como despesa de manutenção.
+@ Apresentação das Demonstrações - Itens Distintos
+Como regra geral, a entidade deve apresentar separadamente os itens de natureza ou função distinta, a menos que sejam {{c1::imateriais}} :: imateriais
++ Patrimonial / Materialidade
++ imateriais — Itens insignificantes que não alteram a utilidade das informações geradas para a prestação de contas.
++ Apresentação separada — Critério que prescreve a individualização de contas com bases de mensuração ou funções diversas no setor público.
++ Agregação patrimonial — Procedimento de aglutinação de ativos individualmente de pequeno valor visando a simplificação das demonstrações.
+@ Ativo Imobilizado - Critério do Valor do Conjunto
+O critério do MCASP que viabiliza a agregação de ativos imobilizados individualmente insignificantes é o {{c1::critério do valor do conjunto}} :: critério do valor do conjunto
++ Patrimonial / Imobilizado
++ critério do valor do conjunto — Regra do manual que simplifica o reconhecimento de pequenos equipamentos e periféricos de informática de baixo valor.
++ Julgamento profissional — Requisito de avaliação da gerência para decidir sobre a agregação de ativos considerando a realidade local da entidade.
++ Controle físico — Prática que deve ser mantida mesmo para os bens que foram agrupados contabilmente sob um único registro de valor.
+@ Ativo Imobilizado - Avaliação de Custos no Conjunto
+Ao aplicar o critério do valor do conjunto, a entidade avalia todos os seus custos de ativos imobilizados no momento em que eles são {{c1::incorridos}} :: incorridos
++ Patrimonial / Imobilizado
++ incorridos — Fatos geradores de despesas e custos patrimoniais que determinam o momento da avaliação dos valores do imobilizado.
++ Custos de aquisição — Gastos incorridos inicialmente para comprar ou construir os elementos insignificantes que compõem o lote.
++ Renovação e substituição — Desembolsos subsequentes que mantêm ou ampliam o potencial de serviço do lote de ativos integrados.
+@ Ativo Imobilizado - Custos Posteriores no Conjunto
+No critério do valor do conjunto, os custos avaliados incluem os gastos iniciais de aquisição ou construção e os custos subsequentes para {{c1::renová-los}} e substituir suas partes :: renová-los
++ Patrimonial / Imobilizado
++ renová-los — Gastos subsequentes que prolongam a vida útil do conjunto de ativos e devem ser capitalizados no balanço patrimonial.
++ Substituição de partes — Troca física de componentes de lote que enseja a baixa contábil da parcela do ativo que foi substituída.
++ VPD no imobilizado — Custos decorrentes de manutenção rotineira que não são ativados no conjunto e vão direto para o resultado.
+@ Questão FGV - Aplicação do Valor do Conjunto
+[MC] De acordo com o MCASP, em relação ao registro de acervos de livros e periódicos sob o critério do valor do conjunto: :: ele impede o registro de ativos construídos pela própria entidade | ele permite o reconhecimento de um ativo a partir da agregação dos custos incorridos * | ele exige o uso de custo corrente de reposição nas mensurações subsequentes :: Explicação: O critério permite agregar itens individualmente insignificantes, reconhecendo o ativo imobilizado pela soma de todos os seus custos na ocorrência dos fatos geradores. :: Patrimonial / Imobilizado
++ agregação de custos — Técnica recomendada para registrar acervos de bibliotecas públicas e periféricos de computadores de forma simplificada.
++ Ativos construídos — Bens edificados pela própria organização pública que também admitem o agrupamento de custos pelo critério do conjunto.
++ Modelo de custo — Abordagem padrão que apresenta o imobilizado pelo valor de aquisição deduzido de depreciações e reduções acumuladas.
+@ Questão FGV - Instalação de Biblioteca e Classificação
+Na instalação de uma biblioteca com acervo técnico para servidores, a aquisição definitiva de livros classifica-se como {{c1::Investimentos::Inversões Financeiras / Outras Despesas Correntes / Investimentos}} e a licença anual de software como {{c2::Outras Despesas Correntes::Outras Despesas Correntes / Investimentos / Inversões Financeiras}} :: Investimentos / Outras Despesas Correntes
++ Despesa_Pública / Classificação
++ Investimentos — Despesas de capital voltadas para a compra de instalações, equipamentos e materiais permanentes como acervos técnicos definitivos.
++ Outras Despesas Correntes — Despesas correntes destinadas à manutenção operacional das atividades governamentais como licenças temporárias e reformas.
++ Licença anual de software — Contrato de uso recorrente e com prazo determinado que não gera incorporação permanente ao imobilizado.
+@ Características Qualitativas - Materialidade
+Segundo a Estrutura Conceitual, ao se determinar se um item é material, {{c1::não é possível}} especificar um limite quantitativo uniforme aplicável a todas as entidades :: não é possível
++ Estrutura_Conceitual / Materialidade
++ não é possível — Impossibilidade de estipular uma linha de corte financeira rígida e comum a todos os órgãos da administração pública.
++ Materialidade — Restrição à informação que pondera se erros ou omissões podem mudar a percepção do usuário sobre o dever de accountability.
++ Contexto qualitativo — Critério que pondera a natureza do ato, a sensibilidade política e o impacto social das transações de cada entidade.

@@ -156,5 +156,14 @@
       "prompt_vazado",
       "mais_repetido"
     ]
+  },
+  "16-frentes-repetidas.txt": {
+    "cartoes": 28,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 99,
+    "titulos": 28,
+    "tags": 27,
+    "detectores": []
   }
 }

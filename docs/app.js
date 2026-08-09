@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.36.0";
+const VERSAO = "8.37.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -463,11 +463,11 @@ function irParaLinha(n) {
 }
 
 /* Botão pequeno reaproveitado nas sugestões e nos cartões. */
-function botaoMini(rotuloKey, cor, acao) {
+function botaoMini(rotuloKey, cor, acao, rotuloPronto) {
   const b = document.createElement("button");
   b.className = "btn " + cor;
   b.style.cssText = "padding:2px 8px;font-size:11px;margin-left:6px";
-  b.textContent = t(rotuloKey);
+  b.textContent = rotuloPronto || t(rotuloKey);
   b.onclick = acao;
   return b;
 }
@@ -564,45 +564,28 @@ function renderSugestoes(r, raw) {
     if ((c.front + c.back).length > 220 && longos < 2) {
       itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }), linha: c.line }); longos++;
     }
-    const k = c.front.toLowerCase().trim();
-    if (vistos[k] && dups < 2) {
-      itens.push({ dot: "dot-org", txt: t("crit_dup", { a: vistos[k], b: c.line }), linha: c.line }); dups++;
-    } else if (!vistos[k]) vistos[k] = c.line;
   });
-  // cartões marcados como VERIFICAR entram na lista com atalho
-  r.cards.filter((c) => c.issues.length).slice(0, 3).forEach((c) => {
-    itens.push({ dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line });
+  // frentes repetidas: um item por GRUPO, com todas as linhas. Antes o
+  // aviso saía em pares e parava no segundo — um grupo de três cartões
+  // aparecia como um par, e o resto ficava invisível.
+  const grupos = gruposDuplicados(r);
+  if (grupos.length) {
+    // o resumo com a AÇÃO vem primeiro: era o item que sobrava de fora
+    // quando a lista batia no limite de exibição
+    const extras = grupos.reduce((s, g) => s + g.length - 1, 0);
+    itens.push({ dot: "dot-org", txt: t("crit_dup_total", { g: grupos.length, n: extras }),
+                 fixTxt: t("fix_dup_cut"), acao: () => recortarDuplicados(grupos) });
+  }
+  grupos.slice(0, 4).forEach((g) => {
+    itens.push({
+      dot: "dot-org", linha: g[0].line,
+      txt: t("crit_dup", {
+        n: g.length,
+        linhas: g.map((c) => c.line).join(", "),
+        f: g[0].front.replace(/\{\{c\d+::/g, "").replace(/\}\}/g, "").slice(0, 70),
+      }),
+    });
   });
-  (r.warnLines || []).slice(0, 3).forEach((n, i) => {
-    itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n });
-  });
-  if (temMarcadores(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_bullets"),
-                 fixTxt: t("fix_bullets"), fix: removerMarcadoresTexto });
-  if (temTagsQueSaoTexto(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_pairs_tags") || t("crit_bullets"),
-                 fixTxt: t("fix_tags_text"), fix: corrigirTagsQueSaoTexto });
-  if (temTituloGrudado(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_title_glued"),
-                 fixTxt: t("fix_title_glued"), fix: corrigirTituloGrudado });
-  if (temPromptVazado(raw))
-    itens.push({ dot: "dot-red", txt: t("crit_prompt_leak"),
-                 fixTxt: t("fix_prompt_leak"), fix: corrigirPromptVazado });
-  if (temMaisRepetido(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_mais_rep"),
-                 fixTxt: t("fix_mais_rep"), fix: corrigirMaisRepetido });
-  if (temClozeRepetida(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_cloze_rep"),
-                 fixTxt: t("fix_cloze_rep"), fix: corrigirClozeRepetida });
-  if (temEspacosRuins(raw))
-    itens.push({ dot: "dot-blue", txt: t("crit_espacos"),
-                 fixTxt: t("fix_espacos"), fix: corrigirEspacos });
-  if (temTagsNaExplicacao(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_tags_in_more"),
-                 fixTxt: t("fix_tags_in_more"), fix: corrigirTagsNaExplicacao });
-  if (temMarkdown(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_markdown"),
-                 fixTxt: t("fix_markdown"), fix: corrigirMarkdown });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
@@ -625,7 +608,7 @@ function renderSugestoes(r, raw) {
   const temProblema = !!correcaoPendente || r.warnings.length > 0 || precisaNormalizar(r);
   atualizarBotaoCorrigir(temProblema);
 
-  itens.slice(0, 6).forEach((it) => {
+  itens.slice(0, 8).forEach((it) => {
     const div = document.createElement("div");
     div.className = "sug";
     const dot = document.createElement("span");
@@ -638,7 +621,9 @@ function renderSugestoes(r, raw) {
       const acoes = document.createElement("div");
       acoes.className = "sug-acao";
       if (it.linha) acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(it.linha)));
-      if (it.fix) {
+      if (it.acao) {
+        acoes.append(botaoMini(it.fixTxt ? null : "fix_now", "btn-azul", it.acao, it.fixTxt));
+      } else if (it.fix) {
         // NÃO corrige direto: abre o Normalizar, onde o usuário vê
         // antes/depois de cada mudança e escolhe o que aplicar.
         acoes.append(botaoMini("fix_now", "btn-azul", () => abrirNormalizar(it.fix)));
@@ -3685,3 +3670,30 @@ $("btnRegistro").onclick = async () => {
   }
 };
 attachTip($("btnRegistro"), "tip_log");
+
+
+/* Mantém a PRIMEIRA de cada grupo e manda as demais para a gaveta.
+ * Não apaga: a repetida costuma ter uma explicação melhor que a primeira,
+ * e quem decide qual fica é o usuário, olhando com calma depois. */
+async function recortarDuplicados(grupos) {
+  const extras = grupos.flatMap((g) => g.slice(1));
+  if (!extras.length) return;
+  if (!(await uiConfirm(t("confirm_dup_cut", { n: extras.length, g: grupos.length })))) return;
+  // de baixo para cima: tirar um bloco muda a numeração dos de cima
+  const ordenados = [...extras].sort((a, b) => b.line - a.line);
+  colagemAnterior = { texto: $("editor").value };
+  const linhas = $("editor").value.split("\n");
+  ordenados.forEach((c) => {
+    const b = blocoDoCartao(linhas, c.line);
+    recortes.push(linhas.slice(b.ini, b.fim + 1).join("\n"));
+    linhas.splice(b.ini, b.fim - b.ini + 1);
+  });
+  $("editor").value = linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
+  reg("RECORTAR", extras.length + " repetida(s) de " + grupos.length + " grupo(s)",
+      recortes.length + " na gaveta");
+  salvarRecortes();
+  $("btnDesfazerColagem").disabled = false;
+  autoSalvar();
+  preview();
+  toast(t("toast_dup_cut", { n: extras.length }));
+}

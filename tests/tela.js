@@ -152,6 +152,31 @@ function testes() {
     ok(api.recortes.length === 0, "R10 a gaveta devia esvaziar após colar");
     ok(/art\. 297/.test(api.$("editor").value), "R11 o cartão chegou sem a explicação");
 
+    // frentes repetidas: grupos inteiros, e o recorte mantém a primeira
+    {
+      const fs2 = require("fs");
+      const path2 = require("path");
+      api.$("editor").value = fs2.readFileSync(
+        path2.join(__dirname, "casos", "16-frentes-repetidas.txt"), "utf8");
+      api.preview();
+      const antesG = api.gruposDuplicados(api.parseAtual());
+      ok(antesG.length === 4, `D1 esperava 4 grupos repetidos, veio ${antesG.length}`);
+      ok(antesG.some((g) => g.length === 3), "D2 grupo de 3 não foi reconhecido como grupo");
+      const antesN = cards().length, antesGav = api.recortes.length;
+      const pd = api.recortarDuplicados(antesG);
+      api._uiFechar(true);
+      return Promise.resolve(pd).then(() => {
+        ok(cards().length === antesN - 6, `D3 devia sobrar ${antesN - 6}, veio ${cards().length}`);
+        ok(api.recortes.length === antesGav + 6, "D4 as repetidas não foram para a gaveta");
+        ok(api.gruposDuplicados(api.parseAtual()).length === 0,
+           "D5 sobrou frente repetida depois do recorte");
+        ok(/^@ /.test(api.recortes[antesGav]), "D6 a repetida foi guardada sem o título");
+        api.recortes.length = 0;
+        return terceiraParte();
+      });
+    }
+
+    function terceiraParte() {
     // excluir: confirma e some
     const antesEx = cards().length;
     const p = api.excluirCartao(cards()[0]);
@@ -162,6 +187,7 @@ function testes() {
       ok(api.recortes.length === 0, "R13 excluir não pode encher a gaveta");
       return segundaParte();
     });
+    }
   }
 
   function segundaParte() {
@@ -218,7 +244,7 @@ if (require.main === module) {
     falhas.forEach((f) => console.log("  FALHA  " + f));
     console.log(falhas.length
       ? `\ntela: ${falhas.length} FALHA(S)\n`
-      : "\ntela: revisão, prompt de correção e recortes ok (44 verificações)\n");
+      : "\ntela: revisão, prompt de correção e recortes e repetidas ok (50 verificações)\n");
     process.exit(falhas.length ? 1 : 0);
   });
 }

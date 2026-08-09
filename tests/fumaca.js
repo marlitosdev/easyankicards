@@ -129,7 +129,7 @@ function rodar() {
     get modoRevisao() { return modoRevisao; },
     abrirPromptCorrecao, montarFixPrompt, limparConferencia, registroTexto, reg,
     atualizarContagemRevisao, recortarCartao, excluirCartao, colarRecortes,
-    _uiFechar, parseAtual,
+    _uiFechar, parseAtual, gruposDuplicados, recortarDuplicados,
     get recortes() { return recortes; },
     get fixPendente() { return fixPendente; },
     get fixBlocos() { return fixBlocos; },
