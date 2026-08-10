@@ -9,8 +9,8 @@
  * As bibliotecas externas (sql.js/JSZip) seguem "cache primeiro", pois
  * têm versão fixa na URL e são pesadas.
  */
-const CACHE = "easyankicards-v8.37.0";
-const SW_VERSION = "8.37.0";
+const CACHE = "easyankicards-v8.38.0";
+const SW_VERSION = "8.38.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",

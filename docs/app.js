@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.37.0";
+const VERSAO = "8.38.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -97,15 +97,19 @@ async function excluirCartao(c) {
   toast("toast_excluido");
 }
 
-function colarRecortes() {
+/* `quais` = índices a colar. Sem argumento, cola tudo (botão da barra). */
+function colarRecortes(quais) {
   if (!recortes.length) return;
+  const idx = (quais && quais.length) ? quais : recortes.map((_, i) => i);
+  const blocos = idx.map((i) => recortes[i]).filter(Boolean);
+  if (!blocos.length) return;
   const base = $("editor").value.replace(/\s+$/, "");
   colagemAnterior = { texto: $("editor").value };
-  $("editor").value = (base ? base + "\n\n" : "") + recortes.join("\n\n") + "\n";
+  $("editor").value = (base ? base + "\n\n" : "") + blocos.join("\n\n") + "\n";
   linhaNovaColada = base ? base.split("\n").length + 2 : 1;
-  const n = recortes.length;
-  reg("COLAR-RECORTES", n + " cartão(ões) da gaveta");
-  recortes = [];
+  const n = blocos.length;
+  reg("COLAR-RECORTES", n + " cartão(ões) da bandeja");
+  recortes = recortes.filter((_, i) => !idx.includes(i));
   salvarRecortes();
   $("btnDesfazerColagem").disabled = false;
   autoSalvar();
@@ -3430,17 +3434,104 @@ function abrirPromptCorrecao() {
 
 $("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
-$("btnRecortesColar").onclick = colarRecortes;
-$("btnRecortesVer").onclick = () => {
-  $("recortesTexto2").value = recortes.join("\n\n");
-  $("dlgRecortes").showModal();
-};
+$("btnRecortesColar").onclick = () => colarRecortes();
+$("btnRecortesVer").onclick = () => { renderRecortes(); $("dlgRecortes").showModal(); };
 $("btnRecortesFechar").onclick = () => $("dlgRecortes").close();
-$("btnRecortesDescartar").onclick = async () => {
-  if (!(await uiConfirm(t("confirm_descartar", { n: recortes.length })))) return;
-  reg("RECORTES", "gaveta descartada", recortes.length + " cartão(ões)");
-  recortes = []; salvarRecortes();
+
+/* Monta a bandeja: um cartão por linha, com caixa de seleção e as duas
+ * ações que fazem sentido para UM cartão — copiar (para levar a outro
+ * lugar) e excluir (quando não vale mais a pena). */
+function renderRecortes() {
+  const lista = $("recortesLista");
+  lista.innerHTML = "";
+  $("chkRecTodos").checked = false;
+  if (!recortes.length) {
+    const vazio = document.createElement("div");
+    vazio.style.cssText = "color:var(--sutil);font-size:12.5px";
+    vazio.textContent = t("recortes_vazio");
+    lista.append(vazio);
+    return;
+  }
+  recortes.forEach((bloco, i) => {
+    const r = parseText(bloco, []);
+    const c = r.cards[0] || {};
+    const div = document.createElement("div");
+    div.className = "rec-item";
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.dataset.i = String(i);
+    const corpo = document.createElement("div");
+    corpo.className = "rec-corpo";
+    if (c.titulo) {
+      const tt = document.createElement("span");
+      tt.className = "rec-tit"; tt.textContent = c.titulo;
+      corpo.append(tt);
+    }
+    corpo.append(document.createTextNode(
+      (c.front || bloco).replace(/\{\{c\d+::/g, "").replace(/\}\}/g, "").slice(0, 130)));
+    const meta = document.createElement("span");
+    meta.className = "rec-meta";
+    const nMais = (c.more || "").split("<br>").filter(Boolean).length;
+    meta.textContent = t("recortes_meta", {
+      tags: (c.ownTags || []).join(", ") || "—", n: nMais });
+    corpo.append(meta);
+    const acoes = document.createElement("div");
+    acoes.className = "rec-acoes";
+    const bCop = document.createElement("button");
+    bCop.className = "btn btn-cinza"; bCop.textContent = t("recortes_copiar_um");
+    bCop.onclick = async () => {
+      try { await navigator.clipboard.writeText(bloco); toast("toast_copied_all"); }
+      catch (e) { uiAlert(t("paste_denied")); }
+    };
+    const bDel = document.createElement("button");
+    bDel.className = "btn btn-del"; bDel.textContent = t("del_btn");
+    bDel.onclick = async () => {
+      if (!(await uiConfirm(t("recortes_excluir_um")))) return;
+      recortes.splice(i, 1);
+      reg("RECORTES", "1 excluído da bandeja", recortes.length + " restantes");
+      salvarRecortes(); renderRecortes();
+      if (!recortes.length) $("dlgRecortes").close();
+    };
+    acoes.append(bCop, bDel);
+    div.append(chk, corpo, acoes);
+    lista.append(div);
+  });
+}
+
+function recortesSelecionados() {
+  return [...$("recortesLista").querySelectorAll("input[type=checkbox]")]
+    .filter((c) => c.checked).map((c) => Number(c.dataset.i));
+}
+
+$("chkRecTodos").onchange = () => {
+  const v = $("chkRecTodos").checked;
+  [...$("recortesLista").querySelectorAll("input[type=checkbox]")]
+    .forEach((c) => { c.checked = v; });
+};
+
+$("btnRecColarSel").onclick = () => {
+  const sel = recortesSelecionados();
+  if (!sel.length) { uiAlert(t("recortes_nada_sel")); return; }
   $("dlgRecortes").close();
+  colarRecortes(sel);
+};
+
+$("btnRecCopiarSel").onclick = async () => {
+  const sel = recortesSelecionados();
+  const quais = sel.length ? sel : recortes.map((_, i) => i);
+  try {
+    await navigator.clipboard.writeText(quais.map((i) => recortes[i]).join("\n\n"));
+    toast(t("recortes_copiados", { n: quais.length }));
+  } catch (e) { uiAlert(t("paste_denied")); }
+};
+
+$("btnRecortesDescartar").onclick = async () => {
+  const sel = recortesSelecionados();
+  const quais = sel.length ? sel : recortes.map((_, i) => i);
+  if (!(await uiConfirm(t("confirm_descartar", { n: quais.length })))) return;
+  reg("RECORTES", quais.length + " descartado(s) da bandeja");
+  recortes = recortes.filter((_, i) => !quais.includes(i));
+  salvarRecortes();
+  if (recortes.length) renderRecortes(); else $("dlgRecortes").close();
   toast("toast_recortes_descartados");
 };
 attachTip($("btnRecortesColar"), "tip_recortes_colar");

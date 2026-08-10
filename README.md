@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.37.0) · by MarlitosDev
+# EasyAnkiCards (v8.38.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -51,7 +51,7 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - Prévia sempre no estilo **"Como no Anki"**, com **múltiplas colunas** (opcional, telas largas), altura ajustável e botão "Ver/Ocultar resposta" por cartão.
 - Título do cartão editável direto no cabeçalho da prévia (edição **cirúrgica**: mexe só naquele cartão, grava `@` acima e rola/destaca a linha alterada). Selo em cada cartão indicando se usa **título próprio**, o **título geral** ou nenhum.
 - **Frentes repetidas** são agrupadas: um aviso por pergunta, com todas as linhas e um trecho da frente. O botão **"Recortar as repetidas"** mantém a primeira de cada grupo e manda as demais para a gaveta, para você comparar as explicações antes de descartar.
-- **Recortar** e **Excluir** cartão direto na prévia, ao lado de "Editar" e "Ocultar resposta". Recortar tira o cartão do texto e guarda numa **gaveta que fica no navegador** — sobrevive a fechar o app; depois é só abrir o baralho certo e clicar em "Colar aqui". O bloco vai inteiro (título `@` e explicações `+`). Ambos são desfazíveis pelo "Desfazer última colagem".
+- **Recortar** e **Excluir** cartão direto na prévia, ao lado de "Editar" e "Ocultar resposta". Recortar tira o cartão do texto e guarda numa **bandeja que fica no navegador** — sobrevive a fechar o app; depois é só abrir o baralho certo e clicar em "Colar aqui". O bloco vai inteiro (título `@`, pergunta, resposta, tags e explicações `+`) — é o mesmo formato do editor, então o cartão volta completo em qualquer baralho. A bandeja lista um cartão por linha, com seleção, **Copiar** e **Excluir** individuais, e permite colar ou descartar só os marcados. Ambos são desfazíveis pelo "Desfazer última colagem".
 - Edição inline em **campos coloridos** por tipo (frente, verso, saiba mais, título, tags), que crescem com o texto, com os secundários recolhíveis; **conversão de tipo** (básico ↔ cloze ↔ múltipla escolha) com confirmação.
 
 **Revisão de conteúdo** (botão "Revisar cartões")

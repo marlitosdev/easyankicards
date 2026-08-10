@@ -253,6 +253,15 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .ver-tudo:hover{opacity:.75}
 .btn-min{padding:4px 9px;font-size:11px}
 .btn-del{background:#b91c1c}
+/* bandeja: um cartão por linha, com seleção e ações próprias */
+.rec-item{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;
+  border:1px solid var(--borda);border-radius:8px;margin-bottom:6px;background:var(--campo)}
+.rec-item input[type=checkbox]{width:16px;height:16px;margin-top:2px;flex:0 0 auto}
+.rec-corpo{flex:1;min-width:0;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.rec-corpo .rec-tit{font-weight:700;color:var(--azul);font-size:11px;display:block}
+.rec-corpo .rec-meta{color:var(--sutil);font-size:10.5px;display:block;margin-top:2px}
+.rec-acoes{display:flex;gap:4px;flex:0 0 auto}
+.rec-acoes .btn{padding:3px 8px;font-size:10.5px}
 .barra-recortes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
   background:var(--laranja-claro);border:1px solid var(--laranja-borda);
   border-radius:9px;padding:7px 10px;margin:0 0 8px;font-size:12px;
@@ -782,15 +791,19 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   </div>
 </dialog>
 
-<dialog id="dlgRecortes" style="max-width:640px;width:94%">
+<dialog id="dlgRecortes" style="max-width:680px;width:94%">
   <div style="padding:16px">
     <h3 style="margin:0 0 6px" data-i18n="recortes_titulo"></h3>
     <div class="nota" data-i18n="recortes_nota" style="margin-bottom:8px"></div>
-    <textarea id="recortesTexto2" readonly spellcheck="false"
-      style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
-             font-size:12px;line-height:1.4"></textarea>
+    <label class="chk-2col" style="margin-bottom:6px">
+      <input type="checkbox" id="chkRecTodos">
+      <span data-i18n="recortes_marcar_todos"></span>
+    </label>
+    <div id="recortesLista"></div>
   </div>
   <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnRecColarSel" data-i18n="recortes_colar_sel"></button>
+    <button class="btn btn-cinza" id="btnRecCopiarSel" data-i18n="recortes_copiar_sel"></button>
     <button class="btn btn-cinza" id="btnRecortesDescartar" data-i18n="recortes_descartar"></button>
     <button class="btn btn-cinza" id="btnRecortesFechar" data-i18n="help_close"></button>
   </div>
