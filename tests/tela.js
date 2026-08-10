@@ -152,6 +152,28 @@ function testes() {
     ok(api.recortes.length === 0, "R10 a gaveta devia esvaziar após colar");
     ok(/art\. 297/.test(api.$("editor").value), "R11 o cartão chegou sem a explicação");
 
+    // bandeja: seleção, colagem parcial e exclusão individual (v8.38)
+    {
+      api.$("editor").value = ["@ Física", "Velocidade da luz? :: 300.000 km/s :: fisica",
+        "+ Nota — no vácuo.", "", "@ Penal", "Documento público? :: Testamento :: penal",
+        "", "@ Civil", "Prazo prescricional? :: Dez anos :: civil"].join("\n");
+      api.preview();
+      [0, 1, 2].forEach(() => api.recortarCartao(api.parseAtual().cards[0]));
+      ok(api.recortes.length === 3, `B1 esperava 3 na bandeja, veio ${api.recortes.length}`);
+      api.renderRecortes();
+      const chks = api.$("recortesLista").querySelectorAll("input[type=checkbox]");
+      ok(chks.length === 3, `B2 a bandeja devia listar 3 cartões, listou ${chks.length}`);
+      chks[0].checked = true;
+      api.$("btnRecColarSel").onclick();
+      ok(api.recortes.length === 2, "B3 colar selecionado devia tirar só 1 da bandeja");
+      ok(/300\.000/.test(api.$("editor").value), "B4 colou o cartão errado");
+      ok(api.recortes.every((b) => !/300\.000/.test(b)),
+         "B5 o cartão colado continuou na bandeja");
+      api.recortes.length = 0;
+      api.$("editor").value = "";
+      api.preview();
+    }
+
     // frentes repetidas: grupos inteiros, e o recorte mantém a primeira
     {
       const fs2 = require("fs");
@@ -244,7 +266,7 @@ if (require.main === module) {
     falhas.forEach((f) => console.log("  FALHA  " + f));
     console.log(falhas.length
       ? `\ntela: ${falhas.length} FALHA(S)\n`
-      : "\ntela: revisão, prompt de correção e recortes e repetidas ok (50 verificações)\n");
+      : "\ntela: revisão, prompt de correção e recortes, bandeja e repetidas ok (55 verificações)\n");
     process.exit(falhas.length ? 1 : 0);
   });
 }

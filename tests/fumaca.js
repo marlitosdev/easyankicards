@@ -12,10 +12,26 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js"];
 
+/* Seletor de pobre: entende "tag" e "tag[attr=valor]", que é tudo que o
+ * app usa. Sem isso não dá para testar tela em lista (a bandeja de
+ * recortes marca as caixas por querySelectorAll). */
+function casa(el, sel) {
+  const m = String(sel).trim().match(/^([a-zA-Z]*)(?:\[([\w-]+)=([^\]]+)\])?$/);
+  if (!m) return false;
+  const [, tag, attr, valor] = m;
+  if (tag && (el.tag || "").toLowerCase() !== tag.toLowerCase()) return false;
+  if (attr && String(el[attr] || "") !== valor.replace(/^["']|["']$/g, "")) return false;
+  return true;
+}
+function descendentes(el, saida) {
+  (el.children || []).forEach((f) => { saida.push(f); descendentes(f, saida); });
+  return saida;
+}
+
 /* Elemento de mentira: aceita tudo que o app costuma fazer com um nó. */
-function novoEl(id) {
+function novoEl(id, tag) {
   const el = {
-    id, value: "", textContent: "", placeholder: "",
+    id, tag: tag || "", value: "", textContent: "", placeholder: "",
     checked: false, disabled: false, readOnly: false, open: false,
     children: [], dataset: {}, options: [], files: [], firstChild: null, parentNode: null, scrollTop: 0, selectionStart: 0, selectionEnd: 0,
     // style aceita leitura, escrita e os métodos de CSS custom property
@@ -30,7 +46,8 @@ function novoEl(id) {
     insertBefore() {}, removeChild() {}, replaceChildren() {},
     addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true,
     setAttribute() {}, removeAttribute() {}, getAttribute: () => null,
-    querySelector: () => novoEl("?css"), querySelectorAll: () => [],
+    querySelector: (sel) => descendentes(el, []).find((f) => casa(f, sel)) || null,
+    querySelectorAll: (sel) => descendentes(el, []).filter((f) => casa(f, sel)),
     showModal() { this.open = true; }, show() { this.open = true; },
     close() { this.open = false; },
     focus() {}, blur() {}, select() {}, click() {},
@@ -61,7 +78,7 @@ function montarDocumento(html) {
     ids,
     doc: {
       getElementById: (id) => (ids.has(id) ? pegar(id) : null),
-      createElement: (tag) => novoEl("<" + tag + ">"),
+      createElement: (tag) => novoEl("<" + tag + ">", tag),
       createTextNode: () => novoEl("#texto"),
       createDocumentFragment: () => novoEl("#frag"),
       // devolve um elemento genérico: o alvo aqui é o getElementById,
@@ -129,7 +146,7 @@ function rodar() {
     get modoRevisao() { return modoRevisao; },
     abrirPromptCorrecao, montarFixPrompt, limparConferencia, registroTexto, reg,
     atualizarContagemRevisao, recortarCartao, excluirCartao, colarRecortes,
-    _uiFechar, parseAtual, gruposDuplicados, recortarDuplicados,
+    _uiFechar, parseAtual, gruposDuplicados, recortarDuplicados, renderRecortes,
     get recortes() { return recortes; },
     get fixPendente() { return fixPendente; },
     get fixBlocos() { return fixBlocos; },
