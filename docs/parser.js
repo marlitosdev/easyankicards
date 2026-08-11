@@ -461,9 +461,13 @@ function temMarcadores(raw) {
 
 /* Markdown que a IA insiste em usar: o Anki mostra os asteriscos literais.
  * Converter para <b> preserva o destaque sem sujar o cartao. */
-const RE_NEGRITO_MD = /\*\*([^*\n]{1,120})\*\*/g;
-function temMarkdown(raw) { RE_NEGRITO_MD.lastIndex = 0; return RE_NEGRITO_MD.test(raw); }
-function corrigirMarkdown(raw) { return raw.replace(RE_NEGRITO_MD, "<b>$1</b>"); }
+/* ARMADILHA: expressão com /g guarda `lastIndex` entre chamadas, e tanto
+ * `.test` quanto `matchAll` (que copia o lastIndex) passam a pular o começo
+ * do texto. Cada uso cria a sua — sai mais barato que lembrar de zerar. */
+const MD_NEGRITO = "\\*\\*([^*\\n]{1,120})\\*\\*";
+function reNegrito() { return new RegExp(MD_NEGRITO, "g"); }
+function temMarkdown(raw) { return new RegExp(MD_NEGRITO).test(raw); }
+function corrigirMarkdown(raw) { return raw.replace(reNegrito(), "<b>$1</b>"); }
 
 /* Resposta quebrada em varias linhas: a IA escreveu "• item" / "1. item" em
  * linhas soltas e cada uma virou um cartao torto. Nao ha conserto automatico
@@ -716,6 +720,7 @@ function detectoresAtivos(raw) {
     espacos: temEspacosRuins(raw),
     prompt_vazado: temPromptVazado(raw),
     mais_repetido: temMaisRepetido(raw),
+    mais_junto: temMaisJunto(raw),
     pares_soltos: temParesSoltos(raw),
   };
   return Object.keys(d).filter((k) => d[k]);
@@ -1122,3 +1127,97 @@ function gruposDuplicados(r) {
   return [...mapa.values()].filter((g) => g.length > 1)
     .sort((a, b) => a[0].line - b[0].line);
 }
+
+/* ===================================================================
+ * ONDE EXATAMENTE ESTÁ O ERRO  (v8.39)
+ * O aviso diz "linha 43", e a linha tem 200 caracteres. Aqui achamos o
+ * TRECHO culpado dentro dela, para o painel de foco poder grifar só
+ * aquele pedaço. Quando não dá para localizar, devolve a linha inteira —
+ * grifar demais é melhor do que não grifar nada.
+ * =================================================================== */
+function marcasNoBloco(bloco) {
+  const marcas = [];
+  const linhas = String(bloco || "").split(/\r?\n/);
+  let base = 0;
+  linhas.forEach((l) => {
+    const add = (ini, fim, tipo) => {
+      if (fim > ini) marcas.push({ ini: base + ini, fim: base + fim, tipo });
+    };
+    // markdown: o Anki imprime os asteriscos
+    for (const m of l.matchAll(reNegrito())) add(m.index, m.index + m[0].length, "markdown");
+    // marcador de lista no começo de uma linha de cartão
+    if (marcadorRemovivel(l)) {
+      const m = l.match(RE_MARCADOR);
+      if (m) add(0, m[0].length, "marcador");
+    }
+    // espaçamento: espaço duplo, espaço antes de pontuação, travessão colado
+    for (const m of l.matchAll(/[ \t]{2,}|\s+[,;.!?]|[^\s—]—[^\s—]/g))
+      add(m.index, m.index + m[0].length, "espacos");
+    // instrução do prompt que vazou: a linha toda é lixo
+    if (_ehLinhaDePrompt(l)) add(0, l.length, "prompt");
+    // lacuna repetida entre pergunta e resposta: grifa a do lado da resposta
+    const pos = posSeparadorTopo(l);
+    if (pos > 0) {
+      const nums = (s) => ((s.match(/\{\{c(\d+)::/g) || []).map((x) => x.replace(/\D/g, "")));
+      const naFrente = new Set(nums(l.slice(0, pos)));
+      for (const m of l.slice(pos).matchAll(/\{\{c(\d+)::/g))
+        if (naFrente.has(m[1])) add(pos + m.index, pos + m.index + m[0].length, "cloze-rep");
+      // 3º campo que é frase, não etiqueta
+      const partes = splitLine(l.trim());
+      if (partes.length === 3 && !looksLikeTags(partes[2])) {
+        const p2 = l.indexOf("::", pos + 2);
+        if (p2 > 0) add(p2, l.length, "tags-texto");
+      }
+    }
+    base += l.length + 1;
+  });
+  return marcas.sort((a, b) => a.ini - b.ini);
+}
+
+/* Junta marcas que se sobrepõem, para não grifar duas vezes o mesmo pedaço. */
+function marcasUnidas(bloco) {
+  const ms = marcasNoBloco(bloco);
+  const saida = [];
+  ms.forEach((m) => {
+    const ult = saida[saida.length - 1];
+    if (ult && m.ini <= ult.fim) { ult.fim = Math.max(ult.fim, m.fim); }
+    else saida.push({ ...m });
+  });
+  return saida;
+}
+
+/* ===================================================================
+ * CONCEITOS EMPILHADOS NUMA LINHA SÓ  (v8.40)
+ * A IA às vezes obedece "uma ideia por linha" pela metade: cria UMA
+ * linha "+" e separa os conceitos com " / " dentro dela. Passa em todas
+ * as checagens — o cartão tem explicação, o texto está bem formado — mas
+ * no Anki sai um parágrafo corrido, justamente o que o bloco separado
+ * tinha resolvido. Um cartão com 3 conceitos vira 1 linha de Saiba mais.
+ * =================================================================== */
+function _varrerMaisJunto(raw, aplicar) {
+  const L = raw.split(/\r?\n/);
+  const saida = [];
+  let achou = false;
+  for (const l of L) {
+    const s = l.trim();
+    if (s.startsWith("+")) {
+      const corpo = s.replace(/^\+\s*/, "");
+      const partes = corpo.split(/\s+\/\s+/).map((x) => x.trim()).filter(Boolean);
+      // 2+ pedaços e nenhum ridiculamente curto: é lista, não uma barra solta
+      /* So e "conceitos grudados" se cada pedaco for PROSA. Uma lista de
+       * tags ("+ Estrutura_Conceitual / Materialidade") tambem casa com o
+       * separador, e quebra-la nao ajuda ninguem — dai exigirmos varias
+       * palavras e tamanho de frase em TODOS os pedacos. */
+      const prosa = (x) => x.length >= 30 && x.split(/\s+/).length >= 4;
+      if (partes.length > 1 && partes.every(prosa)) {
+        achou = true;
+        if (aplicar) { partes.forEach((p) => saida.push("+ " + p)); continue; }
+        return true;
+      }
+    }
+    saida.push(l);
+  }
+  return aplicar ? saida.join("\n") : achou;
+}
+function temMaisJunto(raw) { return _varrerMaisJunto(raw, false); }
+function corrigirMaisJunto(raw) { return _varrerMaisJunto(raw, true); }
