@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.38.0";
+const VERSAO = "8.40.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -582,7 +582,7 @@ function renderSugestoes(r, raw) {
   }
   grupos.slice(0, 4).forEach((g) => {
     itens.push({
-      dot: "dot-org", linha: g[0].line,
+      dot: "dot-org", linha: g[0].line, grupo: true,
       txt: t("crit_dup", {
         n: g.length,
         linhas: g.map((c) => c.line).join(", "),
@@ -590,6 +590,26 @@ function renderSugestoes(r, raw) {
       }),
     });
   });
+  /* Correções disponíveis, uma por detector. Cada uma vira um item com o
+   * seu próprio botão — o usuário vê O QUE está errado antes de decidir.
+   * ATENÇÃO: esta lista some fácil numa reescrita da função (aconteceu na
+   * v8.37). O teste "todo detector aceso oferece correção" existe por isso. */
+  const CORRECOES_UI = [
+    [temPromptVazado, "crit_prompt_leak", "fix_prompt_leak", corrigirPromptVazado, "dot-red"],
+    [temMaisRepetido, "crit_mais_rep", "fix_mais_rep", corrigirMaisRepetido, "dot-org"],
+    [temClozeRepetida, "crit_cloze_rep", "fix_cloze_rep", corrigirClozeRepetida, "dot-org"],
+    [temTagsNaExplicacao, "crit_tags_in_more", "fix_tags_in_more", corrigirTagsNaExplicacao, "dot-org"],
+    [temTituloGrudado, "crit_title_glued", "fix_title_glued", corrigirTituloGrudado, "dot-org"],
+    [temTagsQueSaoTexto, "crit_pairs_tags", "fix_tags_text", corrigirTagsQueSaoTexto, "dot-org"],
+    [temMarcadores, "crit_bullets", "fix_bullets", removerMarcadoresTexto, "dot-org"],
+    [temMarkdown, "crit_markdown", "fix_markdown", corrigirMarkdown, "dot-org"],
+    [temMaisJunto, "crit_mais_junto", "fix_mais_junto", corrigirMaisJunto, "dot-blue"],
+    [temEspacosRuins, "crit_espacos", "fix_espacos", corrigirEspacos, "dot-blue"],
+  ];
+  CORRECOES_UI.forEach(([detector, critKey, fixKey, fix, dot]) => {
+    if (detector(raw)) itens.push({ dot, txt: t(critKey), fixTxt: t(fixKey), fix });
+  });
+
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
@@ -603,7 +623,8 @@ function renderSugestoes(r, raw) {
     : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
     : (temMarcadores(raw) ? removerMarcadoresTexto
     : (temMarkdown(raw) ? corrigirMarkdown
-    : (temEspacosRuins(raw) ? corrigirEspacos : null)))))))));
+    : (temMaisJunto(raw) ? corrigirMaisJunto
+    : (temEspacosRuins(raw) ? corrigirEspacos : null))))))))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -624,13 +645,15 @@ function renderSugestoes(r, raw) {
     if (it.linha || it.fix) {
       const acoes = document.createElement("div");
       acoes.className = "sug-acao";
-      if (it.linha) acoes.append(botaoMini("goto_error", "btn-cinza", () => irParaLinha(it.linha)));
+      if (it.linha)
+        acoes.append(botaoMini("goto_error", "btn-cinza", () => abrirFoco(it.linha, it.txt)));
       if (it.acao) {
         acoes.append(botaoMini(it.fixTxt ? null : "fix_now", "btn-azul", it.acao, it.fixTxt));
       } else if (it.fix) {
         // NÃO corrige direto: abre o Normalizar, onde o usuário vê
         // antes/depois de cada mudança e escolhe o que aplicar.
-        acoes.append(botaoMini("fix_now", "btn-azul", () => abrirNormalizar(it.fix)));
+        acoes.append(botaoMini(it.fixTxt ? null : "fix_now", "btn-azul",
+                              () => abrirNormalizar(it.fix), it.fixTxt));
         const rot = document.createElement("span");
         rot.className = "rot";
         rot.textContent = t("use_normalize");
@@ -3788,3 +3811,212 @@ async function recortarDuplicados(grupos) {
   preview();
   toast(t("toast_dup_cut", { n: extras.length }));
 }
+
+
+/* ===================================================================
+ * PAINEL DE FOCO  (v8.39)
+ * "Ver no texto" só rolava o editor até a linha. Numa parede de 180
+ * linhas isso é quase nada: você chega perto do problema e ainda tem de
+ * achá-lo. Aqui o cartão inteiro é isolado ao lado do painel esquerdo,
+ * com o TRECHO errado grifado, e dá para consertar sem sair dali.
+ * Também navega entre os problemas — quase nunca há só um.
+ * =================================================================== */
+let focoLista = [];      // [{ linha, msg }] de todos os problemas
+let focoAtual = -1;
+let focoBloco = null;    // { ini, fim } do bloco no editor
+
+/* Todos os problemas apontáveis, em ordem de linha. */
+function problemasNavegaveis() {
+  const r = ultimoResult || parseAtual();
+  const raw = $("editor").value;
+  const { achados } = problemasDoTexto(raw, r);
+  const grupos = gruposDuplicados(r);
+  const linhasDeGrupo = new Set(grupos.flatMap((g) => g.map((c) => c.line)));
+  // linha que já é coberta por um grupo não vira item próprio: senão o
+  // mesmo problema apareceria duas vezes na navegação
+  const lista = achados.filter((p) => !linhasDeGrupo.has(p.n))
+    .map((p) => ({ tipo: "linha", linha: p.n, msg: p.msg }));
+  // frentes repetidas entram como GRUPO: no foco elas aparecem lado a lado,
+  // porque a decisão ali é comparar e escolher qual fica
+  grupos.forEach((g) => {
+    lista.push({ tipo: "grupo", linha: g[0].line, fronts: g.map((c) => c.front),
+      msg: t("crit_dup", { n: g.length, linhas: g.map((c) => c.line).join(", "),
+        f: g[0].front.slice(0, 60) }) });
+  });
+  return lista.sort((a, b) => a.linha - b.linha);
+}
+
+function posicionarFoco() {
+  const el = $("focoCartao");
+  const esq = $("painelEsquerdo");
+  if (!el || !esq || !esq.getBoundingClientRect) return;
+  const r = esq.getBoundingClientRect();
+  const largo = matchMedia("(min-width:761px)").matches;
+  if (!largo) return;                       // no celular o CSS manda
+  el.style.left = Math.round(r.right + 12) + "px";
+  el.style.top = Math.round(Math.max(70, r.top)) + "px";
+}
+
+function escaparHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* O bloco com as marcas viradas em <mark>. */
+function blocoMarcado(bloco) {
+  const ms = marcasUnidas(bloco);
+  if (!ms.length) return escaparHtml(bloco);
+  let saida = "", pos = 0;
+  ms.forEach((m) => {
+    saida += escaparHtml(bloco.slice(pos, m.ini))
+      + "<mark>" + escaparHtml(bloco.slice(m.ini, m.fim)) + "</mark>";
+    pos = m.fim;
+  });
+  return saida + escaparHtml(bloco.slice(pos));
+}
+
+function abrirFoco(linha, msg) {
+  focoLista = problemasNavegaveis();
+  focoAtual = focoLista.findIndex((p) => p.linha === linha);
+  if (focoAtual < 0) focoLista.unshift({ linha, msg: msg || "" }), focoAtual = 0;
+  mostrarFoco();
+}
+
+function mostrarFoco() {
+  const item = focoLista[focoAtual];
+  if (!item) { fecharFoco(); return; }
+  if (item.tipo === "grupo") { mostrarFocoGrupo(item); return; }
+  const linhas = $("editor").value.split("\n");
+  const r = parseAtual();
+  // acha o cartão dono da linha; se não houver, mostra a linha sozinha
+  const dono = r.cards.find((c) => {
+    const b = blocoDoCartao(linhas, c.line);
+    return item.linha - 1 >= b.ini && item.linha - 1 <= b.fim;
+  });
+  focoBloco = dono ? blocoDoCartao(linhas, dono.line)
+                   : { ini: item.linha - 1, fim: item.linha - 1 };
+  const bloco = linhas.slice(focoBloco.ini, focoBloco.fim + 1).join("\n");
+
+  $("focoTitulo").textContent = t("foco_titulo", { n: item.linha });
+  $("focoAviso").textContent = item.msg || "";
+  $("focoMarcado").innerHTML = blocoMarcado(bloco);
+  $("focoEditor").value = bloco;
+  $("focoConta").textContent = (focoAtual + 1) + "/" + focoLista.length;
+  $("btnFocoAnterior").disabled = focoAtual <= 0;
+  $("btnFocoProximo").disabled = focoAtual >= focoLista.length - 1;
+  verFoco(false);                       // começa em leitura
+  $("focoCartao").style.display = "";
+  posicionarFoco();
+  irParaLinha(item.linha);              // o editor acompanha
+}
+
+/* alterna entre ler (com grifo) e editar (textarea) */
+function verFoco(editando) {
+  $("focoGrupo").style.display = "none";
+  $("focoMarcado").style.display = editando ? "none" : "";
+  $("focoEditor").style.display = editando ? "" : "none";
+  $("btnFocoAplicar").style.display = editando ? "" : "none";
+  $("btnFocoEditar").style.display = editando ? "none" : "";
+  if (editando) $("focoEditor").focus();
+}
+
+function fecharFoco() {
+  $("focoCartao").style.display = "none";
+  focoBloco = null;
+}
+
+function aplicarFoco() {
+  if (!focoBloco) return;
+  const novo = $("focoEditor").value;
+  const linhas = $("editor").value.split("\n");
+  colagemAnterior = { texto: $("editor").value };
+  linhas.splice(focoBloco.ini, focoBloco.fim - focoBloco.ini + 1, ...novo.split("\n"));
+  $("editor").value = linhas.join("\n");
+  $("btnDesfazerColagem").disabled = false;
+  reg("FOCO", "cartão da linha " + (focoLista[focoAtual] || {}).linha + " editado no foco");
+  autoSalvar();
+  preview();
+  // a lista de problemas mudou: recalcula e fica no mesmo lugar, se ainda houver
+  const antes = focoAtual;
+  focoLista = problemasNavegaveis();
+  if (!focoLista.length) { fecharFoco(); toast("foco_resolvido"); return; }
+  focoAtual = Math.min(antes, focoLista.length - 1);
+  mostrarFoco();
+  toast("foco_aplicado");
+}
+
+/* Modo grupo: as repetidas empilhadas, a primeira marcada como a que fica.
+ * Cada uma tem Recortar (guarda na bandeja) e Excluir. A escolha é do
+ * usuário: a repetição mais nova costuma ter a explicação melhor. */
+function mostrarFocoGrupo(item) {
+  const r = parseAtual();
+  const grupo = gruposDuplicados(r)
+    .find((g) => g.some((c) => item.fronts.includes(c.front)));
+  if (!grupo) {                       // resolvido enquanto o painel estava aberto
+    focoLista = problemasNavegaveis();
+    if (!focoLista.length) { fecharFoco(); toast("foco_resolvido"); return; }
+    focoAtual = Math.min(focoAtual, focoLista.length - 1);
+    mostrarFoco();
+    return;
+  }
+  item.fronts = grupo.map((c) => c.front);
+  $("focoTitulo").textContent = t("foco_grupo_titulo", { n: grupo.length });
+  $("focoAviso").textContent = item.msg;
+  $("focoMarcado").style.display = "none";
+  $("focoEditor").style.display = "none";
+  $("btnFocoEditar").style.display = "none";
+  $("btnFocoAplicar").style.display = "none";
+  const box = $("focoGrupo");
+  box.innerHTML = "";
+  box.style.display = "";
+  const linhas = $("editor").value.split("\n");
+  grupo.forEach((c, i) => {
+    const b = blocoDoCartao(linhas, c.line);
+    const div = document.createElement("div");
+    div.className = "foco-rep" + (i === 0 ? " fica" : "");
+    const cab = document.createElement("div");
+    cab.className = "cab-rep";
+    const selo = document.createElement("span");
+    selo.className = "selo " + (i === 0 ? "selo-fica" : "selo-rep");
+    selo.textContent = t(i === 0 ? "foco_fica" : "foco_repetida");
+    cab.append(selo, document.createTextNode(t("card_line") + " " + c.line));
+    const pre = document.createElement("pre");
+    pre.textContent = linhas.slice(b.ini, b.fim + 1).join("\n");
+    const acoes = document.createElement("div");
+    acoes.className = "acoes-rep";
+    const bRec = document.createElement("button");
+    bRec.className = "btn btn-cinza btn-min";
+    bRec.textContent = t("cut_btn");
+    bRec.onclick = () => { recortarCartao(c); aposMexerNoGrupo(); };
+    const bDel = document.createElement("button");
+    bDel.className = "btn btn-del btn-min";
+    bDel.textContent = t("del_btn");
+    bDel.onclick = async () => { await excluirCartao(c); aposMexerNoGrupo(); };
+    acoes.append(bRec, bDel);
+    div.append(cab, pre, acoes);
+    box.append(div);
+  });
+  $("focoConta").textContent = (focoAtual + 1) + "/" + focoLista.length;
+  $("btnFocoAnterior").disabled = focoAtual <= 0;
+  $("btnFocoProximo").disabled = focoAtual >= focoLista.length - 1;
+  $("focoCartao").style.display = "";
+  posicionarFoco();
+  irParaLinha(grupo[0].line);
+}
+
+function aposMexerNoGrupo() {
+  const item = focoLista[focoAtual];
+  if (item && item.tipo === "grupo") mostrarFocoGrupo(item);
+  else mostrarFoco();
+}
+
+$("btnFocoFechar").onclick = fecharFoco;
+$("btnFocoOk").onclick = fecharFoco;
+$("btnFocoEditar").onclick = () => verFoco(true);
+$("btnFocoAplicar").onclick = aplicarFoco;
+$("btnFocoAnterior").onclick = () => { if (focoAtual > 0) { focoAtual--; mostrarFoco(); } };
+$("btnFocoProximo").onclick = () => {
+  if (focoAtual < focoLista.length - 1) { focoAtual++; mostrarFoco(); }
+};
+window.addEventListener("resize", () => {
+  if ($("focoCartao").style.display !== "none") posicionarFoco();
+});

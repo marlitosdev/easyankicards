@@ -252,6 +252,47 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   color:var(--azul);text-decoration:underline;letter-spacing:.2px}
 .ver-tudo:hover{opacity:.75}
 .btn-min{padding:4px 9px;font-size:11px}
+/* ---- painel de foco ---- */
+.foco{position:fixed;z-index:60;width:380px;max-width:calc(100vw - 24px);
+  background:var(--panel);border:2px solid var(--azul);border-radius:12px;
+  box-shadow:0 8px 28px rgba(0,0,0,.35);padding:11px;max-height:76vh;
+  display:flex;flex-direction:column;gap:7px}
+.foco-cab{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;
+  color:var(--azul)}
+.foco-cab span{flex:1;min-width:0}
+.foco-x{background:none;border:0;cursor:pointer;font-size:15px;color:var(--sutil);
+  padding:0 4px;line-height:1}
+.foco-x:hover{color:var(--texto)}
+.foco-aviso{font-size:11.5px;line-height:1.45;color:var(--laranja);
+  background:var(--laranja-claro);border-radius:7px;padding:6px 8px}
+.foco-texto{margin:0;overflow:auto;flex:1;min-height:70px;
+  font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.6;
+  white-space:pre-wrap;overflow-wrap:anywhere;background:var(--campo);
+  border:1px solid var(--borda);border-radius:8px;padding:9px;color:var(--texto)}
+.foco-texto mark{background:rgba(220,38,38,.32);color:inherit;border-radius:3px;
+  outline:1px solid rgba(220,38,38,.55)}
+.foco textarea{min-height:120px;font-size:12px;margin:0}
+/* modo grupo: as repetidas empilhadas, cada uma com suas ações */
+.foco-grupo{overflow:auto;flex:1;display:flex;flex-direction:column;gap:7px}
+.foco-rep{border:1px solid var(--borda);border-radius:8px;padding:7px 8px;
+  background:var(--campo)}
+.foco-rep.fica{border-color:var(--verde-borda);background:var(--verde-claro)}
+.foco-rep .cab-rep{display:flex;align-items:center;gap:6px;font-size:10.5px;
+  font-weight:800;margin-bottom:4px}
+.foco-rep .selo{border-radius:5px;padding:1px 6px;font-size:9.5px}
+.foco-rep .selo-fica{background:var(--verde);color:#fff}
+.foco-rep .selo-rep{background:var(--laranja);color:#fff}
+.foco-rep pre{margin:0 0 5px;white-space:pre-wrap;overflow-wrap:anywhere;
+  font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.5;
+  max-height:130px;overflow:auto}
+.foco-rep .acoes-rep{display:flex;gap:5px}
+.foco-rodape{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.foco-conta{font-size:11px;color:var(--sutil);min-width:44px;text-align:center}
+.foco-rodape .btn:last-child{margin-left:auto}
+@media (max-width:760px){
+  .foco{left:8px!important;right:8px;bottom:8px;top:auto!important;width:auto;
+    max-height:62vh}
+}
 .btn-del{background:#b91c1c}
 /* bandeja: um cartão por linha, com seleção e ações próprias */
 .rec-item{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;
@@ -488,7 +529,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 
 <main>
   <div class="duas-colunas">
-    <div class="grupo">
+    <div class="grupo" id="painelEsquerdo">
       <div class="gaveta-importar">
         <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
           <span class="gv-icone">▸</span>
@@ -653,6 +694,27 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
     </div>
   </div>
 </dialog>
+
+<!-- Foco: o cartão do aviso, isolado e com o erro grifado. Fica ao lado
+     do painel esquerdo; no celular vira uma folha na parte de baixo. -->
+<aside id="focoCartao" class="foco" style="display:none" aria-live="polite">
+  <div class="foco-cab">
+    <span id="focoTitulo"></span>
+    <button type="button" class="foco-x" id="btnFocoFechar" aria-label="Fechar">✕</button>
+  </div>
+  <div class="foco-aviso" id="focoAviso"></div>
+  <pre class="foco-texto" id="focoMarcado"></pre>
+  <div class="foco-grupo" id="focoGrupo" style="display:none"></div>
+  <textarea id="focoEditor" spellcheck="false" style="display:none"></textarea>
+  <div class="foco-rodape">
+    <button class="btn btn-cinza btn-min" id="btnFocoAnterior">◀</button>
+    <span class="foco-conta" id="focoConta"></span>
+    <button class="btn btn-cinza btn-min" id="btnFocoProximo">▶</button>
+    <button class="btn btn-azul btn-min" id="btnFocoEditar" data-i18n="foco_editar"></button>
+    <button class="btn btn-verde btn-min" id="btnFocoAplicar" style="display:none" data-i18n="foco_aplicar"></button>
+    <button class="btn btn-cinza btn-min" id="btnFocoOk" data-i18n="foco_ok"></button>
+  </div>
+</aside>
 
 <div id="toast"></div>
 
