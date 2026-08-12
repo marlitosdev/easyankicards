@@ -101,6 +101,17 @@ function stableDeckId(name) {
   return 1000000000 + (h % 8999999999);
 }
 
+/* Identidade do cartao para o Anki. Reimportar o mesmo baralho ATUALIZA a
+ * nota quando o guid coincide, e cria uma copia quando nao coincide.
+ *
+ * Por isso o guid tem de sair do CONTEUDO QUE VOCE ESCREVEU, nunca do HTML
+ * gerado: enquanto ele saia dos campos ja formatados, toda melhoria de
+ * apresentacao (um <hr> novo, um <div> de paragrafo) mudava o guid de todos
+ * os cartoes e a reimportacao duplicava o baralho inteiro. */
+function guidDoCartao(c) {
+  return guidFor(c.front, [c.back || "", c.more || ""].join("\x1f"));
+}
+
 function guidFor(front, back) {
   let h = 2166136261;
   const s = front + "\x1f" + back;
@@ -148,10 +159,59 @@ const EST_TMPLS = {
        '{{#Extra}}<div class="justificativa">{{Extra}}</div>{{/Extra}}' + EST_MORE,
 };
 
+/* Transforma a explicação em blocos legíveis, na hora de exportar:
+ *   - uma linha "+" vira um bloco com espaço embaixo (antes era só <br>,
+ *     e o texto saía num parágrafo único, sem respiro entre conceitos);
+ *   - "Termo — texto" ganha o termo em negrito, que é o que o olho procura;
+ *   - a linha "---" vira um traço separando blocos de assunto.
+ * O texto do usuário NÃO muda: isto acontece só no arquivo gerado. */
+function maisEmBlocos(more) {
+  const partes = String(more || "").split(/<br\s*\/?>/i)
+    .map((s) => s.trim()).filter(Boolean);
+  if (!partes.length) return "";
+  return partes.map((p) => {
+    if (/^-{2,}$/.test(p) || p === "—") return '<hr class="mais-sep">';
+    const m = p.match(/^([^—:]{2,60})\s+—\s+([\s\S]+)$/);
+    const corpo = m ? "<b>" + m[1].trim() + "</b> — " + m[2].trim() : p;
+    return '<div class="mais-item">' + corpo + "</div>";
+  }).join("");
+}
+
+/* Mesma ideia do "Saiba mais", agora para a resposta e a justificativa:
+ * o texto chegava aqui com <br> entre as linhas, e <br> nao aceita margem —
+ * o resultado era um bloco unico, sem divisao de paragrafo. Cada linha vira
+ * um <div>, que aceita espacamento. */
+function linhasEmBlocos(txt) {
+  const linhas = String(txt || "").split(/<br\s*\/?>/i)
+    .map((s) => s.trim()).filter(Boolean);
+  const blocos = [];
+  linhas.forEach((l) => {
+    /* "I - x / II - y / III - z" e' uma lista escrita numa linha so' porque
+     * o formato exige a resposta inteira numa linha. Aqui ela volta a ser
+     * lista, com uma regua entre um item e o seguinte. */
+    const itens = typeof itensDaLista === "function" ? itensDaLista(l) : null;
+    if (itens) itens.forEach((i) => blocos.push(["item", i]));
+    else blocos.push(["par", l]);
+  });
+  if (blocos.length < 2) return String(txt || "");
+  return blocos.map(([cls, t]) => '<div class="' + cls + '">' + t + "</div>").join("");
+}
+
 function cssEstilo(p) {
+  p = Object.assign({ alinha: "justify" }, p);
   return `
 .card{background:${p.fundo};font-family:Arial,sans-serif;font-size:18px;
-  color:${p.texto};padding:14px 6px}
+  line-height:1.6;color:${p.texto};padding:14px 6px}
+/* Alinhamento declarado no NOSSO invólucro, e não herdado. O modelo padrão
+   do Anki traz ".card{text-align:center}"; quem já importou uma versão
+   antiga do baralho pode ter esse CSS grudado no tipo de nota, e aí tudo
+   sai centralizado. Declarando aqui, o resultado não depende disso. */
+.card,.eac{text-align:left}
+/* Blocos de texto corrido: justificado COM separação silábica. Justificar
+   sem hifenização abre "rios" de espaço em branco e piora a leitura no
+   celular, que é onde o cartão é revisado. */
+.box,.justificativa,.saibamais div.hint{text-align:${p.alinha};
+  hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
 .materia{max-width:480px;margin:0 auto 10px;background:${p.cab};color:${p.cabTexto};
   font-weight:bold;font-size:21px;text-align:center;padding:10px;
   border-radius:14px;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
@@ -160,51 +220,108 @@ function cssEstilo(p) {
   padding:7px;border-radius:14px 14px 0 0;box-shadow:1px 3px 4px ${p.sombra};
   box-sizing:border-box}
 .box{max-width:480px;margin:0 auto;background:${p.caixa};color:${p.texto};
-  text-align:justify;padding:18px;box-shadow:1px 3px 4px ${p.sombra};
-  box-sizing:border-box}
+  padding:18px;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
 .resposta{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.destaque};
-  font-weight:bold;font-size:21px;text-align:center;padding:12px;
-  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+  font-weight:bold;font-size:21px;line-height:1.4;text-align:center;padding:12px;
+  text-wrap:balance;box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+/* Resposta longa não cabe no formato "manchete": vira texto corrido, no
+   tamanho normal, alinhada como o resto. Quem decide é o app, na hora de
+   exportar, porque só ele sabe o tamanho do texto. */
+.resposta .longa,.resposta.longa{font-size:18px;font-weight:600;text-align:${p.alinha};
+  padding:16px;text-wrap:initial;hyphens:auto;-webkit-hyphens:auto}
 .justificativa{max-width:480px;margin:16px auto 0;background:${p.caixa};color:${p.texto};
-  text-align:justify;padding:16px;border-radius:0 0 14px 14px;
+  padding:16px;border-radius:0 0 14px 14px;
   box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+/* "Saiba mais": a pílula vale para o LINK. O conteúdo revelado é o texto
+   mais longo do cartão e antes herdava "centralizado + letter-spacing" —
+   era o que deixava a leitura difícil. Ele agora tem tratamento próprio. */
 .saibamais{max-width:480px;margin:14px auto 0;background:${p.sub || p.caixa};
-  color:${p.texto};text-align:center;padding:9px;border-radius:22px;
-  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box;letter-spacing:1px}
-.saibamais a{color:${p.destaque};text-decoration:none;font-weight:bold}
+  color:${p.texto};text-align:center;padding:11px 14px;border-radius:16px;
+  box-shadow:1px 3px 4px ${p.sombra};box-sizing:border-box}
+.saibamais a{color:${p.destaque};text-decoration:none;font-weight:bold;letter-spacing:1px}
+.saibamais div.hint{margin-top:11px;padding-top:11px;letter-spacing:normal;
+  border-top:1px solid ${p.sombra};font-size:16px;line-height:1.65}
+/* Um conceito por bloco. Entre dois conceitos entra uma linha fina: com
+   cinco ou dez conceitos, so a margem nao separa nada — o olho le tudo como
+   um paragrafo unico. A linha e discreta de proposito; o traco FORTE fica
+   reservado para "+ ---", que marca mudanca de assunto.
+   ".mais-item + .mais-item" so casa entre dois blocos seguidos, entao o
+   bloco logo apos um "+ ---" nao ganha linha dupla. */
+.mais-item{margin:0 0 9px}
+.mais-item + .mais-item{border-top:1px solid ${p.sombra}40;
+  padding-top:9px}
+.mais-item:last-child{margin-bottom:0}
+.mais-item b{color:${p.destaque}}
+.mais-sep{border:0;border-top:2px dashed ${p.destaque};margin:14px 0 12px}
+/* paragrafos da resposta longa e da justificativa */
+.par{margin:0 0 9px}
+.par + .par{border-top:1px solid ${p.sombra}33;padding-top:9px}
+.par:last-child{margin-bottom:0}
+/* itens de uma enumeracao ("I - ... / II - ...") ganham regua mais visivel
+   que a de paragrafo: aqui a linha e' o que diz "acabou um item, comecou
+   outro", e nao apenas um respiro de leitura */
+.item{margin:0 0 10px;text-align:left}
+.item + .item{border-top:1px solid ${p.sombra};padding-top:10px}
+.item:last-child{margin-bottom:0}
 .cloze{font-weight:bold;color:${p.destaque}}
 .mc-correta{color:${p.destaque};font-weight:bold}
 `;
 }
 
-const ESTILOS = {
-  classic: { ids: [1607392319, 1607392320, 1607392321], css: null },
-  esquema: { ids: [1698100011, 1698100012, 1698100013],
-    css: cssEstilo({ fundo: "#f2f3f6", texto: "#26344f", cab: "#26344f",
-      cabTexto: "#f7f7f7", sub: "#d9d9d9", caixa: "#ffffff",
-      destaque: "#4eaed9", sombra: "#abb2b9" }) },
-  dark: { ids: [1698100021, 1698100022, 1698100023],
-    css: cssEstilo({ fundo: "#14161b", texto: "#e9ebf0", cab: "#3350a5",
-      cabTexto: "#ffffff", sub: "#2a2e37", caixa: "#1f232b",
-      destaque: "#7cc4ff", sombra: "#00000088" }) },
-  paper: { ids: [1698100031, 1698100032, 1698100033],
-    css: cssEstilo({ fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34",
-      cabTexto: "#fdf6e3", sub: "#e7dcc3", caixa: "#fffaf0",
-      destaque: "#b45309", sombra: "#c9b895" }) },
+/* Cores de cada estilo. O CSS é montado na hora, porque o alinhamento do
+ * texto é escolhido pelo usuário na exportação. */
+/* (o app.js tem a sua própria tabela, só para o mini-preview do diálogo;
+   esta aqui é a que vai para o .apkg — nomes diferentes de propósito) */
+const CORES_APKG = {
+  esquema: { fundo: "#f2f3f6", texto: "#26344f", cab: "#26344f",
+    cabTexto: "#f7f7f7", sub: "#d9d9d9", caixa: "#ffffff",
+    destaque: "#4eaed9", sombra: "#abb2b9" },
+  dark: { fundo: "#14161b", texto: "#e9ebf0", cab: "#3350a5",
+    cabTexto: "#ffffff", sub: "#2a2e37", caixa: "#1f232b",
+    destaque: "#7cc4ff", sombra: "#00000088" },
+  paper: { fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34",
+    cabTexto: "#fdf6e3", sub: "#e7dcc3", caixa: "#fffaf0",
+    destaque: "#b45309", sombra: "#c9b895" },
 };
 
+const ESTILOS = {
+  classic: { ids: [1607392319, 1607392320, 1607392321], paleta: null },
+  esquema: { ids: [1698100011, 1698100012, 1698100013], paleta: "esquema" },
+  dark: { ids: [1698100021, 1698100022, 1698100023], paleta: "dark" },
+  paper: { ids: [1698100031, 1698100032, 1698100033], paleta: "paper" },
+};
+
+
 /* Monta os 3 modelos (básico, cloze, MC) para o estilo pedido. */
-function modelosParaEstilo(estilo) {
+function modelosParaEstilo(estilo, alinha) {
   const cfg = ESTILOS[estilo] || ESTILOS.classic;
+  // "justify" só compensa junto com hifenização; "left" fica disponível
+  // para quem prefere a margem direita irregular (mais comum em telas)
+  const al = alinha === "left" ? "left" : "justify";
+  const css = cfg.paleta
+    ? cssEstilo(Object.assign({ alinha: al }, CORES_APKG[cfg.paleta])) : null;
   const base = JSON.parse(JSON.stringify(COL_MODELS));
   const models = montarModeloMC(base);          // garante o MC clássico
-  if (!cfg.css) {
+  if (!css) {
     // estilo clássico: mesmo layout simples, mas com o link "Saiba mais"
     const saida = {};
     Object.keys(models).forEach((k) => {
       const m = comSaibaMais(models[k]);
       m.tmpls[0].afmt += "<br>" + EST_MORE;
-      m.css = (m.css || "") + "\n.saibamais a{color:#0b6bcb;font-weight:bold;text-decoration:none}";
+      /* o modelo classico nasce com ".card{text-align:center}": a regra e
+       * REMOVIDA, nao sobrescrita — sobrescrever depende da ordem do arquivo
+       * e some no dia em que alguem reordenar o CSS. */
+      m.css = String(m.css || "").replace(/(\.card\s*\{[^}]*?)text-align:\s*center;?/, "");
+      /* alinhamento e blocos, iguais aos estilos novos,
+       * senao a explicacao longa sai centralizada linha a linha */
+      m.css = (m.css || "") + "\n.card,.eac{text-align:left}"
+            + "\n.saibamais a{color:#0b6bcb;font-weight:bold;text-decoration:none}"
+            + "\n.mais-item{margin:0 0 9px;text-align:left}"
+            + "\n.mais-item + .mais-item{border-top:1px solid #ddd;padding-top:9px}"
+            + "\n.mais-sep{border:0;border-top:2px dashed #0b6bcb;margin:14px 0 12px}"
+            + "\n.par{margin:0 0 9px;text-align:left}"
+            + "\n.item{margin:0 0 10px;text-align:left}"
+            + "\n.item + .item{border-top:1px solid #bbb;padding-top:10px}";
       saida[k] = m;
     });
     return saida;
@@ -214,23 +331,27 @@ function modelosParaEstilo(estilo) {
   const out = {};
   const b = comSaibaMais(models["1607392319"]);
   b.id = idB; b.name = "EasyAnkiCards " + estilo + " - Básico";
-  b.css = cfg.css;
-  b.tmpls[0].qfmt = EST_TMPLS.basicQ;
-  b.tmpls[0].afmt = EST_TMPLS.basicA;
+  b.css = css;
+  const idioma = (typeof LANG !== "undefined" && LANG === "en") ? "en" : "pt-BR";
+  // sem lang o navegador não sabe onde separar as sílabas, e o texto
+  // justificado volta a abrir buracos entre as palavras
+  const env = (s) => '<div class="eac" lang="' + idioma + '">' + s + "</div>";
+  b.tmpls[0].qfmt = env(EST_TMPLS.basicQ);
+  b.tmpls[0].afmt = env(EST_TMPLS.basicA);
   out[String(idB)] = b;
 
   const c = comSaibaMais(models["1607392320"]);
   c.id = idC; c.name = "EasyAnkiCards " + estilo + " - Cloze";
-  c.css = cfg.css;
-  c.tmpls[0].qfmt = EST_TMPLS.clozeQ;
-  c.tmpls[0].afmt = EST_TMPLS.clozeA;
+  c.css = css;
+  c.tmpls[0].qfmt = env(EST_TMPLS.clozeQ);
+  c.tmpls[0].afmt = env(EST_TMPLS.clozeA);
   out[String(idC)] = c;
 
   const m = comSaibaMais(models["1607392321"]);
   m.id = idM; m.name = "EasyAnkiCards " + estilo + " - Múltipla Escolha";
-  m.css = cfg.css;
-  m.tmpls[0].qfmt = EST_TMPLS.mcQ;
-  m.tmpls[0].afmt = EST_TMPLS.mcA;
+  m.css = css;
+  m.tmpls[0].qfmt = env(EST_TMPLS.mcQ);
+  m.tmpls[0].afmt = env(EST_TMPLS.mcA);
   out[String(idM)] = m;
   return out;
 }
@@ -271,7 +392,7 @@ function montarModeloMC(models) {
 }
 
 /* cards: [{kind:"basic"|"cloze"|"mc", front, back, tags, options?, correct?}] */
-async function buildApkg(cards, deckName, estilo, titulo) {
+async function buildApkg(cards, deckName, estilo, titulo, alinha) {
   estilo = estilo || "classic";
   titulo = titulo === undefined ? "" : titulo;
   const SQL = await window.__sqlPromise;   /* initSqlJs, ver index.html */
@@ -285,7 +406,7 @@ async function buildApkg(cards, deckName, estilo, titulo) {
   deck.id = deckId; deck.name = deckName; deck.mod = nowSec;
   const decks = {}; decks["1"] = DECK_DEFAULT; decks[String(deckId)] = deck;
 
-  const models = modelosParaEstilo(estilo);
+  const models = modelosParaEstilo(estilo, alinha);
   const [MID_B, MID_C, MID_M] = (ESTILOS[estilo] || ESTILOS.classic).ids;
   db.run(
     "INSERT INTO col VALUES (1,?,?,?,11,0,0,0,?,?,?,?,'{}')",
@@ -300,18 +421,24 @@ async function buildApkg(cards, deckName, estilo, titulo) {
       mid = MID_M;
       const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
       const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
-      campos = [c.front, alts, correta, c.back || "", c.more || "",
+      campos = [c.front, alts, correta, linhasEmBlocos(c.back || ""),
+                maisEmBlocos(c.more),
                 c.titulo || titulo];
     } else {
       mid = c.kind === "cloze" ? MID_C : MID_B;
-      campos = [c.front, c.back || "", c.more || "", c.titulo || titulo];
+      // resposta comprida não funciona no formato "manchete" centralizado:
+      // marcamos aqui, que é onde se conhece o tamanho do texto
+      const verso = (c.back || "").length > 90
+        ? '<div class="longa">' + linhasEmBlocos(c.back) + "</div>"
+        : linhasEmBlocos(c.back || "");
+      campos = [c.front, verso, maisEmBlocos(c.more), c.titulo || titulo];
     }
     const noteId = id++;
     const flds = campos.join("\x1f");
     const tags = c.tags.length ? " " + c.tags.join(" ") + " " : "";
     db.run(
       "INSERT INTO notes VALUES (?,?,?,?,-1,?,?,?,0,0,'')",
-      [noteId, guidFor(c.front, flds), mid, nowSec, tags, flds, c.front]
+      [noteId, guidDoCartao(c), mid, nowSec, tags, flds, c.front]
     );
     const ords = c.kind === "cloze" ? clozeOrds(c.front) : [0];
     for (const ord of ords) {
@@ -328,4 +455,191 @@ async function buildApkg(cards, deckName, estilo, titulo) {
   zip.file("collection.anki2", bytes);
   zip.file("media", "{}");
   return await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+}
+
+
+/* ------------------------------------------------------------------
+ * IMPORTAR .apkg — lê um pacote do Anki e devolve cartões no formato
+ * do app: [{kind, front, back, tags, more, titulo}]
+ *
+ * Formatos: pacotes novos (Anki 2.1.50+) trazem collection.anki21b
+ * comprimido em zstd; os antigos trazem collection.anki2 direto.
+ * ------------------------------------------------------------------ */
+
+/* Carrega o fzstd (descompactação zstd dos pacotes modernos do Anki).
+ * Tenta dois CDNs; sem ele, pacotes novos não podem ser lidos. */
+const _FZSTD_CDNS = [
+  "https://cdnjs.cloudflare.com/ajax/libs/fzstd/0.1.1/index.min.js",
+  "https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js",
+  "https://unpkg.com/fzstd@0.1.1/umd/index.js",
+];
+
+async function _carregarFzstd() {
+  if (window.fzstd) return true;
+  for (const url of _FZSTD_CDNS) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("falhou " + url));
+        document.head.append(s);
+        setTimeout(() => reject(new Error("timeout " + url)), 8000);
+      });
+      if (window.fzstd) return true;
+    } catch (e) { /* tenta o próximo */ }
+  }
+  return false;
+}
+
+async function _descompactarZstd(bytes) {
+  if (!(await _carregarFzstd()))
+    throw new Error("ZSTD_INDISPONIVEL");
+  return window.fzstd.decompress(bytes);
+}
+
+/* Remove HTML deixando texto legível (o Anki guarda os campos em HTML). */
+function _limparHtml(s) {
+  return (s || "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(div|p|li|tr)>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function lerApkg(arrayBuffer) {
+  const SQL = await window.__sqlPromise;
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  // escolhe a melhor fonte de dados dentro do pacote
+  let bytes = null, erroZstd = null;
+  const temModerno = !!zip.file("collection.anki21b");
+  if (temModerno) {
+    const raw = await zip.file("collection.anki21b").async("uint8array");
+    try { bytes = await _descompactarZstd(raw); }
+    catch (e) { bytes = null; erroZstd = e; }
+  }
+  if (!bytes && zip.file("collection.anki21"))
+    bytes = await zip.file("collection.anki21").async("uint8array");
+  if (!bytes && zip.file("collection.anki2"))
+    bytes = await zip.file("collection.anki2").async("uint8array");
+  if (!bytes) throw new Error("collection não encontrada no pacote");
+  // guarda o contexto para detectar a "cópia de aviso" mais abaixo
+  var _pacoteModerno = temModerno, _falhouZstd = !!erroZstd;
+
+  const db = new SQL.Database(bytes);
+
+  // modelos: id -> {tipo (0 basico / 1 cloze), campos[]}
+  const modelos = {};
+  try {
+    const col = db.exec("SELECT models FROM col")[0];
+    const js = JSON.parse(col.values[0][0]);
+    Object.keys(js).forEach((k) => {
+      modelos[k] = { tipo: js[k].type, campos: (js[k].flds || []).map((f) => f.name) };
+    });
+  } catch (e) { /* formato novo: tabela notetypes */ }
+  if (!Object.keys(modelos).length) {
+    try {
+      const r = db.exec("SELECT ntid, ord, name FROM fields ORDER BY ntid, ord")[0];
+      (r ? r.values : []).forEach(([ntid, ord, nome]) => {
+        modelos[ntid] = modelos[ntid] || { tipo: 0, campos: [] };
+        modelos[ntid].campos[ord] = nome;
+      });
+      const t = db.exec("SELECT id, config FROM notetypes")[0];
+      (t ? t.values : []).forEach(([id, cfg]) => {
+        const txt = new TextDecoder("utf-8", { fatal: false }).decode(cfg);
+        if (modelos[id]) modelos[id].tipo = /cloze/i.test(txt) ? 1 : 0;
+      });
+    } catch (e) { /* segue com heurística */ }
+  }
+
+  // nome do baralho (primeiro que não seja Default)
+  let deckNome = "";
+  try {
+    const d = db.exec("SELECT decks FROM col")[0];
+    const js = JSON.parse(d.values[0][0]);
+    deckNome = (Object.values(js).map((x) => x.name).find((n) => n && n !== "Default")) || "";
+  } catch (e) {
+    try {
+      const r = db.exec("SELECT name FROM decks")[0];
+      deckNome = (r ? r.values.map((v) => String(v[0]).replace(/\x1f/g, "::")) : [])
+        .find((n) => n && n !== "Default") || "";
+    } catch (e2) { /* sem nome */ }
+  }
+
+  const res = db.exec("SELECT mid, flds, tags FROM notes");
+  const linhas = res.length ? res[0].values : [];
+  const cards = [];
+  linhas.forEach(([mid, flds, tags]) => {
+    const campos = String(flds).split("\x1f").map(_limparHtml);
+    const m = modelos[mid] || {};
+    const nomes = (m.campos || []).map((n) => String(n || "").toLowerCase());
+    const tagArr = String(tags || "").trim().split(/\s+/).filter(Boolean);
+
+    /* Modelos personalizados (muito comuns em baralhos de concurso) põem
+     * matéria/assunto nos primeiros campos e a pergunta mais adiante.
+     * Escolhemos os campos por HEURÍSTICA, na ordem:
+     *  1. nomes conhecidos (pergunta/frente/texto/afirmação...)
+     *  2. o primeiro campo que contenha lacuna {{c1::}}
+     *  3. o campo mais longo (costuma ser o enunciado) */
+    const iPor = (chaves) => nomes.findIndex((n) => chaves.some((k) => n.includes(k)));
+    let iFrente = iPor(["pergunta", "frente", "front", "texto", "text", "afirma", "enunciado", "questão", "questao"]);
+    if (iFrente < 0) iFrente = campos.findIndex((c) => /\{\{c\d+::/.test(c));
+    if (iFrente < 0) {
+      let melhor = 0;
+      campos.forEach((c, i) => { if ((c || "").length > (campos[melhor] || "").length) melhor = i; });
+      iFrente = melhor;
+    }
+    let iVerso = iPor(["resposta", "verso", "back", "correta", "gabarito"]);
+    if (iVerso === iFrente) iVerso = -1;
+    if (iVerso < 0) {
+      // primeiro campo com texto depois da frente
+      for (let i = 0; i < campos.length; i++)
+        if (i !== iFrente && (campos[i] || "").length > 1) { iVerso = i; break; }
+    }
+    let iMais = iPor(["extra", "saiba", "embasamento", "justificativa", "coment", "explica"]);
+    if (iMais === iFrente || iMais === iVerso) iMais = -1;
+    // cabeçalhos (matéria/assunto) viram TÍTULO do cartão
+    let iTitulo = iPor(["matéria", "materia", "assunto", "tópico", "topico", "título", "titulo", "header"]);
+    if (iTitulo === iFrente || iTitulo === iVerso) iTitulo = -1;
+
+    let frente = campos[iFrente] || "";
+    if (!frente) return;
+    // "#" no início vira comentário no editor; "@ + *" são metadados.
+    // Preserva o conteúdo trocando por uma forma equivalente e visível.
+    frente = frente.replace(/^\s*#\s*/, "nº ").replace(/^\s*[@+*]\s*/, "");
+    const ehCloze = m.tipo === 1 || /\{\{c\d+::/.test(frente);
+    let verso = ehCloze ? "" : (campos[iVerso] || "");
+    let mais = iMais >= 0 ? (campos[iMais] || "") : (ehCloze && iVerso >= 0 ? (campos[iVerso] || "") : "");
+    // Cartão básico SEM verso seria descartado pelo parser ("verso vazio").
+    // Usa a explicação como resposta; se não houver, deixa um marcador
+    // para o usuário completar — nenhum cartão importado se perde.
+    if (!ehCloze && !verso.trim()) {
+      if (mais.trim()) { verso = mais; mais = ""; }
+      else verso = "(sem resposta no baralho original)";
+    }
+    cards.push({
+      kind: ehCloze ? "cloze" : "basic",
+      front: frente,
+      back: verso,
+      tags: tagArr, ownTags: tagArr,
+      more: mais,
+      titulo: iTitulo >= 0 ? (campos[iTitulo] || "") : "",
+    });
+  });
+  db.close();
+  /* Pacotes modernos trazem uma cópia antiga contendo APENAS um aviso
+   * ("Atualize para a versão mais recente do Anki..."). Se caímos nela
+   * porque o zstd falhou, avisamos em vez de importar o aviso. */
+  const soAviso = cards.length <= 1 &&
+    cards.every((c) => /atualize para a vers|update to the latest/i.test(c.front || ""));
+  if (soAviso) {
+    const err = new Error(_falhouZstd ? "ZSTD_INDISPONIVEL" : "PACOTE_SO_AVISO");
+    err.code = _falhouZstd ? "ZSTD" : "AVISO";
+    throw err;
+  }
+  return { deck: deckNome, cards };
 }
