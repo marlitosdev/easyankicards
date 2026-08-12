@@ -505,6 +505,18 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   .duas-colunas .grupo:nth-child(2){position:sticky;top:8px}
   #cartoes{max-height:calc(100vh - 250px)}
 }
+.sug-info{all:unset;cursor:help;margin-left:4px;width:12px;height:12px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:9px;
+  font-weight:800;border-radius:50%;border:1px solid currentColor;opacity:.75}
+.sug-info:hover,.sug-info:focus-visible{opacity:1}
+/* O pulso usa a COR DO PRÓPRIO BOTÃO (currentColor no box-shadow), então
+   continua certo se a paleta mudar. Respeita quem pediu menos animação. */
+@keyframes pulsaBotao{
+  0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.55)}
+  50%{box-shadow:0 0 0 7px rgba(139,92,246,0)}}
+.btn.pulsa{animation:pulsaBotao 1.7s ease-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .btn.pulsa{animation:none;outline:2px solid rgba(139,92,246,.8);outline-offset:2px}}
 .sug-quem{font-size:10px;padding:1px 6px;border-radius:9px;margin-right:6px;
   white-space:nowrap;font-weight:700;letter-spacing:.2px}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde)}

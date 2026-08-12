@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.43.0";
+const VERSAO = "8.44.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -589,9 +589,21 @@ function renderSugestoes(r, raw) {
   const box = $("sugestoes");
   box.innerHTML = "";
   const itens = [];
-  if (r.warnings.length) itens.push({ dot: "dot-red", txt: t("sug_ignored", { n: r.warnings.length }) });
-  if (r.nSuspicious) itens.push({ dot: "dot-org", txt: t("sug_verify", { n: r.nSuspicious }) });
-  if (r.nPares) itens.push({ dot: "dot-blue", txt: t("sug_pairs", { n: r.nPares }) });
+  /* Todo item precisa saber ONDE ele acontece. Os três avisos agregados
+   * ("N linhas ignoradas", "N a verificar") não guardavam linha nenhuma e
+   * por isso ficavam sem "Ver no texto" — justamente os que só a IA
+   * resolve, ou seja, os que mais precisam ser encontrados no texto.
+   * A linha do PRIMEIRO caso serve de porta de entrada. */
+  const priLinha = (f) => { const c = r.cards.find(f); return c ? c.line : null; };
+  if (r.warnings.length)
+    itens.push({ dot: "dot-red", txt: t("sug_ignored", { n: r.warnings.length }),
+                 linha: r.warnLines && r.warnLines[0] });
+  if (r.nSuspicious)
+    itens.push({ dot: "dot-org", txt: t("sug_verify", { n: r.nSuspicious }),
+                 linha: priLinha((c) => c.issues && c.issues.length) });
+  if (r.nPares)
+    itens.push({ dot: "dot-blue", txt: t("sug_pairs", { n: r.nPares }),
+                 linha: priLinha((c) => c.infos && c.infos.length) });
   const vistos = {};
   let longos = 0, dups = 0;
   r.cards.forEach((c) => {
@@ -671,6 +683,11 @@ function renderSugestoes(r, raw) {
   // Cartão longo/duplicado é apenas AVISO — não acende o botão.
   const temProblema = !!correcaoPendente || r.warnings.length > 0 || precisaNormalizar(r);
   atualizarBotaoCorrigir(temProblema);
+  /* Quando sobra trabalho que o app não faz, o caminho é o prompt — e o
+   * botão passa a pedir passagem. Sem isso o usuário fica olhando para um
+   * "Nada a corrigir" apagado e conclui que não há mais o que fazer. */
+  const paraIA = itens.some((it) => !it.fix && !it.acao && it.dot !== "dot-green");
+  $("btnPromptCorrigir").classList.toggle("pulsa", paraIA);
 
   itens.slice(0, 8).forEach((it) => {
     const div = document.createElement("div");
@@ -683,9 +700,23 @@ function renderSugestoes(r, raw) {
      * arruma sozinho (formato) e o que só a IA arruma (dividir um cartão
      * longo, encurtar alternativa). Sem essa marca o usuário clica em
      * "Corrigir" esperando que resolva tudo — e conclui que está quebrado. */
+    const daIA = !(it.fix || it.acao);
     const quem = document.createElement("span");
-    quem.className = "sug-quem " + (it.fix || it.acao ? "quem-app" : "quem-ia");
-    quem.textContent = t(it.fix || it.acao ? "quem_app" : "quem_ia");
+    quem.className = "sug-quem " + (daIA ? "quem-ia" : "quem-app");
+    quem.textContent = t(daIA ? "quem_ia" : "quem_app");
+    if (daIA) {
+      /* O crachá diz QUEM resolve; o ícone diz COMO. Passar o mouse mostra
+       * a dica; tocar (celular, onde não existe "passar o mouse") abre o
+       * mesmo texto num aviso. */
+      const info = document.createElement("button");
+      info.className = "sug-info";
+      info.type = "button";
+      info.textContent = "?";
+      info.title = t("quem_ia_dica");
+      info.setAttribute("aria-label", t("quem_ia_dica"));
+      info.onclick = (e) => { e.stopPropagation(); uiAlert(t("quem_ia_dica")); };
+      quem.append(info);
+    }
     div.append(dot, quem, sp);
     // Ações em linha própria (antes ficavam espremidas ao lado do texto)
     if (it.linha || it.fix) {
@@ -1750,9 +1781,23 @@ function analisarColarRev() {
      * arruma sozinho (formato) e o que só a IA arruma (dividir um cartão
      * longo, encurtar alternativa). Sem essa marca o usuário clica em
      * "Corrigir" esperando que resolva tudo — e conclui que está quebrado. */
+    const daIA = !(it.fix || it.acao);
     const quem = document.createElement("span");
-    quem.className = "sug-quem " + (it.fix || it.acao ? "quem-app" : "quem-ia");
-    quem.textContent = t(it.fix || it.acao ? "quem_app" : "quem_ia");
+    quem.className = "sug-quem " + (daIA ? "quem-ia" : "quem-app");
+    quem.textContent = t(daIA ? "quem_ia" : "quem_app");
+    if (daIA) {
+      /* O crachá diz QUEM resolve; o ícone diz COMO. Passar o mouse mostra
+       * a dica; tocar (celular, onde não existe "passar o mouse") abre o
+       * mesmo texto num aviso. */
+      const info = document.createElement("button");
+      info.className = "sug-info";
+      info.type = "button";
+      info.textContent = "?";
+      info.title = t("quem_ia_dica");
+      info.setAttribute("aria-label", t("quem_ia_dica"));
+      info.onclick = (e) => { e.stopPropagation(); uiAlert(t("quem_ia_dica")); };
+      quem.append(info);
+    }
     div.append(dot, quem, sp);
     if (it.linha) div.append(botaoMini("goto_error", "btn-cinza", () => irLinhaColarRev(it.linha)));
     if (it.fix) div.append(botaoMini("fix_now", "btn-azul", () => corrigirColarRev(it.fix)));
@@ -3642,6 +3687,7 @@ attachTip($("btnRecortesColar"), "tip_recortes_colar");
 atualizarBarraRecortes();
 
 $("btnPromptCorrigir").onclick = abrirPromptCorrecao;
+$("btnPromptCorrigir").title = t("fixprompt_btn_tt");
 attachTip($("btnPromptCorrigir"), "tip_fixprompt");
 attachTip($("btnFixPromptColar"), "tip_fixpart_paste");
 $("fixPromptTexto").addEventListener("input", () =>

@@ -436,7 +436,7 @@ const UI = {
   "fixp_generic": "Reescreva o texto seguindo exatamente as regras de formato abaixo.",
   "crit_markdown": "Há markdown (**negrito**) — o Anki mostra os asteriscos no cartão.",
   "fix_markdown": "Converter para <b>",
-  "fixprompt_btn": "Prompt de correção",
+  "fixprompt_btn": "Criar prompt de correção",
   "fixprompt_title": "Prompt de correção para a IA",
   "fixprompt_note": "Copie e cole na sua IA (ChatGPT, Claude, Gemini). Ela devolve o texto corrigido; traga a resposta de volta para cá.",
   "fixprompt_none": "Não há problemas de formato para corrigir.",
@@ -567,7 +567,9 @@ const UI = {
   "quem_app": "o app corrige",
   "quem_ia": "precisa da IA",
   "crit_prompt_colado": "{n} linha(s) parecem o PROMPT, não o material: as regras de formatação voltaram para o editor e algumas viraram cartões.",
-  "fix_prompt_colado": "Remover as linhas do prompt"
+  "fix_prompt_colado": "Remover as linhas do prompt",
+  "quem_ia_dica": "Isto o app não arruma sozinho: exige decidir onde dividir ou o que escrever. Clique em \"Ver no texto\" para conferir e depois em \"Criar prompt de correção\" — o app monta o pedido pronto para colar na IA e devolve o texto já corrigido.",
+  "fixprompt_btn_tt": "Monta o texto para a IA corrigir o conteúdo apontado acima"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1005,7 +1007,7 @@ const UI = {
   "fixp_generic": "Rewrite the text following exactly the format rules below.",
   "crit_markdown": "Markdown found (**bold**) — Anki shows the asterisks on the card.",
   "fix_markdown": "Convert to <b>",
-  "fixprompt_btn": "Fix prompt",
+  "fixprompt_btn": "Build fix prompt",
   "fixprompt_title": "Fix prompt for the AI",
   "fixprompt_note": "Copy and paste into your AI (ChatGPT, Claude, Gemini). It returns the corrected text; bring the answer back here.",
   "fixprompt_none": "There are no format problems to fix.",
@@ -1136,7 +1138,9 @@ const UI = {
   "quem_app": "app fixes it",
   "quem_ia": "needs the AI",
   "crit_prompt_colado": "{n} line(s) look like the PROMPT rather than your material: the formatting rules came back into the editor, some of them as cards.",
-  "fix_prompt_colado": "Remove the prompt lines"
+  "fix_prompt_colado": "Remove the prompt lines",
+  "quem_ia_dica": "The app can't fix this on its own: it takes deciding where to split or what to write. Use \"See in text\" to check it, then \"Build fix prompt\" — the app writes the request for you to paste into the AI and takes the corrected text back.",
+  "fixprompt_btn_tt": "Writes the request for the AI to fix the content flagged above"
  }
 };
 const PARSER_MSG = {
