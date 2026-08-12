@@ -560,7 +560,14 @@ const UI = {
   "foco_fica": "FICA",
   "foco_repetida": "REPETIDA",
   "crit_mais_junto": "Há linhas \"+\" com vários conceitos separados por \" / \" — no Anki saem num parágrafo corrido, sem respiro entre eles.",
-  "fix_mais_junto": "Separar os conceitos"
+  "fix_mais_junto": "Separar os conceitos",
+  "bancada_cartoes": "Bancada de cartões",
+  "bancada_ampliar": "⤢ Ampliar",
+  "bancada_restaurar": "⤡ Voltar ao normal",
+  "quem_app": "o app corrige",
+  "quem_ia": "precisa da IA",
+  "crit_prompt_colado": "{n} linha(s) parecem o PROMPT, não o material: as regras de formatação voltaram para o editor e algumas viraram cartões.",
+  "fix_prompt_colado": "Remover as linhas do prompt"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1122,7 +1129,14 @@ const UI = {
   "foco_fica": "KEEP",
   "foco_repetida": "REPEAT",
   "crit_mais_junto": "Some \"+\" lines pack several concepts separated by \" / \" — in Anki they come out as one run-on paragraph.",
-  "fix_mais_junto": "Split the concepts"
+  "fix_mais_junto": "Split the concepts",
+  "bancada_cartoes": "Card workbench",
+  "bancada_ampliar": "⤢ Expand",
+  "bancada_restaurar": "⤡ Back to normal",
+  "quem_app": "app fixes it",
+  "quem_ia": "needs the AI",
+  "crit_prompt_colado": "{n} line(s) look like the PROMPT rather than your material: the formatting rules came back into the editor, some of them as cards.",
+  "fix_prompt_colado": "Remove the prompt lines"
  }
 };
 const PARSER_MSG = {

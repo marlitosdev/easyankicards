@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.42.0";
+const VERSAO = "8.43.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -423,7 +423,37 @@ function renderNumeros(linhas, marcadas, avisadas) {
   gutter.scrollTop = $("editor").scrollTop;
 }
 
+/* Mede a barra de rolagem do campo e publica a largura como --calha, para
+ * a camada colorida ter a MESMA largura útil. Sem isso as duas quebram as
+ * linhas em pontos diferentes e as marcas escorregam pelo texto — era a
+ * causa das "cores em lugar errado". Roda na abertura e a cada redimensão,
+ * porque a barra some quando o texto cabe todo na tela. */
+function medirCalha() {
+  const ed = $("editor");
+  if (!ed) return;
+  const borda = 2;   /* 1px de cada lado, igual nos dois elementos */
+  const calha = Math.max(0, ed.offsetWidth - ed.clientWidth - borda);
+  document.documentElement.style.setProperty("--calha", calha + "px");
+}
+window.addEventListener("resize", medirCalha);
+
+/* Ampliar a bancada: esconde a prévia e dá a largura toda ao editor.
+ * Fica guardado, porque quem trabalha em texto longo trabalha assim a
+ * sessão inteira e não quer reapertar o botão a cada abertura. */
+let bancadaAmpla = false;   /* o estado mora aqui, nao na classe do <main> */
+function aplicarAmpliar(ligado) {
+  bancadaAmpla = !!ligado;
+  document.querySelector("main").classList.toggle("bancada-ampla", ligado);
+  const b = $("btnAmpliar");
+  b.setAttribute("aria-pressed", ligado ? "true" : "false");
+  b.textContent = t(ligado ? "bancada_restaurar" : "bancada_ampliar");
+  localStorage.setItem("eac_ampliar", ligado ? "1" : "0");
+  medirCalha();
+  renderDestaque();
+}
+
 function renderDestaque() {
+  medirCalha();
   const linhas = $("editor").value.split("\n");
   const html = linhas.map((l, i) => {
     const n = i + 1;
@@ -594,6 +624,14 @@ function renderSugestoes(r, raw) {
    * seu próprio botão — o usuário vê O QUE está errado antes de decidir.
    * ATENÇÃO: esta lista some fácil numa reescrita da função (aconteceu na
    * v8.37). O teste "todo detector aceso oferece correção" existe por isso. */
+  /* Primeiro item da lista, antes de qualquer detalhe de formato: se o que
+   * está no editor é o prompt, nada mais importa. */
+  if (temPromptColado(raw)) {
+    const n = linhasDePrompt(raw).length;
+    itens.unshift({ dot: "dot-red", txt: t("crit_prompt_colado", { n }),
+                    fixTxt: t("fix_prompt_colado"), fix: limparPromptColado });
+  }
+
   const CORRECOES_UI = [
     [temPromptVazado, "crit_prompt_leak", "fix_prompt_leak", corrigirPromptVazado, "dot-red"],
     [temMaisRepetido, "crit_mais_rep", "fix_mais_rep", corrigirMaisRepetido, "dot-org"],
@@ -614,7 +652,8 @@ function renderSugestoes(r, raw) {
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
   // com problema — evita o usuário clicar e não encontrar nada
-  correcaoPendente = temPromptVazado(raw) ? corrigirPromptVazado
+  correcaoPendente = temPromptColado(raw) ? limparPromptColado
+    : (temPromptVazado(raw) ? corrigirPromptVazado
     : (temMaisRepetido(raw) ? corrigirMaisRepetido
     : (temClozeRepetida(raw) ? corrigirClozeRepetida
     : (temTagsNaExplicacao(raw) ? corrigirTagsNaExplicacao
@@ -624,7 +663,7 @@ function renderSugestoes(r, raw) {
     : (temMarcadores(raw) ? removerMarcadoresTexto
     : (temMarkdown(raw) ? corrigirMarkdown
     : (temMaisJunto(raw) ? corrigirMaisJunto
-    : (temEspacosRuins(raw) ? corrigirEspacos : null))))))))));
+    : (temEspacosRuins(raw) ? corrigirEspacos : null)))))))))));
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -640,7 +679,14 @@ function renderSugestoes(r, raw) {
     dot.className = "dot " + it.dot;
     const sp = document.createElement("span");
     sp.textContent = it.txt;
-    div.append(dot, sp);
+    /* Quem resolve cada coisa. A lista misturava dois mundos: o que o app
+     * arruma sozinho (formato) e o que só a IA arruma (dividir um cartão
+     * longo, encurtar alternativa). Sem essa marca o usuário clica em
+     * "Corrigir" esperando que resolva tudo — e conclui que está quebrado. */
+    const quem = document.createElement("span");
+    quem.className = "sug-quem " + (it.fix || it.acao ? "quem-app" : "quem-ia");
+    quem.textContent = t(it.fix || it.acao ? "quem_app" : "quem_ia");
+    div.append(dot, quem, sp);
     // Ações em linha própria (antes ficavam espremidas ao lado do texto)
     if (it.linha || it.fix) {
       const acoes = document.createElement("div");
@@ -1700,7 +1746,14 @@ function analisarColarRev() {
     div.className = "sug";
     const dot = document.createElement("span"); dot.className = "dot " + it.dot;
     const sp = document.createElement("span"); sp.textContent = it.txt;
-    div.append(dot, sp);
+    /* Quem resolve cada coisa. A lista misturava dois mundos: o que o app
+     * arruma sozinho (formato) e o que só a IA arruma (dividir um cartão
+     * longo, encurtar alternativa). Sem essa marca o usuário clica em
+     * "Corrigir" esperando que resolva tudo — e conclui que está quebrado. */
+    const quem = document.createElement("span");
+    quem.className = "sug-quem " + (it.fix || it.acao ? "quem-app" : "quem-ia");
+    quem.textContent = t(it.fix || it.acao ? "quem_app" : "quem_ia");
+    div.append(dot, quem, sp);
     if (it.linha) div.append(botaoMini("goto_error", "btn-cinza", () => irLinhaColarRev(it.linha)));
     if (it.fix) div.append(botaoMini("fix_now", "btn-azul", () => corrigirColarRev(it.fix)));
     box.append(div);
@@ -3077,6 +3130,8 @@ function aplicarDestaque(ligado) {
   if (ligado) renderDestaque();
 }
 $("chkDestaque").checked = localStorage.getItem("eac_destaque") !== "0";
+$("btnAmpliar").onclick = () => aplicarAmpliar(!bancadaAmpla);
+aplicarAmpliar(localStorage.getItem("eac_ampliar") === "1");
 aplicarDestaque($("chkDestaque").checked);
 $("chkDestaque").onchange = () => aplicarDestaque($("chkDestaque").checked);
 attachTip($("chkDestaque"), "tip_highlight");

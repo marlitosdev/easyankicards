@@ -423,9 +423,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
      mais larga que o campo e as quebras de linha (e a seleção) saem
      deslocadas */
   overflow-y:scroll;scrollbar-gutter:stable}
+/* A camada colorida NÃO rola sozinha (o JS copia o scrollTop do campo).
+   Mas ela precisa ter a MESMA largura útil do campo, senão quebra as
+   linhas em pontos diferentes e as marcas deslizam — era o que acontecia:
+   "scrollbar-gutter:stable" reservava a calha e o "scrollbar-width:none"
+   logo abaixo a devolvia. Agora a largura da barra é medida em JS e vira
+   padding, que ninguém pode cancelar sem querer. */
 #editorHl{position:absolute;inset:0;pointer-events:none;
-  color:transparent;z-index:0;scrollbar-width:none}
-#editorHl::-webkit-scrollbar{width:0;height:0}
+  color:transparent;z-index:0;overflow:hidden;
+  padding-right:calc(10px + var(--calha, 15px));scrollbar-gutter:auto}
 .editor-wrap textarea{border-color:var(--borda);resize:vertical}
 .editor-wrap.sem-destaque #editorHl{display:none}
 .grupo-titulo-geral{margin-bottom:10px}
@@ -499,6 +505,20 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   .duas-colunas .grupo:nth-child(2){position:sticky;top:8px}
   #cartoes{max-height:calc(100vh - 250px)}
 }
+.sug-quem{font-size:10px;padding:1px 6px;border-radius:9px;margin-right:6px;
+  white-space:nowrap;font-weight:700;letter-spacing:.2px}
+.quem-app{background:rgba(26,127,55,.16);color:var(--verde)}
+.quem-ia{background:rgba(139,92,246,.18);color:#a78bfa}
+:root[data-theme="light"] .quem-ia{color:#6d28d9}
+.bancada-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:8px;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
+.bancada-nome{font-weight:700;font-size:13px;letter-spacing:.3px;color:var(--texto)}
+/* Modo ampliado: a bancada ocupa a largura toda e a prévia sai de cena.
+   É uma classe no <main>, não um estilo embutido, para o botão poder
+   desfazer sem precisar lembrar de nada. */
+main.bancada-ampla .duas-colunas{grid-template-columns:minmax(0,1fr)}
+main.bancada-ampla .duas-colunas .grupo:nth-child(2){display:none}
+main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .duas-colunas > *{min-width:0}          /* impede o grid de estourar */
 #cartoes{overflow-x:hidden}
 #cartoes .card, #cartoes .card *{max-width:100%;overflow-wrap:anywhere;
@@ -530,6 +550,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 <main>
   <div class="duas-colunas">
     <div class="grupo" id="painelEsquerdo">
+      <div class="bancada-cab">
+        <span class="bancada-nome" id="bancadaNome" data-i18n="bancada_cartoes"></span>
+        <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
+                aria-pressed="false" title=""></button>
+      </div>
       <div class="gaveta-importar">
         <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
           <span class="gv-icone">▸</span>
