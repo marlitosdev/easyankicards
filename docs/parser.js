@@ -1219,5 +1219,28 @@ function _varrerMaisJunto(raw, aplicar) {
   }
   return aplicar ? saida.join("\n") : achou;
 }
+/* Uma resposta como "I - fato / II - regra / III - prova" e' uma LISTA, nao
+ * uma frase. O prompt manda usar " / " para listar itens na mesma linha
+ * (a resposta tem de caber numa linha so'), e ate' aqui isso chegava ao
+ * Anki como texto corrido. Esta funcao reconhece a lista para que ela possa
+ * ser desenhada com uma linha entre os itens.
+ *
+ * Devolve os itens, ou null quando NAO e' lista — e o "null" e' a parte
+ * importante: "R$ 40 / mes", "km / h" e "entrada / saida" tambem tem barra,
+ * e quebra-los seria pior do que nao fazer nada. Por isso a barra sozinha
+ * nao basta; ou todos os pedacos comecam com marcador de enumeracao, ou
+ * todos tem tamanho de item de verdade. */
+const RE_ITEM_LISTA =
+  /^(?:[IVXLC]{1,5}\s*[-–—.):]|[a-eA-E]\s*[-–—.)]|\d{1,2}\s*[-–—.)])\s*\S/;
+
+function itensDaLista(txt) {
+  const partes = String(txt || "").split(/\s+\/\s+/)
+    .map((s) => s.trim()).filter(Boolean);
+  if (partes.length < 2) return null;
+  if (partes.every((x) => RE_ITEM_LISTA.test(x))) return partes;
+  if (partes.every((x) => x.length >= 25 && /\s/.test(x))) return partes;
+  return null;
+}
+
 function temMaisJunto(raw) { return _varrerMaisJunto(raw, false); }
 function corrigirMaisJunto(raw) { return _varrerMaisJunto(raw, true); }

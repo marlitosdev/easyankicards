@@ -182,10 +182,19 @@ function maisEmBlocos(more) {
  * o resultado era um bloco unico, sem divisao de paragrafo. Cada linha vira
  * um <div>, que aceita espacamento. */
 function linhasEmBlocos(txt) {
-  const partes = String(txt || "").split(/<br\s*\/?>/i)
+  const linhas = String(txt || "").split(/<br\s*\/?>/i)
     .map((s) => s.trim()).filter(Boolean);
-  if (partes.length < 2) return String(txt || "");
-  return partes.map((p) => '<div class="par">' + p + "</div>").join("");
+  const blocos = [];
+  linhas.forEach((l) => {
+    /* "I - x / II - y / III - z" e' uma lista escrita numa linha so' porque
+     * o formato exige a resposta inteira numa linha. Aqui ela volta a ser
+     * lista, com uma regua entre um item e o seguinte. */
+    const itens = typeof itensDaLista === "function" ? itensDaLista(l) : null;
+    if (itens) itens.forEach((i) => blocos.push(["item", i]));
+    else blocos.push(["par", l]);
+  });
+  if (blocos.length < 2) return String(txt || "");
+  return blocos.map(([cls, t]) => '<div class="' + cls + '">' + t + "</div>").join("");
 }
 
 function cssEstilo(p) {
@@ -248,6 +257,12 @@ function cssEstilo(p) {
 .par{margin:0 0 9px}
 .par + .par{border-top:1px solid ${p.sombra}33;padding-top:9px}
 .par:last-child{margin-bottom:0}
+/* itens de uma enumeracao ("I - ... / II - ...") ganham regua mais visivel
+   que a de paragrafo: aqui a linha e' o que diz "acabou um item, comecou
+   outro", e nao apenas um respiro de leitura */
+.item{margin:0 0 10px;text-align:left}
+.item + .item{border-top:1px solid ${p.sombra};padding-top:10px}
+.item:last-child{margin-bottom:0}
 .cloze{font-weight:bold;color:${p.destaque}}
 .mc-correta{color:${p.destaque};font-weight:bold}
 `;
@@ -304,7 +319,9 @@ function modelosParaEstilo(estilo, alinha) {
             + "\n.mais-item{margin:0 0 9px;text-align:left}"
             + "\n.mais-item + .mais-item{border-top:1px solid #ddd;padding-top:9px}"
             + "\n.mais-sep{border:0;border-top:2px dashed #0b6bcb;margin:14px 0 12px}"
-            + "\n.par{margin:0 0 9px;text-align:left}";
+            + "\n.par{margin:0 0 9px;text-align:left}"
+            + "\n.item{margin:0 0 10px;text-align:left}"
+            + "\n.item + .item{border-top:1px solid #bbb;padding-top:10px}";
       saida[k] = m;
     });
     return saida;
