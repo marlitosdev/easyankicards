@@ -721,6 +721,7 @@ function detectoresAtivos(raw) {
     prompt_vazado: temPromptVazado(raw),
     mais_repetido: temMaisRepetido(raw),
     mais_junto: temMaisJunto(raw),
+    prompt_colado: temPromptColado(raw),
     pares_soltos: temParesSoltos(raw),
   };
   return Object.keys(d).filter((k) => d[k]);
@@ -1232,6 +1233,69 @@ function _varrerMaisJunto(raw, aplicar) {
  * todos tem tamanho de item de verdade. */
 const RE_ITEM_LISTA =
   /^(?:[IVXLC]{1,5}\s*[-–—.):]|[a-eA-E]\s*[-–—.)]|\d{1,2}\s*[-–—.)])\s*\S/;
+
+/* ------------------------------------------------------------------
+ * O PROMPT COLADO DE VOLTA
+ *
+ * O caso mais caro que aconteceu: em vez do material de estudo, volta
+ * para o editor o proprio prompt — as vezes literal ("+ g) SEM MARKDOWN"),
+ * as vezes pior, com a IA transformando as REGRAS em cartoes ("Quais sao
+ * as regras obrigatorias de formatacao? {{c1::...}}").
+ *
+ * Nenhum detector de FORMATO enxerga isso: sao cartoes perfeitos. O que
+ * denuncia e' o assunto. Por isso este detector olha vocabulario, e nao
+ * sintaxe — e por isso ele so' AVISA, nunca apaga sozinho: um baralho
+ * sobre metodo de estudo falaria dessas mesmas palavras por direito.
+ * ------------------------------------------------------------------ */
+const RE_INSTRUCAO = [
+  /^\s*\+?\s*[a-h]\)\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{3,}:/,   /* "+ g) SEM MARKDOWN:" */
+  /^\s*\+?\s*CART[ÕO]ES\s*:\s*$/i,
+  /^\s*\+?\s*(TEXTO-BASE|REGRAS DE FORMATO|EXEMPLO DE SA[ÍI]DA)\b/i,
+  /^\s*\+?\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{6,}:\s*(cada|a linha|use|nunca|nada)/i,
+  /\bnunca quebre a resposta\b/i,
+  /\bfica SOZINHA, ACIMA do cart[ãa]o\b/i,
+  /\bResponda (?:SOMENTE|apenas) com os cart[õo]es\b/i,
+  /\bcole aqui o material de estudo\b/i,
+  /\bum cart[ãa]o por linha\b/i,
+  /\bsepara(?:das)? por v[íi]rgula, sem espa[çc]os internos\b/i,
+];
+/* assuntos que so' aparecem quando o baralho virou um manual do proprio app */
+const RE_ASSUNTO_APP = [
+  /\bformata[çc][ãa]o de flashcards\b/i,
+  /\bregras obrigat[óo]rias de formata[çc][ãa]o\b/i,
+  /\bo aplicativo rejeita\b/i,
+  /\bnumera[çc][ãa]o d(?:as|e) lacunas\b/i,
+];
+
+function linhasDePrompt(raw) {
+  const achadas = [];
+  String(raw || "").split(/\r?\n/).forEach((l, i) => {
+    if (!l.trim()) return;
+    const bate = RE_INSTRUCAO.some((re) => re.test(l))
+      || RE_ASSUNTO_APP.some((re) => re.test(l));
+    if (bate) achadas.push({ linha: i + 1, txt: l.trim() });
+  });
+  return achadas;
+}
+
+function temPromptColado(raw) { return linhasDePrompt(raw).length >= 2; }
+
+/* Remove as linhas denunciadas. Vai marcada como limpeza porque apaga
+ * conteudo de proposito — a rede de seguranca que barra perda de cartoes
+ * nao se aplica aqui. */
+function limparPromptColado(raw) {
+  const alvo = new Set(linhasDePrompt(raw).map((x) => x.linha));
+  const L = String(raw || "").split(/\r?\n/);
+  /* A explicacao pertence ao cartao de cima. Removido o cartao, as linhas
+   * "+" seguintes ficam orfas — e uma explicacao sem dono e' pior que a
+   * linha original, porque o app tenta gruda-la no cartao anterior. */
+  L.forEach((l, i) => {
+    if (!alvo.has(i + 1) || !hasDelim(l)) return;
+    for (let j = i + 1; j < L.length && /^\s*[+*]/.test(L[j]); j++) alvo.add(j + 1);
+  });
+  return L.filter((_, i) => !alvo.has(i + 1)).join("\n");
+}
+limparPromptColado.limpeza = true;
 
 function itensDaLista(txt) {
   const partes = String(txt || "").split(/\s+\/\s+/)
