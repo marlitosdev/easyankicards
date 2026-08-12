@@ -101,6 +101,17 @@ function stableDeckId(name) {
   return 1000000000 + (h % 8999999999);
 }
 
+/* Identidade do cartao para o Anki. Reimportar o mesmo baralho ATUALIZA a
+ * nota quando o guid coincide, e cria uma copia quando nao coincide.
+ *
+ * Por isso o guid tem de sair do CONTEUDO QUE VOCE ESCREVEU, nunca do HTML
+ * gerado: enquanto ele saia dos campos ja formatados, toda melhoria de
+ * apresentacao (um <hr> novo, um <div> de paragrafo) mudava o guid de todos
+ * os cartoes e a reimportacao duplicava o baralho inteiro. */
+function guidDoCartao(c) {
+  return guidFor(c.front, [c.back || "", c.more || ""].join("\x1f"));
+}
+
 function guidFor(front, back) {
   let h = 2166136261;
   const s = front + "\x1f" + back;
@@ -166,11 +177,27 @@ function maisEmBlocos(more) {
   }).join("");
 }
 
+/* Mesma ideia do "Saiba mais", agora para a resposta e a justificativa:
+ * o texto chegava aqui com <br> entre as linhas, e <br> nao aceita margem —
+ * o resultado era um bloco unico, sem divisao de paragrafo. Cada linha vira
+ * um <div>, que aceita espacamento. */
+function linhasEmBlocos(txt) {
+  const partes = String(txt || "").split(/<br\s*\/?>/i)
+    .map((s) => s.trim()).filter(Boolean);
+  if (partes.length < 2) return String(txt || "");
+  return partes.map((p) => '<div class="par">' + p + "</div>").join("");
+}
+
 function cssEstilo(p) {
   p = Object.assign({ alinha: "justify" }, p);
   return `
 .card{background:${p.fundo};font-family:Arial,sans-serif;font-size:18px;
   line-height:1.6;color:${p.texto};padding:14px 6px}
+/* Alinhamento declarado no NOSSO invólucro, e não herdado. O modelo padrão
+   do Anki traz ".card{text-align:center}"; quem já importou uma versão
+   antiga do baralho pode ter esse CSS grudado no tipo de nota, e aí tudo
+   sai centralizado. Declarando aqui, o resultado não depende disso. */
+.card,.eac{text-align:left}
 /* Blocos de texto corrido: justificado COM separação silábica. Justificar
    sem hifenização abre "rios" de espaço em branco e piora a leitura no
    celular, que é onde o cartão é revisado. */
@@ -205,11 +232,22 @@ function cssEstilo(p) {
 .saibamais a{color:${p.destaque};text-decoration:none;font-weight:bold;letter-spacing:1px}
 .saibamais div.hint{margin-top:11px;padding-top:11px;letter-spacing:normal;
   border-top:1px solid ${p.sombra};font-size:16px;line-height:1.65}
-/* um conceito por bloco, com respiro entre eles */
+/* Um conceito por bloco. Entre dois conceitos entra uma linha fina: com
+   cinco ou dez conceitos, so a margem nao separa nada — o olho le tudo como
+   um paragrafo unico. A linha e discreta de proposito; o traco FORTE fica
+   reservado para "+ ---", que marca mudanca de assunto.
+   ".mais-item + .mais-item" so casa entre dois blocos seguidos, entao o
+   bloco logo apos um "+ ---" nao ganha linha dupla. */
 .mais-item{margin:0 0 9px}
+.mais-item + .mais-item{border-top:1px solid ${p.sombra}40;
+  padding-top:9px}
 .mais-item:last-child{margin-bottom:0}
 .mais-item b{color:${p.destaque}}
-.mais-sep{border:0;border-top:1px dashed ${p.sombra};margin:12px 0}
+.mais-sep{border:0;border-top:2px dashed ${p.destaque};margin:14px 0 12px}
+/* paragrafos da resposta longa e da justificativa */
+.par{margin:0 0 9px}
+.par + .par{border-top:1px solid ${p.sombra}33;padding-top:9px}
+.par:last-child{margin-bottom:0}
 .cloze{font-weight:bold;color:${p.destaque}}
 .mc-correta{color:${p.destaque};font-weight:bold}
 `;
@@ -255,7 +293,18 @@ function modelosParaEstilo(estilo, alinha) {
     Object.keys(models).forEach((k) => {
       const m = comSaibaMais(models[k]);
       m.tmpls[0].afmt += "<br>" + EST_MORE;
-      m.css = (m.css || "") + "\n.saibamais a{color:#0b6bcb;font-weight:bold;text-decoration:none}";
+      /* o modelo classico nasce com ".card{text-align:center}": a regra e
+       * REMOVIDA, nao sobrescrita — sobrescrever depende da ordem do arquivo
+       * e some no dia em que alguem reordenar o CSS. */
+      m.css = String(m.css || "").replace(/(\.card\s*\{[^}]*?)text-align:\s*center;?/, "");
+      /* alinhamento e blocos, iguais aos estilos novos,
+       * senao a explicacao longa sai centralizada linha a linha */
+      m.css = (m.css || "") + "\n.card,.eac{text-align:left}"
+            + "\n.saibamais a{color:#0b6bcb;font-weight:bold;text-decoration:none}"
+            + "\n.mais-item{margin:0 0 9px;text-align:left}"
+            + "\n.mais-item + .mais-item{border-top:1px solid #ddd;padding-top:9px}"
+            + "\n.mais-sep{border:0;border-top:2px dashed #0b6bcb;margin:14px 0 12px}"
+            + "\n.par{margin:0 0 9px;text-align:left}";
       saida[k] = m;
     });
     return saida;
@@ -355,14 +404,16 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha) {
       mid = MID_M;
       const alts = c.options.map((o, i) => letra(i) + ") " + o).join("<br>");
       const correta = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
-      campos = [c.front, alts, correta, c.back || "", maisEmBlocos(c.more),
+      campos = [c.front, alts, correta, linhasEmBlocos(c.back || ""),
+                maisEmBlocos(c.more),
                 c.titulo || titulo];
     } else {
       mid = c.kind === "cloze" ? MID_C : MID_B;
       // resposta comprida não funciona no formato "manchete" centralizado:
       // marcamos aqui, que é onde se conhece o tamanho do texto
       const verso = (c.back || "").length > 90
-        ? '<div class="longa">' + c.back + "</div>" : (c.back || "");
+        ? '<div class="longa">' + linhasEmBlocos(c.back) + "</div>"
+        : linhasEmBlocos(c.back || "");
       campos = [c.front, verso, maisEmBlocos(c.more), c.titulo || titulo];
     }
     const noteId = id++;
@@ -370,7 +421,7 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha) {
     const tags = c.tags.length ? " " + c.tags.join(" ") + " " : "";
     db.run(
       "INSERT INTO notes VALUES (?,?,?,?,-1,?,?,?,0,0,'')",
-      [noteId, guidFor(c.front, flds), mid, nowSec, tags, flds, c.front]
+      [noteId, guidDoCartao(c), mid, nowSec, tags, flds, c.front]
     );
     const ords = c.kind === "cloze" ? clozeOrds(c.front) : [0];
     for (const ord of ords) {
