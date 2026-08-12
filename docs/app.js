@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.41.0";
+const VERSAO = "8.42.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1072,6 +1072,32 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   if (btF) wrap.append(btF);
 
   if (!mostrarResposta) return;   // verso só quando o usuário pedir
+  /* A prévia tem de mostrar a MESMA divisão do arquivo exportado; quando as
+   * duas divergem, o usuário só descobre o problema depois de importar. */
+  const emBlocos = (el, txt, cor) => {
+    const linhas = String(txt || "").split(/<br\s*\/?>/i)
+      .map((s) => s.trim()).filter(Boolean);
+    const blocos = [];
+    linhas.forEach((l) => {
+      const itens = itensDaLista(l);
+      if (itens) itens.forEach((i) => blocos.push(["item", i]));
+      else blocos.push(["par", l]);
+    });
+    if (blocos.length < 2) { el.textContent = txt || ""; return; }
+    blocos.forEach(([cls, txt2], i) => {
+      const d = document.createElement("div");
+      d.textContent = txt2;
+      d.style.margin = "0 0 8px";
+      if (i) {
+        d.style.borderTop = "1px solid " + cor;
+        d.style.opacity = "";
+        d.style.paddingTop = "8px";
+        if (cls === "par") d.style.borderTopColor = cor + "55";
+      }
+      el.append(d);
+    });
+  };
+
   const temVerso = c.kind === "mc" || (!CLOZE_RE.test(c.front) && c.back);
   const rot2 = document.createElement("div");
   rot2.className = "lado-rotulo"; rot2.textContent = t("lado_verso");
@@ -1085,7 +1111,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     "font-size:" + (longa ? "13" : "14") + "px;color:" + p.destaque + ";" + sombra;
   if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
   else if (CLOZE_RE.test(c.front)) verso.textContent = "";
-  else verso.textContent = c.back;
+  else emBlocos(verso, c.back, p.texto);
   if (temVerso) {
     wrap.append(verso);
     const btV = limitarAltura(verso, c.back, p.caixa);
@@ -1127,7 +1153,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     just.style.cssText = "background:" + p.caixa + ";color:" + p.texto +
       ";padding:10px;text-align:" + al + ";font-size:12.5px;margin-top:6px;" +
       "border-radius:0 0 11px 11px;" + sombra;
-    just.textContent = c.back;
+    emBlocos(just, c.back, p.texto);
     wrap.append(just);
     const btJ = limitarAltura(just, c.back, p.caixa);
     if (btJ) wrap.append(btJ);
