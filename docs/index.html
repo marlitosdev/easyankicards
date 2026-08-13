@@ -522,6 +522,60 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde)}
 .quem-ia{background:rgba(139,92,246,.18);color:#a78bfa}
 :root[data-theme="light"] .quem-ia{color:#6d28d9}
+/* ---- barra de modos ----------------------------------------------
+   Trilho vertical no computador, fileira de abas no celular. A MESMA
+   marcação nos dois: quem monta é o registro em modos.js, e o CSS só
+   decide a direção. */
+.barra-modos{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+.modo-btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;
+  align-items:center;gap:8px;padding:9px 13px;border-radius:10px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--sutil);
+  font-size:13px;font-weight:600;white-space:nowrap}
+.modo-btn:hover{border-color:var(--borda-forte,var(--borda));color:var(--texto)}
+.modo-btn.ativo{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
+.modo-ic{font-size:15px;line-height:1}
+.modo-selo{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:1px 6px;border-radius:8px;background:rgba(139,92,246,.18);color:#a78bfa}
+.modo-btn.ativo .modo-selo{background:rgba(255,255,255,.22);color:#fff}
+:root[data-theme="light"] .modo-selo{color:#6d28d9}
+/* ---- esqueleto dos modos que ainda não existem --------------------
+   Formas cinzas no lugar do conteúdo: mostram a ARRUMAÇÃO da tela sem
+   fingir que há dado real ali. */
+.esqueleto{width:100%;box-sizing:border-box;border:1px dashed var(--borda);
+  border-radius:8px;background:var(--campo);color:var(--sutil);padding:10px;
+  font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.5;
+  opacity:.75;resize:none}
+.esqueleto-lista{border:1px dashed var(--borda);border-radius:8px;margin:6px 0}
+.esq-linha{display:flex;justify-content:space-between;gap:10px;padding:8px 11px;
+  font-size:12.5px;border-bottom:1px solid var(--borda);opacity:.65}
+.esq-linha:last-child{border-bottom:0}
+.esq-peso{font-weight:700;color:var(--sutil)}
+.esqueleto-tab{width:100%;border-collapse:collapse;font-size:12.5px;opacity:.65;
+  border:1px dashed var(--borda);border-radius:8px}
+.esqueleto-tab th,.esqueleto-tab td{padding:7px 9px;text-align:left;
+  border-bottom:1px solid var(--borda)}
+.esqueleto-tab th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--sutil)}
+.esq-vazio td{text-align:center;font-style:italic;color:var(--sutil);opacity:.8}
+.esqueleto-doc{border:1px dashed var(--borda);border-radius:8px;padding:14px;margin:6px 0}
+.esq-h1{height:15px;width:52%;border-radius:4px;background:var(--borda);margin:0 0 12px}
+.esq-h2{height:11px;width:34%;border-radius:4px;background:var(--borda);margin:16px 0 9px}
+.esq-p{height:8px;border-radius:4px;background:var(--borda);opacity:.55;margin:0 0 7px}
+.esq-p.curto{width:62%}
+.btn-linha{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.btn-linha .btn{flex:1;min-width:130px}
+@media (min-width:900px){
+  .barra-modos{position:sticky;top:8px;float:left;flex-direction:column;
+    width:172px;margin:0 14px 0 0}
+  .modo-area{overflow:hidden}
+}
+.barra-recuperar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  margin:0 0 10px;padding:9px 11px;border-radius:9px;font-size:12px;
+  background:rgba(220,38,38,.14);border:1px solid rgba(220,38,38,.45)}
+.barra-recuperar .br-acoes{margin-left:auto;display:flex;gap:6px}
+.hist-item{display:flex;align-items:center;gap:10px;padding:8px 4px;
+  border-bottom:1px solid var(--borda);font-size:12.5px}
+.hist-item > :last-child{margin-left:auto}
 .bancada-cab{display:flex;align-items:center;justify-content:space-between;
   gap:8px;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
 .bancada-nome{font-weight:700;font-size:13px;letter-spacing:.3px;color:var(--texto)}
@@ -560,12 +614,25 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 </header>
 
 <main>
+<nav class="barra-modos" id="barraModos" role="tablist" aria-label="Modos"></nav>
+<div class="modo-area">
+<section id="secCartoes" data-modo="cartoes">
   <div class="duas-colunas">
     <div class="grupo" id="painelEsquerdo">
       <div class="bancada-cab">
         <span class="bancada-nome" id="bancadaNome" data-i18n="bancada_cartoes"></span>
+        <span style="display:flex;gap:6px">
+        <button class="btn-min" id="btnHistorico" title=""></button>
         <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
                 aria-pressed="false" title=""></button>
+        </span>
+      </div>
+      <div class="barra-recuperar" id="barraRecuperar" hidden>
+        <span id="recuperarTxt"></span>
+        <span class="br-acoes">
+          <button class="btn-min btn-azul" id="btnRecuperar" data-i18n="hist_recuperar"></button>
+          <button class="btn-min" id="btnRecuperarNao" data-i18n="hist_recuperar_nao"></button>
+        </span>
       </div>
       <div class="gaveta-importar">
         <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
@@ -709,6 +776,85 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <div id="cartoes"></div>
     </div>
   </div>
+</section>
+
+<section id="secEdital" data-modo="edital" hidden>
+  <div class="duas-colunas">
+    <div class="grupo">
+      <div class="bancada-cab">
+        <span class="bancada-nome" data-i18n="edital_bancada"></span>
+      </div>
+      <p class="nota" data-i18n="edital_intro"></p>
+      <div class="rotulo" data-i18n="edital_colar"></div>
+      <textarea id="editalTexto" class="esqueleto" rows="12" disabled
+                placeholder="1 Direito Constitucional&#10;1.1 Princípios fundamentais&#10;1.2 Direitos e garantias&#10;2 Auditoria Governamental&#10;2.1 Achado de auditoria"></textarea>
+      <div class="btn-linha">
+        <button class="btn btn-verde" disabled data-i18n="edital_ler"></button>
+        <button class="btn btn-cinza" disabled data-i18n="edital_exemplo"></button>
+      </div>
+      <div class="rotulo" data-i18n="edital_pesos"></div>
+      <div class="esqueleto-lista">
+        <div class="esq-linha"><span>Direito Constitucional</span><span class="esq-peso">peso 3</span></div>
+        <div class="esq-linha"><span>Auditoria Governamental</span><span class="esq-peso">peso 5</span></div>
+        <div class="esq-linha"><span>Controle Externo</span><span class="esq-peso">peso 4</span></div>
+      </div>
+      <div class="btn-linha">
+        <button class="btn btn-roxo" disabled data-i18n="edital_prompt"></button>
+      </div>
+    </div>
+    <div class="grupo">
+      <div class="bancada-cab"><span class="bancada-nome" data-i18n="edital_prioridade"></span></div>
+      <table class="esqueleto-tab">
+        <thead><tr><th data-i18n="edital_col_topico"></th><th data-i18n="edital_col_peso"></th>
+          <th data-i18n="edital_col_horas"></th><th data-i18n="edital_col_feito"></th></tr></thead>
+        <tbody>
+          <tr><td>Achado de auditoria</td><td>100</td><td>2h30</td><td>☐</td></tr>
+          <tr><td>Princípios fundamentais</td><td>84</td><td>2h00</td><td>☐</td></tr>
+          <tr><td>Direitos e garantias</td><td>71</td><td>1h45</td><td>☐</td></tr>
+          <tr class="esq-vazio"><td colspan="4" data-i18n="edital_amostra"></td></tr>
+        </tbody>
+      </table>
+      <div class="btn-linha">
+        <button class="btn btn-verde" disabled data-i18n="edital_csv"></button>
+        <button class="btn btn-azul" disabled data-i18n="edital_painel"></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="secResumos" data-modo="resumos" hidden>
+  <div class="duas-colunas">
+    <div class="grupo">
+      <div class="bancada-cab">
+        <span class="bancada-nome" data-i18n="resumo_bancada"></span>
+      </div>
+      <p class="nota" data-i18n="resumo_intro"></p>
+      <div class="rotulo" data-i18n="resumo_colar"></div>
+      <textarea id="resumoTexto2" class="esqueleto" rows="14" disabled
+                placeholder="Cole aqui a matéria bruta — aula, PDF, anotação —&#10;e o app devolve o resumo estruturado."></textarea>
+      <div class="btn-linha">
+        <button class="btn btn-verde" disabled data-i18n="resumo_gerar"></button>
+        <button class="btn btn-roxo" disabled data-i18n="resumo_prompt"></button>
+      </div>
+    </div>
+    <div class="grupo">
+      <div class="bancada-cab"><span class="bancada-nome" data-i18n="resumo_saida"></span></div>
+      <div class="esqueleto-doc">
+        <div class="esq-h1">Achado de auditoria</div>
+        <div class="esq-p"></div><div class="esq-p curto"></div>
+        <div class="esq-h2">Elementos</div>
+        <div class="esq-p"></div><div class="esq-p"></div><div class="esq-p curto"></div>
+        <div class="esq-h2">Pegadinhas de prova</div>
+        <div class="esq-p"></div><div class="esq-p curto"></div>
+      </div>
+      <div class="btn-linha">
+        <button class="btn btn-verde" disabled data-i18n="resumo_md"></button>
+        <button class="btn btn-azul" disabled data-i18n="resumo_virar_cartoes"></button>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
 </main>
 
 <div id="barraUpdate">
@@ -890,6 +1036,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </dialog>
 
+<dialog id="dlgHistorico" class="ui-modal">
+  <h3 data-i18n="hist_titulo"></h3>
+  <p class="nota" data-i18n="hist_ajuda"></p>
+  <div id="histLista" style="max-height:50vh;overflow:auto;margin:8px 0"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="dlgHistFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgRecortes" style="max-width:680px;width:94%">
   <div style="padding:16px">
     <h3 style="margin:0 0 6px" data-i18n="recortes_titulo"></h3>
@@ -1064,5 +1218,7 @@ window.__sqlPromise = initSqlJs({
 <script src="parser.js"></script>
 <script src="anki.js"></script>
 <script src="app.js"></script>
+<script src="modos.js"></script>
+<script>montarBarraModos();</script>
 </body>
 </html>

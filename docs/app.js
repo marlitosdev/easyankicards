@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.44.0";
+const VERSAO = "8.47.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -523,6 +523,7 @@ let ultimoAjuste = null;   // { acao, antes, depois } da última correção
  * operação, um da prévia e outro da aplicação. O registro passava a
  * impressão de que o botão rodava duas vezes (v8.35). */
 function corrigirComSeguranca(fn, texto, simular) {
+  if (!simular) guardarVersao("antes de " + (fn.name || "corrigir"), texto);
   const antes = resumoTexto(texto);
   const novo = fn(texto);
   const depois = resumoTexto(novo);
@@ -585,6 +586,49 @@ function atualizarBotaoCorrigir(temAlgo) {
   b.textContent = temAlgo ? t("normalize_btn") : t("normalize_none");
 }
 
+/* Correções que podem rodar TODAS de uma vez. Ficam de fora as que apagam
+ * conteúdo de propósito (o prompt colado, o prompt vazado): remover texto
+ * tem de continuar sendo uma decisão explícita, com o seu próprio botão. */
+const CADEIA_SEGURA = [
+  [temMaisRepetido, corrigirMaisRepetido],
+  [temClozeRepetida, corrigirClozeRepetida],
+  [temTagsNaExplicacao, corrigirTagsNaExplicacao],
+  [temTituloGrudado, corrigirTituloGrudado],
+  [temOrfaosExplicacao, corrigirOrfaosExplicacao],
+  [temTagsQueSaoTexto, corrigirTagsQueSaoTexto],
+  [temMarcadores, removerMarcadoresTexto],
+  [temMarkdown, corrigirMarkdown],
+  [temMaisJunto, corrigirMaisJunto],
+  [temEspacosRuins, corrigirEspacos],
+];
+
+/* Antes, "Corrigir erros" devolvia UMA correção por clique: com quatro
+ * defeitos no texto eram quatro cliques, e o usuário só descobria que
+ * faltava mais quando o botão acendia de novo. Agora uma passada só, com
+ * até três voltas — uma correção pode revelar outra (tirar o marcador
+ * expõe o título grudado). O nome de cada uma vai para o registro. */
+function correcaoDeTudo(raw) {
+  const aplicadas = [];
+  let txt = raw;
+  for (let volta = 0; volta < 3; volta++) {
+    let mexeu = false;
+    CADEIA_SEGURA.forEach(([detecta, corrige]) => {
+      if (!detecta(txt)) return;
+      const novo = corrige(txt);
+      if (novo === txt) return;              /* detectou mas não mudou nada */
+      txt = novo; mexeu = true;
+      if (!aplicadas.includes(corrige)) aplicadas.push(corrige);
+    });
+    if (!mexeu) break;
+  }
+  if (!aplicadas.length) return null;
+  const tudo = (t0) => aplicadas.reduce((acc, f) => f(acc), t0);
+  /* o nome aparece no registro e no diálogo de conferência */
+  Object.defineProperty(tudo, "name",
+    { value: aplicadas.map((f) => f.name).join(" + ") });
+  return tudo;
+}
+
 function renderSugestoes(r, raw) {
   const box = $("sugestoes");
   box.innerHTML = "";
@@ -604,6 +648,10 @@ function renderSugestoes(r, raw) {
   if (r.nPares)
     itens.push({ dot: "dot-blue", txt: t("sug_pairs", { n: r.nPares }),
                  linha: priLinha((c) => c.infos && c.infos.length) });
+  const presos = cartoesDependentes(r);
+  if (presos.length)
+    itens.push({ dot: "dot-org", txt: t("crit_dependente", { n: presos.length }),
+                 linha: presos[0].line });
   const vistos = {};
   let longos = 0, dups = 0;
   r.cards.forEach((c) => {
@@ -664,18 +712,7 @@ function renderSugestoes(r, raw) {
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
   // com problema — evita o usuário clicar e não encontrar nada
-  correcaoPendente = temPromptColado(raw) ? limparPromptColado
-    : (temPromptVazado(raw) ? corrigirPromptVazado
-    : (temMaisRepetido(raw) ? corrigirMaisRepetido
-    : (temClozeRepetida(raw) ? corrigirClozeRepetida
-    : (temTagsNaExplicacao(raw) ? corrigirTagsNaExplicacao
-    : (temTituloGrudado(raw) ? corrigirTituloGrudado
-    : (temOrfaosExplicacao(raw) ? corrigirOrfaosExplicacao
-    : (temTagsQueSaoTexto(raw) ? corrigirTagsQueSaoTexto
-    : (temMarcadores(raw) ? removerMarcadoresTexto
-    : (temMarkdown(raw) ? corrigirMarkdown
-    : (temMaisJunto(raw) ? corrigirMaisJunto
-    : (temEspacosRuins(raw) ? corrigirEspacos : null)))))))))));
+  correcaoPendente = correcaoDeTudo(raw);
   // Ativa só o que "Corrigir erros" REALMENTE arruma:
   //  - uma correção estrutural detectada, ou
   //  - linhas ignoradas (podem virar comentário), ou
@@ -836,11 +873,143 @@ function salvarRevisados() {
   catch (e) {}
 }
 
+/* ==================================================================
+ * HISTÓRICO DO TEXTO — a rede que faltava
+ *
+ * Até a v8.44 o texto morava num único lugar: "eac_texto", sobrescrito
+ * 400ms depois de qualquer digitação. Selecionar tudo e colar outra coisa
+ * apagava horas de trabalho de forma definitiva e SILENCIOSA — nem o
+ * registro guardava nota do que tinha acontecido, porque as duas ações
+ * mais destrutivas do app (substituir o texto e "Apagar tudo") eram as
+ * únicas que não geravam evento.
+ *
+ * Agora cada mudança grande deixa uma cópia. O histórico é curto de
+ * propósito: o objetivo é desfazer um acidente das últimas horas, não
+ * versionar o baralho. Para guardar de verdade, exporte o .apkg.
+ * ================================================================== */
+const HIST_MAX = 12;          /* versões guardadas */
+const HIST_ORC = 1200000;     /* teto de caracteres, ~1,2 MB */
+let historico = [];
+let textoAnterior = "";
+
+function carregarHistorico() {
+  try { historico = JSON.parse(localStorage.getItem("eac_hist") || "[]"); }
+  catch (e) { historico = []; }
+  if (!Array.isArray(historico)) historico = [];
+}
+
+function salvarHistorico() {
+  /* Sob pressão de espaço a versão MAIS ANTIGA sai primeiro: a de ontem
+   * vale menos que a de cinco minutos atrás. E se nem assim couber, o
+   * histórico cede lugar — ele nunca pode impedir de salvar o texto. */
+  for (let tentativa = 0; tentativa < HIST_MAX + 1; tentativa++) {
+    try { localStorage.setItem("eac_hist", JSON.stringify(historico)); return true; }
+    catch (e) { historico.shift(); if (!historico.length) break; }
+  }
+  try { localStorage.removeItem("eac_hist"); } catch (e) {}
+  return false;
+}
+
+function guardarVersao(motivo, texto) {
+  const txt = texto === undefined ? $("editor").value : texto;
+  if (!txt || !txt.trim()) return;
+  const ultimo = historico[historico.length - 1];
+  if (ultimo && ultimo.txt === txt) return;          /* nada mudou */
+  historico.push({ t: Date.now(), m: motivo || "", txt });
+  while (historico.length > HIST_MAX) historico.shift();
+  let total = historico.reduce((s, v) => s + v.txt.length, 0);
+  while (historico.length > 1 && total > HIST_ORC) {
+    total -= historico.shift().txt.length;
+  }
+  salvarHistorico();
+  atualizarBotaoHistorico();
+}
+
+function abrirHistorico() {
+  const lista = $("histLista");
+  lista.innerHTML = "";
+  if (!historico.length) {
+    const p = document.createElement("div");
+    p.className = "nota"; p.textContent = t("hist_vazio");
+    lista.append(p);
+  }
+  /* mais recente primeiro: é quase sempre a que se quer de volta */
+  historico.slice().reverse().forEach((v, k) => {
+    const i = historico.length - 1 - k;
+    const div = document.createElement("div");
+    div.className = "hist-item";
+    const info = document.createElement("div");
+    const n = (v.txt.match(/^[^\n]*::/gm) || []).length;
+    info.innerHTML = "";
+    const forte = document.createElement("b");
+    forte.textContent = new Date(v.t).toLocaleString();
+    const sub = document.createElement("div");
+    sub.className = "nota";
+    sub.textContent = t("hist_linha", { n, c: v.txt.length }) + (v.m ? " · " + v.m : "");
+    info.append(forte, sub);
+    const b = botaoMini("hist_restaurar", "btn-azul", () => {
+      $("dlgHistorico").close(); restaurarVersao(i);
+    });
+    div.append(info, b);
+    lista.append(div);
+  });
+  $("dlgHistorico").showModal();
+}
+
+function atualizarBotaoHistorico() {
+  const b = $("btnHistorico");
+  if (!b) return;
+  b.disabled = !historico.length;
+  b.textContent = t("hist_btn", { n: historico.length });
+}
+
+/* Encolhimento brusco: 137 cartões viram 1 sem nenhum aviso. Aqui a versão
+ * de antes é guardada e uma barra de recuperação aparece — o acidente
+ * continua possível, mas deixa de ser irreversível. */
+const ENCOLHEU_MIN = 1500;    /* só vale a pena para texto de trabalho */
+function vigiarEncolhimento(antes, depois) {
+  if (antes.length < ENCOLHEU_MIN) return;
+  if (depois.length >= antes.length * 0.5) return;
+  guardarVersao("antes de encolher", antes);
+  reg("TEXTO", "texto encolheu muito",
+      antes.length + " -> " + depois.length + " caracteres");
+  mostrarBarraRecuperar(antes.length, depois.length);
+}
+
+function mostrarBarraRecuperar(de, para) {
+  const bar = $("barraRecuperar");
+  if (!bar) return;
+  $("recuperarTxt").textContent = t("hist_shrunk", { de, para });
+  bar.hidden = false;
+}
+
+function esconderBarraRecuperar() {
+  const bar = $("barraRecuperar");
+  if (bar) bar.hidden = true;
+}
+
+function restaurarVersao(i) {
+  const v = historico[i];
+  if (!v) return;
+  guardarVersao("antes de restaurar");     /* o desfazer também é desfeito */
+  $("editor").value = v.txt;
+  textoAnterior = v.txt;
+  esconderBarraRecuperar();
+  autoSalvar();
+  preview();
+  reg("RESTAURAR", "versão de " + new Date(v.t).toLocaleString(),
+      v.txt.length + " caracteres");
+  toast("toast_restaurado");
+}
+
 let saveTimer = null;
 function autoSalvar() {
+  const atual = $("editor").value;
+  vigiarEncolhimento(textoAnterior, atual);
+  textoAnterior = atual;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem("eac_texto", $("editor").value); } catch (e) {}
+    try { localStorage.setItem("eac_texto", atual); } catch (e) {}
   }, 400);
 }
 
@@ -3154,7 +3323,11 @@ $("btnSelecionarTudo").onclick = () => {
 $("btnApagarTudo").onclick = async () => {
   if (!$("editor").value.trim()) return;
   if (!(await uiConfirm(t("clear_confirm")))) return;
+  guardarVersao("antes de apagar tudo");
+  reg("APAGAR", "editor apagado pelo botão",
+      $("editor").value.length + " caracteres");
   $("editor").value = "";
+  textoAnterior = "";
   respostasFechadas.clear();
   marcados.clear();
   localStorage.removeItem("eac_texto");
@@ -3421,8 +3594,18 @@ $("btnPromptMini").onclick = () => copiarPrompt($("btnPromptMini"), "prompt_mini
 /* ------------------------------ start ------------------------------ */
 
 // recupera o último texto (auto-save); se não houver, usa o exemplo
+carregarHistorico();
 const textoSalvo = localStorage.getItem("eac_texto");
 $("editor").value = (textoSalvo !== null && textoSalvo.trim()) ? textoSalvo : t("example");
+/* O ponto de partida da vigilância é o texto que já estava salvo. Sem esta
+ * linha, a primeira colagem da sessão compara contra "" e nunca dispara. */
+textoAnterior = $("editor").value;
+guardarVersao("ao abrir");
+$("btnHistorico").onclick = abrirHistorico;
+$("btnRecuperar").onclick = () => restaurarVersao(historico.length - 1);
+$("btnRecuperarNao").onclick = esconderBarraRecuperar;
+$("dlgHistFechar").onclick = () => $("dlgHistorico").close();
+atualizarBotaoHistorico();
 aplicarTextos();
 preview();
 
