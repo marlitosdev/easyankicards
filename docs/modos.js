@@ -19,7 +19,7 @@
  * verdade: quem lê esta lista sabe tudo sobre os modos sem abrir o HTML. */
 const MODOS = [
   { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
-  { id: "edital", secao: "secEdital", icone: "📋", rotulo: "modo_edital", pronto: false },
+  { id: "edital", secao: "secEdital", icone: "📋", rotulo: "modo_edital", pronto: true },
   { id: "resumos", secao: "secResumos", icone: "📝", rotulo: "modo_resumos", pronto: false },
   { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
 ];

@@ -618,6 +618,34 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 :root[data-theme="light"] .br-titulo{color:#b91c1c}
 .br-corpo{color:var(--texto);opacity:.85;line-height:1.5;margin-bottom:9px}
 .barra-recuperar .br-acoes{display:flex;gap:7px;flex-wrap:wrap}
+.ed-wrap textarea,.ed-wrap #editalNums{font-family:ui-monospace,Consolas,monospace;
+  font-size:13px;line-height:1.5;padding:10px 10px 10px 44px;box-sizing:border-box;
+  border:1px solid var(--borda);border-radius:8px;margin:0}
+.ed-wrap textarea{width:100%;min-height:230px;background:var(--campo);color:var(--texto);
+  resize:vertical;white-space:pre-wrap;overflow-wrap:break-word}
+.ed-wrap #editalNums{position:absolute;left:0;top:0;bottom:0;width:38px;
+  padding:10px 6px 10px 0;overflow:hidden;text-align:right;color:var(--sutil);
+  opacity:.7;border:0;border-right:1px solid var(--borda);background:var(--campo);
+  pointer-events:none;user-select:none;border-radius:8px 0 0 8px}
+.ed-cfg{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 8px}
+.ed-cfg label{display:flex;flex-direction:column;gap:3px;font-size:11px;
+  color:var(--sutil);flex:1;min-width:130px}
+.ed-cfg input{padding:7px 9px;border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font-size:13px}
+.ed-faixa{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--sutil);margin:0 0 8px;font-weight:600}
+.ed-rolagem{max-height:52vh;overflow:auto;border:1px solid var(--borda);border-radius:9px}
+.ed-tab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ed-tab th{position:sticky;top:0;background:var(--panel);font-size:10px;
+  text-transform:uppercase;letter-spacing:.4px;color:var(--sutil);
+  text-align:left;padding:7px 9px;border-bottom:1px solid var(--borda)}
+.ed-tab td{padding:7px 9px;border-bottom:1px solid var(--borda);color:var(--texto)}
+.ed-tab .ed-disc{color:var(--sutil);font-size:11.5px}
+.ed-tab .ed-pri{font-weight:800;text-align:right}
+.ed-tab .ed-h{white-space:nowrap;color:var(--sutil)}
+.ed-tem-motivo{border-bottom:1px dotted var(--sutil);cursor:help}
+.ed-tab tr.ed-feito td{opacity:.45;text-decoration:line-through}
+.ed-tab tr.ed-feito td:last-child{opacity:1;text-decoration:none}
 .ferr-bloco{border:1px solid var(--borda);border-radius:10px;padding:11px 13px;
   margin-bottom:10px}
 .ferr-tit{font-weight:700;font-size:13px;margin-bottom:3px}
@@ -850,44 +878,44 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 
 <section id="secEdital" data-modo="edital" hidden>
   <div class="duas-colunas">
-    <div class="grupo">
+    <div class="grupo" id="painelEdital">
       <div class="bancada-cab">
-        <span class="bancada-nome" data-i18n="edital_bancada"></span>
+        <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
+          <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
+        </span>
       </div>
-      <p class="nota" data-i18n="edital_intro"></p>
-      <div class="rotulo" data-i18n="edital_colar"></div>
-      <textarea id="editalTexto" class="esqueleto" rows="12" disabled
-                placeholder="1 Direito Constitucional&#10;1.1 Princípios fundamentais&#10;1.2 Direitos e garantias&#10;2 Auditoria Governamental&#10;2.1 Achado de auditoria"></textarea>
-      <div class="btn-linha">
-        <button class="btn btn-verde" disabled data-i18n="edital_ler"></button>
-        <button class="btn btn-cinza" disabled data-i18n="edital_exemplo"></button>
+      <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+      <label class="bancada-sub" data-i18n="ed_colar"></label>
+      <div class="editor-wrap ed-wrap">
+        <div id="editalNums" aria-hidden="true"></div>
+        <textarea id="editalTexto" spellcheck="false"
+          placeholder="# TCE-PE | prova: 2026-08-30 | horas: 12&#10;@ Auditoria Governamental :: 5&#10;+ Achado de auditoria :: 5 :: cai em quase toda prova"></textarea>
       </div>
-      <div class="rotulo" data-i18n="edital_pesos"></div>
-      <div class="esqueleto-lista">
-        <div class="esq-linha"><span>Direito Constitucional</span><span class="esq-peso">peso 3</span></div>
-        <div class="esq-linha"><span>Auditoria Governamental</span><span class="esq-peso">peso 5</span></div>
-        <div class="esq-linha"><span>Controle Externo</span><span class="esq-peso">peso 4</span></div>
-      </div>
-      <div class="btn-linha">
-        <button class="btn btn-roxo" disabled data-i18n="edital_prompt"></button>
-      </div>
+      <div id="editalSug" class="sugestoes"></div>
+      <button class="btn btn-verde" id="btnEditalCorrigir" disabled></button>
     </div>
+
     <div class="grupo">
-      <div class="bancada-cab"><span class="bancada-nome" data-i18n="edital_prioridade"></span></div>
-      <table class="esqueleto-tab">
-        <thead><tr><th data-i18n="edital_col_topico"></th><th data-i18n="edital_col_peso"></th>
-          <th data-i18n="edital_col_horas"></th><th data-i18n="edital_col_feito"></th></tr></thead>
-        <tbody>
-          <tr><td>Achado de auditoria</td><td>100</td><td>2h30</td><td>☐</td></tr>
-          <tr><td>Princípios fundamentais</td><td>84</td><td>2h00</td><td>☐</td></tr>
-          <tr><td>Direitos e garantias</td><td>71</td><td>1h45</td><td>☐</td></tr>
-          <tr class="esq-vazio"><td colspan="4" data-i18n="edital_amostra"></td></tr>
-        </tbody>
-      </table>
-      <div class="btn-linha">
-        <button class="btn btn-verde" disabled data-i18n="edital_csv"></button>
-        <button class="btn btn-azul" disabled data-i18n="edital_painel"></button>
+      <div class="bancada-cab"><h2 class="bancada-nome" data-i18n="ed_prioridade"></h2></div>
+      <div class="ed-cfg">
+        <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
+        <label><span data-i18n="ed_horas"></span>
+          <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
       </div>
+      <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
+      <div class="ed-rolagem">
+        <table class="ed-tab">
+          <thead><tr>
+            <th data-i18n="ed_col_top"></th><th data-i18n="ed_col_disc"></th>
+            <th data-i18n="ed_col_pri"></th><th data-i18n="ed_col_h"></th>
+            <th data-i18n="ed_col_ok"></th>
+          </tr></thead>
+          <tbody id="edTabela"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
     </div>
   </div>
 </section>
@@ -1124,6 +1152,15 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
+<dialog id="dlgTexto" class="ui-modal">
+  <h3 id="dlgTextoTit"></h3>
+  <textarea id="dlgTextoCorpo" rows="14" readonly
+            style="width:100%;box-sizing:border-box"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnDlgTextoCopiar" data-i18n="diag_copiar"></button>
+    <button class="btn btn-cinza" id="btnDlgTextoFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgHistorico" class="ui-modal">
   <h3 data-i18n="hist_titulo"></h3>
   <p class="nota" data-i18n="hist_ajuda"></p>
@@ -1306,7 +1343,9 @@ window.__sqlPromise = initSqlJs({
 <script src="parser.js"></script>
 <script src="anki.js"></script>
 <script src="app.js"></script>
+<script src="edital.js"></script>
+<script src="edital-ui.js"></script>
 <script src="modos.js"></script>
-<script>montarBarraModos();</script>
+<script>edIniciar(); montarBarraModos();</script>
 </body>
 </html>
