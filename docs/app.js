@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.50.0";
+const VERSAO = "8.51.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4249,6 +4249,20 @@ $("btnDiagBaixar").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
   reg("DIAGNOSTICO", "baixado", nome);
   toast("toast_diag_saved");
+};
+
+/* Janela genérica de texto: título + caixa somente-leitura + copiar. Serve
+ * a qualquer prompt novo sem precisar de um diálogo próprio para cada um. */
+function abrirTextoSimples(titulo, texto) {
+  $("dlgTextoTit").textContent = titulo;
+  $("dlgTextoCorpo").value = texto;
+  $("dlgTexto").showModal();
+  $("dlgTextoCorpo").select();
+}
+$("btnDlgTextoFechar").onclick = () => $("dlgTexto").close();
+$("btnDlgTextoCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("dlgTextoCorpo").value); toast("toast_copied"); }
+  catch (e) { uiAlert(t("toast_copy_fail")); }
 };
 
 attachTip($("btnDiagnostico"), "tip_diag");
