@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.49.0";
+const VERSAO = "8.50.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -983,7 +983,7 @@ function abrirHistorico() {
     sub.textContent = t("hist_linha", { n, c: v.txt.length }) + (v.m ? " · " + v.m : "");
     info.append(forte, sub);
     const b = botaoMini("hist_restaurar", "btn-azul", () => {
-      $("dlgHistorico").close(); restaurarVersao(i);
+      $("dlgHistorico").close(); restaurarVersao(i);   /* confirma dentro */
     });
     div.append(info, b);
     lista.append(div);
@@ -1019,14 +1019,34 @@ function mostrarBarraRecuperar(de, para) {
   bar.hidden = false;
 }
 
+/* Dispensar não confirma: confirmar um "não faça nada" ensina a clicar em
+ * qualquer caixa sem ler. Em vez disso, o app avisa ONDE a cópia ficou —
+ * que é a informação de que a pessoa vai precisar depois. */
+function dispensarRecuperar() {
+  esconderBarraRecuperar();
+  uiAlert(t("hist_dispensado"));
+  reg("TEXTO", "aviso de encolhimento dispensado pelo usuário");
+}
+
 function esconderBarraRecuperar() {
   const bar = $("barraRecuperar");
   if (bar) bar.hidden = true;
 }
 
-function restaurarVersao(i) {
+/* Restaurar SUBSTITUI o que está no editor. É destrutivo, então o app diz
+ * exatamente o que vai acontecer, com os dois tamanhos na frente, antes de
+ * fazer. E diz também que dá para desfazer — porque a versão atual é
+ * guardada no mesmo movimento, e saber disso muda a decisão. */
+async function restaurarVersao(i, confirmar) {
   const v = historico[i];
   if (!v) return;
+  if (confirmar !== false) {
+    const atual = $("editor").value.length;
+    const ok = await uiConfirm(t("hist_confirma", {
+      atual, novo: v.txt.length, quando: new Date(v.t).toLocaleString(),
+    }));
+    if (!ok) return;
+  }
   guardarVersao("antes de restaurar");     /* o desfazer também é desfeito */
   $("editor").value = v.txt;
   textoAnterior = v.txt;
@@ -3399,6 +3419,7 @@ function aplicarDestaque(ligado) {
 $("chkDestaque").checked = localStorage.getItem("eac_destaque") !== "0";
 $("btnAmpliar").onclick = () => aplicarAmpliar(!bancadaAmpla);
 aplicarAmpliar(localStorage.getItem("eac_ampliar") === "1");
+attachTip($("btnAmpliar"), "tip_ampliar");
 aplicarDestaque($("chkDestaque").checked);
 $("chkDestaque").onchange = () => aplicarDestaque($("chkDestaque").checked);
 attachTip($("chkDestaque"), "tip_highlight");
@@ -3652,7 +3673,7 @@ textoAnterior = $("editor").value;
 guardarVersao("ao abrir");
 $("btnHistorico").onclick = abrirHistorico;
 $("btnRecuperar").onclick = () => restaurarVersao(historico.length - 1);
-$("btnRecuperarNao").onclick = esconderBarraRecuperar;
+$("btnRecuperarNao").onclick = dispensarRecuperar;
 $("dlgHistFechar").onclick = () => $("dlgHistorico").close();
 atualizarBotaoHistorico();
 aplicarTextos();

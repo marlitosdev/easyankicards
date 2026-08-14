@@ -570,14 +570,14 @@ const UI = {
   "fix_prompt_colado": "Remover as linhas do prompt",
   "quem_ia_dica": "Isto o app não arruma sozinho: exige decidir onde dividir ou o que escrever. Clique em \"Ver no texto\" para conferir e depois em \"Criar prompt de correção\" — o app monta o pedido pronto para colar na IA e devolve o texto já corrigido.",
   "fixprompt_btn_tt": "Monta o texto para a IA corrigir o conteúdo apontado acima",
-  "hist_btn": "⟲ Histórico ({n})",
+  "hist_btn": "⟲ Abrir versões guardadas ({n})",
   "hist_titulo": "Versões do texto",
-  "hist_ajuda": "O app guarda uma cópia antes de cada mudança grande. É uma rede para acidentes das últimas horas — para guardar de verdade, exporte o .apkg.",
+  "hist_ajuda": "Antes de cada mudança grande — corrigir, apagar, colar por cima — o app guarda uma cópia do texto. Ficam as 12 últimas. Serve para desfazer um acidente das últimas horas; para guardar de verdade, exporte o .apkg.",
   "hist_vazio": "Ainda não há versões guardadas.",
   "hist_linha": "{n} cartões · {c} caracteres",
   "hist_restaurar": "Restaurar",
-  "hist_shrunk": "O texto encolheu de {de} para {para} caracteres. Guardei a versão anterior.",
-  "hist_recuperar": "Recuperar o texto anterior",
+  "hist_shrunk": "O texto encolheu de {de} para {para} caracteres",
+  "hist_recuperar": "Trazer o texto de volta",
   "hist_recuperar_nao": "Foi de propósito",
   "toast_restaurado": "Versão restaurada",
   "crit_dependente": "{n} cartão(ões) só fazem sentido junto da prova de origem (\"Questão 17\", \"Letra A\", \"gabarito\") — daqui a dois meses não testam nada. Peça à IA para reescrevê-los pelo conceito.",
@@ -629,7 +629,11 @@ const UI = {
   "modo_ferramentas": "Ferramentas",
   "ferr_intro": "Ferramentas que não fazem parte do fluxo do dia a dia, mas ajudam quando você precisa delas.",
   "ferr_soon_edital": "Conectar pasta para gravação automática",
-  "ferr_soon_backup": "Baixar e restaurar backup completo"
+  "ferr_soon_backup": "Baixar e restaurar backup completo",
+  "hist_bar_corpo": "Costuma ser colagem por cima de tudo, ou Ctrl+A seguido de digitação. Guardei uma cópia do texto de antes — se foi sem querer, dá para trazer de volta agora.",
+  "hist_confirma": "Trazer de volta a versão de {quando}?\\n\\nO editor tem {atual} caracteres agora e passará a ter {novo}. O texto atual não se perde: ele vai para o Histórico no mesmo instante, então dá para voltar atrás.",
+  "hist_dispensado": "Aviso dispensado. A cópia do texto anterior continua guardada — você a encontra em Ferramentas › Versões do texto, junto com as demais.",
+  "tip_ampliar": "Dá a largura toda ao editor e esconde a prévia dos cartões. Útil para colar textos grandes. O botão volta a encolher."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1201,14 +1205,14 @@ const UI = {
   "fix_prompt_colado": "Remove the prompt lines",
   "quem_ia_dica": "The app can't fix this on its own: it takes deciding where to split or what to write. Use \"See in text\" to check it, then \"Build fix prompt\" — the app writes the request for you to paste into the AI and takes the corrected text back.",
   "fixprompt_btn_tt": "Writes the request for the AI to fix the content flagged above",
-  "hist_btn": "⟲ History ({n})",
+  "hist_btn": "⟲ Open saved versions ({n})",
   "hist_titulo": "Text versions",
-  "hist_ajuda": "The app keeps a copy before every large change. It's a net for accidents in the last few hours — to keep things for good, export the .apkg.",
+  "hist_ajuda": "Before every large change — fixing, clearing, pasting over — the app keeps a copy of the text. The last 12 are kept. It undoes an accident from the last few hours; to keep things for good, export the .apkg.",
   "hist_vazio": "No versions saved yet.",
   "hist_linha": "{n} cards · {c} characters",
   "hist_restaurar": "Restore",
-  "hist_shrunk": "The text shrank from {de} to {para} characters. I saved the previous version.",
-  "hist_recuperar": "Bring the previous text back",
+  "hist_shrunk": "The text shrank from {de} to {para} characters",
+  "hist_recuperar": "Bring the text back",
   "hist_recuperar_nao": "That was on purpose",
   "toast_restaurado": "Version restored",
   "crit_dependente": "{n} card(s) only make sense next to the original exam (\"Question 17\", \"Answer A\", \"answer key\") — in two months they test nothing. Ask the AI to rewrite them by concept.",
@@ -1260,7 +1264,11 @@ const UI = {
   "modo_ferramentas": "Tools",
   "ferr_intro": "Tools that aren't part of the day-to-day flow, but help when you need them.",
   "ferr_soon_edital": "Connect a folder for automatic saving",
-  "ferr_soon_backup": "Download and restore a full backup"
+  "ferr_soon_backup": "Download and restore a full backup",
+  "hist_bar_corpo": "Usually a paste over everything, or Ctrl+A followed by typing. I kept a copy of the earlier text — if it wasn't on purpose, you can bring it back now.",
+  "hist_confirma": "Bring back the version from {quando}?\\n\\nThe editor holds {atual} characters now and will hold {novo}. The current text isn't lost: it goes into History at the same moment, so you can undo this.",
+  "hist_dispensado": "Notice dismissed. The copy of the earlier text is still kept — find it under Tools › Text versions, along with the others.",
+  "tip_ampliar": "Gives the editor full width and hides the card preview. Handy for pasting large texts. The button shrinks it back."
  }
 };
 const PARSER_MSG = {
