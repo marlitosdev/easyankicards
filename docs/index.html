@@ -251,7 +251,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   background:none;cursor:pointer;font-size:11px;font-weight:700;
   color:var(--azul);text-decoration:underline;letter-spacing:.2px}
 .ver-tudo:hover{opacity:.75}
-.btn-min{padding:4px 9px;font-size:11px}
+/* .btn-min só dizia tamanho. Sem cor declarada, o botão caía no estilo
+   padrão do navegador — fundo claro do sistema — e o texto herdava o claro
+   do tema escuro: claro sobre claro, ilegível. Cor explícita, sempre. */
+.btn-min{padding:5px 10px;font-size:11px;font-weight:600;border-radius:8px;
+  cursor:pointer;background:var(--campo);color:var(--texto);
+  border:1px solid var(--borda);line-height:1.3}
+.btn-min:hover:not(:disabled){border-color:var(--sutil);background:var(--panel)}
+.btn-min:disabled{opacity:.45;cursor:default}
+.btn-min.btn-azul{background:var(--azul,#2563eb);border-color:transparent;color:#fff}
+.btn-min.btn-cinza{background:var(--campo);color:var(--texto)}
 /* ---- painel de foco ---- */
 .foco{position:fixed;z-index:60;width:380px;max-width:calc(100vw - 24px);
   background:var(--panel);border:2px solid var(--azul);border-radius:12px;
@@ -523,21 +532,50 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .quem-ia{background:rgba(139,92,246,.18);color:#a78bfa}
 :root[data-theme="light"] .quem-ia{color:#6d28d9}
 /* ---- barra de modos ----------------------------------------------
-   Trilho vertical no computador, fileira de abas no celular. A MESMA
-   marcação nos dois: quem monta é o registro em modos.js, e o CSS só
-   decide a direção. */
+   Trilho vertical no computador, fileira de abas no celular. Cada modo
+   tem a sua cor, aplicada só na borda esquerda e no ícone: colorir o
+   botão inteiro faria quatro blocos berrantes disputando atenção com o
+   conteúdo, que é o que importa na tela. */
 .barra-modos{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
 .modo-btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;
-  align-items:center;gap:8px;padding:9px 13px;border-radius:10px;
-  border:1px solid var(--borda);background:var(--campo);color:var(--sutil);
-  font-size:13px;font-weight:600;white-space:nowrap}
-.modo-btn:hover{border-color:var(--borda-forte,var(--borda));color:var(--texto)}
-.modo-btn.ativo{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
-.modo-ic{font-size:15px;line-height:1}
-.modo-selo{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
-  padding:1px 6px;border-radius:8px;background:rgba(139,92,246,.18);color:#a78bfa}
-.modo-btn.ativo .modo-selo{background:rgba(255,255,255,.22);color:#fff}
-:root[data-theme="light"] .modo-selo{color:#6d28d9}
+  align-items:center;gap:9px;padding:10px 12px;border-radius:10px;
+  background:var(--panel);color:var(--sutil);font-size:13px;font-weight:600;
+  white-space:nowrap;border:1px solid var(--borda);
+  border-left:3px solid var(--modo-cor,var(--borda));transition:.12s}
+.modo-btn:hover{color:var(--texto);background:var(--campo)}
+.modo-btn.ativo{color:var(--texto);background:var(--campo);
+  border-color:var(--modo-cor,var(--borda));border-left-width:3px;
+  box-shadow:inset 0 0 0 1px var(--modo-cor,transparent)}
+.modo-btn[data-modo="cartoes"]{--modo-cor:#22c55e}
+.modo-btn[data-modo="edital"]{--modo-cor:#3b82f6}
+.modo-btn[data-modo="resumos"]{--modo-cor:#f59e0b}
+.modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
+.modo-ic{font-size:16px;line-height:1;filter:grayscale(.35)}
+.modo-btn.ativo .modo-ic{filter:none}
+.modo-rot{flex:1}
+.modo-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:1px 5px;border-radius:7px;background:var(--campo);color:var(--sutil);
+  border:1px solid var(--borda)}
+.modo-btn.ativo .modo-selo{border-color:var(--modo-cor);color:var(--modo-cor)}
+/* ---- cabeçalho da bancada ----------------------------------------
+   O nome ficava no alto do painel, longe da caixa que ele nomeia. Agora
+   encosta no editor: quem lê "Bancada de cartões" vê logo abaixo a caixa
+   a que o nome se refere. */
+.bancada-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin:14px 0 2px}
+.bancada-nome{font-size:19px;font-weight:800;letter-spacing:-.2px;
+  color:var(--texto);margin:0;line-height:1.2}
+.bancada-acoes{display:flex;gap:6px;flex-shrink:0}
+.bancada-sub{display:block;font-size:11.5px;color:var(--sutil);
+  margin:0 0 7px;line-height:1.45}
+.ferr-lista{margin-top:12px}
+.ferr-item{display:flex;align-items:center;gap:10px;padding:9px 11px;
+  border:1px dashed var(--borda);border-radius:9px;margin-bottom:7px;
+  font-size:12.5px;color:var(--sutil)}
+.ferr-item b{color:var(--texto);font-weight:600}
+.ferr-selo{margin-left:auto;font-size:9px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;padding:1px 6px;border-radius:7px;
+  background:var(--campo);border:1px solid var(--borda)}
 /* ---- esqueleto dos modos que ainda não existem --------------------
    Formas cinzas no lugar do conteúdo: mostram a ARRUMAÇÃO da tela sem
    fingir que há dado real ali. */
@@ -566,7 +604,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .btn-linha .btn{flex:1;min-width:130px}
 @media (min-width:900px){
   .barra-modos{position:sticky;top:8px;float:left;flex-direction:column;
-    width:172px;margin:0 14px 0 0}
+    width:186px;margin:0 14px 0 0;gap:5px}
   .modo-area{overflow:hidden}
 }
 .barra-recuperar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
@@ -619,14 +657,6 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 <section id="secCartoes" data-modo="cartoes">
   <div class="duas-colunas">
     <div class="grupo" id="painelEsquerdo">
-      <div class="bancada-cab">
-        <span class="bancada-nome" id="bancadaNome" data-i18n="bancada_cartoes"></span>
-        <span style="display:flex;gap:6px">
-        <button class="btn-min" id="btnHistorico" title=""></button>
-        <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
-                aria-pressed="false" title=""></button>
-        </span>
-      </div>
       <div class="barra-recuperar" id="barraRecuperar" hidden>
         <span id="recuperarTxt"></span>
         <span class="br-acoes">
@@ -634,23 +664,15 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
           <button class="btn-min" id="btnRecuperarNao" data-i18n="hist_recuperar_nao"></button>
         </span>
       </div>
-      <div class="gaveta-importar">
-        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
-          <span class="gv-icone">▸</span>
-          <span data-i18n="import_handle"></span>
-          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
-        </button>
-        <div class="gaveta-corpo" id="gavetaImportar" hidden>
-          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
-          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
-          <div class="nota" id="importAviso"></div>
-          <div id="importProgresso" style="display:none">
-            <div class="ip-txt" id="importProgTxt"></div>
-            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
-          </div>
-        </div>
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" id="bancadaNome" data-i18n="bancada_cartoes"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnHistorico" title=""></button>
+          <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
+                  aria-pressed="false" title=""></button>
+        </span>
       </div>
-      <label data-i18n="editor_label"></label>
+      <label class="bancada-sub" data-i18n="editor_label"></label>
       <div class="linha-editor">
         <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
         <button class="btn btn-cinza" id="btnCopiarTudo" data-i18n="copy_all"></button>
@@ -774,6 +796,37 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
         <button class="btn btn-cinza btn-min" id="btnRecortesVer" data-i18n="recortes_ver"></button>
       </div>
       <div id="cartoes"></div>
+    </div>
+  </div>
+</section>
+
+<section id="secFerramentas" data-modo="ferramentas" hidden>
+  <div class="grupo" style="max-width:620px">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="modo_ferramentas"></h2>
+    </div>
+    <p class="nota" data-i18n="ferr_intro"></p>
+      <div class="gaveta-importar">
+        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
+          <span class="gv-icone">▸</span>
+          <span data-i18n="import_handle"></span>
+          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
+        </button>
+        <div class="gaveta-corpo" id="gavetaImportar" hidden>
+          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
+          <div class="nota" id="importAviso"></div>
+          <div id="importProgresso" style="display:none">
+            <div class="ip-txt" id="importProgTxt"></div>
+            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
+          </div>
+        </div>
+      </div>
+    <div class="ferr-lista">
+      <div class="ferr-item"><b data-i18n="ferr_soon_edital"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+      <div class="ferr-item"><b data-i18n="ferr_soon_backup"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
     </div>
   </div>
 </section>
@@ -910,7 +963,6 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div id="status"></div>
     <div class="rodape-tec">
       <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
-      <button type="button" id="btnRegistro" class="link-tec" data-i18n="log_btn"></button>
     </div>
   </div>
 </div>
@@ -1036,6 +1088,25 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </dialog>
 
+<dialog id="dlgDiagnostico" class="ui-modal diag-modal">
+  <h3 data-i18n="diag_titulo"></h3>
+  <p class="nota" data-i18n="diag_ajuda"></p>
+  <div class="diag-legenda">
+    <div><b data-i18n="diag_leg_amb_t"></b> <span data-i18n="diag_leg_amb"></span></div>
+    <div><b data-i18n="diag_leg_arm_t"></b> <span data-i18n="diag_leg_arm"></span></div>
+    <div><b data-i18n="diag_leg_est_t"></b> <span data-i18n="diag_leg_est"></span></div>
+    <div><b data-i18n="diag_leg_reg_t"></b> <span data-i18n="diag_leg_reg"></span></div>
+    <div><b data-i18n="diag_leg_txt_t"></b> <span data-i18n="diag_leg_txt"></span></div>
+  </div>
+  <label class="diag-op"><input type="checkbox" id="chkDiagTexto" checked>
+    <span data-i18n="diag_incluir_texto"></span></label>
+  <pre id="diagPre" class="diag-pre"></pre>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
+    <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
+    <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgHistorico" class="ui-modal">
   <h3 data-i18n="hist_titulo"></h3>
   <p class="nota" data-i18n="hist_ajuda"></p>

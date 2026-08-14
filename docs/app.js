@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.47.0";
+const VERSAO = "8.49.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -142,15 +142,36 @@ try {
   if (Array.isArray(g)) registro = g.slice(-REG_MAX);
 } catch (e) {}
 
+/* Eventos raros valem mais que rotina: seis "[INICIO]" seguidos nao podem
+ * empurrar para fora um "[ERRO]" de tres dias atras. Estes ficam. */
+const REG_FIXOS = ["ERRO", "BLOQUEIO", "APAGAR", "RESTAURAR", "TEXTO"];
+
+/* Com o PWA e o navegador abertos ao mesmo tempo, os eventos das duas
+ * execucoes se intercalam no mesmo registro. Quatro caracteres bastam
+ * para separar uma da outra na hora de ler. */
+const SESSAO = Math.random().toString(36).slice(2, 6);
+
+function podarRegistro() {
+  if (registro.length <= REG_MAX) return;
+  const fixos = registro.filter((r) => REG_FIXOS.includes(r.tipo));
+  const comuns = registro.filter((r) => !REG_FIXOS.includes(r.tipo));
+  const sobra = Math.max(0, REG_MAX - fixos.length);
+  const mantidos = new Set(comuns.slice(-sobra));
+  registro = registro.filter((r) => REG_FIXOS.includes(r.tipo) || mantidos.has(r));
+  /* se ate' os fixos estourarem, ai' sim o mais antigo sai */
+  if (registro.length > REG_MAX) registro = registro.slice(-REG_MAX);
+}
+
 function reg(tipo, msg, extra) {
   const agora = new Date();
   registro.push({
     h: agora.toISOString().slice(11, 19),
     d: agora.toISOString().slice(0, 10),
+    s: SESSAO,
     tipo, msg: String(msg).slice(0, 300),
     extra: extra === undefined ? undefined : extra,
   });
-  if (registro.length > REG_MAX) registro = registro.slice(-REG_MAX);
+  podarRegistro();
   try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
 }
 
@@ -170,7 +191,8 @@ reg("INICIO", "aplicativo aberto", "v" + VERSAO);
 
 function registroTexto() {
   if (!registro.length) return t("log_empty");
-  return registro.map((r) => r.d + " " + r.h + "  [" + r.tipo + "] " + r.msg
+  return registro.map((r) => r.d + " " + r.h + " " + (r.s || "----")
+    + "  [" + r.tipo + "] " + r.msg
     + (r.extra ? "  " + r.extra : "")).join("\n");
 }
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
@@ -910,7 +932,20 @@ function salvarHistorico() {
   return false;
 }
 
+/* Toda operação deliberada (corrigir, apagar, restaurar, aplicar) guarda
+ * versão ANTES de mexer. A marca aqui deixa a vigia distinguir "o texto
+ * sumiu" de "o usuário mandou tirar": sem ela, a barra vermelha acusava
+ * acidente logo depois de a pessoa clicar em Corrigir, e alarme que toca
+ * à toa é alarme que se aprende a ignorar.
+ *
+ * É um sinal, não um cronômetro. A primeira versão usava uma janela de
+ * 1,5 segundo e teria engolido justamente o caso pior — colar por cima de
+ * tudo nos primeiros instantes depois de abrir o app. O sinal vale para
+ * UMA gravação e se apaga sozinho. */
+let appMexendo = false;
+
 function guardarVersao(motivo, texto) {
+  if (motivo !== "ao abrir") appMexendo = true;
   const txt = texto === undefined ? $("editor").value : texto;
   if (!txt || !txt.trim()) return;
   const ultimo = historico[historico.length - 1];
@@ -968,6 +1003,7 @@ function atualizarBotaoHistorico() {
  * continua possível, mas deixa de ser irreversível. */
 const ENCOLHEU_MIN = 1500;    /* só vale a pena para texto de trabalho */
 function vigiarEncolhimento(antes, depois) {
+  if (appMexendo) { appMexendo = false; return; }   /* foi o app, a pedido */
   if (antes.length < ENCOLHEU_MIN) return;
   if (depois.length >= antes.length * 0.5) return;
   guardarVersao("antes de encolher", antes);
@@ -2630,6 +2666,10 @@ async function exportarApkg() {
                                   tituloCartao(), $("selAlinha").value);
     await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
+    /* Sem este evento eu nao conseguia responder a pergunta que mais
+     * importava quando o texto sumiu: existia uma copia fora do app? */
+    reg("EXPORTAR", nomeArquivo() + ".apkg",
+        r.cards.length + " cartões, estilo " + $("selEstilo").value);
     toast("toast_exported");
     const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
     uiAlert(t("apkg_done_msg", { dest: partes.join("  >  ") }));
@@ -3026,6 +3066,9 @@ async function colarMaisTexto() {
   // 1ª linha do trecho novo (para rolar até lá e brilhar)
   linhaNovaColada = tinha ? tinha.split("\n").length + 2 : 1;
   $("btnDesfazerColagem").disabled = false;
+  reg("COLAR-EDITOR", "texto colado no editor",
+      (colagemAnterior ? colagemAnterior.texto.length : 0) + " -> "
+      + $("editor").value.length + " caracteres");
   preview();
   irParaLinha(linhaNovaColada);
   ed.setSelectionRange(  // posiciona o cursor no início do novo texto
@@ -3134,7 +3177,13 @@ function abrirGerar(texto) {
 }
 $("btnGenFull").onclick = () => { genTipo = "prompt_full"; montarGen(); };
 $("btnGenShort").onclick = () => { genTipo = "prompt_mini"; montarGen(); };
-$("btnGenFechar").onclick = () => $("dlgGerar").close();
+/* Terminada a importacao, o proximo passo e' colar os cartoes — que
+ * acontece na bancada. Voltar sozinho evita o usuario fechar a janela e
+ * ficar olhando para a tela de ferramentas sem entender para onde ir. */
+$("btnGenFechar").onclick = () => {
+  $("dlgGerar").close();
+  if (typeof modoAtual !== "undefined" && modoAtual === "ferramentas") trocarModo("cartoes");
+};
 $("btnGenCopiar").onclick = async () => {
   try { await navigator.clipboard.writeText($("genTexto").value);
     $("genDone").textContent = t("gen_copied"); toast("toast_import_gen"); }
@@ -4023,77 +4072,165 @@ function textoEmFoco() {
     : { onde: "editor", txt: $("editor").value };
 }
 
+/* O dado que mais faltava no diagnostico, justamente no problema mais
+ * grave que apareceu: quanto espaco esta em uso, se o navegador prometeu
+ * NAO apagar, e quantas versoes do texto existem para recuperar. */
+let estadoArmazen = "(não consultado)";
+async function medirArmazenamento() {
+  const p = [];
+  try {
+    const persistido = navigator.storage && navigator.storage.persisted
+      ? await navigator.storage.persisted() : null;
+    p.push("permanente: " + (persistido === null ? "não sei" : (persistido ? "sim" : "NÃO")));
+  } catch (e) { p.push("permanente: erro"); }
+  try {
+    const e = navigator.storage && navigator.storage.estimate
+      ? await navigator.storage.estimate() : null;
+    if (e) p.push("uso: " + Math.round((e.usage || 0) / 1024) + " KB de "
+      + Math.round((e.quota || 0) / 1048576) + " MB");
+  } catch (e) { p.push("uso: erro"); }
+  try {
+    let n = 0;
+    for (let i = 0; i < localStorage.length; i++)
+      n += (localStorage.getItem(localStorage.key(i)) || "").length;
+    p.push("localStorage: " + Math.round(n / 1024) + " KB em " + localStorage.length + " chaves");
+  } catch (e) { p.push("localStorage: sem acesso"); }
+  p.push("histórico: " + (typeof historico !== "undefined" ? historico.length : "?") + " versões");
+  estadoArmazen = p.join(" | ");
+  return estadoArmazen;
+}
+
+/* Cada bloco entra dentro de um "tentar": se um deles explodir — e ele roda
+ * exatamente quando as coisas estao quebradas — o relatorio sai com o buraco
+ * anotado, em vez de nao sair. Antes, uma excecao aqui deixava o usuario sem
+ * nada justamente no momento em que o diagnostico era a unica coisa que
+ * restava. */
+function bloco(L, fn) {
+  try { fn(); } catch (e) { L.push("  [falhou ao montar: " + (e && e.message) + "]"); }
+}
+
 function montarDiagnostico() {
-  const foco = textoEmFoco();
-  const raw = foco.txt || "";
-  const r = resumoTexto(raw);
-  const nav = navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg|SamsungBrowser)\/[\d.]+/);
-  const pwa = matchMedia("(display-mode: standalone)").matches ? "PWA instalado" : "navegador";
   const L = [];
-  L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
-    + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa);
-  L.push("Onde: " + foco.onde);
-  if (ultimoAjuste) {
-    const f = (s) => s.cartoes + " cartões, " + s.avisos + " avisos, "
-      + s.suspeitos + " a verificar, " + s.saibaMais + " linhas de Saiba mais";
-    L.push("Última correção: " + ultimoAjuste.acao);
-    L.push("  antes:  " + f(ultimoAjuste.antes));
-    L.push("  depois: " + f(ultimoAjuste.depois)
-      + (ultimoAjuste.bloqueado ? "  [BLOQUEADA: perderia " + ultimoAjuste.bloqueado + "]" : ""));
-  } else L.push("Última correção: nenhuma nesta sessão");
-  L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
-    + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
-    + " títulos, " + r.tags + " tags");
-  const det = detectoresAtivos(raw);
-  L.push("Detectores acesos: " + (det.length ? det.join(", ") : "nenhum"));
-  const p = parseText(raw, []);
-  (p.warnings || []).slice(0, 6).forEach((w, i) =>
-    L.push("  aviso L" + (p.warnLines || [])[i] + ": " + w));
-  p.cards.filter((c) => c.issues.length).slice(0, 6).forEach((c) =>
-    L.push("  cartão L" + c.line + ": " + c.issues[0]));
+  let raw = "", r = null;
+  bloco(L, () => {
+    const foco = textoEmFoco();
+    raw = foco.txt || "";
+    const nav = navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg|SamsungBrowser)\/[\d.]+/);
+    const pwa = matchMedia("(display-mode: standalone)").matches ? "PWA instalado" : "navegador";
+    L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
+      + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa
+      + " | sessão " + SESSAO);
+    L.push("Onde: " + foco.onde);
+  });
+  L.push("Armazenamento: " + estadoArmazen);
+  bloco(L, () => {
+    if (ultimoAjuste) {
+      const f = (s) => s.cartoes + " cartões, " + s.avisos + " avisos, "
+        + s.suspeitos + " a verificar, " + s.saibaMais + " linhas de Saiba mais";
+      L.push("Última correção: " + ultimoAjuste.acao);
+      L.push("  antes:  " + f(ultimoAjuste.antes));
+      L.push("  depois: " + f(ultimoAjuste.depois)
+        + (ultimoAjuste.bloqueado ? "  [BLOQUEADA: perderia " + ultimoAjuste.bloqueado + "]" : ""));
+    } else L.push("Última correção: nenhuma nesta sessão");
+  });
+  bloco(L, () => {
+    r = resumoTexto(raw);
+    L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
+      + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
+      + " títulos, " + r.tags + " tags");
+  });
+  bloco(L, () => {
+    const det = detectoresAtivos(raw);
+    L.push("Detectores acesos: " + (det.length ? det.join(", ") : "nenhum"));
+  });
+  bloco(L, () => {
+    const p = parseText(raw, []);
+    (p.warnings || []).slice(0, 6).forEach((w, i) =>
+      L.push("  aviso L" + (p.warnLines || [])[i] + ": " + w));
+    p.cards.filter((c) => c.issues.length).slice(0, 6).forEach((c) =>
+      L.push("  cartão L" + c.line + ": " + c.issues[0]));
+    const presos = cartoesDependentes(p);
+    if (presos.length) L.push("  presos à prova de origem: " + presos.length
+      + " (primeiro na L" + presos[0].line + ")");
+  });
   L.push("");
   L.push("--- REGISTRO (" + registro.length + " eventos) ---");
-  L.push(registroTexto());
+  bloco(L, () => L.push(registroTexto()));
   L.push("");
-  L.push("--- TEXTO (" + r.linhas + " linhas, " + r.chars + " caracteres) ---");
-  L.push(raw.length > DIAG_MAX
-    ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
-    : raw);
+  bloco(L, () => {
+    L.push("--- TEXTO (" + (r ? r.linhas : "?") + " linhas, " + raw.length + " caracteres) ---");
+    L.push(raw.length > DIAG_MAX
+      ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
+      : raw);
+  });
   return L.join("\n");
 }
 
-$("btnDiagnostico").onclick = async () => {
-  const txt = montarDiagnostico();
-  try {
-    await navigator.clipboard.writeText(txt);
-    toast("toast_diag_copied");
-  } catch (e) {
-    // sem permissão de área de transferência: mostra para copiar à mão
-    $("fixPromptTexto").value = txt;
-    mostrarTamanho("fixPromptTam", txt);
-    $("fixPromptDone").textContent = "";
-    $("dlgFixPrompt").showModal();
+
+/* ------------------------------------------------------------------
+ * DIAGNÓSTICO — um botão só
+ *
+ * Eram dois links no rodapé ("Diagnóstico" e "Registro") que copiavam
+ * cegamente para a área de transferência. Quem clicava não via o que
+ * levava, e a diferença entre os dois não estava escrita em lugar nenhum.
+ * Agora é um painel: explica cada bloco, MOSTRA o relatório antes de sair
+ * da tela, e daí você copia ou baixa.
+ * ------------------------------------------------------------------ */
+let diagTexto = "";
+
+function pintarDiagnostico(txt) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return esc(txt).split("\n").map((l) => {
+    if (/^---.*---$/.test(l.trim())) return '<span class="d-sec">' + l + "</span>";
+    if (/\[(ERRO|BLOQUEIO|APAGAR)\]|\[falhou ao montar/.test(l))
+      return '<span class="d-err">' + l + "</span>";
+    if (/^(EasyAnkiCards |Onde:|Armazenamento:|Agora:|Detectores|Última correção)/.test(l))
+      return '<span class="d-cab">' + l + "</span>";
+    return l;
+  }).join("\n");
+}
+
+function montarPainelDiag() {
+  const comTexto = $("chkDiagTexto").checked;
+  let txt = montarDiagnostico();
+  if (!comTexto) {
+    const corte = txt.indexOf("\n--- TEXTO");
+    if (corte > 0) txt = txt.slice(0, corte) + "\n--- TEXTO (não incluído a pedido) ---";
   }
+  diagTexto = txt;
+  $("diagPre").innerHTML = pintarDiagnostico(txt);
+}
+
+async function abrirDiagnostico() {
+  await medirArmazenamento();
+  montarPainelDiag();
+  reg("DIAGNOSTICO", "painel aberto", registro.length + " eventos");
+  $("dlgDiagnostico").showModal();
+}
+
+$("btnDiagnostico").onclick = abrirDiagnostico;
+$("chkDiagTexto").onchange = montarPainelDiag;
+$("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
+$("btnDiagCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText(diagTexto); toast("toast_diag_copied"); }
+  catch (e) { uiAlert(t("toast_copy_fail")); }
 };
+$("btnDiagBaixar").onclick = () => {
+  /* nome com data e hora: dois relatórios do mesmo dia não se sobrescrevem */
+  const d = new Date();
+  const car = (n) => String(n).padStart(2, "0");
+  const nome = "easyankicards-diagnostico-" + d.getFullYear() + car(d.getMonth() + 1)
+    + car(d.getDate()) + "-" + car(d.getHours()) + car(d.getMinutes()) + ".txt";
+  const url = URL.createObjectURL(new Blob([diagTexto], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  reg("DIAGNOSTICO", "baixado", nome);
+  toast("toast_diag_saved");
+};
+
 attachTip($("btnDiagnostico"), "tip_diag");
-
-
-/* Janela do registro: reaproveita a caixa do prompt (mesmo formato de
- * texto longo + copiar), sem inventar mais uma tela. */
-$("btnRegistro").onclick = async () => {
-  const txt = registroTexto();
-  try {
-    await navigator.clipboard.writeText(txt);
-    toast("toast_log_copied");
-  } catch (e) {
-    $("fixPromptTexto").value = txt;
-    mostrarTamanho("fixPromptTam", txt);
-    limparConferencia();
-    $("fixPromptDone").textContent = "";
-    $("dlgFixPrompt").showModal();
-  }
-};
-attachTip($("btnRegistro"), "tip_log");
 
 
 /* Mantém a PRIMEIRA de cada grupo e manda as demais para a gaveta.
