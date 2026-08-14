@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.51.0";
+const VERSAO = "8.52.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3664,6 +3664,16 @@ $("btnPromptMini").onclick = () => copiarPrompt($("btnPromptMini"), "prompt_mini
 /* ------------------------------ start ------------------------------ */
 
 // recupera o último texto (auto-save); se não houver, usa o exemplo
+/* Pede ao navegador para NÃO descartar os dados sob pressão de disco. É a
+ * causa mais silenciosa de perda, e a única que se resolve com uma linha.
+ * Não protege de limpeza manual — mas tira essa da mesa. */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then((ja) => {
+    if (ja) return;
+    return navigator.storage.persist().then((ok) =>
+      reg("ARMAZEN", "permanência " + (ok ? "concedida" : "negada pelo navegador")));
+  }).catch(() => {});
+}
 carregarHistorico();
 const textoSalvo = localStorage.getItem("eac_texto");
 $("editor").value = (textoSalvo !== null && textoSalvo.trim()) ? textoSalvo : t("example");
@@ -4087,10 +4097,44 @@ $("btnFixPromptFechar").onclick = () => $("dlgFixPrompt").close();
  * =================================================================== */
 const DIAG_MAX = 30000;   // texto muito grande vai cortado, com aviso
 
+/* O diagnóstico olhava sempre a bancada de CARTÕES. Com o modo edital no
+ * ar, isso virou mentira: quem relatava um problema do edital recebia de
+ * volta o texto dos cartões e não tinha como perceber a troca. O foco
+ * segue o modo. */
 function textoEmFoco() {
-  return $("dlgColarRev") && $("dlgColarRev").open
-    ? { onde: "painel de colagem", txt: $("colarRevTexto").value }
-    : { onde: "editor", txt: $("editor").value };
+  if ($("dlgColarRev") && $("dlgColarRev").open)
+    return { onde: "painel de colagem", txt: $("colarRevTexto").value };
+  if (typeof modoAtual !== "undefined" && modoAtual === "edital")
+    return { onde: "bancada do edital", txt: $("editalTexto").value, edital: true };
+  return { onde: "bancada de cartões", txt: $("editor").value };
+}
+
+/* Bloco próprio do edital: as contagens que respondem "veio completo?" —
+ * quantas disciplinas, quantos tópicos, quantos pesos foram chutados e
+ * quais linhas o app não entendeu. Sem isso, a única forma de saber era
+ * contar à mão. */
+function diagEdital(L) {
+  const raw = ($("editalTexto") || {}).value || "";
+  if (!raw.trim()) { L.push("Edital: vazio"); return; }
+  const r = lerEdital(raw);
+  const tops = r.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  const semPeso = r.disciplinas.reduce(
+    (s, d) => s + d.topicos.filter((t) => t.herdado).length, 0);
+  const ign = r.achados.filter((x) => x.tipo === "linha_ignorada");
+  L.push("Edital: " + r.disciplinas.length + " disciplinas, " + tops + " tópicos, "
+    + semPeso + " sem peso, " + ign.length + " linhas ignoradas, "
+    + r.linhas + " linhas no total");
+  L.push("  concurso: " + (r.cfg.concurso || "(sem nome)")
+    + " | prova: " + (r.cfg.prova || "(sem data)")
+    + " | horas/semana: " + r.cfg.horas
+    + " | concluídos: " + Object.keys(edProgresso || {}).length);
+  /* quantos tópicos por disciplina: é onde se vê o edital cortado no meio */
+  r.disciplinas.slice(0, 12).forEach((d) =>
+    L.push("  @ " + d.nome + " (peso " + d.peso + "): " + d.topicos.length + " tópicos"));
+  if (r.disciplinas.length > 12)
+    L.push("  ... e mais " + (r.disciplinas.length - 12) + " disciplinas");
+  ign.slice(0, 5).forEach((x) => L.push("  ignorada L" + x.linha + ": " + x.txt));
+  L.push("  detectores do edital: " + (edDetectores(raw).join(", ") || "nenhum"));
 }
 
 /* O dado que mais faltava no diagnostico, justamente no problema mais
@@ -4155,16 +4199,23 @@ function montarDiagnostico() {
     } else L.push("Última correção: nenhuma nesta sessão");
   });
   bloco(L, () => {
+    L.push("Modo: " + (typeof modoAtual !== "undefined" ? modoAtual : "?"));
+    diagEdital(L);
+  });
+  bloco(L, () => {
+    if (textoEmFoco().edital) return;   /* já contado acima */
     r = resumoTexto(raw);
     L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
       + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
       + " títulos, " + r.tags + " tags");
   });
   bloco(L, () => {
+    if (textoEmFoco().edital) return;
     const det = detectoresAtivos(raw);
     L.push("Detectores acesos: " + (det.length ? det.join(", ") : "nenhum"));
   });
   bloco(L, () => {
+    if (textoEmFoco().edital) return;
     const p = parseText(raw, []);
     (p.warnings || []).slice(0, 6).forEach((w, i) =>
       L.push("  aviso L" + (p.warnLines || [])[i] + ": " + w));
@@ -4179,7 +4230,7 @@ function montarDiagnostico() {
   bloco(L, () => L.push(registroTexto()));
   L.push("");
   bloco(L, () => {
-    L.push("--- TEXTO (" + (r ? r.linhas : "?") + " linhas, " + raw.length + " caracteres) ---");
+    L.push("--- TEXTO (" + raw.split(/\r?\n/).length + " linhas, " + raw.length + " caracteres) ---");
     L.push(raw.length > DIAG_MAX
       ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
       : raw);
@@ -4211,6 +4262,16 @@ function pintarDiagnostico(txt) {
   }).join("\n");
 }
 
+/* Feedback no próprio botão: o toast some rápido e, num diálogo cheio de
+ * texto, passa despercebido. O rótulo confirma onde a mão estava. */
+function confirmarBotao(id, chave) {
+  const b = $(id);
+  const antes = b.textContent;
+  b.textContent = "✓ " + t(chave);
+  b.disabled = true;
+  setTimeout(() => { b.textContent = antes; b.disabled = false; }, 1800);
+}
+
 function montarPainelDiag() {
   const comTexto = $("chkDiagTexto").checked;
   let txt = montarDiagnostico();
@@ -4220,12 +4281,30 @@ function montarPainelDiag() {
   }
   diagTexto = txt;
   $("diagPre").innerHTML = pintarDiagnostico(txt);
+
+  /* Diz, em cima e por extenso, DE QUAL bancada é este relatório. */
+  const foco = textoEmFoco();
+  const alvo = $("diagAlvo");
+  alvo.innerHTML = "";
+  const rot = document.createElement("span");
+  rot.textContent = t("diag_alvo_rot");
+  const nome = document.createElement("b");
+  nome.textContent = foco.onde;
+  const conta = document.createElement("span");
+  conta.className = "da-conta";
+  conta.textContent = t("diag_alvo_conta", {
+    l: (foco.txt || "").split(/\r?\n/).length,
+    c: (foco.txt || "").length,
+    e: registro.length,
+  });
+  alvo.append(rot, nome, conta);
 }
 
 async function abrirDiagnostico() {
   await medirArmazenamento();
   montarPainelDiag();
-  reg("DIAGNOSTICO", "painel aberto", registro.length + " eventos");
+  reg("DIAGNOSTICO", "painel aberto",
+      registro.length + " eventos, foco: " + textoEmFoco().onde);
   $("dlgDiagnostico").showModal();
 }
 
@@ -4233,8 +4312,11 @@ $("btnDiagnostico").onclick = abrirDiagnostico;
 $("chkDiagTexto").onchange = montarPainelDiag;
 $("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
 $("btnDiagCopiar").onclick = async () => {
-  try { await navigator.clipboard.writeText(diagTexto); toast("toast_diag_copied"); }
-  catch (e) { uiAlert(t("toast_copy_fail")); }
+  try {
+    await navigator.clipboard.writeText(diagTexto);
+    confirmarBotao("btnDiagCopiar", "diag_copiado");
+    toast(textoEmFoco().edital ? "toast_diag_copied_ed" : "toast_diag_copied_cd");
+  } catch (e) { uiAlert(t("toast_copy_fail")); }
 };
 $("btnDiagBaixar").onclick = () => {
   /* nome com data e hora: dois relatórios do mesmo dia não se sobrescrevem */
@@ -4247,7 +4329,8 @@ $("btnDiagBaixar").onclick = () => {
   a.href = url; a.download = nome;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  reg("DIAGNOSTICO", "baixado", nome);
+  reg("DIAGNOSTICO", "baixado", nome + " (" + textoEmFoco().onde + ")");
+  confirmarBotao("btnDiagBaixar", "diag_baixado");
   toast("toast_diag_saved");
 };
 

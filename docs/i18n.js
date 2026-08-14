@@ -661,7 +661,14 @@ const UI = {
   "ed_nada": "Nada a corrigir",
   "ed_csv": "Baixar .csv",
   "ed_limpar": "Apagar tudo",
-  "ed_limpar_conf": "Apagar o edital inteiro e o progresso marcado?\\n\\nSão {t} tópicos e {f} concluídos. Isso não pode ser desfeito por aqui."
+  "ed_limpar_conf": "Apagar o edital inteiro e o progresso marcado?\\n\\nSão {t} tópicos e {f} concluídos. Isso não pode ser desfeito por aqui.",
+  "ed_lido": "Lido: {d} disciplinas e {t} tópicos. Compare com o edital de origem antes de confiar no plano.",
+  "diag_alvo_rot": "Relatório de:",
+  "diag_alvo_conta": "{l} linhas · {c} caracteres · {e} eventos",
+  "diag_copiado": "Copiado",
+  "diag_baixado": "Baixado",
+  "toast_diag_copied_cd": "Relatório da bancada de cartões copiado",
+  "toast_diag_copied_ed": "Relatório da bancada do edital copiado"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1324,7 +1331,14 @@ const UI = {
   "ed_nada": "Nothing to fix",
   "ed_csv": "Download .csv",
   "ed_limpar": "Clear all",
-  "ed_limpar_conf": "Delete the whole syllabus and the progress marks?\\n\\n{t} topics and {f} done. This can't be undone here."
+  "ed_limpar_conf": "Delete the whole syllabus and the progress marks?\\n\\n{t} topics and {f} done. This can't be undone here.",
+  "ed_lido": "Read: {d} subjects and {t} topics. Compare with the original syllabus before trusting the plan.",
+  "diag_alvo_rot": "Report from:",
+  "diag_alvo_conta": "{l} lines · {c} characters · {e} events",
+  "diag_copiado": "Copied",
+  "diag_baixado": "Downloaded",
+  "toast_diag_copied_cd": "Card workbench report copied",
+  "toast_diag_copied_ed": "Syllabus workbench report copied"
  }
 };
 const PARSER_MSG = {
