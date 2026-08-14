@@ -44,6 +44,12 @@ function edSugestoes(r) {
                  fixTxt: t("ed_fix_marcador"), fix: normalizarMarcadores });
   if (semPeso)
     itens.push({ dot: "dot-blue", txt: t("ed_crit_peso", { n: semPeso }) });
+  /* Sempre em primeiro lugar, mesmo quando está tudo certo: é o número que
+   * responde "o edital chegou inteiro?" sem precisar contar à mão. */
+  const tops = r.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  if (tops || r.disciplinas.length)
+    itens.unshift({ dot: "dot-green", conta: true,
+      txt: t("ed_lido", { d: r.disciplinas.length, t: tops }) });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("ed_crit_ok") });
 
   itens.forEach((it) => {
@@ -52,7 +58,7 @@ function edSugestoes(r) {
     const dot = document.createElement("span");
     dot.className = "dot " + it.dot;
     const quem = document.createElement("span");
-    const daIA = !it.fix && it.dot !== "dot-green";
+    const daIA = !it.fix && it.dot !== "dot-green" && !it.conta;
     quem.className = "sug-quem " + (daIA ? "quem-ia" : "quem-app");
     if (it.dot !== "dot-green") quem.textContent = t(daIA ? "quem_ia" : "quem_app");
     const sp = document.createElement("span");
@@ -104,9 +110,32 @@ async function edAplicar(fn) {
   edRender();
 }
 
+/* O registro do edital não tinha NENHUM evento de conteúdo: dava para ver
+ * o prompt sendo aberto e nada mais. Quando o usuário perguntou "o edital
+ * veio completo?", não havia como responder. Agora cada mudança de peso
+ * anota as contagens — e é o histórico delas que mostra o edital chegando
+ * pela metade, ou encolhendo sem ninguém mandar. */
+let edUltimaMarca = "";
+let edTimerLog = null;
+function edRegistrarConteudo(r) {
+  const tops = r.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  const ign = r.achados.filter((x) => x.tipo === "linha_ignorada").length;
+  const semPeso = r.disciplinas.reduce(
+    (s, d) => s + d.topicos.filter((t) => t.herdado).length, 0);
+  const marca = r.disciplinas.length + "/" + tops + "/" + ign + "/" + semPeso;
+  if (marca === edUltimaMarca) return;      /* digitar não gera 200 linhas */
+  edUltimaMarca = marca;
+  clearTimeout(edTimerLog);
+  edTimerLog = setTimeout(() => {
+    reg("EDITAL-TEXTO", r.disciplinas.length + " disciplinas, " + tops + " tópicos",
+        ign + " linhas ignoradas, " + semPeso + " sem peso");
+  }, 800);
+}
+
 function edRender() {
   const raw = $("editalTexto").value;
   const r = lerEdital(raw);
+  edRegistrarConteudo(r);
   edNumeros(raw.split("\n").length);
   edSugestoes(r);
 
