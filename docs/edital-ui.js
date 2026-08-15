@@ -225,7 +225,17 @@ function edLinhaTopico(i, semDisciplina) {
   nome.textContent = i.nome;
   const porq = document.createElement("div");
   porq.className = "ed-item-porque";
-  porq.textContent = edPorque(i, semDisciplina);
+  if (!semDisciplina) {
+    /* O nome da disciplina na agenda era texto morto: clicar nele é o gesto
+     * óbvio de quem quer ver o resto da matéria, e não acontecia nada. */
+    const bd = document.createElement("button");
+    bd.type = "button";
+    bd.className = "ed-item-disc-link";
+    bd.textContent = i.disciplina;
+    bd.title = t("ed_abrir_disc", { d: i.disciplina });
+    bd.onclick = (ev) => { ev.stopPropagation(); abrirDisciplina(i.disciplina); };
+    porq.append(bd, document.createTextNode(" · " + edPorque(i, true)));
+  } else porq.textContent = edPorque(i, true);
   meio.append(nome, porq);
 
   const rev = document.createElement("button");
@@ -238,7 +248,9 @@ function edLinhaTopico(i, semDisciplina) {
 
   const min = document.createElement("b");
   min.className = "ed-item-min";
-  min.textContent = horasTexto(i.minutos);
+  /* "1h" diz quanto; "seg 19:00 · 1h" diz quando, e é o quando que vira
+   * compromisso. A agenda só aparece na semana atual, onde faz sentido. */
+  min.textContent = (i.dia ? i.dia + " " + i.hora + " · " : "") + horasTexto(i.minutos);
 
   li.append(chk, pt, meio, rev, min);
   return li;
@@ -283,7 +295,8 @@ function hojeISO() { return new Date().toISOString().slice(0, 10); }
 function anotarDiario(i, acao, detalhe) {
   edDiario.push({ d: hojeISO(), c: i.chave, n: i.nome, disc: i.disciplina,
                   p: i.bruto, m: (detalhe && detalhe.minutos) || i.minutos,
-                  f: (detalhe && detalhe.forma) || null, a: acao });
+                  f: (detalhe && detalhe.formas) || null,
+                  hu: (detalhe && detalhe.humor) || null, a: acao });
   salvarDiario();
 }
 
@@ -427,29 +440,55 @@ function abrirDiario() {
  * decisão a cada registro, e decisão a cada registro é o que faz a pessoa
  * parar de registrar. */
 const ED_FORMAS = ["leitura", "videoaula", "questoes", "resumo", "mapa", "revisao"];
+/* Produtividade percebida. Três níveis: cinco viram uma decisão demorada
+ * sobre algo que é sensação, não medida. */
+const ED_HUMOR = ["ruim", "media", "boa"];
 let regAtual = null;
-let regForma = "leitura";
+let regFormas = [];
+let regHumor = "media";
 
 function abrirRegistro(i) {
   regAtual = i;
-  regForma = i.feito ? "revisao" : "leitura";
+  regFormas = i.feito ? ["revisao"] : ["leitura"];
+  regHumor = "media";
   $("regTitulo").textContent = i.nome;
   $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
   $("regMinutos").value = i.minutos;
+  $("regMinSlider").value = Math.min(240, i.minutos);
+
   const cx = $("regFormas");
   cx.innerHTML = "";
   ED_FORMAS.forEach((f) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "reg-forma" + (f === regForma ? " ativa" : "");
+    b.className = "reg-forma" + (regFormas.includes(f) ? " ativa" : "");
     b.textContent = t("ed_forma_" + f);
+    /* várias formas por sessão: quase ninguém só lê — lê, assiste e resolve
+     * questão na mesma hora, e obrigar a escolher uma falsifica o registro */
     b.onclick = () => {
-      regForma = f;
-      Array.from(cx.children).forEach((x) => x.classList.remove("ativa"));
-      b.classList.add("ativa");
+      const k = regFormas.indexOf(f);
+      if (k >= 0) { if (regFormas.length > 1) regFormas.splice(k, 1); }
+      else regFormas.push(f);
+      b.classList.toggle("ativa", regFormas.includes(f));
     };
     cx.append(b);
   });
+
+  const hx = $("regHumor");
+  hx.innerHTML = "";
+  ED_HUMOR.forEach((hm) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "reg-humor humor-" + hm + (hm === regHumor ? " ativa" : "");
+    b.textContent = t("ed_humor_" + hm);
+    b.onclick = () => {
+      regHumor = hm;
+      Array.from(hx.children).forEach((x) => x.classList.remove("ativa"));
+      b.classList.add("ativa");
+    };
+    hx.append(b);
+  });
+
   $("btnRegRevisao").hidden = !i.feito;
   $("dlgRegistro").showModal();
 }
@@ -458,7 +497,8 @@ function confirmarRegistro(estado) {
   if (!regAtual) return;
   edMarcar(regAtual, estado, {
     minutos: Math.max(1, Number($("regMinutos").value) || regAtual.minutos),
-    forma: regForma,
+    formas: regFormas.slice(),
+    humor: regHumor,
   });
   $("dlgRegistro").close();
   regAtual = null;
@@ -474,9 +514,76 @@ function edMarcar(i, estado, detalhe) {
   edRender();
 }
 
+/* Ritmo em vez de veredito. "121 ficam de fora" encerra o assunto; ritmo
+ * observado ao lado do necessário mostra o tamanho do ajuste — e sobre isso
+ * dá para agir. As duas barras usam a MESMA escala, senão a comparação
+ * mente. */
+function edPintarRitmo(plano) {
+  const box = $("edRitmo");
+  box.innerHTML = "";
+  const R = ritmoDoPlano(plano, edDiario);
+  if (!plano.total || R.necessarioMin === null) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const escala = Math.max(R.necessarioMin, R.observadoMin, R.planejadoMin || 0) || 1;
+  const linha = (rot, min, cls, extra) => {
+    const d = document.createElement("div");
+    d.className = "rt-linha " + cls;
+    const r1 = document.createElement("span");
+    r1.className = "rt-rot"; r1.textContent = rot;
+    const barra = document.createElement("div");
+    barra.className = "rt-barra";
+    const fill = document.createElement("div");
+    fill.className = "rt-fill";
+    fill.style.width = Math.round((min / escala) * 100) + "%";
+    barra.append(fill);
+    const v = document.createElement("b");
+    v.textContent = horasTexto(min) + (extra ? " · " + extra : "");
+    d.append(r1, barra, v);
+    return d;
+  };
+
+  box.append(linha(t("ed_rt_necessario"), R.necessarioMin, "rt-nec",
+    t("ed_rt_topicos", { n: R.necessarioTop })));
+  box.append(linha(t("ed_rt_planejado"), R.planejadoMin || 0, "rt-pla"));
+  if (R.semanasComRegistro)
+    box.append(linha(t("ed_rt_observado"), R.observadoMin, "rt-obs",
+      t("ed_rt_semanas", { n: R.semanasComRegistro })));
+
+  const nota = document.createElement("div");
+  nota.className = "rt-nota";
+  if (!R.semanasComRegistro) nota.textContent = t("ed_rt_sem_dados");
+  else if (R.razao >= 1) nota.textContent = t("ed_rt_no_ritmo");
+  else nota.textContent = t("ed_rt_atras", {
+    p: Math.round((1 - R.razao) * 100), a: R.alcance, t: plano.total });
+  box.append(nota);
+
+  if (plano.fora.length) {
+    const fora = document.createElement("div");
+    fora.className = "rt-fora";
+    fora.textContent = t("ed_rt_fora", { n: plano.fora.length,
+      cabem: plano.fila.length, h: plano.horasNecessarias });
+    box.append(fora);
+  }
+}
+
+/* Abre a disciplina no painel e leva o olho até ela. Só expandir não basta:
+ * com dezessete cartões, o que abriu pode estar fora da tela. */
+function abrirDisciplina(nome) {
+  edAbertas[nome] = true;
+  edVista = "painel";
+  edRender();
+  const alvoCard = (edCards || {})[nome];
+  if (alvoCard && alvoCard.scrollIntoView)
+    alvoCard.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+let edCards = {};
+
 function edPintarPainel(r, plano) {
   const box = $("edPainel");
   box.innerHTML = "";
+  edCards = {};
   if (!plano.total) {
     const p = document.createElement("div");
     p.className = "esq-vazio"; p.textContent = t("ed_vazio");
@@ -542,6 +649,8 @@ function edPintarPainel(r, plano) {
       r: sem.filter((i) => i.ehRevisao).length,
       h: horasTexto(sem.reduce((a, i) => a + i.minutos, 0)) });
     cx.append(h, expl);
+    agendar(sem, { dias: Number($("edDias").value) || 5,
+                   inicio: $("edInicio").value || "19:00" });
     sem.forEach((i) => cx.append(edLinhaTopico(i)));
     box.append(cx);
   }
@@ -621,6 +730,7 @@ function edPintarPainel(r, plano) {
       meus.forEach((i) => lista.append(edLinhaTopico(i, true)));
       card.append(lista);
     }
+    edCards[d.nome] = card;
     grade.append(card);
   });
   box.append(grade);
@@ -762,14 +872,7 @@ function edRender() {
   /* "Não cabe" dito com todas as letras. O modelo antigo espalhava minutos
    * até dar a soma certa e o usuário só descobria a impossibilidade quando
    * já tinha perdido semanas seguindo um plano que não fechava. */
-  const av = $("edNaoCabe");
-  if (plano.fora.length) {
-    av.hidden = false;
-    av.textContent = t("ed_nao_cabe", {
-      cabem: plano.fila.length, fora: plano.fora.length,
-      s: plano.semanas, h: plano.horasNecessarias,
-    });
-  } else av.hidden = true;
+  edPintarRitmo(plano);
 
   edSimular();
   completarDiario(plano.itens);
@@ -837,6 +940,17 @@ function edIniciar() {
   $("btnDiarioFechar").onclick = () => $("dlgDiario").close();
   $("btnDpFechar").onclick = () => $("dlgDiagPlano").close();
   $("btnDpPrompt").onclick = gerarPromptDoDiag;
+  /* os dois campos de tempo são o MESMO valor: arrastar move o número e
+   * digitar move a barra. Dois controles que discordam são um bug esperando. */
+  $("regMinSlider").addEventListener("input", () => {
+    $("regMinutos").value = $("regMinSlider").value;
+  });
+  $("regMinutos").addEventListener("input", () => {
+    const v = Math.max(5, Math.min(240, Number($("regMinutos").value) || 5));
+    $("regMinSlider").value = v;
+  });
+  $("edDias").onchange = edRender;
+  $("edInicio").onchange = edRender;
   $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
   $("btnRegEstudo").onclick = () => confirmarRegistro("feito");
   $("btnRegRevisao").onclick = () => confirmarRegistro("revisado");

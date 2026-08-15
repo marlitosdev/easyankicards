@@ -296,6 +296,77 @@ function motivarItem(i, fatiaDisc) {
     peso: i.peso, fatia: fatiaDisc };
 }
 
+/* ------------------------------------------------------------------
+ * RITMO
+ * "121 ficam de fora" é um veredito; ritmo é um painel. A diferença
+ * importa: o veredito diz que o plano falhou, o ritmo diz o quanto falta
+ * acelerar — e essa é a informação sobre a qual se pode agir.
+ * ------------------------------------------------------------------ */
+function ritmoDoPlano(plano, diario) {
+  const semanas = plano.semanas;
+  const pendentes = plano.total - plano.feitos;
+  const minutosNecessarios = plano.itens
+    .filter((i) => !i.feito).reduce((a, i) => a + i.minutos, 0);
+
+  /* observado: média das últimas 4 semanas com registro, não da vida toda —
+   * quem parou dois meses e voltou não deve ver a média do período parado */
+  const porSemana = {};
+  (diario || []).forEach((x) => {
+    if (!x.d || x.d === "?" || x.a === "pendente") return;
+    const dt = new Date(x.d + "T00:00:00");
+    const k = Math.floor(dt.getTime() / (7 * 86400000));
+    porSemana[k] = (porSemana[k] || 0) + (x.m || 0);
+  });
+  const chaves = Object.keys(porSemana).sort().slice(-4);
+  const obsMin = chaves.length
+    ? Math.round(chaves.reduce((a, k) => a + porSemana[k], 0) / chaves.length) : 0;
+
+  const necMin = semanas ? Math.round(minutosNecessarios / semanas) : null;
+  return {
+    semanas, pendentes,
+    necessarioMin: necMin,
+    necessarioTop: semanas ? Math.ceil(pendentes / semanas) : null,
+    observadoMin: obsMin,
+    semanasComRegistro: chaves.length,
+    planejadoMin: plano.porSemana,
+    /* quanto do necessário o ritmo atual cobre; acima de 1 está sobrando */
+    razao: necMin ? obsMin / necMin : null,
+    /* onde se chega mantendo o ritmo atual */
+    alcance: obsMin && plano.itens.length
+      ? Math.min(plano.total, plano.feitos + Math.floor(
+          (obsMin * (semanas || 0)) / (minutosNecessarios / (pendentes || 1) || 1)))
+      : null,
+  };
+}
+
+/* ------------------------------------------------------------------
+ * AGENDA: dia e hora sugeridos
+ * "1h" diz quanto, não quando — e "quando" é o que falta para virar
+ * compromisso. Com os dias de estudo e o horário de início, cada tópico
+ * da semana ganha um lugar no relógio.
+ * ------------------------------------------------------------------ */
+const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+function agendar(itens, cfg) {
+  const dias = Math.max(1, Math.min(7, Number(cfg && cfg.dias) || 5));
+  const inicio = (cfg && cfg.inicio) || "19:00";
+  const [h0, m0] = inicio.split(":").map(Number);
+  const porDia = Math.ceil(itens.reduce((a, i) => a + i.minutos, 0) / dias);
+  /* estuda-se de segunda a sexta por padrão; sábado e domingo entram só
+     quando a pessoa pede mais de cinco dias */
+  const ordemDias = [1, 2, 3, 4, 5, 6, 0].slice(0, dias);
+  let d = 0, usado = 0;
+  itens.forEach((i) => {
+    if (usado && usado + i.minutos > porDia && d < dias - 1) { d++; usado = 0; }
+    const min = h0 * 60 + m0 + usado;
+    i.dia = DIAS_SEMANA[ordemDias[d]];
+    i.hora = String(Math.floor(min / 60) % 24).padStart(2, "0") + ":"
+      + String(min % 60).padStart(2, "0");
+    usado += i.minutos;
+  });
+  return itens;
+}
+
 function semanaAtual(plano) {
   return (plano.fila || []).filter((i) => i.semana === 1);
 }
