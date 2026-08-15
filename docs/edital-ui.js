@@ -394,6 +394,72 @@ function edTrocarVista(v) {
   $("btnVistaLista").classList.toggle("ativa", v === "lista");
 }
 
+/* ------------------------------------------------------------------
+ * COLAR O PLANO CORRIGIDO
+ * Faltava o outro lado da ponte: o app gerava o prompt e não dizia para
+ * onde a resposta volta. Aqui ela volta com CONFERÊNCIA — o número de
+ * tópicos antes e depois é comparado, porque a IA resumir um edital de 231
+ * linhas é exatamente o que ela faz quando o pedido é longo.
+ * ------------------------------------------------------------------ */
+function edConferirColagem() {
+  const novoTxt = $("edColarTexto").value;
+  const av = $("edColarAviso");
+  if (!novoTxt.trim()) { av.hidden = true; return null; }
+  const antes = lerEdital($("editalTexto").value);
+  const depois = lerEdital(novoTxt);
+  const nA = antes.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  const nD = depois.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  const ign = depois.achados.filter((a) => a.tipo === "linha_ignorada").length;
+  const partes = [t("ed_colar_conf", { a: nA, d: nD,
+    da: antes.disciplinas.length, dd: depois.disciplinas.length })];
+  if (nD < nA) partes.push(t("ed_colar_perdeu", { n: nA - nD }));
+  if (ign) partes.push(t("ed_colar_ignoradas", { n: ign }));
+  av.hidden = false;
+  av.textContent = partes.join(" ");
+  av.classList.toggle("grave", nD < nA);
+  return { nA, nD, novoTxt };
+}
+
+async function edAplicarColagem() {
+  const c = edConferirColagem();
+  if (!c) return;
+  if (c.nD < c.nA) {
+    if (!(await uiConfirm(t("ed_colar_confirma", { n: c.nA - c.nD })))) return;
+  }
+  guardarVersao("antes de colar o plano corrigido", $("editalTexto").value);
+  $("editalTexto").value = c.novoTxt;
+  reg("EDITAL-COLAR", "plano corrigido colado", c.nA + " → " + c.nD + " tópicos");
+  $("dlgEdColar").close();
+  edRender();
+  toast("ed_colado");
+}
+
+/* Simulador de horas: a decisão é uma troca, e troca se decide vendo os dois
+ * lados ao mesmo tempo. Antes o campo mudava o número e o efeito só aparecia
+ * se o usuário fosse ler a tabela inteira. */
+function edSimular() {
+  const r = lerEdital($("editalTexto").value);
+  const horas = Number($("edHorasSlider").value) || 1;
+  $("edHoras").value = horas;
+  const p = montarPlano(r, { horas, prova: $("edProva").value, feitos: edProgresso });
+  const el = $("edSimTxt");
+  el.innerHTML = "";
+  if (!p.total) { el.textContent = ""; return; }
+  const forte = document.createElement("b");
+  forte.textContent = t("ed_sim_horas", { h: horas });
+  const resto = document.createElement("span");
+  if (p.semanas === null) resto.textContent = " " + t("ed_sem_data");
+  else if (!p.fora.length) {
+    resto.className = "ok";
+    resto.textContent = " " + t("ed_sim_cabe", { n: p.fila.length });
+  } else {
+    resto.className = "falta";
+    resto.textContent = " " + t("ed_sim_falta", { n: p.fila.length,
+      f: p.fora.length, h: p.horasNecessarias });
+  }
+  el.append(forte, resto);
+}
+
 function edRender() {
   const raw = $("editalTexto").value;
   const r = lerEdital(raw);
@@ -403,7 +469,10 @@ function edRender() {
 
   /* config: os campos de data e horas mandam no texto, e vice-versa */
   if (r.cfg.prova && $("edProva").value !== r.cfg.prova) $("edProva").value = r.cfg.prova;
-  if (r.cfg.horas && Number($("edHoras").value) !== r.cfg.horas) $("edHoras").value = r.cfg.horas;
+  if (r.cfg.horas && Number($("edHoras").value) !== r.cfg.horas) {
+    $("edHoras").value = r.cfg.horas;
+    $("edHorasSlider").value = r.cfg.horas;
+  }
 
   const plano = montarPlano(r, {
     horas: Number($("edHoras").value) || r.cfg.horas,
@@ -430,6 +499,7 @@ function edRender() {
     });
   } else av.hidden = true;
 
+  edSimular();
   edPintarPainel(r, plano);
   edTrocarVista(edVista);
 
@@ -485,7 +555,19 @@ function edIniciar() {
     $("editalNums").scrollTop = $("editalTexto").scrollTop;
   });
   $("edProva").onchange = edRender;
-  $("edHoras").onchange = edRender;
+  $("edHoras").onchange = () => { $("edHorasSlider").value = $("edHoras").value; edRender(); };
+  /* "input" e não "change": o valor tem de responder enquanto o dedo arrasta,
+   * senão deixa de ser simulação e vira mais um campo para preencher. */
+  $("edHorasSlider").addEventListener("input", edSimular);
+  $("edHorasSlider").addEventListener("change", edRender);
+  $("btnEditalColar").onclick = () => {
+    $("edColarTexto").value = "";
+    $("edColarAviso").hidden = true;
+    $("dlgEdColar").showModal();
+  };
+  $("edColarTexto").addEventListener("input", edConferirColagem);
+  $("btnEdColarAplicar").onclick = edAplicarColagem;
+  $("btnEdColarFechar").onclick = () => $("dlgEdColar").close();
   $("btnEditalCorrigir").onclick = () => {
     if (edCorrecaoPendente) edAplicar(edCorrecaoPendente);
   };
