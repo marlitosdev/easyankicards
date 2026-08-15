@@ -123,29 +123,81 @@ function priorizar(r) {
   return itens;
 }
 
-/* Distribui o orçamento semanal proporcionalmente ao peso bruto, com PISO:
- * sem piso, um tópico de peso 1 num edital grande recebe "0h05" e some da
- * vida do usuário — e um tópico que nunca é estudado é um tópico que a
- * prova cobra. */
-const ED_PISO_MIN = 20;
-function distribuirHoras(itens, horasSemana) {
-  const total = itens.reduce((s, i) => s + i.bruto, 0) || 1;
-  const minutos = Math.max(0, (Number(horasSemana) || 0)) * 60;
-  itens.forEach((i) => {
-    i.minutos = Math.max(ED_PISO_MIN, Math.round((i.bruto / total) * minutos));
+/* ------------------------------------------------------------------
+ * O PLANO: uma fila ao longo das semanas
+ *
+ * O modelo anterior dividia o orçamento SEMANAL entre todos os tópicos.
+ * Com o edital real do TCE-PE — 231 tópicos, 12h por semana — isso deu 20
+ * minutos para cada um, ou seja 77 horas por semana: seis vezes o tempo que
+ * existe. O número era aritmeticamente correto e completamente inútil.
+ *
+ * Ninguém estuda 231 tópicos por semana. Estuda-se uma FATIA por semana, na
+ * ordem da prioridade, até a prova. E quando não cabe, o app diz que não
+ * cabe — em vez de fingir espalhando minutos que ninguém consegue cumprir.
+ * ------------------------------------------------------------------ */
+
+/* Tempo por FAIXA, não proporcional. Proporção entre 231 itens produz "8
+ * minutos de Direito Civil", que não é uma sessão de estudo. */
+const ED_FAIXAS = [
+  { id: "alta", min: 80, minutos: 60 },
+  { id: "media", min: 50, minutos: 45 },
+  { id: "baixa", min: 0, minutos: 30 },
+];
+function faixaDe(prioridade) {
+  return ED_FAIXAS.find((f) => prioridade >= f.min) || ED_FAIXAS[ED_FAIXAS.length - 1];
+}
+
+/* opcoes: { horas, prova, hoje, feitos } — "feitos" é um objeto/Set com as
+ * chaves já concluídas, que saem da fila. */
+function montarPlano(r, opcoes) {
+  const o = opcoes || {};
+  const horas = Math.max(0, Number(o.horas) || 0);
+  const porSemana = horas * 60;
+  const s = semanasAte(o.prova, o.hoje);
+  const semanas = s ? Math.max(0, s.semanas) : null;
+  const feito = (k) => !!(o.feitos && (o.feitos[k] || (o.feitos.has && o.feitos.has(k))));
+
+  const todos = priorizar(r);
+  todos.forEach((i) => {
+    const f = faixaDe(i.prioridade);
+    i.faixa = f.id;
+    i.minutos = f.minutos;
+    i.chave = (i.disciplina + "›" + i.nome).toLowerCase();
+    i.feito = feito(i.chave);
   });
-  /* o piso estoura o orçamento: reduz proporcionalmente quem está acima */
-  let soma = itens.reduce((s, i) => s + i.minutos, 0);
-  if (soma > minutos && minutos > 0) {
-    const acima = itens.filter((i) => i.minutos > ED_PISO_MIN);
-    const excesso = soma - minutos;
-    const base = acima.reduce((s, i) => s + (i.minutos - ED_PISO_MIN), 0) || 1;
-    acima.forEach((i) => {
-      i.minutos = Math.max(ED_PISO_MIN,
-        i.minutos - Math.round(((i.minutos - ED_PISO_MIN) / base) * excesso));
-    });
-  }
-  return itens;
+
+  const fila = todos.filter((i) => !i.feito);
+  const dentro = [], fora = [];
+  let semana = 1, usoSemana = 0, usado = 0;
+
+  fila.forEach((i) => {
+    if (!porSemana || semanas === null) {          /* sem data ou sem horas:
+      não dá para montar cronograma, mas a ordem continua valendo */
+      i.semana = null; dentro.push(i); usado += i.minutos; return;
+    }
+    if (usoSemana + i.minutos > porSemana) { semana++; usoSemana = 0; }
+    if (semanas > 0 && semana > semanas) { i.semana = null; fora.push(i); return; }
+    i.semana = semana; usoSemana += i.minutos; usado += i.minutos;
+    dentro.push(i);
+  });
+
+  return {
+    itens: todos,          /* tudo, na ordem, com faixa e minutos */
+    fila: dentro,          /* o que cabe até a prova */
+    fora,                  /* o que não cabe — nomeado, nunca escondido */
+    semanas, porSemana, usado,
+    orcamento: semanas === null ? null : semanas * porSemana,
+    feitos: todos.filter((i) => i.feito).length,
+    total: todos.length,
+    /* quantas horas por semana cobririam TUDO: é a resposta à pergunta
+     * "então quanto eu precisaria estudar?" */
+    horasNecessarias: semanas ? Math.ceil(
+      (fila.reduce((a, i) => a + i.minutos, 0) / semanas) / 60) : null,
+  };
+}
+
+function semanaAtual(plano) {
+  return (plano.fila || []).filter((i) => i.semana === 1);
 }
 
 function horasTexto(min) {
@@ -204,11 +256,24 @@ function temPesoFaltando(raw) {
   return r.disciplinas.some((d) => d.topicos.some((t) => t.herdado));
 }
 
+/* A IA usou o peso padrão em TODAS as disciplinas: foi o que aconteceu no
+ * edital real (17 disciplinas, todas com 3). Como a prioridade é peso da
+ * disciplina × peso do tópico, a disciplina sai da conta e a "priorização"
+ * vira um empate geral. Formalmente válido, praticamente inútil — o mesmo
+ * tipo de defeito do cartão preso à prova de origem. */
+function temPesosIguais(raw) {
+  const r = typeof raw === "string" ? lerEdital(raw) : raw;
+  if (!r.disciplinas || r.disciplinas.length < 3) return false;
+  const p = r.disciplinas[0].peso;
+  return r.disciplinas.every((d) => d.peso === p);
+}
+
 function edDetectores(raw) {
   const acesos = [];
   if (temNumeracaoEdital(raw)) acesos.push("numeracao");
   if (temMarcadorTorto(raw)) acesos.push("marcador");
   if (temPesoFaltando(raw)) acesos.push("peso_faltando");
+  if (temPesosIguais(raw)) acesos.push("pesos_iguais");
   return acesos;
 }
 
