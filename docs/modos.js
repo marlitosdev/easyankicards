@@ -45,6 +45,7 @@ function trocarModo(id) {
    * contexto é botão que ensina o usuário a desconfiar da tela. */
   const rod = document.getElementById("rodapeExportar");
   if (rod) rod.hidden = id !== "cartoes";
+  if (typeof medirRodape === "function") medirRodape();
   try { localStorage.setItem("eac_modo", id); } catch (e) {}
   if (typeof reg === "function") reg("MODO", "modo " + id);
 }

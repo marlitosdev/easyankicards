@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.60.0";
+const VERSAO = "8.61.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -468,6 +468,17 @@ function medirCalha() {
   document.documentElement.style.setProperty("--calha", calha + "px");
 }
 window.addEventListener("resize", medirCalha);
+
+/* O rodapé é fixo e cobre o fim da página; o corpo reservava 84px chutados.
+ * Como o rodapé muda de altura conforme o modo (no edital os botões de
+ * exportar somem), o número certo só existe em tempo de execução. */
+function medirRodape() {
+  const r = document.querySelector(".rodape");
+  if (!r) return;
+  document.body.style.paddingBottom = (r.offsetHeight + 18) + "px";
+}
+window.addEventListener("resize", medirRodape);
+document.addEventListener("DOMContentLoaded", medirRodape);
 
 /* Ampliar a bancada: esconde a prévia e dá a largura toda ao editor.
  * Fica guardado, porque quem trabalha em texto longo trabalha assim a

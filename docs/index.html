@@ -705,6 +705,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .ed-item{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12px;
   border-bottom:1px solid var(--borda)}
 .ed-item-meio{flex:1;min-width:0}
+.ed-item-disc-link{all:unset;cursor:pointer;color:var(--sutil);
+  text-decoration:underline;text-underline-offset:2px}
+.ed-item-disc-link:hover{color:var(--texto)}
 .ed-item-porque{font-size:10.5px;color:var(--sutil);margin-top:2px;line-height:1.35}
 .ed-item-min{font-size:11px;white-space:nowrap}
 .ed-item.ehrev{background:rgba(34,197,94,.07)}
@@ -732,6 +735,29 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:rgba(245,158,11,.2);color:#e8940a}
 .dp-item.grave .dp-selo{background:rgba(220,38,38,.2);color:#fca5a5}
 :root[data-theme="light"] .dp-item.grave .dp-selo{color:#b91c1c}
+.ed-ritmo{margin:0 0 10px;padding:11px 13px;border-radius:10px;
+  background:var(--campo);border:1px solid var(--borda)}
+.rt-linha{display:flex;align-items:center;gap:9px;margin:0 0 7px;font-size:11.5px}
+.rt-rot{width:74px;flex-shrink:0;color:var(--sutil);font-weight:700;
+  text-transform:uppercase;font-size:9.5px;letter-spacing:.3px}
+.rt-barra{flex:1;height:9px;background:var(--panel);border-radius:5px;overflow:hidden}
+.rt-fill{height:100%;border-radius:5px}
+.rt-nec .rt-fill{background:#8b5cf6}
+.rt-pla .rt-fill{background:#3b82f6}
+.rt-obs .rt-fill{background:#22c55e}
+.rt-linha b{width:112px;text-align:right;flex-shrink:0;font-size:11px}
+.rt-nota{font-size:11.5px;color:var(--sutil);line-height:1.45;margin-top:8px}
+.rt-fora{font-size:11px;line-height:1.45;margin-top:7px;padding:7px 9px;border-radius:8px;
+  background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.4)}
+.reg-tempo{display:flex;align-items:center;gap:10px;margin-top:6px}
+.reg-tempo input[type=range]{flex:1}
+.reg-tempo input[type=number]{width:80px;padding:7px 9px;border-radius:8px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);font-size:13px}
+.reg-humor{all:unset;cursor:pointer;padding:6px 13px;border-radius:8px;font-size:11.5px;
+  font-weight:600;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
+.reg-humor.ativa.humor-ruim{background:#e24b4a;border-color:transparent;color:#fff}
+.reg-humor.ativa.humor-media{background:#BA7517;border-color:transparent;color:#fff}
+.reg-humor.ativa.humor-boa{background:#15803d;border-color:transparent;color:#fff}
 .ed-reg{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
   display:inline-flex;align-items:center;justify-content:center;font-size:11px;
   font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0}
@@ -1013,8 +1039,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
           <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
         </span>
       </div>
+      <!-- O ciclo inteiro numa linha só: pedir, revisar, colar de volta.
+           O diagnóstico estava do outro lado da tela, longe do botão que
+           recebe a resposta dele. -->
       <div class="btn-linha">
         <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+        <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
         <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
       </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
@@ -1030,21 +1060,23 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div class="grupo">
       <div class="bancada-cab">
         <h2 class="bancada-nome" data-i18n="ed_prioridade"></h2>
-        <span class="bancada-acoes">
-          <button class="btn-min" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
-        </span>
+
       </div>
       <div class="ed-cfg">
         <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
         <label><span data-i18n="ed_horas"></span>
           <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
+        <label><span data-i18n="ed_dias"></span>
+          <input type="number" id="edDias" min="1" max="7" step="1" value="5"></label>
+        <label><span data-i18n="ed_inicio"></span>
+          <input type="time" id="edInicio" value="19:00"></label>
       </div>
       <div class="ed-sim">
         <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
         <div class="ed-sim-txt" id="edSimTxt"></div>
       </div>
       <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
-      <div class="ed-nao-cabe" id="edNaoCabe" hidden></div>
+      <div class="ed-ritmo" id="edRitmo" hidden></div>
       <div class="ed-abas">
         <button class="ed-aba ativa" id="btnVistaPainel" data-i18n="ed_vista_painel"></button>
         <button class="ed-aba" id="btnVistaLista" data-i18n="ed_vista_lista"></button>
@@ -1315,8 +1347,13 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 <dialog id="dlgRegistro" class="ui-modal">
   <h3 data-i18n="ed_reg_tit"></h3>
   <div class="reg-topico"><b id="regTitulo"></b><div class="nota" id="regSub"></div></div>
-  <label class="reg-lin"><span data-i18n="ed_reg_min"></span>
-    <input type="number" id="regMinutos" min="1" max="600" step="5"></label>
+  <div class="reg-lin-col"><span data-i18n="ed_reg_min"></span>
+    <div class="reg-tempo">
+      <input type="range" id="regMinSlider" min="5" max="240" step="5" value="60">
+      <input type="number" id="regMinutos" min="1" max="600" step="5">
+    </div></div>
+  <div class="reg-lin-col"><span data-i18n="ed_reg_humor"></span>
+    <div class="reg-formas" id="regHumor"></div></div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_forma"></span>
     <div class="reg-formas" id="regFormas"></div></div>
   <div class="dlg-rodape">
