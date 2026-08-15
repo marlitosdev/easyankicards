@@ -634,6 +634,44 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:var(--campo);color:var(--texto);font-size:13px}
 .ed-faixa{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
   font-size:11.5px;color:var(--sutil);margin:0 0 8px;font-weight:600}
+/* ---- painel do edital ---- */
+.ed-abas{display:flex;gap:6px;margin:0 0 10px}
+.ed-aba{all:unset;cursor:pointer;padding:6px 13px;border-radius:8px;font-size:12px;
+  font-weight:600;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
+.ed-aba.ativa{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
+.ed-topo{background:var(--campo);border:1px solid var(--borda);border-radius:11px;
+  padding:12px 14px;margin:0 0 10px}
+.ed-topo-nome{font-size:14px;font-weight:700;margin:0 0 9px;line-height:1.3}
+.ed-topo-sub{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--sutil);margin-top:7px}
+.ed-barra{height:6px;background:var(--panel);border-radius:4px;overflow:hidden}
+.ed-barra.grande{height:9px}
+.ed-barra-fill{height:100%;background:#22c55e;border-radius:4px;transition:width .2s}
+.ed-caixa{background:var(--campo);border:1px solid var(--borda);border-radius:11px;
+  padding:11px 13px;margin:0 0 10px}
+.ed-caixa-tit{font-size:12.5px;font-weight:700;margin:0 0 7px}
+.ed-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;
+  border-bottom:1px solid var(--borda);cursor:pointer}
+.ed-item:last-child{border-bottom:0}
+.ed-item-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-item-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
+.ed-item b{font-size:11px;white-space:nowrap}
+.ed-item.feito .ed-item-nome{text-decoration:line-through;opacity:.45}
+.ed-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px}
+.ed-card{background:var(--campo);border:1px solid var(--borda);border-radius:11px;padding:11px}
+.ed-card.completo{border-color:#22c55e}
+.ed-card-cab{display:flex;align-items:center;gap:7px;margin:0 0 8px}
+.ed-card-nome{flex:1;font-size:12.5px;font-weight:600;line-height:1.3}
+.ed-peso{font-size:10.5px;padding:2px 5px;border-radius:7px;background:var(--panel);
+  color:var(--texto);border:1px solid var(--borda);cursor:pointer}
+.ed-peso.suspeito{border-color:#e24b4a;color:#fca5a5}
+.ed-card-conta{font-size:11px;color:var(--sutil);margin:6px 0 5px}
+.ed-pontos{display:flex;gap:9px;flex-wrap:wrap;font-size:10.5px}
+.faixa-alta{color:#e24b4a}.faixa-media{color:#BA7517}.faixa-baixa{color:var(--sutil)}
+.ed-abrir{all:unset;cursor:pointer;display:block;margin-top:8px;font-size:10.5px;
+  font-weight:700;color:var(--sutil);text-decoration:underline}
+.ed-abrir:hover{color:var(--texto)}
+.ed-card-lista{margin-top:7px;border-top:1px solid var(--borda);padding-top:5px}
 .ed-nao-cabe{margin:0 0 8px;padding:9px 11px;border-radius:9px;font-size:11.5px;
   line-height:1.5;color:var(--texto);background:rgba(245,158,11,.16);
   border:1px solid rgba(245,158,11,.5)}
@@ -912,6 +950,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       </div>
       <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
       <div class="ed-nao-cabe" id="edNaoCabe" hidden></div>
+      <div class="ed-abas">
+        <button class="ed-aba ativa" id="btnVistaPainel" data-i18n="ed_vista_painel"></button>
+        <button class="ed-aba" id="btnVistaLista" data-i18n="ed_vista_lista"></button>
+      </div>
+      <div id="edPainel"></div>
+      <div id="edListaBox" hidden>
       <div class="ed-rolagem">
         <table class="ed-tab">
           <thead><tr>
@@ -921,6 +965,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
           </tr></thead>
           <tbody id="edTabela"></tbody>
         </table>
+      </div>
       </div>
       <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
     </div>
@@ -1153,6 +1198,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
   <label class="diag-op"><input type="checkbox" id="chkDiagTexto" checked>
     <span data-i18n="diag_incluir_texto"></span></label>
+  <label class="diag-op"><input type="checkbox" id="chkDiagModo">
+    <span data-i18n="diag_so_modo"></span></label>
   <pre id="diagPre" class="diag-pre"></pre>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>

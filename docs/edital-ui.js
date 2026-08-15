@@ -136,6 +136,180 @@ function edRegistrarConteudo(r) {
   }, 800);
 }
 
+/* ==================================================================
+ * O PAINEL
+ * A tabela de 231 linhas responde "qual é a ordem?", que é uma pergunta
+ * que se faz uma vez. O painel responde "e agora?", que se faz todo dia.
+ * Por isso ele abre por padrão e a tabela vira a segunda aba.
+ * ================================================================== */
+let edVista = localStorage.getItem("eac_edital_vista") || "painel";
+let edAbertas = {};        /* disciplinas expandidas */
+
+function edBarra(feitos, total, cls) {
+  const d = document.createElement("div");
+  d.className = "ed-barra" + (cls ? " " + cls : "");
+  const f = document.createElement("div");
+  f.className = "ed-barra-fill";
+  f.style.width = (total ? Math.round((feitos / total) * 100) : 0) + "%";
+  d.append(f);
+  return d;
+}
+
+function edPontos(itens) {
+  const box = document.createElement("div");
+  box.className = "ed-pontos";
+  ["alta", "media", "baixa"].forEach((f) => {
+    const n = itens.filter((i) => i.faixa === f).length;
+    if (!n) return;
+    const s = document.createElement("span");
+    s.className = "faixa-" + f;
+    s.textContent = "● " + n + " " + t("ed_faixa_" + f);
+    box.append(s);
+  });
+  return box;
+}
+
+function edLinhaTopico(i) {
+  const li = document.createElement("label");
+  li.className = "ed-item" + (i.feito ? " feito" : "");
+  const chk = document.createElement("input");
+  chk.type = "checkbox"; chk.checked = i.feito;
+  chk.onchange = () => {
+    if (chk.checked) edProgresso[i.chave] = true; else delete edProgresso[i.chave];
+    reg("EDITAL-PROGRESSO", (chk.checked ? "feito: " : "desfeito: ") + i.nome,
+        i.disciplina);
+    edRender();
+  };
+  const pt = document.createElement("span");
+  pt.className = "ed-ponto ponto-" + i.faixa;
+  const nome = document.createElement("span");
+  nome.className = "ed-item-nome";
+  nome.textContent = i.nome;
+  if (i.motivo) nome.title = i.motivo;
+  const disc = document.createElement("span");
+  disc.className = "ed-item-disc";
+  disc.textContent = i.disciplina;
+  const min = document.createElement("b");
+  min.textContent = horasTexto(i.minutos);
+  li.append(chk, pt, nome, disc, min);
+  return li;
+}
+
+function edPintarPainel(r, plano) {
+  const box = $("edPainel");
+  box.innerHTML = "";
+  if (!plano.total) {
+    const p = document.createElement("div");
+    p.className = "esq-vazio"; p.textContent = t("ed_vazio");
+    box.append(p); return;
+  }
+
+  /* -------- topo: progresso e contagem regressiva -------- */
+  const topo = document.createElement("div");
+  topo.className = "ed-topo";
+  const nome = document.createElement("div");
+  nome.className = "ed-topo-nome";
+  nome.textContent = r.cfg.concurso || t("ed_sem_nome");
+  const pct = plano.total ? Math.round((plano.feitos / plano.total) * 100) : 0;
+  topo.append(nome, edBarra(plano.feitos, plano.total, "grande"));
+  const sub = document.createElement("div");
+  sub.className = "ed-topo-sub";
+  const esq = document.createElement("span");
+  esq.textContent = t("ed_topo_prog", { f: plano.feitos, t: plano.total, p: pct });
+  const dir = document.createElement("span");
+  const sem = semanaAtual(plano);
+  dir.textContent = plano.semanas === null ? t("ed_sem_data")
+    : t("ed_topo_semana", { n: sem.length,
+        h: horasTexto(sem.reduce((a, i) => a + i.minutos, 0)) });
+  sub.append(esq, dir);
+  topo.append(sub);
+  box.append(topo);
+
+  /* -------- esta semana: a lista curta -------- */
+  if (sem.length) {
+    const cx = document.createElement("div");
+    cx.className = "ed-caixa";
+    const h = document.createElement("div");
+    h.className = "ed-caixa-tit";
+    h.textContent = t("ed_esta_semana");
+    cx.append(h);
+    sem.forEach((i) => cx.append(edLinhaTopico(i)));
+    box.append(cx);
+  }
+
+  /* -------- disciplinas: cartões com barra de progresso -------- */
+  const grade = document.createElement("div");
+  grade.className = "ed-grade";
+  r.disciplinas.forEach((d) => {
+    const meus = plano.itens.filter((i) => i.disciplina === d.nome);
+    if (!meus.length) return;
+    const feitos = meus.filter((i) => i.feito).length;
+    const card = document.createElement("div");
+    card.className = "ed-card" + (feitos === meus.length ? " completo" : "");
+
+    const cab = document.createElement("div");
+    cab.className = "ed-card-cab";
+    const tit = document.createElement("span");
+    tit.className = "ed-card-nome";
+    tit.textContent = d.nome;
+    /* peso editável ali mesmo: mexer no peso é a ação que mais muda o plano,
+     * e mandar o usuário procurar a linha no texto é pedir para não fazer */
+    const sel = document.createElement("select");
+    sel.className = "ed-peso" + (temPesosIguais(r) ? " suspeito" : "");
+    [1, 2, 3, 4, 5].forEach((n) => {
+      const o = document.createElement("option");
+      o.value = n; o.textContent = t("ed_peso_n", { n });
+      if (n === d.peso) o.selected = true;
+      sel.append(o);
+    });
+    sel.onchange = () => edMudarPeso(d, Number(sel.value));
+    cab.append(tit, sel);
+    card.append(cab, edBarra(feitos, meus.length));
+
+    const cont = document.createElement("div");
+    cont.className = "ed-card-conta";
+    cont.textContent = t("ed_card_conta", { f: feitos, t: meus.length });
+    card.append(cont, edPontos(meus));
+
+    const abrir = document.createElement("button");
+    abrir.className = "ed-abrir";
+    abrir.textContent = edAbertas[d.nome] ? t("ed_fechar") : t("ed_abrir");
+    abrir.onclick = () => { edAbertas[d.nome] = !edAbertas[d.nome]; edRender(); };
+    card.append(abrir);
+    if (edAbertas[d.nome]) {
+      const lista = document.createElement("div");
+      lista.className = "ed-card-lista";
+      meus.forEach((i) => lista.append(edLinhaTopico(i)));
+      card.append(lista);
+    }
+    grade.append(card);
+  });
+  box.append(grade);
+}
+
+/* Mudar o peso reescreve o TEXTO — nunca um estado paralelo. Enquanto texto
+ * e tela puderem divergir, uma das duas está mentindo, e o usuário não tem
+ * como saber qual. */
+function edMudarPeso(disc, peso) {
+  const L = $("editalTexto").value.split(/\r?\n/);
+  const i = disc.linha - 1;
+  if (!L[i]) return;
+  const partes = L[i].replace(/^@\s*/, "").split("::").map((s) => s.trim());
+  L[i] = "@ " + partes[0] + " :: " + peso;
+  $("editalTexto").value = L.join("\n");
+  reg("EDITAL-PESO", disc.nome, disc.peso + " → " + peso);
+  edRender();
+}
+
+function edTrocarVista(v) {
+  edVista = v;
+  localStorage.setItem("eac_edital_vista", v);
+  $("edPainel").hidden = v !== "painel";
+  $("edListaBox").hidden = v !== "lista";
+  $("btnVistaPainel").classList.toggle("ativa", v === "painel");
+  $("btnVistaLista").classList.toggle("ativa", v === "lista");
+}
+
 function edRender() {
   const raw = $("editalTexto").value;
   const r = lerEdital(raw);
@@ -171,6 +345,9 @@ function edRender() {
       s: plano.semanas, h: plano.horasNecessarias,
     });
   } else av.hidden = true;
+
+  edPintarPainel(r, plano);
+  edTrocarVista(edVista);
 
   const tb = $("edTabela");
   tb.innerHTML = "";
@@ -246,6 +423,8 @@ function edIniciar() {
     $("editalTexto").value = ""; edProgresso = {};
     edRender();
   };
+  $("btnVistaPainel").onclick = () => edTrocarVista("painel");
+  $("btnVistaLista").onclick = () => edTrocarVista("lista");
   $("btnEditalCsv").onclick = () => {
     const r = lerEdital($("editalTexto").value);
     const plano = montarPlano(r, { horas: Number($("edHoras").value),

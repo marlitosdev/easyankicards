@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.53.0";
+const VERSAO = "8.54.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -189,9 +189,19 @@ window.addEventListener("unhandledrejection", (e) => {
 // pelo meio da história
 reg("INICIO", "aplicativo aberto", "v" + VERSAO);
 
-function registroTexto() {
-  if (!registro.length) return t("log_empty");
-  return registro.map((r) => r.d + " " + r.h + " " + (r.s || "----")
+/* O registro é UM só, com os eventos de cada modo marcados por prefixo. Ter
+ * dois registros separados criaria a pergunta "em qual deles está?" — e a
+ * resposta certa costuma ser "nos dois, e a ordem entre eles importa". O que
+ * faltava era conseguir FILTRAR, que é o que este parâmetro faz. */
+const REG_POR_MODO = {
+  edital: /^EDITAL/,
+  cartoes: /^(CORRIGIR|LIMPAR|COLAR|APLICAR|EXCLUIR|RECORTAR|RECORTES|FOCO|EXPORTAR|REVISAO|PROMPT|BLOQUEIO)/,
+};
+function registroTexto(soDoModo) {
+  const re = soDoModo && REG_POR_MODO[soDoModo];
+  const lista = re ? registro.filter((r) => re.test(r.tipo)) : registro;
+  if (!lista.length) return t(re ? "log_empty_modo" : "log_empty");
+  return lista.map((r) => r.d + " " + r.h + " " + (r.s || "----")
     + "  [" + r.tipo + "] " + r.msg
     + (r.extra ? "  " + r.extra : "")).join("\n");
 }
@@ -4226,8 +4236,11 @@ function montarDiagnostico() {
       + " (primeiro na L" + presos[0].line + ")");
   });
   L.push("");
-  L.push("--- REGISTRO (" + registro.length + " eventos) ---");
-  bloco(L, () => L.push(registroTexto()));
+  const soModo = $("chkDiagModo") && $("chkDiagModo").checked
+    ? (typeof modoAtual !== "undefined" ? modoAtual : null) : null;
+  L.push("--- REGISTRO (" + registro.length + " eventos"
+    + (soModo ? ", filtrado: só " + soModo : "") + ") ---");
+  bloco(L, () => L.push(registroTexto(soModo)));
   L.push("");
   bloco(L, () => {
     L.push("--- TEXTO (" + raw.split(/\r?\n/).length + " linhas, " + raw.length + " caracteres) ---");
@@ -4310,6 +4323,7 @@ async function abrirDiagnostico() {
 
 $("btnDiagnostico").onclick = abrirDiagnostico;
 $("chkDiagTexto").onchange = montarPainelDiag;
+$("chkDiagModo").onchange = montarPainelDiag;
 $("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
 $("btnDiagCopiar").onclick = async () => {
   try {
