@@ -634,7 +634,7 @@ const UI = {
   "hist_confirma": "Trazer de volta a versão de {quando}?\\n\\nO editor tem {atual} caracteres agora e passará a ter {novo}. O texto atual não se perde: ele vai para o Histórico no mesmo instante, então dá para voltar atrás.",
   "hist_dispensado": "Aviso dispensado. A cópia do texto anterior continua guardada — você a encontra em Ferramentas › Versões do texto, junto com as demais.",
   "tip_ampliar": "Dá a largura toda ao editor e esconde a prévia dos cartões. Útil para colar textos grandes. O botão volta a encolher.",
-  "ed_prompt": "Você vai organizar um EDITAL de concurso para estudo. Responda SOMENTE no formato abaixo, sem comentários, sem markdown, sem cercas de código.\n\nFORMATO (uma linha por item):\n# Nome do concurso | prova: AAAA-MM-DD | horas: 12\n@ Nome da disciplina :: peso\n+ Nome do tópico :: peso :: por que esse peso\n\nREGRAS:\n1. \"@\" abre uma disciplina. O peso dela vem da PONTUAÇÃO NA PROVA (número de questões ou pontos). Se o edital não disser, use 3.\n2. \"+\" é um tópico dentro da disciplina anterior. Um tópico por linha.\n3. Peso é um número inteiro de 1 a 5. 5 = cai muito e é difícil; 1 = raro ou trivial.\n4. O terceiro campo do tópico é o MOTIVO do peso, em até 12 palavras — \"cai em quase toda prova da banca\", \"só cobrado em prova discursiva\". Sem motivo inventado: se não souber, deixe o campo fora.\n5. TIRE a numeração do edital (\"1.1\", \"2.3.4\") do nome do tópico. Ela serve ao edital, não à lista de estudo.\n6. NÃO agrupe tópicos diferentes na mesma linha e NÃO resuma o edital: todo tópico listado tem de aparecer. Perder tópico é pior do que devolver uma lista longa.\n7. Nada de \"::\" dentro do texto — só como separador.\n8. Não escreva nada antes do \"#\" nem depois do último tópico.\n\nEXEMPLO DE SAÍDA:\n# TCE-PE Auditor | prova: 2026-08-30 | horas: 12\n@ Auditoria Governamental :: 5\n+ Achado de auditoria :: 5 :: cai em quase toda prova da banca\n+ Papéis de trabalho :: 3 :: cobrado em anos alternados\n@ Direito Constitucional :: 3\n+ Princípios fundamentais :: 4 :: base para várias outras questões\n\nEDITAL:\n[cole aqui o edital]",
+  "ed_prompt": "Você vai organizar um EDITAL de concurso para estudo. Responda SOMENTE no formato abaixo, sem comentários, sem markdown, sem cercas de código.\n\nFORMATO (uma linha por item):\n# Nome do concurso | prova: AAAA-MM-DD | horas: 12\n@ Nome da disciplina :: peso\n+ Nome do tópico :: peso :: por que esse peso\n\nREGRAS:\n1. \"@\" abre uma disciplina. O peso dela TEM DE VARIAR entre as disciplinas: ele vem do número de questões ou de pontos que a disciplina vale na prova. Devolver todas com o mesmo peso é o mesmo que não priorizar — se o edital não trouxer a distribuição, estime pela quantidade de conteúdo e diga isso no motivo do primeiro tópico. Nunca use 3 em todas.\n1b. \"@\" abre uma disciplina. O peso dela vem da PONTUAÇÃO NA PROVA (número de questões ou pontos). Se o edital não disser, use 3.\n2. \"+\" é um tópico dentro da disciplina anterior. Um tópico por linha.\n3. Peso é um número inteiro de 1 a 5. 5 = cai muito e é difícil; 1 = raro ou trivial.\n4. O terceiro campo do tópico é o MOTIVO do peso, em até 12 palavras — \"cai em quase toda prova da banca\", \"só cobrado em prova discursiva\". Sem motivo inventado: se não souber, deixe o campo fora.\n5. TIRE a numeração do edital (\"1.1\", \"2.3.4\") do nome do tópico. Ela serve ao edital, não à lista de estudo.\n6. NÃO agrupe tópicos diferentes na mesma linha e NÃO resuma o edital: todo tópico listado tem de aparecer. Perder tópico é pior do que devolver uma lista longa.\n7. Nada de \"::\" dentro do texto — só como separador.\n8. Não escreva nada antes do \"#\" nem depois do último tópico.\n\nEXEMPLO DE SAÍDA:\n# TCE-PE Auditor | prova: 2026-08-30 | horas: 12\n@ Auditoria Governamental :: 5\n+ Achado de auditoria :: 5 :: cai em quase toda prova da banca\n+ Papéis de trabalho :: 3 :: cobrado em anos alternados\n@ Direito Constitucional :: 3\n+ Princípios fundamentais :: 4 :: base para várias outras questões\n\nEDITAL:\n[cole aqui o edital]",
   "ed_prompt_btn": "Criar prompt para a IA organizar o edital",
   "ed_colar": "1. Cole aqui o resultado do prompt (ou digite) — a leitura é automática",
   "ed_bancada": "Bancada do edital",
@@ -646,7 +646,7 @@ const UI = {
   "ed_col_top": "Tópico",
   "ed_col_disc": "Disciplina",
   "ed_col_pri": "Prior.",
-  "ed_col_h": "Por semana",
+  "ed_col_h": "Quando",
   "ed_col_ok": "Feito",
   "ed_vazio": "Cole o edital ao lado — ou use o prompt para uma IA organizá-lo.",
   "ed_resumo": "{d} disciplinas · {t} tópicos · {f} concluídos ({p}%)",
@@ -668,7 +668,11 @@ const UI = {
   "diag_copiado": "Copiado",
   "diag_baixado": "Baixado",
   "toast_diag_copied_cd": "Relatório da bancada de cartões copiado",
-  "toast_diag_copied_ed": "Relatório da bancada do edital copiado"
+  "toast_diag_copied_ed": "Relatório da bancada do edital copiado",
+  "ed_nao_cabe": "Nas {s} semanas até a prova cabem {cabem} tópicos. {fora} ficam de fora — os de menor prioridade. Para cobrir tudo seriam necessárias cerca de {h}h por semana.",
+  "ed_sem_n": "sem. {n}",
+  "ed_fora": "fora",
+  "ed_crit_pesos_iguais": "As {n} disciplinas estão todas com peso {p} — a IA não diferenciou nenhuma. Como a prioridade é peso da disciplina × peso do tópico, a disciplina sai da conta e a ordem vira quase um empate. Ajuste as principais ou peça o prompt de novo."
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1304,7 +1308,7 @@ const UI = {
   "hist_confirma": "Bring back the version from {quando}?\\n\\nThe editor holds {atual} characters now and will hold {novo}. The current text isn't lost: it goes into History at the same moment, so you can undo this.",
   "hist_dispensado": "Notice dismissed. The copy of the earlier text is still kept — find it under Tools › Text versions, along with the others.",
   "tip_ampliar": "Gives the editor full width and hides the card preview. Handy for pasting large texts. The button shrinks it back.",
-  "ed_prompt": "You will organise an exam SYLLABUS for study. Reply ONLY in the format below — no comments, no markdown, no code fences.\n\nFORMAT (one line per item):\n# Exam name | prova: YYYY-MM-DD | horas: 12\n@ Subject name :: weight\n+ Topic name :: weight :: why this weight\n\nRULES:\n1. \"@\" opens a subject. Its weight comes from the SCORE IN THE EXAM (number of questions or points). If the syllabus doesn't say, use 3.\n2. \"+\" is a topic inside the previous subject. One topic per line.\n3. Weight is a whole number from 1 to 5. 5 = comes up a lot and is hard; 1 = rare or trivial.\n4. The topic's third field is the REASON for the weight, up to 12 words. Never invent one: if you don't know, leave the field out.\n5. STRIP the syllabus numbering (\"1.1\", \"2.3.4\") from the topic name.\n6. Do NOT merge topics into one line and do NOT summarise: every listed topic must appear. Losing a topic is worse than a long list.\n7. No \"::\" inside the text — separator only.\n8. Write nothing before the \"#\" or after the last topic.\n\nSYLLABUS:\n[paste the syllabus here]",
+  "ed_prompt": "You will organise an exam SYLLABUS for study. Reply ONLY in the format below — no comments, no markdown, no code fences.\n\nFORMAT (one line per item):\n# Exam name | prova: YYYY-MM-DD | horas: 12\n@ Subject name :: weight\n+ Topic name :: weight :: why this weight\n\nRULES:\n1. \"@\" opens a subject. Its weight MUST VARY across subjects: it comes from how many questions or points the subject is worth. Returning the same weight for all is the same as not prioritising. Never use 3 for everything.\n1b. \"@\" opens a subject. Its weight comes from the SCORE IN THE EXAM (number of questions or points). If the syllabus doesn't say, use 3.\n2. \"+\" is a topic inside the previous subject. One topic per line.\n3. Weight is a whole number from 1 to 5. 5 = comes up a lot and is hard; 1 = rare or trivial.\n4. The topic's third field is the REASON for the weight, up to 12 words. Never invent one: if you don't know, leave the field out.\n5. STRIP the syllabus numbering (\"1.1\", \"2.3.4\") from the topic name.\n6. Do NOT merge topics into one line and do NOT summarise: every listed topic must appear. Losing a topic is worse than a long list.\n7. No \"::\" inside the text — separator only.\n8. Write nothing before the \"#\" or after the last topic.\n\nSYLLABUS:\n[paste the syllabus here]",
   "ed_prompt_btn": "Build the syllabus prompt",
   "ed_colar": "1. Paste the prompt result here (or type it) — it's read automatically",
   "ed_bancada": "Syllabus workbench",
@@ -1316,7 +1320,7 @@ const UI = {
   "ed_col_top": "Topic",
   "ed_col_disc": "Subject",
   "ed_col_pri": "Prio.",
-  "ed_col_h": "Per week",
+  "ed_col_h": "When",
   "ed_col_ok": "Done",
   "ed_vazio": "Paste the syllabus on the left — or use the prompt to have an AI organise it.",
   "ed_resumo": "{d} subjects · {t} topics · {f} done ({p}%)",
@@ -1338,7 +1342,11 @@ const UI = {
   "diag_copiado": "Copied",
   "diag_baixado": "Downloaded",
   "toast_diag_copied_cd": "Card workbench report copied",
-  "toast_diag_copied_ed": "Syllabus workbench report copied"
+  "toast_diag_copied_ed": "Syllabus workbench report copied",
+  "ed_nao_cabe": "In the {s} weeks left, {cabem} topics fit. {fora} are left out — the lowest priority ones. Covering everything would take about {h}h per week.",
+  "ed_sem_n": "wk {n}",
+  "ed_fora": "left out",
+  "ed_crit_pesos_iguais": "All {n} subjects carry weight {p} — the AI didn't differentiate any. Since priority is subject weight × topic weight, the subject drops out of the maths and the ranking is nearly a tie. Adjust the main ones or run the prompt again."
  }
 };
 const PARSER_MSG = {

@@ -42,6 +42,10 @@ function edSugestoes(r) {
   if (temMarcadorTorto($("editalTexto").value))
     itens.push({ dot: "dot-org", txt: t("ed_crit_marcador"),
                  fixTxt: t("ed_fix_marcador"), fix: normalizarMarcadores });
+  if (temPesosIguais(r))
+    itens.push({ dot: "dot-org", txt: t("ed_crit_pesos_iguais",
+      { n: r.disciplinas.length, p: r.disciplinas[0].peso }),
+      linha: r.disciplinas[0].linha });
   if (semPeso)
     itens.push({ dot: "dot-blue", txt: t("ed_crit_peso", { n: semPeso }) });
   /* Sempre em primeiro lugar, mesmo quando está tudo certo: é o número que
@@ -143,16 +147,30 @@ function edRender() {
   if (r.cfg.prova && $("edProva").value !== r.cfg.prova) $("edProva").value = r.cfg.prova;
   if (r.cfg.horas && Number($("edHoras").value) !== r.cfg.horas) $("edHoras").value = r.cfg.horas;
 
-  const itens = distribuirHoras(priorizar(r), Number($("edHoras").value) || r.cfg.horas);
+  const plano = montarPlano(r, {
+    horas: Number($("edHoras").value) || r.cfg.horas,
+    prova: $("edProva").value, feitos: edProgresso,
+  });
+  const itens = plano.itens;
   const s = semanasAte($("edProva").value);
   $("edRestam").textContent = s
     ? t("ed_restam", { s: s.semanas, d: s.dias }) : t("ed_sem_data");
-
-  const feitos = itens.filter((i) => edProgresso[edChave(i)]).length;
   $("edResumo").textContent = itens.length
-    ? t("ed_resumo", { d: r.disciplinas.length, t: itens.length, f: feitos,
-                       p: Math.round((feitos / itens.length) * 100) })
+    ? t("ed_resumo", { d: r.disciplinas.length, t: plano.total, f: plano.feitos,
+                       p: Math.round((plano.feitos / plano.total) * 100) })
     : "";
+
+  /* "Não cabe" dito com todas as letras. O modelo antigo espalhava minutos
+   * até dar a soma certa e o usuário só descobria a impossibilidade quando
+   * já tinha perdido semanas seguindo um plano que não fechava. */
+  const av = $("edNaoCabe");
+  if (plano.fora.length) {
+    av.hidden = false;
+    av.textContent = t("ed_nao_cabe", {
+      cabem: plano.fila.length, fora: plano.fora.length,
+      s: plano.semanas, h: plano.horasNecessarias,
+    });
+  } else av.hidden = true;
 
   const tb = $("edTabela");
   tb.innerHTML = "";
@@ -164,7 +182,7 @@ function edRender() {
   }
   itens.forEach((i) => {
     const tr = document.createElement("tr");
-    const feito = !!edProgresso[edChave(i)];
+    const feito = !!i.feito;
     if (feito) tr.className = "ed-feito";
     const cel = (txt, cls) => {
       const td = document.createElement("td");
@@ -182,8 +200,13 @@ function edRender() {
     };
     const tdOk = document.createElement("td");
     tdOk.append(chk);
-    tr.append(tdNome, cel(i.disciplina, "ed-disc"), cel(String(i.prioridade), "ed-pri"),
-              cel(horasTexto(i.minutos), "ed-h"), tdOk);
+    const tdPri = cel(String(i.prioridade), "ed-pri faixa-" + i.faixa);
+    const pt = document.createElement("span");
+    pt.className = "ed-ponto ponto-" + i.faixa;
+    tdPri.prepend(pt);
+    tr.append(tdNome, cel(i.disciplina, "ed-disc"), tdPri,
+              cel(i.semana ? t("ed_sem_n", { n: i.semana })
+                           : (i.feito ? "—" : t("ed_fora")), "ed-h"), tdOk);
     tb.append(tr);
   });
   edSalvar();
@@ -225,12 +248,15 @@ function edIniciar() {
   };
   $("btnEditalCsv").onclick = () => {
     const r = lerEdital($("editalTexto").value);
-    const itens = distribuirHoras(priorizar(r), Number($("edHoras").value));
+    const plano = montarPlano(r, { horas: Number($("edHoras").value),
+      prova: $("edProva").value, feitos: edProgresso });
+    const itens = plano.itens;
     /* ponto e vírgula e vírgula decimal: é o que o Excel em português abre
        com dois cliques, sem assistente de importação */
-    const linhas = ["Disciplina;Peso disc.;Tópico;Peso tóp.;Prioridade;Minutos/sem;Feito;Por quê"];
+    const linhas = ["Disciplina;Peso disc.;Tópico;Peso tóp.;Prioridade;Faixa;Semana;Minutos;Feito;Por quê"];
     itens.forEach((i) => linhas.push([i.disciplina, i.disciplinaPeso, i.nome, i.peso,
-      i.prioridade, i.minutos, edProgresso[edChave(i)] ? "sim" : "não", i.motivo || ""]
+      i.prioridade, i.faixa, i.semana || "fora", i.minutos,
+      i.feito ? "sim" : "não", i.motivo || ""]
       .map((c) => String(c).replace(/;/g, ",")).join(";")));
     const url = URL.createObjectURL(new Blob(["﻿" + linhas.join("\n")],
       { type: "text/csv;charset=utf-8" }));

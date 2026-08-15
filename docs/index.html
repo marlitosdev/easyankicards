@@ -634,6 +634,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:var(--campo);color:var(--texto);font-size:13px}
 .ed-faixa{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
   font-size:11.5px;color:var(--sutil);margin:0 0 8px;font-weight:600}
+.ed-nao-cabe{margin:0 0 8px;padding:9px 11px;border-radius:9px;font-size:11.5px;
+  line-height:1.5;color:var(--texto);background:rgba(245,158,11,.16);
+  border:1px solid rgba(245,158,11,.5)}
+.ed-ponto{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
+.ponto-alta{background:#e24b4a}.ponto-media{background:#BA7517}
+.ponto-baixa{background:#888780}
 .ed-rolagem{max-height:52vh;overflow:auto;border:1px solid var(--borda);border-radius:9px}
 .ed-tab{width:100%;border-collapse:collapse;font-size:12.5px}
 .ed-tab th{position:sticky;top:0;background:var(--panel);font-size:10px;
@@ -905,6 +911,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
           <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
       </div>
       <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
+      <div class="ed-nao-cabe" id="edNaoCabe" hidden></div>
       <div class="ed-rolagem">
         <table class="ed-tab">
           <thead><tr>
