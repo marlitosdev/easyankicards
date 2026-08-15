@@ -197,8 +197,32 @@ function montarPlano(r, opcoes) {
   const revVencidas = todos.filter((i) => i.feito && !i.revisado
     && (i.dias === null || i.dias >= REV_DIAS));
   revVencidas.forEach((i) => { i.ehRevisao = true; i.minutos = Math.round(i.minutos / 2); });
-  const fila = revVencidas.concat(pendentes)
+  /* ---- INTERCALAR DISCIPLINAS ----
+   * Ordenar só por peso agrupa a semana por disciplina: sete horas seguidas
+   * de Direito Administrativo, depois oito de Financeiro. Ninguém estuda
+   * assim, e quem tenta esquece o primeiro bloco antes de chegar ao fim.
+   *
+   * O rodízio pega, a cada rodada, o tópico mais pesado de cada disciplina
+   * que ainda tem fila — a ordem por peso continua valendo DENTRO de cada
+   * disciplina e entre as rodadas, mas a semana sai misturada. */
+  const bruta = revVencidas.concat(pendentes)
     .sort((a, b) => (b.bruto - a.bruto) || (a.ehRevisao ? -1 : 1));
+  const porDisc = new Map();
+  bruta.forEach((i) => {
+    if (!porDisc.has(i.disciplina)) porDisc.set(i.disciplina, []);
+    porDisc.get(i.disciplina).push(i);
+  });
+  /* disciplinas entram no rodízio na ordem da sua fatia da prova */
+  const ordemDisc = [...porDisc.keys()].sort((a, b) => (fatia[b] || 0) - (fatia[a] || 0));
+  const fila = [];
+  let restam = true;
+  while (restam) {
+    restam = false;
+    ordemDisc.forEach((d) => {
+      const lista = porDisc.get(d);
+      if (lista && lista.length) { fila.push(lista.shift()); restam = true; }
+    });
+  }
   todos.forEach((i) => { i.porque = motivarItem(i, fatia[i.disciplina]); });
   const dentro = [], fora = [];
   let semana = 1, usoSemana = 0, usado = 0;

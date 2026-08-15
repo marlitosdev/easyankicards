@@ -205,14 +205,15 @@ function edLinhaTopico(i, semDisciplina) {
   li.className = "ed-item" + (i.feito ? " feito" : "")
     + (i.revisado ? " revisado" : "") + (i.ehRevisao ? " ehrev" : "");
 
-  const chk = document.createElement("input");
-  chk.type = "checkbox";
-  chk.checked = i.feito;
-  chk.title = t(i.feito ? "ed_desmarcar" : "ed_marcar_feito");
-  chk.onclick = (ev) => {
-    ev.stopPropagation();
-    edMarcar(i, i.feito ? null : "feito");   /* desmarcar volta a pendente */
-  };
+  /* Botão, não caixa. Marcar é rápido demais para o que significa: o registro
+   * passa a perguntar QUANTO e COMO, porque é isso que permite, meses depois,
+   * dizer "você lê muito e resolve pouca questão". Uma caixa nunca saberia. */
+  const chk = document.createElement("button");
+  chk.type = "button";
+  chk.className = "ed-reg" + (i.revisado ? " rev" : (i.feito ? " ok" : ""));
+  chk.textContent = i.revisado ? "✓✓" : (i.feito ? "✓" : "+");
+  chk.title = t(i.feito ? "ed_reg_mais" : "ed_reg_novo");
+  chk.onclick = (ev) => { ev.stopPropagation(); abrirRegistro(i); };
 
   const pt = document.createElement("span");
   pt.className = "ed-ponto ponto-" + i.faixa;
@@ -229,14 +230,11 @@ function edLinhaTopico(i, semDisciplina) {
 
   const rev = document.createElement("button");
   rev.type = "button";
-  rev.className = "ed-rev" + (i.revisado ? " ativo" : "");
-  rev.textContent = "R";
-  rev.title = t(i.revisado ? "ed_tirar_rev" : "ed_marcar_rev");
+  rev.className = "ed-rev";
+  rev.textContent = "↺";
+  rev.title = t("ed_desmarcar");
   rev.style.visibility = i.feito ? "visible" : "hidden";
-  rev.onclick = (ev) => {
-    ev.stopPropagation();
-    edMarcar(i, i.revisado ? "feito" : "revisado");
-  };
+  rev.onclick = (ev) => { ev.stopPropagation(); edMarcar(i, null, null); };
 
   const min = document.createElement("b");
   min.className = "ed-item-min";
@@ -282,10 +280,26 @@ function salvarDiario() {
 }
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 
-function anotarDiario(i, acao) {
+function anotarDiario(i, acao, detalhe) {
   edDiario.push({ d: hojeISO(), c: i.chave, n: i.nome, disc: i.disciplina,
-                  p: i.bruto, m: i.minutos, a: acao });
+                  p: i.bruto, m: (detalhe && detalhe.minutos) || i.minutos,
+                  f: (detalhe && detalhe.forma) || null, a: acao });
   salvarDiario();
+}
+
+/* O diário nasceu na v8.58; quem já tinha progresso marcado via o contador
+ * cheio e o diário vazio — dois números do mesmo app se contradizendo. Aqui
+ * o que já estava marcado entra como registro, com a data que houver. */
+function completarDiario(itens) {
+  const tem = new Set(edDiario.map((x) => x.c));
+  let n = 0;
+  (itens || []).forEach((i) => {
+    if (!i.estado || tem.has(i.chave)) return;
+    edDiario.push({ d: i.quando || "?", c: i.chave, n: i.nome, disc: i.disciplina,
+                    p: i.bruto, m: i.minutos, f: null, a: i.estado, retro: true });
+    n++;
+  });
+  if (n) { salvarDiario(); reg("EDITAL-DIARIO", n + " marca(s) antigas viraram registro"); }
 }
 
 function estatisticasDiario(dias) {
@@ -322,6 +336,60 @@ function apagarDoDiario(idx) {
   abrirDiario();
 }
 
+/* Ver ANTES de decidir. O botão gerava o prompt direto: o usuário recebia um
+ * pedido pronto para a IA sem nunca ter lido o que estava errado, e aceitar
+ * ou recusar a correção virava um ato de fé. Primeiro o diagnóstico, em
+ * português; o prompt fica a um clique, para quem quiser. */
+function abrirDiagPlano() {
+  const r = lerEdital($("editalTexto").value);
+  const plano = montarPlano(r, { horas: Number($("edHoras").value),
+    prova: $("edProva").value, feitos: edProgresso });
+  const achados = diagnosticoPlano(r, plano);
+  $("dpResumo").textContent = t("ed_diag_estado", { d: r.disciplinas.length,
+    t: plano.total, s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas });
+  const lista = $("dpLista");
+  lista.innerHTML = "";
+  if (!achados.length) {
+    const p = document.createElement("div");
+    p.className = "nota"; p.textContent = t("ed_diag_limpo");
+    lista.append(p);
+  }
+  achados.forEach((a) => {
+    const li = document.createElement("div");
+    li.className = "dp-item" + (a.grave ? " grave" : "");
+    const selo = document.createElement("span");
+    selo.className = "dp-selo";
+    selo.textContent = t(a.grave ? "ed_dp_grave" : "ed_dp_atencao");
+    const tx = document.createElement("span");
+    tx.textContent = a.msg;
+    li.append(selo, tx);
+    lista.append(li);
+  });
+  diagAchados = achados;
+  diagPlanoAtual = { r, plano };
+  reg("EDITAL-DIAG", achados.length + " impropriedade(s)",
+      achados.filter((a) => a.grave).length + " grave(s)");
+  $("dlgDiagPlano").showModal();
+}
+
+let diagAchados = [];
+let diagPlanoAtual = null;
+
+function gerarPromptDoDiag() {
+  if (!diagPlanoAtual) return;
+  const { r, plano } = diagPlanoAtual;
+  const L = [t("ed_diag_cab"), ""];
+  L.push(t("ed_diag_estado", { d: r.disciplinas.length, t: plano.total,
+    s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas }));
+  L.push("");
+  if (!diagAchados.length) L.push(t("ed_diag_limpo"));
+  else diagAchados.forEach((a, k) =>
+    L.push((k + 1) + ". " + (a.grave ? "[GRAVE] " : "") + a.msg));
+  L.push("", t("ed_diag_pedido"), "", "PLANO ATUAL:", $("editalTexto").value);
+  $("dlgDiagPlano").close();
+  abrirTextoSimples(t("ed_diag_btn"), L.join("\n"));
+}
+
 function abrirDiario() {
   const lista = $("diarioLista");
   lista.innerHTML = "";
@@ -355,10 +423,51 @@ function abrirDiario() {
   $("dlgDiario").showModal();
 }
 
-function edMarcar(i, estado) {
+/* Formas de estudo. A lista é curta de propósito: dez opções viram uma
+ * decisão a cada registro, e decisão a cada registro é o que faz a pessoa
+ * parar de registrar. */
+const ED_FORMAS = ["leitura", "videoaula", "questoes", "resumo", "mapa", "revisao"];
+let regAtual = null;
+let regForma = "leitura";
+
+function abrirRegistro(i) {
+  regAtual = i;
+  regForma = i.feito ? "revisao" : "leitura";
+  $("regTitulo").textContent = i.nome;
+  $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
+  $("regMinutos").value = i.minutos;
+  const cx = $("regFormas");
+  cx.innerHTML = "";
+  ED_FORMAS.forEach((f) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "reg-forma" + (f === regForma ? " ativa" : "");
+    b.textContent = t("ed_forma_" + f);
+    b.onclick = () => {
+      regForma = f;
+      Array.from(cx.children).forEach((x) => x.classList.remove("ativa"));
+      b.classList.add("ativa");
+    };
+    cx.append(b);
+  });
+  $("btnRegRevisao").hidden = !i.feito;
+  $("dlgRegistro").showModal();
+}
+
+function confirmarRegistro(estado) {
+  if (!regAtual) return;
+  edMarcar(regAtual, estado, {
+    minutos: Math.max(1, Number($("regMinutos").value) || regAtual.minutos),
+    forma: regForma,
+  });
+  $("dlgRegistro").close();
+  regAtual = null;
+}
+
+function edMarcar(i, estado, detalhe) {
   if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
   else delete edProgresso[i.chave];
-  anotarDiario(i, estado || "pendente");
+  anotarDiario(i, estado || "pendente", detalhe);
   reg("EDITAL-PROGRESSO", (estado || "pendente") + ": " + i.nome,
       i.disciplina + " · peso " + i.bruto);
   edRender();
@@ -467,9 +576,12 @@ function edPintarPainel(r, plano) {
 
     const cab = document.createElement("div");
     cab.className = "ed-card-cab";
-    const tit = document.createElement("span");
+    const tit = document.createElement("button");
+    tit.type = "button";
     tit.className = "ed-card-nome";
     tit.textContent = d.nome;
+    tit.title = t("ed_abrir");
+    tit.onclick = () => { edAbertas[d.nome] = !edAbertas[d.nome]; edRender(); };
     /* peso editável ali mesmo: mexer no peso é a ação que mais muda o plano,
      * e mandar o usuário procurar a linha no texto é pedir para não fazer */
     const sel = document.createElement("select");
@@ -659,6 +771,7 @@ function edRender() {
   } else av.hidden = true;
 
   edSimular();
+  completarDiario(plano.itens);
   edPintarPainel(r, plano);
   edTrocarVista(edVista);
 
@@ -721,6 +834,11 @@ function edIniciar() {
   $("edHorasSlider").addEventListener("input", edSimular);
   $("edHorasSlider").addEventListener("change", () => edMudarHoras($("edHorasSlider").value));
   $("btnDiarioFechar").onclick = () => $("dlgDiario").close();
+  $("btnDpFechar").onclick = () => $("dlgDiagPlano").close();
+  $("btnDpPrompt").onclick = gerarPromptDoDiag;
+  $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
+  $("btnRegEstudo").onclick = () => confirmarRegistro("feito");
+  $("btnRegRevisao").onclick = () => confirmarRegistro("revisado");
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";
     $("edColarAviso").hidden = true;
@@ -750,23 +868,7 @@ function edIniciar() {
     $("editalTexto").value = ""; edProgresso = {};
     edRender();
   };
-  $("btnEditalDiag").onclick = () => {
-    const r = lerEdital($("editalTexto").value);
-    const plano = montarPlano(r, { horas: Number($("edHoras").value),
-      prova: $("edProva").value, feitos: edProgresso });
-    const achados = diagnosticoPlano(r, plano);
-    const L = [t("ed_diag_cab"), ""];
-    L.push(t("ed_diag_estado", { d: r.disciplinas.length, t: plano.total,
-      s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas }));
-    L.push("");
-    if (!achados.length) L.push(t("ed_diag_limpo"));
-    else achados.forEach((a, i) =>
-      L.push((i + 1) + ". " + (a.grave ? "[GRAVE] " : "") + a.msg));
-    L.push("", t("ed_diag_pedido"), "", "PLANO ATUAL:", $("editalTexto").value);
-    abrirTextoSimples(t("ed_diag_btn"), L.join("\n"));
-    reg("EDITAL-DIAG", achados.length + " impropriedade(s)",
-        achados.filter((a) => a.grave).length + " grave(s)");
-  };
+  $("btnEditalDiag").onclick = abrirDiagPlano;
   $("btnVistaPainel").onclick = () => edTrocarVista("painel");
   $("btnVistaLista").onclick = () => edTrocarVista("lista");
   $("btnEditalCsv").onclick = () => {
