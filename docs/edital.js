@@ -367,6 +367,56 @@ function agendar(itens, cfg) {
   return itens;
 }
 
+/* ------------------------------------------------------------------
+ * PANORAMA POR DISCIPLINA
+ * A pergunta que o painel não respondia: "qual matéria pesada eu ainda não
+ * toquei?". Progresso médio esconde isso — 40% do plano feito pode ser
+ * 100% das leves e 0% da que vale 15% da prova.
+ * ------------------------------------------------------------------ */
+function panoramaDisciplinas(plano) {
+  const porNome = new Map();
+  plano.itens.forEach((i) => {
+    if (!porNome.has(i.disciplina))
+      porNome.set(i.disciplina, { nome: i.disciplina, peso: i.disciplinaPeso, itens: [] });
+    porNome.get(i.disciplina).itens.push(i);
+  });
+  const totalBruto = plano.peso.total || 1;
+  const lista = [...porNome.values()].map((d) => {
+    const bruto = d.itens.reduce((a, i) => a + i.bruto, 0);
+    const feitos = d.itens.filter((i) => i.feito);
+    const revs = d.itens.filter((i) => i.revisado);
+    const intocados = d.itens.filter((i) => !i.feito);
+    /* o número que importa: quanto do PESO desta disciplina ainda não foi
+       tocado. Contar tópicos empata "Ordem social" com "Lei de Responsabilidade
+       Fiscal", e a prova não empata. */
+    const pesoIntocado = intocados.reduce((a, i) => a + i.bruto, 0);
+    return {
+      nome: d.nome, peso: d.peso, itens: d.itens,
+      total: d.itens.length, feitos: feitos.length, revisados: revs.length,
+      intocados: intocados.length,
+      altaIntocada: intocados.filter((i) => i.faixa === "alta").length,
+      bruto, fatia: Math.round((bruto / totalBruto) * 100),
+      pesoFeito: Math.round((d.itens.filter((i) => i.feito)
+        .reduce((a, i) => a + i.bruto, 0) / (bruto || 1)) * 100),
+      pesoRevisado: Math.round((revs.reduce((a, i) => a + i.bruto, 0) / (bruto || 1)) * 100),
+      /* lacuna = fatia da prova ainda não estudada. É a régua da ordenação:
+         não adianta ordenar por fatia se a disciplina já está pronta. */
+      lacuna: Math.round((pesoIntocado / totalBruto) * 100),
+    };
+  });
+  lista.sort((a, b) => (b.lacuna - a.lacuna) || (b.fatia - a.fatia));
+  return lista;
+}
+
+/* Os tópicos de maior peso que continuam intocados, em qualquer disciplina.
+ * É a lista que responde "o que eu não posso deixar de estudar". */
+function lacunasCriticas(plano, n) {
+  return plano.itens
+    .filter((i) => !i.feito && i.faixa === "alta")
+    .sort((a, b) => b.bruto - a.bruto)
+    .slice(0, n || 8);
+}
+
 function semanaAtual(plano) {
   return (plano.fila || []).filter((i) => i.semana === 1);
 }

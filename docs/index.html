@@ -728,6 +728,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .di-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
+.dp-rodape{flex-wrap:wrap}
 .dp-item{display:flex;gap:9px;align-items:flex-start;padding:9px 2px;font-size:12.5px;
   line-height:1.5;border-bottom:1px solid var(--borda)}
 .dp-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
@@ -735,6 +736,25 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:rgba(245,158,11,.2);color:#e8940a}
 .dp-item.grave .dp-selo{background:rgba(220,38,38,.2);color:#fca5a5}
 :root[data-theme="light"] .dp-item.grave .dp-selo{color:#b91c1c}
+.dsc-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.dsc-num{padding:9px 10px;border-radius:9px;background:var(--campo);
+  border:1px solid var(--borda);text-align:center}
+.dsc-num b{display:block;font-size:18px;line-height:1.1}
+.dsc-num span{font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;
+  color:var(--sutil);font-weight:700}
+.n-feito b{color:#22c55e}.n-rev b{color:#15803d}.n-falta b{color:var(--sutil)}
+.n-alerta{border-color:rgba(226,75,74,.6)}.n-alerta b{color:#e24b4a}
+.lac-linha{all:unset;cursor:pointer;display:flex;align-items:center;gap:9px;
+  padding:7px 0;font-size:12px;border-bottom:1px solid var(--borda);width:100%;
+  box-sizing:border-box}
+.lac-linha:hover .lac-nome{text-decoration:underline}
+.lac-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lac-barra{width:90px;height:6px;border-radius:4px;background:var(--panel);
+  overflow:hidden;flex-shrink:0}
+.lac-ok{height:100%;background:#22c55e;border-radius:4px}
+.lac-linha b{width:104px;text-align:right;font-size:11px;flex-shrink:0;color:var(--sutil)}
+.lac-linha b.lac-alerta{color:#e24b4a}
+.rt-tit{font-size:12.5px;font-weight:700;margin:0 0 9px}
 .ed-ritmo{margin:0 0 10px;padding:11px 13px;border-radius:10px;
   background:var(--campo);border:1px solid var(--borda)}
 .rt-linha{display:flex;align-items:center;gap:9px;margin:0 0 7px;font-size:11.5px}
@@ -1339,7 +1359,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <p class="nota" data-i18n="ed_dp_ajuda"></p>
   <div class="ed-diario-res" id="dpResumo"></div>
   <div id="dpLista" style="max-height:46vh;overflow:auto;margin:8px 0"></div>
-  <div class="dlg-rodape">
+  <div class="dlg-rodape dp-rodape">
+    <button class="btn btn-cinza" id="btnDpVer" data-i18n="ed_dp_ver"></button>
+    <button class="btn btn-verde" id="btnDpCopiar" data-i18n="ed_dp_copiar"></button>
     <button class="btn btn-roxo" id="btnDpPrompt" data-i18n="ed_dp_prompt"></button>
     <button class="btn btn-cinza" id="btnDpFechar" data-i18n="help_close"></button>
   </div>
@@ -1360,6 +1382,15 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
     <button class="btn btn-azul" id="btnRegRevisao" data-i18n="ed_reg_revisao"></button>
     <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgDisciplina" class="ui-modal diag-modal">
+  <h3 id="dscTitulo"></h3>
+  <p class="nota" id="dscSub"></p>
+  <div class="dsc-resumo" id="dscResumo"></div>
+  <div id="dscLista" style="max-height:46vh;overflow:auto;margin:10px 0"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnDscFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <dialog id="dlgDiario" class="ui-modal">

@@ -143,7 +143,8 @@ function edRegistrarConteudo(r) {
  * Por isso ele abre por padrão e a tabela vira a segunda aba.
  * ================================================================== */
 let edVista = localStorage.getItem("eac_edital_vista") || "painel";
-let edAbertas = {};        /* disciplinas expandidas */
+let edAbertas = {};
+let edAgendaAberta = false;        /* disciplinas expandidas */
 
 /* Uma barra, duas camadas: o verde claro é o que foi estudado, o escuro
  * dentro dele é o que já foi revisado. Duas barras separadas fariam parecer
@@ -388,6 +389,33 @@ function abrirDiagPlano() {
 let diagAchados = [];
 let diagPlanoAtual = null;
 
+/* Copiar o PLANO, não o pedido. Nem toda cópia é para a IA: às vezes é para
+ * guardar, mandar para alguém ou colar numa planilha — e obrigar a passar
+ * pelo prompt faz o usuário editar à mão o que o app já tinha pronto. */
+function copiarPlano() {
+  const txt = $("editalTexto").value;
+  navigator.clipboard.writeText(txt).then(() => {
+    const b = $("btnDpCopiar");
+    const antes = b.textContent;
+    b.textContent = "✓ " + t("diag_copiado");
+    b.disabled = true;
+    setTimeout(() => { b.textContent = antes; b.disabled = false; }, 1800);
+    const r = lerEdital(txt);
+    reg("EDITAL", "plano copiado",
+        r.disciplinas.length + " disciplinas, "
+        + r.disciplinas.reduce((a, d) => a + d.topicos.length, 0) + " tópicos");
+  }).catch(() => uiAlert(t("toast_copy_fail")));
+}
+
+/* Ver antes de copiar: são 250 linhas, e ninguém devia mandar para fora um
+ * texto que não leu. A janela de texto já traz o seu próprio botão de copiar. */
+function verPlano() {
+  const r = lerEdital($("editalTexto").value);
+  const n = r.disciplinas.reduce((a, d) => a + d.topicos.length, 0);
+  abrirTextoSimples(t("ed_dp_ver_tit", { d: r.disciplinas.length, t: n }),
+    $("editalTexto").value);
+}
+
 function gerarPromptDoDiag() {
   if (!diagPlanoAtual) return;
   const { r, plano } = diagPlanoAtual;
@@ -543,12 +571,16 @@ function edPintarRitmo(plano) {
     return d;
   };
 
+  const tit = document.createElement("div");
+  tit.className = "rt-tit";
+  tit.textContent = t("ed_rt_titulo");
+  box.append(tit);
   box.append(linha(t("ed_rt_necessario"), R.necessarioMin, "rt-nec",
     t("ed_rt_topicos", { n: R.necessarioTop })));
   box.append(linha(t("ed_rt_planejado"), R.planejadoMin || 0, "rt-pla"));
-  if (R.semanasComRegistro)
-    box.append(linha(t("ed_rt_observado"), R.observadoMin, "rt-obs",
-      t("ed_rt_semanas", { n: R.semanasComRegistro })));
+  box.append(linha(t("ed_rt_observado"), R.observadoMin, "rt-obs",
+    R.semanasComRegistro ? t("ed_rt_semanas", { n: R.semanasComRegistro })
+                         : t("ed_rt_nada")));
 
   const nota = document.createElement("div");
   nota.className = "rt-nota";
@@ -569,13 +601,44 @@ function edPintarRitmo(plano) {
 
 /* Abre a disciplina no painel e leva o olho até ela. Só expandir não basta:
  * com dezessete cartões, o que abriu pode estar fora da tela. */
+/* Rolar até o cartão era pior que não fazer nada: o usuário perdia o lugar
+ * onde estava e ainda tinha de achar o que abriu. A disciplina passa a ter
+ * uma janela própria, com o panorama dela — e fechar devolve a tela intacta. */
 function abrirDisciplina(nome) {
-  edAbertas[nome] = true;
-  edVista = "painel";
-  edRender();
-  const alvoCard = (edCards || {})[nome];
-  if (alvoCard && alvoCard.scrollIntoView)
-    alvoCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  const r = lerEdital($("editalTexto").value);
+  const plano = montarPlano(r, { horas: Number($("edHoras").value),
+    prova: $("edProva").value, feitos: edProgresso });
+  const d = panoramaDisciplinas(plano).find((x) => x.nome === nome);
+  if (!d) return;
+
+  $("dscTitulo").textContent = d.nome;
+  $("dscSub").textContent = t("ed_dsc_sub", { p: d.peso, f: d.fatia, n: d.total });
+
+  const cx = $("dscResumo");
+  cx.innerHTML = "";
+  const cartao = (rot, val, cls) => {
+    const b = document.createElement("div");
+    b.className = "dsc-num " + (cls || "");
+    const v = document.createElement("b"); v.textContent = val;
+    const r2 = document.createElement("span"); r2.textContent = rot;
+    b.append(v, r2); return b;
+  };
+  cx.append(
+    cartao(t("ed_dsc_estudado"), d.pesoFeito + "%", "n-feito"),
+    cartao(t("ed_dsc_revisado"), d.pesoRevisado + "%", "n-rev"),
+    cartao(t("ed_dsc_intocado"), d.intocados + "/" + d.total, "n-falta"),
+    cartao(t("ed_dsc_alta"), String(d.altaIntocada), d.altaIntocada ? "n-alerta" : ""));
+
+  const lista = $("dscLista");
+  lista.innerHTML = "";
+  /* dentro da disciplina, o intocado de maior peso vem primeiro: é a ordem
+   * em que a pessoa deveria atacar se abrisse a matéria agora */
+  d.itens.slice().sort((a, b) => (a.feito - b.feito) || (b.bruto - a.bruto))
+    .forEach((i) => lista.append(edLinhaTopico(i, true)));
+
+  $("dlgDisciplina").showModal();
+  reg("EDITAL-DISCIPLINA", "panorama aberto: " + nome,
+      d.fatia + "% da prova, " + d.intocados + " intocados");
 }
 
 let edCards = {};
@@ -651,8 +714,60 @@ function edPintarPainel(r, plano) {
     cx.append(h, expl);
     agendar(sem, { dias: Number($("edDias").value) || 5,
                    inicio: $("edInicio").value || "19:00" });
-    sem.forEach((i) => cx.append(edLinhaTopico(i)));
+    /* 53 linhas numa "agenda da semana" não é agenda, é lista. Mostra as
+     * primeiras e guarda o resto atrás de um clique — quem quiser a semana
+     * inteira pede; quem quer saber o que fazer agora já sabe. */
+    const AGENDA_CURTA = 6;
+    const mostrar = edAgendaAberta ? sem : sem.slice(0, AGENDA_CURTA);
+    mostrar.forEach((i) => cx.append(edLinhaTopico(i)));
+    if (sem.length > AGENDA_CURTA) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ed-abrir";
+      b.textContent = edAgendaAberta ? t("ed_agenda_menos")
+        : t("ed_agenda_mais", { n: sem.length - AGENDA_CURTA });
+      b.onclick = () => { edAgendaAberta = !edAgendaAberta; edRender(); };
+      cx.append(b);
+    }
     box.append(cx);
+  }
+
+  /* -------- onde estão os buracos --------
+   * Progresso médio esconde o que decide a prova: 40% do plano feito pode
+   * ser 100% das matérias leves e 0% da que vale 15%. Esta lista ordena
+   * pela FATIA DA PROVA AINDA NÃO ESTUDADA, que é outra coisa. */
+  const pan = panoramaDisciplinas(plano);
+  const comLacuna = pan.filter((d) => d.lacuna > 0).slice(0, 6);
+  if (comLacuna.length) {
+    const cx2 = document.createElement("div");
+    cx2.className = "ed-caixa";
+    const h2 = document.createElement("div");
+    h2.className = "ed-caixa-tit";
+    h2.textContent = t("ed_lacunas_tit");
+    const s2 = document.createElement("div");
+    s2.className = "ed-caixa-sub";
+    s2.textContent = t("ed_lacunas_sub");
+    cx2.append(h2, s2);
+    comLacuna.forEach((d) => {
+      const li = document.createElement("button");
+      li.type = "button";
+      li.className = "lac-linha";
+      li.onclick = () => abrirDisciplina(d.nome);
+      const nm = document.createElement("span");
+      nm.className = "lac-nome"; nm.textContent = d.nome;
+      const ba = document.createElement("div");
+      ba.className = "lac-barra";
+      const ok = document.createElement("div");
+      ok.className = "lac-ok";
+      ok.style.width = d.pesoFeito + "%";
+      ba.append(ok);
+      const vl = document.createElement("b");
+      vl.textContent = t("ed_lac_val", { l: d.lacuna, a: d.altaIntocada });
+      if (d.altaIntocada) vl.className = "lac-alerta";
+      li.append(nm, ba, vl);
+      cx2.append(li);
+    });
+    box.append(cx2);
   }
 
   /* -------- disciplinas: cartões com barra de progresso -------- */
@@ -938,8 +1053,11 @@ function edIniciar() {
   $("edHorasSlider").addEventListener("input", edSimular);
   $("edHorasSlider").addEventListener("change", () => edMudarHoras($("edHorasSlider").value));
   $("btnDiarioFechar").onclick = () => $("dlgDiario").close();
+  $("btnDscFechar").onclick = () => $("dlgDisciplina").close();
   $("btnDpFechar").onclick = () => $("dlgDiagPlano").close();
   $("btnDpPrompt").onclick = gerarPromptDoDiag;
+  $("btnDpCopiar").onclick = copiarPlano;
+  $("btnDpVer").onclick = verPlano;
   /* os dois campos de tempo são o MESMO valor: arrastar move o número e
    * digitar move a barra. Dois controles que discordam são um bug esperando. */
   $("regMinSlider").addEventListener("input", () => {
