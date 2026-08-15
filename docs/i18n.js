@@ -713,7 +713,24 @@ const UI = {
   "ed_colado": "Plano substituído",
   "ed_sim_horas": "Com {h}h por semana:",
   "ed_sim_cabe": "todos os {n} tópicos cabem até a prova.",
-  "ed_sim_falta": "cabem {n} tópicos e {f} ficam de fora. Seriam necessárias {h}h por semana para cobrir tudo."
+  "ed_sim_falta": "cabem {n} tópicos e {f} ficam de fora. Seriam necessárias {h}h por semana para cobrir tudo.",
+  "ed_desmarcar": "Desmarcar — volta a pendente",
+  "ed_pq_peso": "peso {peso}, faixa {faixa}",
+  "ed_pq_fatia": "disciplina vale {p}% da prova",
+  "ed_pq_rev_vencida": "revisão: estudado há {n} dias",
+  "ed_pq_rev_pendente": "revisão pendente",
+  "ed_pq_concluido": "estudado e revisado",
+  "ed_semana_expl": "Os {n} tópicos de maior peso ainda em aberto, incluindo {r} revisão(ões) vencida(s), que cabem nas horas desta semana ({h}). Marque a caixa ao estudar e o R ao revisar.",
+  "ed_diario_7": "Últimos 7 dias: {t} tópicos, {r} revisões, {h} — ver diário",
+  "ed_diario_tit": "Diário de estudos",
+  "ed_diario_ajuda": "Cada marca vira um registro. Apagar um registro desfaz a marca quando ele for o último daquele tópico — é assim que se corrige um clique errado.",
+  "ed_diario_resumo": "Últimos 7 dias: {t} tópicos · {r} revisões · {h} · {e} registros no total",
+  "ed_diario_vazio": "Nenhum registro ainda. Marque um tópico como estudado para começar.",
+  "ed_diario_apagar": "Apagar",
+  "ed_acao_feito": "estudou",
+  "ed_acao_revisado": "revisou",
+  "ed_acao_pendente": "desmarcou",
+  "ed_med_abrir": "Abrir o diário de estudos"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1428,7 +1445,24 @@ const UI = {
   "ed_colado": "Plan replaced",
   "ed_sim_horas": "At {h}h per week:",
   "ed_sim_cabe": "all {n} topics fit before the exam.",
-  "ed_sim_falta": "{n} topics fit and {f} are left out. Covering everything would take {h}h per week."
+  "ed_sim_falta": "{n} topics fit and {f} are left out. Covering everything would take {h}h per week.",
+  "ed_desmarcar": "Unmark — back to pending",
+  "ed_pq_peso": "weight {peso}, {faixa} band",
+  "ed_pq_fatia": "subject is {p}% of the exam",
+  "ed_pq_rev_vencida": "review: studied {n} days ago",
+  "ed_pq_rev_pendente": "review pending",
+  "ed_pq_concluido": "studied and reviewed",
+  "ed_semana_expl": "The {n} highest-weight open topics, including {r} overdue review(s), that fit this week's hours ({h}). Tick the box when you study, the R when you review.",
+  "ed_diario_7": "Last 7 days: {t} topics, {r} reviews, {h} — open the log",
+  "ed_diario_tit": "Study log",
+  "ed_diario_ajuda": "Every mark becomes an entry. Deleting an entry undoes the mark when it's the last one for that topic — that's how a wrong click is fixed.",
+  "ed_diario_resumo": "Last 7 days: {t} topics · {r} reviews · {h} · {e} entries in total",
+  "ed_diario_vazio": "No entries yet. Mark a topic as studied to start.",
+  "ed_diario_apagar": "Delete",
+  "ed_acao_feito": "studied",
+  "ed_acao_revisado": "reviewed",
+  "ed_acao_pendente": "unmarked",
+  "ed_med_abrir": "Open the study log"
  }
 };
 const PARSER_MSG = {

@@ -165,8 +165,11 @@ function edBarra(feitos, revisados, total, cls) {
  * perguntas diferentes, e é a diferença entre elas que informa: "67% dos
  * tópicos, 7% do peso" quer dizer que o esforço foi para o lugar errado. */
 function edMedida(rot, nTop, nTotal, pctPeso, cls) {
-  const d = document.createElement("div");
+  const d = document.createElement("button");
+  d.type = "button";
   d.className = "ed-medida " + (cls || "");
+  d.title = t("ed_med_abrir");
+  d.onclick = abrirDiario;
   const r = document.createElement("span");
   r.className = "ed-med-rot"; r.textContent = rot;
   const a = document.createElement("b");
@@ -193,45 +196,169 @@ function edPontos(itens) {
   return box;
 }
 
+/* A linha era um <label> com a caixa dentro: clicar em qualquer lugar dela
+ * alternava a marca, inclusive no botão "R", e o resultado era um estado que
+ * parecia não desfazer. Agora é um <div>, e cada controle responde só por
+ * si — quem clica na caixa marca a caixa; quem clica no R marca o R. */
 function edLinhaTopico(i, semDisciplina) {
-  const li = document.createElement("label");
+  const li = document.createElement("div");
   li.className = "ed-item" + (i.feito ? " feito" : "")
-    + (i.revisado ? " revisado" : "");
+    + (i.revisado ? " revisado" : "") + (i.ehRevisao ? " ehrev" : "");
+
   const chk = document.createElement("input");
-  chk.type = "checkbox"; chk.checked = i.feito;
-  chk.title = t("ed_marcar_feito");
-  chk.onchange = () => edMarcar(i, chk.checked ? "feito" : null);
-  /* O "R" só aparece depois de estudado: não se revisa o que não se viu.
-   * Revelação progressiva evita a pergunta "qual dos dois eu marco?". */
+  chk.type = "checkbox";
+  chk.checked = i.feito;
+  chk.title = t(i.feito ? "ed_desmarcar" : "ed_marcar_feito");
+  chk.onclick = (ev) => {
+    ev.stopPropagation();
+    edMarcar(i, i.feito ? null : "feito");   /* desmarcar volta a pendente */
+  };
+
+  const pt = document.createElement("span");
+  pt.className = "ed-ponto ponto-" + i.faixa;
+
+  const meio = document.createElement("div");
+  meio.className = "ed-item-meio";
+  const nome = document.createElement("div");
+  nome.className = "ed-item-nome";
+  nome.textContent = i.nome;
+  const porq = document.createElement("div");
+  porq.className = "ed-item-porque";
+  porq.textContent = edPorque(i, semDisciplina);
+  meio.append(nome, porq);
+
   const rev = document.createElement("button");
+  rev.type = "button";
   rev.className = "ed-rev" + (i.revisado ? " ativo" : "");
   rev.textContent = "R";
   rev.title = t(i.revisado ? "ed_tirar_rev" : "ed_marcar_rev");
-  rev.hidden = !i.feito;
+  rev.style.visibility = i.feito ? "visible" : "hidden";
   rev.onclick = (ev) => {
-    ev.preventDefault(); ev.stopPropagation();
+    ev.stopPropagation();
     edMarcar(i, i.revisado ? "feito" : "revisado");
   };
-  const pt = document.createElement("span");
-  pt.className = "ed-ponto ponto-" + i.faixa;
-  const nome = document.createElement("span");
-  nome.className = "ed-item-nome";
-  nome.textContent = i.nome;
-  if (i.motivo) nome.title = i.motivo;
-  const disc = document.createElement("span");
-  disc.className = "ed-item-disc";
-  /* dentro do cartão da disciplina o nome se repetiria em todas as linhas —
-   * 23 vezes "Língua Portuguesa" não informa nada e rouba a largura do que
-   * importa, que é o nome do tópico */
-  disc.textContent = semDisciplina ? "" : i.disciplina;
+
   const min = document.createElement("b");
+  min.className = "ed-item-min";
   min.textContent = horasTexto(i.minutos);
-  li.append(chk, pt, nome, disc, rev, min);
+
+  li.append(chk, pt, meio, rev, min);
   return li;
 }
 
+/* A frase que explica a recomendação. Sem ela, "Esta semana" é uma ordem sem
+ * argumento — e ordem sem argumento a pessoa ignora, ou pior, segue sem
+ * perceber que está errada. */
+function edPorque(i, semDisciplina) {
+  const p = i.porque || {};
+  const disc = semDisciplina ? "" : i.disciplina + " · ";
+  const fatia = t("ed_pq_fatia", { p: p.fatia });
+  if (p.tipo === "rev_vencida")
+    return disc + t("ed_pq_rev_vencida", { n: p.dias }) + " · " + fatia;
+  if (p.tipo === "rev_pendente") return disc + t("ed_pq_rev_pendente") + " · " + fatia;
+  if (p.tipo === "concluido") return disc + t("ed_pq_concluido");
+  return disc + t("ed_pq_peso", { peso: p.peso, faixa: t("ed_faixa_" + i.faixa) })
+    + " · " + fatia;
+}
+
+/* ------------------------------------------------------------------
+ * DIÁRIO DE ESTUDOS
+ * O progresso diz ONDE você está; o diário diz COMO chegou lá. É ele que
+ * responde "quanto rendeu esta semana?" — pergunta que o estado atual não
+ * sabe responder, porque ele só guarda o resultado. Append-only.
+ * ------------------------------------------------------------------ */
+let edDiario = [];
+const DIARIO_MAX = 1500;
+
+function carregarDiario() {
+  try { edDiario = JSON.parse(localStorage.getItem("eac_edital_diario") || "[]"); }
+  catch (e) { edDiario = []; }
+  if (!Array.isArray(edDiario)) edDiario = [];
+}
+function salvarDiario() {
+  while (edDiario.length > DIARIO_MAX) edDiario.shift();
+  try { localStorage.setItem("eac_edital_diario", JSON.stringify(edDiario)); }
+  catch (e) {}
+}
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+function anotarDiario(i, acao) {
+  edDiario.push({ d: hojeISO(), c: i.chave, n: i.nome, disc: i.disciplina,
+                  p: i.bruto, m: i.minutos, a: acao });
+  salvarDiario();
+}
+
+function estatisticasDiario(dias) {
+  const limite = Date.now() - (dias || 7) * 86400000;
+  const recentes = edDiario.filter((x) => new Date(x.d + "T00:00:00") >= limite
+    && x.a !== "pendente");
+  return {
+    eventos: recentes.length,
+    topicos: new Set(recentes.map((x) => x.c)).size,
+    peso: recentes.reduce((a, x) => a + (x.p || 0), 0),
+    minutos: recentes.reduce((a, x) => a + (x.m || 0), 0),
+    revisoes: recentes.filter((x) => x.a === "revisado").length,
+  };
+}
+
+/* Apagar um registro do diário desfaz a marca, quando ele for o ÚLTIMO
+ * daquele tópico: o estado volta a ser o que o registro anterior dizia, ou
+ * pendente se não houver. Sem isso o diário viraria um arquivo de coisas
+ * erradas que ninguém consegue consertar. */
+function apagarDoDiario(idx) {
+  const x = edDiario[idx];
+  if (!x) return;
+  const ultimoDoTopico = edDiario.reduce(
+    (m, y, k) => (y.c === x.c ? k : m), -1) === idx;
+  edDiario.splice(idx, 1);
+  if (ultimoDoTopico) {
+    const ant = edDiario.filter((y) => y.c === x.c).pop();
+    if (ant && ant.a !== "pendente") edProgresso[x.c] = { e: ant.a, d: ant.d };
+    else delete edProgresso[x.c];
+  }
+  salvarDiario();
+  reg("EDITAL-DIARIO", "registro apagado: " + x.n, x.a + " de " + x.d);
+  edRender();
+  abrirDiario();
+}
+
+function abrirDiario() {
+  const lista = $("diarioLista");
+  lista.innerHTML = "";
+  const st = estatisticasDiario(7);
+  $("diarioResumo").textContent = t("ed_diario_resumo", { t: st.topicos,
+    r: st.revisoes, h: horasTexto(st.minutos), e: edDiario.length });
+  if (!edDiario.length) {
+    const p = document.createElement("div");
+    p.className = "nota"; p.textContent = t("ed_diario_vazio");
+    lista.append(p);
+  }
+  /* mais recente primeiro: o registro errado costuma ser o que acabou de
+   * ser feito, e obrigar a rolar até o fim para achá-lo seria hostil */
+  edDiario.slice().reverse().forEach((x, k) => {
+    const idx = edDiario.length - 1 - k;
+    const li = document.createElement("div");
+    li.className = "diario-item";
+    const q = document.createElement("span");
+    q.className = "di-data"; q.textContent = x.d;
+    const ac = document.createElement("span");
+    ac.className = "di-acao acao-" + x.a;
+    ac.textContent = t("ed_acao_" + x.a);
+    const nm = document.createElement("span");
+    nm.className = "di-nome"; nm.textContent = x.n;
+    const ds = document.createElement("span");
+    ds.className = "di-disc"; ds.textContent = x.disc;
+    const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
+    li.append(q, ac, nm, ds, bt);
+    lista.append(li);
+  });
+  $("dlgDiario").showModal();
+}
+
 function edMarcar(i, estado) {
-  if (estado) edProgresso[i.chave] = estado; else delete edProgresso[i.chave];
+  if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
+  else delete edProgresso[i.chave];
+  anotarDiario(i, estado || "pendente");
   reg("EDITAL-PROGRESSO", (estado || "pendente") + ": " + i.nome,
       i.disciplina + " · peso " + i.bruto);
   edRender();
@@ -260,6 +387,16 @@ function edPintarPainel(r, plano) {
     edMedida(t("ed_estudado"), plano.feitos, plano.total, plano.peso.pctFeito, "m-feito"),
     edMedida(t("ed_revisado"), plano.revisados, plano.total, plano.peso.pctRevisado, "m-rev"));
   topo.append(meds);
+  const st = estatisticasDiario(7);
+  if (st.eventos) {
+    const linha = document.createElement("div");
+    linha.className = "ed-diario";
+    linha.title = t("ed_med_abrir");
+    linha.onclick = abrirDiario;
+    linha.textContent = t("ed_diario_7", { t: st.topicos, r: st.revisoes,
+      h: horasTexto(st.minutos) });
+    topo.append(linha);
+  }
   /* O aviso que dá o recado do painel inteiro: quando a contagem de tópicos
    * anda muito à frente do peso, o esforço está indo para o lado leve. */
   const pctTop = plano.total ? Math.round((plano.feitos / plano.total) * 100) : 0;
@@ -289,7 +426,12 @@ function edPintarPainel(r, plano) {
     const h = document.createElement("div");
     h.className = "ed-caixa-tit";
     h.textContent = t("ed_esta_semana");
-    cx.append(h);
+    const expl = document.createElement("div");
+    expl.className = "ed-caixa-sub";
+    expl.textContent = t("ed_semana_expl", { n: sem.length,
+      r: sem.filter((i) => i.ehRevisao).length,
+      h: horasTexto(sem.reduce((a, i) => a + i.minutos, 0)) });
+    cx.append(h, expl);
     sem.forEach((i) => cx.append(edLinhaTopico(i)));
     box.append(cx);
   }
@@ -374,6 +516,27 @@ function edPintarPainel(r, plano) {
 /* Mudar o peso reescreve o TEXTO — nunca um estado paralelo. Enquanto texto
  * e tela puderem divergir, uma das duas está mentindo, e o usuário não tem
  * como saber qual. */
+/* As horas moram na linha "#" do texto, igual aos pesos nas linhas "@".
+ * Antes o controle mudava só o campo e o edRender seguinte lia o texto e
+ * devolvia o valor antigo — arrastar parecia não funcionar, e não funcionava
+ * mesmo. Uma fonte da verdade só. */
+function edMudarHoras(h) {
+  const horas = Math.max(1, Math.min(80, Math.round(Number(h) || 1)));
+  const r = lerEdital($("editalTexto").value);
+  const L = $("editalTexto").value.split(/\r?\n/);
+  const cab = [];
+  if (r.cfg.concurso) cab.push(r.cfg.concurso);
+  if (r.cfg.prova) cab.push("prova: " + r.cfg.prova);
+  cab.push("horas: " + horas);
+  const i = L.findIndex((l) => /^\s*#/.test(l));
+  if (i < 0) L.unshift("# " + cab.join(" | ")); else L[i] = "# " + cab.join(" | ");
+  $("editalTexto").value = L.join("\n");
+  $("edHoras").value = horas;
+  $("edHorasSlider").value = horas;
+  reg("EDITAL-HORAS", horas + "h por semana");
+  edRender();
+}
+
 function edMudarPeso(disc, peso) {
   const L = $("editalTexto").value.split(/\r?\n/);
   const i = disc.linha - 1;
@@ -440,7 +603,6 @@ async function edAplicarColagem() {
 function edSimular() {
   const r = lerEdital($("editalTexto").value);
   const horas = Number($("edHorasSlider").value) || 1;
-  $("edHoras").value = horas;
   const p = montarPlano(r, { horas, prova: $("edProva").value, feitos: edProgresso });
   const el = $("edSimTxt");
   el.innerHTML = "";
@@ -469,10 +631,7 @@ function edRender() {
 
   /* config: os campos de data e horas mandam no texto, e vice-versa */
   if (r.cfg.prova && $("edProva").value !== r.cfg.prova) $("edProva").value = r.cfg.prova;
-  if (r.cfg.horas && Number($("edHoras").value) !== r.cfg.horas) {
-    $("edHoras").value = r.cfg.horas;
-    $("edHorasSlider").value = r.cfg.horas;
-  }
+  if (r.cfg.horas) { $("edHoras").value = r.cfg.horas; $("edHorasSlider").value = r.cfg.horas; }
 
   const plano = montarPlano(r, {
     horas: Number($("edHoras").value) || r.cfg.horas,
@@ -547,6 +706,7 @@ function edRender() {
 function edIniciar() {
   const guardado = localStorage.getItem("eac_edital_texto");
   if (guardado) $("editalTexto").value = guardado;
+  carregarDiario();
   try { edProgresso = JSON.parse(localStorage.getItem("eac_edital_progresso") || "{}"); }
   catch (e) { edProgresso = {}; }
 
@@ -555,11 +715,12 @@ function edIniciar() {
     $("editalNums").scrollTop = $("editalTexto").scrollTop;
   });
   $("edProva").onchange = edRender;
-  $("edHoras").onchange = () => { $("edHorasSlider").value = $("edHoras").value; edRender(); };
+  $("edHoras").onchange = () => edMudarHoras($("edHoras").value);
   /* "input" e não "change": o valor tem de responder enquanto o dedo arrasta,
    * senão deixa de ser simulação e vira mais um campo para preencher. */
   $("edHorasSlider").addEventListener("input", edSimular);
-  $("edHorasSlider").addEventListener("change", edRender);
+  $("edHorasSlider").addEventListener("change", () => edMudarHoras($("edHorasSlider").value));
+  $("btnDiarioFechar").onclick = () => $("dlgDiario").close();
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";
     $("edColarAviso").hidden = true;
