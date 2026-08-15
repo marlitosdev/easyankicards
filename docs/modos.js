@@ -40,6 +40,11 @@ function trocarModo(id) {
     b.classList.toggle("ativo", meu);
     b.setAttribute("aria-selected", meu ? "true" : "false");
   }
+  /* O rodapé de exportação é da bancada de CARTÕES: "Baixar .txt" e "Baixar
+   * .apkg" não significam nada no edital, e botão que não faz sentido no
+   * contexto é botão que ensina o usuário a desconfiar da tela. */
+  const rod = document.getElementById("rodapeExportar");
+  if (rod) rod.hidden = id !== "cartoes";
   try { localStorage.setItem("eac_modo", id); } catch (e) {}
   if (typeof reg === "function") reg("MODO", "modo " + id);
 }
