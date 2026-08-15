@@ -646,7 +646,29 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   font-size:11.5px;color:var(--sutil);margin-top:7px}
 .ed-barra{height:6px;background:var(--panel);border-radius:4px;overflow:hidden}
 .ed-barra.grande{height:9px}
-.ed-barra-fill{height:100%;background:#22c55e;border-radius:4px;transition:width .2s}
+.ed-barra{position:relative}
+.ed-barra-fill{height:100%;background:#22c55e;border-radius:4px;transition:width .2s;
+  opacity:.45}
+.ed-barra-rev{position:absolute;left:0;top:0;height:100%;background:#15803d;
+  border-radius:4px;transition:width .2s}
+.ed-medidas{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.ed-medida{flex:1;min-width:150px;display:flex;align-items:baseline;gap:7px;
+  padding:7px 9px;border-radius:9px;background:var(--panel);border:1px solid var(--borda)}
+.ed-med-rot{font-size:10px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--sutil);font-weight:800}
+.ed-medida b{font-size:12px;font-weight:700}
+.ed-med-peso{margin-left:auto;color:#22c55e}
+.m-rev .ed-med-peso{color:#15803d}
+:root[data-theme="light"] .m-rev .ed-med-peso{color:#166534}
+.ed-alerta-peso{margin-top:9px;padding:7px 10px;border-radius:8px;font-size:11.5px;
+  line-height:1.45;background:rgba(245,158,11,.16);border:1px solid rgba(245,158,11,.5)}
+.ed-rev{all:unset;cursor:pointer;width:17px;height:17px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0}
+.ed-rev:hover{border-color:#15803d;color:#22c55e}
+.ed-rev.ativo{background:#15803d;border-color:#15803d;color:#fff}
+.ed-item.revisado .ed-item-nome{opacity:.6;text-decoration:none;font-style:italic}
+.ed-card.estudado{border-color:rgba(34,197,94,.45)}
 .ed-caixa{background:var(--campo);border:1px solid var(--borda);border-radius:11px;
   padding:11px 13px;margin:0 0 10px}
 .ed-caixa-tit{font-size:12.5px;font-weight:700;margin:0 0 7px}
@@ -660,11 +682,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .ed-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px}
 .ed-card{background:var(--campo);border:1px solid var(--borda);border-radius:11px;padding:11px}
 .ed-card.completo{border-color:#22c55e}
-.ed-card-cab{display:flex;align-items:center;gap:7px;margin:0 0 8px}
+.ed-card-cab{display:flex;align-items:center;gap:6px;margin:0 0 8px;flex-wrap:wrap}
 .ed-card-nome{flex:1;font-size:12.5px;font-weight:600;line-height:1.3}
 .ed-peso{font-size:10.5px;padding:2px 5px;border-radius:7px;background:var(--panel);
   color:var(--texto);border:1px solid var(--borda);cursor:pointer}
 .ed-peso.suspeito{border-color:#e24b4a;color:#fca5a5}
+.ed-fatia{font-size:9.5px;font-weight:800;letter-spacing:.3px;padding:2px 6px;
+  border-radius:7px;background:rgba(139,92,246,.18);color:#a78bfa;white-space:nowrap}
+:root[data-theme="light"] .ed-fatia{color:#6d28d9}
 .ed-card-conta{font-size:11px;color:var(--sutil);margin:6px 0 5px}
 .ed-pontos{display:flex;gap:9px;flex-wrap:wrap;font-size:10.5px}
 .faixa-alta{color:#e24b4a}.faixa-media{color:#BA7517}.faixa-baixa{color:var(--sutil)}
@@ -967,7 +992,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
         </table>
       </div>
       </div>
-      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
+      <div class="btn-linha">
+        <button class="btn btn-roxo" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
+        <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
+      </div>
     </div>
   </div>
 </section>
@@ -1053,7 +1081,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 
 <div class="rodape">
   <div style="width:100%;max-width:600px">
-    <div style="display:flex;gap:8px;justify-content:center">
+    <div style="display:flex;gap:8px;justify-content:center" id="rodapeExportar">
       <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
       <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
     </div>

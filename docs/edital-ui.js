@@ -145,13 +145,37 @@ function edRegistrarConteudo(r) {
 let edVista = localStorage.getItem("eac_edital_vista") || "painel";
 let edAbertas = {};        /* disciplinas expandidas */
 
-function edBarra(feitos, total, cls) {
+/* Uma barra, duas camadas: o verde claro é o que foi estudado, o escuro
+ * dentro dele é o que já foi revisado. Duas barras separadas fariam parecer
+ * que são coisas somáveis — revisado é um SUBCONJUNTO de estudado. */
+function edBarra(feitos, revisados, total, cls) {
   const d = document.createElement("div");
   d.className = "ed-barra" + (cls ? " " + cls : "");
   const f = document.createElement("div");
   f.className = "ed-barra-fill";
   f.style.width = (total ? Math.round((feitos / total) * 100) : 0) + "%";
-  d.append(f);
+  const rv = document.createElement("div");
+  rv.className = "ed-barra-rev";
+  rv.style.width = (total ? Math.round((revisados / total) * 100) : 0) + "%";
+  d.append(f, rv);
+  return d;
+}
+
+/* As duas réguas lado a lado. Contar tópicos e somar peso respondem
+ * perguntas diferentes, e é a diferença entre elas que informa: "67% dos
+ * tópicos, 7% do peso" quer dizer que o esforço foi para o lugar errado. */
+function edMedida(rot, nTop, nTotal, pctPeso, cls) {
+  const d = document.createElement("div");
+  d.className = "ed-medida " + (cls || "");
+  const r = document.createElement("span");
+  r.className = "ed-med-rot"; r.textContent = rot;
+  const a = document.createElement("b");
+  a.textContent = t("ed_med_top", { f: nTop, t: nTotal,
+    p: nTotal ? Math.round((nTop / nTotal) * 100) : 0 });
+  const b = document.createElement("b");
+  b.className = "ed-med-peso";
+  b.textContent = t("ed_med_peso", { p: pctPeso });
+  d.append(r, a, b);
   return d;
 }
 
@@ -169,16 +193,24 @@ function edPontos(itens) {
   return box;
 }
 
-function edLinhaTopico(i) {
+function edLinhaTopico(i, semDisciplina) {
   const li = document.createElement("label");
-  li.className = "ed-item" + (i.feito ? " feito" : "");
+  li.className = "ed-item" + (i.feito ? " feito" : "")
+    + (i.revisado ? " revisado" : "");
   const chk = document.createElement("input");
   chk.type = "checkbox"; chk.checked = i.feito;
-  chk.onchange = () => {
-    if (chk.checked) edProgresso[i.chave] = true; else delete edProgresso[i.chave];
-    reg("EDITAL-PROGRESSO", (chk.checked ? "feito: " : "desfeito: ") + i.nome,
-        i.disciplina);
-    edRender();
+  chk.title = t("ed_marcar_feito");
+  chk.onchange = () => edMarcar(i, chk.checked ? "feito" : null);
+  /* O "R" só aparece depois de estudado: não se revisa o que não se viu.
+   * Revelação progressiva evita a pergunta "qual dos dois eu marco?". */
+  const rev = document.createElement("button");
+  rev.className = "ed-rev" + (i.revisado ? " ativo" : "");
+  rev.textContent = "R";
+  rev.title = t(i.revisado ? "ed_tirar_rev" : "ed_marcar_rev");
+  rev.hidden = !i.feito;
+  rev.onclick = (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    edMarcar(i, i.revisado ? "feito" : "revisado");
   };
   const pt = document.createElement("span");
   pt.className = "ed-ponto ponto-" + i.faixa;
@@ -188,11 +220,21 @@ function edLinhaTopico(i) {
   if (i.motivo) nome.title = i.motivo;
   const disc = document.createElement("span");
   disc.className = "ed-item-disc";
-  disc.textContent = i.disciplina;
+  /* dentro do cartão da disciplina o nome se repetiria em todas as linhas —
+   * 23 vezes "Língua Portuguesa" não informa nada e rouba a largura do que
+   * importa, que é o nome do tópico */
+  disc.textContent = semDisciplina ? "" : i.disciplina;
   const min = document.createElement("b");
   min.textContent = horasTexto(i.minutos);
-  li.append(chk, pt, nome, disc, min);
+  li.append(chk, pt, nome, disc, rev, min);
   return li;
+}
+
+function edMarcar(i, estado) {
+  if (estado) edProgresso[i.chave] = estado; else delete edProgresso[i.chave];
+  reg("EDITAL-PROGRESSO", (estado || "pendente") + ": " + i.nome,
+      i.disciplina + " · peso " + i.bruto);
+  edRender();
 }
 
 function edPintarPainel(r, plano) {
@@ -210,12 +252,27 @@ function edPintarPainel(r, plano) {
   const nome = document.createElement("div");
   nome.className = "ed-topo-nome";
   nome.textContent = r.cfg.concurso || t("ed_sem_nome");
-  const pct = plano.total ? Math.round((plano.feitos / plano.total) * 100) : 0;
-  topo.append(nome, edBarra(plano.feitos, plano.total, "grande"));
+  topo.append(nome,
+    edBarra(plano.feitos, plano.revisados, plano.total, "grande"));
+  const meds = document.createElement("div");
+  meds.className = "ed-medidas";
+  meds.append(
+    edMedida(t("ed_estudado"), plano.feitos, plano.total, plano.peso.pctFeito, "m-feito"),
+    edMedida(t("ed_revisado"), plano.revisados, plano.total, plano.peso.pctRevisado, "m-rev"));
+  topo.append(meds);
+  /* O aviso que dá o recado do painel inteiro: quando a contagem de tópicos
+   * anda muito à frente do peso, o esforço está indo para o lado leve. */
+  const pctTop = plano.total ? Math.round((plano.feitos / plano.total) * 100) : 0;
+  if (plano.feitos >= 5 && pctTop - plano.peso.pctFeito >= 10) {
+    const al = document.createElement("div");
+    al.className = "ed-alerta-peso";
+    al.textContent = t("ed_desalinhado", { top: pctTop, peso: plano.peso.pctFeito });
+    topo.append(al);
+  }
   const sub = document.createElement("div");
   sub.className = "ed-topo-sub";
   const esq = document.createElement("span");
-  esq.textContent = t("ed_topo_prog", { f: plano.feitos, t: plano.total, p: pct });
+  esq.textContent = "";
   const dir = document.createElement("span");
   const sem = semanaAtual(plano);
   dir.textContent = plano.semanas === null ? t("ed_sem_data")
@@ -240,12 +297,31 @@ function edPintarPainel(r, plano) {
   /* -------- disciplinas: cartões com barra de progresso -------- */
   const grade = document.createElement("div");
   grade.className = "ed-grade";
+  /* Ordenadas pelo PESO TOTAL NA PROVA, não pelo 1-5 da disciplina. São
+   * coisas diferentes: Direito Constitucional (26 tópicos) e Noções de
+   * Direito Penal (3 tópicos) podem ter o mesmo "peso 3" e mesmo assim
+   * representar fatias muito diferentes do que a prova cobra. O que decide
+   * é a soma de (peso da disciplina × peso do tópico) de todos os tópicos
+   * dela. Empate desempata pelo mais atrasado. */
+  const pesoDaDisc = {};
+  const progDaDisc = {};
   r.disciplinas.forEach((d) => {
+    const meus = plano.itens.filter((i) => i.disciplina === d.nome);
+    pesoDaDisc[d.nome] = meus.reduce((a, i) => a + i.bruto, 0);
+    progDaDisc[d.nome] = meus.length
+      ? meus.filter((i) => i.feito).length / meus.length : 1;
+  });
+  const ordenadas = r.disciplinas.slice().sort((a, b) =>
+    (pesoDaDisc[b.nome] - pesoDaDisc[a.nome]) || (progDaDisc[a.nome] - progDaDisc[b.nome]));
+  ordenadas.forEach((d) => {
     const meus = plano.itens.filter((i) => i.disciplina === d.nome);
     if (!meus.length) return;
     const feitos = meus.filter((i) => i.feito).length;
+    const revs = meus.filter((i) => i.revisado).length;
+    const pesoD = somarPeso(meus);
     const card = document.createElement("div");
-    card.className = "ed-card" + (feitos === meus.length ? " completo" : "");
+    card.className = "ed-card" + (revs === meus.length ? " completo"
+      : (feitos === meus.length ? " estudado" : ""));
 
     const cab = document.createElement("div");
     cab.className = "ed-card-cab";
@@ -264,11 +340,19 @@ function edPintarPainel(r, plano) {
     });
     sel.onchange = () => edMudarPeso(d, Number(sel.value));
     cab.append(tit, sel);
-    card.append(cab, edBarra(feitos, meus.length));
+    card.append(cab, edBarra(feitos, revs, meus.length));
 
     const cont = document.createElement("div");
     cont.className = "ed-card-conta";
-    cont.textContent = t("ed_card_conta", { f: feitos, t: meus.length });
+    cont.textContent = t("ed_card_conta", { f: feitos, t: meus.length,
+      p: pesoD.pctFeito, r: revs });
+    /* Quanto ESTA disciplina representa da prova inteira. É o número que
+     * justifica a ordem dos cartões e o que decide onde investir a semana. */
+    const fatia = document.createElement("div");
+    fatia.className = "ed-fatia";
+    const share = Math.round((pesoDaDisc[d.nome] / (plano.peso.total || 1)) * 100);
+    fatia.textContent = t("ed_fatia", { p: share });
+    cab.append(fatia);
     card.append(cont, edPontos(meus));
 
     const abrir = document.createElement("button");
@@ -279,7 +363,7 @@ function edPintarPainel(r, plano) {
     if (edAbertas[d.nome]) {
       const lista = document.createElement("div");
       lista.className = "ed-card-lista";
-      meus.forEach((i) => lista.append(edLinhaTopico(i)));
+      meus.forEach((i) => lista.append(edLinhaTopico(i, true)));
       card.append(lista);
     }
     grade.append(card);
@@ -331,7 +415,7 @@ function edRender() {
     ? t("ed_restam", { s: s.semanas, d: s.dias }) : t("ed_sem_data");
   $("edResumo").textContent = itens.length
     ? t("ed_resumo", { d: r.disciplinas.length, t: plano.total, f: plano.feitos,
-                       p: Math.round((plano.feitos / plano.total) * 100) })
+                       p: plano.peso.pctFeito })
     : "";
 
   /* "Não cabe" dito com todas as letras. O modelo antigo espalhava minutos
@@ -422,6 +506,23 @@ function edIniciar() {
     reg("EDITAL", "edital apagado", itens.length + " tópicos");
     $("editalTexto").value = ""; edProgresso = {};
     edRender();
+  };
+  $("btnEditalDiag").onclick = () => {
+    const r = lerEdital($("editalTexto").value);
+    const plano = montarPlano(r, { horas: Number($("edHoras").value),
+      prova: $("edProva").value, feitos: edProgresso });
+    const achados = diagnosticoPlano(r, plano);
+    const L = [t("ed_diag_cab"), ""];
+    L.push(t("ed_diag_estado", { d: r.disciplinas.length, t: plano.total,
+      s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas }));
+    L.push("");
+    if (!achados.length) L.push(t("ed_diag_limpo"));
+    else achados.forEach((a, i) =>
+      L.push((i + 1) + ". " + (a.grave ? "[GRAVE] " : "") + a.msg));
+    L.push("", t("ed_diag_pedido"), "", "PLANO ATUAL:", $("editalTexto").value);
+    abrirTextoSimples(t("ed_diag_btn"), L.join("\n"));
+    reg("EDITAL-DIAG", achados.length + " impropriedade(s)",
+        achados.filter((a) => a.grave).length + " grave(s)");
   };
   $("btnVistaPainel").onclick = () => edTrocarVista("painel");
   $("btnVistaLista").onclick = () => edTrocarVista("lista");

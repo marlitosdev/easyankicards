@@ -155,7 +155,13 @@ function montarPlano(r, opcoes) {
   const porSemana = horas * 60;
   const s = semanasAte(o.prova, o.hoje);
   const semanas = s ? Math.max(0, s.semanas) : null;
-  const feito = (k) => !!(o.feitos && (o.feitos[k] || (o.feitos.has && o.feitos.has(k))));
+  /* Aceita o formato antigo (true = estudado) para não perder o progresso de
+   * quem já estava usando: migração silenciosa, feita na leitura. */
+  const estadoDe = (k) => {
+    const v = o.feitos && o.feitos[k];
+    if (v === true) return "feito";
+    return v === "feito" || v === "revisado" ? v : null;
+  };
 
   const todos = priorizar(r);
   todos.forEach((i) => {
@@ -163,7 +169,11 @@ function montarPlano(r, opcoes) {
     i.faixa = f.id;
     i.minutos = f.minutos;
     i.chave = (i.disciplina + "›" + i.nome).toLowerCase();
-    i.feito = feito(i.chave);
+    /* dois estados, não um: estudar e revisar são coisas diferentes, e a
+     * segunda é a que fixa. "revisado" implica "estudado". */
+    i.estado = estadoDe(i.chave);
+    i.feito = i.estado === "feito" || i.estado === "revisado";
+    i.revisado = i.estado === "revisado";
   });
 
   const fila = todos.filter((i) => !i.feito);
@@ -188,11 +198,33 @@ function montarPlano(r, opcoes) {
     semanas, porSemana, usado,
     orcamento: semanas === null ? null : semanas * porSemana,
     feitos: todos.filter((i) => i.feito).length,
+    revisados: todos.filter((i) => i.revisado).length,
     total: todos.length,
+    /* ---- a medida que faltava ----
+     * Contar tópicos trata Direito Constitucional e Noções de Direito Penal
+     * como iguais. O que decide a prova é PESO: quanto da importância do
+     * edital já foi coberta. 18% dos tópicos pode ser 30% da prova, ou 8% —
+     * e quem só olha a contagem não tem como saber em qual dos dois está. */
+    peso: somarPeso(todos),
     /* quantas horas por semana cobririam TUDO: é a resposta à pergunta
      * "então quanto eu precisaria estudar?" */
     horasNecessarias: semanas ? Math.ceil(
       (fila.reduce((a, i) => a + i.minutos, 0) / semanas) / 60) : null,
+  };
+}
+
+/* Soma dos pesos brutos (peso da disciplina × peso do tópico) em cada
+ * estado. É a régua honesta do progresso: cobrir metade dos tópicos de peso
+ * máximo vale mais do que cobrir todos os de peso mínimo. */
+function somarPeso(itens) {
+  const soma = (f) => itens.filter(f).reduce((a, i) => a + i.bruto, 0);
+  const total = soma(() => true) || 1;
+  const feito = soma((i) => i.feito);
+  const revisado = soma((i) => i.revisado);
+  return {
+    total, feito, revisado,
+    pctFeito: Math.round((feito / total) * 100),
+    pctRevisado: Math.round((revisado / total) * 100),
   };
 }
 
@@ -301,6 +333,102 @@ function edCorrecaoDeTudo(raw) {
   Object.defineProperty(tudo, "name",
     { value: aplicadas.map((f) => f.name).join(" + ") });
   return tudo;
+}
+
+/* ------------------------------------------------------------------
+ * DIAGNÓSTICO DO PLANEJAMENTO
+ *
+ * Diferente do diagnóstico técnico: aqui não se procura defeito de FORMATO,
+ * e sim impropriedade de PLANEJAMENTO. Um edital pode estar impecavelmente
+ * escrito e ainda assim descrever um plano que não decide nada — foi o que
+ * aconteceu com as 17 disciplinas empatadas em peso 3.
+ *
+ * O app aponta; quem corrige é a IA ou o usuário. Julgar que Auditoria vale
+ * mais que Direito Civil exige conhecer o concurso, e isso o app não sabe.
+ * ------------------------------------------------------------------ */
+function diagnosticoPlano(r, plano) {
+  const achados = [];
+  const add = (id, grave, msg, dado) => achados.push({ id, grave, msg, dado });
+  const discs = r.disciplinas || [];
+  const itens = (plano && plano.itens) || [];
+  const pesoTotal = (plano && plano.peso && plano.peso.total) || 1;
+
+  if (!discs.length) return achados;
+
+  if (temPesosIguais(r))
+    add("pesos_iguais", true,
+      "Todas as " + discs.length + " disciplinas estão com peso " + discs[0].peso
+      + ". Como a prioridade é peso da disciplina × peso do tópico, a disciplina "
+      + "sai da conta e a ordenação vira quase um empate.");
+
+  /* fatia de cada disciplina na prova — é o número que o usuário não vê no
+   * texto e que muda completamente a leitura do plano */
+  const fatia = {};
+  discs.forEach((d) => {
+    const meus = itens.filter((i) => i.disciplina === d.nome);
+    fatia[d.nome] = { pct: Math.round((meus.reduce((a, i) => a + i.bruto, 0)
+      / pesoTotal) * 100), n: meus.length, peso: d.peso };
+  });
+  const dominante = Object.keys(fatia).filter((k) => fatia[k].pct >= 25);
+  dominante.forEach((k) => add("dominante", false,
+    '"' + k + '" sozinha representa ' + fatia[k].pct + "% do peso do plano, "
+    + "com " + fatia[k].n + " tópicos. Confira se isso corresponde à prova ou se "
+    + "a disciplina foi detalhada demais em relação às outras."));
+
+  /* muitos tópicos com peso baixo, ou poucos com peso alto: sinal de que a
+   * granularidade da divisão está desigual entre disciplinas */
+  const media = discs.reduce((a, d) => a + d.topicos.length, 0) / discs.length;
+  discs.forEach((d) => {
+    if (d.topicos.length === 1)
+      add("uma_linha", false, '"' + d.nome + '" tem um único tópico — '
+        + "provavelmente o conteúdo dela não foi dividido.");
+    else if (d.topicos.length > media * 2.5)
+      add("granular", false, '"' + d.nome + '" tem ' + d.topicos.length
+        + " tópicos, muito acima da média de " + Math.round(media)
+        + ". Se os outros forem divididos no mesmo detalhe, a ordem muda.");
+  });
+
+  const semPeso = itens.filter((i) => {
+    const d = discs.find((x) => x.nome === i.disciplina);
+    const t0 = d && d.topicos.find((x) => x.nome === i.nome);
+    return t0 && t0.herdado;
+  });
+  if (semPeso.length) add("sem_peso", true, semPeso.length
+    + " tópico(s) entraram sem peso e valem 3 por padrão — um palpite "
+    + "disfarçado de escolha.");
+
+  const semMotivo = itens.filter((i) => !i.motivo);
+  if (semMotivo.length > itens.length * 0.5)
+    add("sem_motivo", false, semMotivo.length + " de " + itens.length
+      + " tópicos não dizem POR QUE têm aquele peso. Sem o motivo não dá para "
+      + "conferir o julgamento nem revisá-lo depois.");
+
+  /* nomes repetidos entre disciplinas: costuma ser o mesmo assunto contado
+     duas vezes, o que infla artificialmente a fatia de uma delas */
+  const vistos = {};
+  itens.forEach((i) => {
+    const k = i.nome.toLowerCase().trim();
+    if (vistos[k] && vistos[k] !== i.disciplina)
+      add("repetido", false, 'O tópico "' + i.nome + '" aparece em "'
+        + vistos[k] + '" e em "' + i.disciplina + '".');
+    else vistos[k] = i.disciplina;
+  });
+
+  const longos = itens.filter((i) => i.nome.length > 90);
+  if (longos.length) add("longo", false, longos.length
+    + " tópico(s) têm nome muito comprido — costumam ser vários assuntos numa "
+    + "linha só, o que impede pesar cada um.");
+
+  if (plano && plano.fora && plano.fora.length)
+    add("nao_cabe", true, plano.fora.length + " de " + itens.length
+      + " tópicos não cabem nas " + plano.semanas + " semanas até a prova. "
+      + "Seriam necessárias cerca de " + plano.horasNecessarias + "h por semana "
+      + "para cobrir tudo.");
+
+  if (!r.cfg.prova) add("sem_data", true,
+    "O plano não tem data de prova, então não há como saber o que cabe.");
+
+  return achados;
 }
 
 /* Devolve o texto canônico a partir da estrutura — é o que permite o
