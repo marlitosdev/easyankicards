@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.57.0";
+const VERSAO = "8.58.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4315,6 +4315,11 @@ function montarPainelDiag() {
 
 async function abrirDiagnostico() {
   await medirArmazenamento();
+  /* No edital, o filtro por modo já vem ligado: quem está relatando um
+   * problema do plano não quer ler 180 eventos dos cartões para achar os
+   * seus três. Quem quiser tudo desmarca. */
+  if (typeof modoAtual !== "undefined" && modoAtual !== "cartoes")
+    $("chkDiagModo").checked = true;
   montarPainelDiag();
   reg("DIAGNOSTICO", "painel aberto",
       registro.length + " eventos, foco: " + textoEmFoco().onde);

@@ -157,10 +157,12 @@ function montarPlano(r, opcoes) {
   const semanas = s ? Math.max(0, s.semanas) : null;
   /* Aceita o formato antigo (true = estudado) para não perder o progresso de
    * quem já estava usando: migração silenciosa, feita na leitura. */
-  const estadoDe = (k) => {
+  const marcaDe = (k) => {
     const v = o.feitos && o.feitos[k];
-    if (v === true) return "feito";
-    return v === "feito" || v === "revisado" ? v : null;
+    if (v === true) return { e: "feito", d: null };            /* formato v8.44 */
+    if (v === "feito" || v === "revisado") return { e: v, d: null };  /* v8.55 */
+    if (v && typeof v === "object" && v.e) return v;           /* com data */
+    return null;
   };
 
   const todos = priorizar(r);
@@ -171,12 +173,33 @@ function montarPlano(r, opcoes) {
     i.chave = (i.disciplina + "›" + i.nome).toLowerCase();
     /* dois estados, não um: estudar e revisar são coisas diferentes, e a
      * segunda é a que fixa. "revisado" implica "estudado". */
-    i.estado = estadoDe(i.chave);
+    const m = marcaDe(i.chave);
+    i.estado = m && m.e;
+    i.quando = m && m.d;
+    i.dias = m && m.d ? Math.floor((Date.now() - new Date(m.d + "T00:00:00")) / 86400000) : null;
     i.feito = i.estado === "feito" || i.estado === "revisado";
     i.revisado = i.estado === "revisado";
   });
 
-  const fila = todos.filter((i) => !i.feito);
+  /* Fatia de cada disciplina na prova: entra no motivo porque é o argumento
+   * mais forte a favor de estudar aquilo agora. */
+  const fatia = {};
+  const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
+  todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
+  Object.keys(fatia).forEach((k) => {
+    fatia[k] = Math.round((fatia[k] / totalBruto) * 100);
+  });
+
+  /* A fila tem duas fontes: o que nunca foi estudado e o que já passou do
+   * prazo de revisão. Revisão vencida entra ANTES de assunto novo de peso
+   * igual — reaprender custa mais caro do que manter. */
+  const pendentes = todos.filter((i) => !i.feito);
+  const revVencidas = todos.filter((i) => i.feito && !i.revisado
+    && (i.dias === null || i.dias >= REV_DIAS));
+  revVencidas.forEach((i) => { i.ehRevisao = true; i.minutos = Math.round(i.minutos / 2); });
+  const fila = revVencidas.concat(pendentes)
+    .sort((a, b) => (b.bruto - a.bruto) || (a.ehRevisao ? -1 : 1));
+  todos.forEach((i) => { i.porque = motivarItem(i, fatia[i.disciplina]); });
   const dentro = [], fora = [];
   let semana = 1, usoSemana = 0, usado = 0;
 
@@ -197,6 +220,7 @@ function montarPlano(r, opcoes) {
     fora,                  /* o que não cabe — nomeado, nunca escondido */
     semanas, porSemana, usado,
     orcamento: semanas === null ? null : semanas * porSemana,
+    fatia,
     feitos: todos.filter((i) => i.feito).length,
     revisados: todos.filter((i) => i.revisado).length,
     total: todos.length,
@@ -226,6 +250,26 @@ function somarPeso(itens) {
     pctFeito: Math.round((feito / total) * 100),
     pctRevisado: Math.round((revisado / total) * 100),
   };
+}
+
+/* ------------------------------------------------------------------
+ * POR QUE ESTE TÓPICO ESTÁ SENDO RECOMENDADO
+ *
+ * "Esta semana" mostrava oito linhas sem dizer por que aquelas. Recomendação
+ * sem justificativa é ordem, e ordem que a pessoa não entende ela ignora —
+ * ou pior, segue sem perceber que está errada. Cada item passa a carregar o
+ * motivo, na mesma lógica que decidiu a fila.
+ * ------------------------------------------------------------------ */
+const REV_DIAS = 7;    /* a partir daqui a revisão é considerada vencida */
+
+function motivarItem(i, fatiaDisc) {
+  if (i.feito && !i.revisado)
+    return { tipo: i.dias === null ? "rev_pendente" : "rev_vencida",
+             dias: i.dias, fatia: fatiaDisc };
+  if (i.revisado) return { tipo: "concluido", fatia: fatiaDisc };
+  return { tipo: i.faixa === "alta" ? "peso_alto"
+    : (i.faixa === "media" ? "peso_medio" : "peso_baixo"),
+    peso: i.peso, fatia: fatiaDisc };
 }
 
 function semanaAtual(plano) {
