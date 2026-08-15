@@ -469,7 +469,8 @@ function edMarcar(i, estado, detalhe) {
   else delete edProgresso[i.chave];
   anotarDiario(i, estado || "pendente", detalhe);
   reg("EDITAL-PROGRESSO", (estado || "pendente") + ": " + i.nome,
-      i.disciplina + " · peso " + i.bruto);
+      /* "peso 25" parecia valor fora de escala; 5×5 mostra de onde veio */
+      i.disciplina + " · peso " + i.disciplinaPeso + "×" + i.peso);
   edRender();
 }
 

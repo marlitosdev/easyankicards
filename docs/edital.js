@@ -465,6 +465,22 @@ function diagnosticoPlano(r, plano) {
     + " tópico(s) entraram sem peso e valem 3 por padrão — um palpite "
     + "disfarçado de escolha.");
 
+  /* O motivo GENÉRICO é pior que o motivo ausente: ele silencia o detector
+   * de motivo faltando e passa a impressão de que a informação existe. E a
+   * culpa é do prompt — a frase "não localizei em provas anteriores" foi
+   * oferecida por ele como saída de emergência, e a IA a usou em 60% dos
+   * casos do edital real. Quem oferece a saída fácil colhe a saída fácil. */
+  /* Cuidado com abreviaturas curtas: a primeira versão trazia "n\/?a\b" e ele
+   * casava com o "na" de "caiu NA última prova" — o detector acusava 21 de 21
+   * onde o certo era 19. Padrão curto demais acha o que não existe. */
+  const RE_MOTIVO_VAZIO = /n[ãa]o\s+(localizei|sei|encontrei|consta)|sem\s+informa[çc]|desconhec|^n\/a$|not\s+found/i;
+  const genericos = itens.filter((i) => i.motivo && RE_MOTIVO_VAZIO.test(i.motivo));
+  if (genericos.length >= itens.length * 0.3)
+    add("motivo_generico", false, genericos.length + " de " + itens.length
+      + ' tópicos repetem uma justificativa genérica ("' + genericos[0].motivo.slice(0, 40)
+      + '..."). O campo está preenchido, mas não informa nada — e isso desliga o '
+      + "aviso de motivo faltando. Vale pedir à IA só os que ela consegue justificar.");
+
   const semMotivo = itens.filter((i) => !i.motivo);
   if (semMotivo.length > itens.length * 0.5)
     add("sem_motivo", false, semMotivo.length + " de " + itens.length
@@ -481,6 +497,23 @@ function diagnosticoPlano(r, plano) {
         + vistos[k] + '" e em "' + i.disciplina + '".');
     else vistos[k] = i.disciplina;
   });
+
+  /* Colisão de prioridade: um tópico que a banca cobrou, dentro de uma
+   * disciplina de peso baixo, fica atrás de um tópico irrelevante de uma
+   * disciplina de peso alto. É consequência de multiplicar os dois pesos, e
+   * o app não pode decidir sozinho — mas pode mostrar o caso concreto. */
+  const marcados = itens.filter((i) => i.motivo
+    && /caiu|cobrad|cai em|toda prova/i.test(i.motivo));
+  if (marcados.length) {
+    const pior = marcados.reduce((m, i) => (i.bruto < m.bruto ? i : m), marcados[0]);
+    const acimaDele = itens.filter((i) => i.bruto > pior.bruto
+      && (!i.motivo || RE_MOTIVO_VAZIO.test(i.motivo))).length;
+    if (acimaDele >= itens.length * 0.25)
+      add("colisao", false, '"' + pior.nome.slice(0, 46) + '" caiu em prova mas está '
+        + "atrás de " + acimaDele + " tópicos sem histórico conhecido, porque a "
+        + 'disciplina dele ("' + pior.disciplina + '") tem peso baixo. Se o assunto '
+        + "importa mais que a disciplina, suba o peso do tópico.");
+  }
 
   const longos = itens.filter((i) => i.nome.length > 90);
   if (longos.length) add("longo", false, longos.length
