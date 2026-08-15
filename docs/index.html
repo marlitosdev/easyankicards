@@ -697,6 +697,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   font-weight:700;color:var(--sutil);text-decoration:underline}
 .ed-abrir:hover{color:var(--texto)}
 .ed-card-lista{margin-top:7px;border-top:1px solid var(--borda);padding-top:5px}
+.ed-sim{margin:0 0 9px}
+.ed-sim input[type=range]{width:100%;margin:0 0 5px}
+.ed-sim-txt{font-size:11.5px;color:var(--sutil);line-height:1.45}
+.ed-sim-txt b{color:var(--texto)}
+.ed-sim-txt .ok{color:#22c55e}
+.ed-sim-txt .falta{color:#e8940a}
 .ed-nao-cabe{margin:0 0 8px;padding:9px 11px;border-radius:9px;font-size:11.5px;
   line-height:1.5;color:var(--texto);background:rgba(245,158,11,.16);
   border:1px solid rgba(245,158,11,.5)}
@@ -955,7 +961,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
           <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
         </span>
       </div>
-      <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+      <div class="btn-linha">
+        <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+        <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
+      </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
       <div class="editor-wrap ed-wrap">
         <div id="editalNums" aria-hidden="true"></div>
@@ -972,6 +981,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
         <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
         <label><span data-i18n="ed_horas"></span>
           <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
+      </div>
+      <div class="ed-sim">
+        <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
+        <div class="ed-sim-txt" id="edSimTxt"></div>
       </div>
       <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
       <div class="ed-nao-cabe" id="edNaoCabe" hidden></div>
@@ -1233,6 +1246,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
     <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgEdColar" class="ui-modal">
+  <h3 data-i18n="ed_colar_tit"></h3>
+  <p class="nota" data-i18n="ed_colar_ajuda"></p>
+  <textarea id="edColarTexto" rows="12" style="width:100%;box-sizing:border-box"
+            placeholder="# Concurso | prova: 2026-08-30 | horas: 12&#10;@ Disciplina :: 5&#10;+ Tópico :: 4 :: motivo"></textarea>
+  <div id="edColarAviso" class="ed-nao-cabe" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnEdColarAplicar" data-i18n="ed_colar_aplicar"></button>
+    <button class="btn btn-cinza" id="btnEdColarFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <dialog id="dlgTexto" class="ui-modal">
