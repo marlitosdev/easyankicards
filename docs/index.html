@@ -107,6 +107,11 @@ textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius
 .card.ignorado .ig-acoes .btn{padding:4px 10px;font-size:11.5px}
 /* linha técnica do rodapé: diagnóstico e registro. Discreta de propósito —
    servem para relatar problema, não fazem parte do uso normal. */
+/* Sem style embutido: "display:flex" inline VENCE a regra [hidden]{display:none}
+   do navegador, e o elemento ficava escondido no papel e visível na tela —
+   foi por isso que os botões de exportar sobreviveram a duas correções. */
+.rodape-exportar{display:flex;gap:8px;justify-content:center}
+.rodape-exportar[hidden]{display:none}
 .rodape-tec{display:flex;gap:14px;justify-content:center;margin-top:6px}
 .link-tec{background:none;border:0;padding:2px 4px;cursor:pointer;
   font-size:11px;color:var(--sutil);opacity:.65;text-decoration:underline}
@@ -720,6 +725,30 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .di-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
+.dp-item{display:flex;gap:9px;align-items:flex-start;padding:9px 2px;font-size:12.5px;
+  line-height:1.5;border-bottom:1px solid var(--borda)}
+.dp-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:2px 7px;border-radius:7px;white-space:nowrap;flex-shrink:0;margin-top:1px;
+  background:rgba(245,158,11,.2);color:#e8940a}
+.dp-item.grave .dp-selo{background:rgba(220,38,38,.2);color:#fca5a5}
+:root[data-theme="light"] .dp-item.grave .dp-selo{color:#b91c1c}
+.ed-reg{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0}
+.ed-reg:hover{border-color:#22c55e;color:#22c55e}
+.ed-reg.ok{background:rgba(34,197,94,.2);border-color:transparent;color:#22c55e}
+.ed-reg.rev{background:#15803d;border-color:transparent;color:#fff}
+.reg-topico{padding:9px 11px;border-radius:9px;background:var(--campo);
+  border:1px solid var(--borda);margin:6px 0 10px}
+.reg-topico .nota{margin:3px 0 0}
+.reg-lin{display:flex;align-items:center;gap:9px;font-size:12.5px;margin:0 0 10px}
+.reg-lin input{width:90px;padding:7px 9px;border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font-size:13px}
+.reg-lin-col{font-size:12.5px}
+.reg-formas{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.reg-forma{all:unset;cursor:pointer;padding:6px 11px;border-radius:8px;font-size:11.5px;
+  font-weight:600;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
+.reg-forma.ativa{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
 .ed-sim{margin:0 0 9px}
 .ed-sim input[type=range]{width:100%;margin:0 0 5px}
 .ed-sim-txt{font-size:11.5px;color:var(--sutil);line-height:1.45}
@@ -999,7 +1028,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     </div>
 
     <div class="grupo">
-      <div class="bancada-cab"><h2 class="bancada-nome" data-i18n="ed_prioridade"></h2></div>
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_prioridade"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
+        </span>
+      </div>
       <div class="ed-cfg">
         <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
         <label><span data-i18n="ed_horas"></span>
@@ -1028,10 +1062,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
         </table>
       </div>
       </div>
-      <div class="btn-linha">
-        <button class="btn btn-roxo" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
-        <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
-      </div>
+      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
     </div>
   </div>
 </section>
@@ -1117,7 +1148,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 
 <div class="rodape">
   <div style="width:100%;max-width:600px">
-    <div style="display:flex;gap:8px;justify-content:center" id="rodapeExportar">
+    <div class="rodape-exportar" id="rodapeExportar">
       <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
       <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
     </div>
@@ -1269,6 +1300,29 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
     <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgDiagPlano" class="ui-modal">
+  <h3 data-i18n="ed_diag_btn"></h3>
+  <p class="nota" data-i18n="ed_dp_ajuda"></p>
+  <div class="ed-diario-res" id="dpResumo"></div>
+  <div id="dpLista" style="max-height:46vh;overflow:auto;margin:8px 0"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-roxo" id="btnDpPrompt" data-i18n="ed_dp_prompt"></button>
+    <button class="btn btn-cinza" id="btnDpFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgRegistro" class="ui-modal">
+  <h3 data-i18n="ed_reg_tit"></h3>
+  <div class="reg-topico"><b id="regTitulo"></b><div class="nota" id="regSub"></div></div>
+  <label class="reg-lin"><span data-i18n="ed_reg_min"></span>
+    <input type="number" id="regMinutos" min="1" max="600" step="5"></label>
+  <div class="reg-lin-col"><span data-i18n="ed_reg_forma"></span>
+    <div class="reg-formas" id="regFormas"></div></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
+    <button class="btn btn-azul" id="btnRegRevisao" data-i18n="ed_reg_revisao"></button>
+    <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <dialog id="dlgDiario" class="ui-modal">
