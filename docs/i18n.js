@@ -672,7 +672,22 @@ const UI = {
   "ed_nao_cabe": "Nas {s} semanas até a prova cabem {cabem} tópicos. {fora} ficam de fora — os de menor prioridade. Para cobrir tudo seriam necessárias cerca de {h}h por semana.",
   "ed_sem_n": "sem. {n}",
   "ed_fora": "fora",
-  "ed_crit_pesos_iguais": "As {n} disciplinas estão todas com peso {p} — a IA não diferenciou nenhuma. Como a prioridade é peso da disciplina × peso do tópico, a disciplina sai da conta e a ordem vira quase um empate. Ajuste as principais ou peça o prompt de novo."
+  "ed_crit_pesos_iguais": "As {n} disciplinas estão todas com peso {p} — a IA não diferenciou nenhuma. Como a prioridade é peso da disciplina × peso do tópico, a disciplina sai da conta e a ordem vira quase um empate. Ajuste as principais ou peça o prompt de novo.",
+  "diag_so_modo": "Mostrar só os eventos do modo em que estou (edital ou cartões)",
+  "log_empty_modo": "(nenhum evento deste modo ainda)",
+  "ed_vista_painel": "Painel",
+  "ed_vista_lista": "Lista completa",
+  "ed_esta_semana": "Esta semana",
+  "ed_topo_prog": "{f} de {t} tópicos · {p}%",
+  "ed_topo_semana": "esta semana: {n} tópicos · {h}",
+  "ed_sem_nome": "(concurso sem nome)",
+  "ed_card_conta": "{f} de {t} concluídos",
+  "ed_faixa_alta": "alta",
+  "ed_faixa_media": "média",
+  "ed_faixa_baixa": "baixa",
+  "ed_peso_n": "peso {n}",
+  "ed_abrir": "ver tópicos",
+  "ed_fechar": "esconder tópicos"
  },
  "en": {
   "app_title": "EasyAnkiCards",
@@ -1346,7 +1361,22 @@ const UI = {
   "ed_nao_cabe": "In the {s} weeks left, {cabem} topics fit. {fora} are left out — the lowest priority ones. Covering everything would take about {h}h per week.",
   "ed_sem_n": "wk {n}",
   "ed_fora": "left out",
-  "ed_crit_pesos_iguais": "All {n} subjects carry weight {p} — the AI didn't differentiate any. Since priority is subject weight × topic weight, the subject drops out of the maths and the ranking is nearly a tie. Adjust the main ones or run the prompt again."
+  "ed_crit_pesos_iguais": "All {n} subjects carry weight {p} — the AI didn't differentiate any. Since priority is subject weight × topic weight, the subject drops out of the maths and the ranking is nearly a tie. Adjust the main ones or run the prompt again.",
+  "diag_so_modo": "Show only the events of the mode I'm in (syllabus or cards)",
+  "log_empty_modo": "(no events from this mode yet)",
+  "ed_vista_painel": "Dashboard",
+  "ed_vista_lista": "Full list",
+  "ed_esta_semana": "This week",
+  "ed_topo_prog": "{f} of {t} topics · {p}%",
+  "ed_topo_semana": "this week: {n} topics · {h}",
+  "ed_sem_nome": "(unnamed exam)",
+  "ed_card_conta": "{f} of {t} done",
+  "ed_faixa_alta": "high",
+  "ed_faixa_media": "medium",
+  "ed_faixa_baixa": "low",
+  "ed_peso_n": "weight {n}",
+  "ed_abrir": "show topics",
+  "ed_fechar": "hide topics"
  }
 };
 const PARSER_MSG = {
