@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.45.0";
+const VERSAO = "8.66.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -142,15 +142,36 @@ try {
   if (Array.isArray(g)) registro = g.slice(-REG_MAX);
 } catch (e) {}
 
+/* Eventos raros valem mais que rotina: seis "[INICIO]" seguidos nao podem
+ * empurrar para fora um "[ERRO]" de tres dias atras. Estes ficam. */
+const REG_FIXOS = ["ERRO", "BLOQUEIO", "APAGAR", "RESTAURAR", "TEXTO"];
+
+/* Com o PWA e o navegador abertos ao mesmo tempo, os eventos das duas
+ * execucoes se intercalam no mesmo registro. Quatro caracteres bastam
+ * para separar uma da outra na hora de ler. */
+const SESSAO = Math.random().toString(36).slice(2, 6);
+
+function podarRegistro() {
+  if (registro.length <= REG_MAX) return;
+  const fixos = registro.filter((r) => REG_FIXOS.includes(r.tipo));
+  const comuns = registro.filter((r) => !REG_FIXOS.includes(r.tipo));
+  const sobra = Math.max(0, REG_MAX - fixos.length);
+  const mantidos = new Set(comuns.slice(-sobra));
+  registro = registro.filter((r) => REG_FIXOS.includes(r.tipo) || mantidos.has(r));
+  /* se ate' os fixos estourarem, ai' sim o mais antigo sai */
+  if (registro.length > REG_MAX) registro = registro.slice(-REG_MAX);
+}
+
 function reg(tipo, msg, extra) {
   const agora = new Date();
   registro.push({
     h: agora.toISOString().slice(11, 19),
     d: agora.toISOString().slice(0, 10),
+    s: SESSAO,
     tipo, msg: String(msg).slice(0, 300),
     extra: extra === undefined ? undefined : extra,
   });
-  if (registro.length > REG_MAX) registro = registro.slice(-REG_MAX);
+  podarRegistro();
   try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
 }
 
@@ -168,9 +189,20 @@ window.addEventListener("unhandledrejection", (e) => {
 // pelo meio da história
 reg("INICIO", "aplicativo aberto", "v" + VERSAO);
 
-function registroTexto() {
-  if (!registro.length) return t("log_empty");
-  return registro.map((r) => r.d + " " + r.h + "  [" + r.tipo + "] " + r.msg
+/* O registro é UM só, com os eventos de cada modo marcados por prefixo. Ter
+ * dois registros separados criaria a pergunta "em qual deles está?" — e a
+ * resposta certa costuma ser "nos dois, e a ordem entre eles importa". O que
+ * faltava era conseguir FILTRAR, que é o que este parâmetro faz. */
+const REG_POR_MODO = {
+  edital: /^EDITAL/,
+  cartoes: /^(CORRIGIR|LIMPAR|COLAR|APLICAR|EXCLUIR|RECORTAR|RECORTES|FOCO|EXPORTAR|REVISAO|PROMPT|BLOQUEIO)/,
+};
+function registroTexto(soDoModo) {
+  const re = soDoModo && REG_POR_MODO[soDoModo];
+  const lista = re ? registro.filter((r) => re.test(r.tipo)) : registro;
+  if (!lista.length) return t(re ? "log_empty_modo" : "log_empty");
+  return lista.map((r) => r.d + " " + r.h + " " + (r.s || "----")
+    + "  [" + r.tipo + "] " + r.msg
     + (r.extra ? "  " + r.extra : "")).join("\n");
 }
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
@@ -437,6 +469,17 @@ function medirCalha() {
 }
 window.addEventListener("resize", medirCalha);
 
+/* O rodapé é fixo e cobre o fim da página; o corpo reservava 84px chutados.
+ * Como o rodapé muda de altura conforme o modo (no edital os botões de
+ * exportar somem), o número certo só existe em tempo de execução. */
+function medirRodape() {
+  const r = document.querySelector(".rodape");
+  if (!r) return;
+  document.body.style.paddingBottom = (r.offsetHeight + 18) + "px";
+}
+window.addEventListener("resize", medirRodape);
+document.addEventListener("DOMContentLoaded", medirRodape);
+
 /* Ampliar a bancada: esconde a prévia e dá a largura toda ao editor.
  * Fica guardado, porque quem trabalha em texto longo trabalha assim a
  * sessão inteira e não quer reapertar o botão a cada abertura. */
@@ -648,6 +691,10 @@ function renderSugestoes(r, raw) {
   if (r.nPares)
     itens.push({ dot: "dot-blue", txt: t("sug_pairs", { n: r.nPares }),
                  linha: priLinha((c) => c.infos && c.infos.length) });
+  const presos = cartoesDependentes(r);
+  if (presos.length)
+    itens.push({ dot: "dot-org", txt: t("crit_dependente", { n: presos.length }),
+                 linha: presos[0].line });
   const vistos = {};
   let longos = 0, dups = 0;
   r.cards.forEach((c) => {
@@ -906,7 +953,20 @@ function salvarHistorico() {
   return false;
 }
 
+/* Toda operação deliberada (corrigir, apagar, restaurar, aplicar) guarda
+ * versão ANTES de mexer. A marca aqui deixa a vigia distinguir "o texto
+ * sumiu" de "o usuário mandou tirar": sem ela, a barra vermelha acusava
+ * acidente logo depois de a pessoa clicar em Corrigir, e alarme que toca
+ * à toa é alarme que se aprende a ignorar.
+ *
+ * É um sinal, não um cronômetro. A primeira versão usava uma janela de
+ * 1,5 segundo e teria engolido justamente o caso pior — colar por cima de
+ * tudo nos primeiros instantes depois de abrir o app. O sinal vale para
+ * UMA gravação e se apaga sozinho. */
+let appMexendo = false;
+
 function guardarVersao(motivo, texto) {
+  if (motivo !== "ao abrir") appMexendo = true;
   const txt = texto === undefined ? $("editor").value : texto;
   if (!txt || !txt.trim()) return;
   const ultimo = historico[historico.length - 1];
@@ -944,7 +1004,7 @@ function abrirHistorico() {
     sub.textContent = t("hist_linha", { n, c: v.txt.length }) + (v.m ? " · " + v.m : "");
     info.append(forte, sub);
     const b = botaoMini("hist_restaurar", "btn-azul", () => {
-      $("dlgHistorico").close(); restaurarVersao(i);
+      $("dlgHistorico").close(); restaurarVersao(i);   /* confirma dentro */
     });
     div.append(info, b);
     lista.append(div);
@@ -964,6 +1024,7 @@ function atualizarBotaoHistorico() {
  * continua possível, mas deixa de ser irreversível. */
 const ENCOLHEU_MIN = 1500;    /* só vale a pena para texto de trabalho */
 function vigiarEncolhimento(antes, depois) {
+  if (appMexendo) { appMexendo = false; return; }   /* foi o app, a pedido */
   if (antes.length < ENCOLHEU_MIN) return;
   if (depois.length >= antes.length * 0.5) return;
   guardarVersao("antes de encolher", antes);
@@ -979,14 +1040,34 @@ function mostrarBarraRecuperar(de, para) {
   bar.hidden = false;
 }
 
+/* Dispensar não confirma: confirmar um "não faça nada" ensina a clicar em
+ * qualquer caixa sem ler. Em vez disso, o app avisa ONDE a cópia ficou —
+ * que é a informação de que a pessoa vai precisar depois. */
+function dispensarRecuperar() {
+  esconderBarraRecuperar();
+  uiAlert(t("hist_dispensado"));
+  reg("TEXTO", "aviso de encolhimento dispensado pelo usuário");
+}
+
 function esconderBarraRecuperar() {
   const bar = $("barraRecuperar");
   if (bar) bar.hidden = true;
 }
 
-function restaurarVersao(i) {
+/* Restaurar SUBSTITUI o que está no editor. É destrutivo, então o app diz
+ * exatamente o que vai acontecer, com os dois tamanhos na frente, antes de
+ * fazer. E diz também que dá para desfazer — porque a versão atual é
+ * guardada no mesmo movimento, e saber disso muda a decisão. */
+async function restaurarVersao(i, confirmar) {
   const v = historico[i];
   if (!v) return;
+  if (confirmar !== false) {
+    const atual = $("editor").value.length;
+    const ok = await uiConfirm(t("hist_confirma", {
+      atual, novo: v.txt.length, quando: new Date(v.t).toLocaleString(),
+    }));
+    if (!ok) return;
+  }
   guardarVersao("antes de restaurar");     /* o desfazer também é desfeito */
   $("editor").value = v.txt;
   textoAnterior = v.txt;
@@ -2626,6 +2707,10 @@ async function exportarApkg() {
                                   tituloCartao(), $("selAlinha").value);
     await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
     $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
+    /* Sem este evento eu nao conseguia responder a pergunta que mais
+     * importava quando o texto sumiu: existia uma copia fora do app? */
+    reg("EXPORTAR", nomeArquivo() + ".apkg",
+        r.cards.length + " cartões, estilo " + $("selEstilo").value);
     toast("toast_exported");
     const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
     uiAlert(t("apkg_done_msg", { dest: partes.join("  >  ") }));
@@ -3022,6 +3107,9 @@ async function colarMaisTexto() {
   // 1ª linha do trecho novo (para rolar até lá e brilhar)
   linhaNovaColada = tinha ? tinha.split("\n").length + 2 : 1;
   $("btnDesfazerColagem").disabled = false;
+  reg("COLAR-EDITOR", "texto colado no editor",
+      (colagemAnterior ? colagemAnterior.texto.length : 0) + " -> "
+      + $("editor").value.length + " caracteres");
   preview();
   irParaLinha(linhaNovaColada);
   ed.setSelectionRange(  // posiciona o cursor no início do novo texto
@@ -3122,15 +3210,49 @@ function montarGen() {
   mostrarTamanho("genTam", $("genTexto").value);
   $("genDone").textContent = "";
 }
-function abrirGerar(texto) {
+/* A origem viaja junto: quando o prompt nasce de um tópico do edital, os
+ * cartões que voltarem sabem a que assunto pertencem — e é isso que permite
+ * arquivá-los no material sem o usuário reinformar disciplina e concurso. */
+let genOrigem = null;
+
+function abrirGerar(texto, origem) {
   genTextoBase = texto || "";
+  genOrigem = origem || null;
   genTipo = "prompt_full";
   montarGen();
+  const b = $("btnGenMaterial");
+  if (b) {
+    b.hidden = !genOrigem;
+    b.textContent = genOrigem
+      ? t("gen_guardar_material", { t: genOrigem.topico }) : "";
+  }
   $("dlgGerar").showModal();
+}
+
+/* Guarda o que estiver na caixa como CARTÕES do tópico. O texto colado aqui
+ * é a resposta da IA, não o prompt — por isso o app confere antes: sem "::"
+ * em nenhuma linha, não são cartões. */
+function guardarCartoesNoMaterial() {
+  if (!genOrigem) return;
+  const txt = $("genTexto").value;
+  const linhas = (txt.match(/^[^\n#@+].*::/gm) || []).length;
+  if (!linhas) { uiAlert(t("gen_material_sem_cartoes")); return; }
+  const ch = matChave(genOrigem.disciplina, genOrigem.topico);
+  matGravarCartoes(ch, txt, genOrigem);
+  reg("MATERIAL", "cartões guardados: " + genOrigem.topico, linhas + " cartões");
+  uiAlert(t("gen_material_ok", { n: linhas, t: genOrigem.topico }));
+  if (typeof matRender === "function") matRender();
 }
 $("btnGenFull").onclick = () => { genTipo = "prompt_full"; montarGen(); };
 $("btnGenShort").onclick = () => { genTipo = "prompt_mini"; montarGen(); };
-$("btnGenFechar").onclick = () => $("dlgGerar").close();
+/* Terminada a importacao, o proximo passo e' colar os cartoes — que
+ * acontece na bancada. Voltar sozinho evita o usuario fechar a janela e
+ * ficar olhando para a tela de ferramentas sem entender para onde ir. */
+$("btnGenMaterial").onclick = guardarCartoesNoMaterial;
+$("btnGenFechar").onclick = () => {
+  $("dlgGerar").close();
+  if (typeof modoAtual !== "undefined" && modoAtual === "ferramentas") trocarModo("cartoes");
+};
 $("btnGenCopiar").onclick = async () => {
   try { await navigator.clipboard.writeText($("genTexto").value);
     $("genDone").textContent = t("gen_copied"); toast("toast_import_gen"); }
@@ -3346,6 +3468,7 @@ function aplicarDestaque(ligado) {
 $("chkDestaque").checked = localStorage.getItem("eac_destaque") !== "0";
 $("btnAmpliar").onclick = () => aplicarAmpliar(!bancadaAmpla);
 aplicarAmpliar(localStorage.getItem("eac_ampliar") === "1");
+attachTip($("btnAmpliar"), "tip_ampliar");
 aplicarDestaque($("chkDestaque").checked);
 $("chkDestaque").onchange = () => aplicarDestaque($("chkDestaque").checked);
 attachTip($("chkDestaque"), "tip_highlight");
@@ -3590,6 +3713,16 @@ $("btnPromptMini").onclick = () => copiarPrompt($("btnPromptMini"), "prompt_mini
 /* ------------------------------ start ------------------------------ */
 
 // recupera o último texto (auto-save); se não houver, usa o exemplo
+/* Pede ao navegador para NÃO descartar os dados sob pressão de disco. É a
+ * causa mais silenciosa de perda, e a única que se resolve com uma linha.
+ * Não protege de limpeza manual — mas tira essa da mesa. */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then((ja) => {
+    if (ja) return;
+    return navigator.storage.persist().then((ok) =>
+      reg("ARMAZEN", "permanência " + (ok ? "concedida" : "negada pelo navegador")));
+  }).catch(() => {});
+}
 carregarHistorico();
 const textoSalvo = localStorage.getItem("eac_texto");
 $("editor").value = (textoSalvo !== null && textoSalvo.trim()) ? textoSalvo : t("example");
@@ -3599,7 +3732,7 @@ textoAnterior = $("editor").value;
 guardarVersao("ao abrir");
 $("btnHistorico").onclick = abrirHistorico;
 $("btnRecuperar").onclick = () => restaurarVersao(historico.length - 1);
-$("btnRecuperarNao").onclick = esconderBarraRecuperar;
+$("btnRecuperarNao").onclick = dispensarRecuperar;
 $("dlgHistFechar").onclick = () => $("dlgHistorico").close();
 atualizarBotaoHistorico();
 aplicarTextos();
@@ -4013,83 +4146,267 @@ $("btnFixPromptFechar").onclick = () => $("dlgFixPrompt").close();
  * =================================================================== */
 const DIAG_MAX = 30000;   // texto muito grande vai cortado, com aviso
 
+/* O diagnóstico olhava sempre a bancada de CARTÕES. Com o modo edital no
+ * ar, isso virou mentira: quem relatava um problema do edital recebia de
+ * volta o texto dos cartões e não tinha como perceber a troca. O foco
+ * segue o modo. */
 function textoEmFoco() {
-  return $("dlgColarRev") && $("dlgColarRev").open
-    ? { onde: "painel de colagem", txt: $("colarRevTexto").value }
-    : { onde: "editor", txt: $("editor").value };
+  if ($("dlgColarRev") && $("dlgColarRev").open)
+    return { onde: "painel de colagem", txt: $("colarRevTexto").value };
+  if (typeof modoAtual !== "undefined" && modoAtual === "edital")
+    return { onde: "bancada do edital", txt: $("editalTexto").value, edital: true };
+  return { onde: "bancada de cartões", txt: $("editor").value };
+}
+
+/* Bloco próprio do edital: as contagens que respondem "veio completo?" —
+ * quantas disciplinas, quantos tópicos, quantos pesos foram chutados e
+ * quais linhas o app não entendeu. Sem isso, a única forma de saber era
+ * contar à mão. */
+function diagEdital(L) {
+  const raw = ($("editalTexto") || {}).value || "";
+  if (!raw.trim()) { L.push("Edital: vazio"); return; }
+  const r = lerEdital(raw);
+  const tops = r.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  const semPeso = r.disciplinas.reduce(
+    (s, d) => s + d.topicos.filter((t) => t.herdado).length, 0);
+  const ign = r.achados.filter((x) => x.tipo === "linha_ignorada");
+  L.push("Edital: " + r.disciplinas.length + " disciplinas, " + tops + " tópicos, "
+    + semPeso + " sem peso, " + ign.length + " linhas ignoradas, "
+    + r.linhas + " linhas no total");
+  L.push("  concurso: " + (r.cfg.concurso || "(sem nome)")
+    + " | prova: " + (r.cfg.prova || "(sem data)")
+    + " | horas/semana: " + r.cfg.horas
+    + " | concluídos: " + Object.keys(edProgresso || {}).length);
+  /* quantos tópicos por disciplina: é onde se vê o edital cortado no meio */
+  r.disciplinas.slice(0, 12).forEach((d) =>
+    L.push("  @ " + d.nome + " (peso " + d.peso + "): " + d.topicos.length + " tópicos"));
+  if (r.disciplinas.length > 12)
+    L.push("  ... e mais " + (r.disciplinas.length - 12) + " disciplinas");
+  ign.slice(0, 5).forEach((x) => L.push("  ignorada L" + x.linha + ": " + x.txt));
+  L.push("  detectores do edital: " + (edDetectores(raw).join(", ") || "nenhum"));
+}
+
+/* O dado que mais faltava no diagnostico, justamente no problema mais
+ * grave que apareceu: quanto espaco esta em uso, se o navegador prometeu
+ * NAO apagar, e quantas versoes do texto existem para recuperar. */
+let estadoArmazen = "(não consultado)";
+async function medirArmazenamento() {
+  const p = [];
+  try {
+    const persistido = navigator.storage && navigator.storage.persisted
+      ? await navigator.storage.persisted() : null;
+    p.push("permanente: " + (persistido === null ? "não sei" : (persistido ? "sim" : "NÃO")));
+  } catch (e) { p.push("permanente: erro"); }
+  try {
+    const e = navigator.storage && navigator.storage.estimate
+      ? await navigator.storage.estimate() : null;
+    if (e) p.push("uso: " + Math.round((e.usage || 0) / 1024) + " KB de "
+      + Math.round((e.quota || 0) / 1048576) + " MB");
+  } catch (e) { p.push("uso: erro"); }
+  try {
+    let n = 0;
+    for (let i = 0; i < localStorage.length; i++)
+      n += (localStorage.getItem(localStorage.key(i)) || "").length;
+    p.push("localStorage: " + Math.round(n / 1024) + " KB em " + localStorage.length + " chaves");
+  } catch (e) { p.push("localStorage: sem acesso"); }
+  p.push("histórico: " + (typeof historico !== "undefined" ? historico.length : "?") + " versões");
+  estadoArmazen = p.join(" | ");
+  return estadoArmazen;
+}
+
+/* Cada bloco entra dentro de um "tentar": se um deles explodir — e ele roda
+ * exatamente quando as coisas estao quebradas — o relatorio sai com o buraco
+ * anotado, em vez de nao sair. Antes, uma excecao aqui deixava o usuario sem
+ * nada justamente no momento em que o diagnostico era a unica coisa que
+ * restava. */
+function bloco(L, fn) {
+  try { fn(); } catch (e) { L.push("  [falhou ao montar: " + (e && e.message) + "]"); }
 }
 
 function montarDiagnostico() {
-  const foco = textoEmFoco();
-  const raw = foco.txt || "";
-  const r = resumoTexto(raw);
-  const nav = navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg|SamsungBrowser)\/[\d.]+/);
-  const pwa = matchMedia("(display-mode: standalone)").matches ? "PWA instalado" : "navegador";
   const L = [];
-  L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
-    + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa);
-  L.push("Onde: " + foco.onde);
-  if (ultimoAjuste) {
-    const f = (s) => s.cartoes + " cartões, " + s.avisos + " avisos, "
-      + s.suspeitos + " a verificar, " + s.saibaMais + " linhas de Saiba mais";
-    L.push("Última correção: " + ultimoAjuste.acao);
-    L.push("  antes:  " + f(ultimoAjuste.antes));
-    L.push("  depois: " + f(ultimoAjuste.depois)
-      + (ultimoAjuste.bloqueado ? "  [BLOQUEADA: perderia " + ultimoAjuste.bloqueado + "]" : ""));
-  } else L.push("Última correção: nenhuma nesta sessão");
-  L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
-    + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
-    + " títulos, " + r.tags + " tags");
-  const det = detectoresAtivos(raw);
-  L.push("Detectores acesos: " + (det.length ? det.join(", ") : "nenhum"));
-  const p = parseText(raw, []);
-  (p.warnings || []).slice(0, 6).forEach((w, i) =>
-    L.push("  aviso L" + (p.warnLines || [])[i] + ": " + w));
-  p.cards.filter((c) => c.issues.length).slice(0, 6).forEach((c) =>
-    L.push("  cartão L" + c.line + ": " + c.issues[0]));
+  let raw = "", r = null;
+  bloco(L, () => {
+    const foco = textoEmFoco();
+    raw = foco.txt || "";
+    const nav = navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg|SamsungBrowser)\/[\d.]+/);
+    const pwa = matchMedia("(display-mode: standalone)").matches ? "PWA instalado" : "navegador";
+    L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
+      + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa
+      + " | sessão " + SESSAO);
+    L.push("Onde: " + foco.onde);
+  });
+  L.push("Armazenamento: " + estadoArmazen);
+  bloco(L, () => {
+    if (ultimoAjuste) {
+      const f = (s) => s.cartoes + " cartões, " + s.avisos + " avisos, "
+        + s.suspeitos + " a verificar, " + s.saibaMais + " linhas de Saiba mais";
+      L.push("Última correção: " + ultimoAjuste.acao);
+      L.push("  antes:  " + f(ultimoAjuste.antes));
+      L.push("  depois: " + f(ultimoAjuste.depois)
+        + (ultimoAjuste.bloqueado ? "  [BLOQUEADA: perderia " + ultimoAjuste.bloqueado + "]" : ""));
+    } else L.push("Última correção: nenhuma nesta sessão");
+  });
+  bloco(L, () => {
+    L.push("Modo: " + (typeof modoAtual !== "undefined" ? modoAtual : "?"));
+    diagEdital(L);
+  });
+  bloco(L, () => {
+    if (textoEmFoco().edital) return;   /* já contado acima */
+    r = resumoTexto(raw);
+    L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
+      + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
+      + " títulos, " + r.tags + " tags");
+  });
+  bloco(L, () => {
+    if (textoEmFoco().edital) return;
+    const det = detectoresAtivos(raw);
+    L.push("Detectores acesos: " + (det.length ? det.join(", ") : "nenhum"));
+  });
+  bloco(L, () => {
+    if (textoEmFoco().edital) return;
+    const p = parseText(raw, []);
+    (p.warnings || []).slice(0, 6).forEach((w, i) =>
+      L.push("  aviso L" + (p.warnLines || [])[i] + ": " + w));
+    p.cards.filter((c) => c.issues.length).slice(0, 6).forEach((c) =>
+      L.push("  cartão L" + c.line + ": " + c.issues[0]));
+    const presos = cartoesDependentes(p);
+    if (presos.length) L.push("  presos à prova de origem: " + presos.length
+      + " (primeiro na L" + presos[0].line + ")");
+  });
   L.push("");
-  L.push("--- REGISTRO (" + registro.length + " eventos) ---");
-  L.push(registroTexto());
+  const soModo = $("chkDiagModo") && $("chkDiagModo").checked
+    ? (typeof modoAtual !== "undefined" ? modoAtual : null) : null;
+  L.push("--- REGISTRO (" + registro.length + " eventos"
+    + (soModo ? ", filtrado: só " + soModo : "") + ") ---");
+  bloco(L, () => L.push(registroTexto(soModo)));
   L.push("");
-  L.push("--- TEXTO (" + r.linhas + " linhas, " + r.chars + " caracteres) ---");
-  L.push(raw.length > DIAG_MAX
-    ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
-    : raw);
+  bloco(L, () => {
+    L.push("--- TEXTO (" + raw.split(/\r?\n/).length + " linhas, " + raw.length + " caracteres) ---");
+    L.push(raw.length > DIAG_MAX
+      ? raw.slice(0, DIAG_MAX) + "\n[...cortado, " + (raw.length - DIAG_MAX) + " caracteres a mais]"
+      : raw);
+  });
   return L.join("\n");
 }
 
-$("btnDiagnostico").onclick = async () => {
-  const txt = montarDiagnostico();
-  try {
-    await navigator.clipboard.writeText(txt);
-    toast("toast_diag_copied");
-  } catch (e) {
-    // sem permissão de área de transferência: mostra para copiar à mão
-    $("fixPromptTexto").value = txt;
-    mostrarTamanho("fixPromptTam", txt);
-    $("fixPromptDone").textContent = "";
-    $("dlgFixPrompt").showModal();
+
+/* ------------------------------------------------------------------
+ * DIAGNÓSTICO — um botão só
+ *
+ * Eram dois links no rodapé ("Diagnóstico" e "Registro") que copiavam
+ * cegamente para a área de transferência. Quem clicava não via o que
+ * levava, e a diferença entre os dois não estava escrita em lugar nenhum.
+ * Agora é um painel: explica cada bloco, MOSTRA o relatório antes de sair
+ * da tela, e daí você copia ou baixa.
+ * ------------------------------------------------------------------ */
+let diagTexto = "";
+
+function pintarDiagnostico(txt) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return esc(txt).split("\n").map((l) => {
+    if (/^---.*---$/.test(l.trim())) return '<span class="d-sec">' + l + "</span>";
+    if (/\[(ERRO|BLOQUEIO|APAGAR)\]|\[falhou ao montar/.test(l))
+      return '<span class="d-err">' + l + "</span>";
+    if (/^(EasyAnkiCards |Onde:|Armazenamento:|Agora:|Detectores|Última correção)/.test(l))
+      return '<span class="d-cab">' + l + "</span>";
+    return l;
+  }).join("\n");
+}
+
+/* Feedback no próprio botão: o toast some rápido e, num diálogo cheio de
+ * texto, passa despercebido. O rótulo confirma onde a mão estava. */
+function confirmarBotao(id, chave) {
+  const b = $(id);
+  const antes = b.textContent;
+  b.textContent = "✓ " + t(chave);
+  b.disabled = true;
+  setTimeout(() => { b.textContent = antes; b.disabled = false; }, 1800);
+}
+
+function montarPainelDiag() {
+  const comTexto = $("chkDiagTexto").checked;
+  let txt = montarDiagnostico();
+  if (!comTexto) {
+    const corte = txt.indexOf("\n--- TEXTO");
+    if (corte > 0) txt = txt.slice(0, corte) + "\n--- TEXTO (não incluído a pedido) ---";
   }
+  diagTexto = txt;
+  $("diagPre").innerHTML = pintarDiagnostico(txt);
+
+  /* Diz, em cima e por extenso, DE QUAL bancada é este relatório. */
+  const foco = textoEmFoco();
+  const alvo = $("diagAlvo");
+  alvo.innerHTML = "";
+  const rot = document.createElement("span");
+  rot.textContent = t("diag_alvo_rot");
+  const nome = document.createElement("b");
+  nome.textContent = foco.onde;
+  const conta = document.createElement("span");
+  conta.className = "da-conta";
+  conta.textContent = t("diag_alvo_conta", {
+    l: (foco.txt || "").split(/\r?\n/).length,
+    c: (foco.txt || "").length,
+    e: registro.length,
+  });
+  alvo.append(rot, nome, conta);
+}
+
+async function abrirDiagnostico() {
+  await medirArmazenamento();
+  /* No edital, o filtro por modo já vem ligado: quem está relatando um
+   * problema do plano não quer ler 180 eventos dos cartões para achar os
+   * seus três. Quem quiser tudo desmarca. */
+  if (typeof modoAtual !== "undefined" && modoAtual !== "cartoes")
+    $("chkDiagModo").checked = true;
+  montarPainelDiag();
+  reg("DIAGNOSTICO", "painel aberto",
+      registro.length + " eventos, foco: " + textoEmFoco().onde);
+  $("dlgDiagnostico").showModal();
+}
+
+$("btnDiagnostico").onclick = abrirDiagnostico;
+$("chkDiagTexto").onchange = montarPainelDiag;
+$("chkDiagModo").onchange = montarPainelDiag;
+$("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
+$("btnDiagCopiar").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(diagTexto);
+    confirmarBotao("btnDiagCopiar", "diag_copiado");
+    toast(textoEmFoco().edital ? "toast_diag_copied_ed" : "toast_diag_copied_cd");
+  } catch (e) { uiAlert(t("toast_copy_fail")); }
 };
+$("btnDiagBaixar").onclick = () => {
+  /* nome com data e hora: dois relatórios do mesmo dia não se sobrescrevem */
+  const d = new Date();
+  const car = (n) => String(n).padStart(2, "0");
+  const nome = "easyankicards-diagnostico-" + d.getFullYear() + car(d.getMonth() + 1)
+    + car(d.getDate()) + "-" + car(d.getHours()) + car(d.getMinutes()) + ".txt";
+  const url = URL.createObjectURL(new Blob([diagTexto], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  reg("DIAGNOSTICO", "baixado", nome + " (" + textoEmFoco().onde + ")");
+  confirmarBotao("btnDiagBaixar", "diag_baixado");
+  toast("toast_diag_saved");
+};
+
+/* Janela genérica de texto: título + caixa somente-leitura + copiar. Serve
+ * a qualquer prompt novo sem precisar de um diálogo próprio para cada um. */
+function abrirTextoSimples(titulo, texto) {
+  $("dlgTextoTit").textContent = titulo;
+  $("dlgTextoCorpo").value = texto;
+  $("dlgTexto").showModal();
+  $("dlgTextoCorpo").select();
+}
+$("btnDlgTextoFechar").onclick = () => $("dlgTexto").close();
+$("btnDlgTextoCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("dlgTextoCorpo").value); toast("toast_copied"); }
+  catch (e) { uiAlert(t("toast_copy_fail")); }
+};
+
 attachTip($("btnDiagnostico"), "tip_diag");
-
-
-/* Janela do registro: reaproveita a caixa do prompt (mesmo formato de
- * texto longo + copiar), sem inventar mais uma tela. */
-$("btnRegistro").onclick = async () => {
-  const txt = registroTexto();
-  try {
-    await navigator.clipboard.writeText(txt);
-    toast("toast_log_copied");
-  } catch (e) {
-    $("fixPromptTexto").value = txt;
-    mostrarTamanho("fixPromptTam", txt);
-    limparConferencia();
-    $("fixPromptDone").textContent = "";
-    $("dlgFixPrompt").showModal();
-  }
-};
-attachTip($("btnRegistro"), "tip_log");
 
 
 /* Mantém a PRIMEIRA de cada grupo e manda as demais para a gaveta.

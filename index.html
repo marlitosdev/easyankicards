@@ -107,6 +107,11 @@ textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius
 .card.ignorado .ig-acoes .btn{padding:4px 10px;font-size:11.5px}
 /* linha técnica do rodapé: diagnóstico e registro. Discreta de propósito —
    servem para relatar problema, não fazem parte do uso normal. */
+/* Sem style embutido: "display:flex" inline VENCE a regra [hidden]{display:none}
+   do navegador, e o elemento ficava escondido no papel e visível na tela —
+   foi por isso que os botões de exportar sobreviveram a duas correções. */
+.rodape-exportar{display:flex;gap:8px;justify-content:center}
+.rodape-exportar[hidden]{display:none}
 .rodape-tec{display:flex;gap:14px;justify-content:center;margin-top:6px}
 .link-tec{background:none;border:0;padding:2px 4px;cursor:pointer;
   font-size:11px;color:var(--sutil);opacity:.65;text-decoration:underline}
@@ -251,7 +256,16 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   background:none;cursor:pointer;font-size:11px;font-weight:700;
   color:var(--azul);text-decoration:underline;letter-spacing:.2px}
 .ver-tudo:hover{opacity:.75}
-.btn-min{padding:4px 9px;font-size:11px}
+/* .btn-min só dizia tamanho. Sem cor declarada, o botão caía no estilo
+   padrão do navegador — fundo claro do sistema — e o texto herdava o claro
+   do tema escuro: claro sobre claro, ilegível. Cor explícita, sempre. */
+.btn-min{padding:5px 10px;font-size:11px;font-weight:600;border-radius:8px;
+  cursor:pointer;background:var(--campo);color:var(--texto);
+  border:1px solid var(--borda);line-height:1.3}
+.btn-min:hover:not(:disabled){border-color:var(--sutil);background:var(--panel)}
+.btn-min:disabled{opacity:.45;cursor:default}
+.btn-min.btn-azul{background:var(--azul,#2563eb);border-color:transparent;color:#fff}
+.btn-min.btn-cinza{background:var(--campo);color:var(--texto)}
 /* ---- painel de foco ---- */
 .foco{position:fixed;z-index:60;width:380px;max-width:calc(100vw - 24px);
   background:var(--panel);border:2px solid var(--azul);border-radius:12px;
@@ -522,10 +536,398 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde)}
 .quem-ia{background:rgba(139,92,246,.18);color:#a78bfa}
 :root[data-theme="light"] .quem-ia{color:#6d28d9}
-.barra-recuperar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
-  margin:0 0 10px;padding:9px 11px;border-radius:9px;font-size:12px;
-  background:rgba(220,38,38,.14);border:1px solid rgba(220,38,38,.45)}
-.barra-recuperar .br-acoes{margin-left:auto;display:flex;gap:6px}
+.mat-barra{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin:0 0 6px}
+.fmt{all:unset;cursor:pointer;width:28px;height:26px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.fmt:hover{border-color:var(--sutil)}
+.fmt-sep{width:1px;height:18px;background:var(--borda);margin:0 3px}
+.fmt-colar{width:auto;padding:0 10px;font-size:11px;font-weight:700}
+.mat-num{margin:0 0 7px;padding-left:4px}
+.fmt-dica{font-size:10.5px;color:var(--sutil);margin-left:auto}
+.mat-ctrl{display:flex;align-items:center;gap:7px;font-size:11.5px;
+  color:var(--sutil);margin:0 0 8px}
+.mat-fonte{min-width:34px;text-align:center;font-weight:700;color:var(--texto)}
+.mat-leitura{border:1px solid var(--borda);border-radius:9px;padding:16px 18px;
+  background:var(--campo);color:var(--texto);line-height:1.65;max-height:52vh;
+  overflow:auto}
+.mat-leitura h3{font-size:1.25em;margin:0 0 10px}
+.mat-leitura h4{font-size:1.1em;margin:16px 0 7px;color:var(--sutil)}
+.mat-leitura p{margin:0 0 11px}
+.mat-leitura ul{margin:0 0 11px;padding-left:20px}
+.mat-leitura li{margin:0 0 5px}
+.mat-leitura hr{border:0;border-top:1px solid var(--borda);margin:14px 0}
+.mat-leitura mark{background:rgba(245,158,11,.3);color:inherit;border-radius:3px;padding:0 2px}
+dialog.mat-amplo{max-width:96vw;width:96vw}
+dialog.mat-amplo .mat-leitura{max-height:74vh}
+.ed-doc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px;
+  border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
+.ed-doc:hover{opacity:1;border-color:var(--borda)}
+.ed-doc.tem{opacity:1;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
+.mat-busca{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);
+  font-size:13px;margin-top:8px}
+.mat-grupo{margin:0 0 6px}
+.mat-cc{font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;
+  color:#a78bfa;padding:10px 0 4px;border-bottom:1px solid var(--borda)}
+:root[data-theme="light"] .mat-cc{color:#6d28d9}
+.mat-disc{margin:0 0 2px}
+.mat-disc-cab{all:unset;cursor:pointer;display:block;padding:8px 0 5px;
+  font-size:12px;font-weight:700;color:var(--texto)}
+.mat-disc-cab:hover{color:var(--sutil)}
+.mat-disc .mat-item{padding-left:14px}
+.mat-caixa{border:1px solid var(--borda);border-radius:10px;padding:4px 11px;margin-top:8px}
+.mat-item{display:flex;align-items:center;gap:10px;padding:9px 0;
+  border-bottom:1px solid var(--borda)}
+.mat-item:last-child{border-bottom:0}
+.mat-item-txt{flex:1;min-width:0}
+.mat-nome{font-size:13px;font-weight:600;color:var(--texto);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat-sub{font-size:11px;color:var(--sutil);margin-top:2px}
+.mat-conta{font-size:11px;color:var(--sutil);font-weight:600}
+.selo-base{font-size:10.5px;padding:2px 8px;border-radius:8px;font-weight:700;
+  border:1px solid var(--borda);background:var(--campo);color:var(--sutil)}
+.sb-ok{border-color:rgba(34,197,94,.5);color:#22c55e}
+.sb-aviso{border-color:rgba(245,158,11,.5);color:#e8940a}
+.sb-alerta{border-color:rgba(220,38,38,.5);color:#fca5a5}
+:root[data-theme="light"] .sb-alerta{color:#b91c1c}
+.selo-ajuda{all:unset;cursor:help;width:15px;height:15px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
+.selo-ajuda:hover{color:var(--texto)}
+.bk-bloco{padding:9px 11px;border-radius:9px;background:var(--campo);
+  border:1px solid var(--borda);margin:0 0 8px}
+.bk-rot{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--sutil);font-weight:800;margin-bottom:3px}
+.bk-txt{font-size:12.5px;line-height:1.5;color:var(--texto)}
+.bk-passo{border-top:1px solid var(--borda);padding-top:11px;margin-top:11px}
+.bk-passo b{display:block;font-size:13px;margin-bottom:3px;color:var(--texto)}
+.bk-passo .nota{display:block;margin:0 0 8px}
+.bk-aviso{padding:9px 11px;border-radius:9px;font-size:12px;line-height:1.5;
+  margin:9px 0;border:1px solid var(--borda);color:var(--texto)}
+.bk-aviso.ok{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.45)}
+.bk-aviso.grave{background:rgba(220,38,38,.16);border-color:rgba(220,38,38,.5)}
+.bk-tab{margin-top:4px}
+.bk-tab .bk-num{text-align:right;font-weight:700;width:70px}
+.bk-tab .bk-dif{font-size:11px;color:var(--sutil);width:120px}
+.bk-tab tr.bk-perde td{color:#fca5a5}
+:root[data-theme="light"] .bk-tab tr.bk-perde td{color:#b91c1c}
+/* ---- painel de diagnóstico ----
+   Este bloco já sumiu uma vez: a reescrita do CSS dos modos (v8.59) cortou
+   um intervalo que o continha, e o painel ficou sem formatação sem ninguém
+   notar — classe usada no HTML sem regra correspondente não dá erro em
+   lugar nenhum. O teste F4 passou a exigir que ela exista. */
+.diag-modal{max-width:860px}
+.diag-alvo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 4px;
+  padding:8px 11px;border-radius:9px;font-size:12px;
+  background:var(--campo);border:1px solid var(--borda)}
+.diag-alvo b{font-size:13px}
+.diag-alvo .da-conta{margin-left:auto;color:var(--sutil);font-size:11.5px}
+.diag-legenda{font-size:11.5px;line-height:1.6;color:var(--sutil);
+  border:1px solid var(--borda);border-radius:9px;padding:9px 11px;margin:8px 0}
+.diag-legenda b{color:var(--texto);font-family:ui-monospace,Consolas,monospace}
+.diag-op{display:flex;align-items:center;gap:7px;font-size:12px;margin:8px 0}
+.diag-pre{max-height:46vh;overflow:auto;margin:0;padding:11px;border-radius:9px;
+  background:var(--campo);border:1px solid var(--borda);
+  font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.55;
+  white-space:pre-wrap;overflow-wrap:break-word;color:var(--texto)}
+.diag-pre .d-sec{color:#4eaed9;font-weight:700}
+.diag-pre .d-err{background:rgba(220,38,38,.18);border-radius:3px}
+.diag-pre .d-cab{color:var(--texto);font-weight:700}
+/* ---- barra de modos ----------------------------------------------
+   Trilho vertical no computador, fileira de abas no celular. Cada modo
+   tem a sua cor, aplicada só na borda esquerda e no ícone: colorir o
+   botão inteiro faria quatro blocos berrantes disputando atenção com o
+   conteúdo, que é o que importa na tela. */
+.barra-modos{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+.modo-btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;
+  align-items:center;gap:9px;padding:10px 12px;border-radius:10px;
+  background:var(--panel);color:var(--sutil);font-size:13px;font-weight:600;
+  white-space:nowrap;border:1px solid var(--borda);
+  border-left:3px solid var(--modo-cor,var(--borda));transition:.12s}
+.modo-btn:hover{color:var(--texto);background:var(--campo)}
+.modo-btn.ativo{color:var(--texto);background:var(--campo);
+  border-color:var(--modo-cor,var(--borda));border-left-width:3px;
+  box-shadow:inset 0 0 0 1px var(--modo-cor,transparent)}
+.modo-btn[data-modo="cartoes"]{--modo-cor:#22c55e}
+.modo-btn[data-modo="edital"]{--modo-cor:#3b82f6}
+.modo-btn[data-modo="resumos"]{--modo-cor:#f59e0b}
+.modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
+.modo-ic{font-size:16px;line-height:1;filter:grayscale(.35)}
+.modo-btn.ativo .modo-ic{filter:none}
+.modo-rot{flex:1}
+.modo-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:1px 5px;border-radius:7px;background:var(--campo);color:var(--sutil);
+  border:1px solid var(--borda)}
+.modo-btn.ativo .modo-selo{border-color:var(--modo-cor);color:var(--modo-cor)}
+/* ---- cabeçalho da bancada ----------------------------------------
+   O nome ficava no alto do painel, longe da caixa que ele nomeia. Agora
+   encosta no editor: quem lê "Bancada de cartões" vê logo abaixo a caixa
+   a que o nome se refere. */
+.bancada-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin:14px 0 2px}
+.bancada-nome{font-size:19px;font-weight:800;letter-spacing:-.2px;
+  color:var(--texto);margin:0;line-height:1.2}
+.bancada-acoes{display:flex;gap:6px;flex-shrink:0}
+.bancada-sub{display:block;font-size:11.5px;color:var(--sutil);
+  margin:0 0 7px;line-height:1.45}
+.ferr-lista{margin-top:12px}
+.ferr-item{display:flex;align-items:center;gap:10px;padding:9px 11px;
+  border:1px dashed var(--borda);border-radius:9px;margin-bottom:7px;
+  font-size:12.5px;color:var(--sutil)}
+.ferr-item b{color:var(--texto);font-weight:600}
+.ferr-selo{margin-left:auto;font-size:9px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;padding:1px 6px;border-radius:7px;
+  background:var(--campo);border:1px solid var(--borda)}
+/* ---- esqueleto dos modos que ainda não existem --------------------
+   Formas cinzas no lugar do conteúdo: mostram a ARRUMAÇÃO da tela sem
+   fingir que há dado real ali. */
+.esqueleto{width:100%;box-sizing:border-box;border:1px dashed var(--borda);
+  border-radius:8px;background:var(--campo);color:var(--sutil);padding:10px;
+  font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.5;
+  opacity:.75;resize:none}
+.esqueleto-lista{border:1px dashed var(--borda);border-radius:8px;margin:6px 0}
+.esq-linha{display:flex;justify-content:space-between;gap:10px;padding:8px 11px;
+  font-size:12.5px;border-bottom:1px solid var(--borda);opacity:.65}
+.esq-linha:last-child{border-bottom:0}
+.esq-peso{font-weight:700;color:var(--sutil)}
+.esqueleto-tab{width:100%;border-collapse:collapse;font-size:12.5px;opacity:.65;
+  border:1px dashed var(--borda);border-radius:8px}
+.esqueleto-tab th,.esqueleto-tab td{padding:7px 9px;text-align:left;
+  border-bottom:1px solid var(--borda)}
+.esqueleto-tab th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--sutil)}
+.esq-vazio td{text-align:center;font-style:italic;color:var(--sutil);opacity:.8}
+.esqueleto-doc{border:1px dashed var(--borda);border-radius:8px;padding:14px;margin:6px 0}
+.esq-h1{height:15px;width:52%;border-radius:4px;background:var(--borda);margin:0 0 12px}
+.esq-h2{height:11px;width:34%;border-radius:4px;background:var(--borda);margin:16px 0 9px}
+.esq-p{height:8px;border-radius:4px;background:var(--borda);opacity:.55;margin:0 0 7px}
+.esq-p.curto{width:62%}
+.btn-linha{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.btn-linha .btn{flex:1;min-width:130px}
+@media (min-width:900px){
+  .barra-modos{position:sticky;top:8px;float:left;flex-direction:column;
+    width:186px;margin:0 14px 0 0;gap:5px}
+  .modo-area{overflow:hidden}
+}
+/* Aviso de acidente. Declara a COR do texto: sem isso ela era herdada e,
+   dependendo do tema, virava escuro sobre vermelho escuro — a mensagem
+   sumia e sobravam dois botões sem contexto, que foi o que aconteceu. */
+.barra-recuperar{display:block;margin:0 0 12px;padding:11px 13px;
+  border-radius:10px;font-size:12px;color:var(--texto);
+  background:rgba(220,38,38,.16);border:1px solid rgba(220,38,38,.55)}
+.br-titulo{display:flex;gap:7px;align-items:baseline;font-weight:800;
+  font-size:12.5px;color:#fca5a5;margin-bottom:4px}
+:root[data-theme="light"] .br-titulo{color:#b91c1c}
+.br-corpo{color:var(--texto);opacity:.85;line-height:1.5;margin-bottom:9px}
+.barra-recuperar .br-acoes{display:flex;gap:7px;flex-wrap:wrap}
+.ed-wrap textarea,.ed-wrap #editalNums{font-family:ui-monospace,Consolas,monospace;
+  font-size:13px;line-height:1.5;padding:10px 10px 10px 44px;box-sizing:border-box;
+  border:1px solid var(--borda);border-radius:8px;margin:0}
+.ed-wrap textarea{width:100%;min-height:230px;background:var(--campo);color:var(--texto);
+  resize:vertical;white-space:pre-wrap;overflow-wrap:break-word}
+.ed-wrap #editalNums{position:absolute;left:0;top:0;bottom:0;width:38px;
+  padding:10px 6px 10px 0;overflow:hidden;text-align:right;color:var(--sutil);
+  opacity:.7;border:0;border-right:1px solid var(--borda);background:var(--campo);
+  pointer-events:none;user-select:none;border-radius:8px 0 0 8px}
+.ed-cfg{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 8px}
+.ed-cfg label{display:flex;flex-direction:column;gap:3px;font-size:11px;
+  color:var(--sutil);flex:1;min-width:130px}
+.ed-cfg input{padding:7px 9px;border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font-size:13px}
+.ed-faixa{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--sutil);margin:0 0 8px;font-weight:600}
+/* ---- painel do edital ---- */
+.ed-abas{display:flex;gap:6px;margin:0 0 10px}
+.ed-aba{all:unset;cursor:pointer;padding:6px 13px;border-radius:8px;font-size:12px;
+  font-weight:600;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
+.ed-aba.ativa{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
+.ed-topo{background:var(--campo);border:1px solid var(--borda);border-radius:11px;
+  padding:12px 14px;margin:0 0 10px}
+.ed-topo-nome{font-size:14px;font-weight:700;margin:0 0 9px;line-height:1.3}
+.ed-topo-sub{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--sutil);margin-top:7px}
+.ed-barra{height:6px;background:var(--panel);border-radius:4px;overflow:hidden}
+.ed-barra.grande{height:9px}
+.ed-barra{position:relative}
+.ed-barra-fill{height:100%;background:#22c55e;border-radius:4px;transition:width .2s;
+  opacity:.45}
+.ed-barra-rev{position:absolute;left:0;top:0;height:100%;background:#15803d;
+  border-radius:4px;transition:width .2s}
+.ed-medidas{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.ed-medida{flex:1;min-width:150px;display:flex;align-items:baseline;gap:7px;
+  padding:7px 9px;border-radius:9px;background:var(--panel);border:1px solid var(--borda)}
+.ed-med-rot{font-size:10px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--sutil);font-weight:800}
+.ed-medida b{font-size:12px;font-weight:700}
+.ed-med-peso{margin-left:auto;color:#22c55e}
+.m-rev .ed-med-peso{color:#15803d}
+:root[data-theme="light"] .m-rev .ed-med-peso{color:#166534}
+.ed-alerta-peso{margin-top:9px;padding:7px 10px;border-radius:8px;font-size:11.5px;
+  line-height:1.45;background:rgba(245,158,11,.16);border:1px solid rgba(245,158,11,.5)}
+.ed-rev{all:unset;cursor:pointer;width:17px;height:17px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0}
+.ed-rev:hover{border-color:#15803d;color:#22c55e}
+.ed-rev.ativo{background:#15803d;border-color:#15803d;color:#fff}
+.ed-item.revisado .ed-item-nome{opacity:.6;text-decoration:none;font-style:italic}
+.ed-card.estudado{border-color:rgba(34,197,94,.45)}
+.ed-caixa{background:var(--campo);border:1px solid var(--borda);border-radius:11px;
+  padding:11px 13px;margin:0 0 10px}
+.ed-caixa-tit{font-size:12.5px;font-weight:700;margin:0 0 7px}
+.ed-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;
+  border-bottom:1px solid var(--borda);cursor:pointer}
+.ed-item:last-child{border-bottom:0}
+.ed-item-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-item-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
+.ed-item b{font-size:11px;white-space:nowrap}
+.ed-item.feito .ed-item-nome{text-decoration:line-through;opacity:.45}
+.ed-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px}
+.ed-card{background:var(--campo);border:1px solid var(--borda);border-radius:11px;padding:11px}
+.ed-card.completo{border-color:#22c55e}
+.ed-card-cab{display:flex;align-items:center;gap:6px;margin:0 0 8px;flex-wrap:wrap}
+/* Virou <button> para ficar clicável e ninguém declarou a cor: de novo o
+   estilo padrão do navegador, fundo claro e texto claro por cima. O teste F3
+   passou a cobrir este seletor também. */
+.ed-card-nome{all:unset;cursor:pointer;flex:1;min-width:0;font-size:12.5px;
+  font-weight:600;line-height:1.3;color:var(--texto);background:none}
+.ed-card-nome:hover{text-decoration:underline}
+.ed-peso{font-size:10.5px;padding:2px 5px;border-radius:7px;background:var(--panel);
+  color:var(--texto);border:1px solid var(--borda);cursor:pointer}
+.ed-peso.suspeito{border-color:#e24b4a;color:#fca5a5}
+.ed-fatia{font-size:9.5px;font-weight:800;letter-spacing:.3px;padding:2px 6px;
+  border-radius:7px;background:rgba(139,92,246,.18);color:#a78bfa;white-space:nowrap}
+:root[data-theme="light"] .ed-fatia{color:#6d28d9}
+.ed-card-conta{font-size:11px;color:var(--sutil);margin:6px 0 5px}
+.ed-pontos{display:flex;gap:9px;flex-wrap:wrap;font-size:10.5px}
+.faixa-alta{color:#e24b4a}.faixa-media{color:#BA7517}.faixa-baixa{color:var(--sutil)}
+.ed-abrir{all:unset;cursor:pointer;display:block;margin-top:8px;font-size:10.5px;
+  font-weight:700;color:var(--sutil);text-decoration:underline}
+.ed-abrir:hover{color:var(--texto)}
+.ed-card-lista{margin-top:7px;border-top:1px solid var(--borda);padding-top:5px}
+.ed-item{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12px;
+  border-bottom:1px solid var(--borda)}
+.ed-item-meio{flex:1;min-width:0}
+.ed-item-disc-link{all:unset;cursor:pointer;color:var(--sutil);
+  text-decoration:underline;text-underline-offset:2px}
+.ed-item-disc-link:hover{color:var(--texto)}
+.ed-item-porque{font-size:10.5px;color:var(--sutil);margin-top:2px;line-height:1.35}
+.ed-item-min{font-size:11px;white-space:nowrap}
+.ed-item.ehrev{background:rgba(34,197,94,.07)}
+.ed-medida{cursor:pointer;text-align:left;font:inherit}
+.ed-medida:hover{border-color:var(--sutil)}
+.ed-diario{margin-top:8px;font-size:11px;color:var(--sutil);cursor:pointer;
+  text-decoration:underline}
+.ed-diario-res{font-size:12px;color:var(--sutil);padding:8px 10px;border-radius:8px;
+  background:var(--campo);border:1px solid var(--borda)}
+.diario-item{display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:12px;
+  border-bottom:1px solid var(--borda)}
+.di-data{color:var(--sutil);font-size:10.5px;white-space:nowrap}
+.di-acao{font-size:9.5px;font-weight:800;text-transform:uppercase;padding:1px 6px;
+  border-radius:7px;white-space:nowrap}
+.acao-feito{background:rgba(34,197,94,.18);color:#22c55e}
+.acao-revisado{background:rgba(21,128,61,.28);color:#4ade80}
+.acao-pendente{background:var(--campo);color:var(--sutil)}
+.di-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.di-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
+.ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
+.dp-rodape{flex-wrap:wrap}
+.dp-item{display:flex;gap:9px;align-items:flex-start;padding:9px 2px;font-size:12.5px;
+  line-height:1.5;border-bottom:1px solid var(--borda)}
+.dp-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:2px 7px;border-radius:7px;white-space:nowrap;flex-shrink:0;margin-top:1px;
+  background:rgba(245,158,11,.2);color:#e8940a}
+.dp-item.grave .dp-selo{background:rgba(220,38,38,.2);color:#fca5a5}
+:root[data-theme="light"] .dp-item.grave .dp-selo{color:#b91c1c}
+.dsc-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.dsc-num{padding:9px 10px;border-radius:9px;background:var(--campo);
+  border:1px solid var(--borda);text-align:center}
+.dsc-num b{display:block;font-size:18px;line-height:1.1}
+.dsc-num span{font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;
+  color:var(--sutil);font-weight:700}
+.n-feito b{color:#22c55e}.n-rev b{color:#15803d}.n-falta b{color:var(--sutil)}
+.n-alerta{border-color:rgba(226,75,74,.6)}.n-alerta b{color:#e24b4a}
+.lac-linha{all:unset;cursor:pointer;display:flex;align-items:center;gap:9px;
+  padding:7px 0;font-size:12px;border-bottom:1px solid var(--borda);width:100%;
+  box-sizing:border-box}
+.lac-linha:hover .lac-nome{text-decoration:underline}
+.lac-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lac-barra{width:90px;height:6px;border-radius:4px;background:var(--panel);
+  overflow:hidden;flex-shrink:0}
+.lac-ok{height:100%;background:#22c55e;border-radius:4px}
+.lac-linha b{width:104px;text-align:right;font-size:11px;flex-shrink:0;color:var(--sutil)}
+.lac-linha b.lac-alerta{color:#e24b4a}
+.rt-tit{font-size:12.5px;font-weight:700;margin:0 0 9px}
+.ed-ritmo{margin:0 0 10px;padding:11px 13px;border-radius:10px;
+  background:var(--campo);border:1px solid var(--borda)}
+.rt-linha{display:flex;align-items:center;gap:9px;margin:0 0 7px;font-size:11.5px}
+.rt-rot{width:74px;flex-shrink:0;color:var(--sutil);font-weight:700;
+  text-transform:uppercase;font-size:9.5px;letter-spacing:.3px}
+.rt-barra{flex:1;height:9px;background:var(--panel);border-radius:5px;overflow:hidden}
+.rt-fill{height:100%;border-radius:5px}
+.rt-nec .rt-fill{background:#8b5cf6}
+.rt-pla .rt-fill{background:#3b82f6}
+.rt-obs .rt-fill{background:#22c55e}
+.rt-linha b{width:112px;text-align:right;flex-shrink:0;font-size:11px}
+.rt-nota{font-size:11.5px;color:var(--sutil);line-height:1.45;margin-top:8px}
+.rt-fora{font-size:11px;line-height:1.45;margin-top:7px;padding:7px 9px;border-radius:8px;
+  background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.4)}
+.reg-tempo{display:flex;align-items:center;gap:10px;margin-top:6px}
+.reg-tempo input[type=range]{flex:1}
+.reg-tempo input[type=number]{width:80px;padding:7px 9px;border-radius:8px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);font-size:13px}
+.reg-humor{all:unset;cursor:pointer;padding:6px 13px;border-radius:8px;font-size:11.5px;
+  font-weight:600;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
+.reg-humor.ativa.humor-ruim{background:#e24b4a;border-color:transparent;color:#fff}
+.reg-humor.ativa.humor-media{background:#BA7517;border-color:transparent;color:#fff}
+.reg-humor.ativa.humor-boa{background:#15803d;border-color:transparent;color:#fff}
+.ed-reg{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0;
+  background:var(--campo)}
+.ed-reg:hover{border-color:#22c55e;color:#22c55e}
+.ed-reg.ok{background:rgba(34,197,94,.2);border-color:transparent;color:#22c55e}
+.ed-reg.rev{background:#15803d;border-color:transparent;color:#fff}
+.reg-topico{padding:9px 11px;border-radius:9px;background:var(--campo);
+  border:1px solid var(--borda);margin:6px 0 10px}
+.reg-topico .nota{margin:3px 0 0}
+.reg-lin{display:flex;align-items:center;gap:9px;font-size:12.5px;margin:0 0 10px}
+.reg-lin input{width:90px;padding:7px 9px;border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font-size:13px}
+.reg-lin-col{font-size:12.5px}
+.reg-formas{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.reg-forma{all:unset;cursor:pointer;padding:6px 11px;border-radius:8px;font-size:11.5px;
+  font-weight:600;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
+.reg-forma.ativa{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
+.ed-sim{margin:0 0 9px}
+.ed-sim input[type=range]{width:100%;margin:0 0 5px}
+.ed-sim-txt{font-size:11.5px;color:var(--sutil);line-height:1.45}
+.ed-sim-txt b{color:var(--texto)}
+.ed-sim-txt .ok{color:#22c55e}
+.ed-sim-txt .falta{color:#e8940a}
+.ed-nao-cabe{margin:0 0 8px;padding:9px 11px;border-radius:9px;font-size:11.5px;
+  line-height:1.5;color:var(--texto);background:rgba(245,158,11,.16);
+  border:1px solid rgba(245,158,11,.5)}
+.ed-ponto{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
+.ponto-alta{background:#e24b4a}.ponto-media{background:#BA7517}
+.ponto-baixa{background:#888780}
+.ed-rolagem{max-height:52vh;overflow:auto;border:1px solid var(--borda);border-radius:9px}
+.ed-tab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ed-tab th{position:sticky;top:0;background:var(--panel);font-size:10px;
+  text-transform:uppercase;letter-spacing:.4px;color:var(--sutil);
+  text-align:left;padding:7px 9px;border-bottom:1px solid var(--borda)}
+.ed-tab td{padding:7px 9px;border-bottom:1px solid var(--borda);color:var(--texto)}
+.ed-tab .ed-disc{color:var(--sutil);font-size:11.5px}
+.ed-tab .ed-pri{font-weight:800;text-align:right}
+.ed-tab .ed-h{white-space:nowrap;color:var(--sutil)}
+.ed-tem-motivo{border-bottom:1px dotted var(--sutil);cursor:help}
+.ed-tab tr.ed-feito td{opacity:.45;text-decoration:line-through}
+.ed-tab tr.ed-feito td:last-child{opacity:1;text-decoration:none}
+.ferr-bloco{border:1px solid var(--borda);border-radius:10px;padding:11px 13px;
+  margin-bottom:10px}
+.ferr-tit{font-weight:700;font-size:13px;margin-bottom:3px}
+.ferr-bloco .nota{margin:0 0 9px}
 .hist-item{display:flex;align-items:center;gap:10px;padding:8px 4px;
   border-bottom:1px solid var(--borda);font-size:12.5px}
 .hist-item > :last-child{margin-left:auto}
@@ -567,40 +969,28 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 </header>
 
 <main>
+<nav class="barra-modos" id="barraModos" role="tablist" aria-label="Modos"></nav>
+<div class="modo-area">
+<section id="secCartoes" data-modo="cartoes">
   <div class="duas-colunas">
     <div class="grupo" id="painelEsquerdo">
-      <div class="bancada-cab">
-        <span class="bancada-nome" id="bancadaNome" data-i18n="bancada_cartoes"></span>
-        <span style="display:flex;gap:6px">
-        <button class="btn-min" id="btnHistorico" title=""></button>
-        <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
-                aria-pressed="false" title=""></button>
-        </span>
-      </div>
-      <div class="barra-recuperar" id="barraRecuperar" hidden>
-        <span id="recuperarTxt"></span>
-        <span class="br-acoes">
+      <div class="barra-recuperar" id="barraRecuperar" hidden role="alert">
+        <div class="br-titulo"><span aria-hidden="true">⚠</span>
+          <span id="recuperarTxt"></span></div>
+        <div class="br-corpo" data-i18n="hist_bar_corpo"></div>
+        <div class="br-acoes">
           <button class="btn-min btn-azul" id="btnRecuperar" data-i18n="hist_recuperar"></button>
           <button class="btn-min" id="btnRecuperarNao" data-i18n="hist_recuperar_nao"></button>
-        </span>
-      </div>
-      <div class="gaveta-importar">
-        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
-          <span class="gv-icone">▸</span>
-          <span data-i18n="import_handle"></span>
-          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
-        </button>
-        <div class="gaveta-corpo" id="gavetaImportar" hidden>
-          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
-          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
-          <div class="nota" id="importAviso"></div>
-          <div id="importProgresso" style="display:none">
-            <div class="ip-txt" id="importProgTxt"></div>
-            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
-          </div>
         </div>
       </div>
-      <label data-i18n="editor_label"></label>
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" id="bancadaNome" data-i18n="bancada_cartoes"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
+                  aria-pressed="false" title=""></button>
+        </span>
+      </div>
+      <label class="bancada-sub" data-i18n="editor_label"></label>
       <div class="linha-editor">
         <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
         <button class="btn btn-cinza" id="btnCopiarTudo" data-i18n="copy_all"></button>
@@ -726,6 +1116,266 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <div id="cartoes"></div>
     </div>
   </div>
+</section>
+
+<section id="secFerramentas" data-modo="ferramentas" hidden>
+  <div class="grupo" style="max-width:620px">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="modo_ferramentas"></h2>
+    </div>
+    <p class="nota" data-i18n="ferr_intro"></p>
+      <div class="gaveta-importar">
+        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
+          <span class="gv-icone">▸</span>
+          <span data-i18n="import_handle"></span>
+          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
+        </button>
+        <div class="gaveta-corpo" id="gavetaImportar" hidden>
+          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
+          <div class="nota" id="importAviso"></div>
+          <div id="importProgresso" style="display:none">
+            <div class="ip-txt" id="importProgTxt"></div>
+            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
+          </div>
+        </div>
+      </div>
+    <div class="ferr-bloco">
+      <div class="ferr-tit" data-i18n="hist_titulo"></div>
+      <p class="nota" data-i18n="hist_ajuda"></p>
+      <button class="btn btn-cinza" id="btnHistorico" title=""></button>
+    </div>
+    <div class="ferr-lista">
+      <div class="ferr-item"><b data-i18n="ferr_soon_edital"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+      <div class="ferr-item"><b data-i18n="ferr_soon_backup"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="secEdital" data-modo="edital" hidden>
+  <div class="duas-colunas">
+    <div class="grupo" id="painelEdital">
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
+          <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
+        </span>
+      </div>
+      <!-- O ciclo inteiro numa linha só: pedir, revisar, colar de volta.
+           O diagnóstico estava do outro lado da tela, longe do botão que
+           recebe a resposta dele. -->
+      <div class="btn-linha">
+        <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+        <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
+        <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
+      </div>
+      <label class="bancada-sub" data-i18n="ed_colar"></label>
+      <div class="editor-wrap ed-wrap">
+        <div id="editalNums" aria-hidden="true"></div>
+        <textarea id="editalTexto" spellcheck="false"
+          placeholder="# TCE-PE | prova: 2026-08-30 | horas: 12&#10;@ Auditoria Governamental :: 5&#10;+ Achado de auditoria :: 5 :: cai em quase toda prova"></textarea>
+      </div>
+      <div id="editalSug" class="sugestoes"></div>
+      <button class="btn btn-verde" id="btnEditalCorrigir" disabled></button>
+    </div>
+
+    <div class="grupo">
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_prioridade"></h2>
+
+      </div>
+      <div class="ed-cfg">
+        <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
+        <label><span data-i18n="ed_horas"></span>
+          <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
+        <label><span data-i18n="ed_dias"></span>
+          <input type="number" id="edDias" min="1" max="7" step="1" value="5"></label>
+        <label><span data-i18n="ed_inicio"></span>
+          <input type="time" id="edInicio" value="19:00"></label>
+      </div>
+      <div class="ed-sim">
+        <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
+        <div class="ed-sim-txt" id="edSimTxt"></div>
+      </div>
+      <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
+      <div class="ed-ritmo" id="edRitmo" hidden></div>
+      <div class="ed-abas">
+        <button class="ed-aba ativa" id="btnVistaPainel" data-i18n="ed_vista_painel"></button>
+        <button class="ed-aba" id="btnVistaLista" data-i18n="ed_vista_lista"></button>
+      </div>
+      <div id="edPainel"></div>
+      <div id="edListaBox" hidden>
+      <div class="ed-rolagem">
+        <table class="ed-tab">
+          <thead><tr>
+            <th data-i18n="ed_col_top"></th><th data-i18n="ed_col_disc"></th>
+            <th data-i18n="ed_col_pri"></th><th data-i18n="ed_col_h"></th>
+            <th data-i18n="ed_col_ok"></th>
+          </tr></thead>
+          <tbody id="edTabela"></tbody>
+        </table>
+      </div>
+      </div>
+      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
+    </div>
+  </div>
+</section>
+
+<section id="secResumos" data-modo="material" hidden>
+  <div class="grupo" style="max-width:760px">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="modo_material"></h2>
+      <span class="bancada-acoes"><span class="mat-conta" id="matContagem"></span></span>
+    </div>
+    <p class="nota" data-i18n="mat_intro"></p>
+    <input type="search" id="matBusca" class="mat-busca"
+           placeholder="Filtrar por concurso, disciplina, tópico ou conteúdo">
+    <div id="matLista" class="mat-caixa"></div>
+  </div>
+</section>
+
+<section id="secFerramentas" data-modo="ferramentas" hidden>
+  <div class="grupo" style="max-width:620px">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="modo_ferramentas"></h2>
+    </div>
+    <p class="nota" data-i18n="ferr_intro"></p>
+      <div class="gaveta-importar">
+        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
+          <span class="gv-icone">▸</span>
+          <span data-i18n="import_handle"></span>
+          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
+        </button>
+        <div class="gaveta-corpo" id="gavetaImportar" hidden>
+          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
+          <div class="nota" id="importAviso"></div>
+          <div id="importProgresso" style="display:none">
+            <div class="ip-txt" id="importProgTxt"></div>
+            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
+          </div>
+        </div>
+      </div>
+    <div class="ferr-bloco">
+      <div class="ferr-tit" data-i18n="hist_titulo"></div>
+      <p class="nota" data-i18n="hist_ajuda"></p>
+      <button class="btn btn-cinza" id="btnHistorico" title=""></button>
+    </div>
+    <div class="ferr-lista">
+      <div class="ferr-item"><b data-i18n="ferr_soon_edital"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+      <div class="ferr-item"><b data-i18n="ferr_soon_backup"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="secEdital" data-modo="edital" hidden>
+  <div class="duas-colunas">
+    <div class="grupo" id="painelEdital">
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
+          <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
+        </span>
+      </div>
+      <!-- O ciclo inteiro numa linha só: pedir, revisar, colar de volta.
+           O diagnóstico estava do outro lado da tela, longe do botão que
+           recebe a resposta dele. -->
+      <div class="btn-linha">
+        <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+        <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
+        <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
+      </div>
+      <label class="bancada-sub" data-i18n="ed_colar"></label>
+      <div class="editor-wrap ed-wrap">
+        <div id="editalNums" aria-hidden="true"></div>
+        <textarea id="editalTexto" spellcheck="false"
+          placeholder="# TCE-PE | prova: 2026-08-30 | horas: 12&#10;@ Auditoria Governamental :: 5&#10;+ Achado de auditoria :: 5 :: cai em quase toda prova"></textarea>
+      </div>
+      <div id="editalSug" class="sugestoes"></div>
+      <button class="btn btn-verde" id="btnEditalCorrigir" disabled></button>
+    </div>
+
+    <div class="grupo">
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_prioridade"></h2>
+
+      </div>
+      <div class="ed-cfg">
+        <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
+        <label><span data-i18n="ed_horas"></span>
+          <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
+        <label><span data-i18n="ed_dias"></span>
+          <input type="number" id="edDias" min="1" max="7" step="1" value="5"></label>
+        <label><span data-i18n="ed_inicio"></span>
+          <input type="time" id="edInicio" value="19:00"></label>
+      </div>
+      <div class="ed-sim">
+        <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
+        <div class="ed-sim-txt" id="edSimTxt"></div>
+      </div>
+      <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
+      <div class="ed-ritmo" id="edRitmo" hidden></div>
+      <div class="ed-abas">
+        <button class="ed-aba ativa" id="btnVistaPainel" data-i18n="ed_vista_painel"></button>
+        <button class="ed-aba" id="btnVistaLista" data-i18n="ed_vista_lista"></button>
+      </div>
+      <div id="edPainel"></div>
+      <div id="edListaBox" hidden>
+      <div class="ed-rolagem">
+        <table class="ed-tab">
+          <thead><tr>
+            <th data-i18n="ed_col_top"></th><th data-i18n="ed_col_disc"></th>
+            <th data-i18n="ed_col_pri"></th><th data-i18n="ed_col_h"></th>
+            <th data-i18n="ed_col_ok"></th>
+          </tr></thead>
+          <tbody id="edTabela"></tbody>
+        </table>
+      </div>
+      </div>
+      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
+    </div>
+  </div>
+</section>
+
+<section id="secResumos" data-modo="resumos" hidden>
+  <div class="duas-colunas">
+    <div class="grupo">
+      <div class="bancada-cab">
+        <span class="bancada-nome" data-i18n="resumo_bancada"></span>
+      </div>
+      <p class="nota" data-i18n="resumo_intro"></p>
+      <div class="rotulo" data-i18n="resumo_colar"></div>
+      <textarea id="resumoTexto2" class="esqueleto" rows="14" disabled
+                placeholder="Cole aqui a matéria bruta — aula, PDF, anotação —&#10;e o app devolve o resumo estruturado."></textarea>
+      <div class="btn-linha">
+        <button class="btn btn-verde" disabled data-i18n="resumo_gerar"></button>
+        <button class="btn btn-roxo" disabled data-i18n="resumo_prompt"></button>
+      </div>
+    </div>
+    <div class="grupo">
+      <div class="bancada-cab"><span class="bancada-nome" data-i18n="resumo_saida"></span></div>
+      <div class="esqueleto-doc">
+        <div class="esq-h1">Achado de auditoria</div>
+        <div class="esq-p"></div><div class="esq-p curto"></div>
+        <div class="esq-h2">Elementos</div>
+        <div class="esq-p"></div><div class="esq-p"></div><div class="esq-p curto"></div>
+        <div class="esq-h2">Pegadinhas de prova</div>
+        <div class="esq-p"></div><div class="esq-p curto"></div>
+      </div>
+      <div class="btn-linha">
+        <button class="btn btn-verde" disabled data-i18n="resumo_md"></button>
+        <button class="btn btn-azul" disabled data-i18n="resumo_virar_cartoes"></button>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
 </main>
 
 <div id="barraUpdate">
@@ -774,14 +1424,16 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 
 <div class="rodape">
   <div style="width:100%;max-width:600px">
-    <div style="display:flex;gap:8px;justify-content:center">
+    <div class="rodape-exportar" id="rodapeExportar">
       <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
       <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
     </div>
     <div id="status"></div>
     <div class="rodape-tec">
+      <span class="selo-base" id="seloBase"></span>
+      <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
+      <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
       <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
-      <button type="button" id="btnRegistro" class="link-tec" data-i18n="log_btn"></button>
     </div>
   </div>
 </div>
@@ -865,6 +1517,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div id="genDone" style="font-size:12px;color:var(--verde);margin-top:6px;min-height:16px"></div>
   </div>
   <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnGenMaterial" hidden></button>
     <button class="btn btn-verde" id="btnGenCopiar" data-i18n="gen_copy"></button>
     <button class="btn btn-cinza" id="btnGenFechar" data-i18n="help_close"></button>
   </div>
@@ -907,6 +1560,191 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </dialog>
 
+<dialog id="dlgDiagnostico" class="ui-modal diag-modal">
+  <h3 data-i18n="diag_titulo"></h3>
+  <div class="diag-alvo" id="diagAlvo"></div>
+  <p class="nota" data-i18n="diag_ajuda"></p>
+  <div class="diag-legenda">
+    <div><b data-i18n="diag_leg_amb_t"></b> <span data-i18n="diag_leg_amb"></span></div>
+    <div><b data-i18n="diag_leg_arm_t"></b> <span data-i18n="diag_leg_arm"></span></div>
+    <div><b data-i18n="diag_leg_est_t"></b> <span data-i18n="diag_leg_est"></span></div>
+    <div><b data-i18n="diag_leg_reg_t"></b> <span data-i18n="diag_leg_reg"></span></div>
+    <div><b data-i18n="diag_leg_txt_t"></b> <span data-i18n="diag_leg_txt"></span></div>
+  </div>
+  <label class="diag-op"><input type="checkbox" id="chkDiagTexto" checked>
+    <span data-i18n="diag_incluir_texto"></span></label>
+  <label class="diag-op"><input type="checkbox" id="chkDiagModo">
+    <span data-i18n="diag_so_modo"></span></label>
+  <pre id="diagPre" class="diag-pre"></pre>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
+    <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
+    <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgDiagPlano" class="ui-modal">
+  <h3 data-i18n="ed_diag_btn"></h3>
+  <p class="nota" data-i18n="ed_dp_ajuda"></p>
+  <div class="ed-diario-res" id="dpResumo"></div>
+  <div id="dpLista" style="max-height:46vh;overflow:auto;margin:8px 0"></div>
+  <div class="dlg-rodape dp-rodape">
+    <button class="btn btn-cinza" id="btnDpVer" data-i18n="ed_dp_ver"></button>
+    <button class="btn btn-verde" id="btnDpCopiar" data-i18n="ed_dp_copiar"></button>
+    <button class="btn btn-roxo" id="btnDpPrompt" data-i18n="ed_dp_prompt"></button>
+    <button class="btn btn-cinza" id="btnDpFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgRegistro" class="ui-modal">
+  <h3 data-i18n="ed_reg_tit"></h3>
+  <div class="reg-topico"><b id="regTitulo"></b><div class="nota" id="regSub"></div></div>
+  <div class="reg-lin-col"><span data-i18n="ed_reg_min"></span>
+    <div class="reg-tempo">
+      <input type="range" id="regMinSlider" min="5" max="240" step="5" value="60">
+      <input type="number" id="regMinutos" min="1" max="600" step="5">
+    </div></div>
+  <div class="reg-lin-col"><span data-i18n="ed_reg_humor"></span>
+    <div class="reg-formas" id="regHumor"></div></div>
+  <div class="reg-lin-col"><span data-i18n="ed_reg_forma"></span>
+    <div class="reg-formas" id="regFormas"></div></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
+    <button class="btn btn-azul" id="btnRegRevisao" data-i18n="ed_reg_revisao"></button>
+    <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgMatColar" class="ui-modal">
+  <h3 data-i18n="mat_colar_tit"></h3>
+  <p class="nota" data-i18n="mat_colar_ajuda"></p>
+  <textarea id="matColarTexto" rows="12" style="width:100%;box-sizing:border-box"
+            placeholder="Cole aqui o texto do NotebookLM, Gemini ou ChatGPT."></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnMatColarOk" data-i18n="mat_colar_ok"></button>
+    <button class="btn btn-cinza" id="btnMatColarFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgMaterial" class="ui-modal diag-modal">
+  <h3 id="matTitulo"></h3>
+  <p class="nota" id="matSub"></p>
+  <p class="nota" data-i18n="mat_ajuda"></p>
+  <div class="mat-barra" id="matBarra">
+    <button class="fmt" id="btnFmtB" title="Negrito"><b>N</b></button>
+    <button class="fmt" id="btnFmtI" title="Italico"><i>I</i></button>
+    <button class="fmt" id="btnFmtM" title="Destacar">&#9646;</button>
+    <span class="fmt-sep"></span>
+    <button class="fmt" id="btnFmtH" title="Titulo">H</button>
+    <button class="fmt" id="btnFmtL" title="Lista">&#9776;</button>
+    <button class="fmt" id="btnFmtHr" title="Linha">&#8212;</button>
+    <button class="fmt fmt-colar" id="btnMatColar" data-i18n="mat_colar_btn"></button>
+    <span class="fmt-dica" data-i18n="mat_fmt_dica"></span>
+  </div>
+  <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
+            placeholder="Escreva aqui o que precisa lembrar deste tópico."></textarea>
+  <div class="mat-ctrl" id="matCtrlLeitura" hidden>
+    <span data-i18n="mat_letra"></span>
+    <button class="btn-min" id="btnMatMenor">A&#8722;</button>
+    <span class="mat-fonte" id="matFonteVal">15px</span>
+    <button class="btn-min" id="btnMatMaior">A+</button>
+    <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar"></button>
+  </div>
+  <div class="mat-leitura" id="matLeitura" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMatModo"></button>
+    <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"></button>
+    <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden></button>
+    <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes"></button>
+    <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgBackup" class="ui-modal">
+  <h3 data-i18n="bk_tit"></h3>
+  <p class="nota" data-i18n="bk_ajuda"></p>
+  <div class="bk-bloco">
+    <div class="bk-rot" data-i18n="bk_agora_rot"></div>
+    <div id="bkAgora" class="bk-txt"></div>
+  </div>
+  <div class="bk-bloco">
+    <div class="bk-rot" data-i18n="bk_ultimo_rot"></div>
+    <div id="bkUltimo" class="bk-txt"></div>
+  </div>
+  <div class="bk-passo">
+    <b data-i18n="bk_p1_tit"></b>
+    <span class="nota" data-i18n="bk_p1_txt"></span>
+    <div class="btn-linha">
+      <button class="btn btn-verde" id="btnBkSalvarNuvem" data-i18n="bk_salvar_nuvem"></button>
+      <button class="btn btn-cinza" id="btnBkBaixar" data-i18n="bk_baixar"></button>
+    </div>
+  </div>
+  <div class="bk-passo">
+    <b data-i18n="bk_p2_tit"></b>
+    <span class="nota" data-i18n="bk_p2_txt"></span>
+    <div class="btn-linha">
+      <button class="btn btn-azul" id="btnBkCarregar" data-i18n="bk_carregar"></button>
+    </div>
+    <input type="file" id="bkArquivo" accept="application/json,.json" style="display:none">
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnBkFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgBkConf" class="ui-modal diag-modal">
+  <h3 data-i18n="bk_conf_tit"></h3>
+  <p class="nota" data-i18n="bk_conf_ajuda"></p>
+  <div class="ed-diario-res" id="bkConfArquivo"></div>
+  <div class="bk-aviso" id="bkConfAviso"></div>
+  <table class="ed-tab bk-tab">
+    <thead><tr>
+      <th data-i18n="bk_col_o_que"></th><th data-i18n="bk_col_agora"></th>
+      <th data-i18n="bk_col_backup"></th><th data-i18n="bk_col_dif"></th>
+    </tr></thead>
+    <tbody id="bkConfTabela"></tbody>
+  </table>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnBkConfAplicar" data-i18n="bk_conf_aplicar"></button>
+    <button class="btn btn-cinza" id="btnBkConfCancelar" data-i18n="bk_conf_cancelar"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgDisciplina" class="ui-modal diag-modal">
+  <h3 id="dscTitulo"></h3>
+  <p class="nota" id="dscSub"></p>
+  <div class="dsc-resumo" id="dscResumo"></div>
+  <div id="dscLista" style="max-height:46vh;overflow:auto;margin:10px 0"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnDscFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgDiario" class="ui-modal">
+  <h3 data-i18n="ed_diario_tit"></h3>
+  <p class="nota" data-i18n="ed_diario_ajuda"></p>
+  <div class="ed-diario-res" id="diarioResumo"></div>
+  <div id="diarioLista" style="max-height:52vh;overflow:auto;margin:8px 0"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnDiarioFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgEdColar" class="ui-modal">
+  <h3 data-i18n="ed_colar_tit"></h3>
+  <p class="nota" data-i18n="ed_colar_ajuda"></p>
+  <textarea id="edColarTexto" rows="12" style="width:100%;box-sizing:border-box"
+            placeholder="# Concurso | prova: 2026-08-30 | horas: 12&#10;@ Disciplina :: 5&#10;+ Tópico :: 4 :: motivo"></textarea>
+  <div id="edColarAviso" class="ed-nao-cabe" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnEdColarAplicar" data-i18n="ed_colar_aplicar"></button>
+    <button class="btn btn-cinza" id="btnEdColarFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<dialog id="dlgTexto" class="ui-modal">
+  <h3 id="dlgTextoTit"></h3>
+  <textarea id="dlgTextoCorpo" rows="14" readonly
+            style="width:100%;box-sizing:border-box"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnDlgTextoCopiar" data-i18n="diag_copiar"></button>
+    <button class="btn btn-cinza" id="btnDlgTextoFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgHistorico" class="ui-modal">
   <h3 data-i18n="hist_titulo"></h3>
   <p class="nota" data-i18n="hist_ajuda"></p>
@@ -1089,5 +1927,20 @@ window.__sqlPromise = initSqlJs({
 <script src="parser.js"></script>
 <script src="anki.js"></script>
 <script src="app.js"></script>
+<script src="backup.js"></script>
+<script src="backup-ui.js"></script>
+<script src="material.js"></script>
+<script src="edital.js"></script>
+<script src="edital-ui.js"></script>
+<script src="modos.js"></script>
+<script>
+/* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
+   tem de subir — senão o app inteiro fica preso num estado sem modo, com o
+   rodapé de exportação aparecendo onde não devia. */
+try { edIniciar(); } catch (e) { console.error(e); }
+try { bkIniciar(); } catch (e) { console.error(e); }
+try { matIniciar(); } catch (e) { console.error(e); }
+try { montarBarraModos(); } catch (e) { console.error(e); }
+</script>
 </body>
 </html>

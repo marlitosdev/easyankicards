@@ -604,6 +604,9 @@ function corrigirLacunaOpcoesLongas(raw) {
 
 /* Reúne, sem repetir linha, tudo que o app critica no texto. */
 function problemasDoTexto(raw, r) {
+  /* o cartao preso a prova entra por linha: e' o unico jeito de o pedido
+   * dizer QUAL cartao reescrever */
+  const _presos = new Map(cartoesDependentes(r).map((c) => [c.line, true]));
   const linhas = raw.split(/\r?\n/);
   const achados = [];
   const add = (n, msg) => {
@@ -626,6 +629,7 @@ function problemasDoTexto(raw, r) {
       // A sugestão acompanha o tamanho, senão a IA divide ao meio e para.
       add(c.line, t("crit_long_msg", { n: Math.max(2, Math.round(tam / 200)), t: tam }));
     }
+    if (_presos.has(c.line)) add(c.line, t("crit_dependente_linha"));
     const k = c.front.toLowerCase().trim();
     if (vistos[k]) add(c.line, t("crit_dup_msg", { a: vistos[k] }));
     else vistos[k] = c.line;
@@ -1266,6 +1270,48 @@ const RE_ASSUNTO_APP = [
   /\bo aplicativo rejeita\b/i,
   /\bnumera[çc][ãa]o d(?:as|e) lacunas\b/i,
 ];
+
+/* ------------------------------------------------------------------
+ * O CARTAO PRESO A PROVA DE ORIGEM
+ *
+ * "Qual a ordem correta das definicoes da Questao 17? :: Letra A: (1)
+ * Avaliacao, (2) Formulacao de agendas". Formato impecavel, conteudo nulo:
+ * pergunta ONDE estava a resposta, nao O QUE a coisa e'. Daqui a dois meses
+ * quem revisa nao tem a prova na frente e o cartao nao ensina nada.
+ *
+ * A IA produz isso quando recebe uma lista de questoes: ela preserva com
+ * fidelidade o andaime (numero, letra, gabarito) e joga fora o conceito.
+ * A regra esta nos prompts, mas prompt e' pedido — este detector e' a
+ * garantia, e so' aponta: reescrever exige entender o assunto.
+ * ------------------------------------------------------------------ */
+const RE_DEPENDENTE = [
+  /\bquest[ãa]o\s+n?[.º°]?\s*\d+/i,
+  /\b(letra|alternativa)\s+[A-E]\b/,
+  /\bgabarito\b/i,
+  /\bassinale\b/i,
+  /\bafirmativa\s+[IVX]+\b/i,
+  /\b(o|a)\s+(item|assertiva)\s+(acima|abaixo|est[áa])/i,
+  /\bconforme\s+o\s+texto\s+(acima|apresentado|dado)/i,
+  /\bda\s+quest[ãa]o\s+(acima|anterior|apresentada)/i,
+  /* a segunda safra veio de um caso real que passou batido pela primeira:
+   * "Qual alternativa indica... A alternativa correta é a D) ..." — nao cita
+   * numero de questao nem "Letra X", mas e' o mesmo defeito */
+  /\bqual\s+(a\s+)?alternativa\b/i,
+  /\balternativa\s+(correta|incorreta|verdadeira|errada|falsa)\b/i,
+  /\b[ée]\s+a\s+[A-E]\)/i,
+  /\bop[çc][ãa]o\s+correta\b/i,
+];
+
+/* Recebe o resultado do parse: so' o CARTAO importa. A explicacao pode
+ * citar a prova por direito ("caiu na FGV 2024"); a pergunta, nao. */
+function cartoesDependentes(r) {
+  return (r.cards || []).filter((c) => {
+    /* o TITULO conta: "Metodos Preditivos — Gabarito da Questao" aparece no
+     * cartao e denuncia a origem tanto quanto a pergunta */
+    const alvo = [c.titulo || "", c.front || "", c.back || ""].join(" ");
+    return RE_DEPENDENTE.some((re) => re.test(alvo));
+  });
+}
 
 function linhasDePrompt(raw) {
   const achadas = [];
