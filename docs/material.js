@@ -25,7 +25,7 @@ function matCarregar() {
 try { matCarregar(); } catch (e) {}
 
 function matSalvar() {
-  try { localStorage.setItem("eac_resumos", JSON.stringify(matResumos)); }
+  try { guardar("eac_resumos", JSON.stringify(matResumos)); }
   catch (e) {}
 }
 
@@ -294,6 +294,9 @@ let matFonte = 15;            /* px do modo leitura */
 let matAmpliado = false;
 
 function matAbrirEditor(item, comoLer) {
+  /* abre limpo: rascunho pendente é do material anterior */
+  matSujo = false;
+  matSelGuardada = "";
   matAtual = { chave: matChave(item.disciplina, item.nome),
                disciplina: item.disciplina, topico: item.nome };
   const r = matObter(matAtual.chave);
@@ -366,9 +369,33 @@ function matAmpliar() {
  * ------------------------------------------------------------------ */
 const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?" };
 
-function matMarcarSelecao(tipo) {
+/* A SELEÇÃO MORRE ANTES DO CLIQUE.
+ * Apertar o botão dispara mousedown ANTES de click, e o mousedown já move o
+ * foco e recolhe a seleção — quando o onclick roda, getSelection() devolve
+ * vazio. Era isto que fazia o app responder "selecione pelo menos três
+ * caracteres" para quem tinha selecionado uma frase inteira: a mensagem
+ * estava certa sobre o que via, e o que via já era o estrago do clique.
+ *
+ * Dois cuidados, e os dois são necessários:
+ *  - guardar a última seleção válida feita DENTRO do painel de leitura;
+ *  - preventDefault no mousedown dos botões, para o navegador não recolher
+ *    a seleção nem tirar o foco do texto. */
+let matSelGuardada = "";
+let matSujo = false;      /* há marcação feita e ainda não salva */
+
+function matLembrarSelecao() {
   const sel = window.getSelection && window.getSelection();
-  const trecho = sel ? String(sel).trim() : "";
+  if (!sel || sel.isCollapsed) return;
+  const painel = $("matLeitura");
+  if (painel && sel.anchorNode && painel.contains
+      && !painel.contains(sel.anchorNode)) return;
+  const txt = String(sel).trim();
+  if (txt) matSelGuardada = txt;
+}
+
+function matMarcarSelecao(tipo) {
+  matLembrarSelecao();
+  const trecho = matSelGuardada;
   if (trecho.length < 3) { uiAlert(t("mat_marca_curta")); return; }
   const ta = $("matTexto");
   const marca = MAT_MARCAS[tipo] || "==";
@@ -378,20 +405,52 @@ function matMarcarSelecao(tipo) {
   const antes = ta.value.slice(Math.max(0, idx - 3), idx);
   if (/==[!?]?$/.test(antes)) { uiAlert(t("mat_marca_ja")); return; }
   ta.value = ta.value.slice(0, idx) + marca + trecho + "==" + ta.value.slice(idx + trecho.length);
-  matGravar(matAtual.chave, ta.value,
-    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  /* NÃO grava aqui. Grifar é experimentar: a pessoa marca, olha, desfaz,
+   * marca de novo. Gravar a cada clique tira dela a chance de desistir —
+   * e sem gravação imediata o botão "Salvar estado" passa a significar
+   * alguma coisa, em vez de ser um botão que não muda nada. */
+  matSujo = true;
+  matSelGuardada = "";
   reg("MATERIAL", "trecho marcado (" + tipo + ")", trecho.slice(0, 40));
   matTrocarModo("ler");
-  $("matEstado").textContent = t("mat_marcado");
+  $("matEstado").textContent = t("mat_marcado_nao_salvo");
 }
 
 function matLimparMarcas() {
   const ta = $("matTexto");
   ta.value = ta.value.replace(/==[!?]?([^=\n]{1,300})==/g, "$1");
-  matGravar(matAtual.chave, ta.value,
-    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  matSujo = true;                    /* também é rascunho: dá para desistir */
   matTrocarModo("ler");
-  $("matEstado").textContent = t("mat_marcas_limpas");
+  $("matEstado").textContent = t("mat_marcas_limpas_nao_salvo");
+}
+
+function matSalvarEstado() {
+  if (!matAtual) return false;
+  matGravar(matAtual.chave, $("matTexto").value,
+    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  matSujo = false;
+  $("matEstado").textContent = t("mat_estado_salvo",
+    { d: new Date().toLocaleTimeString() });
+  reg("MATERIAL", "estado salvo: " + (matAtual && matAtual.topico));
+  matRender();
+  return true;
+}
+
+/* Fechar com marcação pendente pergunta antes.
+ * A alternativa — descartar calado — é a mesma família de erro que apagou
+ * 137 cartões: trabalho que some sem ninguém dizer nada. E salvar sozinho
+ * também não serve, porque aí "não salvar" deixa de existir. */
+async function matFechar() {
+  if (matSujo) {
+    const salvar = await uiConfirm(t("mat_fechar_sem_salvar"));
+    if (salvar) { matSalvarEstado(); }
+    else reg("MATERIAL", "marcacao descartada ao fechar",
+             matAtual && matAtual.topico);
+  }
+  matSujo = false;
+  matSelGuardada = "";
+  $("dlgMaterial").close();
+  matAtual = null;
 }
 
 function matRegistrarLeitura() {
@@ -584,14 +643,19 @@ function matIniciar() {
   $("btnMarcaI").onclick = () => matMarcarSelecao("importante");
   $("btnMarcaQ").onclick = () => matMarcarSelecao("duvida");
   $("btnMarcaLimpar").onclick = matLimparMarcas;
-  $("btnMatSalvarEstado").onclick = () => {
-    matGravar(matAtual.chave, $("matTexto").value,
-      { disciplina: matAtual.disciplina, topico: matAtual.topico });
-    $("matEstado").textContent = t("mat_estado_salvo",
-      { d: new Date().toLocaleTimeString() });
-    reg("MATERIAL", "estado salvo: " + (matAtual && matAtual.topico));
-    matRender();
-  };
+  $("btnMatSalvarEstado").onclick = () => matSalvarEstado();
+
+  /* mantém a última seleção viva: o clique no botão de marcar chega depois
+   * de o navegador já ter recolhido a seleção */
+  ["mouseup", "touchend", "keyup"].forEach((ev) => {
+    if ($("matLeitura")) $("matLeitura").addEventListener(ev, matLembrarSelecao);
+  });
+  if (document.addEventListener)
+    document.addEventListener("selectionchange", matLembrarSelecao);
+  /* e impede o próprio clique de destruí-la */
+  ["btnMarcaD", "btnMarcaI", "btnMarcaQ"].forEach((id) => {
+    if ($(id)) $(id).addEventListener("mousedown", (ev) => ev.preventDefault());
+  });
   /* colar na caixa manual também aproveita o HTML */
   if ($("matColarTexto")) {
     $("matColarTexto").addEventListener("paste", (ev) => {
@@ -617,7 +681,7 @@ function matIniciar() {
    ["btnFmtL", () => matPrefixo("- ")], ["btnFmtHr", () => matPrefixo("---\n")]]
     .forEach(([id, fn]) => { if ($(id)) $(id).onclick = fn; });
   $("btnMatCartoes").onclick = matVirarCartoes;
-  $("btnMatFechar").onclick = () => { $("dlgMaterial").close(); matAtual = null; };
+  $("btnMatFechar").onclick = () => matFechar();
   if ($("matBusca")) {
     $("matBusca").addEventListener("input", () => {
       matFiltro = $("matBusca").value; matRender();

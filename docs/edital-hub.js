@@ -11,6 +11,7 @@
  * ===================================================================== */
 
 let hubFiltro = "";
+let hubSoEste = false;      /* agenda restrita ao edital aberto */
 
 /* ------------------------------------------------------------------
  * AGENDA DA SEMANA — atravessa editais
@@ -29,8 +30,13 @@ function hubPintarAgenda() {
   if (!box) return;
   box.innerHTML = "";
 
-  const ativos = editais.filter((e) => edSituacao(e).grupo !== "encerrado");
+  let ativos = editais.filter((e) => edSituacao(e).grupo !== "encerrado");
   if (!ativos.length) { box.hidden = true; return; }
+  /* o filtro só existe quando há mais de um: com um edital só, oferecer
+   * "ver só este" é um botão que não muda nada */
+  const todosAtivos = ativos;
+  if (hubSoEste && edAberto())
+    ativos = ativos.filter((e) => e.id === edAberto().id);
   box.hidden = false;
 
   const cx = document.createElement("div");
@@ -41,8 +47,10 @@ function hubPintarAgenda() {
   const tit = document.createElement("div");
   tit.className = "ed-caixa-tit";
   tit.textContent = t("hub_agenda_tit");
-  cab.append(tit);
+  cab.append(tit, hubControlesAgenda());
   cx.append(cab);
+  const filtroEd = hubFiltroEdital(ativos);
+  if (filtroEd) cx.append(filtroEd);
 
   /* pega a fila da semana de cada edital ativo e junta */
   const linhas = [];
@@ -74,12 +82,19 @@ function hubPintarAgenda() {
 
   const sub = document.createElement("div");
   sub.className = "ed-caixa-sub";
-  sub.textContent = t("hub_agenda_sub", {
+  sub.textContent = t(ativos.length === 1 ? "hub_agenda_sub1" : "hub_agenda_sub", {
     n: linhas.length,
     c: ativos.length,
     h: horasTexto(linhas.reduce((a, i) => a + (i.minutos || 0), 0)),
   });
   cx.append(sub);
+
+  /* Agendar é o que transforma uma lista de tópicos em agenda: sem esta
+   * chamada cada linha vem sem dia nem horário sugerido — foi o que a
+   * mudança para o topo tinha quebrado, porque o agendamento morava dentro
+   * do painel antigo. Os dois números vêm da preferência de estudo, não do
+   * edital: a semana é uma só, mesmo com três concursos. */
+  agendar(linhas, { dias: hubPref("dias", 5), inicio: hubPref("inicio", "19:00") });
 
   const mostrar = hubAgendaAberta ? linhas : linhas.slice(0, HUB_AGENDA_CURTA);
   mostrar.forEach((i) => {
@@ -107,6 +122,86 @@ function hubPintarAgenda() {
     cx.append(b);
   }
   box.append(cx);
+}
+
+/* Um só lugar mostra a semana. Quando a pessoa está dentro de um edital,
+ * ela às vezes quer ver só aquele — mas isso é um FILTRO da mesma lista, e
+ * não uma segunda lista com outro número. */
+function hubFiltroEdital(todos) {
+  const aberto = edAberto();
+  if (!aberto || todos.length < 2) { hubSoEste = false; return null; }
+  const cx = document.createElement("div");
+  cx.className = "ed-agenda-filtro";
+  [[false, "hub_ag_todos"], [true, "hub_ag_so_este"]].forEach(([v, k]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ed-ag-opt" + (hubSoEste === v ? " ativa" : "");
+    b.textContent = t(k, { n: aberto.nome });
+    b.onclick = () => { hubSoEste = v; hubPintarAgenda(); };
+    cx.append(b);
+  });
+  return cx;
+}
+
+/* ------------------------------------------------------------------
+ * PREFERÊNCIA DE ESTUDO — global, não do edital
+ *
+ * "Dias por semana" e "começo do dia" descrevem a rotina da PESSOA, não o
+ * concurso. Guardar isso dentro de cada edital produziria três respostas
+ * diferentes para a mesma pergunta ("a que horas eu estudo?") e a agenda,
+ * que junta os três, teria de escolher uma — arbitrariamente.
+ * ------------------------------------------------------------------ */
+const HUB_PREF = { dias: "eac_estudo_dias", inicio: "eac_estudo_inicio" };
+
+function hubPref(qual, padrao) {
+  try {
+    const v = localStorage.getItem(HUB_PREF[qual]);
+    if (v === null || v === "") return padrao;
+    return qual === "dias" ? Math.max(1, Math.min(7, Number(v) || padrao)) : v;
+  } catch (e) { return padrao; }
+}
+
+function hubPrefGravar(qual, valor) {
+  try { localStorage.setItem(HUB_PREF[qual], String(valor)); } catch (e) {}
+  /* os campos da bancada mostram a mesma coisa: dois lugares exibindo o
+   * mesmo número acabam discordando se um não seguir o outro */
+  const campo = document.getElementById(qual === "dias" ? "edDias" : "edInicio");
+  if (campo && campo.value !== String(valor)) campo.value = valor;
+  reg("EDITAL", "rotina de estudo alterada", qual + " = " + valor);
+}
+
+function hubControlesAgenda() {
+  const cx = document.createElement("div");
+  cx.className = "ed-agenda-cfg";
+
+  const ld = document.createElement("label");
+  ld.className = "ed-agenda-cfg-item";
+  ld.append(document.createTextNode(t("hub_cfg_dias")));
+  const dias = document.createElement("input");
+  dias.type = "number"; dias.min = "1"; dias.max = "7"; dias.step = "1";
+  dias.value = String(hubPref("dias", 5));
+  dias.onchange = () => {
+    hubPrefGravar("dias", Math.max(1, Math.min(7, Number(dias.value) || 5)));
+    hubPintarAgenda();
+    if (typeof edRender === "function" && edAberto()) edRender();
+  };
+  ld.append(dias);
+
+  const li = document.createElement("label");
+  li.className = "ed-agenda-cfg-item";
+  li.append(document.createTextNode(t("hub_cfg_inicio")));
+  const ini = document.createElement("input");
+  ini.type = "time";
+  ini.value = hubPref("inicio", "19:00");
+  ini.onchange = () => {
+    hubPrefGravar("inicio", ini.value || "19:00");
+    hubPintarAgenda();
+    if (typeof edRender === "function" && edAberto()) edRender();
+  };
+  li.append(ini);
+
+  cx.append(ld, li);
+  return cx;
 }
 
 /* ------------------------------------------------------------------
@@ -230,6 +325,11 @@ function hubAbrirEdital(id) {
     localStorage.setItem("eac_edital_texto", e.texto || "");
     localStorage.setItem("eac_edital_progresso", JSON.stringify(e.progresso || {}));
   } catch (x) {}
+  /* edital que já tem conteúdo abre recolhido: quem volta a um edital
+   * cadastrado quer ver o plano, não colar de novo. Vazio abre aberto,
+   * porque aí colar É o que falta fazer. */
+  bancRecolhida = !!(e.texto && e.texto.trim());
+  bancAplicar();
   reg("EDITAL", "edital aberto", e.nome);
   hubRender();
   if (typeof edRender === "function") edRender();
@@ -307,10 +407,63 @@ function hubIniciar() {
   if (v) v.onclick = hubVoltar;
   const r = document.getElementById("btnEdRenomear");
   if (r) r.onclick = hubRenomear;
+  const rc = document.getElementById("btnEdBancRecolher");
+  if (rc) rc.onclick = bancAlternar;
+  try { bancRecolhida = localStorage.getItem("eac_banc_recolhida") === "1"; } catch (e) {}
+  bancAplicar();
+
+  /* os campos da bancada nascem com a rotina salva — antes eles voltavam
+   * ao padrão a cada recarga e o planejamento mudava sozinho */
+  const cd = document.getElementById("edDias");
+  if (cd) {
+    cd.value = String(hubPref("dias", 5));
+    cd.addEventListener("change", () => hubPrefGravar("dias", cd.value));
+  }
+  const ci = document.getElementById("edInicio");
+  if (ci) {
+    ci.value = hubPref("inicio", "19:00");
+    ci.addEventListener("change", () => hubPrefGravar("inicio", ci.value));
+  }
 
   /* o edital aberto manda o seu texto para a bancada */
   const a = edAberto();
   const ta = document.getElementById("editalTexto");
   if (a && ta && !ta.value) ta.value = a.texto || "";
   hubRender();
+}
+
+/* ------------------------------------------------------------------
+ * BANCADA RECOLHÍVEL
+ *
+ * Depois de colar o edital, a bancada é uma caixa de texto de 230 px que
+ * não muda mais — e ela empurra para baixo o painel que se olha todo dia.
+ * Recolher não esconde informação: o resumo fica no lugar, e é o que a
+ * pessoa precisa saber de relance (quantas disciplinas, quantos tópicos).
+ * ------------------------------------------------------------------ */
+let bancRecolhida = false;
+
+function bancAplicar() {
+  const corpo = document.getElementById("edBancCorpo");
+  const resumo = document.getElementById("edBancResumo");
+  const bt = document.getElementById("btnEdBancRecolher");
+  if (!corpo || !resumo || !bt) return;
+  corpo.hidden = bancRecolhida;
+  resumo.hidden = !bancRecolhida;
+  bt.textContent = t(bancRecolhida ? "ed_expandir" : "ed_recolher");
+  if (bancRecolhida) {
+    const ta = document.getElementById("editalTexto");
+    const r = lerEdital((ta && ta.value) || "");
+    const tops = r.disciplinas.reduce((a, d) => a + d.topicos.length, 0);
+    resumo.innerHTML = "";
+    const b = document.createElement("b");
+    b.textContent = t("ed_banc_resumo", { d: r.disciplinas.length, t: tops });
+    resumo.append(b);
+  }
+  try { localStorage.setItem("eac_banc_recolhida", bancRecolhida ? "1" : "0"); } catch (e) {}
+}
+
+function bancAlternar() {
+  bancRecolhida = !bancRecolhida;
+  reg("EDITAL", "bancada " + (bancRecolhida ? "recolhida" : "expandida"));
+  bancAplicar();
 }

@@ -24,7 +24,8 @@ const BK_CHAVES = {
   edital: ["eac_editais", "eac_edital_atual",
            "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario"],
   material: ["eac_resumos"],
-  preferencias: ["eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
+  preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
+                 "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",
     "eac_maisCampos", "eac_modo", "eac_ampliar", "eac_edital_vista"],
 };

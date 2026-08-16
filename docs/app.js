@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.68.0";
+const VERSAO = "8.72.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -58,7 +58,7 @@ try {
 } catch (e) {}
 
 function salvarRecortes() {
-  try { localStorage.setItem("eac_recortes", JSON.stringify(recortes)); } catch (e) {}
+  guardar("eac_recortes", JSON.stringify(recortes));
   atualizarBarraRecortes();
 }
 
@@ -173,6 +173,53 @@ function reg(tipo, msg, extra) {
   });
   podarRegistro();
   try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
+}
+
+/* ------------------------------------------------------------------
+ * GRAVAÇÃO QUE NÃO FALHA CALADA
+ *
+ * Até a v8.69 havia 37 pontos gravando com "catch (e) {}". Com espaço
+ * sobrando isso nunca aparece; com o espaço cheio o app continua perfeito
+ * na tela e não salva mais nada — e a pessoa só descobre ao recarregar.
+ * É a mesma falha que custou 137 cartões: trabalho sumindo sem ninguém
+ * dizer nada.
+ *
+ * Aqui a gravação de CONTEÚDO passa a avisar. Preferência (tema, idioma)
+ * continua podendo falhar em silêncio: perder o tema não é perder trabalho.
+ * ------------------------------------------------------------------ */
+let falhasGravacao = [];
+let avisouGravacao = false;
+
+function guardar(chave, valor) {
+  try {
+    localStorage.setItem(chave, valor);
+    /* voltou a funcionar depois de ter falhado: vale registrar, senão o
+     * diagnóstico mostra um problema que já passou */
+    if (falhasGravacao.length && falhasGravacao[falhasGravacao.length - 1].chave === chave) {
+      reg("ARMAZEN", "gravação voltou a funcionar", chave);
+      falhasGravacao = falhasGravacao.filter((f) => f.chave !== chave);
+    }
+    return true;
+  } catch (e) {
+    const nome = (e && e.name) || "erro";
+    falhasGravacao.push({ chave, nome, quando: new Date().toISOString() });
+    if (falhasGravacao.length > 20) falhasGravacao.shift();
+    /* reg() guarda em memória mesmo quando não consegue gravar, então o
+     * diagnóstico ainda enxerga a falha */
+    reg("ERRO", "NÃO consegui gravar " + chave + " (" + nome + ")",
+        "o trabalho deste momento pode não sobreviver ao recarregar");
+    if (!avisouGravacao) {
+      avisouGravacao = true;
+      try { avisarGravacaoFalhou(); } catch (x) {}
+    }
+    return false;
+  }
+}
+
+/* Um aviso só por sessão, e visível — não um console.error. Quem precisa
+ * saber disto é a pessoa, e ela precisa saber ANTES de fechar a aba. */
+function avisarGravacaoFalhou() {
+  if (typeof uiAlert === "function") uiAlert(t("armazen_falhou"));
 }
 
 /* Erro de JavaScript entra no registro sozinho — é o tipo de falha que o
@@ -912,7 +959,7 @@ function carregarRevisados() {
   } catch (e) { return new Set(); }
 }
 function salvarRevisados() {
-  try { localStorage.setItem("eac_revisados", JSON.stringify([...revisados])); }
+  try { guardar("eac_revisados", JSON.stringify([...revisados])); }
   catch (e) {}
 }
 
@@ -946,7 +993,7 @@ function salvarHistorico() {
    * vale menos que a de cinco minutos atrás. E se nem assim couber, o
    * histórico cede lugar — ele nunca pode impedir de salvar o texto. */
   for (let tentativa = 0; tentativa < HIST_MAX + 1; tentativa++) {
-    try { localStorage.setItem("eac_hist", JSON.stringify(historico)); return true; }
+    try { guardar("eac_hist", JSON.stringify(historico)); return true; }
     catch (e) { historico.shift(); if (!historico.length) break; }
   }
   try { localStorage.removeItem("eac_hist"); } catch (e) {}
@@ -1086,7 +1133,7 @@ function autoSalvar() {
   textoAnterior = atual;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem("eac_texto", atual); } catch (e) {}
+    guardar("eac_texto", atual);
   }, 400);
 }
 
@@ -4210,6 +4257,16 @@ async function medirArmazenamento() {
     p.push("localStorage: " + Math.round(n / 1024) + " KB em " + localStorage.length + " chaves");
   } catch (e) { p.push("localStorage: sem acesso"); }
   p.push("histórico: " + (typeof historico !== "undefined" ? historico.length : "?") + " versões");
+  /* A linha mais importante deste bloco: gravação recusada é o problema que
+   * não aparece na tela. Sem ela, o diagnóstico de um app que parou de
+   * salvar fica idêntico ao de um app saudável. */
+  p.push("gravações recusadas: " + (falhasGravacao.length
+    ? falhasGravacao.length + " (" + [...new Set(falhasGravacao.map((f) => f.chave))].join(", ") + ")"
+    : "nenhuma"));
+  try {
+    const n = (JSON.parse(localStorage.getItem("eac_editais") || "[]") || []).length;
+    p.push("editais cadastrados: " + n);
+  } catch (e) { p.push("editais cadastrados: erro ao ler"); }
   estadoArmazen = p.join(" | ");
   return estadoArmazen;
 }
