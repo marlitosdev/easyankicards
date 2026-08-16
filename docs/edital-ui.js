@@ -10,9 +10,26 @@ let edCorrecaoPendente = null;
 
 function edSalvar() {
   try {
+    /* Os dois slots antigos continuam sendo a cópia de trabalho do edital
+     * ABERTO — é o que a bancada inteira já lê e escreve. O que mudou em
+     * 8.68 é que eles deixaram de ser o destino final: cada gravação também
+     * cai dentro do registro do edital na lista. Sem esse espelho, trocar
+     * de edital sobrescreveria o outro. */
     localStorage.setItem("eac_edital_texto", $("editalTexto").value);
     localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso));
   } catch (e) {}
+  if (typeof edAberto === "function") {
+    const alvo = edAberto();
+    if (alvo) {
+      alvo.texto = $("editalTexto").value;
+      alvo.progresso = edProgresso;
+      alvo.tocado = new Date().toISOString();
+      /* o nome segue o cabeçalho do edital enquanto ninguém renomear à mão */
+      const cfg = (lerEdital(alvo.texto).cfg) || {};
+      if (cfg.concurso && !alvo.renomeado) alvo.nome = cfg.concurso;
+      edSalvarLista();
+    }
+  }
 }
 
 function edChave(it) { return (it.disciplina + "›" + it.nome).toLowerCase(); }
@@ -253,9 +270,20 @@ function edLinhaTopico(i, semDisciplina) {
   const doc = document.createElement("button");
   doc.type = "button";
   const ch = matChave(i.disciplina, i.nome);
-  doc.className = "ed-doc" + (matTem(ch) ? " tem" : "");
-  doc.textContent = "📄";
-  doc.title = t(matTem(ch) ? "mat_ver" : "mat_criar", { n: i.nome });
+  const temTxt = !!(matObter(ch) && String(matObter(ch).texto || "").trim());
+  const nCard = matContarCartoes(ch);
+  /* três estados, não dois: nada, resumo, e resumo COM cartões. Saber que o
+   * tópico já virou cartão muda o que fazer com a hora de estudo. */
+  doc.className = "ed-doc" + (temTxt || nCard ? " tem" : "") + (nCard ? " cards" : "");
+  doc.textContent = nCard ? "🗂" : "📄";
+  doc.title = nCard ? t("mat_ver_cards", { n: i.nome, c: nCard })
+    : t(temTxt ? "mat_ver" : "mat_criar", { n: i.nome });
+  if (nCard) {
+    const sel = document.createElement("span");
+    sel.className = "ed-doc-n";
+    sel.textContent = nCard;
+    doc.append(sel);
+  }
   doc.onclick = (ev) => { ev.stopPropagation(); matAbrirEditor(i); };
 
   const min = document.createElement("b");
