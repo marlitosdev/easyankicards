@@ -536,6 +536,69 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde)}
 .quem-ia{background:rgba(139,92,246,.18);color:#a78bfa}
 :root[data-theme="light"] .quem-ia{color:#6d28d9}
+.ed-doc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px;
+  border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
+.ed-doc:hover{opacity:1;border-color:var(--borda)}
+.ed-doc.tem{opacity:1;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
+.mat-caixa{border:1px solid var(--borda);border-radius:10px;padding:4px 11px;margin-top:8px}
+.mat-item{display:flex;align-items:center;gap:10px;padding:9px 0;
+  border-bottom:1px solid var(--borda)}
+.mat-item:last-child{border-bottom:0}
+.mat-item-txt{flex:1;min-width:0}
+.mat-nome{font-size:13px;font-weight:600;color:var(--texto);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat-sub{font-size:11px;color:var(--sutil);margin-top:2px}
+.mat-conta{font-size:11px;color:var(--sutil);font-weight:600}
+.selo-base{font-size:10.5px;padding:2px 8px;border-radius:8px;font-weight:700;
+  border:1px solid var(--borda);background:var(--campo);color:var(--sutil)}
+.sb-ok{border-color:rgba(34,197,94,.5);color:#22c55e}
+.sb-aviso{border-color:rgba(245,158,11,.5);color:#e8940a}
+.sb-alerta{border-color:rgba(220,38,38,.5);color:#fca5a5}
+:root[data-theme="light"] .sb-alerta{color:#b91c1c}
+.selo-ajuda{all:unset;cursor:help;width:15px;height:15px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
+.selo-ajuda:hover{color:var(--texto)}
+.bk-bloco{padding:9px 11px;border-radius:9px;background:var(--campo);
+  border:1px solid var(--borda);margin:0 0 8px}
+.bk-rot{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--sutil);font-weight:800;margin-bottom:3px}
+.bk-txt{font-size:12.5px;line-height:1.5;color:var(--texto)}
+.bk-passo{border-top:1px solid var(--borda);padding-top:11px;margin-top:11px}
+.bk-passo b{display:block;font-size:13px;margin-bottom:3px;color:var(--texto)}
+.bk-passo .nota{display:block;margin:0 0 8px}
+.bk-aviso{padding:9px 11px;border-radius:9px;font-size:12px;line-height:1.5;
+  margin:9px 0;border:1px solid var(--borda);color:var(--texto)}
+.bk-aviso.ok{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.45)}
+.bk-aviso.grave{background:rgba(220,38,38,.16);border-color:rgba(220,38,38,.5)}
+.bk-tab{margin-top:4px}
+.bk-tab .bk-num{text-align:right;font-weight:700;width:70px}
+.bk-tab .bk-dif{font-size:11px;color:var(--sutil);width:120px}
+.bk-tab tr.bk-perde td{color:#fca5a5}
+:root[data-theme="light"] .bk-tab tr.bk-perde td{color:#b91c1c}
+/* ---- painel de diagnóstico ----
+   Este bloco já sumiu uma vez: a reescrita do CSS dos modos (v8.59) cortou
+   um intervalo que o continha, e o painel ficou sem formatação sem ninguém
+   notar — classe usada no HTML sem regra correspondente não dá erro em
+   lugar nenhum. O teste F4 passou a exigir que ela exista. */
+.diag-modal{max-width:860px}
+.diag-alvo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 4px;
+  padding:8px 11px;border-radius:9px;font-size:12px;
+  background:var(--campo);border:1px solid var(--borda)}
+.diag-alvo b{font-size:13px}
+.diag-alvo .da-conta{margin-left:auto;color:var(--sutil);font-size:11.5px}
+.diag-legenda{font-size:11.5px;line-height:1.6;color:var(--sutil);
+  border:1px solid var(--borda);border-radius:9px;padding:9px 11px;margin:8px 0}
+.diag-legenda b{color:var(--texto);font-family:ui-monospace,Consolas,monospace}
+.diag-op{display:flex;align-items:center;gap:7px;font-size:12px;margin:8px 0}
+.diag-pre{max-height:46vh;overflow:auto;margin:0;padding:11px;border-radius:9px;
+  background:var(--campo);border:1px solid var(--borda);
+  font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.55;
+  white-space:pre-wrap;overflow-wrap:break-word;color:var(--texto)}
+.diag-pre .d-sec{color:#4eaed9;font-weight:700}
+.diag-pre .d-err{background:rgba(220,38,38,.18);border-radius:3px}
+.diag-pre .d-cab{color:var(--texto);font-weight:700}
 /* ---- barra de modos ----------------------------------------------
    Trilho vertical no computador, fileira de abas no celular. Cada modo
    tem a sua cor, aplicada só na borda esquerda e no ícone: colorir o
@@ -1125,6 +1188,123 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </section>
 
+<section id="secResumos" data-modo="material" hidden>
+  <div class="grupo" style="max-width:760px">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="modo_material"></h2>
+      <span class="bancada-acoes"><span class="mat-conta" id="matContagem"></span></span>
+    </div>
+    <p class="nota" data-i18n="mat_intro"></p>
+    <div id="matLista" class="mat-caixa"></div>
+  </div>
+</section>
+
+<section id="secFerramentas" data-modo="ferramentas" hidden>
+  <div class="grupo" style="max-width:620px">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="modo_ferramentas"></h2>
+    </div>
+    <p class="nota" data-i18n="ferr_intro"></p>
+      <div class="gaveta-importar">
+        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
+          <span class="gv-icone">▸</span>
+          <span data-i18n="import_handle"></span>
+          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
+        </button>
+        <div class="gaveta-corpo" id="gavetaImportar" hidden>
+          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
+          <div class="nota" id="importAviso"></div>
+          <div id="importProgresso" style="display:none">
+            <div class="ip-txt" id="importProgTxt"></div>
+            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
+          </div>
+        </div>
+      </div>
+    <div class="ferr-bloco">
+      <div class="ferr-tit" data-i18n="hist_titulo"></div>
+      <p class="nota" data-i18n="hist_ajuda"></p>
+      <button class="btn btn-cinza" id="btnHistorico" title=""></button>
+    </div>
+    <div class="ferr-lista">
+      <div class="ferr-item"><b data-i18n="ferr_soon_edital"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+      <div class="ferr-item"><b data-i18n="ferr_soon_backup"></b>
+        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="secEdital" data-modo="edital" hidden>
+  <div class="duas-colunas">
+    <div class="grupo" id="painelEdital">
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
+        <span class="bancada-acoes">
+          <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
+          <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
+        </span>
+      </div>
+      <!-- O ciclo inteiro numa linha só: pedir, revisar, colar de volta.
+           O diagnóstico estava do outro lado da tela, longe do botão que
+           recebe a resposta dele. -->
+      <div class="btn-linha">
+        <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
+        <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
+        <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
+      </div>
+      <label class="bancada-sub" data-i18n="ed_colar"></label>
+      <div class="editor-wrap ed-wrap">
+        <div id="editalNums" aria-hidden="true"></div>
+        <textarea id="editalTexto" spellcheck="false"
+          placeholder="# TCE-PE | prova: 2026-08-30 | horas: 12&#10;@ Auditoria Governamental :: 5&#10;+ Achado de auditoria :: 5 :: cai em quase toda prova"></textarea>
+      </div>
+      <div id="editalSug" class="sugestoes"></div>
+      <button class="btn btn-verde" id="btnEditalCorrigir" disabled></button>
+    </div>
+
+    <div class="grupo">
+      <div class="bancada-cab">
+        <h2 class="bancada-nome" data-i18n="ed_prioridade"></h2>
+
+      </div>
+      <div class="ed-cfg">
+        <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
+        <label><span data-i18n="ed_horas"></span>
+          <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
+        <label><span data-i18n="ed_dias"></span>
+          <input type="number" id="edDias" min="1" max="7" step="1" value="5"></label>
+        <label><span data-i18n="ed_inicio"></span>
+          <input type="time" id="edInicio" value="19:00"></label>
+      </div>
+      <div class="ed-sim">
+        <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
+        <div class="ed-sim-txt" id="edSimTxt"></div>
+      </div>
+      <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
+      <div class="ed-ritmo" id="edRitmo" hidden></div>
+      <div class="ed-abas">
+        <button class="ed-aba ativa" id="btnVistaPainel" data-i18n="ed_vista_painel"></button>
+        <button class="ed-aba" id="btnVistaLista" data-i18n="ed_vista_lista"></button>
+      </div>
+      <div id="edPainel"></div>
+      <div id="edListaBox" hidden>
+      <div class="ed-rolagem">
+        <table class="ed-tab">
+          <thead><tr>
+            <th data-i18n="ed_col_top"></th><th data-i18n="ed_col_disc"></th>
+            <th data-i18n="ed_col_pri"></th><th data-i18n="ed_col_h"></th>
+            <th data-i18n="ed_col_ok"></th>
+          </tr></thead>
+          <tbody id="edTabela"></tbody>
+        </table>
+      </div>
+      </div>
+      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
+    </div>
+  </div>
+</section>
+
 <section id="secResumos" data-modo="resumos" hidden>
   <div class="duas-colunas">
     <div class="grupo">
@@ -1212,6 +1392,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     </div>
     <div id="status"></div>
     <div class="rodape-tec">
+      <span class="selo-base" id="seloBase"></span>
+      <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
+      <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
       <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
     </div>
   </div>
@@ -1390,6 +1573,69 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
+<dialog id="dlgMaterial" class="ui-modal diag-modal">
+  <h3 id="matTitulo"></h3>
+  <p class="nota" id="matSub"></p>
+  <p class="nota" data-i18n="mat_ajuda"></p>
+  <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
+            placeholder="Escreva aqui o que precisa lembrar deste tópico."></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"></button>
+    <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes"></button>
+    <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgBackup" class="ui-modal">
+  <h3 data-i18n="bk_tit"></h3>
+  <p class="nota" data-i18n="bk_ajuda"></p>
+  <div class="bk-bloco">
+    <div class="bk-rot" data-i18n="bk_agora_rot"></div>
+    <div id="bkAgora" class="bk-txt"></div>
+  </div>
+  <div class="bk-bloco">
+    <div class="bk-rot" data-i18n="bk_ultimo_rot"></div>
+    <div id="bkUltimo" class="bk-txt"></div>
+  </div>
+  <div class="bk-passo">
+    <b data-i18n="bk_p1_tit"></b>
+    <span class="nota" data-i18n="bk_p1_txt"></span>
+    <div class="btn-linha">
+      <button class="btn btn-verde" id="btnBkSalvarNuvem" data-i18n="bk_salvar_nuvem"></button>
+      <button class="btn btn-cinza" id="btnBkBaixar" data-i18n="bk_baixar"></button>
+    </div>
+  </div>
+  <div class="bk-passo">
+    <b data-i18n="bk_p2_tit"></b>
+    <span class="nota" data-i18n="bk_p2_txt"></span>
+    <div class="btn-linha">
+      <button class="btn btn-azul" id="btnBkCarregar" data-i18n="bk_carregar"></button>
+    </div>
+    <input type="file" id="bkArquivo" accept="application/json,.json" style="display:none">
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnBkFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgBkConf" class="ui-modal diag-modal">
+  <h3 data-i18n="bk_conf_tit"></h3>
+  <p class="nota" data-i18n="bk_conf_ajuda"></p>
+  <div class="ed-diario-res" id="bkConfArquivo"></div>
+  <div class="bk-aviso" id="bkConfAviso"></div>
+  <table class="ed-tab bk-tab">
+    <thead><tr>
+      <th data-i18n="bk_col_o_que"></th><th data-i18n="bk_col_agora"></th>
+      <th data-i18n="bk_col_backup"></th><th data-i18n="bk_col_dif"></th>
+    </tr></thead>
+    <tbody id="bkConfTabela"></tbody>
+  </table>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnBkConfAplicar" data-i18n="bk_conf_aplicar"></button>
+    <button class="btn btn-cinza" id="btnBkConfCancelar" data-i18n="bk_conf_cancelar"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgDisciplina" class="ui-modal diag-modal">
   <h3 id="dscTitulo"></h3>
   <p class="nota" id="dscSub"></p>
@@ -1610,6 +1856,9 @@ window.__sqlPromise = initSqlJs({
 <script src="parser.js"></script>
 <script src="anki.js"></script>
 <script src="app.js"></script>
+<script src="backup.js"></script>
+<script src="backup-ui.js"></script>
+<script src="material.js"></script>
 <script src="edital.js"></script>
 <script src="edital-ui.js"></script>
 <script src="modos.js"></script>
@@ -1618,6 +1867,8 @@ window.__sqlPromise = initSqlJs({
    tem de subir — senão o app inteiro fica preso num estado sem modo, com o
    rodapé de exportação aparecendo onde não devia. */
 try { edIniciar(); } catch (e) { console.error(e); }
+try { bkIniciar(); } catch (e) { console.error(e); }
+try { matIniciar(); } catch (e) { console.error(e); }
 try { montarBarraModos(); } catch (e) { console.error(e); }
 </script>
 </body>
