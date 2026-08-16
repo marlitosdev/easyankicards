@@ -247,13 +247,24 @@ function edLinhaTopico(i, semDisciplina) {
   rev.style.visibility = i.feito ? "visible" : "hidden";
   rev.onclick = (ev) => { ev.stopPropagation(); edMarcar(i, null, null); };
 
+  /* O material do tópico, a um clique da agenda. Vazio por padrão; o ponto
+   * verde aparece quando existe conteúdo, para dar para varrer a semana e
+   * ver o que já tem resumo sem abrir nada. */
+  const doc = document.createElement("button");
+  doc.type = "button";
+  const ch = matChave(i.disciplina, i.nome);
+  doc.className = "ed-doc" + (matTem(ch) ? " tem" : "");
+  doc.textContent = "📄";
+  doc.title = t(matTem(ch) ? "mat_ver" : "mat_criar", { n: i.nome });
+  doc.onclick = (ev) => { ev.stopPropagation(); matAbrirEditor(i); };
+
   const min = document.createElement("b");
   min.className = "ed-item-min";
   /* "1h" diz quanto; "seg 19:00 · 1h" diz quando, e é o quando que vira
    * compromisso. A agenda só aparece na semana atual, onde faz sentido. */
   min.textContent = (i.dia ? i.dia + " " + i.hora + " · " : "") + horasTexto(i.minutos);
 
-  li.append(chk, pt, meio, rev, min);
+  li.append(chk, pt, meio, doc, rev, min);
   return li;
 }
 
@@ -293,11 +304,24 @@ function salvarDiario() {
 }
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 
+/* Para QUAL concurso foi este estudo. Hoje o app tem um edital só, mas o
+ * registro é para sempre: sem esta marca, o dia em que existirem dois planos
+ * os históricos se misturam e não há como separá-los depois — informação que
+ * não foi gravada na hora não se recupera. Enquanto os planos com nome não
+ * existem, a identidade vem do cabeçalho "#" do edital. */
+function concursoAtual() {
+  try {
+    const c = lerEdital($("editalTexto").value).cfg;
+    return { nome: c.concurso || "", prova: c.prova || "" };
+  } catch (e) { return { nome: "", prova: "" }; }
+}
+
 function anotarDiario(i, acao, detalhe) {
   edDiario.push({ d: hojeISO(), c: i.chave, n: i.nome, disc: i.disciplina,
                   p: i.bruto, m: (detalhe && detalhe.minutos) || i.minutos,
                   f: (detalhe && detalhe.formas) || null,
-                  hu: (detalhe && detalhe.humor) || null, a: acao });
+                  hu: (detalhe && detalhe.humor) || null, a: acao,
+                  cc: concursoAtual().nome });
   salvarDiario();
 }
 
@@ -310,7 +334,8 @@ function completarDiario(itens) {
   (itens || []).forEach((i) => {
     if (!i.estado || tem.has(i.chave)) return;
     edDiario.push({ d: i.quando || "?", c: i.chave, n: i.nome, disc: i.disciplina,
-                    p: i.bruto, m: i.minutos, f: null, a: i.estado, retro: true });
+                    p: i.bruto, m: i.minutos, f: null, a: i.estado, retro: true,
+                    cc: concursoAtual().nome });
     n++;
   });
   if (n) { salvarDiario(); reg("EDITAL-DIARIO", n + " marca(s) antigas viraram registro"); }
@@ -456,7 +481,9 @@ function abrirDiario() {
     const nm = document.createElement("span");
     nm.className = "di-nome"; nm.textContent = x.n;
     const ds = document.createElement("span");
-    ds.className = "di-disc"; ds.textContent = x.disc;
+    ds.className = "di-disc";
+    ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
+    ds.title = x.cc ? t("ed_para_concurso", { c: x.cc }) : t("ed_sem_concurso_ajuda");
     const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
     li.append(q, ac, nm, ds, bt);
     lista.append(li);
