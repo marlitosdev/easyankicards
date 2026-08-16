@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.64.0";
+const VERSAO = "8.66.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3210,17 +3210,45 @@ function montarGen() {
   mostrarTamanho("genTam", $("genTexto").value);
   $("genDone").textContent = "";
 }
-function abrirGerar(texto) {
+/* A origem viaja junto: quando o prompt nasce de um tópico do edital, os
+ * cartões que voltarem sabem a que assunto pertencem — e é isso que permite
+ * arquivá-los no material sem o usuário reinformar disciplina e concurso. */
+let genOrigem = null;
+
+function abrirGerar(texto, origem) {
   genTextoBase = texto || "";
+  genOrigem = origem || null;
   genTipo = "prompt_full";
   montarGen();
+  const b = $("btnGenMaterial");
+  if (b) {
+    b.hidden = !genOrigem;
+    b.textContent = genOrigem
+      ? t("gen_guardar_material", { t: genOrigem.topico }) : "";
+  }
   $("dlgGerar").showModal();
+}
+
+/* Guarda o que estiver na caixa como CARTÕES do tópico. O texto colado aqui
+ * é a resposta da IA, não o prompt — por isso o app confere antes: sem "::"
+ * em nenhuma linha, não são cartões. */
+function guardarCartoesNoMaterial() {
+  if (!genOrigem) return;
+  const txt = $("genTexto").value;
+  const linhas = (txt.match(/^[^\n#@+].*::/gm) || []).length;
+  if (!linhas) { uiAlert(t("gen_material_sem_cartoes")); return; }
+  const ch = matChave(genOrigem.disciplina, genOrigem.topico);
+  matGravarCartoes(ch, txt, genOrigem);
+  reg("MATERIAL", "cartões guardados: " + genOrigem.topico, linhas + " cartões");
+  uiAlert(t("gen_material_ok", { n: linhas, t: genOrigem.topico }));
+  if (typeof matRender === "function") matRender();
 }
 $("btnGenFull").onclick = () => { genTipo = "prompt_full"; montarGen(); };
 $("btnGenShort").onclick = () => { genTipo = "prompt_mini"; montarGen(); };
 /* Terminada a importacao, o proximo passo e' colar os cartoes — que
  * acontece na bancada. Voltar sozinho evita o usuario fechar a janela e
  * ficar olhando para a tela de ferramentas sem entender para onde ir. */
+$("btnGenMaterial").onclick = guardarCartoesNoMaterial;
 $("btnGenFechar").onclick = () => {
   $("dlgGerar").close();
   if (typeof modoAtual !== "undefined" && modoAtual === "ferramentas") trocarModo("cartoes");

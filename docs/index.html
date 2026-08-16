@@ -536,11 +536,47 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde)}
 .quem-ia{background:rgba(139,92,246,.18);color:#a78bfa}
 :root[data-theme="light"] .quem-ia{color:#6d28d9}
+.mat-barra{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin:0 0 6px}
+.fmt{all:unset;cursor:pointer;width:28px;height:26px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.fmt:hover{border-color:var(--sutil)}
+.fmt-sep{width:1px;height:18px;background:var(--borda);margin:0 3px}
+.fmt-colar{width:auto;padding:0 10px;font-size:11px;font-weight:700}
+.mat-num{margin:0 0 7px;padding-left:4px}
+.fmt-dica{font-size:10.5px;color:var(--sutil);margin-left:auto}
+.mat-ctrl{display:flex;align-items:center;gap:7px;font-size:11.5px;
+  color:var(--sutil);margin:0 0 8px}
+.mat-fonte{min-width:34px;text-align:center;font-weight:700;color:var(--texto)}
+.mat-leitura{border:1px solid var(--borda);border-radius:9px;padding:16px 18px;
+  background:var(--campo);color:var(--texto);line-height:1.65;max-height:52vh;
+  overflow:auto}
+.mat-leitura h3{font-size:1.25em;margin:0 0 10px}
+.mat-leitura h4{font-size:1.1em;margin:16px 0 7px;color:var(--sutil)}
+.mat-leitura p{margin:0 0 11px}
+.mat-leitura ul{margin:0 0 11px;padding-left:20px}
+.mat-leitura li{margin:0 0 5px}
+.mat-leitura hr{border:0;border-top:1px solid var(--borda);margin:14px 0}
+.mat-leitura mark{background:rgba(245,158,11,.3);color:inherit;border-radius:3px;padding:0 2px}
+dialog.mat-amplo{max-width:96vw;width:96vw}
+dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ed-doc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
   display:inline-flex;align-items:center;justify-content:center;font-size:12px;
   border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
 .ed-doc:hover{opacity:1;border-color:var(--borda)}
 .ed-doc.tem{opacity:1;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
+.mat-busca{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);
+  font-size:13px;margin-top:8px}
+.mat-grupo{margin:0 0 6px}
+.mat-cc{font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;
+  color:#a78bfa;padding:10px 0 4px;border-bottom:1px solid var(--borda)}
+:root[data-theme="light"] .mat-cc{color:#6d28d9}
+.mat-disc{margin:0 0 2px}
+.mat-disc-cab{all:unset;cursor:pointer;display:block;padding:8px 0 5px;
+  font-size:12px;font-weight:700;color:var(--texto)}
+.mat-disc-cab:hover{color:var(--sutil)}
+.mat-disc .mat-item{padding-left:14px}
 .mat-caixa{border:1px solid var(--borda);border-radius:10px;padding:4px 11px;margin-top:8px}
 .mat-item{display:flex;align-items:center;gap:10px;padding:9px 0;
   border-bottom:1px solid var(--borda)}
@@ -1195,6 +1231,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <span class="bancada-acoes"><span class="mat-conta" id="matContagem"></span></span>
     </div>
     <p class="nota" data-i18n="mat_intro"></p>
+    <input type="search" id="matBusca" class="mat-busca"
+           placeholder="Filtrar por concurso, disciplina, tópico ou conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
 </section>
@@ -1479,6 +1517,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div id="genDone" style="font-size:12px;color:var(--verde);margin-top:6px;min-height:16px"></div>
   </div>
   <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnGenMaterial" hidden></button>
     <button class="btn btn-verde" id="btnGenCopiar" data-i18n="gen_copy"></button>
     <button class="btn btn-cinza" id="btnGenFechar" data-i18n="help_close"></button>
   </div>
@@ -1573,14 +1612,46 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
+<dialog id="dlgMatColar" class="ui-modal">
+  <h3 data-i18n="mat_colar_tit"></h3>
+  <p class="nota" data-i18n="mat_colar_ajuda"></p>
+  <textarea id="matColarTexto" rows="12" style="width:100%;box-sizing:border-box"
+            placeholder="Cole aqui o texto do NotebookLM, Gemini ou ChatGPT."></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnMatColarOk" data-i18n="mat_colar_ok"></button>
+    <button class="btn btn-cinza" id="btnMatColarFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMaterial" class="ui-modal diag-modal">
   <h3 id="matTitulo"></h3>
   <p class="nota" id="matSub"></p>
   <p class="nota" data-i18n="mat_ajuda"></p>
+  <div class="mat-barra" id="matBarra">
+    <button class="fmt" id="btnFmtB" title="Negrito"><b>N</b></button>
+    <button class="fmt" id="btnFmtI" title="Italico"><i>I</i></button>
+    <button class="fmt" id="btnFmtM" title="Destacar">&#9646;</button>
+    <span class="fmt-sep"></span>
+    <button class="fmt" id="btnFmtH" title="Titulo">H</button>
+    <button class="fmt" id="btnFmtL" title="Lista">&#9776;</button>
+    <button class="fmt" id="btnFmtHr" title="Linha">&#8212;</button>
+    <button class="fmt fmt-colar" id="btnMatColar" data-i18n="mat_colar_btn"></button>
+    <span class="fmt-dica" data-i18n="mat_fmt_dica"></span>
+  </div>
   <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
             placeholder="Escreva aqui o que precisa lembrar deste tópico."></textarea>
+  <div class="mat-ctrl" id="matCtrlLeitura" hidden>
+    <span data-i18n="mat_letra"></span>
+    <button class="btn-min" id="btnMatMenor">A&#8722;</button>
+    <span class="mat-fonte" id="matFonteVal">15px</span>
+    <button class="btn-min" id="btnMatMaior">A+</button>
+    <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar"></button>
+  </div>
+  <div class="mat-leitura" id="matLeitura" hidden></div>
   <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMatModo"></button>
     <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"></button>
+    <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden></button>
     <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes"></button>
     <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close"></button>
   </div>
