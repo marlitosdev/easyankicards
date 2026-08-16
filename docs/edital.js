@@ -834,3 +834,121 @@ function acompanhamento(plano, diario, metaMin) {
     },
   };
 }
+
+/* =====================================================================
+ * INCLUIR E EXCLUIR DISCIPLINA À MÃO
+ *
+ * Tudo acontece NO TEXTO do edital, como o peso editável e as horas já
+ * faziam. Estado que não está no texto é estado que diverge da tela — foi
+ * o que aconteceu quando o campo de horas e o controle deslizante
+ * brigavam, e não vou repetir isso guardando disciplina em outro lugar.
+ * ===================================================================== */
+
+/* "Direito Tributário :: 4 :: cai muito" → { nome, peso, motivo } */
+function edLerLinhaTopico(linha) {
+  const p = String(linha).replace(/^\s*[+\-*]\s*/, "").split("::").map((x) => x.trim());
+  const nome = p[0] || "";
+  const peso = p[1] !== undefined && p[1] !== "" ? Number(p[1]) : null;
+  return {
+    nome,
+    peso: (peso && peso >= 1 && peso <= 5) ? peso : 3,
+    motivo: p[2] || "",
+  };
+}
+
+function edIncluirDisciplina(texto, nome, peso, linhasTopicos) {
+  const limpo = String(nome || "").trim();
+  if (!limpo) return { erro: "sem_nome" };
+
+  const r = lerEdital(texto || "");
+  if (r.disciplinas.some((d) => d.nome.toLowerCase() === limpo.toLowerCase()))
+    return { erro: "repetida", nome: limpo };
+
+  const tops = String(linhasTopicos || "").split("\n")
+    .map((l) => l.trim()).filter(Boolean).map(edLerLinhaTopico)
+    .filter((tp) => tp.nome);
+  /* disciplina sem tópico não entra na agenda nem na conta do peso: seria
+   * um item invisível que a pessoa jura ter cadastrado */
+  if (!tops.length) return { erro: "sem_topicos" };
+
+  const p = Math.max(1, Math.min(5, Number(peso) || 3));
+  const bloco = ["@ " + limpo + " :: " + p]
+    .concat(tops.map((tp) => "+ " + tp.nome + " :: " + tp.peso
+      + (tp.motivo ? " :: " + tp.motivo : "")));
+
+  const base = String(texto || "").replace(/\s*$/, "");
+  const novo = (base ? base + "\n" : "") + bloco.join("\n") + "\n";
+  return { texto: novo, nome: limpo, peso: p, topicos: tops.length };
+}
+
+/* Excluir tira a disciplina DO PLANO — e só do plano.
+ *
+ * O diário de estudos não é mexido: ele é o histórico do que você fez, e
+ * histórico não se reescreve porque o plano mudou. As marcas de estudado
+ * também ficam guardadas: a chave é "disciplina›tópico", então se a
+ * disciplina voltar um dia, o que já estava marcado volta com ela. Apagar
+ * seria destruir informação para não ganhar nada.
+ *
+ * A função devolve as contas para que a confirmação possa dizer o que
+ * realmente acontece, em vez de um "tem certeza?" genérico. */
+function edExcluirDisciplina(texto, nome, progresso) {
+  const alvo = String(nome || "").trim().toLowerCase();
+  if (!alvo) return { erro: "sem_nome" };
+
+  const r = lerEdital(texto || "");
+  const d = r.disciplinas.find((x) => x.nome.toLowerCase() === alvo);
+  if (!d) return { erro: "nao_achou", nome };
+
+  const prog = progresso || {};
+  const chaves = d.topicos.map((tp) => (d.nome + "›" + tp.nome).toLowerCase());
+  const marcados = chaves.filter((c) => prog[c]);
+
+  /* recorta o bloco no texto: da linha "@ nome" até a próxima "@" */
+  const linhas = String(texto || "").split("\n");
+  const ini = linhas.findIndex((l) =>
+    /^\s*@/.test(l) && l.replace(/^\s*@\s*/, "").split("::")[0].trim().toLowerCase() === alvo);
+  if (ini < 0) return { erro: "nao_achou", nome };
+  let fim = ini + 1;
+  while (fim < linhas.length && !/^\s*@/.test(linhas[fim])) fim++;
+  linhas.splice(ini, fim - ini);
+
+  return {
+    texto: linhas.join("\n"),
+    nome: d.nome,
+    topicos: d.topicos.length,
+    marcados: marcados.length,
+    chaves,
+    peso: d.peso,
+  };
+}
+
+/* Redistribuir: devolve os pesos que fariam a fatia das OUTRAS disciplinas
+ * voltar ao que era antes da inclusão. Não aplica nada — quem aplica é a
+ * pessoa, e "manter assim" é a primeira opção de propósito, porque peso
+ * vindo do número de questões do edital é dado, não palpite do app. */
+function edRedistribuir(textoAntes, textoDepois) {
+  const A = lerEdital(textoAntes || ""), D = lerEdital(textoDepois || "");
+  const fatia = (r) => {
+    const tot = r.disciplinas.reduce((a, d) =>
+      a + d.peso * d.topicos.reduce((b, tp) => b + tp.peso, 0), 0) || 1;
+    const m = {};
+    r.disciplinas.forEach((d) => {
+      m[d.nome.toLowerCase()] = (d.peso * d.topicos.reduce((b, tp) => b + tp.peso, 0)) / tot;
+    });
+    return m;
+  };
+  const fa = fatia(A), fd = fatia(D);
+  return D.disciplinas
+    .filter((d) => fa[d.nome.toLowerCase()] !== undefined)
+    .map((d) => {
+      const k = d.nome.toLowerCase();
+      const alvoPeso = d.peso * (fa[k] / (fd[k] || 1));
+      return {
+        nome: d.nome, de: d.peso,
+        para: Math.max(1, Math.min(5, Math.round(alvoPeso))),
+        fatiaAntes: Math.round(fa[k] * 100),
+        fatiaDepois: Math.round(fd[k] * 100),
+      };
+    })
+    .filter((x) => x.de !== x.para);
+}
