@@ -8,6 +8,13 @@
 let edProgresso = {};      /* nome do tópico -> true */
 let edCorrecaoPendente = null;
 
+/* H5 — "Buscar tópico" (antes "Lista completa").
+ * Estado próprio: o que se procura, sob qual filtro, e o que está marcado
+ * para a ação em lote. */
+let edBusca = "";
+let edFiltro = "tudo";
+let edSelecao = new Set();
+
 function edSalvar() {
   try {
     /* Os dois slots antigos continuam sendo a cópia de trabalho do edital
@@ -15,8 +22,8 @@ function edSalvar() {
      * 8.68 é que eles deixaram de ser o destino final: cada gravação também
      * cai dentro do registro do edital na lista. Sem esse espelho, trocar
      * de edital sobrescreveria o outro. */
-    localStorage.setItem("eac_edital_texto", $("editalTexto").value);
-    localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso));
+    guardar("eac_edital_texto", $("editalTexto").value);
+    guardar("eac_edital_progresso", JSON.stringify(edProgresso));
   } catch (e) {}
   if (typeof edAberto === "function") {
     const alvo = edAberto();
@@ -327,7 +334,7 @@ function carregarDiario() {
 }
 function salvarDiario() {
   while (edDiario.length > DIARIO_MAX) edDiario.shift();
-  try { localStorage.setItem("eac_edital_diario", JSON.stringify(edDiario)); }
+  try { guardar("eac_edital_diario", JSON.stringify(edDiario)); }
   catch (e) {}
 }
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
@@ -604,54 +611,187 @@ function edMarcar(i, estado, detalhe) {
 function edPintarRitmo(plano) {
   const box = $("edRitmo");
   box.innerHTML = "";
-  const R = ritmoDoPlano(plano, edDiario);
-  if (!plano.total || R.necessarioMin === null) { box.hidden = true; return; }
+  if (!plano.total || plano.semanas === null) { box.hidden = true; return; }
   box.hidden = false;
 
-  const escala = Math.max(R.necessarioMin, R.observadoMin, R.planejadoMin || 0) || 1;
-  const linha = (rot, min, cls, extra) => {
-    const d = document.createElement("div");
-    d.className = "rt-linha " + cls;
-    const r1 = document.createElement("span");
-    r1.className = "rt-rot"; r1.textContent = rot;
-    const barra = document.createElement("div");
-    barra.className = "rt-barra";
-    const fill = document.createElement("div");
-    fill.className = "rt-fill";
-    fill.style.width = Math.round((min / escala) * 100) + "%";
-    barra.append(fill);
-    const v = document.createElement("b");
-    v.textContent = horasTexto(min) + (extra ? " · " + extra : "");
-    d.append(r1, barra, v);
-    return d;
-  };
+  const A = acompanhamento(plano, edDiario, plano.porSemana);
 
   const tit = document.createElement("div");
   tit.className = "rt-tit";
-  tit.textContent = t("ed_rt_titulo");
+  tit.textContent = t("ed_ac_titulo");
   box.append(tit);
-  box.append(linha(t("ed_rt_necessario"), R.necessarioMin, "rt-nec",
-    t("ed_rt_topicos", { n: R.necessarioTop })));
-  box.append(linha(t("ed_rt_planejado"), R.planejadoMin || 0, "rt-pla"));
-  box.append(linha(t("ed_rt_observado"), R.observadoMin, "rt-obs",
-    R.semanasComRegistro ? t("ed_rt_semanas", { n: R.semanasComRegistro })
-                         : t("ed_rt_nada")));
 
-  const nota = document.createElement("div");
-  nota.className = "rt-nota";
-  if (!R.semanasComRegistro) nota.textContent = t("ed_rt_sem_dados");
-  else if (R.razao >= 1) nota.textContent = t("ed_rt_no_ritmo");
-  else nota.textContent = t("ed_rt_atras", {
-    p: Math.round((1 - R.razao) * 100), a: R.alcance, t: plano.total });
-  box.append(nota);
+  /* H3 — O ESCOPO FICA ESCRITO.
+   * A agenda logo acima soma todos os editais; este bloco é de UM só. Sem
+   * o nome aqui, com dois concursos a tela mostra dois números com o mesmo
+   * ar de verdade e nada que os distinga. Foi assim que as duas agendas
+   * conviveram. */
+  const escopo = document.createElement("div");
+  escopo.className = "ac-escopo";
+  const qual = (typeof edAberto === "function" && edAberto())
+    ? edAberto().nome : (lerEdital($("editalTexto").value).cfg.concurso || t("ed_sem_nome"));
+  escopo.textContent = t("ed_ac_escopo", { n: qual });
+  box.append(escopo);
 
-  if (plano.fora.length) {
+  /* H4 — com dois ou mais editais ativos, a comparação vem ANTES do
+   * detalhe. Somar a cobertura de dois concursos daria um número que não
+   * existe (ninguém presta uma prova média); o que existe é a pergunta
+   * "estou abandonando um deles?". */
+  if (typeof comparativoEditais === "function") {
+    const linhas = comparativoEditais(edDiario);
+    if (linhas.length >= 2) box.append(edTabelaComparativa(linhas));
+  }
+
+  /* ---------- 1. COBERTURA — por PESO, contagem como legenda ----------
+   * Liderar com "0/232 tópicos" inverte a régua: 40% dos tópicos pode ser
+   * 12% do peso, e é o peso que decide a prova. */
+  const cob = document.createElement("div");
+  cob.className = "ac-bloco";
+  const cRot = document.createElement("div");
+  cRot.className = "ac-rot";
+  cRot.textContent = t("ed_ac_cobertura");
+  cob.append(cRot);
+
+  /* barra empilhada única: revisado dentro do estudado, na escala da prova */
+  const ba = document.createElement("div");
+  ba.className = "ac-barra";
+  const fRev = document.createElement("div");
+  fRev.className = "ac-f-rev";
+  fRev.style.width = A.cobertura.pesoRevisado + "%";
+  const fEst = document.createElement("div");
+  fEst.className = "ac-f-est";
+  fEst.style.width = Math.max(0, A.cobertura.pesoEstudado - A.cobertura.pesoRevisado) + "%";
+  ba.append(fRev, fEst);
+  cob.append(ba);
+
+  const cNum = document.createElement("div");
+  cNum.className = "ac-num";
+  cNum.textContent = t("ed_ac_cob_num", {
+    e: A.cobertura.pesoEstudado, r: A.cobertura.pesoRevisado,
+    f: A.cobertura.topicosFeitos, tt: A.cobertura.topicosTotal,
+    s: A.cobertura.semanas,
+  });
+  cob.append(cNum);
+  box.append(cob);
+
+  /* ---------- 2. RITMO ---------- */
+  const rit = document.createElement("div");
+  rit.className = "ac-bloco";
+  const rRot = document.createElement("div");
+  rRot.className = "ac-rot";
+  rRot.textContent = t("ed_ac_ritmo");
+  rit.append(rRot);
+  const rTxt = document.createElement("div");
+  rTxt.className = "ac-num";
+  /* sem registro nao se inventa media: a linha vira instrucao, e aparece
+   * UMA vez — antes o "nada registrado" ocupava tres lugares na tela */
+  rTxt.textContent = A.ritmo.medivel
+    ? t("ed_ac_ritmo_txt", { fez: horasTexto(A.ritmo.fezMin),
+        n: A.ritmo.semanasComRegistro, meta: horasTexto(A.ritmo.metaMin),
+        ag: horasTexto(A.ritmo.agendaMin) })
+    : t("ed_ac_ritmo_vazio", { ag: horasTexto(A.ritmo.agendaMin) });
+  rit.append(rTxt);
+  box.append(rit);
+
+  /* ---------- 3. PROJEÇÃO — a única linha acionável da tela ----------
+   * Responde "vale a pena manter este ritmo?". O cálculo ja existia
+   * (ritmoDoPlano.alcance) e nunca chegava a ser desenhado. */
+  const pj = document.createElement("div");
+  pj.className = "ac-proj";
+  if (A.projecao) {
+    const forte = document.createElement("b");
+    forte.textContent = t("ed_ac_proj", { h: horasTexto(A.ritmo.fezMin),
+      p: A.projecao.pesoPct });
+    pj.append(forte);
+    if (A.projecaoMeta && A.projecaoMeta.pesoPct > A.projecao.pesoPct) {
+      const segunda = document.createElement("div");
+      segunda.className = "ac-proj2";
+      segunda.textContent = t("ed_ac_proj_meta", {
+        h: horasTexto(A.ritmo.metaMin), p: A.projecaoMeta.pesoPct });
+      pj.append(segunda);
+    }
+    pj.classList.toggle("ruim", A.projecao.pesoPct < 60);
+  } else {
+    pj.className = "ac-proj ac-proj-vazia";
+    pj.textContent = t("ed_ac_proj_sem");
+  }
+  box.append(pj);
+
+  /* ---------- 4. o alerta, no rodapé: é aviso, nunca meta ---------- */
+  if (A.fora.n) {
     const fora = document.createElement("div");
     fora.className = "rt-fora";
-    fora.textContent = t("ed_rt_fora", { n: plano.fora.length,
-      cabem: plano.fila.length, h: plano.horasNecessarias });
+    fora.textContent = t("ed_ac_fora", { n: A.fora.n, p: A.fora.pesoPct });
     box.append(fora);
   }
+}
+
+/* A tabela que responde "estou abandonando algum concurso?".
+ * A coluna que decide é a última: ela mostra qual prova ainda dá tempo de
+ * salvar e qual já está fora de alcance no ritmo atual. */
+function edTabelaComparativa(linhas) {
+  const cx = document.createElement("div");
+  cx.className = "ac-comp";
+  const h = document.createElement("div");
+  h.className = "ac-rot";
+  h.textContent = t("ed_ac_comp_tit", { n: linhas.length });
+  cx.append(h);
+
+  const cab = document.createElement("div");
+  cab.className = "ac-comp-linha ac-comp-cab";
+  [t("ed_ac_c_edital"), t("ed_ac_c_prazo"), t("ed_ac_c_coberto"),
+   t("ed_ac_c_ritmo"), t("ed_ac_c_proj")].forEach((txt, k) => {
+    const c = document.createElement("span");
+    c.className = "ac-c c" + k; c.textContent = txt; cab.append(c);
+  });
+  cx.append(cab);
+
+  linhas.forEach((l) => {
+    const li = document.createElement("div");
+    li.className = "ac-comp-linha";
+    if (typeof edAberto === "function" && edAberto() && edAberto().id === l.id)
+      li.classList.add("aberto");
+
+    const nome = document.createElement("button");
+    nome.type = "button"; nome.className = "ac-c c0 ac-c-nome";
+    nome.textContent = l.nome;
+    nome.onclick = () => { if (typeof hubAbrirEdital === "function") hubAbrirEdital(l.id); };
+
+    const prazo = document.createElement("span");
+    prazo.className = "ac-c c1";
+    prazo.textContent = l.dias === null ? t("hub_prazo_sem") : t("hub_prazo_dias", { n: l.dias });
+    if (l.dias !== null && l.dias <= 30) prazo.classList.add("urgente");
+
+    const cob = document.createElement("span");
+    cob.className = "ac-c c2"; cob.textContent = l.pesoEstudado + "%";
+
+    const rit = document.createElement("span");
+    rit.className = "ac-c c3";
+    rit.textContent = l.ritmoMin === null ? "—" : horasTexto(l.ritmoMin);
+
+    const pj = document.createElement("span");
+    pj.className = "ac-c c4";
+    if (l.projecao === null) pj.textContent = "—";
+    else {
+      pj.textContent = l.projecao + "%";
+      /* a cor diz o que a coluna quer dizer: onde o ritmo atual leva */
+      pj.classList.add(l.projecao >= 80 ? "bom" : l.projecao >= 50 ? "medio" : "ruim");
+    }
+    li.append(nome, prazo, cob, rit, pj);
+    cx.append(li);
+  });
+
+  /* a leitura da tabela, escrita: sem isto, são cinco colunas de números */
+  const risco = linhas.filter((l) => l.projecao !== null && l.projecao < 50
+                                     && l.dias !== null && l.dias <= 120);
+  if (risco.length) {
+    const n = document.createElement("div");
+    n.className = "ac-comp-nota";
+    n.textContent = t("ed_ac_comp_risco", {
+      l: risco.map((x) => x.nome).join(", "), n: risco.length });
+    cx.append(n);
+  }
+  return cx;
 }
 
 /* Abre a disciplina no painel e leva o olho até ela. Só expandir não basta:
@@ -714,14 +854,12 @@ function edPintarPainel(r, plano) {
   const nome = document.createElement("div");
   nome.className = "ed-topo-nome";
   nome.textContent = r.cfg.concurso || t("ed_sem_nome");
-  topo.append(nome,
-    edBarra(plano.feitos, plano.revisados, plano.total, "grande"));
-  const meds = document.createElement("div");
-  meds.className = "ed-medidas";
-  meds.append(
-    edMedida(t("ed_estudado"), plano.feitos, plano.total, plano.peso.pctFeito, "m-feito"),
-    edMedida(t("ed_revisado"), plano.revisados, plano.total, plano.peso.pctRevisado, "m-rev"));
-  topo.append(meds);
+  /* A barra e os dois quadros ESTUDADO/REVISADO saíram daqui na v8.71:
+   * eram os mesmos números do bloco de acompanhamento, logo acima, em
+   * outro formato. Dois lugares mostrando o mesmo dado acabam divergindo,
+   * e quando divergem ninguém sabe qual acreditar. O topo fica com o que
+   * só ele tem: a identidade do edital. */
+  topo.append(nome);
   const st = estatisticasDiario(7);
   if (st.eventos) {
     const linha = document.createElement("div");
@@ -741,51 +879,21 @@ function edPintarPainel(r, plano) {
     al.textContent = t("ed_desalinhado", { top: pctTop, peso: plano.peso.pctFeito });
     topo.append(al);
   }
-  const sub = document.createElement("div");
-  sub.className = "ed-topo-sub";
-  const esq = document.createElement("span");
-  esq.textContent = "";
-  const dir = document.createElement("span");
-  const sem = semanaAtual(plano);
-  dir.textContent = plano.semanas === null ? t("ed_sem_data")
-    : t("ed_topo_semana", { n: sem.length,
-        h: horasTexto(sem.reduce((a, i) => a + i.minutos, 0)) });
-  sub.append(esq, dir);
-  topo.append(sub);
+  /* "esta semana: 82 tópicos · 59h45" saiu: é exatamente o que o cabeçalho
+   * da agenda, no topo da tela, já diz — e com o escopo certo (todos os
+   * editais), enquanto aqui era só deste. */
   box.append(topo);
 
-  /* -------- esta semana: a lista curta -------- */
-  if (sem.length) {
-    const cx = document.createElement("div");
-    cx.className = "ed-caixa";
-    const h = document.createElement("div");
-    h.className = "ed-caixa-tit";
-    h.textContent = t("ed_esta_semana");
-    const expl = document.createElement("div");
-    expl.className = "ed-caixa-sub";
-    expl.textContent = t("ed_semana_expl", { n: sem.length,
-      r: sem.filter((i) => i.ehRevisao).length,
-      h: horasTexto(sem.reduce((a, i) => a + i.minutos, 0)) });
-    cx.append(h, expl);
-    agendar(sem, { dias: Number($("edDias").value) || 5,
-                   inicio: $("edInicio").value || "19:00" });
-    /* 53 linhas numa "agenda da semana" não é agenda, é lista. Mostra as
-     * primeiras e guarda o resto atrás de um clique — quem quiser a semana
-     * inteira pede; quem quer saber o que fazer agora já sabe. */
-    const AGENDA_CURTA = 6;
-    const mostrar = edAgendaAberta ? sem : sem.slice(0, AGENDA_CURTA);
-    mostrar.forEach((i) => cx.append(edLinhaTopico(i)));
-    if (sem.length > AGENDA_CURTA) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "ed-abrir";
-      b.textContent = edAgendaAberta ? t("ed_agenda_menos")
-        : t("ed_agenda_mais", { n: sem.length - AGENDA_CURTA });
-      b.onclick = () => { edAgendaAberta = !edAgendaAberta; edRender(); };
-      cx.append(b);
-    }
-    box.append(cx);
-  }
+  /* -------- esta semana MORA NO TOPO --------
+   * Até a v8.69 existiam DUAS "Agenda da semana": esta, do edital aberto, e
+   * a do topo, que junta os editais. Duas listas com o mesmo nome e números
+   * diferentes — a de cima somava 82 tópicos de todos os concursos, esta
+   * somava os deste. Quem olha não tem como saber qual está certa, e passa
+   * a não confiar em nenhuma. Era o mesmo defeito das horas por semana,
+   * quando o campo e o controle deslizante discordavam.
+   *
+   * Ficou uma só, no topo, porque a semana é uma só. O que esta tinha de
+   * próprio — ver só o edital aberto — virou um filtro lá em cima. */
 
   /* -------- onde estão os buracos --------
    * Progresso médio esconde o que decide a prova: 40% do plano feito pode
@@ -941,6 +1049,32 @@ function edMudarPeso(disc, peso) {
   edRender();
 }
 
+function edPintarLote() {
+  const barra = $("edLote");
+  if (!barra) return;
+  barra.classList.toggle("mostra", edSelecao.size > 0);
+  const c = $("edLoteConta");
+  if (c) c.textContent = t("ed_lote_conta", { n: edSelecao.size });
+}
+
+async function edLoteAplicar(marcar) {
+  if (!edSelecao.size) return;
+  const n = edSelecao.size;
+  /* marcar em lote mexe em progresso, que é o dado que não se refaz.
+   * Pergunta com o número dentro, não um "tem certeza?" genérico. */
+  if (!(await uiConfirm(t(marcar ? "ed_lote_conf" : "ed_lote_conf_des", { n })))) return;
+  edSelecao.forEach((chave) => {
+    if (marcar) edProgresso[chave] = { e: "feito", d: hojeISO() };
+    else delete edProgresso[chave];
+  });
+  reg("EDITAL", (marcar ? "marcados" : "desmarcados") + " em lote", n + " tópicos");
+  edSelecao.clear();
+  edSalvar();
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  toast(marcar ? "ed_lote_feito_ok" : "ed_colado");
+}
+
 function edTrocarVista(v) {
   edVista = v;
   localStorage.setItem("eac_edital_vista", v);
@@ -961,30 +1095,96 @@ function edConferirColagem() {
   const novoTxt = $("edColarTexto").value;
   const av = $("edColarAviso");
   if (!novoTxt.trim()) { av.hidden = true; return null; }
-  const antes = lerEdital($("editalTexto").value);
-  const depois = lerEdital(novoTxt);
-  const nA = antes.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
-  const nD = depois.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
-  const ign = depois.achados.filter((a) => a.tipo === "linha_ignorada").length;
-  const partes = [t("ed_colar_conf", { a: nA, d: nD,
-    da: antes.disciplinas.length, dd: depois.disciplinas.length })];
-  if (nD < nA) partes.push(t("ed_colar_perdeu", { n: nA - nD }));
-  if (ign) partes.push(t("ed_colar_ignoradas", { n: ign }));
+
+  const c = edCompararColagem($("editalTexto").value, novoTxt, edProgresso);
   av.hidden = false;
-  av.textContent = partes.join(" ");
-  av.classList.toggle("grave", nD < nA);
-  return { nA, nD, novoTxt };
+  av.innerHTML = "";
+  av.classList.toggle("grave", c.grave || c.vazio);
+
+  /* A conferência deixou de ser uma frase e virou uma lista. O texto antigo
+   * dizia só "perdeu N tópicos" — e não dizia nada quando o número batia,
+   * que é justamente o caso perigoso: 3 → 3 tópicos com um deles renomeado
+   * apaga a marca de estudado sem aviso nenhum. */
+  const linha = (txt, classe) => {
+    const d = document.createElement("div");
+    d.className = "ed-mud" + (classe ? " " + classe : "");
+    d.textContent = txt;
+    av.append(d);
+    return d;
+  };
+
+  linha(t("ed_colar_conf", { a: c.topicosAntes, d: c.topicosDepois,
+                             da: c.discAntes, dd: c.discDepois }));
+
+  if (c.vazio) { linha(t("ed_colar_vazio"), "perigo"); return Object.assign(c, { novoTxt }); }
+
+  /* o dano primeiro: é o único item da lista que não se desfaz */
+  if (c.orfaos.length) {
+    linha(t("ed_colar_orfaos", { n: c.orfaos.length }), "perigo");
+    c.orfaos.slice(0, 6).forEach((o) => linha("· " + o.d + " › " + o.t, "detalhe"));
+    if (c.orfaos.length > 6) linha(t("ed_colar_mais", { n: c.orfaos.length - 6 }), "detalhe");
+  }
+  if (c.discSomem.length)
+    linha(t("ed_colar_disc_somem", { l: c.discSomem.slice(0, 4).join(", ") }), "aviso");
+  if (c.discSurgem.length)
+    linha(t("ed_colar_disc_surgem", { l: c.discSurgem.slice(0, 4).join(", ") }));
+  if (c.pesosMudam.length)
+    linha(t("ed_colar_pesos", {
+      l: c.pesosMudam.slice(0, 4).map((p) => p.nome + " " + p.de + "→" + p.para).join(", "),
+    }), "aviso");
+  if (c.somem.length && !c.orfaos.length)
+    linha(t("ed_colar_somem", { n: c.somem.length }), "aviso");
+  if (c.ignoradas) linha(t("ed_colar_ignoradas", { n: c.ignoradas }), "aviso");
+  if (!c.orfaos.length && !c.discSomem.length && !c.pesosMudam.length && !c.somem.length)
+    linha(t("ed_colar_sem_perda"), "ok");
+
+  return Object.assign(c, { novoTxt });
 }
 
 async function edAplicarColagem() {
   const c = edConferirColagem();
   if (!c) return;
-  if (c.nD < c.nA) {
-    if (!(await uiConfirm(t("ed_colar_confirma", { n: c.nA - c.nD })))) return;
+
+  /* Confirmação em degraus: cada pergunta cobre um tipo de mudança, e a
+   * mais grave vem por último, com o número dentro dela. Uma pergunta só,
+   * genérica, é a que a pessoa aprende a responder no automático. */
+  if (c.vazio) {
+    await uiAlert(t("ed_colar_vazio_erro"));
+    return;
   }
+  if (c.discSomem.length || c.pesosMudam.length) {
+    const partes = [];
+    if (c.discSomem.length)
+      partes.push(t("ed_conf_disc", { n: c.discSomem.length, l: c.discSomem.slice(0, 5).join(", ") }));
+    if (c.pesosMudam.length)
+      partes.push(t("ed_conf_pesos", { n: c.pesosMudam.length,
+        l: c.pesosMudam.slice(0, 5).map((p) => p.nome + ": " + p.de + " → " + p.para).join("\n· ") }));
+    if (!(await uiConfirm(partes.join("\n\n") + "\n\n" + t("ed_conf_seguir")))) {
+      reg("EDITAL-COLAR", "colagem cancelada na conferência de estrutura");
+      return;
+    }
+  }
+  if (c.somem.length && !c.orfaos.length) {
+    if (!(await uiConfirm(t("ed_conf_somem", { n: c.somem.length,
+        l: c.somem.slice(0, 5).map((x) => x.t).join("\n· ") })))) {
+      reg("EDITAL-COLAR", "colagem cancelada na conferência de tópicos");
+      return;
+    }
+  }
+  /* a última e a mais séria: progresso que fica sem dono */
+  if (c.orfaos.length) {
+    if (!(await uiConfirm(t("ed_conf_orfaos", { n: c.orfaos.length,
+        l: c.orfaos.slice(0, 5).map((o) => o.d + " › " + o.t).join("\n· ") })))) {
+      reg("EDITAL-COLAR", "colagem cancelada: progresso em risco", c.orfaos.length + " tópicos");
+      return;
+    }
+  }
+
   guardarVersao("antes de colar o plano corrigido", $("editalTexto").value);
   $("editalTexto").value = c.novoTxt;
-  reg("EDITAL-COLAR", "plano corrigido colado", c.nA + " → " + c.nD + " tópicos");
+  reg("EDITAL-COLAR", "plano corrigido colado",
+      c.topicosAntes + " → " + c.topicosDepois + " tópicos, "
+      + c.orfaos.length + " marcações órfãs");
   $("dlgEdColar").close();
   edRender();
   toast("ed_colado");
@@ -1051,13 +1251,28 @@ function edRender() {
 
   const tb = $("edTabela");
   tb.innerHTML = "";
-  if (!itens.length) {
+
+  /* filtra ANTES de desenhar: 232 linhas é o que tornava esta tela inútil */
+  const q = edBusca.trim().toLowerCase();
+  const visiveis = itens.filter((i) => {
+    if (edFiltro === "pendentes" && i.feito) return false;
+    if (edFiltro === "feitos" && !i.feito) return false;
+    if (edFiltro === "alta" && i.faixa !== "alta") return false;
+    if (!q) return true;
+    return (i.nome + " " + i.disciplina).toLowerCase().includes(q);
+  });
+  edPintarLote();
+
+  if (!visiveis.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5; td.className = "esq-vazio"; td.textContent = t("ed_vazio");
+    td.colSpan = 6; td.className = "esq-vazio";
+    /* a mensagem muda conforme a causa: "edital vazio" e "nada neste
+     * filtro" são problemas diferentes e pedem ações diferentes */
+    td.textContent = itens.length ? t("ed_busca_vazia") : t("ed_vazio");
     tr.append(td); tb.append(tr); edSalvar(); return;
   }
-  itens.forEach((i) => {
+  visiveis.forEach((i) => {
     const tr = document.createElement("tr");
     const feito = !!i.feito;
     if (feito) tr.className = "ed-feito";
@@ -1067,6 +1282,20 @@ function edRender() {
     };
     const tdNome = cel(i.nome);
     if (i.motivo) { tdNome.title = i.motivo; tdNome.classList.add("ed-tem-motivo"); }
+    /* caixa de SELEÇÃO (lote), separada da caixa de "estudado": marcar
+     * cem tópicos um a um na agenda é o que ninguém faz — e quem chega
+     * com meio edital já estudado precisa exatamente disso */
+    const sel = document.createElement("input");
+    sel.type = "checkbox";
+    sel.className = "ed-sel";
+    sel.checked = edSelecao.has(i.chave);
+    sel.title = t("ed_lote_conta", { n: edSelecao.size });
+    sel.onchange = () => {
+      if (sel.checked) edSelecao.add(i.chave); else edSelecao.delete(i.chave);
+      edPintarLote();
+    };
+    tr.append((() => { const td = document.createElement("td"); td.append(sel); return td; })());
+
     const chk = document.createElement("input");
     chk.type = "checkbox"; chk.checked = feito;
     chk.onchange = () => {
@@ -1159,6 +1388,22 @@ function edIniciar() {
   $("btnEditalDiag").onclick = abrirDiagPlano;
   $("btnVistaPainel").onclick = () => edTrocarVista("painel");
   $("btnVistaLista").onclick = () => edTrocarVista("lista");
+  if ($("edBuscaTop")) $("edBuscaTop").addEventListener("input", () => {
+    edBusca = $("edBuscaTop").value; edRender();
+  });
+  [["edFiltroTudo", "tudo"], ["edFiltroPend", "pendentes"],
+   ["edFiltroAlta", "alta"], ["edFiltroFeitos", "feitos"]].forEach(([id, k]) => {
+    if (!$(id)) return;
+    $(id).onclick = () => {
+      edFiltro = k;
+      ["edFiltroTudo", "edFiltroPend", "edFiltroAlta", "edFiltroFeitos"]
+        .forEach((x) => $(x) && $(x).classList.toggle("ativa", x === id));
+      edRender();
+    };
+  });
+  if ($("btnLoteFeito")) $("btnLoteFeito").onclick = () => edLoteAplicar(true);
+  if ($("btnLoteDesfazer")) $("btnLoteDesfazer").onclick = () => edLoteAplicar(false);
+  if ($("btnLoteNada")) $("btnLoteNada").onclick = () => { edSelecao.clear(); edRender(); };
   $("btnEditalCsv").onclick = () => {
     const r = lerEdital($("editalTexto").value);
     const plano = montarPlano(r, { horas: Number($("edHoras").value),

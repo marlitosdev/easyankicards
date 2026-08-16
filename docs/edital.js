@@ -672,3 +672,165 @@ function edParaTexto(r) {
   });
   return L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }
+
+/* =====================================================================
+ * O QUE MUDA AO COLAR UM PLANO CORRIGIDO
+ *
+ * Colar substitui o edital inteiro. A pergunta única de antes ("perdeu N
+ * tópicos, continuar?") escondia o risco maior: o progresso é guardado por
+ * "disciplina›tópico", então um tópico que só mudou de NOME leva junto a
+ * marca de estudado — e a pessoa não vê isso acontecer. Meses de leitura
+ * viram zero sem uma linha de aviso.
+ *
+ * Esta função não decide nada. Ela lista o que vai mudar, separando o que
+ * é ajuste do que é perda.
+ * ===================================================================== */
+function edCompararColagem(txtAntes, txtDepois, progresso) {
+  const A = lerEdital(txtAntes || "");
+  const D = lerEdital(txtDepois || "");
+  const prog = progresso || {};
+
+  const chaves = (r) => {
+    const m = {};
+    r.disciplinas.forEach((d) =>
+      d.topicos.forEach((tp) => { m[(d.nome + "›" + tp.nome).toLowerCase()] = { d: d.nome, t: tp.nome }; }));
+    return m;
+  };
+  const kA = chaves(A), kD = chaves(D);
+
+  const somem = Object.keys(kA).filter((k) => !(k in kD));
+  const surgem = Object.keys(kD).filter((k) => !(k in kA));
+
+  /* a linha que importa: progresso marcado que deixa de ter dono */
+  const orfaos = somem.filter((k) => prog[k]).map((k) => kA[k]);
+
+  const pesoA = {}, pesoD = {};
+  A.disciplinas.forEach((d) => { pesoA[d.nome.toLowerCase()] = { n: d.nome, p: d.peso }; });
+  D.disciplinas.forEach((d) => { pesoD[d.nome.toLowerCase()] = { n: d.nome, p: d.peso }; });
+  const pesosMudam = Object.keys(pesoA)
+    .filter((k) => k in pesoD && pesoA[k].p !== pesoD[k].p)
+    .map((k) => ({ nome: pesoA[k].n, de: pesoA[k].p, para: pesoD[k].p }));
+
+  const discSomem = A.disciplinas.filter((d) => !(d.nome.toLowerCase() in pesoD)).map((d) => d.nome);
+  const discSurgem = D.disciplinas.filter((d) => !(d.nome.toLowerCase() in pesoA)).map((d) => d.nome);
+
+  const ignoradas = D.achados.filter((a) => a.tipo === "linha_ignorada").length;
+
+  return {
+    topicosAntes: Object.keys(kA).length,
+    topicosDepois: Object.keys(kD).length,
+    discAntes: A.disciplinas.length,
+    discDepois: D.disciplinas.length,
+    somem: somem.map((k) => kA[k]),
+    surgem: surgem.map((k) => kD[k]),
+    orfaos,
+    pesosMudam,
+    discSomem,
+    discSurgem,
+    ignoradas,
+    /* "grave" é o que não se desfaz colando de novo: progresso perdido.
+     * Tópico a menos é uma escolha; marca de estudado sumindo é um dano. */
+    grave: orfaos.length > 0,
+    vazio: Object.keys(kD).length === 0,
+  };
+}
+
+/* =====================================================================
+ * ACOMPANHAMENTO — um bloco, três perguntas
+ *
+ * O painel antigo mostrava "PARA COBRIR TUDO: 163h30" como a barra maior e
+ * mais colorida da tela. Esse número é só
+ *
+ *     minutos pendentes ÷ semanas até a prova
+ *
+ * e portanto descreve a DISTÂNCIA ATÉ A PROVA, não o seu estudo: o mesmo
+ * edital pede 164 h/semana com a prova em 13 dias e 5 h/semana com a prova
+ * em 6 meses. Ele aparecia três vezes (barra, rótulo e caixa de aviso),
+ * enquanto a informação que decide — onde você chega no ritmo real — já
+ * estava calculada e nunca era mostrada.
+ *
+ * Aqui as três perguntas ficam separadas e cada resposta aparece UMA vez:
+ *   1. quanto da prova eu já cubro?      (por PESO, não por contagem)
+ *   2. em que ritmo eu estou?            (fez × meta × o que a agenda pede)
+ *   3. onde isso me leva no dia da prova? (projeção — a única acionável)
+ * ===================================================================== */
+
+/* Projeção honesta: gasta o orçamento de minutos percorrendo a FILA na
+ * ordem de prioridade, que é como o plano realmente funciona. Somar peso
+ * médio daria um número mais bonito e errado. */
+function projetarCobertura(plano, minutosPorSemana) {
+  if (!plano || !plano.semanas || !minutosPorSemana) return null;
+  let orcamento = minutosPorSemana * plano.semanas;
+  const pesoTotal = (plano.peso && plano.peso.total) || 0;
+  if (!pesoTotal) return null;
+
+  let pesoGanho = 0, topicos = 0;
+  const pendentes = plano.itens
+    .filter((i) => !i.feito)
+    .slice()
+    .sort((a, b) => b.bruto - a.bruto);
+  for (const i of pendentes) {
+    if (orcamento < i.minutos) break;
+    orcamento -= i.minutos;
+    pesoGanho += i.bruto;
+    topicos++;
+  }
+  const jaFeito = (plano.peso && plano.peso.feito) || 0;
+  return {
+    topicos: plano.feitos + topicos,
+    pesoPct: Math.round(((jaFeito + pesoGanho) / pesoTotal) * 100),
+    sobra: pendentes.length - topicos,
+    /* o menor peso que entrou e o maior que ficou de fora. Serve para o
+     * teste provar que a fila de prioridade foi respeitada de verdade, em
+     * vez de inferir isso de um limiar percentual — que e chute, e que me
+     * deixou passar duas sabotagens. */
+    menorDentro: topicos ? pendentes[topicos - 1].bruto : null,
+    maiorFora: topicos < pendentes.length ? pendentes[topicos].bruto : null,
+  };
+}
+
+function acompanhamento(plano, diario, metaMin) {
+  const r = ritmoDoPlano(plano, diario);
+  const peso = plano.peso || { total: 0, pctFeito: 0, pctRevisado: 0 };
+
+  /* a agenda desta semana é o que o app de fato pede — é a meta real, e é
+   * comparável com o que a pessoa fez */
+  const agendaMin = plano.porSemana || 0;
+  const meta = metaMin || agendaMin;
+
+  return {
+    /* 1. cobertura — sempre por peso, com a contagem como legenda */
+    cobertura: {
+      pesoEstudado: peso.pctFeito,
+      pesoRevisado: peso.pctRevisado,
+      topicosFeitos: plano.feitos,
+      topicosTotal: plano.total,
+      semanas: plano.semanas,
+    },
+    /* 2. ritmo */
+    ritmo: {
+      fezMin: r.observadoMin,
+      semanasComRegistro: r.semanasComRegistro,
+      metaMin: meta,
+      agendaMin,
+      /* Sem registro não se inventa média — e "média de 1 semana com 0min"
+       * NÃO é registro. Enquanto a condição era só semanasComRegistro > 0,
+       * a linha do ritmo anunciava "fez 0min/semana (média de 1 semana)"
+       * enquanto a projeção logo abaixo dizia "sem registro de estudo".
+       * Dois blocos da mesma tela discordando sobre o mesmo fato. */
+      medivel: r.semanasComRegistro > 0 && r.observadoMin > 0,
+    },
+    /* 3. projeção — só existe com registro, senão é chute com cara de dado */
+    projecao: (r.semanasComRegistro > 0 && r.observadoMin > 0)
+      ? projetarCobertura(plano, r.observadoMin) : null,
+    projecaoMeta: meta ? projetarCobertura(plano, meta) : null,
+    /* 4. o alerta, no rodapé: é aviso, nunca meta */
+    fora: {
+      n: plano.fora.length,
+      pesoPct: plano.peso && plano.peso.total
+        ? Math.round((plano.fora.reduce((a, i) => a + i.bruto, 0) / plano.peso.total) * 100)
+        : 0,
+      horasParaTudo: r.necessarioMin ? Math.round(r.necessarioMin / 60) : null,
+    },
+  };
+}

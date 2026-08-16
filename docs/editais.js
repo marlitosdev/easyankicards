@@ -53,7 +53,7 @@ function edCarregarLista() {
 }
 
 function edSalvarLista() {
-  try { localStorage.setItem("eac_editais", JSON.stringify(editais)); } catch (e) {}
+  guardar("eac_editais", JSON.stringify(editais));
 }
 
 function edAberto() {
@@ -185,4 +185,56 @@ function edTopicosAtivos(opcoes) {
   });
   juntos.sort((a, b) => b.pesoAjustado - a.pesoAjustado);
   return juntos;
+}
+
+/* =====================================================================
+ * COMPARATIVO ENTRE EDITAIS
+ *
+ * Somar a cobertura de dois concursos produz um número que não existe:
+ * ninguém presta uma prova média. "11% do peso de todas as minhas provas"
+ * não corresponde a nada que se possa decidir.
+ *
+ * Com dois ou mais editais ativos, a pergunta também muda: deixa de ser
+ * "quanto já cobri?" e passa a ser "estou abandonando um deles?". Isso só
+ * uma linha por edital responde — e a coluna que decide é a última, a
+ * projeção, porque é ela que mostra qual prova ainda dá tempo de salvar.
+ * ===================================================================== */
+function comparativoEditais(diario, hoje) {
+  const linhas = [];
+  editais.forEach((e) => {
+    const s = edSituacao(e, hoje);
+    if (s.grupo === "encerrado") return;
+    const r = lerEdital(e.texto || "");
+    if (!r.disciplinas.length) return;
+    const cfg = r.cfg || {};
+    const p = montarPlano(r, {
+      horas: cfg.horas || 10, prova: s.prova, hoje,
+      feitos: e.progresso || {},
+    });
+    /* o ritmo é POR EDITAL: o diário guarda o nome do concurso em cada
+     * registro (campo "cc") desde a v8.66, e é isso que permite dizer
+     * "você deu 6h ao TCE e 40min ao TCU nesta semana" */
+    const meu = (diario || []).filter((x) =>
+      !x.cc || x.cc === e.nome || x.cc === cfg.concurso);
+    const A = acompanhamento(p, meu, p.porSemana);
+    linhas.push({
+      id: e.id, nome: e.nome,
+      dias: s.dias, grupo: s.grupo,
+      pesoEstudado: A.cobertura.pesoEstudado,
+      pesoRevisado: A.cobertura.pesoRevisado,
+      topicos: p.total, feitos: p.feitos,
+      ritmoMin: A.ritmo.medivel ? A.ritmo.fezMin : null,
+      projecao: A.projecao ? A.projecao.pesoPct : null,
+      projecaoMeta: A.projecaoMeta ? A.projecaoMeta.pesoPct : null,
+      fora: A.fora.n,
+    });
+  });
+  /* ordem: quem tem prova mais perto primeiro — é onde o tempo decide */
+  linhas.sort((a, b) => {
+    if (a.dias === null && b.dias === null) return 0;
+    if (a.dias === null) return 1;
+    if (b.dias === null) return -1;
+    return a.dias - b.dias;
+  });
+  return linhas;
 }
