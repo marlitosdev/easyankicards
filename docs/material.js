@@ -393,18 +393,80 @@ function matLembrarSelecao() {
   if (txt) matSelGuardada = txt;
 }
 
+/* O QUE SE VÊ NÃO É O QUE ESTÁ GUARDADO.
+ * A leitura mostra "créditos suplementares"; o arquivo guarda
+ * "**créditos suplementares**". Qualquer seleção que atravesse um marcador
+ * simplesmente NÃO EXISTE no texto-fonte, e o indexOf falhava — o app então
+ * respondia "não encontrei esse trecho, salve antes de marcar", culpando a
+ * pessoa por um defeito dele. Grifar frase inteira, que é o uso normal,
+ * quase sempre atravessa um negrito.
+ *
+ * A ponte é um mapa: percorre a fonte ignorando os marcadores e anotando,
+ * para cada caractere visível, de onde ele veio. Assim a busca acontece no
+ * texto que a pessoa realmente leu, e a marca é gravada na posição certa
+ * do arquivo. */
+function matMapear(src) {
+  const plano = [], mapa = [];
+  let i = 0;
+  while (i < src.length) {
+    const m = src.slice(i).match(/^(\*\*|==[!?]?|__)/);
+    if (m) { i += m[0].length; continue; }
+    const c = src[i];
+    if (/\s/.test(c)) {
+      /* espaços em branco viram um só: a leitura colapsa linhas em branco,
+       * e sem isto a seleção que cruza um parágrafo nunca casaria */
+      if (plano.length && plano[plano.length - 1] !== " ") { plano.push(" "); mapa.push(i); }
+      i++; continue;
+    }
+    plano.push(c); mapa.push(i); i++;
+  }
+  return { plano: plano.join(""), mapa };
+}
+
+/* A borda da marca não pode partir um negrito ao meio.
+ * Selecionando "abertura de créditos suplementares" o recorte terminava
+ * ANTES do "**" que fecha o negrito, e o texto virava
+ * "==abertura de **créditos suplementares==" — negrito aberto e nunca
+ * fechado, que estraga a leitura de todo o resto do resumo. Aqui a faixa
+ * cresce até que os pares fiquem completos. */
+function matEquilibrar(src, ini, fim) {
+  const impar = (a, b) => ((src.slice(a, b).match(/\*\*/g) || []).length % 2) === 1;
+  let voltas = 0;
+  while (impar(ini, fim) && voltas++ < 8) {
+    const dep = src.indexOf("**", fim);
+    const ant = src.lastIndexOf("**", ini - 1);
+    /* prefere crescer para a frente: o fecho costuma estar logo ali, e
+     * crescer para trás engoliria palavras que a pessoa não selecionou */
+    if (dep >= 0 && (ant < 0 || dep - fim <= ini - ant)) fim = dep + 2;
+    else if (ant >= 0) ini = ant;
+    else break;
+  }
+  return { ini, fim };
+}
+
+function matNormalizar(s) {
+  return String(s || "").replace(/(\*\*|==[!?]?|__)/g, "").replace(/\s+/g, " ").trim();
+}
+
 function matMarcarSelecao(tipo) {
   matLembrarSelecao();
   const trecho = matSelGuardada;
-  if (trecho.length < 3) { uiAlert(t("mat_marca_curta")); return; }
+  if (matNormalizar(trecho).length < 3) { uiAlert(t("mat_marca_curta")); return; }
   const ta = $("matTexto");
   const marca = MAT_MARCAS[tipo] || "==";
-  /* procura o trecho ainda sem marca em volta */
-  const idx = ta.value.indexOf(trecho);
-  if (idx < 0) { uiAlert(t("mat_marca_nao_achou")); return; }
-  const antes = ta.value.slice(Math.max(0, idx - 3), idx);
+
+  const { plano, mapa } = matMapear(ta.value);
+  const alvo = matNormalizar(trecho);
+  const pos = plano.indexOf(alvo);
+  if (pos < 0) { uiAlert(t("mat_marca_nao_achou")); return; }
+
+  const faixa = matEquilibrar(ta.value, mapa[pos], mapa[pos + alvo.length - 1] + 1);
+  const ini = faixa.ini, fim = faixa.fim;
+  const antes = ta.value.slice(Math.max(0, ini - 3), ini);
   if (/==[!?]?$/.test(antes)) { uiAlert(t("mat_marca_ja")); return; }
-  ta.value = ta.value.slice(0, idx) + marca + trecho + "==" + ta.value.slice(idx + trecho.length);
+  /* grava o pedaço ORIGINAL, com os negritos que houver dentro dele */
+  const original = ta.value.slice(ini, fim);
+  ta.value = ta.value.slice(0, ini) + marca + original + "==" + ta.value.slice(fim);
   /* NÃO grava aqui. Grifar é experimentar: a pessoa marca, olha, desfaz,
    * marca de novo. Gravar a cada clique tira dela a chance de desistir —
    * e sem gravação imediata o botão "Salvar estado" passa a significar

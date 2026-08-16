@@ -807,6 +807,10 @@ function abrirDisciplina(nome) {
   if (!d) return;
 
   $("dscTitulo").textContent = d.nome;
+  if ($("btnDscExcluir")) $("btnDscExcluir").onclick = () => {
+    $("dlgDisciplina").close();
+    ndExcluir(d.nome);
+  };
   $("dscSub").textContent = t("ed_dsc_sub", { p: d.peso, f: d.fatia, n: d.total });
 
   const cx = $("dscResumo");
@@ -1404,6 +1408,11 @@ function edIniciar() {
   if ($("btnLoteFeito")) $("btnLoteFeito").onclick = () => edLoteAplicar(true);
   if ($("btnLoteDesfazer")) $("btnLoteDesfazer").onclick = () => edLoteAplicar(false);
   if ($("btnLoteNada")) $("btnLoteNada").onclick = () => { edSelecao.clear(); edRender(); };
+  /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
+   * eu embarquei um botão morto */
+  if ($("btnEdNovaDisc")) $("btnEdNovaDisc").onclick = ndAbrir;
+  if ($("btnNdIncluir")) $("btnNdIncluir").onclick = ndIncluir;
+  if ($("btnNdFechar")) $("btnNdFechar").onclick = () => $("dlgNovaDisc").close();
   $("btnEditalCsv").onclick = () => {
     const r = lerEdital($("editalTexto").value);
     const plano = montarPlano(r, { horas: Number($("edHoras").value),
@@ -1425,4 +1434,143 @@ function edIniciar() {
     reg("EDITAL", "csv baixado", itens.length + " tópicos");
   };
   edRender();
+}
+
+/* =====================================================================
+ * FORMULÁRIO: INCLUIR / EXCLUIR DISCIPLINA
+ * ===================================================================== */
+let ndPeso = 3;
+
+function ndAbrir() {
+  ndPeso = 3;
+  $("ndNome").value = "";
+  $("ndTopicos").value = "";
+  $("ndRedistrib").hidden = true;
+  ndPintarPesos();
+  $("dlgNovaDisc").showModal();
+  reg("EDITAL", "formulário de disciplina aberto");
+}
+
+/* Os cinco botões de peso, e ao lado o que JÁ existe em cada um.
+ * Pedir "peso de 1 a 5" sem mostrar o resto foi o que produziu, no edital
+ * do TCE-PE, 17 disciplinas com peso 3 — o que anula a priorização
+ * inteira, porque a prioridade é peso da disciplina × peso do tópico. */
+function ndPintarPesos() {
+  const cx = $("ndPesos");
+  cx.innerHTML = "";
+  [1, 2, 3, 4, 5].forEach((p) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "nd-peso" + (p === ndPeso ? " ativa" : "");
+    b.textContent = String(p);
+    b.onclick = () => { ndPeso = p; ndPintarPesos(); };
+    cx.append(b);
+  });
+
+  const mapa = $("ndMapa");
+  mapa.innerHTML = "";
+  const r = lerEdital($("editalTexto").value);
+  const porPeso = {};
+  r.disciplinas.forEach((d) => {
+    (porPeso[d.peso] = porPeso[d.peso] || []).push(d.nome);
+  });
+  [5, 4, 3, 2, 1].forEach((p) => {
+    const linha = document.createElement("div");
+    linha.className = "nd-mapa-linha";
+    const b = document.createElement("span");
+    b.className = "nd-mapa-p"; b.textContent = p;
+    const n = document.createElement("span");
+    n.className = "nd-mapa-n";
+    n.textContent = (porPeso[p] || []).join(", ") || t("nd_nenhuma");
+    linha.append(b, n);
+    mapa.append(linha);
+  });
+}
+
+async function ndIncluir() {
+  const antes = $("editalTexto").value;
+  const r = edIncluirDisciplina(antes, $("ndNome").value, ndPeso, $("ndTopicos").value);
+  if (r.erro === "sem_nome") { await uiAlert(t("nd_sem_nome")); return; }
+  if (r.erro === "sem_topicos") { await uiAlert(t("nd_sem_topicos")); return; }
+  if (r.erro === "repetida") { await uiAlert(t("nd_repetida", { n: r.nome })); return; }
+
+  guardarVersao("antes de incluir disciplina", antes);
+  $("editalTexto").value = r.texto;
+  reg("EDITAL-DISCIPLINA", "incluída à mão: " + r.nome,
+      "peso " + r.peso + ", " + r.topicos + " tópicos");
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  $("dlgNovaDisc").close();
+  await uiAlert(t("nd_ok", { n: r.nome, t: r.topicos }));
+
+  /* só DEPOIS de incluir faz sentido perguntar sobre redistribuir: agora
+   * dá para mostrar de quanto foi o deslocamento real */
+  const mud = edRedistribuir(antes, r.texto);
+  if (mud.length) ndOferecerRedistribuicao(mud, r);
+}
+
+function ndOferecerRedistribuicao(mud, incluida) {
+  const cx = $("edColarAviso");
+  const alvo = cx && !cx.hidden ? cx : null;
+  const painel = document.createElement("div");
+  painel.className = "nd-redistrib";
+  const txt = document.createElement("div");
+  txt.textContent = t("nd_desloca", {
+    n: incluida.nome, p: incluida.peso,
+    l: mud.slice(0, 4).map((m) => m.nome + " " + m.fatiaAntes + "% → " + m.fatiaDepois + "%").join("; "),
+  });
+  const expl = document.createElement("div");
+  expl.className = "nota";
+  expl.textContent = t("nd_redis_expl");
+  const ops = document.createElement("div");
+  ops.className = "nd-opcoes";
+
+  /* "manter assim" PRIMEIRO, de propósito: peso vindo do número de
+   * questões do edital é dado, e o app não reescreve dado sem pedido. */
+  const manter = document.createElement("button");
+  manter.type = "button"; manter.className = "btn-min";
+  manter.textContent = t("nd_redis_manter");
+  manter.onclick = () => { painel.remove(); reg("EDITAL-PESO", "redistribuição recusada"); };
+
+  const aplicar = document.createElement("button");
+  aplicar.type = "button"; aplicar.className = "btn-min";
+  aplicar.textContent = t("nd_redis_aplicar");
+  aplicar.onclick = () => {
+    guardarVersao("antes de redistribuir pesos", $("editalTexto").value);
+    let txt2 = $("editalTexto").value;
+    mud.forEach((m) => {
+      txt2 = txt2.replace(new RegExp("^(\\\\s*@\\\\s*" + m.nome.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")
+        + "\\\\s*::\\\\s*)\\\\d+", "m"), "$1" + m.para);
+    });
+    $("editalTexto").value = txt2;
+    reg("EDITAL-PESO", "redistribuídos " + mud.length + " pesos",
+        mud.map((m) => m.nome + " " + m.de + "→" + m.para).join(", "));
+    painel.remove();
+    edRender();
+  };
+  ops.append(manter, aplicar);
+  painel.append(txt, expl, ops);
+  const destino = $("edPainel");
+  if (destino) destino.prepend(painel);
+}
+
+async function ndExcluir(nome) {
+  const antes = $("editalTexto").value;
+  const r = edExcluirDisciplina(antes, nome, edProgresso);
+  if (r.erro) { await uiAlert(t("nd_nao_achou", { n: nome })); return; }
+  if (!(await uiConfirm(t("nd_excluir_conf", {
+    n: r.nome, t: r.topicos, m: r.marcados })))) return;
+
+  guardarVersao("antes de excluir disciplina", antes);
+  $("editalTexto").value = r.texto;
+  /* NÃO mexe em edProgresso nem no diário: o diário é o histórico do que
+   * você fez, e histórico não se reescreve porque o plano mudou. As marcas
+   * ficam guardadas pela chave "disciplina›tópico" — se a disciplina
+   * voltar, elas voltam com ela. */
+  reg("EDITAL-DISCIPLINA", "excluída: " + r.nome,
+      r.topicos + " tópicos saíram do plano, " + r.marcados
+      + " marcações guardadas para o caso de voltar");
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  toast("nd_excluida");
 }

@@ -23,6 +23,7 @@ function bkMarcarSalvo(onde) {
 function atualizarSeloBase() {
   const el = $("seloBase");
   if (!el) return;
+  bkSemearData();
   const i = idadeBase();
   el.className = "selo-base";
   if (!i) {
@@ -33,6 +34,30 @@ function atualizarSeloBase() {
     el.textContent = t("bk_selo", { d: d.toLocaleDateString(), n: i.dias });
     el.classList.add(i.dias <= 7 ? "sb-ok" : (i.dias <= 21 ? "sb-aviso" : "sb-alerta"));
   }
+}
+
+/* Quem já usava o app antes do backup existir não tem "eac_backup_em", e o
+ * selo dizia "nunca" mesmo com meses de trabalho guardado. A data mais
+ * recente em que algo foi tocado responde melhor que "nunca": não é a data
+ * de um backup, é a idade dos dados — que é o que o selo quer informar. */
+function bkSemearData() {
+  try {
+    if (localStorage.getItem("eac_backup_em")) return;
+    let maisNovo = "";
+    const olha = (v) => { if (v && v > maisNovo) maisNovo = v; };
+    try {
+      (JSON.parse(localStorage.getItem("eac_editais") || "[]") || [])
+        .forEach((e) => { olha(e.tocado); olha(e.criado); });
+    } catch (x) {}
+    try {
+      const mat = JSON.parse(localStorage.getItem("eac_resumos") || "{}") || {};
+      Object.keys(mat).forEach((k) => olha(mat[k] && mat[k].tocado));
+    } catch (x) {}
+    if (!maisNovo) return;
+    localStorage.setItem("eac_backup_em", maisNovo);
+    localStorage.setItem("eac_backup_onde", t("bk_onde_local"));
+    reg("BACKUP", "idade da base deduzida dos dados", maisNovo.slice(0, 10));
+  } catch (e) {}
 }
 
 function bkTextoJson() { return JSON.stringify(montarBackup(), null, 1); }
@@ -146,8 +171,19 @@ async function bkConfirmarRestauro() {
    * restaurar o backup errado não pode ser o fim da linha */
   try { guardarVersao("antes de restaurar backup"); } catch (e) {}
   try {
+    const gerado = bkPendente.gerado;
     const n = restaurarBackup(bkPendente);
-    reg("BACKUP", "restaurado", n + " chaves, de " + (bkPendente.gerado || "?"));
+    /* A DATA DA BASE VEM DO ARQUIVO.
+     * "eac_backup_em" só era escrito ao SALVAR. Quem restaurava uma base
+     * num aparelho novo via "sem base" logo depois de carregar uma — e o
+     * selo existe justamente para dizer de quando é o que está ali. O
+     * arquivo carrega a hora em que foi gerado ("gerado"), e essa é a
+     * resposta certa: a base é daquele momento, não de agora. */
+    try {
+      localStorage.setItem("eac_backup_em", gerado || new Date().toISOString());
+      localStorage.setItem("eac_backup_onde", t("bk_onde_arquivo"));
+    } catch (x) {}
+    reg("BACKUP", "restaurado", n + " chaves, de " + (gerado || "?"));
     bkPendente = null;
     $("dlgBkConf").close();
     await uiAlert(t("bk_restaurado"));

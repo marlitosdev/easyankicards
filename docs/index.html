@@ -882,6 +882,21 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ac-c.ruim{color:#e5484d;font-weight:700}
 .ac-comp-nota{font-size:10.5px;color:#f5a524;margin-top:7px;line-height:1.45}
 .ed-busca-barra{display:flex;flex-direction:column;gap:7px;margin:0 0 9px}
+.nd-rot{display:block;font-size:10px;font-weight:800;letter-spacing:.05em;
+  color:var(--sutil);margin:12px 0 5px;text-transform:uppercase}
+.nd-pesos{display:flex;gap:6px;flex-wrap:wrap}
+.nd-peso{all:unset;cursor:pointer;min-width:30px;text-align:center;padding:7px 12px;
+  border-radius:9px;font-size:13px;font-weight:700;color:var(--texto);
+  border:1px solid var(--borda);background:var(--campo)}
+.nd-peso.ativa{border-color:#30a46c;background:var(--panel);color:#30a46c}
+.nd-mapa{margin-top:8px;font-size:10.5px;color:var(--sutil);line-height:1.6}
+.nd-mapa-linha{display:flex;gap:7px;align-items:baseline}
+.nd-mapa-p{font-weight:800;color:var(--texto);min-width:14px}
+.nd-mapa-n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nd-redistrib{margin-top:12px;padding:10px 12px;border-radius:9px;
+  border-left:3px solid #f5a524;background:var(--campo);font-size:11.5px;
+  color:var(--texto);line-height:1.5}
+.nd-redistrib .nd-opcoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .ed-filtros{display:flex;gap:5px;flex-wrap:wrap}
 .ed-filtro{all:unset;cursor:pointer;padding:4px 11px;border-radius:999px;font-size:10.5px;
   font-weight:600;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
@@ -1691,6 +1706,32 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </dialog>
 
+<dialog id="dlgNovaDisc" class="ui-modal diag-modal">
+  <h3 data-i18n="nd_titulo"></h3>
+  <p class="nota" data-i18n="nd_ajuda"></p>
+  <label class="nd-rot" data-i18n="nd_nome"></label>
+  <input type="text" id="ndNome" class="mat-busca" placeholder="Ex.: Direito Tributário">
+
+  <label class="nd-rot" data-i18n="nd_peso"></label>
+  <!-- O campo difícil é o peso. Pedir "de 1 a 5" sem mostrar o resto
+       produz o que o edital do TCE-PE mostrou: 17 disciplinas com peso 3,
+       o que anula a priorização inteira. Aqui a escolha é comparação. -->
+  <div class="nd-pesos" id="ndPesos"></div>
+  <div class="nd-mapa" id="ndMapa"></div>
+
+  <label class="nd-rot" data-i18n="nd_topicos"></label>
+  <textarea id="ndTopicos" rows="7" style="width:100%;box-sizing:border-box"
+    placeholder="Um tópico por linha. Opcional: nome :: peso :: por que cai"></textarea>
+  <div class="nota" data-i18n="nd_topicos_dica"></div>
+
+  <div id="ndRedistrib" class="nd-redistrib" hidden></div>
+
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnNdIncluir" data-i18n="nd_incluir"></button>
+    <button class="btn btn-cinza" id="btnNdFechar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMaterial" class="ui-modal diag-modal">
   <h3 id="matTitulo"></h3>
   <p class="nota" id="matSub"></p>
@@ -1790,6 +1831,11 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div id="dscLista" style="max-height:46vh;overflow:auto;margin:10px 0"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnDscFechar" data-i18n="help_close"></button>
+    <!-- Excluir mora aqui, no painel da disciplina, e não numa lista de
+         botões: é onde a pessoa já está olhando o que aquela matéria pesa
+         e quanto dela foi estudado — que é a informação necessária para
+         decidir tirá-la do plano. -->
+    <button class="btn-min btn-min-perigo" id="btnDscExcluir" data-i18n="nd_excluir"></button>
   </div>
 </dialog>
 <dialog id="dlgDiario" class="ui-modal">
