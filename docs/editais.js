@@ -1,0 +1,188 @@
+/* =====================================================================
+ * EDITAIS — vários planos, não um
+ *
+ * Até a v8.67 existia UM edital, em "eac_edital_texto". A partir daqui há
+ * uma lista, e o app precisa responder três perguntas que antes não faziam
+ * sentido: qual edital está aberto, quais estão ativos, e como a agenda da
+ * semana combina tópicos de concursos diferentes.
+ *
+ * A migração é a parte que não pode falhar: quem já tem um edital com meses
+ * de progresso marcado não pode abrir o app e encontrar a lista vazia.
+ * ===================================================================== */
+
+let editais = [];
+let editalAtual = null;      /* id do edital aberto, ou null = tela de lista */
+
+function edNovoId() {
+  return "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+}
+
+function edCarregarLista() {
+  try { editais = JSON.parse(localStorage.getItem("eac_editais") || "[]"); }
+  catch (e) { editais = []; }
+  if (!Array.isArray(editais)) editais = [];
+
+  /* Migração do edital único. Só acontece uma vez, e só quando há o que
+   * migrar: sem isto, quem já usava o app perderia texto e progresso na
+   * atualização — o tipo de perda que não se percebe até ser tarde. */
+  if (!editais.length) {
+    let txt = null, prog = "{}";
+    try {
+      txt = localStorage.getItem("eac_edital_texto");
+      prog = localStorage.getItem("eac_edital_progresso") || "{}";
+    } catch (e) {}
+    if (txt && txt.trim()) {
+      const cfg = (typeof lerEdital === "function" ? lerEdital(txt).cfg : {}) || {};
+      editais.push({
+        id: edNovoId(),
+        nome: cfg.concurso || "Edital importado",
+        texto: txt,
+        progresso: (() => { try { return JSON.parse(prog); } catch (e) { return {}; } })(),
+        criado: new Date().toISOString(),
+        tocado: new Date().toISOString(),
+        migrado: true,
+      });
+      edSalvarLista();
+      if (typeof reg === "function")
+        reg("EDITAL", "edital único migrado para a lista", cfg.concurso || "sem nome");
+    }
+  }
+  try { editalAtual = localStorage.getItem("eac_edital_atual") || null; } catch (e) {}
+  if (editalAtual && !editais.some((x) => x.id === editalAtual)) editalAtual = null;
+  return editais;
+}
+
+function edSalvarLista() {
+  try { localStorage.setItem("eac_editais", JSON.stringify(editais)); } catch (e) {}
+}
+
+function edAberto() {
+  return editais.find((x) => x.id === editalAtual) || null;
+}
+
+function edAbrir(id) {
+  editalAtual = id || null;
+  try {
+    if (id) localStorage.setItem("eac_edital_atual", id);
+    else localStorage.removeItem("eac_edital_atual");
+  } catch (e) {}
+  const e = edAberto();
+  if (e) { e.tocado = new Date().toISOString(); edSalvarLista(); }
+  return e;
+}
+
+function edCriar(nome, texto) {
+  const e = {
+    id: edNovoId(), nome: nome || "Novo edital", texto: texto || "",
+    progresso: {}, criado: new Date().toISOString(), tocado: new Date().toISOString(),
+  };
+  editais.push(e);
+  edSalvarLista();
+  return e;
+}
+
+function edApagar(id) {
+  const i = editais.findIndex((x) => x.id === id);
+  if (i < 0) return false;
+  editais.splice(i, 1);
+  if (editalAtual === id) edAbrir(null);
+  edSalvarLista();
+  return true;
+}
+
+function edDuplicar(id) {
+  const o = editais.find((x) => x.id === id);
+  if (!o) return null;
+  /* progresso NÃO vem junto: duplicar serve para reaproveitar o edital em
+   * outro cargo, e herdar o progresso do outro concurso seria mentir sobre
+   * o que já foi estudado ali */
+  const c = edCriar(o.nome + " (cópia)", o.texto);
+  return c;
+}
+
+/* ------------------------------------------------------------------
+ * SITUAÇÃO DE CADA EDITAL
+ * Três grupos, e a régua é a data da prova — que é a única coisa que
+ * torna um edital mais urgente que outro.
+ * ------------------------------------------------------------------ */
+const ED_PROXIMO_DIAS = 120;   /* quatro meses: dentro disso a prova manda */
+
+function edSituacao(e, hoje) {
+  const cfg = (typeof lerEdital === "function" ? lerEdital(e.texto || "").cfg : {}) || {};
+  const prova = cfg.prova || "";
+  if (!prova) return { grupo: "sem_data", dias: null, prova: "", cfg };
+  const fim = new Date(prova + "T00:00:00");
+  if (isNaN(fim)) return { grupo: "sem_data", dias: null, prova: "", cfg };
+  const ini = hoje ? new Date(hoje) : new Date();
+  const dias = Math.floor((fim - ini) / 86400000);
+  if (dias < 0) return { grupo: "encerrado", dias, prova, cfg };
+  return { grupo: dias <= ED_PROXIMO_DIAS ? "proximo" : "sem_data", dias, prova, cfg };
+}
+
+/* ordem: prova mais próxima primeiro; sem data depois; encerrados por último */
+const ED_ORDEM_GRUPO = { proximo: 0, sem_data: 1, encerrado: 2 };
+
+function edAgrupados(filtro, hoje) {
+  const f = (filtro || "").trim().toLowerCase();
+  const lista = editais
+    .map((e) => {
+      const s = edSituacao(e, hoje);
+      const r = typeof lerEdital === "function" ? lerEdital(e.texto || "") : null;
+      const tops = r ? r.disciplinas.reduce((a, d) => a + d.topicos.length, 0) : 0;
+      const feitos = Object.keys(e.progresso || {}).length;
+      return Object.assign({}, e, {
+        sit: s, disciplinas: r ? r.disciplinas.length : 0,
+        topicos: tops, feitos,
+        pct: tops ? Math.round((feitos / tops) * 100) : 0,
+      });
+    })
+    .filter((e) => !f || (e.nome + " " + (e.sit.cfg.concurso || "")).toLowerCase().includes(f));
+  lista.sort((a, b) => {
+    const g = ED_ORDEM_GRUPO[a.sit.grupo] - ED_ORDEM_GRUPO[b.sit.grupo];
+    if (g) return g;
+    if (a.sit.dias !== null && b.sit.dias !== null) return a.sit.dias - b.sit.dias;
+    return String(b.tocado).localeCompare(String(a.tocado));
+  });
+  const grupos = { proximo: [], sem_data: [], encerrado: [] };
+  lista.forEach((e) => grupos[e.sit.grupo].push(e));
+  return grupos;
+}
+
+/* ------------------------------------------------------------------
+ * A AGENDA É DE ESTUDOS, NÃO DE UM EDITAL
+ * A semana combina os tópicos de TODOS os editais ativos. Comparar peso
+ * entre concursos diferentes só faz sentido depois de considerar a
+ * urgência: um tópico de peso médio numa prova em três semanas vale mais
+ * que um de peso alto numa prova sem data marcada.
+ * ------------------------------------------------------------------ */
+function edUrgencia(sit) {
+  if (sit.grupo === "encerrado") return 0;         /* fora da conta */
+  if (sit.dias === null) return 0.5;               /* sem data: metade do peso */
+  if (sit.dias <= 30) return 2;
+  if (sit.dias <= 90) return 1.5;
+  if (sit.dias <= 180) return 1.15;
+  return 1;
+}
+
+function edTopicosAtivos(opcoes) {
+  const o = opcoes || {};
+  const juntos = [];
+  editais.forEach((e) => {
+    const s = edSituacao(e, o.hoje);
+    if (s.grupo === "encerrado") return;
+    if (typeof lerEdital !== "function" || typeof montarPlano !== "function") return;
+    const r = lerEdital(e.texto || "");
+    const p = montarPlano(r, { horas: 100, prova: s.prova, hoje: o.hoje,
+                               feitos: e.progresso || {} });
+    const u = edUrgencia(s);
+    p.itens.forEach((i) => {
+      i.edital = e.id;
+      i.editalNome = e.nome;
+      i.urgencia = u;
+      i.pesoAjustado = i.bruto * u;
+      juntos.push(i);
+    });
+  });
+  juntos.sort((a, b) => b.pesoAjustado - a.pesoAjustado);
+  return juntos;
+}

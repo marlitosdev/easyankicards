@@ -9,11 +9,12 @@
  * As bibliotecas externas (sql.js/JSZip) seguem "cache primeiro", pois
  * têm versão fixa na URL e são pesadas.
  */
-const CACHE = "easyankicards-v8.66.0";
-const SW_VERSION = "8.66.0";
+const CACHE = "easyankicards-v8.68.0";
+const SW_VERSION = "8.68.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
-  "edital.js", "edital-ui.js", "backup.js", "backup-ui.js", "material.js", "backup.js", "backup-ui.js",
+  "edital.js", "editais.js", "edital-hub.js", "edital-ui.js",
+  "backup.js", "backup-ui.js", "material.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js",

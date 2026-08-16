@@ -18,6 +18,12 @@ function matCarregar() {
   if (!matResumos || typeof matResumos !== "object") matResumos = {};
 }
 
+/* Carrega AGORA, no carregamento do arquivo, e não só no matIniciar(): a
+ * agenda do edital é desenhada pelo edIniciar(), que roda antes — e desenhava
+ * com a lista vazia, deixando todos os indicadores apagados mesmo havendo
+ * material. Estado que outra tela consulta precisa existir desde o começo. */
+try { matCarregar(); } catch (e) {}
+
 function matSalvar() {
   try { localStorage.setItem("eac_resumos", JSON.stringify(matResumos)); }
   catch (e) {}
@@ -123,6 +129,75 @@ function matEscapar(s) {
  * fica guardado no formato do app, legível e editável, em vez de carregar
  * para sempre a sintaxe de quem o gerou.
  * ------------------------------------------------------------------ */
+/* O texto copiado de uma PÁGINA não traz marcação: "readText" devolve o que
+ * está renderizado, sem os "**" e "##" que só existem no markdown de origem.
+ * A formatação viaja na área de transferência como text/html — é de lá que
+ * ela tem de ser lida, senão o resumo chega achatado. */
+function matHtmlParaMarcas(html) {
+  const doc = document.implementation.createHTMLDocument("");
+  doc.body.innerHTML = String(html || "");
+  const saida = [];
+
+  const inline = (no) => {
+    let s = "";
+    no.childNodes.forEach((f) => {
+      if (f.nodeType === 3) { s += f.nodeValue.replace(/\s+/g, " "); return; }
+      if (f.nodeType !== 1) return;
+      const tag = f.tagName.toLowerCase();
+      const dentro = inline(f);
+      if (!dentro.trim()) { s += dentro; return; }
+      if (tag === "b" || tag === "strong") s += "**" + dentro.trim() + "**";
+      else if (tag === "i" || tag === "em") s += "_" + dentro.trim() + "_";
+      else if (tag === "mark") s += "==" + dentro.trim() + "==";
+      else if (tag === "br") s += "\n";
+      else if (tag === "code") s += dentro;
+      else s += dentro;
+    });
+    return s;
+  };
+
+  const anda = (no) => {
+    no.childNodes.forEach((f) => {
+      if (f.nodeType === 3) {
+        const t2 = f.nodeValue.trim();
+        if (t2) saida.push(t2);
+        return;
+      }
+      if (f.nodeType !== 1) return;
+      const tag = f.tagName.toLowerCase();
+      if (/^h[1-2]$/.test(tag)) { saida.push("# " + inline(f).trim()); return; }
+      if (/^h[3-6]$/.test(tag)) { saida.push("## " + inline(f).trim()); return; }
+      if (tag === "li") {
+        const pai = f.parentNode && f.parentNode.tagName;
+        const ord = pai && pai.toLowerCase() === "ol";
+        const n = ord ? ([].indexOf.call(f.parentNode.children, f) + 1) + ". " : "- ";
+        saida.push(n + inline(f).trim());
+        return;
+      }
+      if (tag === "tr") {
+        const celulas = [].map.call(f.children, (c) => inline(c).trim()).filter(Boolean);
+        if (celulas.length) saida.push("- " + celulas.join(" — "));
+        return;
+      }
+      if (tag === "p" || tag === "div" || tag === "blockquote") {
+        /* só emite o parágrafo quando ele não contém blocos dentro, senão o
+         * texto sairia duplicado — uma vez pelo pai e outra pelos filhos */
+        if (!f.querySelector("p,div,li,tr,h1,h2,h3,h4,h5,h6,ul,ol,table")) {
+          const t3 = inline(f).trim();
+          if (t3) saida.push(t3);
+          return;
+        }
+      }
+      if (tag === "hr") { saida.push("---"); return; }
+      if (tag === "script" || tag === "style") return;
+      anda(f);
+    });
+  };
+
+  anda(doc.body);
+  return saida.join("\n\n");
+}
+
 function matLimparColagem(txt) {
   let s = String(txt || "").replace(/\r\n?/g, "\n");
   /* referências do NotebookLM: [1], [2, 3], [1-4] — fora do começo da linha,
@@ -156,7 +231,9 @@ function matParaHtml(txt) {
   const inline = (s) => s
     .replace(/\*\*([^*\n]{1,200})\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])_([^_\n]{1,200})_(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
-    .replace(/==([^=\n]{1,200})==/g, "<mark>$1</mark>");
+    .replace(/==!([^=\n]{1,300})==/g, '<mark class="m-imp">$1</mark>')
+    .replace(/==\?([^=\n]{1,300})==/g, '<mark class="m-duv">$1</mark>')
+    .replace(/==([^=\n]{1,300})==/g, "<mark>$1</mark>");
   linhas.forEach((l) => {
     const s = l.trim();
     const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
@@ -273,6 +350,50 @@ function matAmpliar() {
  * e "usei o material" — sem isto o resumo vira um arquivo morto que ninguém
  * sabe se foi aberto. O tempo sugerido vem do tamanho do texto: cerca de 200
  * palavras por minuto, com piso de 5 minutos. */
+/* ------------------------------------------------------------------
+ * MARCA-TEXTO NA LEITURA
+ *
+ * Marcar não é editar: quem está lendo quer grifar e seguir lendo, não
+ * entrar num editor e procurar a frase. A marca é gravada NO TEXTO, como
+ * "==assim==" — então ela sobrevive ao backup, à exportação e a qualquer
+ * versão futura do app, em vez de virar uma tabela de posições que quebra
+ * assim que alguém mexe numa vírgula.
+ *
+ * Limite honesto: a marcação encontra a PRIMEIRA ocorrência ainda não
+ * marcada do trecho selecionado. Selecionando uma palavra que se repete,
+ * pode grifar a ocorrência errada — por isso o botão exige uma seleção
+ * de pelo menos três caracteres, e frases funcionam melhor que palavras.
+ * ------------------------------------------------------------------ */
+const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?" };
+
+function matMarcarSelecao(tipo) {
+  const sel = window.getSelection && window.getSelection();
+  const trecho = sel ? String(sel).trim() : "";
+  if (trecho.length < 3) { uiAlert(t("mat_marca_curta")); return; }
+  const ta = $("matTexto");
+  const marca = MAT_MARCAS[tipo] || "==";
+  /* procura o trecho ainda sem marca em volta */
+  const idx = ta.value.indexOf(trecho);
+  if (idx < 0) { uiAlert(t("mat_marca_nao_achou")); return; }
+  const antes = ta.value.slice(Math.max(0, idx - 3), idx);
+  if (/==[!?]?$/.test(antes)) { uiAlert(t("mat_marca_ja")); return; }
+  ta.value = ta.value.slice(0, idx) + marca + trecho + "==" + ta.value.slice(idx + trecho.length);
+  matGravar(matAtual.chave, ta.value,
+    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  reg("MATERIAL", "trecho marcado (" + tipo + ")", trecho.slice(0, 40));
+  matTrocarModo("ler");
+  $("matEstado").textContent = t("mat_marcado");
+}
+
+function matLimparMarcas() {
+  const ta = $("matTexto");
+  ta.value = ta.value.replace(/==[!?]?([^=\n]{1,300})==/g, "$1");
+  matGravar(matAtual.chave, ta.value,
+    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  matTrocarModo("ler");
+  $("matEstado").textContent = t("mat_marcas_limpas");
+}
+
 function matRegistrarLeitura() {
   if (!matAtual) return;
   const txt = $("matTexto").value;
@@ -297,8 +418,21 @@ function matRegistrarLeitura() {
  * e no Firefox e no Safari ela simplesmente não existe. */
 async function matColarDeFora() {
   let txt = "";
+  /* primeiro o HTML, que é onde a formatação está; só depois o texto puro */
   try {
-    if (navigator.clipboard && navigator.clipboard.readText)
+    if (navigator.clipboard && navigator.clipboard.read) {
+      const itens = await navigator.clipboard.read();
+      for (const it of itens) {
+        if (it.types && it.types.includes("text/html")) {
+          const b = await it.getType("text/html");
+          txt = matHtmlParaMarcas(await b.text());
+          break;
+        }
+      }
+    }
+  } catch (e) { txt = ""; }
+  try {
+    if (!txt && navigator.clipboard && navigator.clipboard.readText)
       txt = await navigator.clipboard.readText();
   } catch (e) { txt = ""; }
   if (!txt) {
@@ -446,6 +580,27 @@ function matIniciar() {
   if (!$("matTexto")) return;
   $("btnMatSalvar").onclick = matGravarEditor;
   $("btnMatColar").onclick = matColarDeFora;
+  $("btnMarcaD").onclick = () => matMarcarSelecao("destaque");
+  $("btnMarcaI").onclick = () => matMarcarSelecao("importante");
+  $("btnMarcaQ").onclick = () => matMarcarSelecao("duvida");
+  $("btnMarcaLimpar").onclick = matLimparMarcas;
+  $("btnMatSalvarEstado").onclick = () => {
+    matGravar(matAtual.chave, $("matTexto").value,
+      { disciplina: matAtual.disciplina, topico: matAtual.topico });
+    $("matEstado").textContent = t("mat_estado_salvo",
+      { d: new Date().toLocaleTimeString() });
+    reg("MATERIAL", "estado salvo: " + (matAtual && matAtual.topico));
+    matRender();
+  };
+  /* colar na caixa manual também aproveita o HTML */
+  if ($("matColarTexto")) {
+    $("matColarTexto").addEventListener("paste", (ev) => {
+      const html = ev.clipboardData && ev.clipboardData.getData("text/html");
+      if (!html) return;
+      ev.preventDefault();
+      $("matColarTexto").value = matHtmlParaMarcas(html);
+    });
+  }
   $("btnMatColarOk").onclick = () => matAplicarColagem($("matColarTexto").value);
   $("btnMatColarFechar").onclick = () => $("dlgMatColar").close();
   $("btnMatModo").onclick = () => {

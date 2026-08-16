@@ -557,7 +557,16 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura ul{margin:0 0 11px;padding-left:20px}
 .mat-leitura li{margin:0 0 5px}
 .mat-leitura hr{border:0;border-top:1px solid var(--borda);margin:14px 0}
-.mat-leitura mark{background:rgba(245,158,11,.3);color:inherit;border-radius:3px;padding:0 2px}
+.mat-leitura mark{background:rgba(245,158,11,.32);color:inherit;border-radius:3px;padding:0 2px}
+.mat-leitura mark.m-imp{background:rgba(226,75,74,.32)}
+.mat-leitura mark.m-duv{background:rgba(59,130,246,.32)}
+.marca{all:unset;cursor:pointer;padding:3px 9px;border-radius:7px;font-size:10.5px;
+  font-weight:700;border:1px solid var(--borda);color:var(--texto)}
+.marca-d{background:rgba(245,158,11,.32)}
+.marca-i{background:rgba(226,75,74,.32)}
+.marca-q{background:rgba(59,130,246,.32)}
+.mat-sep{width:1px;height:16px;background:var(--borda);margin:0 4px}
+.mat-estado{margin-left:auto;font-size:10.5px;color:#22c55e;font-weight:700}
 dialog.mat-amplo{max-width:96vw;width:96vw}
 dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ed-doc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
@@ -565,6 +574,11 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
   border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
 .ed-doc:hover{opacity:1;border-color:var(--borda)}
 .ed-doc.tem{opacity:1;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
+.ed-doc.cards{border-color:rgba(139,92,246,.6);background:rgba(139,92,246,.16);
+  position:relative}
+.ed-doc-n{position:absolute;top:-5px;right:-5px;min-width:13px;height:13px;
+  border-radius:7px;background:#8b5cf6;color:#fff;font-size:8.5px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;padding:0 2px}
 .mat-busca{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto);
   font-size:13px;margin-top:8px}
@@ -806,6 +820,59 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
   font-weight:700;color:var(--sutil);text-decoration:underline}
 .ed-abrir:hover{color:var(--texto)}
 .ed-card-lista{margin-top:7px;border-top:1px solid var(--borda);padding-top:5px}
+
+/* ===== v8.68 — hub dos editais e agenda de topo =====================
+   Toda cor aqui é declarada de propósito: três vezes neste projeto um
+   botão nasceu sem color e ficou branco-sobre-branco no tema escuro. */
+.ed-agenda-topo{margin:0 0 14px}
+.ed-agenda-cx{border-color:var(--sutil)}
+.ed-agenda-cab{display:flex;align-items:center;justify-content:space-between;gap:10px}
+/* o selo do concurso na linha da agenda: com dois editais na mesma semana,
+   sem ele a lista não diz para que prova a pessoa está estudando */
+.ed-selo-cc{margin-left:8px;padding:2px 7px;border-radius:999px;
+  font-size:9.5px;font-weight:700;letter-spacing:.02em;cursor:pointer;
+  background:var(--panel);color:var(--sutil);border:1px solid var(--borda);
+  white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.ed-selo-cc:hover{color:var(--texto);border-color:var(--sutil)}
+
+.ed-voltar-linha{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.ed-aberto-nome{font-size:14px;font-weight:700;color:var(--texto);flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+#edHub{max-width:820px}
+.hub-grupo{margin:16px 0 0}
+.hub-grupo-tit{font-size:12.5px;font-weight:700;color:var(--texto);
+  display:flex;align-items:center;gap:7px}
+/* cor E rótulo: o texto do título já diz o que a bolinha diz */
+.hub-grupo-tit::before{content:"";width:8px;height:8px;border-radius:50%;
+  background:var(--sutil);flex:0 0 auto}
+.hub-proximo .hub-grupo-tit::before{background:#e5484d}
+.hub-sem_data .hub-grupo-tit::before{background:#f5a524}
+.hub-encerrado .hub-grupo-tit::before{background:#6b7280}
+.hub-grupo-sub{font-size:10.5px;color:var(--sutil);margin:2px 0 8px}
+
+.hub-card{background:var(--campo);border:1px solid var(--borda);
+  border-left:3px solid var(--borda);border-radius:11px;
+  padding:10px 13px;margin:0 0 8px}
+.hub-card-proximo{border-left-color:#e5484d}
+.hub-card-sem_data{border-left-color:#f5a524}
+.hub-card-encerrado{border-left-color:#6b7280;opacity:.72}
+.hub-card-topo{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hub-card-nome{all:unset;cursor:pointer;font-size:13.5px;font-weight:700;
+  color:var(--texto);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hub-card-nome:hover{text-decoration:underline}
+.hub-prazo{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;
+  white-space:nowrap;background:var(--panel);color:var(--sutil);
+  border:1px solid var(--borda)}
+.hub-prazo-proximo{color:#e5484d;border-color:#e5484d}
+.hub-prazo-sem_data{color:#f5a524;border-color:#f5a524}
+.hub-card-info{font-size:10.5px;color:var(--sutil);margin:4px 0 6px}
+.hub-barra{height:5px;border-radius:999px;background:var(--panel);overflow:hidden}
+.hub-barra-fill{height:100%;background:var(--ok,#30a46c);border-radius:999px}
+.hub-acoes{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.btn-min-perigo{color:#e5484d;border-color:var(--borda);background:var(--campo)}
+.btn-min-perigo:hover:not(:disabled){border-color:#e5484d;background:var(--panel);color:#e5484d}
+
 .ed-item{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12px;
   border-bottom:1px solid var(--borda)}
 .ed-item-meio{flex:1;min-width:0}
@@ -1155,6 +1222,34 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 </section>
 
 <section id="secEdital" data-modo="edital" hidden>
+
+  <!-- A AGENDA VEM ANTES DE TUDO.
+       Quem estuda não estuda "um edital": estuda a semana. Com vários
+       concursos cadastrados, a pergunta das 7h da manhã é "o que abro
+       agora", e a resposta atravessa editais — por isso a agenda fica
+       acima do hub e da bancada, e cada linha diz de qual concurso é. -->
+  <div id="edAgendaTopo" class="ed-agenda-topo"></div>
+
+  <!-- HUB: a lista de editais. É a tela inicial do modo. -->
+  <div id="edHub">
+    <div class="bancada-cab">
+      <h2 class="bancada-nome" data-i18n="hub_titulo"></h2>
+      <span class="bancada-acoes">
+        <button class="btn-min" id="btnHubNovo" data-i18n="hub_novo"></button>
+      </span>
+    </div>
+    <p class="nota" data-i18n="hub_intro"></p>
+    <input type="search" id="hubBusca" class="mat-busca">
+    <div id="hubLista"></div>
+  </div>
+
+  <!-- BANCADA: só aparece ao incluir, consultar ou editar um edital. -->
+  <div id="edBancada" hidden>
+    <div class="ed-voltar-linha">
+      <button class="btn-min" id="btnEdVoltar" data-i18n="hub_voltar"></button>
+      <span class="ed-aberto-nome" id="edNomeAberto"></span>
+      <button class="btn-min" id="btnEdRenomear" data-i18n="hub_renomear"></button>
+    </div>
   <div class="duas-colunas">
     <div class="grupo" id="painelEdital">
       <div class="bancada-cab">
@@ -1222,6 +1317,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
     </div>
   </div>
+  </div><!-- /edBancada -->
 </section>
 
 <section id="secResumos" data-modo="material" hidden>
@@ -1231,150 +1327,11 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <span class="bancada-acoes"><span class="mat-conta" id="matContagem"></span></span>
     </div>
     <p class="nota" data-i18n="mat_intro"></p>
-    <input type="search" id="matBusca" class="mat-busca"
-           placeholder="Filtrar por concurso, disciplina, tópico ou conteúdo">
+    <input type="search" id="matBusca" class="mat-busca" placeholder="Filtrar por concurso, disciplina, tópico ou conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
 </section>
 
-<section id="secFerramentas" data-modo="ferramentas" hidden>
-  <div class="grupo" style="max-width:620px">
-    <div class="bancada-cab">
-      <h2 class="bancada-nome" data-i18n="modo_ferramentas"></h2>
-    </div>
-    <p class="nota" data-i18n="ferr_intro"></p>
-      <div class="gaveta-importar">
-        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
-          <span class="gv-icone">▸</span>
-          <span data-i18n="import_handle"></span>
-          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
-        </button>
-        <div class="gaveta-corpo" id="gavetaImportar" hidden>
-          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
-          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
-          <div class="nota" id="importAviso"></div>
-          <div id="importProgresso" style="display:none">
-            <div class="ip-txt" id="importProgTxt"></div>
-            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
-          </div>
-        </div>
-      </div>
-    <div class="ferr-bloco">
-      <div class="ferr-tit" data-i18n="hist_titulo"></div>
-      <p class="nota" data-i18n="hist_ajuda"></p>
-      <button class="btn btn-cinza" id="btnHistorico" title=""></button>
-    </div>
-    <div class="ferr-lista">
-      <div class="ferr-item"><b data-i18n="ferr_soon_edital"></b>
-        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
-      <div class="ferr-item"><b data-i18n="ferr_soon_backup"></b>
-        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
-    </div>
-  </div>
-</section>
-
-<section id="secEdital" data-modo="edital" hidden>
-  <div class="duas-colunas">
-    <div class="grupo" id="painelEdital">
-      <div class="bancada-cab">
-        <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
-        <span class="bancada-acoes">
-          <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
-          <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
-        </span>
-      </div>
-      <!-- O ciclo inteiro numa linha só: pedir, revisar, colar de volta.
-           O diagnóstico estava do outro lado da tela, longe do botão que
-           recebe a resposta dele. -->
-      <div class="btn-linha">
-        <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
-        <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
-        <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
-      </div>
-      <label class="bancada-sub" data-i18n="ed_colar"></label>
-      <div class="editor-wrap ed-wrap">
-        <div id="editalNums" aria-hidden="true"></div>
-        <textarea id="editalTexto" spellcheck="false"
-          placeholder="# TCE-PE | prova: 2026-08-30 | horas: 12&#10;@ Auditoria Governamental :: 5&#10;+ Achado de auditoria :: 5 :: cai em quase toda prova"></textarea>
-      </div>
-      <div id="editalSug" class="sugestoes"></div>
-      <button class="btn btn-verde" id="btnEditalCorrigir" disabled></button>
-    </div>
-
-    <div class="grupo">
-      <div class="bancada-cab">
-        <h2 class="bancada-nome" data-i18n="ed_prioridade"></h2>
-
-      </div>
-      <div class="ed-cfg">
-        <label><span data-i18n="ed_prova"></span><input type="date" id="edProva"></label>
-        <label><span data-i18n="ed_horas"></span>
-          <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
-        <label><span data-i18n="ed_dias"></span>
-          <input type="number" id="edDias" min="1" max="7" step="1" value="5"></label>
-        <label><span data-i18n="ed_inicio"></span>
-          <input type="time" id="edInicio" value="19:00"></label>
-      </div>
-      <div class="ed-sim">
-        <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
-        <div class="ed-sim-txt" id="edSimTxt"></div>
-      </div>
-      <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
-      <div class="ed-ritmo" id="edRitmo" hidden></div>
-      <div class="ed-abas">
-        <button class="ed-aba ativa" id="btnVistaPainel" data-i18n="ed_vista_painel"></button>
-        <button class="ed-aba" id="btnVistaLista" data-i18n="ed_vista_lista"></button>
-      </div>
-      <div id="edPainel"></div>
-      <div id="edListaBox" hidden>
-      <div class="ed-rolagem">
-        <table class="ed-tab">
-          <thead><tr>
-            <th data-i18n="ed_col_top"></th><th data-i18n="ed_col_disc"></th>
-            <th data-i18n="ed_col_pri"></th><th data-i18n="ed_col_h"></th>
-            <th data-i18n="ed_col_ok"></th>
-          </tr></thead>
-          <tbody id="edTabela"></tbody>
-        </table>
-      </div>
-      </div>
-      <button class="btn btn-verde" id="btnEditalCsv" data-i18n="ed_csv"></button>
-    </div>
-  </div>
-</section>
-
-<section id="secResumos" data-modo="resumos" hidden>
-  <div class="duas-colunas">
-    <div class="grupo">
-      <div class="bancada-cab">
-        <span class="bancada-nome" data-i18n="resumo_bancada"></span>
-      </div>
-      <p class="nota" data-i18n="resumo_intro"></p>
-      <div class="rotulo" data-i18n="resumo_colar"></div>
-      <textarea id="resumoTexto2" class="esqueleto" rows="14" disabled
-                placeholder="Cole aqui a matéria bruta — aula, PDF, anotação —&#10;e o app devolve o resumo estruturado."></textarea>
-      <div class="btn-linha">
-        <button class="btn btn-verde" disabled data-i18n="resumo_gerar"></button>
-        <button class="btn btn-roxo" disabled data-i18n="resumo_prompt"></button>
-      </div>
-    </div>
-    <div class="grupo">
-      <div class="bancada-cab"><span class="bancada-nome" data-i18n="resumo_saida"></span></div>
-      <div class="esqueleto-doc">
-        <div class="esq-h1">Achado de auditoria</div>
-        <div class="esq-p"></div><div class="esq-p curto"></div>
-        <div class="esq-h2">Elementos</div>
-        <div class="esq-p"></div><div class="esq-p"></div><div class="esq-p curto"></div>
-        <div class="esq-h2">Pegadinhas de prova</div>
-        <div class="esq-p"></div><div class="esq-p curto"></div>
-      </div>
-      <div class="btn-linha">
-        <button class="btn btn-verde" disabled data-i18n="resumo_md"></button>
-        <button class="btn btn-azul" disabled data-i18n="resumo_virar_cartoes"></button>
-      </div>
-    </div>
-  </div>
-</section>
 </div>
 </main>
 
@@ -1641,16 +1598,24 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
             placeholder="Escreva aqui o que precisa lembrar deste tópico."></textarea>
   <div class="mat-ctrl" id="matCtrlLeitura" hidden>
+    <span data-i18n="mat_marcar"></span>
+    <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d"></button>
+    <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i"></button>
+    <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q"></button>
+    <button class="btn-min" id="btnMarcaLimpar" data-i18n="mat_marca_limpar"></button>
+    <span class="mat-sep"></span>
     <span data-i18n="mat_letra"></span>
     <button class="btn-min" id="btnMatMenor">A&#8722;</button>
     <span class="mat-fonte" id="matFonteVal">15px</span>
     <button class="btn-min" id="btnMatMaior">A+</button>
     <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar"></button>
+    <span class="mat-estado" id="matEstado"></span>
   </div>
   <div class="mat-leitura" id="matLeitura" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMatModo"></button>
     <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"></button>
+    <button class="btn btn-cinza" id="btnMatSalvarEstado" data-i18n="mat_salvar_estado"></button>
     <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden></button>
     <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes"></button>
     <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close"></button>
@@ -1931,6 +1896,8 @@ window.__sqlPromise = initSqlJs({
 <script src="backup-ui.js"></script>
 <script src="material.js"></script>
 <script src="edital.js"></script>
+<script src="editais.js"></script>
+<script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
 <script src="modos.js"></script>
 <script>
@@ -1938,6 +1905,7 @@ window.__sqlPromise = initSqlJs({
    tem de subir — senão o app inteiro fica preso num estado sem modo, com o
    rodapé de exportação aparecendo onde não devia. */
 try { edIniciar(); } catch (e) { console.error(e); }
+try { hubIniciar(); } catch (e) { console.error(e); }
 try { bkIniciar(); } catch (e) { console.error(e); }
 try { matIniciar(); } catch (e) { console.error(e); }
 try { montarBarraModos(); } catch (e) { console.error(e); }
