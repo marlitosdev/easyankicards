@@ -688,7 +688,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .ed-card{background:var(--campo);border:1px solid var(--borda);border-radius:11px;padding:11px}
 .ed-card.completo{border-color:#22c55e}
 .ed-card-cab{display:flex;align-items:center;gap:6px;margin:0 0 8px;flex-wrap:wrap}
-.ed-card-nome{flex:1;font-size:12.5px;font-weight:600;line-height:1.3}
+/* Virou <button> para ficar clicável e ninguém declarou a cor: de novo o
+   estilo padrão do navegador, fundo claro e texto claro por cima. O teste F3
+   passou a cobrir este seletor também. */
+.ed-card-nome{all:unset;cursor:pointer;flex:1;min-width:0;font-size:12.5px;
+  font-weight:600;line-height:1.3;color:var(--texto);background:none}
+.ed-card-nome:hover{text-decoration:underline}
 .ed-peso{font-size:10.5px;padding:2px 5px;border-radius:7px;background:var(--panel);
   color:var(--texto);border:1px solid var(--borda);cursor:pointer}
 .ed-peso.suspeito{border-color:#e24b4a;color:#fca5a5}
@@ -780,7 +785,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .reg-humor.ativa.humor-boa{background:#15803d;border-color:transparent;color:#fff}
 .ed-reg{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
   display:inline-flex;align-items:center;justify-content:center;font-size:11px;
-  font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0}
+  font-weight:800;border:1px solid var(--borda);color:var(--sutil);flex-shrink:0;
+  background:var(--campo)}
 .ed-reg:hover{border-color:#22c55e;color:#22c55e}
 .ed-reg.ok{background:rgba(34,197,94,.2);border-color:transparent;color:#22c55e}
 .ed-reg.rev{background:#15803d;border-color:transparent;color:#fff}
