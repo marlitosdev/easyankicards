@@ -309,13 +309,29 @@ function edLinhaTopico(i, semDisciplina) {
 function edPorque(i, semDisciplina) {
   const p = i.porque || {};
   const disc = semDisciplina ? "" : i.disciplina + " · ";
-  const fatia = t("ed_pq_fatia", { p: p.fatia });
+  /* "disciplina vale X% da prova" era a informação mais fraca da linha: é da
+   * disciplina, não do tópico, e já aparece no painel e no mapa. Quando há
+   * histórico em outro concurso, ela cede o lugar — porque "já vi isto há 9
+   * dias" muda o que você faz agora, e a fatia da disciplina não. */
+  const h = edMarcaHistorico(i);
+  const fatia = h || t("ed_pq_fatia", { p: p.fatia });
   if (p.tipo === "rev_vencida")
     return disc + t("ed_pq_rev_vencida", { n: p.dias }) + " · " + fatia;
   if (p.tipo === "rev_pendente") return disc + t("ed_pq_rev_pendente") + " · " + fatia;
   if (p.tipo === "concluido") return disc + t("ed_pq_concluido");
   return disc + t("ed_pq_peso", { peso: p.peso, faixa: t("ed_faixa_" + i.faixa) })
     + " · " + fatia;
+}
+
+/* A marca de histórico, em texto curto. Devolve vazio quando não há
+ * vínculo — e vazio é a resposta certa: inventar "sem histórico" em toda
+ * linha só encheria a tela de ruído. */
+function edMarcaHistorico(i) {
+  if (typeof vkHistorico !== "function") return "";
+  const h = vkHistorico(i.disciplina, i.nome, i.estado, edDiario);
+  if (!h || h.marca === "sem_historico" || h.marca === "estudado_aqui"
+      || h.marca === "revisado_aqui") return "";
+  return t("vk_marca_" + h.marca, { c: h.concurso || "?", n: h.dias });
 }
 
 /* ------------------------------------------------------------------
@@ -1573,4 +1589,176 @@ async function ndExcluir(nome) {
   edRender();
   if (typeof hubPintarAgenda === "function") hubPintarAgenda();
   toast("nd_excluida");
+}
+
+/* =====================================================================
+ * TELA "O QUE EU JÁ ESTUDEI DISTO?"
+ * ===================================================================== */
+let vkTriagem = [];        /* candidatos de nome idêntico + a escolha de cada */
+let vkPendentesIa = [];    /* o que vai no prompt */
+
+function vkPendentesDoEdital() {
+  const r = lerEdital($("editalTexto").value);
+  const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
+    prova: $("edProva").value, feitos: edProgresso });
+  /* só os PENDENTES: comparar o que já foi estudado aqui é desperdício e
+   * ainda polui a conferência com pares inúteis */
+  return plano.itens.filter((i) => !i.feito)
+    .map((i) => ({ disciplina: i.disciplina, nome: i.nome }));
+}
+
+function vkAbrir() {
+  const est = vkEstudados(edDiario);
+  if (!est.length) { uiAlert(t("vk_sem_diario")); return; }
+  const pend = vkPendentesDoEdital();
+  vkTriagem = vkIdenticos(est, pend).map((c) => Object.assign({}, c, { escolha: "ia" }));
+  vkPendentesIa = pend;
+
+  $("vkResumo").textContent = t("vk_resumo", {
+    e: est.length, p: pend.length, i: vkTriagem.length });
+  vkPintarTriagem();
+  $("dlgJaEstudei").showModal();
+  reg("VINCULO", "triagem aberta", est.length + " estudados, "
+      + vkTriagem.length + " nomes idênticos");
+}
+
+function vkPintarTriagem() {
+  const box = $("vkLista");
+  box.innerHTML = "";
+  if (!vkTriagem.length) {
+    const p = document.createElement("div");
+    p.className = "esq-vazio"; p.textContent = t("vk_sem_identicos");
+    box.append(p); return;
+  }
+  vkTriagem.forEach((c, k) => {
+    const li = document.createElement("div");
+    li.className = "vk-item";
+    const par = document.createElement("div");
+    par.className = "vk-par";
+    const b = document.createElement("b");
+    b.textContent = c.para.topico;
+    par.append(b);
+    li.append(par);
+
+    const d = document.createElement("div");
+    d.className = "vk-disc" + (c.mesmaDisciplina ? "" : " difere");
+    d.textContent = c.mesmaDisciplina
+      ? t("vk_mesma_disc", { d: c.de.disciplina })
+      : t("vk_outra_disc", { a: c.de.disciplina, b: c.para.disciplina });
+    li.append(d);
+
+    const esc = document.createElement("div");
+    esc.className = "vk-esc";
+    [["igual", "vk_op_igual"], ["ia", "vk_op_ia"], ["nao", "vk_op_nao"]]
+      .forEach(([v, rot]) => {
+        const bt = document.createElement("button");
+        bt.type = "button";
+        bt.className = "vk-op op-" + v + (c.escolha === v ? " ativa" : "");
+        bt.textContent = t(rot);
+        bt.onclick = () => { vkTriagem[k].escolha = v; vkPintarTriagem(); };
+        esc.append(bt);
+      });
+    li.append(esc);
+    box.append(li);
+  });
+}
+
+function vkTodos(escolha) {
+  vkTriagem.forEach((c) => { c.escolha = escolha; });
+  vkPintarTriagem();
+}
+
+/* Aplica SÓ o que a pessoa marcou como "é o mesmo". */
+function vkAplicarTriagem() {
+  const aceitos = vkTriagem.filter((c) => c.escolha === "igual");
+  if (!aceitos.length) { uiAlert(t("vk_nada_marcado")); return; }
+  const ed = typeof edAberto === "function" ? edAberto() : null;
+  const r = vkAplicar(aceitos.map((c) => Object.assign({}, c, {
+    conf: "ALTA", por: t("vk_por_identico"), origem: "nome_identico" })),
+    ed ? ed.id : "");
+  reg("VINCULO", "aceitos por nome idêntico", r.novos + " vínculos");
+  vkTriagem = vkTriagem.filter((c) => c.escolha !== "igual");
+  vkPintarTriagem();
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  toast("vk_aplicados");
+}
+
+/* O prompt leva o que sobrou: os idênticos mandados para a IA MAIS todos os
+ * pendentes que não têm nome igual. */
+function vkGerarPrompt() {
+  const est = vkEstudados(edDiario);
+  const paraIa = new Set(vkTriagem.filter((c) => c.escolha === "ia")
+    .map((c) => c.para.chave));
+  const recusados = new Set(vkTriagem.filter((c) => c.escolha === "nao")
+    .map((c) => c.para.chave));
+  const pend = vkPendentesIa.filter((p) => {
+    const k = vkChave(p.disciplina, p.nome);
+    if (recusados.has(k)) return false;
+    return true;
+  });
+  const ed = typeof edAberto === "function" ? edAberto() : null;
+  const txt = vkPrompt(est, pend, ed ? ed.nome : "");
+  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  reg("VINCULO", "prompt gerado", est.length + " estudados × " + pend.length + " pendentes");
+  toast("vk_prompt_copiado");
+}
+
+function vkConferirColagem() {
+  const est = vkEstudados(edDiario);
+  const r = vkLerResposta($("vkColarTexto").value, est, vkPendentesIa);
+  const av = $("vkColarAviso");
+  av.hidden = false;
+  av.innerHTML = "";
+  const linha = (txt, cls) => {
+    const d = document.createElement("div");
+    d.className = "ed-mud" + (cls ? " " + cls : "");
+    d.textContent = txt; av.append(d);
+  };
+  const alta = r.pares.filter((p) => p.conf === "ALTA").length;
+  linha(t("vk_conf_resumo", { n: r.pares.length, a: alta, m: r.pares.length - alta }));
+  if (r.ignoradas.length)
+    linha(t("vk_conf_ignoradas", { n: r.ignoradas.length }), "aviso");
+  if (!r.pares.length) linha(t("vk_conf_nada"), "perigo");
+  return r;
+}
+
+async function vkAplicarColagem() {
+  const r = vkConferirColagem();
+  if (!r || !r.pares.length) return;
+  const alta = r.pares.filter((p) => p.conf === "ALTA");
+  const media = r.pares.filter((p) => p.conf !== "ALTA");
+  /* MÉDIA nunca entra sozinha: se o app aceitasse tudo, conferir viraria
+   * apertar "aplicar" e a distinção de confiança não serviria para nada. */
+  let usar = alta;
+  if (media.length) {
+    if (await uiConfirm(t("vk_conf_media", { n: media.length })))
+      usar = alta.concat(media);
+  }
+  const ed = typeof edAberto === "function" ? edAberto() : null;
+  const res = vkAplicar(usar, ed ? ed.id : "");
+  reg("VINCULO", "aplicados da IA", res.novos + " novos, " + res.repetidos + " já existiam");
+  $("dlgVkColar").close();
+  $("dlgJaEstudei").close();
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  await uiAlert(t("vk_aplicados_n", { n: res.novos, r: res.repetidos }));
+}
+
+function vkIniciarTela() {
+  vkCarregar();
+  if ($("btnJaEstudei")) $("btnJaEstudei").onclick = vkAbrir;
+  if ($("btnVkTudoIa")) $("btnVkTudoIa").onclick = () => vkTodos("ia");
+  if ($("btnVkTudoIgual")) $("btnVkTudoIgual").onclick = () => vkTodos("igual");
+  if ($("btnVkAplicar")) $("btnVkAplicar").onclick = vkAplicarTriagem;
+  if ($("btnVkPrompt")) $("btnVkPrompt").onclick = vkGerarPrompt;
+  if ($("btnVkColar")) $("btnVkColar").onclick = () => {
+    $("vkColarTexto").value = "";
+    $("vkColarAviso").hidden = true;
+    $("dlgVkColar").showModal();
+  };
+  if ($("btnVkFechar")) $("btnVkFechar").onclick = () => $("dlgJaEstudei").close();
+  if ($("vkColarTexto")) $("vkColarTexto").addEventListener("input", vkConferirColagem);
+  if ($("btnVkColarOk")) $("btnVkColarOk").onclick = vkAplicarColagem;
+  if ($("btnVkColarFechar")) $("btnVkColarFechar").onclick = () => $("dlgVkColar").close();
 }
