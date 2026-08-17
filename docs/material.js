@@ -237,8 +237,18 @@ function matParaHtml(txt) {
   linhas.forEach((l) => {
     const s = l.trim();
     const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
-    if (/^##\s+/.test(s)) { fecharLista(); saida.push("<h4>" + inline(s.replace(/^##\s+/, "")) + "</h4>"); return; }
-    if (/^#\s+/.test(s)) { fecharLista(); saida.push("<h3>" + inline(s.replace(/^#\s+/, "")) + "</h3>"); return; }
+    /* Títulos de 1 a 6 "#". Antes só "#" e "##" eram reconhecidos, e os
+     * resumos do NotebookLM usam "###" e "####" o tempo todo — eles
+     * apareciam LITERAIS na leitura, com os quatro jogos da velha na tela.
+     * Do terceiro nível em diante todos viram h4: mais que dois tamanhos
+     * de título num resumo não ajuda ninguém a ler. */
+    const tit = s.match(/^(#{1,6})\s+/);
+    if (tit) {
+      fecharLista();
+      const nivel = tit[1].length === 1 ? "h3" : "h4";
+      saida.push("<" + nivel + ">" + inline(s.slice(tit[0].length)) + "</" + nivel + ">");
+      return;
+    }
     if (/^[-*]\s+/.test(s)) {
       if (!emLista) { saida.push("<ul>"); emLista = true; }
       saida.push("<li>" + inline(s.replace(/^[-*]\s+/, "")) + "</li>");
@@ -406,20 +416,58 @@ function matLembrarSelecao() {
  * texto que a pessoa realmente leu, e a marca é gravada na posição certa
  * do arquivo. */
 function matMapear(src) {
+  /* Este mapa PRECISA espelhar matParaHtml linha a linha. Na primeira
+   * versão ele cuidava só de "**", "==" e "__" — e a leitura também remove
+   * "## " de título, "- " e "* " de lista, o "_" de itálico, e apaga "---"
+   * inteiro. Cada um desses era um jeito de a seleção não existir no
+   * texto-fonte, com o app respondendo "não encontrei esse trecho". */
   const plano = [], mapa = [];
-  let i = 0;
-  while (i < src.length) {
-    const m = src.slice(i).match(/^(\*\*|==[!?]?|__)/);
-    if (m) { i += m[0].length; continue; }
-    const c = src[i];
-    if (/\s/.test(c)) {
-      /* espaços em branco viram um só: a leitura colapsa linhas em branco,
-       * e sem isto a seleção que cruza um parágrafo nunca casaria */
-      if (plano.length && plano[plano.length - 1] !== " ") { plano.push(" "); mapa.push(i); }
-      i++; continue;
+  let pos = 0;
+  const empurra = (c, idx) => { plano.push(c); mapa.push(idx); };
+  const espaco = (idx) => {
+    if (plano.length && plano[plano.length - 1] !== " ") empurra(" ", idx);
+  };
+
+  String(src).split(/\r?\n/).forEach((linha) => {
+    const ini = pos;
+    pos += linha.length + 1;              /* +1 do \n */
+
+    const s = linha.trim();
+    const recuo = linha.length - linha.replace(/^\s+/, "").length;
+    let i = ini + recuo;
+
+    /* linha divisória some por inteiro da leitura */
+    if (/^-{3,}$/.test(s)) { espaco(i); return; }
+    if (!s) { espaco(i); return; }
+
+    /* prefixos que a leitura consome */
+    const pref = s.match(/^(#{1,6}\s+|[-*]\s+)/);
+    let corpo = s;
+    if (pref) { corpo = s.slice(pref[0].length); i += pref[0].length; }
+
+    espaco(i);
+    let k = 0;
+    while (k < corpo.length) {
+      const resto = corpo.slice(k);
+      /* marcadores em linha, na MESMA ordem em que matParaHtml os consome */
+      const mk = resto.match(/^(\*\*|==[!?]?|__)/);
+      if (mk) { k += mk[0].length; i += mk[0].length; continue; }
+      /* itálico com um "_" só: a leitura exige borda de palavra dos dois
+       * lados, então aqui a regra é a mesma — senão "_" de nome_de_arquivo
+       * seria comido e o mapa sairia torto */
+      if (corpo[k] === "_"
+          && (k === 0 || /[\s(]/.test(corpo[k - 1]))
+          && /^_[^_\n]{1,200}_(?=[\s).,;:!?]|$)/.test(resto)) {
+        k++; i++; continue;
+      }
+      if (corpo[k] === "_" && k > 0 && /[^\s]/.test(corpo[k - 1])
+          && /^_(?=[\s).,;:!?]|$)/.test(resto)) { k++; i++; continue; }
+
+      const c = corpo[k];
+      if (/\s/.test(c)) { espaco(i); k++; i++; continue; }
+      empurra(c, i); k++; i++;
     }
-    plano.push(c); mapa.push(i); i++;
-  }
+  });
   return { plano: plano.join(""), mapa };
 }
 
@@ -429,41 +477,84 @@ function matMapear(src) {
  * "==abertura de **créditos suplementares==" — negrito aberto e nunca
  * fechado, que estraga a leitura de todo o resto do resumo. Aqui a faixa
  * cresce até que os pares fiquem completos. */
+/* Toda recusa de marcação entra no REGISTRO, com o trecho e o motivo.
+ * Enquanto elas eram só um uiAlert, o defeito acontecia repetidas vezes na
+ * tela do usuário e o log não tinha uma linha sobre isso — eu consertava no
+ * escuro, e consertei errado uma vez por causa disso. */
+function matRecusa(motivo, trecho, plano) {
+  const t30 = String(trecho || "").slice(0, 60);
+  reg("MATERIAL-MARCA", "recusada: " + motivo, t30);
+  if (motivo === "nao_achou" && plano) {
+    /* a pista que faltava: o que o app procurou e o que ele tinha */
+    reg("MATERIAL-MARCA", "procurei: " + matNormalizar(trecho).slice(0, 60),
+        "no texto de " + plano.length + " caracteres");
+  }
+  uiAlert(t(motivo === "curta" ? "mat_marca_curta"
+    : motivo === "ja_marcado" ? "mat_marca_ja" : "mat_marca_nao_achou"));
+}
+
 function matEquilibrar(src, ini, fim) {
-  const impar = (a, b) => ((src.slice(a, b).match(/\*\*/g) || []).length % 2) === 1;
+  /* A borda da marca não pode partir um par de marcadores ao meio.
+   * Selecionando "abertura de créditos suplementares" o recorte terminava
+   * ANTES do "**" que fecha o negrito, e o texto virava
+   * "==abertura de **créditos suplementares==" — negrito aberto e nunca
+   * fechado, que estraga a leitura de TODO o resto do resumo.
+   *
+   * Vale para os dois marcadores: "**" e o "_" do itálico. Na primeira
+   * versão só o negrito era equilibrado, e o itálico quebrava igual. */
+  const MARCAS = ["**", "_"];
+  const conta = (mk, a, b) => {
+    let n = 0, k = a;
+    while (k < b) {
+      if (src.startsWith("**", k)) { if (mk === "**") n++; k += 2; continue; }
+      if (src[k] === "_") { if (mk === "_") n++; k++; continue; }
+      k++;
+    }
+    return n;
+  };
   let voltas = 0;
-  while (impar(ini, fim) && voltas++ < 8) {
-    const dep = src.indexOf("**", fim);
-    const ant = src.lastIndexOf("**", ini - 1);
-    /* prefere crescer para a frente: o fecho costuma estar logo ali, e
-     * crescer para trás engoliria palavras que a pessoa não selecionou */
-    if (dep >= 0 && (ant < 0 || dep - fim <= ini - ant)) fim = dep + 2;
-    else if (ant >= 0) ini = ant;
-    else break;
+  let mudou = true;
+  while (mudou && voltas++ < 12) {
+    mudou = false;
+    for (const mk of MARCAS) {
+      if (conta(mk, ini, fim) % 2 === 0) continue;
+      const dep = src.indexOf(mk, fim);
+      const ant = src.lastIndexOf(mk, ini - 1);
+      /* prefere crescer para a frente: o fecho costuma estar logo ali, e
+       * crescer para trás engoliria palavras que a pessoa não selecionou */
+      if (dep >= 0 && (ant < 0 || dep - fim <= ini - ant)) { fim = dep + mk.length; mudou = true; }
+      else if (ant >= 0) { ini = ant; mudou = true; }
+    }
   }
   return { ini, fim };
 }
 
 function matNormalizar(s) {
-  return String(s || "").replace(/(\*\*|==[!?]?|__)/g, "").replace(/\s+/g, " ").trim();
+  /* o mesmo conjunto de marcadores do matMapear, senão a busca procura uma
+   * coisa e o mapa aponta para outra */
+  return String(s || "")
+    .replace(/^\s*(#{1,6}\s+|[-*]\s+)/gm, "")
+    .replace(/(\*\*|==[!?]?|__)/g, "")
+    .replace(/(^|[\s(])_([^_\n]{1,200})_(?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/\s+/g, " ").trim();
 }
 
 function matMarcarSelecao(tipo) {
   matLembrarSelecao();
   const trecho = matSelGuardada;
-  if (matNormalizar(trecho).length < 3) { uiAlert(t("mat_marca_curta")); return; }
+  if (matNormalizar(trecho).length < 3) { matRecusa("curta", trecho); return; }
   const ta = $("matTexto");
   const marca = MAT_MARCAS[tipo] || "==";
 
   const { plano, mapa } = matMapear(ta.value);
   const alvo = matNormalizar(trecho);
   const pos = plano.indexOf(alvo);
-  if (pos < 0) { uiAlert(t("mat_marca_nao_achou")); return; }
+  if (pos < 0) { matRecusa("nao_achou", trecho, plano); return; }
 
   const faixa = matEquilibrar(ta.value, mapa[pos], mapa[pos + alvo.length - 1] + 1);
   const ini = faixa.ini, fim = faixa.fim;
   const antes = ta.value.slice(Math.max(0, ini - 3), ini);
-  if (/==[!?]?$/.test(antes)) { uiAlert(t("mat_marca_ja")); return; }
+  if (/==[!?]?$/.test(antes)) { matRecusa("ja_marcado", trecho); return; }
   /* grava o pedaço ORIGINAL, com os negritos que houver dentro dele */
   const original = ta.value.slice(ini, fim);
   ta.value = ta.value.slice(0, ini) + marca + original + "==" + ta.value.slice(fim);
