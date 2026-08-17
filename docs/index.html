@@ -883,6 +883,22 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ac-comp-nota{font-size:10.5px;color:#f5a524;margin-top:7px;line-height:1.45}
 .ed-busca-barra{display:flex;flex-direction:column;gap:7px;margin:0 0 9px}
 .vk-acoes-topo{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.ed-atalhos{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+/* na linha do diário, o que leva de volta ao material fica antes do que
+   apaga: rever é o gesto comum, apagar é o raro */
+.di-acoes{display:flex;gap:4px}
+.cm-item{padding:8px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
+.cm-item:last-child{border-bottom:0}
+.cm-frente{color:var(--texto);line-height:1.45;font-weight:600}
+.cm-dest{font-size:10px;margin-top:3px;color:#30a46c;font-weight:700}
+.cm-dest.geral{color:#f5a524}
+.cm-dest.vazio{color:#e5484d}
+/* quando a IA inventa um tópico, o nome inventado fica à vista: redirecionar
+   em silêncio esconde o erro que a conferência existe para pegar */
+.cm-inventou{font-size:10px;color:#e5484d;margin-top:2px}
+.cm-troca{margin-top:5px}
+.cm-troca select{font-size:10.5px;padding:3px 6px;border-radius:7px;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda);max-width:100%}
 .vk-lista{max-height:48vh;overflow:auto;margin:6px 0}
 .vk-item{padding:8px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
 .vk-item:last-child{border-bottom:0}
@@ -1339,6 +1355,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
        concursos cadastrados, a pergunta das 7h da manhã é "o que abro
        agora", e a resposta atravessa editais — por isso a agenda fica
        acima do hub e da bancada, e cada linha diz de qual concurso é. -->
+  <!-- O diário tinha DUAS entradas, e as duas eram condicionais: a linha
+       "últimos 7 dias" (que só aparece se houve estudo nesse período) e os
+       medidores ESTUDADO/REVISADO — que eu mesmo removi do painel na v8.71.
+       Resultado: quem passou uma semana sem registrar não tinha COMO abrir
+       o próprio diário. Botão fixo, sempre visível. -->
+  <div class="ed-atalhos">
+    <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
+  </div>
   <div id="edAgendaTopo" class="ed-agenda-topo"></div>
 
   <!-- HUB: a lista de editais. É a tela inicial do modo. -->
@@ -1527,6 +1551,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div class="rodape-exportar" id="rodapeExportar">
       <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
       <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
+      <!-- O cartão saía do app e não voltava: virava .apkg e sumia dentro
+           do Anki. Na hora de revisar um tópico, o material tinha o resumo
+           e não tinha as perguntas que aquele resumo gerou. -->
+      <button class="btn btn-roxo" id="btnSalvarMaterial" data-i18n="cm_botao"></button>
     </div>
     <div id="status"></div>
     <div class="rodape-tec">
@@ -1720,6 +1748,38 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnMatColarOk" data-i18n="mat_colar_ok"></button>
     <button class="btn btn-cinza" id="btnMatColarFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgCartaoMat" class="ui-modal diag-modal">
+  <h3 data-i18n="cm_titulo"></h3>
+  <p class="nota" data-i18n="cm_ajuda"></p>
+  <label class="nd-rot" data-i18n="cm_qual_edital"></label>
+  <select id="cmEdital" class="mat-busca"></select>
+  <p class="nota" id="cmResumo"></p>
+  <div class="vk-acoes-topo">
+    <button class="btn-min" id="btnCmTudoGeral" data-i18n="cm_tudo_geral"></button>
+    <button class="btn-min" id="btnCmSoSemDestino" data-i18n="cm_filtro_sem"></button>
+    <button class="btn-min" id="btnCmTodos" data-i18n="cm_filtro_todos"></button>
+  </div>
+  <div id="cmLista" class="vk-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnCmGravar" data-i18n="cm_gravar"></button>
+    <button class="btn btn-roxo" id="btnCmPrompt" data-i18n="cm_prompt_btn"></button>
+    <button class="btn btn-azul" id="btnCmColar" data-i18n="cm_colar_btn"></button>
+    <button class="btn btn-cinza" id="btnCmFechar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgCmColar" class="ui-modal diag-modal">
+  <h3 data-i18n="cm_colar_tit"></h3>
+  <p class="nota" data-i18n="cm_colar_ajuda"></p>
+  <textarea id="cmColarTexto" rows="10" style="width:100%;box-sizing:border-box"
+    placeholder="~ 3 :: Direito Financeiro > Restos a pagar"></textarea>
+  <div id="cmColarAviso" class="ed-nao-cabe" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnCmColarOk" data-i18n="cm_colar_aplicar"></button>
+    <button class="btn btn-cinza" id="btnCmColarFechar" data-i18n="cancel_btn"></button>
   </div>
 </dialog>
 
@@ -2104,6 +2164,7 @@ window.__sqlPromise = initSqlJs({
 <script src="edital.js"></script>
 <script src="editais.js"></script>
 <script src="vinculos.js"></script>
+<script src="cartoes-material.js"></script>
 <script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
 <script src="modos.js"></script>
@@ -2114,6 +2175,8 @@ window.__sqlPromise = initSqlJs({
 try { edIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar edIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
+try { cmIniciarTela(); } catch (e) { console.error(e);
+  try { reg("ERRO", "falha ao iniciar cmIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { vkIniciarTela(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar vkIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { hubIniciar(); } catch (e) { console.error(e);

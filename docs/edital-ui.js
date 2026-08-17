@@ -535,8 +535,26 @@ function abrirDiario() {
     ds.className = "di-disc";
     ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
     ds.title = x.cc ? t("ed_para_concurso", { c: x.cc }) : t("ed_sem_concurso_ajuda");
+    /* O DIÁRIO PRECISA LEVAR DE VOLTA AO MATERIAL.
+     * Ele registrava o que você fez e não dava caminho nenhum para rever —
+     * a única ação da linha era APAGAR o registro. Quem marca "estudei
+     * Restos a pagar" e três dias depois quer reler o resumo tinha de sair
+     * do diário, achar a disciplina, achar o tópico. */
+    const acoes = document.createElement("div");
+    acoes.className = "di-acoes";
+    const temMat = typeof matTem === "function" && matTem(x.c);
+    const rever = botaoMini(temMat ? "ed_diario_rever" : "ed_diario_escrever",
+      temMat ? "btn-verde" : "btn-cinza", () => {
+        $("dlgDiario").close();
+        matAbrirEditor({ disciplina: x.disc, nome: x.n, chave: x.c }, false);
+      });
+    const irDisc = botaoMini("ed_diario_disciplina", "btn-cinza", () => {
+      $("dlgDiario").close();
+      abrirDisciplina(x.disc);
+    });
     const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
-    li.append(q, ac, nm, ds, bt);
+    acoes.append(rever, irDisc, bt);
+    li.append(q, ac, nm, ds, acoes);
     lista.append(li);
   });
   $("dlgDiario").showModal();
@@ -1426,6 +1444,7 @@ function edIniciar() {
   if ($("btnLoteNada")) $("btnLoteNada").onclick = () => { edSelecao.clear(); edRender(); };
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
    * eu embarquei um botão morto */
+  if ($("btnDiarioTopo")) $("btnDiarioTopo").onclick = abrirDiario;
   if ($("btnEdNovaDisc")) $("btnEdNovaDisc").onclick = ndAbrir;
   if ($("btnNdIncluir")) $("btnNdIncluir").onclick = ndIncluir;
   if ($("btnNdFechar")) $("btnNdFechar").onclick = () => $("dlgNovaDisc").close();
@@ -1761,4 +1780,252 @@ function vkIniciarTela() {
   if ($("vkColarTexto")) $("vkColarTexto").addEventListener("input", vkConferirColagem);
   if ($("btnVkColarOk")) $("btnVkColarOk").onclick = vkAplicarColagem;
   if ($("btnVkColarFechar")) $("btnVkColarFechar").onclick = () => $("dlgVkColar").close();
+}
+
+/* =====================================================================
+ * TELA "SALVAR CARTÕES NO MATERIAL DE ESTUDO"
+ * ===================================================================== */
+let cmItens = [];
+let cmPlano = [];
+let cmSoSemDestino = false;
+
+/* Toda recusa e toda decisão do fluxo entram no REGISTRO. A lição veio do
+ * marca-texto: enquanto a recusa era só um alerta na tela, o defeito
+ * acontecia repetidas vezes e o log não tinha uma linha sobre isso —
+ * consertei no escuro, e consertei pela metade. */
+function cmRecusa(motivo, detalhe) {
+  reg("CARTAO-MATERIAL", "recusado: " + motivo, detalhe || "");
+  uiAlert(t("cm_" + motivo));
+}
+
+function cmEditalEscolhido() {
+  const id = $("cmEdital") && $("cmEdital").value;
+  return (editais || []).find((e) => e.id === id) || null;
+}
+
+function cmPlanoDoEdital(ed) {
+  if (!ed) return [];
+  const r = lerEdital(ed.texto || "");
+  const lista = [];
+  r.disciplinas.forEach((d) =>
+    d.topicos.forEach((tp) => lista.push({ disciplina: d.nome, nome: tp.nome })));
+  return lista;
+}
+
+async function cmAbrir() {
+  const r = await validar();
+  if (!r || !r.cards.length) { cmRecusa("sem_cartoes"); return; }
+  if (!(editais || []).length) { cmRecusa("sem_edital"); return; }
+
+  const sel = $("cmEdital");
+  sel.innerHTML = "";
+  editais.forEach((e) => {
+    const o = document.createElement("option");
+    o.value = e.id; o.textContent = e.nome;
+    sel.append(o);
+  });
+  /* PRECISA de um padrão explícito. Sem isto, quem exporta com o edital
+   * fechado cai num select vazio, a lista de tópicos vem com zero itens e
+   * TODOS os cartões aparecem "sem pista" — silenciosamente, como se as
+   * etiquetas não servissem para nada. */
+  const valido = (editais || []).some((e) => e.id === editalAtual);
+  sel.value = valido ? editalAtual : editais[0].id;
+  sel.onchange = () => cmRecalcular(r.cards);
+  cmRecalcular(r.cards);
+  $("dlgCartaoMat").showModal();
+  reg("CARTAO-MATERIAL", "conferência aberta", r.cards.length + " cartões");
+}
+
+function cmRecalcular(cards) {
+  const ed = cmEditalEscolhido();
+  cmPlano = cmPlanoDoEdital(ed);
+  cmItens = cmClassificarLocal(cards, cmPlano);
+  const c = cmContar(cmItens);
+  reg("CARTAO-MATERIAL", "classificação local: " + (ed ? ed.nome : "sem edital"),
+      c.total + " cartões · " + c.etiqueta + " por tópico, "
+      + c.etiqueta_disciplina + " por disciplina, " + c.sem_pista + " sem pista"
+      + " (plano: " + cmPlano.length + " tópicos)");
+  cmPintar();
+}
+
+function cmPintar() {
+  const c = cmContar(cmItens);
+  $("cmResumo").textContent = t("cm_resumo", {
+    t: c.total, d: c.comDestino, s: c.sem_pista,
+    e: c.etiqueta, g: c.etiqueta_disciplina });
+
+  const box = $("cmLista");
+  box.innerHTML = "";
+  const mostrar = cmSoSemDestino ? cmItens.filter((x) => !x.destino) : cmItens;
+  if (!mostrar.length) {
+    const p = document.createElement("div");
+    p.className = "esq-vazio"; p.textContent = t("cm_lista_vazia");
+    box.append(p); return;
+  }
+
+  mostrar.forEach((x) => {
+    const li = document.createElement("div");
+    li.className = "cm-item";
+    const fr = document.createElement("div");
+    fr.className = "cm-frente";
+    fr.textContent = "[" + (x.n + 1) + "] " + String(x.card.front || "").slice(0, 110);
+    li.append(fr);
+
+    const d = document.createElement("div");
+    const geral = x.destino && x.destino.topico === CM_GERAL;
+    d.className = "cm-dest" + (geral ? " geral" : (x.destino ? "" : " vazio"));
+    d.textContent = x.destino
+      ? "→ " + x.destino.disciplina + " › " + x.destino.topico + "  (" + t("cm_via_" + x.via) + ")"
+      : t("cm_sem_destino");
+    li.append(d);
+
+    if (x.inventado) {
+      const inv = document.createElement("div");
+      inv.className = "cm-inventou";
+      inv.textContent = t("cm_inventou", { n: x.inventado });
+      li.append(inv);
+    }
+
+    /* trocar o destino à mão, sempre — mesmo quando a etiqueta acertou.
+     * Etiqueta errada é tão fácil de escrever quanto etiqueta certa. */
+    const tr = document.createElement("div");
+    tr.className = "cm-troca";
+    const sel = document.createElement("select");
+    const vazio = document.createElement("option");
+    vazio.value = ""; vazio.textContent = t("cm_nao_salvar");
+    sel.append(vazio);
+    const discs = [];
+    cmPlano.forEach((i) => { if (discs.indexOf(i.disciplina) < 0) discs.push(i.disciplina); });
+    discs.forEach((disc) => {
+      const g = document.createElement("optgroup");
+      g.label = disc;
+      const og = document.createElement("option");
+      og.value = disc + "›" + CM_GERAL;
+      og.textContent = CM_GERAL;
+      g.append(og);
+      cmPlano.filter((i) => i.disciplina === disc).forEach((i) => {
+        const o = document.createElement("option");
+        o.value = disc + "›" + i.nome;
+        o.textContent = i.nome;
+        g.append(o);
+      });
+      sel.append(g);
+    });
+    sel.value = x.destino ? (x.destino.disciplina + "›" + x.destino.topico) : "";
+    sel.onchange = () => {
+      if (!sel.value) { x.destino = null; x.via = "sem_pista"; }
+      else {
+        const p = sel.value.split("›");
+        x.destino = { disciplina: p[0], topico: p[1] };
+        x.via = "manual";
+      }
+      delete x.inventado;
+      cmPintar();
+    };
+    tr.append(sel);
+    li.append(tr);
+    box.append(li);
+  });
+}
+
+function cmTudoGeral() {
+  /* o que sobrou sem destino vai para os gerais da disciplina mais provável;
+   * sem disciplina nenhuma, continua de fora — chutar disciplina seria
+   * espalhar cartão no lugar errado, que é pior que não salvar */
+  const primeira = cmPlano.length ? cmPlano[0].disciplina : "";
+  let n = 0;
+  cmItens.forEach((x) => {
+    if (x.destino) return;
+    if (!primeira) return;
+    x.destino = { disciplina: primeira, topico: CM_GERAL };
+    x.via = "manual"; n++;
+  });
+  cmPintar();
+  if (!n) cmRecusa("nada_para_geral", "plano com " + cmPlano.length + " tópicos");
+}
+
+function cmGerarPrompt() {
+  const semDestino = cmItens.filter((x) => !x.destino);
+  if (!semDestino.length) { cmRecusa("todos_com_destino"); return; }
+  const ed = cmEditalEscolhido();
+  const txt = cmPrompt(semDestino, cmPlano, ed ? ed.nome : "");
+  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  reg("CARTAO-MATERIAL", "prompt gerado", semDestino.length + " cartões sem destino");
+  toast("cm_prompt_copiado");
+}
+
+function cmConferirColagem() {
+  const semDestino = cmItens.filter((x) => !x.destino);
+  const r = cmLerResposta($("cmColarTexto").value, semDestino, cmPlano);
+  const av = $("cmColarAviso");
+  av.hidden = false; av.innerHTML = "";
+  const linha = (txt, cls) => {
+    const d = document.createElement("div");
+    d.className = "ed-mud" + (cls ? " " + cls : "");
+    d.textContent = txt; av.append(d);
+  };
+  const inv = r.achados.filter((x) => x.via === "ia_inventou").length;
+  linha(t("cm_conf_resumo", { n: r.achados.length, i: inv }));
+  if (r.ignoradas.length) linha(t("cm_conf_ignoradas", { n: r.ignoradas.length }), "aviso");
+  if (!r.achados.length) linha(t("cm_conf_nada"), "perigo");
+  /* o que a IA devolveu e o que foi descartado: sem isto, "a IA não
+   * classificou nada" é uma queixa sem como investigar */
+  if (r.ignoradas.length || inv) {
+    reg("CARTAO-MATERIAL", "resposta da IA conferida",
+        r.achados.length + " aceitos, " + inv + " com tópico inventado, "
+        + r.ignoradas.length + " linhas descartadas"
+        + (r.ignoradas[0] ? " (1ª: " + (r.ignoradas[0].motivo || "fora do formato") + ")" : ""));
+  }
+  return r;
+}
+
+function cmAplicarColagem() {
+  const r = cmConferirColagem();
+  if (!r || !r.achados.length) return;
+  r.achados.forEach((a) => {
+    const item = cmItens.find((x) => x.n === a.n);
+    if (!item) return;
+    item.destino = a.destino;
+    item.via = a.via;
+    if (a.inventado) item.inventado = a.inventado;
+  });
+  reg("CARTAO-MATERIAL", "classificação da IA aplicada", r.achados.length + " cartões");
+  $("dlgCmColar").close();
+  cmPintar();
+}
+
+async function cmGravarTudo() {
+  const comDestino = cmItens.filter((x) => x.destino);
+  if (!comDestino.length) { cmRecusa("nada_a_gravar", cmItens.length + " cartões, nenhum com destino"); return; }
+  const ed = cmEditalEscolhido();
+  const geral = comDestino.filter((x) => x.destino.topico === CM_GERAL).length;
+  if (!(await uiConfirm(t("cm_conf_gravar", {
+    n: comDestino.length, g: geral, c: ed ? ed.nome : "", f: cmItens.length - comDestino.length })))) {
+    reg("CARTAO-MATERIAL", "gravação cancelada por você", comDestino.length + " cartões");
+    return;
+  }
+
+  const r = cmAplicar(comDestino, ed ? ed.nome : "", matGravarCartoes);
+  reg("CARTAO-MATERIAL", "gravados no material",
+      r.novos + " cartões em " + r.topicos + " tópicos, " + r.repetidos + " já existiam");
+  $("dlgCartaoMat").close();
+  if (typeof matRenderLista === "function") { try { matRenderLista(); } catch (e) {} }
+  await uiAlert(t("cm_gravados", { n: r.novos, t: r.topicos, r: r.repetidos }));
+}
+
+function cmIniciarTela() {
+  if ($("btnSalvarMaterial")) $("btnSalvarMaterial").onclick = cmAbrir;
+  if ($("btnCmFechar")) $("btnCmFechar").onclick = () => $("dlgCartaoMat").close();
+  if ($("btnCmGravar")) $("btnCmGravar").onclick = cmGravarTudo;
+  if ($("btnCmTudoGeral")) $("btnCmTudoGeral").onclick = cmTudoGeral;
+  if ($("btnCmSoSemDestino")) $("btnCmSoSemDestino").onclick = () => { cmSoSemDestino = true; cmPintar(); };
+  if ($("btnCmTodos")) $("btnCmTodos").onclick = () => { cmSoSemDestino = false; cmPintar(); };
+  if ($("btnCmPrompt")) $("btnCmPrompt").onclick = cmGerarPrompt;
+  if ($("btnCmColar")) $("btnCmColar").onclick = () => {
+    $("cmColarTexto").value = ""; $("cmColarAviso").hidden = true;
+    $("dlgCmColar").showModal();
+  };
+  if ($("cmColarTexto")) $("cmColarTexto").addEventListener("input", cmConferirColagem);
+  if ($("btnCmColarOk")) $("btnCmColarOk").onclick = cmAplicarColagem;
+  if ($("btnCmColarFechar")) $("btnCmColarFechar").onclick = () => $("dlgCmColar").close();
 }
