@@ -882,6 +882,22 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ac-c.ruim{color:#e5484d;font-weight:700}
 .ac-comp-nota{font-size:10.5px;color:#f5a524;margin-top:7px;line-height:1.45}
 .ed-busca-barra{display:flex;flex-direction:column;gap:7px;margin:0 0 9px}
+.vk-acoes-topo{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.vk-lista{max-height:48vh;overflow:auto;margin:6px 0}
+.vk-item{padding:8px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
+.vk-item:last-child{border-bottom:0}
+.vk-par{color:var(--texto);line-height:1.5}
+.vk-par b{font-weight:700}
+.vk-disc{font-size:10px;color:var(--sutil);margin-top:2px}
+/* disciplina diferente é o sinal mais forte de que o nome igual engana */
+.vk-disc.difere{color:#f5a524;font-weight:700}
+.vk-esc{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+.vk-op{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
+  font-weight:600;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
+.vk-op.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
+.vk-op.ativa.op-igual{color:#30a46c;border-color:#30a46c}
+.vk-op.ativa.op-ia{color:#8b5cf6;border-color:#8b5cf6}
+.vk-op.ativa.op-nao{color:#e5484d;border-color:#e5484d}
 .nd-rot{display:block;font-size:10px;font-weight:800;letter-spacing:.05em;
   color:var(--sutil);margin:12px 0 5px;text-transform:uppercase}
 .nd-pesos{display:flex;gap:6px;flex-wrap:wrap}
@@ -1367,6 +1383,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
         <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
         <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
         <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
+        <button class="btn btn-cinza" id="btnJaEstudei" data-i18n="vk_botao"></button>
       </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
       <div class="editor-wrap ed-wrap">
@@ -1703,6 +1720,38 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnMatColarOk" data-i18n="mat_colar_ok"></button>
     <button class="btn btn-cinza" id="btnMatColarFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgJaEstudei" class="ui-modal diag-modal">
+  <h3 data-i18n="vk_titulo"></h3>
+  <p class="nota" id="vkResumo"></p>
+  <!-- Nome idêntico NÃO é garantia: "Controle interno e externo" num TCE e
+       numa prefeitura cobram normas diferentes, e o mesmo nome em outra
+       disciplina é outro assunto. Por isso a triagem apresenta e a pessoa
+       decide — item a item, ou mandando tudo para a IA. -->
+  <div class="vk-acoes-topo">
+    <button class="btn-min" id="btnVkTudoIa" data-i18n="vk_tudo_ia"></button>
+    <button class="btn-min" id="btnVkTudoIgual" data-i18n="vk_tudo_igual"></button>
+  </div>
+  <div id="vkLista" class="vk-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnVkAplicar" data-i18n="vk_aplicar"></button>
+    <button class="btn btn-roxo" id="btnVkPrompt" data-i18n="vk_prompt_btn"></button>
+    <button class="btn btn-azul" id="btnVkColar" data-i18n="vk_colar_btn"></button>
+    <button class="btn btn-cinza" id="btnVkFechar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgVkColar" class="ui-modal diag-modal">
+  <h3 data-i18n="vk_colar_tit"></h3>
+  <p class="nota" data-i18n="vk_colar_ajuda"></p>
+  <textarea id="vkColarTexto" rows="10" style="width:100%;box-sizing:border-box"
+    placeholder="~ Direito Financeiro > Restos a pagar :: Finanças Públicas > Inscrição de despesas :: ALTA :: mesma matéria"></textarea>
+  <div id="vkColarAviso" class="ed-nao-cabe" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnVkColarOk" data-i18n="vk_colar_aplicar"></button>
+    <button class="btn btn-cinza" id="btnVkColarFechar" data-i18n="cancel_btn"></button>
   </div>
 </dialog>
 
@@ -2054,6 +2103,7 @@ window.__sqlPromise = initSqlJs({
 <script src="material.js"></script>
 <script src="edital.js"></script>
 <script src="editais.js"></script>
+<script src="vinculos.js"></script>
 <script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
 <script src="modos.js"></script>
@@ -2064,6 +2114,8 @@ window.__sqlPromise = initSqlJs({
 try { edIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar edIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
+try { vkIniciarTela(); } catch (e) { console.error(e);
+  try { reg("ERRO", "falha ao iniciar vkIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { hubIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar hubIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }

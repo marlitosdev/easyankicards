@@ -87,6 +87,9 @@ function edApagar(id) {
   editais.splice(i, 1);
   if (editalAtual === id) edAbrir(null);
   edSalvarLista();
+  /* vínculo apontando para edital apagado continuaria marcando "já estudei"
+   * num concurso que não existe mais */
+  if (typeof vkPodar === "function") vkPodar(editais.map((x) => x.id));
   return true;
 }
 
