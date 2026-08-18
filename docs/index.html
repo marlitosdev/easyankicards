@@ -635,6 +635,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-tipo.ativa.tp-lei{color:#10b981;border-color:#10b981}
 /* selo de tipo em cada linha da lista */
 .mat-selos{display:inline-flex;gap:4px;margin-left:6px}
+.mat-acoes{display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:0 0 auto}
+.mat-lixo{font-size:10px;color:#f5a524;margin-top:3px;line-height:1.5}
 .mat-selo{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px}
 .selo-resumo{background:rgba(34,197,94,.16);color:#30a46c}
 .selo-cartoes{background:rgba(139,92,246,.16);color:#8b5cf6}
@@ -2398,6 +2400,15 @@ window.__sqlPromise = initSqlJs({
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
    tem de subir — senão o app inteiro fica preso num estado sem modo, com o
    rodapé de exportação aparecendo onde não devia. */
+/* O MATERIAL CARREGA PRIMEIRO.
+   A agenda e o painel do edital desenham o ícone de resumo e o de cartões
+   consultando matResumos. Enquanto matIniciar() vinha por último, a agenda
+   era pintada com matResumos AINDA VAZIO: todo tópico aparecia sem resumo e
+   sem cartões, mesmo tendo os dois guardados — e nada repintava depois.
+   Dado antes de quem lê o dado. */
+try { matIniciar(); } catch (e) { console.error(e);
+  try { reg("ERRO", "falha ao iniciar matIniciar: " + (e && e.message),
+            "esta parte do app pode estar sem funcionar"); } catch (x) {} }
 try { edIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar edIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
@@ -2410,9 +2421,6 @@ try { hubIniciar(); } catch (e) { console.error(e);
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
 try { bkIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar bkIniciar: " + (e && e.message),
-            "esta parte do app pode estar sem funcionar"); } catch (x) {} }
-try { matIniciar(); } catch (e) { console.error(e);
-  try { reg("ERRO", "falha ao iniciar matIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
 try { montarBarraModos(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar montarBarraModos: " + (e && e.message),

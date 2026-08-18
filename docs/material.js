@@ -129,6 +129,33 @@ function matContarCartoes(chave) {
   return (r.cartoes.match(/^[^\n#@+].*::/gm) || []).length;
 }
 
+/* Quanto do que está guardado NÃO é cartão. Enquanto a gravação vinha com o
+ * prompt junto, um tópico tinha 155 linhas e 17 cartões — e nada na tela
+ * dizia isso. */
+function matLixoNosCartoes(chave) {
+  const r = matResumos[chave];
+  if (!r || !r.cartoes) return { total: 0, cartoes: 0, lixo: 0 };
+  const linhas = String(r.cartoes).split("\n").filter((l) => l.trim());
+  const cartoes = matContarCartoes(chave);
+  return { total: linhas.length, cartoes, lixo: linhas.length - cartoes };
+}
+
+/* Tira do campo de cartões tudo que não for cartão. Não apaga em silêncio:
+ * quem chama mostra o número antes. */
+function matLimparLixoCartoes(chave) {
+  const r = matResumos[chave];
+  if (!r || !r.cartoes) return 0;
+  const antes = String(r.cartoes).split("\n").filter((l) => l.trim());
+  const so = antes.filter((l) => /^[^\n#@+].*::/.test(l));
+  const tirados = antes.length - so.length;
+  if (!tirados) return 0;
+  r.cartoes = so.join("\n");
+  matSalvar();
+  matReg("cartoes", "limpeza do campo de cartões",
+         tirados + " linha(s) que não eram cartão foram retiradas de " + (r.topico || chave));
+  return tirados;
+}
+
 function matResumo() {
   const ks = Object.keys(matResumos);
   const chars = ks.reduce((a, k) => a + String(matResumos[k].texto || "").length, 0);
@@ -1212,15 +1239,53 @@ function matRender() {
           const esq = document.createElement("div");
           esq.className = "mat-item-txt";
           const nm = document.createElement("div");
-          nm.className = "mat-nome"; nm.textContent = x.topico || x.chave;
+          nm.className = "mat-nome";
+          nm.textContent = x.topico || x.chave;
+          /* OS SELOS APARECEM AQUI.
+           * matSelosDe existia desde a v8.84 e nunca foi usada: a lista
+           * mostrava só o tamanho do resumo, então um tópico com 155
+           * cartões parecia ter apenas texto. Quem salvou cartões não os
+           * encontrava em lugar nenhum. */
+          nm.append(matSelosDe(x));
           const sub = document.createElement("div");
           sub.className = "mat-sub";
+          const nCart = matContarCartoes(x.chave);
           sub.textContent = t("mat_tamanho", { c: String(x.texto || "").length })
+            + (nCart ? " · " + t("mat_n_cartoes", { n: nCart }) : "")
             + " · " + new Date(x.tocado).toLocaleDateString();
           esq.append(nm, sub);
+          /* e um aviso quando o campo de cartões tem lixo dentro */
+          const lx = matLixoNosCartoes(x.chave);
+          if (lx.lixo > 0) {
+            const av = document.createElement("div");
+            av.className = "mat-lixo";
+            av.textContent = t("mat_lixo_aviso", { n: lx.lixo, c: lx.cartoes });
+            const bl = document.createElement("button");
+            bl.type = "button"; bl.className = "btn-min";
+            bl.textContent = t("mat_lixo_limpar");
+            bl.onclick = async () => {
+              if (!(await uiConfirm(t("mat_lixo_conf", { n: lx.lixo, c: lx.cartoes })))) return;
+              matLimparLixoCartoes(x.chave);
+              matRender();
+            };
+            av.append(document.createTextNode(" "), bl);
+            esq.append(av);
+          }
+          const acoes = document.createElement("div");
+          acoes.className = "mat-acoes";
           const ler = botaoMini("mat_abrir", "btn-cinza",
             () => matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "ler"));
-          li.append(esq, ler);
+          acoes.append(ler);
+          /* CAMINHO ATÉ OS CARTÕES. Sem ele, os cartões existiam guardados e
+           * não havia como chegar até eles a não ser abrindo o resumo e
+           * entrando no painel. */
+          if (nCart) {
+            acoes.append(botaoMini(null, "btn-roxo", () => {
+              matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, false);
+              try { matCartoesAbrir(); matCartoesVer(); } catch (e) {}
+            }, t("mat_ver_cartoes_n", { n: nCart })));
+          }
+          li.append(esq, acoes);
           bl.append(li);
         });
       }
