@@ -44,7 +44,10 @@ function edPeso(txt, achados, linha) {
 
 function lerEdital(raw) {
   const linhas = String(raw || "").split(/\r?\n/);
-  const cfg = { concurso: "", prova: "", horas: 10 };
+  /* "previsto" é a data que ainda não existe. Concurso planejado não tem
+   * data — tem JANELA ("entre março e junho de 2027"). Guardar isso como se
+   * fosse uma data faria o painel prometer certeza que não há. */
+  const cfg = { concurso: "", prova: "", horas: 10, previsto: "", fase: "pos" };
   const disciplinas = [];
   const achados = [];
   let atual = null;
@@ -60,6 +63,7 @@ function lerEdital(raw) {
         const [k, v] = p.split(":").map((x) => (x || "").trim());
         if (!v) { if (k) cfg.concurso = k; return; }
         if (/^prova/i.test(k)) cfg.prova = v;
+        else if (/^previsto|^previsao/i.test(k)) { cfg.previsto = v; cfg.fase = "pre"; }
         else if (/^horas/i.test(k)) cfg.horas = Number(v.replace(",", ".")) || 10;
         else if (/^concurso|^nome/i.test(k)) cfg.concurso = v;
       });
@@ -70,7 +74,10 @@ function lerEdital(raw) {
     if (md) {
       const p = edPartes(md[1]);
       const { peso } = edPeso(p[1], achados, n);
-      atual = { nome: p[0], peso, linha: n, topicos: [] };
+      /* terceiro campo da disciplina: a confiança, usada só no pré-edital.
+       * "@ Auditoria :: 5 :: provavel" */
+      const conf = (typeof preConfiancaDe === "function") ? preConfiancaDe(p[2]) : "";
+      atual = { nome: p[0], peso, linha: n, topicos: [], confianca: conf };
       if (!p[0]) achados.push({ linha: n, tipo: "disciplina_sem_nome", txt: s });
       if (disciplinas.some((d) => d.nome.toLowerCase() === p[0].toLowerCase()))
         achados.push({ linha: n, tipo: "disciplina_repetida", txt: p[0] });
@@ -149,6 +156,36 @@ function faixaDe(prioridade) {
 
 /* opcoes: { horas, prova, hoje, feitos } — "feitos" é um objeto/Set com as
  * chaves já concluídas, que saem da fila. */
+/* "2027-03..2027-06" -> { de: "2027-03-01", ate: "2027-06-30", largura: 4 }
+ * Um mês solto ("2027-03") vale como janela daquele mês. */
+function edJanela(txt) {
+  const s = String(txt || "").trim();
+  if (!s) return null;
+  const p = s.split("..").map((x) => x.trim()).filter(Boolean);
+  const fim = (m) => {
+    const [a, b] = m.split("-").map(Number);
+    return a + "-" + String(b).padStart(2, "0") + "-"
+      + new Date(Date.UTC(a, b, 0)).getUTCDate();
+  };
+  const ini = (m) => m.length === 7 ? m + "-01" : m;
+  const de = ini(p[0]);
+  const ate = p[1] ? (p[1].length === 7 ? fim(p[1]) : p[1])
+                   : (p[0].length === 7 ? fim(p[0]) : p[0]);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return null;
+  const meses = (Number(ate.slice(0, 4)) - Number(de.slice(0, 4))) * 12
+    + (Number(ate.slice(5, 7)) - Number(de.slice(5, 7)));
+  return { de, ate, meses: Math.max(0, meses) };
+}
+
+/* A data de planejamento de um edital previsto é a borda MAIS PRÓXIMA da
+ * janela. É a suposição conservadora: se a prova sair em março e você
+ * planejou para junho, você é pego; o contrário só sobra tempo. */
+function edDataPlanejada(cfg) {
+  if (cfg && cfg.prova) return cfg.prova;
+  const j = edJanela(cfg && cfg.previsto);
+  return j ? j.de : "";
+}
+
 function montarPlano(r, opcoes) {
   const o = opcoes || {};
   const horas = Math.max(0, Number(o.horas) || 0);

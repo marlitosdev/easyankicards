@@ -744,7 +744,21 @@ function matPerguntarSaida() {
 function matPorMarcador() {
   if (!matAtual) return;
   const ta = $("matTexto");
-  const pos = ta.selectionStart || 0;
+  /* EM LEITURA, O CURSOR DO TEXTAREA NÃO SERVE.
+   * O campo está escondido e o cursor fica onde o navegador deixou — ao
+   * atribuir .value o Chrome põe no FIM, e o marcador ia sempre para a
+   * última linha. Lendo, o lugar certo é o quanto da leitura já rolou. */
+  let pos = 0;
+  const lendo = matModo === "ler";
+  const painel = $("matLeitura");
+  if (lendo && painel && painel.scrollHeight > 0) {
+    const alt = painel.clientHeight || 0;
+    const total = Math.max(1, painel.scrollHeight - alt);
+    const fracao = Math.min(1, Math.max(0, (painel.scrollTop || 0) / total));
+    pos = Math.round(fracao * String(ta.value || "").length);
+  } else {
+    pos = ta.selectionStart || 0;
+  }
   const r = matResumos[matAtual.chave];
   if (!r) return;
   r.marcador = pos;
@@ -791,8 +805,22 @@ function matRegistrarLeitura() {
   const txt = $("matTexto").value;
   const palavras = (txt.match(/\S+/g) || []).length;
   const min = Math.max(5, Math.round(palavras / 200));
-  const item = { disciplina: matAtual.disciplina, nome: matAtual.topico,
-                 chave: matAtual.chave, minutos: min, bruto: 0 };
+  /* PESOS DE VERDADE, não zeros.
+   * Este item era montado à mão com bruto: 0 e sem disciplinaPeso — o
+   * registro saía como "peso undefined×undefined" e o diário guardava peso
+   * zero para o estudo, o que estraga toda conta por peso depois. Aqui ele
+   * é procurado no plano; só se não existir é que vira item avulso. */
+  let item = null;
+  try {
+    const r = lerEdital($("editalTexto").value);
+    const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
+      prova: $("edProva").value, feitos: edProgresso });
+    item = plano.itens.find((x) => x.chave === matAtual.chave) || null;
+  } catch (e) { item = null; }
+  if (item) item = Object.assign({}, item, { minutos: min });
+  else item = { disciplina: matAtual.disciplina, nome: matAtual.topico,
+                chave: matAtual.chave, minutos: min, bruto: 0,
+                disciplinaPeso: null, peso: null, avulso: true };
   if (typeof edMarcar === "function") {
     /* releitura de material é REVISÃO quando o tópico já foi estudado */
     const jaEstudado = typeof edProgresso !== "undefined"
