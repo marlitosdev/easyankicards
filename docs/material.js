@@ -84,9 +84,27 @@ function matObter(chave) { return matResumos[chave] || null; }
 
 function matGravar(chave, texto, meta) {
   const limpo = String(texto || "").trim();
-  if (!limpo) { delete matResumos[chave]; matSalvar(); return null; }
   const antigo = matResumos[chave] || {};
-  matResumos[chave] = {
+  /* APAGAR SÓ QUANDO NÃO SOBRA NADA.
+   * Texto vazio apagava o registro inteiro — e com ele os CARTÕES, que
+   * moram no mesmo registro e não têm nada a ver com o texto do resumo. */
+  if (!limpo) {
+    if (!String(antigo.cartoes || "").trim()) {
+      delete matResumos[chave]; matSalvar(); return null;
+    }
+    matResumos[chave] = Object.assign({}, antigo, { texto: "",
+      tocado: new Date().toISOString() });
+    matSalvar();
+    return matResumos[chave];
+  }
+  /* Object.assign SOBRE O ANTIGO, não um objeto novo.
+   * Esta função montava um registro do zero com seis campos — e jogava fora
+   * todos os outros: "cartoes", "leiSeca", "marcador", "cartoesInfo".
+   * Resultado: gravar o resumo APAGAVA os cartões do tópico. Abrir o painel
+   * de cartões grava o texto antes, então o próprio ato de ir ver os
+   * cartões destruía os cartões. Foi por isso que eles "não apareciam em
+   * lugar nenhum": eram apagados no caminho. */
+  matResumos[chave] = Object.assign({}, antigo, {
     texto: limpo,
     disciplina: (meta && meta.disciplina) || antigo.disciplina || "",
     topico: (meta && meta.topico) || antigo.topico || "",
@@ -97,7 +115,7 @@ function matGravar(chave, texto, meta) {
       || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
     criado: antigo.criado || new Date().toISOString(),
     tocado: new Date().toISOString(),
-  };
+  });
   matSalvar();
   return matResumos[chave];
 }
@@ -1182,7 +1200,10 @@ function matPintarSugestoes() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "mat-tipo tp-" + tp + (matFTipos.indexOf(tp) >= 0 ? " ativa" : "");
-    b.textContent = t("mat_tipo_" + tp) + " (" + n + ")";
+    /* "cartões (1)" era lido como "1 cartão". O número conta MATERIAIS que
+     * têm cartões — coisa diferente, e a diferença confunde justamente quem
+     * está procurando os cartões. */
+    b.textContent = t("mat_tipo_" + tp) + " · " + t("mat_tipo_conta", { n });
     b.onclick = () => {
       const k = matFTipos.indexOf(tp);
       if (k >= 0) matFTipos.splice(k, 1); else matFTipos.push(tp);
@@ -1320,6 +1341,7 @@ function matIniciar() {
   if ($("btnMatMarcador")) $("btnMatMarcador").onclick = matPorMarcador;
   if ($("btnMatFecharTopo")) $("btnMatFecharTopo").onclick = () => matFechar();
   if ($("btnMatLei")) $("btnMatLei").onclick = matAlternarLei;
+  if ($("btnMatLogAba")) $("btnMatLogAba").onclick = matLogAbrir;
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
   if ($("btnMatLogLimpar")) $("btnMatLogLimpar").onclick = matLogLimpar;
