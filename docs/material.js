@@ -33,6 +33,48 @@ function matChave(disciplina, topico) {
   return (disciplina + "›" + topico).toLowerCase();
 }
 
+/* CONSERTO DE CHAVES ÓRFÃS.
+ * Até a v8.78 os cartões salvos pelo fluxo "Salvar no material" iam para
+ * uma chave normalizada de outro jeito (sem acento, sem pontuação). Eram
+ * gavetas invisíveis: o editor e a agenda procuram pela chave de matChave.
+ * Como cada registro guarda disciplina e tópico, dá para recalcular a chave
+ * certa e juntar o conteúdo — sem perder nada dos dois lados. */
+function matRepararChaves() {
+  let movidos = 0, juntados = 0;
+  Object.keys(matResumos).forEach((k) => {
+    const r = matResumos[k];
+    if (!r || !r.disciplina || !r.topico) return;
+    const certa = matChave(r.disciplina, r.topico);
+    if (certa === k) return;
+    const destino = matResumos[certa];
+    if (!destino) {
+      matResumos[certa] = r;
+      movidos++;
+    } else {
+      /* junta sem sobrescrever: texto do destino manda, cartões somam */
+      destino.texto = destino.texto || r.texto || "";
+      const a = String(destino.cartoes || "").trim();
+      const b = String(r.cartoes || "").trim();
+      if (b) {
+        const jaTem = new Set(a.split("\n").map((l) => l.split("::")[0].trim().toLowerCase()));
+        const novas = b.split("\n").filter((l) =>
+          l.trim() && !jaTem.has(l.split("::")[0].trim().toLowerCase()));
+        destino.cartoes = (a ? a + "\n" : "") + novas.join("\n");
+      }
+      juntados++;
+    }
+    delete matResumos[k];
+  });
+  if (movidos || juntados) {
+    matSalvar();
+    try {
+      reg("MATERIAL", "chaves órfãs consertadas",
+          movidos + " movidas, " + juntados + " juntadas a um tópico existente");
+    } catch (e) {}
+  }
+  return { movidos, juntados };
+}
+
 function matTem(chave) {
   const r = matResumos[chave];
   return !!(r && (String(r.texto || "").trim() || String(r.cartoes || "").trim()));
@@ -224,16 +266,34 @@ function matLimparColagem(txt) {
   return s.trim();
 }
 
+/* Insere a régua do marcador na posição guardada, no fim da linha em que
+ * ela cai — cortar a linha ao meio embaralharia o texto. */
+function matComMarcador(txt) {
+  const r = matAtual && matResumos[matAtual.chave];
+  if (!r || !r.marcador) return txt;
+  const pos = Math.min(r.marcador, txt.length);
+  const quebra = txt.indexOf("\n", pos);
+  const corte = quebra < 0 ? txt.length : quebra;
+  return txt.slice(0, corte) + "\n\u0001MARCADOR\u0001\n" + txt.slice(corte);
+}
+
 function matParaHtml(txt) {
-  const linhas = matEscapar(txt).split(/\r?\n/);
+  const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
   let emLista = false;
   const inline = (s) => s
     .replace(/\*\*([^*\n]{1,200})\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])_([^_\n]{1,200})_(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
-    .replace(/==!([^=\n]{1,300})==/g, '<mark class="m-imp">$1</mark>')
-    .replace(/==\?([^=\n]{1,300})==/g, '<mark class="m-duv">$1</mark>')
-    .replace(/==([^=\n]{1,300})==/g, "<mark>$1</mark>");
+    /* O miolo aceita QUALQUER tamanho e aceita "=" solto — só não aceita
+     * "==", que é o fecho. Antes o limite era 300 caracteres e o miolo
+     * proibia "=": um trecho grande marcado aparecia com os "==" literais
+     * na tela, como se a marca não tivesse pegado. */
+    .replace(/==!((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-imp">$1</mark>')
+    .replace(/==\?((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-duv">$1</mark>')
+    .replace(/==§((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-lei">$1</mark>')
+    .replace(/==\*((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova">$1</mark>')
+    .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg">$1</mark>')
+    .replace(/==((?:[^=\n]|=(?!=))+)==/g, "<mark>$1</mark>");
   linhas.forEach((l) => {
     const s = l.trim();
     const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
@@ -260,6 +320,11 @@ function matParaHtml(txt) {
       fecharLista();
       saida.push("<div class='mat-num'><b>" + s.match(/^\d+/)[0] + ".</b> "
         + inline(s.replace(/^\d+[.)]\s+/, "")) + "</div>");
+      return;
+    }
+    if (s === "\u0001MARCADOR\u0001") {
+      fecharLista();
+      saida.push('<div class="mat-marcador" data-rot="' + matEscapar(t("mat_marcador_rot")) + '"></div>');
       return;
     }
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
@@ -337,6 +402,11 @@ function matTrocarModo(modo) {
   $("btnMatSalvar").hidden = lendo;
   $("btnMatLerReg").hidden = !lendo;
   $("btnMatModo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
+  /* o mesmo comando no topo: com resumo grande, ir até o rodapé para
+   * alternar entre ler e editar é o gesto mais repetido da tela */
+  if ($("btnMatModoTopo"))
+    $("btnMatModoTopo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
+  matPintarMarcador();
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
   if (lendo) {
     $("matLeitura").innerHTML = matParaHtml($("matTexto").value)
@@ -377,7 +447,10 @@ function matAmpliar() {
  * pode grifar a ocorrência errada — por isso o botão exige uma seleção
  * de pelo menos três caracteres, e frases funcionam melhor que palavras.
  * ------------------------------------------------------------------ */
-const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?" };
+/* Seis cores. Os sufixos são de um caractere só e nenhum deles pode ser
+ * "=", senão o fecho "==" fica ambíguo. */
+const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?",
+                     lei: "==§", prova: "==*", pegadinha: "==~" };
 
 /* A SELEÇÃO MORRE ANTES DO CLIQUE.
  * Apertar o botão dispara mousedown ANTES de click, e o mousedown já move o
@@ -481,6 +554,37 @@ function matMapear(src) {
  * Enquanto elas eram só um uiAlert, o defeito acontecia repetidas vezes na
  * tela do usuário e o log não tinha uma linha sobre isso — eu consertava no
  * escuro, e consertei errado uma vez por causa disso. */
+/* TIRAR UMA MARCA SÓ.
+ * Existia "limpar marcas", que apaga todas — e quem errou uma cor tinha de
+ * refazer a leitura inteira. Aqui some só a marca que contém o trecho
+ * selecionado (ou, sem seleção, a marca sob o cursor). */
+function matTirarMarca() {
+  matLembrarSelecao();
+  const ta = $("matTexto");
+  const txt = ta.value;
+  const alvo = matNormalizar(matSelGuardada);
+
+  /* todas as marcas do texto, com onde começam e terminam */
+  const re = /==[!?§*~]?((?:[^=\n]|=(?!=))+)==/g;
+  let achou = null, mm;
+  while ((mm = re.exec(txt)) !== null) {
+    const dentro = matNormalizar(mm[1]);
+    if (alvo && (dentro.indexOf(alvo) >= 0 || alvo.indexOf(dentro) >= 0)) { achou = mm; break; }
+    if (!alvo && ta.selectionStart >= mm.index
+        && ta.selectionStart <= mm.index + mm[0].length) { achou = mm; break; }
+  }
+  if (!achou) { matRecusa("marca_nao_achou", matSelGuardada); return; }
+
+  const abre = achou[0].match(/^==[!?§*~]?/)[0];
+  ta.value = txt.slice(0, achou.index) + achou[1]
+    + txt.slice(achou.index + achou[0].length);
+  reg("MATERIAL-MARCA", "marca retirada (" + abre + ")", achou[1].slice(0, 50));
+  matSujo = true;
+  matSelGuardada = "";
+  matTrocarModo("ler");
+  $("matEstado").textContent = t("mat_marcado_nao_salvo");
+}
+
 function matRecusa(motivo, trecho, plano) {
   const t30 = String(trecho || "").slice(0, 60);
   reg("MATERIAL-MARCA", "recusada: " + motivo, t30);
@@ -490,7 +594,8 @@ function matRecusa(motivo, trecho, plano) {
         "no texto de " + plano.length + " caracteres");
   }
   uiAlert(t(motivo === "curta" ? "mat_marca_curta"
-    : motivo === "ja_marcado" ? "mat_marca_ja" : "mat_marca_nao_achou"));
+    : motivo === "ja_marcado" ? "mat_marca_ja"
+    : motivo === "marca_nao_achou" ? "mat_tirar_nao_achou" : "mat_marca_nao_achou"));
 }
 
 function matEquilibrar(src, ini, fim) {
@@ -595,15 +700,90 @@ function matSalvarEstado() {
  * também não serve, porque aí "não salvar" deixa de existir. */
 async function matFechar() {
   if (matSujo) {
-    const salvar = await uiConfirm(t("mat_fechar_sem_salvar"));
-    if (salvar) { matSalvarEstado(); }
-    else reg("MATERIAL", "marcacao descartada ao fechar",
+    /* TRÊS saídas, não duas. O uiConfirm só oferecia sim/não, e "não"
+     * significava perder o trabalho — sem terceira opção para desistir de
+     * fechar. Quem clica em fechar por engano no meio de uma leitura
+     * marcada perdia tudo por um clique. */
+    const r = await matPerguntarSaida();
+    /* Esc e clique fora resolvem como "false". Aqui o padrão seguro é
+     * FICAR: sair sem salvar precisa ser um clique deliberado, porque é o
+     * único caminho que perde trabalho. */
+    if (r !== "salvar" && r !== "sair") return;
+    if (r === "salvar") matSalvarEstado();
+    else reg("MATERIAL", "marcação descartada ao fechar",
              matAtual && matAtual.topico);
   }
   matSujo = false;
   matSelGuardada = "";
   $("dlgMaterial").close();
   matAtual = null;
+}
+
+/* "salvar e sair" · "sair sem salvar" · "continuar aqui" */
+function matPerguntarSaida() {
+  return new Promise((resolve) => {
+    if (typeof uiEscolha === "function") {
+      uiEscolha(t("mat_saida_tit"), [
+        { valor: "salvar", rot: t("mat_saida_salvar"), classe: "btn-verde" },
+        { valor: "sair", rot: t("mat_saida_sair"), classe: "btn-cinza" },
+        { valor: "cancelar", rot: t("mat_saida_cancelar"), classe: "btn-cinza" },
+      ]).then(resolve);
+      return;
+    }
+    Promise.resolve(uiConfirm(t("mat_fechar_sem_salvar")))
+      .then((sim) => resolve(sim ? "salvar" : "sair"));
+  });
+}
+
+/* ------------------------------------------------------------------
+ * MARCADOR DE PÁGINA
+ * Resumo de vinte telas sem marcador vira "onde eu estava?" toda vez. O
+ * marcador guarda a POSIÇÃO NO TEXTO (não o pixel): mudar o tamanho da
+ * letra ou marcar um trecho não desloca o lugar guardado.
+ * ------------------------------------------------------------------ */
+function matPorMarcador() {
+  if (!matAtual) return;
+  const ta = $("matTexto");
+  const pos = ta.selectionStart || 0;
+  const r = matResumos[matAtual.chave];
+  if (!r) return;
+  r.marcador = pos;
+  r.marcadorEm = new Date().toISOString();
+  matSujo = true;
+  reg("MATERIAL", "marcador de página posto", matAtual.topico + " · caractere " + pos);
+  matTrocarModo(matModo);
+  $("matEstado").textContent = t("mat_marcado_nao_salvo");
+}
+
+function matPintarMarcador() {
+  const r = matAtual && matResumos[matAtual.chave];
+  const tem = !!(r && r.marcador);
+  const ir = $("btnMatIrMarcador");
+  if (ir) ir.hidden = !tem;
+  const info = $("matMarcadorInfo");
+  if (!info) return;
+  if (!tem) { info.textContent = ""; return; }
+  const total = String((r && r.texto) || "").length || 1;
+  info.textContent = t("mat_marcador_em", {
+    p: Math.min(100, Math.round((r.marcador / total) * 100)) });
+}
+
+function matIrMarcador() {
+  const r = matAtual && matResumos[matAtual.chave];
+  if (!r || !r.marcador) return;
+  const ta = $("matTexto");
+  if (!$("matTexto").hidden) {
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = r.marcador;
+    /* rolar até lá: sem isto o cursor vai para o lugar certo e a tela fica
+     * onde estava, que é o mesmo que não ir */
+    const antes = ta.value.slice(0, r.marcador).split("\n").length;
+    ta.scrollTop = Math.max(0, (antes - 3) * 22);
+  }
+  const alvo = $("matLeitura") && $("matLeitura").querySelector
+    ? $("matLeitura").querySelector(".mat-marcador") : null;
+  if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: "center" });
+  reg("MATERIAL", "voltei ao marcador", matAtual.topico);
 }
 
 function matRegistrarLeitura() {
@@ -788,6 +968,7 @@ function matRender() {
 }
 
 function matIniciar() {
+  try { matRepararChaves(); } catch (e) {}
   matCarregar();
   if (!$("matTexto")) return;
   $("btnMatSalvar").onclick = matGravarEditor;
@@ -796,6 +977,13 @@ function matIniciar() {
   $("btnMarcaI").onclick = () => matMarcarSelecao("importante");
   $("btnMarcaQ").onclick = () => matMarcarSelecao("duvida");
   $("btnMarcaLimpar").onclick = matLimparMarcas;
+  if ($("btnMarcaLei")) $("btnMarcaLei").onclick = () => matMarcarSelecao("lei");
+  if ($("btnMarcaProva")) $("btnMarcaProva").onclick = () => matMarcarSelecao("prova");
+  if ($("btnMarcaPeg")) $("btnMarcaPeg").onclick = () => matMarcarSelecao("pegadinha");
+  if ($("btnMarcaTirar")) $("btnMarcaTirar").onclick = matTirarMarca;
+  if ($("btnMatSalvarEstadoTopo")) $("btnMatSalvarEstadoTopo").onclick = () => matSalvarEstado();
+  if ($("btnMatMarcador")) $("btnMatMarcador").onclick = matPorMarcador;
+  if ($("btnMatIrMarcador")) $("btnMatIrMarcador").onclick = matIrMarcador;
   $("btnMatSalvarEstado").onclick = () => matSalvarEstado();
 
   /* mantém a última seleção viva: o clique no botão de marcar chega depois
@@ -806,7 +994,9 @@ function matIniciar() {
   if (document.addEventListener)
     document.addEventListener("selectionchange", matLembrarSelecao);
   /* e impede o próprio clique de destruí-la */
-  ["btnMarcaD", "btnMarcaI", "btnMarcaQ"].forEach((id) => {
+  ["btnMarcaD", "btnMarcaI", "btnMarcaQ", "btnMarcaLei", "btnMarcaProva",
+   "btnMarcaPeg", "btnMarcaTirar"].forEach((id) => {
+    if (!$(id)) return;
     if ($(id)) $(id).addEventListener("mousedown", (ev) => ev.preventDefault());
   });
   /* colar na caixa manual também aproveita o HTML */
@@ -820,11 +1010,13 @@ function matIniciar() {
   }
   $("btnMatColarOk").onclick = () => matAplicarColagem($("matColarTexto").value);
   $("btnMatColarFechar").onclick = () => $("dlgMatColar").close();
-  $("btnMatModo").onclick = () => {
+  const trocarModo = () => {
     if (matModo === "editar") matGravar(matAtual.chave, $("matTexto").value,
       { disciplina: matAtual.disciplina, topico: matAtual.topico });
     matTrocarModo(matModo === "editar" ? "ler" : "editar");
   };
+  $("btnMatModo").onclick = trocarModo;
+  if ($("btnMatModoTopo")) $("btnMatModoTopo").onclick = trocarModo;
   $("btnMatAmpliar").onclick = matAmpliar;
   $("btnMatMaior").onclick = () => matFonteMudar(1);
   $("btnMatMenor").onclick = () => matFonteMudar(-1);
@@ -833,7 +1025,10 @@ function matIniciar() {
    ["btnFmtM", () => matEnvolver("==")], ["btnFmtH", () => matPrefixo("## ")],
    ["btnFmtL", () => matPrefixo("- ")], ["btnFmtHr", () => matPrefixo("---\n")]]
     .forEach(([id, fn]) => { if ($(id)) $(id).onclick = fn; });
-  $("btnMatCartoes").onclick = matVirarCartoes;
+  /* matVirarCartoes fechava o resumo e trocava o app de modo; agora o
+   * painel abre por cima. A função antiga fica como caminho para quem quer
+   * mesmo levar o resumo inteiro para a bancada de cartões. */
+  matCartoesIniciar();
   $("btnMatFechar").onclick = () => matFechar();
   if ($("matBusca")) {
     $("matBusca").addEventListener("input", () => {
@@ -841,4 +1036,188 @@ function matIniciar() {
     });
   }
   matRender();
+}
+
+/* =====================================================================
+ * CARTÕES DO TÓPICO — sem sair do resumo
+ *
+ * O botão antigo fechava o material, trocava o app de modo e abria o
+ * gerador: quem estava no meio de uma leitura marcada perdia o lugar. Este
+ * painel abre POR CIMA (o navegador empilha <dialog> em camada própria) e,
+ * ao fechar, a leitura continua onde estava.
+ *
+ * Sobre os DADOS, que é o que sustenta o resto do projeto: cada cartão
+ * carrega as etiquetas que dizem de onde nasceu (disciplina, tópico,
+ * concurso), e cada lote gravado deixa uma linha de procedência em
+ * "cartoesInfo". Cartão sem origem é cartão que ninguém consegue devolver
+ * ao lugar depois — foi o que nos custou a v8.79 inteira.
+ * ===================================================================== */
+
+/* Etiquetas planas. Planas porque "::" é o separador de campos do material:
+ * hierarquia do Anki aqui faz o cartão voltar mutilado (medido na v8.76). */
+function matEtiquetasTopico(disciplina, topico, concurso) {
+  const achatar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const tags = [];
+  if (disciplina) tags.push("disc_" + achatar(disciplina));
+  if (topico) tags.push("top_" + achatar(topico));
+  if (concurso) tags.push("concurso_" + achatar(concurso));
+  tags.push("de_resumo");
+  return tags.filter(Boolean);
+}
+
+function matCartoesAbrir() {
+  if (!matAtual) return;
+  /* grava o texto antes: o prompt sai do que está escrito agora, e o
+   * resumo em si não é rascunho */
+  matGravar(matAtual.chave, $("matTexto").value,
+    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  const r = matResumos[matAtual.chave] || {};
+  const jaTem = matContarCartoes(matAtual.chave);
+  $("mcSub").textContent = t("mc_sub", {
+    d: matAtual.disciplina, tp: matAtual.topico, n: jaTem });
+  $("mcTexto").value = "";
+  $("mcAviso").hidden = true;
+  $("mcPreview").innerHTML = "";
+  if ($("btnMcVer")) $("btnMcVer").hidden = !jaTem;
+  $("dlgMatCartoes").showModal();
+  reg("MATERIAL-CARTOES", "painel aberto", matAtual.topico
+      + " · " + String(r.texto || "").length + " caracteres de resumo, "
+      + jaTem + " cartões já salvos");
+}
+
+function matCartoesPrompt() {
+  if (!matAtual) return;
+  const r = matResumos[matAtual.chave] || {};
+  const txt = t("mc_prompt", {
+    d: matAtual.disciplina, tp: matAtual.topico,
+    resumo: String(r.texto || ""),
+    tags: matEtiquetasTopico(matAtual.disciplina, matAtual.topico,
+      r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : "")).join(" "),
+  });
+  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  reg("MATERIAL-CARTOES", "prompt gerado", matAtual.topico);
+  toast("mc_prompt_copiado");
+}
+
+/* Lê com o parser do próprio app: o que não passa aqui não passaria na
+ * exportação depois, e é melhor a pessoa saber agora. */
+function matCartoesLer() {
+  const bruto = $("mcTexto").value;
+  if (!bruto.trim()) return { cards: [], avisos: [], repetidos: 0 };
+  const r = parseText(bruto);
+  const jaTem = new Set(
+    String((matResumos[matAtual.chave] || {}).cartoes || "")
+      .split("\n").map((l) => l.split("::")[0].trim().toLowerCase()).filter(Boolean));
+  let repetidos = 0;
+  r.cards.forEach((c) => {
+    c._repetido = jaTem.has(String(c.front || "").trim().toLowerCase());
+    if (c._repetido) repetidos++;
+  });
+  return { cards: r.cards, avisos: r.warnings || [], repetidos };
+}
+
+function matCartoesConferir() {
+  const r = matCartoesLer();
+  const av = $("mcAviso");
+  const pv = $("mcPreview");
+  pv.innerHTML = "";
+  if (!r.cards.length) {
+    av.hidden = !$("mcTexto").value.trim();
+    av.textContent = t("mc_nada_lido");
+    return r;
+  }
+  av.hidden = false;
+  av.textContent = t("mc_lidos", { n: r.cards.length,
+    a: r.avisos.length, r: r.repetidos });
+
+  const concurso = (matResumos[matAtual.chave] || {}).concurso
+    || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
+  const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso);
+  r.cards.slice(0, 40).forEach((c) => {
+    const d = document.createElement("div");
+    d.className = "mc-card";
+    const f = document.createElement("div");
+    f.className = "mc-frente"; f.textContent = c.front;
+    const v = document.createElement("div");
+    v.className = "mc-verso"; v.textContent = String(c.back || "").slice(0, 160);
+    const tg = document.createElement("div");
+    tg.className = "mc-tags"; tg.textContent = tags.join(" · ");
+    d.append(f, v, tg);
+    if (c._repetido) {
+      const j = document.createElement("div");
+      j.className = "mc-jatem"; j.textContent = t("mc_ja_existe");
+      d.append(j);
+    }
+    pv.append(d);
+  });
+  return r;
+}
+
+async function matCartoesSalvar() {
+  if (!matAtual) return;
+  const r = matCartoesLer();
+  const novos = r.cards.filter((c) => !c._repetido);
+  if (!novos.length) {
+    reg("MATERIAL-CARTOES", "nada a salvar",
+        r.cards.length + " lidos, " + r.repetidos + " já existiam");
+    uiAlert(t(r.cards.length ? "mc_todos_repetidos" : "mc_nada_lido"));
+    return;
+  }
+  if (!(await uiConfirm(t("mc_conf_salvar", {
+    n: novos.length, tp: matAtual.topico, r: r.repetidos })))) {
+    reg("MATERIAL-CARTOES", "gravação cancelada por você", novos.length + " cartões");
+    return;
+  }
+
+  const reg0 = matResumos[matAtual.chave] || {};
+  const concurso = reg0.concurso
+    || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
+  const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso);
+  const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
+    .replace(/\r?\n+/g, " ").trim();
+  const linhas = novos.map((c) =>
+    limpa(c.front) + " :: " + limpa(c.back) + " :: "
+    + tags.concat((c.tags || []).map((x) => String(x).replace(/::/g, "_"))).join(" "));
+
+  const antes = String(reg0.cartoes || "").replace(/\s*$/, "");
+  matGravarCartoes(matAtual.chave, (antes ? antes + "\n" : "") + linhas.join("\n"),
+    { disciplina: matAtual.disciplina, topico: matAtual.topico, concurso });
+
+  /* PROCEDÊNCIA. Isto não é enfeite: é o que permite, meses depois,
+   * responder "de qual resumo saiu este cartão e quando". */
+  const alvo = matResumos[matAtual.chave];
+  alvo.cartoesInfo = (alvo.cartoesInfo || []).concat([{
+    quando: new Date().toISOString(), n: novos.length,
+    origem: "resumo", concurso,
+    resumoChars: String(alvo.texto || "").length,
+    app: (typeof VERSAO === "string" ? VERSAO : ""),
+  }]);
+  matSalvar();
+
+  reg("MATERIAL-CARTOES", "gravados no tópico",
+      novos.length + " cartões em " + matAtual.topico
+      + " (" + r.repetidos + " repetidos ignorados) · etiquetas: " + tags.join(" "));
+  $("mcTexto").value = "";
+  matCartoesConferir();
+  if ($("btnMcVer")) $("btnMcVer").hidden = false;
+  await uiAlert(t("mc_salvos", { n: novos.length, tp: matAtual.topico }));
+}
+
+/* Ver o que já está salvo, sem sair do painel. */
+function matCartoesVer() {
+  const txt = String((matResumos[matAtual.chave] || {}).cartoes || "");
+  $("mcTexto").value = txt;
+  matCartoesConferir();
+  reg("MATERIAL-CARTOES", "cartões salvos trazidos para conferência",
+      matContarCartoes(matAtual.chave) + " cartões");
+}
+
+function matCartoesIniciar() {
+  if ($("btnMatCartoes")) $("btnMatCartoes").onclick = matCartoesAbrir;
+  if ($("btnMcPrompt")) $("btnMcPrompt").onclick = matCartoesPrompt;
+  if ($("btnMcSalvar")) $("btnMcSalvar").onclick = matCartoesSalvar;
+  if ($("btnMcVer")) $("btnMcVer").onclick = matCartoesVer;
+  if ($("btnMcFechar")) $("btnMcFechar").onclick = () => $("dlgMatCartoes").close();
+  if ($("mcTexto")) $("mcTexto").addEventListener("input", matCartoesConferir);
 }

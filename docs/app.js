@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.77.0";
+const VERSAO = "8.80.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -294,6 +294,47 @@ function uiDialog(texto, comCancelar) {
 }
 
 function uiAlert(texto) { return uiDialog(String(texto), false); }
+/* Pergunta de TRÊS saídas. O uiConfirm só oferece sim/não, e há decisões
+ * em que "não" significa perder trabalho — nesses casos falta a terceira
+ * porta: desistir de fechar. */
+function uiEscolha(texto, opcoes) {
+  return new Promise((resolve) => {
+    /* USA O MESMO _uiResolve do uiDialog. Na primeira versão eu resolvia
+     * por fora, e aí Esc, clique fora e o arranjo de testes não tinham como
+     * responder — o app ficava esperando para sempre. */
+    if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(false); }
+    _uiResolve = resolve;
+    const m = document.getElementById("uiModal");
+    document.getElementById("uiModalMsg").textContent = texto;
+    const bts = [document.getElementById("uiModalOk"),
+                 document.getElementById("uiModalCancel"),
+                 document.getElementById("uiModalTerceiro")];
+    const lista = (opcoes || []).slice(0, 3);
+    bts.forEach((b, k) => {
+      if (!b) return;
+      const o = lista[k];
+      if (!o) { b.hidden = true; b.style.display = "none"; return; }
+      b.hidden = false; b.style.display = "";
+      b.className = "btn " + (o.classe || "btn-cinza");
+      b.textContent = o.rot;
+      b.onclick = () => { uiEscolhaLimpar(); _uiFechar(o.valor); };
+    });
+    if (!m.open) m.showModal();
+    if (bts[0]) bts[0].focus();
+  });
+}
+
+/* devolve os botões ao estado que uiConfirm/uiAlert esperam: eles dividem o
+ * mesmo diálogo, e um terceiro botão aceso quebraria a próxima pergunta */
+function uiEscolhaLimpar() {
+  const t3 = document.getElementById("uiModalTerceiro");
+  if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
+  ["uiModalOk", "uiModalCancel"].forEach((id) => {
+    const b = document.getElementById(id);
+    if (b) b.onclick = null;
+  });
+}
+
 function uiConfirm(texto) { return uiDialog(String(texto), true); }
 
 // ligações dos botões do modal (uma vez)

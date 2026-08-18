@@ -574,6 +574,31 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark{background:rgba(245,158,11,.32);color:inherit;border-radius:3px;padding:0 2px}
 .mat-leitura mark.m-imp{background:rgba(226,75,74,.32)}
 .mat-leitura mark.m-duv{background:rgba(59,130,246,.32)}
+.mat-leitura mark.m-lei{background:rgba(16,185,129,.30)}
+.mat-leitura mark.m-prova{background:rgba(168,85,247,.32)}
+.mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
+.marca-lei{background:rgba(16,185,129,.22);border-color:rgba(16,185,129,.6)}
+.marca-prova{background:rgba(168,85,247,.22);border-color:rgba(168,85,247,.6)}
+.marca-peg{background:rgba(236,72,153,.22);border-color:rgba(236,72,153,.6)}
+.mc-passos{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.mc-seta{color:var(--sutil);font-size:15px}
+.mc-preview{max-height:34vh;overflow:auto;margin:8px 0}
+.mc-card{padding:7px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
+.mc-card:last-child{border-bottom:0}
+.mc-frente{color:var(--texto);font-weight:600;line-height:1.45}
+.mc-verso{color:var(--sutil);margin-top:2px;line-height:1.45}
+.mc-tags{font-size:9.5px;color:#8b5cf6;margin-top:3px;font-weight:700}
+.mc-jatem{font-size:10px;color:#f5a524;margin-top:3px}
+.mat-topo{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;
+  padding-bottom:8px;border-bottom:1px solid var(--borda)}
+.mat-marcador-info{font-size:10px;color:var(--sutil)}
+.btn-min-ok{border-color:rgba(34,197,94,.5);color:#30a46c}
+/* o marcador de página, na leitura */
+.mat-leitura .mat-marcador{display:block;border-top:2px dashed #f5a524;margin:10px 0;
+  position:relative}
+.mat-leitura .mat-marcador::after{content:attr(data-rot);position:absolute;right:0;top:-9px;
+  background:var(--panel);color:#f5a524;font-size:9px;font-weight:800;padding:0 6px;
+  border-radius:5px}
 .marca{all:unset;cursor:pointer;padding:3px 9px;border-radius:7px;font-size:10.5px;
   font-weight:700;border:1px solid var(--borda);color:var(--texto)}
 .marca-d{background:rgba(245,158,11,.32)}
@@ -886,7 +911,22 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ed-atalhos{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
 /* na linha do diário, o que leva de volta ao material fica antes do que
    apaga: rever é o gesto comum, apagar é o raro */
-.di-acoes{display:flex;gap:4px}
+/* Uma linha do diário são três faixas empilhadas: data+ação+tópico,
+   disciplina+concurso, e os botões. O grid de cinco colunas espremia tudo
+   numa coluna estreita e obrigava a rolar de lado. */
+.di-acoes{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.di-cima{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
+.di-meio{font-size:10px;color:var(--sutil);margin-top:2px}
+.di-item{display:block;padding:9px 0;border-bottom:1px solid var(--borda)}
+.di-item:last-child{border-bottom:0}
+.di-nome{font-weight:700;color:var(--texto);white-space:normal}
+.di-data{font-size:10px;color:var(--sutil);white-space:nowrap}
+.cm-gerais{display:flex;gap:6px;align-items:center;margin:8px 0 0;flex-wrap:wrap}
+.cm-gerais select{flex:1;min-width:150px}
+.cm-sug{font-size:10px;margin-top:3px;color:var(--sutil)}
+.cm-sug b{color:var(--texto);font-weight:700}
+.cm-usar{all:unset;cursor:pointer;margin-left:6px;padding:1px 8px;border-radius:999px;
+  font-size:9.5px;font-weight:700;color:#30a46c;border:1px solid #30a46c}
 .cm-item{padding:8px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
 .cm-item:last-child{border-bottom:0}
 .cm-frente{color:var(--texto);line-height:1.45;font-weight:600}
@@ -1519,6 +1559,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div class="ui-acoes">
       <button class="btn btn-cinza" id="uiModalCancel"></button>
       <button class="btn btn-verde" id="uiModalOk"></button>
+      <!-- terceiro botão, só usado pelas perguntas de três saídas -->
+      <button class="btn btn-cinza" id="uiModalTerceiro" hidden></button>
     </div>
   </div>
 </dialog>
@@ -1757,8 +1799,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <label class="nd-rot" data-i18n="cm_qual_edital"></label>
   <select id="cmEdital" class="mat-busca"></select>
   <p class="nota" id="cmResumo"></p>
-  <div class="vk-acoes-topo">
+  <!-- "jogar nos gerais" usava a PRIMEIRA disciplina do edital e o código
+       dizia "a mais provável" — mentira. No TCE-PE a primeira é Língua
+       Portuguesa, e foi para lá que foram as perguntas de Orçamento Base
+       Zero. Agora a disciplina é escolhida aqui, à vista. -->
+  <div class="cm-gerais">
+    <select id="cmDiscGeral" class="mat-busca"></select>
     <button class="btn-min" id="btnCmTudoGeral" data-i18n="cm_tudo_geral"></button>
+  </div>
+  <div class="vk-acoes-topo">
+    <button class="btn-min" id="btnCmUsarSugestoes" data-i18n="cm_usar_sugestoes"></button>
+    <button class="btn-min" id="btnCmLimpar" data-i18n="cm_limpar"></button>
     <button class="btn-min" id="btnCmSoSemDestino" data-i18n="cm_filtro_sem"></button>
     <button class="btn-min" id="btnCmTodos" data-i18n="cm_filtro_todos"></button>
   </div>
@@ -1768,6 +1819,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-roxo" id="btnCmPrompt" data-i18n="cm_prompt_btn"></button>
     <button class="btn btn-azul" id="btnCmColar" data-i18n="cm_colar_btn"></button>
     <button class="btn btn-cinza" id="btnCmFechar" data-i18n="cancel_btn"></button>
+    <!-- Sem desfazer, o primeiro erro é permanente. Foi o que aconteceu com
+         843 cartões no uso real. -->
+    <button class="btn-min btn-min-perigo" id="btnCmDesfazer" data-i18n="cm_desfazer" hidden></button>
   </div>
 </dialog>
 
@@ -1844,6 +1898,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 <dialog id="dlgMaterial" class="ui-modal diag-modal">
   <h3 id="matTitulo"></h3>
   <p class="nota" id="matSub"></p>
+  <!-- Com resumo grande, "editar" e "salvar estado" só no rodapé obrigam a
+       percorrer a página inteira para um gesto que se faz o tempo todo.
+       Os mesmos comandos ficam aqui em cima. -->
+  <div class="mat-topo">
+    <button class="btn-min" id="btnMatModoTopo"></button>
+    <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar_estado"></button>
+    <span class="mat-sep"></span>
+    <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por"></button>
+    <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden></button>
+    <span class="mat-marcador-info" id="matMarcadorInfo"></span>
+  </div>
   <p class="nota" data-i18n="mat_ajuda"></p>
   <div class="mat-barra" id="matBarra">
     <button class="fmt" id="btnFmtB" title="Negrito"><b>N</b></button>
@@ -1863,6 +1928,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d"></button>
     <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i"></button>
     <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q"></button>
+    <button class="marca marca-lei" id="btnMarcaLei" data-i18n="mat_marca_lei"></button>
+    <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova"></button>
+    <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg"></button>
+    <!-- tirar UMA marca: quem errou a cor tinha de apagar todas e refazer
+         a leitura inteira -->
+    <button class="btn-min" id="btnMarcaTirar" data-i18n="mat_marca_tirar"></button>
     <button class="btn-min" id="btnMarcaLimpar" data-i18n="mat_marca_limpar"></button>
     <span class="mat-sep"></span>
     <span data-i18n="mat_letra"></span>
@@ -1880,6 +1951,31 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden></button>
     <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes"></button>
     <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- Cartões DO TÓPICO, sem sair do resumo.
+     Antes o botão fechava o material, trocava o app para o modo cartões e
+     abria o gerador: quem estava no meio de uma leitura marcada perdia o
+     lugar e tinha de refazer o caminho de volta. Este diálogo abre POR CIMA
+     do resumo — o navegador empilha <dialog> em camada própria — e ao
+     fechar a leitura continua exatamente onde estava. -->
+<dialog id="dlgMatCartoes" class="ui-modal diag-modal">
+  <h3 data-i18n="mc_titulo"></h3>
+  <p class="nota" id="mcSub"></p>
+  <div class="mc-passos">
+    <button class="btn btn-roxo" id="btnMcPrompt" data-i18n="mc_prompt_btn"></button>
+    <span class="mc-seta">›</span>
+    <span class="nota" data-i18n="mc_passo2"></span>
+  </div>
+  <textarea id="mcTexto" rows="9" style="width:100%;box-sizing:border-box"
+    placeholder="Cole aqui a resposta da IA — ou escreva os cartões à mão: pergunta :: resposta"></textarea>
+  <div id="mcAviso" class="ed-nao-cabe" hidden></div>
+  <div id="mcPreview" class="mc-preview"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnMcSalvar" data-i18n="mc_salvar"></button>
+    <button class="btn btn-azul" id="btnMcVer" data-i18n="mc_ver" hidden></button>
+    <button class="btn btn-cinza" id="btnMcFechar" data-i18n="mc_voltar"></button>
   </div>
 </dialog>
 

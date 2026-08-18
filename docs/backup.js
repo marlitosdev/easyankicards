@@ -21,7 +21,7 @@ const BK_CHAVES = {
   /* "eac_editais" é a lista nova; os dois "eac_edital_*" continuam no backup
    * porque um arquivo gerado antes da v8.68 os traz, e restaurá-lo tem de
    * reconstituir o edital único — que a migração então converte na lista. */
-  edital: ["eac_editais", "eac_edital_atual", "eac_vinculos",
+  edital: ["eac_editais", "eac_edital_atual", "eac_vinculos", "eac_cm_recibo",
            "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario"],
   material: ["eac_resumos"],
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
