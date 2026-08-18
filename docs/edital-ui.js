@@ -301,8 +301,24 @@ function edLinhaTopico(i, semDisciplina) {
 
   /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela
    * teria de comparar por texto, que quebra com nomes parecidos */
+  /* CARTÕES do tópico, direto da agenda — do mesmo jeito que o resumo.
+   * Antes só o resumo tinha porta aqui; para fazer cartão era preciso abrir
+   * o material, entrar no painel e voltar. */
+  const crt = document.createElement("button");
+  crt.type = "button";
+  const nCards = matContarCartoes(matChave(i.disciplina, i.nome));
+  crt.className = "ed-crt" + (nCards ? " tem" : "");
+  crt.textContent = "🃏";
+  crt.title = t(nCards ? "ed_crt_ver" : "ed_crt_novo", { n: i.nome, c: nCards });
+  crt.onclick = (ev) => {
+    ev.stopPropagation();
+    /* abre o material e já entra no painel de cartões: dois cliques viram um */
+    matAbrirEditor({ disciplina: i.disciplina, nome: i.nome }, false);
+    try { matCartoesAbrir(); } catch (e) {}
+  };
+
   li._itemChave = i.chave;
-  li.append(chk, pt, meio, doc, rev, min);
+  li.append(chk, pt, meio, doc, crt, rev, min);
   return li;
 }
 

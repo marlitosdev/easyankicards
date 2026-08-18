@@ -407,6 +407,7 @@ function matTrocarModo(modo) {
   if ($("btnMatModoTopo"))
     $("btnMatModoTopo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
   matPintarMarcador();
+  matPintarLei();
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
   if (lendo) {
     $("matLeitura").innerHTML = matParaHtml($("matTexto").value)
@@ -466,6 +467,32 @@ const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?",
 let matSelGuardada = "";
 let matSujo = false;      /* há marcação feita e ainda não salva */
 
+/* Onde, dentro da leitura, a seleção começou — em caracteres do texto
+ * visível. É o que permite saber de QUAL "transparência" você falou quando
+ * a palavra aparece mais de uma vez. */
+let matSelOffset = -1;
+let matSelTotal = 0;
+
+function matGuardarOffset(sel) {
+  matSelOffset = -1; matSelTotal = 0;
+  try {
+    const painel = $("matLeitura");
+    if (!painel || !sel || !sel.anchorNode) return;
+    matSelTotal = String(painel.textContent || "").length;
+    let antes = 0, achou = false;
+    const anda = (no) => {
+      if (achou || !no) return;
+      if (no === sel.anchorNode) { antes += sel.anchorOffset || 0; achou = true; return; }
+      if (!no.childNodes || !no.childNodes.length) {
+        antes += String(no.textContent || "").length; return;
+      }
+      Array.from(no.childNodes).forEach(anda);
+    };
+    anda(painel);
+    if (achou) matSelOffset = antes;
+  } catch (e) { matSelOffset = -1; }
+}
+
 function matLembrarSelecao() {
   const sel = window.getSelection && window.getSelection();
   if (!sel || sel.isCollapsed) return;
@@ -473,7 +500,7 @@ function matLembrarSelecao() {
   if (painel && sel.anchorNode && painel.contains
       && !painel.contains(sel.anchorNode)) return;
   const txt = String(sel).trim();
-  if (txt) matSelGuardada = txt;
+  if (txt) { matSelGuardada = txt; matGuardarOffset(sel); }
 }
 
 /* O QUE SE VÊ NÃO É O QUE ESTÁ GUARDADO.
@@ -578,20 +605,105 @@ function matTirarMarca() {
   const abre = achou[0].match(/^==[!?§*~]?/)[0];
   ta.value = txt.slice(0, achou.index) + achou[1]
     + txt.slice(achou.index + achou[0].length);
-  reg("MATERIAL-MARCA", "marca retirada (" + abre + ")", achou[1].slice(0, 50));
+  matReg("marca", "marca retirada (" + abre + ")", achou[1].slice(0, 50));
   matSujo = true;
   matSelGuardada = "";
   matTrocarModo("ler");
   $("matEstado").textContent = t("mat_marcado_nao_salvo");
 }
 
+/* =====================================================================
+ * REGISTRO PRÓPRIO DOS RESUMOS
+ *
+ * O registro geral do app mistura tudo — edital, cartões, backup — e para
+ * achar por que uma marcação falhou era preciso garimpar. Aqui fica só o
+ * que acontece dentro do resumo, com o tópico em cada linha e o trecho
+ * exato que a pessoa tentou marcar. Foi o que faltou nas três vezes em que
+ * consertei a marcação no escuro.
+ * ===================================================================== */
+const MAT_LOG_MAX = 400;
+let matLog = [];
+
+function matLogCarregar() {
+  try { matLog = JSON.parse(localStorage.getItem("eac_mat_log") || "[]"); }
+  catch (e) { matLog = []; }
+  if (!Array.isArray(matLog)) matLog = [];
+}
+
+function matReg(tipo, oque, detalhe) {
+  matLog.push({
+    q: new Date().toISOString(),
+    t: tipo,
+    o: String(oque || ""),
+    d: String(detalhe || "").slice(0, 200),
+    top: (matAtual && matAtual.topico) || "",
+    disc: (matAtual && matAtual.disciplina) || "",
+    modo: typeof matModo === "string" ? matModo : "",
+  });
+  while (matLog.length > MAT_LOG_MAX) matLog.shift();
+  try {
+    if (typeof guardar === "function") guardar("eac_mat_log", JSON.stringify(matLog));
+    else localStorage.setItem("eac_mat_log", JSON.stringify(matLog));
+  } catch (e) {}
+  /* continua indo para o registro geral também: quem procura por lá não
+   * pode deixar de encontrar */
+  try { reg("MATERIAL-" + tipo.toUpperCase(), oque, detalhe); } catch (e) {}
+}
+
+function matLogTexto() {
+  if (!matLog.length) return t("mat_log_vazio");
+  const linhas = matLog.slice().reverse().map((x) => {
+    const q = String(x.q || "").replace("T", " ").slice(0, 19);
+    const onde = x.top ? " [" + (x.disc ? x.disc + " › " : "") + x.top + "]" : "";
+    return q + "  " + String(x.t).toUpperCase().padEnd(10) + onde
+      + "\n      " + x.o + (x.d ? "\n      " + x.d : "");
+  });
+  return t("mat_log_cab", { n: matLog.length }) + "\n\n" + linhas.join("\n\n");
+}
+
+/* Marca o material como "lei seca" — letra da lei, não comentário. É o que
+ * permite, na hora de revisar, separar o que se lê para decorar do que se
+ * lê para entender. */
+function matAlternarLei() {
+  if (!matAtual) return;
+  const r = matResumos[matAtual.chave];
+  if (!r) return;
+  r.leiSeca = !r.leiSeca;
+  matSalvar();
+  matReg("tipo", (r.leiSeca ? "marcado" : "desmarcado") + " como lei seca", "");
+  matPintarLei();
+  if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+}
+
+function matPintarLei() {
+  const b = $("btnMatLei");
+  if (!b) return;
+  const r = matAtual && matResumos[matAtual.chave];
+  const on = !!(r && r.leiSeca);
+  b.textContent = t(on ? "mat_lei_marcada" : "mat_lei_marcar");
+  if (b.classList) b.classList.toggle("btn-min-ok", on);
+}
+
+function matLogAbrir() {
+  $("matLogTexto").value = matLogTexto();
+  $("dlgMatLog").showModal();
+}
+
+function matLogLimpar() {
+  const n = matLog.length;
+  matLog = [];
+  try { localStorage.removeItem("eac_mat_log"); } catch (e) {}
+  $("matLogTexto").value = matLogTexto();
+  try { reg("MATERIAL", "registro dos resumos apagado", n + " eventos"); } catch (e) {}
+}
+
 function matRecusa(motivo, trecho, plano) {
   const t30 = String(trecho || "").slice(0, 60);
-  reg("MATERIAL-MARCA", "recusada: " + motivo, t30);
+  matReg("marca", "recusada: " + motivo, t30);
   if (motivo === "nao_achou" && plano) {
     /* a pista que faltava: o que o app procurou e o que ele tinha */
-    reg("MATERIAL-MARCA", "procurei: " + matNormalizar(trecho).slice(0, 60),
-        "no texto de " + plano.length + " caracteres");
+    matReg("marca", "procurei: " + matNormalizar(trecho).slice(0, 60),
+           "no texto de " + plano.length + " caracteres");
   }
   uiAlert(t(motivo === "curta" ? "mat_marca_curta"
     : motivo === "ja_marcado" ? "mat_marca_ja"
@@ -653,13 +765,47 @@ function matMarcarSelecao(tipo) {
 
   const { plano, mapa } = matMapear(ta.value);
   const alvo = matNormalizar(trecho);
-  const pos = plano.indexOf(alvo);
-  if (pos < 0) { matRecusa("nao_achou", trecho, plano); return; }
+
+  /* TODAS as ocorrências, não só a primeira.
+   * Era plano.indexOf(alvo): selecionar "transparência" numa linha quando a
+   * MESMA palavra já estava marcada mais acima fazia o app olhar a
+   * ocorrência de cima, ver o "==" e responder "já marcado" — recusando um
+   * trecho que estava livre. */
+  const ocorrencias = [];
+  for (let k = plano.indexOf(alvo); k >= 0; k = plano.indexOf(alvo, k + 1))
+    ocorrencias.push(k);
+  if (!ocorrencias.length) { matRecusa("nao_achou", trecho, plano); return; }
+
+  const jaMarcada = (p) => {
+    const i0 = mapa[p];
+    return /==[!?§*~]?$/.test(ta.value.slice(Math.max(0, i0 - 3), i0));
+  };
+  /* se a leitura sabe ONDE você clicou, vale a ocorrência mais próxima;
+   * senão, a primeira que ainda estiver livre */
+  let escolhida = -1;
+  if (matSelOffset >= 0 && matSelTotal > 0 && ocorrencias.length > 1) {
+    const aproximado = Math.round((matSelOffset / matSelTotal) * plano.length);
+    let melhor = Infinity;
+    ocorrencias.forEach((p) => {
+      if (jaMarcada(p)) return;
+      const d = Math.abs(p - aproximado);
+      if (d < melhor) { melhor = d; escolhida = p; }
+    });
+  }
+  if (escolhida < 0) {
+    const livre = ocorrencias.find((p) => !jaMarcada(p));
+    escolhida = livre === undefined ? -1 : livre;
+  }
+  if (escolhida < 0) { matRecusa("ja_marcado", trecho); return; }
+  const pos = escolhida;
 
   const faixa = matEquilibrar(ta.value, mapa[pos], mapa[pos + alvo.length - 1] + 1);
   const ini = faixa.ini, fim = faixa.fim;
-  const antes = ta.value.slice(Math.max(0, ini - 3), ini);
-  if (/==[!?]?$/.test(antes)) { matRecusa("ja_marcado", trecho); return; }
+  /* A checagem de "já marcado" mudou de lugar: agora ela decide QUAL
+   * ocorrência usar, em vez de recusar tudo por causa da primeira. Esta
+   * linha também tinha um resquício: a regex /==[!?]?$/ não conhecia os
+   * marcadores §, * e ~ criados na v8.79, então marca de lei ou de prova
+   * não era reconhecida como marca. */
   /* grava o pedaço ORIGINAL, com os negritos que houver dentro dele */
   const original = ta.value.slice(ini, fim);
   ta.value = ta.value.slice(0, ini) + marca + original + "==" + ta.value.slice(fim);
@@ -669,7 +815,8 @@ function matMarcarSelecao(tipo) {
    * alguma coisa, em vez de ser um botão que não muda nada. */
   matSujo = true;
   matSelGuardada = "";
-  reg("MATERIAL", "trecho marcado (" + tipo + ")", trecho.slice(0, 40));
+  matReg("marca", "marcado (" + tipo + ")", trecho.slice(0, 60)
+    + " · ocorrência " + (ocorrencias.indexOf(pos) + 1) + " de " + ocorrencias.length);
   matTrocarModo("ler");
   $("matEstado").textContent = t("mat_marcado_nao_salvo");
 }
@@ -764,7 +911,7 @@ function matPorMarcador() {
   r.marcador = pos;
   r.marcadorEm = new Date().toISOString();
   matSujo = true;
-  reg("MATERIAL", "marcador de página posto", matAtual.topico + " · caractere " + pos);
+  matReg("marcador", "marcador posto", "caractere " + pos + " · modo " + matModo);
   matTrocarModo(matModo);
   $("matEstado").textContent = t("mat_marcado_nao_salvo");
 }
@@ -906,10 +1053,41 @@ function matVirarCartoes() {
 /* Agrupa concurso → disciplina → tópico. Com dezenas de resumos de dois ou
  * três concursos, uma lista plana ordenada por data vira um monte: o usuário
  * sabe o que procura (a matéria), não quando escreveu. */
+/* TIPOS DE MATERIAL.
+ * Um tópico pode ter resumo, cartões e lei seca ao mesmo tempo. Filtrar por
+ * palavra nunca separaria as três coisas — "lei" aparece no texto de quase
+ * todo resumo de Direito. Por isso são marcadores, derivados do conteúdo:
+ * cartões e resumo o app sabe sozinho; "lei seca" é uma marca que a pessoa
+ * põe, porque só ela sabe se aquilo é a letra da lei ou um comentário. */
+const MAT_TIPOS = ["resumo", "cartoes", "lei"];
+
+function matTiposDe(x) {
+  const tipos = [];
+  if (String(x.texto || "").trim()) tipos.push("resumo");
+  if (String(x.cartoes || "").trim()) tipos.push("cartoes");
+  if (x.leiSeca) tipos.push("lei");
+  return tipos;
+}
+
+let matFEdital = "";
+let matFDisc = "";
+let matFTipos = [];
+
 function matAgrupado(filtro) {
   const f = (filtro || "").trim().toLowerCase();
-  const casa = (x) => !f || (x.topico + " " + x.disciplina + " "
-    + (x.concurso || "") + " " + x.texto).toLowerCase().includes(f);
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const fe = norm(matFEdital), fd = norm(matFDisc);
+  const casa = (x) => {
+    /* o edital manda: escolhido ele, a disciplina é procurada só dentro dele */
+    if (fe && norm(x.concurso).indexOf(fe) < 0) return false;
+    if (fd && norm(x.disciplina).indexOf(fd) < 0) return false;
+    if (matFTipos.length) {
+      const tps = matTiposDe(x);
+      if (!matFTipos.every((tp) => tps.indexOf(tp) >= 0)) return false;
+    }
+    return !f || (x.topico + " " + x.disciplina + " "
+      + (x.concurso || "") + " " + x.texto).toLowerCase().includes(f);
+  };
   const arv = new Map();
   matLista().filter(casa).forEach((x) => {
     const cc = x.concurso || "";
@@ -923,6 +1101,69 @@ function matAgrupado(filtro) {
 
 let matFiltro = "";
 let matFechados = {};
+
+/* As sugestões saem do que EXISTE, não de uma lista fixa: material de um
+ * concurso apagado não deve continuar sendo oferecido. */
+/* Os selos de tipo, para a linha da lista dizer o que tem ali sem abrir. */
+function matSelosDe(x) {
+  const cx = document.createElement("span");
+  cx.className = "mat-selos";
+  matTiposDe(x).forEach((tp) => {
+    const s = document.createElement("span");
+    s.className = "mat-selo selo-" + tp;
+    s.textContent = t("mat_tipo_" + tp);
+    cx.append(s);
+  });
+  return cx;
+}
+
+function matPintarSugestoes() {
+  const lista = matLista();
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const encher = (id, valores) => {
+    const dl = $(id);
+    if (!dl) return;
+    dl.innerHTML = "";
+    valores.forEach((v) => {
+      const o = document.createElement("option");
+      o.value = v;
+      dl.append(o);
+    });
+  };
+  const eds = [];
+  lista.forEach((x) => {
+    const cc = (x.concurso || "").trim();
+    if (cc && eds.indexOf(cc) < 0) eds.push(cc);
+  });
+  encher("matListaEditais", eds.sort());
+
+  /* disciplinas SÓ do edital escolhido — é o motivo de o edital vir antes */
+  const fe = norm(matFEdital);
+  const discs = [];
+  lista.forEach((x) => {
+    if (fe && norm(x.concurso).indexOf(fe) < 0) return;
+    const d = (x.disciplina || "").trim();
+    if (d && discs.indexOf(d) < 0) discs.push(d);
+  });
+  encher("matListaDiscs", discs.sort());
+
+  const cx = $("matTipos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  MAT_TIPOS.forEach((tp) => {
+    const n = lista.filter((x) => matTiposDe(x).indexOf(tp) >= 0).length;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mat-tipo tp-" + tp + (matFTipos.indexOf(tp) >= 0 ? " ativa" : "");
+    b.textContent = t("mat_tipo_" + tp) + " (" + n + ")";
+    b.onclick = () => {
+      const k = matFTipos.indexOf(tp);
+      if (k >= 0) matFTipos.splice(k, 1); else matFTipos.push(tp);
+      matRender();
+    };
+    cx.append(b);
+  });
+}
 
 function matRender() {
   const box = $("matLista");
@@ -941,6 +1182,7 @@ function matRender() {
     return;
   }
 
+  matPintarSugestoes();
   const arv = matAgrupado(matFiltro);
   let achou = 0;
   arv.forEach((discs, cc) => {
@@ -1011,6 +1253,16 @@ function matIniciar() {
   if ($("btnMarcaTirar")) $("btnMarcaTirar").onclick = matTirarMarca;
   if ($("btnMatSalvarEstadoTopo")) $("btnMatSalvarEstadoTopo").onclick = () => matSalvarEstado();
   if ($("btnMatMarcador")) $("btnMatMarcador").onclick = matPorMarcador;
+  if ($("btnMatFecharTopo")) $("btnMatFecharTopo").onclick = () => matFechar();
+  if ($("btnMatLei")) $("btnMatLei").onclick = matAlternarLei;
+  if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
+  if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
+  if ($("btnMatLogLimpar")) $("btnMatLogLimpar").onclick = matLogLimpar;
+  if ($("btnMatLogCopiar")) $("btnMatLogCopiar").onclick = () => {
+    try { navigator.clipboard.writeText($("matLogTexto").value); } catch (e) {}
+    toast("mat_log_copiado");
+  };
+  matLogCarregar();
   if ($("btnMatIrMarcador")) $("btnMatIrMarcador").onclick = matIrMarcador;
   $("btnMatSalvarEstado").onclick = () => matSalvarEstado();
 
@@ -1063,6 +1315,16 @@ function matIniciar() {
       matFiltro = $("matBusca").value; matRender();
     });
   }
+  if ($("matFEdital")) $("matFEdital").addEventListener("input", () => {
+    matFEdital = $("matFEdital").value;
+    /* trocar de edital limpa a disciplina: a que estava escolhida pode nem
+     * existir no novo, e o resultado vazio pareceria "não tenho material" */
+    if (matFDisc) { matFDisc = ""; if ($("matFDisc")) $("matFDisc").value = ""; }
+    matRender();
+  });
+  if ($("matFDisc")) $("matFDisc").addEventListener("input", () => {
+    matFDisc = $("matFDisc").value; matRender();
+  });
   matRender();
 }
 
