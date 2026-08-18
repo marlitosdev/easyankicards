@@ -554,7 +554,17 @@ function abrirDiario() {
     });
     const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
     acoes.append(rever, irDisc, bt);
-    li.append(q, ac, nm, ds, acoes);
+    /* Os botões ficam ABAIXO da linha, não ao lado. Em coluna estreita o
+     * grid os espremia a ponto de cada rótulo virar uma letra por linha
+     * ("r-e-v-e-r"), e a barra de rolagem horizontal escondia a metade
+     * direita da informação. */
+    const cima = document.createElement("div");
+    cima.className = "di-cima";
+    cima.append(q, ac, nm);
+    const meio = document.createElement("div");
+    meio.className = "di-meio";
+    meio.append(ds);
+    li.append(cima, meio, acoes);
     lista.append(li);
   });
   $("dlgDiario").showModal();
@@ -1840,6 +1850,21 @@ function cmRecalcular(cards) {
   const ed = cmEditalEscolhido();
   cmPlano = cmPlanoDoEdital(ed);
   cmItens = cmClassificarLocal(cards, cmPlano);
+  const dg = $("cmDiscGeral");
+  if (dg) {
+    dg.innerHTML = "";
+    const vazio = document.createElement("option");
+    vazio.value = ""; vazio.textContent = t("cm_escolha_disciplina");
+    dg.append(vazio);
+    const vistas = [];
+    cmPlano.forEach((i) => {
+      if (vistas.indexOf(i.disciplina) >= 0) return;
+      vistas.push(i.disciplina);
+      const o = document.createElement("option");
+      o.value = i.disciplina; o.textContent = i.disciplina;
+      dg.append(o);
+    });
+  }
   const c = cmContar(cmItens);
   reg("CARTAO-MATERIAL", "classificação local: " + (ed ? ed.nome : "sem edital"),
       c.total + " cartões · " + c.etiqueta + " por tópico, "
@@ -1851,8 +1876,7 @@ function cmRecalcular(cards) {
 function cmPintar() {
   const c = cmContar(cmItens);
   $("cmResumo").textContent = t("cm_resumo", {
-    t: c.total, d: c.comDestino, s: c.sem_pista,
-    e: c.etiqueta, g: c.etiqueta_disciplina });
+    t: c.total, d: c.comDestino, u: c.comSugestao, s: c.sem_pista });
 
   const box = $("cmLista");
   box.innerHTML = "";
@@ -1878,6 +1902,24 @@ function cmPintar() {
       ? "→ " + x.destino.disciplina + " › " + x.destino.topico + "  (" + t("cm_via_" + x.via) + ")"
       : t("cm_sem_destino");
     li.append(d);
+
+    /* A sugestão fica visível e desarmada. Aplicar 519 palpites de uma vez,
+     * como a v8.76 fazia, é o mesmo que não perguntar nada — e foi assim
+     * que perguntas de Orçamento Base Zero foram parar em Português. */
+    if (!x.destino && x.sugestao) {
+      const sg = document.createElement("div");
+      sg.className = "cm-sug";
+      const rot = document.createElement("span");
+      rot.textContent = t("cm_sugestao") + " ";
+      const b = document.createElement("b");
+      b.textContent = x.sugestao.disciplina + " › " + x.sugestao.topico;
+      const usar = document.createElement("button");
+      usar.type = "button"; usar.className = "cm-usar";
+      usar.textContent = t("cm_usar");
+      usar.onclick = () => { x.destino = x.sugestao; x.via = "manual"; cmPintar(); };
+      sg.append(rot, b, usar);
+      li.append(sg);
+    }
 
     if (x.inventado) {
       const inv = document.createElement("div");
@@ -1929,19 +1971,31 @@ function cmPintar() {
 }
 
 function cmTudoGeral() {
-  /* o que sobrou sem destino vai para os gerais da disciplina mais provável;
-   * sem disciplina nenhuma, continua de fora — chutar disciplina seria
-   * espalhar cartão no lugar errado, que é pior que não salvar */
-  const primeira = cmPlano.length ? cmPlano[0].disciplina : "";
-  let n = 0;
-  cmItens.forEach((x) => {
-    if (x.destino) return;
-    if (!primeira) return;
-    x.destino = { disciplina: primeira, topico: CM_GERAL };
-    x.via = "manual"; n++;
-  });
+  const disc = $("cmDiscGeral") && $("cmDiscGeral").value;
+  if (!disc) { cmRecusa("escolha_disciplina_erro"); return; }
+  const semDestino = cmItens.filter((x) => !x.destino).length;
+  if (!semDestino) { cmRecusa("nada_para_geral", cmItens.length + " cartões, todos já com destino"); return; }
+  const n = cmParaGerais(cmItens, disc, true);
+  reg("CARTAO-MATERIAL", "mandados para os gerais de " + disc, n + " cartões");
   cmPintar();
-  if (!n) cmRecusa("nada_para_geral", "plano com " + cmPlano.length + " tópicos");
+}
+
+/* Aceitar TODAS as sugestões de uma vez continua possível — mas é um gesto
+ * seu, com o número na frente, e não o estado inicial da tela. */
+async function cmUsarSugestoes() {
+  const alvo = cmItens.filter((x) => !x.destino && x.sugestao);
+  if (!alvo.length) { cmRecusa("sem_sugestoes"); return; }
+  if (!(await uiConfirm(t("cm_conf_sugestoes", { n: alvo.length })))) return;
+  alvo.forEach((x) => { x.destino = x.sugestao; });
+  reg("CARTAO-MATERIAL", "sugestões aceitas em bloco", alvo.length + " cartões");
+  cmPintar();
+}
+
+function cmLimpar() {
+  const n = cmItens.filter((x) => x.destino).length;
+  cmItens.forEach((x) => { x.destino = null; if (x.via !== "etiqueta" && x.via !== "etiqueta_disciplina") x.via = "sem_pista"; });
+  reg("CARTAO-MATERIAL", "destinos limpos", n + " cartões voltaram a ficar sem destino");
+  cmPintar();
 }
 
 function cmGerarPrompt() {
@@ -2006,11 +2060,44 @@ async function cmGravarTudo() {
   }
 
   const r = cmAplicar(comDestino, ed ? ed.nome : "", matGravarCartoes);
+  cmUltimoRecibo = r;
+  try { guardar("eac_cm_recibo", JSON.stringify(r)); } catch (e) {}
   reg("CARTAO-MATERIAL", "gravados no material",
       r.novos + " cartões em " + r.topicos + " tópicos, " + r.repetidos + " já existiam");
+  if ($("btnCmDesfazer")) $("btnCmDesfazer").hidden = false;
   $("dlgCartaoMat").close();
   if (typeof matRenderLista === "function") { try { matRenderLista(); } catch (e) {} }
   await uiAlert(t("cm_gravados", { n: r.novos, t: r.topicos, r: r.repetidos }));
+}
+
+let cmUltimoRecibo = null;
+
+/* DESFAZER a última gravação. Tira do material exatamente as linhas do
+ * recibo — não o tópico, não o que já estava lá, não o que você escreveu
+ * depois. Sem isto, o primeiro erro é permanente: foi o que aconteceu com
+ * 843 cartões no uso real, e não havia caminho de volta. */
+async function cmDesfazerUltimo() {
+  if (!cmUltimoRecibo) {
+    try { cmUltimoRecibo = JSON.parse(localStorage.getItem("eac_cm_recibo") || "null"); }
+    catch (e) { cmUltimoRecibo = null; }
+  }
+  if (!cmUltimoRecibo || !cmUltimoRecibo.recibo || !cmUltimoRecibo.recibo.length) {
+    cmRecusa("nada_a_desfazer"); return;
+  }
+  const r = cmUltimoRecibo;
+  const quantos = r.recibo.reduce((a, x) => a + x.linhas.length, 0);
+  if (!(await uiConfirm(t("cm_conf_desfazer", {
+    n: quantos, t: r.recibo.length,
+    q: String(r.quando || "").slice(0, 16).replace("T", " ") })))) return;
+
+  const d = cmDesfazer(r, matGravarCartoes,
+    (ch) => (matResumos[ch] && matResumos[ch].cartoes) || "");
+  reg("CARTAO-MATERIAL", "gravação desfeita",
+      d.removidas + " cartões retirados de " + d.topicos + " tópicos");
+  cmUltimoRecibo = null;
+  try { localStorage.removeItem("eac_cm_recibo"); } catch (e) {}
+  if ($("btnCmDesfazer")) $("btnCmDesfazer").hidden = true;
+  await uiAlert(t("cm_desfeito", { n: d.removidas, t: d.topicos }));
 }
 
 function cmIniciarTela() {
@@ -2018,6 +2105,9 @@ function cmIniciarTela() {
   if ($("btnCmFechar")) $("btnCmFechar").onclick = () => $("dlgCartaoMat").close();
   if ($("btnCmGravar")) $("btnCmGravar").onclick = cmGravarTudo;
   if ($("btnCmTudoGeral")) $("btnCmTudoGeral").onclick = cmTudoGeral;
+  if ($("btnCmUsarSugestoes")) $("btnCmUsarSugestoes").onclick = cmUsarSugestoes;
+  if ($("btnCmLimpar")) $("btnCmLimpar").onclick = cmLimpar;
+  if ($("btnCmDesfazer")) $("btnCmDesfazer").onclick = cmDesfazerUltimo;
   if ($("btnCmSoSemDestino")) $("btnCmSoSemDestino").onclick = () => { cmSoSemDestino = true; cmPintar(); };
   if ($("btnCmTodos")) $("btnCmTodos").onclick = () => { cmSoSemDestino = false; cmPintar(); };
   if ($("btnCmPrompt")) $("btnCmPrompt").onclick = cmGerarPrompt;

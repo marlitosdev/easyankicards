@@ -26,15 +26,26 @@ function cmNormal(s) {
     .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/* A CHAVE DO TÓPICO É A DO MATERIAL — não uma parecida.
+ *
+ * Esta função normalizava agressivamente (sem acento, sem pontuação) e
+ * matChave() apenas passa para minúsculas. Resultado: "Lei Federal nº
+ * 4.320/1964" virava "lei federal n 4 320 1964" aqui e "lei federal nº
+ * 4.320/1964" lá. Todo tópico com acento ou pontuação recebia DUAS gavetas,
+ * e os cartões gravados iam para a que a agenda e o editor nunca abrem.
+ *
+ * cmNormal continua existindo — mas só para COMPARAR nomes, nunca para
+ * endereçar. Comparar quer tolerância; endereçar quer exatidão. */
 function cmChave(disciplina, topico) {
-  return cmNormal(disciplina) + "›" + cmNormal(topico);
+  if (typeof matChave === "function") return matChave(disciplina, topico);
+  return String(disciplina + "›" + topico).toLowerCase();
 }
 
 /* A gaveta "assuntos gerais" de cada disciplina. Precisa de chave própria
  * e improvável: se fosse "geral", um edital com um tópico chamado "Geral"
  * despejaria os cartões soltos em cima de um tópico real. */
 function cmChaveGeral(disciplina) {
-  return cmNormal(disciplina) + "›" + cmNormal(CM_GERAL);
+  return cmChave(disciplina, CM_GERAL);
 }
 
 /* ------------------------------------------------------------------
@@ -43,7 +54,16 @@ function cmChaveGeral(disciplina) {
  * quem gerou o cartão a partir de um tópico tem essa informação de graça.
  * ------------------------------------------------------------------ */
 function cmClassificarLocal(cards, plano) {
-  /* As etiquetas NÃO chegam aqui como foram escritas. Medi com o leitor do
+  /* NADA AQUI É APLICADO. Tudo o que esta função produz é SUGESTÃO.
+   *
+   * Na v8.76 ela preenchia o destino direto, e o resultado com 843 cartões
+   * reais foi ruim: casar nome de tópico dentro das etiquetas acerta muito
+   * quando o tópico tem nome longo e específico, e erra em silêncio quando
+   * ele é curto e genérico — um edital com "Bens", "Ação" ou "Governança"
+   * atrai cartão de qualquer matéria. Sugerir 500 destinos e aplicá-los
+   * todos é o mesmo que não perguntar nada.
+   *
+   * As etiquetas NÃO chegam aqui como foram escritas. Medi com o leitor do
    * próprio app:
    *   "Direito Financeiro::Restos a pagar" → tags [] (foi parar no VERSO)
    *   "Direito Financeiro"                 → ["Direito", "Financeiro"]
@@ -82,19 +102,38 @@ function cmClassificarLocal(cards, plano) {
 
     const top = tops.find((x) => cabe(x.n, palheiro));
     if (top) {
-      return { card: c, n: k,
-               destino: { disciplina: top.i.disciplina, topico: top.i.nome },
-               via: "etiqueta", confirmado: false };
+      return { card: c, n: k, destino: null,
+               sugestao: { disciplina: top.i.disciplina, topico: top.i.nome },
+               via: "etiqueta" };
     }
     /* etiqueta que casa com a DISCIPLINA mas não com o tópico já resolve
      * metade: o cartão vai para os assuntos gerais dela, não para o limbo */
     const d = discs.find((x) => cabe(x.n, palheiro));
     if (d) {
-      return { card: c, n: k, destino: { disciplina: d.nome, topico: CM_GERAL },
-               via: "etiqueta_disciplina", confirmado: false };
+      return { card: c, n: k, destino: null,
+               sugestao: { disciplina: d.nome, topico: CM_GERAL },
+               via: "etiqueta_disciplina" };
     }
-    return { card: c, n: k, destino: null, via: "sem_pista", confirmado: false };
+    return { card: c, n: k, destino: null, sugestao: null, via: "sem_pista" };
   });
+}
+
+/* Manda para "(assuntos gerais)" de UMA disciplina escolhida.
+ *
+ * A versão anterior usava cmPlano[0].disciplina — a PRIMEIRA do edital — e
+ * o comentário dizia "a disciplina mais provável", o que era falso. No
+ * edital do TCE-PE a primeira é Língua Portuguesa, e foi para lá que
+ * foram parar as perguntas sobre Orçamento Base Zero. */
+function cmParaGerais(itens, disciplina, soSemDestino) {
+  if (!disciplina) return 0;
+  let n = 0;
+  (itens || []).forEach((x) => {
+    if (soSemDestino !== false && x.destino) return;
+    x.destino = { disciplina, topico: CM_GERAL };
+    x.via = "manual";
+    n++;
+  });
+  return n;
 }
 
 /* ------------------------------------------------------------------
@@ -180,6 +219,10 @@ function cmLinhaCartao(c, concurso) {
 /* Idempotente: salvar duas vezes o mesmo lote não duplica nada. A
  * comparação é pela FRENTE do cartão, que é o que identifica a pergunta —
  * o verso pode ter sido corrigido no meio do caminho. */
+/* Grava e devolve um RECIBO: exatamente quais linhas foram acrescentadas
+ * em cada tópico. Sem isto não existe desfazer — e a primeira coisa que
+ * aconteceu no uso real foi 843 cartões irem para o lugar errado sem
+ * caminho de volta. */
 function cmAplicar(destinos, concurso, gravar) {
   const porChave = {};
   (destinos || []).forEach((d) => {
@@ -191,6 +234,7 @@ function cmAplicar(destinos, concurso, gravar) {
   });
 
   let novos = 0, repetidos = 0, topicos = 0;
+  const recibo = [];
   Object.keys(porChave).forEach((ch) => {
     const g = porChave[ch];
     const antes = (typeof matResumos === "object" && matResumos[ch]
@@ -209,20 +253,45 @@ function cmAplicar(destinos, concurso, gravar) {
     });
     if (!linhas.length) return;
     topicos++;
+    recibo.push({ chave: ch, linhas: linhas.slice(),
+                  disciplina: g.destino.disciplina, topico: g.destino.topico });
     const texto = (antes ? antes.replace(/\s*$/, "") + "\n" : "") + linhas.join("\n");
     gravar(ch, texto, { disciplina: g.destino.disciplina,
                         topico: g.destino.topico, concurso: concurso || "" });
   });
-  return { novos, repetidos, topicos };
+  return { novos, repetidos, topicos, recibo, concurso: concurso || "",
+           quando: new Date().toISOString() };
+}
+
+/* DESFAZER: tira do material exatamente as linhas do recibo, e só elas.
+ * Não apaga o tópico nem toca no que já estava lá antes — inclusive o que
+ * você escreveu à mão entre a gravação e o arrependimento. */
+function cmDesfazer(recibo, gravar, lerAtual) {
+  let removidas = 0, topicos = 0;
+  ((recibo && recibo.recibo) || []).forEach((r) => {
+    const atual = lerAtual(r.chave);
+    if (!atual) return;
+    const fora = new Set(r.linhas);
+    const sobrou = atual.split("\n").filter((l) => {
+      if (!fora.has(l)) return true;
+      removidas++; return false;
+    });
+    if (sobrou.length === atual.split("\n").length) return;
+    topicos++;
+    gravar(r.chave, sobrou.join("\n").replace(/^\s+|\s+$/g, ""),
+           { disciplina: r.disciplina, topico: r.topico });
+  });
+  return { removidas, topicos };
 }
 
 /* Quanto de cada degrau — para o cabeçalho da conferência dizer, antes de
  * qualquer trabalho, o que vai dar trabalho. */
 function cmContar(itens) {
   const c = { etiqueta: 0, etiqueta_disciplina: 0, ia: 0, ia_geral: 0,
-              ia_inventou: 0, sem_pista: 0 };
+              ia_inventou: 0, manual: 0, sem_pista: 0 };
   (itens || []).forEach((x) => { c[x.via] = (c[x.via] || 0) + 1; });
   c.comDestino = (itens || []).filter((x) => x.destino).length;
+  c.comSugestao = (itens || []).filter((x) => !x.destino && x.sugestao).length;
   c.total = (itens || []).length;
   return c;
 }
