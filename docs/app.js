@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.85.0";
+const VERSAO = "8.86.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1091,10 +1091,48 @@ function abrirHistorico() {
     sub.className = "nota";
     sub.textContent = t("hist_linha", { n, c: v.txt.length }) + (v.m ? " · " + v.m : "");
     info.append(forte, sub);
+    /* VER ANTES DE DECIDIR.
+     * "Trazer o texto de volta" restaurava às cegas: a pessoa tinha de
+     * aceitar uma troca destrutiva sem saber o que vinha. Aqui o texto
+     * aparece, dá para copiar um pedaço, e só então restaurar. */
+    const acoes = document.createElement("div");
+    acoes.className = "hist-acoes";
+    const previa = document.createElement("textarea");
+    previa.className = "hist-previa";
+    previa.readOnly = true;
+    previa.rows = 10;
+    previa.hidden = true;
+    previa.value = v.txt;
+
+    const bVer = botaoMini("hist_ver", "btn-cinza", () => {
+      previa.hidden = !previa.hidden;
+      bVer.textContent = t(previa.hidden ? "hist_ver" : "hist_esconder");
+    });
+    const bCopiar = botaoMini("hist_copiar", "btn-cinza", () => {
+      /* recuperar PARTES: seleção primeiro, texto todo se não houver */
+      const sel = previa.value.slice(previa.selectionStart || 0,
+        previa.selectionEnd || 0);
+      const alvoTxt = sel.trim() ? sel : previa.value;
+      try { navigator.clipboard.writeText(alvoTxt); } catch (e) {}
+      reg("HISTORICO", "trecho copiado de uma versão",
+          alvoTxt.length + " de " + previa.value.length + " caracteres");
+      toast(sel.trim() ? "hist_copiado_parte" : "hist_copiado_tudo");
+    });
     const b = botaoMini("hist_restaurar", "btn-azul", () => {
       $("dlgHistorico").close(); restaurarVersao(i);   /* confirma dentro */
     });
-    div.append(info, b);
+    /* apagar de vez: histórico cheio de versão velha atrapalha achar a boa */
+    const bDel = botaoMini("hist_apagar", "btn-cinza", async () => {
+      if (!(await uiConfirm(t("hist_apagar_conf", {
+        quando: new Date(v.t).toLocaleString(), c: v.txt.length })))) return;
+      historico.splice(i, 1);
+      try { guardar("eac_historico", JSON.stringify(historico)); } catch (e) {}
+      reg("HISTORICO", "versão apagada de vez", new Date(v.t).toLocaleString());
+      abrirHistorico();
+      atualizarBotaoHistorico();
+    });
+    acoes.append(bVer, bCopiar, b, bDel);
+    div.append(info, acoes, previa);
     lista.append(div);
   });
   $("dlgHistorico").showModal();
@@ -1119,6 +1157,15 @@ function vigiarEncolhimento(antes, depois) {
   reg("TEXTO", "texto encolheu muito",
       antes.length + " -> " + depois.length + " caracteres");
   mostrarBarraRecuperar(antes.length, depois.length);
+}
+
+/* O botão da barra abre a LISTA. Antes ele restaurava a versão mais recente
+ * direto — decisão destrutiva tomada sem ver o que vinha. */
+function abrirRecuperarComLista() {
+  esconderBarraRecuperar();
+  abrirHistorico();
+  reg("TEXTO", "abriu o histórico pelo aviso de encolhimento",
+      historico.length + " versões guardadas");
 }
 
 function mostrarBarraRecuperar(de, para) {
@@ -3839,7 +3886,7 @@ $("editor").value = (textoSalvo !== null && textoSalvo.trim()) ? textoSalvo : t(
 textoAnterior = $("editor").value;
 guardarVersao("ao abrir");
 $("btnHistorico").onclick = abrirHistorico;
-$("btnRecuperar").onclick = () => restaurarVersao(historico.length - 1);
+$("btnRecuperar").onclick = abrirRecuperarComLista;
 $("btnRecuperarNao").onclick = dispensarRecuperar;
 $("dlgHistFechar").onclick = () => $("dlgHistorico").close();
 atualizarBotaoHistorico();

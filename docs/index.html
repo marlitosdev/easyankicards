@@ -624,6 +624,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-marcador-info{font-size:10px;color:var(--sutil)}
 .mat-topo-dir{margin-left:auto;display:flex;gap:6px}
 .mat-filtros{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.mat-f-dica{display:block;font-size:10px;color:var(--sutil);line-height:1.45;margin:0 0 4px}
 .mat-f-campo{flex:1;min-width:170px}
 .mat-f-campo .nd-rot{margin:0 0 3px}
 .mat-tipos{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px}
@@ -637,6 +638,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-selos{display:inline-flex;gap:4px;margin-left:6px}
 .mat-acoes{display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:0 0 auto}
 .mat-lixo{font-size:10px;color:#f5a524;margin-top:3px;line-height:1.5}
+.hist-acoes{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.hist-previa{width:100%;box-sizing:border-box;margin-top:7px;font-size:11px;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda);
+  border-radius:8px;padding:8px}
+.hist-item{display:block;padding:9px 0;border-bottom:1px solid var(--borda)}
+.hist-item:last-child{border-bottom:0}
 .mat-selo{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px}
 .selo-resumo{background:rgba(34,197,94,.16);color:#30a46c}
 .selo-cartoes{background:rgba(139,92,246,.16);color:#8b5cf6}
@@ -1593,7 +1600,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="grupo" style="max-width:760px">
     <div class="bancada-cab">
       <h2 class="bancada-nome" data-i18n="modo_material"></h2>
-      <span class="bancada-acoes"><span class="mat-conta" id="matContagem"></span></span>
+      <span class="bancada-acoes">
+        <span class="mat-conta" id="matContagem"></span>
+        <button class="btn-min" id="btnMatLogAba" data-i18n="mat_log_btn"></button>
+      </span>
     </div>
     <p class="nota" data-i18n="mat_intro"></p>
     <!-- Dois campos com sugestão, e o edital vem PRIMEIRO: com dois
@@ -1604,12 +1614,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div class="mat-filtros">
       <div class="mat-f-campo">
         <label class="nd-rot" data-i18n="mat_f_edital"></label>
+        <span class="mat-f-dica" data-i18n="mat_f_edital_dica"></span>
         <input type="search" id="matFEdital" class="mat-busca" list="matListaEditais"
                placeholder="Todos os editais">
         <datalist id="matListaEditais"></datalist>
       </div>
       <div class="mat-f-campo">
         <label class="nd-rot" data-i18n="mat_f_disc"></label>
+        <span class="mat-f-dica" data-i18n="mat_f_disc_dica"></span>
         <input type="search" id="matFDisc" class="mat-busca" list="matListaDiscs"
                placeholder="Todas as disciplinas">
         <datalist id="matListaDiscs"></datalist>
@@ -1618,6 +1630,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <!-- Marcadores em vez de adivinhar pelo texto: um resumo pode ter
          resumo, cartões e lei seca ao mesmo tempo, e filtrar por palavra
          nunca separaria as três coisas. -->
+    <span class="mat-f-dica" data-i18n="mat_tipos_dica"></span>
     <div class="mat-tipos" id="matTipos"></div>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
