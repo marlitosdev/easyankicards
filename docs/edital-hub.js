@@ -284,14 +284,13 @@ function hubCartao(e) {
   bAbrir.type = "button"; bAbrir.className = "btn-min";
   bAbrir.textContent = t("hub_abrir");
   bAbrir.onclick = () => hubAbrirEdital(e.id);
-  const bDup = document.createElement("button");
-  bDup.type = "button"; bDup.className = "btn-min";
-  bDup.textContent = t("hub_duplicar");
-  bDup.title = t("hub_duplicar_ajuda");
-  bDup.onclick = () => {
-    const n = edDuplicar(e.id);
-    if (n) { reg("EDITAL", "edital duplicado", e.nome + " → " + n.nome); hubRender(); }
-  };
+  /* "duplicar" saiu do cartão na v8.81, a pedido de quem usa.
+   * Ele nasceu supondo um caso — "quero variar o mesmo edital" — que não
+   * aparece: dois concursos diferentes têm editais diferentes, e o mesmo
+   * concurso não precisa de cópia. Na prática ele só criava um segundo
+   * edital com o mesmo nome, que depois disputava a agenda com o original.
+   * A função edDuplicar continua existindo e testada — quem quiser pode
+   * chamá-la —, mas ela não ocupa mais espaço na tela nem convida ao erro. */
   const bDel = document.createElement("button");
   bDel.type = "button"; bDel.className = "btn-min btn-min-perigo";
   bDel.textContent = t("hub_apagar");
@@ -302,7 +301,7 @@ function hubCartao(e) {
     reg("EDITAL", "edital apagado", e.nome + " (" + e.feitos + " marcados)");
     edApagar(e.id); hubRender();
   };
-  acoes.append(bAbrir, bDup, bDel);
+  acoes.append(bAbrir, bDel);
   c.append(acoes);
   return c;
 }

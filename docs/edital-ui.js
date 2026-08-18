@@ -299,6 +299,9 @@ function edLinhaTopico(i, semDisciplina) {
    * compromisso. A agenda só aparece na semana atual, onde faz sentido. */
   min.textContent = (i.dia ? i.dia + " " + i.hora + " · " : "") + horasTexto(i.minutos);
 
+  /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela
+   * teria de comparar por texto, que quebra com nomes parecidos */
+  li._itemChave = i.chave;
   li.append(chk, pt, meio, doc, rev, min);
   return li;
 }
@@ -629,23 +632,84 @@ function abrirRegistro(i) {
 
 function confirmarRegistro(estado) {
   if (!regAtual) return;
-  edMarcar(regAtual, estado, {
-    minutos: Math.max(1, Number($("regMinutos").value) || regAtual.minutos),
-    formas: regFormas.slice(),
-    humor: regHumor,
-  });
+  const item = regAtual;
   $("dlgRegistro").close();
   regAtual = null;
+  /* A ORDEM IMPORTA: edMarcar redesenha a agenda, e a linha que eu queria
+   * animar deixa de existir. Na primeira versão a animação nunca aparecia —
+   * medi: zero linhas recebiam a classe. Agora a linha é marcada primeiro,
+   * o dado é salvo em seguida (sem redesenhar), e o redesenho fica para o
+   * fim da animação. Salvar nunca depende do efeito. */
+  const linhas = edMarcarLinhasSaindo(item, estado);
+  edMarcar(item, estado, {
+    minutos: Math.max(1, Number($("regMinutos").value) || item.minutos),
+    formas: regFormas.slice(),
+    humor: regHumor,
+  }, linhas.length > 0);
+  /* O item some da agenda no mesmo instante em que o diálogo fecha, e some
+   * calado: dá a impressão de que sumiu, não de que foi guardado. A saída
+   * animada mostra PARA ONDE ele foi. */
+  edDespedir(item, estado, linhas);
 }
 
-function edMarcar(i, estado, detalhe) {
+/* Some devagar, com um recado de destino. Se o navegador não animar (ou o
+ * teste não tiver animação nenhuma), o efeito é pulado e o resultado é o
+ * mesmo — animação nunca pode ser a etapa que decide se o dado foi salvo. */
+/* Acha as linhas do item na tela e marca a saída. Separada da despedida
+ * porque precisa rodar ANTES de qualquer redesenho. */
+/* quantas linhas a última despedida animou — instrumentação de verdade,
+ * para o teste poder afirmar que a animação ACONTECEU em vez de supor */
+let edUltimaDespedida = 0;
+
+function edMarcarLinhasSaindo(item, estado) {
+  const linhas = [];
+  const anda = (el) => (el && el.children ? Array.from(el.children) : []).forEach((f) => {
+    if ((f.className || "").split(/\s+/).indexOf("ed-item") >= 0
+        && f._itemChave === item.chave) linhas.push(f);
+    anda(f);
+  });
+  ["edAgendaTopo", "edPainel"].forEach((id) => anda($(id)));
+
+  linhas.forEach((li) => {
+    if (!li.classList || !li.classList.add) return;
+    li.classList.add("ed-indo");
+    const selo = document.createElement("div");
+    selo.className = "ed-indo-selo";
+    selo.textContent = t(estado === "revisado" ? "ed_indo_revisao" : "ed_indo_diario");
+    if (li.append) li.append(selo);
+  });
+  edUltimaDespedida = linhas.length;
+  return linhas;
+}
+
+function edDespedir(item, estado, linhas) {
+  linhas = linhas || [];
+  toast(estado === "revisado" ? "ed_foi_diario_rev" : "ed_foi_diario");
+  reg("EDITAL-PROGRESSO", "item saiu da agenda para o diário",
+      item.nome + " · " + (estado || "pendente"));
+
+  /* redesenha DEPOIS da animação. O tempo é curto de propósito: efeito que
+   * atrasa o próximo clique vira estorvo na segunda vez. */
+  const refazer = () => {
+    try { edRender(); } catch (e) {}
+    try { if (typeof hubPintarAgenda === "function") hubPintarAgenda(); } catch (e) {}
+  };
+  if (typeof setTimeout === "function" && linhas.length) setTimeout(refazer, 420);
+  else refazer();
+}
+
+function edMarcar(i, estado, detalhe, semRender) {
   if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
   else delete edProgresso[i.chave];
   anotarDiario(i, estado || "pendente", detalhe);
+  /* Sem pesos, o registro dizia "peso undefined×undefined" — pior que não
+   * dizer nada, porque parece dado e não é. */
+  const temPeso = i.disciplinaPeso != null && i.peso != null;
   reg("EDITAL-PROGRESSO", (estado || "pendente") + ": " + i.nome,
       /* "peso 25" parecia valor fora de escala; 5×5 mostra de onde veio */
-      i.disciplina + " · peso " + i.disciplinaPeso + "×" + i.peso);
-  edRender();
+      i.disciplina + (temPeso ? " · peso " + i.disciplinaPeso + "×" + i.peso
+                              : " · " + t("ed_sem_peso_reg")));
+  if (!semRender) edRender();
 }
 
 /* Ritmo em vez de veredito. "121 ficam de fora" encerra o assunto; ritmo
@@ -887,6 +951,7 @@ function abrirDisciplina(nome) {
 let edCards = {};
 
 function edPintarPainel(r, plano) {
+  try { vrAtualizarBotao(); } catch (e) {}
   const box = $("edPainel");
   box.innerHTML = "";
   edCards = {};
@@ -1455,6 +1520,7 @@ function edIniciar() {
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
    * eu embarquei um botão morto */
   if ($("btnDiarioTopo")) $("btnDiarioTopo").onclick = abrirDiario;
+  vrIniciar();
   if ($("btnEdNovaDisc")) $("btnEdNovaDisc").onclick = ndAbrir;
   if ($("btnNdIncluir")) $("btnNdIncluir").onclick = ndIncluir;
   if ($("btnNdFechar")) $("btnNdFechar").onclick = () => $("dlgNovaDisc").close();
@@ -2118,4 +2184,217 @@ function cmIniciarTela() {
   if ($("cmColarTexto")) $("cmColarTexto").addEventListener("input", cmConferirColagem);
   if ($("btnCmColarOk")) $("btnCmColarOk").onclick = cmAplicarColagem;
   if ($("btnCmColarFechar")) $("btnCmColarFechar").onclick = () => $("dlgCmColar").close();
+}
+
+/* =====================================================================
+ * P4/P5 — O RITUAL DA VIRADA (pré-edital → pós-edital)
+ * ===================================================================== */
+let vrCmp = null;
+let vrOrfaos = [];
+
+function vrEhPrevisto() {
+  try { return lerEdital($("editalTexto").value).cfg.fase === "pre"; }
+  catch (e) { return false; }
+}
+
+/* O botão só existe quando faz sentido: edital com data publicada não tem
+ * virada nenhuma para fazer. */
+function vrAtualizarBotao() {
+  const b = $("btnVirada");
+  if (b) b.hidden = !vrEhPrevisto();
+}
+
+function vrAbrir() {
+  if (!vrEhPrevisto()) { uiAlert(t("vr_nao_e_previsto")); return; }
+  $("vrTexto").value = "";
+  $("vrAviso").hidden = true;
+  $("vrOrfaos").innerHTML = "";
+  vrCmp = null; vrOrfaos = [];
+  $("dlgVirada").showModal();
+  reg("VIRADA", "ritual aberto", (edAberto() && edAberto().nome) || "");
+}
+
+function vrGerarPrompt() {
+  const txt = t("vr_prompt", { antes: $("editalTexto").value });
+  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  reg("VIRADA", "prompt de conversão gerado", "");
+  toast("vr_prompt_copiado");
+}
+
+function vrConferir() {
+  const novo = $("vrTexto").value;
+  const av = $("vrAviso");
+  const cx = $("vrOrfaos");
+  cx.innerHTML = "";
+  if (!novo.trim()) { av.hidden = true; vrCmp = null; return null; }
+
+  const c = preComparar($("editalTexto").value, novo, edProgresso, edDiario);
+  vrCmp = c;
+  av.hidden = false;
+  av.innerHTML = "";
+  const linha = (txt, cls) => {
+    const d = document.createElement("div");
+    d.className = "vr-resumo";
+    const s = document.createElement("span");
+    if (cls) s.className = cls;
+    s.textContent = txt;
+    d.append(s); av.append(d);
+  };
+  linha(t("vr_r_ficam", { n: c.ficam.length }), "vr-ok");
+  linha(t("vr_r_surgem", { n: c.surgem.length }));
+  if (c.somem.length) linha(t("vr_r_somem", { n: c.somem.length }), "vr-atencao");
+  /* A LINHA QUE MAIS IMPORTA. Sem ela a pessoa lê "17 tópicos saíram" como
+   * "perdi as horas que pus neles". */
+  if (c.estudadosQueSomem.length)
+    linha(t("vr_r_estudados", { n: c.estudadosQueSomem.length,
+      h: Math.round((c.minutosPerdidos / 60) * 10) / 10 }), "vr-atencao");
+  if (c.pesos.length) linha(t("vr_r_pesos", { n: c.pesos.length }));
+  c.discSomem.forEach((d) => linha(t("vr_r_disc_sai", {
+    n: d.nome, c: d.confianca || t("vr_sem_confianca"), t: d.topicos }), "vr-perigo"));
+  if (!c.temData) linha(t("vr_r_sem_data"), "vr-perigo");
+
+  vrPintarOrfaos(novo, c);
+  return c;
+}
+
+/* P5 — cada órfão ganha um destino escolhido POR VOCÊ. Nada é adivinhado:
+ * o que a máquina faria de palpite aqui já se mostrou ruim com os cartões
+ * (v8.78), e aqui o erro custa mais. */
+function vrPintarOrfaos(txtPos, c) {
+  const cx = $("vrOrfaos");
+  const destinos = preDestinos(txtPos);
+  /* GUARDA AS ESCOLHAS ANTES DE REDESENHAR.
+   * A lista é reconstruída a cada conferência — e a conferência roda de
+   * novo dentro do "Aplicar". Sem isto, clicar em Aplicar apagava os
+   * destinos que a pessoa acabara de escolher, e o remanejo não acontecia
+   * nunca. Mesma coisa ao corrigir uma vírgula no texto colado. */
+  const escolhido = {};
+  vrOrfaos.forEach((o) => {
+    if (o.destino) escolhido[o.tipo + "|" + o.chave] = o.destino;
+  });
+  vrOrfaos = [];
+
+  c.estudadosQueSomem.forEach((e) => {
+    vrOrfaos.push({ tipo: "estudo", disciplina: e.disciplina, topico: e.topico,
+                    chave: e.chave, destino: escolhido["estudo|" + e.chave] || null });
+  });
+  preMaterialOrfao(matResumos, txtPos).forEach((m) => {
+    vrOrfaos.push({ tipo: "material", disciplina: m.disciplina, topico: m.topico,
+                    chave: m.chave, chars: m.chars, cartoes: m.cartoes,
+                    destino: escolhido["material|" + m.chave] || null });
+  });
+  if (!vrOrfaos.length) return;
+
+  const tit = document.createElement("div");
+  tit.className = "nd-rot";
+  tit.textContent = t("vr_orfaos_tit", { n: vrOrfaos.length });
+  cx.append(tit);
+
+  vrOrfaos.forEach((o, k) => {
+    const li = document.createElement("div");
+    li.className = "vr-linha";
+    const nome = document.createElement("div");
+    const b = document.createElement("span");
+    b.className = "vr-o-nome"; b.textContent = o.topico;
+    const tp = document.createElement("span");
+    tp.className = "vr-o-tipo " + (o.tipo === "estudo" ? "vr-t-estudo" : "vr-t-material");
+    tp.textContent = t(o.tipo === "estudo" ? "vr_t_estudo" : "vr_t_material");
+    nome.append(b, tp);
+    const sub = document.createElement("div");
+    sub.className = "vr-o-sub";
+    sub.textContent = o.tipo === "material"
+      ? t("vr_o_material", { d: o.disciplina, c: o.chars, n: o.cartoes })
+      : t("vr_o_estudo", { d: o.disciplina });
+    const esc = document.createElement("div");
+    esc.className = "vr-o-esc";
+    const sel = document.createElement("select");
+    const vazio = document.createElement("option");
+    vazio.value = ""; vazio.textContent = t("vr_o_manter");
+    sel.append(vazio);
+    const discs = [];
+    destinos.forEach((d) => { if (discs.indexOf(d.disciplina) < 0) discs.push(d.disciplina); });
+    discs.forEach((disc) => {
+      const g = document.createElement("optgroup");
+      g.label = disc;
+      destinos.filter((d) => d.disciplina === disc).forEach((d) => {
+        const op = document.createElement("option");
+        op.value = disc + "›" + d.topico;
+        op.textContent = d.topico;
+        g.append(op);
+      });
+      sel.append(g);
+    });
+    if (o.destino) sel.value = o.destino.disciplina + "›" + o.destino.topico;
+    sel.onchange = () => {
+      if (!sel.value) { vrOrfaos[k].destino = null; return; }
+      const p = sel.value.split("›");
+      vrOrfaos[k].destino = { disciplina: p[0], topico: p[1] };
+    };
+    esc.append(sel);
+    li.append(nome, sub, esc);
+    cx.append(li);
+  });
+}
+
+async function vrAplicar() {
+  const c = vrConferir();
+  if (!c) { uiAlert(t("vr_cole_antes")); return; }
+  if (!c.temData && !(await uiConfirm(t("vr_conf_sem_data")))) return;
+
+  const remanejar = vrOrfaos.filter((o) => o.destino);
+  if (!(await uiConfirm(t("vr_conf_aplicar", {
+    f: c.ficam.length, s: c.somem.length, n: c.surgem.length,
+    e: c.estudadosQueSomem.length, r: remanejar.length })))) {
+    reg("VIRADA", "cancelada por você", "");
+    return;
+  }
+
+  const ed = edAberto();
+  const antes = $("editalTexto").value;
+  guardarVersao("antes da virada do edital", antes);
+
+  /* 1. carimbar o diário ANTES de mexer no plano: depois disso, mesmo que
+   * o tópico deixe de existir, o registro continua identificável */
+  const carimbados = preCarimbarDiario(edDiario, ed ? ed.nome : "", hojeISO());
+  salvarDiario();
+
+  /* 2. remanejar o que a pessoa apontou */
+  let mats = 0, estudos = 0;
+  remanejar.forEach((o) => {
+    if (o.tipo === "material") {
+      if (preRemanejarMaterial(matResumos, o.chave, o.destino.disciplina,
+            o.destino.topico, matSalvar)) mats++;
+    } else {
+      if (preRemanejarEstudo(o.disciplina, o.topico, o.destino.disciplina,
+            o.destino.topico, ed ? ed.id : "")) estudos++;
+    }
+  });
+
+  /* 3. só então o texto novo. O progresso NÃO é apagado: fica guardado
+   * pela chave, como na exclusão de disciplina (v8.73). */
+  $("editalTexto").value = preAplicar($("vrTexto").value, c).texto;
+
+  reg("VIRADA", "aplicada: " + (ed ? ed.nome : ""),
+      c.ficam.length + " mantidos, " + c.somem.length + " saíram ("
+      + c.estudadosQueSomem.length + " estudados), " + c.surgem.length + " novos · "
+      + carimbados + " registros carimbados como pré-edital · "
+      + mats + " materiais e " + estudos + " estudos remanejados");
+
+  $("dlgVirada").close();
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  vrAtualizarBotao();
+  await uiAlert(t("vr_pronto", {
+    f: c.ficam.length, n: c.surgem.length,
+    h: Math.round((c.minutosPerdidos / 60) * 10) / 10,
+    m: mats + estudos }));
+}
+
+function vrIniciar() {
+  if ($("btnVirada")) $("btnVirada").onclick = vrAbrir;
+  if ($("btnVrPrompt")) $("btnVrPrompt").onclick = vrGerarPrompt;
+  if ($("btnVrAplicar")) $("btnVrAplicar").onclick = vrAplicar;
+  if ($("btnVrFechar")) $("btnVrFechar").onclick = () => $("dlgVirada").close();
+  if ($("vrTexto")) $("vrTexto").addEventListener("input", vrConferir);
+  vrAtualizarBotao();
 }

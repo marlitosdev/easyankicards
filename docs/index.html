@@ -580,6 +580,36 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .marca-lei{background:rgba(16,185,129,.22);border-color:rgba(16,185,129,.6)}
 .marca-prova{background:rgba(168,85,247,.22);border-color:rgba(168,85,247,.6)}
 .marca-peg{background:rgba(236,72,153,.22);border-color:rgba(236,72,153,.6)}
+/* saída do item da agenda: encolhe, esvanece e diz para onde foi */
+@keyframes ed-sai{
+  0%{opacity:1;transform:translateX(0)}
+  35%{opacity:1;transform:translateX(6px)}
+  100%{opacity:0;transform:translateX(48px);max-height:0;padding:0;margin:0}
+}
+.ed-item.ed-indo{animation:ed-sai .42s ease-in forwards;overflow:hidden;position:relative}
+.ed-indo-selo{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  background:rgba(34,197,94,.18);color:#30a46c;font-size:10px;font-weight:800;
+  padding:2px 9px;border-radius:999px;white-space:nowrap;pointer-events:none}
+@media (prefers-reduced-motion:reduce){
+  /* quem pediu menos movimento recebe o recado sem o deslocamento */
+  .ed-item.ed-indo{animation:none;opacity:.35}
+}
+.vr-orfaos{max-height:34vh;overflow:auto;margin:8px 0}
+.vr-linha{padding:8px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
+.vr-linha:last-child{border-bottom:0}
+.vr-o-nome{color:var(--texto);font-weight:700}
+.vr-o-tipo{font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:1px 7px;border-radius:999px;margin-left:6px}
+.vr-t-estudo{background:rgba(245,165,36,.18);color:#f5a524}
+.vr-t-material{background:rgba(139,92,246,.18);color:#8b5cf6}
+.vr-o-sub{font-size:10px;color:var(--sutil);margin-top:2px}
+.vr-o-esc{margin-top:5px}
+.vr-o-esc select{font-size:10.5px;padding:3px 6px;border-radius:7px;max-width:100%;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda)}
+.vr-resumo{font-size:11.5px;line-height:1.6;margin:4px 0}
+.vr-resumo .vr-ok{color:#30a46c;font-weight:700}
+.vr-resumo .vr-atencao{color:#f5a524;font-weight:700}
+.vr-resumo .vr-perigo{color:#e5484d;font-weight:700}
 .mc-passos{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .mc-seta{color:var(--sutil);font-size:15px}
 .mc-preview{max-height:34vh;overflow:auto;margin:8px 0}
@@ -914,13 +944,11 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 /* Uma linha do diário são três faixas empilhadas: data+ação+tópico,
    disciplina+concurso, e os botões. O grid de cinco colunas espremia tudo
    numa coluna estreita e obrigava a rolar de lado. */
-.di-acoes{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+/* botões na horizontal, ABAIXO do registro a que pertencem */
+.di-acoes{display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;margin-top:7px}
+.di-acoes .btn-min{white-space:nowrap;flex:0 0 auto}
 .di-cima{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
 .di-meio{font-size:10px;color:var(--sutil);margin-top:2px}
-.di-item{display:block;padding:9px 0;border-bottom:1px solid var(--borda)}
-.di-item:last-child{border-bottom:0}
-.di-nome{font-weight:700;color:var(--texto);white-space:normal}
-.di-data{font-size:10px;color:var(--sutil);white-space:nowrap}
 .cm-gerais{display:flex;gap:6px;align-items:center;margin:8px 0 0;flex-wrap:wrap}
 .cm-gerais select{flex:1;min-width:150px}
 .cm-sug{font-size:10px;margin-top:3px;color:var(--sutil)}
@@ -1055,16 +1083,23 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
   text-decoration:underline}
 .ed-diario-res{font-size:12px;color:var(--sutil);padding:8px 10px;border-radius:8px;
   background:var(--campo);border:1px solid var(--borda)}
-.diario-item{display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:12px;
+/* O registro do diário é EMPILHADO, não uma linha só.
+   Com display:flex e align-items:center, os três botões dividiam a largura
+   com o texto e viravam uma letra por linha ("r-e-v-e-r"), e o resto sumia
+   atrás de uma barra de rolagem horizontal. Agora: faixa de cima com data,
+   ação e tópico; faixa do meio com disciplina e concurso; e os botões
+   ABAIXO, em linha, com o espaço inteiro para eles. */
+.diario-item{display:block;padding:9px 2px;font-size:12px;
   border-bottom:1px solid var(--borda)}
+.diario-item:last-child{border-bottom:0}
 .di-data{color:var(--sutil);font-size:10.5px;white-space:nowrap}
 .di-acao{font-size:9.5px;font-weight:800;text-transform:uppercase;padding:1px 6px;
   border-radius:7px;white-space:nowrap}
 .acao-feito{background:rgba(34,197,94,.18);color:#22c55e}
 .acao-revisado{background:rgba(21,128,61,.28);color:#4ade80}
 .acao-pendente{background:var(--campo);color:var(--sutil)}
-.di-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.di-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
+.di-nome{font-weight:700;color:var(--texto);white-space:normal;word-break:break-word}
+.di-disc{font-size:10.5px;color:var(--sutil);white-space:normal}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
 .dp-rodape{flex-wrap:wrap}
 .dp-item{display:flex;gap:9px;align-items:flex-start;padding:9px 2px;font-size:12.5px;
@@ -1402,6 +1437,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
        o próprio diário. Botão fixo, sempre visível. -->
   <div class="ed-atalhos">
     <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
+    <!-- só aparece quando o edital em uso é um previsto -->
+    <button type="button" class="btn-min btn-min-ok" id="btnVirada" data-i18n="vr_botao" hidden></button>
   </div>
   <div id="edAgendaTopo" class="ed-agenda-topo"></div>
 
@@ -1960,6 +1997,29 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
      lugar e tinha de refazer o caminho de volta. Este diálogo abre POR CIMA
      do resumo — o navegador empilha <dialog> em camada própria — e ao
      fechar a leitura continua exatamente onde estava. -->
+<!-- P4 — O RITUAL DA VIRADA.
+     É o momento em que se ganha ou se perde meses de estudo: o edital sai e
+     disciplinas, tópicos e pesos mudam. A comparação é mostrada ANTES de
+     qualquer alteração, e a linha que mais importa não é "17 tópicos
+     saíram" — é "9 deles você já estudou, e dá para remanejar". -->
+<dialog id="dlgVirada" class="ui-modal diag-modal">
+  <h3 data-i18n="vr_titulo"></h3>
+  <p class="nota" data-i18n="vr_ajuda"></p>
+  <div class="mc-passos">
+    <button class="btn btn-roxo" id="btnVrPrompt" data-i18n="vr_prompt_btn"></button>
+    <span class="mc-seta">›</span>
+    <span class="nota" data-i18n="vr_passo2"></span>
+  </div>
+  <textarea id="vrTexto" rows="7" style="width:100%;box-sizing:border-box"
+    placeholder="Cole aqui o edital publicado, já no formato do app (# concurso | prova: ... / @ disciplina / + tópico)"></textarea>
+  <div id="vrAviso" class="ed-nao-cabe" hidden></div>
+  <div id="vrOrfaos" class="vr-orfaos"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnVrAplicar" data-i18n="vr_aplicar"></button>
+    <button class="btn btn-cinza" id="btnVrFechar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMatCartoes" class="ui-modal diag-modal">
   <h3 data-i18n="mc_titulo"></h3>
   <p class="nota" id="mcSub"></p>
@@ -2047,7 +2107,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <h3 data-i18n="ed_diario_tit"></h3>
   <p class="nota" data-i18n="ed_diario_ajuda"></p>
   <div class="ed-diario-res" id="diarioResumo"></div>
-  <div id="diarioLista" style="max-height:52vh;overflow:auto;margin:8px 0"></div>
+  <div id="diarioLista" style="max-height:52vh;overflow-y:auto;overflow-x:hidden;margin:8px 0"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnDiarioFechar" data-i18n="help_close"></button>
   </div>
@@ -2260,6 +2320,7 @@ window.__sqlPromise = initSqlJs({
 <script src="edital.js"></script>
 <script src="editais.js"></script>
 <script src="vinculos.js"></script>
+<script src="pre-edital.js"></script>
 <script src="cartoes-material.js"></script>
 <script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
