@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.84.0";
+const VERSAO = "8.85.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3323,10 +3323,30 @@ function abrirGerar(texto, origem) {
 function guardarCartoesNoMaterial() {
   if (!genOrigem) return;
   const txt = $("genTexto").value;
-  const linhas = (txt.match(/^[^\n#@+].*::/gm) || []).length;
-  if (!linhas) { uiAlert(t("gen_material_sem_cartoes")); return; }
+  /* GRAVA SÓ OS CARTÕES, não a caixa inteira.
+   * Esta função contava as linhas com "::" para validar e em seguida
+   * gravava o TEXTO TODO — prompt junto. O material de um tópico ficava com
+   * 155 linhas das quais 17 eram cartão, e o resto era "Gere flashcards
+   * para Anki...". O comentário antigo dizia que o texto ali era a resposta
+   * da IA; a caixa é a mesma onde o prompt é gerado, então quase nunca era. */
+  /* CORTA O PROMPT ANTES DE LER.
+   * O leitor do app é tolerante de propósito: linhas soltas antes do
+   * primeiro cartão viram parte da pergunta dele. Bom na bancada, péssimo
+   * aqui — "Gere flashcards para Anki..." acabava dentro da frente do
+   * primeiro cartão. O prompt está sempre no topo, então tudo que vem antes
+   * da primeira linha com "::" é descartado. */
+  const todas = String(txt).split("\n");
+  const primeiro = todas.findIndex((l) => /^[^\n#@+].*::/.test(l));
+  const util = primeiro > 0 ? todas.slice(primeiro).join("\n") : txt;
+  const r = parseText(util);
+  if (!r.cards.length) { uiAlert(t("gen_material_sem_cartoes")); return; }
+  const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
+    .replace(/\r?\n+/g, " ").trim();
+  const so = r.cards.map((c) => limpa(c.front) + " :: " + limpa(c.back)
+    + (c.tags && c.tags.length ? " :: " + c.tags.map((x) => String(x).replace(/::/g, "_")).join(" ") : ""));
+  const linhas = so.length;
   const ch = matChave(genOrigem.disciplina, genOrigem.topico);
-  matGravarCartoes(ch, txt, genOrigem);
+  matGravarCartoes(ch, so.join("\n"), genOrigem);
   reg("MATERIAL", "cartões guardados: " + genOrigem.topico, linhas + " cartões");
   uiAlert(t("gen_material_ok", { n: linhas, t: genOrigem.topico }));
   if (typeof matRender === "function") matRender();
