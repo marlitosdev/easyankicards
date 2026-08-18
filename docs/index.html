@@ -622,6 +622,23 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-topo{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;
   padding-bottom:8px;border-bottom:1px solid var(--borda)}
 .mat-marcador-info{font-size:10px;color:var(--sutil)}
+.mat-topo-dir{margin-left:auto;display:flex;gap:6px}
+.mat-filtros{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.mat-f-campo{flex:1;min-width:170px}
+.mat-f-campo .nd-rot{margin:0 0 3px}
+.mat-tipos{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px}
+.mat-tipo{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
+  font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
+.mat-tipo.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
+.mat-tipo.ativa.tp-resumo{color:#30a46c;border-color:#30a46c}
+.mat-tipo.ativa.tp-cartoes{color:#8b5cf6;border-color:#8b5cf6}
+.mat-tipo.ativa.tp-lei{color:#10b981;border-color:#10b981}
+/* selo de tipo em cada linha da lista */
+.mat-selos{display:inline-flex;gap:4px;margin-left:6px}
+.mat-selo{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px}
+.selo-resumo{background:rgba(34,197,94,.16);color:#30a46c}
+.selo-cartoes{background:rgba(139,92,246,.16);color:#8b5cf6}
+.selo-lei{background:rgba(16,185,129,.16);color:#10b981}
 .btn-min-ok{border-color:rgba(34,197,94,.5);color:#30a46c}
 /* o marcador de página, na leitura */
 .mat-leitura .mat-marcador{display:block;border-top:2px dashed #f5a524;margin:10px 0;
@@ -642,6 +659,12 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
   display:inline-flex;align-items:center;justify-content:center;font-size:12px;
   border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
 .ed-doc:hover{opacity:1;border-color:var(--borda)}
+/* o irmão do ícone de material: cartões do tópico, a um clique da agenda */
+.ed-crt{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  opacity:.45;border:1px solid transparent;flex:0 0 auto}
+.ed-crt:hover{opacity:1;border-color:var(--borda)}
+.ed-crt.tem{opacity:1;border-color:rgba(139,92,246,.6);background:rgba(139,92,246,.16)}
 .ed-doc.tem{opacity:1;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
 .ed-doc.cards{border-color:rgba(139,92,246,.6);background:rgba(139,92,246,.16);
   position:relative}
@@ -1571,7 +1594,30 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <span class="bancada-acoes"><span class="mat-conta" id="matContagem"></span></span>
     </div>
     <p class="nota" data-i18n="mat_intro"></p>
-    <input type="search" id="matBusca" class="mat-busca" placeholder="Filtrar por concurso, disciplina, tópico ou conteúdo">
+    <!-- Dois campos com sugestão, e o edital vem PRIMEIRO: com dois
+         concursos as disciplinas se repetem ("Direito Financeiro" existe
+         nos dois), e uma lista única de disciplinas não diz de qual delas
+         se trata. Escolhido o edital, a lista de disciplinas encolhe para
+         as que existem nele. -->
+    <div class="mat-filtros">
+      <div class="mat-f-campo">
+        <label class="nd-rot" data-i18n="mat_f_edital"></label>
+        <input type="search" id="matFEdital" class="mat-busca" list="matListaEditais"
+               placeholder="Todos os editais">
+        <datalist id="matListaEditais"></datalist>
+      </div>
+      <div class="mat-f-campo">
+        <label class="nd-rot" data-i18n="mat_f_disc"></label>
+        <input type="search" id="matFDisc" class="mat-busca" list="matListaDiscs"
+               placeholder="Todas as disciplinas">
+        <datalist id="matListaDiscs"></datalist>
+      </div>
+    </div>
+    <!-- Marcadores em vez de adivinhar pelo texto: um resumo pode ter
+         resumo, cartões e lei seca ao mesmo tempo, e filtrar por palavra
+         nunca separaria as três coisas. -->
+    <div class="mat-tipos" id="matTipos"></div>
+    <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
 </section>
@@ -1945,6 +1991,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por"></button>
     <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden></button>
     <span class="mat-marcador-info" id="matMarcadorInfo"></span>
+    <span class="mat-topo-dir">
+      <!-- o registro só dos resumos: o geral mistura edital, cartões e
+           backup, e achar por que uma marcação falhou virava garimpo -->
+      <!-- "lei seca" é marca da pessoa: só ela sabe se aquilo é a letra da
+           lei ou um comentário sobre ela -->
+      <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_marcar"></button>
+      <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn"></button>
+      <!-- fechar também aqui: com resumo grande, o rodapé fica longe.
+           Mesma pergunta de saída do botão de baixo. -->
+      <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo"></button>
+    </span>
   </div>
   <p class="nota" data-i18n="mat_ajuda"></p>
   <div class="mat-barra" id="matBarra">
@@ -2017,6 +2074,18 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnVrAplicar" data-i18n="vr_aplicar"></button>
     <button class="btn btn-cinza" id="btnVrFechar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgMatLog" class="ui-modal diag-modal">
+  <h3 data-i18n="mat_log_tit"></h3>
+  <p class="nota" data-i18n="mat_log_ajuda"></p>
+  <textarea id="matLogTexto" rows="16" readonly
+    style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnMatLogCopiar" data-i18n="mat_log_copiar"></button>
+    <button class="btn-min btn-min-perigo" id="btnMatLogLimpar" data-i18n="mat_log_limpar"></button>
+    <button class="btn btn-cinza" id="btnMatLogFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
