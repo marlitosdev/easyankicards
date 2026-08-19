@@ -317,8 +317,20 @@ function edLinhaTopico(i, semDisciplina) {
     try { matCartoesAbrir(); } catch (e) {}
   };
 
+  /* LEI SECA do tópico, o terceiro documento da linha */
+  const lei = document.createElement("button");
+  lei.type = "button";
+  const temLei = typeof leiTem === "function" && leiTem(matChave(i.disciplina, i.nome));
+  lei.className = "ed-lei" + (temLei ? " tem" : "");
+  lei.textContent = "⚖";
+  lei.title = t(temLei ? "ed_lei_ver" : "ed_lei_novo", { n: i.nome });
+  lei.onclick = (ev) => {
+    ev.stopPropagation();
+    if (typeof leiAbrir === "function") leiAbrir(i.disciplina, i.nome);
+  };
+
   li._itemChave = i.chave;
-  li.append(chk, pt, meio, doc, crt, rev, min);
+  li.append(chk, pt, meio, doc, crt, lei, rev, min);
   return li;
 }
 
