@@ -25,6 +25,23 @@ let hubSoEste = false;      /* agenda restrita ao edital aberto */
 const HUB_AGENDA_CURTA = 6;
 let hubAgendaAberta = false;
 
+/* Minutos registrados na semana em curso, de TODOS os editais. Vem do
+ * diário — que é o que aconteceu — e não do progresso marcado, que só diz
+ * "estudei", nunca "quanto tempo". A semana começa no domingo, como a
+ * agenda. */
+function minutosDaSemana() {
+  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+  const hoje = new Date();
+  const ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - hoje.getDay());
+  const iso = ini.getFullYear() + "-"
+    + String(ini.getMonth() + 1).padStart(2, "0") + "-"
+    + String(ini.getDate()).padStart(2, "0");
+  return diario.reduce((a, x) => {
+    if (!x || !x.d || x.d === "?" || x.d < iso) return a;
+    return a + (Number(x.m) || 0);
+  }, 0);
+}
+
 function hubPintarAgenda() {
   const box = document.getElementById("edAgendaTopo");
   if (!box) return;
@@ -88,6 +105,33 @@ function hubPintarAgenda() {
     h: horasTexto(linhas.reduce((a, i) => a + (i.minutos || 0), 0)),
   });
   cx.append(sub);
+
+  /* MEDIDOR DA SEMANA: o que você já pôs contra o que a agenda pede.
+   * Sem isto, "63h45 desta semana" é uma cobrança sem resposta — não dá
+   * para saber se você está em dia ou atrás. O feito vem do DIÁRIO (o que
+   * aconteceu de verdade), não do que está marcado: marcar um tópico não
+   * diz quanto tempo levou. */
+  const planejadoMin = linhas.reduce((a, i) => a + (i.minutos || 0), 0);
+  const feitoMin = minutosDaSemana();
+  const pct = planejadoMin ? Math.min(100, Math.round((feitoMin / planejadoMin) * 100)) : 0;
+
+  const med = document.createElement("div");
+  med.className = "ag-medidor";
+  const barra = document.createElement("div");
+  barra.className = "ag-barra";
+  const fill = document.createElement("div");
+  fill.className = "ag-fill" + (pct >= 100 ? " cheio" : (pct >= 50 ? " meio" : ""));
+  fill.style.width = pct + "%";
+  barra.append(fill);
+  const rot = document.createElement("div");
+  rot.className = "ag-med-rot";
+  rot.textContent = t("hub_medidor", {
+    f: horasTexto(feitoMin), p: horasTexto(planejadoMin), pct,
+    falta: horasTexto(Math.max(0, planejadoMin - feitoMin)),
+  });
+  med.append(barra, rot);
+  med.title = t("hub_medidor_ajuda");
+  cx.append(med);
 
   /* Agendar é o que transforma uma lista de tópicos em agenda: sem esta
    * chamada cada linha vem sem dia nem horário sugerido — foi o que a

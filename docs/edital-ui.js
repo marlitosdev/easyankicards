@@ -737,6 +737,15 @@ function edMarcar(i, estado, detalhe, semRender) {
       /* "peso 25" parecia valor fora de escala; 5×5 mostra de onde veio */
       i.disciplina + (temPeso ? " · peso " + i.disciplinaPeso + "×" + i.peso
                               : " · " + t("ed_sem_peso_reg")));
+  /* GRAVAR E REDESENHAR SÃO COISAS DIFERENTES.
+   * edSalvar() morava dentro de edRender(). Quando a v8.81 passou a pular o
+   * redesenho para poder animar a saída do item, pulou a GRAVAÇÃO junto: o
+   * progresso ficava só na memória do edital aberto, e a agenda do topo —
+   * que lê "progresso" do registro de cada edital na lista — continuava
+   * mostrando o tópico já estudado. Pior: até alguém salvar por outro
+   * caminho, a marca não sobrevivia a um recarregamento.
+   * Agora a gravação acontece SEMPRE; só o desenho é adiável. */
+  edSalvar();
   if (!semRender) edRender();
 }
 
