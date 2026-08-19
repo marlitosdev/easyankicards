@@ -920,9 +920,22 @@ function matMarcarSelecao(tipo) {
    * linha também tinha um resquício: a regex /==[!?]?$/ não conhecia os
    * marcadores §, * e ~ criados na v8.79, então marca de lei ou de prova
    * não era reconhecida como marca. */
-  /* grava o pedaço ORIGINAL, com os negritos que houver dentro dele */
+  /* MARCA QUE ATRAVESSA LINHAS FECHA EM CADA UMA.
+   * A leitura é montada linha a linha: um "==?" numa linha e o "==" de
+   * fecho na seguinte não formam marca nenhuma — as duas aparecem LITERAIS
+   * na tela, e a pessoa vê "==?Ato Complexo:" como texto. Selecionar um
+   * parágrafo inteiro é o gesto mais comum ao grifar, então isso acontecia
+   * o tempo todo. Aqui a marca é reaberta a cada linha. */
   const original = ta.value.slice(ini, fim);
-  ta.value = ta.value.slice(0, ini) + marca + original + "==" + ta.value.slice(fim);
+  const marcado = original.indexOf("\n") < 0
+    ? marca + original + "=="
+    : original.split("\n").map((linha) => {
+        /* linha vazia não recebe marca: "==?==" não é nada e ainda
+         * apareceria como lixo no texto */
+        if (!linha.trim()) return linha;
+        return marca + linha + "==";
+      }).join("\n");
+  ta.value = ta.value.slice(0, ini) + marcado + ta.value.slice(fim);
   /* NÃO grava aqui. Grifar é experimentar: a pessoa marca, olha, desfaz,
    * marca de novo. Gravar a cada clique tira dela a chance de desistir —
    * e sem gravação imediata o botão "Salvar estado" passa a significar
