@@ -627,9 +627,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-topo{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;
   padding-bottom:8px;border-bottom:1px solid var(--borda)}
 .mat-marcador-info{font-size:10px;color:var(--sutil)}
+.mat-duv-conta{border-color:rgba(59,130,246,.6);color:#3b82f6}
 .mat-topo-dir{margin-left:auto;display:flex;gap:6px}
 .mat-filtros{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
 .mat-f-dica{display:block;font-size:10px;color:var(--sutil);line-height:1.45;margin:0 0 4px}
+.duv-lista{max-height:52vh;overflow:auto;margin:8px 0}
+.duv-item{padding:9px 0;border-bottom:1px solid var(--borda)}
+.duv-item:last-child{border-bottom:0}
+.duv-trecho{font-size:12px;color:var(--texto);line-height:1.5;
+  border-left:3px solid #3b82f6;padding-left:9px}
+.duv-onde{font-size:10px;color:var(--sutil);margin-top:3px}
+.duv-acoes{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
 .mat-f-campo{flex:1;min-width:170px}
 .mat-f-campo .nd-rot{margin:0 0 3px}
 .mat-tipos{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px}
@@ -1620,6 +1628,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <h2 class="bancada-nome" data-i18n="modo_material"></h2>
       <span class="bancada-acoes">
         <span class="mat-conta" id="matContagem"></span>
+        <button class="btn-min" id="btnDuvidas" data-i18n="duv_btn"
+          title="Junta num lugar só tudo que você marcou em azul como dúvida, em todos os resumos e leis secas. Serve para tirar as dúvidas de uma vez."></button>
         <button class="btn-min" id="btnMatLogAba" data-i18n="mat_log_btn"></button>
       </span>
     </div>
@@ -2024,6 +2034,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por" title="Guarda onde você parou. Lendo, usa o ponto da rolagem; editando, usa o cursor."></button>
     <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden title="Leva a leitura de volta ao ponto que você marcou."></button>
     <span class="mat-marcador-info" id="matMarcadorInfo"></span>
+    <!-- quantas dúvidas ESTE resumo tem em aberto: sem o número aqui, a
+         pessoa só descobre indo à lista geral -->
+    <button class="btn-min btn-min-perigo" id="btnMatConsertar" hidden
+      title="Este resumo tem marcação quebrada: asterisco de negrito sem par, ou marca colorida aberta e nunca fechada. Mostro as linhas antes de mexer."></button>
+    <button class="btn-min mat-duv-conta" id="btnMatDuvidas" hidden
+      title="Este resumo tem dúvidas em aberto. Clique para ver todas as suas dúvidas, de todos os tópicos."></button>
     <span class="mat-topo-dir">
       <!-- o registro só dos resumos: o geral mistura edital, cartões e
            backup, e achar por que uma marcação falhou virava garimpo -->
@@ -2116,6 +2132,19 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
      Marcar o resumo inteiro como "lei seca" era confuso: um tópico costuma
      ter as duas coisas — a letra da lei E o comentário sobre ela. Aqui elas
      são dois textos, cada um com seu leitor. -->
+<!-- Marcar em azul o que não se entendeu só serve se der para voltar
+     depois. Espalhadas por vinte resumos, as dúvidas somem. -->
+<dialog id="dlgDuvidas" class="ui-modal diag-modal">
+  <h3 data-i18n="duv_titulo"></h3>
+  <p class="nota" data-i18n="duv_ajuda"></p>
+  <p class="nota" id="duvResumo"></p>
+  <div id="duvLista" class="duv-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnDuvFechar" data-i18n="help_close"
+      title="Fecha a lista. As dúvidas continuam marcadas nos resumos."></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiSeca" class="ui-modal diag-modal">
   <h3 id="leiTitulo"></h3>
   <p class="nota" data-i18n="lei_ajuda"></p>
