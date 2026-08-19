@@ -613,6 +613,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mc-passos{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .mc-seta{color:var(--sutil);font-size:15px}
 .mc-preview{max-height:34vh;overflow:auto;margin:8px 0}
+.mc-acoes-salvos{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.mc-card-acoes{display:flex;gap:4px;margin-top:4px}
+.mc-est-cartao{margin:10px 0;max-height:46vh;overflow:auto}
+.mc-est-barra{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.mc-est-pos{font-size:11px;color:var(--sutil);margin-left:auto}
 .mc-card{padding:7px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
 .mc-card:last-child{border-bottom:0}
 .mc-frente{color:var(--texto);font-weight:600;line-height:1.45}
@@ -674,6 +679,12 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
   opacity:.45;border:1px solid transparent;flex:0 0 auto}
 .ed-crt:hover{opacity:1;border-color:var(--borda)}
 .ed-crt.tem{opacity:1;border-color:rgba(139,92,246,.6);background:rgba(139,92,246,.16)}
+/* o terceiro ícone da linha: a lei seca do tópico */
+.ed-lei{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  opacity:.45;border:1px solid transparent;flex:0 0 auto}
+.ed-lei:hover{opacity:1;border-color:var(--borda)}
+.ed-lei.tem{opacity:1;border-color:rgba(16,185,129,.6);background:rgba(16,185,129,.16)}
 .ed-doc.tem{opacity:1;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
 .ed-doc.cards{border-color:rgba(139,92,246,.6);background:rgba(139,92,246,.16);
   position:relative}
@@ -2000,66 +2011,66 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
        percorrer a página inteira para um gesto que se faz o tempo todo.
        Os mesmos comandos ficam aqui em cima. -->
   <div class="mat-topo">
-    <button class="btn-min" id="btnMatModoTopo"></button>
-    <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar_estado"></button>
+    <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
+    <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar_estado" title="Grava as marcas que você fez. Marcar não grava sozinho de propósito: assim dá para experimentar e desistir."></button>
     <span class="mat-sep"></span>
-    <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por"></button>
-    <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden></button>
+    <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por" title="Guarda onde você parou. Lendo, usa o ponto da rolagem; editando, usa o cursor."></button>
+    <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden title="Leva a leitura de volta ao ponto que você marcou."></button>
     <span class="mat-marcador-info" id="matMarcadorInfo"></span>
     <span class="mat-topo-dir">
       <!-- o registro só dos resumos: o geral mistura edital, cartões e
            backup, e achar por que uma marcação falhou virava garimpo -->
       <!-- "lei seca" é marca da pessoa: só ela sabe se aquilo é a letra da
            lei ou um comentário sobre ela -->
-      <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_marcar"></button>
-      <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn"></button>
+      <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_btn" title="Abre a LEI SECA deste tópico: a letra da lei, guardada à parte do resumo. Tem leitor próprio e botão para registrar que você leu."></button>
+      <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn" title="Mostra só o que aconteceu dentro dos resumos: marcações feitas, recusadas e o motivo. Serve para relatar um problema."></button>
       <!-- fechar também aqui: com resumo grande, o rodapé fica longe.
            Mesma pergunta de saída do botão de baixo. -->
-      <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo"></button>
+      <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo" title="Fecha o resumo. Se houver marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
     </span>
   </div>
   <p class="nota" data-i18n="mat_ajuda"></p>
   <div class="mat-barra" id="matBarra">
-    <button class="fmt" id="btnFmtB" title="Negrito"><b>N</b></button>
-    <button class="fmt" id="btnFmtI" title="Italico"><i>I</i></button>
-    <button class="fmt" id="btnFmtM" title="Destacar">&#9646;</button>
+    <button class="fmt" id="btnFmtB" title="Deixa o trecho selecionado em negrito. Sem seleção, insere as marcas e deixa o cursor no meio."><b>N</b></button>
+    <button class="fmt" id="btnFmtI" title="Deixa o trecho selecionado em itálico. Sem seleção, insere as marcas e deixa o cursor no meio."><i>I</i></button>
+    <button class="fmt" id="btnFmtM" title="Destaca o trecho com fundo colorido, como um marca-texto. É a mesma marca do botão “destaque” da leitura.">&#9646;</button>
     <span class="fmt-sep"></span>
-    <button class="fmt" id="btnFmtH" title="Titulo">H</button>
-    <button class="fmt" id="btnFmtL" title="Lista">&#9776;</button>
-    <button class="fmt" id="btnFmtHr" title="Linha">&#8212;</button>
-    <button class="fmt fmt-colar" id="btnMatColar" data-i18n="mat_colar_btn"></button>
+    <button class="fmt" id="btnFmtH" title="Transforma a linha em título. Um # é título grande, dois ## é subtítulo — até seis níveis.">H</button>
+    <button class="fmt" id="btnFmtL" title="Transforma a linha em item de lista, com marcador.">&#9776;</button>
+    <button class="fmt" id="btnFmtHr" title="Insere uma linha divisória, para separar assuntos dentro do resumo.">&#8212;</button>
+    <button class="fmt fmt-colar" id="btnMatColar" data-i18n="mat_colar_btn" title="Cola texto de fora convertendo a formatação: negrito, itálico, títulos e listas viram a marcação do app em vez de virar texto solto."></button>
     <span class="fmt-dica" data-i18n="mat_fmt_dica"></span>
   </div>
   <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
             placeholder="Escreva aqui o que precisa lembrar deste tópico."></textarea>
   <div class="mat-ctrl" id="matCtrlLeitura" hidden>
     <span data-i18n="mat_marcar"></span>
-    <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d"></button>
-    <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i"></button>
-    <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q"></button>
-    <button class="marca marca-lei" id="btnMarcaLei" data-i18n="mat_marca_lei"></button>
-    <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova"></button>
-    <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg"></button>
+    <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d" title="Marca o trecho selecionado em amarelo: o que você quer reler. Se a palavra aparecer mais de uma vez, marca a que você selecionou."></button>
+    <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i" title="Marca em vermelho: o que não pode faltar na hora da prova."></button>
+    <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q" title="Marca em azul: o que você não entendeu e precisa voltar."></button>
+    <button class="marca marca-lei" id="btnMarcaLei" data-i18n="mat_marca_lei" title="Marca em verde: letra de lei ou artigo, o que se decora em vez de entender."></button>
+    <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova" title="Marca em roxo: isto já caiu em prova. Serve para achar depois o que a banca cobra."></button>
+    <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg" title="Marca em rosa: pegadinha, exceção ou detalhe que costuma derrubar."></button>
     <!-- tirar UMA marca: quem errou a cor tinha de apagar todas e refazer
          a leitura inteira -->
-    <button class="btn-min" id="btnMarcaTirar" data-i18n="mat_marca_tirar"></button>
-    <button class="btn-min" id="btnMarcaLimpar" data-i18n="mat_marca_limpar"></button>
+    <button class="btn-min" id="btnMarcaTirar" data-i18n="mat_marca_tirar" title="Tira só a marca do trecho selecionado, seja qual for a cor. As outras marcas do resumo ficam."></button>
+    <button class="btn-min" id="btnMarcaLimpar" data-i18n="mat_marca_limpar" title="Tira TODAS as marcas do resumo de uma vez. O texto não muda."></button>
     <span class="mat-sep"></span>
     <span data-i18n="mat_letra"></span>
-    <button class="btn-min" id="btnMatMenor">A&#8722;</button>
+    <button class="btn-min" id="btnMatMenor" title="Diminui a letra da leitura. Não altera o texto guardado.">A&#8722;</button>
     <span class="mat-fonte" id="matFonteVal">15px</span>
-    <button class="btn-min" id="btnMatMaior">A+</button>
-    <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar"></button>
+    <button class="btn-min" id="btnMatMaior" title="Aumenta a letra da leitura. Não altera o texto guardado.">A+</button>
+    <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar" title="Alarga a janela do resumo para ocupar mais da tela. Útil em texto longo."></button>
     <span class="mat-estado" id="matEstado"></span>
   </div>
   <div class="mat-leitura" id="matLeitura" hidden></div>
   <div class="dlg-rodape">
-    <button class="btn btn-cinza" id="btnMatModo"></button>
-    <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"></button>
-    <button class="btn btn-cinza" id="btnMatSalvarEstado" data-i18n="mat_salvar_estado"></button>
-    <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden></button>
-    <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes"></button>
-    <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close"></button>
+    <button class="btn btn-cinza" id="btnMatModo" title="Alterna entre ler (marcas coloridas) e editar (texto cru). O mesmo comando existe no topo."></button>
+    <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar" title="Grava o texto do resumo. Os cartões, as marcas e o marcador de página deste tópico continuam intactos."></button>
+    <button class="btn btn-cinza" id="btnMatSalvarEstado" data-i18n="mat_salvar_estado" title="Grava as marcas feitas na leitura. Marcar não grava sozinho: assim dá para experimentar cores e desistir."></button>
+    <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden title="Registra esta leitura no diário de estudos, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
+    <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes" title="Abre o painel de cartões deste tópico por cima do resumo: criar com IA, colar, importar de arquivo, estudar em tela ou apagar. O resumo continua aberto atrás."></button>
+    <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close" title="Fecha o resumo. Com marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
   </div>
 </dialog>
 
@@ -2092,6 +2103,57 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </dialog>
 
+<!-- Estudar em tela, no MESMO desenho do módulo de cartões: o que se vê
+     aqui é o que vai para o Anki. Reaproveita renderCartaoEstilizado. -->
+<!-- LEI SECA — documento próprio, ao lado do resumo.
+     Marcar o resumo inteiro como "lei seca" era confuso: um tópico costuma
+     ter as duas coisas — a letra da lei E o comentário sobre ela. Aqui elas
+     são dois textos, cada um com seu leitor. -->
+<dialog id="dlgLeiSeca" class="ui-modal diag-modal">
+  <h3 id="leiTitulo"></h3>
+  <p class="nota" data-i18n="lei_ajuda"></p>
+  <div class="mat-topo">
+    <button class="btn-min" id="btnLeiModo"
+      title="Alterna entre ler e editar. Na leitura o texto aparece formatado; na edição, cru."></button>
+    <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
+      title="Grava a lei seca deste tópico. O resumo e os cartões não são tocados."></button>
+    <span class="mat-sep"></span>
+    <button class="btn-min" id="btnLeiMenor" title="Diminui a letra da leitura.">A&#8722;</button>
+    <button class="btn-min" id="btnLeiMaior" title="Aumenta a letra da leitura.">A+</button>
+    <span class="mat-topo-dir">
+      <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
+        title="Fecha a lei seca. Se houver mudança não salva, pergunta antes."></button>
+    </span>
+  </div>
+  <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
+    placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
+  <div class="mat-leitura" id="leiLeitura" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiLido" data-i18n="lei_lido"
+      title="Registra no diário que você leu esta lei seca, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
+    <button class="btn btn-cinza" id="btnLeiFechar2" data-i18n="help_close"
+      title="Fecha a lei seca."></button>
+  </div>
+</dialog>
+
+<dialog id="dlgMcEstudo" class="ui-modal diag-modal">
+  <h3 id="mcEstTitulo"></h3>
+  <p class="nota" id="mcEstSub"></p>
+  <div id="mcEstCartao" class="mc-est-cartao"></div>
+  <div class="mc-est-barra">
+    <button class="btn-min" id="btnMcEstAnt" title="Cartão anterior">←</button>
+    <button class="btn btn-azul" id="btnMcEstVirar" data-i18n="mc_est_virar"
+      title="Mostra ou esconde a resposta. Tente lembrar antes de virar — é aí que a revisão funciona."></button>
+    <button class="btn-min" id="btnMcEstProx" title="Próximo cartão">→</button>
+    <span class="mc-est-pos" id="mcEstPos"></span>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn-min btn-min-perigo" id="btnMcEstApagar" data-i18n="mc_est_apagar"
+      title="Apaga este cartão do material deste tópico. Pergunta duas vezes: um cartão apagado não volta."></button>
+    <button class="btn btn-cinza" id="btnMcEstFechar" data-i18n="help_close" title="Fecha o estudo em tela. Os cartões continuam salvos no tópico."></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMatLog" class="ui-modal diag-modal">
   <h3 data-i18n="mat_log_tit"></h3>
   <p class="nota" data-i18n="mat_log_ajuda"></p>
@@ -2108,7 +2170,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <h3 data-i18n="mc_titulo"></h3>
   <p class="nota" id="mcSub"></p>
   <div class="mc-passos">
-    <button class="btn btn-roxo" id="btnMcPrompt" data-i18n="mc_prompt_btn"></button>
+    <button class="btn btn-roxo" id="btnMcPrompt" data-i18n="mc_prompt_btn" title="Copia um prompt com o texto deste resumo e as etiquetas do tópico. Cole numa IA e traga a resposta de volta para a caixa abaixo."></button>
     <span class="mc-seta">›</span>
     <span class="nota" data-i18n="mc_passo2"></span>
   </div>
@@ -2116,10 +2178,18 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     placeholder="Cole aqui a resposta da IA — ou escreva os cartões à mão: pergunta :: resposta"></textarea>
   <div id="mcAviso" class="ed-nao-cabe" hidden></div>
   <div id="mcPreview" class="mc-preview"></div>
+  <div class="mc-acoes-salvos" id="mcAcoesSalvos" hidden>
+    <button class="btn-min" id="btnMcEstudar" data-i18n="mc_estudar" title="Passa pelos cartões salvos um a um, no mesmo desenho que eles terão no Anki. Dá para virar, avançar e apagar os ruins."></button>
+    <button class="btn-min" id="btnMcImportar" data-i18n="mc_importar" title="Lê um arquivo .txt e joga o conteúdo na caixa acima, sem você precisar abrir, copiar e colar."></button>
+    <input type="file" id="mcArquivo" accept=".txt,.csv,.md" hidden>
+  </div>
   <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnMcSalvar" data-i18n="mc_salvar"></button>
-    <button class="btn btn-azul" id="btnMcVer" data-i18n="mc_ver" hidden></button>
-    <button class="btn btn-cinza" id="btnMcFechar" data-i18n="mc_voltar"></button>
+    <button class="btn btn-verde" id="btnMcSalvar" data-i18n="mc_salvar"
+      title="Grava no material deste tópico só os cartões novos. Os repetidos são ignorados, e nada do que já estava lá é apagado."></button>
+    <button class="btn btn-azul" id="btnMcVer" data-i18n="mc_ver" hidden
+      title="Traz para a caixa acima os cartões já salvos neste tópico, para conferir, editar ou apagar."></button>
+    <button class="btn btn-cinza" id="btnMcFechar" data-i18n="mc_voltar"
+      title="Fecha só esta janela. O resumo continua aberto atrás, do jeito que estava."></button>
   </div>
 </dialog>
 

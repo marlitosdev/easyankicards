@@ -724,8 +724,8 @@ function matPintarLei() {
   const b = $("btnMatLei");
   if (!b) return;
   const r = matAtual && matResumos[matAtual.chave];
-  const on = !!(r && r.leiSeca);
-  b.textContent = t(on ? "mat_lei_marcada" : "mat_lei_marcar");
+  const on = !!(r && (String(r.leiTexto || "").trim() || r.leiSeca));
+  b.textContent = t(on ? "mat_lei_tem" : "mat_lei_btn");
   if (b.classList) b.classList.toggle("btn-min-ok", on);
 }
 
@@ -1110,7 +1110,8 @@ function matTiposDe(x) {
   const tipos = [];
   if (String(x.texto || "").trim()) tipos.push("resumo");
   if (String(x.cartoes || "").trim()) tipos.push("cartoes");
-  if (x.leiSeca) tipos.push("lei");
+  /* agora é TEXTO próprio, não uma marca no resumo */
+  if (String(x.leiTexto || "").trim() || x.leiSeca) tipos.push("lei");
   return tipos;
 }
 
@@ -1301,10 +1302,19 @@ function matRender() {
            * não havia como chegar até eles a não ser abrindo o resumo e
            * entrando no painel. */
           if (nCart) {
-            acoes.append(botaoMini(null, "btn-roxo", () => {
-              matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, false);
+            /* vai DIRETO aos cartões: sem abrir o resumo no caminho */
+            const bCart = botaoMini(null, "btn-roxo",
+              () => mcEstudarDireto(x.disciplina, x.topico),
+              t("mat_ver_cartoes_n", { n: nCart }));
+            bCart.title = t("mat_ver_cartoes_ajuda", { n: nCart, tp: x.topico });
+            acoes.append(bCart);
+            /* e um caminho para MEXER neles, que aí sim é outra tarefa */
+            const bMex = botaoMini(null, "btn-cinza", () => {
+              mcApontarTopico(x.disciplina, x.topico);
               try { matCartoesAbrir(); matCartoesVer(); } catch (e) {}
-            }, t("mat_ver_cartoes_n", { n: nCart })));
+            }, t("mat_mexer_cartoes"));
+            bMex.title = t("mat_mexer_cartoes_ajuda");
+            acoes.append(bMex);
           }
           li.append(esq, acoes);
           bl.append(li);
@@ -1340,7 +1350,10 @@ function matIniciar() {
   if ($("btnMatSalvarEstadoTopo")) $("btnMatSalvarEstadoTopo").onclick = () => matSalvarEstado();
   if ($("btnMatMarcador")) $("btnMatMarcador").onclick = matPorMarcador;
   if ($("btnMatFecharTopo")) $("btnMatFecharTopo").onclick = () => matFechar();
-  if ($("btnMatLei")) $("btnMatLei").onclick = matAlternarLei;
+  if ($("btnMatLei")) $("btnMatLei").onclick = () => {
+    if (matAtual) leiAbrir(matAtual.disciplina, matAtual.topico);
+  };
+  leiIniciar();
   if ($("btnMatLogAba")) $("btnMatLogAba").onclick = matLogAbrir;
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
@@ -1457,6 +1470,7 @@ function matCartoesAbrir() {
   $("mcAviso").hidden = true;
   $("mcPreview").innerHTML = "";
   if ($("btnMcVer")) $("btnMcVer").hidden = !jaTem;
+  if ($("mcAcoesSalvos")) $("mcAcoesSalvos").hidden = false;
   $("dlgMatCartoes").showModal();
   reg("MATERIAL-CARTOES", "painel aberto", matAtual.topico
       + " · " + String(r.texto || "").length + " caracteres de resumo, "
@@ -1521,6 +1535,30 @@ function matCartoesConferir() {
     const tg = document.createElement("div");
     tg.className = "mc-tags"; tg.textContent = tags.join(" · ");
     d.append(f, v, tg);
+    /* ver aumentado e apagar, cartão a cartão: julgar um cartão exige
+     * vê-lo do jeito que ele vai aparecer, não numa linha espremida */
+    const ac = document.createElement("div");
+    ac.className = "mc-card-acoes";
+    const bAmp = document.createElement("button");
+    bAmp.type = "button"; bAmp.className = "btn-min";
+    bAmp.textContent = t("mc_ampliar");
+    bAmp.title = t("mc_ampliar_ajuda");
+    bAmp.onclick = () => mcEstudarAbrir(r.cards.indexOf(c));
+    ac.append(bAmp);
+    if (c._repetido) {
+      const bDel = document.createElement("button");
+      bDel.type = "button"; bDel.className = "btn-min btn-min-perigo";
+      bDel.textContent = t("mc_apagar_este");
+      bDel.title = t("mc_apagar_ajuda");
+      bDel.onclick = () => {
+        mcEstCartoes = mcCartoesSalvos();
+        const k = mcEstCartoes.findIndex((x) =>
+          String(x.front || "").trim().toLowerCase() === String(c.front || "").trim().toLowerCase());
+        if (k >= 0) mcApagarCartao(k);
+      };
+      ac.append(bDel);
+    }
+    d.append(ac);
     if (c._repetido) {
       const j = document.createElement("div");
       j.className = "mc-jatem"; j.textContent = t("mc_ja_existe");
@@ -1597,4 +1635,267 @@ function matCartoesIniciar() {
   if ($("btnMcVer")) $("btnMcVer").onclick = matCartoesVer;
   if ($("btnMcFechar")) $("btnMcFechar").onclick = () => $("dlgMatCartoes").close();
   if ($("mcTexto")) $("mcTexto").addEventListener("input", matCartoesConferir);
+  mcEstudoIniciar();
+}
+
+/* =====================================================================
+ * ESTUDAR OS CARTÕES DO TÓPICO EM TELA
+ *
+ * No MESMO desenho do módulo de cartões (renderCartaoEstilizado): o que se
+ * vê aqui é o que vai para o Anki. Serve para revisar sem exportar, e para
+ * julgar se o cartão presta — porque cartão ruim só se revela quando você
+ * tenta responder a ele.
+ * ===================================================================== */
+let mcEstCartoes = [];
+let mcEstIdx = 0;
+let mcEstMostra = false;
+
+function mcCartoesSalvos() {
+  if (!matAtual) return [];
+  const bruto = String((matResumos[matAtual.chave] || {}).cartoes || "");
+  if (!bruto.trim()) return [];
+  try { return parseText(bruto).cards; } catch (e) { return []; }
+}
+
+function mcEstudarAbrir(indice) {
+  mcEstCartoes = mcCartoesSalvos();
+  if (!mcEstCartoes.length) { uiAlert(t("mc_est_vazio")); return; }
+  mcEstIdx = Math.max(0, Math.min(mcEstCartoes.length - 1, indice || 0));
+  mcEstMostra = false;
+  $("mcEstTitulo").textContent = t("mc_est_titulo", { tp: matAtual.topico });
+  $("mcEstSub").textContent = t("mc_est_sub", { d: matAtual.disciplina });
+  mcEstPintar();
+  $("dlgMcEstudo").showModal();
+  matReg("estudo", "estudo em tela aberto", mcEstCartoes.length + " cartões");
+}
+
+function mcEstPintar() {
+  const cx = $("mcEstCartao");
+  cx.innerHTML = "";
+  const c = mcEstCartoes[mcEstIdx];
+  if (!c) return;
+  const div = document.createElement("div");
+  /* a MESMA função do módulo de cartões: se o desenho divergir aqui, a
+   * revisão em tela deixa de valer como ensaio do que vai para o Anki */
+  try { renderCartaoEstilizado(div, c, mcEstMostra); }
+  catch (e) {
+    div.textContent = String(c.front || "") + (mcEstMostra ? "\n" + String(c.back || "") : "");
+  }
+  cx.append(div);
+  $("mcEstPos").textContent = t("mc_est_pos", {
+    n: mcEstIdx + 1, t: mcEstCartoes.length });
+  $("btnMcEstVirar").textContent = t(mcEstMostra ? "mc_est_esconder" : "mc_est_virar");
+}
+
+function mcEstAndar(passo) {
+  if (!mcEstCartoes.length) return;
+  mcEstIdx = (mcEstIdx + passo + mcEstCartoes.length) % mcEstCartoes.length;
+  mcEstMostra = false;
+  mcEstPintar();
+}
+
+/* APAGAR UM CARTÃO — com duas perguntas.
+ * A primeira mostra o cartão inteiro; a segunda exige confirmar que é
+ * mesmo aquele. Cartão apagado não volta, e apagar o errado é fácil quando
+ * se está passando rápido por uma pilha deles. */
+async function mcApagarCartao(indice) {
+  const c = mcEstCartoes[indice];
+  if (!c || !matAtual) return;
+  const frente = String(c.front || "").slice(0, 120);
+  if (!(await uiConfirm(t("mc_apagar_1", { f: frente, v: String(c.back || "").slice(0, 120) })))) return;
+  if (!(await uiConfirm(t("mc_apagar_2", { f: frente })))) {
+    matReg("cartoes", "exclusão de cartão cancelada na segunda pergunta", frente);
+    return;
+  }
+
+  const bruto = String((matResumos[matAtual.chave] || {}).cartoes || "");
+  const linhas = bruto.split("\n");
+  const alvo = String(c.front || "").trim().toLowerCase();
+  const k = linhas.findIndex((l) =>
+    l.split("::")[0].trim().toLowerCase() === alvo);
+  if (k < 0) { uiAlert(t("mc_apagar_nao_achou")); return; }
+  linhas.splice(k, 1);
+  matGravarCartoes(matAtual.chave, linhas.join("\n").replace(/^\s+|\s+$/g, ""),
+    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  matReg("cartoes", "cartão apagado do tópico", frente);
+
+  mcEstCartoes = mcCartoesSalvos();
+  if (!mcEstCartoes.length) { $("dlgMcEstudo").close(); }
+  else { mcEstIdx = Math.min(mcEstIdx, mcEstCartoes.length - 1); mcEstMostra = false; mcEstPintar(); }
+  try { matCartoesVer(); } catch (e) {}
+  try { matRender(); } catch (e) {}
+}
+
+/* IMPORTAR de arquivo: quem tem os cartões num .txt não deveria abrir o
+ * arquivo, copiar e colar. O conteúdo entra na caixa e passa pela mesma
+ * conferência da colagem. */
+function mcImportarArquivo(arq) {
+  if (!arq) return;
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    const txt = String(leitor.result || "");
+    const antes = $("mcTexto").value;
+    $("mcTexto").value = (antes.trim() ? antes.replace(/\s*$/, "") + "\n" : "") + txt;
+    matReg("cartoes", "arquivo importado para a caixa de cartões",
+           (arq.name || "?") + " · " + txt.length + " caracteres");
+    matCartoesConferir();
+  };
+  leitor.onerror = () => uiAlert(t("mc_import_erro"));
+  leitor.readAsText(arq);
+}
+
+/* Aponta o "tópico atual" SEM abrir a janela do resumo.
+ * Consultar os cartões não deveria obrigar a abrir o texto — são duas
+ * coisas diferentes, e quem quer revisar cartão não quer ler resumo. */
+function mcApontarTopico(disciplina, topico) {
+  matAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
+  return matAtual;
+}
+
+function mcEstudarDireto(disciplina, topico) {
+  mcApontarTopico(disciplina, topico);
+  mcEstudarAbrir(0);
+}
+
+function mcEstudoIniciar() {
+  if ($("btnMcEstudar")) $("btnMcEstudar").onclick = () => mcEstudarAbrir(0);
+  if ($("btnMcEstAnt")) $("btnMcEstAnt").onclick = () => mcEstAndar(-1);
+  if ($("btnMcEstProx")) $("btnMcEstProx").onclick = () => mcEstAndar(1);
+  if ($("btnMcEstVirar")) $("btnMcEstVirar").onclick = () => {
+    mcEstMostra = !mcEstMostra; mcEstPintar();
+  };
+  if ($("btnMcEstApagar")) $("btnMcEstApagar").onclick = () => mcApagarCartao(mcEstIdx);
+  if ($("btnMcEstFechar")) $("btnMcEstFechar").onclick = () => $("dlgMcEstudo").close();
+  if ($("btnMcImportar")) $("btnMcImportar").onclick = () => $("mcArquivo").click();
+  if ($("mcArquivo")) $("mcArquivo").onchange = (ev) => {
+    const f = ev && ev.target && ev.target.files && ev.target.files[0];
+    mcImportarArquivo(f);
+    if (ev && ev.target) ev.target.value = "";
+  };
+}
+
+/* =====================================================================
+ * LEI SECA — documento próprio, ao lado do resumo
+ *
+ * Marcar o resumo inteiro como "lei seca" era confuso, e com razão: um
+ * tópico costuma ter as DUAS coisas — a letra da lei e o comentário sobre
+ * ela. São dois textos no mesmo registro, cada um com seu leitor, e o
+ * tópico pode ter um, outro ou os dois.
+ * ===================================================================== */
+let leiAtual = null;
+let leiModo = "ler";
+let leiSujo = false;
+let leiFonte = 15;
+
+function leiTem(chave) {
+  const r = matResumos[chave];
+  return !!(r && String(r.leiTexto || "").trim());
+}
+
+function leiAbrir(disciplina, topico) {
+  leiAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
+  const r = matResumos[leiAtual.chave] || {};
+  $("leiTitulo").textContent = t("lei_titulo", { tp: topico });
+  $("leiTexto").value = String(r.leiTexto || "");
+  leiSujo = false;
+  /* abre LENDO quando já existe texto, e EDITANDO quando está vazio: pedir
+   * para trocar de modo antes de escrever a primeira linha é atrito à toa */
+  leiTrocarModo(String(r.leiTexto || "").trim() ? "ler" : "editar");
+  $("dlgLeiSeca").showModal();
+  matReg("lei", "lei seca aberta", topico + " · "
+    + String(r.leiTexto || "").length + " caracteres");
+}
+
+function leiTrocarModo(modo) {
+  leiModo = modo === "editar" ? "editar" : "ler";
+  const lendo = leiModo === "ler";
+  $("leiTexto").hidden = lendo;
+  $("leiLeitura").hidden = !lendo;
+  $("btnLeiModo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
+  if (lendo) {
+    $("leiLeitura").innerHTML = matParaHtml($("leiTexto").value)
+      || "<p class='nota'>" + t("lei_vazia") + "</p>";
+    $("leiLeitura").style.fontSize = leiFonte + "px";
+  }
+}
+
+function leiGravar() {
+  if (!leiAtual) return;
+  const txt = $("leiTexto").value;
+  const antigo = matResumos[leiAtual.chave] || {};
+  /* Object.assign sobre o antigo, como em matGravar: gravar a lei seca não
+   * pode apagar resumo, cartões nem marcador. */
+  matResumos[leiAtual.chave] = Object.assign({}, antigo, {
+    leiTexto: txt,
+    disciplina: antigo.disciplina || leiAtual.disciplina,
+    topico: antigo.topico || leiAtual.topico,
+    concurso: antigo.concurso
+      || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
+    criado: antigo.criado || new Date().toISOString(),
+    tocado: new Date().toISOString(),
+  });
+  matSalvar();
+  leiSujo = false;
+  matReg("lei", "lei seca gravada", leiAtual.topico + " · " + txt.length + " caracteres");
+  if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+  toast("lei_salva");
+}
+
+/* Registrar que leu: mesma ideia do resumo, mas dizendo que foi lei seca —
+ * ler a letra da lei e ler comentário são esforços diferentes. */
+function leiRegistrarLeitura() {
+  if (!leiAtual) return;
+  const txt = $("leiTexto").value;
+  const palavras = (txt.match(/\S+/g) || []).length;
+  const min = Math.max(5, Math.round(palavras / 150));
+  let item = null;
+  try {
+    const r = lerEdital($("editalTexto").value);
+    const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
+      prova: $("edProva").value, feitos: edProgresso });
+    item = plano.itens.find((x) => x.chave === leiAtual.chave) || null;
+  } catch (e) { item = null; }
+  if (item) item = Object.assign({}, item, { minutos: min });
+  else item = { disciplina: leiAtual.disciplina, nome: leiAtual.topico,
+                chave: leiAtual.chave, minutos: min, bruto: 0,
+                disciplinaPeso: null, peso: null, avulso: true };
+
+  if (typeof edMarcar === "function") {
+    const jaEstudado = typeof edProgresso !== "undefined" && edProgresso[leiAtual.chave];
+    edMarcar(item, jaEstudado ? "revisado" : "feito",
+      { minutos: min, formas: ["leitura"], humor: "media" });
+  }
+  matReg("lei", "leitura de lei seca registrada",
+         min + " min, " + palavras + " palavras");
+  uiAlert(t("lei_lida", { n: min }));
+}
+
+async function leiFechar() {
+  if (leiSujo) {
+    const r = await matPerguntarSaida();
+    if (r !== "salvar" && r !== "sair") return;
+    if (r === "salvar") leiGravar();
+    else matReg("lei", "alterações da lei seca descartadas", leiAtual && leiAtual.topico);
+  }
+  leiSujo = false;
+  $("dlgLeiSeca").close();
+  leiAtual = null;
+}
+
+function leiIniciar() {
+  if ($("btnLeiModo")) $("btnLeiModo").onclick = () => {
+    if (leiModo === "editar") leiGravar();
+    leiTrocarModo(leiModo === "editar" ? "ler" : "editar");
+  };
+  if ($("btnLeiSalvar")) $("btnLeiSalvar").onclick = leiGravar;
+  if ($("btnLeiLido")) $("btnLeiLido").onclick = leiRegistrarLeitura;
+  if ($("btnLeiFechar")) $("btnLeiFechar").onclick = () => leiFechar();
+  if ($("btnLeiFechar2")) $("btnLeiFechar2").onclick = () => leiFechar();
+  if ($("btnLeiMaior")) $("btnLeiMaior").onclick = () => {
+    leiFonte = Math.min(34, leiFonte + 2); leiTrocarModo(leiModo);
+  };
+  if ($("btnLeiMenor")) $("btnLeiMenor").onclick = () => {
+    leiFonte = Math.max(11, leiFonte - 2); leiTrocarModo(leiModo);
+  };
+  if ($("leiTexto")) $("leiTexto").addEventListener("input", () => { leiSujo = true; });
 }
