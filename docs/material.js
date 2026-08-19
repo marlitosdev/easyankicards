@@ -336,7 +336,7 @@ function matParaHtml(txt) {
     .replace(/==!((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-imp">$1</mark>')
     .replace(/==\?((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-duv">$1</mark>')
     .replace(/==§((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-lei">$1</mark>')
-    .replace(/==\*((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova">$1</mark>')
+    .replace(/==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova">$1</mark>')
     .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg">$1</mark>')
     .replace(/==((?:[^=\n]|=(?!=))+)==/g, "<mark>$1</mark>");
   linhas.forEach((l) => {
@@ -453,6 +453,8 @@ function matTrocarModo(modo) {
     $("btnMatModoTopo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
   matPintarMarcador();
   matPintarLei();
+  matPintarDuvidas();
+  matPintarConserto();
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
   if (lendo) {
     $("matLeitura").innerHTML = matParaHtml($("matTexto").value)
@@ -495,6 +497,14 @@ function matAmpliar() {
  * ------------------------------------------------------------------ */
 /* Seis cores. Os sufixos são de um caractere só e nenhum deles pode ser
  * "=", senão o fecho "==" fica ambíguo. */
+/* O SUFIXO DE COR NÃO PODE COMER O NEGRITO.
+ * "==**Ato Complexo:**" tinha o primeiro "*" lido como sufixo da cor
+ * "prova": tirar a marca levava um asterisco junto e o negrito ficava
+ * aberto — "*Ato Complexo:**". O "*" só é sufixo quando NÃO for seguido de
+ * outro "*", porque "**" é negrito. Uma constante só, para os quatro
+ * lugares que precisam disso nunca divergirem. */
+const MAT_SUF = "(?:[!?\u00a7~]|\\*(?!\\*))?";
+
 const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?",
                      lei: "==§", prova: "==*", pegadinha: "==~" };
 
@@ -637,7 +647,7 @@ function matTirarMarca() {
   const alvo = matNormalizar(matSelGuardada);
 
   /* todas as marcas do texto, com onde começam e terminam */
-  const re = /==[!?§*~]?((?:[^=\n]|=(?!=))+)==/g;
+  const re = new RegExp("==" + MAT_SUF + "((?:[^=\\n]|=(?!=))+)==", "g");
   let achou = null, mm;
   while ((mm = re.exec(txt)) !== null) {
     const dentro = matNormalizar(mm[1]);
@@ -647,7 +657,7 @@ function matTirarMarca() {
   }
   if (!achou) { matRecusa("marca_nao_achou", matSelGuardada); return; }
 
-  const abre = achou[0].match(/^==[!?§*~]?/)[0];
+  const abre = achou[0].match(new RegExp("^==" + MAT_SUF))[0];
   ta.value = txt.slice(0, achou.index) + achou[1]
     + txt.slice(achou.index + achou[0].length);
   matReg("marca", "marca retirada (" + abre + ")", achou[1].slice(0, 50));
@@ -695,6 +705,30 @@ function matReg(tipo, oque, detalhe) {
   try { reg("MATERIAL-" + tipo.toUpperCase(), oque, detalhe); } catch (e) {}
 }
 
+/* TODO BOTÃO DO RESUMO PASSA POR AQUI.
+ * Enquanto cada botão chamava sua função direto, um erro dentro dela
+ * morria no console do navegador — que ninguém abre — e o registro dos
+ * resumos ficava mudo justamente no evento que interessa. Envolvendo os
+ * handlers, qualquer falha vira uma linha com o NOME do botão. */
+function matBotao(id, nome, acao) {
+  const b = $(id);
+  if (!b) return;
+  b.onclick = function () {
+    try {
+      const r = acao.apply(this, arguments);
+      /* promessa que falha também tem de contar */
+      if (r && typeof r.catch === "function") {
+        r.catch((e) => matReg("erro", "falha no botão " + nome,
+          (e && e.message) || String(e)));
+      }
+      return r;
+    } catch (e) {
+      matReg("erro", "falha no botão " + nome, (e && e.message) || String(e));
+      try { uiAlert(t("mat_erro_botao", { b: nome })); } catch (x) {}
+    }
+  };
+}
+
 function matLogTexto() {
   if (!matLog.length) return t("mat_log_vazio");
   const linhas = matLog.slice().reverse().map((x) => {
@@ -718,6 +752,40 @@ function matAlternarLei() {
   matReg("tipo", (r.leiSeca ? "marcado" : "desmarcado") + " como lei seca", "");
   matPintarLei();
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+}
+
+/* Quantas dúvidas ESTE resumo tem em aberto. Sem o número aqui, a pessoa
+ * só descobre indo à lista geral — e marca de dúvida que ninguém revisita
+ * é o mesmo que não ter marcado. */
+function matPintarDuvidas() {
+  const b = $("btnMatDuvidas");
+  if (!b) return;
+  const r = matAtual && matResumos[matAtual.chave];
+  const conta = (s) => (String(s || "").match(/==\?((?:[^=\n]|=(?!=))+)==/g) || []).length;
+  const n = r ? conta(r.texto) + conta(r.leiTexto) : 0;
+  b.hidden = !n;
+  if (n) b.textContent = t("mat_duv_conta", { n });
+}
+
+function matPintarConserto() {
+  const b = $("btnMatConsertar");
+  if (!b) return;
+  const q = matAtual ? matNegritoQuebrado(matAtual.chave) : [];
+  b.hidden = !q.length;
+  if (q.length) b.textContent = t("mat_consertar_btn", { n: q.length });
+}
+
+async function matConsertarAbrir() {
+  if (!matAtual) return;
+  const q = matNegritoQuebrado(matAtual.chave);
+  if (!q.length) { uiAlert(t("mat_consertar_nada")); return; }
+  const amostra = q.slice(0, 4).map((x) => "· " + x.txt.slice(0, 90)).join("\n");
+  if (!(await uiConfirm(t("mat_consertar_conf", { n: q.length, a: amostra })))) return;
+  const n = matConsertarNegrito(matAtual.chave);
+  $("matTexto").value = String((matResumos[matAtual.chave] || {}).texto || "");
+  matTrocarModo(matModo);
+  matPintarConserto();
+  await uiAlert(t("mat_consertado", { n }));
 }
 
 function matPintarLei() {
@@ -823,7 +891,8 @@ function matMarcarSelecao(tipo) {
 
   const jaMarcada = (p) => {
     const i0 = mapa[p];
-    return /==[!?§*~]?$/.test(ta.value.slice(Math.max(0, i0 - 3), i0));
+    return new RegExp("==" + MAT_SUF + "$")
+      .test(ta.value.slice(Math.max(0, i0 - 3), i0));
   };
   /* se a leitura sabe ONDE você clicou, vale a ocorrência mais próxima;
    * senão, a primeira que ainda estiver livre */
@@ -1339,22 +1408,26 @@ function matIniciar() {
   if (!$("matTexto")) return;
   $("btnMatSalvar").onclick = matGravarEditor;
   $("btnMatColar").onclick = matColarDeFora;
-  $("btnMarcaD").onclick = () => matMarcarSelecao("destaque");
-  $("btnMarcaI").onclick = () => matMarcarSelecao("importante");
-  $("btnMarcaQ").onclick = () => matMarcarSelecao("duvida");
-  $("btnMarcaLimpar").onclick = matLimparMarcas;
-  if ($("btnMarcaLei")) $("btnMarcaLei").onclick = () => matMarcarSelecao("lei");
-  if ($("btnMarcaProva")) $("btnMarcaProva").onclick = () => matMarcarSelecao("prova");
-  if ($("btnMarcaPeg")) $("btnMarcaPeg").onclick = () => matMarcarSelecao("pegadinha");
-  if ($("btnMarcaTirar")) $("btnMarcaTirar").onclick = matTirarMarca;
-  if ($("btnMatSalvarEstadoTopo")) $("btnMatSalvarEstadoTopo").onclick = () => matSalvarEstado();
-  if ($("btnMatMarcador")) $("btnMatMarcador").onclick = matPorMarcador;
-  if ($("btnMatFecharTopo")) $("btnMatFecharTopo").onclick = () => matFechar();
+  matBotao("btnMarcaD", "marcar destaque", () => matMarcarSelecao("destaque"));
+  matBotao("btnMarcaI", "marcar importante", () => matMarcarSelecao("importante"));
+  matBotao("btnMarcaQ", "marcar dúvida", () => matMarcarSelecao("duvida"));
+  matBotao("btnMarcaLimpar", "limpar marcas", matLimparMarcas);
+  matBotao("btnMarcaLei", "marcar lei", () => matMarcarSelecao("lei"));
+  matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
+  matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
+  matBotao("btnMarcaTirar", "tirar marca", matTirarMarca);
+  matBotao("btnMatSalvarEstadoTopo", "salvar estado (topo)", () => matSalvarEstado());
+  matBotao("btnMatMarcador", "pôr marcador", matPorMarcador);
+  matBotao("btnMatFecharTopo", "fechar (topo)", () => matFechar());
+  matBotao("btnMatDuvidas", "dúvidas deste resumo", matDuvidasAbrir);
   if ($("btnMatLei")) $("btnMatLei").onclick = () => {
     if (matAtual) leiAbrir(matAtual.disciplina, matAtual.topico);
   };
   leiIniciar();
   if ($("btnMatLogAba")) $("btnMatLogAba").onclick = matLogAbrir;
+  matBotao("btnDuvidas", "minhas dúvidas", matDuvidasAbrir);
+  matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
+  if ($("btnDuvFechar")) $("btnDuvFechar").onclick = () => $("dlgDuvidas").close();
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
   if ($("btnMatLogLimpar")) $("btnMatLogLimpar").onclick = matLogLimpar;
@@ -1363,7 +1436,7 @@ function matIniciar() {
     toast("mat_log_copiado");
   };
   matLogCarregar();
-  if ($("btnMatIrMarcador")) $("btnMatIrMarcador").onclick = matIrMarcador;
+  matBotao("btnMatIrMarcador", "ir ao marcador", matIrMarcador);
   $("btnMatSalvarEstado").onclick = () => matSalvarEstado();
 
   /* mantém a última seleção viva: o clique no botão de marcar chega depois
@@ -1898,4 +1971,179 @@ function leiIniciar() {
     leiFonte = Math.max(11, leiFonte - 2); leiTrocarModo(leiModo);
   };
   if ($("leiTexto")) $("leiTexto").addEventListener("input", () => { leiSujo = true; });
+}
+
+/* =====================================================================
+ * MINHAS DÚVIDAS
+ *
+ * Marcar em azul o que não se entendeu só serve se der para voltar depois.
+ * Espalhadas por vinte resumos, as dúvidas somem — e o que era "vou ver
+ * isso" vira "esqueci que não sabia". Aqui elas viram uma lista única,
+ * atravessando todos os tópicos e concursos.
+ *
+ * A lista é DERIVADA do texto, não uma cópia: apagar a marca no resumo tira
+ * a dúvida daqui, e nada fica fora de sincronia.
+ * ===================================================================== */
+function matDuvidas() {
+  const fora = [];
+  Object.keys(matResumos || {}).forEach((chave) => {
+    const r = matResumos[chave];
+    if (!r) return;
+    [["texto", r.texto], ["lei", r.leiTexto]].forEach(([onde, txt]) => {
+      const s = String(txt || "");
+      if (!s) return;
+      const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
+      let mm;
+      while ((mm = re.exec(s)) !== null) {
+        fora.push({
+          chave, onde,
+          disciplina: r.disciplina || "", topico: r.topico || "",
+          concurso: r.concurso || "",
+          trecho: mm[1].replace(/(\*\*|__|_)/g, "").trim(),
+          pos: mm.index,
+        });
+      }
+    });
+  });
+  return fora;
+}
+
+/* Resolver = tirar a marca de dúvida, mantendo o texto. Não apaga nada do
+ * resumo: a dúvida deixa de ser dúvida, o conteúdo fica. */
+function matResolverDuvida(d) {
+  const r = matResumos[d.chave];
+  if (!r) return false;
+  const campo = d.onde === "lei" ? "leiTexto" : "texto";
+  const s = String(r[campo] || "");
+  const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
+  let mm, achou = null;
+  while ((mm = re.exec(s)) !== null) {
+    if (mm.index === d.pos) { achou = mm; break; }
+  }
+  if (!achou) return false;
+  r[campo] = s.slice(0, achou.index) + achou[1] + s.slice(achou.index + achou[0].length);
+  r.tocado = new Date().toISOString();
+  matSalvar();
+  matReg("duvida", "dúvida marcada como resolvida",
+         (d.topico || "?") + " · " + d.trecho.slice(0, 60));
+  return true;
+}
+
+/* CONSERTO DE NEGRITO QUEBRADO.
+ * Até a v8.88, tirar a marca de um trecho que começava com "**negrito**"
+ * levava um asterisco junto (o "*" era lido como sufixo de cor). O texto
+ * ficava com número ímpar de "*" e a leitura embaralhava dali em diante.
+ * Isto encontra as linhas nesse estado e mostra ANTES de mexer. */
+/* Marca ABERTA e nunca fechada na mesma linha: "==?Ato Complexo:**" sem o
+ * "==" de fecho. A leitura mostra o "==?" literal, como se fosse texto. */
+function matMarcaOrfa(linha) {
+  const abre = new RegExp("==" + MAT_SUF, "g");
+  const fecha = /==/g;
+  const total = (String(linha).match(fecha) || []).length;
+  return total % 2 === 1;
+}
+
+function matNegritoQuebrado(chave) {
+  const r = matResumos[chave];
+  if (!r) return [];
+  const fora = [];
+  [["texto", r.texto], ["lei", r.leiTexto]].forEach(([onde, txt]) => {
+    String(txt || "").split("\n").forEach((l, k) => {
+      const n = (l.match(/\*\*/g) || []).length;
+      const soltos = (l.match(/\*/g) || []).length - n * 2;
+      const marcaSolta = matMarcaOrfa(l);
+      if (n % 2 === 1 || soltos > 0 || marcaSolta)
+        fora.push({ onde, linha: k, txt: l.slice(0, 120),
+                    negrito: n % 2 === 1 || soltos > 0, marca: marcaSolta });
+    });
+  });
+  return fora;
+}
+
+/* Tira os asteriscos órfãos, sem tocar nos pares. Não adivinha onde o
+ * negrito deveria terminar: só limpa o que sobrou solto, que é o que
+ * atrapalha a leitura. */
+function matConsertarNegrito(chave) {
+  const r = matResumos[chave];
+  if (!r) return 0;
+  let n = 0;
+  ["texto", "leiTexto"].forEach((campo) => {
+    const s = String(r[campo] || "");
+    if (!s) return;
+    const linhas = s.split("\n").map((l0) => {
+      let l = l0;
+      /* 1. marca aberta e nunca fechada: tira o abridor. Não inventa onde
+       * a marca deveria terminar — inventar seria pintar o que a pessoa
+       * não escolheu. */
+      if (matMarcaOrfa(l)) {
+        l = l.replace(new RegExp("==" + MAT_SUF), "");
+        n++;
+      }
+      const pares = (l.match(/\*\*/g) || []).length;
+      const soltos = (l.match(/\*/g) || []).length - pares * 2;
+      if (pares % 2 === 0 && soltos === 0) return l;
+      n++;
+      /* O defeito REMOVIA um asterisco de abertura ("**Ato" virava "*Ato"),
+       * então consertar é devolvê-lo — não tirar o par que sobrou. Tirar o
+       * "*" solto deixaria "Ato Complexo:**", que continua desequilibrado.
+       * A primeira versão deste conserto fazia exatamente isso. */
+      return l.replace(/(^|[^*])\*(?!\*)([^*]*\*\*)/, "$1**$2");
+    });
+    r[campo] = linhas.join("\n");
+  });
+  if (n) {
+    r.tocado = new Date().toISOString();
+    matSalvar();
+    matReg("conserto", "asteriscos órfãos removidos", n + " linha(s)");
+  }
+  return n;
+}
+
+function matDuvidasAbrir() {
+  const lista = matDuvidas();
+  const box = $("duvLista");
+  box.innerHTML = "";
+  $("duvResumo").textContent = lista.length
+    ? t("duv_resumo", { n: lista.length,
+        d: new Set(lista.map((x) => x.disciplina)).size })
+    : t("duv_vazio");
+
+  lista.forEach((d) => {
+    const li = document.createElement("div");
+    li.className = "duv-item";
+    const tr = document.createElement("div");
+    tr.className = "duv-trecho";
+    tr.textContent = "“" + d.trecho.slice(0, 220) + "”";
+    const onde = document.createElement("div");
+    onde.className = "duv-onde";
+    onde.textContent = (d.concurso ? d.concurso + " · " : "")
+      + (d.disciplina || "?") + " › " + (d.topico || "?")
+      + (d.onde === "lei" ? " · " + t("duv_na_lei") : "");
+    const ac = document.createElement("div");
+    ac.className = "duv-acoes";
+    const bAbrir = document.createElement("button");
+    bAbrir.type = "button"; bAbrir.className = "btn-min";
+    bAbrir.textContent = t("duv_abrir");
+    bAbrir.title = t("duv_abrir_ajuda");
+    bAbrir.onclick = () => {
+      $("dlgDuvidas").close();
+      if (d.onde === "lei") leiAbrir(d.disciplina, d.topico);
+      else matAbrirEditor({ disciplina: d.disciplina, nome: d.topico }, false);
+    };
+    const bOk = document.createElement("button");
+    bOk.type = "button"; bOk.className = "btn-min btn-min-ok";
+    bOk.textContent = t("duv_resolvida");
+    bOk.title = t("duv_resolvida_ajuda");
+    bOk.onclick = async () => {
+      if (!(await uiConfirm(t("duv_conf", { t: d.trecho.slice(0, 90) })))) return;
+      matResolverDuvida(d);
+      matDuvidasAbrir();
+      try { matRender(); } catch (e) {}
+    };
+    ac.append(bAbrir, bOk);
+    li.append(tr, onde, ac);
+    box.append(li);
+  });
+  $("dlgDuvidas").showModal();
+  matReg("duvida", "lista de dúvidas aberta", lista.length + " dúvidas");
 }
