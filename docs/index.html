@@ -952,6 +952,26 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ed-agenda-topo{margin:0 0 14px}
 .ed-agenda-cx{border-color:var(--sutil)}
 .ag-medidor{margin:6px 0 10px}
+/* barra de cada tópico: quanto já foi posto nele contra o que ele pede */
+.reg-atalhos{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.reg-atalho{all:unset;cursor:pointer;padding:3px 11px;border-radius:999px;font-size:11px;
+  font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
+.reg-atalho:hover{color:var(--texto);border-color:var(--sutil)}
+.reg-q{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:4px}
+.reg-q label{display:flex;flex-direction:column;gap:3px;font-size:10.5px;color:var(--sutil)}
+.reg-q input{width:88px}
+.reg-q-pct{font-size:12px;font-weight:800;color:#30a46c;padding-bottom:4px}
+.reg-q-pct.baixo{color:#e5484d}
+.reg-q-pct.medio{color:#f5a524}
+.it-barra{height:4px;border-radius:999px;background:var(--campo);overflow:hidden;
+  margin-top:5px;max-width:280px}
+.it-fill{height:100%;width:0;background:transparent}
+.it-fill.parcial{background:#f5a524}
+.it-fill.cheio{background:#30a46c}
+.di-per{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
+  font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
+.di-per.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
+#diarioPeriodos{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0}
 .ag-barra{height:9px;border-radius:999px;background:var(--campo);overflow:hidden;
   border:1px solid var(--borda)}
 .ag-fill{height:100%;background:#e5484d;transition:width .3s ease}
@@ -1897,11 +1917,41 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <div class="reg-tempo">
       <input type="range" id="regMinSlider" min="5" max="240" step="5" value="60">
       <input type="number" id="regMinutos" min="1" max="600" step="5">
-    </div></div>
+    </div>
+    <!-- Arrastar o cursor para acertar 45 minutos exige pontaria que
+         ninguém tem pressa de ter. Os atalhos SOMAM ao valor atual. -->
+    <div class="reg-atalhos" id="regAtalhos"></div></div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_humor"></span>
     <div class="reg-formas" id="regHumor"></div></div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_forma"></span>
+    <span class="mat-f-dica" data-i18n="ed_reg_forma_dica"></span>
     <div class="reg-formas" id="regFormas"></div></div>
+
+  <!-- Só aparece quando "questões" está marcado: perguntar quantas questões
+       você fez numa sessão de videoaula é atrito puro. -->
+  <div class="reg-lin-col" id="regQuestoesBloco" hidden>
+    <span data-i18n="ed_reg_questoes"></span>
+    <div class="reg-q">
+      <label><span data-i18n="ed_reg_q_feitas"></span>
+        <input type="number" id="regQFeitas" min="0" max="999" step="1" placeholder="0"></label>
+      <label><span data-i18n="ed_reg_q_certas"></span>
+        <input type="number" id="regQCertas" min="0" max="999" step="1" placeholder="0"></label>
+      <span class="reg-q-pct" id="regQPct"></span>
+    </div>
+  </div>
+
+  <div class="reg-lin-col">
+    <span data-i18n="ed_reg_onde"></span>
+    <span class="mat-f-dica" data-i18n="ed_reg_onde_dica"></span>
+    <input type="text" id="regOnde" class="mat-busca" placeholder="PDF pág. 15-40 · Videoaula 03 e 04">
+  </div>
+
+  <div class="reg-lin-col">
+    <button type="button" class="btn-min" id="btnRegObs" data-i18n="ed_reg_obs_abrir"
+      title="Espaço para anotar a pegadinha que te pegou ou a dúvida a esclarecer depois. Fica junto do registro no diário."></button>
+    <textarea id="regObs" rows="3" hidden style="width:100%;box-sizing:border-box"
+      placeholder="O que te pegou nesta sessão? Pegadinha, dúvida, ponto a revisar."></textarea>
+  </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
     <button class="btn btn-azul" id="btnRegRevisao" data-i18n="ed_reg_revisao"></button>
@@ -2296,6 +2346,11 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 <dialog id="dlgDiario" class="ui-modal">
   <h3 data-i18n="ed_diario_tit"></h3>
   <p class="nota" data-i18n="ed_diario_ajuda"></p>
+  <div id="diarioPeriodos"></div>
+  <input type="search" id="diarioBusca" class="mat-busca"
+    placeholder="Buscar por tópico, disciplina ou concurso"
+    title="Filtra os registros do diário. Combina com o período escolhido acima.">
+  <div class="nota" id="diarioConta"></div>
   <div class="ed-diario-res" id="diarioResumo"></div>
   <div id="diarioLista" style="max-height:52vh;overflow-y:auto;overflow-x:hidden;margin:8px 0"></div>
   <div class="dlg-rodape">

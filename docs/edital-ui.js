@@ -225,6 +225,18 @@ function edPontos(itens) {
  * alternava a marca, inclusive no botão "R", e o resultado era um estado que
  * parecia não desfazer. Agora é um <div>, e cada controle responde só por
  * si — quem clica na caixa marca a caixa; quem clica no R marca o R. */
+/* Minutos já registrados NAQUELE tópico. A agenda dizia quanto o tópico
+ * pede e nunca quanto você já pôs nele — e a diferença entre "1h de 1h" e
+ * "10min de 1h" é o que decide se você continua ou passa para o próximo. */
+function minutosDoTopico(chave) {
+  return (edDiario || []).reduce((a, x) => {
+    if (!x || x.a === "pendente") return a;
+    const k = x.c || (typeof matChave === "function"
+      ? matChave(x.disc, x.n) : "");
+    return k === chave ? a + (Number(x.m) || 0) : a;
+  }, 0);
+}
+
 function edLinhaTopico(i, semDisciplina) {
   const li = document.createElement("div");
   li.className = "ed-item" + (i.feito ? " feito" : "")
@@ -298,6 +310,19 @@ function edLinhaTopico(i, semDisciplina) {
   /* "1h" diz quanto; "seg 19:00 · 1h" diz quando, e é o quando que vira
    * compromisso. A agenda só aparece na semana atual, onde faz sentido. */
   min.textContent = (i.dia ? i.dia + " " + i.hora + " · " : "") + horasTexto(i.minutos);
+
+  /* BARRA DO TÓPICO: o que você já pôs contra o que ele pede. */
+  const feitoMin = minutosDoTopico(i.chave);
+  const pctT = i.minutos ? Math.min(100, Math.round((feitoMin / i.minutos) * 100)) : 0;
+  const barraT = document.createElement("div");
+  barraT.className = "it-barra";
+  const fillT = document.createElement("div");
+  fillT.className = "it-fill" + (pctT >= 100 ? " cheio" : (pctT > 0 ? " parcial" : ""));
+  fillT.style.width = pctT + "%";
+  barraT.append(fillT);
+  barraT.title = t("ed_it_barra", {
+    f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
+  meio.append(barraT);
 
   /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela
    * teria de comparar por texto, que quebra com nomes parecidos */
@@ -403,6 +428,9 @@ function anotarDiario(i, acao, detalhe) {
                   p: i.bruto, m: (detalhe && detalhe.minutos) || i.minutos,
                   f: (detalhe && detalhe.formas) || null,
                   hu: (detalhe && detalhe.humor) || null, a: acao,
+                  q: (detalhe && detalhe.questoes) || null,
+                  onde: (detalhe && detalhe.onde) || null,
+                  obs: (detalhe && detalhe.obs) || null,
                   cc: concursoAtual().nome });
   salvarDiario();
 }
@@ -423,9 +451,16 @@ function completarDiario(itens) {
   if (n) { salvarDiario(); reg("EDITAL-DIARIO", n + " marca(s) antigas viraram registro"); }
 }
 
+/* Períodos do diário. "Últimos 7 dias" era a única janela, e ela não
+ * responde "quanto rendi este mês" nem "quanto já pus neste ciclo". */
+const DIARIO_PERIODOS = [7, 30, 90, 0];   /* 0 = tudo */
+let diarioPeriodo = 7;
+
 function estatisticasDiario(dias) {
-  const limite = Date.now() - (dias || 7) * 86400000;
-  const recentes = edDiario.filter((x) => new Date(x.d + "T00:00:00") >= limite
+  const n = dias === undefined ? 7 : dias;
+  const limite = n ? Date.now() - n * 86400000 : 0;
+  const recentes = edDiario.filter((x) => (!limite
+      || new Date(x.d + "T00:00:00") >= limite)
     && x.a !== "pendente");
   return {
     eventos: recentes.length,
@@ -433,6 +468,9 @@ function estatisticasDiario(dias) {
     peso: recentes.reduce((a, x) => a + (x.p || 0), 0),
     minutos: recentes.reduce((a, x) => a + (x.m || 0), 0),
     revisoes: recentes.filter((x) => x.a === "revisado").length,
+    /* média por dia com estudo — "12h em 30 dias" e "12h em 3 dias" são
+     * situações opostas, e o total sozinho não distingue as duas */
+    dias: new Set(recentes.map((x) => x.d)).size,
   };
 }
 
@@ -538,12 +576,42 @@ function gerarPromptDoDiag() {
   abrirTextoSimples(t("ed_diag_btn"), L.join("\n"));
 }
 
+/* Quantos registros a lista mostra de uma vez. Sem limite, um diário de
+ * meses monta milhares de linhas de uma vez: a janela demora a abrir e a
+ * rolagem engasga. O limite cresce sob demanda. */
+const DIARIO_PAGINA = 60;
+let diarioMostrar = DIARIO_PAGINA;
+let diarioBusca = "";
+
+function diarioPintarPeriodos() {
+  const cx = $("diarioPeriodos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  DIARIO_PERIODOS.forEach((d) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "di-per" + (d === diarioPeriodo ? " ativa" : "");
+    b.textContent = t("ed_diario_per_" + d);
+    b.onclick = () => { diarioPeriodo = d; diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
+    cx.append(b);
+  });
+}
+
 function abrirDiario() {
   const lista = $("diarioLista");
   lista.innerHTML = "";
-  const st = estatisticasDiario(7);
-  $("diarioResumo").textContent = t("ed_diario_resumo", { t: st.topicos,
-    r: st.revisoes, h: horasTexto(st.minutos), e: edDiario.length });
+  const st = estatisticasDiario(diarioPeriodo);
+  /* HORAS NA FRENTE, com rótulo. Antes elas apareciam soltas no meio de
+   * "7 tópicos · 0 revisões · 1h30 · 3 registros": um número sem nome,
+   * espremido entre outros. */
+  const med = st.dias ? Math.round(st.minutos / st.dias) : 0;
+  $("diarioResumo").textContent = t("ed_diario_resumo", {
+    h: horasTexto(st.minutos),
+    p: diarioPeriodo ? t("ed_diario_per_" + diarioPeriodo) : t("ed_diario_per_0"),
+    t: st.topicos, r: st.revisoes, e: st.eventos,
+    d: st.dias, med: horasTexto(med),
+  });
+  diarioPintarPeriodos();
   if (!edDiario.length) {
     const p = document.createElement("div");
     p.className = "nota"; p.textContent = t("ed_diario_vazio");
@@ -551,8 +619,21 @@ function abrirDiario() {
   }
   /* mais recente primeiro: o registro errado costuma ser o que acabou de
    * ser feito, e obrigar a rolar até o fim para achá-lo seria hostil */
-  edDiario.slice().reverse().forEach((x, k) => {
-    const idx = edDiario.length - 1 - k;
+  /* Filtra e LIMITA antes de desenhar. Um diário de meses tem milhares de
+   * registros; montar todos de uma vez trava a abertura da janela. */
+  const q = String(diarioBusca || "").trim().toLowerCase();
+  const todos = edDiario.map((x, idx) => ({ x, idx })).reverse()
+    .filter(({ x }) => {
+      if (diarioPeriodo) {
+        const lim = Date.now() - diarioPeriodo * 86400000;
+        if (!(new Date(String(x.d) + "T00:00:00") >= lim)) return false;
+      }
+      if (!q) return true;
+      return ((x.n || "") + " " + (x.disc || "") + " " + (x.cc || ""))
+        .toLowerCase().includes(q);
+    });
+  const visiveis = todos.slice(0, diarioMostrar);
+  visiveis.forEach(({ x, idx }) => {
     const li = document.createElement("div");
     li.className = "diario-item";
     const q = document.createElement("span");
@@ -598,13 +679,35 @@ function abrirDiario() {
     li.append(cima, meio, acoes);
     lista.append(li);
   });
+
+  if (todos.length > visiveis.length) {
+    const mais = document.createElement("button");
+    mais.type = "button";
+    mais.className = "btn-min";
+    mais.style.marginTop = "8px";
+    mais.textContent = t("ed_diario_mais", {
+      n: Math.min(DIARIO_PAGINA, todos.length - visiveis.length),
+      r: todos.length - visiveis.length });
+    mais.onclick = () => { diarioMostrar += DIARIO_PAGINA; abrirDiario(); };
+    lista.append(mais);
+  }
+  const conta = $("diarioConta");
+  if (conta) {
+    conta.textContent = todos.length
+      ? t("ed_diario_mostrando", { v: visiveis.length, t: todos.length })
+      : t("ed_diario_sem_filtro");
+  }
   $("dlgDiario").showModal();
 }
 
 /* Formas de estudo. A lista é curta de propósito: dez opções viram uma
  * decisão a cada registro, e decisão a cada registro é o que faz a pessoa
  * parar de registrar. */
-const ED_FORMAS = ["leitura", "videoaula", "questoes", "resumo", "mapa", "revisao"];
+/* Ler a letra da lei e rodar cartões são dinâmicas diferentes de ler um PDF
+ * teórico — e é a diferença entre elas que explica por que um tópico "com
+ * 3h de estudo" continua caindo. */
+const ED_FORMAS = ["leitura", "videoaula", "questoes", "leiseca",
+                   "flashcards", "resumo", "mapa", "revisao"];
 /* Produtividade percebida. Três níveis: cinco viram uma decisão demorada
  * sobre algo que é sensação, não medida. */
 const ED_HUMOR = ["ruim", "media", "boa"];
@@ -620,6 +723,12 @@ function abrirRegistro(i) {
   $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
   $("regMinutos").value = i.minutos;
   $("regMinSlider").value = Math.min(240, i.minutos);
+  ["regQFeitas", "regQCertas", "regOnde", "regObs"].forEach((id) => {
+    if ($(id)) $(id).value = "";
+  });
+  if ($("regObs")) $("regObs").hidden = true;
+  regPintarAtalhos();
+  regPintarQuestoes();
 
   const cx = $("regFormas");
   cx.innerHTML = "";
@@ -635,6 +744,7 @@ function abrirRegistro(i) {
       if (k >= 0) { if (regFormas.length > 1) regFormas.splice(k, 1); }
       else regFormas.push(f);
       b.classList.toggle("ativa", regFormas.includes(f));
+      regPintarQuestoes();
     };
     cx.append(b);
   });
@@ -658,6 +768,56 @@ function abrirRegistro(i) {
   $("dlgRegistro").showModal();
 }
 
+/* Os campos de questão só existem quando "questões" está marcado. */
+function regPintarQuestoes() {
+  const bl = $("regQuestoesBloco");
+  if (!bl) return;
+  bl.hidden = regFormas.indexOf("questoes") < 0;
+  regPintarPct();
+}
+
+function regPintarPct() {
+  const el = $("regQPct");
+  if (!el) return;
+  const f = Number(($("regQFeitas") || {}).value) || 0;
+  const c = Number(($("regQCertas") || {}).value) || 0;
+  if (!f) { el.textContent = ""; return; }
+  /* acerto acima de 100% é erro de digitação, e mostrar 130% seria fingir
+   * que o número faz sentido */
+  const pct = Math.round((Math.min(c, f) / f) * 100);
+  el.textContent = pct + "%";
+  el.className = "reg-q-pct" + (pct < 60 ? " baixo" : (pct < 80 ? " medio" : ""));
+}
+
+/* Atalhos que SOMAM ao valor atual: quem estudou 45min costuma clicar
+ * +30 e +15, não arrastar o cursor até o número exato. */
+function regPintarAtalhos() {
+  const cx = $("regAtalhos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  [15, 30, 45, 60].forEach((n) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "reg-atalho";
+    b.textContent = "+" + n + "m";
+    b.title = t("ed_reg_atalho_ajuda", { n });
+    b.onclick = () => {
+      const atual = Math.max(0, Number($("regMinutos").value) || 0);
+      const novo = Math.min(600, atual + n);
+      $("regMinutos").value = novo;
+      $("regMinSlider").value = Math.min(240, novo);
+    };
+    cx.append(b);
+  });
+  const zerar = document.createElement("button");
+  zerar.type = "button";
+  zerar.className = "reg-atalho";
+  zerar.textContent = t("ed_reg_zerar");
+  zerar.title = t("ed_reg_zerar_ajuda");
+  zerar.onclick = () => { $("regMinutos").value = 5; $("regMinSlider").value = 5; };
+  cx.append(zerar);
+}
+
 function confirmarRegistro(estado) {
   if (!regAtual) return;
   const item = regAtual;
@@ -669,10 +829,18 @@ function confirmarRegistro(estado) {
    * o dado é salvo em seguida (sem redesenhar), e o redesenho fica para o
    * fim da animação. Salvar nunca depende do efeito. */
   const linhas = edMarcarLinhasSaindo(item, estado);
+  const qf = Number(($("regQFeitas") || {}).value) || 0;
+  const qc = Math.min(qf, Number(($("regQCertas") || {}).value) || 0);
   edMarcar(item, estado, {
     minutos: Math.max(1, Number($("regMinutos").value) || item.minutos),
     formas: regFormas.slice(),
     humor: regHumor,
+    /* só grava questões quando houve questões: campo vazio não vira zero,
+     * porque "0 de 0" e "não fiz questões" são coisas diferentes na conta
+     * de acerto depois */
+    questoes: qf ? { feitas: qf, certas: qc } : null,
+    onde: String(($("regOnde") || {}).value || "").trim() || null,
+    obs: String(($("regObs") || {}).value || "").trim() || null,
   }, linhas.length > 0);
   /* O item some da agenda no mesmo instante em que o diálogo fecha, e some
    * calado: dá a impressão de que sumiu, não de que foi guardado. A saída
@@ -1504,6 +1672,14 @@ function edIniciar() {
   $("edDias").onchange = edRender;
   $("edInicio").onchange = edRender;
   $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
+  ["regQFeitas", "regQCertas"].forEach((id) => {
+    if ($(id)) $(id).addEventListener("input", regPintarPct);
+  });
+  if ($("btnRegObs")) $("btnRegObs").onclick = () => {
+    const t2 = $("regObs");
+    t2.hidden = !t2.hidden;
+    $("btnRegObs").textContent = t(t2.hidden ? "ed_reg_obs_abrir" : "ed_reg_obs_fechar");
+  };
   $("btnRegEstudo").onclick = () => confirmarRegistro("feito");
   $("btnRegRevisao").onclick = () => confirmarRegistro("revisado");
   $("btnEditalColar").onclick = () => {
@@ -1556,7 +1732,16 @@ function edIniciar() {
   if ($("btnLoteNada")) $("btnLoteNada").onclick = () => { edSelecao.clear(); edRender(); };
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
    * eu embarquei um botão morto */
-  if ($("btnDiarioTopo")) $("btnDiarioTopo").onclick = abrirDiario;
+  if ($("btnDiarioTopo")) $("btnDiarioTopo").onclick = () => {
+    diarioMostrar = DIARIO_PAGINA; diarioBusca = ""; 
+    if ($("diarioBusca")) $("diarioBusca").value = "";
+    abrirDiario();
+  };
+  if ($("diarioBusca")) $("diarioBusca").addEventListener("input", () => {
+    diarioBusca = $("diarioBusca").value;
+    diarioMostrar = DIARIO_PAGINA;
+    abrirDiario();
+  });
   vrIniciar();
   if ($("btnEdNovaDisc")) $("btnEdNovaDisc").onclick = ndAbrir;
   if ($("btnNdIncluir")) $("btnNdIncluir").onclick = ndIncluir;
