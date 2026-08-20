@@ -579,6 +579,19 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
 /* DICA incorporada ao resumo: precisa ser reconhecível de relance como
    acréscimo seu, não como parte do material original. */
+.mat-leitura .mat-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.10);
+  padding:6px 10px;margin:6px 0;border-radius:0 6px 6px 0}
+.mat-leitura .mat-quest::before{content:"QUESTÃO";display:block;font-size:9px;
+  letter-spacing:.09em;color:#7c6cf5;font-weight:700;margin-bottom:2px}
+.mat-leitura .mat-gab{border-left:3px solid #2f9e6e;background:rgba(47,158,110,.10);
+  padding:6px 10px;margin:-4px 0 6px;border-radius:0 6px 6px 0}
+.mat-leitura .mat-gab::before{content:"GABARITO";display:block;font-size:9px;
+  letter-spacing:.09em;color:#2f9e6e;font-weight:700;margin-bottom:2px}
+.duv-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.09);
+  padding:5px 9px;margin-top:5px;border-radius:0 6px 6px 0;font-size:12px}
+mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
+  animation:matPisca .55s ease-in-out 4}
+@keyframes matPisca{0%,100%{outline-color:#f5a524}50%{outline-color:transparent}}
 .mat-leitura .mat-dica{border-left:3px solid #f5a524;background:rgba(245,165,36,.10);
   padding:8px 12px;border-radius:0 9px 9px 0;margin:8px 0;font-size:.95em}
 .mat-leitura .mat-dica::before{content:"DICA";display:block;font-size:9px;
@@ -2232,6 +2245,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <h3 id="txtLivreTit"></h3>
   <textarea id="txtLivreCampo" rows="7" style="width:100%;box-sizing:border-box"
     placeholder="Escreva aqui a explicação, com suas palavras."></textarea>
+  <div id="txtLivreCaixa2" style="display:none;margin-top:8px">
+    <label id="txtLivreRot2" class="nota" style="display:block;margin-bottom:3px"></label>
+    <textarea id="txtLivreCampo2" rows="3" style="width:100%;box-sizing:border-box"></textarea>
+  </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnTxtLivreOk" data-i18n="txt_livre_ok"
       title="Guarda o que você escreveu."></button>

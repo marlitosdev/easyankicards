@@ -375,6 +375,18 @@ function matParaHtml(txt) {
     /* "> " é DICA: acréscimo seu ao material, com marca visível. */
     /* o texto já passou por matEscapar, então ">" chega como "&gt;" —
      * testar o caractere cru aqui nunca casaria */
+    /* "?> " é enunciado de questão e ">> " é o gabarito dela. Precisam ser
+     * testados ANTES da dica, senão "&gt;&gt;" cai na regra do "&gt;". */
+    if (/^\?&gt;\s?/.test(s)) {
+      fecharLista();
+      saida.push('<div class="mat-quest">' + inline(s.replace(/^\?&gt;\s?/, "")) + "</div>");
+      return;
+    }
+    if (/^&gt;&gt;\s?/.test(s)) {
+      fecharLista();
+      saida.push('<div class="mat-gab">' + inline(s.replace(/^&gt;&gt;\s?/, "")) + "</div>");
+      return;
+    }
     if (/^&gt;\s?/.test(s)) {
       fecharLista();
       saida.push('<div class="mat-dica">' + inline(s.replace(/^&gt;\s?/, "")) + "</div>");
@@ -422,6 +434,16 @@ let matFonte = 15;            /* px do modo leitura */
 let matAmpliado = false;
 
 function matAbrirEditor(item, comoLer) {
+  /* JÁ ABERTO NESTE MESMO TÓPICO: não recarrega.
+   * Recarregar do registro descartaria, em silêncio, as marcas que ainda
+   * não foram salvas — e era o que "abrir onde está" fazia quando o resumo
+   * já estava na tela. Aqui basta trazer a janela para a frente. */
+  const alvoChave = matChave(item.disciplina, item.nome);
+  if (matEditorAberto(alvoChave)) {
+    matTrocarModo(comoLer || matModo);
+    abrirModal("dlgMaterial");
+    return;
+  }
   /* abre limpo: rascunho pendente é do material anterior */
   matSujo = false;
   matSelGuardada = "";
@@ -768,9 +790,10 @@ function matAlternarLei() {
 function matPintarDuvidas() {
   const b = $("btnMatDuvidas");
   if (!b) return;
-  const r = matAtual && matResumos[matAtual.chave];
   const conta = (s) => (String(s || "").match(/==\?((?:[^=\n]|=(?!=))+)==/g) || []).length;
-  const n = r ? conta(r.texto) + conta(r.leiTexto) : 0;
+  const n = matAtual
+    ? conta(matTextoVivo(matAtual.chave, "texto")) + conta(matTextoVivo(matAtual.chave, "lei"))
+    : 0;
   b.hidden = !n;
   if (n) b.textContent = t("mat_duv_conta", { n });
 }
@@ -2015,7 +2038,10 @@ function matDuvidas() {
   Object.keys(matResumos || {}).forEach((chave) => {
     const r = matResumos[chave];
     if (!r) return;
-    [["texto", r.texto], ["lei", r.leiTexto]].forEach(([onde, txt]) => {
+    /* texto VIVO: dúvida marcada e ainda não salva também conta — foi ela
+     * que a pessoa acabou de criar e quer encontrar */
+    [["texto", matTextoVivo(chave, "texto")],
+     ["lei", matTextoVivo(chave, "lei")]].forEach(([onde, txt]) => {
       const s = String(txt || "");
       if (!s) return;
       const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
@@ -2039,17 +2065,16 @@ function matDuvidas() {
 function matResolverDuvida(d) {
   const r = matResumos[d.chave];
   if (!r) return false;
-  const campo = d.onde === "lei" ? "leiTexto" : "texto";
-  const s = String(r[campo] || "");
+  const campo = d.onde === "lei" ? "lei" : "texto";
+  const s = matTextoVivo(d.chave, campo);
   const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
   let mm, achou = null;
   while ((mm = re.exec(s)) !== null) {
     if (mm.index === d.pos) { achou = mm; break; }
   }
   if (!achou) return false;
-  r[campo] = s.slice(0, achou.index) + achou[1] + s.slice(achou.index + achou[0].length);
-  r.tocado = new Date().toISOString();
-  matSalvar();
+  matAplicarTexto(d.chave, campo,
+    s.slice(0, achou.index) + achou[1] + s.slice(achou.index + achou[0].length));
   matReg("duvida", "dúvida marcada como resolvida",
          (d.topico || "?") + " · " + d.trecho.slice(0, 60));
   return true;
@@ -2132,6 +2157,104 @@ function matConsertarNegrito(chave) {
  *
  * Guardada no registro do material, atrelada ao TRECHO (não à posição): o
  * texto muda de lugar quando você edita o resumo, o trecho não. */
+/* =====================================================================
+ * O TEXTO VIVO
+ *
+ * Existem DUAS cópias do resumo: a da caixa de edição (o que você está
+ * vendo e mexendo) e a do registro (o que está gravado). Enquanto elas
+ * viviam separadas:
+ *  · marcar uma dúvida e não salvar fazia a lista de dúvidas não vê-la;
+ *  · incorporar uma dica escrevia no registro e a tela continuava a mesma —
+ *    e o próximo "salvar" jogava a dica fora, porque a caixa tinha o texto
+ *    antigo;
+ *  · "abrir onde está" recarregava do registro e descartava, em silêncio,
+ *    o que ainda não tinha sido salvo.
+ *
+ * Daqui em diante, quem lê usa matTextoVivo e quem escreve usa
+ * matAplicarTexto. As duas cópias andam juntas.
+ * ===================================================================== */
+function matEditorAberto(chave) {
+  return !!(matAtual && matAtual.chave === chave
+    && $("dlgMaterial") && $("dlgMaterial").open);
+}
+
+function matTextoVivo(chave, campo) {
+  const c = campo === "lei" ? "leiTexto" : "texto";
+  if (c === "texto" && matEditorAberto(chave)) return String($("matTexto").value || "");
+  if (c === "leiTexto" && leiAtual && leiAtual.chave === chave
+      && $("dlgLeiSeca") && $("dlgLeiSeca").open) {
+    return String($("leiTexto").value || "");
+  }
+  const r = matResumos[chave];
+  return String((r && r[c]) || "");
+}
+
+function matAplicarTexto(chave, campo, novo) {
+  const c = campo === "lei" ? "leiTexto" : "texto";
+  const r = matResumos[chave];
+  if (!r) return false;
+  r[c] = novo;
+  r.tocado = new Date().toISOString();
+  matSalvar();
+  /* e a TELA, se estiver mostrando este mesmo texto */
+  if (c === "texto" && matEditorAberto(chave)) {
+    $("matTexto").value = novo;
+    matSujo = false;
+    matTrocarModo(matModo);
+    $("matEstado").textContent = t("mat_estado_salvo",
+      { d: new Date().toLocaleTimeString() });
+  }
+  if (c === "leiTexto" && leiAtual && leiAtual.chave === chave
+      && $("dlgLeiSeca") && $("dlgLeiSeca").open) {
+    $("leiTexto").value = novo;
+    leiSujo = false;
+    leiTrocarModo(leiModo);
+  }
+  return true;
+}
+
+/* ABRIR ONDE ESTÁ
+ * Abrir o resumo não basta: num texto de 6.000 caracteres, a pessoa continua
+ * sem saber onde está o trecho. Aqui rolamos até ele e o piscamos. */
+function matIrPara(trecho, onde) {
+  const alvo = String(trecho || "").trim().slice(0, 60);
+  if (!alvo) return false;
+  const caixa = onde === "lei" ? $("leiLeitura") : $("matLeitura");
+  const area = onde === "lei" ? $("leiTexto") : $("matTexto");
+  const modo = onde === "lei" ? leiModo : matModo;
+  if (modo === "ler" && caixa) {
+    const marcas = caixa.querySelectorAll ? caixa.querySelectorAll("mark") : [];
+    for (let i = 0; i < marcas.length; i++) {
+      if (String(marcas[i].textContent || "").indexOf(alvo.slice(0, 30)) >= 0) {
+        try { marcas[i].scrollIntoView({ block: "center" }); } catch (e) {}
+        marcas[i].classList.add("mat-piscando");
+        setTimeout(() => { try { marcas[i].classList.remove("mat-piscando"); } catch (e) {} }, 2400);
+        return true;
+      }
+    }
+    /* não achou entre as marcas — pode ser dúvida dentro de negrito partido,
+     * ou marca que a leitura não desenhou. Em vez de não fazer nada (que é
+     * o que o botão fazia antes), troca para edição e seleciona lá, onde a
+     * busca é no texto puro e sempre encontra. */
+    if (String(area && area.value || "").indexOf(alvo.slice(0, 30)) >= 0) {
+      matTrocarModo("editar");
+      return matIrPara(trecho, onde);
+    }
+    return false;
+  }
+  /* modo editar: seleciona o trecho na caixa, que rola sozinha */
+  if (area) {
+    const pos = String(area.value || "").indexOf(alvo.slice(0, 30));
+    if (pos < 0) return false;
+    try {
+      area.focus();
+      area.setSelectionRange(pos, pos + alvo.length);
+    } catch (e) {}
+    return true;
+  }
+  return false;
+}
+
 function matChaveDica(trecho) {
   return String(trecho || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 120);
@@ -2165,12 +2288,65 @@ function matGravarDica(chave, trecho, texto) {
  * do trecho, marcada com ">" para a leitura desenhá-la como DICA. Sai da
  * lista de dicas soltas e passa a ser texto — que é o destino de uma dica
  * que já se provou útil. */
+/* =====================================================================
+ * QUESTÃO PRESA AO TRECHO
+ * Mesmo desenho da dica: enunciado + gabarito ficam presos ao TRECHO
+ * (não à posição), sobrevivem à edição do texto, e podem ser incorporados
+ * ao resumo como bloco marcado QUESTÃO / GABARITO.
+ * ===================================================================== */
+function matQuestaoDe(chave, trecho) {
+  const r = matResumos[chave];
+  if (!r || !r.questoes) return null;
+  const k = matChaveDica(trecho);
+  return r.questoes.filter((q) => q.k === k)[0] || null;
+}
+
+function matGravarQuestao(chave, trecho, enunciado, gabarito) {
+  const r = matResumos[chave];
+  if (!r) return null;
+  const k = matChaveDica(trecho);
+  r.questoes = (r.questoes || []).filter((q) => q.k !== k);
+  const en = String(enunciado || "").trim();
+  const ga = String(gabarito || "").trim();
+  if (en) {
+    r.questoes.push({ k, trecho: String(trecho).slice(0, 200), enunciado: en,
+                      gabarito: ga, criado: new Date().toISOString() });
+  }
+  r.tocado = new Date().toISOString();
+  matSalvar();
+  matReg("questao", en ? "questão guardada" : "questão apagada",
+         (r.topico || chave) + " · " + en.slice(0, 50));
+  return en ? r.questoes[r.questoes.length - 1] : null;
+}
+
+function matIncorporarQuestao(chave, trecho, onde) {
+  const r = matResumos[chave];
+  const q = matQuestaoDe(chave, trecho);
+  if (!r || !q) return false;
+  const campo = onde === "lei" ? "lei" : "texto";
+  const s = matTextoVivo(chave, campo);
+  /* mesma busca da dica: matChaveDica normaliza marcas e negrito */
+  const alvoN = matChaveDica(trecho);
+  const linhas = s.split("\n");
+  const k = linhas.findIndex((l) => matChaveDica(l).indexOf(alvoN) >= 0);
+  if (k < 0) return false;
+  const novas = ["?> " + q.enunciado.replace(/\n+/g, " ")];
+  if (q.gabarito) novas.push(">> " + q.gabarito.replace(/\n+/g, " "));
+  linhas.splice(k + 1, 0, ...novas);
+  matAplicarTexto(chave, campo, linhas.join("\n"));
+  r.questoes = (r.questoes || []).filter((x) => x.k !== q.k);
+  matSalvar();
+  matReg("questao", "questão incorporada ao resumo",
+         (r.topico || chave) + " · linha " + (k + 2));
+  return true;
+}
+
 function matIncorporarDica(chave, trecho, onde) {
   const r = matResumos[chave];
   const d = matDicaDe(chave, trecho);
   if (!r || !d) return false;
-  const campo = onde === "lei" ? "leiTexto" : "texto";
-  const s = String(r[campo] || "");
+  const campo = onde === "lei" ? "lei" : "texto";
+  const s = matTextoVivo(chave, campo);
   /* acha a linha que contém o trecho, mesmo com marcas em volta */
   const alvoN = matChaveDica(trecho);
   const linhas = s.split("\n");
@@ -2181,9 +2357,8 @@ function matIncorporarDica(chave, trecho, onde) {
    * tentativa. Guardar a checagem seria código que nenhuma sabotagem
    * consegue quebrar — e código assim mente sobre o que protege. */
   linhas.splice(k + 1, 0, "> " + d.texto.replace(/\n+/g, " "));
-  r[campo] = linhas.join("\n");
+  matAplicarTexto(chave, campo, linhas.join("\n"));
   r.dicas = (r.dicas || []).filter((x) => x.k !== d.k);
-  r.tocado = new Date().toISOString();
   matSalvar();
   matReg("dica", "dica incorporada ao resumo",
          (r.topico || chave) + " · linha " + (k + 2));
@@ -2220,6 +2395,10 @@ function matDuvidasAbrir() {
       $("dlgDuvidas").close();
       if (d.onde === "lei") leiAbrir(d.disciplina, d.topico);
       else matAbrirEditor({ disciplina: d.disciplina, nome: d.topico }, false);
+      /* abrir não basta: rola até o trecho e o pisca */
+      const achou = matIrPara(d.trecho, d.onde);
+      matReg("duvida", achou ? "aberto no trecho da dúvida" : "aberto, trecho não localizado",
+             (d.topico || "?") + " · " + d.trecho.slice(0, 50));
     };
     const bOk = document.createElement("button");
     bOk.type = "button"; bOk.className = "btn-min btn-min-ok";
@@ -2259,13 +2438,47 @@ function matDuvidasAbrir() {
       };
       ac.append(bInc);
     }
+    /* QUESTÃO: mesmo desenho da dica */
+    const jaQ = matQuestaoDe(d.chave, d.trecho);
+    const bQ = document.createElement("button");
+    bQ.type = "button"; bQ.className = "btn-min";
+    bQ.textContent = t(jaQ ? "duv_quest_editar" : "duv_quest_incluir");
+    bQ.title = t("duv_quest_ajuda");
+    bQ.onclick = async () => {
+      const v = await uiTexto(t("duv_quest_tit", { t: d.trecho.slice(0, 90) }),
+        jaQ ? jaQ.enunciado : "",
+        { rotulo2: t("duv_quest_gab"), valor2: jaQ ? jaQ.gabarito : "" });
+      if (v === null) return;
+      matGravarQuestao(d.chave, d.trecho, v.a, v.b);
+      matDuvidasAbrir();
+    };
+    ac.append(bQ);
+    if (jaQ) {
+      const bQi = document.createElement("button");
+      bQi.type = "button"; bQi.className = "btn-min btn-min-ok";
+      bQi.textContent = t("duv_quest_incorporar");
+      bQi.title = t("duv_quest_incorporar_ajuda");
+      bQi.onclick = async () => {
+        if (!(await uiConfirm(t("duv_quest_inc_conf", { t: jaQ.enunciado.slice(0, 120) })))) return;
+        if (!matIncorporarQuestao(d.chave, d.trecho, d.onde)) { uiAlert(t("duv_dica_inc_erro")); return; }
+        matDuvidasAbrir();
+        try { matRender(); } catch (e) {}
+      };
+      ac.append(bQi);
+    }
     ac.append(bOk);
     li.append(tr, onde, ac);
     if (jaTem) {
-      const box = document.createElement("div");
-      box.className = "duv-dica";
-      box.textContent = jaTem.texto;
-      li.append(box);
+      const cx = document.createElement("div");
+      cx.className = "duv-dica";
+      cx.textContent = jaTem.texto;
+      li.append(cx);
+    }
+    if (jaQ) {
+      const cq = document.createElement("div");
+      cq.className = "duv-quest";
+      cq.textContent = jaQ.enunciado + (jaQ.gabarito ? "  →  " + jaQ.gabarito : "");
+      li.append(cq);
     }
     box.append(li);
   });
