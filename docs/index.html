@@ -577,6 +577,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark.m-lei{background:rgba(16,185,129,.30)}
 .mat-leitura mark.m-prova{background:rgba(168,85,247,.32)}
 .mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
+/* DICA incorporada ao resumo: precisa ser reconhecível de relance como
+   acréscimo seu, não como parte do material original. */
+.mat-leitura .mat-dica{border-left:3px solid #f5a524;background:rgba(245,165,36,.10);
+  padding:8px 12px;border-radius:0 9px 9px 0;margin:8px 0;font-size:.95em}
+.mat-leitura .mat-dica::before{content:"DICA";display:block;font-size:9px;
+  font-weight:800;letter-spacing:.06em;color:#f5a524;margin-bottom:3px}
+.duv-dica{border-left:3px solid #f5a524;background:rgba(245,165,36,.08);
+  padding:7px 10px;border-radius:0 8px 8px 0;margin-top:6px;font-size:11px;
+  color:var(--texto);line-height:1.5;white-space:pre-wrap}
 .marca-lei{background:rgba(16,185,129,.22);border-color:rgba(16,185,129,.6)}
 .marca-prova{background:rgba(168,85,247,.22);border-color:rgba(168,85,247,.6)}
 .marca-peg{background:rgba(236,72,153,.22);border-color:rgba(236,72,153,.6)}
@@ -2103,7 +2112,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
        Os mesmos comandos ficam aqui em cima. -->
   <div class="mat-topo">
     <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
-    <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar_estado" title="Grava as marcas que você fez. Marcar não grava sozinho de propósito: assim dá para experimentar e desistir."></button>
+    <!-- MESMO comando do botão do rodapé, com o MESMO rótulo. Antes eram
+         "Salvar" e "Salvar estado", nomes diferentes para a mesma gravação —
+         o que fazia parecer que salvavam coisas diferentes. Aqui em cima ele
+         existe só porque, com resumo longo, o rodapé fica longe. -->
+    <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar"
+      title="Grava o resumo com as marcas que você fez, e continua aqui. É o mesmo botão do rodapé."></button>
     <span class="mat-sep"></span>
     <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por" title="Guarda onde você parou. Lendo, usa o ponto da rolagem; editando, usa o cursor."></button>
     <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden title="Leva a leitura de volta ao ponto que você marcou."></button>
@@ -2163,8 +2177,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="mat-leitura" id="matLeitura" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMatModo" title="Alterna entre ler (marcas coloridas) e editar (texto cru). O mesmo comando existe no topo."></button>
-    <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar" title="Grava o texto do resumo. Os cartões, as marcas e o marcador de página deste tópico continuam intactos."></button>
-    <button class="btn btn-cinza" id="btnMatSalvarEstado" data-i18n="mat_salvar_estado" title="Grava as marcas feitas na leitura. Marcar não grava sozinho: assim dá para experimentar cores e desistir."></button>
+    <!-- UM botão só. Havia dois — "Salvar" e "Salvar estado" — que faziam a
+         MESMA gravação (o texto da caixa, marcas incluídas, porque marca é
+         texto). A única diferença era fechar ou não a janela, e os rótulos
+         sugeriam que salvavam coisas diferentes. Fechar já pergunta o que
+         fazer com o que não foi salvo, então o botão fica com uma tarefa
+         só: gravar e continuar aqui. -->
+    <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"
+      title="Grava o resumo com as marcas que você fez, e continua aqui. Cartões, lei seca e marcador de página não são tocados."></button>
     <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden title="Registra esta leitura no diário de estudos, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
     <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes" title="Abre o painel de cartões deste tópico por cima do resumo: criar com IA, colar, importar de arquivo, estudar em tela ou apagar. O resumo continua aberto atrás."></button>
     <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close" title="Fecha o resumo. Com marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
@@ -2208,6 +2228,18 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
      são dois textos, cada um com seu leitor. -->
 <!-- Marcar em azul o que não se entendeu só serve se der para voltar
      depois. Espalhadas por vinte resumos, as dúvidas somem. -->
+<dialog id="dlgTextoLivre" class="ui-modal diag-modal">
+  <h3 id="txtLivreTit"></h3>
+  <textarea id="txtLivreCampo" rows="7" style="width:100%;box-sizing:border-box"
+    placeholder="Escreva aqui a explicação, com suas palavras."></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnTxtLivreOk" data-i18n="txt_livre_ok"
+      title="Guarda o que você escreveu."></button>
+    <button class="btn btn-cinza" id="btnTxtLivreNao" data-i18n="cancel_btn"
+      title="Sai sem guardar. O que já estava escrito continua como estava."></button>
+  </div>
+</dialog>
+
 <dialog id="dlgDuvidas" class="ui-modal diag-modal">
   <h3 data-i18n="duv_titulo"></h3>
   <p class="nota" data-i18n="duv_ajuda"></p>
