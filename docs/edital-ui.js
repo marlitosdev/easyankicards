@@ -558,7 +558,7 @@ function abrirDiagPlano() {
   diagPlanoAtual = { r, plano };
   reg("EDITAL-DIAG", achados.length + " impropriedade(s)",
       achados.filter((a) => a.grave).length + " grave(s)");
-  $("dlgDiagPlano").showModal();
+  abrirModal("dlgDiagPlano");
 }
 
 let diagAchados = [];
@@ -727,7 +727,7 @@ function abrirDiario() {
       ? t("ed_diario_mostrando", { v: visiveis.length, t: todos.length })
       : t("ed_diario_sem_filtro");
   }
-  $("dlgDiario").showModal();
+  abrirModal("dlgDiario");
 }
 
 /* Formas de estudo. A lista é curta de propósito: dez opções viram uma
@@ -795,7 +795,7 @@ function abrirRegistro(i) {
   });
 
   $("btnRegRevisao").hidden = !i.feito;
-  $("dlgRegistro").showModal();
+  abrirModal("dlgRegistro");
 }
 
 /* Os campos de questão só existem quando "questões" está marcado. */
@@ -1227,7 +1227,7 @@ function abrirDisciplina(nome) {
   d.itens.slice().sort((a, b) => (a.feito - b.feito) || (b.bruto - a.bruto))
     .forEach((i) => lista.append(edLinhaTopico(i, true)));
 
-  $("dlgDisciplina").showModal();
+  abrirModal("dlgDisciplina");
   reg("EDITAL-DISCIPLINA", "panorama aberto: " + nome,
       d.fatia + "% da prova, " + d.intocados + " intocados");
 }
@@ -1764,7 +1764,7 @@ function edIniciar() {
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";
     $("edColarAviso").hidden = true;
-    $("dlgEdColar").showModal();
+    abrirModal("dlgEdColar");
   };
   $("edColarTexto").addEventListener("input", edConferirColagem);
   $("btnEdColarAplicar").onclick = edAplicarColagem;
@@ -1863,7 +1863,7 @@ function ndAbrir() {
   $("ndTopicos").value = "";
   $("ndRedistrib").hidden = true;
   ndPintarPesos();
-  $("dlgNovaDisc").showModal();
+  abrirModal("dlgNovaDisc");
   reg("EDITAL", "formulário de disciplina aberto");
 }
 
@@ -2017,7 +2017,7 @@ function vkAbrir() {
   $("vkResumo").textContent = t("vk_resumo", {
     e: est.length, p: pend.length, i: vkTriagem.length });
   vkPintarTriagem();
-  $("dlgJaEstudei").showModal();
+  abrirModal("dlgJaEstudei");
   reg("VINCULO", "triagem aberta", est.length + " estudados, "
       + vkTriagem.length + " nomes idênticos");
 }
@@ -2155,7 +2155,7 @@ function vkIniciarTela() {
   if ($("btnVkColar")) $("btnVkColar").onclick = () => {
     $("vkColarTexto").value = "";
     $("vkColarAviso").hidden = true;
-    $("dlgVkColar").showModal();
+    abrirModal("dlgVkColar");
   };
   if ($("btnVkFechar")) $("btnVkFechar").onclick = () => $("dlgJaEstudei").close();
   if ($("vkColarTexto")) $("vkColarTexto").addEventListener("input", vkConferirColagem);
@@ -2213,7 +2213,7 @@ async function cmAbrir() {
   sel.value = valido ? editalAtual : editais[0].id;
   sel.onchange = () => cmRecalcular(r.cards);
   cmRecalcular(r.cards);
-  $("dlgCartaoMat").showModal();
+  abrirModal("dlgCartaoMat");
   reg("CARTAO-MATERIAL", "conferência aberta", r.cards.length + " cartões");
 }
 
@@ -2484,7 +2484,7 @@ function cmIniciarTela() {
   if ($("btnCmPrompt")) $("btnCmPrompt").onclick = cmGerarPrompt;
   if ($("btnCmColar")) $("btnCmColar").onclick = () => {
     $("cmColarTexto").value = ""; $("cmColarAviso").hidden = true;
-    $("dlgCmColar").showModal();
+    abrirModal("dlgCmColar");
   };
   if ($("cmColarTexto")) $("cmColarTexto").addEventListener("input", cmConferirColagem);
   if ($("btnCmColarOk")) $("btnCmColarOk").onclick = cmAplicarColagem;
@@ -2515,7 +2515,7 @@ function vrAbrir() {
   $("vrAviso").hidden = true;
   $("vrOrfaos").innerHTML = "";
   vrCmp = null; vrOrfaos = [];
-  $("dlgVirada").showModal();
+  abrirModal("dlgVirada");
   reg("VIRADA", "ritual aberto", (edAberto() && edAberto().nome) || "");
 }
 

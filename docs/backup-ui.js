@@ -160,7 +160,7 @@ function bkMostrarConferencia(nomeArq) {
   const av = $("bkConfAviso");
   av.className = "bk-aviso " + (cmp.perdeAlgo ? "grave" : "ok");
   av.textContent = cmp.perdeAlgo ? t("bk_conf_perde") : t("bk_conf_seguro");
-  $("dlgBkConf").showModal();
+  abrirModal("dlgBkConf");
 }
 
 async function bkConfirmarRestauro() {
@@ -203,7 +203,7 @@ function bkAbrirPainel() {
     ? t("bk_ultimo", { d: new Date(i.quando).toLocaleString(), n: i.dias,
         o: localStorage.getItem("eac_backup_onde") || "?" })
     : t("bk_ultimo_nunca");
-  $("dlgBackup").showModal();
+  abrirModal("dlgBackup");
 }
 
 function bkIniciar() {

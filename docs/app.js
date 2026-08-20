@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.93.0";
+const VERSAO = "8.94.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -297,6 +297,49 @@ function uiAlert(texto) { return uiDialog(String(texto), false); }
 /* Pergunta de TRÊS saídas. O uiConfirm só oferece sim/não, e há decisões
  * em que "não" significa perder trabalho — nesses casos falta a terceira
  * porta: desistir de fechar. */
+/* ABRIR DIÁLOGO SEM QUEBRAR.
+ * showModal() num <dialog> JÁ ABERTO lança InvalidStateError no Chrome — e
+ * a função que chamou morre ali. Foi o que fez "abrir onde está" e
+ * "resolvida", nas dúvidas, parecerem sem efeito: as duas reabriam um
+ * diálogo que já estava na tela. Reabrir é gesto normal (a lista se
+ * redesenha depois de resolver uma dúvida), então o certo é tolerar. */
+/* Pergunta com CAIXA DE TEXTO. O uiConfirm só devolve sim/não, e há coisas
+ * — como escrever a explicação de uma dúvida — que precisam de texto.
+ * Devolve null quando a pessoa desiste, para distinguir "cancelei" de
+ * "apaguei o que estava escrito". */
+function uiTexto(titulo, valor) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById("dlgTextoLivre");
+    if (!dlg) { resolve(null); return; }
+    document.getElementById("txtLivreTit").textContent = titulo || "";
+    const campo = document.getElementById("txtLivreCampo");
+    campo.value = valor || "";
+    const fim = (v) => {
+      document.getElementById("btnTxtLivreOk").onclick = null;
+      document.getElementById("btnTxtLivreNao").onclick = null;
+      if (dlg.open) dlg.close();
+      resolve(v);
+    };
+    document.getElementById("btnTxtLivreOk").onclick = () => fim(campo.value);
+    document.getElementById("btnTxtLivreNao").onclick = () => fim(null);
+    abrirModal(dlg);
+    try { campo.focus(); } catch (e) {}
+  });
+}
+
+function abrirModal(id) {
+  const d = typeof id === "string" ? document.getElementById(id) : id;
+  if (!d) return null;
+  try {
+    if (!d.open) d.showModal();
+  } catch (e) {
+    /* já aberto, ou não suporta modal: não é motivo para derrubar o fluxo */
+    try { d.show && d.show(); } catch (x) {}
+    try { reg("ERRO", "showModal recusado em " + (d.id || "?"), (e && e.message) || ""); } catch (x) {}
+  }
+  return d;
+}
+
 function uiEscolha(texto, opcoes) {
   return new Promise((resolve) => {
     /* USA O MESMO _uiResolve do uiDialog. Na primeira versão eu resolvia
@@ -1135,7 +1178,7 @@ function abrirHistorico() {
     div.append(info, acoes, previa);
     lista.append(div);
   });
-  $("dlgHistorico").showModal();
+  abrirModal("dlgHistorico");
 }
 
 function atualizarBotaoHistorico() {
@@ -1820,7 +1863,7 @@ function abrirIgnorado(ig) {
   $("novoTags").value = partes[2] || "";
   $("dicaCampo").textContent = t("ignored_help");
   atualizarNovoPreview();
-  $("dlgNovo").showModal();
+  abrirModal("dlgNovo");
 }
 
 
@@ -1967,7 +2010,7 @@ function copiarMarcados() {
   if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
   revCopyTipo = "rev_prompt_full";
   montarRevCopy();
-  $("dlgRevCopiar").showModal();
+  abrirModal("dlgRevCopiar");
 }
 $("btnRevTabFull").onclick = () => { revCopyTipo = "rev_prompt_full"; montarRevCopy(); };
 $("btnRevTabShort").onclick = () => { revCopyTipo = "rev_prompt_short"; montarRevCopy(); };
@@ -2088,7 +2131,7 @@ function abrirColarRev(correcao) {
   $("colarRevTexto").value = correcao.replace(/^\s+/, "");
   $("colarRevTexto").placeholder = t("colarrev_ph");
   analisarColarRev();
-  $("dlgColarRev").showModal();
+  abrirModal("dlgColarRev");
   setTimeout(() => $("colarRevTexto").focus(), 60);
 }
 
@@ -2758,7 +2801,7 @@ function abrirNormalizar(ajusteEstrutural) {
     ok.textContent = t("norm_none");
     lista.append(ok);
   }
-  $("dlgNormalizar").showModal();
+  abrirModal("dlgNormalizar");
 }
 
 let normIgnorados = [];
@@ -3113,7 +3156,7 @@ $("btnEmbaralharCloze").onclick = () => {
 
 ["novoFrente", "novoVerso", "novoMais"].forEach((id) => autoCrescer($(id)));
 $("btnNovoCartao").onclick = () => {
-  rotularModelos(); aplicarModelo(); $("dlgNovo").showModal();
+  rotularModelos(); aplicarModelo(); abrirModal("dlgNovo");
   ["novoFrente", "novoVerso", "novoMais"].forEach((id) => {
     const el = $(id); el.style.height = "auto"; el.style.height = (el.scrollHeight + 22) + "px";
   });
@@ -3199,7 +3242,7 @@ function mostrarPrompt(tipo) {
   mostrarTamanho("promptTam", $("promptTexto").value);
 }
 
-$("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); $("dlgPrompt").showModal(); };
+$("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); abrirModal("dlgPrompt"); };
 $("btnTabFull").onclick = () => mostrarPrompt("prompt_full");
 $("btnTabMini").onclick = () => mostrarPrompt("prompt_mini");
 $("btnPromptSalvar").onclick = () => {
@@ -3361,7 +3404,7 @@ function abrirGerar(texto, origem) {
     b.textContent = genOrigem
       ? t("gen_guardar_material", { t: genOrigem.topico }) : "";
   }
-  $("dlgGerar").showModal();
+  abrirModal("dlgGerar");
 }
 
 /* Guarda o que estiver na caixa como CARTÕES do tópico. O texto colado aqui
@@ -3516,7 +3559,7 @@ function abrirImportResultado(lista) {
     arq.append(corpo);
     box.append(arq);
   });
-  $("dlgImportar").showModal();
+  abrirModal("dlgImportar");
 }
 
 /* junta o texto de todos os arquivos válidos. */
@@ -3677,7 +3720,7 @@ $("btnMCRapido").onclick = () => {
   rotularModelos();
   $("selModelo").value = "mc_cloze";
   aplicarModelo();
-  $("dlgNovo").showModal();
+  abrirModal("dlgNovo");
 };
 /* Baralho e tags são pedidos NA HORA de exportar (diálogo), e lembrados. */
 let exportTipo = "apkg";
@@ -3779,7 +3822,7 @@ function abrirExport(tipo) {
   atualizarDestino();
   rotularEstilos();
   previewEstilo();
-  $("dlgExport").showModal();
+  abrirModal("dlgExport");
 }
 
 $("btnTxt").onclick = () => abrirExport("txt");
@@ -3841,7 +3884,7 @@ $("selAlinha").onchange = () => {
 };
 $("ajudaEstilo").onclick = () => uiAlert(t("style_hint"));
 
-$("btnAjuda").onclick = () => $("dlgAjuda").showModal();
+$("btnAjuda").onclick = () => abrirModal("dlgAjuda");
 $("btnFechar").onclick = () => $("dlgAjuda").close();
 
 /* Dicas de funcionamento em TODOS os botões principais */
@@ -4045,13 +4088,13 @@ function abrirPromptCorrecao() {
   reg("PROMPT", "prompt de correção aberto",
     achados.length + " problema(s), origem: " + fixOrigem);
   montarFixPrompt();
-  $("dlgFixPrompt").showModal();
+  abrirModal("dlgFixPrompt");
 }
 
 $("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnRecortesColar").onclick = () => colarRecortes();
-$("btnRecortesVer").onclick = () => { renderRecortes(); $("dlgRecortes").showModal(); };
+$("btnRecortesVer").onclick = () => { renderRecortes(); abrirModal("dlgRecortes"); };
 $("btnRecortesFechar").onclick = () => $("dlgRecortes").close();
 
 /* Monta a bandeja: um cartão por linha, com caixa de seleção e as duas
@@ -4527,7 +4570,7 @@ async function abrirDiagnostico() {
   montarPainelDiag();
   reg("DIAGNOSTICO", "painel aberto",
       registro.length + " eventos, foco: " + textoEmFoco().onde);
-  $("dlgDiagnostico").showModal();
+  abrirModal("dlgDiagnostico");
 }
 
 $("btnDiagnostico").onclick = abrirDiagnostico;
@@ -4562,7 +4605,7 @@ $("btnDiagBaixar").onclick = () => {
 function abrirTextoSimples(titulo, texto) {
   $("dlgTextoTit").textContent = titulo;
   $("dlgTextoCorpo").value = texto;
-  $("dlgTexto").showModal();
+  abrirModal("dlgTexto");
   $("dlgTextoCorpo").select();
 }
 $("btnDlgTextoFechar").onclick = () => $("dlgTexto").close();

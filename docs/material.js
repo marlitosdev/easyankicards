@@ -372,6 +372,14 @@ function matParaHtml(txt) {
       saida.push('<div class="mat-marcador" data-rot="' + matEscapar(t("mat_marcador_rot")) + '"></div>');
       return;
     }
+    /* "> " é DICA: acréscimo seu ao material, com marca visível. */
+    /* o texto já passou por matEscapar, então ">" chega como "&gt;" —
+     * testar o caractere cru aqui nunca casaria */
+    if (/^&gt;\s?/.test(s)) {
+      fecharLista();
+      saida.push('<div class="mat-dica">' + inline(s.replace(/^&gt;\s?/, "")) + "</div>");
+      return;
+    }
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
     if (!s) { fecharLista(); return; }
     fecharLista();
@@ -433,7 +441,7 @@ function matAbrirEditor(item, comoLer) {
   /* material que já existe abre para LER; material novo abre para escrever.
    * Quem clica num tópico que já tem resumo quer relê-lo, não editá-lo. */
   matTrocarModo(comoLer || (r ? "ler" : "editar"));
-  $("dlgMaterial").showModal();
+  abrirModal("dlgMaterial");
   if (matModo === "editar") $("matTexto").focus();
 }
 
@@ -444,7 +452,7 @@ function matTrocarModo(modo) {
   $("matBarra").hidden = lendo;
   $("matLeitura").hidden = !lendo;
   $("matCtrlLeitura").hidden = !lendo;
-  $("btnMatSalvar").hidden = lendo;
+  if ($("btnMatSalvar")) $("btnMatSalvar").hidden = false;   /* serve nos dois modos */
   $("btnMatLerReg").hidden = !lendo;
   $("btnMatModo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
   /* o mesmo comando no topo: com resumo grande, ir até o rodapé para
@@ -799,7 +807,7 @@ function matPintarLei() {
 
 function matLogAbrir() {
   $("matLogTexto").value = matLogTexto();
-  $("dlgMatLog").showModal();
+  abrirModal("dlgMatLog");
 }
 
 function matLogLimpar() {
@@ -963,7 +971,9 @@ function matSalvarEstado() {
   matSujo = false;
   $("matEstado").textContent = t("mat_estado_salvo",
     { d: new Date().toLocaleTimeString() });
-  reg("MATERIAL", "estado salvo: " + (matAtual && matAtual.topico));
+  matReg("salvar", "resumo salvo",
+         (matAtual && matAtual.topico) + " · "
+         + String($("matTexto").value || "").length + " caracteres");
   matRender();
   return true;
 }
@@ -1132,7 +1142,7 @@ async function matColarDeFora() {
   if (!txt) {
     /* sem acesso à área de transferência: pede para colar na caixa */
     $("matColarTexto").value = "";
-    $("dlgMatColar").showModal();
+    abrirModal("dlgMatColar");
     $("matColarTexto").focus();
     return;
   }
@@ -1419,7 +1429,8 @@ function matIniciar() {
   try { matRepararChaves(); } catch (e) {}
   matCarregar();
   if (!$("matTexto")) return;
-  $("btnMatSalvar").onclick = matGravarEditor;
+  /* o botão único: grava e CONTINUA aqui */
+  matBotao("btnMatSalvar", "salvar resumo", () => matSalvarEstado());
   $("btnMatColar").onclick = matColarDeFora;
   matBotao("btnMarcaD", "marcar destaque", () => matMarcarSelecao("destaque"));
   matBotao("btnMarcaI", "marcar importante", () => matMarcarSelecao("importante"));
@@ -1429,7 +1440,7 @@ function matIniciar() {
   matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
   matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
   matBotao("btnMarcaTirar", "tirar marca", matTirarMarca);
-  matBotao("btnMatSalvarEstadoTopo", "salvar estado (topo)", () => matSalvarEstado());
+  matBotao("btnMatSalvarEstadoTopo", "salvar resumo (topo)", () => matSalvarEstado());
   matBotao("btnMatMarcador", "pôr marcador", matPorMarcador);
   matBotao("btnMatFecharTopo", "fechar (topo)", () => matFechar());
   matBotao("btnMatDuvidas", "dúvidas deste resumo", matDuvidasAbrir);
@@ -1450,7 +1461,9 @@ function matIniciar() {
   };
   matLogCarregar();
   matBotao("btnMatIrMarcador", "ir ao marcador", matIrMarcador);
-  $("btnMatSalvarEstado").onclick = () => matSalvarEstado();
+  /* btnMatSalvarEstado foi removido do rodapé na v8.94: fazia a mesma
+   * gravação do botão Salvar, e dois rótulos diferentes para o mesmo ato
+   * sugeriam que salvavam coisas diferentes. */
 
   /* mantém a última seleção viva: o clique no botão de marcar chega depois
    * de o navegador já ter recolhido a seleção */
@@ -1557,7 +1570,7 @@ function matCartoesAbrir() {
   $("mcPreview").innerHTML = "";
   if ($("btnMcVer")) $("btnMcVer").hidden = !jaTem;
   if ($("mcAcoesSalvos")) $("mcAcoesSalvos").hidden = false;
-  $("dlgMatCartoes").showModal();
+  abrirModal("dlgMatCartoes");
   reg("MATERIAL-CARTOES", "painel aberto", matAtual.topico
       + " · " + String(r.texto || "").length + " caracteres de resumo, "
       + jaTem + " cartões já salvos");
@@ -1751,7 +1764,7 @@ function mcEstudarAbrir(indice) {
   $("mcEstTitulo").textContent = t("mc_est_titulo", { tp: matAtual.topico });
   $("mcEstSub").textContent = t("mc_est_sub", { d: matAtual.disciplina });
   mcEstPintar();
-  $("dlgMcEstudo").showModal();
+  abrirModal("dlgMcEstudo");
   matReg("estudo", "estudo em tela aberto", mcEstCartoes.length + " cartões");
 }
 
@@ -1887,7 +1900,7 @@ function leiAbrir(disciplina, topico) {
   /* abre LENDO quando já existe texto, e EDITANDO quando está vazio: pedir
    * para trocar de modo antes de escrever a primeira linha é atrito à toa */
   leiTrocarModo(String(r.leiTexto || "").trim() ? "ler" : "editar");
-  $("dlgLeiSeca").showModal();
+  abrirModal("dlgLeiSeca");
   matReg("lei", "lei seca aberta", topico + " · "
     + String(r.leiTexto || "").length + " caracteres");
 }
@@ -2112,6 +2125,71 @@ function matConsertarNegrito(chave) {
   return n;
 }
 
+/* DICAS.
+ * Uma dúvida sem resposta é só um lembrete de que você não sabe. A dica é a
+ * explicação que você escreve quando finalmente entende — e ela precisa
+ * ficar ONDE a dúvida está, senão você a escreve e nunca mais encontra.
+ *
+ * Guardada no registro do material, atrelada ao TRECHO (não à posição): o
+ * texto muda de lugar quando você edita o resumo, o trecho não. */
+function matChaveDica(trecho) {
+  return String(trecho || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 120);
+}
+
+function matDicaDe(chave, trecho) {
+  const r = matResumos[chave];
+  if (!r || !r.dicas) return null;
+  const k = matChaveDica(trecho);
+  return r.dicas.find((d) => d.k === k) || null;
+}
+
+function matGravarDica(chave, trecho, texto) {
+  const r = matResumos[chave];
+  if (!r) return null;
+  const k = matChaveDica(trecho);
+  r.dicas = (r.dicas || []).filter((d) => d.k !== k);
+  const limpo = String(texto || "").trim();
+  if (limpo) {
+    r.dicas.push({ k, trecho: String(trecho).slice(0, 200), texto: limpo,
+                   criado: new Date().toISOString() });
+  }
+  r.tocado = new Date().toISOString();
+  matSalvar();
+  matReg("dica", limpo ? "dica guardada" : "dica apagada",
+         (r.topico || chave) + " · " + String(trecho).slice(0, 50));
+  return limpo ? r.dicas[r.dicas.length - 1] : null;
+}
+
+/* INCORPORAR: a dica vira parte do resumo, como linha própria logo depois
+ * do trecho, marcada com ">" para a leitura desenhá-la como DICA. Sai da
+ * lista de dicas soltas e passa a ser texto — que é o destino de uma dica
+ * que já se provou útil. */
+function matIncorporarDica(chave, trecho, onde) {
+  const r = matResumos[chave];
+  const d = matDicaDe(chave, trecho);
+  if (!r || !d) return false;
+  const campo = onde === "lei" ? "leiTexto" : "texto";
+  const s = String(r[campo] || "");
+  /* acha a linha que contém o trecho, mesmo com marcas em volta */
+  const alvoN = matChaveDica(trecho);
+  const linhas = s.split("\n");
+  const k = linhas.findIndex((l) => matChaveDica(l).indexOf(alvoN) >= 0);
+  if (k < 0) return false;
+  /* Não checo aqui se já foi incorporada: a dica sai da lista assim que
+   * entra no texto, então matDicaDe() acima já devolve null na segunda
+   * tentativa. Guardar a checagem seria código que nenhuma sabotagem
+   * consegue quebrar — e código assim mente sobre o que protege. */
+  linhas.splice(k + 1, 0, "> " + d.texto.replace(/\n+/g, " "));
+  r[campo] = linhas.join("\n");
+  r.dicas = (r.dicas || []).filter((x) => x.k !== d.k);
+  r.tocado = new Date().toISOString();
+  matSalvar();
+  matReg("dica", "dica incorporada ao resumo",
+         (r.topico || chave) + " · linha " + (k + 2));
+  return true;
+}
+
 function matDuvidasAbrir() {
   const lista = matDuvidas();
   const box = $("duvLista");
@@ -2153,10 +2231,44 @@ function matDuvidasAbrir() {
       matDuvidasAbrir();
       try { matRender(); } catch (e) {}
     };
-    ac.append(bAbrir, bOk);
+    /* DICA: escrever a explicação, ver a que já existe, e incorporá-la */
+    const jaTem = matDicaDe(d.chave, d.trecho);
+    const bDica = document.createElement("button");
+    bDica.type = "button"; bDica.className = "btn-min";
+    bDica.textContent = t(jaTem ? "duv_dica_editar" : "duv_dica_incluir");
+    bDica.title = t("duv_dica_ajuda");
+    bDica.onclick = async () => {
+      const txt = await uiTexto(t("duv_dica_tit", { t: d.trecho.slice(0, 90) }),
+        jaTem ? jaTem.texto : "");
+      if (txt === null) return;
+      matGravarDica(d.chave, d.trecho, txt);
+      matDuvidasAbrir();
+    };
+    ac.append(bAbrir, bDica);
+    if (jaTem) {
+      const bInc = document.createElement("button");
+      bInc.type = "button"; bInc.className = "btn-min btn-min-ok";
+      bInc.textContent = t("duv_dica_incorporar");
+      bInc.title = t("duv_dica_incorporar_ajuda");
+      bInc.onclick = async () => {
+        if (!(await uiConfirm(t("duv_dica_inc_conf", { t: jaTem.texto.slice(0, 120) })))) return;
+        const ok2 = matIncorporarDica(d.chave, d.trecho, d.onde);
+        if (!ok2) { uiAlert(t("duv_dica_inc_erro")); return; }
+        matDuvidasAbrir();
+        try { matRender(); } catch (e) {}
+      };
+      ac.append(bInc);
+    }
+    ac.append(bOk);
     li.append(tr, onde, ac);
+    if (jaTem) {
+      const box = document.createElement("div");
+      box.className = "duv-dica";
+      box.textContent = jaTem.texto;
+      li.append(box);
+    }
     box.append(li);
   });
-  $("dlgDuvidas").showModal();
+  abrirModal("dlgDuvidas");
   matReg("duvida", "lista de dúvidas aberta", lista.length + " dúvidas");
 }
