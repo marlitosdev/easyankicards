@@ -260,6 +260,15 @@ function edLinhaTopico(i, semDisciplina) {
   const nome = document.createElement("div");
   nome.className = "ed-item-nome";
   nome.textContent = i.nome;
+  /* Selo além da cor: quem imprime em preto e branco, ou não distingue
+   * azul de cinza, continua sabendo o que é revisão. */
+  if (i.ehRevisao) {
+    const selo = document.createElement("span");
+    selo.className = "ed-selo-rev";
+    selo.textContent = t("ed_selo_revisao");
+    selo.title = t("ed_selo_revisao_ajuda");
+    nome.append(selo);
+  }
   const porq = document.createElement("div");
   porq.className = "ed-item-porque";
   if (!semDisciplina) {
@@ -323,6 +332,17 @@ function edLinhaTopico(i, semDisciplina) {
   barraT.title = t("ed_it_barra", {
     f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
   meio.append(barraT);
+  /* O NÚMERO AO LADO DA BARRA. Barra sozinha se lê "mais ou menos pela
+   * metade" — e "25min de 1h" é uma decisão diferente de "50min de 1h".
+   * Só aparece quando há tempo registrado: escrever "0min de 1h · 0%" em
+   * 230 linhas seria ruído em cima do que ainda não começou. */
+  if (feitoMin > 0) {
+    const num = document.createElement("div");
+    num.className = "it-num" + (pctT >= 100 ? " cheio" : "");
+    num.textContent = t("ed_it_num", {
+      f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
+    meio.append(num);
+  }
 
   /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela
    * teria de comparar por texto, que quebra com nomes parecidos */
@@ -490,8 +510,18 @@ function apagarDoDiario(idx) {
     else delete edProgresso[x.c];
   }
   salvarDiario();
-  reg("EDITAL-DIARIO", "registro apagado: " + x.n, x.a + " de " + x.d);
+  /* GRAVAR e REPINTAR A AGENDA DO TOPO.
+   * Faltavam as duas: sem edSalvar() a mudança de progresso ficava só na
+   * memória e voltava ao recarregar; sem hubPintarAgenda() a barra do
+   * tópico continuava cheia e o item seguia sumido da agenda, porque o
+   * topo é montado por outra função. É a mesma armadilha do edMarcar na
+   * v8.88 — quem muda progresso tem de gravar E repintar os dois lugares. */
+  edSalvar();
+  reg("EDITAL-DIARIO", "registro apagado: " + x.n,
+      x.a + " de " + x.d + " · " + (x.m || 0) + "min"
+      + (ultimoDoTopico ? " · era o último do tópico" : ""));
   edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
   abrirDiario();
 }
 
@@ -878,9 +908,58 @@ function edMarcarLinhasSaindo(item, estado) {
   return linhas;
 }
 
+let edUltimoRegistro = null;
+
+/* Um botão que aparece por alguns segundos e desfaz o último registro:
+ * apaga o registro do diário e devolve o tópico à agenda. */
+function edMostrarDesfazer(item) {
+  const bar = $("barraDesfazerReg");
+  if (!bar) return;
+  $("desfazerRegTxt").textContent = t("ed_desfazer_reg", { n: item.nome });
+  bar.hidden = false;
+  if (typeof setTimeout === "function") setTimeout(() => {
+    if (bar) bar.hidden = true;
+  }, 12000);
+}
+
+function edDesfazerUltimoRegistro() {
+  const bar = $("barraDesfazerReg");
+  if (bar) bar.hidden = true;
+  if (!edUltimoRegistro) { uiAlert(t("ed_desfazer_nada")); return; }
+  /* acha o registro MAIS RECENTE daquele tópico e usa o caminho normal de
+   * apagar, que já sabe devolver o progresso anterior */
+  let idx = -1;
+  for (let k = edDiario.length - 1; k >= 0; k--) {
+    if (edDiario[k] && edDiario[k].c === edUltimoRegistro.chave) { idx = k; break; }
+  }
+  if (idx < 0) { uiAlert(t("ed_desfazer_nada")); return; }
+  const x = edDiario[idx];
+  const ultimoDoTopico = edDiario.reduce(
+    (m, y, k) => (y.c === x.c ? k : m), -1) === idx;
+  edDiario.splice(idx, 1);
+  if (ultimoDoTopico) {
+    const ant = edDiario.filter((y) => y.c === x.c).pop();
+    if (ant && ant.a !== "pendente") edProgresso[x.c] = { e: ant.a, d: ant.d };
+    else delete edProgresso[x.c];
+  }
+  salvarDiario();
+  edSalvar();
+  reg("EDITAL-DIARIO", "último registro desfeito: " + x.n, x.a + " de " + x.d);
+  edUltimoRegistro = null;
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  toast("ed_desfeito_reg");
+}
+
 function edDespedir(item, estado, linhas) {
   linhas = linhas || [];
+  /* DESFAZER À MÃO, no instante seguinte.
+   * O erro mais comum aqui é de MIRA: você registra um tópico, ele sai da
+   * agenda, a lista sobe, e o próximo clique cai na linha que subiu. Sem um
+   * desfazer imediato, corrigir exige abrir o diário e achar o registro. */
+  edUltimoRegistro = { chave: item.chave, nome: item.nome, quando: Date.now() };
   toast(estado === "revisado" ? "ed_foi_diario_rev" : "ed_foi_diario");
+  edMostrarDesfazer(item);
   reg("EDITAL-PROGRESSO", "item saiu da agenda para o diário",
       item.nome + " · " + (estado || "pendente"));
 
@@ -1732,6 +1811,10 @@ function edIniciar() {
   if ($("btnLoteNada")) $("btnLoteNada").onclick = () => { edSelecao.clear(); edRender(); };
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
    * eu embarquei um botão morto */
+  if ($("btnDesfazerReg")) $("btnDesfazerReg").onclick = edDesfazerUltimoRegistro;
+  if ($("btnDesfazerRegNao")) $("btnDesfazerRegNao").onclick = () => {
+    const b = $("barraDesfazerReg"); if (b) b.hidden = true;
+  };
   if ($("btnDiarioTopo")) $("btnDiarioTopo").onclick = () => {
     diarioMostrar = DIARIO_PAGINA; diarioBusca = ""; 
     if ($("diarioBusca")) $("diarioBusca").value = "";

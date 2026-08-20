@@ -968,6 +968,8 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .it-fill{height:100%;width:0;background:transparent}
 .it-fill.parcial{background:#f5a524}
 .it-fill.cheio{background:#30a46c}
+.it-num{font-size:10px;color:#f5a524;margin-top:2px;font-weight:700}
+.it-num.cheio{color:#30a46c}
 .di-per{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
   font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
 .di-per.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
@@ -1017,6 +1019,10 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ed-busca-barra{display:flex;flex-direction:column;gap:7px;margin:0 0 9px}
 .vk-acoes-topo{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .ed-atalhos{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+.ed-desfazer-reg{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  margin:0 0 8px;padding:8px 11px;border-radius:9px;font-size:11.5px;
+  background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.45);color:var(--texto)}
+.ed-desfazer-reg[hidden]{display:none}
 /* na linha do diário, o que leva de volta ao material fica antes do que
    apaga: rever é o gesto comum, apagar é o raro */
 /* Uma linha do diário são três faixas empilhadas: data+ação+tópico,
@@ -1154,7 +1160,16 @@ dialog.mat-amplo .mat-leitura{max-height:74vh}
 .ed-item-disc-link:hover{color:var(--texto)}
 .ed-item-porque{font-size:10.5px;color:var(--sutil);margin-top:2px;line-height:1.35}
 .ed-item-min{font-size:11px;white-space:nowrap}
-.ed-item.ehrev{background:rgba(34,197,94,.07)}
+/* REVISÃO tem cor própria. Antes era verde a 7% — praticamente invisível,
+   e verde é a cor de "feito", que é outra coisa. Azul, com barra à esquerda
+   e selo, porque cor sozinha não serve a quem imprime em preto e branco nem
+   a quem tem dificuldade com cores. */
+.ed-item.ehrev{background:rgba(59,130,246,.07);border-left:3px solid #3b82f6;
+  padding-left:7px}
+.ed-item.ehrev .ed-item-nome{color:#93c5fd}
+.ed-selo-rev{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  background:rgba(59,130,246,.18);color:#3b82f6;padding:1px 7px;border-radius:999px;
+  margin-left:6px;white-space:nowrap}
 .ed-medida{cursor:pointer;text-align:left;font:inherit}
 .ed-medida:hover{border-color:var(--sutil)}
 .ed-diario{margin-top:8px;font-size:11px;color:var(--sutil);cursor:pointer;
@@ -1513,6 +1528,15 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
        medidores ESTUDADO/REVISADO — que eu mesmo removi do painel na v8.71.
        Resultado: quem passou uma semana sem registrar não tinha COMO abrir
        o próprio diário. Botão fixo, sempre visível. -->
+  <!-- O erro mais comum ao registrar é de MIRA: o item sai da agenda, a
+       lista sobe, e o clique seguinte cai na linha que subiu. -->
+  <div class="ed-desfazer-reg" id="barraDesfazerReg" hidden>
+    <span id="desfazerRegTxt"></span>
+    <button class="btn-min btn-min-ok" id="btnDesfazerReg" data-i18n="ed_desfazer_btn"
+      title="Apaga o registro que acabou de ser feito e devolve o tópico à agenda."></button>
+    <button class="btn-min" id="btnDesfazerRegNao" data-i18n="ed_desfazer_nao"
+      title="Fecha este aviso. O registro fica."></button>
+  </div>
   <div class="ed-atalhos">
     <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
     <!-- só aparece quando o edital em uso é um previsto -->
