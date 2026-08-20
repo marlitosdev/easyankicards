@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.94.0";
+const VERSAO = "8.95.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -307,20 +307,31 @@ function uiAlert(texto) { return uiDialog(String(texto), false); }
  * — como escrever a explicação de uma dúvida — que precisam de texto.
  * Devolve null quando a pessoa desiste, para distinguir "cancelei" de
  * "apaguei o que estava escrito". */
-function uiTexto(titulo, valor) {
+/* uiTexto(titulo, valor)            -> promessa de string ou null
+ * uiTexto(titulo, valor, {rotulo2, valor2}) -> promessa de {a, b} ou null
+ * O segundo campo existe para a questão, que tem enunciado E gabarito. */
+function uiTexto(titulo, valor, dois) {
   return new Promise((resolve) => {
     const dlg = document.getElementById("dlgTextoLivre");
     if (!dlg) { resolve(null); return; }
     document.getElementById("txtLivreTit").textContent = titulo || "";
     const campo = document.getElementById("txtLivreCampo");
     campo.value = valor || "";
+    const cx2 = document.getElementById("txtLivreCaixa2");
+    const campo2 = document.getElementById("txtLivreCampo2");
+    if (cx2 && campo2) {
+      cx2.style.display = dois ? "" : "none";
+      document.getElementById("txtLivreRot2").textContent = (dois && dois.rotulo2) || "";
+      campo2.value = (dois && dois.valor2) || "";
+    }
     const fim = (v) => {
       document.getElementById("btnTxtLivreOk").onclick = null;
       document.getElementById("btnTxtLivreNao").onclick = null;
       if (dlg.open) dlg.close();
       resolve(v);
     };
-    document.getElementById("btnTxtLivreOk").onclick = () => fim(campo.value);
+    document.getElementById("btnTxtLivreOk").onclick = () =>
+      fim(dois ? { a: campo.value, b: (campo2 && campo2.value) || "" } : campo.value);
     document.getElementById("btnTxtLivreNao").onclick = () => fim(null);
     abrirModal(dlg);
     try { campo.focus(); } catch (e) {}
