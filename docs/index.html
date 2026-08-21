@@ -587,11 +587,61 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   padding:6px 10px;margin:-4px 0 6px;border-radius:0 6px 6px 0}
 .mat-leitura .mat-gab::before{content:"GABARITO";display:block;font-size:9px;
   letter-spacing:.09em;color:#2f9e6e;font-weight:700;margin-bottom:2px}
+/* =====================================================================
+ * UMA barra de rolagem só, e o menu sempre à vista
+ *
+ * Havia DUAS rolagens encaixadas: o diálogo inteiro (.diag-modal tem
+ * overflow:auto) e o painel de leitura (max-height:52vh + overflow:auto).
+ * Quem estava no fim do texto rolava a de dentro; para alcançar os botões
+ * de cima precisava perceber que existia outra barra, a de fora, e rolar
+ * ELA. Daí a queixa de não conseguir voltar ao menu.
+ *
+ * A saída não é menu flutuante: é tirar o cabeçalho e o rodapé de dentro
+ * da área que rola. Com o diálogo em coluna flexível, título, barra de
+ * botões e rodapé ficam FIXOS, e só o texto rola. Menu flutuante
+ * resolveria pela metade — continuaria sobrepondo o texto e as duas
+ * barras continuariam existindo.
+ * ===================================================================== */
+#dlgMaterial, #dlgLeiSeca{display:flex;flex-direction:column;
+  height:92vh;max-height:92vh}
+#dlgMaterial > *, #dlgLeiSeca > *{flex:0 0 auto}
+/* o texto é a única parte elástica — e portanto a única que rola */
+#dlgMaterial #matTexto, #dlgMaterial #matLeitura,
+#dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura{
+  flex:1 1 auto;min-height:120px;max-height:none;height:auto;resize:none}
+/* cabeçalho comprido não pode comer a tela inteira num monitor baixo */
+#dlgMaterial .mat-topo, #dlgMaterial .mat-ctrl, #dlgMaterial .mat-barra{
+  max-height:24vh;overflow-y:auto}
+.btn-min.btn-salvo{background:#2f9e6e!important;color:#fff!important;
+  border-color:#2f9e6e!important;transition:background .12s}
+.btn.btn-salvo{background:#2f9e6e!important;color:#fff!important}
+.cns-lista{max-height:46vh;overflow:auto;margin:6px 0}
+.cns-item{border-left:3px solid #f5a524;padding:5px 9px;margin-bottom:7px;
+  border-radius:0 6px 6px 0;background:rgba(245,165,36,.07)}
+.cns-item.cns-teima{border-left-color:#8b8b8b;background:rgba(140,140,140,.08)}
+.cns-onde{font-size:10px;letter-spacing:.06em;color:#9aa;margin-bottom:3px}
+.cns-antes,.cns-depois{font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:11.5px;white-space:pre-wrap;word-break:break-word;padding:2px 0}
+.cns-antes{color:#e06c6c;text-decoration:line-through;text-decoration-color:rgba(224,108,108,.45)}
+.cns-depois{color:#5fbf8f}
 .duv-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.09);
   padding:5px 9px;margin-top:5px;border-radius:0 6px 6px 0;font-size:12px}
 mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
   animation:matPisca .55s ease-in-out 4}
 @keyframes matPisca{0%,100%{outline-color:#f5a524}50%{outline-color:transparent}}
+.mat-leitura details.mat-dica > summary,
+.mat-leitura details.mat-gab > summary{cursor:pointer;list-style:none;
+  font-size:9px;letter-spacing:.09em;font-weight:700;user-select:none}
+.mat-leitura details.mat-dica > summary::-webkit-details-marker,
+.mat-leitura details.mat-gab > summary::-webkit-details-marker{display:none}
+.mat-leitura details.mat-dica > summary{color:#f5a524}
+.mat-leitura details.mat-gab > summary{color:#2f9e6e}
+.mat-leitura details.mat-dica > summary::before{content:"▾ "}
+.mat-leitura details.mat-gab > summary::before{content:"▾ "}
+.mat-leitura details:not([open]).mat-dica > summary::before,
+.mat-leitura details:not([open]).mat-gab > summary::before{content:"▸ "}
+.mat-leitura details.mat-dica > div,
+.mat-leitura details.mat-gab > div{margin-top:3px}
 .mat-leitura .mat-dica{border-left:3px solid #f5a524;background:rgba(245,165,36,.10);
   padding:8px 12px;border-radius:0 9px 9px 0;margin:8px 0;font-size:.95em}
 .mat-leitura .mat-dica::before{content:"DICA";display:block;font-size:9px;
@@ -698,7 +748,7 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mat-sep{width:1px;height:16px;background:var(--borda);margin:0 4px}
 .mat-estado{margin-left:auto;font-size:10.5px;color:#22c55e;font-weight:700}
 dialog.mat-amplo{max-width:96vw;width:96vw}
-dialog.mat-amplo .mat-leitura{max-height:74vh}
+dialog.mat-amplo{height:96vh;max-height:96vh}
 .ed-doc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
   display:inline-flex;align-items:center;justify-content:center;font-size:12px;
   border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
@@ -2146,7 +2196,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
            backup, e achar por que uma marcação falhou virava garimpo -->
       <!-- "lei seca" é marca da pessoa: só ela sabe se aquilo é a letra da
            lei ou um comentário sobre ela -->
-      <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_btn" title="Abre a LEI SECA deste tópico: a letra da lei, guardada à parte do resumo. Tem leitor próprio e botão para registrar que você leu."></button>
+      <button class="btn-min" id="btnMatDicas" hidden
+      title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
+    <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_btn" title="Abre a LEI SECA deste tópico: a letra da lei, guardada à parte do resumo. Tem leitor próprio e botão para registrar que você leu."></button>
       <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn" title="Mostra só o que aconteceu dentro dos resumos: marcações feitas, recusadas e o motivo. Serve para relatar um problema."></button>
       <!-- fechar também aqui: com resumo grande, o rodapé fica longe.
            Mesma pergunta de saída do botão de baixo. -->
@@ -2254,6 +2306,19 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       title="Guarda o que você escreveu."></button>
     <button class="btn btn-cinza" id="btnTxtLivreNao" data-i18n="cancel_btn"
       title="Sai sem guardar. O que já estava escrito continua como estava."></button>
+  </div>
+</dialog>
+
+<dialog id="dlgMatConserto" class="ui-modal diag-modal">
+  <h3 data-i18n="cns_titulo"></h3>
+  <p class="nota" data-i18n="cns_ajuda"></p>
+  <div id="cnsLista" class="cns-lista"></div>
+  <p class="nota" id="cnsResumo"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnCnsOk" data-i18n="cns_ok"
+      title="Aplica exatamente as trocas mostradas acima."></button>
+    <button class="btn btn-cinza" id="btnCnsNao" data-i18n="cancel_btn"
+      title="Sai sem mexer no resumo."></button>
   </div>
 </dialog>
 

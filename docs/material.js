@@ -322,6 +322,24 @@ function matComMarcador(txt) {
   return txt.slice(0, corte) + "\n\u0001MARCADOR\u0001\n" + txt.slice(corte);
 }
 
+/* lembra se você prefere as dicas abertas ou fechadas */
+let matDicasAbertas = true;
+try { matDicasAbertas = localStorage.getItem("eac_mat_dicas") !== "0"; } catch (e) {}
+
+function matAlternarDicas() {
+  matDicasAbertas = !matDicasAbertas;
+  try { localStorage.setItem("eac_mat_dicas", matDicasAbertas ? "1" : "0"); } catch (e) {}
+  matPintarDicasBotao();
+  if (matModo === "ler") matTrocarModo("ler");
+  matReg("dica", matDicasAbertas ? "dicas expandidas" : "dicas recolhidas", "");
+}
+
+function matPintarDicasBotao() {
+  const b = $("btnMatDicas");
+  if (!b) return;
+  b.textContent = t(matDicasAbertas ? "mat_dicas_recolher" : "mat_dicas_expandir");
+}
+
 function matParaHtml(txt) {
   const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
@@ -384,12 +402,19 @@ function matParaHtml(txt) {
     }
     if (/^&gt;&gt;\s?/.test(s)) {
       fecharLista();
-      saida.push('<div class="mat-gab">' + inline(s.replace(/^&gt;&gt;\s?/, "")) + "</div>");
+      /* gabarito FECHADO por padrão: resposta à vista ao lado da pergunta
+       * não deixa você testar a si mesmo, que é o motivo de ter questão. */
+      saida.push('<details class="mat-gab"><summary>' + t("mat_gabarito")
+        + '</summary><div>' + inline(s.replace(/^&gt;&gt;\s?/, "")) + "</div></details>");
       return;
     }
     if (/^&gt;\s?/.test(s)) {
       fecharLista();
-      saida.push('<div class="mat-dica">' + inline(s.replace(/^&gt;\s?/, "")) + "</div>");
+      /* dica recolhível: no meio de um resumo longo ela compete com o texto
+       * original; fechada, vira uma linha fina que você abre quando precisa */
+      saida.push('<details class="mat-dica"' + (matDicasAbertas ? " open" : "")
+        + '><summary>' + t("mat_dica_rot") + '</summary><div>'
+        + inline(s.replace(/^&gt;\s?/, "")) + "</div></details>");
       return;
     }
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
@@ -462,14 +487,17 @@ function matAbrirEditor(item, comoLer) {
   } catch (e) {}
   /* material que já existe abre para LER; material novo abre para escrever.
    * Quem clica num tópico que já tem resumo quer relê-lo, não editá-lo. */
-  matTrocarModo(comoLer || (r ? "ler" : "editar"));
+  matTrocarModo(comoLer ? "ler" : (r ? "ler" : "editar"));
   abrirModal("dlgMaterial");
   if (matModo === "editar") $("matTexto").focus();
 }
 
 function matTrocarModo(modo) {
-  matModo = modo;
-  const lendo = modo === "ler";
+  /* só existem dois modos. Qualquer outra coisa (um true vindo de quem
+   * confundiu "comoLer" com booleano) virava um modo inexistente: nem lia
+   * nem editava, e o painel de leitura ficava escondido e vazio sem erro. */
+  matModo = modo === "ler" || modo === true ? "ler" : "editar";
+  const lendo = matModo === "ler";
   $("matTexto").hidden = lendo;
   $("matBarra").hidden = lendo;
   $("matLeitura").hidden = !lendo;
@@ -485,6 +513,11 @@ function matTrocarModo(modo) {
   matPintarLei();
   matPintarDuvidas();
   matPintarConserto();
+  /* o botão de dicas só faz sentido se este resumo TEM dica incorporada */
+  if ($("btnMatDicas")) {
+    $("btnMatDicas").hidden = !/^&gt;\s|^>\s/m.test($("matTexto").value || "");
+    matPintarDicasBotao();
+  }
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
   if (lendo) {
     $("matLeitura").innerHTML = matParaHtml($("matTexto").value)
@@ -808,15 +841,60 @@ function matPintarConserto() {
 
 async function matConsertarAbrir() {
   if (!matAtual) return;
-  const q = matNegritoQuebrado(matAtual.chave);
-  if (!q.length) { uiAlert(t("mat_consertar_nada")); return; }
-  const amostra = q.slice(0, 4).map((x) => "· " + x.txt.slice(0, 90)).join("\n");
-  if (!(await uiConfirm(t("mat_consertar_conf", { n: q.length, a: amostra })))) return;
+  const plano = matConsertarPlano(matAtual.chave);
+  if (!plano.length) { await uiAlert(t("mat_consertar_nada")); matPintarConserto(); return; }
+
+  /* MOSTRA antes de mexer. Um botão que altera o resumo sem dizer o que vai
+   * alterar pede confiança cega — e este já errou uma vez, calado. */
+  const box = $("cnsLista");
+  box.innerHTML = "";
+  const mudam = plano.filter((p) => p.mudou);
+  const teimam = plano.filter((p) => !p.mudou);
+  plano.forEach((p) => {
+    const li = document.createElement("div");
+    li.className = "cns-item" + (p.mudou ? "" : " cns-teima");
+    const onde = document.createElement("div");
+    onde.className = "cns-onde";
+    onde.textContent = t("cns_linha", { n: p.linha + 1 })
+      + (p.onde === "lei" ? " · " + t("duv_na_lei") : "")
+      + (p.mudou ? "" : " · " + t("cns_sem_conserto"));  /* só se uma regra futura falhar */
+    const a1 = document.createElement("div");
+    a1.className = "cns-antes"; a1.textContent = p.antes.slice(0, 300);
+    li.append(onde, a1);
+    if (p.mudou) {
+      const d1 = document.createElement("div");
+      d1.className = "cns-depois"; d1.textContent = p.depois.slice(0, 300);
+      li.append(d1);
+    }
+    box.append(li);
+  });
+  /* Não mostro mais "N sem conserto possível": toda linha que o detector
+   * aponta hoje TEM conserto, então o número seria sempre zero — um campo
+   * que nunca muda só ocupa espaço e sugere um risco que não existe.
+   * A honestidade de verdade está na conferência DEPOIS de aplicar. */
+  $("cnsResumo").textContent = t("cns_resumo", { m: mudam.length });
+  $("btnCnsOk").disabled = !mudam.length;
+
+  const querFazer = await new Promise((resolve) => {
+    const fim = (v) => {
+      $("btnCnsOk").onclick = null; $("btnCnsNao").onclick = null;
+      if ($("dlgMatConserto").open) $("dlgMatConserto").close();
+      resolve(v);
+    };
+    $("btnCnsOk").onclick = () => fim(true);
+    $("btnCnsNao").onclick = () => fim(false);
+    abrirModal("dlgMatConserto");
+  });
+  if (!querFazer) return;
+
   const n = matConsertarNegrito(matAtual.chave);
-  $("matTexto").value = String((matResumos[matAtual.chave] || {}).texto || "");
-  matTrocarModo(matModo);
+  /* CONFERE o resultado em vez de anunciar sucesso: o aviso anterior dizia
+   * "consertei 1 linha" sem olhar se algo tinha mudado, e o botão voltava. */
+  const restam = matConsertarPlano(matAtual.chave);
   matPintarConserto();
-  await uiAlert(t("mat_consertado", { n }));
+  await uiAlert(restam.length
+    ? t("cns_feito_resta", { n, r: restam.length })
+    : t("mat_consertado", { n }));
 }
 
 function matPintarLei() {
@@ -987,6 +1065,26 @@ function matLimparMarcas() {
   $("matEstado").textContent = t("mat_marcas_limpas_nao_salvo");
 }
 
+/* Confirmação que dá para ver sem procurar.
+ * O carimbo "salvo às HH:MM:SS" existia, mas fica embaixo da barra de
+ * marcação — longe do botão e fácil de não notar. Aqui o próprio botão
+ * responde por um instante, que é onde o olho já está. */
+function matPiscarSalvo() {
+  ["btnMatSalvar", "btnMatSalvarEstadoTopo"].forEach((id) => {
+    const b = $(id);
+    if (!b) return;
+    if (b._voltar) { clearTimeout(b._voltar); b.textContent = b._rot || b.textContent; }
+    b._rot = b._rot || b.textContent;
+    b.textContent = t("mat_salvo_ok");
+    b.classList.add("btn-salvo");
+    b._voltar = setTimeout(() => {
+      b.textContent = b._rot;
+      b.classList.remove("btn-salvo");
+      b._voltar = null;
+    }, 1800);
+  });
+}
+
 function matSalvarEstado() {
   if (!matAtual) return false;
   matGravar(matAtual.chave, $("matTexto").value,
@@ -997,6 +1095,7 @@ function matSalvarEstado() {
   matReg("salvar", "resumo salvo",
          (matAtual && matAtual.topico) + " · "
          + String($("matTexto").value || "").length + " caracteres");
+  matPiscarSalvo();
   matRender();
   return true;
 }
@@ -1474,6 +1573,7 @@ function matIniciar() {
   if ($("btnMatLogAba")) $("btnMatLogAba").onclick = matLogAbrir;
   matBotao("btnDuvidas", "minhas dúvidas", matDuvidasAbrir);
   matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
+  matBotao("btnMatDicas", "recolher/expandir dicas", matAlternarDicas);
   if ($("btnDuvFechar")) $("btnDuvFechar").onclick = () => $("dlgDuvidas").close();
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
@@ -2098,14 +2198,15 @@ function matNegritoQuebrado(chave) {
   const r = matResumos[chave];
   if (!r) return [];
   const fora = [];
-  [["texto", r.texto], ["lei", r.leiTexto]].forEach(([onde, txt]) => {
+  /* texto VIVO: o conserto tem de olhar o que está NA TELA. Enquanto olhava
+   * só o registro, ele "consertava" uma cópia que o próximo salvamento
+   * sobrescrevia — e o contador do botão nunca baixava. */
+  [["texto", matTextoVivo(chave, "texto")], ["lei", matTextoVivo(chave, "lei")]]
+    .forEach(([onde, txt]) => {
     String(txt || "").split("\n").forEach((l, k) => {
-      const n = (l.match(/\*\*/g) || []).length;
-      const soltos = (l.match(/\*/g) || []).length - n * 2;
-      const marcaSolta = matMarcaOrfa(l);
-      if (n % 2 === 1 || soltos > 0 || marcaSolta)
-        fora.push({ onde, linha: k, txt: l.slice(0, 120),
-                    negrito: n % 2 === 1 || soltos > 0, marca: marcaSolta });
+      if (!matLinhaTorta(l)) return;
+      fora.push({ onde, linha: k, txt: l.slice(0, 120),
+                  marca: matMarcaOrfa(l) });
     });
   });
   return fora;
@@ -2114,38 +2215,98 @@ function matNegritoQuebrado(chave) {
 /* Tira os asteriscos órfãos, sem tocar nos pares. Não adivinha onde o
  * negrito deveria terminar: só limpa o que sobrou solto, que é o que
  * atrapalha a leitura. */
-function matConsertarNegrito(chave) {
-  const r = matResumos[chave];
-  if (!r) return 0;
-  let n = 0;
-  ["texto", "leiTexto"].forEach((campo) => {
-    const s = String(r[campo] || "");
-    if (!s) return;
-    const linhas = s.split("\n").map((l0) => {
-      let l = l0;
-      /* 1. marca aberta e nunca fechada: tira o abridor. Não inventa onde
-       * a marca deveria terminar — inventar seria pintar o que a pessoa
-       * não escolheu. */
-      if (matMarcaOrfa(l)) {
-        l = l.replace(new RegExp("==" + MAT_SUF), "");
-        n++;
-      }
-      const pares = (l.match(/\*\*/g) || []).length;
-      const soltos = (l.match(/\*/g) || []).length - pares * 2;
-      if (pares % 2 === 0 && soltos === 0) return l;
-      n++;
-      /* O defeito REMOVIA um asterisco de abertura ("**Ato" virava "*Ato"),
-       * então consertar é devolvê-lo — não tirar o par que sobrou. Tirar o
-       * "*" solto deixaria "Ato Complexo:**", que continua desequilibrado.
-       * A primeira versão deste conserto fazia exatamente isso. */
-      return l.replace(/(^|[^*])\*(?!\*)([^*]*\*\*)/, "$1**$2");
+/* =====================================================================
+ * CONSERTO DE UMA LINHA
+ *
+ * Devolve { nova, mudou, motivo }. Não grava nada — quem chama decide.
+ * Isolar isto permite MOSTRAR o que vai mudar antes de mudar, que era o
+ * pedido, e permite não mentir: se a linha não tem conserto, dizemos.
+ *
+ * O defeito típico é um asterisco perdido de um par: "**Titulo:*" ou
+ * "*Titulo:**". A versão anterior só sabia o segundo caso — o primeiro
+ * passava batido e ainda assim era CONTADO como consertado, então o
+ * aviso "(1)" reaparecia para sempre.
+ * ===================================================================== */
+/* UMA regra só para "esta linha está torta?".
+ * Estava escrita duas vezes, e as duas contavam o marcador de lista
+ * ("* item") como asterisco solto: qualquer resumo com lista virava um
+ * aviso permanente de "consertar marcação (1)" que nada consertava,
+ * porque a linha estava certa desde o começo. */
+function matLinhaTorta(l) {
+  const s = String(l).replace(/^(\s*[-*]\s+)/, "");
+  const pares = (s.match(/\*\*/g) || []).length;
+  const soltos = (s.match(/\*/g) || []).length - pares * 2;
+  return pares % 2 === 1 || soltos > 0 || matMarcaOrfa(s);
+}
+
+function matConsertarLinha(l0) {
+  let l = String(l0);
+  const motivos = [];
+
+  /* marca de cor aberta e nunca fechada: tira o abridor. Não inventamos
+   * onde ela deveria terminar — inventar é pintar o que não foi escolhido. */
+  if (matMarcaOrfa(l)) {
+    l = l.replace(new RegExp("==" + MAT_SUF), "");
+    motivos.push("marca_aberta");
+  }
+
+  /* o marcador de lista no começo é um "*" legítimo: fica de fora da conta */
+  const mBul = l.match(/^(\s*[-*]\s+)/);
+  const bullet = mBul ? mBul[1] : "";
+  let corpo = bullet ? l.slice(bullet.length) : l;
+
+  /* trabalha por SEQUÊNCIAS de asterisco: "**"=par, "*"=solto.
+   * Sequência de tamanho ímpar = alguém perdeu um asterisco; devolve. */
+  const antesAst = corpo;
+  corpo = corpo.replace(/\*+/g, (seq) => (seq.length % 2 === 1 ? seq + "*" : seq));
+  if (corpo !== antesAst) motivos.push("asterisco_devolvido");
+
+  /* sobrou número ímpar de delimitadores "**"? então há negrito que abre e
+   * nunca fecha. Tira o que ficou aberto, como se faz com a marca de cor. */
+  const dels = (corpo.match(/\*\*/g) || []).length;
+  if (dels % 2 === 1) {
+    const ult = corpo.lastIndexOf("**");
+    corpo = corpo.slice(0, ult) + corpo.slice(ult + 2);
+    /* tirar o delimitador costuma deixar dois espaços colados onde antes
+     * havia " * " — juntar de volta é parte de deixar o texto apresentável */
+    if (corpo.slice(ult - 1, ult + 1) === "  ") corpo = corpo.slice(0, ult) + corpo.slice(ult + 1);
+    motivos.push("negrito_aberto_removido");
+  }
+
+  const nova = bullet + corpo;
+  return { nova, mudou: nova !== String(l0), motivo: motivos.join("+") };
+}
+
+/* O PLANO: o que mudaria, sem mudar nada. É isto que a janela mostra. */
+function matConsertarPlano(chave) {
+  const itens = [];
+  [["texto", matTextoVivo(chave, "texto")], ["lei", matTextoVivo(chave, "lei")]]
+    .forEach(([onde, txt]) => {
+      String(txt || "").split("\n").forEach((l, k) => {
+        if (!matLinhaTorta(l)) return;
+        const r = matConsertarLinha(l);
+        itens.push({ onde, linha: k, antes: l, depois: r.nova,
+                     mudou: r.mudou, motivo: r.motivo });
+      });
     });
-    r[campo] = linhas.join("\n");
+  return itens;
+}
+
+function matConsertarNegrito(chave) {
+  const plano = matConsertarPlano(chave);
+  let n = 0, teimosas = 0;
+  ["texto", "lei"].forEach((campo) => {
+    const desteCampo = plano.filter((p) => p.onde === campo && p.mudou);
+    if (!desteCampo.length) return;
+    const linhas = matTextoVivo(chave, campo).split("\n");
+    desteCampo.forEach((p) => { linhas[p.linha] = p.depois; n++; });
+    matAplicarTexto(chave, campo, linhas.join("\n"));
   });
-  if (n) {
-    r.tocado = new Date().toISOString();
-    matSalvar();
-    matReg("conserto", "asteriscos órfãos removidos", n + " linha(s)");
+  teimosas = plano.filter((p) => !p.mudou).length;
+  if (n || teimosas) {
+    matReg("conserto", n ? "marcação consertada" : "nada tinha conserto",
+           n + " linha(s) mudada(s)"
+           + (teimosas ? " · " + teimosas + " sem conserto possível" : ""));
   }
   return n;
 }
