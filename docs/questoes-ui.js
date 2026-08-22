@@ -15,6 +15,7 @@ let qsUiCtxCriar = null;      /* de qual tópico vieram as questões sendo criad
 let qsUiAchados = null;
 let qsUiDoTexto = [];   /* as que o detector achou no próprio texto */
 let qsUiTextoBase = "";  /* o texto do resumo que abriu esta criação */
+let qsUiEscolhas = [];   /* o que a pessoa marcou para gravar, uma por questão */
 let qsUiRecibo = null;
 let qsUiVoltarPara = null;    /* quem abriu a sessão: resumo ou aba */
 
@@ -153,19 +154,33 @@ function qsUiConferir() {
 function qsUiPintarConf(achados, ignoradas) {
   const r = { achados: achados || [], ignoradas: ignoradas || [] };
   qsUiAchados = r.achados;
+  qsUiEscolhas = [];
   const box = $("qsCriarConf");
   box.innerHTML = "";
+
   r.achados.forEach((q, i) => {
+    const par = qsSemelhante(q);
     const li = document.createElement("div");
-    li.className = "qs-conf";
-    const cab = document.createElement("div");
+    li.className = "qs-conf" + (par ? " qs-conf-rep" : "");
+
+    /* a escolha fica com quem está olhando. Sem duplicata, marcado; com
+     * duplicata, desmarcado — mas VISÍVEL, e ao lado da que já existe. */
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !par;
+    qsUiEscolhas.push({ cb, q, par });
+
+    const cab = document.createElement("label");
     cab.className = "qs-conf-cab";
-    cab.textContent = "[" + (i + 1) + "] " + t("qs_tipo_" + q.tipo)
-      + (q.banca ? " · " + q.banca : "") + " · " + t("qs_gab_e", { g: q.gabarito });
+    cab.append(cb, document.createTextNode(" [" + (i + 1) + "] "
+      + t("qs_tipo_" + q.tipo) + (q.banca ? " · " + q.banca : "")
+      + " · " + t("qs_gab_e", { g: q.gabarito })));
+    li.append(cab);
+
     const en = document.createElement("div");
     en.className = "qs-conf-en";
     en.textContent = q.enunciado;
-    li.append(cab, en);
+    li.append(en);
     q.opcoes.forEach((o) => {
       const op = document.createElement("div");
       op.className = "qs-conf-op" + (o.letra === q.gabarito ? " certa" : "");
@@ -178,20 +193,47 @@ function qsUiPintarConf(achados, ignoradas) {
       cm.textContent = q.comentario;
       li.append(cm);
     }
+
+    if (par) {
+      /* MOSTRA A OUTRA. Dizer "repetida" sem mostrar contra o quê obriga a
+       * acreditar; mostrando as duas, dá para conferir. */
+      const av = document.createElement("div");
+      av.className = "qs-conf-aviso";
+      av.textContent = t("qs_rep_" + par.como,
+        { pct: Math.round(par.score * 100),
+          tp: par.existente.topico || "—" });
+      const ja = document.createElement("div");
+      ja.className = "qs-conf-ja";
+      ja.textContent = t("qs_rep_ja") + " " + par.existente.enunciado;
+      li.append(av, ja);
+    }
     box.append(li);
   });
-  /* o que foi RECUSADO fica à vista, com o motivo: uma questão que some em
-   * silêncio é pior que uma questão errada, porque ninguém vai procurá-la */
+
+  /* o que nem chegou a virar questão, com o motivo e o texto inteiro */
   r.ignoradas.forEach((x) => {
     const li = document.createElement("div");
     li.className = "qs-conf qs-conf-ruim";
-    li.textContent = t("qs_recusada", { l: x.linha, m: t("qs_motivo_" + x.motivo) || x.motivo })
-      + (x.txt ? " — " + x.txt : "");
+    const cab = document.createElement("div");
+    cab.className = "qs-conf-cab";
+    cab.textContent = t("qs_recusada", { l: x.linha,
+      m: t("qs_motivo_" + x.motivo) || x.motivo });
+    const tx = document.createElement("div");
+    tx.className = "qs-conf-en";
+    tx.textContent = x.txt || "";
+    li.append(cab, tx);
     box.append(li);
   });
-  $("qsCriarResumo").textContent = t("qs_conf_resumo",
-    { n: r.achados.length, r: r.ignoradas.length });
-  $("btnQsCriarAplicar").disabled = !r.achados.length;
+
+  const contar = () => {
+    const n = qsUiEscolhas.filter((e) => e.cb.checked).length;
+    const reps = qsUiEscolhas.filter((e) => e.par).length;
+    $("qsCriarResumo").textContent = t("qs_conf_resumo2",
+      { n, tot: r.achados.length, rep: reps, rec: r.ignoradas.length });
+    $("btnQsCriarAplicar").disabled = !n;
+  };
+  qsUiEscolhas.forEach((e) => { e.cb.onchange = contar; });
+  contar();
 }
 
 /* ---------------------------------------------------------------------
@@ -206,15 +248,30 @@ function qsUiPintarConf(achados, ignoradas) {
 
 
 function qsUiAplicar() {
-  if (!qsUiAchados || !qsUiAchados.length) return;
-  qsUiRecibo = qsAplicar(qsUiAchados);
+  if (!qsUiEscolhas || !qsUiEscolhas.length) return;
+  const escolhidas = qsUiEscolhas.filter((e) => e.cb.checked);
+  if (!escolhidas.length) return;
+  const deixadas = qsUiEscolhas.filter((e) => !e.cb.checked);
+  /* quem marcou uma repetida quis gravar mesmo assim: a decisão dela vale
+   * mais do que a regra automática */
+  qsUiRecibo = qsAplicar(escolhidas.map((e) => {
+    if (e.par) e.q._forcar = true;
+    return e.q;
+  }));
   $("dlgQsCriar").close();
   qsUiMostrarDesfazer(qsUiRecibo);
   qsUiPintarBotaoResumo();
   qsUiRender();
+  /* REGISTRO COM CARA: quantas entraram, quantas a PESSOA deixou de fora,
+   * e o começo do enunciado de cada uma que ficou de fora. "6 repetidas"
+   * não deixa ninguém conferir depois se a decisão foi boa. */
+  const foraTxt = deixadas.map((e) =>
+    (e.par ? "[" + e.par.como + "] " : "") + String(e.q.enunciado).slice(0, 60))
+    .join(" | ");
   matReg("questao", "questões gravadas",
-         qsUiRecibo.novas + " novas · " + qsUiRecibo.repetidas + " repetidas");
-  uiAlert(t("qs_aplicadas", { n: qsUiRecibo.novas, r: qsUiRecibo.repetidas }));
+         qsUiRecibo.novas + " gravadas · " + deixadas.length + " deixadas de fora"
+         + (foraTxt ? " → " + foraTxt : ""));
+  uiAlert(t("qs_aplicadas2", { n: qsUiRecibo.novas, f: deixadas.length }));
 }
 
 function qsUiMostrarDesfazer(rec) {

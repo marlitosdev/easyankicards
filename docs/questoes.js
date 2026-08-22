@@ -459,11 +459,67 @@ function qsIgual(a, b) {
     && (a.chave || "") === (b.chave || "");
 }
 
+/* =====================================================================
+ * PARECIDA COM ALGUMA QUE JÁ EXISTE?
+ *
+ * Antes a duplicata era descartada na gravação, calada. O registro dizia
+ * "6 repetidas" — um número sem cara: não dava para saber quais, nem
+ * contra o que, nem se a decisão estava certa. Perder trabalho em silêncio
+ * é pior do que gravar duplicata, porque a duplicata dá para apagar depois
+ * e o que sumiu ninguém procura.
+ *
+ * Esta função só APONTA. Quem decide é quem está olhando.
+ * ===================================================================== */
+function qsPalavras(s) {
+  return qsNormal(s).replace(/[^\wà-ÿ ]/g, " ").split(/\s+/)
+    .filter((w) => w.length > 3);
+}
+
+function qsParecenca(a, b) {
+  const pa = qsPalavras(a), pb = qsPalavras(b);
+  if (!pa.length || !pb.length) return 0;
+  const setB = {};
+  pb.forEach((w) => { setB[w] = 1; });
+  let juntas = 0;
+  const vistas = {};
+  pa.forEach((w) => { if (setB[w] && !vistas[w]) { juntas++; vistas[w] = 1; } });
+  const total = new Set(pa.concat(pb)).size;
+  return total ? juntas / total : 0;
+}
+
+/* devolve { como, existente, score } ou null */
+function qsSemelhante(nova, lista) {
+  const base = lista || qsBanco;
+  const en = qsNormal(nova.enunciado);
+  let melhor = null;
+  base.forEach((v) => {
+    if (qsNormal(v.enunciado) === en) {
+      const mesmoTopico = (v.chave || "") === (nova.chave || "");
+      const como = mesmoTopico ? "igual" : "igual_outro_topico";
+      if (!melhor || como === "igual") melhor = { como, existente: v, score: 1 };
+      return;
+    }
+    const s = qsParecenca(v.enunciado, nova.enunciado);
+    if (s >= 0.8 && (!melhor || (melhor.score < s && melhor.como !== "igual"))) {
+      melhor = { como: "parecida", existente: v, score: s };
+    }
+  });
+  return melhor;
+}
+
 function qsAplicar(lista, gravar) {
   const novas = [];
   let repetidas = 0;
+  const recusadas = [];
   (lista || []).forEach((q) => {
-    if (qsBanco.some((v) => qsIgual(v, q))) { repetidas++; return; }
+    /* "_forcar" é a decisão de quem viu as duas lado a lado e disse para
+     * gravar assim mesmo. Sem isso, a escolha da pessoa seria desfeita
+     * aqui embaixo, o que é pior do que nunca ter perguntado. */
+    if (!q._forcar && qsBanco.some((v) => qsIgual(v, q))) {
+      repetidas++;
+      recusadas.push({ enunciado: q.enunciado, motivo: "ja_existe" });
+      return;
+    }
     const limpa = {
       id: q.id || qsNovoId(),
       tipo: q.tipo === "ce" ? "ce" : "me",
@@ -484,7 +540,8 @@ function qsAplicar(lista, gravar) {
     novas.push(limpa);
   });
   qsSalvar(gravar);
-  return { novas: novas.length, repetidas, ids: novas.map((x) => x.id) };
+  return { novas: novas.length, repetidas, recusadas,
+           ids: novas.map((x) => x.id) };
 }
 
 function qsDesfazer(recibo, gravar) {
@@ -670,6 +727,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
+    qsSemelhante, qsParecenca, qsIgual,
     qsSemMarcacao,
   };
 }
