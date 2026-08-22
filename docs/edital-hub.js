@@ -209,7 +209,7 @@ function hubPrefGravar(qual, valor) {
   try { localStorage.setItem(HUB_PREF[qual], String(valor)); } catch (e) {}
   /* os campos da bancada mostram a mesma coisa: dois lugares exibindo o
    * mesmo número acabam discordando se um não seguir o outro */
-  const campo = document.getElementById(qual === "dias" ? "edDias" : "edInicio");
+  const campo = document.getElementById(qual === "dias" ? "edDias" : null);
   if (campo && campo.value !== String(valor)) campo.value = valor;
   reg("EDITAL", "rotina de estudo alterada", qual + " = " + valor);
 }
@@ -231,20 +231,21 @@ function hubControlesAgenda() {
   };
   ld.append(dias);
 
-  const li = document.createElement("label");
-  li.className = "ed-agenda-cfg-item";
-  li.append(document.createTextNode(t("hub_cfg_inicio")));
-  const ini = document.createElement("input");
-  ini.type = "time";
-  ini.value = hubPref("inicio", "19:00");
-  ini.onchange = () => {
-    hubPrefGravar("inicio", ini.value || "19:00");
-    hubPintarAgenda();
-    if (typeof edRender === "function" && edAberto()) edRender();
-  };
-  li.append(ini);
+  /* HORAS POR SEMANA, SÓ PARA VER.
+   * O horário de início saiu: ninguém estuda às 05:40 porque uma divisão
+   * mandou, e o número dava ao plano uma precisão que ele não tem.
+   * No lugar dele, a informação que de fato governa a agenda — as horas
+   * semanais. Aqui é VISTA, não campo: quem manda nelas é o planejamento
+   * de cada edital, e ter dois lugares editando o mesmo número é como se
+   * criam os dois números que discordam. */
+  const lh = document.createElement("div");
+  lh.className = "ed-agenda-cfg-item ed-agenda-horas";
+  const totalH = (editais.filter((e) => edSituacao(e).grupo !== "encerrado")
+    .reduce((s, e) => s + ((lerEdital(e.texto || "").cfg || {}).horas || 0), 0));
+  lh.textContent = t("hub_cfg_horas", { h: totalH });
+  lh.title = t("hub_cfg_horas_ajuda");
 
-  cx.append(ld, li);
+  cx.append(ld, lh);
   return cx;
 }
 
@@ -461,11 +462,6 @@ function hubIniciar() {
   if (cd) {
     cd.value = String(hubPref("dias", 5));
     cd.addEventListener("change", () => hubPrefGravar("dias", cd.value));
-  }
-  const ci = document.getElementById("edInicio");
-  if (ci) {
-    ci.value = hubPref("inicio", "19:00");
-    ci.addEventListener("change", () => hubPrefGravar("inicio", ci.value));
   }
 
   /* o edital aberto manda o seu texto para a bancada */

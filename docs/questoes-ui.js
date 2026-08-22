@@ -77,9 +77,15 @@ function qsUiCriarAbrir(texto, ctx) {
 
   qsUiPintarConf(qsUiDoTexto.slice(), incompletos);
   abrirModal("dlgQsCriar");
+  const porMot = {};
+  incompletos.forEach((x) => { porMot[x.motivo] = (porMot[x.motivo] || 0) + 1; });
   matReg("questao", "criação de questões aberta",
          (ctx && ctx.topico ? ctx.topico + " · " : "")
-         + qsUiDoTexto.length + " já no texto · " + t0.length + " caracteres");
+         + qsUiDoTexto.length + " prontas no texto · "
+         + incompletos.length + " recusadas do texto"
+         + (incompletos.length ? " (" + Object.keys(porMot).sort()
+             .map((k) => k + "×" + porMot[k]).join(", ") + ")" : "")
+         + " · " + t0.length + " caracteres");
 }
 
 
@@ -90,18 +96,26 @@ function qsUiCriarAbrir(texto, ctx) {
  * concurso deste resumo. */
 function qsUiFonteAtual() {
   const outro = $("qsFonteOutro") && $("qsFonteOutro").checked;
-  if (!outro) return { texto: qsUiTextoBase, externo: false };
-  return { texto: String(($("qsCriarFonte") || {}).value || ""), externo: true };
+  return { texto: outro ? "" : qsUiTextoBase, externo: !!outro };
 }
 
+/* MATERIAL DE FORA NÃO PRECISA PASSAR POR AQUI.
+ * A primeira versão pedia para colar a aula, a lei ou o artigo dentro do
+ * app só para o app devolver o mesmo texto dentro do prompt — um desvio
+ * inteiro para nada. Quando a fonte é externa, o que se copia são as
+ * INSTRUÇÕES; a pessoa junta com o material onde ele já está.
+ * O que volta continua entrando pela mesma conferência. */
 function qsUiRefazerPrompt() {
   const f = qsUiFonteAtual();
-  if ($("qsCriarFonte")) $("qsCriarFonte").hidden = !f.externo;
-  const pronto = f.texto.trim();
-  $("qsCriarPrompt").value = pronto
-    ? qsPrompt(pronto, qsUiCtxCriar || {})
-    : t("qs_fonte_vazia");
-  if ($("btnQsCopiarPrompt")) $("btnQsCopiarPrompt").disabled = !pronto;
+  if ($("qsCriarFonte")) $("qsCriarFonte").hidden = true;
+  if ($("qsFonteNota")) {
+    $("qsFonteNota").hidden = !f.externo;
+    $("qsFonteNota").textContent = t("qs_fonte_nota");
+  }
+  $("qsCriarPrompt").value = f.externo
+    ? qsPrompt(t("qs_marca_material"), qsUiCtxCriar || {})
+    : qsPrompt(qsUiTextoBase, qsUiCtxCriar || {});
+  if ($("btnQsCopiarPrompt")) $("btnQsCopiarPrompt").disabled = false;
 }
 
 function qsUiConferir() {
@@ -118,9 +132,20 @@ function qsUiConferir() {
     juntas.push(q);
   });
   qsUiPintarConf(juntas, r.ignoradas);
+  /* REGISTRO PARA MELHORAR O PROMPT.
+   * Só o total não ajuda: para saber o que ajustar é preciso saber POR QUE
+   * cada uma foi recusada e quantas de cada motivo. É este detalhe que
+   * transforma "2 recusadas" em "a IA não fecha o gabarito em CE". */
+  const porMotivo = {};
+  r.ignoradas.forEach((x) => { porMotivo[x.motivo] = (porMotivo[x.motivo] || 0) + 1; });
+  const detalhe = Object.keys(porMotivo).sort()
+    .map((k) => k + "×" + porMotivo[k]).join(", ");
   matReg("questao", "conferência de questões",
          r.achados.length + " da IA · " + repetidas + " repetidas do texto · "
-         + r.ignoradas.length + " recusadas");
+         + r.ignoradas.length + " recusadas"
+         + (detalhe ? " · motivos: " + detalhe : "")
+         + " · formato: " + (/\[QUESTAO\]/i.test($("qsCriarResposta").value)
+             ? "campos nomeados" : "linha compacta"));
 }
 
 /* o desenho da conferência é o mesmo vindo da IA ou vindo do texto: o que
@@ -425,7 +450,7 @@ function qsUiPintarBotaoResumo() {
   const b = $("btnMatQuestoes");
   if (!b) return;
   if (!matAtual) { b.hidden = true; return; }
-  const n = (qsContarPorChave()[matAtual.chave] || 0);
+  const n = qsContarDoTopico(matAtual.chave);
   b.hidden = false;
   b.textContent = n ? t("qs_do_topico_n", { n }) : t("qs_do_topico_zero");
   b.disabled = false;
@@ -457,6 +482,17 @@ function qsUiVirarSelecao() {
 function qsUiIniciar() {
   qsCarregar();
   if ($("btnQsConferir")) $("btnQsConferir").onclick = () => qsUiConferir();
+  /* colar direto o que a IA devolveu, sem trocar de janela */
+  if ($("btnQsColar")) {
+    $("btnQsColar").onclick = async () => {
+      let lido = "";
+      try { lido = await navigator.clipboard.readText(); } catch (e) { lido = ""; }
+      if (!String(lido).trim()) { await uiAlert(t("qs_colar_vazio")); return; }
+      $("qsCriarResposta").value = lido;
+      matReg("questao", "resposta da IA colada", String(lido).length + " caracteres");
+      qsUiConferir();
+    };
+  }
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
   ["qsFonteResumo", "qsFonteOutro"].forEach((id) => {

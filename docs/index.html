@@ -701,6 +701,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:var(--campo);color:var(--texto);border:1px solid var(--borda);
   border-radius:6px;padding:6px 8px;font-family:inherit}
 .mat-leitura .mat-dica-just > div{text-align:justify}
+.ed-agenda-horas{font-size:11px;color:var(--sutil);white-space:nowrap}
 .qs-fonte{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;font-size:12px;
   color:var(--sutil)}
 .qs-fonte label{display:flex;gap:5px;align-items:center;cursor:pointer}
@@ -1860,8 +1861,6 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
           <input type="number" id="edHoras" min="1" max="80" step="1" value="10"></label>
         <label><span data-i18n="ed_dias"></span>
           <input type="number" id="edDias" min="1" max="7" step="1" value="5"></label>
-        <label><span data-i18n="ed_inicio"></span>
-          <input type="time" id="edInicio" value="19:00"></label>
       </div>
       <div class="ed-sim">
         <input type="range" id="edHorasSlider" min="1" max="60" step="1" value="10">
@@ -2502,15 +2501,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       <label title="A IA parte do texto deste resumo."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
       <label title="A IA parte de um texto que você colar: PDF de aula, lei, artigo, apostila."><input type="radio" name="qsFonte" id="qsFonteOutro"><span data-i18n="qs_fonte_outro"></span></label>
     </div>
+    <p class="nota" id="qsFonteNota" hidden></p>
     <textarea id="qsCriarFonte" rows="4" hidden
-      style="width:100%;box-sizing:border-box;font-size:12px"
-      placeholder="Cole aqui o material externo: trecho de aula, lei, artigo."></textarea>
+      style="width:100%;box-sizing:border-box;font-size:12px"></textarea>
     <div class="qs-passo"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
       <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
         title="Copia o prompt inteiro para colar na IA."></button></div>
     <textarea id="qsCriarPrompt" rows="4" readonly
       style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
     <div class="qs-passo"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
+      <button class="btn-min" id="btnQsColar" data-i18n="qs_colar_btn"
+        title="Traz o que você copiou da IA direto para a caixa abaixo e já confere."></button>
       <button class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
         title="Lê o que você colou e junta às questões já achadas no texto."></button></div>
     <textarea id="qsCriarResposta" rows="5"
