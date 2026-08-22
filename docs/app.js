@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "9.03.0";
+const VERSAO = "9.05.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -330,6 +330,24 @@ function uiTexto(titulo, valor, dois) {
       if (dlg.open) dlg.close();
       resolve(v);
     };
+    /* colar mantendo a formatação: o que vem de uma página traz negrito,
+     * itálico e listas em text/html, e o texto puro chega achatado */
+    const bCol = document.getElementById("btnTxtLivreColar");
+    if (bCol) {
+      bCol.onclick = async () => {
+        let lido = "";
+        try {
+          lido = typeof matLerColagemFormatada === "function"
+            ? await matLerColagemFormatada() : "";
+        } catch (e) { lido = ""; }
+        if (!String(lido).trim()) { await uiAlert(t("dic_colar_vazio")); return; }
+        const limpo = typeof matDicaLimparColagem === "function"
+          ? matDicaLimparColagem(lido) : lido;
+        /* acrescenta ao que já estiver escrito, em vez de apagar */
+        campo.value = campo.value.trim()
+          ? campo.value.replace(/\s*$/, "") + "\n" + limpo : limpo;
+      };
+    }
     document.getElementById("btnTxtLivreOk").onclick = () =>
       fim(dois ? { a: campo.value, b: (campo2 && campo2.value) || "" } : campo.value);
     document.getElementById("btnTxtLivreNao").onclick = () => fim(null);

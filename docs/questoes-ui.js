@@ -95,6 +95,22 @@ function qsUiCriarAbrir(texto, ctx) {
  * um artigo rendem questões que o resumo não tem. O que não muda é o
  * destino: as questões continuam nascendo com a disciplina, o tópico e o
  * concurso deste resumo. */
+/* A DICA É DESENHADA, NÃO CUSPIDA.
+ * Ela era posta como texto puro, então uma dica colada de uma página
+ * aparecia com "**", "###" e "---" à mostra — pior de ler do que o texto
+ * original. Passa pelo mesmo desenho do resumo: negrito vira negrito,
+ * lista vira lista, quebra de linha vira quebra de linha. */
+function qsUiCaixaDica(texto) {
+  const dc = document.createElement("div");
+  dc.className = "qs-minha-dica";
+  try {
+    dc.innerHTML = matParaHtml(String(texto || ""));
+  } catch (e) {
+    dc.textContent = String(texto || "");
+  }
+  return dc;
+}
+
 function qsUiFonteAtual() {
   const outro = $("qsFonteOutro") && $("qsFonteOutro").checked;
   return { texto: outro ? "" : qsUiTextoBase, externo: !!outro };
@@ -314,11 +330,81 @@ function qsUiPintarSessao() {
   const corpo = $("qsSessCorpo");
   corpo.innerHTML = "";
   if (!q) {
-    /* fim da fila: o placar vira o assunto */
+    /* FIM DA SESSÃO.
+     * O placar sozinho não ensina nada. O que ensina é rever o que se
+     * errou — com o gabarito comentado ao lado e o lugar para escrever a
+     * dica que vai evitar o erro da próxima vez. */
     const fim = document.createElement("div");
     fim.className = "qs-fim";
     fim.textContent = t("qs_fim", { c: p.certas, n: p.feitas, pct: p.pct });
     corpo.append(fim);
+
+    const erradas = (qsSessao ? qsSessao.respondidas : [])
+      .filter((x) => !x.acertou)
+      .map((x) => ({ resp: x.resp,
+                     q: qsSessao.fila.filter((y) => y.id === x.id)[0] }))
+      .filter((x) => x.q);
+
+    if (erradas.length) {
+      const tit = document.createElement("div");
+      tit.className = "qs-rev-tit";
+      tit.textContent = t("qs_rever_tit", { n: erradas.length });
+      corpo.append(tit);
+
+      erradas.forEach((x) => {
+        const li = document.createElement("div");
+        li.className = "qs-rev";
+        const en = document.createElement("div");
+        en.className = "qs-rev-en";
+        en.textContent = x.q.enunciado;
+        const suaResp = x.q.tipo === "ce"
+          ? (x.resp === "C" ? t("qs_certo") : t("qs_errado"))
+          : x.resp;
+        const gabTxt = x.q.tipo === "ce"
+          ? (x.q.gabarito === "C" ? t("qs_certo") : t("qs_errado"))
+          : x.q.gabarito;
+        const lin = document.createElement("div");
+        lin.className = "qs-rev-gab";
+        lin.textContent = t("qs_rev_resp", { sua: suaResp, gab: gabTxt });
+        li.append(en, lin);
+        if (x.q.comentario) {
+          const cm = document.createElement("div");
+          cm.className = "qs-coment";
+          cm.textContent = x.q.comentario;
+          li.append(cm);
+        }
+        const minha = qsDicaDeQuestao(x.q.id);
+        if (minha) li.append(qsUiCaixaDica(minha));
+        const bd = document.createElement("button");
+        bd.type = "button"; bd.className = "btn-min qs-bt-dica";
+        bd.textContent = t(minha ? "qs_dica_editar" : "qs_dica_incluir");
+        bd.title = t("qs_dica_ajuda");
+        bd.onclick = async () => {
+          const txt = await uiTexto(
+            t("qs_dica_tit", { e: x.q.enunciado.slice(0, 90) }), minha);
+          if (txt === null) return;
+          qsGravarDica(x.q.id, txt);
+          matReg("questao", "dica escrita na revisão dos erros",
+                 x.q.enunciado.slice(0, 60));
+          qsUiPintarSessao();
+        };
+        li.append(bd);
+        corpo.append(li);
+      });
+    }
+
+    /* REGISTRAR O ESTUDO. Resolver questão é estudar; sem isto, a hora
+     * gasta aqui não entrava no diário e o progresso do edital ficava
+     * menor do que o real. */
+    if (p.feitas) {
+      const br = document.createElement("button");
+      br.type = "button";
+      br.className = "btn btn-verde qs-bt-registrar";
+      br.textContent = t("qs_registrar_btn");
+      br.title = t("qs_registrar_ajuda");
+      br.onclick = () => qsUiRegistrarEstudo();
+      corpo.append(br);
+    }
     $("btnQsProxima").hidden = true;
     return;
   }
@@ -374,12 +460,7 @@ function qsUiPintarSessao() {
     /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
      * é gabarito disfarçado. */
     const minha = qsDicaDeQuestao(q.id);
-    if (minha) {
-      const dc = document.createElement("div");
-      dc.className = "qs-minha-dica";
-      dc.textContent = minha;
-      corpo.append(dc);
-    }
+    if (minha) corpo.append(qsUiCaixaDica(minha));
     const bd = document.createElement("button");
     bd.type = "button";
     bd.className = "btn-min qs-bt-dica";
@@ -403,6 +484,43 @@ function qsUiPintarSessao() {
 /* ---------------------------------------------------------------------
  * A ABA
  * ------------------------------------------------------------------- */
+/* Leva o resultado da sessão para o registro de estudo do edital.
+ * Não grava nada sozinho: abre o mesmo formulário de sempre, já preenchido,
+ * para a pessoa conferir, ajustar e confirmar. */
+function qsUiRegistrarEstudo() {
+  const s = qsSessaoAtual();
+  if (!s || !s.respondidas.length) { uiAlert(t("qs_registrar_nada")); return; }
+  const p = qsPlacar();
+
+  /* de qual tópico foi esta sessão? Se ela misturou tópicos, não há um
+   * lugar honesto para lançar as horas — e inventar um seria pior. */
+  const chaves = {};
+  s.fila.forEach((q) => { if (q.chave) chaves[q.chave] = q; });
+  const nomes = Object.keys(chaves);
+  if (nomes.length !== 1) {
+    uiAlert(t("qs_registrar_varios", { n: nomes.length }));
+    return;
+  }
+  const modelo = chaves[nomes[0]];
+
+  /* tempo da sessão, arredondado para cima: meia questão não é meio minuto */
+  const min = Math.max(1, Math.min(240,
+    Math.round((Date.now() - new Date(s.comecou).getTime()) / 60000)));
+
+  $("dlgQsResponder").close();
+  if (typeof abrirRegistro !== "function") { uiAlert(t("qs_registrar_sem_edital")); return; }
+  abrirRegistro({
+    nome: modelo.topico, disciplina: modelo.disciplina,
+    chave: modelo.chave, minutos: min, feito: false,
+  });
+  if (typeof regDeQuestoes === "function") {
+    regDeQuestoes(p.feitas, p.certas, min);
+  }
+  matReg("questao", "registro de estudo por questões aberto",
+         modelo.topico + " · " + p.certas + "/" + p.feitas
+         + " (" + p.pct + "%) · " + min + " min sugeridos");
+}
+
 function qsUiOpcoesDe(sel, valores, rotuloTodos, atual) {
   const s = $(sel);
   if (!s) return;

@@ -1579,6 +1579,34 @@ function matRegistrarLeitura() {
 /* Colar já limpo. Duas portas: a área de transferência (um clique) e uma
  * caixa para colar à mão, porque ler a área de transferência exige permissão
  * e no Firefox e no Safari ela simplesmente não existe. */
+/* LÊ A ÁREA DE TRANSFERÊNCIA PRESERVANDO A FORMATAÇÃO.
+ * O que se copia de uma página traz a formatação em text/html; o texto puro
+ * chega achatado, e é por isso que uma dica colada aparecia com "**" e "###"
+ * à mostra. Aqui o HTML vem primeiro e vira a marcação do app.
+ * Devolve "" quando o navegador não deixa ler — Firefox e Safari não têm
+ * clipboard.read(), e nesse caso quem chama oferece a caixa para colar. */
+async function matLerColagemFormatada() {
+  let txt = "";
+  try {
+    if (navigator.clipboard && navigator.clipboard.read) {
+      const itens = await navigator.clipboard.read();
+      for (const it of itens) {
+        if (it.types && it.types.includes("text/html")) {
+          const b = await it.getType("text/html");
+          txt = matHtmlParaMarcas(await b.text());
+          break;
+        }
+      }
+    }
+  } catch (e) { txt = ""; }
+  try {
+    if (!txt && navigator.clipboard && navigator.clipboard.readText) {
+      txt = await navigator.clipboard.readText();
+    }
+  } catch (e) { txt = ""; }
+  return txt;
+}
+
 async function matColarDeFora() {
   let txt = "";
   /* primeiro o HTML, que é onde a formatação está; só depois o texto puro */
@@ -2991,6 +3019,16 @@ function matDicaLimparColagem(txt) {
   linhas.forEach((l0) => {
     let l = l0.trim();
     if (/^-{3,}$/.test(l) || /^_{3,}$/.test(l) || /^={3,}$/.test(l)) return;
+    /* LaTeX que a IA às vezes devolve. Vem com uma barra ou com duas —
+     * markdown escapa a barra —, e o app não desenha fórmula: sem isto os
+     * delimitadores apareciam como texto no meio da dica. */
+    l = l.replace(/\\{1,2}[[\]()]/g, "")
+         .replace(/\\{1,2}text\s*\{([^}]*)\}/g, "$1")
+         .replace(/\\{1,2}bf\s*/g, "")
+         .replace(/\\{1,2}([$%&#])/g, "$1")
+         .replace(/\\{2}/g, " ")
+         .replace(/\s{2,}/g, " ")
+         .trim();
     l = l.replace(/^#{1,6}\s+/, "");            /* título vira linha normal */
     l = l.replace(/^\s*[-*•]\s+/, "• ");        /* marcador de lista padronizado */
     l = l.replace(/^\s*\d+[.)]\s+/, (mm) => mm.trim() + " ");
@@ -3491,7 +3529,9 @@ function matDuvidasAbrir() {
     if (jaTem) {
       const cx = document.createElement("div");
       cx.className = "duv-dica";
-      cx.textContent = jaTem.texto;
+      /* mesma razão da dica da questão: texto cru mostra os "**" */
+      try { cx.innerHTML = matParaHtml(jaTem.texto); }
+      catch (e) { cx.textContent = jaTem.texto; }
       li.append(cx);
     }
     if (jaQ) {

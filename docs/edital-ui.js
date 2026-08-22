@@ -768,6 +768,34 @@ let regAtual = null;
 let regFormas = [];
 let regHumor = "media";
 
+/* Preenche o registro com o resultado de uma sessão de questões.
+ * Chamado DEPOIS de abrirRegistro, que limpa os campos ao abrir — por isso
+ * é uma função à parte e não um parâmetro. O que ela põe é sugestão: a
+ * pessoa confirma e pode mudar tudo antes de gravar. */
+function regDeQuestoes(feitas, certas, minutos) {
+  regFormas = ["questoes"];
+  if ($("regQFeitas")) $("regQFeitas").value = String(feitas || 0);
+  if ($("regQCertas")) $("regQCertas").value = String(certas || 0);
+  if (minutos && $("regMinutos")) {
+    $("regMinutos").value = String(minutos);
+    if ($("regMinSlider")) $("regMinSlider").value = String(Math.min(240, minutos));
+  }
+  /* Repinta A PARTIR de regFormas, não de um rótulo escolhido à mão.
+   * Comparar com o texto do botão deixava a tela dizer "Questões" enquanto
+   * a variável guardava outra coisa — e é a variável que vai para o diário.
+   * Tela e dado têm de vir da mesma fonte, senão um dia divergem e quem
+   * lê a tela grava outra coisa sem saber. */
+  const cx = $("regFormas");
+  if (cx && cx.querySelectorAll) {
+    const botoes = cx.querySelectorAll("button");
+    ED_FORMAS.forEach((f, k) => {
+      if (botoes[k]) botoes[k].classList.toggle("ativa", regFormas.indexOf(f) >= 0);
+    });
+  }
+  if (typeof regPintarQuestoes === "function") regPintarQuestoes();
+  if (typeof regPintarPct === "function") regPintarPct();
+}
+
 function abrirRegistro(i) {
   regAtual = i;
   regFormas = i.feito ? ["revisao"] : ["leitura"];
