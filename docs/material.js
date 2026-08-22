@@ -340,10 +340,115 @@ function matPintarDicasBotao() {
   b.textContent = t(matDicasAbertas ? "mat_dicas_recolher" : "mat_dicas_expandir");
 }
 
-function matParaHtml(txt) {
+/* =====================================================================
+ * MODO PROVA
+ *
+ * As questões que JÁ estão escritas no resumo viram respondíveis: o
+ * gabarito e o comentário somem até você escolher. O texto NÃO é alterado
+ * — isto é desenho. Desligar devolve o resumo exatamente como estava.
+ *
+ * A escolha é por resumo, não global: há tópico que é quase só questão e
+ * tópico que não tem nenhuma.
+ * ===================================================================== */
+let matProvaLigada = {};
+try { matProvaLigada = JSON.parse(localStorage.getItem("eac_mat_prova") || "{}"); }
+catch (e) { matProvaLigada = {}; }
+let matProvaResp = {};      /* respostas da sessão, por chave › índice do bloco */
+
+function matProvaEstaLigada(chave) { return !!matProvaLigada[chave]; }
+
+function matProvaBlocos(chave) {
+  if (typeof qsNoTexto !== "function") return [];
+  return qsNoTexto(matTextoVivo(chave, "texto")).filter((b) => b.completa);
+}
+
+function matAlternarProva() {
+  if (!matAtual) return;
+  const c = matAtual.chave;
+  matProvaLigada[c] = !matProvaLigada[c];
+  if (!matProvaLigada[c]) delete matProvaLigada[c];
+  try { localStorage.setItem("eac_mat_prova", JSON.stringify(matProvaLigada)); } catch (e) {}
+  matProvaResp[c] = {};      /* religar recomeça: senão você reveria as respostas */
+  matPintarProvaBotao();
+  if (matModo === "ler") matTrocarModo("ler");
+  matReg("prova", matProvaLigada[c] ? "modo prova ligado" : "modo prova desligado",
+         matProvaBlocos(c).length + " questões no texto");
+}
+
+function matPintarProvaBotao() {
+  const b = $("btnMatProva");
+  if (!b) return;
+  if (!matAtual) { b.hidden = true; return; }
+  const n = matProvaBlocos(matAtual.chave).length;
+  b.hidden = !n;                 /* sem questão no texto, o botão não serve */
+  if (!n) return;
+  const on = matProvaEstaLigada(matAtual.chave);
+  b.textContent = t(on ? "prova_desligar" : "prova_ligar", { n });
+  b.classList.toggle("btn-min-ok", on);
+  b.title = t(on ? "prova_desligar_ajuda" : "prova_ligar_ajuda", { n });
+}
+
+function matProvaResponder(idx, letra) {
+  if (!matAtual) return;
+  const c = matAtual.chave;
+  matProvaResp[c] = matProvaResp[c] || {};
+  if (matProvaResp[c][idx]) return;          /* uma resposta por passagem */
+  matProvaResp[c][idx] = letra;
+  const b = matProvaBlocos(c)[idx];
+  matReg("prova", "questão do texto respondida",
+         (b && b.gabarito === letra ? "acertou" : "errou") + " · " + letra);
+  matTrocarModo("ler");
+}
+
+/* desenha um bloco de questão como cartão respondível */
+function matProvaCartao(b, idx, resp) {
+  const esc = matEscapar;
+  const cab = t("prova_rotulo") + (b.num ? " " + b.num : "")
+    + (b.rotulo ? " · " + b.rotulo : "");
+  const opcoes = b.tipo === "ce"
+    ? [{ letra: "C", txt: t("qs_certo") }, { letra: "E", txt: t("qs_errado") }]
+    : b.opcoes;
+  let h = '<div class="qp">';
+  h += '<div class="qp-cab">' + esc(cab) + "</div>";
+  h += '<div class="qp-en">' + esc(b.enunciado) + "</div>";
+  h += '<div class="qp-ops">';
+  opcoes.forEach((o) => {
+    let cls = "qp-op";
+    if (resp) {
+      if (o.letra === b.gabarito) cls += " qp-certa";
+      else if (o.letra === resp) cls += " qp-errada";
+    }
+    h += '<button type="button" class="' + cls + '" data-qp="' + idx
+      + '" data-let="' + esc(o.letra) + '"' + (resp ? " disabled" : "") + ">"
+      + esc(o.letra + ") " + o.txt) + "</button>";
+  });
+  h += "</div>";
+  if (resp) {
+    const acertou = resp === b.gabarito;
+    h += '<div class="qp-gab ' + (acertou ? "qp-ok" : "qp-nao") + '">'
+      + esc((acertou ? t("qs_acertou") : t("qs_errou"))
+            + " · " + t("qs_gab_e", { g: b.gabarito })) + "</div>";
+    /* comentário RECOLHIDO: dá para passar rápido por muitas questões e
+     * abrir só a explicação das que importam */
+    if (b.comentario) {
+      h += '<details class="qp-cm"><summary>' + esc(t("prova_ver_coment"))
+        + "</summary><div>" + esc(b.comentario) + "</div></details>";
+    }
+  }
+  h += "</div>";
+  return h;
+}
+
+function matParaHtml(txt, prova) {
   const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
   let emLista = false;
+  /* mapa linha → bloco de questão, para pular as linhas que o cartão
+   * já desenhou (enunciado, opções, resposta e comentário) */
+  const porLinha = {};
+  (prova && prova.blocos ? prova.blocos : []).forEach((b, i) => {
+    for (let k = b.ini; k <= b.fim; k++) porLinha[k] = (k === b.ini) ? { b, i } : { pula: true };
+  });
   const inline = (s) => s
     .replace(/\*\*([^*\n]{1,200})\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])_([^_\n]{1,200})_(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
@@ -357,9 +462,20 @@ function matParaHtml(txt) {
     .replace(/==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova">$1</mark>')
     .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg">$1</mark>')
     .replace(/==((?:[^=\n]|=(?!=))+)==/g, "<mark>$1</mark>");
-  linhas.forEach((l) => {
+  /* uma só, fora do laço: era recriada a cada linha, e o cartão de questão
+   * precisa dela ANTES do ponto onde estava declarada */
+  const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
+  linhas.forEach((l, kLinha) => {
+    /* linha dentro de um bloco de questão: quem desenha é o cartão */
+    const alvoQ = porLinha[kLinha];
+    if (alvoQ) {
+      if (alvoQ.pula) return;
+      fecharLista();
+      saida.push(matProvaCartao(alvoQ.b, alvoQ.i,
+        (prova && prova.respostas && prova.respostas[alvoQ.i]) || ""));
+      return;
+    }
     const s = l.trim();
-    const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
     /* Títulos de 1 a 6 "#". Antes só "#" e "##" eram reconhecidos, e os
      * resumos do NotebookLM usam "###" e "####" o tempo todo — eles
      * apareciam LITERAIS na leitura, com os quatro jogos da velha na tela.
@@ -513,6 +629,7 @@ function matTrocarModo(modo) {
   matPintarLei();
   matPintarDuvidas();
   matPintarConserto();
+  matPintarProvaBotao();
   /* quantas questões existem para ESTE tópico */
   if (typeof qsUiPintarBotaoResumo === "function") {
     try { qsUiPintarBotaoResumo(); } catch (e) {}
@@ -524,7 +641,12 @@ function matTrocarModo(modo) {
   }
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
   if (lendo) {
-    $("matLeitura").innerHTML = matParaHtml($("matTexto").value)
+    const provaOn = matAtual && matProvaEstaLigada(matAtual.chave);
+    const prova = provaOn
+      ? { blocos: matProvaBlocos(matAtual.chave),
+          respostas: matProvaResp[matAtual.chave] || {} }
+      : null;
+    $("matLeitura").innerHTML = matParaHtml($("matTexto").value, prova)
       || "<p class='nota'>" + t("mat_vazio_leitura") + "</p>";
     $("matLeitura").style.fontSize = matFonte + "px";
   }
@@ -1734,6 +1856,16 @@ function matIniciar() {
   matBotao("btnDuvidas", "minhas dúvidas", matDuvidasAbrir);
   matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
   matBotao("btnMatDicas", "recolher/expandir dicas", matAlternarDicas);
+  matBotao("btnMatProva", "modo prova", matAlternarProva);
+  /* um clique só, delegado: o painel é montado por innerHTML, então não há
+   * onde pendurar manipulador em cada botão */
+  if ($("matLeitura")) {
+    $("matLeitura").onclick = (ev) => {
+      const alvo = ev && ev.target;
+      if (!alvo || !alvo.dataset || alvo.dataset.qp === undefined) return;
+      matProvaResponder(Number(alvo.dataset.qp), alvo.dataset.let || "");
+    };
+  }
   if ($("btnDuvFechar")) $("btnDuvFechar").onclick = () => $("dlgDuvidas").close();
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();

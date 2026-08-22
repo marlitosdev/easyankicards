@@ -31,6 +31,7 @@ function qsUiCriarAbrir(texto, ctx) {
   qsUiAchados = null;
   const t0 = String(texto || "").trim();
   if (!t0) { uiAlert(t("qs_criar_sem_texto")); return; }
+  qsUiPassosPrompt(true);
   $("qsCriarPrompt").value = qsPrompt(t0, ctx);
   $("qsCriarResposta").value = "";
   $("qsCriarConf").innerHTML = "";
@@ -46,6 +47,15 @@ function qsUiCriarAbrir(texto, ctx) {
 
 function qsUiConferir() {
   const r = qsLerResposta($("qsCriarResposta").value, qsUiCtxCriar || {});
+  qsUiPintarConf(r.achados, r.ignoradas);
+  matReg("questao", "conferência de questões",
+         r.achados.length + " ok · " + r.ignoradas.length + " recusadas");
+}
+
+/* o desenho da conferência é o mesmo vindo da IA ou vindo do texto: o que
+ * muda é de onde as questões saíram, não o que precisa ser conferido */
+function qsUiPintarConf(achados, ignoradas) {
+  const r = { achados: achados || [], ignoradas: ignoradas || [] };
   qsUiAchados = r.achados;
   const box = $("qsCriarConf");
   box.innerHTML = "";
@@ -86,8 +96,50 @@ function qsUiConferir() {
   $("qsCriarResumo").textContent = t("qs_conf_resumo",
     { n: r.achados.length, r: r.ignoradas.length });
   $("btnQsCriarAplicar").disabled = !r.achados.length;
-  matReg("questao", "conferência de questões",
-         r.achados.length + " ok · " + r.ignoradas.length + " recusadas");
+}
+
+/* ---------------------------------------------------------------------
+ * D3 — importar as questões que JÁ estão escritas no resumo
+ *
+ * Sem IA e sem prompt: o detector já leu o texto. Mas passa pela MESMA
+ * conferência, porque a detecção pode errar — e porque é aqui que se
+ * confirma a banca, já que o parêntese do enunciado nem sempre é uma
+ * ("(Questão de Pegadinha)" não é banca).
+ * ------------------------------------------------------------------- */
+function qsUiImportarDoTexto() {
+  if (!matAtual) return;
+  const ctx = { disciplina: matAtual.disciplina, topico: matAtual.topico,
+                chave: matAtual.chave, concurso: qsUiConcursoAtual() };
+  const blocos = qsNoTexto(matTextoVivo(matAtual.chave, "texto"));
+  const bons = blocos.filter((b) => b.completa);
+  const ruins = blocos.filter((b) => !b.completa).map((b) => ({
+    linha: b.ini + 1, txt: String(b.enunciado || "").slice(0, 70),
+    motivo: b.gabarito ? "sem_enunciado" : "sem_gabarito",
+  }));
+  if (!bons.length && !ruins.length) { uiAlert(t("prova_nada_no_texto")); return; }
+
+  qsUiCtxCriar = ctx;
+  $("qsCriarPrompt").value = "";
+  $("qsCriarResposta").value = "";
+  /* os dois primeiros passos não existem neste caminho: não há prompt para
+   * copiar nem resposta para colar. Escondê-los evita a pergunta "e agora,
+   * onde eu colo?" diante de uma tela que já tem tudo pronto. */
+  qsUiPassosPrompt(false);
+  $("qsCriarDe").textContent = (ctx.concurso ? ctx.concurso + " · " : "")
+    + ctx.disciplina + " › " + ctx.topico;
+  qsUiPintarConf(qsDeBlocos(bons, ctx), ruins);
+  abrirModal("dlgQsCriar");
+  matReg("questao", "importação do texto aberta",
+         bons.length + " completas · " + ruins.length + " incompletas");
+}
+
+function qsUiPassosPrompt(mostrar) {
+  ["qsPasso1", "qsCriarPrompt", "qsPasso2", "qsCriarResposta"].forEach((id) => {
+    const e = $(id);
+    if (e) e.hidden = !mostrar;
+  });
+  const p3 = $("qsPasso3");
+  if (p3) p3.hidden = false;
 }
 
 function qsUiAplicar() {
@@ -370,6 +422,9 @@ function qsUiIniciar() {
   if ($("btnQsDesfazer")) $("btnQsDesfazer").onclick = () => qsUiDesfazer();
   if ($("btnMatQuestoes")) $("btnMatQuestoes").onclick = () => qsUiResponderDoTopico();
   if ($("btnMatVirarQuestao")) $("btnMatVirarQuestao").onclick = () => qsUiVirarSelecao();
+  if ($("btnMatImportarQuestoes")) {
+    $("btnMatImportarQuestoes").onclick = () => qsUiImportarDoTexto();
+  }
   if ($("btnQsCriarDaAba")) {
     $("btnQsCriarDaAba").onclick = () => {
       uiAlert(t("qs_criar_pela_aba"));
