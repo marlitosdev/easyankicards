@@ -729,6 +729,33 @@ function abrirDiario() {
     const meio = document.createElement("div");
     meio.className = "di-meio";
     meio.append(ds);
+    /* O QUE O REGISTRO DIZ DE VERDADE.
+     * A linha mostrava data, ação, tópico e disciplina — e escondia
+     * justamente o que se quer saber ao reler o diário: quanto tempo foi,
+     * de que jeito se estudou, e como foi nas questões. Sem isso, "estudou
+     * Leis Orçamentárias" não distingue vinte minutos de três horas. */
+    const det = document.createElement("div");
+    det.className = "di-det";
+    const pedacos = [];
+    if (x.m) pedacos.push(horasTexto(x.m));
+    const formas = (x.f && x.f.length ? x.f : []).map((f) => t("ed_forma_" + f))
+      .filter(Boolean);
+    if (formas.length) pedacos.push(formas.join(" + "));
+    if (x.q && x.q.feitas) {
+      const pct = x.q.feitas ? Math.round((x.q.certas / x.q.feitas) * 100) : 0;
+      pedacos.push(t("ed_diario_questoes", { c: x.q.certas, n: x.q.feitas, pct }));
+    }
+    if (x.hu && x.hu !== "media") pedacos.push(t("ed_humor_" + x.hu));
+    if (x.p) pedacos.push(t("ed_diario_peso", { p: x.p }));
+    if (x.onde) pedacos.push(String(x.onde).slice(0, 40));
+    det.textContent = pedacos.join(" · ");
+    if (pedacos.length) meio.append(det);
+    if (x.obs) {
+      const ob = document.createElement("div");
+      ob.className = "di-obs";
+      ob.textContent = String(x.obs).slice(0, 220);
+      meio.append(ob);
+    }
     li.append(cima, meio, acoes);
     lista.append(li);
   });
@@ -772,6 +799,28 @@ let regHumor = "media";
  * Chamado DEPOIS de abrirRegistro, que limpa os campos ao abrir — por isso
  * é uma função à parte e não um parâmetro. O que ela põe é sugestão: a
  * pessoa confirma e pode mudar tudo antes de gravar. */
+/* Preenche o registro com uma forma e um tempo sugeridos.
+ * É a base de regDeQuestoes e de regDeLeitura: as duas sugerem, nenhuma
+ * decide — quem confirma é quem estudou. */
+function regSugerir(formas, minutos) {
+  regFormas = (formas && formas.length ? formas : ["leitura"]).slice();
+  if (minutos && $("regMinutos")) {
+    $("regMinutos").value = String(minutos);
+    if ($("regMinSlider")) $("regMinSlider").value = String(Math.min(240, minutos));
+  }
+  const cx = $("regFormas");
+  if (cx && cx.querySelectorAll) {
+    const botoes = cx.querySelectorAll("button");
+    ED_FORMAS.forEach((f, k) => {
+      if (botoes[k]) botoes[k].classList.toggle("ativa", regFormas.indexOf(f) >= 0);
+    });
+  }
+  if (typeof regPintarQuestoes === "function") regPintarQuestoes();
+  if (typeof regPintarPct === "function") regPintarPct();
+}
+
+function regDeLeitura(minutos) { regSugerir(["resumo"], minutos); }
+
 function regDeQuestoes(feitas, certas, minutos) {
   regFormas = ["questoes"];
   if ($("regQFeitas")) $("regQFeitas").value = String(feitas || 0);

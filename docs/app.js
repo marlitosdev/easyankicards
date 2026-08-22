@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "9.05.0";
+const VERSAO = "9.07.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -244,9 +244,36 @@ const REG_POR_MODO = {
   edital: /^EDITAL/,
   cartoes: /^(CORRIGIR|LIMPAR|COLAR|APLICAR|EXCLUIR|RECORTAR|RECORTES|FOCO|EXPORTAR|REVISAO|PROMPT|BLOQUEIO)/,
 };
+/* PERÍODO NO REGISTRO PRINCIPAL.
+ * Com centenas de eventos, "o que aconteceu agora" fica enterrado. O
+ * diário e o registro dos resumos já filtram por período; este era o
+ * único que obrigava a garimpar o arquivo inteiro.
+ * O dia é o LOCAL, como no registro dos resumos: quem estuda às 22h não
+ * pode ver a sessão da noite cair no dia anterior por causa de fuso. */
+let regPeriodo = 0;          /* 0 = tudo · 1 = hoje · 7, 30, 90 = dias */
+const REG_PERIODOS = [0, 1, 7, 30];
+
+function regDentroDoPeriodo(r, dias) {
+  if (!dias) return true;
+  const d = new Date(String(r.d) + "T" + String(r.h || "00:00:00"));
+  if (isNaN(d.getTime())) return true;
+  if (dias === 1) {
+    const h = new Date();
+    return d.getFullYear() === h.getFullYear() && d.getMonth() === h.getMonth()
+      && d.getDate() === h.getDate();
+  }
+  return d.getTime() >= Date.now() - dias * 86400000;
+}
+
+function registroFiltrado(soDoModo, dias) {
+  const re = soDoModo && REG_POR_MODO[soDoModo];
+  return registro.filter((r) => (!re || re.test(r.tipo))
+    && regDentroDoPeriodo(r, dias === undefined ? regPeriodo : dias));
+}
+
 function registroTexto(soDoModo) {
   const re = soDoModo && REG_POR_MODO[soDoModo];
-  const lista = re ? registro.filter((r) => re.test(r.tipo)) : registro;
+  const lista = registroFiltrado(soDoModo);
   if (!lista.length) return t(re ? "log_empty_modo" : "log_empty");
   return lista.map((r) => r.d + " " + r.h + " " + (r.s || "----")
     + "  [" + r.tipo + "] " + r.msg
@@ -4514,8 +4541,10 @@ function montarDiagnostico() {
   L.push("");
   const soModo = $("chkDiagModo") && $("chkDiagModo").checked
     ? (typeof modoAtual !== "undefined" ? modoAtual : null) : null;
-  L.push("--- REGISTRO (" + registro.length + " eventos"
-    + (soModo ? ", filtrado: só " + soModo : "") + ") ---");
+  const nPer = registroFiltrado(soModo).length;
+  L.push("--- REGISTRO (" + nPer + " de " + registro.length + " eventos"
+    + (soModo ? ", filtrado: só " + soModo : "")
+    + (regPeriodo ? ", período: " + t("diag_per_" + regPeriodo) : "") + ") ---");
   bloco(L, () => L.push(registroTexto(soModo)));
   L.push("");
   bloco(L, () => {
@@ -4570,6 +4599,7 @@ function montarPainelDiag() {
   }
   diagTexto = txt;
   $("diagPre").innerHTML = pintarDiagnostico(txt);
+  diagPintarPeriodos();
 
   /* Diz, em cima e por extenso, DE QUAL bancada é este relatório. */
   const foco = textoEmFoco();
@@ -4605,6 +4635,27 @@ async function abrirDiagnostico() {
 $("btnDiagnostico").onclick = abrirDiagnostico;
 $("chkDiagTexto").onchange = montarPainelDiag;
 $("chkDiagModo").onchange = montarPainelDiag;
+/* botões de período, ao lado das outras opções do diagnóstico */
+function diagPintarPeriodos() {
+  const cx = $("diagPeriodos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  REG_PERIODOS.forEach((p) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min" + (regPeriodo === p ? " mat-ligado" : "");
+    b.textContent = t("diag_per_" + p);
+    b.title = t("diag_per_ajuda");
+    b.setAttribute("aria-pressed", regPeriodo === p ? "true" : "false");
+    b.onclick = () => {
+      regPeriodo = p;
+      diagPintarPeriodos();
+      if (typeof abrirDiagnostico === "function") abrirDiagnostico(true);
+    };
+    cx.append(b);
+  });
+}
+
 $("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
 $("btnDiagCopiar").onclick = async () => {
   try {

@@ -1564,16 +1564,24 @@ function matRegistrarLeitura() {
   else item = { disciplina: matAtual.disciplina, nome: matAtual.topico,
                 chave: matAtual.chave, minutos: min, bruto: 0,
                 disciplinaPeso: null, peso: null, avulso: true };
-  if (typeof edMarcar === "function") {
-    /* releitura de material é REVISÃO quando o tópico já foi estudado */
-    const jaEstudado = typeof edProgresso !== "undefined"
-      && edProgresso[matAtual.chave];
-    edMarcar(item, jaEstudado ? "revisado" : "feito",
-      { minutos: min, formas: ["resumo"], humor: "media" });
-  }
-  reg("MATERIAL", "leitura registrada: " + matAtual.topico,
-      min + " min, " + palavras + " palavras");
-  uiAlert(t("mat_lido", { n: min }));
+  /* PERGUNTA ANTES. NÃO FECHA O TÓPICO SOZINHO.
+   *
+   * Antes daqui saía um edMarcar direto: o app estimava o tempo pelo
+   * tamanho do texto (palavras ÷ 200) e dava o assunto por ESTUDADO com
+   * esse número. Ler 13 mil caracteres virava "9 minutos" e fechava um
+   * tópico planejado para uma hora — um clique apagava o item da agenda
+   * com um tempo que ninguém informou.
+   *
+   * O tempo estimado continua útil como SUGESTÃO, mas quem sabe quanto
+   * tempo passou lendo é quem leu. Abre o registro de estudo de sempre,
+   * já com a forma "resumo" marcada e os minutos sugeridos, e a decisão
+   * de fechar ou não o tópico é de quem confirma. */
+  $("dlgMaterial").close();
+  if (typeof abrirRegistro !== "function") { uiAlert(t("mat_lido_sem_edital")); return; }
+  abrirRegistro(item);
+  if (typeof regDeLeitura === "function") regDeLeitura(min);
+  reg("MATERIAL", "registro de leitura aberto: " + matAtual.topico,
+      min + " min sugeridos, " + palavras + " palavras");
 }
 
 /* Colar já limpo. Duas portas: a área de transferência (um clique) e uma

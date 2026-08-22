@@ -1267,6 +1267,10 @@ dialog.mat-amplo{max-height:96vh}
    disciplina+concurso, e os botões. O grid de cinco colunas espremia tudo
    numa coluna estreita e obrigava a rolar de lado. */
 /* botões na horizontal, ABAIXO do registro a que pertencem */
+.diag-periodos{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.di-det{font-size:11px;color:var(--sutil);margin-top:3px}
+.di-obs{font-size:11px;color:var(--sutil);font-style:italic;margin-top:3px;
+  border-left:2px solid var(--borda);padding-left:7px}
 .di-acoes{display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;margin-top:7px}
 .di-acoes .btn-min{white-space:nowrap;flex:0 0 auto}
 .di-cima{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
@@ -2179,6 +2183,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
   <label class="diag-op"><input type="checkbox" id="chkDiagTexto" checked>
     <span data-i18n="diag_incluir_texto"></span></label>
+  <div class="diag-periodos" id="diagPeriodos"></div>
   <label class="diag-op"><input type="checkbox" id="chkDiagModo">
     <span data-i18n="diag_so_modo"></span></label>
   <pre id="diagPre" class="diag-pre"></pre>
