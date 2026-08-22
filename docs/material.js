@@ -949,9 +949,15 @@ function matAlternarLei() {
 function matPintarDuvidas() {
   const b = $("btnMatDuvidas");
   if (!b) return;
-  const conta = (s) => (String(s || "").match(/==\?((?:[^=\n]|=(?!=))+)==/g) || []).length;
+  /* A MESMA CONTA DA LISTA.
+   * Aqui havia uma segunda contagem, por conta própria, contando as marcas
+   * "==?" cruas do texto. Desde que uma seleção de várias linhas passou a
+   * virar UMA dúvida (cada linha carrega a sua marca), as duas contas
+   * divergiram: o botão dizia "2 dúvidas aqui" e a lista abria com uma só.
+   * Número que discorda de outro número na mesma tela é pior que número
+   * nenhum — quem lê não sabe em qual acreditar. */
   const n = matAtual
-    ? conta(matTextoVivo(matAtual.chave, "texto")) + conta(matTextoVivo(matAtual.chave, "lei"))
+    ? matDuvidas().filter((d) => d.chave === matAtual.chave).length
     : 0;
   b.hidden = !n;
   if (n) b.textContent = t("mat_duv_conta", { n });
@@ -2898,7 +2904,11 @@ function matDuvidasAbrir() {
     bAbrir.onclick = () => {
       $("dlgDuvidas").close();
       if (d.onde === "lei") leiAbrir(d.disciplina, d.topico);
-      else matAbrirEditor({ disciplina: d.disciplina, nome: d.topico }, false);
+      /* abre LENDO, sempre. A dúvida é uma marca azul, e azul só existe na
+       * leitura: abrir no modo de edição joga a pessoa no texto cru, com a
+       * marcação "==?" à mostra, para procurar algo que ela reconhece pela
+       * cor. Antes ele mantinha o modo em que o resumo já estava. */
+      else matAbrirEditor({ disciplina: d.disciplina, nome: d.topico }, "ler");
       /* abrir não basta: rola até o trecho e o pisca */
       const achou = matIrPara(d.ancora || d.trecho, d.onde);
       matReg("duvida", achou ? "aberto no trecho da dúvida" : "aberto, trecho não localizado",
