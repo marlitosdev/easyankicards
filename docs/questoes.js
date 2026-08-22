@@ -198,6 +198,116 @@ function qsLerResposta(txt, ctx) {
   return { achados, ignoradas };
 }
 
+/* =====================================================================
+ * D1 — QUESTÕES QUE JÁ ESTÃO ESCRITAS NO RESUMO
+ *
+ * Boa parte do material já vem em forma de questão, com a resposta logo
+ * abaixo. Lendo assim não há teste nenhum: a resposta chega antes de a
+ * pergunta terminar. Aqui elas são ENCONTRADAS no texto — sem IA, sem
+ * reescrever nada.
+ *
+ * Conservador de propósito: exige o PAR cabeçalho + resposta. Um sozinho
+ * não vira questão. Material didático é cheio de pergunta retórica seguida
+ * de explicação, e transformar isso em questão esconderia texto que a
+ * pessoa quer ler corrido.
+ * ===================================================================== */
+const QS_CAB = /^\s*[-*•]?\s*(?:\*\*)?\s*Quest[ãa]o\b\s*(\d+)?\s*(?:\(([^)]*)\))?\s*:?\s*(?:\*\*)?\s*(.*)$/i;
+const QS_RESP = /^\s*[-*•]?\s*(?:\*\*)?\s*(?:Resposta|Gabarito)\s*:?\s*(.*)$/i;
+
+function qsSemMarcacao(s) {
+  return String(s == null ? "" : s).replace(/\*\*|__|_|==[!?§*~]?/g, "").trim();
+}
+
+function qsNoTexto(txt) {
+  const linhas = String(txt || "").split("\n");
+  const blocos = [];
+  let aberto = null;
+
+  linhas.forEach((l, i) => {
+    const cru = qsSemMarcacao(l);
+
+    const mc = cru.match(QS_CAB);
+    if (mc) {
+      /* cabeçalho novo antes de a resposta chegar: o anterior não era uma
+       * questão completa, e questão sem gabarito não dá para responder */
+      aberto = {
+        ini: i, num: mc[1] || "",
+        /* o parêntese NÃO é necessariamente a banca: "(FGV - Juiz)" é, mas
+         * "(Questão de Pegadinha)" e "(FGV - Adaptada)" não são. Guardo o
+         * texto inteiro como rótulo e deixo a banca para confirmação — o
+         * detector não tem como saber, e chutar viraria etiqueta errada
+         * em cima de questão certa. */
+        rotulo: (mc[2] || "").trim(),
+        enunciado: mc[3] || "", opcoes: [], gabarito: "", comentario: "",
+      };
+      /* opções na MESMA linha: "… ? A) uma B) outra C) terceira" */
+      const partes = aberto.enunciado.split(/(?=\b[A-E]\)\s)/);
+      if (partes.length >= 3) {
+        aberto.enunciado = partes[0].trim();
+        partes.slice(1).forEach((p) => {
+          const mm = p.match(/^([A-E])\)\s*(.*)$/);
+          if (mm) aberto.opcoes.push({ letra: mm[1], txt: mm[2].trim() });
+        });
+      }
+      return;
+    }
+    if (!aberto) return;
+
+    /* opção em linha própria */
+    const mo = cru.match(/^([A-Ea-e])\s*[).]\s+(.+)$/);
+    if (mo && !aberto.gabarito) {
+      aberto.opcoes.push({ letra: mo[1].toUpperCase(), txt: mo[2].trim() });
+      return;
+    }
+
+    const mr = cru.match(QS_RESP);
+    if (mr) {
+      const resto = mr[1] || "";
+      const porLetra = resto.match(/^([A-E])\b[.)]?\s*(.*)$/);
+      const porPalavra = resto.match(/^(Sim|N[ãa]o|Certo|Errado|Verdadeiro|Falso)\b[.,]?\s*(.*)$/i);
+      if (aberto.opcoes.length && porLetra) {
+        aberto.gabarito = porLetra[1]; aberto.comentario = porLetra[2];
+      } else if (porPalavra) {
+        const p0 = qsNormal(porPalavra[1]);
+        aberto.gabarito = /^(sim|certo|verdadeiro)/.test(p0) ? "C" : "E";
+        aberto.comentario = porPalavra[2];
+      } else {
+        /* resposta sem gabarito reconhecível: não dá para responder, então
+         * não vira questão — mas o bloco fica registrado como incompleto
+         * para poder ser mostrado na importação com o motivo. */
+        aberto.comentario = resto;
+      }
+      aberto.fim = i;
+      aberto.tipo = aberto.opcoes.length ? "me" : "ce";
+      aberto.completa = !!(aberto.gabarito && aberto.enunciado);
+      blocos.push(aberto);
+      aberto = null;
+      return;
+    }
+
+    /* linha corrida logo abaixo do enunciado: continuação dele */
+    if (!aberto.opcoes.length && !aberto.gabarito && cru) {
+      aberto.enunciado = (aberto.enunciado ? aberto.enunciado + " " : "") + cru;
+    }
+  });
+  return blocos;
+}
+
+/* converte os blocos achados no texto para o mesmo formato das questões
+ * geradas pela IA, para poderem entrar no banco pelo mesmo caminho */
+function qsDeBlocos(blocos, ctx) {
+  const c = ctx || {};
+  return (blocos || []).filter((b) => b.completa).map((b) => ({
+    id: qsNovoId(),
+    tipo: b.tipo, enunciado: b.enunciado,
+    opcoes: b.opcoes.slice(), gabarito: b.gabarito, comentario: b.comentario,
+    banca: "", rotulo: b.rotulo,
+    disciplina: c.disciplina || "", topico: c.topico || "",
+    chave: c.chave || "", concurso: c.concurso || "",
+    origem: "texto",
+  }));
+}
+
 /* ---------------------------------------------------------------------
  * GRAVAR — com recibo, e sem duplicar
  * ------------------------------------------------------------------- */
@@ -363,6 +473,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsNormal, qsCarregar, qsSalvar, qsTodas, qsPrompt, qsLerResposta,
     qsAplicar, qsDesfazer, qsApagar, qsFiltrar, qsContarPorChave, qsBancas,
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
-    qsDesempenho, qsSessaoAtual, qsJaRespondida,
+    qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
+    qsSemMarcacao,
   };
 }

@@ -630,6 +630,29 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .btn-min.btn-salvo{background:#2f9e6e!important;color:#fff!important;
   border-color:#2f9e6e!important;transition:background .12s}
 .btn.btn-salvo{background:#2f9e6e!important;color:#fff!important}
+.mat-leitura .qp{border:1px solid var(--borda);border-left:3px solid #7c6cf5;
+  border-radius:0 9px 9px 0;padding:10px 13px;margin:12px 0;background:rgba(124,108,245,.06)}
+.mat-leitura .qp-cab{font-size:9px;letter-spacing:.09em;color:#7c6cf5;font-weight:700;
+  margin-bottom:5px}
+.mat-leitura .qp-en{font-size:14px;line-height:1.55;margin-bottom:10px}
+.mat-leitura .qp-ops{display:flex;flex-direction:column;gap:5px}
+.mat-leitura .qp-op{text-align:left;padding:7px 11px;border-radius:7px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);
+  font-size:13px;line-height:1.4;cursor:pointer;font-family:inherit}
+.mat-leitura .qp-op:hover:not(:disabled){border-color:#7c6cf5}
+.mat-leitura .qp-certa{border-color:#2f9e6e!important;background:rgba(47,158,110,.16)!important}
+.mat-leitura .qp-errada{border-color:#e06c6c!important;background:rgba(224,108,108,.16)!important}
+.mat-leitura .qp-gab{margin-top:9px;font-weight:700;font-size:12.5px}
+.mat-leitura .qp-ok{color:#2f9e6e}
+.mat-leitura .qp-nao{color:#e06c6c}
+.mat-leitura .qp-cm{margin-top:6px}
+.mat-leitura .qp-cm > summary{cursor:pointer;list-style:none;font-size:10px;
+  letter-spacing:.07em;color:var(--sutil);font-weight:700;user-select:none}
+.mat-leitura .qp-cm > summary::-webkit-details-marker{display:none}
+.mat-leitura .qp-cm > summary::before{content:"▸ "}
+.mat-leitura .qp-cm[open] > summary::before{content:"▾ "}
+.mat-leitura .qp-cm > div{margin-top:4px;font-size:12.5px;line-height:1.5;
+  color:var(--sutil);border-left:3px solid var(--borda);padding-left:9px}
 .qs-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
 .qs-chk{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sutil)}
 .qs-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 10px}
@@ -2293,7 +2316,11 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
            backup, e achar por que uma marcação falhou virava garimpo -->
       <!-- "lei seca" é marca da pessoa: só ela sabe se aquilo é a letra da
            lei ou um comentário sobre ela -->
-      <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
+      <button class="btn-min" id="btnMatImportarQuestoes" data-i18n="prova_importar_btn"
+      title="Grava no banco de questões as que já estão escritas neste resumo. Passa pela mesma conferência das geradas por IA, e dá para desfazer."></button>
+    <button class="btn-min" id="btnMatProva" hidden
+      title="As questões que já estão escritas neste resumo viram respondíveis: o gabarito e o comentário somem até você escolher. O texto não é alterado."></button>
+    <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
       title="Responde, em sequência, as questões deste tópico."></button>
     <button class="btn-min" id="btnMatVirarQuestao" data-i18n="qs_virar"
       title="Pega o trecho selecionado (ou o resumo inteiro) e monta o prompt para transformá-lo em questões respondíveis, de certo/errado ou múltipla escolha."></button>
@@ -2414,18 +2441,18 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <h3 data-i18n="qs_criar_titulo"></h3>
   <p class="nota" id="qsCriarDe"></p>
   <p class="nota" data-i18n="qs_criar_ajuda"></p>
-  <div class="qs-passo"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
+  <div class="qs-passo" id="qsPasso1"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
     <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
       title="Copia o prompt inteiro para colar na IA."></button></div>
   <textarea id="qsCriarPrompt" rows="5" readonly
     style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
-  <div class="qs-passo"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
+  <div class="qs-passo" id="qsPasso2"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
     <button class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
       title="Lê o que você colou e mostra o que entendeu ANTES de gravar."></button></div>
   <textarea id="qsCriarResposta" rows="6"
     style="width:100%;box-sizing:border-box;font-size:12px"
     placeholder="Cole aqui a resposta da IA."></textarea>
-  <div class="qs-passo"><span class="qs-num">3</span><span data-i18n="qs_passo3"></span></div>
+  <div class="qs-passo" id="qsPasso3"><span class="qs-num">3</span><span data-i18n="qs_passo3"></span></div>
   <div id="qsCriarConf" class="qs-conf-lista"></div>
   <p class="nota" id="qsCriarResumo"></p>
   <div class="dlg-rodape">
