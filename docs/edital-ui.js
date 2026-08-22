@@ -374,8 +374,28 @@ function edLinhaTopico(i, semDisciplina) {
     if (typeof leiAbrir === "function") leiAbrir(i.disciplina, i.nome);
   };
 
+  /* QUESTÕES do tópico, o quarto documento da linha.
+   * Sem isto, responder as questões de um tópico exigia abrir o resumo e
+   * procurar o botão lá dentro — três cliques para um gesto que a agenda
+   * já oferece para resumo, cartões e lei seca. */
+  const qst = document.createElement("button");
+  qst.type = "button";
+  const nQ = typeof qsContarPorChave === "function"
+    ? (qsContarPorChave()[matChave(i.disciplina, i.nome)] || 0) : 0;
+  qst.className = "ed-qst" + (nQ ? " tem" : "");
+  qst.textContent = "❓";
+  qst.title = t(nQ ? "ed_qst_ver" : "ed_qst_novo", { n: nQ, tp: i.nome });
+  qst.onclick = (ev) => {
+    ev.stopPropagation();
+    if (typeof matAbrirEditor !== "function") return;
+    /* abre o resumo do tópico e vai direto às questões: com questões,
+     * responde; sem nenhuma, leva a criar — o mesmo caminho de dentro */
+    matAbrirEditor({ disciplina: i.disciplina, nome: i.nome }, "ler");
+    try { qsUiResponderDoTopico(); } catch (x) {}
+  };
+
   li._itemChave = i.chave;
-  li.append(chk, pt, meio, doc, crt, lei, rev, min);
+  li.append(chk, pt, meio, doc, crt, lei, qst, rev, min);
   return li;
 }
 

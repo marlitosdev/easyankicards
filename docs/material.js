@@ -471,6 +471,7 @@ function matParaHtml(txt, prova) {
     .replace(/==((?:[^=\n]|=(?!=))+)==/g, "<mark>$1</mark>");
   /* uma só, fora do laço: era recriada a cada linha, e o cartão de questão
    * precisa dela ANTES do ponto onde estava declarada */
+  let emDica = false, emDicaJust = false;
   const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
   linhas.forEach((l, kLinha) => {
     /* linha dentro de um bloco de questão: quem desenha é o cartão */
@@ -483,6 +484,7 @@ function matParaHtml(txt, prova) {
       return;
     }
     const s = l.trim();
+    if (!/^&gt;~?\s?/.test(s) || /^&gt;&gt;/.test(s)) emDica = false;
     /* Títulos de 1 a 6 "#". Antes só "#" e "##" eram reconhecidos, e os
      * resumos do NotebookLM usam "###" e "####" o tempo todo — eles
      * apareciam LITERAIS na leitura, com os quatro jogos da velha na tela.
@@ -532,14 +534,22 @@ function matParaHtml(txt, prova) {
       return;
     }
     if (/^&gt;~?\s?/.test(s)) {
-      fecharLista();
-      /* dica recolhível: no meio de um resumo longo ela compete com o texto
-       * original; fechada, vira uma linha fina que você abre quando precisa */
+      /* DICA DE VÁRIAS LINHAS É UM BLOCO SÓ.
+       * Cada linha virava o seu próprio quadrinho "DICA", e uma explicação
+       * de três parágrafos aparecia como três dicas empilhadas. */
       const just = /^&gt;~/.test(s);
+      const corpo = inline(s.replace(/^&gt;~?\s?/, ""));
+      if (emDica && emDicaJust === just) {
+        saida[saida.length - 1] = saida[saida.length - 1]
+          .replace(/<\/div><\/details>$/, "") + "<br>" + corpo + "</div></details>";
+        return;
+      }
+      fecharLista();
+      emDica = true; emDicaJust = just;
       saida.push('<details class="mat-dica' + (just ? " mat-dica-just" : "") + '"'
         + (matDicasAbertas ? " open" : "")
         + '><summary>' + t("mat_dica_rot") + '</summary><div>'
-        + inline(s.replace(/^&gt;~?\s?/, "")) + "</div></details>");
+        + corpo + "</div></details>");
       return;
     }
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
@@ -1374,6 +1384,8 @@ function matPiscarSalvo() {
 
 function matSalvarEstado() {
   if (!matAtual) return false;
+  /* a dica em edição entra junto: é o mesmo gesto de "guardar o que fiz" */
+  try { matSalvarDicasPendentes(); } catch (e) {}
   matGravar(matAtual.chave, $("matTexto").value,
     { disciplina: matAtual.disciplina, topico: matAtual.topico });
   matSujo = false;
@@ -2836,13 +2848,31 @@ function matDicasDoResumo(chave) {
     fora.push({ tipo: "solta", k: d.k, trecho: d.trecho || "",
                 texto: d.texto || "", align: d.align === "justificado" ? "justificado" : "esquerda" });
   });
-  matTextoVivo(chave, "texto").split("\n").forEach((l, i) => {
+  /* LINHAS SEGUIDAS SÃO UMA DICA SÓ.
+   * Dica de estudo raramente cabe numa linha. Enquanto cada linha ">" era
+   * uma dica separada, uma explicação de três parágrafos aparecia como três
+   * dicas na lista — e, pior, o pedido de melhoria à IA saía com "responda
+   * em uma linha", que era a minha limitação virando ordem para ela
+   * resumir. A pessoa recebia de volta um resumo do que tinha escrito. */
+  const linhas = matTextoVivo(chave, "texto").split("\n");
+  let bloco = null;
+  const fecharBloco = () => {
+    if (bloco) { fora.push(bloco); bloco = null; }
+  };
+  linhas.forEach((l, i) => {
     const mm = l.match(/^>(~?)\s?(.*)$/);
-    if (!mm) return;
-    if (/^>/.test(l.slice(1))) return;         /* ">>" é gabarito, não dica */
-    fora.push({ tipo: "no_texto", linha: i, texto: mm[2],
-                align: mm[1] === "~" ? "justificado" : "esquerda" });
+    const ehDica = mm && !/^>/.test(l.slice(1));   /* ">>" é gabarito */
+    if (!ehDica) { fecharBloco(); return; }
+    const al = mm[1] === "~" ? "justificado" : "esquerda";
+    if (bloco && bloco.align === al && bloco.fim === i - 1) {
+      bloco.texto += "\n" + mm[2];
+      bloco.fim = i;
+    } else {
+      fecharBloco();
+      bloco = { tipo: "no_texto", linha: i, fim: i, texto: mm[2], align: al };
+    }
   });
+  fecharBloco();
   return fora;
 }
 
@@ -2852,14 +2882,21 @@ function matDicasContar(chave) { return matDicasDoResumo(chave).length; }
 function matDicaSalvar(chave, ref, texto, align) {
   const r = matResumos[chave];
   if (!r) return false;
-  const limpo = String(texto == null ? "" : texto).replace(/\n+/g, " ").trim();
+  /* preserva as quebras: eram esmagadas em espaço, e era isso que obrigava
+   * a dica a caber numa linha só */
+  const limpo = String(texto == null ? "" : texto)
+    .split("\n").map((x) => x.trim()).filter((x, k, arr) => x || (k > 0 && k < arr.length - 1))
+    .join("\n").trim();
   const marca = align === "justificado" ? ">~ " : "> ";
   if (ref.tipo === "no_texto") {
     const linhas = matTextoVivo(chave, "texto").split("\n");
-    if (ref.linha < 0 || ref.linha >= linhas.length) return false;
+    const fim = ref.fim === undefined ? ref.linha : ref.fim;
+    if (ref.linha < 0 || fim >= linhas.length) return false;
     if (!/^>(~?)\s?/.test(linhas[ref.linha])) return false;
-    if (!limpo) linhas.splice(ref.linha, 1);       /* dica vazia sai do texto */
-    else linhas[ref.linha] = marca + limpo;
+    const quantas = fim - ref.linha + 1;
+    if (!limpo) linhas.splice(ref.linha, quantas);   /* dica vazia sai do texto */
+    else linhas.splice(ref.linha, quantas,
+      ...limpo.split("\n").map((x) => marca + x));
     matAplicarTexto(chave, "texto", linhas.join("\n"));
   } else {
     const d = (r.dicas || []).filter((x) => x.k === ref.k)[0];
@@ -2899,6 +2936,33 @@ function matNegritoNaCaixa(ta) {
   return true;
 }
 
+/* O QUE VOLTA DA IA, ARRUMADO
+ *
+ * O prompt diz quais marcas o app entende, mas pedido não é garantia. Isto
+ * conserta o que costuma escapar, em vez de deixar aparecer como texto
+ * solto no meio da dica: título com "#", marcador de lista, linha de
+ * separação, e a fileira de linhas em branco que algumas respostas trazem.
+ *
+ * O que NÃO se mexe: "**negrito**" e "_itálico_" passam intactos, porque
+ * são exatamente o que a leitura sabe desenhar.
+ */
+function matDicaLimparColagem(txt) {
+  const linhas = String(txt == null ? "" : txt).split(/\r?\n/);
+  const fora = [];
+  linhas.forEach((l0) => {
+    let l = l0.trim();
+    if (/^-{3,}$/.test(l) || /^_{3,}$/.test(l) || /^={3,}$/.test(l)) return;
+    l = l.replace(/^#{1,6}\s+/, "");            /* título vira linha normal */
+    l = l.replace(/^\s*[-*•]\s+/, "• ");        /* marcador de lista padronizado */
+    l = l.replace(/^\s*\d+[.)]\s+/, (mm) => mm.trim() + " ");
+    if (!l) { if (fora.length && fora[fora.length - 1] !== "") fora.push(""); return; }
+    fora.push(l);
+  });
+  while (fora.length && fora[fora.length - 1] === "") fora.pop();
+  while (fora.length && fora[0] === "") fora.shift();
+  return fora.join("\n");
+}
+
 function matDicaPrompt(texto, trecho) {
   return t("dica_prompt", { texto: String(texto || ""),
                             trecho: String(trecho || "").slice(0, 400) });
@@ -2911,6 +2975,8 @@ function matDicaPrompt(texto, trecho) {
  * gravar a cada tecla tira dela a chance de desistir.
  * ------------------------------------------------------------------- */
 let matDicaAlinhos = {};      /* alinhamento escolhido antes de salvar */
+let matDicaEditando = -1;     /* qual dica está aberta para edição (uma por vez) */
+let matDicaCaixas = [];       /* campos em edição, para o "Salvar resumo" alcançar */
 
 function matDicasListaAbrir() {
   if (!matAtual) return;
@@ -2918,6 +2984,7 @@ function matDicasListaAbrir() {
   const lista = matDicasDoResumo(chave);
   const box = $("dicLista");
   box.innerHTML = "";
+  matDicaCaixas = [];
   $("dicResumo").textContent = lista.length
     ? t("dic_resumo", { n: lista.length,
         s: lista.filter((x) => x.tipo === "solta").length,
@@ -2935,12 +3002,72 @@ function matDicasListaAbrir() {
       : t("dic_presa", { t: String(d.trecho).slice(0, 90) });
     li.append(onde);
 
+    const editando = matDicaEditando === idx;
+
+    /* ---------- MODO LEITURA (o padrão) ----------
+     * Abrir tudo em caixa de edição transformava a lista num formulário de
+     * dez campos: para LER as suas dicas você tinha de encarar o texto cru,
+     * com os "**" à mostra. Aqui a dica aparece como ela é na tela, e só
+     * a que você escolher vira campo. */
+    if (!editando) {
+      const vis = document.createElement("div");
+      vis.className = "dic-vista" + (d.align === "justificado" ? " dic-just" : "");
+      vis.innerHTML = matParaHtml(d.texto)
+        .replace(/^<p>/, "").replace(/<\/p>$/, "");
+      li.append(vis);
+
+      const ac = document.createElement("div");
+      ac.className = "dic-acoes";
+
+      const bV = document.createElement("button");
+      bV.type = "button"; bV.className = "btn-min";
+      bV.textContent = t("dic_ver_texto");
+      bV.title = t(d.tipo === "no_texto" ? "dic_ver_texto_ajuda" : "dic_ver_trecho_ajuda");
+      bV.onclick = () => {
+        $("dlgDicas").close();
+        matTrocarModo("ler");
+        const alvo = d.tipo === "no_texto" ? d.texto : d.trecho;
+        const achou = matIrPara(String(alvo).split("\n")[0], "texto");
+        matReg("dica", achou ? "aberto no lugar da dica" : "lugar da dica não encontrado",
+               String(alvo).slice(0, 60));
+      };
+
+      const bEd = document.createElement("button");
+      bEd.type = "button"; bEd.className = "btn-min btn-min-ok";
+      bEd.textContent = t("dic_editar");
+      bEd.title = t("dic_editar_ajuda");
+      bEd.onclick = () => { matDicaEditando = idx; matDicasListaAbrir(); };
+
+      const bX = document.createElement("button");
+      bX.type = "button"; bX.className = "btn-min btn-min-perigo";
+      bX.textContent = t("dic_apagar");
+      bX.title = t("dic_apagar_ajuda");
+      bX.onclick = async () => {
+        if (!(await uiConfirm(t("dic_apagar_conf",
+          { t: String(d.texto).slice(0, 140) })))) return;
+        matDicaSalvar(chave, d, "", d.align);
+        matDicaEditando = -1;
+        matDicasListaAbrir();
+        matPintarDicasLista();
+        try { matRender(); } catch (e) {}
+        if (matModo === "ler") matTrocarModo("ler");
+      };
+
+      ac.append(bV, bEd, bX);
+      li.append(ac);
+      box.append(li);
+      return;
+    }
+
+    /* ---------- MODO EDIÇÃO (só a escolhida) ---------- */
     const ta = document.createElement("textarea");
     ta.className = "dic-campo" + (d.align === "justificado" ? " dic-just" : "");
-    ta.rows = 3;
+    ta.rows = Math.min(14, Math.max(4, String(d.texto).split("\n").length + 2));
     ta.value = d.texto;
     li.append(ta);
     matDicaAlinhos[idx] = d.align;
+    /* fica registrado para o "Salvar resumo" poder gravar junto */
+    matDicaCaixas.push({ ref: d, ta, idx, original: d.texto });
 
     const ac = document.createElement("div");
     ac.className = "dic-acoes";
@@ -2971,29 +3098,13 @@ function matDicasListaAbrir() {
     ac.append(bJ, bE);
     pintaAlinho();
 
-    /* VER NO TEXTO: a dica existe em algum lugar do resumo, e ler a dica
-     * fora do contexto dela é meia informação. Para as que ainda não foram
-     * incorporadas, leva ao trecho a que elas se referem. */
-    const bV = document.createElement("button");
-    bV.type = "button"; bV.className = "btn-min";
-    bV.textContent = t("dic_ver_texto");
-    bV.title = t(d.tipo === "no_texto" ? "dic_ver_texto_ajuda" : "dic_ver_trecho_ajuda");
-    bV.onclick = () => {
-      $("dlgDicas").close();
-      matTrocarModo("ler");
-      const alvo = d.tipo === "no_texto" ? d.texto : d.trecho;
-      const achou = matIrPara(alvo, "texto");
-      matReg("dica", achou ? "aberto no lugar da dica" : "lugar da dica não encontrado",
-             String(alvo).slice(0, 60));
-    };
-    ac.append(bV);
-
     const bS = document.createElement("button");
     bS.type = "button"; bS.className = "btn-min btn-min-ok";
     bS.textContent = t("dic_salvar");
     bS.title = t("dic_salvar_ajuda");
     bS.onclick = () => {
       matDicaSalvar(chave, d, ta.value, matDicaAlinhos[idx]);
+      matDicaEditando = -1;
       matDicasListaAbrir();
       matPintarDicasLista();
       try { matRender(); } catch (e) {}
@@ -3001,15 +3112,22 @@ function matDicasListaAbrir() {
     };
     ac.append(bS);
 
+    const bC = document.createElement("button");
+    bC.type = "button"; bC.className = "btn-min";
+    bC.textContent = t("cancel_btn");
+    bC.title = t("dic_cancelar_ajuda");
+    bC.onclick = () => { matDicaEditando = -1; matDicasListaAbrir(); };
+    ac.append(bC);
+
     const bX = document.createElement("button");
     bX.type = "button"; bX.className = "btn-min btn-min-perigo";
     bX.textContent = t("dic_apagar");
     bX.title = t("dic_apagar_ajuda");
     bX.onclick = async () => {
-      /* apagar dica é perda de texto escrito à mão: pergunta antes, e
-       * mostra o que vai embora */
-      if (!(await uiConfirm(t("dic_apagar_conf", { t: d.texto.slice(0, 140) })))) return;
+      if (!(await uiConfirm(t("dic_apagar_conf",
+        { t: String(d.texto).slice(0, 140) })))) return;
       matDicaSalvar(chave, d, "", d.align);
+      matDicaEditando = -1;
       matDicasListaAbrir();
       matPintarDicasLista();
       try { matRender(); } catch (e) {}
@@ -3018,7 +3136,7 @@ function matDicasListaAbrir() {
     ac.append(bX);
     li.append(ac);
 
-    /* melhorar com IA: prompt pronto, e o que você colar SUBSTITUI o texto */
+    /* melhorar com IA */
     const det = document.createElement("details");
     det.className = "dic-ia";
     const sm = document.createElement("summary");
@@ -3041,27 +3159,61 @@ function matDicasListaAbrir() {
     const resp = document.createElement("textarea");
     resp.className = "dic-resp"; resp.rows = 3;
     resp.placeholder = t("dic_colar_aqui");
+    const bp = document.createElement("button");
+    bp.type = "button"; bp.className = "btn-min";
+    bp.textContent = t("dic_colar_btn");
+    bp.title = t("dic_colar_btn_ajuda");
+    bp.onclick = async () => {
+      let lido = "";
+      try { lido = await navigator.clipboard.readText(); } catch (e) { lido = ""; }
+      if (!String(lido).trim()) { await uiAlert(t("dic_colar_vazio")); return; }
+      resp.value = matDicaLimparColagem(lido);
+      matReg("dica", "resposta da IA colada", String(lido).length + " caracteres");
+    };
     const ba = document.createElement("button");
     ba.type = "button"; ba.className = "btn-min btn-min-ok";
     ba.textContent = t("dic_usar");
     ba.title = t("dic_usar_ajuda");
     ba.onclick = async () => {
-      const novo = String(resp.value || "").trim();
+      const novo = matDicaLimparColagem(resp.value);
       if (!novo) { await uiAlert(t("dic_nada_colado")); return; }
-      /* mostra o antes e o depois: substituir texto escrito à mão sem a
-       * pessoa ver o que entra no lugar é o tipo de ajuda que atrapalha */
-      if (!(await uiConfirm(t("dic_usar_conf",
-        { a: d.texto.slice(0, 160), b: novo.slice(0, 160) })))) return;
-      ta.value = novo.replace(/\n+/g, " ").trim();
-      matReg("dica", "dica melhorada pela IA", novo.slice(0, 60));
+      const encolheu = String(d.texto).length > 200
+        && novo.length < String(d.texto).length * 0.6;
+      const msg = encolheu
+        ? t("dic_usar_conf_curta", { a: String(d.texto).slice(0, 160),
+            b: novo.slice(0, 160), de: String(d.texto).length, para: novo.length })
+        : t("dic_usar_conf", { a: String(d.texto).slice(0, 160), b: novo.slice(0, 160) });
+      if (!(await uiConfirm(msg))) return;
+      ta.value = novo;
+      matReg("dica", "dica melhorada pela IA",
+             String(d.texto).length + " → " + novo.length + " caracteres");
     };
-    det.append(pr, bc, resp, ba);
+    det.append(pr, bc, resp, bp, ba);
     li.append(det);
-
     box.append(li);
   });
   abrirModal("dlgDicas");
   matReg("dica", "lista de dicas aberta", lista.length + " dicas");
+}
+
+/* O "Salvar resumo" grava também a dica que estiver em edição.
+ * Sem isto, quem escrevia a dica e apertava o botão grande de salvar —
+ * o gesto natural — perdia o que tinha escrito, porque o painel tem o seu
+ * próprio salvar e o de fora não sabia dele. */
+function matSalvarDicasPendentes() {
+  if (!matAtual) return 0;
+  if (!$("dlgDicas") || !$("dlgDicas").open) return 0;
+  let n = 0;
+  matDicaCaixas.forEach((c) => {
+    if (!c.ta || c.ta.value === c.original) return;
+    if (matDicaSalvar(matAtual.chave, c.ref, c.ta.value, matDicaAlinhos[c.idx])) n++;
+  });
+  if (n) {
+    matDicaEditando = -1;
+    matDicasListaAbrir();
+    matPintarDicasLista();
+  }
+  return n;
 }
 
 function matPintarDicasLista() {
@@ -3178,7 +3330,10 @@ function matIncorporarDica(chave, trecho, onde) {
    * entra no texto, então matDicaDe() acima já devolve null na segunda
    * tentativa. Guardar a checagem seria código que nenhuma sabotagem
    * consegue quebrar — e código assim mente sobre o que protege. */
-  linhas.splice(k + 1, 0, "> " + d.texto.replace(/\n+/g, " "));
+  /* uma linha ">" por linha da dica: colapsar tudo num parágrafo só era o
+   * que fazia a dica longa virar um bloco ilegível */
+  linhas.splice(k + 1, 0, ...String(d.texto).split("\n")
+    .map((x) => x.trim()).filter(Boolean).map((x) => "> " + x));
   matAplicarTexto(chave, campo, linhas.join("\n"));
   r.dicas = (r.dicas || []).filter((x) => x.k !== d.k);
   matSalvar();
