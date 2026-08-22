@@ -938,15 +938,36 @@ function matBotao(id, nome, acao) {
   };
 }
 
+/* SÓ DE HOJE.
+ * Com 135 eventos acumulados, procurar o que acabou de acontecer vira
+ * garimpo — e é justamente o de hoje que serve para entender o que deu
+ * errado agora. O filtro é do dia local, não UTC: quem estuda às 22h não
+ * pode ver a sessão de ontem por causa de fuso. */
+let matLogSoHoje = false;
+
+function matLogDoDia(quando) {
+  const d = new Date(quando);
+  if (isNaN(d.getTime())) return false;
+  const h = new Date();
+  return d.getFullYear() === h.getFullYear() && d.getMonth() === h.getMonth()
+    && d.getDate() === h.getDate();
+}
+
+function matLogFiltrado() {
+  return matLogSoHoje ? matLog.filter((x) => matLogDoDia(x.q)) : matLog;
+}
+
 function matLogTexto() {
-  if (!matLog.length) return t("mat_log_vazio");
-  const linhas = matLog.slice().reverse().map((x) => {
+  const lista = matLogFiltrado();
+  if (!lista.length) return matLogSoHoje ? t("mat_log_vazio_hoje") : t("mat_log_vazio");
+  const linhas = lista.slice().reverse().map((x) => {
     const q = String(x.q || "").replace("T", " ").slice(0, 19);
     const onde = x.top ? " [" + (x.disc ? x.disc + " › " : "") + x.top + "]" : "";
     return q + "  " + String(x.t).toUpperCase().padEnd(10) + onde
       + "\n      " + x.o + (x.d ? "\n      " + x.d : "");
   });
-  return t("mat_log_cab", { n: matLog.length }) + "\n\n" + linhas.join("\n\n");
+  return t(matLogSoHoje ? "mat_log_cab_hoje" : "mat_log_cab",
+            { n: lista.length, tot: matLog.length }) + "\n\n" + linhas.join("\n\n");
 }
 
 /* Marca o material como "lei seca" — letra da lei, não comentário. É o que
@@ -1059,8 +1080,25 @@ function matPintarLei() {
 }
 
 function matLogAbrir() {
+  matLogPintarFiltro();
   $("matLogTexto").value = matLogTexto();
   abrirModal("dlgMatLog");
+}
+
+function matLogPintarFiltro() {
+  const b = $("btnMatLogHoje");
+  if (!b) return;
+  const n = matLog.filter((x) => matLogDoDia(x.q)).length;
+  b.textContent = t(matLogSoHoje ? "mat_log_todos_btn" : "mat_log_hoje_btn", { n });
+  b.classList.toggle("mat-ligado", matLogSoHoje);
+  b.setAttribute("aria-pressed", matLogSoHoje ? "true" : "false");
+  b.title = t(matLogSoHoje ? "mat_log_todos_ajuda" : "mat_log_hoje_ajuda", { n });
+}
+
+function matLogAlternarHoje() {
+  matLogSoHoje = !matLogSoHoje;
+  matLogPintarFiltro();
+  $("matLogTexto").value = matLogTexto();
 }
 
 function matLogLimpar() {
@@ -1899,6 +1937,7 @@ function matIniciar() {
   if ($("btnDuvFechar")) $("btnDuvFechar").onclick = () => $("dlgDuvidas").close();
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
+  matBotao("btnMatLogHoje", "só de hoje no registro", matLogAlternarHoje);
   if ($("btnMatLogLimpar")) $("btnMatLogLimpar").onclick = matLogLimpar;
   if ($("btnMatLogCopiar")) $("btnMatLogCopiar").onclick = () => {
     try { navigator.clipboard.writeText($("matLogTexto").value); } catch (e) {}

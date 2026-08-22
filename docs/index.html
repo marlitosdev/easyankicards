@@ -725,6 +725,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-conf-en{font-size:12.5px;margin:2px 0}
 .qs-conf-op{font-size:11.5px;padding-left:8px;color:var(--sutil)}
 .qs-conf-op.certa{color:#2f9e6e;font-weight:700}
+.qs-conf-rep{border-left-color:#f5a524;background:rgba(245,165,36,.08)}
+.qs-conf-aviso{font-size:11px;color:#f5a524;font-weight:700;margin-top:5px}
+.qs-conf-ja{font-size:11.5px;color:var(--sutil);border-left:2px solid var(--borda);
+  padding-left:8px;margin-top:3px}
+.qs-conf-cab input{margin-right:2px}
+.qs-conf-cab{cursor:pointer;display:flex;align-items:center;gap:2px}
 .qs-conf-cm{font-size:11px;color:var(--sutil);font-style:italic;margin-top:3px}
 .qs-sess{min-height:150px}
 .qs-de{font-size:10px;letter-spacing:.05em;color:var(--sutil);margin-bottom:6px}
@@ -2650,6 +2656,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <textarea id="matLogTexto" rows="16" readonly
     style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
   <div class="dlg-rodape">
+    <button class="btn-min" id="btnMatLogHoje"></button>
     <button class="btn btn-azul" id="btnMatLogCopiar" data-i18n="mat_log_copiar"></button>
     <button class="btn-min btn-min-perigo" id="btnMatLogLimpar" data-i18n="mat_log_limpar"></button>
     <button class="btn btn-cinza" id="btnMatLogFechar" data-i18n="help_close"></button>
