@@ -932,6 +932,20 @@ function matRecusa(motivo, trecho, plano) {
     : motivo === "marca_nao_achou" ? "mat_tirar_nao_achou" : "mat_marca_nao_achou"));
 }
 
+/* limites da LINHA onde a posição p está */
+function matLimitesDaLinha(src, p) {
+  const a = src.lastIndexOf("\n", Math.max(0, p - 1)) + 1;
+  const b = src.indexOf("\n", p);
+  return { a, b: b < 0 ? src.length : b };
+}
+
+/* Um pedaço só vale marca se tiver algum conteúdo de verdade. "**" sozinho
+ * passava no teste de "não está vazio" e virava uma dúvida em branco na
+ * lista — foi a terceira dúvida fantasma que apareceu na tela. */
+function matTemConteudo(s) {
+  return /[0-9A-Za-zÀ-ÿ]/.test(String(s));
+}
+
 function matEquilibrar(src, ini, fim) {
   /* A borda da marca não pode partir um par de marcadores ao meio.
    * Selecionando "abertura de créditos suplementares" o recorte terminava
@@ -957,12 +971,28 @@ function matEquilibrar(src, ini, fim) {
     mudou = false;
     for (const mk of MARCAS) {
       if (conta(mk, ini, fim) % 2 === 0) continue;
-      const dep = src.indexOf(mk, fim);
-      const ant = src.lastIndexOf(mk, ini - 1);
+      /* NUNCA SAIR DA LINHA.
+       * indexOf(mk, fim) varria o documento INTEIRO: ao marcar um bloco que
+       * terminava com negrito desequilibrado, a marca ia buscar o "**" de
+       * fecho parágrafos adiante e engolia texto que ninguém selecionou —
+       * uma questão inteira, no caso real. */
+      const lim = matLimitesDaLinha(src, fim > ini ? fim - 1 : ini);
+      const lim0 = matLimitesDaLinha(src, ini);
+      let dep = src.indexOf(mk, fim);
+      if (dep < 0 || dep + mk.length > lim.b) dep = -1;
+      let ant = src.lastIndexOf(mk, ini - 1);
+      if (ant < lim0.a) ant = -1;
       /* prefere crescer para a frente: o fecho costuma estar logo ali, e
        * crescer para trás engoliria palavras que a pessoa não selecionou */
       if (dep >= 0 && (ant < 0 || dep - fim <= ini - ant)) { fim = dep + mk.length; mudou = true; }
       else if (ant >= 0) { ini = ant; mudou = true; }
+      else {
+        /* não dá para equilibrar sem sair da linha: então ENCOLHE, deixando
+         * o marcador solto de fora da marca. Melhor uma marca um pouco
+         * menor do que uma que atravessa o resumo. */
+        const solto = src.lastIndexOf(mk, fim - mk.length);
+        if (solto > ini) { fim = solto; mudou = true; }
+      }
     }
   }
   return { ini, fim };
@@ -1022,8 +1052,7 @@ function matMarcarSelecao(tipo) {
   if (escolhida < 0) { matRecusa("ja_marcado", trecho); return; }
   const pos = escolhida;
 
-  const faixa = matEquilibrar(ta.value, mapa[pos], mapa[pos + alvo.length - 1] + 1);
-  const ini = faixa.ini, fim = faixa.fim;
+  const ini0 = mapa[pos], fim0 = mapa[pos + alvo.length - 1] + 1;
   /* A checagem de "já marcado" mudou de lugar: agora ela decide QUAL
    * ocorrência usar, em vez de recusar tudo por causa da primeira. Esta
    * linha também tinha um resquício: a regex /==[!?]?$/ não conhecia os
@@ -1032,23 +1061,34 @@ function matMarcarSelecao(tipo) {
   /* MARCA QUE ATRAVESSA LINHAS FECHA EM CADA UMA.
    * A leitura é montada linha a linha: um "==?" numa linha e o "==" de
    * fecho na seguinte não formam marca nenhuma — as duas aparecem LITERAIS
-   * na tela, e a pessoa vê "==?Ato Complexo:" como texto. Selecionar um
-   * parágrafo inteiro é o gesto mais comum ao grifar, então isso acontecia
-   * o tempo todo. Aqui a marca é reaberta a cada linha. */
-  const original = ta.value.slice(ini, fim);
-  const marcado = original.indexOf("\n") < 0
-    ? marca + original + "=="
-    : original.split("\n").map((linha) => {
-        /* linha vazia não recebe marca: "==?==" não é nada e ainda
-         * apareceria como lixo no texto */
-        if (!linha.trim()) return linha;
-        return marca + linha + "==";
-      }).join("\n");
-  ta.value = ta.value.slice(0, ini) + marcado + ta.value.slice(fim);
+   * na tela. Então cada linha recebe a sua própria marca.
+   *
+   * E cada linha é equilibrada SOZINHA. Equilibrar o bloco inteiro de uma
+   * vez dava paridade certa no total e errada em cada linha: a soma de dois
+   * negritos ímpares é par. */
+  const pedacos = [];
+  let p = ini0;
+  while (p < fim0) {
+    const nl = ta.value.indexOf("\n", p);
+    const q = nl < 0 || nl >= fim0 ? fim0 : nl;
+    if (q > p) pedacos.push([p, q]);
+    p = q + 1;
+  }
+  let saida = "", cursor = 0, marcados = 0;
+  pedacos.forEach(([a0, b0]) => {
+    const f = matEquilibrar(ta.value, a0, b0);
+    const txt = ta.value.slice(f.ini, f.fim);
+    if (!matTemConteudo(txt)) return;      /* linha em branco ou só marcação */
+    if (f.ini < cursor) return;            /* já coberto pelo pedaço anterior */
+    saida += ta.value.slice(cursor, f.ini) + marca + txt + "==";
+    cursor = f.fim;
+    marcados++;
+  });
+  if (!marcados) { matRecusa("nao_achou", trecho, plano); return; }
+  saida += ta.value.slice(cursor);
+  ta.value = saida;
   /* NÃO grava aqui. Grifar é experimentar: a pessoa marca, olha, desfaz,
-   * marca de novo. Gravar a cada clique tira dela a chance de desistir —
-   * e sem gravação imediata o botão "Salvar estado" passa a significar
-   * alguma coisa, em vez de ser um botão que não muda nada. */
+   * marca de novo. Gravar a cada clique tira dela a chance de desistir. */
   matSujo = true;
   matSelGuardada = "";
   matReg("marca", "marcado (" + tipo + ")", trecho.slice(0, 60)
@@ -1057,12 +1097,117 @@ function matMarcarSelecao(tipo) {
   $("matEstado").textContent = t("mat_marcado_nao_salvo");
 }
 
-function matLimparMarcas() {
+/* =====================================================================
+ * LIMPAR MARCAS — com escolha, e sem levar dica e questão junto
+ *
+ * Antes: um clique apagava TODAS as marcas do resumo, sem perguntar e sem
+ * mostrar o quê. Duas consequências:
+ *  · não dava para tirar só o amarelo e manter o azul;
+ *  · apagar uma marca de dúvida some com ela da lista, e a dica ou a
+ *    questão presa àquele trecho fica órfã — o trabalho continua gravado,
+ *    mas sem porta de entrada.
+ * Agora as marcas com dica ou questão vêm DESMARCADAS e sinalizadas.
+ * ===================================================================== */
+const MAT_ROTULO_MARCA = { "==": "destaque", "==!": "importante", "==?": "duvida",
+                           "==§": "lei", "==*": "prova", "==~": "pegadinha" };
+
+function matMarcasNoTexto(chave, campo) {
+  const s = matTextoVivo(chave, campo || "texto");
+  const re = new RegExp("==" + MAT_SUF + "((?:[^=\\n]|=(?!=))+)==", "g");
+  const fora = [];
+  let mm;
+  while ((mm = re.exec(s)) !== null) {
+    const abre = mm[0].slice(0, mm[0].length - mm[1].length - 2);
+    const limpo = String(mm[1]).replace(/(\*\*|__|_)/g, "").trim();
+    fora.push({
+      pos: mm.index, inteiro: mm[0], miolo: mm[1], abre,
+      tipo: MAT_ROTULO_MARCA[abre] || "destaque",
+      trecho: limpo,
+      temDica: !!matDicaDe(chave, limpo),
+      temQuestao: !!matQuestaoDe(chave, limpo),
+    });
+  }
+  return fora;
+}
+
+async function matLimparMarcas() {
+  if (!matAtual) return;
+  const marcas = matMarcasNoTexto(matAtual.chave, "texto");
+  if (!marcas.length) { await uiAlert(t("lm_nenhuma")); return; }
+
+  const box = $("lmLista");
+  box.innerHTML = "";
+  const caixas = [];
+  marcas.forEach((mk, i) => {
+    const li = document.createElement("label");
+    li.className = "lm-item" + (mk.temDica || mk.temQuestao ? " lm-guardado" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    /* trecho com dica ou questão NÃO vem marcado: apagar por descuido é o
+     * que faz perder trabalho, e o descuido mora no "marcar tudo". */
+    cb.checked = !(mk.temDica || mk.temQuestao);
+    caixas.push({ cb, mk });
+    const corpo = document.createElement("span");
+    corpo.className = "lm-corpo";
+    const tp = document.createElement("span");
+    tp.className = "lm-tipo m-" + mk.tipo;
+    tp.textContent = t("mat_marca_" + mk.tipo) || mk.tipo;
+    const tx = document.createElement("span");
+    tx.className = "lm-txt";
+    tx.textContent = mk.trecho.slice(0, 160);
+    corpo.append(tp, tx);
+    if (mk.temDica || mk.temQuestao) {
+      const av = document.createElement("span");
+      av.className = "lm-aviso";
+      av.textContent = mk.temDica && mk.temQuestao ? t("lm_tem_ambos")
+        : mk.temDica ? t("lm_tem_dica") : t("lm_tem_questao");
+      corpo.append(av);
+    }
+    li.append(cb, corpo);
+    box.append(li);
+  });
+
+  const contar = () => {
+    const n = caixas.filter((c) => c.cb.checked).length;
+    $("lmResumo").textContent = t("lm_resumo", { n, total: marcas.length });
+    $("btnLmOk").disabled = !n;
+  };
+  caixas.forEach((c) => { c.cb.onchange = contar; });
+  $("btnLmTodas").onclick = () => { caixas.forEach((c) => { c.cb.checked = true; }); contar(); };
+  $("btnLmNenhuma").onclick = () => { caixas.forEach((c) => { c.cb.checked = false; }); contar(); };
+  contar();
+
+  const vai = await new Promise((resolve) => {
+    const fim = (v) => {
+      $("btnLmOk").onclick = null; $("btnLmNao").onclick = null;
+      if ($("dlgLimparMarcas").open) $("dlgLimparMarcas").close();
+      resolve(v);
+    };
+    $("btnLmOk").onclick = () => fim(true);
+    $("btnLmNao").onclick = () => fim(false);
+    abrirModal("dlgLimparMarcas");
+  });
+  if (!vai) return;
+
+  /* de trás para frente: tirar uma marca move tudo que vem depois */
+  const tirar = caixas.filter((c) => c.cb.checked).map((c) => c.mk)
+    .sort((a, b) => b.pos - a.pos);
   const ta = $("matTexto");
-  ta.value = ta.value.replace(/==[!?]?([^=\n]{1,300})==/g, "$1");
+  let s = ta.value;
+  let n = 0;
+  tirar.forEach((mk) => {
+    if (s.slice(mk.pos, mk.pos + mk.inteiro.length) !== mk.inteiro) return;
+    s = s.slice(0, mk.pos) + mk.miolo + s.slice(mk.pos + mk.inteiro.length);
+    n++;
+  });
+  ta.value = s;
   matSujo = true;                    /* também é rascunho: dá para desistir */
   matTrocarModo("ler");
   $("matEstado").textContent = t("mat_marcas_limpas_nao_salvo");
+  matReg("marca", "marcas retiradas em lote",
+         n + " de " + marcas.length
+         + " · preservadas com dica/questão: "
+         + marcas.filter((x) => x.temDica || x.temQuestao).length);
 }
 
 /* Confirmação que dá para ver sem procurar.
@@ -1530,6 +1675,17 @@ function matRender() {
             bMex.title = t("mat_mexer_cartoes_ajuda");
             acoes.append(bMex);
           }
+          /* CAMINHO ATÉ A LEI SECA.
+           * Ela já era guardada por disciplina e tópico, mas só dava para
+           * chegar nela pela agenda da semana — o material, que é a
+           * estante, não tinha porta para ela. */
+          const temL = typeof leiTem === "function" && leiTem(x.chave);
+          const bLei = botaoMini(null, temL ? "btn-verde" : "btn-cinza",
+            () => leiAbrir(x.disciplina, x.topico),
+            t(temL ? "mat_lei_ver" : "mat_lei_criar"));
+          bLei.title = t(temL ? "mat_lei_ver_ajuda" : "mat_lei_criar_ajuda",
+            { tp: x.topico });
+          acoes.append(bLei);
           li.append(esq, acoes);
           bl.append(li);
         });
@@ -2018,6 +2174,14 @@ function leiAbrir(disciplina, topico) {
   leiAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
   const r = matResumos[leiAtual.chave] || {};
   $("leiTitulo").textContent = t("lei_titulo", { tp: topico });
+  /* de qual concurso, de qual disciplina: a lei seca é a mesma letra da lei,
+   * mas o recorte cobrado muda de banca para banca — sem o carimbo, quem
+   * abre por fora do edital não sabe de onde aquilo veio. */
+  if ($("leiSub")) {
+    $("leiSub").textContent = [r.concurso, disciplina, topico]
+      .filter(Boolean).join(" · ")
+      + (r.leiTexto ? " · " + t("lei_tamanho", { c: String(r.leiTexto).length }) : "");
+  }
   $("leiTexto").value = String(r.leiTexto || "");
   leiSujo = false;
   /* abre LENDO quando já existe texto, e EDITANDO quando está vazio: pedir
@@ -2146,15 +2310,50 @@ function matDuvidas() {
       if (!s) return;
       const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
       let mm;
+      const crus = [];
       while ((mm = re.exec(s)) !== null) {
+        crus.push({ bruto: mm[1], pos: mm.index,
+                    linha: s.slice(0, mm.index).split("\n").length - 1 });
+      }
+      /* UMA SELEÇÃO = UMA DÚVIDA.
+       * A marca é reaberta a cada linha (a leitura é montada linha a linha),
+       * então grifar um parágrafo de três linhas criava TRÊS dúvidas na
+       * lista para um único gesto. Aqui as linhas vizinhas — pulando as
+       * linhas em branco que separam parágrafos — voltam a ser uma coisa só.
+       * Só o que ficou separado por conteúdo de verdade conta como outra. */
+      const linhas = s.split("\n");
+      const soBranco = (de, ate) => {
+        for (let i = de + 1; i < ate; i++) if (linhas[i].trim()) return false;
+        return true;
+      };
+      const grupos = [];
+      crus.forEach((c) => {
+        const ult = grupos[grupos.length - 1];
+        /* só junta o que está em linhas DIFERENTES: duas marcas na MESMA
+         * linha são dois gestos distintos, não um bloco partido. */
+        if (ult && c.linha > ult.fimLinha && soBranco(ult.fimLinha, c.linha)) {
+          ult.pedacos.push(c.bruto); ult.fimLinha = c.linha;
+        } else {
+          grupos.push({ pedacos: [c.bruto], pos: c.pos, fimLinha: c.linha });
+        }
+      });
+      const limpar = (x) => String(x).replace(/(\*\*|__|_)/g, "").trim();
+      grupos.forEach((g) => {
         fora.push({
           chave, onde,
           disciplina: r.disciplina || "", topico: r.topico || "",
           concurso: r.concurso || "",
-          trecho: mm[1].replace(/(\*\*|__|_)/g, "").trim(),
-          pos: mm.index,
+          /* junta com QUEBRA DE LINHA, não com espaço: quem procura a
+           * dúvida no texto usa a primeira linha, e com tudo numa linha só
+           * não havia primeira linha para usar. */
+          trecho: g.pedacos.map(limpar).join("\n"),
+          /* âncora = primeiro pedaço: é por ele que se acha a dúvida no
+           * texto, porque nenhuma LINHA contém o trecho inteiro */
+          ancora: limpar(g.pedacos[0]),
+          pedacos: g.pedacos.slice(),
+          pos: g.pos,
         });
-      }
+      });
     });
   });
   return fora;
@@ -2166,17 +2365,23 @@ function matResolverDuvida(d) {
   const r = matResumos[d.chave];
   if (!r) return false;
   const campo = d.onde === "lei" ? "lei" : "texto";
-  const s = matTextoVivo(d.chave, campo);
-  const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
-  let mm, achou = null;
-  while ((mm = re.exec(s)) !== null) {
-    if (mm.index === d.pos) { achou = mm; break; }
-  }
-  if (!achou) return false;
-  matAplicarTexto(d.chave, campo,
-    s.slice(0, achou.index) + achou[1] + s.slice(achou.index + achou[0].length));
+  let s = matTextoVivo(d.chave, campo);
+  /* uma dúvida pode ocupar VÁRIAS linhas, cada uma com a sua marca: tirar
+   * só a primeira deixaria o resto azul e a dúvida voltaria à lista. */
+  const pedacos = d.pedacos && d.pedacos.length ? d.pedacos : [d.trecho];
+  let tirou = 0;
+  pedacos.forEach((p) => {
+    const inteiro = "==?" + p + "==";
+    const k = s.indexOf(inteiro);
+    if (k < 0) return;
+    s = s.slice(0, k) + p + s.slice(k + inteiro.length);
+    tirou++;
+  });
+  if (!tirou) return false;
+  matAplicarTexto(d.chave, campo, s);
   matReg("duvida", "dúvida marcada como resolvida",
-         (d.topico || "?") + " · " + d.trecho.slice(0, 60));
+         (r.topico || d.chave) + " · " + String(d.trecho).slice(0, 60)
+         + (tirou > 1 ? " · " + tirou + " trechos" : ""));
   return true;
 }
 
@@ -2487,7 +2692,8 @@ function matIncorporarQuestao(chave, trecho, onde) {
   const campo = onde === "lei" ? "lei" : "texto";
   const s = matTextoVivo(chave, campo);
   /* mesma busca da dica: matChaveDica normaliza marcas e negrito */
-  const alvoN = matChaveDica(trecho);
+  /* nenhuma LINHA contém um trecho de várias linhas: procura pela primeira */
+  const alvoN = matChaveDica(String(trecho).split("\n")[0].slice(0, 120));
   const linhas = s.split("\n");
   const k = linhas.findIndex((l) => matChaveDica(l).indexOf(alvoN) >= 0);
   if (k < 0) return false;
@@ -2509,7 +2715,8 @@ function matIncorporarDica(chave, trecho, onde) {
   const campo = onde === "lei" ? "lei" : "texto";
   const s = matTextoVivo(chave, campo);
   /* acha a linha que contém o trecho, mesmo com marcas em volta */
-  const alvoN = matChaveDica(trecho);
+  /* nenhuma LINHA contém um trecho de várias linhas: procura pela primeira */
+  const alvoN = matChaveDica(String(trecho).split("\n")[0].slice(0, 120));
   const linhas = s.split("\n");
   const k = linhas.findIndex((l) => matChaveDica(l).indexOf(alvoN) >= 0);
   if (k < 0) return false;
@@ -2557,7 +2764,7 @@ function matDuvidasAbrir() {
       if (d.onde === "lei") leiAbrir(d.disciplina, d.topico);
       else matAbrirEditor({ disciplina: d.disciplina, nome: d.topico }, false);
       /* abrir não basta: rola até o trecho e o pisca */
-      const achou = matIrPara(d.trecho, d.onde);
+      const achou = matIrPara(d.ancora || d.trecho, d.onde);
       matReg("duvida", achou ? "aberto no trecho da dúvida" : "aberto, trecho não localizado",
              (d.topico || "?") + " · " + d.trecho.slice(0, 50));
     };
