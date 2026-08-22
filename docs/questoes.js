@@ -128,6 +128,23 @@ function qsLerResposta(txt, ctx) {
     atual = null;
   };
 
+  /* CAMPOS NOMEADOS — o formato que a IA deve devolver.
+   * A primeira versão pedia uma linha compacta ("? CE :: banca :: …") e
+   * confiava em pontuação para separar as partes. Funciona quando a IA
+   * colabora e falha em silêncio quando ela põe um "::" no meio do
+   * enunciado. Com o campo dito pelo nome, cada pedaço chega rotulado e
+   * não há o que adivinhar.
+   * O formato antigo continua sendo aceito: respostas já copiadas por aí
+   * não podem parar de funcionar. */
+  const CAMPOS = {
+    tipo: /^TIPO\s*:\s*(.*)$/i,
+    banca: /^BANCA\s*:\s*(.*)$/i,
+    enunciado: /^ENUNCIADO\s*:\s*(.*)$/i,
+    gabarito: /^GABARITO\s*:\s*(.*)$/i,
+    comentario: /^COMENT[ÁA]RIO\s*:\s*(.*)$/i,
+  };
+  let campoAberto = "";
+
   linhas.forEach((l0, li) => {
     const l = l0.trim();
     /* linha em branco ENCERRA o comentário. Sem isso, a despedida da IA
@@ -137,8 +154,51 @@ function qsLerResposta(txt, ctx) {
     if (!l) { if (atual) atual._lendoComentario = false; return; }
     if (/^-{3,}$/.test(l)) { if (atual) atual._lendoComentario = false; return; }
 
+    /* abre uma questão nova no formato nomeado */
+    if (/^\[QUEST[ÃA]O\]?/i.test(l) || /^QUEST[ÃA]O\s*\d*\s*$/i.test(l)) {
+      fechar();
+      campoAberto = "";
+      atual = {
+        id: qsNovoId(), tipo: "ce", enunciado: "", opcoes: [], gabarito: "",
+        comentario: "", banca: "",
+        disciplina: c.disciplina || "", topico: c.topico || "",
+        chave: c.chave || "", concurso: c.concurso || "",
+        origem: "prompt", linha: li + 1,
+      };
+      return;
+    }
+    if (/^\[\/QUEST[ÃA]O\]$/i.test(l)) { fechar(); campoAberto = ""; return; }
+
+    let achouCampo = false;
+    Object.keys(CAMPOS).forEach((k) => {
+      if (achouCampo) return;
+      const mm = l.match(CAMPOS[k]);
+      if (!mm) return;
+      achouCampo = true;
+      if (!atual) {
+        atual = {
+          id: qsNovoId(), tipo: "ce", enunciado: "", opcoes: [], gabarito: "",
+          comentario: "", banca: "",
+          disciplina: c.disciplina || "", topico: c.topico || "",
+          chave: c.chave || "", concurso: c.concurso || "",
+          origem: "prompt", linha: li + 1,
+        };
+      }
+      const v = String(mm[1] || "").trim();
+      /* TIPO é dica, não decisão: quem manda é o conteúdo — tem opções, é
+       * múltipla escolha; não tem, é certo/errado. A IA erra o rótulo com
+       * frequência e acerta o conteúdo. O campo continua sendo LIDO para
+       * não sobrar como linha solta dentro do enunciado. */
+      if (k === "tipo") atual.tipo = qsNormal(v).indexOf("ce") === 0 ? "ce" : "me";
+      else if (k === "gabarito") atual.gabarito = v.toUpperCase().slice(0, 1);
+      else atual[k] = v;
+      campoAberto = k;
+    });
+    if (achouCampo) return;
+
     if (/^\?/.test(l)) {
       fechar();
+      campoAberto = "";
       const p = l.replace(/^\?\s*/, "").split("::").map((x) => x.trim());
       const tipo = qsNormal(p[0]).replace(/[^a-z]/g, "");
       let banca = "", enunciado = "";
@@ -162,6 +222,7 @@ function qsLerResposta(txt, ctx) {
 
     const mo = l.match(/^([A-Ea-e])\s*[).\-]\s+(.+)$/);
     if (mo && atual && !atual.gabarito) {
+      campoAberto = "";
       atual.opcoes.push({ letra: mo[1].toUpperCase(), txt: mo[2].trim() });
       return;
     }
@@ -174,6 +235,11 @@ function qsLerResposta(txt, ctx) {
       return;
     }
 
+    /* continuação de um campo nomeado que ocupou mais de uma linha */
+    if (atual && campoAberto && (campoAberto === "enunciado" || campoAberto === "comentario")) {
+      atual[campoAberto] = (atual[campoAberto] ? atual[campoAberto] + " " : "") + l;
+      return;
+    }
     if (atual && atual._lendoComentario) {
       /* só continua o comentário se a frase estava PENDURADA. Um comentário
        * que já terminou em ponto não pede continuação — o que vem depois é
@@ -215,21 +281,83 @@ const QS_CAB = /^\s*[-*•]?\s*(?:\*\*)?\s*Quest[ãa]o\b\s*(\d+)?\s*(?:\(([^)]*)
 const QS_RESP = /^\s*[-*•]?\s*(?:\*\*)?\s*(?:Resposta|Gabarito)\s*:?\s*(.*)$/i;
 
 function qsSemMarcacao(s) {
-  return String(s == null ? "" : s).replace(/\*\*|__|_|==[!?§*~]?/g, "").trim();
+  /* tira também o "#" de título: material de estudo escreve as questões
+   * como "#### **Questão 1: …**", e sem remover o cabeçalho de markdown o
+   * detector não reconhecia nenhuma delas. */
+  return String(s == null ? "" : s)
+    .replace(/^\s*#{1,6}\s*/, "")
+    .replace(/\*\*|__|_|==[!?§*~]?/g, "").trim();
+}
+
+/* "… ? A) uma B) outra C) terceira" numa linha só.
+ * Precisa rodar também no FIM do bloco: as opções costumam vir na linha
+ * seguinte ao cabeçalho, e checar só no cabeçalho deixava a questão como
+ * certo/errado com um gabarito "B" que não existia em opção nenhuma. */
+function qsSepararOpcoesInline(bloco) {
+  if (!bloco || bloco.opcoes.length) return bloco;
+  const partes = String(bloco.enunciado || "").split(/(?=\b[A-E]\)\s)/);
+  if (partes.length < 3) return bloco;
+  bloco.enunciado = partes[0].trim();
+  partes.slice(1).forEach((p) => {
+    const mm = p.match(/^([A-E])\)\s*(.*)$/);
+    if (mm) bloco.opcoes.push({ letra: mm[1], txt: mm[2].trim() });
+  });
+  return bloco;
 }
 
 function qsNoTexto(txt) {
   const linhas = String(txt || "").split("\n");
   const blocos = [];
   let aberto = null;
+  let gabDe = null;      /* questão cujo comentário está sendo lido da seção de gabaritos */
 
   linhas.forEach((l, i) => {
     const cru = qsSemMarcacao(l);
 
     const mc = cru.match(QS_CAB);
     if (mc) {
+      /* SEÇÃO "GABARITO COMENTADO", à parte.
+       * Muito material separa as questões das respostas: primeiro a lista de
+       * questões, depois um bloco "GABARITO COMENTADO" onde cada linha é
+       * "Questão 1: Gabarito B" seguida da fundamentação. Essas linhas
+       * COMEÇAM com "Questão", então eram lidas como um cabeçalho novo — e
+       * a questão lá de cima ficava sem gabarito e era recusada.
+       * Aqui, "Questão N: Gabarito X" volta para a questão N. */
+      /* guarda a questão ainda aberta ANTES de tratar a linha de gabarito:
+       * senão ela é descartada aqui e o gabarito dela, que vem logo abaixo,
+       * não encontra dono. */
+      const guardarAberta = () => {
+        if (!aberto) return;
+        qsSepararOpcoesInline(aberto);
+        aberto.fim = i - 1;
+        aberto.tipo = aberto.opcoes.length ? "me" : "ce";
+        aberto.completa = false;
+        blocos.push(aberto);
+        aberto = null;
+      };
+      const mg = String(mc[3] || "").match(
+        /^Gabarito\s*:?\s*([A-E]|Certo|Errado|Sim|N[ãa]o|Verdadeiro|Falso)\b[.,]?\s*(.*)$/i);
+      if (mg && mc[1]) {
+        guardarAberta();
+        const dono = blocos.filter((b) => b.num === mc[1] && !b.gabarito)[0];
+        if (dono) {
+          const g = qsNormal(mg[1]);
+          dono.gabarito = /^[a-e]$/.test(g) ? g.toUpperCase()
+            : (/^(sim|certo|verdadeiro)/.test(g) ? "C" : "E");
+          dono.comentario = [dono.comentario, mg[2]].filter(Boolean).join(" ").trim();
+          dono.completa = !!(dono.gabarito && dono.enunciado);
+          gabDe = dono;                 /* as linhas seguintes são a fundamentação */
+          return;
+        }
+      }
       /* cabeçalho novo antes de a resposta chegar: o anterior não era uma
        * questão completa, e questão sem gabarito não dá para responder */
+      /* GUARDA A ANTERIOR MESMO SEM RESPOSTA.
+       * Ela era descartada em silêncio, e por isso a seção "GABARITO
+       * COMENTADO" mais abaixo não tinha a quem entregar o gabarito. Fica
+       * como incompleta — e a seção de gabaritos a completa. */
+      guardarAberta();
+      gabDe = null;
       aberto = {
         ini: i, num: mc[1] || "",
         /* o parêntese NÃO é necessariamente a banca: "(FGV - Juiz)" é, mas
@@ -240,15 +368,14 @@ function qsNoTexto(txt) {
         rotulo: (mc[2] || "").trim(),
         enunciado: mc[3] || "", opcoes: [], gabarito: "", comentario: "",
       };
-      /* opções na MESMA linha: "… ? A) uma B) outra C) terceira" */
-      const partes = aberto.enunciado.split(/(?=\b[A-E]\)\s)/);
-      if (partes.length >= 3) {
-        aberto.enunciado = partes[0].trim();
-        partes.slice(1).forEach((p) => {
-          const mm = p.match(/^([A-E])\)\s*(.*)$/);
-          if (mm) aberto.opcoes.push({ letra: mm[1], txt: mm[2].trim() });
-        });
-      }
+      qsSepararOpcoesInline(aberto);
+      return;
+    }
+    /* fundamentação do gabarito, na seção à parte */
+    if (!aberto && gabDe) {
+      if (!cru) { gabDe = null; return; }
+      gabDe.comentario = (gabDe.comentario ? gabDe.comentario + " " : "")
+        + cru.replace(/^\s*(?:\*\*)?\s*Fundamenta[çc][ãa]o\s*(?:\*\*)?\s*:?\s*/i, "");
       return;
     }
     if (!aberto) return;
@@ -263,6 +390,14 @@ function qsNoTexto(txt) {
     const mr = cru.match(QS_RESP);
     if (mr) {
       const resto = mr[1] || "";
+      /* "GABARITO COMENTADO" é TÍTULO de seção, não resposta.
+       * Começa com "Gabarito", então era engolido como se fosse a resposta
+       * da questão aberta acima — e a palavra "COMENTADO" ia parar dentro
+       * do comentário dela. */
+      if (!resto || /^(comentad[oa]s?|das quest[õo]es|comentado das quest[õo]es)$/i
+          .test(resto.trim())) {
+        return;
+      }
       const porLetra = resto.match(/^([A-E])\b[.)]?\s*(.*)$/);
       const porPalavra = resto.match(/^(Sim|N[ãa]o|Certo|Errado|Verdadeiro|Falso)\b[.,]?\s*(.*)$/i);
       if (aberto.opcoes.length && porLetra) {
@@ -277,6 +412,7 @@ function qsNoTexto(txt) {
          * para poder ser mostrado na importação com o motivo. */
         aberto.comentario = resto;
       }
+      qsSepararOpcoesInline(aberto);
       aberto.fim = i;
       aberto.tipo = aberto.opcoes.length ? "me" : "ce";
       aberto.completa = !!(aberto.gabarito && aberto.enunciado);
@@ -290,6 +426,13 @@ function qsNoTexto(txt) {
       aberto.enunciado = (aberto.enunciado ? aberto.enunciado + " " : "") + cru;
     }
   });
+  if (aberto) {
+    qsSepararOpcoesInline(aberto);
+    aberto.fim = linhas.length - 1;
+    aberto.tipo = aberto.opcoes.length ? "me" : "ce";
+    aberto.completa = false;
+    blocos.push(aberto);
+  }
   return blocos;
 }
 
@@ -385,7 +528,8 @@ function qsApagar(id, gravar) {
 function qsFiltrar(f) {
   const o = f || {};
   return qsBanco.filter((q) => {
-    if (o.chave && q.chave !== o.chave) return false;
+    if (o.chave && q.chave !== o.chave
+        && qsChaveNormal(q.chave) !== qsChaveNormal(o.chave)) return false;
     if (o.disciplina && qsNormal(q.disciplina) !== qsNormal(o.disciplina)) return false;
     if (o.concurso && qsNormal(q.concurso) !== qsNormal(o.concurso)) return false;
     if (o.banca && qsNormal(q.banca) !== qsNormal(o.banca)) return false;
@@ -402,11 +546,39 @@ function qsFiltrar(f) {
 
 /* quantas questões cada tópico tem — é o que põe o número no botão dentro
  * do resumo sem varrer o banco a cada desenho */
+/* A conta por tópico não pode depender de acento nem de caixa.
+ * "direito financeiro›leis orçamentárias" e "…›leis orcamentarias" são o
+ * mesmo tópico para quem estuda, e eram dois no contador: metade das
+ * questões ficava fora da conta e o atalho da agenda mentia o número.
+ * Guarda as duas formas — a exata e a normalizada — para quem pergunta com
+ * qualquer uma achar. */
+function qsChaveNormal(ch) { return qsNormal(ch); }
+
 function qsContarPorChave() {
   const m = {};
-  qsBanco.forEach((q) => { if (q.chave) m[q.chave] = (m[q.chave] || 0) + 1; });
+  qsBanco.forEach((q) => {
+    if (!q.chave) return;
+    m[q.chave] = (m[q.chave] || 0) + 1;
+    const n = qsChaveNormal(q.chave);
+    if (n !== q.chave) m[n] = (m[n] || 0) + 1;
+  });
+  /* quem consulta por uma forma tem de achar o total das duas */
+  Object.keys(m).forEach((k) => {
+    const n = qsChaveNormal(k);
+    if (n !== k && m[n] !== undefined) m[k] = m[n];
+  });
   return m;
 }
+
+/* quantas questões existem para este tópico, com a mesma tolerância */
+function qsContarDoTopico(chave) {
+  const n = qsChaveNormal(chave);
+  return qsBanco.filter((q) => q.chave === chave || qsChaveNormal(q.chave) === n).length;
+}
+
+/* questões sem tópico nenhum: existem, mas não aparecem em contador de
+ * tópico algum. Sem isto elas somem da vista e a soma nunca fecha. */
+function qsSemTopico() { return qsBanco.filter((q) => !q.chave); }
 
 function qsBancas() {
   const s = {};
@@ -497,7 +669,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsAplicar, qsDesfazer, qsApagar, qsFiltrar, qsContarPorChave, qsBancas,
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
-    qsGravarDica, qsDicaDeQuestao,
+    qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
     qsSemMarcacao,
   };
 }

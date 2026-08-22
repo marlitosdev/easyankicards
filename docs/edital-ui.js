@@ -318,7 +318,10 @@ function edLinhaTopico(i, semDisciplina) {
   min.className = "ed-item-min";
   /* "1h" diz quanto; "seg 19:00 · 1h" diz quando, e é o quando que vira
    * compromisso. A agenda só aparece na semana atual, onde faz sentido. */
-  min.textContent = (i.dia ? i.dia + " " + i.hora + " · " : "") + horasTexto(i.minutos);
+  /* SÓ O DIA. O horário de início era invenção do app: ninguém estuda às
+   * 05:40 porque uma conta de divisão disse isso, e o número dava ao plano
+   * uma precisão que ele não tem. O que serve é o dia e quanto tempo. */
+  min.textContent = (i.dia ? i.dia + " · " : "") + horasTexto(i.minutos);
 
   /* BARRA DO TÓPICO: o que você já pôs contra o que ele pede. */
   const feitoMin = minutosDoTopico(i.chave);
@@ -380,8 +383,8 @@ function edLinhaTopico(i, semDisciplina) {
    * já oferece para resumo, cartões e lei seca. */
   const qst = document.createElement("button");
   qst.type = "button";
-  const nQ = typeof qsContarPorChave === "function"
-    ? (qsContarPorChave()[matChave(i.disciplina, i.nome)] || 0) : 0;
+  const nQ = typeof qsContarDoTopico === "function"
+    ? qsContarDoTopico(matChave(i.disciplina, i.nome)) : 0;
   qst.className = "ed-qst" + (nQ ? " tem" : "");
   qst.textContent = "❓";
   qst.title = t(nQ ? "ed_qst_ver" : "ed_qst_novo", { n: nQ, tp: i.nome });
@@ -1769,7 +1772,6 @@ function edIniciar() {
     $("regMinSlider").value = v;
   });
   $("edDias").onchange = edRender;
-  $("edInicio").onchange = edRender;
   $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
   ["regQFeitas", "regQCertas"].forEach((id) => {
     if ($(id)) $(id).addEventListener("input", regPintarPct);
