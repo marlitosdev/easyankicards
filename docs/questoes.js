@@ -88,15 +88,43 @@ function qsPrompt(texto, ctx) {
  * em vez de virar uma questão pela metade que só aparece meses depois, no
  * meio de um simulado, quando não dá mais para saber o que se perdeu.
  * ------------------------------------------------------------------- */
+/* TUDO NUMA LINHA SÓ TAMBÉM É RESPOSTA VÁLIDA.
+ *
+ * O formato pede um campo por linha, mas a IA — e a área de transferência
+ * de alguns chats — devolve o bloco inteiro numa linha:
+ *   "[QUESTAO] TIPO: CE BANCA: FGV ENUNCIADO: … GABARITO: C COMENTARIO: … [/QUESTAO]"
+ * O leitor só olhava o COMEÇO da linha, então via o "[QUESTAO]" e jogava o
+ * resto fora: treze questões perfeitas viravam treze "sem enunciado e sem
+ * gabarito". O conteúdo estava certo; a exigência é que era rígida demais.
+ *
+ * Aqui a linha é reaberta nos rótulos, antes de qualquer leitura. Rótulo é
+ * marca inequívoca — não se confunde com texto corrido —, então dá para
+ * cortar por ele sem risco de partir um enunciado ao meio.
+ */
+function qsAbrirCampos(txt) {
+  return String(txt || "")
+    .replace(/\s*\[\s*\/\s*QUEST[ÃA]O\s*\]\s*/gi, "\n[/QUESTAO]\n")
+    .replace(/\s*\[\s*QUEST[ÃA]O\s*\]\s*/gi, "\n[QUESTAO]\n")
+    /* NÃO consumir a quebra de linha depois dos dois-pontos.
+     * Com "\\s*" ali, um campo vazio ("BANCA:" sozinho na linha) engolia a
+     * quebra seguinte e grudava o campo de baixo dentro dele — a banca
+     * vazia virava "BANCA: ENUNCIADO: …" e o enunciado sumia. */
+    .replace(/(^|[^\S\n])(TIPO|BANCA|ENUNCIADO|GABARITO|COMENT[ÁA]RIO)[ \t]*:[ \t]*/gim,
+             (mm, antes, nome) => "\n" + nome.toUpperCase() + ": ")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 function qsLerResposta(txt, ctx) {
   const c = ctx || {};
   const achados = [];
   const ignoradas = [];
-  const linhas = String(txt || "").split("\n");
+  const linhas = qsAbrirCampos(txt).split("\n");
   let atual = null;
 
   const fechar = () => {
     if (!atual) return;
+    /* opções escritas dentro do próprio enunciado: "… ? A) uma B) outra" */
+    qsSepararOpcoesInline(atual);
     /* O CONTEÚDO MANDA, NÃO O RÓTULO.
      * A IA às vezes escreve "? CE" e entrega opções A/B/C. Se a correção
      * viesse depois da conferência, uma questão perfeitamente boa era
@@ -727,7 +755,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
-    qsSemelhante, qsParecenca, qsIgual,
+    qsSemelhante, qsParecenca, qsIgual, qsAbrirCampos,
     qsSemMarcacao,
   };
 }
