@@ -744,9 +744,23 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-gab{margin-top:12px;font-weight:700;font-size:13px}
 .qs-gab-ok{color:#2f9e6e}
 .qs-gab-nao{color:#e06c6c}
+.qs-rev-tit{margin:16px 0 8px;font-size:11px;letter-spacing:.08em;font-weight:700;
+  color:#e06c6c}
+.qs-rev{border-left:3px solid #e06c6c;background:rgba(224,108,108,.07);
+  padding:8px 11px;margin-bottom:9px;border-radius:0 7px 7px 0}
+.qs-rev-en{font-size:13px;line-height:1.5}
+.qs-rev-gab{font-size:11px;color:var(--sutil);margin-top:4px}
+.qs-bt-registrar{margin-top:14px;width:100%}
 .qs-minha-dica{margin-top:8px;font-size:12.5px;line-height:1.5;
   border-left:3px solid #f5a524;background:rgba(245,165,36,.10);
   padding:6px 10px;border-radius:0 6px 6px 0}
+.qs-minha-dica p{margin:0 0 7px}
+.qs-minha-dica p:last-child{margin-bottom:0}
+.qs-minha-dica ul{margin:0 0 7px;padding-left:18px}
+.qs-minha-dica b{font-weight:700;color:var(--texto)}
+.qs-minha-dica h3,.qs-minha-dica h4{font-size:1em;margin:8px 0 4px}
+.duv-dica p{margin:0 0 6px}
+.duv-dica p:last-child{margin-bottom:0}
 .qs-minha-dica::before{content:"SUA DICA";display:block;font-size:9px;
   letter-spacing:.09em;color:#f5a524;font-weight:700;margin-bottom:2px}
 .qs-bt-dica{margin-top:9px}
@@ -2488,6 +2502,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <textarea id="txtLivreCampo2" rows="3" style="width:100%;box-sizing:border-box"></textarea>
   </div>
   <div class="dlg-rodape">
+    <button class="btn-min" id="btnTxtLivreColar" data-i18n="dic_colar_form"
+      title="Cola o que você copiou mantendo o negrito, o itálico e as listas. O que vem de uma página traz a formatação junto; colar como texto puro chega achatado, com os ** à mostra."></button>
     <button class="btn btn-verde" id="btnTxtLivreOk" data-i18n="txt_livre_ok"
       title="Guarda o que você escreveu."></button>
     <button class="btn btn-cinza" id="btnTxtLivreNao" data-i18n="cancel_btn"
