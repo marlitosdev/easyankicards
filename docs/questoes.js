@@ -331,6 +331,9 @@ function qsAplicar(lista, gravar) {
       disciplina: q.disciplina || "", topico: q.topico || "",
       chave: q.chave || "", concurso: q.concurso || "", banca: q.banca || "",
       origem: q.origem || "manual",
+      /* sem campo de dica aqui: nada cria questao JA com dica — ela nasce
+       * depois, pelo botao, via qsGravarDica. Guardar o campo na gravacao
+       * seria linha que nenhuma sabotagem consegue quebrar. */
       criado: new Date().toISOString(),
       tentativas: [],
     };
@@ -347,6 +350,26 @@ function qsDesfazer(recibo, gravar) {
   qsBanco = qsBanco.filter((q) => recibo.ids.indexOf(q.id) < 0);
   qsSalvar(gravar);
   return antes - qsBanco.length;
+}
+
+/* A DICA É SUA, e é outra coisa que o comentário.
+ * O comentário explica por que o gabarito é aquele — vem da questão. A dica
+ * é o que VOCÊ escreveu para não errar de novo: o macete, o jeito de
+ * lembrar, o erro que já cometeu aqui. Guardar as duas juntas apagaria essa
+ * diferença, e é a sua que costuma ser a que faz a questão parar de cair. */
+function qsGravarDica(id, texto, gravar) {
+  const q = qsBanco.filter((x) => x.id === id)[0];
+  if (!q) return null;
+  const limpo = String(texto || "").trim();
+  if (limpo) q.dica = limpo; else delete q.dica;
+  q.tocado = new Date().toISOString();
+  qsSalvar(gravar);
+  return limpo || null;
+}
+
+function qsDicaDeQuestao(id) {
+  const q = qsBanco.filter((x) => x.id === id)[0];
+  return (q && q.dica) || "";
 }
 
 function qsApagar(id, gravar) {
@@ -474,6 +497,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsAplicar, qsDesfazer, qsApagar, qsFiltrar, qsContarPorChave, qsBancas,
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
+    qsGravarDica, qsDicaDeQuestao,
     qsSemMarcacao,
   };
 }

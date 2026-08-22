@@ -14,6 +14,7 @@ let qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "",
 let qsUiCtxCriar = null;      /* de qual tópico vieram as questões sendo criadas */
 let qsUiAchados = null;
 let qsUiDoTexto = [];   /* as que o detector achou no próprio texto */
+let qsUiTextoBase = "";  /* o texto do resumo que abriu esta criação */
 let qsUiRecibo = null;
 let qsUiVoltarPara = null;    /* quem abriu a sessão: resumo ou aba */
 
@@ -53,10 +54,18 @@ function qsUiCriarAbrir(texto, ctx) {
   }));
 
   /* 2. e o prompt, pronto, para quem quiser mais */
-  $("qsCriarPrompt").value = qsPrompt(t0, ctx);
+  qsUiTextoBase = t0;
+  if ($("qsFonteResumo")) $("qsFonteResumo").checked = true;
+  if ($("qsFonteOutro")) $("qsFonteOutro").checked = false;
+  if ($("qsCriarFonte")) { $("qsCriarFonte").value = ""; $("qsCriarFonte").hidden = true; }
+  qsUiRefazerPrompt();
   $("qsCriarResposta").value = "";
+  /* deixa explícito ONDE elas vão parar: é isto que faz os filtros da aba
+   * funcionarem depois, e vale igual quando o material vem de fora — a
+   * fonte muda, o arquivamento não. */
   $("qsCriarDe").textContent = ctx
-    ? (ctx.concurso ? ctx.concurso + " · " : "") + ctx.disciplina + " › " + ctx.topico
+    ? t("qs_vinculadas_a", { onde: [ctx.concurso, ctx.disciplina, ctx.topico]
+        .filter(Boolean).join(" · ") })
     : "";
   /* o bloco da IA nasce fechado quando o texto já rendeu questões: nesse
    * caso o caminho curto já está pronto, e abrir o prompt seria oferecer
@@ -73,6 +82,27 @@ function qsUiCriarAbrir(texto, ctx) {
          + qsUiDoTexto.length + " já no texto · " + t0.length + " caracteres");
 }
 
+
+/* De onde a IA parte: deste resumo, ou de um material que você colar.
+ * O resumo nem sempre é a melhor fonte — uma aula em PDF, a letra da lei ou
+ * um artigo rendem questões que o resumo não tem. O que não muda é o
+ * destino: as questões continuam nascendo com a disciplina, o tópico e o
+ * concurso deste resumo. */
+function qsUiFonteAtual() {
+  const outro = $("qsFonteOutro") && $("qsFonteOutro").checked;
+  if (!outro) return { texto: qsUiTextoBase, externo: false };
+  return { texto: String(($("qsCriarFonte") || {}).value || ""), externo: true };
+}
+
+function qsUiRefazerPrompt() {
+  const f = qsUiFonteAtual();
+  if ($("qsCriarFonte")) $("qsCriarFonte").hidden = !f.externo;
+  const pronto = f.texto.trim();
+  $("qsCriarPrompt").value = pronto
+    ? qsPrompt(pronto, qsUiCtxCriar || {})
+    : t("qs_fonte_vazia");
+  if ($("btnQsCopiarPrompt")) $("btnQsCopiarPrompt").disabled = !pronto;
+}
 
 function qsUiConferir() {
   const r = qsLerResposta($("qsCriarResposta").value, qsUiCtxCriar || {});
@@ -259,6 +289,29 @@ function qsUiPintarSessao() {
       cm.textContent = q.comentario;
       corpo.append(cm);
     }
+    /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
+     * é gabarito disfarçado. */
+    const minha = qsDicaDeQuestao(q.id);
+    if (minha) {
+      const dc = document.createElement("div");
+      dc.className = "qs-minha-dica";
+      dc.textContent = minha;
+      corpo.append(dc);
+    }
+    const bd = document.createElement("button");
+    bd.type = "button";
+    bd.className = "btn-min qs-bt-dica";
+    bd.textContent = t(minha ? "qs_dica_editar" : "qs_dica_incluir");
+    bd.title = t("qs_dica_ajuda");
+    bd.onclick = async () => {
+      const txt = await uiTexto(t("qs_dica_tit", { e: q.enunciado.slice(0, 90) }), minha);
+      if (txt === null) return;
+      qsGravarDica(q.id, txt);
+      matReg("questao", txt.trim() ? "dica da questão guardada" : "dica da questão apagada",
+             q.enunciado.slice(0, 60));
+      qsUiPintarSessao();
+    };
+    corpo.append(bd);
   }
   $("btnQsProxima").hidden = false;
   $("btnQsProxima").disabled = !jaFoi;
@@ -406,6 +459,10 @@ function qsUiIniciar() {
   if ($("btnQsConferir")) $("btnQsConferir").onclick = () => qsUiConferir();
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
+  ["qsFonteResumo", "qsFonteOutro"].forEach((id) => {
+    if ($(id)) $(id).onchange = () => qsUiRefazerPrompt();
+  });
+  if ($("qsCriarFonte")) $("qsCriarFonte").oninput = () => qsUiRefazerPrompt();
   if ($("btnQsCopiarPrompt")) {
     $("btnQsCopiarPrompt").onclick = () => {
       try { navigator.clipboard.writeText($("qsCriarPrompt").value); } catch (e) {}

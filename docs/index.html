@@ -678,6 +678,31 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-item-acoes{display:flex;gap:6px;margin-top:7px}
 .qs-desfazer{display:flex;gap:8px;align-items:center;background:rgba(47,158,110,.12);
   border-left:3px solid #2f9e6e;padding:6px 10px;border-radius:0 7px 7px 0;margin:6px 0}
+.dic-lista{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.dic-item{border:1px solid var(--borda);border-left:3px solid #f5a524;
+  border-radius:0 8px 8px 0;padding:8px 11px;background:rgba(245,165,36,.05)}
+.dic-onde{font-size:10px;letter-spacing:.05em;color:var(--sutil);margin-bottom:5px}
+.dic-campo{width:100%;box-sizing:border-box;font-size:13px;line-height:1.5;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda);
+  border-radius:7px;padding:7px 9px;font-family:inherit;text-align:left}
+.dic-campo.dic-just{text-align:justify}
+.dic-acoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dic-neg{font-weight:800}
+.dic-ia{margin-top:8px}
+.dic-ia > summary{cursor:pointer;font-size:11px;color:var(--sutil);font-weight:700;
+  user-select:none;list-style:none}
+.dic-ia > summary::-webkit-details-marker{display:none}
+.dic-ia > summary::before{content:"▸ "}
+.dic-ia[open] > summary::before{content:"▾ "}
+.dic-prompt,.dic-resp{width:100%;box-sizing:border-box;font-size:11px;margin-top:5px;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda);
+  border-radius:6px;padding:6px 8px;font-family:inherit}
+.mat-leitura .mat-dica-just > div{text-align:justify}
+.qs-fonte{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;font-size:12px;
+  color:var(--sutil)}
+.qs-fonte label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.btn-min.mat-ligado{background:#2f9e6e!important;color:#fff!important;
+  border-color:#2f9e6e!important}
 .qs-ia{margin:8px 0;border:1px solid var(--borda);border-radius:8px;padding:7px 10px}
 .qs-ia > summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--sutil);
   user-select:none;list-style:none}
@@ -709,6 +734,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-gab{margin-top:12px;font-weight:700;font-size:13px}
 .qs-gab-ok{color:#2f9e6e}
 .qs-gab-nao{color:#e06c6c}
+.qs-minha-dica{margin-top:8px;font-size:12.5px;line-height:1.5;
+  border-left:3px solid #f5a524;background:rgba(245,165,36,.10);
+  padding:6px 10px;border-radius:0 6px 6px 0}
+.qs-minha-dica::before{content:"SUA DICA";display:block;font-size:9px;
+  letter-spacing:.09em;color:#f5a524;font-weight:700;margin-bottom:2px}
+.qs-bt-dica{margin-top:9px}
 .qs-coment{margin-top:6px;font-size:12.5px;line-height:1.5;color:var(--sutil);
   border-left:3px solid var(--borda);padding-left:10px}
 .qs-fim{font-size:15px;text-align:center;padding:26px 10px}
@@ -2337,6 +2368,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       title="Esconde o gabarito das questões que já estão escritas neste resumo, para você responder antes de ver. O texto não é alterado."></button>
     <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
       title="Responde, em sequência, as questões deste tópico."></button>
+    <button class="btn-min mat-duv-conta" id="btnMatDicasLista" hidden
+      title="Todas as dicas deste resumo, para ler, corrigir e formatar."></button>
     <button class="btn-min" id="btnMatDicas" hidden
       title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
     <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_btn" title="Abre a LEI SECA deste tópico: a letra da lei, guardada à parte do resumo. Tem leitor próprio e botão para registrar que você leu."></button>
@@ -2458,6 +2491,13 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <details id="qsIA" class="qs-ia">
     <summary data-i18n="qs_ia_titulo"
       title="Pede à IA que escreva questões NOVAS sobre este texto, além das que já estiverem escritas nele."></summary>
+    <div class="qs-fonte">
+      <label title="A IA parte do texto deste resumo."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
+      <label title="A IA parte de um texto que você colar: PDF de aula, lei, artigo, apostila."><input type="radio" name="qsFonte" id="qsFonteOutro"><span data-i18n="qs_fonte_outro"></span></label>
+    </div>
+    <textarea id="qsCriarFonte" rows="4" hidden
+      style="width:100%;box-sizing:border-box;font-size:12px"
+      placeholder="Cole aqui o material externo: trecho de aula, lei, artigo."></textarea>
     <div class="qs-passo"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
       <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
         title="Copia o prompt inteiro para colar na IA."></button></div>
@@ -2493,6 +2533,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       title="Fecha a sessão e abre a criação de questões para este tópico."></button>
     <button class="btn btn-cinza" id="btnQsSessFechar" data-i18n="help_close"
       title="Encerra a sessão. O que você já respondeu fica registrado."></button>
+  </div>
+</dialog>
+
+<dialog id="dlgDicas" class="ui-modal diag-modal">
+  <h3 data-i18n="dic_titulo"></h3>
+  <p class="nota" data-i18n="dic_ajuda"></p>
+  <p class="nota" id="dicResumo"></p>
+  <div id="dicLista" class="dic-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnDicFechar" data-i18n="help_close"
+      title="Fecha. O que você não salvou fica como estava."></button>
   </div>
 </dialog>
 

@@ -370,6 +370,7 @@ function matAlternarProva() {
   try { localStorage.setItem("eac_mat_prova", JSON.stringify(matProvaLigada)); } catch (e) {}
   matProvaResp[c] = {};      /* religar recomeça: senão você reveria as respostas */
   matPintarProvaBotao();
+  matPintarDicasLista();
   if (matModo === "ler") matTrocarModo("ler");
   matReg("prova", matProvaLigada[c] ? "modo prova ligado" : "modo prova desligado",
          matProvaBlocos(c).length + " questões no texto");
@@ -382,10 +383,16 @@ function matPintarProvaBotao() {
   const n = matProvaBlocos(matAtual.chave).length;
   b.hidden = !n;                 /* sem questão no texto, o botão não serve */
   if (!n) return;
+  /* O ESTADO TEM DE SER LEGÍVEL SEM CLICAR.
+   * Antes o rótulo alternava entre duas AÇÕES ("ocultar" / "mostrar"), e
+   * ação não diz estado: lendo "ocultar gabarito" não dá para saber se ele
+   * está oculto agora ou se o clique é que vai ocultar. Agora o rótulo diz
+   * COMO ESTÁ, e a cor confirma. */
   const on = matProvaEstaLigada(matAtual.chave);
-  b.textContent = t(on ? "prova_desligar" : "prova_ligar", { n });
-  b.classList.toggle("btn-min-ok", on);
-  b.title = t(on ? "prova_desligar_ajuda" : "prova_ligar_ajuda", { n });
+  b.textContent = t(on ? "prova_on" : "prova_off", { n });
+  b.classList.toggle("mat-ligado", on);
+  b.setAttribute("aria-pressed", on ? "true" : "false");
+  b.title = t(on ? "prova_on_ajuda" : "prova_off_ajuda", { n });
 }
 
 function matProvaResponder(idx, letra) {
@@ -524,13 +531,15 @@ function matParaHtml(txt, prova) {
         + '</summary><div>' + inline(s.replace(/^&gt;&gt;\s?/, "")) + "</div></details>");
       return;
     }
-    if (/^&gt;\s?/.test(s)) {
+    if (/^&gt;~?\s?/.test(s)) {
       fecharLista();
       /* dica recolhível: no meio de um resumo longo ela compete com o texto
        * original; fechada, vira uma linha fina que você abre quando precisa */
-      saida.push('<details class="mat-dica"' + (matDicasAbertas ? " open" : "")
+      const just = /^&gt;~/.test(s);
+      saida.push('<details class="mat-dica' + (just ? " mat-dica-just" : "") + '"'
+        + (matDicasAbertas ? " open" : "")
         + '><summary>' + t("mat_dica_rot") + '</summary><div>'
-        + inline(s.replace(/^&gt;\s?/, "")) + "</div></details>");
+        + inline(s.replace(/^&gt;~?\s?/, "")) + "</div></details>");
       return;
     }
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
@@ -630,6 +639,7 @@ function matTrocarModo(modo) {
   matPintarDuvidas();
   matPintarConserto();
   matPintarProvaBotao();
+  matPintarDicasLista();
   /* quantas questões existem para ESTE tópico */
   if (typeof qsUiPintarBotaoResumo === "function") {
     try { qsUiPintarBotaoResumo(); } catch (e) {}
@@ -1863,6 +1873,8 @@ function matIniciar() {
   matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
   matBotao("btnMatDicas", "recolher/expandir dicas", matAlternarDicas);
   matBotao("btnMatProva", "modo prova", matAlternarProva);
+  matBotao("btnMatDicasLista", "minhas dicas", matDicasListaAbrir);
+  if ($("btnDicFechar")) $("btnDicFechar").onclick = () => $("dlgDicas").close();
   /* um clique só, delegado: o painel é montado por innerHTML, então não há
    * onde pendurar manipulador em cada botão */
   if ($("matLeitura")) {
@@ -2730,21 +2742,48 @@ function matIrPara(trecho, onde) {
   const caixa = onde === "lei" ? $("leiLeitura") : $("matLeitura");
   const area = onde === "lei" ? $("leiTexto") : $("matTexto");
   const modo = onde === "lei" ? leiModo : matModo;
-  if (modo === "ler" && caixa) {
-    const marcas = caixa.querySelectorAll ? caixa.querySelectorAll("mark") : [];
-    for (let i = 0; i < marcas.length; i++) {
-      if (String(marcas[i].textContent || "").indexOf(alvo.slice(0, 30)) >= 0) {
-        try { marcas[i].scrollIntoView({ block: "center" }); } catch (e) {}
-        marcas[i].classList.add("mat-piscando");
-        setTimeout(() => { try { marcas[i].classList.remove("mat-piscando"); } catch (e) {} }, 2400);
+  /* compara sem marcação e sem espaço sobrando dos dois lados: o texto da
+   * tela já perdeu os "**" e o do registro não */
+  const limpo = (s) => String(s || "").replace(/\*\*|__|_/g, "")
+    .replace(/\s+/g, " ").trim().toLowerCase();
+  /* DUAS chaves de busca, não uma.
+   * A âncora da dúvida começa no cabeçalho ("Questão 2 (Cebraspe):"), mas o
+   * cartão do modo "ocultar gabarito" mostra só o enunciado — o cabeçalho
+   * virou o rótulo do cartão. Procurando só pelo começo, nunca casava, e a
+   * função caía na edição achando que o trecho não existia. */
+  const semCab = String(alvo).replace(
+    /^\s*[-*•]?\s*(?:\*\*)?\s*Quest[ãa]o\b\s*\d*\s*(?:\([^)]*\))?\s*:?\s*(?:\*\*)?\s*/i, "");
+  const chaves = [limpo(alvo).slice(0, 30), limpo(semCab).slice(0, 30)]
+    .filter((x) => x.length >= 8);
+  const casa = (txt) => {
+    const t0 = limpo(txt);
+    return chaves.some((c) => t0.indexOf(c) >= 0);
+  };
+  const chave = chaves[0] || "";
+
+  if (modo === "ler" && caixa && caixa.querySelectorAll) {
+    /* PROCURA ALÉM DO <mark>.
+     * Só as marcas eram varridas. Com o "ocultar gabarito" ligado, as linhas
+     * de questão viram cartões e o <mark> azul deixa de existir na tela —
+     * então nada era encontrado e a função caía no último recurso, que é
+     * abrir a edição. Era isto que jogava "abrir onde está" no texto cru.
+     * A ordem vai do mais preciso ao mais amplo. */
+    const grupos = ["mark", ".qp", ".mat-dica", "p", "li", "div"];
+    for (let g = 0; g < grupos.length; g++) {
+      const nos = caixa.querySelectorAll(grupos[g]);
+      for (let i = 0; i < nos.length; i++) {
+        if (!casa(nos[i].textContent)) continue;
+        try { nos[i].scrollIntoView({ block: "center" }); } catch (e) {}
+        nos[i].classList.add("mat-piscando");
+        const alvoNo = nos[i];
+        setTimeout(() => { try { alvoNo.classList.remove("mat-piscando"); } catch (e) {} }, 2400);
         return true;
       }
     }
-    /* não achou entre as marcas — pode ser dúvida dentro de negrito partido,
-     * ou marca que a leitura não desenhou. Em vez de não fazer nada (que é
-     * o que o botão fazia antes), troca para edição e seleciona lá, onde a
-     * busca é no texto puro e sempre encontra. */
-    if (String(area && area.value || "").indexOf(alvo.slice(0, 30)) >= 0) {
+    /* não achou nem assim: aí sim vale trocar para a edição, onde a busca é
+     * no texto puro. Melhor levar a pessoa a um lugar certo num modo que
+     * ela não pediu do que deixá-la sem resposta. */
+    if (casa(area && area.value)) {
       matTrocarModo("editar");
       return matIrPara(trecho, onde);
     }
@@ -2752,7 +2791,17 @@ function matIrPara(trecho, onde) {
   }
   /* modo editar: seleciona o trecho na caixa, que rola sozinha */
   if (area) {
-    const pos = String(area.value || "").indexOf(alvo.slice(0, 30));
+    const cru = String(area.value || "");
+    let pos = cru.indexOf(alvo.slice(0, 30));
+    if (pos < 0) {
+      /* o trecho vem sem "**"; o texto cru tem. Procura pela versão limpa. */
+      const alvo2 = limpo(alvo).slice(0, 24);
+      const idx = limpo(cru).indexOf(alvo2);
+      if (idx >= 0) {
+        const primeira = alvo.replace(/\*\*|__|_/g, "").trim().split(/\s+/)[0];
+        pos = primeira ? cru.indexOf(primeira) : -1;
+      }
+    }
     if (pos < 0) return false;
     try {
       area.focus();
@@ -2761,6 +2810,269 @@ function matIrPara(trecho, onde) {
     return true;
   }
   return false;
+}
+
+/* =====================================================================
+ * TODAS AS DICAS DE UM RESUMO
+ *
+ * Elas vivem em dois lugares, e as duas contam:
+ *  · SOLTAS — presas ao trecho de uma dúvida, ainda não escritas no texto
+ *    (r.dicas[]);
+ *  · NO TEXTO — já incorporadas, como linha começando por ">".
+ *
+ * Listar só as soltas esconderia justamente as que a pessoa já achou boas o
+ * bastante para guardar no resumo.
+ *
+ * ALINHAMENTO: ">" é à esquerda e ">~" é justificado. Um caractere depois do
+ * marcador, como já se faz com "==!" e "==?" nas marcas. É o único jeito de
+ * a escolha sobreviver no texto, que é onde a dica incorporada mora — não há
+ * objeto para guardar a preferência.
+ * ===================================================================== */
+function matDicasDoResumo(chave) {
+  const r = matResumos[chave];
+  if (!r) return [];
+  const fora = [];
+  (r.dicas || []).forEach((d) => {
+    fora.push({ tipo: "solta", k: d.k, trecho: d.trecho || "",
+                texto: d.texto || "", align: d.align === "justificado" ? "justificado" : "esquerda" });
+  });
+  matTextoVivo(chave, "texto").split("\n").forEach((l, i) => {
+    const mm = l.match(/^>(~?)\s?(.*)$/);
+    if (!mm) return;
+    if (/^>/.test(l.slice(1))) return;         /* ">>" é gabarito, não dica */
+    fora.push({ tipo: "no_texto", linha: i, texto: mm[2],
+                align: mm[1] === "~" ? "justificado" : "esquerda" });
+  });
+  return fora;
+}
+
+function matDicasContar(chave) { return matDicasDoResumo(chave).length; }
+
+/* grava a dica de volta no lugar de onde ela veio */
+function matDicaSalvar(chave, ref, texto, align) {
+  const r = matResumos[chave];
+  if (!r) return false;
+  const limpo = String(texto == null ? "" : texto).replace(/\n+/g, " ").trim();
+  const marca = align === "justificado" ? ">~ " : "> ";
+  if (ref.tipo === "no_texto") {
+    const linhas = matTextoVivo(chave, "texto").split("\n");
+    if (ref.linha < 0 || ref.linha >= linhas.length) return false;
+    if (!/^>(~?)\s?/.test(linhas[ref.linha])) return false;
+    if (!limpo) linhas.splice(ref.linha, 1);       /* dica vazia sai do texto */
+    else linhas[ref.linha] = marca + limpo;
+    matAplicarTexto(chave, "texto", linhas.join("\n"));
+  } else {
+    const d = (r.dicas || []).filter((x) => x.k === ref.k)[0];
+    if (!d) return false;
+    if (!limpo) r.dicas = r.dicas.filter((x) => x.k !== ref.k);
+    else { d.texto = limpo; d.align = align === "justificado" ? "justificado" : "esquerda"; }
+    r.tocado = new Date().toISOString();
+    matSalvar();
+  }
+  matReg("dica", limpo ? "dica alterada" : "dica apagada",
+         (ref.tipo === "no_texto" ? "linha " + (ref.linha + 1) : "presa ao trecho")
+         + " · " + align);
+  return true;
+}
+
+/* negrito no que estiver selecionado DENTRO de uma caixa de texto */
+/* recebe a CAIXA, não o id dela: estes campos nascem na hora, e procurar
+ * por id o que se acabou de criar é depender de o elemento já estar no
+ * documento — funciona por acaso, e some quando alguém muda a ordem. */
+function matNegritoNaCaixa(ta) {
+  if (typeof ta === "string") ta = $(ta);
+  if (!ta) return false;
+  const v = String(ta.value || "");
+  const a = Number(ta.selectionStart) || 0;
+  const b = Number(ta.selectionEnd) || 0;
+  if (b <= a) return false;                    /* nada selecionado */
+  const dentro = v.slice(a, b);
+  /* já está em negrito? então tira — o mesmo botão desfaz */
+  const jaTem = v.slice(Math.max(0, a - 2), a) === "**" && v.slice(b, b + 2) === "**";
+  if (jaTem) {
+    ta.value = v.slice(0, a - 2) + dentro + v.slice(b + 2);
+    try { ta.setSelectionRange(a - 2, b - 2); } catch (e) {}
+  } else {
+    ta.value = v.slice(0, a) + "**" + dentro + "**" + v.slice(b);
+    try { ta.setSelectionRange(a + 2, b + 2); } catch (e) {}
+  }
+  return true;
+}
+
+function matDicaPrompt(texto, trecho) {
+  return t("dica_prompt", { texto: String(texto || ""),
+                            trecho: String(trecho || "").slice(0, 400) });
+}
+
+/* ---------------------------------------------------------------------
+ * O PAINEL DAS DICAS
+ * Uma por bloco: onde ela está, o texto editável, e o que dá para fazer
+ * com ele. Salvar é explícito — dica é texto que a pessoa escreveu, e
+ * gravar a cada tecla tira dela a chance de desistir.
+ * ------------------------------------------------------------------- */
+let matDicaAlinhos = {};      /* alinhamento escolhido antes de salvar */
+
+function matDicasListaAbrir() {
+  if (!matAtual) return;
+  const chave = matAtual.chave;
+  const lista = matDicasDoResumo(chave);
+  const box = $("dicLista");
+  box.innerHTML = "";
+  $("dicResumo").textContent = lista.length
+    ? t("dic_resumo", { n: lista.length,
+        s: lista.filter((x) => x.tipo === "solta").length,
+        i: lista.filter((x) => x.tipo === "no_texto").length })
+    : t("dic_vazio");
+
+  lista.forEach((d, idx) => {
+    const li = document.createElement("div");
+    li.className = "dic-item";
+
+    const onde = document.createElement("div");
+    onde.className = "dic-onde";
+    onde.textContent = d.tipo === "no_texto"
+      ? t("dic_no_texto", { l: d.linha + 1 })
+      : t("dic_presa", { t: String(d.trecho).slice(0, 90) });
+    li.append(onde);
+
+    const ta = document.createElement("textarea");
+    ta.className = "dic-campo" + (d.align === "justificado" ? " dic-just" : "");
+    ta.rows = 3;
+    ta.value = d.texto;
+    li.append(ta);
+    matDicaAlinhos[idx] = d.align;
+
+    const ac = document.createElement("div");
+    ac.className = "dic-acoes";
+
+    const bN = document.createElement("button");
+    bN.type = "button"; bN.className = "btn-min dic-neg";
+    bN.textContent = t("dic_negrito");
+    bN.title = t("dic_negrito_ajuda");
+    bN.onclick = () => { matNegritoNaCaixa(ta); };
+    ac.append(bN);
+
+    const pintaAlinho = () => {
+      const j = matDicaAlinhos[idx] === "justificado";
+      bJ.classList.toggle("mat-ligado", j);
+      bE.classList.toggle("mat-ligado", !j);
+      ta.className = "dic-campo" + (j ? " dic-just" : "");
+    };
+    const bJ = document.createElement("button");
+    bJ.type = "button"; bJ.className = "btn-min";
+    bJ.textContent = t("dic_justificar");
+    bJ.title = t("dic_justificar_ajuda");
+    bJ.onclick = () => { matDicaAlinhos[idx] = "justificado"; pintaAlinho(); };
+    const bE = document.createElement("button");
+    bE.type = "button"; bE.className = "btn-min";
+    bE.textContent = t("dic_esquerda");
+    bE.title = t("dic_esquerda_ajuda");
+    bE.onclick = () => { matDicaAlinhos[idx] = "esquerda"; pintaAlinho(); };
+    ac.append(bJ, bE);
+    pintaAlinho();
+
+    /* VER NO TEXTO: a dica existe em algum lugar do resumo, e ler a dica
+     * fora do contexto dela é meia informação. Para as que ainda não foram
+     * incorporadas, leva ao trecho a que elas se referem. */
+    const bV = document.createElement("button");
+    bV.type = "button"; bV.className = "btn-min";
+    bV.textContent = t("dic_ver_texto");
+    bV.title = t(d.tipo === "no_texto" ? "dic_ver_texto_ajuda" : "dic_ver_trecho_ajuda");
+    bV.onclick = () => {
+      $("dlgDicas").close();
+      matTrocarModo("ler");
+      const alvo = d.tipo === "no_texto" ? d.texto : d.trecho;
+      const achou = matIrPara(alvo, "texto");
+      matReg("dica", achou ? "aberto no lugar da dica" : "lugar da dica não encontrado",
+             String(alvo).slice(0, 60));
+    };
+    ac.append(bV);
+
+    const bS = document.createElement("button");
+    bS.type = "button"; bS.className = "btn-min btn-min-ok";
+    bS.textContent = t("dic_salvar");
+    bS.title = t("dic_salvar_ajuda");
+    bS.onclick = () => {
+      matDicaSalvar(chave, d, ta.value, matDicaAlinhos[idx]);
+      matDicasListaAbrir();
+      matPintarDicasLista();
+      try { matRender(); } catch (e) {}
+      if (matModo === "ler") matTrocarModo("ler");
+    };
+    ac.append(bS);
+
+    const bX = document.createElement("button");
+    bX.type = "button"; bX.className = "btn-min btn-min-perigo";
+    bX.textContent = t("dic_apagar");
+    bX.title = t("dic_apagar_ajuda");
+    bX.onclick = async () => {
+      /* apagar dica é perda de texto escrito à mão: pergunta antes, e
+       * mostra o que vai embora */
+      if (!(await uiConfirm(t("dic_apagar_conf", { t: d.texto.slice(0, 140) })))) return;
+      matDicaSalvar(chave, d, "", d.align);
+      matDicasListaAbrir();
+      matPintarDicasLista();
+      try { matRender(); } catch (e) {}
+      if (matModo === "ler") matTrocarModo("ler");
+    };
+    ac.append(bX);
+    li.append(ac);
+
+    /* melhorar com IA: prompt pronto, e o que você colar SUBSTITUI o texto */
+    const det = document.createElement("details");
+    det.className = "dic-ia";
+    const sm = document.createElement("summary");
+    sm.textContent = t("dic_ia_titulo");
+    sm.title = t("dic_ia_ajuda");
+    det.append(sm);
+    const pr = document.createElement("textarea");
+    pr.className = "dic-prompt"; pr.rows = 3; pr.readOnly = true;
+    pr.value = matDicaPrompt(d.texto, d.tipo === "solta" ? d.trecho : "");
+    const bc = document.createElement("button");
+    bc.type = "button"; bc.className = "btn-min";
+    bc.textContent = t("copy_btn");
+    bc.title = t("dic_copiar_ajuda");
+    bc.onclick = () => {
+      try { navigator.clipboard.writeText(pr.value); } catch (e) {}
+      const r0 = bc.textContent;
+      bc.textContent = t("copied");
+      setTimeout(() => { bc.textContent = r0; }, 1800);
+    };
+    const resp = document.createElement("textarea");
+    resp.className = "dic-resp"; resp.rows = 3;
+    resp.placeholder = t("dic_colar_aqui");
+    const ba = document.createElement("button");
+    ba.type = "button"; ba.className = "btn-min btn-min-ok";
+    ba.textContent = t("dic_usar");
+    ba.title = t("dic_usar_ajuda");
+    ba.onclick = async () => {
+      const novo = String(resp.value || "").trim();
+      if (!novo) { await uiAlert(t("dic_nada_colado")); return; }
+      /* mostra o antes e o depois: substituir texto escrito à mão sem a
+       * pessoa ver o que entra no lugar é o tipo de ajuda que atrapalha */
+      if (!(await uiConfirm(t("dic_usar_conf",
+        { a: d.texto.slice(0, 160), b: novo.slice(0, 160) })))) return;
+      ta.value = novo.replace(/\n+/g, " ").trim();
+      matReg("dica", "dica melhorada pela IA", novo.slice(0, 60));
+    };
+    det.append(pr, bc, resp, ba);
+    li.append(det);
+
+    box.append(li);
+  });
+  abrirModal("dlgDicas");
+  matReg("dica", "lista de dicas aberta", lista.length + " dicas");
+}
+
+function matPintarDicasLista() {
+  const b = $("btnMatDicasLista");
+  if (!b) return;
+  const n = matAtual ? matDicasContar(matAtual.chave) : 0;
+  b.hidden = !n;
+  if (n) {
+    b.textContent = t("dic_conta", { n });
+    b.title = t("dic_conta_ajuda", { n });
+  }
 }
 
 function matChaveDica(trecho) {
