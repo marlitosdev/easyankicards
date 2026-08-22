@@ -663,8 +663,18 @@ function qsUiIniciar() {
       let lido = "";
       try { lido = await navigator.clipboard.readText(); } catch (e) { lido = ""; }
       if (!String(lido).trim()) { await uiAlert(t("qs_colar_vazio")); return; }
-      $("qsCriarResposta").value = lido;
-      matReg("questao", "resposta da IA colada", String(lido).length + " caracteres");
+      /* ACRESCENTA, não substitui.
+       * Uma tanda de questões raramente vem numa resposta só: pede-se
+       * mais, cola-se de novo, e a colagem anterior era apagada — o
+       * trabalho da rodada passada sumia sem aviso. Agora cada colagem
+       * entra no fim, e a conferência lê tudo junto. */
+      const antes = String($("qsCriarResposta").value || "");
+      $("qsCriarResposta").value = antes.trim()
+        ? antes.replace(/\s*$/, "") + "\n\n" + lido
+        : lido;
+      matReg("questao", "resposta da IA colada",
+             String(lido).length + " caracteres"
+             + (antes.trim() ? " · acrescentados a " + antes.length : ""));
       qsUiConferir();
     };
   }
