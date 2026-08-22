@@ -13,6 +13,7 @@ let qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "",
                    soIneditas: false, soErradas: false, busca: "" };
 let qsUiCtxCriar = null;      /* de qual tópico vieram as questões sendo criadas */
 let qsUiAchados = null;
+let qsUiDoTexto = [];   /* as que o detector achou no próprio texto */
 let qsUiRecibo = null;
 let qsUiVoltarPara = null;    /* quem abriu a sessão: resumo ou aba */
 
@@ -26,30 +27,70 @@ function qsUiConcursoAtual() {
  * CRIAR — o mesmo ritual dos cartões: copiar o prompt, colar a resposta,
  * CONFERIR, e só então aplicar. Nada entra sozinho.
  * ------------------------------------------------------------------- */
+/* UMA porta só para criar questões.
+ *
+ * Antes eram dois botões — "virar em questão" e "importar do texto" — e a
+ * diferença entre eles era invisível de fora: os dois terminavam na mesma
+ * conferência produzindo questões. A diferença real é a FONTE: uma lê o
+ * que já está escrito, a outra pede à IA que escreva mais.
+ *
+ * Agora é uma janela só: o que já está no texto aparece pronto, e a IA é
+ * um extra dentro dela, para quem quer MAIS do que o texto já tem.
+ */
 function qsUiCriarAbrir(texto, ctx) {
   qsUiCtxCriar = ctx || null;
   qsUiAchados = null;
+  qsUiDoTexto = [];
   const t0 = String(texto || "").trim();
   if (!t0) { uiAlert(t("qs_criar_sem_texto")); return; }
-  qsUiPassosPrompt(true);
+
+  /* 1. o que JÁ está escrito, sem IA nenhuma */
+  const blocos = qsNoTexto(t0);
+  qsUiDoTexto = qsDeBlocos(blocos.filter((b) => b.completa), ctx || {});
+  const incompletos = blocos.filter((b) => !b.completa).map((b) => ({
+    linha: b.ini + 1, txt: String(b.enunciado || "").slice(0, 70),
+    motivo: b.gabarito ? "sem_enunciado" : "sem_gabarito",
+  }));
+
+  /* 2. e o prompt, pronto, para quem quiser mais */
   $("qsCriarPrompt").value = qsPrompt(t0, ctx);
   $("qsCriarResposta").value = "";
-  $("qsCriarConf").innerHTML = "";
-  $("qsCriarResumo").textContent = "";
-  $("btnQsCriarAplicar").disabled = true;
   $("qsCriarDe").textContent = ctx
     ? (ctx.concurso ? ctx.concurso + " · " : "") + ctx.disciplina + " › " + ctx.topico
     : "";
+  /* o bloco da IA nasce fechado quando o texto já rendeu questões: nesse
+   * caso o caminho curto já está pronto, e abrir o prompt seria oferecer
+   * trabalho antes de mostrar o resultado */
+  if ($("qsIA")) $("qsIA").open = !qsUiDoTexto.length;
+  $("qsDoTextoAviso").textContent = qsUiDoTexto.length
+    ? t("qs_do_texto_achei", { n: qsUiDoTexto.length })
+    : t("qs_do_texto_nada");
+
+  qsUiPintarConf(qsUiDoTexto.slice(), incompletos);
   abrirModal("dlgQsCriar");
   matReg("questao", "criação de questões aberta",
-         (ctx && ctx.topico ? ctx.topico + " · " : "") + t0.length + " caracteres");
+         (ctx && ctx.topico ? ctx.topico + " · " : "")
+         + qsUiDoTexto.length + " já no texto · " + t0.length + " caracteres");
 }
+
 
 function qsUiConferir() {
   const r = qsLerResposta($("qsCriarResposta").value, qsUiCtxCriar || {});
-  qsUiPintarConf(r.achados, r.ignoradas);
+  /* SOMA às que vieram do texto, em vez de substituir: quem pediu mais à IA
+   * não quis abrir mão das que já tinha. Sem duplicar o que a IA devolveu
+   * igual ao que já estava escrito. */
+  const juntas = qsUiDoTexto.slice();
+  let repetidas = 0;
+  r.achados.forEach((q) => {
+    if (juntas.some((v) => qsNormal(v.enunciado) === qsNormal(q.enunciado))) {
+      repetidas++; return;
+    }
+    juntas.push(q);
+  });
+  qsUiPintarConf(juntas, r.ignoradas);
   matReg("questao", "conferência de questões",
-         r.achados.length + " ok · " + r.ignoradas.length + " recusadas");
+         r.achados.length + " da IA · " + repetidas + " repetidas do texto · "
+         + r.ignoradas.length + " recusadas");
 }
 
 /* o desenho da conferência é o mesmo vindo da IA ou vindo do texto: o que
@@ -106,41 +147,8 @@ function qsUiPintarConf(achados, ignoradas) {
  * confirma a banca, já que o parêntese do enunciado nem sempre é uma
  * ("(Questão de Pegadinha)" não é banca).
  * ------------------------------------------------------------------- */
-function qsUiImportarDoTexto() {
-  if (!matAtual) return;
-  const ctx = { disciplina: matAtual.disciplina, topico: matAtual.topico,
-                chave: matAtual.chave, concurso: qsUiConcursoAtual() };
-  const blocos = qsNoTexto(matTextoVivo(matAtual.chave, "texto"));
-  const bons = blocos.filter((b) => b.completa);
-  const ruins = blocos.filter((b) => !b.completa).map((b) => ({
-    linha: b.ini + 1, txt: String(b.enunciado || "").slice(0, 70),
-    motivo: b.gabarito ? "sem_enunciado" : "sem_gabarito",
-  }));
-  if (!bons.length && !ruins.length) { uiAlert(t("prova_nada_no_texto")); return; }
 
-  qsUiCtxCriar = ctx;
-  $("qsCriarPrompt").value = "";
-  $("qsCriarResposta").value = "";
-  /* os dois primeiros passos não existem neste caminho: não há prompt para
-   * copiar nem resposta para colar. Escondê-los evita a pergunta "e agora,
-   * onde eu colo?" diante de uma tela que já tem tudo pronto. */
-  qsUiPassosPrompt(false);
-  $("qsCriarDe").textContent = (ctx.concurso ? ctx.concurso + " · " : "")
-    + ctx.disciplina + " › " + ctx.topico;
-  qsUiPintarConf(qsDeBlocos(bons, ctx), ruins);
-  abrirModal("dlgQsCriar");
-  matReg("questao", "importação do texto aberta",
-         bons.length + " completas · " + ruins.length + " incompletas");
-}
 
-function qsUiPassosPrompt(mostrar) {
-  ["qsPasso1", "qsCriarPrompt", "qsPasso2", "qsCriarResposta"].forEach((id) => {
-    const e = $(id);
-    if (e) e.hidden = !mostrar;
-  });
-  const p3 = $("qsPasso3");
-  if (p3) p3.hidden = false;
-}
 
 function qsUiAplicar() {
   if (!qsUiAchados || !qsUiAchados.length) return;
@@ -367,13 +375,16 @@ function qsUiPintarBotaoResumo() {
   const n = (qsContarPorChave()[matAtual.chave] || 0);
   b.hidden = false;
   b.textContent = n ? t("qs_do_topico_n", { n }) : t("qs_do_topico_zero");
-  b.disabled = !n;
+  b.disabled = false;
   b.title = n ? t("qs_do_topico_ajuda", { n }) : t("qs_do_topico_zero_ajuda");
 }
 
 function qsUiResponderDoTopico() {
   if (!matAtual) return;
   const lista = qsFiltrar({ chave: matAtual.chave });
+  /* sem questão neste tópico, o botão não pode ser um beco: leva a criar,
+   * que é o que a pessoa faria em seguida de qualquer jeito */
+  if (!lista.length) { qsUiVirarSelecao(); return; }
   qsUiResponderAbrir(lista, "resumo");
 }
 
@@ -421,10 +432,14 @@ function qsUiIniciar() {
   if ($("qsBusca")) $("qsBusca").oninput = () => qsUiLerFiltros();
   if ($("btnQsDesfazer")) $("btnQsDesfazer").onclick = () => qsUiDesfazer();
   if ($("btnMatQuestoes")) $("btnMatQuestoes").onclick = () => qsUiResponderDoTopico();
-  if ($("btnMatVirarQuestao")) $("btnMatVirarQuestao").onclick = () => qsUiVirarSelecao();
-  if ($("btnMatImportarQuestoes")) {
-    $("btnMatImportarQuestoes").onclick = () => qsUiImportarDoTexto();
+  if ($("btnQsCriarDaSessao")) {
+    $("btnQsCriarDaSessao").onclick = () => {
+      $("dlgQsResponder").close();
+      qsUiVirarSelecao();
+    };
   }
+  if ($("btnMatVirarQuestao")) $("btnMatVirarQuestao").onclick = () => qsUiVirarSelecao();
+
   if ($("btnQsCriarDaAba")) {
     $("btnQsCriarDaAba").onclick = () => {
       uiAlert(t("qs_criar_pela_aba"));

@@ -9,6 +9,21 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
+/* =====================================================================
+ * [hidden] TEM DE VENCER. SEMPRE.
+ *
+ * A regra do navegador é [hidden]{display:none}, com especificidade baixa.
+ * Qualquer classe que dê display — ".qs-passo{display:flex}" — ganha dela,
+ * e o elemento fica escondido no código e visível na tela. O app escondeu
+ * coisa por engano por causa disto pelo menos quatro vezes, e cada uma foi
+ * remendada no seu canto: .rodape-exportar[hidden], .gaveta-corpo[hidden],
+ * .ed-desfazer-reg[hidden]. Três remendos para o mesmo defeito.
+ *
+ * Uma regra só, com !important, resolve a classe inteira do problema —
+ * inclusive nos lugares que ainda nem foram escritos.
+ * ===================================================================== */
+[hidden]{display:none!important}
+
 :root{
   --bg:#f5f6f8; --panel:#fff; --texto:#1a1a2e; --sutil:#5b6472;
   --verde:#1a7f37; --verde-claro:#eaf6ea; --verde-borda:#4caf50;
@@ -107,11 +122,9 @@ textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius
 .card.ignorado .ig-acoes .btn{padding:4px 10px;font-size:11.5px}
 /* linha técnica do rodapé: diagnóstico e registro. Discreta de propósito —
    servem para relatar problema, não fazem parte do uso normal. */
-/* Sem style embutido: "display:flex" inline VENCE a regra [hidden]{display:none}
-   do navegador, e o elemento ficava escondido no papel e visível na tela —
-   foi por isso que os botões de exportar sobreviveram a duas correções. */
+/* Sem style embutido: "display:flex" inline vence até o !important da
+   regra global de [hidden]. Inline continua sendo caso à parte. */
 .rodape-exportar{display:flex;gap:8px;justify-content:center}
-.rodape-exportar[hidden]{display:none}
 .rodape-tec{display:flex;gap:14px;justify-content:center;margin-top:6px}
 .link-tec{background:none;border:0;padding:2px 4px;cursor:pointer;
   font-size:11px;color:var(--sutil);opacity:.65;text-decoration:underline}
@@ -359,7 +372,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   border:1px solid var(--laranja-borda);border-radius:6px;padding:1px 7px}
 .gaveta-alca.desktop-ok .gv-selo{display:none}
 .gaveta-corpo{padding:0 11px 11px;display:flex;flex-direction:column;gap:8px}
-.gaveta-corpo[hidden]{display:none}
 " .gaveta-corpo .nota{font-size:11.5px;color:var(--sutil);line-height:1.4}
 #importProgresso .ip-txt{font-size:11.5px;color:var(--sutil);margin-bottom:4px}
 #importProgresso .ip-barra{height:8px;background:var(--borda);border-radius:5px;overflow:hidden}
@@ -666,6 +678,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-item-acoes{display:flex;gap:6px;margin-top:7px}
 .qs-desfazer{display:flex;gap:8px;align-items:center;background:rgba(47,158,110,.12);
   border-left:3px solid #2f9e6e;padding:6px 10px;border-radius:0 7px 7px 0;margin:6px 0}
+.qs-ia{margin:8px 0;border:1px solid var(--borda);border-radius:8px;padding:7px 10px}
+.qs-ia > summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--sutil);
+  user-select:none;list-style:none}
+.qs-ia > summary::-webkit-details-marker{display:none}
+.qs-ia > summary::before{content:"▸ "}
+.qs-ia[open] > summary::before{content:"▾ "}
 .qs-passo{display:flex;gap:7px;align-items:center;margin:10px 0 4px;font-size:12px;
   color:var(--sutil)}
 .qs-num{display:inline-flex;width:17px;height:17px;border-radius:50%;background:var(--borda);
@@ -1184,7 +1202,6 @@ dialog.mat-amplo{max-height:96vh}
 .ed-desfazer-reg{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   margin:0 0 8px;padding:8px 11px;border-radius:9px;font-size:11.5px;
   background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.45);color:var(--texto)}
-.ed-desfazer-reg[hidden]{display:none}
 /* na linha do diário, o que leva de volta ao material fica antes do que
    apaga: rever é o gesto comum, apagar é o raro */
 /* Uma linha do diário são três faixas empilhadas: data+ação+tópico,
@@ -2316,14 +2333,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
            backup, e achar por que uma marcação falhou virava garimpo -->
       <!-- "lei seca" é marca da pessoa: só ela sabe se aquilo é a letra da
            lei ou um comentário sobre ela -->
-      <button class="btn-min" id="btnMatImportarQuestoes" data-i18n="prova_importar_btn"
-      title="Grava no banco de questões as que já estão escritas neste resumo. Passa pela mesma conferência das geradas por IA, e dá para desfazer."></button>
     <button class="btn-min" id="btnMatProva" hidden
-      title="As questões que já estão escritas neste resumo viram respondíveis: o gabarito e o comentário somem até você escolher. O texto não é alterado."></button>
+      title="Esconde o gabarito das questões que já estão escritas neste resumo, para você responder antes de ver. O texto não é alterado."></button>
     <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
       title="Responde, em sequência, as questões deste tópico."></button>
-    <button class="btn-min" id="btnMatVirarQuestao" data-i18n="qs_virar"
-      title="Pega o trecho selecionado (ou o resumo inteiro) e monta o prompt para transformá-lo em questões respondíveis, de certo/errado ou múltipla escolha."></button>
     <button class="btn-min" id="btnMatDicas" hidden
       title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
     <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_btn" title="Abre a LEI SECA deste tópico: a letra da lei, guardada à parte do resumo. Tem leitor próprio e botão para registrar que você leu."></button>
@@ -2440,19 +2453,25 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 <dialog id="dlgQsCriar" class="ui-modal diag-modal">
   <h3 data-i18n="qs_criar_titulo"></h3>
   <p class="nota" id="qsCriarDe"></p>
-  <p class="nota" data-i18n="qs_criar_ajuda"></p>
-  <div class="qs-passo" id="qsPasso1"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
-    <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
-      title="Copia o prompt inteiro para colar na IA."></button></div>
-  <textarea id="qsCriarPrompt" rows="5" readonly
-    style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
-  <div class="qs-passo" id="qsPasso2"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
-    <button class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
-      title="Lê o que você colou e mostra o que entendeu ANTES de gravar."></button></div>
-  <textarea id="qsCriarResposta" rows="6"
-    style="width:100%;box-sizing:border-box;font-size:12px"
-    placeholder="Cole aqui a resposta da IA."></textarea>
-  <div class="qs-passo" id="qsPasso3"><span class="qs-num">3</span><span data-i18n="qs_passo3"></span></div>
+  <p class="nota" id="qsDoTextoAviso"></p>
+
+  <details id="qsIA" class="qs-ia">
+    <summary data-i18n="qs_ia_titulo"
+      title="Pede à IA que escreva questões NOVAS sobre este texto, além das que já estiverem escritas nele."></summary>
+    <div class="qs-passo"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
+      <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
+        title="Copia o prompt inteiro para colar na IA."></button></div>
+    <textarea id="qsCriarPrompt" rows="4" readonly
+      style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
+    <div class="qs-passo"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
+      <button class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
+        title="Lê o que você colou e junta às questões já achadas no texto."></button></div>
+    <textarea id="qsCriarResposta" rows="5"
+      style="width:100%;box-sizing:border-box;font-size:12px"
+      placeholder="Cole aqui a resposta da IA."></textarea>
+  </details>
+
+  <p class="nota" data-i18n="qs_confira_ajuda"></p>
   <div id="qsCriarConf" class="qs-conf-lista"></div>
   <p class="nota" id="qsCriarResumo"></p>
   <div class="dlg-rodape">
@@ -2470,6 +2489,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
+    <button class="btn btn-cinza" id="btnQsCriarDaSessao" data-i18n="qs_criar_mais"
+      title="Fecha a sessão e abre a criação de questões para este tópico."></button>
     <button class="btn btn-cinza" id="btnQsSessFechar" data-i18n="help_close"
       title="Encerra a sessão. O que você já respondeu fica registrado."></button>
   </div>
