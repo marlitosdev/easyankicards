@@ -602,8 +602,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * resolveria pela metade — continuaria sobrepondo o texto e as duas
  * barras continuariam existindo.
  * ===================================================================== */
+/* max-height, NUNCA height: com altura fixa de 92vh o diálogo passa a ser
+ * mais alto do que a área útil da janela, e o navegador o centra deixando o
+ * TÍTULO acima da borda de cima — sem rolagem que alcance. Foi o que sumiu
+ * com o cabeçalho da lei seca e escondeu a pergunta do "fechar", que
+ * aparecia no mesmo lugar invisível.
+ * Com max-height o diálogo cresce só até caber, e o cabeçalho fica sempre
+ * dentro da tela. */
 #dlgMaterial, #dlgLeiSeca{display:flex;flex-direction:column;
-  height:92vh;max-height:92vh}
+  max-height:92vh;margin:auto}
 #dlgMaterial > *, #dlgLeiSeca > *{flex:0 0 auto}
 /* o texto é a única parte elástica — e portanto a única que rola */
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
@@ -615,6 +622,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .btn-min.btn-salvo{background:#2f9e6e!important;color:#fff!important;
   border-color:#2f9e6e!important;transition:background .12s}
 .btn.btn-salvo{background:#2f9e6e!important;color:#fff!important}
+.lm-lista{max-height:46vh;overflow:auto;margin:6px 0}
+.lm-topo{display:flex;gap:6px;margin:4px 0}
+.lm-item{display:flex;gap:8px;align-items:flex-start;padding:5px 7px;
+  border-radius:7px;cursor:pointer}
+.lm-item:hover{background:rgba(255,255,255,.04)}
+.lm-item.lm-guardado{background:rgba(245,165,36,.08)}
+.lm-corpo{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;min-width:0}
+.lm-tipo{font-size:9px;letter-spacing:.07em;font-weight:700;padding:1px 5px;
+  border-radius:4px;flex:0 0 auto}
+.lm-txt{font-size:12px;word-break:break-word}
+.lm-aviso{font-size:10px;color:#f5a524;font-weight:700}
 .cns-lista{max-height:46vh;overflow:auto;margin:6px 0}
 .cns-item{border-left:3px solid #f5a524;padding:5px 9px;margin-bottom:7px;
   border-radius:0 6px 6px 0;background:rgba(245,165,36,.07)}
@@ -748,7 +766,7 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mat-sep{width:1px;height:16px;background:var(--borda);margin:0 4px}
 .mat-estado{margin-left:auto;font-size:10.5px;color:#22c55e;font-weight:700}
 dialog.mat-amplo{max-width:96vw;width:96vw}
-dialog.mat-amplo{height:96vh;max-height:96vh}
+dialog.mat-amplo{max-height:96vh}
 .ed-doc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:7px;
   display:inline-flex;align-items:center;justify-content:center;font-size:12px;
   border:1px solid transparent;background:none;opacity:.35;flex-shrink:0}
@@ -2309,6 +2327,25 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   </div>
 </dialog>
 
+<dialog id="dlgLimparMarcas" class="ui-modal diag-modal">
+  <h3 data-i18n="lm_titulo"></h3>
+  <p class="nota" data-i18n="lm_ajuda"></p>
+  <div class="lm-topo">
+    <button class="btn-min" id="btnLmTodas" data-i18n="lm_todas"
+      title="Marca todas, inclusive as que têm dica ou questão."></button>
+    <button class="btn-min" id="btnLmNenhuma" data-i18n="lm_nenhuma_btn"
+      title="Desmarca todas."></button>
+  </div>
+  <div id="lmLista" class="lm-lista"></div>
+  <p class="nota" id="lmResumo"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLmOk" data-i18n="lm_ok"
+      title="Tira apenas as marcas selecionadas. O texto não muda."></button>
+    <button class="btn btn-cinza" id="btnLmNao" data-i18n="cancel_btn"
+      title="Sai sem tirar nenhuma marca."></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMatConserto" class="ui-modal diag-modal">
   <h3 data-i18n="cns_titulo"></h3>
   <p class="nota" data-i18n="cns_ajuda"></p>
@@ -2335,6 +2372,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 
 <dialog id="dlgLeiSeca" class="ui-modal diag-modal">
   <h3 id="leiTitulo"></h3>
+  <p class="nota" id="leiSub"></p>
   <p class="nota" data-i18n="lei_ajuda"></p>
   <div class="mat-topo">
     <button class="btn-min" id="btnLeiModo"
