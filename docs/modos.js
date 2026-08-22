@@ -21,6 +21,7 @@ const MODOS = [
   { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
   { id: "edital", secao: "secEdital", icone: "📋", rotulo: "modo_edital", pronto: true },
   { id: "material", secao: "secResumos", icone: "📚", rotulo: "modo_material", pronto: true },
+  { id: "questoes", secao: "secQuestoes", icone: "❓", rotulo: "modo_questoes", pronto: true },
   { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
 ];
 

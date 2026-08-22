@@ -513,6 +513,10 @@ function matTrocarModo(modo) {
   matPintarLei();
   matPintarDuvidas();
   matPintarConserto();
+  /* quantas questões existem para ESTE tópico */
+  if (typeof qsUiPintarBotaoResumo === "function") {
+    try { qsUiPintarBotaoResumo(); } catch (e) {}
+  }
   /* o botão de dicas só faz sentido se este resumo TEM dica incorporada */
   if ($("btnMatDicas")) {
     $("btnMatDicas").hidden = !/^&gt;\s|^>\s/m.test($("matTexto").value || "");

@@ -23,7 +23,10 @@ const BK_CHAVES = {
    * reconstituir o edital único — que a migração então converte na lista. */
   edital: ["eac_editais", "eac_edital_atual", "eac_vinculos", "eac_cm_recibo", "eac_mat_log",
            "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario"],
-  material: ["eac_resumos"],
+  /* as questões têm arquivo próprio (não vivem na gaveta do tópico), então
+   * precisam entrar no backup por conta: sem esta linha, salvar e carregar
+   * a base apagava o banco inteiro em silêncio. */
+  material: ["eac_resumos", "eac_questoes"],
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
                  "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",
@@ -78,6 +81,7 @@ function resumirBackup(dados) {
     progresso: progTodos || jsonN(e.eac_edital_progresso),
     diario: jsonN(e.eac_edital_diario),
     resumos: jsonN(m.eac_resumos),
+    questoes: jsonN(m.eac_questoes),
   };
 }
 
