@@ -2064,27 +2064,40 @@ function matIniciar() {
 
 /* Etiquetas planas. Planas porque "::" é o separador de campos do material:
  * hierarquia do Anki aqui faz o cartão voltar mutilado (medido na v8.76). */
-function matEtiquetasTopico(disciplina, topico, concurso) {
+/* A ÚLTIMA ETIQUETA DIZ DE ONDE O CARTÃO VEIO.
+ * Era sempre "de_resumo", inclusive nos cartões nascidos de uma questão —
+ * uma etiqueta que mente sobre a procedência estraga justamente a busca
+ * que ela existe para servir ("quais cartões saíram das questões?"). */
+function matEtiquetasTopico(disciplina, topico, concurso, origem) {
   const achatar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const tags = [];
   if (disciplina) tags.push("disc_" + achatar(disciplina));
   if (topico) tags.push("top_" + achatar(topico));
   if (concurso) tags.push("concurso_" + achatar(concurso));
-  tags.push("de_resumo");
+  tags.push(origem === "questao" ? "de_questao" : "de_resumo");
   return tags.filter(Boolean);
 }
 
-function matCartoesAbrir() {
+/* Quando o painel é aberto de FORA do resumo — de uma questão, por
+ * exemplo — o prompt não sai do resumo, e gravar o resumo aqui seria
+ * gravar o que estiver na caixa, que pode ser de outro tópico ou vazio. */
+let mcPromptDeFora = null;
+
+function matCartoesAbrir(opts) {
   if (!matAtual) return;
+  const o = opts || {};
+  mcPromptDeFora = o.prompt ? String(o.prompt) : null;
   /* grava o texto antes: o prompt sai do que está escrito agora, e o
    * resumo em si não é rascunho */
-  matGravar(matAtual.chave, $("matTexto").value,
-    { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  if (!o.semGravarResumo) {
+    matGravar(matAtual.chave, $("matTexto").value,
+      { disciplina: matAtual.disciplina, topico: matAtual.topico });
+  }
   const r = matResumos[matAtual.chave] || {};
   const jaTem = matContarCartoes(matAtual.chave);
-  $("mcSub").textContent = t("mc_sub", {
-    d: matAtual.disciplina, tp: matAtual.topico, n: jaTem });
+  $("mcSub").textContent = (o.sub || t("mc_sub", {
+    d: matAtual.disciplina, tp: matAtual.topico, n: jaTem }));
   $("mcTexto").value = "";
   $("mcAviso").hidden = true;
   $("mcPreview").innerHTML = "";
@@ -2099,6 +2112,12 @@ function matCartoesAbrir() {
 function matCartoesPrompt() {
   if (!matAtual) return;
   const r = matResumos[matAtual.chave] || {};
+  if (mcPromptDeFora) {
+    try { navigator.clipboard.writeText(mcPromptDeFora); } catch (e) {}
+    reg("MATERIAL-CARTOES", "prompt gerado (de uma questão)", matAtual.topico);
+    toast("mc_prompt_copiado");
+    return;
+  }
   const txt = t("mc_prompt", {
     d: matAtual.disciplina, tp: matAtual.topico,
     resumo: String(r.texto || ""),
@@ -2143,7 +2162,8 @@ function matCartoesConferir() {
 
   const concurso = (matResumos[matAtual.chave] || {}).concurso
     || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
-  const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso);
+  const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso,
+    mcPromptDeFora ? "questao" : "resumo");
   r.cards.slice(0, 40).forEach((c) => {
     const d = document.createElement("div");
     d.className = "mc-card";
@@ -2207,7 +2227,8 @@ async function matCartoesSalvar() {
   const reg0 = matResumos[matAtual.chave] || {};
   const concurso = reg0.concurso
     || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
-  const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso);
+  const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso,
+    mcPromptDeFora ? "questao" : "resumo");
   const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
     .replace(/\r?\n+/g, " ").trim();
   const linhas = novos.map((c) =>

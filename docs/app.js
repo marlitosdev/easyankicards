@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "9.08.0";
+const VERSAO = "9.09.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -255,7 +255,13 @@ const REG_PERIODOS = [0, 1, 7, 30];
 
 function regDentroDoPeriodo(r, dias) {
   if (!dias) return true;
-  const d = new Date(String(r.d) + "T" + String(r.h || "00:00:00"));
+  /* O REGISTRO GRAVA EM UTC (reg() usa toISOString), E O DIA DA PESSOA É
+   * LOCAL. Lendo "2026-08-23T00:31" como hora local, um evento das 21h31
+   * de sábado em Brasília virava domingo — e sumia do filtro "só de hoje"
+   * justamente no fim do dia, que é quando mais se olha o registro.
+   * O "Z" diz ao navegador que aquilo é UTC; depois disso, getDate()
+   * devolve o dia no relógio de quem está lendo. */
+  const d = new Date(String(r.d) + "T" + String(r.h || "00:00:00") + "Z");
   if (isNaN(d.getTime())) return true;
   if (dias === 1) {
     const h = new Date();
