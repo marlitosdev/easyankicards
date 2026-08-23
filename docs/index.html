@@ -79,7 +79,14 @@ header .hdr-cor input{position:absolute;inset:-4px;width:calc(100% + 8px);
 header .hdr-reset{width:34px;justify-content:center;padding:0;font-size:15px}
 header .hdr-ajuda{background:var(--azul);color:#fff;border-color:transparent}
 select,button,input,textarea{font:inherit;color:var(--texto)}
-input[type=text],textarea,select{background:var(--campo);border-color:var(--borda)}
+/* CAMPO NUMERICO TAMBEM E CAMPO.
+   Esta regra listava so [type=text]: todo input de numero ficava com o
+   fundo padrao do navegador (branco) enquanto a letra herdava o texto
+   claro do tema — branco no branco, invisivel. Era o que sumia com
+   "questoes feitas" e "acertos" na hora de registrar o estudo. */
+input[type=text],input[type=number],textarea,select{background:var(--campo);border-color:var(--borda)}
+input[type=number]{border:1px solid var(--borda);border-radius:8px;padding:8px 9px;
+  color:var(--texto)}
 .btn{color:#fff}
 .btn{border:1px solid rgba(0,0,0,.12);border-radius:9px;padding:9px 14px;cursor:pointer;
   font-family:inherit;font-weight:600;font-size:13px;letter-spacing:.2px;color:#fff;
@@ -1572,6 +1579,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .rs-tela{width:100%;height:auto;max-width:100%;background:#fdfdf7;border-radius:8px;
   display:block;touch-action:none;cursor:crosshair}
 .rs-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.qs-filtro-on{background:var(--roxo,#7c5cff);color:#fff;border-color:transparent}
 </style>
 </head>
 <body>
@@ -2249,13 +2257,21 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
        você fez numa sessão de videoaula é atrito puro. -->
   <div class="reg-lin-col" id="regQuestoesBloco" hidden>
     <span data-i18n="ed_reg_questoes"></span>
-    <div class="reg-q">
+    <div class="reg-q" id="regQContagem">
       <label><span data-i18n="ed_reg_q_feitas"></span>
         <input type="number" id="regQFeitas" min="0" max="999" step="1" placeholder="0"></label>
       <label><span data-i18n="ed_reg_q_certas"></span>
         <input type="number" id="regQCertas" min="0" max="999" step="1" placeholder="0"></label>
       <span class="reg-q-pct" id="regQPct"></span>
     </div>
+    <!-- Quem resolveu no papel raramente lembra "34 de 40"; lembra "uns 85%".
+         Exigir a contagem exata fazia o registro ser abandonado ou chutado. -->
+    <div class="reg-q" id="regQSoPctCx" hidden>
+      <label><span data-i18n="ed_reg_q_pct"></span>
+        <input type="number" id="regQPctCampo" min="0" max="100" step="1" placeholder="0"></label>
+      <span class="reg-q-pct" id="regQPctEco"></span>
+    </div>
+    <button type="button" class="btn-min" id="btnRegQSoPct"></button>
   </div>
 
   <div class="reg-lin-col">
@@ -2422,6 +2438,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       title="Esconde o gabarito das questões que já estão escritas neste resumo, para você responder antes de ver. O texto não é alterado."></button>
     <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
       title="Responde, em sequência, as questões deste tópico."></button>
+    <!-- MARCAR ONDE ESTAO AS QUESTOES.
+         Este botao existia no codigo e nao existia aqui: o "if ($(id))"
+         que liga o clique engoliu a falta em silencio, e o unico caminho
+         que sobrou foi gerar do resumo INTEIRO. Selecionar o trecho e
+         mandar so ele para o prompt e a diferenca entre 1.400 e 7.600
+         caracteres de contexto. -->
+    <button class="btn-min" id="btnMatVirarQuestao" hidden
+      title="Usa o trecho que você selecionou no resumo para montar o prompt de criação de questões. Sem seleção, usa o resumo inteiro."></button>
     <button class="btn-min mat-duv-conta" id="btnMatDicasLista" hidden
       title="Todas as dicas deste resumo, para ler, corrigir e formatar."></button>
     <button class="btn-min" id="btnMatDicas" hidden
@@ -2608,6 +2632,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <div class="dlg-rodape">
     <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
     <button class="btn-min" id="btnQsEmbaralhar" hidden></button>
+    <button class="btn-min" id="btnQsSoFalhas" hidden></button>
     <button class="btn btn-verde" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
     <button class="btn btn-cinza" id="btnQsCriarDaSessao" data-i18n="qs_criar_mais"

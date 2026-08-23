@@ -837,9 +837,62 @@ function qsResponder(escolha, gravar) {
   return { acertou, gabarito: q.gabarito, comentario: q.comentario, resp };
 }
 
+/* ============ SÓ AS QUE ERREI (ou ainda não respondi) ============
+ *
+ * Segunda passagem numa lista de 40 questões: 34 já foram e estão
+ * certas, e a pessoa quer voltar nas 6 que ficaram. Sem isto, é
+ * apertar "próxima" 34 vezes olhando gabarito que já sabe.
+ *
+ * O filtro NÃO mexe na fila. Recortar a lista pareceria mais simples,
+ * mas jogaria fora a ordem e o histórico da rodada — e desligar o
+ * filtro não teria como devolver o que foi cortado. Aqui ele só muda
+ * quais questões o "próxima" PULA, e por isso liga e desliga no meio
+ * da resolução sem perder nada. */
+function qsInteressaNoFiltro(q) {
+  if (!qsSessao || !q) return true;
+  const r = qsSessao.respondidas.filter((x) => x.id === q.id)[0];
+  return !r || !r.acertou;
+}
+
+function qsFiltroFalhas(ligado, gravar) {
+  if (!qsSessao) return false;
+  qsSessao.soFalhas = !!ligado;
+  /* LIGAR RECOMEÇA A VARREDURA DO TOPO.
+   * Continuar de onde estava parecia menos intrusivo, mas o botão diz
+   * "só as que errei (6)" e entregaria só as que estivessem ADIANTE do
+   * ponto atual — o número da tela prometendo uma coisa e o "próxima"
+   * fazendo outra. Do topo, a passagem cobre as seis. */
+  if (qsSessao.soFalhas) {
+    let i = 0;
+    while (i < qsSessao.fila.length && !qsInteressaNoFiltro(qsSessao.fila[i])) i++;
+    qsSessao.i = i;
+  }
+  qsSessaoGravar(gravar);
+  return qsSessao.soFalhas;
+}
+
+function qsFiltroFalhasLigado() { return !!(qsSessao && qsSessao.soFalhas); }
+
+/* quantas ainda interessam ao filtro, para o botão poder dizer o número */
+function qsQuantasFalhas() {
+  if (!qsSessao) return 0;
+  return qsSessao.fila.filter((q) => qsInteressaNoFiltro(q)).length;
+}
+
 function qsAndar(n, gravar) {
   if (!qsSessao) return null;
-  qsSessao.i = Math.max(0, Math.min(qsSessao.fila.length, qsSessao.i + (n || 1)));
+  const passo = n || 1;
+  let i = Math.max(0, Math.min(qsSessao.fila.length, qsSessao.i + passo));
+  if (qsSessao.soFalhas) {
+    const dir = passo < 0 ? -1 : 1;
+    while (i > 0 && i < qsSessao.fila.length
+           && !qsInteressaNoFiltro(qsSessao.fila[i])) i += dir;
+    /* andando para trás e não sobrou nada antes: fica onde dá, sem
+     * cair no índice 0 de uma questão que o filtro esconde */
+    if (i < 0) i = 0;
+    if (i > qsSessao.fila.length) i = qsSessao.fila.length;
+  }
+  qsSessao.i = i;
   qsSessaoGravar(gravar);
   return qsAtual();
 }

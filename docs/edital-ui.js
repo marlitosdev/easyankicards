@@ -297,7 +297,11 @@ function edLinhaTopico(i, semDisciplina) {
    * ver o que já tem resumo sem abrir nada. */
   const doc = document.createElement("button");
   doc.type = "button";
-  const ch = matChave(i.disciplina, i.nome);
+  /* chave VIVA: a lâmpada responde "existe material deste tópico?", não
+   * "existe exatamente nesta grafia?". Com a chave exata, um acento de
+   * diferença apagava os três indicadores e o material parecia sumido. */
+  const ch = (typeof matChaveViva === "function")
+    ? matChaveViva(i.disciplina, i.nome) : matChave(i.disciplina, i.nome);
   const temTxt = !!(matObter(ch) && String(matObter(ch).texto || "").trim());
   const nCard = matContarCartoes(ch);
   /* três estados, não dois: nada, resumo, e resumo COM cartões. Saber que o
@@ -354,7 +358,7 @@ function edLinhaTopico(i, semDisciplina) {
    * o material, entrar no painel e voltar. */
   const crt = document.createElement("button");
   crt.type = "button";
-  const nCards = matContarCartoes(matChave(i.disciplina, i.nome));
+  const nCards = matContarCartoes(ch);
   crt.className = "ed-crt" + (nCards ? " tem" : "");
   crt.textContent = "🃏";
   crt.title = t(nCards ? "ed_crt_ver" : "ed_crt_novo", { n: i.nome, c: nCards });
@@ -375,7 +379,7 @@ function edLinhaTopico(i, semDisciplina) {
   /* LEI SECA do tópico, o terceiro documento da linha */
   const lei = document.createElement("button");
   lei.type = "button";
-  const temLei = typeof leiTem === "function" && leiTem(matChave(i.disciplina, i.nome));
+  const temLei = typeof leiTem === "function" && leiTem(ch);
   lei.className = "ed-lei" + (temLei ? " tem" : "");
   lei.textContent = "⚖";
   lei.title = t(temLei ? "ed_lei_ver" : "ed_lei_novo", { n: i.nome });
@@ -390,18 +394,16 @@ function edLinhaTopico(i, semDisciplina) {
    * já oferece para resumo, cartões e lei seca. */
   const qst = document.createElement("button");
   qst.type = "button";
-  const nQ = typeof qsContarDoTopico === "function"
-    ? qsContarDoTopico(matChave(i.disciplina, i.nome)) : 0;
+  const nQ = typeof qsContarDoTopico === "function" ? qsContarDoTopico(ch) : 0;
   qst.className = "ed-qst" + (nQ ? " tem" : "");
   qst.textContent = "❓";
   qst.title = t(nQ ? "ed_qst_ver" : "ed_qst_novo", { n: nQ, tp: i.nome });
   qst.onclick = (ev) => {
     ev.stopPropagation();
-    if (typeof matAbrirEditor !== "function") return;
-    /* abre o resumo do tópico e vai direto às questões: com questões,
-     * responde; sem nenhuma, leva a criar — o mesmo caminho de dentro */
-    matAbrirEditor({ disciplina: i.disciplina, nome: i.nome }, "ler");
-    try { qsUiResponderDoTopico(); } catch (x) {}
+    /* direto para a resolução, sem abrir o resumo no meio do caminho —
+     * igual ao que foi feito com os cartões. Sem questões salvas, o
+     * mesmo botão convida a criar pela sistemática de sempre. */
+    try { qsUiResponderDireto(i.disciplina, i.nome); } catch (x) {}
   };
 
   li._itemChave = i.chave;
@@ -425,6 +427,11 @@ function edPorque(i, semDisciplina) {
     return disc + t("ed_pq_rev_vencida", { n: p.dias }) + " · " + fatia;
   if (p.tipo === "rev_pendente") return disc + t("ed_pq_rev_pendente") + " · " + fatia;
   if (p.tipo === "concluido") return disc + t("ed_pq_concluido");
+  /* SEM DADO, DIZER QUE NAO HA — nao imprimir a moldura vazia.
+   * Faltando "porque", isto saia como "peso , · ed_faixa_undefined ·
+   * disciplina vale ,% da prova": tres campos com cara de informacao e
+   * nenhum conteudo, o que e pior do que uma linha curta e verdadeira. */
+  if (p.peso == null || !i.faixa) return disc + t("ed_pq_sem_plano");
   return disc + t("ed_pq_peso", { peso: p.peso, faixa: t("ed_faixa_" + i.faixa) })
     + " · " + fatia;
 }
@@ -751,6 +758,9 @@ function abrirDiario() {
     if (x.q && x.q.feitas) {
       const pct = x.q.feitas ? Math.round((x.q.certas / x.q.feitas) * 100) : 0;
       pedacos.push(t("ed_diario_questoes", { c: x.q.certas, n: x.q.feitas, pct }));
+    } else if (x.q && x.q.pct != null) {
+      /* sem contagem: o diário diz isso em vez de fingir um "0 de 0" */
+      pedacos.push(t("ed_diario_questoes_pct", { pct: x.q.pct }));
     }
     if (x.hu && x.hu !== "media") pedacos.push(t("ed_humor_" + x.hu));
     if (x.p) pedacos.push(t("ed_diario_peso", { p: x.p }));
@@ -852,7 +862,35 @@ function regDeQuestoes(feitas, certas, minutos) {
   if (typeof regPintarPct === "function") regPintarPct();
 }
 
+/* O ITEM DE VERDADE, VINDO DO PLANO.
+ *
+ * Quem chega ao registro por fora da agenda — o fim de uma sessao de
+ * questoes, o resumo — so sabe disciplina e topico, e montava um item
+ * a mao, sem peso, sem faixa e sem "porque". Dai vinham duas coisas
+ * ruins e visiveis: o cabecalho do registro saia quebrado, e o diario
+ * gravava o estudo com peso nulo, estragando toda conta por peso
+ * depois. Procurar no plano e barato; inventar sai caro. */
+function edItemDoPlano(disciplina, nome) {
+  try {
+    const r = lerEdital($("editalTexto").value);
+    const plano = montarPlano(r, {
+      horas: Number($("edHoras").value) || r.cfg.horas,
+      prova: $("edProva").value, feitos: edProgresso });
+    const alvo = matChaveNormal(matChave(disciplina, nome));
+    return plano.itens.filter((x) => matChaveNormal(x.chave) === alvo)[0] || null;
+  } catch (e) { return null; }
+}
+
 function abrirRegistro(i) {
+  /* enriquece AQUI, num lugar so: qualquer porta de entrada nova ganha
+   * o mesmo tratamento sem precisar lembrar disto */
+  if (i && i.porque == null) {
+    const real = edItemDoPlano(i.disciplina, i.nome);
+    if (real) i = Object.assign({}, real, {
+      minutos: i.minutos != null ? i.minutos : real.minutos,
+      feito: i.feito != null ? i.feito : real.feito,
+    });
+  }
   regAtual = i;
   regFormas = i.feito ? ["revisao"] : ["leitura"];
   regHumor = "media";
@@ -860,9 +898,10 @@ function abrirRegistro(i) {
   $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
   $("regMinutos").value = i.minutos;
   $("regMinSlider").value = Math.min(240, i.minutos);
-  ["regQFeitas", "regQCertas", "regOnde", "regObs"].forEach((id) => {
+  ["regQFeitas", "regQCertas", "regQPctCampo", "regOnde", "regObs"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
+  regQSoPct = false;
   if ($("regObs")) $("regObs").hidden = true;
   regPintarAtalhos();
   regPintarQuestoes();
@@ -906,14 +945,58 @@ function abrirRegistro(i) {
 }
 
 /* Os campos de questão só existem quando "questões" está marcado. */
+/* PERCENTUAL SOZINHO É UM DADO LEGÍTIMO.
+ * "34 de 40" ninguém lembra depois de fechar o caderno; "uns 85%" todo
+ * mundo lembra. Sem esta saída, o campo ficava vazio (perdendo o dado)
+ * ou era chutado com números inventados — que depois entram nas contas
+ * como se tivessem sido contados. O diário guarda o percentual e diz
+ * que não houve contagem. */
+let regQSoPct = false;
+
 function regPintarQuestoes() {
   const bl = $("regQuestoesBloco");
   if (!bl) return;
   bl.hidden = regFormas.indexOf("questoes") < 0;
+  const par = $("regQSoPctCx");
+  const btn = $("btnRegQSoPct");
+  /* dois blocos irmãos, cada um com o seu id: esconder pelo parentNode do
+   * campo parecia mais curto, mas amarra o comportamento à forma do HTML
+   * e não dá para o teste afirmar nada sobre ele. */
+  if ($("regQContagem")) $("regQContagem").hidden = regQSoPct;
+  if (par) par.hidden = !regQSoPct;
+  if (btn) {
+    btn.textContent = t(regQSoPct ? "ed_reg_conta_exata" : "ed_reg_so_pct");
+    btn.title = t(regQSoPct ? "ed_reg_conta_ajuda" : "ed_reg_so_pct_ajuda");
+  }
   regPintarPct();
 }
 
+/* o que vai para o diário: contagem, percentual puro, ou nada */
+function regQuestoesDoFormulario() {
+  if (regQSoPct) {
+    const v = Number(($("regQPctCampo") || {}).value);
+    if (!isFinite(v) || String(($("regQPctCampo") || {}).value).trim() === "") return null;
+    const pct = Math.max(0, Math.min(100, Math.round(v)));
+    return { pct, semContagem: true };
+  }
+  const qf = Number(($("regQFeitas") || {}).value) || 0;
+  const qc = Math.min(qf, Number(($("regQCertas") || {}).value) || 0);
+  return qf ? { feitas: qf, certas: qc } : null;
+}
+
 function regPintarPct() {
+  if (regQSoPct) {
+    const eco = $("regQPctEco");
+    if (eco) {
+      const v = Number(($("regQPctCampo") || {}).value);
+      const vazio = String(($("regQPctCampo") || {}).value).trim() === "";
+      const pct = vazio ? null : Math.max(0, Math.min(100, Math.round(v)));
+      eco.textContent = pct == null ? "" : pct + "%";
+      eco.className = "reg-q-pct" + (pct == null ? ""
+        : (pct < 60 ? " baixo" : (pct < 80 ? " medio" : "")));
+    }
+    return;
+  }
   const el = $("regQPct");
   if (!el) return;
   const f = Number(($("regQFeitas") || {}).value) || 0;
@@ -966,8 +1049,7 @@ function confirmarRegistro(estado) {
    * o dado é salvo em seguida (sem redesenhar), e o redesenho fica para o
    * fim da animação. Salvar nunca depende do efeito. */
   const linhas = edMarcarLinhasSaindo(item, estado);
-  const qf = Number(($("regQFeitas") || {}).value) || 0;
-  const qc = Math.min(qf, Number(($("regQCertas") || {}).value) || 0);
+  const qDados = regQuestoesDoFormulario();
   edMarcar(item, estado, {
     minutos: Math.max(1, Number($("regMinutos").value) || item.minutos),
     formas: regFormas.slice(),
@@ -975,7 +1057,7 @@ function confirmarRegistro(estado) {
     /* só grava questões quando houve questões: campo vazio não vira zero,
      * porque "0 de 0" e "não fiz questões" são coisas diferentes na conta
      * de acerto depois */
-    questoes: qf ? { feitas: qf, certas: qc } : null,
+    questoes: qDados,
     onde: String(($("regOnde") || {}).value || "").trim() || null,
     obs: String(($("regObs") || {}).value || "").trim() || null,
   }, linhas.length > 0);
@@ -1857,9 +1939,21 @@ function edIniciar() {
   });
   $("edDias").onchange = edRender;
   $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
-  ["regQFeitas", "regQCertas"].forEach((id) => {
+  ["regQFeitas", "regQCertas", "regQPctCampo"].forEach((id) => {
     if ($(id)) $(id).addEventListener("input", regPintarPct);
   });
+  if ($("btnRegQSoPct")) $("btnRegQSoPct").onclick = () => {
+    /* trocar de modo NÃO joga fora o que já estava preenchido: quem veio
+     * de uma sessão de questões chega com a contagem certa e pode querer
+     * voltar atrás sem redigitar */
+    regQSoPct = !regQSoPct;
+    if (regQSoPct && $("regQPctCampo") && !String($("regQPctCampo").value).trim()) {
+      const f = Number(($("regQFeitas") || {}).value) || 0;
+      const c = Number(($("regQCertas") || {}).value) || 0;
+      if (f) $("regQPctCampo").value = String(Math.round((Math.min(c, f) / f) * 100));
+    }
+    regPintarQuestoes();
+  };
   if ($("btnRegObs")) $("btnRegObs").onclick = () => {
     const t2 = $("regObs");
     t2.hidden = !t2.hidden;

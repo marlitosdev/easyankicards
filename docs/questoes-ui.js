@@ -506,6 +506,15 @@ function qsUiPintarSessao() {
     $("btnQsProxima").hidden = true;
     if ($("btnQsPular")) $("btnQsPular").hidden = true;
     if ($("btnQsEmbaralhar")) $("btnQsEmbaralhar").hidden = true;
+    if ($("btnQsSoFalhas")) {
+      /* no fim da rodada o filtro continua à mão: é dali que se volta
+       * para as erradas sem recomeçar tudo */
+      const lig = qsFiltroFalhasLigado();
+      $("btnQsSoFalhas").hidden = !qsQuantasFalhas() && !lig;
+      $("btnQsSoFalhas").textContent =
+        t(lig ? "qs_so_falhas_on" : "qs_so_falhas", { n: qsQuantasFalhas() });
+      $("btnQsSoFalhas").className = "btn-min" + (lig ? " qs-filtro-on" : "");
+    }
     /* acabou a rodada: o papel de lado nao tem mais a que se referir */
     try { rsPrepararPara(null); } catch (e) {}
     return;
@@ -620,6 +629,18 @@ function qsUiPintarSessao() {
   if ($("btnQsPular")) {
     $("btnQsPular").hidden = !!jaFoi;
     $("btnQsPular").title = t("qs_pular_ajuda");
+  }
+  /* SÓ AS QUE ERREI — liga e desliga no meio da rodada.
+   * Aparece a partir do momento em que existe o que filtrar; antes da
+   * primeira resposta ele não teria o que fazer. */
+  if ($("btnQsSoFalhas")) {
+    const b = $("btnQsSoFalhas");
+    const lig = qsFiltroFalhasLigado();
+    const nf = qsQuantasFalhas();
+    b.hidden = !qsPlacar().feitas;
+    b.textContent = t(lig ? "qs_so_falhas_on" : "qs_so_falhas", { n: nf });
+    b.title = t("qs_so_falhas_ajuda");
+    b.className = "btn-min" + (lig ? " qs-filtro-on" : "");
   }
   if ($("btnQsEmbaralhar")) {
     const faltam = qsPendentes().length;
@@ -778,6 +799,42 @@ function qsUiPintarBotaoResumo() {
   b.textContent = n ? t("qs_do_topico_n", { n }) : t("qs_do_topico_zero");
   b.disabled = false;
   b.title = n ? t("qs_do_topico_ajuda", { n }) : t("qs_do_topico_zero_ajuda");
+
+  /* O BOTAO TEM DE DIZER DE QUAL TEXTO VAI SAIR A QUESTAO.
+   * "virar em questão" sem mais nada nao deixa ver se vai usar o trecho
+   * marcado ou o resumo todo — e a pessoa so descobre lendo o prompt
+   * gerado. Com o tamanho no rotulo, da para conferir antes. */
+  const v = $("btnMatVirarQuestao");
+  if (v) {
+    v.hidden = false;
+    const sel = qsUiSelecaoViva();
+    v.textContent = sel
+      ? t("qs_virar_sel", { n: sel.length })
+      : t("qs_virar_tudo");
+    v.title = t(sel ? "qs_virar_sel_ajuda" : "qs_virar_tudo_ajuda");
+    v.className = "btn-min" + (sel ? " btn-min-ok" : "");
+  }
+}
+
+/* O trecho marcado AGORA, se houver. Lê a seleção viva da caixa antes de
+ * olhar a guardada: entre selecionar e clicar não pode haver espaço para
+ * o app usar um trecho velho. */
+function qsUiSelecaoViva() {
+  try { matLembrarSelecao(); } catch (e) {}
+  const s = String(typeof matSelGuardada === "string" ? matSelGuardada : "").trim();
+  return s || null;
+}
+
+/* RESPONDER SEM PASSAR PELO RESUMO.
+ * O atalho da agenda abria o resumo em modo de leitura e só então as
+ * questões — o mesmo desvio que os cartões tinham. Quem clica em "❓" na
+ * agenda quer responder, não ler o texto. Sem questão nenhuma no tópico,
+ * o botão não vira beco: leva à criação de sempre, já apontada para
+ * este tópico e com o texto do resumo como matéria-prima. */
+function qsUiResponderDireto(disciplina, topico) {
+  if (typeof mcApontarTopico !== "function") return;
+  mcApontarTopico(disciplina, topico);
+  qsUiResponderDoTopico();
 }
 
 function qsUiResponderDoTopico() {
@@ -860,6 +917,15 @@ function qsUiIniciar() {
       matReg("questao", "questão pulada",
              q ? String(q.enunciado).slice(0, 60) : "");
     });
+  }
+  if ($("btnQsSoFalhas")) {
+    $("btnQsSoFalhas").onclick = () => {
+      const lig = qsFiltroFalhas(!qsFiltroFalhasLigado());
+      qsUiPintarSessao();
+      if (lig && !qsAtual() && !qsQuantasFalhas()) uiAlert(t("qs_so_falhas_fim"));
+      matReg("questao", "filtro de erradas " + (lig ? "ligado" : "desligado"),
+             qsQuantasFalhas() + " interessam");
+    };
   }
   if ($("btnQsEmbaralhar")) {
     $("btnQsEmbaralhar").onclick = () => {

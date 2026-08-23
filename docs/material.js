@@ -33,6 +33,33 @@ function matChave(disciplina, topico) {
   return (disciplina + "›" + topico).toLowerCase();
 }
 
+/* A CHAVE QUE REALMENTE TEM O MATERIAL.
+ *
+ * matChave é exata: um acento de diferença entre o nome no edital e o
+ * nome com que o resumo foi salvo produz duas gavetas, e a agenda passa
+ * a procurar na gaveta vazia. O sintoma é o pior possível — a lâmpada
+ * de "tem resumo/cartão" apaga, e o material parece perdido embora
+ * esteja inteiro do lado.
+ *
+ * matRepararChaves conserta isso no arranque, mas só alcança registros
+ * que guardaram disciplina e tópico. Aqui a pergunta é outra e mais
+ * honesta: "existe material PARA ESTE TÓPICO?" — comparando as chaves
+ * sem acento, que é como uma pessoa leria as duas. Devolve a chave
+ * exata quando ela existe, senão a variante encontrada, senão a
+ * calculada (para quem vai CRIAR). */
+function matChaveNormal(ch) {
+  return String(ch || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/\s+/g, " ").trim();
+}
+function matChaveViva(disciplina, topico) {
+  const exata = matChave(disciplina, topico);
+  if (matResumos[exata]) return exata;
+  const alvo = matChaveNormal(exata);
+  const achada = Object.keys(matResumos)
+    .filter((k) => matChaveNormal(k) === alvo)[0];
+  return achada || exata;
+}
+
 /* CONSERTO DE CHAVES ÓRFÃS.
  * Até a v8.78 os cartões salvos pelo fluxo "Salvar no material" iam para
  * uma chave normalizada de outro jeito (sem acento, sem pontuação). Eram
@@ -2481,7 +2508,10 @@ function mcImportarArquivo(arq) {
  * Consultar os cartões não deveria obrigar a abrir o texto — são duas
  * coisas diferentes, e quem quer revisar cartão não quer ler resumo. */
 function mcApontarTopico(disciplina, topico) {
-  matAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
+  /* pela chave VIVA: apontar para a grafia exata quando o material está
+   * guardado numa variante levava a um tópico vazio, com os cartões e o
+   * resumo intactos numa gaveta ao lado. */
+  matAtual = { disciplina, topico, chave: matChaveViva(disciplina, topico) };
   return matAtual;
 }
 
