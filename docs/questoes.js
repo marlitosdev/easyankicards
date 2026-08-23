@@ -684,6 +684,116 @@ function qsDisciplinas() {
  * teste em leitura — que é exatamente o que a pessoa já fez no resumo.
  * ------------------------------------------------------------------- */
 let qsSessao = null;
+const QS_SESSAO_LOJA = "eac_qs_sessao";
+
+/* =====================================================================
+ * A SESSÃO SOBREVIVE A FECHAR A JANELA
+ *
+ * As TENTATIVAS sempre ficaram guardadas em cada questão — o histórico de
+ * acertos nunca se perdeu. O que sumia era a sessão: onde você parou e
+ * quais já tinha feito nesta rodada. Fechar e reabrir jogava de volta na
+ * primeira, com 31 questões pela frente de novo, e as já respondidas
+ * voltavam a aparecer.
+ *
+ * Guardar só a ORDEM DOS IDS, não as questões: se uma for apagada ou
+ * corrigida no meio do caminho, quem manda é o banco, e a fila se refaz
+ * com o que existe agora.
+ * ===================================================================== */
+function qsSessaoGravar(gravar) {
+  if (!qsSessao) return;
+  const dado = {
+    escopo: qsSessao.escopo || "",
+    ids: qsSessao.fila.map((x) => x.id),
+    i: qsSessao.i,
+    respondidas: qsSessao.respondidas,
+    comecou: qsSessao.comecou,
+    tocado: new Date().toISOString(),
+  };
+  const txt = JSON.stringify(dado);
+  if (gravar) { gravar(QS_SESSAO_LOJA, txt); return; }
+  try { localStorage.setItem(QS_SESSAO_LOJA, txt); } catch (e) {}
+}
+
+function qsSessaoLer(lerLoja) {
+  let cru = null;
+  if (lerLoja) cru = lerLoja(QS_SESSAO_LOJA);
+  else { try { cru = localStorage.getItem(QS_SESSAO_LOJA); } catch (e) { cru = null; } }
+  try {
+    const v = JSON.parse(cru || "null");
+    return v && Array.isArray(v.ids) ? v : null;
+  } catch (e) { return null; }
+}
+
+function qsSessaoApagar(gravar) {
+  if (gravar) { gravar(QS_SESSAO_LOJA, ""); return; }
+  try { localStorage.removeItem(QS_SESSAO_LOJA); } catch (e) {}
+}
+
+/* Há sessão inacabada para este escopo? Devolve o resumo dela, ou null. */
+function qsSessaoRetomavel(escopo, lerLoja) {
+  const s = qsSessaoLer(lerLoja);
+  if (!s || (escopo && s.escopo !== escopo)) return null;
+  const vivas = s.ids.filter((id) => qsBanco.some((x) => x.id === id));
+  if (!vivas.length) return null;
+  const feitas = (s.respondidas || []).filter((r) => vivas.indexOf(r.id) >= 0);
+  if (feitas.length >= vivas.length) return null;     /* já terminou */
+  return { total: vivas.length, feitas: feitas.length,
+           certas: feitas.filter((r) => r.acertou).length,
+           comecou: s.comecou, escopo: s.escopo };
+}
+
+function qsSessaoRetomar(escopo, lerLoja, gravar) {
+  const s = qsSessaoLer(lerLoja);
+  if (!s || (escopo && s.escopo !== escopo)) return null;
+  const fila = s.ids.map((id) => qsBanco.filter((x) => x.id === id)[0])
+    .filter(Boolean);
+  if (!fila.length) return null;
+  const respondidas = (s.respondidas || [])
+    .filter((r) => fila.some((x) => x.id === r.id));
+  qsSessao = { fila, i: Math.max(0, Math.min(fila.length, s.i || 0)),
+               respondidas, comecou: s.comecou || new Date().toISOString(),
+               escopo: s.escopo || escopo || "" };
+  /* cai na primeira ainda não respondida: retomar é continuar de onde
+   * parou, não voltar para uma que já foi feita */
+  const feito = {};
+  respondidas.forEach((r) => { feito[r.id] = 1; });
+  const proxima = fila.findIndex((x) => !feito[x.id]);
+  if (proxima >= 0) qsSessao.i = proxima;
+  qsSessaoGravar(gravar);
+  return qsSessao;
+}
+
+/* Acrescenta ao FIM as que ainda não estão na fila. É o que permite criar
+ * questões novas no meio do caminho sem recomeçar. */
+function qsSessaoAcrescentar(lista, gravar) {
+  if (!qsSessao) return 0;
+  const tem = {};
+  qsSessao.fila.forEach((x) => { tem[x.id] = 1; });
+  const novas = (lista || []).filter((x) => x && !tem[x.id]);
+  novas.forEach((x) => qsSessao.fila.push(x));
+  if (novas.length) qsSessaoGravar(gravar);
+  return novas.length;
+}
+
+/* Embaralha SÓ o que ainda não foi respondido, e a partir da posição
+ * atual: mexer no que já passou mudaria o histórico da rodada. */
+function qsEmbaralharRestantes(sorte, gravar) {
+  if (!qsSessao) return 0;
+  const feito = {};
+  qsSessao.respondidas.forEach((r) => { feito[r.id] = 1; });
+  const ini = qsSessao.i;
+  const cabeca = qsSessao.fila.slice(0, ini);
+  const resto = qsSessao.fila.slice(ini);
+  const pendentes = resto.filter((x) => !feito[x.id]);
+  const jaFeitas = resto.filter((x) => feito[x.id]);
+  for (let i = pendentes.length - 1; i > 0; i--) {
+    const j = Math.floor((sorte ? sorte() : Math.random()) * (i + 1));
+    const tmp = pendentes[i]; pendentes[i] = pendentes[j]; pendentes[j] = tmp;
+  }
+  qsSessao.fila = cabeca.concat(pendentes, jaFeitas);
+  qsSessaoGravar(gravar);
+  return pendentes.length;
+}
 
 function qsSessaoIniciar(lista, opcoes) {
   const o = opcoes || {};
@@ -694,7 +804,9 @@ function qsSessaoIniciar(lista, opcoes) {
       const tmp = fila[i]; fila[i] = fila[j]; fila[j] = tmp;
     }
   }
-  qsSessao = { fila, i: 0, respondidas: [], comecou: new Date().toISOString() };
+  qsSessao = { fila, i: 0, respondidas: [], comecou: new Date().toISOString(),
+               escopo: o.escopo || "" };
+  qsSessaoGravar(o.gravar);
   return qsSessao;
 }
 
@@ -721,13 +833,32 @@ function qsResponder(escolha, gravar) {
   q.tentativas.push({ q: new Date().toISOString(), resp, acertou });
   qsSessao.respondidas.push({ id: q.id, resp, acertou });
   qsSalvar(gravar);
+  qsSessaoGravar(gravar);
   return { acertou, gabarito: q.gabarito, comentario: q.comentario, resp };
 }
 
-function qsAndar(n) {
+function qsAndar(n, gravar) {
   if (!qsSessao) return null;
   qsSessao.i = Math.max(0, Math.min(qsSessao.fila.length, qsSessao.i + (n || 1)));
+  qsSessaoGravar(gravar);
   return qsAtual();
+}
+
+/* PULAR: anda sem responder. A questão continua pendente e volta a
+ * aparecer numa próxima passagem — pular não é errar. */
+function qsPular(gravar) {
+  if (!qsSessao) return null;
+  const q = qsAtual();
+  if (q) qsSessao.pulou = (qsSessao.pulou || []).concat([q.id]);
+  return qsAndar(1, gravar);
+}
+
+/* quantas ainda faltam responder nesta sessão */
+function qsPendentes() {
+  if (!qsSessao) return [];
+  const feito = {};
+  qsSessao.respondidas.forEach((r) => { feito[r.id] = 1; });
+  return qsSessao.fila.filter((x) => !feito[x.id]);
 }
 
 function qsPlacar() {
@@ -756,6 +887,9 @@ if (typeof module !== "undefined" && module.exports) {
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
     qsSemelhante, qsParecenca, qsIgual, qsAbrirCampos,
+    qsSessaoGravar, qsSessaoLer, qsSessaoApagar, qsSessaoRetomavel,
+    qsSessaoRetomar, qsSessaoAcrescentar, qsEmbaralharRestantes,
+    qsPular, qsPendentes,
     qsSemMarcacao,
   };
 }

@@ -26,7 +26,10 @@ const BK_CHAVES = {
   /* as questões têm arquivo próprio (não vivem na gaveta do tópico), então
    * precisam entrar no backup por conta: sem esta linha, salvar e carregar
    * a base apagava o banco inteiro em silêncio. */
-  material: ["eac_resumos", "eac_questoes"],
+  /* a rodada em andamento também é trabalho: sem ela no backup, trocar de
+   * base joga fora "12 de 31 respondidas" — que é justamente o que a
+   * pessoa não quer refazer. */
+  material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova"],
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
                  "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",

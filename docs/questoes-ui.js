@@ -359,14 +359,43 @@ function qsUiDesfazer() {
 /* ---------------------------------------------------------------------
  * RESPONDER — o gabarito só depois da escolha
  * ------------------------------------------------------------------- */
-function qsUiResponderAbrir(lista, deOnde) {
+/* RETOMAR OU RECOMEÇAR.
+ * Fechar a janela deixava a rodada para trás: reabrir mostrava as 31 de
+ * novo, inclusive as já respondidas. Agora a sessão é guardada, e ao
+ * reabrir o MESMO escopo a pessoa escolhe — nunca se decide por ela, que
+ * é o que faria perder o que já tinha sido feito. */
+async function qsUiResponderAbrir(lista, deOnde, escopo) {
   if (!lista || !lista.length) { uiAlert(t("qs_nenhuma_para_responder")); return; }
   qsUiVoltarPara = deOnde || null;
-  qsSessaoIniciar(lista, { embaralhar: true });
+  const esc = escopo || ("de:" + (deOnde || "aba"));
+
+  const retomavel = qsSessaoRetomavel(esc);
+  let retomou = false;
+  if (retomavel) {
+    const r = await uiEscolha(t("qs_retomar_perg", {
+      f: retomavel.feitas, n: retomavel.total,
+      c: retomavel.certas,
+      pct: retomavel.feitas ? Math.round((retomavel.certas / retomavel.feitas) * 100) : 0,
+    }), [
+      { valor: "continuar", rotulo: t("qs_retomar_sim") },
+      { valor: "recomecar", rotulo: t("qs_retomar_nao") },
+      { valor: "sair", rotulo: t("cancel_btn") },
+    ]);
+    if (r === "sair" || r === null) return;
+    if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
+  }
+  if (!retomou) qsSessaoIniciar(lista, { embaralhar: true, escopo: esc });
+  else {
+    /* questões criadas depois que a rodada começou entram no fim, em vez
+     * de obrigar a recomeçar para incluí-las */
+    const n = qsSessaoAcrescentar(lista);
+    if (n) matReg("questao", "questões novas somadas à sessão", n + " questões");
+  }
   qsUiPintarSessao();
   abrirModal("dlgQsResponder");
-  matReg("questao", "sessão de questões iniciada",
-         lista.length + " questões · " + (deOnde || "aba"));
+  matReg("questao", retomou ? "sessão de questões retomada" : "sessão de questões iniciada",
+         qsPlacar().total + " questões · " + (deOnde || "aba")
+         + (retomou ? " · " + qsPlacar().feitas + " já feitas" : ""));
 }
 
 function qsUiPintarSessao() {
@@ -452,6 +481,9 @@ function qsUiPintarSessao() {
     /* REGISTRAR O ESTUDO. Resolver questão é estudar; sem isto, a hora
      * gasta aqui não entrava no diário e o progresso do edital ficava
      * menor do que o real. */
+    /* rodada encerrada: a sessão guardada deixa de valer, senão a próxima
+     * abertura ofereceria "continuar" uma coisa que já acabou */
+    if (!qsPendentes().length) { try { qsSessaoApagar(); } catch (e) {} }
     if (p.feitas) {
       const br = document.createElement("button");
       br.type = "button";
@@ -462,6 +494,8 @@ function qsUiPintarSessao() {
       corpo.append(br);
     }
     $("btnQsProxima").hidden = true;
+    if ($("btnQsPular")) $("btnQsPular").hidden = true;
+    if ($("btnQsEmbaralhar")) $("btnQsEmbaralhar").hidden = true;
     return;
   }
   const de = document.createElement("div");
@@ -472,6 +506,26 @@ function qsUiPintarSessao() {
   en.className = "qs-enunciado";
   en.textContent = q.enunciado;
   corpo.append(de, en);
+
+  /* HISTÓRICO DESTA QUESTÃO, ANTES DE RESPONDER — SEM ENTREGAR O GABARITO.
+   * Saber que já se errou isto duas vezes muda a atenção com que se lê.
+   * Mas só o PLACAR aparece: dizer QUAL letra foi marcada da última vez
+   * seria, numa questão de certo/errado, contar a resposta. */
+  const ts = q.tentativas || [];
+  if (ts.length) {
+    const hs = document.createElement("div");
+    const certas = ts.filter((x) => x.acertou).length;
+    hs.className = "qs-hist" + (certas === ts.length ? " ok"
+      : (certas === 0 ? " nao" : ""));
+    const ult = new Date(ts[ts.length - 1].q);
+    const dias = Math.floor((Date.now() - ult.getTime()) / 86400000);
+    hs.textContent = t("qs_hist_desta", {
+      n: ts.length, c: certas,
+      quando: dias <= 0 ? t("qs_hist_hoje") : t("qs_hist_dias", { d: dias }),
+    });
+    hs.title = t("qs_hist_ajuda");
+    corpo.append(hs);
+  }
 
   const jaFoi = qsJaRespondida();
   const opcoes = q.tipo === "ce"
@@ -543,6 +597,19 @@ function qsUiPintarSessao() {
   $("btnQsProxima").hidden = false;
   $("btnQsProxima").disabled = !jaFoi;
   $("btnQsProxima").textContent = t("qs_proxima");
+  /* PULAR não é errar: a questão fica pendente e volta depois.
+   * EMBARALHAR mexe só no que falta — reordenar o que já passou mudaria
+   * o histórico da rodada. */
+  if ($("btnQsPular")) {
+    $("btnQsPular").hidden = !!jaFoi;
+    $("btnQsPular").title = t("qs_pular_ajuda");
+  }
+  if ($("btnQsEmbaralhar")) {
+    const faltam = qsPendentes().length;
+    $("btnQsEmbaralhar").hidden = faltam < 2;
+    $("btnQsEmbaralhar").textContent = t("qs_embaralhar", { n: faltam });
+    $("btnQsEmbaralhar").title = t("qs_embaralhar_ajuda");
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -653,7 +720,7 @@ function qsUiRender() {
     const bResp = document.createElement("button");
     bResp.type = "button"; bResp.className = "btn-min btn-min-ok";
     bResp.textContent = t("qs_responder_esta");
-    bResp.onclick = () => qsUiResponderAbrir([q], "aba");
+    bResp.onclick = () => qsUiResponderAbrir([q], "aba", "uma:" + q.id);
     const bDel = document.createElement("button");
     bDel.type = "button"; bDel.className = "btn-min btn-min-perigo";
     bDel.textContent = t("qs_apagar");
@@ -702,7 +769,7 @@ function qsUiResponderDoTopico() {
   /* sem questão neste tópico, o botão não pode ser um beco: leva a criar,
    * que é o que a pessoa faria em seguida de qualquer jeito */
   if (!lista.length) { qsUiVirarSelecao(); return; }
-  qsUiResponderAbrir(lista, "resumo");
+  qsUiResponderAbrir(lista, "resumo", "topico:" + matAtual.chave);
 }
 
 /* "virar em questão": pega o que está selecionado no resumo — ou o resumo
@@ -758,6 +825,22 @@ function qsUiIniciar() {
     };
   }
   if ($("btnQsProxima")) $("btnQsProxima").onclick = () => { qsAndar(1); qsUiPintarSessao(); };
+  if ($("btnQsPular")) {
+    $("btnQsPular").onclick = () => {
+      const q = qsAtual();
+      qsPular();
+      qsUiPintarSessao();
+      matReg("questao", "questão pulada",
+             q ? String(q.enunciado).slice(0, 60) : "");
+    };
+  }
+  if ($("btnQsEmbaralhar")) {
+    $("btnQsEmbaralhar").onclick = () => {
+      const n = qsEmbaralharRestantes();
+      qsUiPintarSessao();
+      matReg("questao", "questões restantes embaralhadas", n + " pendentes");
+    };
+  }
   if ($("btnQsSessFechar")) {
     $("btnQsSessFechar").onclick = () => {
       $("dlgQsResponder").close();
@@ -766,7 +849,8 @@ function qsUiIniciar() {
     };
   }
   if ($("btnQsResponderTudo")) {
-    $("btnQsResponderTudo").onclick = () => qsUiResponderAbrir(qsFiltrar(qsUiFiltro), "aba");
+    $("btnQsResponderTudo").onclick = () => qsUiResponderAbrir(qsFiltrar(qsUiFiltro),
+      "aba", "aba:" + JSON.stringify(qsUiFiltro));
   }
   ["qsFDisc", "qsFBanca", "qsFTipo", "qsFIneditas", "qsFErradas"].forEach((id) => {
     if ($(id)) $(id).onchange = () => qsUiLerFiltros();

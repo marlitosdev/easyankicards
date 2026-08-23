@@ -734,6 +734,10 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-conf-cm{font-size:11px;color:var(--sutil);font-style:italic;margin-top:3px}
 .qs-sess{min-height:150px}
 .qs-de{font-size:10px;letter-spacing:.05em;color:var(--sutil);margin-bottom:6px}
+.qs-hist{font-size:11px;color:var(--sutil);margin:-6px 0 12px;
+  border-left:2px solid var(--borda);padding-left:8px}
+.qs-hist.ok{color:#2f9e6e;border-left-color:#2f9e6e}
+.qs-hist.nao{color:#e06c6c;border-left-color:#e06c6c}
 .qs-enunciado{font-size:15px;line-height:1.55;margin-bottom:12px}
 .qs-opcoes{display:flex;flex-direction:column;gap:6px}
 .qs-op{text-align:left;padding:9px 12px;border-radius:8px;border:1px solid var(--borda);
@@ -2562,6 +2566,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <p class="nota" id="qsSessPlacar"></p>
   <div id="qsSessCorpo" class="qs-sess"></div>
   <div class="dlg-rodape">
+    <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
+    <button class="btn-min" id="btnQsEmbaralhar" hidden></button>
     <button class="btn btn-verde" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
     <button class="btn btn-cinza" id="btnQsCriarDaSessao" data-i18n="qs_criar_mais"
