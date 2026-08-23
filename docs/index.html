@@ -829,9 +829,6 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .duv-dica{border-left:3px solid #f5a524;background:rgba(245,165,36,.08);
   padding:7px 10px;border-radius:0 8px 8px 0;margin-top:6px;font-size:11px;
   color:var(--texto);line-height:1.5;white-space:pre-wrap}
-.marca-lei{background:rgba(16,185,129,.22);border-color:rgba(16,185,129,.6)}
-.marca-prova{background:rgba(168,85,247,.22);border-color:rgba(168,85,247,.6)}
-.marca-peg{background:rgba(236,72,153,.22);border-color:rgba(236,72,153,.6)}
 /* saída do item da agenda: encolhe, esvanece e diz para onde foi */
 @keyframes ed-sai{
   0%{opacity:1;transform:translateX(0)}
@@ -925,6 +922,14 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .marca-d{background:rgba(245,158,11,.32)}
 .marca-i{background:rgba(226,75,74,.32)}
 .marca-q{background:rgba(59,130,246,.32)}
+/* ORDEM IMPORTA MAIS QUE ESPECIFICIDADE AQUI.
+   Estas tres estavam ANTES de ".marca{all:unset}" — e "all:unset" apaga o
+   fundo. Como a especificidade e a mesma, quem vem depois vence: lei,
+   prova e pegadinha ficavam sem cor nenhuma na barra, enquanto destaque,
+   importante e duvida (declaradas depois) mantinham a delas. */
+.marca-lei{background:rgba(16,185,129,.30)}
+.marca-prova{background:rgba(168,85,247,.34)}
+.marca-peg{background:rgba(236,72,153,.32)}
 .mat-sep{width:1px;height:16px;background:var(--borda);margin:0 4px}
 .mat-estado{margin-left:auto;font-size:10.5px;color:#22c55e;font-weight:700}
 dialog.mat-amplo{max-width:96vw;width:96vw}
@@ -1580,6 +1585,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   display:block;touch-action:none;cursor:crosshair}
 .rs-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .qs-filtro-on{background:var(--roxo,#7c5cff);color:#fff;border-color:transparent}
+.mat-conta-prova{border-color:rgba(168,85,247,.7);color:#c084fc}
+.mat-conta-peg{border-color:rgba(236,72,153,.7);color:#f472b6}
+.mk-edit{width:100%;box-sizing:border-box;min-height:70px;font-size:12px;margin-top:6px}
+.mat-leitura mark{cursor:pointer}
 </style>
 </head>
 <body>
@@ -2444,13 +2453,22 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
          que sobrou foi gerar do resumo INTEIRO. Selecionar o trecho e
          mandar so ele para o prompt e a diferenca entre 1.400 e 7.600
          caracteres de contexto. -->
-    <button class="btn-min" id="btnMatVirarQuestao" hidden
-      title="Usa o trecho que você selecionou no resumo para montar o prompt de criação de questões. Sem seleção, usa o resumo inteiro."></button>
+    <button class="btn-min" id="btnMatQstTrecho" hidden
+      title="Monta o prompt SÓ com o trecho que você selecionou. Fica apagado enquanto não houver seleção."></button>
+    <button class="btn-min" id="btnMatQstResumo" hidden
+      title="Monta o prompt com o resumo inteiro deste tópico."></button>
+    <button class="btn-min mat-conta-prova" id="btnMatProvaLista" hidden
+      title="Tudo que você marcou como 'caiu na prova' neste resumo: ver no texto, editar ou tirar a marca."></button>
+    <button class="btn-min mat-conta-peg" id="btnMatPegLista" hidden
+      title="Tudo que você marcou como 'pegadinha' neste resumo: ver no texto, editar ou tirar a marca."></button>
     <button class="btn-min mat-duv-conta" id="btnMatDicasLista" hidden
       title="Todas as dicas deste resumo, para ler, corrigir e formatar."></button>
     <button class="btn-min" id="btnMatDicas" hidden
       title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
-    <button class="btn-min" id="btnMatLei" data-i18n="mat_lei_btn" title="Abre a LEI SECA deste tópico: a letra da lei, guardada à parte do resumo. Tem leitor próprio e botão para registrar que você leu."></button>
+    <!-- LEI SECA SAIU DAQUI: ela tem porta propria na agenda da semana
+         (o "⚖" da linha do topico), que e de onde se decide o que estudar.
+         Dentro do resumo era mais um botao competindo com os que mexem no
+         texto que esta na tela. -->
       <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn" title="Mostra só o que aconteceu dentro dos resumos: marcações feitas, recusadas e o motivo. Serve para relatar um problema."></button>
       <!-- fechar também aqui: com resumo grande, o rodapé fica longe.
            Mesma pergunta de saída do botão de baixo. -->
@@ -2476,13 +2494,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d" title="Marca o trecho selecionado em amarelo: o que você quer reler. Se a palavra aparecer mais de uma vez, marca a que você selecionou."></button>
     <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i" title="Marca em vermelho: o que não pode faltar na hora da prova."></button>
     <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q" title="Marca em azul: o que você não entendeu e precisa voltar."></button>
-    <button class="marca marca-lei" id="btnMarcaLei" data-i18n="mat_marca_lei" title="Marca em verde: letra de lei ou artigo, o que se decora em vez de entender."></button>
     <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova" title="Marca em roxo: isto já caiu em prova. Serve para achar depois o que a banca cobra."></button>
     <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg" title="Marca em rosa: pegadinha, exceção ou detalhe que costuma derrubar."></button>
-    <!-- tirar UMA marca: quem errou a cor tinha de apagar todas e refazer
-         a leitura inteira -->
-    <button class="btn-min" id="btnMarcaTirar" data-i18n="mat_marca_tirar" title="Tira só a marca do trecho selecionado, seja qual for a cor. As outras marcas do resumo ficam."></button>
-    <button class="btn-min" id="btnMarcaLimpar" data-i18n="mat_marca_limpar" title="Tira TODAS as marcas do resumo de uma vez. O texto não muda."></button>
+    <!-- TIRAR MARCA SAIU DAQUI.
+         Ele adivinhava qual marca voce queria tirar a partir da selecao e
+         apagava sem mostrar nada. Agora se clica na propria marca colorida
+         no texto: aponta-se para o que se quer mexer, em vez de descrever.
+         "Limpar marcas" tambem saiu: apagar tudo de uma vez era a operacao
+         mais destrutiva da tela, ao lado das que so pintam. -->
     <span class="mat-sep"></span>
     <span data-i18n="mat_letra"></span>
     <button class="btn-min" id="btnMatMenor" title="Diminui a letra da leitura. Não altera o texto guardado.">A&#8722;</button>
@@ -2682,6 +2701,34 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
       title="Aplica exatamente as trocas mostradas acima."></button>
     <button class="btn btn-cinza" id="btnCnsNao" data-i18n="cancel_btn"
       title="Sai sem mexer no resumo."></button>
+  </div>
+</dialog>
+
+<!-- MENU DA MARCA: abre clicando no proprio trecho pintado.
+     Uma tela so, sem pergunta encadeada — a escolha de cor tem cinco
+     opcoes e o modal generico so mostra tres, o que deixava duas cores
+     inalcancaveis. -->
+<dialog id="dlgMarcaMenu" class="ui-modal diag-modal">
+  <h3 id="mmTitulo"></h3>
+  <p class="nota" id="mmTrecho"></p>
+  <p class="nota" data-i18n="mm_trocar_rot"></p>
+  <div class="mat-ctrl" id="mmCores"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMmTirar"></button>
+    <button class="btn-min" id="btnMmLista"></button>
+    <button class="btn btn-cinza" id="btnMmFechar" data-i18n="help_close"
+      title="Fecha sem mexer na marca."></button>
+  </div>
+</dialog>
+
+<dialog id="dlgMarcasTipo" class="ui-modal diag-modal">
+  <h3 id="mkTitulo"></h3>
+  <p class="nota" id="mkAjuda"></p>
+  <p class="nota" id="mkResumo"></p>
+  <div id="mkLista" class="duv-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMkFechar" data-i18n="help_close"
+      title="Fecha a lista. As marcas continuam no texto."></button>
   </div>
 </dialog>
 

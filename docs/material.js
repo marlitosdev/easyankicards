@@ -490,12 +490,15 @@ function matParaHtml(txt, prova) {
      * "==", que é o fecho. Antes o limite era 300 caracteres e o miolo
      * proibia "=": um trecho grande marcado aparecia com os "==" literais
      * na tela, como se a marca não tivesse pegado. */
-    .replace(/==!((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-imp">$1</mark>')
-    .replace(/==\?((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-duv">$1</mark>')
-    .replace(/==§((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-lei">$1</mark>')
-    .replace(/==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova">$1</mark>')
-    .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg">$1</mark>')
-    .replace(/==((?:[^=\n]|=(?!=))+)==/g, "<mark>$1</mark>");
+    /* o TIPO vai junto no HTML: sem ele, clicar numa marca para tirá-la
+       obrigaria a adivinhar a cor pela classe CSS — e classe é aparência,
+       não dado. */
+    .replace(/==!((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-imp" data-marca="importante">$1</mark>')
+    .replace(/==\?((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-duv" data-marca="duvida">$1</mark>')
+    .replace(/==§((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-lei" data-marca="lei">$1</mark>')
+    .replace(/==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova" data-marca="prova">$1</mark>')
+    .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg" data-marca="pegadinha">$1</mark>')
+    .replace(/==((?:[^=\n]|=(?!=))+)==/g, '<mark data-marca="destaque">$1</mark>');
   /* uma só, fora do laço: era recriada a cada linha, e o cartão de questão
    * precisa dela ANTES do ponto onde estava declarada */
   let emDica = false, emDicaJust = false;
@@ -674,6 +677,7 @@ function matTrocarModo(modo) {
   matPintarMarcador();
   matPintarLei();
   matPintarDuvidas();
+  matPintarContadores();
   matPintarConserto();
   matPintarProvaBotao();
   matPintarDicasLista();
@@ -1097,6 +1101,12 @@ async function matConsertarAbrir() {
     : t("mat_consertado", { n }));
 }
 
+/* A LEI SECA SAIU DA BARRA DO RESUMO.
+ * Ela continua inteira — com leitor proprio, registro de leitura e o
+ * atalho "⚖" na linha da agenda, que e de onde se escolhe o que
+ * estudar. Aqui dentro era mais um botao disputando espaco com os que
+ * mexem no texto que esta na tela. A funcao fica, sem alvo: se o botao
+ * voltar um dia, ela volta a pintar sozinha. */
 function matPintarLei() {
   const b = $("btnMatLei");
   if (!b) return;
@@ -1291,13 +1301,34 @@ function matMarcarSelecao(tipo) {
     if (q > p) pedacos.push([p, q]);
     p = q + 1;
   }
+  /* "==*" GRUDADO EM "**" NÃO É MARCA NENHUMA.
+   *
+   * O sufixo de "caiu na prova" é um asterisco, e a regra que o
+   * reconhece exige que ele NÃO seja seguido de outro — senão "==**"
+   * (destaque com negrito dentro, que é comum) viraria marca de prova.
+   * Marcar uma linha que começa em negrito produzia "==***", que cai
+   * fora dessa regra: a marca não pintava, o asterisco ficava contado
+   * como negrito solto e o "consertar marcação" acendia no primeiro uso
+   * do botão.
+   *
+   * Tentei antes empurrar os "**" para fora da marca. Funcionava no
+   * caso da tela e quebrava outro: seleção que ATRAVESSA um negrito
+   * (abre antes, fecha depois) ficava com um "**" ímpar lá dentro — os
+   * testes M12, M13, M17 e M18 pegaram na hora.
+   *
+   * O conserto certo é menor: separar os dois com um espaço. O "*" do
+   * sufixo deixa de ter outro "*" atrás, o negrito continua exatamente
+   * como estava, e nada mais no texto muda. */
+  const semColisao = (txt) => (marca.slice(-1) === "*" && txt.slice(0, 1) === "*")
+    ? " " + txt : txt;
+
   let saida = "", cursor = 0, marcados = 0;
   pedacos.forEach(([a0, b0]) => {
     const f = matEquilibrar(ta.value, a0, b0);
     const txt = ta.value.slice(f.ini, f.fim);
     if (!matTemConteudo(txt)) return;      /* linha em branco ou só marcação */
     if (f.ini < cursor) return;            /* já coberto pelo pedaço anterior */
-    saida += ta.value.slice(cursor, f.ini) + marca + txt + "==";
+    saida += ta.value.slice(cursor, f.ini) + marca + semColisao(txt) + "==";
     cursor = f.fim;
     marcados++;
   });
@@ -1968,18 +1999,14 @@ function matIniciar() {
   matBotao("btnMarcaD", "marcar destaque", () => matMarcarSelecao("destaque"));
   matBotao("btnMarcaI", "marcar importante", () => matMarcarSelecao("importante"));
   matBotao("btnMarcaQ", "marcar dúvida", () => matMarcarSelecao("duvida"));
-  matBotao("btnMarcaLimpar", "limpar marcas", matLimparMarcas);
-  matBotao("btnMarcaLei", "marcar lei", () => matMarcarSelecao("lei"));
   matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
   matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
-  matBotao("btnMarcaTirar", "tirar marca", matTirarMarca);
   matBotao("btnMatSalvarEstadoTopo", "salvar resumo (topo)", () => matSalvarEstado());
   matBotao("btnMatMarcador", "pôr marcador", matPorMarcador);
+  matBotao("btnMatProvaLista", "lista de caiu na prova", () => matPainelMarcas("prova"));
+  matBotao("btnMatPegLista", "lista de pegadinhas", () => matPainelMarcas("pegadinha"));
   matBotao("btnMatFecharTopo", "fechar (topo)", () => matFechar());
   matBotao("btnMatDuvidas", "dúvidas deste resumo", matDuvidasAbrir);
-  if ($("btnMatLei")) $("btnMatLei").onclick = () => {
-    if (matAtual) leiAbrir(matAtual.disciplina, matAtual.topico);
-  };
   leiIniciar();
   if ($("btnMatLogAba")) $("btnMatLogAba").onclick = matLogAbrir;
   matBotao("btnDuvidas", "minhas dúvidas", matDuvidasAbrir);
@@ -1998,6 +2025,24 @@ function matIniciar() {
     };
   }
   if ($("btnDuvFechar")) $("btnDuvFechar").onclick = () => $("dlgDuvidas").close();
+  if ($("btnMkFechar")) $("btnMkFechar").onclick = () => $("dlgMarcasTipo").close();
+  if ($("btnMmFechar")) $("btnMmFechar").onclick = () => $("dlgMarcaMenu").close();
+  if ($("btnMmTirar")) $("btnMmTirar").onclick = async () => {
+    const m = mmMarcaAberta;
+    if (!m) return;
+    /* a pergunta mostra o trecho inteiro: quem confirma tem de estar
+     * vendo exatamente o que perde a cor */
+    if (!(await uiConfirm(t("mk_tirar_conf", { t: String(m.trecho).slice(0, 160) })))) return;
+    if (!matTirarMarcaDe(m)) { uiAlert(t("mk_tirar_falhou")); return; }
+    $("dlgMarcaMenu").close();
+    try { matRender(); } catch (e) {}
+    matPintarContadores();
+  };
+  if ($("btnMmLista")) $("btnMmLista").onclick = () => {
+    const m = mmMarcaAberta;
+    $("dlgMarcaMenu").close();
+    if (m) matPainelMarcas(m.tipo);
+  };
   if ($("btnMatLog")) $("btnMatLog").onclick = matLogAbrir;
   if ($("btnMatLogFechar")) $("btnMatLogFechar").onclick = () => $("dlgMatLog").close();
   matBotao("btnMatLogHoje", "só de hoje no registro", matLogAlternarHoje);
@@ -2017,11 +2062,21 @@ function matIniciar() {
   ["mouseup", "touchend", "keyup"].forEach((ev) => {
     if ($("matLeitura")) $("matLeitura").addEventListener(ev, matLembrarSelecao);
   });
+  /* CLIQUE NA MARCA. Um ouvinte só no container, e não um por <mark>:
+   * a leitura é redesenhada a cada mudança, e ligar por elemento
+   * deixaria ouvintes órfãos a cada repintura. */
+  if ($("matLeitura")) $("matLeitura").addEventListener("click", (ev) => {
+    const alvo = ev && ev.target;
+    if (!alvo || !alvo.getAttribute || !alvo.getAttribute("data-marca")) return;
+    /* seleção em curso é gesto de marcar, não de abrir menu */
+    if (String(matSelGuardada || "").trim().length > 2) return;
+    matMenuDaMarca(alvo);
+  });
   if (document.addEventListener)
     document.addEventListener("selectionchange", matLembrarSelecao);
   /* e impede o próprio clique de destruí-la */
-  ["btnMarcaD", "btnMarcaI", "btnMarcaQ", "btnMarcaLei", "btnMarcaProva",
-   "btnMarcaPeg", "btnMarcaTirar"].forEach((id) => {
+  ["btnMarcaD", "btnMarcaI", "btnMarcaQ", "btnMarcaProva",
+   "btnMarcaPeg"].forEach((id) => {
     if (!$(id)) return;
     if ($(id)) $(id).addEventListener("mousedown", (ev) => ev.preventDefault());
   });
@@ -2697,7 +2752,22 @@ function leiIniciar() {
  * A lista é DERIVADA do texto, não uma cópia: apagar a marca no resumo tira
  * a dúvida daqui, e nada fica fora de sincronia.
  * ===================================================================== */
-function matDuvidas() {
+/* AS MARCAS DE UM TIPO, JUNTANDO AS QUE SAO UM GESTO SO.
+ * Mesma maquina das duvidas, com o prefixo como parametro: "caiu na
+ * prova" e "pegadinha" precisam exatamente do mesmo agrupamento (a marca
+ * reabre a cada linha, e um grifo de tres linhas nao pode virar tres
+ * itens na lista). Duplicar o codigo teria feito as tres listas
+ * divergirem na primeira correcao. */
+const MAT_PREFIXO_RE = { duvida: "\\?", prova: "\\*", pegadinha: "~",
+                         importante: "!", lei: "\u00a7" };
+
+function matMarcasDe(tipo) { return matDuvidas(tipo); }
+
+function matContarMarcas(tipo, chave) {
+  return matMarcasDe(tipo).filter((m) => !chave || m.chave === chave).length;
+}
+
+function matDuvidas(tipo) {
   const fora = [];
   Object.keys(matResumos || {}).forEach((chave) => {
     const r = matResumos[chave];
@@ -2708,7 +2778,8 @@ function matDuvidas() {
      ["lei", matTextoVivo(chave, "lei")]].forEach(([onde, txt]) => {
       const s = String(txt || "");
       if (!s) return;
-      const re = /==\?((?:[^=\n]|=(?!=))+)==/g;
+      const pref = MAT_PREFIXO_RE[tipo || "duvida"] || "\\?";
+      const re = new RegExp("==" + pref + "((?:[^=\\n]|=(?!=))+)==", "g");
       let mm;
       const crus = [];
       while ((mm = re.exec(s)) !== null) {
@@ -2752,6 +2823,7 @@ function matDuvidas() {
           ancora: limpar(g.pedacos[0]),
           pedacos: g.pedacos.slice(),
           pos: g.pos,
+          tipo: tipo || "duvida",
         });
       });
     });
@@ -2783,6 +2855,252 @@ function matResolverDuvida(d) {
          (r.topico || d.chave) + " · " + String(d.trecho).slice(0, 60)
          + (tirou > 1 ? " · " + tirou + " trechos" : ""));
   return true;
+}
+
+/* ======================= PAINEL DE UMA MARCA =======================
+ *
+ * A lista das dúvidas já existia e resolvia bem um problema: ver de
+ * uma vez tudo que foi grifado, achar no texto e mexer. "Caiu na
+ * prova" e "pegadinha" precisavam do mesmo, e por um motivo mais forte
+ * ainda: são as marcas que a pessoa consulta na véspera da prova.
+ *
+ * As ações são três, e todas mostram o trecho antes de agir — nenhuma
+ * marca some sem que se veja o que vai sumir. */
+let mkTipoAberto = null;
+
+/* TIRAR UMA MARCA, PELOS SEUS PEDAÇOS.
+ * Reaproveita a mesma mecânica da dúvida resolvida: a marca reabre a
+ * cada linha, e tirar só a primeira deixaria o resto pintado. */
+function matTirarMarcaDe(m) {
+  const r = matResumos[m.chave];
+  if (!r) return false;
+  const campo = m.onde === "lei" ? "lei" : "texto";
+  let s2 = matTextoVivo(m.chave, campo);
+  const abre = MAT_MARCAS[m.tipo] || "==";
+  const pedacos = m.pedacos && m.pedacos.length ? m.pedacos : [m.trecho];
+  let tirou = 0;
+  pedacos.forEach((p2) => {
+    const inteiro = abre + p2 + "==";
+    const k = s2.indexOf(inteiro);
+    if (k < 0) return;
+    s2 = s2.slice(0, k) + p2 + s2.slice(k + inteiro.length);
+    tirou++;
+  });
+  if (!tirou) return false;
+  matAplicarTexto(m.chave, campo, s2);
+  matReg("marca", "marca retirada pela lista (" + m.tipo + ")",
+         String(m.trecho).slice(0, 60) + (tirou > 1 ? " · " + tirou + " trechos" : ""));
+  return true;
+}
+
+/* EDITAR O TEXTO DE DENTRO DA MARCA.
+ * Só vale para marca de uma linha: partida em várias, cada pedaço tem a
+ * sua marca e não há um "texto" único para substituir sem adivinhar
+ * onde recolocar as quebras. Nesse caso o botão leva ao texto. */
+function matEditarMarca(m, novoTexto) {
+  const r = matResumos[m.chave];
+  if (!r) return false;
+  if (!m.pedacos || m.pedacos.length !== 1) return false;
+  const campo = m.onde === "lei" ? "lei" : "texto";
+  let s2 = matTextoVivo(m.chave, campo);
+  const abre = MAT_MARCAS[m.tipo] || "==";
+  const inteiro = abre + m.pedacos[0] + "==";
+  const k = s2.indexOf(inteiro);
+  if (k < 0) return false;
+  const limpo = String(novoTexto || "").replace(/[\r\n]+/g, " ").trim();
+  if (!limpo) return false;
+  s2 = s2.slice(0, k) + abre + limpo + "==" + s2.slice(k + inteiro.length);
+  matAplicarTexto(m.chave, campo, s2);
+  matReg("marca", "texto da marca editado (" + m.tipo + ")", limpo.slice(0, 60));
+  return true;
+}
+
+function matPainelMarcas(tipo) {
+  mkTipoAberto = tipo;
+  const lista = matMarcasDe(tipo)
+    .filter((m) => !matAtual || m.chave === matAtual.chave);
+  const box = $("mkLista");
+  if (!box) return;
+  box.innerHTML = "";
+  $("mkTitulo").textContent = t("mk_titulo_" + tipo);
+  $("mkAjuda").textContent = t("mk_ajuda_" + tipo);
+  $("mkResumo").textContent = lista.length
+    ? t("mk_resumo", { n: lista.length })
+    : t("mk_vazio");
+
+  lista.forEach((m) => {
+    const li = document.createElement("div");
+    li.className = "duv-item";
+    const tr = document.createElement("div");
+    tr.className = "duv-trecho";
+    tr.textContent = "\u201c" + String(m.trecho).slice(0, 260) + "\u201d";
+    li.append(tr);
+
+    const ac = document.createElement("div");
+    ac.className = "duv-acoes";
+
+    const bVer = document.createElement("button");
+    bVer.type = "button"; bVer.className = "btn-min";
+    bVer.textContent = t("mk_ver");
+    bVer.title = t("mk_ver_ajuda");
+    bVer.onclick = () => {
+      $("dlgMarcasTipo").close();
+      matAbrirEditor({ disciplina: m.disciplina, nome: m.topico }, "ler");
+      const achou = matIrPara(m.ancora || m.trecho, m.onde);
+      matReg("marca", achou ? "aberto no trecho da marca" : "trecho da marca não localizado",
+             String(m.trecho).slice(0, 50));
+    };
+
+    const bEd = document.createElement("button");
+    bEd.type = "button"; bEd.className = "btn-min";
+    bEd.textContent = t("mk_editar");
+    bEd.title = t("mk_editar_ajuda");
+    bEd.onclick = () => {
+      /* a caixa aparece NO ITEM, com o texto atual dentro: editar é
+       * corrigir o que está ali, e para isso é preciso ver o que está
+       * ali sem abrir outra janela por cima */
+      if (li.querySelector(".mk-edit")) return;
+      const ta = document.createElement("textarea");
+      ta.className = "mk-edit";
+      ta.value = String(m.trecho);
+      const salvar = document.createElement("button");
+      salvar.type = "button"; salvar.className = "btn-min btn-min-ok";
+      salvar.textContent = t("mk_editar_salvar");
+      salvar.onclick = () => {
+        if (m.pedacos && m.pedacos.length !== 1) { uiAlert(t("mk_editar_varias")); return; }
+        if (!matEditarMarca(m, ta.value)) { uiAlert(t("mk_editar_falhou")); return; }
+        matPainelMarcas(tipo);
+        try { matRender(); } catch (e) {}
+      };
+      li.append(ta, salvar);
+    };
+
+    const bTirar = document.createElement("button");
+    bTirar.type = "button"; bTirar.className = "btn-min";
+    bTirar.textContent = t("mk_tirar");
+    bTirar.title = t("mk_tirar_ajuda");
+    bTirar.onclick = async () => {
+      /* o trecho inteiro na pergunta: quem confirma tem de estar vendo
+       * exatamente o que perde a cor */
+      if (!(await uiConfirm(t("mk_tirar_conf", { t: String(m.trecho).slice(0, 160) })))) return;
+      if (!matTirarMarcaDe(m)) { uiAlert(t("mk_tirar_falhou")); return; }
+      matPainelMarcas(tipo);
+      try { matRender(); } catch (e) {}
+      matPintarContadores();
+    };
+
+    ac.append(bVer, bEd, bTirar);
+    li.append(ac);
+    box.append(li);
+  });
+  abrirModal("dlgMarcasTipo");
+}
+
+/* ============ CLICAR NA PRÓPRIA MARCA ============
+ *
+ * O botão "tirar esta marca" pedia para a pessoa DESCREVER, com a
+ * seleção, qual marca queria mexer — e então adivinhava, sem mostrar
+ * nada, casando por pedaço de texto. Selecionar uma palavra que
+ * aparecia dentro de duas marcas tirava a primeira que ele achasse.
+ *
+ * Apontar é mais simples do que descrever: clicar no trecho pintado
+ * abre um menu ali mesmo, e o que vai acontecer se refere ao que está
+ * embaixo do dedo. Não há mais o que adivinhar. */
+function matMarcaSobPonteiro(el) {
+  if (!el) return null;
+  const tipo = el.getAttribute && el.getAttribute("data-marca");
+  if (!tipo) return null;
+  const texto = String(el.textContent || "").trim();
+  if (!texto) return null;
+  /* acha o item correspondente na lista do tipo: é ele que carrega os
+   * pedaços, e são os pedaços que sabem tirar a marca de várias linhas */
+  const iguais = matMarcasDe(tipo).filter((m) =>
+    (matAtual ? m.chave === matAtual.chave : true)
+    && (matNormalizar(m.trecho).indexOf(matNormalizar(texto)) >= 0
+        || matNormalizar(texto).indexOf(matNormalizar(m.trecho)) >= 0));
+  return iguais[0] || { tipo, trecho: texto,
+    chave: matAtual && matAtual.chave, onde: "texto",
+    disciplina: matAtual && matAtual.disciplina,
+    topico: matAtual && matAtual.topico, pedacos: [texto] };
+}
+
+const MAT_TIPOS_MENU = ["destaque", "importante", "duvida", "prova", "pegadinha"];
+const MAT_ROT_MARCA = { destaque: "mat_marca_d", importante: "mat_marca_i",
+  duvida: "mat_marca_q", lei: "mat_marca_lei", prova: "mat_marca_prova",
+  pegadinha: "mat_marca_peg" };
+const MAT_CLASSE_MARCA = { destaque: "marca-d", importante: "marca-i",
+  duvida: "marca-q", lei: "marca-lei", prova: "marca-prova",
+  pegadinha: "marca-peg" };
+
+let mmMarcaAberta = null;
+
+function matMenuDaMarca(el) {
+  const m = matMarcaSobPonteiro(el);
+  if (!m || !$("dlgMarcaMenu")) return;
+  mmMarcaAberta = m;
+  $("mmTitulo").textContent = t("mk_menu_titulo",
+    { cor: t(MAT_ROT_MARCA[m.tipo] || "mat_marca_d") });
+  $("mmTrecho").textContent = "\u201c" + String(m.trecho).slice(0, 200) + "\u201d";
+
+  /* TODAS as cores numa fileira, com a cor de cada uma no proprio botao:
+   * escolher cor lendo nome de cor e mais lento do que apontar a cor. */
+  const cx = $("mmCores");
+  cx.innerHTML = "";
+  MAT_TIPOS_MENU.filter((x) => x !== m.tipo).forEach((x) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "marca " + (MAT_CLASSE_MARCA[x] || "");
+    b.textContent = t(MAT_ROT_MARCA[x]);
+    b.onclick = () => {
+      if (!matTrocarCorDaMarca(m, x)) return;
+      $("dlgMarcaMenu").close();
+      try { matRender(); } catch (e) {}
+      matPintarContadores();
+    };
+    cx.append(b);
+  });
+
+  $("btnMmTirar").textContent = t("mk_menu_tirar");
+  $("btnMmTirar").title = t("mk_tirar_ajuda");
+  const temLista = m.tipo === "prova" || m.tipo === "pegadinha";
+  $("btnMmLista").hidden = !temLista;
+  $("btnMmLista").textContent = t("mk_menu_lista");
+  abrirModal("dlgMarcaMenu");
+}
+
+function matTrocarCorDaMarca(m, novoTipo) {
+  const campo = m.onde === "lei" ? "lei" : "texto";
+  let s2 = matTextoVivo(m.chave, campo);
+  const abre = MAT_MARCAS[m.tipo] || "==";
+  const novoAbre = MAT_MARCAS[novoTipo] || "==";
+  const pedacos = m.pedacos && m.pedacos.length ? m.pedacos : [m.trecho];
+  let trocou = 0;
+  pedacos.forEach((p2) => {
+    const inteiro = abre + p2 + "==";
+    const k = s2.indexOf(inteiro);
+    if (k < 0) return;
+    s2 = s2.slice(0, k) + novoAbre + p2 + "==" + s2.slice(k + inteiro.length);
+    trocou++;
+  });
+  if (!trocou) { uiAlert(t("mk_tirar_falhou")); return false; }
+  matAplicarTexto(m.chave, campo, s2);
+  matReg("marca", "cor da marca trocada (" + m.tipo + " → " + novoTipo + ")",
+         String(m.trecho).slice(0, 60));
+  return true;
+}
+
+/* os contadores da barra, sempre a partir do texto VIVO */
+function matPintarContadores() {
+  [["prova", "btnMatProvaLista"], ["pegadinha", "btnMatPegLista"]].forEach(([tp, id]) => {
+    const b = $(id);
+    if (!b) return;
+    if (!matAtual) { b.hidden = true; return; }
+    const n = matContarMarcas(tp, matAtual.chave);
+    b.hidden = false;
+    b.disabled = !n;
+    b.textContent = t(n ? "mk_conta_" + tp : "mk_conta_" + tp + "_zero", { n });
+    b.title = t(n ? "mk_conta_ajuda" : "mk_conta_zero_ajuda");
+  });
 }
 
 /* CONSERTO DE NEGRITO QUEBRADO.
@@ -2837,11 +3155,23 @@ function matNegritoQuebrado(chave) {
  * ("* item") como asterisco solto: qualquer resumo com lista virava um
  * aviso permanente de "consertar marcação (1)" que nada consertava,
  * porque a linha estava certa desde o começo. */
+/* O "*" DA MARCA "caiu na prova" NÃO É NEGRITO.
+ *
+ * Esta conta somava TODO asterisco da linha, inclusive o que abre a
+ * marca "==*". Marcar uma linha com "caiu na prova" passava a linha de
+ * par para ímpar e o "consertar marcação" acendia sozinho — no primeiro
+ * uso do botão, sem que nada estivesse torto. Antes de contar, saem os
+ * delimitadores de marca; o que sobra é só formatação de verdade. */
+function matSemMarcas(l) {
+  return String(l).replace(new RegExp("==" + MAT_SUF, "g"), "");
+}
+
 function matLinhaTorta(l) {
-  const s = String(l).replace(/^(\s*[-*]\s+)/, "");
+  const cru = String(l).replace(/^(\s*[-*]\s+)/, "");
+  const s = matSemMarcas(cru);
   const pares = (s.match(/\*\*/g) || []).length;
   const soltos = (s.match(/\*/g) || []).length - pares * 2;
-  return pares % 2 === 1 || soltos > 0 || matMarcaOrfa(s);
+  return pares % 2 === 1 || soltos > 0 || matMarcaOrfa(cru);
 }
 
 function matConsertarLinha(l0) {
@@ -2862,8 +3192,18 @@ function matConsertarLinha(l0) {
 
   /* trabalha por SEQUÊNCIAS de asterisco: "**"=par, "*"=solto.
    * Sequência de tamanho ímpar = alguém perdeu um asterisco; devolve. */
+  /* os delimitadores de marca saem de cena enquanto o asterisco é
+   * consertado, e voltam no lugar exato: sem isto, "==*" virava "==**"
+   * e a marca de prova deixava de ser marca. */
+  const GUARDA = "\u0001";
+  const guardados = [];
   const antesAst = corpo;
+  corpo = corpo.replace(new RegExp("==" + MAT_SUF, "g"), (m) => {
+    guardados.push(m); return GUARDA;
+  });
   corpo = corpo.replace(/\*+/g, (seq) => (seq.length % 2 === 1 ? seq + "*" : seq));
+  let gi = 0;
+  corpo = corpo.replace(new RegExp(GUARDA, "g"), () => guardados[gi++]);
   if (corpo !== antesAst) motivos.push("asterisco_devolvido");
 
   /* sobrou número ímpar de delimitadores "**"? então há negrito que abre e
