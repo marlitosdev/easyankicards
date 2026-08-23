@@ -804,15 +804,30 @@ function qsUiPintarBotaoResumo() {
    * "virar em questão" sem mais nada nao deixa ver se vai usar o trecho
    * marcado ou o resumo todo — e a pessoa so descobre lendo o prompt
    * gerado. Com o tamanho no rotulo, da para conferir antes. */
-  const v = $("btnMatVirarQuestao");
-  if (v) {
-    v.hidden = false;
-    const sel = qsUiSelecaoViva();
-    v.textContent = sel
-      ? t("qs_virar_sel", { n: sel.length })
-      : t("qs_virar_tudo");
-    v.title = t(sel ? "qs_virar_sel_ajuda" : "qs_virar_tudo_ajuda");
-    v.className = "btn-min" + (sel ? " btn-min-ok" : "");
+  /* DOIS BOTOES, UM POR ORIGEM.
+   * Um botao so, que trocava de rotulo conforme houvesse selecao, obrigava
+   * a LER o rotulo para saber o que ia acontecer — e "trecho marcado"
+   * ainda se confundia com as marcas coloridas da mesma barra. Separados,
+   * cada um diz uma coisa so, e o do trecho fica apagado enquanto nao ha
+   * trecho: dai se ve, sem ler, que falta selecionar. */
+  const sel = qsUiSelecaoViva();
+  const bt = $("btnMatQstTrecho");
+  if (bt) {
+    bt.hidden = false;
+    bt.disabled = !sel;
+    bt.textContent = sel ? t("qs_qst_trecho_n", { n: sel.length })
+                         : t("qs_qst_trecho_sem");
+    bt.title = t(sel ? "qs_qst_trecho_ajuda" : "qs_qst_trecho_sem_ajuda");
+    bt.className = "btn-min" + (sel ? " btn-min-ok" : "");
+  }
+  const br = $("btnMatQstResumo");
+  if (br) {
+    br.hidden = false;
+    /* o tamanho nos DOIS botoes: e comparando os dois numeros que se ve,
+     * sem abrir nada, o que cada caminho vai mandar para a IA */
+    const todo = String(matTextoVivo(matAtual.chave, "texto") || "");
+    br.textContent = t("qs_qst_resumo", { n: todo.length });
+    br.title = t("qs_qst_resumo_ajuda");
   }
 }
 
@@ -848,10 +863,11 @@ function qsUiResponderDoTopico() {
 
 /* "virar em questão": pega o que está selecionado no resumo — ou o resumo
  * inteiro, se nada estiver selecionado — e leva ao ritual do prompt. */
-function qsUiVirarSelecao() {
+function qsUiVirarSelecao(origem) {
   if (!matAtual) return;
   matLembrarSelecao();
-  const sel = String(matSelGuardada || "").trim();
+  const sel = origem === "resumo" ? "" : String(matSelGuardada || "").trim();
+  if (origem === "trecho" && !sel) { uiAlert(t("qs_qst_trecho_sem_ajuda")); return; }
   const texto = sel || matTextoVivo(matAtual.chave, "texto");
   qsUiCriarAbrir(texto, {
     disciplina: matAtual.disciplina, topico: matAtual.topico,
@@ -957,7 +973,12 @@ function qsUiIniciar() {
       qsUiVirarSelecao();
     };
   }
-  if ($("btnMatVirarQuestao")) $("btnMatVirarQuestao").onclick = () => qsUiVirarSelecao();
+  if ($("btnMatQstTrecho")) {
+    $("btnMatQstTrecho").onclick = () => qsUiVirarSelecao("trecho");
+  }
+  if ($("btnMatQstResumo")) {
+    $("btnMatQstResumo").onclick = () => qsUiVirarSelecao("resumo");
+  }
 
   if ($("btnQsCriarDaAba")) {
     $("btnQsCriarDaAba").onclick = () => {
