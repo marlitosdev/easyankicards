@@ -100,6 +100,55 @@ function qsUiCriarAbrir(texto, ctx) {
  * aparecia com "**", "###" e "---" à mostra — pior de ler do que o texto
  * original. Passa pelo mesmo desenho do resumo: negrito vira negrito,
  * lista vira lista, quebra de linha vira quebra de linha. */
+/* =====================================================================
+ * QUESTÃO → CARTÕES
+ *
+ * Não converte sozinho. Questão e cartão são coisas diferentes: a questão
+ * tem enunciado longo, alternativas e comentário; o cartão precisa caber de
+ * cabeça, com uma ideia só. Copiar a questão para dentro de um cartão dá um
+ * cartão ruim — e cartão ruim se revisa por meses antes de alguém notar.
+ *
+ * Então vai pelo mesmo caminho de sempre: prompt, colagem, conferência, e
+ * gravação no material DESTE tópico, com as mesmas etiquetas dos outros
+ * cartões dele. Nada de formato novo.
+ * ===================================================================== */
+function qsPromptCartao(q) {
+  const opcoes = (q.opcoes || []).map((o) => o.letra + ") " + o.txt).join("\n");
+  const gab = q.tipo === "ce"
+    ? (q.gabarito === "C" ? t("qs_certo") : t("qs_errado"))
+    : q.gabarito;
+  const tags = (typeof matEtiquetasTopico === "function")
+    ? matEtiquetasTopico(q.disciplina, q.topico, q.concurso, "questao").join(" ") : "";
+  return t("qs_cartao_prompt", {
+    d: q.disciplina || "?", tp: q.topico || "?",
+    banca: q.banca || "—", tags,
+    enunciado: q.enunciado || "",
+    opcoes: opcoes || "—",
+    gabarito: gab || "?",
+    comentario: q.comentario || "—",
+    dica: qsDicaDeQuestao(q.id) || "—",
+  });
+}
+
+function qsUiCartoesDaQuestao(q) {
+  if (!q) return;
+  if (!q.disciplina || !q.topico) { uiAlert(t("qs_cartao_sem_topico")); return; }
+  if (typeof mcApontarTopico !== "function" || typeof matCartoesAbrir !== "function") {
+    uiAlert(t("qs_cartao_sem_material")); return;
+  }
+  $("dlgQsResponder").close();
+  mcApontarTopico(q.disciplina, q.topico);
+  matCartoesAbrir({
+    semGravarResumo: true,
+    prompt: qsPromptCartao(q),
+    sub: t("qs_cartao_sub", { tp: q.topico,
+      n: (typeof matContarCartoes === "function"
+          ? matContarCartoes(matChave(q.disciplina, q.topico)) : 0) }),
+  });
+  matReg("questao", "cartões a partir de uma questão",
+         q.topico + " · " + String(q.enunciado).slice(0, 60));
+}
+
 function qsUiCaixaDica(texto) {
   const dc = document.createElement("div");
   dc.className = "qs-minha-dica";
@@ -375,6 +424,13 @@ function qsUiPintarSessao() {
         }
         const minha = qsDicaDeQuestao(x.q.id);
         if (minha) li.append(qsUiCaixaDica(minha));
+        const bcart = document.createElement("button");
+        bcart.type = "button"; bcart.className = "btn-min qs-bt-dica";
+        bcart.textContent = t("qs_cartao_btn");
+        bcart.title = t("qs_cartao_ajuda");
+        bcart.onclick = () => qsUiCartoesDaQuestao(x.q);
+        li.append(bcart);
+
         const bd = document.createElement("button");
         bd.type = "button"; bd.className = "btn-min qs-bt-dica";
         bd.textContent = t(minha ? "qs_dica_editar" : "qs_dica_incluir");
@@ -461,6 +517,14 @@ function qsUiPintarSessao() {
      * é gabarito disfarçado. */
     const minha = qsDicaDeQuestao(q.id);
     if (minha) corpo.append(qsUiCaixaDica(minha));
+    const bc = document.createElement("button");
+    bc.type = "button";
+    bc.className = "btn-min qs-bt-dica";
+    bc.textContent = t("qs_cartao_btn");
+    bc.title = t("qs_cartao_ajuda");
+    bc.onclick = () => qsUiCartoesDaQuestao(q);
+    corpo.append(bc);
+
     const bd = document.createElement("button");
     bd.type = "button";
     bd.className = "btn-min qs-bt-dica";
