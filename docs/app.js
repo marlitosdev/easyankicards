@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "9.11.0";
+const VERSAO = "9.12.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1609,6 +1609,12 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   // a prévia tem de mostrar o MESMO alinhamento que vai para o .apkg
   const al = ($("selAlinha") && $("selAlinha").value) === "left" ? "left" : "justify";
   const wrap = document.createElement("div");
+  /* PENDURAR AGORA, nao no fim: existe um "return" no meio desta funcao,
+   * para quando a resposta esta escondida. Com o append la embaixo, esse
+   * return saia sem nunca prender o cartao na tela — a FRENTE tambem
+   * sumia, e o cartao so aparecia depois de apertar "ver resposta".
+   * Era o que fazia "ampliar" e "estudar em tela" parecerem vazios. */
+  div.append(wrap);
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
   const proprio = (c.titulo || "").trim();
@@ -1747,7 +1753,6 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     const btJ = limitarAltura(just, c.back, p.caixa);
     if (btJ) wrap.append(btJ);
   }
-  div.append(wrap);
 }
 
 

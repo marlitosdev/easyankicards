@@ -360,9 +360,16 @@ function edLinhaTopico(i, semDisciplina) {
   crt.title = t(nCards ? "ed_crt_ver" : "ed_crt_novo", { n: i.nome, c: nCards });
   crt.onclick = (ev) => {
     ev.stopPropagation();
-    /* abre o material e já entra no painel de cartões: dois cliques viram um */
-    matAbrirEditor({ disciplina: i.disciplina, nome: i.nome }, false);
-    try { matCartoesAbrir(); } catch (e) {}
+    /* CARTÃO NÃO PRECISA DO RESUMO.
+     * Antes isto abria o resumo em modo de EDIÇÃO e, por cima, o painel de
+     * cartões: para rever um cartão a pessoa passava pelo texto cru do
+     * resumo, que não tem nada a ver com o gesto. Agora vai direto: tendo
+     * cartões, abre o leitor; não tendo, abre a criação. */
+    try {
+      if (nCards) { mcEstudarDireto(i.disciplina, i.nome); return; }
+      mcApontarTopico(i.disciplina, i.nome);
+      matCartoesAbrir({ semGravarResumo: true });
+    } catch (e) {}
   };
 
   /* LEI SECA do tópico, o terceiro documento da linha */
