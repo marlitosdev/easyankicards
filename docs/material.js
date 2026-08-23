@@ -2092,7 +2092,8 @@ function matCartoesAbrir(opts) {
   mcVoltarPara = o.voltarPara || null;
   if ($("btnMcFechar")) {
     $("btnMcFechar").textContent = t(o.voltarPara === "questoes"
-      ? "mc_voltar_questoes" : "mc_voltar");
+      ? "mc_voltar_questoes"
+      : (o.voltarPara === "cartoes" ? "mc_voltar_cartoes" : "mc_voltar"));
   }
   /* grava o texto antes: o prompt sai do que está escrito agora, e o
    * resumo em si não é rascunho */
@@ -2231,7 +2232,10 @@ function matCartoesConferir() {
     bAmp.type = "button"; bAmp.className = "btn-min";
     bAmp.textContent = t("mc_ampliar");
     bAmp.title = t("mc_ampliar_ajuda");
-    bAmp.onclick = () => mcEstudarAbrir(r.cards.indexOf(c));
+    /* a lista da CONFERÊNCIA, não a dos salvos — e com a resposta à vista,
+     * porque aqui a pessoa está julgando o cartão, não se testando */
+    bAmp.onclick = () => mcEstudarAbrir(r.cards.indexOf(c),
+      { lista: r.cards, revelado: true, deOnde: "conferencia" });
     ac.append(bAmp);
     if (c._repetido) {
       const bDel = document.createElement("button");
@@ -2331,6 +2335,8 @@ function matCartoesIniciar() {
       $("dlgMatCartoes").close();
       if (mcVoltarPara === "questoes" && typeof qsUiVoltarASessao === "function") {
         qsUiVoltarASessao();
+      } else if (mcVoltarPara === "cartoes" && matAtual) {
+        try { mcEstudarAbrir(0); } catch (e) {}
       }
       mcVoltarPara = null;
     };
@@ -2358,16 +2364,42 @@ function mcCartoesSalvos() {
   try { return parseText(bruto).cards; } catch (e) { return []; }
 }
 
-function mcEstudarAbrir(indice) {
-  mcEstCartoes = mcCartoesSalvos();
+/* CONFERIR NÃO É ESTUDAR.
+ *
+ * "Ampliar", na lista do que acabou de ser colado, serve para OLHAR o
+ * cartão inteiro e julgar se presta — a resposta tem de estar à vista.
+ * "Estudar em tela" é o contrário: a resposta só aparece quando você
+ * pedir, senão não é teste, é leitura.
+ *
+ * E havia um defeito pior: ampliar indexava nos cartões JÁ SALVOS, e não
+ * nos que estavam na conferência. Ampliar o terceiro cartão colado abria
+ * o terceiro cartão antigo do tópico — outro cartão, sem aviso nenhum.
+ */
+let mcEstDeOnde = null;
+
+function mcEstudarAbrir(indice, opts) {
+  const o = opts || {};
+  mcEstCartoes = (o.lista && o.lista.length) ? o.lista.slice() : mcCartoesSalvos();
   if (!mcEstCartoes.length) { uiAlert(t("mc_est_vazio")); return; }
   mcEstIdx = Math.max(0, Math.min(mcEstCartoes.length - 1, indice || 0));
-  mcEstMostra = false;
-  $("mcEstTitulo").textContent = t("mc_est_titulo", { tp: matAtual.topico });
-  $("mcEstSub").textContent = t("mc_est_sub", { d: matAtual.disciplina });
+  mcEstMostra = !!o.revelado;
+  mcEstDeOnde = o.deOnde || null;
+  $("mcEstTitulo").textContent = t(o.revelado ? "mc_est_titulo_conf" : "mc_est_titulo",
+    { tp: (matAtual && matAtual.topico) || "" });
+  $("mcEstSub").textContent = t("mc_est_sub",
+    { d: (matAtual && matAtual.disciplina) || "" });
+  if ($("btnMcEstCriar")) {
+    /* criar mais cartões DAQUI, sem passar pelo resumo */
+    $("btnMcEstCriar").hidden = !!o.revelado;
+  }
+  if ($("btnMcEstFechar")) {
+    $("btnMcEstFechar").textContent = t(o.deOnde === "conferencia"
+      ? "mc_est_voltar_conf" : "help_close");
+  }
   mcEstPintar();
   abrirModal("dlgMcEstudo");
-  matReg("estudo", "estudo em tela aberto", mcEstCartoes.length + " cartões");
+  matReg("estudo", o.revelado ? "cartão ampliado na conferência" : "estudo em tela aberto",
+         mcEstCartoes.length + " cartões");
 }
 
 function mcEstPintar() {
@@ -2466,7 +2498,22 @@ function mcEstudoIniciar() {
     mcEstMostra = !mcEstMostra; mcEstPintar();
   };
   if ($("btnMcEstApagar")) $("btnMcEstApagar").onclick = () => mcApagarCartao(mcEstIdx);
-  if ($("btnMcEstFechar")) $("btnMcEstFechar").onclick = () => $("dlgMcEstudo").close();
+  if ($("btnMcEstFechar")) {
+    $("btnMcEstFechar").onclick = () => {
+      $("dlgMcEstudo").close();
+      /* veio da conferência: devolve para lá, senão a pessoa perde de vista
+       * a lista que estava julgando */
+      if (mcEstDeOnde === "conferencia") abrirModal("dlgMatCartoes");
+      mcEstDeOnde = null;
+    };
+  }
+  if ($("btnMcEstCriar")) {
+    $("btnMcEstCriar").onclick = () => {
+      $("dlgMcEstudo").close();
+      /* sem abrir o resumo: os cartões novos são deste mesmo tópico */
+      matCartoesAbrir({ semGravarResumo: true, voltarPara: "cartoes" });
+    };
+  }
   if ($("btnMcImportar")) $("btnMcImportar").onclick = () => $("mcArquivo").click();
   if ($("mcArquivo")) $("mcArquivo").onchange = (ev) => {
     const f = ev && ev.target && ev.target.files && ev.target.files[0];

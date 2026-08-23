@@ -506,8 +506,15 @@ function qsUiPintarSessao() {
     $("btnQsProxima").hidden = true;
     if ($("btnQsPular")) $("btnQsPular").hidden = true;
     if ($("btnQsEmbaralhar")) $("btnQsEmbaralhar").hidden = true;
+    /* acabou a rodada: o papel de lado nao tem mais a que se referir */
+    try { rsPrepararPara(null); } catch (e) {}
     return;
   }
+  /* O rascunho pertence A QUESTAO: trocar de questao troca o papel.
+   * Se ele acompanhasse a sessao, a conta da questao 3 apareceria por
+   * cima do esquema da questao 4. */
+  try { if (!rsMesmaQuestao(q.id)) rsPrepararPara(q.id); } catch (e) {}
+
   const de = document.createElement("div");
   de.className = "qs-de";
   de.textContent = [q.concurso, q.banca, q.disciplina, q.topico]
@@ -834,15 +841,25 @@ function qsUiIniciar() {
       setTimeout(() => { b.textContent = r; }, 1800);
     };
   }
-  if ($("btnQsProxima")) $("btnQsProxima").onclick = () => { qsAndar(1); qsUiPintarSessao(); };
+  /* SAIR DA QUESTAO COM RABISCO NA TELA.
+   * Nao salva sozinho (o pedido foi "a pedido do usuario"), mas
+   * tambem nao joga fora calado: pergunta uma vez e segue. */
+  const sairDaQuestao = (segue) => {
+    let perguntar = false;
+    try { perguntar = rsPrecisaPerguntar(); } catch (e) { perguntar = false; }
+    if (!perguntar) { segue(); return; }
+    return rsGuardarSeSair().then(segue, segue);
+  };
+  if ($("btnQsProxima")) $("btnQsProxima").onclick = () =>
+    sairDaQuestao(() => { qsAndar(1); qsUiPintarSessao(); });
   if ($("btnQsPular")) {
-    $("btnQsPular").onclick = () => {
+    $("btnQsPular").onclick = () => sairDaQuestao(() => {
       const q = qsAtual();
       qsPular();
       qsUiPintarSessao();
       matReg("questao", "questão pulada",
              q ? String(q.enunciado).slice(0, 60) : "");
-    };
+    });
   }
   if ($("btnQsEmbaralhar")) {
     $("btnQsEmbaralhar").onclick = () => {
@@ -852,11 +869,11 @@ function qsUiIniciar() {
     };
   }
   if ($("btnQsSessFechar")) {
-    $("btnQsSessFechar").onclick = () => {
+    $("btnQsSessFechar").onclick = () => sairDaQuestao(() => {
       $("dlgQsResponder").close();
       qsUiRender();
       if (qsUiVoltarPara === "resumo") qsUiPintarBotaoResumo();
-    };
+    });
   }
   if ($("btnQsResponderTudo")) {
     $("btnQsResponderTudo").onclick = () => qsUiResponderAbrir(qsFiltrar(qsUiFiltro),

@@ -1559,6 +1559,19 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 #cartoes .card, #cartoes .card *{max-width:100%;overflow-wrap:anywhere;
   word-break:break-word}
 #novoPreview *{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+.rs-caixa{border:1px solid var(--linha,#3a3a3a);border-radius:10px;margin:10px 0;overflow:hidden}
+.rs-topo{display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,.05)}
+.rs-tit{font-weight:700;font-size:13px}
+.rs-aviso{font-size:11.5px;opacity:.75;margin-left:auto}
+.rs-aviso.rs-ok{color:#3fbf6a;opacity:1}
+.rs-corpo{padding:8px}
+.rs-ferramentas{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.rs-caneta{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.rs-caneta.rs-sel{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.rs-borracha.rs-sel{outline:2px solid #fff}
+.rs-tela{width:100%;height:auto;max-width:100%;background:#fdfdf7;border-radius:8px;
+  display:block;touch-action:none;cursor:crosshair}
+.rs-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 </style>
 </head>
 <body>
@@ -2571,6 +2584,27 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   <h3 data-i18n="qs_sess_titulo"></h3>
   <p class="nota" id="qsSessPlacar"></p>
   <div id="qsSessCorpo" class="qs-sess"></div>
+
+  <!-- RASCUNHO: o papel de lado. Recolhido por padrao. -->
+  <div id="rsCaixa" class="rs-caixa" hidden>
+    <div class="rs-topo">
+      <button class="btn-min" id="btnRsMin" type="button"></button>
+      <span class="rs-tit" data-i18n="rs_titulo"></span>
+      <span class="rs-aviso" id="rsAviso"></span>
+    </div>
+    <div id="rsCorpo" class="rs-corpo" hidden>
+      <div class="rs-ferramentas" id="rsFerramentas"></div>
+      <canvas id="rsTela" class="rs-tela" width="900" height="420"></canvas>
+      <p class="nota" data-i18n="rs_ajuda"></p>
+      <div class="rs-acoes">
+        <button class="btn-min" id="btnRsDesfazer" type="button" data-i18n="rs_desfazer"></button>
+        <button class="btn-min" id="btnRsLimpar" type="button" data-i18n="rs_limpar"></button>
+        <button class="btn-min" id="btnRsApagarSalvo" type="button" data-i18n="rs_apagar_salvo" hidden></button>
+        <button class="btn btn-verde" id="btnRsSalvar" type="button"></button>
+      </div>
+    </div>
+  </div>
+
   <div class="dlg-rodape">
     <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
     <button class="btn-min" id="btnQsEmbaralhar" hidden></button>
@@ -2674,6 +2708,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn btn-azul" id="btnMcEstVirar" data-i18n="mc_est_virar"
       title="Mostra ou esconde a resposta. Tente lembrar antes de virar — é aí que a revisão funciona."></button>
     <button class="btn-min" id="btnMcEstProx" title="Próximo cartão">→</button>
+    <button class="btn-min" id="btnMcEstCriar" data-i18n="mc_est_criar"
+      title="Abre a criação de cartões deste mesmo tópico, sem passar pelo resumo."></button>
     <span class="mc-est-pos" id="mcEstPos"></span>
   </div>
   <div class="dlg-rodape">
@@ -3013,6 +3049,7 @@ window.__sqlPromise = initSqlJs({
 <script src="backup-ui.js"></script>
 <script src="material.js"></script>
 <script src="questoes.js"></script>
+<script src="rascunho.js"></script>
 <script src="questoes-ui.js"></script>
 <script src="edital.js"></script>
 <script src="editais.js"></script>
