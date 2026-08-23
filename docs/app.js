@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "9.10.0";
+const VERSAO = "9.11.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -315,6 +315,13 @@ function uiDialog(texto, comCancelar) {
     _uiResolve = resolve;
     const m = document.getElementById("uiModal");
     document.getElementById("uiModalMsg").textContent = texto;
+    /* religa SEMPRE ao abrir: qualquer coisa que tenha mexido nestes
+     * botões antes não pode deixar um aviso sem saída. Ficar preso num
+     * aviso é o pior defeito que este app pode ter — não dá nem para
+     * relatar o problema de dentro dele. */
+    _uiLigarPadrao();
+    const t3 = document.getElementById("uiModalTerceiro");
+    if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
     document.getElementById("uiModalOk").textContent = "OK";
     const cancel = document.getElementById("uiModalCancel");
     cancel.textContent = t("cancel_btn");
@@ -421,7 +428,16 @@ function uiEscolha(texto, opcoes) {
       if (!o) { b.hidden = true; b.style.display = "none"; return; }
       b.hidden = false; b.style.display = "";
       b.className = "btn " + (o.classe || "btn-cinza");
-      b.textContent = o.rot;
+      /* BOTÃO SEM RÓTULO É BOTÃO INUTILIZÁVEL.
+       * Quem chama pode escrever "rot" ou "rotulo" — os dois nomes já
+       * apareceram no app —, e se nenhum vier, é melhor mostrar o valor
+       * cru do que três retângulos cinzas sem texto, que foi o que a
+       * pessoa viu: não dava para saber qual apertar. */
+      const rot = o.rot || o.rotulo || o.label;
+      if (!rot) {
+        try { reg("ERRO", "uiEscolha: opção sem rótulo", String(o.valor)); } catch (e) {}
+      }
+      b.textContent = rot || String(o.valor || "?");
       b.onclick = () => { uiEscolhaLimpar(); _uiFechar(o.valor); };
     });
     if (!m.open) m.showModal();
@@ -429,22 +445,32 @@ function uiEscolha(texto, opcoes) {
   });
 }
 
-/* devolve os botões ao estado que uiConfirm/uiAlert esperam: eles dividem o
- * mesmo diálogo, e um terceiro botão aceso quebraria a próxima pergunta */
+/* O OK E O CANCELAR TÊM DE VOLTAR A FUNCIONAR.
+ *
+ * Estes dois botões são compartilhados por uiAlert, uiConfirm e uiEscolha.
+ * Aqui eu os ANULAVA depois de uma escolha — e como as ligações padrão
+ * eram feitas UMA VEZ SÓ, no carregamento, elas nunca voltavam. Resultado:
+ * depois de qualquer pergunta de três saídas, o próximo aviso aparecia com
+ * o OK morto e o app ficava preso, sem jeito de sair a não ser recarregando.
+ *
+ * Agora não se anula: devolve-se o comportamento padrão. */
+function _uiLigarPadrao() {
+  const ok = document.getElementById("uiModalOk");
+  const ca = document.getElementById("uiModalCancel");
+  if (ok) ok.onclick = () => _uiFechar(true);
+  if (ca) ca.onclick = () => _uiFechar(false);
+}
+
 function uiEscolhaLimpar() {
   const t3 = document.getElementById("uiModalTerceiro");
   if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
-  ["uiModalOk", "uiModalCancel"].forEach((id) => {
-    const b = document.getElementById(id);
-    if (b) b.onclick = null;
-  });
+  _uiLigarPadrao();
 }
 
 function uiConfirm(texto) { return uiDialog(String(texto), true); }
 
-// ligações dos botões do modal (uma vez)
-document.getElementById("uiModalOk").onclick = () => _uiFechar(true);
-document.getElementById("uiModalCancel").onclick = () => _uiFechar(false);
+/* ligações dos botões do modal */
+_uiLigarPadrao();
 document.getElementById("uiModal").addEventListener("click", (e) => {
   if (e.target.id === "uiModal") _uiFechar(false);   // clique no fundo
 });
