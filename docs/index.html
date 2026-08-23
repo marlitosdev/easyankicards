@@ -734,6 +734,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-conf-cm{font-size:11px;color:var(--sutil);font-style:italic;margin-top:3px}
 .qs-sess{min-height:150px}
 .qs-de{font-size:10px;letter-spacing:.05em;color:var(--sutil);margin-bottom:6px}
+.mc-prompt-ver{margin:6px 0}
+.mc-prompt-ver > summary{cursor:pointer;font-size:11px;color:var(--sutil);
+  font-weight:700;user-select:none;list-style:none}
+.mc-prompt-ver > summary::-webkit-details-marker{display:none}
+.mc-prompt-ver > summary::before{content:"▸ "}
+.mc-prompt-ver[open] > summary::before{content:"▾ "}
 .qs-hist{font-size:11px;color:var(--sutil);margin:-6px 0 12px;
   border-left:2px solid var(--borda);padding-left:8px}
 .qs-hist.ok{color:#2f9e6e;border-left-color:#2f9e6e}
@@ -2698,6 +2704,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <span class="mc-seta">›</span>
     <span class="nota" data-i18n="mc_passo2"></span>
   </div>
+  <details id="mcPromptVer" class="mc-prompt-ver" hidden>
+    <summary data-i18n="mc_prompt_ver"
+      title="Mostra o texto exato que foi copiado. Serve para conferir e para colar à mão, caso o navegador não deixe copiar."></summary>
+    <textarea id="mcPromptTexto" rows="6" readonly
+      style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
+  </details>
   <textarea id="mcTexto" rows="9" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a resposta da IA — ou escreva os cartões à mão: pergunta :: resposta"></textarea>
   <div id="mcAviso" class="ed-nao-cabe" hidden></div>

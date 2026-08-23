@@ -2083,11 +2083,17 @@ function matEtiquetasTopico(disciplina, topico, concurso, origem) {
  * exemplo — o prompt não sai do resumo, e gravar o resumo aqui seria
  * gravar o que estiver na caixa, que pode ser de outro tópico ou vazio. */
 let mcPromptDeFora = null;
+let mcVoltarPara = null;    /* "questoes" quando o painel veio de uma questão */
 
 function matCartoesAbrir(opts) {
   if (!matAtual) return;
   const o = opts || {};
   mcPromptDeFora = o.prompt ? String(o.prompt) : null;
+  mcVoltarPara = o.voltarPara || null;
+  if ($("btnMcFechar")) {
+    $("btnMcFechar").textContent = t(o.voltarPara === "questoes"
+      ? "mc_voltar_questoes" : "mc_voltar");
+  }
   /* grava o texto antes: o prompt sai do que está escrito agora, e o
    * resumo em si não é rascunho */
   if (!o.semGravarResumo) {
@@ -2099,6 +2105,8 @@ function matCartoesAbrir(opts) {
   $("mcSub").textContent = (o.sub || t("mc_sub", {
     d: matAtual.disciplina, tp: matAtual.topico, n: jaTem }));
   $("mcTexto").value = "";
+  if ($("mcPromptVer")) { $("mcPromptVer").hidden = true; $("mcPromptVer").open = false; }
+  if ($("mcPromptTexto")) $("mcPromptTexto").value = "";
   $("mcAviso").hidden = true;
   $("mcPreview").innerHTML = "";
   if ($("btnMcVer")) $("btnMcVer").hidden = !jaTem;
@@ -2112,21 +2120,62 @@ function matCartoesAbrir(opts) {
 function matCartoesPrompt() {
   if (!matAtual) return;
   const r = matResumos[matAtual.chave] || {};
-  if (mcPromptDeFora) {
-    try { navigator.clipboard.writeText(mcPromptDeFora); } catch (e) {}
-    reg("MATERIAL-CARTOES", "prompt gerado (de uma questão)", matAtual.topico);
-    toast("mc_prompt_copiado");
-    return;
-  }
-  const txt = t("mc_prompt", {
+  const txt = mcPromptDeFora || t("mc_prompt", {
     d: matAtual.disciplina, tp: matAtual.topico,
     resumo: String(r.texto || ""),
     tags: matEtiquetasTopico(matAtual.disciplina, matAtual.topico,
-      r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : "")).join(" "),
+      r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
+      mcPromptDeFora ? "questao" : "resumo").join(" "),
   });
-  try { navigator.clipboard.writeText(txt); } catch (e) {}
-  reg("MATERIAL-CARTOES", "prompt gerado", matAtual.topico);
-  toast("mc_prompt_copiado");
+
+  /* MOSTRA O QUE FOI COPIADO, E DIZ SE COPIOU.
+   * Antes o botão copiava calado: não dava para saber se tinha funcionado
+   * nem o que tinha ido para a área de transferência — e, nos navegadores
+   * que negam acesso à área de transferência, nada acontecia mesmo.
+   * Agora o texto fica à vista, para conferir e para colar à mão. */
+  if ($("mcPromptTexto")) $("mcPromptTexto").value = txt;
+  if ($("mcPromptVer")) $("mcPromptVer").hidden = false;
+
+  let copiou = false;
+  try {
+    const p = navigator.clipboard && navigator.clipboard.writeText(txt);
+    copiou = true;
+    if (p && p.catch) p.catch(() => { matCartoesPromptFalhou(); });
+  } catch (e) { copiou = false; }
+  if (!copiou) matCartoesPromptFalhou();
+  else {
+    const b = $("btnMcPrompt");
+    if (b) {
+      if (b._voltar) clearTimeout(b._voltar);
+      /* se a tradução ainda não tiver sido aplicada, textContent está
+       * vazio — guardar o vazio faria o rótulo sumir depois do aviso */
+      b._rot = b._rot || b.textContent || t("mc_prompt_btn");
+      b.textContent = t("mc_prompt_copiado_btn", { n: txt.length });
+      b.classList.add("btn-salvo");
+      b._voltar = setTimeout(() => {
+        b.textContent = b._rot;
+        b.classList.remove("btn-salvo");
+        b._voltar = null;
+      }, 2200);
+    }
+  }
+  reg("MATERIAL-CARTOES", copiou ? "prompt copiado" : "prompt gerado (sem copiar)",
+      matAtual.topico + " · " + txt.length + " caracteres"
+      + (mcPromptDeFora ? " · de uma questão" : ""));
+  if (copiou) toast("mc_prompt_copiado");
+}
+
+/* o navegador negou a área de transferência: o texto já está à mostra,
+ * então basta abrir o bloco e explicar */
+function matCartoesPromptFalhou() {
+  if ($("mcPromptVer")) $("mcPromptVer").open = true;
+  const b = $("btnMcPrompt");
+  if (b) {
+    if (b._voltar) clearTimeout(b._voltar);
+    b._rot = b._rot || b.textContent || t("mc_prompt_btn");
+    b.textContent = t("mc_prompt_falhou_btn");
+    b._voltar = setTimeout(() => { b.textContent = b._rot; b._voltar = null; }, 3000);
+  }
 }
 
 /* Lê com o parser do próprio app: o que não passa aqui não passaria na
@@ -2273,7 +2322,19 @@ function matCartoesIniciar() {
   if ($("btnMcPrompt")) $("btnMcPrompt").onclick = matCartoesPrompt;
   if ($("btnMcSalvar")) $("btnMcSalvar").onclick = matCartoesSalvar;
   if ($("btnMcVer")) $("btnMcVer").onclick = matCartoesVer;
-  if ($("btnMcFechar")) $("btnMcFechar").onclick = () => $("dlgMatCartoes").close();
+  /* VOLTAR PARA ONDE SE VEIO.
+   * O botão dizia sempre "Voltar ao resumo". Quem chegou aqui de uma
+   * questão era despejado no resumo, com a rodada de questões fechada
+   * atrás — e tinha de reabrir tudo para continuar de onde estava. */
+  if ($("btnMcFechar")) {
+    $("btnMcFechar").onclick = () => {
+      $("dlgMatCartoes").close();
+      if (mcVoltarPara === "questoes" && typeof qsUiVoltarASessao === "function") {
+        qsUiVoltarASessao();
+      }
+      mcVoltarPara = null;
+    };
+  }
   if ($("mcTexto")) $("mcTexto").addEventListener("input", matCartoesConferir);
   mcEstudoIniciar();
 }

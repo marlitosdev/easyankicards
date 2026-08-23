@@ -140,6 +140,7 @@ function qsUiCartoesDaQuestao(q) {
   mcApontarTopico(q.disciplina, q.topico);
   matCartoesAbrir({
     semGravarResumo: true,
+    voltarPara: "questoes",
     prompt: qsPromptCartao(q),
     sub: t("qs_cartao_sub", { tp: q.topico,
       n: (typeof matContarCartoes === "function"
@@ -147,6 +148,15 @@ function qsUiCartoesDaQuestao(q) {
   });
   matReg("questao", "cartões a partir de uma questão",
          q.topico + " · " + String(q.enunciado).slice(0, 60));
+}
+
+/* volta para a rodada de questões de onde a pessoa saiu, no ponto em que
+ * estava — sem perder a sessão nem obrigar a reabrir pelo caminho longo */
+function qsUiVoltarASessao() {
+  if (!qsSessaoAtual()) return false;
+  qsUiPintarSessao();
+  abrirModal("dlgQsResponder");
+  return true;
 }
 
 function qsUiCaixaDica(texto) {
@@ -377,9 +387,9 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
       c: retomavel.certas,
       pct: retomavel.feitas ? Math.round((retomavel.certas / retomavel.feitas) * 100) : 0,
     }), [
-      { valor: "continuar", rotulo: t("qs_retomar_sim") },
-      { valor: "recomecar", rotulo: t("qs_retomar_nao") },
-      { valor: "sair", rotulo: t("cancel_btn") },
+      { valor: "continuar", rot: t("qs_retomar_sim"), classe: "btn-verde" },
+      { valor: "recomecar", rot: t("qs_retomar_nao"), classe: "btn-azul" },
+      { valor: "sair", rot: t("cancel_btn") },
     ]);
     if (r === "sair" || r === null) return;
     if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
