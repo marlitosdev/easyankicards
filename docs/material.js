@@ -1634,7 +1634,12 @@ function matRegistrarLeitura() {
    * tempo passou lendo é quem leu. Abre o registro de estudo de sempre,
    * já com a forma "resumo" marcada e os minutos sugeridos, e a decisão
    * de fechar ou não o tópico é de quem confirma. */
-  $("dlgMaterial").close();
+  /* O RESUMO FICA ABERTO.
+   * Antes daqui saía um close(): registrar a leitura fechava o texto
+   * que se acabou de ler. Quem registra costuma querer continuar ali —
+   * marcar mais um trecho, conferir uma dúvida, criar um cartão — e
+   * tinha de reabrir o tópico inteiro para isso. O registro é uma
+   * janela POR CIMA, como o painel de cartões já é. */
   if (typeof abrirRegistro !== "function") { uiAlert(t("mat_lido_sem_edital")); return; }
   abrirRegistro(item);
   if (typeof regDeLeitura === "function") regDeLeitura(min);

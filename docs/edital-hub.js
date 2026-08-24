@@ -66,7 +66,7 @@ function hubPintarAgenda() {
   tit.textContent = t("hub_agenda_tit");
   cab.append(tit, hubControlesAgenda());
   cx.append(cab);
-  const filtroEd = hubFiltroEdital(ativos);
+  const filtroEd = hubFiltroEdital(todosAtivos);
   if (filtroEd) cx.append(filtroEd);
 
   /* pega a fila da semana de cada edital ativo e junta */
@@ -97,6 +97,43 @@ function hubPintarAgenda() {
 
   linhas.sort((a, b) => (b.ehRevisao ? 1 : 0) - (a.ehRevisao ? 1 : 0) || b.ordem - a.ordem);
 
+  /* TIRADOS DA AGENDA: adiados com prazo em aberto e dispensados.
+   * Some daqui, não do plano: o que sai por tempo volta sozinho quando o
+   * prazo vence, e o que saiu de vez continua listado na sua gaveta. */
+  const antesDeTirar = linhas.length;
+  const listaCheia = linhas.slice();
+  const visiveis = linhas.filter((i) => !edEstaFora(i.chave));
+  const tirados = antesDeTirar - visiveis.length;
+  linhas.length = 0;
+  visiveis.forEach((i) => linhas.push(i));
+
+  /* FILTRO DE DISCIPLINA — em cima das linhas que sobraram.
+   * A ordem de prioridade não muda: filtrar é esconder, não reordenar.
+   * As opções saem das disciplinas que REALMENTE estão na agenda desta
+   * semana; oferecer as 17 do edital, com 4 na tela, seria oferecer 13
+   * botões que não fazem nada. */
+  const disciplinas = [];
+  linhas.forEach((i) => {
+    if (i.disciplina && disciplinas.indexOf(i.disciplina) < 0) disciplinas.push(i.disciplina);
+  });
+  const filtroDisc = hubFiltroDisciplina(disciplinas);
+  if (filtroDisc) cx.append(filtroDisc);
+  const escolhidas = hubDiscEscolhidas(disciplinas);
+  const daFiltragem = linhas.filter((i) => escolhidas.indexOf(i.disciplina) >= 0);
+  const escondidas = linhas.length - daFiltragem.length;
+  linhas.length = 0;
+  daFiltragem.forEach((i) => linhas.push(i));
+
+  if (tirados || escondidas) {
+    const av = document.createElement("div");
+    av.className = "ed-caixa-sub ed-ag-aviso";
+    av.textContent = [
+      tirados ? t("hub_ag_tirados", { n: tirados }) : "",
+      escondidas ? t("hub_ag_escondidas", { n: escondidas }) : "",
+    ].filter(Boolean).join(" · ");
+    cx.append(av);
+  }
+
   const sub = document.createElement("div");
   sub.className = "ed-caixa-sub";
   sub.textContent = t(ativos.length === 1 ? "hub_agenda_sub1" : "hub_agenda_sub", {
@@ -111,9 +148,21 @@ function hubPintarAgenda() {
    * para saber se você está em dia ou atrás. O feito vem do DIÁRIO (o que
    * aconteceu de verdade), não do que está marcado: marcar um tópico não
    * diz quanto tempo levou. */
-  const planejadoMin = linhas.reduce((a, i) => a + (i.minutos || 0), 0);
+  const planejadoMin = linhas.reduce((a2, i) => a2 + (i.minutos || 0), 0);
   const feitoMin = minutosDaSemana();
-  const pct = planejadoMin ? Math.min(100, Math.round((feitoMin / planejadoMin) * 100)) : 0;
+
+  /* HORA DISPENSADA NÃO É HORA ESTUDADA NEM HORA PERDIDA.
+   *
+   * Somá-la ao feito faria a barra dizer que a semana foi produtiva sem
+   * ninguém ter estudado; deixá-la de fora faria a semana parecer
+   * atrasada por causa de uma decisão consciente. É uma terceira coisa,
+   * e ganha uma faixa própria — cinza, entre o verde do feito e o vazio
+   * do que falta. Só entram as dispensadas DESTA semana: as antigas já
+   * não pesam sobre estes sete dias. */
+  const dispMin = faDispensadosDaSemana();
+  const base = planejadoMin + dispMin;
+  const pct = base ? Math.min(100, Math.round((feitoMin / base) * 100)) : 0;
+  const pctDisp = base ? Math.min(100 - pct, Math.round((dispMin / base) * 100)) : 0;
 
   const med = document.createElement("div");
   med.className = "ag-medidor";
@@ -123,12 +172,19 @@ function hubPintarAgenda() {
   fill.className = "ag-fill" + (pct >= 100 ? " cheio" : (pct >= 50 ? " meio" : ""));
   fill.style.width = pct + "%";
   barra.append(fill);
+  if (pctDisp > 0) {
+    const disp = document.createElement("div");
+    disp.className = "ag-fill-disp";
+    disp.style.width = pctDisp + "%";
+    disp.title = t("hub_medidor_disp_ajuda", { h: horasTexto(dispMin) });
+    barra.append(disp);
+  }
   const rot = document.createElement("div");
   rot.className = "ag-med-rot";
   rot.textContent = t("hub_medidor", {
     f: horasTexto(feitoMin), p: horasTexto(planejadoMin), pct,
     falta: horasTexto(Math.max(0, planejadoMin - feitoMin)),
-  });
+  }) + (dispMin ? " · " + t("hub_medidor_disp", { h: horasTexto(dispMin) }) : "");
   med.append(barra, rot);
   med.title = t("hub_medidor_ajuda");
   cx.append(med);
@@ -171,6 +227,98 @@ function hubPintarAgenda() {
 /* Um só lugar mostra a semana. Quando a pessoa está dentro de um edital,
  * ela às vezes quer ver só aquele — mas isso é um FILTRO da mesma lista, e
  * não uma segunda lista com outro número. */
+/* QUEM ESTÁ NA VISTA AGORA — um lugar só.
+ * O cabeçalho, a soma de horas e a lista precisam concordar sobre isso;
+ * cada um calculando por conta própria é como nasceram os 40 contra 44. */
+/* ---------------- FILTRO DE DISCIPLINA ----------------
+ * Guardado por NOME de disciplina, não por índice: o plano muda de
+ * ordem a cada semana, e índice guardado passaria a apontar para outra
+ * matéria sem avisar. Guarda-se o que foi ESCONDIDO, não o que foi
+ * escolhido — assim disciplina nova entra visível por padrão, em vez de
+ * nascer oculta porque não estava na lista do dia em que se filtrou. */
+const HUB_DISC_OCULTAS = "eac_agenda_disc_ocultas";
+
+function hubDiscOcultas() {
+  try {
+    const v = JSON.parse(localStorage.getItem(HUB_DISC_OCULTAS) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch (e) { return []; }
+}
+function hubDiscOcultasGravar(lista) {
+  try { localStorage.setItem(HUB_DISC_OCULTAS, JSON.stringify(lista || [])); }
+  catch (e) {}
+}
+function hubDiscEscolhidas(todas) {
+  const ocultas = hubDiscOcultas();
+  const vis = (todas || []).filter((d) => ocultas.indexOf(d) < 0);
+  /* esconder TUDO deixaria a agenda vazia sem explicação: nesse caso o
+   * filtro se desfaz sozinho e a semana volta inteira */
+  return vis.length ? vis : (todas || []).slice();
+}
+
+function hubFiltroDisciplina(todas) {
+  if (!todas || todas.length < 2) return null;
+  const ocultas = hubDiscOcultas();
+  const cx = document.createElement("div");
+  cx.className = "ed-agenda-filtro ed-ag-disc";
+
+  const rot = document.createElement("span");
+  rot.className = "ed-ag-disc-rot";
+  rot.textContent = t("hub_ag_disc_rot");
+  cx.append(rot);
+
+  todas.forEach((d) => {
+    const on = ocultas.indexOf(d) < 0;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ed-ag-opt" + (on ? " ativa" : "");
+    b.textContent = d;
+    b.title = t(on ? "hub_ag_disc_esconder" : "hub_ag_disc_mostrar", { d });
+    b.onclick = () => {
+      const lista = hubDiscOcultas();
+      const k = lista.indexOf(d);
+      if (k >= 0) lista.splice(k, 1); else lista.push(d);
+      hubDiscOcultasGravar(lista);
+      hubPintarAgenda();
+      reg("EDITAL", "filtro de disciplina na agenda",
+          (k >= 0 ? "mostrar " : "esconder ") + d);
+    };
+    cx.append(b);
+  });
+
+  if (ocultas.length) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min";
+    b.textContent = t("hub_ag_disc_todas");
+    b.title = t("hub_ag_disc_todas_ajuda");
+    b.onclick = () => { hubDiscOcultasGravar([]); hubPintarAgenda(); };
+    cx.append(b);
+  }
+  return cx;
+}
+
+/* dispensados DESTA semana, em minutos */
+function faDispensadosDaSemana() {
+  if (typeof faDispensados !== "function") return 0;
+  const hoje = new Date();
+  const ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - hoje.getDay());
+  return faDispensados().reduce((a, d) => {
+    const q = d.q ? new Date(d.q) : null;
+    if (!q || q < ini) return a;
+    return a + (Number(d.minutos) || 0);
+  }, 0);
+}
+
+function hubEditaisNaVista() {
+  const ativos = editais.filter((e) => edSituacao(e).grupo !== "encerrado");
+  if (hubSoEste && edAberto()) {
+    const so = ativos.filter((e) => e.id === edAberto().id);
+    if (so.length) return so;
+  }
+  return ativos;
+}
+
 function hubFiltroEdital(todos) {
   const aberto = edAberto();
   if (!aberto || todos.length < 2) { hubSoEste = false; return null; }
@@ -238,12 +386,27 @@ function hubControlesAgenda() {
    * semanais. Aqui é VISTA, não campo: quem manda nelas é o planejamento
    * de cada edital, e ter dois lugares editando o mesmo número é como se
    * criam os dois números que discordam. */
+  /* AS HORAS DE QUEM ESTÁ NA AGENDA, E DITO QUANTOS SÃO.
+   *
+   * Este número somava TODOS os editais ativos enquanto o painel "Plano
+   * de estudo" mostrava as horas de UM. Dois números na mesma tela,
+   * 40 e 44, sem nada explicando a diferença — parecia erro de conta.
+   * Não era: eram perguntas diferentes com a mesma cara. Agora ele
+   * segue o filtro (com um edital em vista, bate com o painel) e diz
+   * de quantos editais está falando quando é mais de um. */
   const lh = document.createElement("div");
   lh.className = "ed-agenda-cfg-item ed-agenda-horas";
-  const totalH = (editais.filter((e) => edSituacao(e).grupo !== "encerrado")
-    .reduce((s, e) => s + ((lerEdital(e.texto || "").cfg || {}).horas || 0), 0));
-  lh.textContent = t("hub_cfg_horas", { h: totalH });
-  lh.title = t("hub_cfg_horas_ajuda");
+  const usados = hubEditaisNaVista();
+  const totalH = usados.reduce(
+    (s2, e) => s2 + ((lerEdital(e.texto || "").cfg || {}).horas || 0), 0);
+  lh.textContent = usados.length > 1
+    ? t("hub_cfg_horas_n", { h: totalH, n: usados.length })
+    : t("hub_cfg_horas", { h: totalH });
+  lh.title = usados.length > 1
+    ? t("hub_cfg_horas_n_ajuda", {
+        lista: usados.map((e) => (e.nome || "?") + " "
+          + ((lerEdital(e.texto || "").cfg || {}).horas || 0) + "h").join(" + ") })
+    : t("hub_cfg_horas_ajuda");
 
   cx.append(ld, lh);
   return cx;

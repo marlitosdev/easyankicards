@@ -406,9 +406,111 @@ function edLinhaTopico(i, semDisciplina) {
     try { qsUiResponderDireto(i.disciplina, i.nome); } catch (x) {}
   };
 
+  /* TIRAR DA AGENDA — ao lado do registro de estudo.
+   * Registrar diz "fiz"; este diz "agora não" ou "não preciso". Sem ele,
+   * a única saída para um item fora de hora era marcá-lo como feito,
+   * que é mentira que vira número no diário. */
+  const fora = document.createElement("button");
+  fora.type = "button";
+  fora.className = "btn-min ed-fora";
+  fora.textContent = "⤳";
+  fora.title = t("fa_btn_ajuda");
+  fora.onclick = (ev) => {
+    ev.stopPropagation();
+    faAbrir(i);
+  };
+
   li._itemChave = i.chave;
-  li.append(chk, pt, meio, doc, crt, lei, qst, rev, min);
+  li.append(chk, pt, meio, doc, crt, lei, qst, fora, rev, min);
   return li;
+}
+
+/* A AGENDA PERGUNTA "ESTE SAIU?" NUM LUGAR SÓ.
+ * O hub e a lista do edital desenham linhas por caminhos diferentes;
+ * cada um consultando a gaveta por conta própria era como nasceriam
+ * dois critérios para a mesma pergunta. */
+function edEstaFora(chave) {
+  return typeof faEstaFora === "function" ? faEstaFora(chave) : false;
+}
+
+/* ---------------- TIRAR DA AGENDA, COM O PORQUÊ ---------------- */
+let faItemAlvo = null;
+
+function faAbrir(item) {
+  if (!item || !$("dlgForaAgenda")) return;
+  faItemAlvo = item;
+  $("faAlvo").textContent = t("fa_alvo", {
+    d: item.disciplina || "?", t: item.nome || item.topico || "?" });
+
+  [["faTempo", "adiado"], ["faVez", "dispensado"]].forEach(([id, tipo]) => {
+    const cx = $(id);
+    if (!cx) return;
+    cx.innerHTML = "";
+    FA_MOTIVOS.filter((m) => m.tipo === tipo).forEach((m) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min";
+      b.textContent = t("fa_motivo_" + m.id)
+        + (m.dias ? "  \u00b7  " + t("ed_fa_dias", { n: m.dias }) : "");
+      b.onclick = () => faConfirmar(m.id);
+      cx.append(b);
+    });
+  });
+  abrirModal("dlgForaAgenda");
+}
+
+function faConfirmar(motivoId) {
+  const item = faItemAlvo;
+  const m = faMotivo(motivoId);
+  if (!item || !m) return;
+  const r = faTirar(item, motivoId);
+  $("dlgForaAgenda").close();
+  faItemAlvo = null;
+  if (!r) return;
+  /* recibo: o que aconteceu e o que esperar. "Sumiu da tela" sozinho
+   * não distingue adiado de dispensado, que é justamente a diferença
+   * que este gesto criou. */
+  uiAlert(t(r.tipo === "adiado" ? "fa_feito_adiado" : "fa_feito_dispensado",
+    { t: item.nome || item.topico || "?", d: r.ate || "" }));
+  try { edRender(); } catch (e) {}
+  try { hubPintarAgenda(); } catch (e) {}
+}
+
+function faListaAbrir() {
+  const box = $("faListaCx");
+  if (!box) return;
+  box.innerHTML = "";
+  const ad = faAdiados(), di = faDispensados();
+  $("faListaResumo").textContent = (ad.length || di.length)
+    ? t("fa_lista_resumo", { a: ad.length, d: di.length,
+        h: horasTexto(faMinutosDispensados()) })
+    : t("fa_lista_vazia");
+
+  ad.concat(di).forEach((r) => {
+    const li = document.createElement("div");
+    li.className = "duv-item";
+    const tit = document.createElement("div");
+    tit.className = "duv-trecho";
+    tit.textContent = (r.disciplina ? r.disciplina + " › " : "") + (r.topico || r.chave);
+    const mot = document.createElement("div");
+    mot.className = "fa-item-motivo";
+    mot.textContent = t("fa_motivo_" + r.motivo)
+      + (r.ate ? " · " + t("fa_volta_em", { d: r.ate })
+               : " · " + t("fa_dispensado_rot"));
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min";
+    b.textContent = t("fa_voltar");
+    b.title = t("fa_voltar_ajuda");
+    b.onclick = () => {
+      faVoltar(r.chave);
+      faListaAbrir();
+      try { edRender(); } catch (e) {}
+      try { hubPintarAgenda(); } catch (e) {}
+    };
+    li.append(tit, mot, b);
+    box.append(li);
+  });
+  abrirModal("dlgForaLista");
 }
 
 /* A frase que explica a recomendação. Sem ela, "Esta semana" é uma ordem sem
@@ -1939,6 +2041,10 @@ function edIniciar() {
   });
   $("edDias").onchange = edRender;
   $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
+  if ($("btnFaFechar")) $("btnFaFechar").onclick = () => {
+    $("dlgForaAgenda").close(); faItemAlvo = null;
+  };
+  if ($("btnFaListaFechar")) $("btnFaListaFechar").onclick = () => $("dlgForaLista").close();
   ["regQFeitas", "regQCertas", "regQPctCampo"].forEach((id) => {
     if ($(id)) $(id).addEventListener("input", regPintarPct);
   });
