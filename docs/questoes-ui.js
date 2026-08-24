@@ -633,6 +633,18 @@ function qsUiPintarSessao() {
   /* SÓ AS QUE ERREI — liga e desliga no meio da rodada.
    * Aparece a partir do momento em que existe o que filtrar; antes da
    * primeira resposta ele não teria o que fazer. */
+  /* ENCERRAR COM O PLACAR QUE ESTIVER.
+   * Uma rodada de 40 questões raramente termina de uma vez, e antes
+   * disto só havia duas saídas: responder todas ou fechar a janela — e
+   * fechar não registrava nada, então uma hora de estudo evaporava.
+   * Aqui a rodada acaba onde está e o placar parcial vira registro. */
+  if ($("btnQsEncerrar")) {
+    const b = $("btnQsEncerrar");
+    const pl = qsPlacar();
+    b.hidden = !pl.feitas;
+    b.textContent = t("qs_encerrar", { c: pl.certas, n: pl.feitas, pct: pl.pct });
+    b.title = t("qs_encerrar_ajuda", { f: Math.max(0, pl.total - pl.feitas) });
+  }
   if ($("btnQsSoFalhas")) {
     const b = $("btnQsSoFalhas");
     const lig = qsFiltroFalhasLigado();
@@ -656,6 +668,31 @@ function qsUiPintarSessao() {
 /* Leva o resultado da sessão para o registro de estudo do edital.
  * Não grava nada sozinho: abre o mesmo formulário de sempre, já preenchido,
  * para a pessoa conferir, ajustar e confirmar. */
+/* ENCERRAR AGORA — com duas perguntas.
+ *
+ * A primeira mostra o placar e o que fica pendente; a segunda exige
+ * confirmar que é isso mesmo. Duas porque o gesto é irreversível para a
+ * rodada: as pendentes voltam a ser pendentes, e quem apertou por
+ * engano perde a sequência em que estava. Depois do sim, vai direto ao
+ * registro de estudo com o placar parcial — que é o motivo de existir
+ * este botão. */
+async function qsUiEncerrarComPlacar() {
+  const s = qsSessaoAtual();
+  const p = qsPlacar();
+  if (!s || !p.feitas) { uiAlert(t("qs_registrar_nada")); return; }
+  const faltam = Math.max(0, p.total - p.feitas);
+
+  if (!(await uiConfirm(t("qs_encerrar_conf1", {
+    c: p.certas, n: p.feitas, pct: p.pct, f: faltam })))) return;
+  if (!(await uiConfirm(t("qs_encerrar_conf2", { n: p.feitas })))) return;
+
+  matReg("questao", "rodada encerrada pelo placar parcial",
+         p.certas + "/" + p.feitas + " (" + p.pct + "%) · " + faltam + " pendentes");
+  /* o registro precisa da sessão VIVA para saber o tópico e o tempo;
+   * apagar antes deixaria o registro sem de onde tirar os dados */
+  qsUiRegistrarEstudo();
+}
+
 function qsUiRegistrarEstudo() {
   const s = qsSessaoAtual();
   if (!s || !s.respondidas.length) { uiAlert(t("qs_registrar_nada")); return; }
@@ -933,6 +970,9 @@ function qsUiIniciar() {
       matReg("questao", "questão pulada",
              q ? String(q.enunciado).slice(0, 60) : "");
     });
+  }
+  if ($("btnQsEncerrar")) {
+    $("btnQsEncerrar").onclick = () => qsUiEncerrarComPlacar();
   }
   if ($("btnQsSoFalhas")) {
     $("btnQsSoFalhas").onclick = () => {

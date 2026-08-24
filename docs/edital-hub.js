@@ -118,12 +118,19 @@ function hubPintarAgenda() {
   });
   const filtroDisc = hubFiltroDisciplina(disciplinas);
   if (filtroDisc) cx.append(filtroDisc);
+  const tudoOculto = hubDiscTudoOculto(disciplinas);
   const escolhidas = hubDiscEscolhidas(disciplinas);
   const daFiltragem = linhas.filter((i) => escolhidas.indexOf(i.disciplina) >= 0);
   const escondidas = linhas.length - daFiltragem.length;
   linhas.length = 0;
   daFiltragem.forEach((i) => linhas.push(i));
 
+  if (tudoOculto) {
+    const vz = document.createElement("div");
+    vz.className = "ed-caixa-sub";
+    vz.textContent = t("hub_ag_disc_vazio", { n: disciplinas.length });
+    cx.append(vz);
+  }
   if (tirados || escondidas) {
     const av = document.createElement("div");
     av.className = "ed-caixa-sub ed-ag-aviso";
@@ -248,12 +255,19 @@ function hubDiscOcultasGravar(lista) {
   try { localStorage.setItem(HUB_DISC_OCULTAS, JSON.stringify(lista || [])); }
   catch (e) {}
 }
+/* ESCONDER TUDO É UM PASSO INTERMEDIÁRIO, NÃO UM ESTADO.
+ * Quem quer ver só uma disciplina de dezessete não vai clicar em
+ * dezesseis: clica em "desmarcar todas" e depois na que quer. Entre um
+ * clique e outro a agenda fica legitimamente vazia — e precisa dizer
+ * isso, em vez de se desfazer sozinha e devolver as dezessete. */
+function hubDiscTudoOculto(todas) {
+  const ocultas = hubDiscOcultas();
+  return !!(todas || []).length && (todas || []).every((d) => ocultas.indexOf(d) >= 0);
+}
+
 function hubDiscEscolhidas(todas) {
   const ocultas = hubDiscOcultas();
-  const vis = (todas || []).filter((d) => ocultas.indexOf(d) < 0);
-  /* esconder TUDO deixaria a agenda vazia sem explicação: nesse caso o
-   * filtro se desfaz sozinho e a semana volta inteira */
-  return vis.length ? vis : (todas || []).slice();
+  return (todas || []).filter((d) => ocultas.indexOf(d) < 0);
 }
 
 function hubFiltroDisciplina(todas) {
@@ -271,7 +285,10 @@ function hubFiltroDisciplina(todas) {
     const on = ocultas.indexOf(d) < 0;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "ed-ag-opt" + (on ? " ativa" : "");
+    /* classe própria: "todo botão dentro do filtro" incluía o
+     * "desmarcar todas" e o "mostrar todas", que não são disciplinas.
+     * Sem separar, qualquer botão novo na barra quebra quem conta. */
+    b.className = "ed-ag-opt ed-ag-disc-b" + (on ? " ativa" : "");
     b.textContent = d;
     b.title = t(on ? "hub_ag_disc_esconder" : "hub_ag_disc_mostrar", { d });
     b.onclick = () => {
@@ -285,6 +302,18 @@ function hubFiltroDisciplina(todas) {
     };
     cx.append(b);
   });
+
+  const nenhuma = document.createElement("button");
+  nenhuma.type = "button";
+  nenhuma.className = "btn-min";
+  nenhuma.textContent = t("hub_ag_disc_nenhuma");
+  nenhuma.title = t("hub_ag_disc_nenhuma_ajuda");
+  nenhuma.onclick = () => {
+    hubDiscOcultasGravar(todas.slice());
+    hubPintarAgenda();
+    reg("EDITAL", "filtro de disciplina na agenda", "desmarcou todas");
+  };
+  cx.append(nenhuma);
 
   if (ocultas.length) {
     const b = document.createElement("button");
