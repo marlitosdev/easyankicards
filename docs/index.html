@@ -1605,6 +1605,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   rgba(148,163,184,.28) 5px,rgba(148,163,184,.28) 10px)}
 .ag-barra{position:relative}
 .ag-fill{position:relative;z-index:1}
+.nd-ia{border:1px solid var(--borda);border-radius:10px;padding:9px;margin:9px 0}
+.nd-ia-bts{display:flex;gap:6px;flex-wrap:wrap;margin:5px 0 8px}
 </style>
 </head>
 <body>
@@ -2422,6 +2424,28 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     placeholder="Um tópico por linha. Opcional: nome :: peso :: por que cai"></textarea>
   <div class="nota" data-i18n="nd_topicos_dica"></div>
 
+  <!-- MESMA SISTEMATICA DOS OUTROS PROMPTS: copiar, levar a IA, colar de
+       volta. Quem tem o edital em PDF nao vai digitar 22 topicos com peso
+       um a um; o que falta e o texto no formato do app. -->
+  <div class="nd-ia">
+    <button type="button" class="btn-min" id="btnNdPrompt"></button>
+    <div id="ndPromptCx" hidden>
+      <p class="nota" data-i18n="nd_prompt_ajuda"></p>
+      <textarea id="ndPrompt" rows="6" readonly
+        style="width:100%;box-sizing:border-box"></textarea>
+      <div class="nd-ia-bts">
+        <button type="button" class="btn-min btn-min-ok" id="btnNdCopiar"></button>
+      </div>
+      <p class="nota" data-i18n="nd_colar_ajuda"></p>
+      <textarea id="ndColar" rows="6"
+        style="width:100%;box-sizing:border-box"
+        placeholder="Cole aqui a resposta da IA"></textarea>
+      <div class="nd-ia-bts">
+        <button type="button" class="btn-min btn-min-ok" id="btnNdAplicarIA"></button>
+      </div>
+    </div>
+  </div>
+
   <div id="ndRedistrib" class="nd-redistrib" hidden></div>
 
   <div class="dlg-rodape">
@@ -2670,6 +2694,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
     <button class="btn-min" id="btnQsSoFalhas" hidden></button>
     <button class="btn btn-verde" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
+    <button class="btn btn-verde" id="btnQsEncerrar" hidden></button>
     <button class="btn btn-cinza" id="btnQsCriarDaSessao" data-i18n="qs_criar_mais"
       title="Fecha a sessão e abre a criação de questões para este tópico."></button>
     <button class="btn btn-cinza" id="btnQsSessFechar" data-i18n="help_close"

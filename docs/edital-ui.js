@@ -252,8 +252,14 @@ function edLinhaTopico(i, semDisciplina) {
   chk.title = t(i.feito ? "ed_reg_mais" : "ed_reg_novo");
   chk.onclick = (ev) => { ev.stopPropagation(); abrirRegistro(i); };
 
+  /* O PONTO COLORIDO TEM DE SE EXPLICAR.
+   * Ele carrega a decisão inteira do plano — por que este tópico está
+   * na frente dos outros — e era a única coisa da linha sem nada ao
+   * passar o mouse. Cor sem legenda é enfeite; com legenda, é o
+   * argumento que faz a pessoa aceitar (ou contestar) a ordem. */
   const pt = document.createElement("span");
   pt.className = "ed-ponto ponto-" + i.faixa;
+  pt.title = edExplicarCor(i);
 
   const meio = document.createElement("div");
   meio.className = "ed-item-meio";
@@ -421,7 +427,10 @@ function edLinhaTopico(i, semDisciplina) {
   };
 
   li._itemChave = i.chave;
-  li.append(chk, pt, meio, doc, crt, lei, qst, fora, rev, min);
+  /* "tirar da agenda" ao lado de "registrar": as duas respostas possíveis
+   * para o mesmo item ficam juntas — "fiz" e "agora não". Lá no fim da
+   * linha, entre os atalhos de material, ele parecia mais um documento. */
+  li.append(chk, fora, pt, meio, doc, crt, lei, qst, rev, min);
   return li;
 }
 
@@ -429,6 +438,18 @@ function edLinhaTopico(i, semDisciplina) {
  * O hub e a lista do edital desenham linhas por caminhos diferentes;
  * cada um consultando a gaveta por conta própria era como nasceriam
  * dois critérios para a mesma pergunta. */
+/* A COR, EM PALAVRAS. Uma frase que diz o que a cor significa e de onde
+ * ela veio — peso da disciplina × peso do tópico — para a ordem da
+ * agenda poder ser conferida em vez de obedecida no escuro. */
+function edExplicarCor(i) {
+  const faixa = i && i.faixa ? t("ed_faixa_" + i.faixa) : null;
+  if (!faixa) return t("ed_cor_sem_plano");
+  const temPeso = i.disciplinaPeso != null && i.peso != null;
+  return t("ed_cor_ajuda", { faixa })
+    + (temPeso ? " " + t("ed_cor_conta",
+        { d: i.disciplinaPeso, p: i.peso, b: i.disciplinaPeso * i.peso }) : "");
+}
+
 function edEstaFora(chave) {
   return typeof faEstaFora === "function" ? faEstaFora(chave) : false;
 }
@@ -2134,6 +2155,32 @@ function edIniciar() {
   vrIniciar();
   if ($("btnEdNovaDisc")) $("btnEdNovaDisc").onclick = ndAbrir;
   if ($("btnNdIncluir")) $("btnNdIncluir").onclick = ndIncluir;
+  if ($("btnNdPrompt")) {
+    $("btnNdPrompt").onclick = () => {
+      const cx = $("ndPromptCx");
+      cx.hidden = !cx.hidden;
+      $("btnNdPrompt").textContent = t(cx.hidden ? "nd_prompt_btn" : "nd_prompt_btn_fechar");
+      if (!cx.hidden) ndPintarPrompt();
+    };
+  }
+  if ($("btnNdCopiar")) {
+    $("btnNdCopiar").textContent = t("nd_copiar");
+    $("btnNdCopiar").onclick = () => {
+      ndPintarPrompt();
+      try { navigator.clipboard.writeText($("ndPrompt").value); } catch (e) {}
+      const b2 = $("btnNdCopiar");
+      const r = b2.textContent;
+      b2.textContent = t("copied");
+      setTimeout(() => { b2.textContent = r; }, 1800);
+    };
+  }
+  if ($("btnNdAplicarIA")) {
+    $("btnNdAplicarIA").textContent = t("nd_aplicar_ia");
+    $("btnNdAplicarIA").onclick = () => ndAplicarIA();
+  }
+  /* o prompt cita a disciplina que se está criando: se o nome muda, ele
+   * tem de mudar junto, senão a IA recebe um alvo velho */
+  if ($("ndNome")) $("ndNome").addEventListener("input", ndPintarPrompt);
   if ($("btnNdFechar")) $("btnNdFechar").onclick = () => $("dlgNovaDisc").close();
   $("btnEditalCsv").onclick = () => {
     const r = lerEdital($("editalTexto").value);
@@ -2163,10 +2210,89 @@ function edIniciar() {
  * ===================================================================== */
 let ndPeso = 3;
 
+/* ---------------- O PROMPT DA DISCIPLINA ----------------
+ *
+ * Preencher 22 tópicos com peso e justificativa à mão é o tipo de
+ * trabalho que ninguém faz duas vezes — e quando faz, faz mal: no
+ * edital do TCE-PE, 17 disciplinas saíram com peso 3, o que anula a
+ * priorização inteira (prioridade é peso da disciplina × peso do
+ * tópico; se todos são 3, tudo empata).
+ *
+ * O prompt não escreve no edital: preenche os CAMPOS desta janela. O
+ * texto só entra depois que a pessoa conferir e apertar Incluir — a
+ * mesma regra dos outros rituais de IA do app. */
+function ndMontarPrompt() {
+  let concurso = "", banca = "";
+  try {
+    const cfg = (lerEdital($("editalTexto").value).cfg) || {};
+    concurso = cfg.concurso || "";
+    banca = cfg.banca || "";
+  } catch (e) {}
+  return t("nd_prompt", {
+    concurso: concurso || "—",
+    banca: banca || "—",
+    disc: String(($("ndNome") || {}).value || "").trim() || "—",
+  });
+}
+
+function ndPintarPrompt() {
+  if (!$("ndPrompt")) return;
+  $("ndPrompt").value = ndMontarPrompt();
+}
+
+/* LÊ A RESPOSTA DA IA.
+ * Tolerante com o que muda entre modelos (acento em TÓPICOS, dois
+ * pontos ausentes, linha em branco no meio) e rígido com o que
+ * importa: sem nome de disciplina não há o que preencher. */
+function ndLerRespostaIA(txt) {
+  const linhas = String(txt || "").split(/\r?\n/);
+  const semAcento = (x) => String(x).normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  let nome = "", peso = null;
+  const topicos = [];
+  let emTopicos = false;
+  linhas.forEach((l0) => {
+    const l = String(l0).trim();
+    if (!l) return;
+    const chave = semAcento(l);
+    if (/^DISCIPLINA\s*:?/.test(chave)) {
+      nome = l.replace(/^[^:]*:?/, "").trim();
+      emTopicos = false; return;
+    }
+    if (/^PESO\s*:?/.test(chave)) {
+      const m = l.match(/(\d+)/);
+      if (m) peso = Math.max(1, Math.min(5, Number(m[1])));
+      emTopicos = false; return;
+    }
+    if (/^TOPICOS\s*:?/.test(chave)) { emTopicos = true; return; }
+    if (emTopicos) topicos.push(l.replace(/^[-*\u2022]\s*/, ""));
+  });
+  return { nome, peso, topicos };
+}
+
+function ndAplicarIA() {
+  const cru = String(($("ndColar") || {}).value || "").trim();
+  if (!cru) { uiAlert(t("nd_ia_vazio")); return false; }
+  const r = ndLerRespostaIA(cru);
+  if (!r.nome) { uiAlert(t("nd_ia_sem_nome")); return false; }
+  $("ndNome").value = r.nome;
+  if (r.peso) { ndPeso = r.peso; ndPintarPesos(); }
+  if (r.topicos.length) $("ndTopicos").value = r.topicos.join("\n");
+  ndPintarPrompt();
+  reg("EDITAL", "disciplina preenchida pela IA",
+      r.nome + " · peso " + (r.peso || "?") + " · " + r.topicos.length + " tópicos");
+  uiAlert(t("nd_ia_ok", { d: r.nome, p: r.peso || "?", n: r.topicos.length }));
+  return true;
+}
+
 function ndAbrir() {
   ndPeso = 3;
   $("ndNome").value = "";
   $("ndTopicos").value = "";
+  if ($("ndColar")) $("ndColar").value = "";
+  if ($("ndPromptCx")) $("ndPromptCx").hidden = true;
+  if ($("btnNdPrompt")) $("btnNdPrompt").textContent = t("nd_prompt_btn");
+  ndPintarPrompt();
   $("ndRedistrib").hidden = true;
   ndPintarPesos();
   abrirModal("dlgNovaDisc");
