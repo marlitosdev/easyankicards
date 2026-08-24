@@ -1589,6 +1589,22 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .mat-conta-peg{border-color:rgba(236,72,153,.7);color:#f472b6}
 .mk-edit{width:100%;box-sizing:border-box;min-height:70px;font-size:12px;margin-top:6px}
 .mat-leitura mark{cursor:pointer}
+.fa-grupo{border:1px solid var(--borda);border-radius:10px;padding:9px;margin:8px 0}
+.fa-grupo-tit{font-weight:800;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.fa-grupo-dica{font-size:11px;color:var(--sutil);margin:3px 0 7px;line-height:1.45}
+.fa-opcoes{display:flex;flex-direction:column;gap:6px}
+.fa-opcoes button{text-align:left}
+.ed-fora{border-color:rgba(148,163,184,.6);color:#94a3b8}
+.ed-ag-disc-rot{font-size:10.5px;color:var(--sutil);align-self:center;margin-right:4px}
+.ed-ag-aviso{color:var(--sutil);font-size:11px}
+.fa-item-motivo{font-size:10.5px;color:var(--sutil);margin-top:3px}
+/* a faixa das horas dispensadas: encosta no fim do verde e vai ate onde
+   a decisao alcancou. Cinza de proposito — nao e conquista nem divida. */
+.ag-fill-disp{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(
+  45deg,rgba(148,163,184,.55),rgba(148,163,184,.55) 5px,
+  rgba(148,163,184,.28) 5px,rgba(148,163,184,.28) 10px)}
+.ag-barra{position:relative}
+.ag-fill{position:relative;z-index:1}
 </style>
 </head>
 <body>
@@ -2708,6 +2724,38 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
      Uma tela so, sem pergunta encadeada — a escolha de cor tem cinco
      opcoes e o modal generico so mostra tres, o que deixava duas cores
      inalcancaveis. -->
+<dialog id="dlgForaAgenda" class="ui-modal diag-modal">
+  <h3 data-i18n="fa_titulo"></h3>
+  <p class="nota" id="faAlvo"></p>
+  <p class="nota" data-i18n="fa_ajuda"></p>
+
+  <div class="fa-grupo">
+    <div class="fa-grupo-tit" data-i18n="fa_grupo_tempo"></div>
+    <div class="fa-grupo-dica" data-i18n="fa_grupo_tempo_dica"></div>
+    <div id="faTempo" class="fa-opcoes"></div>
+  </div>
+  <div class="fa-grupo">
+    <div class="fa-grupo-tit" data-i18n="fa_grupo_vez"></div>
+    <div class="fa-grupo-dica" data-i18n="fa_grupo_vez_dica"></div>
+    <div id="faVez" class="fa-opcoes"></div>
+  </div>
+
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnFaFechar" data-i18n="help_close"
+      title="Fecha sem tirar nada da agenda."></button>
+  </div>
+</dialog>
+
+<dialog id="dlgForaLista" class="ui-modal diag-modal">
+  <h3 data-i18n="fa_lista_titulo"></h3>
+  <p class="nota" data-i18n="fa_lista_ajuda"></p>
+  <p class="nota" id="faListaResumo"></p>
+  <div id="faListaCx" class="duv-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnFaListaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMarcaMenu" class="ui-modal diag-modal">
   <h3 id="mmTitulo"></h3>
   <p class="nota" id="mmTrecho"></p>
@@ -3128,6 +3176,7 @@ window.__sqlPromise = initSqlJs({
 <script src="vinculos.js"></script>
 <script src="pre-edital.js"></script>
 <script src="cartoes-material.js"></script>
+<script src="fora-da-agenda.js"></script>
 <script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
 <script src="modos.js"></script>
