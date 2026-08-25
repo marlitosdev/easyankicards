@@ -461,6 +461,11 @@ function edLinhaTopico(i, semDisciplina) {
   mais.title = t("ed_mais_ajuda");
   mais.onclick = (ev) => {
     ev.stopPropagation();
+    /* UM MENU DE CADA VEZ.
+     * Sem isto, abrir o segundo deixava o primeiro aberto — e com dez
+     * linhas na semana a agenda virava uma pilha de menus abertos, que
+     * foi exatamente o que apareceu na tela. */
+    edFecharMenus(li);
     const antigo = li.querySelector(".ed-menu");
     if (antigo) { antigo.hidden = !antigo.hidden; return; }
     const menu = document.createElement("div");
@@ -1719,8 +1724,29 @@ function edPintarPainel(r, plano) {
       ok.className = "lac-ok";
       ok.style.width = d.pesoFeito + "%";
       ba.append(ok);
+      /* DOIS NÚMEROS, PORQUE SÃO DUAS COISAS.
+       *
+       * Aqui saía só "{l}% da prova", e {l} é a LACUNA — a fatia da prova
+       * que ainda não foi estudada. Mas "13% da prova" ao lado de
+       * "Direito Constitucional" se lê como "esta disciplina vale 13%",
+       * e a pessoa conclui que o app está dizendo que Constitucional é a
+       * matéria mais importante da prova dela. Não estava: estava
+       * dizendo que é o maior BURACO. O subtítulo explicava, o número
+       * contradizia, e o número ganha.
+       *
+       * Com os dois lado a lado a ordem se explica sozinha: uma
+       * disciplina que vale mais pode aparecer abaixo justamente porque
+       * já foi estudada. */
+      /* "8 de alta" era jargão interno: "alta" é a FAIXA, que em todo o
+       * resto do app se chama "estudar primeiro". Quem lê a tela não
+       * tem como saber que existe uma escala alta/média/baixa por trás
+       * — e nenhum outro lugar usa essa palavra. */
       const vl = document.createElement("b");
-      vl.textContent = t("ed_lac_val", { l: d.lacuna, a: d.altaIntocada });
+      vl.textContent = t(
+        !d.altaIntocada ? "ed_lac_val_0"
+          : (d.altaIntocada === 1 ? "ed_lac_val_1" : "ed_lac_val"),
+        { l: d.lacuna, f: d.fatia, a: d.altaIntocada });
+      vl.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
       if (d.altaIntocada) vl.className = "lac-alerta";
       li.append(nm, ba, vl);
       cx2.append(li);
@@ -1842,6 +1868,18 @@ function edPintarPainel(r, plano) {
  * O mesmo critério da agenda — maior peso da disciplina × peso do
  * tópico — restrito ao que ainda não foi feito e não está fora da
  * agenda. Se estiver tudo feito, devolve nulo e o card diz isso. */
+/* fecha os menus abertos das OUTRAS linhas */
+function edFecharMenus(menos) {
+  ["edAgendaTopo", "edPainel"].forEach((id) => {
+    const raiz = $(id);
+    if (!raiz || !raiz.querySelectorAll) return;
+    (raiz.querySelectorAll(".ed-menu") || []).forEach((m) => {
+      if (menos && menos.querySelector && menos.querySelector(".ed-menu") === m) return;
+      m.hidden = true;
+    });
+  });
+}
+
 function edProximoDa(itens) {
   const livres = (itens || []).filter((i) => !i.feito && !edEstaFora(i.chave));
   if (!livres.length) return null;

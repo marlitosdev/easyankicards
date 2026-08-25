@@ -1464,9 +1464,15 @@ dialog.mat-amplo{max-height:96vh}
 .btn-min-perigo{color:var(--erro);border-color:var(--borda);background:var(--campo)}
 .btn-min-perigo:hover:not(:disabled){border-color:var(--erro);background:var(--panel);color:var(--erro)}
 
-.ed-item{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12px;
-  border-bottom:1px solid var(--borda)}
-.ed-item-meio{flex:1;min-width:0}
+/* A LINHA PODE QUEBRAR — E O TEXTO TEM PISO.
+   O menu foi acrescentado com "flex-basis:100%" dentro de uma linha
+   flex SEM wrap: em vez de ir para baixo, ele espremeu todo o resto
+   ate a largura minima, e a coluna do nome virou uma palavra por
+   linha. Duas regras resolvem: a linha quebra, e o bloco de texto tem
+   largura minima propria em vez de encolher ate sumir. */
+.ed-item{display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:7px 0;
+  font-size:12px;border-bottom:1px solid var(--borda)}
+.ed-item-meio{flex:1 1 240px;min-width:200px}
 .ed-item-disc-link{all:unset;cursor:pointer;color:var(--sutil);
   text-decoration:underline;text-underline-offset:2px}
 .ed-item-disc-link:hover{color:var(--texto)}
@@ -1686,14 +1692,26 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   border-top:1px solid var(--borda)}
 .ed-disc-caixa{margin:6px 0}
 .ed-disc-cabeca{font-weight:700}
-.ed-disc-busca{width:100%;max-width:280px;margin-bottom:6px}
-.ed-ag-disc{max-height:34vh;overflow:auto;padding:6px;border:1px solid var(--borda);
-  border-radius:9px;margin-top:5px}
+/* GRADE, NAO NUVEM.
+   Em linha, cada pilula tinha a largura do nome: "Português" ao lado de
+   "Noções de Direito Previdenciário e de Avaliação Atuarial" produzia
+   degraus irregulares que o olho tem de reprocessar a cada linha. Em
+   colunas iguais, o olho percorre uma coluna de cima a baixo. O nome
+   longo e cortado com reticencias e a dica traz ele inteiro. */
+.ed-ag-disc{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+  gap:6px;max-height:38vh;overflow:auto;padding:8px;
+  border:1px solid var(--borda);border-radius:9px;margin-top:5px}
+.ed-disc-busca{grid-column:1/-1;width:100%;margin:0}
+.ed-ag-disc .ed-ag-disc-b{width:100%;text-align:left;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
+.ed-disc-acoes{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;
+  padding-top:7px;border-top:1px solid var(--borda)}
 .ed-estudar{font-weight:700}
 .ed-estudar.tem{border-color:var(--acao);color:var(--info)}
 .ed-mais{padding:4px 9px;font-weight:800;line-height:1}
-.ed-menu{display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%;margin-top:6px;
-  padding-top:6px;border-top:1px solid var(--borda)}
+.ed-menu{display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%;width:100%;
+  margin-top:6px;padding-top:6px;border-top:1px dashed var(--borda);
+  order:99}
 .ed-menu-item.tem{border-color:var(--acao);color:var(--info)}
 .ed-card-prox{display:block;width:100%;text-align:left;margin-top:7px;
   font-size:12px;font-weight:600;color:var(--info);background:transparent;
