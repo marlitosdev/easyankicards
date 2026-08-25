@@ -1736,6 +1736,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .qm-gab{font-size:11.5px;font-weight:700;margin-top:7px;color:var(--info)}
 .qm-coment{font-size:11px;color:var(--sutil);margin-top:5px;line-height:1.45;
   padding-top:5px;border-top:1px solid var(--borda)}
+.qm-extras{border-left:3px solid var(--acao);background:rgba(47,107,220,.10);
+  padding:7px 10px;border-radius:0 8px 8px 0;margin:6px 0;font-size:11.5px;
+  line-height:1.5;white-space:pre-wrap;color:var(--texto)}
 </style>
 </head>
 <body>
@@ -2809,8 +2812,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min btn-min-ok" id="btnQmConferir"></button>
   </div>
   <div id="qmComparar" class="qm-comparar" hidden></div>
+  <div id="qmExtrasAviso" class="qm-extras" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnQmAplicar" hidden></button>
+    <button class="btn btn-verde" id="btnQmAplicarTodas" hidden></button>
     <button class="btn btn-cinza" id="btnQmFechar" data-i18n="help_close"
       title="Sai sem mexer na questão."></button>
   </div>
