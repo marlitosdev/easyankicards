@@ -695,6 +695,7 @@ function qsUiPintarSessao() {
  * ===================================================================== */
 let qmAlvo = null;
 let qmNova = null;
+let qmExtras = [];
 
 function qmTextoDaQuestao(q) {
   const L = ["TIPO: " + (q.tipo === "ce" ? "CE" : "ME"),
@@ -746,6 +747,9 @@ function qsUiMelhorarAbrir() {
   $("qmColar").value = "";
   $("qmComparar").hidden = true;
   $("btnQmAplicar").hidden = true;
+  if ($("btnQmAplicarTodas")) $("btnQmAplicarTodas").hidden = true;
+  if ($("qmExtrasAviso")) $("qmExtrasAviso").hidden = true;
+  qmExtras = [];
   abrirModal("dlgQsMelhorar");
   matReg("questao", "correção de questão aberta",
          defeitos.map((d) => d.id).join(", ") || "sem defeito detectado");
@@ -761,6 +765,18 @@ function qsUiMelhorarConferir() {
   const nova = (r.achados || [])[0];
   if (!nova || !nova.enunciado) { uiAlert(t("qm_nao_leu")); return false; }
   qmNova = nova;
+  /* A IA DEVOLVEU MAIS DE UMA.
+   *
+   * O prompt pede uma questão só, mas quando o enunciado original tinha
+   * três coladas — que é um dos defeitos que este recurso existe para
+   * consertar — devolver três é a resposta CERTA. Até aqui o app pegava
+   * a primeira e descartava o resto sem dizer nada: o trabalho da IA
+   * sumia, e quem colou não tinha como saber.
+   *
+   * Agora as extras aparecem e a escolha é explícita. Elas entram como
+   * questões NOVAS (a rodada em curso não as vê — a fila dela foi
+   * montada antes), e por isso o recibo diz isso. */
+  qmExtras = (r.achados || []).slice(1).filter((q) => q && q.enunciado);
 
   /* ANTES E DEPOIS, LADO A LADO. Aplicar sem ver o que muda é confiar
    * na IA justamente onde ela já falhou uma vez. */
@@ -817,6 +833,23 @@ function qsUiMelhorarConferir() {
     });
   cx.hidden = false;
   $("btnQmAplicar").hidden = false;
+  $("btnQmAplicar").textContent = t("qm_aplicar");
+
+  const av = $("qmExtrasAviso");
+  if (av) {
+    av.hidden = !qmExtras.length;
+    av.textContent = qmExtras.length
+      ? t("qm_extras", { n: qmExtras.length,
+          lista: qmExtras.map((q) => "\u2022 " + String(q.enunciado).slice(0, 90))
+            .join("\n") })
+      : "";
+  }
+  const bMais = $("btnQmAplicarTodas");
+  if (bMais) {
+    bMais.hidden = !qmExtras.length;
+    bMais.textContent = t("qm_aplicar_todas", { n: qmExtras.length });
+    bMais.title = t("qm_aplicar_todas_ajuda", { n: qmExtras.length });
+  }
 
   /* a versão nova também passa pelo detector: sem isto, trocaríamos um
    * texto torto por outro sem ninguém perceber */
@@ -828,7 +861,7 @@ function qsUiMelhorarConferir() {
   return true;
 }
 
-function qsUiMelhorarAplicar() {
+function qsUiMelhorarAplicar(comExtras) {
   if (!qmAlvo || !qmNova) return false;
   /* MESMO id, MESMO histórico: o que muda é o texto. Criar uma questão
    * nova e apagar a velha perderia as tentativas e a dica escrita à
@@ -841,12 +874,26 @@ function qsUiMelhorarAplicar() {
     banca: qmNova.banca || qmAlvo.banca,
   });
   if (!ok2) { uiAlert(t("qm_nao_leu")); return false; }
+  let entraram = 0;
+  if (comExtras && qmExtras.length) {
+    /* passam pela MESMA porta das questões novas: dedupe por semelhança
+     * e tudo o mais. Uma extra igual a uma que já existe é recusada
+     * ali, como seria em qualquer criação. */
+    const res = qsAplicar(qmExtras.map((q) => Object.assign({}, q, {
+      disciplina: qmAlvo.disciplina, topico: qmAlvo.topico,
+      chave: qmAlvo.chave, concurso: qmAlvo.concurso,
+    })));
+    entraram = (res && res.novas ? res.novas.length : 0);
+  }
   $("dlgQsMelhorar").close();
   qsUiPintarSessao();
-  uiAlert(t("qm_aplicado"));
+  uiAlert(entraram
+    ? t("qm_aplicado_mais", { n: entraram })
+    : t("qm_aplicado"));
   matReg("questao", "questão corrigida pela IA",
-         String(qmNova.enunciado || "").slice(0, 60));
-  qmAlvo = null; qmNova = null;
+         String(qmNova.enunciado || "").slice(0, 60)
+         + (entraram ? " · +" + entraram + " acrescentadas" : ""));
+  qmAlvo = null; qmNova = null; qmExtras = [];
   return true;
 }
 
@@ -1202,7 +1249,10 @@ function qsUiIniciar() {
   }
   if ($("btnQmAplicar")) {
     $("btnQmAplicar").textContent = t("qm_aplicar");
-    $("btnQmAplicar").onclick = () => qsUiMelhorarAplicar();
+    $("btnQmAplicar").onclick = () => qsUiMelhorarAplicar(false);
+  }
+  if ($("btnQmAplicarTodas")) {
+    $("btnQmAplicarTodas").onclick = () => qsUiMelhorarAplicar(true);
   }
   if ($("btnQmCopiar")) {
     $("btnQmCopiar").textContent = t("qm_copiar");
