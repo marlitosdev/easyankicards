@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.67.0) · by MarlitosDev
+# EasyAnkiCards (v10.0.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -75,6 +75,16 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - **Diálogos animados** (sem os avisos nativos que travam a aba); confirmação antes de ações destrutivas.
 - Dicas em todos os botões (hover no desktop, toque longo no celular) e avisos curtos após cada ação, dizendo o próximo passo.
 - Instalável e offline (service worker "rede primeiro": sempre carrega a versão mais recente com internet). **Aviso de atualização inteligente**: só aparece quando há de fato uma versão nova.
+- **Contraste conferido por teste**, não por gosto: cada par cor/fundo é medido nos três temas e reprovado abaixo de 4,5:1 — nos dois sentidos, texto sobre painel e rótulo branco sobre botão colorido.
+- **Uma cor de ação** (azul) e três papéis de botão: primário, secundário e destrutivo. O verde significa só resultado — gabarito certo, progresso, acerto.
+
+**Estudo (modos Edital, Resumos e Questões)**
+- **Plano do edital** com peso da disciplina × peso do tópico, agenda da semana, diário e acompanhamento. Vários editais ao mesmo tempo, com filtro.
+- **Agenda** com filtro de disciplinas em linha fechada e busca, status do tópico em palavras, um botão "estudar" e um `⋮` com os destinos por extenso.
+- **Adiar ou dispensar** um tópico pelo motivo: adiado volta sozinho e continua devendo; dispensado sai da conta e ganha faixa própria no medidor.
+- **Resumos** com seis marcas coloridas gravadas no texto, dicas, lei seca, cartões e questões — todos indexados pela mesma chave do progresso.
+- **Questões**: banco próprio, criação por prompt (do trecho selecionado ou do resumo inteiro), rodada que sobrevive a fechar a janela, filtro "só as que errei", rascunho a dedo ou mouse, encerrar com o placar parcial e **correção da questão por prompt**, preservando id e histórico.
+- **Registro de estudo** com tempo, forma, humor e placar de questões — ou só o percentual, para quem não lembra a contagem exata.
 
 ## Estrutura do projeto
 
@@ -82,6 +92,10 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 easy-anki-cards/
 ├── docs/                  # PWA (web/celular) — servida pelo GitHub Pages
 │   ├── index.html · app.js · parser.js · anki.js · i18n.js
+│   ├── edital.js · editais.js · edital-ui.js · edital-hub.js · pre-edital.js
+│   ├── material.js · cartoes-material.js · vinculos.js · modos.js
+│   ├── questoes.js · questoes-ui.js · rascunho.js · fora-da-agenda.js
+│   ├── backup.js · backup-ui.js
 │   └── manifest.webmanifest · sw.js · icon-192/512.png · .nojekyll
 ├── src/easyankicards/     # desktop (janela nativa que carrega docs/) + CLI
 ├── scripts/build_exe.bat  # gera release\EasyAnkiCards.exe
@@ -162,9 +176,10 @@ mostra de quando é a sua base, verde até 7 dias, vermelho depois de 21.
 
 ## Material de estudo
 
-O terceiro modo deixou de ser esqueleto. Cada tópico do edital ganha um botão
-na agenda e nas caixas de disciplina; o texto fica indexado pela **mesma chave
-do progresso** (`disciplina›tópico`) — sem tabela de ligação e sem id novo.
+Cada tópico do edital tem o seu resumo, indexado pela **mesma chave do
+progresso** (`disciplina›tópico`) — sem tabela de ligação e sem id novo: se a
+chave serve para dizer "estudei isto", serve para dizer "e o que eu estudei foi
+isto".
 
 **Colar de fora preserva a formatação.** O texto copiado de uma *página*
 (NotebookLM, Gemini) não traz `**` nem `##`: `readText()` devolve o que está
@@ -180,16 +195,30 @@ qualquer versão futura — em vez de virar uma tabela de posições que quebra
 assim que alguém mexe numa vírgula. O limite honesto: a marca encontra a
 primeira ocorrência do trecho, então frases funcionam melhor que palavras.
 
-O indicador na agenda tem **três** estados, não dois: nada, resumo, e resumo
-com cartões guardados (com a contagem). Saber que o tópico já virou cartão muda
-o que fazer com a hora de estudo.
+A linha da agenda diz, em palavras e sem clique, o que o tópico tem: `resumo ·
+4 cartões · 12 questões · lei seca`. Etiqueta só existe quando há material — a
+ausência é a informação, e ícone apagado em toda linha era ruído.
 
+**A chave tolera a grafia.** `matChave` é exata, e um acento de diferença entre
+o nome no edital e o nome com que o resumo foi salvo criava duas gavetas: a
+agenda procurava na vazia e apagava os indicadores, com o material inteiro do
+lado. A busca da agenda pergunta "existe material *deste tópico*?", comparando
+sem acento — não "existe exatamente nesta grafia?".
 
-O terceiro modo deixou de ser esqueleto. Cada tópico do edital ganha um botão
-`📄` na agenda e nas caixas de disciplina; o texto fica indexado pela **mesma
-chave do progresso** (`disciplina›tópico`) — sem tabela de ligação e sem id
-novo: se a chave serve para dizer "estudei isto", serve para dizer "e o que eu
-estudei foi isto".
+**As marcas coloridas.** Seis cores (`==destaque==`, `==!importante==`,
+`==?dúvida==`, `==§lei==`, `==*prova==`, `==~pegadinha==`), gravadas no texto.
+Clicar num trecho pintado abre um menu ali mesmo: trocar a cor, tirar a marca,
+ver na lista. Apontar é mais simples que descrever — o botão antigo pedia para
+a pessoa selecionar o trecho e então adivinhava qual marca remover, sem mostrar
+nada antes de apagar.
+
+*Caiu na prova* e *pegadinha* têm painel próprio com contador, e lá dentro cada
+trecho traz ver-no-texto, editar e tirar a marca.
+
+**O `*` da marca de prova não é negrito.** `==*` seguido de `**` produz `==***`,
+que o leitor não reconhece como marca nenhuma — a marca não pintava e o
+"consertar marcação" acendia no primeiro uso do botão. Um espaço separa os dois.
+
 
 O ciclo fecha com "Virar cartões", que leva o resumo para a bancada já dentro
 do prompt de geração: **edital decide o assunto → material guarda o conteúdo →
@@ -199,6 +228,131 @@ Cada resumo e cada registro do diário gravam **para qual concurso** foram
 feitos. Hoje há um edital só e a marca parece supérflua; ela existe porque
 informação que não é gravada na hora não se recupera depois — no dia em que
 houver dois planos, os históricos precisam ser separáveis.
+
+## Questões
+
+Banco próprio (`eac_questoes`), separado dos cartões: cartão fixa memória,
+questão treina julgamento, e misturar os dois faria um contador mentir sobre o
+outro.
+
+**Criar.** Duas portas na barra do resumo, cada uma dizendo o que vai levar:
+`questões do trecho selecionado (1.331 caracteres)` e `questões do resumo
+inteiro (12.548 caracteres)`. Os dois números lado a lado deixam conferir, sem
+abrir nada, o que cada caminho manda para a IA. O primeiro fica apagado
+enquanto não houver seleção — assim se vê, sem ler, que falta selecionar.
+
+Questões já escritas dentro do resumo (`?> enunciado` / `>> gabarito`) são
+detectadas e viram respondíveis com o gabarito oculto.
+
+**Responder.** A rodada sobrevive a fechar a janela. Dá para pular, embaralhar
+o que falta, e ligar **"só as que errei"** no meio da resolução — que não
+recorta a fila, só muda o que o "próxima" pula, então desligar devolve a rodada
+inteira com o placar intacto. Antes de responder, o histórico daquela questão
+aparece como placar, nunca como letra: dizer *qual* alternativa foi marcada da
+última vez, numa questão de certo/errado, é contar a resposta.
+
+**Rascunho.** Um papel de lado, recolhido por padrão, com quatro canetas
+(preta, azul, vermelha, verde), borracha e desfazer. Funciona a dedo, mouse ou
+caneta pelo mesmo caminho de código. O desenho é guardado como **traços**, não
+como imagem: um PNG por questão estoura o armazenamento do navegador em poucas
+dezenas de rascunhos — sem aviso, derrubando outros dados junto. Cada questão
+tem o seu papel, e nada é salvo sem você mandar (mas sair com rabisco na tela
+pergunta antes).
+
+**Encerrar agora (2/5 · 40%).** Fecha a rodada com o placar que estiver e leva
+ao registro de estudo. Duas confirmações, porque o gesto é irreversível para a
+rodada. Antes só havia responder tudo ou fechar a janela — e fechar não
+registrava nada, então a hora de estudo evaporava.
+
+**Melhorar esta questão.** Questão gerada por IA sai torta com frequência, e a
+única saída era apagá-la, perdendo junto o histórico e a dica escrita à mão. O
+detector nomeia o defeito e o botão se anuncia: *✏️ melhorar esta questão (5
+problemas)*. O caso que originou isto tinha cinco de uma vez — a resolução
+dentro do enunciado (a questão se responde sozinha), conversa da IA copiada
+junto ("Que tal criarmos um simulado?"), cabeçalho de simulado, markdown cru e
+emoji.
+
+O prompt não pede "melhore": lista os defeitos **encontrados**, porque "melhore
+esta questão" devolve outra versão do mesmo problema — a IA não sabe o que
+incomodou. A correção mostra antes e depois lado a lado, e aplicar **mantém o
+id, as tentativas e a dica**: é a mesma questão com texto novo.
+
+## Fora da agenda: adiar e dispensar
+
+Há duas situações em que o item certo está na frente e mesmo assim não é o que
+fazer agora — e elas *parecem* a mesma coisa, porque as duas tiram o item da
+tela. Não são, e a diferença aparece no número que importa: quanto falta
+estudar.
+
+| | o que é | o que acontece |
+|---|---|---|
+| **adiar** | não é a hora (semana cheia, foco em outro concurso) | volta sozinho no prazo e **continua na conta** do que falta |
+| **dispensar** | já está coberto (estudei para outro edital, já domino) | **sai da conta**, e as horas aparecem em cor própria |
+
+Tratar as duas como uma só produziria um de dois erros: ou a agenda cobra
+eternamente o que já foi visto, ou o plano encolhe cada vez que a semana está
+cheia — e a pessoa chega na prova achando que estudou.
+
+Por isso o **motivo decide o tipo**. Ninguém escolhe entre dois botões
+parecidos: escolhe-se o porquê, que é o que a pessoa sabe, e a consequência vem
+junto. No medidor da semana as horas dispensadas ganham faixa hachurada
+própria: não são horas estudadas nem horas perdidas.
+
+## Interface: uma cor de ação, contraste medido
+
+A crítica que originou a v10 estava certa: roxo neon, verde esmeralda, vermelho,
+laranja e cinza ao mesmo tempo, e subtextos ilegíveis.
+
+**Contraste medido, não opinado.** No tema preto, o roxo dava 3,33:1 e o cinza
+3,93:1 — os "textos apagados". A causa: as cores nasceram como *fundo* de botão
+(escuras, com letra branca por cima) e foram reaproveitadas como *cor de texto*.
+Cada cor passou a ter um par — a de encher e a de escrever — e um teste calcula
+o contraste de todos os pares nos três temas, falhando abaixo de 4,5:1. Nos dois
+sentidos: o rótulo branco sobre o fundo colorido também é medido.
+
+**Uma cor de ação.** Verde, azul, roxo e ciano viraram azul. O verde saiu dos
+botões e passou a significar exclusivamente resultado — gabarito certo,
+progresso, acerto no placar. Botão verde ao lado de gabarito verde era a mesma
+cor dizendo duas coisas. Três papéis e só: primário, secundário e destrutivo.
+
+**Ação destrutiva não fica na linha de frente.** "Apagar" em vermelho ao lado de
+"responder" atraía mais o olho que a ação principal — e o alvo errado num toque
+de celular leva junto o histórico da questão. Foi para um `⋮`, a um toque de
+quem o procura e a nenhum de quem não procura.
+
+**A linha da agenda tem três alvos, não seis.** "Estudar" leva ao que o tópico
+tem (resumo, ou cartões se não houver resumo, ou a criação se não houver nada);
+o `⋮` guarda o resto, e é lá dentro que cabe a palavra escrita por extenso —
+"ver os 4 cartões", "responder as 12 questões". Trocar os ícones por rótulos na
+própria linha teria piorado: cada linha ficaria três vezes mais alta.
+
+**O card da disciplina responde uma pergunta só: e agora?** Fechado, tem nome,
+uma barra e o **próximo tópico** — o de maior peso ainda não estudado, ignorando
+o que foi adiado. Os seis números de antes (estudados, revisados, porcentagem,
+fatia da prova, bolinhas das faixas) não sumiram: foram para "números e
+tópicos", que é onde se vai quando a pergunta deixa de ser "e agora?" e passa a
+ser "como estou nesta matéria?".
+
+**O filtro de disciplinas é uma linha fechada.** Dezessete disciplinas viravam
+dezessete pílulas empilhadas, mais altas que a própria agenda. Agora:
+`disciplinas (3 de 17) ▾`, com busca sem acento dentro e um "desmarcar todas"
+— porque quem quer ver uma de dezessete não vai clicar em dezesseis.
+
+## Registro de estudo
+
+Registrar pergunta **quanto** e **como**, porque é isso que permite, meses
+depois, dizer "você lê muito e resolve pouca questão".
+
+Quem resolveu no papel raramente lembra "34 de 40"; lembra "uns 85%". Um
+marcador troca as duas contagens por um campo único de percentual, e o diário
+grava *"87% de acerto (sem contagem)"* em vez de fingir uma contagem que não
+houve. Campo em branco não vira 0% — "não informei" e "0%" são coisas
+diferentes.
+
+O ponto colorido da linha explica a própria cor ao passar o mouse: *"Prioridade:
+estudar primeiro. Vem de peso 5 da disciplina × peso 5 do tópico = 25."* Cor sem
+legenda é enfeite; com legenda, é o argumento que faz aceitar (ou contestar) a
+ordem da agenda.
 
 ## Duas réguas: tópicos e peso
 
@@ -358,9 +512,11 @@ Um modo novo é uma entrada aqui mais uma `<section>` no HTML — `app.js`,
 de o código procurar por `[data-modo]`: assim o registro é a única fonte da
 verdade e dá para saber tudo sobre os modos sem abrir o HTML.
 
-**Edital** e **Resumos** hoje são só o esqueleto — formas cinzas mostrando a
-arrumação da tela, com os botões desativados e o selo "em breve". A regra que
-o teste K5 protege desde já: trocar de modo **não encosta no texto do editor**.
+**Edital**, **Resumos** e **Questões** deixaram de ser esqueleto: hoje o edital
+tem plano, agenda, diário e acompanhamento; os resumos têm marcas, dicas, lei
+seca e cartões; as questões têm banco, sessão que sobrevive a fechar a janela,
+rascunho e correção por prompt. A regra que o teste K5 protege desde a época do
+esqueleto continua valendo: trocar de modo **não encosta no texto do editor**.
 Um modo que apagasse o trabalho do outro repetiria o acidente que custou 137
 cartões.
 
@@ -431,15 +587,36 @@ São dois tipos de teste. As **invariantes** valem para qualquer texto e pegam o
 | I4 | corrigir 2x = corrigir 1x (idempotência) | v8.19 |
 | I5 | ida e volta (texto → cartões → texto) não muda nada | — |
 
+Duas invariantes de dado que nasceram do mesmo susto — **perda silenciosa**:
+texto vivo (o que está na caixa) e texto gravado (o que está no registro) não
+podem divergir, senão a próxima gravação apaga o que a tela mostrava; e nada
+sai da tela sem que a pessoa veja o que vai sair, seja marca, questão recusada
+por semelhança, ou rascunho ainda não guardado.
+
 A lista de sugestões marca **quem resolve** cada problema, e a marca vem com consequência: todo item de IA sabe dizer em que linha ele acontece ("Ver no texto"), o crachá traz um ícone que explica o caminho, e o botão "Criar prompt de correção" pulsa enquanto houver trabalho que só a IA faz. Detalhe:  o app arruma o que é mecânico (formato, espaço, markdown); dividir um cartão longo ou encurtar uma alternativa é editorial e vai para a IA pelo prompt de correção. Sem essa marca o usuário clica em "Corrigir" esperando que resolva tudo e conclui que o app está quebrado.
 
 Há também um detector para o pior acidente do fluxo: **o prompt colado de volta no lugar do material**. Ele não olha sintaxe — os cartões que a IA gera a partir das próprias regras são formalmente perfeitos — e sim vocabulário. Por isso só avisa e oferece limpar, nunca apaga sozinho: um baralho sobre método de estudo falaria dessas mesmas palavras por direito.
 
 `apkg.js` olha o arquivo que sai, não o app: confere que o alinhamento vai **declarado** no CSS exportado (e não herdado do modelo padrão do Anki, que centraliza tudo), que os conceitos do "Saiba mais" saem em blocos separados, e que o `guid` de cada nota vem do texto que você escreveu — não do HTML gerado. Essa última é a que evita a pior surpresa: enquanto o `guid` saía dos campos já formatados, qualquer melhoria de apresentação mudava a identidade de todos os cartões e reimportar o baralho **duplicava tudo** em vez de atualizar.
 
-`estrutura.js` confere que as tags do HTML fecham na ordem certa e que cada elemento continua dentro do painel a que pertence — uma tag sobrando não quebra nada visivelmente, o navegador "conserta" e o resultado é um pedaço da tela na coluna errada.
+`estrutura.js` confere que as tags do HTML fecham na ordem certa e que cada elemento continua dentro do painel a que pertence — uma tag sobrando não quebra nada visivelmente, o navegador "conserta" e o resultado é um pedaço da tela na coluna errada. Com o tempo ele virou o lugar das regras que valem para a tela inteira:
 
-Rodam junto três testes de interface, num DOM mínimo escrito à mão (sem dependência): `fumaca.js` verifica que o app carrega sem erro, e `tela.js` exercita o fluxo de revisão, o prompt de correção, a bandeja e o foco.
+| | regra | veio do bug |
+|---|---|---|
+| E6 | todo script do `index.html` está no SHELL do `sw.js` | app quebrado offline para quem já tinha instalado |
+| E7 | nenhum `<dialog>` ganha `display` sem exigir `[open]` | janelas que não fechavam e se acumulavam embaixo da tela |
+| E8 | `[hidden]` vence qualquer `display` de classe | painel que ficava visível apesar de escondido |
+| E9 | todo clique ligado no JS aponta para um id que existe no HTML | "virar o trecho em questão" morreu calado: o código do clique continuou inteiro, o botão sumiu do HTML, e o `if ($(id))` engoliu a falta |
+| E10 | contraste de texto ≥ 4,5:1 nos três temas, nos dois sentidos | campo de acertos branco no branco; roxo a 3,33:1 no tema preto |
+| E11 | fundo de botão sai de um token de papel, nunca de cor fixa | cinco cores de ação escolhidas por gosto |
+
+E9 e E10 pegam a mesma classe de defeito: **o que falha sem dar sintoma**. Um botão que não existe não dá erro no console; uma cor ilegível não quebra nada. Os dois só aparecem quando alguém tenta usar — e reclama.
+
+Rodam junto os testes de interface, num DOM mínimo escrito à mão (sem dependência): `fumaca.js` verifica que o app carrega sem erro, `tela.js` exercita revisão, prompt de correção, bandeja e foco, e mais `material-marcas.js`, `material-dicas-questoes.js`, `questoes.js`, `questoes-ui.js`, `rascunho.js`, `fora-da-agenda.js`, `registro.js`, `edital.js`, `editais.js`, `vinculos.js`, `pre-edital.js`, `cartoes-material.js`, `apkg.js` e `colagem.js`.
+
+**Cada melhoria do DOM simulado revelou um defeito real.** Enquanto `textContent` devolvia só o texto do próprio nó, qualquer painel montado por partes era medido como string vazia. Enquanto `classList` era um no-op, todo comportamento baseado em classe passava sem ser exercido. Enquanto os atributos do HTML eram ignorados, "nasce escondido" era indemonstrável. E enquanto `getContext("2d")` não existia, "desenhei e apareceu" não tinha como ser afirmado. Simulador que mente faz teste que aprova.
+
+**Sabotagem.** Toda regra nova é quebrada de propósito depois de escrita, para confirmar que o teste morde. Foi assim que descobri asserções que passavam sem exercitar nada: `ok(condição, mensagem)` num arquivo cujo helper é `ok(mensagem, condição)` — a mensagem, sendo texto não vazio, era lida como "verdadeiro" e o bloco inteiro aprovava. E um `await` numa promessa que nunca resolvia: o teste travava e **saía com código de sucesso**. Por isso os arquivos têm vigia com prazo, e nenhum espera por promessa que possa pendurar.
 
 Uma verificação de `tela.js` merece destaque, porque nasceu de um erro meu: **todo detector aceso tem de oferecer o seu próprio botão de correção na lista de sugestões**. Na v8.37, ao reescrever o bloco das frentes repetidas, apaguei sem querer todos os itens de correção. O botão geral continuou funcionando, nenhum teste caiu, e o usuário simplesmente deixou de ver *o que* estava errado — a pior classe de defeito, a que não dá sintoma.
 
