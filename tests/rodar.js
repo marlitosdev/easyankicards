@@ -34,6 +34,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { comVigia } = require("./vigia.js");
 
 const RAIZ = path.join(__dirname, "..");
 const DIR_CASOS = path.join(__dirname, "casos");
@@ -58,7 +59,8 @@ function carregarApp() {
     + "temTagsNaExplicacao,corrigirTagsNaExplicacao,"
     + "temClozeRepetida,corrigirClozeRepetida,"
     + "temEspacosRuins,corrigirEspacos,"
-    + "temPromptVazado,corrigirPromptVazado,temMaisRepetido,corrigirMaisRepetido};";
+    + "temPromptVazado,corrigirPromptVazado,temMaisRepetido,corrigirMaisRepetido,"
+    + "temMaisJunto,corrigirMaisJunto,marcasUnidas};";
   const api = new Function(codigo + "\n" + exportar)();
   api.setLanguage("pt");
   return api;
@@ -78,6 +80,7 @@ const CORRECOES = {
   corrigirTagsNaExplicacao: app.corrigirTagsNaExplicacao,
   corrigirClozeRepetida: app.corrigirClozeRepetida,
   corrigirEspacos: app.corrigirEspacos,
+  corrigirMaisJunto: app.corrigirMaisJunto,
   // as duas de LIMPEZA saem das invariantes I2/I3/I6 de propósito:
   // elas existem para remover lixo, então reduzir contagem é o esperado
 
@@ -167,7 +170,7 @@ function conferir(atual, esperado) {
 }
 
 /* ------------------------------------------------------------------ */
-function main() {
+async function main() {
   const arquivos = fs.readdirSync(DIR_CASOS).filter((f) => f.endsWith(".txt")).sort();
   const esperado = fs.existsSync(ARQ_ESPERADO)
     ? JSON.parse(fs.readFileSync(ARQ_ESPERADO, "utf8")) : {};
@@ -189,12 +192,41 @@ function main() {
 
   // testes de interface (DOM mínimo): carregamento do app e fluxo de revisão
   const fumaca = require("./fumaca.js").rodar().falhas;
-  const parcial = require("./parcial.js").testes();
-  const estrutura = require("./estrutura.js").testes();
-  return Promise.resolve(require("./tela.js").testes()).then((tela) => {
+  const parcial = await comVigia(Promise.resolve(require("./parcial.js").testes()), "parcial");
+  const estrutura = await comVigia(Promise.resolve(require("./estrutura.js").testes()), "estrutura");
+  const apkg = await comVigia(Promise.resolve(require("./apkg.js").testes()), "apkg");
+  const edital = await comVigia(Promise.resolve(require("./edital.js").testes()), "edital");
+  const colagem = await comVigia(Promise.resolve(require("./colagem.js").testes()), "colagem");
+  const editais = await comVigia(Promise.resolve(require("./editais.js").testes()), "editais");
+  const vinc = await comVigia(Promise.resolve(require("./vinculos.js").testes()), "vinculos");
+  const preEd = await comVigia(Promise.resolve(require("./pre-edital.js").testes()), "pre-edital");
+  const cartMat = await comVigia(Promise.resolve(require("./cartoes-material.js").testes()), "cartoes-material");
+  const marcasP = await comVigia(Promise.resolve(require("./material-marcas.js").testes()), "material-marcas");
+  const regP = await comVigia(Promise.resolve(require("./registro.js").testes()), "registro");
+  const dqP = await comVigia(Promise.resolve(require("./material-dicas-questoes.js").testes()), "material-dicas-questoes");
+  const qsP = await comVigia(Promise.resolve(require("./questoes.js").testes()), "questoes");
+  const quP = await comVigia(Promise.resolve(require("./questoes-ui.js").testes()), "questoes-ui");
+  const rsP = await comVigia(Promise.resolve(require("./rascunho.js").testes()), "rascunho");
+  const faP = await comVigia(Promise.resolve(require("./fora-da-agenda.js").testes()), "fora-da-agenda");
+  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP]).then(([tela, marcas, registroT, dqT, qsT, quT, rsT, faT]) => {
     const extras = [["estrutura do HTML", estrutura],
                     ["carregamento do app", fumaca], ["prompt e colagem parcial", parcial],
-                    ["tela: revisão, correção e registro", tela]];
+                    ["tela: revisão, correção e registro", tela],
+                    ["arquivo .apkg: alinhamento, blocos e identidade", apkg],
+                    ["edital: leitura, pesos, prioridade e horas", edital],
+                    ["editais: migração, grupos e agenda multi-edital", editais],
+                    ["vínculos: triagem, faixas de tempo e idempotência", vinc],
+                    ["pré-edital: janela, confiança e registro que sobrevive", preEd],
+                    ["cartões no material: etiquetas, IA e ida-e-volta", cartMat],
+                    ["marcas: seleção, rascunho e fechar-que-pergunta", marcas],
+                    ["dicas e questões: texto vivo e abrir-onde-está", dqT],
+                    ["questões: formato, banco e sessão de resposta", qsT],
+                    ["questões na tela: criar, responder e a aba", quT],
+                    ["rascunho: o papel de lado da questão", rsT],
+                    ["fora da agenda: adiar, dispensar e filtrar", faT],
+                    ["registro: gravação recusada e eventos do edital", registroT],
+                    [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
+                                    : "colagem: HTML vira marcação do app", colagem.falhas]];
     console.log("");
     extras.forEach(([nome, fs2]) => {
       falhasTotal += fs2.length;
@@ -222,4 +254,8 @@ function main() {
   }
 }
 
-Promise.resolve(main()).then((c) => process.exit(c));
+Promise.resolve(main())
+  .then((c) => process.exit(c))
+  /* sem este catch, uma suíte que TRAVA saía com código 0 e sem imprimir
+   * nada — o vigia levanta a mão, mas alguém precisa escutá-lo */
+  .catch((e) => { console.log("\n  " + e.message + "\n"); process.exit(1); });

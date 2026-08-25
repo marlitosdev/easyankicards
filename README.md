@@ -1,4 +1,4 @@
-# EasyAnkiCards (v8.66.0) · by MarlitosDev
+# EasyAnkiCards (v8.67.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -161,6 +161,29 @@ escolher uma pasta — se for a do Drive, a cópia sobe sozinha. O selo no rodap
 mostra de quando é a sua base, verde até 7 dias, vermelho depois de 21.
 
 ## Material de estudo
+
+O terceiro modo deixou de ser esqueleto. Cada tópico do edital ganha um botão
+na agenda e nas caixas de disciplina; o texto fica indexado pela **mesma chave
+do progresso** (`disciplina›tópico`) — sem tabela de ligação e sem id novo.
+
+**Colar de fora preserva a formatação.** O texto copiado de uma *página*
+(NotebookLM, Gemini) não traz `**` nem `##`: `readText()` devolve o que está
+renderizado. A formatação viaja como `text/html`, e é de lá que ela é lida e
+convertida — cabeçalhos, negrito, itálico, listas numeradas e tabelas. As
+referências numeradas do NotebookLM (`[1]`, `[2, 3]`) são removidas, porque só
+fazem sentido dentro dele.
+
+**Marcar não é editar.** No modo leitura, selecionar um trecho e clicar em
+*destaque*, *importante* ou *dúvida* grifa sem sair da leitura. A marca é
+gravada **no texto** (`==assim==`), então sobrevive ao backup, à exportação e a
+qualquer versão futura — em vez de virar uma tabela de posições que quebra
+assim que alguém mexe numa vírgula. O limite honesto: a marca encontra a
+primeira ocorrência do trecho, então frases funcionam melhor que palavras.
+
+O indicador na agenda tem **três** estados, não dois: nada, resumo, e resumo
+com cartões guardados (com a contagem). Saber que o tópico já virou cartão muda
+o que fazer com a hora de estudo.
+
 
 O terceiro modo deixou de ser esqueleto. Cada tópico do edital ganha um botão
 `📄` na agenda e nas caixas de disciplina; o texto fica indexado pela **mesma
