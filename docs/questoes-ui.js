@@ -645,6 +645,19 @@ function qsUiPintarSessao() {
     b.textContent = t("qs_encerrar", { c: pl.certas, n: pl.feitas, pct: pl.pct });
     b.title = t("qs_encerrar_ajuda", { f: Math.max(0, pl.total - pl.feitas) });
   }
+  if ($("btnQsMelhorar")) {
+    const bm = $("btnQsMelhorar");
+    const qAtual = qsAtual();
+    bm.hidden = !qAtual;
+    if (qAtual) {
+      const d = qsDefeitos(qAtual);
+      bm.textContent = d.length ? t("qm_btn_n", { n: d.length }) : t("qm_btn");
+      bm.title = t("qm_btn_ajuda");
+      /* questão com defeito detectado se anuncia: a pessoa não precisa
+       * desconfiar do texto sozinha */
+      bm.className = "btn-min" + (d.length ? " qm-alerta" : "");
+    }
+  }
   if ($("btnQsSoFalhas")) {
     const b = $("btnQsSoFalhas");
     const lig = qsFiltroFalhasLigado();
@@ -668,6 +681,137 @@ function qsUiPintarSessao() {
 /* Leva o resultado da sessão para o registro de estudo do edital.
  * Não grava nada sozinho: abre o mesmo formulário de sempre, já preenchido,
  * para a pessoa conferir, ajustar e confirmar. */
+/* =====================================================================
+ * MELHORAR ESTA QUESTÃO
+ *
+ * Questão gerada por IA sai torta com frequência, e até aqui a única
+ * saída era apagá-la — perdendo junto o histórico de acertos e a dica
+ * escrita à mão. Aqui ela é CONSERTADA: mesma questão, mesmo id, mesmo
+ * histórico, texto novo.
+ *
+ * O prompt não pede "melhore". Pede para consertar defeitos NOMEADOS,
+ * porque "melhore esta questão" devolve outra versão do mesmo
+ * problema — a IA não sabe o que incomodou.
+ * ===================================================================== */
+let qmAlvo = null;
+let qmNova = null;
+
+function qmTextoDaQuestao(q) {
+  const L = ["TIPO: " + (q.tipo === "ce" ? "CE" : "ME"),
+             "BANCA: " + (q.banca || "")];
+  L.push("ENUNCIADO: " + String(q.enunciado || ""));
+  (q.opcoes || []).forEach((o) => L.push(o.letra + ") " + o.txt));
+  L.push("GABARITO: " + String(q.gabarito || ""));
+  if (q.comentario) L.push("COMENTARIO: " + String(q.comentario));
+  return L.join("\n");
+}
+
+function qmDescreverDefeitos(lista) {
+  if (!lista.length) return "- " + t("qm_sem_defeito");
+  return lista.map((d) => "- " + t("qm_def_" + d.id, { n: d.n, g: d.g })).join("\n");
+}
+
+function qsUiMelhorarAbrir() {
+  const q = qsAtual();
+  if (!q) return;
+  qmAlvo = q;
+  qmNova = null;
+  const defeitos = qsDefeitos(q);
+
+  const cx = $("qmDefeitos");
+  cx.innerHTML = "";
+  if (!defeitos.length) {
+    const d = document.createElement("div");
+    d.className = "nota";
+    d.textContent = t("qm_sem_defeito");
+    cx.append(d);
+  } else {
+    defeitos.forEach((x) => {
+      const d = document.createElement("div");
+      d.className = "qm-def";
+      d.textContent = t("qm_def_" + x.id, { n: x.n, g: x.g });
+      cx.append(d);
+    });
+  }
+
+  $("qmPrompt").value = t("qm_prompt", {
+    defeitos: qmDescreverDefeitos(defeitos),
+    tipo: q.tipo === "ce" ? "CE" : "ME",
+    banca: q.banca || "—",
+    disciplina: q.disciplina || "—",
+    topico: q.topico || "—",
+    opcoes_rot: q.tipo === "ce" ? "" : "A) … B) … C) … D) … E) …\n",
+    atual: qmTextoDaQuestao(q),
+  });
+  $("qmColar").value = "";
+  $("qmComparar").hidden = true;
+  $("btnQmAplicar").hidden = true;
+  abrirModal("dlgQsMelhorar");
+  matReg("questao", "correção de questão aberta",
+         defeitos.map((d) => d.id).join(", ") || "sem defeito detectado");
+}
+
+function qsUiMelhorarConferir() {
+  const cru = String(($("qmColar") || {}).value || "").trim();
+  if (!cru) { uiAlert(t("qm_vazio")); return false; }
+  const r = qsLerResposta(cru, {
+    disciplina: qmAlvo && qmAlvo.disciplina, topico: qmAlvo && qmAlvo.topico,
+    chave: qmAlvo && qmAlvo.chave, concurso: qmAlvo && qmAlvo.concurso,
+  });
+  const nova = (r.achados || [])[0];
+  if (!nova || !nova.enunciado) { uiAlert(t("qm_nao_leu")); return false; }
+  qmNova = nova;
+
+  /* ANTES E DEPOIS, LADO A LADO. Aplicar sem ver o que muda é confiar
+   * na IA justamente onde ela já falhou uma vez. */
+  const cx = $("qmComparar");
+  cx.innerHTML = "";
+  [["qm_antes", qmAlvo, "qm-antes"], ["qm_depois", nova, "qm-depois"]]
+    .forEach(([rot, q, cls]) => {
+      const r1 = document.createElement("div");
+      r1.className = "qm-rot";
+      r1.textContent = t(rot);
+      const d = document.createElement("div");
+      d.className = "qm-lado " + cls;
+      d.textContent = String(q.enunciado || "").slice(0, 700)
+        + "\n\n" + t("qs_gab_e", { g: q.gabarito || "?" });
+      cx.append(r1, d);
+    });
+  cx.hidden = false;
+  $("btnQmAplicar").hidden = false;
+
+  /* a versão nova também passa pelo detector: sem isto, trocaríamos um
+   * texto torto por outro sem ninguém perceber */
+  const aindaRuim = qsDefeitos(nova);
+  if (aindaRuim.length) {
+    uiAlert(t("qm_ainda_ruim", { n: aindaRuim.length,
+      lista: aindaRuim.map((d) => d.id).join(", ") }));
+  }
+  return true;
+}
+
+function qsUiMelhorarAplicar() {
+  if (!qmAlvo || !qmNova) return false;
+  /* MESMO id, MESMO histórico: o que muda é o texto. Criar uma questão
+   * nova e apagar a velha perderia as tentativas e a dica escrita à
+   * mão — que é o que dói mais numa questão já respondida. */
+  const ok2 = qsSubstituir(qmAlvo.id, {
+    enunciado: qmNova.enunciado,
+    opcoes: qmNova.opcoes || qmAlvo.opcoes,
+    gabarito: qmNova.gabarito || qmAlvo.gabarito,
+    comentario: qmNova.comentario || qmAlvo.comentario,
+    banca: qmNova.banca || qmAlvo.banca,
+  });
+  if (!ok2) { uiAlert(t("qm_nao_leu")); return false; }
+  $("dlgQsMelhorar").close();
+  qsUiPintarSessao();
+  uiAlert(t("qm_aplicado"));
+  matReg("questao", "questão corrigida pela IA",
+         String(qmNova.enunciado || "").slice(0, 60));
+  qmAlvo = null; qmNova = null;
+  return true;
+}
+
 /* ENCERRAR AGORA — com duas perguntas.
  *
  * A primeira mostra o placar e o que fica pendente; a segunda exige
@@ -769,11 +913,28 @@ function qsUiRender() {
     const li = document.createElement("div");
     li.className = "qs-item";
     const cab = document.createElement("div");
+    /* TRÊS CAMADAS, NÃO UM BLOCO.
+     * Tudo em uma linha de texto miúdo fazia a lista parecer um muro:
+     * tipo, banca, disciplina, tópico e concurso disputando com o
+     * enunciado, que é a única coisa que se lê para decidir. Agora:
+     * etiquetas pequenas em cima, enunciado em corpo maior no meio, e
+     * o histórico discreto embaixo. */
     cab.className = "qs-item-cab";
-    cab.textContent = t("qs_tipo_" + q.tipo)
-      + (q.banca ? " · " + q.banca : "")
-      + " · " + (q.disciplina || "—") + " › " + (q.topico || "—")
-      + (q.concurso ? " · " + q.concurso : "");
+    const etiquetas = [
+      { txt: t("qs_tipo_" + q.tipo), cls: "qs-tag qs-tag-tipo" },
+      q.banca ? { txt: q.banca, cls: "qs-tag qs-tag-banca" } : null,
+      { txt: q.disciplina || "—", cls: "qs-tag" },
+    ].filter(Boolean);
+    etiquetas.forEach((e) => {
+      const sp = document.createElement("span");
+      sp.className = e.cls;
+      sp.textContent = e.txt;
+      cab.append(sp);
+    });
+    /* tópico e concurso na dica, não na tela: são o contexto de quem já
+     * sabe onde está, e ocupavam a mesma linha do que se precisa ler */
+    cab.title = (q.topico || "—") + (q.concurso ? " · " + q.concurso : "");
+
     const en = document.createElement("div");
     en.className = "qs-item-en";
     en.textContent = q.enunciado.slice(0, 240);
@@ -787,7 +948,9 @@ function qsUiRender() {
       hs.textContent = t("qs_hist", { n: ts.length, c: certas })
         + " · " + (ts[ts.length - 1].acertou ? t("qs_ultima_ok") : t("qs_ultima_nao"));
       hs.className += ts[ts.length - 1].acertou ? " ok" : " nao";
-      li.append(hs);
+      /* o histórico vai para DEPOIS das ações, na base do card: é
+       * informação de apoio, não o que se lê primeiro */
+      li._hist = hs;
     }
 
     const ac = document.createElement("div");
@@ -796,18 +959,37 @@ function qsUiRender() {
     bResp.type = "button"; bResp.className = "btn-min btn-min-ok";
     bResp.textContent = t("qs_responder_esta");
     bResp.onclick = () => qsUiResponderAbrir([q], "aba", "uma:" + q.id);
-    const bDel = document.createElement("button");
-    bDel.type = "button"; bDel.className = "btn-min btn-min-perigo";
-    bDel.textContent = t("qs_apagar");
-    bDel.title = t("qs_apagar_ajuda");
-    bDel.onclick = async () => {
-      if (!(await uiConfirm(t("qs_apagar_conf", { e: q.enunciado.slice(0, 90) })))) return;
-      qsApagar(q.id);
-      qsUiPintarBotaoResumo();
-      qsUiRender();
+    /* APAGAR SAI DA LINHA DE FRENTE.
+     * Em vermelho forte ao lado de "responder", ele atraía mais o olho
+     * do que a ação principal — e o alvo errado num toque de celular é
+     * uma questão perdida com o histórico dela junto. Vai para um "⋮":
+     * continua a um toque de distância de quem o procura, e a nenhum
+     * de quem não procura. */
+    const bMais = document.createElement("button");
+    bMais.type = "button"; bMais.className = "btn-min qs-item-mais";
+    bMais.textContent = "⋮";
+    bMais.title = t("qs_mais_ajuda");
+    bMais.onclick = () => {
+      const menu = li.querySelector(".qs-item-menu");
+      if (menu) { menu.hidden = !menu.hidden; return; }
+      const cx2 = document.createElement("div");
+      cx2.className = "qs-item-menu";
+      const bDel = document.createElement("button");
+      bDel.type = "button"; bDel.className = "btn-min btn-perigo";
+      bDel.textContent = t("qs_apagar");
+      bDel.title = t("qs_apagar_ajuda");
+      bDel.onclick = async () => {
+        if (!(await uiConfirm(t("qs_apagar_conf", { e: q.enunciado.slice(0, 90) })))) return;
+        qsApagar(q.id);
+        qsUiPintarBotaoResumo();
+        qsUiRender();
+      };
+      cx2.append(bDel);
+      li.append(cx2);
     };
-    ac.append(bResp, bDel);
+    ac.append(bResp, bMais);
     li.append(ac);
+    if (li._hist) li.append(li._hist);
     box.append(li);
   });
 }
@@ -973,6 +1155,26 @@ function qsUiIniciar() {
   }
   if ($("btnQsEncerrar")) {
     $("btnQsEncerrar").onclick = () => qsUiEncerrarComPlacar();
+  }
+  if ($("btnQsMelhorar")) $("btnQsMelhorar").onclick = () => qsUiMelhorarAbrir();
+  if ($("btnQmFechar")) $("btnQmFechar").onclick = () => $("dlgQsMelhorar").close();
+  if ($("btnQmConferir")) {
+    $("btnQmConferir").textContent = t("qm_conferir");
+    $("btnQmConferir").onclick = () => qsUiMelhorarConferir();
+  }
+  if ($("btnQmAplicar")) {
+    $("btnQmAplicar").textContent = t("qm_aplicar");
+    $("btnQmAplicar").onclick = () => qsUiMelhorarAplicar();
+  }
+  if ($("btnQmCopiar")) {
+    $("btnQmCopiar").textContent = t("qm_copiar");
+    $("btnQmCopiar").onclick = () => {
+      try { navigator.clipboard.writeText($("qmPrompt").value); } catch (e) {}
+      const b2 = $("btnQmCopiar");
+      const r = b2.textContent;
+      b2.textContent = t("copied");
+      setTimeout(() => { b2.textContent = r; }, 1800);
+    };
   }
   if ($("btnQsSoFalhas")) {
     $("btnQsSoFalhas").onclick = () => {

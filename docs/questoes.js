@@ -656,6 +656,81 @@ function qsContarPorChave() {
 }
 
 /* quantas questões existem para este tópico, com a mesma tolerância */
+/* =====================================================================
+ * O QUE ESTRAGA UMA QUESTÃO GERADA POR IA
+ *
+ * O caso que originou isto veio inteiro numa questão só, e vale mais
+ * que qualquer regra abstrata:
+ *
+ *   "* *Contexto*: O Município Alfa aprovou lei majorando o ISS…
+ *    * *Resolução*: A vinculação é inconstitucional. Viola o princípio
+ *    da não vinculação (Art. 167, IV). --- 🩷 Que tal criarmos um
+ *    simulado focado nas pegadinhas que a FGV costuma aplicar?
+ *    Excelente! Preparei um Simulado Seletivo de Alto Nível com 5
+ *    questões inéditas… Tente responder mentalmente antes de conferir
+ *    o gabarito comentado. --- SIMULADO DE FINANÇAS PÚBLICAS: ART. 167"
+ *
+ * Cinco defeitos diferentes ali dentro:
+ *   1. a RESOLUÇÃO dentro do enunciado — a questão se responde sozinha;
+ *   2. a CONVERSA da IA copiada junto ("Que tal…", "Excelente!");
+ *   3. o CABEÇALHO do simulado virou parte do enunciado;
+ *   4. markdown cru ("* *Contexto*:") e separadores "---";
+ *   5. emoji.
+ *
+ * Detectar isso é o que permite dizer À IA o que consertar, em vez de
+ * pedir "melhore" e receber outra versão do mesmo problema. */
+const QS_DEFEITOS = [
+  { id: "resolucao", re: /(^|\n|\s)\**\s*(resolu[çc][ãa]o|resposta|gabarito|solu[çc][ãa]o|coment[áa]rio)\s*\**\s*:/i },
+  { id: "conversa", re: /(que tal|excelente!|preparei|vamos l[áa]|espero que|bons estudos|segue abaixo|aqui est[ãa]o|tente responder|antes de conferir|logo abaixo)/i },
+  { id: "cabecalho", re: /(simulado|bateria de quest[õo]es|lista de exerc[íi]cios|quest[õo]es in[ée]ditas)\s*(de|sobre|:)/i },
+  { id: "markdown", re: /(\*\*|^\s*\*\s|\n\s*\*\s|^#{1,6}\s|\n#{1,6}\s|^\s*---\s*$|\n\s*---\s*\n)/ },
+  { id: "emoji", re: /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u },
+  { id: "longo", re: null },
+  { id: "varias", re: /(\n|\s)\d+\s*[).]\s+[A-ZÀ-Ú].{40,}(\n|\s)\d+\s*[).]\s+/ },
+];
+
+/* TROCAR O TEXTO DE UMA QUESTÃO, MANTENDO A QUESTÃO.
+ * Apagar e recriar seria mais curto e perderia o que mais importa numa
+ * questão já respondida: as tentativas (o histórico de acertos e erros)
+ * e a dica escrita à mão. O id é a identidade; o resto é conteúdo. */
+function qsSubstituir(id, campos, gravar) {
+  const q = qsBanco.filter((x) => x.id === id)[0];
+  if (!q || !campos) return false;
+  const antes = { enunciado: q.enunciado, gabarito: q.gabarito };
+  ["enunciado", "opcoes", "gabarito", "comentario", "banca"].forEach((k) => {
+    if (campos[k] !== undefined && campos[k] !== null && campos[k] !== "") q[k] = campos[k];
+  });
+  q.corrigida = { q: new Date().toISOString(), antes };
+  qsSalvar(gravar);
+  return true;
+}
+
+function qsDefeitos(q) {
+  if (!q) return [];
+  const en = String(q.enunciado || "");
+  const achados = [];
+  QS_DEFEITOS.forEach((d) => {
+    if (d.id === "longo") {
+      /* 900 caracteres é o dobro de um enunciado longo de banca. Acima
+       * disso quase sempre há mais de uma questão colada, ou texto que
+       * não é da questão. */
+      if (en.length > 900) achados.push({ id: "longo", n: en.length });
+      return;
+    }
+    if (d.re && d.re.test(en)) achados.push({ id: d.id });
+  });
+  /* gabarito que não combina com o tipo é defeito de estrutura, não de
+   * texto: uma CE com gabarito "B" não tem como ser respondida */
+  const gab = String(q.gabarito || "").toUpperCase();
+  if (q.tipo === "ce" && gab && gab !== "C" && gab !== "E") {
+    achados.push({ id: "gab_ce", g: gab });
+  }
+  if (q.tipo !== "ce" && gab && !(q.opcoes || []).some((o) => o.letra === gab)) {
+    achados.push({ id: "gab_me", g: gab });
+  }
+  return achados;
+}
+
 function qsContarDoTopico(chave) {
   const n = qsChaveNormal(chave);
   return qsBanco.filter((q) => q.chave === chave || qsChaveNormal(q.chave) === n).length;
