@@ -245,6 +245,30 @@ function hubPintarAgenda() {
  * nascer oculta porque não estava na lista do dia em que se filtrou. */
 const HUB_DISC_OCULTAS = "eac_agenda_disc_ocultas";
 
+/* O REGISTRO É PARA DIAGNÓSTICO, NÃO PARA CONTABILIDADE DE CLIQUE.
+ *
+ * Ele guarda as últimas 200 ações e é a ferramenta para descobrir por
+ * que algo falhou. Escolher quais disciplinas ver é um gesto de UMA
+ * intenção feito com MUITOS cliques: num despejo real apareceram
+ * dezesseis "esconder X" em trinta segundos, ocupando 8% do registro
+ * inteiro e empurrando para fora eventos que importavam.
+ *
+ * Então o filtro grava o RESULTADO, não cada toque: espera a mão parar
+ * e anota uma linha com o que ficou. */
+let hubDiscTimer = null;
+
+function hubRegistrarFiltro(todas) {
+  if (hubDiscTimer) clearTimeout(hubDiscTimer);
+  hubDiscTimer = setTimeout(() => {
+    hubDiscTimer = null;
+    const ocultas = hubDiscOcultas();
+    const vis = (todas || []).filter((d) => ocultas.indexOf(d) < 0);
+    reg("EDITAL", "filtro de disciplina na agenda",
+        vis.length + " de " + (todas || []).length + " em vista"
+        + (vis.length && vis.length <= 4 ? ": " + vis.join(", ") : ""));
+  }, 1200);
+}
+
 function hubDiscOcultas() {
   try {
     const v = JSON.parse(localStorage.getItem(HUB_DISC_OCULTAS) || "[]");
@@ -359,8 +383,7 @@ function hubFiltroDisciplina(todas) {
       if (k >= 0) lista.splice(k, 1); else lista.push(d);
       hubDiscOcultasGravar(lista);
       hubPintarAgenda();
-      reg("EDITAL", "filtro de disciplina na agenda",
-          (k >= 0 ? "mostrar " : "esconder ") + d);
+      hubRegistrarFiltro(todas);
     };
     cx.append(b);
   });
@@ -377,7 +400,7 @@ function hubFiltroDisciplina(todas) {
   nenhuma.onclick = () => {
     hubDiscOcultasGravar(todas.slice());
     hubPintarAgenda();
-    reg("EDITAL", "filtro de disciplina na agenda", "desmarcou todas");
+    hubRegistrarFiltro(todas);
   };
   acoes.append(nenhuma);
 
@@ -387,7 +410,11 @@ function hubFiltroDisciplina(todas) {
     b.className = "btn-min";
     b.textContent = t("hub_ag_disc_todas");
     b.title = t("hub_ag_disc_todas_ajuda");
-    b.onclick = () => { hubDiscOcultasGravar([]); hubPintarAgenda(); };
+    b.onclick = () => {
+      hubDiscOcultasGravar([]);
+      hubPintarAgenda();
+      hubRegistrarFiltro(todas);
+    };
     acoes.append(b);
   }
   cx.append(acoes);

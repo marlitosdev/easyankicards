@@ -1718,10 +1718,24 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   border:1px solid var(--borda);border-radius:8px;padding:7px 9px;cursor:pointer}
 .ed-card-prox:hover{border-color:var(--acao)}
 .ed-card-prox-fim{color:var(--ok);cursor:default;font-weight:700}
-.ed-status{display:flex;gap:5px;flex-wrap:wrap;margin-top:3px}
-.ed-st-item{font-size:9.5px;font-weight:700;letter-spacing:.03em;color:var(--sutil);
-  border:1px solid var(--borda);border-radius:5px;padding:1px 5px}
+.ed-status{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+/* etiqueta de TEXTO: nunca quebra no meio da palavra e nao tem tamanho
+   fixo — foi o que a classe do icone antigo impunha */
+.ed-st-item{display:inline-block;width:auto;height:auto;font-size:10px;
+  font-weight:700;letter-spacing:.02em;line-height:1.5;white-space:nowrap;
+  color:var(--sutil);background:transparent;
+  border:1px solid var(--borda);border-radius:6px;padding:1px 7px;cursor:default}
 .ed-st-item.tem{color:var(--info);border-color:var(--acao)}
+.ed-st-item{transition:border-color .12s}
+button.ed-st-item{cursor:pointer}
+button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
+.ed-st-1{font-weight:800;background:rgba(47,107,220,.14)}
+.ed-menu-vazio{font-size:11px;color:var(--sutil);padding:2px 0}
+.qm-julgue{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--sutil);margin-bottom:4px}
+.qm-gab{font-size:11.5px;font-weight:700;margin-top:7px;color:var(--info)}
+.qm-coment{font-size:11px;color:var(--sutil);margin-top:5px;line-height:1.45;
+  padding-top:5px;border-top:1px solid var(--borda)}
 </style>
 </head>
 <body>
