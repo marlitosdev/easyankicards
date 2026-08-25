@@ -684,8 +684,58 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgMaterial[open] > *, #dlgLeiSeca[open] > *{flex:0 0 auto}
 /* o texto é a única parte elástica — e portanto a única que rola */
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
-#dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura{
+#dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{
   flex:1 1 auto;min-height:120px;max-height:none;height:auto;resize:none}
+
+/* ---- LEI SECA ------------------------------------------------------
+ * A fila de leis, a procedência e o "onde parei" ficam ACIMA do texto e
+ * não crescem: são referência, não conteúdo. O que rola é a lei. */
+.lei-fila{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.lei-chip{font-size:11.5px;padding:4px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);
+  font-family:inherit}
+.lei-chip:hover{border-color:var(--acao)}
+.lei-chip-on{border-color:var(--acao);background:var(--acao);color:#fff;font-weight:700}
+.lei-chip-add{border-style:dashed;color:var(--sutil)}
+.lei-proc{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 6px;
+  font-size:11.5px}
+.lei-proc-txt{color:var(--sutil)}
+.lei-fonte{color:var(--info);text-decoration:underline}
+/* a cor de alerta aqui NÃO é decoração: é a única pista de que o texto
+ * pode estar desatualizado */
+.lei-velha{color:var(--atencao);font-weight:600}
+.lei-onde{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 8px}
+.lei-onde-txt{font-size:12px;color:var(--sutil)}
+.lei-barra{flex:0 0 120px;height:6px;border-radius:999px;background:var(--borda);
+  overflow:hidden}
+.lei-barra-in{height:100%;background:var(--verde);border-radius:999px}
+.lei-blocos{max-height:26vh;overflow-y:auto;border:1px solid var(--borda);
+  border-radius:9px;padding:8px 10px;margin:4px 0 8px;background:var(--campo)}
+.lei-bloco{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding:5px 0;border-bottom:1px solid var(--borda)}
+.lei-bloco:last-child{border-bottom:none}
+.lei-bloco-nome{flex:1 1 180px;text-align:left;background:none;border:none;
+  color:var(--texto);font-family:inherit;font-size:12.5px;cursor:pointer;padding:0}
+.lei-bloco-nome:hover{text-decoration:underline}
+.lei-bloco-meta{font-size:11px;color:var(--sutil)}
+.lei-bloco-lido .lei-bloco-nome{color:var(--sutil)}
+.lei-div{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--sutil);font-weight:800;margin:16px 0 6px;
+  border-bottom:1px solid var(--borda);padding-bottom:4px}
+.lei-art{border-left:3px solid var(--borda);padding:2px 0 2px 11px;margin:10px 0}
+.lei-art-parei{border-left-color:var(--verde)}
+.lei-art-pisca{background:rgba(124,108,245,.14);border-radius:0 8px 8px 0}
+.lei-art-cab{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:3px}
+.lei-art-num{font-weight:800;font-size:12px;color:var(--info)}
+.lei-art-b{font-size:10.5px;padding:2px 7px}
+.lei-art-txt{line-height:1.6}
+.lei-rec{margin:7px 0}
+.lei-rec-cab{display:block;width:100%;text-align:left;padding:7px 11px;
+  border:1px solid var(--borda);border-radius:8px;background:var(--campo);
+  color:var(--texto);font-family:inherit;font-size:13px;cursor:pointer}
+.lei-rec-cab:hover{border-color:var(--acao)}
+.lei-rec-txt{padding:7px 11px 2px;line-height:1.6;border-left:3px solid var(--verde);
+  margin:4px 0 0 10px}
 /* cabeçalho comprido não pode comer a tela inteira num monitor baixo */
 #dlgMaterial .mat-topo, #dlgMaterial .mat-ctrl, #dlgMaterial .mat-barra{
   max-height:24vh;overflow-y:auto}
@@ -1739,6 +1789,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .qm-extras{border-left:3px solid var(--acao);background:rgba(47,107,220,.10);
   padding:7px 10px;border-radius:0 8px 8px 0;margin:6px 0;font-size:11.5px;
   line-height:1.5;white-space:pre-wrap;color:var(--texto)}
+.mc-est-nav{display:flex;align-items:center;justify-content:center;gap:12px;
+  margin-top:10px}
+.mc-est-principal{margin:10px 0 4px}
+.mc-est-virar{width:100%;padding:13px;font-size:15px}
+.mc-est-ferramentas{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
+  padding-top:9px;border-top:1px solid var(--borda)}
 </style>
 </head>
 <body>
@@ -2988,28 +3044,155 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgLeiSeca" class="ui-modal diag-modal">
   <h3 id="leiTitulo"></h3>
   <p class="nota" id="leiSub"></p>
-  <p class="nota" data-i18n="lei_ajuda"></p>
+
+  <!-- Quais leis servem ESTE tópico. Uma lei pode servir vários tópicos:
+       é o que evita colar a mesma 4.320 cinco vezes. -->
+  <div class="lei-fila" id="leiFila"></div>
+
+  <!-- De onde veio e de quando é. Lei muda; sem carimbo de data não há
+       como saber que o texto envelheceu. -->
+  <div class="lei-proc" id="leiProc" hidden></div>
+
+  <!-- Onde parei, em artigo. -->
+  <div class="lei-onde" id="leiOnde" hidden></div>
+
   <div class="mat-topo">
-    <button class="btn-min" id="btnLeiModo"
-      title="Alterna entre ler e editar. Na leitura o texto aparece formatado; na edição, cru."></button>
-    <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
-      title="Grava a lei seca deste tópico. O resumo e os cartões não são tocados."></button>
+    <button class="btn-min" id="btnLeiModoLer" data-i18n="lei_modo_ler"
+      title="Mostra a lei formatada, artigo a artigo, com o botão de parar em cada um."></button>
+    <button class="btn-min" id="btnLeiModoEditar" data-i18n="lei_modo_editar"
+      title="Mostra o texto cru, para colar ou corrigir a letra da lei."></button>
+    <button class="btn-min" id="btnLeiModoRecitar" data-i18n="lei_modo_recitar"
+      title="Esconde o texto e mostra só o número e a ementa de cada artigo. Serve para conferir o que você realmente lembra — reler dá sensação de saber."></button>
     <span class="mat-sep"></span>
+    <button class="btn-min" id="btnLeiBlocos" data-i18n="lei_blocos_btn"
+      title="Abre a lista de capítulos, com quantos artigos e quantos minutos cada um leva. Ler 115 artigos de uma vez não é uma sessão de estudo."></button>
+    <button class="btn-min" id="btnLeiIr" data-i18n="lei_ir_btn"
+      title="Vai direto a um artigo pelo número."></button>
+    <button class="btn-min" id="btnLeiRank" data-i18n="lei_rank_btn"
+      title="Mostra quais artigos mais aparecem NAS SUAS questões e como você tem se saído em cada um."></button>
+    <button class="btn-min" id="btnLeiProc" data-i18n="lei_proc_btn"
+      title="Guarda o link da fonte, a data da consulta e a versão do texto."></button>
+    <span class="mat-sep"></span>
+    <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
+      title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
     <button class="btn-min" id="btnLeiMenor" title="Diminui a letra da leitura.">A&#8722;</button>
     <button class="btn-min" id="btnLeiMaior" title="Aumenta a letra da leitura.">A+</button>
     <span class="mat-topo-dir">
       <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
-        title="Fecha a lei seca. Se houver mudança não salva, pergunta antes."></button>
+        title="Fecha a lei. Se houver mudança não salva, pergunta antes."></button>
     </span>
   </div>
+
+  <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
+       para a pessoa decorar o app em vez da lei. -->
+  <div class="mat-barra" id="leiMarcas">
+    <button class="marca marca-d" id="btnLeiMarcaDest" data-i18n="mat_marca_d"
+      title="Grifa o trecho selecionado na leitura."></button>
+    <button class="marca marca-i" id="btnLeiMarcaImp" data-i18n="mat_marca_i"
+      title="Marca como importante."></button>
+    <button class="marca marca-q" id="btnLeiMarcaDuv" data-i18n="mat_marca_q"
+      title="Marca como dúvida — entra na lista de dúvidas."></button>
+    <button class="marca marca-prova" id="btnLeiMarcaProva" data-i18n="mat_marca_prova"
+      title="Marca que este trecho já caiu em prova."></button>
+    <button class="marca marca-peg" id="btnLeiMarcaPeg" data-i18n="mat_marca_peg"
+      title="Marca a pegadinha — na letra da lei é onde ela mais mora."></button>
+    <span class="mat-topo-dir"><span class="nota" id="leiEstado"></span></span>
+  </div>
+
+  <div class="lei-blocos" id="leiBlocosCx" hidden></div>
   <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
+  <div class="mat-leitura" id="leiRecitar" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiLido" data-i18n="lei_lido"
-      title="Registra no diário que você leu esta lei seca, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
+      title="Registra no diário que você leu, com o tempo estimado. Se um capítulo estiver aberto, conta só o tempo dele."></button>
     <button class="btn btn-cinza" id="btnLeiFechar2" data-i18n="help_close"
-      title="Fecha a lei seca."></button>
+      title="Fecha a lei."></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiProc" class="ui-modal">
+  <h3 data-i18n="lei_proc_titulo"></h3>
+  <p class="nota" data-i18n="lei_proc_ajuda"></p>
+  <label class="nota" data-i18n="lei_proc_nome"></label>
+  <input type="text" id="leiProcNome" placeholder="Lei 4.320/1964">
+  <label class="nota" data-i18n="lei_proc_fonte"></label>
+  <input type="text" id="leiProcFonte"
+    placeholder="https://www.planalto.gov.br/ccivil_03/leis/l4320.htm">
+  <label class="nota" data-i18n="lei_proc_data"></label>
+  <input type="date" id="leiProcData">
+  <label class="nota" data-i18n="lei_proc_versao"></label>
+  <input type="text" id="leiProcVersao" placeholder="atualizada até a EC 126/2022">
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiProcSalvar" data-i18n="lei_proc_salvar"></button>
+    <button class="btn btn-cinza" id="btnLeiProcFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiVincular" class="ui-modal diag-modal">
+  <h3 data-i18n="lei_vinc_titulo"></h3>
+  <p class="nota" data-i18n="lei_vinc_ajuda"></p>
+  <div id="leiVincCx" class="duv-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiVincFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiCloze" class="ui-modal diag-modal">
+  <h3 id="leiClozeTitulo"></h3>
+  <p class="nota" data-i18n="lei_cloze_ajuda"></p>
+  <textarea id="leiClozePrompt" rows="7" readonly
+    style="width:100%;box-sizing:border-box"></textarea>
+  <div class="mat-topo">
+    <button class="btn-min" id="btnLeiClozeCopiar" data-i18n="lei_cloze_copiar"></button>
+  </div>
+  <label class="nota" data-i18n="lei_cloze_colar"></label>
+  <textarea id="leiClozeColar" rows="6" style="width:100%;box-sizing:border-box"
+    placeholder="Cole aqui a resposta da IA."></textarea>
+  <div class="mat-topo">
+    <button class="btn-min btn-min-ok" id="btnLeiClozeConferir"
+      data-i18n="lei_cloze_conferir"></button>
+  </div>
+  <div id="leiClozePrevia" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiClozeAplicar" hidden></button>
+    <button class="btn btn-cinza" id="btnLeiClozeFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiRank" class="ui-modal diag-modal">
+  <h3 id="leiRankTitulo"></h3>
+  <p class="nota" data-i18n="lei_rank_ajuda"></p>
+  <div id="leiRankCx" class="duv-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiRankFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgMcMelhorar" class="ui-modal diag-modal">
+  <h3 data-i18n="cm_mel_titulo"></h3>
+  <p class="nota" data-i18n="cm_mel_ajuda"></p>
+  <div id="cmMelDefeitos" class="qm-defeitos"></div>
+  <p class="nota" data-i18n="cm_mel_prompt_rot"></p>
+  <textarea id="cmMelPrompt" rows="7" readonly
+    style="width:100%;box-sizing:border-box"></textarea>
+  <div class="qm-bts">
+    <button type="button" class="btn-min btn-min-ok" id="btnCmMelCopiar"></button>
+  </div>
+  <p class="nota" data-i18n="cm_mel_colar_rot"></p>
+  <textarea id="cmMelColar" rows="5" style="width:100%;box-sizing:border-box"
+    placeholder="Cole aqui o cartão corrigido pela IA"></textarea>
+  <div class="qm-bts">
+    <button type="button" class="btn-min btn-min-ok" id="btnCmMelConferir"></button>
+  </div>
+  <div id="cmMelComparar" class="qm-comparar" hidden></div>
+  <div id="cmMelExtras" class="qm-extras" hidden></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnCmMelAplicar" hidden></button>
+    <button class="btn btn-verde" id="btnCmMelAplicarTodos" hidden></button>
+    <button class="btn btn-cinza" id="btnCmMelFechar" data-i18n="help_close"
+      title="Sai sem mexer no cartão."></button>
   </div>
 </dialog>
 
@@ -3017,18 +3200,31 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <h3 id="mcEstTitulo"></h3>
   <p class="nota" id="mcEstSub"></p>
   <div id="mcEstCartao" class="mc-est-cartao"></div>
-  <div class="mc-est-barra">
+
+  <!-- TRES FAIXAS, COMO NA RESOLUCAO DE QUESTOES.
+       Estava tudo numa fila so: "anterior", "virar", "proxima", "criar
+       mais" e a posicao, com o "apagar" vermelho no rodape ao lado do
+       "fechar". Virar o cartao e a acao central da tela e disputava
+       espaco com criar e apagar. Agora: navegacao em cima, o gesto
+       principal sozinho no meio, e o resto embaixo. -->
+  <div class="mc-est-nav">
     <button class="btn-min" id="btnMcEstAnt" title="Cartão anterior">←</button>
-    <button class="btn btn-azul" id="btnMcEstVirar" data-i18n="mc_est_virar"
-      title="Mostra ou esconde a resposta. Tente lembrar antes de virar — é aí que a revisão funciona."></button>
+    <span class="mc-est-pos" id="mcEstPos"></span>
     <button class="btn-min" id="btnMcEstProx" title="Próximo cartão">→</button>
+  </div>
+  <div class="mc-est-principal">
+    <button class="btn btn-verde mc-est-virar" id="btnMcEstVirar" data-i18n="mc_est_virar"
+      title="Mostra ou esconde a resposta. Tente lembrar antes de virar — é aí que a revisão funciona."></button>
+  </div>
+  <div class="mc-est-ferramentas">
+    <button class="btn-min" id="btnMcEstMelhorar" hidden
+      title="Monta um prompt para a IA reescrever este cartão, apontando o que está errado nele. Você confere o antes e o depois antes de aplicar."></button>
     <button class="btn-min" id="btnMcEstCriar" data-i18n="mc_est_criar"
       title="Abre a criação de cartões deste mesmo tópico, sem passar pelo resumo."></button>
-    <span class="mc-est-pos" id="mcEstPos"></span>
+    <button class="btn-min btn-perigo" id="btnMcEstApagar" data-i18n="mc_est_apagar"
+      title="Apaga este cartão do material deste tópico. Pergunta duas vezes: um cartão apagado não volta."></button>
   </div>
   <div class="dlg-rodape">
-    <button class="btn-min btn-min-perigo" id="btnMcEstApagar" data-i18n="mc_est_apagar"
-      title="Apaga este cartão do material deste tópico. Pergunta duas vezes: um cartão apagado não volta."></button>
     <button class="btn btn-cinza" id="btnMcEstFechar" data-i18n="help_close" title="Fecha o estudo em tela. Os cartões continuam salvos no tópico."></button>
   </div>
 </dialog>
@@ -3362,6 +3558,9 @@ window.__sqlPromise = initSqlJs({
 <script src="backup.js"></script>
 <script src="backup-ui.js"></script>
 <script src="material.js"></script>
+<script src="cartao-melhorar.js"></script>
+<script src="lei-seca.js"></script>
+<script src="lei-ui.js"></script>
 <script src="questoes.js"></script>
 <script src="rascunho.js"></script>
 <script src="questoes-ui.js"></script>

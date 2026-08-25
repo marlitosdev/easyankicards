@@ -788,10 +788,13 @@ function matGuardarOffset(sel) {
   } catch (e) { matSelOffset = -1; }
 }
 
-function matLembrarSelecao() {
+/* O painel de onde vem a seleção é PARÂMETRO desde que a lei seca passou
+ * a ter marcas também: são dois leitores na tela, e ler a seleção do
+ * painel errado marcaria no documento errado. */
+function matLembrarSelecao(painelId) {
   const sel = window.getSelection && window.getSelection();
   if (!sel || sel.isCollapsed) return;
-  const painel = $("matLeitura");
+  const painel = $(painelId || "matLeitura");
   if (painel && sel.anchorNode && painel.contains
       && !painel.contains(sel.anchorNode)) return;
   const txt = String(sel).trim();
@@ -1111,7 +1114,7 @@ function matPintarLei() {
   const b = $("btnMatLei");
   if (!b) return;
   const r = matAtual && matResumos[matAtual.chave];
-  const on = !!(r && (String(r.leiTexto || "").trim() || r.leiSeca));
+  const on = !!(r && (String(r.leiTexto || "").trim() || r.leiSeca || r.leiId));
   b.textContent = t(on ? "mat_lei_tem" : "mat_lei_btn");
   if (b.classList) b.classList.toggle("btn-min-ok", on);
 }
@@ -1235,11 +1238,17 @@ function matNormalizar(s) {
     .replace(/\s+/g, " ").trim();
 }
 
-function matMarcarSelecao(tipo) {
-  matLembrarSelecao();
+/* ONDE: "resumo" (padrão) ou "lei". As marcas são as MESMAS seis — a
+ * pegadinha é justamente o que mais importa marcar na letra da lei, e
+ * ter um jogo de marcas diferente em cada documento seria pedir para a
+ * pessoa lembrar de duas convenções. */
+function matMarcarSelecao(tipo, onde) {
+  const naLei = onde === "lei";
+  matLembrarSelecao(naLei ? "leiLeitura" : "matLeitura");
   const trecho = matSelGuardada;
   if (matNormalizar(trecho).length < 3) { matRecusa("curta", trecho); return; }
-  const ta = $("matTexto");
+  const ta = $(naLei ? "leiTexto" : "matTexto");
+  if (!ta) return;
   const marca = MAT_MARCAS[tipo] || "==";
 
   const { plano, mapa } = matMapear(ta.value);
@@ -1337,10 +1346,17 @@ function matMarcarSelecao(tipo) {
   ta.value = saida;
   /* NÃO grava aqui. Grifar é experimentar: a pessoa marca, olha, desfaz,
    * marca de novo. Gravar a cada clique tira dela a chance de desistir. */
-  matSujo = true;
   matSelGuardada = "";
-  matReg("marca", "marcado (" + tipo + ")", trecho.slice(0, 60)
+  matReg("marca", "marcado (" + tipo + ")" + (naLei ? " na lei" : ""),
+    trecho.slice(0, 60)
     + " · ocorrência " + (ocorrencias.indexOf(pos) + 1) + " de " + ocorrencias.length);
+  if (naLei) {
+    leiSujo = true;
+    leiTrocarModo("ler");
+    if ($("leiEstado")) $("leiEstado").textContent = t("mat_marcado_nao_salvo");
+    return;
+  }
+  matSujo = true;
   matTrocarModo("ler");
   $("matEstado").textContent = t("mat_marcado_nao_salvo");
 }
@@ -1760,8 +1776,9 @@ function matTiposDe(x) {
   const tipos = [];
   if (String(x.texto || "").trim()) tipos.push("resumo");
   if (String(x.cartoes || "").trim()) tipos.push("cartoes");
-  /* agora é TEXTO próprio, não uma marca no resumo */
-  if (String(x.leiTexto || "").trim() || x.leiSeca) tipos.push("lei");
+  /* "leiId" é o ponteiro para a biblioteca; "leiTexto" é o campo antigo,
+   * que continua contando enquanto houver base não migrada. */
+  if (String(x.leiTexto || "").trim() || x.leiSeca || x.leiId) tipos.push("lei");
   return tipos;
 }
 
@@ -2505,6 +2522,19 @@ function mcEstPintar() {
   $("mcEstPos").textContent = t("mc_est_pos", {
     n: mcEstIdx + 1, t: mcEstCartoes.length });
   $("btnMcEstVirar").textContent = t(mcEstMostra ? "mc_est_esconder" : "mc_est_virar");
+
+  /* O CARTÃO RUIM SE ANUNCIA.
+   * Sem isto, descobrir que um cartão é lixo depende de a pessoa parar
+   * para julgar cada um — e no meio de uma revisão ninguém para. */
+  const bm = $("btnMcEstMelhorar");
+  if (bm) {
+    let d = [];
+    try { d = cmDefeitosDoCartao(c); } catch (e) { d = []; }
+    bm.hidden = false;
+    bm.textContent = d.length ? t("cm_mel_btn_n", { n: d.length }) : t("cm_mel_btn");
+    bm.title = t("cm_mel_btn_ajuda");
+    bm.className = "btn-min" + (d.length ? " qm-alerta" : "");
+  }
 }
 
 function mcEstAndar(passo) {
@@ -2518,6 +2548,55 @@ function mcEstAndar(passo) {
  * A primeira mostra o cartão inteiro; a segunda exige confirmar que é
  * mesmo aquele. Cartão apagado não volta, e apagar o errado é fácil quando
  * se está passando rápido por uma pilha deles. */
+/* APAGAR UM CARTÃO DO TEXTO — PELO LUGAR, NÃO PELO TEXTO.
+ *
+ * Dois defeitos moravam aqui, e o segundo é pior que o primeiro.
+ *
+ * 1. A busca comparava a frente JÁ PROCESSADA com o texto CRU da linha.
+ *    Num cartão de lacuna o cru tem "{{c1::30 dias}}" e a tela mostra
+ *    "[...]" — nunca casam, e o app respondia "não achei esse cartão no
+ *    texto salvo". Era por isso que só o primeiro apagava: o primeiro
+ *    era um cartão comum, os seguintes eram cloze.
+ *
+ * 2. Mesmo quando achava, apagava UMA linha. O "+ Saiba mais" do cartão
+ *    ficava órfão logo abaixo — e o leitor, que junta o "+" ao cartão
+ *    ACIMA dele, passava a grudar aquela explicação no cartão seguinte.
+ *    O cartão errado ganhava um "saiba mais" que não era dele, sem
+ *    ninguém ver.
+ *
+ * O parser já devolve, para cada cartão, a LINHA em que ele está. É por
+ * ela que se apaga, levando junto o que pertence ao cartão: o título
+ * "@" de cima e as continuações "+"/"*" de baixo. */
+function mcTextoSemCartao(bruto, c) {
+  const linhas = String(bruto || "").split("\n");
+  let k = (c && c.line ? c.line - 1 : -1);
+
+  /* confere que a linha é mesmo a dele: o texto pode ter sido editado
+   * desde que a lista foi montada, e apagar por número às cegas apagaria
+   * o cartão errado — que é o acidente que este recurso não pode ter */
+  const igual = (l) => String(l || "").trim() === String((c && c.raw) || "").trim();
+  if (k < 0 || !igual(linhas[k])) {
+    k = linhas.findIndex(igual);
+  }
+  if (k < 0) {
+    /* último recurso: compara só a frente crua, antes do "::" */
+    const alvo = String((c && c.raw) || "").split("::")[0].trim().toLowerCase();
+    if (!alvo) return null;
+    k = linhas.findIndex((l) => l.split("::")[0].trim().toLowerCase() === alvo);
+  }
+  if (k < 0) return null;
+
+  let de = k, ate = k;
+  /* as continuações de baixo ("+ saiba mais") são deste cartão */
+  while (ate + 1 < linhas.length && /^\s*[+*]\s/.test(linhas[ate + 1])) ate++;
+  /* o título "@" de cima também: ele existe para o cartão abaixo dele */
+  if (de > 0 && /^\s*@\s/.test(linhas[de - 1])) de--;
+
+  linhas.splice(de, ate - de + 1);
+  /* não deixa dois brancos seguidos onde o cartão estava */
+  return linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
+}
+
 async function mcApagarCartao(indice) {
   const c = mcEstCartoes[indice];
   if (!c || !matAtual) return;
@@ -2529,13 +2608,9 @@ async function mcApagarCartao(indice) {
   }
 
   const bruto = String((matResumos[matAtual.chave] || {}).cartoes || "");
-  const linhas = bruto.split("\n");
-  const alvo = String(c.front || "").trim().toLowerCase();
-  const k = linhas.findIndex((l) =>
-    l.split("::")[0].trim().toLowerCase() === alvo);
-  if (k < 0) { uiAlert(t("mc_apagar_nao_achou")); return; }
-  linhas.splice(k, 1);
-  matGravarCartoes(matAtual.chave, linhas.join("\n").replace(/^\s+|\s+$/g, ""),
+  const novo = mcTextoSemCartao(bruto, c);
+  if (novo === null) { uiAlert(t("mc_apagar_nao_achou")); return; }
+  matGravarCartoes(matAtual.chave, novo,
     { disciplina: matAtual.disciplina, topico: matAtual.topico });
   matReg("cartoes", "cartão apagado do tópico", frente);
 
@@ -2588,6 +2663,15 @@ function mcEstudoIniciar() {
     mcEstMostra = !mcEstMostra; mcEstPintar();
   };
   if ($("btnMcEstApagar")) $("btnMcEstApagar").onclick = () => mcApagarCartao(mcEstIdx);
+  if ($("btnMcEstMelhorar")) {
+    $("btnMcEstMelhorar").onclick = () => {
+      const c = mcEstCartoes[mcEstIdx];
+      if (!c) return;
+      cmMelAbrir(c, { disciplina: matAtual && matAtual.disciplina,
+                      topico: matAtual && matAtual.topico });
+    };
+  }
+  try { cmMelIniciar(); } catch (e) {}
   if ($("btnMcEstFechar")) {
     $("btnMcEstFechar").onclick = () => {
       $("dlgMcEstudo").close();
@@ -2612,139 +2696,11 @@ function mcEstudoIniciar() {
   };
 }
 
-/* =====================================================================
- * LEI SECA — documento próprio, ao lado do resumo
- *
- * Marcar o resumo inteiro como "lei seca" era confuso, e com razão: um
- * tópico costuma ter as DUAS coisas — a letra da lei e o comentário sobre
- * ela. São dois textos no mesmo registro, cada um com seu leitor, e o
- * tópico pode ter um, outro ou os dois.
- * ===================================================================== */
-let leiAtual = null;
-let leiModo = "ler";
-let leiSujo = false;
-let leiFonte = 15;
+/* A LEI SECA MUDOU DE ARQUIVO: virou docs/lei-seca.js (a lei como
+ * documento, com artigos e biblioteca) e docs/lei-ui.js (a tela).
+ * O que ficou aqui era um segundo campo de texto por tópico — e era
+ * essa a limitação, não a tela. */
 
-function leiTem(chave) {
-  const r = matResumos[chave];
-  return !!(r && String(r.leiTexto || "").trim());
-}
-
-function leiAbrir(disciplina, topico) {
-  leiAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
-  const r = matResumos[leiAtual.chave] || {};
-  $("leiTitulo").textContent = t("lei_titulo", { tp: topico });
-  /* de qual concurso, de qual disciplina: a lei seca é a mesma letra da lei,
-   * mas o recorte cobrado muda de banca para banca — sem o carimbo, quem
-   * abre por fora do edital não sabe de onde aquilo veio. */
-  if ($("leiSub")) {
-    $("leiSub").textContent = [r.concurso, disciplina, topico]
-      .filter(Boolean).join(" · ")
-      + (r.leiTexto ? " · " + t("lei_tamanho", { c: String(r.leiTexto).length }) : "");
-  }
-  $("leiTexto").value = String(r.leiTexto || "");
-  leiSujo = false;
-  /* abre LENDO quando já existe texto, e EDITANDO quando está vazio: pedir
-   * para trocar de modo antes de escrever a primeira linha é atrito à toa */
-  leiTrocarModo(String(r.leiTexto || "").trim() ? "ler" : "editar");
-  abrirModal("dlgLeiSeca");
-  matReg("lei", "lei seca aberta", topico + " · "
-    + String(r.leiTexto || "").length + " caracteres");
-}
-
-function leiTrocarModo(modo) {
-  leiModo = modo === "editar" ? "editar" : "ler";
-  const lendo = leiModo === "ler";
-  $("leiTexto").hidden = lendo;
-  $("leiLeitura").hidden = !lendo;
-  $("btnLeiModo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
-  if (lendo) {
-    $("leiLeitura").innerHTML = matParaHtml($("leiTexto").value)
-      || "<p class='nota'>" + t("lei_vazia") + "</p>";
-    $("leiLeitura").style.fontSize = leiFonte + "px";
-  }
-}
-
-function leiGravar() {
-  if (!leiAtual) return;
-  const txt = $("leiTexto").value;
-  const antigo = matResumos[leiAtual.chave] || {};
-  /* Object.assign sobre o antigo, como em matGravar: gravar a lei seca não
-   * pode apagar resumo, cartões nem marcador. */
-  matResumos[leiAtual.chave] = Object.assign({}, antigo, {
-    leiTexto: txt,
-    disciplina: antigo.disciplina || leiAtual.disciplina,
-    topico: antigo.topico || leiAtual.topico,
-    concurso: antigo.concurso
-      || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
-    criado: antigo.criado || new Date().toISOString(),
-    tocado: new Date().toISOString(),
-  });
-  matSalvar();
-  leiSujo = false;
-  matReg("lei", "lei seca gravada", leiAtual.topico + " · " + txt.length + " caracteres");
-  if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
-  toast("lei_salva");
-}
-
-/* Registrar que leu: mesma ideia do resumo, mas dizendo que foi lei seca —
- * ler a letra da lei e ler comentário são esforços diferentes. */
-function leiRegistrarLeitura() {
-  if (!leiAtual) return;
-  const txt = $("leiTexto").value;
-  const palavras = (txt.match(/\S+/g) || []).length;
-  const min = Math.max(5, Math.round(palavras / 150));
-  let item = null;
-  try {
-    const r = lerEdital($("editalTexto").value);
-    const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
-      prova: $("edProva").value, feitos: edProgresso });
-    item = plano.itens.find((x) => x.chave === leiAtual.chave) || null;
-  } catch (e) { item = null; }
-  if (item) item = Object.assign({}, item, { minutos: min });
-  else item = { disciplina: leiAtual.disciplina, nome: leiAtual.topico,
-                chave: leiAtual.chave, minutos: min, bruto: 0,
-                disciplinaPeso: null, peso: null, avulso: true };
-
-  if (typeof edMarcar === "function") {
-    const jaEstudado = typeof edProgresso !== "undefined" && edProgresso[leiAtual.chave];
-    edMarcar(item, jaEstudado ? "revisado" : "feito",
-      { minutos: min, formas: ["leitura"], humor: "media" });
-  }
-  matReg("lei", "leitura de lei seca registrada",
-         min + " min, " + palavras + " palavras");
-  uiAlert(t("lei_lida", { n: min }));
-}
-
-async function leiFechar() {
-  if (leiSujo) {
-    const r = await matPerguntarSaida();
-    if (r !== "salvar" && r !== "sair") return;
-    if (r === "salvar") leiGravar();
-    else matReg("lei", "alterações da lei seca descartadas", leiAtual && leiAtual.topico);
-  }
-  leiSujo = false;
-  $("dlgLeiSeca").close();
-  leiAtual = null;
-}
-
-function leiIniciar() {
-  if ($("btnLeiModo")) $("btnLeiModo").onclick = () => {
-    if (leiModo === "editar") leiGravar();
-    leiTrocarModo(leiModo === "editar" ? "ler" : "editar");
-  };
-  if ($("btnLeiSalvar")) $("btnLeiSalvar").onclick = leiGravar;
-  if ($("btnLeiLido")) $("btnLeiLido").onclick = leiRegistrarLeitura;
-  if ($("btnLeiFechar")) $("btnLeiFechar").onclick = () => leiFechar();
-  if ($("btnLeiFechar2")) $("btnLeiFechar2").onclick = () => leiFechar();
-  if ($("btnLeiMaior")) $("btnLeiMaior").onclick = () => {
-    leiFonte = Math.min(34, leiFonte + 2); leiTrocarModo(leiModo);
-  };
-  if ($("btnLeiMenor")) $("btnLeiMenor").onclick = () => {
-    leiFonte = Math.max(11, leiFonte - 2); leiTrocarModo(leiModo);
-  };
-  if ($("leiTexto")) $("leiTexto").addEventListener("input", () => { leiSujo = true; });
-}
 
 /* =====================================================================
  * MINHAS DÚVIDAS
@@ -3292,9 +3248,14 @@ function matEditorAberto(chave) {
 function matTextoVivo(chave, campo) {
   const c = campo === "lei" ? "leiTexto" : "texto";
   if (c === "texto" && matEditorAberto(chave)) return String($("matTexto").value || "");
-  if (c === "leiTexto" && leiAtual && leiAtual.chave === chave
-      && $("dlgLeiSeca") && $("dlgLeiSeca").open) {
-    return String($("leiTexto").value || "");
+  /* O TEXTO DA LEI NÃO MORA MAIS AQUI. Ele foi para a biblioteca, onde
+   * uma lei só serve vários tópicos. Quem sabe encontrá-lo é lei-ui.js —
+   * inclusive quando a janela está aberta e o texto ainda não foi
+   * gravado, que é o caso em que duas cópias divergem. */
+  if (c === "leiTexto") {
+    if (typeof leiTextoDoTopico === "function") return leiTextoDoTopico(chave);
+    const r0 = matResumos[chave];
+    return String((r0 && r0.leiTexto) || "");
   }
   const r = matResumos[chave];
   return String((r && r[c]) || "");
@@ -3302,6 +3263,9 @@ function matTextoVivo(chave, campo) {
 
 function matAplicarTexto(chave, campo, novo) {
   const c = campo === "lei" ? "leiTexto" : "texto";
+  if (c === "leiTexto" && typeof leiAplicarNoTopico === "function") {
+    return leiAplicarNoTopico(chave, novo);
+  }
   const r = matResumos[chave];
   if (!r) return false;
   r[c] = novo;
@@ -3314,12 +3278,6 @@ function matAplicarTexto(chave, campo, novo) {
     matTrocarModo(matModo);
     $("matEstado").textContent = t("mat_estado_salvo",
       { d: new Date().toLocaleTimeString() });
-  }
-  if (c === "leiTexto" && leiAtual && leiAtual.chave === chave
-      && $("dlgLeiSeca") && $("dlgLeiSeca").open) {
-    $("leiTexto").value = novo;
-    leiSujo = false;
-    leiTrocarModo(leiModo);
   }
   return true;
 }
