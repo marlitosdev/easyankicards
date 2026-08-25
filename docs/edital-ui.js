@@ -430,7 +430,93 @@ function edLinhaTopico(i, semDisciplina) {
   /* "tirar da agenda" ao lado de "registrar": as duas respostas possíveis
    * para o mesmo item ficam juntas — "fiz" e "agora não". Lá no fim da
    * linha, entre os atalhos de material, ele parecia mais um documento. */
-  li.append(chk, fora, pt, meio, doc, crt, lei, qst, rev, min);
+  /* UM BOTÃO DE ESTUDAR E UM MENU.
+   *
+   * A linha tinha seis alvos: registrar, tirar, 📄, 🃏, ⚖, ❓, desmarcar.
+   * Com dez linhas na semana, sessenta alvos na mesma tela — e os quatro
+   * do meio são ícones que só quem já usa reconhece. Trocar por rótulos
+   * de texto pioraria: cada linha ficaria três vezes mais alta.
+   *
+   * A saída é reduzir, não renomear. "Estudar" leva ao que o tópico TEM
+   * (resumo, ou cartões se não houver resumo, ou a criação se não houver
+   * nada) e o "⋮" guarda o resto — lá dentro há espaço para escrever por
+   * extenso, que é onde o rótulo de texto de fato ajuda. */
+  const estudar = document.createElement("button");
+  estudar.type = "button";
+  estudar.className = "btn-min ed-estudar" + (temTxt || nCard ? " tem" : "");
+  estudar.textContent = t(temTxt || nCard ? "ed_estudar" : "ed_estudar_criar");
+  estudar.title = t(temTxt ? "ed_estudar_resumo" : (nCard ? "ed_estudar_cartoes"
+    : "ed_estudar_vazio"), { n: i.nome, c: nCard });
+  estudar.onclick = (ev) => {
+    ev.stopPropagation();
+    if (temTxt) { matAbrirEditor(i, "ler"); return; }
+    if (nCard) { try { mcEstudarDireto(i.disciplina, i.nome); } catch (e) {} return; }
+    matAbrirEditor(i);
+  };
+
+  const mais = document.createElement("button");
+  mais.type = "button";
+  mais.className = "btn-min ed-mais";
+  mais.textContent = "⋮";
+  mais.title = t("ed_mais_ajuda");
+  mais.onclick = (ev) => {
+    ev.stopPropagation();
+    const antigo = li.querySelector(".ed-menu");
+    if (antigo) { antigo.hidden = !antigo.hidden; return; }
+    const menu = document.createElement("div");
+    menu.className = "ed-menu";
+    /* os mesmos destinos de antes, agora com nome e contagem: dentro do
+     * menu cabe a palavra que não cabia na linha */
+    [[doc, t(temTxt ? "ed_menu_resumo" : "ed_menu_resumo_novo")],
+     /* "ver os 1 cartões" é o tipo de frase que denuncia software.
+      * Três casos, três textos: nenhum, um, vários. */
+     [crt, t(!nCards ? "ed_menu_cartoes"
+       : (nCards === 1 ? "ed_menu_cartoes_1" : "ed_menu_cartoes_n"), { n: nCards })],
+     [qst, t(!nQ ? "ed_menu_questoes"
+       : (nQ === 1 ? "ed_menu_questoes_1" : "ed_menu_questoes_n"), { n: nQ })],
+     [lei, t(temLei ? "ed_menu_lei" : "ed_menu_lei_nova")]].forEach(([b, rot]) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "btn-min ed-menu-item" + (/ tem/.test(" " + (b.className || "")) ? " tem" : "");
+      item.textContent = rot;
+      item.title = b.title;
+      item.onclick = (e2) => { e2.stopPropagation(); menu.hidden = true; b.onclick(e2); };
+      menu.append(item);
+    });
+    li.append(menu);
+  };
+
+  /* STATUS NÃO É AÇÃO.
+   *
+   * Os quatro ícones da linha faziam duas coisas ao mesmo tempo: diziam
+   * o que o tópico TEM e serviam de botão para lá ir. A crítica de
+   * usabilidade acertou na parte da ação — ícone sem palavra, quatro
+   * por linha, sessenta na tela. Mas varrer a semana e ver o que já tem
+   * resumo continua valendo, e some junto se tudo for para o menu.
+   *
+   * Então cada coisa no seu lugar: aqui embaixo do nome, em palavras e
+   * sem clique, o que existe; no "⋮", os caminhos. */
+  const status = document.createElement("div");
+  status.className = "ed-status";
+  [[temTxt, "ed-doc", t("ed_st_resumo")],
+   [nCards, "ed-crt", nCards === 1 ? t("ed_st_cartao") : t("ed_st_cartoes", { n: nCards })],
+   [nQ, "ed-qst", nQ === 1 ? t("ed_st_questao") : t("ed_st_questoes", { n: nQ })],
+   [temLei, "ed-lei", t("ed_st_lei")]].forEach(([tem, cls, rot]) => {
+    if (!tem) return;
+    const sp = document.createElement("span");
+    sp.className = cls + " tem ed-st-item";
+    sp.textContent = rot;
+    if (cls === "ed-crt" && nCards) {
+      const n2 = document.createElement("span");
+      n2.className = "ed-doc-n";
+      n2.textContent = nCards;
+      sp.append(n2);
+    }
+    status.append(sp);
+  });
+  if (status.children.length) meio.append(status);
+
+  li.append(chk, fora, pt, meio, estudar, mais, rev, min);
   return li;
 }
 
@@ -1693,25 +1779,54 @@ function edPintarPainel(r, plano) {
     cab.append(tit, sel);
     card.append(cab, edBarra(feitos, revs, meus.length));
 
-    const cont = document.createElement("div");
-    cont.className = "ed-card-conta";
-    cont.textContent = t("ed_card_conta", { f: feitos, t: meus.length,
-      p: pesoD.pctFeito, r: revs });
-    /* Quanto ESTA disciplina representa da prova inteira. É o número que
-     * justifica a ordem dos cartões e o que decide onde investir a semana. */
-    const fatia = document.createElement("div");
-    fatia.className = "ed-fatia";
+    /* O CARD FECHADO RESPONDE UMA PERGUNTA SÓ: E AGORA?
+     *
+     * Antes ele trazia seis números em corpo miúdo — estudados,
+     * revisados, porcentagem, fatia da prova, e as bolinhas das três
+     * faixas — com peso e porcentagem aparecendo duas vezes, na barra
+     * e no badge. Seis números que não dizem o que fazer.
+     *
+     * Fechado ele agora tem nome, UMA barra e o PRÓXIMO TÓPICO. Os
+     * números não sumiram: mudaram de lugar, para dentro do card
+     * aberto, que é onde se vai quando a pergunta deixa de ser "e
+     * agora?" e passa a ser "como estou nesta matéria?". */
     const share = Math.round((pesoDaDisc[d.nome] / (plano.peso.total || 1)) * 100);
-    fatia.textContent = t("ed_fatia", { p: share });
-    cab.append(fatia);
-    card.append(cont, edPontos(meus));
+    const proximo = edProximoDa(meus);
+    if (proximo) {
+      const pr = document.createElement("button");
+      pr.type = "button";
+      pr.className = "ed-card-prox";
+      pr.textContent = t("ed_card_prox", { n: proximo.nome });
+      pr.title = t("ed_card_prox_ajuda", { n: proximo.nome,
+        p: proximo.disciplinaPeso != null ? proximo.disciplinaPeso * proximo.peso : "?" });
+      pr.onclick = (ev) => {
+        ev.stopPropagation();
+        if (typeof matAbrirEditor === "function") matAbrirEditor(proximo, "ler");
+      };
+      card.append(pr);
+    } else {
+      const pr = document.createElement("div");
+      pr.className = "ed-card-prox ed-card-prox-fim";
+      pr.textContent = t("ed_card_prox_fim");
+      card.append(pr);
+    }
 
     const abrir = document.createElement("button");
     abrir.className = "ed-abrir";
-    abrir.textContent = edAbertas[d.nome] ? t("ed_fechar") : t("ed_abrir");
+    abrir.textContent = edAbertas[d.nome] ? t("ed_fechar") : t("ed_abrir_detalhe");
     abrir.onclick = () => { edAbertas[d.nome] = !edAbertas[d.nome]; edRender(); };
     card.append(abrir);
     if (edAbertas[d.nome]) {
+      /* os números que saíram da capa vivem aqui */
+      const cont = document.createElement("div");
+      cont.className = "ed-card-conta";
+      cont.textContent = t("ed_card_conta", { f: feitos, t: meus.length,
+        p: pesoD.pctFeito, r: revs });
+      const fatia = document.createElement("div");
+      fatia.className = "ed-fatia";
+      fatia.textContent = t("ed_fatia", { p: share });
+      card.append(cont, fatia, edPontos(meus));
+
       const lista = document.createElement("div");
       lista.className = "ed-card-lista";
       meus.forEach((i) => lista.append(edLinhaTopico(i, true)));
@@ -1721,6 +1836,16 @@ function edPintarPainel(r, plano) {
     grade.append(card);
   });
   box.append(grade);
+}
+
+/* O PRÓXIMO TÓPICO DESTA DISCIPLINA.
+ * O mesmo critério da agenda — maior peso da disciplina × peso do
+ * tópico — restrito ao que ainda não foi feito e não está fora da
+ * agenda. Se estiver tudo feito, devolve nulo e o card diz isso. */
+function edProximoDa(itens) {
+  const livres = (itens || []).filter((i) => !i.feito && !edEstaFora(i.chave));
+  if (!livres.length) return null;
+  return livres.slice().sort((a, b) => (b.bruto || 0) - (a.bruto || 0))[0];
 }
 
 /* Mudar o peso reescreve o TEXTO — nunca um estado paralelo. Enquanto texto

@@ -270,18 +270,70 @@ function hubDiscEscolhidas(todas) {
   return (todas || []).filter((d) => ocultas.indexOf(d) < 0);
 }
 
+/* UMA LINHA FECHADA, NÃO UMA NUVEM.
+ *
+ * Dezessete disciplinas viravam dezessete pílulas empilhadas — mais
+ * alto que a própria agenda, e impossível de varrer com o olho. Agora
+ * o filtro é uma linha só: "disciplinas (3 de 17) ▾". Aberto, mostra
+ * a mesma lista com busca; fechado, some.
+ *
+ * O estado (aberto/fechado) vive em memória e não é gravado: abrir o
+ * app com o filtro escancarado, porque uma vez foi aberto, seria o
+ * mesmo problema de volta. */
+let hubDiscAberto = false;
+let hubDiscBusca = "";
+
 function hubFiltroDisciplina(todas) {
   if (!todas || todas.length < 2) return null;
   const ocultas = hubDiscOcultas();
+  const visiveis = hubDiscEscolhidas(todas);
+
+  const caixa = document.createElement("div");
+  caixa.className = "ed-disc-caixa";
+
+  const cabeca = document.createElement("button");
+  cabeca.type = "button";
+  cabeca.className = "btn-min ed-disc-cabeca";
+  cabeca.textContent = t("hub_ag_disc_resumo",
+    { n: visiveis.length, t: todas.length }) + (hubDiscAberto ? " ▴" : " ▾");
+  cabeca.title = t("hub_ag_disc_resumo_ajuda");
+  cabeca.onclick = () => { hubDiscAberto = !hubDiscAberto; hubPintarAgenda(); };
+  caixa.append(cabeca);
+
+  if (!hubDiscAberto) return caixa;
+
   const cx = document.createElement("div");
   cx.className = "ed-agenda-filtro ed-ag-disc";
 
-  const rot = document.createElement("span");
-  rot.className = "ed-ag-disc-rot";
-  rot.textContent = t("hub_ag_disc_rot");
-  cx.append(rot);
+  /* BUSCA: com dezessete nomes, achar "Direito Processual Civil" no
+   * meio é mais rápido digitando três letras do que varrendo a lista. */
+  const busca = document.createElement("input");
+  busca.type = "text";
+  busca.className = "ed-disc-busca";
+  busca.placeholder = t("hub_ag_disc_busca");
+  busca.value = hubDiscBusca;
+  busca.oninput = () => {
+    hubDiscBusca = busca.value;
+    hubPintarAgenda();
+    const b2 = document.getElementById("edAgendaTopo");
+    const campo = b2 && b2.querySelector ? null : null;
+    if (campo) campo.focus();
+  };
+  cx.append(busca);
 
-  todas.forEach((d) => {
+  const semAcento = (x) => String(x || "").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const alvo = semAcento(hubDiscBusca).trim();
+  const mostrar = alvo ? todas.filter((d) => semAcento(d).indexOf(alvo) >= 0) : todas;
+
+  if (!mostrar.length) {
+    const vz = document.createElement("span");
+    vz.className = "ed-ag-disc-rot";
+    vz.textContent = t("hub_ag_disc_nada", { q: hubDiscBusca });
+    cx.append(vz);
+  }
+
+  mostrar.forEach((d) => {
     const on = ocultas.indexOf(d) < 0;
     const b = document.createElement("button");
     b.type = "button";
@@ -324,7 +376,8 @@ function hubFiltroDisciplina(todas) {
     b.onclick = () => { hubDiscOcultasGravar([]); hubPintarAgenda(); };
     cx.append(b);
   }
-  return cx;
+  caixa.append(cx);
+  return caixa;
 }
 
 /* dispensados DESTA semana, em minutos */
