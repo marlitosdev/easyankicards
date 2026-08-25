@@ -1,0 +1,10 @@
+@ Formatação de Flashcards — Diretrizes Obrigatórias
+Quais são as regras obrigatórias de formatação dos flashcards? {{c1::Numeração diferente nas lacunas}} :: flashcards, formatacao
++ Regras gerais — Garantem legibilidade e compatibilidade com o formato exigido pelo app.
++ b) TÍTULO: a linha "@ Título" fica SOZINHA, ACIMA do cartão. Nunca na mesma linha da pergunta.
++ g) SEM MARKDOWN: nada de <b>negrito</b>, ##, tabelas. Para destacar, use <b>texto</b>.
++ CARTÕES:
+
+@ Matriz GUT
+A matriz GUT é utilizada para identificar fatores internos e externos? {{c1::NÃO}} :: gut
++ Matriz GUT — Ferramenta de priorização por Gravidade, Urgência e Tendência.

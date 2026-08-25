@@ -1,0 +1,7 @@
+@ Despesa com pessoal
+
+O que a LRF considera :: Despesa total com pessoal :: lrf, pessoal
++ Abrange os detentores de mandato eletivo, os cargos e as funções de qualquer espécie / Inclui vencimentos, vantagens fixas e variáveis, subsídios e proventos da aposentadoria / Exemplo: os encargos sociais e a contribuição para entidades de previdência também entram na conta
+
+Qual é o período de apuração :: Doze meses, contados no mês em referência com os onze anteriores :: lrf
++ Estrutura_Conceitual / Materialidade

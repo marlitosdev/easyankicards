@@ -1,0 +1,14 @@
+@ Ciclo de Políticas Públicas — Gabarito da Questão 17
+Qual a ordem correta das definições 1, 2 e 3 apresentadas na Questão 17? A ordem correta é a Letra A: (1) Avaliação, (2) Formulação de Agendas, (3) Processo Decisório. :: politicas_publicas, questoes
++ Correção da associação — 1 = Avaliação de resultados; 2 = Seleção da agenda; 3 = Tomada de decisão formal.
+
+O que se decide na fase de formulação da agenda? :: Quais problemas, entre muitos possíveis, entram na pauta do governo :: politicas_publicas
++ Formulação da agenda — É a triagem: nem todo problema social vira problema de governo.
+
+O que é a Letra Financeira do Tesouro? :: Título público federal pós-fixado, atrelado à taxa Selic :: financas
+
+@ Métodos Preditivos — Gabarito da Questão
+Qual alternativa indica corretamente a característica fundamental dos métodos preditivos? A alternativa correta é a D) planejamento completo e detalhado de todos os entregáveis. :: gestao_de_projetos, preditivo
++ Correção de distratores — Não permitem iniciar sem escopo nem focam em mudanças contínuas.
+
+Qual costuma ser a alternativa mais barata de financiamento para a empresa? :: O capital próprio retido, por não ter custo de juros :: financas

@@ -165,5 +165,36 @@
     "titulos": 28,
     "tags": 27,
     "detectores": []
+  },
+  "17-saiba-mais-numa-linha-so.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 2,
+    "titulos": 1,
+    "tags": 3,
+    "detectores": [
+      "mais_junto"
+    ]
+  },
+  "18-prompt-colado-de-volta.txt": {
+    "cartoes": 2,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 5,
+    "titulos": 2,
+    "tags": 3,
+    "detectores": [
+      "prompt_colado"
+    ]
+  },
+  "19-cartao-preso-a-prova.txt": {
+    "cartoes": 5,
+    "avisos": 0,
+    "suspeitos": 0,
+    "saibaMais": 3,
+    "titulos": 2,
+    "tags": 3,
+    "detectores": []
   }
 }
