@@ -29,7 +29,16 @@ const BK_CHAVES = {
   /* a rodada em andamento também é trabalho: sem ela no backup, trocar de
    * base joga fora "12 de 31 respondidas" — que é justamente o que a
    * pessoa não quer refazer. */
-  material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova"],
+  /* "eac_leis" é a biblioteca: o texto da lei NÃO fica mais dentro do
+   * tópico, então sem esta chave o backup levaria os resumos e deixaria
+   * as leis para trás — e a perda só apareceria ao restaurar.
+   *
+   * "eac_rascunhos" e "eac_fora_da_agenda" estavam faltando desde que
+   * foram criados. Restaurar apagava os rabiscos das questões e todos os
+   * adiamentos e dispensas, sem uma linha de aviso: o pior tipo de
+   * perda, porque a tela depois parece apenas "vazia", não quebrada. */
+  material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
+             "eac_leis", "eac_rascunhos", "eac_fora_da_agenda"],
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
                  "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",

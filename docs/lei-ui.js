@@ -1,0 +1,964 @@
+/* =====================================================================
+ * A TELA DA LEI SECA
+ *
+ * A anterior era uma caixa de texto e dois botões. Esta parte de outra
+ * pergunta: o que muda quando o app SABE que aquilo é uma lei?
+ *
+ *   · sabe onde você parou, e diz em artigo ("parei no art. 35"), não em
+ *     posição de rolagem — que morre ao mudar a fonte ou o aparelho;
+ *   · sabe de onde o texto veio e de quando é, porque lei muda e estudar
+ *     redação revogada é pior que não estudar;
+ *   · sabe partir a leitura em capítulos, porque 115 artigos não são uma
+ *     sessão de estudo;
+ *   · sabe esconder o texto e mostrar só a ementa, que é como se confere
+ *     se a lei foi realmente aprendida;
+ *   · sabe qual artigo mais aparece nas SUAS questões, e quantas você
+ *     errou nele.
+ *
+ * O texto mora na biblioteca (lei-seca.js). Aqui só existe tela.
+ * ===================================================================== */
+
+let leiAtual = null;        /* {disciplina, topico, chave} */
+let leiIdAtual = "";        /* qual lei da biblioteca está aberta */
+let leiModo = "ler";        /* ler | editar | recitar */
+let leiSujo = false;
+let leiFonte = 15;
+let leiRecitados = {};      /* artigos já revelados no modo recitar */
+let leiBlocoAberto = "";
+
+function leiModoAtual() { return leiModo; }
+
+/* ---------------------------------------------------------------------
+ * QUAL LEI ESTÁ ABERTA
+ * ------------------------------------------------------------------ */
+
+/* A lei preferida do tópico é a que ele apontou; na falta, a primeira
+ * ligada a ele. O ponteiro fica no tópico, o texto fica na lei — é o
+ * contrário de antes, e é o que impede cinco cópias da 4.320. */
+function leiDoTopicoAtual(chave) {
+  const r = (typeof matResumos !== "undefined" && matResumos[chave]) || {};
+  if (r.leiId && leiDe(r.leiId)) return leiDe(r.leiId);
+  const lista = leisDoTopico(chave);
+  return lista[0] || null;
+}
+
+function leiTem(chave) {
+  const r = (typeof matResumos !== "undefined" && matResumos[chave]) || null;
+  /* o campo antigo continua valendo enquanto não for migrado: quem tem
+   * lei colada na versão anterior não pode ver o botão apagar */
+  if (r && String(r.leiTexto || "").trim()) return true;
+  const l = leiDoTopicoAtual(chave);
+  return !!(l && String(l.texto || "").trim());
+}
+
+/* PONTES PARA O RESTO DO APP.
+ * As marcas, as dúvidas e o "abrir onde está" perguntam pelo texto da
+ * lei de um tópico. Antes iam direto ao registro; agora passam por aqui,
+ * que sabe se a lei está na biblioteca ou ainda no campo antigo. */
+function leiTextoDoTopico(chave) {
+  if (leiAtual && leiAtual.chave === chave
+      && $("dlgLeiSeca") && $("dlgLeiSeca").open && $("leiTexto")) {
+    return String($("leiTexto").value || "");
+  }
+  const l = leiDoTopicoAtual(chave);
+  if (l) return String(l.texto || "");
+  const r = (typeof matResumos !== "undefined" && matResumos[chave]) || {};
+  return String(r.leiTexto || "");
+}
+
+function leiAplicarNoTopico(chave, novo) {
+  const l = leiDoTopicoAtual(chave);
+  if (l) leiGuardar({ id: l.id, texto: novo });
+  else if (typeof matResumos !== "undefined" && matResumos[chave]) {
+    matResumos[chave].leiTexto = novo;
+    matSalvar();
+  }
+  if (leiAtual && leiAtual.chave === chave
+      && $("dlgLeiSeca") && $("dlgLeiSeca").open && $("leiTexto")) {
+    $("leiTexto").value = novo;
+    leiSujo = false;
+    leiPintar();
+  }
+  return true;
+}
+
+/* ---------------------------------------------------------------------
+ * ABRIR
+ * ------------------------------------------------------------------ */
+
+function leiAbrir(disciplina, topico, id) {
+  leiAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
+  /* migra na primeira abertura: quem tinha lei colada no campo antigo
+   * encontra a mesma lei aqui, sem precisar refazer nada */
+  try { leisMigrarDe(typeof matResumos !== "undefined" ? matResumos : {}); }
+  catch (e) {}
+
+  const l = id ? leiDe(id) : leiDoTopicoAtual(leiAtual.chave);
+  leiIdAtual = l ? l.id : "";
+  leiRecitados = {};
+  leiBlocoAberto = "";
+  leiSujo = false;
+
+  $("leiTexto").value = l ? String(l.texto || "") : "";
+  leiTrocarModo(l && String(l.texto || "").trim() ? "ler" : "editar");
+  leiPintar();
+  abrirModal("dlgLeiSeca");
+  try {
+    matReg("lei", "lei seca aberta", topico + " · "
+      + (l ? l.nome + " · " + leiArtigos(l.texto).length + " artigos"
+           : "nenhuma lei ligada ainda"));
+  } catch (e) {}
+}
+
+/* ---------------------------------------------------------------------
+ * PINTAR
+ * ------------------------------------------------------------------ */
+
+function leiPintar() {
+  if (!leiAtual) return;
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const r = (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]) || {};
+
+  $("leiTitulo").textContent = l ? l.nome : t("lei_titulo", { tp: leiAtual.topico });
+  $("leiSub").textContent = [r.concurso, leiAtual.disciplina, leiAtual.topico]
+    .filter(Boolean).join(" · ");
+
+  leiPintarFila();
+  leiPintarProcedencia();
+  leiPintarOnde();
+  leiPintarBlocos();
+  if (leiModo !== "editar") leiTrocarModo(leiModo);
+}
+
+/* A FILA DE LEIS DO TÓPICO.
+ * Um tópico pode ser servido por mais de uma lei (despesa pública é
+ * 4.320 E a LRF). Trocar entre elas tem de ser um clique, e a fila diz
+ * quantos artigos cada uma tem — que é a diferença entre "a lei inteira"
+ * e "o artigo que eu colei com pressa". */
+function leiPintarFila() {
+  const cx = $("leiFila");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const lista = leisDoTopico(leiAtual.chave);
+
+  lista.forEach((l) => {
+    const b = document.createElement("button");
+    b.className = "lei-chip" + (l.id === leiIdAtual ? " lei-chip-on" : "");
+    const p = leiProgresso(l.id) || { total: 0, pct: 0 };
+    b.textContent = l.nome + " · " + t("lei_n_artigos", { n: p.total })
+      + (p.pct ? " · " + p.pct + "%" : "");
+    b.title = t("lei_chip_ajuda", { n: (l.topicos || []).length });
+    b.onclick = () => leiTrocarPara(l.id);
+    cx.append(b);
+  });
+
+  const bNova = document.createElement("button");
+  bNova.className = "lei-chip lei-chip-add";
+  bNova.id = "btnLeiNova";
+  bNova.textContent = t("lei_colar_nova");
+  bNova.title = t("lei_colar_nova_ajuda");
+  bNova.onclick = () => leiNovaAbrir();
+  cx.append(bNova);
+
+  /* vincular uma lei que já está na biblioteca é o gesto que faz a
+   * reforma valer: a 4.320 do tópico de receita serve o de despesa sem
+   * ser colada de novo */
+  const outras = leisLista().filter((l) =>
+    !(l.topicos || []).some((c) => leisChaveComparavel(c)
+      === leisChaveComparavel(leiAtual.chave)));
+  if (outras.length) {
+    const bV = document.createElement("button");
+    bV.className = "lei-chip lei-chip-add";
+    bV.textContent = t("lei_vincular", { n: outras.length });
+    bV.title = t("lei_vincular_ajuda");
+    bV.onclick = () => leiVincularAbrir();
+    cx.append(bV);
+  }
+}
+
+/* PROCEDÊNCIA — de onde veio e de quando é.
+ *
+ * Lei muda. A EC 126/2022 apareceu nas questões do usuário; um texto
+ * colado antes dela está errado e não tem como saber olhando. Guardar o
+ * link e a data da consulta não impede o texto de envelhecer — mas faz o
+ * envelhecimento aparecer, que é tudo o que se pode fazer sem internet. */
+const LEI_DIAS_VELHA = 180;
+
+function leiPintarProcedencia() {
+  const cx = $("leiProc");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l) { cx.hidden = true; return; }
+  cx.hidden = false;
+
+  if (l.fonte) {
+    const a = document.createElement("a");
+    a.href = l.fonte;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.className = "lei-fonte";
+    a.textContent = t("lei_fonte_abrir");
+    a.title = l.fonte;
+    cx.append(a);
+  }
+
+  const d = document.createElement("span");
+  d.className = "lei-proc-txt";
+  if (l.consultadaEm) {
+    const dias = Math.round(
+      (Date.now() - new Date(l.consultadaEm + "T12:00:00").getTime()) / 86400000);
+    d.textContent = t("lei_consultada", { d: l.consultadaEm })
+      + (l.versao ? " · " + l.versao : "");
+    if (dias > LEI_DIAS_VELHA) {
+      d.classList.add("lei-velha");
+      d.textContent += " · " + t("lei_velha", { n: dias });
+    }
+  } else {
+    d.classList.add("lei-velha");
+    d.textContent = t("lei_sem_procedencia");
+  }
+  cx.append(d);
+
+  const b = document.createElement("button");
+  b.className = "btn-min";
+  b.textContent = t("lei_procedencia_editar");
+  b.title = t("lei_procedencia_ajuda");
+  b.onclick = () => leiProcAbrir();
+  cx.append(b);
+}
+
+/* ONDE PAREI — em artigo, e com o botão de continuar dali. */
+function leiPintarOnde() {
+  const cx = $("leiOnde");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const p = l ? leiProgresso(l.id) : null;
+  if (!p || !p.total) { cx.hidden = true; return; }
+  cx.hidden = false;
+
+  const barra = document.createElement("div");
+  barra.className = "lei-barra";
+  const dentro = document.createElement("div");
+  dentro.className = "lei-barra-in";
+  dentro.style.width = p.pct + "%";
+  barra.append(dentro);
+
+  const txt = document.createElement("span");
+  txt.className = "lei-onde-txt";
+  txt.textContent = p.lidos
+    ? t("lei_parei_em", { a: p.artigo, n: p.lidos, tot: p.total, p: p.pct })
+    : t("lei_nao_comecou", { tot: p.total });
+
+  cx.append(barra, txt);
+
+  if (p.proximo) {
+    const b = document.createElement("button");
+    b.className = "btn-min btn-min-ok";
+    b.textContent = t("lei_continuar", { a: p.proximo.numCru });
+    b.title = t("lei_continuar_ajuda");
+    b.onclick = () => { leiTrocarModo("ler"); leiIrArtigo(p.proximo.num); };
+    cx.append(b);
+  }
+}
+
+/* BLOCOS — ler por capítulo, com o tempo de cada um. */
+function leiPintarBlocos() {
+  const cx = $("leiBlocosCx");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l) return;
+  const blocos = leiBlocos(l.texto);
+  const lidos = l.blocos || {};
+
+  const cab = document.createElement("div");
+  cab.className = "nota";
+  cab.textContent = t("lei_blocos_ajuda", {
+    n: blocos.length,
+    lidos: blocos.filter((b) => lidos[b.nome]).length,
+  });
+  cx.append(cab);
+
+  blocos.forEach((b) => {
+    const linha = document.createElement("div");
+    linha.className = "lei-bloco" + (lidos[b.nome] ? " lei-bloco-lido" : "");
+
+    const nome = document.createElement("button");
+    nome.className = "lei-bloco-nome";
+    nome.textContent = b.nome;
+    nome.title = t("lei_bloco_ir", { de: b.de, ate: b.ate });
+    nome.onclick = () => {
+      leiBlocoAberto = b.nome;
+      leiTrocarModo(leiModo === "recitar" ? "recitar" : "ler");
+      leiIrArtigo(b.de);
+    };
+
+    const meta = document.createElement("span");
+    meta.className = "lei-bloco-meta";
+    meta.textContent = t("lei_bloco_meta", { n: b.quantos, min: b.minutos });
+
+    const chk = document.createElement("button");
+    chk.className = "btn-min" + (lidos[b.nome] ? " btn-min-ok" : "");
+    chk.textContent = lidos[b.nome] ? t("lei_bloco_lido", { d: lidos[b.nome] })
+                                    : t("lei_bloco_marcar");
+    chk.title = t("lei_bloco_marcar_ajuda");
+    chk.onclick = () => {
+      leiBlocoLido(l.id, b.nome, !lidos[b.nome]);
+      /* marcar o capítulo lido move o marcador para o último artigo
+       * dele: as duas coisas dizem a mesma verdade, e deixá-las
+       * discordando é o começo de "o app não sabe onde eu estou" */
+      if (!lidos[b.nome]) leiParar(l.id, b.ate);
+      try {
+        matReg("lei", (lidos[b.nome] ? "capítulo desmarcado" : "capítulo lido"),
+               l.nome + " · " + b.nome);
+      } catch (e) {}
+      leiPintar();
+    };
+
+    linha.append(nome, meta, chk);
+    cx.append(linha);
+  });
+}
+
+/* ---------------------------------------------------------------------
+ * MODOS DE LEITURA
+ * ------------------------------------------------------------------ */
+
+function leiTrocarModo(modo) {
+  leiModo = ["ler", "editar", "recitar"].indexOf(modo) >= 0 ? modo : "ler";
+  const ed = leiModo === "editar";
+  const rec = leiModo === "recitar";
+  $("leiTexto").hidden = !ed;
+  $("leiLeitura").hidden = ed || rec;
+  if ($("leiRecitar")) $("leiRecitar").hidden = !rec;
+  if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec;
+
+  [["btnLeiModoLer", "ler"], ["btnLeiModoEditar", "editar"],
+   ["btnLeiModoRecitar", "recitar"]].forEach(([id, m]) => {
+    const b = $(id);
+    if (b && b.classList) b.classList.toggle("btn-min-ok", leiModo === m);
+  });
+
+  if (leiModo === "ler") leiPintarLeitura();
+  if (rec) leiPintarRecitar();
+}
+
+/* A LEITURA, ARTIGO A ARTIGO.
+ * Cada artigo vira um bloco com âncora própria — é o que permite rolar
+ * até ele, marcar "parei aqui" e gerar lacuna só dele. Um texto corrido
+ * não permitiria nenhuma das três. */
+function leiPintarLeitura() {
+  const cx = $("leiLeitura");
+  if (!cx) return;
+  cx.innerHTML = "";
+  cx.style.fontSize = leiFonte + "px";
+  const bruto = String($("leiTexto").value || "");
+  const arts = leiArtigos(bruto);
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const parei = l ? l.parei : "";
+
+  if (!arts.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    /* texto colado que não tem artigo nenhum ainda é texto: mostrar o
+     * que existe é melhor que uma tela vazia dizendo "cole a lei" */
+    p.innerHTML = matParaHtml(bruto) || t("lei_vazia");
+    cx.append(p);
+    return;
+  }
+
+  let divisao = "";
+  arts.forEach((a) => {
+    if (a.divisao && a.divisao !== divisao) {
+      divisao = a.divisao;
+      const h = document.createElement("div");
+      h.className = "lei-div";
+      h.textContent = divisao;
+      cx.append(h);
+    }
+
+    const bloco = document.createElement("div");
+    bloco.className = "lei-art" + (a.num === parei ? " lei-art-parei" : "");
+    bloco.id = "leiArt_" + a.num.replace(/[^A-Z0-9-]/gi, "");
+
+    const cab = document.createElement("div");
+    cab.className = "lei-art-cab";
+    const rot = document.createElement("span");
+    rot.className = "lei-art-num";
+    rot.textContent = a.rotulo;
+    cab.append(rot);
+
+    const bParei = document.createElement("button");
+    bParei.className = "btn-min lei-art-b";
+    bParei.textContent = a.num === parei ? t("lei_aqui") : t("lei_parar_aqui");
+    bParei.title = t("lei_parar_aqui_ajuda");
+    bParei.onclick = () => {
+      leiParar(leiIdAtual, a.num);
+      leiPintar();
+    };
+
+    const bCloze = document.createElement("button");
+    bCloze.className = "btn-min lei-art-b";
+    bCloze.textContent = t("lei_cloze_art");
+    bCloze.title = t("lei_cloze_art_ajuda");
+    bCloze.onclick = () => leiClozeAbrir(a);
+
+    cab.append(bParei, bCloze);
+
+    const corpo = document.createElement("div");
+    corpo.className = "lei-art-txt";
+    corpo.innerHTML = matParaHtml(a.texto);
+
+    bloco.append(cab, corpo);
+    cx.append(bloco);
+  });
+}
+
+/* MODO RECITAR — só o número e a ementa; o texto fica escondido.
+ *
+ * É a diferença entre reconhecer e lembrar. Reler a lei dá a sensação de
+ * que se sabe, porque cada linha parece familiar quando está na frente.
+ * Ver "Art. 167 — São vedados:" e ter de completar mostra o que
+ * realmente ficou. */
+function leiPintarRecitar() {
+  const cx = $("leiRecitar");
+  if (!cx) return;
+  cx.innerHTML = "";
+  cx.style.fontSize = leiFonte + "px";
+  const arts = leiArtigos(String($("leiTexto").value || ""));
+  if (!arts.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("lei_recitar_vazio");
+    cx.append(p);
+    return;
+  }
+
+  const cab = document.createElement("p");
+  cab.className = "nota";
+  cab.textContent = t("lei_recitar_ajuda", {
+    n: arts.length, v: Object.keys(leiRecitados).length,
+  });
+  cx.append(cab);
+
+  arts.forEach((a) => {
+    const bloco = document.createElement("div");
+    bloco.className = "lei-rec";
+
+    const b = document.createElement("button");
+    b.className = "lei-rec-cab";
+    b.textContent = a.rotulo + (a.ementa ? " — " + a.ementa : "");
+    b.title = t("lei_recitar_ver");
+    b.onclick = () => {
+      leiRecitados[a.num] = !leiRecitados[a.num];
+      leiPintarRecitar();
+    };
+    bloco.append(b);
+
+    if (leiRecitados[a.num]) {
+      const d = document.createElement("div");
+      d.className = "lei-rec-txt";
+      d.innerHTML = matParaHtml(a.texto);
+      bloco.append(d);
+    }
+    cx.append(bloco);
+  });
+}
+
+/* ---------------------------------------------------------------------
+ * NAVEGAR
+ * ------------------------------------------------------------------ */
+
+function leiIrArtigo(num) {
+  const alvo = leiNumNormal(num);
+  const el = $("leiArt_" + alvo.replace(/[^A-Z0-9-]/gi, ""));
+  if (!el) return false;
+  if (el.scrollIntoView) {
+    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+  }
+  if (el.classList) {
+    el.classList.add("lei-art-pisca");
+    setTimeout(() => { try { el.classList.remove("lei-art-pisca"); } catch (e) {} }, 1600);
+  }
+  return true;
+}
+
+async function leiIrAbrir() {
+  const arts = leiArtigos(String($("leiTexto").value || ""));
+  if (!arts.length) { uiAlert(t("lei_sem_artigos")); return; }
+  const v = await uiTexto(t("lei_ir_pergunta", {
+    de: arts[0].numCru, ate: arts[arts.length - 1].numCru }), "");
+  if (v === null) return;
+  if (!leiIrArtigo(v)) uiAlert(t("lei_ir_nao_achou", { a: v }));
+}
+
+/* ---------------------------------------------------------------------
+ * GRAVAR, COLAR E VINCULAR
+ * ------------------------------------------------------------------ */
+
+function leiGravar() {
+  if (!leiAtual) return;
+  const txt = String($("leiTexto").value || "");
+  let l = leiIdAtual ? leiDe(leiIdAtual) : null;
+
+  if (!l) {
+    /* primeira colagem: a lei nasce aqui, já identificada pelo próprio
+     * cabeçalho quando ele veio junto */
+    const ident = leiIdentificar(txt);
+    const nome = ident ? ident.nome
+      : (leiAtual.disciplina + " — " + leiAtual.topico);
+    l = leiGuardar(Object.assign({ nome, texto: txt, topicos: [leiAtual.chave],
+      consultadaEm: leisHojeISO() },
+      ident ? { especie: ident.especie, numero: ident.numero, ano: ident.ano } : {}));
+    if (!l) return;
+    leiIdAtual = l.id;
+  } else {
+    leiGuardar({ id: l.id, texto: txt });
+    leiLigar(l.id, leiAtual.chave);
+  }
+
+  /* o tópico guarda o PONTEIRO, não o texto */
+  const antigo = (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]) || {};
+  matResumos[leiAtual.chave] = Object.assign({}, antigo, {
+    leiId: leiIdAtual,
+    disciplina: antigo.disciplina || leiAtual.disciplina,
+    topico: antigo.topico || leiAtual.topico,
+    concurso: antigo.concurso
+      || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
+    criado: antigo.criado || new Date().toISOString(),
+    tocado: new Date().toISOString(),
+  });
+  matSalvar();
+
+  leiSujo = false;
+  try {
+    matReg("lei", "lei gravada",
+           leiDe(leiIdAtual).nome + " · " + leiArtigos(txt).length + " artigos");
+  } catch (e) {}
+  if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+  leiPintar();
+  toast("lei_salva");
+}
+
+function leiTrocarPara(id) {
+  if (leiSujo) leiGravar();
+  leiIdAtual = id;
+  const l = leiDe(id);
+  $("leiTexto").value = l ? String(l.texto || "") : "";
+  if (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]) {
+    matResumos[leiAtual.chave].leiId = id;
+    matSalvar();
+  }
+  leiSujo = false;
+  leiRecitados = {};
+  leiTrocarModo("ler");
+  leiPintar();
+}
+
+function leiNovaAbrir() {
+  leiIdAtual = "";
+  $("leiTexto").value = "";
+  leiSujo = false;
+  leiTrocarModo("editar");
+  leiPintar();
+  uiAlert(t("lei_colar_instrucao"));
+}
+
+function leiVincularAbrir() {
+  const cx = $("leiVincCx");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const minha = leisChaveComparavel(leiAtual.chave);
+  const outras = leisLista().filter((l) =>
+    !(l.topicos || []).some((c) => leisChaveComparavel(c) === minha));
+  if (!outras.length) { uiAlert(t("lei_vincular_vazio")); return; }
+
+  outras.forEach((l) => {
+    const item = document.createElement("div");
+    item.className = "duv-item";
+    const tit = document.createElement("div");
+    tit.className = "duv-titulo";
+    tit.textContent = l.nome;
+    const sub = document.createElement("div");
+    sub.className = "nota";
+    /* dizer QUEM já usa a lei é o que dá confiança de que é a mesma:
+     * "a 4.320 que você já leu em Receita" */
+    sub.textContent = t("lei_vinc_sub", {
+      n: leiArtigos(l.texto).length,
+      onde: (l.topicos || []).map((c) => String(c).split("›").pop()).join(", ") || "—",
+    });
+    const b = document.createElement("button");
+    b.className = "btn-min btn-min-ok";
+    b.textContent = t("lei_vincular_este");
+    b.onclick = () => {
+      leiLigar(l.id, leiAtual.chave);
+      $("dlgLeiVincular").close();
+      leiTrocarPara(l.id);
+    };
+    item.append(tit, sub, b);
+    cx.append(item);
+  });
+  abrirModal("dlgLeiVincular");
+}
+
+/* ---------------------------------------------------------------------
+ * PROCEDÊNCIA (link, data, versão)
+ * ------------------------------------------------------------------ */
+
+function leiProcAbrir() {
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l) { uiAlert(t("lei_proc_sem_lei")); return; }
+  $("leiProcNome").value = l.nome || "";
+  $("leiProcFonte").value = l.fonte || "";
+  $("leiProcData").value = l.consultadaEm || leisHojeISO();
+  $("leiProcVersao").value = l.versao || "";
+  abrirModal("dlgLeiProc");
+}
+
+function leiProcSalvar() {
+  if (!leiIdAtual) return false;
+  const nome = String($("leiProcNome").value || "").trim();
+  leiGuardar({
+    id: leiIdAtual,
+    nome: nome || leiDe(leiIdAtual).nome,
+    fonte: String($("leiProcFonte").value || "").trim(),
+    consultadaEm: String($("leiProcData").value || "").trim(),
+    versao: String($("leiProcVersao").value || "").trim(),
+  });
+  $("dlgLeiProc").close();
+  try {
+    matReg("lei", "procedência da lei atualizada",
+           nome + " · " + $("leiProcData").value);
+  } catch (e) {}
+  leiPintar();
+  return true;
+}
+
+/* ---------------------------------------------------------------------
+ * CLOZE DE UM ARTIGO
+ *
+ * Lacuna feita à mão num artigo de dez linhas é trabalho de minutos e
+ * sai ruim: esconde-se a palavra errada, ou esconde-se tanto que o
+ * cartão vira adivinhação. O prompt aqui é específico — pede lacuna nos
+ * NÚMEROS e nos VERBOS DE COMANDO, que é o que a banca troca.
+ * ------------------------------------------------------------------ */
+
+let leiClozeArt = null;
+let leiClozeLidos = [];
+
+function leiClozeAbrir(a) {
+  if (!a || !$("dlgLeiCloze")) return;
+  leiClozeArt = a;
+  leiClozeLidos = [];
+  const l = leiDe(leiIdAtual) || {};
+  $("leiClozeTitulo").textContent = t("lei_cloze_titulo", { a: a.rotulo });
+  $("leiClozePrompt").value = t("lei_cloze_prompt", {
+    lei: l.nome || "—",
+    artigo: a.rotulo,
+    etiqueta: leiEtiquetaDe(l, a),
+    texto: a.texto,
+  });
+  $("leiClozeColar").value = "";
+  $("leiClozePrevia").innerHTML = "";
+  $("leiClozePrevia").hidden = true;
+  $("btnLeiClozeAplicar").hidden = true;
+  abrirModal("dlgLeiCloze");
+}
+
+/* A ETIQUETA CARREGA O ARTIGO.
+ * Cartão de lei sem número de artigo é cartão órfão: quando ele erra na
+ * revisão, não há como voltar ao texto. Com "lei4320-art35" na etiqueta,
+ * o cartão aponta de volta para a linha exata. */
+function leiEtiquetaDe(l, a) {
+  const base = String((l && (l.numero || l.nome)) || "lei")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return base + "-art" + String(a.num).toLowerCase();
+}
+
+function leiClozeConferir() {
+  const cru = String(($("leiClozeColar") || {}).value || "").trim();
+  if (!cru) { uiAlert(t("lei_cloze_vazio")); return false; }
+  let lidos = [];
+  try { lidos = (parseText(cru).cards || []); } catch (e) { lidos = []; }
+  lidos = lidos.filter((c) => c && String(c.front || "").trim());
+  if (!lidos.length) { uiAlert(t("lei_cloze_nao_leu")); return false; }
+
+  /* CARTÃO DE LEI SEM LACUNA NENHUMA quase sempre é a IA devolvendo o
+   * artigo copiado. Avisa, mas não recusa: pode ser um cartão de
+   * pergunta-e-resposta legítimo sobre o artigo. */
+  const semLacuna = lidos.filter((c) => !/\{\{c\d+::/.test(String(c.front || "")));
+  leiClozeLidos = lidos;
+
+  const cx = $("leiClozePrevia");
+  cx.innerHTML = "";
+  cx.hidden = false;
+  lidos.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.className = "qm-lado qm-depois";
+    const fr = document.createElement("div");
+    fr.textContent = (i + 1) + ". " + String(c.front || "").slice(0, 400);
+    d.append(fr);
+    if (String(c.back || "").trim()) {
+      const v = document.createElement("div");
+      v.className = "qm-gab";
+      v.textContent = t("cm_mel_verso") + " " + String(c.back);
+      d.append(v);
+    }
+    cx.append(d);
+  });
+  $("btnLeiClozeAplicar").hidden = false;
+  $("btnLeiClozeAplicar").textContent = t("lei_cloze_aplicar", { n: lidos.length });
+  if (semLacuna.length) {
+    uiAlert(t("lei_cloze_sem_lacuna", { n: semLacuna.length }));
+  }
+  return true;
+}
+
+function leiClozeAplicar() {
+  if (!leiClozeLidos.length || !leiAtual) return false;
+  const ch = leiAtual.chave;
+  const antigo = String(((typeof matResumos !== "undefined" && matResumos[ch]) || {}).cartoes || "");
+  const linhas = leiClozeLidos.map((c) => {
+    const etq = (c.ownTags && c.ownTags.length) ? c.ownTags.join(" ")
+      : leiEtiquetaDe(leiDe(leiIdAtual) || {}, leiClozeArt);
+    return String(c.front || "") + " :: " + String(c.back || "") + " :: " + etq;
+  });
+  const texto = (antigo ? antigo.replace(/\s+$/, "") + "\n" : "") + linhas.join("\n");
+  matGravarCartoes(ch, texto,
+    { disciplina: leiAtual.disciplina, topico: leiAtual.topico });
+  $("dlgLeiCloze").close();
+  try {
+    matReg("cartoes", "cartões gerados de um artigo",
+           (leiClozeArt ? leiClozeArt.rotulo : "?") + " · " + linhas.length);
+  } catch (e) {}
+  uiAlert(t("lei_cloze_pronto", { n: linhas.length }));
+  leiClozeLidos = [];
+  return true;
+}
+
+/* ---------------------------------------------------------------------
+ * ARTIGOS QUE MAIS CAEM
+ *
+ * A estatística não vem de fora: vem das questões que a própria pessoa
+ * salvou e das marcas de "caiu na prova" que ela pôs. É pequena, e por
+ * isso mesmo é honesta — não diz "o art. 167 é o mais cobrado do país",
+ * diz "o art. 167 apareceu em 3 das SUAS questões e você errou 2".
+ * ------------------------------------------------------------------ */
+
+function leiRanking(id) {
+  const l = leiDe(id || leiIdAtual);
+  if (!l) return [];
+  const arts = leiArtigos(l.texto);
+  const porNum = {};
+  arts.forEach((a) => {
+    porNum[a.num] = { num: a.num, rotulo: a.rotulo, ementa: a.ementa,
+                      questoes: 0, erros: 0, acertos: 0, prova: 0, incisos: [] };
+  });
+
+  /* 1. as questões salvas */
+  let banco = [];
+  try { banco = (typeof qsTodas === "function" ? qsTodas() : []) || []; }
+  catch (e) { banco = []; }
+  banco.forEach((q) => {
+    const alvo = [q.enunciado, q.comentario, q.gabarito].filter(Boolean).join(" ");
+    leiCitacoes(alvo).forEach((c) => {
+      const r = porNum[c.num];
+      if (!r) return;                    /* artigo de outra lei */
+      r.questoes++;
+      c.incisos.forEach((i) => { if (r.incisos.indexOf(i) < 0) r.incisos.push(i); });
+      (q.tentativas || []).forEach((tt) => {
+        if (tt && tt.acertou) r.acertos++; else if (tt) r.erros++;
+      });
+    });
+  });
+
+  /* 2. as marcas de "caiu na prova" dentro da própria lei */
+  try {
+    const marcas = matMarcasNoTexto(leiAtual ? leiAtual.chave : "", "lei") || [];
+    marcas.filter((m) => m.tipo === "prova").forEach((m) => {
+      /* a marca não diz o artigo: descobre-se por onde ela caiu no texto */
+      const antes = String(l.texto || "").slice(0, m.pos);
+      const ultimo = leiArtigos(antes).pop();
+      if (ultimo && porNum[ultimo.num]) porNum[ultimo.num].prova++;
+    });
+  } catch (e) {}
+
+  return Object.keys(porNum).map((k) => porNum[k])
+    .filter((r) => r.questoes || r.prova)
+    .sort((a, b) => (b.questoes + b.prova * 2) - (a.questoes + a.prova * 2)
+                 || b.erros - a.erros);
+}
+
+function leiRankingAbrir() {
+  const cx = $("leiRankCx");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const lista = leiRanking(leiIdAtual);
+  const l = leiDe(leiIdAtual) || {};
+  $("leiRankTitulo").textContent = t("lei_rank_titulo", { lei: l.nome || "—" });
+
+  if (!lista.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    /* dizer POR QUE está vazio: sem isto a tela parece quebrada, quando
+     * na verdade só falta a pessoa salvar questões desta lei */
+    p.textContent = t("lei_rank_vazio");
+    cx.append(p);
+  }
+
+  lista.forEach((r) => {
+    const item = document.createElement("div");
+    item.className = "duv-item";
+
+    const tit = document.createElement("div");
+    tit.className = "duv-titulo";
+    tit.textContent = r.rotulo + (r.ementa ? " — " + r.ementa : "");
+
+    const sub = document.createElement("div");
+    sub.className = "nota";
+    const partes = [];
+    if (r.questoes) partes.push(t("lei_rank_questoes", { n: r.questoes }));
+    if (r.erros || r.acertos) {
+      partes.push(t("lei_rank_placar", { e: r.erros, a: r.acertos }));
+    }
+    if (r.prova) partes.push(t("lei_rank_prova", { n: r.prova }));
+    if (r.incisos.length) partes.push(t("lei_rank_incisos", { i: r.incisos.join(", ") }));
+    sub.textContent = partes.join(" · ");
+    if (r.erros > r.acertos) sub.classList.add("lei-velha");
+
+    const b = document.createElement("button");
+    b.className = "btn-min";
+    b.textContent = t("lei_rank_ver");
+    b.onclick = () => {
+      $("dlgLeiRank").close();
+      leiTrocarModo("ler");
+      leiIrArtigo(r.num);
+    };
+
+    item.append(tit, sub, b);
+    cx.append(item);
+  });
+  abrirModal("dlgLeiRank");
+}
+
+/* ---------------------------------------------------------------------
+ * REGISTRAR LEITURA
+ * ------------------------------------------------------------------ */
+
+/* Se um capítulo estiver selecionado, o tempo é o DELE — registrar a lei
+ * inteira depois de ler um capítulo infla o estudo e desmonta o plano. */
+function leiRegistrarLeitura() {
+  if (!leiAtual) return;
+  const txt = String($("leiTexto").value || "");
+  let palavras = (txt.match(/\S+/g) || []).length;
+  let rotulo = "";
+  if (leiBlocoAberto) {
+    const b = leiBlocos(txt).filter((x) => x.nome === leiBlocoAberto)[0];
+    if (b) {
+      palavras = b.artigos.reduce((s, a) => s + (a.texto.match(/\S+/g) || []).length, 0);
+      rotulo = b.nome;
+    }
+  }
+  const min = Math.max(5, Math.round(palavras / 75));
+
+  let item = null;
+  try {
+    const r = lerEdital($("editalTexto").value);
+    const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
+      prova: $("edProva").value, feitos: edProgresso });
+    item = plano.itens.find((x) => x.chave === leiAtual.chave) || null;
+  } catch (e) { item = null; }
+  if (item) item = Object.assign({}, item, { minutos: min });
+  else item = { disciplina: leiAtual.disciplina, nome: leiAtual.topico,
+                chave: leiAtual.chave, minutos: min, bruto: 0,
+                disciplinaPeso: null, peso: null, avulso: true };
+
+  if (typeof edMarcar === "function") {
+    const jaEstudado = typeof edProgresso !== "undefined" && edProgresso[leiAtual.chave];
+    edMarcar(item, jaEstudado ? "revisado" : "feito",
+      { minutos: min, formas: ["leitura"], humor: "media" });
+  }
+  try {
+    matReg("lei", "leitura de lei registrada",
+           min + " min · " + palavras + " palavras" + (rotulo ? " · " + rotulo : ""));
+  } catch (e) {}
+  uiAlert(t("lei_lida", { n: min }));
+}
+
+async function leiFechar() {
+  if (leiSujo) {
+    const r = await matPerguntarSaida();
+    if (r !== "salvar" && r !== "sair") return;
+    if (r === "salvar") leiGravar();
+    else {
+      try { matReg("lei", "alterações da lei descartadas",
+                   leiAtual && leiAtual.topico); } catch (e) {}
+    }
+  }
+  leiSujo = false;
+  $("dlgLeiSeca").close();
+  leiAtual = null;
+}
+
+/* ---------------------------------------------------------------------
+ * LIGAR OS BOTÕES
+ * ------------------------------------------------------------------ */
+
+function leiIniciar() {
+  const liga = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+
+  liga("btnLeiModoLer", () => leiTrocarModo("ler"));
+  liga("btnLeiModoEditar", () => leiTrocarModo("editar"));
+  liga("btnLeiModoRecitar", () => leiTrocarModo("recitar"));
+  liga("btnLeiSalvar", () => leiGravar());
+  liga("btnLeiBlocos", () => {
+    const cx = $("leiBlocosCx");
+    if (cx) cx.hidden = !cx.hidden;
+  });
+  liga("btnLeiIr", () => leiIrAbrir());
+  liga("btnLeiRank", () => leiRankingAbrir());
+  liga("btnLeiProc", () => leiProcAbrir());
+  liga("btnLeiFechar", () => leiFechar());
+  liga("btnLeiFechar2", () => leiFechar());
+  liga("btnLeiLido", () => leiRegistrarLeitura());
+  liga("btnLeiMaior", () => { leiFonte = Math.min(34, leiFonte + 2); leiTrocarModo(leiModo); });
+  liga("btnLeiMenor", () => { leiFonte = Math.max(11, leiFonte - 2); leiTrocarModo(leiModo); });
+
+  liga("btnLeiProcSalvar", () => leiProcSalvar());
+  liga("btnLeiProcFechar", () => $("dlgLeiProc").close());
+  liga("btnLeiVincFechar", () => $("dlgLeiVincular").close());
+  liga("btnLeiClozeFechar", () => $("dlgLeiCloze").close());
+  liga("btnLeiClozeConferir", () => leiClozeConferir());
+  liga("btnLeiClozeAplicar", () => leiClozeAplicar());
+  liga("btnLeiClozeCopiar", () => {
+    try { navigator.clipboard.writeText($("leiClozePrompt").value); } catch (e) {}
+    const b = $("btnLeiClozeCopiar");
+    const r = b.textContent;
+    b.textContent = t("copied");
+    setTimeout(() => { b.textContent = r; }, 1800);
+  });
+  liga("btnLeiRankFechar", () => $("dlgLeiRank").close());
+
+  /* as seis marcas, as MESMAS do resumo */
+  [["btnLeiMarcaDest", "destaque"], ["btnLeiMarcaImp", "importante"],
+   ["btnLeiMarcaDuv", "duvida"], ["btnLeiMarcaProva", "prova"],
+   ["btnLeiMarcaPeg", "pegadinha"]].forEach(([id, tipo]) => {
+    liga(id, () => matMarcarSelecao(tipo, "lei"));
+  });
+
+  if ($("leiTexto")) {
+    $("leiTexto").addEventListener("input", () => { leiSujo = true; });
+  }
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    leiAbrir, leiGravar, leiTem, leiFechar, leiRegistrarLeitura, leiIniciar,
+    leiTrocarModo, leiModoAtual, leiPintar, leiIrArtigo, leiTrocarPara,
+    leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiClozeAbrir,
+    leiClozeConferir, leiClozeAplicar, leiRanking, leiRankingAbrir,
+    leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
+  };
+}
