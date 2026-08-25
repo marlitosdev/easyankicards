@@ -766,6 +766,27 @@ function qsUiMelhorarConferir() {
    * na IA justamente onde ela já falhou uma vez. */
   const cx = $("qmComparar");
   cx.innerHTML = "";
+  /* "GABARITO: E" NAO SE LE.
+   *
+   * Numa questao de certo/errado, o enunciado corrigido e uma AFIRMACAO
+   * a julgar — e uma afirmacao falsa e um item perfeitamente valido. Mas
+   * a comparacao mostrava a frase sozinha, seguida de "gabarito: E", e
+   * quem le ve o app afirmando uma coisa errada e conclui que a correcao
+   * saiu torta. Foi exatamente o que aconteceu com "É constitucional a
+   * norma que vincula o ISS...": a questao estava certa, o painel e que
+   * nao dizia que aquilo era um item para julgar, nem o que "E"
+   * significa, nem por que.
+   *
+   * Tres consertos: a moldura de "julgue o item", o gabarito por
+   * extenso, e o comentario — que e o que permite discordar da IA. */
+  const gabPorExtenso = (q) => {
+    const g = String(q.gabarito || "").toUpperCase();
+    if (q.tipo !== "ce") return t("qs_gab_e", { g: g || "?" });
+    if (g === "C") return t("qm_gab_certo");
+    if (g === "E") return t("qm_gab_errado");
+    return t("qs_gab_e", { g: g || "?" });
+  };
+
   [["qm_antes", qmAlvo, "qm-antes"], ["qm_depois", nova, "qm-depois"]]
     .forEach(([rot, q, cls]) => {
       const r1 = document.createElement("div");
@@ -773,8 +794,25 @@ function qsUiMelhorarConferir() {
       r1.textContent = t(rot);
       const d = document.createElement("div");
       d.className = "qm-lado " + cls;
-      d.textContent = String(q.enunciado || "").slice(0, 700)
-        + "\n\n" + t("qs_gab_e", { g: q.gabarito || "?" });
+
+      if (q.tipo === "ce") {
+        const mold = document.createElement("div");
+        mold.className = "qm-julgue";
+        mold.textContent = t("qm_julgue");
+        d.append(mold);
+      }
+      const en = document.createElement("div");
+      en.textContent = String(q.enunciado || "").slice(0, 700);
+      const gb = document.createElement("div");
+      gb.className = "qm-gab";
+      gb.textContent = gabPorExtenso(q);
+      d.append(en, gb);
+      if (q.comentario) {
+        const cm = document.createElement("div");
+        cm.className = "qm-coment";
+        cm.textContent = String(q.comentario).slice(0, 400);
+        d.append(cm);
+      }
       cx.append(r1, d);
     });
   cx.hidden = false;

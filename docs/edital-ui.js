@@ -441,8 +441,13 @@ function edLinhaTopico(i, semDisciplina) {
    * (resumo, ou cartões se não houver resumo, ou a criação se não houver
    * nada) e o "⋮" guarda o resto — lá dentro há espaço para escrever por
    * extenso, que é onde o rótulo de texto de fato ajuda. */
+  /* "Estudar" existia para dar um alvo óbvio à linha. Com as etiquetas
+   * clicáveis ele virou um quarto botão dizendo o que o primeiro chip já
+   * diz — some quando há material, e fica só para o tópico vazio, onde
+   * de fato não há chip nenhum e é preciso um convite. */
   const estudar = document.createElement("button");
   estudar.type = "button";
+  estudar.hidden = !!(temTxt || nCards || nQ || temLei);
   estudar.className = "btn-min ed-estudar" + (temTxt || nCard ? " tem" : "");
   estudar.textContent = t(temTxt || nCard ? "ed_estudar" : "ed_estudar_criar");
   estudar.title = t(temTxt ? "ed_estudar_resumo" : (nCard ? "ed_estudar_cartoes"
@@ -472,14 +477,21 @@ function edLinhaTopico(i, semDisciplina) {
     menu.className = "ed-menu";
     /* os mesmos destinos de antes, agora com nome e contagem: dentro do
      * menu cabe a palavra que não cabia na linha */
-    [[doc, t(temTxt ? "ed_menu_resumo" : "ed_menu_resumo_novo")],
-     /* "ver os 1 cartões" é o tipo de frase que denuncia software.
-      * Três casos, três textos: nenhum, um, vários. */
-     [crt, t(!nCards ? "ed_menu_cartoes"
-       : (nCards === 1 ? "ed_menu_cartoes_1" : "ed_menu_cartoes_n"), { n: nCards })],
-     [qst, t(!nQ ? "ed_menu_questoes"
-       : (nQ === 1 ? "ed_menu_questoes_1" : "ed_menu_questoes_n"), { n: nQ })],
-     [lei, t(temLei ? "ed_menu_lei" : "ed_menu_lei_nova")]].forEach(([b, rot]) => {
+    /* SÓ O QUE FALTA. O que existe já está na linha, como etiqueta
+     * clicável; repetir aqui foi o que criou as duas listas iguais. */
+    const faltando = [
+      temTxt ? null : [doc, t("ed_menu_resumo_novo")],
+      nCards ? null : [crt, t("ed_menu_cartoes")],
+      nQ ? null : [qst, t("ed_menu_questoes")],
+      temLei ? null : [lei, t("ed_menu_lei_nova")],
+    ].filter(Boolean);
+    if (!faltando.length) {
+      const vz = document.createElement("span");
+      vz.className = "ed-menu-vazio";
+      vz.textContent = t("ed_menu_completo");
+      menu.append(vz);
+    }
+    faltando.forEach(([b, rot]) => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "btn-min ed-menu-item" + (/ tem/.test(" " + (b.className || "")) ? " tem" : "");
@@ -503,21 +515,52 @@ function edLinhaTopico(i, semDisciplina) {
    * sem clique, o que existe; no "⋮", os caminhos. */
   const status = document.createElement("div");
   status.className = "ed-status";
-  [[temTxt, "ed-doc", t("ed_st_resumo")],
-   [nCards, "ed-crt", nCards === 1 ? t("ed_st_cartao") : t("ed_st_cartoes", { n: nCards })],
-   [nQ, "ed-qst", nQ === 1 ? t("ed_st_questao") : t("ed_st_questoes", { n: nQ })],
-   [temLei, "ed-lei", t("ed_st_lei")]].forEach(([tem, cls, rot]) => {
-    if (!tem) return;
-    const sp = document.createElement("span");
-    sp.className = cls + " tem ed-st-item";
-    sp.textContent = rot;
-    if (cls === "ed-crt" && nCards) {
-      const n2 = document.createElement("span");
-      n2.className = "ed-doc-n";
-      n2.textContent = nCards;
-      sp.append(n2);
-    }
-    status.append(sp);
+  /* CLASSE PRÓPRIA, NÃO A DO BOTÃO ANTIGO.
+   *
+   * Na primeira versão isto reusou "ed-doc"/"ed-crt"/"ed-qst" para os
+   * testes existentes continuarem encontrando o indicador. Só que essas
+   * classes carregam o estilo do ÍCONE que existia ali: 22×22 pixels,
+   * fundo colorido e um contador posicionado por cima. Aplicadas a uma
+   * etiqueta de texto, espremeram as palavras numa caixinha quadrada e
+   * grudaram "cartões" em "questões".
+   *
+   * Reusar nome de classe para não mexer no teste é o mesmo que mentir
+   * para o teste: ele passou a confirmar uma coisa que a tela não fazia. */
+  /* UMA COISA SÓ: O QUE EXISTE **É** O CAMINHO PARA ELE.
+   *
+   * Na versão anterior a linha dizia "3 cartões" e o menu, logo abaixo,
+   * dizia "ver os 3 cartões". Duas listas com o mesmo conteúdo, uma
+   * informando e a outra agindo — e a pessoa lia tudo duas vezes para
+   * descobrir que era a mesma coisa. Eu tinha separado "status" de
+   * "ação" por princípio, e o princípio criou a duplicata.
+   *
+   * Agora a etiqueta é o atalho: ela diz o que tem e leva até lá. O
+   * "⋮" fica com o que NÃO existe ainda — criar o que falta —, que é a
+   * única coisa que uma etiqueta de conteúdo não tem como mostrar. */
+  const atalhos = [
+    { tem: temTxt, cls: "ed-st-doc", rot: t("ed_st_resumo"),
+      dica: t("ed_menu_resumo"), alvo: doc },
+    { tem: nCards, cls: "ed-st-crt",
+      rot: nCards === 1 ? t("ed_st_cartao") : t("ed_st_cartoes", { n: nCards }),
+      dica: nCards === 1 ? t("ed_menu_cartoes_1") : t("ed_menu_cartoes_n", { n: nCards }),
+      alvo: crt },
+    { tem: nQ, cls: "ed-st-qst",
+      rot: nQ === 1 ? t("ed_st_questao") : t("ed_st_questoes", { n: nQ }),
+      dica: nQ === 1 ? t("ed_menu_questoes_1") : t("ed_menu_questoes_n", { n: nQ }),
+      alvo: qst },
+    { tem: temLei, cls: "ed-st-lei", rot: t("ed_st_lei"),
+      dica: t("ed_menu_lei"), alvo: lei },
+  ];
+  atalhos.filter((x) => x.tem).forEach((x, k) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    /* o primeiro ganha destaque: com três chips iguais lado a lado não
+     * há por onde começar, e o resumo é o que se abre em nove de dez vezes */
+    b.className = "ed-st-item tem " + x.cls + (k === 0 ? " ed-st-1" : "");
+    b.textContent = x.rot;
+    b.title = x.dica;
+    b.onclick = (ev) => { ev.stopPropagation(); x.alvo.onclick(ev); };
+    status.append(b);
   });
   if (status.children.length) meio.append(status);
 
