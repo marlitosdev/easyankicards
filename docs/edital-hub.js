@@ -324,7 +324,14 @@ function hubFiltroDisciplina(todas) {
   const semAcento = (x) => String(x || "").normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const alvo = semAcento(hubDiscBusca).trim();
-  const mostrar = alvo ? todas.filter((d) => semAcento(d).indexOf(alvo) >= 0) : todas;
+  /* ORDEM ALFABÉTICA AQUI DENTRO, e não a da agenda.
+   * Na agenda a ordem é por prioridade, que é o que decide o que
+   * estudar. Numa lista para ACHAR uma disciplina, prioridade parece
+   * ordem aleatória: procura-se por nome, então ordena-se por nome. */
+  const ordenadas = todas.slice().sort((a2, b2) =>
+    semAcento(a2).localeCompare(semAcento(b2)));
+  const mostrar = alvo
+    ? ordenadas.filter((d) => semAcento(d).indexOf(alvo) >= 0) : ordenadas;
 
   if (!mostrar.length) {
     const vz = document.createElement("span");
@@ -341,8 +348,11 @@ function hubFiltroDisciplina(todas) {
      * "desmarcar todas" e o "mostrar todas", que não são disciplinas.
      * Sem separar, qualquer botão novo na barra quebra quem conta. */
     b.className = "ed-ag-opt ed-ag-disc-b" + (on ? " ativa" : "");
-    b.textContent = d;
-    b.title = t(on ? "hub_ag_disc_esconder" : "hub_ag_disc_mostrar", { d });
+    /* marca de escolha ANTES do nome: com os nomes cortados por
+     * reticências, a cor sozinha exigia comparar tons entre colunas */
+    b.textContent = (on ? "\u2713 " : "\u00a0\u00a0 ") + d;
+    b.title = (on ? t("hub_ag_disc_esconder", { d }) : t("hub_ag_disc_mostrar", { d }))
+      + " \u2014 " + d;
     b.onclick = () => {
       const lista = hubDiscOcultas();
       const k = lista.indexOf(d);
@@ -355,6 +365,10 @@ function hubFiltroDisciplina(todas) {
     cx.append(b);
   });
 
+  /* as duas ações gerais numa faixa própria, embaixo da grade */
+  const acoes = document.createElement("div");
+  acoes.className = "ed-disc-acoes";
+
   const nenhuma = document.createElement("button");
   nenhuma.type = "button";
   nenhuma.className = "btn-min";
@@ -365,7 +379,7 @@ function hubFiltroDisciplina(todas) {
     hubPintarAgenda();
     reg("EDITAL", "filtro de disciplina na agenda", "desmarcou todas");
   };
-  cx.append(nenhuma);
+  acoes.append(nenhuma);
 
   if (ocultas.length) {
     const b = document.createElement("button");
@@ -374,8 +388,9 @@ function hubFiltroDisciplina(todas) {
     b.textContent = t("hub_ag_disc_todas");
     b.title = t("hub_ag_disc_todas_ajuda");
     b.onclick = () => { hubDiscOcultasGravar([]); hubPintarAgenda(); };
-    cx.append(b);
+    acoes.append(b);
   }
+  cx.append(acoes);
   caixa.append(cx);
   return caixa;
 }
