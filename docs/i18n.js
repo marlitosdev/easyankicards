@@ -1069,6 +1069,15 @@ const UI = {
   "hub_g_semdata_sub": "Sem data marcada, ou prova ainda distante. Entra na semana com metade do peso.",
   "hub_g_encerrado": "Já encerrados ({n})",
   "hub_g_encerrado_sub": "A prova já passou. Fica guardado, mas fora da agenda.",
+  "hub_prazo_ha_dias": "encerrado há {n} dia(s)",
+  "hub_virada_tit": "A prova já foi",
+  "hub_virada_qual": "{n} — prova em {d}, há {h} dia(s).",
+  "hub_virada_marcar": "Antes de planejar o próximo: marque, tópico a tópico, o que caiu de verdade. Essa informação é a mais cara que este aplicativo guarda — é a única amostra real do que a banca cobra — e ela some da sua memória em poucos dias. Meia hora agora vale mais que uma semana em novembro.",
+  "hub_virada_btn_marcar": "abrir e marcar o que caiu",
+  "hub_virada_btn_marcar_ajuda": "Abre o edital que você acabou de prestar. Use a marca “caiu na prova” nos trechos e questões — ela vale para os próximos concursos.",
+  "hub_virada_btn_novo": "criar o próximo edital",
+  "hub_virada_btn_novo_ajuda": "O edital encerrado não é apagado: o diário dele é o que responde “o que eu já estudei disto?” no concurso seguinte.",
+  "ed_prova_passou": "Esta prova foi em {d}, há {n} dia(s). O plano abaixo é o retrato de onde você parou — não há mais cronograma a cumprir.",
   "hub_prazo_dias": "{n} dias",
   "hub_prazo_sem": "sem data",
   "hub_prazo_passou": "encerrado",
@@ -1863,6 +1872,11 @@ const UI = {
   "mat_ver_cards": "{n}: material e {c} cartões guardados"
  },
  "en": {
+  "hub_prazo_ha_dias": "finished {n} day(s) ago",
+  "hub_virada_tit": "The exam has passed",
+  "hub_virada_btn_marcar": "open and mark what came up",
+  "hub_virada_btn_novo": "create the next syllabus",
+
   "lei_janela_estreita": "narrow",
   "lei_janela_media": "medium",
   "lei_janela_larga": "wide",

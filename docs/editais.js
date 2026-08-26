@@ -110,15 +110,42 @@ function edDuplicar(id) {
  * ------------------------------------------------------------------ */
 const ED_PROXIMO_DIAS = 120;   /* quatro meses: dentro disso a prova manda */
 
+/* Meia-noite LOCAL do dia informado. Aceita "AAAA-MM-DD" (que o
+ * construtor parsearia como UTC, deslocando o dia) e Date. */
+function leiHojeZero(hoje) {
+  if (typeof hoje === "string" && /^\d{4}-\d{2}-\d{2}$/.test(hoje)) {
+    return new Date(hoje + "T00:00:00");
+  }
+  const d = hoje ? new Date(hoje) : new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 function edSituacao(e, hoje) {
   const cfg = (typeof lerEdital === "function" ? lerEdital(e.texto || "").cfg : {}) || {};
   const prova = cfg.prova || "";
   if (!prova) return { grupo: "sem_data", dias: null, prova: "", cfg };
   const fim = new Date(prova + "T00:00:00");
   if (isNaN(fim)) return { grupo: "sem_data", dias: null, prova: "", cfg };
-  const ini = hoje ? new Date(hoje) : new Date();
-  const dias = Math.floor((fim - ini) / 86400000);
-  if (dias < 0) return { grupo: "encerrado", dias, prova, cfg };
+  /* DIAS DE CALENDÁRIO, NÃO HORAS DECORRIDAS.
+   * A data da prova é meia-noite local; "agora" é uma hora qualquer do
+   * dia. A subtração crua dava 89,1 dias para uma prova daqui a 90, e a
+   * tela mostrava 89 — contra os 90 que qualquer pessoa conta no
+   * calendário. O erro crescia com o passar do dia.
+   *
+   * O zeramento tem de respeitar o formato de "hoje": vindo como texto
+   * "AAAA-MM-DD" ele é parseado em UTC, e ler getDate() dele (que é
+   * local) tira um dia inteiro em qualquer fuso a oeste de Greenwich.
+   * O teste E14 pegou exatamente isso. */
+  const ini = leiHojeZero(hoje);
+  const dias = Math.round((fim - ini) / 86400000);
+  /* DIAS É SEMPRE UM NÚMERO POSITIVO — o que muda é o que ele conta.
+   * Antes o encerrado saía com dias negativo e a tela imprimia "−6 dias",
+   * literal. "Dias" para quem lê significa "quanto falta"; para uma prova
+   * que passou, o número que importa é "há quanto tempo", e são duas
+   * grandezas diferentes com o mesmo nome. Agora vêm separadas. */
+  if (dias < 0) {
+    return { grupo: "encerrado", dias: null, desde: Math.abs(dias), prova, cfg };
+  }
   return { grupo: dias <= ED_PROXIMO_DIAS ? "proximo" : "sem_data", dias, prova, cfg };
 }
 
@@ -222,7 +249,7 @@ function comparativoEditais(diario, hoje) {
     const A = acompanhamento(p, meu, p.porSemana);
     linhas.push({
       id: e.id, nome: e.nome,
-      dias: s.dias, grupo: s.grupo,
+      dias: s.dias, desde: s.desde || null, grupo: s.grupo,
       pesoEstudado: A.cobertura.pesoEstudado,
       pesoRevisado: A.cobertura.pesoRevisado,
       topicos: p.total, feitos: p.feitos,
