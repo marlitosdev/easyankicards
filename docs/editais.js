@@ -122,10 +122,23 @@ function leiHojeZero(hoje) {
 
 function edSituacao(e, hoje) {
   const cfg = (typeof lerEdital === "function" ? lerEdital(e.texto || "").cfg : {}) || {};
-  const prova = cfg.prova || "";
-  if (!prova) return { grupo: "sem_data", dias: null, prova: "", cfg };
+  let prova = cfg.prova || "";
+  let fase = 1;
+  /* A DATA QUE IMPORTA É A PRÓXIMA, NÃO A PRIMEIRA.
+   * Sem isto, a SEFAZ-AL viraria "encerrada" no dia 14 de dezembro — com
+   * a discursiva de janeiro ainda pela frente — e sumiria da agenda
+   * exatamente no mês em que ela precisa aparecer todos os dias. */
+  if (cfg.fase2 && cfg.fase2.prova && prova) {
+    const zero = (d) => new Date(d + "T00:00:00");
+    const agora = hoje ? new Date(hoje) : new Date();
+    if (zero(prova) < agora && zero(cfg.fase2.prova) >= agora) {
+      prova = cfg.fase2.prova;
+      fase = 2;
+    }
+  }
+  if (!prova) return { grupo: "sem_data", dias: null, prova: "", fase, cfg };
   const fim = new Date(prova + "T00:00:00");
-  if (isNaN(fim)) return { grupo: "sem_data", dias: null, prova: "", cfg };
+  if (isNaN(fim)) return { grupo: "sem_data", dias: null, prova: "", fase, cfg };
   /* DIAS DE CALENDÁRIO, NÃO HORAS DECORRIDAS.
    * A data da prova é meia-noite local; "agora" é uma hora qualquer do
    * dia. A subtração crua dava 89,1 dias para uma prova daqui a 90, e a
@@ -144,9 +157,9 @@ function edSituacao(e, hoje) {
    * que passou, o número que importa é "há quanto tempo", e são duas
    * grandezas diferentes com o mesmo nome. Agora vêm separadas. */
   if (dias < 0) {
-    return { grupo: "encerrado", dias: null, desde: Math.abs(dias), prova, cfg };
+    return { grupo: "encerrado", dias: null, desde: Math.abs(dias), prova, fase, cfg };
   }
-  return { grupo: dias <= ED_PROXIMO_DIAS ? "proximo" : "sem_data", dias, prova, cfg };
+  return { grupo: dias <= ED_PROXIMO_DIAS ? "proximo" : "sem_data", dias, prova, fase, cfg };
 }
 
 /* ordem: prova mais próxima primeiro; sem data depois; encerrados por último */

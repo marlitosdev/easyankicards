@@ -2217,6 +2217,31 @@ function edRender() {
     bRestam.textContent = s
       ? t("ed_restam", { s: s.semanas, d: s.dias }) : t("ed_sem_data");
     if (bRestam.classList) bRestam.classList.remove("ed-passou");
+    /* CONCURSO DE DUAS DATAS: dizer as duas.
+     * O prazo mostrado é o da PRÓXIMA fase; a outra não pode ficar
+     * invisível, ou a pessoa planeja dezembro sem saber que janeiro
+     * existe — e, passada a objetiva, se assusta com uma agenda que
+     * trocou de conteúdo sozinha. */
+    const f2 = r.cfg && r.cfg.fase2;
+    if (f2 && f2.prova && plano.fase && plano.fase.n === 1) {
+      bRestam.textContent += "  ·  " + t("ed_fase2_resumo", {
+        nome: f2.nome, d: f2.prova, n: plano.fase2N, h: f2.horas });
+    }
+  }
+
+  /* MARCAR QUASE TUDO PARA A SEGUNDA FASE ANULA A MARCA.
+   * Se 80% dos tópicos voltam em janeiro, a marca deixou de dizer o que
+   * priorizar e virou decoração — e a agenda de janeiro fica com o mesmo
+   * tamanho da de dezembro, num prazo três vezes menor. */
+  if (plano.fase && plano.fase.temFase2 && plano.total) {
+    const pct = Math.round((plano.fase2N / plano.total) * 100);
+    if (pct > 40) {
+      const av = document.createElement("div");
+      av.className = "nota ed-passou";
+      av.textContent = t("ed_fase2_muitos", {
+        n: plano.fase2N, tot: plano.total, p: pct });
+      bRestam.append(av);
+    }
   }
   $("edResumo").textContent = itens.length
     ? t("ed_resumo", { d: r.disciplinas.length, t: plano.total, f: plano.feitos,
