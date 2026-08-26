@@ -25,8 +25,137 @@ let leiSujo = false;
 let leiFonte = 15;
 let leiRecitados = {};      /* artigos já revelados no modo recitar */
 let leiBlocoAberto = "";
+let leiCheia = false;       /* leitura ocupando a janela inteira */
 
 function leiModoAtual() { return leiModo; }
+
+/* ---------------------------------------------------------------------
+ * REGISTRO PRÓPRIO
+ *
+ * O registro dos resumos já existe e mistura tudo o que acontece no
+ * material. Quando algo falha DENTRO da lei — uma marca que não pegou,
+ * um artigo que o leitor não reconheceu, um cartão que não entrou — é
+ * preciso garimpar entre centenas de linhas de outra coisa.
+ *
+ * Aqui fica só o que aconteceu na lei, com a lei e o artigo em cada
+ * linha, e com os erros separados. Dois filtros, porque são as duas
+ * perguntas que se faz: "o que eu fiz hoje?" e "o que deu errado?".
+ * ------------------------------------------------------------------ */
+
+const LEI_LOG_CHAVE = "eac_lei_log";
+const LEI_LOG_MAX = 300;
+let leiLog = [];
+let leiLogSoHoje = true;    /* começa em HOJE: é o caso comum */
+let leiLogSoErros = false;
+
+function leiLogCarregar() {
+  try { leiLog = JSON.parse(localStorage.getItem(LEI_LOG_CHAVE) || "[]"); }
+  catch (e) { leiLog = []; }
+  if (!Array.isArray(leiLog)) leiLog = [];
+}
+
+function leiReg(tipo, oque, detalhe) {
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  leiLog.push({
+    q: new Date().toISOString(),
+    t: String(tipo || ""),
+    o: String(oque || ""),
+    d: String(detalhe == null ? "" : detalhe).slice(0, 240),
+    lei: (l && l.nome) || "",
+    top: (leiAtual && leiAtual.topico) || "",
+    modo: leiModo,
+  });
+  while (leiLog.length > LEI_LOG_MAX) leiLog.shift();
+  try { localStorage.setItem(LEI_LOG_CHAVE, JSON.stringify(leiLog)); } catch (e) {}
+  /* continua indo para o registro do material também: quem procura por
+   * lá não pode deixar de encontrar */
+  try { matReg("lei", oque, detalhe); } catch (e) {}
+}
+
+/* TODO BOTÃO DA LEI PASSA POR AQUI.
+ * Mesma razão do matBotao: erro dentro de um handler morre no console
+ * do navegador, que ninguém abre, e o registro fica mudo justamente no
+ * evento que interessa. Envolvendo, a falha vira uma linha com o NOME
+ * do botão — que é o que a pessoa consegue relatar. */
+function leiBotao(id, nome, acao) {
+  const b = $(id);
+  if (!b) return;
+  b.onclick = function () {
+    try {
+      const r = acao.apply(this, arguments);
+      if (r && typeof r.catch === "function") {
+        r.catch((e) => leiReg("erro", "falha em " + nome,
+          (e && e.message) || String(e)));
+      }
+      return r;
+    } catch (e) {
+      leiReg("erro", "falha em " + nome, (e && e.message) || String(e));
+      try { uiAlert(t("lei_erro_botao", { b: nome })); } catch (x) {}
+    }
+  };
+}
+
+function leiLogDiaLocal(d) {
+  const x = d instanceof Date ? d : new Date(d);
+  if (isNaN(x.getTime())) return "";
+  return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0")
+    + "-" + String(x.getDate()).padStart(2, "0");
+}
+
+function leiLogHojeISO() { return leiLogDiaLocal(new Date()); }
+
+/* O DIA É O DIA DA PESSOA, NÃO O DE GREENWICH.
+ * O carimbo é gravado em ISO (UTC); "hoje" é o dia do relógio dela. No
+ * Brasil, a partir das 21h os dois divergem — e o filtro de hoje,
+ * comparando as duas coisas como texto, mostrava ZERO linhas justamente
+ * no horário em que mais se estuda. O registro parecia não registrar. */
+function leiLogFiltrado() {
+  const hoje = leiLogHojeISO();
+  return leiLog.filter((x) => {
+    if (leiLogSoErros && x.t !== "erro") return false;
+    if (leiLogSoHoje && leiLogDiaLocal(x.q) !== hoje) return false;
+    return true;
+  });
+}
+
+function leiLogTexto() {
+  const lista = leiLogFiltrado();
+  if (!lista.length) return t("lei_log_vazio");
+  return lista.map((x) => {
+    const d = new Date(x.q);
+    const h = isNaN(d.getTime()) ? "--:--:--" : d.toTimeString().slice(0, 8);
+    const dia = leiLogDiaLocal(x.q);
+    return (leiLogSoHoje ? h : dia + " " + h)
+      + "  [" + (x.t || "?") + "] " + (x.o || "")
+      + (x.d ? "  — " + x.d : "")
+      + (x.lei ? "  (" + x.lei + (x.top ? " · " + x.top : "") + ")" : "");
+  }).join("\n");
+}
+
+function leiLogPintar() {
+  if (!$("leiLogTexto")) return;
+  $("leiLogTexto").value = leiLogTexto();
+  const erros = leiLog.filter((x) => x.t === "erro").length;
+  const hoje = leiLog.filter((x) =>
+    leiLogDiaLocal(x.q) === leiLogHojeISO()).length;
+  /* O RESUMO DIZ O QUE O FILTRO ESTÁ ESCONDENDO.
+   * Sem isto, "0 linhas" com o filtro de hoje ligado parece registro
+   * vazio — e a pessoa conclui que o app não registra nada. */
+  $("leiLogResumo").textContent = t("lei_log_resumo", {
+    v: leiLogFiltrado().length, tot: leiLog.length, hoje, erros,
+  });
+  const bh = $("btnLeiLogHoje");
+  if (bh && bh.classList) bh.classList.toggle("btn-min-ok", leiLogSoHoje);
+  const be = $("btnLeiLogErros");
+  if (be && be.classList) be.classList.toggle("btn-min-ok", leiLogSoErros);
+  /* erro é o único estado que merece cor: é o que se procura */
+  if (be && be.classList) be.classList.toggle("btn-min-perigo", erros > 0);
+}
+
+function leiLogAbrir() {
+  leiLogPintar();
+  abrirModal("dlgLeiLog");
+}
 
 /* ---------------------------------------------------------------------
  * QUAL LEI ESTÁ ABERTA
@@ -103,8 +232,7 @@ function leiAbrir(disciplina, topico, id) {
   leiTrocarModo(l && String(l.texto || "").trim() ? "ler" : "editar");
   leiPintar();
   abrirModal("dlgLeiSeca");
-  try {
-    matReg("lei", "lei seca aberta", topico + " · "
+  try { leiReg("lei", "lei seca aberta", topico + " · "
       + (l ? l.nome + " · " + leiArtigos(l.texto).length + " artigos"
            : "nenhuma lei ligada ainda"));
   } catch (e) {}
@@ -127,6 +255,7 @@ function leiPintar() {
   leiPintarProcedencia();
   leiPintarOnde();
   leiPintarBlocos();
+  leiCheiaAplicar();
   if (leiModo !== "editar") leiTrocarModo(leiModo);
 }
 
@@ -310,8 +439,7 @@ function leiPintarBlocos() {
        * dele: as duas coisas dizem a mesma verdade, e deixá-las
        * discordando é o começo de "o app não sabe onde eu estou" */
       if (!lidos[b.nome]) leiParar(l.id, b.ate);
-      try {
-        matReg("lei", (lidos[b.nome] ? "capítulo desmarcado" : "capítulo lido"),
+      try { leiReg("bloco", (lidos[b.nome] ? "capítulo desmarcado" : "capítulo lido"),
                l.nome + " · " + b.nome);
       } catch (e) {}
       leiPintar();
@@ -326,6 +454,74 @@ function leiPintarBlocos() {
  * MODOS DE LEITURA
  * ------------------------------------------------------------------ */
 
+/* ---------------------------------------------------------------------
+ * LER MAIOR — tela cheia e letra que fica
+ *
+ * Ler lei é a atividade mais longa que este app abriga: são dezenas de
+ * minutos de olho no texto. E era justamente a que tinha menos espaço —
+ * a fila de leis, a procedência, o marcador, a barra de modos, a barra
+ * de marcas e a lista de capítulos empurravam a lei para uma faixa de
+ * poucos centímetros, com barra de rolagem própria.
+ *
+ * Tudo isso é referência, e referência só serve ANTES e DEPOIS de ler.
+ * Na tela cheia some tudo o que não é a lei; a saída é um clique, e o
+ * marcador continua onde estava.
+ *
+ * O tamanho da letra é guardado. Quem aumenta a letra tem um motivo que
+ * não muda de uma sessão para outra, e refazer o ajuste toda vez é o
+ * tipo de atrito que faz a pessoa desistir do recurso.
+ * ------------------------------------------------------------------ */
+
+const LEI_FONTE_CHAVE = "eac_lei_fonte";
+
+function leiFonteCarregar() {
+  try {
+    const v = Number(localStorage.getItem(LEI_FONTE_CHAVE));
+    if (v >= 11 && v <= 34) leiFonte = v;
+  } catch (e) {}
+}
+
+function leiFonteMudar(delta) {
+  leiFonte = Math.max(11, Math.min(34, leiFonte + delta));
+  try { localStorage.setItem(LEI_FONTE_CHAVE, String(leiFonte)); } catch (e) {}
+  leiTrocarModo(leiModo);
+  leiReg("leitura", "tamanho da letra", leiFonte + "px");
+}
+
+/* UM LUGAR SÓ decide o que é referência e o que é lei.
+ * Espalhar "esconde isto, mostra aquilo" por três funções foi como o
+ * app já chegou uma vez a um estado em que a barra de marcas ficava
+ * visível no modo errado. Aqui a regra é uma linha por elemento. */
+function leiCheiaAplicar() {
+  const dlg = $("dlgLeiSeca");
+  if (dlg && dlg.classList) dlg.classList.toggle("lei-cheia", leiCheia);
+
+  const ref = ["leiFila", "leiSub"];
+  ref.forEach((id) => { const el = $(id); if (el) el.hidden = leiCheia; });
+  /* procedência e marcador já se escondem sozinhos quando não há o que
+   * mostrar; na tela cheia somem de qualquer forma */
+  if (leiCheia) {
+    ["leiProc", "leiOnde", "leiBlocosCx"].forEach((id) => {
+      const el = $(id); if (el) el.hidden = true;
+    });
+  }
+  const mc = $("leiMarcas");
+  if (mc) mc.hidden = leiCheia || leiModo !== "ler";
+
+  const b = $("btnLeiCheia");
+  if (b) {
+    b.textContent = t(leiCheia ? "lei_cheia_sair" : "lei_cheia");
+    if (b.classList) b.classList.toggle("btn-min-ok", leiCheia);
+  }
+}
+
+function leiCheiaTrocar(sim) {
+  leiCheia = sim === undefined ? !leiCheia : !!sim;
+  if (leiCheia) { leiCheiaAplicar(); leiTrocarModo(leiModo); }
+  else leiPintar();          /* leiPintar já chama leiCheiaAplicar */
+  leiReg("leitura", leiCheia ? "leitura ampliada" : "leitura normal", "");
+}
+
 function leiTrocarModo(modo) {
   leiModo = ["ler", "editar", "recitar"].indexOf(modo) >= 0 ? modo : "ler";
   const ed = leiModo === "editar";
@@ -333,7 +529,9 @@ function leiTrocarModo(modo) {
   $("leiTexto").hidden = !ed;
   $("leiLeitura").hidden = ed || rec;
   if ($("leiRecitar")) $("leiRecitar").hidden = !rec;
-  if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec;
+  /* na tela cheia a barra de marcas some junto: ela é ferramenta de
+   * quem está trabalhando o texto, não de quem está lendo */
+  if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec || leiCheia;
 
   [["btnLeiModoLer", "ler"], ["btnLeiModoEditar", "editar"],
    ["btnLeiModoRecitar", "recitar"]].forEach(([id, m]) => {
@@ -533,8 +731,7 @@ function leiGravar() {
   matSalvar();
 
   leiSujo = false;
-  try {
-    matReg("lei", "lei gravada",
+  try { leiReg("gravar", "lei gravada",
            leiDe(leiIdAtual).nome + " · " + leiArtigos(txt).length + " artigos");
   } catch (e) {}
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
@@ -628,8 +825,7 @@ function leiProcSalvar() {
     versao: String($("leiProcVersao").value || "").trim(),
   });
   $("dlgLeiProc").close();
-  try {
-    matReg("lei", "procedência da lei atualizada",
+  try { leiReg("procedencia", "procedência atualizada",
            nome + " · " + $("leiProcData").value);
   } catch (e) {}
   leiPintar();
@@ -730,7 +926,7 @@ function leiClozeAplicar() {
     { disciplina: leiAtual.disciplina, topico: leiAtual.topico });
   $("dlgLeiCloze").close();
   try {
-    matReg("cartoes", "cartões gerados de um artigo",
+    leiReg("cartoes", "cartões gerados de um artigo",
            (leiClozeArt ? leiClozeArt.rotulo : "?") + " · " + linhas.length);
   } catch (e) {}
   uiAlert(t("lei_cloze_pronto", { n: linhas.length }));
@@ -880,8 +1076,7 @@ function leiRegistrarLeitura() {
     edMarcar(item, jaEstudado ? "revisado" : "feito",
       { minutos: min, formas: ["leitura"], humor: "media" });
   }
-  try {
-    matReg("lei", "leitura de lei registrada",
+  try { leiReg("leitura", "leitura registrada",
            min + " min · " + palavras + " palavras" + (rotulo ? " · " + rotulo : ""));
   } catch (e) {}
   uiAlert(t("lei_lida", { n: min }));
@@ -893,13 +1088,50 @@ async function leiFechar() {
     if (r !== "salvar" && r !== "sair") return;
     if (r === "salvar") leiGravar();
     else {
-      try { matReg("lei", "alterações da lei descartadas",
+      try { leiReg("gravar", "alterações descartadas",
                    leiAtual && leiAtual.topico); } catch (e) {}
     }
   }
   leiSujo = false;
+  /* sair da tela cheia ao fechar: reabrir a lei amputada de tudo, sem
+   * ter pedido, parece defeito e nao recurso */
+  if (leiCheia) leiCheiaTrocar(false);
   $("dlgLeiSeca").close();
   leiAtual = null;
+}
+
+/* ---------------------------------------------------------------------
+ * AJUDA
+ *
+ * Escrita como mapa da janela, não como lista de botões: cada item diz
+ * PARA QUE serve e POR QUE existe. "Recitar: esconde o texto" é inútil
+ * sem o "porque reler dá sensação de saber" — é o porquê que faz a
+ * pessoa usar o recurso em vez de achá-lo estranho.
+ * ------------------------------------------------------------------ */
+
+const LEI_AJUDA = [
+  "fila", "proc", "onde", "modos", "capitulos", "artigo", "marcas",
+  "cartoes", "recitar", "ranking", "cheia", "gravar", "lido", "log",
+];
+
+function leiAjudaAbrir() {
+  const cx = $("leiAjudaCx");
+  if (!cx) return;
+  cx.innerHTML = "";
+  LEI_AJUDA.forEach((id) => {
+    const item = document.createElement("div");
+    item.className = "duv-item";
+    const tit = document.createElement("div");
+    tit.className = "duv-titulo";
+    tit.textContent = t("lei_aj_" + id + "_t");
+    const txt = document.createElement("div");
+    txt.className = "nota";
+    txt.textContent = t("lei_aj_" + id + "_d");
+    item.append(tit, txt);
+    cx.append(item);
+  });
+  abrirModal("dlgLeiAjuda");
+  leiReg("ajuda", "ajuda aberta", "");
 }
 
 /* ---------------------------------------------------------------------
@@ -907,26 +1139,54 @@ async function leiFechar() {
  * ------------------------------------------------------------------ */
 
 function leiIniciar() {
-  const liga = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+  leiLogCarregar();
+  leiFonteCarregar();
+  /* leiBotao no lugar de um onclick nu: qualquer falha vira linha de
+   * registro com o nome do botão, em vez de morrer no console */
+  const liga = (id, nome, fn) => leiBotao(id, nome, fn);
 
-  liga("btnLeiModoLer", () => leiTrocarModo("ler"));
-  liga("btnLeiModoEditar", () => leiTrocarModo("editar"));
-  liga("btnLeiModoRecitar", () => leiTrocarModo("recitar"));
-  liga("btnLeiSalvar", () => leiGravar());
-  liga("btnLeiBlocos", () => {
+  liga("btnLeiModoLer", "ler", () => leiTrocarModo("ler"));
+  liga("btnLeiModoEditar", "editar", () => leiTrocarModo("editar"));
+  liga("btnLeiModoRecitar", "recitar", () => leiTrocarModo("recitar"));
+  liga("btnLeiSalvar", "gravar", () => leiGravar());
+  liga("btnLeiBlocos", "capítulos", () => {
     const cx = $("leiBlocosCx");
     if (cx) cx.hidden = !cx.hidden;
   });
-  liga("btnLeiIr", () => leiIrAbrir());
-  liga("btnLeiRank", () => leiRankingAbrir());
-  liga("btnLeiProc", () => leiProcAbrir());
-  liga("btnLeiFechar", () => leiFechar());
-  liga("btnLeiFechar2", () => leiFechar());
-  liga("btnLeiLido", () => leiRegistrarLeitura());
-  liga("btnLeiMaior", () => { leiFonte = Math.min(34, leiFonte + 2); leiTrocarModo(leiModo); });
-  liga("btnLeiMenor", () => { leiFonte = Math.max(11, leiFonte - 2); leiTrocarModo(leiModo); });
+  liga("btnLeiIr", "ir ao artigo", () => leiIrAbrir());
+  liga("btnLeiRank", "artigos que mais caem", () => leiRankingAbrir());
+  liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
+  liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());
+  liga("btnLeiAjudaFechar", "fechar ajuda", () => $("dlgLeiAjuda").close());
+  liga("btnLeiLog", "registro", () => leiLogAbrir());
+  liga("btnLeiFechar", "fechar", () => leiFechar());
+  liga("btnLeiFechar2", "fechar", () => leiFechar());
+  liga("btnLeiLido", "li este material", () => leiRegistrarLeitura());
+  liga("btnLeiMaior", "letra maior", () => leiFonteMudar(2));
+  liga("btnLeiMenor", "letra menor", () => leiFonteMudar(-2));
 
-  liga("btnLeiProcSalvar", () => leiProcSalvar());
+  liga("btnLeiLogHoje", "filtro de hoje", () => {
+    leiLogSoHoje = !leiLogSoHoje; leiLogPintar();
+  });
+  liga("btnLeiLogErros", "filtro de erros", () => {
+    leiLogSoErros = !leiLogSoErros; leiLogPintar();
+  });
+  liga("btnLeiLogCopiar", "copiar registro", () => {
+    try { navigator.clipboard.writeText($("leiLogTexto").value); } catch (e) {}
+    const b = $("btnLeiLogCopiar");
+    const r = b.textContent;
+    b.textContent = t("copied");
+    setTimeout(() => { b.textContent = r; }, 1800);
+  });
+  liga("btnLeiLogLimpar", "apagar registro", async () => {
+    if (!(await uiConfirm(t("lei_log_limpar_conf", { n: leiLog.length })))) return;
+    leiLog = [];
+    try { localStorage.setItem(LEI_LOG_CHAVE, "[]"); } catch (e) {}
+    leiLogPintar();
+  });
+  liga("btnLeiLogFechar", "fechar registro", () => $("dlgLeiLog").close());
+
+  liga("btnLeiProcSalvar", "guardar procedência", () => leiProcSalvar());
   liga("btnLeiProcFechar", () => $("dlgLeiProc").close());
   liga("btnLeiVincFechar", () => $("dlgLeiVincular").close());
   liga("btnLeiClozeFechar", () => $("dlgLeiCloze").close());
@@ -945,7 +1205,7 @@ function leiIniciar() {
   [["btnLeiMarcaDest", "destaque"], ["btnLeiMarcaImp", "importante"],
    ["btnLeiMarcaDuv", "duvida"], ["btnLeiMarcaProva", "prova"],
    ["btnLeiMarcaPeg", "pegadinha"]].forEach(([id, tipo]) => {
-    liga(id, () => matMarcarSelecao(tipo, "lei"));
+    liga(id, "marca " + tipo, () => matMarcarSelecao(tipo, "lei"));
   });
 
   if ($("leiTexto")) {
@@ -960,5 +1220,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiClozeAbrir,
     leiClozeConferir, leiClozeAplicar, leiRanking, leiRankingAbrir,
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
+    leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
+    leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
   };
 }

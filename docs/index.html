@@ -736,6 +736,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-rec-cab:hover{border-color:var(--acao)}
 .lei-rec-txt{padding:7px 11px 2px;line-height:1.6;border-left:3px solid var(--verde);
   margin:4px 0 0 10px}
+
+/* LER MAIOR — a lei ocupa a janela, o resto sai da frente.
+ * Só o que é elástico cresce: o painel de leitura. Tudo o mais já está
+ * escondido pelo JS, e o [hidden] continua ganhando (invariante E8). */
+#dlgLeiSeca.lei-cheia[open]{max-height:98vh;width:min(1100px,98vw);
+  padding-top:10px}
+#dlgLeiSeca.lei-cheia h3{font-size:1em;margin:0 0 4px;color:var(--sutil)}
+#dlgLeiSeca.lei-cheia .mat-leitura{max-height:none;border:none;
+  padding:6px 4px;background:transparent}
+#dlgLeiSeca.lei-cheia #leiLeitura, #dlgLeiSeca.lei-cheia #leiRecitar,
+#dlgLeiSeca.lei-cheia #leiTexto{min-height:60vh}
 /* cabeçalho comprido não pode comer a tela inteira num monitor baixo */
 #dlgMaterial .mat-topo, #dlgMaterial .mat-ctrl, #dlgMaterial .mat-barra{
   max-height:24vh;overflow-y:auto}
@@ -1329,6 +1340,11 @@ dialog.mat-amplo{max-height:96vh}
 .it-fill.cheio{background:#30a46c}
 .it-num{font-size:10px;color:var(--atencao);margin-top:2px;font-weight:700}
 .it-num.cheio{color:var(--ok)}
+/* EXCEDER O PREVISTO NÃO É ERRO — é informação.
+ * Cor de atenção, não de erro: estudar mais que o planejado pode ser a
+ * coisa certa. O que não pode é a tela dizer "100%" e calar o resto. */
+.it-fill.excedeu{background:var(--atencao)}
+.it-num.excedeu{color:var(--atencao)}
 .di-per{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
   font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
 .di-per.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
@@ -3070,13 +3086,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Vai direto a um artigo pelo número."></button>
     <button class="btn-min" id="btnLeiRank" data-i18n="lei_rank_btn"
       title="Mostra quais artigos mais aparecem NAS SUAS questões e como você tem se saído em cada um."></button>
-    <button class="btn-min" id="btnLeiProc" data-i18n="lei_proc_btn"
-      title="Guarda o link da fonte, a data da consulta e a versão do texto."></button>
     <span class="mat-sep"></span>
     <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
       title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
+    <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
+      title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei. O tamanho da letra fica guardado."></button>
     <button class="btn-min" id="btnLeiMenor" title="Diminui a letra da leitura.">A&#8722;</button>
     <button class="btn-min" id="btnLeiMaior" title="Aumenta a letra da leitura.">A+</button>
+    <span class="mat-sep"></span>
+    <button class="btn-min" id="btnLeiAjuda" data-i18n="lei_ajuda_btn"
+      title="Explica, um a um, para que serve cada recurso desta janela."></button>
+    <button class="btn-min" id="btnLeiLog" data-i18n="lei_log_btn"
+      title="Mostra só o que aconteceu aqui dentro: o que você marcou, gravou e leu, e os erros. Serve para relatar um problema."></button>
     <span class="mat-topo-dir">
       <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
         title="Fecha a lei. Se houver mudança não salva, pergunta antes."></button>
@@ -3158,6 +3179,38 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiClozeAplicar" hidden></button>
     <button class="btn btn-cinza" id="btnLeiClozeFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiAjuda" class="ui-modal diag-modal">
+  <h3 data-i18n="lei_ajuda_titulo"></h3>
+  <p class="nota" data-i18n="lei_ajuda_intro"></p>
+  <div id="leiAjudaCx" class="duv-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiAjudaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiLog" class="ui-modal diag-modal">
+  <h3 data-i18n="lei_log_titulo"></h3>
+  <p class="nota" data-i18n="lei_log_ajuda"></p>
+  <div class="mat-topo">
+    <button class="btn-min" id="btnLeiLogHoje" data-i18n="lei_log_hoje"
+      title="Alterna entre mostrar só o dia de hoje e mostrar tudo o que está guardado."></button>
+    <button class="btn-min" id="btnLeiLogErros" data-i18n="lei_log_erros"
+      title="Mostra só as falhas. Se algo não funcionou, a linha do erro está aqui."></button>
+    <button class="btn-min" id="btnLeiLogCopiar" data-i18n="lei_log_copiar"
+      title="Copia o registro inteiro para você colar num relato de problema."></button>
+    <span class="mat-topo-dir">
+      <button class="btn-min btn-min-perigo" id="btnLeiLogLimpar" data-i18n="lei_log_limpar"
+        title="Apaga o registro. Pergunta antes: depois de apagado não há como reconstituir."></button>
+    </span>
+  </div>
+  <p class="nota" id="leiLogResumo"></p>
+  <textarea id="leiLogTexto" rows="14" readonly
+    style="width:100%;box-sizing:border-box"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiLogFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
