@@ -25,6 +25,58 @@ function edPartes(linha) {
   return linha.split("::").map((s) => s.trim());
 }
 
+/* =====================================================================
+ * SEGUNDA FASE
+ *
+ * Alguns concursos têm duas datas na mesma inscrição: a SEFAZ-AL faz a
+ * objetiva em dezembro e a discursiva em janeiro. A tentação é cadastrar
+ * dois editais — e é a saída errada, por quatro motivos:
+ *
+ *  · o conteúdo é o mesmo, e duplicá-lo são 200 tópicos repetidos;
+ *  · o progresso se parte em dois, e ninguém marca o mesmo tópico duas
+ *    vezes pela terceira semana seguida;
+ *  · dois editais ativos fazem a agenda dividir as suas horas entre duas
+ *    coisas que são uma só;
+ *  · a segunda fase é CONDICIONAL — só acontece se você passar na
+ *    primeira —, e um edital paralelo trata como certo um evento que
+ *    ainda não ocorreu.
+ *
+ * Então a unidade continua sendo o edital. O que ganha plural é a data.
+ *
+ *   # SEFAZ-AL Auditor | prova: 2026-12-13 | horas: 20
+ *   # fase 2: discursiva | prova: 2027-01-24 | horas: 25
+ *
+ * E o marcador "!d" no tópico diz que ele volta na segunda fase:
+ *
+ *   + Obrigação tributária :: 5 :: cai sempre !d
+ *   + Responsabilidade tributária :: 3 :: !d5
+ *
+ * O "!d5" dá peso PRÓPRIO na fase 2: um tópico que vale 2% da objetiva
+ * pode ser uma questão discursiva inteira, e herdar o peso da primeira
+ * fase apagaria justamente essa diferença.
+ *
+ * Sem marcador, o tópico é só da primeira fase — que é o caso da maioria
+ * e portanto o padrão certo.
+ * ================================================================== */
+
+const ED_FASE2_RE = /^fase\s*2\b\s*:?\s*(.*)$/i;
+/* "!d" ou "!d4"; sempre no fim do campo, para não competir com o texto
+ * do motivo — que é prosa livre e não pode ganhar sintaxe. */
+const ED_MARCA_F2_RE = /\s*!d([1-5])?\s*$/i;
+
+/* Separa o marcador do motivo. Devolve o motivo LIMPO, porque ele é
+ * exibido na tela e "cai sempre !d" seria ruído para quem lê. */
+function edMarcaFase2(motivo) {
+  const s = String(motivo || "");
+  const m = s.match(ED_MARCA_F2_RE);
+  if (!m) return { fase2: false, pesoF2: null, motivo: s.trim() };
+  return {
+    fase2: true,
+    pesoF2: m[1] ? Number(m[1]) : null,
+    motivo: s.replace(ED_MARCA_F2_RE, "").trim(),
+  };
+}
+
 /* Peso ausente vale 3 (meio da escala). Peso fora de 1..5 é registrado como
  * problema, mas o valor é preso na faixa em vez de descartado — perder o
  * tópico seria pior do que aceitar um peso torto. */
@@ -59,7 +111,32 @@ function lerEdital(raw) {
 
     const mc = s.match(ED_CFG_RE);
     if (mc) {
-      mc[1].split("|").forEach((p) => {
+      const partes = mc[1].split("|");
+      /* SEGUNDA LINHA DE CABEÇALHO = SEGUNDA FASE.
+       * O "#" já era o cabeçalho; um edital com duas linhas "#" tinha a
+       * segunda sobrescrevendo a primeira em silêncio. Agora, quando ela
+       * começa com "fase 2", vira o outro prazo em vez de apagar o
+       * primeiro. */
+      const f2 = String(partes[0] || "").trim().match(ED_FASE2_RE);
+      if (f2) {
+        cfg.fase2 = cfg.fase2 || { nome: "", prova: "", horas: 0 };
+        cfg.fase2.nome = (f2[1] || "").trim();
+        partes.slice(1).forEach((p) => {
+          const i = p.indexOf(":");
+          const k = (i < 0 ? p : p.slice(0, i)).trim();
+          const v = (i < 0 ? "" : p.slice(i + 1)).trim();
+          if (!v) return;
+          if (/^prova/i.test(k)) cfg.fase2.prova = v;
+          else if (/^horas/i.test(k)) cfg.fase2.horas = Number(v.replace(",", ".")) || 0;
+        });
+        /* fase 2 sem horas próprias herda as da primeira: é mais provável
+         * que a pessoa tenha esquecido de escrever do que que ela pretenda
+         * estudar zero hora por semana em janeiro */
+        if (!cfg.fase2.horas) cfg.fase2.horas = cfg.horas;
+        if (!cfg.fase2.nome) cfg.fase2.nome = "2ª fase";
+        return;
+      }
+      partes.forEach((p) => {
         const [k, v] = p.split(":").map((x) => (x || "").trim());
         if (!v) { if (k) cfg.concurso = k; return; }
         if (/^prova/i.test(k)) cfg.prova = v;
@@ -90,8 +167,13 @@ function lerEdital(raw) {
       const p = edPartes(mt[1]);
       if (!atual) { achados.push({ linha: n, tipo: "topico_sem_disciplina", txt: p[0] }); return; }
       const { peso, herdado } = edPeso(p[1], achados, n);
+      const f2 = edMarcaFase2(p[2]);
       atual.topicos.push({
-        nome: p[0], peso, herdado, motivo: p[2] || "", linha: n,
+        nome: p[0], peso, herdado, motivo: f2.motivo, linha: n,
+        fase2: f2.fase2,
+        /* sem peso próprio, a fase 2 herda o da primeira — melhor que
+         * inventar um número que a pessoa não escreveu */
+        pesoF2: f2.fase2 ? (f2.pesoF2 || peso) : null,
       });
       if (!p[0]) achados.push({ linha: n, tipo: "topico_sem_nome", txt: s });
       return;
@@ -121,6 +203,8 @@ function priorizar(r) {
         disciplina: d.nome, disciplinaPeso: d.peso,
         nome: t.nome, peso: t.peso, motivo: t.motivo, linha: t.linha,
         bruto: d.peso * t.peso,
+        fase2: !!t.fase2, pesoF2: t.pesoF2 || null,
+        brutoF2: t.fase2 ? d.peso * (t.pesoF2 || t.peso) : 0,
       });
     });
   });
@@ -186,11 +270,63 @@ function edDataPlanejada(cfg) {
   return j ? j.de : "";
 }
 
+/* EM QUE FASE ESTAMOS HOJE.
+ *
+ * A pergunta não é "qual a última data", é "qual a PRÓXIMA". Enquanto a
+ * objetiva não aconteceu, o prazo que importa é dezembro; passada ela,
+ * passa a ser janeiro. Contar sempre para a última data seria o erro
+ * caro: espalharia o conteúdo da objetiva por semanas que só existem se
+ * a pessoa passar, e dezembro — a fase que decide tudo — receberia menos
+ * horas do que precisa.
+ */
+function edFaseAtual(cfg, hoje) {
+  const c = cfg || {};
+  const f2 = c.fase2 && c.fase2.prova ? c.fase2 : null;
+  const p1 = edDataPlanejada(c);
+  const s1 = p1 ? semanasAte(p1, hoje) : null;
+  const passouP1 = !!(s1 && s1.dias < 0);
+
+  if (f2 && passouP1) {
+    return { n: 2, nome: f2.nome || "2ª fase", prova: f2.prova,
+             horas: f2.horas || c.horas, so2: true, temFase2: true };
+  }
+  return { n: 1, nome: "", prova: p1, horas: c.horas, so2: false,
+           temFase2: !!f2, prova2: f2 ? f2.prova : "",
+           nome2: f2 ? (f2.nome || "2ª fase") : "" };
+}
+
 function montarPlano(r, opcoes) {
   const o = opcoes || {};
-  const horas = Math.max(0, Number(o.horas) || 0);
+  const cfg = (r && r.cfg) || {};
+  /* A FASE MANDA NO PRAZO E NAS HORAS.
+   * Quem chamar sem passar nada continua vendo o comportamento de
+   * sempre; quem passar "fase" força uma delas (a tela de simulação
+   * precisa disso para mostrar as duas lado a lado). */
+  const faseAuto = edFaseAtual(cfg, o.hoje);
+  const fase = o.fase === 2
+    ? { n: 2, nome: (cfg.fase2 && cfg.fase2.nome) || "2ª fase",
+        prova: cfg.fase2 && cfg.fase2.prova,
+        horas: (cfg.fase2 && cfg.fase2.horas) || cfg.horas,
+        so2: true, temFase2: !!(cfg.fase2 && cfg.fase2.prova) }
+    : (o.fase === 1
+        ? Object.assign({}, faseAuto, { n: 1, so2: false,
+            prova: edDataPlanejada(cfg), horas: cfg.horas })
+        : faseAuto);
+
+  /* QUEM MANDA NO PRAZO E NAS HORAS:
+   *  · fase forçada pelo chamador → os dados daquela fase;
+   *  · fase 2 detectada sozinha   → os dados da fase 2 (o que a tela
+   *    passou nos campos "prova" e "horas" é da PRIMEIRA fase e está
+   *    velho — usá-lo aqui planejaria janeiro com o prazo de dezembro);
+   *  · fase 1                     → o que o chamador passou, que é o que
+   *    está nos campos da tela e pode estar sendo simulado. */
+  const mandaAFase = o.fase !== undefined || fase.so2;
+  const horas = Math.max(0, Number(
+    mandaAFase ? fase.horas : (o.horas !== undefined ? o.horas : fase.horas)) || 0);
   const porSemana = horas * 60;
-  const s = semanasAte(o.prova, o.hoje);
+  const prazo = mandaAFase ? fase.prova
+    : (o.prova !== undefined ? o.prova : fase.prova);
+  const s = semanasAte(prazo, o.hoje);
   const semanas = s ? Math.max(0, s.semanas) : null;
   /* Aceita o formato antigo (true = estudado) para não perder o progresso de
    * quem já estava usando: migração silenciosa, feita na leitura. */
@@ -202,7 +338,23 @@ function montarPlano(r, opcoes) {
     return null;
   };
 
-  const todos = priorizar(r);
+  let todos = priorizar(r);
+  /* NA SEGUNDA FASE, SÓ O QUE CAI NELA — e com o peso DELA.
+   *
+   * A discursiva não cobra o edital inteiro: cobra um recorte, e um
+   * tópico que vale 2% da objetiva pode ser uma questão discursiva
+   * inteira. Manter a lista e o peso da primeira fase produziria uma
+   * agenda de janeiro cheia de assunto que não vai ser cobrado, na ordem
+   * errada. */
+  if (fase.so2) {
+    todos = todos.filter((i) => i.fase2);
+    const maxF2 = todos.reduce((m, i) => Math.max(m, i.brutoF2), 0) || 1;
+    todos.forEach((i) => {
+      i.bruto = i.brutoF2;
+      i.prioridade = Math.round((i.brutoF2 / maxF2) * 100);
+    });
+    todos.sort((a, b) => b.bruto - a.bruto || a.linha - b.linha);
+  }
   todos.forEach((i) => {
     const f = faixaDe(i.prioridade);
     i.faixa = f.id;
@@ -302,6 +454,12 @@ function montarPlano(r, opcoes) {
      * (que também é o valor de uma prova daqui a três dias) */
     vencida,
     diasDesde: vencida && s ? Math.abs(s.dias) : null,
+    /* qual fase este plano representa, e o que existe do outro lado */
+    fase,
+    prazo,
+    /* quantos tópicos voltam na segunda fase — o número que responde
+     * "vale a pena marcar mais?" e alimenta o aviso de excesso */
+    fase2N: todos.filter((i) => i.fase2).length,
     semanas, porSemana, usado,
     orcamento: semanas === null ? null : semanas * porSemana,
     fatia,
@@ -729,11 +887,31 @@ function edParaTexto(r) {
   if (c.concurso) cab.push(c.concurso);
   if (c.prova) cab.push("prova: " + c.prova);
   if (c.horas) cab.push("horas: " + c.horas);
-  if (cab.length) { L.push("# " + cab.join(" | ")); L.push(""); }
+  if (cab.length) { L.push("# " + cab.join(" | ")); }
+  /* A SEGUNDA FASE TEM DE VOLTAR PARA O TEXTO.
+   * Este arquivo é reescrito em operações de rotina — colar plano
+   * corrigido, incluir disciplina à mão. Sem estas linhas, a data de
+   * janeiro e todos os marcadores evaporavam na primeira delas, sem
+   * aviso nenhum: o plano da discursiva simplesmente deixava de existir
+   * e a pessoa só descobriria em dezembro. */
+  if (c.fase2 && c.fase2.prova) {
+    const c2 = ["fase 2: " + (c.fase2.nome || "2ª fase")];
+    c2.push("prova: " + c.fase2.prova);
+    if (c.fase2.horas) c2.push("horas: " + c.fase2.horas);
+    L.push("# " + c2.join(" | "));
+  }
+  if (cab.length) L.push("");
   (r.disciplinas || []).forEach((d) => {
     L.push("@ " + d.nome + " :: " + d.peso);
     d.topicos.forEach((t) => {
-      L.push("+ " + t.nome + " :: " + t.peso + (t.motivo ? " :: " + t.motivo : ""));
+      /* o marcador vai no FIM do terceiro campo, como foi lido. Um tópico
+       * marcado sem motivo ganha o campo só para carregar a marca. */
+      let m = t.motivo || "";
+      if (t.fase2) {
+        const p = (t.pesoF2 && t.pesoF2 !== t.peso) ? String(t.pesoF2) : "";
+        m = (m ? m + " " : "") + "!d" + p;
+      }
+      L.push("+ " + t.nome + " :: " + t.peso + (m ? " :: " + m : ""));
     });
     L.push("");
   });

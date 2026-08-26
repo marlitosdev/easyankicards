@@ -169,6 +169,10 @@ function hubPintarAgenda() {
       linhas.push(Object.assign({}, i, {
         edital: e.id, editalNome: e.nome || cfg.concurso || t("ed_sem_nome"),
         urgencia: u, ordem: (i.bruto || 0) * u,
+        /* de qual FASE é esta linha, e se o tópico volta na seguinte */
+        faseN: plano.fase ? plano.fase.n : 1,
+        faseNome: plano.fase ? plano.fase.nome : "",
+        temFase2: !!(plano.fase && plano.fase.temFase2),
       }));
     });
   });
@@ -301,6 +305,30 @@ function hubPintarAgenda() {
     selo.onclick = (ev) => { ev.stopPropagation(); hubAbrirEdital(i.edital); };
     const alvo = li.querySelector(".ed-lin-disc") || li;
     alvo.append(selo);
+
+    /* O SELO DE FASE. Estudar com o calendário errado na cabeça é o erro
+     * mais caro possível num concurso de duas datas: em dezembro você
+     * revisa para janeiro, ou em janeiro estuda o que só caía em
+     * dezembro. O selo só aparece quando há duas fases — num edital
+     * comum ele seria ruído dizendo o óbvio. */
+    if (i.temFase2) {
+      const f = document.createElement("span");
+      f.className = "ed-selo-fase" + (i.faseN === 2 ? " ed-selo-fase2" : "");
+      f.textContent = i.faseN === 2 ? (i.faseNome || t("ed_fase2"))
+                                    : t("ed_fase1");
+      f.title = t("ed_fase_ajuda", { n: i.faseN });
+      alvo.append(f);
+    }
+    /* NA PRIMEIRA FASE, marcar o que VOLTA na segunda. Não muda a ordem —
+     * muda o cuidado: um resumo que vai ser reusado em janeiro vale ser
+     * feito melhor da primeira vez. */
+    if (i.faseN === 1 && i.fase2) {
+      const d = document.createElement("span");
+      d.className = "ed-selo-volta";
+      d.textContent = t("ed_volta_fase2_sinal");
+      d.title = t("ed_volta_fase2");
+      alvo.append(d);
+    }
     li.append();
     cx.append(li);
   });
