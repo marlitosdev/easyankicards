@@ -255,6 +255,7 @@ function leiPintar() {
   leiPintarProcedencia();
   leiPintarOnde();
   leiPintarBlocos();
+  leiPintarTamanhos();
   leiCheiaAplicar();
   if (leiModo !== "editar") leiTrocarModo(leiModo);
 }
@@ -374,11 +375,19 @@ function leiPintarOnde() {
   dentro.style.width = p.pct + "%";
   barra.append(dentro);
 
-  const txt = document.createElement("span");
-  txt.className = "lei-onde-txt";
+  /* O TEXTO É O ATALHO.
+   * Dizer "parei no art. 35" e obrigar a pessoa a procurar o art. 35 na
+   * rolagem é dar a informação e cobrar o trabalho. O rótulo já nomeia o
+   * destino; ele mesmo leva até lá. */
+  const txt = document.createElement(p.lidos ? "button" : "span");
+  txt.className = "lei-onde-txt" + (p.lidos ? " lei-onde-ir" : "");
   txt.textContent = p.lidos
     ? t("lei_parei_em", { a: p.artigo, n: p.lidos, tot: p.total, p: p.pct })
     : t("lei_nao_comecou", { tot: p.total });
+  if (p.lidos) {
+    txt.title = t("lei_ir_ao_marcador", { a: p.artigo });
+    txt.onclick = () => { leiTrocarModo("ler"); leiIrArtigo(p.artigo); };
+  }
 
   cx.append(barra, txt);
 
@@ -474,18 +483,68 @@ function leiPintarBlocos() {
 
 const LEI_FONTE_CHAVE = "eac_lei_fonte";
 
+/* TAMANHOS COM NOME, NÃO SÓ "MAIS" E "MENOS".
+ *
+ * O A+/A− pedia oito cliques para chegar de 15 a 30, e no caminho a
+ * pessoa não sabia onde ia parar. Uma lista nomeada resolve os dois
+ * problemas: escolhe-se o destino, não a direção.
+ *
+ * E o teto subiu muito. O antigo parava em 34px, que é grande para uma
+ * interface e pequeno para quem quer ler lei de longe, no tablet
+ * apoiado, ou tem alguma dificuldade de visão. 56px é uma linha com
+ * poucas palavras — e para ler lei isso é bom, não ruim: artigo se lê
+ * devagar. */
+const LEI_TAMANHOS = [
+  { id: "pequeno", px: 13 },
+  { id: "normal", px: 15 },
+  { id: "medio", px: 19 },
+  { id: "grande", px: 24 },
+  { id: "muito_grande", px: 32 },
+  { id: "enorme", px: 42 },
+  { id: "gigante", px: 56 },
+];
+
 function leiFonteCarregar() {
   try {
     const v = Number(localStorage.getItem(LEI_FONTE_CHAVE));
-    if (v >= 11 && v <= 34) leiFonte = v;
+    if (v >= 13 && v <= 56) leiFonte = v;
   } catch (e) {}
 }
 
-function leiFonteMudar(delta) {
-  leiFonte = Math.max(11, Math.min(34, leiFonte + delta));
+function leiFonteDefinir(px) {
+  const v = Number(px) || 15;
+  leiFonte = Math.max(13, Math.min(56, v));
   try { localStorage.setItem(LEI_FONTE_CHAVE, String(leiFonte)); } catch (e) {}
+  leiPintarTamanhos();
   leiTrocarModo(leiModo);
   leiReg("leitura", "tamanho da letra", leiFonte + "px");
+}
+
+/* mantido porque o A+/A− continua sendo o gesto rápido de quem só quer
+ * um degrau; ele agora anda pela MESMA lista, sem inventar tamanhos
+ * intermediários que a lista não oferece */
+function leiFonteMudar(delta) {
+  const i = LEI_TAMANHOS.findIndex((x) => x.px === leiFonte);
+  const j = Math.max(0, Math.min(LEI_TAMANHOS.length - 1,
+    (i < 0 ? 1 : i) + (delta > 0 ? 1 : -1)));
+  leiFonteDefinir(LEI_TAMANHOS[j].px);
+}
+
+function leiPintarTamanhos() {
+  const cx = $("leiTamanhos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  LEI_TAMANHOS.forEach((x) => {
+    const b = document.createElement("button");
+    b.className = "lei-tam" + (x.px === leiFonte ? " lei-tam-on" : "");
+    b.textContent = t("lei_tam_" + x.id);
+    /* a AMOSTRA é o próprio botão: o rótulo é escrito no tamanho que ele
+     * aplica, então dá para escolher olhando, sem tentativa e erro */
+    b.style.fontSize = Math.min(20, Math.round(x.px * 0.55) + 6) + "px";
+    b.title = t("lei_tam_ajuda", { px: x.px });
+    b.onclick = () => leiFonteDefinir(x.px);
+    cx.append(b);
+  });
 }
 
 /* UM LUGAR SÓ decide o que é referência e o que é lei.
@@ -532,6 +591,9 @@ function leiTrocarModo(modo) {
   /* na tela cheia a barra de marcas some junto: ela é ferramenta de
    * quem está trabalhando o texto, não de quem está lendo */
   if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec || leiCheia;
+  /* o seletor de tamanho SOBREVIVE à tela cheia: é lá que se quer
+   * ajustar a letra. Some só na edição, onde o texto é cru. */
+  if ($("leiTamanhos")) $("leiTamanhos").hidden = ed;
 
   [["btnLeiModoLer", "ler"], ["btnLeiModoEditar", "editar"],
    ["btnLeiModoRecitar", "recitar"]].forEach(([id, m]) => {
@@ -556,6 +618,11 @@ function leiPintarLeitura() {
   const arts = leiArtigos(bruto);
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   const parei = l ? l.parei : "";
+  /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
+   * dentro do laço releria o banco de questões a cada artigo */
+  const ranking = {};
+  try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
+  catch (e) {}
 
   if (!arts.length) {
     const p = document.createElement("p");
@@ -583,19 +650,26 @@ function leiPintarLeitura() {
 
     const cab = document.createElement("div");
     cab.className = "lei-art-cab";
-    const rot = document.createElement("span");
-    rot.className = "lei-art-num";
-    rot.textContent = a.rotulo;
-    cab.append(rot);
 
-    const bParei = document.createElement("button");
-    bParei.className = "btn-min lei-art-b";
-    bParei.textContent = a.num === parei ? t("lei_aqui") : t("lei_parar_aqui");
-    bParei.title = t("lei_parar_aqui_ajuda");
-    bParei.onclick = () => {
-      leiParar(leiIdAtual, a.num);
+    /* O NÚMERO DO ARTIGO É O MARCADOR.
+     *
+     * Antes havia um botão "parei aqui" em CADA artigo. Numa lei de 115
+     * artigos isso são 115 alvos disputando espaço com o texto — e o
+     * cabeçalho de cada artigo ficava mais pesado que alguns artigos.
+     *
+     * O número já estava lá, já é único, já é o endereço. Clicar nele
+     * marca. Zero elementos novos na tela, mesma capacidade. */
+    const rot = document.createElement("button");
+    rot.className = "lei-art-num" + (a.num === parei ? " lei-art-num-parei" : "");
+    rot.textContent = a.rotulo + (a.num === parei ? " " + t("lei_aqui_sinal") : "");
+    rot.title = a.num === parei ? t("lei_aqui_ajuda") : t("lei_parar_aqui_ajuda");
+    rot.onclick = () => {
+      /* clicar de novo no artigo já marcado TIRA o marcador: sem isso, a
+       * única forma de desmarcar seria marcar outro artigo qualquer */
+      leiParar(leiIdAtual, a.num === parei ? "" : a.num);
       leiPintar();
     };
+    cab.append(rot);
 
     const bCloze = document.createElement("button");
     bCloze.className = "btn-min lei-art-b";
@@ -603,15 +677,201 @@ function leiPintarLeitura() {
     bCloze.title = t("lei_cloze_art_ajuda");
     bCloze.onclick = () => leiClozeAbrir(a);
 
-    cab.append(bParei, bCloze);
+    /* editar ESTE artigo, sem abrir a lei inteira num campo de texto */
+    const bEd = document.createElement("button");
+    bEd.className = "btn-min lei-art-b";
+    bEd.textContent = t("lei_art_editar");
+    bEd.title = t("lei_art_editar_ajuda");
+    bEd.onclick = () => leiEdAbrir(a.num);
+
+    cab.append(bCloze, bEd);
 
     const corpo = document.createElement("div");
     corpo.className = "lei-art-txt";
     corpo.innerHTML = matParaHtml(a.texto);
 
     bloco.append(cab, corpo);
+
+    /* AVISO DO ARTIGO QUE MAIS CAI.
+     * O ranking já existia, mas numa janela à parte — e quem está lendo a
+     * lei não vai abrir outra tela para conferir se aquele artigo é
+     * cobrado. A informação tem de estar onde o olho já está: embaixo do
+     * artigo, no momento em que ele está sendo lido.
+     *
+     * O texto é deliberadamente modesto. Não diz "este é dos mais
+     * cobrados do país" — a amostra é o banco de questões da própria
+     * pessoa, e prometer mais do que se sabe é o começo de estudar a
+     * coisa errada com confiança. */
+    const est = ranking[a.num];
+    if (est) {
+      const av = document.createElement("div");
+      av.className = "lei-art-cai"
+        + (est.erros > est.acertos ? " lei-art-cai-erro" : "");
+      const partes = [];
+      if (est.questoes) partes.push(t("lei_cai_questoes", { n: est.questoes }));
+      if (est.prova) partes.push(t("lei_cai_prova", { n: est.prova }));
+      if (est.erros || est.acertos) {
+        partes.push(t("lei_cai_placar", { e: est.erros, a: est.acertos }));
+      }
+      if (est.incisos.length) {
+        partes.push(t("lei_cai_incisos", { i: est.incisos.join(", ") }));
+      }
+      av.textContent = t("lei_cai_aviso") + " " + partes.join(" · ");
+      bloco.append(av);
+    }
+
     cx.append(bloco);
   });
+}
+
+/* ---------------------------------------------------------------------
+ * EDITAR UM ARTIGO
+ *
+ * A edição era uma caixa de texto com a lei inteira dentro. Para trocar
+ * a redação do art. 35 numa lei de 115 artigos era preciso rolar até
+ * achar, mexer no meio de cinco mil palavras e torcer para não ter
+ * apagado o vizinho — sem contar as marcas coloridas espalhadas pelo
+ * texto, que somem junto com o trecho errado sem avisar.
+ *
+ * Aqui a unidade de edição é o artigo, porque é a unidade em que a lei
+ * muda. Uma emenda troca a redação de UM artigo, ou acrescenta UM artigo
+ * — nunca "reescreve o arquivo". A janela mostra só aquele pedaço, e o
+ * resto do texto é intocado por construção: a substituição é feita por
+ * endereço de linha, não por busca e troca.
+ *
+ * A caixa com a lei inteira continua existindo, para colar uma lei nova
+ * de uma vez. Ela deixou de ser o único caminho, que era o problema.
+ * ------------------------------------------------------------------ */
+
+let leiEdNum = "";          /* "" = artigo novo */
+
+function leiEdAbrir(num) {
+  if (!$("dlgLeiArt")) return;
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const texto = String($("leiTexto").value || "");
+  leiEdNum = num ? leiNumNormal(num) : "";
+
+  const arts = leiArtigos(texto);
+  const a = leiEdNum ? arts.filter((x) => x.num === leiEdNum)[0] : null;
+
+  $("leiArtTitulo").textContent = a
+    ? t("lei_art_ed_titulo", { a: a.rotulo })
+    : t("lei_art_novo_titulo");
+  $("leiArtSub").textContent = a
+    ? [(l && l.nome) || "", a.divisao].filter(Boolean).join(" · ")
+    : t("lei_art_novo_ajuda");
+  $("leiArtTexto").value = a ? a.texto : "";
+  $("leiArtAviso").textContent = "";
+  $("btnLeiArtApagar").hidden = !a;
+
+  /* a lista de artigos ao lado: trocar de artigo sem fechar e reabrir */
+  const cx = $("leiArtLista");
+  if (cx) {
+    cx.innerHTML = "";
+    arts.forEach((x) => {
+      const b = document.createElement("button");
+      b.className = "lei-art-item" + (x.num === leiEdNum ? " lei-art-item-on" : "");
+      b.textContent = x.rotulo + (x.ementa ? " — " + x.ementa : "");
+      b.title = x.divisao || "";
+      b.onclick = () => leiEdTrocar(x.num);
+      cx.append(b);
+    });
+    const bNovo = document.createElement("button");
+    bNovo.className = "lei-art-item lei-art-item-novo";
+    bNovo.textContent = t("lei_art_novo");
+    bNovo.title = t("lei_art_novo_ajuda");
+    bNovo.onclick = () => leiEdTrocar("");
+    cx.append(bNovo);
+  }
+
+  abrirModal("dlgLeiArt");
+  leiReg("editar", a ? "edição de artigo aberta" : "artigo novo",
+         a ? a.rotulo : "");
+}
+
+/* Trocar de artigo dentro da janela SEM perder o que foi digitado sem
+ * querer: se há alteração pendente, ela é salva antes. Perguntar a cada
+ * clique da lista transformaria navegar em interrogatório. */
+function leiEdTrocar(num) {
+  if (leiEdSujo()) leiEdSalvar(true);
+  leiEdAbrir(num);
+}
+
+function leiEdSujo() {
+  const texto = String($("leiTexto").value || "");
+  const a = leiEdNum ? leiArtigo(texto, leiEdNum) : null;
+  const agora = String(($("leiArtTexto") || {}).value || "").replace(/\s+$/, "");
+  if (!a) return !!agora.trim();
+  return agora !== String(a.texto || "").replace(/\s+$/, "");
+}
+
+function leiEdSalvar(silencioso) {
+  const novo = String(($("leiArtTexto") || {}).value || "").replace(/\s+$/, "");
+  const texto = String($("leiTexto").value || "");
+  if (!novo.trim()) {
+    $("leiArtAviso").textContent = t("lei_art_vazio");
+    return false;
+  }
+  /* o texto tem de continuar sendo um artigo: sem o "Art. N" na frente,
+   * o pedaço deixaria de ser encontrável e o marcador, os cartões e a
+   * estatística perderiam a âncora de uma vez */
+  const lido = leiArtigos(novo)[0];
+  /* o guarda vale por si: sem ele, qualquer caminho abaixo que use
+   * "lido" estoura com pilha de erro em vez de dizer o que faltou */
+  if (!lido || lido.linha !== 1) {
+    $("leiArtAviso").textContent = t("lei_art_sem_numero");
+    return false;
+  }
+
+  let final;
+  if (leiEdNum) {
+    if (lido.num !== leiEdNum) {
+      /* renumerar é trocar de artigo: some do lugar antigo e entra no
+       * novo, senão ficariam dois */
+      const semVelho = leiSubstituirArtigo(texto, leiEdNum, "");
+      final = leiInserirArtigo(String(semVelho || "").replace(/\n{3,}/g, "\n\n"), novo);
+    } else {
+      final = leiSubstituirArtigo(texto, leiEdNum, novo);
+    }
+  } else {
+    final = leiInserirArtigo(texto, novo);
+    if (final === null) {
+      $("leiArtAviso").textContent = t("lei_art_ja_existe", { a: lido.numCru });
+      return false;
+    }
+  }
+  if (final === null) { $("leiArtAviso").textContent = t("lei_art_nao_achou"); return false; }
+
+  $("leiTexto").value = final;
+  leiSujo = true;
+  leiGravar();
+  leiEdNum = lido.num;
+  if (!silencioso) {
+    $("dlgLeiArt").close();
+    leiTrocarModo("ler");
+    leiIrArtigo(lido.num);
+  }
+  leiReg("editar", "artigo gravado", lido.rotulo);
+  return true;
+}
+
+async function leiEdApagar() {
+  if (!leiEdNum) return false;
+  const texto = String($("leiTexto").value || "");
+  const a = leiArtigo(texto, leiEdNum);
+  if (!a) return false;
+  /* mostra O QUE se perde antes de perguntar: "apagar o art. 35?" sem o
+   * texto na frente é perguntar sobre um número */
+  if (!(await uiConfirm(t("lei_art_apagar_conf", {
+    a: a.rotulo, txt: a.corpo.slice(0, 160) })))) return false;
+  $("leiTexto").value = String(leiSubstituirArtigo(texto, leiEdNum, "") || "")
+    .replace(/\n{3,}/g, "\n\n");
+  leiSujo = true;
+  leiGravar();
+  leiReg("editar", "artigo apagado", a.rotulo);
+  $("dlgLeiArt").close();
+  leiTrocarModo("ler");
+  return true;
 }
 
 /* MODO RECITAR — só o número e a ementa; o texto fica escondido.
@@ -1110,8 +1370,9 @@ async function leiFechar() {
  * ------------------------------------------------------------------ */
 
 const LEI_AJUDA = [
-  "fila", "proc", "onde", "modos", "capitulos", "artigo", "marcas",
-  "cartoes", "recitar", "ranking", "cheia", "gravar", "lido", "log",
+  "fila", "proc", "onde", "modos", "capitulos", "artigo", "editar",
+  "marcas", "cartoes", "cai", "recitar", "ranking", "cheia", "gravar",
+  "lido", "log",
 ];
 
 function leiAjudaAbrir() {
@@ -1141,6 +1402,7 @@ function leiAjudaAbrir() {
 function leiIniciar() {
   leiLogCarregar();
   leiFonteCarregar();
+  leiPintarTamanhos();
   /* leiBotao no lugar de um onclick nu: qualquer falha vira linha de
    * registro com o nome do botão, em vez de morrer no console */
   const liga = (id, nome, fn) => leiBotao(id, nome, fn);
@@ -1186,6 +1448,16 @@ function leiIniciar() {
   });
   liga("btnLeiLogFechar", "fechar registro", () => $("dlgLeiLog").close());
 
+  liga("btnLeiArtSalvar", "gravar artigo", () => leiEdSalvar(false));
+  liga("btnLeiArtApagar", "apagar artigo", () => leiEdApagar());
+  liga("btnLeiArtFechar", "fechar artigo", () => {
+    /* fechar com alteração pendente não pode jogar fora em silêncio: a
+     * pessoa acabou de digitar a nova redação de um artigo */
+    if (leiEdSujo()) leiEdSalvar(true);
+    $("dlgLeiArt").close();
+    leiTrocarModo("ler");
+  });
+
   liga("btnLeiProcSalvar", "guardar procedência", () => leiProcSalvar());
   liga("btnLeiProcFechar", () => $("dlgLeiProc").close());
   liga("btnLeiVincFechar", () => $("dlgLeiVincular").close());
@@ -1222,5 +1494,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
     leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
+    leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
+    leiFonteDefinir, leiPintarTamanhos, LEI_TAMANHOS,
   };
 }
