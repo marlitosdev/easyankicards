@@ -264,11 +264,30 @@ function montarPlano(r, opcoes) {
   const dentro = [], fora = [];
   let semana = 1, usoSemana = 0, usado = 0;
 
+  /* PROVA JÁ REALIZADA — o plano precisa dizer isso, não fingir.
+   *
+   * Com a data no passado, semanasAte devolve semanas = 0. E a guarda
+   * abaixo era "semanas > 0 && semana > semanas": com zero, ela NUNCA
+   * disparava, então nenhum tópico ia para o "não cabe" e todos os 232
+   * recebiam "semana 1". Ao mesmo tempo o orçamento virava zero e o
+   * "horas necessárias" virava null e sumia da tela.
+   *
+   * O resultado era a pior combinação possível: um plano afirmando que
+   * o edital inteiro cabe nesta semana, com orçamento de zero horas — e
+   * sem o número que denunciaria a contradição. Quem abrisse o TCE-PE
+   * no dia 31 de agosto veria exatamente isso.
+   *
+   * Agora zero semanas significa o que significa: não há mais janela.
+   * Tudo vai para o "fora", que é a lista que o app já sabe mostrar
+   * nomeada, nunca escondida. */
+  const vencida = semanas === 0 && (s ? s.dias < 0 : false);
+
   fila.forEach((i) => {
     if (!porSemana || semanas === null) {          /* sem data ou sem horas:
       não dá para montar cronograma, mas a ordem continua valendo */
       i.semana = null; dentro.push(i); usado += i.minutos; return;
     }
+    if (vencida) { i.semana = null; fora.push(i); return; }
     if (usoSemana + i.minutos > porSemana) { semana++; usoSemana = 0; }
     if (semanas > 0 && semana > semanas) { i.semana = null; fora.push(i); return; }
     i.semana = semana; usoSemana += i.minutos; usado += i.minutos;
@@ -279,6 +298,10 @@ function montarPlano(r, opcoes) {
     itens: todos,          /* tudo, na ordem, com faixa e minutos */
     fila: dentro,          /* o que cabe até a prova */
     fora,                  /* o que não cabe — nomeado, nunca escondido */
+    /* dito em voz alta, para a tela não ter de deduzir de "semanas === 0"
+     * (que também é o valor de uma prova daqui a três dias) */
+    vencida,
+    diasDesde: vencida && s ? Math.abs(s.dias) : null,
     semanas, porSemana, usado,
     orcamento: semanas === null ? null : semanas * porSemana,
     fatia,
@@ -469,8 +492,15 @@ function semanasAte(prova, hoje) {
   if (!prova) return null;
   const fim = new Date(prova + "T00:00:00");
   if (isNaN(fim)) return null;
-  const ini = hoje ? new Date(hoje) : new Date();
-  const dias = Math.floor((fim - ini) / 86400000);
+  /* mesma correção de edSituacao: dias de CALENDÁRIO. Sem zerar a hora,
+   * uma prova daqui a 14 dias virava 13 depois do meio-dia — e 13 dias
+   * são uma semana no planejamento, contra as duas que a pessoa contou.
+   * O zeramento respeita o formato: "AAAA-MM-DD" é meia-noite LOCAL. */
+  const ini = (typeof hoje === "string" && /^\d{4}-\d{2}-\d{2}$/.test(hoje))
+    ? new Date(hoje + "T00:00:00")
+    : (() => { const d = hoje ? new Date(hoje) : new Date();
+               return new Date(d.getFullYear(), d.getMonth(), d.getDate()); })();
+  const dias = Math.round((fim - ini) / 86400000);
   return { dias, semanas: Math.max(0, Math.floor(dias / 7)) };
 }
 

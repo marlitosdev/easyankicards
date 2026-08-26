@@ -1648,8 +1648,14 @@ function edTabelaComparativa(linhas) {
 
     const prazo = document.createElement("span");
     prazo.className = "ac-c c1";
-    prazo.textContent = l.dias === null ? t("hub_prazo_sem") : t("hub_prazo_dias", { n: l.dias });
-    if (l.dias !== null && l.dias <= 30) prazo.classList.add("urgente");
+    /* TRÊS ESTADOS, NÃO DOIS. "sem data" e "já passou" são coisas
+     * diferentes, e tratar as duas como "dias === null" fazia uma prova
+     * encerrada aparecer como se nunca tivesse tido data marcada. */
+    prazo.textContent = l.grupo === "encerrado"
+      ? t("hub_prazo_ha_dias", { n: l.desde })
+      : (l.dias === null ? t("hub_prazo_sem") : t("hub_prazo_dias", { n: l.dias }));
+    if (l.grupo === "encerrado") prazo.classList.add("passou");
+    else if (l.dias !== null && l.dias <= 30) prazo.classList.add("urgente");
 
     const cob = document.createElement("span");
     cob.className = "ac-c c2"; cob.textContent = l.pesoEstudado + "%";
@@ -2198,8 +2204,20 @@ function edRender() {
   });
   const itens = plano.itens;
   const s = semanasAte($("edProva").value);
-  $("edRestam").textContent = s
-    ? t("ed_restam", { s: s.semanas, d: s.dias }) : t("ed_sem_data");
+  /* PROVA QUE JÁ FOI NÃO TEM "SEMANAS RESTANTES".
+   * Dizia "0 semanas até a prova (−6 dias)" — dois números errados na
+   * mesma linha. Agora diz o que é: já foi, há quanto tempo, e que o
+   * plano abaixo virou retrato em vez de cronograma. */
+  const bRestam = $("edRestam");
+  if (plano.vencida) {
+    bRestam.textContent = t("ed_prova_passou", {
+      d: $("edProva").value, n: plano.diasDesde });
+    if (bRestam.classList) bRestam.classList.add("ed-passou");
+  } else {
+    bRestam.textContent = s
+      ? t("ed_restam", { s: s.semanas, d: s.dias }) : t("ed_sem_data");
+    if (bRestam.classList) bRestam.classList.remove("ed-passou");
+  }
   $("edResumo").textContent = itens.length
     ? t("ed_resumo", { d: r.disciplinas.length, t: plano.total, f: plano.feitos,
                        p: plano.peso.pctFeito })

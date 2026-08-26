@@ -42,13 +42,98 @@ function minutosDaSemana() {
   }, 0);
 }
 
+/* A VIRADA DE PÁGINA — o que aparece no lugar da agenda quando a última
+ * prova já passou.
+ *
+ * Três coisas, nesta ordem, porque é a ordem em que elas perdem valor:
+ *
+ * 1. QUE A PROVA PASSOU. É a explicação que faltava.
+ * 2. MARCAR O QUE CAIU. Enquanto está fresco. Esta informação é a mais
+ *    cara que o app pode guardar — é a única amostra real do que a banca
+ *    cobra — e ela evapora em dias. Por isso vem antes de qualquer
+ *    conversa sobre planejar o próximo.
+ * 3. O PRÓXIMO EDITAL. Criar ou abrir.
+ *
+ * O edital encerrado NÃO é apagado nem arquivado sozinho. Ele é a fonte
+ * do reaproveitamento no concurso seguinte: o diário dele é o que
+ * responde "o que eu já estudei disto?". */
+function hubViradaDePagina(encerrados) {
+  const cx = document.createElement("div");
+  cx.className = "ed-caixa ed-virada";
+
+  const tit = document.createElement("div");
+  tit.className = "ed-caixa-tit";
+  tit.textContent = t("hub_virada_tit");
+  cx.append(tit);
+
+  encerrados.slice(0, 3).forEach((e) => {
+    const s = edSituacao(e);
+    const l = document.createElement("div");
+    l.className = "nota";
+    l.textContent = t("hub_virada_qual", {
+      n: e.nome, d: s.prova, h: s.desde,
+    });
+    cx.append(l);
+  });
+
+  const dica = document.createElement("p");
+  dica.className = "nota ed-virada-dica";
+  dica.textContent = t("hub_virada_marcar");
+  cx.append(dica);
+
+  const acoes = document.createElement("div");
+  acoes.className = "ed-virada-acoes";
+
+  const bProva = document.createElement("button");
+  bProva.className = "btn btn-verde";
+  bProva.id = "btnViradaMarcar";
+  bProva.textContent = t("hub_virada_btn_marcar");
+  bProva.title = t("hub_virada_btn_marcar_ajuda");
+  bProva.onclick = () => {
+    /* abre o edital que acabou de ser prestado: é lá que estão os
+     * tópicos para marcar o que caiu */
+    if (typeof hubAbrirEdital === "function") hubAbrirEdital(encerrados[0].id);
+  };
+
+  const bNovo = document.createElement("button");
+  bNovo.className = "btn btn-cinza";
+  bNovo.id = "btnViradaNovo";
+  bNovo.textContent = t("hub_virada_btn_novo");
+  bNovo.title = t("hub_virada_btn_novo_ajuda");
+  bNovo.onclick = () => { if (typeof hubNovo === "function") hubNovo(); };
+
+  acoes.append(bProva, bNovo);
+  cx.append(acoes);
+  try { reg("EDITAL", "virada de página mostrada", encerrados[0].nome); } catch (e) {}
+  return cx;
+}
+
 function hubPintarAgenda() {
   const box = document.getElementById("edAgendaTopo");
   if (!box) return;
   box.innerHTML = "";
 
   let ativos = editais.filter((e) => edSituacao(e).grupo !== "encerrado");
-  if (!ativos.length) { box.hidden = true; return; }
+
+  /* A AGENDA NÃO PODE SUMIR SEM DIZER POR QUÊ.
+   *
+   * Antes: `if (!ativos.length) { box.hidden = true; return; }`. No dia
+   * seguinte à prova, o único edital passava a ser "encerrado", a lista
+   * de ativos ficava vazia e o painel inteiro se escondia. Quem abrisse
+   * o app na manhã de 31 de agosto encontraria a agenda simplesmente
+   * ausente — sem aviso, sem "a prova foi ontem", sem oferta de abrir o
+   * próximo. Some a tela e some a explicação junto.
+   *
+   * O dia seguinte à prova é, além disso, o momento de maior valor do
+   * semestre: é quando você ainda lembra o que caiu. Uma tela vazia
+   * naquele instante desperdiça exatamente essa janela. */
+  if (!ativos.length) {
+    const encerrados = editais.filter((e) => edSituacao(e).grupo === "encerrado");
+    if (!encerrados.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.append(hubViradaDePagina(encerrados));
+    return;
+  }
   /* o filtro só existe quando há mais de um: com um edital só, oferecer
    * "ver só este" é um botão que não muda nada */
   const todosAtivos = ativos;
@@ -589,7 +674,9 @@ function hubCartao(e) {
 
   const prazo = document.createElement("span");
   prazo.className = "hub-prazo hub-prazo-" + e.sit.grupo;
-  if (e.sit.grupo === "encerrado") prazo.textContent = t("hub_prazo_passou");
+  if (e.sit.grupo === "encerrado") {
+    prazo.textContent = t("hub_prazo_ha_dias", { n: e.sit.desde });
+  }
   else if (e.sit.dias === null) prazo.textContent = t("hub_prazo_sem");
   else prazo.textContent = t("hub_prazo_dias", { n: e.sit.dias });
   topo.append(prazo);
