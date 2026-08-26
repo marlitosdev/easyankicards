@@ -59,6 +59,47 @@ function edPartes(linha) {
  * e portanto o padrão certo.
  * ================================================================== */
 
+/* =====================================================================
+ * BLOCOS COM NOTA MÍNIMA
+ *
+ * Peso e mínimo respondem perguntas diferentes, e confundi-los é o erro
+ * que elimina candidato bem preparado:
+ *
+ *   PESO diz ONDE ESTÃO OS PONTOS. Estudar o que tem peso alto maximiza
+ *   a nota total.
+ *
+ *   MÍNIMO diz ONDE ESTÁ A ELIMINAÇÃO. O TCE-PE exigia acerto mínimo por
+ *   grupo de disciplinas: zerar um bloco pequeno reprova, mesmo com nota
+ *   total altíssima.
+ *
+ * Uma disciplina de peso baixo dentro de um bloco com corte não é um
+ * problema de PONTOS — é um problema de SOBREVIVÊNCIA. Otimizar só pelo
+ * peso leva direto a negligenciá-la, que foi exatamente o que aconteceu.
+ *
+ * Sintaxe (a linha "&" abre um bloco; as disciplinas seguintes são dele
+ * até o próximo "&"):
+ *
+ *   & Conhecimentos Básicos | minimo: 50%
+ *   @ Português :: 10q
+ *   @ Raciocínio Lógico :: 5q
+ *   & Conhecimentos Específicos | minimo: 60%
+ *   @ Direito Financeiro :: 20q
+ *
+ * O mínimo aceita "50%" (do bloco) ou "12" (acertos absolutos). Sem
+ * blocos declarados, tudo continua como sempre foi: um edital plano.
+ * ================================================================== */
+const ED_BLOCO_RE = /^&\s*(.+)$/;
+
+function edMinimo(txt) {
+  const s = String(txt || "").trim();
+  if (!s) return null;
+  const pct = s.match(/^(\d{1,3}(?:[.,]\d+)?)\s*%$/);
+  if (pct) return { tipo: "pct", valor: Number(pct[1].replace(",", ".")) };
+  const abs = s.match(/^(\d{1,4}(?:[.,]\d+)?)\s*(?:qu?e?s?t?[õo]?e?s?|acertos?|pontos?|p)?$/i);
+  if (abs) return { tipo: "abs", valor: Number(abs[1].replace(",", ".")) };
+  return null;
+}
+
 const ED_FASE2_RE = /^fase\s*2\b\s*:?\s*(.*)$/i;
 /* "!d" ou "!d4"; sempre no fim do campo, para não competir com o texto
  * do motivo — que é prosa livre e não pode ganhar sintaxe. */
@@ -80,8 +121,45 @@ function edMarcaFase2(motivo) {
 /* Peso ausente vale 3 (meio da escala). Peso fora de 1..5 é registrado como
  * problema, mas o valor é preso na faixa em vez de descartado — perder o
  * tópico seria pior do que aceitar um peso torto. */
+/* PESO DA DISCIPLINA EM QUESTÕES OU PONTOS.
+ *
+ * A escala de 1 a 5 é um juízo comprimido, e é a coisa certa para o
+ * TÓPICO — "isto cai muito dentro da disciplina" é opinião informada,
+ * não número. Para a DISCIPLINA, porém, o edital costuma dizer o número
+ * exato: Português 10 questões, Direito Financeiro 20. Espremer 10 e 20
+ * numa escala de cinco pontos perde a razão real (2:1) e produz uma
+ * "fatia da prova" estimada onde poderia ser exata.
+ *
+ * Acrescentar 1,5 e 2,5 dobra a resolução e mantém a compressão. Aceitar
+ * o número de questões elimina a compressão — que é o que a pergunta
+ * "quero pesos fiéis à pontuação" está de fato pedindo.
+ *
+ *   @ Português :: 10q        dez questões
+ *   @ Direito Financeiro :: 45p   quarenta e cinco pontos
+ *   @ Ética :: 3              a escala de sempre, ainda válida
+ *
+ * Decimais na escala de 1 a 5 continuam aceitos (2,5 sempre funcionou);
+ * eles só não resolvem o problema de fidelidade sozinhos. */
+function edPesoAbs(txt) {
+  const m = String(txt === undefined ? "" : txt).trim()
+    .match(/^(\d{1,4}(?:[.,]\d+)?)\s*(q|quest[õo]es?|p|pontos?)$/i);
+  if (!m) return null;
+  const u = m[2].toLowerCase().charAt(0) === "q" ? "q" : "p";
+  const v = Number(m[1].replace(",", "."));
+  if (!isFinite(v) || v <= 0) return null;
+  return { valor: v, unidade: u };
+}
+
 function edPeso(txt, achados, linha) {
   if (txt === undefined || txt === "") return { peso: 3, herdado: true };
+  const abs = edPesoAbs(txt);
+  if (abs) {
+    /* O PESO 1..5 CONTINUA EXISTINDO, derivado — o resto do app depende
+     * dele (faixas de tempo, prioridade do tópico). O que muda é que a
+     * FATIA da prova passa a ser calculada do número absoluto, e aí ela
+     * deixa de ser estimativa. */
+    return { peso: 3, herdado: false, abs: abs.valor, unidade: abs.unidade };
+  }
   const n = Number(String(txt).replace(",", "."));
   if (!isFinite(n)) {
     achados.push({ linha, tipo: "peso_invalido", txt: String(txt) });
@@ -101,8 +179,10 @@ function lerEdital(raw) {
    * fosse uma data faria o painel prometer certeza que não há. */
   const cfg = { concurso: "", prova: "", horas: 10, previsto: "", fase: "pos" };
   const disciplinas = [];
+  const blocos = [];
   const achados = [];
   let atual = null;
+  let blocoAtual = null;
 
   linhas.forEach((l, i) => {
     const n = i + 1;
@@ -147,14 +227,39 @@ function lerEdital(raw) {
       return;
     }
 
+    const mb = s.match(ED_BLOCO_RE);
+    if (mb) {
+      const partes = mb[1].split("|");
+      const nome = (partes[0] || "").trim();
+      let min = null;
+      partes.slice(1).forEach((x) => {
+        const i2 = x.indexOf(":");
+        const k = (i2 < 0 ? x : x.slice(0, i2)).trim();
+        const v = (i2 < 0 ? "" : x.slice(i2 + 1)).trim();
+        if (/^m[íi]nimo|^min|^corte/i.test(k)) min = edMinimo(v);
+      });
+      blocoAtual = { nome, minimo: min, linha: n, disciplinas: [] };
+      if (!nome) achados.push({ linha: n, tipo: "bloco_sem_nome", txt: s });
+      /* BLOCO SEM MÍNIMO NÃO É ERRO — pode ser só agrupamento. Mas é
+       * quase sempre esquecimento, e o mínimo é justamente a informação
+       * que evita a eliminação: vira aviso, não some calado. */
+      if (nome && !min) achados.push({ linha: n, tipo: "bloco_sem_minimo", txt: nome });
+      blocos.push(blocoAtual);
+      return;
+    }
+
     const md = s.match(ED_DISC_RE);
     if (md) {
       const p = edPartes(md[1]);
-      const { peso } = edPeso(p[1], achados, n);
+      const { peso, abs, unidade } = edPeso(p[1], achados, n);
       /* terceiro campo da disciplina: a confiança, usada só no pré-edital.
        * "@ Auditoria :: 5 :: provavel" */
       const conf = (typeof preConfiancaDe === "function") ? preConfiancaDe(p[2]) : "";
-      atual = { nome: p[0], peso, linha: n, topicos: [], confianca: conf };
+      atual = { nome: p[0], peso, linha: n, topicos: [], confianca: conf,
+                /* o número real do edital, quando ele foi escrito */
+                abs: abs || null, unidade: unidade || "",
+                bloco: blocoAtual ? blocoAtual.nome : "" };
+      if (blocoAtual) blocoAtual.disciplinas.push(p[0]);
       if (!p[0]) achados.push({ linha: n, tipo: "disciplina_sem_nome", txt: s });
       if (disciplinas.some((d) => d.nome.toLowerCase() === p[0].toLowerCase()))
         achados.push({ linha: n, tipo: "disciplina_repetida", txt: p[0] });
@@ -184,7 +289,7 @@ function lerEdital(raw) {
     achados.push({ linha: n, tipo: "linha_ignorada", txt: s.slice(0, 80) });
   });
 
-  return { cfg, disciplinas, achados, linhas: linhas.length };
+  return { cfg, disciplinas, blocos, achados, linhas: linhas.length };
 }
 
 /* ------------------------------------------------------------------
@@ -373,11 +478,27 @@ function montarPlano(r, opcoes) {
   /* Fatia de cada disciplina na prova: entra no motivo porque é o argumento
    * mais forte a favor de estudar aquilo agora. */
   const fatia = {};
-  const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
-  todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
-  Object.keys(fatia).forEach((k) => {
-    fatia[k] = Math.round((fatia[k] / totalBruto) * 100);
-  });
+  /* FATIA EXATA quando o edital trouxe os números.
+   * Somar "peso da disciplina × peso do tópico" estima a importância;
+   * quando o edital diz "Português 10 questões, Financeiro 20", a razão
+   * é 2:1 e ponto final — e a estimativa só pode errar. Basta UMA
+   * disciplina sem número para a conta exata deixar de valer para todas,
+   * porque a soma teria escalas misturadas. */
+  const comAbs = (r.disciplinas || []).filter((d) => d.abs > 0);
+  const exata = comAbs.length > 0
+    && comAbs.length === (r.disciplinas || []).length;
+  if (exata) {
+    const somaAbs = comAbs.reduce((a, d) => a + d.abs, 0) || 1;
+    comAbs.forEach((d) => {
+      fatia[d.nome] = Math.round((d.abs / somaAbs) * 100);
+    });
+  } else {
+    const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
+    todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
+    Object.keys(fatia).forEach((k) => {
+      fatia[k] = Math.round((fatia[k] / totalBruto) * 100);
+    });
+  }
 
   /* A fila tem duas fontes: o que nunca foi estudado e o que já passou do
    * prazo de revisão. Revisão vencida entra ANTES de assunto novo de peso
@@ -454,6 +575,11 @@ function montarPlano(r, opcoes) {
      * (que também é o valor de uma prova daqui a três dias) */
     vencida,
     diasDesde: vencida && s ? Math.abs(s.dias) : null,
+    /* CUMPRIMENTO DOS MÍNIMOS — a pergunta "posso ser eliminado?", que é
+     * diferente de "quanto da prova eu cobri?" */
+    blocos: edCumprimentoBlocos(r, todos),
+    /* a fatia da prova é EXATA quando o edital trouxe os números */
+    fatiaExata: exata,
     /* qual fase este plano representa, e o que existe do outro lado */
     fase,
     prazo,
@@ -492,6 +618,78 @@ function somarPeso(itens) {
     pctFeito: Math.round((feito / total) * 100),
     pctRevisado: Math.round((revisado / total) * 100),
   };
+}
+
+/* =====================================================================
+ * CUMPRIMENTO DOS MÍNIMOS POR BLOCO
+ *
+ * O que este cálculo responde é diferente do resto do app. Em todo lugar
+ * a pergunta é "quanto da prova eu já cobri?" — aqui é "existe algum
+ * bloco em que eu posso ser ELIMINADO mesmo indo bem no total?".
+ *
+ * UMA HONESTIDADE NECESSÁRIA: o mínimo do edital é de ACERTOS, e o app
+ * não sabe quanto você vai acertar — sabe quanto você COBRIU. São coisas
+ * diferentes, e prometer a primeira medindo a segunda seria mentira.
+ *
+ * Então a régua aqui é explícita: cobertura abaixo do mínimo é risco
+ * DIRETO (não dá para acertar 50% de um bloco que você não estudou), e
+ * cobertura acima do mínimo é apenas a condição necessária — não a
+ * suficiente. A tela diz isso com todas as letras.
+ *
+ * A folga existe pelo mesmo motivo: cobrir exatamente 50% para um mínimo
+ * de 50% não é ficar em cima da linha, é ficar abaixo dela na prática,
+ * porque ninguém acerta tudo o que estudou.
+ * ================================================================== */
+const ED_FOLGA_MINIMO = 1.25;   /* cobrir 25% acima do corte é o "seguro" */
+
+function edCumprimentoBlocos(r, itens) {
+  const blocos = (r && r.blocos) || [];
+  if (!blocos.length) return [];
+  const porDisc = {};
+  (r.disciplinas || []).forEach((d) => { porDisc[d.nome] = d; });
+
+  return blocos.map((b) => {
+    const nomes = b.disciplinas || [];
+    const meus = (itens || []).filter((i) => nomes.indexOf(i.disciplina) >= 0);
+    const total = meus.reduce((a, i) => a + i.bruto, 0);
+    const feito = meus.filter((i) => i.feito).reduce((a, i) => a + i.bruto, 0);
+    const pct = total ? Math.round((feito / total) * 100) : 0;
+
+    /* o peso do bloco na prova inteira: um bloco com corte que vale 15%
+     * da prova é um risco diferente de um que vale 60% */
+    const totalGeral = (itens || []).reduce((a, i) => a + i.bruto, 0) || 1;
+    const fatia = Math.round((total / totalGeral) * 100);
+
+    /* o mínimo em PERCENTUAL do bloco, seja como veio escrito */
+    let minPct = null;
+    if (b.minimo) {
+      if (b.minimo.tipo === "pct") minPct = b.minimo.valor;
+      else {
+        /* absoluto: precisa do número de questões do bloco para virar
+         * percentual. Sem os números do edital, não dá — e inventar uma
+         * conversão seria pior que dizer que não sabe. */
+        const q = nomes.reduce((a, x) => {
+          const d = porDisc[x];
+          return a + (d && d.abs ? d.abs : 0);
+        }, 0);
+        minPct = q ? Math.round((b.minimo.valor / q) * 100) : null;
+      }
+    }
+
+    const abaixo = minPct !== null && pct < minPct;
+    const apertado = minPct !== null && !abaixo
+      && pct < Math.min(100, minPct * ED_FOLGA_MINIMO);
+
+    return {
+      nome: b.nome, minimo: b.minimo, minPct, fatia,
+      disciplinas: nomes, topicos: meus.length,
+      feitos: meus.filter((i) => i.feito).length,
+      total, feito, pct, abaixo, apertado,
+      /* quanto falta cobrir para sair do vermelho, em PESO — é o número
+       * que responde "e agora, quanto eu estudo disto?" */
+      faltaPeso: abaixo ? Math.max(0, (minPct / 100) * total - feito) : 0,
+    };
+  });
 }
 
 /* ------------------------------------------------------------------

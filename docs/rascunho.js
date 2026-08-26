@@ -30,7 +30,29 @@ const RS_CANETAS = [
   { id: "vermelha", cor: "#d62828", larg: 2.6 },
   { id: "verde",    cor: "#128a3a", larg: 2.6 },
 ];
-const RS_RAIO_BORRACHA = 15;   // em pixels da tela do desenho
+/* TAMANHOS DE BORRACHA.
+ *
+ * Um raio fixo servia mal aos dois usos que existem de verdade: tirar um
+ * traço fino no meio de uma conta pede precisão, e limpar meia folha
+ * pede área. Com um só, o primeiro caso apaga o vizinho e o segundo vira
+ * vinte passadas.
+ *
+ * A lista é compartilhada com a película do enunciado: são o mesmo gesto
+ * em duas superfícies, e ter tamanhos diferentes em cada uma seria pedir
+ * para a pessoa reaprender a ferramenta ao mudar de lugar. */
+const RS_BORRACHAS = [
+  { id: "fina", raio: 7 },
+  { id: "media", raio: 15 },
+  { id: "grossa", raio: 34 },
+];
+let rsBorrachaRaio = 15;
+
+function rsBorrachaDefinir(raio) {
+  const v = Number(raio) || 15;
+  rsBorrachaRaio = Math.max(4, Math.min(60, v));
+  rsPintarBorrachas();
+  return rsBorrachaRaio;
+}
 
 let rsQid = null;        // questão a que este rascunho pertence
 let rsTracos = [];       // [{cor, larg, pontos:[[x,y],...]}]
@@ -171,7 +193,7 @@ function rsApagarEm(x, y) {
   const sobrou = [];
   rsTracos.forEach((tr) => {
     const toca = tr.pontos.some((p) =>
-      Math.abs(p[0] - x) <= RS_RAIO_BORRACHA && Math.abs(p[1] - y) <= RS_RAIO_BORRACHA);
+      Math.abs(p[0] - x) <= rsBorrachaRaio && Math.abs(p[1] - y) <= rsBorrachaRaio);
     if (toca) rsLixo.push({ tipo: "traco", tracos: [tr] });
     else sobrou.push(tr);
   });
@@ -232,6 +254,7 @@ function rsPintar() {
   });
   if (rsBotoes.borracha) rsBotoes.borracha.className =
     "btn-min rs-borracha" + (rsBorracha ? " rs-sel" : "");
+  rsPintarBorrachas();
   const av = $("rsAviso");
   if (av) {
     av.textContent = !rsTracos.length ? ""
@@ -290,6 +313,13 @@ async function rsGuardarSeSair() {
 
 /* acesso as ferramentas por nome — o teste precisa apertar a caneta
  * vermelha do mesmo jeito que um dedo aperta */
+function rsPintarBorrachas() {
+  RS_BORRACHAS.forEach((x) => {
+    const b = rsBotoes["b_" + x.id];
+    if (b) b.className = "rs-bsize" + (x.raio === rsBorrachaRaio ? " rs-sel" : "");
+  });
+}
+
 function rsFerramenta(nome) { return rsBotoes[nome] || null; }
 
 function rsIniciar() {
@@ -319,6 +349,33 @@ function rsIniciar() {
     bb.onclick = () => { rsBorracha = !rsBorracha; rsPintar(); };
     rsBotoes.borracha = bb;
     fer.append(bb);
+
+    /* OS TAMANHOS DA BORRACHA, ao lado dela — e não escondidos num menu.
+     * Trocar de tamanho acontece no meio do gesto ("errei uma linha, não
+     * a conta inteira"); um menu a mais nesse ponto faz a pessoa desistir
+     * e apagar tudo. O botão é redondo e do tamanho que ele apaga: a
+     * amostra é o próprio botão. */
+    RS_BORRACHAS.forEach((x) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = "btnRsBorracha_" + x.id;
+      b.className = "rs-bsize";
+      b.title = t("rs_borracha_tam_" + x.id);
+      b.setAttribute("aria-label", t("rs_borracha_tam_" + x.id));
+      const d = Math.round(6 + x.raio * 0.32);
+      b.style.width = d + "px";
+      b.style.height = d + "px";
+      b.onclick = () => {
+        rsBorrachaDefinir(x.raio);
+        /* escolher um tamanho LIGA a borracha: ninguém escolhe o tamanho
+         * de uma ferramenta que não pretende usar em seguida */
+        rsBorracha = true;
+        rsPintar();
+      };
+      rsBotoes["b_" + x.id] = b;
+      fer.append(b);
+    });
+    rsPintarBorrachas();
   }
 
   if ($("btnRsMin")) $("btnRsMin").onclick = () => rsRecolher(rsAberto());
@@ -353,5 +410,7 @@ if (typeof module !== "undefined" && module.exports) {
     rsComecar, rsMover, rsSoltar, rsApagarEm, rsDesfazer, rsLimpar,
     rsSalvarNaQuestao, rsApagarSalvo, rsGuardarSeSair, rsDaQuestao,
     rsQuantosSalvos, rsPintar, rsFerramenta, rsPrecisaPerguntar,
+    RS_BORRACHAS, rsBorrachaDefinir, rsPintarBorrachas,
+    rsBorrachaRaioAtual: () => rsBorrachaRaio,
   };
 }

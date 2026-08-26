@@ -11,7 +11,6 @@
  * ===================================================================== */
 
 let hubFiltro = "";
-let hubSoEste = false;      /* agenda restrita ao edital aberto */
 
 /* ------------------------------------------------------------------
  * AGENDA DA SEMANA — atravessa editais
@@ -137,8 +136,9 @@ function hubPintarAgenda() {
   /* o filtro só existe quando há mais de um: com um edital só, oferecer
    * "ver só este" é um botão que não muda nada */
   const todosAtivos = ativos;
-  if (hubSoEste && edAberto())
-    ativos = ativos.filter((e) => e.id === edAberto().id);
+  /* o filtro por edital manda em quais entram na conta da semana */
+  ativos = ativos.filter((e) => hubEdVisivel(e.id));
+  if (!ativos.length) ativos = todosAtivos;   /* nunca some tudo */
   box.hidden = false;
 
   const cx = document.createElement("div");
@@ -547,28 +547,97 @@ function faDispensadosDaSemana() {
   }, 0);
 }
 
+/* Quem mais precisa saber quais editais estão em vista: o medidor de
+ * horas da semana, que somaria as horas de um concurso escondido e daria
+ * um total que não corresponde ao que está na tela. */
 function hubEditaisNaVista() {
   const ativos = editais.filter((e) => edSituacao(e).grupo !== "encerrado");
-  if (hubSoEste && edAberto()) {
-    const so = ativos.filter((e) => e.id === edAberto().id);
-    if (so.length) return so;
-  }
-  return ativos;
+  const vis = ativos.filter((e) => hubEdVisivel(e.id));
+  return vis.length ? vis : ativos;
+}
+
+/* FILTRO POR EDITAL — escolher QUAIS, não "todos ou o aberto".
+ *
+ * A versão anterior tinha dois problemas que se somavam:
+ *
+ *  · ela só existia quando havia um edital ABERTO. Na tela da agenda,
+ *    que é onde a semana é lida, normalmente não há nenhum aberto — e o
+ *    filtro simplesmente não aparecia;
+ *  · e quando aparecia, oferecia "todos" ou "só o aberto". Com três
+ *    concursos, "ver o TCE e a SEFAZ mas não o ISS" era impossível.
+ *
+ * Como o filtro de DISCIPLINA se alimenta das linhas que sobraram, ele
+ * era arrastado junto: sem conseguir isolar um edital, não havia como
+ * ver só as disciplinas dele.
+ *
+ * Agora é uma escolha por edital, guardada entre sessões — a agenda é a
+ * primeira tela do dia, e refazer a filtragem toda manhã é o tipo de
+ * atrito que faz a pessoa parar de usar o filtro. */
+const HUB_ED_OCULTOS = "eac_ag_editais_ocultos";
+let hubEdOcultos = null;
+
+function hubEdOcultosLer() {
+  if (hubEdOcultos) return hubEdOcultos;
+  try {
+    const v = JSON.parse(localStorage.getItem(HUB_ED_OCULTOS) || "[]");
+    hubEdOcultos = Array.isArray(v) ? v : [];
+  } catch (e) { hubEdOcultos = []; }
+  return hubEdOcultos;
+}
+
+function hubEdOcultosGravar() {
+  try { localStorage.setItem(HUB_ED_OCULTOS, JSON.stringify(hubEdOcultos || [])); }
+  catch (e) {}
+}
+
+function hubEdVisivel(id) { return hubEdOcultosLer().indexOf(String(id)) < 0; }
+
+function hubEdAlternar(id) {
+  const k = String(id);
+  hubEdOcultosLer();
+  const i = hubEdOcultos.indexOf(k);
+  if (i >= 0) hubEdOcultos.splice(i, 1); else hubEdOcultos.push(k);
+  hubEdOcultosGravar();
+}
+
+/* ESCONDER TODOS OS EDITAIS É ESCONDER A AGENDA.
+ * Diferente do filtro de disciplina, aqui não há nada útil no estado
+ * "nenhum": a tela ficaria vazia sem que nada estivesse errado. O último
+ * visível recusa ser desmarcado, e o botão diz por quê. */
+function hubEdSoUmVisivel(todos) {
+  return (todos || []).filter((e) => hubEdVisivel(e.id)).length <= 1;
 }
 
 function hubFiltroEdital(todos) {
-  const aberto = edAberto();
-  if (!aberto || todos.length < 2) { hubSoEste = false; return null; }
+  if (!todos || todos.length < 2) return null;
   const cx = document.createElement("div");
-  cx.className = "ed-agenda-filtro";
-  [[false, "hub_ag_todos"], [true, "hub_ag_so_este"]].forEach(([v, k]) => {
+  cx.className = "ed-agenda-filtro ed-ag-editais";
+
+  todos.forEach((e) => {
+    const on = hubEdVisivel(e.id);
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "ed-ag-opt" + (hubSoEste === v ? " ativa" : "");
-    b.textContent = t(k, { n: aberto.nome });
-    b.onclick = () => { hubSoEste = v; hubPintarAgenda(); };
+    b.className = "ed-ag-opt" + (on ? " ativa" : "");
+    b.textContent = (on ? "✓ " : "") + e.nome;
+    const ultimo = on && hubEdSoUmVisivel(todos);
+    b.title = ultimo ? t("hub_ag_ed_ultimo") : t("hub_ag_ed_ajuda", { n: e.nome });
+    b.onclick = () => {
+      if (ultimo) { try { uiAlert(t("hub_ag_ed_ultimo")); } catch (x) {} return; }
+      hubEdAlternar(e.id);
+      hubPintarAgenda();
+    };
     cx.append(b);
   });
+
+  const escondidos = todos.filter((e) => !hubEdVisivel(e.id)).length;
+  if (escondidos) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ed-ag-opt ed-ag-opt-todas";
+    b.textContent = t("hub_ag_ed_todos", { n: escondidos });
+    b.onclick = () => { hubEdOcultos = []; hubEdOcultosGravar(); hubPintarAgenda(); };
+    cx.append(b);
+  }
   return cx;
 }
 

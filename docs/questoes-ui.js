@@ -531,7 +531,18 @@ function qsUiPintarSessao() {
   const en = document.createElement("div");
   en.className = "qs-enunciado";
   en.textContent = q.enunciado;
-  corpo.append(de, en);
+  corpo.append(de);
+  /* A PELÍCULA ENVOLVE SÓ O ENUNCIADO.
+   * Uma camada por cima das alternativas engoliria os cliques delas — e
+   * responder é o gesto mais importante desta tela. Ela nasce desligada
+   * e, desligada, não intercepta nada: o texto continua selecionável,
+   * que é o que o botão de copiar logo abaixo depende. */
+  try {
+    const env = plEnvolver(en, q.id);
+    corpo.append(env || en);
+    corpo.append(plBarra());
+    corpo.append(plBarraCopiar(q));
+  } catch (e) { corpo.append(en); }
 
   /* HISTÓRICO DESTA QUESTÃO, ANTES DE RESPONDER — SEM ENTREGAR O GABARITO.
    * Saber que já se errou isto duas vezes muda a atenção com que se lê.

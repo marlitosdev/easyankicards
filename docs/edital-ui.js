@@ -237,6 +237,60 @@ function minutosDoTopico(chave) {
   }, 0);
 }
 
+/* =====================================================================
+ * TEMPO DE REVISÃO — uma conta separada, porque é outra coisa
+ *
+ * O defeito: numa linha de REVISÃO, a tela mostrava "1h15 de 30min".
+ * Os dois números existem, e nenhum dos dois está errado sozinho — o
+ * problema é que eles não falam da mesma coisa:
+ *
+ *   1h15  = tudo o que já foi gasto neste tópico desde sempre, incluindo
+ *           o estudo original de semanas atrás;
+ *   30min = o orçamento SÓ DA REVISÃO (metade do tempo de um tópico
+ *           novo, porque revisar custa menos que aprender).
+ *
+ * Compará-los dá "250% cumprido" numa revisão que ainda não começou. É
+ * a mesma família de erro do "1h15 de 30min · 100%" corrigido antes:
+ * dois números verdadeiros postos lado a lado como se fossem
+ * comparáveis.
+ *
+ * A régua certa para uma revisão é o tempo gasto DEPOIS da última vez em
+ * que o tópico foi dado por estudado. É isso que estas funções separam —
+ * e é isso que permite responder "quanto de revisão eu já cumpri?", que
+ * antes não tinha resposta em lugar nenhum do app.
+ * ================================================================== */
+
+/* MINUTOS DE REVISÃO = o que foi registrado COMO revisão.
+ *
+ * Cheguei a escrever isto com aritmética de datas — "o tempo gasto
+ * depois da última conclusão". Era rebuscado e ambíguo: a própria sessão
+ * que conclui a revisão fica de fora do intervalo, e o número zerava
+ * justamente quando a revisão acabava de ser feita.
+ *
+ * O app já distingue os dois gestos no momento do registro: estudar um
+ * tópico novo entra como "feito", reestudar um já concluído entra como
+ * "revisado". A informação sempre esteve lá; bastava somá-la. */
+function minutosDeRevisao(chave) {
+  return (edDiario || []).reduce((a, x) => {
+    if (!x || x.a !== "revisado") return a;
+    const k = x.c || (typeof matChave === "function" ? matChave(x.disc, x.n) : "");
+    return k === chave ? a + (Number(x.m) || 0) : a;
+  }, 0);
+}
+
+/* A data do primeiro "feito" — quando o tópico foi aprendido. É o que dá
+ * sentido ao total ("1h15 ao todo, desde 18/08"). */
+function ultimaConclusao(chave) {
+  let ult = "";
+  (edDiario || []).forEach((x) => {
+    if (!x || x.a !== "feito" || !x.d || x.d === "?") return;
+    const k = x.c || (typeof matChave === "function" ? matChave(x.disc, x.n) : "");
+    if (k !== chave) return;
+    if (!ult || x.d > ult) ult = x.d;
+  });
+  return ult;
+}
+
 /* FATOR DE REALIDADE — quanto o plano erra, medido pelo que já aconteceu.
  *
  * O plano reparte as horas da semana por peso: "Direito Financeiro vale
@@ -378,7 +432,13 @@ function edLinhaTopico(i, semDisciplina) {
    * matéria, e a pessoa chega na prova com um terço do edital que a tela
    * jurava estar coberto. Esconder o excedente esconde exatamente o dado
    * que denuncia isso. */
-  const feitoMin = minutosDoTopico(i.chave);
+  /* NUMA REVISÃO, A CONTA É OUTRA.
+   * O orçamento da linha (i.minutos) é o da revisão — metade do de um
+   * tópico novo. Medir contra ele o tempo de TODA a vida do tópico dava
+   * "1h15 de 30min" numa revisão que sequer tinha começado. */
+  const totalMin = minutosDoTopico(i.chave);
+  const desdeQuando = i.ehRevisao ? ultimaConclusao(i.chave) : "";
+  const feitoMin = i.ehRevisao ? minutosDeRevisao(i.chave) : totalMin;
   const pctReal = i.minutos ? Math.round((feitoMin / i.minutos) * 100) : 0;
   const pctT = Math.min(100, pctReal);
   const excedeu = pctReal > 115;      /* folga: 34min de 30min não é notícia */
@@ -398,14 +458,33 @@ function edLinhaTopico(i, semDisciplina) {
    * metade" — e "25min de 1h" é uma decisão diferente de "50min de 1h".
    * Só aparece quando há tempo registrado: escrever "0min de 1h · 0%" em
    * 230 linhas seria ruído em cima do que ainda não começou. */
-  if (feitoMin > 0) {
+  /* NUMA REVISÃO A LINHA APARECE MESMO EM ZERO.
+   * "0 de 30min de revisão" é exatamente a resposta para "quanto de
+   * revisão eu já cumpri?" — e esconder o zero deixaria a pergunta sem
+   * resposta justamente quando ela mais importa. */
+  if (feitoMin > 0 || i.ehRevisao) {
     const num = document.createElement("div");
     num.className = "it-num" + (excedeu ? " excedeu" : (pctT >= 100 ? " cheio" : ""));
-    num.textContent = excedeu
+    num.textContent = (excedeu
       ? t("ed_it_num_mais", { f: horasTexto(feitoMin), p: horasTexto(i.minutos),
           extra: horasTexto(feitoMin - i.minutos) })
-      : t("ed_it_num", { f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
+      : t("ed_it_num", { f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT }))
+      + (i.ehRevisao ? " " + t("ed_it_de_revisao") : "");
     meio.append(num);
+  }
+  /* O TEMPO TOTAL CONTINUA VISÍVEL — em outra linha, e nomeado.
+   * Ele é informação boa ("já pus 1h15 neste tópico ao todo"); o erro
+   * era usá-lo como se fosse o tempo da revisão. Numa revisão que ainda
+   * não começou, esta é a única linha que aparece. */
+  if (i.ehRevisao && totalMin > 0) {
+    const tot = document.createElement("div");
+    tot.className = "it-num it-num-total";
+    tot.textContent = t("ed_it_total_antes", {
+      f: horasTexto(totalMin),
+      d: desdeQuando ? t("ed_it_desde", { d: desdeQuando }) : "",
+    });
+    tot.title = t("ed_it_total_ajuda");
+    meio.append(tot);
   }
 
   /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela
@@ -1737,6 +1816,104 @@ function abrirDisciplina(nome) {
 
 let edCards = {};
 
+/* =====================================================================
+ * O PAINEL DOS MÍNIMOS
+ *
+ * Desenho pensado para uma leitura só, de relance, respondendo na ordem:
+ *
+ *   1. Estou em risco? — a cor e o rótulo do bloco.
+ *   2. Quanto falta?   — a distância entre a barra e a linha do corte.
+ *   3. Onde estudar?   — as disciplinas do bloco, listadas.
+ *
+ * A escolha visual que faz o painel funcionar é a LINHA DO CORTE
+ * desenhada dentro da própria barra. Duas barras lado a lado (coberto e
+ * mínimo) obrigam a comparar dois comprimentos, e comparar comprimentos
+ * separados é justamente o que o olho faz mal. Com a linha por cima, a
+ * pergunta vira binária: a barra passou do risco, ou não passou.
+ *
+ * A ordem é a do risco, não a do edital: o bloco em que você pode ser
+ * eliminado vem primeiro, mesmo sendo o menor da prova.
+ * ================================================================== */
+function edPintarBlocos(plano) {
+  const blocos = (plano && plano.blocos) || [];
+  const comMin = blocos.filter((b) => b.minPct !== null);
+  if (!comMin.length) return null;
+
+  const cx = document.createElement("div");
+  cx.className = "ed-caixa ed-min-cx";
+
+  const emRisco = comMin.filter((b) => b.abaixo).length;
+  const tit = document.createElement("div");
+  tit.className = "ed-caixa-tit" + (emRisco ? " ed-min-alerta" : "");
+  tit.textContent = emRisco
+    ? t("ed_min_tit_risco", { n: emRisco })
+    : t("ed_min_tit_ok", { n: comMin.length });
+  cx.append(tit);
+
+  const sub = document.createElement("p");
+  sub.className = "nota";
+  /* A RESSALVA VEM JUNTO, não escondida numa ajuda: o mínimo do edital é
+   * de ACERTOS e a barra mede COBERTURA. Estar acima da linha é condição
+   * necessária, não suficiente — e prometer o contrário seria pior que
+   * não ter o painel. */
+  sub.textContent = t("ed_min_ajuda");
+  cx.append(sub);
+
+  /* risco primeiro, depois apertado, depois o resto — e dentro de cada
+   * grupo, o que vale mais na prova na frente */
+  const ordem = comMin.slice().sort((a, b) =>
+    (b.abaixo ? 2 : b.apertado ? 1 : 0) - (a.abaixo ? 2 : a.apertado ? 1 : 0)
+    || b.fatia - a.fatia);
+
+  ordem.forEach((b) => {
+    const li = document.createElement("div");
+    li.className = "ed-min-bloco"
+      + (b.abaixo ? " ed-min-abaixo" : (b.apertado ? " ed-min-apertado" : ""));
+
+    const cab = document.createElement("div");
+    cab.className = "ed-min-cab";
+    const nm = document.createElement("span");
+    nm.className = "ed-min-nome";
+    nm.textContent = b.nome;
+    const est = document.createElement("span");
+    est.className = "ed-min-estado";
+    est.textContent = b.abaixo ? t("ed_min_abaixo")
+      : (b.apertado ? t("ed_min_apertado") : t("ed_min_ok"));
+    cab.append(nm, est);
+    li.append(cab);
+
+    /* A BARRA COM A LINHA DO CORTE POR CIMA. */
+    const barra = document.createElement("div");
+    barra.className = "ed-min-barra";
+    const fill = document.createElement("div");
+    fill.className = "ed-min-fill";
+    fill.style.width = Math.min(100, b.pct) + "%";
+    const corte = document.createElement("div");
+    corte.className = "ed-min-corte";
+    corte.style.left = Math.min(100, b.minPct) + "%";
+    corte.title = t("ed_min_corte", { p: b.minPct });
+    barra.append(fill, corte);
+    barra.title = t("ed_min_barra", { c: b.pct, m: b.minPct, n: b.nome });
+    li.append(barra);
+
+    const num = document.createElement("div");
+    num.className = "ed-min-num";
+    num.textContent = t("ed_min_num", {
+      c: b.pct, m: b.minPct, f: b.feitos, tt: b.topicos, fatia: b.fatia });
+    li.append(num);
+
+    /* ONDE ESTUDAR: as disciplinas do bloco. Sem isto, o painel diz que
+     * há risco e não diz do quê — e a pessoa volta a olhar só o peso. */
+    const dl = document.createElement("div");
+    dl.className = "nota ed-min-discs";
+    dl.textContent = t("ed_min_discs", { d: (b.disciplinas || []).join(", ") });
+    li.append(dl);
+
+    cx.append(li);
+  });
+  return cx;
+}
+
 function edPintarPainel(r, plano) {
   try { vrAtualizarBotao(); } catch (e) {}
   const box = $("edPainel");
@@ -1783,6 +1960,14 @@ function edPintarPainel(r, plano) {
    * da agenda, no topo da tela, já diz — e com o escopo certo (todos os
    * editais), enquanto aqui era só deste. */
   box.append(topo);
+
+  /* -------- os mínimos por bloco, LOGO ABAIXO DA IDENTIDADE --------
+   * Vem antes de tudo o que fala de peso, e de propósito: peso é uma
+   * questão de quanto você pontua, mínimo é uma questão de você ser ou
+   * não eliminado. Quem lê a tela de cima para baixo tem de encontrar a
+   * eliminação primeiro. */
+  const pBloc = edPintarBlocos(plano);
+  if (pBloc) box.append(pBloc);
 
   /* -------- esta semana MORA NO TOPO --------
    * Até a v8.69 existiam DUAS "Agenda da semana": esta, do edital aberto, e
