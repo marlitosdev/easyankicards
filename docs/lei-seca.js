@@ -262,6 +262,58 @@ function leiBlocos(texto) {
   }));
 }
 
+/* ---------------------------------------------------------------------
+ * MEXER NUM ARTIGO SEM MEXER NA LEI
+ *
+ * Lei muda. Uma emenda troca a redação de um artigo, outra acrescenta um
+ * artigo no meio. Até aqui, a única forma de acompanhar isso era abrir a
+ * lei inteira num campo de texto e caçar a linha certa entre centenas —
+ * com o risco, a cada vez, de apagar sem querer o artigo vizinho ou uma
+ * marca colorida que estava três parágrafos acima.
+ *
+ * Estas duas funções trabalham por ENDEREÇO, não por rolagem: sabem
+ * exatamente onde o artigo começa e termina, e devolvem o texto inteiro
+ * com só aquele pedaço trocado. Tudo o mais — marcas, artigos vizinhos,
+ * cabeçalhos de capítulo — fica byte por byte como estava.
+ * ------------------------------------------------------------------ */
+
+function leiSubstituirArtigo(texto, num, novo) {
+  const alvo = leiNumNormal(num);
+  const arts = leiArtigos(texto);
+  const a = arts.filter((x) => x.num === alvo)[0];
+  if (!a) return null;
+  const linhas = String(texto || "").split("\n");
+  const corpo = String(novo || "").replace(/\s+$/, "").split("\n");
+  linhas.splice(a.linha - 1, a.linhaFim - a.linha + 1, ...corpo);
+  return linhas.join("\n");
+}
+
+/* ACRESCENTAR NO LUGAR CERTO.
+ * O art. 12-A entra depois do 12 e antes do 13 — colar no fim do arquivo
+ * daria uma lei em que o artigo novo aparece depois do "entra em vigor",
+ * e o modo recitar leria a lei fora de ordem. Aqui o lugar é calculado
+ * pela numeração, e o artigo entra logo abaixo do antecessor. */
+function leiInserirArtigo(texto, novo) {
+  const cru = String(novo || "").replace(/\s+$/, "");
+  const primeiro = leiArtigos(cru)[0];
+  if (!primeiro) return null;             /* não começa com "Art. N" */
+  const arts = leiArtigos(texto);
+  if (arts.some((x) => x.num === primeiro.num)) return null;   /* já existe */
+
+  const linhas = String(texto || "").split("\n");
+  const anterior = arts.filter((x) => x.ordem < primeiro.ordem).pop();
+  const corpo = cru.split("\n");
+  if (!anterior) {
+    /* antes de todos: entra acima do primeiro artigo, preservando o
+     * preâmbulo e a ementa da lei que vêm antes dele */
+    const pos = arts.length ? arts[0].linha - 1 : linhas.length;
+    linhas.splice(pos, 0, ...corpo, "");
+  } else {
+    linhas.splice(anterior.linhaFim, 0, "", ...corpo);
+  }
+  return linhas.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
 /* CITAÇÃO DE ARTIGO DENTRO DE OUTRO TEXTO.
  * Serve para ligar questão ↔ artigo: a questão diz "nos termos do art.
  * 167, IV, da CF", e é isso que permite responder "o art. 167 apareceu
@@ -548,7 +600,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     LEIS_CHAVE, LEI_ART_POR_BLOCO,
     leiNumNormal, leiNumOrdem, leiEmenta, leiArtigos, leiArtigo, leiBlocos,
-    leiCitacoes, leiIdentificar,
+    leiCitacoes, leiIdentificar, leiSubstituirArtigo, leiInserirArtigo,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
     leiParar, leiProgresso, leiBlocoLido, leiBlocosLidos, leisMigrarDe,

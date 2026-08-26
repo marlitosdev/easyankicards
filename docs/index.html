@@ -747,6 +747,57 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   padding:6px 4px;background:transparent}
 #dlgLeiSeca.lei-cheia #leiLeitura, #dlgLeiSeca.lei-cheia #leiRecitar,
 #dlgLeiSeca.lei-cheia #leiTexto{min-height:60vh}
+
+/* AJUDA E REGISTRO — fora da fila de trabalho, e com forma própria.
+ * Redondos e de contorno, contra os retângulos dos botões de ação: a
+ * forma diz "isto não é parte do que você está fazendo agora". */
+.lei-apoio{display:inline-flex;gap:6px;align-items:center}
+.lei-redondo{width:26px;height:26px;border-radius:50%;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--borda);background:transparent;color:var(--sutil);
+  font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;
+  flex:0 0 auto}
+.lei-redondo:hover{border-color:var(--info);color:var(--info)}
+
+/* ESCOLHER O TAMANHO, não subir de dois em dois. Cada botão é escrito
+   no tamanho que aplica — a amostra é o próprio rótulo. */
+.lei-tamanhos{display:flex;flex-wrap:wrap;gap:5px;align-items:baseline;
+  margin:0 0 8px}
+.lei-tam{border:1px solid var(--borda);background:var(--campo);color:var(--sutil);
+  border-radius:7px;padding:2px 9px;cursor:pointer;font-family:inherit;
+  line-height:1.3}
+.lei-tam:hover{border-color:var(--acao)}
+.lei-tam-on{border-color:var(--acao);color:var(--texto);font-weight:700}
+
+/* O NÚMERO DO ARTIGO É BOTÃO — e tem de continuar parecendo o número.
+   Sem moldura até o mouse chegar: 115 molduras seriam 115 ruídos. */
+.lei-art-num{background:none;border:1px solid transparent;padding:1px 5px;
+  border-radius:6px;font-family:inherit;font-weight:800;font-size:12px;
+  color:var(--info);cursor:pointer}
+.lei-art-num:hover{border-color:var(--info)}
+.lei-art-num-parei{color:var(--ok);border-color:var(--ok)}
+.lei-onde-ir{background:none;border:none;padding:0;font-family:inherit;
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* O aviso do artigo cobrado: discreto, e vermelho só quando você erra
+   mais do que acerta nele. */
+.lei-art-cai{font-size:10.5px;color:var(--info);margin-top:5px;
+  border-left:2px solid var(--info);padding-left:7px;line-height:1.45}
+.lei-art-cai-erro{color:var(--erro);border-left-color:var(--erro)}
+
+/* EDIÇÃO POR ARTIGO: a lista à esquerda, o campo à direita. */
+.lei-art-ed{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
+.lei-art-lista{flex:1 1 210px;max-height:46vh;overflow-y:auto;
+  border:1px solid var(--borda);border-radius:9px;padding:5px;
+  background:var(--campo);display:flex;flex-direction:column;gap:2px}
+.lei-art-campo{flex:2 1 320px;display:flex;flex-direction:column}
+.lei-art-item{text-align:left;background:none;border:1px solid transparent;
+  border-radius:6px;padding:5px 8px;font-family:inherit;font-size:11.5px;
+  color:var(--sutil);cursor:pointer;line-height:1.35}
+.lei-art-item:hover{border-color:var(--acao);color:var(--texto)}
+.lei-art-item-on{border-color:var(--acao);background:rgba(124,108,245,.10);
+  color:var(--texto);font-weight:700}
+.lei-art-item-novo{border-style:dashed;border-color:var(--borda);margin-top:4px}
 /* cabeçalho comprido não pode comer a tela inteira num monitor baixo */
 #dlgMaterial .mat-topo, #dlgMaterial .mat-ctrl, #dlgMaterial .mat-barra{
   max-height:24vh;overflow-y:auto}
@@ -3090,19 +3141,25 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
       title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
     <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
-      title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei. O tamanho da letra fica guardado."></button>
-    <button class="btn-min" id="btnLeiMenor" title="Diminui a letra da leitura.">A&#8722;</button>
-    <button class="btn-min" id="btnLeiMaior" title="Aumenta a letra da leitura.">A+</button>
-    <span class="mat-sep"></span>
-    <button class="btn-min" id="btnLeiAjuda" data-i18n="lei_ajuda_btn"
-      title="Explica, um a um, para que serve cada recurso desta janela."></button>
-    <button class="btn-min" id="btnLeiLog" data-i18n="lei_log_btn"
-      title="Mostra só o que aconteceu aqui dentro: o que você marcou, gravou e leu, e os erros. Serve para relatar um problema."></button>
-    <span class="mat-topo-dir">
+      title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei."></button>
+    <button class="btn-min" id="btnLeiMenor" title="Um tamanho de letra abaixo.">A&#8722;</button>
+    <button class="btn-min" id="btnLeiMaior" title="Um tamanho de letra acima.">A+</button>
+    <!-- ajuda e registro ficam FORA da fila de trabalho, à direita e com
+         forma própria: são recursos de quando algo dá errado ou de quando
+         se está aprendendo o app, não de quem está lendo a lei. -->
+    <span class="mat-topo-dir lei-apoio">
+      <button class="lei-redondo" id="btnLeiAjuda"
+        title="Ajuda: explica, um a um, para que serve cada recurso desta janela.">?</button>
+      <button class="lei-redondo" id="btnLeiLog"
+        title="Registro: só o que aconteceu aqui dentro — o que você marcou, gravou e leu, e os erros. Serve para relatar um problema.">☰</button>
       <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
         title="Fecha a lei. Se houver mudança não salva, pergunta antes."></button>
     </span>
   </div>
+
+  <!-- Escolher o tamanho, em vez de subir de dois em dois sem saber
+       onde vai parar. Cada botão é escrito no tamanho que aplica. -->
+  <div class="lei-tamanhos" id="leiTamanhos"></div>
 
   <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
        para a pessoa decorar o app em vez da lei. -->
@@ -3179,6 +3236,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiClozeAplicar" hidden></button>
     <button class="btn btn-cinza" id="btnLeiClozeFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiArt" class="ui-modal diag-modal">
+  <h3 id="leiArtTitulo"></h3>
+  <p class="nota" id="leiArtSub"></p>
+  <div class="lei-art-ed">
+    <!-- a lista à esquerda: trocar de artigo sem fechar e reabrir -->
+    <div class="lei-art-lista" id="leiArtLista"></div>
+    <div class="lei-art-campo">
+      <textarea id="leiArtTexto" rows="12"
+        style="width:100%;box-sizing:border-box"
+        placeholder="Art. 35. Pertencem ao exercício financeiro:&#10;I - as receitas nele arrecadadas;"></textarea>
+      <p class="nota" id="leiArtAviso"></p>
+    </div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiArtSalvar" data-i18n="lei_art_salvar"></button>
+    <button class="btn btn-cinza" id="btnLeiArtFechar" data-i18n="help_close"></button>
+    <button class="btn btn-perigo" id="btnLeiArtApagar" data-i18n="lei_art_apagar"
+      title="Retira este artigo da lei. Mostra o texto antes de perguntar."></button>
   </div>
 </dialog>
 
