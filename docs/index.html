@@ -834,6 +834,27 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura .qp-cm[open] > summary::before{content:"▾ "}
 .mat-leitura .qp-cm > div{margin-top:4px;font-size:12.5px;line-height:1.5;
   color:var(--sutil);border-left:3px solid var(--borda);padding-left:9px}
+/* A PELÍCULA — camada transparente SÓ sobre o enunciado.
+   O contêiner é posicionado para a tela poder cobri-lo exatamente; ela
+   termina onde o enunciado termina, e por isso nunca alcança os botões
+   das alternativas, que são irmãos deste bloco e não filhos. */
+.pl-cx{position:relative}
+.pl-tela{position:absolute;inset:0;width:100%;height:100%;
+  touch-action:none;pointer-events:none;border-radius:8px}
+/* ligada, a película se anuncia: uma borda tracejada de canto a canto.
+   Sem esse sinal, a pessoa clica no texto, nada acontece, e ela conclui
+   que a tela travou. */
+.pl-tela.pl-on{pointer-events:auto;cursor:crosshair;
+  outline:1px dashed var(--info);outline-offset:2px}
+.pl-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px}
+.pl-fer{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center}
+.pl-copiar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 10px}
+/* os tamanhos de borracha: redondos e do tamanho que apagam — a amostra
+   é o próprio botão, sem legenda para traduzir. */
+.rs-bsize{border-radius:50%;border:1px solid var(--borda);
+  background:var(--campo);padding:0;cursor:pointer;flex:0 0 auto}
+.rs-bsize:hover{border-color:var(--acao)}
+.rs-bsize.rs-sel{border-color:var(--acao);background:var(--acao)}
 .qs-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
 .qs-chk{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sutil)}
 .qs-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 10px}
@@ -1349,6 +1370,31 @@ dialog.mat-amplo{max-height:96vh}
 .ed-virada-dica{margin:8px 0 10px;line-height:1.5}
 .ed-virada-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .ed-passou{color:var(--atencao);font-weight:600}
+
+/* MÍNIMOS POR BLOCO — a pergunta "posso ser eliminado?".
+   A LINHA DO CORTE fica DENTRO da barra: duas barras lado a lado
+   obrigariam a comparar dois comprimentos separados, que é justamente o
+   que o olho faz mal. Com a linha por cima, a leitura vira binária. */
+.ed-min-cx{border-left:3px solid var(--borda)}
+.ed-min-alerta{color:var(--erro)}
+.ed-min-bloco{padding:7px 0;border-bottom:1px solid var(--borda)}
+.ed-min-bloco:last-child{border-bottom:none}
+.ed-min-cab{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.ed-min-nome{font-weight:700;font-size:12.5px}
+.ed-min-estado{font-size:9.5px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--sutil)}
+.ed-min-abaixo .ed-min-estado{color:var(--erro)}
+.ed-min-apertado .ed-min-estado{color:var(--atencao)}
+.ed-min-barra{position:relative;height:10px;border-radius:999px;
+  background:var(--borda);overflow:hidden;margin:5px 0 3px}
+.ed-min-fill{height:100%;background:var(--verde);border-radius:999px}
+.ed-min-abaixo .ed-min-fill{background:var(--vermelho)}
+.ed-min-apertado .ed-min-fill{background:var(--atencao)}
+/* a linha do corte precisa aparecer POR CIMA do preenchimento */
+.ed-min-corte{position:absolute;top:-2px;bottom:-2px;width:2px;
+  background:var(--texto);opacity:.85}
+.ed-min-num{font-size:10.5px;color:var(--sutil)}
+.ed-min-discs{margin:2px 0 0}
 /* SELO DE FASE — só aparece em edital de duas datas. Estudar com o
    calendário errado na cabeça é o erro mais caro num concurso assim. */
 .ed-selo-fase{font-size:9px;font-weight:800;letter-spacing:.05em;
@@ -1418,6 +1464,9 @@ dialog.mat-amplo{max-height:96vh}
  * coisa certa. O que não pode é a tela dizer "100%" e calar o resto. */
 .it-fill.excedeu{background:var(--atencao)}
 .it-num.excedeu{color:var(--atencao)}
+/* o tempo TOTAL do tópico, ao lado do tempo da revisão: informação boa,
+   desde que nomeada — o erro era usá-la como se fosse a mesma coisa */
+.it-num-total{color:var(--sutil)!important;font-weight:400}
 .di-per{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
   font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
 .di-per.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
@@ -3724,6 +3773,7 @@ window.__sqlPromise = initSqlJs({
 <script src="lei-ui.js"></script>
 <script src="questoes.js"></script>
 <script src="rascunho.js"></script>
+<script src="pelicula.js"></script>
 <script src="questoes-ui.js"></script>
 <script src="edital.js"></script>
 <script src="editais.js"></script>
