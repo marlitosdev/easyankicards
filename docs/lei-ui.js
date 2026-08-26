@@ -255,7 +255,7 @@ function leiPintar() {
   leiPintarProcedencia();
   leiPintarOnde();
   leiPintarBlocos();
-  leiPintarTamanhos();
+  leiJanelaAplicar();
   leiCheiaAplicar();
   if (leiModo !== "editar") leiTrocarModo(leiModo);
 }
@@ -483,68 +483,99 @@ function leiPintarBlocos() {
 
 const LEI_FONTE_CHAVE = "eac_lei_fonte";
 
-/* TAMANHOS COM NOME, NÃO SÓ "MAIS" E "MENOS".
+/* A LETRA É UM GRADIENTE, NÃO UM MENU.
  *
- * O A+/A− pedia oito cliques para chegar de 15 a 30, e no caminho a
- * pessoa não sabia onde ia parar. Uma lista nomeada resolve os dois
- * problemas: escolhe-se o destino, não a direção.
+ * Cheguei a pôr uma lista de tamanhos com nome — pequeno, médio,
+ * grande, enorme, gigante. Era resposta para a pergunta errada. Quem
+ * mexe na letra quer um degrau a mais ou a menos do que está vendo, e
+ * decide olhando; nomear os degraus só acrescentou sete botões e a
+ * necessidade de traduzir "muito grande" para pixels na cabeça.
  *
- * E o teto subiu muito. O antigo parava em 34px, que é grande para uma
- * interface e pequeno para quem quer ler lei de longe, no tablet
- * apoiado, ou tem alguma dificuldade de visão. 56px é uma linha com
- * poucas palavras — e para ler lei isso é bom, não ruim: artigo se lê
- * devagar. */
-const LEI_TAMANHOS = [
-  { id: "pequeno", px: 13 },
-  { id: "normal", px: 15 },
-  { id: "medio", px: 19 },
-  { id: "grande", px: 24 },
-  { id: "muito_grande", px: 32 },
-  { id: "enorme", px: 42 },
-  { id: "gigante", px: 56 },
-];
+ * O A+/A− já era a forma certa. O que faltava era o OUTRO eixo — o
+ * tamanho da janela —, e é isso que está logo abaixo. */
+const LEI_FONTE_MIN = 13;
+const LEI_FONTE_MAX = 56;
 
 function leiFonteCarregar() {
   try {
     const v = Number(localStorage.getItem(LEI_FONTE_CHAVE));
-    if (v >= 13 && v <= 56) leiFonte = v;
+    if (v >= LEI_FONTE_MIN && v <= LEI_FONTE_MAX) leiFonte = v;
   } catch (e) {}
 }
 
 function leiFonteDefinir(px) {
   const v = Number(px) || 15;
-  leiFonte = Math.max(13, Math.min(56, v));
+  leiFonte = Math.max(LEI_FONTE_MIN, Math.min(LEI_FONTE_MAX, v));
   try { localStorage.setItem(LEI_FONTE_CHAVE, String(leiFonte)); } catch (e) {}
-  leiPintarTamanhos();
   leiTrocarModo(leiModo);
   leiReg("leitura", "tamanho da letra", leiFonte + "px");
 }
 
-/* mantido porque o A+/A− continua sendo o gesto rápido de quem só quer
- * um degrau; ele agora anda pela MESMA lista, sem inventar tamanhos
- * intermediários que a lista não oferece */
 function leiFonteMudar(delta) {
-  const i = LEI_TAMANHOS.findIndex((x) => x.px === leiFonte);
-  const j = Math.max(0, Math.min(LEI_TAMANHOS.length - 1,
-    (i < 0 ? 1 : i) + (delta > 0 ? 1 : -1)));
-  leiFonteDefinir(LEI_TAMANHOS[j].px);
+  leiFonteDefinir(leiFonte + (delta > 0 ? 2 : -2));
 }
 
-function leiPintarTamanhos() {
-  const cx = $("leiTamanhos");
-  if (!cx) return;
-  cx.innerHTML = "";
-  LEI_TAMANHOS.forEach((x) => {
-    const b = document.createElement("button");
-    b.className = "lei-tam" + (x.px === leiFonte ? " lei-tam-on" : "");
-    b.textContent = t("lei_tam_" + x.id);
-    /* a AMOSTRA é o próprio botão: o rótulo é escrito no tamanho que ele
-     * aplica, então dá para escolher olhando, sem tentativa e erro */
-    b.style.fontSize = Math.min(20, Math.round(x.px * 0.55) + 6) + "px";
-    b.title = t("lei_tam_ajuda", { px: x.px });
-    b.onclick = () => leiFonteDefinir(x.px);
-    cx.append(b);
-  });
+/* ---------------------------------------------------------------------
+ * O TAMANHO DA JANELA
+ *
+ * Aumentar a letra e aumentar a janela resolvem coisas diferentes, e eu
+ * tinha confundido as duas. Letra maior serve a quem tem dificuldade de
+ * enxergar; janela maior serve a quem tem tela sobrando — e num monitor
+ * de 27 polegadas a lei estava sendo lida numa coluna do tamanho de um
+ * celular, com o resto da tela em branco.
+ *
+ * São quatro larguras, e a última usa a tela inteira. A altura cresce
+ * junto: janela larga e baixa continuaria pedindo rolagem a cada dois
+ * artigos.
+ *
+ * A COLUNA DE TEXTO TEM UM LIMITE PRÓPRIO, em "em" e não em pixels: 62
+ * vezes a altura da letra. Assim ela cresce quando a letra cresce, e
+ * numa janela muito larga com letra pequena o excedente vira margem em
+ * vez de virar linha de 200 caracteres — que ninguém consegue seguir
+ * sem perder onde estava ao voltar para a esquerda.
+ * ------------------------------------------------------------------ */
+
+const LEI_JANELA_CHAVE = "eac_lei_janela";
+const LEI_JANELAS = ["estreita", "media", "larga", "maxima"];
+let leiJanela = 1;          /* índice em LEI_JANELAS */
+
+function leiJanelaCarregar() {
+  try {
+    const cru = localStorage.getItem(LEI_JANELA_CHAVE);
+    /* AUSENTE NÃO É ZERO. Number(null) vale 0, e 0 é um índice válido
+     * aqui — então quem nunca escolheu nada abriria sempre na janela mais
+     * estreita, achando que esse é o tamanho normal do aplicativo. */
+    if (cru === null || cru === "") return;
+    const v = Number(cru);
+    if (Number.isFinite(v) && v >= 0 && v < LEI_JANELAS.length) leiJanela = v;
+  } catch (e) {}
+}
+
+function leiJanelaAplicar() {
+  const dlg = $("dlgLeiSeca");
+  if (dlg && dlg.classList) {
+    LEI_JANELAS.forEach((nome, i) => {
+      dlg.classList.toggle("lei-j-" + nome, i === leiJanela);
+    });
+  }
+  const menos = $("btnLeiJanelaMenos");
+  const mais = $("btnLeiJanelaMais");
+  /* desligar o botão que não tem para onde ir é mais honesto que deixá-lo
+   * clicável sem efeito — o clique sem resposta parece defeito */
+  if (menos) menos.disabled = leiJanela <= 0;
+  if (mais) mais.disabled = leiJanela >= LEI_JANELAS.length - 1;
+  const rot = $("leiJanelaNome");
+  if (rot) rot.textContent = t("lei_janela_" + LEI_JANELAS[leiJanela]);
+}
+
+function leiJanelaMudar(delta) {
+  const novo = Math.max(0, Math.min(LEI_JANELAS.length - 1,
+    leiJanela + (delta > 0 ? 1 : -1)));
+  if (novo === leiJanela) return;
+  leiJanela = novo;
+  try { localStorage.setItem(LEI_JANELA_CHAVE, String(leiJanela)); } catch (e) {}
+  leiJanelaAplicar();
+  leiReg("leitura", "tamanho da janela", LEI_JANELAS[leiJanela]);
 }
 
 /* UM LUGAR SÓ decide o que é referência e o que é lei.
@@ -591,9 +622,6 @@ function leiTrocarModo(modo) {
   /* na tela cheia a barra de marcas some junto: ela é ferramenta de
    * quem está trabalhando o texto, não de quem está lendo */
   if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec || leiCheia;
-  /* o seletor de tamanho SOBREVIVE à tela cheia: é lá que se quer
-   * ajustar a letra. Some só na edição, onde o texto é cru. */
-  if ($("leiTamanhos")) $("leiTamanhos").hidden = ed;
 
   [["btnLeiModoLer", "ler"], ["btnLeiModoEditar", "editar"],
    ["btnLeiModoRecitar", "recitar"]].forEach(([id, m]) => {
@@ -1402,7 +1430,7 @@ function leiAjudaAbrir() {
 function leiIniciar() {
   leiLogCarregar();
   leiFonteCarregar();
-  leiPintarTamanhos();
+  leiJanelaCarregar();
   /* leiBotao no lugar de um onclick nu: qualquer falha vira linha de
    * registro com o nome do botão, em vez de morrer no console */
   const liga = (id, nome, fn) => leiBotao(id, nome, fn);
@@ -1426,6 +1454,8 @@ function leiIniciar() {
   liga("btnLeiLido", "li este material", () => leiRegistrarLeitura());
   liga("btnLeiMaior", "letra maior", () => leiFonteMudar(2));
   liga("btnLeiMenor", "letra menor", () => leiFonteMudar(-2));
+  liga("btnLeiJanelaMais", "janela maior", () => leiJanelaMudar(1));
+  liga("btnLeiJanelaMenos", "janela menor", () => leiJanelaMudar(-1));
 
   liga("btnLeiLogHoje", "filtro de hoje", () => {
     leiLogSoHoje = !leiLogSoHoje; leiLogPintar();
@@ -1495,6 +1525,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
     leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
-    leiFonteDefinir, leiPintarTamanhos, LEI_TAMANHOS,
+    leiFonteDefinir, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
+    leiJanelaAtual: () => leiJanela,
   };
 }
