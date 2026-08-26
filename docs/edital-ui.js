@@ -237,6 +237,38 @@ function minutosDoTopico(chave) {
   }, 0);
 }
 
+/* FATOR DE REALIDADE — quanto o plano erra, medido pelo que já aconteceu.
+ *
+ * O plano reparte as horas da semana por peso: "Direito Financeiro vale
+ * 15% da prova, então 6h; são 12 tópicos, 30min cada". A conta é honesta
+ * e a premissa é chute — 30min por tópico é o que sobrou da divisão, não
+ * uma estimativa de quanto aquele tópico leva.
+ *
+ * Quem estuda descobre a verdade e não tem como contá-la ao app. Este
+ * número conta: pega os tópicos JÁ estudados de uma disciplina e compara
+ * o tempo real com o previsto. Se der 2,4, o plano dessa disciplina está
+ * pedindo menos da metade do que ela custa — e as horas restantes são
+ * ficção.
+ *
+ * De propósito, ele NÃO reescreve o plano sozinho. Um número desses,
+ * calculado sobre três tópicos, ainda é frágil; aplicá-lo em silêncio
+ * refaria a agenda inteira sem ninguém pedir. Ele informa, e quem decide
+ * mudar as horas da semana é a pessoa.
+ */
+function edFatorReal(disciplina, itens) {
+  const lista = (itens || []).filter((x) => x && x.disciplina === disciplina);
+  let prev = 0, real = 0, n = 0;
+  lista.forEach((x) => {
+    const f = minutosDoTopico(x.chave);
+    if (!f || !x.minutos) return;
+    prev += x.minutos; real += f; n++;
+  });
+  /* menos de três tópicos é anedota, não medida: uma sessão longa num
+   * tópico difícil viraria "a disciplina inteira custa o triplo" */
+  if (n < 3 || !prev) return null;
+  return { fator: real / prev, topicos: n, previsto: prev, real };
+}
+
 function edLinhaTopico(i, semDisciplina) {
   const li = document.createElement("div");
   li.className = "ed-item" + (i.feito ? " feito" : "")
@@ -333,17 +365,34 @@ function edLinhaTopico(i, semDisciplina) {
    * uma precisão que ele não tem. O que serve é o dia e quanto tempo. */
   min.textContent = (i.dia ? i.dia + " · " : "") + horasTexto(i.minutos);
 
-  /* BARRA DO TÓPICO: o que você já pôs contra o que ele pede. */
+  /* BARRA DO TÓPICO: o que você já pôs contra o que ele pede.
+   *
+   * A BARRA TRAVA EM 100%, O NÚMERO NÃO PODE TRAVAR.
+   * Uma barra não sabe passar da própria caixa, e tudo bem. Mas o rótulo
+   * dizia "1h15 de 30min · 100%", que é falso de duas formas: 1h15 de
+   * 30min são 250%, e o "100%" faz parecer que o plano foi cumprido na
+   * medida — quando o tópico custou duas vezes e meia o previsto.
+   *
+   * Isso não é detalhe estético. O plano inteiro é uma conta de horas: se
+   * cada tópico consome 2,5× o reservado, as 40h da semana rendem 16h de
+   * matéria, e a pessoa chega na prova com um terço do edital que a tela
+   * jurava estar coberto. Esconder o excedente esconde exatamente o dado
+   * que denuncia isso. */
   const feitoMin = minutosDoTopico(i.chave);
-  const pctT = i.minutos ? Math.min(100, Math.round((feitoMin / i.minutos) * 100)) : 0;
+  const pctReal = i.minutos ? Math.round((feitoMin / i.minutos) * 100) : 0;
+  const pctT = Math.min(100, pctReal);
+  const excedeu = pctReal > 115;      /* folga: 34min de 30min não é notícia */
   const barraT = document.createElement("div");
   barraT.className = "it-barra";
   const fillT = document.createElement("div");
-  fillT.className = "it-fill" + (pctT >= 100 ? " cheio" : (pctT > 0 ? " parcial" : ""));
+  fillT.className = "it-fill" + (excedeu ? " excedeu"
+    : (pctT >= 100 ? " cheio" : (pctT > 0 ? " parcial" : "")));
   fillT.style.width = pctT + "%";
   barraT.append(fillT);
-  barraT.title = t("ed_it_barra", {
-    f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
+  barraT.title = excedeu
+    ? t("ed_it_barra_mais", { f: horasTexto(feitoMin), p: horasTexto(i.minutos),
+        pct: pctReal, extra: horasTexto(feitoMin - i.minutos) })
+    : t("ed_it_barra", { f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
   meio.append(barraT);
   /* O NÚMERO AO LADO DA BARRA. Barra sozinha se lê "mais ou menos pela
    * metade" — e "25min de 1h" é uma decisão diferente de "50min de 1h".
@@ -351,9 +400,11 @@ function edLinhaTopico(i, semDisciplina) {
    * 230 linhas seria ruído em cima do que ainda não começou. */
   if (feitoMin > 0) {
     const num = document.createElement("div");
-    num.className = "it-num" + (pctT >= 100 ? " cheio" : "");
-    num.textContent = t("ed_it_num", {
-      f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
+    num.className = "it-num" + (excedeu ? " excedeu" : (pctT >= 100 ? " cheio" : ""));
+    num.textContent = excedeu
+      ? t("ed_it_num_mais", { f: horasTexto(feitoMin), p: horasTexto(i.minutos),
+          extra: horasTexto(feitoMin - i.minutos) })
+      : t("ed_it_num", { f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
     meio.append(num);
   }
 
