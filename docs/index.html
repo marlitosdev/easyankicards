@@ -761,13 +761,19 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 
 /* O TAMANHO DA JANELA — quatro larguras, e a altura cresce junto.
    Janela larga e baixa continuaria pedindo rolagem a cada dois artigos. */
+/* AS GAVETAS DO LEITOR: recuadas e com faixa própria, para se lerem
+   como "aberto a partir do botão acima" e não como mais uma fila. */
+.lei-gaveta{border-left:2px solid var(--acao);padding-left:9px;margin:2px 0 8px}
 .lei-janela{display:inline-flex;gap:4px;align-items:center;
   border:1px solid var(--borda);border-radius:8px;padding:1px 5px}
 .lei-janela .nota{min-width:56px;text-align:center;font-size:10.5px}
-#dlgLeiSeca.lei-j-estreita[open]{width:min(640px,96vw);max-height:88vh}
-#dlgLeiSeca.lei-j-media[open]{width:min(860px,96vw);max-height:92vh}
-#dlgLeiSeca.lei-j-larga[open]{width:min(1150px,97vw);max-height:95vh}
-#dlgLeiSeca.lei-j-maxima[open]{width:98vw;max-height:98vh}
+/* O max-width de .diag-modal (860px) CORTAVA a largura: width crescia e
+   max-width clampava, e por isso a janela só aumentava na vertical. Cada
+   tamanho precisa soltar os dois. */
+#dlgLeiSeca.lei-j-estreita[open]{width:min(640px,96vw);max-width:96vw;max-height:88vh}
+#dlgLeiSeca.lei-j-media[open]{width:min(880px,96vw);max-width:96vw;max-height:92vh}
+#dlgLeiSeca.lei-j-larga[open]{width:min(1200px,97vw);max-width:97vw;max-height:95vh}
+#dlgLeiSeca.lei-j-maxima[open]{width:98vw;max-width:98vw;max-height:98vh}
 /* A COLUNA DE TEXTO TEM LIMITE PRÓPRIO, em "em" e não em pixels: assim
    ela cresce junto com a letra. Numa janela larga com letra pequena o
    excedente vira MARGEM, não linha de 200 caracteres — que ninguém
@@ -855,6 +861,26 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:var(--campo);padding:0;cursor:pointer;flex:0 0 auto}
 .rs-bsize:hover{border-color:var(--acao)}
 .rs-bsize.rs-sel{border-color:var(--acao);background:var(--acao)}
+/* O HISTÓRICO DOS BLOCOS: consulta, não o gesto do dia — por isso vem
+   recolhido, e o resumo aparece no próprio cabeçalho. */
+.qs-hist{margin:0 0 10px;border:1px solid var(--borda);border-radius:10px;
+  padding:8px 11px;background:var(--campo)}
+.qs-hist > summary{cursor:pointer;font-size:12.5px;font-weight:700;
+  list-style:none;display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+.qs-hist > summary::-webkit-details-marker{display:none}
+.qs-hist > summary::before{content:"▸ ";font-weight:400;color:var(--sutil)}
+.qs-hist[open] > summary::before{content:"▾ "}
+.qs-hist-lista{display:flex;flex-direction:column;gap:5px;margin:8px 0 0;
+  max-height:38vh;overflow-y:auto}
+.qs-hist-item{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;
+  padding:5px 0;border-bottom:1px solid var(--borda)}
+.qs-hist-item:last-child{border-bottom:none}
+.qs-hist-rot{font-weight:600;font-size:12px;flex:1 1 140px}
+.qs-hist-num{font-size:11px;color:var(--sutil)}
+/* abandonado NÃO é erro — é informação, e a mais útil: diz onde o estudo
+   emperra. Cor de atenção, não de falha. */
+.qs-hist-aberto .qs-hist-num{color:var(--atencao)}
+.qs-hist-rodape{margin-top:8px}
 .qs-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
 .qs-chk{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sutil)}
 .qs-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 10px}
@@ -1061,6 +1087,25 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mc-verso{color:var(--sutil);margin-top:2px;line-height:1.45}
 .mc-tags{font-size:9.5px;color:var(--info);margin-top:3px;font-weight:700}
 .mc-jatem{font-size:10px;color:var(--atencao);margin-top:3px}
+/* O QUE FOI RECUSADO. Fica ACIMA da prévia dos cartões bons de propósito:
+   é a informação que se procura quando o número de avisos não é zero, e
+   embaixo da lista de cartões ela ficaria fora da tela justamente nos
+   casos grandes, que são os que mais avisam. */
+.mc-recusadas{margin:8px 0;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--borda);background:var(--panel)}
+.mc-recusadas-cab{display:flex;gap:8px;align-items:center;
+  justify-content:space-between;font-size:12px}
+.mc-recusadas-lista{list-style:none;margin:6px 0 0;padding:0}
+.mc-recusada{padding:5px 0;border-top:1px solid var(--borda);font-size:11px}
+.mc-recusada:first-child{border-top:0}
+.mc-recusada-cab{font-weight:700;line-height:1.4}
+/* recusada e a-conferir NÃO podem ter a mesma cor: uma não virou cartão,
+   a outra virou e só precisa de um olhar. Iguais, a pessoa apaga o que
+   estava bom. */
+.mc-recusada-recusada .mc-recusada-cab{color:var(--erro)}
+.mc-recusada-suspeito .mc-recusada-cab{color:var(--atencao)}
+.mc-recusada-txt{color:var(--sutil);margin-top:2px;line-height:1.4;
+  word-break:break-word}
 .mat-topo{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;
   padding-bottom:8px;border-bottom:1px solid var(--borda)}
 .mat-marcador-info{font-size:10px;color:var(--sutil)}
@@ -1223,7 +1268,17 @@ dialog.mat-amplo{max-height:96vh}
    tem a sua cor, aplicada só na borda esquerda e no ícone: colorir o
    botão inteiro faria quatro blocos berrantes disputando atenção com o
    conteúdo, que é o que importa na tela. */
-.barra-modos{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+.modos-caixa{margin:0 0 12px}
+.modos-cab{display:flex;align-items:center;gap:8px;margin:0 0 5px}
+.modos-tit{font-size:9.5px;font-weight:800;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--sutil)}
+.modos-min{all:unset;cursor:pointer;width:20px;height:20px;border-radius:5px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--sutil);font-size:12px;border:1px solid var(--borda);
+  margin-left:auto}
+.modos-min:hover{color:var(--texto);border-color:var(--acao)}
+.barra-modos{display:flex;gap:6px;margin:0;flex-wrap:wrap}
+
 .modo-btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;
   align-items:center;gap:9px;padding:10px 12px;border-radius:10px;
   background:var(--panel);color:var(--sutil);font-size:13px;font-weight:600;
@@ -1244,6 +1299,16 @@ dialog.mat-amplo{max-height:96vh}
   padding:1px 5px;border-radius:7px;background:var(--campo);color:var(--sutil);
   border:1px solid var(--borda)}
 .modo-btn.ativo .modo-selo{border-color:var(--modo-cor);color:var(--modo-cor)}
+/* RECOLHIDA: só o ícone. O rótulo vira dica do botão — não some, porque
+   ícone sozinho é enigma para quem ainda não decorou.
+   Estas regras vêm DEPOIS da regra base de .modo-btn de propósito: a
+   invariante que exige "todo botão declara cor e fundo" procura a
+   PRIMEIRA regra com aquele seletor, e uma regra de ajuste antes da
+   base a faria concluir que o botão nasceu sem cor. */
+.modos-caixa.modos-min .modo-rot,
+.modos-caixa.modos-min .modo-selo{display:none}
+.modos-caixa.modos-min .modo-btn{padding:9px 11px;gap:0}
+.modos-caixa.modos-min .modo-ic{font-size:17px}
 /* ---- cabeçalho da bancada ----------------------------------------
    O nome ficava no alto do painel, longe da caixa que ele nomeia. Agora
    encosta no editor: quem lê "Bancada de cartões" vê logo abaixo a caixa
@@ -1370,6 +1435,17 @@ dialog.mat-amplo{max-height:96vh}
 .ed-virada-dica{margin:8px 0 10px;line-height:1.5}
 .ed-virada-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .ed-passou{color:var(--atencao);font-weight:600}
+/* A LINHA QUE ACABOU DE MUDAR pisca por um instante. Um indicador que
+   acende sem transicao, numa lista de dez linhas, acende fora do campo
+   de visao — e e como se nao tivesse acendido. */
+@keyframes ed-piscada{
+  0%{background:rgba(124,108,245,.28)}
+  100%{background:transparent}
+}
+.ed-item.ed-piscou{animation:ed-piscada 1.4s ease-out}
+@media (prefers-reduced-motion:reduce){
+  .ed-item.ed-piscou{animation:none;background:rgba(124,108,245,.14)}
+}
 
 /* MÍNIMOS POR BLOCO — a pergunta "posso ser eliminado?".
    A LINHA DO CORTE fica DENTRO da barra: duas barras lado a lado
@@ -1957,7 +2033,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </header>
 
 <main>
-<nav class="barra-modos" id="barraModos" role="tablist" aria-label="Modos"></nav>
+<!-- A FAIXA TEM NOME. Cinco lugares diferentes do aplicativo sem uma
+     palavra dizendo que aquilo é a navegação pareciam botões soltos. -->
+<div class="modos-caixa" id="modosCaixa">
+  <div class="modos-cab">
+    <span class="modos-tit" data-i18n="modos_titulo"></span>
+    <button class="modos-min" id="btnModosRecolher" type="button"
+      aria-controls="barraModos" aria-expanded="true">&laquo;</button>
+  </div>
+  <nav class="barra-modos" id="barraModos" role="tablist" aria-label="Modos"></nav>
+</div>
 <div class="modo-area">
 <section id="secCartoes" data-modo="cartoes">
   <div class="duas-colunas">
@@ -2115,6 +2200,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Tira do banco as questões que acabaram de entrar."></button>
   </div>
   <div class="qs-filtros">
+    <!-- ACHAR QUESTÃO PELO EDITAL, NÃO SÓ PELA DISCIPLINA.
+         Disciplina é o nome que a questão carrega; o edital é a lista
+         que você está estudando. Com dois ou três concursos, "todas as
+         questões de Direito Financeiro" mistura recortes de bancas e
+         cargos diferentes — e a pergunta real é sempre "o que eu tenho
+         PARA ESTE edital?".
+         O tópico vem em seguida, já filtrado pelo edital escolhido, e
+         com os BLOCOS do edital como cabeçalho: é assim que a lista de
+         232 tópicos vira navegável. -->
+    <select id="qsFEdital" title="Filtra pelas questões dos tópicos deste edital."></select>
+    <select id="qsFTopico" title="Um tópico do edital escolhido. Os blocos do edital aparecem como cabeçalho."></select>
     <select id="qsFDisc" title="Filtra por disciplina."></select>
     <select id="qsFBanca" title="Filtra por banca examinadora."></select>
     <select id="qsFTipo" title="Certo/errado ou múltipla escolha.">
@@ -2126,6 +2222,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <label class="qs-chk" title="Só aquelas em que você errou da última vez — é onde o estudo rende mais."><input type="checkbox" id="qsFErradas"><span data-i18n="qs_so_erradas"></span></label>
     <input id="qsBusca" type="search" placeholder="buscar no enunciado" title="Procura no texto do enunciado.">
   </div>
+  <!-- HISTÓRICO DOS BLOCOS. Fica recolhido: é consulta, não é o gesto
+       do dia. Aberto, mostra o que foi feito e permite refazer o mesmo
+       recorte — que é o que distingue um histórico de um placar. -->
+  <details id="qsHist" class="qs-hist">
+    <summary><span data-i18n="qs_hist_titulo"></span>
+      <span class="nota" id="qsHistResumo"></span></summary>
+    <div id="qsHistLista" class="qs-hist-lista"></div>
+    <div class="qs-hist-rodape">
+      <button class="btn-min btn-min-perigo" id="btnQsHistLimpar"
+        data-i18n="qs_hist_limpar"
+        title="Apaga o histórico dos blocos. As questões e o seu desempenho em cada uma não são tocados."></button>
+    </div>
+  </details>
   <div class="qs-barra">
     <button class="btn btn-verde" id="btnQsResponderTudo"
       title="Responde, em sequência, todas as questões que passaram no filtro acima."></button>
@@ -2639,9 +2748,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <textarea id="regObs" rows="3" hidden style="width:100%;box-sizing:border-box"
       placeholder="O que te pegou nesta sessão? Pegadinha, dúvida, ponto a revisar."></textarea>
   </div>
+  <!-- UM BOTÃO, NÃO DOIS. O app já sabe se o tópico é novo ou está para
+       revisar — perguntar isso à pessoa é transferir para ela uma
+       classificação que o plano faz melhor, e errar aqui não dá aviso
+       nenhum: o tempo entra e a revisão continua pendente.
+       O rótulo diz o que vai ser lançado; o "⋮" existe para as vezes em
+       que a pessoa discorda do app. -->
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
-    <button class="btn btn-azul" id="btnRegRevisao" data-i18n="ed_reg_revisao"></button>
+    <button class="btn btn-cinza" id="btnRegOutro" data-i18n="ed_reg_outro"
+      title="Lança como o outro tipo. Use quando você discordar: reler um tópico que você mal viu é estudo novo, não revisão."></button>
     <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
@@ -2959,14 +3075,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="qs-fonte">
       <label title="A IA parte do texto deste resumo."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
       <label title="A IA parte de um texto que você colar: PDF de aula, lei, artigo, apostila."><input type="radio" name="qsFonte" id="qsFonteOutro"><span data-i18n="qs_fonte_outro"></span></label>
+      <!-- O CADERNO É OUTRA COISA. No NotebookLM a IA já tem as fontes
+           carregadas e responde ANCORADA nelas — o prompt não precisa (nem
+           deve) levar o texto junto, e precisa exigir que ela não invente
+           fora das fontes. Mandar o prompt genérico ali desperdiça a única
+           vantagem real do caderno. -->
+      <label title="A IA já tem as fontes carregadas no caderno (NotebookLM). O prompt manda gerar SÓ a partir delas, com a citação da fonte no comentário."><input type="radio" name="qsFonte" id="qsFonteCaderno"><span data-i18n="qs_fonte_caderno"></span></label>
     </div>
     <p class="nota" id="qsFonteNota" hidden></p>
     <textarea id="qsCriarFonte" rows="4" hidden
       style="width:100%;box-sizing:border-box;font-size:12px"></textarea>
     <div class="qs-passo"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
       <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
-        title="Copia o prompt inteiro para colar na IA."></button></div>
-    <textarea id="qsCriarPrompt" rows="4" readonly
+        title="Copia o prompt inteiro para colar na IA."></button>
+      <!-- O PROMPT É PARA COPIAR, NÃO PARA LER. São quarenta linhas de
+           instrução que empurram para baixo o campo onde a resposta é
+           colada — que é o campo que a pessoa realmente usa. Fica
+           recolhido; quem quiser conferir abre. -->
+      <button class="btn-min" id="btnQsVerPrompt" data-i18n="qs_ver_prompt"
+        title="Mostra o texto do prompt. Ele serve para ser copiado; ler não é necessário."></button></div>
+    <textarea id="qsCriarPrompt" rows="4" readonly hidden
       style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
     <div class="qs-passo"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
       <button class="btn-min" id="btnQsColar" data-i18n="qs_colar_btn"
@@ -2982,6 +3110,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="qsCriarConf" class="qs-conf-lista"></div>
   <p class="nota" id="qsCriarResumo"></p>
   <div class="dlg-rodape">
+    <button class="btn-min" id="btnQsLog" data-i18n="ger_log_btn"
+      title="Abre o registro da geração: o que foi lido e recusado desta vez e das anteriores, com o motivo de cada uma."></button>
     <button class="btn btn-verde" id="btnQsCriarAplicar" data-i18n="qs_aplicar" disabled
       title="Grava as questões conferidas. Dá para desfazer logo depois."></button>
     <button class="btn btn-cinza" id="btnQsCriarFechar" data-i18n="cancel_btn"
@@ -3202,30 +3332,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnLeiModoRecitar" data-i18n="lei_modo_recitar"
       title="Esconde o texto e mostra só o número e a ementa de cada artigo. Serve para conferir o que você realmente lembra — reler dá sensação de saber."></button>
     <span class="mat-sep"></span>
-    <button class="btn-min" id="btnLeiBlocos" data-i18n="lei_blocos_btn"
-      title="Abre a lista de capítulos, com quantos artigos e quantos minutos cada um leva. Ler 115 artigos de uma vez não é uma sessão de estudo."></button>
-    <button class="btn-min" id="btnLeiIr" data-i18n="lei_ir_btn"
-      title="Vai direto a um artigo pelo número."></button>
-    <button class="btn-min" id="btnLeiRank" data-i18n="lei_rank_btn"
-      title="Mostra quais artigos mais aparecem NAS SUAS questões e como você tem se saído em cada um."></button>
-    <span class="mat-sep"></span>
     <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
       title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
-    <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
-      title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei."></button>
-    <button class="btn-min" id="btnLeiMenor" title="Letra menor.">A&#8722;</button>
-    <button class="btn-min" id="btnLeiMaior" title="Letra maior.">A+</button>
-    <!-- O OUTRO EIXO: o tamanho da JANELA. Letra maior serve a quem tem
-         dificuldade de enxergar; janela maior serve a quem tem tela
-         sobrando — num monitor grande a lei estava numa coluna estreita
-         com o resto da tela em branco. -->
-    <span class="lei-janela">
-      <button class="btn-min" id="btnLeiJanelaMenos"
-        title="Janela mais estreita.">&#8592;&#8594;</button>
-      <span class="nota" id="leiJanelaNome"></span>
-      <button class="btn-min" id="btnLeiJanelaMais"
-        title="Janela mais larga e mais alta — aproveita telas maiores.">&#8594;&#8592;</button>
-    </span>
+    <!-- CATORZE BOTÕES NUMA FILA SÓ VIRAM RUÍDO.
+         Os três primeiros (ler/editar/recitar) são UMA escolha, e ficam.
+         O resto se divide por PERGUNTA: "onde eu vou?" e "como eu vejo?".
+         Cada gaveta abre sob demanda; fechadas, a barra tem sete alvos em
+         vez de catorze. -->
+    <button class="btn-min" id="btnLeiNavegar" data-i18n="lei_gav_navegar"
+      title="Capítulos, ir a um artigo pelo número, e os artigos que mais caem nas suas questões."></button>
+    <button class="btn-min" id="btnLeiExibir" data-i18n="lei_gav_exibir"
+      title="Tamanho da letra, tamanho da janela e leitura ampliada."></button>
     <!-- ajuda e registro ficam FORA da fila de trabalho, à direita e com
          forma própria: são recursos de quando algo dá errado ou de quando
          se está aprendendo o app, não de quem está lendo a lei. -->
@@ -3239,6 +3356,38 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </span>
   </div>
 
+
+  <!-- AS DUAS GAVETAS. Fechadas por padrão: elas respondem perguntas que
+       se fazem uma vez por sessão, não a cada artigo. -->
+  <div class="mat-topo lei-gaveta" id="leiGavNavegar" hidden>
+    <button class="btn-min" id="btnLeiBlocos" data-i18n="lei_blocos_btn"
+      title="Abre a lista de capítulos, com quantos artigos e quantos minutos cada um leva. Ler 115 artigos de uma vez não é uma sessão de estudo."></button>
+    <button class="btn-min" id="btnLeiIr" data-i18n="lei_ir_btn"
+      title="Vai direto a um artigo pelo número."></button>
+    <button class="btn-min" id="btnLeiRank" data-i18n="lei_rank_btn"
+      title="Mostra quais artigos mais aparecem NAS SUAS questões e como você tem se saído em cada um."></button>
+  </div>
+  <div class="mat-topo lei-gaveta" id="leiGavExibir" hidden>
+    <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
+      title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei."></button>
+    <span class="mat-sep"></span>
+    <span class="nota" data-i18n="lei_letra_rot"></span>
+    <button class="btn-min" id="btnLeiMenor" title="Letra menor.">A&#8722;</button>
+    <button class="btn-min" id="btnLeiMaior" title="Letra maior.">A+</button>
+    <span class="mat-sep"></span>
+    <!-- O OUTRO EIXO: o tamanho da JANELA. Letra maior serve a quem tem
+         dificuldade de enxergar; janela maior serve a quem tem tela
+         sobrando — num monitor grande a lei estava numa coluna estreita
+         com o resto da tela em branco. -->
+    <span class="nota" data-i18n="lei_janela_rot"></span>
+    <span class="lei-janela">
+      <button class="btn-min" id="btnLeiJanelaMenos"
+        title="Janela mais estreita.">&#8592;&#8594;</button>
+      <span class="nota" id="leiJanelaNome"></span>
+      <button class="btn-min" id="btnLeiJanelaMais"
+        title="Janela mais larga e mais alta — aproveita telas maiores.">&#8594;&#8592;</button>
+    </span>
+  </div>
 
   <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
        para a pessoa decorar o app em vez da lei. -->
@@ -3371,6 +3520,33 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgGerLog" class="ui-modal diag-modal">
+  <h3 data-i18n="ger_log_titulo"></h3>
+  <p class="nota" data-i18n="ger_log_ajuda"></p>
+  <div class="mat-topo">
+    <button class="btn-min" id="btnGerLogHoje" data-i18n="ger_log_hoje"
+      title="Alterna entre mostrar só o dia de hoje e mostrar tudo o que está guardado."></button>
+    <button class="btn-min" id="btnGerLogErros" data-i18n="ger_log_erros"
+      title="Mostra só as falhas. Se algo não funcionou, a linha do erro está aqui."></button>
+    <button class="btn-min" id="btnGerLogCartoes" data-i18n="ger_log_so_cartoes"
+      title="Mostra só o que aconteceu na geração de cartões. Toque de novo para ver os dois."></button>
+    <button class="btn-min" id="btnGerLogQuestoes" data-i18n="ger_log_so_questoes"
+      title="Mostra só o que aconteceu na geração de questões. Toque de novo para ver os dois."></button>
+    <button class="btn-min" id="btnGerLogCopiar" data-i18n="ger_log_copiar"
+      title="Copia o registro inteiro para você colar num relato de problema."></button>
+    <span class="mat-topo-dir">
+      <button class="btn-min btn-min-perigo" id="btnGerLogLimpar" data-i18n="ger_log_limpar"
+        title="Apaga o registro. Pergunta antes: depois de apagado não há como reconstituir."></button>
+    </span>
+  </div>
+  <p class="nota" id="gerLogResumo"></p>
+  <textarea id="gerLogTexto" rows="14" readonly
+    style="width:100%;box-sizing:border-box"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnGerLogFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiRank" class="ui-modal diag-modal">
   <h3 id="leiRankTitulo"></h3>
   <p class="nota" data-i18n="lei_rank_ajuda"></p>
@@ -3469,6 +3645,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <textarea id="mcTexto" rows="9" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a resposta da IA — ou escreva os cartões à mão: pergunta :: resposta"></textarea>
   <div id="mcAviso" class="ed-nao-cabe" hidden></div>
+  <!-- O QUE FOI RECUSADO, e por quê. Antes só existia a CONTAGEM de
+       avisos, no mcAviso acima: "1 aviso(s)" e nenhum caminho para
+       descobrir qual. -->
+  <div id="mcRecusadas" class="mc-recusadas" hidden>
+    <div class="mc-recusadas-cab">
+      <b data-i18n="mc_avisos_titulo"></b>
+      <button class="btn-min" id="btnMcLog" data-i18n="ger_log_btn"
+        title="Abre o registro da geração: o mesmo que está aqui, mais o histórico das outras vezes e os erros."></button>
+    </div>
+    <p class="nota" data-i18n="mc_avisos_ajuda"></p>
+    <ul id="mcRecusadasLista" class="mc-recusadas-lista"></ul>
+  </div>
   <div id="mcPreview" class="mc-preview"></div>
   <div class="mc-acoes-salvos" id="mcAcoesSalvos" hidden>
     <button class="btn-min" id="btnMcEstudar" data-i18n="mc_estudar" title="Passa pelos cartões salvos um a um, no mesmo desenho que eles terão no Anki. Dá para virar, avançar e apagar os ruins."></button>
@@ -3774,6 +3962,8 @@ window.__sqlPromise = initSqlJs({
 <script src="questoes.js"></script>
 <script src="rascunho.js"></script>
 <script src="pelicula.js"></script>
+<script src="geracao-log.js"></script>
+<script src="questoes-hist.js"></script>
 <script src="questoes-ui.js"></script>
 <script src="edital.js"></script>
 <script src="editais.js"></script>
@@ -3794,6 +3984,12 @@ window.__sqlPromise = initSqlJs({
    era pintada com matResumos AINDA VAZIO: todo tópico aparecia sem resumo e
    sem cartões, mesmo tendo os dois guardados — e nada repintava depois.
    Dado antes de quem lê o dado. */
+/* O REGISTRO DA GERAÇÃO SOBE ANTES de quem escreve nele: se ele falhar
+   ao iniciar, os gerReg das outras telas caem no catch e o app segue —
+   mas o contrário (escrever antes de carregar) apagaria o histórico,
+   porque gerLog começaria vazio e o primeiro gravar sobrescreveria. */
+try { gerLogIniciar(); } catch (e) { console.error(e);
+  try { reg("ERRO", "falha ao iniciar gerLogIniciar: " + (e && e.message), ""); } catch (x) {} }
 try { qsUiIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar qsUiIniciar: " + (e && e.message), ""); } catch (x) {} }
 try { matIniciar(); } catch (e) { console.error(e);

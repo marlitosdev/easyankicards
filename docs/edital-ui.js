@@ -327,6 +327,9 @@ function edLinhaTopico(i, semDisciplina) {
   const li = document.createElement("div");
   li.className = "ed-item" + (i.feito ? " feito" : "")
     + (i.revisado ? " revisado" : "") + (i.ehRevisao ? " ehrev" : "");
+  /* a chave na própria linha: é o que permite reencontrá-la depois de
+   * uma repintura, para piscar exatamente a que mudou */
+  if (i.chave) li.dataset.chave = i.chave;
 
   /* Botão, não caixa. Marcar é rápido demais para o que significa: o registro
    * passa a perguntar QUANTO e COMO, porque é isso que permite, meses depois,
@@ -1268,6 +1271,49 @@ function edItemDoPlano(disciplina, nome) {
   } catch (e) { return null; }
 }
 
+/* Qual dos dois lançamentos está preparado neste momento. Começa pelo
+ * que o plano diz, e só muda se a pessoa discordar explicitamente. */
+let regTipo = "feito";
+
+/* As formas de estudo, num lugar só — antes esta lista era montada
+ * dentro de abrirRegistro, e por isso não havia como repintá-la quando o
+ * tipo do lançamento mudava. */
+function regPintarFormas() {
+  const cx = $("regFormas");
+  if (!cx) return;
+  cx.innerHTML = "";
+  ED_FORMAS.forEach((f) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "reg-forma" + (regFormas.includes(f) ? " ativa" : "");
+    b.textContent = t("ed_forma_" + f);
+    /* várias formas por sessão: quase ninguém só lê — lê, assiste e resolve
+     * questão na mesma hora, e obrigar a escolher uma falsifica o registro */
+    b.onclick = () => {
+      const k = regFormas.indexOf(f);
+      if (k >= 0) { if (regFormas.length > 1) regFormas.splice(k, 1); }
+      else regFormas.push(f);
+      b.classList.toggle("ativa", regFormas.includes(f));
+      regPintarQuestoes();
+    };
+    cx.append(b);
+  });
+}
+
+function regPintarBotoes() {
+  const b = $("btnRegEstudo");
+  if (b) {
+    b.textContent = t(regTipo === "revisado" ? "ed_reg_revisao" : "ed_reg_estudo");
+    b.title = t(regTipo === "revisado" ? "ed_reg_revisao_ajuda"
+                                       : "ed_reg_estudo_ajuda");
+  }
+  const o = $("btnRegOutro");
+  if (o) {
+    o.textContent = t(regTipo === "revisado" ? "ed_reg_como_estudo"
+                                             : "ed_reg_como_revisao");
+  }
+}
+
 function abrirRegistro(i) {
   /* enriquece AQUI, num lugar so: qualquer porta de entrada nova ganha
    * o mesmo tratamento sem precisar lembrar disto */
@@ -1293,24 +1339,7 @@ function abrirRegistro(i) {
   regPintarAtalhos();
   regPintarQuestoes();
 
-  const cx = $("regFormas");
-  cx.innerHTML = "";
-  ED_FORMAS.forEach((f) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "reg-forma" + (regFormas.includes(f) ? " ativa" : "");
-    b.textContent = t("ed_forma_" + f);
-    /* várias formas por sessão: quase ninguém só lê — lê, assiste e resolve
-     * questão na mesma hora, e obrigar a escolher uma falsifica o registro */
-    b.onclick = () => {
-      const k = regFormas.indexOf(f);
-      if (k >= 0) { if (regFormas.length > 1) regFormas.splice(k, 1); }
-      else regFormas.push(f);
-      b.classList.toggle("ativa", regFormas.includes(f));
-      regPintarQuestoes();
-    };
-    cx.append(b);
-  });
+  regPintarFormas();
 
   const hx = $("regHumor");
   hx.innerHTML = "";
@@ -1327,7 +1356,15 @@ function abrirRegistro(i) {
     hx.append(b);
   });
 
-  $("btnRegRevisao").hidden = !i.feito;
+  /* O BOTÃO DIZ O QUE VAI FAZER.
+   * Um tópico já estudado que volta é revisão; um tópico novo é estudo.
+   * O app sabe a diferença — e dizê-la no rótulo é o que transforma uma
+   * decisão silenciosa numa informação. O segundo botão continua
+   * existindo para quando a pessoa discordar (reler um tópico que ela
+   * mal viu é estudo novo, não revisão), mas em cinza e à direita: é a
+   * exceção, não a escolha de todo dia. */
+  regTipo = i.feito ? "revisado" : "feito";
+  regPintarBotoes();
   abrirModal("dlgRegistro");
 }
 
@@ -2571,8 +2608,19 @@ function edIniciar() {
     t2.hidden = !t2.hidden;
     $("btnRegObs").textContent = t(t2.hidden ? "ed_reg_obs_abrir" : "ed_reg_obs_fechar");
   };
-  $("btnRegEstudo").onclick = () => confirmarRegistro("feito");
-  $("btnRegRevisao").onclick = () => confirmarRegistro("revisado");
+  $("btnRegEstudo").onclick = () => confirmarRegistro(regTipo);
+  $("btnRegOutro").onclick = () => {
+    regTipo = regTipo === "revisado" ? "feito" : "revisado";
+    /* TROCAR O TIPO TROCA A FORMA PADRÃO.
+     * Quem clica aqui está declarando "esta sessão foi da outra
+     * natureza". Manter "leitura" marcada num lançamento de revisão —
+     * ou o contrário — mandaria o tempo para a conta errada, e é
+     * exatamente o tipo de divergência que ninguém percebe depois. */
+    regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
+    regPintarFormas();
+    regPintarQuestoes();
+    regPintarBotoes();
+  };
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";
     $("edColarAviso").hidden = true;

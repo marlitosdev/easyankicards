@@ -24,8 +24,13 @@ function matCarregar() {
  * material. Estado que outra tela consulta precisa existir desde o começo. */
 try { matCarregar(); } catch (e) {}
 
-function matSalvar() {
+function matSalvar(chave) {
   try { guardar("eac_resumos", JSON.stringify(matResumos)); }
+  catch (e) {}
+  /* GRAVAR E DESENHAR ERAM DOIS MUNDOS SEM PONTE: criar um cartão
+   * gravava certo e a agenda só mostrava depois de um F5. Quem não sabe
+   * disso conclui que a gravação falhou e refaz o trabalho. */
+  try { if (typeof edAvisarMudanca === "function") edAvisarMudanca(chave); }
   catch (e) {}
 }
 
@@ -143,7 +148,7 @@ function matGravar(chave, texto, meta) {
     criado: antigo.criado || new Date().toISOString(),
     tocado: new Date().toISOString(),
   });
-  matSalvar();
+  matSalvar(chave);
   return matResumos[chave];
 }
 
@@ -2267,6 +2272,12 @@ function matCartoesPrompt() {
   reg("MATERIAL-CARTOES", copiou ? "prompt copiado" : "prompt gerado (sem copiar)",
       matAtual.topico + " · " + txt.length + " caracteres"
       + (mcPromptDeFora ? " · de uma questão" : ""));
+  try {
+    gerReg("cartoes", "prompt",
+      copiou ? "prompt copiado" : "prompt gerado (a área de transferência recusou)",
+      txt.length + " caracteres" + (mcPromptDeFora ? " · a partir de uma questão" : ""),
+      { topico: matAtual.topico, disciplina: matAtual.disciplina });
+  } catch (e) {}
   if (copiou) toast("mc_prompt_copiado");
 }
 
@@ -2287,7 +2298,8 @@ function matCartoesPromptFalhou() {
  * exportação depois, e é melhor a pessoa saber agora. */
 function matCartoesLer() {
   const bruto = $("mcTexto").value;
-  if (!bruto.trim()) return { cards: [], avisos: [], repetidos: 0 };
+  if (!bruto.trim())
+    return { cards: [], avisos: [], ignorados: [], suspeitos: [], repetidos: 0 };
   const r = parseText(bruto);
   const jaTem = new Set(
     String((matResumos[matAtual.chave] || {}).cartoes || "")
@@ -2297,7 +2309,87 @@ function matCartoesLer() {
     c._repetido = jaTem.has(String(c.front || "").trim().toLowerCase());
     if (c._repetido) repetidos++;
   });
-  return { cards: r.cards, avisos: r.warnings || [], repetidos };
+  /* O PARSER JÁ SABIA DE TUDO ISSO — qual linha foi recusada, o número
+   * dela, o texto e a frase do motivo — e esta função jogava fora
+   * `ignorados` e as `issues` de cada cartão no caminho de volta. O que
+   * sobrava era a CONTAGEM: "1 aviso(s)", sem nenhum caminho para
+   * descobrir qual. Contar um problema sem dizer qual é pior do que não
+   * contar: a pessoa fica sabendo que algo deu errado e sem saída. */
+  const suspeitos = r.cards
+    .filter((c) => c.issues && c.issues.length)
+    .map((c) => ({ linha: c.line, txt: String(c.front || "").slice(0, 90),
+                   motivos: c.issues.slice() }));
+  return { cards: r.cards, avisos: r.warnings || [],
+           ignorados: r.ignorados || [], suspeitos, repetidos };
+}
+
+/* As linhas recusadas viram uma lista com número, motivo e o texto que
+ * foi jogado fora. O texto inteiro importa: sem ele, "linha 1 sem ::"
+ * obriga a pessoa a contar linhas no campo acima para achar o culpado. */
+function matCartoesPintarRecusadas(r) {
+  const cx = $("mcRecusadas"), ul = $("mcRecusadasLista");
+  if (!cx || !ul) return [];
+  ul.innerHTML = "";
+  const itens = [];
+  (r.avisos || []).forEach((msg, i) => {
+    const ig = (r.ignorados || [])[i] || {};
+    itens.push({ tipo: "recusada", linha: ig.line || 0,
+                 motivo: msg, txt: ig.texto || "" });
+  });
+  (r.suspeitos || []).forEach((sp) => {
+    itens.push({ tipo: "suspeito", linha: sp.linha || 0,
+                 motivo: sp.motivos.join(" · "), txt: sp.txt || "" });
+  });
+  if (!itens.length) { cx.hidden = true; return itens; }
+  cx.hidden = false;
+  itens.forEach((x) => {
+    const li = document.createElement("li");
+    li.className = "mc-recusada mc-recusada-" + x.tipo;
+    const cab = document.createElement("div");
+    cab.className = "mc-recusada-cab";
+    /* RECUSADA e A CONFERIR são coisas diferentes e precisam parecer
+     * diferentes: uma não virou cartão, a outra virou e pode estar
+     * torta. Numa lista só, a pessoa apaga o que estava bom. */
+    cab.textContent = t(x.tipo === "recusada" ? "mc_rec_rot" : "mc_susp_rot",
+      { l: x.linha || "?" }) + " " + x.motivo;
+    li.append(cab);
+    if (x.txt) {
+      const tx = document.createElement("div");
+      tx.className = "mc-recusada-txt";
+      tx.textContent = x.txt;
+      li.append(tx);
+    }
+    ul.append(li);
+  });
+  return itens;
+}
+
+/* A CONFERÊNCIA RODA A CADA TECLA DIGITADA — está no "input" do campo.
+ * Registrar toda vez encheria o log com trezentas linhas iguais e ele
+ * deixaria de servir para o que foi feito. Então só entra quando o
+ * RESULTADO muda: outra contagem, outro motivo. Digitar sem alterar o
+ * que o parser entende não produz linha nenhuma. */
+let mcUltimaLeitura = "";
+
+function matCartoesRegistrarLeitura(r, recusadas) {
+  if (typeof gerReg !== "function") return;
+  const assinatura = [r.cards.length, r.repetidos,
+    (recusadas || []).map((x) => x.linha + ":" + x.motivo).join("|")].join("/");
+  if (assinatura === mcUltimaLeitura) return;
+  mcUltimaLeitura = assinatura;
+  /* campo vazio não é evento: é o estado de partida */
+  if (!r.cards.length && !(recusadas || []).length) return;
+  try {
+    gerReg("cartoes", "leitura", "texto conferido",
+      r.cards.length + " lido(s) · " + (recusadas || []).length
+      + " aviso(s) · " + r.repetidos + " já existia(m)",
+      { topico: (matAtual && matAtual.topico) || "",
+        disciplina: (matAtual && matAtual.disciplina) || "",
+        motivos: (recusadas || []).map((x) => ({
+          linha: x.linha, txtMotivo: x.motivo, txt: x.txt })),
+        numeros: { lidos: r.cards.length, avisos: (recusadas || []).length,
+                   repetidos: r.repetidos } });
+  } catch (e) {}
 }
 
 function matCartoesConferir() {
@@ -2305,14 +2397,19 @@ function matCartoesConferir() {
   const av = $("mcAviso");
   const pv = $("mcPreview");
   pv.innerHTML = "";
+  const recusadas = matCartoesPintarRecusadas(r);
   if (!r.cards.length) {
     av.hidden = !$("mcTexto").value.trim();
     av.textContent = t("mc_nada_lido");
+    matCartoesRegistrarLeitura(r, recusadas);
     return r;
   }
   av.hidden = false;
+  /* a contagem agora soma as duas coisas que a lista embaixo mostra —
+   * antes contava só os avisos do parser e escondia os cartões tortos */
   av.textContent = t("mc_lidos", { n: r.cards.length,
-    a: r.avisos.length, r: r.repetidos });
+    a: recusadas.length, r: r.repetidos });
+  matCartoesRegistrarLeitura(r, recusadas);
 
   const concurso = (matResumos[matAtual.chave] || {}).concurso
     || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
@@ -2372,12 +2469,22 @@ async function matCartoesSalvar() {
   if (!novos.length) {
     reg("MATERIAL-CARTOES", "nada a salvar",
         r.cards.length + " lidos, " + r.repetidos + " já existiam");
+    try {
+      gerReg("cartoes", "descarte", "nada a salvar",
+        r.cards.length + " lido(s), " + r.repetidos + " já existia(m)",
+        { topico: matAtual.topico, disciplina: matAtual.disciplina });
+    } catch (e) {}
     uiAlert(t(r.cards.length ? "mc_todos_repetidos" : "mc_nada_lido"));
     return;
   }
   if (!(await uiConfirm(t("mc_conf_salvar", {
     n: novos.length, tp: matAtual.topico, r: r.repetidos })))) {
     reg("MATERIAL-CARTOES", "gravação cancelada por você", novos.length + " cartões");
+    try {
+      gerReg("cartoes", "descarte", "gravação cancelada por você",
+        novos.length + " cartão(ões) que estavam prontos",
+        { topico: matAtual.topico, disciplina: matAtual.disciplina });
+    } catch (e) {}
     return;
   }
 
@@ -2410,7 +2517,15 @@ async function matCartoesSalvar() {
   reg("MATERIAL-CARTOES", "gravados no tópico",
       novos.length + " cartões em " + matAtual.topico
       + " (" + r.repetidos + " repetidos ignorados) · etiquetas: " + tags.join(" "));
+  try {
+    gerReg("cartoes", "gravacao", "gravados no tópico",
+      novos.length + " cartão(ões) · " + r.repetidos + " repetido(s) ignorado(s)"
+      + " · etiquetas: " + tags.join(" "),
+      { topico: matAtual.topico, disciplina: matAtual.disciplina,
+        numeros: { gravados: novos.length, repetidos: r.repetidos } });
+  } catch (e) {}
   $("mcTexto").value = "";
+  mcUltimaLeitura = "";
   matCartoesConferir();
   if ($("btnMcVer")) $("btnMcVer").hidden = false;
   await uiAlert(t("mc_salvos", { n: novos.length, tp: matAtual.topico }));
