@@ -48,10 +48,14 @@ function qsCarregar(lerLoja) {
   return qsBanco;
 }
 
-function qsSalvar(gravar) {
+function qsSalvar(gravar, chave) {
   const txt = JSON.stringify(qsBanco);
   if (gravar) { gravar(QS_CHAVE_LOJA, txt); return; }
   try { localStorage.setItem(QS_CHAVE_LOJA, txt); } catch (e) {}
+  /* mesma ponte do material: sem ela, a questão recém-criada só aparecia
+   * na agenda depois de recarregar a página */
+  try { if (typeof edAvisarMudanca === "function") edAvisarMudanca(chave); }
+  catch (e) {}
 }
 
 function qsTodas() { return qsBanco; }
@@ -70,6 +74,28 @@ function qsNovoId() {
  * texto corrido vira questões sobre o que ele afirma. O que ele não diz,
  * a IA não deve supor.
  * ------------------------------------------------------------------- */
+/* PROMPT PARA UM CADERNO COM FONTES CARREGADAS (NotebookLM e afins).
+ *
+ * A diferença que justifica um prompt separado: ali a IA já tem o
+ * material e responde ancorada nele. O prompt genérico pede "gere
+ * questões sobre este texto" e não manda texto nenhum — no caderno isso
+ * desperdiça a única vantagem real do lugar, e ainda deixa a porta
+ * aberta para a IA responder de memória, que é como entram no banco as
+ * questões com contexto errado.
+ *
+ * Aqui as instruções são o contrário: SÓ o que está nas fontes, e a
+ * citação de onde saiu dentro do comentário — que é o que permite,
+ * meses depois, conferir a questão contra o material em vez de
+ * acreditar nela. */
+function qsPromptCaderno(ctx) {
+  const c = ctx || {};
+  return t("qs_prompt_caderno", {
+    disciplina: c.disciplina || "?",
+    topico: c.topico || "?",
+    concurso: c.concurso || "?",
+  });
+}
+
 function qsPrompt(texto, ctx) {
   const c = ctx || {};
   return t("qs_prompt", {
@@ -567,7 +593,7 @@ function qsAplicar(lista, gravar) {
     qsBanco.push(limpa);
     novas.push(limpa);
   });
-  qsSalvar(gravar);
+  qsSalvar(gravar, novas.length ? novas[0].chave : "");
   return { novas: novas.length, repetidas, recusadas,
            ids: novas.map((x) => x.id) };
 }
@@ -615,6 +641,13 @@ function qsFiltrar(f) {
   return qsBanco.filter((q) => {
     if (o.chave && q.chave !== o.chave
         && qsChaveNormal(q.chave) !== qsChaveNormal(o.chave)) return false;
+    /* CONJUNTO de chaves — é assim que "só as questões deste edital"
+     * funciona sem que o banco de questões precise saber o que é um
+     * edital. Quem sabe montar a lista é a tela; aqui só se filtra. */
+    if (o.chaves && o.chaves.length) {
+      const k = qsChaveNormal(q.chave || "");
+      if (!k || o.chaves.indexOf(k) < 0) return false;
+    }
     if (o.disciplina && qsNormal(q.disciplina) !== qsNormal(o.disciplina)) return false;
     if (o.concurso && qsNormal(q.concurso) !== qsNormal(o.concurso)) return false;
     if (o.banca && qsNormal(q.banca) !== qsNormal(o.banca)) return false;
@@ -909,6 +942,11 @@ function qsResponder(escolha, gravar) {
   qsSessao.respondidas.push({ id: q.id, resp, acertou });
   qsSalvar(gravar);
   qsSessaoGravar(gravar);
+  /* o bloco em andamento acompanha a cada resposta: assim uma rodada
+   * abandonada guarda o que chegou a ser feito, em vez de ficar zerada */
+  try {
+    if (typeof qhAtualizar === "function") qhAtualizar(qsPlacar(), { gravar });
+  } catch (e) {}
   return { acertou, gabarito: q.gabarito, comentario: q.comentario, resp };
 }
 
@@ -1009,7 +1047,7 @@ function qsDesempenho(lista) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    qsNormal, qsCarregar, qsSalvar, qsTodas, qsPrompt, qsLerResposta,
+    qsNormal, qsCarregar, qsSalvar, qsTodas, qsPrompt, qsPromptCaderno, qsLerResposta,
     qsAplicar, qsDesfazer, qsApagar, qsFiltrar, qsContarPorChave, qsBancas,
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,

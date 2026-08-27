@@ -107,6 +107,63 @@ function hubViradaDePagina(encerrados) {
   return cx;
 }
 
+/* =====================================================================
+ * "ALGO MUDOU" — repintar a agenda quando o material muda
+ *
+ * O defeito: criar um cartão ou uma questão gravava tudo certo, e a
+ * agenda continuava mostrando o indicador apagado. Só aparecia depois de
+ * um F5 — e quem não sabe disso conclui que a gravação não funcionou, e
+ * refaz. Duas vezes o mesmo trabalho, com o app dizendo que não aconteceu
+ * nada.
+ *
+ * A causa é simples e a correção também: gravar e desenhar eram dois
+ * mundos sem ponte. matSalvar e qsSalvar são os gargalos por onde passa
+ * toda mudança de material; basta que eles avisem.
+ *
+ * DUAS PRECAUÇÕES:
+ *
+ * 1. DEBOUNCE. matSalvar é chamado a cada marca, a cada tecla do editor
+ *    em algumas telas. Repintar 232 linhas a cada chamada travaria a
+ *    digitação. O aviso se acumula e a repintura acontece uma vez, no
+ *    fim da rajada.
+ *
+ * 2. A MUDANÇA TEM DE SER PERCEBIDA. Um indicador que acende sem
+ *    transição, numa lista de dez linhas, acende fora do campo de visão
+ *    e é como se não tivesse acendido. A linha que mudou pisca — não
+ *    para enfeitar, mas para dizer "foi aqui".
+ * ================================================================== */
+let hubMudouTimer = null;
+let hubMudouChave = "";
+
+function edAvisarMudanca(chave) {
+  if (chave) hubMudouChave = String(chave);
+  if (hubMudouTimer) return;                 /* já há uma repintura marcada */
+  hubMudouTimer = setTimeout(() => {
+    hubMudouTimer = null;
+    const alvo = hubMudouChave;
+    hubMudouChave = "";
+    try { hubPintarAgenda(); } catch (e) {}
+    /* a tela do edital também mostra os mesmos indicadores */
+    try { if (typeof edRender === "function" && $("edPainel")) edRender(); }
+    catch (e) {}
+    try { if (typeof matRender === "function") matRender(); } catch (e) {}
+    if (alvo) hubPiscarLinha(alvo);
+  }, 120);
+}
+
+/* Acha a linha daquele tópico na agenda e a pisca por um instante. */
+function hubPiscarLinha(chave) {
+  const box = document.getElementById("edAgendaTopo");
+  if (!box || box.hidden) return;
+  const linhas = box.querySelectorAll(".ed-item");
+  (linhas || []).forEach((li) => {
+    if (String(li.dataset && li.dataset.chave) !== String(chave)) return;
+    if (!li.classList) return;
+    li.classList.add("ed-piscou");
+    setTimeout(() => { try { li.classList.remove("ed-piscou"); } catch (e) {} }, 1400);
+  });
+}
+
 function hubPintarAgenda() {
   const box = document.getElementById("edAgendaTopo");
   if (!box) return;

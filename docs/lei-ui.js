@@ -612,6 +612,24 @@ function leiCheiaTrocar(sim) {
   leiReg("leitura", leiCheia ? "leitura ampliada" : "leitura normal", "");
 }
 
+/* Abre uma gaveta e fecha a outra. */
+function leiGaveta(qual) {
+  const gavetas = ["leiGavNavegar", "leiGavExibir"];
+  const alvo = $(qual);
+  const abrindo = alvo ? alvo.hidden !== false : false;
+  gavetas.forEach((id) => {
+    const el = $(id);
+    if (el) el.hidden = !(abrindo && id === qual);
+  });
+  [["btnLeiNavegar", "leiGavNavegar"], ["btnLeiExibir", "leiGavExibir"]]
+    .forEach(([bid, gid]) => {
+      const b = $(bid);
+      const g = $(gid);
+      if (b && b.classList) b.classList.toggle("btn-min-ok", !!(g && g.hidden === false));
+    });
+  return abrindo;
+}
+
 function leiTrocarModo(modo) {
   leiModo = ["ler", "editar", "recitar"].indexOf(modo) >= 0 ? modo : "ler";
   const ed = leiModo === "editar";
@@ -1444,6 +1462,10 @@ function leiIniciar() {
     if (cx) cx.hidden = !cx.hidden;
   });
   liga("btnLeiIr", "ir ao artigo", () => leiIrAbrir());
+  /* AS GAVETAS. Uma de cada vez: duas abertas devolveriam a fila de
+   * catorze botões que elas existem para desfazer. */
+  liga("btnLeiNavegar", "gaveta ir para", () => leiGaveta("leiGavNavegar"));
+  liga("btnLeiExibir", "gaveta exibição", () => leiGaveta("leiGavExibir"));
   liga("btnLeiRank", "artigos que mais caem", () => leiRankingAbrir());
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
   liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());
@@ -1524,6 +1546,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
     leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
+    leiGaveta,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
     leiFonteDefinir, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,

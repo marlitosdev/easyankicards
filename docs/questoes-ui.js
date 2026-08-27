@@ -58,6 +58,11 @@ function qsUiCriarAbrir(texto, ctx) {
   qsUiTextoBase = t0;
   if ($("qsFonteResumo")) $("qsFonteResumo").checked = true;
   if ($("qsFonteOutro")) $("qsFonteOutro").checked = false;
+  if ($("qsFonteCaderno")) $("qsFonteCaderno").checked = false;
+  /* o prompt volta recolhido a cada abertura: ele é para copiar, não
+   * para ler, e aberto empurra para baixo o campo que a pessoa usa */
+  if ($("qsCriarPrompt")) $("qsCriarPrompt").hidden = true;
+  if ($("btnQsVerPrompt")) $("btnQsVerPrompt").textContent = t("qs_ver_prompt");
   if ($("qsCriarFonte")) { $("qsCriarFonte").value = ""; $("qsCriarFonte").hidden = true; }
   qsUiRefazerPrompt();
   $("qsCriarResposta").value = "";
@@ -172,7 +177,12 @@ function qsUiCaixaDica(texto) {
 
 function qsUiFonteAtual() {
   const outro = $("qsFonteOutro") && $("qsFonteOutro").checked;
-  return { texto: outro ? "" : qsUiTextoBase, externo: !!outro };
+  const caderno = $("qsFonteCaderno") && $("qsFonteCaderno").checked;
+  return {
+    texto: (outro || caderno) ? "" : qsUiTextoBase,
+    externo: !!(outro || caderno),
+    caderno: !!caderno,
+  };
 }
 
 /* MATERIAL DE FORA NÃO PRECISA PASSAR POR AQUI.
@@ -188,9 +198,18 @@ function qsUiRefazerPrompt() {
     $("qsFonteNota").hidden = !f.externo;
     $("qsFonteNota").textContent = t("qs_fonte_nota");
   }
-  $("qsCriarPrompt").value = f.externo
-    ? qsPrompt(t("qs_marca_material"), qsUiCtxCriar || {})
-    : qsPrompt(qsUiTextoBase, qsUiCtxCriar || {});
+  /* O CADERNO TEM PROMPT PRÓPRIO.
+   * Num caderno do NotebookLM a IA já está com as fontes carregadas e
+   * responde ancorada nelas. Mandar ali o prompt genérico — que pede
+   * "gere questões sobre este texto" e não traz texto nenhum — joga fora
+   * a única vantagem real do caderno, e ainda abre a porta para ela
+   * inventar de memória. O prompt do caderno exige o contrário: só o que
+   * está nas fontes, com a citação de onde saiu. */
+  $("qsCriarPrompt").value = f.caderno
+    ? qsPromptCaderno(qsUiCtxCriar || {})
+    : (f.externo
+        ? qsPrompt(t("qs_marca_material"), qsUiCtxCriar || {})
+        : qsPrompt(qsUiTextoBase, qsUiCtxCriar || {}));
   if ($("btnQsCopiarPrompt")) $("btnQsCopiarPrompt").disabled = false;
 }
 
@@ -222,6 +241,21 @@ function qsUiConferir() {
          + (detalhe ? " · motivos: " + detalhe : "")
          + " · formato: " + (/\[QUESTAO\]/i.test($("qsCriarResposta").value)
              ? "campos nomeados" : "linha compacta"));
+  /* O MESMO no registro da geração — e ali com os motivos linha a linha,
+   * não só a contagem por motivo. "gabarito_fora_das_opcoes×2" diz o que
+   * ajustar no prompt; a linha e o enunciado dizem QUAL questão. */
+  try {
+    gerReg("questoes", "leitura", "resposta da IA conferida",
+      r.achados.length + " lida(s) · " + repetidas + " repetida(s) do texto · "
+      + r.ignoradas.length + " recusada(s)"
+      + " · formato: " + (/\[QUESTAO\]/i.test($("qsCriarResposta").value)
+          ? "campos nomeados" : "linha compacta"),
+      { topico: (qsUiCtxCriar || {}).topico || "",
+        disciplina: (qsUiCtxCriar || {}).disciplina || "",
+        motivos: r.ignoradas,
+        numeros: { lidas: r.achados.length, repetidas,
+                   recusadas: r.ignoradas.length } });
+  } catch (e) {}
 }
 
 /* o desenho da conferência é o mesmo vindo da IA ou vindo do texto: o que
@@ -346,6 +380,17 @@ function qsUiAplicar() {
   matReg("questao", "questões gravadas",
          qsUiRecibo.novas + " gravadas · " + deixadas.length + " deixadas de fora"
          + (foraTxt ? " → " + foraTxt : ""));
+  try {
+    gerReg("questoes", "gravacao", "questões gravadas",
+      qsUiRecibo.novas + " gravada(s) · " + deixadas.length + " deixada(s) de fora",
+      { topico: (qsUiCtxCriar || {}).topico || "",
+        disciplina: (qsUiCtxCriar || {}).disciplina || "",
+        motivos: deixadas.map((e) => ({
+          linha: e.q.linha || 0,
+          txtMotivo: e.par ? t("qs_ger_fora_rep") : t("qs_ger_fora_voce"),
+          txt: String(e.q.enunciado || "").slice(0, 90) })),
+        numeros: { gravadas: qsUiRecibo.novas, fora: deixadas.length } });
+  } catch (e) {}
   uiAlert(t("qs_aplicadas2", { n: qsUiRecibo.novas, f: deixadas.length }));
 }
 
@@ -394,7 +439,20 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
     if (r === "sair" || r === null) return;
     if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
   }
-  if (!retomou) qsSessaoIniciar(lista, { embaralhar: true, escopo: esc });
+  if (!retomou) {
+    qsSessaoIniciar(lista, { embaralhar: true, escopo: esc });
+    /* O BLOCO ENTRA NO HISTÓRICO AO COMEÇAR, não ao terminar — rodada
+     * abandonada no meio é informação, talvez a mais útil, porque diz
+     * onde o estudo emperra. E entra pelo MESMO caminho venha ela da
+     * agenda ou da aba: dois formatos para o mesmo gesto seriam duas
+     * listas que nunca somam. */
+    try {
+      qhIniciar(lista, {
+        origem: deOnde || "aba", escopo: esc,
+        filtro: qsUiFiltroDoEscopo(esc, deOnde),
+      });
+    } catch (e) {}
+  }
   else {
     /* questões criadas depois que a rodada começou entram no fim, em vez
      * de obrigar a recomeçar para incluí-las */
@@ -955,9 +1013,23 @@ function qsUiRegistrarEstudo() {
 
   $("dlgQsResponder").close();
   if (typeof abrirRegistro !== "function") { uiAlert(t("qs_registrar_sem_edital")); return; }
+  /* NÃO DIZER "feito: false" AQUI.
+   *
+   * Era este o defeito: resolver questões de um tópico que estava para
+   * revisar somava as horas mas não cumpria a revisão — o tópico
+   * continuava cobrado na agenda, dia após dia, com o tempo entrando
+   * numa conta e a revisão em outra.
+   *
+   * A causa era esta linha. O "feito: false" não era uma informação,
+   * era um valor de preenchimento — e abrirRegistro respeita o que
+   * recebe: só busca o estado real do plano quando o campo vem VAZIO.
+   * Dizer "false" sobrescrevia a verdade com um palpite, e o palpite
+   * estava sempre errado justamente nos tópicos já estudados.
+   *
+   * Omitindo o campo, quem decide é o plano — que é quem sabe. */
   abrirRegistro({
     nome: modelo.topico, disciplina: modelo.disciplina,
-    chave: modelo.chave, minutos: min, feito: false,
+    chave: modelo.chave, minutos: min,
   });
   if (typeof regDeQuestoes === "function") {
     regDeQuestoes(p.feitas, p.certas, min);
@@ -982,14 +1054,241 @@ function qsUiOpcoesDe(sel, valores, rotuloTodos, atual) {
   });
 }
 
+/* =====================================================================
+ * FILTRAR POR EDITAL E POR TÓPICO
+ *
+ * Disciplina é o nome que a questão carrega; o edital é a lista que a
+ * pessoa está estudando. Com dois ou três concursos abertos, "todas as
+ * questões de Direito Financeiro" mistura recortes de bancas e cargos
+ * diferentes — e a pergunta real, na hora de estudar, é sempre "o que eu
+ * tenho PARA ESTE edital?".
+ *
+ * O tópico vem depois e é filtrado pelo edital escolhido. E os BLOCOS do
+ * edital entram como cabeçalho da lista (<optgroup>): é o que transforma
+ * 232 linhas soltas numa lista navegável, e é também onde a pergunta
+ * "tenho questões do bloco que está abaixo do mínimo?" ganha resposta.
+ * ================================================================== */
+
+/* As chaves de tópico de um edital, agrupadas pelos blocos dele. */
+function qsUiTopicosDoEdital(id) {
+  if (typeof editais === "undefined" || typeof lerEdital !== "function") return [];
+  const e = (editais || []).filter((x) => x.id === id)[0];
+  if (!e) return [];
+  const r = lerEdital(e.texto || "");
+  const porBloco = {};
+  const ordem = [];
+  (r.disciplinas || []).forEach((d) => {
+    /* sem blocos declarados, a DISCIPLINA vira o cabeçalho: melhor um
+     * agrupamento óbvio que uma lista de 232 nomes sem hierarquia */
+    const grupo = d.bloco || d.nome;
+    if (!porBloco[grupo]) { porBloco[grupo] = []; ordem.push(grupo); }
+    (d.topicos || []).forEach((tp) => {
+      porBloco[grupo].push({
+        chave: (d.nome + "›" + tp.nome).toLowerCase(),
+        nome: tp.nome, disciplina: d.nome,
+      });
+    });
+  });
+  return ordem.map((g) => ({ grupo: g, itens: porBloco[g] }));
+}
+
+/* A lista que está na tela agora — usada pelo "responder tudo", que
+ * precisa responder exatamente o que está sendo mostrado. */
+/* O QUE REFAZER PRECISA SABER.
+ * Um item de histórico que diz "12 de 20, 60%" é um número solto que não
+ * leva a lugar nenhum. Guardando o filtro, "refazer" reconstrói o mesmo
+ * recorte — e é isso que transforma o histórico numa ferramenta em vez
+ * de um placar. */
+/* =====================================================================
+ * O HISTÓRICO NA TELA
+ *
+ * Cada linha responde três coisas, nesta ordem: DE QUE foi o bloco, COMO
+ * você foi, e o caminho para REFAZER. A terceira é a que separa um
+ * histórico de um placar — sem ela, a lista é só um museu de números.
+ * ================================================================== */
+function qsUiHistRender() {
+  const box = $("qsHistLista");
+  if (!box) return;
+  qhCarregar();
+  const todos = qhTodos();
+
+  const r = qhResumo(7);
+  const cab = $("qsHistResumo");
+  if (cab) {
+    cab.textContent = r.blocos
+      ? t("qs_hist_resumo_cab", { n: r.blocos + (r.blocos === 1 ? " bloco" : " blocos"),
+          pct: r.pct === null ? "—" : r.pct + "%" })
+      : t("qs_hist_resumo_zero");
+  }
+
+  box.innerHTML = "";
+  if (!todos.length) {
+    const p = document.createElement("div");
+    p.className = "nota";
+    /* dizer POR QUE está vazio, e o que fazer para deixar de estar */
+    p.textContent = t("qs_hist_vazio");
+    box.append(p);
+    return;
+  }
+
+  todos.slice(0, 40).forEach((h) => {
+    const li = document.createElement("div");
+    /* INTERROMPIDO NÃO É ERRO — é informação, e a mais útil: diz onde o
+     * estudo emperra. Por isso tem estado próprio, em cor de atenção. */
+    const aberto = !h.fim && h.feitas < h.total;
+    li.className = "qs-hist-item" + (aberto ? " qs-hist-aberto" : "");
+
+    const rot = document.createElement("span");
+    rot.className = "qs-hist-rot";
+    rot.textContent = h.rotulo || t("qs_hist_linha_zero", { tot: h.total });
+
+    const num = document.createElement("span");
+    num.className = "qs-hist-num";
+    num.textContent = (h.feitas
+      ? t("qs_hist_linha", { f: h.feitas, tot: h.total,
+          pct: h.pct === null ? "—" : h.pct + "%" })
+      : t("qs_hist_linha_zero", { tot: h.total }))
+      + (aberto ? " · " + t("qs_hist_aberto") : "");
+
+    const quando = document.createElement("span");
+    quando.className = "qs-hist-num";
+    quando.textContent = t("qs_hist_quando", {
+      d: String(h.q || "").slice(0, 10), min: h.minutos || 0 })
+      + " · " + t("qs_hist_origem_" + (h.origem || "aba"));
+
+    const bRe = document.createElement("button");
+    bRe.type = "button";
+    bRe.className = "btn-min";
+    bRe.textContent = t("qs_hist_refazer");
+    bRe.title = t("qs_hist_refazer_ajuda");
+    bRe.onclick = () => qsUiHistRefazer(h.id);
+
+    const bDel = document.createElement("button");
+    bDel.type = "button";
+    bDel.className = "btn-min btn-min-perigo";
+    bDel.textContent = "×";
+    bDel.title = t("qs_hist_apagar_ajuda");
+    bDel.onclick = () => { qhApagar(h.id); qsUiHistRender(); };
+
+    li.append(rot, num, quando, bRe, bDel);
+    box.append(li);
+  });
+}
+
+/* REFAZER = reconstruir o mesmo recorte, não repetir as mesmas questões
+ * na mesma ordem. Se uma questão foi apagada desde então, o bloco vem
+ * menor — e isso é mais honesto que ressuscitar o que não existe mais. */
+function qsUiHistRefazer(id) {
+  const h = qhTodos().filter((x) => x.id === id)[0];
+  if (!h) return false;
+  if (!h.filtro) { uiAlert(t("qs_hist_sem_filtro")); return false; }
+  if (h.filtro.umaId) {
+    const q = qsTodas().filter((x) => x.id === h.filtro.umaId)[0];
+    if (!q) { uiAlert(t("qs_hist_sem_filtro")); return false; }
+    qsUiResponderAbrir([q], "aba", "uma:" + q.id);
+    return true;
+  }
+  Object.keys(h.filtro).forEach((k) => { qsUiFiltro[k] = h.filtro[k]; });
+  qsUiRender();
+  qsUiResponderAbrir(qsUiListaFiltrada(), h.origem || "aba", h.escopo || "");
+  return true;
+}
+
+function qsUiFiltroDoEscopo(esc, deOnde) {
+  if (deOnde === "aba") return Object.assign({}, qsUiFiltro);
+  const m = String(esc || "").match(/^topico:(.+)$/);
+  if (m) return { chave: m[1] };
+  const u = String(esc || "").match(/^uma:(.+)$/);
+  if (u) return { umaId: u[1] };
+  return null;
+}
+
+function qsUiListaFiltrada() {
+  const filtro = Object.assign({}, qsUiFiltro);
+  if (filtro.edital && !filtro.chave) {
+    const ks = [];
+    qsUiTopicosDoEdital(filtro.edital).forEach((g) => {
+      g.itens.forEach((it) => ks.push(qsChaveNormal(it.chave)));
+    });
+    filtro.chaves = ks;
+  }
+  delete filtro.edital;
+  return qsFiltrar(filtro);
+}
+
+function qsUiPintarEditais() {
+  const sel = $("qsFEdital");
+  if (!sel) return;
+  const lista = (typeof editais !== "undefined" ? editais : []) || [];
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = t("qs_todos_editais");
+  sel.append(o0);
+  lista.forEach((e) => {
+    const o = document.createElement("option");
+    o.value = e.id;
+    o.textContent = e.nome;
+    if (e.id === qsUiFiltro.edital) o.selected = true;
+    sel.append(o);
+  });
+  /* com um edital só, escolher entre "todos" e "ele" não muda nada */
+  sel.hidden = lista.length < 2;
+}
+
+function qsUiPintarTopicos() {
+  const sel = $("qsFTopico");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = t("qs_todos_topicos");
+  sel.append(o0);
+
+  const grupos = qsUiFiltro.edital ? qsUiTopicosDoEdital(qsUiFiltro.edital) : [];
+  /* SEM EDITAL ESCOLHIDO NÃO HÁ LISTA DE TÓPICOS. Juntar os tópicos de
+   * três editais numa lista só devolveria o amontoado que este filtro
+   * existe para desfazer. */
+  sel.hidden = !grupos.length;
+  if (!grupos.length) { qsUiFiltro.chave = ""; return; }
+
+  /* quantas questões existem por tópico: um tópico sem questão nenhuma
+   * na lista é uma escolha que leva a uma tela vazia */
+  const conta = {};
+  qsTodas().forEach((q) => {
+    const k = qsChaveNormal(q.chave || "");
+    if (k) conta[k] = (conta[k] || 0) + 1;
+  });
+
+  grupos.forEach((g) => {
+    const og = document.createElement("optgroup");
+    og.label = g.grupo;
+    let algum = false;
+    g.itens.forEach((it) => {
+      const n = conta[qsChaveNormal(it.chave)] || 0;
+      if (!n) return;                 /* tópico sem questão não entra */
+      algum = true;
+      const o = document.createElement("option");
+      o.value = it.chave;
+      o.textContent = it.nome + " (" + n + ")";
+      if (qsChaveNormal(it.chave) === qsChaveNormal(qsUiFiltro.chave)) o.selected = true;
+      og.append(o);
+    });
+    if (algum) sel.append(og);
+  });
+}
+
 function qsUiRender() {
   const box = $("qsLista");
   if (!box) return;
+  qsUiPintarEditais();
+  qsUiPintarTopicos();
   qsUiOpcoesDe("qsFDisc", qsDisciplinas(), t("qs_todas_disc"), qsUiFiltro.disciplina);
   qsUiOpcoesDe("qsFBanca", qsBancas(), t("qs_todas_bancas"), qsUiFiltro.banca);
 
-  const lista = qsFiltrar(qsUiFiltro);
+  /* o filtro de edital vira um CONJUNTO DE CHAVES aqui, não lá dentro:
+   * o banco de questões não precisa saber o que é um edital */
+  const lista = qsUiListaFiltrada();
   const d = qsDesempenho(lista);
+  try { qsUiHistRender(); } catch (e) {}
   $("qsResumo").textContent = qsTodas().length
     ? t("qs_resumo", { n: lista.length, tot: qsTodas().length,
         f: d.feitas, pct: d.pct === null ? "—" : d.pct + "%" })
@@ -1092,6 +1391,8 @@ function qsUiRender() {
 
 function qsUiLerFiltros() {
   qsUiFiltro = {
+    edital: ($("qsFEdital") || {}).value || "",
+    chave: ($("qsFTopico") || {}).value || "",
     disciplina: ($("qsFDisc") || {}).value || "",
     banca: ($("qsFBanca") || {}).value || "",
     tipo: ($("qsFTipo") || {}).value || "",
@@ -1216,17 +1517,40 @@ function qsUiIniciar() {
   }
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
-  ["qsFonteResumo", "qsFonteOutro"].forEach((id) => {
+  ["qsFonteResumo", "qsFonteOutro", "qsFonteCaderno"].forEach((id) => {
     if ($(id)) $(id).onchange = () => qsUiRefazerPrompt();
   });
   if ($("qsCriarFonte")) $("qsCriarFonte").oninput = () => qsUiRefazerPrompt();
+  if ($("btnQsVerPrompt")) {
+    $("btnQsVerPrompt").onclick = () => {
+      const ta = $("qsCriarPrompt");
+      if (!ta) return;
+      ta.hidden = !ta.hidden;
+      $("btnQsVerPrompt").textContent =
+        t(ta.hidden ? "qs_ver_prompt" : "qs_esconder_prompt");
+    };
+  }
   if ($("btnQsCopiarPrompt")) {
     $("btnQsCopiarPrompt").onclick = () => {
-      try { navigator.clipboard.writeText($("qsCriarPrompt").value); } catch (e) {}
+      let copiou = true;
+      try { navigator.clipboard.writeText($("qsCriarPrompt").value); }
+      catch (e) { copiou = false; }
       const b = $("btnQsCopiarPrompt");
       const r = b.textContent;
       b.textContent = t("copied");
       setTimeout(() => { b.textContent = r; }, 1800);
+      /* QUAL PROMPT SAIU importa tanto quanto se saiu: o do caderno e o
+       * comum pedem coisas diferentes, e quando a resposta vem torta a
+       * primeira pergunta é qual dos dois foi usado. */
+      try {
+        const f = qsUiFonteAtual();
+        gerReg("questoes", "prompt",
+          copiou ? "prompt copiado" : "prompt gerado (a área de transferência recusou)",
+          $("qsCriarPrompt").value.length + " caracteres · "
+          + (f.caderno ? "prompt do caderno" : f.externo ? "material externo" : "deste resumo"),
+          { topico: (qsUiCtxCriar || {}).topico || "",
+            disciplina: (qsUiCtxCriar || {}).disciplina || "" });
+      } catch (e) {}
     };
   }
   /* SAIR DA QUESTAO COM RABISCO NA TELA.
@@ -1299,10 +1623,20 @@ function qsUiIniciar() {
     });
   }
   if ($("btnQsResponderTudo")) {
-    $("btnQsResponderTudo").onclick = () => qsUiResponderAbrir(qsFiltrar(qsUiFiltro),
+    $("btnQsResponderTudo").onclick = () => qsUiResponderAbrir(qsUiListaFiltrada(),
       "aba", "aba:" + JSON.stringify(qsUiFiltro));
   }
-  ["qsFDisc", "qsFBanca", "qsFTipo", "qsFIneditas", "qsFErradas"].forEach((id) => {
+  if ($("btnQsHistLimpar")) {
+    $("btnQsHistLimpar").onclick = async () => {
+      const n = qhTodos().length;
+      if (!n) return;
+      if (!(await uiConfirm(t("qs_hist_limpar_conf", { n })))) return;
+      qhLimpar();
+      qsUiHistRender();
+    };
+  }
+  ["qsFEdital", "qsFTopico", "qsFDisc", "qsFBanca", "qsFTipo",
+   "qsFIneditas", "qsFErradas"].forEach((id) => {
     if ($(id)) $(id).onchange = () => qsUiLerFiltros();
   });
   if ($("qsBusca")) $("qsBusca").oninput = () => qsUiLerFiltros();
