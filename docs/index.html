@@ -682,6 +682,27 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgMaterial[open], #dlgLeiSeca[open]{display:flex;flex-direction:column;
   max-height:92vh;margin:auto}
 #dlgMaterial[open] > *, #dlgLeiSeca[open] > *{flex:0 0 auto}
+
+/* ---- RESPONDER QUESTÕES: a ação principal não pode sair da tela ----
+ * O "Próxima" era o último elemento de um diálogo que rolava inteiro.
+ * Com enunciado longo, barra de grifo, alternativas e rascunho, ele
+ * caía abaixo da borda — e avançar virava "rolar até o fim primeiro",
+ * a cada questão. Mesmo remédio da lei seca e do material: o diálogo
+ * em coluna, só o CORPO da questão elástico, e o passo principal preso
+ * no rodapé, sempre no mesmo lugar.
+ * [open] é obrigatório: sem ele o display:flex venceria o display:none
+ * da folha do navegador e o diálogo apareceria fechado na página. */
+#dlgQsResponder[open]{display:flex;flex-direction:column;
+  max-height:92vh;margin:auto}
+#dlgQsResponder[open] > *{flex:0 0 auto}
+#dlgQsResponder #qsSessCorpo{flex:1 1 auto;overflow-y:auto;min-height:80px}
+/* o rascunho fica junto do que rola: é papel de apoio, não passo do
+   fluxo, e preso embaixo roubaria a altura do enunciado */
+#dlgQsResponder #rsCaixa{flex:0 1 auto;overflow-y:auto;max-height:44vh}
+/* a faixa da ação principal encosta no rodapé e ganha uma linha acima
+   para não parecer que flutua sobre o texto */
+#dlgQsResponder .qs-barra-principal{margin:8px 0 0;padding-top:8px;
+  border-top:1px solid var(--borda)}
 /* o texto é a única parte elástica — e portanto a única que rola */
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
 #dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{
@@ -1106,6 +1127,20 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mc-recusada-suspeito .mc-recusada-cab{color:var(--atencao)}
 .mc-recusada-txt{color:var(--sutil);margin-top:2px;line-height:1.4;
   word-break:break-word}
+.mat-info-bt{border-radius:999px;width:22px;height:22px;padding:0;
+  font-weight:800;line-height:1}
+/* MENU DE TRÊS PONTOS por linha. `position:relative` no contêiner e
+   `absolute` no menu: assim ele flutua sobre a linha de baixo em vez de
+   empurrá-la, que era o defeito de resolver isto com um <details>. */
+.mat-menu-cx{position:relative;display:inline-block}
+.mat-menu-bt{padding:3px 7px;font-weight:800;letter-spacing:.06em}
+.mat-menu{position:absolute;right:0;top:calc(100% + 3px);z-index:30;
+  min-width:170px;display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--borda);border-radius:9px;
+  box-shadow:0 8px 22px rgba(0,0,0,.34);overflow:hidden}
+.mat-menu-item{text-align:left;background:none;border:0;color:var(--texto);
+  font-family:inherit;font-size:11.5px;padding:7px 10px;cursor:pointer}
+.mat-menu-item:hover{background:var(--campo)}
 .mat-topo{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;
   padding-bottom:8px;border-bottom:1px solid var(--borda)}
 .mat-marcador-info{font-size:10px;color:var(--sutil)}
@@ -1792,16 +1827,37 @@ dialog.mat-amplo{max-height:96vh}
   color:var(--sutil);font-weight:700}
 .n-feito b{color:var(--ok)}.n-rev b{color:var(--ok)}.n-falta b{color:var(--sutil)}
 .n-alerta{border-color:rgba(226,75,74,.6)}.n-alerta b{color:var(--erro)}
-.lac-linha{all:unset;cursor:pointer;display:flex;align-items:center;gap:9px;
+/* UMA GRADE, e o cabeçalho usa exatamente as mesmas colunas: definidas
+   em dois lugares diferentes elas desalinham na primeira mudança de
+   fonte, e uma tabela desalinhada é pior do que texto corrido. */
+.lac-cab,.lac-linha{display:grid;
+  grid-template-columns:minmax(0,1fr) 88px 46px 46px 34px;
+  align-items:center;gap:9px}
+.lac-cab{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--sutil);font-weight:700;padding:6px 0 4px;
+  border-bottom:1px solid var(--borda)}
+.lac-linha{all:unset;cursor:pointer;display:grid;
+  grid-template-columns:minmax(0,1fr) 88px 46px 46px 34px;
+  align-items:center;gap:9px;
   padding:7px 0;font-size:12px;border-bottom:1px solid var(--borda);width:100%;
   box-sizing:border-box}
 .lac-linha:hover .lac-nome{text-decoration:underline}
-.lac-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lac-barra{width:90px;height:6px;border-radius:4px;background:var(--panel);
+.lac-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lac-barra{width:100%;height:6px;border-radius:4px;background:var(--panel);
   overflow:hidden;flex-shrink:0}
 .lac-ok{height:100%;background:#22c55e;border-radius:4px}
-.lac-linha b{width:104px;text-align:right;font-size:11px;flex-shrink:0;color:var(--sutil)}
-.lac-linha b.lac-alerta{color:var(--erro)}
+.lac-num{text-align:right;font-size:11px;color:var(--sutil);
+  font-variant-numeric:tabular-nums}
+/* a coluna do progresso guarda barra E número: a barra para a leitura de
+   relance, o número para conferir */
+.lac-feito{display:flex;align-items:center;gap:6px}
+.lac-feito i{font-style:normal;flex:0 0 30px;text-align:right}
+/* só DUAS coisas ganham cor, e por motivos diferentes: o buraco (porque
+   é o critério da ordem) e os prioritários intocados (porque é o que se
+   deve fazer hoje). Tudo colorido é nada colorido — era o defeito do
+   bloco anterior, seis frases inteiras em vermelho. */
+.lac-falta{color:var(--texto);font-weight:700}
+.lac-num.lac-alerta{color:var(--erro);font-weight:800}
 .rt-tit{font-size:12.5px;font-weight:700;margin:0 0 9px}
 .ed-ritmo{margin:0 0 10px;padding:11px 13px;border-radius:10px;
   background:var(--campo);border:1px solid var(--borda)}
@@ -1895,7 +1951,11 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .rs-aviso{font-size:11.5px;opacity:.75;margin-left:auto}
 .rs-aviso.rs-ok{color:var(--ok);opacity:1}
 .rs-corpo{padding:8px}
-.rs-ferramentas{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+/* de faixa própria para trecho da barra do título: sem margem embaixo,
+   porque não é mais uma linha — e com gap menor, porque agora divide a
+   linha com o título e o aviso */
+.rs-ferramentas{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
+.rs-topo{flex-wrap:wrap}
 .rs-caneta{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .rs-caneta.rs-sel{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
 .rs-borracha.rs-sel{outline:2px solid #fff}
@@ -2438,9 +2498,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button class="btn-min" id="btnDuvidas" data-i18n="duv_btn"
           title="Junta num lugar só tudo que você marcou em azul como dúvida, em todos os resumos e leis secas. Serve para tirar as dúvidas de uma vez."></button>
         <button class="btn-min" id="btnMatLogAba" data-i18n="mat_log_btn"></button>
+        <!-- A INSTRUÇÃO VIRA BOTÃO.
+             O parágrafo explicava bem — na primeira vez. Da segunda em
+             diante ele é uma faixa de texto que se lê por cima todo dia
+             e que empurra a lista para baixo. Quem precisa dele ainda o
+             alcança; quem já sabe não paga mais por ele. -->
+        <button class="btn-min mat-info-bt" id="btnMatIntro"
+          aria-label="O que é esta aba" title="O que é esta aba">?</button>
       </span>
     </div>
-    <p class="nota" data-i18n="mat_intro"></p>
     <!-- Dois campos com sugestão, e o edital vem PRIMEIRO: com dois
          concursos as disciplinas se repetem ("Direito Financeiro" existe
          nos dois), e uma lista única de disciplinas não diz de qual delas
@@ -3152,13 +3218,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <!-- RASCUNHO: o papel de lado. Recolhido por padrao. -->
   <div id="rsCaixa" class="rs-caixa" hidden>
+    <!-- AS FERRAMENTAS SOBEM PARA A LINHA DO TÍTULO.
+         Numa faixa própria elas custavam uma linha inteira só para
+         existir, e essa linha entra na conta do que empurra o botão de
+         ação para fora da tela. Na barra do título o espaço já estava
+         pago, e a ordem continua a mesma: primeiro escolher, depois
+         desenhar. -->
     <div class="rs-topo">
       <button class="btn-min" id="btnRsMin" type="button"></button>
       <span class="rs-tit" data-i18n="rs_titulo"></span>
+      <span class="rs-ferramentas" id="rsFerramentas" hidden></span>
       <span class="rs-aviso" id="rsAviso"></span>
     </div>
     <div id="rsCorpo" class="rs-corpo" hidden>
-      <div class="rs-ferramentas" id="rsFerramentas"></div>
       <canvas id="rsTela" class="rs-tela" width="900" height="420"></canvas>
       <p class="nota" data-i18n="rs_ajuda"></p>
       <div class="rs-acoes">
