@@ -153,6 +153,7 @@ function plBarra() {
   fer.append(bl);
 
   barra.append(fer);
+  plBotoes.fer = fer;
   plPintarFerramentas();
   return barra;
 }
@@ -185,6 +186,13 @@ function plLigar(sim) {
 function plLigada_() { return plLigada; }
 
 function plPintarFerramentas() {
+  /* AS FERRAMENTAS SÓ EXISTEM ENQUANTO SE GRIFA.
+   * Sete botões — quatro cores, borracha, dois tamanhos — ocupavam uma
+   * faixa inteira entre o enunciado e as alternativas em TODA questão,
+   * inclusive nas que ninguém marca. E o custo não é só estético: é essa
+   * faixa que empurrava o "Próxima" para fora da tela. Desligada, sobra
+   * um botão só, "grifar", que é a porta de entrada. */
+  if (plBotoes.fer) plBotoes.fer.hidden = !plLigada;
   (typeof RS_CANETAS !== "undefined" ? RS_CANETAS : []).forEach((c) => {
     const b = plBotoes[c.id];
     if (b) b.className = "rs-caneta"

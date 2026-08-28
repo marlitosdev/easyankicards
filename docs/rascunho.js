@@ -118,6 +118,12 @@ function rsRecolher(sim) {
   const corpo = $("rsCorpo");
   if (!corpo) return;
   corpo.hidden = !!sim;
+  /* AS FERRAMENTAS SEGUEM O CORPO. Elas agora moram na barra do título,
+   * que continua visível com o rascunho recolhido — e cores de caneta
+   * ao lado de um rascunho fechado não são atalho, são enfeite: não há
+   * onde desenhar. */
+  const fer = $("rsFerramentas");
+  if (fer) fer.hidden = !!sim;
   const b = $("btnRsMin");
   if (b) {
     b.textContent = t(sim ? "rs_abrir" : "rs_recolher");

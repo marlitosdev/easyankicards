@@ -1886,6 +1886,70 @@ function matPintarSugestoes() {
   });
 }
 
+/* Qual linha está com o menu aberto. UMA SÓ: dois menus abertos ao mesmo
+ * tempo em linhas vizinhas se sobrepõem e a pessoa clica no item errado.
+ * Guardado fora do desenho porque matRender() reconstrói a lista inteira
+ * a cada mudança — dentro, o menu fecharia sozinho a cada repintura. */
+let matMenuAberto = "";
+
+function matMenuFechar() {
+  matMenuAberto = "";
+  const box = $("matLista");
+  if (!box) return;
+  const varrer = (el) => {
+    (el.children || []).forEach((f) => {
+      if (/(^| )mat-menu( |$)/.test(f.className || "")) f.hidden = true;
+      varrer(f);
+    });
+  };
+  varrer(box);
+}
+
+/* O menu de três pontos de uma linha. `outras` são {rot, dica, faz}. */
+function matMenuLinha(chave, outras) {
+  const cx = document.createElement("span");
+  cx.className = "mat-menu-cx";
+  if (!outras || !outras.length) return cx;
+
+  const bt = document.createElement("button");
+  bt.type = "button";
+  bt.className = "btn-min mat-menu-bt";
+  bt.textContent = "⋮";
+  /* SÓ O SÍMBOLO NÃO DIZ NADA a quem usa leitor de tela nem a quem passa
+   * o dedo em cima. O rótulo acessível diz o que há atrás. */
+  bt.title = t("mat_menu_ajuda");
+  bt.setAttribute("aria-label", t("mat_menu_ajuda"));
+  bt.setAttribute("aria-haspopup", "true");
+
+  const menu = document.createElement("div");
+  menu.className = "mat-menu";
+  menu.hidden = matMenuAberto !== chave;
+
+  outras.forEach((o) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mat-menu-item";
+    b.textContent = o.rot;
+    if (o.dica) b.title = o.dica;
+    b.onclick = () => {
+      /* FECHA ANTES DE AGIR: a ação costuma abrir outra janela, e um menu
+       * aberto atrás dela reaparece quando a janela fecha, sem contexto. */
+      matMenuFechar();
+      try { o.faz(); } catch (e) {}
+    };
+    menu.append(b);
+  });
+
+  bt.onclick = () => {
+    const abrir = menu.hidden;
+    matMenuFechar();
+    if (abrir) { matMenuAberto = chave; menu.hidden = false; }
+  };
+  bt.setAttribute("aria-expanded", menu.hidden ? "false" : "true");
+  cx.append(bt, menu);
+  return cx;
+}
+
 function matRender() {
   const box = $("matLista");
   if (!box) return;
@@ -1965,40 +2029,46 @@ function matRender() {
             av.append(document.createTextNode(" "), bl);
             esq.append(av);
           }
+          /* UMA AÇÃO PRINCIPAL POR LINHA, o resto no menu.
+           * Quatro botões repetidos em cada uma das dezenas de linhas
+           * produziam uma parede de botões onde nada se destaca — e o
+           * que se faz noventa por cento das vezes é abrir o material.
+           * Os outros caminhos continuam existindo, a um toque de
+           * distância, em vez de disputarem o olho a cada linha. */
           const acoes = document.createElement("div");
           acoes.className = "mat-acoes";
           const ler = botaoMini("mat_abrir", "btn-cinza",
             () => matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "ler"));
           acoes.append(ler);
+
+          const outras = [];
           /* CAMINHO ATÉ OS CARTÕES. Sem ele, os cartões existiam guardados e
            * não havia como chegar até eles a não ser abrindo o resumo e
            * entrando no painel. */
           if (nCart) {
             /* vai DIRETO aos cartões: sem abrir o resumo no caminho */
-            const bCart = botaoMini(null, "btn-roxo",
-              () => mcEstudarDireto(x.disciplina, x.topico),
-              t("mat_ver_cartoes_n", { n: nCart }));
-            bCart.title = t("mat_ver_cartoes_ajuda", { n: nCart, tp: x.topico });
-            acoes.append(bCart);
+            outras.push({ rot: t("mat_ver_cartoes_n", { n: nCart }),
+              dica: t("mat_ver_cartoes_ajuda", { n: nCart, tp: x.topico }),
+              faz: () => mcEstudarDireto(x.disciplina, x.topico) });
             /* e um caminho para MEXER neles, que aí sim é outra tarefa */
-            const bMex = botaoMini(null, "btn-cinza", () => {
-              mcApontarTopico(x.disciplina, x.topico);
-              try { matCartoesAbrir(); matCartoesVer(); } catch (e) {}
-            }, t("mat_mexer_cartoes"));
-            bMex.title = t("mat_mexer_cartoes_ajuda");
-            acoes.append(bMex);
+            outras.push({ rot: t("mat_mexer_cartoes"),
+              dica: t("mat_mexer_cartoes_ajuda"),
+              faz: () => {
+                mcApontarTopico(x.disciplina, x.topico);
+                try { matCartoesAbrir(); matCartoesVer(); } catch (e) {}
+              } });
           }
           /* CAMINHO ATÉ A LEI SECA.
            * Ela já era guardada por disciplina e tópico, mas só dava para
            * chegar nela pela agenda da semana — o material, que é a
            * estante, não tinha porta para ela. */
           const temL = typeof leiTem === "function" && leiTem(x.chave);
-          const bLei = botaoMini(null, temL ? "btn-verde" : "btn-cinza",
-            () => leiAbrir(x.disciplina, x.topico),
-            t(temL ? "mat_lei_ver" : "mat_lei_criar"));
-          bLei.title = t(temL ? "mat_lei_ver_ajuda" : "mat_lei_criar_ajuda",
-            { tp: x.topico });
-          acoes.append(bLei);
+          outras.push({ rot: t(temL ? "mat_lei_ver" : "mat_lei_criar"),
+            dica: t(temL ? "mat_lei_ver_ajuda" : "mat_lei_criar_ajuda",
+              { tp: x.topico }),
+            faz: () => leiAbrir(x.disciplina, x.topico) });
+
+          acoes.append(matMenuLinha(x.chave, outras));
           li.append(esq, acoes);
           bl.append(li);
         });
@@ -2036,6 +2106,15 @@ function matIniciar() {
   matBotao("btnMatDuvidas", "dúvidas deste resumo", matDuvidasAbrir);
   leiIniciar();
   if ($("btnMatLogAba")) $("btnMatLogAba").onclick = matLogAbrir;
+  /* o texto não sumiu, mudou de lugar: continua sendo o mesmo mat_intro,
+   * agora só para quem pedir */
+  if ($("btnMatIntro")) {
+    $("btnMatIntro").onclick = () => {
+      $("btnMatIntro").title = t("mat_intro_tit");
+      $("btnMatIntro").setAttribute("aria-label", t("mat_intro_tit"));
+      uiAlert(t("mat_intro") + "\n\n" + t("mat_ajuda"));
+    };
+  }
   matBotao("btnDuvidas", "minhas dúvidas", matDuvidasAbrir);
   matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
   matBotao("btnMatDicas", "recolher/expandir dicas", matAlternarDicas);

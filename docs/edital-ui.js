@@ -2033,6 +2033,30 @@ function edPintarPainel(r, plano) {
     s2.className = "ed-caixa-sub";
     s2.textContent = t("ed_lacunas_sub");
     cx2.append(h2, s2);
+
+    /* COLUNAS ALINHADAS, NÃO UMA FRASE POR LINHA.
+     * Antes cada disciplina carregava a mesma frase inteira — "falta X%
+     * da prova · vale Y% · Z para estudar primeiro" — repetida seis
+     * vezes em vermelho. Ler seis frases para comparar três números é
+     * trabalho que a tela devia fazer: em coluna, a comparação é o
+     * próprio alinhamento, e o olho desce pelo número que interessa.
+     * O cabeçalho existe porque, sem ele, três porcentagens seguidas na
+     * mesma linha não dizem qual é qual — e era justamente essa confusão
+     * ("13% da prova" lido como o peso da disciplina) que a frase longa
+     * tentava desfazer com palavras. */
+    const cab = document.createElement("div");
+    cab.className = "lac-cab";
+    [["ed_lac_col_disc", ""], ["ed_lac_col_feito", "lac-num"],
+     ["ed_lac_col_vale", "lac-num"], ["ed_lac_col_falta", "lac-num"],
+     ["ed_lac_col_prior", "lac-num"]].forEach(([k, cls]) => {
+      const c = document.createElement("span");
+      c.className = "lac-cab-c " + cls;
+      c.textContent = t(k);
+      c.title = t(k + "_ajuda");
+      cab.append(c);
+    });
+    cx2.append(cab);
+
     comLacuna.forEach((d) => {
       const li = document.createElement("button");
       li.type = "button";
@@ -2046,31 +2070,32 @@ function edPintarPainel(r, plano) {
       ok.className = "lac-ok";
       ok.style.width = d.pesoFeito + "%";
       ba.append(ok);
-      /* DOIS NÚMEROS, PORQUE SÃO DUAS COISAS.
-       *
-       * Aqui saía só "{l}% da prova", e {l} é a LACUNA — a fatia da prova
-       * que ainda não foi estudada. Mas "13% da prova" ao lado de
-       * "Direito Constitucional" se lê como "esta disciplina vale 13%",
-       * e a pessoa conclui que o app está dizendo que Constitucional é a
-       * matéria mais importante da prova dela. Não estava: estava
-       * dizendo que é o maior BURACO. O subtítulo explicava, o número
-       * contradizia, e o número ganha.
-       *
-       * Com os dois lado a lado a ordem se explica sozinha: uma
-       * disciplina que vale mais pode aparecer abaixo justamente porque
-       * já foi estudada. */
-      /* "8 de alta" era jargão interno: "alta" é a FAIXA, que em todo o
-       * resto do app se chama "estudar primeiro". Quem lê a tela não
-       * tem como saber que existe uma escala alta/média/baixa por trás
-       * — e nenhum outro lugar usa essa palavra. */
-      const vl = document.createElement("b");
-      vl.textContent = t(
-        !d.altaIntocada ? "ed_lac_val_0"
-          : (d.altaIntocada === 1 ? "ed_lac_val_1" : "ed_lac_val"),
-        { l: d.lacuna, f: d.fatia, a: d.altaIntocada });
-      vl.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
-      if (d.altaIntocada) vl.className = "lac-alerta";
-      li.append(nm, ba, vl);
+      /* a barra e o número do progresso ocupam a MESMA coluna: a barra é
+       * a leitura de relance, o número é a conferência */
+      const feito = document.createElement("span");
+      feito.className = "lac-num lac-feito";
+      feito.append(ba);
+      const pf = document.createElement("i");
+      pf.textContent = Math.round(d.pesoFeito) + "%";
+      feito.append(pf);
+
+      const vale = document.createElement("span");
+      vale.className = "lac-num";
+      vale.textContent = d.fatia + "%";
+
+      const falta = document.createElement("span");
+      /* FALTA é a coluna que explica a ordem da lista. Tirá-la deixaria
+       * uma tabela ordenada por um critério invisível. */
+      falta.className = "lac-num lac-falta";
+      falta.textContent = d.lacuna + "%";
+
+      const prior = document.createElement("span");
+      prior.className = "lac-num" + (d.altaIntocada ? " lac-alerta" : "");
+      prior.textContent = d.altaIntocada ? String(d.altaIntocada) : "—";
+      prior.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
+
+      li.append(nm, feito, vale, falta, prior);
+      li.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
       cx2.append(li);
     });
     box.append(cx2);
