@@ -1601,6 +1601,9 @@ function qsUiVirarSelecao(origem) {
 
 function qsUiIniciar() {
   qsCarregar();
+  /* os gatilhos do rascunho vivem na barra da questão: quem os liga é
+   * esta tela, no arranque, e não a montagem preguiçosa do rascunho */
+  try { rsGatilhosIniciar(); } catch (e) {}
   if ($("btnQsConferir")) $("btnQsConferir").onclick = () => qsUiConferir();
   /* colar direto o que a IA devolveu, sem trocar de janela */
   if ($("btnQsColar")) {

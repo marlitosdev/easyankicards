@@ -3440,8 +3440,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          um painel que estava fechado. Agora os dois são um grupo só, no
          fim da questão, que é de onde se decide fazer conta. -->
     <span class="rs-gatilhos">
-      <button class="btn-min" id="btnRsAbrir" title="Abre o rascunho por cima da questão. O texto continua legível ao fundo."></button>
-      <button class="btn-min" id="btnRsAbrirCheia" title="Abre o rascunho ocupando a tela inteira, com a folha grande — para conta longa."></button>
+      <!-- O RÓTULO VEM DO HTML, e não de um JS que talvez rode.
+           Enquanto o texto era escrito só por rsPintarGatilhos(), um
+           botão sem rótulo era um botão invisível — e foi assim que o
+           rascunho sumiu da tela inteira depois de um tropeço numa
+           função que roda dentro de um try/catch. -->
+      <button class="btn-min" id="btnRsAbrir" data-i18n="rs_abrir"
+        title="Abre o rascunho por cima da questão. O texto continua legível ao fundo."></button>
+      <button class="btn-min" id="btnRsAbrirCheia" data-i18n="rs_cheia"
+        title="Abre o rascunho ocupando a tela inteira, com a folha grande — para conta longa."></button>
     </span>
     <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
     <button class="btn-min" id="btnQsEmbaralhar" hidden></button>

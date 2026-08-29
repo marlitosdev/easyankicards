@@ -229,8 +229,13 @@ function rsRecolher(sim) {
    * barra de título e um botão de "folha inteira" para expandir um
    * painel que não estava aberto. Agora o rascunho fechado não ocupa
    * nada — quem o abre são os gatilhos, no fim da questão. */
+  /* ABRIR NÃO DEPENDE DE HAVER QUESTÃO CARREGADA.
+   * Dependia, e era a segunda metade do mesmo defeito: com rsQid nulo o
+   * painel não abria, sem dizer nada — um botão que não faz nada é pior
+   * do que um botão ausente. O que precisa de questão é SALVAR, e
+   * rsSalvarNaQuestao já recusa com uma frase. */
   const cx = $("rsCaixa");
-  if (cx) cx.hidden = !!sim || !rsQid;
+  if (cx) cx.hidden = !!sim;
   if (sim && rsCheia) rsCheiaTrocar(false);
   /* AS FERRAMENTAS SEGUEM O CORPO. Cores de caneta ao lado de um
    * rascunho fechado não são atalho, são enfeite: não há onde desenhar. */
@@ -304,8 +309,19 @@ function rsPintarGatilhos() {
   const aberto = rsAberto();
   const b1 = $("btnRsAbrir"), b2 = $("btnRsAbrirCheia");
   const temSalvo = !!(rsQid && rsDaQuestao(rsQid));
+  /* SÓ ESCONDE COM O PAINEL ABERTO — e nunca por não haver questão.
+   *
+   * A regra era "some se não há rsQid", e rsQid só é preenchido por
+   * rsPrepararPara, que roda dentro de um try/catch lá na tela de
+   * questões. Qualquer tropeço ali — e basta um — engolia a exceção e
+   * deixava os dois gatilhos escondidos para sempre: o rascunho sumia
+   * da tela inteira, sem erro, sem aviso, sem caminho de volta.
+   *
+   * Um botão que abre o rascunho não precisa saber de que questão ele é.
+   * Se a questão não estiver pronta, quem descobre isso é o clique — e
+   * aí há uma mensagem, em vez de um botão ausente. */
   if (b1) {
-    b1.hidden = aberto || !rsQid;
+    b1.hidden = aberto;
     b1.textContent = "";
     b1.append(document.createTextNode(t("rs_abrir")));
     if (temSalvo) {
@@ -317,7 +333,7 @@ function rsPintarGatilhos() {
       b1.append(selo);
     }
   }
-  if (b2) b2.hidden = aberto || !rsQid;
+  if (b2) b2.hidden = aberto;
 }
 
 function rsAberto() {
@@ -586,12 +602,44 @@ function rsPintarBorrachas() {
 
 function rsFerramenta(nome) { return rsBotoes[nome] || null; }
 
+/* OS GATILHOS SÃO LIGADOS NO ARRANQUE, e não dentro de rsIniciar().
+ *
+ * rsIniciar() só roda na primeira vez que uma questão é pintada. Enquanto
+ * os gatilhos dependiam dele, eles ficavam sem texto e sem clique até
+ * lá — e se algo falhasse no caminho, para sempre. O botão que ABRE uma
+ * coisa não pode depender de essa coisa já ter sido montada: é ele quem
+ * a monta. */
+function rsGatilhosIniciar() {
+  const b1 = $("btnRsAbrir"), b2 = $("btnRsAbrirCheia");
+  if (b1) {
+    b1.onclick = () => {
+      if (!rsIniciado) rsIniciar();
+      rsRecolher(false);
+      rsCheiaTrocar(false);
+    };
+  }
+  if (b2) {
+    b2.textContent = t("rs_cheia");
+    b2.onclick = () => {
+      if (!rsIniciado) rsIniciar();
+      rsRecolher(false);
+      rsCheiaTrocar(true);
+    };
+  }
+  rsPintarGatilhos();
+}
+
 function rsIniciar() {
   if (rsIniciado) return;
   const cx = $("rsCaixa");
   if (!cx) return;
   rsIniciado = true;
   rsEspessuraCarregar();
+  /* DE QUALQUER PORTA. Os gatilhos são ligados no arranque da tela de
+   * questões, mas também aqui: quem chegar primeiro liga, e ligar duas
+   * vezes é inofensivo. Depender de uma ordem entre dois arranques é
+   * como o rascunho já sumiu uma vez. */
+  try { rsGatilhosIniciar(); } catch (e) {}
   /* O TAMANHO DA FOLHA VEM DAQUI, não do atributo do HTML. Com o número
    * escrito nos dois lugares, mudar um deles faz a conversão de escala
    * partir de um tamanho que não é o da folha — e todo traço aparece
@@ -691,13 +739,7 @@ function rsIniciar() {
   if ($("btnRsModo")) $("btnRsModo").onclick = () => rsModoTrocar();
   if ($("btnRsCheia")) $("btnRsCheia").onclick = () => rsCheiaTrocar();
   if ($("btnRsMin")) $("btnRsMin").onclick = () => rsRecolher(true);
-  if ($("btnRsAbrir")) {
-    $("btnRsAbrir").onclick = () => { rsRecolher(false); rsCheiaTrocar(false); };
-  }
-  if ($("btnRsAbrirCheia")) {
-    $("btnRsAbrirCheia").textContent = t("rs_cheia");
-    $("btnRsAbrirCheia").onclick = () => { rsRecolher(false); rsCheiaTrocar(true); };
-  }
+
   /* ESC VOLTA À QUESTÃO ANTES de fechar a rodada. Sem isto, o gesto mais
    * natural para "sair da folha inteira" encerraria a sessão de questões
    * — e o rabisco não salvo iria junto. */
