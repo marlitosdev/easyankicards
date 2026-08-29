@@ -718,11 +718,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
     min-width:0}
   #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #rsCaixa{flex:0 0 40%;
     max-height:none;align-self:stretch;margin:0}
-  /* de volta à faixa própria: ao lado sobra largura, e espremida na
-     linha do título ela ficava ilegível justamente onde há espaço */
-  #dlgQsResponder.qs-com-rascunho .rs-ferramentas{display:flex;
-    padding:6px 8px 0}
-  #dlgQsResponder.qs-com-rascunho .rs-topo{flex-wrap:nowrap}
+  /* ao lado, o rascunho tem coluna inteira: a tela de desenho cresce
+     até onde a altura da questão permitir, em vez de ficar uma tirinha */
+  #dlgQsResponder.qs-com-rascunho .rs-tela{min-height:220px}
 }
 /* a faixa da ação principal encosta no rodapé e ganha uma linha acima
    para não parecer que flutua sobre o texto */
@@ -1159,7 +1157,19 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mc-preview{max-height:34vh;overflow:auto;margin:8px 0}
 .mc-acoes-salvos{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
 .mc-card-acoes{display:flex;gap:4px;margin-top:4px}
-.mc-est-cartao{margin:10px 0;max-height:46vh;overflow:auto}
+/* O CARTÃO É O ASSUNTO da tela: cresce até onde couber, e o resto é
+   uma faixa fina. Com 46vh fixos ele ficava do mesmo tamanho de um
+   cartão de duas linhas e de um de vinte. */
+.mc-est-cartao{margin:10px 0;flex:1 1 auto;overflow:auto;min-height:120px}
+#dlgMcEstudo[open]{display:flex;flex-direction:column;max-height:92vh;margin:auto}
+#dlgMcEstudo[open] > *{flex:0 0 auto}
+.mc-est-nav{display:flex;gap:8px;align-items:center;margin:8px 0 2px}
+.mc-est-seta{min-width:38px}
+.mc-est-dir{margin-left:auto;display:inline-flex;gap:6px;align-items:center}
+.mc-est-principal{margin:2px 0}
+/* apagar mora no menu, e lá dentro ele é o único vermelho: a cor é o
+   aviso, e um aviso que aparece o tempo todo deixa de avisar */
+.mc-est-apagar{color:var(--erro);font-weight:700}
 .mc-est-barra{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .mc-est-pos{font-size:11px;color:var(--sutil);margin-left:auto}
 .mc-card{padding:7px 0;border-bottom:1px solid var(--borda);font-size:11.5px}
@@ -2011,10 +2021,20 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .rs-aviso{font-size:11.5px;opacity:.75;margin-left:auto}
 .rs-aviso.rs-ok{color:var(--ok);opacity:1}
 .rs-corpo{padding:8px}
-/* de faixa própria para trecho da barra do título: sem margem embaixo,
-   porque não é mais uma linha — e com gap menor, porque agora divide a
-   linha com o título e o aviso */
-.rs-ferramentas{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
+/* FAIXA PRÓPRIA, e que QUEBRA. A caixa do rascunho corta o que passa da
+   borda (overflow:hidden), então uma faixa que não quebra não fica
+   apertada: ela some. */
+.rs-ferramentas{display:flex;gap:5px;align-items:center;flex-wrap:wrap;
+  margin-bottom:6px}
+/* o botão MOSTRA a espessura, como o do grifo — e é o mesmo desenho nas
+   duas superfícies de propósito: mudar de lugar não pode pedir para a
+   pessoa reaprender a ferramenta */
+.rs-esp{display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:20px;padding:0;border:1px solid var(--borda);
+  border-radius:6px;background:var(--campo);cursor:pointer;flex:0 0 auto}
+.rs-esp .rs-esp-tr{display:block;width:14px;border-radius:99px;
+  background:var(--texto)}
+.rs-esp.rs-sel{border-color:var(--acao);box-shadow:0 0 0 1px var(--acao)}
 .rs-topo{flex-wrap:wrap}
 .rs-caneta{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .rs-caneta.rs-sel{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
@@ -3305,19 +3325,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <!-- RASCUNHO: o papel de lado. Recolhido por padrao. -->
   <div id="rsCaixa" class="rs-caixa" hidden>
-    <!-- AS FERRAMENTAS SOBEM PARA A LINHA DO TÍTULO.
-         Numa faixa própria elas custavam uma linha inteira só para
-         existir, e essa linha entra na conta do que empurra o botão de
-         ação para fora da tela. Na barra do título o espaço já estava
-         pago, e a ordem continua a mesma: primeiro escolher, depois
-         desenhar. -->
     <div class="rs-topo">
       <button class="btn-min" id="btnRsMin" type="button"></button>
       <span class="rs-tit" data-i18n="rs_titulo"></span>
-      <span class="rs-ferramentas" id="rsFerramentas" hidden></span>
       <span class="rs-aviso" id="rsAviso"></span>
     </div>
     <div id="rsCorpo" class="rs-corpo" hidden>
+      <!-- AS FERRAMENTAS EM FAIXA PRÓPRIA, e não na linha do título.
+           Na linha do título elas economizavam uma linha e custavam
+           caro: a caixa do rascunho tem overflow:hidden, então numa
+           coluna estreita as canetas simplesmente SUMIAM cortadas na
+           borda direita — sem barra de rolagem, sem sinal de que havia
+           mais botões ali. Aqui elas quebram para a linha de baixo, que
+           é o que uma faixa de ferramentas faz quando não cabe. -->
+      <div class="rs-ferramentas" id="rsFerramentas" hidden></div>
       <canvas id="rsTela" class="rs-tela" width="900" height="420"></canvas>
       <p class="nota" data-i18n="rs_ajuda"></p>
       <div class="rs-acoes">
@@ -3747,28 +3768,38 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="mcEstSub"></p>
   <div id="mcEstCartao" class="mc-est-cartao"></div>
 
-  <!-- TRES FAIXAS, COMO NA RESOLUCAO DE QUESTOES.
-       Estava tudo numa fila so: "anterior", "virar", "proxima", "criar
-       mais" e a posicao, com o "apagar" vermelho no rodape ao lado do
-       "fechar". Virar o cartao e a acao central da tela e disputava
-       espaco com criar e apagar. Agora: navegacao em cima, o gesto
-       principal sozinho no meio, e o resto embaixo. -->
-  <div class="mc-est-nav">
-    <button class="btn-min" id="btnMcEstAnt" title="Cartão anterior">←</button>
-    <span class="mc-est-pos" id="mcEstPos"></span>
-    <button class="btn-min" id="btnMcEstProx" title="Próximo cartão">→</button>
-  </div>
+  <!-- A ORDEM DA TELA É A ORDEM DO GESTO.
+       Estava assim: cartão, depois a navegação (← 1 de 50 →), depois
+       "mostrar a resposta", depois três botões — entre eles "apagar
+       este cartão", em vermelho, logo abaixo da ação principal.
+       Duas coisas erradas. A navegação separava o cartão do gesto que
+       se faz com ele, e a mão que ia para "mostrar" passava por cima do
+       "apagar" cinquenta vezes por sessão.
+       Agora: o cartão, o gesto principal COLADO nele, a navegação
+       embaixo (que é quando ela importa: depois de responder), e o
+       resto — inclusive apagar — atrás de um menu. -->
   <div class="mc-est-principal">
     <button class="btn btn-verde mc-est-virar" id="btnMcEstVirar" data-i18n="mc_est_virar"
       title="Mostra ou esconde a resposta. Tente lembrar antes de virar — é aí que a revisão funciona."></button>
   </div>
-  <div class="mc-est-ferramentas">
-    <button class="btn-min" id="btnMcEstMelhorar" hidden
-      title="Monta um prompt para a IA reescrever este cartão, apontando o que está errado nele. Você confere o antes e o depois antes de aplicar."></button>
-    <button class="btn-min" id="btnMcEstCriar" data-i18n="mc_est_criar"
-      title="Abre a criação de cartões deste mesmo tópico, sem passar pelo resumo."></button>
-    <button class="btn-min btn-perigo" id="btnMcEstApagar" data-i18n="mc_est_apagar"
-      title="Apaga este cartão do material deste tópico. Pergunta duas vezes: um cartão apagado não volta."></button>
+  <div class="mc-est-nav">
+    <button class="btn-min mc-est-seta" id="btnMcEstAnt" title="Cartão anterior">←</button>
+    <span class="mc-est-pos" id="mcEstPos"></span>
+    <button class="btn-min mc-est-seta" id="btnMcEstProx" title="Próximo cartão">→</button>
+    <span class="mc-est-dir">
+      <button class="btn-min" id="btnMcEstMelhorar" hidden
+        title="Monta um prompt para a IA reescrever este cartão, apontando o que está errado nele. Você confere o antes e o depois antes de aplicar."></button>
+      <span class="mat-menu-cx">
+        <button class="btn-min mat-menu-bt" id="btnMcEstMais" aria-haspopup="true"
+          title="Mais coisas para fazer com este cartão: criar mais, apagar.">⋮</button>
+        <div class="mat-menu" id="mcEstMenu" hidden>
+          <button class="mat-menu-item" id="btnMcEstCriar" data-i18n="mc_est_criar"
+            title="Abre a criação de cartões deste mesmo tópico, sem passar pelo resumo."></button>
+          <button class="mat-menu-item mc-est-apagar" id="btnMcEstApagar" data-i18n="mc_est_apagar"
+            title="Apaga este cartão do material deste tópico. Pergunta duas vezes: um cartão apagado não volta."></button>
+        </div>
+      </span>
+    </span>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMcEstFechar" data-i18n="help_close" title="Fecha o estudo em tela. Os cartões continuam salvos no tópico."></button>

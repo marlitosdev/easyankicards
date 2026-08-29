@@ -2338,6 +2338,25 @@ function matIniciar() {
  * Era sempre "de_resumo", inclusive nos cartões nascidos de uma questão —
  * uma etiqueta que mente sobre a procedência estraga justamente a busca
  * que ela existe para servir ("quais cartões saíram das questões?"). */
+/* Junta listas de etiquetas SEM repetir, preservando a ordem da
+ * primeira aparição. A comparação ignora maiúsculas: "Direito_Financeiro"
+ * e "direito_financeiro" são a mesma etiqueta para quem procura, e
+ * guardar as duas só faz a lista crescer. */
+function matJuntarTags() {
+  const vistas = {}, saida = [];
+  Array.prototype.slice.call(arguments).forEach((lista) => {
+    (lista || []).forEach((tg) => {
+      const t0 = String(tg || "").trim();
+      if (!t0) return;
+      const k = t0.toLowerCase();
+      if (vistas[k]) return;
+      vistas[k] = 1;
+      saida.push(t0);
+    });
+  });
+  return saida;
+}
+
 function matEtiquetasTopico(disciplina, topico, concurso, origem) {
   const achatar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -2767,7 +2786,13 @@ async function matCartoesSalvar() {
     .replace(/\r?\n+/g, " ").trim();
   const linhas = novos.map((c) =>
     limpa(c.front) + " :: " + limpa(c.back) + " :: "
-    + tags.concat((c.tags || []).map((x) => String(x).replace(/::/g, "_"))).join(" "));
+    /* SEM REPETIR. O prompt manda a IA escrever exatamente as etiquetas
+     * do tópico no terceiro campo, e aqui elas eram acrescentadas OUTRA
+     * VEZ — toda linha salva saía com as quatro tags em dobro, e a tela
+     * de estudo as mostrava duas vezes seguidas. O Anki junta iguais na
+     * importação, então o estrago era invisível lá e permanente aqui. */
+    + matJuntarTags(tags,
+        (c.tags || []).map((x) => String(x).replace(/::/g, "_"))).join(" "));
 
   const antes = String(reg0.cartoes || "").replace(/\s*$/, "");
   matGravarCartoes(matAtual.chave, (antes ? antes + "\n" : "") + linhas.join("\n"),
@@ -2872,11 +2897,55 @@ function mcCartoesSalvos() {
  */
 let mcEstDeOnde = null;
 
+/* ONDE PAREI, POR TÓPICO.
+ *
+ * A sessão de questões já voltava de onde parou; a pilha de cartões
+ * recomeçava do primeiro. Com cinquenta cartões, "continuar amanhã"
+ * significava passar por trinta que já tinham sido vistos — e a saída
+ * prática vira não voltar mais.
+ *
+ * Guardado por TÓPICO, e não um número global: cada pilha tem o seu
+ * lugar, e um índice compartilhado abriria o cartão 30 de uma pilha de
+ * 5. Guardado também o TAMANHO da pilha de então: se ela mudou de
+ * tamanho — cartões apagados, cartões novos — o índice velho aponta
+ * para outro cartão, e recomeçar do início é mais honesto do que abrir
+ * um cartão qualquer dizendo que foi ali que você parou. */
+const MC_PAREI_CHAVE = "eac_mc_parei";
+
+function mcPareiLer() {
+  try { return JSON.parse(localStorage.getItem(MC_PAREI_CHAVE) || "{}") || {}; }
+  catch (e) { return {}; }
+}
+
+function mcPareiGuardar(chave, idx, total) {
+  if (!chave) return false;
+  const tudo = mcPareiLer();
+  if (idx <= 0) delete tudo[chave];       /* no primeiro, não há o que guardar */
+  else tudo[chave] = { i: idx, n: total, q: new Date().toISOString() };
+  try { localStorage.setItem(MC_PAREI_CHAVE, JSON.stringify(tudo)); } catch (e) {}
+  return true;
+}
+
+function mcPareiDe(chave, total) {
+  const r = mcPareiLer()[chave];
+  if (!r) return 0;
+  if (Number(r.n) !== Number(total)) return 0;   /* a pilha mudou */
+  const i = Number(r.i) || 0;
+  return i > 0 && i < total ? i : 0;
+}
+
 function mcEstudarAbrir(indice, opts) {
   const o = opts || {};
   mcEstCartoes = (o.lista && o.lista.length) ? o.lista.slice() : mcCartoesSalvos();
   if (!mcEstCartoes.length) { uiAlert(t("mc_est_vazio")); return; }
-  mcEstIdx = Math.max(0, Math.min(mcEstCartoes.length - 1, indice || 0));
+  /* RETOMAR só quando ninguém pediu um cartão específico: "ampliar o
+   * terceiro da conferência" é um pedido, e sobrepô-lo com o marcador
+   * abriria outro cartão sem avisar. */
+  const chaveP = (matAtual && matAtual.chave) || "";
+  const pedido = indice || 0;
+  const retomar = (!o.lista && !pedido && !o.revelado)
+    ? mcPareiDe(chaveP, mcEstCartoes.length) : 0;
+  mcEstIdx = Math.max(0, Math.min(mcEstCartoes.length - 1, pedido || retomar));
   mcEstMostra = !!o.revelado;
   mcEstDeOnde = o.deOnde || null;
   $("mcEstTitulo").textContent = t(o.revelado ? "mc_est_titulo_conf" : "mc_est_titulo",
@@ -2894,10 +2963,20 @@ function mcEstudarAbrir(indice, opts) {
   mcEstPintar();
   abrirModal("dlgMcEstudo");
   matReg("estudo", o.revelado ? "cartão ampliado na conferência" : "estudo em tela aberto",
-         mcEstCartoes.length + " cartões");
+         mcEstCartoes.length + " cartões"
+         + (retomar ? " · retomado no cartão " + (retomar + 1) : ""));
+}
+
+function mcEstMenuFechar() {
+  const m = $("mcEstMenu");
+  if (m) m.hidden = true;
 }
 
 function mcEstPintar() {
+  /* o menu não sobrevive à troca de cartão: aberto sobre o cartão
+   * seguinte, o "apagar" que estava embaixo do dedo passa a valer para
+   * OUTRO cartão */
+  mcEstMenuFechar();
   const cx = $("mcEstCartao");
   cx.innerHTML = "";
   const c = mcEstCartoes[mcEstIdx];
@@ -2905,7 +2984,10 @@ function mcEstPintar() {
   const div = document.createElement("div");
   /* a MESMA função do módulo de cartões: se o desenho divergir aqui, a
    * revisão em tela deixa de valer como ensaio do que vai para o Anki */
-  try { renderCartaoEstilizado(div, c, mcEstMostra); }
+  /* CONFERIR mostra o cartão como AUTOR (título, selo, etiquetas);
+   * ESTUDAR mostra como ALUNO. É a mesma função, com o que é de autoria
+   * desligado. */
+  try { renderCartaoEstilizado(div, c, mcEstMostra, { estudo: !mcEstDeOnde }); }
   catch (e) {
     div.textContent = String(c.front || "") + (mcEstMostra ? "\n" + String(c.back || "") : "");
   }
@@ -2932,6 +3014,12 @@ function mcEstAndar(passo) {
   if (!mcEstCartoes.length) return;
   mcEstIdx = (mcEstIdx + passo + mcEstCartoes.length) % mcEstCartoes.length;
   mcEstMostra = false;
+  /* guardado a cada passo, e não ao fechar: quem estuda no telefone
+   * fecha o app pelo gesto do sistema, e um "salvar ao sair" que depende
+   * de o usuário sair pela porta certa não guarda nada nesse caso */
+  if (!mcEstDeOnde) {
+    mcPareiGuardar((matAtual && matAtual.chave) || "", mcEstIdx, mcEstCartoes.length);
+  }
   mcEstPintar();
 }
 
@@ -3053,7 +3141,18 @@ function mcEstudoIniciar() {
   if ($("btnMcEstVirar")) $("btnMcEstVirar").onclick = () => {
     mcEstMostra = !mcEstMostra; mcEstPintar();
   };
-  if ($("btnMcEstApagar")) $("btnMcEstApagar").onclick = () => mcApagarCartao(mcEstIdx);
+  if ($("btnMcEstApagar")) {
+    $("btnMcEstApagar").onclick = () => {
+      mcEstMenuFechar();
+      mcApagarCartao(mcEstIdx);
+    };
+  }
+  if ($("btnMcEstMais")) {
+    $("btnMcEstMais").onclick = () => {
+      const m = $("mcEstMenu");
+      if (m) m.hidden = !m.hidden;
+    };
+  }
   if ($("btnMcEstMelhorar")) {
     $("btnMcEstMelhorar").onclick = () => {
       const c = mcEstCartoes[mcEstIdx];
@@ -3074,6 +3173,7 @@ function mcEstudoIniciar() {
   }
   if ($("btnMcEstCriar")) {
     $("btnMcEstCriar").onclick = () => {
+      mcEstMenuFechar();
       $("dlgMcEstudo").close();
       /* sem abrir o resumo: os cartões novos são deste mesmo tópico */
       matCartoesAbrir({ semGravarResumo: true, voltarPara: "cartoes" });
