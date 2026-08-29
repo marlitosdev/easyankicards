@@ -164,6 +164,39 @@ function qsUiVoltarASessao() {
   return true;
 }
 
+/* UMA DOBRA, com o estado lembrado por TIPO — não por questão.
+ *
+ * O comentário e a dica juntos empurram as alternativas da questão
+ * seguinte para fora da tela; recolhidos, a resposta certa continua à
+ * vista e o resto espera ser pedido. E a decisão vale para a rodada
+ * inteira: quem fecha o comentário numa questão não quer reabri-lo na
+ * próxima. Guardar por questão faria o gesto recomeçar do zero a cada
+ * uma, que é a forma mais rápida de a pessoa desistir de usar. */
+const QS_DOBRAS = {};
+
+function qsUiDobra(chaveTitulo, encher) {
+  const cx = document.createElement("details");
+  cx.className = "qs-dobra";
+  /* aberto por padrão: acabar de responder e não ver o comentário seria
+   * esconder justamente o que se foi buscar */
+  const aberto = QS_DOBRAS[chaveTitulo] !== false;
+  /* A PROPRIEDADE é a forma canônica — o navegador reflete no atributo
+   * sozinho. O atributo vai junto porque quem lê o HTML (e os testes de
+   * estrutura) procura por ele. */
+  cx.open = aberto;
+  if (aberto) cx.setAttribute("open", "");
+  else if (cx.removeAttribute) cx.removeAttribute("open");
+  const cab = document.createElement("summary");
+  cab.className = "qs-dobra-cab";
+  cab.textContent = t(chaveTitulo);
+  cx.append(cab);
+  const corpo = document.createElement("div");
+  encher(corpo);
+  cx.append(corpo);
+  cx.ontoggle = () => { QS_DOBRAS[chaveTitulo] = !!cx.open; };
+  return cx;
+}
+
 function qsUiCaixaDica(texto) {
   const dc = document.createElement("div");
   dc.className = "qs-minha-dica";
@@ -482,8 +515,39 @@ function qsUiPintarSessao() {
      * dica que vai evitar o erro da próxima vez. */
     const fim = document.createElement("div");
     fim.className = "qs-fim";
-    fim.textContent = t("qs_fim", { c: p.certas, n: p.feitas, pct: p.pct });
+    /* NUMA REPESCAGEM o placar é DELA, e o rótulo tem de dizer isso.
+     * "8 de 10, 80%" logo depois de uma rodada de 60% seria lido como
+     * "melhorei de 60 para 80" — e não é: são conjuntos diferentes, um
+     * deles feito só do que já tinha dado errado. */
+    fim.textContent = t(qsSessao && qsSessao.repescagem ? "qs_fim_rep" : "qs_fim",
+      { c: p.certas, n: p.feitas, pct: p.pct });
     corpo.append(fim);
+
+    /* DUAS SAÍDAS, e as duas no topo do fim da rodada: é aqui que se
+     * decide o que fazer com o que acabou de acontecer, e ter de rolar
+     * até o rodapé para achá-las fazia o placar virar um beco. */
+    const acoes = document.createElement("div");
+    acoes.className = "qs-fim-acoes";
+    const bReg = document.createElement("button");
+    bReg.type = "button";
+    bReg.className = "btn btn-verde";
+    bReg.textContent = t("qs_registrar_btn");
+    bReg.title = t("qs_registrar_ajuda");
+    bReg.onclick = () => qsUiRegistrarEstudo();
+    acoes.append(bReg);
+
+    const erradasQ = qsErradasDaSessao();
+    if (erradasQ.length) {
+      const bRep = document.createElement("button");
+      bRep.type = "button";
+      bRep.className = "btn btn-azul";
+      bRep.id = "btnQsRepescar";
+      bRep.textContent = t("qs_repescar", { n: erradasQ.length });
+      bRep.title = t("qs_repescar_ajuda");
+      bRep.onclick = () => qsUiRepescar();
+      acoes.append(bRep);
+    }
+    corpo.append(acoes);
 
     const erradas = (qsSessao ? qsSessao.respondidas : [])
       .filter((x) => !x.acertou)
@@ -657,15 +721,21 @@ function qsUiPintarSessao() {
       + " · " + t("qs_gab_e", { g: q.gabarito });
     corpo.append(gb);
     if (q.comentario) {
-      const cm = document.createElement("div");
-      cm.className = "qs-coment";
-      cm.textContent = q.comentario;
-      corpo.append(cm);
+      corpo.append(qsUiDobra("qs_coment_tit", (el) => {
+        el.className = "qs-coment";
+        el.textContent = q.comentario;
+      }));
     }
     /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
      * é gabarito disfarçado. */
     const minha = qsDicaDeQuestao(q.id);
-    if (minha) corpo.append(qsUiCaixaDica(minha));
+    if (minha) {
+      corpo.append(qsUiDobra("qs_dica_dobra", (el) => {
+        el.className = "qs-minha-dica";
+        try { el.innerHTML = matParaHtml(String(minha)); }
+        catch (e) { el.textContent = String(minha); }
+      }));
+    }
     const bc = document.createElement("button");
     bc.type = "button";
     bc.className = "btn-min qs-bt-dica";
@@ -989,6 +1059,44 @@ async function qsUiEncerrarComPlacar() {
   /* o registro precisa da sessão VIVA para saber o tópico e o tempo;
    * apagar antes deixaria o registro sem de onde tirar os dados */
   qsUiRegistrarEstudo();
+}
+
+/* SEGUNDA PASSADA, só nas que erraram — e com placar próprio.
+ *
+ * Somar os acertos da repescagem no placar da primeira rodada apagaria a
+ * única informação que interessa aqui: quanto você acertava ANTES de
+ * rever. Uma rodada nova, marcada como repescagem, mantém as duas
+ * medidas separadas e comparáveis.
+ *
+ * A ORDEM É MANTIDA, sem embaralhar: a repescagem é releitura do próprio
+ * erro, e reencontrar a questão onde ela estava ajuda a lembrar o que se
+ * pensou na hora. */
+function qsUiRepescar() {
+  const erradas = qsErradasDaSessao();
+  if (!erradas.length) { uiAlert(t("qs_repescar_nada")); return false; }
+  const s0 = qsSessaoAtual();
+  const p0 = qsPlacar();
+  /* REGISTRA A PRIMEIRA RODADA ANTES de abrir a segunda: sem isto, o
+   * histórico do bloco ficaria com o placar da repescagem por cima do
+   * original, e o bloco original desapareceria da conta. */
+  try {
+    if (typeof qhAtualizar === "function") qhAtualizar(p0, { fechar: true });
+  } catch (e) {}
+  matReg("questao", "repescagem das erradas",
+         erradas.length + " de " + p0.feitas + " feitas · "
+         + p0.certas + " certas na primeira passada");
+
+  qsSessaoIniciar(erradas, {
+    escopo: (s0 && s0.escopo) || "", repescagem: true,
+    deRodada: { feitas: p0.feitas, certas: p0.certas, pct: p0.pct },
+  });
+  try {
+    if (typeof qhIniciar === "function") {
+      qhIniciar(erradas, { origem: "repescagem", escopo: (s0 && s0.escopo) || "" });
+    }
+  } catch (e) {}
+  qsUiPintarSessao();
+  return true;
 }
 
 function qsUiRegistrarEstudo() {
