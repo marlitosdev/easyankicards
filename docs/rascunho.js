@@ -186,8 +186,46 @@ function rsMesmaQuestao(id) {
  * razão de escala.
  * ------------------------------------------------------------------ */
 const RS_FOLHA_NORMAL = { w: 900, h: 420 };
+/* usada quando não dá para medir a tela (teste, navegador antigo) */
 const RS_FOLHA_CHEIA = { w: 1500, h: 1150 };
 let rsCheia = false;
+let rsVidro = false;
+
+/* A FOLHA DA TELA CHEIA TEM O TAMANHO DA TELA.
+ *
+ * Um valor fixo é sempre errado em algum aparelho: grande demais num
+ * telefone (o traço sai fino como fio de cabelo) e pequeno demais num
+ * monitor (a mão desenha o dobro do que aparece). Medindo a janela, a
+ * proporção do que se escreve é a mesma em qualquer lugar.
+ *
+ * O desconto de 150px é o que as barras de cima e de baixo ocupam. Errar
+ * para menos é seguro: sobra margem. Errar para mais faria a folha
+ * passar da tela e esconder o botão de salvar. */
+function rsFolhaDaTela() {
+  const w = typeof window !== "undefined" ? window.innerWidth : 0;
+  const h = typeof window !== "undefined" ? window.innerHeight : 0;
+  if (!w || !h) return RS_FOLHA_CHEIA;
+  /* a densidade dobra a resolução interna: sem isso, numa tela retina o
+   * traço sai serrilhado */
+  const dpr = Math.max(1, Math.min(2,
+    (typeof window !== "undefined" && window.devicePixelRatio) || 1));
+  return { w: Math.round(w * dpr), h: Math.round(Math.max(240, h - 150) * dpr) };
+}
+
+/* VER A QUESTÃO ATRÁS — só na folha inteira.
+ *
+ * A folha branca é o certo para somar um balanço: número escrito sobre
+ * texto não se lê. Mas para riscar um esquema em cima do enunciado, o
+ * papel é justamente o que atrapalha. São dois usos legítimos e opostos,
+ * então é uma escolha, com o papel como padrão. */
+function rsVidroTrocar(sim) {
+  rsVidro = sim === undefined ? !rsVidro : !!sim;
+  const dlg = $("dlgQsResponder");
+  if (dlg && dlg.classList) dlg.classList.toggle("rs-vidro", rsVidro);
+  const b = $("btnRsVidro");
+  if (b && b.classList) b.classList.toggle("btn-min-ok", rsVidro);
+  return rsVidro;
+}
 
 function rsRedimensionar(w, h) {
   const cv = rsTela();
@@ -215,8 +253,11 @@ function rsCheiaTrocar(sim) {
   /* abrir a folha inteira com o rascunho recolhido não faria sentido:
    * a tela ficaria vazia com um botão de voltar */
   if (rsCheia && !rsAberto()) rsRecolher(false);
-  const f = rsCheia ? RS_FOLHA_CHEIA : RS_FOLHA_NORMAL;
+  const f = rsCheia ? rsFolhaDaTela() : RS_FOLHA_NORMAL;
   rsRedimensionar(f.w, f.h);
+  /* sair da folha inteira leva junto o fundo transparente: ele só existe
+   * lá, e ficar ligado por baixo faria o painel de 72% abrir sem papel */
+  if (!rsCheia) rsVidroTrocar(false);
   rsPintar();
   return rsCheia;
 }
@@ -292,11 +333,6 @@ function rsTextoAtual() {
 
 function rsTemAlgo() {
   return rsTracos.length > 0 || !!rsTextoAtual().trim();
-}
-
-function rsPintarAjuda() {
-  const p2 = $("rsAjudaNota");
-  if (p2) p2.hidden = rsTemAlgo();
 }
 
 /* OS DOIS GATILHOS, e o selo.
@@ -528,12 +564,19 @@ function rsPintar() {
     bModo.textContent = t(rsModo === "caneta" ? "rs_modo_teclado" : "rs_modo_caneta");
     bModo.title = t(rsModo === "caneta" ? "rs_modo_teclado_ajuda" : "rs_modo_caneta_ajuda");
   }
+  const bVidro = $("btnRsVidro");
+  if (bVidro) {
+    /* só faz sentido na folha inteira: no painel de 72% a questão já
+     * está visível acima dele */
+    bVidro.hidden = !rsCheia;
+    bVidro.textContent = t("rs_vidro");
+    bVidro.title = t("rs_vidro_ajuda");
+  }
   const bCheia = $("btnRsCheia");
   if (bCheia) {
     bCheia.textContent = t(rsCheia ? "rs_cheia_sair" : "rs_cheia");
     if (bCheia.classList) bCheia.classList.toggle("btn-min-ok", rsCheia);
   }
-  rsPintarAjuda();
   rsPintarGatilhos();
 }
 
@@ -739,6 +782,7 @@ function rsIniciar() {
   if ($("btnRsModo")) $("btnRsModo").onclick = () => rsModoTrocar();
   if ($("btnRsCheia")) $("btnRsCheia").onclick = () => rsCheiaTrocar();
   if ($("btnRsMin")) $("btnRsMin").onclick = () => rsRecolher(true);
+  if ($("btnRsVidro")) $("btnRsVidro").onclick = () => rsVidroTrocar();
 
   /* ESC VOLTA À QUESTÃO ANTES de fechar a rodada. Sem isto, o gesto mais
    * natural para "sair da folha inteira" encerraria a sessão de questões
