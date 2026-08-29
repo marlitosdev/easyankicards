@@ -128,6 +128,19 @@ function plBarra() {
   fer.className = "pl-fer";
   fer.id = "plFerramentas";
 
+  /* TRÊS GRUPOS, como no rascunho — e pelo mesmo motivo. Numa fila só,
+   * os tamanhos de borracha (bolinhas) ficavam ao lado das espessuras de
+   * grifo (pílulas): dois controles diferentes, parecidos, encostados um
+   * no outro. Separados por função, a mão vai ao lugar em vez de ler.
+   * Esquerda: com o que grifar. Centro: o que desfaz. Direita: limpar. */
+  const gEsq = document.createElement("span");
+  gEsq.className = "rs-grupo rs-grupo-esq";
+  const gCen = document.createElement("span");
+  gCen.className = "rs-grupo rs-grupo-centro";
+  const gDir = document.createElement("span");
+  gDir.className = "rs-grupo rs-grupo-dir";
+  fer.append(gEsq, gCen, gDir);
+
   PL_CANETAS.forEach((c) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -143,7 +156,7 @@ function plBarra() {
       plLigar(true);
     };
     plBotoes[c.id] = b;
-    fer.append(b);
+    gEsq.append(b);
   });
 
   const bb = document.createElement("button");
@@ -154,7 +167,7 @@ function plBarra() {
   bb.title = t("rs_borracha_ajuda");
   bb.onclick = () => { plBorracha = !plBorracha; plLigar(true); };
   plBotoes.borracha = bb;
-  fer.append(bb);
+  gCen.append(bb);
 
   (typeof RS_BORRACHAS !== "undefined" ? RS_BORRACHAS : []).forEach((x) => {
     const b = document.createElement("button");
@@ -172,7 +185,7 @@ function plBarra() {
       plLigar(true);
     };
     plBotoes["b_" + x.id] = b;
-    fer.append(b);
+    gCen.append(b);
   });
 
   /* A ESPESSURA fica junto das cores e antes da borracha: escolher com
@@ -191,7 +204,7 @@ function plBarra() {
     b.append(barrinha);
     b.onclick = () => { plEspessuraDefinir(i); plBorracha = false; plLigar(true); };
     plBotoes["e_" + x.id] = b;
-    fer.append(b);
+    gEsq.append(b);
   });
 
   const bl = document.createElement("button");
@@ -202,7 +215,7 @@ function plBarra() {
   bl.title = t("pl_limpar_ajuda");
   bl.onclick = () => plLimpar();
   plBotoes.limpar = bl;
-  fer.append(bl);
+  gDir.append(bl);
 
   barra.append(fer);
   plBotoes.fer = fer;

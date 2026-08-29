@@ -701,32 +701,51 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    fluxo, e preso embaixo roubaria a altura do enunciado */
 #dlgQsResponder #rsCaixa{flex:0 1 auto;overflow-y:auto;max-height:44vh}
 
-/* ---- EM TELA LARGA, O RASCUNHO VAI PARA O LADO ----
-   Embaixo da questão ele disputa altura com o enunciado e as
-   alternativas — que é o problema de origem, e a razão de a barra de
-   ferramentas dele ter virado um aperto na barra do título. Ao lado, a
-   altura deixa de ser disputada: sobra para o enunciado o que sobrava
-   antes, e o rascunho ganha a coluna inteira.
-   O gatilho é a LARGURA DA JANELA, não o aparelho: um telefone deitado
-   e um monitor pequeno merecem a mesma decisão. Abaixo disso continua
-   embaixo, empilhado, que é o único arranjo que cabe. */
-@media (min-width:900px){
-  #dlgQsResponder.qs-com-rascunho[open]{width:min(1180px,96vw)}
-  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado{display:flex;gap:14px;
-    align-items:flex-start;flex:1 1 auto;min-height:0}
-  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #qsSessCorpo{flex:1 1 58%;
-    min-width:0}
-  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #rsCaixa{flex:0 0 40%;
-    max-height:none;align-self:stretch;margin:0}
-  /* ao lado, o rascunho tem coluna inteira: a tela de desenho cresce
-     até onde a altura da questão permitir, em vez de ficar uma tirinha */
-  #dlgQsResponder.qs-com-rascunho .rs-tela{min-height:300px}
-  /* a coluna do rascunho cresce: 40% de 1180 dava 200px de folha, que
-     é largura de bloco de recado, não de papel de rascunho */
-  #dlgQsResponder.qs-com-rascunho[open]{width:min(1400px,98vw)}
-  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #qsSessCorpo{flex:1 1 46%}
-  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #rsCaixa{flex:0 0 52%}
-}
+/* ---- O RASCUNHO É UM PAINEL SOBREPOSTO, NÃO UMA COLUNA ----
+ *
+ * Em coluna, os dois lados perdiam: a questão estreitava e o rascunho
+ * virava uma tira de duzentos pixels onde as canetas quebravam em duas
+ * linhas. E como cada lado rolava por conta, apareciam DUAS barras de
+ * rolagem verticais paralelas — a pessoa tinha de descobrir qual das
+ * duas movia o que ela queria ver.
+ *
+ * Sobreposto, o rascunho usa a largura inteira quando está aberto e
+ * devolve a tela inteira quando fecha. O enunciado continua atrás, e é
+ * por isso que o painel para em 70%: ler a questão enquanto se faz a
+ * conta é metade do gesto.
+ */
+#dlgQsResponder .rs-caixa{
+  position:absolute;left:0;right:0;bottom:0;z-index:40;
+  max-height:72%;display:flex;flex-direction:column;margin:0;
+  border-radius:14px 14px 0 0;background:var(--panel);
+  box-shadow:0 -10px 30px rgba(0,0,0,.45);border:1px solid var(--borda);
+  border-bottom:0}
+#dlgQsResponder .rs-caixa[hidden]{display:none}
+#dlgQsResponder .rs-corpo{display:flex;flex-direction:column;min-height:0;
+  flex:1 1 auto;padding:8px 10px 10px}
+#dlgQsResponder .rs-folha{flex:1 1 auto;min-height:0;overflow:auto}
+#dlgQsResponder .rs-tela{min-height:180px}
+/* a folha inteira é o mesmo painel indo até o topo */
+#dlgQsResponder.rs-cheia .rs-caixa{top:0;max-height:100%;
+  border-radius:0;box-shadow:none}
+#dlgQsResponder.rs-cheia .rs-tela{min-height:60vh}
+#dlgQsResponder.rs-cheia #rsAjudaNota{display:none}
+/* o diálogo precisa ser o referencial do painel */
+#dlgQsResponder[open]{position:fixed}
+
+/* OS DOIS GATILHOS, LADO A LADO e com a mesma altura: são o mesmo
+   assunto, e separá-los faria parecer que abrem coisas diferentes. */
+.rs-gatilhos{display:inline-flex;gap:0}
+.rs-gatilhos .btn-min:first-child{border-top-right-radius:0;
+  border-bottom-right-radius:0}
+.rs-gatilhos .btn-min:last-child{border-top-left-radius:0;
+  border-bottom-left-radius:0;margin-left:-1px}
+/* SELO DE RASCUNHO GUARDADO: sem ele, a única forma de saber que há
+   conta salva naquela questão é abrir e olhar. */
+.rs-selo{display:inline-block;margin-left:5px;padding:0 5px;border-radius:99px;
+  background:var(--acao);color:#fff;font-size:9.5px;font-weight:800;
+  vertical-align:middle}
+
 /* a faixa da ação principal encosta no rodapé e ganha uma linha acima
    para não parecer que flutua sobre o texto */
 #dlgQsResponder .qs-barra-principal{margin:8px 0 0;padding-top:8px;
@@ -918,7 +937,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .pl-tela.pl-on{pointer-events:auto;cursor:crosshair;
   outline:1px dashed var(--info);outline-offset:2px}
 .pl-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px}
-.pl-fer{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center}
+/* a faixa do grifo ocupa a linha inteira para os grupos poderem se
+   distribuir — encolhida ao conteúdo, "centro" e "direita" caem no mesmo
+   lugar e a divisão não se vê */
+.pl-fer{display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:1 1 100%}
+.pl-barra{align-items:flex-start}
 /* DOBRAS DA QUESTÃO: o triângulo do navegador basta como afordância, e
    o rótulo diz o que está lá dentro antes de custar altura para mostrar */
 .qs-fim-acoes{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
@@ -2026,11 +2049,20 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .rs-aviso{font-size:11.5px;opacity:.75;margin-left:auto}
 .rs-aviso.rs-ok{color:var(--ok);opacity:1}
 .rs-corpo{padding:8px}
-/* FAIXA PRÓPRIA, e que QUEBRA. A caixa do rascunho corta o que passa da
-   borda (overflow:hidden), então uma faixa que não quebra não fica
-   apertada: ela some. */
-.rs-ferramentas{display:flex;gap:5px;align-items:center;flex-wrap:wrap;
-  margin-bottom:6px}
+/* UMA BARRA, TRÊS GRUPOS, e ela quebra. A caixa corta o que passa da
+   borda, então uma barra que não quebra não fica apertada: ela some. */
+.rs-barra{display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  margin-bottom:6px;flex:0 0 auto}
+.rs-grupo{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
+/* com os dois "auto" o do centro fica no meio e o da direita na ponta */
+.rs-grupo-esq{flex:0 1 auto}
+.rs-grupo-centro{margin-left:auto}
+.rs-grupo-dir{margin-left:auto}
+.rs-acoes .rs-aviso{margin-right:auto}
+.rs-texto{width:100%;min-height:180px;box-sizing:border-box;resize:vertical;
+  font-family:inherit;font-size:14px;line-height:1.5;padding:10px;
+  border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto)}
 /* o botão MOSTRA a espessura, como o do grifo — e é o mesmo desenho nas
    duas superfícies de propósito: mudar de lugar não pode pedir para a
    pessoa reaprender a ferramenta */
@@ -3346,33 +3378,46 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <!-- RASCUNHO: o papel de lado. Recolhido por padrao. -->
   <div id="rsCaixa" class="rs-caixa" hidden>
-    <div class="rs-topo">
-      <button class="btn-min" id="btnRsMin" type="button"></button>
-      <span class="rs-tit" data-i18n="rs_titulo"></span>
-      <span class="rs-aviso" id="rsAviso"></span>
-      <!-- FOLHA INTEIRA. Uma coluna de duzentos pixels serve para riscar
-           uma alternativa; não serve para somar um balanço patrimonial
-           ou montar uma DFC. Aqui o rascunho ocupa a janela e a folha
-           cresce junto — não é só a mesma folha esticada. -->
-      <button class="btn-min rs-topo-dir" id="btnRsCheia" type="button"
-        data-i18n="rs_cheia"
-        title="O rascunho ocupa a janela inteira e a folha fica grande, para conta longa. Esc ou o mesmo botão voltam."></button>
-    </div>
     <div id="rsCorpo" class="rs-corpo" hidden>
-      <!-- AS FERRAMENTAS EM FAIXA PRÓPRIA, e não na linha do título.
-           Na linha do título elas economizavam uma linha e custavam
-           caro: a caixa do rascunho tem overflow:hidden, então numa
-           coluna estreita as canetas simplesmente SUMIAM cortadas na
-           borda direita — sem barra de rolagem, sem sinal de que havia
-           mais botões ali. Aqui elas quebram para a linha de baixo, que
-           é o que uma faixa de ferramentas faz quando não cabe. -->
-      <div class="rs-ferramentas" id="rsFerramentas" hidden></div>
-      <canvas id="rsTela" class="rs-tela" width="900" height="420"></canvas>
+      <!-- UMA BARRA SÓ, HORIZONTAL, EM TRÊS GRUPOS.
+           Esquerda o que escreve (cores e espessuras), centro o que
+           desfaz (borracha e limpar), direita o tamanho da janela. A
+           divisão não é enfeite: é o que permite achar a ferramenta pelo
+           lugar, sem ler. Antes elas quebravam em duas linhas dentro de
+           uma coluna estreita, e a ordem mudava conforme a largura. -->
+      <div class="rs-barra" id="rsFerramentas" hidden>
+        <!-- OS GRUPOS SÃO DECLARADOS AQUI, e o JS só preenche os dois
+             primeiros. Botão criado em JS não aparece na leitura do
+             HTML — nem para quem revisa, nem para os invariantes que
+             conferem se todo clique tem um elemento de verdade. -->
+        <span class="rs-grupo rs-grupo-esq" id="rsGrupoEsq"></span>
+        <span class="rs-grupo rs-grupo-centro" id="rsGrupoCen"></span>
+        <span class="rs-grupo rs-grupo-dir">
+          <button class="btn-min" id="btnRsModo" type="button"
+            title="Troca entre escrever à mão e digitar. O que você digitar é salvo junto com o traço."></button>
+          <button class="btn-min" id="btnRsCheia" type="button"
+            title="A folha ocupa a tela inteira e fica grande, para conta longa. Esc volta."></button>
+          <button class="btn-min" id="btnRsMin" type="button"
+            title="Fecha o rascunho. O desenho continua aqui até você trocar de questão."></button>
+        </span>
+      </div>
+      <div class="rs-folha">
+        <canvas id="rsTela" class="rs-tela" width="900" height="420"></canvas>
+        <!-- MODO TECLADO. Nem toda conta se faz desenhando: quem prefere
+             digitar os números antes de resolver não devia precisar
+             escrever à mão com o dedo. O texto é salvo junto do traço. -->
+        <textarea id="rsTexto" class="rs-texto" hidden
+          placeholder="Digite aqui os dados da questão, a conta, o que precisar."></textarea>
+      </div>
       <!-- a instrução só enquanto a folha está em branco: com o rabisco
            feito ela vira uma faixa de texto ocupando altura que a conta
            precisa -->
       <p class="nota" id="rsAjudaNota" data-i18n="rs_ajuda"></p>
       <div class="rs-acoes">
+        <!-- O ESTADO FICA JUNTO DO SALVAR, e não na barra de ferramentas:
+             "3 traços · não salvo" é resposta à pergunta que se faz com a
+             mão no botão de gravar, não enquanto se escolhe a caneta. -->
+        <span class="rs-aviso" id="rsAviso"></span>
         <button class="btn-min" id="btnRsDesfazer" type="button" data-i18n="rs_desfazer"></button>
         <button class="btn-min" id="btnRsLimpar" type="button" data-i18n="rs_limpar"></button>
         <button class="btn-min" id="btnRsApagarSalvo" type="button" data-i18n="rs_apagar_salvo" hidden></button>
@@ -3389,6 +3434,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        que se faz COM ESTA questão, no meio o passo principal, embaixo
        as saídas. -->
   <div class="qs-barra qs-barra-ferramentas">
+    <!-- OS DOIS GATILHOS DO RASCUNHO, JUNTOS E AQUI.
+         Antes a caixa do rascunho ficava sempre na tela, recolhida, com
+         o "folha inteira" solto na barra dela — um botão para expandir
+         um painel que estava fechado. Agora os dois são um grupo só, no
+         fim da questão, que é de onde se decide fazer conta. -->
+    <span class="rs-gatilhos">
+      <button class="btn-min" id="btnRsAbrir" title="Abre o rascunho por cima da questão. O texto continua legível ao fundo."></button>
+      <button class="btn-min" id="btnRsAbrirCheia" title="Abre o rascunho ocupando a tela inteira, com a folha grande — para conta longa."></button>
+    </span>
     <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
     <button class="btn-min" id="btnQsEmbaralhar" hidden></button>
     <button class="btn-min" id="btnQsSoFalhas" hidden></button>
