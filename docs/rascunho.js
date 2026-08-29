@@ -121,7 +121,12 @@ function rsGravarTudo(o) {
 }
 function rsDaQuestao(id) {
   const r = rsLerTudo()[String(id)];
-  return r && r.tracos && r.tracos.length ? r : null;
+  if (!r) return null;
+  /* um rascunho SÓ DE TEXTO é um rascunho: exigir traço aqui fazia a
+   * conta digitada sumir na volta, e o selo não aparecer */
+  const temTraco = !!(r.tracos && r.tracos.length);
+  const temTexto = !!String(r.texto || "").trim();
+  return (temTraco || temTexto) ? r : null;
 }
 function rsQuantosSalvos() { return Object.keys(rsLerTudo()).length; }
 
@@ -138,13 +143,18 @@ function rsPrepararPara(id) {
   if (!rsIniciado) rsIniciar();
   rsQid = id == null ? null : String(id);
   const guardado = rsQid ? rsDaQuestao(rsQid) : null;
-  rsTracos = guardado ? guardado.tracos.map((tr) => ({
+  rsTracos = guardado && guardado.tracos ? guardado.tracos.map((tr) => ({
     cor: tr.cor, larg: tr.larg, pontos: tr.pontos.map((p) => p.slice()),
   })) : [];
+  const tx0 = $("rsTexto");
+  if (tx0) tx0.value = (guardado && guardado.texto) || "";
+  /* volta no modo em que há conteúdo: guardado só texto, abrir na
+   * caneta mostraria uma folha em branco sobre um rascunho que existe */
+  rsModoTrocar(guardado && !rsTracos.length && String((guardado || {}).texto || "").trim()
+    ? "teclado" : "caneta");
   rsSalvo = !!guardado;
   rsLixo = [];
   rsBorracha = false;
-  cx.hidden = !rsQid;
   /* TROCAR DE QUESTÃO SAI DA FOLHA INTEIRA: ela é um estado de trabalho
    * daquela questão, e ficar nela esconderia o enunciado da seguinte. */
   if (rsCheia) rsCheiaTrocar(false);
@@ -207,11 +217,7 @@ function rsCheiaTrocar(sim) {
   if (rsCheia && !rsAberto()) rsRecolher(false);
   const f = rsCheia ? RS_FOLHA_CHEIA : RS_FOLHA_NORMAL;
   rsRedimensionar(f.w, f.h);
-  const b = $("btnRsCheia");
-  if (b) {
-    b.textContent = t(rsCheia ? "rs_cheia_sair" : "rs_cheia");
-    if (b.classList) b.classList.toggle("btn-min-ok", rsCheia);
-  }
+  rsPintar();
   return rsCheia;
 }
 
@@ -219,28 +225,99 @@ function rsRecolher(sim) {
   const corpo = $("rsCorpo");
   if (!corpo) return;
   corpo.hidden = !!sim;
+  /* RECOLHIDO É FECHADO. Antes a caixa continuava na tela, vazia, com a
+   * barra de título e um botão de "folha inteira" para expandir um
+   * painel que não estava aberto. Agora o rascunho fechado não ocupa
+   * nada — quem o abre são os gatilhos, no fim da questão. */
+  const cx = $("rsCaixa");
+  if (cx) cx.hidden = !!sim || !rsQid;
+  if (sim && rsCheia) rsCheiaTrocar(false);
   /* AS FERRAMENTAS SEGUEM O CORPO. Cores de caneta ao lado de um
    * rascunho fechado não são atalho, são enfeite: não há onde desenhar. */
   const fer = $("rsFerramentas");
   if (fer) fer.hidden = !!sim;
-  /* A JANELA SÓ VIRA DUAS COLUNAS quando há rascunho ABERTO para pôr na
-   * segunda. Alargar por causa de uma caixa recolhida deixaria metade da
-   * tela vazia ao lado do enunciado — e a largura extra é justamente o
-   * que torna o texto da questão mais difícil de ler em linha longa. */
-  const dlg = $("dlgQsResponder");
-  if (dlg && dlg.classList) dlg.classList.toggle("qs-com-rascunho", !sim);
   const b = $("btnRsMin");
   if (b) {
-    b.textContent = t(sim ? "rs_abrir" : "rs_recolher");
-    b.title = t(sim ? "rs_abrir_ajuda" : "rs_recolher_ajuda");
+    b.textContent = t("rs_recolher");
+    b.title = t("rs_recolher_ajuda");
   }
+  rsPintarGatilhos();
   if (!sim) rsPintar();
 }
 /* a instrução serve à primeira vez; com a folha rabiscada ela vira uma
  * faixa de texto ocupando altura que a conta precisa */
+/* ---------------------------------------------------------------------
+ * CANETA OU TECLADO
+ *
+ * O rascunho nasceu como papel: desenhar é o gesto certo para riscar uma
+ * alternativa ou montar um esquema. Mas transcrever os números de um
+ * balanço é digitar, não desenhar — e escrever à mão com o dedo, num
+ * telefone, é o caminho mais lento possível para uma coisa que o teclado
+ * faz em segundos.
+ *
+ * O texto é guardado JUNTO do traço, na mesma entrada da questão: são as
+ * duas metades do mesmo rascunho, e separá-las faria "salvar" significar
+ * coisas diferentes conforme o modo em que a pessoa estivesse. */
+let rsModo = "caneta";
+
+function rsModoTrocar(qual) {
+  rsModo = qual || (rsModo === "caneta" ? "teclado" : "caneta");
+  const cv = rsTela(), tx = $("rsTexto");
+  if (cv) cv.hidden = rsModo !== "caneta";
+  if (tx) tx.hidden = rsModo !== "teclado";
+  /* as ferramentas de desenho não servem ao teclado: deixá-las acesas
+   * seria oferecer uma caneta para escrever num campo de texto */
+  ["rs-grupo-esq", "rs-grupo-centro"].forEach((cls) => {
+    const g = $("rsFerramentas");
+    if (!g) return;
+    (g.children || []).forEach((f) => {
+      if (new RegExp("(^| )" + cls + "( |$)").test(f.className || "")) {
+        f.hidden = rsModo !== "caneta";
+      }
+    });
+  });
+  rsPintar();
+  return rsModo;
+}
+
+function rsTextoAtual() {
+  const tx = $("rsTexto");
+  return tx ? String(tx.value || "") : "";
+}
+
+function rsTemAlgo() {
+  return rsTracos.length > 0 || !!rsTextoAtual().trim();
+}
+
 function rsPintarAjuda() {
   const p2 = $("rsAjudaNota");
-  if (p2) p2.hidden = rsTracos.length > 0;
+  if (p2) p2.hidden = rsTemAlgo();
+}
+
+/* OS DOIS GATILHOS, e o selo.
+ *
+ * O selo responde a uma pergunta que antes só se respondia abrindo: esta
+ * questão tem conta guardada? Numa segunda passada pelo mesmo bloco, é a
+ * diferença entre reabrir trinta rascunhos para achar o que interessa e
+ * ver de relance quais têm alguma coisa. */
+function rsPintarGatilhos() {
+  const aberto = rsAberto();
+  const b1 = $("btnRsAbrir"), b2 = $("btnRsAbrirCheia");
+  const temSalvo = !!(rsQid && rsDaQuestao(rsQid));
+  if (b1) {
+    b1.hidden = aberto || !rsQid;
+    b1.textContent = "";
+    b1.append(document.createTextNode(t("rs_abrir")));
+    if (temSalvo) {
+      const selo = document.createElement("span");
+      selo.className = "rs-selo";
+      selo.id = "rsSelo";
+      selo.textContent = t("rs_selo");
+      selo.title = t("rs_selo_ajuda");
+      b1.append(selo);
+    }
+  }
+  if (b2) b2.hidden = aberto || !rsQid;
 }
 
 function rsAberto() {
@@ -430,20 +507,36 @@ function rsPintar() {
   if (bs) bs.textContent = t(rsSalvo ? "rs_salvar_de_novo" : "rs_salvar");
   const bl = $("btnRsApagarSalvo");
   if (bl) bl.hidden = !(rsQid && rsDaQuestao(rsQid));
+  const bModo = $("btnRsModo");
+  if (bModo) {
+    bModo.textContent = t(rsModo === "caneta" ? "rs_modo_teclado" : "rs_modo_caneta");
+    bModo.title = t(rsModo === "caneta" ? "rs_modo_teclado_ajuda" : "rs_modo_caneta_ajuda");
+  }
+  const bCheia = $("btnRsCheia");
+  if (bCheia) {
+    bCheia.textContent = t(rsCheia ? "rs_cheia_sair" : "rs_cheia");
+    if (bCheia.classList) bCheia.classList.toggle("btn-min-ok", rsCheia);
+  }
   rsPintarAjuda();
+  rsPintarGatilhos();
 }
 
 /* ---------------- salvar ---------------- */
 
 function rsSalvarNaQuestao() {
   if (!rsQid) { uiAlert(t("rs_sem_questao")); return false; }
-  if (!rsTracos.length) { uiAlert(t("rs_vazio")); return false; }
+  /* TRAÇO OU TEXTO: as duas metades do mesmo rascunho. Exigir traço
+   * faria "salvar" recusar uma conta inteiramente digitada. */
+  if (!rsTemAlgo()) { uiAlert(t("rs_vazio")); return false; }
   const tudo = rsLerTudo();
-  tudo[rsQid] = { tracos: rsTracos, q: new Date().toISOString() };
+  tudo[rsQid] = { tracos: rsTracos, texto: rsTextoAtual(),
+                  q: new Date().toISOString() };
   if (!rsGravarTudo(tudo)) return false;
   rsSalvo = true;
   rsPintar();
-  try { matReg("questoes", "rascunho guardado na questão", rsTracos.length + " traços"); }
+  try { matReg("questoes", "rascunho guardado na questão",
+    rsTracos.length + " traços"
+    + (rsTextoAtual().trim() ? " · " + rsTextoAtual().length + " caracteres" : "")); }
   catch (e) {}
   uiAlert(t("rs_salvo_ok"));
   return true;
@@ -508,6 +601,13 @@ function rsIniciar() {
 
   const fer = $("rsFerramentas");
   if (fer && !fer.children.length) {
+    /* TRÊS GRUPOS, e a posição é o que identifica a ferramenta. Numa
+     * fila única de dez botões a pessoa lê todos toda vez; com grupos
+     * ela vai ao lugar. Os dois primeiros são preenchidos aqui; o da
+     * direita já vem escrito no HTML, porque botão criado em JS não
+     * aparece para quem lê a página nem para os invariantes. */
+    const gEsq = $("rsGrupoEsq") || fer;
+    const gCen = $("rsGrupoCen") || fer;
     RS_CANETAS.forEach((c) => {
       const b = document.createElement("button");
       b.type = "button";
@@ -518,7 +618,7 @@ function rsIniciar() {
       b.setAttribute("aria-label", t("rs_caneta_" + c.id));
       b.onclick = () => { rsCaneta = c.id; rsBorracha = false; rsPintar(); };
       rsBotoes[c.id] = b;
-      fer.append(b);
+      gEsq.append(b);
     });
     /* A ESPESSURA DA CANETA fica junto das cores e ANTES da borracha:
      * escolher com que traço escrever é parte de escrever, não de
@@ -537,7 +637,7 @@ function rsIniciar() {
       b.append(tr);
       b.onclick = () => { rsEspessuraDefinir(i); rsBorracha = false; rsPintar(); };
       rsBotoes["e_" + x.id] = b;
-      fer.append(b);
+      gEsq.append(b);
     });
 
     const bb = document.createElement("button");
@@ -546,7 +646,7 @@ function rsIniciar() {
     bb.title = t("rs_borracha_ajuda");
     bb.onclick = () => { rsBorracha = !rsBorracha; rsPintar(); };
     rsBotoes.borracha = bb;
-    fer.append(bb);
+    gCen.append(bb);
 
     /* OS TAMANHOS DA BORRACHA, ao lado dela — e não escondidos num menu.
      * Trocar de tamanho acontece no meio do gesto ("errei uma linha, não
@@ -571,13 +671,33 @@ function rsIniciar() {
         rsPintar();
       };
       rsBotoes["b_" + x.id] = b;
-      fer.append(b);
+      gCen.append(b);
     });
+    /* limpar tudo fica no CENTRO, com a borracha: são a mesma família
+     * (desfazer o que foi feito), e longe das cores, que é o que a mão
+     * procura o tempo todo */
+    const bLimpa = document.createElement("button");
+    bLimpa.type = "button";
+    bLimpa.id = "btnRsLimparBarra";
+    bLimpa.className = "btn-min";
+    bLimpa.textContent = t("rs_limpar");
+    bLimpa.onclick = () => rsLimpar();
+    gCen.append(bLimpa);
+
     rsPintarBorrachas();
   }
 
   if ($("btnRsMin")) $("btnRsMin").onclick = () => rsRecolher(rsAberto());
+  if ($("btnRsModo")) $("btnRsModo").onclick = () => rsModoTrocar();
   if ($("btnRsCheia")) $("btnRsCheia").onclick = () => rsCheiaTrocar();
+  if ($("btnRsMin")) $("btnRsMin").onclick = () => rsRecolher(true);
+  if ($("btnRsAbrir")) {
+    $("btnRsAbrir").onclick = () => { rsRecolher(false); rsCheiaTrocar(false); };
+  }
+  if ($("btnRsAbrirCheia")) {
+    $("btnRsAbrirCheia").textContent = t("rs_cheia");
+    $("btnRsAbrirCheia").onclick = () => { rsRecolher(false); rsCheiaTrocar(true); };
+  }
   /* ESC VOLTA À QUESTÃO ANTES de fechar a rodada. Sem isto, o gesto mais
    * natural para "sair da folha inteira" encerraria a sessão de questões
    * — e o rabisco não salvo iria junto. */
