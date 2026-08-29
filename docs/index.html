@@ -720,7 +720,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
     max-height:none;align-self:stretch;margin:0}
   /* ao lado, o rascunho tem coluna inteira: a tela de desenho cresce
      até onde a altura da questão permitir, em vez de ficar uma tirinha */
-  #dlgQsResponder.qs-com-rascunho .rs-tela{min-height:220px}
+  #dlgQsResponder.qs-com-rascunho .rs-tela{min-height:300px}
+  /* a coluna do rascunho cresce: 40% de 1180 dava 200px de folha, que
+     é largura de bloco de recado, não de papel de rascunho */
+  #dlgQsResponder.qs-com-rascunho[open]{width:min(1400px,98vw)}
+  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #qsSessCorpo{flex:1 1 46%}
+  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #rsCaixa{flex:0 0 52%}
 }
 /* a faixa da ação principal encosta no rodapé e ganha uma linha acima
    para não parecer que flutua sobre o texto */
@@ -2041,6 +2046,22 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .rs-borracha.rs-sel{outline:2px solid #fff}
 .rs-tela{width:100%;height:auto;max-width:100%;background:#fdfdf7;border-radius:8px;
   display:block;touch-action:none;cursor:crosshair}
+.rs-topo-dir{margin-left:auto}
+
+/* ---- RASCUNHO EM FOLHA INTEIRA ----
+   O diálogo inteiro vira papel: a questão sai da frente, a caixa ocupa
+   tudo e a folha usa a altura disponível. Mesma ideia da lei seca e do
+   resumo em tela cheia, e pelo mesmo motivo — há gestos que não cabem
+   num canto da tela. */
+#dlgQsResponder.rs-cheia[open]{width:min(1400px,98vw);max-height:96vh}
+#dlgQsResponder.rs-cheia .qs-corpo-lado{display:block}
+#dlgQsResponder.rs-cheia #qsSessCorpo{display:none}
+#dlgQsResponder.rs-cheia .qs-barra,
+#dlgQsResponder.rs-cheia .dlg-rodape,
+#dlgQsResponder.rs-cheia #qsSessPlacar{display:none}
+#dlgQsResponder.rs-cheia #rsCaixa{max-height:none;height:auto}
+#dlgQsResponder.rs-cheia .rs-tela{min-height:62vh}
+#dlgQsResponder.rs-cheia #rsAjudaNota{display:none}
 .rs-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .qs-filtro-on{background:var(--roxo,#7c5cff);color:#fff;border-color:transparent}
 .mat-conta-prova{border-color:rgba(168,85,247,.7);color:var(--info)}
@@ -3329,6 +3350,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min" id="btnRsMin" type="button"></button>
       <span class="rs-tit" data-i18n="rs_titulo"></span>
       <span class="rs-aviso" id="rsAviso"></span>
+      <!-- FOLHA INTEIRA. Uma coluna de duzentos pixels serve para riscar
+           uma alternativa; não serve para somar um balanço patrimonial
+           ou montar uma DFC. Aqui o rascunho ocupa a janela e a folha
+           cresce junto — não é só a mesma folha esticada. -->
+      <button class="btn-min rs-topo-dir" id="btnRsCheia" type="button"
+        data-i18n="rs_cheia"
+        title="O rascunho ocupa a janela inteira e a folha fica grande, para conta longa. Esc ou o mesmo botão voltam."></button>
     </div>
     <div id="rsCorpo" class="rs-corpo" hidden>
       <!-- AS FERRAMENTAS EM FAIXA PRÓPRIA, e não na linha do título.
@@ -3340,7 +3368,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
            é o que uma faixa de ferramentas faz quando não cabe. -->
       <div class="rs-ferramentas" id="rsFerramentas" hidden></div>
       <canvas id="rsTela" class="rs-tela" width="900" height="420"></canvas>
-      <p class="nota" data-i18n="rs_ajuda"></p>
+      <!-- a instrução só enquanto a folha está em branco: com o rabisco
+           feito ela vira uma faixa de texto ocupando altura que a conta
+           precisa -->
+      <p class="nota" id="rsAjudaNota" data-i18n="rs_ajuda"></p>
       <div class="rs-acoes">
         <button class="btn-min" id="btnRsDesfazer" type="button" data-i18n="rs_desfazer"></button>
         <button class="btn-min" id="btnRsLimpar" type="button" data-i18n="rs_limpar"></button>
