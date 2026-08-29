@@ -77,11 +77,62 @@ function ehTagSolta(txt) { return looksLikeTags(txt); }
  * O que distingue etiqueta de frase é a FORMA: partes separadas por vírgula,
  * cada uma sem espaço interno (o Anki separa tags por espaço) e sem
  * pontuação de fim de frase. */
+/* As palavras que só existem para ligar outras. Curta de propósito: uma
+ * lista longa começaria a recusar etiqueta legítima ("prova", "lei"). */
+const LIGACAO_RE = new RegExp("^(?:a|as|o|os|um|uma|uns|umas|de|do|da|dos|das"
+  + "|em|no|na|nos|nas|ao|aos|à|às|e|ou|que|se|por|pelo|pela|para|com|sem"
+  + "|the|of|and|or|to|for|in|on|is|are)$", "i");
+
+/* O QUE É UM CAMPO DE ETIQUETAS.
+ *
+ * Esta função DISCORDAVA de parseTags, que é quem realmente lê as tags.
+ * parseTags separa por espaço OU vírgula — a convenção do próprio Anki, e
+ * a que o prompt deste app manda a IA usar. Esta aqui separava só por
+ * vírgula e recusava qualquer campo com espaço dentro. Resultado: um
+ * conjunto perfeitamente válido como
+ *
+ *   disc_Direito_Financeiro top_Receita_Publica concurso_TCE_PE de_resumo
+ *
+ * era acusado de "3º campo parece TEXTO, não tags". Cinquenta cartões
+ * colados, cinquenta avisos — todos falsos, todos sobre etiquetas que o
+ * próprio app tinha acabado de mandar a IA escrever. E não parava no
+ * aviso: o cartão saía marcado como tagsSuspeitas, e a rede de segurança
+ * que confere se as etiquetas sobreviveram passava a contar zero.
+ *
+ * A regra agora é a mesma de parseTags, com uma exigência a mais para não
+ * perder o que a checagem existia para pegar: uma FRASE sem pontuação
+ * ("provavel quebra de linha faltando") também não tem vírgula nem dois
+ * pontos. O que separa uma frase de um conjunto de etiquetas é que
+ * etiqueta é palavra COMPOSTA — tem "_", "-", "#" ou "::" dentro. Basta
+ * uma no conjunto para o campo ser reconhecido como etiquetas; nenhuma, e
+ * ele continua sendo tratado como texto. */
 function looksLikeTags(raw) {
   const s = (raw || "").trim();
   if (!s || s.includes("{{") || s.includes(":") || /[.!?;]/.test(s)) return false;
   if (s.length > 200 || parseTags(s).length > 8) return false;
-  return s.split(",").every((x) => x.trim() && !/\s/.test(x.trim()));
+  const partes = s.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  if (!partes.length) return false;
+  /* toda parte tem de ser uma palavra só, sem os sinais que só aparecem
+   * em texto corrido */
+  if (!partes.every((x) => /^[#]?[\wÀ-ÿ][\wÀ-ÿ.:/-]*$/.test(x))) return false;
+  /* PALAVRA DE LIGAÇÃO É A ASSINATURA DA FRASE.
+   * Etiqueta não tem "de", "que", "para": elas existem para ligar
+   * palavras numa oração, e é isso que uma lista de etiquetas não é.
+   * Sem esta regra, "tag_a linha solta que vira explicacao" passaria por
+   * etiquetas só porque a primeira palavra tem um sublinhado — e a
+   * correção automática engoliria a frase inteira para dentro do campo
+   * de tags, que foi exatamente o que aconteceu. */
+  if (partes.some((x) => LIGACAO_RE.test(x))) return false;
+  /* UMA PALAVRA SÓ é etiqueta, e sempre foi: ninguém escreve uma frase
+   * de uma palavra no terceiro campo. Tirar isto agora quebraria quem
+   * escreve "Impostos" à mão. */
+  if (partes.length === 1) return true;
+  /* uma etiqueta composta em qualquer lugar do conjunto basta: é o sinal
+   * de que aquilo foi escrito para ser etiqueta, e não uma frase */
+  if (partes.some((x) => /[_#-]/.test(x))) return true;
+  /* sem nenhuma composta, só aceita se houver vírgula separando — a
+   * vírgula é a intenção declarada de que aquilo é uma lista */
+  return s.indexOf(",") >= 0;
 }
 
 function agruparLinhas(rawText) {
@@ -698,8 +749,15 @@ function resumoTexto(raw) {
     // perceber quando uma correção mexe demais no texto
     // linha "+" que contém só etiquetas não é explicação: contá-la faria a
     // rede de segurança acusar perda de conteúdo ao devolvê-las ao cartão
+    /* SEPARADOR NÃO É CONTEÚDO. Uma linha "---" dentro do Saiba mais é
+     * um traço de separação; contá-la como explicação faz a rede de
+     * segurança acusar perda quando uma correção apenas a remove.
+     * Antes ela escapava por acidente — passava por "etiqueta" na
+     * checagem frouxa —, e o acidente sumiu quando a checagem ficou
+     * correta. Agora a exclusão está escrita, que é onde devia estar. */
     saibaMais: r.cards.reduce((s, c) => s + (c.more
-      ? c.more.split("<br>").filter((x) => x.trim() && !looksLikeTags(x)).length
+      ? c.more.split("<br>").filter((x) => x.trim()
+          && !/^[\s\-–—_=*.]+$/.test(x.trim()) && !looksLikeTags(x)).length
       : 0), 0),
     titulos: r.cards.filter((c) => c.titulo).length,
     // só etiquetas de verdade: um 3º campo que na verdade é frase não conta

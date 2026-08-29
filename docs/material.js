@@ -712,7 +712,67 @@ function matFonteMudar(d) {
   matFonte = Math.max(12, Math.min(28, matFonte + d));
   $("matLeitura").style.fontSize = matFonte + "px";
   $("matFonteVal").textContent = matFonte + "px";
+  /* o mesmo número em dois lugares: a barra normal e a da tela cheia.
+   * Um deles ficando para trás faria a pessoa duvidar de qual vale. */
+  if ($("matCheiaFonte")) $("matCheiaFonte").textContent = matFonte + "px";
   try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
+}
+
+/* ------------------------------------------------------------------
+ * LER O RESUMO EM TELA CHEIA
+ *
+ * UM LUGAR SÓ decide o que sobrevive à tela cheia. Espalhar "esconde
+ * isto, mostra aquilo" por várias funções foi como o leitor de lei já
+ * chegou uma vez a um estado com a barra de marcas visível no modo
+ * errado — e um botão novo criado amanhã apareceria aqui sem que
+ * ninguém tivesse decidido isso.
+ *
+ * Fica: o texto, a saída, o tamanho da letra e o marcador de onde parei
+ * — inclusive para MARCAR DE NOVO em outro ponto. Marcar é o gesto que
+ * se faz no meio de uma leitura longa; obrigar a sair da tela cheia para
+ * guardar o lugar seria perder o lugar para poder guardá-lo.
+ * ------------------------------------------------------------------ */
+let matCheia = false;
+
+function matCheiaAplicar() {
+  const dlg = $("dlgMaterial");
+  if (dlg && dlg.classList) dlg.classList.toggle("mat-cheia", matCheia);
+
+  /* [hidden] ganha do CSS (invariante E8): esconder aqui é o que vale */
+  ["matSub", "matTopo", "matAjudaNota", "matBarra", "matCtrlLeitura",
+   "matRodape"]
+    .forEach((id) => { const el = $(id); if (el) el.hidden = matCheia; });
+  const bar = $("matCheiaBarra");
+  if (bar) bar.hidden = !matCheia;
+
+  /* NA TELA CHEIA SÓ SE LÊ. Deixar o campo de edição aparecer seria
+   * oferecer digitar sem a barra de formatação e sem o botão de salvar
+   * — um caminho para perder trabalho. */
+  if (matCheia) {
+    const ta = $("matTexto");
+    if (ta) ta.hidden = true;
+    const lt = $("matLeitura");
+    if (lt) lt.hidden = false;
+  }
+  const b = $("btnMatCheia");
+  if (b && b.classList) b.classList.toggle("btn-min-ok", matCheia);
+  if ($("matCheiaFonte")) $("matCheiaFonte").textContent = matFonte + "px";
+  matPintarMarcador();
+}
+
+function matCheiaTrocar(sim) {
+  matCheia = sim === undefined ? !matCheia : !!sim;
+  if (matCheia) {
+    /* entra sempre LENDO: é o que a tela cheia é */
+    if (matModo !== "ler") matTrocarModo("ler");
+    matCheiaAplicar();
+  } else {
+    matCheiaAplicar();
+    matTrocarModo(matModo);
+  }
+  try { matReg("leitura", matCheia ? "tela cheia" : "voltou ao tamanho padrão",
+    (matAtual && matAtual.topico) || ""); } catch (e) {}
+  return matCheia;
 }
 
 function matAmpliar() {
@@ -1596,6 +1656,10 @@ function matPintarMarcador() {
   const tem = !!(r && r.marcador);
   const ir = $("btnMatIrMarcador");
   if (ir) ir.hidden = !tem;
+  /* o mesmo botão existe na barra da tela cheia, e aparece pela mesma
+   * regra: só quando há marcador para onde ir */
+  const ir2 = $("btnMatCheiaIr");
+  if (ir2) ir2.hidden = !tem;
   const info = $("matMarcadorInfo");
   if (!info) return;
   if (!tem) { info.textContent = ""; return; }
@@ -2205,6 +2269,24 @@ function matIniciar() {
   $("btnMatModo").onclick = trocarModo;
   if ($("btnMatModoTopo")) $("btnMatModoTopo").onclick = trocarModo;
   $("btnMatAmpliar").onclick = matAmpliar;
+  matBotao("btnMatCheia", "ler em tela cheia", () => matCheiaTrocar(true));
+  matBotao("btnMatCheiaSair", "voltar do tela cheia", () => matCheiaTrocar(false));
+  matBotao("btnMatCheiaMaior", "letra maior (tela cheia)", () => matFonteMudar(1));
+  matBotao("btnMatCheiaMenor", "letra menor (tela cheia)", () => matFonteMudar(-1));
+  /* MESMA função dos botões de cima, de propósito: dois caminhos para o
+   * mesmo gesto que não sejam o mesmo código acabam divergindo. */
+  matBotao("btnMatCheiaMarcar", "pôr marcador (tela cheia)", matPorMarcador);
+  matBotao("btnMatCheiaIr", "ir ao marcador (tela cheia)", matIrMarcador);
+  /* ESC SAI DA TELA CHEIA ANTES de fechar o resumo. Sem isto, o gesto
+   * mais natural para "voltar ao tamanho normal" fecharia a janela
+   * inteira — e quem estava lendo perderia a página. */
+  if ($("dlgMaterial")) {
+    $("dlgMaterial").addEventListener("cancel", (e) => {
+      if (!matCheia) return;
+      if (e && e.preventDefault) e.preventDefault();
+      matCheiaTrocar(false);
+    });
+  }
   $("btnMatMaior").onclick = () => matFonteMudar(1);
   $("btnMatMenor").onclick = () => matFonteMudar(-1);
   $("btnMatLerReg").onclick = matRegistrarLeitura;
@@ -2471,6 +2553,115 @@ function matCartoesRegistrarLeitura(r, recusadas) {
   } catch (e) {}
 }
 
+/* ------------------------------------------------------------------
+ * CONSERTAR O TEXTO COLADO — o mesmo mecanismo da bancada de cartões.
+ *
+ * A bancada já tinha uma cadeia de correções seguras (juntar linha
+ * partida, tirar marcador de lista, converter markdown, separar título
+ * grudado) e um prompt de correção para o que nenhuma regra adivinha. O
+ * painel de cartões do material não tinha nem um nem outro: quem colava
+ * cinquenta cartões tortos via cinquenta avisos e nenhuma saída.
+ *
+ * A REDE DE SEGURANÇA É A PARTE IMPORTANTE. Uma correção automática que
+ * "arruma" perdendo três cartões ou as etiquetas de todos é pior do que
+ * não corrigir — e o estrago só apareceria dias depois, no Anki. Por
+ * isso o conserto é medido antes e depois, e recusado se qualquer uma
+ * das duas contagens cair.
+ * ------------------------------------------------------------------ */
+/* A REDE DE SEGURANÇA, separada de quem a usa.
+ *
+ * Fica em função própria por duas razões. A primeira é que ela é a parte
+ * que não pode errar: um conserto que "arruma" perdendo três cartões ou
+ * as etiquetas de todos é pior do que não consertar, e o estrago só
+ * apareceria dias depois, dentro do Anki. A segunda é que assim ela se
+ * testa sozinha, com números na mão, sem precisar fabricar um texto que
+ * provoque a perda — e um teste que depende de provocar o desastre é um
+ * teste que deixa de valer quando o desastre muda de forma.
+ *
+ * CARTÕES REAIS, não `cartoes`: juntar uma linha partida REDUZ a
+ * contagem bruta sem perder nada, e alarme falso aqui treinaria a pessoa
+ * a ignorar o alarme. */
+function matConsertoPerdas(antes, depois) {
+  const perdas = [];
+  if (depois.cartoesReais < antes.cartoesReais) {
+    perdas.push(t("mc_perde_cartoes",
+      { c1: antes.cartoesReais, c2: depois.cartoesReais }));
+  }
+  if (depois.tags < antes.tags) {
+    perdas.push(t("mc_perde_tags", { t1: antes.tags, t2: depois.tags }));
+  }
+  return perdas;
+}
+
+async function matCartoesConsertar() {
+  const bruto = $("mcTexto").value;
+  if (!bruto.trim()) { uiAlert(t("mc_nada_lido")); return false; }
+  if (typeof correcaoDeTudo !== "function") return false;
+
+  const fn = correcaoDeTudo(bruto);
+  if (!fn) { await uiAlert(t("mc_consertar_nada")); return false; }
+  const novo = fn(bruto);
+  if (novo === bruto) { await uiAlert(t("mc_consertar_nada")); return false; }
+
+  const antes = resumoTexto(bruto), depois = resumoTexto(novo);
+  const perdas = matConsertoPerdas(antes, depois);
+  if (perdas.length) {
+    try {
+      gerReg("cartoes", "descarte", "conserto recusado pela rede de segurança",
+        perdas.join(" · "),
+        { topico: (matAtual && matAtual.topico) || "" });
+    } catch (e) {}
+    await uiAlert(t("mc_consertar_perde", { p: perdas.join(" · ") }));
+    return false;
+  }
+
+  const oque = String(fn.name || "").replace(/corrigir|remover/gi, "").trim()
+    || t("mc_consertar");
+  if (!(await uiConfirm(t("mc_consertar_conf", {
+    o: oque, c1: antes.cartoes, c2: depois.cartoes,
+    t1: antes.tags, t2: depois.tags,
+    a1: antes.avisos + antes.suspeitos, a2: depois.avisos + depois.suspeitos,
+  })))) return false;
+
+  $("mcTexto").value = novo;
+  mcUltimaLeitura = "";
+  const r = matCartoesConferir();
+  try {
+    gerReg("cartoes", "leitura", "texto consertado automaticamente",
+      oque + " · " + antes.cartoes + "→" + depois.cartoes + " cartões · "
+      + (antes.avisos + antes.suspeitos) + "→"
+      + (depois.avisos + depois.suspeitos) + " avisos",
+      { topico: (matAtual && matAtual.topico) || "",
+        disciplina: (matAtual && matAtual.disciplina) || "" });
+  } catch (e) {}
+  await uiAlert(t("mc_consertado", { c: r.cards.length,
+    a: depois.avisos + depois.suspeitos }));
+  return true;
+}
+
+/* O CAMINHO DA IA, para o que nenhuma regra consegue adivinhar: o mesmo
+ * prompt da bancada, com as linhas numeradas e o problema de cada uma. */
+function matCartoesPromptCorrecao() {
+  const bruto = $("mcTexto").value;
+  if (!bruto.trim()) { uiAlert(t("mc_nada_lido")); return false; }
+  if (typeof montarPromptCorrecao !== "function") return false;
+  const r = parseText(bruto);
+  if (!r.warnings.length && !r.nSuspicious) {
+    uiAlert(t("mc_prompt_fix_nada"));
+    return false;
+  }
+  const txt = montarPromptCorrecao(bruto, r);
+  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  try {
+    gerReg("cartoes", "prompt", "prompt de correção copiado",
+      txt.length + " caracteres · " + r.warnings.length + " aviso(s), "
+      + r.nSuspicious + " a conferir",
+      { topico: (matAtual && matAtual.topico) || "" });
+  } catch (e) {}
+  uiAlert(t("mc_prompt_fix_copiado", { n: txt.length }));
+  return true;
+}
+
 function matCartoesConferir() {
   const r = matCartoesLer();
   const av = $("mcAviso");
@@ -2624,6 +2815,12 @@ function matCartoesIniciar() {
   if ($("btnMcPrompt")) $("btnMcPrompt").onclick = matCartoesPrompt;
   if ($("btnMcSalvar")) $("btnMcSalvar").onclick = matCartoesSalvar;
   if ($("btnMcVer")) $("btnMcVer").onclick = matCartoesVer;
+  /* pelos dois botões novos passa o envoltório que registra a falha: um
+   * erro dentro de um conserto automático é justamente o que ninguém
+   * consegue relatar sem uma linha de log */
+  matBotao("btnMcConsertar", "consertar o texto colado", matCartoesConsertar);
+  matBotao("btnMcPromptFix", "prompt de correção dos cartões",
+    matCartoesPromptCorrecao);
   /* VOLTAR PARA ONDE SE VEIO.
    * O botão dizia sempre "Voltar ao resumo". Quem chegou aqui de uma
    * questão era despejado no resumo, com a rodada de questões fechada
@@ -2913,8 +3110,65 @@ function mcEstudoIniciar() {
  * reabre a cada linha, e um grifo de tres linhas nao pode virar tres
  * itens na lista). Duplicar o codigo teria feito as tres listas
  * divergirem na primeira correcao. */
-const MAT_PREFIXO_RE = { duvida: "\\?", prova: "\\*", pegadinha: "~",
-                         importante: "!", lei: "\u00a7" };
+/* O RECONHECEDOR DE CADA COR, e ele precisa cobrir TODAS.
+ *
+ * "destaque" faltava aqui. A linha que l\u00ea este objeto terminava em
+ * `|| "\\?"`, e "\\?" \u00e9 o prefixo da D\u00daVIDA \u2014 um valor de reserva que
+ * parece certo e \u00e9 de outra coisa. Resultado: matMarcasDe("destaque")
+ * devolvia a lista das d\u00favidas, o contador contava d\u00favidas, e o menu da
+ * marca nunca achava o item correspondente. Sem o item, ele ca\u00eda no
+ * plano B, que remonta o trecho a partir do texto RENDERIZADO \u2014 sem os
+ * "**" do negrito \u2014 e procurar isso no fonte n\u00e3o acha nada. A resposta
+ * era "n\u00e3o consegui achar este trecho", numa marca vis\u00edvel na tela.
+ * Um destaque, uma vez posto, n\u00e3o sa\u00eda mais.
+ *
+ * O destaque n\u00e3o tem letra depois do "==". Por isso o reconhecedor dele
+ * \u00e9 uma NEGA\u00c7\u00c3O de largura zero: "== n\u00e3o seguido de nenhum dos outros
+ * sinais". Sem ela, o padr\u00e3o do destaque casaria tamb\u00e9m com ==!isto== e
+ * ==?aquilo==, e o erro s\u00f3 trocaria de dire\u00e7\u00e3o. */
+/* O SINAL DE CADA COR, DERIVADO DE MAT_MARCAS — não escrito de novo.
+ *
+ * Antes havia uma segunda lista, MAT_PREFIXO_RE, mantida à mão. Ela não
+ * tinha entrada para "destaque", e quem a lia terminava em `|| "\\?"`:
+ * um valor de reserva que parece certo e é de outra coisa — "\\?" é o
+ * sinal da DÚVIDA. Então matMarcasDe("destaque") devolvia a lista das
+ * dúvidas. O contador contava dúvidas, e o menu da marca nunca achava o
+ * item correspondente; sem ele caía no plano B, que remonta o trecho a
+ * partir do texto RENDERIZADO — sem os "**" do negrito — e procurar isso
+ * no fonte não acha nada. A resposta era "não consegui achar este
+ * trecho", numa marca visível na tela. Um destaque, uma vez posto, não
+ * saía mais.
+ *
+ * Duas listas para a mesma coisa é uma que vai ficar para trás. Esta é
+ * construída a partir da outra, então uma cor nova já nasce reconhecida. */
+const MAT_TIPO_POR_SINAL = {};
+Object.keys(MAT_MARCAS).forEach((tp) => {
+  MAT_TIPO_POR_SINAL[String(MAT_MARCAS[tp]).slice(2)] = tp;
+});
+const MAT_SINAIS = Object.keys(MAT_TIPO_POR_SINAL).filter(Boolean).join("");
+
+/* UMA VARREDURA SÓ, para todas as cores.
+ *
+ * Procurar cor por cor parece equivalente e não é. O destaque não tem
+ * sinal ("==assim=="), então o padrão dele começa em "==" puro — e uma
+ * busca independente pode começar no "==" que FECHA outra marca. Em
+ * "==?duvida==, o ==*prova==" ela casava o fecha-dúvida com o abre-prova
+ * e devolvia ", o " como se fosse um destaque: pedaços de texto que a
+ * pessoa nunca marcou, na lista, contados no contador e oferecidos para
+ * apagar. Varrendo da esquerda para a direita e consumindo cada marca
+ * inteira, um fecha nunca é lido como um abre. */
+function matVarrerMarcas(s) {
+  const re = new RegExp("==([" + MAT_SINAIS.replace(/[\\\]^-]/g, "\\$&")
+    + "]?)((?:[^=\\n]|=(?!=))+)==", "g");
+  const achados = [];
+  let mm;
+  while ((mm = re.exec(s)) !== null) {
+    const tp = MAT_TIPO_POR_SINAL[mm[1] || ""];
+    if (!tp) continue;
+    achados.push({ tipo: tp, bruto: mm[2], pos: mm.index });
+  }
+  return achados;
+}
 
 function matMarcasDe(tipo) { return matDuvidas(tipo); }
 
@@ -2933,14 +3187,19 @@ function matDuvidas(tipo) {
      ["lei", matTextoVivo(chave, "lei")]].forEach(([onde, txt]) => {
       const s = String(txt || "");
       if (!s) return;
-      const pref = MAT_PREFIXO_RE[tipo || "duvida"] || "\\?";
-      const re = new RegExp("==" + pref + "((?:[^=\\n]|=(?!=))+)==", "g");
-      let mm;
-      const crus = [];
-      while ((mm = re.exec(s)) !== null) {
-        crus.push({ bruto: mm[1], pos: mm.index,
-                    linha: s.slice(0, mm.index).split("\n").length - 1 });
+      /* SEM VALOR DE RESERVA. Uma cor que não exista devolve lista vazia
+       * e deixa um registro — em vez de virar, calada, a lista de outra
+       * cor. Errar alto custa uma tela vazia; errar baixo custou uma
+       * marca que não saía. */
+      const tp = tipo || "duvida";
+      if (!MAT_MARCAS[tp]) {
+        try { matReg("erro", "cor de marca desconhecida: " + tp, ""); } catch (e) {}
+        return;
       }
+      const crus = matVarrerMarcas(s)
+        .filter((x) => x.tipo === tp)
+        .map((x) => ({ bruto: x.bruto, pos: x.pos,
+                       linha: s.slice(0, x.pos).split("\n").length - 1 }));
       /* UMA SELEÇÃO = UMA DÚVIDA.
        * A marca é reaberta a cada linha (a leitura é montada linha a linha),
        * então grifar um parágrafo de três linhas criava TRÊS dúvidas na
@@ -3241,6 +3500,10 @@ function matTrocarCorDaMarca(m, novoTipo) {
   matAplicarTexto(m.chave, campo, s2);
   matReg("marca", "cor da marca trocada (" + m.tipo + " → " + novoTipo + ")",
          String(m.trecho).slice(0, 60));
+  /* O MENU SEGURA ESTE MESMO OBJETO. Deixá-lo com a cor velha faz a ação
+   * seguinte — tirar, ou trocar de novo — procurar pelo sinal errado no
+   * texto e falhar com "não consegui achar este trecho". */
+  m.tipo = novoTipo;
   return true;
 }
 

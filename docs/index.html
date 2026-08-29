@@ -695,10 +695,35 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgQsResponder[open]{display:flex;flex-direction:column;
   max-height:92vh;margin:auto}
 #dlgQsResponder[open] > *{flex:0 0 auto}
+#dlgQsResponder .qs-corpo-lado{flex:1 1 auto;overflow-y:auto;min-height:80px}
 #dlgQsResponder #qsSessCorpo{flex:1 1 auto;overflow-y:auto;min-height:80px}
 /* o rascunho fica junto do que rola: é papel de apoio, não passo do
    fluxo, e preso embaixo roubaria a altura do enunciado */
 #dlgQsResponder #rsCaixa{flex:0 1 auto;overflow-y:auto;max-height:44vh}
+
+/* ---- EM TELA LARGA, O RASCUNHO VAI PARA O LADO ----
+   Embaixo da questão ele disputa altura com o enunciado e as
+   alternativas — que é o problema de origem, e a razão de a barra de
+   ferramentas dele ter virado um aperto na barra do título. Ao lado, a
+   altura deixa de ser disputada: sobra para o enunciado o que sobrava
+   antes, e o rascunho ganha a coluna inteira.
+   O gatilho é a LARGURA DA JANELA, não o aparelho: um telefone deitado
+   e um monitor pequeno merecem a mesma decisão. Abaixo disso continua
+   embaixo, empilhado, que é o único arranjo que cabe. */
+@media (min-width:900px){
+  #dlgQsResponder.qs-com-rascunho[open]{width:min(1180px,96vw)}
+  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado{display:flex;gap:14px;
+    align-items:flex-start;flex:1 1 auto;min-height:0}
+  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #qsSessCorpo{flex:1 1 58%;
+    min-width:0}
+  #dlgQsResponder.qs-com-rascunho .qs-corpo-lado > #rsCaixa{flex:0 0 40%;
+    max-height:none;align-self:stretch;margin:0}
+  /* de volta à faixa própria: ao lado sobra largura, e espremida na
+     linha do título ela ficava ilegível justamente onde há espaço */
+  #dlgQsResponder.qs-com-rascunho .rs-ferramentas{display:flex;
+    padding:6px 8px 0}
+  #dlgQsResponder.qs-com-rascunho .rs-topo{flex-wrap:nowrap}
+}
 /* a faixa da ação principal encosta no rodapé e ganha uma linha acima
    para não parecer que flutua sobre o texto */
 #dlgQsResponder .qs-barra-principal{margin:8px 0 0;padding-top:8px;
@@ -757,6 +782,22 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-rec-cab:hover{border-color:var(--acao)}
 .lei-rec-txt{padding:7px 11px 2px;line-height:1.6;border-left:3px solid var(--verde);
   margin:4px 0 0 10px}
+
+/* LER O RESUMO EM TELA CHEIA — só o texto, e uma porta de volta.
+ * Mesma ideia da lei: o que é elástico cresce, o resto some. A diferença
+ * é o que fica: além do texto e da saída, o tamanho da letra e o
+ * marcador de onde parei — que é justamente o gesto que se faz DURANTE
+ * uma leitura longa, e mandar sair da tela cheia para marcar seria
+ * perder o lugar para poder guardar o lugar. */
+#dlgMaterial.mat-cheia[open]{max-height:98vh;width:min(1100px,98vw);
+  padding-top:10px}
+#dlgMaterial.mat-cheia h3{font-size:1em;margin:0 0 4px;color:var(--sutil)}
+#dlgMaterial.mat-cheia .mat-leitura{max-height:none;border:none;
+  padding:6px 4px;background:transparent}
+#dlgMaterial.mat-cheia #matLeitura{min-height:60vh}
+.mat-cheia-barra{display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
+.mat-cheia-dir{margin-left:auto;display:inline-flex;gap:6px;align-items:center}
 
 /* LER MAIOR — a lei ocupa a janela, o resto sai da frente.
  * Só o que é elástico cresce: o painel de leitura. Tudo o mais já está
@@ -875,6 +916,25 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   outline:1px dashed var(--info);outline-offset:2px}
 .pl-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px}
 .pl-fer{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center}
+/* DOBRAS DA QUESTÃO: o triângulo do navegador basta como afordância, e
+   o rótulo diz o que está lá dentro antes de custar altura para mostrar */
+.qs-fim-acoes{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+.qs-dobra{margin:6px 0}
+.qs-dobra-cab{cursor:pointer;font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--sutil);font-weight:700;
+  padding:3px 0;list-style:revert}
+.qs-dobra-cab:hover{color:var(--info)}
+/* as cores do grifo são claras e saturadas; contra o fundo do app elas
+   sumiriam sem um contorno */
+.pl-caneta{border:1px solid rgba(0,0,0,.35);box-shadow:0 0 6px currentColor}
+/* cada botão de espessura MOSTRA a espessura: apontar é mais rápido do
+   que ler "média" e traduzir para uma largura */
+.pl-esp{display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:22px;padding:0;border:1px solid var(--borda);
+  border-radius:6px;background:var(--campo);cursor:pointer}
+.pl-esp .pl-esp-tr{display:block;width:16px;border-radius:99px;
+  background:var(--texto)}
+.pl-esp.rs-sel{border-color:var(--acao);box-shadow:0 0 0 1px var(--acao)}
 .pl-copiar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 10px}
 /* os tamanhos de borracha: redondos e do tamanho que apagam — a amostra
    é o próprio botão, sem legenda para traduzir. */
@@ -2968,7 +3028,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- Com resumo grande, "editar" e "salvar estado" só no rodapé obrigam a
        percorrer a página inteira para um gesto que se faz o tempo todo.
        Os mesmos comandos ficam aqui em cima. -->
-  <div class="mat-topo">
+  <div class="mat-topo" id="matTopo">
     <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
     <!-- MESMO comando do botão do rodapé, com o MESMO rótulo. Antes eram
          "Salvar" e "Salvar estado", nomes diferentes para a mesma gravação —
@@ -3023,7 +3083,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo" title="Fecha o resumo. Se houver marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
     </span>
   </div>
-  <p class="nota" data-i18n="mat_ajuda"></p>
+  <p class="nota" id="matAjudaNota" data-i18n="mat_ajuda"></p>
   <div class="mat-barra" id="matBarra">
     <button class="fmt" id="btnFmtB" title="Deixa o trecho selecionado em negrito. Sem seleção, insere as marcas e deixa o cursor no meio."><b>N</b></button>
     <button class="fmt" id="btnFmtI" title="Deixa o trecho selecionado em itálico. Sem seleção, insere as marcas e deixa o cursor no meio."><i>I</i></button>
@@ -3056,10 +3116,30 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-fonte" id="matFonteVal">15px</span>
     <button class="btn-min" id="btnMatMaior" title="Aumenta a letra da leitura. Não altera o texto guardado.">A+</button>
     <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar" title="Alarga a janela do resumo para ocupar mais da tela. Útil em texto longo."></button>
+    <button class="btn-min" id="btnMatCheia" data-i18n="mat_cheia"
+      title="Só o texto do resumo, ocupando a tela. Sai com Esc ou pelo botão de voltar."></button>
     <span class="mat-estado" id="matEstado"></span>
   </div>
+  <!-- A BARRA DA TELA CHEIA — existe só nela.
+       Esconder botão por botão da barra normal daria o mesmo resultado
+       visual e um estado a mais para errar: bastaria um botão novo
+       aparecer amanhã sem ninguém lembrar de escondê-lo. Aqui o que
+       sobrevive à tela cheia está escrito em um lugar só, e é isto. -->
+  <div class="mat-cheia-barra" id="matCheiaBarra" hidden>
+    <button class="btn-min" id="btnMatCheiaSair" data-i18n="mat_cheia_sair"
+      title="Volta ao tamanho padrão, com todos os controles. O Esc faz o mesmo."></button>
+    <span class="mat-cheia-dir">
+      <button class="btn-min" id="btnMatCheiaMenor" title="Diminui a letra.">A&#8722;</button>
+      <span class="mat-fonte" id="matCheiaFonte">15px</span>
+      <button class="btn-min" id="btnMatCheiaMaior" title="Aumenta a letra.">A+</button>
+      <button class="btn-min" id="btnMatCheiaMarcar" data-i18n="mat_marcador_por"
+        title="Guarda onde você parou, no ponto em que a leitura está agora. Pode marcar de novo em outro lugar quantas vezes quiser."></button>
+      <button class="btn-min" id="btnMatCheiaIr" data-i18n="mat_marcador_ir" hidden
+        title="Leva a leitura de volta ao ponto que você marcou."></button>
+    </span>
+  </div>
   <div class="mat-leitura" id="matLeitura" hidden></div>
-  <div class="dlg-rodape">
+  <div class="dlg-rodape" id="matRodape">
     <button class="btn btn-cinza" id="btnMatModo" title="Alterna entre ler (marcas coloridas) e editar (texto cru). O mesmo comando existe no topo."></button>
     <!-- UM botão só. Havia dois — "Salvar" e "Salvar estado" — que faziam a
          MESMA gravação (o texto da caixa, marcas incluídas, porque marca é
@@ -3214,6 +3294,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgQsResponder" class="ui-modal diag-modal">
   <h3 data-i18n="qs_sess_titulo"></h3>
   <p class="nota" id="qsSessPlacar"></p>
+  <!-- CORPO E RASCUNHO NO MESMO ENVOLTÓRIO.
+       Em tela larga o CSS os põe lado a lado; em tela estreita eles
+       continuam empilhados, porque não cabe outra coisa. O envoltório
+       existe para que essa decisão seja só de CSS: nenhum JS move
+       elemento de lugar, e mover elemento durante uma sessão é como se
+       perde o traço do rascunho e a rolagem do enunciado. -->
+  <div class="qs-corpo-lado">
   <div id="qsSessCorpo" class="qs-sess"></div>
 
   <!-- RASCUNHO: o papel de lado. Recolhido por padrao. -->
@@ -3240,6 +3327,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button class="btn btn-verde" id="btnRsSalvar" type="button"></button>
       </div>
     </div>
+  </div>
   </div>
 
   <!-- TRÊS FAIXAS, TRÊS INTENÇÕES.
@@ -3723,6 +3811,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="mcRecusadas" class="mc-recusadas" hidden>
     <div class="mc-recusadas-cab">
       <b data-i18n="mc_avisos_titulo"></b>
+      <!-- OS DOIS CAMINHOS DE CONSERTO, no lugar onde o problema aparece.
+           O primeiro é o do próprio app: a mesma cadeia de correções
+           seguras da bancada de cartões. O segundo é o da IA, para o que
+           nenhuma regra consegue adivinhar. -->
+      <button class="btn-min btn-min-ok" id="btnMcConsertar" data-i18n="mc_consertar"
+        title="Aplica as correções automáticas que o app sabe fazer sem risco: junta linha partida, tira marcador de lista, converte markdown. Mostra o que vai mudar e recusa qualquer conserto que perca cartão ou etiqueta."></button>
+      <button class="btn-min" id="btnMcPromptFix" data-i18n="mc_prompt_fix"
+        title="Copia um prompt com as linhas problemáticas numeradas, para a IA devolver o texto corrigido."></button>
       <button class="btn-min" id="btnMcLog" data-i18n="ger_log_btn"
         title="Abre o registro da geração: o mesmo que está aqui, mais o histórico das outras vezes e os erros."></button>
     </div>

@@ -913,9 +913,27 @@ function qsSessaoIniciar(lista, opcoes) {
     }
   }
   qsSessao = { fila, i: 0, respondidas: [], comecou: new Date().toISOString(),
-               escopo: o.escopo || "" };
+               escopo: o.escopo || "",
+               /* DE ONDE ESTA RODADA VEIO. Uma segunda passada só nas
+                * erradas é outra rodada, com placar próprio — misturar o
+                * acerto dela no placar da primeira apagaria justamente a
+                * informação que se foi buscar: quanto você acertava ANTES
+                * de rever. */
+               repescagem: !!o.repescagem,
+               deRodada: o.deRodada || null };
   qsSessaoGravar(o.gravar);
   return qsSessao;
+}
+
+/* As que você errou nesta rodada, na ordem em que apareceram. Só as
+ * ERRADAS: pular as que não deu tempo de responder seria repescar o que
+ * nunca foi tentado, que é outra coisa — e essas continuam na fila
+ * original, esperando. */
+function qsErradasDaSessao() {
+  if (!qsSessao) return [];
+  const ids = {};
+  qsSessao.respondidas.forEach((x) => { if (!x.acertou) ids[x.id] = 1; });
+  return qsSessao.fila.filter((q) => ids[q.id]);
 }
 
 function qsSessaoAtual() { return qsSessao; }
@@ -1052,7 +1070,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
-    qsSemelhante, qsParecenca, qsIgual, qsAbrirCampos,
+    qsSemelhante, qsParecenca, qsIgual, qsAbrirCampos, qsErradasDaSessao,
     qsSessaoGravar, qsSessaoLer, qsSessaoApagar, qsSessaoRetomavel,
     qsSessaoRetomar, qsSessaoAcrescentar, qsEmbaralharRestantes,
     qsPular, qsPendentes,

@@ -118,12 +118,16 @@ function rsRecolher(sim) {
   const corpo = $("rsCorpo");
   if (!corpo) return;
   corpo.hidden = !!sim;
-  /* AS FERRAMENTAS SEGUEM O CORPO. Elas agora moram na barra do título,
-   * que continua visível com o rascunho recolhido — e cores de caneta
-   * ao lado de um rascunho fechado não são atalho, são enfeite: não há
-   * onde desenhar. */
+  /* AS FERRAMENTAS SEGUEM O CORPO. Cores de caneta ao lado de um
+   * rascunho fechado não são atalho, são enfeite: não há onde desenhar. */
   const fer = $("rsFerramentas");
   if (fer) fer.hidden = !!sim;
+  /* A JANELA SÓ VIRA DUAS COLUNAS quando há rascunho ABERTO para pôr na
+   * segunda. Alargar por causa de uma caixa recolhida deixaria metade da
+   * tela vazia ao lado do enunciado — e a largura extra é justamente o
+   * que torna o texto da questão mais difícil de ler em linha longa. */
+  const dlg = $("dlgQsResponder");
+  if (dlg && dlg.classList) dlg.classList.toggle("qs-com-rascunho", !sim);
   const b = $("btnRsMin");
   if (b) {
     b.textContent = t(sim ? "rs_abrir" : "rs_recolher");
@@ -194,16 +198,56 @@ function rsSoltar() {
  * Apagar "meio traço" exigiria partir a linha em duas e o resultado
  * costuma ser pior do que refazer o risco. Como some coisa, o apagado
  * vai para a pilha do desfazer. */
-function rsApagarEm(x, y) {
-  const antes = rsTracos.length;
-  const sobrou = [];
-  rsTracos.forEach((tr) => {
-    const toca = tr.pontos.some((p) =>
-      Math.abs(p[0] - x) <= rsBorrachaRaio && Math.abs(p[1] - y) <= rsBorrachaRaio);
-    if (toca) rsLixo.push({ tipo: "traco", tracos: [tr] });
-    else sobrou.push(tr);
+/* O QUE SOBRA DE UM TRAÇO DEPOIS DA BORRACHA.
+ *
+ * Antes, tocar num traço apagava o traço INTEIRO — e por isso escolher o
+ * tamanho da borracha não mudava nada: grande ou pequena, o resultado
+ * era o mesmo, sumir com a linha toda. O raio só mudava a facilidade de
+ * acertar, nunca o quanto se apagava, e uma borracha que não apaga por
+ * tamanho não é uma borracha, é um botão de excluir.
+ *
+ * Aqui os pontos dentro do raio saem e os trechos que sobram de cada
+ * lado viram traços independentes — apagar o meio de uma linha deixa as
+ * duas pontas, como no papel.
+ *
+ * A distância é a EUCLIDIANA, não a do quadrado: o cursor é redondo, e
+ * com o teste em caixa a borracha apagava nos cantos, onde ela
+ * visivelmente não encostou. */
+function rsPartirTraco(tr, x, y, raio) {
+  const r2 = raio * raio;
+  const partes = [];
+  let atual = [];
+  (tr.pontos || []).forEach((p) => {
+    const dx = p[0] - x, dy = p[1] - y;
+    if (dx * dx + dy * dy <= r2) {
+      if (atual.length > 1) partes.push(atual);
+      atual = [];
+    } else {
+      atual.push(p);
+    }
   });
-  if (sobrou.length === antes) return;
+  if (atual.length > 1) partes.push(atual);
+  /* trecho de um ponto só não desenha nada (o traço é uma polilinha) e
+   * viraria sujeira invisível acumulando na memória */
+  return partes.map((pontos) => Object.assign({}, tr, { pontos }));
+}
+
+function rsApagarEm(x, y) {
+  const sobrou = [];
+  const tirados = [], postos = [];
+  rsTracos.forEach((tr) => {
+    const partes = rsPartirTraco(tr, x, y, rsBorrachaRaio);
+    if (partes.length === 1 && partes[0].pontos.length === (tr.pontos || []).length) {
+      sobrou.push(tr);                     /* a borracha não encostou */
+      return;
+    }
+    tirados.push(tr);
+    partes.forEach((pt) => { postos.push(pt); sobrou.push(pt); });
+  });
+  if (!tirados.length) return;
+  /* DESFAZER PRECISA SABER DAS DUAS PONTAS: repor o traço original sem
+   * tirar os pedaços deixaria a linha desenhada duas vezes. */
+  rsLixo.push({ tipo: "traco", tracos: tirados, novos: postos });
   rsTracos = sobrou;
   rsMarcarSujo();
   rsPintar();
@@ -212,6 +256,11 @@ function rsApagarEm(x, y) {
 function rsDesfazer() {
   if (rsLixo.length) {
     const v = rsLixo.pop();
+    /* tira os pedaços que a borracha deixou antes de repor o inteiro:
+     * sem isto, desfazer desenharia a linha por cima dela mesma */
+    if (v.novos && v.novos.length) {
+      rsTracos = rsTracos.filter((tr) => v.novos.indexOf(tr) < 0);
+    }
     rsTracos = rsTracos.concat(v.tracos);
   } else if (rsTracos.length) {
     rsTracos.pop();

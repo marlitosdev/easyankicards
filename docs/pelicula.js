@@ -30,9 +30,41 @@
  * tela seriam duas convenções para a pessoa decorar.
  * ===================================================================== */
 
+/* AS CORES DO GRIFO SÃO PRÓPRIAS, e não as canetas do rascunho.
+ *
+ * O rascunho desenha SOBRE papel em branco: ali o traço escuro e fino é
+ * o certo. O grifo passa POR CIMA de texto — e as mesmas cores escuras,
+ * mesmo translúcidas, cinzentam a palavra em vez de destacá-la. Estas
+ * são de marca-texto: claras, saturadas, do tipo que salta na página.
+ * Os identificadores são os mesmos do rascunho para que a barra e o
+ * estado das ferramentas continuem valendo sem tradução no meio. */
+const PL_CANETAS = [
+  { id: "amarela",  cor: "#f2ff00" },
+  { id: "verde",    cor: "#39ff5c" },
+  { id: "rosa",     cor: "#ff2bd6" },
+  { id: "azul",     cor: "#00e5ff" },
+];
+
+/* TRÊS ESPESSURAS. Uma só servia mal aos dois usos reais: circular uma
+ * palavra pede traço fino, varrer uma linha inteira pede traço largo —
+ * e com um valor no meio termo os dois saem errados. */
+const PL_ESPESSURAS = [
+  { id: "fina",  larg: 9 },
+  { id: "media", larg: 15 },
+  { id: "grossa", larg: 24 },
+];
+const PL_ESP_CHAVE = "eac_pl_esp";
+
+/* MAIS OPACO DO QUE ERA. Com 0.32 o grifo mal aparecia num tema escuro,
+ * e o pedido — "que chame atenção" — é o próprio ponto de grifar. A
+ * palavra por baixo continua legível porque a cor é clara e o modo de
+ * composição preserva o texto escuro. */
+const PL_ALPHA = 0.55;
+
 let plQid = null;         /* questão a que esta película pertence */
 let plTracos = [];
-let plCaneta = "vermelha"; /* vermelho: no papel, é a cor de quem grifa */
+let plEspessura = 1;      /* índice em PL_ESPESSURAS */
+let plCaneta = "amarela"; /* amarelo: é a cor do marca-texto */
 let plBorracha = false;
 let plDesenhando = false;
 let plLigada = false;
@@ -54,6 +86,7 @@ function plEnvolver(en, qid) {
   plBorracha = false;
   plLigada = false;
   plBotoes = {};
+  plEspessuraCarregar();
 
   const cx = document.createElement("div");
   cx.className = "pl-cx";
@@ -95,14 +128,14 @@ function plBarra() {
   fer.className = "pl-fer";
   fer.id = "plFerramentas";
 
-  (typeof RS_CANETAS !== "undefined" ? RS_CANETAS : []).forEach((c) => {
+  PL_CANETAS.forEach((c) => {
     const b = document.createElement("button");
     b.type = "button";
     b.id = "btnPlCaneta_" + c.id;
-    b.className = "rs-caneta";
+    b.className = "rs-caneta pl-caneta";
     b.style.background = c.cor;
-    b.title = t("rs_caneta_" + c.id);
-    b.setAttribute("aria-label", t("rs_caneta_" + c.id));
+    b.title = t("pl_caneta_" + c.id);
+    b.setAttribute("aria-label", t("pl_caneta_" + c.id));
     b.onclick = () => {
       plCaneta = c.id; plBorracha = false;
       /* escolher caneta LIGA a película: ninguém escolhe a cor de uma
@@ -139,6 +172,25 @@ function plBarra() {
       plLigar(true);
     };
     plBotoes["b_" + x.id] = b;
+    fer.append(b);
+  });
+
+  /* A ESPESSURA fica junto das cores e antes da borracha: escolher com
+   * que traço grifar é parte de grifar, não de apagar. Cada botão mostra
+   * a própria espessura — apontar é mais rápido do que ler "média". */
+  PL_ESPESSURAS.forEach((x, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = "btnPlEsp_" + x.id;
+    b.className = "pl-esp";
+    b.title = t("pl_esp_" + x.id);
+    b.setAttribute("aria-label", t("pl_esp_" + x.id));
+    const barrinha = document.createElement("span");
+    barrinha.className = "pl-esp-tr";
+    barrinha.style.height = Math.max(2, Math.round(x.larg * 0.42)) + "px";
+    b.append(barrinha);
+    b.onclick = () => { plEspessuraDefinir(i); plBorracha = false; plLigar(true); };
+    plBotoes["e_" + x.id] = b;
     fer.append(b);
   });
 
@@ -193,10 +245,14 @@ function plPintarFerramentas() {
    * faixa que empurrava o "Próxima" para fora da tela. Desligada, sobra
    * um botão só, "grifar", que é a porta de entrada. */
   if (plBotoes.fer) plBotoes.fer.hidden = !plLigada;
-  (typeof RS_CANETAS !== "undefined" ? RS_CANETAS : []).forEach((c) => {
+  PL_CANETAS.forEach((c) => {
     const b = plBotoes[c.id];
-    if (b) b.className = "rs-caneta"
+    if (b) b.className = "rs-caneta pl-caneta"
       + (!plBorracha && plCaneta === c.id ? " rs-sel" : "");
+  });
+  PL_ESPESSURAS.forEach((x, i) => {
+    const b = plBotoes["e_" + x.id];
+    if (b) b.className = "pl-esp" + (i === plEspessura ? " rs-sel" : "");
   });
   if (plBotoes.borracha) {
     plBotoes.borracha.className = "btn-min rs-borracha"
@@ -225,9 +281,31 @@ function plCoords(e) {
 }
 
 function plCanetaAtual() {
-  const lista = typeof RS_CANETAS !== "undefined" ? RS_CANETAS : [];
-  return lista.filter((c) => c.id === plCaneta)[0] || lista[0]
-    || { cor: "#d62828", larg: 2.6 };
+  return PL_CANETAS.filter((c) => c.id === plCaneta)[0] || PL_CANETAS[0];
+}
+
+function plLarguraAtual() {
+  const e = PL_ESPESSURAS[plEspessura] || PL_ESPESSURAS[1];
+  return e.larg;
+}
+
+function plEspessuraDefinir(i) {
+  const n = Math.max(0, Math.min(PL_ESPESSURAS.length - 1, Number(i) || 0));
+  plEspessura = n;
+  try { localStorage.setItem(PL_ESP_CHAVE, String(n)); } catch (e) {}
+  plPintarFerramentas();
+  return plEspessura;
+}
+
+function plEspessuraCarregar() {
+  let v = null;
+  try { v = localStorage.getItem(PL_ESP_CHAVE); } catch (e) { v = null; }
+  /* Number(null) é 0, e 0 é a espessura mais fina: sem esta checagem,
+   * "nunca escolhi" viraria "escolhi a mais fina" — o mesmo tropeço que
+   * o tamanho da janela da lei já teve. */
+  if (v === null || v === "") return plEspessura;
+  plEspessura = Math.max(0, Math.min(PL_ESPESSURAS.length - 1, Number(v) || 0));
+  return plEspessura;
 }
 
 function plComecar(e) {
@@ -235,10 +313,10 @@ function plComecar(e) {
   const [x, y] = plCoords(e);
   if (plBorracha) { plApagarEm(x, y); plDesenhando = true; return; }
   const c = plCanetaAtual();
-  /* GRIFO, NÃO CANETA FINA. Sobre texto, o traço tem de ser largo e
-   * translúcido — senão ele cobre a palavra que estava tentando
-   * destacar, e o destaque vira rasura. */
-  plTracos.push({ cor: c.cor, larg: 11, pontos: [[x, y]] });
+  /* GRIFO, NÃO CANETA FINA. Sobre texto, o traço tem de ser largo — mas
+   * a largura agora é escolhida, e vai gravada NO TRAÇO: trocar de
+   * espessura depois não pode reescrever o que já foi grifado. */
+  plTracos.push({ cor: c.cor, larg: plLarguraAtual(), pontos: [[x, y]] });
   plDesenhando = true;
   plPintar();
 }
@@ -265,12 +343,31 @@ function plSoltar() {
   plPintar();
 }
 
+/* MESMA BORRACHA DO RASCUNHO, e pela mesma razão: apagar o traço inteiro
+ * fazia o tamanho escolhido não mudar nada — o raio só decidia se
+ * acertava, nunca o quanto saía. Aqui saem os pontos dentro do círculo e
+ * o que sobra de cada lado continua desenhado.
+ *
+ * A função que parte o traço mora no rascunho e é reusada aqui de
+ * propósito: duas cópias da mesma conta é uma que vai ficar para trás na
+ * próxima correção — como já aconteceu com o reconhecedor das marcas. */
 function plApagarEm(x, y) {
   const raio = typeof rsBorrachaRaio !== "undefined" ? rsBorrachaRaio : 15;
-  const antes = plTracos.length;
-  plTracos = plTracos.filter((tr) => !tr.pontos.some((p) =>
-    Math.abs(p[0] - x) <= raio && Math.abs(p[1] - y) <= raio));
-  if (plTracos.length !== antes) plPintar();
+  const partir = typeof rsPartirTraco === "function" ? rsPartirTraco : null;
+  let mudou = false;
+  const sobrou = [];
+  plTracos.forEach((tr) => {
+    const partes = partir ? partir(tr, x, y, raio) : [tr];
+    if (partes.length === 1 && partes[0].pontos.length === (tr.pontos || []).length) {
+      sobrou.push(tr);
+      return;
+    }
+    mudou = true;
+    partes.forEach((pt) => sobrou.push(pt));
+  });
+  if (!mudou) return;
+  plTracos = sobrou;
+  plPintar();
 }
 
 /* Sem confirmação, de propósito: aqui não há nada a perder, porque nada
@@ -295,14 +392,19 @@ function plPintar() {
     ctx.beginPath();
     ctx.strokeStyle = tr.cor;
     ctx.lineWidth = tr.larg;
-    /* translúcido: o grifo tem de deixar a palavra legível por baixo */
-    ctx.globalAlpha = 0.32;
+    /* translúcido: o grifo tem de deixar a palavra legível por baixo.
+     * "multiply" é o que faz isto se parecer com marca-texto de verdade
+     * — a tinta escurece o fundo e deixa passar as letras — em vez de
+     * uma faixa de cor por cima delas. */
+    ctx.globalAlpha = PL_ALPHA;
+    if ("globalCompositeOperation" in ctx) ctx.globalCompositeOperation = "multiply";
     tr.pontos.forEach((p, i) => {
       if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
     });
     ctx.stroke();
   });
   ctx.globalAlpha = 1;
+  if ("globalCompositeOperation" in ctx) ctx.globalCompositeOperation = "source-over";
 }
 
 function plAmarrarPonteiro(cv) {
