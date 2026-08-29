@@ -1322,11 +1322,21 @@ function regPintarBotoes() {
 function abrirRegistro(i) {
   /* enriquece AQUI, num lugar so: qualquer porta de entrada nova ganha
    * o mesmo tratamento sem precisar lembrar disto */
-  if (i && i.porque == null) {
+  const aberto = (typeof edAberto === "function") ? edAberto() : null;
+  const deOutroEdital = i && i.edital && (!aberto
+    || String(i.edital) !== String(aberto.id));
+  /* NÃO ENRIQUECER COM O PLANO DE OUTRO EDITAL. O plano aqui é o do
+   * edital ABERTO; para uma linha que veio de outro, ele descreveria um
+   * tópico homônimo — mesma disciplina, mesmo nome, outro concurso — e
+   * o registro sairia com o peso, os minutos e o estado do vizinho. */
+  if (i && i.porque == null && !deOutroEdital) {
     const real = edItemDoPlano(i.disciplina, i.nome);
     if (real) i = Object.assign({}, real, {
       minutos: i.minutos != null ? i.minutos : real.minutos,
       feito: i.feito != null ? i.feito : real.feito,
+      /* de qual edital veio a linha SOBREVIVE ao enriquecimento: é ele
+       * que decide onde a marca vai ser gravada */
+      edital: i.edital != null ? i.edital : real.edital,
     });
   }
   regAtual = i;
@@ -1591,9 +1601,43 @@ function edDespedir(item, estado, linhas) {
   else refazer();
 }
 
+/* Grava o estado no edital DONO do item, que nem sempre é o aberto. */
+function edMarcarProgresso(i, estado) {
+  const alvo = (typeof edAberto === "function") ? edAberto() : null;
+  const deOutro = i.edital && (!alvo || String(i.edital) !== String(alvo.id));
+  if (!deOutro) {
+    if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
+    else delete edProgresso[i.chave];
+    edSalvar();
+    return true;
+  }
+  /* A AGENDA DO TOPO JUNTA TODOS OS EDITAIS; edProgresso é de UM só.
+   *
+   * Este era o defeito, e ele não dava nenhum sinal: registrar uma linha
+   * do edital B enquanto o A estava aberto escrevia no progresso do A.
+   * A linha de B nunca saía da agenda — por mais vezes que se
+   * registrasse —, e o A ganhava calado um tópico "revisado" que ninguém
+   * estudou lá. O registro dizia "revisado: Leis Orçamentárias" nas duas
+   * vezes, e as duas vezes foram no edital errado.
+   *
+   * A linha já sabe de onde veio (i.edital). Faltava alguém perguntar. */
+  const dono = (typeof editais !== "undefined" ? editais : [])
+    .filter((e) => String(e.id) === String(i.edital))[0];
+  if (!dono) return false;
+  dono.progresso = dono.progresso || {};
+  if (estado) dono.progresso[i.chave] = { e: estado, d: hojeISO() };
+  else delete dono.progresso[i.chave];
+  dono.tocado = new Date().toISOString();
+  if (typeof edSalvarLista === "function") edSalvarLista();
+  return true;
+}
+
 function edMarcar(i, estado, detalhe, semRender) {
-  if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
-  else delete edProgresso[i.chave];
+  const gravou = edMarcarProgresso(i, estado);
+  if (!gravou) {
+    try { reg("ERRO", "registro sem edital dono: " + i.nome, String(i.edital)); }
+    catch (e) {}
+  }
   anotarDiario(i, estado || "pendente", detalhe);
   /* Sem pesos, o registro dizia "peso undefined×undefined" — pior que não
    * dizer nada, porque parece dado e não é. */
@@ -1610,8 +1654,12 @@ function edMarcar(i, estado, detalhe, semRender) {
    * mostrando o tópico já estudado. Pior: até alguém salvar por outro
    * caminho, a marca não sobrevivia a um recarregamento.
    * Agora a gravação acontece SEMPRE; só o desenho é adiável. */
-  edSalvar();
   if (!semRender) edRender();
+  /* A AGENDA DO TOPO é repintada pela despedida (edDespedir chama
+   * hubPintarAgenda), que é por onde todo registro passa. Cheguei a pôr
+   * um hubRender() aqui também; tirei porque nenhum teste conseguia
+   * distinguir as duas versões — e código que ninguém consegue mostrar
+   * que faz diferença é código que vai apodrecer sem aviso. */
 }
 
 /* Ritmo em vez de veredito. "121 ficam de fora" encerra o assunto; ritmo
