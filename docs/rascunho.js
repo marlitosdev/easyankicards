@@ -145,6 +145,10 @@ function rsPrepararPara(id) {
   rsLixo = [];
   rsBorracha = false;
   cx.hidden = !rsQid;
+  /* TROCAR DE QUESTÃO SAI DA FOLHA INTEIRA: ela é um estado de trabalho
+   * daquela questão, e ficar nela esconderia o enunciado da seguinte. */
+  if (rsCheia) rsCheiaTrocar(false);
+  else rsRedimensionar(RS_FOLHA_NORMAL.w, RS_FOLHA_NORMAL.h);
   rsRecolher(true);
   rsPintar();
 }
@@ -153,6 +157,62 @@ function rsPrepararPara(id) {
  * rascunho que a pessoa acabou de fazer para resolve-la. */
 function rsMesmaQuestao(id) {
   return rsQid != null && String(id) === rsQid;
+}
+
+/* ---------------------------------------------------------------------
+ * O TAMANHO DA FOLHA
+ *
+ * A tela tem um tamanho INTERNO em pixels (o espaço de coordenadas em
+ * que os traços são guardados) e um tamanho em CSS. Esticar só o CSS não
+ * dá mais espaço: dá o mesmo desenho maior, com o traço engordando
+ * junto. Para caber um balanço patrimonial é preciso mais ESPAÇO — mais
+ * pixels internos.
+ *
+ * E aqui está a parte que não pode errar: os traços já feitos estão
+ * guardados em coordenadas da folha ANTIGA. Trocar o tamanho sem mexer
+ * neles empurraria tudo para o canto superior esquerdo, encolhido — o
+ * rabisco que a pessoa acabou de fazer apareceria deslocado do lugar
+ * onde ela o fez. Por isso cada ponto é convertido junto, pela mesma
+ * razão de escala.
+ * ------------------------------------------------------------------ */
+const RS_FOLHA_NORMAL = { w: 900, h: 420 };
+const RS_FOLHA_CHEIA = { w: 1500, h: 1150 };
+let rsCheia = false;
+
+function rsRedimensionar(w, h) {
+  const cv = rsTela();
+  if (!cv || !w || !h) return false;
+  const antesW = cv.width || RS_FOLHA_NORMAL.w;
+  const antesH = cv.height || RS_FOLHA_NORMAL.h;
+  if (antesW === w && antesH === h) return false;
+  const fx = w / antesW, fy = h / antesH;
+  rsTracos.forEach((tr) => {
+    tr.pontos = (tr.pontos || []).map((p) => [p[0] * fx, p[1] * fy]);
+    /* a LARGURA do traço acompanha a escala: sem isto, uma linha fina
+     * numa folha pequena vira um fio invisível na folha grande */
+    tr.larg = (Number(tr.larg) || 3) * Math.min(fx, fy);
+  });
+  cv.width = w;
+  cv.height = h;
+  rsPintar();
+  return true;
+}
+
+function rsCheiaTrocar(sim) {
+  rsCheia = sim === undefined ? !rsCheia : !!sim;
+  const dlg = $("dlgQsResponder");
+  if (dlg && dlg.classList) dlg.classList.toggle("rs-cheia", rsCheia);
+  /* abrir a folha inteira com o rascunho recolhido não faria sentido:
+   * a tela ficaria vazia com um botão de voltar */
+  if (rsCheia && !rsAberto()) rsRecolher(false);
+  const f = rsCheia ? RS_FOLHA_CHEIA : RS_FOLHA_NORMAL;
+  rsRedimensionar(f.w, f.h);
+  const b = $("btnRsCheia");
+  if (b) {
+    b.textContent = t(rsCheia ? "rs_cheia_sair" : "rs_cheia");
+    if (b.classList) b.classList.toggle("btn-min-ok", rsCheia);
+  }
+  return rsCheia;
 }
 
 function rsRecolher(sim) {
@@ -176,6 +236,13 @@ function rsRecolher(sim) {
   }
   if (!sim) rsPintar();
 }
+/* a instrução serve à primeira vez; com a folha rabiscada ela vira uma
+ * faixa de texto ocupando altura que a conta precisa */
+function rsPintarAjuda() {
+  const p2 = $("rsAjudaNota");
+  if (p2) p2.hidden = rsTracos.length > 0;
+}
+
 function rsAberto() {
   const corpo = $("rsCorpo");
   return !!(corpo && corpo.hidden === false);
@@ -363,6 +430,7 @@ function rsPintar() {
   if (bs) bs.textContent = t(rsSalvo ? "rs_salvar_de_novo" : "rs_salvar");
   const bl = $("btnRsApagarSalvo");
   if (bl) bl.hidden = !(rsQid && rsDaQuestao(rsQid));
+  rsPintarAjuda();
 }
 
 /* ---------------- salvar ---------------- */
@@ -431,6 +499,12 @@ function rsIniciar() {
   if (!cx) return;
   rsIniciado = true;
   rsEspessuraCarregar();
+  /* O TAMANHO DA FOLHA VEM DAQUI, não do atributo do HTML. Com o número
+   * escrito nos dois lugares, mudar um deles faz a conversão de escala
+   * partir de um tamanho que não é o da folha — e todo traço aparece
+   * deslocado. Uma fonte só para o mesmo número. */
+  const cv0 = rsTela();
+  if (cv0) { cv0.width = RS_FOLHA_NORMAL.w; cv0.height = RS_FOLHA_NORMAL.h; }
 
   const fer = $("rsFerramentas");
   if (fer && !fer.children.length) {
@@ -503,6 +577,17 @@ function rsIniciar() {
   }
 
   if ($("btnRsMin")) $("btnRsMin").onclick = () => rsRecolher(rsAberto());
+  if ($("btnRsCheia")) $("btnRsCheia").onclick = () => rsCheiaTrocar();
+  /* ESC VOLTA À QUESTÃO ANTES de fechar a rodada. Sem isto, o gesto mais
+   * natural para "sair da folha inteira" encerraria a sessão de questões
+   * — e o rabisco não salvo iria junto. */
+  if ($("dlgQsResponder")) {
+    $("dlgQsResponder").addEventListener("cancel", (e) => {
+      if (!rsCheia) return;
+      if (e && e.preventDefault) e.preventDefault();
+      rsCheiaTrocar(false);
+    });
+  }
   if ($("btnRsDesfazer")) $("btnRsDesfazer").onclick = () => rsDesfazer();
   if ($("btnRsLimpar")) $("btnRsLimpar").onclick = () => rsLimpar();
   if ($("btnRsSalvar")) $("btnRsSalvar").onclick = () => rsSalvarNaQuestao();
