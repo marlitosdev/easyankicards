@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "11.9.0";
+const VERSAO = "12.0.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1604,7 +1604,18 @@ function limitarAltura(el, texto, fundo) {
   return bt;
 }
 
-function renderCartaoEstilizado(div, c, mostrarResposta) {
+/* O MESMO desenho serve a duas telas com propósitos opostos.
+ *
+ * Na BANCADA você julga o cartão: o cabeçalho editável, o selo dizendo de
+ * onde vem o título e a faixa de etiquetas são o assunto. No ESTUDO você
+ * é o aluno: título de placeholder, aviso de "sai sem cabeçalho" e quatro
+ * etiquetas de sessenta caracteres empurram a pergunta para o rodapé do
+ * cartão — que é o único pedaço que importa ali.
+ *
+ * `opc.estudo` tira o que é de autoria e mantém o desenho, que é o que
+ * faz a revisão em tela valer como ensaio do que vai para o Anki. */
+function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
+  const oEst = !!(opc && opc.estudo);
   const p = PALETAS[localStorage.getItem("eac_style") || "esquema"] || PALETAS.esquema;
   // a prévia tem de mostrar o MESMO alinhamento que vai para o .apkg
   const al = ($("selAlinha") && $("selAlinha").value) === "left" ? "left" : "justify";
@@ -1621,7 +1632,10 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
   const geral = tituloGeral();
   const deckNome = proprio || geral;
 
-  if (p.cab) {
+  /* no estudo, cabeçalho só se ele EXISTE: um retângulo azul escrito
+   * "título deste cartão" é um convite a editar, e quem está estudando
+   * não está editando */
+  if (p.cab && (!oEst || deckNome)) {
     const pill = document.createElement("div");
     pill.className = "card-cab-edit" + (proprio ? "" : " card-cab-inherit");
     pill.textContent = deckNome || t("card_title_placeholder");
@@ -1633,12 +1647,17 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     wrap.append(pill);
   }
   // badge deixando claro de onde vem o título deste cartão
-  const badge = document.createElement("div");
-  if (proprio) { badge.className = "card-badge-titulo card-badge-own"; badge.textContent = "● " + t("card_own_title"); }
-  else if (geral) { badge.className = "card-badge-titulo card-badge-gen"; badge.textContent = "● " + t("card_using_general", { t: geral }); }
-  else { badge.className = "card-badge-titulo card-badge-none"; badge.textContent = "● " + t("card_using_general_none"); }
-  wrap.append(badge);
-  if (p.sub && c.tags.length) {
+  if (!oEst) {
+    const badge = document.createElement("div");
+    if (proprio) { badge.className = "card-badge-titulo card-badge-own"; badge.textContent = "● " + t("card_own_title"); }
+    else if (geral) { badge.className = "card-badge-titulo card-badge-gen"; badge.textContent = "● " + t("card_using_general", { t: geral }); }
+    else { badge.className = "card-badge-titulo card-badge-none"; badge.textContent = "● " + t("card_using_general_none"); }
+    wrap.append(badge);
+  }
+  /* as etiquetas são para ACHAR o cartão depois, não para respondê-lo:
+   * três linhas delas antes da pergunta é o mesmo que esconder a
+   * pergunta */
+  if (p.sub && c.tags.length && !oEst) {
     const sub = document.createElement("div");
     sub.textContent = c.tags.join("  ·  ");
     sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +

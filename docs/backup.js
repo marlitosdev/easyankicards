@@ -38,7 +38,7 @@ const BK_CHAVES = {
    * adiamentos e dispensas, sem uma linha de aviso: o pior tipo de
    * perda, porque a tela depois parece apenas "vazia", não quebrada. */
   material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
-             "eac_leis", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist"],
+             "eac_leis", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei"],
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
                  "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",

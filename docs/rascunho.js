@@ -47,6 +47,47 @@ const RS_BORRACHAS = [
 ];
 let rsBorrachaRaio = 15;
 
+/* ESPESSURA DA CANETA — pelo mesmo motivo do grifo.
+ *
+ * Um traço fixo de 2,6 serve para escrever uma conta e não serve para
+ * circular uma resposta ou riscar um caminho inteiro. E a superfície é
+ * pequena: num rascunho de meia tela, traço fino em telefone some, e
+ * traço grosso num monitor grande vira borrão.
+ *
+ * Os valores são MENORES do que os do grifo de propósito. O grifo passa
+ * por cima de texto e precisa cobrir a linha; a caneta escreve, e
+ * escrita com 15px de largura não tem forma nenhuma. */
+const RS_ESPESSURAS = [
+  { id: "fina", larg: 1.8 },
+  { id: "media", larg: 3 },
+  { id: "grossa", larg: 6 },
+];
+const RS_ESP_CHAVE = "eac_rs_esp";
+let rsEspessura = 1;
+
+function rsLarguraAtual() {
+  return (RS_ESPESSURAS[rsEspessura] || RS_ESPESSURAS[1]).larg;
+}
+
+function rsEspessuraDefinir(i) {
+  const n = Math.max(0, Math.min(RS_ESPESSURAS.length - 1, Number(i) || 0));
+  rsEspessura = n;
+  try { localStorage.setItem(RS_ESP_CHAVE, String(n)); } catch (e) {}
+  rsPintar();
+  return rsEspessura;
+}
+
+function rsEspessuraCarregar() {
+  let v = null;
+  try { v = localStorage.getItem(RS_ESP_CHAVE); } catch (e) { v = null; }
+  /* Number(null) é 0, e 0 é a mais fina: sem esta checagem, "nunca
+   * escolhi" viraria "escolhi a mais fina" — o mesmo tropeço que o
+   * tamanho da janela da lei já teve. */
+  if (v === null || v === "") return rsEspessura;
+  rsEspessura = Math.max(0, Math.min(RS_ESPESSURAS.length - 1, Number(v) || 0));
+  return rsEspessura;
+}
+
 function rsBorrachaDefinir(raio) {
   const v = Number(raio) || 15;
   rsBorrachaRaio = Math.max(4, Math.min(60, v));
@@ -168,7 +209,9 @@ function rsComecar(e) {
   const [x, y] = rsCoords(e);
   if (rsBorracha) { rsApagarEm(x, y); rsDesenhando = true; return; }
   const c = rsCanetaAtual();
-  rsTracos.push({ cor: c.cor, larg: c.larg, pontos: [[x, y]] });
+  /* a largura vai GRAVADA no traço: trocar de espessura depois não pode
+   * reescrever o que já foi desenhado */
+  rsTracos.push({ cor: c.cor, larg: rsLarguraAtual(), pontos: [[x, y]] });
   rsDesenhando = true;
   rsMarcarSujo();
   rsPintar();
@@ -369,6 +412,11 @@ async function rsGuardarSeSair() {
 /* acesso as ferramentas por nome — o teste precisa apertar a caneta
  * vermelha do mesmo jeito que um dedo aperta */
 function rsPintarBorrachas() {
+  RS_ESPESSURAS.forEach((x, i) => {
+    const b = rsBotoes["e_" + x.id];
+    if (b) b.className = "rs-esp"
+      + (!rsBorracha && i === rsEspessura ? " rs-sel" : "");
+  });
   RS_BORRACHAS.forEach((x) => {
     const b = rsBotoes["b_" + x.id];
     if (b) b.className = "rs-bsize" + (x.raio === rsBorrachaRaio ? " rs-sel" : "");
@@ -382,6 +430,7 @@ function rsIniciar() {
   const cx = $("rsCaixa");
   if (!cx) return;
   rsIniciado = true;
+  rsEspessuraCarregar();
 
   const fer = $("rsFerramentas");
   if (fer && !fer.children.length) {
@@ -397,6 +446,26 @@ function rsIniciar() {
       rsBotoes[c.id] = b;
       fer.append(b);
     });
+    /* A ESPESSURA DA CANETA fica junto das cores e ANTES da borracha:
+     * escolher com que traço escrever é parte de escrever, não de
+     * apagar. Cada botão mostra a própria espessura — apontar é mais
+     * rápido do que ler "média" e traduzir para uma largura. */
+    RS_ESPESSURAS.forEach((x, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = "btnRsEsp_" + x.id;
+      b.className = "rs-esp";
+      b.title = t("rs_esp_" + x.id);
+      b.setAttribute("aria-label", t("rs_esp_" + x.id));
+      const tr = document.createElement("span");
+      tr.className = "rs-esp-tr";
+      tr.style.height = Math.max(2, Math.round(x.larg * 1.6)) + "px";
+      b.append(tr);
+      b.onclick = () => { rsEspessuraDefinir(i); rsBorracha = false; rsPintar(); };
+      rsBotoes["e_" + x.id] = b;
+      fer.append(b);
+    });
+
     const bb = document.createElement("button");
     bb.type = "button"; bb.id = "btnRsBorracha"; bb.className = "btn-min rs-borracha";
     bb.textContent = t("rs_borracha");
