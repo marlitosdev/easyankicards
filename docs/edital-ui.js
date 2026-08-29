@@ -336,8 +336,13 @@ function edLinhaTopico(i, semDisciplina) {
    * dizer "você lê muito e resolve pouca questão". Uma caixa nunca saberia. */
   const chk = document.createElement("button");
   chk.type = "button";
-  chk.className = "ed-reg" + (i.revisado ? " rev" : (i.feito ? " ok" : ""));
-  chk.textContent = i.revisado ? "✓✓" : (i.feito ? "✓" : "+");
+  /* O SINAL DIZ O QUE FALTA, não o que passou.
+   * Um "✓" verde numa revisão vencida é a mesma mentira do texto
+   * riscado: o tópico foi estudado, sim, e é exatamente por isso que ele
+   * está de volta na semana. O "↻" diz o que o botão vai fazer. */
+  chk.className = "ed-reg" + (i.revisado ? " rev"
+    : (i.ehRevisao ? " arev" : (i.feito ? " ok" : "")));
+  chk.textContent = i.revisado ? "✓✓" : (i.ehRevisao ? "↻" : (i.feito ? "✓" : "+"));
   chk.title = t(i.feito ? "ed_reg_mais" : "ed_reg_novo");
   chk.onclick = (ev) => { ev.stopPropagation(); abrirRegistro(i); };
 

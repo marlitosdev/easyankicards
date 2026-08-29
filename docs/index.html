@@ -1641,6 +1641,17 @@ dialog.mat-amplo{max-height:96vh}
 .ed-item-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
 .ed-item b{font-size:11px;white-space:nowrap}
 .ed-item.feito .ed-item-nome{text-decoration:line-through;opacity:.45}
+/* REVISÃO VENCIDA NÃO É TRABALHO FEITO.
+ *
+ * A classe "feito" é verdadeira para uma revisão pendente — o tópico JÁ
+ * foi estudado —, e por isso ela herdava o risco e o desbotado de item
+ * concluído. Na agenda, o item que mais precisa de atenção na semana
+ * aparecia com a cara de quem já saiu da lista: riscado, apagado, com um
+ * "✓" ao lado. Quem olhava concluía que estava tudo certo.
+ *
+ * Vem DEPOIS da regra acima de propósito: as duas têm a mesma
+ * especificidade, e é a ordem no arquivo que decide. */
+.ed-item.feito.ehrev .ed-item-nome{text-decoration:none;opacity:1}
 .ed-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px}
 .ed-card{background:var(--campo);border:1px solid var(--borda);border-radius:11px;padding:11px}
 .ed-card.completo{border-color:var(--ok)}
@@ -2008,6 +2019,10 @@ dialog.mat-amplo{max-height:96vh}
 .ed-reg:hover{border-color:var(--ok);color:var(--ok)}
 .ed-reg.ok{background:rgba(34,197,94,.2);border-color:transparent;color:var(--ok)}
 .ed-reg.rev{background:#15803d;border-color:transparent;color:#fff}
+/* revisão vencida: cor de atenção, não de conclusão. O verde do "feito"
+   nesta posição dizia "resolvido" sobre o item mais urgente da semana */
+.ed-reg.arev{background:rgba(245,158,11,.22);border-color:transparent;
+  color:var(--atencao);font-weight:800}
 .reg-topico{padding:9px 11px;border-radius:9px;background:var(--campo);
   border:1px solid var(--borda);margin:6px 0 10px}
 .reg-topico .nota{margin:3px 0 0}
