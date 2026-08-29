@@ -725,11 +725,32 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   flex:1 1 auto;padding:8px 10px 10px}
 #dlgQsResponder .rs-folha{flex:1 1 auto;min-height:0;overflow:auto}
 #dlgQsResponder .rs-tela{min-height:180px}
-/* a folha inteira é o mesmo painel indo até o topo */
-#dlgQsResponder.rs-cheia .rs-caixa{top:0;max-height:100%;
-  border-radius:0;box-shadow:none}
-#dlgQsResponder.rs-cheia .rs-tela{min-height:60vh}
-#dlgQsResponder.rs-cheia #rsAjudaNota{display:none}
+/* ---- FOLHA INTEIRA: A TELA DO APARELHO, NÃO A DA JANELA ----
+ *
+ * Era "absolute" com top:0 — e absolute mede o DIÁLOGO, que já está
+ * limitado a 92vh e tem recuo dos quatro lados. O painel ia até o topo
+ * do diálogo e parava ali: escondia a questão e não crescia. Fixed com
+ * inset:0 mede a tela do aparelho, que é o que "folha inteira" quer
+ * dizer.
+ *
+ * 100dvh, e não 100vh: no telefone, a barra do navegador entra e sai, e
+ * com vh a parte de baixo da folha — onde ficam salvar e limpar — some
+ * atrás dela. */
+#dlgQsResponder.rs-cheia .rs-caixa{position:fixed;inset:0;
+  width:100vw;height:100vh;height:100dvh;max-height:none;
+  z-index:9999;border-radius:0;box-shadow:none;border:0}
+#dlgQsResponder.rs-cheia .rs-corpo{height:100%;padding:6px 8px 8px}
+#dlgQsResponder.rs-cheia .rs-folha{overflow:hidden}
+#dlgQsResponder.rs-cheia .rs-tela{height:100%;min-height:0}
+/* na folha inteira, "recolher" e "voltar à questão" faziam a mesma
+   coisa: dois botões para um gesto é um a mais para decidir */
+#dlgQsResponder.rs-cheia #btnRsMin{display:none}
+
+/* VER A QUESTÃO ATRÁS. A folha branca é o certo para uma conta longa;
+   para riscar um esquema em cima do enunciado, o papel atrapalha. O
+   padrão é papel, e quem quiser transparência pede. */
+#dlgQsResponder.rs-cheia.rs-vidro .rs-caixa{background:rgba(18,24,38,.86)}
+#dlgQsResponder.rs-cheia.rs-vidro .rs-tela{background:transparent}
 /* o diálogo precisa ser o referencial do painel */
 #dlgQsResponder[open]{position:fixed}
 
@@ -2093,8 +2114,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 #dlgQsResponder.rs-cheia #qsSessPlacar{display:none}
 #dlgQsResponder.rs-cheia #rsCaixa{max-height:none;height:auto}
 #dlgQsResponder.rs-cheia .rs-tela{min-height:62vh}
-#dlgQsResponder.rs-cheia #rsAjudaNota{display:none}
-.rs-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+/* coladas na folha: cada pixel entre o fim do desenho e o botão de
+   salvar é área de trabalho que a conta não tem */
+.rs-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;flex:0 0 auto}
 .qs-filtro-on{background:var(--roxo,#7c5cff);color:#fff;border-color:transparent}
 .mat-conta-prova{border-color:rgba(168,85,247,.7);color:var(--info)}
 .mat-conta-peg{border-color:rgba(236,72,153,.7);color:var(--erro)}
@@ -3395,6 +3417,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <span class="rs-grupo rs-grupo-dir">
           <button class="btn-min" id="btnRsModo" type="button"
             title="Troca entre escrever à mão e digitar. O que você digitar é salvo junto com o traço."></button>
+          <button class="btn-min" id="btnRsVidro" type="button" hidden
+            title="Deixa a folha transparente para você riscar por cima do enunciado, que fica legível ao fundo. Toque de novo para voltar ao papel branco."></button>
           <button class="btn-min" id="btnRsCheia" type="button"
             title="A folha ocupa a tela inteira e fica grande, para conta longa. Esc volta."></button>
           <button class="btn-min" id="btnRsMin" type="button"
@@ -3409,10 +3433,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <textarea id="rsTexto" class="rs-texto" hidden
           placeholder="Digite aqui os dados da questão, a conta, o que precisar."></textarea>
       </div>
-      <!-- a instrução só enquanto a folha está em branco: com o rabisco
-           feito ela vira uma faixa de texto ocupando altura que a conta
-           precisa -->
-      <p class="nota" id="rsAjudaNota" data-i18n="rs_ajuda"></p>
       <div class="rs-acoes">
         <!-- O ESTADO FICA JUNTO DO SALVAR, e não na barra de ferramentas:
              "3 traços · não salvo" é resposta à pergunta que se faz com a
