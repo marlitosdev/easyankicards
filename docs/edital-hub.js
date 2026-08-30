@@ -241,7 +241,30 @@ function hubPintarAgenda() {
     cx.append(p); box.append(cx); return;
   }
 
-  linhas.sort((a, b) => (b.ehRevisao ? 1 : 0) - (a.ehRevisao ? 1 : 0) || b.ordem - a.ordem);
+  /* A ORDEM DA AGENDA É A ORDEM DO PLANO.
+   *
+   * Aqui havia um segundo criterio: ordenar por "bruto x urgencia". Ele
+   * parecia so uma reordenacao razoavel — mais pesado primeiro —, e era
+   * o desfazimento completo do rodizio que montarPlano acabara de fazer.
+   *
+   * O rodizio existe porque ordenar por peso AGRUPA POR DISCIPLINA: a
+   * disciplina de peso 5 tem todos os seus topicos de peso 5 no topo, e
+   * a semana inteira sai concentrada nela. Num edital com Direito
+   * Financeiro pesado, as oito primeiras linhas da agenda eram cinco de
+   * Financeiro e tres de Controle Externo — nenhuma de Portugues, de
+   * Contabilidade ou de Administrativo. Quem estuda de cima para baixo
+   * passava a semana numa disciplina so.
+   *
+   * O plano ja resolvia isso e a tela desfazia. Agora a posicao no
+   * rodizio manda, e a urgencia entra DIVIDINDO essa posicao: um edital
+   * com prova em 20 dias (urgencia 2) aparece com o dobro da densidade
+   * de um com prova em um ano, sem que nenhum dos dois deixe de
+   * intercalar as proprias disciplinas. */
+  linhas.sort((a, b) =>
+    (b.ehRevisao ? 1 : 0) - (a.ehRevisao ? 1 : 0)
+    || ((a.ordemFila || 999) / (a.urgencia || 1))
+       - ((b.ordemFila || 999) / (b.urgencia || 1))
+    || b.ordem - a.ordem);
 
   /* TIRADOS DA AGENDA: adiados com prazo em aberto e dispensados.
    * Some daqui, não do plano: o que sai por tempo volta sozinho quando o
@@ -771,7 +794,18 @@ function hubControlesAgenda() {
           + ((lerEdital(e.texto || "").cfg || {}).horas || 0) + "h").join(" + ") })
     : t("hub_cfg_horas_ajuda");
 
-  cx.append(ld, lh);
+  /* O RAIO-X, ao lado dos numeros que ele explica. Discreto de
+   * proposito: nao e uma acao de estudo, e a resposta a "por que isto
+   * e nao aquilo" — pergunta que so aparece depois de olhar a lista. */
+  const raio = document.createElement("button");
+  raio.type = "button";
+  raio.id = "btnPlogAbrir";
+  raio.className = "ed-agenda-cfg-item plog-gatilho";
+  raio.textContent = t("plog_gatilho");
+  raio.title = t("plog_gatilho_aj");
+  raio.onclick = () => { if (typeof plAbrir === "function") plAbrir(); };
+
+  cx.append(ld, lh, raio);
   return cx;
 }
 
@@ -930,22 +964,112 @@ function hubGravarAberto() {
   edSalvarLista();
 }
 
+/* ---------------------------------------------------------------------
+ * NOVO EDITAL — uma caixa com o que o plano precisa para existir.
+ *
+ * Antes: um prompt() do navegador pedindo o nome, e um edital vazio. A
+ * pessoa era largada numa bancada em branco tendo de descobrir sozinha
+ * onde se põe a data da prova, onde se dizem as horas por semana e qual
+ * é o formato das disciplinas — três coisas que o app já sabe pedir, e
+ * sem as quais o plano não calcula nada.
+ *
+ * A caixa nasce com um nome escrito e a data em branco: nome é o que dá
+ * para chutar (e trocar depois), data é o que não dá.
+ * ------------------------------------------------------------------ */
 function hubNovo() {
-  const nome = prompt(t("hub_novo_pergunta"), t("hub_novo_padrao"));
-  if (nome === null) return;
+  const dlg = document.getElementById("dlgEdNovo");
+  if (!dlg) {   /* sem a caixa, o caminho antigo ainda cria o edital */
+    hubGravarAberto();
+    const e0 = edCriar(t("hub_novo_padrao"), "");
+    reg("EDITAL", "edital criado", e0.nome);
+    hubAbrirEdital(e0.id);
+    return;
+  }
+  const v = (id, valor) => {
+    const el = document.getElementById(id);
+    if (el) el.value = valor;
+  };
+  v("edNovoNome", t("hub_novo_padrao"));
+  v("edNovoProva", ""); v("edNovoHoras", "20");
+  v("edNovoF2Nome", ""); v("edNovoF2Prova", ""); v("edNovoPlano", "");
+  const f2 = document.getElementById("edNovoF2cx");
+  if (f2) f2.open = false;
+  const conf = document.getElementById("edNovoConf");
+  if (conf) conf.textContent = "";
+  abrirModal("dlgEdNovo");
+  const nome = document.getElementById("edNovoNome");
+  if (nome && nome.select) { try { nome.focus(); nome.select(); } catch (e) {} }
+}
+
+/* Monta o texto do edital a partir da caixa. Separada de quem a mostra
+ * para poder ser conferida com valores na mão. */
+function hubNovoTexto(d) {
+  const L = [];
+  const cab = [String(d.nome || "").trim() || t("hub_novo_padrao")];
+  if (d.prova) cab.push("prova: " + d.prova);
+  if (d.horas) cab.push("horas: " + d.horas);
+  L.push("# " + cab.join(" | "));
+  if (d.f2Prova) {
+    const c2 = ["fase 2: " + (String(d.f2Nome || "").trim() || "2ª fase")];
+    c2.push("prova: " + d.f2Prova);
+    if (d.horas) c2.push("horas: " + d.horas);
+    L.push("# " + c2.join(" | "));
+  }
+  const plano = String(d.plano || "").trim();
+  if (plano) {
+    /* O CABEÇALHO É NOSSO, o resto é da pessoa. Se ela colar a resposta
+     * inteira da IA — que já vem com "#" —, aquela linha viraria uma
+     * segunda configuração competindo com a daqui. */
+    const corpo = plano.split(/\r?\n/)
+      .filter((l) => !/^\s*#/.test(l))
+      .join("\n").trim();
+    if (corpo) { L.push(""); L.push(corpo); }
+  }
+  return L.join("\n") + "\n";
+}
+
+function hubNovoCriar() {
+  const val = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value || "").trim() : "";
+  };
+  const texto = hubNovoTexto({
+    nome: val("edNovoNome"), prova: val("edNovoProva"),
+    horas: val("edNovoHoras"), f2Nome: val("edNovoF2Nome"),
+    f2Prova: val("edNovoF2Prova"), plano: val("edNovoPlano"),
+  });
+  const r = lerEdital(texto);
+  const nTop = (r.disciplinas || []).reduce((a, d) => a + d.topicos.length, 0);
+  document.getElementById("dlgEdNovo").close();
   hubGravarAberto();
-  const e = edCriar((nome || "").trim() || t("hub_novo_padrao"), "");
-  reg("EDITAL", "edital criado", e.nome);
+  const e = edCriar(val("edNovoNome") || t("hub_novo_padrao"), texto);
+  /* o nome digitado MANDA no cabeçalho: sem isto, o app reescreveria o
+   * nome a partir do texto na primeira gravação */
+  e.renomeado = !!val("edNovoNome");
+  edSalvarLista();
+  reg("EDITAL", "edital criado", e.nome
+    + (nTop ? " · " + (r.disciplinas || []).length + " disciplinas, "
+              + nTop + " tópicos" : " · sem disciplinas ainda"));
   hubAbrirEdital(e.id);
+  return e;
 }
 
 function hubRenomear() {
   const e = edAberto();
   if (!e) return;
-  const n = prompt(t("hub_renomear_pergunta"), e.nome);
-  if (n === null) return;
+  /* A CAIXA É DO APP, não do navegador. O prompt() nativo abre com o
+   * endereço do site no título ("marlitosdev.github.io diz"), no canto
+   * de cima, com os botões do sistema — parece um aviso de segurança, e
+   * não uma pergunta do aplicativo que a pessoa acabou de usar. */
+  uiTexto(t("hub_renomear_pergunta"), e.nome).then((n) => {
+    if (n === null) return;
+    hubRenomearAplicar(e, n);
+  });
+}
+
+function hubRenomearAplicar(e, n) {
   const antes = e.nome;
-  e.nome = (n || "").trim() || e.nome;
+  e.nome = String(n || "").trim() || e.nome;
   /* renomeado à mão manda no cabeçalho do texto: se o app reescrevesse o
    * nome a cada tecla, "TCE-PE · Auditor" viraria "TCE-PE" sozinho */
   e.renomeado = true;
@@ -971,6 +1095,10 @@ function hubRender() {
 
 function hubIniciar() {
   edCarregarLista();
+  /* o raio-X se liga aqui porque o gatilho dele mora na barra da agenda,
+   * que e desta tela — e porque os botoes do dialogo existem desde o
+   * carregamento, nao dependem de nenhum edital estar aberto */
+  try { if (typeof plIniciar === "function") plIniciar(); } catch (e) {}
   const b = document.getElementById("hubBusca");
   if (b) b.oninput = () => { hubFiltro = b.value; hubPintarLista(); };
   const n = document.getElementById("btnHubNovo");
@@ -979,6 +1107,38 @@ function hubIniciar() {
   if (v) v.onclick = hubVoltar;
   const r = document.getElementById("btnEdRenomear");
   if (r) r.onclick = hubRenomear;
+  const nc = document.getElementById("btnEdNovoCriar");
+  if (nc) nc.onclick = hubNovoCriar;
+  const nn = document.getElementById("btnEdNovoNao");
+  if (nn) nn.onclick = () => document.getElementById("dlgEdNovo").close();
+  const np = document.getElementById("btnEdNovoPrompt");
+  if (np) {
+    /* o prompt fica NA CAIXA onde o plano vai ser colado: mandar a
+     * pessoa procurá-lo noutra tela é onde ela desiste e cria o edital
+     * vazio */
+    np.onclick = () => {
+      try { navigator.clipboard.writeText(t("ed_prompt")); } catch (e) {}
+      const c = document.getElementById("edNovoConf");
+      if (c) c.textContent = t("ed_novo_prompt_ok");
+    };
+  }
+  /* conferência viva: dizer quantas disciplinas o texto colado tem ANTES
+   * de criar é o que evita criar cinco editais até acertar o formato */
+  const pl = document.getElementById("edNovoPlano");
+  if (pl) {
+    pl.oninput = () => {
+      const c = document.getElementById("edNovoConf");
+      if (!c) return;
+      const txt = String(pl.value || "").trim();
+      if (!txt) { c.textContent = ""; return; }
+      const r2 = lerEdital("# x\n" + txt.split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l)).join("\n"));
+      const nd = (r2.disciplinas || []).length;
+      const nt = (r2.disciplinas || []).reduce((a, d) => a + d.topicos.length, 0);
+      const ign = (r2.achados || []).filter((a) => a.tipo === "linha_ignorada").length;
+      c.textContent = t("ed_novo_conf", { d: nd, t: nt, i: ign });
+    };
+  }
   const rc = document.getElementById("btnEdBancRecolher");
   if (rc) rc.onclick = bancAlternar;
   try { bancRecolhida = localStorage.getItem("eac_banc_recolhida") === "1"; } catch (e) {}

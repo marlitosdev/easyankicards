@@ -1719,6 +1719,87 @@ dialog.mat-amplo{max-height:96vh}
 .ag-fill.cheio{background:#30a46c}
 .ag-med-rot{font-size:10.5px;color:var(--sutil);margin-top:4px;line-height:1.5}
 .ed-agenda-cab{display:flex;align-items:center;justify-content:space-between;gap:10px}
+/* ---- RAIO-X DA RECOMENDACAO ----
+   Painel largo de proposito: a informacao aqui e COMPARATIVA (fatia da
+   prova contra fatia do tempo, uma linha por disciplina) e comparar em
+   coluna estreita obriga a rolar entre os dois numeros que precisam ser
+   vistos juntos. */
+.plog-modal{max-width:min(1080px,96vw);width:min(1080px,96vw)}
+.plog-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.plog-cab h3{margin:0 0 2px}
+.plog-abas{display:flex;gap:4px;align-items:center;flex-wrap:wrap;
+  margin:12px 0 0;border-bottom:1px solid var(--borda);padding-bottom:0}
+.plog-cab-dir{margin-left:auto}
+.plog-aba{appearance:none;border:0;background:transparent;color:var(--sutil);
+  font:inherit;font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;border-radius:8px 8px 0 0}
+.plog-aba:hover{color:var(--texto);background:var(--bg)}
+.plog-aba.ativa{color:var(--acao);border-bottom-color:var(--acao)}
+.plog-corpo{margin-top:14px;max-height:66vh;overflow:auto}
+
+/* cartoes do topo: os numeros de contexto sem os quais o resto nao se le */
+.plog-tiras{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.plog-tira{background:var(--bg);border:1px solid var(--borda);border-radius:10px;
+  padding:8px 12px;min-width:96px}
+.plog-tira b{display:block;font-size:17px;line-height:1.15}
+.plog-tira span{font-size:10.5px;color:var(--sutil);text-transform:uppercase;
+  letter-spacing:.04em}
+.plog-selo{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;
+  border-radius:999px;background:var(--verde-claro);color:var(--verde-txt)}
+.plog-selo.estimada{background:var(--laranja-claro);color:var(--laranja-txt)}
+
+/* a tabela: densa, alinhada, numeros a direita */
+.plog-tab{width:100%;border-collapse:collapse;font-size:12px}
+.plog-tab th{text-align:left;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--sutil);font-weight:700;
+  padding:6px 8px;border-bottom:1px solid var(--borda);
+  position:sticky;top:0;background:var(--panel)}
+.plog-tab td{padding:6px 8px;border-bottom:1px solid var(--borda)}
+.plog-tab tr:hover td{background:var(--bg)}
+.plog-num{text-align:right;font-variant-numeric:tabular-nums}
+.plog-conta{font-variant-numeric:tabular-nums;color:var(--sutil);font-size:11px}
+.plog-rev td{background:var(--laranja-claro)}
+
+/* AS DUAS BARRAS. A comparacao e o produto deste painel, entao ela e
+   desenho, nao numero solto: uma barra por cima da outra, mesma escala,
+   e o olho ve a diferenca antes de ler a coluna. */
+.plog-barras{display:flex;flex-direction:column;gap:3px;min-width:130px}
+.plog-barra{height:7px;border-radius:999px;background:var(--borda);overflow:hidden}
+.plog-barra i{display:block;height:100%;border-radius:999px}
+.plog-barra.prova i{background:var(--acao)}
+.plog-barra.tempo i{background:var(--roxo)}
+.plog-legenda{display:flex;gap:12px;font-size:10.5px;color:var(--sutil);
+  margin-bottom:10px;align-items:center}
+.plog-legenda i{display:inline-block;width:10px;height:7px;border-radius:999px;
+  margin-right:4px;vertical-align:middle}
+.plog-legenda .lp i{background:var(--acao)}
+.plog-legenda .lt i{background:var(--roxo)}
+.plog-desvio{font-weight:700;font-variant-numeric:tabular-nums}
+.plog-desvio.mais{color:var(--laranja-txt)}
+.plog-desvio.menos{color:var(--vermelho-txt)}
+.plog-desvio.zero{color:var(--verde-txt)}
+.plog-aviso{background:var(--laranja-claro);border:1px solid var(--laranja-borda);
+  border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}
+.plog-aviso b{color:var(--laranja-txt)}
+.plog-podas{border:1px solid var(--borda);border-radius:12px;padding:12px;
+  margin-bottom:16px;background:var(--bg)}
+.plog-poda-cab{margin-bottom:8px;font-size:12px}
+.plog-poda{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 0;border-top:1px solid var(--borda)}
+.plog-poda.vazia{opacity:.55}
+.plog-poda-nome{font-size:12px;font-weight:600}
+.plog-poda-dir{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.plog-poda-tam{font-size:12px;font-variant-numeric:tabular-nums;color:var(--sutil)}
+.plog-poda-total{border-top:1px solid var(--borda);padding-top:9px;margin-top:2px;
+  font-size:12px;font-weight:700;text-align:right}
+.plog-vazio{color:var(--sutil);font-size:12px;padding:18px 2px}
+.plog-naoentra{font-size:10.5px;color:var(--sutil);font-style:italic}
+
+/* o gatilho, na barra da agenda: discreto ate o ponteiro chegar */
+.ed-agenda-cfg-item.plog-gatilho{cursor:pointer;border:1px solid var(--borda);
+  border-radius:999px;padding:3px 10px;background:transparent;color:var(--sutil);
+  font-size:10.5px;font-weight:600;font-family:inherit}
+.ed-agenda-cfg-item.plog-gatilho:hover{color:var(--acao);border-color:var(--acao)}
 .ed-agenda-cfg{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .ed-agenda-filtro{display:flex;gap:5px;margin:6px 0 2px;flex-wrap:wrap}
 .ed-banc-resumo{font-size:11.5px;color:var(--sutil);padding:8px 0 4px;line-height:1.5}
@@ -2115,6 +2196,17 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .rs-tela{width:100%;height:auto;max-width:100%;background:#fdfdf7;border-radius:8px;
   display:block;touch-action:none;cursor:crosshair}
 .rs-topo-dir{margin-left:auto}
+
+/* NOVO EDITAL: campos empilhados, dois a dois onde couber. Rótulo em
+   cima do campo — ao lado, com nomes de tamanhos diferentes, as caixas
+   ficam desalinhadas e a leitura vira ziguezague. */
+.ednovo-linha{display:flex;flex-direction:column;gap:3px;margin:8px 0}
+.ednovo-linha .mat-busca{width:100%;box-sizing:border-box}
+.ednovo-dupla{display:flex;gap:10px;flex-wrap:wrap}
+.ednovo-dupla > .ednovo-linha{flex:1 1 150px}
+.ednovo-f2{margin:6px 0;border-left:2px solid var(--borda);padding-left:9px}
+.ednovo-f2 > summary{cursor:pointer;font-size:11.5px;color:var(--sutil);
+  padding:3px 0}
 
 /* ---- RASCUNHO EM FOLHA INTEIRA ----
    O diálogo inteiro vira papel: a questão sai da frente, a caixa ocupa
@@ -3302,6 +3394,63 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      são dois textos, cada um com seu leitor. -->
 <!-- Marcar em azul o que não se entendeu só serve se der para voltar
      depois. Espalhadas por vinte resumos, as dúvidas somem. -->
+<!-- NOVO EDITAL — uma caixa só, com o que o plano precisa para existir.
+     Antes: um prompt() do navegador pedindo o nome, e um edital vazio.
+     A pessoa era largada numa bancada em branco tendo de descobrir
+     sozinha a data, as horas e o formato das disciplinas — e o app já
+     sabe pedir as três coisas. -->
+<dialog id="dlgEdNovo" class="ui-modal diag-modal">
+  <h3 data-i18n="ed_novo_tit"></h3>
+  <p class="nota" data-i18n="ed_novo_ajuda"></p>
+  <div class="ednovo-linha">
+    <label class="nd-rot" for="edNovoNome" data-i18n="ed_novo_nome"></label>
+    <input type="text" id="edNovoNome" class="mat-busca"
+      placeholder="SEFAZ-AL Auditor Fiscal">
+  </div>
+  <div class="ednovo-dupla">
+    <div class="ednovo-linha">
+      <label class="nd-rot" for="edNovoProva" data-i18n="ed_novo_prova"></label>
+      <input type="date" id="edNovoProva" class="mat-busca">
+    </div>
+    <div class="ednovo-linha">
+      <label class="nd-rot" for="edNovoHoras" data-i18n="ed_novo_horas"></label>
+      <input type="number" id="edNovoHoras" class="mat-busca" min="1" max="80" value="20">
+    </div>
+  </div>
+  <!-- A SEGUNDA DATA É EXCEÇÃO, e por isso vem recolhida: a maioria dos
+       concursos tem uma prova só, e um campo de data sempre à vista
+       sugere que falta preencher. -->
+  <details id="edNovoF2cx" class="ednovo-f2">
+    <summary data-i18n="ed_novo_f2"></summary>
+    <div class="ednovo-dupla">
+      <div class="ednovo-linha">
+        <label class="nd-rot" for="edNovoF2Nome" data-i18n="ed_novo_f2_nome"></label>
+        <input type="text" id="edNovoF2Nome" class="mat-busca" placeholder="discursiva">
+      </div>
+      <div class="ednovo-linha">
+        <label class="nd-rot" for="edNovoF2Prova" data-i18n="ed_novo_f2_prova"></label>
+        <input type="date" id="edNovoF2Prova" class="mat-busca">
+      </div>
+    </div>
+  </details>
+
+  <div class="ednovo-linha">
+    <label class="nd-rot" for="edNovoPlano" data-i18n="ed_novo_plano"></label>
+    <span class="mat-f-dica" data-i18n="ed_novo_plano_dica"></span>
+    <textarea id="edNovoPlano" rows="7" style="width:100%;box-sizing:border-box"
+      placeholder="@ Direito Tributário :: 20q&#10;+ Obrigação tributária :: 5 :: cai sempre"></textarea>
+  </div>
+  <p class="nota" id="edNovoConf"></p>
+  <div class="dlg-rodape">
+    <button class="btn-min" id="btnEdNovoPrompt" data-i18n="ed_prompt_btn"
+      title="Copia o prompt para a IA montar a lista de disciplinas e tópicos a partir do edital. Cole a resposta no campo acima."></button>
+    <button class="btn btn-verde" id="btnEdNovoCriar" data-i18n="ed_novo_criar"
+      title="Cria o edital com estes dados. Você pode colar as disciplinas depois, se preferir."></button>
+    <button class="btn btn-cinza" id="btnEdNovoNao" data-i18n="cancel_btn"
+      title="Sai sem criar nada."></button>
+  </div>
+</dialog>
+
 <dialog id="dlgTextoLivre" class="ui-modal diag-modal">
   <h3 id="txtLivreTit"></h3>
   <textarea id="txtLivreCampo" rows="7" style="width:100%;box-sizing:border-box"
@@ -3828,6 +3977,38 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgPlanoLog" class="ui-modal plog-modal">
+  <div class="plog-cab">
+    <div>
+      <h3 data-i18n="plog_titulo"></h3>
+      <p class="nota" id="plogSub"></p>
+    </div>
+    <button class="btn-min" id="btnPlogFechar" data-i18n="help_close"></button>
+  </div>
+  <div class="plog-abas">
+    <button class="plog-aba" id="btnPlogAbaFila" data-plog-aba="fila"
+      data-i18n="plog_aba_fila"
+      title="A semana de hoje, item a item, com a conta que pos cada um naquela posicao."></button>
+    <button class="plog-aba" id="btnPlogAbaDisc" data-plog-aba="disc"
+      data-i18n="plog_aba_disc"
+      title="Quanto cada disciplina vale na prova contra quanto de tempo ela recebe."></button>
+    <button class="plog-aba" id="btnPlogAbaSinais" data-plog-aba="sinais"
+      data-i18n="plog_aba_sinais"
+      title="O que o app ja mede sobre o seu desempenho e nao usa para decidir nada."></button>
+    <button class="plog-aba" id="btnPlogAbaHist" data-plog-aba="hist"
+      data-i18n="plog_aba_hist"
+      title="Como a agenda mudou de um dia para o outro."></button>
+    <button class="plog-aba" id="btnPlogAbaArmazem" data-plog-aba="armazem"
+      data-i18n="plog_aba_armazem"
+      title="Quanto cada coisa ocupa no navegador e o que da para liberar sem perder nada."></button>
+    <span class="plog-cab-dir">
+      <button class="btn-min" id="btnPlogCopiar" data-i18n="plog_copiar"
+        title="Copia o relatorio inteiro em texto, para colar numa conversa."></button>
+    </span>
+  </div>
+  <div class="plog-corpo" id="plogCorpo"></div>
+</dialog>
+
 <dialog id="dlgGerLog" class="ui-modal diag-modal">
   <h3 data-i18n="ger_log_titulo"></h3>
   <p class="nota" data-i18n="ger_log_ajuda"></p>
@@ -4289,6 +4470,7 @@ window.__sqlPromise = initSqlJs({
 <script src="rascunho.js"></script>
 <script src="pelicula.js"></script>
 <script src="geracao-log.js"></script>
+<script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>
 <script src="questoes-ui.js"></script>
 <script src="edital.js"></script>
