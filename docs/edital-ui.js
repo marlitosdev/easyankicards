@@ -369,6 +369,24 @@ function edLinhaTopico(i, semDisciplina) {
     selo.title = t("ed_selo_revisao_ajuda");
     nome.append(selo);
   }
+  /* O SELO DO NÍVEL. Sem ele, a dificuldade mexeria na ordem da agenda
+   * sem nada na tela explicando por quê — e ordem que muda sozinha é
+   * ordem em que ninguém confia. Vencida aparece riscada: continua à
+   * vista para você reavaliar, e já não pesa. */
+  const dSelo = (typeof difSeloDe === "function") ? difSeloDe(i) : null;
+  if (dSelo) nome.append(dSelo);
+
+  /* A TRAVA DIZ QUE ATUOU. Ela dobra a presença da disciplina na semana;
+   * fazer isso calado seria a agenda mudando sozinha, que é exatamente a
+   * reclamação que deu origem a tudo isto. */
+  if (i.trava) {
+    const tv = document.createElement("span");
+    tv.className = "ed-item-trava";
+    tv.textContent = t("ed_trava", { b: i.travaBloco || "?" });
+    tv.title = t("ed_trava_aj");
+    nome.append(tv);
+  }
+
   const porq = document.createElement("div");
   porq.className = "ed-item-porque";
   if (!semDisciplina) {
@@ -1207,6 +1225,48 @@ let regAtual = null;
 let regFormas = [];
 let regHumor = "media";
 
+/* O NÍVEL ESCOLHIDO NESTE REGISTRO. Vazio = você não opinou agora, e
+ * então a avaliação anterior fica de pé: não opinar não é o mesmo que
+ * dizer "médio", e tratar os dois igual apagaria silenciosamente o que
+ * você tinha declarado. */
+let regDif = "";
+
+function regDifAtual() { return regDif; }
+
+function regDifPintar(item) {
+  const cx = $("regDificuldade");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const atual = (typeof difDe === "function" && item)
+    ? difDe(item.disciplina, item.nome) : null;
+  (typeof DIF_NIVEIS !== "undefined" ? DIF_NIVEIS : []).forEach((nv) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    /* o que vale AGORA aparece aceso mesmo sem você tocar em nada:
+     * é como se vê que já existe uma avaliação para confirmar ou mudar */
+    const aceso = regDif ? regDif === nv.id
+      : !!(atual && atual.nivel === nv.id && !atual.vencida);
+    b.className = "reg-humor dif-" + nv.id + (aceso ? " ativa" : "");
+    b.textContent = t("dif_n_" + nv.id);
+    b.title = t("dif_n_" + nv.id + "_aj");
+    b.onclick = () => {
+      /* tocar de novo no que já está aceso desmarca: é como se tira uma
+       * opinião sem ter de escolher outra */
+      regDif = (regDif === nv.id) ? "" : nv.id;
+      regDifPintar(item);
+    };
+    cx.append(b);
+  });
+  const eco = $("regDifEco");
+  if (eco) {
+    eco.textContent = !atual || !atual.nivel ? t("dif_eco_sem")
+      : (atual.vencida
+          ? t("dif_eco_vencida", { n: t("dif_n_" + atual.nivel), d: atual.dias })
+          : t("dif_eco_atual", { n: t("dif_n_" + atual.nivel),
+              o: t("dif_origem_" + atual.origem), d: atual.dias }));
+  }
+}
+
 /* Preenche o registro com o resultado de uma sessão de questões.
  * Chamado DEPOIS de abrirRegistro, que limpa os campos ao abrir — por isso
  * é uma função à parte e não um parâmetro. O que ela põe é sugestão: a
@@ -1342,6 +1402,7 @@ function abrirRegistro(i) {
   regAtual = i;
   regFormas = i.feito ? ["revisao"] : ["leitura"];
   regHumor = "media";
+  regDif = "";
   $("regTitulo").textContent = i.nome;
   $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
   $("regMinutos").value = i.minutos;
@@ -1378,6 +1439,8 @@ function abrirRegistro(i) {
    * existindo para quando a pessoa discordar (reler um tópico que ela
    * mal viu é estudo novo, não revisão), mas em cinza e à direita: é a
    * exceção, não a escolha de todo dia. */
+  regDifPintar(i);
+
   regTipo = i.feito ? "revisado" : "feito";
   regPintarBotoes();
   abrirModal("dlgRegistro");
@@ -1489,6 +1552,17 @@ function confirmarRegistro(estado) {
    * fim da animação. Salvar nunca depende do efeito. */
   const linhas = edMarcarLinhasSaindo(item, estado);
   const qDados = regQuestoesDoFormulario();
+  /* A DIFICULDADE ANTES DE MARCAR: edMarcar redesenha a agenda, e a
+   * agenda mostra o selo do nível. Gravar depois pintaria a tela com o
+   * valor velho até a próxima repintura. */
+  if (typeof difDefinir === "function") {
+    if (regDif) difDefinir(item.disciplina, item.nome, regDif, "declarada");
+    else if (typeof difDoHumor === "function") {
+      /* você não opinou: o "rendeu pouco/bem" da sessão vira palpite —
+       * e o palpite não pisa numa declaração sua que ainda vale */
+      difDoHumor(item.disciplina, item.nome, regHumor);
+    }
+  }
   edMarcar(item, estado, {
     minutos: Math.max(1, Number($("regMinutos").value) || item.minutos),
     formas: regFormas.slice(),
@@ -1992,11 +2066,68 @@ function edPintarBlocos(plano) {
       c: b.pct, m: b.minPct, f: b.feitos, tt: b.topicos, fatia: b.fatia });
     li.append(num);
 
-    /* ONDE ESTUDAR: as disciplinas do bloco. Sem isto, o painel diz que
-     * há risco e não diz do quê — e a pessoa volta a olhar só o peso. */
+    /* O ACERTO DO BLOCO, quando há questões que o sustentem — e SEMPRE
+     * em linha própria, nunca somado à cobertura. Cobrir 100% e acertar
+     * 40% é uma situação real, e a média dos dois descreveria alguém que
+     * não existe. */
+    if (b.acerto !== null && b.acerto !== undefined) {
+      const ac = document.createElement("div");
+      ac.className = "ed-min-acerto"
+        + (b.acertoAbaixo ? " abaixo" : (b.acertoApertado ? " apertado" : ""));
+      ac.textContent = t("ed_min_acerto", {
+        a: b.acerto, m: b.minPct, meta: b.metaAcerto, n: b.acertoAmostra });
+      li.append(ac);
+    } else if (b.minPct !== null) {
+      const ac = document.createElement("div");
+      ac.className = "nota ed-min-semacerto";
+      ac.textContent = t("ed_min_sem_acerto", { n: ED_AMOSTRA_MINIMA });
+      li.append(ac);
+    }
+
+    /* ONDE ESTUDAR: as disciplinas do bloco, uma linha cada, com os DOIS
+     * números. Antes era só uma lista de nomes separada por vírgula: o
+     * painel dizia que havia risco e não dizia de quê, e com quatro
+     * disciplinas dentro isso não é informação, é um enigma. */
     const dl = document.createElement("div");
-    dl.className = "nota ed-min-discs";
-    dl.textContent = t("ed_min_discs", { d: (b.disciplinas || []).join(", ") });
+    dl.className = "ed-min-linhas";
+    (b.linhas || []).forEach((L) => {
+      const ln = document.createElement("div");
+      ln.className = "ed-min-linha"
+        + (L.acertoAbaixo ? " abaixo" : (L.acertoApertado ? " apertado" : ""));
+      const nm2 = document.createElement("button");
+      nm2.type = "button";
+      nm2.className = "ed-item-disc-link";
+      nm2.textContent = L.nome;
+      nm2.title = t("ed_abrir_disc", { d: L.nome });
+      nm2.onclick = (ev) => { ev.stopPropagation(); abrirDisciplina(L.nome); };
+
+      const cob = document.createElement("span");
+      cob.className = "ed-min-cel";
+      cob.textContent = t("ed_min_l_cob", { c: L.cobertura });
+      cob.title = t("ed_min_l_cob_aj");
+
+      const acc = document.createElement("span");
+      acc.className = "ed-min-cel"
+        + (L.acertoAbaixo ? " ruim" : (L.seguro ? " bom" : ""));
+      acc.textContent = L.acerto === null ? t("ed_min_l_sem")
+        : t("ed_min_l_ac", { a: L.acerto, n: L.acertoAmostra });
+      acc.title = L.acerto === null
+        ? t("ed_min_sem_acerto", { n: ED_AMOSTRA_MINIMA })
+        : t("ed_min_l_ac_aj", { n: L.acertoAmostra });
+
+      ln.append(nm2, cob, acc);
+      /* o percentual anotado de cabeça vem à parte, com o nome dele: sem
+       * isso, ou ele some (perdendo o dado) ou vira acerto contado
+       * (mentindo sobre a origem) */
+      if (L.acertoAnotado !== null && L.acertoAnotado !== undefined) {
+        const an = document.createElement("span");
+        an.className = "ed-min-cel anotado";
+        an.textContent = t("ed_min_l_anotado", { a: L.acertoAnotado });
+        an.title = t("ed_min_l_anotado_aj");
+        ln.append(an);
+      }
+      dl.append(ln);
+    });
     li.append(dl);
 
     cx.append(li);

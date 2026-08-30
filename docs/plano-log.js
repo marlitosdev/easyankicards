@@ -41,6 +41,8 @@ function plItemConta(i) {
     pesoDisc: i.disciplinaPeso,
     pesoTop: i.peso,
     bruto: i.bruto,
+    fator: i.fator == null ? 1 : i.fator,
+    brutoOrdem: i.brutoOrdem == null ? i.bruto : i.brutoOrdem,
     prioridade: i.prioridade,
     faixa: i.faixa,
     minutos: i.minutos,
@@ -610,6 +612,7 @@ function plPintarFila(box, d) {
     { txt: t("plog_c_disc") },
     { txt: t("plog_c_topico") },
     { txt: t("plog_c_conta"), ajuda: t("plog_c_conta_aj") },
+    { txt: t("dif_col"), num: true, ajuda: t("dif_col_aj") },
     { txt: t("plog_c_prio"), num: true, ajuda: t("plog_c_prio_aj") },
     { txt: t("plog_c_faixa"), ajuda: t("plog_c_faixa_aj") },
     { txt: t("plog_c_min"), num: true },
@@ -623,6 +626,8 @@ function plPintarFila(box, d) {
     cel(c.disciplina);
     cel(c.topico + (c.ehRevisao ? " ↻" : ""));
     cel(c.pesoDisc + " × " + c.pesoTop + " = " + c.bruto, "plog-conta");
+    cel(c.fator === 1 ? "—" : "×" + String(c.fator).replace(".", ","),
+        "plog-num");
     cel(c.prioridade, "plog-num");
     cel(t("plog_faixa_" + c.faixa));
     cel(c.minutos, "plog-num");

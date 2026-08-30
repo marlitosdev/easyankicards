@@ -1781,6 +1781,30 @@ dialog.mat-amplo{max-height:96vh}
 .plog-aviso{background:var(--laranja-claro);border:1px solid var(--laranja-borda);
   border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}
 .plog-aviso b{color:var(--laranja-txt)}
+.ed-min-acerto{font-size:11.5px;margin-top:5px;padding:5px 8px;border-radius:8px;
+  background:var(--bg);color:var(--sutil)}
+.ed-min-acerto.abaixo{background:var(--laranja-claro);color:var(--laranja-txt);font-weight:600}
+.ed-min-acerto.apertado{background:var(--laranja-claro);color:var(--laranja-txt)}
+.ed-min-semacerto{margin-top:5px}
+.ed-min-linhas{margin-top:7px;display:flex;flex-direction:column;gap:2px}
+.ed-min-linha{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  font-size:11.5px;padding:3px 0;border-top:1px solid var(--borda)}
+.ed-min-linha .ed-item-disc-link{font-size:11.5px;min-width:132px;text-align:left}
+.ed-min-cel{color:var(--sutil);font-variant-numeric:tabular-nums}
+.ed-min-cel.bom{color:var(--verde-txt);font-weight:600}
+.ed-min-cel.ruim{color:var(--vermelho-txt);font-weight:600}
+.ed-min-cel.anotado{font-style:italic;opacity:.8}
+.ed-item-trava{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:999px;
+  background:var(--laranja-claro);color:var(--laranja-txt);margin-left:5px;
+  vertical-align:middle}
+/* ---- nivel de dificuldade ---- */
+.dif-eco{font-size:10.5px;margin-top:3px;min-height:13px}
+.dif-selo{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;
+  border-radius:999px;margin-left:5px;vertical-align:middle;letter-spacing:.02em}
+.dif-selo.alta{background:var(--laranja-claro);color:var(--laranja-txt)}
+.dif-selo.media{background:var(--bg);color:var(--sutil)}
+.dif-selo.baixa{background:var(--verde-claro);color:var(--verde-txt)}
+.dif-selo.vencida{opacity:.55;text-decoration:line-through}
 .plog-podas{border:1px solid var(--borda);border-radius:12px;padding:12px;
   margin-bottom:16px;background:var(--bg)}
 .plog-poda-cab{margin-bottom:8px;font-size:12px}
@@ -3039,6 +3063,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="reg-atalhos" id="regAtalhos"></div></div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_humor"></span>
     <div class="reg-formas" id="regHumor"></div></div>
+  <div class="reg-lin-col"><span data-i18n="dif_pergunta"></span>
+    <span class="mat-f-dica" data-i18n="dif_pergunta_dica"></span>
+    <div class="reg-formas" id="regDificuldade"></div>
+    <div class="nota dif-eco" id="regDifEco"></div></div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_forma"></span>
     <span class="mat-f-dica" data-i18n="ed_reg_forma_dica"></span>
     <div class="reg-formas" id="regFormas"></div></div>
@@ -4470,6 +4498,7 @@ window.__sqlPromise = initSqlJs({
 <script src="rascunho.js"></script>
 <script src="pelicula.js"></script>
 <script src="geracao-log.js"></script>
+<script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>
 <script src="questoes-ui.js"></script>

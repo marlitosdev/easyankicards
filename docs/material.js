@@ -1961,7 +1961,9 @@ function matMenuFechar() {
   const box = $("matLista");
   if (!box) return;
   const varrer = (el) => {
-    (el.children || []).forEach((f) => {
+    /* Array.from: children e uma HTMLCollection, que nao tem forEach.
+     * Sem isto, TODO clique na bancada de material lancava excecao. */
+    Array.from(el.children || []).forEach((f) => {
       if (/(^| )mat-menu( |$)/.test(f.className || "")) f.hidden = true;
       varrer(f);
     });
