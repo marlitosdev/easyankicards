@@ -526,14 +526,37 @@ function montarPlano(r, opcoes) {
   const ordemDisc = [...porDisc.keys()].sort((a, b) => (fatia[b] || 0) - (fatia[a] || 0));
   const fila = [];
   let restam = true;
+  let rodada = 0;
   while (restam) {
     restam = false;
+    rodada++;
     ordemDisc.forEach((d) => {
       const lista = porDisc.get(d);
-      if (lista && lista.length) { fila.push(lista.shift()); restam = true; }
+      if (lista && lista.length) {
+        const it = lista.shift();
+        /* MARCAS DO PERCURSO, para o raio-X do plano poder explicar a
+         * posição de um item sem refazer a conta por fora — refazer por
+         * fora produz uma segunda implementação da mesma regra, e as
+         * duas divergem no primeiro ajuste. Nada aqui entra no cálculo. */
+        it.rodada = rodada;
+        /* "ordemFila", nao "ordem": a agenda do topo ja usa "ordem" para o
+         * seu proprio criterio (bruto x urgencia) e a sobrescreve ao juntar
+         * os editais. Dois campos com o mesmo nome e significados
+         * diferentes e como o raio-X passaria a mostrar o numero errado
+         * sem nenhum sinal de que mudou. */
+        it.ordemFila = fila.length + 1;
+        fila.push(it);
+        restam = true;
+      }
     });
   }
-  todos.forEach((i) => { i.porque = motivarItem(i, fatia[i.disciplina]); });
+  todos.forEach((i) => {
+    /* a fatia da disciplina no próprio item: ela já ia dentro de "porque",
+     * mas lá é uma mensagem de tela — quem precisa do NÚMERO tinha de
+     * abrir o motivo e torcer para o tipo certo ter caído */
+    i.fatiaDisc = fatia[i.disciplina] != null ? fatia[i.disciplina] : null;
+    i.porque = motivarItem(i, fatia[i.disciplina]);
+  });
   const dentro = [], fora = [];
   let semana = 1, usoSemana = 0, usado = 0;
 
@@ -1099,8 +1122,43 @@ function edParaTexto(r) {
     L.push("# " + c2.join(" | "));
   }
   if (cab.length) L.push("");
+
+  /* OS BLOCOS COM MÍNIMO TAMBÉM TÊM DE VOLTAR.
+   *
+   * Mesmo defeito da fase 2, e descoberto do mesmo jeito: escrevendo um
+   * edital de SEFAZ e mandando o texto ida e volta. As linhas "&"
+   * sumiam na primeira reescrita de rotina — colar plano corrigido,
+   * incluir disciplina — e com elas a nota mínima por bloco, que é a
+   * informação que decide ELIMINAÇÃO. Um plano que perde o mínimo passa
+   * a otimizar pontos totais num concurso onde dá para ser cortado com
+   * nota alta.
+   *
+   * Cada bloco é escrito ANTES da primeira disciplina dele, que é onde
+   * ele estava. */
+  const blocoDe = {};
+  (r.blocos || []).forEach((b) => {
+    (b.disciplinas || []).forEach((nome) => {
+      if (blocoDe[nome] === undefined) blocoDe[nome] = b;
+    });
+  });
+  let blocoAberto = null;
+
   (r.disciplinas || []).forEach((d) => {
-    L.push("@ " + d.nome + " :: " + d.peso);
+    const bl = blocoDe[d.nome];
+    if (bl && bl !== blocoAberto) {
+      blocoAberto = bl;
+      const m = bl.minimo || {};
+      const valor = m.tipo === "pct" ? m.valor + "%" : String(m.valor);
+      L.push("& " + bl.nome + (m.valor != null ? " | minimo: " + valor : ""));
+    }
+    /* O PESO EM QUESTÕES é o número real da prova; o 1..5 é derivado
+     * dele. Escrever o derivado apagava a fonte: "20q" virava "3", e a
+     * fatia da prova voltava a ser estimativa — sem nada avisando que a
+     * precisão tinha ido embora. */
+    const peso = (d.abs > 0)
+      ? (String(d.abs) + (d.unidade === "p" ? "p" : "q"))
+      : d.peso;
+    L.push("@ " + d.nome + " :: " + peso);
     d.topicos.forEach((t) => {
       /* o marcador vai no FIM do terceiro campo, como foi lido. Um tópico
        * marcado sem motivo ganha o campo só para carregar a marca. */
