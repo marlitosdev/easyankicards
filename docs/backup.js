@@ -21,8 +21,15 @@ const BK_CHAVES = {
   /* "eac_editais" é a lista nova; os dois "eac_edital_*" continuam no backup
    * porque um arquivo gerado antes da v8.68 os traz, e restaurá-lo tem de
    * reconstituir o edital único — que a migração então converte na lista. */
+  /* "eac_dificuldade" é o seu julgamento sobre cada tópico — meses de
+   * "isto eu não domino" que não se reconstituem de lugar nenhum, e que
+   * mandam na ordem da agenda. Ficar de fora do backup faria a agenda
+   * voltar ao peso puro do edital depois de restaurar, sem uma linha de
+   * aviso: exatamente como "eac_rascunhos" ficou de fora por meses.
+   * "eac_plano_snaps" é a série de instantâneos da recomendação. */
   edital: ["eac_editais", "eac_edital_atual", "eac_vinculos", "eac_cm_recibo", "eac_mat_log",
-           "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario"],
+           "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario",
+           "eac_dificuldade", "eac_plano_snaps"],
   /* as questões têm arquivo próprio (não vivem na gaveta do tópico), então
    * precisam entrar no backup por conta: sem esta linha, salvar e carregar
    * a base apagava o banco inteiro em silêncio. */

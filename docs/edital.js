@@ -300,22 +300,47 @@ function lerEdital(raw) {
  * teste consegue conferir. Misturar os dois foi o erro que deixou os
  * cartões cheios de "gabarito da questão 17".
  * ------------------------------------------------------------------ */
-function priorizar(r) {
+/* DUAS RÉGUAS, E ELAS NÃO PODEM SE MISTURAR.
+ *
+ * "bruto" é peso da disciplina × peso do tópico: quanto AQUILO VALE NA
+ * PROVA. É com ele que se mede a fatia de cada disciplina, a cobertura
+ * do edital e o cumprimento dos mínimos por bloco.
+ *
+ * "brutoOrdem" é o mesmo número multiplicado pelo quanto VOCÊ ACHA QUE
+ * NÃO SABE. É com ele que se decide o que vem primeiro.
+ *
+ * Deixar a dificuldade entrar no "bruto" seria o erro caro: marcar um
+ * tópico como difícil aumentaria o peso dele no edital, e a sua
+ * cobertura CAIRIA sem você ter desestudado nada — o painel de
+ * eliminação passaria a reagir ao seu humor em vez de ao edital. A prova
+ * não fica mais difícil porque você achou que ela é.
+ *
+ * `fatores` é um mapa "disciplina›topico" (minúsculas) → número. Quem
+ * não passa nada continua com o comportamento de sempre. */
+function priorizar(r, fatores) {
+  const fs = fatores || {};
   const itens = [];
   r.disciplinas.forEach((d) => {
     d.topicos.forEach((t) => {
+      const bruto = d.peso * t.peso;
+      const f = Number(fs[(d.nome + "›" + t.nome).toLowerCase()]);
+      const fator = isFinite(f) && f > 0 ? f : 1;
       itens.push({
         disciplina: d.nome, disciplinaPeso: d.peso,
         nome: t.nome, peso: t.peso, motivo: t.motivo, linha: t.linha,
-        bruto: d.peso * t.peso,
+        bruto,
+        fator,
+        brutoOrdem: bruto * fator,
         fase2: !!t.fase2, pesoF2: t.pesoF2 || null,
         brutoF2: t.fase2 ? d.peso * (t.pesoF2 || t.peso) : 0,
       });
     });
   });
-  const max = itens.reduce((m, i) => Math.max(m, i.bruto), 0) || 1;
-  itens.forEach((i) => { i.prioridade = Math.round((i.bruto / max) * 100); });
-  itens.sort((a, b) => b.bruto - a.bruto || a.linha - b.linha);
+  const max = itens.reduce((m, i) => Math.max(m, i.brutoOrdem), 0) || 1;
+  itens.forEach((i) => {
+    i.prioridade = Math.round((i.brutoOrdem / max) * 100);
+  });
+  itens.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
   return itens;
 }
 
@@ -443,7 +468,19 @@ function montarPlano(r, opcoes) {
     return null;
   };
 
-  let todos = priorizar(r);
+  /* OS FATORES SÃO DADOS DE FORA. Quem chamar sem passar nada continua
+   * com o comportamento de sempre; a tela passa o mapa do módulo de
+   * dificuldade, e o teste passa um mapa na mão — o motor não sabe de
+   * onde veio nem precisa saber. */
+  const fatores = o.fatores
+    || (o.fatores === null ? {} :
+        (typeof difMapaFatores === "function" ? difMapaFatores(o.hoje) : {}));
+  /* o mesmo padrão para os acertos: a tela não precisa lembrar de passar,
+   * e o teste consegue passar um mapa na mão */
+  const acertos = o.acertos || (o.acertos === null ? {} : edAcertos(
+    (typeof edDiario !== "undefined" && edDiario) || [],
+    (typeof qsBanco !== "undefined" && qsBanco) || []));
+  let todos = priorizar(r, fatores);
   /* NA SEGUNDA FASE, SÓ O QUE CAI NELA — e com o peso DELA.
    *
    * A discursiva não cobra o edital inteiro: cobra um recorte, e um
@@ -453,12 +490,18 @@ function montarPlano(r, opcoes) {
    * errada. */
   if (fase.so2) {
     todos = todos.filter((i) => i.fase2);
-    const maxF2 = todos.reduce((m, i) => Math.max(m, i.brutoF2), 0) || 1;
+    /* o máximo tem de ser da MESMA régua que o numerador, senão a
+     * prioridade de um tópico difícil passa de 100 */
+    const maxF2 = todos.reduce(
+      (m, i) => Math.max(m, i.brutoF2 * (i.fator || 1)), 0) || 1;
     todos.forEach((i) => {
       i.bruto = i.brutoF2;
-      i.prioridade = Math.round((i.brutoF2 / maxF2) * 100);
+      /* a dificuldade acompanha o tópico para a segunda fase: é o mesmo
+       * assunto e a mesma insegurança, com outro peso de prova */
+      i.brutoOrdem = i.brutoF2 * (i.fator || 1);
+      i.prioridade = Math.round((i.brutoOrdem / maxF2) * 100);
     });
-    todos.sort((a, b) => b.bruto - a.bruto || a.linha - b.linha);
+    todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
   }
   todos.forEach((i) => {
     const f = faixaDe(i.prioridade);
@@ -515,8 +558,10 @@ function montarPlano(r, opcoes) {
    * O rodízio pega, a cada rodada, o tópico mais pesado de cada disciplina
    * que ainda tem fila — a ordem por peso continua valendo DENTRO de cada
    * disciplina e entre as rodadas, mas a semana sai misturada. */
+  /* a fila ordena pelo brutoOrdem — o peso da prova JÁ multiplicado pela
+   * sua dificuldade. É o único lugar onde o seu julgamento manda. */
   const bruta = revVencidas.concat(pendentes)
-    .sort((a, b) => (b.bruto - a.bruto) || (a.ehRevisao ? -1 : 1));
+    .sort((a, b) => (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
   const porDisc = new Map();
   bruta.forEach((i) => {
     if (!porDisc.has(i.disciplina)) porDisc.set(i.disciplina, []);
@@ -524,6 +569,26 @@ function montarPlano(r, opcoes) {
   });
   /* disciplinas entram no rodízio na ordem da sua fatia da prova */
   const ordemDisc = [...porDisc.keys()].sort((a, b) => (fatia[b] || 0) - (fatia[a] || 0));
+  /* ---- TRAVA ANTI-ELIMINAÇÃO, COM TETO ----
+   *
+   * Uma disciplina de bloco com corte, cuja cobertura ou cujo acerto
+   * está abaixo da margem, ganha DUAS vagas por rodada em vez de uma.
+   *
+   * DUAS, E NÃO A FILA INTEIRA. A regra óbvia seria "fura a fila até
+   * sair do risco", e ela é uma armadilha: acerto sobe devagar, a
+   * disciplina monopolizaria o rodízio por semanas, você não estudaria
+   * o resto — e como o resto também tem corte, o remédio criaria a
+   * doença no bloco vizinho. É o mesmo defeito de concentração que a
+   * agenda tinha por acidente, agora por regra explícita.
+   *
+   * O teto também se auto-limita: se TODAS as disciplinas estiverem em
+   * risco, todas ganham duas vagas e a proporção volta a ser a de
+   * antes — que é o comportamento certo, porque nesse caso não há
+   * ninguém a quem tirar tempo. */
+  const emRisco = {};
+  edDiscEmRisco(edCumprimentoBlocos(r, todos, acertos))
+    .forEach((x) => { emRisco[x.disciplina] = x; });
+
   const fila = [];
   let restam = true;
   let rodada = 0;
@@ -531,9 +596,17 @@ function montarPlano(r, opcoes) {
     restam = false;
     rodada++;
     ordemDisc.forEach((d) => {
+      const vagas = emRisco[d] ? 2 : 1;
+      for (let v = 0; v < vagas; v++) {
       const lista = porDisc.get(d);
       if (lista && lista.length) {
         const it = lista.shift();
+        /* o item diz que veio pela trava, e por quê: ordem que muda
+         * sozinha sem explicação é ordem em que ninguém confia */
+        if (emRisco[d]) {
+          it.trava = emRisco[d].motivo;
+          it.travaBloco = emRisco[d].bloco;
+        }
         /* MARCAS DO PERCURSO, para o raio-X do plano poder explicar a
          * posição de um item sem refazer a conta por fora — refazer por
          * fora produz uma segunda implementação da mesma regra, e as
@@ -547,6 +620,7 @@ function montarPlano(r, opcoes) {
         it.ordemFila = fila.length + 1;
         fila.push(it);
         restam = true;
+      }
       }
     });
   }
@@ -600,7 +674,7 @@ function montarPlano(r, opcoes) {
     diasDesde: vencida && s ? Math.abs(s.dias) : null,
     /* CUMPRIMENTO DOS MÍNIMOS — a pergunta "posso ser eliminado?", que é
      * diferente de "quanto da prova eu cobri?" */
-    blocos: edCumprimentoBlocos(r, todos),
+    blocos: edCumprimentoBlocos(r, todos, acertos),
     /* a fatia da prova é EXATA quando o edital trouxe os números */
     fatiaExata: exata,
     /* qual fase este plano representa, e o que existe do outro lado */
@@ -665,7 +739,68 @@ function somarPeso(itens) {
  * ================================================================== */
 const ED_FOLGA_MINIMO = 1.25;   /* cobrir 25% acima do corte é o "seguro" */
 
-function edCumprimentoBlocos(r, itens) {
+/* Margem de segurança do ACERTO, em pontos percentuais acima do mínimo.
+ * Diferente da folga da cobertura porque a pergunta é outra: ali é
+ * "cobri o suficiente para poder acertar"; aqui é "estou acertando com
+ * distância bastante do corte para uma prova ruim não me eliminar". */
+const ED_MARGEM_ACERTO = 10;
+
+/* ------------------------------------------------------------------
+ * QUANTO VOCÊ ACERTA, POR DISCIPLINA
+ *
+ * Uma função só, porque duas contando a mesma coisa com regras
+ * diferentes é o defeito que mais voltou neste app. O painel de blocos,
+ * o raio-X e a trava anti-eliminação leem daqui.
+ *
+ * O QUE ENTRA: questões respondidas no app (tentativa a tentativa) e
+ * registros de estudo COM CONTAGEM ("17 de 20"). O que não entra é o
+ * percentual anotado de cabeça ("uns 85%"): ele não diz de quantas
+ * questões fala, então não tem peso para entrar numa média — e uma
+ * média em que uma parcela não tem peso não é uma média, é um chute
+ * com aparência de conta. Ele volta à parte, com o nome dele.
+ * ------------------------------------------------------------------ */
+function edAcertos(diario, banco) {
+  const por = {};
+  const pega = (d) => {
+    if (!por[d]) {
+      por[d] = { disciplina: d, feitas: 0, certas: 0, pct: null,
+                 anotados: [], pctAnotado: null, amostra: 0 };
+    }
+    return por[d];
+  };
+  (diario || []).forEach((x) => {
+    if (!x || !x.disc || x.a === "pendente" || !x.q) return;
+    const L = pega(x.disc);
+    if (x.q.feitas) { L.feitas += x.q.feitas; L.certas += x.q.certas || 0; }
+    else if (x.q.pct != null) L.anotados.push(x.q.pct);
+  });
+  (banco || []).forEach((q) => {
+    if (!q || !q.disciplina) return;
+    const L = pega(q.disciplina);
+    (q.tentativas || []).forEach((tt) => {
+      L.feitas++;
+      if (tt.acertou) L.certas++;
+    });
+  });
+  Object.keys(por).forEach((k) => {
+    const L = por[k];
+    L.pct = L.feitas ? Math.round((L.certas / L.feitas) * 100) : null;
+    L.pctAnotado = L.anotados.length
+      ? Math.round(L.anotados.reduce((a, b) => a + b, 0) / L.anotados.length)
+      : null;
+    L.amostra = L.feitas;
+    delete L.anotados;
+  });
+  return por;
+}
+
+/* AMOSTRA MÍNIMA PARA CHAMAR ALGUÉM DE RISCO.
+ * Errar 3 de 5 dá 40% e não diz nada sobre a disciplina — reorganizar a
+ * semana por causa disso seria deixar a agenda balançar ao sabor de uma
+ * tarde. Abaixo deste número o acerto é exibido e não decide. */
+const ED_AMOSTRA_MINIMA = 20;
+
+function edCumprimentoBlocos(r, itens, acertos) {
   const blocos = (r && r.blocos) || [];
   if (!blocos.length) return [];
   const porDisc = {};
@@ -703,16 +838,115 @@ function edCumprimentoBlocos(r, itens) {
     const apertado = minPct !== null && !abaixo
       && pct < Math.min(100, minPct * ED_FOLGA_MINIMO);
 
+    /* ---- AS DISCIPLINAS DO BLOCO, uma linha cada ----
+     *
+     * O bloco em risco dizia "há risco" e não dizia DE QUÊ. Com 4
+     * disciplinas dentro, saber que o bloco está a 54% não diz onde
+     * estudar — e a pessoa volta a olhar só o peso, que é o hábito que
+     * o painel existe para corrigir.
+     *
+     * DOIS NÚMEROS QUE NÃO SE MISTURAM. "cobertura" é quanto do peso
+     * daquela disciplina você já estudou; "acerto" é quanto você acerta
+     * quando responde. O mínimo do edital é de ACERTO. O app mede os
+     * dois e nunca os soma: cobrir 100% e acertar 40% é uma situação
+     * real, e a média dos dois (70%) descreveria alguém que não existe. */
+    const ac = acertos || {};
+    const linhas = nomes.map((nome) => {
+      const dela = meus.filter((i) => i.disciplina === nome);
+      const tt = dela.reduce((a, i) => a + i.bruto, 0);
+      const ft = dela.filter((i) => i.feito).reduce((a, i) => a + i.bruto, 0);
+      const a = ac[nome] || {};
+      const amostra = a.amostra || 0;
+      const acerto = amostra >= ED_AMOSTRA_MINIMA ? a.pct : null;
+      const seguro = minPct === null || acerto === null
+        ? null : acerto >= minPct + ED_MARGEM_ACERTO;
+      return {
+        nome,
+        topicos: dela.length,
+        feitos: dela.filter((i) => i.feito).length,
+        cobertura: tt ? Math.round((ft / tt) * 100) : 0,
+        peso: tt,
+        /* nulo quando não há amostra que sustente o número — e nulo é
+         * uma resposta, não um zero */
+        acerto,
+        acertoAmostra: amostra,
+        /* o percentual que você anotou de cabeça, sempre à parte */
+        acertoAnotado: a.pctAnotado == null ? null : a.pctAnotado,
+        /* abaixo do corte, ou dentro da margem, ou seguro */
+        acertoAbaixo: acerto !== null && minPct !== null && acerto < minPct,
+        acertoApertado: acerto !== null && minPct !== null
+          && acerto >= minPct && acerto < minPct + ED_MARGEM_ACERTO,
+        seguro,
+      };
+    }).sort((a, b) => {
+      /* pior primeiro: é a ordem de quem procura onde pode ser cortado */
+      const risco = (x) => (x.acertoAbaixo ? 2 : (x.acertoApertado ? 1 : 0));
+      return risco(b) - risco(a) || a.cobertura - b.cobertura;
+    });
+
+    /* O ACERTO DO BLOCO INTEIRO, ponderado pelo tamanho da amostra de
+     * cada disciplina — não pela média das médias, que daria a uma
+     * disciplina de 5 questões o mesmo voto de uma de 500. */
+    let bFeitas = 0, bCertas = 0;
+    nomes.forEach((nome) => {
+      const a = ac[nome] || {};
+      bFeitas += a.feitas || 0;
+      bCertas += a.certas || 0;
+    });
+    const acertoBloco = bFeitas >= ED_AMOSTRA_MINIMA
+      ? Math.round((bCertas / bFeitas) * 100) : null;
+
     return {
       nome: b.nome, minimo: b.minimo, minPct, fatia,
       disciplinas: nomes, topicos: meus.length,
       feitos: meus.filter((i) => i.feito).length,
       total, feito, pct, abaixo, apertado,
+      linhas,
+      acerto: acertoBloco,
+      acertoAmostra: bFeitas,
+      /* a meta que dá margem: o corte mais 10 pontos */
+      metaAcerto: minPct === null ? null
+        : Math.min(100, minPct + ED_MARGEM_ACERTO),
+      acertoAbaixo: acertoBloco !== null && minPct !== null
+        && acertoBloco < minPct,
+      acertoApertado: acertoBloco !== null && minPct !== null
+        && acertoBloco >= minPct && acertoBloco < minPct + ED_MARGEM_ACERTO,
       /* quanto falta cobrir para sair do vermelho, em PESO — é o número
        * que responde "e agora, quanto eu estudo disto?" */
       faltaPeso: abaixo ? Math.max(0, (minPct / 100) * total - feito) : 0,
     };
   });
+}
+
+/* QUEM ESTÁ EM RISCO DE CORTE.
+ *
+ * Só disciplinas de bloco COM mínimo declarado: sem corte no edital não
+ * há eliminação por bloco, e tratar todo mundo como risco tornaria a
+ * trava inútil por excesso.
+ *
+ * Dois gatilhos, e o motivo de cada um fica registrado:
+ *  · cobertura abaixo do mínimo — você não estudou o bastante para
+ *    poder acertar o corte, e isso não depende de medir acerto nenhum;
+ *  · acerto abaixo do mínimo + margem — você está respondendo perto
+ *    demais da linha, com amostra que sustente o número.
+ *
+ * A cobertura entra porque ela existe desde o primeiro dia; o acerto,
+ * só quando há questões suficientes. Esperar pelo acerto deixaria a
+ * trava dormindo justamente nos meses em que ela mais serve. */
+function edDiscEmRisco(blocos) {
+  const fora = [];
+  (blocos || []).forEach((b) => {
+    if (b.minPct === null || b.minPct === undefined) return;
+    (b.linhas || []).forEach((L) => {
+      const motivos = [];
+      if (L.cobertura < b.minPct) motivos.push("cobertura");
+      if (L.acertoAbaixo || L.acertoApertado) motivos.push("acerto");
+      if (!motivos.length) return;
+      fora.push({ disciplina: L.nome, bloco: b.nome, motivo: motivos.join("+"),
+                  minPct: b.minPct, cobertura: L.cobertura, acerto: L.acerto });
+    });
+  });
+  return fora;
 }
 
 /* ------------------------------------------------------------------

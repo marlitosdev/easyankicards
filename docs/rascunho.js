@@ -316,7 +316,9 @@ function rsModoTrocar(qual) {
   ["rs-grupo-esq", "rs-grupo-centro"].forEach((cls) => {
     const g = $("rsFerramentas");
     if (!g) return;
-    (g.children || []).forEach((f) => {
+    /* mesma armadilha: HTMLCollection nao tem forEach, e trocar para o
+     * teclado lancava excecao no meio da repintura da barra */
+    Array.from(g.children || []).forEach((f) => {
       if (new RegExp("(^| )" + cls + "( |$)").test(f.className || "")) {
         f.hidden = rsModo !== "caneta";
       }
