@@ -1448,6 +1448,142 @@ function edParaTexto(r) {
  * Esta função não decide nada. Ela lista o que vai mudar, separando o que
  * é ajuste do que é perda.
  * ===================================================================== */
+/* TRAZER DE VOLTA O QUE NÃO TEM HERDEIRO.
+ *
+ * Conserto mecânico, e só mecânico: cada tópico sem herdeiro volta para
+ * a SUA disciplina, com o peso e o motivo que tinha. Não há juízo aqui —
+ * decidir se um tópico merece existir é da pessoa ou da IA; recolocar uma
+ * linha que se perdeu numa reescrita é aritmética de texto.
+ *
+ * Volta no FIM da disciplina, não na posição original: a ordem do texto
+ * não é a ordem do estudo (quem ordena é o peso), e tentar adivinhar o
+ * lugar certo produziria uma inserção errada com cara de acerto. No fim,
+ * fica visível que aquilo foi recolocado. */
+function edRecolocarPerdidos(txtNovo, perdidos, txtAntigo) {
+  const faltam = (perdidos || []).filter((x) => x && x.semHerdeiro);
+  if (!faltam.length) return { texto: txtNovo, postos: 0, semDisciplina: [] };
+
+  /* o peso e o motivo originais, para a linha voltar inteira */
+  const A = lerEdital(txtAntigo || "");
+  const orig = {};
+  A.disciplinas.forEach((d) => d.topicos.forEach((tp) => {
+    orig[(d.nome + "›" + tp.nome).toLowerCase()] = tp;
+  }));
+
+  const porDisc = {};
+  const semDisciplina = [];
+  faltam.forEach((x) => { (porDisc[x.d] = porDisc[x.d] || []).push(x); });
+
+  const linhas = String(txtNovo || "").split(/\r?\n/);
+  const saida = [];
+  let discAtual = "";
+  let postos = 0;
+  const despejar = () => {
+    if (!discAtual || !porDisc[discAtual]) return;
+    porDisc[discAtual].forEach((x) => {
+      const tp = orig[(x.d + "›" + x.t).toLowerCase()] || {};
+      const peso = tp.peso == null ? 3 : tp.peso;
+      const motivo = String(tp.motivo || "").trim();
+      saida.push("+ " + x.t + " :: " + peso + (motivo ? " :: " + motivo : ""));
+      postos++;
+    });
+    delete porDisc[discAtual];
+  };
+  linhas.forEach((l) => {
+    const eDisc = /^\s*@/.test(l);
+    const eBloco = /^\s*&/.test(l);
+    /* o despejo acontece ANTES da próxima disciplina ou bloco: pôr
+     * depois jogaria o tópico na disciplina errada, que é exatamente o
+     * tipo de erro silencioso que este conserto existe para evitar */
+    if (eDisc || eBloco) despejar();
+    if (eDisc) {
+      const m = l.match(/^\s*@\s*(.+)$/);
+      const nome = m ? m[1].split("::")[0].trim() : "";
+      discAtual = nome;
+    }
+    saida.push(l);
+  });
+  despejar();
+
+  /* disciplina que não existe mais no texto novo: o tópico não tem onde
+   * voltar, e inventar a disciplina seria decidir por quem cola */
+  Object.keys(porDisc).forEach((d) => {
+    porDisc[d].forEach((x) => semDisciplina.push(x));
+  });
+
+  return { texto: saida.join("\n"), postos, semDisciplina };
+}
+
+/* ------------------------------------------------------------------
+ * QUEM HERDOU O TÓPICO QUE SUMIU
+ *
+ * A conferência compara nomes exatos. Isso torna INVISÍVEL a diferença
+ * entre as duas coisas mais diferentes que podem acontecer numa revisão
+ * de plano:
+ *
+ *   · "Cassação, anulação, revogação e convalidação" virou quatro linhas
+ *     — nada se perdeu, ao contrário: agora dá para pesar cada uma;
+ *   · "Improbidade administrativa" simplesmente não está mais lá.
+ *
+ * As duas apareciam como "some", e a tela dizia só o número. Diante de
+ * "107 tópicos somem" não há decisão possível: aceitar arrisca perder
+ * conteúdo, recusar joga fora uma revisão inteira. O número sem a lista
+ * transforma uma conferência em um impasse.
+ *
+ * Aqui cada sumiço procura um HERDEIRO na mesma disciplina, por três
+ * regras, da mais forte para a mais fraca. Nenhuma delas decide nada —
+ * o app continua só mostrando, e quem escolhe é quem estudou.
+ * ------------------------------------------------------------------ */
+function edNormalizar(s) {
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/* palavras curtas e de ligação não contam para a semelhança: duas linhas
+ * que só compartilham "de", "da" e "e" não têm nada em comum */
+const ED_VAZIAS = new Set(["a", "as", "o", "os", "um", "uma", "de", "do", "da",
+  "dos", "das", "em", "no", "na", "nos", "nas", "ao", "aos", "e", "ou", "que",
+  "se", "por", "pelo", "pela", "para", "com", "sem", "seus", "suas", "sua"]);
+
+function edPalavras(s) {
+  return edNormalizar(s).split(" ")
+    .filter((w) => w.length > 2 && !ED_VAZIAS.has(w));
+}
+
+function edHerdeirosDe(nomeAntigo, candidatos) {
+  const velho = edNormalizar(nomeAntigo);
+  const pv = edPalavras(nomeAntigo);
+  const achados = [];
+  (candidatos || []).forEach((novo) => {
+    const n = edNormalizar(novo);
+    if (!n || !velho) return;
+    /* 1. O NOVO COMEÇA COM O VELHO. "Conceito" → "Conceito de agente
+     *    público": é o caso de quem desambiguou um nome genérico. */
+    if (n.indexOf(velho + " ") === 0) {
+      achados.push({ nome: novo, como: "prefixo", forca: 3 });
+      return;
+    }
+    /* 2. O VELHO CONTÉM O NOVO. "Cassação, anulação, revogação e
+     *    convalidação" → "Cassação": é a divisão de uma linha composta,
+     *    o caso mais comum numa revisão. */
+    if ((" " + velho + " ").indexOf(" " + n + " ") >= 0) {
+      achados.push({ nome: novo, como: "parte", forca: 3 });
+      return;
+    }
+    /* 3. PALAVRAS EM COMUM, para renomeações que não encaixam nas duas
+     *    anteriores ("Patrimônio: componentes..." → "Componentes do
+     *    patrimônio e equação fundamental"). Metade das palavras
+     *    significativas é o limiar: abaixo disso vira coincidência. */
+    if (!pv.length) return;
+    const pn = new Set(edPalavras(novo));
+    const juntas = pv.filter((w) => pn.has(w)).length;
+    if (juntas / pv.length >= 0.5) {
+      achados.push({ nome: novo, como: "parecido", forca: juntas / pv.length });
+    }
+  });
+  return achados.sort((a, b) => b.forca - a.forca).slice(0, 3);
+}
+
 function edCompararColagem(txtAntes, txtDepois, progresso) {
   const A = lerEdital(txtAntes || "");
   const D = lerEdital(txtDepois || "");
@@ -1463,6 +1599,26 @@ function edCompararColagem(txtAntes, txtDepois, progresso) {
 
   const somem = Object.keys(kA).filter((k) => !(k in kD));
   const surgem = Object.keys(kD).filter((k) => !(k in kA));
+
+  /* CADA SUMIÇO PROCURA UM HERDEIRO, só entre os que SURGIRAM na mesma
+   * disciplina: comparar com o plano novo inteiro acharia "herdeiro" em
+   * tópicos que já existiam antes e não têm relação nenhuma com este. */
+  const novosPorDisc = {};
+  surgem.forEach((k) => {
+    const x = kD[k];
+    (novosPorDisc[x.d] = novosPorDisc[x.d] || []).push(x.t);
+  });
+  const somemDetalhe = somem.map((k) => {
+    const x = kA[k];
+    const herdeiros = edHerdeirosDe(x.t, novosPorDisc[x.d] || []);
+    return { d: x.d, t: x.t, herdeiros,
+             /* "orfao" aqui é no sentido de sem herdeiro — diferente do
+              * "orfaos" abaixo, que é progresso marcado sem dono */
+             semHerdeiro: herdeiros.length === 0,
+             marcado: !!prog[k] };
+  });
+  const semHerdeiro = somemDetalhe.filter((x) => x.semHerdeiro);
+  const herdados = somemDetalhe.filter((x) => !x.semHerdeiro);
 
   /* a linha que importa: progresso marcado que deixa de ter dono */
   const orfaos = somem.filter((k) => prog[k]).map((k) => kA[k]);
@@ -1486,6 +1642,12 @@ function edCompararColagem(txtAntes, txtDepois, progresso) {
     discDepois: D.disciplinas.length,
     somem: somem.map((k) => kA[k]),
     surgem: surgem.map((k) => kD[k]),
+    /* a lista inteira, com o provável destino de cada um */
+    somemDetalhe,
+    /* os dois grupos que a tela precisa separar: o que virou outra coisa
+     * e o que não tem para onde ter ido */
+    herdados,
+    semHerdeiro,
     orfaos,
     pesosMudam,
     discSomem,

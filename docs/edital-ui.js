@@ -2537,11 +2537,120 @@ function edConferirColagem() {
     }), "aviso");
   if (c.somem.length && !c.orfaos.length)
     linha(t("ed_colar_somem", { n: c.somem.length }), "aviso");
+  edColarPintarLista(c);
   if (c.ignoradas) linha(t("ed_colar_ignoradas", { n: c.ignoradas }), "aviso");
   if (!c.orfaos.length && !c.discSomem.length && !c.pesosMudam.length && !c.somem.length)
     linha(t("ed_colar_sem_perda"), "ok");
 
   return Object.assign(c, { novoTxt });
+}
+
+/* ------------------------------------------------------------------
+ * A LISTA DO QUE SOME — separada em duas, porque são duas coisas.
+ *
+ * "107 tópicos somem" não é uma informação sobre a qual se possa
+ * decidir: aceitar arrisca perder conteúdo, recusar joga fora a revisão
+ * inteira. E as duas causas são opostas — dividir uma linha em quatro
+ * FAZ o nome antigo sumir, e não perdeu nada.
+ * ------------------------------------------------------------------ */
+function edColarPintarLista(c) {
+  const cx = $("edColarListaCx");
+  const box = $("edColarLista");
+  if (!cx || !box) return;
+  const det = (c && c.somemDetalhe) || [];
+  cx.hidden = !det.length;
+  const bRec = $("btnEdColarRecolocar");
+  const bPro = $("btnEdColarPrompt");
+  const perdidos = (c && c.semHerdeiro) || [];
+  if (bRec) {
+    bRec.hidden = !perdidos.length;
+    bRec.textContent = t("ed_colar_recolocar", { n: perdidos.length });
+  }
+  if (bPro) bPro.hidden = !perdidos.length;
+  if (!det.length) { box.innerHTML = ""; return; }
+
+  const tit = $("edColarListaTit");
+  if (tit) {
+    tit.textContent = t("ed_colar_lista_tit", {
+      n: det.length, h: (c.herdados || []).length, p: perdidos.length });
+  }
+
+  box.innerHTML = "";
+  const grupo = (rotulo, itens, perdido) => {
+    if (!itens.length) return;
+    const g = document.createElement("div");
+    g.className = "ed-colar-grupo";
+    g.textContent = rotulo + " (" + itens.length + ")";
+    box.append(g);
+    itens.forEach((x) => {
+      const li = document.createElement("div");
+      li.className = "ed-colar-item" + (perdido ? " perdido" : "");
+      const de = document.createElement("span");
+      de.className = "de";
+      de.textContent = x.d + " › " + x.t;
+      li.append(de);
+      /* MARCADO COMO ESTUDADO é o que dói: some a linha e some junto a
+       * prova de que você já passou por ela */
+      if (x.marcado) {
+        const m = document.createElement("span");
+        m.className = "marca";
+        m.textContent = t("ed_colar_marcado");
+        li.append(m);
+      }
+      if (!perdido && x.herdeiros.length) {
+        const v = document.createElement("span");
+        v.className = "virou";
+        v.textContent = t("ed_colar_virou", {
+          l: x.herdeiros.map((h) => h.nome).join(" · ") });
+        li.append(v);
+      }
+      box.append(li);
+    });
+  };
+  /* o que não tem para onde ter ido vem PRIMEIRO: é a lista sobre a qual
+   * se decide, e enterrá-la depois de noventa divisões legítimas seria
+   * escondê-la com aparência de completude */
+  grupo(t("ed_colar_g_perdidos"), perdidos, true);
+  grupo(t("ed_colar_g_herdados"), (c.herdados || []), false);
+}
+
+function edColarTextoDaLista(c) {
+  const L = [];
+  ((c && c.semHerdeiro) || []).forEach((x) => {
+    L.push("@ " + x.d + "  >  " + x.t);
+  });
+  return L.join("\n");
+}
+
+/* O CONSERTO MECÂNICO: devolve ao texto colado, na disciplina certa,
+ * cada tópico que sumiu sem herdeiro — com o peso e o motivo originais. */
+function edColarRecolocar() {
+  const c = edConferirColagem();
+  if (!c || !(c.semHerdeiro || []).length) return;
+  const r = edRecolocarPerdidos(c.novoTxt, c.semHerdeiro, $("editalTexto").value);
+  $("edColarTexto").value = r.texto;
+  /* reconfere na hora: o número que a pessoa vê tem de ser o do texto
+   * que está na caixa agora, não o de antes do conserto */
+  edConferirColagem();
+  const avisos = [t("ed_colar_recolocou", { n: r.postos })];
+  if (r.semDisciplina.length) {
+    avisos.push(t("ed_colar_recolocou_nao", {
+      n: r.semDisciplina.length,
+      l: r.semDisciplina.slice(0, 3).map((x) => x.d + " › " + x.t).join(", ") }));
+  }
+  uiAlert(avisos.join("\n\n"));
+  reg("EDITAL-COLAR", "topicos sem herdeiro devolvidos ao texto",
+      r.postos + " recolocados, " + r.semDisciplina.length + " sem disciplina");
+}
+
+function edColarPrompt() {
+  const c = edConferirColagem();
+  if (!c) return;
+  const lista = edColarTextoDaLista(c);
+  if (!lista) return;
+  const txt = t("ed_colar_prompt_txt", {
+    n: (c.semHerdeiro || []).length, l: lista });
+  copiar(txt, t("ed_colar_prompt_copiado"));
 }
 
 async function edAplicarColagem() {
@@ -2838,6 +2947,17 @@ function edIniciar() {
   $("edColarTexto").addEventListener("input", edConferirColagem);
   $("btnEdColarAplicar").onclick = edAplicarColagem;
   $("btnEdColarFechar").onclick = () => $("dlgEdColar").close();
+  if ($("btnEdColarRecolocar")) $("btnEdColarRecolocar").onclick = edColarRecolocar;
+  if ($("btnEdColarPrompt")) $("btnEdColarPrompt").onclick = edColarPrompt;
+  if ($("btnEdColarCopiarLista")) $("btnEdColarCopiarLista").onclick = () => {
+    const c = edConferirColagem();
+    if (!c) return;
+    const L = [];
+    (c.semHerdeiro || []).forEach((x) => L.push("SEM CORRESPONDENCIA  " + x.d + " > " + x.t));
+    (c.herdados || []).forEach((x) => L.push("virou outro nome      " + x.d + " > " + x.t
+      + "  ->  " + x.herdeiros.map((h) => h.nome).join(" · ")));
+    copiar(L.join("\n"), t("diag_copiado"));
+  };
   $("btnEditalCorrigir").onclick = () => {
     if (edCorrecaoPendente) edAplicar(edCorrecaoPendente);
   };

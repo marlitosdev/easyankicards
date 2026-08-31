@@ -1801,6 +1801,21 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .plog-aviso{background:var(--laranja-claro);border:1px solid var(--laranja-borda);
   border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}
 .plog-aviso b{color:var(--laranja-txt)}
+/* ---- lista do que some ao colar ---- */
+.ed-colar-lista{border:1px solid var(--borda);border-radius:10px;margin:9px 0 0;
+  padding:9px 11px;background:var(--bg);max-height:230px;overflow:auto}
+.ed-colar-lista-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:6px;font-size:11.5px;position:sticky;top:-9px;
+  background:var(--bg);padding:2px 0}
+.ed-colar-grupo{font-size:10.5px;font-weight:800;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--sutil);margin:8px 0 3px}
+.ed-colar-item{font-size:11.5px;padding:3px 0;border-top:1px solid var(--borda)}
+.ed-colar-item .de{color:var(--texto)}
+.ed-colar-item .virou{color:var(--sutil);display:block;padding-left:13px}
+.ed-colar-item.perdido .de{color:var(--vermelho-txt);font-weight:600}
+.ed-colar-item .marca{font-size:9.5px;font-weight:700;padding:1px 6px;
+  border-radius:999px;background:var(--laranja-claro);color:var(--laranja-txt);
+  margin-left:6px}
 .ed-min-acerto{font-size:11.5px;margin-top:5px;padding:5px 8px;border-radius:8px;
   background:var(--bg);color:var(--sutil)}
 .ed-min-acerto.abaixo{background:var(--laranja-claro);color:var(--laranja-txt);font-weight:600}
@@ -4312,8 +4327,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <textarea id="edColarTexto" rows="12" style="width:100%;box-sizing:border-box"
             placeholder="# Concurso | prova: 2026-08-30 | horas: 12&#10;@ Disciplina :: 5&#10;+ Tópico :: 4 :: motivo"></textarea>
   <div id="edColarAviso" class="ed-nao-cabe" hidden></div>
+  <div id="edColarListaCx" class="ed-colar-lista" hidden>
+    <div class="ed-colar-lista-cab">
+      <b id="edColarListaTit"></b>
+      <button class="btn-min" id="btnEdColarCopiarLista" data-i18n="ed_colar_copiar_lista"
+        title="Copia a lista inteira em texto, para conferir fora do aplicativo."></button>
+    </div>
+    <div id="edColarLista"></div>
+  </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnEdColarAplicar" data-i18n="ed_colar_aplicar"></button>
+    <button class="btn" id="btnEdColarRecolocar" data-i18n="ed_colar_recolocar" hidden
+      title="Devolve ao texto colado, na disciplina de origem, cada topico que sumiu sem deixar herdeiro — com o peso e o motivo que tinha."></button>
+    <button class="btn btn-cinza" id="btnEdColarPrompt" data-i18n="ed_colar_prompt" hidden
+      title="Copia um pedido para a IA reincluir os topicos que sumiram, nomeando cada um."></button>
     <button class="btn btn-cinza" id="btnEdColarFechar" data-i18n="help_close"></button>
   </div>
 </dialog>

@@ -1032,6 +1032,18 @@ const UI = {
   "plog_nunca_txt": "diário de estudo, progresso, editais, resumos, cartões, questões e as tentativas. O diário é a única prova do que você estudou, e as tentativas são o sinal de dificuldade que falta ao plano — apagá-los para ganhar espaço venderia justamente o que este painel existe para mostrar.",
   /* ---- dificuldade declarada ---- */
   /* ---- blocos: cobertura e acerto, separados ---- */
+  "ed_colar_copiar_lista": "Copiar a lista",
+  "ed_colar_recolocar": "Trazer de volta os {n} sem herdeiro",
+  "ed_colar_prompt": "Prompt para a IA reincluir",
+  "ed_colar_lista_tit": "{n} tópico(s) somem — {h} viraram outro nome, {p} sem correspondência",
+  "ed_colar_g_perdidos": "Sem correspondência no plano novo",
+  "ed_colar_g_herdados": "Provavelmente divididos ou renomeados",
+  "ed_colar_virou": "virou: {l}",
+  "ed_colar_marcado": "estudado",
+  "ed_colar_recolocou": "{n} tópico(s) devolvidos ao texto. Confira e aplique.",
+  "ed_colar_recolocou_nao": "{n} não tinham disciplina no texto novo e não voltaram: {l}",
+  "ed_colar_prompt_copiado": "Pedido copiado. Cole na IA junto com o plano.",
+  "ed_colar_prompt_txt": "No plano corrigido que você devolveu, {n} tópico(s) do plano original sumiram sem deixar nenhum tópico correspondente. Reinclua CADA UM deles, na disciplina indicada, mantendo o formato \"+ tópico :: peso :: motivo\". Não altere o resto do plano. Se algum deles for irrelevante, mantenha-o com peso 1 e diga o motivo — perder tópico é pior que devolver uma lista longa.\n\nOs que faltam:\n{l}",
   "ed_min_acerto": "Acerto medido: {a}% em {n} questões — o corte é {m}% e a margem de segurança, {meta}%.",
   "ed_min_sem_acerto": "Sem acerto medido: são precisas ao menos {n} questões respondidas para o percentual dizer alguma coisa.",
   "ed_min_l_cob": "cobertura {c}%",
