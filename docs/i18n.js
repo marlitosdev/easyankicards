@@ -1032,6 +1032,14 @@ const UI = {
   "plog_nunca_txt": "diário de estudo, progresso, editais, resumos, cartões, questões e as tentativas. O diário é a única prova do que você estudou, e as tentativas são o sinal de dificuldade que falta ao plano — apagá-los para ganhar espaço venderia justamente o que este painel existe para mostrar.",
   /* ---- dificuldade declarada ---- */
   /* ---- blocos: cobertura e acerto, separados ---- */
+  "ed_colar_antes": "Antes de decidir — nada aqui altera o seu plano",
+  "ed_colar_recolocar_exp": "Devolve ao texto acima, na disciplina de origem, cada tópico sem correspondência — com o peso e o motivo que tinha. Só mexe na caixa de texto.",
+  "ed_colar_prompt_exp": "Copia um pedido nomeando os tópicos sem correspondência, para você mandar a IA reincluí-los e colar a resposta de novo.",
+  "ed_colar_copiar_exp": "Copia a lista inteira em texto — o que sumiu, o que virou outro nome — para conferir fora do aplicativo.",
+  "ed_colar_aplicar_exp": "Substituir troca o plano inteiro pelo texto acima. A versão de agora vai para o histórico e dá para voltar.",
+  "ed_colar_conf_recolocar": "Devolver {n} tópico(s) ao texto colado?\n\nCada um volta para a disciplina de origem, no fim dela, com o peso e o motivo originais. Isto muda só a caixa de texto — o seu plano continua como está até você apertar Substituir.",
+  "ed_colar_conf_prompt": "Copiar o pedido para a IA?\n\nEle nomeia os {n} tópico(s) sem correspondência e pede a reinclusão. Você vai precisar colar o pedido junto com o plano e trazer a resposta de volta para cá.",
+  "ed_colar_conf_copiar": "Copiar a lista de {n} tópico(s)?\n\nVai para a área de transferência em texto simples, separando os que não têm correspondência dos que viraram outro nome.",
   "ed_colar_copiar_lista": "Copiar a lista",
   "ed_colar_recolocar": "Trazer de volta os {n} sem herdeiro",
   "ed_colar_prompt": "Prompt para a IA reincluir",

@@ -1545,9 +1545,26 @@ const ED_VAZIAS = new Set(["a", "as", "o", "os", "um", "uma", "de", "do", "da",
   "dos", "das", "em", "no", "na", "nos", "nas", "ao", "aos", "e", "ou", "que",
   "se", "por", "pelo", "pela", "para", "com", "sem", "seus", "suas", "sua"]);
 
+/* PLURAL NÃO É OUTRA PALAVRA. "Taxas de juros nominal, efetiva..." virou
+ * "Taxa de juros nominal", e sem tirar o "s" final as duas não têm
+ * palavra nenhuma em comum na cabeça da frase. Corte grosseiro de
+ * propósito: aqui basta aproximar, e um radicalizador de verdade erraria
+ * em nomes próprios e siglas. */
+function edRadical(w) {
+  return w.length > 4 && /s$/.test(w) ? w.slice(0, -1) : w;
+}
+
 function edPalavras(s) {
   return edNormalizar(s).split(" ")
-    .filter((w) => w.length > 2 && !ED_VAZIAS.has(w));
+    .filter((w) => w.length > 2 && !ED_VAZIAS.has(w))
+    .map(edRadical);
+}
+
+/* As PARTES de um nome composto. "Concessão, permissão e autorização"
+ * são três itens de uma lista, e é como lista que a revisão os trata. */
+function edPartesDoNome(s) {
+  return edNormalizar(s).split(/,| e | ou |;|:/)
+    .map((x) => x.trim()).filter(Boolean);
 }
 
 function edHerdeirosDe(nomeAntigo, candidatos) {
@@ -1570,13 +1587,45 @@ function edHerdeirosDe(nomeAntigo, candidatos) {
       achados.push({ nome: novo, como: "parte", forca: 3 });
       return;
     }
-    /* 3. PALAVRAS EM COMUM, para renomeações que não encaixam nas duas
-     *    anteriores ("Patrimônio: componentes..." → "Componentes do
-     *    patrimônio e equação fundamental"). Metade das palavras
-     *    significativas é o limiar: abaixo disso vira coincidência. */
     if (!pv.length) return;
-    const pn = new Set(edPalavras(novo));
+    const pnLista = edPalavras(novo);
+    const pn = new Set(pnLista);
+    const svelho = new Set(pv);
     const juntas = pv.filter((w) => pn.has(w)).length;
+
+    /* 3. O NOVO CABE DENTRO DO VELHO.
+     *
+     * Esta é a medida que faltava, e a que estava invertida. Contar
+     * quanto do VELHO aparece no novo mede RENOMEAÇÃO; um pedaço de uma
+     * lista de sete itens cobre um sétimo do nome antigo e some da
+     * conta. O que identifica uma divisão é o contrário: quase toda
+     * palavra do pedaço já estava no todo.
+     *
+     * "Taxa de juros nominal" tem três palavras, e as três estão em
+     * "Taxas de juros nominal, efetiva, equivalente, real e aparente". */
+    const dentro = pnLista.length
+      ? pnLista.filter((w) => svelho.has(w)).length / pnLista.length : 0;
+    if (dentro >= 0.5) {
+      achados.push({ nome: novo, como: "parte", forca: 2 + dentro });
+      return;
+    }
+
+    /* 4. O NOVO COMEÇA POR UM ITEM DA LISTA VELHA.
+     *
+     * "Concessão, permissão e autorização" virou "Concessão de serviço
+     * público": só uma das três palavras do novo estava no velho, e
+     * mesmo assim é claramente o mesmo assunto — porque a palavra é a
+     * CABEÇA da frase e era um item da lista. */
+    const cabeca = pnLista[0];
+    if (cabeca && edPartesDoNome(nomeAntigo)
+        .some((parte) => edPalavras(parte).indexOf(cabeca) === 0)) {
+      achados.push({ nome: novo, como: "item", forca: 1.5 });
+      return;
+    }
+
+    /* 5. PALAVRAS EM COMUM, para renomeações que não encaixam em nenhuma
+     *    das anteriores. Metade das palavras do NOME ANTIGO é o limiar:
+     *    abaixo disso vira coincidência. */
     if (juntas / pv.length >= 0.5) {
       achados.push({ nome: novo, como: "parecido", forca: juntas / pv.length });
     }

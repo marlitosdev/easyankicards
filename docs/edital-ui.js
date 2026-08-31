@@ -2562,11 +2562,18 @@ function edColarPintarLista(c) {
   const bRec = $("btnEdColarRecolocar");
   const bPro = $("btnEdColarPrompt");
   const perdidos = (c && c.semHerdeiro) || [];
+  /* A FAIXA INTEIRA aparece com a lista: as três ações só fazem sentido
+   * quando há algo que sumiu para conferir. */
+  const faixa = $("edColarAcoes");
+  if (faixa) faixa.hidden = !det.length;
   if (bRec) {
     bRec.hidden = !perdidos.length;
     bRec.textContent = t("ed_colar_recolocar", { n: perdidos.length });
   }
   if (bPro) bPro.hidden = !perdidos.length;
+  /* copiar a lista serve mesmo quando tudo tem herdeiro: é a conferência */
+  const bCop = $("btnEdColarCopiarLista");
+  if (bCop) bCop.hidden = !det.length;
   if (!det.length) { box.innerHTML = ""; return; }
 
   const tit = $("edColarListaTit");
@@ -2624,9 +2631,14 @@ function edColarTextoDaLista(c) {
 
 /* O CONSERTO MECÂNICO: devolve ao texto colado, na disciplina certa,
  * cada tópico que sumiu sem herdeiro — com o peso e o motivo originais. */
-function edColarRecolocar() {
+async function edColarRecolocar() {
   const c = edConferirColagem();
   if (!c || !(c.semHerdeiro || []).length) return;
+  /* SEGUNDA CONFIRMAÇÃO. O botão mexe no texto que a pessoa colou, e
+   * mexer no texto de outra pessoa sem avisar é o tipo de ajuda que
+   * ninguém pediu. A frase diz o que muda E o que NÃO muda. */
+  if (!(await uiConfirm(t("ed_colar_conf_recolocar",
+      { n: c.semHerdeiro.length })))) return;
   const r = edRecolocarPerdidos(c.novoTxt, c.semHerdeiro, $("editalTexto").value);
   $("edColarTexto").value = r.texto;
   /* reconfere na hora: o número que a pessoa vê tem de ser o do texto
@@ -2643,14 +2655,62 @@ function edColarRecolocar() {
       r.postos + " recolocados, " + r.semDisciplina.length + " sem disciplina");
 }
 
-function edColarPrompt() {
+/* COPIAR DE VERDADE.
+ * A primeira versão chamava copiar(), que não existe neste app — o
+ * botão falhava calado, que é o pior modo de falhar: parece que copiou.
+ * Aqui a promessa só é feita depois que o navegador confirma. */
+function edColarCopiarTexto(txt, aviso, btn) {
+  if (!txt) return Promise.resolve(false);
+  const ok = () => {
+    if (btn) {
+      const antes = btn.textContent;
+      btn.textContent = "✓ " + t("diag_copiado");
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = antes; btn.disabled = false; }, 1800);
+    }
+    if (aviso) uiAlert(aviso);
+    return true;
+  };
+  try {
+    return navigator.clipboard.writeText(txt).then(ok, () => {
+      uiAlert(t("toast_copy_fail"));
+      return false;
+    });
+  } catch (e) {
+    uiAlert(t("toast_copy_fail"));
+    return Promise.resolve(false);
+  }
+}
+
+async function edColarPrompt() {
   const c = edConferirColagem();
   if (!c) return;
   const lista = edColarTextoDaLista(c);
   if (!lista) return;
-  const txt = t("ed_colar_prompt_txt", {
-    n: (c.semHerdeiro || []).length, l: lista });
-  copiar(txt, t("ed_colar_prompt_copiado"));
+  const n = (c.semHerdeiro || []).length;
+  /* SEGUNDA CONFIRMAÇÃO, com o que vai acontecer dentro dela. */
+  if (!(await uiConfirm(t("ed_colar_conf_prompt", { n })))) return;
+  const txt = t("ed_colar_prompt_txt", { n, l: lista });
+  await edColarCopiarTexto(txt, t("ed_colar_prompt_copiado"),
+                           $("btnEdColarPrompt"));
+  reg("EDITAL-COLAR", "prompt de reinclusao copiado", n + " topicos");
+}
+
+async function edColarCopiarLista() {
+  const c = edConferirColagem();
+  if (!c) return;
+  const det = c.somemDetalhe || [];
+  if (!det.length) return;
+  if (!(await uiConfirm(t("ed_colar_conf_copiar", { n: det.length })))) return;
+  const L = [];
+  (c.semHerdeiro || []).forEach((x) => {
+    L.push("SEM CORRESPONDENCIA  " + x.d + " > " + x.t);
+  });
+  (c.herdados || []).forEach((x) => {
+    L.push("virou outro nome      " + x.d + " > " + x.t
+      + "  ->  " + x.herdeiros.map((h) => h.nome).join(" | "));
+  });
+  await edColarCopiarTexto(L.join("\n"), "", $("btnEdColarCopiarLista"));
 }
 
 async function edAplicarColagem() {
@@ -2949,15 +3009,9 @@ function edIniciar() {
   $("btnEdColarFechar").onclick = () => $("dlgEdColar").close();
   if ($("btnEdColarRecolocar")) $("btnEdColarRecolocar").onclick = edColarRecolocar;
   if ($("btnEdColarPrompt")) $("btnEdColarPrompt").onclick = edColarPrompt;
-  if ($("btnEdColarCopiarLista")) $("btnEdColarCopiarLista").onclick = () => {
-    const c = edConferirColagem();
-    if (!c) return;
-    const L = [];
-    (c.semHerdeiro || []).forEach((x) => L.push("SEM CORRESPONDENCIA  " + x.d + " > " + x.t));
-    (c.herdados || []).forEach((x) => L.push("virou outro nome      " + x.d + " > " + x.t
-      + "  ->  " + x.herdeiros.map((h) => h.nome).join(" · ")));
-    copiar(L.join("\n"), t("diag_copiado"));
-  };
+  if ($("btnEdColarCopiarLista")) {
+    $("btnEdColarCopiarLista").onclick = edColarCopiarLista;
+  }
   $("btnEditalCorrigir").onclick = () => {
     if (edCorrecaoPendente) edAplicar(edCorrecaoPendente);
   };
