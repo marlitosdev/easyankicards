@@ -1426,11 +1426,17 @@ dialog.mat-amplo{max-height:96vh}
 .modos-cab{display:flex;align-items:center;gap:8px;margin:0 0 5px}
 .modos-tit{font-size:9.5px;font-weight:800;letter-spacing:.11em;
   text-transform:uppercase;color:var(--sutil)}
-.modos-min{all:unset;cursor:pointer;width:20px;height:20px;border-radius:5px;
+/* "button.modos-min", não ".modos-min": com "all:unset" e 20x20 dentro,
+   esta regra apaga o layout de qualquer coisa em que ela caia. Exigir a
+   etiqueta <button> a torna inerte num contentor — e foi num contentor
+   que ela caiu, encolhendo a faixa de navegação inteira para 20 pixels
+   e fazendo os botões, que ali são "float:left", descolarem e flutuarem
+   por cima da agenda. */
+button.modos-min{all:unset;cursor:pointer;width:20px;height:20px;border-radius:5px;
   display:inline-flex;align-items:center;justify-content:center;
   color:var(--sutil);font-size:12px;border:1px solid var(--borda);
   margin-left:auto}
-.modos-min:hover{color:var(--texto);border-color:var(--acao)}
+button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .barra-modos{display:flex;gap:6px;margin:0;flex-wrap:wrap}
 
 .modo-btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;
@@ -1455,14 +1461,22 @@ dialog.mat-amplo{max-height:96vh}
 .modo-btn.ativo .modo-selo{border-color:var(--modo-cor);color:var(--modo-cor)}
 /* RECOLHIDA: só o ícone. O rótulo vira dica do botão — não some, porque
    ícone sozinho é enigma para quem ainda não decorou.
+
+   O ESTADO SE CHAMA "modos-recolhida", NÃO "modos-min".
+   "modos-min" é a classe do BOTÃO de recolher, com "all:unset" e 20x20
+   dentro. Enquanto o estado da faixa usava o mesmo nome, recolher punha
+   "modos-min" no contêiner — e a regra base, que casa por classe simples,
+   se aplicava também a ele: a faixa de navegação inteira virava uma
+   caixinha de 20 pixels com borda. Um nome, dois significados, no mesmo
+   pedaço de tela.
    Estas regras vêm DEPOIS da regra base de .modo-btn de propósito: a
    invariante que exige "todo botão declara cor e fundo" procura a
    PRIMEIRA regra com aquele seletor, e uma regra de ajuste antes da
    base a faria concluir que o botão nasceu sem cor. */
-.modos-caixa.modos-min .modo-rot,
-.modos-caixa.modos-min .modo-selo{display:none}
-.modos-caixa.modos-min .modo-btn{padding:9px 11px;gap:0}
-.modos-caixa.modos-min .modo-ic{font-size:17px}
+.modos-caixa.modos-recolhida .modo-rot,
+.modos-caixa.modos-recolhida .modo-selo{display:none}
+.modos-caixa.modos-recolhida .modo-btn{padding:9px 11px;gap:0}
+.modos-caixa.modos-recolhida .modo-ic{font-size:17px}
 /* ---- cabeçalho da bancada ----------------------------------------
    O nome ficava no alto do painel, longe da caixa que ele nomeia. Agora
    encosta no editor: quem lê "Bancada de cartões" vê logo abaixo a caixa
@@ -1512,6 +1526,12 @@ dialog.mat-amplo{max-height:96vh}
   .barra-modos{position:sticky;top:8px;float:left;flex-direction:column;
     width:186px;margin:0 14px 0 0;gap:5px}
   .modo-area{overflow:hidden}
+  /* RECOLHER PRECISA DEVOLVER ESPAÇO. Esconder os rótulos e manter a
+     coluna com 186px de largura seria trocar texto por vazio — o botão
+     prometia espaço e entregava uma faixa igualmente larga, só que
+     menos legível. */
+  .modos-caixa.modos-recolhida .barra-modos{width:auto;min-width:0}
+  .modos-caixa.modos-recolhida .modos-tit{display:none}
 }
 /* Aviso de acidente. Declara a COR do texto: sem isso ela era herdada e,
    dependendo do tema, virava escuro sobre vermelho escuro — a mensagem

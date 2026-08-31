@@ -87,7 +87,10 @@ function modosRecolher(sim) {
 
 function modosPintarRecolhida() {
   const cx = document.getElementById("modosCaixa");
-  if (cx && cx.classList) cx.classList.toggle("modos-min", modosRecolhida);
+  /* "modos-recolhida", nunca "modos-min": esta segunda e' a classe do
+   * BOTAO (all:unset, 20x20), e po-la no contentor encolhia a faixa
+   * inteira para 20 pixels. */
+  if (cx && cx.classList) cx.classList.toggle("modos-recolhida", modosRecolhida);
   const b = document.getElementById("btnModosRecolher");
   if (b) {
     b.textContent = modosRecolhida ? "»" : "«";

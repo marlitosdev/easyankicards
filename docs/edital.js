@@ -289,6 +289,34 @@ function lerEdital(raw) {
     achados.push({ linha: n, tipo: "linha_ignorada", txt: s.slice(0, 80) });
   });
 
+  /* ------------------------------------------------------------------
+   * O PESO 1..5 SAI DO NÚMERO DE QUESTÕES, quando ele existe.
+   *
+   * edPeso devolvia "peso: 3" para TODA disciplina escrita em "Nq" —
+   * ela sabe o número absoluto, mas não conhece as outras disciplinas e
+   * por isso não tinha como situá-lo numa escala. O 3 era um valor de
+   * espera que ninguém trocava depois.
+   *
+   * A consequência era grave e silenciosa: num edital inteiro escrito
+   * com o formato EXATO — 5q, 10q, 15q, 20q — as dezesseis disciplinas
+   * saíam com peso 3, o produto "peso da disciplina × peso do tópico"
+   * perdia um dos fatores, e a ordenação virava quase um empate. Escrever
+   * o número certo do edital dava um plano PIOR do que chutar 1 a 5.
+   *
+   * A conta só é possível aqui, depois de ler todas: a escala é relativa
+   * à maior disciplina da prova, que é a régua com significado. */
+  const absAll = disciplinas.filter((d) => d.abs > 0);
+  if (absAll.length) {
+    const maxAbs = absAll.reduce((m, d) => Math.max(m, d.abs), 0) || 1;
+    absAll.forEach((d) => {
+      d.peso = Math.max(1, Math.min(5, 1 + Math.round(4 * (d.abs / maxAbs))));
+      /* fica dito que este peso foi derivado, e de quê: quem for
+       * reescrever o edital precisa saber que o número de origem é o
+       * "Nq", não este */
+      d.pesoDerivado = true;
+    });
+  }
+
   return { cfg, disciplinas, blocos, achados, linhas: linhas.length };
 }
 
