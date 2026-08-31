@@ -969,7 +969,7 @@ const UI = {
   "plog_leg_prova": "fatia da prova",
   "plog_leg_tempo": "fatia do tempo",
   "plog_desvio_tit": "Prova e tempo não batem.",
-  "plog_desvio_txt": "{d} vale {p}% da prova e recebe {tm}% do tempo ({x}pp). O rodízio dá uma vaga por disciplina a cada rodada, então a fatia da prova ordena as disciplinas mas não muda o volume de estudo de nenhuma.",
+  "plog_desvio_txt": "{d} vale {p}% da prova e recebe {tm}% do tempo ({x}pp). O peso da disciplina já alonga as sessões dela, mas o rodízio continua dando uma vaga por disciplina a cada rodada — então a correção vem pela duração, não pela quantidade, e sobra esta diferença.",
   "plog_sinais_tit": "Nada disto entra no cálculo.",
   "plog_sinais_txt": "O app mede o seu desempenho e o plano não o consulta: a prioridade de um tópico é a mesma no primeiro dia e depois de você errar 70% das questões dele. Esta é a matéria-prima disponível para mudar isso.",
   "plog_c_acerto": "acerto",
