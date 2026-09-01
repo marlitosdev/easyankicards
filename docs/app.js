@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "13.3.0";
+const VERSAO = "13.4.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -165,6 +165,19 @@ function podarRegistro() {
 function reg(tipo, msg, extra) {
   const agora = new Date();
   registro.push({
+    /* DIA E HORA EM UTC, OS DOIS. Aqui o par data+hora é um INSTANTE, e
+     * regDentroDoPeriodo o relê com "Z" no fim para devolvê-lo ao fuso
+     * de quem está lendo — é o desenho certo para um registro de
+     * eventos, e ele já estava certo.
+     *
+     * Tentei "consertar" isto trocando só o dia por local, junto com a
+     * correção do diário. Foi um erro de leitura meu: misturar dia local
+     * com hora UTC produz um instante que não existiu, e o filtro "só de
+     * hoje" passou a esconder o evento que acabara de acontecer.
+     *
+     * A diferença entre os dois casos é o que cada um guarda. O diário
+     * guarda um DIA (sem hora) e por isso precisa do dia local. O
+     * registro guarda um INSTANTE, e instante se guarda em UTC. */
     h: agora.toISOString().slice(11, 19),
     d: agora.toISOString().slice(0, 10),
     s: SESSAO,

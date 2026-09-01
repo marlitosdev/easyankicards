@@ -203,7 +203,8 @@ function vkHistorico(disciplina, topico, estado, diario, hoje) {
     return Math.floor(Date.UTC(p[0], (p[1] || 1) - 1, p[2] || 1) / 86400000);
   };
   const hojeIso = hoje ? String(hoje).slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
+    : (typeof hojeISO === "function"
+        ? hojeISO() : new Date().toISOString().slice(0, 10));
   const dias = Math.max(0, emDias(hojeIso) - emDias(melhor.d));
   const marca = dias <= VK_FAIXAS.recente ? "ja_visto"
     : dias <= VK_FAIXAS.morno ? "vale_revisar" : "visto_ha_muito";

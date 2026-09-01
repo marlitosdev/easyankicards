@@ -115,7 +115,8 @@ function preCarimbarDiario(diario, nomeEdital, quandoSaiu) {
     if (!x || x.fase) return;
     x.fase = "pre";
     x.faseEdital = nomeEdital || "";
-    x.faseAte = quandoSaiu || new Date().toISOString().slice(0, 10);
+    x.faseAte = quandoSaiu || (typeof hojeISO === "function"
+      ? hojeISO() : new Date().toISOString().slice(0, 10));
     n++;
   });
   return n;
