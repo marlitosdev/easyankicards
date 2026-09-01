@@ -1630,7 +1630,24 @@ function edHerdeirosDe(nomeAntigo, candidatos) {
       achados.push({ nome: novo, como: "parecido", forca: juntas / pv.length });
     }
   });
-  return achados.sort((a, b) => b.forca - a.forca).slice(0, 3);
+  achados.sort((a, b) => b.forca - a.forca);
+
+  /* SÓ OS QUE CHEGAM PERTO DO MELHOR.
+   *
+   * "Finanças públicas" achava três herdeiros: a linha certa e mais
+   * "Advocacia pública" e "Defensoria Pública", que só compartilham a
+   * palavra "públicas". O mesmo com "Distrito Federal" aparecendo como
+   * parente de "Processo legislativo federal".
+   *
+   * O erro não era a regra e sim a tolerância: o ruído SEMPRE veio mais
+   * fraco que o acerto (2,5 contra 3,0). Um candidato fraco ao lado de
+   * um forte não é uma alternativa a considerar, é uma palavra comum
+   * repetida — e mostrá-lo faz duvidar do que está certo ao lado.
+   *
+   * Quando não há nenhum forte, os fracos ficam: aí eles são a única
+   * pista, e a tela diz "provavelmente". */
+  const melhor = achados.length ? achados[0].forca : 0;
+  return achados.filter((x) => x.forca >= melhor - 0.4).slice(0, 3);
 }
 
 function edCompararColagem(txtAntes, txtDepois, progresso) {
