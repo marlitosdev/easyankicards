@@ -3489,6 +3489,12 @@ let vkPendentesIa = [];    /* o que vai no prompt */
  * escolhida, e trocar a disciplina depois de copiar o prompt faria a
  * colagem descartar a resposta inteira dizendo "não achei". */
 let vkOrigemIa = [];
+/* AS DUPLAS QUE A TRIAGEM SEMÂNTICA ESCOLHEU.
+ * Vazio = ninguém triou, e o fluxo é o de sempre (duas listas, uma
+ * disciplina por vez). Cheio = o prompt passa a classificar duplas
+ * prontas, e o log mostra a proximidade de cada uma. */
+let vzDuplasAtuais = [];
+let vzCortados = 0;
 
 /* ------------------------------------------------------------------
  * O ACERVO DO OUTRO CONCURSO, com os quatro depósitos reais.
@@ -3745,9 +3751,20 @@ function vkOrigemDe(id) {
   return vkEhAmbos() ? vkComoOrigem(vkPendentesDe(id)) : vkEstudadosDe(id);
 }
 
+/* Trocar de modo ou de edital JOGA FORA A TRIAGEM.
+ * As duplas foram calculadas para um par de editais; mantê-las depois
+ * de trocar um dos lados montaria um prompt sobre um concurso e uma
+ * conferência sobre outro. */
+function vzEsquecer() {
+  vzDuplasAtuais = [];
+  vzCortados = 0;
+  if ($("vzEstado")) $("vzEstado").hidden = true;
+}
+
 function vkTrocarModo(m) {
   if (vkModo === m) return;
   vkModo = m;
+  vzEsquecer();
   reg("VINCULO", "modo da comparacao", m);
   vkPintarModo();
   vkPintarDiscs();
@@ -3773,7 +3790,12 @@ function vkPintarModo() {
   põe("btnVkPrompt", amb ? "vk_prompt_btn_ambos" : "vk_prompt_btn");
   põe("vkPromptExp", amb ? "vk_prompt_exp_ambos" : "vk_prompt_exp");
   põe("vkColarExp", amb ? "vk_colar_exp_ambos" : "vk_colar_exp");
-  if ($("vkDiscs")) $("vkDiscs").hidden = !amb;
+  /* O RECORTE À MÃO É O CAMINHO SEM CHAVE. Com as duplas na mesa, a
+   * disciplina deixou de ser o modo de encurtar a pergunta, e deixar os
+   * dois seletores na tela sugeriria que ainda mandam em alguma coisa. */
+  if ($("vkDiscs")) $("vkDiscs").hidden = !amb || vzDuplasAtuais.length > 0;
+  if ($("vzPasso")) $("vzPasso").hidden = !amb;
+  if (amb) vzPintarChave();
   /* o atalho dos nomes idênticos é do outro modo: ali ele compara o que
    * foi estudado; aqui não há nada estudado para comparar */
   if (amb && $("vkAtalho")) $("vkAtalho").hidden = true;
@@ -3805,6 +3827,124 @@ function vkPintarDiscs() {
    * direita parada montaria um prompt comparando duas matérias que não
    * têm nada a ver — e a IA responderia alguma coisa */
   encher($("vkParaDisc"), dB, vkParDisciplina(escolhaA, dB) || dB[0] || "");
+}
+
+/* =====================================================================
+ * A TRIAGEM SEMÂNTICA (PASSO 0)
+ *
+ * Ela ORDENA e ENCURTA. Não vincula, não marca, não decide — e a
+ * insistência tem motivo: um vínculo errado faz um tópico sumir da
+ * agenda, e esse erro não pode nascer de uma multiplicação de vetores.
+ * O cosseno mede "falam do mesmo assunto?"; a pergunta do aplicativo é
+ * "estudar um cobre o outro, para estes dois cargos?" — e o cargo não
+ * está escrito no nome do tópico.
+ *
+ * O que ela resolve é o tamanho. 533 × 232 = 123.656 duplas viram umas
+ * duzentas e cinquenta, de todo o edital de uma vez, e o recorte à mão
+ * por disciplina deixa de ser necessário.
+ * ===================================================================== */
+function vzEstadoTexto(chave, dados, erro) {
+  const el = $("vzEstado");
+  if (!el) return;
+  el.hidden = false;
+  el.className = "vz-estado" + (erro ? " vz-erro" : "");
+  el.innerHTML = "";
+  const b = document.createElement("b");
+  b.textContent = t(chave, dados || {});
+  el.append(b);
+}
+
+function vzPintarChave() {
+  const selo = $("vzChaveSelo");
+  if (!selo) return;
+  const c = (typeof vzChaveApi === "function") ? vzChaveApi() : "";
+  selo.textContent = c
+    ? t("vz_chave_tem", { c: vzChaveResumida(c) })
+    : t("vz_chave_falta");
+}
+
+function vzAbrirChave() {
+  if ($("vzChaveCampo")) $("vzChaveCampo").value = "";
+  const agora = $("vzChaveAgora");
+  const c = vzChaveApi();
+  if (agora) {
+    agora.textContent = c ? t("vz_chave_tem", { c: vzChaveResumida(c) })
+                          : t("vz_chave_falta");
+  }
+  abrirModal("dlgVzChave");
+}
+
+/* A triagem apaga o resultado anterior ANTES de começar.
+ * Deixar as duplas velhas na tela durante uma chamada que pode falhar
+ * faria a pessoa copiar o prompt do edital errado sem perceber. */
+/* "opc" existe para o teste poder responder no lugar da rede E exercer
+ * ESTE caminho — o que o botão chama. A primeira versão do teste
+ * chamava vzDuplas direto, uma camada abaixo, e com isso a asserção
+ * mais importante do arquivo ("a triagem não vincula") passava mesmo
+ * com uma linha de vkAplicar plantada bem aqui. Testar a camada de
+ * baixo é testar o que eu escolhi testar, não o que a pessoa aperta. */
+async function vzTriar(opc) {
+  const de = ($("vkDeEdital") || {}).value || "";
+  const para = ($("vkParaEdital") || {}).value || "";
+  if (String(de) === String(para)) { await uiAlert(t("vk_mesmo_edital")); return; }
+  if (!vzChaveApi()) { vzAbrirChave(); return; }
+
+  vzDuplasAtuais = [];
+  vzCortados = 0;
+  vkPintarLados();
+
+  const a = vkComoOrigem(vkPendentesDe(de));
+  const b = vkPendentesDe(para).map((x) =>
+    ({ disciplina: x.disciplina, topico: x.nome }));
+  if (!a.length || !b.length) { await uiAlert(t("vk_sem_pendentes")); return; }
+
+  const btn = $("btnVzTriar");
+  if (btn) { btn.disabled = true; }
+  vzEstadoTexto("vz_indo", { n: a.length + b.length });
+  try {
+    const r = await vzDuplas(a, b, Object.assign({
+      andamento: (feitos, total) =>
+        vzEstadoTexto("vz_andamento", { f: feitos, t: total }),
+    }, opc || {}));
+    vzDuplasAtuais = r.pares;
+    vzCortados = r.cortados;
+    reg("VINCULO", "triagem semantica",
+        r.pares.length + " duplas de " + (a.length * b.length)
+        + " possiveis, " + r.cortados + " acima do teto");
+    vzEstadoTexto("vz_pronto", {
+      n: r.pares.length, p: a.length * b.length,
+      f: r.pares.filter((x) => x.faixa === "forte").length,
+      c: r.cortados,
+    });
+  } catch (e) {
+    /* O MOTIVO NA TELA. "Falhou" manda tentar de novo nos três casos, e
+     * só um deles melhora tentando de novo. */
+    const q = String((e && e.message) || "rede");
+    const chave = q === "chave_recusada" ? "vz_erro_chave"
+      : q === "cota" ? "vz_erro_cota"
+        : q === "sem_chave" ? "vz_chave_falta"
+          : q === "resposta_incompleta" ? "vz_erro_incompleta" : "vz_erro_rede";
+    vzEstadoTexto(chave, { d: (e && e.detalhe) || "" }, true);
+    reg("VINCULO", "triagem semantica falhou", q);
+  }
+  if (btn) btn.disabled = false;
+  vkPintarLados();
+}
+
+/* A proximidade de uma dupla, para o log. Devolve null quando não houve
+ * triagem — e null não é 0: "não medi" e "medi e deu zero" viram a
+ * mesma coisa se forem o mesmo valor. */
+function vzScoreDe(dA, tA, dB, tB) {
+  if (!vzDuplasAtuais.length) return null;
+  const k = (d, x) => vkChave(d, x);
+  const alvo = k(dA, tA) + "|" + k(dB, tB);
+  const inv = k(dB, tB) + "|" + k(dA, tA);
+  const achou = vzDuplasAtuais.filter((p) => {
+    const s = k(p.de.disciplina, p.de.topico) + "|"
+      + k(p.para.disciplina, p.para.topico);
+    return s === alvo || s === inv;
+  })[0];
+  return achou ? achou.score : null;
 }
 
 function vkAbrir() {
@@ -3843,8 +3983,12 @@ function vkPintarLados() {
    * Sem o recorte seriam 533 × 232 combinações num prompt só; com ele,
    * uma disciplina contra a outra — que é o tamanho em que a IA ainda
    * presta atenção e o log ainda dá para ler. */
-  const dDe = ($("vkDeDisc") || {}).value || "";
-  const dPara = ($("vkParaDisc") || {}).value || "";
+  /* triado, o recorte por disciplina não se aplica: as duplas vieram de
+   * todo o edital, e filtrar aqui esconderia metade das respostas que a
+   * IA vai devolver */
+  const triado = vkEhAmbos() && vzDuplasAtuais.length > 0;
+  const dDe = triado ? "" : (($("vkDeDisc") || {}).value || "");
+  const dPara = triado ? "" : (($("vkParaDisc") || {}).value || "");
   const est = vkEhAmbos()
     ? vkSoDaDisciplina(vkOrigemDe(de), dDe) : vkEstudadosDe(de);
   const pend = vkEhAmbos()
@@ -3855,12 +3999,18 @@ function vkPintarLados() {
       Object.assign({}, c, { escolha: "igual" }));
 
   if (res) {
-    res.textContent = vkEhAmbos()
-      ? t("vk_resumo_ambos", { e: est.length, p: pend.length,
-          da: dDe || "?", db: dPara || "?",
+    /* triado, o resumo fala de DUPLAS; sem triagem, de duas listas.
+     * São contagens de coisas diferentes e não podem usar a mesma
+     * frase — "250" ao lado de "533 × 232" só confunde. */
+    res.textContent = (vkEhAmbos() && vzDuplasAtuais.length)
+      ? t("vk_resumo_duplas", { n: vzDuplasAtuais.length,
           de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" })
-      : t("vk_resumo_novo", { e: est.length, p: pend.length,
-          de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" });
+      : vkEhAmbos()
+        ? t("vk_resumo_ambos", { e: est.length, p: pend.length,
+            da: dDe || "?", db: dPara || "?",
+            de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" })
+        : t("vk_resumo_novo", { e: est.length, p: pend.length,
+            de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" });
   }
   if (at) {
     at.hidden = !vkTriagem.length;
@@ -3891,8 +4041,9 @@ async function vkGerarPrompt() {
   const para = ($("vkParaEdital") || {}).value || "";
   if (String(de) === String(para)) { await uiAlert(t("vk_mesmo_edital")); return; }
   const amb = vkEhAmbos();
-  const dDe = ($("vkDeDisc") || {}).value || "";
-  const dPara = ($("vkParaDisc") || {}).value || "";
+  const triado = amb && vzDuplasAtuais.length > 0;
+  const dDe = triado ? "" : (($("vkDeDisc") || {}).value || "");
+  const dPara = triado ? "" : (($("vkParaDisc") || {}).value || "");
   const est = amb ? vkSoDaDisciplina(vkOrigemDe(de), dDe) : vkEstudadosDe(de);
   const pend = amb ? vkSoDaDisciplina(vkPendentesDe(para), dPara)
                    : vkPendentesDe(para);
@@ -3906,11 +4057,19 @@ async function vkGerarPrompt() {
    * tudo dizendo "não achei" */
   vkPendentesIa = pend;
   vkOrigemIa = est;
-  const txt = amb
-    ? vkPromptAmbos(est, pend, vkNomeDoEdital(de), vkNomeDoEdital(para), dDe)
-    : vkPrompt(est, pend, vkNomeDoEdital(para), vkNomeDoEdital(de));
-  reg("VINCULO", "prompt gerado (" + vkModo + ")",
-      est.length + " × " + pend.length + (amb ? " · " + dDe : ""));
+  /* COM AS DUPLAS, A PERGUNTA MUDA DE NATUREZA.
+   * Sem triagem, manda-se duas listas e pede-se à IA que ache os pares
+   * — 123.656 combinações implícitas numa resposta só. Com triagem,
+   * chegam duzentas duplas prontas e pergunta-se de cada uma "esta
+   * serve?": uma linha entra, uma linha sai, e dá para conferir. */
+  const txt = triado
+    ? vkPromptDuplas(vzDuplasAtuais, vkNomeDoEdital(de), vkNomeDoEdital(para))
+    : (amb
+      ? vkPromptAmbos(est, pend, vkNomeDoEdital(de), vkNomeDoEdital(para), dDe)
+      : vkPrompt(est, pend, vkNomeDoEdital(para), vkNomeDoEdital(de)));
+  reg("VINCULO", "prompt gerado (" + vkModo + (triado ? "/triado" : "") + ")",
+      triado ? vzDuplasAtuais.length + " duplas"
+             : est.length + " × " + pend.length + (amb ? " · " + dDe : ""));
   /* A REAÇÃO DO BOTÃO. Antes era um toast de dois segundos que passava
    * despercebido, e ficava a dúvida de sempre: copiou? copiou o quê?
    * Agora o botão confirma e a caixa diz o tamanho do que foi copiado e
@@ -3966,6 +4125,12 @@ function vkConferirColagem() {
           { n: r.pares.length, a: forte, m: r.pares.length - forte }));
   if (r.ignoradas.length)
     linha(t("vk_conf_ignoradas", { n: r.ignoradas.length }), "aviso");
+  /* QUANTAS A IA RECUSOU — a medida de quanto a triagem exagerou.
+   * Sem este número não há como calibrar o corte, e a impressão que
+   * fica é a de que a vizinhança semântica acertou tudo. */
+  if ((r.recusados || []).length) {
+    linha(t("vk_conf_recusadas", { n: r.recusados.length }));
+  }
   if (!r.pares.length) linha(t("vk_conf_nada"), "perigo");
 
   /* MARCADO POR PADRÃO, mas visível. Desmarcar tudo faria a pessoa
@@ -4026,6 +4191,22 @@ function vkPintarPares() {
       por.textContent = x.por;
       tx.append(por);
     }
+    /* A PROXIMIDADE, quando houve triagem — e só então.
+     *
+     * Ela fica cinza e discreta de propósito: é o motivo de a dupla ter
+     * sido PERGUNTADA, não a resposta. Um par de 94% que a IA marcou
+     * como recorte diferente continua sendo recorte diferente, e dar ao
+     * número o destaque do veredito faria a pessoa confiar na medida
+     * errada. */
+    const sc = vzScoreDe(x.de.disciplina, x.de.topico,
+                         x.para.disciplina, x.para.topico);
+    if (sc !== null) {
+      const s2 = document.createElement("span");
+      s2.className = "vk-par-score";
+      s2.textContent = Math.round(sc * 100) + "%";
+      s2.title = t("vz_score_aj");
+      tx.append(s2);
+    }
     li.append(tx);
     box.append(li);
   });
@@ -4079,10 +4260,33 @@ function vkIniciarTela() {
   if ($("btnVkModoAmbos")) {
     $("btnVkModoAmbos").onclick = () => vkTrocarModo("ambos");
   }
+  if ($("btnVzTriar")) $("btnVzTriar").onclick = vzTriar;
+  if ($("btnVzChave")) $("btnVzChave").onclick = vzAbrirChave;
+  if ($("btnVzChaveFechar")) {
+    $("btnVzChaveFechar").onclick = () => $("dlgVzChave").close();
+  }
+  if ($("btnVzChaveOk")) $("btnVzChaveOk").onclick = () => {
+    const v = vzGuardarChave(($("vzChaveCampo") || {}).value || "");
+    /* o REGISTRO nunca vê a chave. Ele é copiado e colado em relatos de
+     * problema, e uma chave de API dentro dele vira cobrança de outra
+     * pessoa. */
+    reg("VINCULO", "chave da IA guardada", v ? "sim" : "campo vazio");
+    $("dlgVzChave").close();
+    vzPintarChave();
+  };
+  if ($("btnVzChaveApagar")) $("btnVzChaveApagar").onclick = async () => {
+    if (!(await uiConfirm(t("vz_chave_apagar_conf")))) return;
+    vzGuardarChave("");
+    reg("VINCULO", "chave da IA apagada");
+    $("dlgVzChave").close();
+    vzPintarChave();
+  };
   ["vkDeEdital", "vkParaEdital"].forEach((id) => {
     /* trocar de edital refaz as listas de disciplina: mantê-las seria
      * oferecer matérias que não existem no edital agora escolhido */
-    if ($(id)) $(id).onchange = () => { vkPintarDiscs(); vkPintarLados(); };
+    if ($(id)) $(id).onchange = () => {
+      vzEsquecer(); vkPintarModo(); vkPintarDiscs(); vkPintarLados();
+    };
   });
   /* trocar a disciplina da ESQUERDA re-sugere a da direita; trocar a da
    * direita é a palavra final de quem estuda e não mexe em mais nada */
