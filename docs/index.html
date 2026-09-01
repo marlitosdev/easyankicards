@@ -1810,7 +1810,9 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .ed-colar-acao .nota{font-size:10.5px;line-height:1.35;margin:0}
 .ed-colar-acao button{align-self:flex-start;max-width:100%;white-space:normal;
   text-align:left}
-.ed-colar-rodape{align-items:center;flex-wrap:wrap}
+.ed-colar-decidir{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--borda)}
+.ed-colar-decidir .ed-colar-acao{flex:1 1 190px}
 .ed-colar-rodape-exp{flex:1 1 100%;margin:4px 0 0;font-size:10.5px}
 /* ---- lista do que some ao colar ---- */
 .ed-colar-lista{border:1px solid var(--borda);border-radius:10px;margin:9px 0 0;
@@ -4355,25 +4357,38 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="edColarAcoes" class="ed-colar-acoes" hidden>
     <div class="ed-colar-acoes-tit" data-i18n="ed_colar_antes"></div>
     <div class="ed-colar-acoes-lin">
-      <div class="ed-colar-acao">
+      <div class="ed-colar-acao" id="edColarAcaoRecolocar">
         <button class="btn-min" id="btnEdColarRecolocar"></button>
         <span class="nota" data-i18n="ed_colar_recolocar_exp"></span>
       </div>
-      <div class="ed-colar-acao">
+      <div class="ed-colar-acao" id="edColarAcaoPrompt">
         <button class="btn-min" id="btnEdColarPrompt" data-i18n="ed_colar_prompt"></button>
         <span class="nota" data-i18n="ed_colar_prompt_exp"></span>
       </div>
-      <div class="ed-colar-acao">
+      <div class="ed-colar-acao" id="edColarAcaoCopiar">
         <button class="btn-min" id="btnEdColarCopiarLista" data-i18n="ed_colar_copiar_lista"></button>
         <span class="nota" data-i18n="ed_colar_copiar_exp"></span>
       </div>
     </div>
   </div>
 
-  <div class="dlg-rodape ed-colar-rodape">
-    <button class="btn btn-verde" id="btnEdColarAplicar" data-i18n="ed_colar_aplicar"></button>
-    <button class="btn btn-cinza" id="btnEdColarFechar" data-i18n="help_close"></button>
-    <span class="nota ed-colar-rodape-exp" data-i18n="ed_colar_aplicar_exp"></span>
+  <!-- A DECISÃO, separada das ações que só mexem no texto. Cada botão
+       diz embaixo o que faz e o que acontece depois — a explicação junto
+       do botão, não num balão que aparece se o ponteiro parar em cima
+       (e que ninguém vê no telefone). -->
+  <div class="ed-colar-decidir">
+    <div class="ed-colar-acao">
+      <button class="btn btn-verde" id="btnEdColarAplicar" data-i18n="ed_colar_aplicar"></button>
+      <span class="nota" data-i18n="ed_colar_aplicar_exp"></span>
+    </div>
+    <div class="ed-colar-acao">
+      <button class="btn btn-cinza" id="btnEdColarLimpar" data-i18n="ed_colar_limpar"></button>
+      <span class="nota" data-i18n="ed_colar_limpar_exp"></span>
+    </div>
+    <div class="ed-colar-acao">
+      <button class="btn btn-cinza" id="btnEdColarFechar" data-i18n="help_close"></button>
+      <span class="nota" data-i18n="ed_colar_fechar_exp"></span>
+    </div>
   </div>
 </dialog>
 <dialog id="dlgTexto" class="ui-modal">

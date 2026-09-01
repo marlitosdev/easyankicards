@@ -2497,7 +2497,16 @@ function edTrocarVista(v) {
 function edConferirColagem() {
   const novoTxt = $("edColarTexto").value;
   const av = $("edColarAviso");
-  if (!novoTxt.trim()) { av.hidden = true; return null; }
+  if (!novoTxt.trim()) {
+    av.hidden = true;
+    /* A SAÍDA ANTECIPADA DEIXAVA A TELA MENTINDO. Com a caixa vazia, o
+     * aviso sumia e a lista de "o que some" continuava lá, descrevendo
+     * um texto que já não existe — junto com os botões de conserto, que
+     * agiriam sobre nada. Apagar o texto tem de apagar tudo o que foi
+     * dito sobre ele. */
+    edColarPintarLista(null);
+    return null;
+  }
 
   const c = edCompararColagem($("editalTexto").value, novoTxt, edProgresso);
   av.hidden = false;
@@ -2557,6 +2566,7 @@ function edColarPintarLista(c) {
   const cx = $("edColarListaCx");
   const box = $("edColarLista");
   if (!cx || !box) return;
+  /* "c" nulo é a caixa vazia: some tudo, inclusive as ações */
   const det = (c && c.somemDetalhe) || [];
   cx.hidden = !det.length;
   const bRec = $("btnEdColarRecolocar");
@@ -2566,12 +2576,25 @@ function edColarPintarLista(c) {
    * quando há algo que sumiu para conferir. */
   const faixa = $("edColarAcoes");
   if (faixa) faixa.hidden = !det.length;
+  /* A EXPLICAÇÃO ACOMPANHA O BOTÃO.
+   * Esconder só o botão deixava a frase que o explica sozinha na tela —
+   * "Devolve ao texto acima..." sem nada para apertar, descrevendo uma
+   * ação que não existe naquele momento. */
+  const par = (id, mostrar) => {
+    /* pelo ID, não pelo parentNode: depender da forma do HTML amarra o
+     * comportamento ao desenho e nenhum teste alcança a relação */
+    const el = $(id);
+    if (el) el.hidden = !mostrar;
+  };
+  par("edColarAcaoRecolocar", perdidos.length > 0);
+  par("edColarAcaoPrompt", perdidos.length > 0);
   if (bRec) {
     bRec.hidden = !perdidos.length;
     bRec.textContent = t("ed_colar_recolocar", { n: perdidos.length });
   }
   if (bPro) bPro.hidden = !perdidos.length;
   /* copiar a lista serve mesmo quando tudo tem herdeiro: é a conferência */
+  par("edColarAcaoCopiar", det.length > 0);
   const bCop = $("btnEdColarCopiarLista");
   if (bCop) bCop.hidden = !det.length;
   if (!det.length) { box.innerHTML = ""; return; }
@@ -2696,6 +2719,23 @@ async function edColarPrompt() {
   reg("EDITAL-COLAR", "prompt de reinclusao copiado", n + " topicos");
 }
 
+/* LIMPAR A CAIXA para colar outra versão.
+ *
+ * Sem isto, trocar de versão exigia selecionar quinhentas linhas com o
+ * cursor dentro de uma caixa de doze linhas de altura — e um "colar"
+ * feito sem apagar tudo emenda os dois planos num texto que o leitor
+ * aceita e ninguém escreveu. */
+async function edColarLimpar() {
+  const cx = $("edColarTexto");
+  if (!cx) return;
+  if (String(cx.value || "").trim()
+      && !(await uiConfirm(t("ed_colar_conf_limpar")))) return;
+  cx.value = "";
+  edConferirColagem();
+  if (cx.focus) cx.focus();
+  toast("ed_colar_limpou");
+}
+
 async function edColarCopiarLista() {
   const c = edConferirColagem();
   if (!c) return;
@@ -2751,6 +2791,13 @@ async function edAplicarColagem() {
       return;
     }
   }
+
+  /* A ÚLTIMA PERGUNTA VEM SEMPRE, com os números dentro.
+   * As confirmações acima só aparecem quando há risco; sem elas, um
+   * plano de 533 tópicos podia substituir outro num clique só, e a
+   * única ação irreversível da caixa era a mais fácil de disparar. */
+  if (!(await uiConfirm(t("ed_colar_conf_aplicar", {
+      a: c.topicosAntes, d: c.topicosDepois, dd: c.discDepois })))) return;
 
   guardarVersao("antes de colar o plano corrigido", $("editalTexto").value);
   $("editalTexto").value = c.novoTxt;
@@ -3009,6 +3056,7 @@ function edIniciar() {
   $("btnEdColarFechar").onclick = () => $("dlgEdColar").close();
   if ($("btnEdColarRecolocar")) $("btnEdColarRecolocar").onclick = edColarRecolocar;
   if ($("btnEdColarPrompt")) $("btnEdColarPrompt").onclick = edColarPrompt;
+  if ($("btnEdColarLimpar")) $("btnEdColarLimpar").onclick = edColarLimpar;
   if ($("btnEdColarCopiarLista")) {
     $("btnEdColarCopiarLista").onclick = edColarCopiarLista;
   }
