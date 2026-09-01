@@ -1875,6 +1875,20 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vk-modo-on:hover{color:#fff;border-color:transparent}
 .vk-discs{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 2px;
   padding:9px 11px;border:1px dashed var(--borda);border-radius:10px}
+/* ---- triagem semântica (passo 0) ---- */
+.vz-passo{border-color:var(--acao)}
+.vz-estado{font-size:11px;line-height:1.5;margin-top:7px;padding:7px 9px;
+  border-radius:8px;background:var(--campo);color:var(--sutil)}
+.vz-estado b{color:var(--texto)}
+.vz-erro{color:var(--erro)}
+.vz-chave-lin{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-top:8px}
+.vz-chave-lin .nota{margin:0}
+/* o score de proximidade, na linha do log. Cinza de propósito: é uma
+   medida auxiliar, não o veredito — quem decide é a coluna do lado. */
+.vk-par-score{font-size:9.5px;font-weight:800;padding:1px 6px;
+  border-radius:999px;background:var(--campo);color:var(--sutil);
+  border:1px solid var(--borda);margin-left:6px;flex-shrink:0}
 .vk-lados{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 2px}
 .vk-lado{flex:1 1 220px;font-size:11px;font-weight:700;letter-spacing:.03em;
   text-transform:uppercase;color:var(--sutil)}
@@ -3369,13 +3383,33 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        Tudo contra tudo seriam 533 × 232 combinações e uma lista de 765
        linhas num prompt só: a IA perde o fio no meio e a resposta não dá
        para conferir. Por disciplina são umas noventa contra noventa —
-       cabe, e o log inteiro é legível. -->
+       cabe, e o log inteiro é legível.
+
+       Este recorte à mão é o caminho SEM chave de API. Com a triagem
+       semântica ligada, os candidatos saem de todo o edital de uma vez
+       e a faixa abaixo some. -->
   <div class="vk-discs" id="vkDiscs" hidden>
     <label class="vk-lado"><span data-i18n="vk_disc_de"></span>
       <select id="vkDeDisc"></select></label>
     <label class="vk-lado"><span data-i18n="vk_disc_para"></span>
       <select id="vkParaDisc"></select></label>
   </div>
+
+  <!-- PASSO 0 — A TRIAGEM SEMÂNTICA.
+       Um vetor por tópico, e as ~250 duplas mais próximas de todo o
+       edital viram o prompt. Não vincula nada: ordena e encurta, para
+       que a pergunta caiba numa resposta que dê para conferir. -->
+  <div class="vk-passo vz-passo" id="vzPasso" hidden>
+    <div class="vk-passo-n" data-i18n="vz_passo0"></div>
+    <button class="btn btn-ciano" id="btnVzTriar" data-i18n="vz_triar_btn"></button>
+    <span class="nota" data-i18n="vz_triar_exp"></span>
+    <div class="vz-estado" id="vzEstado" hidden></div>
+    <div class="vz-chave-lin">
+      <button class="btn-min" id="btnVzChave" data-i18n="vz_chave_btn"></button>
+      <span class="nota" id="vzChaveSelo"></span>
+    </div>
+  </div>
+
   <p class="nota" id="vkResumo"></p>
 
   <!-- Os dois passos são os mesmos nos dois modos; só o texto muda, e
@@ -3401,6 +3435,25 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnVkFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- A CHAVE DA API, no aparelho de quem usa.
+     O app não tem servidor: ou a chave fica aqui, ou não há triagem
+     semântica. Isso não é escondido — está escrito na caixa, com o
+     botão de apagar ao lado e a informação de que a chave não entra no
+     backup (um arquivo de backup circula por nuvem e por e-mail). -->
+<dialog id="dlgVzChave" class="ui-modal diag-modal">
+  <h3 data-i18n="vz_chave_tit"></h3>
+  <p class="nota" data-i18n="vz_chave_ajuda"></p>
+  <div class="vka-aviso" data-i18n="vz_chave_aviso"></div>
+  <input type="password" id="vzChaveCampo" class="mat-busca"
+    autocomplete="off" spellcheck="false" placeholder="AIza...">
+  <p class="nota" id="vzChaveAgora"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnVzChaveOk" data-i18n="vz_chave_salvar"></button>
+    <button class="btn btn-cinza" id="btnVzChaveFechar" data-i18n="cancel_btn"></button>
+    <button class="btn-min btn-min-perigo" id="btnVzChaveApagar" data-i18n="vz_chave_apagar"></button>
   </div>
 </dialog>
 
@@ -4809,6 +4862,7 @@ window.__sqlPromise = initSqlJs({
 <script src="edital.js"></script>
 <script src="editais.js"></script>
 <script src="vinculos.js"></script>
+<script src="vizinhos.js"></script>
 <script src="pre-edital.js"></script>
 <script src="cartoes-material.js"></script>
 <script src="fora-da-agenda.js"></script>

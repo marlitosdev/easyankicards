@@ -30,6 +30,17 @@ const BK_CHAVES = {
   edital: ["eac_editais", "eac_edital_atual", "eac_vinculos", "eac_cm_recibo", "eac_mat_log",
            "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario",
            "eac_dificuldade", "eac_plano_snaps"],
+  /* FORA DO BACKUP, DE PROPÓSITO: "eac_chave_gemini".
+   *
+   * Toda a lógica deste arquivo é "não esqueça de incluir" — e esta é a
+   * única chave em que esquecer seria o certo, então ela precisa estar
+   * escrita, ou alguém a acrescenta em seis meses achando que corrige
+   * um descuido.
+   *
+   * Um arquivo de backup é feito para circular: vai para a nuvem, para
+   * o e-mail, para o pen drive. Uma chave de API dentro dele vira
+   * cobrança na fatura de quem a gerou. Perder a chave num backup custa
+   * dez segundos para colar de novo; vazá-la custa dinheiro. */
   /* as questões têm arquivo próprio (não vivem na gaveta do tópico), então
    * precisam entrar no backup por conta: sem esta linha, salvar e carregar
    * a base apagava o banco inteiro em silêncio. */

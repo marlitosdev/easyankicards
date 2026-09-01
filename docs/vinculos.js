@@ -248,6 +248,36 @@ function vkPromptAmbos(a, b, nomeA, nomeB, disciplina) {
   });
 }
 
+/* O PROMPT DAS DUPLAS JÁ ESCOLHIDAS.
+ *
+ * Os outros dois prompts mandam DUAS LISTAS e pedem à IA que ache os
+ * pares — e é aí que o tamanho estoura: 533 contra 232 são 123.656
+ * combinações implícitas numa resposta só. Foi o que obrigou a recortar
+ * por disciplina e a rodar dezesseis vezes.
+ *
+ * Com a vizinhança semântica escolhendo os candidatos, a tarefa muda de
+ * natureza: chegam duzentas duplas prontas e pergunta-se de cada uma
+ * "esta serve?". Uma linha entra, uma linha sai — dá para conferir
+ * item a item, coisa que uma resposta livre não permite.
+ *
+ * E ela precisa poder dizer NÃO. Aproximação de vetor não é
+ * equivalência de matéria: "Responsabilidade Civil" e "Responsabilidade
+ * Civil do Estado" ficam quase coladas e são assuntos diferentes. Se o
+ * formato não tivesse a saída NAO, a IA seria empurrada a aprovar o
+ * lixo que a triagem deixou passar. */
+function vkPromptDuplas(pares, nomeA, nomeB) {
+  const linha = (p, i) => (i + 1) + ". "
+    + (p.de.disciplina ? p.de.disciplina + " > " : "") + p.de.topico
+    + "  ::  "
+    + (p.para.disciplina ? p.para.disciplina + " > " : "") + p.para.topico;
+  return t("vk_prompt_duplas", {
+    a: (nomeA && String(nomeA).trim()) || "?",
+    b: (nomeB && String(nomeB).trim()) || "?",
+    n: (pares || []).length,
+    duplas: (pares || []).map(linha).join("\n"),
+  });
+}
+
 /* ------------------------------------------------------------------
  * A RESPOSTA
  * "~ assunto estudado :: tópico do edital :: ALTA :: por quê"
@@ -260,7 +290,7 @@ function vkLerResposta(txt, estudados, pendentes) {
     vkNormal(p.disciplina + " " + p.nome) === vkNormal(s)
     || vkNormal(p.nome) === vkNormal(String(s).split(">").pop()));
 
-  const pares = [], ignoradas = [];
+  const pares = [], ignoradas = [], recusados = [];
   String(txt || "").split("\n").forEach((l, i) => {
     const bruta = l.trim();
     if (!bruta) return;
@@ -277,6 +307,20 @@ function vkLerResposta(txt, estudados, pendentes) {
      * O formato velho continua sendo lido: quem tiver um prompt antigo
      * salvo, ou uma IA que respondeu ALTA, não fica sem resposta. */
     const bruto = String(p[2] || "").trim().toUpperCase();
+    /* A RECUSA DA IA É RESPOSTA, NÃO LIXO.
+     *
+     * No caminho das duplas, quem escolheu os candidatos foi a
+     * vizinhança semântica — e ela erra por construção: aproxima
+     * "Responsabilidade Civil" de "Responsabilidade Civil do Estado".
+     * A IA precisa poder devolver essas duplas com um NÃO, e esse não
+     * precisa ser CONTADO: "a IA recusou 60 das 250" é a medida de
+     * quanto a triagem exagerou, e sem ela não há como calibrar o
+     * corte. Jogar as recusas na pilha das linhas ignoradas as
+     * misturaria com erro de formato, que é outra coisa. */
+    if (/^N[AÃ]O/.test(bruto)) {
+      recusados.push({ de: e, para: d, por: p[3] || "" });
+      return;
+    }
     const sug = /^PULAR/.test(bruto) ? "PULAR"
       : (/^REVISAR/.test(bruto) ? "REVISAR"
         /* o vocabulário do segundo modo. Não é sinônimo do primeiro:
@@ -295,7 +339,7 @@ function vkLerResposta(txt, estudados, pendentes) {
                  sugestao: sug,
                  por: p[3] || "", origem: "ia" });
   });
-  return { pares, ignoradas };
+  return { pares, ignoradas, recusados };
 }
 
 /* ------------------------------------------------------------------
