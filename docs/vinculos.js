@@ -93,6 +93,111 @@ function vkJaTem(a, b) {
   return vinculos.some((v) => (v.a === a && v.b === b) || (v.a === b && v.b === a));
 }
 
+/* =====================================================================
+ * O SEGUNDO MODO: "VOU ESTUDAR OS DOIS"
+ *
+ * Até aqui a origem da comparação era sempre o DIÁRIO — o que já foi
+ * estudado. Isso responde "o que eu não preciso refazer?", e deixa de
+ * fora a pergunta que aparece quando duas provas estão abertas ao mesmo
+ * tempo: "o que eu vou estudar DUAS VEZES sem perceber?".
+ *
+ * A resposta é o mesmo vínculo, e é por isso que este modo não traz
+ * estrutura nova. Muda só de onde sai a lista da esquerda: dos tópicos
+ * PENDENTES do outro edital, em vez do diário. Ligado o par, o app faz o
+ * resto sozinho — antes de estudar o selo diz "também cai lá"; depois
+ * que você registrar, o mesmo vínculo passa a mostrar o resumo e os
+ * cartões que você acabou de escrever, porque quem alimenta essa leitura
+ * é o diário.
+ *
+ * O RISCO AQUI É O OPOSTO do outro modo. Lá, um vínculo errado fazia
+ * PULAR um assunto. Aqui ele faz estudar o recorte do concurso errado
+ * achando que serve para os dois — e por isso o vocabulário da resposta
+ * muda junto: não é "pular ou revisar", é "serve para os dois" ou
+ * "recorte diferente".
+ * ===================================================================== */
+
+/* Os pendentes na forma de ORIGEM. Sem data e sem concurso, porque não
+ * houve estudo nenhum: inventar uma data aqui faria o app afirmar, na
+ * agenda, algo que nunca aconteceu. */
+function vkComoOrigem(pendentes) {
+  return (pendentes || []).map((p) => ({
+    chave: vkChave(p.disciplina, p.nome || p.topico),
+    disciplina: p.disciplina || "",
+    topico: p.nome || p.topico || "",
+    data: "", concurso: "", acao: "",
+  }));
+}
+
+/* As disciplinas de uma lista, na ordem em que aparecem e sem repetir. */
+function vkDisciplinasDe(lista) {
+  const vistas = {}, saida = [];
+  (lista || []).forEach((x) => {
+    const d = x.disciplina || "";
+    if (!d || vistas[vkNormal(d)]) return;
+    vistas[vkNormal(d)] = true;
+    saida.push(d);
+  });
+  return saida;
+}
+
+/* QUAL DISCIPLINA DE LÁ CORRESPONDE A ESTA.
+ *
+ * É palpite, e por isso é só uma sugestão que a tela deixa trocar:
+ * "Finanças Públicas" e "Direito Financeiro" são a mesma matéria e não
+ * compartilham palavra nenhuma. O que a conta acha bem são os casos
+ * fáceis, que são a maioria — e errar aqui não estraga nada, porque a
+ * escolha final é de quem estuda. */
+function vkParDisciplina(nome, candidatas) {
+  const alvo = vkNormal(nome);
+  const lista = candidatas || [];
+  const igual = lista.filter((c) => vkNormal(c) === alvo)[0];
+  if (igual) return igual;
+  const pal = (s) => vkNormal(s).split(" ").filter((w) => w.length > 3);
+  const minhas = pal(nome);
+  let melhor = null, forca = 0;
+  lista.forEach((c) => {
+    const dela = pal(c);
+    if (!minhas.length || !dela.length) return;
+    const comuns = minhas.filter((w) => dela.indexOf(w) >= 0).length;
+    const f = comuns / Math.max(minhas.length, dela.length);
+    if (f > forca) { forca = f; melhor = c; }
+  });
+  return forca >= 0.5 ? melhor : "";
+}
+
+/* Só os itens de uma disciplina. O recorte é o que torna o prompt
+ * possível: 232 tópicos contra 533 dariam 765 linhas de lista e cento e
+ * vinte mil combinações numa resposta só — a IA perde o fio no meio, e o
+ * que voltar não dá para conferir. */
+function vkSoDaDisciplina(lista, disciplina) {
+  if (!disciplina) return lista || [];
+  const alvo = vkNormal(disciplina);
+  return (lista || []).filter((x) => vkNormal(x.disciplina) === alvo);
+}
+
+/* AS DUAS LISTAS SOMADAS, sem repetir.
+ *
+ * A conferência precisa reconhecer os nomes que a IA devolveu, e eles
+ * foram escritos contra as listas do momento em que o prompt foi
+ * copiado. Trabalhando disciplina a disciplina, essas listas mudam entre
+ * copiar e colar — e recalcular sozinho faria a colagem descartar a
+ * resposta inteira dizendo "não achei nenhum destes".
+ *
+ * Somar em vez de escolher é o que não tem armadilha: reconhece o que
+ * foi enviado E o que está na tela agora, e nunca recusa uma resposta
+ * legítima por causa de um seletor que mudou de posição. */
+function vkUnir(a, b) {
+  const vistos = {}, saida = [];
+  (a || []).concat(b || []).forEach((x) => {
+    if (!x) return;
+    const k = x.chave || vkChave(x.disciplina, x.topico || x.nome);
+    if (vistos[k]) return;
+    vistos[k] = true;
+    saida.push(x);
+  });
+  return saida;
+}
+
 /* ------------------------------------------------------------------
  * O PROMPT
  * Recebe só o que a pessoa mandou para a IA. Sem datas: a IA responde
@@ -118,6 +223,28 @@ function vkPrompt(estudados, pendentes, nomeEdital, deOnde) {
     edital: nomeEdital || "",
     estudei: (estudados || []).map((e) => linha(e.disciplina, e.topico)).join("\n"),
     pendentes: (pendentes || []).map((p) => linha(p.disciplina, p.nome)).join("\n"),
+  });
+}
+
+/* O PROMPT DO SEGUNDO MODO — nenhum dos dois lados foi estudado.
+ *
+ * A pergunta é outra e o vocabulário acompanha. "PULAR" não faz sentido
+ * aqui: não há nada estudado para pular. O que se quer saber é se um
+ * estudo só cobre os dois editais ou se cada prova pede um recorte
+ * próprio — e o erro perigoso deste modo é o inverso do outro: dizer
+ * "serve para os dois" quando não serve faz estudar a matéria certa pelo
+ * ângulo errado, e o buraco só aparece na prova.
+ *
+ * Uma disciplina por vez, dito no cabeçalho, para a IA não sair
+ * procurando parentesco fora do assunto. */
+function vkPromptAmbos(a, b, nomeA, nomeB, disciplina) {
+  const linha = (d, t2) => "- " + (d ? d + " > " : "") + t2;
+  return t("vk_prompt_ambos", {
+    a: (nomeA && String(nomeA).trim()) || "?",
+    b: (nomeB && String(nomeB).trim()) || "?",
+    disc: disciplina || "",
+    la: (a || []).map((x) => linha(x.disciplina, x.topico || x.nome)).join("\n"),
+    lb: (b || []).map((x) => linha(x.disciplina, x.nome || x.topico)).join("\n"),
   });
 }
 
@@ -152,11 +279,19 @@ function vkLerResposta(txt, estudados, pendentes) {
     const bruto = String(p[2] || "").trim().toUpperCase();
     const sug = /^PULAR/.test(bruto) ? "PULAR"
       : (/^REVISAR/.test(bruto) ? "REVISAR"
-        : (/^ALTA/.test(bruto) ? "PULAR" : "REVISAR"));
+        /* o vocabulário do segundo modo. Não é sinônimo do primeiro:
+         * "serve para os dois" é uma previsão sobre um estudo que ainda
+         * vai acontecer, "pular" é um veredito sobre um estudo que já
+         * aconteceu. Guardar o token como veio é o que permite à agenda
+         * dizer a frase certa em cada caso. */
+        : (/^SERVE/.test(bruto) ? "SERVE"
+          : (/^RECORTE/.test(bruto) ? "RECORTE"
+            : (/^ALTA/.test(bruto) ? "PULAR" : "REVISAR"))));
+    const forte = sug === "PULAR" || sug === "SERVE";
     pares.push({ de: e, para: { disciplina: d.disciplina, topico: d.nome,
                                 chave: vkChave(d.disciplina, d.nome) },
                  /* conf fica, para não quebrar quem já lê este campo */
-                 conf: sug === "PULAR" ? "ALTA" : "MEDIA",
+                 conf: forte ? "ALTA" : "MEDIA",
                  sugestao: sug,
                  por: p[3] || "", origem: "ia" });
   });
@@ -168,7 +303,7 @@ function vkLerResposta(txt, estudados, pendentes) {
  * Idempotente de propósito: este botão vai ser apertado de novo todo mês,
  * e tem de acrescentar só o que é novo.
  * ------------------------------------------------------------------ */
-function vkAplicar(pares, editalId) {
+function vkAplicar(pares, editalId, modo) {
   let novos = 0, repetidos = 0;
   (pares || []).forEach((p) => {
     const a = p.de.chave, b = p.para.chave;
@@ -176,6 +311,11 @@ function vkAplicar(pares, editalId) {
     vinculos.push({
       a, b, editalB: editalId || "",
       conf: p.conf || "ALTA", sugestao: p.sugestao || "",
+      /* DE QUAL PERGUNTA ESTE VÍNCULO NASCEU. "Já estudei" e "vou
+       * estudar os dois" produzem o mesmo objeto e significam coisas
+       * diferentes; sem esta marca a tela teria de adivinhar qual frase
+       * dizer, e adivinharia errado metade das vezes. */
+      modo: modo || p.modo || "estudei",
       por: p.por || "",
       origem: p.origem || "manual", criado: new Date().toISOString(),
     });
@@ -272,7 +412,9 @@ function vkLigadosDe(disciplina, topico, maxSaltos) {
 function vkAcervoDe(disciplina, topico, fontes) {
   const f = fontes || {};
   const ligados = vkLigadosDe(disciplina, topico);
-  if (!ligados.length) return { temAlgo: false, itens: [] };
+  if (!ligados.length) {
+    return { temAlgo: false, temEstudo: false, temVinculo: false, itens: [] };
+  }
 
   const itens = ligados.map((L) => {
     /* a chave do vínculo é normalizada (sem acento, minúscula); os
@@ -329,7 +471,27 @@ function vkAcervoDe(disciplina, topico, fontes) {
    * é o mesmo que não tê-lo. */
   itens.sort((a, b) => (b.temAlgo ? 1 : 0) - (a.temAlgo ? 1 : 0)
     || (a.saltos - b.saltos));
-  return { temAlgo: itens.some((x) => x.temAlgo), itens };
+  /* TRÊS RESPOSTAS, NÃO UMA.
+   *
+   * "temAlgo" sozinho servia enquanto todo vínculo nascia do diário: se
+   * havia vínculo, havia estudo, e quase sempre havia material. No modo
+   * "vou estudar os dois" o vínculo nasce ANTES de qualquer estudo — os
+   * dois lados vazios — e com uma resposta só a agenda não mostrava
+   * nada, justamente no momento em que o aviso mais vale: você está
+   * prestes a estudar um assunto que também cai na outra prova.
+   *
+   * Então:
+   *   temVinculo — existe outro tópico ligado a este (a coincidência);
+   *   temEstudo  — algum deles foi estudado (o diário registrou);
+   *   temAlgo    — algum deles tem material para consultar.
+   * São três estados de uma mesma coisa ao longo do tempo, e a agenda
+   * diz uma frase diferente em cada um. */
+  return {
+    temAlgo: itens.some((x) => x.temAlgo),
+    temEstudo: itens.some((x) => !!x.data),
+    temVinculo: true,
+    itens,
+  };
 }
 
 /* ------------------------------------------------------------------

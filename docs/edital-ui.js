@@ -382,14 +382,30 @@ function edLinhaTopico(i, semDisciplina) {
    * existe material seu sobre este assunto, de outra prova. A decisão de
    * pular ou revisar continua sendo tomada por quem estudou, na hora em
    * que olhar o que já escreveu. */
+  /* O MESMO VÍNCULO, TRÊS FRASES — porque ele atravessa três momentos.
+   *
+   * Ligado antes de qualquer estudo (modo "vou estudar os dois"), o selo
+   * avisa que o assunto cai nas duas provas: é a hora em que isso muda
+   * o que você faz, porque um estudo pode render por dois.
+   * Depois que o diário registrar, ele passa a dizer onde e quando.
+   * E quando houver resumo, cartões ou questões do outro lado, ele abre
+   * a porta para eles.
+   *
+   * Nenhum dos três marca coisa alguma como estudada: quem decide pular
+   * ou revisar é quem estudou. */
   const jaEst = (typeof vkAcervoDoTopico === "function")
     ? vkAcervoDoTopico(i.disciplina, i.nome) : null;
-  if (jaEst && jaEst.temAlgo) {
+  if (jaEst && jaEst.temVinculo) {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "ed-item-jaestudei";
-    b.textContent = t("vka_selo");
-    b.title = t("vka_selo_aj");
+    const onde = (jaEst.itens || []).filter((x) => x.concurso)[0];
+    const cc = (onde && onde.concurso) || "";
+    b.className = "ed-item-jaestudei"
+      + (jaEst.temAlgo ? "" : (jaEst.temEstudo ? " sem-material" : " so-coincide"));
+    b.textContent = jaEst.temAlgo ? t("vka_selo")
+      : (jaEst.temEstudo ? t("vka_selo_sem_material")
+                         : t("vka_selo_coincide", { c: cc || "?" }));
+    b.title = jaEst.temAlgo ? t("vka_selo_aj") : t("vka_selo_coincide_aj");
     b.onclick = (ev) => { ev.stopPropagation(); vkaAbrir(i.disciplina, i.nome); };
     nome.append(b);
   }
@@ -3127,9 +3143,20 @@ function edIniciar() {
   $("btnEditalCorrigir").onclick = () => {
     if (edCorrecaoPendente) edAplicar(edCorrecaoPendente);
   };
-  $("btnEditalPrompt").onclick = () => {
-    abrirTextoSimples(t("ed_prompt_btn"), t("ed_prompt"));
-    reg("EDITAL", "prompt de organização aberto");
+  /* PASSO 1 DA REVISÃO — copiar o pedido, dentro da mesma caixa em que
+   * a resposta vai ser colada.
+   *
+   * Era um botão separado na bancada que abria uma janela de texto para
+   * a pessoa selecionar e copiar à mão; e nada ligava aquele botão ao
+   * outro, do outro lado da linha, que recebe a resposta. Agora copia de
+   * verdade, confirma que copiou e diz o tamanho — porque "abriu uma
+   * janela com texto" não é o mesmo que "está na área de transferência",
+   * e essa diferença era descoberta depois, na hora de colar. */
+  if ($("btnEdColarPedido")) $("btnEdColarPedido").onclick = async () => {
+    const txt = t("ed_prompt");
+    await edColarCopiarTexto(txt, t("ed_rev_pedir_ok",
+      { l: txt.split("\n").length, c: txt.length }), $("btnEdColarPedido"));
+    reg("EDITAL", "pedido de revisão copiado", txt.length + " caracteres");
   };
   $("btnEditalCopiar").onclick = async () => {
     try { await navigator.clipboard.writeText($("editalTexto").value); toast("toast_copied"); }
@@ -3456,6 +3483,12 @@ async function ndExcluir(nome) {
  * ===================================================================== */
 let vkTriagem = [];        /* candidatos de nome idêntico + a escolha de cada */
 let vkPendentesIa = [];    /* o que vai no prompt */
+/* A LISTA DA ESQUERDA QUE FOI MANDADA À IA.
+ * A conferência precisa dela para reconhecer as respostas, e não pode
+ * recalculá-la: no modo dos dois editais ela depende da disciplina
+ * escolhida, e trocar a disciplina depois de copiar o prompt faria a
+ * colagem descartar a resposta inteira dizendo "não achei". */
+let vkOrigemIa = [];
 
 /* ------------------------------------------------------------------
  * O ACERVO DO OUTRO CONCURSO, com os quatro depósitos reais.
@@ -3689,6 +3722,91 @@ function vkEstudadosDe(id) {
   return vkEstudados(doEdital.length ? doEdital : edDiario);
 }
 
+/* ------------------------------------------------------------------
+ * OS DOIS MODOS
+ *
+ * "estudei" — a origem é o DIÁRIO. Responde "o que eu não preciso
+ *   refazer?", e só enxerga o que já foi estudado.
+ * "ambos"   — a origem são os PENDENTES do outro edital. Responde "o que
+ *   eu vou estudar duas vezes sem perceber?", que é a pergunta de quem
+ *   tem duas provas abertas ao mesmo tempo.
+ *
+ * O vínculo criado é o mesmo objeto nos dois casos, e é por isso que
+ * este segundo modo não trouxe estrutura nova: assim que o diário
+ * registrar qualquer um dos lados, o material passa a aparecer do outro
+ * lado sozinho.
+ * ------------------------------------------------------------------ */
+let vkModo = "estudei";
+
+function vkEhAmbos() { return vkModo === "ambos"; }
+
+/* A LISTA DA ESQUERDA. É o único ponto em que os dois modos divergem. */
+function vkOrigemDe(id) {
+  return vkEhAmbos() ? vkComoOrigem(vkPendentesDe(id)) : vkEstudadosDe(id);
+}
+
+function vkTrocarModo(m) {
+  if (vkModo === m) return;
+  vkModo = m;
+  reg("VINCULO", "modo da comparacao", m);
+  vkPintarModo();
+  vkPintarDiscs();
+  vkPintarLados();
+}
+
+/* O que muda na tela quando o modo muda: os rótulos dos dois lados, a
+ * explicação do topo, o texto dos dois passos e a faixa de disciplinas.
+ * Deixar qualquer um destes falando do outro modo seria a tela dizendo
+ * uma coisa e fazendo outra. */
+function vkPintarModo() {
+  const amb = vkEhAmbos();
+  const liga = (id, on) => {
+    const b = $(id);
+    if (b && b.classList) b.classList.toggle("vk-modo-on", on);
+  };
+  liga("btnVkModoEstudei", !amb);
+  liga("btnVkModoAmbos", amb);
+  const põe = (id, chave) => { if ($(id)) $(id).textContent = t(chave); };
+  põe("vkExplica", amb ? "vk_explica_ambos" : "vk_explica");
+  põe("vkRotDe", amb ? "vk_de_ambos" : "vk_de_onde");
+  põe("vkRotPara", amb ? "vk_para_ambos" : "vk_para_onde");
+  põe("btnVkPrompt", amb ? "vk_prompt_btn_ambos" : "vk_prompt_btn");
+  põe("vkPromptExp", amb ? "vk_prompt_exp_ambos" : "vk_prompt_exp");
+  põe("vkColarExp", amb ? "vk_colar_exp_ambos" : "vk_colar_exp");
+  if ($("vkDiscs")) $("vkDiscs").hidden = !amb;
+  /* o atalho dos nomes idênticos é do outro modo: ali ele compara o que
+   * foi estudado; aqui não há nada estudado para comparar */
+  if (amb && $("vkAtalho")) $("vkAtalho").hidden = true;
+}
+
+/* AS DISCIPLINAS DOS DOIS LADOS, com o par provável já escolhido.
+ * O palpite é do app; a escolha é de quem estuda. */
+function vkPintarDiscs() {
+  if (!vkEhAmbos()) return;
+  const de = ($("vkDeEdital") || {}).value || "";
+  const para = ($("vkParaEdital") || {}).value || "";
+  const dA = vkDisciplinasDe(vkPendentesDe(de));
+  const dB = vkDisciplinasDe(vkPendentesDe(para));
+  const encher = (sel, lista, escolhido) => {
+    if (!sel) return;
+    sel.innerHTML = "";
+    lista.forEach((nome) => {
+      const o = document.createElement("option");
+      o.value = nome; o.textContent = nome;
+      if (nome === escolhido) o.selected = true;
+      sel.append(o);
+    });
+    sel.value = escolhido || lista[0] || "";
+  };
+  const antesA = ($("vkDeDisc") || {}).value || "";
+  const escolhaA = dA.indexOf(antesA) >= 0 ? antesA : (dA[0] || "");
+  encher($("vkDeDisc"), dA, escolhaA);
+  /* o outro lado acompanha: trocar a disciplina da esquerda e deixar a
+   * direita parada montaria um prompt comparando duas matérias que não
+   * têm nada a ver — e a IA responderia alguma coisa */
+  encher($("vkParaDisc"), dB, vkParDisciplina(escolhaA, dB) || dB[0] || "");
+}
+
 function vkAbrir() {
   const abertoId = (typeof edAberto === "function" && edAberto())
     ? edAberto().id : "";
@@ -3696,9 +3814,11 @@ function vkAbrir() {
     .filter((e) => String(e.id) !== String(abertoId))[0];
   vkEditaisPara($("vkDeEdital"), outro ? outro.id : abertoId);
   vkEditaisPara($("vkParaEdital"), abertoId);
+  vkPintarModo();
+  vkPintarDiscs();
   vkPintarLados();
   abrirModal("dlgJaEstudei");
-  reg("VINCULO", "comparacao entre editais aberta", "");
+  reg("VINCULO", "comparacao entre editais aberta", vkModo);
 }
 
 /* O RESUMO SE REESCREVE A CADA MUDANÇA.
@@ -3719,16 +3839,28 @@ function vkPintarLados() {
     vkPendentesIa = [];
     return;
   }
-  const est = vkEstudadosDe(de);
-  const pend = vkPendentesDe(para);
+  /* NO MODO DOS DOIS EDITAIS, A COMPARAÇÃO É POR DISCIPLINA.
+   * Sem o recorte seriam 533 × 232 combinações num prompt só; com ele,
+   * uma disciplina contra a outra — que é o tamanho em que a IA ainda
+   * presta atenção e o log ainda dá para ler. */
+  const dDe = ($("vkDeDisc") || {}).value || "";
+  const dPara = ($("vkParaDisc") || {}).value || "";
+  const est = vkEhAmbos()
+    ? vkSoDaDisciplina(vkOrigemDe(de), dDe) : vkEstudadosDe(de);
+  const pend = vkEhAmbos()
+    ? vkSoDaDisciplina(vkPendentesDe(para), dPara) : vkPendentesDe(para);
   vkPendentesIa = pend;
-  vkTriagem = vkIdenticos(est, pend).map((c) =>
-    Object.assign({}, c, { escolha: "igual" }));
+  vkTriagem = vkEhAmbos() ? []
+    : vkIdenticos(est, pend).map((c) =>
+      Object.assign({}, c, { escolha: "igual" }));
 
   if (res) {
-    res.textContent = t("vk_resumo_novo", {
-      e: est.length, p: pend.length,
-      de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" });
+    res.textContent = vkEhAmbos()
+      ? t("vk_resumo_ambos", { e: est.length, p: pend.length,
+          da: dDe || "?", db: dPara || "?",
+          de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" })
+      : t("vk_resumo_novo", { e: est.length, p: pend.length,
+          de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" });
   }
   if (at) {
     at.hidden = !vkTriagem.length;
@@ -3758,15 +3890,36 @@ async function vkGerarPrompt() {
   const de = ($("vkDeEdital") || {}).value || "";
   const para = ($("vkParaEdital") || {}).value || "";
   if (String(de) === String(para)) { await uiAlert(t("vk_mesmo_edital")); return; }
-  const est = vkEstudadosDe(de);
-  const pend = vkPendentesDe(para);
-  if (!est.length) { await uiAlert(t("vk_sem_diario")); return; }
-  const txt = vkPrompt(est, pend, vkNomeDoEdital(para), vkNomeDoEdital(de));
-  try { await navigator.clipboard.writeText(txt); }
-  catch (e) { await uiAlert(t("toast_copy_fail")); return; }
-  reg("VINCULO", "prompt gerado",
-      est.length + " estudados × " + pend.length + " pendentes");
-  toast("vk_prompt_copiado");
+  const amb = vkEhAmbos();
+  const dDe = ($("vkDeDisc") || {}).value || "";
+  const dPara = ($("vkParaDisc") || {}).value || "";
+  const est = amb ? vkSoDaDisciplina(vkOrigemDe(de), dDe) : vkEstudadosDe(de);
+  const pend = amb ? vkSoDaDisciplina(vkPendentesDe(para), dPara)
+                   : vkPendentesDe(para);
+  if (!est.length) {
+    await uiAlert(t(amb ? "vk_sem_pendentes" : "vk_sem_diario")); return;
+  }
+  if (amb && !pend.length) { await uiAlert(t("vk_sem_pendentes")); return; }
+  /* a lista que a IA vai ver é a MESMA que a conferência vai usar para
+   * reconhecer as respostas — guardá-la aqui evita o caso em que a
+   * pessoa troca a disciplina depois de copiar e a colagem descarta
+   * tudo dizendo "não achei" */
+  vkPendentesIa = pend;
+  vkOrigemIa = est;
+  const txt = amb
+    ? vkPromptAmbos(est, pend, vkNomeDoEdital(de), vkNomeDoEdital(para), dDe)
+    : vkPrompt(est, pend, vkNomeDoEdital(para), vkNomeDoEdital(de));
+  reg("VINCULO", "prompt gerado (" + vkModo + ")",
+      est.length + " × " + pend.length + (amb ? " · " + dDe : ""));
+  /* A REAÇÃO DO BOTÃO. Antes era um toast de dois segundos que passava
+   * despercebido, e ficava a dúvida de sempre: copiou? copiou o quê?
+   * Agora o botão confirma e a caixa diz o tamanho do que foi copiado e
+   * qual é o próximo passo. */
+  await edColarCopiarTexto(txt,
+    t(amb ? "vk_prompt_copiado_ambos" : "vk_prompt_copiado_n", {
+      e: est.length, p: pend.length, l: txt.split("\n").length,
+      c: txt.length, d: dDe }),
+    $("btnVkPrompt"));
 }
 
 /* ------------------------------------------------------------------
@@ -3784,8 +3937,18 @@ let vkPares = [];
 
 function vkConferirColagem() {
   const de = ($("vkDeEdital") || {}).value || "";
-  const est = vkEstudadosDe(de);
-  const r = vkLerResposta($("vkColarTexto").value, est, vkPendentesIa);
+  const para = ($("vkParaEdital") || {}).value || "";
+  /* AS LISTAS ENVIADAS SOMADAS ÀS DE AGORA.
+   *
+   * A resposta da IA foi escrita contra as listas do momento em que o
+   * prompt foi copiado, e no modo dos dois editais essas listas são de
+   * UMA disciplina — trocar o seletor entre copiar e colar (que é o
+   * gesto normal de quem trabalha disciplina a disciplina) faria a
+   * conferência descartar a resposta inteira dizendo "não achei". Somar
+   * reconhece os dois conjuntos e não recusa nada legítimo. */
+  const est = vkUnir(vkOrigemIa, vkOrigemDe(de));
+  const pend = vkUnir(vkPendentesIa, vkPendentesDe(para));
+  const r = vkLerResposta($("vkColarTexto").value, est, pend);
   const av = $("vkColarAviso");
   av.hidden = false;
   av.innerHTML = "";
@@ -3794,9 +3957,13 @@ function vkConferirColagem() {
     d.className = "ed-mud" + (cls ? " " + cls : "");
     d.textContent = txt; av.append(d);
   };
-  const pular = r.pares.filter((p) => p.sugestao === "PULAR").length;
-  linha(t("vk_conf_resumo", { n: r.pares.length, a: pular,
-                             m: r.pares.length - pular }));
+  /* "forte" quer dizer coisas diferentes em cada modo — pular um estudo
+   * já feito, ou um estudo só servir para as duas provas — e por isso a
+   * frase do resumo também muda. */
+  const forte = r.pares.filter((p) =>
+    p.sugestao === "PULAR" || p.sugestao === "SERVE").length;
+  linha(t(vkEhAmbos() ? "vk_conf_resumo_ambos" : "vk_conf_resumo",
+          { n: r.pares.length, a: forte, m: r.pares.length - forte }));
   if (r.ignoradas.length)
     linha(t("vk_conf_ignoradas", { n: r.ignoradas.length }), "aviso");
   if (!r.pares.length) linha(t("vk_conf_nada"), "perigo");
@@ -3832,9 +3999,16 @@ function vkPintarPares() {
     const tx = document.createElement("div");
     tx.className = "vk-par-tx";
     const sug = document.createElement("span");
-    const ehPular = x.sugestao === "PULAR";
-    sug.className = "vk-sug " + (ehPular ? "pular" : "revisar");
-    sug.textContent = t(ehPular ? "vk_sug_pular" : "vk_sug_revisar");
+    /* QUATRO PALAVRAS, DOIS PARES. O modo "já estudei" devolve
+     * PULAR/REVISAR; o modo "vou estudar os dois" devolve
+     * SERVE/RECORTE. Traduzir um no outro perderia justamente a
+     * diferença: "pular" é veredito sobre estudo feito, "serve para os
+     * dois" é previsão sobre estudo que ainda vai acontecer. */
+    const forte = x.sugestao === "PULAR" || x.sugestao === "SERVE";
+    const nova = x.sugestao === "SERVE" || x.sugestao === "RECORTE";
+    sug.className = "vk-sug " + (forte ? "pular" : "revisar");
+    sug.textContent = t(nova ? (forte ? "vk_sug_serve" : "vk_sug_recorte")
+                             : (forte ? "vk_sug_pular" : "vk_sug_revisar"));
     tx.append(sug);
     const de = document.createElement("span");
     de.className = "vk-par-de";
@@ -3881,10 +4055,11 @@ async function vkAplicarColagem() {
   /* SEGUNDA CONFIRMAÇÃO, dizendo o que o vínculo faz E o que ele não
    * faz: a confusão entre "vinculado" e "estudado" é a única que pode
    * custar um assunto na prova. */
-  if (!(await uiConfirm(t("vk_par_conf", { n: usar.length })))) return;
+  if (!(await uiConfirm(t(vkEhAmbos() ? "vk_par_conf_ambos" : "vk_par_conf",
+                          { n: usar.length })))) return;
   const para = ($("vkParaEdital") || {}).value || "";
-  const res = vkAplicar(usar, para);
-  reg("VINCULO", "aplicados da IA",
+  const res = vkAplicar(usar, para, vkModo);
+  reg("VINCULO", "aplicados da IA (" + vkModo + ")",
       res.novos + " novos, " + res.repetidos + " já existiam");
   $("dlgVkColar").close();
   $("dlgJaEstudei").close();
@@ -3898,9 +4073,23 @@ function vkIniciarTela() {
   if ($("btnJaEstudei")) $("btnJaEstudei").onclick = vkAbrir;
   if ($("btnVkaFechar")) $("btnVkaFechar").onclick = () => $("dlgVkAcervo").close();
   if ($("btnVkIdenticos")) $("btnVkIdenticos").onclick = vkAceitarIdenticos;
+  if ($("btnVkModoEstudei")) {
+    $("btnVkModoEstudei").onclick = () => vkTrocarModo("estudei");
+  }
+  if ($("btnVkModoAmbos")) {
+    $("btnVkModoAmbos").onclick = () => vkTrocarModo("ambos");
+  }
   ["vkDeEdital", "vkParaEdital"].forEach((id) => {
-    if ($(id)) $(id).onchange = vkPintarLados;
+    /* trocar de edital refaz as listas de disciplina: mantê-las seria
+     * oferecer matérias que não existem no edital agora escolhido */
+    if ($(id)) $(id).onchange = () => { vkPintarDiscs(); vkPintarLados(); };
   });
+  /* trocar a disciplina da ESQUERDA re-sugere a da direita; trocar a da
+   * direita é a palavra final de quem estuda e não mexe em mais nada */
+  if ($("vkDeDisc")) {
+    $("vkDeDisc").onchange = () => { vkPintarDiscs(); vkPintarLados(); };
+  }
+  if ($("vkParaDisc")) $("vkParaDisc").onchange = vkPintarLados;
   if ($("btnVkPrompt")) $("btnVkPrompt").onclick = vkGerarPrompt;
   if ($("btnVkTodos")) $("btnVkTodos").onclick = () => vkMarcarTodos(true);
   if ($("btnVkNenhum")) $("btnVkNenhum").onclick = () => vkMarcarTodos(false);
