@@ -879,7 +879,25 @@ function salvarDiario() {
   try { guardar("eac_edital_diario", JSON.stringify(edDiario)); }
   catch (e) {}
 }
-function hojeISO() { return new Date().toISOString().slice(0, 10); }
+/* O DIA DE HOJE, NO FUSO DE QUEM ESTUDA.
+ *
+ * Era "toISOString().slice(0, 10)", que devolve o dia em UTC. No Brasil
+ * isso significa que TODO REGISTRO FEITO DEPOIS DAS 21H é gravado com a
+ * data de amanhã — e quem estuda para concurso estuda à noite.
+ *
+ * O estrago é silencioso e composto: a sessão aparece no diário num dia
+ * que ainda não chegou; a revisão passa a ser contada a partir da data
+ * errada; e "dias desde que estudei" fica negativo, o que nenhuma tela
+ * espera. Nada disso avisa, e nada disso se corrige depois — a data que
+ * foi gravada é a que ficou.
+ *
+ * Aqui o dia vem dos componentes LOCAIS, que é o que a pessoa vê no
+ * relógio dela. */
+function hojeISO() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+    + "-" + String(d.getDate()).padStart(2, "0");
+}
 
 /* Para QUAL concurso foi este estudo. Hoje o app tem um edital só, mas o
  * registro é para sempre: sem esta marca, o dia em que existirem dois planos
@@ -2544,8 +2562,25 @@ function edConferirColagem() {
     linha(t("ed_colar_pesos", {
       l: c.pesosMudam.slice(0, 4).map((p) => p.nome + " " + p.de + "→" + p.para).join(", "),
     }), "aviso");
-  if (c.somem.length && !c.orfaos.length)
-    linha(t("ed_colar_somem", { n: c.somem.length }), "aviso");
+  /* DUAS FRASES, DUAS COISAS.
+   *
+   * "107 tópicos somem" descrevia uma revisão em que nada se perdeu e
+   * assustava com razão aparente — dividir "Cassação, anulação,
+   * revogação e convalidação" em quatro linhas FAZ o nome antigo deixar
+   * de existir, e isso não é perda, é o objetivo.
+   *
+   * Alarme falso ensina a ignorar o alarme. Então a renomeação vira
+   * informação neutra, e a palavra "somem" fica reservada para o que
+   * some de verdade. */
+  const renomeados = (c.herdados || []).length;
+  const perdidos = (c.semHerdeiro || []).length;
+  if (renomeados) linha(t("ed_colar_renomeados", { n: renomeados }));
+  if (perdidos && !c.orfaos.length)
+    linha(t("ed_colar_somem", { n: perdidos }), "aviso");
+  /* e o único risco real de uma renomeação: a marca de estudado */
+  const marcados = (c.somemDetalhe || []).filter((x) => x.marcado).length;
+  if (marcados && !c.orfaos.length)
+    linha(t("ed_colar_somem_marcados", { n: marcados }), "perigo");
   edColarPintarLista(c);
   if (c.ignoradas) linha(t("ed_colar_ignoradas", { n: c.ignoradas }), "aviso");
   if (!c.orfaos.length && !c.discSomem.length && !c.pesosMudam.length && !c.somem.length)
@@ -2602,16 +2637,25 @@ function edColarPintarLista(c) {
   const tit = $("edColarListaTit");
   if (tit) {
     tit.textContent = t("ed_colar_lista_tit", {
-      n: det.length, h: (c.herdados || []).length, p: perdidos.length });
+      h: (c.herdados || []).length, p: perdidos.length });
   }
 
   box.innerHTML = "";
-  const grupo = (rotulo, itens, perdido) => {
+  const grupo = (rotulo, itens, perdido, explica) => {
     if (!itens.length) return;
     const g = document.createElement("div");
     g.className = "ed-colar-grupo";
     g.textContent = rotulo + " (" + itens.length + ")";
     box.append(g);
+    /* O MOTIVO JUNTO DO GRUPO. Sem ele, uma lista de cem linhas
+     * intitulada "divididos ou renomeados" ainda parece um problema —
+     * a pessoa lê cem nomes desaparecendo e conta com o pior. */
+    if (explica) {
+      const e = document.createElement("div");
+      e.className = "nota ed-colar-grupo-exp";
+      e.textContent = explica;
+      box.append(e);
+    }
     itens.forEach((x) => {
       const li = document.createElement("div");
       li.className = "ed-colar-item" + (perdido ? " perdido" : "");
@@ -2640,8 +2684,10 @@ function edColarPintarLista(c) {
   /* o que não tem para onde ter ido vem PRIMEIRO: é a lista sobre a qual
    * se decide, e enterrá-la depois de noventa divisões legítimas seria
    * escondê-la com aparência de completude */
-  grupo(t("ed_colar_g_perdidos"), perdidos, true);
-  grupo(t("ed_colar_g_herdados"), (c.herdados || []), false);
+  grupo(t("ed_colar_g_perdidos"), perdidos, true,
+        t("ed_colar_g_perdidos_exp"));
+  grupo(t("ed_colar_g_herdados"), (c.herdados || []), false,
+        t("ed_colar_g_herdados_exp"));
 }
 
 function edColarTextoDaLista(c) {
