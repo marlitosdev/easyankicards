@@ -376,6 +376,24 @@ function edLinhaTopico(i, semDisciplina) {
   const dSelo = (typeof difSeloDe === "function") ? difSeloDe(i) : null;
   if (dSelo) nome.append(dSelo);
 
+  /* "JÁ ESTUDEI ISTO" — o selo que abre a porta para o outro concurso.
+   *
+   * Ele NÃO diz que o tópico está feito, e não marca nada: diz que
+   * existe material seu sobre este assunto, de outra prova. A decisão de
+   * pular ou revisar continua sendo tomada por quem estudou, na hora em
+   * que olhar o que já escreveu. */
+  const jaEst = (typeof vkAcervoDoTopico === "function")
+    ? vkAcervoDoTopico(i.disciplina, i.nome) : null;
+  if (jaEst && jaEst.temAlgo) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ed-item-jaestudei";
+    b.textContent = t("vka_selo");
+    b.title = t("vka_selo_aj");
+    b.onclick = (ev) => { ev.stopPropagation(); vkaAbrir(i.disciplina, i.nome); };
+    nome.append(b);
+  }
+
   /* A TRAVA DIZ QUE ATUOU. Ela dobra a presença da disciplina na semana;
    * fazer isso calado seria a agenda mudando sozinha, que é exatamente a
    * reclamação que deu origem a tudo isto. */
@@ -3439,6 +3457,175 @@ async function ndExcluir(nome) {
 let vkTriagem = [];        /* candidatos de nome idêntico + a escolha de cada */
 let vkPendentesIa = [];    /* o que vai no prompt */
 
+/* ------------------------------------------------------------------
+ * O ACERVO DO OUTRO CONCURSO, com os quatro depósitos reais.
+ *
+ * vinculos.js não conhece material.js nem questoes.js — ele é sobre a
+ * LIGAÇÃO, não sobre o que está ligado. É aqui, na camada de tela, que
+ * os quatro acervos se juntam; e é por isso que a função lá aceita os
+ * mapas de fora e o teste consegue entregar mapas de mentira.
+ * ------------------------------------------------------------------ */
+function vkAcervoDoTopico(disciplina, topico) {
+  /* a chave do vínculo é normalizada; os acervos usam a original. O
+   * diário é a ponte: ele guarda a chave real de cada estudo. */
+  const chaveReal = {};
+  const nomeReal = {};
+  const estudo = {};
+  (edDiario || []).forEach((x) => {
+    if (!x || !x.n || x.a === "pendente") return;
+    const norm = vkChave(x.disc, x.n);
+    const real = (typeof matChave === "function")
+      ? matChave(x.disc, x.n) : (x.disc + "›" + x.n).toLowerCase();
+    chaveReal[norm] = real;
+    if (!nomeReal[norm]) nomeReal[norm] = (x.disc || "") + "›" + x.n;
+    /* o registro MAIS RECENTE manda: um tópico estudado duas vezes tem
+     * duas linhas no diário, e a data que importa é a última */
+    const antes = estudo[norm];
+    if (!antes || String(x.d || "") > String(antes.data || "")) {
+      estudo[norm] = { data: x.d || "", concurso: x.cc || "", acao: x.a || "" };
+    }
+  });
+
+  /* matResumos e a variavel viva do modulo de material; matResumosAtual
+   * so existe no simulador de teste, e usa-la aqui daria um objeto vazio
+   * no navegador — o acervo apareceria sempre sem resumo nem cartoes. */
+  const resumos = (typeof matResumos !== "undefined" && matResumos) || {};
+  const leis = {};
+  const questoes = {};
+  Object.keys(chaveReal).forEach((norm) => {
+    const real = chaveReal[norm];
+    try {
+      leis[real] = (typeof leisDoTopico === "function")
+        ? leisDoTopico(real) : [];
+    } catch (e) { leis[real] = []; }
+    try {
+      questoes[real] = (typeof qsContarDoTopico === "function")
+        ? qsContarDoTopico(real) : 0;
+    } catch (e) { questoes[real] = 0; }
+  });
+
+  /* EM QUAL EDITAL CADASTRADO CADA TÓPICO EXISTE.
+   *
+   * É a resposta certa para "de qual concurso é isto?" quando o diário
+   * não registrou nada. O primeiro edital que contém o tópico vence: um
+   * mesmo nome em dois editais é raro, e quando acontece qualquer um dos
+   * dois é uma resposta melhor do que nenhuma. */
+  const editalDoTopico = {};
+  (typeof editais !== "undefined" ? editais : []).forEach((e) => {
+    const nome = vkNomeDoEdital(e.id) || e.nome || "";
+    const r = lerEdital(e.texto || "");
+    (r.disciplinas || []).forEach((d) => {
+      (d.topicos || []).forEach((tp) => {
+        const k = vkChave(d.nome, tp.nome);
+        if (!editalDoTopico[k]) editalDoTopico[k] = nome;
+        if (!chaveReal[k]) chaveReal[k] = matChave(d.nome, tp.nome);
+        /* o nome do edital vence o do diário: é o texto que você
+         * escreveu no plano, e é como o assunto aparece em toda parte */
+        nomeReal[k] = d.nome + "›" + tp.nome;
+      });
+    });
+  });
+
+  return vkAcervoDe(disciplina, topico,
+                    { chaveReal, nomeReal, estudo, resumos, leis, questoes,
+                      editalDoTopico });
+}
+
+/* ------------------------------------------------------------------
+ * A GAVETA DE CONSULTA
+ * ------------------------------------------------------------------ */
+function vkaAbrir(disciplina, topico) {
+  const ac = vkAcervoDoTopico(disciplina, topico);
+  const sub = $("vkaSub");
+  if (sub) sub.textContent = t("vka_sub", { d: disciplina, t: topico });
+  const box = $("vkaLista");
+  if (!box) return;
+  box.innerHTML = "";
+
+  (ac.itens || []).forEach((x) => {
+    const li = document.createElement("div");
+    li.className = "vka-item";
+    const cab = document.createElement("div");
+    cab.className = "vka-cab";
+    cab.textContent = x.disciplina + " › " + x.topico;
+    li.append(cab);
+
+    /* QUANDO E PARA QUEM. É o par que decide: "estudei há 40 dias para o
+     * TCE-PE" e "estudei há dois anos" pedem coisas diferentes. */
+    const q = document.createElement("div");
+    q.className = "vka-quando";
+    const chave = x.data ? (x.acao === "revisado" ? "vka_revisado_em"
+                                                  : "vka_estudado_em")
+                         : "vka_estudado_sem_data";
+    let txt = t(chave, { c: x.concurso || "?", d: x.data || "" });
+    if (x.data && typeof difDias === "function") {
+      const dias = difDias(x.data);
+      if (isFinite(dias)) txt += t("vka_ha_dias", { n: dias });
+    }
+    q.textContent = txt;
+    li.append(q);
+
+    const acervo = document.createElement("div");
+    acervo.className = "vka-acervo";
+    const botao = (rot, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min";
+      b.textContent = rot;
+      b.onclick = fn;
+      acervo.append(b);
+    };
+    if (x.resumoChars) {
+      botao(t("vka_resumo", { n: x.resumoChars }) + " · " + t("vka_abrir"),
+            () => vkaIrPara(x, "resumo"));
+    }
+    if (x.cartoes) {
+      botao(t("vka_cartoes", { n: x.cartoes }) + " · " + t("vka_abrir"),
+            () => vkaIrPara(x, "cartoes"));
+    }
+    if (x.leis) {
+      botao(t("vka_leis", { n: x.leis }) + " · " + t("vka_abrir"),
+            () => vkaIrPara(x, "leis"));
+    }
+    if (x.questoes) {
+      botao(t("vka_questoes", { n: x.questoes }) + " · " + t("vka_abrir"),
+            () => vkaIrPara(x, "questoes"));
+    }
+    if (!x.temAlgo) {
+      const n = document.createElement("div");
+      n.className = "vka-nada";
+      n.textContent = t("vka_nada");
+      acervo.append(n);
+    }
+    li.append(acervo);
+    box.append(li);
+  });
+
+  abrirModal("dlgVkAcervo");
+  reg("VINCULO", "acervo de outro concurso consultado",
+      disciplina + " › " + topico + " · " + (ac.itens || []).length + " ligado(s)");
+}
+
+/* ABRIR O MATERIAL DO OUTRO TÓPICO — o de lá, no lugar dele.
+ *
+ * Nunca copiar para cá. Trazer o texto para o tópico desta prova
+ * misturaria o recorte de dois concursos num resumo só, e ninguém
+ * saberia depois qual parte foi escrita para qual banca. */
+function vkaIrPara(item, onde) {
+  $("dlgVkAcervo").close();
+  const alvo = { disciplina: item.disciplina, nome: item.topico };
+  if (onde === "questoes" && typeof qsUiAbrirDoTopico === "function") {
+    qsUiAbrirDoTopico(item.chave);
+    return;
+  }
+  if (typeof matAbrirEditor === "function") {
+    matAbrirEditor(alvo, true);
+    if (onde === "cartoes" && typeof matCartoesAbrir === "function") {
+      matCartoesAbrir();
+    }
+  }
+}
+
 function vkPendentesDoEdital() {
   const r = lerEdital($("editalTexto").value);
   const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
@@ -3449,105 +3636,155 @@ function vkPendentesDoEdital() {
     .map((i) => ({ disciplina: i.disciplina, nome: i.nome }));
 }
 
-function vkAbrir() {
-  const est = vkEstudados(edDiario);
-  if (!est.length) { uiAlert(t("vk_sem_diario")); return; }
-  const pend = vkPendentesDoEdital();
-  vkTriagem = vkIdenticos(est, pend).map((c) => Object.assign({}, c, { escolha: "ia" }));
-  vkPendentesIa = pend;
-
-  $("vkResumo").textContent = t("vk_resumo", {
-    e: est.length, p: pend.length, i: vkTriagem.length });
-  vkPintarTriagem();
-  abrirModal("dlgJaEstudei");
-  reg("VINCULO", "triagem aberta", est.length + " estudados, "
-      + vkTriagem.length + " nomes idênticos");
-}
-
-function vkPintarTriagem() {
-  const box = $("vkLista");
-  box.innerHTML = "";
-  if (!vkTriagem.length) {
-    const p = document.createElement("div");
-    p.className = "esq-vazio"; p.textContent = t("vk_sem_identicos");
-    box.append(p); return;
-  }
-  vkTriagem.forEach((c, k) => {
-    const li = document.createElement("div");
-    li.className = "vk-item";
-    const par = document.createElement("div");
-    par.className = "vk-par";
-    const b = document.createElement("b");
-    b.textContent = c.para.topico;
-    par.append(b);
-    li.append(par);
-
-    const d = document.createElement("div");
-    d.className = "vk-disc" + (c.mesmaDisciplina ? "" : " difere");
-    d.textContent = c.mesmaDisciplina
-      ? t("vk_mesma_disc", { d: c.de.disciplina })
-      : t("vk_outra_disc", { a: c.de.disciplina, b: c.para.disciplina });
-    li.append(d);
-
-    const esc = document.createElement("div");
-    esc.className = "vk-esc";
-    [["igual", "vk_op_igual"], ["ia", "vk_op_ia"], ["nao", "vk_op_nao"]]
-      .forEach(([v, rot]) => {
-        const bt = document.createElement("button");
-        bt.type = "button";
-        bt.className = "vk-op op-" + v + (c.escolha === v ? " ativa" : "");
-        bt.textContent = t(rot);
-        bt.onclick = () => { vkTriagem[k].escolha = v; vkPintarTriagem(); };
-        esc.append(bt);
-      });
-    li.append(esc);
-    box.append(li);
+/* Os editais que podem entrar na comparação. */
+function vkEditaisPara(sel, escolhido) {
+  if (!sel) return;
+  sel.innerHTML = "";
+  (typeof editais !== "undefined" ? editais : []).forEach((e) => {
+    const o = document.createElement("option");
+    o.value = e.id;
+    const cfg = lerEdital(e.texto || "").cfg || {};
+    o.textContent = e.nome || cfg.concurso || t("ed_sem_nome");
+    if (String(e.id) === String(escolhido)) o.selected = true;
+    sel.append(o);
   });
+  /* o VALUE explícito, além do "selected" na opção: são duas formas de
+   * dizer a mesma coisa, e só a primeira é lida por quem pergunta
+   * "sel.value" logo depois — inclusive o próprio app, três linhas
+   * abaixo, ao montar o resumo. */
+  const primeiro = (typeof editais !== "undefined" ? editais : [])[0];
+  sel.value = String(escolhido || (primeiro ? primeiro.id : ""));
 }
 
-function vkTodos(escolha) {
-  vkTriagem.forEach((c) => { c.escolha = escolha; });
-  vkPintarTriagem();
+/* O CABEÇALHO DE UM EDITAL — nome do concurso e cargo, que é o que
+ * decide se dois assuntos homônimos são a mesma coisa. */
+function vkNomeDoEdital(id) {
+  const e = (typeof editais !== "undefined" ? editais : [])
+    .filter((x) => String(x.id) === String(id))[0];
+  if (!e) return "";
+  const cfg = lerEdital(e.texto || "").cfg || {};
+  return cfg.concurso || e.nome || "";
 }
 
-/* Aplica SÓ o que a pessoa marcou como "é o mesmo". */
-function vkAplicarTriagem() {
-  const aceitos = vkTriagem.filter((c) => c.escolha === "igual");
-  if (!aceitos.length) { uiAlert(t("vk_nada_marcado")); return; }
-  const ed = typeof edAberto === "function" ? edAberto() : null;
-  const r = vkAplicar(aceitos.map((c) => Object.assign({}, c, {
-    conf: "ALTA", por: t("vk_por_identico"), origem: "nome_identico" })),
-    ed ? ed.id : "");
-  reg("VINCULO", "aceitos por nome idêntico", r.novos + " vínculos");
-  vkTriagem = vkTriagem.filter((c) => c.escolha !== "igual");
-  vkPintarTriagem();
+/* Os pendentes de um edital ESCOLHIDO — não mais só o aberto. */
+function vkPendentesDe(id) {
+  const e = (typeof editais !== "undefined" ? editais : [])
+    .filter((x) => String(x.id) === String(id))[0];
+  if (!e) return [];
+  const r = lerEdital(e.texto || "");
+  const s2 = typeof edSituacao === "function" ? edSituacao(e) : {};
+  const plano = montarPlano(r, { horas: (r.cfg || {}).horas || 10,
+    prova: s2.prova, feitos: e.progresso || {} });
+  return plano.itens.filter((i) => !i.feito)
+    .map((i) => ({ disciplina: i.disciplina, nome: i.nome }));
+}
+
+/* O que foi estudado NUM edital: o diário filtrado pelo concurso dele. */
+function vkEstudadosDe(id) {
+  const nome = vkNomeDoEdital(id);
+  const doEdital = (edDiario || []).filter((x) =>
+    !nome || String(x.cc || "") === nome);
+  /* sem nome de concurso no diário antigo, vale tudo: registros de antes
+   * da marca de concurso não podem sumir da comparação */
+  return vkEstudados(doEdital.length ? doEdital : edDiario);
+}
+
+function vkAbrir() {
+  const abertoId = (typeof edAberto === "function" && edAberto())
+    ? edAberto().id : "";
+  const outro = (typeof editais !== "undefined" ? editais : [])
+    .filter((e) => String(e.id) !== String(abertoId))[0];
+  vkEditaisPara($("vkDeEdital"), outro ? outro.id : abertoId);
+  vkEditaisPara($("vkParaEdital"), abertoId);
+  vkPintarLados();
+  abrirModal("dlgJaEstudei");
+  reg("VINCULO", "comparacao entre editais aberta", "");
+}
+
+/* O RESUMO SE REESCREVE A CADA MUDANÇA.
+ *
+ * Antes era escrito uma vez, ao abrir, e a lista se repintava sozinha —
+ * dava "1 têm nome idêntico" ao lado de "nenhum tópico tem nome
+ * idêntico", as duas frases na mesma tela. Número que não acompanha o
+ * que descreve é pior que número nenhum. */
+function vkPintarLados() {
+  const de = ($("vkDeEdital") || {}).value || "";
+  const para = ($("vkParaEdital") || {}).value || "";
+  const res = $("vkResumo");
+  const at = $("vkAtalho");
+  if (String(de) === String(para)) {
+    if (res) res.textContent = t("vk_mesmo_edital");
+    if (at) at.hidden = true;
+    vkTriagem = [];
+    vkPendentesIa = [];
+    return;
+  }
+  const est = vkEstudadosDe(de);
+  const pend = vkPendentesDe(para);
+  vkPendentesIa = pend;
+  vkTriagem = vkIdenticos(est, pend).map((c) =>
+    Object.assign({}, c, { escolha: "igual" }));
+
+  if (res) {
+    res.textContent = t("vk_resumo_novo", {
+      e: est.length, p: pend.length,
+      de: vkNomeDoEdital(de) || "?", para: vkNomeDoEdital(para) || "?" });
+  }
+  if (at) {
+    at.hidden = !vkTriagem.length;
+    const txt = $("vkAtalhoTxt");
+    if (txt) txt.textContent = t("vk_identicos_txt", { n: vkTriagem.length });
+  }
+}
+
+/* O ATALHO: aceitar os nomes idênticos sem passar pela IA. Deixou de ser
+ * etapa obrigatória — em 7 assuntos contra 533 tópicos ele achou UM par,
+ * e ambíguo o bastante para o próprio texto mandar conferir. */
+async function vkAceitarIdenticos() {
+  if (!vkTriagem.length) return;
+  if (!(await uiConfirm(t("vk_identicos_conf", { n: vkTriagem.length })))) return;
+  const para = ($("vkParaEdital") || {}).value || "";
+  const res = vkAplicar(vkTriagem.map((c) =>
+    Object.assign({}, c, { conf: "ALTA" })), para);
+  reg("VINCULO", "identicos aceitos sem IA",
+      res.novos + " novos, " + res.repetidos + " ja existiam");
+  vkPintarLados();
   edRender();
   if (typeof hubPintarAgenda === "function") hubPintarAgenda();
-  toast("vk_aplicados");
+  await uiAlert(t("vk_aplicados_n", { n: res.novos, r: res.repetidos }));
 }
 
-/* O prompt leva o que sobrou: os idênticos mandados para a IA MAIS todos os
- * pendentes que não têm nome igual. */
-function vkGerarPrompt() {
-  const est = vkEstudados(edDiario);
-  const paraIa = new Set(vkTriagem.filter((c) => c.escolha === "ia")
-    .map((c) => c.para.chave));
-  const recusados = new Set(vkTriagem.filter((c) => c.escolha === "nao")
-    .map((c) => c.para.chave));
-  const pend = vkPendentesIa.filter((p) => {
-    const k = vkChave(p.disciplina, p.nome);
-    if (recusados.has(k)) return false;
-    return true;
-  });
-  const ed = typeof edAberto === "function" ? edAberto() : null;
-  const txt = vkPrompt(est, pend, ed ? ed.nome : "");
-  try { navigator.clipboard.writeText(txt); } catch (e) {}
-  reg("VINCULO", "prompt gerado", est.length + " estudados × " + pend.length + " pendentes");
+async function vkGerarPrompt() {
+  const de = ($("vkDeEdital") || {}).value || "";
+  const para = ($("vkParaEdital") || {}).value || "";
+  if (String(de) === String(para)) { await uiAlert(t("vk_mesmo_edital")); return; }
+  const est = vkEstudadosDe(de);
+  const pend = vkPendentesDe(para);
+  if (!est.length) { await uiAlert(t("vk_sem_diario")); return; }
+  const txt = vkPrompt(est, pend, vkNomeDoEdital(para), vkNomeDoEdital(de));
+  try { await navigator.clipboard.writeText(txt); }
+  catch (e) { await uiAlert(t("toast_copy_fail")); return; }
+  reg("VINCULO", "prompt gerado",
+      est.length + " estudados × " + pend.length + " pendentes");
   toast("vk_prompt_copiado");
 }
 
+/* ------------------------------------------------------------------
+ * O LOG DA VINCULAÇÃO, ANTES DE EFETIVAR
+ *
+ * Aplicar cem pares vindos de uma IA sem olhá-los é confiar sem
+ * conferir, e o erro aqui não é simétrico: um vínculo errado faz você
+ * PULAR um assunto na prova; um vínculo que faltou só custa reler.
+ *
+ * Então cada par vira uma linha com o que a IA sugeriu, por quê, e uma
+ * caixa para tirar o que você não aceita. O que entra é o que você
+ * marcou — não o que a IA mandou.
+ * ------------------------------------------------------------------ */
+let vkPares = [];
+
 function vkConferirColagem() {
-  const est = vkEstudados(edDiario);
+  const de = ($("vkDeEdital") || {}).value || "";
+  const est = vkEstudadosDe(de);
   const r = vkLerResposta($("vkColarTexto").value, est, vkPendentesIa);
   const av = $("vkColarAviso");
   av.hidden = false;
@@ -3557,29 +3794,98 @@ function vkConferirColagem() {
     d.className = "ed-mud" + (cls ? " " + cls : "");
     d.textContent = txt; av.append(d);
   };
-  const alta = r.pares.filter((p) => p.conf === "ALTA").length;
-  linha(t("vk_conf_resumo", { n: r.pares.length, a: alta, m: r.pares.length - alta }));
+  const pular = r.pares.filter((p) => p.sugestao === "PULAR").length;
+  linha(t("vk_conf_resumo", { n: r.pares.length, a: pular,
+                             m: r.pares.length - pular }));
   if (r.ignoradas.length)
     linha(t("vk_conf_ignoradas", { n: r.ignoradas.length }), "aviso");
   if (!r.pares.length) linha(t("vk_conf_nada"), "perigo");
+
+  /* MARCADO POR PADRÃO, mas visível. Desmarcar tudo faria a pessoa
+   * clicar cem vezes para usar a resposta que pediu; marcar tudo sem
+   * mostrar é o que este painel existe para acabar. */
+  vkPares = r.pares.map((x) => Object.assign({}, x, { usar: true }));
+  vkPintarPares();
   return r;
 }
 
-async function vkAplicarColagem() {
-  const r = vkConferirColagem();
-  if (!r || !r.pares.length) return;
-  const alta = r.pares.filter((p) => p.conf === "ALTA");
-  const media = r.pares.filter((p) => p.conf !== "ALTA");
-  /* MÉDIA nunca entra sozinha: se o app aceitasse tudo, conferir viraria
-   * apertar "aplicar" e a distinção de confiança não serviria para nada. */
-  let usar = alta;
-  if (media.length) {
-    if (await uiConfirm(t("vk_conf_media", { n: media.length })))
-      usar = alta.concat(media);
+function vkPintarPares() {
+  const cx = $("vkParesCx");
+  const box = $("vkPares");
+  if (!cx || !box) return;
+  cx.hidden = !vkPares.length;
+  box.innerHTML = "";
+  const tit = $("vkParesTit");
+  if (tit) {
+    tit.textContent = t("vk_pares_tit", { n: vkPares.length,
+      m: vkPares.filter((x) => x.usar).length });
   }
-  const ed = typeof edAberto === "function" ? edAberto() : null;
-  const res = vkAplicar(usar, ed ? ed.id : "");
-  reg("VINCULO", "aplicados da IA", res.novos + " novos, " + res.repetidos + " já existiam");
+  vkPares.forEach((x, k) => {
+    const li = document.createElement("div");
+    li.className = "vk-par-li";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!x.usar;
+    cb.onchange = () => { vkPares[k].usar = cb.checked; vkPintarPares(); };
+    li.append(cb);
+
+    const tx = document.createElement("div");
+    tx.className = "vk-par-tx";
+    const sug = document.createElement("span");
+    const ehPular = x.sugestao === "PULAR";
+    sug.className = "vk-sug " + (ehPular ? "pular" : "revisar");
+    sug.textContent = t(ehPular ? "vk_sug_pular" : "vk_sug_revisar");
+    tx.append(sug);
+    const de = document.createElement("span");
+    de.className = "vk-par-de";
+    de.textContent = (x.de.disciplina ? x.de.disciplina + " › " : "")
+      + x.de.topico;
+    tx.append(de);
+    const seta = document.createElement("span");
+    seta.className = "vk-par-seta";
+    seta.textContent = "→";
+    tx.append(seta);
+    tx.append(document.createTextNode(x.para.topico));
+    if (x.por) {
+      const por = document.createElement("span");
+      por.className = "vk-par-por";
+      por.textContent = x.por;
+      tx.append(por);
+    }
+    li.append(tx);
+    box.append(li);
+  });
+}
+
+function vkMarcarTodos(v) {
+  vkPares.forEach((x) => { x.usar = v; });
+  vkPintarPares();
+}
+
+async function vkCopiarLog() {
+  if (!vkPares.length) return;
+  const L = vkPares.map((x) =>
+    (x.usar ? "[x] " : "[ ] ") + (x.sugestao || "?") + "  "
+    + (x.de.disciplina ? x.de.disciplina + " > " : "") + x.de.topico
+    + "  ->  " + x.para.disciplina + " > " + x.para.topico
+    + (x.por ? "   (" + x.por + ")" : ""));
+  try { await navigator.clipboard.writeText(L.join("\n")); }
+  catch (e) { await uiAlert(t("toast_copy_fail")); return; }
+  await uiAlert(t("diag_copiado"));
+}
+
+async function vkAplicarColagem() {
+  if (!vkPares.length) { vkConferirColagem(); }
+  const usar = vkPares.filter((x) => x.usar);
+  if (!usar.length) { await uiAlert(t("vk_nada_marcado")); return; }
+  /* SEGUNDA CONFIRMAÇÃO, dizendo o que o vínculo faz E o que ele não
+   * faz: a confusão entre "vinculado" e "estudado" é a única que pode
+   * custar um assunto na prova. */
+  if (!(await uiConfirm(t("vk_par_conf", { n: usar.length })))) return;
+  const para = ($("vkParaEdital") || {}).value || "";
+  const res = vkAplicar(usar, para);
+  reg("VINCULO", "aplicados da IA",
+      res.novos + " novos, " + res.repetidos + " já existiam");
   $("dlgVkColar").close();
   $("dlgJaEstudei").close();
   edRender();
@@ -3590,13 +3896,20 @@ async function vkAplicarColagem() {
 function vkIniciarTela() {
   vkCarregar();
   if ($("btnJaEstudei")) $("btnJaEstudei").onclick = vkAbrir;
-  if ($("btnVkTudoIa")) $("btnVkTudoIa").onclick = () => vkTodos("ia");
-  if ($("btnVkTudoIgual")) $("btnVkTudoIgual").onclick = () => vkTodos("igual");
-  if ($("btnVkAplicar")) $("btnVkAplicar").onclick = vkAplicarTriagem;
+  if ($("btnVkaFechar")) $("btnVkaFechar").onclick = () => $("dlgVkAcervo").close();
+  if ($("btnVkIdenticos")) $("btnVkIdenticos").onclick = vkAceitarIdenticos;
+  ["vkDeEdital", "vkParaEdital"].forEach((id) => {
+    if ($(id)) $(id).onchange = vkPintarLados;
+  });
   if ($("btnVkPrompt")) $("btnVkPrompt").onclick = vkGerarPrompt;
+  if ($("btnVkTodos")) $("btnVkTodos").onclick = () => vkMarcarTodos(true);
+  if ($("btnVkNenhum")) $("btnVkNenhum").onclick = () => vkMarcarTodos(false);
+  if ($("btnVkCopiarLog")) $("btnVkCopiarLog").onclick = vkCopiarLog;
   if ($("btnVkColar")) $("btnVkColar").onclick = () => {
     $("vkColarTexto").value = "";
     $("vkColarAviso").hidden = true;
+    vkPares = [];
+    vkPintarPares();
     abrirModal("dlgVkColar");
   };
   if ($("btnVkFechar")) $("btnVkFechar").onclick = () => $("dlgJaEstudei").close();

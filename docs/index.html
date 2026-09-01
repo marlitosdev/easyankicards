@@ -1814,6 +1814,54 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
   margin-top:14px;padding-top:12px;border-top:1px solid var(--borda)}
 .ed-colar-decidir .ed-colar-acao{flex:1 1 190px}
 .ed-colar-rodape-exp{flex:1 1 100%;margin:4px 0 0;font-size:10.5px}
+.vk-pares{border:1px solid var(--borda);border-radius:10px;padding:9px 11px;
+  margin:9px 0 0;background:var(--bg);max-height:250px;overflow:auto}
+.vk-pares-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:9px;flex-wrap:wrap;margin-bottom:6px;font-size:11.5px;position:sticky;
+  top:-9px;background:var(--bg);padding:2px 0}
+.vk-par-li{display:flex;gap:8px;align-items:flex-start;padding:6px 0;
+  border-top:1px solid var(--borda);font-size:11.5px}
+.vk-par-li input{margin-top:3px;flex:0 0 auto}
+.vk-par-tx{flex:1 1 auto;min-width:0}
+.vk-par-de{color:var(--sutil)}
+.vk-par-seta{color:var(--sutil);margin:0 4px}
+.vk-par-por{display:block;color:var(--sutil);font-size:10.5px;margin-top:2px}
+.vk-sug{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:999px;
+  margin-right:5px;vertical-align:middle}
+.vk-sug.pular{background:var(--verde-claro);color:var(--verde-txt)}
+.vk-sug.revisar{background:var(--laranja-claro);color:var(--laranja-txt)}
+.vk-rodape-exp{flex:1 1 100%;margin:4px 0 0;font-size:10.5px}
+.vk-lados{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 2px}
+.vk-lado{flex:1 1 220px;font-size:11px;font-weight:700;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--sutil)}
+.vk-lado select{display:block;width:100%;margin-top:3px;padding:7px 8px;
+  border-radius:8px;border:1px solid var(--borda);background:var(--campo);
+  color:var(--texto);font-family:inherit;font-size:12.5px;text-transform:none;
+  letter-spacing:0;font-weight:400}
+.vk-passo{border:1px solid var(--borda);border-radius:10px;padding:10px 12px;
+  margin:9px 0 0;background:var(--bg);display:flex;flex-direction:column;
+  align-items:flex-start;gap:5px}
+.vk-passo-n{font-size:10.5px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--sutil)}
+.vk-passo .nota{margin:0;font-size:10.5px;line-height:1.4}
+.vk-atalho{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin-top:10px;padding-top:9px;border-top:1px solid var(--borda);
+  font-size:11.5px;color:var(--sutil)}
+/* ---- acervo de outro concurso ---- */
+.vka-aviso{background:var(--laranja-claro);color:var(--laranja-txt);
+  border-radius:9px;padding:9px 11px;font-size:11.5px;line-height:1.45;
+  margin:8px 0 10px}
+.vka-item{border:1px solid var(--borda);border-radius:10px;padding:10px 12px;
+  margin-bottom:9px;background:var(--bg)}
+.vka-cab{font-size:12.5px;font-weight:700;margin-bottom:2px}
+.vka-quando{font-size:11px;color:var(--sutil);margin-bottom:8px}
+.vka-acervo{display:flex;gap:7px;flex-wrap:wrap}
+.vka-nada{font-size:11.5px;color:var(--sutil);font-style:italic}
+.ed-item-jaestudei{font-size:9.5px;font-weight:700;padding:1px 7px;
+  border-radius:999px;background:var(--verde-claro);color:var(--verde-txt);
+  margin-left:5px;vertical-align:middle;cursor:pointer;border:0;
+  font-family:inherit}
+.ed-item-jaestudei:hover{filter:brightness(1.08)}
 /* ---- lista do que some ao colar ---- */
 .ed-colar-lista{border:1px solid var(--borda);border-radius:10px;margin:9px 0 0;
   padding:9px 11px;background:var(--bg);max-height:230px;overflow:auto}
@@ -3223,21 +3271,53 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <dialog id="dlgJaEstudei" class="ui-modal diag-modal">
   <h3 data-i18n="vk_titulo"></h3>
-  <p class="nota" id="vkResumo"></p>
-  <!-- Nome idêntico NÃO é garantia: "Controle interno e externo" num TCE e
-       numa prefeitura cobram normas diferentes, e o mesmo nome em outra
-       disciplina é outro assunto. Por isso a triagem apresenta e a pessoa
-       decide — item a item, ou mandando tudo para a IA. -->
-  <div class="vk-acoes-topo">
-    <button class="btn-min" id="btnVkTudoIa" data-i18n="vk_tudo_ia"></button>
-    <button class="btn-min" id="btnVkTudoIgual" data-i18n="vk_tudo_igual"></button>
+  <p class="nota" data-i18n="vk_explica"></p>
+
+  <!-- OS DOIS EDITAIS, ESCOLHIDOS. Antes a origem era implícita (o
+       diário inteiro) e o destino era o edital aberto — e quem usava não
+       via nem uma coisa nem outra. Com dois seletores, a comparação que
+       vai ser feita fica escrita na tela. -->
+  <div class="vk-lados">
+    <label class="vk-lado"><span data-i18n="vk_de_onde"></span>
+      <select id="vkDeEdital"></select></label>
+    <label class="vk-lado"><span data-i18n="vk_para_onde"></span>
+      <select id="vkParaEdital"></select></label>
   </div>
-  <div id="vkLista" class="vk-lista"></div>
+  <p class="nota" id="vkResumo"></p>
+
+  <div class="vk-passo">
+    <div class="vk-passo-n" data-i18n="vk_passo1"></div>
+    <button class="btn btn-verde" id="btnVkPrompt" data-i18n="vk_prompt_btn"></button>
+    <span class="nota" data-i18n="vk_prompt_exp"></span>
+  </div>
+  <div class="vk-passo">
+    <div class="vk-passo-n" data-i18n="vk_passo2"></div>
+    <button class="btn btn-verde" id="btnVkColar" data-i18n="vk_colar_btn"></button>
+    <span class="nota" data-i18n="vk_colar_exp"></span>
+  </div>
+
+  <!-- O ATALHO DOS NOMES IDÊNTICOS. Deixou de ser etapa: em 7 assuntos
+       contra 533 tópicos ele achou UM par, e ambíguo. Vira uma linha
+       discreta para quem quiser, e some quando não há nenhum. -->
+  <div class="vk-atalho" id="vkAtalho" hidden>
+    <span id="vkAtalhoTxt"></span>
+    <button class="btn-min" id="btnVkIdenticos" data-i18n="vk_identicos_btn"></button>
+  </div>
+
   <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnVkAplicar" data-i18n="vk_aplicar"></button>
-    <button class="btn btn-roxo" id="btnVkPrompt" data-i18n="vk_prompt_btn"></button>
-    <button class="btn btn-azul" id="btnVkColar" data-i18n="vk_colar_btn"></button>
-    <button class="btn btn-cinza" id="btnVkFechar" data-i18n="cancel_btn"></button>
+    <button class="btn btn-cinza" id="btnVkFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- O ACERVO DO OUTRO CONCURSO. Só consulta: nada aqui marca o tópico
+     como estudado nem substitui o material desta prova. -->
+<dialog id="dlgVkAcervo" class="ui-modal diag-modal">
+  <h3 data-i18n="vka_titulo"></h3>
+  <p class="nota" id="vkaSub"></p>
+  <div class="vka-aviso" data-i18n="vka_aviso"></div>
+  <div id="vkaLista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnVkaFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
@@ -3247,9 +3327,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <textarea id="vkColarTexto" rows="10" style="width:100%;box-sizing:border-box"
     placeholder="~ Direito Financeiro > Restos a pagar :: Finanças Públicas > Inscrição de despesas :: ALTA :: mesma matéria"></textarea>
   <div id="vkColarAviso" class="ed-nao-cabe" hidden></div>
+
+  <!-- O LOG DA VINCULAÇÃO, antes de efetivar. Cada par com o que a IA
+       sugeriu e por quê, e uma caixa para tirar o que você não aceita.
+       Aplicar uma lista de cem pares sem vê-los é o mesmo que confiar
+       sem conferir — e o erro aqui faz PULAR assunto na prova. -->
+  <div id="vkParesCx" class="vk-pares" hidden>
+    <div class="vk-pares-cab">
+      <b id="vkParesTit"></b>
+      <span>
+        <button class="btn-min" id="btnVkTodos" data-i18n="vk_marcar_todos"></button>
+        <button class="btn-min" id="btnVkNenhum" data-i18n="vk_marcar_nenhum"></button>
+        <button class="btn-min" id="btnVkCopiarLog" data-i18n="vk_copiar_log"></button>
+      </span>
+    </div>
+    <div id="vkPares"></div>
+  </div>
+
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnVkColarOk" data-i18n="vk_colar_aplicar"></button>
     <button class="btn btn-cinza" id="btnVkColarFechar" data-i18n="cancel_btn"></button>
+    <span class="nota vk-rodape-exp" data-i18n="vk_colar_aplicar_exp"></span>
   </div>
 </dialog>
 
