@@ -1485,9 +1485,42 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
   gap:10px;margin:14px 0 2px}
 .bancada-nome{font-size:19px;font-weight:800;letter-spacing:-.2px;
   color:var(--texto);margin:0;line-height:1.2}
-.bancada-acoes{display:flex;gap:6px;flex-shrink:0}
+.bancada-acoes{display:flex;gap:6px;flex-shrink:0;align-items:center}
 .bancada-sub{display:block;font-size:11.5px;color:var(--sutil);
   margin:0 0 7px;line-height:1.45}
+
+/* ---- recolher/expandir a bancada ---------------------------------
+   Um botão que precisa ser encontrado depois, não agora. Recolhido, a
+   coluna inteira vira uma linha de resumo e este é o único caminho de
+   volta: se ele se parecer com "Copiar tudo" e "Apagar tudo", quem
+   recolheu por engano acha que o edital sumiu.
+
+   O ESTADO TEM NOME PRÓPRIO ("banc-aberta"), e não reaproveita o nome
+   do botão — foi o que encolheu a faixa de navegação para 20 pixels na
+   v13: uma classe que era ao mesmo tempo identidade e estado, com
+   geometria na regra base. Aqui a regra do estado só pinta. */
+.banc-alternar{padding:5px 12px;font-size:11px;font-weight:800;
+  letter-spacing:.3px;border-radius:999px;cursor:pointer;
+  background:var(--campo);color:var(--sutil);
+  border:1px solid var(--borda);transition:transform .12s,box-shadow .2s}
+.banc-alternar:hover{transform:translateY(-1px);color:var(--texto);
+  border-color:var(--acao)}
+/* recolhida: cor viva e um anel, porque agora ele é a saída */
+.banc-aberta{background:var(--atencao);color:#131313;
+  border-color:transparent;box-shadow:0 0 0 3px rgba(255,180,94,.22)}
+.banc-aberta:hover{color:#131313;border-color:transparent}
+
+/* ---- as três ações da bancada, com a explicação embaixo -----------
+   O nome do botão cabe em três palavras; o que ele faz, não. Sem a
+   linha de baixo, "Diagnóstico do planejamento" e "Colar plano
+   corrigido" são dois rótulos que só quem já usou entende — e o segundo
+   parecia uma ação solta, quando é a segunda metade da primeira. */
+.ed-acoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:9px;margin:10px 0 14px}
+.ed-acao{display:flex;flex-direction:column;gap:5px;min-width:0}
+.ed-acao .btn{width:100%;box-sizing:border-box}
+.ed-acao-exp{font-size:11px;line-height:1.45;color:var(--sutil);
+  padding:0 2px}
 .ferr-lista{margin-top:12px}
 .ferr-item{display:flex;align-items:center;gap:10px;padding:9px 11px;
   border:1px dashed var(--borda);border-radius:9px;margin-bottom:7px;
@@ -1831,6 +1864,17 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vk-sug.pular{background:var(--verde-claro);color:var(--verde-txt)}
 .vk-sug.revisar{background:var(--laranja-claro);color:var(--laranja-txt)}
 .vk-rodape-exp{flex:1 1 100%;margin:4px 0 0;font-size:10.5px}
+/* as duas perguntas, lado a lado. "vk-modo-on" é só estado e só pinta:
+   a forma fica na classe de identidade (E15). */
+.vk-modos{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px}
+.vk-modo{flex:1 1 180px;padding:9px 12px;font-size:12px;font-weight:700;
+  border-radius:10px;cursor:pointer;text-align:left;line-height:1.3;
+  background:var(--campo);color:var(--sutil);border:1px solid var(--borda)}
+.vk-modo:hover{color:var(--texto);border-color:var(--acao)}
+.vk-modo-on{background:var(--acao);color:#fff;border-color:transparent}
+.vk-modo-on:hover{color:#fff;border-color:transparent}
+.vk-discs{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 2px;
+  padding:9px 11px;border:1px dashed var(--borda);border-radius:10px}
 .vk-lados{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 2px}
 .vk-lado{flex:1 1 220px;font-size:11px;font-weight:700;letter-spacing:.03em;
   text-transform:uppercase;color:var(--sutil)}
@@ -1862,6 +1906,13 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
   margin-left:5px;vertical-align:middle;cursor:pointer;border:0;
   font-family:inherit}
 .ed-item-jaestudei:hover{filter:brightness(1.08)}
+/* Os três momentos do mesmo vínculo, em três cores. Verde é "tenho
+   material aqui do lado"; as outras duas são avisos, não conquistas, e
+   por isso não usam a cor de coisa pronta. */
+.ed-item-jaestudei.sem-material{background:var(--campo);color:var(--sutil);
+  border:1px solid var(--borda)}
+.ed-item-jaestudei.so-coincide{background:transparent;color:var(--atencao);
+  border:1px dashed var(--atencao)}
 /* ---- lista do que some ao colar ---- */
 .ed-colar-lista{border:1px solid var(--borda);border-radius:10px;margin:9px 0 0;
   padding:9px 11px;background:var(--bg);max-height:230px;overflow:auto}
@@ -2779,22 +2830,41 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <span class="bancada-acoes">
           <!-- Depois que o edital está colado, a bancada é uma caixa de texto
                enorme que não muda mais. Recolher devolve a tela para o que
-               se usa todo dia: a agenda e o painel. -->
-          <button class="btn-min" id="btnEdBancRecolher" data-i18n="ed_recolher"></button>
+               se usa todo dia: a agenda e o painel.
+
+               O BOTÃO DE VOLTA PRECISA SER ACHÁVEL. Recolhido, tudo o que
+               resta desta coluna é uma linha de resumo — e o caminho de
+               volta era um botão pálido igual aos outros dois, do mesmo
+               tamanho e da mesma cor, no canto. Quem recolhe uma vez e não
+               acha o "expandir" conclui que o app comeu o edital. Por isso
+               ele tem forma própria e, quando recolhido, cor viva. -->
+          <button class="banc-alternar" id="btnEdBancRecolher" data-i18n="ed_recolher"></button>
           <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
           <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
         </span>
       </div>
       <div class="ed-banc-resumo" id="edBancResumo" hidden></div>
       <div id="edBancCorpo">
-      <!-- O ciclo inteiro numa linha só: pedir, revisar, colar de volta.
-           O diagnóstico estava do outro lado da tela, longe do botão que
-           recebe a resposta dele. -->
-      <div class="btn-linha">
-        <button class="btn btn-roxo" id="btnEditalPrompt" data-i18n="ed_prompt_btn"></button>
-        <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
-        <button class="btn btn-azul" id="btnEditalColar" data-i18n="ed_colar_btn"></button>
-        <button class="btn btn-cinza" id="btnJaEstudei" data-i18n="vk_botao"></button>
+      <!-- TRÊS AÇÕES, CADA UMA COM O QUE ELA FAZ ESCRITO EMBAIXO.
+           Eram quatro botões cujos nomes descreviam o gesto ("criar
+           prompt", "colar plano") e não o resultado, e dois deles eram
+           metades do mesmo trabalho: pedir a revisão e receber a revisão.
+           Separados, davam para ser apertados fora de ordem e não diziam
+           que um dependia do outro. Agora são um caminho só, de dois
+           passos, dentro da mesma caixa. -->
+      <div class="ed-acoes">
+        <div class="ed-acao">
+          <button class="btn btn-roxo" id="btnEditalColar" data-i18n="ed_rev_btn"></button>
+          <span class="ed-acao-exp" data-i18n="ed_rev_exp"></span>
+        </div>
+        <div class="ed-acao">
+          <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
+          <span class="ed-acao-exp" data-i18n="ed_diag_exp"></span>
+        </div>
+        <div class="ed-acao">
+          <button class="btn btn-cinza" id="btnJaEstudei" data-i18n="vk_botao"></button>
+          <span class="ed-acao-exp" data-i18n="vk_botao_exp"></span>
+        </div>
       </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
       <div class="editor-wrap ed-wrap">
@@ -3271,29 +3341,54 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <dialog id="dlgJaEstudei" class="ui-modal diag-modal">
   <h3 data-i18n="vk_titulo"></h3>
-  <p class="nota" data-i18n="vk_explica"></p>
+
+  <!-- DUAS PERGUNTAS DIFERENTES, O MESMO VÍNCULO.
+       "O que eu não preciso refazer?" olha para o diário — o que já foi
+       estudado. "O que eu vou estudar duas vezes sem perceber?" olha
+       para o que está pendente nos DOIS editais, e é a pergunta de quem
+       tem duas provas abertas ao mesmo tempo. O mecanismo é o mesmo; o
+       que muda é de onde sai a lista da esquerda. -->
+  <div class="vk-modos">
+    <button class="vk-modo" id="btnVkModoEstudei" data-i18n="vk_modo_estudei"></button>
+    <button class="vk-modo" id="btnVkModoAmbos" data-i18n="vk_modo_ambos"></button>
+  </div>
+  <p class="nota" id="vkExplica"></p>
 
   <!-- OS DOIS EDITAIS, ESCOLHIDOS. Antes a origem era implícita (o
        diário inteiro) e o destino era o edital aberto — e quem usava não
        via nem uma coisa nem outra. Com dois seletores, a comparação que
        vai ser feita fica escrita na tela. -->
   <div class="vk-lados">
-    <label class="vk-lado"><span data-i18n="vk_de_onde"></span>
+    <label class="vk-lado"><span id="vkRotDe"></span>
       <select id="vkDeEdital"></select></label>
-    <label class="vk-lado"><span data-i18n="vk_para_onde"></span>
+    <label class="vk-lado"><span id="vkRotPara"></span>
       <select id="vkParaEdital"></select></label>
+  </div>
+
+  <!-- UMA DISCIPLINA POR VEZ, no modo dos dois editais.
+       Tudo contra tudo seriam 533 × 232 combinações e uma lista de 765
+       linhas num prompt só: a IA perde o fio no meio e a resposta não dá
+       para conferir. Por disciplina são umas noventa contra noventa —
+       cabe, e o log inteiro é legível. -->
+  <div class="vk-discs" id="vkDiscs" hidden>
+    <label class="vk-lado"><span data-i18n="vk_disc_de"></span>
+      <select id="vkDeDisc"></select></label>
+    <label class="vk-lado"><span data-i18n="vk_disc_para"></span>
+      <select id="vkParaDisc"></select></label>
   </div>
   <p class="nota" id="vkResumo"></p>
 
+  <!-- Os dois passos são os mesmos nos dois modos; só o texto muda, e
+       por isso ele é pintado pelo JS em vez de fixo no HTML. -->
   <div class="vk-passo">
     <div class="vk-passo-n" data-i18n="vk_passo1"></div>
-    <button class="btn btn-verde" id="btnVkPrompt" data-i18n="vk_prompt_btn"></button>
-    <span class="nota" data-i18n="vk_prompt_exp"></span>
+    <button class="btn btn-verde" id="btnVkPrompt"></button>
+    <span class="nota" id="vkPromptExp"></span>
   </div>
   <div class="vk-passo">
     <div class="vk-passo-n" data-i18n="vk_passo2"></div>
     <button class="btn btn-verde" id="btnVkColar" data-i18n="vk_colar_btn"></button>
-    <span class="nota" data-i18n="vk_colar_exp"></span>
+    <span class="nota" id="vkColarExp"></span>
   </div>
 
   <!-- O ATALHO DOS NOMES IDÊNTICOS. Deixou de ser etapa: em 7 assuntos
@@ -4436,6 +4531,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgEdColar" class="ui-modal">
   <h3 data-i18n="ed_colar_tit"></h3>
   <p class="nota" data-i18n="ed_colar_ajuda"></p>
+
+  <!-- O PASSO 1 MORA AQUI AGORA.
+       Pedir a revisão e receber a revisão eram dois botões distantes na
+       bancada, e nada dizia que o segundo só faz sentido depois do
+       primeiro. Juntos, a caixa conta a história inteira: copie isto,
+       cole numa IA, traga a resposta para o campo de baixo. -->
+  <div class="vk-passo">
+    <div class="vk-passo-n" data-i18n="vk_passo1"></div>
+    <button class="btn btn-roxo" id="btnEdColarPedido" data-i18n="ed_rev_pedir"></button>
+    <span class="nota" data-i18n="ed_rev_pedir_exp"></span>
+  </div>
+  <div class="vk-passo">
+    <div class="vk-passo-n" data-i18n="vk_passo2"></div>
+    <span class="nota" data-i18n="ed_rev_colar_exp"></span>
+  </div>
+
   <textarea id="edColarTexto" rows="12" style="width:100%;box-sizing:border-box"
             placeholder="# Concurso | prova: 2026-08-30 | horas: 12&#10;@ Disciplina :: 5&#10;+ Tópico :: 4 :: motivo"></textarea>
   <div id="edColarAviso" class="ed-nao-cabe" hidden></div>

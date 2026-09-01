@@ -1177,6 +1177,13 @@ function bancAplicar() {
   corpo.hidden = bancRecolhida;
   resumo.hidden = !bancRecolhida;
   bt.textContent = t(bancRecolhida ? "ed_expandir" : "ed_recolher");
+  /* RECOLHIDO, ELE É A ÚNICA SAÍDA — e por isso fica em cor viva.
+   * Expandido é só mais um botão de canto e não precisa disputar
+   * atenção com o edital. O estado tem nome próprio e a regra dele só
+   * pinta: a geometria mora na classe de identidade, que é o que evita
+   * o defeito da faixa de navegação encolhida (E15). */
+  if (bt.classList) bt.classList.toggle("banc-aberta", bancRecolhida);
+  bt.title = t(bancRecolhida ? "ed_expandir_aj" : "ed_recolher_aj");
   if (bancRecolhida) {
     const ta = document.getElementById("editalTexto");
     const r = lerEdital((ta && ta.value) || "");
