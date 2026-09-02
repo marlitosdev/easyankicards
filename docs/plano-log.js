@@ -584,19 +584,51 @@ function plTiras(d) {
   return cx;
 }
 
+/* A CLASSE DA COLUNA VALE PARA O CABEÇALHO E PARA A CÉLULA.
+ *
+ * Numa tela de 540 px esta tabela tem nove colunas e não cabe. A saída é
+ * o CSS esconder algumas e fixar a do tópico — e para isso as células
+ * precisam de classe, não de posição.
+ *
+ * Se cabeçalho e célula recebessem a classe em lugares diferentes do
+ * código, uma hora um esconderia a coluna e o outro não: a tabela
+ * continuaria desenhando, alinhada, com os números embaixo do rótulo
+ * errado. Uma tabela que mente alinhada é pior que uma tabela quebrada,
+ * porque parece certa. Por isso a lista de colunas é uma só, e a linha
+ * se monta a partir dela. */
+function plColCls(c) {
+  return [c.num ? "plog-num" : "", c.cls || ""].filter(Boolean).join(" ");
+}
+
 function plTabela(cabecalhos) {
   const tab = plEl("table", "plog-tab");
   const thead = plEl("thead");
   const tr = plEl("tr");
   cabecalhos.forEach((c) => {
-    const th = plEl("th", c.num ? "plog-num" : "", c.txt);
+    const th = plEl("th", plColCls(c), c.txt);
     if (c.ajuda) th.title = c.ajuda;
     tr.append(th);
   });
   thead.append(tr);
   const tbody = plEl("tbody");
   tab.append(thead, tbody);
-  return { tab, tbody };
+  return { tab, tbody, cols: cabecalhos };
+}
+
+/* Uma linha, montada a partir das MESMAS colunas do cabeçalho. Cada
+ * valor pode ser um texto ou um nó — o tópico precisa de dois pedaços
+ * dentro da mesma célula. */
+function plLinha(tbody, cols, valores, clsLinha) {
+  const tr = plEl("tr", clsLinha || "");
+  cols.forEach((c, k) => {
+    const v = valores[k];
+    const td = plEl("td", plColCls(c));
+    if (v && v.nodeType) td.append(v);
+    else td.textContent = v == null ? "" : String(v);
+    tr.append(td);
+  });
+  tbody.append(tr);
+  return tr;
 }
 
 /* ---- aba: a fila da semana, item a item ---- */
@@ -606,12 +638,17 @@ function plPintarFila(box, d) {
     box.append(plEl("div", "plog-vazio", t("plog_sem_fila")));
     return;
   }
-  const { tab, tbody } = plTabela([
-    { txt: "#", num: true },
+  /* "plog-so-largo" some em tela estreita: a ordem já é a ordem das
+   * linhas, e ler "#3" na terceira linha não acrescenta nada num espaço
+   * que faz falta. "plog-col-top" é a coluna que fica FIXA ao rolar
+   * para o lado — sem ela, três colunas adiante ninguém sabe mais de
+   * qual tópico é a linha, e a tabela vira uma grade de números. */
+  const { tab, tbody, cols } = plTabela([
+    { txt: "#", num: true, cls: "plog-so-largo" },
     { txt: t("plog_c_rodada"), num: true, ajuda: t("plog_c_rodada_aj") },
-    { txt: t("plog_c_disc") },
-    { txt: t("plog_c_topico") },
-    { txt: t("plog_c_conta"), ajuda: t("plog_c_conta_aj") },
+    { txt: t("plog_c_disc"), cls: "plog-so-largo" },
+    { txt: t("plog_c_topico"), cls: "plog-col-top" },
+    { txt: t("plog_c_conta"), ajuda: t("plog_c_conta_aj"), cls: "plog-conta" },
     { txt: t("dif_col"), num: true, ajuda: t("dif_col_aj") },
     { txt: t("plog_c_prio"), num: true, ajuda: t("plog_c_prio_aj") },
     { txt: t("plog_c_faixa"), ajuda: t("plog_c_faixa_aj") },
@@ -619,19 +656,28 @@ function plPintarFila(box, d) {
   ]);
   semana1.forEach((i) => {
     const c = plItemConta(i);
-    const tr = plEl("tr", c.ehRevisao ? "plog-rev" : "");
-    const cel = (txt, cls) => tr.append(plEl("td", cls || "", txt));
-    cel(c.ordem, "plog-num");
-    cel(c.rodada == null ? "?" : "r" + c.rodada, "plog-num");
-    cel(c.disciplina);
-    cel(c.topico + (c.ehRevisao ? " ↻" : ""));
-    cel(c.pesoDisc + " × " + c.pesoTop + " = " + c.bruto, "plog-conta");
-    cel(c.fator === 1 ? "—" : "×" + String(c.fator).replace(".", ","),
-        "plog-num");
-    cel(c.prioridade, "plog-num");
-    cel(t("plog_faixa_" + c.faixa));
-    cel(c.minutos, "plog-num");
-    tbody.append(tr);
+    /* A DISCIPLINA VAI JUNTO DO TÓPICO, sempre — e o CSS decide qual
+     * das duas cópias aparece. Em tela larga vale a coluna própria; em
+     * tela estreita, a coluna some e sobra esta linha de cima, para a
+     * identidade do item caber numa célula só e poder ser fixada.
+     *
+     * Montar isto por largura, no JavaScript, criaria um desenho que
+     * muda com o tamanho da janela sem ninguém repintar — e um redimensionar
+     * deixaria a tabela sem disciplina em lugar nenhum. */
+    const cel = plEl("div", "plog-top-cel");
+    cel.append(plEl("span", "plog-top-disc", c.disciplina));
+    cel.append(plEl("span", "", c.topico + (c.ehRevisao ? " ↻" : "")));
+    plLinha(tbody, cols, [
+      c.ordem,
+      c.rodada == null ? "?" : "r" + c.rodada,
+      c.disciplina,
+      cel,
+      c.pesoDisc + " × " + c.pesoTop + " = " + c.bruto,
+      c.fator === 1 ? "—" : "×" + String(c.fator).replace(".", ","),
+      c.prioridade,
+      t("plog_faixa_" + c.faixa),
+      c.minutos,
+    ], c.ehRevisao ? "plog-rev" : "");
   });
   box.append(tab);
 }
@@ -897,7 +943,63 @@ function plAbasPintar() {
   });
 }
 
+/* =====================================================================
+ * TELA CHEIA
+ *
+ * Este painel é uma tabela de nove colunas e algumas centenas de linhas.
+ * Numa janela de 500 px ele fica com duas barras de rolagem aninhadas —
+ * uma da página, outra do corpo — e um corpo de 66vh que só mostra sete
+ * linhas por vez. Não é um problema de estilo: é o painel não cabendo no
+ * lugar onde foi posto.
+ *
+ * ABAIXO DE 760 px ELE JÁ ABRE EM TELA CHEIA. Deixar a escolha para o
+ * usuário nesse tamanho seria oferecer uma opção cuja resposta certa é
+ * sempre a mesma — e ele descobriria isso depois de tentar ler a tabela
+ * na janela pequena.
+ *
+ * Acima disso a escolha é dele e fica guardada, porque numa tela grande
+ * a janela flutuante tem uma vantagem real: dá para ver a agenda atrás
+ * enquanto se lê a conta que a produziu.
+ * ===================================================================== */
+const PL_TELA_CHAVE = "eac_plog_cheia";
+const PL_TELA_ESTREITA = 760;
+let plTelaCheia = false;
+
+function plTelaEstreita() {
+  const l = (typeof window !== "undefined" && window.innerWidth) || 1024;
+  return l < PL_TELA_ESTREITA;
+}
+
+function plTelaAplicar() {
+  const dlg = document.getElementById("dlgPlanoLog");
+  const bt = document.getElementById("btnPlogTela");
+  if (dlg && dlg.classList) dlg.classList.toggle("plog-cheia", plTelaCheia);
+  if (bt) {
+    bt.textContent = t(plTelaCheia ? "plog_tela_sair" : "plog_tela_cheia");
+    bt.title = t(plTelaCheia ? "plog_tela_sair_aj" : "plog_tela_cheia_aj");
+    /* NUMA TELA ESTREITA O BOTÃO SOME em vez de ficar desligado: ele
+     * ofereceria voltar para um formato em que a tabela não se lê. */
+    bt.hidden = plTelaEstreita();
+  }
+}
+
+function plTelaAlternar() {
+  plTelaCheia = !plTelaCheia;
+  try { localStorage.setItem(PL_TELA_CHAVE, plTelaCheia ? "1" : "0"); }
+  catch (e) {}
+  if (typeof reg === "function") {
+    reg("PLANO-LOG", "raio-X " + (plTelaCheia ? "em tela cheia" : "em janela"));
+  }
+  plTelaAplicar();
+}
+
 function plAbrir() {
+  /* a largura manda; a preferência só decide o que a largura não decide */
+  try {
+    plTelaCheia = plTelaEstreita()
+      || localStorage.getItem(PL_TELA_CHAVE) === "1";
+  } catch (e) { plTelaCheia = plTelaEstreita(); }
+  plTelaAplicar();
   plDados = plContexto();
   /* GRAVA AO ABRIR, não a cada render da agenda: o plano se remonta
    * dezenas de vezes por sessão, e gravar em todas encheria a série de
@@ -921,6 +1023,15 @@ function plCopiar() {
   else if (navigator.clipboard) navigator.clipboard.writeText(txt);
 }
 
+/* Trocar de aba é uma função, não um trecho dentro de um onclick: o
+ * teste precisa poder pedir a aba da semana sem depender de o
+ * simulador achar o botão por seletor de classe. */
+function plAbaTrocar(nome) {
+  plAba = nome || "disc";
+  plPintar();
+  return plAba;
+}
+
 function plIniciar() {
   const liga = (id, fn) => {
     const b = document.getElementById(id);
@@ -931,8 +1042,21 @@ function plIniciar() {
     else { const d = document.getElementById("dlgPlanoLog"); if (d) d.close(); }
   });
   liga("btnPlogCopiar", plCopiar);
+  liga("btnPlogTela", plTelaAlternar);
+  /* GIRAR O APARELHO É TROCAR DE TELA.
+   * Sem isto, quem abre o painel em pé (estreito, portanto em tela
+   * cheia) e deita o telefone fica com uma janela de 100vh dentro de
+   * uma tela mais larga, e o botão de sair continuaria escondido. */
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("resize", () => {
+      const d = document.getElementById("dlgPlanoLog");
+      if (!d || !d.open) return;
+      if (plTelaEstreita()) plTelaCheia = true;
+      plTelaAplicar();
+    });
+  }
   document.querySelectorAll(".plog-aba").forEach((b) => {
-    b.onclick = () => { plAba = b.dataset.plogAba; plPintar(); };
+    b.onclick = () => plAbaTrocar(b.dataset.plogAba);
   });
 }
 
@@ -944,5 +1068,8 @@ if (typeof module !== "undefined" && module.exports) {
     plContexto, plAbrir, plPintar, plIniciar, plCopiar,
     plArmazenamento, plPodasDisponiveis, plPodaLogs, plPodaRascunhos,
     plPodaSnaps, plTamanho, plBytes, PL_GAVETAS,
+    plTelaAplicar, plTelaAlternar, plTelaEstreita, plColCls, plAbaTrocar,
+    plTabela, plLinha, PL_TELA_ESTREITA, PL_TELA_CHAVE,
+    plTelaCheiaAtual: () => plTelaCheia,
   };
 }

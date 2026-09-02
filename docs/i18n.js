@@ -928,6 +928,10 @@ const UI = {
   "plog_titulo": "Raio-X da recomendação",
   "plog_sub": "{c} · prova {p} · fase {f}",
   "plog_sub_varios": "{n} editais ativos; mostrando o primeiro",
+  "plog_tela_cheia": "Tela cheia",
+  "plog_tela_cheia_aj": "Abre o painel ocupando a tela inteira. A tabela tem nove colunas: numa janela pequena sobram duas barras de rolagem e sete linhas visíveis.",
+  "plog_tela_sair": "Sair da tela cheia",
+  "plog_tela_sair_aj": "Volta para a janela flutuante, que deixa ver a agenda por trás enquanto se lê a conta que a produziu.",
   "plog_copiar": "Copiar relatório",
   "plog_copiado": "Relatório copiado.",
   "plog_aba_fila": "A semana",
@@ -1158,7 +1162,7 @@ const UI = {
   "ed_banc_resumo": "{d} disciplinas · {t} tópicos carregados",
   "ed_nova_disc": "+ incluir disciplina à mão",
   "nd_titulo": "Incluir disciplina à mão",
-  "vk_botao": "Aproveitar outro concurso",
+  "vk_botao": "Comparar e vincular editais",
   "cm_botao": "Salvar no material de estudo",
   "cm_sugestao": "sugestão pela etiqueta:",
   "cm_usar": "usar",
@@ -1244,6 +1248,32 @@ const UI = {
   "vk_identicos_conf": "Aceitar {n} par(es) só porque o nome é idêntico?\n\nNome igual não é garantia: o mesmo título em outra disciplina, ou de outro ente, costuma ser outro assunto. Isto cria os vínculos — não marca nada como estudado.",
   "vk_resumo_novo": "{e} assunto(s) já estudados em \"{de}\" · {p} tópico(s) pendentes em \"{para}\".",
   "vk_mesmo_edital": "Escolha dois editais diferentes: comparar um edital com ele mesmo não produz nada.",
+  /* ---- a frase segue o dado ----------------------------------
+     Havia uma frase só para duas coisas diferentes: o registro do
+     diário e a dedução de "em qual edital este tópico existe". Tópico
+     nenhum estudado aparecia como estudado. */
+  "vka_tambem_cai": "Também cai em {c} — ainda não estudado",
+  "vka_so_consta": "Consta no edital de {c} — sem registro de estudo",
+  "vka_sem_material": "Não há material guardado deste tópico no outro edital.",
+
+  /* ---- a faxina dos vínculos ---- */
+  "vk_rev_btn": "Revisar vínculos",
+  "vk_rev_tit": "Revisar os vínculos entre editais",
+  "vk_rev_ajuda": "Cada vínculo é uma afirmação sua: \"estes dois assuntos são a mesma coisa\". Aqui eles aparecem agrupados por par de concursos, para você conferir e apagar o que não faz sentido. Apagar um vínculo não toca em material, diário nem progresso — some só a ligação.",
+  "vk_rev_resumo": "{n} vínculo(s) em {g} par(es) de editais. {m} deles não levam a nada hoje: nenhum dos dois lados foi estudado e nenhum tem resumo, cartão, lei ou questão.",
+  "vk_rev_grupo_conta": "{n} vínculo(s) · {m} sem nada a dizer",
+  "vk_rev_selo_mudo": "SEM NADA",
+  "vk_rev_so_mudos": "Marcar os que não levam a nada",
+  "vk_rev_todos": "Mostrar todos",
+  "vk_rev_copiar": "Copiar a lista",
+  "vk_rev_apagar": "Apagar os {n} marcados",
+  "vk_rev_apagar_exp": "Só os que você marcou. Material, diário e progresso não são tocados.",
+  "vk_rev_conf": "Apagar {n} vínculo(s)?\n\nO QUE ACONTECE: estes tópicos deixam de se avisar entre si. O selo some da agenda e o material do outro concurso deixa de aparecer a um toque naquele tópico.\n\nO QUE NÃO ACONTECE: nenhum resumo, cartão, lei, questão ou registro do diário é apagado. Nada sai do seu progresso. Se mudar de ideia, é só vincular de novo.",
+  "vk_rev_apagados": "{n} vínculo(s) apagado(s).",
+  "vk_rev_vazio": "Nenhum vínculo criado ainda.",
+  "vk_rev_sem_mudos": "Nenhum vínculo mudo: todos levam a algum material ou a algum estudo registrado.",
+  "vk_rev_sem_edital": "(edital não cadastrado)",
+  "vk_mapa_n": "{n} assuntos",
   "vk_titulo": "Aproveitar o que já estudei em outro concurso",
   /* ---- triagem semântica: o passo 0 ------------------------------
      Ela ORDENA e ENCURTA. Não vincula. O texto da tela precisa dizer
@@ -1281,7 +1311,7 @@ const UI = {
   "ed_rev_btn": "Revisar o edital com a IA",
   "ed_rev_exp": "Passo 1 copia o pedido; passo 2 recebe a resposta. O app confere tópico a tópico antes de trocar o plano — nada é substituído sem a sua confirmação.",
   "ed_diag_exp": "Aponta peso repetido, tópico sem motivo, semana estourada e disciplina fora do plano. Só aponta: não altera nada sozinho.",
-  "vk_botao_exp": "Liga assuntos equivalentes entre dois editais para você consultar o material do outro concurso. Nenhum tópico é marcado como estudado.",
+  "vk_botao_exp": "Procura, entre dois concursos seus, os assuntos que se repetem — para reaproveitar o que já estudou e para saber, ao estudar um, que o outro também cobra aquilo. Nenhum tópico é marcado como estudado.",
   "ed_rev_pedir": "Copiar o pedido para a IA",
   "ed_rev_pedir_exp": "Copia as instruções de como organizar o edital. Cole numa IA junto com o seu edital e traga a resposta para o campo abaixo. Nada muda no aplicativo agora.",
   "ed_rev_colar_exp": "Cole aqui o plano que a IA devolveu. O app compara com o atual, mostra o que some e por quê, e só substitui depois que você confirmar.",

@@ -1780,9 +1780,35 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .plog-modal{max-width:min(1080px,96vw);width:min(1080px,96vw)}
 .plog-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .plog-cab h3{margin:0 0 2px}
-.plog-abas{display:flex;gap:4px;align-items:center;flex-wrap:wrap;
+.plog-cab-btns{display:flex;gap:6px;flex-shrink:0}
+
+/* ---- TELA CHEIA -------------------------------------------------
+   O estado tem nome próprio ("plog-cheia") e não reaproveita o nome de
+   nenhuma classe de identidade — a lição da faixa de navegação que
+   encolheu para 20 px (invariante E15).
+
+   O diálogo vira uma coluna: cabeçalho e abas com altura própria, e o
+   corpo tomando o resto. Sem o flex, "max-height:66vh" continuaria
+   valendo e sobraria uma faixa preta embaixo da tabela. */
+.plog-cheia{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;
+  border-radius:0;padding:12px 14px;display:flex;flex-direction:column;
+  resize:none}
+.plog-cheia .plog-corpo{max-height:none;flex:1 1 auto;min-height:0}
+/* em tela cheia os cartões do topo são contexto, não o assunto */
+.plog-cheia .plog-tira{padding:6px 10px;min-width:78px}
+.plog-cheia .plog-tira b{font-size:15px}
+
+/* AS ABAS EM UMA LINHA SÓ.
+   Com "flex-wrap:wrap" elas quebravam em duas fileiras numa tela
+   estreita, e a segunda fileira roubava altura justamente de onde a
+   tabela precisava dela. Rolar a faixa de abas para o lado custa um
+   gesto; perder 40 px de tabela custa duas linhas de conteúdo. */
+.plog-abas{display:flex;gap:4px;align-items:center;flex-wrap:nowrap;
+  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
   margin:12px 0 0;border-bottom:1px solid var(--borda);padding-bottom:0}
-.plog-cab-dir{margin-left:auto}
+.plog-aba{white-space:nowrap;flex-shrink:0}
+.plog-cab-dir{margin-left:auto;flex-shrink:0}
 .plog-aba{appearance:none;border:0;background:transparent;color:var(--sutil);
   font:inherit;font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;
   border-bottom:2px solid transparent;margin-bottom:-1px;border-radius:8px 8px 0 0}
@@ -1812,6 +1838,39 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .plog-num{text-align:right;font-variant-numeric:tabular-nums}
 .plog-conta{font-variant-numeric:tabular-nums;color:var(--sutil);font-size:11px}
 .plog-rev td{background:var(--laranja-claro)}
+/* a disciplina dentro da célula do tópico: existe sempre no HTML e só
+   aparece quando a coluna própria dela some (ver abaixo) */
+.plog-top-cel{display:flex;flex-direction:column;gap:1px}
+.plog-top-disc{display:none;font-size:10px;color:var(--sutil);
+  text-transform:uppercase;letter-spacing:.03em}
+
+/* ---- TELA ESTREITA: nove colunas não cabem em 540 px -------------
+   Duas medidas, e as duas preservam a leitura em coluna, que é o
+   produto deste painel:
+
+   1. some o que é recuperável — o "#" repete a ordem das linhas, e a
+      disciplina reaparece por cima do tópico;
+   2. a coluna do tópico fica FIXA. Rolando para o lado sem ela, três
+      colunas adiante ninguém sabe mais de qual assunto é a linha, e a
+      tabela vira uma grade de números soltos. */
+@media (max-width:760px){
+  .plog-tab .plog-so-largo{display:none}
+  .plog-top-disc{display:block}
+  .plog-tab{font-size:11.5px}
+  .plog-tab th,.plog-tab td{padding:6px 6px}
+  .plog-tab .plog-col-top{position:sticky;left:0;z-index:2;
+    min-width:132px;max-width:180px;
+    background:var(--panel);box-shadow:1px 0 0 var(--borda)}
+  /* a célula fixa da linha em revisão mantém a cor dela: sem isto, o
+     fundo do painel passa por cima e só metade da linha fica laranja */
+  .plog-rev .plog-col-top{background:var(--laranja-claro)}
+  /* o cabeçalho é fixo no topo E na esquerda ao mesmo tempo: o canto
+     precisa vencer os dois, senão a célula do corpo passa por cima */
+  .plog-tab th.plog-col-top{z-index:3}
+  .plog-tira{padding:6px 10px;min-width:74px}
+  .plog-tira b{font-size:15px}
+  .plog-tira span{font-size:9.5px}
+}
 
 /* AS DUAS BARRAS. A comparacao e o produto deste painel, entao ela e
    desenho, nao numero solto: uma barra por cima da outra, mesma escala,
@@ -1911,7 +1970,36 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
   margin:8px 0 10px}
 .vka-item{border:1px solid var(--borda);border-radius:10px;padding:10px 12px;
   margin-bottom:9px;background:var(--bg)}
-.vka-cab{font-size:12.5px;font-weight:700;margin-bottom:2px}
+/* cabeçalho de gaveta com o fechar no topo */
+.vka-cab{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;margin-bottom:4px}
+.vka-cab h3{margin:0}
+/* "consta" não é "estudei": cor de nota, não de conquista */
+.vka-so-consta{font-style:italic}
+/* ---- a faxina dos vínculos ---- */
+.vk-rev-acoes{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px}
+.vk-rev-lista{max-height:52vh;overflow:auto;margin:4px 0 10px}
+.vk-rev-grupo{border:1px solid var(--borda);border-radius:10px;
+  padding:9px 11px;margin-bottom:9px;background:var(--bg)}
+.vk-rev-par{font-size:12.5px;font-weight:800;margin-bottom:2px}
+.vk-rev-conta{font-size:10.5px;color:var(--sutil);margin-bottom:7px}
+.vk-rev-li{display:flex;align-items:flex-start;gap:8px;padding:5px 0;
+  border-top:1px solid var(--borda);font-size:11.5px;line-height:1.4}
+.vk-rev-li:first-of-type{border-top:0}
+.vk-rev-mudo{color:var(--sutil)}
+.vk-rev-selo{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;
+  background:var(--campo);border:1px solid var(--borda);color:var(--sutil);
+  flex-shrink:0}
+/* ---- o mapa dos editais ligados, na lista ---- */
+.hub-vinculos{border:1px dashed var(--borda);border-radius:11px;
+  padding:10px 12px;margin:10px 0 14px}
+.hub-vinc-acoes{display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+  margin-bottom:6px}
+.hub-vinculos .nota{margin:0}
+.hub-mapa{margin-top:10px;overflow-x:auto}
+.hub-mapa svg{display:block}
+.hub-mapa-vazio{font-size:11.5px;color:var(--sutil);font-style:italic}
+.vka-cab-nome{font-size:12.5px;font-weight:700;margin-bottom:2px}
 .vka-quando{font-size:11px;color:var(--sutil);margin-bottom:8px}
 .vka-acervo{display:flex;gap:7px;flex-wrap:wrap}
 .vka-nada{font-size:11.5px;color:var(--sutil);font-style:italic}
@@ -2827,6 +2915,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <p class="nota" data-i18n="hub_intro"></p>
     <input type="search" id="hubBusca" class="mat-busca">
+
+    <!-- COMPARAR DOIS EDITAIS É UMA AÇÃO DA LISTA, não da bancada.
+         O botão morava dentro de um edital aberto, e a pergunta que ele
+         responde tem dois sujeitos: "onde estes DOIS concursos se
+         encontram?". Quem quer isso está olhando para a lista, não para
+         um deles. -->
+    <div class="hub-vinculos">
+      <div class="hub-vinc-acoes">
+        <button class="btn btn-azul" id="btnHubVincular" data-i18n="vk_botao"></button>
+        <button class="btn-min" id="btnHubRevisar" data-i18n="vk_rev_btn"></button>
+      </div>
+      <span class="nota" data-i18n="vk_botao_exp"></span>
+      <!-- O MAPA: quais editais estão ligados a quais, e por quantos
+           assuntos. A informação é uma rede, e o olho lê rede melhor
+           que lista. -->
+      <div id="hubMapa" class="hub-mapa" hidden></div>
+    </div>
+
     <div id="hubLista"></div>
   </div>
 
@@ -2874,10 +2980,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <div class="ed-acao">
           <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
           <span class="ed-acao-exp" data-i18n="ed_diag_exp"></span>
-        </div>
-        <div class="ed-acao">
-          <button class="btn btn-cinza" id="btnJaEstudei" data-i18n="vk_botao"></button>
-          <span class="ed-acao-exp" data-i18n="vk_botao_exp"></span>
         </div>
       </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
@@ -3438,6 +3540,32 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- A FAXINA DOS VÍNCULOS.
+     Um vínculo errado guardado é bomba de efeito retardado: hoje ele é
+     mudo, e no dia em que você escrever um resumo naquele tópico ele
+     volta apontando o material certo para o assunto errado — com a
+     autoridade de quem tem conteúdo, no meio de um estudo. Por isso
+     esconder não basta, e por isso apagar é gesto de quem estuda. -->
+<dialog id="dlgVkRevisar" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="vk_rev_tit"></h3>
+    <button class="btn-min" id="btnVkRevFecharTopo" data-i18n="help_close"></button>
+  </div>
+  <p class="nota" data-i18n="vk_rev_ajuda"></p>
+  <div class="vka-aviso" id="vkRevResumo"></div>
+  <div class="vk-rev-acoes">
+    <button class="btn-min" id="btnVkRevMudos" data-i18n="vk_rev_so_mudos"></button>
+    <button class="btn-min" id="btnVkRevTodos" data-i18n="vk_rev_todos"></button>
+    <button class="btn-min" id="btnVkRevCopiar" data-i18n="vk_rev_copiar"></button>
+  </div>
+  <div id="vkRevLista" class="vk-rev-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnVkRevFechar" data-i18n="help_close"></button>
+    <button class="btn-min btn-min-perigo" id="btnVkRevApagar"></button>
+    <span class="nota vk-rodape-exp" data-i18n="vk_rev_apagar_exp"></span>
+  </div>
+</dialog>
+
 <!-- A CHAVE DA API, no aparelho de quem usa.
      O app não tem servidor: ou a chave fica aqui, ou não há triagem
      semântica. Isso não é escondido — está escrito na caixa, com o
@@ -3460,7 +3588,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <!-- O ACERVO DO OUTRO CONCURSO. Só consulta: nada aqui marca o tópico
      como estudado nem substitui o material desta prova. -->
 <dialog id="dlgVkAcervo" class="ui-modal diag-modal">
-  <h3 data-i18n="vka_titulo"></h3>
+  <!-- FECHAR NO TOPO. A gaveta pode ter uma dúzia de itens e um botão
+       de fechar só no fim obriga a rolar tudo para sair — numa tela de
+       celular, três telas de rolagem para desfazer um toque. -->
+  <div class="vka-cab">
+    <h3 data-i18n="vka_titulo"></h3>
+    <button class="btn-min" id="btnVkaFecharTopo" data-i18n="help_close"></button>
+  </div>
   <p class="nota" id="vkaSub"></p>
   <div class="vka-aviso" data-i18n="vka_aviso"></div>
   <div id="vkaLista"></div>
@@ -4306,7 +4440,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <h3 data-i18n="plog_titulo"></h3>
       <p class="nota" id="plogSub"></p>
     </div>
-    <button class="btn-min" id="btnPlogFechar" data-i18n="help_close"></button>
+    <span class="plog-cab-btns">
+      <!-- Numa tela de celular esta janela é um retângulo de 500 px com
+           uma tabela de nove colunas dentro: duas barras de rolagem
+           aninhadas e nada legível. A tela cheia não é um luxo aqui, é
+           a única forma de o painel funcionar — e por isso ele já ABRE
+           assim quando a tela é estreita. -->
+      <button class="btn-min" id="btnPlogTela"></button>
+      <button class="btn-min" id="btnPlogFechar" data-i18n="help_close"></button>
+    </span>
   </div>
   <div class="plog-abas">
     <button class="plog-aba" id="btnPlogAbaFila" data-plog-aba="fila"
