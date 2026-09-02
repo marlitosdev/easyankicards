@@ -1087,6 +1087,11 @@ function hubRender() {
   const banc = document.getElementById("edBancada");
   if (hub) hub.hidden = !!aberto;
   if (banc) banc.hidden = !aberto;
+  /* o mapa de vínculos vive na lista, e se repinta com ela: apagar um
+   * vínculo ou um edital muda o desenho */
+  if (!aberto && typeof vkMapaPintar === "function") {
+    try { vkMapaPintar(); } catch (e) {}
+  }
   const nm = document.getElementById("edNomeAberto");
   if (nm) nm.textContent = aberto ? aberto.nome : "";
   if (!aberto) hubPintarLista();

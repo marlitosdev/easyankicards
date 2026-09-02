@@ -398,13 +398,20 @@ function edLinhaTopico(i, semDisciplina) {
   if (jaEst && jaEst.temVinculo) {
     const b = document.createElement("button");
     b.type = "button";
-    const onde = (jaEst.itens || []).filter((x) => x.concurso)[0];
-    const cc = (onde && onde.concurso) || "";
+    /* O NOME DO CONCURSO VEM DE ONDE A FRASE VAI FALAR.
+     * Dizendo "já estudei", o nome tem de sair do diário; dizendo
+     * "também cai em", tem de sair do edital onde o tópico consta. Um
+     * campo só para os dois foi exatamente o que produziu a afirmação
+     * falsa. */
+    const doEstudo = (jaEst.itens || []).filter((x) => x.estudado)[0];
+    const doOutro = (jaEst.itens || []).filter((x) => x.ondeConsta)[0];
     b.className = "ed-item-jaestudei"
       + (jaEst.temAlgo ? "" : (jaEst.temEstudo ? " sem-material" : " so-coincide"));
     b.textContent = jaEst.temAlgo ? t("vka_selo")
       : (jaEst.temEstudo ? t("vka_selo_sem_material")
-                         : t("vka_selo_coincide", { c: cc || "?" }));
+                         : t("vka_selo_coincide",
+                             { c: (doOutro && doOutro.ondeConsta)
+                                  || (doEstudo && doEstudo.concurso) || "?" }));
     b.title = jaEst.temAlgo ? t("vka_selo_aj") : t("vka_selo_coincide_aj");
     b.onclick = (ev) => { ev.stopPropagation(); vkaAbrir(i.disciplina, i.nome); };
     nome.append(b);
@@ -3550,13 +3557,29 @@ function vkAcervoDoTopico(disciplina, topico) {
    * mesmo nome em dois editais é raro, e quando acontece qualquer um dos
    * dois é uma resposta melhor do que nenhuma. */
   const editalDoTopico = {};
+  /* QUAL DELES AINDA VAI ACONTECER.
+   *
+   * É o que separa os dois usos do vínculo. De um concurso que já
+   * passou só interessa o MATERIAL — o registro de "estudei isto para o
+   * TCE-PE" não muda nada hoje. De um concurso que ainda vem, a
+   * coincidência é o próprio aviso: você vai estudar isto duas vezes
+   * sem perceber. */
+  const editalAtivo = {};
+  const hoje = hojeISO();
   (typeof editais !== "undefined" ? editais : []).forEach((e) => {
     const nome = vkNomeDoEdital(e.id) || e.nome || "";
     const r = lerEdital(e.texto || "");
+    const s3 = typeof edSituacao === "function" ? edSituacao(e) : {};
+    /* sem data de prova, conta como ativo: um edital que você ainda não
+     * datou é um edital que você ainda pretende fazer, e chamá-lo de
+     * encerrado esconderia justamente o aviso que ele deve dar */
+    const prova = (s3 && s3.prova) || (r.cfg && r.cfg.prova) || "";
+    const vivo = !prova || String(prova).slice(0, 10) >= hoje;
     (r.disciplinas || []).forEach((d) => {
       (d.topicos || []).forEach((tp) => {
         const k = vkChave(d.nome, tp.nome);
         if (!editalDoTopico[k]) editalDoTopico[k] = nome;
+        if (vivo) editalAtivo[k] = true;
         if (!chaveReal[k]) chaveReal[k] = matChave(d.nome, tp.nome);
         /* o nome do edital vence o do diário: é o texto que você
          * escreveu no plano, e é como o assunto aparece em toda parte */
@@ -3567,7 +3590,7 @@ function vkAcervoDoTopico(disciplina, topico) {
 
   return vkAcervoDe(disciplina, topico,
                     { chaveReal, nomeReal, estudo, resumos, leis, questoes,
-                      editalDoTopico });
+                      editalDoTopico, editalAtivo });
 }
 
 /* ------------------------------------------------------------------
@@ -3591,15 +3614,30 @@ function vkaAbrir(disciplina, topico) {
 
     /* QUANDO E PARA QUEM. É o par que decide: "estudei há 40 dias para o
      * TCE-PE" e "estudei há dois anos" pedem coisas diferentes. */
+    /* A FRASE SEGUE O DADO, e não o contrário.
+     *
+     * Havia uma frase só — "Estudado para {c}" — usada tanto para o
+     * registro do diário quanto para a dedução de "em qual edital este
+     * tópico existe". Resultado: tópico nenhum estudado aparecia como
+     * estudado, em dois editais marcando 0%.
+     *
+     * São três estados e três frases:
+     *   · estudado, com data  → "Estudado para X em 12/03, há 40 dias"
+     *   · não estudado, edital que ainda vem → "Também cai em X"
+     *   · não estudado, edital encerrado → "Consta no edital de X" */
     const q = document.createElement("div");
-    q.className = "vka-quando";
-    const chave = x.data ? (x.acao === "revisado" ? "vka_revisado_em"
-                                                  : "vka_estudado_em")
-                         : "vka_estudado_sem_data";
-    let txt = t(chave, { c: x.concurso || "?", d: x.data || "" });
-    if (x.data && typeof difDias === "function") {
-      const dias = difDias(x.data);
-      if (isFinite(dias)) txt += t("vka_ha_dias", { n: dias });
+    q.className = "vka-quando" + (x.estudado ? "" : " vka-so-consta");
+    let txt;
+    if (x.estudado) {
+      txt = t(x.acao === "revisado" ? "vka_revisado_em" : "vka_estudado_em",
+              { c: x.concurso || "?", d: x.data || "" });
+      if (typeof difDias === "function") {
+        const dias = difDias(x.data);
+        if (isFinite(dias)) txt += t("vka_ha_dias", { n: dias });
+      }
+    } else {
+      txt = t(x.ativo ? "vka_tambem_cai" : "vka_so_consta",
+              { c: x.ondeConsta || x.concurso || "?" });
     }
     q.textContent = txt;
     li.append(q);
@@ -3633,7 +3671,10 @@ function vkaAbrir(disciplina, topico) {
     if (!x.temAlgo) {
       const n = document.createElement("div");
       n.className = "vka-nada";
-      n.textContent = t("vka_nada");
+      /* "foi estudado mas não sobrou material" só pode ser dito de um
+       * tópico que foi mesmo estudado. Para os outros, a verdade é
+       * mais simples: não há material daquele lado. */
+      n.textContent = t(x.estudado ? "vka_nada" : "vka_sem_material");
       acervo.append(n);
     }
     li.append(acervo);
@@ -4249,9 +4290,281 @@ async function vkAplicarColagem() {
   await uiAlert(t("vk_aplicados_n", { n: res.novos, r: res.repetidos }));
 }
 
+/* =====================================================================
+ * A REVISÃO DOS VÍNCULOS
+ *
+ * Esconder o vínculo mudo resolve a tela de hoje. Não resolve o amanhã:
+ * no dia em que você escrever um resumo naquele tópico, ele deixa de
+ * ser mudo e volta — apontando o material certo para o assunto errado,
+ * com a autoridade de quem tem conteúdo. Por isso existe um lugar para
+ * apagar, e por isso apagar continua sendo gesto seu.
+ * ===================================================================== */
+let vkRevDados = null;
+let vkRevSoMudos = false;
+let vkRevMarcados = {};
+
+function vkRevFontes() {
+  /* as mesmas fontes do acervo, montadas uma vez */
+  const chaveReal = {}, nomeReal = {}, estudo = {}, editalDoTopico = {};
+  (edDiario || []).forEach((x) => {
+    if (!x || !x.n) return;
+    const norm = vkChave(x.disc, x.n);
+    if (!chaveReal[norm]) chaveReal[norm] = matChave(x.disc, x.n);
+    if (!nomeReal[norm]) nomeReal[norm] = (x.disc || "") + "›" + x.n;
+    const antes = estudo[norm];
+    if (x.a !== "pendente" && (!antes || String(x.d || "") > String(antes.data || ""))) {
+      estudo[norm] = { data: x.d || "", concurso: x.cc || "", acao: x.a || "" };
+    }
+  });
+  (typeof editais !== "undefined" ? editais : []).forEach((e) => {
+    const nome = vkNomeDoEdital(e.id) || e.nome || "";
+    const r = lerEdital(e.texto || "");
+    (r.disciplinas || []).forEach((d) => {
+      (d.topicos || []).forEach((tp) => {
+        const k = vkChave(d.nome, tp.nome);
+        if (!editalDoTopico[k]) editalDoTopico[k] = nome;
+        if (!chaveReal[k]) chaveReal[k] = matChave(d.nome, tp.nome);
+        nomeReal[k] = d.nome + "›" + tp.nome;
+      });
+    });
+  });
+  const resumos = (typeof matResumos !== "undefined" && matResumos) || {};
+  const leis = {}, questoes = {};
+  Object.keys(chaveReal).forEach((norm) => {
+    const real = chaveReal[norm];
+    try { leis[real] = (typeof leisDoTopico === "function") ? leisDoTopico(real) : []; }
+    catch (e) { leis[real] = []; }
+    try {
+      questoes[real] = (typeof qsContarDoTopico === "function")
+        ? qsContarDoTopico(real) : 0;
+    } catch (e) { questoes[real] = 0; }
+  });
+  return { chaveReal, nomeReal, estudo, resumos, leis, questoes, editalDoTopico };
+}
+
+function vkRevAbrir() {
+  vkRevDados = vkRevisao(vkRevFontes());
+  vkRevMarcados = {};
+  vkRevSoMudos = false;
+  vkRevPintar();
+  abrirModal("dlgVkRevisar");
+  reg("VINCULO", "revisao de vinculos aberta",
+      vkRevDados.total + " vinculos, " + vkRevDados.mudos + " sem nada a dizer");
+}
+
+function vkRevChaveDe(x) { return x.a + "|" + x.b; }
+
+function vkRevPintar() {
+  const box = $("vkRevLista");
+  const res = $("vkRevResumo");
+  if (!box || !vkRevDados) return;
+  if (res) {
+    res.textContent = t("vk_rev_resumo", {
+      n: vkRevDados.total, m: vkRevDados.mudos,
+      g: vkRevDados.grupos.length });
+  }
+  box.innerHTML = "";
+  let mostrados = 0;
+  vkRevDados.grupos.forEach((g) => {
+    const itens = vkRevSoMudos ? g.itens.filter((x) => x.mudo) : g.itens;
+    if (!itens.length) return;
+    const cx = document.createElement("div");
+    cx.className = "vk-rev-grupo";
+    const par = document.createElement("div");
+    par.className = "vk-rev-par";
+    par.textContent = g.par;
+    cx.append(par);
+    const conta = document.createElement("div");
+    conta.className = "vk-rev-conta";
+    conta.textContent = t("vk_rev_grupo_conta",
+      { n: g.itens.length, m: g.mudos });
+    cx.append(conta);
+
+    itens.forEach((x) => {
+      mostrados++;
+      const li = document.createElement("div");
+      li.className = "vk-rev-li" + (x.mudo ? " vk-rev-mudo" : "");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      const k = vkRevChaveDe(x);
+      cb.checked = !!vkRevMarcados[k];
+      cb.onchange = () => {
+        if (cb.checked) vkRevMarcados[k] = x; else delete vkRevMarcados[k];
+        vkRevBotao();
+      };
+      li.append(cb);
+      const tx = document.createElement("div");
+      tx.textContent = x.nomeA.replace("›", " › ") + "   ↔   "
+        + x.nomeB.replace("›", " › ") + (x.por ? "  ·  " + x.por : "");
+      li.append(tx);
+      if (x.mudo) {
+        const s = document.createElement("span");
+        s.className = "vk-rev-selo";
+        s.textContent = t("vk_rev_selo_mudo");
+        li.append(s);
+      }
+      cx.append(li);
+    });
+    box.append(cx);
+  });
+  if (!mostrados) {
+    const p = document.createElement("div");
+    p.className = "hub-mapa-vazio";
+    p.textContent = t(vkRevSoMudos ? "vk_rev_sem_mudos" : "vk_rev_vazio");
+    box.append(p);
+  }
+  vkRevBotao();
+}
+
+function vkRevBotao() {
+  const b = $("btnVkRevApagar");
+  if (!b) return;
+  const n = Object.keys(vkRevMarcados).length;
+  b.textContent = t("vk_rev_apagar", { n });
+  b.disabled = n === 0;
+}
+
+async function vkRevApagar() {
+  const marcados = Object.keys(vkRevMarcados).map((k) => vkRevMarcados[k]);
+  if (!marcados.length) return;
+  /* SEGUNDA CONFIRMAÇÃO, com o que se perde e o que não se perde.
+   * Apagar vínculo não toca em material, diário nem progresso — e dizer
+   * isso é o que permite apagar sem medo. */
+  if (!(await uiConfirm(t("vk_rev_conf", { n: marcados.length })))) return;
+  const n = vkApagarPares(marcados);
+  reg("VINCULO", "vinculos apagados na revisao", n + " de " + marcados.length);
+  vkRevMarcados = {};
+  vkRevDados = vkRevisao(vkRevFontes());
+  vkRevPintar();
+  edRender();
+  if (typeof hubRender === "function") hubRender();
+  await uiAlert(t("vk_rev_apagados", { n }));
+}
+
+function vkRevMarcarMudos() {
+  if (!vkRevDados) return;
+  vkRevDados.grupos.forEach((g) => {
+    g.itens.filter((x) => x.mudo).forEach((x) => {
+      vkRevMarcados[vkRevChaveDe(x)] = x;
+    });
+  });
+  vkRevSoMudos = true;
+  vkRevPintar();
+}
+
+async function vkRevCopiar() {
+  if (!vkRevDados) return;
+  const L = [];
+  vkRevDados.grupos.forEach((g) => {
+    L.push("== " + g.par + "  (" + g.itens.length + ")");
+    g.itens.forEach((x) => {
+      L.push((x.mudo ? "[mudo] " : "       ")
+        + x.nomeA + "  ->  " + x.nomeB + (x.por ? "   (" + x.por + ")" : ""));
+    });
+    L.push("");
+  });
+  await edColarCopiarTexto(L.join("\n"), t("diag_copiado"), $("btnVkRevCopiar"));
+}
+
+/* =====================================================================
+ * O MAPA DOS EDITAIS LIGADOS
+ *
+ * A informação é uma rede: qual concurso encosta em qual, e por quantos
+ * assuntos. Em lista isso só se descobre abrindo tópico por tópico; em
+ * desenho, é uma olhada.
+ *
+ * SVG à mão, sem biblioteca. Com três ou quatro editais o desenho é uma
+ * linha entre dois nomes com um número em cima — trazer um motor de
+ * grafos para isso seria carregar um guindaste para levantar uma
+ * cadeira.
+ * ===================================================================== */
+function vkMapaDados() {
+  const fontes = vkRevFontes();
+  const nomeDe = (chave) => fontes.editalDoTopico[chave] || "";
+  const pares = {};
+  const nos = {};
+  (vkCarregar() || []).forEach((v) => {
+    const na = nomeDe(v.a), nb = nomeDe(v.b);
+    if (!na || !nb || na === nb) return;
+    const k = [na, nb].sort().join(" ");
+    pares[k] = (pares[k] || 0) + 1;
+    nos[na] = (nos[na] || 0) + 1;
+    nos[nb] = (nos[nb] || 0) + 1;
+  });
+  return {
+    nos: Object.keys(nos),
+    arestas: Object.keys(pares).map((k) => {
+      const p = k.split(" ");
+      return { a: p[0], b: p[1], n: pares[k] };
+    }).sort((x, y) => y.n - x.n),
+  };
+}
+
+function vkMapaPintar() {
+  const box = $("hubMapa");
+  if (!box) return;
+  const d = vkMapaDados();
+  box.innerHTML = "";
+  if (!d.arestas.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const LARG = 520, LINHA = 46;
+  const alt = d.arestas.length * LINHA + 16;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 " + LARG + " " + alt);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", String(alt));
+  const cria = (tag, attrs, texto) => {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    Object.keys(attrs).forEach((k) => el.setAttribute(k, attrs[k]));
+    if (texto != null) el.textContent = texto;
+    svg.append(el);
+    return el;
+  };
+  d.arestas.forEach((e, i) => {
+    const y = 22 + i * LINHA;
+    /* a linha, com a espessura acompanhando o número de assuntos: dois
+     * editais que se tocam em oitenta pontos não podem parecer iguais a
+     * dois que se tocam em três */
+    const esp = Math.max(1.5, Math.min(7, 1.5 + e.n / 8));
+    cria("line", { x1: 12, y1: y, x2: LARG - 12, y2: y,
+      stroke: "var(--acao)", "stroke-width": esp, "stroke-linecap": "round",
+      opacity: "0.5" });
+    cria("text", { x: 12, y: y - 9, fill: "var(--texto)",
+      "font-size": "11.5", "font-weight": "700" }, e.a);
+    cria("text", { x: LARG - 12, y: y - 9, fill: "var(--texto)",
+      "font-size": "11.5", "font-weight": "700", "text-anchor": "end" }, e.b);
+    /* o número no meio, sobre um fundo, para não sumir na linha */
+    cria("rect", { x: LARG / 2 - 46, y: y - 10, width: 92, height: 20,
+      rx: 10, fill: "var(--panel)", stroke: "var(--borda)" });
+    cria("text", { x: LARG / 2, y: y + 4, fill: "var(--sutil)",
+      "font-size": "10.5", "font-weight": "800", "text-anchor": "middle" },
+      t("vk_mapa_n", { n: e.n }));
+  });
+  box.append(svg);
+}
+
 function vkIniciarTela() {
   vkCarregar();
-  if ($("btnJaEstudei")) $("btnJaEstudei").onclick = vkAbrir;
+  if ($("btnHubVincular")) $("btnHubVincular").onclick = vkAbrir;
+  if ($("btnHubRevisar")) $("btnHubRevisar").onclick = vkRevAbrir;
+  if ($("btnVkRevFechar")) {
+    $("btnVkRevFechar").onclick = () => $("dlgVkRevisar").close();
+  }
+  if ($("btnVkRevFecharTopo")) {
+    $("btnVkRevFecharTopo").onclick = () => $("dlgVkRevisar").close();
+  }
+  if ($("btnVkRevApagar")) $("btnVkRevApagar").onclick = vkRevApagar;
+  if ($("btnVkRevMudos")) $("btnVkRevMudos").onclick = vkRevMarcarMudos;
+  if ($("btnVkRevTodos")) $("btnVkRevTodos").onclick = () => {
+    vkRevSoMudos = false; vkRevPintar();
+  };
+  if ($("btnVkRevCopiar")) $("btnVkRevCopiar").onclick = vkRevCopiar;
+  if ($("btnVkaFecharTopo")) {
+    $("btnVkaFecharTopo").onclick = () => $("dlgVkAcervo").close();
+  }
   if ($("btnVkaFechar")) $("btnVkaFechar").onclick = () => $("dlgVkAcervo").close();
   if ($("btnVkIdenticos")) $("btnVkIdenticos").onclick = vkAceitarIdenticos;
   if ($("btnVkModoEstudei")) {

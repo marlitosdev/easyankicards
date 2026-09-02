@@ -369,6 +369,78 @@ function vkAplicar(pares, editalId, modo) {
   return { novos, repetidos };
 }
 
+/* =====================================================================
+ * A REVISÃO DOS VÍNCULOS — a faxina
+ *
+ * ELA É NECESSÁRIA, e a pergunta "esconder não basta?" tem uma resposta
+ * concreta: não.
+ *
+ * Esconder resolve o hoje. Mas um vínculo errado guardado é uma bomba de
+ * efeito retardado: no dia em que você escrever um resumo naquele
+ * tópico, ele deixa de ser mudo e volta à tela — apontando o material
+ * certo para o assunto errado. E aí ele chega com a autoridade de quem
+ * tem conteúdo, no meio de um estudo, sem nada por perto que lembre de
+ * onde veio.
+ *
+ * Também há a razão simples: eles são SEUS. Uma resposta de IA aplicada
+ * em bloco pode ter criado duzentos pares que você nunca leu um a um, e
+ * não existe motivo para carregá-los para sempre.
+ *
+ * O QUE ESTA FUNÇÃO NÃO FAZ é decidir. Ela agrupa, conta e classifica;
+ * apagar é gesto de quem estuda, item a item ou em bloco, com o número
+ * na frente. O app não sabe qual vínculo é besteira — ele só sabe qual
+ * deles nunca teve nada a dizer.
+ * ===================================================================== */
+function vkRevisao(fontes) {
+  const f = fontes || {};
+  const nomeDe = (chave) => (f.editalDoTopico && f.editalDoTopico[chave]) || "";
+  const bonito = (chave) => (f.nomeReal && f.nomeReal[chave]) || chave;
+  const temMaterial = (chave) => {
+    const real = (f.chaveReal && f.chaveReal[chave]) || chave;
+    const res = (f.resumos && f.resumos[real]) || null;
+    const cart = res && String(res.cartoes || "").trim() ? 1 : 0;
+    const leis = ((f.leis && f.leis[real]) || []).length;
+    const q = (f.questoes && f.questoes[real]) || 0;
+    return !!(res && String(res.texto || "").trim()) || !!cart || leis > 0 || q > 0;
+  };
+  const estudado = (chave) => !!((f.estudo && f.estudo[chave]) || {}).data;
+
+  const grupos = {};
+  (vinculos || []).forEach((v, i) => {
+    const na = nomeDe(v.a) || t("vk_rev_sem_edital");
+    const nb = nomeDe(v.b) || t("vk_rev_sem_edital");
+    /* o par de editais, sempre na mesma ordem: A↔B e B↔A são o mesmo
+     * par, e dois grupos para a mesma coisa dobrariam a lista */
+    const par = [na, nb].sort().join("  ↔  ");
+    if (!grupos[par]) grupos[par] = { par, itens: [], mudos: 0 };
+    const mudo = !temMaterial(v.a) && !temMaterial(v.b)
+      && !estudado(v.a) && !estudado(v.b);
+    grupos[par].itens.push({
+      i, a: v.a, b: v.b,
+      nomeA: bonito(v.a), nomeB: bonito(v.b),
+      origem: v.origem || "", sugestao: v.sugestao || "", por: v.por || "",
+      modo: v.modo || "estudei", criado: v.criado || "",
+      mudo,
+    });
+    if (mudo) grupos[par].mudos++;
+  });
+  const lista = Object.keys(grupos).map((k) => grupos[k]);
+  lista.sort((a, b) => b.itens.length - a.itens.length);
+  return {
+    grupos: lista,
+    total: (vinculos || []).length,
+    mudos: lista.reduce((s, g) => s + g.mudos, 0),
+  };
+}
+
+/* APAGAR OS ESCOLHIDOS. Recebe pares (a,b), não índices: a lista da tela
+ * pode ter sido filtrada, e um índice velho apagaria o vizinho. */
+function vkApagarPares(pares) {
+  let n = 0;
+  (pares || []).forEach((p) => { n += vkDesfazer(p.a, p.b); });
+  return n;
+}
+
 function vkDesfazer(a, b) {
   const antes = vinculos.length;
   vinculos = vinculos.filter((v) => !((v.a === a && v.b === b) || (v.a === b && v.b === a)));
@@ -413,8 +485,29 @@ function vkDesfazer(a, b) {
  *
  * O limite de três saltos não é medo de laço (os visitados já cuidam
  * disso): é que além disso a soma de aproximações deixa de significar
- * qualquer coisa. */
-const VK_SALTOS_MAX = 3;
+ * qualquer coisa.
+ *
+ * =====================================================================
+ * UM SALTO, E NÃO TRÊS — corrigido depois do uso real
+ * =====================================================================
+ *
+ * Três saltos foi um erro meu, e o tamanho dele apareceu na tela: um
+ * tópico com dois vínculos diretos mostrava OITO na gaveta. A cadeia
+ * A→B→C fazia cada tópico puxar a vizinhança da vizinhança, e o painel
+ * que deveria responder "o que eu já tenho sobre isto?" respondia com
+ * a metade do banco de dados.
+ *
+ * E o argumento que sustentava os três saltos é o mesmo que agora os
+ * derruba: VÍNCULO NÃO É IGUALDADE. Cada elo aceita uma diferença de
+ * recorte; três elos somam três diferenças, e o que chega na ponta não
+ * é "o mesmo assunto", é um primo distante. Guardar o número de saltos
+ * e mostrá-lo na tela não resolve — ninguém lê "3 saltos" e desconta
+ * mentalmente a confiança.
+ *
+ * Então o padrão é UM: o vínculo que VOCÊ afirmou. O que o app deduziu
+ * continua calculável (basta pedir mais saltos), e é assim que a faxina
+ * de vínculos consegue mostrar a rede inteira quando ela é o assunto. */
+const VK_SALTOS_MAX = 1;
 
 function vkLigadosDe(disciplina, topico, maxSaltos) {
   const inicio = vkChave(disciplina, topico);
@@ -490,11 +583,31 @@ function vkAcervoDe(disciplina, topico, fontes) {
        * dizer que um tópico do ISS Caruaru era do SEFAZ-AL — errado com
        * cara de certo, que é o pior modo de errar.
        *
-       * A ordem é: o que o diário registrou (é fato, tem data), depois
-       * em qual edital cadastrado aquele tópico existe (é dedução, mas
-       * verificável), e por fim nada. Nunca um identificador interno. */
-      concurso: (est && est.concurso)
-        || (f.editalDoTopico && f.editalDoTopico[L.chave]) || "",
+      /* ============================================================
+       * "FOI ESTUDADO" E "CONSTA NESTE EDITAL" SAO DUAS COISAS
+       * ============================================================
+       *
+       * Este campo misturava as duas, e o resultado foi o aplicativo
+       * afirmando um estudo que nunca houve. A ordem era: o que o
+       * diario registrou; e, se nao houvesse registro, em qual edital o
+       * topico existe. O segundo responde "de onde e este topico?" — e
+       * a frase da gaveta em volta dele dizia "Estudado para X".
+       *
+       * Dois editais marcando 0% estudado apareciam listando oito
+       * estudos cada. Nao havia contradicao no dado: havia uma frase
+       * colada no dado errado, que e o pior modo de errar, porque
+       * parece informacao e ninguem desconfia de informacao.
+       *
+       * Agora sao dois campos com dois nomes, e quem escreve a frase
+       * precisa escolher qual dos dois esta usando: "concurso" so
+       * existe quando ha registro no diario. */
+      estudado: !!(est && est.data),
+      concurso: (est && est.concurso) || "",
+      ondeConsta: (f.editalDoTopico && f.editalDoTopico[L.chave]) || "",
+      /* O OUTRO EDITAL AINDA VAI ACONTECER?
+       * E o que separa "vou estudar os dois, me avise" de "isto e de um
+       * concurso que ja passou, so me interessa o material". */
+      ativo: !!(f.editalAtivo && f.editalAtivo[L.chave]),
       data: (est && est.data) || "",
       acao: (est && est.acao) || "",
       /* quantos elos de distância, para a tela poder separar o que você
@@ -510,6 +623,33 @@ function vkAcervoDe(disciplina, topico, fontes) {
         || leis.length > 0 || questoes > 0,
     };
   });
+
+  /* =================================================================
+   * O QUE MERECE APARECER
+   *
+   * Uma linha só vale a tela se responder alguma pergunta:
+   *
+   *   · tem MATERIAL do outro lado — resumo, cartões, lei, questões.
+   *     Este é o único motivo que vale para um concurso que já passou:
+   *     o registro de "estudei isto para o TCE-PE" não ajuda a decidir
+   *     nada hoje, mas o resumo que ficou de lá ajuda muito;
+   *   · foi ESTUDADO de verdade, com data no diário;
+   *   · o outro edital AINDA VAI ACONTECER — aí a coincidência é o
+   *     próprio aviso: você vai estudar isto duas vezes.
+   *
+   * O que sobra é um vínculo mudo: dois tópicos ligados, nenhum
+   * estudado, nada escrito, e o outro concurso encerrado. Ele não é
+   * errado — só não tem o que dizer, e oito deles empilhados afogam o
+   * único que tinha.
+   *
+   * Continuam GUARDADOS. Escondê-los é decisão de tela; apagá-los é
+   * decisão de quem estuda, e tem lugar próprio (a revisão de
+   * vínculos). O dia em que você escrever um resumo naquele tópico, o
+   * vínculo mudo volta a falar sozinho. */
+  itens.forEach((x) => {
+    x.util = x.temAlgo || x.estudado || x.ativo;
+  });
+  const mudos = itens.filter((x) => !x.util).length;
   /* PERTO E COM MATERIAL PRIMEIRO. Numa cadeia de três concursos o
    * item útil pode ser o mais distante, e enterrá-lo sob um elo vazio
    * é o mesmo que não tê-lo. */
@@ -530,11 +670,27 @@ function vkAcervoDe(disciplina, topico, fontes) {
    *   temAlgo    — algum deles tem material para consultar.
    * São três estados de uma mesma coisa ao longo do tempo, e a agenda
    * diz uma frase diferente em cada um. */
+  const uteis = itens.filter((x) => x.util);
   return {
-    temAlgo: itens.some((x) => x.temAlgo),
-    temEstudo: itens.some((x) => !!x.data),
-    temVinculo: true,
-    itens,
+    temAlgo: uteis.some((x) => x.temAlgo),
+    /* SÓ COM DATA NO DIÁRIO. Era "algum item tem data", e a data vinha
+     * do mesmo campo que também guardava a dedução — por isso a agenda
+     * dizia "já estudei em outro" para tópico nenhum estudado. */
+    temEstudo: uteis.some((x) => x.estudado),
+    /* a coincidência entre dois editais que ainda vão acontecer */
+    temCoincidencia: uteis.some((x) => x.ativo && !x.estudado && !x.temAlgo),
+    temVinculo: uteis.length > 0,
+    /* quantos ficaram de fora, para a tela poder oferecer a faxina em
+     * vez de esconder e calar */
+    mudos,
+    itens: uteis,
+    /* NÃO devolve a lista completa. Ela existiu por um instante, "caso
+     * alguém precise", e a sabotagem provou o que isso vale: dava para
+     * trocá-la pela lista filtrada sem nenhum teste piscar, porque
+     * ninguém a lia. Campo que ninguém lê não é opção guardada para o
+     * futuro — é uma segunda versão da verdade esperando divergir da
+     * primeira. Quem precisa da lista inteira usa vkRevisao, que existe
+     * exatamente para isso. */
   };
 }
 
