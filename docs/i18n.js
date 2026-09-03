@@ -1291,6 +1291,18 @@ const UI = {
 
   /* ---- o registro do processo ---- */
   "vzl_vazio": "Nada registrado ainda. O registro guarda o que entrou e o que saiu de cada etapa da vinculação — é onde se descobre por que uma resposta da IA foi descartada, ou por que apareceram vínculos demais.",
+  /* ---- a matriz de reuso entre editais ------------------------
+     Autoexplicativa: quem olha precisa saber o que o número mede e o
+     que fazer com ele, sem sair da tela. */
+  "vk_mapa_intro": "Onde os seus concursos se encontram. A barra compara os pares entre si; a porcentagem diz quanto de um edital o outro já cobre. Toque num par para comparar os dois.",
+  "vk_par_cobre": "{n} assuntos ligados · cobre {ta} de {tA} tópicos de um e {tb} de {tB} do outro ({p}% no melhor caso)",
+  "vk_par_historico": "{n} ligações de um concurso que já passou. Servem para consultar o material que ficou — não entram no planejamento.",
+  "vk_par_comparar": "Comparar estes dois →",
+  "vk_par_ver": "Ver o que ficou →",
+  "vk_faixa_alta": "MUITO EM COMUM",
+  "vk_faixa_media": "EM PARTE",
+  "vk_faixa_baixa": "POUCO EM COMUM",
+  "vk_faixa_encerrado": "PROVA JÁ PASSOU",
   "vk_titulo": "Aproveitar o que já estudei em outro concurso",
   /* ---- triagem semântica: o passo 0 ------------------------------
      Ela ORDENA e ENCURTA. Não vincula. O texto da tela precisa dizer

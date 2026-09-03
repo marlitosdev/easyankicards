@@ -4366,6 +4366,13 @@ function vkRevFontes() {
    * falta deste mapa que fez a tela dizer "502 vínculos não levam a
    * nada" sobre um par de concursos futuros. */
   const editalAtivo = {};
+  /* de qual EDITAL (o id, não o nome) é cada tópico, e quantos tópicos
+   * cada edital tem no total. O id é o que permite ao mapa abrir a
+   * comparação já com os dois concursos escolhidos; o total é o
+   * denominador da cobertura. */
+  const editalIdDoTopico = {};
+  const totalDoEdital = {};
+  const nomeDoId = {};
   const hojeRev = hojeISO();
   (edDiario || []).forEach((x) => {
     if (!x || !x.n) return;
@@ -4383,10 +4390,14 @@ function vkRevFontes() {
     const sr = typeof edSituacao === "function" ? edSituacao(e) : {};
     const prova = (sr && sr.prova) || (r.cfg && r.cfg.prova) || "";
     const vivoR = !prova || String(prova).slice(0, 10) >= hojeRev;
+    nomeDoId[e.id] = nome;
+    totalDoEdital[e.id] = (r.disciplinas || [])
+      .reduce((soma, d) => soma + (d.topicos || []).length, 0);
     (r.disciplinas || []).forEach((d) => {
       (d.topicos || []).forEach((tp) => {
         const k = vkChave(d.nome, tp.nome);
         if (!editalDoTopico[k]) editalDoTopico[k] = nome;
+        if (!editalIdDoTopico[k]) editalIdDoTopico[k] = e.id;
         if (vivoR) editalAtivo[k] = true;
         if (!chaveReal[k]) chaveReal[k] = matChave(d.nome, tp.nome);
         nomeReal[k] = d.nome + "›" + tp.nome;
@@ -4405,7 +4416,8 @@ function vkRevFontes() {
     } catch (e) { questoes[real] = 0; }
   });
   return { chaveReal, nomeReal, estudo, resumos, leis, questoes,
-           editalDoTopico, editalAtivo };
+           editalDoTopico, editalAtivo, editalIdDoTopico, totalDoEdital,
+           nomeDoId };
 }
 
 function vkRevAbrir() {
@@ -4654,25 +4666,96 @@ async function vkRevCopiar() {
  * cadeira.
  * ===================================================================== */
 function vkMapaDados() {
-  const fontes = vkRevFontes();
-  const nomeDe = (chave) => fontes.editalDoTopico[chave] || "";
-  const pares = {};
-  const nos = {};
-  (vkCarregar() || []).forEach((v) => {
-    const na = nomeDe(v.a), nb = nomeDe(v.b);
-    if (!na || !nb || na === nb) return;
-    const k = [na, nb].sort().join(" ");
-    pares[k] = (pares[k] || 0) + 1;
-    nos[na] = (nos[na] || 0) + 1;
-    nos[nb] = (nos[nb] || 0) + 1;
-  });
-  return {
-    nos: Object.keys(nos),
-    arestas: Object.keys(pares).map((k) => {
-      const p = k.split(" ");
-      return { a: p[0], b: p[1], n: pares[k] };
-    }).sort((x, y) => y.n - x.n),
+  const f = vkRevFontes();
+  const idDe = (chave) => f.editalIdDoTopico[chave] || "";
+  const ativo = (chave) => !!f.editalAtivo[chave];
+  const material = (chave) => {
+    const real = f.chaveReal[chave] || chave;
+    const res = (f.resumos && f.resumos[real]) || null;
+    const cart = res && String(res.cartoes || "").trim() ? 1 : 0;
+    return !!(res && String(res.texto || "").trim()) || !!cart
+      || ((f.leis && f.leis[real]) || []).length > 0
+      || ((f.questoes && f.questoes[real]) || 0) > 0;
   };
+  const estudado = (chave) => !!((f.estudo && f.estudo[chave]) || {}).data;
+  const lado = (ch) => ({ material: material(ch), estudado: estudado(ch),
+                          ativo: ativo(ch) });
+
+  const pares = {};
+  (vkCarregar() || []).forEach((v) => {
+    const ia = idDe(v.a), ib = idDe(v.b);
+    if (!ia || !ib || ia === ib) return;
+    /* a ordem do par é estável: A↔B e B↔A são o mesmo par */
+    const dupla = [ia, ib].sort();
+    const k = dupla.join("|");
+    if (!pares[k]) {
+      pares[k] = { idA: dupla[0], idB: dupla[1],
+        a: f.nomeDoId[dupla[0]] || "?", b: f.nomeDoId[dupla[1]] || "?",
+        ligacoes: 0, ativas: 0,
+        /* CONJUNTOS, não contadores: um tópico ligado a três do outro
+         * lado é UM tópico coberto, não três. Contar arestas responde
+         * "quantos vínculos existem"; contar tópicos responde "quanto
+         * do meu edital está coberto", que é a pergunta de estudo. */
+        topsA: {}, topsB: {} };
+    }
+    const P = pares[k];
+    P.ligacoes++;
+    const vivo = vkVinculoUtil(lado(v.a), lado(v.b));
+    if (vivo) P.ativas++;
+    const chA = idDe(v.a) === P.idA ? v.a : v.b;
+    const chB = chA === v.a ? v.b : v.a;
+    if (vivo) { P.topsA[chA] = 1; P.topsB[chB] = 1; }
+  });
+
+  const lista = Object.keys(pares).map((k) => {
+    const P = pares[k];
+    const nA = Object.keys(P.topsA).length;
+    const nB = Object.keys(P.topsB).length;
+    const totA = f.totalDoEdital[P.idA] || 0;
+    const totB = f.totalDoEdital[P.idB] || 0;
+    /* A COBERTURA É O NÚMERO QUE DECIDE ESTUDO.
+     *
+     * "191 ligações" impressiona e não informa: 191 entre dois editais
+     * de 533 tópicos é uma coisa, entre dois de 60 é outra. A fração de
+     * cada edital que o outro cobre é comparável entre pares e entre
+     * concursos de tamanhos diferentes.
+     *
+     * Vale o MAIOR dos dois lados: é o melhor caso de reaproveitamento,
+     * e é ele que responde "vale a pena estudar os dois juntos?". */
+    const pctA = totA ? Math.round((nA / totA) * 100) : 0;
+    const pctB = totB ? Math.round((nB / totB) * 100) : 0;
+    return Object.assign(P, {
+      topicosA: nA, topicosB: nB, totalA: totA, totalB: totB,
+      pctA, pctB, reuso: Math.max(pctA, pctB),
+      /* os dois ainda vão acontecer? é o que separa "planejar os dois
+       * juntos" de "consultar o que sobrou de um que já passou" */
+      ativoA: !!f.editalAtivo[Object.keys(P.topsA)[0]] || P.ativas > 0,
+      dosDois: nA > 0 && nB > 0,
+      encerrado: P.ativas === 0,
+      faixa: vkFaixaReuso(Math.max(pctA, pctB), P.ativas),
+    });
+  });
+  /* os pares vivos primeiro, e dentro deles o de maior reuso */
+  lista.sort((x, y) => (x.encerrado ? 1 : 0) - (y.encerrado ? 1 : 0)
+    || y.reuso - x.reuso || y.ativas - x.ativas);
+  return { nos: [], arestas: lista, pares: lista,
+           maior: lista.reduce((m, x) => Math.max(m, x.ativas), 0) };
+}
+
+/* AS TRÊS FAIXAS SÃO DE LEITURA, e o corte é arbitrário — dito aqui
+ * porque um rótulo como "alta intersecção" soa a medida e não é. Ele só
+ * separa a lista em três grupos para o olho: onde vale planejar os dois
+ * juntos, onde há sobreposição parcial, e onde quase não há.
+ *
+ * O número ao lado é que é a medida; a etiqueta é o atalho. */
+const VK_REUSO_ALTA = 25;
+const VK_REUSO_MEDIA = 10;
+
+function vkFaixaReuso(pct, ativas) {
+  if (!ativas) return "encerrado";
+  if (pct >= VK_REUSO_ALTA) return "alta";
+  if (pct >= VK_REUSO_MEDIA) return "media";
+  return "baixa";
 }
 
 function vkMapaPintar() {
@@ -4680,45 +4763,102 @@ function vkMapaPintar() {
   if (!box) return;
   const d = vkMapaDados();
   box.innerHTML = "";
-  if (!d.arestas.length) {
-    box.hidden = true;
-    return;
-  }
+  if (!d.pares.length) { box.hidden = true; return; }
   box.hidden = false;
-  const LARG = 520, LINHA = 46;
-  const alt = d.arestas.length * LINHA + 16;
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 " + LARG + " " + alt);
-  svg.setAttribute("width", "100%");
-  svg.setAttribute("height", String(alt));
-  const cria = (tag, attrs, texto) => {
-    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    Object.keys(attrs).forEach((k) => el.setAttribute(k, attrs[k]));
-    if (texto != null) el.textContent = texto;
-    svg.append(el);
-    return el;
-  };
-  d.arestas.forEach((e, i) => {
-    const y = 22 + i * LINHA;
-    /* a linha, com a espessura acompanhando o número de assuntos: dois
-     * editais que se tocam em oitenta pontos não podem parecer iguais a
-     * dois que se tocam em três */
-    const esp = Math.max(1.5, Math.min(7, 1.5 + e.n / 8));
-    cria("line", { x1: 12, y1: y, x2: LARG - 12, y2: y,
-      stroke: "var(--acao)", "stroke-width": esp, "stroke-linecap": "round",
-      opacity: "0.5" });
-    cria("text", { x: 12, y: y - 9, fill: "var(--texto)",
-      "font-size": "11.5", "font-weight": "700" }, e.a);
-    cria("text", { x: LARG - 12, y: y - 9, fill: "var(--texto)",
-      "font-size": "11.5", "font-weight": "700", "text-anchor": "end" }, e.b);
-    /* o número no meio, sobre um fundo, para não sumir na linha */
-    cria("rect", { x: LARG / 2 - 46, y: y - 10, width: 92, height: 20,
-      rx: 10, fill: "var(--panel)", stroke: "var(--borda)" });
-    cria("text", { x: LARG / 2, y: y + 4, fill: "var(--sutil)",
-      "font-size": "10.5", "font-weight": "800", "text-anchor": "middle" },
-      t("vk_mapa_n", { n: e.n }));
+
+  /* UMA FRASE ANTES DA TABELA.
+   * Sem ela, três barras com números são um enfeite: quem olha não sabe
+   * se "191" é bom ou ruim, nem o que fazer com o dado. */
+  const intro = document.createElement("div");
+  intro.className = "hub-mapa-intro";
+  intro.textContent = t("vk_mapa_intro");
+  box.append(intro);
+
+  d.pares.forEach((p) => {
+    const li = document.createElement("button");
+    li.type = "button";
+    li.className = "hub-par" + (p.encerrado ? " hub-par-off" : "");
+
+    /* OS DOIS NOMES, cortados com reticências e inteiros no título.
+     * Em SVG o texto não quebra nem corta, e os nomes longos passavam
+     * por cima da etiqueta do meio — foi o defeito visível na tela. */
+    const nomes = document.createElement("div");
+    nomes.className = "hub-par-nomes";
+    const na = document.createElement("span");
+    na.className = "hub-par-n";
+    na.textContent = p.a; na.title = p.a;
+    const seta = document.createElement("span");
+    seta.className = "hub-par-seta";
+    seta.textContent = "↔";
+    const nb = document.createElement("span");
+    nb.className = "hub-par-n";
+    nb.textContent = p.b; nb.title = p.b;
+    nomes.append(na, seta, nb);
+    li.append(nomes);
+
+    /* A BARRA MOSTRA A COBERTURA, e é a mesma grandeza que ordena a
+     * lista. Duas razões:
+     *
+     * · a escala absoluta anterior (1,5 + n/8, teto de 7 px) saturava
+     *   acima de 44 ligações — 191, 158 e 138 saíam idênticas;
+     * · e uma barra proporcional ao MAIOR par consertaria isso, mas
+     *   mediria uma coisa enquanto a ordem da lista mede outra. O olho
+     *   leria "esta é maior" e a lista diria "aquela vem primeiro".
+     *
+     * Cobertura é uma fração de 0 a 100 por construção: não satura, é
+     * comparável entre concursos de tamanhos diferentes, e é o número
+     * que decide se vale estudar os dois juntos. */
+    const trilho = document.createElement("div");
+    trilho.className = "hub-par-trilho";
+    const cheio = document.createElement("i");
+    cheio.style.width = Math.max(3, Math.min(100, p.reuso)) + "%";
+    trilho.append(cheio);
+    li.append(trilho);
+
+    /* A LINHA QUE EXPLICA O NÚMERO.
+     * "191 ligações" não decide nada — 191 entre dois editais de 533
+     * tópicos é uma coisa, entre dois de 60 é outra. A cobertura é
+     * comparável, e é ela que responde "vale estudar os dois juntos?". */
+    const info = document.createElement("div");
+    info.className = "hub-par-info";
+    const selo = document.createElement("span");
+    selo.className = "hub-par-selo faixa-" + p.faixa;
+    selo.textContent = t("vk_faixa_" + p.faixa);
+    info.append(selo);
+    const txt = document.createElement("span");
+    txt.className = "hub-par-txt";
+    txt.textContent = p.encerrado
+      ? t("vk_par_historico", { n: p.ligacoes })
+      : t("vk_par_cobre", { n: p.ativas, ta: p.topicosA, tA: p.totalA,
+                            tb: p.topicosB, tB: p.totalB, p: p.reuso });
+    info.append(txt);
+    li.append(info);
+
+    const acao = document.createElement("span");
+    acao.className = "hub-par-acao";
+    acao.textContent = t(p.encerrado ? "vk_par_ver" : "vk_par_comparar");
+    li.append(acao);
+
+    /* CLICAR ABRE A COMPARAÇÃO JÁ COM OS DOIS ESCOLHIDOS. Sem isto, ver
+     * o par mais promissor e ter de reencontrá-lo em dois seletores é
+     * pedir o mesmo trabalho duas vezes. */
+    li.onclick = () => vkAbrirPar(p.idA, p.idB);
+    box.append(li);
   });
-  box.append(svg);
+}
+
+/* Abre a ferramenta de comparação com os dois editais do par já
+ * selecionados. */
+function vkAbrirPar(idA, idB) {
+  vkAbrir();
+  if ($("vkDeEdital")) $("vkDeEdital").value = String(idA);
+  if ($("vkParaEdital")) $("vkParaEdital").value = String(idB);
+  vzEsquecer();
+  vkPintarModo();
+  vkPintarDiscs();
+  vkPintarLados();
+  reg("VINCULO", "comparacao aberta pelo mapa",
+      vkNomeDoEdital(idA) + " x " + vkNomeDoEdital(idB));
 }
 
 function vkIniciarTela() {
