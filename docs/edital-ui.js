@@ -591,6 +591,21 @@ function edLinhaTopico(i, semDisciplina) {
     if (typeof leiAbrir === "function") leiAbrir(i.disciplina, i.nome);
   };
 
+  /* JURISPRUDÊNCIA do tópico — o quinto material, e o mais recente.
+   * Segue a forma dos outros quatro de propósito: um alvo, uma
+   * contagem, e o mesmo caminho para criar quando não existe nada. */
+  const jur = document.createElement("button");
+  jur.type = "button";
+  const nJur = typeof jurContarDoTopico === "function"
+    ? jurContarDoTopico(ch) : 0;
+  jur.className = "ed-jur" + (nJur ? " tem" : "");
+  jur.textContent = "§";
+  jur.title = t(nJur ? "ed_jur_ver" : "ed_jur_novo", { n: nJur, tp: i.nome });
+  jur.onclick = (ev) => {
+    ev.stopPropagation();
+    if (typeof jurAbrir === "function") jurAbrir(i.disciplina, i.nome);
+  };
+
   /* QUESTÕES do tópico, o quarto documento da linha.
    * Sem isto, responder as questões de um tópico exigia abrir o resumo e
    * procurar o botão lá dentro — três cliques para um gesto que a agenda
@@ -681,6 +696,7 @@ function edLinhaTopico(i, semDisciplina) {
       nCards ? null : [crt, t("ed_menu_cartoes")],
       nQ ? null : [qst, t("ed_menu_questoes")],
       temLei ? null : [lei, t("ed_menu_lei_nova")],
+      nJur ? null : [jur, t("ed_menu_juris_nova")],
     ].filter(Boolean);
     if (!faltando.length) {
       const vz = document.createElement("span");
@@ -747,6 +763,12 @@ function edLinhaTopico(i, semDisciplina) {
       alvo: qst },
     { tem: temLei, cls: "ed-st-lei", rot: t("ed_st_lei"),
       dica: t("ed_menu_lei"), alvo: lei },
+    /* JURISPRUDÊNCIA: o quarto material do tópico. A etiqueta diz
+     * quantos julgados há e leva até eles — a mesma regra dos outros
+     * três, para não haver uma quinta convenção nesta linha. */
+    { tem: nJur, cls: "ed-st-jur",
+      rot: nJur === 1 ? t("ed_st_juris_1") : t("ed_st_juris", { n: nJur }),
+      dica: t("ed_menu_juris_ver", { n: nJur }), alvo: jur },
   ];
   atalhos.filter((x) => x.tem).forEach((x, k) => {
     const b = document.createElement("button");
