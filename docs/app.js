@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "14.7.0";
+const VERSAO = "14.8.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4616,6 +4616,21 @@ function montarDiagnostico() {
     + (regPeriodo ? ", período: " + t("diag_per_" + regPeriodo) : "") + ") ---");
   bloco(L, () => L.push(registroTexto(soModo)));
   L.push("");
+  /* O REGISTRO DA VINCULAÇÃO ENTRA NO DIAGNÓSTICO.
+   *
+   * Ele responde perguntas que o registro geral não responde — "250
+   * linhas coladas viraram 213 pares, por quê?" precisa do número de
+   * entrada e do de saída de cada etapa, lado a lado. E o diagnóstico é
+   * o que se cola num relato de problema: deixá-lo de fora obrigava a
+   * abrir duas telas e juntar dois textos à mão. */
+  try {
+    if (typeof vzLogLer === "function" && vzLogLer().length) {
+      L.push("--- VINCULAÇÃO ENTRE EDITAIS (" + vzLogLer().length
+             + " etapas registradas) ---");
+      L.push(vzLogTexto());
+      L.push("");
+    }
+  } catch (e) {}
   bloco(L, () => {
     L.push("--- TEXTO (" + raw.split(/\r?\n/).length + " linhas, " + raw.length + " caracteres) ---");
     L.push(raw.length > DIAG_MAX

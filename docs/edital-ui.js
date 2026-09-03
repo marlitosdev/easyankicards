@@ -3818,6 +3818,14 @@ function vkTrocarModo(m) {
  * uma coisa e fazendo outra. */
 function vkPintarModo() {
   const amb = vkEhAmbos();
+  /* TRIADO, O PASSO 1 MUDA DE ASSUNTO.
+   *
+   * O prompt deixa de ser "esta disciplina contra aquela" e passa a ser
+   * "estas duplas prontas". A tela dizia as duas coisas ao mesmo tempo:
+   * o resumo anunciava "a escolha por disciplina não é mais
+   * necessária" e o botão logo abaixo continuava "Criar prompt DESTA
+   * disciplina". */
+  const triado = amb && vzDuplasAtuais.length > 0;
   const liga = (id, on) => {
     const b = $(id);
     if (b && b.classList) b.classList.toggle("vk-modo-on", on);
@@ -3828,8 +3836,10 @@ function vkPintarModo() {
   põe("vkExplica", amb ? "vk_explica_ambos" : "vk_explica");
   põe("vkRotDe", amb ? "vk_de_ambos" : "vk_de_onde");
   põe("vkRotPara", amb ? "vk_para_ambos" : "vk_para_onde");
-  põe("btnVkPrompt", amb ? "vk_prompt_btn_ambos" : "vk_prompt_btn");
-  põe("vkPromptExp", amb ? "vk_prompt_exp_ambos" : "vk_prompt_exp");
+  põe("btnVkPrompt", triado ? "vk_prompt_btn_duplas"
+    : (amb ? "vk_prompt_btn_ambos" : "vk_prompt_btn"));
+  põe("vkPromptExp", triado ? "vk_prompt_exp_duplas"
+    : (amb ? "vk_prompt_exp_ambos" : "vk_prompt_exp"));
   põe("vkColarExp", amb ? "vk_colar_exp_ambos" : "vk_colar_exp");
   /* O RECORTE À MÃO É O CAMINHO SEM CHAVE. Com as duplas na mesa, a
    * disciplina deixou de ser o modo de encurtar a pergunta, e deixar os
@@ -3850,16 +3860,22 @@ function vkPintarDiscs() {
   const para = ($("vkParaEdital") || {}).value || "";
   const dA = vkDisciplinasDe(vkPendentesDe(de));
   const dB = vkDisciplinasDe(vkPendentesDe(para));
-  const encher = (sel, lista, escolhido) => {
+  const encher = (sel, lista, escolhido, pedirEscolha) => {
     if (!sel) return;
     sel.innerHTML = "";
+    if (pedirEscolha) {
+      const o0 = document.createElement("option");
+      o0.value = ""; o0.textContent = t("vk_disc_escolha");
+      o0.selected = true;
+      sel.append(o0);
+    }
     lista.forEach((nome) => {
       const o = document.createElement("option");
       o.value = nome; o.textContent = nome;
       if (nome === escolhido) o.selected = true;
       sel.append(o);
     });
-    sel.value = escolhido || lista[0] || "";
+    sel.value = pedirEscolha ? (escolhido || "") : (escolhido || lista[0] || "");
   };
   const antesA = ($("vkDeDisc") || {}).value || "";
   const escolhaA = dA.indexOf(antesA) >= 0 ? antesA : (dA[0] || "");
@@ -3867,7 +3883,16 @@ function vkPintarDiscs() {
   /* o outro lado acompanha: trocar a disciplina da esquerda e deixar a
    * direita parada montaria um prompt comparando duas matérias que não
    * têm nada a ver — e a IA responderia alguma coisa */
-  encher($("vkParaDisc"), dB, vkParDisciplina(escolhaA, dB) || dB[0] || "");
+  /* SEM PAR PLAUSÍVEL, NENHUM. O "|| dB[0]" era um chute com cara de
+   * sugestão: na tela real ele casou "Sistema Tributário Brasileiro"
+   * com "Ciência de Dados", que é a primeira disciplina do outro
+   * edital. A função vkParDisciplina foi escrita justamente para não
+   * chutar — e a tela reintroduzia o chute na linha seguinte.
+   *
+   * Um seletor pedindo escolha é honesto; um seletor já preenchido com
+   * disparate parece que o app sabe alguma coisa. */
+  const sugerida = vkParDisciplina(escolhaA, dB);
+  encher($("vkParaDisc"), dB, sugerida, !sugerida);
 }
 
 /* =====================================================================
@@ -3965,6 +3990,14 @@ async function vzTriar(opc) {
       f: r.pares.filter((x) => x.faixa === "forte").length,
       c: r.cortados,
     });
+    /* A TELA INTEIRA MUDA, não só o resumo.
+     *
+     * Triado, o recorte por disciplina deixa de valer e o passo 1 passa
+     * a mandar as duplas prontas. Repintar só o resumo deixava a faixa
+     * de disciplinas na tela e o botão dizendo "Criar prompt DESTA
+     * disciplina" — a tela afirmando uma coisa e o botão fazendo outra,
+     * que é o defeito mais caro que uma ferramenta de decisão pode ter. */
+    vkPintarModo();
   } catch (e) {
     /* O MOTIVO NA TELA. "Falhou" manda tentar de novo nos três casos, e
      * só um deles melhora tentando de novo. */
@@ -3997,10 +4030,20 @@ function vzScoreDe(dA, tA, dB, tB) {
 }
 
 function vkAbrir() {
+  /* DOIS EDITAIS DIFERENTES, SEMPRE — inclusive quando não há edital
+   * aberto.
+   *
+   * A tela abria com o mesmo concurso dos dois lados e o aviso vermelho
+   * "escolha dois editais diferentes" já na cara de quem entrou. O erro
+   * estava no caso de borda: sem edital aberto, "abertoId" ficava vazio
+   * e os dois seletores caíam no primeiro da lista.
+   *
+   * Um aviso que aparece antes de a pessoa fazer qualquer coisa não é
+   * um aviso — é uma configuração errada com cara de erro do usuário. */
+  const lista = (typeof editais !== "undefined" ? editais : []);
   const abertoId = (typeof edAberto === "function" && edAberto())
-    ? edAberto().id : "";
-  const outro = (typeof editais !== "undefined" ? editais : [])
-    .filter((e) => String(e.id) !== String(abertoId))[0];
+    ? edAberto().id : (lista[0] ? lista[0].id : "");
+  const outro = lista.filter((e) => String(e.id) !== String(abertoId))[0];
   vkEditaisPara($("vkDeEdital"), outro ? outro.id : abertoId);
   vkEditaisPara($("vkParaEdital"), abertoId);
   vkPintarModo();
@@ -4335,7 +4378,38 @@ let vkRevSoMudos = false;
 let vkRevMarcados = {};
 /* a proximidade medida de cada vínculo, quando houve medição */
 let vkRevScores = {};
-const VK_REV_CORTE = 0.6;
+/* O CORTE DA FAXINA É RELATIVO À PRÓPRIA BASE, e isso não é preferência
+ * de estilo — o corte fixo era CIRCULAR.
+ *
+ * Os vínculos nascem da triagem semântica, que já descarta tudo abaixo
+ * de 0,60. Então, por construção, nenhum vínculo criado por ali pode
+ * estar abaixo de 0,60 — e medir de novo com o mesmo número nunca marca
+ * coisa alguma. No uso real: 523 vínculos medidos, ZERO abaixo do corte,
+ * e o mais frouxo da base inteira em 89%. A ferramenta de faxina
+ * respondia "está tudo ótimo" porque estava perguntando com a mesma
+ * régua que tinha selecionado.
+ *
+ * O que se quer é o RODAPÉ DESTA BASE: os 15% mais frouxos entre os que
+ * existem, seja qual for o valor absoluto. Se o pior é 89%, os piores
+ * 89% é onde começar a olhar; se um dia entrarem vínculos manuais de
+ * 40%, eles sobem sozinhos para o topo.
+ *
+ * O corte absoluto fica como TETO de segurança: nada acima de 0,95 é
+ * pré-marcado, por mais que seja o rodapé da distribuição — dois nomes
+ * praticamente idênticos não são candidatos a faxina. */
+const VK_REV_FRACAO = 0.15;
+const VK_REV_TETO = 0.95;
+
+/* O valor abaixo do qual pré-marcar, calculado a partir dos scores
+ * desta base. Devolve null quando não há o que marcar. */
+function vkRevCorteDe(scores) {
+  const L = (scores || []).slice().sort((a, b) => a - b);
+  if (!L.length) return null;
+  const quantos = Math.max(1, Math.round(L.length * VK_REV_FRACAO));
+  const corte = L[Math.min(quantos, L.length) - 1];
+  /* o teto: se até o rodapé da base está colado, não há faxina a fazer */
+  return corte > VK_REV_TETO ? null : corte;
+}
 
 /* =====================================================================
  * O INTERRUPTOR DA CHAVE, no rodapé
@@ -4506,12 +4580,34 @@ function vkRevPintar() {
   vkRevBotao();
 }
 
+/* A BARRA QUE APARECE QUANDO HÁ ALGO MARCADO.
+ *
+ * Numa lista de quinhentos itens, o botão de apagar fica a três telas
+ * de rolagem de onde a pessoa está marcando — e a contagem, que é a
+ * única confirmação de que a marcação funcionou, fica junto com ele.
+ * A barra traz os dois para perto do dedo e some sozinha quando não há
+ * nada marcado, sem ocupar espaço no caso comum. */
 function vkRevBotao() {
-  const b = $("btnVkRevApagar");
-  if (!b) return;
   const n = Object.keys(vkRevMarcados).length;
-  b.textContent = t("vk_rev_apagar", { n });
-  b.disabled = n === 0;
+  const b = $("btnVkRevApagar");
+  if (b) {
+    b.textContent = t("vk_rev_apagar", { n });
+    b.disabled = n === 0;
+  }
+  const barra = $("vkRevBarra");
+  if (barra) barra.hidden = n === 0;
+  const conta = $("vkRevBarraConta");
+  if (conta) conta.textContent = t("vk_rev_barra", { n });
+  const bd = $("btnVkRevBarraApagar");
+  if (bd) bd.textContent = t("vk_rev_apagar", { n });
+}
+
+/* Desmarcar tudo — e dizer que desmarcou. */
+function vkRevDesmarcar() {
+  const n = Object.keys(vkRevMarcados).length;
+  vkRevMarcados = {};
+  vkRevPintar();
+  vkReagir($("btnVkRevDesmarcar"), t("vk_rev_desmarcou", { n }));
 }
 
 async function vkRevApagar() {
@@ -4580,11 +4676,10 @@ async function vkRevMedir(opc) {
       andamento: (f, t2) => mostra("vz_andamento", { f, t: t2 }),
     }, opc || {}));
     vkRevScores = {};
-    let frouxos = 0;
-    r.medidos.forEach((m) => {
-      vkRevScores[vkRevChaveDe(m)] = m.score;
-      if (m.score < VK_REV_CORTE) frouxos++;
-    });
+    r.medidos.forEach((m) => { vkRevScores[vkRevChaveDe(m)] = m.score; });
+    const corte = vkRevCorteDe(r.medidos.map((m) => m.score));
+    const frouxos = corte === null ? 0
+      : r.medidos.filter((m) => m.score <= corte).length;
     /* A ORDEM DA TELA PASSA A SER A DA MEDIDA. Sem isto, o número
      * apareceria em cada linha e a pessoa teria de procurar os baixos a
      * olho — que é o trabalho manual que se foi eliminar. */
@@ -4599,12 +4694,16 @@ async function vkRevMedir(opc) {
      * coisas diferentes: a marca é uma sugestão que se desfaz com um
      * toque, e o botão de apagar continua dizendo o número. */
     vkRevMarcados = {};
-    r.medidos.filter((m) => m.score < VK_REV_CORTE)
-      .forEach((m) => { vkRevMarcados[vkRevChaveDe(m)] = m; });
+    if (corte !== null) {
+      r.medidos.filter((m) => m.score <= corte)
+        .forEach((m) => { vkRevMarcados[vkRevChaveDe(m)] = m; });
+    }
     vkRevSoMudos = false;
     vkRevPintar();
-    mostra("vk_rev_medido", { n: todos.length, f: frouxos,
-                              c: Math.round(VK_REV_CORTE * 100) });
+    /* DIZER O CORTE QUE FOI USADO. Ele muda de uma base para outra, e um
+     * número que se move sem explicação é pior que número nenhum. */
+    mostra(corte === null ? "vk_rev_medido_nada" : "vk_rev_medido",
+      { n: todos.length, f: frouxos, c: Math.round(corte * 100) });
     reg("VINCULO", "vinculos medidos",
         todos.length + " pares, " + frouxos + " abaixo do corte");
   } catch (e) {
@@ -4628,6 +4727,41 @@ async function vkRevVerLog() {
   }
 }
 
+/* =====================================================================
+ * A REAÇÃO DO BOTÃO
+ *
+ * "Marcar os que não levam a nada" mudava caixas de seleção lá embaixo,
+ * fora da vista, e o botão não dava sinal nenhum: quem apertava não
+ * sabia se tinha funcionado, e apertava de novo.
+ *
+ * Uma frase curta no próprio botão, por um segundo e meio, responde a
+ * pergunta no lugar onde ela foi feita — que é o dedo que acabou de
+ * tocar. É a mesma ideia do "✓ copiado" que já existia no fluxo do
+ * edital; aqui ela vira função para não ser reescrita em cada botão.
+ * ===================================================================== */
+/* A ÚLTIMA REAÇÃO MOSTRADA, guardada.
+ *
+ * O texto no botão dura um segundo e meio e some — e some também para
+ * quem está diagnosticando um problema pelo relato de outra pessoa.
+ * Guardar a última reação custa uma variável e responde "o botão
+ * chegou a dizer alguma coisa?", que é a primeira pergunta quando
+ * alguém diz "apertei e não aconteceu nada". */
+let vkUltimaReacao = "";
+
+function vkReagir(btn, texto) {
+  vkUltimaReacao = String(texto || "");
+  if (!btn) return;
+  if (btn._voltar) clearTimeout(btn._voltar);
+  if (btn._antes === undefined) btn._antes = btn.textContent;
+  btn.textContent = texto;
+  if (btn.classList) btn.classList.add("btn-reagiu");
+  btn._voltar = setTimeout(() => {
+    btn.textContent = btn._antes;
+    btn._antes = undefined;
+    if (btn.classList) btn.classList.remove("btn-reagiu");
+  }, 1600);
+}
+
 function vkRevMarcarMudos() {
   if (!vkRevDados) return;
   vkRevDados.grupos.forEach((g) => {
@@ -4637,6 +4771,9 @@ function vkRevMarcarMudos() {
   });
   vkRevSoMudos = true;
   vkRevPintar();
+  const n = Object.keys(vkRevMarcados).length;
+  vkReagir($("btnVkRevMudos"),
+    t(n ? "vk_rev_marcou" : "vk_rev_nada_mudo", { n }));
 }
 
 async function vkRevCopiar() {
@@ -4865,6 +5002,9 @@ function vkIniciarTela() {
   vkCarregar();
   if ($("btnHubVincular")) $("btnHubVincular").onclick = vkAbrir;
   if ($("btnHubRevisar")) $("btnHubRevisar").onclick = vkRevAbrir;
+  if ($("btnVkAjuda")) {
+    $("btnVkAjuda").onclick = () => uiAlert(t("vk_botao_exp"));
+  }
   if ($("btnVkRevFechar")) {
     $("btnVkRevFechar").onclick = () => $("dlgVkRevisar").close();
   }
@@ -4874,7 +5014,26 @@ function vkIniciarTela() {
   if ($("btnVkRevApagar")) $("btnVkRevApagar").onclick = vkRevApagar;
   if ($("btnVkRevMudos")) $("btnVkRevMudos").onclick = vkRevMarcarMudos;
   if ($("btnVkRevMedir")) $("btnVkRevMedir").onclick = vkRevMedir;
+  /* o ⋮ abre e fecha; clicar em qualquer coisa dentro dele fecha junto,
+   * porque um menu que fica aberto depois da escolha esconde a lista */
+  if ($("btnVkRevMenu")) {
+    $("btnVkRevMenu").onclick = () => {
+      const m = $("vkRevMenu");
+      if (m) m.hidden = !m.hidden;
+    };
+  }
+  ["btnVkRevTodos", "btnVkRevCopiar", "btnVkRevLog"].forEach((id) => {
+    const b = $(id);
+    if (!b) return;
+    const antes = b.onclick;
+    b.addEventListener("click", () => {
+      const m = $("vkRevMenu");
+      if (m) m.hidden = true;
+    });
+    if (antes) b.onclick = antes;
+  });
   if ($("btnVkRevLog")) $("btnVkRevLog").onclick = vkRevVerLog;
+  if ($("btnVkLogAqui")) $("btnVkLogAqui").onclick = vkRevVerLog;
   /* o interruptor da chave: uma vez, para o aplicativo inteiro */
   if ($("btnChaveIA")) {
     $("btnChaveIA").onclick = () => {
@@ -4883,8 +5042,17 @@ function vkIniciarTela() {
   }
   vkChavePintar();
   if ($("btnVkRevTodos")) $("btnVkRevTodos").onclick = () => {
-    vkRevSoMudos = false; vkRevPintar();
+    vkRevSoMudos = false;
+    vkRevPintar();
+    vkReagir($("btnVkRevTodos"),
+      t("vk_rev_mostrando", { n: (vkRevDados || { total: 0 }).total }));
   };
+  if ($("btnVkRevDesmarcar")) {
+    $("btnVkRevDesmarcar").onclick = vkRevDesmarcar;
+  }
+  if ($("btnVkRevBarraApagar")) {
+    $("btnVkRevBarraApagar").onclick = vkRevApagar;
+  }
   if ($("btnVkRevCopiar")) $("btnVkRevCopiar").onclick = vkRevCopiar;
   if ($("btnVkaFecharTopo")) {
     $("btnVkaFecharTopo").onclick = () => $("dlgVkAcervo").close();
