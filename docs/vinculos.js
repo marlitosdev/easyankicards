@@ -370,6 +370,39 @@ function vkAplicar(pares, editalId, modo) {
 }
 
 /* =====================================================================
+ * UM VÍNCULO TEM O QUE DIZER? — a regra, num lugar só
+ *
+ * Ela já existiu em dois lugares, e eles discordaram no primeiro uso
+ * real: a gaveta considerava "o outro edital ainda vai acontecer" e a
+ * revisão não. Resultado na tela: 502 de 513 vínculos rotulados "não
+ * levam a nada" — e a maioria deles era ISS↔SEFAZ, dois concursos
+ * futuros, ou seja, exatamente os bons. Um botão "marcar os que não
+ * levam a nada" em cima disso teria apagado o trabalho todo.
+ *
+ * A REGRA É DIRECIONAL, e é por isso que ela não cabe num "&&" solto.
+ * Um vínculo serve a quem está estudando; então:
+ *
+ *   1. só um lado ATIVO tem alguém para avisar — ninguém estuda para um
+ *      concurso que já passou;
+ *   2. e o OUTRO lado precisa oferecer alguma coisa: material para
+ *      consultar, um estudo registrado, ou estar ele mesmo ativo (aí a
+ *      coincidência é o próprio aviso: você vai estudar isto duas
+ *      vezes).
+ *
+ * Basta um dos dois sentidos servir. ISS↔SEFAZ, os dois futuros: serve.
+ * ISS↔TCE com o TCE encerrado e vazio: não serve — o TCE não tem o que
+ * emprestar, e ninguém mais estuda para ele.
+ * ===================================================================== */
+function vkOferece(lado) {
+  return !!(lado && (lado.material || lado.estudado || lado.ativo));
+}
+
+function vkVinculoUtil(a, b) {
+  return (!!(a && a.ativo) && vkOferece(b))
+      || (!!(b && b.ativo) && vkOferece(a));
+}
+
+/* =====================================================================
  * A REVISÃO DOS VÍNCULOS — a faxina
  *
  * ELA É NECESSÁRIA, e a pergunta "esconder não basta?" tem uma resposta
@@ -413,8 +446,15 @@ function vkRevisao(fontes) {
      * par, e dois grupos para a mesma coisa dobrariam a lista */
     const par = [na, nb].sort().join("  ↔  ");
     if (!grupos[par]) grupos[par] = { par, itens: [], mudos: 0 };
-    const mudo = !temMaterial(v.a) && !temMaterial(v.b)
-      && !estudado(v.a) && !estudado(v.b);
+    /* A MESMA REGRA DA GAVETA, pela mesma função. Enquanto eram duas,
+     * elas discordaram: 502 de 513 vínculos vinham rotulados "não
+     * levam a nada" porque esta metade ignorava se o outro edital
+     * ainda ia acontecer. */
+    const lado = (ch) => ({
+      material: temMaterial(ch), estudado: estudado(ch),
+      ativo: !!(f.editalAtivo && f.editalAtivo[ch]),
+    });
+    const mudo = !vkVinculoUtil(lado(v.a), lado(v.b));
     grupos[par].itens.push({
       i, a: v.a, b: v.b,
       nomeA: bonito(v.a), nomeB: bonito(v.b),
@@ -646,8 +686,12 @@ function vkAcervoDe(disciplina, topico, fontes) {
    * decisão de quem estuda, e tem lugar próprio (a revisão de
    * vínculos). O dia em que você escrever um resumo naquele tópico, o
    * vínculo mudo volta a falar sozinho. */
+  /* A MESMA REGRA, pela mesma função. Deste lado, quem pergunta é o
+   * tópico da tela — que está no edital aberto e portanto é o lado
+   * ativo; o que se avalia é o que o outro lado oferece. */
   itens.forEach((x) => {
-    x.util = x.temAlgo || x.estudado || x.ativo;
+    x.util = vkVinculoUtil({ ativo: true },
+      { material: x.temAlgo, estudado: x.estudado, ativo: x.ativo });
   });
   const mudos = itens.filter((x) => !x.util).length;
   /* PERTO E COM MATERIAL PRIMEIRO. Numa cadeia de três concursos o

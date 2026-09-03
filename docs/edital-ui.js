@@ -3952,6 +3952,14 @@ async function vzTriar(opc) {
     reg("VINCULO", "triagem semantica",
         r.pares.length + " duplas de " + (a.length * b.length)
         + " possiveis, " + r.cortados + " acima do teto");
+    if (typeof vzLogGravar === "function") {
+      vzLogGravar("triagem", {
+        origem: a.length, destino: b.length,
+        possiveis: a.length * b.length,
+        duplas: r.pares.length, cortados: r.cortados, tokens: r.tokens,
+      }, r.pares.slice(0, 6).map((x) =>
+        Math.round(x.score * 100) + "%  " + x.de.topico + " ↔ " + x.para.topico));
+    }
     vzEstadoTexto("vz_pronto", {
       n: r.pares.length, p: a.length * b.length,
       f: r.pares.filter((x) => x.faixa === "forte").length,
@@ -4178,6 +4186,21 @@ function vkConferirColagem() {
    * clicar cem vezes para usar a resposta que pediu; marcar tudo sem
    * mostrar é o que este painel existe para acabar. */
   vkPares = r.pares.map((x) => Object.assign({}, x, { usar: true }));
+  /* O NÚMERO DE ENTRADA E O DE SAÍDA, lado a lado. O defeito deste
+   * processo mora sempre na diferença entre os dois: quarenta linhas
+   * coladas e oito reconhecidas é uma pergunta que nenhuma linha de log
+   * solta responde — e as ignoradas, em amostra, dizem por quê. */
+  if (typeof vzLogGravar === "function") {
+    vzLogGravar("conferir-colagem", {
+      modo: vkModo,
+      linhas: String($("vkColarTexto").value || "").split("\n")
+        .filter((x) => x.trim()).length,
+      pares: r.pares.length,
+      ignoradas: r.ignoradas.length,
+      recusadas: (r.recusados || []).length,
+      origem: est.length, destino: pend.length,
+    }, (r.ignoradas || []).map((x) => "linha " + x.linha + ": " + x.txt));
+  }
   vkPintarPares();
   return r;
 }
@@ -4283,6 +4306,14 @@ async function vkAplicarColagem() {
   const res = vkAplicar(usar, para, vkModo);
   reg("VINCULO", "aplicados da IA (" + vkModo + ")",
       res.novos + " novos, " + res.repetidos + " já existiam");
+  if (typeof vzLogGravar === "function") {
+    vzLogGravar("aplicar-vinculos", {
+      modo: vkModo, marcados: usar.length,
+      novos: res.novos, repetidos: res.repetidos,
+      total: vkCarregar().length,
+    }, usar.slice(0, 6).map((x) =>
+      (x.sugestao || "?") + "  " + x.de.topico + " ↔ " + x.para.topico));
+  }
   $("dlgVkColar").close();
   $("dlgJaEstudei").close();
   edRender();
@@ -4302,10 +4333,40 @@ async function vkAplicarColagem() {
 let vkRevDados = null;
 let vkRevSoMudos = false;
 let vkRevMarcados = {};
+/* a proximidade medida de cada vínculo, quando houve medição */
+let vkRevScores = {};
+const VK_REV_CORTE = 0.6;
+
+/* =====================================================================
+ * O INTERRUPTOR DA CHAVE, no rodapé
+ *
+ * A chave estava guardada dentro de uma ferramenta, e quem a pusesse lá
+ * não tinha como saber que ela vale para o aplicativo inteiro. Agora ela
+ * mora onde moram as informações do app, e o estado é a informação
+ * principal: ligado ou desligado, visível sem abrir nada.
+ * ===================================================================== */
+function vkChavePintar() {
+  const b = $("btnChaveIA");
+  if (!b) return;
+  const tem = (typeof vzChaveApi === "function") && vzChaveApi();
+  if (b.classList) {
+    b.classList.toggle("chave-on", !!tem);
+    b.classList.toggle("chave-off", !tem);
+  }
+  const txt = $("chaveIaTxt");
+  if (txt) txt.textContent = t(tem ? "chave_ia_on" : "chave_ia_off");
+  b.title = t(tem ? "chave_ia_on_aj" : "chave_ia_off_aj");
+}
 
 function vkRevFontes() {
   /* as mesmas fontes do acervo, montadas uma vez */
   const chaveReal = {}, nomeReal = {}, estudo = {}, editalDoTopico = {};
+  /* SEM ISTO A REVISÃO MENTE. Ela precisa saber quais editais ainda vão
+   * acontecer para aplicar a mesma regra da gaveta — e foi exatamente a
+   * falta deste mapa que fez a tela dizer "502 vínculos não levam a
+   * nada" sobre um par de concursos futuros. */
+  const editalAtivo = {};
+  const hojeRev = hojeISO();
   (edDiario || []).forEach((x) => {
     if (!x || !x.n) return;
     const norm = vkChave(x.disc, x.n);
@@ -4319,10 +4380,14 @@ function vkRevFontes() {
   (typeof editais !== "undefined" ? editais : []).forEach((e) => {
     const nome = vkNomeDoEdital(e.id) || e.nome || "";
     const r = lerEdital(e.texto || "");
+    const sr = typeof edSituacao === "function" ? edSituacao(e) : {};
+    const prova = (sr && sr.prova) || (r.cfg && r.cfg.prova) || "";
+    const vivoR = !prova || String(prova).slice(0, 10) >= hojeRev;
     (r.disciplinas || []).forEach((d) => {
       (d.topicos || []).forEach((tp) => {
         const k = vkChave(d.nome, tp.nome);
         if (!editalDoTopico[k]) editalDoTopico[k] = nome;
+        if (vivoR) editalAtivo[k] = true;
         if (!chaveReal[k]) chaveReal[k] = matChave(d.nome, tp.nome);
         nomeReal[k] = d.nome + "›" + tp.nome;
       });
@@ -4339,7 +4404,8 @@ function vkRevFontes() {
         ? qsContarDoTopico(real) : 0;
     } catch (e) { questoes[real] = 0; }
   });
-  return { chaveReal, nomeReal, estudo, resumos, leis, questoes, editalDoTopico };
+  return { chaveReal, nomeReal, estudo, resumos, leis, questoes,
+           editalDoTopico, editalAtivo };
 }
 
 function vkRevAbrir() {
@@ -4397,6 +4463,18 @@ function vkRevPintar() {
       tx.textContent = x.nomeA.replace("›", " › ") + "   ↔   "
         + x.nomeB.replace("›", " › ") + (x.por ? "  ·  " + x.por : "");
       li.append(tx);
+      /* A PROXIMIDADE MEDIDA, quando houve medição. Ela é o motivo de a
+       * linha estar no topo da lista — não o veredito. Um par de 40%
+       * pode ser "Improbidade administrativa ↔ Lei nº 8.429/1992", que
+       * é a mesma coisa escrita de dois jeitos. */
+      const sc = vkRevScores[k];
+      if (sc !== undefined) {
+        const s2 = document.createElement("span");
+        s2.className = "vk-par-score";
+        s2.textContent = Math.round(sc * 100) + "%";
+        s2.title = t("vk_rev_score_aj");
+        li.append(s2);
+      }
       if (x.mudo) {
         const s = document.createElement("span");
         s.className = "vk-rev-selo";
@@ -4431,14 +4509,111 @@ async function vkRevApagar() {
    * Apagar vínculo não toca em material, diário nem progresso — e dizer
    * isso é o que permite apagar sem medo. */
   if (!(await uiConfirm(t("vk_rev_conf", { n: marcados.length })))) return;
+  const antes = vkCarregar().length;
   const n = vkApagarPares(marcados);
   reg("VINCULO", "vinculos apagados na revisao", n + " de " + marcados.length);
+  /* QUAIS ERAM. Apagar quinhentos vínculos sem registro de quais eram
+   * torna impossível responder, depois, "por que sumiu o selo daquele
+   * tópico?" — e é a única operação irreversível desta ferramenta. */
+  if (typeof vzLogGravar === "function") {
+    vzLogGravar("faxina-apagar", {
+      marcados: marcados.length, apagados: n,
+      antes, depois: vkCarregar().length,
+    }, marcados.slice(0, 6).map((x) => x.nomeA + " ↔ " + x.nomeB));
+  }
   vkRevMarcados = {};
   vkRevDados = vkRevisao(vkRevFontes());
   vkRevPintar();
   edRender();
   if (typeof hubRender === "function") hubRender();
   await uiAlert(t("vk_rev_apagados", { n }));
+}
+
+/* MEDIR, ORDENAR E PRÉ-MARCAR — a faxina de quinhentos vínculos.
+ *
+ * O que ela NÃO faz é apagar. A medida erra nos dois sentidos, e o erro
+ * caro aqui é o de baixo: "Improbidade administrativa" e "Lei nº
+ * 8.429/1992" são a mesma coisa e ficam longe, porque um é conceito e o
+ * outro é número de lei. Apagar sozinho abaixo do corte destruiria
+ * justamente os vínculos que dão trabalho reconhecer — e que são o
+ * motivo de esta ferramenta existir.
+ *
+ * O que ela faz é pôr os mais frouxos no topo, marcados, com o número
+ * ao lado: quinhentas decisões viram uma leitura. */
+/* "opc" passa direto para a medição — é o que permite ao teste
+ * responder no lugar da rede E exercer ESTE caminho, o que o botão
+ * chama. Testar a camada de baixo é testar a camada que eu escolhi. */
+async function vkRevMedir(opc) {
+  if (!vkRevDados) return;
+  if (typeof vzChaveApi !== "function" || !vzChaveApi()) {
+    if (typeof vzAbrirChave === "function") vzAbrirChave();
+    return;
+  }
+  const todos = [];
+  vkRevDados.grupos.forEach((g) => g.itens.forEach((x) => todos.push(x)));
+  if (!todos.length) return;
+
+  const est = $("vkRevEstado");
+  const mostra = (chave, dados, erro) => {
+    if (!est) return;
+    est.hidden = false;
+    est.className = "vz-estado" + (erro ? " vz-erro" : "");
+    est.textContent = t(chave, dados || {});
+  };
+  const btn = $("btnVkRevMedir");
+  if (btn) btn.disabled = true;
+  mostra("vk_rev_medindo", { n: todos.length });
+  try {
+    const r = await vzMedirVinculos(todos, Object.assign({
+      andamento: (f, t2) => mostra("vz_andamento", { f, t: t2 }),
+    }, opc || {}));
+    vkRevScores = {};
+    let frouxos = 0;
+    r.medidos.forEach((m) => {
+      vkRevScores[vkRevChaveDe(m)] = m.score;
+      if (m.score < VK_REV_CORTE) frouxos++;
+    });
+    /* A ORDEM DA TELA PASSA A SER A DA MEDIDA. Sem isto, o número
+     * apareceria em cada linha e a pessoa teria de procurar os baixos a
+     * olho — que é o trabalho manual que se foi eliminar. */
+    vkRevDados.grupos.forEach((g) => {
+      g.itens.sort((a, b) =>
+        (vkRevScores[vkRevChaveDe(a)] === undefined ? 2
+          : vkRevScores[vkRevChaveDe(a)])
+        - (vkRevScores[vkRevChaveDe(b)] === undefined ? 2
+          : vkRevScores[vkRevChaveDe(b)]));
+    });
+    /* PRÉ-MARCADOS, e visíveis. Marcar sozinho e apagar sozinho são
+     * coisas diferentes: a marca é uma sugestão que se desfaz com um
+     * toque, e o botão de apagar continua dizendo o número. */
+    vkRevMarcados = {};
+    r.medidos.filter((m) => m.score < VK_REV_CORTE)
+      .forEach((m) => { vkRevMarcados[vkRevChaveDe(m)] = m; });
+    vkRevSoMudos = false;
+    vkRevPintar();
+    mostra("vk_rev_medido", { n: todos.length, f: frouxos,
+                              c: Math.round(VK_REV_CORTE * 100) });
+    reg("VINCULO", "vinculos medidos",
+        todos.length + " pares, " + frouxos + " abaixo do corte");
+  } catch (e) {
+    const q = String((e && e.message) || "rede");
+    mostra(q === "chave_recusada" ? "vz_erro_chave"
+      : q === "cota" ? "vz_erro_cota" : "vz_erro_rede",
+      { d: (e && e.detalhe) || "" }, true);
+    if (typeof vzLogGravar === "function") {
+      vzLogGravar("medir-vinculos-falhou", { erro: q }, []);
+    }
+  }
+  if (btn) btn.disabled = false;
+}
+
+async function vkRevVerLog() {
+  const txt = (typeof vzLogTexto === "function") ? vzLogTexto() : "";
+  if (typeof abrirTextoSimples === "function") {
+    abrirTextoSimples(t("vk_rev_log"), txt);
+  } else {
+    await uiAlert(txt.slice(0, 1200));
+  }
 }
 
 function vkRevMarcarMudos() {
@@ -4558,6 +4733,15 @@ function vkIniciarTela() {
   }
   if ($("btnVkRevApagar")) $("btnVkRevApagar").onclick = vkRevApagar;
   if ($("btnVkRevMudos")) $("btnVkRevMudos").onclick = vkRevMarcarMudos;
+  if ($("btnVkRevMedir")) $("btnVkRevMedir").onclick = vkRevMedir;
+  if ($("btnVkRevLog")) $("btnVkRevLog").onclick = vkRevVerLog;
+  /* o interruptor da chave: uma vez, para o aplicativo inteiro */
+  if ($("btnChaveIA")) {
+    $("btnChaveIA").onclick = () => {
+      if (typeof vzAbrirChave === "function") vzAbrirChave();
+    };
+  }
+  vkChavePintar();
   if ($("btnVkRevTodos")) $("btnVkRevTodos").onclick = () => {
     vkRevSoMudos = false; vkRevPintar();
   };
@@ -4586,6 +4770,7 @@ function vkIniciarTela() {
     reg("VINCULO", "chave da IA guardada", v ? "sim" : "campo vazio");
     $("dlgVzChave").close();
     vzPintarChave();
+    vkChavePintar();
   };
   if ($("btnVzChaveApagar")) $("btnVzChaveApagar").onclick = async () => {
     if (!(await uiConfirm(t("vz_chave_apagar_conf")))) return;
@@ -4593,6 +4778,7 @@ function vkIniciarTela() {
     reg("VINCULO", "chave da IA apagada");
     $("dlgVzChave").close();
     vzPintarChave();
+    vkChavePintar();
   };
   ["vkDeEdital", "vkParaEdital"].forEach((id) => {
     /* trocar de edital refaz as listas de disciplina: mantê-las seria

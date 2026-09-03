@@ -1934,6 +1934,31 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vk-modo-on:hover{color:#fff;border-color:transparent}
 .vk-discs{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 2px;
   padding:9px 11px;border:1px dashed var(--borda);border-radius:10px}
+/* ---- o interruptor da chave da IA, no rodapé -------------------
+   Formato próprio (pílula com uma luz), para não se confundir com os
+   links técnicos ao lado. O estado é a informação principal: quem olha
+   precisa saber se está ligado ANTES de abrir qualquer coisa.
+
+   "chave-on" é só estado e só pinta; a forma mora na classe de
+   identidade (invariante E15). */
+.chave-ia{display:inline-flex;align-items:center;gap:7px;
+  padding:5px 12px 5px 9px;border-radius:999px;cursor:pointer;
+  font:inherit;font-size:11px;font-weight:800;letter-spacing:.02em;
+  background:var(--campo);color:var(--sutil);
+  border:1px solid var(--borda);transition:box-shadow .2s,transform .12s}
+.chave-ia:hover{transform:translateY(-1px);color:var(--texto)}
+.chave-ia-luz{width:9px;height:9px;border-radius:50%;flex-shrink:0;
+  background:var(--sutil);box-shadow:none}
+.chave-ia-txt{white-space:nowrap}
+.chave-on{background:var(--verde-claro);color:var(--verde-txt);
+  border-color:transparent;box-shadow:0 0 0 3px rgba(95,211,138,.18)}
+.chave-on .chave-ia-luz{background:var(--ok);
+  box-shadow:0 0 7px var(--ok)}
+.chave-on:hover{color:var(--verde-txt)}
+/* desligado: âmbar, porque é um convite, não um erro */
+.chave-off{background:var(--campo);color:var(--atencao);
+  border-color:var(--atencao);border-style:dashed}
+.chave-off:hover{color:var(--atencao)}
 /* ---- triagem semântica (passo 0) ---- */
 .vz-passo{border-color:var(--acao)}
 .vz-estado{font-size:11px;line-height:1.5;margin-top:7px;padding:7px 9px;
@@ -3168,6 +3193,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <div id="status"></div>
     <div class="rodape-tec">
+      <!-- A CHAVE DA IA, UMA VEZ, PARA O APLICATIVO INTEIRO.
+           Ela estava escondida dentro de uma ferramenta, e quem a
+           guardasse lá não tinha como saber que ela vale para as
+           outras. Aqui ela é um interruptor: liga ou desliga, e diz em
+           qual estado está sem precisar ser aberto. -->
+      <button type="button" id="btnChaveIA" class="chave-ia">
+        <span class="chave-ia-luz" id="chaveIaLuz"></span>
+        <span class="chave-ia-txt" id="chaveIaTxt"></span>
+      </button>
       <span class="selo-base" id="seloBase"></span>
       <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
       <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
@@ -3554,10 +3588,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" data-i18n="vk_rev_ajuda"></p>
   <div class="vka-aviso" id="vkRevResumo"></div>
   <div class="vk-rev-acoes">
+    <!-- MEDIR ORDENA A FAXINA, não a executa. Quinhentos vínculos a
+         olho não acontece; medidos e ordenados do mais frouxo para o
+         mais firme, viram uma leitura. -->
+    <button class="btn btn-ciano" id="btnVkRevMedir" data-i18n="vk_rev_medir"></button>
     <button class="btn-min" id="btnVkRevMudos" data-i18n="vk_rev_so_mudos"></button>
     <button class="btn-min" id="btnVkRevTodos" data-i18n="vk_rev_todos"></button>
     <button class="btn-min" id="btnVkRevCopiar" data-i18n="vk_rev_copiar"></button>
+    <button class="btn-min" id="btnVkRevLog" data-i18n="vk_rev_log"></button>
   </div>
+  <span class="nota" data-i18n="vk_rev_medir_exp"></span>
+  <div class="vz-estado" id="vkRevEstado" hidden></div>
   <div id="vkRevLista" class="vk-rev-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnVkRevFechar" data-i18n="help_close"></button>

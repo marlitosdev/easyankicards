@@ -90,6 +90,73 @@ function vzChaveResumida(v) {
   return s.length <= 8 ? "…" + s.slice(-4) : s.slice(0, 4) + "…" + s.slice(-4);
 }
 
+/* =====================================================================
+ * O REGISTRO DO PROCESSO DE VINCULAÇÃO
+ *
+ * O registro geral do app (reg) guarda uma linha por evento e serve
+ * para "o que aconteceu neste aplicativo hoje". Não serve para
+ * diagnosticar ESTE processo, que tem cinco etapas, roda em cima de
+ * centenas de itens e falha de maneiras específicas: a IA devolveu
+ * quarenta linhas e só oito foram reconhecidas — por quê? A triagem
+ * separou duzentas duplas e a IA recusou cento e oitenta — o corte está
+ * frouxo demais? Apaguei quinhentos vínculos — quais eram?
+ *
+ * Nenhuma dessas perguntas se responde com uma linha de log. Elas
+ * precisam do NÚMERO DE ENTRADA E DO NÚMERO DE SAÍDA de cada etapa,
+ * lado a lado, porque o defeito mora sempre na diferença entre os dois.
+ *
+ * Guarda pouco de propósito: contagens e amostras, nunca as listas
+ * inteiras. O aplicativo vive em 5 MB e este registro é diagnóstico —
+ * ele não pode competir por espaço com o diário de estudo.
+ * ===================================================================== */
+const VZ_LOG_CHAVE = "eac_vinculo_log";
+const VZ_LOG_MAX = 60;
+const VZ_LOG_AMOSTRA = 6;
+
+function vzLogLer() {
+  try {
+    const L = JSON.parse(localStorage.getItem(VZ_LOG_CHAVE) || "[]");
+    return Array.isArray(L) ? L : [];
+  } catch (e) { return []; }
+}
+
+function vzLogGravar(etapa, dados, amostra) {
+  const L = vzLogLer();
+  L.push({
+    q: new Date().toISOString(),
+    e: etapa,
+    d: dados || {},
+    /* A AMOSTRA é o que transforma número em diagnóstico. "8 de 40
+     * reconhecidas" diz que há um problema; as seis linhas que não
+     * foram reconhecidas dizem QUAL — quase sempre um nome que a IA
+     * reescreveu, e isso só se vê lendo. */
+    a: (amostra || []).slice(0, VZ_LOG_AMOSTRA).map((x) => String(x).slice(0, 120)),
+  });
+  while (L.length > VZ_LOG_MAX) L.shift();
+  try {
+    if (typeof guardar === "function") guardar(VZ_LOG_CHAVE, JSON.stringify(L));
+    else localStorage.setItem(VZ_LOG_CHAVE, JSON.stringify(L));
+  } catch (e) {}
+  return L.length;
+}
+
+function vzLogLimpar() {
+  try { localStorage.removeItem(VZ_LOG_CHAVE); } catch (e) {}
+}
+
+/* O relatório em texto, para colar num relato de problema. */
+function vzLogTexto() {
+  const L = vzLogLer();
+  if (!L.length) return t("vzl_vazio");
+  return L.map((x) => {
+    const cab = (x.q || "").slice(0, 16).replace("T", " ") + "  " + x.e;
+    const nums = Object.keys(x.d || {})
+      .map((k) => k + "=" + x.d[k]).join("  ");
+    const am = (x.a || []).map((s) => "      · " + s).join("\n");
+    return cab + (nums ? "\n      " + nums : "") + (am ? "\n" + am : "");
+  }).join("\n");
+}
+
 /* ------------------------------------------------------------------
  * O TEXTO QUE VIRA VETOR
  *
@@ -269,6 +336,63 @@ async function vzVetores(textos, opc) {
  * verdade, para acelerar uma etapa que custa um milésimo de dólar
  * refazer. Passam pela memória, viram duzentas duplas, e vão embora.
  * ------------------------------------------------------------------ */
+/* =====================================================================
+ * MEDIR OS VÍNCULOS QUE JÁ EXISTEM — para ordenar a faxina
+ *
+ * Revisar quinhentos vínculos a olho não acontece. Mas a saída NÃO é
+ * apagar sozinho abaixo de um corte, e o motivo é o mesmo de sempre,
+ * agora invertido:
+ *
+ *   · score ALTO é prova fraca de equivalência — "Responsabilidade
+ *     Civil" e "Responsabilidade Civil do Estado" ficam a 94%;
+ *   · score BAIXO é prova fraca de NÃO-equivalência — "Improbidade
+ *     administrativa" e "Lei nº 8.429/1992" são a mesma coisa e ficam
+ *     longe, porque um é conceito e o outro é número de lei.
+ *
+ * Apagar automaticamente abaixo de 0,6 destruiria justamente os
+ * vínculos mais valiosos: os que ligam nomes diferentes para a mesma
+ * matéria. Esses são difíceis de reconhecer e são o motivo de existir
+ * esta ferramenta — os fáceis a pessoa acha sozinha.
+ *
+ * Então a medida ORDENA e PRÉ-MARCA. Os mais frouxos sobem para o topo
+ * da lista, já marcados, com o número ao lado; um passe de olho
+ * desmarca os poucos que são bons e o resto vai embora numa vez. O
+ * trabalho manual cai de quinhentas decisões para uma leitura — e
+ * continua sendo decisão de quem estuda.
+ * ===================================================================== */
+async function vzMedirVinculos(pares, opc) {
+  const o = opc || {};
+  const lista = pares || [];
+  if (!lista.length) return { medidos: [], tokens: 0 };
+
+  /* cada tópico entra UMA vez, mesmo aparecendo em dez vínculos: são
+   * quinhentos pares e umas duzentas chaves distintas, e pagar dez
+   * vezes pelo mesmo vetor é jogar dinheiro e tempo fora */
+  const indice = {}, textos = [];
+  const por = (nome) => {
+    const partes = String(nome || "").split("›");
+    const txt = vzTextoDoTopico(partes[0], partes.slice(1).join("›"));
+    if (indice[txt] === undefined) { indice[txt] = textos.length; textos.push(txt); }
+    return indice[txt];
+  };
+  lista.forEach((p) => { p._ia = por(p.nomeA); p._ib = por(p.nomeB); });
+
+  const vetores = await vzVetores(textos, o);
+  const medidos = lista.map((p) => Object.assign({}, p, {
+    score: vzCos(vetores[p._ia], vetores[p._ib]),
+  }));
+  /* DO MAIS FROUXO PARA O MAIS FIRME: a faxina começa por onde há mais
+   * chance de estar o lixo, e quem cansar no meio já terá tirado o pior */
+  medidos.sort((a, b) => a.score - b.score);
+  medidos.forEach((m) => { delete m._ia; delete m._ib; });
+  const tokens = Math.ceil(textos.join(" ").length / 4);
+  vzLogGravar("medir-vinculos",
+    { pares: lista.length, topicos: textos.length, tokens },
+    medidos.slice(0, VZ_LOG_AMOSTRA).map((m) =>
+      Math.round(m.score * 100) + "%  " + m.nomeA + " ↔ " + m.nomeB));
+  return { medidos, tokens };
+}
+
 async function vzDuplas(listaA, listaB, opc) {
   const o = opc || {};
   const a = (listaA || []).map((x) => ({
