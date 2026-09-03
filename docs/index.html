@@ -1932,7 +1932,8 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vk-modo:hover{color:var(--texto);border-color:var(--acao)}
 .vk-modo-on{background:var(--acao);color:#fff;border-color:transparent}
 .vk-modo-on:hover{color:#fff;border-color:transparent}
-.vk-discs{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 2px;
+.vk-discs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:10px 12px;margin:8px 0 2px;
   padding:9px 11px;border:1px dashed var(--borda);border-radius:10px}
 /* ---- o interruptor da chave da IA, no rodapé -------------------
    Formato próprio (pílula com uma luz), para não se confundir com os
@@ -1973,7 +1974,11 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vk-par-score{font-size:9.5px;font-weight:800;padding:1px 6px;
   border-radius:999px;background:var(--campo);color:var(--sutil);
   border:1px solid var(--borda);margin-left:6px;flex-shrink:0}
-.vk-lados{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 2px}
+/* GRADE, não coluna: quatro seletores empilhados empurram os passos
+   para fora da tela num celular, e a relação "este par x aquele par"
+   se lê melhor lado a lado. */
+.vk-lados{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:10px 12px;margin:10px 0 2px}
 .vk-lado{flex:1 1 220px;font-size:11px;font-weight:700;letter-spacing:.03em;
   text-transform:uppercase;color:var(--sutil)}
 .vk-lado select{display:block;width:100%;margin-top:3px;padding:7px 8px;
@@ -2002,14 +2007,41 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 /* "consta" não é "estudei": cor de nota, não de conquista */
 .vka-so-consta{font-style:italic}
 /* ---- a faxina dos vínculos ---- */
-.vk-rev-acoes{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px}
-.vk-rev-lista{max-height:52vh;overflow:auto;margin:4px 0 10px}
+.vk-rev-acoes{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px;
+  align-items:center}
+/* as utilidades atrás do ⋮: elas existem, e não disputam o olho com a
+   ação principal */
+.vk-rev-mais{position:relative;margin-left:auto}
+.vk-rev-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:5;
+  display:flex;flex-direction:column;gap:4px;padding:6px;
+  background:var(--panel);border:1px solid var(--borda);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);min-width:150px}
+.vk-rev-menu .btn-min{text-align:left;width:100%}
+/* ROLAGEM ÚNICA: o diálogo já rola; a lista rolando por dentro criava
+   duas barras aninhadas e o atrito de nunca saber qual delas move. */
+.vk-rev-lista{margin:4px 0 10px}
+/* a reação do botão: por um segundo e meio, ele diz o que fez */
+.btn-reagiu{background:var(--verde-claro);color:var(--verde-txt);
+  border-color:transparent}
+/* a barra do que está marcado, colada no fim do diálogo */
+.vk-rev-barra{position:sticky;bottom:0;z-index:4;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:9px 11px;margin:0 0 8px;border-radius:10px;
+  background:var(--campo);border:1px solid var(--acao);
+  font-size:11.5px;font-weight:700;
+  box-shadow:0 -4px 14px rgba(0,0,0,.18)}
+.vk-rev-barra-btns{margin-left:auto;display:flex;gap:6px}
 .vk-rev-grupo{border:1px solid var(--borda);border-radius:10px;
   padding:9px 11px;margin-bottom:9px;background:var(--bg)}
 .vk-rev-par{font-size:12.5px;font-weight:800;margin-bottom:2px}
 .vk-rev-conta{font-size:10.5px;color:var(--sutil);margin-bottom:7px}
-.vk-rev-li{display:flex;align-items:flex-start;gap:8px;padding:5px 0;
-  border-top:1px solid var(--borda);font-size:11.5px;line-height:1.4}
+.vk-rev-li{display:flex;align-items:flex-start;gap:12px;padding:7px 0;
+  border-top:1px solid var(--borda);font-size:11.5px;line-height:1.45}
+.vk-rev-li input[type=checkbox]{margin-top:2px;flex-shrink:0}
+.vk-rev-li > div{flex:1 1 auto;min-width:0}
+/* o % fica no canto, alinhado com o começo da linha, e não no fim do
+   texto — assim a coluna de números se lê de cima a baixo */
+.vk-rev-li .vk-par-score{margin-left:auto;align-self:flex-start}
 .vk-rev-li:first-of-type{border-top:0}
 .vk-rev-mudo{color:var(--sutil)}
 .vk-rev-selo{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;
@@ -2028,6 +2060,7 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .hub-mapa{margin-top:10px;display:flex;flex-direction:column;gap:7px}
 .hub-mapa-intro{font-size:11px;line-height:1.45;color:var(--sutil);
   margin-bottom:2px}
+.vk-linha-aj{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .hub-mapa-vazio{font-size:11.5px;color:var(--sutil);font-style:italic}
 .hub-par{display:block;width:100%;text-align:left;cursor:pointer;
   font:inherit;padding:9px 11px;border-radius:10px;
@@ -2988,7 +3021,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button class="btn btn-azul" id="btnHubVincular" data-i18n="vk_botao"></button>
         <button class="btn-min" id="btnHubRevisar" data-i18n="vk_rev_btn"></button>
       </div>
-      <span class="nota" data-i18n="vk_botao_exp"></span>
+      <!-- O TEXTO LONGO ATRÁS DO (?).
+         Ele explica bem e rouba o lugar das duas ações que estão logo
+         acima. Quem já entendeu não precisa relê-lo toda vez; quem não
+         entendeu toca no (?). É o mesmo padrão da instrução do
+         material. -->
+    <span class="nota vk-linha-aj">
+      <span data-i18n="vk_botao_curto"></span>
+      <button type="button" class="selo-ajuda" id="btnVkAjuda" title="?">?</button>
+    </span>
       <!-- O MAPA: quais editais estão ligados a quais, e por quantos
            assuntos. A informação é uma rede, e o olho lê rede melhor
            que lista. -->
@@ -3608,6 +3649,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnVkFechar" data-i18n="help_close"></button>
+    <!-- O REGISTRO ONDE O PROCESSO ACONTECE.
+         Ele morava só dentro de "Revisar vínculos", e quem acabou de
+         rodar a comparação e quer saber por que 250 linhas viraram 213
+         está AQUI, não lá. -->
+    <button class="btn-min" id="btnVkLogAqui" data-i18n="vk_rev_log"></button>
   </div>
 </dialog>
 
@@ -3624,19 +3670,39 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <p class="nota" data-i18n="vk_rev_ajuda"></p>
   <div class="vka-aviso" id="vkRevResumo"></div>
+  <!-- HIERARQUIA: UMA ação em cor sólida, o resto em contorno, e as
+       utilidades atrás do ⋮. Cinco botões lado a lado em três estilos
+       diferentes não dizem qual é o gesto principal — e aqui ele é um
+       só: medir para poder decidir. -->
   <div class="vk-rev-acoes">
-    <!-- MEDIR ORDENA A FAXINA, não a executa. Quinhentos vínculos a
-         olho não acontece; medidos e ordenados do mais frouxo para o
-         mais firme, viram uma leitura. -->
     <button class="btn btn-ciano" id="btnVkRevMedir" data-i18n="vk_rev_medir"></button>
     <button class="btn-min" id="btnVkRevMudos" data-i18n="vk_rev_so_mudos"></button>
-    <button class="btn-min" id="btnVkRevTodos" data-i18n="vk_rev_todos"></button>
-    <button class="btn-min" id="btnVkRevCopiar" data-i18n="vk_rev_copiar"></button>
-    <button class="btn-min" id="btnVkRevLog" data-i18n="vk_rev_log"></button>
+    <span class="vk-rev-mais">
+      <button class="btn-min" id="btnVkRevMenu" title="Mais ações">⋮</button>
+      <span class="vk-rev-menu" id="vkRevMenu" hidden>
+        <button class="btn-min" id="btnVkRevTodos" data-i18n="vk_rev_todos"></button>
+        <button class="btn-min" id="btnVkRevCopiar" data-i18n="vk_rev_copiar"></button>
+        <button class="btn-min" id="btnVkRevLog" data-i18n="vk_rev_log"></button>
+      </span>
+    </span>
   </div>
   <span class="nota" data-i18n="vk_rev_medir_exp"></span>
   <div class="vz-estado" id="vkRevEstado" hidden></div>
   <div id="vkRevLista" class="vk-rev-lista"></div>
+
+  <!-- A BARRA DO QUE ESTÁ MARCADO. Numa lista de quinhentos itens o
+       botão de apagar fica a três telas de rolagem de onde se está
+       marcando — e a contagem, que é a única confirmação de que a
+       marcação pegou, fica junto com ele. Aqui os dois ficam perto do
+       dedo, e a barra some quando não há nada marcado. -->
+  <div class="vk-rev-barra" id="vkRevBarra" hidden>
+    <span id="vkRevBarraConta"></span>
+    <span class="vk-rev-barra-btns">
+      <button class="btn-min" id="btnVkRevDesmarcar" data-i18n="vk_rev_desmarcar"></button>
+      <button class="btn-min btn-min-perigo" id="btnVkRevBarraApagar"></button>
+    </span>
+  </div>
+
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnVkRevFechar" data-i18n="help_close"></button>
     <button class="btn-min btn-min-perigo" id="btnVkRevApagar"></button>
