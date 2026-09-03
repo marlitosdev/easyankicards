@@ -29,7 +29,11 @@ const BK_CHAVES = {
    * "eac_plano_snaps" é a série de instantâneos da recomendação. */
   edital: ["eac_editais", "eac_edital_atual", "eac_vinculos", "eac_cm_recibo", "eac_mat_log",
            "eac_edital_texto", "eac_edital_progresso", "eac_edital_diario",
-           "eac_dificuldade", "eac_plano_snaps"],
+           "eac_dificuldade", "eac_plano_snaps",
+           /* a jurisprudência é material do mesmo nível do resumo e da
+            * lei seca: meses de teses copiadas dos tribunais, que não
+            * se reconstituem de lugar nenhum */
+           "eac_juris"],
   /* FORA DO BACKUP, DE PROPÓSITO: "eac_chave_gemini".
    *
    * Toda a lógica deste arquivo é "não esqueça de incluir" — e esta é a

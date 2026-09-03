@@ -2006,6 +2006,33 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vka-cab h3{margin:0}
 /* "consta" não é "estudei": cor de nota, não de conquista */
 .vka-so-consta{font-style:italic}
+/* ---- jurisprudência ---------------------------------------------
+   Segue a forma da lei seca e das questões de propósito: o quinto
+   material de um tópico não pode ter uma quinta convenção visual. */
+.jur-colar-lin{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin:7px 0 4px}
+.jur-colar-lin .nota{margin:0;flex:1 1 240px}
+.jur-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:9px 10px;margin:10px 0}
+.jur-campos input{width:100%;box-sizing:border-box;padding:7px 8px;
+  border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font:inherit;font-size:12px}
+.jur-salvar-lin{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  margin:10px 0 4px}
+.jur-lista{margin:6px 0 10px}
+.jur-item{border:1px solid var(--borda);border-radius:10px;
+  padding:9px 11px;margin-bottom:8px;background:var(--bg)}
+.jur-cab{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  font-size:12.5px}
+.jur-data,.jur-orgao{font-size:10.5px;color:var(--sutil)}
+/* A TESE É O CONTEÚDO. Ela é o que se lê na revisão; o resto é
+   etiqueta de procedência. */
+.jur-tese{font-size:12px;line-height:1.5;margin:5px 0 2px}
+.jur-em{font-size:10.5px;color:var(--sutil);font-style:italic;margin-top:4px}
+.jur-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+/* o chip na agenda, no mesmo formato dos outros quatro */
+.ed-st-jur{background:var(--roxo-claro,var(--campo));
+  color:var(--roxo-txt,var(--texto))}
 /* ---- a faxina dos vínculos ---- */
 .vk-rev-acoes{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px;
   align-items:center}
@@ -3663,6 +3690,63 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      volta apontando o material certo para o assunto errado — com a
      autoridade de quem tem conteúdo, no meio de um estudo. Por isso
      esconder não basta, e por isso apagar é gesto de quem estuda. -->
+<!-- A GAVETA DE JURISPRUDÊNCIA DE UM TÓPICO.
+     O quarto material, ao lado do resumo, dos cartões, das questões e
+     da lei seca. O que se decora de um julgado não é o julgado inteiro:
+     é a TESE, a frase que a banca transcreve na assertiva. Por isso ela
+     é o campo grande, e o resto são etiquetas. -->
+<dialog id="dlgJuris" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="jur_titulo"></h3>
+    <button class="btn-min" id="btnJurFecharTopo" data-i18n="help_close"></button>
+  </div>
+  <p class="nota" id="jurSub"></p>
+  <p class="nota" data-i18n="jur_ajuda"></p>
+
+  <!-- COLAR COM FORMATAÇÃO: o bloco cru do sítio do tribunal entra
+       aqui e sai nos campos de baixo, com o que foi reconhecido escrito
+       na tela antes de qualquer coisa ser salva. -->
+  <label class="nd-rot" data-i18n="jur_colar_rot"></label>
+  <textarea id="jurColar" rows="5" style="width:100%;box-sizing:border-box"
+    placeholder="RE 574706 / PR — PARANÁ&#10;Relator(a): Min. CÁRMEN LÚCIA&#10;Julgamento: 15/03/2017 — Tribunal Pleno&#10;Tese: O ICMS não compõe a base de cálculo para fins de incidência do PIS e da COFINS."></textarea>
+  <div class="jur-colar-lin">
+    <button class="btn btn-azul" id="btnJurColar" data-i18n="jur_colar_btn"></button>
+    <span class="nota" data-i18n="jur_colar_exp"></span>
+  </div>
+  <div id="jurColarAviso" class="ed-mud" hidden></div>
+
+  <label class="nd-rot" data-i18n="jur_tese_rot"></label>
+  <textarea id="jurTese" rows="4" style="width:100%;box-sizing:border-box"
+    placeholder="A frase que você quer reconhecer na prova."></textarea>
+
+  <div class="jur-campos">
+    <label class="vk-lado"><span data-i18n="jur_c_tribunal"></span>
+      <input type="text" id="jurTribunal" placeholder="STF"></label>
+    <label class="vk-lado"><span data-i18n="jur_c_classe"></span>
+      <input type="text" id="jurClasse" placeholder="RE"></label>
+    <label class="vk-lado"><span data-i18n="jur_c_numero"></span>
+      <input type="text" id="jurNumero" placeholder="574706"></label>
+    <label class="vk-lado"><span data-i18n="jur_c_data"></span>
+      <input type="date" id="jurData"></label>
+    <label class="vk-lado"><span data-i18n="jur_c_orgao"></span>
+      <input type="text" id="jurOrgao" placeholder="Tribunal Pleno"></label>
+    <label class="vk-lado"><span data-i18n="jur_c_fonte"></span>
+      <input type="text" id="jurFonte" placeholder="portal do STF"></label>
+  </div>
+
+  <div class="jur-salvar-lin">
+    <button class="btn btn-verde" id="btnJurSalvar"></button>
+    <button class="btn-min" id="btnJurLimpar" data-i18n="jur_limpar"></button>
+  </div>
+
+  <p class="nota" id="jurConta"></p>
+  <div id="jurLista" class="jur-lista"></div>
+
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnJurFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgVkRevisar" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="vk_rev_tit"></h3>
@@ -3868,6 +3952,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Monta o prompt SÓ com o trecho que você selecionou. Fica apagado enquanto não houver seleção."></button>
     <button class="btn-min" id="btnMatQstResumo" hidden
       title="Monta o prompt com o resumo inteiro deste tópico."></button>
+    <!-- JURISPRUDÊNCIA A PARTIR DO QUE ESTÁ SELECIONADO.
+         O gesto que a ferramenta existe para servir: lendo o resumo,
+         você encontra a frase que o tribunal decidiu, seleciona e
+         guarda como tese. Sem isto, guardar um julgado exigiria sair da
+         leitura e redigitar — e ninguém faz isso no meio de um estudo. -->
+    <button class="btn-min" id="btnMatJuris" data-i18n="jur_do_trecho"
+      title="Guarda o trecho selecionado como a tese de um julgado deste tópico. Sem seleção, abre a gaveta vazia para você colar a ementa."></button>
     <button class="btn-min mat-conta-prova" id="btnMatProvaLista" hidden
       title="Tudo que você marcou como 'caiu na prova' neste resumo: ver no texto, editar ou tirar a marca."></button>
     <button class="btn-min mat-conta-peg" id="btnMatPegLista" hidden
@@ -5149,6 +5240,8 @@ window.__sqlPromise = initSqlJs({
 <script src="editais.js"></script>
 <script src="vinculos.js"></script>
 <script src="vizinhos.js"></script>
+<script src="juris.js"></script>
+<script src="juris-ui.js"></script>
 <script src="pre-edital.js"></script>
 <script src="cartoes-material.js"></script>
 <script src="fora-da-agenda.js"></script>
@@ -5181,6 +5274,8 @@ try { edIniciar(); } catch (e) { console.error(e);
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
 try { cmIniciarTela(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar cmIniciarTela: " + (e && e.message)); } catch (x) {} }
+try { jurIniciarTela(); } catch (e) { console.error(e);
+  try { reg("ERRO", "falha ao iniciar jurIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { vkIniciarTela(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar vkIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { hubIniciar(); } catch (e) { console.error(e);

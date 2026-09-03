@@ -856,6 +856,14 @@ function matGuardarOffset(sel) {
 /* O painel de onde vem a seleção é PARÂMETRO desde que a lei seca passou
  * a ter marcas também: são dois leitores na tela, e ler a seleção do
  * painel errado marcaria no documento errado. */
+/* O TÓPICO ABERTO E A SELEÇÃO GUARDADA, para quem precisa dos dois de
+ * fora deste arquivo (a jurisprudência, por exemplo). Ler as variáveis
+ * direto de outro módulo seria uma segunda leitura da mesma coisa, e é
+ * assim que duas telas passam a discordar sobre qual tópico está
+ * aberto. */
+function matAtualAtual() { return matAtual; }
+function matSelGuardadaAtual() { return matSelGuardada; }
+
 function matLembrarSelecao(painelId) {
   const sel = window.getSelection && window.getSelection();
   if (!sel || sel.isCollapsed) return;
@@ -2133,6 +2141,16 @@ function matRender() {
             dica: t(temL ? "mat_lei_ver_ajuda" : "mat_lei_criar_ajuda",
               { tp: x.topico }),
             faz: () => leiAbrir(x.disciplina, x.topico) });
+          /* CAMINHO ATÉ A JURISPRUDÊNCIA, pelo mesmo motivo da lei seca:
+           * ela é guardada por tópico e, sem esta porta, só se chegaria
+           * nela pela agenda da semana. */
+          const nJ = typeof jurContarDoTopico === "function"
+            ? jurContarDoTopico(x.chave) : 0;
+          outras.push({ rot: t(nJ ? "mat_juris_ver" : "mat_juris_criar",
+              { n: nJ }),
+            dica: t(nJ ? "mat_juris_ver_ajuda" : "mat_juris_criar_ajuda",
+              { n: nJ, tp: x.topico }),
+            faz: () => jurAbrir(x.disciplina, x.topico) });
 
           acoes.append(matMenuLinha(x.chave, outras));
           li.append(esq, acoes);
