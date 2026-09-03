@@ -1274,6 +1274,23 @@ const UI = {
   "vk_rev_sem_mudos": "Nenhum vínculo mudo: todos levam a algum material ou a algum estudo registrado.",
   "vk_rev_sem_edital": "(edital não cadastrado)",
   "vk_mapa_n": "{n} assuntos",
+  /* ---- o interruptor da chave, no rodapé -----------------------
+     Linguagem simples: quem lê isto pode nunca ter ouvido falar em API. */
+  "chave_ia_on": "IA LIGADA",
+  "chave_ia_off": "IA DESLIGADA",
+  "chave_ia_on_aj": "Sua chave do Gemini está guardada neste aparelho. Os recursos que usam IA funcionam sem pedir nada. Toque para trocar ou apagar.",
+  "chave_ia_off_aj": "Sem chave guardada. Alguns recursos comparam assuntos entre editais usando a IA do Google, e para isso precisam de uma chave sua — gratuita, pega em aistudio.google.com. Toque para colar.",
+
+  /* ---- medir os vínculos existentes ---- */
+  "vk_rev_medir": "Medir e ordenar",
+  "vk_rev_medir_exp": "Mede o quanto os dois nomes de cada vínculo se parecem, põe os mais frouxos no topo e já os deixa marcados. Não apaga nada — a medida erra, e às vezes erra feio: \"Improbidade administrativa\" e \"Lei nº 8.429/1992\" são a mesma coisa e ficam longe. Precisa da chave da IA e custa cerca de um milésimo de dólar.",
+  "vk_rev_medindo": "Medindo {n} vínculos…",
+  "vk_rev_medido": "{n} vínculos medidos. {f} ficaram abaixo de {c}% e já estão marcados — confira antes de apagar, porque nomes diferentes para a mesma matéria também ficam baixos.",
+  "vk_rev_score_aj": "O quanto os dois nomes se parecem. É por isso que esta linha está no topo — não é a resposta. Nomes diferentes para a mesma matéria ficam baixos aqui.",
+  "vk_rev_log": "Ver o registro",
+
+  /* ---- o registro do processo ---- */
+  "vzl_vazio": "Nada registrado ainda. O registro guarda o que entrou e o que saiu de cada etapa da vinculação — é onde se descobre por que uma resposta da IA foi descartada, ou por que apareceram vínculos demais.",
   "vk_titulo": "Aproveitar o que já estudei em outro concurso",
   /* ---- triagem semântica: o passo 0 ------------------------------
      Ela ORDENA e ENCURTA. Não vincula. O texto da tela precisa dizer
