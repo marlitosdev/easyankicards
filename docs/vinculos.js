@@ -439,6 +439,7 @@ function vkRevisao(fontes) {
   const estudado = (chave) => !!((f.estudo && f.estudo[chave]) || {}).data;
 
   const grupos = {};
+  const arquivados = [];
   (vinculos || []).forEach((v, i) => {
     const na = nomeDe(v.a) || t("vk_rev_sem_edital");
     const nb = nomeDe(v.b) || t("vk_rev_sem_edital");
@@ -455,21 +456,35 @@ function vkRevisao(fontes) {
       ativo: !!(f.editalAtivo && f.editalAtivo[ch]),
     });
     const mudo = !vkVinculoUtil(lado(v.a), lado(v.b));
-    grupos[par].itens.push({
+    const item = {
       i, a: v.a, b: v.b,
       nomeA: bonito(v.a), nomeB: bonito(v.b),
       origem: v.origem || "", sugestao: v.sugestao || "", por: v.por || "",
       modo: v.modo || "estudei", criado: v.criado || "",
-      mudo,
-    });
+      mudo, arq: vkArquivado(v), par,
+    };
+    /* ARQUIVADO SAI DOS GRUPOS E DAS CONTAS. Se ele continuasse somando
+     * em "246 sem historico", arquivar nao mudaria numero nenhum na
+     * tela — e uma acao que nao muda nada visivel parece nao ter
+     * funcionado. */
+    if (item.arq) { arquivados.push(item); return; }
+    grupos[par].itens.push(item);
     if (mudo) grupos[par].mudos++;
   });
-  const lista = Object.keys(grupos).map((k) => grupos[k]);
+  const lista = Object.keys(grupos).map((k) => grupos[k])
+    .filter((g) => g.itens.length);
   lista.sort((a, b) => b.itens.length - a.itens.length);
+  const vivos = lista.reduce((s, g) => s + g.itens.length, 0);
+  const mudos = lista.reduce((s, g) => s + g.mudos, 0);
   return {
     grupos: lista,
-    total: (vinculos || []).length,
-    mudos: lista.reduce((s, g) => s + g.mudos, 0),
+    arquivados,
+    /* "total" e o que esta EM USO, nao o que existe no armazenamento:
+     * e o numero que a tela mostra, e ele tem de cair quando se
+     * arquiva. */
+    total: vivos,
+    mudos,
+    falantes: vivos - mudos,
   };
 }
 
@@ -479,6 +494,50 @@ function vkApagarPares(pares) {
   let n = 0;
   (pares || []).forEach((p) => { n += vkDesfazer(p.a, p.b); });
   return n;
+}
+
+/* =====================================================================
+ * ARQUIVAR — a saída que não destrói
+ *
+ * Apagar um vínculo sem histórico resolve a poluição de hoje e cria um
+ * problema de amanhã: no dia em que você escrever um resumo naquele
+ * tópico do concurso encerrado, o vínculo teria voltado a falar — e não
+ * volta, porque não existe mais. Duzentos e quarenta e seis apagados de
+ * uma vez é uma decisão tomada sobre duzentos e quarenta e seis casos
+ * que ninguém leu um a um.
+ *
+ * Arquivar guarda a decisão sem destruir o dado: o vínculo sai da
+ * agenda, sai do resumo, sai da lista de revisão — e continua lá, num
+ * filtro próprio, de onde volta com um toque.
+ *
+ * O QUE ELE NÃO FAZ, DE PROPÓSITO: voltar sozinho. Um vínculo que
+ * ressuscita porque você escreveu um resumo chegaria no meio de um
+ * estudo, com a autoridade de quem tem conteúdo, sem nada por perto que
+ * lembrasse de onde veio — e você já o tinha dispensado uma vez.
+ * Arquivar É a decisão "não quero ver isto"; desfazê-la tem de ser um
+ * gesto seu.
+ * ===================================================================== */
+function vkArquivado(v) { return !!(v && v.arq); }
+
+function vkArquivar(pares, arquivar) {
+  const quer = arquivar !== false;
+  let n = 0;
+  (pares || []).forEach((p) => {
+    vinculos.forEach((v) => {
+      if ((v.a === p.a && v.b === p.b) || (v.a === p.b && v.b === p.a)) {
+        if (!!v.arq === quer) return;
+        if (quer) { v.arq = 1; v.arqEm = new Date().toISOString(); }
+        else { delete v.arq; delete v.arqEm; }
+        n++;
+      }
+    });
+  });
+  if (n) vkSalvar();
+  return n;
+}
+
+function vkContarArquivados() {
+  return (vinculos || []).filter(vkArquivado).length;
 }
 
 function vkDesfazer(a, b) {
@@ -561,6 +620,9 @@ function vkLigadosDe(disciplina, topico, maxSaltos) {
     const proxima = [];
     fronteira.forEach((atual) => {
       vinculos.forEach((v) => {
+        /* ARQUIVADO NAO APARECE. E o ponto de arquivar: some da agenda e
+         * do resumo, sem deixar de existir. */
+        if (vkArquivado(v)) return;
         if (v.a !== atual.chave && v.b !== atual.chave) return;
         const outro = v.a === atual.chave ? v.b : v.a;
         if (vistos[outro]) return;
