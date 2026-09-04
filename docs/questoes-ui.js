@@ -598,7 +598,8 @@ function qsUiPintarSessao() {
         bd.title = t("qs_dica_ajuda");
         bd.onclick = async () => {
           const txt = await uiTexto(
-            t("qs_dica_tit", { e: x.q.enunciado.slice(0, 90) }), minha);
+            t("qs_dica_tit", { e: x.q.enunciado.slice(0, 90) }), minha,
+            null, qsUiCopiarNaDica(x.q));
           if (txt === null) return;
           qsGravarDica(x.q.id, txt);
           matReg("questao", "dica escrita na revisão dos erros",
@@ -750,7 +751,8 @@ function qsUiPintarSessao() {
     bd.textContent = t(minha ? "qs_dica_editar" : "qs_dica_incluir");
     bd.title = t("qs_dica_ajuda");
     bd.onclick = async () => {
-      const txt = await uiTexto(t("qs_dica_tit", { e: q.enunciado.slice(0, 90) }), minha);
+      const txt = await uiTexto(t("qs_dica_tit", { e: q.enunciado.slice(0, 90) }),
+        minha, null, qsUiCopiarNaDica(q));
       if (txt === null) return;
       qsGravarDica(q.id, txt);
       matReg("questao", txt.trim() ? "dica da questão guardada" : "dica da questão apagada",
@@ -1601,6 +1603,12 @@ function qsUiVirarSelecao(origem) {
 
 function qsUiIniciar() {
   qsCarregar();
+  /* O TAMANHO GUARDADO É APLICADO NO ARRANQUE, e não ao abrir a sessão:
+   * a classe fica no <dialog>, que já existe, e assim a primeira
+   * questão da rodada já nasce no tamanho certo — sem o pisca de abrir
+   * pequeno e crescer. */
+  if ($("btnQsTamanho")) $("btnQsTamanho").onclick = qsTamanhoTrocar;
+  qsTamanhoPintar();
   /* os gatilhos do rascunho vivem na barra da questão: quem os liga é
    * esta tela, no arranque, e não a montagem preguiçosa do rascunho */
   try { rsGatilhosIniciar(); } catch (e) {}
@@ -1772,4 +1780,89 @@ function qsUiIniciar() {
     };
   }
   qsUiRender();
+}
+
+/* O BOTÃO "COPIAR A QUESTÃO" DENTRO DA CAIXA DA DICA.
+ *
+ * Escrever a explicação com suas palavras quase sempre passa por
+ * perguntar a alguma IA, e para perguntar é preciso o enunciado. Sem
+ * isto o caminho era fechar a caixa — perdendo o que já estava escrito
+ * —, copiar na tela de trás e reabrir.
+ *
+ * VAI SEM A DICA, de propósito: é ela que você está escrevendo agora, e
+ * mandar para a IA o rascunho da própria resposta é pedir que ela
+ * concorde com você. Gabarito e comentário vão, porque são o que
+ * permite à IA explicar em vez de chutar. */
+function qsUiCopiarNaDica(q) {
+  if (!q || typeof plTextoDaQuestao !== "function") return null;
+  return {
+    rotulo: t("dic_copiar_q"),
+    dica: t("dic_copiar_q_ajuda"),
+    faz: () => {
+      const txt = plTextoDaQuestao(q, { gabarito: true, dica: false });
+      try { navigator.clipboard.writeText(txt); } catch (e) {}
+      try {
+        matReg("questao", "questão copiada de dentro da caixa da dica",
+               String(q.enunciado || "").slice(0, 60));
+      } catch (e) {}
+      return txt;
+    },
+  };
+}
+
+/* =====================================================================
+ * O TAMANHO DA CAIXA DE RESPONDER
+ *
+ * Enunciado de concurso é texto longo, cheio de vírgula e de negativa,
+ * lido com atenção — e a caixa nasceu dimensionada para caber num
+ * telefone. Num monitor sobra tela vazia dos dois lados enquanto o
+ * texto se espreme em quinze linhas curtas.
+ *
+ * A CLASSE VAI NO <dialog>, e não na fonte de um elemento: crescer só a
+ * letra dentro de uma caixa estreita piora, porque produz ainda mais
+ * linhas curtas. Cresce a caixa e o texto juntos.
+ *
+ * E FICA GUARDADO. Quem precisa de letra maior precisa dela SEMPRE; um
+ * ajuste que se perde ao fechar a sessão é um ajuste que se refaz toda
+ * vez, e aí não se usa.
+ * ===================================================================== */
+const QS_TAM_CHAVE = "eac_qs_tamanho";
+const QS_TAMS = 3;
+
+function qsTamanhoAtual() {
+  let v = 0;
+  try { v = parseInt(localStorage.getItem(QS_TAM_CHAVE) || "0", 10); } catch (e) { v = 0; }
+  return (v >= 0 && v < QS_TAMS) ? v : 0;
+}
+
+function qsTamanhoPor(v) {
+  const n = ((v % QS_TAMS) + QS_TAMS) % QS_TAMS;
+  try { guardar(QS_TAM_CHAVE, String(n)); } catch (e) {}
+  qsTamanhoPintar();
+  return n;
+}
+
+function qsTamanhoPintar() {
+  const n = qsTamanhoAtual();
+  const dlg = $("dlgQsResponder");
+  if (dlg) {
+    /* as três classes são exclusivas: deixar duas ligadas faria a última
+     * regra do arquivo ganhar, e o tamanho passaria a depender da ordem
+     * do CSS em vez da escolha da pessoa */
+    ["qs-t1", "qs-t2"].forEach((c, i) => {
+      const liga = (i + 1) === n;
+      if (dlg.classList) dlg.classList[liga ? "add" : "remove"](c);
+    });
+  }
+  const b = $("btnQsTamanho");
+  if (b) {
+    b.textContent = t("qs_tam_" + n);
+    b.title = t("qs_tam_ajuda");
+  }
+}
+
+function qsTamanhoTrocar() {
+  const n = qsTamanhoPor(qsTamanhoAtual() + 1);
+  try { reg("QUESTOES", "tamanho da caixa trocado", t("qs_tam_" + n)); } catch (e) {}
+  return n;
 }

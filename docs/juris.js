@@ -118,7 +118,8 @@ function jurTem(chave) { return jurDoTopico(chave).length > 0; }
 function jurIdentificar(txt) {
   const bruto = String(txt || "");
   const achado = { tribunal: "", classe: "", numero: "", data: "",
-                   relator: "", orgao: "", tese: "", tribunalDeduzido: false };
+                   relator: "", orgao: "", tese: "", ano: "",
+                   tribunalDeduzido: false };
   if (!bruto.trim()) return achado;
 
   /* TRIBUNAL: sigla isolada, não pedaço de palavra. "STF" dentro de
@@ -163,6 +164,17 @@ function jurIdentificar(txt) {
     const ano = p[2].length === 2 ? "20" + p[2] : p[2];
     achado.data = ano + "-" + String(p[1]).padStart(2, "0")
       + "-" + String(p[0]).padStart(2, "0");
+  } else {
+    /* SÓ O ANO, quando é só o que o texto diz.
+     *
+     * Muito texto de estudo cita "no julgamento da ADI 2405, em 2019" —
+     * sem dia nem mês. A caixa de data pede dd/mm/aaaa e não aceita um
+     * ano sozinho, então antes isto virava campo vazio e a pessoa não
+     * ficava sabendo que havia um ano ali. Ele fica guardado à parte, e
+     * a tela diz "2019 (só o ano)". */
+    const anoSo = bruto.match(/\b(?:em|de|ano de)\s+((?:19|20)\d{2})\b/i)
+      || bruto.match(/\b((?:19|20)\d{2})\b/);
+    if (anoSo) achado.ano = anoSo[1];
   }
 
   const rel = bruto.match(/Relator(?:\(a\))?\s*:?\s*(?:Min(?:istro|istra)?\.?\s*)?([^\n,;]{3,60})/i);
@@ -175,14 +187,47 @@ function jurIdentificar(txt) {
    * com "Tese:" ou dentro do bloco de ementa. Sem marcação nenhuma,
    * sugere-se a primeira frase longa — que quem cola confere e corrige,
    * porque é o campo que vai ser lido na revisão. */
+  /* AS QUEBRAS DE LINHA SÃO PRESERVADAS ATÉ A LIMPEZA.
+   *
+   * Antes o texto era achatado com \s+ ANTES de tirar a marcação, e aí
+   * "### 1." deixava de estar em início de linha: a regra de título,
+   * que é ancorada em ^, não pegava mais nada e o "###" chegava inteiro
+   * na tese. Quem colapsa é jurSemMarcacao, no fim. */
   const tRot = bruto.match(/(?:^|\n)\s*(?:tese|ementa)\s*:?\s*([\s\S]{20,600}?)(?:\n\s*\n|$)/i);
-  if (tRot) achado.tese = tRot[1].replace(/\s+/g, " ").trim();
+  if (tRot) achado.tese = tRot[1];
   else {
-    const frase = bruto.split(/\n\s*\n/).map((x) => x.replace(/\s+/g, " ").trim())
-      .filter((x) => x.length >= 40)[0];
-    if (frase) achado.tese = frase.slice(0, 600);
+    const frase = bruto.split(/\n\s*\n/).map((x) => x.trim())
+      .filter((x) => x.replace(/\s+/g, " ").length >= 40)[0];
+    if (frase) achado.tese = frase.slice(0, 900);
   }
+  /* A TESE VAI SEM MARCAÇÃO DE MARKDOWN.
+   *
+   * Quem cola de uma resposta de IA ou de um material de estudo traz
+   * "**ADI 2405/RS**" e "### 1." junto. O app não desenha markdown na
+   * citação da tese: os asteriscos apareciam LITERALMENTE na tela, em
+   * texto que se vai reler dezenas de vezes até a prova.
+   *
+   * Só a TESE é limpa. O texto colado inteiro fica como veio — é a
+   * regra que este arquivo tem desde o começo: o extrator não joga fora
+   * o que não entendeu. */
+  achado.tese = jurSemMarcacao(achado.tese).slice(0, 600);
   return achado;
+}
+
+/* Tira o que é marcação de texto, mantendo o que é texto. Não usa o
+ * limpador da dica porque aquele preserva quebras de linha e marcadores
+ * de lista, que numa tese de três linhas viram sujeira. */
+function jurSemMarcacao(txt) {
+  return String(txt || "")
+    .replace(/^#{1,6}\s+/gm, "")            /* ### título */
+    .replace(/\*\*([^*]+)\*\*/g, "$1")      /* **negrito** */
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1$2")  /* *itálico* */
+    .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*[-*•]\s+/gm, "")          /* marcador de lista */
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /* O TÍTULO CURTO, para caber numa linha de lista. */
@@ -264,4 +309,131 @@ if (typeof module !== "undefined" && module.exports) {
     jurDoTopico, jurContarDoTopico, jurTem, jurIdentificar, jurTitulo,
     jurGravar, jurDe, jurApagar, jurLigar, jurDesligar, jurTexto,
   };
+}
+
+/* =====================================================================
+ * O MESMO JULGADO GUARDADO DUAS VEZES
+ *
+ * Aconteceu no uso real: "ADI 2405" e "ADI 2.405" viraram dois cartões
+ * na mesma tela. São o mesmo processo — o ponto que os separou foi o
+ * ponto de milhar.
+ *
+ * DUAS PERGUNTAS DIFERENTES, E SÓ UMA PRECISA DE IA:
+ *
+ *  · MESMO PROCESSO? É aritmética. Tribunal, classe e número, com o
+ *    número sem pontuação. Não há dúvida a resolver, e mandar isto para
+ *    uma IA seria pagar por uma resposta que a comparação de strings dá
+ *    com certeza.
+ *  · MESMA COISA, PROCESSOS DIFERENTES? Aí sim: dois julgados sem
+ *    número, ou dois números distintos que decidiram a mesma tese, ou o
+ *    acórdão e a súmula que dele nasceu. Isso é leitura, e é o que o
+ *    prompt vai perguntar.
+ * ===================================================================== */
+function jurSoDigitos(s) { return String(s || "").replace(/\D+/g, ""); }
+
+/* A identidade de PROCESSO. Vazia quando não há classe nem número — e
+ * vazia não casa com vazia, senão todo julgado sem número seria
+ * "repetido" de todos os outros sem número. */
+function jurIdentidade(j) {
+  if (!j) return "";
+  const num = jurSoDigitos(j.numero);
+  const cls = String(j.classe || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!num || !cls) return "";
+  return [String(j.tribunal || "").toUpperCase().trim(), cls, num].join("|");
+}
+
+/* Os outros julgados que são o MESMO PROCESSO deste. */
+function jurIguaisA(j, lista) {
+  const id = jurIdentidade(j);
+  if (!id) return [];
+  return (lista || jurLista()).filter((x) =>
+    x && x.id !== (j && j.id) && jurIdentidade(x) === id);
+}
+
+/* Os pares repetidos de um tópico, para a tela oferecer a união. */
+function jurRepetidosDoTopico(chave) {
+  const lista = jurDoTopico(chave);
+  const vistos = {};
+  const pares = [];
+  lista.forEach((j) => {
+    const id = jurIdentidade(j);
+    if (!id) return;
+    if (vistos[id]) pares.push({ fica: vistos[id], vai: j, id });
+    else vistos[id] = j;
+  });
+  return pares;
+}
+
+/* =====================================================================
+ * UNIR DOIS JULGADOS
+ *
+ * O QUE NÃO SE PERDE: nada. A tese que sai vai para o fim do texto do
+ * que fica, com uma linha dizendo de onde veio, e os tópicos dos dois
+ * se somam. Este arquivo inteiro é construído sobre "o extrator não
+ * joga fora o que não entendeu" — unir não pode ser a exceção.
+ *
+ * QUEM FICA é quem tem mais matéria: a tese mais longa costuma ser a
+ * que a pessoa escreveu com cuidado, e a curta a que veio de um resumo
+ * automático. Empatado, fica o mais antigo, que é o que já está
+ * apontado pelos outros tópicos.
+ * ===================================================================== */
+function jurUnir(idFica, idVai) {
+  /* MEXE NO OBJETO GUARDADO, e não na cópia que jurDe devolve: a leitura
+   * é feita do localStorage a cada chamada, então alterar o retorno de
+   * jurDe muda uma cópia que ninguém mais vai ver. */
+  const tudo = jurLerTudo();
+  const a = tudo[String(idFica)], b = tudo[String(idVai)];
+  if (!a || !b || a.id === b.id) return null;
+  const tA = String(a.tese || "").trim(), tB = String(b.tese || "").trim();
+  const extra = [];
+  if (tB && jurChaveComparavel(tB) !== jurChaveComparavel(tA)) {
+    extra.push(t("jur_unir_veio", { t: jurTitulo(b) }));
+    extra.push(tB);
+  }
+  const txB = String(b.texto || "").trim();
+  if (txB && txB !== String(a.texto || "").trim()) {
+    extra.push(t("jur_unir_ementa", { t: jurTitulo(b) }));
+    extra.push(txB);
+  }
+  if (extra.length) {
+    a.texto = String(a.texto || "").replace(/\s*$/, "")
+      + (String(a.texto || "").trim() ? "\n\n" : "") + extra.join("\n");
+  }
+  /* os campos que faltavam de um lado vêm do outro: unir tem de somar */
+  ["tribunal", "classe", "numero", "data", "orgao", "relator", "fonte"]
+    .forEach((k) => { if (!String(a[k] || "").trim() && b[k]) a[k] = b[k]; });
+  (b.topicos || []).forEach((c) => {
+    if (!(a.topicos || []).some((x) => jurChaveComparavel(x) === jurChaveComparavel(c))) {
+      a.topicos = (a.topicos || []).concat([c]);
+    }
+  });
+  a.tocado = new Date().toISOString();
+  delete tudo[String(b.id)];
+  if (!jurGravarTudo(tudo)) return null;
+  return a;
+}
+
+/* =====================================================================
+ * O PROMPT: "estes julgados dizem a mesma coisa?"
+ *
+ * Ele existe para o caso em que a aritmética não responde — dois
+ * julgados sem número, números diferentes que decidiram a mesma tese, o
+ * acórdão e a súmula que dele nasceu.
+ *
+ * ELE NÃO UNE NADA. Devolve uma leitura, e unir continua sendo um
+ * toque seu num botão. É a mesma regra do resto do aplicativo: a IA
+ * ordena e sugere, quem decide é quem estuda — inclusive porque uma
+ * resposta errada aqui funde duas teses distintas num registro só, e
+ * isso não se desfaz no dia da prova.
+ * ===================================================================== */
+function jurPromptComparar(lista) {
+  const L = (lista || []).filter(Boolean);
+  if (L.length < 2) return "";
+  const blocos = L.map((j, i) => [
+    "[" + (i + 1) + "] " + (jurTitulo(j) || t("jur_sem_titulo")),
+    (j.data ? String(j.data).split("-").reverse().join("/") + " · " : "")
+      + (j.orgao || ""),
+    String(j.tese || j.texto || "").replace(/\s+/g, " ").slice(0, 900),
+  ].filter((x) => String(x).trim()).join("\n"));
+  return t("jur_prompt_texto", { n: L.length, blocos: blocos.join("\n\n") });
 }

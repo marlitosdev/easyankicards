@@ -64,7 +64,11 @@ const BK_CHAVES = {
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
                  "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",
-    "eac_maisCampos", "eac_modo", "eac_ampliar", "eac_edital_vista"],
+    "eac_maisCampos", "eac_modo", "eac_ampliar", "eac_edital_vista",
+    /* o tamanho da caixa de responder: quem escolheu letra maior
+     * escolheu por precisar dela, e restaurar num aparelho novo com
+     * a letra pequena de volta é desfazer uma decisão de acessibilidade */
+    "eac_qs_tamanho"],
 };
 
 function bkLer(k) {

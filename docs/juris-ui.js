@@ -139,6 +139,10 @@ function jurColar() {
   }
   if (a.orgao) pedacos.push(a.orgao);
   if (a.data) pedacos.push(String(a.data).split("-").reverse().join("/"));
+  /* O ANO SOLTO, quando é tudo o que o texto diz. A caixa de data não
+   * aceita ano sozinho, e sem esta linha a pessoa não ficava sabendo
+   * que havia uma data ali — parecia que o extrator não viu nada. */
+  else if (a.ano) pedacos.push(t("jur_so_ano", { a: a.ano }));
   const av = $("jurColarAviso");
   if (av) {
     av.hidden = false;
@@ -238,6 +242,95 @@ async function jurTirar(id) {
   jurRepintarTelas();
 }
 
+/* O **NEGRITO** VIRA NEGRITO, sem innerHTML.
+ *
+ * O extrator novo já tira a marcação do que se cola daqui em diante,
+ * mas o que foi guardado ANTES tem os asteriscos gravados no texto — e
+ * migrar o armazenamento para consertar aparência é mexer no dado por
+ * causa da tela. Desenhar resolve os dois casos e não altera nada do
+ * que está guardado.
+ *
+ * NÃO USA innerHTML: o texto vem de uma colagem de fora, e montar HTML
+ * com ele daria a qualquer página copiada a chance de injetar marcação
+ * na tela do aplicativo. Aqui só existem nós de texto e <b>. */
+function jurEscreverTese(el, txt) {
+  el.textContent = "";
+  String(txt || "").split(/(\*\*[^*]+\*\*)/g).forEach((p) => {
+    if (!p) return;
+    if (/^\*\*[^*]+\*\*$/.test(p)) {
+      const b = document.createElement("b");
+      b.textContent = p.slice(2, -2);
+      el.append(b);
+    } else {
+      el.append(document.createTextNode(p));
+    }
+  });
+}
+
+/* ------------------------------------------------------------------
+ * OS REPETIDOS, quando existem
+ *
+ * "ADI 2405" e "ADI 2.405" viraram dois cartões na mesma tela no uso
+ * real. São o mesmo processo, e o que os separou foi o ponto de milhar.
+ * Aqui a tela diz isso e oferece a união — sem fazê-la sozinha: unir
+ * mistura duas teses num registro só, e desfazer isso na véspera da
+ * prova não é possível.
+ * ------------------------------------------------------------------ */
+function jurPintarRepetidos() {
+  const cx = $("jurRepetidos");
+  if (!cx || !jurTopicoAtual) return;
+  cx.innerHTML = "";
+  const pares = jurRepetidosDoTopico(jurTopicoAtual.chave);
+  cx.hidden = !pares.length || jurModo !== "ler";
+  if (cx.hidden) return;
+
+  const tit = document.createElement("div");
+  tit.className = "jur-rep-tit";
+  tit.textContent = t("jur_rep_tit");
+  cx.append(tit);
+  const exp = document.createElement("div");
+  exp.className = "nota";
+  exp.textContent = t("jur_rep_exp");
+  cx.append(exp);
+
+  pares.forEach((p) => {
+    const li = document.createElement("div");
+    li.className = "jur-rep-li";
+    const nome = document.createElement("span");
+    nome.textContent = t("jur_rep_um", { t: jurTitulo(p.fica), n: 2 });
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min";
+    b.textContent = t("jur_rep_unir");
+    b.onclick = () => jurUnirPar(p.fica.id, p.vai.id);
+    li.append(nome, b);
+    cx.append(li);
+  });
+}
+
+async function jurUnirPar(idFica, idVai) {
+  const a = jurDe(idFica);
+  if (!(await uiConfirm(t("jur_rep_unir_conf", { t: jurTitulo(a) })))) return;
+  const r = jurUnir(idFica, idVai);
+  if (!r) return;
+  reg("JURIS", "julgados repetidos unidos", jurTitulo(r));
+  jurPintarLista();
+  jurRepintarTelas();
+  await uiAlert(t("jur_rep_uniu", { t: jurTitulo(r) }));
+}
+
+/* O PROMPT, para quando a aritmética não responde. */
+async function jurCopiarPrompt() {
+  if (!jurTopicoAtual) return;
+  const lista = jurDoTopico(jurTopicoAtual.chave);
+  if (lista.length < 2) { await uiAlert(t("jur_prompt_poucos")); return; }
+  const txt = jurPromptComparar(lista);
+  const ok = await edColarCopiarTexto(txt, "", null);
+  reg("JURIS", "prompt de comparacao copiado",
+      lista.length + " julgados de " + jurTopicoAtual.nome);
+  if (ok) jurReagirBtn("btnJurPrompt", t("jur_prompt_copiado"));
+}
+
 function jurPintarLista() {
   const box = $("jurLista");
   if (!box || !jurTopicoAtual) return;
@@ -248,6 +341,9 @@ function jurPintarLista() {
     conta.textContent = lista.length
       ? t("jur_conta", { n: lista.length }) : t("jur_conta_zero");
   }
+  jurPintarRepetidos();
+  /* O prompt de comparação só faz sentido com dois ou mais. */
+  if ($("btnJurPrompt")) $("btnJurPrompt").hidden = lista.length < 2 || jurModo !== "ler";
   if (!lista.length) return;
 
   lista.forEach((j) => {
@@ -323,7 +419,7 @@ function jurPintarLista() {
     if (j.tese) {
       const p = document.createElement("blockquote");
       p.className = "jur-tese";
-      p.textContent = j.tese;
+      jurEscreverTese(p, j.tese);
       li.append(p);
     }
 
@@ -471,6 +567,7 @@ function jurIniciarTela() {
   liga("btnJurMais", () => jurTrocarModo("incluir"));
   liga("btnJurMeta", () => jurMeta(!jurMetaAberta()));
   dicaLigar("btnJurAjuda", "jur_ajuda");
+  liga("btnJurPrompt", jurCopiarPrompt);
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
   liga("btnJurFechar", () => $("dlgJuris").close());
   liga("btnJurFecharTopo", () => $("dlgJuris").close());
