@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "15.2.0";
+const VERSAO = "15.5.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -363,7 +363,11 @@ function uiAlert(texto) { return uiDialog(String(texto), false); }
 /* uiTexto(titulo, valor)            -> promessa de string ou null
  * uiTexto(titulo, valor, {rotulo2, valor2}) -> promessa de {a, b} ou null
  * O segundo campo existe para a questão, que tem enunciado E gabarito. */
-function uiTexto(titulo, valor, dois) {
+/* "extra" é um botão a mais no rodapé: {rotulo, dica, faz}. Ele existe
+ * para o caso da dica de questão, em que copiar o enunciado sem fechar
+ * a caixa é o que evita perder o que já foi escrito — e fica opcional
+ * porque uiTexto serve a meia dúzia de telas que não têm o que copiar. */
+function uiTexto(titulo, valor, dois, extra) {
   return new Promise((resolve) => {
     const dlg = document.getElementById("dlgTextoLivre");
     if (!dlg) { resolve(null); return; }
@@ -376,6 +380,30 @@ function uiTexto(titulo, valor, dois) {
       cx2.style.display = dois ? "" : "none";
       document.getElementById("txtLivreRot2").textContent = (dois && dois.rotulo2) || "";
       campo2.value = (dois && dois.valor2) || "";
+    }
+    const bEx = document.getElementById("btnTxtLivreExtra");
+    if (bEx) {
+      bEx.hidden = !(extra && typeof extra.faz === "function");
+      bEx.textContent = (extra && extra.rotulo) || "";
+      bEx.title = (extra && extra.dica) || "";
+      /* LIMPAR SEMPRE, na abertura.
+       *
+       * Havia esta limpeza aqui E outra no fechamento, e cada uma
+       * cobria a outra: sabotar qualquer das duas passava verde, que é
+       * como código morto sobrevive. Ficou a da abertura, porque ela
+       * também vale quando a caixa anterior foi fechada pelo Esc, sem
+       * passar pelo fechamento. */
+      bEx.onclick = null;
+      if (!bEx.hidden) {
+        bEx.onclick = () => {
+          extra.faz();
+          /* REAÇÃO NO PRÓPRIO BOTÃO: copiar não muda nada na tela, e sem
+           * confirmação a pessoa aperta de novo achando que falhou. */
+          const antes = bEx.textContent;
+          bEx.textContent = t("copied");
+          setTimeout(() => { bEx.textContent = antes; }, 1800);
+        };
+      }
     }
     const fim = (v) => {
       document.getElementById("btnTxtLivreOk").onclick = null;
@@ -5065,7 +5093,24 @@ function dicaMostrar(alvo, texto) {
   x.setAttribute("aria-label", x.title);
   x.onclick = dicaFechar;
   b.append(x, p);
-  document.body.append(b);
+  /* DENTRO DO DIÁLOGO, quando há um aberto.
+   *
+   * Um <dialog> aberto por showModal() vive na TOP LAYER do navegador,
+   * que fica acima de todo o resto da página independentemente de
+   * z-index — "z-index: 9999" no balão não vence, porque nem estão na
+   * mesma disputa. Pendurado no <body>, o balão da ajuda saía ATRÁS da
+   * caixa que o abriu: visível pela borda, ilegível, e sem jeito de
+   * trazer para a frente por CSS.
+   *
+   * Pendurando-o no próprio diálogo, ele entra na top layer junto. A
+   * posição continua em pixel de viewport (position: fixed), então a
+   * conta de onde ele fica não muda. */
+  let casa = document.body;
+  try {
+    if (alvo.closest) casa = alvo.closest("dialog") || document.body;
+  } catch (e) { casa = document.body; }
+  casa.append(b);
+  b.__casa = casa;
 
   /* CABER NA TELA. O balão tem largura fixa; encostado na direita ele
    * sairia da janela num telefone, então recua até caber. */

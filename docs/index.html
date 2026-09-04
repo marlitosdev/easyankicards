@@ -1094,6 +1094,20 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-hist.ok{color:var(--ok);border-left-color:var(--ok)}
 .qs-hist.nao{color:var(--erro);border-left-color:var(--erro)}
 .qs-enunciado{font-size:15px;line-height:1.55;margin-bottom:12px}
+/* OS TRÊS TAMANHOS DA CAIXA DE RESPONDER.
+   A classe vai no <dialog>, então uma regra só move a caixa inteira: a
+   largura, o enunciado, as alternativas e o comentário. Mexer só na
+   fonte deixaria o texto grande dentro de uma caixa estreita — mais
+   linhas curtas, que é justamente o que cansa. */
+#dlgQsResponder.qs-t1{max-width:820px}
+#dlgQsResponder.qs-t1 .qs-enunciado{font-size:17px;line-height:1.62}
+#dlgQsResponder.qs-t1 .qs-op,
+#dlgQsResponder.qs-t1 .qs-coment{font-size:14.5px;line-height:1.6}
+#dlgQsResponder.qs-t2{max-width:1040px}
+#dlgQsResponder.qs-t2 .qs-enunciado{font-size:19.5px;line-height:1.7}
+#dlgQsResponder.qs-t2 .qs-op,
+#dlgQsResponder.qs-t2 .qs-coment{font-size:16.5px;line-height:1.68}
+.qs-tam{flex:0 0 auto;white-space:nowrap}
 .qs-opcoes{display:flex;flex-direction:column;gap:6px}
 .qs-op{text-align:left;padding:9px 12px;border-radius:8px;border:1px solid var(--borda);
   background:var(--campo);color:var(--texto);font-size:13.5px;line-height:1.4;cursor:pointer}
@@ -2071,7 +2085,23 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
   color:var(--texto);opacity:.72}
 .jur-ic:hover{opacity:1;border-color:var(--borda);background:var(--campo)}
 .jur-ic-perigo:hover{border-color:var(--vermelho,#dc2626)}
-.jur-ementa-btn{margin-top:6px}
+/* O GATILHO DA EMENTA COM BORDA. Sem ela era cinza-escuro sobre
+   cinza-escuro: o texto se lia, o botão não se via. */
+.jur-ementa-btn{margin-top:6px;border:1px solid var(--borda);
+  border-radius:999px;padding:4px 12px;font-size:10.5px;
+  background:transparent;color:var(--sutil)}
+.jur-ementa-btn:hover{color:var(--texto);background:var(--campo);
+  border-color:var(--sutil)}
+/* O AVISO DOS REPETIDOS */
+.jur-rep{border:1px solid var(--amarelo,#d97706);border-radius:10px;
+  padding:9px 12px;margin:8px 0 10px;background:var(--campo)}
+.jur-rep-tit{font-size:12px;font-weight:700;margin-bottom:2px}
+.jur-rep-li{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  font-size:11.5px;margin-top:7px}
+.jur-rep-li span{flex:1 1 180px}
+/* o rodapé grudado embaixo da caixa */
+.jur-rodape{position:sticky;bottom:0;background:var(--bg);
+  padding-top:8px;margin-top:4px;border-top:1px solid var(--borda);z-index:2}
 /* A PÍLULA DO QUE FOI DETECTADO, colada na caixa de colar. */
 .jur-pilula{font-size:11.5px;line-height:1.45;margin:7px 0 0;
   padding:6px 11px;border-radius:999px;display:inline-block;
@@ -2082,8 +2112,13 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .jur-meta-btn{margin:10px 0 2px;font-size:11px}
 /* A EMENTA INTEIRA, quando aberta: monoespaçada e rolável, porque é
    texto de tribunal com recuos que querem dizer alguma coisa. */
-.jur-ementa{white-space:pre-wrap;font-size:11px;line-height:1.45;
-  max-height:38vh;overflow:auto;margin:6px 0 0;padding:8px 10px;
+/* SEM ROLAGEM DENTRO DA ROLAGEM.
+   A ementa tinha altura máxima e barra própria: rolar dentro de uma
+   caixa que já rola é o gesto mais irritante que existe numa modal, e
+   o dedo nunca acerta qual das duas vai se mover. Ela cresce à vontade
+   e quem rola é a caixa de fora, uma só. */
+.jur-ementa{white-space:pre-wrap;font-size:11.5px;line-height:1.5;
+  overflow:visible;height:auto;margin:6px 0 0;padding:8px 10px;
   border:1px dashed var(--borda);border-radius:8px;background:var(--campo)}
 /* "+ guardar mais um julgado": a única ação azul do modo leitura, com a
    explicação ao lado — é o mesmo par de "criar mais questões". */
@@ -3805,9 +3840,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        não há o que ler e a única coisa a fazer é incluir.
        É a mesma lógica do "responder / criar mais" das questões. -->
   <div id="jurLerAcoes" class="jur-ler-acoes" hidden>
+    <!-- O SUBTEXTO SAIU: "+ guardar mais um julgado" já diz o que faz,
+         e a frase explicando que ele abre o formulário custava uma
+         linha inteira em cima da lista, que é o conteúdo da tela. -->
     <button class="btn btn-azul" id="btnJurMais" data-i18n="jur_mais"></button>
-    <span class="nota" data-i18n="jur_mais_exp"></span>
+    <button class="btn-min" id="btnJurPrompt" data-i18n="jur_prompt_btn"
+      hidden title="Para quando os números são diferentes ou não existem, e só lendo dá para saber se as duas teses dizem o mesmo."></button>
   </div>
+
+  <!-- OS REPETIDOS. Só aparece quando há: um aviso permanente sobre
+       algo que quase nunca acontece vira ruído de fundo. -->
+  <div id="jurRepetidos" class="jur-rep" hidden></div>
 
   <div id="jurForm">
   <!-- COLAR COM FORMATAÇÃO: o bloco cru do sítio do tribunal entra
@@ -3864,7 +3907,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="jurConta"></p>
   <div id="jurLista" class="jur-lista"></div>
 
-  <div class="dlg-rodape">
+  <!-- RODAPÉ GRUDADO, e não solto no fim do fluxo.
+       Com quinze julgados na lista, o "Fechar" ficava a três telas de
+       rolagem — e o ✖ do topo, a três telas para cima. Grudado embaixo,
+       a saída está sempre a um toque, e o espaço de rolagem fica
+       inteiro para a lista. -->
+  <div class="dlg-rodape jur-rodape">
     <button class="btn btn-cinza" id="btnJurFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
@@ -4291,6 +4339,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <textarea id="txtLivreCampo2" rows="3" style="width:100%;box-sizing:border-box"></textarea>
   </div>
   <div class="dlg-rodape">
+    <!-- COPIAR A QUESTÃO SEM SAIR DAQUI.
+         Escrever a dica com suas palavras costuma passar por perguntar
+         a alguma IA — e para perguntar é preciso o enunciado. Sem este
+         botão o caminho era fechar a caixa (perdendo o que já estava
+         escrito), copiar lá fora e reabrir. Ele só aparece quando quem
+         chamou a caixa tem uma questão para oferecer. -->
+    <button class="btn-min" id="btnTxtLivreExtra" hidden></button>
     <button class="btn-min" id="btnTxtLivreColar" data-i18n="dic_colar_form"
       title="Cola o que você copiou mantendo o negrito, o itálico e as listas. O que vem de uma página traz a formatação junto; colar como texto puro chega achatado, com os ** à mostra."></button>
     <button class="btn btn-verde" id="btnTxtLivreOk" data-i18n="txt_livre_ok"
@@ -4382,7 +4437,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <dialog id="dlgQsResponder" class="ui-modal diag-modal">
-  <h3 data-i18n="qs_sess_titulo"></h3>
+  <div class="vka-cab">
+    <h3 data-i18n="qs_sess_titulo"></h3>
+    <!-- O TAMANHO DA CAIXA E DA LETRA, no cabeçalho.
+         Enunciado de prova é texto longo e cheio de vírgula, lido com
+         atenção; a caixa padrão foi dimensionada para caber em telefone
+         e num monitor sobra tela vazia dos dois lados enquanto o texto
+         se espreme. Três tamanhos, um toque para trocar, guardado entre
+         as sessões — quem precisa de letra maior precisa dela SEMPRE,
+         não uma vez. -->
+    <button type="button" class="btn-min qs-tam" id="btnQsTamanho"></button>
+  </div>
   <p class="nota" id="qsSessPlacar"></p>
   <!-- CORPO E RASCUNHO NO MESMO ENVOLTÓRIO.
        Em tela larga o CSS os põe lado a lado; em tela estreita eles
