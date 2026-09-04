@@ -1440,7 +1440,10 @@ dialog.mat-amplo{max-height:96vh}
    um intervalo que o continha, e o painel ficou sem formatação sem ninguém
    notar — classe usada no HTML sem regra correspondente não dá erro em
    lugar nenhum. O teste F4 passou a exigir que ela exista. */
-.diag-modal{max-width:860px}
+/* MESMO CASO, e este vale para TODOS os diálogos de diagnóstico do app
+   — jurisprudência, vínculos, questões. Enquanto era ".diag-modal", os
+   860 px nunca valeram e todos eles vinham espremidos em 440. */
+dialog.diag-modal{max-width:860px}
 .diag-alvo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 4px;
   padding:8px 11px;border-radius:9px;font-size:12px;
   background:var(--campo);border:1px solid var(--borda)}
@@ -1817,7 +1820,23 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
    prova contra fatia do tempo, uma linha por disciplina) e comparar em
    coluna estreita obriga a rolar entre os dois numeros que precisam ser
    vistos juntos. */
-.plog-modal{max-width:min(1080px,96vw);width:min(1080px,96vw)}
+/* "dialog.plog-modal", E NÃO ".plog-modal".
+ *
+ * Regra geral do app: "dialog.ui-modal{max-width:440px;width:calc(100%
+ * - 36px)}". Ela é ELEMENTO + CLASSE, e por isso vence qualquer regra
+ * de classe sozinha, esteja onde estiver no arquivo — especificidade
+ * não se resolve por ordem.
+ *
+ * Enquanto isto era ".plog-modal", os 1080 px NUNCA valeram: o painel
+ * sempre coube em 440. E ".plog-cheia{width:100vw}", pela mesma razão,
+ * também nunca valeu — era por isso que a tela cheia parecia só
+ * esticar para baixo. Passei duas versões procurando no lugar errado
+ * (consulta de contêiner, tamanho inline do "resize") porque testei o
+ * pedaço que mexi em vez da cascata inteira.
+ *
+ * "dialog.mat-amplo" logo acima já usava este prefixo: alguém tropeçou
+ * nisto antes e resolveu assim. */
+dialog.plog-modal{max-width:min(1080px,96vw);width:min(1080px,96vw)}
 .plog-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .plog-cab h3{margin:0 0 2px}
 .plog-cab-btns{display:flex;gap:6px;flex-shrink:0}
@@ -1830,7 +1849,12 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
    O diálogo vira uma coluna: cabeçalho e abas com altura própria, e o
    corpo tomando o resto. Sem o flex, "max-height:66vh" continuaria
    valendo e sobraria uma faixa preta embaixo da tabela. */
-.plog-cheia{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;
+/* "[open]" NÃO É ENFEITE: esta regra dá "display:flex" ao diálogo, e o
+   navegador esconde <dialog> fechado com um "display:none" da folha do
+   próprio navegador — que qualquer regra de autor derruba. Sem o
+   [open], o painel ficaria na tela para sempre. É o invariante E7, e
+   ele pegou isto aqui. */
+dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;
   border-radius:0;padding:10px 8px;display:flex;flex-direction:column;
   resize:none}
 /* CADA PIXEL DE LARGURA VAI PARA A TABELA.
