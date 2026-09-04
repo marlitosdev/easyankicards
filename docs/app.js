@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "14.9.0";
+const VERSAO = "15.1.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -5015,3 +5015,86 @@ $("btnFocoProximo").onclick = () => {
 window.addEventListener("resize", () => {
   if ($("focoCartao").style.display !== "none") posicionarFoco();
 });
+
+/* =====================================================================
+ * O BALÃO DE AJUDA — três linhas não valem um modal
+ *
+ * O texto atrás do (?) tem duas ou três frases. Num <dialog> modal ele
+ * escurece a tela inteira, rouba o foco, e exige um "OK" do tamanho de
+ * um botão de ação para devolver a navegação — três gestos para ler uma
+ * frase, e a página por baixo esquecida. Pior: interrompe exatamente
+ * quem estava no meio de uma decisão e parou para conferir uma dúvida
+ * pequena.
+ *
+ * O balão nasce colado no ícone, some ao clicar em qualquer outro
+ * lugar, no Esc, ou ao tocar no (?) de novo. Não bloqueia nada: o que
+ * está atrás dele continua legível, que é o ponto de uma dica.
+ *
+ * ELE É POSICIONADO EM PIXEL, e não com CSS relativo, porque os (?)
+ * moram dentro de <dialog> e de barras roláveis, onde "position:
+ * absolute" acaba ancorado no contêiner errado.
+ * ===================================================================== */
+let dicaBalao = null;
+
+function dicaFechar() {
+  if (dicaBalao && dicaBalao.parentNode) dicaBalao.parentNode.removeChild(dicaBalao);
+  dicaBalao = null;
+}
+
+function dicaAberta() { return !!dicaBalao; }
+
+function dicaMostrar(alvo, texto) {
+  /* TOCAR NO MESMO (?) FECHA. Sem isto o único jeito de sair seria
+   * clicar fora, e o ícone viraria um botão que só liga. */
+  const mesmo = dicaBalao && dicaBalao.__alvo === alvo;
+  dicaFechar();
+  if (mesmo || !alvo) return null;
+
+  const b = document.createElement("div");
+  b.className = "dica-balao";
+  b.setAttribute("role", "tooltip");
+  b.__alvo = alvo;
+  const p = document.createElement("div");
+  p.className = "dica-txt";
+  p.textContent = String(texto || "");
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "dica-x";
+  x.textContent = "✖";
+  x.title = (typeof t === "function") ? t("help_close") : "fechar";
+  x.setAttribute("aria-label", x.title);
+  x.onclick = dicaFechar;
+  b.append(x, p);
+  document.body.append(b);
+
+  /* CABER NA TELA. O balão tem largura fixa; encostado na direita ele
+   * sairia da janela num telefone, então recua até caber. */
+  const r = (alvo.getBoundingClientRect && alvo.getBoundingClientRect()) || null;
+  const larg = 300;
+  const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
+  if (r) {
+    const esq = Math.max(8, Math.min(r.left, jan - larg - 8));
+    b.style.left = esq + "px";
+    b.style.top = (r.bottom + 6) + "px";
+  }
+  dicaBalao = b;
+  return b;
+}
+
+/* Liga um (?) ao seu texto. Um lugar só, para os três (ou trinta) que
+ * existirem: dica escrita em cada botão é dica que diverge. */
+function dicaLigar(idBotao, chave) {
+  const b = $(idBotao);
+  if (!b) return;
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    dicaMostrar(b, (typeof t === "function") ? t(chave) : chave);
+  };
+}
+
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("click", () => { if (dicaBalao) dicaFechar(); });
+  document.addEventListener("keydown", (e) => {
+    if (e && e.key === "Escape" && dicaBalao) dicaFechar();
+  });
+}

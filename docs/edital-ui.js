@@ -601,6 +601,10 @@ function edLinhaTopico(i, semDisciplina) {
   jur.className = "ed-jur" + (nJur ? " tem" : "");
   jur.textContent = "§";
   jur.title = t(nJur ? "ed_jur_ver" : "ed_jur_novo", { n: nJur, tp: i.nome });
+  /* SEM DIZER EM QUE MODO ABRIR: quem decide é o jurAbrir, pela
+   * contagem. Repetir aqui "se tem, ler; se não, incluir" criaria a
+   * mesma regra em dois lugares — e regra escrita duas vezes é regra
+   * que um dia diverge. */
   jur.onclick = (ev) => {
     ev.stopPropagation();
     if (typeof jurAbrir === "function") jurAbrir(i.disciplina, i.nome);
@@ -4144,6 +4148,7 @@ async function vkAceitarIdenticos() {
     Object.assign({}, c, { conf: "ALTA" })), para);
   reg("VINCULO", "identicos aceitos sem IA",
       res.novos + " novos, " + res.repetidos + " ja existiam");
+  vkPintarBotoes();
   vkPintarLados();
   edRender();
   if (typeof hubPintarAgenda === "function") hubPintarAgenda();
@@ -4369,6 +4374,7 @@ async function vkAplicarColagem() {
                           { n: usar.length })))) return;
   const para = ($("vkParaEdital") || {}).value || "";
   const res = vkAplicar(usar, para, vkModo);
+  vkPintarBotoes();
   reg("VINCULO", "aplicados da IA (" + vkModo + ")",
       res.novos + " novos, " + res.repetidos + " já existiam");
   if (typeof vzLogGravar === "function") {
@@ -4641,6 +4647,7 @@ async function vkRevApagar() {
   if (!(await uiConfirm(t("vk_rev_conf", { n: marcados.length })))) return;
   const antes = vkCarregar().length;
   const n = vkApagarPares(marcados);
+  vkPintarBotoes();
   reg("VINCULO", "vinculos apagados na revisao", n + " de " + marcados.length);
   /* QUAIS ERAM. Apagar quinhentos vínculos sem registro de quais eram
    * torna impossível responder, depois, "por que sumiu o selo daquele
@@ -5020,12 +5027,29 @@ function vkAbrirPar(idA, idB) {
       vkNomeDoEdital(idA) + " x " + vkNomeDoEdital(idB));
 }
 
+/* O BOTÃO DA REVISÃO CARREGA A CONTAGEM, E SOME NO ZERO.
+ *
+ * "Revisar vínculos" ao lado de "Comparar dois editais" parecia um
+ * segundo jeito de fazer a mesma coisa — dois botões, dois verbos
+ * vagos, nenhum número. Com "Revisar os 523 vínculos" fica claro que um
+ * cria e o outro mexe no que já existe; e num app recém-instalado, onde
+ * não há vínculo nenhum, o botão simplesmente não aparece, em vez de
+ * abrir uma tela vazia. */
+function vkPintarBotoes() {
+  const b = $("btnHubRevisar");
+  if (!b) return;
+  const n = (typeof vinculos !== "undefined" && vinculos) ? vinculos.length : 0;
+  b.hidden = !n;
+  b.textContent = n === 1 ? t("vk_rev_btn_um") : t("vk_rev_btn", { n });
+}
+
 function vkIniciarTela() {
   vkCarregar();
   if ($("btnHubVincular")) $("btnHubVincular").onclick = vkAbrir;
   if ($("btnHubRevisar")) $("btnHubRevisar").onclick = vkRevAbrir;
+  vkPintarBotoes();
   if ($("btnVkAjuda")) {
-    $("btnVkAjuda").onclick = () => uiAlert(t("vk_botao_exp"));
+    dicaLigar("btnVkAjuda", "vk_botao_exp");
   }
   if ($("btnVkRevFechar")) {
     $("btnVkRevFechar").onclick = () => $("dlgVkRevisar").close();
@@ -5135,6 +5159,9 @@ function vkIniciarTela() {
     abrirModal("dlgVkColar");
   };
   if ($("btnVkFechar")) $("btnVkFechar").onclick = () => $("dlgJaEstudei").close();
+  if ($("btnVkFecharTopo")) {
+    $("btnVkFecharTopo").onclick = () => $("dlgJaEstudei").close();
+  }
   if ($("vkColarTexto")) $("vkColarTexto").addEventListener("input", vkConferirColagem);
   if ($("btnVkColarOk")) $("btnVkColarOk").onclick = vkAplicarColagem;
   if ($("btnVkColarFechar")) $("btnVkColarFechar").onclick = () => $("dlgVkColar").close();
