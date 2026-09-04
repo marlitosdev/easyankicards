@@ -1378,6 +1378,32 @@ dialog.mat-amplo{max-height:96vh}
   display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;
   font-weight:800;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
 .selo-ajuda:hover{color:var(--texto)}
+/* O BALÃO DO (?), em vez de um modal para três linhas de texto. */
+.dica-balao{position:fixed;z-index:9999;width:300px;max-width:calc(100vw - 16px);
+  background:var(--bg);border:1px solid var(--borda);border-radius:11px;
+  box-shadow:0 8px 26px rgba(0,0,0,.28);padding:11px 13px 12px}
+.dica-txt{font-size:11.5px;line-height:1.55;white-space:pre-wrap;
+  color:var(--texto);padding-right:14px}
+.dica-x{position:absolute;top:5px;right:7px;background:none;border:0;
+  cursor:pointer;font-size:11px;color:var(--sutil);padding:2px 4px;line-height:1}
+.dica-x:hover{color:var(--texto)}
+/* O ✖ PADRÃO DO CANTO DOS MODAIS. Texto "Fechar" fica só no rodapé:
+   dois botões escritos igual, um em cada ponta, disputam a mesma
+   leitura e nenhum vira o caminho óbvio de saída. */
+.dlg-x{all:unset;cursor:pointer;font-size:13px;line-height:1;color:var(--sutil);
+  padding:4px 7px;border-radius:8px;flex:0 0 auto}
+.dlg-x:hover{color:var(--texto);background:var(--campo)}
+/* O RESULTADO DA COMPARAÇÃO, que era uma nota cinza igual às
+   explicações em volta e por isso não se achava. */
+.vk-resumo{font-size:12px;line-height:1.5;margin:10px 0;padding:9px 12px;
+  border-radius:10px;background:var(--campo);
+  border:1px solid var(--borda);border-left:3px solid var(--azul,#2563eb)}
+.vk-resumo b{font-size:13px}
+/* "📄 Registro" no topo: utilidade, não saída. */
+.vk-cab-log{all:unset;cursor:pointer;font-size:10.5px;color:var(--sutil);
+  border:1px solid var(--borda);border-radius:999px;padding:3px 10px;
+  flex:0 0 auto}
+.vk-cab-log:hover{color:var(--texto);background:var(--campo)}
 .bk-bloco{padding:9px 11px;border-radius:9px;background:var(--campo);
   border:1px solid var(--borda);margin:0 0 8px}
 .bk-rot{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;
@@ -2022,14 +2048,48 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .jur-lista{margin:6px 0 10px}
 .jur-item{border:1px solid var(--borda);border-radius:10px;
   padding:9px 11px;margin-bottom:8px;background:var(--bg)}
-.jur-cab{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+.jur-cab{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
   font-size:12.5px}
 .jur-data,.jur-orgao{font-size:10.5px;color:var(--sutil)}
-/* A TESE É O CONTEÚDO. Ela é o que se lê na revisão; o resto é
-   etiqueta de procedência. */
-.jur-tese{font-size:12px;line-height:1.5;margin:5px 0 2px}
+/* ETIQUETAS DE PROCEDÊNCIA: a corte em destaque, o processo neutro. */
+.jur-sel{font-size:10.5px;font-weight:700;letter-spacing:.02em;
+  padding:2px 7px;border-radius:999px;line-height:1.5}
+.jur-sel.trib{background:var(--azul,#2563eb);color:#fff}
+.jur-sel.proc{background:var(--campo);color:var(--texto);
+  border:1px solid var(--borda);font-weight:600}
+/* A TESE É O CONTEÚDO — e como citação, para não se confundir com a
+   ementa logo abaixo, que tem a mesma tipografia. */
+.jur-tese{font-size:12.5px;line-height:1.55;margin:7px 0 2px;
+  padding:7px 11px;border-left:3px solid var(--azul,#2563eb);
+  border-radius:0 8px 8px 0;background:var(--campo)}
 .jur-em{font-size:10.5px;color:var(--sutil);font-style:italic;margin-top:4px}
-.jur-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+/* AS AÇÕES NO CANTO: "margin-left:auto" empurra o grupo para a direita
+   da mesma linha do cabeçalho, em vez de gastar uma linha própria. */
+.jur-acoes{display:flex;gap:2px;margin-left:auto}
+.jur-ic{background:none;border:1px solid transparent;border-radius:7px;
+  cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;
+  color:var(--texto);opacity:.72}
+.jur-ic:hover{opacity:1;border-color:var(--borda);background:var(--campo)}
+.jur-ic-perigo:hover{border-color:var(--vermelho,#dc2626)}
+.jur-ementa-btn{margin-top:6px}
+/* A PÍLULA DO QUE FOI DETECTADO, colada na caixa de colar. */
+.jur-pilula{font-size:11.5px;line-height:1.45;margin:7px 0 0;
+  padding:6px 11px;border-radius:999px;display:inline-block;
+  background:var(--campo);border:1px solid var(--borda)}
+.jur-pilula.ok{border-color:var(--verde,#16a34a)}
+.jur-pilula.aviso{border-color:var(--amarelo,#d97706);border-radius:10px;
+  display:block}
+.jur-meta-btn{margin:10px 0 2px;font-size:11px}
+/* A EMENTA INTEIRA, quando aberta: monoespaçada e rolável, porque é
+   texto de tribunal com recuos que querem dizer alguma coisa. */
+.jur-ementa{white-space:pre-wrap;font-size:11px;line-height:1.45;
+  max-height:38vh;overflow:auto;margin:6px 0 0;padding:8px 10px;
+  border:1px dashed var(--borda);border-radius:8px;background:var(--campo)}
+/* "+ guardar mais um julgado": a única ação azul do modo leitura, com a
+   explicação ao lado — é o mesmo par de "criar mais questões". */
+.jur-ler-acoes{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  margin:8px 0 10px}
+.jur-ler-acoes .nota{margin:0;flex:1 1 200px}
 /* o chip na agenda, no mesmo formato dos outros quatro */
 .ed-st-jur{background:var(--roxo-claro,var(--campo));
   color:var(--roxo-txt,var(--texto))}
@@ -3045,8 +3105,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          um deles. -->
     <div class="hub-vinculos">
       <div class="hub-vinc-acoes">
+        <!-- DOIS BOTÕES, E DOIS VERBOS OPOSTOS.
+             "Comparar estes dois", nas linhas do mapa logo abaixo, não é
+             um terceiro comando: é ESTE comando com os dois editais já
+             escolhidos. Um atalho com argumento, não uma função nova.
+             O que precisa continuar separado é a revisão, porque ela faz
+             o contrário — o azul CRIA vínculos, este APAGA, e juntar
+             criar e apagar num controle só é o pior tipo de fusão.
+             O texto do segundo é pintado pelo JS: ele carrega a
+             contagem, e some quando não há vínculo nenhum para revisar. -->
         <button class="btn btn-azul" id="btnHubVincular" data-i18n="vk_botao"></button>
-        <button class="btn-min" id="btnHubRevisar" data-i18n="vk_rev_btn"></button>
+        <button class="btn-min" id="btnHubRevisar" hidden></button>
       </div>
       <!-- O TEXTO LONGO ATRÁS DO (?).
          Ele explica bem e rouba o lugar das duas ações que estão logo
@@ -3595,7 +3664,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <dialog id="dlgJaEstudei" class="ui-modal diag-modal">
-  <h3 data-i18n="vk_titulo"></h3>
+  <!-- O CABEÇALHO CARREGA A UTILIDADE, O RODAPÉ CARREGA A SAÍDA.
+       "Ver o registro" estava colado no "Fechar", disputando a mesma
+       leitura: dois botões lado a lado no fim da tela, um que sai e um
+       que abre outra coisa. Registro é utilidade — sobe para o topo
+       como pílula discreta; embaixo fica só o caminho de saída. -->
+  <div class="vka-cab">
+    <h3 data-i18n="vk_titulo"></h3>
+    <button type="button" class="vk-cab-log" id="btnVkLogAqui"
+      data-i18n="vk_rev_log_curto"></button>
+    <button type="button" class="dlg-x" id="btnVkFecharTopo" title="✖">✖</button>
+  </div>
 
   <!-- DUAS PERGUNTAS DIFERENTES, O MESMO VÍNCULO.
        "O que eu não preciso refazer?" olha para o diário — o que já foi
@@ -3651,7 +3730,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
   </div>
 
-  <p class="nota" id="vkResumo"></p>
+  <div class="vk-resumo" id="vkResumo"></div>
 
   <!-- Os dois passos são os mesmos nos dois modos; só o texto muda, e
        por isso ele é pintado pelo JS em vez de fixo no HTML. -->
@@ -3676,11 +3755,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnVkFechar" data-i18n="help_close"></button>
-    <!-- O REGISTRO ONDE O PROCESSO ACONTECE.
-         Ele morava só dentro de "Revisar vínculos", e quem acabou de
-         rodar a comparação e quer saber por que 250 linhas viraram 213
-         está AQUI, não lá. -->
-    <button class="btn-min" id="btnVkLogAqui" data-i18n="vk_rev_log"></button>
   </div>
 </dialog>
 
@@ -3697,29 +3771,55 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      é o campo grande, e o resto são etiquetas. -->
 <dialog id="dlgJuris" class="ui-modal diag-modal">
   <div class="vka-cab">
-    <h3 data-i18n="jur_titulo"></h3>
-    <button class="btn-min" id="btnJurFecharTopo" data-i18n="help_close"></button>
+    <h3 id="jurTitulo" data-i18n="jur_titulo"></h3>
+    <!-- O TEXTO LONGO ATRÁS DO (?).
+         Três parágrafos de instrução ("o que os tribunais decidiram…",
+         "guarde a TESE…", "cola o bloco como veio…") empurravam a
+         primeira caixa para baixo da dobra. Quem já entendeu não
+         precisa relê-los toda vez; quem não entendeu toca no (?). -->
+    <button type="button" class="selo-ajuda" id="btnJurAjuda" title="?">?</button>
+    <button type="button" class="dlg-x" id="btnJurFecharTopo" title="✖">✖</button>
   </div>
   <p class="nota" id="jurSub"></p>
-  <p class="nota" data-i18n="jur_ajuda"></p>
 
+  <!-- DUAS TELAS NUMA SÓ, e a que abre depende do que existe.
+       Com julgados guardados, o gesto é LER — e um formulário de sete
+       campos no topo empurra a leitura para fora da tela. Sem nenhum,
+       não há o que ler e a única coisa a fazer é incluir.
+       É a mesma lógica do "responder / criar mais" das questões. -->
+  <div id="jurLerAcoes" class="jur-ler-acoes" hidden>
+    <button class="btn btn-azul" id="btnJurMais" data-i18n="jur_mais"></button>
+    <span class="nota" data-i18n="jur_mais_exp"></span>
+  </div>
+
+  <div id="jurForm">
   <!-- COLAR COM FORMATAÇÃO: o bloco cru do sítio do tribunal entra
        aqui e sai nos campos de baixo, com o que foi reconhecido escrito
        na tela antes de qualquer coisa ser salva. -->
   <label class="nd-rot" data-i18n="jur_colar_rot"></label>
   <textarea id="jurColar" rows="5" style="width:100%;box-sizing:border-box"
     placeholder="RE 574706 / PR — PARANÁ&#10;Relator(a): Min. CÁRMEN LÚCIA&#10;Julgamento: 15/03/2017 — Tribunal Pleno&#10;Tese: O ICMS não compõe a base de cálculo para fins de incidência do PIS e da COFINS."></textarea>
+  <!-- A PÍLULA FICA COLADA NA CAIXA, não lá embaixo junto dos campos.
+       O que o app entendeu tem de ser lido no mesmo lugar onde se
+       colou; seis campos preenchidos a meia tela de distância fazem a
+       pessoa confiar num palpite sem ver que houve palpite. -->
+  <div id="jurColarAviso" class="jur-pilula" hidden></div>
   <div class="jur-colar-lin">
     <button class="btn btn-azul" id="btnJurColar" data-i18n="jur_colar_btn"></button>
-    <span class="nota" data-i18n="jur_colar_exp"></span>
   </div>
-  <div id="jurColarAviso" class="ed-mud" hidden></div>
 
   <label class="nd-rot" data-i18n="jur_tese_rot"></label>
   <textarea id="jurTese" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="A frase que você quer reconhecer na prova."></textarea>
 
-  <div class="jur-campos">
+  <!-- OS SEIS CAMPOS SÃO CONFERÊNCIA, NÃO DIGITAÇÃO.
+       Quando "ler e preencher" funciona — que é quase sempre — eles já
+       vêm certos e ninguém os toca; abertos, ocupam metade da tela e
+       afastam a tese, que é a única coisa que se escreve à mão. Ficam
+       aqui atrás, e a pílula acima diz o que há dentro. -->
+  <button type="button" class="btn-min jur-meta-btn" id="btnJurMeta"
+    data-i18n="jur_meta_ver"></button>
+  <div class="jur-campos" id="jurMetaCampos" hidden>
     <label class="vk-lado"><span data-i18n="jur_c_tribunal"></span>
       <input type="text" id="jurTribunal" placeholder="STF"></label>
     <label class="vk-lado"><span data-i18n="jur_c_classe"></span>
@@ -3737,7 +3837,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="jur-salvar-lin">
     <button class="btn btn-verde" id="btnJurSalvar"></button>
     <button class="btn-min" id="btnJurLimpar" data-i18n="jur_limpar"></button>
+    <!-- só aparece quando há o que ler: sem julgado nenhum, "voltar para
+         a leitura" levaria a uma tela vazia -->
+    <button class="btn-min" id="btnJurVoltarLer" data-i18n="jur_voltar_ler"
+      hidden></button>
   </div>
+  </div><!-- /jurForm -->
 
   <p class="nota" id="jurConta"></p>
   <div id="jurLista" class="jur-lista"></div>
@@ -3750,7 +3855,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgVkRevisar" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="vk_rev_tit"></h3>
-    <button class="btn-min" id="btnVkRevFecharTopo" data-i18n="help_close"></button>
+    <button type="button" class="dlg-x" id="btnVkRevFecharTopo" title="✖">✖</button>
   </div>
   <p class="nota" data-i18n="vk_rev_ajuda"></p>
   <div class="vka-aviso" id="vkRevResumo"></div>
@@ -3821,7 +3926,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        celular, três telas de rolagem para desfazer um toque. -->
   <div class="vka-cab">
     <h3 data-i18n="vka_titulo"></h3>
-    <button class="btn-min" id="btnVkaFecharTopo" data-i18n="help_close"></button>
+    <button type="button" class="dlg-x" id="btnVkaFecharTopo" title="✖">✖</button>
   </div>
   <p class="nota" id="vkaSub"></p>
   <div class="vka-aviso" data-i18n="vka_aviso"></div>

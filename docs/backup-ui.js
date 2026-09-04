@@ -217,6 +217,6 @@ function bkIniciar() {
   $("bkArquivo").onchange = (e) => bkLerArquivo(e.target.files && e.target.files[0]);
   $("btnBkConfAplicar").onclick = bkConfirmarRestauro;
   $("btnBkConfCancelar").onclick = () => { bkPendente = null; $("dlgBkConf").close(); };
-  $("btnSeloAjuda").onclick = () => uiAlert(t("bk_selo_ajuda"));
+  dicaLigar("btnSeloAjuda", "bk_selo_ajuda");
   atualizarSeloBase();
 }
