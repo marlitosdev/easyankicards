@@ -970,10 +970,51 @@ function plTelaEstreita() {
   return l < PL_TELA_ESTREITA;
 }
 
+/* O TAMANHO QUE O DEDO DEIXOU GRAVADO.
+ *
+ * O diálogo tem "resize: both": arrastar o canto é um gesto legítimo, e
+ * o navegador guarda o resultado como estilo INLINE no elemento —
+ * style="width: 550px; height: 700px".
+ *
+ * Estilo inline vence qualquer regra de classe, inclusive
+ * ".plog-cheia{width:100vw}". Foi por isso que a tela cheia parecia só
+ * esticar para baixo: a altura vinha de "height:100dvh" numa janela
+ * onde o inline de altura já tinha sido substituído pela rolagem, mas a
+ * LARGURA continuava presa nos 550 px de um arrasto feito semanas
+ * antes. Nenhum ajuste de CSS resolve isso, porque o problema não está
+ * no CSS.
+ *
+ * Entrar em tela cheia guarda esse tamanho e o apaga; sair devolve
+ * exatamente o que estava lá. O arrasto da pessoa não se perde. */
+let plTamanhoGuardado = null;
+
+function plSoltarTamanho(dlg) {
+  if (!dlg || !dlg.style) return;
+  /* GUARDA UMA VEZ SÓ. plTelaAplicar roda a cada repintura, e na segunda
+   * o que ele leria já seria o vazio que ele mesmo escreveu — o
+   * tamanho original iria embora e "sair da tela cheia" devolveria uma
+   * caixa sem largura nenhuma. */
+  if (plTamanhoGuardado) return;
+  plTamanhoGuardado = { w: dlg.style.width || "", h: dlg.style.height || "" };
+  dlg.style.width = "";
+  dlg.style.height = "";
+}
+
+function plDevolverTamanho(dlg) {
+  if (!dlg || !dlg.style || !plTamanhoGuardado) return;
+  dlg.style.width = plTamanhoGuardado.w;
+  dlg.style.height = plTamanhoGuardado.h;
+  plTamanhoGuardado = null;
+}
+
 function plTelaAplicar() {
   const dlg = document.getElementById("dlgPlanoLog");
   const bt = document.getElementById("btnPlogTela");
   if (dlg && dlg.classList) dlg.classList.toggle("plog-cheia", plTelaCheia);
+  if (dlg) {
+    if (plTelaCheia) plSoltarTamanho(dlg);
+    else plDevolverTamanho(dlg);
+  }
   if (bt) {
     bt.textContent = t(plTelaCheia ? "plog_tela_sair" : "plog_tela_cheia");
     bt.title = t(plTelaCheia ? "plog_tela_sair_aj" : "plog_tela_cheia_aj");
