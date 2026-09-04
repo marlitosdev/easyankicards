@@ -2131,6 +2131,23 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .vk-rev-li .vk-par-score{margin-left:auto;align-self:flex-start}
 .vk-rev-li:first-of-type{border-top:0}
 .vk-rev-mudo{color:var(--sutil)}
+/* AS ABAS DA REVISÃO. A de "sem histórico" ganha um traço de alerta
+   quando tem gente dentro: é a aba para onde se vai fazer faxina. */
+.vk-rev-abas{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0 4px}
+.vk-rev-aba{all:unset;cursor:pointer;font-size:10.5px;padding:5px 11px;
+  border-radius:999px;border:1px solid var(--borda);color:var(--sutil);
+  white-space:nowrap}
+.vk-rev-aba:hover{color:var(--texto);background:var(--campo)}
+.vk-rev-aba.sel{background:var(--azul,#2563eb);color:#fff;
+  border-color:var(--azul,#2563eb);font-weight:700}
+.vk-rev-aba.alerta:not(.sel){border-color:var(--amarelo,#d97706)}
+/* O PAR EM DUAS LINHAS: o lado A, o lado B abaixo com a seta na
+   margem, e a justificativa menor e cinza embaixo dos dois. */
+.vk-rev-tx{flex:1 1 auto;min-width:0}
+.vk-rev-lado{font-size:11.5px;line-height:1.45;word-break:break-word}
+.vk-rev-lado.b{color:var(--sutil)}
+.vk-rev-por{font-size:10px;line-height:1.4;color:var(--sutil);
+  opacity:.85;margin-top:2px}
 .vk-rev-selo{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;
   background:var(--campo);border:1px solid var(--borda);color:var(--sutil);
   flex-shrink:0}
@@ -3859,17 +3876,28 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <p class="nota" data-i18n="vk_rev_ajuda"></p>
   <div class="vka-aviso" id="vkRevResumo"></div>
+
+  <!-- AS ABAS, com a contagem em cada uma.
+       Quinhentos vínculos numa rolagem só obrigam a passar por cima dos
+       que estão certos para chegar nos que não estão. Com as abas, a
+       faxina dos 246 sem histórico é: tocar na aba, "marcar os 246",
+       arquivar. -->
+  <div class="vk-rev-abas" id="vkRevAbas"></div>
+  <p class="nota" id="vkRevAbaAjuda" hidden></p>
   <!-- HIERARQUIA: UMA ação em cor sólida, o resto em contorno, e as
        utilidades atrás do ⋮. Cinco botões lado a lado em três estilos
        diferentes não dizem qual é o gesto principal — e aqui ele é um
        só: medir para poder decidir. -->
   <div class="vk-rev-acoes">
     <button class="btn btn-ciano" id="btnVkRevMedir" data-i18n="vk_rev_medir"></button>
-    <button class="btn-min" id="btnVkRevMudos" data-i18n="vk_rev_so_mudos"></button>
+    <!-- "Marcar os desta aba" substituiu "Marcar os que não levam a
+         nada": a aba já escolheu QUAIS, e o botão só marca o que está
+         na tela. Um botão que marca coisas que você não está vendo é um
+         botão que você aperta sem saber sobre o que decidiu. -->
+    <button class="btn-min" id="btnVkRevMudos"></button>
     <span class="vk-rev-mais">
       <button class="btn-min" id="btnVkRevMenu" title="Mais ações">⋮</button>
       <span class="vk-rev-menu" id="vkRevMenu" hidden>
-        <button class="btn-min" id="btnVkRevTodos" data-i18n="vk_rev_todos"></button>
         <button class="btn-min" id="btnVkRevCopiar" data-i18n="vk_rev_copiar"></button>
         <button class="btn-min" id="btnVkRevLog" data-i18n="vk_rev_log"></button>
       </span>
@@ -3888,14 +3916,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span id="vkRevBarraConta"></span>
     <span class="vk-rev-barra-btns">
       <button class="btn-min" id="btnVkRevDesmarcar" data-i18n="vk_rev_desmarcar"></button>
+      <!-- ARQUIVAR VEM ANTES DE APAGAR, e em tom neutro contra o
+           vermelho: das duas saídas, a reversível é a que deve estar
+           debaixo do dedo. -->
+      <button class="btn-min" id="btnVkRevBarraArquivar"></button>
+      <button class="btn-min" id="btnVkRevBarraReativar" hidden></button>
       <button class="btn-min btn-min-perigo" id="btnVkRevBarraApagar"></button>
     </span>
   </div>
 
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnVkRevFechar" data-i18n="help_close"></button>
+    <button class="btn-min" id="btnVkRevArquivar"></button>
     <button class="btn-min btn-min-perigo" id="btnVkRevApagar"></button>
-    <span class="nota vk-rodape-exp" data-i18n="vk_rev_apagar_exp"></span>
+    <span class="nota vk-rodape-exp" data-i18n="vk_rev_arquivar_exp"></span>
   </div>
 </dialog>
 

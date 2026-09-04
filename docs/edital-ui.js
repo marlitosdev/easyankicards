@@ -4402,7 +4402,11 @@ async function vkAplicarColagem() {
  * apagar, e por isso apagar continua sendo gesto seu.
  * ===================================================================== */
 let vkRevDados = null;
-let vkRevSoMudos = false;
+/* QUAL ABA ESTA ABERTA: "todos" | "falam" | "mudos" | "arq".
+ * Era um booleano ("so os mudos, sim ou nao"), e com ele nao havia como
+ * chegar a "so os que tem historico" nem a "so os arquivados" — dois
+ * estados que a lista precisa ter. */
+let vkRevAba = "todos";
 let vkRevMarcados = {};
 /* a proximidade medida de cada vínculo, quando houve medição */
 let vkRevScores = {};
@@ -4525,7 +4529,7 @@ function vkRevFontes() {
 function vkRevAbrir() {
   vkRevDados = vkRevisao(vkRevFontes());
   vkRevMarcados = {};
-  vkRevSoMudos = false;
+  vkRevAba = "todos";
   vkRevPintar();
   abrirModal("dlgVkRevisar");
   reg("VINCULO", "revisao de vinculos aberta",
@@ -4534,31 +4538,95 @@ function vkRevAbrir() {
 
 function vkRevChaveDe(x) { return x.a + "|" + x.b; }
 
+/* O QUE CADA ABA MOSTRA. Um lugar so: a contagem escrita na aba e a
+ * lista que ela pinta tem de sair da mesma regra, ou a aba diz 246 e a
+ * tela mostra outro numero. */
+function vkRevDaAba(itens, aba) {
+  if (aba === "mudos") return (itens || []).filter((x) => x.mudo);
+  if (aba === "falam") return (itens || []).filter((x) => !x.mudo);
+  return itens || [];
+}
+
+function vkRevVisiveis() {
+  if (!vkRevDados) return [];
+  if (vkRevAba === "arq") return vkRevDados.arquivados || [];
+  const fora = [];
+  vkRevDados.grupos.forEach((g) => {
+    vkRevDaAba(g.itens, vkRevAba).forEach((x) => fora.push(x));
+  });
+  return fora;
+}
+
+function vkRevAbaTrocar(aba) {
+  vkRevAba = aba;
+  vkRevPintar();
+}
+
+function vkRevPintarAbas() {
+  const box = $("vkRevAbas");
+  if (!box || !vkRevDados) return;
+  box.innerHTML = "";
+  const d = vkRevDados;
+  const abas = [
+    ["todos", "vk_rev_aba_todos", d.total],
+    ["falam", "vk_rev_aba_falam", d.falantes],
+    ["mudos", "vk_rev_aba_mudos", d.mudos],
+    ["arq", "vk_rev_aba_arq", (d.arquivados || []).length],
+  ];
+  abas.forEach(([id, chave, n]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "vk-rev-aba" + (vkRevAba === id ? " sel" : "")
+      + (id === "mudos" && n ? " alerta" : "");
+    b.textContent = t(chave, { n });
+    b.onclick = () => vkRevAbaTrocar(id);
+    box.append(b);
+  });
+  const aj = $("vkRevAbaAjuda");
+  if (aj) {
+    aj.hidden = vkRevAba !== "arq";
+    aj.textContent = t("vk_rev_arq_ajuda");
+  }
+}
+
 function vkRevPintar() {
   const box = $("vkRevLista");
   const res = $("vkRevResumo");
   if (!box || !vkRevDados) return;
   if (res) {
+    /* O RESUMO EM DUAS FRASES, e a segunda so quando ha o que dizer.
+     * "246 deles nao levam a nada" grudado no total virava um paragrafo
+     * marrom que ninguem le ate o fim. */
     res.textContent = t("vk_rev_resumo", {
-      n: vkRevDados.total, m: vkRevDados.mudos,
-      g: vkRevDados.grupos.length });
+      n: vkRevDados.total, g: vkRevDados.grupos.length }) + " "
+      + (vkRevDados.mudos
+          ? t("vk_rev_resumo_mudos", { m: vkRevDados.mudos })
+          : t("vk_rev_resumo_limpo"));
   }
+  vkRevPintarAbas();
   box.innerHTML = "";
   let mostrados = 0;
-  vkRevDados.grupos.forEach((g) => {
-    const itens = vkRevSoMudos ? g.itens.filter((x) => x.mudo) : g.itens;
+  /* A ABA DOS ARQUIVADOS nao tem grupos: e uma lista so, e agrupa-la
+   * por par de editais espalharia cinco itens por quatro cabecalhos. */
+  const grupos = vkRevAba === "arq"
+    ? [{ par: "", itens: vkRevDados.arquivados || [], mudos: 0, arq: true }]
+    : vkRevDados.grupos;
+  grupos.forEach((g) => {
+    const itens = g.arq ? g.itens : vkRevDaAba(g.itens, vkRevAba);
     if (!itens.length) return;
     const cx = document.createElement("div");
     cx.className = "vk-rev-grupo";
-    const par = document.createElement("div");
-    par.className = "vk-rev-par";
-    par.textContent = g.par;
-    cx.append(par);
-    const conta = document.createElement("div");
-    conta.className = "vk-rev-conta";
-    conta.textContent = t("vk_rev_grupo_conta",
-      { n: g.itens.length, m: g.mudos });
-    cx.append(conta);
+    if (g.par) {
+      const par = document.createElement("div");
+      par.className = "vk-rev-par";
+      par.textContent = g.par;
+      cx.append(par);
+      const conta = document.createElement("div");
+      conta.className = "vk-rev-conta";
+      conta.textContent = t("vk_rev_grupo_conta",
+        { n: g.itens.length, m: g.mudos });
+      cx.append(conta);
+    }
 
     itens.forEach((x) => {
       mostrados++;
@@ -4573,9 +4641,29 @@ function vkRevPintar() {
         vkRevBotao();
       };
       li.append(cb);
+      /* DUAS LINHAS, E NAO UMA FRASE COMPRIDA.
+       *
+       * "Direito Administrativo > Improbidade ↔ Nocoes de Direito
+       * Administrativo > Improbidade · Lei 8.429 aplicavel a todos os
+       * entes" corre por quatro linhas de texto continuo, e achar onde
+       * termina o topico A e comeca o B exige procurar a seta no meio
+       * do paragrafo. Empilhados, os dois lados se comparam de relance
+       * — que e o gesto desta tela. */
       const tx = document.createElement("div");
-      tx.textContent = x.nomeA.replace("›", " › ") + "   ↔   "
-        + x.nomeB.replace("›", " › ") + (x.por ? "  ·  " + x.por : "");
+      tx.className = "vk-rev-tx";
+      const la = document.createElement("div");
+      la.className = "vk-rev-lado a";
+      la.textContent = x.nomeA.replace("›", " › ");
+      const lb = document.createElement("div");
+      lb.className = "vk-rev-lado b";
+      lb.textContent = "↔  " + x.nomeB.replace("›", " › ");
+      tx.append(la, lb);
+      if (x.por) {
+        const pq = document.createElement("div");
+        pq.className = "vk-rev-por";
+        pq.textContent = x.por;
+        tx.append(pq);
+      }
       li.append(tx);
       /* A PROXIMIDADE MEDIDA, quando houve medição. Ela é o motivo de a
        * linha estar no topo da lista — não o veredito. Um par de 40%
@@ -4602,7 +4690,8 @@ function vkRevPintar() {
   if (!mostrados) {
     const p = document.createElement("div");
     p.className = "hub-mapa-vazio";
-    p.textContent = t(vkRevSoMudos ? "vk_rev_sem_mudos" : "vk_rev_vazio");
+    p.textContent = t(vkRevAba === "mudos" ? "vk_rev_sem_mudos"
+      : (vkRevAba === "arq" ? "vk_rev_arq_vazio" : "vk_rev_vazio"));
     box.append(p);
   }
   vkRevBotao();
@@ -4628,6 +4717,27 @@ function vkRevBotao() {
   if (conta) conta.textContent = t("vk_rev_barra", { n });
   const bd = $("btnVkRevBarraApagar");
   if (bd) bd.textContent = t("vk_rev_apagar", { n });
+  /* NA ABA DOS ARQUIVADOS a acao util e a inversa. Deixar "arquivar"
+   * ali seria oferecer o que ja foi feito. */
+  const naArq = vkRevAba === "arq";
+  const ba = $("btnVkRevBarraArquivar");
+  if (ba) { ba.hidden = naArq; ba.textContent = t("vk_rev_arquivar", { n }); }
+  const br = $("btnVkRevBarraReativar");
+  if (br) { br.hidden = !naArq; br.textContent = t("vk_rev_reativar", { n }); }
+  const bq = $("btnVkRevArquivar");
+  if (bq) {
+    bq.hidden = naArq;
+    bq.textContent = t("vk_rev_arquivar", { n });
+    bq.disabled = n === 0;
+  }
+  /* "Marcar os N desta aba" carrega o numero da aba aberta: sem ele o
+   * botao nao diz sobre quantos voce esta prestes a decidir. */
+  const bm = $("btnVkRevMudos");
+  if (bm) {
+    const v = vkRevVisiveis().length;
+    bm.textContent = t("vk_rev_marcar_visiveis", { n: v });
+    bm.disabled = v === 0;
+  }
 }
 
 /* Desmarcar tudo — e dizer que desmarcou. */
@@ -4664,6 +4774,37 @@ async function vkRevApagar() {
   edRender();
   if (typeof hubRender === "function") hubRender();
   await uiAlert(t("vk_rev_apagados", { n }));
+}
+
+/* ARQUIVAR OS MARCADOS — a saida reversivel.
+ *
+ * Ela existe porque a irreversivel e cara no caso errado: um vinculo
+ * sem historico hoje pode ser o unico aviso util no dia em que voce
+ * abrir aquele topico. Arquivar tira da frente sem fechar a porta, e
+ * por isso pede confirmacao mais curta que apagar. */
+async function vkRevArquivar(arquivar) {
+  const marcados = Object.keys(vkRevMarcados).map((k) => vkRevMarcados[k]);
+  if (!marcados.length) return;
+  const voltando = arquivar === false;
+  if (!voltando
+      && !(await uiConfirm(t("vk_rev_arquivar_conf", { n: marcados.length })))) {
+    return;
+  }
+  const n = vkArquivar(marcados, !voltando);
+  reg("VINCULO", voltando ? "vinculos reativados" : "vinculos arquivados",
+      n + " de " + marcados.length);
+  if (typeof vzLogGravar === "function") {
+    vzLogGravar(voltando ? "faxina-reativar" : "faxina-arquivar",
+      { marcados: marcados.length, mudados: n },
+      marcados.slice(0, 6).map((x) => x.nomeA + " ↔ " + x.nomeB));
+  }
+  vkRevMarcados = {};
+  vkRevDados = vkRevisao(vkRevFontes());
+  vkRevPintar();
+  vkPintarBotoes();
+  edRender();
+  if (typeof hubRender === "function") hubRender();
+  await uiAlert(t(voltando ? "vk_rev_reativou" : "vk_rev_arquivou", { n }));
 }
 
 /* MEDIR, ORDENAR E PRÉ-MARCAR — a faxina de quinhentos vínculos.
@@ -4727,7 +4868,10 @@ async function vkRevMedir(opc) {
       r.medidos.filter((m) => m.score <= corte)
         .forEach((m) => { vkRevMarcados[vkRevChaveDe(m)] = m; });
     }
-    vkRevSoMudos = false;
+    /* MEDIR MOSTRA TODOS. O corte marca os frouxos, e escondê-los
+     * atrás de uma aba deixaria a marcação invisível — a pessoa
+     * apertaria "medir" e veria a mesma lista de antes. */
+    vkRevAba = "todos";
     vkRevPintar();
     /* DIZER O CORTE QUE FOI USADO. Ele muda de uma base para outra, e um
      * número que se move sem explicação é pior que número nenhum. */
@@ -4791,18 +4935,21 @@ function vkReagir(btn, texto) {
   }, 1600);
 }
 
-function vkRevMarcarMudos() {
+/* MARCAR O QUE ESTA NA TELA, e nada mais.
+ *
+ * A versao anterior marcava "os que nao levam a nada" varrendo a base
+ * inteira e SO ENTAO trocava o filtro — marcava coisas que a pessoa
+ * ainda nao estava vendo. Com a aba escolhendo quais, marcar so o
+ * visivel e a mesma faxina em dois toques, com a diferenca de que o
+ * conjunto marcado e exatamente o conjunto na tela. */
+function vkRevMarcarVisiveis() {
   if (!vkRevDados) return;
-  vkRevDados.grupos.forEach((g) => {
-    g.itens.filter((x) => x.mudo).forEach((x) => {
-      vkRevMarcados[vkRevChaveDe(x)] = x;
-    });
-  });
-  vkRevSoMudos = true;
+  const v = vkRevVisiveis();
+  v.forEach((x) => { vkRevMarcados[vkRevChaveDe(x)] = x; });
   vkRevPintar();
-  const n = Object.keys(vkRevMarcados).length;
   vkReagir($("btnVkRevMudos"),
-    t(n ? "vk_rev_marcou" : "vk_rev_nada_mudo", { n }));
+    t(v.length ? "vk_rev_marcou" : "vk_rev_nada_mudo",
+      { n: Object.keys(vkRevMarcados).length }));
 }
 
 async function vkRevCopiar() {
@@ -5058,7 +5205,7 @@ function vkIniciarTela() {
     $("btnVkRevFecharTopo").onclick = () => $("dlgVkRevisar").close();
   }
   if ($("btnVkRevApagar")) $("btnVkRevApagar").onclick = vkRevApagar;
-  if ($("btnVkRevMudos")) $("btnVkRevMudos").onclick = vkRevMarcarMudos;
+  if ($("btnVkRevMudos")) $("btnVkRevMudos").onclick = vkRevMarcarVisiveis;
   if ($("btnVkRevMedir")) $("btnVkRevMedir").onclick = vkRevMedir;
   /* o ⋮ abre e fecha; clicar em qualquer coisa dentro dele fecha junto,
    * porque um menu que fica aberto depois da escolha esconde a lista */
@@ -5068,7 +5215,7 @@ function vkIniciarTela() {
       if (m) m.hidden = !m.hidden;
     };
   }
-  ["btnVkRevTodos", "btnVkRevCopiar", "btnVkRevLog"].forEach((id) => {
+  ["btnVkRevCopiar", "btnVkRevLog"].forEach((id) => {
     const b = $(id);
     if (!b) return;
     const antes = b.onclick;
@@ -5087,17 +5234,18 @@ function vkIniciarTela() {
     };
   }
   vkChavePintar();
-  if ($("btnVkRevTodos")) $("btnVkRevTodos").onclick = () => {
-    vkRevSoMudos = false;
-    vkRevPintar();
-    vkReagir($("btnVkRevTodos"),
-      t("vk_rev_mostrando", { n: (vkRevDados || { total: 0 }).total }));
-  };
   if ($("btnVkRevDesmarcar")) {
     $("btnVkRevDesmarcar").onclick = vkRevDesmarcar;
   }
   if ($("btnVkRevBarraApagar")) {
     $("btnVkRevBarraApagar").onclick = vkRevApagar;
+  }
+  if ($("btnVkRevArquivar")) $("btnVkRevArquivar").onclick = () => vkRevArquivar(true);
+  if ($("btnVkRevBarraArquivar")) {
+    $("btnVkRevBarraArquivar").onclick = () => vkRevArquivar(true);
+  }
+  if ($("btnVkRevBarraReativar")) {
+    $("btnVkRevBarraReativar").onclick = () => vkRevArquivar(false);
   }
   if ($("btnVkRevCopiar")) $("btnVkRevCopiar").onclick = vkRevCopiar;
   if ($("btnVkaFecharTopo")) {
