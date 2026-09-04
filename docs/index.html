@@ -1831,9 +1831,23 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
    corpo tomando o resto. Sem o flex, "max-height:66vh" continuaria
    valendo e sobraria uma faixa preta embaixo da tabela. */
 .plog-cheia{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;
-  border-radius:0;padding:12px 14px;display:flex;flex-direction:column;
+  border-radius:0;padding:10px 8px;display:flex;flex-direction:column;
   resize:none}
-.plog-cheia .plog-corpo{max-height:none;flex:1 1 auto;min-height:0}
+/* CADA PIXEL DE LARGURA VAI PARA A TABELA.
+   Em tela cheia o recuo lateral do modal é gasto puro: são nove
+   colunas disputando a linha, e 14 px de cada lado custam meia coluna.
+   O corpo estende até a borda; só o texto do cabeçalho mantém a
+   margem, porque título encostado na borda não se lê. */
+.plog-cheia .plog-corpo{max-height:none;flex:1 1 auto;min-height:0;
+  margin-left:-8px;margin-right:-8px;padding:0 8px}
+/* O CABEÇALHO E AS ABAS NÃO PODEM SER ESPREMIDOS.
+   Num contêiner flex, todo filho encolhe por padrão — e foi assim que
+   a faixa de abas apareceu cortada pela metade em tela cheia, com a
+   barra de rolagem por cima dos rótulos. */
+.plog-cheia .plog-cab,
+.plog-cheia .plog-abas,
+.plog-cheia > p{flex:0 0 auto}
+.plog-cheia .plog-abas{min-height:38px}
 /* em tela cheia os cartões do topo são contexto, não o assunto */
 .plog-cheia .plog-tira{padding:6px 10px;min-width:78px}
 .plog-cheia .plog-tira b{font-size:15px}
@@ -1893,7 +1907,25 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
    2. a coluna do tópico fica FIXA. Rolando para o lado sem ela, três
       colunas adiante ninguém sabe mais de qual assunto é a linha, e a
       tabela vira uma grade de números soltos. */
-@media (max-width:760px){
+/* A CAIXA, E NÃO A JANELA.
+ *
+ * Estas regras nasceram em "@media (max-width:760px)" — largura da
+ * JANELA. Só que o que fica apertado é o MODAL: fora da tela cheia ele
+ * tem no máximo 1080 px, e numa janela de 1400 a consulta diz "tela
+ * larga", as nove colunas ficam todas na tela e a tabela transborda
+ * numa barra de rolagem horizontal. Era o defeito relatado: a tela
+ * cheia crescia e a tabela continuava rolando para o lado.
+ *
+ * "@container" pergunta pela largura do elemento que de fato contém a
+ * tabela. O bloco "@media" abaixo continua, para navegador que não
+ * conheça consulta de contêiner: as duas dizem a mesma coisa, e valer
+ * duas vezes não faz mal. */
+.plog-corpo{container-type:inline-size;container-name:plogcx}
+
+/* 900, E NÃO 760. As nove colunas precisam de uns 875 px para caber sem
+   transbordar; abaixo disso mostrá-las todas não é "caber", é criar a
+   barra de rolagem que este painel existe para não ter. */
+@container plogcx (max-width:900px){
   .plog-tab .plog-so-largo{display:none}
   .plog-top-disc{display:block}
   .plog-tab{font-size:11.5px}
@@ -1901,12 +1933,32 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
   .plog-tab .plog-col-top{position:sticky;left:0;z-index:2;
     min-width:132px;max-width:180px;
     background:var(--panel);box-shadow:1px 0 0 var(--borda)}
-  /* a célula fixa da linha em revisão mantém a cor dela: sem isto, o
-     fundo do painel passa por cima e só metade da linha fica laranja */
   .plog-rev .plog-col-top{background:var(--laranja-claro)}
-  /* o cabeçalho é fixo no topo E na esquerda ao mesmo tempo: o canto
-     precisa vencer os dois, senão a célula do corpo passa por cima */
   .plog-tab th.plog-col-top{z-index:3}
+}
+
+/* O MESMO DESENHO, PARA NAVEGADOR SEM CONSULTA DE CONTÊINER.
+   Fica dentro de "@supports not", e não solto ao lado: duas regras
+   VIVAS dizendo a mesma coisa é como elas divergem — foi assim que a
+   utilidade do vínculo acabou escrita em dois lugares e 502 vínculos
+   sumiram da tela. Aqui, ou vale uma, ou vale a outra. */
+@supports not (container-type:inline-size){
+  @media (max-width:760px){
+    .plog-tab .plog-so-largo{display:none}
+    .plog-top-disc{display:block}
+    .plog-tab{font-size:11.5px}
+    .plog-tab th,.plog-tab td{padding:6px 6px}
+    .plog-tab .plog-col-top{position:sticky;left:0;z-index:2;
+      min-width:132px;max-width:180px;
+      background:var(--panel);box-shadow:1px 0 0 var(--borda)}
+    .plog-rev .plog-col-top{background:var(--laranja-claro)}
+    .plog-tab th.plog-col-top{z-index:3}
+  }
+}
+
+/* ESTAS SÃO DA JANELA MESMO: os cartões do topo encolhem porque o
+   aparelho é pequeno, não porque o modal está apertado. */
+@media (max-width:760px){
   .plog-tira{padding:6px 10px;min-width:74px}
   .plog-tira b{font-size:15px}
   .plog-tira span{font-size:9.5px}
