@@ -924,6 +924,10 @@ function hubAbrirEdital(id) {
   if (!e) return;
   const ta = document.getElementById("editalTexto");
   if (ta) ta.value = e.texto || "";
+  /* A BANCADA PASSA A SER DESTE EDITAL. É este passo — carregar o texto
+   * — que cria o par; marcá-lo aqui é o que permite às gravações
+   * seguintes saberem de quem é o que está na tela. */
+  if (typeof edMarcarDonoDoTexto === "function") edMarcarDonoDoTexto(e.id);
   /* o progresso é POR EDITAL: sem trocar aqui, marcar um tópico no TCU
    * apareceria marcado no TCE-PE */
   if (typeof edProgresso !== "undefined") edProgresso = e.progresso || {};
@@ -954,7 +958,18 @@ function hubGravarAberto() {
   const e = edAberto();
   if (!e) return;
   const ta = document.getElementById("editalTexto");
-  if (ta) e.texto = ta.value;
+  /* A MESMA REGRA DO edSalvar, pela mesma função. Este caminho roda ao
+   * TROCAR de edital — exatamente quando o texto da bancada e o edital
+   * aberto têm mais chance de não combinarem. */
+  const txt = ta ? ta.value : "";
+  if (typeof edPodeGravarNo === "function" && !edPodeGravarNo(e, txt).ok) {
+    try {
+      reg("EDITAL", "gravacao recusada ao trocar de edital",
+          "aberto: " + e.nome);
+    } catch (x) {}
+    return;
+  }
+  if (ta) e.texto = txt;
   try {
     e.progresso = JSON.parse(localStorage.getItem("eac_edital_progresso") || "{}");
   } catch (x) {}

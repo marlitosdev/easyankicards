@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.1.1";
+const VERSAO = "16.3.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4709,6 +4709,16 @@ function montarPainelDiag() {
     const corte = txt.indexOf("\n--- TEXTO");
     if (corte > 0) txt = txt.slice(0, corte) + "\n--- TEXTO (não incluído a pedido) ---";
   }
+  /* MASCARAR ANTES DE QUALQUER COISA.
+   *
+   * Este relatório existe para ser copiado e mandado para alguém — é o
+   * único texto do aplicativo cujo destino é sair daqui. A chave da IA
+   * vive no mesmo armazenamento e pode aparecer num trecho colado, numa
+   * URL de erro ou no diagnóstico de rede. Uma chave vazada vira
+   * cobrança na fatura de quem a gerou, e o custo de mascarar é uma
+   * expressão regular. Mascara na variável, não só na tela: é a
+   * variável que o botão de copiar e o de baixar usam. */
+  if (typeof rtMascarar === "function") txt = rtMascarar(txt);
   diagTexto = txt;
   $("diagPre").innerHTML = pintarDiagnostico(txt);
   diagPintarPeriodos();
@@ -4739,6 +4749,11 @@ async function abrirDiagnostico() {
   if (typeof modoAtual !== "undefined" && modoAtual !== "cartoes")
     $("chkDiagModo").checked = true;
   montarPainelDiag();
+  /* A LINHA DO TEMPO NASCE FECHADA: ela é para quando a pergunta é "o
+   * que aconteceu antes disto?", e mostrá-la sempre empurraria o
+   * diagnóstico — que é o que se copia — para baixo de quatrocentas
+   * linhas. Quem precisa dela toca numa aba. */
+  try { rtIniciarTela(); } catch (e) {}
   reg("DIAGNOSTICO", "painel aberto",
       registro.length + " eventos, foco: " + textoEmFoco().onde);
   abrirModal("dlgDiagnostico");
