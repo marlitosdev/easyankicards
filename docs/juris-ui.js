@@ -12,6 +12,7 @@
 
 let jurTopicoAtual = null;      /* {disciplina, nome, chave} */
 let jurEditando = "";           /* id em edição, "" para novo */
+let jurCategoriaColada = "";    /* categoria vinda da colagem/JSON */
 /* "ler" ou "incluir" — ver jurPintarModo */
 let jurModo = "ler";
 
@@ -67,11 +68,12 @@ function jurTrocarModo(m) {
 }
 
 function jurLimparForm() {
-  ["jurColar", "jurTese", "jurTribunal", "jurClasse", "jurNumero",
+  ["jurColar", "jurTese", "jurResumo", "jurTribunal", "jurClasse", "jurNumero",
    "jurData", "jurOrgao", "jurFonte"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
   jurEditando = "";
+  jurCategoriaColada = "";
   const av = $("jurColarAviso");
   if (av) { av.hidden = true; av.textContent = ""; }
   jurMeta(false);
@@ -118,10 +120,15 @@ function jurColar() {
   põe("jurNumero", a.numero);
   põe("jurData", a.data);
   põe("jurOrgao", a.orgao);
+  if (a.categoria) jurCategoriaColada = a.categoria;
   /* a tese só é sugerida quando o campo está vazio: quem já escreveu a
    * sua não pode perdê-la para um palpite */
   if ($("jurTese") && !$("jurTese").value.trim() && a.tese) {
     $("jurTese").value = a.tese;
+  }
+  /* mesma regra do campo da tese: sugestão só onde não há nada escrito */
+  if ($("jurResumo") && !$("jurResumo").value.trim() && a.resumo) {
+    $("jurResumo").value = a.resumo;
   }
 
   /* A PÍLULA DIZ OS VALORES, NÃO OS NOMES DOS CAMPOS.
@@ -178,7 +185,12 @@ async function jurSalvar() {
     id: jurEditando || undefined,
     tribunal: v("jurTribunal"), classe: v("jurClasse"),
     numero: v("jurNumero"), data: v("jurData"), orgao: v("jurOrgao"),
-    fonte: v("jurFonte"), tese, texto,
+    fonte: v("jurFonte"), tese, texto, resumo: v("jurResumo"),
+    /* a categoria vem da colagem ou é deduzida da classe na hora de
+     * desenhar — guardá-la evita recalcular e permite que um JSON traga
+     * uma classificação que a classe sozinha não diria */
+    categoria: jurCategoriaColada
+      || (typeof jurCategoria === "function" ? jurCategoria(v("jurClasse")) : ""),
     topicos: jurEditando ? undefined : [jurTopicoAtual.chave],
   });
   if (!j) { await uiAlert(t("jur_nao_salvou")); return; }
@@ -212,7 +224,7 @@ function jurEditar(id) {
   põe("jurTribunal", j.tribunal); põe("jurClasse", j.classe);
   põe("jurNumero", j.numero); põe("jurData", j.data);
   põe("jurOrgao", j.orgao); põe("jurFonte", j.fonte);
-  põe("jurTese", j.tese); põe("jurColar", j.texto);
+  põe("jurTese", j.tese); põe("jurResumo", j.resumo); põe("jurColar", j.texto);
   /* editar é incluir com os campos preenchidos: sem trocar de modo, o
    * formulário ficaria escondido e o clique não faria nada visível */
   jurModo = "incluir";
@@ -319,11 +331,35 @@ async function jurUnirPar(idFica, idVai) {
   await uiAlert(t("jur_rep_uniu", { t: jurTitulo(r) }));
 }
 
+/* PEDIR À IA QUE LEIA A EMENTA E PREENCHA.
+ *
+ * O texto que vai na pergunta é o que está na caixa de colar — o mesmo
+ * que a pessoa acabou de colar do tribunal. A resposta volta pela mesma
+ * caixa, e o "ler e preencher" a entende porque ela vem em JSON. Um
+ * caminho só, sem tela nova. */
+async function jurPedirIA() {
+  const bruto = String(($("jurColar") || {}).value || "").trim();
+  if (!bruto) { await uiAlert(t("jur_prompt_ia_vazio")); return; }
+  const txt = jurPromptPreencher(bruto,
+    jurTopicoAtual ? jurTopicoAtual.nome : "");
+  const ok = await edColarCopiarTexto(txt, "", null);
+  reg("JURIS", "prompt de leitura copiado", bruto.length + " caracteres");
+  if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
+}
+
 /* O PROMPT, para quando a aritmética não responde. */
 async function jurCopiarPrompt() {
   if (!jurTopicoAtual) return;
   const lista = jurDoTopico(jurTopicoAtual.chave);
   if (lista.length < 2) { await uiAlert(t("jur_prompt_poucos")); return; }
+  /* QUAIS JULGADOS VÃO ENTRAR, escritos antes de copiar.
+   * "Criar prompt" sem dizer sobre o quê obriga a colar numa IA para
+   * descobrir o que foi perguntado — e o prompt sai com o texto inteiro
+   * das teses, que é o que se manda para fora do aparelho. */
+  if (!(await uiConfirm(t("jur_prompt_escopo", {
+        n: lista.length,
+        l: lista.map((x) => jurTitulo(x) || t("jur_sem_titulo")).join("\n· "),
+      })))) return;
   const txt = jurPromptComparar(lista);
   const ok = await edColarCopiarTexto(txt, "", null);
   reg("JURIS", "prompt de comparacao copiado",
@@ -369,6 +405,17 @@ function jurPintarLista() {
     if (j.tribunal) sel(j.tribunal, "trib");
     const proc = [j.classe, j.numero].filter(Boolean).join(" ");
     if (proc) sel(proc, "proc");
+    /* A CATEGORIA MUDA O JEITO DE ESTUDAR, e por isso vale um selo
+     * próprio: súmula vinculante se decora literal, tema repetitivo se
+     * decora pela tese, acórdão isolado se lê pelo raciocínio.
+     * Deduzida da classe quando ninguém a informou. */
+    const cat = j.categoria || (typeof jurCategoria === "function"
+      ? jurCategoria(j.classe) : "");
+    if (cat) {
+      const c = sel(cat, "cat cat-" + cat.split(" ")[0].toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+      c.title = t("jur_cat_aj");
+    }
     if (j.data) {
       const d = document.createElement("span");
       d.className = "jur-data";
@@ -421,6 +468,17 @@ function jurPintarLista() {
       p.className = "jur-tese";
       jurEscreverTese(p, j.tese);
       li.append(p);
+    }
+
+    /* O RESUMO VEM DEPOIS DA TESE, e menor.
+     * A tese é o que se decora; o resumo é o que se lê quando a tese
+     * sozinha não basta. Invertendo o tamanho, a explicação roubaria a
+     * atenção da frase que cai na prova. */
+    if (j.resumo) {
+      const rs = document.createElement("div");
+      rs.className = "jur-resumo";
+      rs.textContent = j.resumo;
+      li.append(rs);
     }
 
     /* EM QUANTOS TÓPICOS ELE ESTÁ. É o que impede o susto de "tirei
@@ -568,6 +626,7 @@ function jurIniciarTela() {
   liga("btnJurMeta", () => jurMeta(!jurMetaAberta()));
   dicaLigar("btnJurAjuda", "jur_ajuda");
   liga("btnJurPrompt", jurCopiarPrompt);
+  liga("btnJurPromptIA", jurPedirIA);
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
   liga("btnJurFechar", () => $("dlgJuris").close());
   liga("btnJurFecharTopo", () => $("dlgJuris").close());

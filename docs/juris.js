@@ -115,12 +115,120 @@ function jurTem(chave) { return jurDoTopico(chave).length > 0; }
  * preservado: um extrator que "limpa" o que não entendeu apaga
  * justamente o que era diferente, e diferente costuma ser importante.
  * ------------------------------------------------------------------ */
+/* =====================================================================
+ * JSON TAMBÉM SERVE — MAS NÃO É EXIGIDO
+ *
+ * Uma proposta era o "ler e preencher" passar a EXIGIR um JSON limpo.
+ * Isso inverteria o valor do botão: hoje você copia da página do
+ * tribunal e cola; exigindo JSON, seria copiar, pedir a uma IA que
+ * converta, e só então colar — três passos onde havia um, e nenhum
+ * deles possível sem chave de API.
+ *
+ * Mas JSON é ÓTIMO quando já se tem: vem sem ambiguidade, sem ruído de
+ * diário oficial, com a data já normalizada. Então ele é aceito, e não
+ * exigido. O extrator olha o texto: se for um objeto JSON com campos
+ * que ele conhece, lê de lá; senão, faz o que sempre fez.
+ *
+ * OS DOIS NOMES DE CADA CAMPO. "data_julgamento" e "data", "tese_curta"
+ * e "tese": quem gera o JSON é uma IA seguindo um exemplo, e exemplo
+ * nunca é seguido à risca. Aceitar as duas grafias custa uma linha e
+ * evita "não reconheci nada" num JSON quase certo.
+ * ===================================================================== */
+function jurDoJson(bruto) {
+  /* SEM GUARDA DE PRIMEIRO CARACTERE.
+   *
+   * Havia aqui um "só continue se começar com { ou [". A sabotagem
+   * mostrou que ele nunca fazia diferença: uma ementa de tribunal não é
+   * JSON válido, então o JSON.parse abaixo já a recusa, e um número ou
+   * uma string solta reprovam no teste de objeto. Era otimização
+   * disfarçada de proteção — e guarda que não guarda nada engana quem
+   * lê depois. */
+  const txt = String(bruto || "").trim();
+  let o = null;
+  try { o = JSON.parse(txt); } catch (e) { return null; }
+  if (Array.isArray(o)) o = o[0];
+  if (!o || typeof o !== "object") return null;
+  const pega = function () {
+    for (let i = 0; i < arguments.length; i++) {
+      const v = o[arguments[i]];
+      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+  const achado = {
+    tribunal: pega("tribunal", "corte").toUpperCase(),
+    classe: pega("classe", "tipo"),
+    numero: pega("numero", "n\u00famero", "processo"),
+    data: pega("data_julgamento", "data", "julgamento"),
+    relator: pega("relator", "relatora"),
+    orgao: pega("orgao", "\u00f3rgao", "orgao_julgador"),
+    tese: pega("tese_curta", "tese", "ementa"),
+    resumo: pega("resumo", "resumo_curto", "explicacao", "explica\u00e7\u00e3o"),
+    categoria: pega("categoria", "classificacao").toUpperCase(),
+    ano: "", texto: "", tribunalDeduzido: false,
+  };
+  /* DATA SÓ SE FOR DATA: a caixa da tela é <input type="date"> e só
+   * entende aaaa-mm-dd. Um ano solto vai para o campo do ano. */
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(achado.data)) {
+    const br = achado.data.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+    if (br) {
+      achado.data = br[3] + "-" + br[2].padStart(2, "0") + "-"
+        + br[1].padStart(2, "0");
+    } else {
+      const so = achado.data.match(/^((?:19|20)\d{2})$/);
+      achado.ano = so ? so[1] : "";
+      achado.data = "";
+    }
+  }
+  if (!achado.tribunal && achado.classe && JUR_CASA[achado.classe]) {
+    achado.tribunal = JUR_CASA[achado.classe];
+    achado.tribunalDeduzido = true;
+  }
+  if (!achado.categoria) achado.categoria = jurCategoria(achado.classe);
+  /* SEM NADA RECONHECÍVEL não é um julgado: pode ser qualquer outro
+   * objeto colado por engano, e fingir que entendeu seria pior do que
+   * cair no extrator de texto. */
+  if (!achado.classe && !achado.numero && !achado.tese) return null;
+  return achado;
+}
+
+/* =====================================================================
+ * A CATEGORIA — o que muda o jeito de estudar
+ *
+ * Não é enfeite: súmula vinculante se decora literal, tema repetitivo
+ * se decora pela tese, e um acórdão isolado se lê pelo raciocínio. O
+ * selo diz qual dos três está na sua frente antes de você abrir.
+ *
+ * DEDUZIDA DA CLASSE quando ninguém informou: a classe já carrega essa
+ * informação, e pedir para digitá-la de novo é pedir o mesmo dado duas
+ * vezes.
+ * ===================================================================== */
+const JUR_CATEGORIAS = {
+  "S\u00famula Vinculante": "S\u00daMULA VINCULANTE",
+  "S\u00famula": "S\u00daMULA",
+  "Tema": "REPETITIVO",
+  "Repercuss\u00e3o Geral": "REPERCUSS\u00c3O GERAL",
+  "ADI": "CONTROLE CONCENTRADO",
+  "ADC": "CONTROLE CONCENTRADO",
+  "ADPF": "CONTROLE CONCENTRADO",
+  "ADO": "CONTROLE CONCENTRADO",
+};
+
+function jurCategoria(classe) {
+  const c = String(classe || "").trim();
+  return c ? (JUR_CATEGORIAS[c] || "") : "";
+}
+
 function jurIdentificar(txt) {
   const bruto = String(txt || "");
   const achado = { tribunal: "", classe: "", numero: "", data: "",
-                   relator: "", orgao: "", tese: "", ano: "",
+                   relator: "", orgao: "", tese: "", ano: "", categoria: "",
                    tribunalDeduzido: false };
   if (!bruto.trim()) return achado;
+  /* JSON PRIMEIRO, quando for JSON: o resto do extrator trabalha com
+   * texto de página de tribunal e não teria o que fazer com chaves. */
+  const doJson = jurDoJson(bruto);
+  if (doJson) return doJson;
 
   /* TRIBUNAL: sigla isolada, não pedaço de palavra. "STF" dentro de
    * "MANIFESTO" não é tribunal nenhum. */
@@ -211,6 +319,7 @@ function jurIdentificar(txt) {
    * regra que este arquivo tem desde o começo: o extrator não joga fora
    * o que não entendeu. */
   achado.tese = jurSemMarcacao(achado.tese).slice(0, 600);
+  achado.categoria = jurCategoria(achado.classe);
   return achado;
 }
 
@@ -254,6 +363,17 @@ function jurGravar(dados) {
   const r = Object.assign({
     id, tribunal: "", classe: "", numero: "", orgao: "", relator: "",
     data: "", tese: "", texto: "", fonte: "", topicos: [],
+    /* O RESUMO É UM CAMPO À PARTE, e essa separação é o ponto.
+     *
+     * A tese é a proposição jurídica como ela é — a frase que se
+     * reconhece na prova, e que não pode ser parafraseada por ninguém:
+     * uma reescrita que troca "lei complementar" por "lei ordinária",
+     * ou que perde um "não", vira resposta errada memorizada. O resumo
+     * é a explicação, e explicação pode ser reescrita à vontade.
+     *
+     * Por isso a IA preenche o RESUMO, e nunca reescreve a tese em cima
+     * dela. Foi a diferença entre acrescentar e substituir. */
+    resumo: "", categoria: "",
     criado: new Date().toISOString(),
   }, antigo, dados, { id, tocado: new Date().toISOString() });
   r.topicos = (r.topicos || []).filter((x, i, a) => x && a.indexOf(x) === i);
@@ -411,6 +531,33 @@ function jurUnir(idFica, idVai) {
   delete tudo[String(b.id)];
   if (!jurGravarTudo(tudo)) return null;
   return a;
+}
+
+/* =====================================================================
+ * O PROMPT QUE PREENCHE OS CAMPOS
+ *
+ * O extrator de texto acerta o que está escrito com rótulo — classe,
+ * número, data, órgão. O que ele não sabe fazer é ler trinta linhas de
+ * ementa e dizer, em três, o que aquilo decidiu. Isso é leitura, e é
+ * para isso que a IA serve aqui.
+ *
+ * A REGRA QUE ESTE PROMPT CARREGA, e que é o motivo de ele existir na
+ * forma em que está: a IA preenche o RESUMO e NÃO reescreve a tese.
+ * Tese é proposição jurídica — uma paráfrase que troca "lei
+ * complementar" por "lei ordinária", ou que perde um "não", vira
+ * resposta errada memorizada, e memorizada com a confiança de quem
+ * copiou do tribunal. O resumo é explicação, e explicação pode ser
+ * escrita com outras palavras sem custo nenhum.
+ *
+ * A RESPOSTA VEM EM JSON porque o app já sabe lê-lo (jurDoJson), e
+ * porque campo nomeado não se confunde: "tese" no lugar de "resumo" é
+ * um erro que um formato livre esconderia.
+ * ===================================================================== */
+function jurPromptPreencher(texto, tituloTopico) {
+  const t2 = String(texto || "").trim();
+  if (!t2) return "";
+  return t("jur_prompt_preencher", {
+    tp: tituloTopico || "", txt: t2.slice(0, 6000) });
 }
 
 /* =====================================================================

@@ -1001,8 +1001,23 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .gr-az{background:rgba(96,165,250,.36)}
 /* A FAIXA DAS CORES: quatro bolas e o resto atrás do ⋮. */
 .qs-fer{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px}
+/* "all: unset" APAGAVA A COR DAS BOLINHAS.
+ *
+ * As cores vêm de ".gr-am", ".gr-vd"… — regras de uma classe só, como
+ * esta. Escritas ANTES dela no arquivo, perdiam: com a mesma
+ * especificidade, quem vem depois ganha, e "all: unset" zera tudo,
+ * inclusive o fundo. Os quatro botões apareciam como círculos vazios.
+ *
+ * A correção não é reordenar o arquivo — ordem é frágil, e a próxima
+ * regra escrita no lugar errado traz o defeito de volta. É dar a estas
+ * o seletor mais específico: ".qs-cor.gr-am" (0,2,0) vence ".qs-cor"
+ * (0,1,0) esteja onde estiver. */
 .qs-cor{all:unset;cursor:pointer;width:26px;height:26px;border-radius:50%;
   border:2px solid transparent;box-shadow:inset 0 0 0 1px var(--borda)}
+.qs-cor.gr-am{background:rgba(250,204,21,.85)}
+.qs-cor.gr-vd{background:rgba(74,222,128,.8)}
+.qs-cor.gr-rs{background:rgba(244,114,182,.8)}
+.qs-cor.gr-az{background:rgba(96,165,250,.8)}
 .qs-cor.sel{border-color:var(--texto)}
 .qs-fer-limpar{margin-left:4px}
 .qs-fer-mais{position:relative;margin-left:auto}
@@ -2249,6 +2264,14 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
 .jur-sel{font-size:10.5px;font-weight:700;letter-spacing:.02em;
   padding:2px 7px;border-radius:999px;line-height:1.5}
 .jur-sel.trib{background:var(--azul,#2563eb);color:#fff}
+.jur-sel.cat{background:transparent;border:1px solid var(--borda);
+  color:var(--sutil);font-weight:600;font-size:9.5px;cursor:help}
+.jur-sel.cat.cat-sumula{border-color:var(--amarelo,#d97706);
+  color:var(--amarelo,#d97706)}
+.jur-sel.cat.cat-repetitivo,.jur-sel.cat.cat-repercussao{
+  border-color:var(--verde,#16a34a);color:var(--verde,#16a34a)}
+.jur-sel.cat.cat-controle{border-color:var(--vermelho,#dc2626);
+  color:var(--vermelho,#dc2626)}
 .jur-sel.proc{background:var(--campo);color:var(--texto);
   border:1px solid var(--borda);font-weight:600}
 /* A TESE É O CONTEÚDO — e como citação, para não se confundir com a
@@ -2256,6 +2279,8 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
 .jur-tese{font-size:12.5px;line-height:1.55;margin:7px 0 2px;
   padding:7px 11px;border-left:3px solid var(--azul,#2563eb);
   border-radius:0 8px 8px 0;background:var(--campo)}
+.jur-resumo{font-size:11.5px;line-height:1.5;margin:5px 0 0;
+  color:var(--sutil);padding-left:11px;border-left:2px solid var(--borda)}
 .jur-em{font-size:10.5px;color:var(--sutil);font-style:italic;margin-top:4px}
 /* AS AÇÕES NO CANTO: "margin-left:auto" empurra o grupo para a direita
    da mesma linha do cabeçalho, em vez de gastar uma linha própria. */
@@ -4061,11 +4086,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="jurColarAviso" class="jur-pilula" hidden></div>
   <div class="jur-colar-lin">
     <button class="btn btn-azul" id="btnJurColar" data-i18n="jur_colar_btn"></button>
+    <!-- QUANDO A EMENTA É LONGA DEMAIS PARA O EXTRATOR.
+         Ele acerta o que está escrito com rótulo; ler trinta linhas e
+         dizer em três o que foi decidido é outra coisa. Este botão
+         copia a pergunta para você colar numa IA e trazer a resposta
+         de volta pelo mesmo campo — o JSON que ela devolve o "ler e
+         preencher" já entende. -->
+    <button class="btn-min" id="btnJurPromptIA" data-i18n="jur_prompt_ia"></button>
   </div>
 
   <label class="nd-rot" data-i18n="jur_tese_rot"></label>
   <textarea id="jurTese" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="A frase que você quer reconhecer na prova."></textarea>
+
+  <!-- O RESUMO É OUTRO CAMPO, E NÃO OUTRA VERSÃO DA TESE.
+       A tese é a proposição como ela é — não se parafraseia. O resumo
+       explica o que ela decidiu e por quê, e pode ser reescrito à
+       vontade. É este campo que a IA preenche. -->
+  <label class="nd-rot" data-i18n="jur_resumo_rot"></label>
+  <textarea id="jurResumo" rows="3" style="width:100%;box-sizing:border-box"
+    placeholder="O que este julgado decidiu, com suas palavras. Opcional."></textarea>
 
   <!-- OS SEIS CAMPOS SÃO CONFERÊNCIA, NÃO DIGITAÇÃO.
        Quando "ler e preencher" funciona — que é quase sempre — eles já
