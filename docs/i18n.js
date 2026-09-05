@@ -1362,6 +1362,26 @@ const UI = {
   "jur_prompt_ia": "pedir à IA que leia e resuma",
   "jur_prompt_ia_vazio": "Cole a ementa na caixa acima primeiro — é ela que vai dentro da pergunta.",
   "jur_prompt_ia_copiado": "Pergunta copiada. Cole numa IA, traga a resposta de volta para a MESMA caixa e toque em “ler e preencher”.\n\nEla vai preencher os campos e escrever o RESUMO. A tese vem transcrita do texto, não reescrita: trocar uma palavra na tese muda o que você marca na prova.",
+  /* ---- O QUE CADA BOTÃO DESTA GAVETA FAZ ----
+     Um julgado guardado errado é matéria estudada errada, e esta tela
+     tem botões que criam, apagam, copiam para fora e mandam texto para
+     uma IA. Nenhum deles pode depender de adivinhação. */
+  "jur_b_ajuda": "Explica o que é esta gaveta, para que serve a tese e como colar uma ementa.",
+  "jur_b_fechar_topo": "Fecha a gaveta. O que você não salvou não é guardado.",
+  "jur_b_mais": "Abre o formulário para guardar mais um julgado neste mesmo tópico.",
+  "jur_b_prompt": "Monta uma pergunta sobre os julgados JÁ GUARDADOS aqui, para você colar numa IA e descobrir se dois deles são o mesmo. Não apaga nem une nada sozinho.",
+  "jur_b_colar": "Lê o que está na caixa acima e separa tribunal, classe, número, data e órgão nos campos. Entende tanto a ementa copiada do site do tribunal quanto um JSON devolvido por uma IA.",
+  "jur_b_prompt_ia": "Copia uma pergunta com a ementa dentro, para você colar numa IA. Ela devolve os campos preenchidos e escreve o RESUMO — a tese vem transcrita, nunca reescrita.",
+  "jur_b_meta": "Mostra ou esconde tribunal, classe, número, data, órgão e fonte. Ficam recolhidos porque quase nunca precisam de correção.",
+  "jur_b_salvar": "Guarda este julgado no tópico aberto. Ele passa a aparecer na agenda e no material.",
+  "jur_b_limpar": "Esvazia o formulário. Não apaga nada do que já está guardado.",
+  "jur_b_voltar": "Volta para a lista dos julgados já guardados neste tópico.",
+  "jur_b_fechar": "Fecha a gaveta.",
+  "jur_b_card": "Cria um cartão de memorização neste tópico: a pergunta cita o julgado, a resposta é a tese.",
+  "jur_b_editar": "Abre este julgado no formulário para corrigir qualquer campo.",
+  "jur_b_copiar": "Copia este julgado como texto, para colar fora do aplicativo.",
+  "jur_b_tirar": "Tira este julgado DESTE tópico. Se ele estiver em outros, continua lá.",
+  "jur_tag_aj": "Assunto “{t}”. Toque para ver só os julgados com esta etiqueta; toque de novo para ver todos.",
   "jur_resumo_rot": "RESUMO — o que ele decidiu (opcional)",
   "jur_resumo_aj": "A explicação do julgado, com suas palavras ou escrita pela IA. Diferente da tese: a tese é a frase do tribunal, que não se parafraseia; o resumo explica.",
   "jur_cat_aj": "O tipo do julgado — e ele muda o jeito de estudar: súmula vinculante se decora na literalidade; tema repetitivo, pela tese; acórdão isolado, pelo raciocínio.",
