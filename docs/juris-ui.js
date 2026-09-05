@@ -13,6 +13,8 @@
 let jurTopicoAtual = null;      /* {disciplina, nome, chave} */
 let jurEditando = "";           /* id em edição, "" para novo */
 let jurCategoriaColada = "";    /* categoria vinda da colagem/JSON */
+let jurTagsColadas = [];        /* etiquetas de assunto vindas do JSON */
+let jurFiltroTag = "";          /* etiqueta escolhida na lista */
 /* "ler" ou "incluir" — ver jurPintarModo */
 let jurModo = "ler";
 
@@ -30,6 +32,7 @@ function jurAbrir(disciplina, topico, modo) {
     ? matChave(disciplina, topico) : (disciplina + "›" + topico);
   jurTopicoAtual = { disciplina, nome: topico, chave };
   jurEditando = "";
+  jurFiltroTag = "";
   const sub = $("jurSub");
   if (sub) sub.textContent = t("jur_sub", { d: disciplina, t: topico });
   jurLimparForm();
@@ -48,6 +51,9 @@ function jurPintarModo() {
   const lendo = jurModo === "ler";
   const quantos = jurTopicoAtual ? jurDoTopico(jurTopicoAtual.chave).length : 0;
   if ($("jurForm")) $("jurForm").hidden = lendo;
+  /* O GUARDAR VIVE NO RODAPÉ FIXO, fora do formulário — então é ele que
+   * precisa saber que no modo leitura não há o que salvar. */
+  if ($("btnJurSalvar")) $("btnJurSalvar").hidden = lendo;
   if ($("jurLerAcoes")) $("jurLerAcoes").hidden = !lendo;
   /* voltar para a leitura só existe quando há o que ler */
   if ($("btnJurVoltarLer")) $("btnJurVoltarLer").hidden = !quantos;
@@ -74,6 +80,7 @@ function jurLimparForm() {
   });
   jurEditando = "";
   jurCategoriaColada = "";
+  jurTagsColadas = [];
   const av = $("jurColarAviso");
   if (av) { av.hidden = true; av.textContent = ""; }
   jurMeta(false);
@@ -114,6 +121,15 @@ function jurColar() {
   const bruto = String(($("jurColar") || {}).value || "");
   if (!bruto.trim()) { jurReagirBtn("btnJurColar", t("jur_colar_vazio")); return; }
   const a = jurIdentificar(bruto);
+  /* COLAR UM JSON É UM PEDIDO EXPLÍCITO DE PREENCHIMENTO.
+   *
+   * Para texto solto, a regra é não sobrescrever o que já está escrito:
+   * o extrator adivinha, e adivinhação não apaga trabalho. Um JSON não
+   * adivinha nada — ele traz os campos nomeados, e quem o colou colou
+   * para que substituíssem. Foi o que faltou: a tese continuava com um
+   * texto anterior enquanto o JSON trazia a tese certa. */
+  const doJson = String(bruto).trim()[0] === "{"
+    && typeof jurDoJson === "function" && !!jurDoJson(bruto);
   const põe = (id, v) => { if ($(id) && v) $(id).value = v; };
   põe("jurTribunal", a.tribunal);
   põe("jurClasse", a.classe);
@@ -121,13 +137,13 @@ function jurColar() {
   põe("jurData", a.data);
   põe("jurOrgao", a.orgao);
   if (a.categoria) jurCategoriaColada = a.categoria;
-  /* a tese só é sugerida quando o campo está vazio: quem já escreveu a
-   * sua não pode perdê-la para um palpite */
-  if ($("jurTese") && !$("jurTese").value.trim() && a.tese) {
+  /* A tese só é SUGERIDA quando o campo está vazio — quem já escreveu a
+   * sua não pode perdê-la para um palpite. Vindo de JSON, substitui:
+   * ali não houve palpite, houve um campo nomeado. */
+  if ($("jurTese") && a.tese && (doJson || !$("jurTese").value.trim())) {
     $("jurTese").value = a.tese;
   }
-  /* mesma regra do campo da tese: sugestão só onde não há nada escrito */
-  if ($("jurResumo") && !$("jurResumo").value.trim() && a.resumo) {
+  if ($("jurResumo") && a.resumo && (doJson || !$("jurResumo").value.trim())) {
     $("jurResumo").value = a.resumo;
   }
 
@@ -137,6 +153,25 @@ function jurColar() {
    * leitura e nada sobre o que foi lido — para conferir era preciso
    * descer até os campos. "STF · RE 574706 · Pleno · 15/03/2017" se
    * confere de relance, que é o ponto de mostrar. */
+  /* O JSON SAI DA CAIXA E A EMENTA ENTRA.
+   *
+   * O DEFEITO: o que ficasse na caixa de colar virava o "texto" do
+   * julgado — então, colando um JSON, o "ver ementa completa" mostrava
+   * chaves e aspas. JSON é transporte; o que se lê é ementa. Trocar o
+   * conteúdo da caixa resolve na origem: o JSON nunca chega ao
+   * armazenamento nem à tela, e a pessoa VÊ o que foi extraído. */
+  if (doJson && $("jurColar")) {
+    /* SE VEIO EMENTA LIMPA, ela fica; se não veio, a caixa esvazia.
+     *
+     * Guardar o JSON como se fosse a ementa era o defeito relatado: o
+     * "ver ementa completa" mostrava chaves e aspas. E deixar o JSON na
+     * caixa quando ele não traz ementa nenhuma repetiria o defeito por
+     * omissão — o campo do texto viraria o JSON de novo na hora de
+     * salvar. Sem ementa, não há ementa: melhor vazio do que código. */
+    $("jurColar").value = a.texto || "";
+  }
+  if (a.tags && a.tags.length) jurTagsColadas = a.tags;
+
   const achou = ["tribunal", "classe", "numero", "data", "orgao"]
     .filter((k) => a[k]);
   const pedacos = [];
@@ -191,6 +226,7 @@ async function jurSalvar() {
      * uma classificação que a classe sozinha não diria */
     categoria: jurCategoriaColada
       || (typeof jurCategoria === "function" ? jurCategoria(v("jurClasse")) : ""),
+    tags: jurTagsColadas.slice(),
     topicos: jurEditando ? undefined : [jurTopicoAtual.chave],
   });
   if (!j) { await uiAlert(t("jur_nao_salvou")); return; }
@@ -371,7 +407,14 @@ function jurPintarLista() {
   const box = $("jurLista");
   if (!box || !jurTopicoAtual) return;
   box.innerHTML = "";
-  const lista = jurDoTopico(jurTopicoAtual.chave);
+  let lista = jurDoTopico(jurTopicoAtual.chave);
+  /* O FILTRO POR ETIQUETA vale só enquanto a gaveta está aberta: é uma
+   * lente de leitura, não uma preferência que se guarda. */
+  if (jurFiltroTag) {
+    const alvo = jurTagNormal(jurFiltroTag);
+    lista = lista.filter((x) =>
+      jurTagsDe(x).some((tg) => jurTagNormal(tg) === alvo));
+  }
   const conta = $("jurConta");
   if (conta) {
     conta.textContent = lista.length
@@ -479,6 +522,34 @@ function jurPintarLista() {
       rs.className = "jur-resumo";
       rs.textContent = j.resumo;
       li.append(rs);
+    }
+
+    /* AS ETIQUETAS DE ASSUNTO, clicáveis.
+     *
+     * Elas cruzam julgados de tópicos diferentes: a mesma etiqueta liga
+     * uma ADI estudada em Tributário a um repetitivo estudado em
+     * Administrativo — o que a árvore do edital, por ser árvore, não
+     * consegue fazer. Clicar filtra a lista por ela. */
+    const tags = (typeof jurTagsDe === "function") ? jurTagsDe(j) : [];
+    if (tags.length) {
+      const cx2 = document.createElement("div");
+      cx2.className = "jur-tags";
+      tags.forEach((tg) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "jur-tag"
+          + (jurTagNormal(tg) === jurTagNormal(jurFiltroTag) ? " sel" : "");
+        b.textContent = "#" + tg;
+        b.title = t("jur_tag_aj", { t: tg });
+        b.onclick = (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          jurFiltroTag = (jurTagNormal(tg) === jurTagNormal(jurFiltroTag))
+            ? "" : tg;
+          jurPintarLista();
+        };
+        cx2.append(b);
+      });
+      li.append(cx2);
     }
 
     /* EM QUANTOS TÓPICOS ELE ESTÁ. É o que impede o susto de "tirei

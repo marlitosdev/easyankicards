@@ -163,9 +163,30 @@ function jurDoJson(bruto) {
     relator: pega("relator", "relatora"),
     orgao: pega("orgao", "\u00f3rgao", "orgao_julgador"),
     tese: pega("tese_curta", "tese", "ementa"),
-    resumo: pega("resumo", "resumo_curto", "explicacao", "explica\u00e7\u00e3o"),
+    resumo: pega("resumo_prova", "resumo", "resumo_curto", "explicacao"),
+    /* A EMENTA LIMPA, quando a IA a devolveu. É ela que vai para o
+     * campo do texto — nunca o JSON.
+     *
+     * O DEFEITO QUE ISTO CONSERTA: o "ver ementa completa" mostrava o
+     * objeto JSON cru, com chaves e aspas. A colagem virava o texto
+     * guardado sem ninguém perguntar se aquilo era leitura. JSON é
+     * transporte; o que se lê é ementa. */
+    texto: pega("ementa_limpa", "ementa", "texto", "inteiro_teor"),
+    /* As etiquetas de assunto, quando vierem. */
+    tags: (function () {
+      const v = o.hashtags || o.tags || o.assuntos;
+      /* SEM O "#" JÁ NA ENTRADA: guardar com e ler sem seriam duas
+       * representações da mesma coisa, e a comparação erraria em
+       * algum dos dois lados. */
+      const limpa = (x) => String(x).replace(/^#+/, "").trim();
+      if (Array.isArray(v)) return v.map(limpa).filter(Boolean);
+      if (typeof v === "string") {
+        return v.split(/[,;\s]+/).map(limpa).filter(Boolean);
+      }
+      return [];
+    })(),
     categoria: pega("categoria", "classificacao").toUpperCase(),
-    ano: "", texto: "", tribunalDeduzido: false,
+    ano: "", tribunalDeduzido: false,
   };
   /* DATA SÓ SE FOR DATA: a caixa da tela é <input type="date"> e só
    * entende aaaa-mm-dd. Um ano solto vai para o campo do ano. */
@@ -190,6 +211,51 @@ function jurDoJson(bruto) {
    * cair no extrator de texto. */
   if (!achado.classe && !achado.numero && !achado.tese) return null;
   return achado;
+}
+
+/* =====================================================================
+ * AS ETIQUETAS DE ASSUNTO
+ *
+ * "#dação em pagamento", "#licitação". Elas cruzam julgados de tópicos
+ * diferentes: a mesma etiqueta liga uma ADI do Supremo estudada em
+ * Tributário a um repetitivo do STJ estudado em Administrativo — o que
+ * a árvore do edital, por ser uma árvore, não consegue fazer.
+ *
+ * GUARDADAS SEM O "#" e comparadas sem acento e sem caixa, pelo mesmo
+ * motivo das chaves de tópico: "#Licitação" e "#licitacao" são a mesma
+ * etiqueta, e duas grafias fariam duas listas.
+ * ===================================================================== */
+function jurTagNormal(t2) {
+  return String(t2 || "").replace(/^#+/, "").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ").trim();
+}
+
+function jurTagsDe(j) {
+  return ((j && j.tags) || []).map((x) => String(x).replace(/^#+/, "").trim())
+    .filter(Boolean);
+}
+
+/* Todas as etiquetas que existem, com quantos julgados cada uma tem. */
+function jurTagsTodas() {
+  const c = {};
+  jurLista().forEach((j) => {
+    jurTagsDe(j).forEach((t2) => {
+      const k = jurTagNormal(t2);
+      if (!k) return;
+      if (!c[k]) c[k] = { nome: t2, chave: k, n: 0 };
+      c[k].n++;
+    });
+  });
+  return Object.keys(c).map((k) => c[k]).sort((a, b) => b.n - a.n
+    || a.nome.localeCompare(b.nome));
+}
+
+function jurPorTag(tag) {
+  const alvo = jurTagNormal(tag);
+  if (!alvo) return [];
+  return jurLista().filter((j) =>
+    jurTagsDe(j).some((x) => jurTagNormal(x) === alvo));
 }
 
 /* =====================================================================
@@ -362,7 +428,7 @@ function jurGravar(dados) {
   const antigo = tudo[id] || {};
   const r = Object.assign({
     id, tribunal: "", classe: "", numero: "", orgao: "", relator: "",
-    data: "", tese: "", texto: "", fonte: "", topicos: [],
+    data: "", tese: "", texto: "", fonte: "", topicos: [], tags: [],
     /* O RESUMO É UM CAMPO À PARTE, e essa separação é o ponto.
      *
      * A tese é a proposição jurídica como ela é — a frase que se

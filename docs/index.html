@@ -2279,6 +2279,13 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
 .jur-tese{font-size:12.5px;line-height:1.55;margin:7px 0 2px;
   padding:7px 11px;border-left:3px solid var(--azul,#2563eb);
   border-radius:0 8px 8px 0;background:var(--campo)}
+/* AS ETIQUETAS DE ASSUNTO: pílulas clicáveis que cruzam tópicos. */
+.jur-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.jur-tag{all:unset;cursor:pointer;font-size:10px;padding:2px 9px;
+  border-radius:999px;border:1px solid var(--borda);color:var(--sutil)}
+.jur-tag:hover{color:var(--texto);background:var(--campo)}
+.jur-tag.sel{background:var(--azul,#2563eb);color:#fff;
+  border-color:var(--azul,#2563eb);font-weight:700}
 .jur-resumo{font-size:11.5px;line-height:1.5;margin:5px 0 0;
   color:var(--sutil);padding-left:11px;border-left:2px solid var(--borda)}
 .jur-em{font-size:10.5px;color:var(--sutil);font-style:italic;margin-top:4px}
@@ -4049,8 +4056,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          "guarde a TESE…", "cola o bloco como veio…") empurravam a
          primeira caixa para baixo da dobra. Quem já entendeu não
          precisa relê-los toda vez; quem não entendeu toca no (?). -->
-    <button type="button" class="selo-ajuda" id="btnJurAjuda" title="?">?</button>
-    <button type="button" class="dlg-x" id="btnJurFecharTopo" title="✖">✖</button>
+    <button type="button" class="selo-ajuda" id="btnJurAjuda" data-i18n-title="jur_b_ajuda">?</button>
+    <button type="button" class="dlg-x" id="btnJurFecharTopo" data-i18n-title="jur_b_fechar_topo">✖</button>
   </div>
   <p class="nota" id="jurSub"></p>
 
@@ -4063,9 +4070,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- O SUBTEXTO SAIU: "+ guardar mais um julgado" já diz o que faz,
          e a frase explicando que ele abre o formulário custava uma
          linha inteira em cima da lista, que é o conteúdo da tela. -->
-    <button class="btn btn-azul" id="btnJurMais" data-i18n="jur_mais"></button>
+    <button class="btn btn-azul" id="btnJurMais" data-i18n="jur_mais" data-i18n-title="jur_b_mais"></button>
     <button class="btn-min" id="btnJurPrompt" data-i18n="jur_prompt_btn"
-      hidden title="Para quando os números são diferentes ou não existem, e só lendo dá para saber se as duas teses dizem o mesmo."></button>
+      hidden data-i18n-title="jur_b_prompt"></button>
   </div>
 
   <!-- OS REPETIDOS. Só aparece quando há: um aviso permanente sobre
@@ -4085,14 +4092,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        pessoa confiar num palpite sem ver que houve palpite. -->
   <div id="jurColarAviso" class="jur-pilula" hidden></div>
   <div class="jur-colar-lin">
-    <button class="btn btn-azul" id="btnJurColar" data-i18n="jur_colar_btn"></button>
+    <button class="btn btn-azul" id="btnJurColar" data-i18n="jur_colar_btn" data-i18n-title="jur_b_colar"></button>
     <!-- QUANDO A EMENTA É LONGA DEMAIS PARA O EXTRATOR.
          Ele acerta o que está escrito com rótulo; ler trinta linhas e
          dizer em três o que foi decidido é outra coisa. Este botão
          copia a pergunta para você colar numa IA e trazer a resposta
          de volta pelo mesmo campo — o JSON que ela devolve o "ler e
          preencher" já entende. -->
-    <button class="btn-min" id="btnJurPromptIA" data-i18n="jur_prompt_ia"></button>
+    <button class="btn-min" id="btnJurPromptIA" data-i18n="jur_prompt_ia" data-i18n-title="jur_b_prompt_ia"></button>
   </div>
 
   <label class="nd-rot" data-i18n="jur_tese_rot"></label>
@@ -4113,7 +4120,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        afastam a tese, que é a única coisa que se escreve à mão. Ficam
        aqui atrás, e a pílula acima diz o que há dentro. -->
   <button type="button" class="btn-min jur-meta-btn" id="btnJurMeta"
-    data-i18n="jur_meta_ver"></button>
+    data-i18n="jur_meta_ver" data-i18n-title="jur_b_meta"></button>
   <div class="jur-campos" id="jurMetaCampos" hidden>
     <label class="vk-lado"><span data-i18n="jur_c_tribunal"></span>
       <input type="text" id="jurTribunal" placeholder="STF"></label>
@@ -4129,13 +4136,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <input type="text" id="jurFonte" placeholder="portal do STF"></label>
   </div>
 
+  <!-- O "GUARDAR" NÃO MORA MAIS AQUI.
+       Ele ficava depois de TRÊS caixas de texto altas — ementa, tese e
+       resumo — e portanto abaixo da dobra, enquanto o "Fechar", a ação
+       menos importante da tela, era o único preso no rodapé. Quem
+       terminava de escrever não via como salvar. A ação principal subiu
+       para a barra fixa; aqui ficou o que é utilidade. -->
   <div class="jur-salvar-lin">
-    <button class="btn btn-verde" id="btnJurSalvar"></button>
-    <button class="btn-min" id="btnJurLimpar" data-i18n="jur_limpar"></button>
+    <button class="btn-min" id="btnJurLimpar" data-i18n="jur_limpar" data-i18n-title="jur_b_limpar"></button>
     <!-- só aparece quando há o que ler: sem julgado nenhum, "voltar para
          a leitura" levaria a uma tela vazia -->
     <button class="btn-min" id="btnJurVoltarLer" data-i18n="jur_voltar_ler"
-      hidden></button>
+      hidden data-i18n-title="jur_b_voltar"></button>
   </div>
   </div><!-- /jurForm -->
 
@@ -4148,7 +4160,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        a saída está sempre a um toque, e o espaço de rolagem fica
        inteiro para a lista. -->
   <div class="dlg-rodape jur-rodape">
-    <button class="btn btn-cinza" id="btnJurFechar" data-i18n="help_close"></button>
+    <!-- A AÇÃO PRINCIPAL PRIMEIRO, e sempre visível: é ela que se
+         procura depois de escrever. Some no modo leitura, onde não há
+         formulário para salvar. -->
+    <button class="btn btn-verde" id="btnJurSalvar"
+      data-i18n-title="jur_b_salvar"></button>
+    <button class="btn btn-cinza" id="btnJurFechar" data-i18n="help_close" data-i18n-title="jur_b_fechar"></button>
   </div>
 </dialog>
 

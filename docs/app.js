@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.5.0";
+const VERSAO = "16.6.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -601,6 +601,21 @@ function rotularTemas() {
 function aplicarTextos() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = t(el.dataset.i18n);
+  });
+  /* A EXPLICAÇÃO DO BOTÃO TAMBÉM É TEXTO, e também se traduz.
+   *
+   * Antes só o rótulo passava por aqui; o "title" ficava escrito à mão
+   * no HTML, em português, e não mudava com o idioma. Um botão que
+   * explica o que faz numa língua e se chama noutra é pior do que um
+   * botão sem explicação. */
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const txt = t(el.dataset.i18nTitle);
+    el.title = txt;
+    /* aria-label junto: leitor de tela não lê "title" de botão com
+     * rótulo próprio, e o ícone sozinho ficaria mudo */
+    if (!el.textContent || !el.textContent.trim()) {
+      el.setAttribute("aria-label", txt);
+    }
   });
   $("versao").textContent = "v" + VERSAO;
   $("deckExp").placeholder = t("deck_placeholder");
