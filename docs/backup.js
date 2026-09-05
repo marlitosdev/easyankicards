@@ -61,6 +61,13 @@ const BK_CHAVES = {
    * perda, porque a tela depois parece apenas "vazia", não quebrada. */
   material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
              "eac_leis", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei"],
+  /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
+   *
+   * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de
+   * downloads daqui. Levado num backup para outro computador, listaria
+   * cópias que não estão lá — e a lista serve justamente para você
+   * achar o arquivo certo. Uma lista que aponta para o nada é pior do
+   * que nenhuma. */
   preferencias: ["eac_estudo_dias", "eac_estudo_inicio",
                  "eac_deck", "eac_titulo", "eac_lang", "eac_theme", "eac_cor",
     "eac_style", "eac_alinha", "eac_2col", "eac_destaque", "eac_gaveta",
@@ -192,4 +199,55 @@ function idadeBase() {
   if (!q) return null;
   const dias = Math.floor((Date.now() - new Date(q).getTime()) / 86400000);
   return { quando: q, dias };
+}
+
+/* =====================================================================
+ * O HISTÓRICO DAS CÓPIAS
+ *
+ * "base de 04/09/2026 · há 0d" não responde a pergunta que se faz de
+ * verdade: salvei três vezes hoje — esta que está carregada é qual das
+ * três? Data sem hora não distingue nada dentro do mesmo dia, e "há 0d"
+ * é a informação menos útil possível.
+ *
+ * O que responde é o NOME DO ARQUIVO, porque ele já carrega hora e
+ * minuto (easyankicards-20260904-2047.json) e é o que aparece na pasta
+ * de downloads. Guardando as últimas cópias com hora, destino e nome, a
+ * pergunta vira uma leitura.
+ * ===================================================================== */
+const BK_HIST_CHAVE = "eac_backup_hist";
+const BK_HIST_MAX = 8;
+
+function bkHistorico() {
+  try {
+    const L = JSON.parse(localStorage.getItem(BK_HIST_CHAVE) || "[]");
+    return Array.isArray(L) ? L : [];
+  } catch (e) { return []; }
+}
+
+/* "onde" é download, pasta ou compartilhado; "nome" é o arquivo. O
+ * resumo vai junto porque é o que permite reconhecer a cópia mesmo sem
+ * o arquivo à mão: "aquela com 47 disciplinas". */
+function bkRegistrarCopia(onde, nome, quando) {
+  const q = quando || new Date().toISOString();
+  const item = { quando: q, onde: onde || "?", nome: nome || "",
+                 resumo: resumoAtual() };
+  const L = [item].concat(bkHistorico()).slice(0, BK_HIST_MAX);
+  try { localStorage.setItem(BK_HIST_CHAVE, JSON.stringify(L)); } catch (e) {}
+  return L;
+}
+
+/* A cópia que corresponde ao que está carregado agora — casada pelo
+ * instante, que é o mesmo que "eac_backup_em" guarda. */
+function bkCopiaAtual() {
+  const q = bkLer("eac_backup_em");
+  if (!q) return null;
+  return bkHistorico().filter((x) => x && x.quando === q)[0] || null;
+}
+
+/* Quantas cópias foram feitas no MESMO dia desta. É o número que
+ * explica por que a data sozinha não bastava. */
+function bkCopiasNoDia(iso) {
+  const dia = String(iso || "").slice(0, 10);
+  if (!dia) return 0;
+  return bkHistorico().filter((x) => String(x.quando || "").slice(0, 10) === dia).length;
 }

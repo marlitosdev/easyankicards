@@ -10,12 +10,37 @@
 let bkPendente = null;      /* backup carregado, à espera de confirmação */
 let bkPasta = null;         /* handle da pasta escolhida (File System Access) */
 
-function bkMarcarSalvo(onde) {
+function bkMarcarSalvo(onde, nome) {
+  const q = new Date().toISOString();
   try {
-    localStorage.setItem("eac_backup_em", new Date().toISOString());
+    localStorage.setItem("eac_backup_em", q);
     localStorage.setItem("eac_backup_onde", onde || "");
+    localStorage.setItem("eac_backup_arq", nome || "");
   } catch (e) {}
+  /* O NOME DO ARQUIVO É O QUE IDENTIFICA A CÓPIA. Ele traz hora e
+   * minuto, e é o que aparece na pasta de downloads — sem ele, três
+   * cópias do mesmo dia são indistinguíveis. */
+  try { bkRegistrarCopia(onde, nome, q); } catch (e) {}
   atualizarSeloBase();
+  /* O PAINEL AINDA ESTÁ ABERTO quando se salva. Sem repintar, a lista
+   * de cópias fica sem a que acabou de ser feita — e a pessoa aperta de
+   * novo achando que não funcionou. */
+  try { bkPintarPainel(); } catch (e) {}
+}
+
+/* QUE HORAS ERAM, e não só que dia foi.
+ *
+ * "base de 04/09/2026 · há 0d" era a informação errada em dois sentidos:
+ * a data sozinha não separa três cópias do mesmo dia, e "há 0d" ocupa
+ * espaço para dizer "hoje" de um jeito que ninguém fala. */
+function bkQuandoCurto(iso, dias) {
+  const d = new Date(iso);
+  const hora = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (dias <= 0) return t("bk_quando_hoje", { h: hora });
+  if (dias === 1) return t("bk_quando_ontem", { h: hora });
+  return t("bk_quando_antes", {
+    d: d.toLocaleDateString([], { day: "2-digit", month: "2-digit" }),
+    h: hora, n: dias });
 }
 
 /* O selo fica no rodapé, sempre visível: "base de hoje" ou "base de 12/08 —
@@ -30,8 +55,11 @@ function atualizarSeloBase() {
     el.textContent = t("bk_selo_nunca");
     el.classList.add("sb-alerta");
   } else {
-    const d = new Date(i.quando);
-    el.textContent = t("bk_selo", { d: d.toLocaleDateString(), n: i.dias });
+    el.textContent = t("bk_selo", { q: bkQuandoCurto(i.quando, i.dias) });
+    /* O NOME DO ARQUIVO NO TÍTULO: é o que se compara com a pasta de
+     * downloads quando há mais de uma cópia do mesmo dia. */
+    const arq = localStorage.getItem("eac_backup_arq") || "";
+    el.title = arq ? t("bk_selo_arq", { a: arq }) : t("bk_selo_ajuda_curta");
     el.classList.add(i.dias <= 7 ? "sb-ok" : (i.dias <= 21 ? "sb-aviso" : "sb-alerta"));
   }
 }
@@ -62,6 +90,38 @@ function bkSemearData() {
 
 function bkTextoJson() { return JSON.stringify(montarBackup(), null, 1); }
 
+/* =====================================================================
+ * O QUE ESTE NAVEGADOR SABE FAZER
+ *
+ * "Salvar na nuvem" e "Baixar arquivo" pareciam dois botões para a
+ * mesma coisa — e às vezes ERAM. O primeiro tenta três caminhos em
+ * ordem: a folha de compartilhamento do celular, o seletor de pasta do
+ * computador, e — se nenhum dos dois existe — cai calado no download.
+ * Num navegador sem esses recursos, os dois botões faziam exatamente a
+ * mesma coisa sem nada na tela dizendo isso.
+ *
+ * Perguntar antes resolve: onde há só download, há um botão só.
+ * ===================================================================== */
+function bkPodeCompartilhar() {
+  return !!(typeof navigator !== "undefined" && navigator.share
+    && navigator.canShare);
+}
+
+function bkPodeEscolherPasta() {
+  return !!(typeof window !== "undefined" && window.showSaveFilePicker);
+}
+
+function bkModoDeGuardar() {
+  if (bkPodeCompartilhar()) return "compartilhar";
+  if (bkPodeEscolherPasta()) return "pasta";
+  return "download";
+}
+
+/* A pasta escolhida nesta sessão. Guardá-la evita reescolher a cada
+ * cópia — e reescrever o MESMO arquivo é a melhor resposta para "salvei
+ * três vezes hoje e não sei qual é qual": passa a haver um. */
+function bkPastaNome() { return bkPasta ? (bkPasta.name || "") : ""; }
+
 /* ---------- guardar ---------- */
 
 async function bkSalvarNaNuvem() {
@@ -75,7 +135,7 @@ async function bkSalvarNaNuvem() {
     const arq = new File([json], nome, { type: "application/json" });
     if (navigator.canShare && navigator.canShare({ files: [arq] })) {
       await navigator.share({ files: [arq], title: "Backup EasyAnkiCards" });
-      bkMarcarSalvo("compartilhado");
+      bkMarcarSalvo("compartilhado", nome);
       reg("BACKUP", "compartilhado pelo sistema", nome);
       return;
     }
@@ -94,7 +154,7 @@ async function bkSalvarNaNuvem() {
       await w.write(json);
       await w.close();                      /* e só aqui troca pelo bom */
       bkPasta = h;
-      bkMarcarSalvo(h.name || "pasta");
+      bkMarcarSalvo("pasta", h.name || nome);
       reg("BACKUP", "gravado na pasta", h.name || nome);
       uiAlert(t("bk_salvo_pasta", { n: h.name || nome }));
       return;
@@ -112,7 +172,7 @@ function bkBaixar() {
   a.href = url; a.download = nome;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  bkMarcarSalvo("download");
+  bkMarcarSalvo("download", nome);
   reg("BACKUP", "baixado", nome);
   uiAlert(t("bk_baixado", { n: nome }));
 }
@@ -193,17 +253,127 @@ async function bkConfirmarRestauro() {
   }
 }
 
-function bkAbrirPainel() {
+function bkPintarPainel() {
   const r = resumoAtual();
-  $("bkAgora").textContent = t("bk_agora", {
-    c: r.cartoes, d: r.disciplinas, t: r.topicos, p: r.progresso,
-    di: r.diario, re: r.resumos });
+  if ($("bkAgora")) {
+    $("bkAgora").textContent = t("bk_agora", {
+      c: r.cartoes, d: r.disciplinas, t: r.topicos, p: r.progresso,
+      di: r.diario, re: r.resumos });
+  }
   const i = idadeBase();
-  $("bkUltimo").textContent = i
-    ? t("bk_ultimo", { d: new Date(i.quando).toLocaleString(), n: i.dias,
-        o: localStorage.getItem("eac_backup_onde") || "?" })
-    : t("bk_ultimo_nunca");
+  if ($("bkUltimo")) {
+    /* COM HORA E COM O NOME DO ARQUIVO. A data por extenso já estava
+     * aqui; o que faltava era o nome, que é o que se procura na pasta
+     * de downloads quando há mais de uma cópia do mesmo dia. */
+    const arq = localStorage.getItem("eac_backup_arq") || "";
+    $("bkUltimo").textContent = i
+      ? t(arq ? "bk_ultimo_arq" : "bk_ultimo", {
+          d: bkQuandoCurto(i.quando, i.dias),
+          o: t("bk_onde_" + (localStorage.getItem("eac_backup_onde") || "download")),
+          a: arq })
+      : t("bk_ultimo_nunca");
+  }
+  bkPintarHistorico();
+  bkPintarBotoes();
+}
+
+/* ---------------------------------------------------------------------
+ * AS ÚLTIMAS CÓPIAS
+ *
+ * A lista existe para uma pergunta só: "salvei três vezes hoje — a que
+ * está carregada é qual?". A resposta é a linha marcada como ATUAL, e o
+ * nome ao lado é o arquivo que se procura na pasta.
+ * ------------------------------------------------------------------ */
+function bkPintarHistorico() {
+  const cx = $("bkHist");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const L = bkHistorico();
+  const atual = localStorage.getItem("eac_backup_em") || "";
+  cx.hidden = L.length < 2;
+  if (cx.hidden) return;
+
+  const tit = document.createElement("div");
+  tit.className = "bk-rot";
+  tit.textContent = t("bk_hist_rot");
+  cx.append(tit);
+
+  L.forEach((x) => {
+    const li = document.createElement("div");
+    li.className = "bk-hist-li" + (x.quando === atual ? " atual" : "");
+    const d = new Date(x.quando);
+    const quando = document.createElement("b");
+    quando.textContent = d.toLocaleDateString([], { day: "2-digit", month: "2-digit" })
+      + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    li.append(quando);
+    const onde = document.createElement("span");
+    onde.className = "bk-hist-onde";
+    onde.textContent = t("bk_onde_" + (x.onde || "download"));
+    li.append(onde);
+    if (x.nome) {
+      const nm = document.createElement("span");
+      nm.className = "bk-hist-arq";
+      nm.textContent = x.nome;
+      li.append(nm);
+    }
+    if (x.quando === atual) {
+      const selo = document.createElement("span");
+      selo.className = "bk-hist-selo";
+      selo.textContent = t("bk_hist_atual");
+      li.append(selo);
+    }
+    cx.append(li);
+  });
+}
+
+function bkAbrirPainel() {
+  bkPintarPainel();
   abrirModal("dlgBackup");
+}
+
+/* Os botões dizem o que VAI acontecer, e o que não pode acontecer
+ * simplesmente não aparece. */
+function bkPintarBotoes() {
+  const modo = bkModoDeGuardar();
+  const bn = $("btnBkSalvarNuvem");
+  const bb = $("btnBkBaixar");
+  const exp = $("bkGuardarExp");
+  const bre = $("btnBkRegravar");
+
+  if (bn) {
+    /* SÓ APARECE QUANDO FAZ ALGO DIFERENTE de baixar. */
+    bn.hidden = modo === "download";
+    bn.textContent = t(modo === "compartilhar" ? "bk_nuvem" : "bk_pasta");
+  }
+  if (bb) bb.textContent = t("bk_baixar");
+  if (exp) exp.textContent = t("bk_guardar_exp_" + modo);
+  if (bre) {
+    /* REGRAVAR NA MESMA PASTA: existe só depois de haver uma pasta
+     * escolhida, e some ao recarregar a página — o navegador não deixa
+     * guardar a permissão sozinho. */
+    const nome = bkPastaNome();
+    bre.hidden = !nome;
+    bre.textContent = t("bk_regravar", { n: nome });
+  }
+}
+
+async function bkRegravar() {
+  if (!bkPasta) return;
+  try {
+    const w = await bkPasta.createWritable();
+    await w.write(bkTextoJson());
+    await w.close();
+    bkMarcarSalvo("pasta", bkPasta.name || "");
+    bkPintarPainel();
+    await uiAlert(t("bk_regravado", { n: bkPasta.name || "" }));
+  } catch (e) {
+    /* PERMISSÃO PERDIDA é o caso comum: o navegador a revoga sozinho
+     * depois de um tempo. Cair de volta no caminho que pergunta é
+     * melhor do que um erro que a pessoa não pode resolver. */
+    bkPasta = null;
+    bkPintarBotoes();
+    await bkSalvarNaNuvem();
+  }
 }
 
 function bkIniciar() {
@@ -212,6 +382,7 @@ function bkIniciar() {
   b.onclick = bkAbrirPainel;
   $("btnBkSalvarNuvem").onclick = bkSalvarNaNuvem;
   $("btnBkBaixar").onclick = bkBaixar;
+  if ($("btnBkRegravar")) $("btnBkRegravar").onclick = bkRegravar;
   $("btnBkCarregar").onclick = bkAbrirArquivo;
   $("btnBkFechar").onclick = () => $("dlgBackup").close();
   $("bkArquivo").onchange = (e) => bkLerArquivo(e.target.files && e.target.files[0]);

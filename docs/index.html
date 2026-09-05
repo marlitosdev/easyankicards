@@ -771,6 +771,46 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    para não parecer que flutua sobre o texto */
 #dlgQsResponder .qs-barra-principal{margin:8px 0 0;padding-top:8px;
   border-top:1px solid var(--borda)}
+
+/* ---- RESPONDER NUM APARELHO PEQUENO -------------------------------
+ *
+ * O problema medido: para ler o fim do enunciado e ver as alternativas
+ * é preciso subir e descer, e a decisão exige as duas coisas na cabeça
+ * ao mesmo tempo. Três medidas, e nenhuma delas é "diminuir a letra":
+ *
+ * 1. AS ALTERNATIVAS ANCORAM NO PÉ. O enunciado rola atrás delas; a
+ *    resposta está sempre debaixo do dedo. É o que fazem os aplicativos
+ *    de prova, e pela mesma razão.
+ * 2. AS BORDAS EMAGRECEM. Dezoito pixels de recuo em cima e embaixo,
+ *    mais a margem do <dialog>, custam quase duas linhas de enunciado
+ *    numa tela de telefone — espaço gasto em nada.
+ * 3. O CABEÇALHO ENCOLHE: o título da sessão e o placar viram uma
+ *    linha, porque nenhum dos dois se lê enquanto se responde.
+ */
+@media (max-width:760px){
+  dialog#dlgQsResponder{padding:8px 10px 0}
+  #dlgQsResponder h3{font-size:15px;margin:0 0 2px}
+  #dlgQsResponder #qsSessPlacar{margin:0 0 6px}
+  /* a caixa inteira vira coluna para o enunciado poder ser a única
+     parte elástica — sem isto "flex:1" abaixo não teria contra o quê */
+  dialog#dlgQsResponder[open]{display:flex;flex-direction:column;
+    max-height:96dvh}
+  #dlgQsResponder .qs-corpo-lado{flex:1 1 auto;min-height:0;display:flex;
+    flex-direction:column}
+  #dlgQsResponder #qsSessCorpo{flex:1 1 auto;min-height:0;display:flex;
+    flex-direction:column}
+  /* SÓ O ENUNCIADO ROLA. As alternativas e a ação ficam fora da
+     rolagem, encostadas no pé da caixa. */
+  #dlgQsResponder .qs-enunciado{flex:1 1 auto;min-height:0;overflow:auto;
+    margin-bottom:6px}
+  #dlgQsResponder .qs-opcoes{flex:0 0 auto;position:sticky;bottom:0;
+    background:var(--panel);padding-top:6px;
+    box-shadow:0 -6px 12px -6px rgba(0,0,0,.45)}
+  #dlgQsResponder .qs-fer{flex:0 0 auto;margin:4px 0 2px}
+  #dlgQsResponder .qs-barra-ferramentas{flex:0 0 auto}
+  #dlgQsResponder .qs-barra-principal{flex:0 0 auto;margin:6px 0 0}
+  #dlgQsResponder .dlg-rodape{flex:0 0 auto;margin-top:4px}
+}
 /* o texto é a única parte elástica — e portanto a única que rola */
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
 #dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{
@@ -949,6 +989,26 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    O contêiner é posicionado para a tela poder cobri-lo exatamente; ela
    termina onde o enunciado termina, e por isso nunca alcança os botões
    das alternativas, que são irmãos deste bloco e não filhos. */
+/* ---- GRIFO POR SELEÇÃO ------------------------------------------
+   As marcas são <mark> de verdade dentro do texto: refluem com ele,
+   crescem com a letra e sobrevivem a girar o aparelho — nada disso
+   um desenho por cima conseguia. */
+.gr-cx mark.gr-m{border-radius:3px;padding:.05em 0;cursor:pointer;
+  color:inherit;background:transparent}
+.gr-am{background:rgba(250,204,21,.42)}
+.gr-vd{background:rgba(74,222,128,.36)}
+.gr-rs{background:rgba(244,114,182,.36)}
+.gr-az{background:rgba(96,165,250,.36)}
+/* A FAIXA DAS CORES: quatro bolas e o resto atrás do ⋮. */
+.qs-fer{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px}
+.qs-cor{all:unset;cursor:pointer;width:26px;height:26px;border-radius:50%;
+  border:2px solid transparent;box-shadow:inset 0 0 0 1px var(--borda)}
+.qs-cor.sel{border-color:var(--texto)}
+.qs-fer-limpar{margin-left:4px}
+.qs-fer-mais{position:relative;margin-left:auto}
+.qs-fer-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:5;
+  background:var(--panel);border:1px solid var(--borda);border-radius:10px;
+  padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.3);min-width:230px}
 .pl-cx{position:relative}
 .pl-tela{position:absolute;inset:0;width:100%;height:100%;
   touch-action:none;pointer-events:none;border-radius:8px}
@@ -1420,6 +1480,18 @@ dialog.mat-amplo{max-height:96vh}
 .vk-cab-log:hover{color:var(--texto);background:var(--campo)}
 .bk-bloco{padding:9px 11px;border-radius:9px;background:var(--campo);
   border:1px solid var(--borda);margin:0 0 8px}
+/* AS ÚLTIMAS CÓPIAS, com a carregada em destaque. */
+.bk-hist{margin:8px 0 4px;border:1px solid var(--borda);border-radius:9px;
+  padding:8px 11px;background:var(--campo)}
+.bk-hist-li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;
+  font-size:11px;line-height:1.6;padding:2px 0;color:var(--sutil)}
+.bk-hist-li.atual{color:var(--texto)}
+.bk-hist-li b{font-size:11.5px;flex:0 0 auto}
+.bk-hist-onde{flex:0 0 auto}
+.bk-hist-arq{font-family:ui-monospace,monospace;font-size:10px;
+  word-break:break-all;flex:1 1 140px}
+.bk-hist-selo{flex:0 0 auto;font-size:9.5px;font-weight:700;padding:1px 7px;
+  border-radius:999px;background:var(--verde-claro);color:var(--verde-txt)}
 .bk-rot{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;
   color:var(--sutil);font-weight:800;margin-bottom:3px}
 .bk-txt{font-size:12.5px;line-height:1.5;color:var(--texto)}
@@ -5171,12 +5243,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="bk-rot" data-i18n="bk_ultimo_rot"></div>
     <div id="bkUltimo" class="bk-txt"></div>
   </div>
+
+  <!-- AS ÚLTIMAS CÓPIAS. Só aparece quando há mais de uma: com uma só,
+       a linha do "último backup" acima já disse tudo. -->
+  <div id="bkHist" class="bk-hist" hidden></div>
   <div class="bk-passo">
     <b data-i18n="bk_p1_tit"></b>
-    <span class="nota" data-i18n="bk_p1_txt"></span>
+    <!-- O TEXTO DIZ O QUE ESTE NAVEGADOR FAZ, e é pintado pelo JS: numa
+         janela sem seletor de pasta nem compartilhamento, prometer
+         "escolha uma pasta" seria mentira. -->
+    <span class="nota" id="bkGuardarExp"></span>
     <div class="btn-linha">
-      <button class="btn btn-verde" id="btnBkSalvarNuvem" data-i18n="bk_salvar_nuvem"></button>
-      <button class="btn btn-cinza" id="btnBkBaixar" data-i18n="bk_baixar"></button>
+      <button class="btn btn-verde" id="btnBkSalvarNuvem" hidden></button>
+      <button class="btn btn-cinza" id="btnBkBaixar"></button>
+      <!-- REGRAVAR NA MESMA PASTA. Só existe depois de haver uma pasta
+           escolhida nesta sessão, e é a melhor resposta para "salvei
+           três vezes hoje e não sei qual é qual": passa a haver um
+           arquivo só, sempre o mesmo. -->
+      <button class="btn btn-cinza" id="btnBkRegravar" hidden></button>
     </div>
   </div>
   <div class="bk-passo">
@@ -5510,7 +5594,8 @@ window.__sqlPromise = initSqlJs({
 <script src="lei-ui.js"></script>
 <script src="questoes.js"></script>
 <script src="rascunho.js"></script>
-<script src="pelicula.js"></script>
+<script src="copiar-questao.js"></script>
+<script src="grifo.js"></script>
 <script src="geracao-log.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
