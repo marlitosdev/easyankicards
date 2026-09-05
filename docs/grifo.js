@@ -227,20 +227,82 @@ function grPintar(caixa, qid, texto) {
       if (ev && ev.stopPropagation) ev.stopPropagation();
       grTirarEm(qid, txt, p.ini);
       grPintar(caixa, qid, txt);
+      try { reg("GRIFO", "grifo tirado", "questão " + (qid || "?")); } catch (e) {}
     };
     caixa.append(m);
   });
 }
 
 /* A caixa do enunciado, já pintada e ligada. Substitui plEnvolver. */
+/* O NAVEGADOR AVISA A CADA MUDANÇA DE SELEÇÃO, e é aí que ela ainda
+ * existe. Um só ouvinte para o aplicativo inteiro: ligar e desligar por
+ * questão criaria o caso de ficar sem ouvinte nenhum. */
+let grOuvindo = false;
+
+function grOuvirSelecao() {
+  if (grOuvindo) return;
+  if (typeof document === "undefined" || !document.addEventListener) return;
+  document.addEventListener("selectionchange", () => {
+    try { grLembrarSelecao(); } catch (e) {}
+  });
+  grOuvindo = true;
+}
+
 function grEnvolver(caixa, qid, texto) {
   grQid = qid == null ? null : String(qid);
   grTexto = String(texto || "");
   grCaixa = caixa || null;
+  grEsquecerSelecao();
+  grOuvirSelecao();
   if (caixa) caixa.className = ((caixa.className || "") + " gr-cx").trim();
   grPintar(caixa, grQid, grTexto);
   return caixa;
 }
+
+/* ---------------------------------------------------------------------
+ * A SELEÇÃO PRECISA SER LEMBRADA ANTES DO CLIQUE
+ *
+ * O DEFEITO: selecionar o trecho, tocar numa cor, e nada acontecer.
+ *
+ * No Chrome, apertar um <button> move o foco e COLAPSA a seleção no
+ * "mousedown" — antes do "click". Quando o gatilho da cor roda, o que
+ * "window.getSelection()" devolve já é um cursor sem largura: início
+ * igual a fim, e a função recusa. O gesto inteiro do grifo dependia de
+ * ler a seleção no instante em que ela já não existe mais.
+ *
+ * ESTE APLICATIVO JÁ SABIA DISSO: "matLembrarSelecao", no material,
+ * existe pelo mesmo motivo e resolve do mesmo jeito. Eu não apliquei
+ * aqui.
+ *
+ * A CORREÇÃO É UM CAMINHO SÓ, e não duas defesas: a seleção é anotada
+ * enquanto ela existe (o navegador avisa a cada mudança) e o botão usa
+ * o que ficou anotado. Duas defesas — anotar E impedir o foco de sair —
+ * seriam duas verdades sobre a mesma coisa, e uma delas viraria código
+ * morto que ninguém consegue testar.
+ * ------------------------------------------------------------------ */
+let grSelGuardada = null;      /* {ini, fim} dentro do enunciado */
+
+/* Lê a seleção viva e a anota, se ela for utilizável. Devolve o que
+ * anotou, para quem quiser usar na hora. */
+function grLembrarSelecao() {
+  if (!grCaixa) return null;
+  const sel = (typeof window !== "undefined" && window.getSelection)
+    ? window.getSelection() : null;
+  if (!sel || !sel.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  const a = grPosicaoDe(grCaixa, r.startContainer, r.startOffset);
+  const b = grPosicaoDe(grCaixa, r.endContainer, r.endOffset);
+  /* FORA DA CAIXA OU SEM LARGURA não vira grifo — e, principalmente,
+   * não apaga o que já estava anotado: o colapso causado pelo próprio
+   * clique chega aqui como uma seleção vazia, e deixá-lo sobrescrever a
+   * anotação seria reintroduzir o defeito por outro caminho. */
+  if (a < 0 || b < 0 || a === b) return null;
+  grSelGuardada = { ini: Math.min(a, b), fim: Math.max(a, b) };
+  return grSelGuardada;
+}
+
+function grSelGuardadaAtual() { return grSelGuardada; }
+function grEsquecerSelecao() { grSelGuardada = null; }
 
 /* Grifa o que está selecionado AGORA, com a cor escolhida.
  *
@@ -252,21 +314,38 @@ function grEnvolver(caixa, qid, texto) {
  * separados. */
 function grDaSelecao() {
   if (!grCaixa) return null;
-  const sel = (typeof window !== "undefined" && window.getSelection)
-    ? window.getSelection() : null;
-  if (!sel || !sel.rangeCount) return null;
-  const r = sel.getRangeAt(0);
-  const a = grPosicaoDe(grCaixa, r.startContainer, r.startOffset);
-  const b = grPosicaoDe(grCaixa, r.endContainer, r.endOffset);
-  if (a < 0 || b < 0 || a === b) return null;
-  grAcrescentar(grQid, grTexto, a, b, grCorAtual());
+  /* tenta a viva primeiro — no caminho em que ela sobrevive, é a mais
+   * recente; se já colapsou, vale a que ficou anotada */
+  grLembrarSelecao();
+  const s = grSelGuardada;
+  if (!s) {
+    try {
+      reg("GRIFO", "cor tocada sem trecho selecionado",
+          "questão " + (grQid || "?"));
+    } catch (e) {}
+    return null;
+  }
+  grAcrescentar(grQid, grTexto, s.ini, s.fim, grCorAtual());
   grPintar(grCaixa, grQid, grTexto);
-  try { sel.removeAllRanges(); } catch (e) {}
-  return { ini: Math.min(a, b), fim: Math.max(a, b), cor: grCorAtual() };
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (sel) sel.removeAllRanges();
+  } catch (e) {}
+  grEsquecerSelecao();
+  try {
+    reg("GRIFO", "trecho grifado",
+        grCorAtual() + " · " + (s.fim - s.ini) + " caracteres · questão "
+        + (grQid || "?"));
+  } catch (e) {}
+  return { ini: s.ini, fim: s.fim, cor: grCorAtual() };
 }
 
 function grLimparTela() {
   if (!grCaixa) return;
+  try {
+    reg("GRIFO", "grifos apagados",
+        grContar(grQid) + " · questão " + (grQid || "?"));
+  } catch (e) {}
   grLimpar(grQid);
   grPintar(grCaixa, grQid, grTexto);
 }
