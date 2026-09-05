@@ -1085,6 +1085,8 @@ const UI = {
   "ed_min_l_anotado": "anotado {a}%",
   "ed_min_l_anotado_aj": "Percentual que você anotou de cabeça, sem contar questão por questão. Fica à parte porque não se sabe de quantas questões ele fala.",
   "ed_trava": "reforçado: risco de corte em {b}",
+  "ed_cede": "bloco menor: já coberta e revisada",
+  "ed_cede_aj": "Esta disciplina está com {c}% coberta (a régua para ceder tempo é {a}%) e {r}% do que você cobriu já foi revisado — e ela não está em risco de corte em bloco nenhum.\n\nPor isso os tópicos que faltam dela entram com bloco de {para} em vez de {de}, e o tempo que sobra vai para as disciplinas atrasadas.\n\nIsto NÃO muda a ordem da fila nem o peso da disciplina na prova: muda só a duração do bloco. Se ela voltar a ficar em risco, os blocos voltam ao tamanho de antes.",
   "ed_trava_aj": "Esta disciplina está abaixo da margem num bloco com nota mínima, então recebe duas vagas por rodada em vez de uma. Duas, e não a fila inteira: monopolizar a agenda com ela criaria o mesmo risco no bloco vizinho.",
   "dif_pergunta": "Quanto você domina este tópico?",
   "dif_pergunta_dica": "Sobe ou desce a frequência dele na agenda. Não muda o peso na prova.",

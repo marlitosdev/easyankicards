@@ -392,7 +392,19 @@ function edLinhaTopico(i, semDisciplina) {
   meio.className = "ed-item-meio";
   const nome = document.createElement("div");
   nome.className = "ed-item-nome";
-  nome.textContent = i.nome;
+  /* O TÍTULO NUM ELEMENTO PRÓPRIO, e não solto como texto.
+   *
+   * Os selos — revisão, trava, "já estudei", "também cai em" — são
+   * acrescentados aqui dentro. Enquanto o título era um nó de texto
+   * solto numa linha com "white-space: nowrap", tudo ficava na mesma
+   * linha e as reticências cortavam o fim: numa tela estreita, com três
+   * selos, quem sumia era o selo da trava — a informação mais
+   * importante da linha. Com o título num span, a linha vira flex e os
+   * selos passam para baixo quando não cabem, em vez de serem cortados. */
+  const tit = document.createElement("span");
+  tit.className = "ed-item-titulo";
+  tit.textContent = i.nome;
+  nome.append(tit);
   /* Selo além da cor: quem imprime em preto e branco, ou não distingue
    * azul de cinza, continua sabendo o que é revisão. */
   if (i.ehRevisao) {
@@ -459,6 +471,22 @@ function edLinhaTopico(i, semDisciplina) {
     tv.textContent = t("ed_trava", { b: i.travaBloco || "?" });
     tv.title = t("ed_trava_aj");
     nome.append(tv);
+  }
+
+  /* E QUANDO ELA CEDE, TAMBÉM DIZ.
+   *
+   * O bloco desta disciplina encolheu de 60 para 45 minutos porque ela
+   * já está coberta com folga e revisada. Encolher calado seria a
+   * agenda mudando sozinha — a mesma reclamação que deu origem à trava,
+   * do outro lado do sinal. */
+  if (i.cedeu) {
+    const cd = document.createElement("span");
+    cd.className = "ed-item-cede";
+    cd.textContent = t("ed_cede");
+    cd.title = t("ed_cede_aj", {
+      c: i.cedeu.cobertura, a: i.cedeu.alvo, r: i.cedeu.revisao,
+      de: i.faixaAntes, para: i.faixa });
+    nome.append(cd);
   }
 
   const porq = document.createElement("div");
