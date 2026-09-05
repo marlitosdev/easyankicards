@@ -36,11 +36,16 @@ function bkMarcarSalvo(onde, nome) {
 function bkQuandoCurto(iso, dias) {
   const d = new Date(iso);
   const hora = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (dias <= 0) return t("bk_quando_hoje", { h: hora });
-  if (dias === 1) return t("bk_quando_ontem", { h: hora });
+  /* CALCULA O DIA AQUI, sem confiar no que veio de fora: "hoje" é uma
+   * afirmação sobre o calendário, e quem chama pode passar uma idade em
+   * horas — foi assim que uma cópia de ontem às 20:47 apareceu como
+   * "hoje, 20:47" às 15:44. */
+  const n = bkDiasDeCalendario(iso);
+  if (n <= 0) return t("bk_quando_hoje", { h: hora });
+  if (n === 1) return t("bk_quando_ontem", { h: hora });
   return t("bk_quando_antes", {
     d: d.toLocaleDateString([], { day: "2-digit", month: "2-digit" }),
-    h: hora, n: dias });
+    h: hora, n: n });
 }
 
 /* O selo fica no rodapé, sempre visível: "base de hoje" ou "base de 12/08 —

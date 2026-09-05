@@ -194,11 +194,31 @@ function nomeArquivoBackup() {
 /* Idade da base em dias, para o app poder dizer de quando é o que você está
  * usando — a informação que faltava para alguém perceber que abriu o app num
  * aparelho onde o backup é de três semanas atrás. */
+/* DIAS DE CALENDÁRIO, e não horas divididas por 24.
+ *
+ * O defeito: uma cópia feita ONTEM às 20:47, olhada hoje às 15:44, tem
+ * 19 horas de idade — menos de um dia. Dividindo por 86400000 dá zero,
+ * e a tela dizia "hoje, 20:47" para um arquivo de ontem, mostrando uma
+ * hora que ainda não chegou. É o mesmo erro do "há 0d" que este trecho
+ * tinha acabado de substituir, com outra roupa: "quanto tempo passou"
+ * não responde "que dia foi".
+ *
+ * A conta certa zera as horas dos dois lados e conta as viradas de
+ * meia-noite entre eles — que é o que "ontem" quer dizer para quem
+ * fala. E usa horário LOCAL: a virada do dia é a do aparelho, não a de
+ * Greenwich, ou quem salva às 22h no Brasil vê "amanhã". */
+function bkDiasDeCalendario(iso, agora) {
+  const a = new Date(iso);
+  const b = agora ? new Date(agora) : new Date();
+  if (isNaN(a.getTime())) return 0;
+  const meiaNoite = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((meiaNoite(b) - meiaNoite(a)) / 86400000);
+}
+
 function idadeBase() {
   const q = bkLer("eac_backup_em");
   if (!q) return null;
-  const dias = Math.floor((Date.now() - new Date(q).getTime()) / 86400000);
-  return { quando: q, dias };
+  return { quando: q, dias: bkDiasDeCalendario(q) };
 }
 
 /* =====================================================================
