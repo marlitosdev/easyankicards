@@ -1521,6 +1521,29 @@ dialog.diag-modal{max-width:860px}
   background:var(--campo);border:1px solid var(--borda)}
 .diag-alvo b{font-size:13px}
 .diag-alvo .da-conta{margin-left:auto;color:var(--sutil);font-size:11.5px}
+/* ---- A LINHA DO TEMPO DE TODOS OS REGISTROS ---- */
+.rt-abas{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 6px}
+.rt-aba{all:unset;cursor:pointer;font-size:10.5px;padding:5px 11px;
+  border-radius:999px;border:1px solid var(--borda);color:var(--sutil);
+  white-space:nowrap}
+.rt-aba:hover{color:var(--texto);background:var(--campo)}
+.rt-aba.sel{background:var(--azul,#2563eb);color:#fff;
+  border-color:var(--azul,#2563eb);font-weight:700}
+.rt-aba.tem-erro:not(.sel){border-color:var(--vermelho,#dc2626);
+  color:var(--vermelho,#dc2626)}
+.rt-lista{max-height:46vh;overflow:auto;border:1px solid var(--borda);
+  border-radius:9px;padding:6px 2px;margin-bottom:10px;background:var(--campo)}
+.rt-li{display:grid;grid-template-columns:auto auto 1fr;gap:8px;
+  font-size:10.5px;line-height:1.5;padding:3px 9px;
+  font-family:ui-monospace,monospace;color:var(--sutil)}
+/* O ERRO SE ACHA ROLANDO, sem precisar ler: é o ponto de quebra, e
+   quem abre este painel quase sempre veio atrás dele. */
+.rt-li.n-erro{background:var(--vermelho-claro,#3b1414);color:var(--texto)}
+.rt-li.n-aviso{background:var(--laranja-claro);color:var(--texto)}
+.rt-li.n-info{color:var(--texto)}
+.rt-q{white-space:nowrap;opacity:.8}
+.rt-f{white-space:nowrap;font-weight:700;opacity:.85}
+.rt-m{word-break:break-word}
 .diag-legenda{font-size:11.5px;line-height:1.6;color:var(--sutil);
   border:1px solid var(--borda);border-radius:9px;padding:9px 11px;margin:8px 0}
 .diag-legenda b{color:var(--texto);font-family:ui-monospace,Consolas,monospace}
@@ -3722,6 +3745,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="diag-periodos" id="diagPeriodos"></div>
   <label class="diag-op"><input type="checkbox" id="chkDiagModo">
     <span data-i18n="diag_so_modo"></span></label>
+
+  <!-- A LINHA DO TEMPO ÚNICA.
+       Os cinco registros continuam cada um no seu lugar — ler o da
+       vinculação dentro da tela de vinculação é o que o torna útil ali.
+       O que faltava era poder olhar todos juntos, em ordem, quando a
+       pergunta é "o que aconteceu antes disto?". Esta aba não guarda
+       nada: lê as fontes e junta. -->
+  <div class="rt-abas" id="rtAbas"></div>
+  <div class="rt-lista" id="rtLista" hidden></div>
+
   <pre id="diagPre" class="diag-pre"></pre>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
@@ -5597,6 +5630,7 @@ window.__sqlPromise = initSqlJs({
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>
 <script src="geracao-log.js"></script>
+<script src="registro-tudo.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>

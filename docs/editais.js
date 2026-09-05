@@ -281,3 +281,94 @@ function comparativoEditais(diario, hoje) {
   });
   return linhas;
 }
+
+/* =====================================================================
+ * DE QUEM É O TEXTO QUE ESTÁ NA BANCADA
+ *
+ * O QUE ACONTECEU, num backup de verdade: o edital "TCE-PE Auditor de
+ * Controle Externo" — 17 disciplinas, 232 tópicos, 6 marcados —
+ * apareceu numa cópia com o nome, o texto e o progresso do "ISS Caruaru
+ * Auditor Fiscal". Mesmo id, mesma data de criação, conteúdo do outro.
+ * Duzentos e trinta e dois tópicos sumiram sem uma linha de aviso.
+ *
+ * COMO: duas funções gravam o conteúdo da bancada dentro do edital
+ * aberto — edSalvar e hubGravarAberto. Nenhuma das duas conferia se o
+ * texto que está na bancada é DAQUELE edital. Elas assumem o par. Basta
+ * "eac_edital_atual" apontar para um edital e a bancada estar com o
+ * texto de outro — o que acontece se a página abrir com a cópia de
+ * trabalho antiga, ou se algum caminho trocar o aberto sem recarregar o
+ * texto — para a gravação seguinte escrever um edital por cima do
+ * outro. E ela ainda RENOMEIA o destino, pelo cabeçalho do texto: é por
+ * isso que ficaram dois "ISS Caruaru" na lista.
+ *
+ * A REGRA, escrita uma vez só e usada pelas duas: gravar pode mudar o
+ * conteúdo de um edital; NÃO pode mudar de qual edital ele é. Se o
+ * cabeçalho da bancada nomeia outro concurso, ou se a bancada está
+ * marcada como sendo de outro edital, a gravação é recusada — e dita em
+ * voz alta, porque não gravar em silêncio é o outro jeito de perder
+ * trabalho.
+ * ===================================================================== */
+const ED_DONO_CHAVE = "eac_edital_texto_de";
+
+function edDonoDoTexto() {
+  try { return localStorage.getItem(ED_DONO_CHAVE) || ""; } catch (e) { return ""; }
+}
+
+function edMarcarDonoDoTexto(id) {
+  try {
+    if (id) localStorage.setItem(ED_DONO_CHAVE, String(id));
+    else localStorage.removeItem(ED_DONO_CHAVE);
+  } catch (e) {}
+}
+
+/* O concurso que o cabeçalho do texto declara — a identidade que o
+ * próprio texto carrega. */
+function edConcursoDoTexto(texto) {
+  try {
+    const cfg = (lerEdital(String(texto || "")).cfg) || {};
+    return String(cfg.concurso || "").trim();
+  } catch (e) { return ""; }
+}
+
+function edMesmoNome(a, b) {
+  const n = (x) => String(x || "").toLowerCase().normalize("NFD")
+    .replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+  return n(a) === n(b);
+}
+
+/* Devolve { ok, motivo }. "motivo" é o que a tela mostra. */
+function edPodeGravarNo(alvo, texto) {
+  if (!alvo) return { ok: false, motivo: "sem-alvo" };
+
+  /* 1. A BANCADA ESTÁ MARCADA COMO DE OUTRO EDITAL. É o caso direto, e
+   *    só existe depois que alguém abriu um edital de verdade. */
+  const dono = edDonoDoTexto();
+  if (dono && String(dono) !== String(alvo.id)) {
+    return { ok: false, motivo: "outro-dono" };
+  }
+
+  /* 2. O CABEÇALHO NOMEIA UM EDITAL QUE JÁ EXISTE NA LISTA.
+   *
+   *    A pergunta certa não é "o cabeçalho mudou?" — mudar o cabeçalho
+   *    do próprio edital é renomear, e renomear é legítimo: corrigir o
+   *    nome do concurso, acertar o ano. A primeira versão desta trava
+   *    barrava isso, o que é pior que o defeito.
+   *
+   *    A pergunta certa é "este texto é de OUTRO edital que existe?".
+   *    Foi exatamente o que aconteceu: o cabeçalho dizia "ISS Caruaru
+   *    Auditor Fiscal", havia um edital com esse nome na lista, e o
+   *    texto foi gravado por cima do TCE-PE — deixando dois "ISS
+   *    Caruaru". Renomear para um nome novo continua passando; assumir
+   *    a identidade de um irmão, não.
+   *
+   *    O dono marcado não substitui esta checagem: ele diz de onde a
+   *    bancada foi CARREGADA, e continua apontando para o mesmo edital
+   *    depois de alguém colar outro plano por cima. */
+  const cab = edConcursoDoTexto(texto);
+  if (cab) {
+    const irmao = (editais || []).filter((x) =>
+      x && String(x.id) !== String(alvo.id) && edMesmoNome(x.nome, cab))[0];
+    if (irmao) return { ok: false, motivo: "outro-concurso" };
+  }
+  return { ok: true, motivo: "" };
+}

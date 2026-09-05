@@ -27,16 +27,49 @@ function edSalvar() {
   } catch (e) {}
   if (typeof edAberto === "function") {
     const alvo = edAberto();
-    if (alvo) {
-      alvo.texto = $("editalTexto").value;
+    const txt = $("editalTexto").value;
+    /* GRAVAR PODE MUDAR O CONTEÚDO DE UM EDITAL; NÃO PODE MUDAR DE QUAL
+     * EDITAL ELE É. A regra mora em edPodeGravarNo, e é a mesma que
+     * hubGravarAberto usa — escrita duas vezes, um dia divergiriam, e a
+     * divergência aqui custa um edital inteiro. */
+    const pode = (typeof edPodeGravarNo === "function")
+      ? edPodeGravarNo(alvo, txt) : { ok: !!alvo, motivo: "sem-alvo" };
+    if (alvo && pode.ok) {
+      alvo.texto = txt;
       alvo.progresso = edProgresso;
       alvo.tocado = new Date().toISOString();
       /* o nome segue o cabeçalho do edital enquanto ninguém renomear à mão */
       const cfg = (lerEdital(alvo.texto).cfg) || {};
       if (cfg.concurso && !alvo.renomeado) alvo.nome = cfg.concurso;
       edSalvarLista();
+      if (typeof edMarcarDonoDoTexto === "function") edMarcarDonoDoTexto(alvo.id);
+    } else if (alvo && pode.motivo !== "sem-alvo") {
+      edAvisarGravacaoRecusada(alvo, txt, pode.motivo);
     }
   }
+}
+
+/* NÃO GRAVAR EM SILÊNCIO TAMBÉM É PERDER TRABALHO.
+ *
+ * A recusa protege o edital do outro lado; quem está digitando precisa
+ * saber que o que está na tela não foi para lugar nenhum, e por quê. O
+ * aviso sai uma vez por sessão para cada motivo — repetido a cada
+ * tecla, viraria ruído que se aprende a fechar sem ler. */
+let edRecusasAvisadas = {};
+
+function edAvisarGravacaoRecusada(alvo, texto, motivo) {
+  try {
+    reg("EDITAL", "gravacao recusada (" + motivo + ")",
+        "bancada: " + (edConcursoDoTexto(texto) || "sem cabeçalho")
+        + " · aberto: " + (alvo && alvo.nome));
+  } catch (e) {}
+  if (edRecusasAvisadas[motivo]) return;
+  edRecusasAvisadas[motivo] = true;
+  try {
+    uiAlert(t("ed_recusa_" + motivo, {
+      a: (alvo && alvo.nome) || "",
+      b: edConcursoDoTexto(texto) || "" }));
+  } catch (e) {}
 }
 
 function edChave(it) { return (it.disciplina + "›" + it.nome).toLowerCase(); }

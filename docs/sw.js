@@ -25,13 +25,13 @@
  *
  * Agora os três andam juntos, e o invariante E16 (tests/estrutura.js)
  * derruba a suíte se um deles ficar para trás. */
-const CACHE = "easyankicards-v16.1.1";
-const SW_VERSION = "16.1.1";
+const CACHE = "easyankicards-v16.3.0";
+const SW_VERSION = "16.3.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
   "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",
   "backup.js", "backup-ui.js", "material.js",
-  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js",
+  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js", "fora-da-agenda.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
