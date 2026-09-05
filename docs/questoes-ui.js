@@ -655,16 +655,14 @@ function qsUiPintarSessao() {
   en.className = "qs-enunciado";
   en.textContent = q.enunciado;
   corpo.append(de);
-  /* A PELÍCULA ENVOLVE SÓ O ENUNCIADO.
-   * Uma camada por cima das alternativas engoliria os cliques delas — e
-   * responder é o gesto mais importante desta tela. Ela nasce desligada
-   * e, desligada, não intercepta nada: o texto continua selecionável,
-   * que é o que o botão de copiar logo abaixo depende. */
+  /* O GRIFO É O PRÓPRIO TEXTO, e não uma camada por cima dele.
+   * Nada intercepta clique, nada precisa ser ligado: selecionar texto
+   * sempre foi possível, e as cores só agem sobre o que está
+   * selecionado. */
   try {
-    const env = plEnvolver(en, q.id);
-    corpo.append(env || en);
-    corpo.append(plBarra());
-    corpo.append(plBarraCopiar(q));
+    grEnvolver(en, q.id, q.enunciado);
+    corpo.append(en);
+    corpo.append(qsUiFerramentas(q));
   } catch (e) { corpo.append(en); }
 
   /* HISTÓRICO DESTA QUESTÃO, ANTES DE RESPONDER — SEM ENTREGAR O GABARITO.
@@ -1865,4 +1863,76 @@ function qsTamanhoTrocar() {
   const n = qsTamanhoPor(qsTamanhoAtual() + 1);
   try { reg("QUESTOES", "tamanho da caixa trocado", t("qs_tam_" + n)); } catch (e) {}
   return n;
+}
+
+/* =====================================================================
+ * AS FERRAMENTAS DA QUESTÃO, NUMA LINHA SÓ
+ *
+ * Antes eram três faixas empilhadas entre o enunciado e as
+ * alternativas: a do grifo (sete botões), a de copiar (um botão e duas
+ * caixas de marcar) e o histórico. Num telefone isso é meia tela de
+ * controle entre o texto que se lê e a resposta que se dá — e ler e
+ * responder são as duas únicas coisas que esta tela faz.
+ *
+ * Agora: as quatro cores, que são o gesto frequente e precisam estar à
+ * mão; e o resto atrás de um ⋮.
+ * ===================================================================== */
+function qsUiFerramentas(q) {
+  const barra = document.createElement("div");
+  barra.className = "qs-fer";
+
+  GR_CORES.forEach((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "qs-cor gr-" + c.id + (grCorAtual() === c.id ? " sel" : "");
+    b.title = t("gr_cor_ajuda", { c: t(c.i18n) });
+    b.setAttribute("aria-label", b.title);
+    b.onclick = () => {
+      /* GRIFA O QUE ESTIVER SELECIONADO; sem seleção, só troca a cor
+       * para o próximo grifo. Um botão que não faz nada quando não há
+       * seleção pareceria quebrado — então ele sempre faz alguma coisa
+       * visível. */
+      /* A COR PRIMEIRO, o grifo depois. Assim tocar numa cor sem nada
+       * selecionado faz o que o botão promete: escolhe a cor do
+       * próximo grifo. */
+      grEscolherCor(c.id);
+      const feito = grDaSelecao();
+      qsUiPintarCores(barra);
+      if (!feito) vkReagir(b, t("gr_sem_selecao"));
+    };
+    barra.append(b);
+  });
+
+  const limpar = document.createElement("button");
+  limpar.type = "button";
+  limpar.className = "btn-min qs-fer-limpar";
+  limpar.textContent = t("gr_limpar");
+  limpar.title = t("gr_limpar_ajuda");
+  limpar.onclick = () => { grLimparTela(); vkReagir(limpar, t("gr_limpou")); };
+  barra.append(limpar);
+
+  /* o ⋮ com o que não é gesto de leitura */
+  const mais = document.createElement("span");
+  mais.className = "qs-fer-mais";
+  const bm = document.createElement("button");
+  bm.type = "button";
+  bm.className = "btn-min";
+  bm.textContent = "⋮";
+  bm.title = t("qs_fer_mais");
+  const menu = document.createElement("span");
+  menu.className = "qs-fer-menu";
+  menu.hidden = true;
+  bm.onclick = () => { menu.hidden = !menu.hidden; };
+  try { menu.append(plBarraCopiar(q)); } catch (e) {}
+  mais.append(bm, menu);
+  barra.append(mais);
+  return barra;
+}
+
+function qsUiPintarCores(barra) {
+  if (!barra || !barra.querySelectorAll) return;
+  GR_CORES.forEach((c) => {
+    const b = barra.querySelector(".qs-cor.gr-" + c.id);
+    if (b && b.classList) b.classList.toggle("sel", grCorAtual() === c.id);
+  });
 }
