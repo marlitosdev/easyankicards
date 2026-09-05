@@ -613,9 +613,43 @@ function montarPlano(r, opcoes) {
    * risco, todas ganham duas vagas e a proporção volta a ser a de
    * antes — que é o comportamento certo, porque nesse caso não há
    * ninguém a quem tirar tempo. */
+  /* UMA CONTA SÓ, lida pelos dois lados. A trava e a liberação são
+   * decisões opostas sobre a MESMA medida; calcular os blocos duas
+   * vezes seria abrir a porta para elas divergirem — que é o defeito
+   * que mais voltou neste aplicativo. */
+  const blocos = edCumprimentoBlocos(r, todos, acertos);
   const emRisco = {};
-  edDiscEmRisco(edCumprimentoBlocos(r, todos, acertos))
-    .forEach((x) => { emRisco[x.disciplina] = x; });
+  edDiscEmRisco(blocos).forEach((x) => { emRisco[x.disciplina] = x; });
+
+  /* ---- QUEM JÁ PODE CEDER TEMPO ----
+   *
+   * Um degrau de faixa, e só na DURAÇÃO. Não mexe em brutoOrdem, nem na
+   * prioridade, nem na ordem da fila: a disciplina continua entrando na
+   * mesma posição do rodízio, com blocos mais curtos. Mexer na ordem
+   * seria uma segunda mudança escondida dentro de uma.
+   *
+   * E NUNCA MEXE EM "bruto" — é dele que saem a cobertura e o
+   * cumprimento dos mínimos. Um fator que entrasse ali faria a trava
+   * ler uma cobertura que não existe e se desligar sozinha, sem sinal
+   * nenhum na tela. */
+  const cedem = {};
+  edDiscComFolga(blocos, todos, emRisco)
+    .forEach((x) => { cedem[x.disciplina] = x; });
+  if (Object.keys(cedem).length) {
+    todos.forEach((i) => {
+      const c = cedem[i.disciplina];
+      if (!c || i.feito) return;
+      const k = ED_FAIXAS.findIndex((f) => f.id === i.faixa);
+      if (k < 0 || k >= ED_FAIXAS.length - 1) return;   /* já é a menor */
+      const nova = ED_FAIXAS[k + 1];
+      i.faixaAntes = i.faixa;
+      i.faixa = nova.id;
+      i.minutos = nova.minutos;
+      /* o item diz que cedeu, e por quê: tempo que encolhe sem
+       * explicação é a mesma reclamação que deu origem à trava */
+      i.cedeu = { cobertura: c.cobertura, alvo: c.alvo, revisao: c.revisao };
+    });
+  }
 
   const fila = [];
   let restam = true;
@@ -702,7 +736,10 @@ function montarPlano(r, opcoes) {
     diasDesde: vencida && s ? Math.abs(s.dias) : null,
     /* CUMPRIMENTO DOS MÍNIMOS — a pergunta "posso ser eliminado?", que é
      * diferente de "quanto da prova eu cobri?" */
-    blocos: edCumprimentoBlocos(r, todos, acertos),
+    /* A MESMA conta de lá de cima, e não uma terceira chamada: a
+     * liberação e a trava já leram estes blocos, e a tela tem de ver
+     * exatamente o que elas viram. */
+    blocos,
     /* a fatia da prova é EXATA quando o edital trouxe os números */
     fatiaExata: exata,
     /* qual fase este plano representa, e o que existe do outro lado */
@@ -961,6 +998,82 @@ function edCumprimentoBlocos(r, itens, acertos) {
  * A cobertura entra porque ela existe desde o primeiro dia; o acerto,
  * só quando há questões suficientes. Esperar pelo acerto deixaria a
  * trava dormindo justamente nos meses em que ela mais serve. */
+/* =====================================================================
+ * QUEM JÁ PODE CEDER TEMPO
+ *
+ * O contrário da trava, e de propósito o contrário APOIADO EM DADO
+ * CERTO. A trava reage a risco, e risco pode ser estimado; ceder tempo
+ * tira minutos de uma disciplina, e tirar minutos com base em
+ * estimativa é o que pode custar a prova.
+ *
+ * POR QUE COBERTURA E REVISÃO, E NÃO ACERTO. Acerto é sinal derivado:
+ * você só responde questão do que o plano mandou estudar, então o
+ * número existe justamente onde o plano já investiu — e não existe onde
+ * ele não investiu. Medir por ele e realimentar o plano fecha um
+ * círculo. Cobertura e revisão são fato: o app sabe exatamente quantos
+ * tópicos foram fechados e quantos foram revisados, e são os mesmos
+ * números em que a trava já confia.
+ *
+ * E 90% DE ACERTO EM 10% DA DISCIPLINA NÃO É MOTIVO PARA NADA. Amostra
+ * grande em pedaço pequeno continua sendo pedaço pequeno; por isso a
+ * régua aqui é a fração da DISCIPLINA, não a contagem de questões.
+ *
+ * TRÊS CONDIÇÕES, todas necessárias:
+ *  1. não estar em risco de corte — e a trava já testa cobertura abaixo
+ *     do mínimo, então esta condição sozinha impede o caso pior;
+ *  2. cobertura com a folga que o app já usa em todo lugar (25% acima
+ *     do mínimo do bloco);
+ *  3. a maioria do que foi coberto já revisado — estudar fixa menos que
+ *     revisar, e ceder tempo de matéria estudada-e-não-revisada é ceder
+ *     do que ainda vai embora.
+ * ===================================================================== */
+/* Sem mínimo declarado não há corte, e o "×1,25 do mínimo" não tem
+ * âncora. Aí a régua é a própria disciplina estar quase fechada: alto o
+ * bastante para não liberar tempo de quem mal começou. */
+const ED_CEDE_SEM_MINIMO = 80;   /* % da disciplina coberta */
+const ED_CEDE_REVISAO = 50;      /* % do coberto que precisa estar revisado */
+
+function edDiscComFolga(blocos, itens, emRisco) {
+  const risco = emRisco || {};
+  const fora = [];
+  const porDisc = {};
+  (itens || []).forEach((i) => {
+    if (!i || !i.disciplina) return;
+    const d = porDisc[i.disciplina] || (porDisc[i.disciplina] =
+      { total: 0, feito: 0, revisado: 0 });
+    d.total += i.bruto;
+    if (i.feito) d.feito += i.bruto;
+    if (i.revisado) d.revisado += i.bruto;
+  });
+
+  /* o mínimo que vale para cada disciplina, quando existe */
+  const minDe = {};
+  (blocos || []).forEach((b) => {
+    if (b.minPct === null || b.minPct === undefined) return;
+    (b.linhas || []).forEach((L) => { minDe[L.nome] = b.minPct; });
+  });
+
+  Object.keys(porDisc).forEach((nome) => {
+    if (risco[nome]) return;                       /* 1 */
+    const d = porDisc[nome];
+    if (!d.total) return;
+    const cob = Math.round((d.feito / d.total) * 100);
+    const min = minDe[nome];
+    const alvo = (min === undefined)
+      ? ED_CEDE_SEM_MINIMO
+      : Math.round(min * ED_FOLGA_MINIMO);
+    if (cob < alvo) return;                        /* 2 */
+    /* 3: a maioria DO QUE FOI COBERTO, e não do total — quem cobriu 90%
+     * e revisou 50% desses 90% está em situação diferente de quem
+     * cobriu 50% e revisou tudo. */
+    const rev = d.feito ? Math.round((d.revisado / d.feito) * 100) : 0;
+    if (rev < ED_CEDE_REVISAO) return;
+    fora.push({ disciplina: nome, cobertura: cob, alvo, revisao: rev,
+                comMinimo: min !== undefined });
+  });
+  return fora;
+}
+
 function edDiscEmRisco(blocos) {
   const fora = [];
   (blocos || []).forEach((b) => {

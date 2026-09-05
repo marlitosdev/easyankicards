@@ -1828,7 +1828,16 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .ed-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;
   border-bottom:1px solid var(--borda);cursor:pointer}
 .ed-item:last-child{border-bottom:0}
-.ed-item-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* O TÍTULO E OS SELOS NA MESMA LINHA ENQUANTO COUBEREM.
+   O título encolhe com reticências; os selos nunca encolhem e descem
+   para a linha de baixo quando falta espaço. Antes tudo era uma linha
+   só com nowrap, e numa tela estreita as reticências comiam justamente
+   o selo da trava — o aviso de risco de corte. */
+.ed-item-nome{flex:1;min-width:0;display:flex;flex-wrap:wrap;
+  align-items:center;gap:6px}
+.ed-item-titulo{flex:1 1 auto;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ed-item-nome > :not(.ed-item-titulo){flex:0 0 auto}
 .ed-item-disc{font-size:10.5px;color:var(--sutil);white-space:nowrap}
 .ed-item b{font-size:11px;white-space:nowrap}
 .ed-item.feito .ed-item-nome{text-decoration:line-through;opacity:.45}
@@ -2449,6 +2458,11 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
 .ed-min-cel.bom{color:var(--verde-txt);font-weight:600}
 .ed-min-cel.ruim{color:var(--vermelho-txt);font-weight:600}
 .ed-min-cel.anotado{font-style:italic;opacity:.8}
+/* O SELO DE QUEM CEDEU TEMPO: verde discreto, porque é boa notícia —
+   ao contrário da trava, que é alerta. */
+.ed-item-cede{font-size:9.5px;font-weight:700;padding:1px 7px;
+  border-radius:999px;background:var(--verde-claro);color:var(--verde-txt);
+  cursor:help}
 .ed-item-trava{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:999px;
   background:var(--laranja-claro);color:var(--laranja-txt);margin-left:5px;
   vertical-align:middle}
