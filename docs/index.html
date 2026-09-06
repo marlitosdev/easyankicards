@@ -401,6 +401,12 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   background:#1d4ed8;color:#fff;padding:10px 14px;border-radius:12px;
   box-shadow:0 6px 20px rgba(0,0,0,.35);font-size:13px}
 #barraUpdate.on{display:flex}
+/* AS DUAS FAIXAS TÊM CORES DIFERENTES PORQUE PEDEM COISAS DIFERENTES.
+   Verde: já baixou, depende de um toque seu. Âmbar: é o servidor que
+   ainda não entregou, e não há botão aqui que resolva. */
+#barraUpdate.upd-pronta{border-color:var(--verde,#16a34a)}
+#barraUpdate.upd-origem{border-color:var(--amarelo,#d97706)}
+#barraUpdate.upd-origem .btn-verde{background:var(--amarelo,#d97706)}
 #avisoTopo{border:1.5px solid var(--laranja-borda);background:var(--laranja-claro);
   border-radius:10px;padding:9px 11px;margin:8px 0}
 #avisoTopo .av-tit{font-size:12.5px;font-weight:800;color:var(--laranja-txt);margin-bottom:3px}

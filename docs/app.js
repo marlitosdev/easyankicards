@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.8.0";
+const VERSAO = "16.9.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4116,17 +4116,48 @@ preview();
 let swReg = null;
 let swEsperando = null;
 
-function mostrarBarraUpdate(worker) {
+/* A FAIXA DIZ QUAL VERSÃO, E DE QUEM É A VEZ.
+ *
+ * "Nova versão disponível" não distingue os dois estados que pedem
+ * coisas diferentes: uma versão que JÁ BAIXOU e espera um toque seu, e
+ * um servidor que ainda não entregou nada. A primeira é sua; a segunda
+ * não tem o que você fazer. Dizer o número da versão é o que permite
+ * conferir depois se a troca aconteceu mesmo. */
+function mostrarBarraUpdate(worker, versao) {
   swEsperando = worker;
-  $("updTitulo").textContent = t("update_title");
+  $("updTitulo").textContent = t("update_title", { v: versao || "?" });
   $("updTexto").textContent = t("update_text");
   $("btnAtualizar").textContent = t("update_btn");
   $("btnDepois").textContent = t("update_later");
-  $("barraUpdate").classList.add("on");
+  const b = $("barraUpdate");
+  if (b && b.classList) {
+    b.classList.remove("upd-origem");
+    b.classList.add("on", "upd-pronta");
+  }
+}
+
+/* O OUTRO ESTADO: o servidor ainda serve o antigo. Cor diferente
+ * porque a providência é diferente — aqui não há botão que resolva, e
+ * oferecer um seria mentir sobre quem manda. */
+function mostrarBarraOrigem(ativo) {
+  $("updTitulo").textContent = t("update_origem_tit", { a: ativo || "?" });
+  $("updTexto").textContent = t("update_origem_txt", { v: VERSAO });
+  $("btnAtualizar").textContent = t("update_origem_btn");
+  $("btnDepois").textContent = t("update_later");
+  const b = $("barraUpdate");
+  if (b && b.classList) {
+    b.classList.remove("upd-pronta");
+    b.classList.add("on", "upd-origem");
+  }
 }
 
 $("btnAtualizar").onclick = () => {
-  $("barraUpdate").classList.remove("on");
+  const b = $("barraUpdate");
+  const daOrigem = b && b.classList && b.classList.contains("upd-origem");
+  b.classList.remove("on");
+  /* NA FAIXA DA ORIGEM não há worker esperando: o botão leva ao
+   * diagnóstico, que é onde está a explicação e a saída forte. */
+  if (daOrigem) { abrirDiagnostico(); return; }
   if (swEsperando) swEsperando.postMessage("SKIP_WAITING");
   else location.reload();
 };
@@ -4149,7 +4180,7 @@ function pedirVersaoSW(worker) {
 async function avaliarWaiting(worker) {
   if (!worker) return;
   const v = await pedirVersaoSW(worker);
-  if (v && v !== VERSAO) mostrarBarraUpdate(worker);
+  if (v && v !== VERSAO) mostrarBarraUpdate(worker, v);
   else worker.postMessage("SKIP_WAITING");   // redundante: ativa calado
 }
 
@@ -4167,15 +4198,37 @@ async function procurarAtualizacao(manual) {
   if (manual) toast("update_checking");
   try {
     await swReg.update();
-    setTimeout(() => {
-      if (swReg.waiting) avaliarWaiting(swReg.waiting);
-      else if (manual) toast("update_none");
+    setTimeout(async () => {
+      if (swReg.waiting) { avaliarWaiting(swReg.waiting); return; }
+      /* SEM NINGUÉM ESPERANDO, mas o worker no comando serve outra
+       * versão: é o servidor que está atrasado, e isso precisa ser dito
+       * — senão a pessoa fica recarregando uma página que nunca vai
+       * mudar. */
+      try {
+        const d = await swDiagnostico();
+        if (d.estado === "atrasado") { mostrarBarraOrigem(d.ativo); return; }
+      } catch (e) {}
+      if (manual) toast("update_none");
     }, 1200);
   } catch (e) { /* offline: silencioso */ }
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").then((reg) => {
+  /* "updateViaCache: none" — A CORREÇÃO DE RAIZ DA TERCEIRA CAUSA.
+   *
+   * O navegador guarda o PRÓPRIO "sw.js" no cache HTTP. Enquanto ele
+   * estiver lá, nenhuma verificação de atualização chega ao servidor:
+   * o navegador compara o arquivo novo com uma cópia velha da sua
+   * memória e conclui, corretamente do ponto de vista dele, que nada
+   * mudou. Foi assim que "subi os arquivos e continua a versão antiga"
+   * aconteceu sem que nada estivesse errado no código.
+   *
+   * No GitHub Pages não dá para mandar cabeçalho nenhum — o servidor é
+   * o que é. Mas dá para dizer ao navegador, aqui, que este arquivo
+   * específico nunca vem do cache. Uma palavra resolve o que nenhum
+   * botão de emergência resolveria bem. */
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+    .then((reg) => {
     swReg = reg;
     if (reg.waiting && navigator.serviceWorker.controller) avaliarWaiting(reg.waiting);
     vigiarInstalacao(reg);
