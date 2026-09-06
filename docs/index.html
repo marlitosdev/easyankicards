@@ -999,12 +999,35 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    As marcas são <mark> de verdade dentro do texto: refluem com ele,
    crescem com a letra e sobrevivem a girar o aparelho — nada disso
    um desenho por cima conseguia. */
+/* O GRIFO SAÍA TRANSPARENTE — e este é o defeito relatado três vezes.
+ *
+ * A regra da marca era ".gr-cx mark.gr-m" — duas classes e um elemento,
+ * especificidade (0,2,1) — e trazia "background: transparent" para
+ * apagar o amarelo que o navegador põe em <mark> por conta própria. As
+ * cores eram ".gr-am", ".gr-vd"… — uma classe só, (0,1,0).
+ *
+ * (0,2,1) vence (0,1,0) esteja onde estiver no arquivo. Resultado: a
+ * marca era criada, o texto era envolvido, tudo funcionava — e o grifo
+ * era desenhado com fundo transparente. Invisível.
+ *
+ * É a TERCEIRA vez que a mesma armadilha me pega neste projeto: o
+ * "dialog.ui-modal" que espremia os modais, o "all: unset" que apagava
+ * as bolinhas de cor, e agora esta. Sempre igual — uma regra base mais
+ * específica que a regra de cor, e nenhum teste podia ver, porque o
+ * simulador não tem folha de estilo.
+ *
+ * A correção é dar às cores o MESMO seletor da base. */
 .gr-cx mark.gr-m{border-radius:3px;padding:.05em 0;cursor:pointer;
   color:inherit;background:transparent}
-.gr-am{background:rgba(250,204,21,.42)}
-.gr-vd{background:rgba(74,222,128,.36)}
-.gr-rs{background:rgba(244,114,182,.36)}
-.gr-az{background:rgba(96,165,250,.36)}
+.gr-cx mark.gr-m.gr-am{background:rgba(250,204,21,.5)}
+.gr-cx mark.gr-m.gr-vd{background:rgba(74,222,128,.42)}
+.gr-cx mark.gr-m.gr-rs{background:rgba(244,114,182,.42)}
+.gr-cx mark.gr-m.gr-az{background:rgba(96,165,250,.42)}
+/* as bolinhas da barra continuam usando as classes curtas */
+.gr-am{background:rgba(250,204,21,.5)}
+.gr-vd{background:rgba(74,222,128,.42)}
+.gr-rs{background:rgba(244,114,182,.42)}
+.gr-az{background:rgba(96,165,250,.42)}
 /* A FAIXA DAS CORES: quatro bolas e o resto atrás do ⋮. */
 .qs-fer{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px}
 /* "all: unset" APAGAVA A COR DAS BOLINHAS.

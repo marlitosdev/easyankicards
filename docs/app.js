@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.9.0";
+const VERSAO = "16.9.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;

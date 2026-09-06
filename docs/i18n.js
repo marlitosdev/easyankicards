@@ -2032,6 +2032,8 @@ const UI = {
   "gr_limpar_ajuda": "Tira todos os grifos deste enunciado. Para tirar um só, toque nele.",
   "gr_limpou": "✓ grifos apagados",
   "gr_tirar_ajuda": "Toque para tirar este grifo.",
+  "qs_ver_registro": "ver registro desta sessão",
+  "qs_ver_registro_aj": "Abre o diagnóstico já filtrado nos erros. É onde aparecem as falhas que não travam a tela — um botão que não fez nada, uma gravação recusada — e que de outro jeito passariam despercebidas.",
   "qs_fer_mais": "copiar a questão e outras utilidades",
   "qs_tam_0": "A tamanho normal",
   "qs_tam_1": "A+ letra maior",

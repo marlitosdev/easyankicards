@@ -265,4 +265,15 @@ function rtPintar() {
   });
 }
 
-function rtIniciarTela() { rtFiltro = "nenhum"; rtPintar(); }
+function rtIniciarTela() {
+  rtFiltro = rtPedido || "nenhum";
+  rtPedido = "";
+  rtPintar();
+}
+
+/* ABRIR O PAINEL JÁ NUM FILTRO. Quem chega aqui vindo de um botão
+ * "ver registro" veio atrás de alguma coisa, e a linha do tempo fechada
+ * o obrigaria a procurar a aba. O pedido vale UMA abertura: guardá-lo
+ * faria o painel abrir sempre filtrado, escondendo o resto. */
+let rtPedido = "";
+function rtPorFiltroExterno(f) { rtPedido = f || ""; }
