@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.6.0";
+const VERSAO = "16.8.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4611,6 +4611,13 @@ function montarDiagnostico() {
       + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa
       + " | sessão " + SESSAO);
     L.push("Onde: " + foco.onde);
+    /* DE QUAL VERSÃO O SERVICE WORKER ESTÁ SERVINDO.
+     *
+     * É a informação que faltava nas duas vezes em que "subi os
+     * arquivos e continua a versão antiga": sem ela, não dá para
+     * distinguir "o servidor não atualizou" de "o worker antigo ainda
+     * está no controle" — e os dois pedem coisas diferentes. */
+    if (swDiagUltimo) L.push(swLinhaDiagnostico(swDiagUltimo));
   });
   L.push("Armazenamento: " + estadoArmazen);
   bloco(L, () => {
@@ -4756,8 +4763,14 @@ function montarPainelDiag() {
   alvo.append(rot, nome, conta);
 }
 
+let swDiagUltimo = null;
+
 async function abrirDiagnostico() {
   await medirArmazenamento();
+  /* consultado ANTES de montar o texto: o relatório que se copia tem de
+   * trazer isto, que é a primeira coisa a olhar quando "a versão não
+   * mudou" */
+  try { swDiagUltimo = await swDiagnostico(); } catch (e) { swDiagUltimo = null; }
   /* No edital, o filtro por modo já vem ligado: quem está relatando um
    * problema do plano não quer ler 180 eventos dos cartões para achar os
    * seus três. Quem quiser tudo desmarca. */
@@ -4799,6 +4812,14 @@ function diagPintarPeriodos() {
 }
 
 $("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
+if ($("btnSwForcar")) {
+  $("btnSwForcar").onclick = async () => {
+    const r = await swForcarAtualizacao();
+    if (r === "trocou") return;               /* a página recarrega sozinha */
+    if (r === "limpou") return;
+    if (r !== "desistiu") await uiAlert(t("sw_forcou"));
+  };
+}
 $("btnDiagCopiar").onclick = async () => {
   try {
     await navigator.clipboard.writeText(diagTexto);
@@ -5172,4 +5193,85 @@ if (typeof document !== "undefined" && document.addEventListener) {
   document.addEventListener("keydown", (e) => {
     if (e && e.key === "Escape" && dicaBalao) dicaFechar();
   });
+}
+
+/* =====================================================================
+ * QUANDO A ATUALIZAÇÃO NÃO CHEGA
+ *
+ * Já aconteceu duas vezes: os arquivos novos sobem para o servidor e o
+ * aplicativo continua mostrando os antigos. A causa quase nunca é o
+ * código — é uma destas três, e nenhuma delas aparece na tela:
+ *
+ *  1. o service worker ATIVO é o antigo, e o novo está em espera;
+ *  2. o próprio "sw.js" veio do cache do navegador, então nem o novo
+ *     worker foi visto;
+ *  3. o servidor ainda serve a versão anterior (propagação).
+ *
+ * Sem saber em qual delas se está, a pessoa recarrega a página dez
+ * vezes — que é justamente o gesto que não resolve nenhuma das três.
+ *
+ * Estas duas funções dão nome ao estado e uma saída. A saída forte
+ * DESREGISTRA o worker e apaga os caches: é a única que resolve o caso
+ * 2, e é segura porque nada do que a pessoa estudou vive ali — os
+ * caches guardam os arquivos do programa, e os dados moram no
+ * localStorage, que não é tocado.
+ * ===================================================================== */
+async function swDiagnostico() {
+  const fora = { suporta: "serviceWorker" in navigator, app: VERSAO,
+                 ativo: null, esperando: null, estado: "" };
+  if (!fora.suporta) { fora.estado = "sem-suporte"; return fora; }
+  try {
+    const reg = swReg || await navigator.serviceWorker.getRegistration();
+    if (!reg) { fora.estado = "sem-registro"; return fora; }
+    if (navigator.serviceWorker.controller) {
+      fora.ativo = await pedirVersaoSW(navigator.serviceWorker.controller);
+    }
+    if (reg.waiting) fora.esperando = await pedirVersaoSW(reg.waiting);
+  } catch (e) { fora.estado = "erro"; return fora; }
+
+  if (fora.esperando && fora.esperando !== fora.ativo) fora.estado = "esperando";
+  else if (fora.ativo && fora.ativo !== VERSAO) fora.estado = "atrasado";
+  else if (!fora.ativo) fora.estado = "sem-controle";
+  else fora.estado = "em-dia";
+  return fora;
+}
+
+function swLinhaDiagnostico(d) {
+  if (!d.suporta) return t("sw_diag_sem_suporte");
+  const chave = "sw_diag_" + (d.estado || "erro").replace(/-/g, "_");
+  return t(chave, { a: d.ativo || "?", e: d.esperando || "?", v: VERSAO });
+}
+
+/* A saída: do mais leve para o mais forte, e só o forte pergunta. */
+async function swForcarAtualizacao() {
+  const d = await swDiagnostico();
+
+  /* 1. há um novo esperando: é só mandar entrar */
+  if (d.estado === "esperando" && swReg && swReg.waiting) {
+    swReg.waiting.postMessage("SKIP_WAITING");
+    return "trocou";
+  }
+  /* 2. procura no servidor */
+  if (swReg) {
+    try { await swReg.update(); } catch (e) {}
+    if (swReg.waiting) { swReg.waiting.postMessage("SKIP_WAITING"); return "trocou"; }
+  }
+  /* 3. o caminho forte, com pergunta: desregistra e limpa os caches */
+  if (!(await uiConfirm(t("sw_forcar_conf", { a: d.ativo || "?", v: VERSAO })))) {
+    return "desistiu";
+  }
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((r) => r.unregister()));
+  } catch (e) {}
+  try {
+    const ks = await caches.keys();
+    await Promise.all(ks.map((k) => caches.delete(k)));
+  } catch (e) {}
+  try {
+    reg("APP", "atualizacao forcada",
+        "worker desregistrado e caches apagados · ativo era " + (d.ativo || "?"));
+  } catch (e) {}
+  location.reload();
+  return "limpou";
 }
