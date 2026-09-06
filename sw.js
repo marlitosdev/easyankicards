@@ -9,11 +9,31 @@
  * As bibliotecas externas (sql.js/JSZip) seguem "cache primeiro", pois
  * têm versão fixa na URL e são pesadas.
  */
-const CACHE = "easyankicards-v8.66.0";
-const SW_VERSION = "8.66.0";
+/* OS TRÊS NÚMEROS SÃO O MESMO NÚMERO.
+ *
+ * "SW_VERSION" nasceu com contagem própria (ia em 9.11.0 enquanto o app
+ * ia em 14.1.0), e isso quebrava calado a única decisão que ele toma: a
+ * página compara a versão do worker em espera com a VERSAO do app para
+ * saber se a atualização é real ou uma espera redundante. Com duas
+ * escalas diferentes, "diferente" era sempre verdade — o ramo do
+ * silêncio nunca rodava, e o aviso aparecia sempre.
+ *
+ * E o CACHE precisa mudar a cada versão, senão o navegador serve os
+ * arquivos velhos de uma versão nova. Foi assim que a v14.2 e a v14.3
+ * subiram e a tela continuou dizendo 14.1.0: só o CACHE tinha sido
+ * trocado; a VERSAO ficou parada e ninguém tinha como notar.
+ *
+ * Agora os três andam juntos, e o invariante E16 (tests/estrutura.js)
+ * derruba a suíte se um deles ficar para trás. */
+const CACHE = "easyankicards-v16.7.0";
+const SW_VERSION = "16.7.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
-  "edital.js", "edital-ui.js", "backup.js", "backup-ui.js", "material.js", "backup.js", "backup-ui.js",
+  "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",
+  "backup.js", "backup-ui.js", "material.js",
+  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js",
+  "dificuldade.js",
+  "plano-log.js", "questoes-hist.js", "questoes-ui.js", "fora-da-agenda.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js",

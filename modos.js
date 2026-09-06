@@ -21,6 +21,7 @@ const MODOS = [
   { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
   { id: "edital", secao: "secEdital", icone: "📋", rotulo: "modo_edital", pronto: true },
   { id: "material", secao: "secResumos", icone: "📚", rotulo: "modo_material", pronto: true },
+  { id: "questoes", secao: "secQuestoes", icone: "❓", rotulo: "modo_questoes", pronto: true },
   { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
 ];
 
@@ -50,6 +51,69 @@ function trocarModo(id) {
   if (typeof reg === "function") reg("MODO", "modo " + id);
 }
 
+/* =====================================================================
+ * A BARRA TEM NOME, E PODE ENCOLHER
+ *
+ * A faixa nunca se apresentou. "Cartões, Edital, Material de estudos,
+ * Questões, Ferramentas" são cinco lugares diferentes do aplicativo, e
+ * quem chega não tem como saber que aquilo é a navegação — parecia uma
+ * fileira de botões soltos acima do conteúdo.
+ *
+ * E ela custa caro em tela pequena: cinco rótulos por extenso comem uma
+ * faixa inteira antes de o conteúdo começar. Recolhida, fica só o ícone;
+ * o nome vira dica do botão, e a escolha fica guardada — quem trabalha
+ * num monitor pequeno não quer refazer isso toda manhã.
+ * ================================================================== */
+const MODOS_CHAVE_RECOLHIDA = "eac_modos_recolhida";
+let modosRecolhida = false;
+
+function modosCarregarEstado() {
+  try { modosRecolhida = localStorage.getItem(MODOS_CHAVE_RECOLHIDA) === "1"; }
+  catch (e) { modosRecolhida = false; }
+  return modosRecolhida;
+}
+
+function modosRecolher(sim) {
+  modosRecolhida = sim === undefined ? !modosRecolhida : !!sim;
+  try {
+    localStorage.setItem(MODOS_CHAVE_RECOLHIDA, modosRecolhida ? "1" : "0");
+  } catch (e) {}
+  modosPintarRecolhida();
+  if (typeof reg === "function") {
+    reg("MODO", modosRecolhida ? "barra de modos recolhida" : "barra de modos aberta");
+  }
+  return modosRecolhida;
+}
+
+function modosPintarRecolhida() {
+  const cx = document.getElementById("modosCaixa");
+  /* "modos-recolhida", nunca "modos-min": esta segunda e' a classe do
+   * BOTAO (all:unset, 20x20), e po-la no contentor encolhia a faixa
+   * inteira para 20 pixels. */
+  if (cx && cx.classList) cx.classList.toggle("modos-recolhida", modosRecolhida);
+  const b = document.getElementById("btnModosRecolher");
+  if (b) {
+    b.textContent = modosRecolhida ? "»" : "«";
+    b.title = typeof t === "function"
+      ? t(modosRecolhida ? "modos_abrir_ajuda" : "modos_recolher_ajuda") : "";
+    b.setAttribute("aria-expanded", modosRecolhida ? "false" : "true");
+  }
+  /* RECOLHIDA, O RÓTULO VIRA DICA — não some.
+   * Um ícone sozinho é um enigma para quem ainda não decorou; o nome
+   * continua alcançável parando o mouse em cima, e o leitor de tela
+   * continua lendo o botão inteiro. */
+  const nav = document.getElementById("barraModos");
+  if (nav) {
+    (Array.from(nav.children || [])).forEach((b2) => {
+      const m = MODOS.filter((x) => x.id === (b2.dataset && b2.dataset.modo))[0];
+      if (!m) return;
+      const nome = typeof t === "function" ? t(m.rotulo) : m.id;
+      b2.title = modosRecolhida ? nome : "";
+      b2.setAttribute("aria-label", nome);
+    });
+  }
+}
+
 function montarBarraModos() {
   const nav = document.getElementById("barraModos");
   if (!nav) return;
@@ -76,6 +140,11 @@ function montarBarraModos() {
     b.onclick = () => trocarModo(m.id);
     nav.append(b);
   });
+  const b = document.getElementById("btnModosRecolher");
+  if (b) b.onclick = () => modosRecolher();
+  modosCarregarEstado();
+  modosPintarRecolhida();
+
   let guardado = "cartoes";
   try { guardado = localStorage.getItem("eac_modo") || "cartoes"; } catch (e) {}
   trocarModo(guardado);
