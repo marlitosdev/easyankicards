@@ -2280,6 +2280,16 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
   padding:7px 11px;border-left:3px solid var(--azul,#2563eb);
   border-radius:0 8px 8px 0;background:var(--campo)}
 /* AS ETIQUETAS DE ASSUNTO: pílulas clicáveis que cruzam tópicos. */
+.jur-tags-form{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+.jur-tag-ed{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;
+  padding:3px 6px 3px 10px;border-radius:999px;border:1px solid var(--borda);
+  color:var(--texto);background:var(--campo)}
+.jur-tag-x{all:unset;cursor:pointer;font-size:9px;color:var(--sutil);
+  padding:0 3px}
+.jur-tag-x:hover{color:var(--vermelho,#dc2626)}
+.jur-tag-add{all:unset;cursor:pointer;font-size:10.5px;padding:3px 11px;
+  border-radius:999px;border:1px dashed var(--borda);color:var(--sutil)}
+.jur-tag-add:hover{color:var(--texto);border-color:var(--sutil)}
 .jur-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .jur-tag{all:unset;cursor:pointer;font-size:10px;padding:2px 9px;
   border-radius:999px;border:1px solid var(--borda);color:var(--sutil)}
@@ -3803,6 +3813,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <pre id="diagPre" class="diag-pre"></pre>
   <div class="dlg-rodape">
+    <!-- A SAÍDA PARA QUANDO A ATUALIZAÇÃO NÃO CHEGA. Mora aqui porque
+         é para cá que se vem quando algo está errado. -->
+    <button class="btn btn-cinza" id="btnSwForcar" data-i18n="sw_forcar"
+      data-i18n-title="sw_forcar_aj"></button>
     <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
     <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
@@ -4084,7 +4098,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        aqui e sai nos campos de baixo, com o que foi reconhecido escrito
        na tela antes de qualquer coisa ser salva. -->
   <label class="nd-rot" data-i18n="jur_colar_rot"></label>
-  <textarea id="jurColar" rows="5" style="width:100%;box-sizing:border-box"
+  <textarea id="jurColar" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="RE 574706 / PR — PARANÁ&#10;Relator(a): Min. CÁRMEN LÚCIA&#10;Julgamento: 15/03/2017 — Tribunal Pleno&#10;Tese: O ICMS não compõe a base de cálculo para fins de incidência do PIS e da COFINS."></textarea>
   <!-- A PÍLULA FICA COLADA NA CAIXA, não lá embaixo junto dos campos.
        O que o app entendeu tem de ser lido no mesmo lugar onde se
@@ -4102,8 +4116,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnJurPromptIA" data-i18n="jur_prompt_ia" data-i18n-title="jur_b_prompt_ia"></button>
   </div>
 
+  <!-- A TESE E O RESUMO SÓ APARECEM QUANDO EXISTEM.
+       Três caixas altas empilhadas — ementa, tese, resumo — enchiam a
+       tela de espaço vazio antes de haver o que escrever nele. O
+       caminho normal é colar e mandar ler; os campos surgem já
+       preenchidos, e quem quiser escrever à mão abre pelo botão. -->
+  <div id="jurConteudo" hidden>
   <label class="nd-rot" data-i18n="jur_tese_rot"></label>
-  <textarea id="jurTese" rows="4" style="width:100%;box-sizing:border-box"
+  <textarea id="jurTese" rows="2" style="width:100%;box-sizing:border-box"
     placeholder="A frase que você quer reconhecer na prova."></textarea>
 
   <!-- O RESUMO É OUTRO CAMPO, E NÃO OUTRA VERSÃO DA TESE.
@@ -4111,8 +4131,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        explica o que ela decidiu e por quê, e pode ser reescrito à
        vontade. É este campo que a IA preenche. -->
   <label class="nd-rot" data-i18n="jur_resumo_rot"></label>
-  <textarea id="jurResumo" rows="3" style="width:100%;box-sizing:border-box"
+  <textarea id="jurResumo" rows="2" style="width:100%;box-sizing:border-box"
     placeholder="O que este julgado decidiu, com suas palavras. Opcional."></textarea>
+
+  <!-- AS ETIQUETAS, EDITÁVEIS ANTES DE SALVAR. A IA propõe; quem
+       estuda decide. Etiqueta errada não é só selo feio: ela entra no
+       filtro, e o julgado some da busca em que deveria aparecer. -->
+  <label class="nd-rot" data-i18n="jur_tags_rot"></label>
+  <div id="jurTagsForm" class="jur-tags-form"></div>
+  </div><!-- /jurConteudo -->
+
+  <!-- só existe enquanto os campos estão escondidos -->
+  <button type="button" class="btn-min" id="btnJurAMao"
+    data-i18n="jur_a_mao" data-i18n-title="jur_b_a_mao"></button>
 
   <!-- OS SEIS CAMPOS SÃO CONFERÊNCIA, NÃO DIGITAÇÃO.
        Quando "ler e preencher" funciona — que é quase sempre — eles já

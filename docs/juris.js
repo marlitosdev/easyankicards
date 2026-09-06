@@ -650,3 +650,70 @@ function jurPromptComparar(lista) {
   ].filter((x) => String(x).trim()).join("\n"));
   return t("jur_prompt_texto", { n: L.length, blocos: blocos.join("\n\n") });
 }
+
+/* =====================================================================
+ * O CONSERTO DO QUE JÁ ESTÁ GUARDADO
+ *
+ * Corrigir a ENTRADA não conserta o que entrou antes dela. Os julgados
+ * salvos enquanto o defeito existia têm o objeto JSON gravado no campo
+ * do texto — e é ele que o "ver ementa completa" mostra, com chaves e
+ * aspas, e que o botão de copiar exporta.
+ *
+ * Isto roda uma vez, no arranque, e é DIFERENTE de reescrever a tela:
+ * ali (o negrito do markdown) a decisão certa foi desenhar melhor e não
+ * tocar no dado, porque o dado estava certo e só a exibição estava
+ * feia. Aqui o dado está errado: JSON não é ementa. Uma coisa é mostrar
+ * bem o que está guardado; outra é guardar o que não devia.
+ *
+ * O QUE ELE NUNCA FAZ: sobrescrever campo que já tem conteúdo. A tese e
+ * o resumo são texto de estudo — se a pessoa corrigiu algum, a correção
+ * dela vale mais que o JSON. Só campo VAZIO é preenchido, e o resto do
+ * JSON é descartado depois que tudo o que ele tinha de útil saiu de lá.
+ * ===================================================================== */
+function jurEhJson(txt) {
+  /* SEM GUARDA DE PRIMEIRO CARACTERE, pelo mesmo motivo de jurDoJson: o
+   * JSON.parse já recusa uma ementa, e um número ou uma string solta
+   * reprovam no teste de objeto. Guarda que não guarda nada engana quem
+   * lê depois. */
+  try {
+    const o = JSON.parse(String(txt || "").trim());
+    return !!o && typeof o === "object";
+  } catch (e) { return false; }
+}
+
+function jurRepararJson() {
+  const tudo = jurLerTudo();
+  const ids = Object.keys(tudo);
+  let consertados = 0;
+  ids.forEach((id) => {
+    const j = tudo[id];
+    if (!j || !jurEhJson(j.texto)) return;
+    const doJson = jurDoJson(j.texto);
+    /* SEM CONSEGUIR LER, NÃO MEXE. Um JSON que o extrator não entende
+     * pode ser outra coisa que alguém colou de propósito, e apagá-lo
+     * seria destruir sem saber o quê. */
+    if (!doJson) return;
+
+    ["tribunal", "classe", "numero", "data", "orgao", "relator",
+     "tese", "resumo", "categoria"].forEach((k) => {
+      if (!String(j[k] || "").trim() && String(doJson[k] || "").trim()) {
+        j[k] = doJson[k];
+      }
+    });
+    if (!(j.tags || []).length && (doJson.tags || []).length) {
+      j.tags = doJson.tags.slice();
+    }
+    /* e o texto vira a ementa limpa, ou nada */
+    j.texto = String(doJson.texto || "").trim();
+    consertados++;
+  });
+  if (consertados) {
+    jurGravarTudo(tudo);
+    try {
+      reg("JURIS", "ementas em JSON consertadas",
+          consertados + " julgado(s): o objeto JSON saiu do campo do "
+          + "texto e o que faltava foi preenchido a partir dele");
+    } catch (e) {}
+  }
+  return consertados;
+}

@@ -81,9 +81,10 @@ function jurLimparForm() {
   jurEditando = "";
   jurCategoriaColada = "";
   jurTagsColadas = [];
-  const av = $("jurColarAviso");
-  if (av) { av.hidden = true; av.textContent = ""; }
+  jurPintarTagsForm();
+  jurPilulaLimpar();
   jurMeta(false);
+  jurConteudoVisivel(false);
   jurBotaoSalvar();
 }
 
@@ -93,6 +94,42 @@ function jurLimparForm() {
  * funciona — que é quase sempre — já vêm certos e ninguém os toca.
  * Abertos, ocupam metade da tela e empurram a tese, que é a única coisa
  * escrita à mão, para fora da dobra. */
+/* ---------------------------------------------------------------------
+ * A TESE E O RESUMO SÓ APARECEM QUANDO EXISTEM
+ *
+ * Três caixas altas empilhadas — ementa, tese, resumo — enchiam a tela
+ * de espaço vazio antes de haver o que escrever nele: na prática, duas
+ * caixas de quinze linhas para conteúdo de duas.
+ *
+ * O caminho normal é colar e mandar ler: os campos surgem já
+ * preenchidos. Quem quiser escrever sem colar nada abre pelo botão. E
+ * eles nunca se escondem sozinhos depois de ter conteúdo — esconder
+ * texto que a pessoa escreveu seria perder trabalho aos olhos dela.
+ * ------------------------------------------------------------------ */
+function jurConteudoVisivel(mostrar) {
+  const temTexto = ["jurTese", "jurResumo"].some((id) =>
+    $(id) && String($(id).value || "").trim());
+  const ver = mostrar === undefined ? temTexto : (!!mostrar || temTexto);
+  if ($("jurConteudo")) $("jurConteudo").hidden = !ver;
+  if ($("btnJurAMao")) $("btnJurAMao").hidden = ver;
+  if (ver) jurCrescer();
+  return ver;
+}
+
+/* A CAIXA CRESCE COM O TEXTO, em vez de reservar altura para o que
+ * talvez não venha. Sem isto, o campo de duas linhas obrigaria a rolar
+ * dentro dele numa tese longa — rolagem dentro de rolagem, que é o que
+ * já tirei da ementa. */
+function jurCrescer() {
+  ["jurTese", "jurResumo", "jurColar"].forEach((id) => {
+    const ta = $(id);
+    if (!ta || !ta.style) return;
+    ta.style.height = "auto";
+    const h = ta.scrollHeight;
+    if (h) ta.style.height = Math.min(h + 2, 420) + "px";
+  });
+}
+
 function jurMeta(abrir) {
   const cx = $("jurMetaCampos");
   if (cx) cx.hidden = !abrir;
@@ -102,6 +139,53 @@ function jurMeta(abrir) {
 
 function jurMetaAberta() {
   return !!($("jurMetaCampos") && !$("jurMetaCampos").hidden);
+}
+
+/* ---------------------------------------------------------------------
+ * AS ETIQUETAS, EDITÁVEIS ANTES DE SALVAR
+ *
+ * A IA propõe; quem estuda decide. Uma etiqueta errada não é só um selo
+ * feio: ela entra no filtro, e um julgado marcado com o assunto errado
+ * some da busca em que deveria aparecer.
+ * ------------------------------------------------------------------ */
+function jurPintarTagsForm() {
+  const cx = $("jurTagsForm");
+  if (!cx) return;
+  cx.innerHTML = "";
+  cx.hidden = false;
+  jurTagsColadas.forEach((tg, i) => {
+    const p = document.createElement("span");
+    p.className = "jur-tag-ed";
+    const nm = document.createElement("span");
+    nm.textContent = "#" + tg;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "jur-tag-x";
+    x.textContent = "✖";
+    x.title = t("jur_tag_tirar", { t: tg });
+    x.setAttribute("aria-label", x.title);
+    x.onclick = () => {
+      jurTagsColadas = jurTagsColadas.filter((_, k) => k !== i);
+      jurPintarTagsForm();
+    };
+    p.append(nm, x);
+    cx.append(p);
+  });
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "jur-tag-add";
+  add.textContent = t("jur_tag_add");
+  add.title = t("jur_tag_add_aj");
+  add.onclick = async () => {
+    const novo = await uiTexto(t("jur_tag_add"), "");
+    const limpo = String(novo || "").replace(/^#+/, "").trim();
+    if (!limpo) return;
+    if (!jurTagsColadas.some((x2) => jurTagNormal(x2) === jurTagNormal(limpo))) {
+      jurTagsColadas = jurTagsColadas.concat([limpo]);
+    }
+    jurPintarTagsForm();
+  };
+  cx.append(add);
 }
 
 function jurBotaoSalvar() {
@@ -117,7 +201,19 @@ function jurBotaoSalvar() {
  * ser salva — extrair em silêncio e mostrar formulário preenchido faria
  * a pessoa confiar num palpite sem saber que houve palpite.
  * ------------------------------------------------------------------ */
+/* A PÍLULA NUNCA SOBREVIVE À PRÓXIMA LEITURA.
+ *
+ * Ela dizia "Detectado: STF · ADI 1.917" enquanto a caixa já estava com
+ * outro julgado — sobra da leitura anterior. Um selo de sucesso que
+ * fala do que não está mais na tela é pior que selo nenhum: ele afirma,
+ * e afirma errado. */
+function jurPilulaLimpar() {
+  const av = $("jurColarAviso");
+  if (av) { av.hidden = true; av.textContent = ""; av.className = "jur-pilula"; }
+}
+
 function jurColar() {
+  jurPilulaLimpar();
   const bruto = String(($("jurColar") || {}).value || "");
   if (!bruto.trim()) { jurReagirBtn("btnJurColar", t("jur_colar_vazio")); return; }
   const a = jurIdentificar(bruto);
@@ -171,6 +267,7 @@ function jurColar() {
     $("jurColar").value = a.texto || "";
   }
   if (a.tags && a.tags.length) jurTagsColadas = a.tags;
+  jurPintarTagsForm();
 
   const achou = ["tribunal", "classe", "numero", "data", "orgao"]
     .filter((k) => a[k]);
@@ -197,6 +294,8 @@ function jurColar() {
    * o que conferir — há o que preencher. Reconheceu: ficam fechados,
    * e a pílula acima já mostra o que há dentro. */
   jurMeta(!achou.length);
+  /* preencheu alguma coisa: os campos aparecem, já com o conteúdo */
+  jurConteudoVisivel();
   reg("JURIS", "ementa colada",
       achou.length + " campos reconhecidos de " + bruto.length + " caracteres");
   jurReagirBtn("btnJurColar", t("jur_colou_btn", { n: achou.length }));
@@ -256,17 +355,22 @@ function jurEditar(id) {
   const j = jurDe(id);
   if (!j) return;
   jurEditando = id;
+  /* editar é outro julgado: o selo da leitura anterior não vale mais */
+  jurPilulaLimpar();
   const põe = (idc, v) => { if ($(idc)) $(idc).value = v || ""; };
   põe("jurTribunal", j.tribunal); põe("jurClasse", j.classe);
   põe("jurNumero", j.numero); põe("jurData", j.data);
   põe("jurOrgao", j.orgao); põe("jurFonte", j.fonte);
   põe("jurTese", j.tese); põe("jurResumo", j.resumo); põe("jurColar", j.texto);
+  jurTagsColadas = (typeof jurTagsDe === "function") ? jurTagsDe(j) : [];
+  jurPintarTagsForm();
   /* editar é incluir com os campos preenchidos: sem trocar de modo, o
    * formulário ficaria escondido e o clique não faria nada visível */
   jurModo = "incluir";
   jurPintarModo();
   /* editando à mão, os campos são o que se veio mexer */
   jurMeta(true);
+  jurConteudoVisivel(true);
   jurBotaoSalvar();
   if ($("jurTese") && $("jurTese").focus) $("jurTese").focus();
 }
@@ -686,6 +790,9 @@ function jurDaSelecao() {
 }
 
 function jurIniciarTela() {
+  /* CONSERTA O QUE FOI GUARDADO ERRADO, uma vez, no arranque.
+   * Corrigir a entrada não conserta o que entrou antes dela. */
+  try { jurRepararJson(); } catch (e) {}
   const liga = (id, fn) => { if ($(id)) $(id).onclick = fn; };
   liga("btnJurColar", jurColar);
   liga("btnJurSalvar", jurSalvar);
@@ -698,6 +805,11 @@ function jurIniciarTela() {
   dicaLigar("btnJurAjuda", "jur_ajuda");
   liga("btnJurPrompt", jurCopiarPrompt);
   liga("btnJurPromptIA", jurPedirIA);
+  liga("btnJurAMao", () => jurConteudoVisivel(true));
+  /* a caixa acompanha o que se digita */
+  ["jurTese", "jurResumo", "jurColar"].forEach((id) => {
+    if ($(id)) $(id).oninput = jurCrescer;
+  });
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
   liga("btnJurFechar", () => $("dlgJuris").close());
   liga("btnJurFecharTopo", () => $("dlgJuris").close());
