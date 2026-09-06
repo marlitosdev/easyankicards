@@ -47,6 +47,47 @@ function jurAbrir(disciplina, topico, modo) {
       disciplina + " › " + topico + " · " + quantos + " julgado(s)");
 }
 
+/* =====================================================================
+ * DE ONDE A GAVETA FOI ABERTA — E PARA ONDE ELA DEVOLVE
+ *
+ * A gaveta é aberta da agenda, do material, do resumo e agora da
+ * questão. Dos três primeiros a volta é trivial: a tela de trás
+ * continua onde estava, e fechar basta.
+ *
+ * Da QUESTÃO é diferente por um detalhe que só aparece no uso: quem
+ * está respondendo uma prova quer voltar para A MESMA QUESTÃO, no
+ * mesmo ponto, com o rascunho e o grifo intactos. Fechar a sessão para
+ * abrir os julgados e reabri-la depois perderia as três coisas — e
+ * perder o traço de uma conta no meio de uma questão é o tipo de
+ * estrago que faz alguém parar de usar o botão.
+ *
+ * ENTÃO A SESSÃO NÃO É FECHADA. Um <dialog> aberto por showModal()
+ * empilha no top layer: a gaveta sobe POR CIMA da questão, e fechá-la
+ * descobre a questão exatamente como ela estava. Não há "voltar" a
+ * programar — há um "não sair" a respeitar.
+ *
+ * O que sobra para esta função é o que de fato mudou: o número de
+ * julgados do tópico, que a tela de trás mostra e que pode ter
+ * aumentado enquanto a gaveta esteve aberta.
+ * ===================================================================== */
+let jurVoltaPara = null;   /* função a chamar quando a gaveta fechar */
+
+function jurFechar() {
+  const d = $("dlgJuris");
+  if (d && d.close) d.close();
+  /* o "close" do <dialog> chama jurVoltarPara; em navegador que não
+   * dispare o evento, esta linha garante que ele aconteça mesmo assim.
+   * jurVoltarPara é idempotente de propósito por causa disto. */
+  jurVoltarPara();
+}
+
+function jurVoltarPara() {
+  const f = jurVoltaPara;
+  jurVoltaPara = null;          /* uma vez só: chamar duas vezes repintaria
+                                 * a sessão sem que nada tivesse mudado */
+  if (typeof f === "function") { try { f(); } catch (e) {} }
+}
+
 function jurPintarModo() {
   const lendo = jurModo === "ler";
   const quantos = jurTopicoAtual ? jurDoTopico(jurTopicoAtual.chave).length : 0;
@@ -86,6 +127,9 @@ function jurLimparForm() {
   jurMeta(false);
   jurConteudoVisivel(false);
   jurBotaoSalvar();
+  /* esvaziar a caixa desabilita o botão principal — senão ele continua
+   * dizendo "perguntar à IA" sobre uma ementa que não existe mais */
+  if (typeof jurPintarPrincipal === "function") jurPintarPrincipal();
 }
 
 /* A SANFONA DOS SEIS CAMPOS.
@@ -120,13 +164,28 @@ function jurConteudoVisivel(mostrar) {
  * talvez não venha. Sem isto, o campo de duas linhas obrigaria a rolar
  * dentro dele numa tese longa — rolagem dentro de rolagem, que é o que
  * já tirei da ementa. */
+/* O TETO É MENOR NA CAIXA DE COLAR, e a diferença tem motivo.
+ *
+ * A tese e o resumo são CONTEÚDO: crescem porque o que está ali dentro
+ * é o que se vai ler depois. A caixa de colar é TRANSPORTE — recebe a
+ * ementa crua e o JSON de volta, e nada do que está nela é guardado
+ * como está. Deixá-la subir a 420px como as outras afundava o
+ * formulário inteiro por causa de um texto de passagem.
+ *
+ * O teto também está no CSS (#jurColar{max-height:180px}), e de
+ * propósito: se um dia esta função não rodar, a caixa ainda não estoura
+ * a tela. Mas os dois números têm de ser o mesmo — dois tetos
+ * diferentes fazem a caixa parar de crescer antes de encostar no
+ * limite visível, e o efeito é uma barra de rolagem que aparece sem
+ * explicação. */
+const JUR_TETO = { jurColar: 180, jurTese: 420, jurResumo: 420 };
 function jurCrescer() {
   ["jurTese", "jurResumo", "jurColar"].forEach((id) => {
     const ta = $(id);
     if (!ta || !ta.style) return;
     ta.style.height = "auto";
     const h = ta.scrollHeight;
-    if (h) ta.style.height = Math.min(h + 2, 420) + "px";
+    if (h) ta.style.height = Math.min(h + 2, JUR_TETO[id] || 420) + "px";
   });
 }
 
@@ -210,6 +269,79 @@ function jurBotaoSalvar() {
 function jurPilulaLimpar() {
   const av = $("jurColarAviso");
   if (av) { av.hidden = true; av.textContent = ""; av.className = "jur-pilula"; }
+}
+
+/* =====================================================================
+ * UM BOTÃO PRINCIPAL QUE SABE EM QUE PASSO VOCÊ ESTÁ
+ *
+ * O FLUXO ANTIGO, escrito por extenso, mostra o problema: colar a
+ * ementa → apertar "pedir à IA" → sair do app → voltar com o JSON e
+ * colá-lo na MESMA caixa → apertar o OUTRO botão, "ler e preencher".
+ * Dois botões que não são alternativas, e sim dois momentos do mesmo
+ * caminho — mas apresentados lado a lado como se fossem escolha. Quem
+ * não decorou a sequência aperta o errado, e o errado ou copia um
+ * prompt que ninguém pediu ou tenta extrair campos de um texto que
+ * ainda não passou por IA.
+ *
+ * A CAIXA JÁ SABE EM QUAL DOS DOIS MOMENTOS SE ESTÁ: ementa dentro é
+ * antes, JSON dentro é depois. Então quem decide é ela, e o botão só
+ * anuncia o que vai fazer. Não é um botão que faz duas coisas — é o
+ * mesmo passo ("siga daqui") em duas situações diferentes.
+ *
+ * VAZIA, ELE FICA DESABILITADO. Antes abria um alerta modal para dizer
+ * "cole a ementa acima primeiro" — interrompendo a tela para informar
+ * o que a tela já mostrava.
+ * ===================================================================== */
+function jurEstadoDaCaixa() {
+  const bruto = String(($("jurColar") || {}).value || "").trim();
+  if (!bruto) return "vazia";
+  /* jurEhJson e não um teste de primeiro caractere: uma ementa que
+   * comece com "{" não existe, mas um JSON precedido de espaço ou de
+   * uma crase de markdown existe o tempo todo. */
+  if (typeof jurEhJson === "function" && jurEhJson(bruto)) return "resposta";
+  return "ementa";
+}
+
+function jurPintarPrincipal() {
+  const b = $("btnJurPrincipal");
+  if (!b) return;
+  const est = jurEstadoDaCaixa();
+  b.disabled = est === "vazia";
+  b.textContent = t("jur_principal_" + est);
+  b.title = t("jur_principal_" + est + "_aj");
+  /* o caminho local só se oferece quando há texto para ele ler */
+  if ($("btnJurColar")) $("btnJurColar").disabled = est === "vazia";
+}
+
+function jurPrincipal() {
+  const est = jurEstadoDaCaixa();
+  if (est === "vazia") return;                 /* desabilitado; nem chega aqui */
+  if (est === "resposta") { jurColar(); return; }
+  jurPedirIA();
+}
+
+/* COLOU UM JSON, JÁ ESTÁ LIDO.
+ *
+ * Colar a resposta da IA e ainda ter de apertar um botão é o passo que
+ * não decide nada: não existe motivo para colar um JSON de julgado na
+ * caixa e NÃO querer que ele seja lido. O selo verde com os valores
+ * detectados aparece na hora, e é ele que confirma que a colagem valeu.
+ *
+ * SÓ PARA JSON. Ementa colada continua esperando: ali a leitura é
+ * palpite, e palpite automático preencheria seis campos sem ninguém
+ * ter pedido — que é o oposto do que a pílula existe para evitar.
+ *
+ * O setTimeout não é superstição: no instante do evento "paste" o
+ * valor da caixa ainda é o ANTERIOR; o texto novo só está lá no fim do
+ * ciclo. Ler antes disso leria o que estava na tela antes da colagem. */
+function jurAoColarNaCaixa() {
+  setTimeout(() => {
+    jurCrescer();
+    jurPintarPrincipal();
+    if (jurEstadoDaCaixa() !== "resposta") return;
+    jurColar();
+    reg("JURIS", "resposta da IA lida ao colar", "sem clique extra");
+  }, 0);
 }
 
 function jurColar() {
@@ -299,6 +431,11 @@ function jurColar() {
   reg("JURIS", "ementa colada",
       achou.length + " campos reconhecidos de " + bruto.length + " caracteres");
   jurReagirBtn("btnJurColar", t("jur_colou_btn", { n: achou.length }));
+  /* LER UM JSON TROCA O CONTEÚDO DA CAIXA pela ementa limpa — ou seja,
+   * o estado muda de "resposta" para "ementa" ou "vazia" dentro desta
+   * mesma função. Sem repintar aqui, o botão principal continuaria
+   * oferecendo "ler a resposta" sobre uma resposta que já foi lida. */
+  if (typeof jurPintarPrincipal === "function") jurPintarPrincipal();
 }
 
 /* a mesma reação curta dos outros botões do app */
@@ -329,7 +466,11 @@ async function jurSalvar() {
     topicos: jurEditando ? undefined : [jurTopicoAtual.chave],
   });
   if (!j) { await uiAlert(t("jur_nao_salvou")); return; }
-  if (jurEditando) jurLigar(j.id, jurTopicoAtual.chave);
+  /* SEMPRE, e não só ao editar: o vínculo já existe quando se cria (ele
+   * foi para "topicos" ali em cima), mas o RÓTULO não — e é ele que faz
+   * o julgado aparecer na estante com o nome certo da disciplina. */
+  jurLigar(j.id, jurTopicoAtual.chave,
+           jurTopicoAtual.disciplina, jurTopicoAtual.nome);
 
   reg("JURIS", jurEditando ? "julgado editado" : "julgado guardado",
       jurTitulo(j) + " · " + jurTopicoAtual.nome);
@@ -487,6 +628,87 @@ async function jurPedirIA() {
   if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
 }
 
+/* =====================================================================
+ * COMPLETAR E CONFERIR UM JULGADO JÁ GUARDADO
+ *
+ * Dois toques, e o segundo é separado do primeiro de propósito: entre
+ * copiar a pergunta e colar a resposta a pessoa sai do aplicativo. Um
+ * botão só que fizesse as duas coisas teria de adivinhar em qual das
+ * duas metades ela está.
+ *
+ * A GRAVAÇÃO É CEGA PARA CAMPO CHEIO — quem decide isso é jurCompletar,
+ * e é lá que a regra tem de morar: aqui é tela, e tela que também
+ * decide o que sobrescrever é onde a regra se perde na próxima
+ * refatoração.
+ * ===================================================================== */
+async function jurCompletarPedir(id) {
+  const j = jurDe(id);
+  if (!j) return;
+  const txt = jurPromptCompletar(j, jurTopicoAtual ? jurTopicoAtual.nome : "");
+  if (!txt) return;
+  const ok = await edColarCopiarTexto(txt, "", null);
+  const falta = jurFaltando(j);
+  reg("JURIS", "prompt de completar copiado",
+      jurTitulo(j) + " · faltam " + falta.length + ": " + falta.join(", "));
+  if (ok) await uiAlert(t("jur_completar_copiado"));
+}
+
+async function jurCompletarLer(id) {
+  const j = jurDe(id);
+  if (!j) return;
+  const bruto = await uiTexto(t("jur_completar_cole"), "", true);
+  if (bruto === null) return;
+  let dados = null;
+  try { dados = JSON.parse(String(bruto).trim()); } catch (e) { dados = null; }
+  if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
+    reg("JURIS", "resposta de completar recusada", "não era JSON");
+    await uiAlert(t("jur_completar_nada"));
+    return;
+  }
+  const r = jurCompletar(id, dados);
+  const partes = [];
+  partes.push(r.mudou.length
+    ? t("jur_completar_fez", { q: r.mudou.map(jurNomeCampo).join(", ") })
+    : t("jur_completar_zero"));
+  if (r.ignorados.length) {
+    partes.push(t("jur_completar_ignorou",
+      { q: r.ignorados.map(jurNomeCampo).join(", ") }));
+  }
+  /* A CONFERÊNCIA É AVISO, NUNCA CORREÇÃO.
+   * A tese é transcrição do tribunal e o resumo é texto de estudo: uma
+   * troca automática aqui apagaria a palavra certa achando que era a
+   * errada, e o erro sairia gravado com a autoridade de "o app
+   * corrigiu". */
+  const conf = Array.isArray(dados.conferencia) ? dados.conferencia : [];
+  if (conf.length) {
+    partes.push("\n\n" + t("jur_conferencia_tit") + "\n"
+      + conf.slice(0, 8).map((c) => t("jur_conferencia_linha", {
+          c: String((c && c.campo) || "?"),
+          p: String((c && c.problema) || ""),
+          tr: String((c && c.trecho) || ""),
+          sg: String((c && c.sugestao) || ""),
+        })).join("\n\n")
+      + t("jur_conferencia_aviso"));
+  } else {
+    partes.push(t("jur_conferencia_nada"));
+  }
+  if (dados.identificacao) {
+    partes.push(t("jur_ident_tit", { q: String(dados.identificacao) }));
+  }
+  reg("JURIS", "resposta de completar aplicada",
+      jurTitulo(j) + " · preenchidos " + r.mudou.length
+      + " · apontamentos " + conf.length);
+  jurPintarLista();
+  await uiAlert(partes.join(""));
+}
+
+function jurNomeCampo(k) {
+  const c = (typeof JUR_CAMPOS_META !== "undefined" ? JUR_CAMPOS_META : [])
+    .filter((x) => x.k === k)[0];
+  if (c) return t(c.i);
+  return k === "tags" ? t("jur_f_tags") : k;
+}
+
 /* O PROMPT, para quando a aritmética não responde. */
 async function jurCopiarPrompt() {
   if (!jurTopicoAtual) return;
@@ -597,6 +819,22 @@ function jurPintarLista() {
       acoes.append(b);
       return b;
     };
+    /* COMPLETAR E CONFERIR, com o número do que falta no próprio ícone.
+     *
+     * O ícone mudo dizia "há uma ação aqui"; o número diz QUAL é o
+     * estado — "faltam 6 campos" é a informação que faz alguém tocar.
+     * Sem ele, um julgado pela metade e um completo têm exatamente a
+     * mesma aparência, e o pela metade só é descoberto no dia em que se
+     * procura por ele e não se acha. */
+    const falta = (typeof jurFaltando === "function") ? jurFaltando(j) : [];
+    const bF = bt(falta.length ? "🩹" + falta.length : "🩹",
+      falta.length
+        ? t("jur_completar_falta", { n: falta.length,
+            q: falta.map(jurNomeCampo).join(", ") })
+        : t("jur_completar_ok"),
+      falta.length ? "jur-ic-falta" : "", () => jurCompletarPedir(j.id));
+    bF.oncontextmenu = (ev) => { if (ev) ev.preventDefault(); };
+    bt("📥", t("jur_completar_ler_aj"), "", () => jurCompletarLer(j.id));
     bt("🃏", t("jur_card_dica"), "", () => jurGerarCartao(j.id));
     bt("✏️", t("jur_ed"), "", () => jurEditar(j.id));
     bt("📋", t("jur_cp"), "", async () => {
@@ -795,6 +1033,7 @@ function jurIniciarTela() {
   try { jurRepararJson(); } catch (e) {}
   const liga = (id, fn) => { if ($(id)) $(id).onclick = fn; };
   liga("btnJurColar", jurColar);
+  liga("btnJurPrincipal", jurPrincipal);
   liga("btnJurSalvar", jurSalvar);
   liga("btnJurLimpar", () => {
     jurLimparForm();
@@ -807,11 +1046,34 @@ function jurIniciarTela() {
   liga("btnJurPromptIA", jurPedirIA);
   liga("btnJurAMao", () => jurConteudoVisivel(true));
   /* a caixa acompanha o que se digita */
-  ["jurTese", "jurResumo", "jurColar"].forEach((id) => {
+  ["jurTese", "jurResumo"].forEach((id) => {
     if ($(id)) $(id).oninput = jurCrescer;
   });
+  /* A CAIXA DE COLAR TEM DOIS OUVINTES, E POR ISSO SAIU DA LISTA ACIMA.
+   *
+   * Ela precisa crescer (como as outras) E redesenhar o botão
+   * principal, que muda de rótulo conforme o que está dentro dela.
+   * Enquanto estava na lista, a atribuição de lá sobrescrevia a daqui —
+   * o último "oninput = ..." apaga o anterior sem erro nenhum, e o
+   * botão simplesmente não se atualizava. É o mesmo motivo de o
+   * "paste" ser addEventListener e não onpaste. */
+  if ($("jurColar")) {
+    $("jurColar").oninput = () => { jurCrescer(); jurPintarPrincipal(); };
+    if ($("jurColar").addEventListener) {
+      $("jurColar").addEventListener("paste", jurAoColarNaCaixa);
+    }
+  }
+  jurPintarPrincipal();
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
-  liga("btnJurFechar", () => $("dlgJuris").close());
-  liga("btnJurFecharTopo", () => $("dlgJuris").close());
+  liga("btnJurFechar", () => jurFechar());
+  liga("btnJurFecharTopo", () => jurFechar());
+  /* ESC E O ✖ TÊM DE ACABAR NO MESMO LUGAR.
+   * Enquanto só o botão chamava a volta, fechar com Esc deixava a tela
+   * de trás com o número velho de julgados — o mesmo desfecho por dois
+   * caminhos, e um deles mentindo. O evento "close" é o único ponto por
+   * onde os dois passam. */
+  if ($("dlgJuris") && $("dlgJuris").addEventListener) {
+    $("dlgJuris").addEventListener("close", () => jurVoltarPara());
+  }
   liga("btnMatJuris", jurDaSelecao);
 }

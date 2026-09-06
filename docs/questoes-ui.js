@@ -508,6 +508,12 @@ function qsUiPintarSessao() {
 
   const corpo = $("qsSessCorpo");
   corpo.innerHTML = "";
+  /* O ESTADO SE ZERA AQUI, no mesmo lugar em que o conteúdo se zera.
+   * Deixá-lo para o fim da função significaria que o caminho do FIM DA
+   * RODADA — que sai antes, por um return — herdaria a classe da última
+   * questão respondida, e a tela final abriria com o arranjo de uma
+   * tela que não existe mais. */
+  corpo.className = "qs-sess";
   if (!q) {
     /* FIM DA SESSÃO.
      * O placar sozinho não ensina nada. O que ensina é rever o que se
@@ -713,14 +719,34 @@ function qsUiPintarSessao() {
   });
   corpo.append(cx);
 
+  /* =================================================================
+   * ANTES E DEPOIS DE RESPONDER SÃO DUAS TELAS, NÃO UMA
+   *
+   * ANTES, o que se lê é o enunciado e o que se decide são as
+   * alternativas: as alternativas ancoram no pé e o enunciado rola
+   * atrás delas.
+   *
+   * DEPOIS, as alternativas viram botões desligados — não há mais o
+   * que clicar nelas — e o que se lê é o comentário. Mantendo o mesmo
+   * arranjo, o comentário nascia embaixo de tudo, fora da área que
+   * rola, e a única forma de alcançá-lo era arrastar a caixa inteira.
+   * Era esta a queixa.
+   *
+   * Então tudo o que aparece DEPOIS entra num bloco só, que passa a
+   * ser a parte elástica da caixa. Não é enfeite de CSS: sem um
+   * elemento para chamar de "o depois", não há o que tornar elástico —
+   * seis irmãos soltos não podem ser um bloco de rolagem.
+   * ================================================================= */
   if (jaFoi) {
+    const depois = document.createElement("div");
+    depois.className = "qs-depois";
     const gb = document.createElement("div");
     gb.className = "qs-gab " + (jaFoi.acertou ? "qs-gab-ok" : "qs-gab-nao");
     gb.textContent = (jaFoi.acertou ? t("qs_acertou") : t("qs_errou"))
       + " · " + t("qs_gab_e", { g: q.gabarito });
-    corpo.append(gb);
+    depois.append(gb);
     if (q.comentario) {
-      corpo.append(qsUiDobra("qs_coment_tit", (el) => {
+      depois.append(qsUiDobra("qs_coment_tit", (el) => {
         el.className = "qs-coment";
         el.textContent = q.comentario;
       }));
@@ -729,7 +755,7 @@ function qsUiPintarSessao() {
      * é gabarito disfarçado. */
     const minha = qsDicaDeQuestao(q.id);
     if (minha) {
-      corpo.append(qsUiDobra("qs_dica_dobra", (el) => {
+      depois.append(qsUiDobra("qs_dica_dobra", (el) => {
         el.className = "qs-minha-dica";
         try { el.innerHTML = matParaHtml(String(minha)); }
         catch (e) { el.textContent = String(minha); }
@@ -741,7 +767,7 @@ function qsUiPintarSessao() {
     bc.textContent = t("qs_cartao_btn");
     bc.title = t("qs_cartao_ajuda");
     bc.onclick = () => qsUiCartoesDaQuestao(q);
-    corpo.append(bc);
+    depois.append(bc);
 
     const bd = document.createElement("button");
     bd.type = "button";
@@ -757,7 +783,12 @@ function qsUiPintarSessao() {
              q.enunciado.slice(0, 60));
       qsUiPintarSessao();
     };
-    corpo.append(bd);
+    depois.append(bd);
+    corpo.append(depois);
+    /* A CAIXA SABE EM QUAL DOS DOIS ESTADOS ESTÁ. Sem esta classe o CSS
+     * teria de adivinhar pela presença de um filho, e ":has()" não
+     * existe em todo navegador que roda este aplicativo. */
+    corpo.className = "qs-sess qs-fez";
   }
   $("btnQsProxima").hidden = false;
   $("btnQsProxima").disabled = !jaFoi;
@@ -806,12 +837,77 @@ function qsUiPintarSessao() {
     b.title = t("qs_so_falhas_ajuda");
     b.className = "btn-min" + (lig ? " qs-filtro-on" : "");
   }
+  /* O JULGADO DESTA QUESTÃO.
+   *
+   * O botão diz quantos já existem no tópico, e é essa contagem que
+   * decide o verbo: com julgados guardados a gaveta abre para LER (a
+   * pergunta que se faz ao errar é "qual era mesmo a tese?"); sem
+   * nenhum, abre para INCLUIR. Abrir sempre no formulário obrigaria a
+   * voltar um passo justamente na hora em que se quer conferir.
+   *
+   * SÓ APARECE COM DISCIPLINA E TÓPICO: sem eles não há gaveta para
+   * onde ir, e um botão que às vezes não faz nada é pior que um botão
+   * a menos — ensina a não confiar nos outros. */
+  if ($("btnQsJuris")) {
+    const b = $("btnQsJuris");
+    const q2 = qsAtual();
+    const temAlvo = !!(q2 && q2.disciplina && q2.topico);
+    b.hidden = !temAlvo;
+    if (temAlvo) {
+      const ch = (typeof matChave === "function")
+        ? matChave(q2.disciplina, q2.topico) : "";
+      const nj = (typeof jurContarDoTopico === "function" && ch)
+        ? jurContarDoTopico(ch) : 0;
+      b.textContent = t(nj ? "qs_juris_ver" : "qs_juris_novo", { n: nj });
+      b.title = t(nj ? "qs_juris_ver_ajuda" : "qs_juris_ajuda",
+                  { n: nj, tp: q2.topico });
+      b.onclick = () => qsUiJuris(q2);
+    }
+  }
   if ($("btnQsEmbaralhar")) {
     const faltam = qsPendentes().length;
     $("btnQsEmbaralhar").hidden = faltam < 2;
     $("btnQsEmbaralhar").textContent = t("qs_embaralhar", { n: faltam });
     $("btnQsEmbaralhar").title = t("qs_embaralhar_ajuda");
   }
+}
+
+/* =====================================================================
+ * DA QUESTÃO PARA O JULGADO, E DE VOLTA
+ *
+ * A SESSÃO NÃO É FECHADA. Um <dialog> aberto por showModal() empilha no
+ * top layer do navegador: a gaveta sobe por cima da questão e, ao
+ * fechar, descobre a mesma questão — mesma rolagem, mesmo rascunho,
+ * mesmos grifos. Fechar e reabrir a sessão perderia as três coisas, e
+ * perder o traço de uma conta no meio de uma questão é o tipo de
+ * estrago que faz alguém parar de usar o botão.
+ *
+ * A REPINTURA NA VOLTA não é enfeite: se um julgado foi guardado, o
+ * próprio botão precisa passar de "guardar julgado" para "2 julgados" —
+ * senão a única prova de que o trabalho foi salvo estaria em outra
+ * tela.
+ * ===================================================================== */
+function qsUiJuris(q) {
+  if (!q || !q.disciplina || !q.topico) return;
+  if (typeof jurAbrir !== "function") return;
+  const ch = (typeof matChave === "function")
+    ? matChave(q.disciplina, q.topico) : "";
+  const antes = (typeof jurContarDoTopico === "function" && ch)
+    ? jurContarDoTopico(ch) : 0;
+  jurAbrir(q.disciplina, q.topico, antes ? "ler" : "incluir");
+  jurVoltaPara = () => {
+    const dep = (typeof jurContarDoTopico === "function" && ch)
+      ? jurContarDoTopico(ch) : 0;
+    if (dep !== antes) {
+      reg("QUESTOES", "julgado guardado a partir de uma questão",
+          q.topico + " · " + antes + "→" + dep);
+    }
+    /* repinta SEMPRE, e não só quando o número mudou: editar um julgado
+     * sem criar outro também muda o que a tela de trás deveria dizer */
+    try { qsUiPintarSessao(); } catch (e) {}
+  };
+  reg("QUESTOES", "gaveta de julgados aberta pela questão",
+      q.topico + " · " + antes + " guardado(s)");
 }
 
 /* ---------------------------------------------------------------------

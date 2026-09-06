@@ -212,14 +212,46 @@ function matResumo() {
   const discs = new Set(ks.map((k) => (matResumos[k].disciplina || "").trim()).filter(Boolean));
   const ccs = new Set(ks.map((k) => (matResumos[k].concurso || "").trim()).filter(Boolean));
   const cartoes = ks.reduce((a, k) => a + matContarCartoes(k), 0);
-  return { total: ks.length, caracteres: chars, disciplinas: discs.size,
+  /* OS TÓPICOS QUE SÓ TÊM JULGADO CONTAM AQUI TAMBÉM.
+   *
+   * matRender pergunta "total" antes de qualquer outra coisa e, com
+   * zero, desenha "nada guardado ainda" e volta — sem nem chamar a
+   * lista. Ou seja: com seis julgados guardados e nenhum resumo, a
+   * estante dizia que estava vazia. É o mesmo defeito que este trabalho
+   * inteiro veio consertar, um andar acima: material que existe e não é
+   * alcançável.
+   *
+   * A CONTA É SÓ DA TELA. Nada disto é gravado, e "caracteres" e
+   * "cartões" continuam vindo só do que está no armazenamento — são
+   * medidas do texto escrito, e julgado não é texto de resumo. */
+  const so = matSoJuris();
+  so.forEach((x) => {
+    if ((x.disciplina || "").trim()) discs.add(x.disciplina.trim());
+    if ((x.concurso || "").trim()) ccs.add(x.concurso.trim());
+  });
+  return { total: ks.length + so.length, gravados: ks.length,
+           caracteres: chars, disciplinas: discs.size,
            concursos: ccs.size, cartoes };
 }
 
 /* Lista para a aba, agrupada por disciplina e ordenada pelo que foi mexido
  * por último — quem abre o Material quer continuar de onde parou. */
+/* O QUE ESTÁ GRAVADO. Só isto — quem conta, faz backup ou calcula
+ * cobertura precisa da verdade do armazenamento, sem linha inventada. */
 function matLista() {
   return Object.keys(matResumos).map((k) => Object.assign({ chave: k }, matResumos[k]))
+    .sort((a, b) => String(b.tocado || "").localeCompare(String(a.tocado || "")));
+}
+
+/* O QUE A ESTANTE MOSTRA: o gravado mais os tópicos que só têm julgado.
+ *
+ * São duas funções e não uma porque são duas perguntas diferentes, e
+ * juntá-las numa só é o erro que este código já cometeu antes (um campo
+ * com dois sentidos, uma função chamada de três lugares com três
+ * expectativas). "O que existe guardado" e "o que a pessoa deve ver na
+ * estante" só coincidiam enquanto a jurisprudência estava de fora. */
+function matListaCheia() {
+  return matLista().concat(matSoJuris())
     .sort((a, b) => String(b.tocado || "").localeCompare(String(a.tocado || "")));
 }
 
@@ -1847,7 +1879,26 @@ function matVirarCartoes() {
  * todo resumo de Direito. Por isso são marcadores, derivados do conteúdo:
  * cartões e resumo o app sabe sozinho; "lei seca" é uma marca que a pessoa
  * põe, porque só ela sabe se aquilo é a letra da lei ou um comentário. */
-const MAT_TIPOS = ["resumo", "cartoes", "lei"];
+/* A JURISPRUDÊNCIA É O QUARTO TIPO, e a diferença dela é onde mora.
+ *
+ * Resumo, cartões e lei seca são CAMPOS do registro do material: para
+ * saber se existem, basta olhar o próprio x. Julgado mora em outra
+ * gaveta (eac_juris), ligado ao tópico por chave — e é por isso que ele
+ * ficou de fora até agora: a estante lista os registros de material, e
+ * um tópico que só tem julgado não tem registro nenhum.
+ *
+ * Ficar de fora não era detalhe de exibição. Significava que o julgado
+ * não contava como material estudado, não aparecia no filtro, e não era
+ * achável pela busca — ou seja, estava guardado e fora do alcance de
+ * quem o guardou. */
+const MAT_TIPOS = ["resumo", "cartoes", "lei", "juris"];
+
+function matTemJuris(chave) {
+  if (typeof jurChavesComJulgado !== "function") return false;
+  const norm = typeof jurChaveComparavel === "function"
+    ? jurChaveComparavel : matChaveNormal;
+  return jurChavesComJulgado().has(norm(chave));
+}
 
 function matTiposDe(x) {
   const tipos = [];
@@ -1856,7 +1907,57 @@ function matTiposDe(x) {
   /* "leiId" é o ponteiro para a biblioteca; "leiTexto" é o campo antigo,
    * que continua contando enquanto houver base não migrada. */
   if (String(x.leiTexto || "").trim() || x.leiSeca || x.leiId) tipos.push("lei");
+  if (matTemJuris(x.chave)) tipos.push("juris");
   return tipos;
+}
+
+/* ------------------------------------------------------------------
+ * OS TÓPICOS QUE SÓ TÊM JULGADO
+ *
+ * matLista() nasce de matResumos: um tópico sem resumo e sem cartões
+ * não está lá. Enquanto os julgados eram uma gaveta à parte isso não
+ * doía; agora que eles são material, doeria muito — quem guardou seis
+ * julgados de um tópico e nenhum resumo abriria a estante e a veria
+ * vazia.
+ *
+ * A saída NÃO é gravar um registro de material vazio para cada tópico
+ * com julgado. Isso criaria lixo permanente no armazenamento por causa
+ * de uma decisão de tela, e um registro vazio reaparece em toda
+ * contagem, todo backup e todo cálculo de cobertura. O que se monta
+ * aqui é uma linha DE VISUALIZAÇÃO, viva só durante o desenho: ela não
+ * é gravada, e some sozinha se o julgado for apagado.
+ * ------------------------------------------------------------------ */
+/* O texto pesquisável dos julgados de um tópico. Só é montado quando
+ * há busca ativa — a lista inteira concatenada a cada repintura seria
+ * trabalho jogado fora nas nove de cada dez vezes em que ninguém está
+ * procurando nada. */
+function matJurisTexto(chave) {
+  if (typeof jurDoTopico !== "function" || !matTemJuris(chave)) return "";
+  return jurDoTopico(chave)
+    .map((j) => [jurTitulo(j), j.tese, j.resumo, (j.tags || []).join(" ")]
+      .filter(Boolean).join(" "))
+    .join(" ");
+}
+
+function matSoJuris() {
+  if (typeof jurLista !== "function") return [];
+  const vistas = new Set(Object.keys(matResumos).map(matChaveNormal));
+  const porChave = new Map();
+  jurLista().forEach((j) => {
+    (j.topicos || []).forEach((c) => {
+      const k = matChaveNormal(c);
+      if (!k || vistas.has(k) || porChave.has(k)) return;
+      const r = jurRotuloDe(j, c);
+      if (!r.topico) return;      /* chave estropiada não vira linha */
+      porChave.set(k, {
+        chave: c, disciplina: r.disciplina, topico: r.topico,
+        concurso: j.concurso || "", texto: "", cartoes: "",
+        soJuris: true,
+        criado: j.criado || "", tocado: j.tocado || j.criado || "",
+      });
+    });
+  });
+  return [...porChave.values()];
 }
 
 let matFEdital = "";
@@ -1875,11 +1976,20 @@ function matAgrupado(filtro) {
       const tps = matTiposDe(x);
       if (!matFTipos.every((tp) => tps.indexOf(tp) >= 0)) return false;
     }
-    return !f || (x.topico + " " + x.disciplina + " "
-      + (x.concurso || "") + " " + x.texto).toLowerCase().includes(f);
+    /* A BUSCA TAMBÉM ENTRA NOS JULGADOS.
+     * Procurar "confisco" e não achar o tópico onde está o julgado que
+     * fala de confisco é o mesmo defeito de antes por outro caminho: o
+     * material existe e não é alcançável. Só a tese e o resumo entram —
+     * são o que a pessoa escreveu para ler; a ementa inteira encheria a
+     * busca de casamentos que ela não pediu. */
+    if (!f) return true;
+    const meu = (x.topico + " " + x.disciplina + " "
+      + (x.concurso || "") + " " + x.texto).toLowerCase();
+    if (meu.includes(f)) return true;
+    return matJurisTexto(x.chave).toLowerCase().includes(f);
   };
   const arv = new Map();
-  matLista().filter(casa).forEach((x) => {
+  matListaCheia().filter(casa).forEach((x) => {
     const cc = x.concurso || "";
     if (!arv.has(cc)) arv.set(cc, new Map());
     const d = x.disciplina || "";
@@ -1908,7 +2018,9 @@ function matSelosDe(x) {
 }
 
 function matPintarSugestoes() {
-  const lista = matLista();
+  /* a lista CHEIA: senão o filtro "jurisprudência" nasceria dizendo
+   * "0" justamente nos tópicos que só têm julgado */
+  const lista = matListaCheia();
   const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   const encher = (id, valores) => {
     const dl = $(id);
@@ -2113,7 +2225,33 @@ function matRender() {
           acoes.className = "mat-acoes";
           const ler = botaoMini("mat_abrir", "btn-cinza",
             () => matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "ler"));
+          /* NUM TÓPICO QUE SÓ TEM JULGADO, "abrir" abriria um resumo em
+           * branco: a ação principal ali é ver os julgados, e oferecer a
+           * folha vazia como caminho principal é mandar a pessoa para o
+           * lugar onde o material dela NÃO está. */
+          if (x.soJuris) ler.hidden = true;
           acoes.append(ler);
+
+          /* O BOTÃO PRÓPRIO DA JURISPRUDÊNCIA.
+           *
+           * Ele existia só dentro do ⋮, junto de "mexer nos cartões" e
+           * "ver a lei seca" — três coisas diferentes atrás do mesmo
+           * clique-e-procure. Enquanto o julgado não contava como
+           * material isso se defendia; agora que conta, esconder o
+           * acesso ao quarto tipo enquanto os outros três têm porta na
+           * própria linha seria dizer uma coisa no selo e outra no
+           * caminho. Só aparece onde HÁ julgado — em tópico sem nenhum,
+           * o convite continua no menu, que é onde moram as ações que
+           * criam coisa nova. */
+          const nJul = typeof jurContarDoTopico === "function"
+            ? jurContarDoTopico(x.chave) : 0;
+          if (nJul) {
+            const bj = botaoMini(null, "btn-cinza",
+              () => jurAbrir(x.disciplina, x.topico, "ler"),
+              t("mat_juris_btn", { n: nJul }));
+            bj.title = t("mat_juris_ver_ajuda", { n: nJul, tp: x.topico });
+            acoes.append(bj);
+          }
 
           const outras = [];
           /* CAMINHO ATÉ OS CARTÕES. Sem ele, os cartões existiam guardados e
@@ -2144,13 +2282,15 @@ function matRender() {
           /* CAMINHO ATÉ A JURISPRUDÊNCIA, pelo mesmo motivo da lei seca:
            * ela é guardada por tópico e, sem esta porta, só se chegaria
            * nela pela agenda da semana. */
-          const nJ = typeof jurContarDoTopico === "function"
-            ? jurContarDoTopico(x.chave) : 0;
-          outras.push({ rot: t(nJ ? "mat_juris_ver" : "mat_juris_criar",
-              { n: nJ }),
-            dica: t(nJ ? "mat_juris_ver_ajuda" : "mat_juris_criar_ajuda",
-              { n: nJ, tp: x.topico }),
-            faz: () => jurAbrir(x.disciplina, x.topico) });
+          /* COM JULGADO, O CAMINHO JÁ ESTÁ NA LINHA — e repeti-lo no ⋮
+           * seria duas portas para a mesma sala, na mesma linha. O que
+           * fica aqui é o convite para CRIAR o primeiro, que é ação de
+           * menu: se propõe, não se destaca. */
+          if (!nJul) {
+            outras.push({ rot: t("mat_juris_criar"),
+              dica: t("mat_juris_criar_ajuda", { tp: x.topico }),
+              faz: () => jurAbrir(x.disciplina, x.topico, "incluir") });
+          }
 
           acoes.append(matMenuLinha(x.chave, outras));
           li.append(esq, acoes);

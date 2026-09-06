@@ -1362,6 +1362,64 @@ const UI = {
   "jur_prompt_copiado": "Prompt copiado. Cole numa IA e leia a resposta antes de unir qualquer coisa — unir é decisão sua.",
   "jur_prompt_poucos": "É preciso pelo menos dois julgados neste tópico para comparar.",
   "jur_prompt_preencher": "Abaixo está a ementa/o acórdão de um julgado que guardei para estudar o tópico \"{tp}\".\n\nDevolva SOMENTE um objeto JSON, sem texto antes nem depois, com estes campos:\n\n{\n  \"tribunal\": \"sigla, ex.: STF\",\n  \"classe\": \"ex.: ADI, RE, REsp, Súmula Vinculante, Tema\",\n  \"numero\": \"só o número, como está escrito\",\n  \"data_julgamento\": \"aaaa-mm-dd, ou vazio se o texto não disser\",\n  \"orgao\": \"órgão julgador, ou vazio\",\n  \"relator\": \"nome, ou vazio\",\n  \"categoria\": \"SÚMULA VINCULANTE | REPETITIVO | REPERCUSSÃO GERAL | CONTROLE CONCENTRADO | vazio\",\n  \"tese_curta\": \"COPIADA do texto, não reescrita\",\n  \"resumo\": \"escrito por você, 2 a 4 frases\"\n}\n\nREGRAS QUE NÃO PODEM SER QUEBRADAS:\n1. \"tese_curta\" é TRANSCRIÇÃO. Copie a frase do próprio texto — a que enuncia o que ficou decidido. Não parafraseie, não resuma, não \"melhore\": trocar uma palavra na tese muda o que eu vou marcar na prova. Se a tese não estiver enunciada em nenhuma frase, deixe \"tese_curta\" vazia e explique no resumo.\n2. \"resumo\" é SEU. Diga o que o tribunal decidiu e por quê, em linguagem direta, 2 a 4 frases. É aqui que você escreve com suas palavras.\n3. Campo que o texto não informa fica com string vazia. Não deduza número, data nem relator.\n4. Nada de markdown, nada de ``` em volta do JSON.\n\nTEXTO:\n{txt}",
+  /* ---- COMPLETAR E CONFERIR O QUE JÁ ESTÁ GUARDADO ----
+     Duas tarefas num pedido só porque olham o mesmo texto. A segunda
+     (conferir) é a que este prompt tem de proteger: ele PODE apontar
+     erro na tese, e NÃO PODE corrigi-la. */
+  /* NOMES EM MINÚSCULA, e por isso chaves próprias: os "jur_c_*" são
+     rótulos de campo em CAIXA ALTA (TRIBUNAL, CLASSE), certos em cima
+     de uma caixinha e errados no meio de uma frase — "Preenchi:
+     TRIBUNAL, CLASSE" parece grito. Reaproveitar a chave teria criado
+     duas entradas com o mesmo nome no mesmo objeto, onde a última cala
+     a primeira sem avisar ninguém. */
+  "jur_f_tribunal": "tribunal",
+  "jur_f_classe": "classe",
+  "jur_f_numero": "número",
+  "jur_f_data": "data do julgamento",
+  "jur_f_orgao": "órgão julgador",
+  "jur_f_relator": "relator",
+  "jur_f_fonte": "onde encontrei",
+  "jur_f_resumo": "resumo",
+  "jur_f_tags": "assuntos",
+  "jur_nada_preenchido": "(nenhum campo preenchido além da tese)",
+  "jur_nada_faltando": "(nenhum)",
+  "jur_prompt_completar": "Tenho este julgado guardado para estudar o tópico \"{tp}\", e ele está incompleto. Preciso de duas coisas: COMPLETAR o que falta e CONFERIR o que já está escrito.\n\nJULGADO: {tit}\n\nO QUE JÁ ESTÁ PREENCHIDO (não mexa nestes campos):\n{tem}\n\nCAMPOS VAZIOS QUE QUERO PREENCHER: {falta}\n\nTESE GUARDADA (transcrição do tribunal — NÃO reescreva):\n{tese}\n\nRESUMO GUARDADO:\n{resumo}\n\nEMENTA GUARDADA:\n{ementa}\n\n---\n\nDevolva SOMENTE um objeto JSON, sem texto antes nem depois:\n\n{\n  \"tribunal\": \"\",\n  \"classe\": \"ex.: ADI, RE, REsp, Súmula Vinculante, Tema\",\n  \"numero\": \"só o número\",\n  \"data_julgamento\": \"aaaa-mm-dd\",\n  \"orgao\": \"\",\n  \"relator\": \"\",\n  \"fonte\": \"onde este julgado pode ser conferido\",\n  \"categoria\": \"SÚMULA VINCULANTE | REPETITIVO | REPERCUSSÃO GERAL | CONTROLE CONCENTRADO | vazio\",\n  \"resumo\": \"2 a 4 frases, só se o resumo guardado estiver vazio\",\n  \"assuntos\": [\"3 a 6 assuntos curtos, em minúsculas\"],\n  \"conferencia\": [\n    { \"campo\": \"tese|resumo|ementa\", \"trecho\": \"o pedaço exato com problema\", \"problema\": \"o que está errado\", \"sugestao\": \"como deveria estar\" }\n  ],\n  \"identificacao\": \"o que você entendeu que este julgado é, em uma frase — para eu conferir se você identificou o processo certo\"\n}\n\nREGRAS QUE NÃO PODEM SER QUEBRADAS:\n1. NÃO REESCREVA A TESE. Ela é transcrição do tribunal: trocar uma palavra muda o que eu marco na prova. Se houver erro nela, aponte em \"conferencia\" e deixe que eu decida.\n2. SÓ PREENCHA CAMPO VAZIO. Se um campo aparece na lista \"já preenchido\", devolva-o vazio — eu não quero a sua versão dele.\n3. NÃO INVENTE NÚMERO, DATA NEM RELATOR. Se você não tem certeza de qual processo é este, devolva esses campos vazios e diga isso em \"identificacao\". Um número errado aqui é pior que um campo vazio: campo vazio eu vejo, número errado eu decoro.\n4. EM \"conferencia\", procure: erro de digitação (palavra repetida, letra trocada), incoerência entre a tese e o resumo, número ou percentual que aparece diferente nos dois, e afirmação no resumo que a tese não sustenta. Lista vazia se estiver tudo certo — não invente problema para parecer útil.\n5. \"assuntos\" são etiquetas de busca, não frases: \"multa tributária\", \"não confisco\", \"anterioridade\".\n6. Nada de markdown, nada de ``` em volta do JSON.",
+  "jur_completar": "completar e conferir",
+  "jur_completar_aj": "Monta uma pergunta com este julgado dentro, para você colar numa IA. Ela preenche só os campos vazios e aponta erros no texto — a tese nunca é reescrita.",
+  "jur_completar_falta": "Faltam {n} campo(s): {q}. Toque para montar a pergunta.",
+  "jur_completar_ok": "Este julgado está completo. A pergunta ainda serve para conferir o texto.",
+  "jur_completar_copiado": "Pergunta copiada. Cole numa IA e traga a resposta de volta com “ler a resposta”.\n\nSó os campos VAZIOS serão preenchidos. O que você já escreveu fica como está, e a tese não é reescrita em hipótese nenhuma.",
+  "jur_completar_ler": "ler a resposta",
+  "jur_completar_ler_aj": "Cole aqui o JSON que a IA devolveu. Preenche os campos vazios, soma os assuntos e mostra o que ela apontou no texto.",
+  "jur_completar_cole": "Cole a resposta da IA",
+  "jur_completar_nada": "Não entendi essa resposta como JSON. Copie o objeto inteiro, das chaves de abertura às de fechamento.",
+  "jur_completar_fez": "Preenchi: {q}.",
+  "jur_completar_zero": "Nada a preencher — todos os campos que ela devolveu já tinham conteúdo.",
+  "jur_completar_ignorou": "\n\nNão gravei (o campo já tinha outro conteúdo): {q}. Se quiser trocar, edite à mão.",
+  "jur_conferencia_tit": "O que a IA apontou no texto",
+  "jur_conferencia_nada": "\n\nEla não apontou nenhum problema no texto.",
+  "jur_conferencia_linha": "[{c}] {p}\n   está: {tr}\n   sugere: {sg}",
+  "jur_conferencia_aviso": "\n\nNADA DISTO FOI APLICADO. A tese é transcrição do tribunal e o resumo é seu — corrija à mão o que fizer sentido, em “editar”.",
+  "jur_ident_tit": "\n\nO que ela entendeu que este julgado é:\n{q}\n\nSe isso não bate com o julgado que você guardou, ela identificou outro processo — e nesse caso os campos que ela preencheu estão errados.",
+  /* ---- DA QUESTÃO PARA O JULGADO ----
+     O rótulo muda com a contagem porque o VERBO muda: sem julgado
+     guardado o que se faz é criar; com julgados guardados, o que se
+     faz ao errar uma questão é conferir a tese. */
+  "qs_juris_novo": "⚖ guardar julgado",
+  "qs_juris_ver": "⚖ {n} julgados",
+  "qs_juris_ajuda": "Abre a gaveta de jurisprudência de \u201c{tp}\u201d por cima desta questão, para guardar o julgado que ela cobra. Ao fechar você volta para a MESMA questão, com o rascunho e os grifos como estavam.",
+  "qs_juris_ver_ajuda": "Mostra os {n} julgados já guardados em \u201c{tp}\u201d, por cima desta questão. Ao fechar você volta para a mesma questão, no mesmo ponto.",
+  /* ---- O BOTÃO PRINCIPAL DA ENTRADA ----
+     Três rótulos para três estados da caixa, e é a caixa que decide
+     qual aparece. O rótulo diz o que vai acontecer; o title diz por
+     que este é o passo certo agora. */
+  "jur_b_principal": "Faz o passo seguinte do que estiver na caixa acima: com a ementa dentro, monta a pergunta para a IA; com a resposta da IA dentro, preenche os campos. Vazia, ele fica desligado.",
+  "jur_principal_vazia": "✨ processar a ementa",
+  "jur_principal_vazia_aj": "Cole a ementa do tribunal na caixa acima e este botão se acende.",
+  "jur_principal_ementa": "✨ perguntar à IA",
+  "jur_principal_ementa_aj": "Copia uma pergunta com esta ementa dentro. Cole numa IA e traga a resposta de volta para a MESMA caixa — ela é lida sozinha, sem clique nenhum. A tese vem transcrita do tribunal, nunca reescrita.",
+  "jur_principal_resposta": "ler a resposta e preencher",
+  "jur_principal_resposta_aj": "A caixa tem a resposta da IA. Este botão a lê e preenche os campos. Normalmente nem é preciso: colar já dispara a leitura.",
   "jur_prompt_ia": "pedir à IA que leia e resuma",
   "jur_prompt_ia_vazio": "Cole a ementa na caixa acima primeiro — é ela que vai dentro da pergunta.",
   "jur_prompt_ia_copiado": "Pergunta copiada. Cole numa IA, traga a resposta de volta para a MESMA caixa e toque em “ler e preencher”.\n\nEla vai preencher os campos e escrever o RESUMO. A tese vem transcrita do texto, não reescrita: trocar uma palavra na tese muda o que você marca na prova.",
@@ -1470,6 +1528,11 @@ const UI = {
   "ed_menu_juris_ver": "ver os {n} julgados",
   "ed_menu_juris_nova": "guardar jurisprudência",
   "mat_juris_ver": "Ver os {n} julgados",
+  /* O BOTÃO DA LINHA É CURTO DE PROPÓSITO: ele fica ao lado de "abrir",
+     numa fila que já briga por largura. "Ver os 6 julgados" empurraria
+     a fila para a segunda linha em toda tela estreita — e o verbo já
+     está implícito num botão. */
+  "mat_juris_btn": "⚖ {n} julgados",
   "mat_juris_criar": "Guardar jurisprudência",
   "mat_juris_ver_ajuda": "Abre os {n} julgados guardados em \"{tp}\".",
   "mat_juris_criar_ajuda": "Ainda não há jurisprudência em \"{tp}\". Abre a gaveta para colar uma ementa ou escrever a tese.",
@@ -2348,6 +2411,7 @@ const UI = {
   "mat_tipo_resumo": "resumo",
   "mat_tipo_cartoes": "cartões",
   "mat_tipo_lei": "lei seca",
+  "mat_tipo_juris": "julgados",
   "mat_n_cartoes": "{n} cartão(ões)",
   "mat_ver_cartoes_n": "ver os {n} cartões",
   "mat_ver_cartoes_ajuda": "Abre os {n} cartões de “{tp}” em tela, um de cada vez, sem abrir o resumo.",
@@ -4466,6 +4530,7 @@ const UI = {
   "mat_tipo_resumo": "summary",
   "mat_tipo_cartoes": "cards",
   "mat_tipo_lei": "raw law",
+  "mat_tipo_juris": "case law",
   "mat_n_cartoes": "{n} card(s)",
   "mat_ver_cartoes_n": "see the {n} cards",
   "mat_ver_cartoes_ajuda": "Opens the {n} cards of “{tp}” on screen, one at a time, without opening the summary.",
