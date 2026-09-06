@@ -1924,6 +1924,29 @@ function qsUiFerramentas(q) {
   menu.hidden = true;
   bm.onclick = () => { menu.hidden = !menu.hidden; };
   try { menu.append(plBarraCopiar(q)); } catch (e) {}
+
+  /* O REGISTRO, A PARTIR DAQUI.
+   *
+   * Ele sempre existiu — [QUESTOES], [MATERIAL-QUESTAO] e agora
+   * [GRIFO] —, mas só se chegava nele pelo rodapé do aplicativo, com a
+   * sessão de questões fechada. Quem está respondendo e vê algo
+   * estranho não vai fechar a sessão para procurar o registro: vai
+   * desistir e concluir que o app quebrou.
+   *
+   * Ele abre JÁ FILTRADO nos erros, porque é o que se procura. */
+  try {
+    const bl = document.createElement("button");
+    bl.type = "button";
+    bl.className = "btn-min";
+    bl.textContent = t("qs_ver_registro");
+    bl.title = t("qs_ver_registro_aj");
+    bl.onclick = () => {
+      menu.hidden = true;
+      if (typeof rtPorFiltroExterno === "function") rtPorFiltroExterno("erro");
+      if (typeof abrirDiagnostico === "function") abrirDiagnostico();
+    };
+    menu.append(bl);
+  } catch (e) {}
   mais.append(bm, menu);
   barra.append(mais);
   return barra;
