@@ -188,7 +188,12 @@ function edRegistrarConteudo(r) {
   edUltimaMarca = marca;
   clearTimeout(edTimerLog);
   edTimerLog = setTimeout(() => {
-    reg("EDITAL-TEXTO", r.disciplinas.length + " disciplinas, " + tops + " tópicos",
+    /* edUltimaMarca é variável de módulo: zera a cada recarga e por isso
+     * só segura a digitação. Contra "abri o app 24 vezes e o edital não
+     * mudou nenhuma" quem segura é regSeMudou, que consulta o registro
+     * gravado — o único estado que sobrevive à recarga. */
+    regSeMudou("EDITAL-TEXTO",
+        r.disciplinas.length + " disciplinas, " + tops + " tópicos",
         ign + " linhas ignoradas, " + semPeso + " sem peso");
   }, 800);
 }

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.9.1";
+const VERSAO = "16.9.2";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -189,6 +189,53 @@ function reg(tipo, msg, extra) {
 }
 
 /* ------------------------------------------------------------------
+ * FATO QUE NÃO MUDA NÃO OCUPA 24 LINHAS
+ *
+ * O diagnóstico que o usuário mandou tinha 24 eventos [EDITAL-TEXTO],
+ * um por abertura do app, TODOS dizendo a mesma coisa: "7 disciplinas,
+ * 133 tópicos · 0 linhas ignoradas, 0 sem peso". O filtro por edital
+ * ficou inútil — 24 de 24 eventos eram essa linha — e as 24 ocupavam
+ * 12% do caderninho de 200, empurrando para fora eventos que importam.
+ *
+ * O guard que já existia em edRegistrarConteudo é uma variável de
+ * módulo: ela zera a cada recarga, então protege contra digitação e não
+ * contra abertura. A defesa tem que morar no registro, que é o que
+ * atravessa as sessões.
+ *
+ * Repetição não é apagada, é CONTADA. "×24, até 14:07" responde tanto
+ * "continua igual?" quanto "quantas vezes conferi isso?", e a linha
+ * guarda a hora da PRIMEIRA vez para não pular de lugar na ordem
+ * cronológica. E como a conta vive no próprio registro, limpar o
+ * registro faz o fato voltar a ser anotado — nada fica invisível para
+ * sempre por causa de um marcador guardado em outro canto.
+ * ------------------------------------------------------------------ */
+function regSeMudou(tipo, msg, extra) {
+  const m = String(msg).slice(0, 300);
+  const x = extra === undefined ? undefined : extra;
+  for (let i = registro.length - 1; i >= 0; i--) {
+    const r = registro[i];
+    if (r.tipo !== tipo) continue;
+    /* só o ÚLTIMO do mesmo tipo conta: se o valor mudou e voltou, isso é
+     * uma ida e uma volta, e as duas merecem linha própria */
+    if (r.msg === m && (r.extra || "") === (x || "")) {
+      r.n = (r.n || 1) + 1;
+      r.ult = new Date().toISOString().slice(11, 19);
+      try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
+      return false;
+    }
+    break;
+  }
+  reg(tipo, msg, extra);
+  return true;
+}
+
+/* Sufixo de repetição, para quem imprime o registro. Fora daqui ninguém
+ * precisa saber que os campos se chamam n e ult. */
+function regRepeticao(r) {
+  return (r && r.n > 1) ? "  (×" + r.n + (r.ult ? ", até " + r.ult : "") + ")" : "";
+}
+
+/* ------------------------------------------------------------------
  * GRAVAÇÃO QUE NÃO FALHA CALADA
  *
  * Até a v8.69 havia 37 pontos gravando com "catch (e) {}". Com espaço
@@ -296,7 +343,7 @@ function registroTexto(soDoModo) {
   if (!lista.length) return t(re ? "log_empty_modo" : "log_empty");
   return lista.map((r) => r.d + " " + r.h + " " + (r.s || "----")
     + "  [" + r.tipo + "] " + r.msg
-    + (r.extra ? "  " + r.extra : "")).join("\n");
+    + (r.extra ? "  " + r.extra : "") + regRepeticao(r)).join("\n");
 }
 let colagemAnterior = null;   // {texto} do editor ANTES da última colagem
 let linhaNovaColada = null;   // 1ª linha do texto recém-colado (brilho)
@@ -4619,9 +4666,20 @@ async function medirArmazenamento() {
   try {
     const e = navigator.storage && navigator.storage.estimate
       ? await navigator.storage.estimate() : null;
-    if (e) p.push("uso: " + Math.round((e.usage || 0) / 1024) + " KB de "
-      + Math.round((e.quota || 0) / 1048576) + " MB");
-  } catch (e) { p.push("uso: erro"); }
+    /* CUIDADO AO LER ESTA LINHA. navigator.storage.estimate() mede
+     * CacheStorage + IndexedDB e NÃO conta o localStorage. Depois de uma
+     * limpeza de cache ela devolve 0, e "uso: 0 KB" ao lado de 1780 KB de
+     * localStorage parecia dizer que todo o material havia sumido — quando
+     * o material inteiro estava intacto, só que na outra linha.
+     *
+     * O rótulo passa a dizer O QUE foi medido, e a frase entre parênteses
+     * diz o que NÃO foi. Um número sem unidade de sentido é pior que
+     * número nenhum: o primeiro assusta, o segundo só falta. */
+    if (e) p.push("arquivos do app (cache+IndexedDB): "
+      + Math.round((e.usage || 0) / 1024) + " KB de "
+      + Math.round((e.quota || 0) / 1048576) + " MB"
+      + "  — não inclui o material, que está no localStorage abaixo");
+  } catch (e) { p.push("arquivos do app: erro"); }
   try {
     let n = 0;
     for (let i = 0; i < localStorage.length; i++)
