@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "8.66.0";
+const VERSAO = "16.7.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -58,7 +58,7 @@ try {
 } catch (e) {}
 
 function salvarRecortes() {
-  try { localStorage.setItem("eac_recortes", JSON.stringify(recortes)); } catch (e) {}
+  guardar("eac_recortes", JSON.stringify(recortes));
   atualizarBarraRecortes();
 }
 
@@ -165,6 +165,19 @@ function podarRegistro() {
 function reg(tipo, msg, extra) {
   const agora = new Date();
   registro.push({
+    /* DIA E HORA EM UTC, OS DOIS. Aqui o par data+hora é um INSTANTE, e
+     * regDentroDoPeriodo o relê com "Z" no fim para devolvê-lo ao fuso
+     * de quem está lendo — é o desenho certo para um registro de
+     * eventos, e ele já estava certo.
+     *
+     * Tentei "consertar" isto trocando só o dia por local, junto com a
+     * correção do diário. Foi um erro de leitura meu: misturar dia local
+     * com hora UTC produz um instante que não existiu, e o filtro "só de
+     * hoje" passou a esconder o evento que acabara de acontecer.
+     *
+     * A diferença entre os dois casos é o que cada um guarda. O diário
+     * guarda um DIA (sem hora) e por isso precisa do dia local. O
+     * registro guarda um INSTANTE, e instante se guarda em UTC. */
     h: agora.toISOString().slice(11, 19),
     d: agora.toISOString().slice(0, 10),
     s: SESSAO,
@@ -173,6 +186,53 @@ function reg(tipo, msg, extra) {
   });
   podarRegistro();
   try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
+}
+
+/* ------------------------------------------------------------------
+ * GRAVAÇÃO QUE NÃO FALHA CALADA
+ *
+ * Até a v8.69 havia 37 pontos gravando com "catch (e) {}". Com espaço
+ * sobrando isso nunca aparece; com o espaço cheio o app continua perfeito
+ * na tela e não salva mais nada — e a pessoa só descobre ao recarregar.
+ * É a mesma falha que custou 137 cartões: trabalho sumindo sem ninguém
+ * dizer nada.
+ *
+ * Aqui a gravação de CONTEÚDO passa a avisar. Preferência (tema, idioma)
+ * continua podendo falhar em silêncio: perder o tema não é perder trabalho.
+ * ------------------------------------------------------------------ */
+let falhasGravacao = [];
+let avisouGravacao = false;
+
+function guardar(chave, valor) {
+  try {
+    localStorage.setItem(chave, valor);
+    /* voltou a funcionar depois de ter falhado: vale registrar, senão o
+     * diagnóstico mostra um problema que já passou */
+    if (falhasGravacao.length && falhasGravacao[falhasGravacao.length - 1].chave === chave) {
+      reg("ARMAZEN", "gravação voltou a funcionar", chave);
+      falhasGravacao = falhasGravacao.filter((f) => f.chave !== chave);
+    }
+    return true;
+  } catch (e) {
+    const nome = (e && e.name) || "erro";
+    falhasGravacao.push({ chave, nome, quando: new Date().toISOString() });
+    if (falhasGravacao.length > 20) falhasGravacao.shift();
+    /* reg() guarda em memória mesmo quando não consegue gravar, então o
+     * diagnóstico ainda enxerga a falha */
+    reg("ERRO", "NÃO consegui gravar " + chave + " (" + nome + ")",
+        "o trabalho deste momento pode não sobreviver ao recarregar");
+    if (!avisouGravacao) {
+      avisouGravacao = true;
+      try { avisarGravacaoFalhou(); } catch (x) {}
+    }
+    return false;
+  }
+}
+
+/* Um aviso só por sessão, e visível — não um console.error. Quem precisa
+ * saber disto é a pessoa, e ela precisa saber ANTES de fechar a aba. */
+function avisarGravacaoFalhou() {
+  if (typeof uiAlert === "function") uiAlert(t("armazen_falhou"));
 }
 
 /* Erro de JavaScript entra no registro sozinho — é o tipo de falha que o
@@ -197,9 +257,42 @@ const REG_POR_MODO = {
   edital: /^EDITAL/,
   cartoes: /^(CORRIGIR|LIMPAR|COLAR|APLICAR|EXCLUIR|RECORTAR|RECORTES|FOCO|EXPORTAR|REVISAO|PROMPT|BLOQUEIO)/,
 };
+/* PERÍODO NO REGISTRO PRINCIPAL.
+ * Com centenas de eventos, "o que aconteceu agora" fica enterrado. O
+ * diário e o registro dos resumos já filtram por período; este era o
+ * único que obrigava a garimpar o arquivo inteiro.
+ * O dia é o LOCAL, como no registro dos resumos: quem estuda às 22h não
+ * pode ver a sessão da noite cair no dia anterior por causa de fuso. */
+let regPeriodo = 0;          /* 0 = tudo · 1 = hoje · 7, 30, 90 = dias */
+const REG_PERIODOS = [0, 1, 7, 30];
+
+function regDentroDoPeriodo(r, dias) {
+  if (!dias) return true;
+  /* O REGISTRO GRAVA EM UTC (reg() usa toISOString), E O DIA DA PESSOA É
+   * LOCAL. Lendo "2026-08-23T00:31" como hora local, um evento das 21h31
+   * de sábado em Brasília virava domingo — e sumia do filtro "só de hoje"
+   * justamente no fim do dia, que é quando mais se olha o registro.
+   * O "Z" diz ao navegador que aquilo é UTC; depois disso, getDate()
+   * devolve o dia no relógio de quem está lendo. */
+  const d = new Date(String(r.d) + "T" + String(r.h || "00:00:00") + "Z");
+  if (isNaN(d.getTime())) return true;
+  if (dias === 1) {
+    const h = new Date();
+    return d.getFullYear() === h.getFullYear() && d.getMonth() === h.getMonth()
+      && d.getDate() === h.getDate();
+  }
+  return d.getTime() >= Date.now() - dias * 86400000;
+}
+
+function registroFiltrado(soDoModo, dias) {
+  const re = soDoModo && REG_POR_MODO[soDoModo];
+  return registro.filter((r) => (!re || re.test(r.tipo))
+    && regDentroDoPeriodo(r, dias === undefined ? regPeriodo : dias));
+}
+
 function registroTexto(soDoModo) {
   const re = soDoModo && REG_POR_MODO[soDoModo];
-  const lista = re ? registro.filter((r) => re.test(r.tipo)) : registro;
+  const lista = registroFiltrado(soDoModo);
   if (!lista.length) return t(re ? "log_empty_modo" : "log_empty");
   return lista.map((r) => r.d + " " + r.h + " " + (r.s || "----")
     + "  [" + r.tipo + "] " + r.msg
@@ -235,6 +328,13 @@ function uiDialog(texto, comCancelar) {
     _uiResolve = resolve;
     const m = document.getElementById("uiModal");
     document.getElementById("uiModalMsg").textContent = texto;
+    /* religa SEMPRE ao abrir: qualquer coisa que tenha mexido nestes
+     * botões antes não pode deixar um aviso sem saída. Ficar preso num
+     * aviso é o pior defeito que este app pode ter — não dá nem para
+     * relatar o problema de dentro dele. */
+    _uiLigarPadrao();
+    const t3 = document.getElementById("uiModalTerceiro");
+    if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
     document.getElementById("uiModalOk").textContent = "OK";
     const cancel = document.getElementById("uiModalCancel");
     cancel.textContent = t("cancel_btn");
@@ -247,11 +347,171 @@ function uiDialog(texto, comCancelar) {
 }
 
 function uiAlert(texto) { return uiDialog(String(texto), false); }
+/* Pergunta de TRÊS saídas. O uiConfirm só oferece sim/não, e há decisões
+ * em que "não" significa perder trabalho — nesses casos falta a terceira
+ * porta: desistir de fechar. */
+/* ABRIR DIÁLOGO SEM QUEBRAR.
+ * showModal() num <dialog> JÁ ABERTO lança InvalidStateError no Chrome — e
+ * a função que chamou morre ali. Foi o que fez "abrir onde está" e
+ * "resolvida", nas dúvidas, parecerem sem efeito: as duas reabriam um
+ * diálogo que já estava na tela. Reabrir é gesto normal (a lista se
+ * redesenha depois de resolver uma dúvida), então o certo é tolerar. */
+/* Pergunta com CAIXA DE TEXTO. O uiConfirm só devolve sim/não, e há coisas
+ * — como escrever a explicação de uma dúvida — que precisam de texto.
+ * Devolve null quando a pessoa desiste, para distinguir "cancelei" de
+ * "apaguei o que estava escrito". */
+/* uiTexto(titulo, valor)            -> promessa de string ou null
+ * uiTexto(titulo, valor, {rotulo2, valor2}) -> promessa de {a, b} ou null
+ * O segundo campo existe para a questão, que tem enunciado E gabarito. */
+/* "extra" é um botão a mais no rodapé: {rotulo, dica, faz}. Ele existe
+ * para o caso da dica de questão, em que copiar o enunciado sem fechar
+ * a caixa é o que evita perder o que já foi escrito — e fica opcional
+ * porque uiTexto serve a meia dúzia de telas que não têm o que copiar. */
+function uiTexto(titulo, valor, dois, extra) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById("dlgTextoLivre");
+    if (!dlg) { resolve(null); return; }
+    document.getElementById("txtLivreTit").textContent = titulo || "";
+    const campo = document.getElementById("txtLivreCampo");
+    campo.value = valor || "";
+    const cx2 = document.getElementById("txtLivreCaixa2");
+    const campo2 = document.getElementById("txtLivreCampo2");
+    if (cx2 && campo2) {
+      cx2.style.display = dois ? "" : "none";
+      document.getElementById("txtLivreRot2").textContent = (dois && dois.rotulo2) || "";
+      campo2.value = (dois && dois.valor2) || "";
+    }
+    const bEx = document.getElementById("btnTxtLivreExtra");
+    if (bEx) {
+      bEx.hidden = !(extra && typeof extra.faz === "function");
+      bEx.textContent = (extra && extra.rotulo) || "";
+      bEx.title = (extra && extra.dica) || "";
+      /* LIMPAR SEMPRE, na abertura.
+       *
+       * Havia esta limpeza aqui E outra no fechamento, e cada uma
+       * cobria a outra: sabotar qualquer das duas passava verde, que é
+       * como código morto sobrevive. Ficou a da abertura, porque ela
+       * também vale quando a caixa anterior foi fechada pelo Esc, sem
+       * passar pelo fechamento. */
+      bEx.onclick = null;
+      if (!bEx.hidden) {
+        bEx.onclick = () => {
+          extra.faz();
+          /* REAÇÃO NO PRÓPRIO BOTÃO: copiar não muda nada na tela, e sem
+           * confirmação a pessoa aperta de novo achando que falhou. */
+          const antes = bEx.textContent;
+          bEx.textContent = t("copied");
+          setTimeout(() => { bEx.textContent = antes; }, 1800);
+        };
+      }
+    }
+    const fim = (v) => {
+      document.getElementById("btnTxtLivreOk").onclick = null;
+      document.getElementById("btnTxtLivreNao").onclick = null;
+      if (dlg.open) dlg.close();
+      resolve(v);
+    };
+    /* colar mantendo a formatação: o que vem de uma página traz negrito,
+     * itálico e listas em text/html, e o texto puro chega achatado */
+    const bCol = document.getElementById("btnTxtLivreColar");
+    if (bCol) {
+      bCol.onclick = async () => {
+        let lido = "";
+        try {
+          lido = typeof matLerColagemFormatada === "function"
+            ? await matLerColagemFormatada() : "";
+        } catch (e) { lido = ""; }
+        if (!String(lido).trim()) { await uiAlert(t("dic_colar_vazio")); return; }
+        const limpo = typeof matDicaLimparColagem === "function"
+          ? matDicaLimparColagem(lido) : lido;
+        /* acrescenta ao que já estiver escrito, em vez de apagar */
+        campo.value = campo.value.trim()
+          ? campo.value.replace(/\s*$/, "") + "\n" + limpo : limpo;
+      };
+    }
+    document.getElementById("btnTxtLivreOk").onclick = () =>
+      fim(dois ? { a: campo.value, b: (campo2 && campo2.value) || "" } : campo.value);
+    document.getElementById("btnTxtLivreNao").onclick = () => fim(null);
+    abrirModal(dlg);
+    try { campo.focus(); } catch (e) {}
+  });
+}
+
+function abrirModal(id) {
+  const d = typeof id === "string" ? document.getElementById(id) : id;
+  if (!d) return null;
+  try {
+    if (!d.open) d.showModal();
+  } catch (e) {
+    /* já aberto, ou não suporta modal: não é motivo para derrubar o fluxo */
+    try { d.show && d.show(); } catch (x) {}
+    try { reg("ERRO", "showModal recusado em " + (d.id || "?"), (e && e.message) || ""); } catch (x) {}
+  }
+  return d;
+}
+
+function uiEscolha(texto, opcoes) {
+  return new Promise((resolve) => {
+    /* USA O MESMO _uiResolve do uiDialog. Na primeira versão eu resolvia
+     * por fora, e aí Esc, clique fora e o arranjo de testes não tinham como
+     * responder — o app ficava esperando para sempre. */
+    if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(false); }
+    _uiResolve = resolve;
+    const m = document.getElementById("uiModal");
+    document.getElementById("uiModalMsg").textContent = texto;
+    const bts = [document.getElementById("uiModalOk"),
+                 document.getElementById("uiModalCancel"),
+                 document.getElementById("uiModalTerceiro")];
+    const lista = (opcoes || []).slice(0, 3);
+    bts.forEach((b, k) => {
+      if (!b) return;
+      const o = lista[k];
+      if (!o) { b.hidden = true; b.style.display = "none"; return; }
+      b.hidden = false; b.style.display = "";
+      b.className = "btn " + (o.classe || "btn-cinza");
+      /* BOTÃO SEM RÓTULO É BOTÃO INUTILIZÁVEL.
+       * Quem chama pode escrever "rot" ou "rotulo" — os dois nomes já
+       * apareceram no app —, e se nenhum vier, é melhor mostrar o valor
+       * cru do que três retângulos cinzas sem texto, que foi o que a
+       * pessoa viu: não dava para saber qual apertar. */
+      const rot = o.rot || o.rotulo || o.label;
+      if (!rot) {
+        try { reg("ERRO", "uiEscolha: opção sem rótulo", String(o.valor)); } catch (e) {}
+      }
+      b.textContent = rot || String(o.valor || "?");
+      b.onclick = () => { uiEscolhaLimpar(); _uiFechar(o.valor); };
+    });
+    if (!m.open) m.showModal();
+    if (bts[0]) bts[0].focus();
+  });
+}
+
+/* O OK E O CANCELAR TÊM DE VOLTAR A FUNCIONAR.
+ *
+ * Estes dois botões são compartilhados por uiAlert, uiConfirm e uiEscolha.
+ * Aqui eu os ANULAVA depois de uma escolha — e como as ligações padrão
+ * eram feitas UMA VEZ SÓ, no carregamento, elas nunca voltavam. Resultado:
+ * depois de qualquer pergunta de três saídas, o próximo aviso aparecia com
+ * o OK morto e o app ficava preso, sem jeito de sair a não ser recarregando.
+ *
+ * Agora não se anula: devolve-se o comportamento padrão. */
+function _uiLigarPadrao() {
+  const ok = document.getElementById("uiModalOk");
+  const ca = document.getElementById("uiModalCancel");
+  if (ok) ok.onclick = () => _uiFechar(true);
+  if (ca) ca.onclick = () => _uiFechar(false);
+}
+
+function uiEscolhaLimpar() {
+  const t3 = document.getElementById("uiModalTerceiro");
+  if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
+  _uiLigarPadrao();
+}
+
 function uiConfirm(texto) { return uiDialog(String(texto), true); }
 
-// ligações dos botões do modal (uma vez)
-document.getElementById("uiModalOk").onclick = () => _uiFechar(true);
-document.getElementById("uiModalCancel").onclick = () => _uiFechar(false);
+/* ligações dos botões do modal */
+_uiLigarPadrao();
 document.getElementById("uiModal").addEventListener("click", (e) => {
   if (e.target.id === "uiModal") _uiFechar(false);   // clique no fundo
 });
@@ -341,6 +601,21 @@ function rotularTemas() {
 function aplicarTextos() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = t(el.dataset.i18n);
+  });
+  /* A EXPLICAÇÃO DO BOTÃO TAMBÉM É TEXTO, e também se traduz.
+   *
+   * Antes só o rótulo passava por aqui; o "title" ficava escrito à mão
+   * no HTML, em português, e não mudava com o idioma. Um botão que
+   * explica o que faz numa língua e se chama noutra é pior do que um
+   * botão sem explicação. */
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const txt = t(el.dataset.i18nTitle);
+    el.title = txt;
+    /* aria-label junto: leitor de tela não lê "title" de botão com
+     * rótulo próprio, e o ícone sozinho ficaria mudo */
+    if (!el.textContent || !el.textContent.trim()) {
+      el.setAttribute("aria-label", txt);
+    }
   });
   $("versao").textContent = "v" + VERSAO;
   $("deckExp").placeholder = t("deck_placeholder");
@@ -912,7 +1187,7 @@ function carregarRevisados() {
   } catch (e) { return new Set(); }
 }
 function salvarRevisados() {
-  try { localStorage.setItem("eac_revisados", JSON.stringify([...revisados])); }
+  try { guardar("eac_revisados", JSON.stringify([...revisados])); }
   catch (e) {}
 }
 
@@ -946,7 +1221,7 @@ function salvarHistorico() {
    * vale menos que a de cinco minutos atrás. E se nem assim couber, o
    * histórico cede lugar — ele nunca pode impedir de salvar o texto. */
   for (let tentativa = 0; tentativa < HIST_MAX + 1; tentativa++) {
-    try { localStorage.setItem("eac_hist", JSON.stringify(historico)); return true; }
+    try { guardar("eac_hist", JSON.stringify(historico)); return true; }
     catch (e) { historico.shift(); if (!historico.length) break; }
   }
   try { localStorage.removeItem("eac_hist"); } catch (e) {}
@@ -1003,13 +1278,51 @@ function abrirHistorico() {
     sub.className = "nota";
     sub.textContent = t("hist_linha", { n, c: v.txt.length }) + (v.m ? " · " + v.m : "");
     info.append(forte, sub);
+    /* VER ANTES DE DECIDIR.
+     * "Trazer o texto de volta" restaurava às cegas: a pessoa tinha de
+     * aceitar uma troca destrutiva sem saber o que vinha. Aqui o texto
+     * aparece, dá para copiar um pedaço, e só então restaurar. */
+    const acoes = document.createElement("div");
+    acoes.className = "hist-acoes";
+    const previa = document.createElement("textarea");
+    previa.className = "hist-previa";
+    previa.readOnly = true;
+    previa.rows = 10;
+    previa.hidden = true;
+    previa.value = v.txt;
+
+    const bVer = botaoMini("hist_ver", "btn-cinza", () => {
+      previa.hidden = !previa.hidden;
+      bVer.textContent = t(previa.hidden ? "hist_ver" : "hist_esconder");
+    });
+    const bCopiar = botaoMini("hist_copiar", "btn-cinza", () => {
+      /* recuperar PARTES: seleção primeiro, texto todo se não houver */
+      const sel = previa.value.slice(previa.selectionStart || 0,
+        previa.selectionEnd || 0);
+      const alvoTxt = sel.trim() ? sel : previa.value;
+      try { navigator.clipboard.writeText(alvoTxt); } catch (e) {}
+      reg("HISTORICO", "trecho copiado de uma versão",
+          alvoTxt.length + " de " + previa.value.length + " caracteres");
+      toast(sel.trim() ? "hist_copiado_parte" : "hist_copiado_tudo");
+    });
     const b = botaoMini("hist_restaurar", "btn-azul", () => {
       $("dlgHistorico").close(); restaurarVersao(i);   /* confirma dentro */
     });
-    div.append(info, b);
+    /* apagar de vez: histórico cheio de versão velha atrapalha achar a boa */
+    const bDel = botaoMini("hist_apagar", "btn-cinza", async () => {
+      if (!(await uiConfirm(t("hist_apagar_conf", {
+        quando: new Date(v.t).toLocaleString(), c: v.txt.length })))) return;
+      historico.splice(i, 1);
+      try { guardar("eac_historico", JSON.stringify(historico)); } catch (e) {}
+      reg("HISTORICO", "versão apagada de vez", new Date(v.t).toLocaleString());
+      abrirHistorico();
+      atualizarBotaoHistorico();
+    });
+    acoes.append(bVer, bCopiar, b, bDel);
+    div.append(info, acoes, previa);
     lista.append(div);
   });
-  $("dlgHistorico").showModal();
+  abrirModal("dlgHistorico");
 }
 
 function atualizarBotaoHistorico() {
@@ -1031,6 +1344,15 @@ function vigiarEncolhimento(antes, depois) {
   reg("TEXTO", "texto encolheu muito",
       antes.length + " -> " + depois.length + " caracteres");
   mostrarBarraRecuperar(antes.length, depois.length);
+}
+
+/* O botão da barra abre a LISTA. Antes ele restaurava a versão mais recente
+ * direto — decisão destrutiva tomada sem ver o que vinha. */
+function abrirRecuperarComLista() {
+  esconderBarraRecuperar();
+  abrirHistorico();
+  reg("TEXTO", "abriu o histórico pelo aviso de encolhimento",
+      historico.length + " versões guardadas");
 }
 
 function mostrarBarraRecuperar(de, para) {
@@ -1086,7 +1408,7 @@ function autoSalvar() {
   textoAnterior = atual;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem("eac_texto", atual); } catch (e) {}
+    guardar("eac_texto", atual);
   }, 400);
 }
 
@@ -1338,18 +1660,38 @@ function limitarAltura(el, texto, fundo) {
   return bt;
 }
 
-function renderCartaoEstilizado(div, c, mostrarResposta) {
+/* O MESMO desenho serve a duas telas com propósitos opostos.
+ *
+ * Na BANCADA você julga o cartão: o cabeçalho editável, o selo dizendo de
+ * onde vem o título e a faixa de etiquetas são o assunto. No ESTUDO você
+ * é o aluno: título de placeholder, aviso de "sai sem cabeçalho" e quatro
+ * etiquetas de sessenta caracteres empurram a pergunta para o rodapé do
+ * cartão — que é o único pedaço que importa ali.
+ *
+ * `opc.estudo` tira o que é de autoria e mantém o desenho, que é o que
+ * faz a revisão em tela valer como ensaio do que vai para o Anki. */
+function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
+  const oEst = !!(opc && opc.estudo);
   const p = PALETAS[localStorage.getItem("eac_style") || "esquema"] || PALETAS.esquema;
   // a prévia tem de mostrar o MESMO alinhamento que vai para o .apkg
   const al = ($("selAlinha") && $("selAlinha").value) === "left" ? "left" : "justify";
   const wrap = document.createElement("div");
+  /* PENDURAR AGORA, nao no fim: existe um "return" no meio desta funcao,
+   * para quando a resposta esta escondida. Com o append la embaixo, esse
+   * return saia sem nunca prender o cartao na tela — a FRENTE tambem
+   * sumia, e o cartao so aparecia depois de apertar "ver resposta".
+   * Era o que fazia "ampliar" e "estudar em tela" parecerem vazios. */
+  div.append(wrap);
   wrap.style.cssText = "background:" + p.fundo + ";padding:10px;border-radius:10px;color:" + p.texto + ";max-width:100%;overflow-wrap:anywhere;box-sizing:border-box";
   const sombra = "box-shadow:1px 2px 4px rgba(0,0,0,.3);";
   const proprio = (c.titulo || "").trim();
   const geral = tituloGeral();
   const deckNome = proprio || geral;
 
-  if (p.cab) {
+  /* no estudo, cabeçalho só se ele EXISTE: um retângulo azul escrito
+   * "título deste cartão" é um convite a editar, e quem está estudando
+   * não está editando */
+  if (p.cab && (!oEst || deckNome)) {
     const pill = document.createElement("div");
     pill.className = "card-cab-edit" + (proprio ? "" : " card-cab-inherit");
     pill.textContent = deckNome || t("card_title_placeholder");
@@ -1361,12 +1703,17 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     wrap.append(pill);
   }
   // badge deixando claro de onde vem o título deste cartão
-  const badge = document.createElement("div");
-  if (proprio) { badge.className = "card-badge-titulo card-badge-own"; badge.textContent = "● " + t("card_own_title"); }
-  else if (geral) { badge.className = "card-badge-titulo card-badge-gen"; badge.textContent = "● " + t("card_using_general", { t: geral }); }
-  else { badge.className = "card-badge-titulo card-badge-none"; badge.textContent = "● " + t("card_using_general_none"); }
-  wrap.append(badge);
-  if (p.sub && c.tags.length) {
+  if (!oEst) {
+    const badge = document.createElement("div");
+    if (proprio) { badge.className = "card-badge-titulo card-badge-own"; badge.textContent = "● " + t("card_own_title"); }
+    else if (geral) { badge.className = "card-badge-titulo card-badge-gen"; badge.textContent = "● " + t("card_using_general", { t: geral }); }
+    else { badge.className = "card-badge-titulo card-badge-none"; badge.textContent = "● " + t("card_using_general_none"); }
+    wrap.append(badge);
+  }
+  /* as etiquetas são para ACHAR o cartão depois, não para respondê-lo:
+   * três linhas delas antes da pergunta é o mesmo que esconder a
+   * pergunta */
+  if (p.sub && c.tags.length && !oEst) {
     const sub = document.createElement("div");
     sub.textContent = c.tags.join("  ·  ");
     sub.style.cssText = "background:" + p.sub + ";color:" + p.texto +
@@ -1481,7 +1828,6 @@ function renderCartaoEstilizado(div, c, mostrarResposta) {
     const btJ = limitarAltura(just, c.back, p.caixa);
     if (btJ) wrap.append(btJ);
   }
-  div.append(wrap);
 }
 
 
@@ -1685,7 +2031,7 @@ function abrirIgnorado(ig) {
   $("novoTags").value = partes[2] || "";
   $("dicaCampo").textContent = t("ignored_help");
   atualizarNovoPreview();
-  $("dlgNovo").showModal();
+  abrirModal("dlgNovo");
 }
 
 
@@ -1832,7 +2178,7 @@ function copiarMarcados() {
   if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
   revCopyTipo = "rev_prompt_full";
   montarRevCopy();
-  $("dlgRevCopiar").showModal();
+  abrirModal("dlgRevCopiar");
 }
 $("btnRevTabFull").onclick = () => { revCopyTipo = "rev_prompt_full"; montarRevCopy(); };
 $("btnRevTabShort").onclick = () => { revCopyTipo = "rev_prompt_short"; montarRevCopy(); };
@@ -1953,7 +2299,7 @@ function abrirColarRev(correcao) {
   $("colarRevTexto").value = correcao.replace(/^\s+/, "");
   $("colarRevTexto").placeholder = t("colarrev_ph");
   analisarColarRev();
-  $("dlgColarRev").showModal();
+  abrirModal("dlgColarRev");
   setTimeout(() => $("colarRevTexto").focus(), 60);
 }
 
@@ -2623,7 +2969,7 @@ function abrirNormalizar(ajusteEstrutural) {
     ok.textContent = t("norm_none");
     lista.append(ok);
   }
-  $("dlgNormalizar").showModal();
+  abrirModal("dlgNormalizar");
 }
 
 let normIgnorados = [];
@@ -2978,7 +3324,7 @@ $("btnEmbaralharCloze").onclick = () => {
 
 ["novoFrente", "novoVerso", "novoMais"].forEach((id) => autoCrescer($(id)));
 $("btnNovoCartao").onclick = () => {
-  rotularModelos(); aplicarModelo(); $("dlgNovo").showModal();
+  rotularModelos(); aplicarModelo(); abrirModal("dlgNovo");
   ["novoFrente", "novoVerso", "novoMais"].forEach((id) => {
     const el = $(id); el.style.height = "auto"; el.style.height = (el.scrollHeight + 22) + "px";
   });
@@ -3064,7 +3410,7 @@ function mostrarPrompt(tipo) {
   mostrarTamanho("promptTam", $("promptTexto").value);
 }
 
-$("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); $("dlgPrompt").showModal(); };
+$("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); abrirModal("dlgPrompt"); };
 $("btnTabFull").onclick = () => mostrarPrompt("prompt_full");
 $("btnTabMini").onclick = () => mostrarPrompt("prompt_mini");
 $("btnPromptSalvar").onclick = () => {
@@ -3226,7 +3572,7 @@ function abrirGerar(texto, origem) {
     b.textContent = genOrigem
       ? t("gen_guardar_material", { t: genOrigem.topico }) : "";
   }
-  $("dlgGerar").showModal();
+  abrirModal("dlgGerar");
 }
 
 /* Guarda o que estiver na caixa como CARTÕES do tópico. O texto colado aqui
@@ -3235,10 +3581,30 @@ function abrirGerar(texto, origem) {
 function guardarCartoesNoMaterial() {
   if (!genOrigem) return;
   const txt = $("genTexto").value;
-  const linhas = (txt.match(/^[^\n#@+].*::/gm) || []).length;
-  if (!linhas) { uiAlert(t("gen_material_sem_cartoes")); return; }
+  /* GRAVA SÓ OS CARTÕES, não a caixa inteira.
+   * Esta função contava as linhas com "::" para validar e em seguida
+   * gravava o TEXTO TODO — prompt junto. O material de um tópico ficava com
+   * 155 linhas das quais 17 eram cartão, e o resto era "Gere flashcards
+   * para Anki...". O comentário antigo dizia que o texto ali era a resposta
+   * da IA; a caixa é a mesma onde o prompt é gerado, então quase nunca era. */
+  /* CORTA O PROMPT ANTES DE LER.
+   * O leitor do app é tolerante de propósito: linhas soltas antes do
+   * primeiro cartão viram parte da pergunta dele. Bom na bancada, péssimo
+   * aqui — "Gere flashcards para Anki..." acabava dentro da frente do
+   * primeiro cartão. O prompt está sempre no topo, então tudo que vem antes
+   * da primeira linha com "::" é descartado. */
+  const todas = String(txt).split("\n");
+  const primeiro = todas.findIndex((l) => /^[^\n#@+].*::/.test(l));
+  const util = primeiro > 0 ? todas.slice(primeiro).join("\n") : txt;
+  const r = parseText(util);
+  if (!r.cards.length) { uiAlert(t("gen_material_sem_cartoes")); return; }
+  const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
+    .replace(/\r?\n+/g, " ").trim();
+  const so = r.cards.map((c) => limpa(c.front) + " :: " + limpa(c.back)
+    + (c.tags && c.tags.length ? " :: " + c.tags.map((x) => String(x).replace(/::/g, "_")).join(" ") : ""));
+  const linhas = so.length;
   const ch = matChave(genOrigem.disciplina, genOrigem.topico);
-  matGravarCartoes(ch, txt, genOrigem);
+  matGravarCartoes(ch, so.join("\n"), genOrigem);
   reg("MATERIAL", "cartões guardados: " + genOrigem.topico, linhas + " cartões");
   uiAlert(t("gen_material_ok", { n: linhas, t: genOrigem.topico }));
   if (typeof matRender === "function") matRender();
@@ -3361,7 +3727,7 @@ function abrirImportResultado(lista) {
     arq.append(corpo);
     box.append(arq);
   });
-  $("dlgImportar").showModal();
+  abrirModal("dlgImportar");
 }
 
 /* junta o texto de todos os arquivos válidos. */
@@ -3522,7 +3888,7 @@ $("btnMCRapido").onclick = () => {
   rotularModelos();
   $("selModelo").value = "mc_cloze";
   aplicarModelo();
-  $("dlgNovo").showModal();
+  abrirModal("dlgNovo");
 };
 /* Baralho e tags são pedidos NA HORA de exportar (diálogo), e lembrados. */
 let exportTipo = "apkg";
@@ -3624,7 +3990,7 @@ function abrirExport(tipo) {
   atualizarDestino();
   rotularEstilos();
   previewEstilo();
-  $("dlgExport").showModal();
+  abrirModal("dlgExport");
 }
 
 $("btnTxt").onclick = () => abrirExport("txt");
@@ -3686,7 +4052,7 @@ $("selAlinha").onchange = () => {
 };
 $("ajudaEstilo").onclick = () => uiAlert(t("style_hint"));
 
-$("btnAjuda").onclick = () => $("dlgAjuda").showModal();
+$("btnAjuda").onclick = () => abrirModal("dlgAjuda");
 $("btnFechar").onclick = () => $("dlgAjuda").close();
 
 /* Dicas de funcionamento em TODOS os botões principais */
@@ -3731,7 +4097,7 @@ $("editor").value = (textoSalvo !== null && textoSalvo.trim()) ? textoSalvo : t(
 textoAnterior = $("editor").value;
 guardarVersao("ao abrir");
 $("btnHistorico").onclick = abrirHistorico;
-$("btnRecuperar").onclick = () => restaurarVersao(historico.length - 1);
+$("btnRecuperar").onclick = abrirRecuperarComLista;
 $("btnRecuperarNao").onclick = dispensarRecuperar;
 $("dlgHistFechar").onclick = () => $("dlgHistorico").close();
 atualizarBotaoHistorico();
@@ -3890,13 +4256,13 @@ function abrirPromptCorrecao() {
   reg("PROMPT", "prompt de correção aberto",
     achados.length + " problema(s), origem: " + fixOrigem);
   montarFixPrompt();
-  $("dlgFixPrompt").showModal();
+  abrirModal("dlgFixPrompt");
 }
 
 $("btnFixTabParcial").onclick = () => { fixModo = "parcial"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnFixTabInteiro").onclick = () => { fixModo = "inteiro"; $("fixPromptDone").textContent = ""; limparConferencia(); montarFixPrompt(); };
 $("btnRecortesColar").onclick = () => colarRecortes();
-$("btnRecortesVer").onclick = () => { renderRecortes(); $("dlgRecortes").showModal(); };
+$("btnRecortesVer").onclick = () => { renderRecortes(); abrirModal("dlgRecortes"); };
 $("btnRecortesFechar").onclick = () => $("dlgRecortes").close();
 
 /* Monta a bandeja: um cartão por linha, com caixa de seleção e as duas
@@ -4210,6 +4576,16 @@ async function medirArmazenamento() {
     p.push("localStorage: " + Math.round(n / 1024) + " KB em " + localStorage.length + " chaves");
   } catch (e) { p.push("localStorage: sem acesso"); }
   p.push("histórico: " + (typeof historico !== "undefined" ? historico.length : "?") + " versões");
+  /* A linha mais importante deste bloco: gravação recusada é o problema que
+   * não aparece na tela. Sem ela, o diagnóstico de um app que parou de
+   * salvar fica idêntico ao de um app saudável. */
+  p.push("gravações recusadas: " + (falhasGravacao.length
+    ? falhasGravacao.length + " (" + [...new Set(falhasGravacao.map((f) => f.chave))].join(", ") + ")"
+    : "nenhuma"));
+  try {
+    const n = (JSON.parse(localStorage.getItem("eac_editais") || "[]") || []).length;
+    p.push("editais cadastrados: " + n);
+  } catch (e) { p.push("editais cadastrados: erro ao ler"); }
   estadoArmazen = p.join(" | ");
   return estadoArmazen;
 }
@@ -4277,10 +4653,27 @@ function montarDiagnostico() {
   L.push("");
   const soModo = $("chkDiagModo") && $("chkDiagModo").checked
     ? (typeof modoAtual !== "undefined" ? modoAtual : null) : null;
-  L.push("--- REGISTRO (" + registro.length + " eventos"
-    + (soModo ? ", filtrado: só " + soModo : "") + ") ---");
+  const nPer = registroFiltrado(soModo).length;
+  L.push("--- REGISTRO (" + nPer + " de " + registro.length + " eventos"
+    + (soModo ? ", filtrado: só " + soModo : "")
+    + (regPeriodo ? ", período: " + t("diag_per_" + regPeriodo) : "") + ") ---");
   bloco(L, () => L.push(registroTexto(soModo)));
   L.push("");
+  /* O REGISTRO DA VINCULAÇÃO ENTRA NO DIAGNÓSTICO.
+   *
+   * Ele responde perguntas que o registro geral não responde — "250
+   * linhas coladas viraram 213 pares, por quê?" precisa do número de
+   * entrada e do de saída de cada etapa, lado a lado. E o diagnóstico é
+   * o que se cola num relato de problema: deixá-lo de fora obrigava a
+   * abrir duas telas e juntar dois textos à mão. */
+  try {
+    if (typeof vzLogLer === "function" && vzLogLer().length) {
+      L.push("--- VINCULAÇÃO ENTRE EDITAIS (" + vzLogLer().length
+             + " etapas registradas) ---");
+      L.push(vzLogTexto());
+      L.push("");
+    }
+  } catch (e) {}
   bloco(L, () => {
     L.push("--- TEXTO (" + raw.split(/\r?\n/).length + " linhas, " + raw.length + " caracteres) ---");
     L.push(raw.length > DIAG_MAX
@@ -4331,8 +4724,19 @@ function montarPainelDiag() {
     const corte = txt.indexOf("\n--- TEXTO");
     if (corte > 0) txt = txt.slice(0, corte) + "\n--- TEXTO (não incluído a pedido) ---";
   }
+  /* MASCARAR ANTES DE QUALQUER COISA.
+   *
+   * Este relatório existe para ser copiado e mandado para alguém — é o
+   * único texto do aplicativo cujo destino é sair daqui. A chave da IA
+   * vive no mesmo armazenamento e pode aparecer num trecho colado, numa
+   * URL de erro ou no diagnóstico de rede. Uma chave vazada vira
+   * cobrança na fatura de quem a gerou, e o custo de mascarar é uma
+   * expressão regular. Mascara na variável, não só na tela: é a
+   * variável que o botão de copiar e o de baixar usam. */
+  if (typeof rtMascarar === "function") txt = rtMascarar(txt);
   diagTexto = txt;
   $("diagPre").innerHTML = pintarDiagnostico(txt);
+  diagPintarPeriodos();
 
   /* Diz, em cima e por extenso, DE QUAL bancada é este relatório. */
   const foco = textoEmFoco();
@@ -4360,14 +4764,40 @@ async function abrirDiagnostico() {
   if (typeof modoAtual !== "undefined" && modoAtual !== "cartoes")
     $("chkDiagModo").checked = true;
   montarPainelDiag();
+  /* A LINHA DO TEMPO NASCE FECHADA: ela é para quando a pergunta é "o
+   * que aconteceu antes disto?", e mostrá-la sempre empurraria o
+   * diagnóstico — que é o que se copia — para baixo de quatrocentas
+   * linhas. Quem precisa dela toca numa aba. */
+  try { rtIniciarTela(); } catch (e) {}
   reg("DIAGNOSTICO", "painel aberto",
       registro.length + " eventos, foco: " + textoEmFoco().onde);
-  $("dlgDiagnostico").showModal();
+  abrirModal("dlgDiagnostico");
 }
 
 $("btnDiagnostico").onclick = abrirDiagnostico;
 $("chkDiagTexto").onchange = montarPainelDiag;
 $("chkDiagModo").onchange = montarPainelDiag;
+/* botões de período, ao lado das outras opções do diagnóstico */
+function diagPintarPeriodos() {
+  const cx = $("diagPeriodos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  REG_PERIODOS.forEach((p) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min" + (regPeriodo === p ? " mat-ligado" : "");
+    b.textContent = t("diag_per_" + p);
+    b.title = t("diag_per_ajuda");
+    b.setAttribute("aria-pressed", regPeriodo === p ? "true" : "false");
+    b.onclick = () => {
+      regPeriodo = p;
+      diagPintarPeriodos();
+      if (typeof abrirDiagnostico === "function") abrirDiagnostico(true);
+    };
+    cx.append(b);
+  });
+}
+
 $("btnDiagFechar").onclick = () => $("dlgDiagnostico").close();
 $("btnDiagCopiar").onclick = async () => {
   try {
@@ -4397,7 +4827,7 @@ $("btnDiagBaixar").onclick = () => {
 function abrirTextoSimples(titulo, texto) {
   $("dlgTextoTit").textContent = titulo;
   $("dlgTextoCorpo").value = texto;
-  $("dlgTexto").showModal();
+  abrirModal("dlgTexto");
   $("dlgTextoCorpo").select();
 }
 $("btnDlgTextoFechar").onclick = () => $("dlgTexto").close();
@@ -4643,3 +5073,103 @@ $("btnFocoProximo").onclick = () => {
 window.addEventListener("resize", () => {
   if ($("focoCartao").style.display !== "none") posicionarFoco();
 });
+
+/* =====================================================================
+ * O BALÃO DE AJUDA — três linhas não valem um modal
+ *
+ * O texto atrás do (?) tem duas ou três frases. Num <dialog> modal ele
+ * escurece a tela inteira, rouba o foco, e exige um "OK" do tamanho de
+ * um botão de ação para devolver a navegação — três gestos para ler uma
+ * frase, e a página por baixo esquecida. Pior: interrompe exatamente
+ * quem estava no meio de uma decisão e parou para conferir uma dúvida
+ * pequena.
+ *
+ * O balão nasce colado no ícone, some ao clicar em qualquer outro
+ * lugar, no Esc, ou ao tocar no (?) de novo. Não bloqueia nada: o que
+ * está atrás dele continua legível, que é o ponto de uma dica.
+ *
+ * ELE É POSICIONADO EM PIXEL, e não com CSS relativo, porque os (?)
+ * moram dentro de <dialog> e de barras roláveis, onde "position:
+ * absolute" acaba ancorado no contêiner errado.
+ * ===================================================================== */
+let dicaBalao = null;
+
+function dicaFechar() {
+  if (dicaBalao && dicaBalao.parentNode) dicaBalao.parentNode.removeChild(dicaBalao);
+  dicaBalao = null;
+}
+
+function dicaAberta() { return !!dicaBalao; }
+
+function dicaMostrar(alvo, texto) {
+  /* TOCAR NO MESMO (?) FECHA. Sem isto o único jeito de sair seria
+   * clicar fora, e o ícone viraria um botão que só liga. */
+  const mesmo = dicaBalao && dicaBalao.__alvo === alvo;
+  dicaFechar();
+  if (mesmo || !alvo) return null;
+
+  const b = document.createElement("div");
+  b.className = "dica-balao";
+  b.setAttribute("role", "tooltip");
+  b.__alvo = alvo;
+  const p = document.createElement("div");
+  p.className = "dica-txt";
+  p.textContent = String(texto || "");
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "dica-x";
+  x.textContent = "✖";
+  x.title = (typeof t === "function") ? t("help_close") : "fechar";
+  x.setAttribute("aria-label", x.title);
+  x.onclick = dicaFechar;
+  b.append(x, p);
+  /* DENTRO DO DIÁLOGO, quando há um aberto.
+   *
+   * Um <dialog> aberto por showModal() vive na TOP LAYER do navegador,
+   * que fica acima de todo o resto da página independentemente de
+   * z-index — "z-index: 9999" no balão não vence, porque nem estão na
+   * mesma disputa. Pendurado no <body>, o balão da ajuda saía ATRÁS da
+   * caixa que o abriu: visível pela borda, ilegível, e sem jeito de
+   * trazer para a frente por CSS.
+   *
+   * Pendurando-o no próprio diálogo, ele entra na top layer junto. A
+   * posição continua em pixel de viewport (position: fixed), então a
+   * conta de onde ele fica não muda. */
+  let casa = document.body;
+  try {
+    if (alvo.closest) casa = alvo.closest("dialog") || document.body;
+  } catch (e) { casa = document.body; }
+  casa.append(b);
+  b.__casa = casa;
+
+  /* CABER NA TELA. O balão tem largura fixa; encostado na direita ele
+   * sairia da janela num telefone, então recua até caber. */
+  const r = (alvo.getBoundingClientRect && alvo.getBoundingClientRect()) || null;
+  const larg = 300;
+  const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
+  if (r) {
+    const esq = Math.max(8, Math.min(r.left, jan - larg - 8));
+    b.style.left = esq + "px";
+    b.style.top = (r.bottom + 6) + "px";
+  }
+  dicaBalao = b;
+  return b;
+}
+
+/* Liga um (?) ao seu texto. Um lugar só, para os três (ou trinta) que
+ * existirem: dica escrita em cada botão é dica que diverge. */
+function dicaLigar(idBotao, chave) {
+  const b = $(idBotao);
+  if (!b) return;
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    dicaMostrar(b, (typeof t === "function") ? t(chave) : chave);
+  };
+}
+
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("click", () => { if (dicaBalao) dicaFechar(); });
+  document.addEventListener("keydown", (e) => {
+    if (e && e.key === "Escape" && dicaBalao) dicaFechar();
+  });
+}

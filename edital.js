@@ -25,11 +25,141 @@ function edPartes(linha) {
   return linha.split("::").map((s) => s.trim());
 }
 
+/* =====================================================================
+ * SEGUNDA FASE
+ *
+ * Alguns concursos têm duas datas na mesma inscrição: a SEFAZ-AL faz a
+ * objetiva em dezembro e a discursiva em janeiro. A tentação é cadastrar
+ * dois editais — e é a saída errada, por quatro motivos:
+ *
+ *  · o conteúdo é o mesmo, e duplicá-lo são 200 tópicos repetidos;
+ *  · o progresso se parte em dois, e ninguém marca o mesmo tópico duas
+ *    vezes pela terceira semana seguida;
+ *  · dois editais ativos fazem a agenda dividir as suas horas entre duas
+ *    coisas que são uma só;
+ *  · a segunda fase é CONDICIONAL — só acontece se você passar na
+ *    primeira —, e um edital paralelo trata como certo um evento que
+ *    ainda não ocorreu.
+ *
+ * Então a unidade continua sendo o edital. O que ganha plural é a data.
+ *
+ *   # SEFAZ-AL Auditor | prova: 2026-12-13 | horas: 20
+ *   # fase 2: discursiva | prova: 2027-01-24 | horas: 25
+ *
+ * E o marcador "!d" no tópico diz que ele volta na segunda fase:
+ *
+ *   + Obrigação tributária :: 5 :: cai sempre !d
+ *   + Responsabilidade tributária :: 3 :: !d5
+ *
+ * O "!d5" dá peso PRÓPRIO na fase 2: um tópico que vale 2% da objetiva
+ * pode ser uma questão discursiva inteira, e herdar o peso da primeira
+ * fase apagaria justamente essa diferença.
+ *
+ * Sem marcador, o tópico é só da primeira fase — que é o caso da maioria
+ * e portanto o padrão certo.
+ * ================================================================== */
+
+/* =====================================================================
+ * BLOCOS COM NOTA MÍNIMA
+ *
+ * Peso e mínimo respondem perguntas diferentes, e confundi-los é o erro
+ * que elimina candidato bem preparado:
+ *
+ *   PESO diz ONDE ESTÃO OS PONTOS. Estudar o que tem peso alto maximiza
+ *   a nota total.
+ *
+ *   MÍNIMO diz ONDE ESTÁ A ELIMINAÇÃO. O TCE-PE exigia acerto mínimo por
+ *   grupo de disciplinas: zerar um bloco pequeno reprova, mesmo com nota
+ *   total altíssima.
+ *
+ * Uma disciplina de peso baixo dentro de um bloco com corte não é um
+ * problema de PONTOS — é um problema de SOBREVIVÊNCIA. Otimizar só pelo
+ * peso leva direto a negligenciá-la, que foi exatamente o que aconteceu.
+ *
+ * Sintaxe (a linha "&" abre um bloco; as disciplinas seguintes são dele
+ * até o próximo "&"):
+ *
+ *   & Conhecimentos Básicos | minimo: 50%
+ *   @ Português :: 10q
+ *   @ Raciocínio Lógico :: 5q
+ *   & Conhecimentos Específicos | minimo: 60%
+ *   @ Direito Financeiro :: 20q
+ *
+ * O mínimo aceita "50%" (do bloco) ou "12" (acertos absolutos). Sem
+ * blocos declarados, tudo continua como sempre foi: um edital plano.
+ * ================================================================== */
+const ED_BLOCO_RE = /^&\s*(.+)$/;
+
+function edMinimo(txt) {
+  const s = String(txt || "").trim();
+  if (!s) return null;
+  const pct = s.match(/^(\d{1,3}(?:[.,]\d+)?)\s*%$/);
+  if (pct) return { tipo: "pct", valor: Number(pct[1].replace(",", ".")) };
+  const abs = s.match(/^(\d{1,4}(?:[.,]\d+)?)\s*(?:qu?e?s?t?[õo]?e?s?|acertos?|pontos?|p)?$/i);
+  if (abs) return { tipo: "abs", valor: Number(abs[1].replace(",", ".")) };
+  return null;
+}
+
+const ED_FASE2_RE = /^fase\s*2\b\s*:?\s*(.*)$/i;
+/* "!d" ou "!d4"; sempre no fim do campo, para não competir com o texto
+ * do motivo — que é prosa livre e não pode ganhar sintaxe. */
+const ED_MARCA_F2_RE = /\s*!d([1-5])?\s*$/i;
+
+/* Separa o marcador do motivo. Devolve o motivo LIMPO, porque ele é
+ * exibido na tela e "cai sempre !d" seria ruído para quem lê. */
+function edMarcaFase2(motivo) {
+  const s = String(motivo || "");
+  const m = s.match(ED_MARCA_F2_RE);
+  if (!m) return { fase2: false, pesoF2: null, motivo: s.trim() };
+  return {
+    fase2: true,
+    pesoF2: m[1] ? Number(m[1]) : null,
+    motivo: s.replace(ED_MARCA_F2_RE, "").trim(),
+  };
+}
+
 /* Peso ausente vale 3 (meio da escala). Peso fora de 1..5 é registrado como
  * problema, mas o valor é preso na faixa em vez de descartado — perder o
  * tópico seria pior do que aceitar um peso torto. */
+/* PESO DA DISCIPLINA EM QUESTÕES OU PONTOS.
+ *
+ * A escala de 1 a 5 é um juízo comprimido, e é a coisa certa para o
+ * TÓPICO — "isto cai muito dentro da disciplina" é opinião informada,
+ * não número. Para a DISCIPLINA, porém, o edital costuma dizer o número
+ * exato: Português 10 questões, Direito Financeiro 20. Espremer 10 e 20
+ * numa escala de cinco pontos perde a razão real (2:1) e produz uma
+ * "fatia da prova" estimada onde poderia ser exata.
+ *
+ * Acrescentar 1,5 e 2,5 dobra a resolução e mantém a compressão. Aceitar
+ * o número de questões elimina a compressão — que é o que a pergunta
+ * "quero pesos fiéis à pontuação" está de fato pedindo.
+ *
+ *   @ Português :: 10q        dez questões
+ *   @ Direito Financeiro :: 45p   quarenta e cinco pontos
+ *   @ Ética :: 3              a escala de sempre, ainda válida
+ *
+ * Decimais na escala de 1 a 5 continuam aceitos (2,5 sempre funcionou);
+ * eles só não resolvem o problema de fidelidade sozinhos. */
+function edPesoAbs(txt) {
+  const m = String(txt === undefined ? "" : txt).trim()
+    .match(/^(\d{1,4}(?:[.,]\d+)?)\s*(q|quest[õo]es?|p|pontos?)$/i);
+  if (!m) return null;
+  const u = m[2].toLowerCase().charAt(0) === "q" ? "q" : "p";
+  const v = Number(m[1].replace(",", "."));
+  if (!isFinite(v) || v <= 0) return null;
+  return { valor: v, unidade: u };
+}
+
 function edPeso(txt, achados, linha) {
   if (txt === undefined || txt === "") return { peso: 3, herdado: true };
+  const abs = edPesoAbs(txt);
+  if (abs) {
+    /* O PESO 1..5 CONTINUA EXISTINDO, derivado — o resto do app depende
+     * dele (faixas de tempo, prioridade do tópico). O que muda é que a
+     * FATIA da prova passa a ser calculada do número absoluto, e aí ela
+     * deixa de ser estimativa. */
+    return { peso: 3, herdado: false, abs: abs.valor, unidade: abs.unidade };
+  }
   const n = Number(String(txt).replace(",", "."));
   if (!isFinite(n)) {
     achados.push({ linha, tipo: "peso_invalido", txt: String(txt) });
@@ -44,10 +174,15 @@ function edPeso(txt, achados, linha) {
 
 function lerEdital(raw) {
   const linhas = String(raw || "").split(/\r?\n/);
-  const cfg = { concurso: "", prova: "", horas: 10 };
+  /* "previsto" é a data que ainda não existe. Concurso planejado não tem
+   * data — tem JANELA ("entre março e junho de 2027"). Guardar isso como se
+   * fosse uma data faria o painel prometer certeza que não há. */
+  const cfg = { concurso: "", prova: "", horas: 10, previsto: "", fase: "pos" };
   const disciplinas = [];
+  const blocos = [];
   const achados = [];
   let atual = null;
+  let blocoAtual = null;
 
   linhas.forEach((l, i) => {
     const n = i + 1;
@@ -56,21 +191,75 @@ function lerEdital(raw) {
 
     const mc = s.match(ED_CFG_RE);
     if (mc) {
-      mc[1].split("|").forEach((p) => {
+      const partes = mc[1].split("|");
+      /* SEGUNDA LINHA DE CABEÇALHO = SEGUNDA FASE.
+       * O "#" já era o cabeçalho; um edital com duas linhas "#" tinha a
+       * segunda sobrescrevendo a primeira em silêncio. Agora, quando ela
+       * começa com "fase 2", vira o outro prazo em vez de apagar o
+       * primeiro. */
+      const f2 = String(partes[0] || "").trim().match(ED_FASE2_RE);
+      if (f2) {
+        cfg.fase2 = cfg.fase2 || { nome: "", prova: "", horas: 0 };
+        cfg.fase2.nome = (f2[1] || "").trim();
+        partes.slice(1).forEach((p) => {
+          const i = p.indexOf(":");
+          const k = (i < 0 ? p : p.slice(0, i)).trim();
+          const v = (i < 0 ? "" : p.slice(i + 1)).trim();
+          if (!v) return;
+          if (/^prova/i.test(k)) cfg.fase2.prova = v;
+          else if (/^horas/i.test(k)) cfg.fase2.horas = Number(v.replace(",", ".")) || 0;
+        });
+        /* fase 2 sem horas próprias herda as da primeira: é mais provável
+         * que a pessoa tenha esquecido de escrever do que que ela pretenda
+         * estudar zero hora por semana em janeiro */
+        if (!cfg.fase2.horas) cfg.fase2.horas = cfg.horas;
+        if (!cfg.fase2.nome) cfg.fase2.nome = "2ª fase";
+        return;
+      }
+      partes.forEach((p) => {
         const [k, v] = p.split(":").map((x) => (x || "").trim());
         if (!v) { if (k) cfg.concurso = k; return; }
         if (/^prova/i.test(k)) cfg.prova = v;
+        else if (/^previsto|^previsao/i.test(k)) { cfg.previsto = v; cfg.fase = "pre"; }
         else if (/^horas/i.test(k)) cfg.horas = Number(v.replace(",", ".")) || 10;
         else if (/^concurso|^nome/i.test(k)) cfg.concurso = v;
       });
       return;
     }
 
+    const mb = s.match(ED_BLOCO_RE);
+    if (mb) {
+      const partes = mb[1].split("|");
+      const nome = (partes[0] || "").trim();
+      let min = null;
+      partes.slice(1).forEach((x) => {
+        const i2 = x.indexOf(":");
+        const k = (i2 < 0 ? x : x.slice(0, i2)).trim();
+        const v = (i2 < 0 ? "" : x.slice(i2 + 1)).trim();
+        if (/^m[íi]nimo|^min|^corte/i.test(k)) min = edMinimo(v);
+      });
+      blocoAtual = { nome, minimo: min, linha: n, disciplinas: [] };
+      if (!nome) achados.push({ linha: n, tipo: "bloco_sem_nome", txt: s });
+      /* BLOCO SEM MÍNIMO NÃO É ERRO — pode ser só agrupamento. Mas é
+       * quase sempre esquecimento, e o mínimo é justamente a informação
+       * que evita a eliminação: vira aviso, não some calado. */
+      if (nome && !min) achados.push({ linha: n, tipo: "bloco_sem_minimo", txt: nome });
+      blocos.push(blocoAtual);
+      return;
+    }
+
     const md = s.match(ED_DISC_RE);
     if (md) {
       const p = edPartes(md[1]);
-      const { peso } = edPeso(p[1], achados, n);
-      atual = { nome: p[0], peso, linha: n, topicos: [] };
+      const { peso, abs, unidade } = edPeso(p[1], achados, n);
+      /* terceiro campo da disciplina: a confiança, usada só no pré-edital.
+       * "@ Auditoria :: 5 :: provavel" */
+      const conf = (typeof preConfiancaDe === "function") ? preConfiancaDe(p[2]) : "";
+      atual = { nome: p[0], peso, linha: n, topicos: [], confianca: conf,
+                /* o número real do edital, quando ele foi escrito */
+                abs: abs || null, unidade: unidade || "",
+                bloco: blocoAtual ? blocoAtual.nome : "" };
+      if (blocoAtual) blocoAtual.disciplinas.push(p[0]);
       if (!p[0]) achados.push({ linha: n, tipo: "disciplina_sem_nome", txt: s });
       if (disciplinas.some((d) => d.nome.toLowerCase() === p[0].toLowerCase()))
         achados.push({ linha: n, tipo: "disciplina_repetida", txt: p[0] });
@@ -83,8 +272,13 @@ function lerEdital(raw) {
       const p = edPartes(mt[1]);
       if (!atual) { achados.push({ linha: n, tipo: "topico_sem_disciplina", txt: p[0] }); return; }
       const { peso, herdado } = edPeso(p[1], achados, n);
+      const f2 = edMarcaFase2(p[2]);
       atual.topicos.push({
-        nome: p[0], peso, herdado, motivo: p[2] || "", linha: n,
+        nome: p[0], peso, herdado, motivo: f2.motivo, linha: n,
+        fase2: f2.fase2,
+        /* sem peso próprio, a fase 2 herda o da primeira — melhor que
+         * inventar um número que a pessoa não escreveu */
+        pesoF2: f2.fase2 ? (f2.pesoF2 || peso) : null,
       });
       if (!p[0]) achados.push({ linha: n, tipo: "topico_sem_nome", txt: s });
       return;
@@ -95,7 +289,35 @@ function lerEdital(raw) {
     achados.push({ linha: n, tipo: "linha_ignorada", txt: s.slice(0, 80) });
   });
 
-  return { cfg, disciplinas, achados, linhas: linhas.length };
+  /* ------------------------------------------------------------------
+   * O PESO 1..5 SAI DO NÚMERO DE QUESTÕES, quando ele existe.
+   *
+   * edPeso devolvia "peso: 3" para TODA disciplina escrita em "Nq" —
+   * ela sabe o número absoluto, mas não conhece as outras disciplinas e
+   * por isso não tinha como situá-lo numa escala. O 3 era um valor de
+   * espera que ninguém trocava depois.
+   *
+   * A consequência era grave e silenciosa: num edital inteiro escrito
+   * com o formato EXATO — 5q, 10q, 15q, 20q — as dezesseis disciplinas
+   * saíam com peso 3, o produto "peso da disciplina × peso do tópico"
+   * perdia um dos fatores, e a ordenação virava quase um empate. Escrever
+   * o número certo do edital dava um plano PIOR do que chutar 1 a 5.
+   *
+   * A conta só é possível aqui, depois de ler todas: a escala é relativa
+   * à maior disciplina da prova, que é a régua com significado. */
+  const absAll = disciplinas.filter((d) => d.abs > 0);
+  if (absAll.length) {
+    const maxAbs = absAll.reduce((m, d) => Math.max(m, d.abs), 0) || 1;
+    absAll.forEach((d) => {
+      d.peso = Math.max(1, Math.min(5, 1 + Math.round(4 * (d.abs / maxAbs))));
+      /* fica dito que este peso foi derivado, e de quê: quem for
+       * reescrever o edital precisa saber que o número de origem é o
+       * "Nq", não este */
+      d.pesoDerivado = true;
+    });
+  }
+
+  return { cfg, disciplinas, blocos, achados, linhas: linhas.length };
 }
 
 /* ------------------------------------------------------------------
@@ -106,20 +328,47 @@ function lerEdital(raw) {
  * teste consegue conferir. Misturar os dois foi o erro que deixou os
  * cartões cheios de "gabarito da questão 17".
  * ------------------------------------------------------------------ */
-function priorizar(r) {
+/* DUAS RÉGUAS, E ELAS NÃO PODEM SE MISTURAR.
+ *
+ * "bruto" é peso da disciplina × peso do tópico: quanto AQUILO VALE NA
+ * PROVA. É com ele que se mede a fatia de cada disciplina, a cobertura
+ * do edital e o cumprimento dos mínimos por bloco.
+ *
+ * "brutoOrdem" é o mesmo número multiplicado pelo quanto VOCÊ ACHA QUE
+ * NÃO SABE. É com ele que se decide o que vem primeiro.
+ *
+ * Deixar a dificuldade entrar no "bruto" seria o erro caro: marcar um
+ * tópico como difícil aumentaria o peso dele no edital, e a sua
+ * cobertura CAIRIA sem você ter desestudado nada — o painel de
+ * eliminação passaria a reagir ao seu humor em vez de ao edital. A prova
+ * não fica mais difícil porque você achou que ela é.
+ *
+ * `fatores` é um mapa "disciplina›topico" (minúsculas) → número. Quem
+ * não passa nada continua com o comportamento de sempre. */
+function priorizar(r, fatores) {
+  const fs = fatores || {};
   const itens = [];
   r.disciplinas.forEach((d) => {
     d.topicos.forEach((t) => {
+      const bruto = d.peso * t.peso;
+      const f = Number(fs[(d.nome + "›" + t.nome).toLowerCase()]);
+      const fator = isFinite(f) && f > 0 ? f : 1;
       itens.push({
         disciplina: d.nome, disciplinaPeso: d.peso,
         nome: t.nome, peso: t.peso, motivo: t.motivo, linha: t.linha,
-        bruto: d.peso * t.peso,
+        bruto,
+        fator,
+        brutoOrdem: bruto * fator,
+        fase2: !!t.fase2, pesoF2: t.pesoF2 || null,
+        brutoF2: t.fase2 ? d.peso * (t.pesoF2 || t.peso) : 0,
       });
     });
   });
-  const max = itens.reduce((m, i) => Math.max(m, i.bruto), 0) || 1;
-  itens.forEach((i) => { i.prioridade = Math.round((i.bruto / max) * 100); });
-  itens.sort((a, b) => b.bruto - a.bruto || a.linha - b.linha);
+  const max = itens.reduce((m, i) => Math.max(m, i.brutoOrdem), 0) || 1;
+  itens.forEach((i) => {
+    i.prioridade = Math.round((i.brutoOrdem / max) * 100);
+  });
+  itens.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
   return itens;
 }
 
@@ -149,11 +398,93 @@ function faixaDe(prioridade) {
 
 /* opcoes: { horas, prova, hoje, feitos } — "feitos" é um objeto/Set com as
  * chaves já concluídas, que saem da fila. */
+/* "2027-03..2027-06" -> { de: "2027-03-01", ate: "2027-06-30", largura: 4 }
+ * Um mês solto ("2027-03") vale como janela daquele mês. */
+function edJanela(txt) {
+  const s = String(txt || "").trim();
+  if (!s) return null;
+  const p = s.split("..").map((x) => x.trim()).filter(Boolean);
+  const fim = (m) => {
+    const [a, b] = m.split("-").map(Number);
+    return a + "-" + String(b).padStart(2, "0") + "-"
+      + new Date(Date.UTC(a, b, 0)).getUTCDate();
+  };
+  const ini = (m) => m.length === 7 ? m + "-01" : m;
+  const de = ini(p[0]);
+  const ate = p[1] ? (p[1].length === 7 ? fim(p[1]) : p[1])
+                   : (p[0].length === 7 ? fim(p[0]) : p[0]);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return null;
+  const meses = (Number(ate.slice(0, 4)) - Number(de.slice(0, 4))) * 12
+    + (Number(ate.slice(5, 7)) - Number(de.slice(5, 7)));
+  return { de, ate, meses: Math.max(0, meses) };
+}
+
+/* A data de planejamento de um edital previsto é a borda MAIS PRÓXIMA da
+ * janela. É a suposição conservadora: se a prova sair em março e você
+ * planejou para junho, você é pego; o contrário só sobra tempo. */
+function edDataPlanejada(cfg) {
+  if (cfg && cfg.prova) return cfg.prova;
+  const j = edJanela(cfg && cfg.previsto);
+  return j ? j.de : "";
+}
+
+/* EM QUE FASE ESTAMOS HOJE.
+ *
+ * A pergunta não é "qual a última data", é "qual a PRÓXIMA". Enquanto a
+ * objetiva não aconteceu, o prazo que importa é dezembro; passada ela,
+ * passa a ser janeiro. Contar sempre para a última data seria o erro
+ * caro: espalharia o conteúdo da objetiva por semanas que só existem se
+ * a pessoa passar, e dezembro — a fase que decide tudo — receberia menos
+ * horas do que precisa.
+ */
+function edFaseAtual(cfg, hoje) {
+  const c = cfg || {};
+  const f2 = c.fase2 && c.fase2.prova ? c.fase2 : null;
+  const p1 = edDataPlanejada(c);
+  const s1 = p1 ? semanasAte(p1, hoje) : null;
+  const passouP1 = !!(s1 && s1.dias < 0);
+
+  if (f2 && passouP1) {
+    return { n: 2, nome: f2.nome || "2ª fase", prova: f2.prova,
+             horas: f2.horas || c.horas, so2: true, temFase2: true };
+  }
+  return { n: 1, nome: "", prova: p1, horas: c.horas, so2: false,
+           temFase2: !!f2, prova2: f2 ? f2.prova : "",
+           nome2: f2 ? (f2.nome || "2ª fase") : "" };
+}
+
 function montarPlano(r, opcoes) {
   const o = opcoes || {};
-  const horas = Math.max(0, Number(o.horas) || 0);
+  const cfg = (r && r.cfg) || {};
+  /* A FASE MANDA NO PRAZO E NAS HORAS.
+   * Quem chamar sem passar nada continua vendo o comportamento de
+   * sempre; quem passar "fase" força uma delas (a tela de simulação
+   * precisa disso para mostrar as duas lado a lado). */
+  const faseAuto = edFaseAtual(cfg, o.hoje);
+  const fase = o.fase === 2
+    ? { n: 2, nome: (cfg.fase2 && cfg.fase2.nome) || "2ª fase",
+        prova: cfg.fase2 && cfg.fase2.prova,
+        horas: (cfg.fase2 && cfg.fase2.horas) || cfg.horas,
+        so2: true, temFase2: !!(cfg.fase2 && cfg.fase2.prova) }
+    : (o.fase === 1
+        ? Object.assign({}, faseAuto, { n: 1, so2: false,
+            prova: edDataPlanejada(cfg), horas: cfg.horas })
+        : faseAuto);
+
+  /* QUEM MANDA NO PRAZO E NAS HORAS:
+   *  · fase forçada pelo chamador → os dados daquela fase;
+   *  · fase 2 detectada sozinha   → os dados da fase 2 (o que a tela
+   *    passou nos campos "prova" e "horas" é da PRIMEIRA fase e está
+   *    velho — usá-lo aqui planejaria janeiro com o prazo de dezembro);
+   *  · fase 1                     → o que o chamador passou, que é o que
+   *    está nos campos da tela e pode estar sendo simulado. */
+  const mandaAFase = o.fase !== undefined || fase.so2;
+  const horas = Math.max(0, Number(
+    mandaAFase ? fase.horas : (o.horas !== undefined ? o.horas : fase.horas)) || 0);
   const porSemana = horas * 60;
-  const s = semanasAte(o.prova, o.hoje);
+  const prazo = mandaAFase ? fase.prova
+    : (o.prova !== undefined ? o.prova : fase.prova);
+  const s = semanasAte(prazo, o.hoje);
   const semanas = s ? Math.max(0, s.semanas) : null;
   /* Aceita o formato antigo (true = estudado) para não perder o progresso de
    * quem já estava usando: migração silenciosa, feita na leitura. */
@@ -165,7 +496,41 @@ function montarPlano(r, opcoes) {
     return null;
   };
 
-  const todos = priorizar(r);
+  /* OS FATORES SÃO DADOS DE FORA. Quem chamar sem passar nada continua
+   * com o comportamento de sempre; a tela passa o mapa do módulo de
+   * dificuldade, e o teste passa um mapa na mão — o motor não sabe de
+   * onde veio nem precisa saber. */
+  const fatores = o.fatores
+    || (o.fatores === null ? {} :
+        (typeof difMapaFatores === "function" ? difMapaFatores(o.hoje) : {}));
+  /* o mesmo padrão para os acertos: a tela não precisa lembrar de passar,
+   * e o teste consegue passar um mapa na mão */
+  const acertos = o.acertos || (o.acertos === null ? {} : edAcertos(
+    (typeof edDiario !== "undefined" && edDiario) || [],
+    (typeof qsBanco !== "undefined" && qsBanco) || []));
+  let todos = priorizar(r, fatores);
+  /* NA SEGUNDA FASE, SÓ O QUE CAI NELA — e com o peso DELA.
+   *
+   * A discursiva não cobra o edital inteiro: cobra um recorte, e um
+   * tópico que vale 2% da objetiva pode ser uma questão discursiva
+   * inteira. Manter a lista e o peso da primeira fase produziria uma
+   * agenda de janeiro cheia de assunto que não vai ser cobrado, na ordem
+   * errada. */
+  if (fase.so2) {
+    todos = todos.filter((i) => i.fase2);
+    /* o máximo tem de ser da MESMA régua que o numerador, senão a
+     * prioridade de um tópico difícil passa de 100 */
+    const maxF2 = todos.reduce(
+      (m, i) => Math.max(m, i.brutoF2 * (i.fator || 1)), 0) || 1;
+    todos.forEach((i) => {
+      i.bruto = i.brutoF2;
+      /* a dificuldade acompanha o tópico para a segunda fase: é o mesmo
+       * assunto e a mesma insegurança, com outro peso de prova */
+      i.brutoOrdem = i.brutoF2 * (i.fator || 1);
+      i.prioridade = Math.round((i.brutoOrdem / maxF2) * 100);
+    });
+    todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
+  }
   todos.forEach((i) => {
     const f = faixaDe(i.prioridade);
     i.faixa = f.id;
@@ -184,11 +549,27 @@ function montarPlano(r, opcoes) {
   /* Fatia de cada disciplina na prova: entra no motivo porque é o argumento
    * mais forte a favor de estudar aquilo agora. */
   const fatia = {};
-  const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
-  todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
-  Object.keys(fatia).forEach((k) => {
-    fatia[k] = Math.round((fatia[k] / totalBruto) * 100);
-  });
+  /* FATIA EXATA quando o edital trouxe os números.
+   * Somar "peso da disciplina × peso do tópico" estima a importância;
+   * quando o edital diz "Português 10 questões, Financeiro 20", a razão
+   * é 2:1 e ponto final — e a estimativa só pode errar. Basta UMA
+   * disciplina sem número para a conta exata deixar de valer para todas,
+   * porque a soma teria escalas misturadas. */
+  const comAbs = (r.disciplinas || []).filter((d) => d.abs > 0);
+  const exata = comAbs.length > 0
+    && comAbs.length === (r.disciplinas || []).length;
+  if (exata) {
+    const somaAbs = comAbs.reduce((a, d) => a + d.abs, 0) || 1;
+    comAbs.forEach((d) => {
+      fatia[d.nome] = Math.round((d.abs / somaAbs) * 100);
+    });
+  } else {
+    const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
+    todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
+    Object.keys(fatia).forEach((k) => {
+      fatia[k] = Math.round((fatia[k] / totalBruto) * 100);
+    });
+  }
 
   /* A fila tem duas fontes: o que nunca foi estudado e o que já passou do
    * prazo de revisão. Revisão vencida entra ANTES de assunto novo de peso
@@ -205,8 +586,10 @@ function montarPlano(r, opcoes) {
    * O rodízio pega, a cada rodada, o tópico mais pesado de cada disciplina
    * que ainda tem fila — a ordem por peso continua valendo DENTRO de cada
    * disciplina e entre as rodadas, mas a semana sai misturada. */
+  /* a fila ordena pelo brutoOrdem — o peso da prova JÁ multiplicado pela
+   * sua dificuldade. É o único lugar onde o seu julgamento manda. */
   const bruta = revVencidas.concat(pendentes)
-    .sort((a, b) => (b.bruto - a.bruto) || (a.ehRevisao ? -1 : 1));
+    .sort((a, b) => (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
   const porDisc = new Map();
   bruta.forEach((i) => {
     if (!porDisc.has(i.disciplina)) porDisc.set(i.disciplina, []);
@@ -214,24 +597,129 @@ function montarPlano(r, opcoes) {
   });
   /* disciplinas entram no rodízio na ordem da sua fatia da prova */
   const ordemDisc = [...porDisc.keys()].sort((a, b) => (fatia[b] || 0) - (fatia[a] || 0));
-  const fila = [];
-  let restam = true;
-  while (restam) {
-    restam = false;
-    ordemDisc.forEach((d) => {
-      const lista = porDisc.get(d);
-      if (lista && lista.length) { fila.push(lista.shift()); restam = true; }
+  /* ---- TRAVA ANTI-ELIMINAÇÃO, COM TETO ----
+   *
+   * Uma disciplina de bloco com corte, cuja cobertura ou cujo acerto
+   * está abaixo da margem, ganha DUAS vagas por rodada em vez de uma.
+   *
+   * DUAS, E NÃO A FILA INTEIRA. A regra óbvia seria "fura a fila até
+   * sair do risco", e ela é uma armadilha: acerto sobe devagar, a
+   * disciplina monopolizaria o rodízio por semanas, você não estudaria
+   * o resto — e como o resto também tem corte, o remédio criaria a
+   * doença no bloco vizinho. É o mesmo defeito de concentração que a
+   * agenda tinha por acidente, agora por regra explícita.
+   *
+   * O teto também se auto-limita: se TODAS as disciplinas estiverem em
+   * risco, todas ganham duas vagas e a proporção volta a ser a de
+   * antes — que é o comportamento certo, porque nesse caso não há
+   * ninguém a quem tirar tempo. */
+  /* UMA CONTA SÓ, lida pelos dois lados. A trava e a liberação são
+   * decisões opostas sobre a MESMA medida; calcular os blocos duas
+   * vezes seria abrir a porta para elas divergirem — que é o defeito
+   * que mais voltou neste aplicativo. */
+  const blocos = edCumprimentoBlocos(r, todos, acertos);
+  const emRisco = {};
+  edDiscEmRisco(blocos).forEach((x) => { emRisco[x.disciplina] = x; });
+
+  /* ---- QUEM JÁ PODE CEDER TEMPO ----
+   *
+   * Um degrau de faixa, e só na DURAÇÃO. Não mexe em brutoOrdem, nem na
+   * prioridade, nem na ordem da fila: a disciplina continua entrando na
+   * mesma posição do rodízio, com blocos mais curtos. Mexer na ordem
+   * seria uma segunda mudança escondida dentro de uma.
+   *
+   * E NUNCA MEXE EM "bruto" — é dele que saem a cobertura e o
+   * cumprimento dos mínimos. Um fator que entrasse ali faria a trava
+   * ler uma cobertura que não existe e se desligar sozinha, sem sinal
+   * nenhum na tela. */
+  const cedem = {};
+  edDiscComFolga(blocos, todos, emRisco)
+    .forEach((x) => { cedem[x.disciplina] = x; });
+  if (Object.keys(cedem).length) {
+    todos.forEach((i) => {
+      const c = cedem[i.disciplina];
+      if (!c || i.feito) return;
+      const k = ED_FAIXAS.findIndex((f) => f.id === i.faixa);
+      if (k < 0 || k >= ED_FAIXAS.length - 1) return;   /* já é a menor */
+      const nova = ED_FAIXAS[k + 1];
+      i.faixaAntes = i.faixa;
+      i.faixa = nova.id;
+      i.minutos = nova.minutos;
+      /* o item diz que cedeu, e por quê: tempo que encolhe sem
+       * explicação é a mesma reclamação que deu origem à trava */
+      i.cedeu = { cobertura: c.cobertura, alvo: c.alvo, revisao: c.revisao };
     });
   }
-  todos.forEach((i) => { i.porque = motivarItem(i, fatia[i.disciplina]); });
+
+  const fila = [];
+  let restam = true;
+  let rodada = 0;
+  while (restam) {
+    restam = false;
+    rodada++;
+    ordemDisc.forEach((d) => {
+      const vagas = emRisco[d] ? 2 : 1;
+      for (let v = 0; v < vagas; v++) {
+      const lista = porDisc.get(d);
+      if (lista && lista.length) {
+        const it = lista.shift();
+        /* o item diz que veio pela trava, e por quê: ordem que muda
+         * sozinha sem explicação é ordem em que ninguém confia */
+        if (emRisco[d]) {
+          it.trava = emRisco[d].motivo;
+          it.travaBloco = emRisco[d].bloco;
+        }
+        /* MARCAS DO PERCURSO, para o raio-X do plano poder explicar a
+         * posição de um item sem refazer a conta por fora — refazer por
+         * fora produz uma segunda implementação da mesma regra, e as
+         * duas divergem no primeiro ajuste. Nada aqui entra no cálculo. */
+        it.rodada = rodada;
+        /* "ordemFila", nao "ordem": a agenda do topo ja usa "ordem" para o
+         * seu proprio criterio (bruto x urgencia) e a sobrescreve ao juntar
+         * os editais. Dois campos com o mesmo nome e significados
+         * diferentes e como o raio-X passaria a mostrar o numero errado
+         * sem nenhum sinal de que mudou. */
+        it.ordemFila = fila.length + 1;
+        fila.push(it);
+        restam = true;
+      }
+      }
+    });
+  }
+  todos.forEach((i) => {
+    /* a fatia da disciplina no próprio item: ela já ia dentro de "porque",
+     * mas lá é uma mensagem de tela — quem precisa do NÚMERO tinha de
+     * abrir o motivo e torcer para o tipo certo ter caído */
+    i.fatiaDisc = fatia[i.disciplina] != null ? fatia[i.disciplina] : null;
+    i.porque = motivarItem(i, fatia[i.disciplina]);
+  });
   const dentro = [], fora = [];
   let semana = 1, usoSemana = 0, usado = 0;
+
+  /* PROVA JÁ REALIZADA — o plano precisa dizer isso, não fingir.
+   *
+   * Com a data no passado, semanasAte devolve semanas = 0. E a guarda
+   * abaixo era "semanas > 0 && semana > semanas": com zero, ela NUNCA
+   * disparava, então nenhum tópico ia para o "não cabe" e todos os 232
+   * recebiam "semana 1". Ao mesmo tempo o orçamento virava zero e o
+   * "horas necessárias" virava null e sumia da tela.
+   *
+   * O resultado era a pior combinação possível: um plano afirmando que
+   * o edital inteiro cabe nesta semana, com orçamento de zero horas — e
+   * sem o número que denunciaria a contradição. Quem abrisse o TCE-PE
+   * no dia 31 de agosto veria exatamente isso.
+   *
+   * Agora zero semanas significa o que significa: não há mais janela.
+   * Tudo vai para o "fora", que é a lista que o app já sabe mostrar
+   * nomeada, nunca escondida. */
+  const vencida = semanas === 0 && (s ? s.dias < 0 : false);
 
   fila.forEach((i) => {
     if (!porSemana || semanas === null) {          /* sem data ou sem horas:
       não dá para montar cronograma, mas a ordem continua valendo */
       i.semana = null; dentro.push(i); usado += i.minutos; return;
     }
+    if (vencida) { i.semana = null; fora.push(i); return; }
     if (usoSemana + i.minutos > porSemana) { semana++; usoSemana = 0; }
     if (semanas > 0 && semana > semanas) { i.semana = null; fora.push(i); return; }
     i.semana = semana; usoSemana += i.minutos; usado += i.minutos;
@@ -242,6 +730,24 @@ function montarPlano(r, opcoes) {
     itens: todos,          /* tudo, na ordem, com faixa e minutos */
     fila: dentro,          /* o que cabe até a prova */
     fora,                  /* o que não cabe — nomeado, nunca escondido */
+    /* dito em voz alta, para a tela não ter de deduzir de "semanas === 0"
+     * (que também é o valor de uma prova daqui a três dias) */
+    vencida,
+    diasDesde: vencida && s ? Math.abs(s.dias) : null,
+    /* CUMPRIMENTO DOS MÍNIMOS — a pergunta "posso ser eliminado?", que é
+     * diferente de "quanto da prova eu cobri?" */
+    /* A MESMA conta de lá de cima, e não uma terceira chamada: a
+     * liberação e a trava já leram estes blocos, e a tela tem de ver
+     * exatamente o que elas viram. */
+    blocos,
+    /* a fatia da prova é EXATA quando o edital trouxe os números */
+    fatiaExata: exata,
+    /* qual fase este plano representa, e o que existe do outro lado */
+    fase,
+    prazo,
+    /* quantos tópicos voltam na segunda fase — o número que responde
+     * "vale a pena marcar mais?" e alimenta o aviso de excesso */
+    fase2N: todos.filter((i) => i.fase2).length,
     semanas, porSemana, usado,
     orcamento: semanas === null ? null : semanas * porSemana,
     fatia,
@@ -274,6 +780,314 @@ function somarPeso(itens) {
     pctFeito: Math.round((feito / total) * 100),
     pctRevisado: Math.round((revisado / total) * 100),
   };
+}
+
+/* =====================================================================
+ * CUMPRIMENTO DOS MÍNIMOS POR BLOCO
+ *
+ * O que este cálculo responde é diferente do resto do app. Em todo lugar
+ * a pergunta é "quanto da prova eu já cobri?" — aqui é "existe algum
+ * bloco em que eu posso ser ELIMINADO mesmo indo bem no total?".
+ *
+ * UMA HONESTIDADE NECESSÁRIA: o mínimo do edital é de ACERTOS, e o app
+ * não sabe quanto você vai acertar — sabe quanto você COBRIU. São coisas
+ * diferentes, e prometer a primeira medindo a segunda seria mentira.
+ *
+ * Então a régua aqui é explícita: cobertura abaixo do mínimo é risco
+ * DIRETO (não dá para acertar 50% de um bloco que você não estudou), e
+ * cobertura acima do mínimo é apenas a condição necessária — não a
+ * suficiente. A tela diz isso com todas as letras.
+ *
+ * A folga existe pelo mesmo motivo: cobrir exatamente 50% para um mínimo
+ * de 50% não é ficar em cima da linha, é ficar abaixo dela na prática,
+ * porque ninguém acerta tudo o que estudou.
+ * ================================================================== */
+const ED_FOLGA_MINIMO = 1.25;   /* cobrir 25% acima do corte é o "seguro" */
+
+/* Margem de segurança do ACERTO, em pontos percentuais acima do mínimo.
+ * Diferente da folga da cobertura porque a pergunta é outra: ali é
+ * "cobri o suficiente para poder acertar"; aqui é "estou acertando com
+ * distância bastante do corte para uma prova ruim não me eliminar". */
+const ED_MARGEM_ACERTO = 10;
+
+/* ------------------------------------------------------------------
+ * QUANTO VOCÊ ACERTA, POR DISCIPLINA
+ *
+ * Uma função só, porque duas contando a mesma coisa com regras
+ * diferentes é o defeito que mais voltou neste app. O painel de blocos,
+ * o raio-X e a trava anti-eliminação leem daqui.
+ *
+ * O QUE ENTRA: questões respondidas no app (tentativa a tentativa) e
+ * registros de estudo COM CONTAGEM ("17 de 20"). O que não entra é o
+ * percentual anotado de cabeça ("uns 85%"): ele não diz de quantas
+ * questões fala, então não tem peso para entrar numa média — e uma
+ * média em que uma parcela não tem peso não é uma média, é um chute
+ * com aparência de conta. Ele volta à parte, com o nome dele.
+ * ------------------------------------------------------------------ */
+function edAcertos(diario, banco) {
+  const por = {};
+  const pega = (d) => {
+    if (!por[d]) {
+      por[d] = { disciplina: d, feitas: 0, certas: 0, pct: null,
+                 anotados: [], pctAnotado: null, amostra: 0 };
+    }
+    return por[d];
+  };
+  (diario || []).forEach((x) => {
+    if (!x || !x.disc || x.a === "pendente" || !x.q) return;
+    const L = pega(x.disc);
+    if (x.q.feitas) { L.feitas += x.q.feitas; L.certas += x.q.certas || 0; }
+    else if (x.q.pct != null) L.anotados.push(x.q.pct);
+  });
+  (banco || []).forEach((q) => {
+    if (!q || !q.disciplina) return;
+    const L = pega(q.disciplina);
+    (q.tentativas || []).forEach((tt) => {
+      L.feitas++;
+      if (tt.acertou) L.certas++;
+    });
+  });
+  Object.keys(por).forEach((k) => {
+    const L = por[k];
+    L.pct = L.feitas ? Math.round((L.certas / L.feitas) * 100) : null;
+    L.pctAnotado = L.anotados.length
+      ? Math.round(L.anotados.reduce((a, b) => a + b, 0) / L.anotados.length)
+      : null;
+    L.amostra = L.feitas;
+    delete L.anotados;
+  });
+  return por;
+}
+
+/* AMOSTRA MÍNIMA PARA CHAMAR ALGUÉM DE RISCO.
+ * Errar 3 de 5 dá 40% e não diz nada sobre a disciplina — reorganizar a
+ * semana por causa disso seria deixar a agenda balançar ao sabor de uma
+ * tarde. Abaixo deste número o acerto é exibido e não decide. */
+const ED_AMOSTRA_MINIMA = 20;
+
+function edCumprimentoBlocos(r, itens, acertos) {
+  const blocos = (r && r.blocos) || [];
+  if (!blocos.length) return [];
+  const porDisc = {};
+  (r.disciplinas || []).forEach((d) => { porDisc[d.nome] = d; });
+
+  return blocos.map((b) => {
+    const nomes = b.disciplinas || [];
+    const meus = (itens || []).filter((i) => nomes.indexOf(i.disciplina) >= 0);
+    const total = meus.reduce((a, i) => a + i.bruto, 0);
+    const feito = meus.filter((i) => i.feito).reduce((a, i) => a + i.bruto, 0);
+    const pct = total ? Math.round((feito / total) * 100) : 0;
+
+    /* o peso do bloco na prova inteira: um bloco com corte que vale 15%
+     * da prova é um risco diferente de um que vale 60% */
+    const totalGeral = (itens || []).reduce((a, i) => a + i.bruto, 0) || 1;
+    const fatia = Math.round((total / totalGeral) * 100);
+
+    /* o mínimo em PERCENTUAL do bloco, seja como veio escrito */
+    let minPct = null;
+    if (b.minimo) {
+      if (b.minimo.tipo === "pct") minPct = b.minimo.valor;
+      else {
+        /* absoluto: precisa do número de questões do bloco para virar
+         * percentual. Sem os números do edital, não dá — e inventar uma
+         * conversão seria pior que dizer que não sabe. */
+        const q = nomes.reduce((a, x) => {
+          const d = porDisc[x];
+          return a + (d && d.abs ? d.abs : 0);
+        }, 0);
+        minPct = q ? Math.round((b.minimo.valor / q) * 100) : null;
+      }
+    }
+
+    const abaixo = minPct !== null && pct < minPct;
+    const apertado = minPct !== null && !abaixo
+      && pct < Math.min(100, minPct * ED_FOLGA_MINIMO);
+
+    /* ---- AS DISCIPLINAS DO BLOCO, uma linha cada ----
+     *
+     * O bloco em risco dizia "há risco" e não dizia DE QUÊ. Com 4
+     * disciplinas dentro, saber que o bloco está a 54% não diz onde
+     * estudar — e a pessoa volta a olhar só o peso, que é o hábito que
+     * o painel existe para corrigir.
+     *
+     * DOIS NÚMEROS QUE NÃO SE MISTURAM. "cobertura" é quanto do peso
+     * daquela disciplina você já estudou; "acerto" é quanto você acerta
+     * quando responde. O mínimo do edital é de ACERTO. O app mede os
+     * dois e nunca os soma: cobrir 100% e acertar 40% é uma situação
+     * real, e a média dos dois (70%) descreveria alguém que não existe. */
+    const ac = acertos || {};
+    const linhas = nomes.map((nome) => {
+      const dela = meus.filter((i) => i.disciplina === nome);
+      const tt = dela.reduce((a, i) => a + i.bruto, 0);
+      const ft = dela.filter((i) => i.feito).reduce((a, i) => a + i.bruto, 0);
+      const a = ac[nome] || {};
+      const amostra = a.amostra || 0;
+      const acerto = amostra >= ED_AMOSTRA_MINIMA ? a.pct : null;
+      const seguro = minPct === null || acerto === null
+        ? null : acerto >= minPct + ED_MARGEM_ACERTO;
+      return {
+        nome,
+        topicos: dela.length,
+        feitos: dela.filter((i) => i.feito).length,
+        cobertura: tt ? Math.round((ft / tt) * 100) : 0,
+        peso: tt,
+        /* nulo quando não há amostra que sustente o número — e nulo é
+         * uma resposta, não um zero */
+        acerto,
+        acertoAmostra: amostra,
+        /* o percentual que você anotou de cabeça, sempre à parte */
+        acertoAnotado: a.pctAnotado == null ? null : a.pctAnotado,
+        /* abaixo do corte, ou dentro da margem, ou seguro */
+        acertoAbaixo: acerto !== null && minPct !== null && acerto < minPct,
+        acertoApertado: acerto !== null && minPct !== null
+          && acerto >= minPct && acerto < minPct + ED_MARGEM_ACERTO,
+        seguro,
+      };
+    }).sort((a, b) => {
+      /* pior primeiro: é a ordem de quem procura onde pode ser cortado */
+      const risco = (x) => (x.acertoAbaixo ? 2 : (x.acertoApertado ? 1 : 0));
+      return risco(b) - risco(a) || a.cobertura - b.cobertura;
+    });
+
+    /* O ACERTO DO BLOCO INTEIRO, ponderado pelo tamanho da amostra de
+     * cada disciplina — não pela média das médias, que daria a uma
+     * disciplina de 5 questões o mesmo voto de uma de 500. */
+    let bFeitas = 0, bCertas = 0;
+    nomes.forEach((nome) => {
+      const a = ac[nome] || {};
+      bFeitas += a.feitas || 0;
+      bCertas += a.certas || 0;
+    });
+    const acertoBloco = bFeitas >= ED_AMOSTRA_MINIMA
+      ? Math.round((bCertas / bFeitas) * 100) : null;
+
+    return {
+      nome: b.nome, minimo: b.minimo, minPct, fatia,
+      disciplinas: nomes, topicos: meus.length,
+      feitos: meus.filter((i) => i.feito).length,
+      total, feito, pct, abaixo, apertado,
+      linhas,
+      acerto: acertoBloco,
+      acertoAmostra: bFeitas,
+      /* a meta que dá margem: o corte mais 10 pontos */
+      metaAcerto: minPct === null ? null
+        : Math.min(100, minPct + ED_MARGEM_ACERTO),
+      acertoAbaixo: acertoBloco !== null && minPct !== null
+        && acertoBloco < minPct,
+      acertoApertado: acertoBloco !== null && minPct !== null
+        && acertoBloco >= minPct && acertoBloco < minPct + ED_MARGEM_ACERTO,
+      /* quanto falta cobrir para sair do vermelho, em PESO — é o número
+       * que responde "e agora, quanto eu estudo disto?" */
+      faltaPeso: abaixo ? Math.max(0, (minPct / 100) * total - feito) : 0,
+    };
+  });
+}
+
+/* QUEM ESTÁ EM RISCO DE CORTE.
+ *
+ * Só disciplinas de bloco COM mínimo declarado: sem corte no edital não
+ * há eliminação por bloco, e tratar todo mundo como risco tornaria a
+ * trava inútil por excesso.
+ *
+ * Dois gatilhos, e o motivo de cada um fica registrado:
+ *  · cobertura abaixo do mínimo — você não estudou o bastante para
+ *    poder acertar o corte, e isso não depende de medir acerto nenhum;
+ *  · acerto abaixo do mínimo + margem — você está respondendo perto
+ *    demais da linha, com amostra que sustente o número.
+ *
+ * A cobertura entra porque ela existe desde o primeiro dia; o acerto,
+ * só quando há questões suficientes. Esperar pelo acerto deixaria a
+ * trava dormindo justamente nos meses em que ela mais serve. */
+/* =====================================================================
+ * QUEM JÁ PODE CEDER TEMPO
+ *
+ * O contrário da trava, e de propósito o contrário APOIADO EM DADO
+ * CERTO. A trava reage a risco, e risco pode ser estimado; ceder tempo
+ * tira minutos de uma disciplina, e tirar minutos com base em
+ * estimativa é o que pode custar a prova.
+ *
+ * POR QUE COBERTURA E REVISÃO, E NÃO ACERTO. Acerto é sinal derivado:
+ * você só responde questão do que o plano mandou estudar, então o
+ * número existe justamente onde o plano já investiu — e não existe onde
+ * ele não investiu. Medir por ele e realimentar o plano fecha um
+ * círculo. Cobertura e revisão são fato: o app sabe exatamente quantos
+ * tópicos foram fechados e quantos foram revisados, e são os mesmos
+ * números em que a trava já confia.
+ *
+ * E 90% DE ACERTO EM 10% DA DISCIPLINA NÃO É MOTIVO PARA NADA. Amostra
+ * grande em pedaço pequeno continua sendo pedaço pequeno; por isso a
+ * régua aqui é a fração da DISCIPLINA, não a contagem de questões.
+ *
+ * TRÊS CONDIÇÕES, todas necessárias:
+ *  1. não estar em risco de corte — e a trava já testa cobertura abaixo
+ *     do mínimo, então esta condição sozinha impede o caso pior;
+ *  2. cobertura com a folga que o app já usa em todo lugar (25% acima
+ *     do mínimo do bloco);
+ *  3. a maioria do que foi coberto já revisado — estudar fixa menos que
+ *     revisar, e ceder tempo de matéria estudada-e-não-revisada é ceder
+ *     do que ainda vai embora.
+ * ===================================================================== */
+/* Sem mínimo declarado não há corte, e o "×1,25 do mínimo" não tem
+ * âncora. Aí a régua é a própria disciplina estar quase fechada: alto o
+ * bastante para não liberar tempo de quem mal começou. */
+const ED_CEDE_SEM_MINIMO = 80;   /* % da disciplina coberta */
+const ED_CEDE_REVISAO = 50;      /* % do coberto que precisa estar revisado */
+
+function edDiscComFolga(blocos, itens, emRisco) {
+  const risco = emRisco || {};
+  const fora = [];
+  const porDisc = {};
+  (itens || []).forEach((i) => {
+    if (!i || !i.disciplina) return;
+    const d = porDisc[i.disciplina] || (porDisc[i.disciplina] =
+      { total: 0, feito: 0, revisado: 0 });
+    d.total += i.bruto;
+    if (i.feito) d.feito += i.bruto;
+    if (i.revisado) d.revisado += i.bruto;
+  });
+
+  /* o mínimo que vale para cada disciplina, quando existe */
+  const minDe = {};
+  (blocos || []).forEach((b) => {
+    if (b.minPct === null || b.minPct === undefined) return;
+    (b.linhas || []).forEach((L) => { minDe[L.nome] = b.minPct; });
+  });
+
+  Object.keys(porDisc).forEach((nome) => {
+    if (risco[nome]) return;                       /* 1 */
+    const d = porDisc[nome];
+    if (!d.total) return;
+    const cob = Math.round((d.feito / d.total) * 100);
+    const min = minDe[nome];
+    const alvo = (min === undefined)
+      ? ED_CEDE_SEM_MINIMO
+      : Math.round(min * ED_FOLGA_MINIMO);
+    if (cob < alvo) return;                        /* 2 */
+    /* 3: a maioria DO QUE FOI COBERTO, e não do total — quem cobriu 90%
+     * e revisou 50% desses 90% está em situação diferente de quem
+     * cobriu 50% e revisou tudo. */
+    const rev = d.feito ? Math.round((d.revisado / d.feito) * 100) : 0;
+    if (rev < ED_CEDE_REVISAO) return;
+    fora.push({ disciplina: nome, cobertura: cob, alvo, revisao: rev,
+                comMinimo: min !== undefined });
+  });
+  return fora;
+}
+
+function edDiscEmRisco(blocos) {
+  const fora = [];
+  (blocos || []).forEach((b) => {
+    if (b.minPct === null || b.minPct === undefined) return;
+    (b.linhas || []).forEach((L) => {
+      const motivos = [];
+      if (L.cobertura < b.minPct) motivos.push("cobertura");
+      if (L.acertoAbaixo || L.acertoApertado) motivos.push("acerto");
+      if (!motivos.length) return;
+      fora.push({ disciplina: L.nome, bloco: b.nome, motivo: motivos.join("+"),
+                  minPct: b.minPct, cobertura: L.cobertura, acerto: L.acerto });
+    });
+  });
+  return fora;
 }
 
 /* ------------------------------------------------------------------
@@ -432,8 +1246,15 @@ function semanasAte(prova, hoje) {
   if (!prova) return null;
   const fim = new Date(prova + "T00:00:00");
   if (isNaN(fim)) return null;
-  const ini = hoje ? new Date(hoje) : new Date();
-  const dias = Math.floor((fim - ini) / 86400000);
+  /* mesma correção de edSituacao: dias de CALENDÁRIO. Sem zerar a hora,
+   * uma prova daqui a 14 dias virava 13 depois do meio-dia — e 13 dias
+   * são uma semana no planejamento, contra as duas que a pessoa contou.
+   * O zeramento respeita o formato: "AAAA-MM-DD" é meia-noite LOCAL. */
+  const ini = (typeof hoje === "string" && /^\d{4}-\d{2}-\d{2}$/.test(hoje))
+    ? new Date(hoje + "T00:00:00")
+    : (() => { const d = hoje ? new Date(hoje) : new Date();
+               return new Date(d.getFullYear(), d.getMonth(), d.getDate()); })();
+  const dias = Math.round((fim - ini) / 86400000);
   return { dias, semanas: Math.max(0, Math.floor(dias / 7)) };
 }
 
@@ -662,13 +1483,576 @@ function edParaTexto(r) {
   if (c.concurso) cab.push(c.concurso);
   if (c.prova) cab.push("prova: " + c.prova);
   if (c.horas) cab.push("horas: " + c.horas);
-  if (cab.length) { L.push("# " + cab.join(" | ")); L.push(""); }
+  if (cab.length) { L.push("# " + cab.join(" | ")); }
+  /* A SEGUNDA FASE TEM DE VOLTAR PARA O TEXTO.
+   * Este arquivo é reescrito em operações de rotina — colar plano
+   * corrigido, incluir disciplina à mão. Sem estas linhas, a data de
+   * janeiro e todos os marcadores evaporavam na primeira delas, sem
+   * aviso nenhum: o plano da discursiva simplesmente deixava de existir
+   * e a pessoa só descobriria em dezembro. */
+  if (c.fase2 && c.fase2.prova) {
+    const c2 = ["fase 2: " + (c.fase2.nome || "2ª fase")];
+    c2.push("prova: " + c.fase2.prova);
+    if (c.fase2.horas) c2.push("horas: " + c.fase2.horas);
+    L.push("# " + c2.join(" | "));
+  }
+  if (cab.length) L.push("");
+
+  /* OS BLOCOS COM MÍNIMO TAMBÉM TÊM DE VOLTAR.
+   *
+   * Mesmo defeito da fase 2, e descoberto do mesmo jeito: escrevendo um
+   * edital de SEFAZ e mandando o texto ida e volta. As linhas "&"
+   * sumiam na primeira reescrita de rotina — colar plano corrigido,
+   * incluir disciplina — e com elas a nota mínima por bloco, que é a
+   * informação que decide ELIMINAÇÃO. Um plano que perde o mínimo passa
+   * a otimizar pontos totais num concurso onde dá para ser cortado com
+   * nota alta.
+   *
+   * Cada bloco é escrito ANTES da primeira disciplina dele, que é onde
+   * ele estava. */
+  const blocoDe = {};
+  (r.blocos || []).forEach((b) => {
+    (b.disciplinas || []).forEach((nome) => {
+      if (blocoDe[nome] === undefined) blocoDe[nome] = b;
+    });
+  });
+  let blocoAberto = null;
+
   (r.disciplinas || []).forEach((d) => {
-    L.push("@ " + d.nome + " :: " + d.peso);
+    const bl = blocoDe[d.nome];
+    if (bl && bl !== blocoAberto) {
+      blocoAberto = bl;
+      const m = bl.minimo || {};
+      const valor = m.tipo === "pct" ? m.valor + "%" : String(m.valor);
+      L.push("& " + bl.nome + (m.valor != null ? " | minimo: " + valor : ""));
+    }
+    /* O PESO EM QUESTÕES é o número real da prova; o 1..5 é derivado
+     * dele. Escrever o derivado apagava a fonte: "20q" virava "3", e a
+     * fatia da prova voltava a ser estimativa — sem nada avisando que a
+     * precisão tinha ido embora. */
+    const peso = (d.abs > 0)
+      ? (String(d.abs) + (d.unidade === "p" ? "p" : "q"))
+      : d.peso;
+    L.push("@ " + d.nome + " :: " + peso);
     d.topicos.forEach((t) => {
-      L.push("+ " + t.nome + " :: " + t.peso + (t.motivo ? " :: " + t.motivo : ""));
+      /* o marcador vai no FIM do terceiro campo, como foi lido. Um tópico
+       * marcado sem motivo ganha o campo só para carregar a marca. */
+      let m = t.motivo || "";
+      if (t.fase2) {
+        const p = (t.pesoF2 && t.pesoF2 !== t.peso) ? String(t.pesoF2) : "";
+        m = (m ? m + " " : "") + "!d" + p;
+      }
+      L.push("+ " + t.nome + " :: " + t.peso + (m ? " :: " + m : ""));
     });
     L.push("");
   });
   return L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+/* =====================================================================
+ * O QUE MUDA AO COLAR UM PLANO CORRIGIDO
+ *
+ * Colar substitui o edital inteiro. A pergunta única de antes ("perdeu N
+ * tópicos, continuar?") escondia o risco maior: o progresso é guardado por
+ * "disciplina›tópico", então um tópico que só mudou de NOME leva junto a
+ * marca de estudado — e a pessoa não vê isso acontecer. Meses de leitura
+ * viram zero sem uma linha de aviso.
+ *
+ * Esta função não decide nada. Ela lista o que vai mudar, separando o que
+ * é ajuste do que é perda.
+ * ===================================================================== */
+/* TRAZER DE VOLTA O QUE NÃO TEM HERDEIRO.
+ *
+ * Conserto mecânico, e só mecânico: cada tópico sem herdeiro volta para
+ * a SUA disciplina, com o peso e o motivo que tinha. Não há juízo aqui —
+ * decidir se um tópico merece existir é da pessoa ou da IA; recolocar uma
+ * linha que se perdeu numa reescrita é aritmética de texto.
+ *
+ * Volta no FIM da disciplina, não na posição original: a ordem do texto
+ * não é a ordem do estudo (quem ordena é o peso), e tentar adivinhar o
+ * lugar certo produziria uma inserção errada com cara de acerto. No fim,
+ * fica visível que aquilo foi recolocado. */
+function edRecolocarPerdidos(txtNovo, perdidos, txtAntigo) {
+  const faltam = (perdidos || []).filter((x) => x && x.semHerdeiro);
+  if (!faltam.length) return { texto: txtNovo, postos: 0, semDisciplina: [] };
+
+  /* o peso e o motivo originais, para a linha voltar inteira */
+  const A = lerEdital(txtAntigo || "");
+  const orig = {};
+  A.disciplinas.forEach((d) => d.topicos.forEach((tp) => {
+    orig[(d.nome + "›" + tp.nome).toLowerCase()] = tp;
+  }));
+
+  const porDisc = {};
+  const semDisciplina = [];
+  faltam.forEach((x) => { (porDisc[x.d] = porDisc[x.d] || []).push(x); });
+
+  const linhas = String(txtNovo || "").split(/\r?\n/);
+  const saida = [];
+  let discAtual = "";
+  let postos = 0;
+  const despejar = () => {
+    if (!discAtual || !porDisc[discAtual]) return;
+    porDisc[discAtual].forEach((x) => {
+      const tp = orig[(x.d + "›" + x.t).toLowerCase()] || {};
+      const peso = tp.peso == null ? 3 : tp.peso;
+      const motivo = String(tp.motivo || "").trim();
+      saida.push("+ " + x.t + " :: " + peso + (motivo ? " :: " + motivo : ""));
+      postos++;
+    });
+    delete porDisc[discAtual];
+  };
+  linhas.forEach((l) => {
+    const eDisc = /^\s*@/.test(l);
+    const eBloco = /^\s*&/.test(l);
+    /* o despejo acontece ANTES da próxima disciplina ou bloco: pôr
+     * depois jogaria o tópico na disciplina errada, que é exatamente o
+     * tipo de erro silencioso que este conserto existe para evitar */
+    if (eDisc || eBloco) despejar();
+    if (eDisc) {
+      const m = l.match(/^\s*@\s*(.+)$/);
+      const nome = m ? m[1].split("::")[0].trim() : "";
+      discAtual = nome;
+    }
+    saida.push(l);
+  });
+  despejar();
+
+  /* disciplina que não existe mais no texto novo: o tópico não tem onde
+   * voltar, e inventar a disciplina seria decidir por quem cola */
+  Object.keys(porDisc).forEach((d) => {
+    porDisc[d].forEach((x) => semDisciplina.push(x));
+  });
+
+  return { texto: saida.join("\n"), postos, semDisciplina };
+}
+
+/* ------------------------------------------------------------------
+ * QUEM HERDOU O TÓPICO QUE SUMIU
+ *
+ * A conferência compara nomes exatos. Isso torna INVISÍVEL a diferença
+ * entre as duas coisas mais diferentes que podem acontecer numa revisão
+ * de plano:
+ *
+ *   · "Cassação, anulação, revogação e convalidação" virou quatro linhas
+ *     — nada se perdeu, ao contrário: agora dá para pesar cada uma;
+ *   · "Improbidade administrativa" simplesmente não está mais lá.
+ *
+ * As duas apareciam como "some", e a tela dizia só o número. Diante de
+ * "107 tópicos somem" não há decisão possível: aceitar arrisca perder
+ * conteúdo, recusar joga fora uma revisão inteira. O número sem a lista
+ * transforma uma conferência em um impasse.
+ *
+ * Aqui cada sumiço procura um HERDEIRO na mesma disciplina, por três
+ * regras, da mais forte para a mais fraca. Nenhuma delas decide nada —
+ * o app continua só mostrando, e quem escolhe é quem estudou.
+ * ------------------------------------------------------------------ */
+function edNormalizar(s) {
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/* palavras curtas e de ligação não contam para a semelhança: duas linhas
+ * que só compartilham "de", "da" e "e" não têm nada em comum */
+const ED_VAZIAS = new Set(["a", "as", "o", "os", "um", "uma", "de", "do", "da",
+  "dos", "das", "em", "no", "na", "nos", "nas", "ao", "aos", "e", "ou", "que",
+  "se", "por", "pelo", "pela", "para", "com", "sem", "seus", "suas", "sua"]);
+
+/* PLURAL NÃO É OUTRA PALAVRA. "Taxas de juros nominal, efetiva..." virou
+ * "Taxa de juros nominal", e sem tirar o "s" final as duas não têm
+ * palavra nenhuma em comum na cabeça da frase. Corte grosseiro de
+ * propósito: aqui basta aproximar, e um radicalizador de verdade erraria
+ * em nomes próprios e siglas. */
+function edRadical(w) {
+  return w.length > 4 && /s$/.test(w) ? w.slice(0, -1) : w;
+}
+
+function edPalavras(s) {
+  return edNormalizar(s).split(" ")
+    .filter((w) => w.length > 2 && !ED_VAZIAS.has(w))
+    .map(edRadical);
+}
+
+/* As PARTES de um nome composto. "Concessão, permissão e autorização"
+ * são três itens de uma lista, e é como lista que a revisão os trata. */
+function edPartesDoNome(s) {
+  return edNormalizar(s).split(/,| e | ou |;|:/)
+    .map((x) => x.trim()).filter(Boolean);
+}
+
+function edHerdeirosDe(nomeAntigo, candidatos) {
+  const velho = edNormalizar(nomeAntigo);
+  const pv = edPalavras(nomeAntigo);
+  const achados = [];
+  (candidatos || []).forEach((novo) => {
+    const n = edNormalizar(novo);
+    if (!n || !velho) return;
+    /* 1. O NOVO COMEÇA COM O VELHO. "Conceito" → "Conceito de agente
+     *    público": é o caso de quem desambiguou um nome genérico. */
+    if (n.indexOf(velho + " ") === 0) {
+      achados.push({ nome: novo, como: "prefixo", forca: 3 });
+      return;
+    }
+    /* 2. O VELHO CONTÉM O NOVO. "Cassação, anulação, revogação e
+     *    convalidação" → "Cassação": é a divisão de uma linha composta,
+     *    o caso mais comum numa revisão. */
+    if ((" " + velho + " ").indexOf(" " + n + " ") >= 0) {
+      achados.push({ nome: novo, como: "parte", forca: 3 });
+      return;
+    }
+    if (!pv.length) return;
+    const pnLista = edPalavras(novo);
+    const pn = new Set(pnLista);
+    const svelho = new Set(pv);
+    const juntas = pv.filter((w) => pn.has(w)).length;
+
+    /* 3. O NOVO CABE DENTRO DO VELHO.
+     *
+     * Esta é a medida que faltava, e a que estava invertida. Contar
+     * quanto do VELHO aparece no novo mede RENOMEAÇÃO; um pedaço de uma
+     * lista de sete itens cobre um sétimo do nome antigo e some da
+     * conta. O que identifica uma divisão é o contrário: quase toda
+     * palavra do pedaço já estava no todo.
+     *
+     * "Taxa de juros nominal" tem três palavras, e as três estão em
+     * "Taxas de juros nominal, efetiva, equivalente, real e aparente". */
+    const dentro = pnLista.length
+      ? pnLista.filter((w) => svelho.has(w)).length / pnLista.length : 0;
+    if (dentro >= 0.5) {
+      achados.push({ nome: novo, como: "parte", forca: 2 + dentro });
+      return;
+    }
+
+    /* 4. O NOVO COMEÇA POR UM ITEM DA LISTA VELHA.
+     *
+     * "Concessão, permissão e autorização" virou "Concessão de serviço
+     * público": só uma das três palavras do novo estava no velho, e
+     * mesmo assim é claramente o mesmo assunto — porque a palavra é a
+     * CABEÇA da frase e era um item da lista. */
+    const cabeca = pnLista[0];
+    if (cabeca && edPartesDoNome(nomeAntigo)
+        .some((parte) => edPalavras(parte).indexOf(cabeca) === 0)) {
+      achados.push({ nome: novo, como: "item", forca: 1.5 });
+      return;
+    }
+
+    /* 5. PALAVRAS EM COMUM, para renomeações que não encaixam em nenhuma
+     *    das anteriores. Metade das palavras do NOME ANTIGO é o limiar:
+     *    abaixo disso vira coincidência. */
+    if (juntas / pv.length >= 0.5) {
+      achados.push({ nome: novo, como: "parecido", forca: juntas / pv.length });
+    }
+  });
+  achados.sort((a, b) => b.forca - a.forca);
+
+  /* SÓ OS QUE CHEGAM PERTO DO MELHOR.
+   *
+   * "Finanças públicas" achava três herdeiros: a linha certa e mais
+   * "Advocacia pública" e "Defensoria Pública", que só compartilham a
+   * palavra "públicas". O mesmo com "Distrito Federal" aparecendo como
+   * parente de "Processo legislativo federal".
+   *
+   * O erro não era a regra e sim a tolerância: o ruído SEMPRE veio mais
+   * fraco que o acerto (2,5 contra 3,0). Um candidato fraco ao lado de
+   * um forte não é uma alternativa a considerar, é uma palavra comum
+   * repetida — e mostrá-lo faz duvidar do que está certo ao lado.
+   *
+   * Quando não há nenhum forte, os fracos ficam: aí eles são a única
+   * pista, e a tela diz "provavelmente". */
+  const melhor = achados.length ? achados[0].forca : 0;
+  return achados.filter((x) => x.forca >= melhor - 0.4).slice(0, 3);
+}
+
+function edCompararColagem(txtAntes, txtDepois, progresso) {
+  const A = lerEdital(txtAntes || "");
+  const D = lerEdital(txtDepois || "");
+  const prog = progresso || {};
+
+  const chaves = (r) => {
+    const m = {};
+    r.disciplinas.forEach((d) =>
+      d.topicos.forEach((tp) => { m[(d.nome + "›" + tp.nome).toLowerCase()] = { d: d.nome, t: tp.nome }; }));
+    return m;
+  };
+  const kA = chaves(A), kD = chaves(D);
+
+  const somem = Object.keys(kA).filter((k) => !(k in kD));
+  const surgem = Object.keys(kD).filter((k) => !(k in kA));
+
+  /* CADA SUMIÇO PROCURA UM HERDEIRO, só entre os que SURGIRAM na mesma
+   * disciplina: comparar com o plano novo inteiro acharia "herdeiro" em
+   * tópicos que já existiam antes e não têm relação nenhuma com este. */
+  const novosPorDisc = {};
+  surgem.forEach((k) => {
+    const x = kD[k];
+    (novosPorDisc[x.d] = novosPorDisc[x.d] || []).push(x.t);
+  });
+  const somemDetalhe = somem.map((k) => {
+    const x = kA[k];
+    const herdeiros = edHerdeirosDe(x.t, novosPorDisc[x.d] || []);
+    return { d: x.d, t: x.t, herdeiros,
+             /* "orfao" aqui é no sentido de sem herdeiro — diferente do
+              * "orfaos" abaixo, que é progresso marcado sem dono */
+             semHerdeiro: herdeiros.length === 0,
+             marcado: !!prog[k] };
+  });
+  const semHerdeiro = somemDetalhe.filter((x) => x.semHerdeiro);
+  const herdados = somemDetalhe.filter((x) => !x.semHerdeiro);
+
+  /* a linha que importa: progresso marcado que deixa de ter dono */
+  const orfaos = somem.filter((k) => prog[k]).map((k) => kA[k]);
+
+  const pesoA = {}, pesoD = {};
+  A.disciplinas.forEach((d) => { pesoA[d.nome.toLowerCase()] = { n: d.nome, p: d.peso }; });
+  D.disciplinas.forEach((d) => { pesoD[d.nome.toLowerCase()] = { n: d.nome, p: d.peso }; });
+  const pesosMudam = Object.keys(pesoA)
+    .filter((k) => k in pesoD && pesoA[k].p !== pesoD[k].p)
+    .map((k) => ({ nome: pesoA[k].n, de: pesoA[k].p, para: pesoD[k].p }));
+
+  const discSomem = A.disciplinas.filter((d) => !(d.nome.toLowerCase() in pesoD)).map((d) => d.nome);
+  const discSurgem = D.disciplinas.filter((d) => !(d.nome.toLowerCase() in pesoA)).map((d) => d.nome);
+
+  const ignoradas = D.achados.filter((a) => a.tipo === "linha_ignorada").length;
+
+  return {
+    topicosAntes: Object.keys(kA).length,
+    topicosDepois: Object.keys(kD).length,
+    discAntes: A.disciplinas.length,
+    discDepois: D.disciplinas.length,
+    somem: somem.map((k) => kA[k]),
+    surgem: surgem.map((k) => kD[k]),
+    /* a lista inteira, com o provável destino de cada um */
+    somemDetalhe,
+    /* os dois grupos que a tela precisa separar: o que virou outra coisa
+     * e o que não tem para onde ter ido */
+    herdados,
+    semHerdeiro,
+    orfaos,
+    pesosMudam,
+    discSomem,
+    discSurgem,
+    ignoradas,
+    /* "grave" é o que não se desfaz colando de novo: progresso perdido.
+     * Tópico a menos é uma escolha; marca de estudado sumindo é um dano. */
+    grave: orfaos.length > 0,
+    vazio: Object.keys(kD).length === 0,
+  };
+}
+
+/* =====================================================================
+ * ACOMPANHAMENTO — um bloco, três perguntas
+ *
+ * O painel antigo mostrava "PARA COBRIR TUDO: 163h30" como a barra maior e
+ * mais colorida da tela. Esse número é só
+ *
+ *     minutos pendentes ÷ semanas até a prova
+ *
+ * e portanto descreve a DISTÂNCIA ATÉ A PROVA, não o seu estudo: o mesmo
+ * edital pede 164 h/semana com a prova em 13 dias e 5 h/semana com a prova
+ * em 6 meses. Ele aparecia três vezes (barra, rótulo e caixa de aviso),
+ * enquanto a informação que decide — onde você chega no ritmo real — já
+ * estava calculada e nunca era mostrada.
+ *
+ * Aqui as três perguntas ficam separadas e cada resposta aparece UMA vez:
+ *   1. quanto da prova eu já cubro?      (por PESO, não por contagem)
+ *   2. em que ritmo eu estou?            (fez × meta × o que a agenda pede)
+ *   3. onde isso me leva no dia da prova? (projeção — a única acionável)
+ * ===================================================================== */
+
+/* Projeção honesta: gasta o orçamento de minutos percorrendo a FILA na
+ * ordem de prioridade, que é como o plano realmente funciona. Somar peso
+ * médio daria um número mais bonito e errado. */
+function projetarCobertura(plano, minutosPorSemana) {
+  if (!plano || !plano.semanas || !minutosPorSemana) return null;
+  let orcamento = minutosPorSemana * plano.semanas;
+  const pesoTotal = (plano.peso && plano.peso.total) || 0;
+  if (!pesoTotal) return null;
+
+  let pesoGanho = 0, topicos = 0;
+  const pendentes = plano.itens
+    .filter((i) => !i.feito)
+    .slice()
+    .sort((a, b) => b.bruto - a.bruto);
+  for (const i of pendentes) {
+    if (orcamento < i.minutos) break;
+    orcamento -= i.minutos;
+    pesoGanho += i.bruto;
+    topicos++;
+  }
+  const jaFeito = (plano.peso && plano.peso.feito) || 0;
+  return {
+    topicos: plano.feitos + topicos,
+    pesoPct: Math.round(((jaFeito + pesoGanho) / pesoTotal) * 100),
+    sobra: pendentes.length - topicos,
+    /* o menor peso que entrou e o maior que ficou de fora. Serve para o
+     * teste provar que a fila de prioridade foi respeitada de verdade, em
+     * vez de inferir isso de um limiar percentual — que e chute, e que me
+     * deixou passar duas sabotagens. */
+    menorDentro: topicos ? pendentes[topicos - 1].bruto : null,
+    maiorFora: topicos < pendentes.length ? pendentes[topicos].bruto : null,
+  };
+}
+
+function acompanhamento(plano, diario, metaMin) {
+  const r = ritmoDoPlano(plano, diario);
+  const peso = plano.peso || { total: 0, pctFeito: 0, pctRevisado: 0 };
+
+  /* a agenda desta semana é o que o app de fato pede — é a meta real, e é
+   * comparável com o que a pessoa fez */
+  const agendaMin = plano.porSemana || 0;
+  const meta = metaMin || agendaMin;
+
+  return {
+    /* 1. cobertura — sempre por peso, com a contagem como legenda */
+    cobertura: {
+      pesoEstudado: peso.pctFeito,
+      pesoRevisado: peso.pctRevisado,
+      topicosFeitos: plano.feitos,
+      topicosTotal: plano.total,
+      semanas: plano.semanas,
+    },
+    /* 2. ritmo */
+    ritmo: {
+      fezMin: r.observadoMin,
+      semanasComRegistro: r.semanasComRegistro,
+      metaMin: meta,
+      agendaMin,
+      /* Sem registro não se inventa média — e "média de 1 semana com 0min"
+       * NÃO é registro. Enquanto a condição era só semanasComRegistro > 0,
+       * a linha do ritmo anunciava "fez 0min/semana (média de 1 semana)"
+       * enquanto a projeção logo abaixo dizia "sem registro de estudo".
+       * Dois blocos da mesma tela discordando sobre o mesmo fato. */
+      medivel: r.semanasComRegistro > 0 && r.observadoMin > 0,
+    },
+    /* 3. projeção — só existe com registro, senão é chute com cara de dado */
+    projecao: (r.semanasComRegistro > 0 && r.observadoMin > 0)
+      ? projetarCobertura(plano, r.observadoMin) : null,
+    projecaoMeta: meta ? projetarCobertura(plano, meta) : null,
+    /* 4. o alerta, no rodapé: é aviso, nunca meta */
+    fora: {
+      n: plano.fora.length,
+      pesoPct: plano.peso && plano.peso.total
+        ? Math.round((plano.fora.reduce((a, i) => a + i.bruto, 0) / plano.peso.total) * 100)
+        : 0,
+      horasParaTudo: r.necessarioMin ? Math.round(r.necessarioMin / 60) : null,
+    },
+  };
+}
+
+/* =====================================================================
+ * INCLUIR E EXCLUIR DISCIPLINA À MÃO
+ *
+ * Tudo acontece NO TEXTO do edital, como o peso editável e as horas já
+ * faziam. Estado que não está no texto é estado que diverge da tela — foi
+ * o que aconteceu quando o campo de horas e o controle deslizante
+ * brigavam, e não vou repetir isso guardando disciplina em outro lugar.
+ * ===================================================================== */
+
+/* "Direito Tributário :: 4 :: cai muito" → { nome, peso, motivo } */
+function edLerLinhaTopico(linha) {
+  const p = String(linha).replace(/^\s*[+\-*]\s*/, "").split("::").map((x) => x.trim());
+  const nome = p[0] || "";
+  const peso = p[1] !== undefined && p[1] !== "" ? Number(p[1]) : null;
+  return {
+    nome,
+    peso: (peso && peso >= 1 && peso <= 5) ? peso : 3,
+    motivo: p[2] || "",
+  };
+}
+
+function edIncluirDisciplina(texto, nome, peso, linhasTopicos) {
+  const limpo = String(nome || "").trim();
+  if (!limpo) return { erro: "sem_nome" };
+
+  const r = lerEdital(texto || "");
+  if (r.disciplinas.some((d) => d.nome.toLowerCase() === limpo.toLowerCase()))
+    return { erro: "repetida", nome: limpo };
+
+  const tops = String(linhasTopicos || "").split("\n")
+    .map((l) => l.trim()).filter(Boolean).map(edLerLinhaTopico)
+    .filter((tp) => tp.nome);
+  /* disciplina sem tópico não entra na agenda nem na conta do peso: seria
+   * um item invisível que a pessoa jura ter cadastrado */
+  if (!tops.length) return { erro: "sem_topicos" };
+
+  const p = Math.max(1, Math.min(5, Number(peso) || 3));
+  const bloco = ["@ " + limpo + " :: " + p]
+    .concat(tops.map((tp) => "+ " + tp.nome + " :: " + tp.peso
+      + (tp.motivo ? " :: " + tp.motivo : "")));
+
+  const base = String(texto || "").replace(/\s*$/, "");
+  const novo = (base ? base + "\n" : "") + bloco.join("\n") + "\n";
+  return { texto: novo, nome: limpo, peso: p, topicos: tops.length };
+}
+
+/* Excluir tira a disciplina DO PLANO — e só do plano.
+ *
+ * O diário de estudos não é mexido: ele é o histórico do que você fez, e
+ * histórico não se reescreve porque o plano mudou. As marcas de estudado
+ * também ficam guardadas: a chave é "disciplina›tópico", então se a
+ * disciplina voltar um dia, o que já estava marcado volta com ela. Apagar
+ * seria destruir informação para não ganhar nada.
+ *
+ * A função devolve as contas para que a confirmação possa dizer o que
+ * realmente acontece, em vez de um "tem certeza?" genérico. */
+function edExcluirDisciplina(texto, nome, progresso) {
+  const alvo = String(nome || "").trim().toLowerCase();
+  if (!alvo) return { erro: "sem_nome" };
+
+  const r = lerEdital(texto || "");
+  const d = r.disciplinas.find((x) => x.nome.toLowerCase() === alvo);
+  if (!d) return { erro: "nao_achou", nome };
+
+  const prog = progresso || {};
+  const chaves = d.topicos.map((tp) => (d.nome + "›" + tp.nome).toLowerCase());
+  const marcados = chaves.filter((c) => prog[c]);
+
+  /* recorta o bloco no texto: da linha "@ nome" até a próxima "@" */
+  const linhas = String(texto || "").split("\n");
+  const ini = linhas.findIndex((l) =>
+    /^\s*@/.test(l) && l.replace(/^\s*@\s*/, "").split("::")[0].trim().toLowerCase() === alvo);
+  if (ini < 0) return { erro: "nao_achou", nome };
+  let fim = ini + 1;
+  while (fim < linhas.length && !/^\s*@/.test(linhas[fim])) fim++;
+  linhas.splice(ini, fim - ini);
+
+  return {
+    texto: linhas.join("\n"),
+    nome: d.nome,
+    topicos: d.topicos.length,
+    marcados: marcados.length,
+    chaves,
+    peso: d.peso,
+  };
+}
+
+/* Redistribuir: devolve os pesos que fariam a fatia das OUTRAS disciplinas
+ * voltar ao que era antes da inclusão. Não aplica nada — quem aplica é a
+ * pessoa, e "manter assim" é a primeira opção de propósito, porque peso
+ * vindo do número de questões do edital é dado, não palpite do app. */
+function edRedistribuir(textoAntes, textoDepois) {
+  const A = lerEdital(textoAntes || ""), D = lerEdital(textoDepois || "");
+  const fatia = (r) => {
+    const tot = r.disciplinas.reduce((a, d) =>
+      a + d.peso * d.topicos.reduce((b, tp) => b + tp.peso, 0), 0) || 1;
+    const m = {};
+    r.disciplinas.forEach((d) => {
+      m[d.nome.toLowerCase()] = (d.peso * d.topicos.reduce((b, tp) => b + tp.peso, 0)) / tot;
+    });
+    return m;
+  };
+  const fa = fatia(A), fd = fatia(D);
+  return D.disciplinas
+    .filter((d) => fa[d.nome.toLowerCase()] !== undefined)
+    .map((d) => {
+      const k = d.nome.toLowerCase();
+      const alvoPeso = d.peso * (fa[k] / (fd[k] || 1));
+      return {
+        nome: d.nome, de: d.peso,
+        para: Math.max(1, Math.min(5, Math.round(alvoPeso))),
+        fatiaAntes: Math.round(fa[k] * 100),
+        fatiaDepois: Math.round(fd[k] * 100),
+      };
+    })
+    .filter((x) => x.de !== x.para);
 }
