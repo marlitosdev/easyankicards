@@ -72,12 +72,40 @@ function jurLerTudo() {
 }
 
 function jurGravarTudo(tudo) {
+  jurEsquecerChaves();
   try {
     const s = JSON.stringify(tudo || {});
     if (typeof guardar === "function") return guardar(JUR_CHAVE, s) !== false;
     localStorage.setItem(JUR_CHAVE, s);
     return true;
   } catch (e) { return false; }
+}
+
+/* ------------------------------------------------------------------
+ * QUAIS TÓPICOS TÊM JULGADO — UMA VEZ, NÃO UMA VEZ POR LINHA
+ *
+ * A estante de material pergunta "este tópico tem julgado?" para cada
+ * linha da lista, e mais uma vez por tipo ao contar os filtros. Com
+ * jurTem() isso seria um localStorage.getItem + JSON.parse por
+ * pergunta: com 300 materiais e 4 tipos, mais de mil leituras da
+ * gaveta inteira para desenhar uma tela.
+ *
+ * O cache é apagado por jurGravarTudo — ou seja, por TODA escrita, que
+ * é o único jeito de o conjunto mudar. Cache que se invalida sozinho no
+ * único ponto de escrita não tem como ficar velho; cache invalidado à
+ * mão em cinco chamadores é onde nasce a lista que não atualiza.
+ * ------------------------------------------------------------------ */
+let jurChavesCache = null;
+function jurEsquecerChaves() { jurChavesCache = null; }
+function jurChavesComJulgado() {
+  if (jurChavesCache) return jurChavesCache;
+  const s = new Set();
+  jurLista().forEach((j) => (j.topicos || []).forEach((c) => {
+    const k = jurChaveComparavel(c);
+    if (k) s.add(k);
+  }));
+  jurChavesCache = s;
+  return s;
 }
 
 function jurLista() {
@@ -461,13 +489,48 @@ function jurApagar(id) {
  * O mesmo julgado serve a vários tópicos e a vários editais — uma tese
  * de repercussão geral encosta em meia dúzia de assuntos. Por isso a
  * ligação é uma lista, e desligar de um tópico não apaga o julgado. */
-function jurLigar(id, chave) {
+/* O RÓTULO VIAJA JUNTO COM O VÍNCULO.
+ *
+ * A chave é "direito tributário›princípios" — minúscula, com "›" no
+ * meio, porque é feita para COMPARAR, não para ler. Enquanto o julgado
+ * só aparecia dentro do tópico, isso bastava: o nome bonito estava no
+ * cabeçalho da gaveta.
+ *
+ * Agora que o julgado entra na estante de material, ele precisa dizer
+ * de qual disciplina e de qual tópico é — e num tópico que NÃO tem
+ * resumo não existe registro nenhum de onde tirar o nome com maiúscula
+ * e acento. Reconstruir a partir da chave devolveria "direito
+ * tributário" na lista, ao lado de "Direito Tributário" escrito
+ * certo: duas linhas para a mesma disciplina.
+ *
+ * Então o nome é guardado NA HORA DO VÍNCULO, que é o único momento em
+ * que ele existe sem ambiguidade. Julgado antigo não tem o mapa, e
+ * para esse o app volta a partir da chave — pior, mas nunca errado. */
+function jurLigar(id, chave, disciplina, topico) {
   const j = jurDe(id);
   if (!j || !chave) return false;
   const alvo = jurChaveComparavel(chave);
-  if ((j.topicos || []).some((c) => jurChaveComparavel(c) === alvo)) return true;
+  if (disciplina || topico) {
+    j.rotulos = Object.assign({}, j.rotulos || {});
+    j.rotulos[alvo] = { d: disciplina || "", t: topico || "" };
+  }
+  if ((j.topicos || []).some((c) => jurChaveComparavel(c) === alvo)) {
+    /* já ligado: mas se o rótulo chegou agora, ele vale a gravação */
+    return (disciplina || topico) ? !!jurGravar(j) : true;
+  }
   j.topicos = (j.topicos || []).concat([chave]);
   return !!jurGravar(j);
+}
+
+/* O nome legível de um tópico, do mapa quando existe e da chave quando
+ * não. Um só lugar decide isso — dois lugares reconstruindo a chave de
+ * jeitos parecidos é como nascem as duas linhas para o mesmo tópico. */
+function jurRotuloDe(j, chave) {
+  const alvo = jurChaveComparavel(chave);
+  const r = (j && j.rotulos && j.rotulos[alvo]) || null;
+  if (r && (r.d || r.t)) return { disciplina: r.d || "", topico: r.t || "" };
+  const p = String(chave || "").split("›");
+  return { disciplina: (p[0] || "").trim(), topico: (p.slice(1).join("›")).trim() };
 }
 
 function jurDesligar(id, chave) {
@@ -624,6 +687,135 @@ function jurPromptPreencher(texto, tituloTopico) {
   if (!t2) return "";
   return t("jur_prompt_preencher", {
     tp: tituloTopico || "", txt: t2.slice(0, 6000) });
+}
+
+/* =====================================================================
+ * O JULGADO JÁ GUARDADO, INCOMPLETO
+ *
+ * O prompt de cima serve à ENTRADA: existe uma ementa colada, e a IA a
+ * lê. Depois de guardado o cenário é outro e mais comum do que parece —
+ * a ementa foi colada pela metade, ou nem foi colada (a tese foi
+ * escrita à mão), e sobraram seis campos vazios: classe, data, órgão,
+ * fonte, e nenhum assunto.
+ *
+ * Isso não é cosmético. Sem classe e número o julgado não se identifica
+ * na busca; sem assunto ele não se cruza com os outros; sem data não se
+ * sabe se foi superado. E, principalmente: o texto guardado pode estar
+ * torto — o resumo desta base tem "tetos teto diferenciados", que
+ * entrou na gravação e ninguém releu.
+ *
+ * DUAS TAREFAS NUM PEDIDO SÓ, e é de propósito. "Complete o que falta"
+ * e "confira o que está escrito" olham o mesmo texto; separá-los em
+ * dois botões faria a pessoa colar a mesma ementa duas vezes numa IA.
+ *
+ * O QUE ELE NUNCA PEDE: reescrever a tese. A regra é a mesma do outro
+ * prompt e pelo mesmo motivo — tese parafraseada é resposta errada
+ * decorada. Erro NA TESE é APONTADO, com o trecho e o problema, para
+ * quem estuda decidir; nunca corrigido por conta própria.
+ * ===================================================================== */
+const JUR_CAMPOS_META = [
+  { k: "tribunal", i: "jur_f_tribunal" },
+  { k: "classe", i: "jur_f_classe" },
+  { k: "numero", i: "jur_f_numero" },
+  { k: "data", i: "jur_f_data" },
+  { k: "orgao", i: "jur_f_orgao" },
+  { k: "relator", i: "jur_f_relator" },
+  { k: "fonte", i: "jur_f_fonte" },
+  { k: "resumo", i: "jur_f_resumo" },
+];
+
+/* Quais campos estão vazios. "tags" entra pela contagem e não pelo
+ * valor: uma lista vazia é falsy só depois de se olhar o comprimento —
+ * e `[]` sozinho é verdadeiro, que é como uma checagem descuidada
+ * concluiria que o julgado tem assunto. */
+function jurFaltando(j) {
+  if (!j) return [];
+  const falta = JUR_CAMPOS_META
+    .filter((c) => !String(j[c.k] || "").trim())
+    .map((c) => c.k);
+  if (!(jurTagsDe(j) || []).length) falta.push("tags");
+  return falta;
+}
+
+function jurPromptCompletar(j, tituloTopico) {
+  if (!j) return "";
+  const falta = jurFaltando(j);
+  const tem = JUR_CAMPOS_META.filter((c) => String(j[c.k] || "").trim())
+    .map((c) => t(c.i) + ": " + String(j[c.k]).trim());
+  const tags = jurTagsDe(j) || [];
+  if (tags.length) tem.push(t("jur_f_tags") + ": " + tags.join(", "));
+  return t("jur_prompt_completar", {
+    tp: tituloTopico || (j.topicos || [])[0] || "",
+    tit: jurTitulo(j),
+    tem: tem.length ? tem.join("\n") : t("jur_nada_preenchido"),
+    falta: falta.length ? falta.join(", ") : t("jur_nada_faltando"),
+    tese: String(j.tese || "").trim() || "(vazia)",
+    resumo: String(j.resumo || "").trim() || "(vazio)",
+    ementa: String(j.texto || "").trim().slice(0, 4000) || "(não guardei a ementa)",
+  });
+}
+
+/* =====================================================================
+ * APLICAR A RESPOSTA SEM APAGAR O QUE JÁ EXISTIA
+ *
+ * Esta é a metade perigosa. Uma IA que devolve o objeto inteiro — com
+ * os campos que ela leu E os que ela deduziu — sobrescreveria a tese
+ * conferida à mão por uma transcrição aproximada, e o estrago só
+ * apareceria na prova.
+ *
+ * Então a regra é dura e vale para TODOS os campos: campo com conteúdo
+ * fica como está. O que a resposta traz para um campo já preenchido
+ * não é gravado — vira aviso, e quem estuda decide.
+ *
+ * Devolve { mudou:[...], ignorados:[...] } para a tela poder dizer o
+ * que aconteceu. Gravação silenciosa aqui seria pedir fé.
+ * ===================================================================== */
+function jurCompletar(id, dados) {
+  const j = jurDe(id);
+  if (!j || !dados || typeof dados !== "object") {
+    return { mudou: [], ignorados: [], ok: false };
+  }
+  const vindo = {
+    tribunal: dados.tribunal, classe: dados.classe, numero: dados.numero,
+    data: dados.data_julgamento || dados.data, orgao: dados.orgao,
+    relator: dados.relator, fonte: dados.fonte, resumo: dados.resumo,
+    categoria: dados.categoria,
+  };
+  const mudou = [], ignorados = [];
+  const novo = {};
+  Object.keys(vindo).forEach((k) => {
+    const v = String(vindo[k] === undefined || vindo[k] === null ? "" : vindo[k]).trim();
+    if (!v) return;
+    if (String(j[k] || "").trim()) {
+      /* só conta como conflito se for DIFERENTE: a IA repetir o que já
+       * está lá é o caso comum, e anunciá-lo como "ignorei" faria a
+       * pessoa procurar um problema que não existe */
+      if (String(j[k]).trim() !== v) ignorados.push(k);
+      return;
+    }
+    novo[k] = v;
+    mudou.push(k);
+  });
+  /* ASSUNTOS SE SOMAM, não se substituem: são o único campo em que a
+   * sugestão da IA e o que a pessoa escreveu podem conviver. */
+  const sug = Array.isArray(dados.assuntos) ? dados.assuntos
+    : (Array.isArray(dados.tags) ? dados.tags : []);
+  if (sug.length) {
+    const atuais = jurTagsDe(j) || [];
+    const juntas = atuais.slice();
+    sug.forEach((tg) => {
+      const s = String(tg || "").trim();
+      if (!s) return;
+      if (!juntas.some((x) => jurTagNormal(x) === jurTagNormal(s))) juntas.push(s);
+    });
+    if (juntas.length > atuais.length) { novo.tags = juntas; mudou.push("tags"); }
+  }
+  /* A TESE NUNCA ENTRA AQUI. Nem vazia: uma tese "transcrita" por quem
+   * não tem a ementa na frente é invenção, e inventada ela seria
+   * decorada exatamente como se fosse do tribunal. */
+  if (!mudou.length) return { mudou: [], ignorados, ok: true };
+  novo.id = j.id;
+  return { mudou, ignorados, ok: !!jurGravar(novo) };
 }
 
 /* =====================================================================

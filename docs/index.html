@@ -698,11 +698,72 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * no rodapé, sempre no mesmo lugar.
  * [open] é obrigatório: sem ele o display:flex venceria o display:none
  * da folha do navegador e o diálogo apareceria fechado na página. */
+/* ---- A ALTURA QUE ESTAVA SOBRANDO ----------------------------------
+ *
+ * O QUE FOI MEDIDO. Com "max-height", a caixa cresce só até caber o
+ * conteúdo: numa questão curta ela para no meio da tela, e quando o
+ * comentário aparece ela precisa crescer de novo — a caixa muda de
+ * tamanho por baixo do dedo, e o "próxima" nunca está duas vezes no
+ * mesmo lugar. Com altura FIXA, a área de leitura é a maior possível
+ * desde o primeiro instante e nada se mexe entre uma questão e outra.
+ *
+ * É "dvh" e não "vh". O comentário logo acima desta seção avisa que
+ * altura fixa em vh põe o título acima da borda no telefone — e o
+ * motivo é justamente o vh, que ignora a barra do navegador e por isso
+ * mede mais do que a tela tem. dvh mede a área que existe agora, e é
+ * ela que a caixa preenche. O @supports abaixo mantém o comportamento
+ * antigo onde dvh não existe: pior, e nunca quebrado. */
 #dlgQsResponder[open]{display:flex;flex-direction:column;
-  max-height:92vh;margin:auto}
+  height:96dvh;max-height:96dvh;margin:auto}
+@supports not (height:1dvh){
+  #dlgQsResponder[open]{height:auto;max-height:92vh}
+}
 #dlgQsResponder[open] > *{flex:0 0 auto}
-#dlgQsResponder .qs-corpo-lado{flex:1 1 auto;overflow-y:auto;min-height:80px}
-#dlgQsResponder #qsSessCorpo{flex:1 1 auto;overflow-y:auto;min-height:80px}
+#dlgQsResponder .qs-corpo-lado{flex:1 1 auto;min-height:0;display:flex;
+  flex-direction:column}
+#dlgQsResponder #qsSessCorpo{flex:1 1 auto;min-height:0;display:flex;
+  flex-direction:column;overflow:hidden}
+
+/* ---- ANTES E DEPOIS DE RESPONDER, DOIS ARRANJOS -------------------
+ *
+ * Isto era regra só de telefone. Em monitor a caixa inteira rolava de
+ * uma vez, e o comentário — que nasce depois das alternativas — ficava
+ * abaixo da dobra: responder e ler o porquê exigia arrastar, toda vez.
+ * A largura da tela nunca foi o problema; o problema é que enunciado,
+ * alternativas e comentário são três coisas com vidas diferentes
+ * dentro de uma caixa só.
+ *
+ * ANTES DE RESPONDER: o enunciado é o elástico e rola; as alternativas
+ * ancoram no pé, sempre debaixo do dedo.
+ *
+ * DEPOIS: as alternativas viram botões desligados e param de merecer o
+ * lugar de honra; o comentário é que passa a ser lido, e vira ele o
+ * elástico. O enunciado continua na tela — sem ele o comentário não se
+ * entende — mas cede altura, limitado a pouco mais de um terço. */
+#dlgQsResponder .qs-enunciado{flex:1 1 auto;min-height:60px;overflow:auto;
+  margin-bottom:6px}
+#dlgQsResponder .qs-opcoes{flex:0 0 auto;position:sticky;bottom:0;
+  background:var(--panel);padding-top:6px;
+  box-shadow:0 -6px 12px -6px rgba(0,0,0,.45)}
+#dlgQsResponder .qs-fer{flex:0 0 auto;margin:4px 0 2px}
+#dlgQsResponder .qs-de, #dlgQsResponder .qs-hist{flex:0 0 auto}
+/* A DIVISÃO DEPOIS DE RESPONDER É POR PESO, NÃO POR PORCENTAGEM.
+ *
+ * "max-height:38%" parecia a escrita natural, e é uma armadilha: altura
+ * em porcentagem só resolve quando o elemento de cima tem altura
+ * DEFINIDA, e numa corrente de flex isso depende de cada elo ter
+ * min-height:0 e uma base definida. Basta um elo mudar — o rascunho
+ * abrir, uma barra aparecer — para a porcentagem virar "auto" sem erro
+ * nenhum, e o comentário volta a nascer fora da tela: o defeito
+ * original, agora intermitente e por isso pior de achar.
+ *
+ * Com "flex:2 1 0" e "flex:3 1 0", quem divide é o próprio flexbox: o
+ * que sobra vai dois para o enunciado e três para o comentário, sem
+ * depender de nenhum elo ter altura conhecida. */
+#dlgQsResponder .qs-fez .qs-enunciado{flex:2 1 0;min-height:48px}
+#dlgQsResponder .qs-fez .qs-opcoes{position:static;box-shadow:none}
+#dlgQsResponder .qs-depois{flex:3 1 0;min-height:80px;overflow-y:auto;
+  margin-top:6px}
 /* o rascunho fica junto do que rola: é papel de apoio, não passo do
    fluxo, e preso embaixo roubaria a altura do enunciado */
 #dlgQsResponder #rsCaixa{flex:0 1 auto;overflow-y:auto;max-height:44vh}
@@ -775,8 +836,21 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 
 /* a faixa da ação principal encosta no rodapé e ganha uma linha acima
    para não parecer que flutua sobre o texto */
-#dlgQsResponder .qs-barra-principal{margin:8px 0 0;padding-top:8px;
+/* AS TRÊS FAIXAS CONTINUAM TRÊS — a separação entre "o que se faz com
+   esta questão", "o passo principal" e "as saídas" foi desenhada
+   porque "encerrar agora" ao lado de "próxima" fazia acabar a rodada
+   por engano. O que sai é o ESPAÇO delas, que somava perto de cento e
+   cinquenta pixels de recuo para três fileiras de botão. */
+#dlgQsResponder .qs-barra-principal{margin:4px 0 0;padding-top:5px;
   border-top:1px solid var(--borda)}
+#dlgQsResponder .qs-barra-ferramentas{margin:2px 0 0}
+#dlgQsResponder .dlg-rodape{padding:6px 0 2px;margin-top:2px}
+/* O TÍTULO E O PLACAR NUMA LINHA SÓ, em qualquer largura: nenhum dos
+   dois se lê enquanto se responde, e juntos custavam duas fileiras de
+   texto no alto de toda questão. */
+#dlgQsResponder h3{font-size:15px;margin:0}
+#dlgQsResponder #qsSessPlacar{margin:0 0 4px;font-size:11.5px}
+#dlgQsResponder .vka-cab{margin-bottom:0}
 
 /* ---- RESPONDER NUM APARELHO PEQUENO -------------------------------
  *
@@ -795,27 +869,16 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  */
 @media (max-width:760px){
   dialog#dlgQsResponder{padding:8px 10px 0}
-  #dlgQsResponder h3{font-size:15px;margin:0 0 2px}
-  #dlgQsResponder #qsSessPlacar{margin:0 0 6px}
-  /* a caixa inteira vira coluna para o enunciado poder ser a única
-     parte elástica — sem isto "flex:1" abaixo não teria contra o quê */
-  dialog#dlgQsResponder[open]{display:flex;flex-direction:column;
-    max-height:96dvh}
-  #dlgQsResponder .qs-corpo-lado{flex:1 1 auto;min-height:0;display:flex;
-    flex-direction:column}
-  #dlgQsResponder #qsSessCorpo{flex:1 1 auto;min-height:0;display:flex;
-    flex-direction:column}
-  /* SÓ O ENUNCIADO ROLA. As alternativas e a ação ficam fora da
-     rolagem, encostadas no pé da caixa. */
-  #dlgQsResponder .qs-enunciado{flex:1 1 auto;min-height:0;overflow:auto;
-    margin-bottom:6px}
-  #dlgQsResponder .qs-opcoes{flex:0 0 auto;position:sticky;bottom:0;
-    background:var(--panel);padding-top:6px;
-    box-shadow:0 -6px 12px -6px rgba(0,0,0,.45)}
-  #dlgQsResponder .qs-fer{flex:0 0 auto;margin:4px 0 2px}
+  /* O ARRANJO EM DUAS ZONAS SUBIU PARA A REGRA GERAL: ele nasceu aqui,
+     para telefone, e o defeito que ele conserta — o comentário fora da
+     área que rola — nunca foi de telefone. As regras que estavam aqui
+     e viraram gerais foram APAGADAS, não deixadas repetidas: a mesma
+     medida escrita em dois lugares diverge no primeiro dia em que
+     alguém ajusta um deles, e é sempre o de baixo que ganha, calado.
+     Sobra o que de fato depende de a tela ser pequena — e num telefone
+     o enunciado cede mais espaço ainda ao comentário. */
+  #dlgQsResponder .qs-fez .qs-enunciado{flex:1 1 0}
   #dlgQsResponder .qs-barra-ferramentas{flex:0 0 auto}
-  #dlgQsResponder .qs-barra-principal{flex:0 0 auto;margin:6px 0 0}
-  #dlgQsResponder .dlg-rodape{flex:0 0 auto;margin-top:4px}
 }
 /* o texto é a única parte elástica — e portanto a única que rola */
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
@@ -1401,6 +1464,9 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mat-tipo.ativa.tp-resumo{color:var(--ok);border-color:var(--ok)}
 .mat-tipo.ativa.tp-cartoes{color:var(--info);border-color:var(--info)}
 .mat-tipo.ativa.tp-lei{color:#10b981;border-color:#10b981}
+/* a jurisprudência tem cor própria pelo mesmo motivo dos outros três:
+   o filtro precisa dizer QUAL tipo está ligado sem que se leia o texto */
+.mat-tipo.ativa.tp-juris{color:#f59e0b;border-color:#f59e0b}
 /* selo de tipo em cada linha da lista */
 .mat-selos{display:inline-flex;gap:4px;margin-left:6px}
 .mat-acoes{display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:0 0 auto}
@@ -1415,6 +1481,7 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .selo-resumo{background:rgba(34,197,94,.16);color:var(--ok)}
 .selo-cartoes{background:rgba(139,92,246,.16);color:var(--info)}
 .selo-lei{background:rgba(16,185,129,.16);color:#10b981}
+.selo-juris{background:rgba(245,158,11,.16);color:#f59e0b}
 .btn-min-ok{border-color:rgba(34,197,94,.5);color:var(--ok)}
 /* o marcador de página, na leitura */
 .mat-leitura .mat-marcador{display:block;border-top:2px dashed #f5a524;margin:10px 0;
@@ -2276,6 +2343,32 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
 .jur-colar-lin{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   margin:7px 0 4px}
 .jur-colar-lin .nota{margin:0;flex:1 1 240px}
+/* BOTÃO PRINCIPAL DESABILITADO É RESPOSTA, NÃO CASTIGO.
+   Ele fica visivelmente fora de alcance enquanto a caixa está vazia —
+   e é isso que substitui o alerta "cole a ementa acima primeiro", que
+   interrompia a tela para dizer o que já se via nela. */
+.jur-colar-lin .btn[disabled]{opacity:.42;cursor:not-allowed;
+  filter:saturate(.35)}
+/* A CAIXA DE COLAR É TRANSPORTE, NÃO CONTEÚDO.
+   Ela recebe a ementa crua e o JSON de volta; nada do que está nela é
+   guardado como está. Deixá-la crescer até 420px como a tese fazia o
+   formulário afundar por causa de um texto que se usa uma vez e some. */
+#jurColar{max-height:180px}
+/* TESE E RESUMO EM DUAS COLUNAS, quando a GAVETA (não a janela) é
+   larga. Empilhadas, elas somavam com a ementa quase mil pixels de
+   caixa e empurravam o "guardar" para duas rolagens abaixo. */
+.jur-par{display:grid;grid-template-columns:1fr;gap:4px 14px}
+.jur-par-c{min-width:0;display:flex;flex-direction:column}
+#dlgJuris{container-type:inline-size;container-name:jurcx}
+@container jurcx (min-width:660px){
+  .jur-par{grid-template-columns:1fr 1fr}
+}
+/* NAVEGADOR SEM @container: a mesma decisão pela largura da janela.
+   Pior (a gaveta pode ter sido redimensionada), e ainda assim melhor
+   que a coluna única em monitor de 27 polegadas. */
+@supports not (container-type:inline-size){
+  @media (min-width:900px){ .jur-par{grid-template-columns:1fr 1fr} }
+}
 .jur-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
   gap:9px 10px;margin:10px 0}
 .jur-campos input{width:100%;box-sizing:border-box;padding:7px 8px;
@@ -2336,6 +2429,13 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
   color:var(--texto);opacity:.72}
 .jur-ic:hover{opacity:1;border-color:var(--borda);background:var(--campo)}
 .jur-ic-perigo:hover{border-color:var(--vermelho,#dc2626)}
+/* JULGADO PELA METADE SE ANUNCIA.
+   Sem cor, ele fica idêntico ao completo, e o incompleto só é
+   descoberto no dia em que se procura por ele e não se acha. O número
+   vem colado no ícone: "🩹6" diz de relance quantos campos faltam. */
+.jur-ic-falta{opacity:1;color:#f59e0b;font-weight:800;font-size:11.5px;
+  border-color:rgba(245,158,11,.45)}
+.jur-ic-falta:hover{border-color:#f59e0b;background:rgba(245,158,11,.12)}
 /* O GATILHO DA EMENTA COM BORDA. Sem ela era cinza-escuro sobre
    cinza-escuro: o texto se lia, o botão não se via. */
 .jur-ementa-btn{margin-top:6px;border:1px solid var(--borda);
@@ -4134,15 +4234,30 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        colou; seis campos preenchidos a meia tela de distância fazem a
        pessoa confiar num palpite sem ver que houve palpite. -->
   <div id="jurColarAviso" class="jur-pilula" hidden></div>
+  <!-- UM BOTÃO PRINCIPAL QUE SABE EM QUE PASSO VOCÊ ESTÁ.
+       Antes eram dois concorrentes — "ler e preencher" e "pedir à IA" —
+       e escolher entre eles exigia saber de cor que o caminho é: colar
+       a ementa, pedir à IA, sair do app, voltar com o JSON pela MESMA
+       caixa e apertar o OUTRO botão. Cinco passos e uma caixa que troca
+       de papel no meio.
+       Agora o principal lê o que está na caixa e faz o passo seguinte:
+       ementa dentro, ele pergunta; resposta da IA dentro, ele preenche.
+       Caixa vazia, ele fica desabilitado — em vez de abrir um alerta
+       para dizer que está vazia, o que a pessoa já sabe. -->
   <div class="jur-colar-lin">
-    <button class="btn btn-azul" id="btnJurColar" data-i18n="jur_colar_btn" data-i18n-title="jur_b_colar"></button>
-    <!-- QUANDO A EMENTA É LONGA DEMAIS PARA O EXTRATOR.
-         Ele acerta o que está escrito com rótulo; ler trinta linhas e
-         dizer em três o que foi decidido é outra coisa. Este botão
-         copia a pergunta para você colar numa IA e trazer a resposta
-         de volta pelo mesmo campo — o JSON que ela devolve o "ler e
-         preencher" já entende. -->
-    <button class="btn-min" id="btnJurPromptIA" data-i18n="jur_prompt_ia" data-i18n-title="jur_b_prompt_ia"></button>
+    <!-- O TÍTULO TAMBÉM VEM DO HTML, e não só do JS que o refina a cada
+         estado. Um botão explicado apenas por código é um botão mudo em
+         qualquer instante anterior à primeira repintura — e mudo para
+         sempre se aquela função tropeçar dentro de um try/catch. É o
+         mesmo motivo pelo qual os rótulos do rascunho voltaram para
+         cá. -->
+    <button class="btn btn-azul" id="btnJurPrincipal" disabled
+      data-i18n-title="jur_b_principal"></button>
+    <!-- O CAMINHO SEM IA continua inteiro e ao lado: quem colou um bloco
+         curto do tribunal só quer o número e a data, e não precisa
+         gastar uma ida à IA por isso. -->
+    <button class="btn-min" id="btnJurColar" data-i18n="jur_colar_btn" data-i18n-title="jur_b_colar"></button>
+    <button class="btn-min" id="btnJurPromptIA" hidden data-i18n="jur_prompt_ia" data-i18n-title="jur_b_prompt_ia"></button>
   </div>
 
   <!-- A TESE E O RESUMO SÓ APARECEM QUANDO EXISTEM.
@@ -4151,17 +4266,32 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        caminho normal é colar e mandar ler; os campos surgem já
        preenchidos, e quem quiser escrever à mão abre pelo botão. -->
   <div id="jurConteudo" hidden>
+  <!-- TESE E RESUMO LADO A LADO EM TELA LARGA.
+       Empilhadas, as três caixas altas do formulário somavam quase mil
+       pixels e o "guardar" ficava duas rolagens abaixo do que se acabou
+       de escrever. Lado a lado elas também se comparam, que é o gesto
+       que importa aqui: o resumo tem de explicar A TESE que está ao
+       lado, e não outra. Em tela estreita voltam a empilhar, porque
+       duas colunas de trinta caracteres não são leitura.
+       É @container e não @media: o que decide é a largura da GAVETA,
+       que pode estar redimensionada, e não a da janela. -->
+  <div class="jur-par">
+  <div class="jur-par-c">
   <label class="nd-rot" data-i18n="jur_tese_rot"></label>
-  <textarea id="jurTese" rows="2" style="width:100%;box-sizing:border-box"
+  <textarea id="jurTese" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="A frase que você quer reconhecer na prova."></textarea>
+  </div>
 
   <!-- O RESUMO É OUTRO CAMPO, E NÃO OUTRA VERSÃO DA TESE.
        A tese é a proposição como ela é — não se parafraseia. O resumo
        explica o que ela decidiu e por quê, e pode ser reescrito à
        vontade. É este campo que a IA preenche. -->
+  <div class="jur-par-c">
   <label class="nd-rot" data-i18n="jur_resumo_rot"></label>
-  <textarea id="jurResumo" rows="2" style="width:100%;box-sizing:border-box"
+  <textarea id="jurResumo" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="O que este julgado decidiu, com suas palavras. Opcional."></textarea>
+  </div>
+  </div>
 
   <!-- AS ETIQUETAS, EDITÁVEIS ANTES DE SALVAR. A IA propõe; quem
        estuda decide. Etiqueta errada não é só selo feio: ela entra no
@@ -4842,6 +4972,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min" id="btnRsAbrirCheia" data-i18n="rs_cheia"
         title="Abre o rascunho ocupando a tela inteira, com a folha grande — para conta longa."></button>
     </span>
+    <!-- O JULGADO QUE A QUESTÃO CITA.
+         Metade das questões de Direito sai de um julgado, e o momento em
+         que se descobre isso é o momento em que se erra a questão — não
+         depois, na estante. Sem este botão o caminho era encerrar a
+         rodada, achar o tópico no material, abrir a gaveta e voltar:
+         quatro telas, e o rascunho e os grifos da questão perdidos no
+         meio. A gaveta sobe POR CIMA da sessão e fechá-la devolve a
+         mesma questão, no mesmo ponto. -->
+    <button class="btn-min" id="btnQsJuris" data-i18n-title="qs_juris_ajuda" hidden></button>
     <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
     <button class="btn-min" id="btnQsEmbaralhar" hidden></button>
     <button class="btn-min" id="btnQsSoFalhas" hidden></button>
