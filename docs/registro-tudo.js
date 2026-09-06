@@ -104,7 +104,13 @@ function rtDoRegistroGeral() {
   return L.map((r) => ({
     quando: rtInstante(r.d + "T" + (r.h || "00:00:00")),
     fonte: "app", tag: r.tipo || "", sessao: r.s || "",
-    msg: r.msg || "", extra: r.extra || "",
+    msg: r.msg || "",
+    /* a contagem de repetição viaja junto com o extra: a linha unificada
+     * não tem campo próprio para ela, e sem isso "×24" só apareceria no
+     * painel antigo — dois lugares mostrando o mesmo evento de formas
+     * diferentes é o começo de um bug de leitura */
+    extra: (r.extra || "")
+      + (typeof regRepeticao === "function" ? regRepeticao(r) : ""),
   }));
 }
 
