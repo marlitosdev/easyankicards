@@ -713,10 +713,29 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * mede mais do que a tela tem. dvh mede a área que existe agora, e é
  * ela que a caixa preenche. O @supports abaixo mantém o comportamento
  * antigo onde dvh não existe: pior, e nunca quebrado. */
+/* ---- E A ALTURA FIXA DUROU UMA VERSÃO ------------------------------
+ *
+ * "height:96dvh" foi meu erro, e o DevTools o mostrou sem margem para
+ * discussão: .qs-enunciado medindo 824 x 680,94 para um enunciado de
+ * TRÊS LINHAS. A caixa passou a ter altura fixa; o enunciado estava
+ * escrito para CRESCER e preencher o que sobrasse; então ele esticou
+ * seiscentos pixels de nada, e as alternativas foram parar no fim de um
+ * buraco cinza.
+ *
+ * O raciocínio que me levou lá — "assim o próxima fica sempre no mesmo
+ * lugar" — não era falso, era pequeno demais para o preço. Um botão que
+ * se desloca meio centímetro entre uma questão e outra custa muito
+ * menos que seiscentos pixels de vazio entre a pergunta e a resposta.
+ *
+ * Volta o "max-height": a caixa cresce SÓ até caber, e para em 96dvh.
+ * A parte que faltava — e que é o conserto de verdade — está logo
+ * abaixo, em .qs-enunciado: com um teto para a altura fixa não haveria
+ * nada esticando, e sem o teto no enunciado a altura fixa vira buraco.
+ * Os dois juntos é que fazem sentido. */
 #dlgQsResponder[open]{display:flex;flex-direction:column;
-  height:96dvh;max-height:96dvh;margin:auto}
+  max-height:96dvh;margin:auto}
 @supports not (height:1dvh){
-  #dlgQsResponder[open]{height:auto;max-height:92vh}
+  #dlgQsResponder[open]{max-height:92vh}
 }
 #dlgQsResponder[open] > *{flex:0 0 auto}
 #dlgQsResponder .qs-corpo-lado{flex:1 1 auto;min-height:0;display:flex;
@@ -740,8 +759,24 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * lugar de honra; o comentário é que passa a ser lido, e vira ele o
  * elástico. O enunciado continua na tela — sem ele o comentário não se
  * entende — mas cede altura, limitado a pouco mais de um terço. */
-#dlgQsResponder .qs-enunciado{flex:1 1 auto;min-height:60px;overflow:auto;
-  margin-bottom:6px}
+/* O ENUNCIADO ENCOLHE, MAS NÃO ESTICA. É esta linha que estava errada.
+ *
+ * "flex:1 1 auto" quer dizer duas coisas ao mesmo tempo, e só uma delas
+ * era desejada: "ceda espaço quando faltar" (certo) e "tome o espaço
+ * que sobrar" (o buraco de 680px). "flex:0 1 auto" mantém a primeira e
+ * remove a segunda: três linhas ocupam três linhas, e as alternativas
+ * sobem para debaixo delas.
+ *
+ * O TETO EM dvh, e não em porcentagem. Porcentagem de altura depende de
+ * cada elo da corrente flex ter altura definida — foi o argumento que
+ * usei para trocar max-height:38% por peso na parte de baixo, e vale
+ * aqui igual. dvh mede a tela, que sempre existe.
+ *
+ * ENUNCIADO LONGO continua como antes: bate no teto, rola por dentro, e
+ * as alternativas ficam visíveis logo abaixo — que era o desenho de
+ * telefone que valeu a pena trazer para todas as larguras. */
+#dlgQsResponder .qs-enunciado{flex:0 1 auto;min-height:0;max-height:52dvh;
+  overflow:auto;margin-bottom:6px}
 #dlgQsResponder .qs-opcoes{flex:0 0 auto;position:sticky;bottom:0;
   background:var(--panel);padding-top:6px;
   box-shadow:0 -6px 12px -6px rgba(0,0,0,.45)}
@@ -760,9 +795,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * Com "flex:2 1 0" e "flex:3 1 0", quem divide é o próprio flexbox: o
  * que sobra vai dois para o enunciado e três para o comentário, sem
  * depender de nenhum elo ter altura conhecida. */
-#dlgQsResponder .qs-fez .qs-enunciado{flex:2 1 0;min-height:48px}
+/* DEPOIS DE RESPONDER, UM SÓ CRESCE — e é o comentário, que é o que se
+ * lê. O peso 2:3 que estava aqui repartia a sobra entre os dois, o que
+ * significa que um enunciado de três linhas voltaria a esticar, agora
+ * até dois quintos da caixa. O enunciado cede: fica na altura do texto,
+ * com teto menor que o de antes de responder, porque a partir daqui ele
+ * é referência e não mais a leitura principal. */
+#dlgQsResponder .qs-fez .qs-enunciado{flex:0 1 auto;max-height:34dvh}
 #dlgQsResponder .qs-fez .qs-opcoes{position:static;box-shadow:none}
-#dlgQsResponder .qs-depois{flex:3 1 0;min-height:80px;overflow-y:auto;
+#dlgQsResponder .qs-depois{flex:1 1 auto;min-height:0;overflow-y:auto;
   margin-top:6px}
 /* o rascunho fica junto do que rola: é papel de apoio, não passo do
    fluxo, e preso embaixo roubaria a altura do enunciado */
@@ -877,7 +918,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
      alguém ajusta um deles, e é sempre o de baixo que ganha, calado.
      Sobra o que de fato depende de a tela ser pequena — e num telefone
      o enunciado cede mais espaço ainda ao comentário. */
-  #dlgQsResponder .qs-fez .qs-enunciado{flex:1 1 0}
+  #dlgQsResponder .qs-fez .qs-enunciado{max-height:26dvh}
   #dlgQsResponder .qs-barra-ferramentas{flex:0 0 auto}
 }
 /* o texto é a única parte elástica — e portanto a única que rola */
