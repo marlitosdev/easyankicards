@@ -2018,7 +2018,10 @@ function qsUiFerramentas(q) {
   const menu = document.createElement("span");
   menu.className = "qs-fer-menu";
   menu.hidden = true;
-  bm.onclick = () => { menu.hidden = !menu.hidden; };
+  bm.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    qsFerMenu(menu.hidden ? bm : null, menu);
+  };
   try { menu.append(plBarraCopiar(q)); } catch (e) {}
 
   /* O REGISTRO, A PARTIR DAQUI.
@@ -2037,7 +2040,7 @@ function qsUiFerramentas(q) {
     bl.textContent = t("qs_ver_registro");
     bl.title = t("qs_ver_registro_aj");
     bl.onclick = () => {
-      menu.hidden = true;
+      qsFerFechar();
       if (typeof rtPorFiltroExterno === "function") rtPorFiltroExterno("erro");
       if (typeof abrirDiagnostico === "function") abrirDiagnostico();
     };
@@ -2046,6 +2049,79 @@ function qsUiFerramentas(q) {
   mais.append(bm, menu);
   barra.append(mais);
   return barra;
+}
+
+/* =====================================================================
+ * O ⋮ TEM DE SAIR DE DENTRO DO RECORTE
+ *
+ * O DEFEITO. O menu era "position:absolute" pendurado no botão, e o
+ * botão mora dentro de #qsSessCorpo — que tem recorte (era
+ * "overflow-y:auto", virou "overflow:hidden" quando as duas zonas de
+ * rolagem desceram para os filhos). Quem recorta é o ANCESTRAL: um
+ * absolute cujo bloco contenedor está dentro da caixa recortada é
+ * cortado na borda dela, e não há z-index que resolva isso — z-index
+ * decide quem fica na frente, não quem existe fora da moldura.
+ *
+ * É EXATAMENTE O CASO DO BALÃO DO (?), e a saída é a mesma: sair do
+ * subárvore recortada. Lá, pendurando o balão no <dialog>; aqui,
+ * trocando para "position:fixed" e calculando a posição a partir do
+ * retângulo do botão. Um elemento fixed só é recortado por ancestral
+ * com transform, filter ou contain — overflow sozinho não o alcança.
+ *
+ * TAMBÉM RESOLVE O EMPILHAMENTO DE QUEBRA: as alternativas são
+ * "position:sticky", e sticky cria contexto de empilhamento. O menu já
+ * ganhava delas por z-index, mas essa vitória dependia de os dois
+ * estarem no MESMO contexto — uma condição que qualquer transform novo
+ * em algum pai romperia sem aviso.
+ *
+ * FECHAR: clique fora e Esc. Um menu aberto que só fecha pelo próprio
+ * botão vira um retângulo grudado na tela quando a pessoa clica em
+ * outro lugar — e, sendo fixed, ele não rola junto com nada.
+ * ===================================================================== */
+let qsFerAberto = null;      /* {menu, fora, tecla} do único menu aberto */
+
+function qsFerMenu(botao, menu) {
+  qsFerFechar();
+  if (!botao || !menu) return null;
+  menu.hidden = false;
+  /* SÓ AQUI ELE VIRA fixed, e não na folha de estilo: escondido, um
+   * fixed continua ocupando lugar nenhum, mas passa a ser medido
+   * contra a janela mesmo quando ninguém o pediu. */
+  if (menu.style) menu.style.position = "fixed";
+  qsFerPosicionar(botao, menu);
+
+  const fora = () => qsFerFechar();
+  const tecla = (ev) => { if (ev && ev.key === "Escape") qsFerFechar(); };
+  qsFerAberto = { menu, fora, tecla };
+  try {
+    document.addEventListener("click", fora);
+    document.addEventListener("keydown", tecla);
+  } catch (e) {}
+  return menu;
+}
+
+function qsFerPosicionar(botao, menu) {
+  const r = (botao.getBoundingClientRect && botao.getBoundingClientRect()) || null;
+  if (!r || !menu.style) return;
+  const larg = 230;                       /* o min-width da folha de estilo */
+  const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
+  /* ALINHADO À DIREITA DO BOTÃO, como era com "right:0" — e recuado
+   * quando isso o jogaria para fora da janela num telefone. */
+  const esq = Math.max(8, Math.min(r.right - larg, jan - larg - 8));
+  menu.style.left = esq + "px";
+  menu.style.top = (r.bottom + 4) + "px";
+  menu.style.right = "auto";
+}
+
+function qsFerFechar() {
+  const a = qsFerAberto;
+  qsFerAberto = null;
+  if (!a) return;
+  a.menu.hidden = true;
+  try {
+    document.removeEventListener("click", a.fora);
+    document.removeEventListener("keydown", a.tecla);
+  } catch (e) {}
 }
 
 function qsUiPintarCores(barra) {

@@ -1154,9 +1154,22 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-cor.sel{border-color:var(--texto)}
 .qs-fer-limpar{margin-left:4px}
 .qs-fer-mais{position:relative;margin-left:auto}
-.qs-fer-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:5;
+/* O MENU É POSICIONADO PELO JS, contra a JANELA — não contra o botão.
+ *
+ * "position:absolute" o prendia dentro de #qsSessCorpo, que recorta, e
+ * a borda da caixa o cortava. Quem recorta é o ancestral: nem z-index
+ * nem "overflow:visible" no filho mudam isso — o primeiro decide quem
+ * fica na frente, o segundo fala do conteúdo do próprio elemento.
+ *
+ * O "left/top" vem de qsFerPosicionar, e o "position:fixed" também é
+ * posto por lá, na hora de abrir. Aqui fica só a aparência. O z-index
+ * alto continua útil contra as alternativas, que são sticky e criam
+ * contexto de empilhamento próprio. */
+.qs-fer-menu{top:0;left:0;z-index:60;
   background:var(--panel);border:1px solid var(--borda);border-radius:10px;
-  padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.3);min-width:230px}
+  padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.3);min-width:230px;
+  max-width:min(320px,92vw)}
+.qs-fer-menu[hidden]{display:none}
 .pl-cx{position:relative}
 .pl-tela{position:absolute;inset:0;width:100%;height:100%;
   touch-action:none;pointer-events:none;border-radius:8px}
