@@ -1373,6 +1373,18 @@ const ED_FORMAS = ["leitura", "videoaula", "questoes", "leiseca",
  * sobre algo que é sensação, não medida. */
 const ED_HUMOR = ["ruim", "media", "boa"];
 let regAtual = null;
+/* QUEM ABRIU O FORMULÁRIO PODE QUERER SABER QUE ELE FOI CONFIRMADO.
+ *
+ * A lei seca precisa disto para anotar "leitura registrada" com os
+ * minutos QUE A PESSOA CONFIRMOU, e não com os que o app sugeriu.
+ * Anotar na abertura diria que houve registro mesmo quando o
+ * formulário fosse fechado sem gravar — e é justamente para o registro
+ * que se olha quando alguma conta não bate.
+ *
+ * É de UM USO SÓ, e zerado tanto na confirmação quanto no fechamento:
+ * um retorno que sobrevive ao cancelamento dispararia no registro
+ * seguinte, vindo de outra tela. */
+let regDepois = null;
 let regFormas = [];
 let regHumor = "media";
 
@@ -1694,6 +1706,8 @@ function regPintarAtalhos() {
 function confirmarRegistro(estado) {
   if (!regAtual) return;
   const item = regAtual;
+  const depois = regDepois;
+  regDepois = null;
   $("dlgRegistro").close();
   regAtual = null;
   /* A ORDEM IMPORTA: edMarcar redesenha a agenda, e a linha que eu queria
@@ -1714,8 +1728,9 @@ function confirmarRegistro(estado) {
       difDoHumor(item.disciplina, item.nome, regHumor);
     }
   }
+  const minCerto = Math.max(1, Number($("regMinutos").value) || item.minutos);
   edMarcar(item, estado, {
-    minutos: Math.max(1, Number($("regMinutos").value) || item.minutos),
+    minutos: minCerto,
     formas: regFormas.slice(),
     humor: regHumor,
     /* só grava questões quando houve questões: campo vazio não vira zero,
@@ -1725,6 +1740,7 @@ function confirmarRegistro(estado) {
     onde: String(($("regOnde") || {}).value || "").trim() || null,
     obs: String(($("regObs") || {}).value || "").trim() || null,
   }, linhas.length > 0);
+  if (typeof depois === "function") { try { depois(minCerto, estado); } catch (e) {} }
   /* O item some da agenda no mesmo instante em que o diálogo fecha, e some
    * calado: dá a impressão de que sumiu, não de que foi guardado. A saída
    * animada mostra PARA ONDE ele foi. */
@@ -3187,7 +3203,14 @@ function edIniciar() {
     $("regMinSlider").value = v;
   });
   $("edDias").onchange = edRender;
-  $("btnRegFechar").onclick = () => { $("dlgRegistro").close(); regAtual = null; };
+  $("btnRegFechar").onclick = () => {
+    $("dlgRegistro").close();
+    regAtual = null;
+    /* FECHAR SEM GRAVAR TAMBÉM ZERA O RETORNO. Sem isto ele ficaria
+     * armado esperando o PRÓXIMO registro — que pode vir da agenda, de
+     * outro tópico — e a lei seca anotaria uma leitura que nunca houve. */
+    regDepois = null;
+  };
   if ($("btnFaFechar")) $("btnFaFechar").onclick = () => {
     $("dlgForaAgenda").close(); faItemAlvo = null;
   };

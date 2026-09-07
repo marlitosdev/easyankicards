@@ -644,7 +644,11 @@ function leiTrocarModo(modo) {
   [["btnLeiModoLer", "ler"], ["btnLeiModoEditar", "editar"],
    ["btnLeiModoRecitar", "recitar"]].forEach(([id, m]) => {
     const b = $(id);
-    if (b && b.classList) b.classList.toggle("btn-min-ok", leiModo === m);
+    /* DENTRO DO GRUPO, o escolhido é preenchido e não só realçado:
+     * "btn-min-ok" era a mesma cor do "gravar" ao lado, e a barra
+     * mostrava dois botões verdes que não têm nada a ver um com o
+     * outro. Num seletor, o estado é qual dos três está ligado. */
+    if (b && b.classList) b.classList.toggle("lei-modo-on", leiModo === m);
   });
 
   if (leiModo === "ler") leiPintarLeitura();
@@ -690,8 +694,19 @@ function leiPintarLeitura() {
       cx.append(h);
     }
 
+    /* A BORDA LATERAL DIZ ONDE ESTÁ O PERIGO, sem que se leia nada.
+     *
+     * Na véspera da prova ninguém relê 115 artigos: percorre procurando
+     * o que já derrubou. Essa informação já existia — o aviso "cai nas
+     * suas questões" embaixo do artigo —, mas ela só aparece DEPOIS de
+     * se chegar ao artigo e ler até o fim dele. A borda aparece antes,
+     * de relance, enquanto se rola. */
+    const risco = ranking[a.num];
     const bloco = document.createElement("div");
-    bloco.className = "lei-art" + (a.num === parei ? " lei-art-parei" : "");
+    bloco.className = "lei-art"
+      + (a.num === parei ? " lei-art-parei" : "")
+      + (risco && risco.erros > risco.acertos ? " lei-art-perigo"
+         : (risco && risco.prova ? " lei-art-caiu" : ""));
     bloco.id = "leiArt_" + a.num.replace(/[^A-Z0-9-]/gi, "");
 
     const cab = document.createElement("div");
@@ -926,6 +941,12 @@ async function leiEdApagar() {
  * que se sabe, porque cada linha parece familiar quando está na frente.
  * Ver "Art. 167 — São vedados:" e ter de completar mostra o que
  * realmente ficou. */
+/* Modo do "recitar": falso esconde o artigo inteiro (como sempre foi),
+ * verdadeiro mostra o artigo com as palavras-chave apagadas. Vive na
+ * memória e não no armazenamento: é escolha de exercício, e a de hoje
+ * não tem por que valer amanhã. */
+let leiRecLacuna = false;
+
 function leiPintarRecitar() {
   const cx = $("leiRecitar");
   if (!cx) return;
@@ -947,13 +968,42 @@ function leiPintarRecitar() {
   });
   cx.append(cab);
 
+  /* =================================================================
+   * DOIS GRAUS DE DIFICULDADE, E O MAIS FÁCIL É O QUE FALTAVA
+   *
+   * Esconder o artigo INTEIRO é um degrau alto: ou se recita de cor,
+   * ou se desiste e abre. E testa a coisa errada — que você lembra que
+   * existe um art. 150, não o que ele diz.
+   *
+   * A banca não troca o artigo, troca UMA palavra: "quinze" vira
+   * "trinta", "vedado" vira "permitido", "somente" some. No modo
+   * LACUNA o artigo aparece inteiro com essas palavras apagadas — o
+   * texto sustenta a memória e o que decide a assertiva é o que fica
+   * em branco.
+   * ================================================================= */
+  const alt = document.createElement("button");
+  alt.type = "button";
+  alt.className = "btn-min" + (leiRecLacuna ? " lei-modo-on" : "");
+  alt.textContent = t(leiRecLacuna ? "lei_rec_lac_on" : "lei_rec_lac_off");
+  alt.title = t("lei_rec_lac_aj");
+  alt.onclick = () => {
+    leiRecLacuna = !leiRecLacuna;
+    try { leiReg("recitar", "modo de recitar trocado",
+                 leiRecLacuna ? "lacuna nas palavras-chave" : "artigo inteiro escondido"); }
+    catch (e) {}
+    leiPintarRecitar();
+  };
+  cx.append(alt);
+
   arts.forEach((a) => {
     const bloco = document.createElement("div");
     bloco.className = "lei-rec";
 
     const b = document.createElement("button");
     b.className = "lei-rec-cab";
-    b.textContent = a.rotulo + (a.ementa ? " — " + a.ementa : "");
+    const nLac = leiRecLacuna ? leiQuantasLacunas(a.texto) : 0;
+    b.textContent = a.rotulo + (a.ementa ? " — " + a.ementa : "")
+      + (nLac ? "  (" + t("lei_rec_lac_n", { n: nLac }) + ")" : "");
     b.title = t("lei_recitar_ver");
     b.onclick = () => {
       leiRecitados[a.num] = !leiRecitados[a.num];
@@ -961,7 +1011,26 @@ function leiPintarRecitar() {
     };
     bloco.append(b);
 
-    if (leiRecitados[a.num]) {
+    /* NO MODO LACUNA O TEXTO APARECE SEMPRE — é o exercício. Abrir o
+     * artigo aqui quer dizer "mostre as palavras que você apagou", e
+     * não "mostre o artigo", que já está à vista. */
+    if (leiRecLacuna) {
+      const d = document.createElement("div");
+      d.className = "lei-rec-txt";
+      const aberto = !!leiRecitados[a.num];
+      leiComLacunas(a.texto).forEach((pd) => {
+        if (!pd.lacuna) { d.append(document.createTextNode(pd.txt)); return; }
+        const m = document.createElement("span");
+        m.className = "lei-lac" + (aberto ? " lei-lac-vista" : "");
+        /* MESMA LARGURA DA PALAVRA ESCONDIDA, e é de propósito: uma
+         * lacuna de tamanho fixo entregaria que ali cabia "trinta" e
+         * não "quinze". Aqui o traço acompanha o que sumiu. */
+        m.textContent = aberto ? pd.txt : "▁".repeat(Math.min(12, pd.txt.length));
+        if (!aberto) m.title = t("lei_lac_ajuda");
+        d.append(m);
+      });
+      bloco.append(d);
+    } else if (leiRecitados[a.num]) {
       const d = document.createElement("div");
       d.className = "lei-rec-txt";
       d.innerHTML = matParaHtml(a.texto);
@@ -989,8 +1058,70 @@ function leiIrArtigo(num) {
   return true;
 }
 
-async function leiIrAbrir() {
+/* =====================================================================
+ * IR A UM ARTIGO: UMA GRADE, NÃO UMA CAIXA DE DIGITAÇÃO
+ *
+ * Perguntar "qual artigo?" e esperar que a pessoa digite exige que ela
+ * SAIBA o número — e quem está lendo uma lei nova quase nunca sabe:
+ * quer voltar "àquele que falava de prazo", que estava "lá pelo meio".
+ * Digitar também erra: "8" e "8º" e "8-A" são três coisas, e a caixa
+ * respondia "não achei" para duas delas.
+ *
+ * A grade mostra o que EXISTE. Não há como pedir um artigo que não há,
+ * não há grafia para acertar, e a numeração inteira à vista dá a
+ * dimensão da lei — que é informação por si só.
+ *
+ * OS SELOS VIAJAM JUNTO: o artigo onde parei e os que mais caem nas
+ * suas questões vêm marcados na própria grade. É onde a pergunta "por
+ * onde eu continuo?" costuma ser respondida.
+ * ===================================================================== */
+function leiIrAbrir() {
   const arts = leiArtigos(String($("leiTexto").value || ""));
+  if (!arts.length) { uiAlert(t("lei_sem_artigos")); return; }
+  const cx = $("leiIrGrade");
+  if (!cx) {
+    /* sem a grade no HTML, a caixa antiga — nunca ficar sem caminho */
+    return leiIrDigitando(arts);
+  }
+  cx.innerHTML = "";
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const parei = l ? l.parei : "";
+  const ranking = {};
+  try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
+  catch (e) {}
+
+  arts.forEach((a) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    const est = ranking[a.num];
+    b.className = "lei-ir-n"
+      + (a.num === parei ? " lei-ir-parei" : "")
+      + (est && est.prova ? " lei-ir-prova" : "")
+      + (est && est.erros > est.acertos ? " lei-ir-erro" : "");
+    b.textContent = a.numCru;
+    const dicas = [];
+    if (a.num === parei) dicas.push(t("lei_ir_dica_parei"));
+    if (est && est.prova) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
+    if (est && est.questoes) dicas.push(t("lei_ir_dica_q", { n: est.questoes }));
+    b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
+    b.onclick = () => {
+      $("dlgLeiIr").close();
+      leiIrArtigo(a.num);
+    };
+    cx.append(b);
+  });
+  if ($("leiIrSub")) {
+    $("leiIrSub").textContent = t("lei_ir_sub", { n: arts.length });
+  }
+  abrirModal("dlgLeiIr");
+  try { leiReg("navegar", "grade de artigos aberta", arts.length + " artigos"); }
+  catch (e) {}
+}
+
+/* O caminho antigo, guardado inteiro: ele ainda serve numa lei de
+ * trezentos artigos, onde a grade é grande demais para o olho. */
+async function leiIrDigitando(lista) {
+  const arts = lista || leiArtigos(String($("leiTexto").value || ""));
   if (!arts.length) { uiAlert(t("lei_sem_artigos")); return; }
   const v = await uiTexto(t("lei_ir_pergunta", {
     de: arts[0].numCru, ate: arts[arts.length - 1].numCru }), "");
@@ -1377,15 +1508,56 @@ function leiRegistrarLeitura() {
                 chave: leiAtual.chave, minutos: min, bruto: 0,
                 disciplinaPeso: null, peso: null, avulso: true };
 
-  if (typeof edMarcar === "function") {
-    const jaEstudado = typeof edProgresso !== "undefined" && edProgresso[leiAtual.chave];
-    edMarcar(item, jaEstudado ? "revisado" : "feito",
-      { minutos: min, formas: ["leitura"], humor: "media" });
+  /* =================================================================
+   * O REGISTRO PASSA PELA MESMA TELA DE TODO O RESTO DO APLICATIVO
+   *
+   * Até aqui este botão gravava SOZINHO: chamava edMarcar com os
+   * minutos que ele mesmo tinha calculado, e avisava depois. Duas
+   * coisas erradas nisso, e a segunda é a grave.
+   *
+   * 1. É A ÚNICA PORTA ASSIM. Agenda, material e questões todas abrem
+   *    o mesmo formulário — minutos, forma de estudo, questões feitas,
+   *    dificuldade, onde parei, observação. Aqui não havia nada disso:
+   *    quem leu a lei com o livro do lado e resolveu vinte questões
+   *    registrava "leitura, 193 min, humor médio" e ponto.
+   *
+   * 2. OS MINUTOS ERAM UM PALPITE APRESENTADO COMO FATO. Ninguém
+   *    cronometrou nada: "min" é palavras ÷ 75, ou seja "quanto tempo
+   *    ESTA lei levaria para ser lida inteira, a 75 palavras por
+   *    minuto". Para a EC 132/2023, 14465 palavras, isso dá 193
+   *    minutos — e iam para o diário como três horas de estudo por
+   *    causa de um botão. Um erro assim não fica no diário: ele entra
+   *    no cálculo de cobertura, muda a prioridade da disciplina e
+   *    desloca as horas das outras.
+   *
+   * O palpite continua útil — é um bom ponto de partida, e melhor que
+   * um campo em branco. Ele passa a ser o valor SUGERIDO num campo que
+   * se corrige em dois toques, que é a diferença entre estimar e
+   * afirmar.
+   * ================================================================= */
+  if (typeof abrirRegistro !== "function") {
+    /* sem a tela, o caminho antigo — é melhor registrar de forma tosca
+     * do que não registrar; mas isto não acontece no app montado */
+    if (typeof edMarcar === "function") {
+      const ja = typeof edProgresso !== "undefined" && edProgresso[leiAtual.chave];
+      edMarcar(item, ja ? "revisado" : "feito",
+        { minutos: min, formas: ["leitura"], humor: "media" });
+    }
+    return;
   }
-  try { leiReg("leitura", "leitura registrada",
-           min + " min · " + palavras + " palavras" + (rotulo ? " · " + rotulo : ""));
-  } catch (e) {}
-  uiAlert(t("lei_lida", { n: min }));
+  /* O REGISTRO SÓ É ANOTADO DEPOIS DE CONFIRMADO.
+   * Anotar aqui diria "leitura registrada" mesmo quando a pessoa
+   * fechasse o formulário sem gravar — e um registro que mente sobre o
+   * que aconteceu é pior que registro nenhum, porque é para ele que se
+   * olha quando algo não bate. */
+  const quanto = palavras + " palavras" + (rotulo ? " · " + rotulo : "");
+  regDepois = (m2) => {
+    try { leiReg("leitura", "leitura registrada", m2 + " min · " + quanto); }
+    catch (e) {}
+  };
+  abrirRegistro(item);
+  try { leiReg("leitura", "tela de registro aberta",
+               "sugestão de " + min + " min · " + quanto); } catch (e) {}
 }
 
 async function leiFechar() {
@@ -1462,6 +1634,11 @@ function leiIniciar() {
     if (cx) cx.hidden = !cx.hidden;
   });
   liga("btnLeiIr", "ir ao artigo", () => leiIrAbrir());
+  liga("btnLeiIrDigitar", "ir ao artigo digitando", () => {
+    $("dlgLeiIr").close();
+    leiIrDigitando();
+  });
+  liga("btnLeiIrFechar", "fechar a grade de artigos", () => $("dlgLeiIr").close());
   /* AS GAVETAS. Uma de cada vez: duas abertas devolveriam a fila de
    * catorze botões que elas existem para desfazer. */
   liga("btnLeiNavegar", "gaveta ir para", () => leiGaveta("leiGavNavegar"));
