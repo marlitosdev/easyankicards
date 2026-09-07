@@ -963,6 +963,43 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   border-bottom:1px solid var(--borda);padding-bottom:4px}
 .lei-art{border-left:3px solid var(--borda);padding:2px 0 2px 11px;margin:10px 0}
 .lei-art-parei{border-left-color:var(--verde)}
+/* O PERIGO SE VÊ DE RELANCE, sem ler.
+   Na véspera ninguém relê 115 artigos: percorre procurando o que já
+   derrubou. A borda mais grossa é a do artigo em que se erra mais do
+   que se acerta; a mais discreta, a do que já caiu em prova. */
+.lei-art-perigo{border-left-width:4px;border-left-color:#ef4444}
+.lei-art-caiu{border-left-width:4px;border-left-color:#f59e0b}
+/* QUEBRA DE LINHA NO CORPO DO ARTIGO.
+   Lei colada de PDF traz referências longas sem espaço ("art.150,III,'b'"
+   grudado, URLs do Planalto) e uma palavra que não quebra abre barra de
+   rolagem HORIZONTAL no painel inteiro — a segunda barra, dentro da
+   caixa que já rola. Rolar para o lado para ler uma lei é o pior tipo
+   de rolagem: perde-se a linha na volta. */
+.lei-art-txt{overflow-wrap:anywhere;word-break:normal}
+#dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{overflow-x:hidden}
+
+/* A GRADE DE ARTIGOS */
+.lei-ir-grade{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 10px;
+  max-height:52vh;overflow-y:auto}
+.lei-ir-n{font-family:inherit;font-size:11.5px;font-weight:700;
+  padding:5px 9px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.lei-ir-n:hover{border-color:var(--acao)}
+.lei-ir-parei{border-color:var(--verde);color:var(--verde)}
+.lei-ir-prova{border-color:#f59e0b;color:#f59e0b}
+.lei-ir-erro{border-color:#ef4444;color:#ef4444}
+
+/* OS TRÊS MODOS SÃO UMA ESCOLHA SÓ, e por isso se desenham como uma.
+   Soltos, "ler", "editar" e "recitar" tinham a mesma aparência de
+   "gravar" e "fechar" — que não são alternativas entre si. Encostados,
+   com uma borda em volta dos três, a forma já diz "escolha um". */
+.lei-modos{display:inline-flex;border:1px solid var(--borda);
+  border-radius:9px;overflow:hidden}
+.lei-modos .btn-min{border-radius:0;border:none;
+  border-right:1px solid var(--borda);margin:0}
+.lei-modos .btn-min:last-child{border-right:none}
+.lei-modos .btn-min.lei-modo-on{background:var(--acao);color:#fff;
+  font-weight:700}
 .lei-art-pisca{background:rgba(124,108,245,.14);border-radius:0 8px 8px 0}
 .lei-art-cab{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:3px}
 .lei-art-num{font-weight:800;font-size:12px;color:var(--info)}
@@ -975,6 +1012,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-rec-cab:hover{border-color:var(--acao)}
 .lei-rec-txt{padding:7px 11px 2px;line-height:1.6;border-left:3px solid var(--verde);
   margin:4px 0 0 10px}
+/* A LACUNA É UM TRAÇO DA LARGURA DA PALAVRA que sumiu.
+   Largura fixa entregaria o tamanho errado — uma lacuna sempre igual
+   diria que ali cabe qualquer coisa, e uma de tamanho padrão diria que
+   cabia "trinta" quando cabia "quinze". */
+.lei-lac{color:var(--acao);letter-spacing:.5px;font-weight:700;
+  border-bottom:1px solid var(--acao);cursor:help}
+.lei-lac-vista{color:var(--ok);border-bottom-color:var(--ok);
+  letter-spacing:normal}
 
 /* LER O RESUMO EM TELA CHEIA — só o texto, e uma porta de volta.
  * Mesma ideia da lei: o que é elástico cresce, o resto some. A diferença
@@ -5183,12 +5228,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="lei-onde" id="leiOnde" hidden></div>
 
   <div class="mat-topo">
+    <!-- OS TRÊS MODOS SÃO UMA ESCOLHA, e se desenham como uma: encostados
+         e dentro de uma borda só. Soltos, tinham a mesma forma de
+         "gravar" e "fechar", que não são alternativas entre si — e a
+         barra parecia ter onze ações independentes quando tem sete. -->
+    <span class="lei-modos">
     <button class="btn-min" id="btnLeiModoLer" data-i18n="lei_modo_ler"
       title="Mostra a lei formatada, artigo a artigo, com o botão de parar em cada um."></button>
     <button class="btn-min" id="btnLeiModoEditar" data-i18n="lei_modo_editar"
       title="Mostra o texto cru, para colar ou corrigir a letra da lei."></button>
     <button class="btn-min" id="btnLeiModoRecitar" data-i18n="lei_modo_recitar"
       title="Esconde o texto e mostra só o número e a ementa de cada artigo. Serve para conferir o que você realmente lembra — reler dá sensação de saber."></button>
+    </span>
     <span class="mat-sep"></span>
     <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
       title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
@@ -5442,6 +5493,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     style="width:100%;box-sizing:border-box"></textarea>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnGerLogFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- A GRADE DE ARTIGOS.
+     Substitui a caixa "digite o número do artigo": quem lê uma lei nova
+     não sabe o número, sabe que era "lá pelo meio, o do prazo". E
+     digitar erra — "8", "8º" e "8-A" são três coisas, e duas delas
+     recebiam "não achei". A grade mostra o que existe: não há grafia
+     para acertar, nem como pedir artigo que não há. -->
+<dialog id="dlgLeiIr" class="ui-modal diag-modal">
+  <h3 data-i18n="lei_ir_titulo"></h3>
+  <p class="nota" id="leiIrSub"></p>
+  <div id="leiIrGrade" class="lei-ir-grade"></div>
+  <p class="nota" data-i18n="lei_ir_legenda"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiIrDigitar" data-i18n="lei_ir_digitar"
+      data-i18n-title="lei_ir_digitar_aj"></button>
+    <button class="btn btn-cinza" id="btnLeiIrFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

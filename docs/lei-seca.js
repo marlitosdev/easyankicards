@@ -596,7 +596,88 @@ function leisMigrarDe(resumos, gravar) {
   return criadas;
 }
 
-if (typeof module !== "undefined" && module.exports) {
+/* =====================================================================
+ * LACUNA PARCIAL: ESCONDER O QUE A BANCA TROCA
+ *
+ * O "recitar" esconde o artigo inteiro e mostra só o número e a ementa.
+ * Isso testa se você lembra que existe um art. 150, não se você sabe o
+ * que ele diz — e artigo inteiro escondido é um degrau alto demais: ou
+ * se recita de cor, ou se desiste e abre.
+ *
+ * A banca não troca o artigo: ela troca UMA palavra. "Quinze" vira
+ * "trinta", "vedado" vira "permitido", "somente" some, "poderá" vira
+ * "deverá". Essas são as palavras que decidem a assertiva, e são elas
+ * que esta função apaga.
+ *
+ * O QUE ENTRA NA LISTA, e por quê:
+ *   - NUMERAIS e prazos: é a troca mais comum e a mais fácil de não
+ *     notar relendo.
+ *   - MODAIS (poderá/deverá, é vedado/é permitido): invertem a norma
+ *     inteira sem mudar mais nada na frase.
+ *   - RESTRITIVAS (salvo, exceto, somente, exclusivamente): tirar uma
+ *     delas transforma exceção em regra.
+ *   - QUÓRUNS e frações, pelo mesmo motivo dos numerais.
+ *
+ * O QUE NÃO ENTRA: substantivo comum, verbo qualquer, conectivo. Apagar
+ * palavra à toa transforma o exercício em adivinhação de texto, que
+ * treina paciência e não a norma.
+ *
+ * DEVOLVE PEDAÇOS, não HTML. Quem desenha decide o que é lacuna e o que
+ * é texto — misturar marcação aqui obrigaria esta função a saber da
+ * tela, e ela é a única parte disto que dá para testar sozinha.
+ * ===================================================================== */
+const LEI_MODAIS = ["poderá", "poderão", "deverá", "deverão", "devem",
+  "pode", "podem", "vedado", "vedada", "proibido", "permitido",
+  "permitida", "obrigatório", "obrigatória", "facultado", "facultada"];
+const LEI_RESTRITIVAS = ["salvo", "exceto", "somente", "exclusivamente",
+  "apenas", "ressalvado", "ressalvada", "inclusive", "não", "nunca",
+  "sempre"];
+
+/* Numeral por extenso: "quinze dias" é tão trocável quanto "15 dias", e
+ * a lei brasileira escreve os prazos das duas formas. */
+const LEI_NUMEROS = ["um", "uma", "dois", "duas", "três", "quatro", "cinco",
+  "seis", "sete", "oito", "nove", "dez", "onze", "doze", "quinze", "vinte",
+  "trinta", "quarenta", "sessenta", "noventa", "cem", "cento", "mil",
+  "metade", "terço", "quarto", "quinto", "décimo", "dobro", "triplo"];
+
+function leiNormalPalavra(p) {
+  return String(p || "").toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/* Uma palavra é chave? A comparação é feita SEM acento dos dois lados:
+ * "vedado" e "orgão"/"órgão" não podem depender de o texto colado ter
+ * vindo com a acentuação certa do diário oficial. */
+function leiPalavraChave(p) {
+  const limpo = leiNormalPalavra(p).replace(/^[^\wº°]+|[^\wº°]+$/g, "");
+  if (!limpo) return false;
+  /* qualquer coisa com dígito: prazos, percentuais, quóruns, valores */
+  if (/\d/.test(limpo)) return true;
+  const listas = LEI_MODAIS.concat(LEI_RESTRITIVAS, LEI_NUMEROS);
+  return listas.some((x) => leiNormalPalavra(x) === limpo);
+}
+
+/* Devolve [{txt, lacuna}] — o texto em pedaços, marcando o que sumir.
+ * Preserva os espaços originais: recompondo os pedaços na ordem, sai
+ * exatamente o texto de entrada. */
+function leiComLacunas(texto) {
+  const bruto = String(texto || "");
+  if (!bruto) return [];
+  const partes = [];
+  const re = /(\s+)/;
+  bruto.split(re).forEach((pedaco) => {
+    if (!pedaco) return;
+    if (/^\s+$/.test(pedaco)) { partes.push({ txt: pedaco, lacuna: false }); return; }
+    partes.push({ txt: pedaco, lacuna: leiPalavraChave(pedaco) });
+  });
+  return partes;
+}
+
+function leiQuantasLacunas(texto) {
+  return leiComLacunas(texto).filter((x) => x.lacuna).length;
+}
+
+if (typeof module !== "undefined" && module.exports)if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     LEIS_CHAVE, LEI_ART_POR_BLOCO,
     leiNumNormal, leiNumOrdem, leiEmenta, leiArtigos, leiArtigo, leiBlocos,
