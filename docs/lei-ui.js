@@ -325,6 +325,20 @@ function leiPintarFila() {
     cx.append(b);
   });
 
+  /* A FILA PRECISA DE UM RÓTULO, senão ela é só uma linha de pílulas.
+   *
+   * O que ela é: a lista das leis LIGADAS A ESTE TÓPICO. Um tópico pode
+   * ter mais de uma (o de "Receita pública" tem a 4.320 e a LRF), e é
+   * por isso que existe fila em vez de um texto só. Sem dizer isso, os
+   * dois botões do fim parecem duas formas de fazer a mesma coisa. */
+  if (lista.length) {
+    const rot = document.createElement("span");
+    rot.className = "lei-fila-rot";
+    rot.textContent = t("lei_fila_rot", { n: lista.length });
+    rot.title = t("lei_fila_rot_aj");
+    cx.prepend(rot);
+  }
+
   const bNova = document.createElement("button");
   bNova.className = "lei-chip lei-chip-add";
   bNova.id = "btnLeiNova";
@@ -342,7 +356,14 @@ function leiPintarFila() {
   if (outras.length) {
     const bV = document.createElement("button");
     bV.className = "lei-chip lei-chip-add";
-    bV.textContent = t("lei_vincular", { n: outras.length });
+    /* ID FIXO: o teste que garante a existência deste botão o procurava
+     * pela PALAVRA "vincular" no rótulo — e quebrou no dia em que o
+     * rótulo virou "usar uma lei já guardada". Um teste que depende do
+     * texto do botão cobra a redação, não a função; um id não muda
+     * quando a frase melhora. */
+    bV.id = "btnLeiVincular";
+    bV.textContent = t(outras.length === 1 ? "lei_vincular_1" : "lei_vincular",
+                       { n: outras.length });
     bV.title = t("lei_vincular_ajuda");
     bV.onclick = () => leiVincularAbrir();
     cx.append(bV);
@@ -1006,9 +1027,14 @@ function leiPintarRecitar() {
 
   const cab = document.createElement("p");
   cab.className = "nota";
-  cab.textContent = t("lei_recitar_ajuda", {
-    n: arts.length, v: Object.keys(leiRecitados).length,
-  });
+  /* QUAL EXERCÍCIO ESTÁ VALENDO, escrito antes de tudo. Sem esta linha
+   * a tela mostra dois desenhos muito diferentes — artigos fechados ou
+   * artigos com buracos — e nada dizia qual dos dois era, nem que havia
+   * dois. */
+  cab.textContent = t(leiRecLacuna ? "lei_rec_modo_lac" : "lei_rec_modo_esc")
+    + " " + t("lei_recitar_ajuda", {
+      n: arts.length, v: Object.keys(leiRecitados).length,
+    });
   cx.append(cab);
 
   /* =================================================================
@@ -1024,9 +1050,16 @@ function leiPintarRecitar() {
    * texto sustenta a memória e o que decide a assertiva é o que fica
    * em branco.
    * ================================================================= */
+  /* O BOTÃO MOSTRA O ESTADO, e não a ação.
+   *
+   * "apagar só as palavras-chave" é um convite: lido com a função já
+   * ligada, ele parece dizer que ela está desligada. E a única outra
+   * pista era um preenchimento de cor, que não se lê. Agora o rótulo
+   * diz em que exercício você está e o que o toque vai fazer — as duas
+   * coisas, porque uma sem a outra é a metade que confunde. */
   const alt = document.createElement("button");
   alt.type = "button";
-  alt.className = "btn-min" + (leiRecLacuna ? " lei-modo-on" : "");
+  alt.className = "btn-min lei-rec-alt" + (leiRecLacuna ? " lei-modo-on" : "");
   alt.textContent = t(leiRecLacuna ? "lei_rec_lac_on" : "lei_rec_lac_off");
   alt.title = t("lei_rec_lac_aj");
   alt.onclick = () => {

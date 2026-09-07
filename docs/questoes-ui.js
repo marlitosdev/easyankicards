@@ -460,17 +460,50 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
   const retomavel = qsSessaoRetomavel(esc);
   let retomou = false;
   if (retomavel) {
-    const r = await uiEscolha(t("qs_retomar_perg", {
+    /* DUAS SITUAÇÕES DIFERENTES, E DUAS PERGUNTAS DIFERENTES.
+     *
+     * Rodada PELA METADE: o que se oferece é continuar de onde parou.
+     * Rodada TERMINADA e não registrada: continuar não quer dizer nada
+     * — não há questão pendente. O que ficou faltando é lançar a hora
+     * no diário, e é isso que a tela tem de oferecer. Oferecer
+     * "continuar" aqui foi o que fez a rodada de 32 parecer perdida:
+     * ela reabria do zero e o placar sumia. */
+    const dados = {
       f: retomavel.feitas, n: retomavel.total,
       c: retomavel.certas,
       pct: retomavel.feitas ? Math.round((retomavel.certas / retomavel.feitas) * 100) : 0,
-    }), [
-      { valor: "continuar", rot: t("qs_retomar_sim"), classe: "btn-verde" },
-      { valor: "recomecar", rot: t("qs_retomar_nao"), classe: "btn-azul" },
-      { valor: "sair", rot: t("cancel_btn") },
-    ]);
-    if (r === "sair" || r === null) return;
-    if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
+    };
+    if (retomavel.terminada) {
+      const r = await uiEscolha(t("qs_terminada_perg", dados), [
+        { valor: "registrar", rot: t("qs_terminada_reg"), classe: "btn-verde" },
+        { valor: "recomecar", rot: t("qs_terminada_nova"), classe: "btn-azul" },
+        { valor: "sair", rot: t("cancel_btn") },
+      ]);
+      if (r === "sair" || r === null) return;
+      if (r === "registrar") {
+        if (qsSessaoRetomar(esc)) {
+          abrirModal("dlgQsResponder");
+          qsUiPintarSessao();
+          qsUiRegistrarEstudo();
+          return;
+        }
+      }
+      /* recomeçar: a rodada velha some, e some SEM ser registrada —
+       * foi escolha explícita de quem estava olhando o placar dela */
+      try {
+        reg("QUESTOES", "rodada terminada descartada sem registrar",
+            dados.f + " de " + dados.n + " · " + dados.c + " certas");
+      } catch (e) {}
+      try { qsSessaoApagar(); } catch (e) {}
+    } else {
+      const r = await uiEscolha(t("qs_retomar_perg", dados), [
+        { valor: "continuar", rot: t("qs_retomar_sim"), classe: "btn-verde" },
+        { valor: "recomecar", rot: t("qs_retomar_nao"), classe: "btn-azul" },
+        { valor: "sair", rot: t("cancel_btn") },
+      ]);
+      if (r === "sair" || r === null) return;
+      if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
+    }
   }
   if (!retomou) {
     qsSessaoIniciar(lista, { embaralhar: true, escopo: esc });
@@ -620,9 +653,19 @@ function qsUiPintarSessao() {
     /* REGISTRAR O ESTUDO. Resolver questão é estudar; sem isto, a hora
      * gasta aqui não entrava no diário e o progresso do edital ficava
      * menor do que o real. */
-    /* rodada encerrada: a sessão guardada deixa de valer, senão a próxima
-     * abertura ofereceria "continuar" uma coisa que já acabou */
-    if (!qsPendentes().length) { try { qsSessaoApagar(); } catch (e) {} }
+    /* A RODADA TERMINADA NÃO É APAGADA AQUI — e esta linha apagava.
+     *
+     * O raciocínio antigo era "acabou, não há o que continuar", e ele
+     * confunde duas perguntas: "sobrou questão?" e "esta rodada já virou
+     * estudo lançado?". Respondidas as 32 de 32, a sessão sumia; quem
+     * fechasse sem tocar em "registrar" perdia o placar da rodada e
+     * reabria numa rodada nova, do zero, sem caminho de volta para
+     * lançar a hora. Uma hora de estudo evaporando por causa de um botão
+     * não tocado é exatamente o defeito que o próprio "encerrar agora"
+     * existia para consertar, reaparecendo no fim da fila.
+     *
+     * Quem apaga agora é o registro (qsSessaoRegistrada), e só depois de
+     * o estudo estar no diário. */
     if (p.feitas) {
       const br = document.createElement("button");
       br.type = "button";
@@ -799,6 +842,29 @@ function qsUiPintarSessao() {
   if ($("btnQsPular")) {
     $("btnQsPular").hidden = !!jaFoi;
     $("btnQsPular").title = t("qs_pular_ajuda");
+  }
+  /* =================================================================
+   * ANDAR PARA TRÁS SEM RESPONDER
+   *
+   * "Pular" sempre existiu e é o caminho para a frente: a questão fica
+   * PENDENTE e volta no fim da fila. Faltava o contrário — reler a
+   * anterior, conferir o comentário de uma que já foi feita, comparar
+   * duas assertivas parecidas. Sem isso o único jeito de rever a de
+   * trás era encerrar a rodada.
+   *
+   * NÃO TOCA NO PLACAR, e é o ponto todo: andar não é responder. O
+   * "respondidas" só cresce em qsResponder; aqui muda apenas ONDE você
+   * está. Uma questão já respondida reabre mostrando o gabarito e as
+   * alternativas desligadas, como sempre; uma ainda não respondida
+   * reabre esperando a resposta.
+   * ================================================================= */
+  if ($("btnQsVoltar")) {
+    const b = $("btnQsVoltar");
+    const s2 = qsSessaoAtual();
+    b.hidden = !s2 || (s2.i || 0) <= 0;
+    b.textContent = t("qs_voltar");
+    b.title = t("qs_voltar_ajuda");
+    b.onclick = () => { qsAndar(-1); qsUiPintarSessao(); };
   }
   /* SÓ AS QUE ERREI — liga e desliga no meio da rodada.
    * Aparece a partir do momento em que existe o que filtrar; antes da
@@ -1231,6 +1297,19 @@ function qsUiRegistrarEstudo() {
    * estava sempre errado justamente nos tópicos já estudados.
    *
    * Omitindo o campo, quem decide é o plano — que é quem sabe. */
+  /* A RODADA SÓ É DADA POR LANÇADA DEPOIS DE CONFIRMADA.
+   *
+   * Marcar aqui, na abertura do formulário, repetiria o erro que este
+   * trabalho inteiro veio consertar: quem fechasse o formulário sem
+   * gravar teria a rodada apagada tendo registrado nada. É o mesmo
+   * "regDepois" que a lei seca usa — e pelo mesmo motivo. */
+  regDepois = () => {
+    try { qsSessaoRegistrada(); } catch (e) {}
+    try {
+      matReg("questao", "rodada registrada e encerrada",
+             modelo.topico + " · " + p.certas + "/" + p.feitas);
+    } catch (e) {}
+  };
   abrirRegistro({
     nome: modelo.topico, disciplina: modelo.disciplina,
     chave: modelo.chave, minutos: min,

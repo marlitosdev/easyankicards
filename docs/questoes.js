@@ -815,6 +815,11 @@ function qsSessaoGravar(gravar) {
     i: qsSessao.i,
     respondidas: qsSessao.respondidas,
     comecou: qsSessao.comecou,
+    /* SE JÁ FOI LANÇADA NO DIÁRIO. Sem este campo aqui, qualquer
+     * gravação seguinte (responder mais uma, embaralhar) apagaria a
+     * marca e a rodada voltaria a ser oferecida — pedindo um segundo
+     * lançamento das mesmas horas. */
+    registrada: !!qsSessao.registrada,
     tocado: new Date().toISOString(),
   };
   const txt = JSON.stringify(dado);
@@ -837,17 +842,65 @@ function qsSessaoApagar(gravar) {
   try { localStorage.removeItem(QS_SESSAO_LOJA); } catch (e) {}
 }
 
-/* Há sessão inacabada para este escopo? Devolve o resumo dela, ou null. */
+/* =====================================================================
+ * A RODADA TERMINADA NÃO PODE SUMIR ANTES DE SER REGISTRADA
+ *
+ * O DEFEITO, relatado com a rodada inteira perdida: respondidas as 32
+ * de 32, a tela apagava a sessão guardada — "já terminou, não há o que
+ * retomar". Quem fechasse sem registrar perdia o placar da rodada, e
+ * reabrindo era jogado numa rodada NOVA, do zero, sem nenhum caminho de
+ * volta para lançar a hora estudada. Uma hora de estudo evaporava por
+ * causa de um botão não tocado.
+ *
+ * O erro de projeto está em confundir DUAS perguntas diferentes:
+ *   · "sobrou questão para responder?"  → continuar de onde parei
+ *   · "esta rodada já virou estudo lançado?" → registrar
+ *
+ * Enquanto a resposta à segunda for não, a rodada continua existindo —
+ * mesmo com tudo respondido. Ela só é apagada quando o estudo é
+ * registrado, ou quando a pessoa descarta na cara dela.
+ *
+ * "terminada" diz qual das duas coisas a tela deve oferecer.
+ * ===================================================================== */
 function qsSessaoRetomavel(escopo, lerLoja) {
   const s = qsSessaoLer(lerLoja);
   if (!s || (escopo && s.escopo !== escopo)) return null;
   const vivas = s.ids.filter((id) => qsBanco.some((x) => x.id === id));
   if (!vivas.length) return null;
   const feitas = (s.respondidas || []).filter((r) => vivas.indexOf(r.id) >= 0);
-  if (feitas.length >= vivas.length) return null;     /* já terminou */
+  /* JÁ REGISTRADA é o único caso em que não há nada a oferecer: o
+   * trabalho já está lançado, e reabrir a mesma rodada só produziria
+   * uma segunda contagem das mesmas horas. */
+  if (s.registrada) return null;
+  if (!feitas.length) return null;      /* nem começou: nada a retomar */
   return { total: vivas.length, feitas: feitas.length,
            certas: feitas.filter((r) => r.acertou).length,
-           comecou: s.comecou, escopo: s.escopo };
+           comecou: s.comecou, escopo: s.escopo,
+           terminada: feitas.length >= vivas.length };
+}
+
+/* Marca a rodada como já lançada no diário. A partir daqui ela pode ser
+ * apagada sem prejuízo — e não é mais oferecida ao reabrir. */
+function qsSessaoRegistrada(gravar) {
+  /* A MARCA VAI NOS DOIS LUGARES, e o teste pegou isto: escrevendo só
+   * no armazenamento, a sessão EM MEMÓRIA continuava com
+   * "registrada: false", e a primeira gravação seguinte — voltar uma
+   * questão, embaralhar, responder mais uma — sobrescrevia a marca com
+   * o valor velho. A rodada voltava a pedir lançamento, e aceitar
+   * contaria as mesmas horas duas vezes.
+   *
+   * É a mesma armadilha que o app já documentou noutros pontos: um
+   * estado guardado em dois lugares diverge no primeiro descuido. Aqui
+   * a memória é a fonte da gravação, então ela tem de ser a primeira a
+   * saber. */
+  if (qsSessao) qsSessao.registrada = true;
+  const s = qsSessaoLer();
+  if (!s) return !!qsSessao;
+  s.registrada = true;
+  const txt = JSON.stringify(s);
+  if (gravar) { gravar(QS_SESSAO_LOJA, txt); return true; }
+  try { localStorage.setItem(QS_SESSAO_LOJA, txt); } catch (e) {}
+  return true;
 }
 
 function qsSessaoRetomar(escopo, lerLoja, gravar) {
@@ -860,6 +913,7 @@ function qsSessaoRetomar(escopo, lerLoja, gravar) {
     .filter((r) => fila.some((x) => x.id === r.id));
   qsSessao = { fila, i: Math.max(0, Math.min(fila.length, s.i || 0)),
                respondidas, comecou: s.comecou || new Date().toISOString(),
+               registrada: !!s.registrada,
                escopo: s.escopo || escopo || "" };
   /* cai na primeira ainda não respondida: retomar é continuar de onde
    * parou, não voltar para uma que já foi feita */
@@ -1072,6 +1126,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
     qsSemelhante, qsParecenca, qsIgual, qsAbrirCampos, qsErradasDaSessao,
     qsSessaoGravar, qsSessaoLer, qsSessaoApagar, qsSessaoRetomavel,
+    qsSessaoRegistrada,
     qsSessaoRetomar, qsSessaoAcrescentar, qsEmbaralharRestantes,
     qsPular, qsPendentes,
     qsSemMarcacao,

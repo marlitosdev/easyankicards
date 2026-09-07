@@ -645,16 +645,88 @@ function leiNormalPalavra(p) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-/* Uma palavra é chave? A comparação é feita SEM acento dos dois lados:
- * "vedado" e "orgão"/"órgão" não podem depender de o texto colado ter
- * vindo com a acentuação certa do diário oficial. */
-function leiPalavraChave(p) {
-  const limpo = leiNormalPalavra(p).replace(/^[^\wº°]+|[^\wº°]+$/g, "");
+/* Só as letras e dígitos: "quinze," e "quinze" são a mesma palavra, e
+ * "20%." precisa manter o % para se reconhecer como percentual. */
+function leiMiolo(p) {
+  return leiNormalPalavra(p).replace(/^[^\wº°%]+|[^\wº°%]+$/g, "");
+}
+
+/* =====================================================================
+ * O NÚMERO DO ARTIGO NÃO É UMA LACUNA — É O ENDEREÇO
+ *
+ * O DEFEITO, visto na EC 132/2023: o Art. 1º saiu com CEM lacunas, e
+ * as primeiras eram "1º", "43.", "4º", "2º", "50.". A regra apagava
+ * qualquer coisa com dígito, e num texto de emenda quase todo dígito é
+ * REFERÊNCIA: "Art. 43", "§ 2º", "inciso III", "Lei 5.172".
+ *
+ * Apagar referência erra duas vezes. Primeiro porque a banca não troca
+ * o endereço de um artigo por outro esperando que você tenha decorado a
+ * numeração de cada remissão — ela troca o PRAZO, o PERCENTUAL, o
+ * QUÓRUM. Segundo porque sem os números o texto deixa de ser legível:
+ * "Art. ▁▁ ... § ▁▁" não é um exercício, é um texto quebrado, e cem
+ * buracos num artigo só não se responde, se abandona.
+ *
+ * ENTÃO O DÍGITO SÓ VIRA LACUNA QUANDO É QUANTIDADE: seguido de uma
+ * unidade (dias, meses, anos, vezes), escrito como percentual, ou
+ * escrito como fração. E nunca quando vem logo depois de uma palavra de
+ * endereço.
+ * ===================================================================== */
+const LEI_ENDERECO = ["art", "arts", "artigo", "artigos", "inciso", "incisos",
+  "alinea", "alineas", "item", "itens", "paragrafo", "paragrafos",
+  "lei", "leis", "decreto", "emenda", "ec", "sumula", "n", "no", "nos",
+  "numero", "caput", "anexo", "capitulo", "secao", "titulo", "livro"];
+
+/* As unidades que transformam um número em prazo ou medida. */
+const LEI_UNIDADES = ["dia", "dias", "mes", "meses", "ano", "anos",
+  "hora", "horas", "vez", "vezes", "por"];
+
+function leiEhEndereco(p) {
+  const m = leiMiolo(p);
+  return LEI_ENDERECO.indexOf(m) >= 0 || m === "§" || /^§+$/.test(String(p || ""));
+}
+
+/* A decisão precisa da VIZINHANÇA, e é por isso que ela não cabe numa
+ * função que olha uma palavra sozinha: "90" depois de "prazo de" e
+ * antes de "dias" é prazo; "90" depois de "Art." é endereço. Foi a
+ * palavra isolada que produziu as cem lacunas. */
+function leiPalavraChaveNo(palavras, i) {
+  const bruto = String(palavras[i] || "");
+  const limpo = leiMiolo(bruto);
   if (!limpo) return false;
-  /* qualquer coisa com dígito: prazos, percentuais, quóruns, valores */
-  if (/\d/.test(limpo)) return true;
+
+  if (/\d/.test(limpo)) {
+    /* percentual e fração são sempre quantidade */
+    if (/%/.test(bruto) || /^\d+\/\d+$/.test(limpo)) return true;
+    /* logo depois de uma palavra de endereço: é remissão */
+    const antes = palavras[i - 1];
+    if (antes !== undefined && leiEhEndereco(antes)) return false;
+    /* "1º", "2º", "43." soltos são numeração de dispositivo */
+    if (/^\d+[º°]?$/.test(limpo) || /^[ivxlcdm]+$/.test(limpo)) {
+      const dep = palavras[i + 1];
+      /* só conta se uma unidade vier logo depois: "90 dias" */
+      return dep !== undefined && LEI_UNIDADES.indexOf(leiMiolo(dep)) >= 0;
+    }
+    return true;                 /* "5.172-A", valores, algo com unidade junto */
+  }
+
   const listas = LEI_MODAIS.concat(LEI_RESTRITIVAS, LEI_NUMEROS);
-  return listas.some((x) => leiNormalPalavra(x) === limpo);
+  if (listas.some((x) => leiNormalPalavra(x) === limpo)) {
+    /* NUMERAL POR EXTENSO também precisa de unidade, pelo mesmo motivo:
+     * "um" e "uma" são artigo indefinido em nove de cada dez frases, e
+     * apagá-los não testa nada. */
+    if (LEI_NUMEROS.some((x) => leiNormalPalavra(x) === limpo)) {
+      const dep = palavras[i + 1];
+      return dep !== undefined && LEI_UNIDADES.indexOf(leiMiolo(dep)) >= 0;
+    }
+    return true;
+  }
+  return false;
+}
+
+/* Mantida para quem só quer perguntar de uma palavra solta — e para o
+ * teste que confere que acento e maiúscula não decidem nada. */
+function leiPalavraChave(p) {
+  return leiPalavraChaveNo([p], 0);
 }
 
 /* Devolve [{txt, lacuna}] — o texto em pedaços, marcando o que sumir.
@@ -663,14 +735,20 @@ function leiPalavraChave(p) {
 function leiComLacunas(texto) {
   const bruto = String(texto || "");
   if (!bruto) return [];
-  const partes = [];
-  const re = /(\s+)/;
-  bruto.split(re).forEach((pedaco) => {
-    if (!pedaco) return;
-    if (/^\s+$/.test(pedaco)) { partes.push({ txt: pedaco, lacuna: false }); return; }
-    partes.push({ txt: pedaco, lacuna: leiPalavraChave(pedaco) });
+  const cru = bruto.split(/(\s+)/).filter((x) => x !== "");
+  /* só as palavras, para a vizinhança ser contada sem os espaços no meio */
+  const idx = [];
+  const palavras = [];
+  cru.forEach((pedaco, k) => {
+    if (/^\s+$/.test(pedaco)) return;
+    idx.push(k);
+    palavras.push(pedaco);
   });
-  return partes;
+  const marca = {};
+  palavras.forEach((_, j) => {
+    if (leiPalavraChaveNo(palavras, j)) marca[idx[j]] = true;
+  });
+  return cru.map((pedaco, k) => ({ txt: pedaco, lacuna: !!marca[k] }));
 }
 
 function leiQuantasLacunas(texto) {
