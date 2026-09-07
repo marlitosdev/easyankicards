@@ -1351,10 +1351,19 @@ const UI = {
   "jur_so_ano": "{a} (só o ano)",
   "jur_unir_veio": "— outra tese guardada para o mesmo julgado ({t}):",
   "jur_unir_ementa": "— ementa que estava no repetido ({t}):",
-  "jur_rep_tit": "Parece o mesmo julgado guardado duas vezes",
-  "jur_rep_um": "{t} está guardado {n} vezes neste tópico.",
-  "jur_rep_unir": "unir os dois",
-  "jur_rep_unir_conf": "Unir os dois registros de {t}?\n\nFica UM só. Nada se perde: a outra tese e a outra ementa vão para o fim do texto, e os tópicos dos dois se somam.",
+  /* O TÍTULO DIZ QUANTOS PROCESSOS ESTÃO DUPLICADOS, e nunca compara uma
+     linha com a outra. Com duas linhas — um RE e uma ADI —, "parece o
+     mesmo julgado guardado duas vezes" era lido como "estas duas são a
+     mesma coisa", e quem lia concluía, com razão, que o app estava
+     propondo unir dois processos diferentes. */
+  "jur_rep_tit": "Um julgado deste tópico está guardado duas vezes",
+  "jur_rep_tit_n": "{n} julgados deste tópico estão guardados duas vezes — cada linha abaixo é UM processo repetido",
+  "jur_rep_um": "{t} — duas cópias:",
+  "jur_rep_copia": "{i}ª",
+  "jur_rep_sem_tese": "(sem tese escrita)",
+  "jur_rep_unir": "unir as duas",
+  "jur_rep_unir_aj": "Junta as duas cópias de {t} num registro só. Nada é apagado: a outra tese e a outra ementa vão para o fim do texto.",
+  "jur_rep_unir_conf": "Unir as duas cópias de {t}?\n\n1ª — {a}\n\n2ª — {b}\n\nFica UM registro só. Nada se perde: a segunda tese e a segunda ementa vão para o fim do texto, e os tópicos das duas se somam.\n\nSe as duas acima NÃO forem a mesma decisão, cancele: é o caso raro de dois processos com o mesmo número.",
   "jur_rep_uniu": "Unidos. Ficou um registro de {t}.",
   "jur_rep_exp": "Mesmo tribunal, mesma classe e mesmo número — só a pontuação difere. Não é palpite: é o mesmo processo.",
   "jur_prompt_btn": "criar prompt: são a mesma coisa?",
@@ -1384,6 +1393,19 @@ const UI = {
   "jur_nada_preenchido": "(nenhum campo preenchido além da tese)",
   "jur_nada_faltando": "(nenhum)",
   "jur_prompt_completar": "Tenho este julgado guardado para estudar o tópico \"{tp}\", e ele está incompleto. Preciso de duas coisas: COMPLETAR o que falta e CONFERIR o que já está escrito.\n\nJULGADO: {tit}\n\nO QUE JÁ ESTÁ PREENCHIDO (não mexa nestes campos):\n{tem}\n\nCAMPOS VAZIOS QUE QUERO PREENCHER: {falta}\n\nTESE GUARDADA (transcrição do tribunal — NÃO reescreva):\n{tese}\n\nRESUMO GUARDADO:\n{resumo}\n\nEMENTA GUARDADA:\n{ementa}\n\n---\n\nDevolva SOMENTE um objeto JSON, sem texto antes nem depois:\n\n{\n  \"tribunal\": \"\",\n  \"classe\": \"ex.: ADI, RE, REsp, Súmula Vinculante, Tema\",\n  \"numero\": \"só o número\",\n  \"data_julgamento\": \"aaaa-mm-dd\",\n  \"orgao\": \"\",\n  \"relator\": \"\",\n  \"fonte\": \"onde este julgado pode ser conferido\",\n  \"categoria\": \"SÚMULA VINCULANTE | REPETITIVO | REPERCUSSÃO GERAL | CONTROLE CONCENTRADO | vazio\",\n  \"resumo\": \"2 a 4 frases, só se o resumo guardado estiver vazio\",\n  \"assuntos\": [\"3 a 6 assuntos curtos, em minúsculas\"],\n  \"conferencia\": [\n    { \"campo\": \"tese|resumo|ementa\", \"trecho\": \"o pedaço exato com problema\", \"problema\": \"o que está errado\", \"sugestao\": \"como deveria estar\" }\n  ],\n  \"identificacao\": \"o que você entendeu que este julgado é, em uma frase — para eu conferir se você identificou o processo certo\"\n}\n\nREGRAS QUE NÃO PODEM SER QUEBRADAS:\n1. NÃO REESCREVA A TESE. Ela é transcrição do tribunal: trocar uma palavra muda o que eu marco na prova. Se houver erro nela, aponte em \"conferencia\" e deixe que eu decida.\n2. SÓ PREENCHA CAMPO VAZIO. Se um campo aparece na lista \"já preenchido\", devolva-o vazio — eu não quero a sua versão dele.\n3. NÃO INVENTE NÚMERO, DATA NEM RELATOR. Se você não tem certeza de qual processo é este, devolva esses campos vazios e diga isso em \"identificacao\". Um número errado aqui é pior que um campo vazio: campo vazio eu vejo, número errado eu decoro.\n4. EM \"conferencia\", procure: erro de digitação (palavra repetida, letra trocada), incoerência entre a tese e o resumo, número ou percentual que aparece diferente nos dois, e afirmação no resumo que a tese não sustenta. Lista vazia se estiver tudo certo — não invente problema para parecer útil.\n5. \"assuntos\" são etiquetas de busca, não frases: \"multa tributária\", \"não confisco\", \"anterioridade\".\n6. Nada de markdown, nada de ``` em volta do JSON.",
+  /* ---- A TELA DE COMPLETAR: dois passos, na ordem em que se fazem ---- */
+  "jur_cpl_titulo": "Completar e conferir este julgado",
+  "jur_cpl_fechar_aj": "Fecha. O que já foi preenchido fica guardado.",
+  "jur_cpl_p1": "Copie a pergunta e cole numa IA:",
+  "jur_cpl_copiar": "copiar a pergunta",
+  "jur_cpl_copiar_aj": "Copia uma pergunta com este julgado dentro — o que já está preenchido, o que falta, a tese e a ementa. A IA devolve um JSON.",
+  "jur_cpl_copiado": "copiado",
+  "jur_cpl_p2": "Cole aqui a resposta dela:",
+  "jur_cpl_ph": "Cole o JSON que a IA devolveu. Ele é lido sozinho — o botão abaixo só é preciso se a colagem não disparar.",
+  "jur_cpl_ler": "ler a resposta",
+  "jur_cpl_ler_aj": "Preenche SÓ os campos vazios, soma os assuntos e mostra o que a IA apontou no texto. A tese nunca é reescrita.",
+  "jur_cpl_vazio_aj": "“{c}” está vazio. É um dos campos que a pergunta vai pedir.",
+  "jur_cpl_cheio_aj": "“{c}” já está preenchido, e a resposta da IA não vai substituí-lo.",
   "jur_completar": "completar e conferir",
   "jur_completar_aj": "Monta uma pergunta com este julgado dentro, para você colar numa IA. Ela preenche só os campos vazios e aponta erros no texto — a tese nunca é reescrita.",
   "jur_completar_falta": "Faltam {n} campo(s): {q}. Toque para montar a pergunta.",

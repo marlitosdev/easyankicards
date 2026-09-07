@@ -77,9 +77,52 @@ function leiReg(tipo, oque, detalhe) {
  * do navegador, que ninguém abre, e o registro fica mudo justamente no
  * evento que interessa. Envolvendo, a falha vira uma linha com o NOME
  * do botão — que é o que a pessoa consegue relatar. */
+/* =====================================================================
+ * A LIGAÇÃO DE UM BOTÃO PRECISA FALHAR NA HORA DE LIGAR
+ *
+ * O DEFEITO REAL, achado no registro do usuário: sete botões desta tela
+ * — todos os "fechar" das gavetas — estavam ligados com DOIS argumentos
+ * numa função de três: liga("btnLeiProcFechar", () => ...). A arrow
+ * caiu no lugar do NOME, "acao" ficou undefined, e o clique produzia
+ * "Cannot read properties of undefined (reading 'apply')".
+ *
+ * O sintoma era o pior possível: o botão existia, respondia ao toque,
+ * não fazia nada, e o log dizia
+ *
+ *   falha em () => $("dlgLeiProc").close() — reading 'apply'
+ *
+ * ou seja, imprimia o CÓDIGO no lugar do nome, porque o código estava
+ * mesmo na variável do nome. Quem lê isso procura um erro dentro do
+ * close(), que está perfeito.
+ *
+ * DUAS DEFESAS, e as duas importam:
+ *
+ * 1. ACEITAR A FORMA DE DOIS ARGUMENTOS. Um botão nunca deve ficar
+ *    morto por causa da ordem dos parâmetros. Sem nome, ele é deduzido
+ *    do id — pior que um nome escrito à mão, e infinitamente melhor que
+ *    não funcionar.
+ * 2. RECUSAR NA LIGAÇÃO O QUE NÃO É FUNÇÃO. Se ainda assim vier lixo no
+ *    lugar da ação, isso é anotado AGORA, no arranque, e não daqui a
+ *    três dias quando alguém tocar no botão. Erro que espera o clique é
+ *    erro que chega junto com a frustração.
+ * ===================================================================== */
 function leiBotao(id, nome, acao) {
+  /* liga(id, fn) — a arrow veio no lugar do nome */
+  if (typeof nome === "function" && acao === undefined) {
+    acao = nome;
+    nome = String(id || "").replace(/^btnLei/, "").replace(/([a-z])([A-Z])/g, "$1 $2")
+      .toLowerCase() || String(id || "");
+  }
   const b = $(id);
   if (!b) return;
+  if (typeof acao !== "function") {
+    /* NÃO liga nada: um onclick que estoura é pior que um botão inerte,
+     * porque o alerta de erro cobre a tela em cima de um gesto simples */
+    try { leiReg("erro", "botão sem ação: " + id,
+                 "ligado com " + (typeof acao) + " no lugar da função"); }
+    catch (e) {}
+    return;
+  }
   b.onclick = function () {
     try {
       const r = acao.apply(this, arguments);
@@ -1688,19 +1731,19 @@ function leiIniciar() {
   });
 
   liga("btnLeiProcSalvar", "guardar procedência", () => leiProcSalvar());
-  liga("btnLeiProcFechar", () => $("dlgLeiProc").close());
-  liga("btnLeiVincFechar", () => $("dlgLeiVincular").close());
-  liga("btnLeiClozeFechar", () => $("dlgLeiCloze").close());
-  liga("btnLeiClozeConferir", () => leiClozeConferir());
-  liga("btnLeiClozeAplicar", () => leiClozeAplicar());
-  liga("btnLeiClozeCopiar", () => {
+  liga("btnLeiProcFechar", "fechar a procedência", () => $("dlgLeiProc").close());
+  liga("btnLeiVincFechar", "fechar o vínculo", () => $("dlgLeiVincular").close());
+  liga("btnLeiClozeFechar", "fechar a lacuna", () => $("dlgLeiCloze").close());
+  liga("btnLeiClozeConferir", "conferir a lacuna", () => leiClozeConferir());
+  liga("btnLeiClozeAplicar", "aplicar a lacuna", () => leiClozeAplicar());
+  liga("btnLeiClozeCopiar", "copiar o prompt da lacuna", () => {
     try { navigator.clipboard.writeText($("leiClozePrompt").value); } catch (e) {}
     const b = $("btnLeiClozeCopiar");
     const r = b.textContent;
     b.textContent = t("copied");
     setTimeout(() => { b.textContent = r; }, 1800);
   });
-  liga("btnLeiRankFechar", () => $("dlgLeiRank").close());
+  liga("btnLeiRankFechar", "fechar os artigos que mais caem", () => $("dlgLeiRank").close());
 
   /* as seis marcas, as MESMAS do resumo */
   [["btnLeiMarcaDest", "destaque"], ["btnLeiMarcaImp", "importante"],

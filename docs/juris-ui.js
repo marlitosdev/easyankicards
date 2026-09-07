@@ -579,7 +579,18 @@ function jurPintarRepetidos() {
 
   const tit = document.createElement("div");
   tit.className = "jur-rep-tit";
-  tit.textContent = t("jur_rep_tit");
+  /* O TÍTULO CONTA QUANTOS PROCESSOS, e não quantos registros.
+   *
+   * "Parece o mesmo julgado guardado duas vezes" sobre uma lista de
+   * DUAS linhas se lê como "estas duas linhas são a mesma coisa" — e as
+   * duas linhas eram um RE e uma ADI, processos evidentemente
+   * diferentes. Quem lia concluía, com razão, que o app estava propondo
+   * uma besteira.
+   *
+   * Cada linha é UM processo que está guardado duas vezes. O aviso
+   * inteiro nunca comparou uma linha com a outra. */
+  tit.textContent = t(pares.length > 1 ? "jur_rep_tit_n" : "jur_rep_tit",
+                      { n: pares.length });
   cx.append(tit);
   const exp = document.createElement("div");
   exp.className = "nota";
@@ -589,21 +600,60 @@ function jurPintarRepetidos() {
   pares.forEach((p) => {
     const li = document.createElement("div");
     li.className = "jur-rep-li";
-    const nome = document.createElement("span");
+
+    const esq = document.createElement("div");
+    esq.className = "jur-rep-txt";
+    const nome = document.createElement("div");
+    nome.className = "jur-rep-nome";
     nome.textContent = t("jur_rep_um", { t: jurTitulo(p.fica), n: 2 });
+    esq.append(nome);
+
+    /* AS DUAS CÓPIAS, ESCRITAS.
+     *
+     * Sem elas, "unir os dois" pedia um ato de fé: não dava para ver o
+     * que ia ser unido nem conferir que são mesmo o mesmo processo. Com
+     * as duas teses lado a lado, a decisão se toma olhando — e o caso
+     * em que o app se engana (dois julgados de números iguais em
+     * tribunais diferentes) fica visível antes de unir, não depois. */
+    [p.fica, p.vai].forEach((x, i) => {
+      const l = document.createElement("div");
+      l.className = "jur-rep-copia";
+      const tese = String(x.tese || x.texto || "").replace(/\s+/g, " ").trim();
+      l.textContent = t("jur_rep_copia", { i: i + 1 })
+        + " " + (tese ? tese.slice(0, 110) + (tese.length > 110 ? "…" : "")
+                      : t("jur_rep_sem_tese"));
+      l.title = tese;
+      esq.append(l);
+    });
+
     const b = document.createElement("button");
     b.type = "button";
     b.className = "btn-min";
     b.textContent = t("jur_rep_unir");
+    b.title = t("jur_rep_unir_aj", { t: jurTitulo(p.fica) });
     b.onclick = () => jurUnirPar(p.fica.id, p.vai.id);
-    li.append(nome, b);
+    li.append(esq, b);
     cx.append(li);
   });
 }
 
 async function jurUnirPar(idFica, idVai) {
   const a = jurDe(idFica);
-  if (!(await uiConfirm(t("jur_rep_unir_conf", { t: jurTitulo(a) })))) return;
+  const b = jurDe(idVai);
+  if (!a || !b) return;
+  /* A PERGUNTA MOSTRA AS DUAS TESES.
+   *
+   * "Unir os dois registros de STF RE 584.100?" não dá o que conferir:
+   * a pessoa está sendo convidada a apagar um registro sem ver o que há
+   * dentro dele. Com as duas teses na pergunta, ela vê que são a mesma
+   * decisão escrita de dois jeitos — ou vê que NÃO são, e cancela. */
+  const corta = (x) => {
+    const s2 = String(x.tese || x.texto || "").replace(/\s+/g, " ").trim();
+    return s2 ? s2.slice(0, 220) + (s2.length > 220 ? "…" : "")
+              : t("jur_rep_sem_tese");
+  };
+  if (!(await uiConfirm(t("jur_rep_unir_conf", {
+        t: jurTitulo(a), a: corta(a), b: corta(b) })))) return;
   const r = jurUnir(idFica, idVai);
   if (!r) return;
   reg("JURIS", "julgados repetidos unidos", jurTitulo(r));
@@ -641,8 +691,83 @@ async function jurPedirIA() {
  * decide o que sobrescrever é onde a regra se perde na próxima
  * refatoração.
  * ===================================================================== */
-async function jurCompletarPedir(id) {
+/* =====================================================================
+ * COMPLETAR E CONFERIR: OS DOIS PASSOS NUMA TELA SÓ
+ *
+ * O QUE ESTAVA ERRADO, e era erro meu de leitura da assinatura:
+ * uiTexto(titulo, valor, dois, extra) — o terceiro argumento abre uma
+ * SEGUNDA caixa de texto, e eu passei "true" achando que pedia caixa
+ * alta. Duas consequências, e a segunda escondia a primeira:
+ *
+ *   1. A tela abria com dois campos idênticos, sem rótulo nenhum, e
+ *      ninguém tinha como saber o que ia em cada um.
+ *   2. Com "dois" ligado, uiTexto devolve {a, b} — um OBJETO. O
+ *      JSON.parse recebia "[object Object]", falhava, e o app dizia
+ *      "não entendi essa resposta como JSON" sobre um JSON perfeito.
+ *      Ou seja: a mensagem de erro acusava o usuário do meu engano.
+ *
+ * MAS TROCAR O "true" POR NADA NÃO BASTAVA. A caixa genérica de texto é
+ * a ferramenta errada aqui: ela não diz o que colar dentro, não diz de
+ * qual julgado se trata, não mostra o que falta, e o resultado saía num
+ * alerta que some ao tocar em OK — sendo que o resultado é exatamente o
+ * que se lê comparando com o julgado na tela de trás.
+ *
+ * A TELA PRÓPRIA põe os dois passos na ordem em que se fazem, mostra
+ * quais campos estão vazios antes e depois, e deixa o resultado escrito
+ * até alguém fechar.
+ * ===================================================================== */
+let jurCplId = "";           /* julgado aberto nesta tela */
+
+function jurCompletarAbrir(id) {
   const j = jurDe(id);
+  if (!j) return;
+  jurCplId = id;
+  if ($("jurCplAlvo")) {
+    $("jurCplAlvo").textContent = jurTitulo(j) || t("jur_sem_titulo");
+  }
+  if ($("jurCplResposta")) $("jurCplResposta").value = "";
+  if ($("jurCplSaida")) { $("jurCplSaida").hidden = true; $("jurCplSaida").textContent = ""; }
+  jurCplPintarFalta();
+  jurCplPintarLer();
+  abrirModal("dlgJurCompletar");
+  reg("JURIS", "tela de completar aberta",
+      jurTitulo(j) + " · faltam " + jurFaltando(j).length);
+}
+
+/* OS CAMPOS VAZIOS, ESCRITOS. "Faltam 6" não diz quais, e "quais" é o
+ * que decide se vale a pena a ida à IA — faltar o relator é uma coisa,
+ * faltar o número do processo é outra. Repintado depois de aplicar, é
+ * ele que mostra o que a resposta resolveu. */
+function jurCplPintarFalta() {
+  const cx = $("jurCplFalta");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const j = jurDe(jurCplId);
+  if (!j) return;
+  const falta = jurFaltando(j);
+  const todos = (typeof JUR_CAMPOS_META !== "undefined" ? JUR_CAMPOS_META : [])
+    .map((c) => c.k).concat(["tags"]);
+  todos.forEach((k) => {
+    const vazio = falta.indexOf(k) >= 0;
+    const p = document.createElement("span");
+    p.className = "jur-cpl-campo" + (vazio ? "" : " jur-cpl-campo-ok");
+    p.textContent = (vazio ? "" : "✓ ") + jurNomeCampo(k);
+    p.title = t(vazio ? "jur_cpl_vazio_aj" : "jur_cpl_cheio_aj",
+                { c: jurNomeCampo(k) });
+    cx.append(p);
+  });
+}
+
+/* O botão de ler só acende com algo na caixa — desabilitado ele diz o
+ * que falta fazer sem precisar de um alerta para dizê-lo. */
+function jurCplPintarLer() {
+  const b = $("btnJurCplLer");
+  if (!b) return;
+  b.disabled = !String(($("jurCplResposta") || {}).value || "").trim();
+}
+
+async function jurCompletarPedir(id) {
+  const j = jurDe(id || jurCplId);
   if (!j) return;
   const txt = jurPromptCompletar(j, jurTopicoAtual ? jurTopicoAtual.nome : "");
   if (!txt) return;
@@ -650,22 +775,32 @@ async function jurCompletarPedir(id) {
   const falta = jurFaltando(j);
   reg("JURIS", "prompt de completar copiado",
       jurTitulo(j) + " · faltam " + falta.length + ": " + falta.join(", "));
-  if (ok) await uiAlert(t("jur_completar_copiado"));
+  if (ok) jurReagirBtn("btnJurCplCopiar", t("jur_cpl_copiado"));
 }
 
-async function jurCompletarLer(id) {
-  const j = jurDe(id);
+/* COLOU, JÁ LÊ — a mesma regra da caixa de entrada. Não existe motivo
+ * para colar a resposta da IA aqui e não querer que ela seja lida. */
+function jurCplAoColar() {
+  setTimeout(() => {
+    jurCplPintarLer();
+    const v = String(($("jurCplResposta") || {}).value || "").trim();
+    if (!v || (typeof jurEhJson === "function" && !jurEhJson(v))) return;
+    jurCompletarLer();
+  }, 0);
+}
+
+function jurCompletarLer() {
+  const j = jurDe(jurCplId);
   if (!j) return;
-  const bruto = await uiTexto(t("jur_completar_cole"), "", true);
-  if (bruto === null) return;
+  const bruto = String(($("jurCplResposta") || {}).value || "").trim();
   let dados = null;
-  try { dados = JSON.parse(String(bruto).trim()); } catch (e) { dados = null; }
+  try { dados = JSON.parse(bruto); } catch (e) { dados = null; }
   if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
     reg("JURIS", "resposta de completar recusada", "não era JSON");
-    await uiAlert(t("jur_completar_nada"));
+    jurCplEscrever(t("jur_completar_nada"));
     return;
   }
-  const r = jurCompletar(id, dados);
+  const r = jurCompletar(jurCplId, dados);
   const partes = [];
   partes.push(r.mudou.length
     ? t("jur_completar_fez", { q: r.mudou.map(jurNomeCampo).join(", ") })
@@ -676,9 +811,8 @@ async function jurCompletarLer(id) {
   }
   /* A CONFERÊNCIA É AVISO, NUNCA CORREÇÃO.
    * A tese é transcrição do tribunal e o resumo é texto de estudo: uma
-   * troca automática aqui apagaria a palavra certa achando que era a
-   * errada, e o erro sairia gravado com a autoridade de "o app
-   * corrigiu". */
+   * troca automática apagaria a palavra certa achando que era a errada,
+   * e o erro sairia gravado com a autoridade de "o app corrigiu". */
   const conf = Array.isArray(dados.conferencia) ? dados.conferencia : [];
   if (conf.length) {
     partes.push("\n\n" + t("jur_conferencia_tit") + "\n"
@@ -698,8 +832,16 @@ async function jurCompletarLer(id) {
   reg("JURIS", "resposta de completar aplicada",
       jurTitulo(j) + " · preenchidos " + r.mudou.length
       + " · apontamentos " + conf.length);
+  jurCplEscrever(partes.join(""));
+  jurCplPintarFalta();
   jurPintarLista();
-  await uiAlert(partes.join(""));
+}
+
+function jurCplEscrever(txt) {
+  const cx = $("jurCplSaida");
+  if (!cx) return;
+  cx.hidden = false;
+  cx.textContent = txt;
 }
 
 function jurNomeCampo(k) {
@@ -827,14 +969,18 @@ function jurPintarLista() {
      * mesma aparência, e o pela metade só é descoberto no dia em que se
      * procura por ele e não se acha. */
     const falta = (typeof jurFaltando === "function") ? jurFaltando(j) : [];
-    const bF = bt(falta.length ? "🩹" + falta.length : "🩹",
+    /* UM ÍCONE SÓ, e ele abre a tela onde os dois passos estão em ordem.
+     *
+     * Eram dois — 🩹 para copiar a pergunta e 📥 para colar a resposta —
+     * e nada na tela dizia que um vinha depois do outro. Dois ícones
+     * mudos lado a lado se leem como duas ações alternativas, e não como
+     * o começo e o fim do mesmo caminho. */
+    bt(falta.length ? "🩹" + falta.length : "🩹",
       falta.length
         ? t("jur_completar_falta", { n: falta.length,
             q: falta.map(jurNomeCampo).join(", ") })
         : t("jur_completar_ok"),
-      falta.length ? "jur-ic-falta" : "", () => jurCompletarPedir(j.id));
-    bF.oncontextmenu = (ev) => { if (ev) ev.preventDefault(); };
-    bt("📥", t("jur_completar_ler_aj"), "", () => jurCompletarLer(j.id));
+      falta.length ? "jur-ic-falta" : "", () => jurCompletarAbrir(j.id));
     bt("🃏", t("jur_card_dica"), "", () => jurGerarCartao(j.id));
     bt("✏️", t("jur_ed"), "", () => jurEditar(j.id));
     bt("📋", t("jur_cp"), "", async () => {
@@ -1034,6 +1180,16 @@ function jurIniciarTela() {
   const liga = (id, fn) => { if ($(id)) $(id).onclick = fn; };
   liga("btnJurColar", jurColar);
   liga("btnJurPrincipal", jurPrincipal);
+  liga("btnJurCplCopiar", () => jurCompletarPedir());
+  liga("btnJurCplLer", () => jurCompletarLer());
+  liga("btnJurCplFechar", () => $("dlgJurCompletar").close());
+  liga("btnJurCplX", () => $("dlgJurCompletar").close());
+  if ($("jurCplResposta")) {
+    $("jurCplResposta").oninput = jurCplPintarLer;
+    if ($("jurCplResposta").addEventListener) {
+      $("jurCplResposta").addEventListener("paste", jurCplAoColar);
+    }
+  }
   liga("btnJurSalvar", jurSalvar);
   liga("btnJurLimpar", () => {
     jurLimparForm();
