@@ -2366,6 +2366,14 @@ const UI = {
   "rs_sem_questao": "Não há questão aberta para guardar o rascunho.",
   "rs_sem_espaco": "Não coube: o armazenamento do navegador está cheio. Apague rascunhos antigos e tente de novo.",
   "qs_pular": "pular",
+  "qs_voltar": "◀ anterior",
+  "qs_voltar_ajuda": "Volta para a questão anterior sem responder esta. Serve para reler a de trás, conferir o comentário de uma que você já fez, ou comparar duas assertivas parecidas. Não mexe no placar: andar não é responder, e a questão que você deixou continua esperando.",
+  /* ---- A RODADA TERMINADA E NÃO REGISTRADA ----
+     "Continuar de onde parei" não quer dizer nada quando não sobrou
+     questão nenhuma. O que ficou faltando é lançar a hora no diário. */
+  "qs_terminada_perg": "Você terminou esta rodada — {f} de {n}, {c} certas ({pct}%) — e ainda não registrou o estudo.\n\nO placar está guardado. Quer lançá-lo no diário agora?",
+  "qs_terminada_reg": "registrar esta rodada",
+  "qs_terminada_nova": "descartar e começar outra",
   "qs_pular_ajuda": "Vai para a próxima sem responder. A questão continua pendente e volta a aparecer — pular não conta como erro.",
   "qs_so_falhas": "só as que errei ({n})",
   "qs_so_falhas_on": "✓ só as que errei ({n})",
@@ -2449,11 +2457,25 @@ const UI = {
   "lei_ajuda": "A letra da lei, guardada na biblioteca. Uma lei serve vários tópicos: a 4.320 vale para receita, despesa, restos a pagar e créditos adicionais ao mesmo tempo.",
   "lei_n_artigos": "{n} artigos",
   "lei_chip_ajuda": "Esta lei está ligada a {n} tópico(s). O texto é um só.",
-  "lei_colar_nova": "+ colar outra lei",
-  "lei_colar_nova_ajuda": "Abre a edição em branco para colar uma lei nova. A anterior não é apagada — fica na fila ao lado.",
+  "lei_colar_nova": "+ colar uma lei nova",
+  "lei_colar_nova_ajuda": "Para texto que AINDA NÃO ESTÁ no aplicativo. Abre uma caixa em branco: você copia a lei do site do Planalto ou de um PDF e cola aqui. Ela nasce agora, ligada a este tópico, e entra na fila ao lado. A lei que já estava aberta não é apagada nem substituída — continua na fila, a um toque. Se o texto que você quer JÁ foi colado noutro tópico, não use este botão: use “usar uma lei já guardada”, senão você fica com duas cópias que divergem na primeira correção.",
   "lei_colar_instrucao": "Cole a lei na caixa de edição e clique em gravar. Se o cabeçalho vier junto (\"LEI Nº 4.320, DE 17 DE MARÇO DE 1964\"), o número e o ano são lidos sozinhos.",
-  "lei_vincular": "vincular uma das {n} já guardadas",
-  "lei_vincular_ajuda": "Liga a este tópico uma lei que já está na biblioteca, sem colar de novo.",
+  /* ---- A FILA DE LEIS DO TÓPICO ----
+     Os dois botões do fim da fila pareciam duas formas de fazer a mesma
+     coisa. Não são, e a diferença é ONDE O TEXTO ESTÁ:
+       · "colar" — o texto ainda está fora do app, num site ou num PDF.
+         Você vai colá-lo agora, e ele nasce aqui.
+       · "usar uma já guardada" — o texto JÁ ESTÁ no aplicativo, colado
+         num outro tópico. Não se cola de novo: aponta-se para o mesmo
+         texto, que passa a ser um só para os dois tópicos. Corrigir num
+         corrige no outro, e o "parei no art. 35" é compartilhado.
+     É esta segunda que faz a biblioteca valer: a 4.320 serve receita e
+     despesa sem virar duas cópias que divergem na primeira correção. */
+  "lei_fila_rot": "leis deste tópico ({n}):",
+  "lei_fila_rot_aj": "Um tópico pode ter mais de uma lei — “Receita pública” costuma ter a 4.320 e a LRF. Toque numa delas para ler; a escolhida fica destacada.",
+  "lei_vincular": "usar uma lei já guardada ({n} disponíveis)",
+  "lei_vincular_1": "usar a outra lei já guardada",
+  "lei_vincular_ajuda": "Para texto que JÁ ESTÁ no aplicativo, colado noutro tópico. Não cola nada de novo: aponta este tópico para o MESMO texto. Daí em diante é um só — corrigir um artigo aqui corrige lá, e o “parei no art. 35” vale para os dois. É o que faz a 4.320 servir “Receita pública” e “Despesa pública” sem virar duas cópias que se desencontram.",
   "lei_vincular_este": "ligar a este tópico",
   "lei_vincular_vazio": "Não há outra lei na biblioteca ainda.",
   "lei_vinc_titulo": "Ligar uma lei já guardada",
@@ -2481,7 +2503,12 @@ const UI = {
   "lei_aqui": "✓ parei aqui",
   "lei_modo_ler": "ler",
   "lei_modo_editar": "editar",
-  "lei_modo_recitar": "recitar",
+  /* "RECITAR" DESCREVIA UM DOS DOIS EXERCÍCIOS, e não o modo.
+     Com o artigo fechado você de fato recita; com o texto em lacunas,
+     você completa — e "recitar" passou a nomear a metade errada. O que
+     os dois têm em comum é o verbo que importa: testar se você sabe,
+     em vez de reler e achar que sabe. */
+  "lei_modo_recitar": "testar",
   "lei_blocos_btn": "capítulos",
   "lei_blocos_ajuda": "{lidos} de {n} capítulos lidos. Marcar um capítulo move o marcador para o último artigo dele.",
   "lei_bloco_meta": "{n} artigos · ~{min} min",
@@ -2505,9 +2532,14 @@ const UI = {
   "lei_sem_artigos": "Esta lei ainda não tem artigo nenhum reconhecido. Cole o texto e grave.",
   "lei_recitar_ajuda": "{v} de {n} artigos revelados. Toque no artigo para ver o texto. Reler dá sensação de saber; completar mostra o que ficou.",
   /* ---- RECITAR COM LACUNA ---- */
-  "lei_rec_lac_off": "esconder o artigo inteiro",
-  "lei_rec_lac_on": "apagar só as palavras-chave",
-  "lei_rec_lac_aj": "Troca o exercício. Escondendo o artigo inteiro você recita de cor. Apagando só as palavras-chave — prazos, números, “salvo”, “vedado”, “somente” — o texto fica à vista e some justamente o que a banca troca na assertiva.",
+  /* O RÓTULO DIZ O ESTADO E O QUE O TOQUE FAZ. Só a ação ("apagar as
+     palavras-chave") lido com a função já ligada parece dizer que ela
+     está desligada — que foi exatamente o relato. */
+  "lei_rec_lac_off": "○ artigo fechado · tocar para deixar o texto com lacunas",
+  "lei_rec_lac_on": "● texto com lacunas · tocar para fechar o artigo inteiro",
+  "lei_rec_modo_esc": "Exercício: ARTIGO FECHADO — você lê só o número e a ementa, e recita o resto de cabeça. Toque no artigo para conferir.",
+  "lei_rec_modo_lac": "Exercício: TEXTO COM LACUNAS — o artigo aparece inteiro, sem os prazos, percentuais e palavras que a banca troca. Toque no artigo para revelar o que sumiu.",
+  "lei_rec_lac_aj": "Troca entre os dois exercícios. Fechado, você recita de cor — é o mais difícil. Com lacunas, o texto sustenta a memória e some só o que decide a assertiva: prazos, percentuais, “salvo”, “vedado”, “somente”, “poderá”. O número dos artigos e das remissões nunca vira lacuna: é endereço, não conteúdo.",
   "lei_rec_lac_n": "{n} lacunas",
   "lei_lac_ajuda": "Toque no artigo para ver as palavras apagadas.",
   "lei_recitar_ver": "Ver o texto deste artigo.",
@@ -2804,7 +2836,7 @@ const UI = {
   "lei_aqui": "✓ stopped here",
   "lei_modo_ler": "read",
   "lei_modo_editar": "edit",
-  "lei_modo_recitar": "recite",
+  "lei_modo_recitar": "test",
   "lei_blocos_btn": "chapters",
   "lei_bloco_marcar": "mark read",
   "lei_bloco_meta": "{n} articles · ~{min} min",
