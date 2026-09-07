@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.11.0";
+const VERSAO = "16.11.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -663,6 +663,14 @@ function aplicarTextos() {
     if (!el.textContent || !el.textContent.trim()) {
       el.setAttribute("aria-label", txt);
     }
+  });
+  /* E O PLACEHOLDER TAMBÉM, pelo mesmo motivo do title: ele é a única
+   * instrução dentro de uma caixa vazia, e escrito à mão no HTML ele
+   * fica preso a um idioma. Meia dúzia deles ainda estão em português
+   * fixo — este atributo é o caminho para tirá-los de lá um a um, sem
+   * uma linha nova de JS por caixa. */
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPh);
   });
   $("versao").textContent = "v" + VERSAO;
   $("deckExp").placeholder = t("deck_placeholder");
