@@ -676,12 +676,18 @@ function matAbrirEditor(item, comoLer) {
   matSelGuardada = "";
   matAtual = { chave: matChave(item.disciplina, item.nome),
                disciplina: item.disciplina, topico: item.nome };
-  const r = matObter(matAtual.chave);
   $("matTitulo").textContent = item.nome;
-  $("matSub").textContent = item.disciplina
-    + (r ? " · " + t("mat_tocado", { d: new Date(r.tocado).toLocaleDateString() })
-         : " · " + t("mat_novo"))
-    + (r && r.concurso ? " · " + r.concurso : "");
+  matPintarSub();
+  /* "r" VOLTOU A SER LIDO AQUI, e não herdado do trecho de cima.
+   *
+   * Ao mover a montagem do subtítulo para matPintarSub, o "const r"
+   * que a alimentava saiu junto — e esta linha continuou usando "r",
+   * que passou a não existir. Toda abertura de material estourava com
+   * "r is not defined", e o teste pegou na primeira execução.
+   *
+   * É a armadilha de sempre ao extrair função: a variável que ela
+   * levou consigo ainda tinha um segundo leitor logo abaixo. */
+  const r = matObter(matAtual.chave);
   $("matTexto").value = (r && r.texto) || "";
   try {
     matFonte = Number(localStorage.getItem("eac_mat_fonte")) || 15;
@@ -692,6 +698,32 @@ function matAbrirEditor(item, comoLer) {
   matTrocarModo(comoLer ? "ler" : (r ? "ler" : "editar"));
   abrirModal("dlgMaterial");
   if (matModo === "editar") $("matTexto").focus();
+}
+
+/* =====================================================================
+ * O SUBTÍTULO TEM DE ACOMPANHAR O QUE FOI SALVO
+ *
+ * O DEFEITO: ele era escrito UMA vez, ao abrir o material, e nunca mais.
+ * Quem abria um tópico em branco via "ainda sem material" — correto — e
+ * continuava vendo "ainda sem material" depois de escrever e salvar
+ * doze mil caracteres, com o botão ao lado dizendo "criar questões do
+ * resumo inteiro (12837 caracteres)". Duas frases sobre a mesma coisa,
+ * na mesma tela, uma delas mentindo.
+ *
+ * Nada estava perdido: o resumo estava salvo, e a contradição era só de
+ * exibição. Mas é a espécie de contradição que faz duvidar do resto —
+ * quem lê "sem material" ao lado de "12837 caracteres" não sabe mais em
+ * qual dos dois acreditar, e o correto é o que parece menos oficial.
+ * ===================================================================== */
+function matPintarSub() {
+  if (!matAtual || !$("matSub")) return;
+  const r = matObter(matAtual.chave);
+  const temTexto = !!(r && String(r.texto || "").trim());
+  $("matSub").textContent = matAtual.disciplina
+    + (temTexto
+        ? " · " + t("mat_tocado", { d: new Date(r.tocado).toLocaleDateString() })
+        : " · " + t("mat_novo"))
+    + (r && r.concurso ? " · " + r.concurso : "");
 }
 
 function matTrocarModo(modo) {
@@ -1612,6 +1644,9 @@ function matSalvarEstado() {
          (matAtual && matAtual.topico) + " · "
          + String($("matTexto").value || "").length + " caracteres");
   matPiscarSalvo();
+  /* o cabeçalho da própria tela, e não só a lista atrás dela: era ele
+   * que continuava dizendo "ainda sem material" depois de salvar */
+  matPintarSub();
   matRender();
   return true;
 }

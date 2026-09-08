@@ -2024,10 +2024,17 @@ const UI = {
   "qs_ultima_ok": "acertou na última",
   "qs_ultima_nao": "errou na última",
   "qs_nenhuma_para_responder": "Não há questões para responder com este filtro.",
-  "qs_do_topico_n": "❓ questões ({n})",
-  "qs_do_topico_zero": "❓ sem questões",
+  /* ---- TRÊS BOTÕES COMEÇAVAM COM ❓ E PARECIAM A MESMA COISA ----
+     Um RESPONDE o que já existe; os outros dois CRIAM, de origens
+     diferentes. Com o mesmo ícone e a mesma forma, a fila lia-se como
+     três variações de um botão só — e o primeiro, dizendo "sem
+     questões", parecia o aviso dos outros dois em vez de um caminho
+     próprio. Agora o verbo vem primeiro e é diferente em cada um: ▶
+     responde, ✚ cria. */
+  "qs_do_topico_n": "▶ responder as {n} questões",
+  "qs_do_topico_zero": "▶ responder — nenhuma questão guardada",
   "qs_do_topico_ajuda": "Responde as {n} questões deste tópico, uma a uma, com gabarito comentado no fim de cada.",
-  "qs_do_topico_zero_ajuda": "Este tópico ainda não tem questões. Use “virar em questão”.",
+  "qs_do_topico_zero_ajuda": "Não há o que responder: este tópico ainda não tem questão nenhuma guardada. Os dois botões “✚ criar questões” ao lado é que fazem as primeiras.",
   "qs_virar": "❓ virar em questão",
   "mk_titulo_prova": "Caiu na prova",
   "mk_titulo_pegadinha": "Pegadinhas",
@@ -2057,11 +2064,18 @@ const UI = {
   "mk_menu_trocar": "trocar a cor",
   "mk_menu_tirar": "tirar esta marca",
   "mk_menu_lista": "ver na lista",
-  "qs_qst_trecho_n": "❓ questões do trecho selecionado ({n} caracteres)",
-  "qs_qst_trecho_sem": "❓ questões do trecho selecionado — nada selecionado",
+  "qs_qst_trecho_n": "✚ criar questões do trecho ({n} caracteres)",
+  "qs_qst_trecho_sem": "✚ criar questões do trecho — selecione um pedaço antes",
+  /* ---- TRECHO CURTO DEMAIS ----
+     31 caracteres é um título ou meia frase. O prompt sai sem contexto
+     e a IA devolve questão sobre coisa nenhuma — que depois entra no
+     banco e é respondida como se valesse. O botão diz o que falta em
+     vez de aceitar e produzir lixo. */
+  "qs_qst_trecho_curto": "✚ criar questões do trecho — só {n} caracteres, selecione mais",
+  "qs_qst_trecho_curto_ajuda": "O trecho selecionado tem {n} caracteres, e o mínimo é {m}. Abaixo disso o prompt vai sem contexto e a IA devolve questões sobre coisa nenhuma — que depois ficam no banco e são respondidas como se valessem. Selecione um parágrafo inteiro.",
   "qs_qst_trecho_ajuda": "Monta o prompt SÓ com o trecho que você selecionou com o cursor. Nada a ver com as marcas coloridas.",
   "qs_qst_trecho_sem_ajuda": "Selecione um trecho do texto com o cursor primeiro. Sem seleção, use o botão ao lado para gerar do resumo inteiro.",
-  "qs_qst_resumo": "❓ questões do resumo inteiro ({n} caracteres)",
+  "qs_qst_resumo": "✚ criar questões do resumo inteiro ({n} caracteres)",
   "qs_qst_resumo_ajuda": "Monta o prompt com o resumo inteiro deste tópico, mesmo que haja um trecho selecionado.",
   "qs_virar_sel": "❓ virar o trecho marcado em questão ({n} caracteres)",
   "qs_virar_sel_ajuda": "Monta o prompt SÓ com o trecho que você selecionou. É o caminho para quando o resumo é grande e as questões saem de um pedaço dele.",
@@ -2092,7 +2106,11 @@ const UI = {
   "qs_criar_mais": "criar mais questões",
   "qs_fonte_vazia": "Cole o material acima e o prompt aparece aqui.",
   "qs_vinculadas_a": "Ficam guardadas em: {onde}",
-  "qs_fonte_resumo": "a partir deste resumo",
+  /* "DESTE RESUMO" ERA MENTIRA METADE DAS VEZES: o mesmo rádio aparece
+     quando o texto é o TRECHO selecionado, e dizia "resumo". */
+  "qs_fonte_resumo": "a partir do texto acima",
+  "qs_criar_de_trecho": "Texto de origem: o TRECHO que você selecionou ({n} caracteres) — não o resumo inteiro.",
+  "qs_criar_de_resumo": "Texto de origem: o resumo inteiro deste tópico ({n} caracteres).",
   "qs_fonte_caderno": "do meu caderno (NotebookLM)",
   "qs_ver_prompt": "ver o prompt",
   "qs_esconder_prompt": "esconder o prompt",

@@ -39,7 +39,7 @@ function qsUiConcursoAtual() {
  * Agora é uma janela só: o que já está no texto aparece pronto, e a IA é
  * um extra dentro dela, para quem quer MAIS do que o texto já tem.
  */
-function qsUiCriarAbrir(texto, ctx) {
+function qsUiCriarAbrir(texto, ctx, origem) {
   qsUiCtxCriar = ctx || null;
   qsUiAchados = null;
   qsUiDoTexto = [];
@@ -73,6 +73,23 @@ function qsUiCriarAbrir(texto, ctx) {
     ? t("qs_vinculadas_a", { onde: [ctx.concurso, ctx.disciplina, ctx.topico]
         .filter(Boolean).join(" · ") })
     : "";
+  /* =================================================================
+   * E DE QUAL TEXTO ELAS SAEM — que é outra pergunta.
+   *
+   * "Ficam guardadas em ..." responde ONDE serão arquivadas. Faltava o
+   * DE ONDE: quem tocou em "criar questões do trecho" chegava a uma
+   * tela cujo rádio dizia "a partir deste resumo", contradizendo o
+   * botão que acabara de apertar. Sem uma linha dizendo qual texto está
+   * na mão, os dois caminhos produzem telas idênticas — e a diferença
+   * entre eles é justamente o texto.
+   * ================================================================= */
+  if ($("qsCriarOrigem")) {
+    const nT = String(texto || "").length;
+    $("qsCriarOrigem").textContent = origem === "trecho"
+      ? t("qs_criar_de_trecho", { n: nT })
+      : t("qs_criar_de_resumo", { n: nT });
+    $("qsCriarOrigem").hidden = false;
+  }
   /* o bloco da IA nasce fechado quando o texto já rendeu questões: nesse
    * caso o caminho curto já está pronto, e abrir o prompt seria oferecer
    * trabalho antes de mostrar o resultado */
@@ -1697,15 +1714,45 @@ function qsUiLerFiltros() {
 /* ---------------------------------------------------------------------
  * O QUE APARECE DENTRO DO RESUMO
  * ------------------------------------------------------------------- */
+/* O MÍNIMO DE TEXTO PARA VALER UMA QUESTÃO.
+ *
+ * Não é um número mágico: é o tamanho abaixo do qual o trecho é um
+ * título ou meia frase, e o prompt vai sem o contexto de que a IA
+ * precisa para escrever uma assertiva verdadeira. Generoso de
+ * propósito — um parágrafo curto de lei passa. */
+const QS_TRECHO_MIN = 120;
+
 function qsUiPintarBotaoResumo() {
   const b = $("btnMatQuestoes");
   if (!b) return;
   if (!matAtual) { b.hidden = true; return; }
   const n = qsContarDoTopico(matAtual.chave);
   b.hidden = false;
-  b.textContent = n ? t("qs_do_topico_n", { n }) : t("qs_do_topico_zero");
+  /* =================================================================
+   * SEM QUESTÃO, ESTE BOTÃO SOME — não fica morto, e não fica sendo um
+   * terceiro caminho para criar.
+   *
+   * A PRIMEIRA TENTATIVA FOI DESABILITÁ-LO, e um teste antigo (U1c)
+   * apontou o erro: com zero questões ele não era um beco, era um
+   * atalho — clicá-lo LEVAVA a criar. Desabilitar teria tirado um
+   * caminho que funcionava, para consertar uma confusão de rótulo.
+   *
+   * Só que esse atalho nasceu quando ele era o ÚNICO botão de questões
+   * do resumo. Hoje há dois, explícitos e rotulados com o verbo, logo
+   * ao lado — e o atalho virou um terceiro caminho para o mesmo lugar,
+   * com um rótulo ("sem questões") que não diz que leva a criar. Era
+   * exatamente esta a queixa: "não sei informar se existem ou não
+   * questões".
+   *
+   * Some é melhor que morto e melhor que repetido: a fila fica com uma
+   * linha só quando não há o que responder, e o que fazer a seguir está
+   * escrito nos dois botões que sobraram.
+   * ================================================================= */
+  b.hidden = !n;
+  if (!n) return qsUiPintarCriadores();
+  b.textContent = t("qs_do_topico_n", { n });
   b.disabled = false;
-  b.title = n ? t("qs_do_topico_ajuda", { n }) : t("qs_do_topico_zero_ajuda");
+  b.title = t("qs_do_topico_ajuda", { n });
 
   /* O BOTAO TEM DE DIZER DE QUAL TEXTO VAI SAIR A QUESTAO.
    * "virar em questão" sem mais nada nao deixa ver se vai usar o trecho
@@ -1717,15 +1764,39 @@ function qsUiPintarBotaoResumo() {
    * ainda se confundia com as marcas coloridas da mesma barra. Separados,
    * cada um diz uma coisa so, e o do trecho fica apagado enquanto nao ha
    * trecho: dai se ve, sem ler, que falta selecionar. */
+  return qsUiPintarCriadores();
+}
+
+/* Os DOIS botões que criam. Separados de qsUiPintarBotaoResumo porque
+ * são pintados também quando o de responder some — e um "return" no
+ * meio da função anterior os teria deixado de fora justamente no caso
+ * em que eles são o único caminho que resta. */
+function qsUiPintarCriadores() {
+  if (!matAtual) return;
   const sel = qsUiSelecaoViva();
   const bt = $("btnMatQstTrecho");
   if (bt) {
+    const nSel = sel ? sel.length : 0;
+    /* TRECHO CURTO DEMAIS NÃO VIRA QUESTÃO.
+     *
+     * O relato veio com "31 caracteres" no rótulo — um título, meia
+     * frase. O prompt sai sem contexto nenhum e a IA devolve questões
+     * sobre coisa nenhuma, que entram no banco e depois são respondidas
+     * como se valessem. O erro não aparece na hora: aparece semanas
+     * depois, numa rodada, e aí já não dá para saber de onde veio.
+     *
+     * O botão passa a dizer o que falta em vez de aceitar e produzir
+     * lixo — mesmo raciocínio da caixa de julgado vazia, que desabilita
+     * em vez de abrir um alerta. */
+    const curto = nSel > 0 && nSel < QS_TRECHO_MIN;
     bt.hidden = false;
-    bt.disabled = !sel;
-    bt.textContent = sel ? t("qs_qst_trecho_n", { n: sel.length })
-                         : t("qs_qst_trecho_sem");
-    bt.title = t(sel ? "qs_qst_trecho_ajuda" : "qs_qst_trecho_sem_ajuda");
-    bt.className = "btn-min" + (sel ? " btn-min-ok" : "");
+    bt.disabled = !sel || curto;
+    bt.textContent = curto ? t("qs_qst_trecho_curto", { n: nSel })
+      : (sel ? t("qs_qst_trecho_n", { n: nSel }) : t("qs_qst_trecho_sem"));
+    bt.title = curto
+      ? t("qs_qst_trecho_curto_ajuda", { n: nSel, m: QS_TRECHO_MIN })
+      : t(sel ? "qs_qst_trecho_ajuda" : "qs_qst_trecho_sem_ajuda");
+    bt.className = "btn-min" + (sel && !curto ? " btn-min-ok" : "");
   }
   const br = $("btnMatQstResumo");
   if (br) {
@@ -1775,11 +1846,15 @@ function qsUiVirarSelecao(origem) {
   matLembrarSelecao();
   const sel = origem === "resumo" ? "" : String(matSelGuardada || "").trim();
   if (origem === "trecho" && !sel) { uiAlert(t("qs_qst_trecho_sem_ajuda")); return; }
+  if (origem === "trecho" && sel.length < QS_TRECHO_MIN) {
+    uiAlert(t("qs_qst_trecho_curto_ajuda", { n: sel.length, m: QS_TRECHO_MIN }));
+    return;
+  }
   const texto = sel || matTextoVivo(matAtual.chave, "texto");
   qsUiCriarAbrir(texto, {
     disciplina: matAtual.disciplina, topico: matAtual.topico,
     chave: matAtual.chave, concurso: qsUiConcursoAtual(),
-  });
+  }, sel ? "trecho" : "resumo");
 }
 
 function qsUiIniciar() {
