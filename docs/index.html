@@ -885,6 +885,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgQsResponder .qs-barra-principal{margin:4px 0 0;padding-top:5px;
   border-top:1px solid var(--borda)}
 #dlgQsResponder .qs-barra-ferramentas{margin:2px 0 0}
+/* A FILA DE ANDAR: o passo principal ocupa o meio e o resto do espaço;
+   os dois laterais têm largura própria e não encolhem. */
+#dlgQsResponder .qs-barra-principal{display:flex;align-items:stretch;gap:6px}
+#dlgQsResponder .qs-barra-principal .qs-bt-grande{flex:1 1 auto}
+.qs-bt-andar{flex:0 0 auto;white-space:nowrap}
 #dlgQsResponder .dlg-rodape{padding:6px 0 2px;margin-top:2px}
 /* O TÍTULO E O PLACAR NUMA LINHA SÓ, em qualquer largura: nenhum dos
    dois se lê enquanto se responde, e juntos custavam duas fileiras de
@@ -5119,21 +5124,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          meio. A gaveta sobe POR CIMA da sessão e fechá-la devolve a
          mesma questão, no mesmo ponto. -->
     <button class="btn-min" id="btnQsJuris" data-i18n-title="qs_juris_ajuda" hidden></button>
-    <!-- ANDAR PARA TRÁS SEM RESPONDER.
-         "Pular" é o caminho para a frente (a questão fica pendente e
-         volta depois). Faltava o contrário: reler a anterior, conferir
-         o comentário de uma que já foi feita, comparar duas assertivas
-         parecidas. Sem isto, o único jeito de rever a de trás era
-         encerrar a rodada. Não mexe no placar: andar não é responder. -->
-    <button class="btn-min" id="btnQsVoltar" hidden></button>
-    <button class="btn-min" id="btnQsPular" data-i18n="qs_pular" hidden></button>
     <button class="btn-min" id="btnQsEmbaralhar" hidden></button>
     <button class="btn-min" id="btnQsSoFalhas" hidden></button>
     <button class="btn-min" id="btnQsMelhorar" hidden></button>
   </div>
+  <!-- OS TRÊS ANDARES NA MESMA FILA, NA ORDEM DO MOVIMENTO.
+       ◀ anterior · PRÓXIMA · pular ▶ — o que anda para trás à esquerda,
+       o que anda para a frente à direita, e no meio o passo de todo dia,
+       grande. Separados em duas faixas, "voltar" e "pular" ficavam
+       perdidos entre "abrir rascunho" e "melhorar esta questão", que não
+       têm nada a ver com andar; e a distância entre eles e o "próxima"
+       escondia que os três fazem a mesma coisa — mudar de questão.
+       Só o do meio é grande: ele é o gesto de noventa por cento das
+       vezes, e os outros dois não podem competir com ele pelo polegar. -->
   <div class="qs-barra qs-barra-principal">
+    <button class="btn-min qs-bt-andar" id="btnQsVoltar" hidden></button>
     <button class="btn btn-verde qs-bt-grande" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
+    <button class="btn-min qs-bt-andar" id="btnQsPular" data-i18n="qs_pular" hidden></button>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnQsEncerrar" hidden></button>

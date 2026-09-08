@@ -2002,7 +2002,10 @@ const UI = {
   "qs_certo": "Certo",
   "qs_errado": "Errado",
   "qs_sess_titulo": "Responder questões",
-  "qs_placar": "{i} de {n} · {c} certa(s) · {pct}%",
+  /* POSIÇÃO E PLACAR SÃO DUAS COISAS. "{i} de {n}" era respondidas+1 e
+     não mudava ao pular nem ao voltar; agora ele é onde você está, e o
+     que foi respondido tem número próprio. */
+  "qs_placar": "questão {i} de {n} · {f} respondida(s) · {c} certa(s) · {pct}%",
   "qs_acertou": "Acertou",
   "qs_errou": "Errou",
   "qs_proxima": "próxima",
@@ -4210,7 +4213,7 @@ const UI = {
   "qs_certo": "True",
   "qs_errado": "False",
   "qs_sess_titulo": "Answer questions",
-  "qs_placar": "{i} of {n} · {c} right · {pct}%",
+  "qs_placar": "question {i} of {n} · {f} answered · {c} right · {pct}%",
   "qs_acertou": "Right",
   "qs_errou": "Wrong",
   "qs_proxima": "next",

@@ -1064,6 +1064,28 @@ function qsQuantasFalhas() {
   return qsSessao.fila.filter((q) => qsInteressaNoFiltro(q)).length;
 }
 
+/* =====================================================================
+ * ONDE ESTOU NA FILA — QUE NÃO É QUANTAS EU RESPONDI
+ *
+ * O DEFEITO: o cabeçalho dizia "1 de 32" e não mudava ao pular nem ao
+ * voltar. A conta era "respondidas + 1", ou seja, o PROGRESSO. Com zero
+ * respondidas ele diz "1 de 32" esteja você na primeira questão ou na
+ * décima — e pular, que é justamente o gesto de andar sem responder,
+ * não mexia em nada.
+ *
+ * São duas informações diferentes e as duas importam: em que questão
+ * estou (muda ao andar) e quantas já respondi (muda ao responder).
+ * Espremidas num número só, a primeira some.
+ * ===================================================================== */
+function qsPosicao() {
+  if (!qsSessao || !qsSessao.fila.length) return { pos: 0, total: 0 };
+  const total = qsSessao.fila.length;
+  /* qsSessao.i pode valer fila.length quando a rodada acabou — ali não
+   * há questão nenhuma, e anunciar "33 de 32" seria pior que nada */
+  const i = Math.max(0, Math.min(total - 1, qsSessao.i));
+  return { pos: i + 1, total };
+}
+
 function qsAndar(n, gravar) {
   if (!qsSessao) return null;
   const passo = n || 1;
@@ -1126,7 +1148,7 @@ if (typeof module !== "undefined" && module.exports) {
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,
     qsSemelhante, qsParecenca, qsIgual, qsAbrirCampos, qsErradasDaSessao,
     qsSessaoGravar, qsSessaoLer, qsSessaoApagar, qsSessaoRetomavel,
-    qsSessaoRegistrada,
+    qsSessaoRegistrada, qsPosicao,
     qsSessaoRetomar, qsSessaoAcrescentar, qsEmbaralharRestantes,
     qsPular, qsPendentes,
     qsSemMarcacao,

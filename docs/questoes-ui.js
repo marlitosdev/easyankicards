@@ -535,9 +535,17 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
 function qsUiPintarSessao() {
   const q = qsAtual();
   const p = qsPlacar();
+  /* DUAS INFORMAÇÕES, E NÃO UMA ESPREMIDA EM DUAS.
+   *
+   * "1 de 32" era respondidas+1 — progresso disfarçado de posição. Com
+   * zero respondidas ele dizia "1 de 32" estivesse você na primeira ou
+   * na décima, e pular (que é andar sem responder) não mexia em nada.
+   * Agora a POSIÇÃO anda com você e o PLACAR anda com as respostas. */
+  const pos = qsPosicao();
   $("qsSessPlacar").textContent = t("qs_placar",
-    { i: Math.min(p.feitas + (q ? 1 : 0), p.total), n: p.total,
-      c: p.certas, pct: p.pct });
+    { i: pos.pos || Math.min(p.feitas + (q ? 1 : 0), p.total),
+      n: pos.total || p.total,
+      f: p.feitas, c: p.certas, pct: p.pct });
 
   const corpo = $("qsSessCorpo");
   corpo.innerHTML = "";

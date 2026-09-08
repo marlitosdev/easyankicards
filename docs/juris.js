@@ -770,6 +770,47 @@ function jurPromptCompletar(j, tituloTopico) {
  * Devolve { mudou:[...], ignorados:[...] } para a tela poder dizer o
  * que aconteceu. Gravação silenciosa aqui seria pedir fé.
  * ===================================================================== */
+/* =====================================================================
+ * O JSON QUE VEM COM ROUPA EM VOLTA
+ *
+ * QUATRO RECUSAS SEGUIDAS NO REGISTRO DO USUÁRIO, todas "não era JSON",
+ * e o objeto estava lá. O que vem de uma IA quase nunca vem limpo: vem
+ * dentro de uma cerca de markdown (```json … ```), ou com uma frase de
+ * cortesia antes ("Claro! Aqui está o JSON:"), ou com um parágrafo
+ * depois. O prompt pede sem nada disso e as IAs desobedecem — todas,
+ * o tempo todo.
+ *
+ * Recusar isso é fazer a pessoa editar texto à mão para agradar o
+ * programa. O trabalho de achar as chaves é do app: tirar a cerca e
+ * pegar do primeiro "{" ao último "}" resolve os três casos com duas
+ * linhas.
+ *
+ * NÃO É "TENTAR CONSERTAR JSON QUEBRADO". Se o que está entre as chaves
+ * não for JSON válido, continua sendo recusado — inventar vírgula que
+ * falta produziria um objeto que ninguém escreveu, e campos errados
+ * entrando calados num julgado é pior que uma recusa clara.
+ * ===================================================================== */
+function jurJsonDoTexto(bruto) {
+  let t2 = String(bruto || "").trim();
+  if (!t2) return null;
+  /* a cerca de markdown, com ou sem a palavra "json" na abertura */
+  t2 = t2.replace(/^```[a-zA-Z]*\s*/, "").replace(/\s*```$/, "").trim();
+  const tenta = (x) => {
+    try {
+      const v = JSON.parse(x);
+      return (v && typeof v === "object" && !Array.isArray(v)) ? v : null;
+    } catch (e) { return null; }
+  };
+  const direto = tenta(t2);
+  if (direto) return direto;
+  /* do primeiro "{" ao último "}": cobre a frase antes e o parágrafo
+   * depois de uma vez só */
+  const a = t2.indexOf("{");
+  const b = t2.lastIndexOf("}");
+  if (a >= 0 && b > a) return tenta(t2.slice(a, b + 1));
+  return null;
+}
+
 function jurCompletar(id, dados) {
   const j = jurDe(id);
   if (!j || !dados || typeof dados !== "object") {
