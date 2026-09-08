@@ -784,7 +784,7 @@ function jurCplAoColar() {
   setTimeout(() => {
     jurCplPintarLer();
     const v = String(($("jurCplResposta") || {}).value || "").trim();
-    if (!v || (typeof jurEhJson === "function" && !jurEhJson(v))) return;
+    if (!v || (typeof jurJsonDoTexto === "function" && !jurJsonDoTexto(v))) return;
     jurCompletarLer();
   }, 0);
 }
@@ -793,9 +793,14 @@ function jurCompletarLer() {
   const j = jurDe(jurCplId);
   if (!j) return;
   const bruto = String(($("jurCplResposta") || {}).value || "").trim();
-  let dados = null;
-  try { dados = JSON.parse(bruto); } catch (e) { dados = null; }
-  if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
+  /* jurJsonDoTexto e não JSON.parse: a resposta chega com cerca de
+   * markdown ou com uma frase de cortesia em volta na maioria das
+   * vezes, e recusá-la era mandar a pessoa editar texto para agradar o
+   * programa. Quatro recusas seguidas no registro do usuário, todas com
+   * o objeto lá dentro. */
+  const dados = (typeof jurJsonDoTexto === "function")
+    ? jurJsonDoTexto(bruto) : null;
+  if (!dados) {
     reg("JURIS", "resposta de completar recusada", "não era JSON");
     jurCplEscrever(t("jur_completar_nada"));
     return;
