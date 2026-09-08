@@ -4966,13 +4966,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgQsCriar" class="ui-modal diag-modal">
   <h3 data-i18n="qs_criar_titulo"></h3>
   <p class="nota" id="qsCriarDe"></p>
+  <!-- DE QUAL TEXTO ELAS SAEM.
+       "Ficam guardadas em ..." responde ONDE serão arquivadas; esta
+       linha responde DE ONDE saem. Sem ela, quem tocava em "criar
+       questões do trecho" chegava a uma tela cujo rádio dizia "a partir
+       deste resumo" — contradizendo o botão que acabara de apertar. -->
+  <p class="nota" id="qsCriarOrigem" hidden></p>
   <p class="nota" id="qsDoTextoAviso"></p>
 
   <details id="qsIA" class="qs-ia">
     <summary data-i18n="qs_ia_titulo"
       title="Pede à IA que escreva questões NOVAS sobre este texto, além das que já estiverem escritas nele."></summary>
     <div class="qs-fonte">
-      <label title="A IA parte do texto deste resumo."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
+      <label title="A IA parte do texto indicado acima — o trecho selecionado ou o resumo inteiro, conforme o botão que você usou."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
       <label title="A IA parte de um texto que você colar: PDF de aula, lei, artigo, apostila."><input type="radio" name="qsFonte" id="qsFonteOutro"><span data-i18n="qs_fonte_outro"></span></label>
       <!-- O CADERNO É OUTRA COISA. No NotebookLM a IA já tem as fontes
            carregadas e responde ANCORADA nelas — o prompt não precisa (nem
