@@ -955,6 +955,38 @@ function qsUiPintarSessao() {
       b.onclick = () => qsUiJuris(q2);
     }
   }
+  /* =================================================================
+   * CONSULTAR A LEI NO MEIO DA QUESTÃO
+   *
+   * Metade das questões de Direito se resolve lendo o artigo — e até
+   * aqui, para ler o artigo, era preciso ENCERRAR a rodada, achar o
+   * tópico no material, abrir a lei e voltar. Quatro telas, com o
+   * rascunho e os grifos da questão perdidos no meio.
+   *
+   * A gaveta sobe POR CIMA da sessão (o <dialog> empilha no top layer)
+   * e fechá-la descobre a mesma questão, no mesmo ponto. É o mesmo
+   * caminho do botão de julgados, e de propósito: consultar não é sair.
+   *
+   * ABRE PARA LER. Recitar e editar são exercícios; no meio de uma
+   * prova o que se quer é conferir a letra do artigo.
+   * ================================================================= */
+  if ($("btnQsLei")) {
+    const b = $("btnQsLei");
+    const q3 = qsAtual();
+    const temAlvo = !!(q3 && q3.disciplina && q3.topico);
+    b.hidden = !temAlvo;
+    if (temAlvo) {
+      const ch = (typeof matChave === "function")
+        ? matChave(q3.disciplina, q3.topico) : "";
+      /* leiTem responde pela BIBLIOTECA e pelo campo antigo ao mesmo
+       * tempo — é ele que sabe se há texto para consultar */
+      const tem = (typeof leiTem === "function" && ch) ? leiTem(ch) : false;
+      b.textContent = t(tem ? "qs_lei_ver" : "qs_lei_sem");
+      b.title = t(tem ? "qs_lei_ver_ajuda" : "qs_lei_sem_ajuda",
+                  { tp: q3.topico });
+      b.onclick = () => qsUiLei(q3);
+    }
+  }
   if ($("btnQsEmbaralhar")) {
     const faltam = qsPendentes().length;
     $("btnQsEmbaralhar").hidden = faltam < 2;
@@ -999,6 +1031,38 @@ function qsUiJuris(q) {
   };
   reg("QUESTOES", "gaveta de julgados aberta pela questão",
       q.topico + " · " + antes + " guardado(s)");
+}
+
+/* =====================================================================
+ * DA QUESTÃO PARA A LEI, E DE VOLTA
+ *
+ * A SESSÃO NÃO É FECHADA — mesma regra do botão de julgados. Um
+ * <dialog> aberto por showModal() empilha no top layer: a lei sobe por
+ * cima da questão e, ao fechar, descobre a mesma questão com a rolagem,
+ * o rascunho e os grifos como estavam. Fechar e reabrir a sessão
+ * perderia as três coisas, e perder o traço de uma conta no meio de uma
+ * questão é o tipo de estrago que faz alguém parar de usar o botão.
+ * ===================================================================== */
+function qsUiLei(q) {
+  if (!q || !q.disciplina || !q.topico) return;
+  if (typeof leiAbrir !== "function") return;
+  const ch = (typeof matChave === "function")
+    ? matChave(q.disciplina, q.topico) : "";
+  const antes = (typeof leiTem === "function" && ch) ? leiTem(ch) : false;
+  leiAbrir(q.disciplina, q.topico);
+  /* LER, e não editar: no meio de uma prova o que se quer é conferir a
+   * letra do artigo. leiAbrir já decide isso pelo conteúdo, mas dizer
+   * aqui torna o comportamento independente daquela decisão. */
+  try { if (typeof leiTrocarModo === "function" && antes) leiTrocarModo("ler"); }
+  catch (e) {}
+  leiVoltaPara = () => {
+    /* repinta SEMPRE: além de a lei poder ter sido colada agora, o
+     * botão da sessão conta o que existe — e conta errado se ninguém
+     * lhe disser que algo mudou */
+    try { qsUiPintarSessao(); } catch (e) {}
+  };
+  reg("QUESTOES", "lei seca aberta pela questão",
+      q.topico + (antes ? " · consulta" : " · ainda sem lei ligada"));
 }
 
 /* ---------------------------------------------------------------------

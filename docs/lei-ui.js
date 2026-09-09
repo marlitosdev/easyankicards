@@ -1636,6 +1636,30 @@ function leiRegistrarLeitura() {
                "sugestão de " + min + " min · " + quanto); } catch (e) {}
 }
 
+/* =====================================================================
+ * DE ONDE A LEI FOI ABERTA — E PARA ONDE ELA DEVOLVE
+ *
+ * Mesmo desenho do "jurVoltaPara" da jurisprudência, e pelo mesmo
+ * motivo: a gaveta da lei passou a ser aberta DE DENTRO de uma sessão
+ * de questões, e quem consulta o artigo no meio de uma prova quer
+ * voltar para a MESMA questão, com o rascunho e os grifos intactos.
+ *
+ * A sessão não é fechada — o <dialog> empilha no top layer e a lei sobe
+ * por cima dela. O que sobra para este retorno é repintar a tela de
+ * trás: o botão dela conta os artigos da lei, e esse número pode ter
+ * mudado enquanto a gaveta esteve aberta.
+ *
+ * DE UM USO SÓ, e zerado ao disparar: um retorno que sobrevive dispara
+ * na próxima abertura da lei, vinda de outra tela.
+ * ===================================================================== */
+let leiVoltaPara = null;
+
+function leiVoltarPara() {
+  const f = leiVoltaPara;
+  leiVoltaPara = null;
+  if (typeof f === "function") { try { f(); } catch (e) {} }
+}
+
 async function leiFechar() {
   if (leiSujo) {
     const r = await matPerguntarSaida();
@@ -1652,6 +1676,7 @@ async function leiFechar() {
   if (leiCheia) leiCheiaTrocar(false);
   $("dlgLeiSeca").close();
   leiAtual = null;
+  leiVoltarPara();
 }
 
 /* ---------------------------------------------------------------------
