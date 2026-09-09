@@ -1427,6 +1427,14 @@ const UI = {
      O rótulo muda com a contagem porque o VERBO muda: sem julgado
      guardado o que se faz é criar; com julgados guardados, o que se
      faz ao errar uma questão é conferir a tese. */
+  /* ---- DA QUESTÃO PARA A LEI SECA ----
+     O rótulo diz se há o que consultar. Sem lei ligada, o botão continua
+     existindo: é dali que se cola a lei que faltava, no exato momento em
+     que se descobre que ela faz falta. */
+  "qs_lei_ver": "⚖ consultar a lei",
+  "qs_lei_ver_ajuda": "Abre a lei seca de “{tp}” por cima desta questão, para conferir a letra do artigo. Ao fechar você volta para a MESMA questão, com o rascunho e os grifos como estavam.",
+  "qs_lei_sem": "⚖ colar a lei",
+  "qs_lei_sem_ajuda": "Ainda não há lei ligada a “{tp}”. Abre a gaveta por cima desta questão para você colar o texto — e ao fechar você volta para a mesma questão.",
   "qs_juris_novo": "⚖ guardar julgado",
   "qs_juris_ver": "⚖ {n} julgados",
   "qs_juris_ajuda": "Abre a gaveta de jurisprudência de \u201c{tp}\u201d por cima desta questão, para guardar o julgado que ela cobra. Ao fechar você volta para a MESMA questão, com o rascunho e os grifos como estavam.",

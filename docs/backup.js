@@ -127,6 +127,32 @@ function resumirBackup(dados) {
     diario: jsonN(e.eac_edital_diario),
     resumos: jsonN(m.eac_resumos),
     questoes: jsonN(m.eac_questoes),
+    /* =================================================================
+     * OS TRÊS QUE FALTAVAM NA CONFERÊNCIA
+     *
+     * "questoes" já era contado aqui e não aparecia na tabela — só
+     * faltava o rótulo. Lei seca e jurisprudência não eram contadas de
+     * jeito nenhum, embora as duas estejam no backup desde que foram
+     * criadas.
+     *
+     * O efeito era ruim justamente no momento mais perigoso do
+     * aplicativo: escolher qual arquivo restaurar. A tabela dizia
+     * "cartões, editais, tópicos, resumos" e calava sobre três acervos
+     * inteiros — dava para trocar uma base com 8 julgados por outra com
+     * 0 sem que uma linha da tela mencionasse julgados.
+     *
+     * ARTIGOS, e não só o número de leis: "3 leis" não distingue três
+     * artigos colados às pressas de três códigos inteiros, e é essa
+     * diferença que se quer ver comparando dois arquivos.
+     * ================================================================= */
+    leis: jsonN(m.eac_leis),
+    artigos: (() => {
+      let o = {};
+      try { o = JSON.parse(m.eac_leis || "{}") || {}; } catch (x) { o = {}; }
+      return Object.keys(o).reduce((soma, k) => soma
+        + conta((o[k] || {}).texto, /^\s*Art\.?\s*\d/gmi), 0);
+    })(),
+    juris: jsonN(e.eac_juris),
   };
 }
 
@@ -136,7 +162,22 @@ function resumoAtual() { return resumirBackup(montarBackup().dados); }
  * de perguntar "substituir?" — sem isto o usuário decide no escuro. */
 function compararBackup(bk) {
   const agora = resumoAtual();
-  const dele = (bk && bk.resumo) || resumirBackup((bk && bk.dados) || {});
+  /* CONTA O QUE ESTÁ NO ARQUIVO, e não o que ele diz de si mesmo.
+   *
+   * "bk.resumo" é o resumo gravado por QUEM GEROU o arquivo — uma
+   * versão anterior do aplicativo, que não conhecia lei seca nem
+   * jurisprudência nem questões na tabela. Confiar nele faria as linhas
+   * novas mostrarem ZERO num arquivo que tem os dados lá dentro; e zero
+   * na coluna "backup" é lido como "vai perder tudo isso", que é o
+   * oposto da verdade.
+   *
+   * Recontar dos dados custa um JSON.parse e responde pelo arquivo que
+   * está na mão. O resumo gravado fica como último recurso, para o caso
+   * de um arquivo sem "dados" — que a validação já recusa, mas que não
+   * custa nada respeitar aqui. */
+  const dele = (bk && bk.dados)
+    ? resumirBackup(bk.dados)
+    : ((bk && bk.resumo) || resumirBackup({}));
   const linhas = [];
   const rotulos = {
     cartoes: "cartões", bandeja: "cartões na bandeja",
@@ -144,6 +185,9 @@ function compararBackup(bk) {
     disciplinas: "disciplinas", topicos: "tópicos do edital",
     progresso: "tópicos marcados", diario: "registros de estudo",
     resumos: "resumos",
+    /* os três que a tabela calava — ver resumirBackup */
+    questoes: "questões", leis: "leis guardadas",
+    artigos: "artigos de lei", juris: "julgados",
   };
   Object.keys(rotulos).forEach((k) => {
     const a = agora[k] || 0, b = dele[k] || 0;
