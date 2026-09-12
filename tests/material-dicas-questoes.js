@@ -518,9 +518,17 @@ function novo() {
   api.$("leiTexto").value = "Art. 1o A lei orcamentaria anual...";
   api.leiGravar();
   const r = api.matResumosAtual()[ch];
-  ok("a lei fica na mesma gaveta do tópico", (r.leiTexto || "").indexOf("Art. 1o") === 0);
+  /* O CONTRATO MUDOU, E DE PROPÓSITO.
+   * O texto da lei NÃO fica mais dentro do tópico: fica na biblioteca, e
+   * o tópico guarda um ponteiro. Era a única forma de a Lei 4.320 servir
+   * cinco tópicos sem virar cinco cópias que envelhecem separadas. */
+  ok("o tópico aponta para a lei na biblioteca", !!r.leiId);
+  ok("e o texto está lá, inteiro",
+    (api.leiTextoDoTopico(ch) || "").indexOf("Art. 1o") === 0);
+  ok("a lei entrou na biblioteca uma vez só", api.leisLista().length === 1);
   ok("gravar a lei não apaga o resumo", r.texto === "Resumo qualquer.");
   ok("e o concurso fica carimbado no registro", r.concurso === "TCE-PE Auditor");
+  ok("o tópico continua sabendo que tem lei", api.leiTem(ch) === true);
 
   /* fechar tem de fechar */
   await api.$("btnLeiFechar").onclick();
@@ -890,29 +898,23 @@ function novo() {
    * onde cabe escrever "responder as N questões". */
   const achar = (cls) => {
     let r = null;
-    const anda = (x) => (x.children || []).forEach((f) => {
+    const anda = (x) => Array.from(x.children || []).forEach((f) => {
       if ((f.className || "").split(/\s+/).includes(cls) && !r) r = f;
       anda(f);
     });
     anda(li); return r;
   };
-  const marca = achar("ed-qst");
+  /* A ETIQUETA E O ATALHO SAO A MESMA COISA.
+   * Antes a linha dizia "1 questão" e o menu, logo abaixo, dizia
+   * "responder a questão" — duas listas com o mesmo conteudo. Agora o
+   * que EXISTE vira etiqueta clicavel na linha, e o "⋮" fica so com o
+   * que falta criar. */
+  const marca = achar("ed-st-qst");
   ok("a linha mostra que o tópico tem questões", !!marca);
   ok("e a etiqueta diz quantas são", /1 quest/.test((marca && marca.textContent) || ""));
-
-  const bMais = achar("ed-mais");
-  ok("a linha da agenda tem o menu ⋮", !!bMais);
-  if (bMais) bMais.onclick({ stopPropagation() {} });
-  const itens = [];
-  const anda2 = (x) => (x.children || []).forEach((f) => {
-    if (/ed-menu-item/.test(f.className || "")) itens.push(f);
-    anda2(f);
-  });
-  anda2(li);
-  const bq = itens.filter((b) => /quest/i.test(b.textContent || ""))[0];
-  ok("o menu oferece as questões do tópico, por extenso", !!bq);
-  if (bq) {
-    bq.onclick({ stopPropagation() {} });
+  ok("e a etiqueta leva até elas", !!(marca && typeof marca.onclick === "function"));
+  if (marca) {
+    marca.onclick({ stopPropagation() {} });
     ok("o atalho abre a sessão de questões do tópico",
       api.$("dlgQsResponder").open === true);
   }

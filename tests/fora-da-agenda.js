@@ -154,7 +154,21 @@ async function testes() {
      * estoura com pilha de erro — que nao diz O QUE quebrou */
     if (!bts.length) { falhas.quantas = n; return falhas; }
 
-    bts[0].onclick();
+    /* POR NOME, NAO POR INDICE nem por texto exato.
+     * A lista passou a sair em ordem alfabetica (procura-se disciplina
+     * por nome, nao por prioridade) e o rotulo ganhou um "✓" na frente.
+     * Teste que indexava a posicao 0 e comparava o texto inteiro
+     * quebrou nas duas — e nao por defeito nenhum. */
+    const porNome = (raiz, nome) => raiz.querySelectorAll(".ed-ag-disc-b")
+      .filter((b) => (b.textContent || "").indexOf(nome) >= 0)[0];
+
+    /* a ordem alfabetica e ela propria uma regra: numa lista para ACHAR,
+     * prioridade parece ordem aleatoria */
+    const nomesNaTela = bts.map((b) => (b.textContent || "").replace(/^[^A-Za-zÀ-ÿ]+/, ""));
+    ok(nomesNaTela[0].indexOf("Controle") === 0,
+       "F4b2 a lista nao veio em ordem alfabetica: " + JSON.stringify(nomesNaTela));
+
+    porNome(filtro, "Direito Financeiro").onclick();
     ok(api.hubDiscOcultas().indexOf("Direito Financeiro") >= 0,
        "F4d clicar guardou a escolha? nao: " + JSON.stringify(api.hubDiscOcultas()));
     /* GUARDAR A ESCOLHA NAO E FILTRAR. A primeira versao deste teste
@@ -183,7 +197,7 @@ async function testes() {
 
     /* e marcar UMA volta a mostrar so ela */
     const umaSo = api.hubFiltroDisciplina(discs).querySelectorAll(".ed-ag-disc-b")
-      .filter((b) => b.textContent === "Controle Externo")[0];
+      .filter((b) => (b.textContent || "").indexOf("Controle Externo") >= 0)[0];
     if (umaSo) umaSo.onclick();
     const so = api.hubDiscEscolhidas(discs);
     ok(so.length === 1 && so[0] === "Controle Externo",
@@ -199,7 +213,7 @@ async function testes() {
       campo.oninput();
       const filtrados = api.hubFiltroDisciplina(discs)
         .querySelectorAll(".ed-ag-disc-b").map((b) => b.textContent);
-      ok(filtrados.length === 1 && filtrados[0] === "Controle Externo",
+      ok(filtrados.length === 1 && /Controle Externo/.test(filtrados[0] || ""),
          "F4d4f a busca nao reduziu a lista: " + JSON.stringify(filtrados));
       /* busca sem acento acha nome COM acento: ninguem digita "Estatística"
        * com o acento no meio de uma busca rapida */
@@ -224,8 +238,8 @@ async function testes() {
     /* disciplina NOVA entra visivel: guardar o que foi escondido, e nao o
      * que foi escolhido, e o que garante isso */
     const comNova = api.hubFiltroDisciplina(discs.concat(["Auditoria"]));
-    const nova = comNova.querySelectorAll("button")
-      .filter((b) => b.textContent === "Auditoria")[0];
+    const nova = comNova.querySelectorAll(".ed-ag-disc-b")
+      .filter((b) => (b.textContent || "").indexOf("Auditoria") >= 0)[0];
     ok(!!nova && /ativa/.test(nova.className || ""),
        "F4e disciplina que entrou depois nasceu escondida");
 
@@ -255,7 +269,7 @@ async function testes() {
 
     const ordem = [];
     let ponto = null;
-    const anda = (x) => (x.children || []).forEach((f) => {
+    const anda = (x) => Array.from(x.children || []).forEach((f) => {
       const c = (f.className || "").split(/\s+/);
       ["ed-reg", "ed-fora", "ed-ponto"].forEach((k) => {
         if (c.includes(k)) ordem.push(k);
@@ -284,7 +298,7 @@ async function testes() {
     const li2 = api.edLinhaAgendaTeste({ disciplina: "D", nome: "Avulso",
       chave: api.matChave("D", "Avulso"), minutos: 30 });
     let p2 = null;
-    const anda2 = (x) => (x.children || []).forEach((f) => {
+    const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
       if ((f.className || "").split(/\s+/).includes("ed-ponto")) p2 = f;
       anda2(f);
     });
@@ -364,7 +378,7 @@ async function testes() {
      * clicavel dentro do bloco de texto, e nao um botao competindo por
      * espaco na faixa de acoes */
     const botoes = [];
-    const anda = (x, dentroDoTexto) => (x.children || []).forEach((f) => {
+    const anda = (x, dentroDoTexto) => Array.from(x.children || []).forEach((f) => {
       const noTexto = dentroDoTexto || /ed-item-meio/.test(f.className || "");
       if (f.tag === "button" && !noTexto) botoes.push(f.textContent);
       anda(f, noTexto);
@@ -372,8 +386,19 @@ async function testes() {
     anda(li, false);
     ok(botoes.length <= 5,
        `F8 a linha voltou a ter ${botoes.length} alvos: ${JSON.stringify(botoes)}`);
-    ok(botoes.some((b) => /estudar|come\u00e7ar/i.test(b)),
-       "F8b falta o botao primario de estudar: " + JSON.stringify(botoes));
+    /* com material na linha, o "estudar" some: ele dizia o mesmo que o
+     * primeiro chip. Ele volta para o topico VAZIO, onde nao ha chip
+     * nenhum e e preciso um convite. */
+    const liVazio = api.edLinhaAgendaTeste({ disciplina: "D", nome: "Nada",
+      chave: api.matChave("D", "Nada"), minutos: 30 });
+    const btsVazio = [];
+    const andaV = (x) => Array.from(x.children || []).forEach((f) => {
+      if (f.tag === "button" && f.hidden !== true) btsVazio.push(f.textContent);
+      andaV(f);
+    });
+    andaV(liVazio);
+    ok(btsVazio.some((b) => /come\u00e7ar|estudar/i.test(b)),
+       "F8b topico vazio ficou sem convite para comecar: " + JSON.stringify(btsVazio));
     ok(botoes.indexOf("\u22ee") >= 0, "F8c falta o menu ⋮");
     ok(!botoes.some((b) => b === "\ud83d\udcc4" || b === "\ud83c\udccf" || b === "\u2696"),
        "F8d os icones enigmaticos voltaram para a linha: " + JSON.stringify(botoes));
@@ -381,7 +406,7 @@ async function testes() {
     /* mas o STATUS continua na linha, em palavras: varrer a semana e ver
      * o que ja tem resumo era util e nao podia ir para dentro do menu */
     const etiquetas = [];
-    const anda2 = (x) => (x.children || []).forEach((f) => {
+    const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
       if (/ed-st-item/.test(f.className || "")) etiquetas.push(f.textContent);
       anda2(f);
     });
@@ -393,25 +418,48 @@ async function testes() {
     ok(!etiquetas.some((e) => /quest/i.test(e)),
        "F8g apareceu etiqueta de questoes num topico que nao tem nenhuma");
 
+    /* A ETIQUETA E O CAMINHO. Antes ela so informava, e o menu logo
+     * abaixo repetia tudo em forma de acao: "3 cartoes" na linha e
+     * "ver os 3 cartoes" no menu, duas listas do mesmo conteudo. */
+    let chipCart = null;
+    const anda2b = (x) => Array.from(x.children || []).forEach((f) => {
+      if (/ed-st-crt/.test(f.className || "") && !chipCart) chipCart = f;
+      anda2b(f);
+    });
+    anda2b(li);
+    ok(chipCart && typeof chipCart.onclick === "function",
+       "F8e2 a etiqueta de cartoes nao leva a lugar nenhum");
+
     /* e o menu leva aos mesmos lugares, por extenso */
     let mais = null;
-    const anda3 = (x) => (x.children || []).forEach((f) => {
+    const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
       if (/ed-mais/.test(f.className || "") && !mais) mais = f;
       anda3(f);
     });
     anda3(li);
     if (mais) mais.onclick({ stopPropagation() {} });
     const itens = [];
-    const anda4 = (x) => (x.children || []).forEach((f) => {
+    const anda4 = (x) => Array.from(x.children || []).forEach((f) => {
       if (/ed-menu-item/.test(f.className || "")) itens.push(f.textContent);
       anda4(f);
     });
     anda4(li);
-    ok(itens.length === 4, `F8h o menu devia ter 4 destinos, tem ${itens.length}`);
+    /* SO O QUE FALTA. O topico tem resumo e cartoes, entao o menu
+     * oferece questoes, lei seca e jurisprudencia — e nada mais.
+     *
+     * O NUMERO NAO E' FIXO: ele e' "os materiais que existem menos os
+     * que este topico ja tem". Cravar 2 fez este teste falhar quando a
+     * jurisprudencia entrou como quinto material, cobrando um numero
+     * em vez da regra. */
+    ok(itens.length === 3,
+       `F8h o menu devia oferecer so o que falta (3), oferece ${itens.length}: `
+       + JSON.stringify(itens));
+    ok(!itens.some((x) => /resumo|cart/i.test(x)),
+       "F8h2 o menu repete o que ja esta na linha: " + JSON.stringify(itens));
+    ok(itens.every((x) => /criar|escrever|guardar/i.test(x)),
+       "F8h3 o menu devia so oferecer criar o que falta: " + JSON.stringify(itens));
     ok(itens.every((x) => /[a-z]{4}/i.test(x)),
        "F8i ha item de menu sem palavra: " + JSON.stringify(itens));
-    ok(!itens.some((x) => /ver os 1 /.test(x)),
-       "F8j 'ver os 1 cartoes' — falta o singular: " + JSON.stringify(itens));
   }
 
   /* ---- F9: o card da disciplina responde "e agora?" ---- */
@@ -442,6 +490,119 @@ async function testes() {
     ok(api.edProximoDa(itens.map((i) => ({ ...i, feito: true }))) === null,
        "F9c com tudo estudado ainda apareceu um 'proximo'");
     ok(api.edProximoDa([]) === null, "F9d disciplina vazia devolveu um proximo");
+  }
+
+  /* ---- F10: a linha da agenda nao se esmaga ----
+   * O menu foi acrescentado com "flex-basis:100%" dentro de uma linha
+   * flex SEM wrap. Em vez de ir para baixo, ele espremeu o resto ate a
+   * largura minima e a coluna do nome virou uma palavra por linha. */
+  {
+    const fs2 = require("fs");
+    const path2 = require("path");
+    const html = fs2.readFileSync(
+      path2.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const css = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/i) || [])[1] || "";
+
+    const regra = (sel) => {
+      const re = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        + "\\s*\\{([^}]*)\\}", "g");
+      const achadas = [...css.matchAll(re)].map((m) => m[1]);
+      return achadas.length ? achadas[achadas.length - 1] : "";
+    };
+
+    const item = regra(".ed-item");
+    ok(/flex-wrap\s*:\s*wrap/.test(item),
+       "F10 .ed-item e flex sem wrap: qualquer filho de largura total "
+       + "espreme os outros em vez de ir para a linha de baixo");
+    const meio = regra(".ed-item-meio");
+    ok(/min-width\s*:\s*[1-9]/.test(meio),
+       "F10b .ed-item-meio nao tem largura minima — o bloco do nome "
+       + "encolhe ate uma palavra por linha: " + meio);
+    const menu = regra(".ed-menu");
+    ok(/flex-basis\s*:\s*100%|width\s*:\s*100%/.test(menu),
+       "F10c o menu nao ocupa a linha inteira");
+  }
+
+  /* ---- F11: um menu aberto por vez ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const linhas = ["Um", "Dois"].map((nome) => api.edLinhaAgendaTeste({
+      disciplina: "D", nome, chave: api.matChave("D", nome), minutos: 60 }));
+    const raiz = api.$("edAgendaTopo");
+    raiz.innerHTML = "";
+    linhas.forEach((li) => raiz.append(li));
+
+    const maisDe = (li) => {
+      let r = null;
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
+        if (/ed-mais/.test(f.className || "") && !r) r = f;
+        anda(f);
+      });
+      anda(li); return r;
+    };
+    const abertos = () => linhas.filter((li) => {
+      const m = li.querySelector(".ed-menu");
+      return m && m.hidden !== true;
+    }).length;
+
+    maisDe(linhas[0]).onclick({ stopPropagation() {} });
+    ok(abertos() === 1, "F11 o primeiro menu nao abriu");
+    maisDe(linhas[1]).onclick({ stopPropagation() {} });
+    ok(abertos() === 1,
+       `F11b abrir o segundo deixou ${abertos()} menus abertos — com dez `
+       + "linhas na semana a agenda vira uma pilha de menus");
+  }
+
+  /* ---- F12: o painel dos buracos nao confunde os dois numeros ----
+   * Saia so "{l}% da prova", e {l} e a LACUNA. Ao lado do nome da
+   * disciplina isso se le como "esta disciplina vale 13%", e a pessoa
+   * conclui que o app esta dizendo que ela e a materia mais importante
+   * da prova. Nao estava: estava dizendo que e o maior BURACO. */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const txt = ["# T | prova: 2026-12-01 | horas: 40",
+      "@ Constitucional :: 4", "+ A :: 5", "+ B :: 5", "+ C :: 5", "+ D :: 5",
+      "+ E :: 5", "+ F :: 5",
+      "@ Financeiro :: 5", "+ G :: 5", "+ H :: 5", "+ I :: 5", "+ J :: 5",
+      "+ K :: 5"].join("\n");
+    const r = api.lerEdital(txt);
+    const feitos = {};
+    ["financeiro›g", "financeiro›h", "financeiro›i"]
+      .forEach((k) => { feitos[k] = { e: "feito", d: "2026-08-20" }; });
+    const plano = api.montarPlano(r, { horas: 40, prova: "2026-12-01", feitos });
+    const pan = api.panoramaDisciplinas(plano);
+    const c = pan.filter((d) => d.nome === "Constitucional")[0];
+    const f = pan.filter((d) => d.nome === "Financeiro")[0];
+
+    ok(f.fatia > c.fatia,
+       "F12-pre o cenario precisa de uma disciplina que VALE mais");
+    ok(f.lacuna < c.lacuna,
+       "F12-pre2 e que ja tenha sido estudada, faltando menos");
+    /* em Constitucional os dois numeros COINCIDEM por definicao (nada
+     * estudado); quem discrimina e a disciplina ja tocada */
+    ok(f.fatia !== f.lacuna,
+       "F12-pre3 o cenario nao discrimina: em Financeiro, fatia e lacuna "
+       + `deram igual (${f.fatia} e ${f.lacuna})`);
+
+    /* os dois numeros tem de aparecer, senao a ordem parece errada */
+    const rot = api.t("ed_lac_val", { l: c.lacuna, f: c.fatia, a: 2 });
+    ok(rot.indexOf(String(c.lacuna)) >= 0 && rot.indexOf(String(c.fatia)) >= 0,
+       "F12 o rotulo nao mostra os DOIS numeros (o que falta e o que vale): " + rot);
+    ok(/falta/i.test(rot),
+       "F12b o rotulo nao diz que o numero principal e o que FALTA: " + rot);
+    ok(/vale/i.test(rot),
+       "F12c o rotulo nao diz quanto a disciplina VALE: " + rot);
+    ok(!/de alta/.test(rot),
+       "F12d voltou o jargao 'de alta' — 'alta' e o nome interno da faixa que "
+       + "o resto do app chama de 'estudar primeiro': " + rot);
+    ok(/estudar primeiro/.test(rot),
+       "F12e o rotulo nao usa o vocabulario do resto do app: " + rot);
+
+    /* zero prioritarios nao vira "0 para estudar primeiro" */
+    const rot0 = api.t("ed_lac_val_0", { l: 5, f: 9 });
+    ok(!/0 /.test(rot0), "F12f com zero pendentes o rotulo escreve um zero: " + rot0);
   }
 
   falhas.quantas = n;

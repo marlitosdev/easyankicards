@@ -208,7 +208,55 @@ async function main() {
   const quP = await comVigia(Promise.resolve(require("./questoes-ui.js").testes()), "questoes-ui");
   const rsP = await comVigia(Promise.resolve(require("./rascunho.js").testes()), "rascunho");
   const faP = await comVigia(Promise.resolve(require("./fora-da-agenda.js").testes()), "fora-da-agenda");
-  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP]).then(([tela, marcas, registroT, dqT, qsT, quT, rsT, faT]) => {
+  const cmP = await comVigia(Promise.resolve(require("./cartao-melhorar.js").testes()), "cartao-melhorar");
+  const lsP = await comVigia(Promise.resolve(require("./lei-seca.js").testes()), "lei-seca");
+  const luP = await comVigia(Promise.resolve(require("./lei-ui.js").testes()), "lei-ui");
+  const teP = await comVigia(Promise.resolve(require("./tempo-excedido.js").testes()), "tempo-excedido");
+  const vrP = await comVigia(Promise.resolve(require("./virada.js").testes()), "virada");
+  const dfP = await comVigia(Promise.resolve(require("./duas-fases.js").testes()), "duas-fases");
+  const mnP = await comVigia(Promise.resolve(require("./minimos.js").testes()), "minimos");
+  const rgP = await comVigia(Promise.resolve(require("./registrar.js").testes()), "registrar");
+  const arP = await comVigia(Promise.resolve(require("./arrumacao.js").testes()), "arrumacao");
+  const qhP = await comVigia(Promise.resolve(require("./questoes-hist.js").testes()), "questoes-hist");
+  const glP = await comVigia(Promise.resolve(require("./geracao-log.js").testes()), "geracao-log");
+  const etP = await comVigia(Promise.resolve(require("./enxugar-tela.js").testes()), "enxugar-tela");
+  const mkP = await comVigia(Promise.resolve(require("./marcas-cores.js").testes()), "marcas-cores");
+  const bgP = await comVigia(Promise.resolve(require("./borracha-grifo-fim.js").testes()), "borracha-grifo-fim");
+  const ecP = await comVigia(Promise.resolve(require("./etiquetas-e-conserto.js").testes()), "etiquetas-e-conserto");
+  const escP = await comVigia(Promise.resolve(require("./estudo-cartoes.js").testes()), "estudo-cartoes");
+  const rpP = await comVigia(Promise.resolve(require("./rascunho-painel.js").testes()), "rascunho-painel");
+  const rvP = await comVigia(Promise.resolve(require("./revisao-vencida.js").testes()), "revisao-vencida");
+  const enP = await comVigia(Promise.resolve(require("./edital-novo.js").testes()), "edital-novo");
+  const rxP = await comVigia(Promise.resolve(require("./plano-log.js").testes()), "plano-log");
+  const dfcP = await comVigia(Promise.resolve(require("./dificuldade.js").testes()), "dificuldade");
+  const bqP = await comVigia(Promise.resolve(require("./blocos-risco.js").testes()), "blocos-risco");
+  const cpP = await comVigia(Promise.resolve(require("./colar-plano.js").testes()), "colar-plano");
+  const apP = await comVigia(Promise.resolve(require("./aproveitar.js").testes()), "aproveitar");
+  const d2P = await comVigia(Promise.resolve(require("./dois-editais.js").testes()), "dois-editais");
+  const baP = await comVigia(Promise.resolve(require("./bancada-acoes.js").testes()), "bancada-acoes");
+  const vzP = await comVigia(Promise.resolve(require("./vizinhos.js").testes()), "vizinhos");
+  const rxTP = await comVigia(Promise.resolve(require("./raiox-tela.js").testes()), "raiox-tela");
+  const vrP2 = await comVigia(Promise.resolve(require("./vinculo-ruido.js").testes()), "vinculo-ruido");
+  const clP = await comVigia(Promise.resolve(require("./chave-e-log.js").testes()), "chave-e-log");
+  const mzP = await comVigia(Promise.resolve(require("./matriz-reuso.js").testes()), "matriz-reuso");
+  const urP = await comVigia(Promise.resolve(require("./vinculo-uso-real.js").testes()), "vinculo-uso-real");
+  const juP = await comVigia(Promise.resolve(require("./juris.js").testes()), "juris");
+  const dbP = await comVigia(Promise.resolve(require("./dica-e-botoes.js").testes()), "dica-e-botoes");
+  const aqP = await comVigia(Promise.resolve(require("./arquivar.js").testes()), "arquivar");
+  const cqP = await comVigia(Promise.resolve(require("./caixa-questao.js").testes()), "caixa-questao");
+  const grP = await comVigia(Promise.resolve(require("./grifo.js").testes()), "grifo");
+  const bkqP = await comVigia(Promise.resolve(require("./backup-quando.js").testes()), "backup-quando");
+  const entP = await comVigia(Promise.resolve(require("./edital-nao-troca.js").testes()), "edital-nao-troca");
+  const rtP = await comVigia(Promise.resolve(require("./registro-tudo.js").testes()), "registro-tudo");
+  const ctP = await comVigia(Promise.resolve(require("./cede-tempo.js").testes()), "cede-tempo");
+  const atzP = await comVigia(Promise.resolve(require("./atualizacao.js").testes()), "atualizacao");
+  const jmP = await comVigia(Promise.resolve(require("./juris-material.js").testes()), "juris-material");
+  const mfP = await comVigia(Promise.resolve(require("./menu-fora-do-recorte.js").testes()), "menu-fora-do-recorte");
+  const ldlP = await comVigia(Promise.resolve(require("./leitor-de-lei.js").testes()), "leitor-de-lei");
+  const rnsP = await comVigia(Promise.resolve(require("./rodada-nao-some.js").testes()), "rodada-nao-some");
+  const cvlP = await comVigia(Promise.resolve(require("./citacao-vai-a-lei.js").testes()), "citacao-vai-a-lei");
+  const mnlP = await comVigia(Promise.resolve(require("./marca-na-lei.js").testes()), "marca-na-lei");
+  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP, cmP, lsP, luP, teP, vrP, dfP, mnP, rgP, arP, qhP, glP, etP, mkP, bgP, ecP, escP, rpP, rvP, enP, rxP, dfcP, bqP, cpP, apP, d2P, baP, vzP, rxTP, vrP2, clP, mzP, urP, juP, dbP, aqP, cqP, grP, bkqP, entP, rtP, ctP, atzP, jmP, mfP, ldlP, rnsP, cvlP, mnlP]).then(([tela,marcas, registroT, dqT, qsT, quT, rsT, faT, cmT, lsT, luT, teT, vrT, dfT, mnT, rgT, arT, qhT, glT, etT, mkT, bgT, ecT, escT, rpT, rvT, enT, rxT, dfcT, bqT, cpT, apT, d2T, baT, vzT, rxTT, vrT2, clT, mzT, urT, juT, dbT, aqT, cqT, grT, bkqT, entT, rtT, ctT, atzT, jmT, mfT, ldlT, rnsT, cvlT, mnlT]) => {
     const extras = [["estrutura do HTML", estrutura],
                     ["carregamento do app", fumaca], ["prompt e colagem parcial", parcial],
                     ["tela: revisão, correção e registro", tela],
@@ -224,6 +272,54 @@ async function main() {
                     ["questões na tela: criar, responder e a aba", quT],
                     ["rascunho: o papel de lado da questão", rsT],
                     ["fora da agenda: adiar, dispensar e filtrar", faT],
+                    ["cartões: apagar sem estrago e corrigir com prévia", cmT],
+                    ["lei seca: artigos, biblioteca e onde parei", lsT],
+                    ["lei na tela: capítulos, recitar, cloze e ranking", luT],
+                    ["tempo: o que passou do previsto aparece", teT],
+                    ["virada: o dia seguinte à prova", vrT],
+                    ["duas fases: objetiva em dezembro, discursiva em janeiro", dfT],
+                    ["mínimos por bloco, peso em questões e filtro por edital", mnT],
+                    ["registrar: um gesto só, e a agenda repinta sozinha", rgT],
+                    ["arrumação: barra de modos, gavetas da lei e filtros de questão", arT],
+                    ["histórico dos blocos de questões: filtro salvo e refazer", qhT],
+                    ["geração: o motivo do aviso e o registro de cartões e questões", glT],
+                    ["enxugar a tela: grifo, rodapé fixo, menu ⋮ e colunas", etT],
+                    ["marcas: as seis cores, trocar e tirar", mkT],
+                    ["borracha por tamanho, grifo neon e o fim da rodada", bgT],
+                    ["etiquetas com espaço e o botão de consertar", ecT],
+                    ["estudo dos cartões: etiquetas, layout e onde parei", escT],
+                    ["rascunho sobreposto: gatilhos, grupos, selo e teclado", rpT],
+                    ["revisão vencida: a linha não pode parecer feita", rvT],
+                    ["edital de duas datas: ler, reescrever e criar", enT],
+                    ["raio-X da recomendacao e armazenamento", rxT],
+                    ["dificuldade declarada: ordena sem mexer na prova", dfcT],
+                    ["blocos: cobertura x acerto e a trava com teto", bqT],
+                    ["colar plano: dividir nao e perder", cpT],
+                    ["aproveitar: vincular nao e marcar como estudado", apT],
+                    ["dois editais ao mesmo tempo: avisar antes de estudar", d2T],
+                    ["bancada: nomes pelo que fazem e reacao a cada gesto", baT],
+                    ["triagem semantica: ordena e encurta, nao decide", vzT],
+                    ["raio-X cabendo na tela do telefone", rxTT],
+                    ["vinculos: nada de estudo que nao houve", vrT2],
+                    ["chave num lugar so, registro e medida que ordena", clT],
+                    ["matriz de reuso: cobertura, escala e o encerrado", mzT],
+                    ["quatro defeitos que so o uso real mostrou", urT],
+                    ["jurisprudencia: o quinto material do topico", juT],
+                    ["tres botoes viram dois, e o (?) vira balao", dbT],
+                    ["arquivar em vez de apagar, e as abas da faxina", aqT],
+                    ["copiar a questao na dica, e o tamanho da caixa", cqT],
+                    ["grifo por selecao: posicao de caractere, nao pixel", grT],
+                    ["de quando e a base carregada, e os dois botoes", bkqT],
+                    ["um edital nao e gravado por cima de outro", entT],
+                    ["todos os registros numa linha do tempo so", rtT],
+                    ["quando uma disciplina ja pode ceder tempo", ctT],
+                    ["quando a atualizacao nao chega", atzT],
+                    ["o julgado vira material, e volta para a questao", jmT],
+                    ["o menu ⋮ sai do recorte da caixa", mfT],
+                    ["leitor de lei: registro, lacuna e grade de artigos", ldlT],
+                    ["a rodada terminada nao some antes de registrada", rnsT],
+                    ["a citacao do comentario leva a lei certa", cvlT],
+                    ["a marca cai onde voce apontou, e da para tirar", mnlT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];
@@ -258,4 +354,4 @@ Promise.resolve(main())
   .then((c) => process.exit(c))
   /* sem este catch, uma suíte que TRAVA saía com código 0 e sem imprimir
    * nada — o vigia levanta a mão, mas alguém precisa escutá-lo */
-  .catch((e) => { console.log("\n  " + e.message + "\n"); process.exit(1); });
+  .catch((e) => { console.log("\n  " + (e && e.stack ? e.stack : e.message) + "\n"); process.exit(1); });

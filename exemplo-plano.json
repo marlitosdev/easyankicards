@@ -1,0 +1,68 @@
+{
+  "app": "EasyAnkiCards",
+  "formato": "plano-estudo/1",
+  "gerado": "2026-08-09T22:30:00Z",
+  "concurso": {
+    "nome": "TCE-PE",
+    "cargo": "Auditor de Controle Externo — Contas Públicas",
+    "banca": "FGV",
+    "prova": "2026-08-30"
+  },
+  "config": { "horasSemana": 12, "pisoMinutos": 15 },
+  "disciplinas": [
+    {
+      "id": "d1",
+      "nome": "Auditoria Governamental",
+      "peso": 3,
+      "grupo": "Módulo III — Específicos",
+      "topicos": [
+        { "id": "d1t1", "nome": "Achado de auditoria", "nivel": 1, "peso": 5,
+          "motivo": "cai em quase toda prova da FGV",
+          "prioridade": 100, "horasSemana": 2.5, "feito": false, "revisado": false },
+        { "id": "d1t2", "nome": "Tipos de auditoria", "nivel": 1, "peso": 3,
+          "motivo": "conceitual, cobrado de forma direta",
+          "prioridade": 60, "horasSemana": 1.5, "feito": true, "revisado": false },
+        { "id": "d1t3", "nome": "Responsabilização de agentes", "nivel": 2, "peso": 4,
+          "motivo": "aparece junto com achado",
+          "prioridade": 80, "horasSemana": 2, "feito": false, "revisado": false }
+      ]
+    },
+    {
+      "id": "d2",
+      "nome": "Língua Portuguesa",
+      "peso": 1,
+      "grupo": "Módulo I — Gerais",
+      "topicos": [
+        { "id": "d2t1", "nome": "Compreensão e interpretação de textos", "nivel": 1,
+          "peso": 4, "motivo": "maior número de questões do módulo",
+          "prioridade": 27, "horasSemana": 0.7, "feito": false, "revisado": false },
+        { "id": "d2t2", "nome": "Ortografia oficial", "nivel": 1, "peso": 1,
+          "motivo": "raramente cobrado isoladamente",
+          "prioridade": 7, "horasSemana": 0.25, "feito": false, "revisado": false }
+      ]
+    }
+  ],
+  "semanas": [
+    {
+      "id": "w1",
+      "inicio": "2026-07-10",
+      "fim": "2026-07-16",
+      "titulo": "Auditoria Governamental — núcleo",
+      "tarefas": [
+        { "id": "w1-1", "topico": "d1t1", "rotulo": "Achado de auditoria", "horas": 2.5 },
+        { "id": "w1-2", "topico": "d1t3", "rotulo": "Responsabilização de agentes", "horas": 2 },
+        { "id": "w1-3", "topico": "d2t1", "rotulo": "Interpretação de textos", "horas": 0.7 }
+      ]
+    },
+    {
+      "id": "w2",
+      "inicio": "2026-07-17",
+      "fim": "2026-07-23",
+      "titulo": "Tipos de auditoria + revisão",
+      "tarefas": [
+        { "id": "w2-1", "topico": "d1t2", "rotulo": "Tipos de auditoria", "horas": 1.5 },
+        { "id": "w2-2", "topico": "d2t2", "rotulo": "Ortografia oficial", "horas": 0.25 }
+      ]
+    }
+  ]
+}

@@ -169,16 +169,41 @@ function testes() {
        `K6d esperava 3 linhas ignoradas (2 de conversa + 1 invencao), veio ${r.ignoradas.length}`);
   }
 
-  /* ---- K7: vinculo orfao nao pode continuar contando ---- */
+  /* ---- K7: APAGAR UM EDITAL NÃO APAGA O QUE VOCÊ SOUBE ----
+   *
+   * Este teste exigia o contrário: que a poda REMOVESSE os vínculos de
+   * um edital que saiu da lista, e que o histórico voltasse a "sem
+   * histórico". Parecia limpeza e era perda.
+   *
+   * O vínculo registra um julgamento SEU — "estes dois assuntos são o
+   * mesmo" — e esse julgamento continua verdadeiro depois que o edital
+   * some da tela. Fechado o concurso do TCE-PE, as equivalências que
+   * você levou meses reconhecendo iam junto, sem aviso.
+   *
+   * E com a cadeia o dano se espalhava: apagar o edital DO MEIO cortava
+   * A↔B e deixava B↔C órfão, quebrando o caminho de A até C. Você
+   * perderia acesso ao seu próprio material por ter arrumado a lista.
+   *
+   * O que se perde na poda agora é só a etiqueta do edital de destino,
+   * que é procedência — e o acervo já descobre o concurso de cada tópico
+   * procurando nos editais que existem. */
   {
     const api = carregar(); api.vkCarregar();
     const cand = api.vkIdenticos(api.vkEstudados(DIARIO), PEND);
     api.vkAplicar(cand, "e2");
-    const n = api.vkPodar(["e1"]);
-    ok(n === cand.length, `K7 a poda devia remover ${cand.length} vinculos orfaos, removeu ${n}`);
-    ok(api.vkHistorico("Financas Publicas", "Restos a pagar", null, DIARIO, "2026-08-16")
-       .marca === "sem_historico",
-       "K7b vinculo de edital apagado continua marcando historico");
+    const antes = api.vkCarregar().length;
+    api.vkPodar(["e1"]);
+    ok(api.vkCarregar().length === antes,
+       `K7 a poda apagou vinculos: ${antes} -> ${api.vkCarregar().length}`);
+    /* e o histórico continua marcando: o assunto foi estudado, e isso
+     * não deixa de ser verdade porque a lista de editais mudou */
+    ok(api.vkHistorico("Financas Publicas", "Restos a pagar", null, DIARIO,
+                       "2026-08-16").marca !== "sem_historico",
+       "K7b apagar o edital apagou a marca de que voce ja estudou o assunto");
+    /* a procedência vira histórico, em vez de sumir */
+    const v = api.vkCarregar().filter((x) => x.editalAntigo === "e2");
+    ok(v.length > 0,
+       "K7c a poda esqueceu de guardar de qual edital o vinculo veio");
   }
 
   return falhas;
@@ -191,7 +216,7 @@ if (require.main === module) {
   comVigia(Promise.resolve(testes()), "vinculos", 60000).then((f) => {
   f.forEach((x) => console.log("  FALHA  " + x));
   console.log(f.length ? `\nvinculos: ${f.length} FALHA(S)\n`
-    : "\nvinculos: triagem, faixas de tempo, idempotencia e poda ok (24 verificacoes)\n");
+    : "\nvinculos: triagem, faixas de tempo, idempotencia e cadeia ok\n");
   process.exit(f.length ? 1 : 0);
   }).catch((e) => { console.log("  FALHA  " + e.message); process.exit(1); });
 }

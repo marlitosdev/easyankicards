@@ -896,25 +896,118 @@ let matSujo = false;      /* há marcação feita e ainda não salva */
  * a palavra aparece mais de uma vez. */
 let matSelOffset = -1;
 let matSelTotal = 0;
+/* QUAL OCORRÊNCIA do trecho selecionado, contada na leitura. 0 = a
+ * primeira. É esta a resposta certa para "de qual 'entre Estados' você
+ * falou?" — e é o que substituiu a regra de proporção. */
+let matSelOrdinal = -1;
 
-function matGuardarOffset(sel) {
-  matSelOffset = -1; matSelTotal = 0;
+/* O QUE NA LEITURA NÃO É O DOCUMENTO.
+ *
+ * O leitor de lei desenha, junto do texto, coisas que NÃO estão no texto
+ * guardado: o botão "Art. 156-A" do cabeçalho (que repete as primeiras
+ * palavras do próprio artigo), os botões de cloze e editar, e o aviso
+ * "este artigo cai em 3 questões suas". Contar ocorrências por cima
+ * disso inflaria a conta e a marca cairia no trecho seguinte.
+ *
+ * A DIVISÃO FICA DE FORA DESTA LISTA, de propósito. "SEÇÃO V-A — Do
+ * Imposto de Competência Compartilhada entre Estados…" parece moldura,
+ * mas é uma LINHA DO TEXTO — e é justamente ali que está a primeira
+ * ocorrência de "entre Estados". Pulá-la faria a contagem dizer
+ * "primeira" para a segunda, que é o erro que se está consertando, com o
+ * sinal trocado. */
+const MAT_CROMO = ["lei-art-cab", "lei-art-num", "lei-art-b", "lei-art-cai"];
+
+function matEhCromo(no) {
+  const c = String((no && no.className) || "");
+  if (!c) return false;
+  return MAT_CROMO.some((k) => (" " + c + " ").indexOf(" " + k + " ") >= 0);
+}
+
+/* =====================================================================
+ * ONDE, NA LEITURA, A SELEÇÃO COMEÇOU
+ *
+ * DOIS DEFEITOS CONSERTADOS AQUI, e os dois já apareceram na sua tela.
+ *
+ * 1. O PAINEL ERA FIXO. "$('matLeitura')" estava cravado, e desde que a
+ *    lei seca ganhou marcas são DOIS leitores. Marcando dentro da lei, o
+ *    nó da seleção não estava nesse painel, a função saía com
+ *    matSelOffset = -1, e matMarcarSelecao caía na regra de último
+ *    recurso: "a primeira ocorrência livre". Foi assim que "entre
+ *    Estados" foi marcado no título da seção em vez do caput.
+ *
+ * 2. A CONTA ERA POR PROPORÇÃO. Sabendo o offset, o código fazia
+ *    (offset / total) * tamanho e escolhia a ocorrência mais próxima do
+ *    resultado. Isso supõe que o texto RENDERIZADO e o texto GUARDADO
+ *    têm o mesmo comprimento — e não têm: o guardado carrega "==", "**"
+ *    e os sufixos das marcas, e o renderizado carrega cabeçalho de
+ *    artigo e avisos que não estão no arquivo. A estimativa errava mais
+ *    quanto mais marcado estivesse o documento, que é exatamente quando
+ *    ela é mais necessária.
+ *
+ * O SUBSTITUTO É CONTAR, não estimar: quantas vezes o trecho aparece
+ * ANTES do ponto onde a seleção começa. Esse número — o ordinal — é o
+ * mesmo nos dois textos, porque não depende de comprimento nenhum.
+ *
+ * O COMEÇO, E NÃO A ÂNCORA. Selecionando da direita para a esquerda, o
+ * anchorNode é o FIM da seleção: contar dali incluiria a própria
+ * ocorrência e marcaria a seguinte. getRangeAt(0).startContainer está
+ * sempre em ordem de documento.
+ * ===================================================================== */
+function matGuardarOffset(sel, painelId) {
+  matSelOffset = -1; matSelTotal = 0; matSelOrdinal = -1;
   try {
-    const painel = $("matLeitura");
+    const painel = $(painelId || "matLeitura");
     if (!painel || !sel || !sel.anchorNode) return;
-    matSelTotal = String(painel.textContent || "").length;
-    let antes = 0, achou = false;
+
+    let no0 = sel.anchorNode;
+    let off0 = sel.anchorOffset || 0;
+    try {
+      if (sel.rangeCount && sel.getRangeAt) {
+        const r = sel.getRangeAt(0);
+        if (r && r.startContainer) { no0 = r.startContainer; off0 = r.startOffset || 0; }
+      }
+    } catch (e) {}
+
+    let todo = "", antes = "", achou = false;
     const anda = (no) => {
-      if (achou || !no) return;
-      if (no === sel.anchorNode) { antes += sel.anchorOffset || 0; achou = true; return; }
+      if (!no) return;
+      if (no !== painel && matEhCromo(no)) return;
+      if (no === no0) {
+        const t2 = String(no.textContent || "");
+        if (!achou) { antes = todo + t2.slice(0, off0); achou = true; }
+        todo += t2;
+        return;
+      }
       if (!no.childNodes || !no.childNodes.length) {
-        antes += String(no.textContent || "").length; return;
+        todo += String(no.textContent || "");
+        return;
       }
       Array.from(no.childNodes).forEach(anda);
     };
     anda(painel);
-    if (achou) matSelOffset = antes;
-  } catch (e) { matSelOffset = -1; }
+    matSelTotal = todo.length;
+    if (!achou) return;
+    matSelOffset = antes.length;
+
+    const alvo = matNormalizar(matSelGuardada);
+    if (alvo.length >= 3) {
+      const antesN = matNormalizar(antes);
+      let k = 0;
+      for (let i = antesN.indexOf(alvo); i >= 0; i = antesN.indexOf(alvo, i + 1)) k++;
+      matSelOrdinal = k;
+    }
+  } catch (e) { matSelOffset = -1; matSelOrdinal = -1; }
+}
+
+/* Em qual dos dois leitores está este nó. Chamado quando ninguém disse
+ * o painel — que é o caso de "selectionchange", ligado ao documento. */
+function matPainelDaSelecao(no) {
+  const ids = ["matLeitura", "leiLeitura"];
+  for (let i = 0; i < ids.length; i++) {
+    const p = $(ids[i]);
+    if (p && p.contains && no && p.contains(no)) return ids[i];
+  }
+  return "";
 }
 
 /* O painel de onde vem a seleção é PARÂMETRO desde que a lei seca passou
@@ -928,14 +1021,34 @@ function matGuardarOffset(sel) {
 function matAtualAtual() { return matAtual; }
 function matSelGuardadaAtual() { return matSelGuardada; }
 
+/* O ARGUMENTO NEM SEMPRE É UM PAINEL.
+ *
+ * Esta função está ligada como OUVINTE em mouseup, touchend, keyup e
+ * selectionchange — e um ouvinte recebe o Evento no primeiro parâmetro.
+ * "painelId" era então um objeto, "$(objeto)" devolvia null, e a
+ * verificação de "a seleção está mesmo dentro do painel?" era pulada
+ * inteira. Funcionava por acidente, e o acidente escondia o defeito: o
+ * painel nunca chegava ao matGuardarOffset.
+ *
+ * Agora só string conta como painel; sem ela, o painel é DESCOBERTO
+ * pelo nó da seleção. E a seleção continua sendo guardada mesmo fora dos
+ * dois leitores — a caixa de questões lê matSelGuardada para oferecer
+ * "copiar a questão na dica", e exigir um leitor aqui apagaria isso. O
+ * que fica sem offset, nesse caso, é só a escolha de ocorrência, que
+ * fora de um leitor não significa nada. */
 function matLembrarSelecao(painelId) {
   const sel = window.getSelection && window.getSelection();
   if (!sel || sel.isCollapsed) return;
-  const painel = $(painelId || "matLeitura");
-  if (painel && sel.anchorNode && painel.contains
-      && !painel.contains(sel.anchorNode)) return;
+  const explicito = (typeof painelId === "string" && painelId) ? painelId : "";
+  if (explicito) {
+    const painel = $(explicito);
+    if (painel && sel.anchorNode && painel.contains
+        && !painel.contains(sel.anchorNode)) return;
+  }
   const txt = String(sel).trim();
-  if (txt) { matSelGuardada = txt; matGuardarOffset(sel); }
+  if (!txt) return;
+  matSelGuardada = txt;
+  matGuardarOffset(sel, explicito || matPainelDaSelecao(sel.anchorNode));
 }
 
 /* O QUE SE VÊ NÃO É O QUE ESTÁ GUARDADO.
@@ -1406,19 +1519,27 @@ function matMarcarSelecao(tipo, onde) {
     return new RegExp("==" + MAT_SUF + "$")
       .test(ta.value.slice(Math.max(0, i0 - 3), i0));
   };
-  /* se a leitura sabe ONDE você clicou, vale a ocorrência mais próxima;
-   * senão, a primeira que ainda estiver livre */
+  /* =================================================================
+   * QUAL DAS OCORRÊNCIAS — POR ORDEM, NÃO POR ESTIMATIVA
+   *
+   * A leitura contou quantas vezes o trecho aparece ANTES do ponto onde
+   * a seleção começou. Esse número é o mesmo nos dois textos, porque não
+   * depende de comprimento — e comprimento era exatamente o que a regra
+   * antiga, de proporção, supunha igual entre o texto renderizado e o
+   * guardado. Não é igual, e nunca foi.
+   *
+   * E SE A OCORRÊNCIA ESCOLHIDA JÁ ESTIVER MARCADA, ISSO É UM "NÃO".
+   * A regra antiga procurava outra livre — e marcava um trecho
+   * DIFERENTE do que estava selecionado, sem dizer nada. Recusar é a
+   * resposta honesta: você apontou para um trecho que já tem marca. */
   let escolhida = -1;
-  if (matSelOffset >= 0 && matSelTotal > 0 && ocorrencias.length > 1) {
-    const aproximado = Math.round((matSelOffset / matSelTotal) * plano.length);
-    let melhor = Infinity;
-    ocorrencias.forEach((p) => {
-      if (jaMarcada(p)) return;
-      const d = Math.abs(p - aproximado);
-      if (d < melhor) { melhor = d; escolhida = p; }
-    });
-  }
-  if (escolhida < 0) {
+  if (matSelOrdinal >= 0 && matSelOrdinal < ocorrencias.length) {
+    const p = ocorrencias[matSelOrdinal];
+    if (jaMarcada(p)) { matRecusa("ja_marcado", trecho); return; }
+    escolhida = p;
+  } else {
+    /* leitura não soube dizer qual (seleção fora dos leitores, ou nó que
+     * a contagem não alcançou): a primeira livre, como sempre foi */
     const livre = ocorrencias.find((p) => !jaMarcada(p));
     escolhida = livre === undefined ? -1 : livre;
   }
@@ -2401,7 +2522,10 @@ function matIniciar() {
     if (!matTirarMarcaDe(m)) { uiAlert(t("mk_tirar_falhou")); return; }
     $("dlgMarcaMenu").close();
     try { matRender(); } catch (e) {}
-    matPintarContadores();
+    /* a remoção JÁ ACONTECEU e já foi gravada; repintar é cortesia.
+     * Vindo do leitor de lei não há tópico de material aberto, e um erro
+     * aqui derrubaria o resto do fluxo por causa de um contador. */
+    try { matPintarContadores(); } catch (e) {}
   };
   if ($("btnMmLista")) $("btnMmLista").onclick = () => {
     const m = mmMarcaAberta;
@@ -2424,18 +2548,38 @@ function matIniciar() {
 
   /* mantém a última seleção viva: o clique no botão de marcar chega depois
    * de o navegador já ter recolhido a seleção */
-  ["mouseup", "touchend", "keyup"].forEach((ev) => {
-    if ($("matLeitura")) $("matLeitura").addEventListener(ev, matLembrarSelecao);
-  });
-  /* CLIQUE NA MARCA. Um ouvinte só no container, e não um por <mark>:
-   * a leitura é redesenhada a cada mudança, e ligar por elemento
-   * deixaria ouvintes órfãos a cada repintura. */
-  if ($("matLeitura")) $("matLeitura").addEventListener("click", (ev) => {
+  /* =================================================================
+   * OS DOIS LEITORES, E NÃO UM
+   *
+   * Desde que a lei seca ganhou marcas são dois painéis de leitura, mas
+   * os ouvintes continuaram ligados só ao do material. O efeito: dentro
+   * da lei dava para PÔR marca e não dava para TIRAR — clicar nela não
+   * fazia nada, e a única saída era editar a lei à mão e apagar os "=="
+   * no meio do texto normativo.
+   *
+   * A máquina de tirar já sabia lidar com a lei: matMarcaSobPonteiro
+   * devolve "onde", e matTrocarCorDaMarca escolhe o campo por ele. Só o
+   * fio estava faltando.
+   * ================================================================= */
+  const cliqueNaMarca = (ev) => {
     const alvo = ev && ev.target;
     if (!alvo || !alvo.getAttribute || !alvo.getAttribute("data-marca")) return;
     /* seleção em curso é gesto de marcar, não de abrir menu */
     if (String(matSelGuardada || "").trim().length > 2) return;
     matMenuDaMarca(alvo);
+  };
+  /* CLIQUE NA MARCA. Um ouvinte só no container, e não um por <mark>:
+   * a leitura é redesenhada a cada mudança, e ligar por elemento
+   * deixaria ouvintes órfãos a cada repintura. */
+  ["matLeitura", "leiLeitura"].forEach((id) => {
+    const p = $(id);
+    if (!p || !p.addEventListener) return;
+    ["mouseup", "touchend", "keyup"].forEach((ev) => {
+      /* o id vai por fora do evento: ligado direto, o ouvinte receberia
+       * o Evento no lugar do painel */
+      p.addEventListener(ev, () => matLembrarSelecao(id));
+    });
+    p.addEventListener("click", cliqueNaMarca);
   });
   if (document.addEventListener)
     document.addEventListener("selectionchange", matLembrarSelecao);
@@ -3473,12 +3617,30 @@ function matContarMarcas(tipo, chave) {
 
 function matDuvidas(tipo) {
   const fora = [];
-  Object.keys(matResumos || {}).forEach((chave) => {
-    const r = matResumos[chave];
-    if (!r) return;
+  /* =================================================================
+   * TÓPICO COM LEI E SEM RESUMO TAMBÉM TEM MARCAS
+   *
+   * A varredura começava e terminava em matResumos — e um tópico que só
+   * tem lei não tem registro de resumo, porque abrir o leitor de lei não
+   * cria um. Resultado: a marca feita dentro da lei existia no texto,
+   * pintava na tela e NÃO aparecia em lista nenhuma. E o que não aparece
+   * na lista não tem como ser tirado, nem contado, nem revisado — é a
+   * velha história do material que existe e é inalcançável.
+   * ================================================================= */
+  const chaves = Object.keys(matResumos || {});
+  try {
+    if (typeof leisLista === "function") {
+      leisLista().forEach((l) => (l.topicos || []).forEach((c) => {
+        if (c && chaves.indexOf(c) < 0) chaves.push(c);
+      }));
+    }
+  } catch (e) {}
+
+  chaves.forEach((chave) => {
+    const r = matResumos[chave] || {};
     /* texto VIVO: dúvida marcada e ainda não salva também conta — foi ela
      * que a pessoa acabou de criar e quer encontrar */
-    [["texto", matTextoVivo(chave, "texto")],
+    [["texto", matResumos[chave] ? matTextoVivo(chave, "texto") : ""],
      ["lei", matTextoVivo(chave, "lei")]].forEach(([onde, txt]) => {
       const s = String(txt || "");
       if (!s) return;
@@ -3581,9 +3743,13 @@ let mkTipoAberto = null;
  * Reaproveita a mesma mecânica da dúvida resolvida: a marca reabre a
  * cada linha, e tirar só a primeira deixaria o resto pintado. */
 function matTirarMarcaDe(m) {
-  const r = matResumos[m.chave];
-  if (!r) return false;
   const campo = m.onde === "lei" ? "lei" : "texto";
+  /* O REGISTRO DE RESUMO SÓ É EXIGIDO PARA O RESUMO.
+   * A lei mora na biblioteca desde a reforma, e um tópico pode ter lei
+   * sem ter resumo nenhum — foi o que este guarda não previu. Ele
+   * recusava a remoção com "não consegui achar este trecho", que é uma
+   * frase sobre o texto quando o problema era outro. */
+  if (campo !== "lei" && !matResumos[m.chave]) return false;
   let s2 = matTextoVivo(m.chave, campo);
   const abre = MAT_MARCAS[m.tipo] || "==";
   const pedacos = m.pedacos && m.pedacos.length ? m.pedacos : [m.trecho];

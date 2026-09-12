@@ -930,6 +930,24 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
 #dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{
   flex:1 1 auto;min-height:120px;max-height:none;height:auto;resize:none}
+/* ---- COLAR A LEI NÃO PODE SER POR UM BURACO DE FECHADURA ----------
+ * O "flex:1 1 auto" acima só reparte ESPAÇO LIVRE, e um diálogo com
+ * max-height mas sem height se dimensiona pelo conteúdo — no modo
+ * editar, pelas 14 linhas do textarea. Pedir altura aqui é o que cria
+ * o espaço livre que o flex-grow então distribui.
+ * O "height" pede, o "max-height" das classes de janela (88/92/95/98)
+ * continua mandando: quem escolheu janela estreita não é surpreendido
+ * por um diálogo de tela cheia só porque entrou em editar. */
+#dlgLeiSeca.lei-m-editar[open]{height:92dvh}
+#dlgLeiSeca.lei-m-editar #leiTexto{
+  /* monoespaçada só AQUI: é a fonte que mostra que o "Art." está no
+     começo da linha, que é o que o leitor de artigos precisa enxergar
+     para separar artigo de continuação. Na leitura ela atrapalharia. */
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:13.5px;line-height:1.55;padding:12px}
+/* a régua de capítulos é mapa de leitura; no modo editar ela só rouba
+   altura da caixa que se veio usar */
+#dlgLeiSeca.lei-m-editar #leiBlocosCx{display:none}
 
 /* ---- LEI SECA ------------------------------------------------------
  * A fila de leis, a procedência e o "onde parei" ficam ACIMA do texto e
@@ -1000,6 +1018,16 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   padding:5px 9px;border-radius:7px;cursor:pointer;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
 .lei-ir-n:hover{border-color:var(--acao)}
+/* O CABEÇALHO DE DIVISÃO DENTRO DA GRADE.
+   "flex-basis:100%" porque a grade é flex-wrap: sem isso o título
+   entraria na fila como se fosse mais um número. Fica grudado no topo
+   enquanto se rola, que é o que responde "o 1º que estou vendo agora é
+   do corpo ou do ADCT?" — a pergunta que a Constituição inteira faz. */
+.lei-ir-div{flex:0 0 100%;position:sticky;top:0;z-index:1;
+  font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--sutil);background:var(--panel);
+  padding:6px 2px 3px;margin-top:4px;border-bottom:1px solid var(--borda)}
+.lei-ir-div:first-child{margin-top:0}
 .lei-ir-parei{border-color:var(--verde);color:var(--verde)}
 .lei-ir-prova{border-color:#f59e0b;color:#f59e0b}
 .lei-ir-erro{border-color:#ef4444;color:#ef4444}
@@ -1094,8 +1122,56 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    excedente vira MARGEM, não linha de 200 caracteres — que ninguém
    consegue seguir sem se perder ao voltar para a esquerda. */
 #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{margin-inline:auto;width:100%}
+/* O LIMITE VALE PARA A COLUNA INTEIRA, e não só para o parágrafo.
+ *
+ * O teto de 62em já existia — mas SÓ no texto do artigo. O resultado
+ * num monitor largo não era linha de duzentos caracteres: era pior de
+ * explicar. O parágrafo parava no meio da tela, alinhado à esquerda, e
+ * o cabeçalho do artigo, a divisão e o aviso de "cai nas suas questões"
+ * continuavam atravessando a janela inteira. Três larguras diferentes
+ * empilhadas, com um deserto à direita do texto.
+ *
+ * Agora quem tem o teto é o BLOCO do artigo, e ele é centrado: tudo o
+ * que pertence ao artigo compartilha a mesma medida, e o excedente
+ * vira margem dos dois lados em vez de vão de um lado só. */
+#dlgLeiSeca .lei-art, #dlgLeiSeca .lei-div,
+#dlgLeiSeca .lei-rec{max-width:62em;margin-inline:auto}
 #dlgLeiSeca .lei-art-txt, #dlgLeiSeca .lei-rec-cab,
 #dlgLeiSeca .lei-rec-txt{max-width:62em}
+
+/* AS AÇÕES DO ARTIGO APARECEM QUANDO A MÃO CHEGA PERTO.
+ *
+ * "🃏 virar cartão" e "✏ editar" repetidos em cento e quinze artigos
+ * são duzentos e trinta botões numa lei — e nenhum deles é o que se
+ * está fazendo, que é LER. Some enquanto se lê e volta ao passar o
+ * cursor pelo artigo.
+ *
+ * SÓ ONDE HÁ PONTEIRO. Num telefone não existe "passar o mouse": lá
+ * eles continuam visíveis o tempo todo, porque a alternativa seria
+ * escondê-los para sempre. É a mesma razão de "@media (hover:hover)"
+ * existir — e o motivo de esta regra não ser simplesmente "opacity:0".
+ *
+ * :focus-within mantém o teclado funcionando: quem chega por Tab
+ * precisa ver o botão em que está. */
+@media (hover: hover) and (pointer: fine) {
+  #dlgLeiSeca .lei-art .lei-art-b{opacity:0;transition:opacity .12s}
+  #dlgLeiSeca .lei-art:hover .lei-art-b,
+  #dlgLeiSeca .lei-art:focus-within .lei-art-b{opacity:1}
+}
+
+/* O PONTILHADO DAS EMENDAS.
+ *
+ * Texto de emenda constitucional vem cheio de linhas assim:
+ *   "Art. 43. ........................................"
+ * — são marcas de "o resto do artigo continua como está", e no papel
+ * do Diário Oficial fazem sentido. Na tela ocupam linhas inteiras de
+ * nada, entre dois trechos que importam.
+ *
+ * ENCOLHER, E NÃO APAGAR: a reticência diz que ali havia texto omitido
+ * pela emenda, e apagá-la faria dois dispositivos distintos parecerem
+ * um parágrafo contínuo. Vira um traço curto e apagado. */
+.lei-omissao{color:var(--sutil);opacity:.55;letter-spacing:2px;
+  user-select:none}
 
 /* O NÚMERO DO ARTIGO É BOTÃO — e tem de continuar parecendo o número.
    Sem moldura até o mouse chegar: 115 molduras seriam 115 ruídos. */
@@ -1230,6 +1306,26 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.3);min-width:230px;
   max-width:min(320px,92vw)}
 .qs-fer-menu[hidden]{display:none}
+/* O MENU DE ESCOLHER A LEI empilha, o do ⋮ não.
+   São duas listas de naturezas diferentes: lá são atalhos avulsos, aqui
+   é uma lista de opções concorrentes, e opção lado a lado numa linha se
+   lê como uma frase. A classe é própria para não mexer no ⋮ — a regra
+   "[hidden]" continua vencendo as duas por especificidade. */
+.qs-lei-menu{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.qs-fer-rot{font-size:11.5px;color:var(--sutil);text-transform:none}
+/* A CITAÇÃO CLICÁVEL DENTRO DO COMENTÁRIO.
+   É <button> e não <a>: não há para onde navegar, e um href="#" num
+   diálogo mexe na barra de endereço por nada. O sublinhado pontilhado
+   diz "isto leva a algum lugar" sem virar um bloco azul no meio da
+   frase — o comentário continua sendo texto para ler. */
+.qs-lei-link{display:inline;padding:0;margin:0;border:0;background:none;
+  font:inherit;color:var(--info);cursor:pointer;
+  text-decoration:underline;text-decoration-style:dotted;
+  text-underline-offset:2px}
+.qs-lei-link:hover,.qs-lei-link:focus-visible{text-decoration-style:solid}
+/* SEM LEI PARA ABRIR ainda é clicável — leva a vincular —, mas não se
+   anuncia como se já soubesse o caminho. */
+.qs-lei-link-sem{color:var(--sutil);text-decoration-style:dashed}
 .pl-cx{position:relative}
 .pl-tela{position:absolute;inset:0;width:100%;height:100%;
   touch-action:none;pointer-events:none;border-radius:8px}
@@ -1564,6 +1660,13 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mat-f-dica{display:block;font-size:10px;color:var(--sutil);line-height:1.45;margin:0 0 4px}
 .duv-lista{max-height:52vh;overflow:auto;margin:8px 0}
 .duv-item{padding:9px 0;border-bottom:1px solid var(--borda)}
+/* AS EXPLICAÇÕES DA AJUDA DA LEI TÊM PARÁGRAFO.
+   "pre-line" e não "pre-wrap": preserva a quebra de linha e continua
+   colapsando os espaços repetidos, que é o que se quer num texto
+   escrito em JavaScript — nenhuma indentação do código vaza para a
+   tela. Sem isto, os "\n\n" das explicações viravam espaço e três
+   itens saíam como um paredão corrido. */
+.lei-aj-d{white-space:pre-line}
 .duv-item:last-child{border-bottom:0}
 .duv-trecho{font-size:12px;color:var(--texto);line-height:1.5;
   border-left:3px solid #3b82f6;padding-left:9px}
