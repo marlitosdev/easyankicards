@@ -1408,9 +1408,14 @@ const UI = {
   "jur_cpl_vazio_aj": "“{c}” está vazio. É um dos campos que a pergunta vai pedir.",
   "jur_cpl_cheio_aj": "“{c}” já está preenchido, e a resposta da IA não vai substituí-lo.",
   "jur_completar": "completar e conferir",
-  "jur_completar_aj": "Monta uma pergunta com este julgado dentro, para você colar numa IA. Ela preenche só os campos vazios e aponta erros no texto — a tese nunca é reescrita.",
-  "jur_completar_falta": "Faltam {n} campo(s): {q}. Toque para montar a pergunta.",
-  "jur_completar_ok": "Este julgado está completo. A pergunta ainda serve para conferir o texto.",
+  /* SEM SINGULAR E PLURAL, "1 campo(s)" soa errado quando falta só um —
+   * e falta só um é o caso mais comum, o de completar de quase pronto.
+   * O mesmo texto também prometia só "montar a pergunta": os dois
+   * botões (copiar a pergunta, colar a resposta) viraram um só faz
+   * tempo, e o rótulo nunca foi atualizado para dizer os dois passos. */
+  "jur_completar_falta_um": "Falta 1 campo: {q}. Toque para copiar a pergunta para a IA e colar a resposta dela.",
+  "jur_completar_falta": "Faltam {n} campos: {q}. Toque para copiar a pergunta para a IA e colar a resposta dela.",
+  "jur_completar_ok": "Este julgado está completo. Toque para conferir o texto com uma IA, se quiser.",
   "jur_completar_copiado": "Pergunta copiada. Cole numa IA e traga a resposta de volta com “ler a resposta”.\n\nSó os campos VAZIOS serão preenchidos. O que você já escreveu fica como está, e a tese não é reescrita em hipótese nenhuma.",
   "jur_completar_ler": "ler a resposta",
   "jur_completar_ler_aj": "Cole aqui o JSON que a IA devolveu. Preenche os campos vazios, soma os assuntos e mostra o que ela apontou no texto.",
@@ -1834,6 +1839,7 @@ const UI = {
   "bk_onde_local": "deste aparelho",
   "bk_selo_ajuda": "Este selo mostra de quando é o seu último backup — não a data dos seus estudos, que continuam salvos neste navegador.\n\nVerde: até 7 dias. Âmbar: até 21. Vermelho: mais que isso, ou nenhum backup.\n\nPara atualizar: abra \"Backup e restauração\" no rodapé e use \"Salvar na nuvem\". Se você escolher a pasta do Google Drive ou do OneDrive, a cópia sobe sozinha e o selo volta a ficar verde.",
   "modo_material": "Material de estudo",
+  "modo_material_curto": "Material",
   "qs_fim_rep": "Repescagem: {c} de {n} ({pct}%) — só das que você tinha errado.",
   "qs_repescar": "tentar de novo as {n} que errei",
   "qs_repescar_ajuda": "Abre uma rodada nova só com as questões que você errou. O placar dela é separado: o desta rodada fica guardado como está.",
@@ -4092,6 +4098,7 @@ const UI = {
   "bk_onde_local": "this device",
   "bk_selo_ajuda": "This badge shows how old your last backup is — not the date of your study data, which stays in this browser.\n\nGreen: up to 7 days. Amber: up to 21. Red: older than that, or no backup at all.\n\nTo update it: open \"Backup and restore\" in the footer and use \"Save to cloud\".",
   "modo_material": "Study material",
+  "modo_material_curto": "Material",
   "qs_fim_rep": "Second pass: {c} of {n} ({pct}%) — only the ones you had missed.",
   "qs_repescar": "retry the {n} I missed",
   "qs_repescar_nada": "You did not miss any in this round.",

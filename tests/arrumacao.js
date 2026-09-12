@@ -87,6 +87,78 @@ async function testes() {
     ok(!recolhida(), "A1i nao voltou a abrir");
     ok(api.loja.getItem("eac_modos_recolhida") === "0",
        "A1j abrir de novo nao foi guardado");
+
+    /* ---- A1k-A1p: as cinco cores, o breakpoint certo, sem float ----
+     * Duas cores tinham sumido: o CSS mirava ".modo-btn[data-modo=
+     * "resumos"]", mas o modo se chama "material" — a regra nunca
+     * casava. "Questões" nunca teve regra nenhuma. E a barra era
+     * "float:left" dentro de um contentor sem *clearfix*: o contentor
+     * colapsava e o "position:sticky" não tinha onde grudar — a barra
+     * sumia ao rolar a página, em qualquer largura de computador. */
+    ok(/\.modo-btn\[data-modo="cartoes"\]\{--modo-cor:/.test(html),
+       "A1k a cor de Cartoes sumiu do CSS");
+    ok(/\.modo-btn\[data-modo="edital"\]\{--modo-cor:/.test(html),
+       "A1l a cor de Edital sumiu do CSS");
+    ok(/\.modo-btn\[data-modo="material"\]\{--modo-cor:/.test(html),
+       "A1m Material de estudo continua sem cor propria (o seletor "
+       + "ainda mira 'resumos', que nao e' o id deste modo)");
+    ok(/\.modo-btn\[data-modo="questoes"\]\{--modo-cor:/.test(html),
+       "A1n Questoes continua sem cor propria");
+    ok(/\.modo-btn\[data-modo="ferramentas"\]\{--modo-cor:/.test(html),
+       "A1o a cor de Ferramentas sumiu do CSS");
+    ok(!/\.modo-btn\[data-modo="resumos"\]/.test(html),
+       "A1p o seletor morto '[data-modo=\"resumos\"]' (nunca casa com "
+       + "nenhum botao) continua no CSS");
+
+    /* sem comentários: a própria explicação de por que o float saiu
+     * cita ".barra-modos{float:left}" como exemplo do jeito antigo, e
+     * uma busca ingênua acharia essa citação em vez do CSS de verdade */
+    const CSSTXT = html.replace(/\/\*[\s\S]*?\*\//g, "");
+    ok(!/\.barra-modos\{[^}]*float:left/.test(CSSTXT),
+       "A1q a barra de modos continua flutuando (float:left) — e o "
+       + "float que faz o contentor colapsar e o sticky perder onde "
+       + "grudar, sumindo ao rolar a pagina");
+    /* o trilho vertical do computador precisa trocar de layout em
+     * 760px, nao 900px — ha' OUTRO "@media (min-width:900px)" no
+     * arquivo, sem nenhuma relacao (grade de jurisprudencia), entao a
+     * busca acha a regra da coluna e sobe ate' o "@media" mais proximo
+     * ACIMA dela, em vez de varrer o arquivo inteiro atras de qualquer
+     * "@media" (o que acharia o primeiro do arquivo, nao o certo) */
+    const marcador = ".modos-caixa{flex:0 0 186px";
+    const posMarcador = CSSTXT.indexOf(marcador);
+    const antes = CSSTXT.slice(0, posMarcador);
+    const posMedia = antes.lastIndexOf("@media (min-width:");
+    const larguraMedia = (antes.slice(posMedia).match(/@media \(min-width:(\d+)px\)/) || [])[1];
+    ok(posMarcador >= 0 && larguraMedia === "760",
+       "A1r o trilho do computador ainda troca de layout em 900px, "
+       + "destoando do resto do app (760px em toda parte, e o que "
+       + "PLANO-edital.md ja documentava para esta barra) — achei "
+       + JSON.stringify(larguraMedia));
+
+    /* o rótulo curto: só existe para caber a fileira numa linha só no
+     * celular, e é a mesma técnica em todo botão — dois <span>, o CSS
+     * decide qual mostrar. Sem rótulo curto próprio, os dois têm o
+     * mesmo texto (não um <span> vazio, que o leitor de tela leria como
+     * "botão sem nome" na largura errada). */
+    const btEstudo = Array.from(api.$("barraModos").children || [])
+      .find((b) => b.dataset && b.dataset.modo === "material");
+    const curto = (btEstudo.children || []).find((c) =>
+      (c.className || "") === "modo-rot-curto");
+    const cheio = (btEstudo.children || []).find((c) =>
+      (c.className || "") === "modo-rot");
+    ok(!!curto && curto.textContent === "Material",
+       "A1s o rotulo curto de Material de estudo nao apareceu: "
+       + (curto && curto.textContent));
+    ok(!!cheio && cheio.textContent === "Material de estudo",
+       "A1t o rotulo cheio de Material de estudo mudou: "
+       + (cheio && cheio.textContent));
+    const btEdital = Array.from(api.$("barraModos").children || [])
+      .find((b) => b.dataset && b.dataset.modo === "edital");
+    const curtoEdital = (btEdital.children || []).find((c) =>
+      (c.className || "") === "modo-rot-curto");
+    ok(!!curtoEdital && curtoEdital.textContent === "Edital",
+       "A1u sem rotulo curto proprio, o botao deveria repetir o rotulo "
+       + "cheio, nao ficar vazio: " + (curtoEdital && curtoEdital.textContent));
   }
 
   /* ---- A2: a janela da lei cresce em LARGURA ---- */

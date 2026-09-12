@@ -810,6 +810,19 @@ function medirRodape() {
 window.addEventListener("resize", medirRodape);
 document.addEventListener("DOMContentLoaded", medirRodape);
 
+/* O cabeçalho é fixo (position:sticky;top:0) e agora a barra de modos
+ * também é — ela precisa grudar LOGO ABAIXO dele, não por cima. Como o
+ * cabeçalho quebra linha em tela estreita (nome + tema + idioma + Ajuda),
+ * a altura certa só existe em tempo de execução — o mesmo motivo de
+ * medirRodape() ao lado. */
+function medirCabecalho() {
+  const h = document.querySelector("header");
+  if (!h) return;
+  document.documentElement.style.setProperty("--altura-cabecalho", h.offsetHeight + "px");
+}
+window.addEventListener("resize", medirCabecalho);
+document.addEventListener("DOMContentLoaded", medirCabecalho);
+
 /* Ampliar a bancada: esconde a prévia e dá a largura toda ao editor.
  * Fica guardado, porque quem trabalha em texto longo trabalha assim a
  * sessão inteira e não quer reapertar o botão a cada abertura. */

@@ -106,6 +106,16 @@ function jurPintarModo() {
 }
 
 function jurTrocarModo(m) {
+  /* "+ guardar mais um julgado" promete um formulário em branco. Sem
+   * limpar aqui, um ✏️ editar cancelado com "voltar para a leitura"
+   * deixava tese/resumo/id do julgado anterior escondidos no
+   * formulário — jurEditar preenche os campos direto, sem passar por
+   * jurTrocarModo, então nada os limpava na volta. "+ mais" reabria com
+   * esse lixo: jurColar só sobrescreve tese/resumo vazios, então o
+   * texto novo (ou melhorado) colado nunca aparecia — e se a pessoa
+   * salvasse assim, sobrescrevia o julgado antigo em vez de criar um
+   * novo, porque jurEditando continuava apontando para ele. */
+  if (m === "incluir") jurLimparForm();
   jurModo = m;
   jurPintarModo();
   jurPintarLista();
@@ -981,7 +991,9 @@ function jurPintarLista() {
      * mudos lado a lado se leem como duas ações alternativas, e não como
      * o começo e o fim do mesmo caminho. */
     bt(falta.length ? "🩹" + falta.length : "🩹",
-      falta.length
+      falta.length === 1
+        ? t("jur_completar_falta_um", { q: jurNomeCampo(falta[0]) })
+        : falta.length
         ? t("jur_completar_falta", { n: falta.length,
             q: falta.map(jurNomeCampo).join(", ") })
         : t("jur_completar_ok"),
