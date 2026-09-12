@@ -17,10 +17,14 @@
 /* Cada entrada diz onde MORA a sua seção. Poderia procurar por
  * "[data-modo]", mas então o registro deixaria de ser a única fonte da
  * verdade: quem lê esta lista sabe tudo sobre os modos sem abrir o HTML. */
+/* "rotuloCurto" é opcional — só quem precisa de um rótulo mais curto para
+ * caber na fileira de uma linha só do celular o declara. Sem ele,
+ * montarBarraModos() repete o rótulo cheio; só "material" precisa hoje. */
 const MODOS = [
   { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
   { id: "edital", secao: "secEdital", icone: "📋", rotulo: "modo_edital", pronto: true },
-  { id: "material", secao: "secResumos", icone: "📚", rotulo: "modo_material", pronto: true },
+  { id: "material", secao: "secResumos", icone: "📚", rotulo: "modo_material",
+    rotuloCurto: "modo_material_curto", pronto: true },
   { id: "questoes", secao: "secQuestoes", icone: "❓", rotulo: "modo_questoes", pronto: true },
   { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
 ];
@@ -130,7 +134,14 @@ function montarBarraModos() {
     const rot = document.createElement("span");
     rot.className = "modo-rot";
     rot.textContent = typeof t === "function" ? t(m.rotulo) : m.id;
-    b.append(ic, rot);
+    /* o rótulo curto é um <span> À PARTE, não um texto trocado por JS: o
+     * CSS escolhe qual dos dois mostrar por largura de tela (fileira
+     * única no celular, coluna no computador), sem o JS precisar saber
+     * de breakpoint nem recriar nada ao redimensionar a janela. */
+    const rotC = document.createElement("span");
+    rotC.className = "modo-rot-curto";
+    rotC.textContent = typeof t === "function" ? t(m.rotuloCurto || m.rotulo) : m.id;
+    b.append(ic, rot, rotC);
     if (!m.pronto) {
       const selo = document.createElement("span");
       selo.className = "modo-selo";

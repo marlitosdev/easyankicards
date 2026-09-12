@@ -1884,45 +1884,73 @@ dialog.diag-modal{max-width:860px}
 .diag-pre .d-err{background:rgba(220,38,38,.18);border-radius:3px}
 .diag-pre .d-cab{color:var(--texto);font-weight:700}
 /* ---- barra de modos ----------------------------------------------
-   Trilho vertical no computador, fileira de abas no celular. Cada modo
-   tem a sua cor, aplicada só na borda esquerda e no ícone: colorir o
-   botão inteiro faria quatro blocos berrantes disputando atenção com o
-   conteúdo, que é o que importa na tela. */
-.modos-caixa{margin:0 0 12px}
+   Fileira única e fixa no topo no celular; trilho vertical fixo no
+   computador. Cada modo tem a sua cor — no celular no topo do botão, no
+   computador na borda esquerda — aplicada só numa risca e no ícone:
+   colorir o botão inteiro faria cinco blocos berrantes disputando
+   atenção com o conteúdo, que é o que importa na tela.
+
+   FIXA, PARA NÃO SUMIR COM O SCROLL. Antes ela vivia no fluxo normal da
+   página — cinco rótulos por extenso quebravam em três linhas no
+   celular, e assim que a pessoa rolava a tela para ler a agenda, a
+   navegação ia embora com elas. "top:var(--altura-cabecalho)" e não um
+   número fixo porque o cabeçalho do app quebra linha em telas estreitas
+   (nome + seletor de tema + idioma + Ajuda) — um valor cravado
+   funcionaria numa largura e cobriria a barra na largura de baixo.
+   "--altura-cabecalho" é medida de verdade em app.js/medirCabecalho(),
+   no mesmo padrão que já mede o rodapé fixo. */
+.modos-caixa{margin:0 0 12px;position:sticky;top:var(--altura-cabecalho,0px);
+  z-index:4;background:var(--bg);padding-top:6px}
 .modos-cab{display:flex;align-items:center;gap:8px;margin:0 0 5px}
 .modos-tit{font-size:9.5px;font-weight:800;letter-spacing:.11em;
   text-transform:uppercase;color:var(--sutil)}
 /* "button.modos-min", não ".modos-min": com "all:unset" e 20x20 dentro,
    esta regra apaga o layout de qualquer coisa em que ela caia. Exigir a
    etiqueta <button> a torna inerte num contentor — e foi num contentor
-   que ela caiu, encolhendo a faixa de navegação inteira para 20 pixels
-   e fazendo os botões, que ali são "float:left", descolarem e flutuarem
-   por cima da agenda. */
+   que ela caiu, encolhendo a faixa de navegação inteira para 20 pixels. */
 button.modos-min{all:unset;cursor:pointer;width:20px;height:20px;border-radius:5px;
   display:inline-flex;align-items:center;justify-content:center;
   color:var(--sutil);font-size:12px;border:1px solid var(--borda);
   margin-left:auto}
 button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
-.barra-modos{display:flex;gap:6px;margin:0;flex-wrap:wrap}
+/* NUNCA QUEBRA LINHA — nem no celular. Cinco rótulos por extenso não
+   cabem numa fileira de 375px; o remédio não é deixar quebrar (eram três
+   linhas antes do conteúdo começar), é encolher o botão: ícone em cima,
+   um rótulo curto embaixo, os cinco lado a lado. */
+.barra-modos{display:flex;gap:5px;margin:0;flex-wrap:nowrap}
 
 .modo-btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;
-  align-items:center;gap:9px;padding:10px 12px;border-radius:10px;
-  background:var(--panel);color:var(--sutil);font-size:13px;font-weight:600;
-  white-space:nowrap;border:1px solid var(--borda);
-  border-left:3px solid var(--modo-cor,var(--borda));transition:.12s}
+  flex:1;min-width:0;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;padding:6px 2px 5px;border-radius:10px;
+  background:var(--panel);color:var(--sutil);font-size:8.5px;font-weight:600;
+  text-align:center;white-space:nowrap;border:1px solid var(--borda);
+  border-top:3px solid var(--modo-cor,var(--borda));transition:.12s}
 .modo-btn:hover{color:var(--texto);background:var(--campo)}
 .modo-btn.ativo{color:var(--texto);background:var(--campo);
-  border-color:var(--modo-cor,var(--borda));border-left-width:3px;
+  border-color:var(--modo-cor,var(--borda));border-top-width:3px;
   box-shadow:inset 0 0 0 1px var(--modo-cor,transparent)}
+/* CINCO MODOS, CINCO CORES.
+   "resumos" nunca existiu como id de modo — o registro (modos.js) chama
+   este modo de "material", e a regra nunca casava: o botão nascia sem
+   cor, igual "questões", que nunca tinha ganhado uma regra sequer. As
+   duas ficavam com a borda cinza genérica, e era a metade da barra
+   "sem acabamento". */
 .modo-btn[data-modo="cartoes"]{--modo-cor:#22c55e}
 .modo-btn[data-modo="edital"]{--modo-cor:#3b82f6}
-.modo-btn[data-modo="resumos"]{--modo-cor:#f59e0b}
+.modo-btn[data-modo="material"]{--modo-cor:#f59e0b}
+.modo-btn[data-modo="questoes"]{--modo-cor:#22d3ee}
 .modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
-.modo-ic{font-size:16px;line-height:1;filter:grayscale(.35)}
+.modo-ic{font-size:15px;line-height:1;filter:grayscale(.35)}
 .modo-btn.ativo .modo-ic{filter:none}
-.modo-rot{flex:1}
-.modo-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
-  padding:1px 5px;border-radius:7px;background:var(--campo);color:var(--sutil);
+.modo-rot{display:none;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* RÓTULO CURTO, só para caber numa fileira que não quebra — "Material"
+   em vez de "Material de estudo". Os outros quatro modos já são curtos:
+   montarBarraModos() sempre cria os dois <span>, e quando não há rótulo
+   curto próprio ele repete o rótulo cheio — assim o CSS decide qual
+   mostrar por largura de tela sem o JS precisar saber de breakpoint. */
+.modo-rot-curto{display:block;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.modo-selo{font-size:8px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;
+  padding:1px 4px;border-radius:6px;background:var(--campo);color:var(--sutil);
   border:1px solid var(--borda)}
 .modo-btn.ativo .modo-selo{border-color:var(--modo-cor);color:var(--modo-cor)}
 /* RECOLHIDA: só o ícone. O rótulo vira dica do botão — não some, porque
@@ -1940,9 +1968,27 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
    PRIMEIRA regra com aquele seletor, e uma regra de ajuste antes da
    base a faria concluir que o botão nasceu sem cor. */
 .modos-caixa.modos-recolhida .modo-rot,
+.modos-caixa.modos-recolhida .modo-rot-curto,
 .modos-caixa.modos-recolhida .modo-selo{display:none}
-.modos-caixa.modos-recolhida .modo-btn{padding:9px 11px;gap:0}
+.modos-caixa.modos-recolhida .modo-btn{padding:7px 4px;gap:0}
 .modos-caixa.modos-recolhida .modo-ic{font-size:17px}
+
+/* ≥760px: volta a ser uma fileira horizontal (ícone ao lado do rótulo,
+   risca colorida à esquerda) — cabe, porque no trilho vertical do
+   computador cada botão tem a largura da coluna inteira, não um quinto
+   da tela. 760px porque é o ponto de corte que o resto do app já usa
+   (a lei seca, a agenda, os diálogos) — 900px era a exceção, não a
+   regra, e uma janela de notebook um pouco mais estreita caía no modo
+   celular sem avisar. */
+@media (min-width:760px){
+  .modo-btn{flex-direction:row;align-items:center;gap:9px;padding:10px 12px;
+    font-size:13px;border-top:none;border-left:3px solid var(--modo-cor,var(--borda))}
+  .modo-btn.ativo{border-left-width:3px}
+  .modo-ic{font-size:16px}
+  .modo-rot{display:block;flex:1;text-align:left}
+  .modo-rot-curto{display:none}
+  .modos-caixa.modos-recolhida .modo-btn{padding:9px 11px}
+}
 /* ---- cabeçalho da bancada ----------------------------------------
    O nome ficava no alto do painel, longe da caixa que ele nomeia. Agora
    encosta no editor: quem lê "Bancada de cartões" vê logo abaixo a caixa
@@ -2021,15 +2067,26 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .esq-p.curto{width:62%}
 .btn-linha{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .btn-linha .btn{flex:1;min-width:130px}
-@media (min-width:900px){
-  .barra-modos{position:sticky;top:8px;float:left;flex-direction:column;
-    width:186px;margin:0 14px 0 0;gap:5px}
-  .modo-area{overflow:hidden}
-  /* RECOLHER PRECISA DEVOLVER ESPAÇO. Esconder os rótulos e manter a
-     coluna com 186px de largura seria trocar texto por vazio — o botão
-     prometia espaço e entregava uma faixa igualmente larga, só que
-     menos legível. */
-  .modos-caixa.modos-recolhida .barra-modos{width:auto;min-width:0}
+@media (min-width:760px){
+  /* FLEX, NÃO FLOAT. Era ".barra-modos{float:left}" dentro de
+     ".modos-caixa" — um float não conta na altura do pai, e sem
+     *clearfix* ".modos-caixa" colapsava para a altura só do cabeçalho
+     "ONDE ESTUDAR" (22px). "position:sticky" gruda dentro dos limites do
+     PRÓPRIO PAI: com o pai de 22px, não sobrava onde grudar, e a barra
+     rolava para fora de vista na primeira rolada — reproduzível em
+     qualquer largura de computador, bastando rolar a página. Como filho
+     comum de um "main" flex (não mais atravessado por float), a altura
+     de ".modos-caixa" volta a ser a do que tem dentro, e o sticky volta
+     a funcionar. */
+  main{display:flex;gap:14px;align-items:flex-start}
+  .modos-caixa{flex:0 0 186px;margin:0}
+  /* RECOLHER PRECISA DEVOLVER ESPAÇO. Manter a coluna com 186px de
+     largura e só esconder os rótulos seria trocar texto por vazio — o
+     botão prometia espaço e entregava uma faixa igualmente larga, só
+     que menos legível. */
+  .modos-caixa.modos-recolhida{flex:0 0 auto}
+  .barra-modos{flex-direction:column;gap:5px}
+  .modo-area{flex:1;min-width:0}
   .modos-caixa.modos-recolhida .modos-tit{display:none}
 }
 /* Aviso de acidente. Declara a COR do texto: sem isso ela era herdada e,

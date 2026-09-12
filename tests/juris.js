@@ -1473,6 +1473,62 @@ async function testes() {
        "J33e salvar depois de editar apagou as etiquetas");
   }
 
+  /* ================================================================
+   * J34: "+ GUARDAR MAIS UM" DEPOIS DE UMA EDIÇÃO CANCELADA
+   *
+   * O DEFEITO relatado: tocar em ✏️ editar, desistir com "voltar para a
+   * leitura" e então tocar em "+ guardar mais um julgado" reabria o
+   * formulário com a tese/o resumo do julgado anterior ainda dentro —
+   * jurEditar preenche os campos direto, sem passar por jurTrocarModo,
+   * então "voltar" não os limpava. Duas consequências: o texto novo (ou
+   * melhorado) colado não aparecia, porque jurColar só escreve por cima
+   * de um campo vazio; e salvar sobrescrevia o julgado ANTIGO, porque
+   * jurEditando continuava apontando para ele.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    montar(api);
+    const ch = api.matChave("Direito Tributário", "Imunidades");
+    const a = api.jurGravar({ tribunal: "STF", classe: "ADI", numero: "1",
+      tese: "tese do primeiro julgado", resumo: "resumo do primeiro",
+      topicos: [ch] });
+
+    api.jurAbrir("Direito Tributário", "Imunidades", "ler");
+    api.jurEditar(a.id);
+    ok(api.$("jurTese").value === "tese do primeiro julgado",
+       "J34-pre editar nao preencheu a tese para o cenario fazer sentido");
+
+    /* desiste, sem salvar nada */
+    api.jurTrocarModo("ler");
+    /* "+ guardar mais um julgado" */
+    api.jurTrocarModo("incluir");
+
+    ok(api.$("jurTese").value === "" && api.$("jurResumo").value === ""
+       && api.$("jurColar").value === "",
+       "J34 o formulario de '+ guardar mais um' reabriu com sobra da "
+       + "edicao cancelada: tese=" + JSON.stringify(api.$("jurTese").value));
+
+    /* o texto novo (aqui, o "melhorado") precisa aparecer — antes, um
+     * campo nao-vazio bloqueava a sobrescrita */
+    api.$("jurTese").value = "tese do segundo julgado, melhorada";
+    api.$("jurResumo").value = "resumo do segundo, melhorado";
+    api.$("jurNumero").value = "2";
+    await conduzir(api, api.jurSalvar());
+
+    const doTopico = api.jurDoTopico(ch);
+    ok(doTopico.length === 2,
+       "J34a devia haver 2 julgados guardados, vieram " + doTopico.length
+       + " — salvar sobrescreveu o primeiro em vez de criar outro");
+    const original = api.jurDe(a.id);
+    ok(original && original.tese === "tese do primeiro julgado",
+       "J34b o julgado original foi sobrescrito pelo '+ mais um': "
+       + JSON.stringify(original && original.tese));
+    const novo = doTopico.filter((j) => j.id !== a.id)[0];
+    ok(novo && novo.tese === "tese do segundo julgado, melhorada",
+       "J34c o julgado novo nao guardou o texto melhorado: "
+       + JSON.stringify(novo && novo.tese));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
