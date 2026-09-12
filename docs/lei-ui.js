@@ -281,6 +281,39 @@ function leiAbrir(disciplina, topico, id) {
   } catch (e) {}
 }
 
+/* =====================================================================
+ * A ÚNICA PORTA PARA "ABRIR A LEI NUM ARTIGO"
+ *
+ * Todo caminho novo — o link de citação dentro do comentário, o popover
+ * do ⚖ quando o tópico tem duas leis, o "ir ao artigo" vindo de fora —
+ * entra por aqui, e não por leiAbrir + leiIrArtigo soltos.
+ *
+ * A ORDEM NÃO É DETALHE. leiIrArtigo procura "#leiArt_N", e esse
+ * elemento só existe depois que leiPintar desenhou o modo LER. Chamado
+ * antes, ele devolve false e não rola nada — e um botão que às vezes
+ * não faz nada ensina a não confiar nos outros. leiAbrir já pinta;
+ * garantir "ler" aqui torna isto independente da decisão dele, que
+ * escolhe "editar" quando a lei ainda está vazia.
+ *
+ * DEVOLVE SE ACHOU. O comentário pode citar o art. 195 numa lei que só
+ * foi colada até o 40 — nesse caso a lei abre (o que é útil) mas quem
+ * chamou precisa saber que o salto não aconteceu, para dizer isso em vez
+ * de deixar a pessoa procurando na tela.
+ * ===================================================================== */
+function leiAbrirNoArtigo(disciplina, topico, idLei, num) {
+  leiAbrir(disciplina, topico, idLei);
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const temTexto = !!(l && String(l.texto || "").trim());
+  if (temTexto && leiModo !== "ler") leiTrocarModo("ler");
+  if (!num || !temTexto) return false;
+  const achou = leiIrArtigo(num);
+  try {
+    leiReg("navegar", achou ? "aberta no artigo citado" : "artigo citado não existe nesta lei",
+           (l ? l.nome : "—") + " · art. " + num);
+  } catch (e) {}
+  return achou;
+}
+
 /* ---------------------------------------------------------------------
  * PINTAR
  * ------------------------------------------------------------------ */
@@ -704,6 +737,28 @@ function leiTrocarModo(modo) {
   /* na tela cheia a barra de marcas some junto: ela é ferramenta de
    * quem está trabalhando o texto, não de quem está lendo */
   if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec || leiCheia;
+  /* =================================================================
+   * A CAIXA DE COLAR PRECISA DE ALTURA, E A ALTURA NÃO É DELA
+   *
+   * O DEFEITO. "#leiTexto" já é "flex:1 1 auto" dentro de um diálogo
+   * "flex-direction:column" — deveria esticar. Não esticava, e o motivo
+   * é que flex-grow reparte ESPAÇO LIVRE: o diálogo tem "max-height",
+   * não "height", então ele se dimensiona pelo conteúdo. No modo LER o
+   * conteúdo é a lei inteira e transborda até o teto — parece cheio. No
+   * modo EDITAR o conteúdo é um textarea de "rows=14", o diálogo encolhe
+   * para caber nele, sobra zero, e não há o que o flex-grow reparta.
+   *
+   * Por isso o conserto é uma CLASSE NO DIÁLOGO e não uma altura no
+   * textarea: dar "height: calc(85vh - 120px)" à caixa acertaria hoje e
+   * erraria no dia em que a fila de leis quebrasse para duas linhas —
+   * os 120px são a soma, medida a olho, de coisas que mudam de tamanho.
+   *
+   * dvh e não vh: vh ignora a barra do navegador no telefone, e a caixa
+   * nasceria mais alta que a tela.
+   * ================================================================= */
+  if ($("dlgLeiSeca") && $("dlgLeiSeca").classList) {
+    $("dlgLeiSeca").classList.toggle("lei-m-editar", ed);
+  }
 
   [["btnLeiModoLer", "ler"], ["btnLeiModoEditar", "editar"],
    ["btnLeiModoRecitar", "recitar"]].forEach(([id, m]) => {
@@ -749,6 +804,9 @@ function leiPintarLeitura() {
   }
 
   let divisao = "";
+  /* quais números já foram desenhados: a Constituição repete quase todos
+   * entre o corpo e o ADCT, e é isso que decide o id de cada bloco */
+  const vistos = {};
   arts.forEach((a) => {
     if (a.divisao && a.divisao !== divisao) {
       divisao = a.divisao;
@@ -771,7 +829,39 @@ function leiPintarLeitura() {
       + (a.num === parei ? " lei-art-parei" : "")
       + (risco && risco.erros > risco.acertos ? " lei-art-perigo"
          : (risco && risco.prova ? " lei-art-caiu" : ""));
-    bloco.id = "leiArt_" + a.num.replace(/[^A-Z0-9-]/gi, "");
+    /* =================================================================
+     * O NÚMERO DO ARTIGO NÃO É CHAVE ÚNICA
+     *
+     * Parece que é, e é assim em toda lei ordinária. Não é na
+     * Constituição: o corpo vai do art. 1º ao 250, e o ADCT recomeça do
+     * art. 1º. Colada inteira do Planalto, ela tem DOIS art. 5º, dois
+     * art. 42, dois de quase tudo até o 97.
+     *
+     * Enquanto o id era só o número, os dois blocos nasciam com o MESMO
+     * id — HTML inválido — e "$" devolve sempre o primeiro. Ir ao art.
+     * 5º do ADCT levava ao art. 5º da Constituição, silenciosamente, e o
+     * texto que aparecia era plausível o bastante para ninguém
+     * desconfiar. É o mesmo estrago da marca que caía na ocorrência
+     * errada.
+     *
+     * A PRIMEIRA OCORRÊNCIA GUARDA O ID PELO NÚMERO; as repetidas ganham
+     * id pelo ÍNDICE. Assim:
+     *  · quem só tem o número na mão — a citação do comentário, "onde
+     *    parei", o ranking — continua chamando leiIrArtigo("5") e cai no
+     *    art. 5º do CORPO, que é o que a banca cita;
+     *  · quem sabe qual ocorrência quer — a grade, que montou a lista a
+     *    partir de leiArtigos — passa o índice junto e acerta o ADCT.
+     *
+     * Um id só por elemento é o que o HTML permite, e por isso são dois
+     * NOMES e não dois atributos: getElementById é o único caminho que o
+     * aplicativo usa para achar nó, e querySelector não é alternativa
+     * aqui porque o simulador dos testes devolve um nó genérico para
+     * qualquer seletor — a asserção passaria sem provar nada.
+     * ================================================================= */
+    bloco.id = vistos[a.num]
+      ? "leiArtI_" + a.indice
+      : "leiArt_" + a.num.replace(/[^A-Z0-9-]/gi, "");
+    vistos[a.num] = true;
 
     const cab = document.createElement("div");
     cab.className = "lei-art-cab";
@@ -788,6 +878,13 @@ function leiPintarLeitura() {
     rot.className = "lei-art-num" + (a.num === parei ? " lei-art-num-parei" : "");
     rot.textContent = a.rotulo + (a.num === parei ? " " + t("lei_aqui_sinal") : "");
     rot.title = a.num === parei ? t("lei_aqui_ajuda") : t("lei_parar_aqui_ajuda");
+    /* PARA QUEM NÃO VÊ A COR. O marcador se anuncia por três meios: a
+     * cor da borda, o sinal no rótulo e — só agora — o aria-current,
+     * que é o único que um leitor de tela entende. "location" é o valor
+     * certo: não é a página atual nem um passo de um processo; é o
+     * ponto do documento em que a pessoa está. */
+    if (a.num === parei) rot.setAttribute("aria-current", "location");
+    else if (rot.removeAttribute) rot.removeAttribute("aria-current");
     rot.onclick = () => {
       /* clicar de novo no artigo já marcado TIRA o marcador: sem isso, a
        * única forma de desmarcar seria marcar outro artigo qualquer */
@@ -813,7 +910,7 @@ function leiPintarLeitura() {
 
     const corpo = document.createElement("div");
     corpo.className = "lei-art-txt";
-    corpo.innerHTML = matParaHtml(a.texto);
+    corpo.innerHTML = matParaHtml(leiSemPontilhado(a.texto));
 
     bloco.append(cab, corpo);
 
@@ -1120,9 +1217,16 @@ function leiPintarRecitar() {
  * NAVEGAR
  * ------------------------------------------------------------------ */
 
-function leiIrArtigo(num) {
+/* O ÍNDICE, QUANDO QUEM CHAMA SABE QUAL OCORRÊNCIA QUER.
+ * Sem ele, "ir ao art. 5º" na Constituição inteira sempre cai no do
+ * corpo — inclusive quando o clique veio do art. 5º do ADCT, que está
+ * quatrocentos artigos abaixo. Com ele, a grade acerta os dois. O
+ * número continua valendo sozinho: é o que a citação de uma questão
+ * tem para oferecer. */
+function leiIrArtigo(num, indice) {
   const alvo = leiNumNormal(num);
-  const el = $("leiArt_" + alvo.replace(/[^A-Z0-9-]/gi, ""));
+  const el = (indice !== undefined && indice !== null && $("leiArtI_" + indice))
+    || $("leiArt_" + alvo.replace(/[^A-Z0-9-]/gi, ""));
   if (!el) return false;
   if (el.scrollIntoView) {
     try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
@@ -1166,7 +1270,26 @@ function leiIrAbrir() {
   try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
   catch (e) {}
 
+  /* A GRADE PRECISA DIZER ONDE CADA FAIXA COMEÇA.
+   *
+   * Com 424 números iguais em fila, "1º" aparece duas vezes e não há
+   * como saber que o segundo é o ADCT — a pessoa clica no primeiro,
+   * chega ao lugar errado e conclui que a grade está quebrada. O
+   * cabeçalho de divisão não é enfeite: é o que transforma a repetição
+   * de numeração da Constituição de defeito aparente em informação.
+   *
+   * E é por isso que a lista NÃO é ordenada por número: a ordem é a do
+   * documento. Ordenar embaralharia o art. 5º do ADCT com o do corpo e
+   * destruiria a única coisa que os distingue — a posição. */
+  let divGrade = "";
   arts.forEach((a) => {
+    if (a.divisao && a.divisao !== divGrade) {
+      divGrade = a.divisao;
+      const h = document.createElement("div");
+      h.className = "lei-ir-div";
+      h.textContent = divGrade;
+      cx.append(h);
+    }
     const b = document.createElement("button");
     b.type = "button";
     const est = ranking[a.num];
@@ -1182,7 +1305,9 @@ function leiIrAbrir() {
     b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
     b.onclick = () => {
       $("dlgLeiIr").close();
-      leiIrArtigo(a.num);
+      /* o índice viaja junto: é o que separa o art. 5º do corpo do art.
+       * 5º do ADCT, e a grade é quem sabe em qual dos dois se clicou */
+      leiIrArtigo(a.num, a.indice);
     };
     cx.append(b);
   });
@@ -1230,18 +1355,22 @@ function leiGravar() {
     leiLigar(l.id, leiAtual.chave);
   }
 
-  /* o tópico guarda o PONTEIRO, não o texto */
-  const antigo = (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]) || {};
-  matResumos[leiAtual.chave] = Object.assign({}, antigo, {
-    leiId: leiIdAtual,
-    disciplina: antigo.disciplina || leiAtual.disciplina,
-    topico: antigo.topico || leiAtual.topico,
-    concurso: antigo.concurso
-      || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
-    criado: antigo.criado || new Date().toISOString(),
-    tocado: new Date().toISOString(),
-  });
-  matSalvar();
+  /* o tópico guarda o PONTEIRO, não o texto — mas só ATUALIZA um resumo
+   * que já existe. Criar um aqui de graça é o mesmo defeito que
+   * matDuvidas e matTirarMarcaDe já consertaram do lado deles: um tópico
+   * pode ter lei sem ter resumo, e salvar a lei não é motivo para esse
+   * tópico ganhar um. Quem precisa achar a lei de um tópico sem resumo
+   * já faz isso por leisDoTopico/leisLista, não por matResumos. */
+  if (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]) {
+    const antigo = matResumos[leiAtual.chave];
+    matResumos[leiAtual.chave] = Object.assign({}, antigo, {
+      leiId: leiIdAtual,
+      concurso: antigo.concurso
+        || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
+      tocado: new Date().toISOString(),
+    });
+    matSalvar();
+  }
 
   leiSujo = false;
   try { leiReg("gravar", "lei gravada",
@@ -1327,12 +1456,44 @@ function leiProcAbrir() {
   abrirModal("dlgLeiProc");
 }
 
+/* O NOME É A FONTE DA VERDADE DE ESPÉCIE, NÚMERO E ANO.
+ *
+ * Sem isto, corrigir o nome corrigia METADE do registro: a Constituição
+ * que tinha sido identificada errado como "Emenda Constitucional
+ * 106/2020" passava a se CHAMAR Constituição e continuava guardando
+ * especie:"Emenda Constitucional" e numero:"106". Ninguém veria — até o
+ * dia em que um comentário citasse "a EC 106" e o aplicativo abrisse a
+ * Constituição inteira dizendo que era a emenda. É a armadilha de
+ * sempre: a mesma informação escrita em dois lugares, e o conserto que
+ * só alcança um deles.
+ *
+ * NÃO PARSEOU, LIMPA. Guardar numero:"106" debaixo de um nome que não
+ * diz 106 é manter uma afirmação falsa; e não se perde nada, porque
+ * leiCasarRotulo já procura o número dentro do NOME quando o campo está
+ * vazio. O apelido é campo à parte e não é tocado. */
+function leiCamposDoNome(nome) {
+  const k = (typeof leiRotuloChave === "function")
+    ? leiRotuloChave(nome) : { especie: "", numero: "" };
+  const bonito = {
+    "lc": "Lei Complementar", "lei": "Lei", "decreto-lei": "Decreto-Lei",
+    "decreto": "Decreto", "ec": "Emenda Constitucional",
+    "constituicao": "Constituição",
+  }[k.especie] || "";
+  const ano = (String(nome || "").match(/\b(1[89]\d{2}|20\d{2})\b/) || [])[1] || "";
+  return { especie: bonito, numero: k.numero || "", ano };
+}
+
 function leiProcSalvar() {
   if (!leiIdAtual) return false;
   const nome = String($("leiProcNome").value || "").trim();
+  const nomeFinal = nome || leiDe(leiIdAtual).nome;
+  const campos = leiCamposDoNome(nomeFinal);
   leiGuardar({
     id: leiIdAtual,
-    nome: nome || leiDe(leiIdAtual).nome,
+    nome: nomeFinal,
+    especie: campos.especie,
+    numero: campos.numero,
+    ano: campos.ano,
     fonte: String($("leiProcFonte").value || "").trim(),
     consultadaEm: String($("leiProcData").value || "").trim(),
     versao: String($("leiProcVersao").value || "").trim(),
@@ -1688,10 +1849,18 @@ async function leiFechar() {
  * pessoa usar o recurso em vez de achá-lo estranho.
  * ------------------------------------------------------------------ */
 
+/* A ORDEM É A DA JORNADA, e não a da barra de botões: como o texto
+ * chega aqui, como se lê, como se marca, como se testa, como se
+ * registra. Quem abre a ajuda está perdido em algum ponto do caminho, e
+ * um índice na ordem do caminho é o que deixa achar o ponto.
+ *
+ * "consulta" e "sinais" entraram com os recursos que descrevem — o ⚖ da
+ * tela de questões e as bordas coloridas do artigo. Ajuda que não
+ * acompanha a tela vira a segunda fonte de verdade, e a errada. */
 const LEI_AJUDA = [
-  "fila", "proc", "onde", "modos", "capitulos", "artigo", "editar",
-  "marcas", "cartoes", "cai", "recitar", "ranking", "cheia", "gravar",
-  "lido", "log",
+  "fila", "proc", "consulta", "onde", "modos", "capitulos", "artigo",
+  "editar", "marcas", "sinais", "cartoes", "cai", "recitar", "ranking",
+  "cheia", "gravar", "lido", "log",
 ];
 
 function leiAjudaAbrir() {
@@ -1705,7 +1874,19 @@ function leiAjudaAbrir() {
     tit.className = "duv-titulo";
     tit.textContent = t("lei_aj_" + id + "_t");
     const txt = document.createElement("div");
-    txt.className = "nota";
+    /* "lei-aj-d" existe por causa do parágrafo.
+     *
+     * Três destas explicações passaram a ter mais de um parágrafo — os
+     * dois exercícios do "testar", os dois limites das marcas, os dois
+     * botões da fila. Elas são escritas com "\n\n" e entram por
+     * textContent, e textContent NÃO quebra linha sozinho: sem um
+     * white-space que preserve a quebra, os parágrafos viram um
+     * paredão de texto corrido — pior de ler do que a versão curta que
+     * eles substituíram.
+     *
+     * A classe é própria e não mexe em ".nota", que é usada em dezenas
+     * de lugares onde a quebra não foi pensada. */
+    txt.className = "nota lei-aj-d";
     txt.textContent = t("lei_aj_" + id + "_d");
     item.append(tit, txt);
     cx.append(item);
@@ -1818,8 +1999,9 @@ function leiIniciar() {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     leiAbrir, leiGravar, leiTem, leiFechar, leiRegistrarLeitura, leiIniciar,
+    leiAbrirNoArtigo, leiIrAbrir, leiNovaAbrir,
     leiTrocarModo, leiModoAtual, leiPintar, leiIrArtigo, leiTrocarPara,
-    leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiClozeAbrir,
+    leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiCamposDoNome, leiClozeAbrir,
     leiClozeConferir, leiClozeAplicar, leiRanking, leiRankingAbrir,
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,

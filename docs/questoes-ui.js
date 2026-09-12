@@ -814,10 +814,7 @@ function qsUiPintarSessao() {
       + " · " + t("qs_gab_e", { g: q.gabarito });
     depois.append(gb);
     if (q.comentario) {
-      depois.append(qsUiDobra("qs_coment_tit", (el) => {
-        el.className = "qs-coment";
-        el.textContent = q.comentario;
-      }));
+      depois.append(qsUiDobra("qs_coment_tit", (el) => qsUiComentario(el, q)));
     }
     /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
      * é gabarito disfarçado. */
@@ -981,10 +978,27 @@ function qsUiPintarSessao() {
       /* leiTem responde pela BIBLIOTECA e pelo campo antigo ao mesmo
        * tempo — é ele que sabe se há texto para consultar */
       const tem = (typeof leiTem === "function" && ch) ? leiTem(ch) : false;
-      b.textContent = t(tem ? "qs_lei_ver" : "qs_lei_sem");
-      b.title = t(tem ? "qs_lei_ver_ajuda" : "qs_lei_sem_ajuda",
-                  { tp: q3.topico });
-      b.onclick = () => qsUiLei(q3);
+      /* QUANTAS LEIS SERVEM ESTE TÓPICO decide o comportamento do botão.
+       * Com uma, abrir direto; com duas, perguntar — porque abrir a
+       * primeira era exatamente o defeito: a metade errada das vezes a
+       * questão citava a outra e o app não dizia nada. */
+      let nLeis = 0;
+      try {
+        nLeis = (typeof leisDoTopico === "function" && ch)
+          ? leisDoTopico(ch).length : 0;
+      } catch (e) { nLeis = 0; }
+      b.textContent = nLeis > 1 ? t("qs_lei_ver_n", { n: nLeis })
+        : t(tem ? "qs_lei_ver" : "qs_lei_sem");
+      b.title = nLeis > 1 ? t("qs_lei_ver_n_ajuda", { n: nLeis, tp: q3.topico })
+        : t(tem ? "qs_lei_ver_ajuda" : "qs_lei_sem_ajuda", { tp: q3.topico });
+      b.onclick = (ev) => {
+        if (nLeis > 1) {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          qsUiLeiEscolher(b, q3, null);
+          return;
+        }
+        qsUiLei(q3);
+      };
     }
   }
   if ($("btnQsEmbaralhar")) {
@@ -1031,6 +1045,252 @@ function qsUiJuris(q) {
   };
   reg("QUESTOES", "gaveta de julgados aberta pela questão",
       q.topico + " · " + antes + " guardado(s)");
+}
+
+/* =====================================================================
+ * O COMENTÁRIO QUE LEVA AO ARTIGO
+ *
+ * O DEFEITO QUE ISTO CONSERTA. O gabarito comentado dizia "nos termos do
+ * art. 156-A, § 1º, IV, da CF/88" e o botão ⚖ abria a PRIMEIRA lei
+ * ligada ao tópico — que num tópico servido por duas (despesa pública é
+ * a 4.320 E a LRF) tinha metade de chance de ser a outra. Abria calado,
+ * e quem lia conferia o artigo errado achando que era o certo.
+ *
+ * NADA DE innerHTML. O comentário vem de IA ou de colagem: é conteúdo de
+ * fora. Por isso leiCitacoesNoTexto devolve POSIÇÕES, e o texto entra
+ * por createTextNode — o pedaço clicável é um <button> montado à parte.
+ * Um "innerHTML com <a>" aqui seria a porta por onde um comentário mal
+ * colado executa script dentro do aplicativo.
+ *
+ * O QUE ACONTECE AO TOCAR está em qsUiLeiIr, e as três respostas
+ * possíveis são de propósito diferentes: abrir, escolher, ou vincular.
+ * ===================================================================== */
+function qsUiComentario(el, q) {
+  el.className = "qs-coment";
+  const txt = String((q && q.comentario) || "");
+  el.textContent = "";
+  let cits = [];
+  try {
+    if (typeof leiCitacoesNoTexto === "function") cits = leiCitacoesNoTexto(txt);
+  } catch (e) { cits = []; }
+  /* sem citação — e este é o caso comum em Português e Informática — o
+   * comentário continua sendo exatamente o texto, sem nada em volta */
+  if (!cits.length) { el.textContent = txt; return el; }
+
+  /* a biblioteca é lida UMA vez por comentário, e não uma por citação:
+   * leisLista() lê o armazenamento e ordena, e um comentário longo cita
+   * seis artigos */
+  const ch = (typeof matChave === "function" && q.disciplina && q.topico)
+    ? matChave(q.disciplina, q.topico) : "";
+  let lista = [], doTopico = [];
+  try {
+    lista = (typeof leisLista === "function") ? leisLista() : [];
+    doTopico = (typeof leisDoTopico === "function" && ch) ? leisDoTopico(ch) : [];
+  } catch (e) {}
+
+  let pos = 0;
+  cits.forEach((c) => {
+    if (c.ini > pos) el.append(document.createTextNode(txt.slice(pos, c.ini)));
+    el.append(qsUiLeiLink(c, q, lista, doTopico));
+    pos = c.fim;
+  });
+  if (pos < txt.length) el.append(document.createTextNode(txt.slice(pos)));
+  return el;
+}
+
+/* PARA ONDE ESTA CITAÇÃO APONTA.
+ *
+ * Três respostas, e a diferença entre elas é o que salva a consulta:
+ *  - a citação nomeia uma lei que está na biblioteca  → abre nela;
+ *  - a citação nomeia uma lei que NÃO está           → oferece vincular;
+ *  - a citação não nomeia lei nenhuma ("o art. 20")  → só vale se o
+ *    tópico tiver UMA lei; com duas, quem escolhe é você.
+ *
+ * O último caso é o antigo defeito escrito ao contrário: onde o app
+ * chutava a primeira, agora ele pergunta. */
+function qsUiLeiAlvo(c, lista, doTopico) {
+  const dt = doTopico || [];
+  if (c && c.rotulo && typeof leiCasarRotulo === "function") {
+    let l = null;
+    try { l = leiCasarRotulo(c.rotulo, lista); } catch (e) { l = null; }
+    if (l) return { lei: l, ligada: dt.some((x) => x.id === l.id) };
+    return { lei: null, motivo: "desconhecida" };
+  }
+  if (dt.length === 1) return { lei: dt[0], ligada: true };
+  return { lei: null, motivo: dt.length ? "ambigua" : "vazia" };
+}
+
+function qsUiLeiLink(c, q, lista, doTopico) {
+  const b = document.createElement("button");
+  b.type = "button";
+  const alvo = qsUiLeiAlvo(c, lista, doTopico);
+  /* O ESTADO É VISÍVEL ANTES DO TOQUE. Um link que abre a lei e um link
+   * que vai pedir para vincular são coisas diferentes, e descobrir isso
+   * só depois de tocar é o que faz alguém parar de tocar. */
+  b.className = "qs-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem");
+  b.textContent = c.texto;
+  b.title = alvo.lei
+    ? t("qs_lei_link_ir", { l: alvo.lei.nome, a: c.numCru })
+    : (c.rotulo ? t("qs_lei_link_sem", { l: c.rotulo })
+                : t("qs_lei_link_qual", { a: c.numCru }));
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    qsUiLeiIr(c, q, b);
+  };
+  return b;
+}
+
+function qsUiLeiIr(c, q, botao) {
+  if (!q || !q.disciplina || !q.topico) return;
+  if (typeof leiAbrir !== "function") return;
+  const ch = (typeof matChave === "function") ? matChave(q.disciplina, q.topico) : "";
+  let lista = [], doTopico = [];
+  try {
+    lista = (typeof leisLista === "function") ? leisLista() : [];
+    doTopico = (typeof leisDoTopico === "function" && ch) ? leisDoTopico(ch) : [];
+  } catch (e) {}
+  const alvo = qsUiLeiAlvo(c, lista, doTopico);
+
+  /* a volta é a mesma dos outros dois botões: a gaveta sobe por cima e,
+   * ao fechar, descobre a mesma questão — mas o botão ⚖ precisa ser
+   * repintado, porque a lei pode ter sido vinculada agora */
+  leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+
+  if (alvo.lei) {
+    /* CONSULTAR NÃO É VINCULAR. Se a lei existe mas não está ligada a
+     * este tópico, ela abre do mesmo jeito — ler o artigo não pode
+     * exigir uma decisão de arrumação primeiro. Vincular continua a um
+     * toque, na fila de chips do próprio leitor. */
+    const achou = leiAbrirNoArtigo(q.disciplina, q.topico, alvo.lei.id, c.num);
+    if (!achou) {
+      try { uiAlert(t("qs_lei_link_nao_achou", { a: c.numCru, l: alvo.lei.nome })); }
+      catch (e) {}
+    }
+    reg("QUESTOES", "citação do comentário aberta na lei",
+        alvo.lei.nome + " · art. " + c.numCru + (alvo.ligada ? "" : " · lei não ligada ao tópico"));
+    return;
+  }
+
+  if (alvo.motivo === "ambigua") {
+    /* o tópico tem duas leis e a citação não disse qual: é a mesma
+     * pergunta do botão ⚖, e a mesma resposta */
+    qsUiLeiEscolher(botao || $("btnQsLei"), q, c);
+    return;
+  }
+
+  /* Sem lei para abrir. O leitor sobe primeiro — leiVincularAbrir lê
+   * leiAtual.chave para saber o que filtrar, e leiTrocarPara escreve em
+   * "leiTexto" e chama leiPintar. Chamado com o leitor fechado ele
+   * vincula de verdade e PINTA UM DIÁLOGO INVISÍVEL: da cadeira de quem
+   * usa, o botão não fez nada. */
+  leiAbrir(q.disciplina, q.topico);
+  const temOutras = lista.length > doTopico.length;
+  try {
+    if (temOutras && typeof leiVincularAbrir === "function") leiVincularAbrir();
+    else if (typeof leiNovaAbrir === "function" && !doTopico.length) leiNovaAbrir();
+  } catch (e) {}
+  reg("QUESTOES", "citação sem lei vinculada",
+      (c.rotulo || "sem rótulo") + " · art. " + c.numCru + " · " + q.topico);
+}
+
+/* =====================================================================
+ * O ⚖ COM MAIS DE UMA LEI: PERGUNTAR, NÃO CHUTAR
+ *
+ * Com uma lei só, perguntar seria burocracia — abre direto. Com duas, o
+ * botão abria a primeira e essa era a metade errada das vezes.
+ *
+ * O MENU É FIXED, e é o mesmo motivo do ⋮: ele nasce dentro de
+ * #qsSessCorpo, que recorta. Um absolute pendurado no botão é cortado na
+ * borda da caixa e não há z-index que resolva — z-index decide quem fica
+ * na frente, não quem existe fora da moldura. Por isso reaproveita
+ * qsFerMenu inteiro, com o mesmo fechar-no-clique-fora e no Esc.
+ * ===================================================================== */
+function qsUiLeiEscolher(botao, q, cit) {
+  if (!botao || !q) return null;
+  const ch = (typeof matChave === "function") ? matChave(q.disciplina, q.topico) : "";
+  let doTopico = [], lista = [];
+  try {
+    doTopico = (typeof leisDoTopico === "function" && ch) ? leisDoTopico(ch) : [];
+    lista = (typeof leisLista === "function") ? leisLista() : [];
+  } catch (e) {}
+
+  let menu = $("qsLeiMenu");
+  if (!menu) {
+    menu = document.createElement("span");
+    menu.id = "qsLeiMenu";
+    menu.className = "qs-fer-menu qs-lei-menu";
+    menu.hidden = true;
+    (botao.parentNode || document.body).append(menu);
+  }
+  /* já aberto, o mesmo toque fecha — senão o botão vira um interruptor
+   * que só liga */
+  if (!menu.hidden) { qsFerFechar(); return null; }
+  menu.innerHTML = "";
+
+  const rot = document.createElement("span");
+  rot.className = "qs-fer-rot";
+  rot.textContent = cit
+    ? t("qs_lei_esc_cit", { a: cit.numCru })
+    : t("qs_lei_esc_tit", { n: doTopico.length });
+  menu.append(rot);
+
+  doTopico.forEach((l) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min";
+    let nArt = 0;
+    try { nArt = leiArtigos(l.texto).length; } catch (e) {}
+    b.textContent = l.nome + " · " + t("lei_n_artigos", { n: nArt });
+    b.title = t("qs_lei_esc_item", { l: l.nome });
+    b.onclick = () => {
+      qsFerFechar();
+      leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+      const num = cit ? cit.num : "";
+      const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, num);
+      if (num && !achou) {
+        try { uiAlert(t("qs_lei_link_nao_achou", { a: cit.numCru, l: l.nome })); }
+        catch (e) {}
+      }
+      reg("QUESTOES", "lei escolhida na questão", l.nome + (num ? " · art. " + num : ""));
+    };
+    menu.append(b);
+  });
+
+  /* AS DUAS PORTAS DE ENTRADA DE LEI NOVA, aqui pelo mesmo motivo que
+   * estão na fila de chips do leitor: quando a lei que a questão cita
+   * não está entre as do tópico, o caminho não pode ser "feche tudo e
+   * vá procurar no material". */
+  const outras = lista.filter((l) => !doTopico.some((d) => d.id === l.id));
+  if (outras.length) {
+    const bv = document.createElement("button");
+    bv.type = "button";
+    bv.className = "btn-min";
+    bv.id = "btnQsLeiVincular";
+    bv.textContent = t("lei_vincular", { n: outras.length });
+    bv.title = t("lei_vincular_ajuda");
+    bv.onclick = () => {
+      qsFerFechar();
+      leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+      leiAbrir(q.disciplina, q.topico);
+      try { leiVincularAbrir(); } catch (e) {}
+    };
+    menu.append(bv);
+  }
+  const bn = document.createElement("button");
+  bn.type = "button";
+  bn.className = "btn-min";
+  bn.id = "btnQsLeiNova";
+  bn.textContent = t("lei_colar_nova");
+  bn.title = t("lei_colar_nova_ajuda");
+  bn.onclick = () => {
+    qsFerFechar();
+    leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+    leiAbrir(q.disciplina, q.topico);
+    try { leiNovaAbrir(); } catch (e) {}
+  };
+  menu.append(bn);
+
+  return qsFerMenu(botao, menu);
 }
 
 /* =====================================================================

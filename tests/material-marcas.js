@@ -752,7 +752,7 @@ async function testes() {
     api.matRender();
     const txt = (el) => {
       let s = "";
-      const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+      const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
       anda(el); return s;
     };
     const naTela = txt(api.$("matLista"));
@@ -790,7 +790,7 @@ async function testes() {
 
     const txt = (el) => {
       let s = "";
-      const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+      const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
       anda(el); return s;
     };
     /* contar os SELOS por classe: procurar a palavra "cartões" no texto da
@@ -798,7 +798,7 @@ async function testes() {
      * tirar os selos passava despercebido */
     const contaCls = (el, cls) => {
       let n = 0;
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         if ((f.className || "").split(/\s+/).includes(cls)) n++;
         anda(f);
       });
@@ -813,7 +813,7 @@ async function testes() {
     /* a CONTAGEM fica na linha de baixo, e e outra coisa: sem ela o item
      * diz que tem cartoes mas nao quantos */
     const subs = [];
-    const andaSub = (x) => (x.children || []).forEach((f) => {
+    const andaSub = (x) => Array.from(x.children || []).forEach((f) => {
       if ((f.className || "").split(/\s+/).includes("mat-sub")) subs.push(f._texto || "");
       andaSub(f);
     });
@@ -823,7 +823,7 @@ async function testes() {
 
     /* e existe um caminho ate eles */
     let botao = null;
-    const anda = (x) => (x.children || []).forEach((f) => {
+    const anda = (x) => Array.from(x.children || []).forEach((f) => {
       if (/ver os 1 cart|see the 1 card/i.test(f._texto || "")) botao = f;
       anda(f);
     });
@@ -1032,9 +1032,25 @@ async function testes() {
     ok(api.leiModoAtual() === "ler",
        "M51f lei seca com conteudo devia abrir em LEITURA");
 
-    /* "li este material" vai para o diario */
+    /* "LI ESTE MATERIAL" AGORA PASSA PELO FORMULARIO.
+     *
+     * Este teste exigia que o botao gravasse DIRETO no diario, e era
+     * assim que o app funcionava — a lei seca era a unica porta que
+     * registrava estudo sozinha, com minutos que ela mesma calculava
+     * (palavras / 75). Numa emenda de 14 mil palavras isso ia para o
+     * diario como 193 minutos de estudo por causa de um toque.
+     *
+     * O destino continua o mesmo e a assercao continua sendo sobre ele:
+     * a leitura TEM de chegar ao diario, no topico certo. O que mudou e
+     * que agora ha um passo de confirmacao no meio — e o teste passa a
+     * exercer o caminho inteiro, senao ele estaria conferindo um
+     * comportamento que o app nao tem mais. */
     api.diarioPor([]);
     api.leiRegistrarLeitura();
+    ok(api.$("dlgRegistro").open === true,
+       "M51g1 o botao da lei seca voltou a gravar sem passar pelo "
+       + "formulario: sem ele nao ha como corrigir os minutos estimados");
+    api.confirmarRegistro("feito");
     api.uiModalResponder(true);
     await new Promise((r) => setImmediate(r));
     ok(api.diarioAtual().length === 1,

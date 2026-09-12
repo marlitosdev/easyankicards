@@ -30,25 +30,39 @@ async function testes() {
     ok(api.$("rsCaixa").hidden === true,
        "R1 sem questao aberta o rascunho nao devia estar na tela");
     api.rsPrepararPara("q1");
-    ok(api.$("rsCaixa").hidden === false, "R1b com questao aberta falta a barra do rascunho");
+    /* FECHADO É FECHADO. Antes a caixa continuava na tela, vazia, com a
+     * barra de título e um botão de "folha inteira" oferecendo expandir
+     * um painel que não estava aberto. O rascunho fechado não ocupa
+     * nada; quem o abre são os gatilhos, no fim da questão. */
+    ok(api.$("rsCaixa").hidden === true,
+       "R1b o rascunho fechado continua ocupando lugar na tela");
     ok(api.$("rsCorpo").hidden === true,
        "R1c o quadro abriu sozinho — o pedido era ficar fechado por padrao");
-    ok(/abrir/i.test(api.$("btnRsMin").textContent),
-       "R1d o botao devia convidar a ABRIR: " + api.$("btnRsMin").textContent);
+    ok(api.$("btnRsAbrir").hidden === false,
+       "R1d falta o gatilho para abrir o rascunho");
+    ok(api.$("btnRsAbrirCheia").hidden === false,
+       "R1d2 falta o gatilho da folha inteira");
 
     /* recolhido nao aceita risco: caso contrario um toque na tela por
      * baixo do quadro fechado desenharia sem ninguem ver */
     traco(api, [[10, 10], [40, 40]]);
     ok(riscos(api) === 0, "R1e desenhou com o quadro fechado");
 
-    api.$("btnRsMin").onclick();
-    ok(api.$("rsCorpo").hidden === false, "R1f o botao nao abriu o quadro");
+    api.$("btnRsAbrir").onclick();
+    ok(api.$("rsCorpo").hidden === false, "R1f o gatilho nao abriu o quadro");
+    ok(api.$("rsCaixa").hidden === false, "R1f2 o painel nao apareceu");
+    /* ABERTO, OS GATILHOS SOMEM: um botão "abrir rascunho" ao lado de um
+     * rascunho aberto é um botão que não faz nada. */
+    ok(api.$("btnRsAbrir").hidden === true,
+       "R1g o gatilho continua na tela com o rascunho aberto");
     ok(/recolher/i.test(api.$("btnRsMin").textContent),
-       "R1g aberto, o botao devia oferecer recolher");
+       "R1g2 aberto, o botao de dentro devia oferecer recolher: "
+       + api.$("btnRsMin").textContent);
     traco(api, [[10, 10], [40, 40]]);
     ok(riscos(api) === 1, "R1h com o quadro aberto o traco nao entrou");
     api.$("btnRsMin").onclick();
     ok(api.$("rsCorpo").hidden === true, "R1i nao recolheu");
+    ok(api.$("rsCaixa").hidden === true, "R1i2 o painel continuou na tela");
     ok(riscos(api) === 1, "R1j recolher APAGOU o desenho — recolher nao e limpar");
   }
 
@@ -110,6 +124,41 @@ async function testes() {
 
     api.$("btnRsDesfazer").onclick();
     ok(riscos(api) === 2, "R3f desfazer nao trouxe de volta o que a borracha levou");
+
+    /* ---- O TAMANHO DA BORRACHA ----
+     * Um raio fixo servia mal aos dois usos reais: tirar um traco fino no
+     * meio de uma conta pede precisao, e limpar meia folha pede area. Com
+     * um so, o primeiro apaga o vizinho e o segundo vira vinte passadas. */
+    const bFina = api.rsFerramenta("b_fina");
+    const bGrossa = api.rsFerramenta("b_grossa");
+    ok(!!bFina && !!bGrossa, "R3f2 faltam os tamanhos de borracha");
+    if (bFina && bGrossa) {
+      const raioFino = api.RS_BORRACHAS[0].raio;
+      const raioGrosso = api.RS_BORRACHAS[api.RS_BORRACHAS.length - 1].raio;
+      const meio = Math.round((raioFino + raioGrosso) / 2);
+
+      api.rsFerramenta("preta").onclick();
+      traco(api, [[300, 300], [302, 300]]);
+      const antes = riscos(api);
+      /* com a FINA escolhida, encostar a "meio" de distancia nao pega */
+      bFina.onclick();
+      api.rsApagarEm(302 + meio, 300);
+      ok(riscos(api) === antes,
+         "R3f3 a borracha fina apagou a " + meio + "px de distancia");
+      /* com a GROSSA, a mesma distancia pega */
+      bGrossa.onclick();
+      api.rsApagarEm(302 + meio, 300);
+      ok(riscos(api) === antes - 1,
+         "R3f4 a borracha grossa nao alcancou a " + meio
+         + "px — o tamanho escolhido nao esta valendo");
+      /* escolher o tamanho LIGA a borracha: ninguem escolhe o tamanho de
+       * uma ferramenta que nao vai usar em seguida */
+      ok(/rs-sel/.test(bb.className || ""),
+         "R3f5 escolher o tamanho nao ligou a borracha");
+      /* a borracha grossa ja tirou o traco extra: a folha volta ao que
+       * era antes deste bloco, e os testes seguintes continuam valendo */
+      api.rsFerramenta("preta").onclick();
+    }
 
     /* limpar tudo pergunta antes, e o "nao" tem de valer */
     api.rsFerramenta("preta").onclick();
@@ -243,8 +292,14 @@ async function testes() {
       { disciplina: "D", topico: "T", chave: c6 }).achados);
     ok(api.qsFiltrar({}).length === 2, "R6 as duas questoes nao entraram");
     api.qsUiResponderDoTopico();
-    ok(api.$("rsCaixa").hidden === false,
-       "R6b a sessao de questoes abriu sem o rascunho a mao");
+    /* O RASCUNHO À MÃO, e não na cara. O painel fica fechado — quem
+     * abre é o gatilho — mas o gatilho tem de estar visível assim que a
+     * rodada começa, senão o rascunho não existe para quem não sabe
+     * dele. */
+    ok(api.$("btnRsAbrir").hidden === false,
+       "R6b a sessao de questoes abriu sem o gatilho do rascunho a mao");
+    ok(api.$("rsCaixa").hidden === true,
+       "R6b2 o painel do rascunho abriu sozinho na sessao");
     ok(api.$("rsCorpo").hidden === true, "R6c o rascunho abriu expandido na sessao");
 
     api.rsRecolher(false);

@@ -429,7 +429,7 @@ async function testes() {
     ok(!api.$("edRitmo").hidden, "M7 120 tópicos em 2h/semana e nenhum painel de ritmo");
     const textoRitmo = (el) => {
       let s = "";
-      const anda = (e) => (e.children || []).forEach((f) => {
+      const anda = (e) => Array.from(e.children || []).forEach((f) => {
         s += " " + (f.textContent || ""); anda(f);
       });
       anda(el); return s;
@@ -504,7 +504,7 @@ async function testes() {
     api.edRender(); api.hubRender();
     const conta = (el, cls) => {
       let n = 0;
-      const anda = (e) => (e.children || []).forEach((fx) => {
+      const anda = (e) => Array.from(e.children || []).forEach((fx) => {
         if ((fx.className || "").split(/\s+/).includes(cls)) n++;
         anda(fx);
       });
@@ -573,7 +573,7 @@ async function testes() {
     api.edRender();
     const colher = (cls) => {
       const out = [];
-      const anda = (e) => (e.children || []).forEach((fx) => {
+      const anda = (e) => Array.from(e.children || []).forEach((fx) => {
         if ((fx.className || "").split(/\s+/).includes(cls)) out.push(fx.textContent);
         anda(fx);
       });
@@ -590,7 +590,7 @@ async function testes() {
     ["Constitucional", "Penal"].forEach((nome) => {
       const bt = (() => {
         let r = null;
-        const anda = (e) => (e.children || []).forEach((fx) => {
+        const anda = (e) => Array.from(e.children || []).forEach((fx) => {
           if ((fx.className || "").split(/\s+/).includes("ed-card-nome")
               && fx.textContent === nome) r = fx;
           anda(fx);
@@ -645,6 +645,10 @@ async function testes() {
        "Q4b a mudança de peso não foi detectada na conferência");
     const aplicando = api.edAplicarColagem();
     api.uiModalResponder(true);          /* usuário confirma a troca de peso */
+    /* e a confirmação FINAL, que passou a vir sempre: sem ela, um plano
+     * inteiro era substituído num clique só quando não havia perda */
+    await Promise.resolve();
+    api.uiModalResponder(true);
     await aplicando;
     ok(api.lerEdital(api.$("editalTexto").value).disciplinas[1].peso === 4,
        "Q5 a colagem confirmada não foi aplicada");
@@ -758,7 +762,7 @@ async function testes() {
     abrirEditalTeste("Panorama T", DSC, emDias(131));
     const acha = (el, cls, out) => {
       out = out || [];
-      (el.children || []).forEach((f) => {
+      Array.from(el.children || []).forEach((f) => {
         if ((f.className || "").split(/\s+/).includes(cls)) out.push(f);
         acha(f, cls, out);
       });
@@ -870,15 +874,15 @@ async function testes() {
     abrirEditalTeste("Material W", api.$("editalTexto").value, api.$("edProva").value);
     const achaW = (el, cls, out) => {
       out = out || [];
-      (el.children || []).forEach((f) => {
+      Array.from(el.children || []).forEach((f) => {
         if ((f.className || "").split(/\s+/).includes(cls)) out.push(f);
         achaW(f, cls, out);
       });
       return out;
     };
     api.hubRender();
-    const docs = achaW(api.$("edAgendaTopo"), "ed-doc")
-      .concat(achaW(api.$("edPainel"), "ed-doc"));
+    const docs = achaW(api.$("edAgendaTopo"), "ed-st-doc")
+      .concat(achaW(api.$("edPainel"), "ed-st-doc"));
     /* O INDICADOR VIROU ETIQUETA DE STATUS, EM PALAVRAS.
      * Antes era um ícone sempre presente, aceso ou apagado. Agora a
      * etiqueta só existe quando há material — a AUSÊNCIA é a informação,
@@ -1031,7 +1035,7 @@ async function testes() {
     abrirEditalTeste("Indicador AA", api.$("editalTexto").value, emDias(131));
     const achaAA = (el, cls, out) => {
       out = out || [];
-      (el.children || []).forEach((f) => {
+      Array.from(el.children || []).forEach((f) => {
         if ((f.className || "").split(/\s+/).includes(cls)) out.push(f);
         achaAA(f, cls, out);
       });
@@ -1042,7 +1046,7 @@ async function testes() {
     api.hubRender();
     const achaAg = (cls) => achaAA(api.$("edAgendaTopo"), cls)
       .concat(achaAA(api.$("edPainel"), cls));
-    const docsAA = achaAg("ed-doc");
+    const docsAA = achaAg("ed-st-doc");
     ok(docsAA.length >= 1, "AA1 o indicador de material não apareceu na agenda");
     ok(docsAA.every((d) => /\btem\b/.test(d.className || "")),
        "AA1b apareceu etiqueta de material para quem não tem material");
@@ -1053,11 +1057,15 @@ async function testes() {
       { disciplina: "Orcamentario", topico: "Vedacao AA" });
     api.edRender(); api.hubRender();
     api.hubRender();
-    const comCards = achaAg("ed-crt");
+    const comCards = achaAg("ed-st-crt");
     ok(comCards.length === 1,
        `AA2 esperava 1 indicador de cartões, veio ${comCards.length}`);
-    ok(achaAg("ed-doc-n").length === 1,
-       "AA3 falta o número de cartões no indicador");
+    /* a contagem vive DENTRO do rotulo agora ("3 cartões"), em vez de
+     * um crachá posicionado por cima do ícone — que era o que espremia
+     * as palavras numa caixinha quadrada. */
+    ok(comCards.some((d) => /\d/.test(d.textContent || "")),
+       "AA3 o indicador de cartões não diz quantos são: "
+       + JSON.stringify(comCards.map((d) => d.textContent)));
 
     /* K — a barra de modos. O que precisa ser verdade desde o esqueleto:
      * trocar de modo esconde uma secao e mostra a outra, e — o que mais
@@ -1191,7 +1199,7 @@ async function testes() {
       + "\n\nA capital e {{c1::Paris::uma alternativa bem comprida com mais de quarenta letras / Paris}}. :: obs :: tag_b";
     api.$("editor").value = LONGO;
     api.renderSugestoes(api.parseAtual(), LONGO);
-    const sugs = (api.$("sugestoes").children || []);
+    const sugs = Array.from(api.$("sugestoes").children || []);
     let iaSemLinha = 0, iaTotal = 0;
     const tem = (el, cls) => (el.children || []).some(
       (f) => new RegExp(cls).test(f.className || "") || tem(f, cls));
@@ -1273,7 +1281,7 @@ async function testes() {
         const anda = (el) => {
           if (!el) return;
           if (nomes.includes((el._texto || "").toLowerCase().trim())) n++;
-          (el.children || []).forEach(anda);
+          Array.from(el.children || []).forEach(anda);
         };
         [api.$("edAgendaTopo"), api.$("edPainel")].forEach(anda);
         return n;
@@ -1402,7 +1410,7 @@ async function testes() {
       api.edRender(); api.hubRender();
       const textoDe = (el) => {
         let s = "";
-        const anda = (e) => (e.children || []).forEach((f) => {
+        const anda = (e) => Array.from(e.children || []).forEach((f) => {
           s += " " + (f._texto || ""); anda(f);
         });
         anda(el); return s;
@@ -1426,7 +1434,7 @@ async function testes() {
        * no bloco de acompanhamento. */
       const contaCls = (el, cls) => {
         let n = 0;
-        const anda = (e) => (e.children || []).forEach((f) => {
+        const anda = (e) => Array.from(e.children || []).forEach((f) => {
           if ((f.className || "").split(/\s+/).includes(cls)) n++;
           anda(f);
         });
@@ -1520,52 +1528,78 @@ async function testes() {
         const L = ["# ISS | prova: " + emDias(131) + " | horas: 20", "@ Financas Publicas :: 5",
           "+ Restos a pagar :: 5 :: pq", "+ Crase :: 2 :: pq",
           "@ Direito Administrativo :: 4", "+ Responsabilidade Civil :: 4 :: pq"].join("\n");
+        /* DOIS EDITAIS: a comparação é entre concursos, e um edital
+         * contra ele mesmo não produz nada — o app recusa e diz isso. */
+        const LTCE = ["# TCE-PE | prova: " + emDias(400) + " | horas: 20",
+          "@ Direito Financeiro :: 5", "+ Restos a pagar :: 5 :: pq",
+          "@ Direito Civil :: 3", "+ Responsabilidade Civil :: 4 :: pq"].join("\n");
+        api.edCriar("TCE-PE", LTCE);
         const eISS = api.edCriar("ISS", L);
         api.hubAbrirEdital(eISS.id);
         api.edRender();
 
-        /* sem diário, o botão não tem o que comparar */
-        api.diarioPor([]);
-        api.vkAbrir();
-        ok(!api.$("dlgJaEstudei").open,
-           "AD1 com o diário vazio a triagem devia recusar abrir e explicar");
-
+        /* A TRIAGEM POR NOME SAIU DO CAMINHO.
+         *
+         * Ela achava um par em sete assuntos contra quinhentos tópicos,
+         * e o par que achava era o mais enganoso possível: nome igual em
+         * disciplina diferente. Três telas de decisão para produzir uma
+         * dúvida. Agora é um atalho opcional, e o caminho principal é a
+         * comparação entre dois editais escolhidos.
+         *
+         * O que continua valendo, e é o que estas asserções guardam:
+         * VINCULAR NÃO É MARCAR COMO ESTUDADO. */
         api.diarioPor([
-          { d: diasAtras(11), disc: "Direito Financeiro", n: "Restos a pagar", a: "feito", cc: "TCE-PE" },
-          { d: diasAtras(9), disc: "Direito Civil", n: "Responsabilidade Civil", a: "revisado", cc: "TCE-PE" },
+          { d: diasAtras(11), disc: "Direito Financeiro", n: "Restos a pagar",
+            a: "feito", cc: "TCE-PE" },
+          { d: diasAtras(9), disc: "Direito Civil", n: "Responsabilidade Civil",
+            a: "revisado", cc: "TCE-PE" },
         ]);
         api.vkAbrir();
-        const tri = api.vkTriagemAtual();
-        ok(tri.length === 2, `AD2 esperava 2 nomes idênticos, veio ${tri.length}`);
-        ok(tri.every((c) => c.escolha === "ia"),
-           "AD3 o padrão da triagem devia ser 'perguntar à IA', não 'é o mesmo'");
-        ok(tri.every((c) => c.mesmaDisciplina === false),
-           "AD4 a triagem não sinalizou que as disciplinas diferem");
+        ok(api.$("dlgJaEstudei").open !== false, "AD1 a ferramenta nao abriu");
 
-        /* nada aplicado até a pessoa decidir */
-        const marca = (d, n) => api.vkHistorico(d, n, null, api.diarioAtual(), diasAtras(5)).marca;
+        const marca = (d, n) => api.vkHistorico(
+          d, n, null, api.diarioAtual(), diasAtras(5)).marca;
         ok(marca("Financas Publicas", "Restos a pagar") === "sem_historico",
-           "AD5 a triagem criou vínculo antes de qualquer decisão");
+           "AD2 abrir a ferramenta ja criou vinculo");
 
-        /* aceita UM e deixa o outro para a IA: com todos marcados como
-         * "igual", o teste não distinguiria "aplica os marcados" de
-         * "aplica tudo" — e essa diferença é a razão da triagem existir */
-        api.vkTriagemAtual().forEach((c) => {
-          c.escolha = c.para.topico === "Restos a pagar" ? "igual" : "ia";
-        });
-        api.vkAplicarTriagem();
+        /* o atalho existe e diz quantos são */
+        const at = api.$("vkAtalho");
+        ok(at && at.hidden === false,
+           "AD3 o atalho dos nomes identicos nao apareceu");
+        ok(/2/.test((api.$("vkAtalhoTxt") || {}).textContent || ""),
+           "AD4 o atalho nao diz quantos pares achou: "
+           + ((api.$("vkAtalhoTxt") || {}).textContent || ""));
+
+        /* e o RESUMO acompanha a escolha dos editais — antes era escrito
+         * uma vez e contradizia a lista logo abaixo */
+        const res1 = (api.$("vkResumo").textContent || "");
+        ok(/2 assunto|2 assuntos/.test(res1) || /assunto/.test(res1),
+           "AD5 o resumo nao descreve a comparacao: " + res1.slice(0, 70));
+
+        /* ACEITAR O ATALHO cria vínculo — e só vínculo. */
+        /* DOIS MODAIS: a confirmação e o aviso do resultado. Responder
+         * só o primeiro deixa a promessa pendurada e o teste morre em
+         * silêncio — sem falha, sem saída, sem pista. */
+        const ap = api.vkAceitarIdenticos();
+        let feito = false;
+        ap.then(() => { feito = true; }, () => { feito = true; });
+        for (let z = 0; z < 12 && !feito; z++) {
+          await Promise.resolve();
+          try { api._uiFechar(true); } catch (e) {}
+        }
+        await ap;
         ok(marca("Financas Publicas", "Restos a pagar") === "ja_visto",
-           "AD6 aceitar como igual não gerou a marca de histórico");
-        ok(marca("Direito Administrativo", "Responsabilidade Civil") === "sem_historico",
-           "AD6b aplicou também o par que estava marcado para ir à IA");
-        ok(marca("Financas Publicas", "Crase") === "sem_historico",
-           "AD7 tópico sem par ganhou marca por tabela");
+           "AD6 aceitar os identicos nao gerou a marca de historico");
+        /* O TESTE QUE DÁ NOME AO RECURSO: o tópico continua PENDENTE. */
+        const prog = api.edProgresso || {};
+        ok(!prog[api.matChave("Financas Publicas", "Restos a pagar")],
+           "AD7 vincular marcou o topico como estudado — a decisao de "
+           + "pular ou revisar e' de quem estudou, nao do app");
 
-        /* e a marca aparece na linha da agenda, no lugar da fatia da
-         * disciplina — que é a informação mais fraca ali */
+        /* e a marca aparece na linha da agenda */
         api.edRender(); api.hubRender();
         const txtAg = api.$("edAgendaTopo").textContent || "";
-        ok(/já visto|seen in/.test(txtAg),
+        ok(/já visto|seen in|já estudei/.test(txtAg),
            "AD8 a marca de histórico não chegou na linha da agenda");
 
         (api.editaisLista() || []).slice().forEach((x) => api.edApagar(x.id));
@@ -1721,7 +1755,7 @@ async function testes() {
         api.abrirDiario();
         const txtD = (el) => {
           let s = "";
-          const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+          const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
           anda(el); return s;
         };
         const linha = txtD(api.$("diarioLista"));
@@ -1793,7 +1827,7 @@ async function testes() {
          * item já registrado até alguém mexer na tela. */
         const txtAg = (el) => {
           let s = "";
-          const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+          const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
           anda(el); return s;
         };
         ok(txtAg(api.$("edAgendaTopo")).indexOf(item.nome) < 0,
@@ -1857,7 +1891,7 @@ async function testes() {
 
         const txtV = (el) => {
           let s = "";
-          const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+          const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
           anda(el); return s;
         };
         const aviso = txtV(api.$("vrAviso"));
@@ -1939,22 +1973,22 @@ async function testes() {
 
         const conta = (el, cls) => {
           let n = 0;
-          const anda = (x) => (x.children || []).forEach((f) => {
+          const anda = (x) => Array.from(x.children || []).forEach((f) => {
             if ((f.className || "").split(/\s+/).includes(cls)) n++;
             anda(f);
           });
           anda(el); return n;
         };
-        ok(conta(api.$("edAgendaTopo"), "ed-crt") >= 1,
+        ok(conta(api.$("edAgendaTopo"), "ed-st-crt") >= 1,
            "AI1 nenhuma linha mostra que tem cartões");
         ok(conta(api.$("edAgendaTopo"), "ed-item")
-           > conta(api.$("edAgendaTopo"), "ed-crt"),
+           > conta(api.$("edAgendaTopo"), "ed-st-crt"),
            "AI1-pre o cenário precisa de linhas com e sem cartões");
         /* o indicador acende só onde há cartão */
         let acesos = 0;
-        const anda2 = (x) => (x.children || []).forEach((f) => {
+        const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
           const c = (f.className || "").split(/\s+/);
-          if (c.includes("ed-crt") && c.includes("tem")) acesos++;
+          if (c.includes("ed-st-crt") && c.includes("tem")) acesos++;
           anda2(f);
         });
         anda2(api.$("edAgendaTopo"));
@@ -1968,27 +2002,26 @@ async function testes() {
          * escrita por extenso. O teste segue o caminho novo. */
         const acharNa = (raiz, cls) => {
           let achado = null;
-          const anda = (x) => (x.children || []).forEach((f) => {
+          const anda = (x) => Array.from(x.children || []).forEach((f) => {
             if ((f.className || "").split(/\s+/).includes(cls) && !achado) achado = f;
             anda(f);
           });
           anda(raiz);
           return achado;
         };
-        const btMais = acharNa(api.$("edAgendaTopo"), "ed-mais");
-        ok(!!btMais, "AI3 a linha da agenda perdeu o menu ⋮");
-        if (btMais) btMais.onclick({ stopPropagation() {} });
+        /* o que o tópico TEM virou etiqueta clicável na própria linha;
+         * o "⋮" ficou só com o que falta criar */
         let alvoBtn = null;
-        const anda3 = (x) => (x.children || []).forEach((f) => {
+        const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
           const txt = f.textContent || "";
-          if (/cart/i.test(txt) && /ed-menu-item/.test(f.className || "") && !alvoBtn) {
+          if (/cart/i.test(txt) && /ed-st-crt/.test(f.className || "") && !alvoBtn) {
             alvoBtn = f;
           }
           anda3(f);
         });
         anda3(api.$("edAgendaTopo"));
         ok(alvoBtn && typeof alvoBtn.onclick === "function",
-           "AI3b o menu da agenda não oferece os cartões do tópico");
+           "AI3b a etiqueta de cartões não leva aos cartões");
         if (!alvoBtn) return falhas;
         /* AI5 mede a MUDANÇA, não o valor absoluto: blocos anteriores
          * deixam o app noutro modo, e comparar com "edital" fazia o teste
@@ -2079,7 +2112,7 @@ async function testes() {
 
         const txtL = (el) => {
           let s = "";
-          const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+          const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
           anda(el); return s;
         };
         ok(txtL(api.$("edAgendaTopo")).indexOf("Principios") >= 0,
@@ -2140,7 +2173,7 @@ async function testes() {
 
         const txtM = (el) => {
           let s = "";
-          const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+          const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
           anda(el); return s;
         };
         const naTela = txtM(api.$("edAgendaTopo"));
@@ -2179,7 +2212,7 @@ async function testes() {
         api.edRender(); api.hubRender();
 
         const fills = [];
-        const anda = (x) => (x.children || []).forEach((f) => {
+        const anda = (x) => Array.from(x.children || []).forEach((f) => {
           if ((f.className || "").indexOf("it-fill") >= 0)
             fills.push({ cls: f.className, w: (f.style || {}).width });
           anda(f);
@@ -2304,7 +2337,7 @@ async function testes() {
 
         const txtP = (el) => {
           let s = "";
-          const anda = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
+          const anda = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); anda(f); });
           anda(el); return s;
         };
         /* o NÚMERO ao lado da barra: barra sozinha se lê "mais ou menos pela
@@ -2315,7 +2348,7 @@ async function testes() {
         api.abrirDiario();
         api.apagarDoDiario(0);
         const larguras = [];
-        const anda2 = (x) => (x.children || []).forEach((f) => {
+        const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
           if ((f.className || "").indexOf("it-fill") >= 0)
             larguras.push((f.style || {}).width);
           anda2(f);
@@ -2351,7 +2384,7 @@ async function testes() {
         api.edRender(); api.hubRender();
 
         const classes = [];
-        const anda = (x) => (x.children || []).forEach((f) => {
+        const anda = (x) => Array.from(x.children || []).forEach((f) => {
           if ((f.className || "").split(/\s+/).includes("ed-item")) classes.push(f.className);
           anda(f);
         });
@@ -2363,7 +2396,7 @@ async function testes() {
 
         const txtQ = (el) => {
           let s = "";
-          const a2 = (x) => (x.children || []).forEach((f) => { s += " " + (f._texto || ""); a2(f); });
+          const a2 = (x) => Array.from(x.children || []).forEach((f) => { s += " " + (f._texto || ""); a2(f); });
           a2(el); return s;
         };
         ok(/revis/i.test(txtQ(api.$("edAgendaTopo"))),

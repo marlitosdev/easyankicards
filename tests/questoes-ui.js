@@ -11,24 +11,33 @@ async function testes() {
   /* os atalhos sairam da linha e foram para o "⋮": quatro icones por
    * linha, dez linhas na semana, quarenta alvos sem palavra nenhuma.
    * Dentro do menu cabe escrever o que cada um faz. */
-  const noMenu = (linha, re) => {
+  /* O ATALHO MUDA DE LUGAR CONFORME EXISTE OU NAO.
+   * O que o topico TEM vira etiqueta clicavel na propria linha; o que
+   * FALTA fica no "⋮" como "criar...". Antes as duas listas traziam o
+   * mesmo conteudo, e a pessoa lia tudo duas vezes. */
+  const atalhoDa = (linha, re) => {
+    let achado = null;
+    const varrer = () => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
+        const cls = f.className || "";
+        if (!achado && (/ed-st-item/.test(cls) || /ed-menu-item/.test(cls))
+            && re.test(f.textContent || "")) achado = f;
+        anda(f);
+      });
+      anda(linha);
+    };
+    varrer();
+    if (achado) return achado;
     let mais = null;
-    const anda = (x) => (x.children || []).forEach((f) => {
-      if ((f.className || "").split(/\s+/).includes("ed-mais") && !mais) mais = f;
-      anda(f);
-    });
-    anda(linha);
-    if (!mais) return null;
-    mais.onclick({ stopPropagation() {} });
-    let alvo = null;
-    const anda2 = (x) => (x.children || []).forEach((f) => {
-      if (/ed-menu-item/.test(f.className || "") && re.test(f.textContent || "")
-          && !alvo) alvo = f;
+    const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
+      if (/ed-mais/.test(f.className || "") && !mais) mais = f;
       anda2(f);
     });
     anda2(linha);
-    return alvo;
+    if (mais) { mais.onclick({ stopPropagation() {} }); varrer(); }
+    return achado;
   };
+
 
 
   const { api } = rodar();
@@ -39,12 +48,27 @@ async function testes() {
   api.matAbrirEditor({ disciplina: "Direito Financeiro", nome: "Leis Orcamentarias" }, "ler");
 
   /* U1 — sem questão, o botão diz isso e não engana */
-  ok(api.$("btnMatQuestoes").hidden === false, "U1 o botao de questoes sumiu do resumo");
-  ok(/sem quest/.test(api.$("btnMatQuestoes").textContent),
-     "U1b sem questoes, o botao devia dizer que nao ha");
-  /* botao vivo mesmo com zero: leva a CRIAR, em vez de ser um beco */
-  ok(api.$("btnMatQuestoes").disabled === false,
-     "U1c botao sem questoes ficou morto em vez de levar a criar");
+  /* SEM QUESTÃO, O BOTÃO DE RESPONDER SOME — e a exigência mudou aqui.
+   *
+   * Este teste pedia que ele ficasse VISÍVEL dizendo "sem questões" e
+   * VIVO, porque clicá-lo levava a criar. Era certo quando ele era o
+   * único botão de questões do resumo. Hoje há dois botões de CRIAR,
+   * rotulados com o verbo, logo ao lado — e o atalho virou um terceiro
+   * caminho para o mesmo lugar, com um rótulo que não diz que leva lá.
+   * Foi a queixa literal do usuário: "não sei informar se existem ou
+   * não questões".
+   *
+   * O que a asserção protege continua sendo o mesmo: NÃO PODE HAVER
+   * BECO. Só que agora quem responde por isso são os dois criadores,
+   * que ficam visíveis — e é neles que a exigência passa a bater. */
+  ok(api.$("btnMatQuestoes").hidden === true,
+     "U1 sem questão nenhuma, o botao de RESPONDER continua na fila: "
+     + "com dois botoes de criar ao lado, ele vira um terceiro caminho "
+     + "para o mesmo lugar, com o rotulo errado");
+  ok(api.$("btnMatQstResumo").hidden === false
+     && !api.$("btnMatQstResumo").disabled,
+     "U1c sem questoes nao sobrou caminho para CRIAR: o botao sumiu e "
+     + "nao houve substituto — isso sim seria um beco");
 
   /* U2 — virar seleção em questão monta o prompt com o contexto */
   api.matPorSelecao("A vedacao de inscricao e valida?");
@@ -148,8 +172,9 @@ async function testes() {
   api.qsUiDesfazer();
   ok(api.qsTodas().length === 0, "U8 desfazer nao tirou as questoes");
   api.qsUiPintarBotaoResumo();
-  ok(/sem quest/.test(api.$("btnMatQuestoes").textContent),
-     "U8b o botao do resumo nao voltou a dizer que nao ha questoes");
+  ok(api.$("btnMatQuestoes").hidden === true,
+     "U8b desfeitas as questoes, o botao de responder continua na fila "
+     + "oferecendo responder o que nao existe mais");
 
   /* ---- D2/D3 pela tela: modo prova e importacao ---- */
   {
@@ -252,8 +277,8 @@ async function testes() {
     a3.matGravar(a3.matChave("D", "Vazio"), "Texto qualquer sem questao nenhuma.",
       { disciplina: "D", topico: "Vazio" });
     a3.matAbrirEditor({ disciplina: "D", nome: "Vazio" }, "ler");
-    ok(a3.$("btnMatQuestoes").disabled === false,
-       "P7 o botao de questoes ficou morto quando nao ha questao");
+    ok(a3.$("btnMatQuestoes").hidden === true,
+       "P7 sem questao no topico, o botao de RESPONDER continua na fila");
     a3.qsUiResponderDoTopico();
     ok(a3.$("dlgQsCriar").open === true,
        "P7b sem questoes, o botao devia levar a criar");
@@ -1219,8 +1244,8 @@ async function testes() {
 
     const li = aL.edLinhaAgendaTeste({ disciplina: "Direito Financeiro",
       nome: "Leis Orcamentarias", chave: cL });
-    const bc = noMenu(li, /cart/i);
-    ok(!!bc, "K1 o menu da agenda perdeu o atalho dos cartoes");
+    const bc = atalhoDa(li, /cart/i);
+    ok(!!bc, "K1 a linha perdeu o atalho dos cartoes (nem na linha, nem no menu)");
     if (!bc) { falhas.quantas = n; return falhas; }
     bc.onclick({ stopPropagation() {} });
     ok(aL.$("dlgMcEstudo").open === true,
@@ -1249,7 +1274,7 @@ async function testes() {
     aL.$("dlgMcEstudo").close();
     const li2 = aL.edLinhaAgendaTeste({ disciplina: "Direito Financeiro",
       nome: "Sem cartoes", chave: cVazio });
-    const bc2 = noMenu(li2, /cart/i);
+    const bc2 = atalhoDa(li2, /cart/i);
     ok(!!bc2, "K1k2 sem cartoes o menu tem de oferecer criar");
     if (bc2) bc2.onclick({ stopPropagation() {} });
     ok(aL.$("dlgMatCartoes").open === true,
@@ -1325,19 +1350,19 @@ async function testes() {
 
     const acha = (li, cls) => {
       const r = [];
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         if ((f.className || "").split(/\s+/).includes(cls)) r.push(f);
         anda(f);
       });
       anda(li); return r;
     };
     const li = aN.edLinhaAgendaTeste({ disciplina: "D", nome: "T", chave: cN });
-    const marca = acha(li, "ed-qst")[0];
+    const marca = acha(li, "ed-st-qst")[0];
     ok(!!marca, "K3 a linha nao mostra que o topico tem questoes");
     ok(/tem/.test((marca && marca.className) || ""),
        "K3b a etiqueta de questoes apareceu apagada");
-    const bq = noMenu(li, /quest/i);
-    ok(!!bq, "K3b2 o menu nao oferece as questoes do topico");
+    const bq = atalhoDa(li, /quest/i);
+    ok(!!bq, "K3b2 nao ha como chegar nas questoes do topico");
     if (bq) bq.onclick({ stopPropagation() {} });
     ok(aN.$("dlgQsResponder").open === true,
        "K3c o atalho da agenda nao abriu a resolucao");
@@ -1352,8 +1377,8 @@ async function testes() {
     const cO = aO.matChave("D", "Vazio");
     aO.matGravar(cO, "Materia-prima para as questoes.", { disciplina: "D", topico: "Vazio" });
     const li = aO.edLinhaAgendaTeste({ disciplina: "D", nome: "Vazio", chave: cO });
-    const bq0 = noMenu(li, /quest/i);
-    ok(!!bq0, "K4-pre o menu nao oferece criar questoes");
+    const bq0 = atalhoDa(li, /quest/i);
+    ok(!!bq0, "K4-pre nao ha como criar questoes a partir da linha");
     if (!bq0) { falhas.quantas = n; return falhas; }
     bq0.onclick({ stopPropagation() {} });
     ok(aO.$("dlgQsCriar").open === true,
@@ -1383,15 +1408,15 @@ async function testes() {
       chave: aP.matChave(disc, top) });
     const acesa = (cls) => {
       let achou = false;
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         const c = (f.className || "").split(/\s+/);
         if (c.includes(cls) && c.includes("tem")) achou = true;
         anda(f);
       });
       anda(li); return achou;
     };
-    ok(acesa("ed-doc"), "K5b a lampada do resumo ficou apagada com o resumo existindo");
-    ok(acesa("ed-crt"), "K5c a lampada dos cartoes ficou apagada com cartao existindo");
+    ok(acesa("ed-st-doc"), "K5b a etiqueta do resumo nao apareceu com o resumo existindo");
+    ok(acesa("ed-st-crt"), "K5c a etiqueta dos cartoes nao apareceu com cartao existindo");
     ok(aP.matChaveViva(disc, top) === variante,
        "K5d a chave viva nao encontrou a gaveta que tem o material");
   }
@@ -1420,14 +1445,42 @@ async function testes() {
     ok(bv.disabled === true,
        "K6c sem selecao o botao do trecho tinha de estar apagado — e assim "
        + "que se ve, sem ler, que falta selecionar");
-    ok(/selecionado/i.test(bv.textContent || ""),
+    /* "selec" e nao "selecionado": a exigencia e que o rotulo FALE DE
+     * SELECAO, e nao que use uma flexao especifica. Preso a palavra
+     * exata, ele quebrou quando o rotulo melhorou para "selecione um
+     * pedaco antes" — um teste cobrando redacao no lugar de funcao. */
+    ok(/selec/i.test(bv.textContent || ""),
        "K6c2 o rotulo nao fala em SELECAO: " + bv.textContent);
     ok(!/marcado/i.test(bv.textContent || ""),
        "K6c3 o rotulo voltou a dizer 'marcado', que e o nome das marcas coloridas");
 
-    aQ.matPorSelecao("TRECHO ALVO com a materia das questoes.");
+    /* UM TRECHO DE VERDADE, e não 38 caracteres.
+     *
+     * A fixture antiga era "TRECHO ALVO com a materia das questoes." —
+     * meia frase, e o app passou a recusar trechos assim: abaixo do
+     * mínimo o prompt vai sem contexto e a IA devolve questão sobre
+     * coisa nenhuma. O teste pedia que ela fosse ACEITA, ou seja, pedia
+     * o defeito. Agora ele usa um parágrafo, que é o que a pessoa
+     * seleciona de verdade. */
+    aQ.matPorSelecao("TRECHO ALVO com a materia das questoes. "
+      + "A vedacao de inscricao em restos a pagar alcanca as emendas "
+      + "individuais impositivas, salvo nos casos previstos em lei "
+      + "complementar, e a excecao nao dispensa a indicacao da fonte.");
     aQ.qsUiPintarBotaoResumo();
     ok(bv.disabled === false, "K6d com trecho selecionado o botao continua apagado");
+    /* ---- e o curto demais continua recusado ---- */
+    aQ.matPorSelecao("meia frase");
+    aQ.qsUiPintarBotaoResumo();
+    ok(bv.disabled === true,
+       "K6d2 um trecho de dez caracteres foi aceito: o prompt vai sem "
+       + "contexto e a IA inventa a questao inteira: " + bv.textContent);
+    /* DEVOLVE A SELEÇÃO BOA antes de seguir: as asserções de baixo
+     * conferem o PROMPT, e um trecho recusado não abre a criação. */
+    aQ.matPorSelecao("TRECHO ALVO com a materia das questoes. "
+      + "A vedacao de inscricao em restos a pagar alcanca as emendas "
+      + "individuais impositivas, salvo nos casos previstos em lei "
+      + "complementar, e a excecao nao dispensa a indicacao da fonte.");
+    aQ.qsUiPintarBotaoResumo();
     ok(/caracteres/.test(bv.textContent || ""),
        "K6e o botao nao diz o tamanho do trecho, que e como se confere antes");
     ok(/caracteres/.test(brz.textContent || ""),
@@ -1708,6 +1761,23 @@ async function testes() {
        "K10r o lado 'como ficaria' nao mostra a versao nova");
     ok(aU.$("btnQmAplicar").hidden === false, "K10s o aplicar nao apareceu");
 
+    /* "GABARITO: E" NAO SE LE.
+     * Numa questao de certo/errado o enunciado corrigido e uma AFIRMACAO
+     * a julgar, e afirmacao falsa e item valido. Mostrada sozinha,
+     * seguida de "gabarito: E", parecia que o app tinha passado a
+     * afirmar uma coisa errada — foi assim que uma correcao CERTA foi
+     * lida como "questao estranha". */
+    const depois = lados[1].textContent || "";
+    ok(/julgue/i.test(depois),
+       "K10s2 falta a moldura de 'julgue o item': sem ela a afirmacao se le "
+       + "como o app afirmando algo, e nao como item de prova");
+    ok(/ERRADO/.test(depois),
+       "K10s3 o gabarito continua so a letra, que nao se le: " + depois.slice(0, 90));
+    ok(/falsa/i.test(depois),
+       "K10s4 nao diz o que 'errado' significa aqui (a afirmacao e falsa)");
+    ok(/art\. 167/.test(depois),
+       "K10s5 o comentario nao aparece — e ele que permite discordar da IA");
+
     aU.$("btnQmAplicar").onclick();
     aU.uiModalResponder(true);
     const dep = aU.qsFiltrar({})[0];
@@ -1742,7 +1812,7 @@ async function testes() {
     ok(!!item, "K11 a questao nao apareceu na lista");
     const acha = (cls) => {
       let r = null;
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         if ((f.className || "").split(/\s+/).includes(cls)) r = f;
         anda(f);
       });
@@ -1750,7 +1820,7 @@ async function testes() {
     };
     const rotulos = () => {
       const L = [];
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         if (/btn/.test(f.className || "")) L.push(f.textContent);
         anda(f);
       });
@@ -1772,7 +1842,7 @@ async function testes() {
     /* e continua pedindo confirmacao mostrando o que se perde */
     const bDel = (() => {
       let r = null;
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         if (/apagar/i.test(f.textContent || "") && /btn/.test(f.className || "")) r = f;
         anda(f);
       });
@@ -1805,7 +1875,7 @@ async function testes() {
     ok(!!item, "K12 a questao nao apareceu na lista");
     const camadas = () => {
       const L = [];
-      const anda = (x) => (x.children || []).forEach((f) => {
+      const anda = (x) => Array.from(x.children || []).forEach((f) => {
         const c = (f.className || "").split(/\s+/);
         ["qs-item-cab", "qs-item-en", "qs-item-acoes", "qs-item-hist"]
           .forEach((k) => { if (c.includes(k)) L.push(k); });
@@ -1837,7 +1907,7 @@ async function testes() {
     aW.qsUiRender();
     const item2 = aW.$("qsLista").querySelectorAll(".qs-item")[0];
     const L2 = [];
-    const anda2 = (x) => (x.children || []).forEach((f) => {
+    const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
       const c = (f.className || "").split(/\s+/);
       ["qs-item-en", "qs-item-acoes", "qs-item-hist"]
         .forEach((k) => { if (c.includes(k)) L2.push(k); });
@@ -1848,6 +1918,88 @@ async function testes() {
        "K12h a estatistica de acerto nao esta na base do card: " + L2.join(","));
     ok(L2.indexOf("qs-item-hist") > L2.indexOf("qs-item-en"),
        "K12i a estatistica ficou antes do enunciado");
+  }
+
+  /* ---- K13: a IA devolve MAIS de uma questao na correcao ----
+   * O prompt pede uma so, mas quando o enunciado original tinha tres
+   * coladas — um dos defeitos que este recurso existe para consertar —
+   * devolver tres e a resposta CERTA. O app pegava a primeira e
+   * descartava o resto sem dizer nada: o trabalho sumia em silencio e
+   * quem colou nao tinha como saber. */
+  {
+    const { api: aX } = rodar();
+    aX.matIniciar(); aX.edIniciar(); aX.qsUiIniciar();
+    const cX = aX.matChave("D", "T");
+    aX.matGravar(cX, "x", { disciplina: "D", topico: "T" });
+    aX.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aX.qsAplicar(aX.qsLerResposta("? CE :: FGV :: Tres coladas numa so.\n= C :: c.",
+      { disciplina: "D", topico: "T", chave: cX }).achados);
+    ok(aX.qsFiltrar({}).length === 1, "K13-pre o cenario precisa de 1 questao");
+    aX.qsUiResponderDoTopico();
+    const totalDaRodada = aX.qsPlacar().total;
+
+    aX.$("btnQsMelhorar").onclick();
+    const tres = [1, 2, 3].map((i) => ["[QUESTAO]", "TIPO: CE", "BANCA: FGV",
+      `ENUNCIADO: Afirmacao separada numero ${i}, agora sozinha e julgavel.`,
+      "GABARITO: E", "COMENTARIO: porque viola o artigo.", "[/QUESTAO]"].join("\n"))
+      .join("\n");
+    aX.$("qmColar").value = tres;
+    aX.$("btnQmConferir").onclick();
+
+    const av = aX.$("qmExtrasAviso");
+    ok(!!av && av.hidden === false,
+       "K13 as questoes extras da IA foram descartadas em silencio");
+    ok(/2/.test(av.textContent || ""),
+       "K13b o aviso nao diz quantas sobraram: " + (av.textContent || "").slice(0, 60));
+    ok(/separada numero 2/.test(av.textContent || ""),
+       "K13c o aviso nao mostra QUAIS sao — sem isso nao da para decidir");
+
+    const bTodas = aX.$("btnQmAplicarTodas");
+    ok(!!bTodas && bTodas.hidden === false,
+       "K13d falta a saida para acrescentar as extras");
+    ok(/2/.test(bTodas.textContent || ""),
+       "K13e o botao nao diz quantas vai acrescentar: " + bTodas.textContent);
+
+    /* aplicar SO a primeira continua sendo uma opcao explicita */
+    ok(aX.$("btnQmAplicar").hidden === false,
+       "K13f sumiu a opcao de aplicar so a corrigida");
+
+    bTodas.onclick();
+    aX.uiModalResponder(true);
+    ok(aX.qsFiltrar({}).length === 3,
+       `K13g deviam existir 3 questoes no banco, existem ${aX.qsFiltrar({}).length}`);
+
+    /* e a rodada EM CURSO nao muda de tamanho: a fila dela foi montada
+     * antes, e mexer nela no meio do caminho mudaria o denominador do
+     * placar depois de a pessoa ja ter respondido */
+    ok(aX.qsPlacar().total === totalDaRodada,
+       "K13h a rodada em curso mudou de tamanho no meio — o denominador do "
+       + "placar nao pode mudar depois de comecar a responder");
+  }
+
+  /* ---- K14: uma questao so nao inventa aviso nenhum ---- */
+  {
+    const { api: aY } = rodar();
+    aY.matIniciar(); aY.edIniciar(); aY.qsUiIniciar();
+    const cY = aY.matChave("D", "T");
+    aY.matGravar(cY, "x", { disciplina: "D", topico: "T" });
+    aY.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aY.qsAplicar(aY.qsLerResposta("? CE :: FGV :: Uma questao normal.\n= C :: c.",
+      { disciplina: "D", topico: "T", chave: cY }).achados);
+    aY.qsUiResponderDoTopico();
+    aY.$("btnQsMelhorar").onclick();
+    aY.$("qmColar").value = ["[QUESTAO]", "TIPO: CE", "BANCA: FGV",
+      "ENUNCIADO: Uma afirmacao unica para julgar.", "GABARITO: C",
+      "COMENTARIO: porque sim.", "[/QUESTAO]"].join("\n");
+    aY.$("btnQmConferir").onclick();
+    ok(aY.$("qmExtrasAviso").hidden === true,
+       "K14 apareceu aviso de extras com uma questao so");
+    ok(aY.$("btnQmAplicarTodas").hidden === true,
+       "K14b apareceu o botao de acrescentar sem haver o que acrescentar");
+    aY.$("btnQmAplicar").onclick();
+    aY.uiModalResponder(true);
+    ok(aY.qsFiltrar({}).length === 1,
+       "K14c a correcao simples criou questao em vez de substituir");
   }
 
   falhas.quantas = n;
