@@ -147,7 +147,7 @@ em vez da rolagem atual.
 | fase | entrega | por quê |
 |---|---|---|
 | **E1** | integrar cobertura ao ritmo, com a frase de projeção | é a informação que decide, e está no rodapé |
-| **E2** | "Mapa das disciplinas": cabeçalho, recolhido, linha única | resolve a poluição sem perder nada |
+| **E2** ✅ | "Mapa das disciplinas": cabeçalho, recolhido, linha única | resolve a poluição sem perder nada |
 | **E3** | grade de horários com perfis prontos | a agenda passa a caber no relógio real |
 | **E4** | faixa curta não recebe tópico longo | sem isto a agenda promete o que não cumpre |
 

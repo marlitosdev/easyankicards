@@ -206,7 +206,11 @@ function edRegistrarConteudo(r) {
  * ================================================================== */
 let edVista = localStorage.getItem("eac_edital_vista") || "painel";
 let edAbertas = {};
-let edAgendaAberta = false;        /* disciplinas expandidas */
+/* "Mapa das disciplinas": recolhido por padrão, e a ordem escolhida —
+ * nenhum dos dois é lembrado entre sessões, igual edAbertas: é estado de
+ * leitura da tela aberta agora, não preferência. */
+let edMapaAberto = false;
+let edMapaOrdem = "lacuna";        /* "lacuna" | "fatia" | "edital" */
 
 /* Uma barra, duas camadas: o verde claro é o que foi estudado, o escuro
  * dentro dele é o que já foi revisado. Duas barras separadas fariam parecer
@@ -2104,19 +2108,60 @@ function edTabelaComparativa(linhas) {
 /* Rolar até o cartão era pior que não fazer nada: o usuário perdia o lugar
  * onde estava e ainda tinha de achar o que abriu. A disciplina passa a ter
  * uma janela própria, com o panorama dela — e fechar devolve a tela intacta. */
-function abrirDisciplina(nome) {
+/* PINTA O CONTEÚDO DA JANELA, SEM (RE)ABRIR NEM REGISTRAR.
+ *
+ * Separado de abrirDisciplina por causa do peso: mudar o peso ali dentro
+ * precisa repintar os números (peso mexe em fatia, em pesoFeito, em
+ * tudo) sem chamar showModal() de novo — o navegador lança erro em
+ * <dialog> já aberto — e sem duplicar o registro de "panorama aberto"
+ * a cada troca de peso. */
+function edPintarModalDisciplina(nome) {
   const r = lerEdital($("editalTexto").value);
   const plano = montarPlano(r, { horas: Number($("edHoras").value),
     prova: $("edProva").value, feitos: edProgresso });
   const d = panoramaDisciplinas(plano).find((x) => x.nome === nome);
-  if (!d) return;
+  if (!d) return null;
+  const discRaw = r.disciplinas.find((x) => x.nome === nome);
 
   $("dscTitulo").textContent = d.nome;
-  if ($("btnDscExcluir")) $("btnDscExcluir").onclick = () => {
-    $("dlgDisciplina").close();
-    ndExcluir(d.nome);
-  };
   $("dscSub").textContent = t("ed_dsc_sub", { p: d.peso, f: d.fatia, n: d.total });
+
+  /* peso editável + próximo tópico: moraram no cartão da grade antiga,
+   * que virou esta janela — sem eles aqui, o "mapa das disciplinas"
+   * perderia as duas ações que só existiam ali. */
+  const acoes = $("dscAcoes");
+  if (acoes) {
+    acoes.innerHTML = "";
+    if (discRaw) {
+      const sel = document.createElement("select");
+      sel.className = "ed-peso" + (temPesosIguais(r) ? " suspeito" : "");
+      [1, 2, 3, 4, 5].forEach((n) => {
+        const o = document.createElement("option");
+        o.value = n; o.textContent = t("ed_peso_n", { n });
+        if (n === discRaw.peso) o.selected = true;
+        sel.append(o);
+      });
+      sel.onchange = () => { edMudarPeso(discRaw, Number(sel.value));
+        edPintarModalDisciplina(nome); };
+      acoes.append(sel);
+    }
+    const proximo = edProximoDa(d.itens);
+    if (proximo) {
+      const pr = document.createElement("button");
+      pr.type = "button";
+      pr.className = "ed-card-prox";
+      pr.textContent = t("ed_card_prox", { n: proximo.nome });
+      pr.title = t("ed_card_prox_ajuda", { n: proximo.nome,
+        p: proximo.disciplinaPeso != null ? proximo.disciplinaPeso * proximo.peso : "?" });
+      pr.onclick = () => { if (typeof matAbrirEditor === "function") matAbrirEditor(proximo, "ler"); };
+      acoes.append(pr);
+    } else {
+      const pr = document.createElement("div");
+      pr.className = "ed-card-prox ed-card-prox-fim";
+      pr.textContent = t("ed_card_prox_fim");
+      acoes.append(pr);
+    }
+  }
 
   const cx = $("dscResumo");
   cx.innerHTML = "";
@@ -2133,6 +2178,11 @@ function abrirDisciplina(nome) {
     cartao(t("ed_dsc_intocado"), d.intocados + "/" + d.total, "n-falta"),
     cartao(t("ed_dsc_alta"), String(d.altaIntocada), d.altaIntocada ? "n-alerta" : ""));
 
+  /* a contagem por faixa (alta/média/baixa) só aparecia no cartão aberto
+   * da grade antiga — continua existindo, só que aqui */
+  const pontosCx = $("dscPontos");
+  if (pontosCx) { pontosCx.innerHTML = ""; pontosCx.append(edPontos(d.itens)); }
+
   const lista = $("dscLista");
   lista.innerHTML = "";
   /* dentro da disciplina, o intocado de maior peso vem primeiro: é a ordem
@@ -2140,12 +2190,25 @@ function abrirDisciplina(nome) {
   d.itens.slice().sort((a, b) => (a.feito - b.feito) || (b.bruto - a.bruto))
     .forEach((i) => lista.append(edLinhaTopico(i, true)));
 
+  return d;
+}
+
+/* Abre a disciplina no painel e leva o olho até ela. Só expandir não basta:
+ * com dezessete cartões, o que abriu pode estar fora da tela. */
+/* Rolar até o cartão era pior que não fazer nada: o usuário perdia o lugar
+ * onde estava e ainda tinha de achar o que abriu. A disciplina passa a ter
+ * uma janela própria, com o panorama dela — e fechar devolve a tela intacta. */
+function abrirDisciplina(nome) {
+  const d = edPintarModalDisciplina(nome);
+  if (!d) return;
+  if ($("btnDscExcluir")) $("btnDscExcluir").onclick = () => {
+    $("dlgDisciplina").close();
+    ndExcluir(d.nome);
+  };
   abrirModal("dlgDisciplina");
   reg("EDITAL-DISCIPLINA", "panorama aberto: " + nome,
       d.fatia + "% da prova, " + d.intocados + " intocados");
 }
-
-let edCards = {};
 
 /* =====================================================================
  * O PAINEL DOS MÍNIMOS
@@ -2306,7 +2369,6 @@ function edPintarPainel(r, plano) {
   try { vrAtualizarBotao(); } catch (e) {}
   const box = $("edPainel");
   box.innerHTML = "";
-  edCards = {};
   if (!plano.total) {
     const p = document.createElement("div");
     p.className = "esq-vazio"; p.textContent = t("ed_vazio");
@@ -2452,114 +2514,120 @@ function edPintarPainel(r, plano) {
     box.append(cx2);
   }
 
-  /* -------- disciplinas: cartões com barra de progresso -------- */
-  const grade = document.createElement("div");
-  grade.className = "ed-grade";
-  /* Ordenadas pelo PESO TOTAL NA PROVA, não pelo 1-5 da disciplina. São
-   * coisas diferentes: Direito Constitucional (26 tópicos) e Noções de
-   * Direito Penal (3 tópicos) podem ter o mesmo "peso 3" e mesmo assim
-   * representar fatias muito diferentes do que a prova cobra. O que decide
-   * é a soma de (peso da disciplina × peso do tópico) de todos os tópicos
-   * dela. Empate desempata pelo mais atrasado. */
-  const pesoDaDisc = {};
-  const progDaDisc = {};
-  r.disciplinas.forEach((d) => {
-    const meus = plano.itens.filter((i) => i.disciplina === d.nome);
-    pesoDaDisc[d.nome] = meus.reduce((a, i) => a + i.bruto, 0);
-    progDaDisc[d.nome] = meus.length
-      ? meus.filter((i) => i.feito).length / meus.length : 1;
-  });
-  const ordenadas = r.disciplinas.slice().sort((a, b) =>
-    (pesoDaDisc[b.nome] - pesoDaDisc[a.nome]) || (progDaDisc[a.nome] - progDaDisc[b.nome]));
-  ordenadas.forEach((d) => {
-    const meus = plano.itens.filter((i) => i.disciplina === d.nome);
-    if (!meus.length) return;
-    const feitos = meus.filter((i) => i.feito).length;
-    const revs = meus.filter((i) => i.revisado).length;
-    const pesoD = somarPeso(meus);
-    const card = document.createElement("div");
-    card.className = "ed-card" + (revs === meus.length ? " completo"
-      : (feitos === meus.length ? " estudado" : ""));
+  /* -------- mapa das disciplinas: recolhido, lista densa quando aberto --
+   * Era uma grade de cartões altos, um por disciplina, sempre abertos —
+   * a mesma leitura de "onde estão os buracos" (disciplina · progresso ·
+   * quanto vale), num formato maior, empilhando a tela abaixo dela. O
+   * cartão grande virou a janela do panorama (abrirDisciplina); aqui
+   * sobra o cabeçalho com o resumo, o seletor de ordem e uma linha por
+   * disciplina — a mesma técnica de colunas compartilhadas de
+   * ".lac-cab,.lac-linha" duas caixas acima. */
+  if (pan.length) {
+    const cxm = document.createElement("div");
+    /* "edm-caixa" existe para achar SÓ esta caixa: ".lac-nome" e
+     * ".lac-linha" também vivem em "onde estão os buracos", uma caixa
+     * acima, e sem um contêiner próprio um teste (ou um seletor futuro)
+     * não teria como pedir só as linhas do mapa. */
+    cxm.className = "ed-caixa edm-caixa";
 
-    const cab = document.createElement("div");
-    cab.className = "ed-card-cab";
-    const tit = document.createElement("button");
-    tit.type = "button";
-    tit.className = "ed-card-nome";
-    tit.textContent = d.nome;
-    tit.title = t("ed_abrir");
-    tit.onclick = () => { edAbertas[d.nome] = !edAbertas[d.nome]; edRender(); };
-    /* peso editável ali mesmo: mexer no peso é a ação que mais muda o plano,
-     * e mandar o usuário procurar a linha no texto é pedir para não fazer */
-    const sel = document.createElement("select");
-    sel.className = "ed-peso" + (temPesosIguais(r) ? " suspeito" : "");
-    [1, 2, 3, 4, 5].forEach((n) => {
-      const o = document.createElement("option");
-      o.value = n; o.textContent = t("ed_peso_n", { n });
-      if (n === d.peso) o.selected = true;
-      sel.append(o);
-    });
-    sel.onchange = () => edMudarPeso(d, Number(sel.value));
-    cab.append(tit, sel);
-    card.append(cab, edBarra(feitos, revs, meus.length));
+    const cab = document.createElement("button");
+    cab.type = "button";
+    cab.className = "edm-cab";
+    const seta = document.createElement("span");
+    seta.className = "edm-seta" + (edMapaAberto ? " aberto" : "");
+    seta.textContent = "▸";
+    const resumo = document.createElement("span");
+    resumo.className = "edm-resumo";
+    const totalTopicos = pan.reduce((a, d) => a + d.total, 0);
+    resumo.textContent = t("edm_resumo",
+      { n: pan.length, t: totalTopicos, p: plano.peso.pctFeito });
+    cab.title = t(edMapaAberto ? "edm_recolher" : "edm_expandir");
+    cab.append(seta, resumo);
+    cab.onclick = () => { edMapaAberto = !edMapaAberto; edRender(); };
+    cxm.append(cab);
 
-    /* O CARD FECHADO RESPONDE UMA PERGUNTA SÓ: E AGORA?
-     *
-     * Antes ele trazia seis números em corpo miúdo — estudados,
-     * revisados, porcentagem, fatia da prova, e as bolinhas das três
-     * faixas — com peso e porcentagem aparecendo duas vezes, na barra
-     * e no badge. Seis números que não dizem o que fazer.
-     *
-     * Fechado ele agora tem nome, UMA barra e o PRÓXIMO TÓPICO. Os
-     * números não sumiram: mudaram de lugar, para dentro do card
-     * aberto, que é onde se vai quando a pergunta deixa de ser "e
-     * agora?" e passa a ser "como estou nesta matéria?". */
-    const share = Math.round((pesoDaDisc[d.nome] / (plano.peso.total || 1)) * 100);
-    const proximo = edProximoDa(meus);
-    if (proximo) {
-      const pr = document.createElement("button");
-      pr.type = "button";
-      pr.className = "ed-card-prox";
-      pr.textContent = t("ed_card_prox", { n: proximo.nome });
-      pr.title = t("ed_card_prox_ajuda", { n: proximo.nome,
-        p: proximo.disciplinaPeso != null ? proximo.disciplinaPeso * proximo.peso : "?" });
-      pr.onclick = (ev) => {
-        ev.stopPropagation();
-        if (typeof matAbrirEditor === "function") matAbrirEditor(proximo, "ler");
-      };
-      card.append(pr);
-    } else {
-      const pr = document.createElement("div");
-      pr.className = "ed-card-prox ed-card-prox-fim";
-      pr.textContent = t("ed_card_prox_fim");
-      card.append(pr);
+    if (edMapaAberto) {
+      const ordemBar = document.createElement("div");
+      ordemBar.className = "edm-ordem";
+      [["lacuna", "edm_ordem_lacuna"], ["fatia", "edm_ordem_fatia"],
+       ["edital", "edm_ordem_edital"]].forEach(([chave, k]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "di-per" + (edMapaOrdem === chave ? " ativa" : "");
+        b.textContent = t(k);
+        b.onclick = () => { edMapaOrdem = chave; edRender(); };
+        ordemBar.append(b);
+      });
+      cxm.append(ordemBar);
+
+      /* "lacuna" é o padrão de panoramaDisciplinas (edital.js) — pan já
+       * vem nessa ordem, então não recalcula nada à toa */
+      let ordenadas = pan;
+      if (edMapaOrdem === "fatia") {
+        ordenadas = pan.slice().sort((a, b) => b.fatia - a.fatia);
+      } else if (edMapaOrdem === "edital") {
+        const linhaDe = {};
+        r.disciplinas.forEach((d) => { linhaDe[d.nome] = d.linha; });
+        ordenadas = pan.slice().sort((a, b) =>
+          (linhaDe[a.nome] || 0) - (linhaDe[b.nome] || 0));
+      }
+
+      const cabCols = document.createElement("div");
+      cabCols.className = "edm-cab-cols";
+      [["ed_lac_col_disc", ""], ["", ""], ["ed_lac_col_feito", "lac-num"],
+       ["ed_lac_col_vale", "lac-num"], ["ed_lac_col_prior", "lac-num"]]
+        .forEach(([k, cls]) => {
+          const c = document.createElement("span");
+          c.className = "lac-cab-c " + cls;
+          if (k) { c.textContent = t(k); c.title = t(k + "_ajuda"); }
+          cabCols.append(c);
+        });
+      cxm.append(cabCols);
+
+      ordenadas.forEach((d) => {
+        const li = document.createElement("button");
+        li.type = "button";
+        li.className = "edm-linha";
+        li.onclick = () => abrirDisciplina(d.nome);
+        li.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
+
+        /* cada célula carrega, além da classe visual ".lac-*" já usada em
+         * "onde estão os buracos", uma classe ".edm-*" própria — só para
+         * poder ser achada sem ambiguidade: ".lac-nome" sozinha existe
+         * nas DUAS caixas ao mesmo tempo quando o mapa está aberto. */
+        const nm = document.createElement("span");
+        nm.className = "lac-nome edm-nome"; nm.textContent = d.nome;
+
+        const pesoEl = document.createElement("span");
+        pesoEl.className = "edm-peso";
+        pesoEl.textContent = t("ed_peso_n", { n: d.peso });
+
+        const feito = document.createElement("span");
+        feito.className = "lac-num lac-feito edm-feito";
+        const ba = document.createElement("div");
+        ba.className = "lac-barra";
+        const ok = document.createElement("div");
+        ok.className = "lac-ok";
+        ok.style.width = d.pesoFeito + "%";
+        ba.append(ok);
+        feito.append(ba);
+        const pf = document.createElement("i");
+        pf.textContent = Math.round(d.pesoFeito) + "%";
+        feito.append(pf);
+
+        const vale = document.createElement("span");
+        vale.className = "lac-num edm-vale"; vale.textContent = d.fatia + "%";
+
+        const prior = document.createElement("span");
+        prior.className = "lac-num edm-prior" + (d.altaIntocada ? " lac-alerta" : "");
+        prior.textContent = d.altaIntocada ? String(d.altaIntocada) : "—";
+
+        li.append(nm, pesoEl, feito, vale, prior);
+        cxm.append(li);
+      });
     }
-
-    const abrir = document.createElement("button");
-    abrir.className = "ed-abrir";
-    abrir.textContent = edAbertas[d.nome] ? t("ed_fechar") : t("ed_abrir_detalhe");
-    abrir.onclick = () => { edAbertas[d.nome] = !edAbertas[d.nome]; edRender(); };
-    card.append(abrir);
-    if (edAbertas[d.nome]) {
-      /* os números que saíram da capa vivem aqui */
-      const cont = document.createElement("div");
-      cont.className = "ed-card-conta";
-      cont.textContent = t("ed_card_conta", { f: feitos, t: meus.length,
-        p: pesoD.pctFeito, r: revs });
-      const fatia = document.createElement("div");
-      fatia.className = "ed-fatia";
-      fatia.textContent = t("ed_fatia", { p: share });
-      card.append(cont, fatia, edPontos(meus));
-
-      const lista = document.createElement("div");
-      lista.className = "ed-card-lista";
-      meus.forEach((i) => lista.append(edLinhaTopico(i, true)));
-      card.append(lista);
-    }
-    edCards[d.nome] = card;
-    grade.append(card);
-  });
-  box.append(grade);
+    box.append(cxm);
+  }
 }
 
 /* O PRÓXIMO TÓPICO DESTA DISCIPLINA.
