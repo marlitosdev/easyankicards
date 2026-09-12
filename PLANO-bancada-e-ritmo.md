@@ -128,7 +128,7 @@ edital.
 | **G1** | ritmo priorizado × tudo, com a frase de decisão | é número errado sendo lido hoje; o resto é layout |
 | **G2** | incluir disciplina com comparação de pesos | destrava cadastrar edital sem IA |
 | **G3** | redistribuição opcional ao salvar | depende de G2 |
-| **G4** | Mapa das disciplinas recolhido, linha única | resolve a poluição sem perder nada |
+| **G4** ✅ | Mapa das disciplinas recolhido, linha única | resolve a poluição sem perder nada |
 
 G1 primeiro porque é o único dos quatro em que a tela **mostra um número que
 não significa o que parece**. Os outros três são desconforto; esse é engano.

@@ -510,14 +510,39 @@ async function testes() {
       });
       anda(el); return n;
     };
-    ok(conta(api.$("edPainel"), "ed-card") === 2,
-       `O1 esperava 2 cartões de disciplina, veio ${conta(api.$("edPainel"), "ed-card")}`);
+    /* acha o primeiro elemento com a classe, descendo a árvore — par de
+     * "conta" para navegar o "mapa das disciplinas" (v16.15) sem depender
+     * de coordenadas de tela. Recebe a raiz de fora porque ".lac-nome" e
+     * companhia existem TAMBÉM em "onde estão os buracos", uma caixa
+     * acima — sem escopar em ".edm-caixa" os dois se confundiriam. */
+    const achar = (el, cls) => {
+      let r = null;
+      const anda = (e) => Array.from(e.children || []).forEach((fx) => {
+        if (!r && (fx.className || "").split(/\s+/).includes(cls)) r = fx;
+        anda(fx);
+      });
+      anda(el); return r;
+    };
+    /* recolhido por padrão: nenhuma linha antes do clique no cabeçalho */
+    ok(!achar(api.$("edPainel"), "edm-linha"),
+       "O0 o mapa das disciplinas não deveria nascer aberto");
+    achar(achar(api.$("edPainel"), "edm-caixa"), "edm-cab").onclick();
+    const mapaO = achar(api.$("edPainel"), "edm-caixa");
+    ok(conta(mapaO, "edm-linha") === 2,
+       `O1 esperava 2 linhas de disciplina, veio ${conta(mapaO, "edm-linha")}`);
     /* a barra do topo saiu do painel na v8.71 (era o mesmo numero do bloco
-     * de acompanhamento, em outro formato); as das disciplinas ficam */
-    ok(conta(api.$("edPainel"), "ed-barra-fill") >= 2,
+     * de acompanhamento, em outro formato); as das disciplinas ficam,
+     * agora na linha densa do mapa */
+    ok(conta(mapaO, "lac-ok") === 2,
        "O2 faltam as barras de progresso das disciplinas");
-    ok(conta(api.$("edPainel"), "ed-peso") === 2,
-       "O3 o peso da disciplina não é editável no cartão");
+    /* o peso deixou de ser editável na própria linha (v16.15, "mapa das
+     * disciplinas" — a linha densa não cabe um <select>). Abrir o
+     * panorama é o caminho agora, e é lá que se prova que continua
+     * editável — a ação não sumiu, só mudou de porta. */
+    achar(mapaO, "edm-linha").onclick();
+    ok(conta(api.$("dscAcoes"), "ed-peso") === 1,
+       "O3 o peso da disciplina não é editável no panorama");
+    api.$("dlgDisciplina").close();
     /* a agenda subiu para o topo na v8.70 — as linhas nascem lá */
     api.hubRender();
     ok(conta(api.$("edAgendaTopo"), "ed-item") + conta(api.$("edPainel"), "ed-item") > 0,
@@ -559,7 +584,7 @@ async function testes() {
     ok(/EDITAL/.test(soEd), "O7 o filtro do registro por modo não trouxe nada");
     ok(!/\[CORRIGIR\]/.test(soEd), "O7b o filtro do edital deixou passar evento de cartões");
 
-    /* P — os cartões vêm ordenados pelo PESO TOTAL NA PROVA, não pelo 1-5
+    /* P — as linhas vêm ordenadas pelo PESO TOTAL NA PROVA, não pelo 1-5
      * da disciplina nem pela ordem do edital. Duas disciplinas de peso 3
      * podem representar fatias muito diferentes do que a prova cobra: o que
      * conta é a soma de (peso disc × peso tópico) de todos os tópicos. */
@@ -571,38 +596,32 @@ async function testes() {
     api.$("edHoras").value = 12;
     api.$("edProva").value = emDias(131);
     api.edRender();
-    const colher = (cls) => {
+    if (!achar(api.$("edPainel"), "edm-linha")) {
+      const cabP = achar(achar(api.$("edPainel"), "edm-caixa"), "edm-cab");
+      if (cabP) cabP.onclick();
+    }
+    const colher = (raiz, cls) => {
       const out = [];
       const anda = (e) => Array.from(e.children || []).forEach((fx) => {
         if ((fx.className || "").split(/\s+/).includes(cls)) out.push(fx.textContent);
         anda(fx);
       });
-      anda(api.$("edPainel")); return out;
+      anda(raiz); return out;
     };
-    const ordem = colher("ed-card-nome");
+    const mapaP = achar(api.$("edPainel"), "edm-caixa");
+    const ordem = colher(mapaP, "edm-nome");
     ok(ordem[0] === "Constitucional",
-       `P1 o primeiro cartão devia ser o de maior fatia da prova, veio "${ordem[0]}"`);
-    /* A FATIA SAIU DA CAPA DO CARD.
-     * Fechado, o card responde "e agora?" — nome, uma barra e o próximo
-     * tópico. A fatia da prova, a contagem e as bolinhas das faixas
-     * continuam existindo, dentro de "números e tópicos". Medir na capa
-     * seria medir a tela antiga. */
-    ["Constitucional", "Penal"].forEach((nome) => {
-      const bt = (() => {
-        let r = null;
-        const anda = (e) => Array.from(e.children || []).forEach((fx) => {
-          if ((fx.className || "").split(/\s+/).includes("ed-card-nome")
-              && fx.textContent === nome) r = fx;
-          anda(fx);
-        });
-        anda(api.$("edPainel")); return r;
-      })();
-      if (bt) bt.onclick();
-    });
-    const fatias = colher("ed-fatia");
-    ok(fatias.length === 2, "P2 os cartões não mostram a fatia da prova");
-    ok(/71/.test(fatias[0]) && /29/.test(fatias[1]),
-       `P3 as fatias não batem com o cálculo: ${fatias.join(" / ")}`);
+       `P1 a primeira linha devia ser a de maior fatia da prova, veio "${ordem[0]}"`);
+    /* A FATIA MORA NA PRÓPRIA LINHA AGORA.
+     * No cartão antigo ela só aparecia depois de expandido — "medir na
+     * capa seria medir a tela antiga". Na linha densa do mapa ela é uma
+     * das quatro colunas, visível sem abrir nada: é o ganho de trocar o
+     * cartão por uma tabela. P2/P3 conferem que os dois números batem
+     * com o cálculo, na mesma ordem das linhas. */
+    const vales = colher(mapaP, "edm-vale");
+    ok(vales.length === 2, "P2 as linhas não mostram a fatia da prova");
+    ok(/71/.test(vales[0]) && /29/.test(vales[1]),
+       `P3 as fatias não batem com o cálculo: ${vales.join(" / ")}`);
 
     /* P4 — o rodapé de exportar é da bancada de cartões e some no edital */
     ok(api.$("rodapeExportar").hidden === true,
@@ -776,8 +795,18 @@ async function testes() {
     const links = acha(api.$("edAgendaTopo"), "ed-item-disc-link")
       .concat(acha(api.$("edPainel"), "ed-item-disc-link"));
     ok(links.length > 0, "T1 o nome da disciplina na agenda não é clicável");
-    ok(acha(api.$("edPainel"), "ed-card-lista").length === 0,
-       "T2 a disciplina já estava aberta antes do clique");
+    /* T2 mudou de pergunta: não existe mais um cartão para "já estar
+     * aberto" — o que precisa continuar recolhido por padrão é o mapa
+     * das disciplinas inteiro (v16.15). "edMapaAberto" é module-level e
+     * pode ter ficado ligado de um bloco O/P anterior nesta mesma sessão
+     * de teste; a asserção que interessa é sobre uma renderização FRESCA
+     * (edital novo, como abrirEditalTeste acabou de fazer), então
+     * recolhe antes de perguntar — sem isso T2 provaria a ordem dos
+     * testes, não o comportamento do app. */
+    const cabT = acha(api.$("edPainel"), "edm-cab")[0];
+    if (cabT && acha(api.$("edPainel"), "edm-linha").length) cabT.onclick();
+    ok(acha(api.$("edPainel"), "edm-linha").length === 0,
+       "T2 o mapa das disciplinas já estava aberto antes de qualquer clique");
     links[0].onclick({ stopPropagation() {} });
     /* abre uma JANELA com o panorama, em vez de rolar a página até o cartão:
      * rolar fazia o usuário perder o lugar onde estava e ainda procurar o
@@ -2481,10 +2510,11 @@ async function testes() {
      * ilegivel. Nao da' para testar contraste sem renderizar, mas da' para
      * exigir que a cor seja DECLARADA em vez de sorteada. */
     const CSSTXT = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
-    /* a lista cresce a cada botão novo que nasce sem cor: .ed-card-nome
-     * virou <button> na v8.58 e repetiu o defeito de .btn-min */
+    /* a lista cresce a cada botão novo que nasce sem cor: .edm-cab (o
+     * cabeçalho do "mapa das disciplinas", v16.15 — sucessor de
+     * .ed-card-nome) repetiria o defeito de .btn-min se não declarasse */
     ["\\.btn-min", "\\.modo-btn", "\\.bancada-nome", "\\.barra-recuperar",
-     "\\.ed-card-nome", "\\.ed-reg", "\\.reg-forma", "\\.ed-aba"].forEach((sel) => {
+     "\\.edm-cab", "\\.ed-reg", "\\.reg-forma", "\\.ed-aba"].forEach((sel) => {
       const re = new RegExp(sel + "\\{[^}]*\\}");
       const m = CSSTXT.match(re);
       ok(!!m, `F3 nao achei a regra ${sel}`);
@@ -2492,7 +2522,7 @@ async function testes() {
       const temFundo = /background/.test(m[0]);
       const temCor = /(^|[;{])\s*color:/.test(m[0]);
       ok(temCor, `F3 ${sel} nao declara a cor do texto`);
-      const semFundo = ["\\.bancada-nome", "\\.ed-card-nome"];
+      const semFundo = ["\\.bancada-nome", "\\.edm-cab"];
       if (!semFundo.includes(sel)) ok(temFundo, `F3 ${sel} nao declara o fundo`);
     });
 

@@ -10,7 +10,7 @@
  *
  * O custo não era só estético: era essa soma que empurrava o botão de
  * avançar para fora da tela. */
-const { rodar } = require("./fumaca.js");
+const { rodar, emDias } = require("./fumaca.js");
 const fs = require("fs");
 const path = require("path");
 
@@ -366,6 +366,45 @@ async function testes() {
     ok(cols(g) && cols(gl) && cols(g).trim() === cols(gl).trim(),
        "E7i as colunas do cabecalho e da linha divergiram:\n"
        + cols(g) + "\n" + cols(gl));
+  }
+
+  /* ================================================================
+   * E8: "mapa das disciplinas" — mesma regra de colunas do E7, num
+   * bloco novo. Era uma grade de dezessete cartões altos, soltos abaixo
+   * de "onde estão os buracos"; virou lista recolhida por padrão, e a
+   * lista precisa da mesma disciplina de colunas compartilhadas — senão
+   * ela desalinha na primeira mudança de fonte, igual a tabela ao lado.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const ed = api.edCriar("Mapa das disciplinas", [
+      "# Painel | prova: " + emDias(140) + " | horas: 12",
+      "@ Direito Constitucional :: 5",
+      "+ Princípios fundamentais :: 5",
+      "+ Direitos e garantias :: 4",
+      "@ Direito Financeiro :: 3",
+      "+ Receita pública :: 3",
+    ].join("\n"));
+    api.hubAbrirEdital(ed.id);
+    api.$("edProva").value = emDias(140);
+    api.edRender();
+
+    const cabMapa = acharClasse(api.$("edPainel"), "edm-cab", [])[0];
+    ok(!!cabMapa, "E8 o mapa das disciplinas nao tem cabecalho para abrir");
+    if (cabMapa) cabMapa.onclick();
+
+    const g8 = cssRegra(".edm-cab-cols,.edm-linha");
+    ok(/grid-template-columns/.test(g8),
+       "E8b cabecalho e linha do mapa nao compartilham as colunas: " + g8);
+    const gl8 = cssRegra(".edm-linha");
+    const cols8 = (r) => (r.match(/grid-template-columns:([^;}]+)/) || [])[1];
+    ok(cols8(g8) && cols8(gl8) && cols8(g8).trim() === cols8(gl8).trim(),
+       "E8c as colunas do cabecalho e da linha do mapa divergiram:\n"
+       + cols8(g8) + "\n" + cols8(gl8));
+
+    const linhas8 = acharClasse(api.$("edPainel"), "edm-linha", []);
+    ok(linhas8.length === 2, "E8d o mapa nao listou as duas disciplinas: " + linhas8.length);
   }
 
   return Object.assign(falhas, { quantas: n });
