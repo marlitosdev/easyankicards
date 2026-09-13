@@ -620,6 +620,47 @@ async function testes() {
        "R14g com lei ligada o botão continua oferecendo colar: " + rot2);
   }
 
+  /* ==============================================================
+   * R15: O ESCOPO PEDIDO E O ESCOPO ENCONTRADO FICAM NO REGISTRO
+   *
+   * RELATADO PELO USUÁRIO, sem conseguir reproduzir: um chip de tópico
+   * específico ("30 questões") abriu o aviso de "continuar de onde
+   * parei" de uma rodada de outro escopo (301 questões, de outro
+   * lugar). O código do escopo (qsSessaoRetomavel, docs/questoes.js)
+   * parece correto — mas sem nenhum rastro, uma colisão de verdade não
+   * deixaria como saber POR QUE aconteceu. Este log é a prova, da
+   * próxima vez.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    montar(api);
+    api.qsSessaoIniciar(api.qsBancoAtual(), { escopo: "topico:x" });
+    api.qsResponder("C");                       /* pela metade, retomável */
+
+    /* não precisa aguardar a escolha: o registro acontece ANTES do
+     * uiEscolha, assim que uma rodada retomável é encontrada */
+    api.qsUiResponderAbrir(api.qsBancoAtual(), "aba", "topico:x");
+    const txt = api.registroTexto();
+    ok(/rodada retomavel encontrada/.test(txt),
+       "R15 uma rodada retomável encontrada não deixou rastro no registro");
+    ok(/pedido=topico:x/.test(txt) && /encontrado=topico:x/.test(txt),
+       "R15a o registro não mostra os dois escopos lado a lado, o que "
+       + "teria provado (ou afastado) a colisão relatada: " + txt);
+    api._uiFechar("sair");    /* fecha o diálogo pendente, sem escolher nada */
+  }
+  {
+    /* ESCOPO DIFERENTE: nada retomável, e nada sobre isto no registro —
+     * o log não pode aparecer para toda rodada nova, só para colisão. */
+    const { api } = rodar();
+    montar(api);
+    api.qsSessaoIniciar(api.qsBancoAtual(), { escopo: "topico:x" });
+    api.qsResponder("C");
+
+    api.qsUiResponderAbrir(api.qsBancoAtual(), "aba", "topico:y");
+    ok(!/rodada retomavel encontrada/.test(api.registroTexto()),
+       "R15b escopos diferentes geraram um log de colisão que não existiu");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
