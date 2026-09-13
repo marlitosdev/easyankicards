@@ -1187,9 +1187,19 @@ function qsUiLeiIr(c, q, botao) {
     return;
   }
 
-  if (alvo.motivo === "ambigua") {
-    /* o tópico tem duas leis e a citação não disse qual: é a mesma
-     * pergunta do botão ⚖, e a mesma resposta */
+  if (alvo.motivo === "ambigua"
+      || (alvo.motivo === "desconhecida" && doTopico.length > 0)) {
+    /* DOIS MOTIVOS, A MESMA PERGUNTA. "Ambígua": a citação não disse
+     * qual das leis já ligadas. "Desconhecida" com o tópico já tendo
+     * lei: a citação NOMEOU uma lei que não bate com nada guardado —
+     * caso real: "ADCT", quando só a Constituição está na biblioteca,
+     * e o ADCT costuma vir DENTRO do próprio texto dela. Ir direto para
+     * "vincular uma lei nova" nesse caso pulava a resposta mais provável
+     * — "é uma das que este tópico já tem" — e ainda oferecia, no
+     * exemplo real, uma lei sem nenhuma relação (a 4.320) só porque era
+     * a única outra na biblioteca. O menu único oferece as duas leis do
+     * tópico primeiro, e "usar já guardada"/"colar nova" continuam ali
+     * para quando a resposta certa não for nenhuma delas. */
     qsUiLeiEscolher(botao || $("btnQsLei"), q, c);
     return;
   }
@@ -1245,7 +1255,14 @@ function qsUiLeiEscolher(botao, q, cit) {
 
   const rot = document.createElement("span");
   rot.className = "qs-fer-rot";
-  rot.textContent = cit
+  /* TRÊS PERGUNTAS DIFERENTES, e o texto diz qual é: a citação nomeou
+   * uma lei que não bate com nenhuma guardada (diz o nome, para quem
+   * está lendo reconhecer o motivo); não nomeou nenhuma, com o tópico
+   * tendo mais de uma; ou é o botão ⚖ perguntando em geral, sem citação
+   * nenhuma por trás. */
+  rot.textContent = cit && cit.rotulo
+    ? t("qs_lei_esc_desconhecida", { l: cit.rotulo, a: cit.numCru })
+    : cit
     ? t("qs_lei_esc_cit", { a: cit.numCru })
     : t("qs_lei_esc_tit", { n: doTopico.length });
   menu.append(rot);
@@ -2641,12 +2658,34 @@ function qsFerPosicionar(botao, menu) {
   if (!r || !menu.style) return;
   const larg = 230;                       /* o min-width da folha de estilo */
   const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
+  const altoJan = (typeof window !== "undefined" && window.innerHeight) || 640;
   /* ALINHADO À DIREITA DO BOTÃO, como era com "right:0" — e recuado
    * quando isso o jogaria para fora da janela num telefone. */
   const esq = Math.max(8, Math.min(r.right - larg, jan - larg - 8));
   menu.style.left = esq + "px";
-  menu.style.top = (r.bottom + 4) + "px";
   menu.style.right = "auto";
+
+  /* NEM SEMPRE CABE EMBAIXO. O botão que abre este menu costuma estar
+   * perto do fim de um comentário comprido — perto do rodapé fixo da
+   * questão —, e "sempre abrir para baixo" empurrava as últimas opções
+   * ("usar uma lei já guardada", "+ colar uma lei nova") para fora da
+   * tela, sem nenhum jeito de rolar até elas. Mede o menu já cheio (o
+   * chamador preenche o conteúdo antes de chamar isto) e escolhe o lado
+   * com mais espaço; o que sobrar vira teto com rolagem própria — nunca
+   * um corte sem aviso nem sem saída. */
+  const altoMenu = menu.scrollHeight || menu.offsetHeight || 0;
+  const espacoEmbaixo = altoJan - r.bottom - 8;
+  const espacoEmCima = r.top - 8;
+  if (altoMenu <= espacoEmbaixo || espacoEmbaixo >= espacoEmCima) {
+    menu.style.top = (r.bottom + 4) + "px";
+    menu.style.bottom = "auto";
+    menu.style.maxHeight = Math.max(120, espacoEmbaixo) + "px";
+  } else {
+    menu.style.top = "auto";
+    menu.style.bottom = (altoJan - r.top + 4) + "px";
+    menu.style.maxHeight = Math.max(120, espacoEmCima) + "px";
+  }
+  menu.style.overflowY = "auto";
 }
 
 function qsFerFechar() {

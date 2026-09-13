@@ -1466,6 +1466,7 @@ const UI = {
   "qs_lei_ver_n_ajuda": "“{tp}” é servido por {n} leis. Antes, o botão abria sempre a primeira — e quando o comentário citava a outra, você conferia o artigo errado sem nenhum aviso. Agora ele pergunta qual.",
   "qs_lei_esc_tit": "de qual das {n} leis?",
   "qs_lei_esc_cit": "o art. {a} está em qual delas?",
+  "qs_lei_esc_desconhecida": "\"{l}\" não está na sua biblioteca — o art. {a} pode ser de uma destas, ou você quer indicar outra?",
   "qs_lei_esc_item": "Abre {l} por cima desta questão. Ao fechar você volta para a MESMA questão.",
   "qs_lei_link_ir": "Abrir {l} no art. {a}, por cima desta questão.",
   "qs_lei_link_sem": "O comentário cita {l}, que não está na sua biblioteca. Toque para vincular uma lei guardada ou colar o texto.",
