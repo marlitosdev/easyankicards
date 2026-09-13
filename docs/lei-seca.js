@@ -405,6 +405,14 @@ const LEI_SUB = [
   /^\s*,?\s*[IVXLC]{1,6}(?![\wº])/,          /* maiúsculo de propósito */
   /^\s*,?\s*§+\s*\d{1,3}\s*[ºo°]?(?:\s*-\s*[A-Z])?/,
   /^\s*,?\s*par[áa]grafo\s+[úu]nico/i,
+  /* "PARÁGRAFO 4" POR EXTENSO — o símbolo § já tinha padrão próprio (duas
+   * linhas acima); faltava a mesma coisa escrita por extenso, do jeito
+   * que uma IA (ou uma pessoa) digita sem querer procurar o símbolo. Foi
+   * exatamente isso que quebrou "art. 60, parágrafo 4, IV, da CF": o
+   * laço parava em "60" sem conseguir atravessar "parágrafo 4", e "da
+   * CF" nunca era alcançado — a citação virava "ambígua" apesar de a lei
+   * estar escrita ali do lado. */
+  /^\s*,?\s*par[áa]grafo\s+\d{1,3}\s*[ºo°]?(?:\s*-\s*[A-Z])?/i,
   /^\s*,?\s*(?:al[íi]nea\s*)?[a-z]\)/i,
   /^\s*,?\s*["'“”][a-z]["'“”]/i,
   /^\s*,\s*[a-k](?=\s*[,;.)]|\s*$)/,         /* alínea sem parêntese */

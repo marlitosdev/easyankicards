@@ -598,12 +598,24 @@ function leiFonteCarregar() {
     const v = Number(localStorage.getItem(LEI_FONTE_CHAVE));
     if (v >= LEI_FONTE_MIN && v <= LEI_FONTE_MAX) leiFonte = v;
   } catch (e) {}
+  leiFontePintar();
+}
+
+/* O NÚMERO, NÃO SÓ O EFEITO. "A+" muda o texto lá embaixo, longe do
+ * botão — clicar demais (ou sem querer, feito acidentalmente algumas
+ * vezes seguidas) não tem como ser percebido nem desfeito sem contar os
+ * cliques de cabeça. O valor ao lado do botão é o que permite notar
+ * "isso já está em 56px" antes de abrir um chamado achando que é bug de
+ * layout. */
+function leiFontePintar() {
+  if ($("leiFonteAtual")) $("leiFonteAtual").textContent = leiFonte + "px";
 }
 
 function leiFonteDefinir(px) {
   const v = Number(px) || 15;
   leiFonte = Math.max(LEI_FONTE_MIN, Math.min(LEI_FONTE_MAX, v));
   try { localStorage.setItem(LEI_FONTE_CHAVE, String(leiFonte)); } catch (e) {}
+  leiFontePintar();
   leiTrocarModo(leiModo);
   leiReg("leitura", "tamanho da letra", leiFonte + "px");
 }
@@ -2005,6 +2017,7 @@ function leiIniciar() {
   liga("btnLeiLido", "li este material", () => leiRegistrarLeitura());
   liga("btnLeiMaior", "letra maior", () => leiFonteMudar(2));
   liga("btnLeiMenor", "letra menor", () => leiFonteMudar(-2));
+  liga("btnLeiFonteReset", "letra padrão", () => leiFonteDefinir(15));
   liga("btnLeiJanelaMais", "janela maior", () => leiJanelaMudar(1));
   liga("btnLeiJanelaMenos", "janela menor", () => leiJanelaMudar(-1));
 
@@ -2082,7 +2095,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
     leiGaveta,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
-    leiFonteDefinir, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
+    leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,
   };
 }

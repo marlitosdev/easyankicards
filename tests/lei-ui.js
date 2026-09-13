@@ -916,6 +916,55 @@ async function testes() {
        "U19i esvaziar a caixa e guardar não apagou a nota");
   }
 
+  /* ==============================================================
+   * U20: O TAMANHO DA LETRA MOSTRA O VALOR, E TEM VOLTA
+   *
+   * O CASO RELATADO, com print: a área de leitura da lei apareceu
+   * espremida, com poucas palavras por linha e barra de rolagem — não
+   * era bug de layout, era a letra em 56px (o teto de LEI_FONTE_MAX),
+   * provavelmente de cliques acumulados em "A+" sem nenhuma pista de
+   * quanto já tinha crescido nem caminho rápido de volta.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+
+    /* o valor aparece ao lado dos botões, não só o efeito no texto */
+    ok(api.$("leiFonteAtual").textContent === "15px",
+       "U20 a letra não nasce mostrando o tamanho padrão: "
+       + api.$("leiFonteAtual").textContent);
+
+    api.leiFonteMudar(2);
+    ok(api.$("leiFonteAtual").textContent === "17px",
+       "U20a o valor ao lado do botão não acompanhou o \"A+\": "
+       + api.$("leiFonteAtual").textContent);
+
+    /* sobe até o teto — é o cenário relatado, 56px */
+    for (let i = 0; i < 30; i++) api.leiFonteMudar(2);
+    ok(api.$("leiFonteAtual").textContent === "56px",
+       "U20b a letra não travou no teto (56px) depois de muitos cliques: "
+       + api.$("leiFonteAtual").textContent);
+
+    /* o botão de reset devolve ao padrão num só toque */
+    api.$("btnLeiFonteReset").onclick();
+    ok(api.$("leiFonteAtual").textContent === "15px",
+       "U20c o reset não devolveu a letra ao tamanho padrão: "
+       + api.$("leiFonteAtual").textContent);
+
+    /* E O VALOR SALVO REPINTA O NÚMERO AO CARREGAR — não só o texto da
+     * lei. "loja" é o mesmo localStorage desta sessão (api.loja), por
+     * isso escrever nele e chamar leiFonteCarregar() de novo simula o
+     * app reabrindo com uma preferência já salva de antes. */
+    api.loja.setItem("eac_lei_fonte", "23");
+    api.leiFonteCarregar();
+    ok(api.$("leiFonteAtual").textContent === "23px",
+       "U20d carregar um tamanho salvo não repintou o número ao lado "
+       + "do botão: " + api.$("leiFonteAtual").textContent);
+  }
+
   falhas.quantas = n;
   return falhas;
 }

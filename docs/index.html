@@ -1186,6 +1186,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-janela{display:inline-flex;gap:4px;align-items:center;
   border:1px solid var(--borda);border-radius:8px;padding:1px 5px}
 .lei-janela .nota{min-width:56px;text-align:center;font-size:10.5px}
+/* O VALOR ATUAL, entre os dois botões — sem ele "A+" clicado várias
+   vezes some sem deixar pista de quanto já cresceu, até a letra virar
+   três palavras por linha. */
+.lei-fonte-atual{min-width:34px;text-align:center;font-size:10.5px;
+  color:var(--sutil);font-variant-numeric:tabular-nums}
 /* O max-width de .diag-modal (860px) CORTAVA a largura: width crescia e
    max-width clampava, e por isso a janela só aumentava na vertical. Cada
    tamanho precisa soltar os dois. */
@@ -5694,7 +5699,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-sep"></span>
     <span class="nota" data-i18n="lei_letra_rot"></span>
     <button class="btn-min" id="btnLeiMenor" title="Letra menor.">A&#8722;</button>
+    <!-- SEM ISTO, "A+" clicado demais (ou sem querer) não tem como ser
+         percebido nem desfeito: o tamanho vai até 56px e some qualquer
+         pista de qual é o valor atual ou de como voltar ao normal. -->
+    <span class="lei-fonte-atual" id="leiFonteAtual" title="Tamanho atual da letra."></span>
     <button class="btn-min" id="btnLeiMaior" title="Letra maior.">A+</button>
+    <button class="btn-min" id="btnLeiFonteReset" title="Volta a letra ao tamanho padrão.">↺</button>
     <span class="mat-sep"></span>
     <!-- O OUTRO EIXO: o tamanho da JANELA. Letra maior serve a quem tem
          dificuldade de enxergar; janela maior serve a quem tem tela
