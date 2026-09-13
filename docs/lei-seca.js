@@ -507,7 +507,17 @@ function leiCitacoesNoTexto(texto) {
 
 function leiRotuloChave(rotulo) {
   const s = leiTxtChave(rotulo);
-  if (/^(cf\b|cf\/|crfb|constitui)/.test(s)) {
+  /* O ADCT NÃO É UMA LEI À PARTE — é o Ato das Disposições Constitucionais
+   * Transitórias, publicado dentro do MESMO texto da Constituição de
+   * 1988, com sua própria numeração de artigos (por isso "art. 130" pode
+   * existir tanto no corpo quanto no ADCT — ver o comentário sobre isso
+   * em leiNotaDe). "CF"/"CRFB" já eram reconhecidos assim; "ADCT" é o
+   * mesmo caso, não um apelido configurável por lei — citar o ADCT sem
+   * ter guardado um documento separado para ele é a regra, não a
+   * exceção, e o caso real que motivou isto era exatamente esse: o
+   * tópico já tinha a Constituição ligada, e o app oferecia "colar uma
+   * lei nova" em vez de abrir a que já existia. */
+  if (/^(cf\b|cf\/|crfb|constitui|adct\b)/.test(s)) {
     return { especie: "constituicao", numero: "", sigla: "" };
   }
   const especie = leiEspecieChave(

@@ -2528,7 +2528,7 @@ const UI = {
   "lei_chip_ajuda": "Esta lei está ligada a {n} tópico(s). O texto é um só.",
   "lei_colar_nova": "+ colar uma lei nova",
   "lei_colar_nova_ajuda": "Para texto que AINDA NÃO ESTÁ no aplicativo. Abre uma caixa em branco: você copia a lei do site do Planalto ou de um PDF e cola aqui. Ela nasce agora, ligada a este tópico, e entra na fila ao lado. A lei que já estava aberta não é apagada nem substituída — continua na fila, a um toque. Se o texto que você quer JÁ foi colado noutro tópico, não use este botão: use “usar uma lei já guardada”, senão você fica com duas cópias que divergem na primeira correção.",
-  "lei_colar_instrucao": "Cole a lei na caixa de edição e clique em gravar. Se o cabeçalho vier junto (\"LEI Nº 4.320, DE 17 DE MARÇO DE 1964\"), o número e o ano são lidos sozinhos.",
+  "lei_colar_instrucao": "Cole a lei na caixa de edição e clique em gravar. Se o cabeçalho vier junto (\"LEI Nº 1.234, DE 5 DE JANEIRO DE 2000\"), o número e o ano são lidos sozinhos.",
   /* ---- A FILA DE LEIS DO TÓPICO ----
      Os dois botões do fim da fila pareciam duas formas de fazer a mesma
      coisa. Não são, e a diferença é ONDE O TEXTO ESTÁ:
