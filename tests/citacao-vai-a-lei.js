@@ -353,22 +353,49 @@ async function testes() {
   }
 
   /* ==============================================================
-   * L45-L48: CITAÇÃO NOMEIA UMA LEI DESCONHECIDA, MAS O TÓPICO JÁ TEM
-   * OUTRAS — OFERECE ESSAS PRIMEIRO, EM VEZ DE PULAR PARA "VINCULAR"
+   * L45: O ADCT NÃO É UMA LEI À PARTE — RESOLVE DIRETO PARA A
+   * CONSTITUIÇÃO, IGUAL "CF"/"CRFB"
    *
-   * O CASO REAL, relatado com print: um comentário citava "art. 130,
-   * § 1º, do ADCT" — ADCT não estava na biblioteca, mas o tópico já
-   * tinha leis ligadas (uma Constituição costuma trazer o ADCT dentro
-   * do próprio texto). Ir direto para "vincular uma lei nova" pulava a
-   * resposta mais provável, e no caso real ainda oferecia uma lei sem
-   * nenhuma relação, só por ser a única outra na biblioteca.
+   * O CASO REAL, relatado com print (duas vezes): um comentário citava
+   * "art. 130, § 1º, do ADCT". Antes, "ADCT" não batia com nenhum
+   * apelido guardado, e o app oferecia "colar uma lei nova" — o usuário
+   * tentou, e ficou sem entender por que uma "Lei 4.320" continuava
+   * aparecendo (era só o exemplo do texto de ajuda, mas parecia que o
+   * app estava de fato ligando a coisa errada). O ADCT é publicado
+   * DENTRO do texto da própria Constituição de 1988 — não é uma lei
+   * numerada à parte — e por isso passa a ser reconhecido do mesmo jeito
+   * que "CF"/"CRFB" já eram: abre direto, sem perguntar nada.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    montarBiblioteca(api, 2);         /* CF (id lei_cf) está entre elas */
+    api.leiLigar("lei_cf", api.matChave(DISC, TOP));
+    const cit = api.leiCitacoesNoTexto("art. 130, § 1º, do ADCT")[0];
+    ok(cit && cit.rotulo === "ADCT",
+       "L45-pre a citação não capturou 'ADCT' como rótulo: "
+       + JSON.stringify(cit));
+
+    const alvo = api.qsUiLeiAlvo(cit, api.leisLista(),
+      api.leisDoTopico(api.matChave(DISC, TOP)));
+    ok(alvo && alvo.lei && alvo.lei.id === "lei_cf",
+       "L45 'ADCT' não resolveu direto para a Constituição já guardada: "
+       + JSON.stringify(alvo));
+  }
+
+  /* ==============================================================
+   * L46-L48: OUTRA LEI, DE VERDADE DESCONHECIDA — O TÓPICO JÁ TEM
+   * OUTRAS, E O MENÚ AS OFERECE PRIMEIRO EM VEZ DE PULAR PARA "VINCULAR"
+   *
+   * Sigla que não é ADCT nem bate com nenhum apelido guardado — o caso
+   * geral que a correção acima NÃO cobre: aqui não há resposta óbvia, e
+   * o app tem de perguntar, não decidir sozinho.
    * ============================================================== */
   {
     const { api } = rodar();
     montarBiblioteca(api, 2);         /* 4.320 e LRF ligados; CTN, não */
-    const cit = api.leiCitacoesNoTexto("art. 130, § 1º, do ADCT")[0];
-    ok(cit && cit.rotulo === "ADCT",
-       "L45-pre a citação não capturou 'ADCT' como rótulo: "
+    const cit = api.leiCitacoesNoTexto("art. 12 da XPTO")[0];
+    ok(cit && cit.rotulo === "XPTO",
+       "L46-pre a citação não capturou 'XPTO' como rótulo: "
        + JSON.stringify(cit));
 
     const q = { disciplina: DISC, topico: TOP, comentario: "" };
@@ -378,15 +405,15 @@ async function testes() {
 
     const menu = api.$("qsLeiMenu");
     ok(!!menu && menu.hidden === false,
-       "L45 uma citação de lei desconhecida, com o tópico já tendo leis "
+       "L46 uma citação de lei desconhecida, com o tópico já tendo leis "
        + "ligadas, não abriu o menu de escolher — foi direto para vincular");
-    ok(/ADCT/.test((menu && menu.textContent) || ""),
-       "L46 o menu não diz qual nome não foi reconhecido: "
+    ok(/XPTO/.test((menu && menu.textContent) || ""),
+       "L47 o menu não diz qual nome não foi reconhecido: "
        + (menu && menu.textContent));
     const itens = Array.from((menu && menu.children) || []);
     ok(itens.some((b) => String(b.textContent || "").indexOf("Lei 4.320") >= 0)
        && itens.some((b) => String(b.textContent || "").indexOf("LC 101") >= 0),
-       "L47 as leis já ligadas ao tópico não apareceram como opção");
+       "L47a as leis já ligadas ao tópico não apareceram como opção");
     ok(itens.some((b) => b.id === "btnQsLeiVincular")
        && itens.some((b) => b.id === "btnQsLeiNova"),
        "L48 vincular uma já guardada / colar nova sumiram do menu único");
