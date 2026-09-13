@@ -848,7 +848,7 @@ function rodar() {
     RT_NIVEIS, rtNivel, rtMascarar, rtTudo, rtTexto, rtLinha,
     rtContarPorNivel, rtDoRegistroGeral, rtDoMaterial, rtDaGeracao,
     rtDaVinculacao,
-    rtPintar, rtPintarAbas, rtIniciarTela,
+    rtPintar, rtPintarAbas, rtIniciarTela, rtLimparErros,
     rtPorFiltroExterno, rtFiltroAtual: () => rtFiltro,
     rtPorFiltro: (f) => { rtFiltro = f; },
     bkDiasDeCalendario,
@@ -893,6 +893,7 @@ function rodar() {
        completar o que faltou e o botao principal da entrada */
     jurChavesComJulgado, jurEsquecerChaves, jurRotuloDe,
     jurFaltando, jurPromptCompletar, jurCompletar, JUR_CAMPOS_META,
+    jurPareceDoisProcessos,
     jurCompletarPedir, jurCompletarLer, jurNomeCampo,
     jurCompletarAbrir, jurCplPintarFalta, jurCplPintarLer, jurCplAoColar,
     jurCplIdAtual: () => jurCplId,

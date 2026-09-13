@@ -737,6 +737,31 @@ function jurFaltando(j) {
   return falta;
 }
 
+/* =====================================================================
+ * DOIS PROCESSOS NUMA FICHA SÓ
+ *
+ * O CASO REAL: "551/RJ e 938.538 AgR/ES" — dois julgados do STF viraram
+ * um número só. Data, órgão e relator descrevem UMA decisão; juntar duas
+ * nesta mesma ficha deixa esses três campos sem resposta certa para
+ * sempre — não é falha de prompt nem de IA, "completar" vai (com razão)
+ * recusar todos os três, porque não existe uma data única para dois
+ * julgamentos diferentes. Foi exatamente o que aconteceu ao pedir para
+ * completar este julgado: a IA devolveu os três vazios e explicou por
+ * quê, em vez de inventar uma resposta.
+ *
+ * SÓ APONTA, NUNCA SEPARA SOZINHO — a mesma regra dos outros detectores
+ * desta tela (jurFaltando, a conferência do "completar"): qual dos dois
+ * leva a tese, que assuntos cada um leva, é decisão de quem estuda.
+ *
+ * O SINAL: um " e " (conjunção, palavra inteira — \b nas duas pontas
+ * para não casar o "e" dentro de "AgRE" ou "Resp") entre dois números.
+ * Não tenta reconhecer o FORMATO do número (variam demais entre
+ * tribunais) — só que há dígito antes E depois da conjunção. */
+const JUR_NUMERO_DUPLO = /\d.*\be\b.*\d/i;
+function jurPareceDoisProcessos(j) {
+  return !!(j && j.numero && JUR_NUMERO_DUPLO.test(String(j.numero)));
+}
+
 function jurPromptCompletar(j, tituloTopico) {
   if (!j) return "";
   const falta = jurFaltando(j);

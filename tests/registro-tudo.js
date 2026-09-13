@@ -355,6 +355,73 @@ async function testes() {
        + "parecer 'perdi tudo': " + pedaco);
   }
 
+  /* ==============================================================
+   * R12: LIMPAR ERROS — SÓ ERROS, SÓ COM CONFIRMAÇÃO, E SÓ QUEM É ERRO
+   *
+   * POR QUE ISTO EXISTE. ERRO está em REG_FIXOS (app.js): a rotação
+   * normal do registro nunca o descarta, de propósito — é o que garante
+   * que um defeito raro não suma antes de alguém notar. Só que isso tem
+   * um preço: um erro já corrigido há semanas (o caso real que originou
+   * este botão) fica poluindo o painel para sempre, sem nenhum jeito de
+   * tirá-lo. Este botão é o oposto da rotação automática: um gesto do
+   * usuário, visível, que pede confirmação antes de agir — nunca um
+   * descarte silencioso.
+   * ============================================================== */
+  const conduzir = async (api, promessa, aceitar) => {
+    let pronto = false;
+    promessa.then(() => { pronto = true; }, () => { pronto = true; });
+    for (let i = 0; i < 12 && !pronto; i++) {
+      await Promise.resolve();
+      try { api._uiFechar(aceitar); } catch (e) {}
+    }
+    return promessa;
+  };
+
+  {
+    const { api } = rodar();
+    api.reg("ERRO", "Uncaught ReferenceError: copiar is not defined");
+    api.reg("ERRO", "falha ao iniciar gerLogIniciar");
+    api.reg("EDITAL", "bancada recolhida");
+    api.rtPintarAbas();
+    ok(api.$("btnRtLimparErros").hidden === false,
+       "R12-pre o botao de limpar erros nao aparece havendo erro no registro");
+    ok(/2/.test(api.$("btnRtLimparErros").textContent || ""),
+       "R12a o botao nao diz quantos erros vai remover: "
+       + api.$("btnRtLimparErros").textContent);
+
+    /* ---- RECUSAR a confirmação não apaga nada ---- */
+    await conduzir(api, api.rtLimparErros(), false);
+    ok(api.rtTudo({ nivel: "erro" }).length === 2,
+       "R12b recusar a confirmacao removeu os erros mesmo assim");
+
+    /* ---- ACEITAR remove só os ERRO, preserva o resto ---- */
+    await conduzir(api, api.rtLimparErros(), true);
+    ok(api.rtTudo({ nivel: "erro" }).length === 0,
+       "R12c aceitar a confirmacao nao removeu os erros: "
+       + JSON.stringify(api.rtTudo({ nivel: "erro" })));
+    ok(api.rtTudo({}).some((x) => x.tag === "EDITAL"),
+       "R12d limpar erros levou junto um evento que nao era erro");
+
+    /* a própria limpeza fica registrada — não é um sumiço sem rastro */
+    ok(api.rtTudo({}).some((x) => x.tag === "REGISTRO"
+       && /erro/i.test(x.msg || "")),
+       "R12e a limpeza dos erros nao deixou rastro no proprio registro");
+
+    /* e o botão some de novo, não há mais erro para limpar */
+    api.rtPintarAbas();
+    ok(api.$("btnRtLimparErros").hidden === true,
+       "R12f o botao continuou visivel depois de nao sobrar erro nenhum");
+  }
+
+  /* ---- R12g: sem erro nenhum, o botão nasce escondido ---- */
+  {
+    const { api } = rodar();
+    api.reg("EDITAL", "bancada recolhida");
+    api.rtPintarAbas();
+    ok(api.$("btnRtLimparErros").hidden === true,
+       "R12g o botao de limpar erros apareceu sem nenhum erro no registro");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

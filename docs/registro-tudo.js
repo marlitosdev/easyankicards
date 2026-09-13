@@ -229,6 +229,38 @@ function rtPintarAbas() {
     b.onclick = () => { rtFiltro = id; rtPintar(); };
     box.append(b);
   });
+
+  /* SÓ APARECE COM ERRO NA LISTA. Erro serve para descobrir o que
+   * aconteceu, não para ficar ali para sempre — mas ele é do tipo que
+   * a rotação normal nunca descarta (REG_FIXOS, em app.js), então sem
+   * este botão um defeito já corrigido há semanas continua poluindo o
+   * painel indefinidamente. Ao contrário da rotação automática, este é
+   * um gesto do usuário, visível e confirmado — não um descarte silencioso. */
+  const btnLimpar = $("btnRtLimparErros");
+  if (btnLimpar) {
+    btnLimpar.hidden = !c.erro;
+    if (c.erro) {
+      btnLimpar.textContent = t("rt_limpar_btn", { n: c.erro });
+      btnLimpar.title = t("rt_limpar_ajuda");
+      btnLimpar.onclick = () => rtLimparErros();
+    }
+  }
+}
+
+/* Remove só os eventos de tipo ERRO do registro geral — nada de avisos,
+ * ações ou o resto da linha do tempo, e nada nos outros quatro registros
+ * (material, geração, vinculação): "limpar erros" não é "limpar tudo". */
+async function rtLimparErros() {
+  const L = (typeof registro !== "undefined" && registro) ? registro : [];
+  const n = L.filter((r) => r.tipo === "ERRO").length;
+  if (!n) return;
+  if (!(await uiConfirm(t("rt_limpar_conf", { n })))) return;
+  registro = L.filter((r) => r.tipo !== "ERRO");
+  try { localStorage.setItem("eac_registro", JSON.stringify(registro)); } catch (e) {}
+  reg("REGISTRO", "erros antigos removidos", n + " removidos");
+  rtPintar();
+  if (typeof montarPainelDiag === "function") montarPainelDiag();
+  toast("rt_limpar_feito");
 }
 
 function rtPintar() {
