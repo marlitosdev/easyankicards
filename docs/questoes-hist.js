@@ -67,7 +67,12 @@ function qhRotulo(lista, filtro) {
   if (kt.length === 1) return kt[0];
   if (kd.length === 1) return kd[0] + (kt.length ? " · " + kt.length + " tópicos" : "");
   if (f.editalNome) return f.editalNome;
-  return "";
+  /* SEM TÓPICO ÚNICO, SEM DISCIPLINA ÚNICA, SEM EDITAL: o bloco
+   * misturou tudo — "responder tudo" sem filtro nenhum. Devolver "" fazia
+   * a tela cair no MESMO texto que a linha de baixo já mostra ("301
+   * questões · não começou"), duplicado. Reaproveita o rótulo que o
+   * próprio filtro usa para "nada escolhido". */
+  return typeof t === "function" ? t("qs_todas_disc") : "";
 }
 
 /* Abre um bloco. Devolve o id, que a sessão carrega até fechar. */
