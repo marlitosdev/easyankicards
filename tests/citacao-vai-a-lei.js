@@ -76,6 +76,20 @@ async function testes() {
        "L3 § e inciso não interrompem a leitura do rótulo");
     ok(um("art. 150, VI, a, da CF").rotulo === "CF",
        "L4 alínea SEM parêntese não interrompe a leitura do rótulo");
+    /* O CASO REAL relatado, com print: um comentário gerado por IA
+     * escreveu "parágrafo 4" por extenso em vez de "§ 4º" — só o símbolo
+     * tinha padrão próprio, então o laço parava no artigo, "da CF" nunca
+     * era alcançado, e a citação virava "ambígua" apesar de a lei estar
+     * escrita ali do lado. */
+    ok(um("cláusulas pétreas (art. 60, parágrafo 4, IV, da CF)").rotulo === "CF",
+       "L4a 'parágrafo 4' por extenso interrompe a leitura do rótulo: "
+       + JSON.stringify(um("cláusulas pétreas (art. 60, parágrafo 4, IV, da CF)")));
+    /* sem acento, exatamente como o comentário real veio */
+    ok(um("art. 60, paragrafo 4, IV, da CF").rotulo === "CF",
+       "L4b 'paragrafo' sem acento também precisa funcionar: "
+       + JSON.stringify(um("art. 60, paragrafo 4, IV, da CF")));
+    ok(um("art. 5º, parágrafo único, da CF").rotulo === "CF",
+       "L4c 'parágrafo único' não pode ter regredido com o padrão novo");
 
     /* A SABOTAGEM QUE ESTA REGRA EXIGE. Aceitar "vírgula + letra" como
      * alínea faria o link cobrir o ", o" de um artigo definido. O que

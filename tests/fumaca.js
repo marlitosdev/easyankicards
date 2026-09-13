@@ -682,7 +682,7 @@ function rodar() {
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
-    leiFonteDefinir, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
+    leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,
     document,
     plBarraCopiar, plTextoDaQuestao, RS_CANETAS,
