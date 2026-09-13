@@ -477,6 +477,16 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
   const retomavel = qsSessaoRetomavel(esc);
   let retomou = false;
   if (retomavel) {
+    /* O ESCOPO PEDIDO E O ESCOPO ENCONTRADO, lado a lado. Sem isto, um
+     * "continuar de onde parei" que aparece no lugar errado (relatado
+     * uma vez, sem conseguir reproduzir) não deixa rastro nenhum — o
+     * registro mostra o resultado da escolha, nunca a comparação que
+     * levou a ela. */
+    try {
+      reg("QUESTOES", "rodada retomavel encontrada para este escopo",
+          "pedido=" + esc + " · encontrado=" + retomavel.escopo
+          + " · " + retomavel.feitas + "/" + retomavel.total);
+    } catch (e) {}
     /* DUAS SITUAÇÕES DIFERENTES, E DUAS PERGUNTAS DIFERENTES.
      *
      * Rodada PELA METADE: o que se oferece é continuar de onde parou.
