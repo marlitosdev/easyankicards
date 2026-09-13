@@ -398,6 +398,66 @@ async function testes() {
        + api.qsUiListaFiltrada().length);
   }
 
+  /* ==============================================================
+   * A7: O ⚙ DO CABEÇALHO — abre, fecha, e não fecha sozinho por cima
+   * do <select>/<input color> que estão dentro dele
+   *
+   * O CASO REAL: tema/cor/idioma saíram da fileira do cabeçalho (três
+   * fileiras empilhadas no mobile, boa parte da tela antes de qualquer
+   * conteúdo) para dentro de um painel que só aparece atrás do ⚙. O
+   * risco de um "fecha ao clicar fora" ingênuo: ele fecharia o painel
+   * também ao clicar no PRÓPRIO seletor de tema, no meio da escolha —
+   * hdrConfigCliqueFora existe para nunca fazer isso.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const cx = api.$("hdrCtls");
+    const btn = api.$("btnHdrConfig");
+    /* O SIMULADOR CRIA CADA ELEMENTO SOLTO, POR ID, SEM ÁRVORE (ver
+     * comentário em fumaca.js) — só liga parentNode para o que está
+     * dentro de um <dialog>, ou para o que ganha appendChild/append em
+     * tempo de execução. "hdrCtls" é uma <div> comum, então o simulador
+     * nunca a conecta aos próprios filhos sozinho; aqui é montada a
+     * MESMA relação que já existe no HTML de verdade, só para o
+     * ".contains()" ter o que verificar. */
+    cx.appendChild(api.$("selTema"));
+    ok(cx && !cx.classList.contains("aberta"),
+       "A7-pre o painel de configuracoes ja nasce aberto");
+
+    /* abre no primeiro clique */
+    btn.onclick({ stopPropagation() {} });
+    ok(cx.classList.contains("aberta"),
+       "A7 o clique no ⚙ nao abriu o painel");
+    ok(btn.getAttribute("aria-expanded") === "true",
+       "A7a aria-expanded nao acompanhou a abertura");
+
+    /* clique DENTRO (no seletor de tema) não fecha — é o bug que este
+     * botão existe para evitar */
+    api.hdrConfigCliqueFora({ target: api.$("selTema") });
+    ok(cx.classList.contains("aberta"),
+       "A7b um clique no proprio seletor de tema fechou o painel");
+
+    /* clique FORA (em outro botao do cabecalho) fecha */
+    api.hdrConfigCliqueFora({ target: api.$("btnAjuda") });
+    ok(!cx.classList.contains("aberta"),
+       "A7c um clique fora do painel nao o fechou");
+    ok(btn.getAttribute("aria-expanded") === "false",
+       "A7d aria-expanded nao voltou a false ao fechar");
+
+    /* Esc fecha */
+    btn.onclick({ stopPropagation() {} });
+    ok(cx.classList.contains("aberta"), "A7e-pre nao abriu para testar o Esc");
+    api.hdrConfigTecla({ key: "Escape" });
+    ok(!cx.classList.contains("aberta"), "A7f Esc nao fechou o painel");
+
+    /* clicar no ⚙ de novo, já aberto, fecha (alterna) */
+    btn.onclick({ stopPropagation() {} });
+    ok(cx.classList.contains("aberta"), "A7g-pre nao abriu para testar o alternar");
+    btn.onclick({ stopPropagation() {} });
+    ok(!cx.classList.contains("aberta"),
+       "A7h clicar no ⚙ com o painel aberto devia fecha-lo");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

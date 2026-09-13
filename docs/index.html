@@ -113,6 +113,41 @@ header .hdr-cor input{position:absolute;inset:-4px;width:calc(100% + 8px);
   height:calc(100% + 8px);border:0;padding:0;cursor:pointer}
 header .hdr-reset{width:34px;justify-content:center;padding:0;font-size:15px}
 header .hdr-ajuda{background:var(--azul);color:#fff;border-color:transparent}
+/* O ⚙ SÓ EXISTE NO MOBILE — no computador os quatro controles cabem
+   numa linha só e não há nada para recolher. Escondido por padrão aqui;
+   a media query abaixo é que o revela abaixo de 760px. */
+header .hdr-config{display:none;width:34px;justify-content:center;padding:0;font-size:15px}
+header .hdr-cor-linha{display:flex;align-items:center;gap:6px}
+/* O ÍCONE SÓ APARECE NO MOBILE — no computador o texto "?  Ajuda" já diz
+   tudo sozinho, e mostrar os dois juntos duplicaria o "?". */
+header .hdr-ajuda .hdr-ic{display:none}
+
+/* ---- CABEÇALHO NO MOBILE: de três fileiras para uma ----
+   Ícone, nome, ❓ e ⚙ cabiam perto de 400px de altura em três fileiras
+   empilhadas (o h1 quebra sozinho, os quatro controles quebram de novo)
+   antes de qualquer conteúdo aparecer. Tema/cor/idioma — usados uma vez
+   e esquecidos, não o dia a dia de ninguém — saem da fileira e viram um
+   painel que só existe quando pedido, atrás do ⚙. A versão, que morava
+   no subtítulo, continua alcançável no Diagnóstico. */
+@media (max-width:760px){
+  header h1 small{display:none}
+  header .hdr-config{display:inline-flex}
+  header .hdr-ajuda .hdr-ic{display:inline}
+  header .hdr-ajuda .hdr-txt{display:none}
+  header .hdr-ajuda{width:34px;justify-content:center;padding:0;font-size:15px}
+  header .hdr-ctls{
+    display:none;
+  }
+  header .hdr-ctls.aberta{
+    display:flex;flex-direction:column;align-items:stretch;gap:8px;
+    position:absolute;top:100%;right:14px;margin-top:6px;
+    background:var(--panel);border:1px solid var(--borda);border-radius:12px;
+    padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);
+    width:min(78vw,280px);z-index:40;
+  }
+  header .hdr-ctls.aberta select,
+  header .hdr-ctls.aberta .hdr-cor-linha{width:100%}
+}
 select,button,input,textarea{font:inherit;color:var(--texto)}
 /* CAMPO NUMERICO TAMBEM E CAMPO.
    Esta regra listava so [type=text]: todo input de numero ficava com o
@@ -3584,21 +3619,31 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small>by MarlitosDev · <span id="versao"></span></small></h1>
-  <div class="hdr-ctls">
+  <div class="hdr-ctls" id="hdrCtls">
     <select id="selTema" aria-label="Tema">
       <option value="auto"></option><option value="light"></option>
       <option value="dark"></option><option value="black"></option>
     </select>
-    <label class="hdr-cor" title="Cor da letra">
-      <input type="color" id="corLetra" aria-label="Cor da letra">
-    </label>
-    <button class="hdr-btn hdr-reset" id="btnCorReset" title="Cor automática">↺</button>
+    <div class="hdr-cor-linha">
+      <label class="hdr-cor" title="Cor da letra">
+        <input type="color" id="corLetra" aria-label="Cor da letra">
+      </label>
+      <button class="hdr-btn hdr-reset" id="btnCorReset" title="Cor automática">↺</button>
+    </div>
     <select id="selIdioma" aria-label="Idioma">
       <option value="pt">Português</option>
       <option value="en">English</option>
     </select>
-    <button class="hdr-btn hdr-ajuda" id="btnAjuda" data-i18n="help_btn"></button>
   </div>
+  <button class="hdr-btn hdr-ajuda" id="btnAjuda">
+    <span class="hdr-ic" aria-hidden="true">❓</span>
+    <span class="hdr-txt" data-i18n="help_btn"></span>
+  </button>
+  <!-- SÓ APARECE NO MOBILE (CSS) — no computador os controles acima já
+       ficam inteiros na fileira, sem precisar de um botão para achá-los. -->
+  <button class="hdr-btn hdr-config" id="btnHdrConfig" type="button"
+          aria-haspopup="true" aria-expanded="false"
+          data-i18n-title="hdr_config_titulo">⚙</button>
 </header>
 
 <main>

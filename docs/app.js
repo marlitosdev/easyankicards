@@ -4123,6 +4123,55 @@ $("ajudaEstilo").onclick = () => uiAlert(t("style_hint"));
 $("btnAjuda").onclick = () => abrirModal("dlgAjuda");
 $("btnFechar").onclick = () => $("dlgAjuda").close();
 
+/* =====================================================================
+ * O ⚙ DO CABEÇALHO — só existe no mobile (CSS cuida disso; aqui só a
+ * abertura/fechamento). Tema, cor da letra e idioma viram um painel que
+ * some por padrão, em vez de três fileiras acima de qualquer conteúdo.
+ *
+ * FECHA COM CLIQUE FORA E ESC — mesma ideia do qsFerMenu (menu de
+ * ferramentas das questões), mas SEM fechar em clique DENTRO do painel:
+ * lá os itens são botões que fecham o menu de propósito ao serem
+ * escolhidos; aqui dentro há um <select> e um <input type="color">, cujo
+ * seletor nativo do sistema um "clique fora" ingênuo derrubaria no meio
+ * da escolha. hdrConfigCliqueFora por isso ignora clique no próprio
+ * painel e no botão que o abre.
+ * ===================================================================== */
+function hdrConfigFechar() {
+  const cx = $("hdrCtls");
+  if (cx) cx.classList.remove("aberta");
+  if ($("btnHdrConfig")) $("btnHdrConfig").setAttribute("aria-expanded", "false");
+  try {
+    document.removeEventListener("click", hdrConfigCliqueFora);
+    document.removeEventListener("keydown", hdrConfigTecla);
+  } catch (e) {}
+}
+function hdrConfigCliqueFora(ev) {
+  const cx = $("hdrCtls"), b = $("btnHdrConfig");
+  if (cx && cx.contains(ev.target)) return;
+  if (b && (ev.target === b || b.contains(ev.target))) return;
+  hdrConfigFechar();
+}
+function hdrConfigTecla(ev) { if (ev && ev.key === "Escape") hdrConfigFechar(); }
+if ($("btnHdrConfig")) {
+  $("btnHdrConfig").onclick = (ev) => {
+    /* impede que este MESMO clique, ao terminar de borbulhar até o
+     * document, seja lido pelo listener de "clique fora" que estamos
+     * prestes a registrar — a mesma técnica do botão de qsFerMenu. */
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    const cx = $("hdrCtls");
+    if (!cx) return;
+    const abrindo = !cx.classList.contains("aberta");
+    hdrConfigFechar();
+    if (abrindo) {
+      cx.classList.add("aberta");
+      $("btnHdrConfig").setAttribute("aria-expanded", "true");
+      document.addEventListener("click", hdrConfigCliqueFora);
+      document.addEventListener("keydown", hdrConfigTecla);
+    }
+  };
+  attachTip($("btnHdrConfig"), "hdr_config_titulo");
+}
+
 /* Dicas de funcionamento em TODOS os botões principais */
 attachTip($("btnNovoCartao"), "tip_new");
 attachTip($("btnMCRapido"), "tip_mc");
