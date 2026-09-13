@@ -1456,18 +1456,35 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-hist > summary::-webkit-details-marker{display:none}
 .qs-hist > summary::before{content:"▸ ";font-weight:400;color:var(--sutil)}
 .qs-hist[open] > summary::before{content:"▾ "}
-.qs-hist-lista{display:flex;flex-direction:column;gap:5px;margin:8px 0 0;
+.qs-hist-lista{display:flex;flex-direction:column;gap:2px;margin:8px 0 0;
   max-height:38vh;overflow-y:auto}
-.qs-hist-item{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;
-  padding:5px 0;border-bottom:1px solid var(--borda)}
+/* DUAS LINHAS POR ITEM, NÃO CINCO ELEMENTOS SOLTOS.
+   Rótulo+ações numa fileira e o resto (contagem, data, origem) numa
+   frase só embaixo — antes eram cinco <span>/<button> num flex-wrap, e
+   cada um quebrava para sua própria linha no celular. */
+.qs-hist-item{padding:6px 0;border-bottom:1px solid var(--borda)}
 .qs-hist-item:last-child{border-bottom:none}
-.qs-hist-rot{font-weight:600;font-size:12px;flex:1 1 140px}
-.qs-hist-num{font-size:11px;color:var(--sutil)}
+.qs-hist-cab{display:flex;align-items:center;gap:8px}
+/* TRUNCA, NÃO QUEBRA: um rótulo longo ("Direito Financeiro · 4 tópicos")
+   cede espaço aos botões em vez de empurrá-los para a linha de baixo. */
+.qs-hist-rot{font-weight:600;font-size:12px;flex:1 1 auto;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qs-hist-acoes{display:flex;gap:4px;flex-shrink:0}
+.qs-hist-meta{font-size:11px;color:var(--sutil);margin-top:2px}
 /* abandonado NÃO é erro — é informação, e a mais útil: diz onde o estudo
-   emperra. Cor de atenção, não de falha. */
-.qs-hist-aberto .qs-hist-num{color:var(--atencao)}
+   emperra. Cor de atenção, não de falha; só no selo, não na frase toda. */
+.qs-hist-flag{color:var(--atencao);font-weight:600}
 .qs-hist-rodape{margin-top:8px}
-.qs-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
+/* CADA CONTROLE NA MESMA LARGURA DA SUA COLUNA, em vez do texto da opção
+   decidir sozinho quanto espaço tomar — era o que fazia "todas as
+   disciplinas" virar uma fileira inteira para si e empurrar o resto. */
+.qs-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+  gap:6px;margin:8px 0}
+.qs-filtros select{width:100%}
+/* "O QUE FILTRAR" (selects, acima) separado de "QUAIS DELAS"
+   (interruptores) — a mesma separação que .qs-barra já faz entre ação
+   e explicação. */
+.qs-chks{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0}
 .qs-chk{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sutil)}
 .qs-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 10px}
 .qs-lista-aba{display:flex;flex-direction:column;gap:8px}
@@ -3873,10 +3890,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <option value="ce" data-i18n="qs_tipo_ce"></option>
       <option value="me" data-i18n="qs_tipo_me"></option>
     </select>
+  </div>
+  <!-- "O QUE FILTRAR" (os selects acima) separado de "QUAIS DELAS"
+       (interruptores) e da busca — três gestos diferentes, três linhas. -->
+  <div class="qs-chks">
     <label class="qs-chk" title="Só as que você nunca respondeu."><input type="checkbox" id="qsFIneditas"><span data-i18n="qs_so_ineditas"></span></label>
     <label class="qs-chk" title="Só aquelas em que você errou da última vez — é onde o estudo rende mais."><input type="checkbox" id="qsFErradas"><span data-i18n="qs_so_erradas"></span></label>
-    <input id="qsBusca" type="search" placeholder="buscar no enunciado" title="Procura no texto do enunciado.">
   </div>
+  <input id="qsBusca" class="mat-busca" type="search" placeholder="buscar no enunciado" title="Procura no texto do enunciado.">
   <!-- HISTÓRICO DOS BLOCOS. Fica recolhido: é consulta, não é o gesto
        do dia. Aberto, mostra o que foi feito e permite refazer o mesmo
        recorte — que é o que distingue um histórico de um placar. -->

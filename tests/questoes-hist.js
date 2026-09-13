@@ -85,6 +85,14 @@ async function testes() {
     ok(api.qhRotulo(todas, { editalNome: "SEFAZ-AL" }) === "SEFAZ-AL",
        "H2c bloco misturado nao caiu no nome do edital: "
        + api.qhRotulo(todas, { editalNome: "SEFAZ-AL" }));
+
+    /* O CASO REAL RELATADO: "responder tudo" sem filtro nenhum mistura
+     * disciplinas e não vem de edital — rotulo() devolvia "", e a tela
+     * caia no MESMO texto que a linha de baixo já mostra, duplicado. */
+    ok(api.qhRotulo(todas, {}) === "todas as disciplinas",
+       "H2d bloco sem topico/disciplina/edital unico voltou a devolver "
+       + "string vazia (duplica a linha de baixo na tela): "
+       + JSON.stringify(api.qhRotulo(todas, {})));
   }
 
   /* ---- H3: o placar acompanha, e o abandono fica registrado ---- */
@@ -226,6 +234,88 @@ async function testes() {
     ok(api.qsTodas().length === 4,
        "H6i apagar um bloco do historico apagou questoes: "
        + api.qsTodas().length);
+  }
+
+  /* ==============================================================
+   * H8: NEM O RÓTULO NEM A LINHA DE BAIXO REPETEM O MESMO TEXTO
+   *
+   * O CASO REAL relatado, com print: "responder tudo" sem filtro
+   * nenhum (mistura disciplinas, sem edital) mostrava "301 questões ·
+   * não começou" DUAS vezes na mesma linha — uma como rótulo (fallback
+   * vazio de qhRotulo), outra como a contagem. E um bloco com 0 feitas
+   * ganhava "interrompido" além de "não começou" — a mesma notícia
+   * duas vezes.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const todas = preparar(api);
+    api.qhIniciar(todas, { origem: "aba" });      /* mistura tudo, sem edital */
+    api.qsUiHistRender();
+
+    const itens = acharClasse(api.$("qsHistLista"), "qs-hist-item", []);
+    ok(itens.length === 1, "H8-pre o bloco nao apareceu na lista");
+    const rot = itens[0] && itens[0].querySelector
+      ? itens[0].querySelector(".qs-hist-rot") : null;
+    const meta = itens[0] && itens[0].querySelector
+      ? itens[0].querySelector(".qs-hist-meta") : null;
+    ok(rot && rot.textContent === "todas as disciplinas",
+       "H8 o rotulo do bloco misturado nao usou o texto generico: "
+       + (rot && rot.textContent));
+    /* NÃO BASTA "textos diferentes" — o bug real era o rótulo aparecer
+     * de novo, como PREFIXO, dentro da linha de baixo ("X · não
+     * começou" seguido de "X · não começou · interrompido"). */
+    ok(meta && rot && meta.textContent.indexOf(rot.textContent) === -1,
+       "H8b a linha de baixo repete o texto do rotulo: "
+       + JSON.stringify({ rot: rot && rot.textContent, meta: meta && meta.textContent }));
+    /* 0 feitas: "nao comecou" ja diz que nao terminou; "interrompido"
+     * junto seria a mesma noticia duas vezes */
+    ok(!/interrompido/i.test((meta && meta.textContent) || ""),
+       "H8c um bloco com 0 feitas ganhou 'interrompido' alem de 'nao "
+       + "comecou': " + (meta && meta.textContent));
+  }
+  {
+    /* DADO ANTIGO: um bloco salvo ANTES desta correção, com rotulo=""
+     * gravado de vez no localStorage — qhRotulo() não roda de novo
+     * sobre ele. Só a defesa em qsUiHistRender() protege este caso. */
+    const { api } = rodar();
+    const todas = preparar(api);
+    const item = api.qhIniciar(todas, { origem: "aba" });
+    item.rotulo = "";                              /* simula dado salvo antes do fix */
+    api.qhGravar();  /* qsUiHistRender chama qhCarregar() e releria o
+                       * valor certo do localStorage se a mutação acima
+                       * não fosse persistida também */
+    api.qsUiHistRender();
+
+    const itens = acharClasse(api.$("qsHistLista"), "qs-hist-item", []);
+    const rot = itens[0] && itens[0].querySelector
+      ? itens[0].querySelector(".qs-hist-rot") : null;
+    const meta = itens[0] && itens[0].querySelector
+      ? itens[0].querySelector(".qs-hist-meta") : null;
+    ok(rot && rot.textContent === "todas as disciplinas",
+       "H8e um bloco antigo com rotulo vazio nao caiu no texto generico: "
+       + (rot && rot.textContent));
+    ok(meta && rot && meta.textContent.indexOf(rot.textContent) === -1,
+       "H8f um bloco antigo com rotulo vazio ainda repete o texto na "
+       + "linha de baixo: "
+       + JSON.stringify({ rot: rot && rot.textContent, meta: meta && meta.textContent }));
+  }
+  {
+    /* progresso real, ainda aberto: aqui "interrompido" É a informação
+     * que falta — o teste garante que o ajuste do H8c nao apagou isso */
+    const { api } = rodar();
+    const todas = preparar(api);
+    api.qsSessaoIniciar(todas);
+    api.qhIniciar(todas, { origem: "aba" });
+    api.qsResponder("C");
+    api.qhAtualizar(api.qsPlacar(), {});
+    api.qsUiHistRender();
+
+    const itens = acharClasse(api.$("qsHistLista"), "qs-hist-item", []);
+    const meta = itens[0] && itens[0].querySelector
+      ? itens[0].querySelector(".qs-hist-meta") : null;
+    ok(meta && /interrompido/i.test(meta.textContent || ""),
+       "H8d um bloco com progresso real e nao terminado perdeu o selo "
+       + "'interrompido': " + (meta && meta.textContent));
   }
 
   /* ---- H7: o histórico entra no backup ---- */

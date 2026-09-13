@@ -1786,43 +1786,63 @@ function qsUiHistRender() {
   todos.slice(0, 40).forEach((h) => {
     const li = document.createElement("div");
     /* INTERROMPIDO NÃO É ERRO — é informação, e a mais útil: diz onde o
-     * estudo emperra. Por isso tem estado próprio, em cor de atenção. */
+     * estudo emperra. Por isso tem estado próprio, em cor de atenção.
+     * SÓ QUANDO HÁ ALGO A RETOMAR (feitas > 0): um bloco com 0 feitas já
+     * diz "não começou" — somar "interrompido" ali é a mesma notícia
+     * duas vezes, não uma segunda informação. */
     const aberto = !h.fim && h.feitas < h.total;
-    li.className = "qs-hist-item" + (aberto ? " qs-hist-aberto" : "");
+    const interrompido = aberto && h.feitas > 0;
+    li.className = "qs-hist-item" + (interrompido ? " qs-hist-aberto" : "");
+
+    /* LINHA 1: de que foi, e as duas ações — sempre juntas, porque o
+     * rótulo cede (trunca, no CSS) o espaço que os botões precisam. */
+    const cab = document.createElement("div");
+    cab.className = "qs-hist-cab";
 
     const rot = document.createElement("span");
     rot.className = "qs-hist-rot";
-    rot.textContent = h.rotulo || t("qs_hist_linha_zero", { tot: h.total });
+    /* "" só sobrevive em bloco salvo ANTES do fallback existir em
+     * qhRotulo (docs/questoes-hist.js) — mesmo texto genérico aqui,
+     * para não voltar a duplicar a linha de baixo. */
+    rot.textContent = h.rotulo || t("qs_todas_disc");
+    rot.title = rot.textContent;
 
-    const num = document.createElement("span");
-    num.className = "qs-hist-num";
-    num.textContent = (h.feitas
-      ? t("qs_hist_linha", { f: h.feitas, tot: h.total,
-          pct: h.pct === null ? "—" : h.pct + "%" })
-      : t("qs_hist_linha_zero", { tot: h.total }))
-      + (aberto ? " · " + t("qs_hist_aberto") : "");
-
-    const quando = document.createElement("span");
-    quando.className = "qs-hist-num";
-    quando.textContent = t("qs_hist_quando", {
-      d: String(h.q || "").slice(0, 10), min: h.minutos || 0 })
-      + " · " + t("qs_hist_origem_" + (h.origem || "aba"));
-
+    const acoes = document.createElement("span");
+    acoes.className = "qs-hist-acoes";
     const bRe = document.createElement("button");
     bRe.type = "button";
     bRe.className = "btn-min";
     bRe.textContent = t("qs_hist_refazer");
     bRe.title = t("qs_hist_refazer_ajuda");
     bRe.onclick = () => qsUiHistRefazer(h.id);
-
     const bDel = document.createElement("button");
     bDel.type = "button";
     bDel.className = "btn-min btn-min-perigo";
     bDel.textContent = "×";
     bDel.title = t("qs_hist_apagar_ajuda");
     bDel.onclick = () => { qhApagar(h.id); qsUiHistRender(); };
+    acoes.append(bRe, bDel);
+    cab.append(rot, acoes);
 
-    li.append(rot, num, quando, bRe, bDel);
+    /* LINHA 2: como você foi e quando — uma frase só, em vez dos dois
+     * <span> de antes (que quebravam em linhas próprias no celular). */
+    const meta = document.createElement("div");
+    meta.className = "qs-hist-meta";
+    const stats = h.feitas
+      ? t("qs_hist_linha", { f: h.feitas, tot: h.total,
+          pct: h.pct === null ? "—" : h.pct + "%" })
+      : t("qs_hist_linha_zero", { tot: h.total });
+    meta.textContent = stats + " · " + t("qs_hist_quando", {
+        d: String(h.q || "").slice(0, 10), min: h.minutos || 0 })
+      + " · " + t("qs_hist_origem_" + (h.origem || "aba"));
+    if (interrompido) {
+      const flag = document.createElement("span");
+      flag.className = "qs-hist-flag";
+      flag.textContent = " · " + t("qs_hist_aberto");
+      meta.append(flag);
+    }
+
+    li.append(cab, meta);
     box.append(li);
   });
 }

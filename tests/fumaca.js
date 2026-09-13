@@ -668,7 +668,7 @@ function rodar() {
     edDiscComFolga, ED_CEDE_SEM_MINIMO, ED_CEDE_REVISAO, ED_FAIXAS, ED_FOLGA_MINIMO,
     ED_AMOSTRA_MINIMA, ED_MARGEM_ACERTO, qsUiResponderAbrir, qsPlacar,
     qhCarregar, qhTodos, qhIniciar, qhAtualizar, qhEmAndamento, qhResumo,
-    qhApagar, qhLimpar, qhRotulo, qsUiHistRender, qsUiHistRefazer,
+    qhApagar, qhLimpar, qhRotulo, qhGravar, qsUiHistRender, qsUiHistRefazer,
     qsUiRepescar, qsErradasDaSessao, qsUiPintarSessao, qsUiDobra,
     gerLogCarregar, gerReg, gerLogTexto, gerLogNumeros, gerLogLimpar,
     gerMotivoTexto, gerMotivoLinha, gerLogDiaLocal, gerBotao, gerLogPintar,
