@@ -756,6 +756,27 @@ function jurPromptCompletar(j, tituloTopico) {
 }
 
 /* =====================================================================
+ * MELHORAR SÓ O RESUMO — nunca a tese
+ *
+ * "Completar e conferir" (acima) preenche o que falta e aponta erro,
+ * sem reescrever nada. Este é o prompt que FALTAVA: quando o resumo
+ * está preenchido mas mal escrito, a única saída até aqui era reescrever
+ * à mão. Tese e ementa entram como CONTEXTO — para a IA entender do que
+ * o julgado trata — mas a regra que vale em todo prompt desta tela vale
+ * aqui também: tese é transcrição do tribunal, nunca reescrita. Por
+ * isso o prompt pede texto simples, não JSON — é UM campo só, e cada
+ * chave a mais no formato é uma chance a mais de a IA errar o que
+ * devolver. */
+function jurPromptMelhorar(tituloTopico, tese, ementa, resumo) {
+  return t("jur_prompt_melhorar", {
+    tp: tituloTopico || "",
+    tese: String(tese || "").trim() || "(vazia)",
+    ementa: String(ementa || "").trim().slice(0, 3000) || "(não guardei a ementa)",
+    resumo: String(resumo || "").trim() || "(vazio)",
+  });
+}
+
+/* =====================================================================
  * APLICAR A RESPOSTA SEM APAGAR O QUE JÁ EXISTIA
  *
  * Esta é a metade perigosa. Uma IA que devolve o objeto inteiro — com

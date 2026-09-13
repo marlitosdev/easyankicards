@@ -283,6 +283,61 @@ async function testes() {
        + api.$("leiTitulo").textContent);
   }
 
+  /* ==============================================================
+   * L42-L44: A NOTA DO ARTIGO AJUDA A RECONHECER A CITAÇÃO
+   *
+   * "Art. 156-A" não diz nada de cabeça a quem não decorou a lei — a
+   * nota é o gancho curto ("isenção na exportação") que aparece na
+   * dica do link quando a lei já está resolvida, e como segunda linha
+   * de cada opção quando o tópico tem mais de uma lei e é preciso
+   * escolher.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const ch = montarBiblioteca(api, 1);          /* só a 4.320 no tópico */
+    api.leiNotaGuardar("lei_4320", "35", "prazo do exercício financeiro");
+
+    const q = { disciplina: DISC, topico: TOP,
+      comentario: "conforme o art. 35 da lei orçamentária" };
+    const el = api.document.createElement("div");
+    api.qsUiComentario(el, q);
+    const link = (el.children || []).find((c) =>
+      String(c.className || "").indexOf("qs-lei-link") >= 0);
+    ok(!!link, "L42-pre o comentário não gerou o link da citação");
+    ok(link && /prazo do exercício financeiro/.test(link.title || ""),
+       "L42 a nota não apareceu na dica do link resolvido: "
+       + (link && link.title));
+
+    /* SEM NOTA, a dica continua exatamente como já era — nada de
+     * "· undefined" nem separador solto. */
+    const semNota = api.leiCitacoesNoTexto("art. 12 da lei orçamentária")[0];
+    ok(semNota && !/·\s*$/.test(
+         api.qsUiLeiLink(semNota, q, api.leisLista(), api.leisDoTopico(ch)).title || ""),
+       "L43 sem nota, a dica ficou com separador sobrando no final");
+  }
+  {
+    const { api } = rodar();
+    montarBiblioteca(api, 2);                      /* 4.320 E LRF no tópico */
+    api.leiNotaGuardar("lei_4320", "35", "prazo do exercício financeiro");
+
+    const cit = api.leiCitacoesNoTexto("art. 35")[0];
+    const q = { disciplina: DISC, topico: TOP, comentario: "" };
+    const bt = api.document.createElement("button");
+    api.document.createElement("div").append(bt);
+    const menu = api.qsUiLeiEscolher(bt, q, cit);
+    const itens = Array.from((menu && menu.children) || []);
+    const da4320 = itens.find((b) =>
+      String(b.textContent || "").indexOf("Lei 4.320") >= 0);
+    ok(da4320 && /prazo do exercício financeiro/.test(da4320.textContent || ""),
+       "L44 a nota do art. 35 não apareceu na opção da lei que o tem: "
+       + (da4320 && da4320.textContent));
+    const daLrf = itens.find((b) =>
+      String(b.textContent || "").indexOf("LC 101") >= 0);
+    ok(daLrf && !/prazo do exercício financeiro/.test(daLrf.textContent || ""),
+       "L44a a nota vazou para a lei que NÃO tem art. 35 marcado assim: "
+       + (daLrf && daLrf.textContent));
+  }
+
   if (!n) falhas.push("nenhuma asserção rodou — o arquivo abortou no meio");
   return falhas;
 }

@@ -1529,6 +1529,69 @@ async function testes() {
        + JSON.stringify(novo && novo.tese));
   }
 
+  /* ================================================================
+   * J35: MELHORAR O RESUMO — ANTES/DEPOIS, E SÓ APLICA QUEM CONFIRMA
+   *
+   * Mesmo formato do cartão-melhorar: gera o prompt, cola a resposta,
+   * mostra antes/depois, e só grava na caixa quando se clica em
+   * aplicar — nada é escrito sozinho ao conferir. E a TESE nunca entra
+   * em jogo: nem é enviada para ser reescrita, nem muda de valor em
+   * nenhum passo, mesma regra dos outros dois prompts desta tela.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    montar(api);
+    api.jurAbrir("Direito Tributário", "Imunidades", "incluir");
+    api.$("jurTese").value = "tese que nunca deve ser tocada";
+    api.$("jurResumo").value = "resumo mal escrito, precisa melhorar";
+    api.$("jurColar").value = EMENTA_STF;
+
+    api.jurMelAbrir();
+    ok(api.$("dlgJurMelhorar").open === true, "J35-pre a janela de melhorar não abriu");
+    const prompt = api.$("jurMelPrompt").value;
+    ok(/tese que nunca deve ser tocada/.test(prompt),
+       "J35 o prompt não trouxe a tese como contexto");
+    ok(/resumo mal escrito/.test(prompt),
+       "J35a o prompt não trouxe o resumo atual");
+    ok(api.$("jurMelComparar").hidden === true,
+       "J35b o antes/depois já nasceu visível, sem resposta nenhuma colada");
+    ok(api.$("btnJurMelAplicar").hidden === true,
+       "J35c o botao de aplicar ja nasceu visivel");
+
+    api.$("jurMelColar").value = "resumo reescrito, claro e direto";
+    ok(api.jurMelConferir() === true, "J35d conferir com uma resposta colada recusou");
+    ok(api.$("jurMelComparar").hidden === false,
+       "J35e conferir nao mostrou o antes/depois");
+    const lados = api.$("jurMelComparar").querySelectorAll(".qm-lado");
+    ok(lados.length === 2, "J35f esperava os dois lados (antes e depois), veio " + lados.length);
+    ok(/resumo mal escrito/.test(lados[0].textContent || ""),
+       "J35g o lado 'antes' nao mostra o resumo que estava la");
+    ok(/resumo reescrito, claro e direto/.test(lados[1].textContent || ""),
+       "J35h o lado 'depois' nao mostra a resposta colada");
+    ok(api.$("btnJurMelAplicar").hidden === false,
+       "J35i conferir nao liberou o botao de aplicar");
+
+    /* CONFERIR NÃO GRAVA — a caixa do formulário continua com o texto
+     * antigo até alguem clicar em aplicar. */
+    ok(api.$("jurResumo").value === "resumo mal escrito, precisa melhorar",
+       "J35j conferir ja mudou o resumo do formulario sozinho");
+    ok(api.$("jurTese").value === "tese que nunca deve ser tocada",
+       "J35k a tese mudou so' de existir a tela de melhorar o resumo");
+
+    ok(api.jurMelAplicar() === true, "J35l aplicar com uma resposta conferida recusou");
+    ok(api.$("jurResumo").value === "resumo reescrito, claro e direto",
+       "J35m aplicar nao escreveu o resumo novo na caixa do formulario");
+    ok(api.$("jurTese").value === "tese que nunca deve ser tocada",
+       "J35n aplicar mexeu na tese — ela nao deveria nem existir nesta tela");
+    ok(api.$("dlgJurMelhorar").open === false, "J35o aplicar nao fechou a janela");
+
+    /* E "APLICAR" NÃO SALVA O JULGADO — é o "Guardar" de sempre que
+     * decide isso, a mesma regra de "marcar é experimentar". */
+    const ch = api.matChave("Direito Tributário", "Imunidades");
+    ok(api.jurDoTopico(ch).length === 0,
+       "J35p aplicar o resumo melhorado guardou o julgado sozinho");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

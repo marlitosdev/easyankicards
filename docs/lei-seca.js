@@ -693,6 +693,29 @@ function leiDe(id) {
   return r || null;
 }
 
+/* A NOTA DE UM ARTIGO — "Art. 151, isenção para exportação" — mora no
+ * próprio registro da lei, um mapa por número normalizado
+ * ("notasArtigos"), pelo mesmo mecanismo de merge que já guarda "onde
+ * parei" e os capítulos lidos. Sem tabela nova, sem chave composta: o
+ * número já é único DENTRO de uma lei (a ambiguidade do art. repetido
+ * entre corpo e ADCT é resolvida no leitor, não aqui — a nota vale para
+ * a primeira ocorrência, que é a que qualquer citação de fora aponta). */
+function leiNotaDe(idLei, num) {
+  const l = leiDe(idLei);
+  if (!l || !l.notasArtigos) return "";
+  return l.notasArtigos[leiNumNormal(num)] || "";
+}
+
+function leiNotaGuardar(idLei, num, texto) {
+  const l = leiDe(idLei);
+  if (!l) return false;
+  const notas = Object.assign({}, l.notasArtigos || {});
+  const n = leiNumNormal(num);
+  const limpo = String(texto || "").trim();
+  if (limpo) notas[n] = limpo; else delete notas[n];
+  return !!leiGuardar({ id: idLei, notasArtigos: notas });
+}
+
 function leisLista() {
   const tudo = leisLerTudo();
   return Object.keys(tudo).map((k) => tudo[k])
@@ -1076,6 +1099,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiRotuloChave, leiCasarRotulo,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
+    leiNotaDe, leiNotaGuardar,
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
     leiParar, leiProgresso, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
     leisHojeISO,

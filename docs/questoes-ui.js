@@ -1129,8 +1129,14 @@ function qsUiLeiLink(c, q, lista, doTopico) {
    * só depois de tocar é o que faz alguém parar de tocar. */
   b.className = "qs-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem");
   b.textContent = c.texto;
+  /* A NOTA, SE HOUVER, ENTRA NA DICA — não no texto do link. O link já
+   * mostra a citação como o comentário a escreveu ("art. 156, § 3º,
+   * II"); a nota é o gancho de reconhecimento ("isenção na exportação"),
+   * útil para quem passa o mouse/dedo antes de decidir abrir. */
+  const nota = alvo.lei && typeof leiNotaDe === "function"
+    ? leiNotaDe(alvo.lei.id, c.num) : "";
   b.title = alvo.lei
-    ? t("qs_lei_link_ir", { l: alvo.lei.nome, a: c.numCru })
+    ? t("qs_lei_link_ir", { l: alvo.lei.nome, a: c.numCru }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t("qs_lei_link_sem", { l: c.rotulo })
                 : t("qs_lei_link_qual", { a: c.numCru }));
   b.onclick = (ev) => {
@@ -1240,7 +1246,21 @@ function qsUiLeiEscolher(botao, q, cit) {
     b.className = "btn-min";
     let nArt = 0;
     try { nArt = leiArtigos(l.texto).length; } catch (e) {}
-    b.textContent = l.nome + " · " + t("lei_n_artigos", { n: nArt });
+    const linha1 = document.createElement("span");
+    linha1.className = "qs-lei-esc-nome";
+    linha1.textContent = l.nome + " · " + t("lei_n_artigos", { n: nArt });
+    b.append(linha1);
+    /* A NOTA AJUDA A ESCOLHER SEM ABRIR AS DUAS. "cit" só existe quando
+     * o popover nasceu de uma citação de artigo específica — sem ele,
+     * não há UM artigo para procurar nota nenhuma. */
+    const notaEsc = cit && typeof leiNotaDe === "function"
+      ? leiNotaDe(l.id, cit.num) : "";
+    if (notaEsc) {
+      const linha2 = document.createElement("span");
+      linha2.className = "qs-lei-esc-nota";
+      linha2.textContent = notaEsc;
+      b.append(linha2);
+    }
     b.title = t("qs_lei_esc_item", { l: l.nome });
     b.onclick = () => {
       qsFerFechar();
