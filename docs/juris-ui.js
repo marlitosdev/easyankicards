@@ -802,6 +802,18 @@ function jurCplAoColar() {
 function jurCompletarLer() {
   const j = jurDe(jurCplId);
   if (!j) return;
+  /* GUARDADO ANTES DE CHAMAR jurCompletar: é o que diferencia "não tinha
+   * nada para preencher" de "tinha, e a IA preferiu não arriscar". As
+   * duas terminam com r.mudou vazio — jurCompletar nem entra num campo
+   * que a resposta devolveu em branco (docs/juris.js, "if (!v) return") —
+   * e sem esta lista a mensagem dizia "já tinha conteúdo" mesmo quando a
+   * IA tinha acabado de recusar, de propósito, preencher o que faltava.
+   * SEM "tags": é o único item de jurFaltando que não corresponde a um
+   * campo de texto do formulário (assuntos se SOMAM, nunca "faltam" no
+   * mesmo sentido), e quase todo julgado nasce sem etiqueta — contá-lo
+   * aqui faria "recusou" aparecer até quando a IA nunca foi questionada
+   * sobre isso. */
+  const faltaAntes = jurFaltando(j).filter((k) => k !== "tags");
   const bruto = String(($("jurCplResposta") || {}).value || "").trim();
   /* jurJsonDoTexto e não JSON.parse: a resposta chega com cerca de
    * markdown ou com uma frase de cortesia em volta na maioria das
@@ -819,7 +831,7 @@ function jurCompletarLer() {
   const partes = [];
   partes.push(r.mudou.length
     ? t("jur_completar_fez", { q: r.mudou.map(jurNomeCampo).join(", ") })
-    : t("jur_completar_zero"));
+    : (faltaAntes.length ? t("jur_completar_recusou") : t("jur_completar_zero")));
   if (r.ignorados.length) {
     partes.push(t("jur_completar_ignorou",
       { q: r.ignorados.map(jurNomeCampo).join(", ") }));
@@ -1000,6 +1012,11 @@ function jurPintarLista() {
     if (j.tribunal) sel(j.tribunal, "trib");
     const proc = [j.classe, j.numero].filter(Boolean).join(" ");
     if (proc) sel(proc, "proc");
+    /* DOIS PROCESSOS NUMA FICHA SÓ. Só aponta — dividir é decisão de
+     * quem estuda, a mesma regra dos outros avisos desta tela. */
+    if (typeof jurPareceDoisProcessos === "function" && jurPareceDoisProcessos(j)) {
+      sel(t("jur_dois_proc"), "dois-proc").title = t("jur_dois_proc_aj");
+    }
     /* A CATEGORIA MUDA O JEITO DE ESTUDAR, e por isso vale um selo
      * próprio: súmula vinculante se decora literal, tema repetitivo se
      * decora pela tese, acórdão isolado se lê pelo raciocínio.

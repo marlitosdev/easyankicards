@@ -578,6 +578,100 @@ async function testes() {
   }
 
   /* ==============================================================
+   * J11l/J11m: "NADA A PREENCHER" TINHA SÓ UM MOTIVO — SÓ QUE HÁ DOIS
+   *
+   * O CASO REAL: um julgado juntava dois processos distintos do STF numa
+   * ficha só (número composto "551/RJ e 938.538 AgR/ES"), e a IA, seguindo
+   * a própria regra do prompt ("não invente data nem relator se não tiver
+   * certeza de qual processo é este"), devolveu data/órgão/relator
+   * vazios DE PROPÓSITO. A tela mostrou "todos os campos que ela devolveu
+   * já tinham conteúdo" — falso: eles não tinham, a IA recusou preenchê-
+   * los. jurCompletar nem entra num campo que a resposta devolveu em
+   * branco ("if (!v) return", em juris.js), então r.mudou fica vazio nos
+   * dois casos (já preenchido, ou recusado) e o texto genérico escondia
+   * qual dos dois tinha acontecido.
+   * ============================================================== */
+  {
+    /* J11l: havia campo faltando, e a IA devolveu vazio — mensagem tem
+     * de dizer que ela recusou, não que "já tinha conteúdo". */
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "ADI",
+      numero: "551/RJ e 938.538 AgR/ES" }, "Direito Tributário", "Limitações");
+    api.jurIniciarTela();
+    api.jurCompletarAbrir(j.id);
+    ok(api.jurFaltando(api.jurDe(j.id)).indexOf("data") >= 0,
+       "J11l-pre o cenário não tem data faltando, o teste não testa nada");
+    api.$("jurCplResposta").value = JSON.stringify({
+      data_julgamento: "", orgao: "", relator: "",
+      identificacao: "dois processos numa ficha só",
+    });
+    api.jurCompletarLer();
+    const saida = String(api.$("jurCplSaida").textContent || "");
+    ok(saida.indexOf(api.t("jur_completar_recusou")) >= 0,
+       "J11l a tela não avisou que a IA recusou preencher: " + saida);
+    ok(saida.indexOf(api.t("jur_completar_zero")) < 0,
+       "J11m a tela disse 'já tinha conteúdo' para campo que estava vazio: " + saida);
+  }
+  {
+    /* J11n: nada faltava, e a IA devolveu os mesmos valores — a mensagem
+     * antiga continua correta aqui, e não pode regredir para a nova. */
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "ADI", numero: "551",
+      data: "2019-05-20", orgao: "Tribunal Pleno", relator: "Min. Fux",
+      fonte: "DJE", resumo: "resumo já completo" },
+      "Direito Tributário", "Limitações");
+    api.jurIniciarTela();
+    api.jurCompletarAbrir(j.id);
+    ok(api.jurFaltando(api.jurDe(j.id)).length === 0
+       || api.jurFaltando(api.jurDe(j.id)).join(",") === "tags",
+       "J11n-pre o cenário ainda tem campo de texto faltando, além de tags: "
+       + JSON.stringify(api.jurFaltando(api.jurDe(j.id))));
+    api.$("jurCplResposta").value = JSON.stringify({
+      tribunal: "STF", classe: "ADI", numero: "551",
+      data_julgamento: "2019-05-20", orgao: "Tribunal Pleno", relator: "Min. Fux",
+    });
+    api.jurCompletarLer();
+    const saida2 = String(api.$("jurCplSaida").textContent || "");
+    ok(saida2.indexOf(api.t("jur_completar_zero")) >= 0,
+       "J11o um julgado já completo deixou de mostrar a mensagem antiga: " + saida2);
+    ok(saida2.indexOf(api.t("jur_completar_recusou")) < 0,
+       "J11p um julgado já completo passou a mostrar a mensagem de recusa: " + saida2);
+  }
+
+  /* ==============================================================
+   * J11q-t: "DOIS PROCESSOS NUMA FICHA SÓ" — SÓ APONTA, NUNCA SEPARA
+   *
+   * O MESMO CASO REAL do bloco acima, agora do lado do cartão: um
+   * número como "551/RJ e 938.538 AgR/ES" ganha um selo de aviso na
+   * lista, explicando por que data/órgão/relator nunca vão fechar — e
+   * um número comum, de processo único, não ganha selo nenhum. O
+   * detector nunca separa a ficha sozinho: quem decide o que vira duas
+   * fichas (e o que cada uma leva) é quem estuda.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const dois = guardar(api, { tribunal: "STF", classe: "ADI",
+      numero: "551/RJ e 938.538 AgR/ES" }, "Direito Tributário", "Limitações");
+    const unico = guardar(api, { tribunal: "STF", classe: "RE",
+      numero: "574706" }, "Direito Tributário", "Limitações");
+
+    ok(api.jurPareceDoisProcessos(dois) === true,
+       "J11q o detector nao reconheceu o numero composto: " + dois.numero);
+    ok(api.jurPareceDoisProcessos(unico) === false,
+       "J11r o detector deu falso positivo num processo unico: " + unico.numero);
+
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Limitações");
+    const cx = api.$("jurLista");
+    const avisos = cx.querySelectorAll ? cx.querySelectorAll(".dois-proc") : [];
+    ok(avisos.length === 1,
+       "J11s a lista nao mostrou exatamente um selo de aviso: " + avisos.length);
+    ok(/dois processos/i.test((avisos[0] && avisos[0].textContent) || ""),
+       "J11t o selo nao diz o que esta acontecendo: "
+       + (avisos[0] && avisos[0].textContent));
+  }
+
+  /* ==============================================================
    * J12: O AVISO DE REPETIDO NÃO PODE PARECER QUE COMPARA AS LINHAS
    *
    * O RELATO REAL: o aviso mostrava duas linhas — "STF RE 584.100" e

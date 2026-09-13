@@ -1893,6 +1893,10 @@ dialog.diag-modal{max-width:860px}
   border-color:var(--azul,#2563eb);font-weight:700}
 .rt-aba.tem-erro:not(.sel){border-color:var(--vermelho,#dc2626);
   color:var(--vermelho,#dc2626)}
+.rt-limpar{all:unset;cursor:pointer;font-size:10.5px;padding:5px 11px;
+  border-radius:999px;border:1px solid var(--vermelho,#dc2626);
+  color:var(--vermelho,#dc2626);white-space:nowrap;margin:0 0 8px;display:inline-block}
+.rt-limpar:hover{background:var(--vermelho-claro,#3b1414);color:#fff}
 .rt-lista{max-height:46vh;overflow:auto;border:1px solid var(--borda);
   border-radius:9px;padding:6px 2px;margin-bottom:10px;background:var(--campo)}
 .rt-li{display:grid;grid-template-columns:auto auto 1fr;gap:8px;
@@ -2712,6 +2716,11 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
   border-color:var(--verde,#16a34a);color:var(--verde,#16a34a)}
 .jur-sel.cat.cat-controle{border-color:var(--vermelho,#dc2626);
   color:var(--vermelho,#dc2626)}
+/* DOIS PROCESSOS NUMA FICHA SÓ: mesmo espírito do selo de categoria —
+   avisa, não decide — mas na cor de atenção, porque aqui o problema
+   trava campos (data/órgão/relator) para sempre, não é só informativo. */
+.jur-sel.dois-proc{background:transparent;border:1px solid var(--atencao,#f59e0b);
+  color:var(--atencao,#f59e0b);font-weight:700;cursor:help}
 .jur-sel.proc{background:var(--campo);color:var(--texto);
   border:1px solid var(--borda);font-weight:600}
 /* A TESE É O CONTEÚDO — e como citação, para não se confundir com a
@@ -4312,6 +4321,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        pergunta é "o que aconteceu antes disto?". Esta aba não guarda
        nada: lê as fontes e junta. -->
   <div class="rt-abas" id="rtAbas"></div>
+  <!-- Só aparece com erro(s) na lista: um convite a limpar, não uma opção
+       sempre visível para algo que quase nunca tem o que limpar. -->
+  <button type="button" id="btnRtLimparErros" class="rt-limpar" hidden></button>
   <div class="rt-lista" id="rtLista" hidden></div>
 
   <pre id="diagPre" class="diag-pre"></pre>

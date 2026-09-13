@@ -1,4 +1,4 @@
-# EasyAnkiCards (v10.4.0) · by MarlitosDev
+# EasyAnkiCards (v16.15.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -91,11 +91,14 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 ```
 easy-anki-cards/
 ├── docs/                  # PWA (web/celular) — servida pelo GitHub Pages
-│   ├── index.html · app.js · parser.js · anki.js · i18n.js
+│   ├── index.html · app.js · parser.js · anki.js · i18n.js · modos.js
 │   ├── edital.js · editais.js · edital-ui.js · edital-hub.js · pre-edital.js
-│   ├── material.js · cartoes-material.js · vinculos.js · modos.js
-│   ├── questoes.js · questoes-ui.js · rascunho.js · fora-da-agenda.js
-│   ├── backup.js · backup-ui.js
+│   ├── material.js · cartoes-material.js · vinculos.js · vizinhos.js · grifo.js
+│   ├── lei-seca.js · lei-ui.js · juris.js · juris-ui.js
+│   ├── questoes.js · questoes-ui.js · questoes-hist.js · copiar-questao.js
+│   ├── rascunho.js · fora-da-agenda.js · dificuldade.js
+│   ├── cartao-melhorar.js · backup.js · backup-ui.js
+│   ├── registro-tudo.js · plano-log.js · geracao-log.js
 │   └── manifest.webmanifest · sw.js · icon-192/512.png · .nojekyll
 ├── src/easyankicards/     # desktop (janela nativa que carrega docs/) + CLI
 ├── scripts/build_exe.bat  # gera release\EasyAnkiCards.exe
@@ -228,6 +231,72 @@ Cada resumo e cada registro do diário gravam **para qual concurso** foram
 feitos. Hoje há um edital só e a marca parece supérflua; ela existe porque
 informação que não é gravada na hora não se recupera depois — no dia em que
 houver dois planos, os históricos precisam ser separáveis.
+
+## Lei seca
+
+**Espaço para o texto.** A lista de capítulos, no topo do leitor, competia com
+o próprio texto da lei por altura vertical: cada linha reaproveitava o botão
+"marcar lido" inteiro (`.btn-min`, pensado para caber texto por extenso), e a
+caixa acumulava preenchimento em cima de preenchimento. Uma classe compacta
+só para esse botão e margens mais justas nas fileiras de botões acima da
+lista devolveram espaço de leitura sem tirar nenhuma função.
+
+**"De onde veio esta lei" mentia duas coisas.** O campo de link vinha
+preenchido com a URL de uma lei específica (a 4.320) como se fosse resposta
+pronta, mesmo editando outra lei — trocado por um texto de exemplo genérico,
+sem URL nenhuma. E o campo de data, quando não havia data salva, chutava a
+data de hoje: abrir a janela só para corrigir o link e clicar "guardar"
+gravava "consultada hoje" mesmo que ninguém tivesse conferido nada — o campo
+agora fica vazio até o usuário confirmar de verdade uma data.
+
+**O destaque do artigo, ao saltar de uma citação.** `scrollIntoView` já
+centralizava o artigo certo, mas o destaque era uma troca estática de cor de
+fundo, sem transição — fácil de não notar o instante exato em que a rolagem
+parou no lugar certo. Passou a reaproveitar a mesma animação de contorno
+pulsante que a busca do material já usa (`@keyframes matPisca`), com a mesma
+guarda de `prefers-reduced-motion` que o app já respeita em outro lugar.
+
+**Nota por artigo.** Nenhum campo assim existia. Cada lei ganhou um mapa
+opcional, `notasArtigos`, guardado pelo mesmo mecanismo de merge que já
+gravava o resto do registro da lei (`leiGuardar`) — sem tabela nova. No
+leitor, cada artigo ganha um botão de nota (vazio: "+ nota"; preenchido: o
+próprio texto, curto); um botão "✨ sugerir com IA" monta um prompt com o
+texto do artigo e a resposta cai numa caixa editável, revisada antes de
+guardar — **a IA sugere, o usuário decide**, a mesma regra que vale para
+tese e ementa em jurisprudência. A nota aparece em mais dois lugares: no
+título do link de uma citação (`qs-lei-link`), quando resolvido para uma lei
+só, e como segunda linha em cada opção do popover de escolher a lei
+(`qsUiLeiEscolher`), quando a citação bate em mais de uma — é o que ajuda a
+escolher sem precisar abrir as duas.
+
+## Jurisprudência: guardar sem perder o que foi corrigido, e melhorar o resumo
+
+**"+ guardar mais um julgado" reaparecia com o julgado anterior.** `jurEditar`
+preenche os campos do formulário diretamente para editar um julgado
+existente; voltar ao modo "incluir" depois disso nunca limpava esses campos,
+porque só `jurEditar` chamava `jurLimparForm()` — `jurTrocarModo("incluir")`
+não chamava. Um julgado novo nascia com o texto do anterior ainda nos campos.
+A correção foi uma linha (`if (m === "incluir") jurLimparForm();`), validada
+revertendo-a de propósito e confirmando que o teste novo falha sem ela.
+
+**O prompt do 🩹 "completar e conferir" tinha erro de concordância.** "Faltam
+1 campo(s)" para um campo só lia mal; a mensagem agora tem duas formas —
+singular e plural — escolhidas por uma condição simples, o mesmo padrão de
+chave dupla (`_um`) já usado em outros textos do app em vez de um "(s)"
+colado.
+
+**Melhorar o resumo, separado de preencher e de corrigir.** O botão "✨
+perguntar à IA" já existia, mas serve para **extrair metadados** de uma
+ementa colada (tribunal, classe, data) — nunca reescreve nada. "Corrigir
+lacunas" (🩹) já aponta campos vazios, também sem reescrever. Faltava mesmo
+melhorar a **redação do resumo**, e só do resumo: a tese continua proibida de
+ser reescrita, por ser transcrição do tribunal. O botão novo (💡, ao lado da
+caixa de resumo) abre uma janela no mesmo formato do "cartão-melhorar" já
+existente no app: gera um prompt → copiar → colar a resposta da IA → conferir
+antes/depois lado a lado → só então aplicar. Tese e ementa entram no prompt
+como contexto, nunca para a IA devolver; "aplicar" escreve o texto novo só na
+caixa do formulário — salvar continua exigindo o "Guardar" de sempre, a mesma
+regra de "marcar é experimentar" que já vale para os grifos da lei seca.
 
 ## Questões
 
@@ -378,6 +447,23 @@ o estudado, verde escuro o revisado dentro dele.
 O progresso salvo no formato antigo (`true`) continua valendo — a migração é
 silenciosa, feita na leitura, para ninguém perder o que já marcou.
 
+## Mapa das disciplinas
+
+Um cartão por disciplina, sempre abertos, competia por altura com a agenda da
+semana logo acima — em dezessete disciplinas, a rolagem até "e agora?" ficava
+longa antes mesmo de chegar lá. O painel virou um **mapa recolhível**: fechado
+por padrão, mostra só um resumo por extenso (`8 disciplinas · 231 tópicos ·
+64% feito`) e uma seta; abrir revela os cartões de cada disciplina, com um
+seletor de **ordem** — por lacuna (o que falta, padrão do panorama já
+existente em `edital.js`), por fatia da prova, ou pela ordem do próprio
+edital.
+
+Nem o estado aberto/fechado nem a ordem escolhida são lembrados entre sessões
+(ao contrário de outras gavetas do app, como `edAbertas`): é estado de leitura
+da tela agora, não preferência — abrir o mapa toda vez que a página carrega
+seria pior do que fechado por padrão, mas lembrar uma ordem antiga na sessão
+seguinte também confundiria mais do que ajudaria.
+
 ## O painel do edital
 
 Duas vistas, e a que abre por padrão é a do dia a dia. A **tabela** de 231
@@ -501,27 +587,60 @@ junto com o defeito é pior do que nenhum**.
 
 ```js
 const MODOS = [
-  { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
-  { id: "edital",  secao: "secEdital",  icone: "📋", rotulo: "modo_edital",  pronto: false },
-  { id: "resumos", secao: "secResumos", icone: "📝", rotulo: "modo_resumos", pronto: false },
+  { id: "cartoes",     secao: "secCartoes",     icone: "🗂", rotulo: "modo_cartoes", pronto: true },
+  { id: "edital",      secao: "secEdital",      icone: "📋", rotulo: "modo_edital",  pronto: true },
+  { id: "material",    secao: "secResumos",     icone: "📚", rotulo: "modo_material",
+    rotuloCurto: "modo_material_curto", pronto: true },
+  { id: "questoes",    secao: "secQuestoes",    icone: "❓", rotulo: "modo_questoes", pronto: true },
+  { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
 ];
 ```
 
 Um modo novo é uma entrada aqui mais uma `<section>` no HTML — `app.js`,
 `parser.js` e `anki.js` não mudam. Cada entrada aponta a própria seção em vez
 de o código procurar por `[data-modo]`: assim o registro é a única fonte da
-verdade e dá para saber tudo sobre os modos sem abrir o HTML.
+verdade e dá para saber tudo sobre os modos sem abrir o HTML. `rotuloCurto` é
+opcional — só quem precisa de um rótulo mais estreito para caber na fileira
+única do celular o declara (hoje só "material"); os outros repetem o rótulo
+cheio, e é o CSS, não o JS, que decide qual dos dois mostrar.
 
-**Edital**, **Resumos** e **Questões** deixaram de ser esqueleto: hoje o edital
-tem plano, agenda, diário e acompanhamento; os resumos têm marcas, dicas, lei
-seca e cartões; as questões têm banco, sessão que sobrevive a fechar a janela,
+Todos os cinco modos deixaram de ser esqueleto: o edital tem plano, agenda,
+diário e acompanhamento; o material tem marcas, dicas, lei seca, jurisprudência
+e cartões; as questões têm banco, sessão que sobrevive a fechar a janela,
 rascunho e correção por prompt. A regra que o teste K5 protege desde a época do
 esqueleto continua valendo: trocar de modo **não encosta no texto do editor**.
 Um modo que apagasse o trabalho do outro repetiria o acidente que custou 137
 cartões.
 
-Trilho vertical acima de 900px, fileira de abas abaixo disso — a mesma
-marcação, montada pelo mesmo registro.
+**Trilho vertical acima de 760px, fileira única abaixo disso** — mesma
+marcação, montada pelo mesmo registro; o breakpoint é 760px porque é o que o
+resto do app já usa (lei seca, agenda, diálogos), não mais 900px, que era a
+exceção e derrubava notebooks um pouco mais estreitos no modo celular sem
+avisar. Um bug de layout apareceu junto com essa correção: a barra usava
+`float`, e `position:sticky` só funciona quando o próprio contentor do
+elemento tem altura no fluxo normal — um pai flutuante colapsa sem clearfix, e
+a barra sumia ao rolar a tela. A troca de `float` por `display:flex` resolveu
+as duas coisas de uma vez.
+
+## Onde estudar: a barra que sumia ao rolar
+
+A faixa de modos (Cartões/Edital/Material/Questões/Ferramentas) tinha dois
+problemas juntos: no computador ela usava `float`, e ao rolar a tela ela
+**desaparecia** — `position:sticky` só funciona quando o próprio contentor do
+elemento tem altura no fluxo normal, e um pai flutuante colapsa sem
+`clearfix`. A inspeção ao vivo (`getBoundingClientRect()` no console) mostrou
+a barra com `top:-700` e o contentor com `height:22` — o pai tinha
+encolhido para quase nada, e a barra "sticky" flutuava para fora da tela
+junto com ele. A troca de `float` por `display:flex` resolveu isso e, de
+quebra, simplificou o CSS: um layout flex não precisa da mesma cerimônia de
+clearfix que o float exige.
+
+No celular, cinco ícones divididos entre trilho vertical e fileira de abas
+conforme a largura já existiam (ver [Modos](#modos-barra-lateral)); o ajuste
+aqui foi de acabamento — cores por modo aplicadas de fato (a regra de
+"material" e "questões" nunca tinha pegado, por causa de um id antigo
+`resumos` que não existe mais no registro) e o breakpoint alinhado ao resto
+do app, 760px em vez de 900px.
 
 ## O cartão preso à prova de origem
 
