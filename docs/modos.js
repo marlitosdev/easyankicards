@@ -47,8 +47,13 @@ function trocarModo(id) {
   }
   /* O rodapé de exportação é da bancada de CARTÕES: "Baixar .txt" e "Baixar
    * .apkg" não significam nada no edital, e botão que não faz sentido no
-   * contexto é botão que ensina o usuário a desconfiar da tela. */
-  const rod = document.getElementById("rodapeExportar");
+   * contexto é botão que ensina o usuário a desconfiar da tela.
+   *
+   * A DIV INTEIRA ESCONDE, não só o conteúdo: desde que a chave da IA e
+   * o diagnóstico se mudaram para dlgConfig, "rodapeExportar" é tudo o
+   * que resta dentro de "rodape" — escondê-lo sozinho deixava a barra
+   * de pé, vazia, ocupando ~20px em todo modo que não é cartões. */
+  const rod = document.getElementById("rodape");
   if (rod) rod.hidden = id !== "cartoes";
   if (typeof medirRodape === "function") medirRodape();
   try { localStorage.setItem("eac_modo", id); } catch (e) {}

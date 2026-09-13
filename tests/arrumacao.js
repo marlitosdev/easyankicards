@@ -399,63 +399,62 @@ async function testes() {
   }
 
   /* ==============================================================
-   * A7: O ⚙ DO CABEÇALHO — abre, fecha, e não fecha sozinho por cima
-   * do <select>/<input color> que estão dentro dele
+   * A7: ⚙ ABRE "CONFIGURAÇÕES" — no computador e no celular
    *
-   * O CASO REAL: tema/cor/idioma saíram da fileira do cabeçalho (três
-   * fileiras empilhadas no mobile, boa parte da tela antes de qualquer
-   * conteúdo) para dentro de um painel que só aparece atrás do ⚙. O
-   * risco de um "fecha ao clicar fora" ingênuo: ele fecharia o painel
-   * também ao clicar no PRÓPRIO seletor de tema, no meio da escolha —
-   * hdrConfigCliqueFora existe para nunca fazer isso.
+   * O CASO REAL: tema/cor/idioma saíam do cabeçalho e o antigo rodapé
+   * técnico (chave da IA, base, diagnóstico) ficava de pé o tempo
+   * inteiro, em toda tela do app. Os dois se mudaram para uma janela só
+   * (dlgConfig), atrás do ⚙ — em QUALQUER largura de tela, não só no
+   * celular: é uma janela normal do app (abrirModal de sempre), então
+   * fechar em Esc/clique no fundo já vem de graça, sem lógica própria.
    * ============================================================== */
   {
     const { api } = rodar();
-    const cx = api.$("hdrCtls");
-    const btn = api.$("btnHdrConfig");
-    /* O SIMULADOR CRIA CADA ELEMENTO SOLTO, POR ID, SEM ÁRVORE (ver
-     * comentário em fumaca.js) — só liga parentNode para o que está
-     * dentro de um <dialog>, ou para o que ganha appendChild/append em
-     * tempo de execução. "hdrCtls" é uma <div> comum, então o simulador
-     * nunca a conecta aos próprios filhos sozinho; aqui é montada a
-     * MESMA relação que já existe no HTML de verdade, só para o
-     * ".contains()" ter o que verificar. */
-    cx.appendChild(api.$("selTema"));
-    ok(cx && !cx.classList.contains("aberta"),
-       "A7-pre o painel de configuracoes ja nasce aberto");
+    ok(api.$("dlgConfig").open === false,
+       "A7-pre a janela de configuracoes ja nasce aberta");
 
-    /* abre no primeiro clique */
-    btn.onclick({ stopPropagation() {} });
-    ok(cx.classList.contains("aberta"),
-       "A7 o clique no ⚙ nao abriu o painel");
-    ok(btn.getAttribute("aria-expanded") === "true",
-       "A7a aria-expanded nao acompanhou a abertura");
+    api.$("btnHdrConfig").onclick();
+    ok(api.$("dlgConfig").open === true,
+       "A7 o clique no ⚙ nao abriu a janela de configuracoes");
 
-    /* clique DENTRO (no seletor de tema) não fecha — é o bug que este
-     * botão existe para evitar */
-    api.hdrConfigCliqueFora({ target: api.$("selTema") });
-    ok(cx.classList.contains("aberta"),
-       "A7b um clique no proprio seletor de tema fechou o painel");
+    /* tema/cor/idioma moraram no cabecalho; agora moram aqui */
+    ["selTema", "corLetra", "btnCorReset", "selIdioma"].forEach((id) => {
+      ok(!!api.$(id), "A7a " + id + " sumiu da tela ao se mudar para dlgConfig");
+    });
+    /* o rodape tecnico inteiro tambem se mudou para ca */
+    ["btnChaveIA", "chaveIaLuz", "chaveIaTxt", "seloBase", "btnSeloAjuda",
+     "btnBackup", "btnDiagnostico", "status"].forEach((id) => {
+      ok(!!api.$(id), "A7b " + id + " sumiu da tela ao sair do rodape fixo");
+    });
 
-    /* clique FORA (em outro botao do cabecalho) fecha */
-    api.hdrConfigCliqueFora({ target: api.$("btnAjuda") });
-    ok(!cx.classList.contains("aberta"),
-       "A7c um clique fora do painel nao o fechou");
-    ok(btn.getAttribute("aria-expanded") === "false",
-       "A7d aria-expanded nao voltou a false ao fechar");
+    api.$("btnConfigFechar").onclick();
+    ok(api.$("dlgConfig").open === false,
+       "A7c o botao Fechar nao fechou a janela de configuracoes");
+  }
 
-    /* Esc fecha */
-    btn.onclick({ stopPropagation() {} });
-    ok(cx.classList.contains("aberta"), "A7e-pre nao abriu para testar o Esc");
-    api.hdrConfigTecla({ key: "Escape" });
-    ok(!cx.classList.contains("aberta"), "A7f Esc nao fechou o painel");
+  /* ==============================================================
+   * A8: O RODAPÉ FIXO SÓ EXISTE NO MODO CARTÕES
+   *
+   * Antes só o CONTEÚDO ("rodapeExportar") escondia fora do modo
+   * cartões; a barra em si ficava de pé, vazia (o rodapé técnico que
+   * a preenchia se mudou para dlgConfig em A7) — uma faixa de ~20px
+   * sobrando em quatro dos cinco modos. Agora esconde a div inteira.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    api.montarBarraModos();
+    api.trocarModo("cartoes");
+    ok(api.$("rodape").hidden === false,
+       "A8 o rodape sumiu no proprio modo cartoes, que e o dono dele");
 
-    /* clicar no ⚙ de novo, já aberto, fecha (alterna) */
-    btn.onclick({ stopPropagation() {} });
-    ok(cx.classList.contains("aberta"), "A7g-pre nao abriu para testar o alternar");
-    btn.onclick({ stopPropagation() {} });
-    ok(!cx.classList.contains("aberta"),
-       "A7h clicar no ⚙ com o painel aberto devia fecha-lo");
+    api.trocarModo("edital");
+    ok(api.$("rodape").hidden === true,
+       "A8a o rodape (a barra inteira, nao so o conteudo) continuou de "
+       + "pe fora do modo cartoes");
+
+    api.trocarModo("cartoes");
+    ok(api.$("rodape").hidden === false,
+       "A8b voltar ao modo cartoes nao trouxe o rodape de volta");
   }
 
   falhas.quantas = n;

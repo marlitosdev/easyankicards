@@ -623,11 +623,16 @@ async function testes() {
     ok(/71/.test(vales[0]) && /29/.test(vales[1]),
        `P3 as fatias não batem com o cálculo: ${vales.join(" / ")}`);
 
-    /* P4 — o rodapé de exportar é da bancada de cartões e some no edital */
-    ok(api.$("rodapeExportar").hidden === true,
+    /* P4 — o rodapé de exportar é da bancada de cartões e some no edital.
+     * A DIV INTEIRA some agora ("rodape"), não só o conteúdo de dentro
+     * ("rodapeExportar") — desde que o rodapé técnico (chave da IA,
+     * base, diagnóstico) se mudou para dlgConfig, rodapeExportar é tudo
+     * o que resta dentro de rodape, e escondê-lo sozinho deixaria a
+     * barra de pé, vazia, em todo modo que não é cartões. */
+    ok(api.$("rodape").hidden === true,
        "P4 os botões de exportar .txt/.apkg aparecem no modo edital");
     api.trocarModo("cartoes");
-    ok(api.$("rodapeExportar").hidden === false,
+    ok(api.$("rodape").hidden === false,
        "P5 os botões de exportar sumiram do modo a que pertencem");
     api.trocarModo("edital");
 
@@ -737,6 +742,13 @@ async function testes() {
     const tagRodape = (CSS2.match(/<div[^>]*id="rodapeExportar"[^>]*>/) || [""])[0];
     ok(!/style="[^"]*display/.test(tagRodape),
        "S1 o rodapé voltou a ter display embutido, que anula o hidden");
+    /* S1b — MESMA REGRA NO ELEMENTO QUE HOJE É O DONO DO "hidden": desde
+     * que o rodapé técnico saiu para dlgConfig, é "rodape" (a div de
+     * fora) quem esconde/mostra, não mais "rodapeExportar" sozinho — o
+     * mesmo bug do S1 poderia voltar aqui. */
+    const tagRodapeTudo = (CSS2.match(/<div[^>]*id="rodape"[^>]*>/) || [""])[0];
+    ok(!/style="[^"]*display/.test(tagRodapeTudo),
+       "S1b o rodape (div de fora) ganhou display embutido, que anula o hidden");
 
     /* S2 — o diário não pode contradizer o contador. Quem já tinha progresso
      * marcado antes de o diário existir via 8 estudados e o diário vazio. */
