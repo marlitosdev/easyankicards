@@ -352,6 +352,82 @@ async function testes() {
        + (daLrf && daLrf.textContent));
   }
 
+  /* ==============================================================
+   * L45-L48: CITAÇÃO NOMEIA UMA LEI DESCONHECIDA, MAS O TÓPICO JÁ TEM
+   * OUTRAS — OFERECE ESSAS PRIMEIRO, EM VEZ DE PULAR PARA "VINCULAR"
+   *
+   * O CASO REAL, relatado com print: um comentário citava "art. 130,
+   * § 1º, do ADCT" — ADCT não estava na biblioteca, mas o tópico já
+   * tinha leis ligadas (uma Constituição costuma trazer o ADCT dentro
+   * do próprio texto). Ir direto para "vincular uma lei nova" pulava a
+   * resposta mais provável, e no caso real ainda oferecia uma lei sem
+   * nenhuma relação, só por ser a única outra na biblioteca.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    montarBiblioteca(api, 2);         /* 4.320 e LRF ligados; CTN, não */
+    const cit = api.leiCitacoesNoTexto("art. 130, § 1º, do ADCT")[0];
+    ok(cit && cit.rotulo === "ADCT",
+       "L45-pre a citação não capturou 'ADCT' como rótulo: "
+       + JSON.stringify(cit));
+
+    const q = { disciplina: DISC, topico: TOP, comentario: "" };
+    const bt = api.document.createElement("button");
+    api.document.createElement("div").append(bt);
+    api.qsUiLeiIr(cit, q, bt);
+
+    const menu = api.$("qsLeiMenu");
+    ok(!!menu && menu.hidden === false,
+       "L45 uma citação de lei desconhecida, com o tópico já tendo leis "
+       + "ligadas, não abriu o menu de escolher — foi direto para vincular");
+    ok(/ADCT/.test((menu && menu.textContent) || ""),
+       "L46 o menu não diz qual nome não foi reconhecido: "
+       + (menu && menu.textContent));
+    const itens = Array.from((menu && menu.children) || []);
+    ok(itens.some((b) => String(b.textContent || "").indexOf("Lei 4.320") >= 0)
+       && itens.some((b) => String(b.textContent || "").indexOf("LC 101") >= 0),
+       "L47 as leis já ligadas ao tópico não apareceram como opção");
+    ok(itens.some((b) => b.id === "btnQsLeiVincular")
+       && itens.some((b) => b.id === "btnQsLeiNova"),
+       "L48 vincular uma já guardada / colar nova sumiram do menu único");
+  }
+
+  /* ==============================================================
+   * L49: O MENU NÃO EXTRAPOLA A TELA
+   *
+   * O CASO REAL, relatado com print: o botão que abre o menu fica perto
+   * do rodapé fixo da questão (comentário comprido, pouco espaço
+   * embaixo) — "sempre abrir para baixo" empurrava "usar uma lei já
+   * guardada" e "+ colar uma lei nova" para fora da janela, sem
+   * nenhuma rolagem para alcançá-las.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    montarBiblioteca(api, 2);
+    const q = { disciplina: DISC, topico: TOP, comentario: "" };
+    const bt = api.document.createElement("button");
+    api.document.createElement("div").append(bt);
+    /* botão perto do fim da janela: pouco espaço embaixo, de propósito */
+    bt.getBoundingClientRect = () => ({
+      top: 600, bottom: 620, left: 20, right: 60, width: 40, height: 20,
+    });
+
+    const menu = api.qsUiLeiEscolher(bt, q, null);
+    ok(!!menu, "L49-pre o menu não abriu");
+    const top = parseFloat(menu.style.top) || 0;
+    const bottom = parseFloat(menu.style.bottom) || 0;
+    /* virou para cima (bottom, não top) OU ganhou um teto de altura que
+     * cabe no espaço restante — o que não pode acontecer é abrir para
+     * baixo SEM limite, como antes */
+    const virouParaCima = menu.style.top === "auto" && bottom > 0;
+    const ganhouTeto = !!menu.style.maxHeight;
+    ok(virouParaCima || ganhouTeto,
+       "L49 o menu perto do rodapé não virou para cima nem ganhou teto "
+       + "de altura — extrapola a tela do mesmo jeito relatado: "
+       + JSON.stringify({ top: menu.style.top, bottom: menu.style.bottom,
+           maxHeight: menu.style.maxHeight }));
+  }
+
   if (!n) falhas.push("nenhuma asserção rodou — o arquivo abortou no meio");
   return falhas;
 }
