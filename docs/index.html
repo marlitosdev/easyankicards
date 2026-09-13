@@ -100,54 +100,57 @@ header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;
        box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:5}
 header h1{font-size:19px;margin:0;flex:1}
 header h1 small{display:block;font-size:11px;font-weight:400;color:var(--sutil);font-style:italic}
-header .hdr-ctls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-header select, header .hdr-btn{height:34px;border-radius:9px;border:1px solid var(--borda);
+/* SEM O PREFIXO "header" NAS CLASSES: tema/cor/idioma se mudaram para
+   dentro de #dlgConfig, e continuam precisando exatamente desta
+   aparência — um seletor escrito só para dentro do cabeçalho parava de
+   valer assim que o controle deixasse de ser filho dele. .hdr-btn e
+   companhia viraram um estilo de botão do app, não mais "do
+   cabeçalho". O <select> continua por ID (#selTema, #selIdioma): virar
+   "select{...}" sozinho, sem qualificar, pintaria TODO select do app —
+   o de modelo de cartão, o de tópico da questão — do mesmo jeito. */
+#selTema, #selIdioma, .hdr-btn{height:34px;border-radius:9px;border:1px solid var(--borda);
   background:var(--campo);color:var(--texto);font-size:12.5px;font-family:inherit;
   padding:0 10px;cursor:pointer;transition:filter .15s, box-shadow .15s}
-header select:hover, header .hdr-btn:hover{filter:brightness(1.06);
+#selTema:hover, #selIdioma:hover, .hdr-btn:hover{filter:brightness(1.06);
   box-shadow:0 1px 4px rgba(0,0,0,.12)}
-header .hdr-btn{display:inline-flex;align-items:center;gap:5px;font-weight:600}
-header .hdr-cor{position:relative;width:34px;height:34px;border-radius:9px;
+.hdr-btn{display:inline-flex;align-items:center;gap:5px;font-weight:600}
+.hdr-cor{position:relative;width:34px;height:34px;border-radius:9px;
   border:1px solid var(--borda);overflow:hidden;padding:0;cursor:pointer;background:none}
-header .hdr-cor input{position:absolute;inset:-4px;width:calc(100% + 8px);
+.hdr-cor input{position:absolute;inset:-4px;width:calc(100% + 8px);
   height:calc(100% + 8px);border:0;padding:0;cursor:pointer}
-header .hdr-reset{width:34px;justify-content:center;padding:0;font-size:15px}
+.hdr-reset{width:34px;justify-content:center;padding:0;font-size:15px}
 header .hdr-ajuda{background:var(--azul);color:#fff;border-color:transparent}
-/* O ⚙ SÓ EXISTE NO MOBILE — no computador os quatro controles cabem
-   numa linha só e não há nada para recolher. Escondido por padrão aqui;
-   a media query abaixo é que o revela abaixo de 760px. */
-header .hdr-config{display:none;width:34px;justify-content:center;padding:0;font-size:15px}
-header .hdr-cor-linha{display:flex;align-items:center;gap:6px}
+/* O ⚙ ABRE "CONFIGURAÇÕES" (dlgConfig) EM QUALQUER TAMANHO DE TELA —
+   tema, cor da letra e idioma não são o dia a dia de ninguém, então
+   saem da fileira do cabeçalho também no computador, não só no celular.
+   O rodapé técnico (chave da IA, base, diagnóstico) mora na mesma
+   janela: uma "configurações" só, não duas superfícies diferentes. */
+header .hdr-config{width:34px;justify-content:center;padding:0;font-size:15px}
+.hdr-cor-linha{display:flex;align-items:center;gap:6px}
 /* O ÍCONE SÓ APARECE NO MOBILE — no computador o texto "?  Ajuda" já diz
    tudo sozinho, e mostrar os dois juntos duplicaria o "?". */
 header .hdr-ajuda .hdr-ic{display:none}
 
 /* ---- CABEÇALHO NO MOBILE: de três fileiras para uma ----
    Ícone, nome, ❓ e ⚙ cabiam perto de 400px de altura em três fileiras
-   empilhadas (o h1 quebra sozinho, os quatro controles quebram de novo)
-   antes de qualquer conteúdo aparecer. Tema/cor/idioma — usados uma vez
-   e esquecidos, não o dia a dia de ninguém — saem da fileira e viram um
-   painel que só existe quando pedido, atrás do ⚙. A versão, que morava
-   no subtítulo, continua alcançável no Diagnóstico. */
+   empilhadas (o h1 quebra sozinho, os controles quebravam de novo)
+   antes de qualquer conteúdo aparecer. A versão, que morava no
+   subtítulo, continua alcançável no Diagnóstico (dentro de ⚙). */
 @media (max-width:760px){
   header h1 small{display:none}
-  header .hdr-config{display:inline-flex}
   header .hdr-ajuda .hdr-ic{display:inline}
   header .hdr-ajuda .hdr-txt{display:none}
   header .hdr-ajuda{width:34px;justify-content:center;padding:0;font-size:15px}
-  header .hdr-ctls{
-    display:none;
-  }
-  header .hdr-ctls.aberta{
-    display:flex;flex-direction:column;align-items:stretch;gap:8px;
-    position:absolute;top:100%;right:14px;margin-top:6px;
-    background:var(--panel);border:1px solid var(--borda);border-radius:12px;
-    padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);
-    width:min(78vw,280px);z-index:40;
-  }
-  header .hdr-ctls.aberta select,
-  header .hdr-ctls.aberta .hdr-cor-linha{width:100%}
 }
+
+/* ---- A JANELA DE CONFIGURAÇÕES ----
+   Cada controle numa linha: rótulo à esquerda, controle à direita — o
+   mesmo padrão de lista usado no resto do app, em vez de inventar um
+   layout novo só para esta janela. */
+.cfg-linha{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin:10px 0}
+.cfg-rot{font-size:12.5px;color:var(--sutil);font-weight:600}
+.cfg-sep{border:0;border-top:1px solid var(--borda);margin:14px 0}
 select,button,input,textarea{font:inherit;color:var(--texto)}
 /* CAMPO NUMERICO TAMBEM E CAMPO.
    Esta regra listava so [type=text]: todo input de numero ficava com o
@@ -210,10 +213,19 @@ textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius
 /* Sem style embutido: "display:flex" inline vence até o !important da
    regra global de [hidden]. Inline continua sendo caso à parte. */
 .rodape-exportar{display:flex;gap:8px;justify-content:center}
-.rodape-tec{display:flex;gap:14px;justify-content:center;margin-top:6px}
+/* AGORA VIVE DENTRO DE dlgConfig, não mais no rodapé fixo — a janela é
+   mais estreita que a barra que ocupava a largura toda, então os cinco
+   itens (chave da IA, base, ?, dois links) podem precisar de segunda
+   linha, o que nunca acontecia lá fora. */
+.rodape-tec{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:6px}
 .link-tec{background:none;border:0;padding:2px 4px;cursor:pointer;
   font-size:11px;color:var(--sutil);opacity:.65;text-decoration:underline}
 .link-tec:hover{opacity:1;color:var(--texto)}
+/* SÓ EXISTE, VISUALMENTE, QUANDO HÁ O QUE EXPORTAR — modos.js esconde a
+   div inteira fora do modo cartões (antes só o conteúdo escondia; a
+   barra ficava uma faixa vazia de 20px em todo o resto do app). Sem
+   isso "ganhar espaço" valeria só para o cabeçalho, e não para os
+   quatro quintos do tempo em que ninguém está exportando nada. */
 .rodape{position:fixed;left:0;right:0;bottom:0;background:var(--panel);
         box-shadow:0 -2px 8px rgba(0,0,0,.1);padding:10px 14px;display:flex;gap:8px;
         justify-content:center;z-index:5}
@@ -3619,32 +3631,61 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small>by MarlitosDev · <span id="versao"></span></small></h1>
-  <div class="hdr-ctls" id="hdrCtls">
-    <select id="selTema" aria-label="Tema">
-      <option value="auto"></option><option value="light"></option>
-      <option value="dark"></option><option value="black"></option>
-    </select>
-    <div class="hdr-cor-linha">
-      <label class="hdr-cor" title="Cor da letra">
-        <input type="color" id="corLetra" aria-label="Cor da letra">
-      </label>
-      <button class="hdr-btn hdr-reset" id="btnCorReset" title="Cor automática">↺</button>
-    </div>
-    <select id="selIdioma" aria-label="Idioma">
-      <option value="pt">Português</option>
-      <option value="en">English</option>
-    </select>
-  </div>
   <button class="hdr-btn hdr-ajuda" id="btnAjuda">
     <span class="hdr-ic" aria-hidden="true">❓</span>
     <span class="hdr-txt" data-i18n="help_btn"></span>
   </button>
-  <!-- SÓ APARECE NO MOBILE (CSS) — no computador os controles acima já
-       ficam inteiros na fileira, sem precisar de um botão para achá-los. -->
   <button class="hdr-btn hdr-config" id="btnHdrConfig" type="button"
-          aria-haspopup="true" aria-expanded="false"
-          data-i18n-title="hdr_config_titulo">⚙</button>
+          data-i18n-title="cfg_titulo">⚙</button>
 </header>
+
+<dialog id="dlgConfig" class="ui-modal">
+  <h3 data-i18n="cfg_titulo"></h3>
+  <div class="dlg-corpo">
+    <div class="cfg-linha">
+      <span class="cfg-rot" data-i18n="cfg_tema"></span>
+      <select id="selTema" aria-label="Tema">
+        <option value="auto"></option><option value="light"></option>
+        <option value="dark"></option><option value="black"></option>
+      </select>
+    </div>
+    <div class="cfg-linha">
+      <span class="cfg-rot" data-i18n="cfg_cor"></span>
+      <div class="hdr-cor-linha">
+        <label class="hdr-cor" title="Cor da letra">
+          <input type="color" id="corLetra" aria-label="Cor da letra">
+        </label>
+        <button class="hdr-btn hdr-reset" id="btnCorReset" title="Cor automática">↺</button>
+      </div>
+    </div>
+    <div class="cfg-linha">
+      <span class="cfg-rot" data-i18n="cfg_idioma"></span>
+      <select id="selIdioma" aria-label="Idioma">
+        <option value="pt">Português</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+    <hr class="cfg-sep">
+    <!-- O RODAPÉ TÉCNICO INTEIRO MOROU NA BARRA FIXA por anos; ela ficava
+         de pé em toda tela do app só para mostrar isto, mesmo quando
+         ninguém tinha nada para diagnosticar. Agora mora aqui — a mesma
+         informação, um toque de distância em vez de sempre visível. -->
+    <div id="status"></div>
+    <div class="rodape-tec">
+      <button type="button" id="btnChaveIA" class="chave-ia">
+        <span class="chave-ia-luz" id="chaveIaLuz"></span>
+        <span class="chave-ia-txt" id="chaveIaTxt"></span>
+      </button>
+      <span class="selo-base" id="seloBase"></span>
+      <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
+      <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
+      <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
+    </div>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnConfigFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 
 <main>
 <!-- A FAIXA TEM NOME. Cinco lugares diferentes do aplicativo sem uma
@@ -4191,7 +4232,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <div id="toast"></div>
 
-<div class="rodape">
+<!-- Só o que se exporta fica aqui — chave da IA, base e diagnóstico
+     moraram nesta barra por anos e agora vivem em ⚙ Configurações
+     (dlgConfig), a um toque em vez de sempre de pé na tela. modos.js
+     esconde esta div INTEIRA fora do modo cartões, e não só o conteúdo
+     de dentro: sem isso ela virava uma faixa vazia de ~20px em todo o
+     resto do app. -->
+<div class="rodape" id="rodape">
   <div style="width:100%;max-width:600px">
     <div class="rodape-exportar" id="rodapeExportar">
       <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
@@ -4200,22 +4247,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
            do Anki. Na hora de revisar um tópico, o material tinha o resumo
            e não tinha as perguntas que aquele resumo gerou. -->
       <button class="btn btn-roxo" id="btnSalvarMaterial" data-i18n="cm_botao"></button>
-    </div>
-    <div id="status"></div>
-    <div class="rodape-tec">
-      <!-- A CHAVE DA IA, UMA VEZ, PARA O APLICATIVO INTEIRO.
-           Ela estava escondida dentro de uma ferramenta, e quem a
-           guardasse lá não tinha como saber que ela vale para as
-           outras. Aqui ela é um interruptor: liga ou desliga, e diz em
-           qual estado está sem precisar ser aberto. -->
-      <button type="button" id="btnChaveIA" class="chave-ia">
-        <span class="chave-ia-luz" id="chaveIaLuz"></span>
-        <span class="chave-ia-txt" id="chaveIaTxt"></span>
-      </button>
-      <span class="selo-base" id="seloBase"></span>
-      <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
-      <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
-      <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
     </div>
   </div>
 </div>

@@ -694,7 +694,6 @@ function rodar() {
     qsUiFerramentas, qsUiPintarCores,
     qsFerMenu, qsFerFechar, qsFerPosicionar,
     qsFerAbertoAtual: () => qsFerAberto,
-    hdrConfigFechar, hdrConfigCliqueFora, hdrConfigTecla,
     /* dispara nos ouvintes do documento: e assim que o navegador conta
        ao app que houve um clique fora ou um Esc */
     docDisparar: (tipo, ev) => {
