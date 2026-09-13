@@ -535,7 +535,7 @@ function leiPintarBlocos() {
     meta.textContent = t("lei_bloco_meta", { n: b.quantos, min: b.minutos });
 
     const chk = document.createElement("button");
-    chk.className = "btn-min" + (lidos[b.nome] ? " btn-min-ok" : "");
+    chk.className = "btn-min lei-bloco-chk" + (lidos[b.nome] ? " btn-min-ok" : "");
     chk.textContent = lidos[b.nome] ? t("lei_bloco_lido", { d: lidos[b.nome] })
                                     : t("lei_bloco_marcar");
     chk.title = t("lei_bloco_marcar_ajuda");
@@ -906,7 +906,17 @@ function leiPintarLeitura() {
     bEd.title = t("lei_art_editar_ajuda");
     bEd.onclick = () => leiEdAbrir(a.num);
 
-    cab.append(bCloze, bEd);
+    /* A NOTA — "do que trata este artigo", em poucas palavras. Ela é o
+     * que ajuda a reconhecer uma citação sem abrir a lei: "art. 151" não
+     * diz nada de cabeça, "art. 151 — isenção na exportação" diz. */
+    const temNota = l ? leiNotaDe(l.id, a.num) : "";
+    const bNota = document.createElement("button");
+    bNota.className = "btn-min lei-art-b" + (temNota ? " lei-art-b-nota" : "");
+    bNota.textContent = temNota ? "📝" : t("lei_nota_add");
+    bNota.title = temNota || t("lei_nota_add_ajuda");
+    bNota.onclick = () => leiNotaAbrir(a);
+
+    cab.append(bCloze, bEd, bNota);
 
     const corpo = document.createElement("div");
     corpo.className = "lei-art-txt";
@@ -944,6 +954,57 @@ function leiPintarLeitura() {
 
     cx.append(bloco);
   });
+}
+
+/* =====================================================================
+ * A NOTA DO ARTIGO — "do que ele trata", para reconhecer sem abrir
+ *
+ * Uma citação sozinha ("art. 151") não diz nada de cabeça a quem não
+ * decorou a lei — a diferença entre "onde estava mesmo isso?" e
+ * reconhecer de relance. A nota é curta de propósito: não é um resumo
+ * do artigo, é o gancho que lembra do assunto ("isenção na
+ * exportação"), não o texto reescrito.
+ *
+ * A IA PODE SUGERIR; QUEM DECIDE SE FICA É QUEM ESTUDA — a mesma regra
+ * da tese e do resumo da jurisprudência. Por isso não há "aplicar
+ * direto": a sugestão cai na MESMA caixa que se edita à mão, e só vira
+ * nota de verdade quando a pessoa clica em guardar.
+ * ===================================================================== */
+let leiNotaArt = null;
+
+function leiNotaAbrir(a) {
+  if (!a || !$("dlgLeiNota")) return;
+  leiNotaArt = a;
+  $("leiNotaTitulo").textContent = t("lei_nota_titulo", { a: a.rotulo });
+  $("leiNotaTexto").value = leiIdAtual ? leiNotaDe(leiIdAtual, a.num) : "";
+  $("leiNotaPrompt").hidden = true;
+  $("leiNotaPromptTxt").value = "";
+  abrirModal("dlgLeiNota");
+}
+
+function leiNotaSugerir() {
+  if (!leiNotaArt) return;
+  $("leiNotaPromptTxt").value = t("lei_nota_prompt",
+    { artigo: leiNotaArt.rotulo, texto: leiNotaArt.texto });
+  $("leiNotaPrompt").hidden = false;
+  try { leiReg("nota", "sugestão de nota copiada", leiNotaArt.rotulo); } catch (e) {}
+}
+
+function leiNotaCopiarPrompt() {
+  try { navigator.clipboard.writeText($("leiNotaPromptTxt").value); } catch (e) {}
+}
+
+function leiNotaSalvar() {
+  if (!leiNotaArt || !leiIdAtual) return false;
+  const texto = String($("leiNotaTexto").value || "").trim();
+  const ok = leiNotaGuardar(leiIdAtual, leiNotaArt.num, texto);
+  if (ok) {
+    $("dlgLeiNota").close();
+    try { leiReg("nota", texto ? "nota guardada" : "nota apagada", leiNotaArt.rotulo); }
+    catch (e) {}
+    leiPintarLeitura();
+  }
+  return ok;
 }
 
 /* ---------------------------------------------------------------------
@@ -1233,7 +1294,9 @@ function leiIrArtigo(num, indice) {
   }
   if (el.classList) {
     el.classList.add("lei-art-pisca");
-    setTimeout(() => { try { el.classList.remove("lei-art-pisca"); } catch (e) {} }, 1600);
+    /* 2200ms = os quatro pulsos de ".55s" da animação matPisca inteiros —
+     * tirar a classe antes cortaria o contorno no meio de um pulso */
+    setTimeout(() => { try { el.classList.remove("lei-art-pisca"); } catch (e) {} }, 2200);
   }
   return true;
 }
@@ -1451,7 +1514,14 @@ function leiProcAbrir() {
   if (!l) { uiAlert(t("lei_proc_sem_lei")); return; }
   $("leiProcNome").value = l.nome || "";
   $("leiProcFonte").value = l.fonte || "";
-  $("leiProcData").value = l.consultadaEm || leisHojeISO();
+  /* SEM DATA SALVA, O CAMPO NASCE VAZIO — nunca "hoje" por padrão.
+   * Chutar hoje fazia abrir esta janela só para corrigir o link e
+   * clicar "guardar" registrar "consultada hoje" mesmo que ninguém
+   * tivesse conferido nada agora: uma data que parece confirmada e
+   * nunca foi. leiPintarProcedencia já trata a ausência corretamente
+   * ("nunca conferida") — quem decide que hoje É a data é a pessoa,
+   * escolhendo, não o formulário chutando por ela. */
+  $("leiProcData").value = l.consultadaEm || "";
   $("leiProcVersao").value = l.versao || "";
   abrirModal("dlgLeiProc");
 }
@@ -1971,6 +2041,10 @@ function leiIniciar() {
 
   liga("btnLeiProcSalvar", "guardar procedência", () => leiProcSalvar());
   liga("btnLeiProcFechar", "fechar a procedência", () => $("dlgLeiProc").close());
+  liga("btnLeiNotaSugerir", "sugerir nota do artigo", () => leiNotaSugerir());
+  liga("btnLeiNotaCopiar", "copiar sugestão de nota", () => leiNotaCopiarPrompt());
+  liga("btnLeiNotaSalvar", "guardar nota do artigo", () => leiNotaSalvar());
+  liga("btnLeiNotaFechar", "fechar a nota do artigo", () => $("dlgLeiNota").close());
   liga("btnLeiVincFechar", "fechar o vínculo", () => $("dlgLeiVincular").close());
   liga("btnLeiClozeFechar", "fechar a lacuna", () => $("dlgLeiCloze").close());
   liga("btnLeiClozeConferir", "conferir a lacuna", () => leiClozeConferir());

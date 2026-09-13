@@ -866,6 +866,75 @@ function jurNomeCampo(k) {
   return k === "tags" ? t("jur_f_tags") : k;
 }
 
+/* =====================================================================
+ * MELHORAR O RESUMO — antes/depois, e só aplica quem confirma
+ *
+ * "Completar e conferir" (acima) preenche o que falta e aponta erro,
+ * sem reescrever nada — era o que faltava para "corrigir lacunas". O
+ * que ainda faltava de verdade era MELHORAR A REDAÇÃO de um resumo que
+ * já existe, mas saiu mal escrito. Mesmo formato do "cartão-melhorar"
+ * (docs/cartao-melhorar.js, mesmas classes ".qm-*"): gera o prompt,
+ * você cola a resposta, vê o antes/depois, e só então aplica.
+ *
+ * DIFERENÇA DE PROPÓSITO: a resposta aqui é texto simples — um campo
+ * só, não um cartão com frente/verso — e "aplicar" escreve na caixa do
+ * formulário, não grava sozinho. Salvar continua sendo o "Guardar" de
+ * sempre, a mesma regra de "marcar é experimentar" que já vale para
+ * grifos na lei seca: aplicar é olhar o resultado, não é comprometer-se
+ * com ele. */
+let jurMelAntes = "";
+let jurMelDepois = "";
+
+function jurMelAbrir() {
+  if (!$("dlgJurMelhorar")) return;
+  const resumo = String(($("jurResumo") || {}).value || "").trim();
+  const tese = String(($("jurTese") || {}).value || "").trim();
+  const ementa = String(($("jurColar") || {}).value || "").trim();
+  jurMelAntes = resumo;
+  jurMelDepois = "";
+  $("jurMelPrompt").value = jurPromptMelhorar(
+    jurTopicoAtual ? jurTopicoAtual.nome : "", tese, ementa, resumo);
+  $("jurMelColar").value = "";
+  $("jurMelComparar").hidden = true;
+  $("btnJurMelAplicar").hidden = true;
+  abrirModal("dlgJurMelhorar");
+  reg("JURIS", "melhorar o resumo aberto", jurTopicoAtual ? jurTopicoAtual.nome : "");
+}
+
+function jurMelConferir() {
+  const cru = String(($("jurMelColar") || {}).value || "").trim();
+  if (!cru) { uiAlert(t("jur_mel_vazio")); return false; }
+  jurMelDepois = cru;
+
+  const cx = $("jurMelComparar");
+  cx.innerHTML = "";
+  [["cm_mel_antes", jurMelAntes || t("jur_mel_antes_vazio"), "qm-antes"],
+   ["cm_mel_depois", jurMelDepois, "qm-depois"]].forEach(([rot, texto, cls]) => {
+    const r1 = document.createElement("div");
+    r1.className = "qm-rot";
+    r1.textContent = t(rot);
+    const d = document.createElement("div");
+    d.className = "qm-lado " + cls;
+    d.textContent = texto;
+    cx.append(r1, d);
+  });
+  cx.hidden = false;
+  $("btnJurMelAplicar").hidden = false;
+  reg("JURIS", "antes/depois do resumo conferido", jurTopicoAtual ? jurTopicoAtual.nome : "");
+  return true;
+}
+
+/* NÃO GRAVA — escreve na caixa do formulário, igual toda marcação
+ * "experimental" deste app. Quem confirma de verdade é o "Guardar". */
+function jurMelAplicar() {
+  if (!jurMelDepois || !$("jurResumo")) return false;
+  $("jurResumo").value = jurMelDepois;
+  $("dlgJurMelhorar").close();
+  reg("JURIS", "resumo melhorado aplicado ao formulário (ainda não salvo)",
+      jurTopicoAtual ? jurTopicoAtual.nome : "");
+  return true;
+}
+
 /* O PROMPT, para quando a aritmética não responde. */
 async function jurCopiarPrompt() {
   if (!jurTopicoAtual) return;
@@ -1201,6 +1270,13 @@ function jurIniciarTela() {
   liga("btnJurCplLer", () => jurCompletarLer());
   liga("btnJurCplFechar", () => $("dlgJurCompletar").close());
   liga("btnJurCplX", () => $("dlgJurCompletar").close());
+  liga("btnJurMelhorarResumo", () => jurMelAbrir());
+  liga("btnJurMelCopiar", () => {
+    try { navigator.clipboard.writeText($("jurMelPrompt").value); } catch (e) {}
+  });
+  liga("btnJurMelConferir", () => jurMelConferir());
+  liga("btnJurMelAplicar", () => jurMelAplicar());
+  liga("btnJurMelFechar", () => $("dlgJurMelhorar").close());
   if ($("jurCplResposta")) {
     $("jurCplResposta").oninput = jurCplPintarLer;
     if ($("jurCplResposta").addEventListener) {

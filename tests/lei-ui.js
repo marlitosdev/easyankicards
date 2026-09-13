@@ -421,6 +421,16 @@ async function testes() {
     api.leiPintar();
     ok(/atualizado|sem link/.test(api.$("leiProc").textContent || ""),
        "U4h lei sem data nenhuma passou calada: " + api.$("leiProc").textContent);
+
+    /* E O FORMULARIO NAO PODE CHUTAR "HOJE" NO LUGAR DELA.
+     * Abrir esta janela so' para corrigir o link e clicar "guardar"
+     * gravava "consultada hoje" mesmo que ninguem tivesse conferido
+     * nada agora — uma data que parece confirmada e nao foi. Quem
+     * decide que hoje E a data e' a pessoa, nao o formulario por ela. */
+    api.leiProcAbrir();
+    ok(api.$("leiProcData").value === "",
+       "U4i o campo de data veio preenchido sozinho, sem ninguem ter "
+       + "confirmado nada: " + JSON.stringify(api.$("leiProcData").value));
   }
 
   /* ---- U5: capítulos como sessões de estudo ---- */
@@ -854,6 +864,56 @@ async function testes() {
     ok(api.leiLog0() === errosAntes,
        "U14e clicar nos botoes gerou " + (api.leiLog0() - errosAntes)
        + " erro(s) — algum deles esta quebrado");
+  }
+
+  /* ---- U19: a nota do artigo — IA sugere, quem estuda decide ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id = api.leisLista()[0].id;
+    const art = api.leiArtigos(L4320)[0];
+
+    /* SEM NOTA, o botão convida a criar uma — e a janela abre vazia */
+    ok(api.leiNotaDe(id, art.num) === "",
+       "U19-pre o artigo já nasceu com nota, o cenário não testa nada");
+    api.leiNotaAbrir(art);
+    ok(api.$("dlgLeiNota").open === true, "U19 a janela da nota não abriu");
+    ok(api.$("leiNotaTexto").value === "",
+       "U19a a caixa da nota veio com algo escrito sozinha");
+
+    /* SUGERIR MONTA O PROMPT, E NÃO ESCREVE NA CAIXA DA NOTA — quem
+     * decide se a sugestão fica é quem cola a resposta e revisa. */
+    api.leiNotaSugerir();
+    ok(api.$("leiNotaPrompt").hidden === false,
+       "U19b sugerir não mostrou o prompt para copiar");
+    ok(new RegExp(art.rotulo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+         .test(api.$("leiNotaPromptTxt").value),
+       "U19c o prompt não menciona o artigo certo: " + api.$("leiNotaPromptTxt").value);
+    ok(api.$("leiNotaTexto").value === "",
+       "U19d sugerir já escreveu na caixa da nota sem a pessoa colar nada");
+
+    /* a resposta "colada" (simulada) e o guardar */
+    api.$("leiNotaTexto").value = "classificação da despesa orçamentária";
+    ok(api.leiNotaSalvar() === true, "U19e guardar a nota falhou");
+    ok(api.$("dlgLeiNota").open === false, "U19f guardar não fechou a janela");
+    ok(api.leiNotaDe(id, art.num) === "classificação da despesa orçamentária",
+       "U19g a nota não foi para o registro da lei: "
+       + JSON.stringify(api.leiNotaDe(id, art.num)));
+
+    /* o botão do artigo, repintado, mostra que agora há nota */
+    api.leiPintarLeitura();
+    const btNota = (api.$("leiLeitura").querySelectorAll(".lei-art-b-nota") || [])[0];
+    ok(!!btNota, "U19h o botão do artigo não passou a indicar que tem nota");
+
+    /* apagar o texto e guardar de novo TIRA a nota — não deixa "" pendurado */
+    api.leiNotaAbrir(art);
+    api.$("leiNotaTexto").value = "";
+    api.leiNotaSalvar();
+    ok(api.leiNotaDe(id, art.num) === "",
+       "U19i esvaziar a caixa e guardar não apagou a nota");
   }
 
   falhas.quantas = n;
