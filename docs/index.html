@@ -974,9 +974,25 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   #dlgQsResponder .qs-barra-ferramentas{flex:0 0 auto}
 }
 /* o texto é a única parte elástica — e portanto a única que rola */
+/* "flex:1 1 auto" SÓ REPARTE ESPAÇO LIVRE — e o diálogo, com "max-height"
+   mas sem "height", se dimensiona pela SOMA dos filhos, não por um alvo
+   a preencher. A ideia era "o texto da lei inteira transborda até o
+   teto sozinho", e por escrito parecia certo — só que um item flex com
+   "overflow:auto" tem tamanho mínimo automático baseado no seu próprio
+   min-height, não no conteúdo que rola dentro dele. Na prática, medido:
+   um diálogo de 720px de janela ficava com 422px de altura total, e o
+   campo de leitura preso em ~120px — o piso de min-height, nunca mais
+   que isso, não importa quantos artigos a lei tenha. "cheia" (mais
+   abaixo) já resolvia isto do jeito certo — min-height DIRETO no campo,
+   não no diálogo —; o padrão nunca tinha ganho a mesma correção. */
 #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
 #dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{
-  flex:1 1 auto;min-height:120px;max-height:none;height:auto;resize:none}
+  flex:1 1 auto;min-height:46dvh;max-height:none;height:auto;resize:none}
+@supports not (height:1dvh){
+  #dlgMaterial #matTexto, #dlgMaterial #matLeitura,
+  #dlgLeiSeca #leiTexto, #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{
+    min-height:46vh}
+}
 /* ---- COLAR A LEI NÃO PODE SER POR UM BURACO DE FECHADURA ----------
  * O "flex:1 1 auto" acima só reparte ESPAÇO LIVRE, e um diálogo com
  * max-height mas sem height se dimensiona pelo conteúdo — no modo
