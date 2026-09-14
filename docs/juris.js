@@ -190,6 +190,7 @@ function jurDoJson(bruto) {
     data: pega("data_julgamento", "data", "julgamento"),
     relator: pega("relator", "relatora"),
     orgao: pega("orgao", "\u00f3rgao", "orgao_julgador"),
+    fonte: pega("fonte", "onde_encontrei", "link", "url"),
     tese: pega("tese_curta", "tese", "ementa"),
     resumo: pega("resumo_prova", "resumo", "resumo_curto", "explicacao"),
     /* A EMENTA LIMPA, quando a IA a devolveu. É ela que vai para o
@@ -316,8 +317,8 @@ function jurCategoria(classe) {
 function jurIdentificar(txt) {
   const bruto = String(txt || "");
   const achado = { tribunal: "", classe: "", numero: "", data: "",
-                   relator: "", orgao: "", tese: "", ano: "", categoria: "",
-                   tribunalDeduzido: false };
+                   relator: "", orgao: "", fonte: "", tese: "", ano: "",
+                   categoria: "", tribunalDeduzido: false };
   if (!bruto.trim()) return achado;
   /* JSON PRIMEIRO, quando for JSON: o resto do extrator trabalha com
    * texto de página de tribunal e não teria o que fazer com chaves. */

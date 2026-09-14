@@ -1833,6 +1833,42 @@ async function testes() {
         api.diarioPor([]);
       }
 
+      /* AF6 — O BOTÃO "HOJE" NO DIÁRIO.
+       * Os períodos existentes eram 7/30/90 dias e "tudo" — nenhum deles
+       * responde "o que estudei HOJE", que é a pergunta de quem quer
+       * avaliar a sessão que acabou de fazer sem misturá-la com a semana
+       * inteira. */
+      {
+        (api.editaisLista() || []).slice().forEach((x) => api.edApagar(x.id));
+        const eF = api.edCriar("TCE-PE", ["# TCE-PE | prova: " + emDias(131) + " | horas: 40",
+          "@ Direito Financeiro :: 5", "+ Restos a pagar :: 5 :: pq"].join("\n"));
+        api.hubAbrirEdital(eF.id);
+        api.diarioPor([
+          { d: diasAtras(0), c: "direito financeiro›restos a pagar",
+            disc: "Direito Financeiro", n: "Restos a pagar", a: "feito",
+            cc: "TCE-PE", m: 30, p: 25 },
+          { d: diasAtras(2), c: "direito financeiro›restos a pagar",
+            disc: "Direito Financeiro", n: "Restos a pagar", a: "feito",
+            cc: "TCE-PE", m: 60, p: 25 },
+        ]);
+        api.abrirDiario();
+        const btns = Array.from((api.$("diarioPeriodos") || {}).children || []);
+        const btnHoje = btns.find((b) => b.textContent === api.t("ed_diario_per_1"));
+        ok(!!btnHoje, "AF6 falta o botão \"hoje\" no diário");
+        if (btnHoje) btnHoje.onclick();
+        ok(api.$("diarioLista").children.length === 1,
+           `AF6b o filtro "hoje" não isolou só o registro de hoje `
+           + `(${api.$("diarioLista").children.length} linha(s))`);
+        /* a função de estatísticas usada no resumo do topo tem de bater
+         * com o que a lista mostra, não só o desenho da tela */
+        const stHoje = api.estatisticasDiario(1);
+        ok(stHoje.eventos === 1,
+           `AF6c estatisticasDiario(1) não isolou só hoje (${stHoje.eventos})`);
+
+        api.edApagar(eF.id);
+        api.diarioPor([]);
+      }
+
       /* AG — o item sai da agenda MOSTRANDO para onde foi.
        * Ele sumia no mesmo instante em que o diálogo fechava, e sumia
        * calado: parecia que tinha se perdido, não que tinha sido guardado. */

@@ -803,9 +803,16 @@ async function testes() {
       data_julgamento: "28/03/2019",
       tese_curta: "Não há reserva de lei complementar federal.",
       categoria: "CONTROLE CONCENTRADO",
+      fonte: "portal do STF",
     }));
     ok(j.classe === "ADI" && j.numero === "2405",
        "J22 o JSON nao foi lido: " + JSON.stringify(j));
+    /* "FONTE" É O MESMO CAMPO que o prompt de completar já pedia — o
+     * prompt de preencher (o primeiro passo) passou a pedi-lo também,
+     * e o extrator precisa aceitá-lo, senão o campo continua vazio e a
+     * pessoa cai de volta no segundo prompt só para preenchê-lo. */
+    ok(j.fonte === "portal do STF",
+       "J22h a fonte do JSON nao foi lida: " + JSON.stringify(j));
     /* A DATA CHEGA NORMALIZADA: a caixa da tela é <input type="date"> e
      * só entende aaaa-mm-dd; devolver "28/03/2019" ali seria devolver
      * um campo vazio. */
@@ -818,10 +825,13 @@ async function testes() {
      * um exemplo, e exemplo nunca é seguido à risca. */
     const b = api.jurIdentificar(JSON.stringify({
       corte: "STJ", tipo: "REsp", processo: "1.234.567",
-      tese: "Uma tese qualquer.", julgamento: "2020-05-10" }));
+      tese: "Uma tese qualquer.", julgamento: "2020-05-10",
+      onde_encontrei: "https://stj.jus.br/x" }));
     ok(b.tribunal === "STJ" && b.classe === "REsp" && b.numero === "1.234.567",
        "J22c as grafias alternativas do JSON nao foram aceitas: "
        + JSON.stringify(b));
+    ok(b.fonte === "https://stj.jus.br/x",
+       "J22c-fonte a grafia alternativa de fonte nao foi aceita: " + b.fonte);
     ok(b.data === "2020-05-10", "J22d a data ja em ISO foi estragada: " + b.data);
 
     /* O CAMINHO DE TEXTO CONTINUA INTACTO — é o principal. */

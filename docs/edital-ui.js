@@ -1078,7 +1078,7 @@ function completarDiario(itens) {
 
 /* Períodos do diário. "Últimos 7 dias" era a única janela, e ela não
  * responde "quanto rendi este mês" nem "quanto já pus neste ciclo". */
-const DIARIO_PERIODOS = [7, 30, 90, 0];   /* 0 = tudo */
+const DIARIO_PERIODOS = [1, 7, 30, 90, 0];   /* 0 = tudo, 1 = hoje */
 let diarioPeriodo = 7;
 
 function estatisticasDiario(dias) {

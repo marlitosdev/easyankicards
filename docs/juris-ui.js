@@ -374,6 +374,7 @@ function jurColar() {
   põe("jurNumero", a.numero);
   põe("jurData", a.data);
   põe("jurOrgao", a.orgao);
+  põe("jurFonte", a.fonte);
   if (a.categoria) jurCategoriaColada = a.categoria;
   /* A tese só é SUGERIDA quando o campo está vazio — quem já escreveu a
    * sua não pode perdê-la para um palpite. Vindo de JSON, substitui:
@@ -411,7 +412,7 @@ function jurColar() {
   if (a.tags && a.tags.length) jurTagsColadas = a.tags;
   jurPintarTagsForm();
 
-  const achou = ["tribunal", "classe", "numero", "data", "orgao"]
+  const achou = ["tribunal", "classe", "numero", "data", "orgao", "fonte"]
     .filter((k) => a[k]);
   const pedacos = [];
   if (a.tribunal) pedacos.push(a.tribunal + (a.tribunalDeduzido ? "*" : ""));
