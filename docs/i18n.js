@@ -803,6 +803,7 @@ const UI = {
   "ed_pq_concluido": "estudado e revisado",
   "ed_semana_expl": "Os {n} tópicos de maior peso ainda em aberto, incluindo {r} revisão(ões) vencida(s), que cabem nas horas desta semana ({h}). Marque a caixa ao estudar e o R ao revisar.",
   "ed_diario_7": "Últimos 7 dias: {t} tópicos, {r} revisões, {h} — ver diário",
+  "ed_diario_per_1": "hoje",
   "ed_diario_per_7": "últimos 7 dias",
   "ed_diario_per_30": "últimos 30 dias",
   "ed_diario_per_90": "últimos 90 dias",
@@ -1379,7 +1380,7 @@ const UI = {
   "jur_prompt_exp": "Para quando os números são diferentes ou não existem, e só lendo dá para saber se as duas teses dizem o mesmo. Copia a pergunta para você colar numa IA.",
   "jur_prompt_copiado": "Prompt copiado. Cole numa IA e leia a resposta antes de unir qualquer coisa — unir é decisão sua.",
   "jur_prompt_poucos": "É preciso pelo menos dois julgados neste tópico para comparar.",
-  "jur_prompt_preencher": "Abaixo está a ementa/o acórdão de um julgado que guardei para estudar o tópico \"{tp}\".\n\nDevolva SOMENTE um objeto JSON, sem texto antes nem depois, com estes campos:\n\n{\n  \"tribunal\": \"sigla, ex.: STF\",\n  \"classe\": \"ex.: ADI, RE, REsp, Súmula Vinculante, Tema\",\n  \"numero\": \"só o número, como está escrito\",\n  \"data_julgamento\": \"aaaa-mm-dd, ou vazio se o texto não disser\",\n  \"orgao\": \"órgão julgador, ou vazio\",\n  \"relator\": \"nome, ou vazio\",\n  \"categoria\": \"SÚMULA VINCULANTE | REPETITIVO | REPERCUSSÃO GERAL | CONTROLE CONCENTRADO | vazio\",\n  \"tese_curta\": \"COPIADA do texto, não reescrita\",\n  \"resumo\": \"escrito por você, 2 a 4 frases\"\n}\n\nREGRAS QUE NÃO PODEM SER QUEBRADAS:\n1. \"tese_curta\" é TRANSCRIÇÃO. Copie a frase do próprio texto — a que enuncia o que ficou decidido. Não parafraseie, não resuma, não \"melhore\": trocar uma palavra na tese muda o que eu vou marcar na prova. Se a tese não estiver enunciada em nenhuma frase, deixe \"tese_curta\" vazia e explique no resumo.\n2. \"resumo\" é SEU. Diga o que o tribunal decidiu e por quê, em linguagem direta, 2 a 4 frases. É aqui que você escreve com suas palavras.\n3. Campo que o texto não informa fica com string vazia. Não deduza número, data nem relator.\n4. Nada de markdown, nada de ``` em volta do JSON.\n\nTEXTO:\n{txt}",
+  "jur_prompt_preencher": "Abaixo está a ementa/o acórdão de um julgado que guardei para estudar o tópico \"{tp}\".\n\nDevolva SOMENTE um objeto JSON, sem texto antes nem depois, com estes campos:\n\n{\n  \"tribunal\": \"sigla, ex.: STF\",\n  \"classe\": \"ex.: ADI, RE, REsp, Súmula Vinculante, Tema\",\n  \"numero\": \"só o número, como está escrito\",\n  \"data_julgamento\": \"aaaa-mm-dd, ou vazio se o texto não disser\",\n  \"orgao\": \"órgão julgador, ou vazio\",\n  \"relator\": \"nome, ou vazio\",\n  \"fonte\": \"onde este julgado pode ser conferido (site do tribunal, número no diário oficial etc.), ou vazio se o texto não disser\",\n  \"categoria\": \"SÚMULA VINCULANTE | REPETITIVO | REPERCUSSÃO GERAL | CONTROLE CONCENTRADO | vazio\",\n  \"tese_curta\": \"COPIADA do texto, não reescrita\",\n  \"resumo\": \"escrito por você, 2 a 4 frases\",\n  \"assuntos\": [\"3 a 6 assuntos curtos, em minúsculas\"]\n}\n\nREGRAS QUE NÃO PODEM SER QUEBRADAS:\n1. \"tese_curta\" é TRANSCRIÇÃO. Copie a frase do próprio texto — a que enuncia o que ficou decidido. Não parafraseie, não resuma, não \"melhore\": trocar uma palavra na tese muda o que eu vou marcar na prova. Se a tese não estiver enunciada em nenhuma frase, deixe \"tese_curta\" vazia e explique no resumo.\n2. \"resumo\" é SEU. Diga o que o tribunal decidiu e por quê, em linguagem direta, 2 a 4 frases. É aqui que você escreve com suas palavras.\n3. Campo que o texto não informa fica com string vazia (ou lista vazia, no caso de \"assuntos\"). Não deduza número, data nem relator.\n4. \"assuntos\" são etiquetas de busca, não frases: \"multa tributária\", \"não confisco\", \"anterioridade\".\n5. Nada de markdown, nada de ``` em volta do JSON.\n\nTEXTO:\n{txt}",
   /* ---- COMPLETAR E CONFERIR O QUE JÁ ESTÁ GUARDADO ----
      Duas tarefas num pedido só porque olham o mesmo texto. A segunda
      (conferir) é a que este prompt tem de proteger: ele PODE apontar
@@ -3685,6 +3686,7 @@ const UI = {
   "ed_pq_concluido": "studied and reviewed",
   "ed_semana_expl": "The {n} highest-weight open topics, including {r} overdue review(s), that fit this week's hours ({h}). Tick the box when you study, the R when you review.",
   "ed_diario_7": "Last 7 days: {t} topics, {r} reviews, {h} — open the log",
+  "ed_diario_per_1": "today",
   "ed_diario_per_7": "last 7 days",
   "ed_diario_per_30": "last 30 days",
   "ed_diario_per_90": "last 90 days",
