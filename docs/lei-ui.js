@@ -348,14 +348,59 @@ function leiPintarFila() {
   const lista = leisDoTopico(leiAtual.chave);
 
   lista.forEach((l) => {
+    const wrap = document.createElement("span");
+    wrap.className = "lei-chip-wrap";
     const b = document.createElement("button");
+    b.type = "button";
     b.className = "lei-chip" + (l.id === leiIdAtual ? " lei-chip-on" : "");
     const p = leiProgresso(l.id) || { total: 0, pct: 0 };
     b.textContent = l.nome + " · " + t("lei_n_artigos", { n: p.total })
       + (p.pct ? " · " + p.pct + "%" : "");
     b.title = t("lei_chip_ajuda", { n: (l.topicos || []).length });
     b.onclick = () => leiTrocarPara(l.id);
-    cx.append(b);
+    /* DESVINCULAR ESTE TÓPICO DESTA LEI — não apagar a lei, que segue na
+     * biblioteca e ligada a quem mais a usa. Existe porque o link entre
+     * uma citação e uma lei podia sair errado sem jeito nenhum de
+     * corrigir: leiDesligar já fazia a metade certa do trabalho, só não
+     * tinha botão nenhum que a chamasse. */
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "lei-chip-x";
+    x.textContent = "✖";
+    x.title = t("lei_chip_desvincular_aj", { l: l.nome });
+    x.setAttribute("aria-label", x.title);
+    x.onclick = async (ev) => {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      const ok = await uiConfirm(
+        t("lei_chip_desvincular_conf", { l: l.nome, tp: leiAtual.topico }));
+      if (!ok) return;
+      leiDesligar(l.id, leiAtual.chave);
+      reg("LEI", "lei desvinculada do topico", l.nome + " · " + leiAtual.topico);
+      const resto = leisDoTopico(leiAtual.chave);
+      /* O PONTEIRO PREFERIDO DO TÓPICO (matResumos[chave].leiId) pode
+       * continuar apontando para a lei que acabou de sair — sem
+       * corrigir, leiDoTopicoAtual voltaria a devolvê-la na próxima vez
+       * que o tópico abrisse, como se o desvincular não tivesse
+       * acontecido. */
+      if (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]
+          && matResumos[leiAtual.chave].leiId === l.id) {
+        matResumos[leiAtual.chave].leiId = resto[0] ? resto[0].id : "";
+        matSalvar();
+      }
+      if (leiIdAtual === l.id) {
+        if (resto[0]) leiTrocarPara(resto[0].id);
+        else {
+          leiIdAtual = "";
+          $("leiTexto").value = "";
+          leiTrocarModo("editar");
+          leiPintar();
+        }
+      } else {
+        leiPintar();
+      }
+    };
+    wrap.append(b, x);
+    cx.append(wrap);
   });
 
   /* A FILA PRECISA DE UM RÓTULO, senão ela é só uma linha de pílulas.

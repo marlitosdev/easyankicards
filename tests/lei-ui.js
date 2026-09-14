@@ -965,6 +965,113 @@ async function testes() {
        + "do botão: " + api.$("leiFonteAtual").textContent);
   }
 
+  /* ---- U21: DESVINCULAR UMA LEI DO TÓPICO, SEM APAGAR A LEI
+   *
+   * O CASO REAL: uma citação casou com a lei errada (ou a pessoa
+   * vinculou por engano), e não havia jeito nenhum de desfazer pela
+   * tela — leiDesligar existia no código e ninguém o chamava. O botão
+   * "✖" de cada pílula da fila resolve isso: some SÓ o vínculo com
+   * ESTE tópico, a lei continua na biblioteca e ligada a quem mais a
+   * usa. ---- */
+  {
+    const { api } = rodar();
+    const ch = preparar(api, "Direito Financeiro", "Despesa pública");
+    api.leiAbrir("Direito Financeiro", "Despesa pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id4320 = api.leisLista()[0].id;
+
+    /* uma segunda lei, ligada ao MESMO tópico — para conferir que
+     * desvincular uma não mexe na outra */
+    api.leiGuardar({ id: "lei_lc101", nome: "LC 101/2000", apelido: "LRF",
+      especie: "Lei Complementar", numero: "101",
+      texto: "Art. 1º. Normas de finanças públicas." });
+    api.leiLigar("lei_lc101", ch);
+    /* e a MESMA 4.320 servindo outro tópico, para conferir que
+     * desvincular de um não desliga do outro */
+    const ch2 = preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiLigar(id4320, ch2);
+
+    api.leiAbrir("Direito Financeiro", "Despesa pública");
+    const acharX = () => {
+      const wraps = api.$("leiFila").querySelectorAll(".lei-chip-wrap");
+      return wraps.map((w) => (w.children || []).find(
+        (c) => (c.className || "").indexOf("lei-chip-x") >= 0));
+    };
+    ok(acharX().length === 2,
+       "U21-pre esperava um \"x\" por lei da fila (2 leis), achou "
+       + acharX().length);
+
+    /* CANCELAR não muda nada */
+    {
+      const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
+        .filter((b) => /4\.320/.test(b.textContent))[0];
+      const x = alvo.parentNode.children.find(
+        (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
+      const p = x.onclick();
+      api.uiModalResponder(false);
+      await p;
+      ok(api.leisDoTopico(ch).some((l) => l.id === id4320),
+         "U21a cancelar o desvincular já desligou a lei mesmo assim");
+    }
+
+    /* DESVINCULAR A 4.320 deste tópico (que está sendo lida agora) */
+    {
+      const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
+        .filter((b) => /4\.320/.test(b.textContent))[0];
+      const x = alvo.parentNode.children.find(
+        (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
+      const p = x.onclick();
+      api.uiModalResponder(true);
+      await p;
+
+      ok(!api.leisDoTopico(ch).some((l) => l.id === id4320),
+         "U21b a 4.320 continua ligada a \"Despesa pública\" depois do "
+         + "desvincular");
+      ok(api.leisDoTopico(ch2).some((l) => l.id === id4320),
+         "U21c desvincular de UM tópico tirou a 4.320 do OUTRO também — "
+         + "a lei devia continuar servindo \"Receita pública\"");
+      ok(api.leisLista().some((l) => l.id === id4320),
+         "U21d desvincular APAGOU a lei da biblioteca — devia só tirar "
+         + "o vínculo com este tópico");
+
+      /* a fila do tópico agora só tem a LC 101, e a leitura trocou
+       * para ela sozinha (era a que sobrou) */
+      const chipsAgora = api.$("leiFila").querySelectorAll(".lei-chip");
+      const filaAgora = chipsAgora.map((b) => b.textContent).join(" | ");
+      ok(!/4\.320/.test(filaAgora) && /LC 101/.test(filaAgora),
+         "U21e a fila não se atualizou depois do desvincular: " + filaAgora);
+      const lc101chip = chipsAgora.filter((b) => /LC 101/.test(b.textContent))[0];
+      ok(lc101chip && /lei-chip-on/.test(lc101chip.className),
+         "U21f a leitura não trocou sozinha para a lei que sobrou (LC "
+         + "101 devia estar marcada como a atual): "
+         + (lc101chip && lc101chip.className));
+      ok(String(api.$("leiTexto").value || "").indexOf("finanças públicas") >= 0,
+         "U21f2 a caixa de texto não trocou para o conteúdo da LC 101");
+    }
+
+    /* DESVINCULAR A ÚLTIMA lei do tópico — cai no estado "sem lei",
+     * igual a um tópico que nunca teve nenhuma */
+    {
+      const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
+        .filter((b) => /LC 101/.test(b.textContent))[0];
+      const x = alvo.parentNode.children.find(
+        (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
+      const p = x.onclick();
+      api.uiModalResponder(true);
+      await p;
+
+      ok(api.leisDoTopico(ch).length === 0,
+         "U21g ainda sobrou alguma lei ligada depois de desvincular a "
+         + "última: " + JSON.stringify(api.leisDoTopico(ch).map((l) => l.nome)));
+      ok(api.leiModoAtual() === "editar",
+         "U21h sem lei nenhuma no tópico, a tela devia voltar ao modo "
+         + "de colar: " + api.leiModoAtual());
+      ok(String(api.$("leiTexto").value || "") === "",
+         "U21i a caixa de texto continuou mostrando a lei desvinculada");
+    }
+  }
+
   falhas.quantas = n;
   return falhas;
 }

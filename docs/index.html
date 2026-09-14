@@ -1022,6 +1022,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-chip:hover{border-color:var(--acao)}
 .lei-chip-on{border-color:var(--acao);background:var(--acao);color:#fff;font-weight:700}
 .lei-chip-add{border-style:dashed;color:var(--sutil)}
+/* O "x" DE DESVINCULAR fica colado no chip, como uma aba — mesmo
+   par visual do "jur-tag-ed"/"jur-tag-x" da jurisprudência. */
+.lei-chip-wrap{display:inline-flex;align-items:stretch}
+.lei-chip-wrap .lei-chip{border-radius:999px 0 0 999px;border-right:none}
+.lei-chip-x{all:unset;cursor:pointer;font-size:9px;color:var(--sutil);
+  display:flex;align-items:center;padding:0 7px;border:1px solid var(--borda);
+  border-left:none;border-radius:0 999px 999px 0;background:var(--campo)}
+.lei-chip-x:hover{color:var(--vermelho,#dc2626)}
 /* O RÓTULO DA FILA. Sem ele a linha é um punhado de pílulas, e os dois
    botões do fim se leem como duas formas de fazer a mesma coisa — quando
    a diferença entre eles é onde o texto está: fora do app (colar) ou já

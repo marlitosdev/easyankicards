@@ -541,9 +541,21 @@ function leiCasarRotulo(rotulo, lista) {
   const ls = lista || leisLista();
   let cand = [];
   if (alvo.especie === "constituicao") {
+    /* O NOME NA BIBLIOTECA TAMBÉM PODE SER A SIGLA, sem a palavra
+     * "Constituição" escrita por extenso em lugar nenhum — "CF 88",
+     * "CF/88", "CRFB" são formas comuns de nomear a lei ao colá-la, e
+     * "apelido" é um campo à parte que quase ninguém preenche se o
+     * próprio nome já diz tudo. O CASO REAL: uma lei guardada como
+     * "CF 88" não tinha "constitui" nem em nome nem em espécie, e o
+     * apelido nunca tinha sido preenchido — a citação "art. 195, §7º,
+     * da Constituição Federal" caía sempre em "não está na biblioteca",
+     * mesmo com o texto certo guardado ali do lado. leiRotuloChave já
+     * sabe reconhecer essas siglas para uma CITAÇÃO; aqui é o mesmo
+     * reconhecimento aplicado ao NOME da lei guardada. */
     cand = ls.filter((l) =>
       /constitui/.test(leiTxtChave(l.especie) + " " + leiTxtChave(l.nome))
-      || /^(cf|crfb)/.test(leiTxtChave(l.apelido)));
+      || /^(cf|crfb)/.test(leiTxtChave(l.apelido))
+      || leiRotuloChave(l.nome).especie === "constituicao");
   } else if (alvo.sigla) {
     /* a sigla casa pelo APELIDO, que é campo que a pessoa preencheu de
      * propósito — nunca pelo nome, senão "LEI" acharia todas */
