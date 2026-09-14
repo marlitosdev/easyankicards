@@ -762,6 +762,74 @@ async function testes() {
     }
   }
 
+  /* ==============================================================
+   * J13: LEI + JURISPRUDÊNCIA LADO A LADO
+   *
+   * O botão só existe quando os DOIS materiais do tópico existem — sem
+   * lei ou sem julgado não há o que separar em duas metades. E só faz
+   * sentido em tela larga: dois painéis não cabem num celular.
+   * ============================================================== */
+  {
+    const { api, janela, doc } = rodar();
+    const disc = "Direito Tributário", topico = "Imunidades";
+
+    /* só julgado, ainda sem lei: o botão não pode aparecer */
+    guardar(api, { tese: "tese qualquer" }, disc, topico);
+    janela.innerWidth = 1200;
+    api.matRender();
+    const semLei = api.$("matLista").querySelectorAll("button")
+      .filter((b) => (b.className || "").indexOf("btn-lj-split") >= 0);
+    ok(semLei.length === 0,
+       "J13a o botão lado a lado apareceu sem lei nenhuma guardada");
+
+    /* agora com lei também */
+    api.leiAbrir(disc, topico);
+    api.$("leiTexto").value = "Art. 1o Texto de teste.";
+    api.leiGravar();
+    api.$("dlgLeiSeca").close();
+    api.matRender();
+    const btns = api.$("matLista").querySelectorAll("button")
+      .filter((b) => (b.className || "").indexOf("btn-lj-split") >= 0);
+    ok(btns.length === 1,
+       "J13b o botão lado a lado não apareceu com lei E julgado guardados: "
+       + btns.length);
+
+    /* ---- J13c: em tela estreita, cai no comportamento normal ---- */
+    janela.innerWidth = 375;
+    api.leiJurLadoALado(disc, topico);
+    ok(api.$("dlgLeiSeca").open === true,
+       "J13c a lei não abriu em tela estreita");
+    ok(api.$("dlgJuris").open !== true,
+       "J13d em tela estreita a jurisprudência abriu junto — devia abrir "
+       + "só a lei, uma de cada vez, como sempre foi no celular");
+    ok(!doc.body.classList.contains("split-lj"),
+       "J13e o modo lado a lado ligou numa tela que não cabe os dois");
+    api.$("dlgLeiSeca").close();
+
+    /* ---- J13f: em tela larga, os dois abrem juntos, pro MESMO tópico ---- */
+    janela.innerWidth = 1200;
+    api.leiJurLadoALado(disc, topico);
+    ok(api.$("dlgLeiSeca").open === true && api.$("dlgJuris").open === true,
+       "J13f em tela larga os dois painéis deviam abrir juntos: lei="
+       + api.$("dlgLeiSeca").open + " juris=" + api.$("dlgJuris").open);
+    ok(doc.body.classList.contains("split-lj"),
+       "J13g a classe que liga o layout lado a lado não foi para o body");
+    const jt = api.jurTopicoAtualAtual();
+    ok(!!jt && jt.disciplina === disc && jt.nome === topico,
+       "J13h a jurisprudência abriu para outro tópico, não o mesmo da lei: "
+       + JSON.stringify(jt));
+
+    /* botão real, clicado de verdade — não só a função por trás dele */
+    api.$("dlgLeiSeca").close(); api.$("dlgJuris").close();
+    api.matRender();
+    const btn = api.$("matLista").querySelectorAll("button")
+      .filter((b) => (b.className || "").indexOf("btn-lj-split") >= 0)[0];
+    ok(!!btn, "J13i-pre o botão precisa existir para o clique valer algo");
+    if (btn) btn.onclick();
+    ok(api.$("dlgLeiSeca").open === true && api.$("dlgJuris").open === true,
+       "J13i o clique no botão real não abriu os dois painéis");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

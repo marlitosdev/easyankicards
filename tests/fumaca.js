@@ -627,7 +627,7 @@ function rodar() {
     montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual,
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
-    matChaveViva, matChaveNormal,
+    matChaveViva, matChaveNormal, leiJurLadoALado,
     matObter, concursoAtual, matParaHtml, matAgrupado, matTrocarModo,
     matLimparColagem, matGravarCartoes, matContarCartoes, matAplicarColagem,
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
