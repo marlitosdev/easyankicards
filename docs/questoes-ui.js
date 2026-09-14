@@ -44,7 +44,17 @@ function qsUiCriarAbrir(texto, ctx, origem) {
   qsUiAchados = null;
   qsUiDoTexto = [];
   const t0 = String(texto || "").trim();
-  if (!t0) { uiAlert(t("qs_criar_sem_texto")); return; }
+  /* SEM RESUMO NÃO É SEM QUESTÃO.
+   *
+   * O DEFEITO: chamada sem texto (tópico que ainda não tem resumo
+   * escrito), esta função recusava com um alerta e nunca abria a tela —
+   * mesmo ela já tendo, ali dentro, o caminho de "outro material" que
+   * não depende de resumo nenhum: a IA responde sobre um PDF de aula, a
+   * lei, um artigo, e a resposta volta colada aqui. Questões é seu
+   * próprio material, não um apêndice do resumo; ficar refém de outro
+   * ter sido escrito primeiro era o oposto disso. Sem texto, a tela abre
+   * igual — só que já com "outro material" marcado, porque não há nada
+   * para escanear no que ninguém escreveu. */
 
   /* 1. o que JÁ está escrito, sem IA nenhuma */
   const blocos = qsNoTexto(t0);
@@ -56,8 +66,15 @@ function qsUiCriarAbrir(texto, ctx, origem) {
 
   /* 2. e o prompt, pronto, para quem quiser mais */
   qsUiTextoBase = t0;
-  if ($("qsFonteResumo")) $("qsFonteResumo").checked = true;
-  if ($("qsFonteOutro")) $("qsFonteOutro").checked = false;
+  /* SEM TEXTO NENHUM, NÃO HÁ "A PARTIR DO TEXTO ACIMA" — o rádio que
+   * aponta para um resumo vazio nasce marcado em "outro material" (e
+   * desligado, para não convidar a escolher uma fonte que não existe);
+   * a pessoa que escrever o resumo depois volta a ver o normal. */
+  if ($("qsFonteResumo")) {
+    $("qsFonteResumo").checked = !!t0;
+    $("qsFonteResumo").disabled = !t0;
+  }
+  if ($("qsFonteOutro")) $("qsFonteOutro").checked = !t0;
   if ($("qsFonteCaderno")) $("qsFonteCaderno").checked = false;
   /* o prompt volta recolhido a cada abertura: ele é para copiar, não
    * para ler, e aberto empurra para baixo o campo que a pessoa usa */
@@ -85,7 +102,9 @@ function qsUiCriarAbrir(texto, ctx, origem) {
    * ================================================================= */
   if ($("qsCriarOrigem")) {
     const nT = String(texto || "").length;
-    $("qsCriarOrigem").textContent = origem === "trecho"
+    $("qsCriarOrigem").textContent = !t0
+      ? t("qs_criar_de_vazio")
+      : origem === "trecho"
       ? t("qs_criar_de_trecho", { n: nT })
       : t("qs_criar_de_resumo", { n: nT });
     $("qsCriarOrigem").hidden = false;

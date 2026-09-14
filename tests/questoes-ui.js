@@ -2002,6 +2002,44 @@ async function testes() {
        "K14c a correcao simples criou questao em vez de substituir");
   }
 
+  /* ---- K15: CRIAR QUESTÕES SEM RESUMO NENHUM ESCRITO — NÃO PODE SER
+   * BECO
+   *
+   * O RELATO REAL: o botão "❓ criar questões" da agenda do edital, num
+   * tópico que ainda não tem resumo, mostrava "não há texto para
+   * transformar em questão" e não ia a lugar nenhum. Questões é seu
+   * próprio material, não um apêndice do resumo — precisa dar para
+   * criar SEM depender de um resumo ter sido escrito antes, pelo
+   * caminho que já existe para material de fora (a IA responde sobre um
+   * PDF de aula, a lei, um artigo; a resposta volta colada aqui). ---- */
+  {
+    const { api: aZ } = rodar();
+    aZ.matIniciar(); aZ.edIniciar(); aZ.qsUiIniciar();
+    /* SEM matGravar NENHUM: o tópico não tem resumo, não tem cartão,
+     * não tem questão — exatamente o estado de "Atos administrativos"
+     * relatado, um tópico do edital que ainda não foi tocado. */
+    aZ.qsUiResponderDireto("Direito Administrativo", "Atos administrativos");
+
+    ok(aZ.$("dlgQsCriar").open === true,
+       "K15 sem resumo, a tela de criar questões nem abriu — o clique "
+       + "virou beco");
+    ok(aZ.$("qsFonteOutro").checked === true,
+       "K15b sem resumo, a fonte devia nascer em \"outro material\" "
+       + "(não há texto do resumo para escanear)");
+    ok(aZ.$("qsFonteResumo").disabled === true,
+       "K15c o rádio \"a partir do texto acima\" devia estar desligado "
+       + "quando não há texto acima nenhum");
+    ok(/não tem resumo/.test(aZ.$("qsCriarOrigem").textContent || ""),
+       "K15d a tela não avisa que o tópico não tem resumo: "
+       + aZ.$("qsCriarOrigem").textContent);
+    /* o prompt continua utilizável — pede o material externo, não um
+     * texto vazio */
+    const prK = aZ.$("qsCriarPrompt").value;
+    ok(!!prK.trim(),
+       "K15e o prompt saiu vazio — sem texto de resumo, ele precisa ser "
+       + "o prompt genérico de \"outro material\"");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
