@@ -1606,6 +1606,8 @@ const UI = {
   "mat_juris_criar": "Guardar jurisprudência",
   "mat_juris_ver_ajuda": "Abre os {n} julgados guardados em \"{tp}\".",
   "mat_juris_criar_ajuda": "Ainda não há jurisprudência em \"{tp}\". Abre a gaveta para colar uma ementa ou escrever a tese.",
+  "mat_split_btn": "⇔ lado a lado",
+  "mat_split_ajuda": "Abre a lei e a jurisprudência de \"{tp}\" uma ao lado da outra, ocupando a tela toda. Só em tela larga.",
   "vk_titulo": "Aproveitar o que já estudei em outro concurso",
   /* ---- triagem semântica: o passo 0 ------------------------------
      Ela ORDENA e ENCURTA. Não vincula. O texto da tela precisa dizer
@@ -4271,6 +4273,8 @@ const UI = {
   "mat_lei_criar": "⚖ add raw law",
   "mat_lei_ver_ajuda": "Opens the law text stored in “{tp}”, without going through the summary.",
   "mat_lei_criar_ajuda": "This topic has no raw law yet. Opens so you can paste the law text of “{tp}”.",
+  "mat_split_btn": "⇔ side by side",
+  "mat_split_ajuda": "Opens the law and the case law for “{tp}” side by side, filling the whole screen. Wide screens only.",
   "lei_tamanho": "{c} characters",
   "qs_prompt": "Create exam questions from the TEXT at the end of this request.\n\nCONTEXT\nSubject: {disciplina}\nTopic: {topico}\nExam: {concurso}\nThe questions will be filed under this subject and topic.\n\nRULES\n1. Use ONLY what the text states.\n2. If the text ALREADY has questions, I HAVE THEM. Create NEW ones.\n3. Cover DIFFERENT points, one per question.\n4. Only include BOARD if the text names it.\n5. The comment explains WHY.\n\nFORMAT — repeat this block per question, one field per line:\n\n[QUESTAO]\nTIPO: CE            (CE = true/false · ME = multiple choice)\nBANCA: FGV          (or leave empty)\nENUNCIADO: the question text\nA) first option     (ME only)\nB) second option\nC) third option\nGABARITO: B         (ME: the letter · CE: only C or E)\nCOMENTARIO: why this is the answer\n[/QUESTAO]\n\nNo intro, no sign-off.\n\nTEXT:\n{texto}",
   "modo_questoes": "Questions",

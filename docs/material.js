@@ -2292,6 +2292,49 @@ function matMenuLinha(chave, outras) {
   return cx;
 }
 
+/* LEI SECA + JURISPRUDÊNCIA LADO A LADO.
+ *
+ * As duas já abrem escopadas ao mesmo tópico — leiAbrir e jurAbrir
+ * recebem disciplina+topico — então não há nada para sincronizar entre
+ * elas: abrir as duas pro mesmo tópico já É a sincronização. O que
+ * faltava era caber as duas na tela ao mesmo tempo, sem uma empilhar
+ * por cima da outra (showModal() empilha; ver o comentário em jurAbrir
+ * sobre por que isso é bom para a gaveta abrir de dentro de uma
+ * questão — aqui é o caso em que NÃO se quer esse empilhamento).
+ *
+ * SÓ EM TELA LARGA: dois painéis não cabem lado a lado num celular, e
+ * o botão que chama isto nem aparece abaixo de 900px (mesmo corte que
+ * ".jur-par" já usa). Abaixo do corte, cai no comportamento normal —
+ * um diálogo de cada vez, como sempre foi. */
+function leiJurLadoALado(disciplina, topico) {
+  const larga = (typeof window !== "undefined" && window.innerWidth) || 0;
+  if (larga < 900) {
+    if (typeof leiAbrir === "function") leiAbrir(disciplina, topico);
+    return;
+  }
+  if (typeof _abrirNaoModalUmaVez !== "undefined") {
+    _abrirNaoModalUmaVez.add("dlgLeiSeca");
+    _abrirNaoModalUmaVez.add("dlgJuris");
+  }
+  if (typeof leiAbrir === "function") leiAbrir(disciplina, topico);
+  if (typeof jurAbrir === "function") jurAbrir(disciplina, topico, "ler");
+  document.body.classList.add("split-lj");
+  const a = $("dlgLeiSeca");
+  const b = $("dlgJuris");
+  /* SAI DO MODO LADO A LADO quando os dois tiverem fechado — não quando
+   * o primeiro fechar, porque fechar só a lei (ou só a jurisprudência) e
+   * continuar com a outra aberta em meia tela é uso legítimo. */
+  const saiuDoSplit = () => {
+    if ((a && a.open) || (b && b.open)) return;
+    document.body.classList.remove("split-lj");
+    if (a) a.removeEventListener("close", saiuDoSplit);
+    if (b) b.removeEventListener("close", saiuDoSplit);
+  };
+  if (a) a.addEventListener("close", saiuDoSplit);
+  if (b) b.addEventListener("close", saiuDoSplit);
+  reg("MATERIAL", "lei e jurisprudencia lado a lado", disciplina + " · " + topico);
+}
+
 function matRender() {
   const box = $("matLista");
   if (!box) return;
@@ -2407,6 +2450,17 @@ function matRender() {
               t("mat_juris_btn", { n: nJul }));
             bj.title = t("mat_juris_ver_ajuda", { n: nJul, tp: x.topico });
             acoes.append(bj);
+          }
+          /* LADO A LADO só quando há os DOIS materiais pra combinar — sem
+           * lei ou sem julgado não tem o que separar em duas metades.
+           * Escondido em tela estreita por CSS (.btn-lj-split); a função
+           * também se protege sozinha se for chamada de outro jeito. */
+          if (nJul && typeof leiTem === "function" && leiTem(x.chave)) {
+            const bs = botaoMini(null, "btn-cinza",
+              () => leiJurLadoALado(x.disciplina, x.topico), t("mat_split_btn"));
+            bs.title = t("mat_split_ajuda", { tp: x.topico });
+            bs.classList.add("btn-lj-split");
+            acoes.append(bs);
           }
 
           const outras = [];

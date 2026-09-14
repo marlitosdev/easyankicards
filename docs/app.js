@@ -484,11 +484,24 @@ function uiTexto(titulo, valor, dois, extra) {
   });
 }
 
+/* QUEM PEDE A PRÓXIMA ABERTURA SEM EMPILHAR.
+ * showModal() promove o <dialog> à top layer do navegador com backdrop
+ * próprio — é isso que faz a gaveta de jurisprudência subir POR CIMA de
+ * uma questão em andamento e devolvê-la intacta ao fechar (ver o
+ * comentário de jurAbrir). É comportamento bom demais para trocar globalmente
+ * só para o painel lado a lado poder existir. Em vez disso, um diálogo
+ * pode se inscrever aqui para a ÚNICA próxima chamada de abrirModal(),
+ * que aí usa show() (não-modal, sem backdrop, posicionável por CSS) —
+ * e a inscrição se apaga sozinha depois de usada. */
+const _abrirNaoModalUmaVez = new Set();
+
 function abrirModal(id) {
   const d = typeof id === "string" ? document.getElementById(id) : id;
   if (!d) return null;
+  const naoModal = _abrirNaoModalUmaVez.has(d.id);
+  _abrirNaoModalUmaVez.delete(d.id);
   try {
-    if (!d.open) d.showModal();
+    if (!d.open) { if (naoModal) d.show(); else d.showModal(); }
   } catch (e) {
     /* já aberto, ou não suporta modal: não é motivo para derrubar o fluxo */
     try { d.show && d.show(); } catch (x) {}
