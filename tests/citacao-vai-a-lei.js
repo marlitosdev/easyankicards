@@ -455,6 +455,46 @@ async function testes() {
            maxHeight: menu.style.maxHeight }));
   }
 
+  /* ==============================================================
+   * L50: A LEI GUARDADA COMO "CF 88" — SEM "CONSTITUIÇÃO" ESCRITO E
+   * SEM APELIDO PREENCHIDO — TAMBÉM CASA
+   *
+   * O CASO REAL, relatado com print: "art. 195, §7º da Constituição
+   * Federal" e "art. 195, V da Constituição Federal" apareciam como
+   * "não está na sua biblioteca", mesmo com a Constituição guardada.
+   * A causa: a lei tinha sido colada com nome "CF 88" — sem a palavra
+   * "constituição" em nome ou espécie, e sem o campo apelido
+   * preenchido (ninguém enche um campo separado quando o nome já diz
+   * tudo). O filtro de "constituicao" em leiCasarRotulo só reconhecia
+   * "constitui" no nome/espécie OU cf/crfb no apelido — as duas portas
+   * fechadas para essa lei.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const ch = api.matChave(DISC, TOP);
+    api.leiGuardar({
+      id: "lei_cf88", nome: "CF 88", apelido: "", especie: "",
+      texto: "Art. 195. A seguridade social será financiada...\n"
+        + "§ 7º São isentas de contribuição para a seguridade social "
+        + "as entidades beneficentes de assistência social.",
+    });
+    api.leiLigar("lei_cf88", ch);
+
+    const achado = api.leiCasarRotulo("Constituição Federal", api.leisLista());
+    ok(achado && achado.id === "lei_cf88",
+       "L50 uma lei guardada como \"CF 88\" (sem \"constitui\" no nome/"
+       + "espécie e sem apelido) não casou com a citação \"Constituição "
+       + "Federal\": " + JSON.stringify(achado));
+
+    /* o mesmo, pelo caminho real: citação dentro de um comentário */
+    const cit = api.leiCitacoesNoTexto(
+      "nos termos do art. 195, § 7º, da Constituição Federal")[0];
+    const alvo = api.qsUiLeiAlvo(cit, api.leisLista(), api.leisDoTopico(ch));
+    ok(alvo && alvo.lei && alvo.lei.id === "lei_cf88",
+       "L50b o comentário citando \"Constituição Federal\" não achou a "
+       + "lei \"CF 88\" pelo caminho da tela: " + JSON.stringify(alvo));
+  }
+
   if (!n) falhas.push("nenhuma asserção rodou — o arquivo abortou no meio");
   return falhas;
 }
