@@ -528,6 +528,12 @@ function leiPintarOnde() {
     : t("lei_nao_comecou", { tot: p.total });
   if (p.lidos) {
     txt.title = t("lei_ir_ao_marcador", { a: p.artigo });
+    /* SÓ O NÚMERO, AQUI — sem ambiguidade nova para resolver: "parei"
+     * grava só o número desde sempre (leiParar), e sem o índice de QUAL
+     * ocorrência foi marcada não há como saber se foi a do corpo ou a
+     * do ADCT. Resolver isso de verdade pede guardar a ocorrência no
+     * marcador também — mudança maior, fora do que este ajuste cobre.
+     * leiIrArtigo cai na primeira ocorrência, como sempre caiu. */
     txt.onclick = () => { leiTrocarModo("ler"); leiIrArtigo(p.artigo); };
   }
 
@@ -538,7 +544,18 @@ function leiPintarOnde() {
     b.className = "btn-min btn-min-ok";
     b.textContent = t("lei_continuar", { a: p.proximo.numCru });
     b.title = t("lei_continuar_ajuda");
-    b.onclick = () => { leiTrocarModo("ler"); leiIrArtigo(p.proximo.num); };
+    /* AQUI O ÍNDICE JÁ NÃO É AMBÍGUO: p.proximo veio de arts[lidos], uma
+     * posição exata — não de uma busca por número. Se essa posição
+     * calhar de ser uma segunda ocorrência (continuar de um título para
+     * o próximo, que também começa do art. 1º), passar só o número
+     * levaria de volta à PRIMEIRA ocorrência, silenciosamente — o mesmo
+     * estrago de sempre, agora no botão que deveria andar para a
+     * FRENTE. O índice mantém leiIrArtigo consistente com o que
+     * leiProgresso já decidiu. */
+    b.onclick = () => {
+      leiTrocarModo("ler");
+      leiIrArtigo(p.proximo.num, p.proximo.indice);
+    };
     cx.append(b);
   }
 }
@@ -1346,8 +1363,17 @@ function leiIrArtigo(num, indice) {
   const el = (indice !== undefined && indice !== null && $("leiArtI_" + indice))
     || $("leiArt_" + alvo.replace(/[^A-Z0-9-]/gi, ""));
   if (!el) return false;
+  /* "center" E NÃO "start" ERA O DEFEITO, para artigo mais alto que a
+   * tela. O CASO REAL: uma Emenda Constitucional cujo Art. 1º cita, por
+   * inteiro, a nova redação de dezenas de artigos da Constituição — um
+   * bloco de milhares de pixels. "center" mira o MEIO desse bloco, não
+   * o começo: quem tocava "continuar no art. 1º" caía no meio de um
+   * parágrafo qualquer, sem o cabeçalho "Art. 1º" à vista em lugar
+   * nenhum — e não tinha como saber que chegou aonde pediu. "start" põe
+   * o topo do bloco — o cabeçalho — no topo da tela, que é o que "ir a
+   * um artigo" promete: mostrar ONDE ele começa. */
   if (el.scrollIntoView) {
-    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+    try { el.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) {}
   }
   if (el.classList) {
     el.classList.add("lei-art-pisca");

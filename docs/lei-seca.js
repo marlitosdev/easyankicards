@@ -860,6 +860,11 @@ function leiProgresso(id) {
     lidos,
     pct: Math.round((lidos / arts.length) * 100),
     artigo: r.parei || "",
+    /* proximo VEM DE UMA POSIÇÃO (arts[lidos]), não de uma busca por
+     * número — por isso carrega o próprio índice sem ambiguidade
+     * nenhuma, mesmo quando o número dele se repete mais à frente no
+     * documento (o corpo da Constituição e o ADCT, por exemplo). Ver o
+     * uso em leiPintarOnde. */
     proximo: (arts[lidos] || null),
   };
 }

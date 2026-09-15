@@ -24,6 +24,8 @@
  *    vir de outra tela e de outro tópico.
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
+const fs = require("fs");
+const path = require("path");
 
 async function testes() {
   const falhas = [];
@@ -516,6 +518,80 @@ async function testes() {
     ok(ids[2] === "leiArtI_2" && ids[3] === "leiArtI_3",
        "L10c a ocorrência repetida não recebeu id por posição: "
        + ids.join(", "));
+  }
+
+  /* ---- L11: "CONTINUAR" ACERTA A OCORRÊNCIA CERTA, MESMO QUANDO O
+   * PRÓXIMO ARTIGO REPETE NÚMERO COM OUTRO LÁ ATRÁS ----
+   *
+   * "continuar" usa arts[lidos] — uma POSIÇÃO, não uma busca por
+   * número — e por isso já sabe exatamente qual ocorrência é a certa.
+   * O que faltava era leiIrArtigo RECEBER essa posição: sem o índice,
+   * "continuar do art. 2º do título I para o art. 1º do título II"
+   * chamava leiIrArtigo só com "1" — que sempre resolve para a
+   * PRIMEIRA ocorrência (a do título I), voltando para trás em vez de
+   * andar para a frente. (A "parei em X" — marcada por número, sem
+   * posição — continua com a mesma ambiguidade de sempre; consertá-la
+   * pede guardar a ocorrência no próprio marcador, mudança maior que
+   * fica para outra hora.)
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const FIX = [
+      "TÍTULO I", "Dos Princípios Fundamentais",
+      "Art. 1º A República constitui-se em Estado Democrático de Direito.",
+      "Art. 2º São Poderes da União o Legislativo, o Executivo e o Judiciário.",
+      "TÍTULO II", "Das Disposições Transitórias",
+      "Art. 1º O Presidente tomará posse no dia 5 de outubro de 1988.",
+      "Art. 2º No dia 7 de setembro de 1993 o eleitorado definirá a forma.",
+    ].join("\n");
+    const ch = api.matChave("Direito Constitucional", "Princípios L11");
+    api.leiGuardar({ id: "lei_cf_t2", nome: "CF de teste 2", texto: FIX });
+    api.leiLigar("lei_cf_t2", ch);
+    api.leiAbrir("Direito Constitucional", "Princípios L11");
+
+    /* "parei" no Art. 2º do TÍTULO I (índice 1) — a ÚNICA ocorrência de
+     * "2" até aqui, sem ambiguidade nenhuma para achar. O próximo
+     * (arts[2]) é o Art. 1º do TÍTULO II: mesmo número do primeiro
+     * artigo da lei inteira, índice bem diferente. */
+    api.leiGuardar({ id: "lei_cf_t2", parei: "2" });
+    const p = api.leiProgresso("lei_cf_t2");
+    ok(!!p.proximo && p.proximo.num === "1" && p.proximo.indice === 2,
+       "L11-pre o próximo depois do art. 2º do título I devia ser o "
+       + "art. 1º do título II (índice 2): " + JSON.stringify(p.proximo));
+
+    api.leiPintar();
+    const bCont = api.$("leiOnde").querySelectorAll("button")
+      .filter((b) => /continuar/i.test(b.textContent))[0];
+    ok(!!bCont, "L11a o botão 'continuar' não apareceu");
+
+    bCont.onclick();
+    ok(api.$("leiArtI_2")._rolouAte === true,
+       "L11b 'continuar' não foi para o Art. 1º do título II (a "
+       + "ocorrência de verdade seguinte) — sem o índice, um número que "
+       + "se repete manda de volta para a primeira ocorrência dele");
+    ok(!api.$("leiArt_1")._rolouAte,
+       "L11c 'continuar' voltou para o Art. 1º do título I em vez de "
+       + "andar para a frente, até o do título II");
+  }
+
+  /* ---- L12: A ROLAGEM MIRA O COMEÇO DO ARTIGO, NÃO O MEIO ----
+   *
+   * "block:center" num artigo mais alto que a tela mostra o MEIO do
+   * bloco — sem o cabeçalho "Art. X" na tela, ninguém sabe aonde
+   * chegou. O simulador de testes não mede pixel nem faz scroll de
+   * verdade, então a prova aqui é no código-fonte: quem lê "ir a um
+   * artigo" tem de pedir "start", não "center". ---- */
+  {
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "docs", "lei-ui.js"), "utf8");
+    const fn = (src.match(/function leiIrArtigo[\s\S]*?\n\}/) || [""])[0];
+    ok(/block:\s*["']start["']/.test(fn),
+       "L12 leiIrArtigo não rola para o início do artigo (\"start\") — "
+       + "um artigo mais alto que a tela mostraria o meio do bloco, sem "
+       + "o cabeçalho à vista");
+    ok(!/block:\s*["']center["']/.test(fn),
+       "L12b leiIrArtigo ainda centraliza o artigo: um bloco mais alto "
+       + "que a tela esconde o cabeçalho acima da dobra");
   }
 
   return Object.assign(falhas, { quantas: n });
