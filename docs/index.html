@@ -822,8 +822,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * ENUNCIADO LONGO continua como antes: bate no teto, rola por dentro, e
  * as alternativas ficam visíveis logo abaixo — que era o desenho de
  * telefone que valeu a pena trazer para todas as larguras. */
+/* SEM "overscroll-behavior:contain", rolar até o fim do enunciado (ou
+ * do comentário, embaixo) deixa o GESTO seguinte "vazar" para a página
+ * por trás do diálogo — mesmo diálogo modal, mesmo #cartoes já tendo
+ * resolvido isto do mesmo jeito. Sem conter, o dedo que rola o texto de
+ * dentro começa a rolar o app por trás assim que a caixinha interna
+ * chega ao fim, e quem está lendo vê o fundo se mexer sem ter pedido. */
 #dlgQsResponder .qs-enunciado{flex:0 1 auto;min-height:0;max-height:52dvh;
-  overflow:auto;margin-bottom:6px}
+  overflow:auto;overscroll-behavior-y:contain;margin-bottom:6px}
 #dlgQsResponder .qs-opcoes{flex:0 0 auto;position:sticky;bottom:0;
   background:var(--panel);padding-top:6px;
   box-shadow:0 -6px 12px -6px rgba(0,0,0,.45)}
@@ -847,11 +853,22 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * significa que um enunciado de três linhas voltaria a esticar, agora
  * até dois quintos da caixa. O enunciado cede: fica na altura do texto,
  * com teto menor que o de antes de responder, porque a partir daqui ele
- * é referência e não mais a leitura principal. */
-#dlgQsResponder .qs-fez .qs-enunciado{flex:0 1 auto;max-height:34dvh}
+ * é referência e não mais a leitura principal.
+ *
+ * MAS CEDER TEM PISO. "min-height:0" (herdado da regra geral) deixa o
+ * flexbox encolher o enunciado até ONDE FOR PRECISO para o comentário
+ * caber — e "onde for preciso" mede pelo conteúdo do comentário, não
+ * pela legibilidade do enunciado. Numa questão com comentário longo e
+ * várias faixas de botão embaixo, isso media 97px de caixa para um
+ * enunciado de 140px de texto: cortado no meio da frase, e cortado
+ * antes de dizer o que a questão pergunta. O piso aqui garante um
+ * mínimo que cabe a maioria dos enunciados por inteiro; o que sobrar
+ * maior que isso continua rolando por dentro, como já era. */
+#dlgQsResponder .qs-fez .qs-enunciado{flex:0 1 auto;max-height:34dvh;
+  min-height:18dvh}
 #dlgQsResponder .qs-fez .qs-opcoes{position:static;box-shadow:none}
 #dlgQsResponder .qs-depois{flex:1 1 auto;min-height:0;overflow-y:auto;
-  margin-top:6px}
+  overscroll-behavior-y:contain;margin-top:6px}
 /* o rascunho fica junto do que rola: é papel de apoio, não passo do
    fluxo, e preso embaixo roubaria a altura do enunciado */
 #dlgQsResponder #rsCaixa{flex:0 1 auto;overflow-y:auto;max-height:44vh}
