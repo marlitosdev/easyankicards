@@ -200,6 +200,38 @@ async function testes() {
        + "queixa original: responder e ter de arrastar a caixa inteira "
        + "para ler o porque: " + dep);
 
+    /* ================================================================
+     * E3g: O ENUNCIADO CEDE, MAS TEM PISO
+     *
+     * O RELATO REAL, com print: depois de responder, o enunciado media
+     * 97px de caixa para 140px de texto — cortado no meio da frase. A
+     * causa era "min-height:0" (herdado da regra geral) sem nenhum piso
+     * próprio: o flexbox encolhia o enunciado até onde fosse preciso
+     * para o comentário caber, e "onde for preciso" media pelo
+     * conteúdo do comentário, não pela legibilidade do enunciado.
+     * ============================================================== */
+    ok(/min-height:\d+d?vh/.test(enunFez),
+       "E3g depois de responder o enunciado nao tem piso — encolhe ate "
+       + "onde o comentario mandar, e um enunciado comum sai cortado no "
+       + "meio da frase: " + enunFez);
+
+    /* ================================================================
+     * E3h: ROLAR O TEXTO DE DENTRO NAO PODE ROLAR O APP DE FORA
+     *
+     * O RELATO REAL: "ao tentar fazer rolagem na tela de questões o
+     * fundo que faz a rolagem por baixo". Sem "overscroll-behavior",
+     * o gesto que rola o enunciado (ou o comentario) até o fim
+     * encadeia para o próximo ancestral que rola — e some diálogo
+     * modal, o "próximo ancestral" pode ser a própria página por trás.
+     * #cartoes já resolvia isto do mesmo jeito, fora de diálogo nenhum.
+     * ============================================================== */
+    ok(/overscroll-behavior(-y)?:\s*contain/.test(enun),
+       "E3h rolar o enunciado até o fim pode vazar para o fundo da "
+       + "página — falta overscroll-behavior:contain: " + enun);
+    ok(/overscroll-behavior(-y)?:\s*contain/.test(dep),
+       "E3h2 rolar o comentario até o fim pode vazar para o fundo da "
+       + "página — falta overscroll-behavior:contain: " + dep);
+
     /* a ordem no HTML importa: a faixa principal tem de vir DEPOIS do
      * corpo, senão "preso embaixo" não quer dizer nada */
     const iCorpo = HTML.indexOf('id="qsSessCorpo"');
