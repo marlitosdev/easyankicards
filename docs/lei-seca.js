@@ -864,6 +864,36 @@ function leiNotaGuardar(idLei, num, texto) {
   return !!leiGuardar({ id: idLei, notasArtigos: notas });
 }
 
+/* A NOTA DE UM TRECHO — diferente da nota de artigo acima: em vez de uma
+ * frase sobre o artigo inteiro, é uma anotação presa a um PEDAÇO
+ * selecionado do texto (a marca "nota", `==@...==`, ver MAT_MARCAS em
+ * material.js). Mesmo padrão de "dica" nos resumos (matChaveDica/
+ * matGravarDica): a chave é o texto NORMALIZADO do trecho, não a
+ * posição — sobrevive a reler a lei, a marcar de novo, a mudar de
+ * aparelho. `notasTrechos` é uma lista (não um mapa) porque o mesmo
+ * trecho normalizado, em teoria, pode aparecer marcado em mais de um
+ * lugar da lei; `matChaveDica` já corta para 120 caracteres, suficiente
+ * para distinguir na prática. */
+function leiNotaTrechoDe(idLei, trecho) {
+  const l = leiDe(idLei);
+  if (!l || !l.notasTrechos) return null;
+  const k = matChaveDica(trecho);
+  return l.notasTrechos.find((n) => n.k === k) || null;
+}
+
+function leiNotaTrechoGuardar(idLei, trecho, texto) {
+  const l = leiDe(idLei);
+  if (!l) return false;
+  const k = matChaveDica(trecho);
+  const lista = (l.notasTrechos || []).filter((n) => n.k !== k);
+  const limpo = String(texto || "").trim();
+  if (limpo) {
+    lista.push({ k, trecho: String(trecho || "").slice(0, 300), texto: limpo,
+                 criado: new Date().toISOString() });
+  }
+  return !!leiGuardar({ id: idLei, notasTrechos: lista });
+}
+
 function leisLista() {
   const tudo = leisLerTudo();
   return Object.keys(tudo).map((k) => tudo[k])
@@ -1254,7 +1284,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiRotuloChave, leiCasarRotulo,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
-    leiNotaDe, leiNotaGuardar,
+    leiNotaDe, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoGuardar,
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
     leiParar, leiProgresso, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
     leisHojeISO,

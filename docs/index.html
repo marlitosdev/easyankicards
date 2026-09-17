@@ -703,6 +703,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark.m-lei{background:rgba(16,185,129,.30)}
 .mat-leitura mark.m-prova{background:rgba(168,85,247,.32)}
 .mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
+/* "nota" carrega texto anexado (as outras seis são só cor) — o
+ * sublinhado pontilhado avisa, de relance, que ali tem mais do que uma
+ * cor: clicar abre o que foi escrito, não um menu de trocar cor. */
+.mat-leitura mark.m-nota{background:rgba(6,182,212,.28);
+  border-bottom:2px dotted rgba(6,182,212,.9)}
 /* DICA incorporada ao resumo: precisa ser reconhecível de relance como
    acréscimo seu, não como parte do material original. */
 .mat-leitura .mat-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.10);
@@ -1217,17 +1222,6 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
 .mat-cheia-dir{margin-left:auto;display:inline-flex;gap:6px;align-items:center}
 
-/* LER MAIOR — a lei ocupa a janela, o resto sai da frente.
- * Só o que é elástico cresce: o painel de leitura. Tudo o mais já está
- * escondido pelo JS, e o [hidden] continua ganhando (invariante E8). */
-#dlgLeiSeca.lei-cheia[open]{max-height:98vh;width:min(1100px,98vw);
-  padding-top:10px}
-#dlgLeiSeca.lei-cheia h3{font-size:1em;margin:0 0 4px;color:var(--sutil)}
-#dlgLeiSeca.lei-cheia .mat-leitura{max-height:none;border:none;
-  padding:6px 4px;background:transparent}
-#dlgLeiSeca.lei-cheia #leiLeitura, #dlgLeiSeca.lei-cheia #leiRecitar,
-#dlgLeiSeca.lei-cheia #leiTexto{min-height:60vh}
-
 /* AJUDA E REGISTRO — fora da fila de trabalho, e com forma própria.
  * Redondos e de contorno, contra os retângulos dos botões de ação: a
  * forma diz "isto não é parte do que você está fazendo agora". */
@@ -1259,6 +1253,42 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgLeiSeca.lei-j-media[open]{width:min(880px,96vw);max-width:96vw;max-height:92vh}
 #dlgLeiSeca.lei-j-larga[open]{width:min(1200px,97vw);max-width:97vw;max-height:95vh}
 #dlgLeiSeca.lei-j-maxima[open]{width:98vw;max-width:98vw;max-height:98vh}
+
+/* LER MAIOR — a lei ocupa a janela, o resto sai da frente.
+ * Só o que é elástico cresce: o painel de leitura. Tudo o mais já está
+ * escondido pelo JS, e o [hidden] continua ganhando (invariante E8).
+ *
+ * PRECISA VIR DEPOIS do bloco .lei-j-* acima, não só ter a regra certa.
+ * ".lei-cheia[open]" e ".lei-j-media[open]" (etc.) têm a MESMA
+ * especificidade — id + classe + atributo — e o diálogo pode estar com
+ * as duas classes juntas ao mesmo tempo (entrar em tela cheia não tira
+ * o tamanho de janela escolhido antes). Em empate de especificidade
+ * quem vem depois no arquivo vence; com ".lei-cheia" antes do bloco de
+ * janela, "tela cheia" nunca ganhava de verdade — no melhor caso batia
+ * a largura de ".lei-j-media" (880px), não a de ".lei-cheia" (1100px). */
+#dlgLeiSeca.lei-cheia[open]{max-height:98vh;width:min(1100px,98vw);
+  padding-top:10px}
+#dlgLeiSeca.lei-cheia h3{font-size:1em;margin:0 0 4px;color:var(--sutil)}
+#dlgLeiSeca.lei-cheia .mat-leitura{max-height:none;border:none;
+  padding:6px 4px;background:transparent}
+#dlgLeiSeca.lei-cheia #leiLeitura, #dlgLeiSeca.lei-cheia #leiRecitar,
+#dlgLeiSeca.lei-cheia #leiTexto{min-height:60vh}
+/* E O DIÁLOGO LARGO NÃO BASTA — a coluna de leitura tinha teto próprio
+ * (62em, ver mais abaixo) sem exceção nenhuma para tela cheia: o
+ * diálogo abria largo e o texto continuava na mesma largura de sempre,
+ * com faixas vazias dos dois lados.
+ *
+ * "100ch" foi a primeira tentativa aqui, e media MENOS que 62em nesta
+ * fonte (~808px contra ~930px) — o teto ficava mais apertado dentro da
+ * tela cheia do que fora dela, o oposto do pedido. Sem teto nenhum é o
+ * conserto certo: quem já limita a largura é o próprio diálogo
+ * (min(1100px,98vw), ali em cima), então a coluna simplesmente usa o
+ * que sobrar dele — nunca vira linha de 200 caracteres porque o
+ * diálogo em si já não deixa. */
+#dlgLeiSeca.lei-cheia .lei-art, #dlgLeiSeca.lei-cheia .lei-div,
+#dlgLeiSeca.lei-cheia .lei-rec{max-width:none}
+#dlgLeiSeca.lei-cheia .lei-art-txt, #dlgLeiSeca.lei-cheia .lei-rec-cab,
+#dlgLeiSeca.lei-cheia .lei-rec-txt{max-width:none}
 /* A COLUNA DE TEXTO TEM LIMITE PRÓPRIO, em "em" e não em pixels: assim
    ela cresce junto com a letra. Numa janela larga com letra pequena o
    excedente vira MARGEM, não linha de 200 caracteres — que ninguém
@@ -1895,6 +1925,7 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .marca-lei{background:rgba(16,185,129,.30)}
 .marca-prova{background:rgba(168,85,247,.34)}
 .marca-peg{background:rgba(236,72,153,.32)}
+.marca-nota{background:rgba(6,182,212,.32)}
 .mat-sep{width:1px;height:16px;background:var(--borda);margin:0 4px}
 .mat-estado{margin-left:auto;font-size:10.5px;color:var(--ok);font-weight:700}
 dialog.mat-amplo{max-width:96vw;width:96vw}
@@ -2839,6 +2870,14 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
  * na top layer com backdrop, um por cima do outro. Sem showModal(), cada
  * um volta a ser um elemento de bloco comum, e aqui é só posicionar cada
  * metade da tela. Mesmo corte de 900px que .jur-par já usa acima. */
+/* SEM showModal(), O FUNDO CONTINUA VIVO.
+ * Os dois diálogos lado a lado abrem com show() (comentário acima), não
+ * showModal() — então o navegador nunca trava sozinho o scroll da
+ * página por trás, nem move o foco para dentro deles. Sem isto, Page
+ * Down e as setas rolavam a página atrás da lei em vez do texto dela.
+ * leiTrocarModo (lei-ui.js) cuida do foco; esta regra é a rede de
+ * segurança do scroll — mesmo que o foco escape, o fundo não rola. */
+body.split-lj{overflow:hidden}
 .btn-lj-split{display:none}
 @media (min-width:900px){
   .btn-lj-split{display:inline-flex}
@@ -5847,6 +5886,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Marca que este trecho já caiu em prova."></button>
     <button class="marca marca-peg" id="btnLeiMarcaPeg" data-i18n="mat_marca_peg"
       title="Marca a pegadinha — na letra da lei é onde ela mais mora."></button>
+    <button class="marca marca-nota" id="btnLeiMarcaNota" data-i18n="lei_marca_nota"
+      title="Marca o trecho selecionado e já abre a caixa para escrever uma anotação sua ali — diferente das outras, esta marca guarda o que você escreveu."></button>
     <span class="mat-topo-dir"><span class="nota" id="leiEstado"></span></span>
   </div>
 

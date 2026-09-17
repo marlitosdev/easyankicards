@@ -729,6 +729,37 @@ function testeEspecificidadeDeModal() {
   return falhas;
 }
 
+/* E24 — EMPATE DE ESPECIFICIDADE CSS: QUEM VEM DEPOIS GANHA.
+ *
+ * Duas regras com a MESMA especificidade (mesmo número de ids, classes e
+ * atributos) não competem por "quem é mais específica" — competem por
+ * ORDEM NO ARQUIVO, e a de baixo vence. ".lei-cheia[open]" e
+ * ".lei-j-media[open]" (etc.) são exatamente isso: id + classe +
+ * atributo, os dois. Com ".lei-cheia" declarada ANTES do bloco de
+ * tamanho de janela, "tela cheia" nunca vencia de verdade — o tamanho
+ * de janela escolhido antes de entrar nela sempre prevalecia, e o
+ * texto ficava com faixas vazias mesmo em tela cheia.
+ *
+ * Este invariante garante que ".lei-cheia[open]" continue vindo DEPOIS
+ * de ".lei-j-maxima[open]" no arquivo — é o que sustenta a intenção
+ * (tela cheia é sempre o maior tamanho, não importa o que veio antes). */
+function testeOrdemCascata() {
+  const falhas = [];
+  const html = fs.readFileSync(path.join(RAIZ, "docs", "index.html"), "utf8");
+  const posCheia = html.indexOf("#dlgLeiSeca.lei-cheia[open]");
+  const posJanela = html.indexOf("#dlgLeiSeca.lei-j-maxima[open]");
+  if (posCheia < 0 || posJanela < 0) {
+    falhas.push("E24 uma das regras de tela cheia/janela da lei sumiu do CSS — "
+      + "confira se elas foram renomeadas");
+  } else if (posCheia < posJanela) {
+    falhas.push('E24 "#dlgLeiSeca.lei-cheia[open]" voltou a vir ANTES de '
+      + '"#dlgLeiSeca.lei-j-maxima[open]" no CSS — mesma especificidade, '
+      + "então quem vem antes PERDE o empate: tela cheia deixaria de "
+      + "vencer o tamanho de janela escolhido antes dela.");
+  }
+  return falhas;
+}
+
 /* E19 — COLEÇÃO DO NAVEGADOR NÃO É ARRAY.
  *
  * "element.children" devolve uma HTMLCollection; "querySelectorAll"
@@ -1103,7 +1134,8 @@ module.exports = { testes: () => [...testes(), ...testeSW(), ...testeDialogos(),
                                   ...testeGrifoVisivel(),
                                   ...testeIdsUnicos(),
                                   ...testeBotaoComNome(),
-                                  ...testeAtivaPinta()] };
+                                  ...testeAtivaPinta(),
+                                  ...testeOrdemCascata()] };
 
 if (require.main === module) {
   /* rodar SÓ testes() aqui deixava testeSW() e testeDialogos() fora do

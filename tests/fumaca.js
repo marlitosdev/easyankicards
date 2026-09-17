@@ -716,6 +716,8 @@ function rodar() {
     leiApagar, leiLigar, leiDesligar, leisDoTopico, leiParar, leiProgresso,
     leiBlocoLido, leiBlocosLidos, leisMigrarDe, LEIS_CHAVE,
     leiNotaDe, leiNotaGuardar, leiNotaAbrir, leiNotaSugerir, leiNotaSalvar,
+    leiNotaTrechoDe, leiNotaTrechoGuardar, leiNotaTrechoAbrir, leiNotaTrechoMarcar,
+    leiNotaCopiarPrompt, matChaveDica,
     leiArtigosEfetivos, leiArtigoAlterar, leiEmCamada, leiDisciplinasDe,
     leiAtualizarAbrir, leiAtualizarComparar, leiUpdMostrar, leiUpdMover,
     leiUpdAceitar, leiUpdPular, leiUpdIA, leiAtualizarAplicar,
