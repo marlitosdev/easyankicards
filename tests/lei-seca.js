@@ -623,6 +623,46 @@ async function testes() {
        "CAM12 a base nao ficou intocada depois de todo o vaivém");
   }
 
+  /* ---- NOTA-TRECHO: nota presa a um pedaço do texto, não ao artigo
+   * inteiro — mesmo padrão de matGravarDica/matDicaDe (chave pelo texto
+   * normalizado, não pela posição): grava, sobrescreve, some se vazio. */
+  {
+    const { api } = rodar();
+    const lei = api.leiGuardar({ nome: "Lei de teste — nota por trecho", texto: L4320 });
+
+    ok(api.leiNotaTrechoDe(lei.id, "as receitas nêle arrecadadas") === null,
+       "NT1 achou nota onde nenhuma foi guardada ainda");
+
+    ok(api.leiNotaTrechoGuardar(lei.id, "as receitas nêle arrecadadas",
+       "isto é a receita orçamentária, não a caixa"),
+       "NT2 guardar recusou uma nota valida");
+    const n1 = api.leiNotaTrechoDe(lei.id, "as receitas nêle arrecadadas");
+    ok(!!n1 && /caixa/.test(n1.texto), "NT3 a nota guardada nao veio de volta");
+    ok(api.leiDe(lei.id).texto === L4320,
+       "NT4 guardar nota por trecho mudou a base — nao deveria");
+
+    /* a mesma chave (texto normalizado) sobrescreve, não duplica */
+    ok(api.leiNotaTrechoGuardar(lei.id, "AS RECEITAS   nêle arrecadadas",
+       "texto novo, mesma frase"), "NT5 sobrescrever recusou");
+    ok(api.leiDe(lei.id).notasTrechos.length === 1,
+       "NT6 duas entradas para a mesma frase normalizada: "
+       + api.leiDe(lei.id).notasTrechos.length);
+    ok(/texto novo/.test(api.leiNotaTrechoDe(lei.id, "as receitas nêle arrecadadas").texto),
+       "NT7 a sobrescrita nao pegou");
+
+    /* texto vazio apaga a entrada */
+    ok(api.leiNotaTrechoGuardar(lei.id, "as receitas nêle arrecadadas", ""),
+       "NT8 apagar (texto vazio) recusou");
+    ok(api.leiNotaTrechoDe(lei.id, "as receitas nêle arrecadadas") === null,
+       "NT9 a nota continuou depois de guardar vazio");
+
+    /* trechos diferentes não colidem entre si */
+    api.leiNotaTrechoGuardar(lei.id, "Tributo é a receita derivada", "definição de tributo");
+    api.leiNotaTrechoGuardar(lei.id, "exercício financeiro", "ano fiscal");
+    ok(api.leiDe(lei.id).notasTrechos.length === 2,
+       "NT10 duas notas de trechos diferentes nao ficaram as duas guardadas");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

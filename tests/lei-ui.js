@@ -1215,8 +1215,15 @@ async function testes() {
 
     ok(api.$("leiTexto").readOnly === true,
        "U25c com a lei ja gravada, o campo deveria virar somente-leitura");
-    ok(api.$("btnLeiSalvar").disabled === true,
-       "U25d com a lei ja gravada, gravar deveria estar desativado");
+    /* "GRAVAR" FICA ATIVO DE PROPOSITO, mesmo com o campo travado — ver
+     * o comentario em leiPintarEdicaoLivre. Chegou a ficar desativado
+     * numa versao anterior, e isso quebrou de verdade: marcar um trecho
+     * (matMarcarSelecao) grava por JS mesmo com o campo so-leitura, e
+     * SEM o botao de gravar ativo nao ha como persistir a marca — a
+     * pessoa via a cor pintar, clicava em "gravar" e nada acontecia. */
+    ok(api.$("btnLeiSalvar").disabled === false,
+       "U25d com a lei ja gravada, gravar deveria continuar ativo — e' o "
+       + "unico jeito de persistir uma marca, ja que o campo e' so-leitura");
     api.leiTrocarModo("editar");
     ok(api.$("leiTextoTravado").hidden === false,
        "U25e a nota explicando o motivo do bloqueio nao apareceu");
@@ -1239,6 +1246,73 @@ async function testes() {
        "U25f uma mudança feita por JS (o caminho real da marcação) "
        + "deveria continuar persistindo — só a digitação manual foi "
        + "travada");
+
+    /* E O CLIQUE NO BOTÃO DE VERDADE também precisa persistir — não só
+     * chamar leiGravar() direto. Foi exatamente aqui que o defeito real
+     * apareceu: o teste chamava leiGravar() direto e passava, mas o
+     * BOTÃO estava desativado e o clique de um usuário de verdade não
+     * fazia nada. */
+    const comOutraMarca = api.$("leiTexto").value
+      .replace("Tributo é a receita derivada", "Tributo é a ==!receita derivada==");
+    api.$("leiTexto").value = comOutraMarca;
+    api.$("btnLeiSalvar").onclick();
+    ok(/==!receita derivada==/.test(api.leiDe(idLei).texto),
+       "U25g clicar no botao de gravar (com o campo travado) nao "
+       + "persistiu uma marca nova");
+  }
+
+  /* ---- U26: nota por trecho — sétima marca, com texto anexado, sem
+   * mexer no "+ nota" por artigo (os dois continuam existindo) ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id = api.leisLista()[0].id;
+
+    api.matSelGuardadaPor("as receitas nêle arrecadadas");
+    api.leiNotaTrechoMarcar();
+    ok(api.$("dlgLeiNota").open === true,
+       "U26 marcar nota nao abriu a caixa de anotacao");
+    ok(/receitas n.le arrecadadas/i.test(api.$("leiNotaTitulo").textContent || ""),
+       "U26b o titulo da caixa nao cita o trecho marcado: "
+       + api.$("leiNotaTitulo").textContent);
+    ok(String(api.$("leiTexto").value || "").indexOf("==@") >= 0,
+       "U26c a marca de nota nao entrou no texto");
+
+    /* A MARCA TEM DE APARECER PINTADA JÁ, SEM GRAVAR ANTES.
+     * matMarcarSelecao de propósito não grava sozinha (dá pra desistir);
+     * mas a LEITURA precisa mostrar a cor na hora, lendo do campo ao
+     * vivo — não do registro gravado, que só teria a marca depois de um
+     * "gravar" explícito. Uma regressão aqui já aconteceu: leiPintarLeitura
+     * passou a ler leiArtigosEfetivos(l) direto do registro salvo, e a
+     * marca recém-criada ficava invisível até a próxima gravação. */
+    const marcada = api.$("leiLeitura").querySelectorAll("mark")
+      .filter((m) => m.getAttribute("data-marca") === "nota");
+    ok(marcada.length === 1,
+       "U26c2 a marca de nota nao apareceu pintada na leitura antes de gravar — "
+       + "achei " + marcada.length);
+
+    api.$("leiNotaTexto").value = "isto é a receita orçamentária";
+    ok(api.leiNotaSalvar() === true, "U26d salvar a nota do trecho falhou");
+    ok(api.$("dlgLeiNota").open === false, "U26e salvar nao fechou a janela");
+    const guardada = api.leiNotaTrechoDe(id, "as receitas nêle arrecadadas");
+    ok(!!guardada && /orçamentária/.test(guardada.texto),
+       "U26f a nota do trecho nao foi para o registro da lei");
+
+    /* o "+ nota" por artigo continua exatamente como estava — os dois
+     * modos são mutuamente exclusivos, um não pode vazar no outro */
+    const a35 = api.leiArtigo(api.$("leiTexto").value, "35");
+    api.leiNotaAbrir(a35);
+    ok(api.$("leiNotaTitulo").textContent === api.t("lei_nota_titulo", { a: a35.rotulo }),
+       "U26g abrir a nota do artigo nao trocou de modo direito");
+    api.$("leiNotaTexto").value = "nota do artigo inteiro";
+    ok(api.leiNotaSalvar() === true, "U26h salvar a nota do artigo falhou");
+    ok(api.leiNotaDe(id, "35") === "nota do artigo inteiro",
+       "U26i a nota do artigo nao foi guardada onde sempre foi (notasArtigos)");
+    ok(!api.leiNotaTrechoDe(id, "35") || api.leiNotaTrechoDe(id, "35").texto !== "nota do artigo inteiro",
+       "U26j a nota do artigo vazou para o registro de notas por trecho");
   }
 
   falhas.quantas = n;

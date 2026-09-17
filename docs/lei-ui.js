@@ -890,6 +890,25 @@ function leiTrocarModo(modo) {
   if (leiModo === "ler") leiPintarLeitura();
   if (rec) leiPintarRecitar();
   leiPintarEdicaoLivre();
+
+  /* O FOCO PRECISA ESTAR DENTRO DO PAINEL CERTO.
+   *
+   * Na janela "lado a lado" (leiJurLadoALado, material.js) o diálogo abre
+   * com .show() em vez de .showModal() — não é modal de verdade, então o
+   * navegador nunca move o foco para dentro dele sozinho. Sem foco em
+   * lugar nenhum do painel, Page Down e as setas rolam o documento por
+   * trás em vez do texto da lei. leiTexto já é um campo (foca sozinho);
+   * leiLeitura/leiRecitar são <div>s e precisam de tabIndex para aceitar
+   * foco — -1 os tira da ordem de Tab normal, mas continuam focáveis por
+   * script, que é só o que se precisa aqui. */
+  const painel = ed ? $("leiTexto") : (rec ? $("leiRecitar") : $("leiLeitura"));
+  if (painel) {
+    if (painel !== $("leiTexto") && !painel.hasAttribute("tabindex")) {
+      painel.tabIndex = -1;
+    }
+    try { painel.focus({ preventScroll: true }); }
+    catch (e) { try { painel.focus(); } catch (e2) {} }
+  }
 }
 
 /* A EDIÇÃO LIVRE DO TEXTO INTEIRO SÓ EXISTE ANTES DA PRIMEIRA GRAVAÇÃO.
@@ -909,9 +928,20 @@ function leiPintarEdicaoLivre() {
   const travado = leiEmCamada();
   const cx = $("leiTexto");
   if (cx) cx.readOnly = travado;
+  /* "GRAVAR" FICA ATIVO — de propósito, mesmo com a base travada.
+   *
+   * A trava real já é o campo ser somente-leitura: ninguém senta e
+   * reescreve o artigo à mão. Mas o valor do campo pode mudar por OUTRO
+   * caminho que não é digitação — marcar um trecho (matMarcarSelecao)
+   * grava direto em $("leiTexto").value por JS, mesmo com readOnly, e
+   * PRECISA do botão de gravar para persistir (a mesma marcação que
+   * "Marcado — ainda não salvo" está pedindo para salvar). Desativar o
+   * botão aqui já quebrou isso uma vez: a pessoa marcava, via a cor
+   * pintar, clicava em "gravar" e nada acontecia — o clique caía num
+   * botão morto. Com o campo travado, gravar só pode persistir esse
+   * tipo de mudança mesmo, então não há razão para desativar. */
   const b = $("btnLeiSalvar");
   if (b) {
-    b.disabled = travado;
     b.title = t(travado ? "lei_salvar_travado_ajuda" : "lei_salvar_livre_ajuda");
   }
   const nota = $("leiTextoTravado");
@@ -935,8 +965,19 @@ function leiPintarLeitura() {
   /* COM LEI GRAVADA, a leitura sempre mostra o texto VIGENTE — base mais
    * o que a camada de alteração registrou (leiArtigosEfetivos). Sem lei
    * ainda (colagem inicial, l é null), não há camada nenhuma para somar:
-   * o que se lê é exatamente o que está sendo digitado. */
-  const arts = l ? leiArtigosEfetivos(l) : leiArtigos(bruto);
+   * o que se lê é exatamente o que está sendo digitado.
+   *
+   * A BASE VEM DO CAMPO AO VIVO (bruto), NÃO DE l.texto GRAVADO.
+   * Marcar um trecho (matMarcarSelecao) muda só $("leiTexto").value —
+   * de propósito não grava a cada clique, para dar chance de desistir
+   * (ver o comentário em matMarcarSelecao). Ler l.texto aqui faria a
+   * marca recém-criada ficar invisível até a próxima gravação: quem
+   * marcasse não veria a cor pintar. l.alteracoes continua vindo do
+   * registro gravado — essa camada só muda por um fluxo que já grava
+   * sozinho (leiArtigoAlterar/leiAtualizarAplicar), nunca por digitação
+   * solta, então não tem o mesmo problema. */
+  const arts = l ? leiArtigosEfetivos(Object.assign({}, l, { texto: bruto }))
+                 : leiArtigos(bruto);
   const parei = l ? l.parei : "";
   /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
    * dentro do laço releria o banco de questões a cada artigo */
@@ -1139,23 +1180,57 @@ function leiPintarLeitura() {
  * nota de verdade quando a pessoa clica em guardar.
  * ===================================================================== */
 let leiNotaArt = null;
+/* A NOTA POR TRECHO usa a MESMA janela (dlgLeiNota), em vez de uma
+ * segunda janela quase idêntica — só troca o que está em `leiNotaArt`
+ * (nota de artigo) por `leiNotaTrechoAlvo` (nota de trecho), os dois
+ * mutuamente exclusivos: abrir um zera o outro. leiNotaSugerir/
+ * leiNotaSalvar abaixo checam qual dos dois está ativo. */
+let leiNotaTrechoAlvo = "";
 
 function leiNotaAbrir(a) {
   if (!a || !$("dlgLeiNota")) return;
   leiNotaArt = a;
+  leiNotaTrechoAlvo = "";
   $("leiNotaTitulo").textContent = t("lei_nota_titulo", { a: a.rotulo });
+  $("leiNotaTexto").placeholder = t("lei_nota_placeholder");
   $("leiNotaTexto").value = leiIdAtual ? leiNotaDe(leiIdAtual, a.num) : "";
   $("leiNotaPrompt").hidden = true;
   $("leiNotaPromptTxt").value = "";
   abrirModal("dlgLeiNota");
 }
 
+/* Chamada depois que a marca "nota" já pegou de verdade
+ * (matMarcarSelecao devolveu true) — o trecho é o mesmo que estava
+ * selecionado, capturado ANTES da marcação (leiNotaTrechoMarcar). */
+function leiNotaTrechoAbrir(trecho) {
+  if (!trecho || !$("dlgLeiNota")) return;
+  leiNotaArt = null;
+  leiNotaTrechoAlvo = trecho;
+  $("leiNotaTitulo").textContent = t("lei_nota_trecho_titulo",
+    { t: trecho.length > 60 ? trecho.slice(0, 60) + "…" : trecho });
+  $("leiNotaTexto").placeholder = t("lei_nota_trecho_placeholder");
+  const existente = leiIdAtual ? leiNotaTrechoDe(leiIdAtual, trecho) : null;
+  $("leiNotaTexto").value = existente ? existente.texto : "";
+  $("leiNotaPrompt").hidden = true;
+  $("leiNotaPromptTxt").value = "";
+  abrirModal("dlgLeiNota");
+}
+
 function leiNotaSugerir() {
-  if (!leiNotaArt) return;
-  $("leiNotaPromptTxt").value = t("lei_nota_prompt",
-    { artigo: leiNotaArt.rotulo, texto: leiNotaArt.texto });
-  $("leiNotaPrompt").hidden = false;
-  try { leiReg("nota", "sugestão de nota copiada", leiNotaArt.rotulo); } catch (e) {}
+  if (leiNotaArt) {
+    $("leiNotaPromptTxt").value = t("lei_nota_prompt",
+      { artigo: leiNotaArt.rotulo, texto: leiNotaArt.texto });
+    $("leiNotaPrompt").hidden = false;
+    try { leiReg("nota", "sugestão de nota copiada", leiNotaArt.rotulo); } catch (e) {}
+    return;
+  }
+  if (leiNotaTrechoAlvo) {
+    $("leiNotaPromptTxt").value = t("lei_nota_trecho_prompt",
+      { texto: leiNotaTrechoAlvo });
+    $("leiNotaPrompt").hidden = false;
+    try { leiReg("nota", "sugestão de nota de trecho copiada",
+             leiNotaTrechoAlvo.slice(0, 60)); } catch (e) {}
+  }
 }
 
 function leiNotaCopiarPrompt() {
@@ -1163,8 +1238,22 @@ function leiNotaCopiarPrompt() {
 }
 
 function leiNotaSalvar() {
-  if (!leiNotaArt || !leiIdAtual) return false;
+  if (!leiIdAtual) return false;
   const texto = String($("leiNotaTexto").value || "").trim();
+
+  if (leiNotaTrechoAlvo) {
+    const ok = leiNotaTrechoGuardar(leiIdAtual, leiNotaTrechoAlvo, texto);
+    if (ok) {
+      $("dlgLeiNota").close();
+      try { leiReg("nota", texto ? "nota de trecho guardada" : "nota de trecho apagada",
+               leiNotaTrechoAlvo.slice(0, 60)); }
+      catch (e) {}
+      leiPintarLeitura();
+    }
+    return ok;
+  }
+
+  if (!leiNotaArt) return false;
   const ok = leiNotaGuardar(leiIdAtual, leiNotaArt.num, texto);
   if (ok) {
     $("dlgLeiNota").close();
@@ -1173,6 +1262,16 @@ function leiNotaSalvar() {
     leiPintarLeitura();
   }
   return ok;
+}
+
+/* Botão da barra de marcas: marca o trecho selecionado como "nota" e,
+ * se pegou de verdade, já abre a caixa para escrever a anotação — o
+ * gesto vira um só (selecionar → clicar → escrever), sem uma parada
+ * extra só para "confirmar que marcou". */
+function leiNotaTrechoMarcar() {
+  const trecho = matSelGuardada;
+  if (!matMarcarSelecao("nota", "lei")) return;
+  leiNotaTrechoAbrir(trecho);
 }
 
 /* ---------------------------------------------------------------------
@@ -2558,6 +2657,9 @@ function leiIniciar() {
    ["btnLeiMarcaPeg", "pegadinha"]].forEach(([id, tipo]) => {
     liga(id, "marca " + tipo, () => matMarcarSelecao(tipo, "lei"));
   });
+  /* a sétima é diferente: marca E já abre a caixa de anotação, em vez de
+   * só pintar (ver leiNotaTrechoMarcar) */
+  liga("btnLeiMarcaNota", "marcar nota", () => leiNotaTrechoMarcar());
 
   if ($("leiTexto")) {
     $("leiTexto").addEventListener("input", () => { leiSujo = true; });
@@ -2584,5 +2686,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiUpdComparoAtual: () => leiUpdComparo,
     leiUpdIdxAtual: () => leiUpdIdx,
     leiPintarEdicaoLivre,
+    leiNotaAbrir, leiNotaTrechoAbrir, leiNotaTrechoMarcar,
+    leiNotaSugerir, leiNotaCopiarPrompt, leiNotaSalvar,
   };
 }

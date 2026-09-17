@@ -535,6 +535,7 @@ function matParaHtml(txt, prova) {
     .replace(/==§((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-lei" data-marca="lei">$1</mark>')
     .replace(/==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova" data-marca="prova">$1</mark>')
     .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg" data-marca="pegadinha">$1</mark>')
+    .replace(/==@((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-nota" data-marca="nota">$1</mark>')
     .replace(/==((?:[^=\n]|=(?!=))+)==/g, '<mark data-marca="destaque">$1</mark>');
   /* uma só, fora do laço: era recriada a cada linha, e o cartão de questão
    * precisa dela ANTES do ponto onde estava declarada */
@@ -872,10 +873,15 @@ function matAmpliar() {
  * aberto — "*Ato Complexo:**". O "*" só é sufixo quando NÃO for seguido de
  * outro "*", porque "**" é negrito. Uma constante só, para os quatro
  * lugares que precisam disso nunca divergirem. */
-const MAT_SUF = "(?:[!?\u00a7~]|\\*(?!\\*))?";
+const MAT_SUF = "(?:[!?\u00a7~@]|\\*(?!\\*))?";
 
+/* "nota" é diferente dos outros seis: as outras marcas são só uma cor —
+ * "nota" carrega texto livre preso ao trecho (ver leiNotaTrechoGuardar,
+ * lei-seca.js, que reaproveita matChaveDica igual a "dica" nos resumos).
+ * Fica de fora de MAT_TIPOS_MENU (a lista de "trocar cor") por isso: não
+ * é uma cor alternativa às outras, é a única com conteúdo dela mesma. */
 const MAT_MARCAS = { destaque: "==", importante: "==!", duvida: "==?",
-                     lei: "==§", prova: "==*", pegadinha: "==~" };
+                     lei: "==§", prova: "==*", pegadinha: "==~", nota: "==@" };
 
 /* A SELEÇÃO MORRE ANTES DO CLIQUE.
  * Apertar o botão dispara mousedown ANTES de click, e o mousedown já move o
@@ -1492,13 +1498,17 @@ function matNormalizar(s) {
  * pegadinha é justamente o que mais importa marcar na letra da lei, e
  * ter um jogo de marcas diferente em cada documento seria pedir para a
  * pessoa lembrar de duas convenções. */
+/* DEVOLVE SE MARCOU DE VERDADE — false em cada recusa, true no sucesso.
+ * Quem chama sem usar o retorno continua funcionando igual (a maioria);
+ * é o que permite à nota por trecho (lei-ui.js) saber que a marcação
+ * realmente aconteceu antes de abrir a caixa de texto por cima dela. */
 function matMarcarSelecao(tipo, onde) {
   const naLei = onde === "lei";
   matLembrarSelecao(naLei ? "leiLeitura" : "matLeitura");
   const trecho = matSelGuardada;
-  if (matNormalizar(trecho).length < 3) { matRecusa("curta", trecho); return; }
+  if (matNormalizar(trecho).length < 3) { matRecusa("curta", trecho); return false; }
   const ta = $(naLei ? "leiTexto" : "matTexto");
-  if (!ta) return;
+  if (!ta) return false;
   const marca = MAT_MARCAS[tipo] || "==";
 
   const { plano, mapa } = matMapear(ta.value);
@@ -1512,7 +1522,7 @@ function matMarcarSelecao(tipo, onde) {
   const ocorrencias = [];
   for (let k = plano.indexOf(alvo); k >= 0; k = plano.indexOf(alvo, k + 1))
     ocorrencias.push(k);
-  if (!ocorrencias.length) { matRecusa("nao_achou", trecho, plano); return; }
+  if (!ocorrencias.length) { matRecusa("nao_achou", trecho, plano); return false; }
 
   const jaMarcada = (p) => {
     const i0 = mapa[p];
@@ -1535,7 +1545,7 @@ function matMarcarSelecao(tipo, onde) {
   let escolhida = -1;
   if (matSelOrdinal >= 0 && matSelOrdinal < ocorrencias.length) {
     const p = ocorrencias[matSelOrdinal];
-    if (jaMarcada(p)) { matRecusa("ja_marcado", trecho); return; }
+    if (jaMarcada(p)) { matRecusa("ja_marcado", trecho); return false; }
     escolhida = p;
   } else {
     /* leitura não soube dizer qual (seleção fora dos leitores, ou nó que
@@ -1543,7 +1553,7 @@ function matMarcarSelecao(tipo, onde) {
     const livre = ocorrencias.find((p) => !jaMarcada(p));
     escolhida = livre === undefined ? -1 : livre;
   }
-  if (escolhida < 0) { matRecusa("ja_marcado", trecho); return; }
+  if (escolhida < 0) { matRecusa("ja_marcado", trecho); return false; }
   const pos = escolhida;
 
   const ini0 = mapa[pos], fim0 = mapa[pos + alvo.length - 1] + 1;
@@ -1599,7 +1609,7 @@ function matMarcarSelecao(tipo, onde) {
     cursor = f.fim;
     marcados++;
   });
-  if (!marcados) { matRecusa("nao_achou", trecho, plano); return; }
+  if (!marcados) { matRecusa("nao_achou", trecho, plano); return false; }
   saida += ta.value.slice(cursor);
   ta.value = saida;
   /* NÃO grava aqui. Grifar é experimentar: a pessoa marca, olha, desfaz,
@@ -1612,11 +1622,12 @@ function matMarcarSelecao(tipo, onde) {
     leiSujo = true;
     leiTrocarModo("ler");
     if ($("leiEstado")) $("leiEstado").textContent = t("mat_marcado_nao_salvo");
-    return;
+    return true;
   }
   matSujo = true;
   matTrocarModo("ler");
   $("matEstado").textContent = t("mat_marcado_nao_salvo");
+  return true;
 }
 
 /* =====================================================================
@@ -1631,7 +1642,8 @@ function matMarcarSelecao(tipo, onde) {
  * Agora as marcas com dica ou questão vêm DESMARCADAS e sinalizadas.
  * ===================================================================== */
 const MAT_ROTULO_MARCA = { "==": "destaque", "==!": "importante", "==?": "duvida",
-                           "==§": "lei", "==*": "prova", "==~": "pegadinha" };
+                           "==§": "lei", "==*": "prova", "==~": "pegadinha",
+                           "==@": "nota" };
 
 function matMarcasNoTexto(chave, campo) {
   const s = matTextoVivo(chave, campo || "texto");
@@ -2620,6 +2632,15 @@ function matIniciar() {
     if (!alvo || !alvo.getAttribute || !alvo.getAttribute("data-marca")) return;
     /* seleção em curso é gesto de marcar, não de abrir menu */
     if (String(matSelGuardada || "").trim().length > 2) return;
+    /* "nota" não é uma cor para trocar — é a única marca com texto
+     * preso a ela, então clicar nela abre direto a caixa de edição
+     * (a mesma janela do "+ nota" por artigo, em modo trecho) em vez
+     * do menu genérico de trocar-cor/tirar. */
+    if (alvo.getAttribute("data-marca") === "nota"
+        && typeof leiNotaTrechoAbrir === "function") {
+      leiNotaTrechoAbrir(String(alvo.textContent || ""));
+      return;
+    }
     matMenuDaMarca(alvo);
   };
   /* CLIQUE NA MARCA. Um ouvinte só no container, e não um por <mark>:
