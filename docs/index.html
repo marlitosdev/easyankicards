@@ -1050,6 +1050,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-chip:hover{border-color:var(--acao)}
 .lei-chip-on{border-color:var(--acao);background:var(--acao);color:#fff;font-weight:700}
 .lei-chip-add{border-style:dashed;color:var(--sutil)}
+/* SEM LEI NENHUMA LIGADA AINDA, reutilizar é a escolha melhor que colar
+ * de novo — o chip de vincular vem cheio e maior, para ser a primeira
+ * coisa que o olho encontra na fila, em vez de mais uma pílula igual. */
+.lei-chip-destaque{border-style:solid;border-color:var(--acao);
+  background:var(--acao);color:#fff;font-weight:700;padding:6px 12px;
+  font-size:12.5px}
+.lei-vinc-grupo{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--sutil);font-weight:800;margin:10px 0 4px}
+.lei-vinc-grupo:first-child{margin-top:0}
 /* O "x" DE DESVINCULAR fica colado no chip, como uma aba — mesmo
    par visual do "jur-tag-ed"/"jur-tag-x" da jurisprudência. */
 .lei-chip-wrap{display:inline-flex;align-items:stretch}
@@ -1313,6 +1322,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   color:var(--info);cursor:pointer}
 .lei-art-num:hover{border-color:var(--info)}
 .lei-art-num-parei{color:var(--ok);border-color:var(--ok)}
+
+/* O SELO DA CAMADA DE ALTERAÇÃO — diz, sem esconder nada, que aquele
+ * artigo não é mais a redação original. Roxo (não vermelho: não é erro,
+ * é informação) para alterado; a cor de alerta só entra em revogado. */
+.lei-selo-alt{font-size:10px;font-weight:700;padding:2px 7px;
+  border-radius:999px;border:1px solid rgba(124,108,245,.5);
+  color:#7c6cf5;background:rgba(124,108,245,.10);font-family:inherit;
+  cursor:pointer;margin-left:4px}
+.lei-selo-revogado{border-color:var(--atencao);color:var(--atencao);
+  background:rgba(245,158,11,.10)}
+.lei-selo-alterado-curto{font-size:10px;color:#7c6cf5}
 .lei-onde-ir{background:none;border:none;padding:0;font-family:inherit;
   cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 
@@ -1335,6 +1355,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-art-item-on{border-color:var(--acao);background:rgba(124,108,245,.10);
   color:var(--texto);font-weight:700}
 .lei-art-item-novo{border-style:dashed;border-color:var(--borda);margin-top:4px}
+.lei-art-item-alt{border-left:3px solid #7c6cf5}
 /* cabeçalho comprido não pode comer a tela inteira num monitor baixo */
 #dlgMaterial .mat-topo, #dlgMaterial .mat-ctrl, #dlgMaterial .mat-barra{
   max-height:24vh;overflow-y:auto}
@@ -5718,16 +5739,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <h3 id="leiTitulo"></h3>
   <p class="nota" id="leiSub"></p>
 
+  <!-- De onde veio e de quando é, perto do título — é a primeira
+       pergunta ao reabrir uma lei, não uma nota de rodapé. Lei muda; sem
+       carimbo de data não há como saber que o texto envelheceu. -->
+  <div class="lei-proc" id="leiProc" hidden></div>
+
+  <!-- Onde parei, em artigo — a segunda pergunta, logo abaixo. -->
+  <div class="lei-onde" id="leiOnde" hidden></div>
+
   <!-- Quais leis servem ESTE tópico. Uma lei pode servir vários tópicos:
        é o que evita colar a mesma 4.320 cinco vezes. -->
   <div class="lei-fila" id="leiFila"></div>
 
-  <!-- De onde veio e de quando é. Lei muda; sem carimbo de data não há
-       como saber que o texto envelheceu. -->
-  <div class="lei-proc" id="leiProc" hidden></div>
-
-  <!-- Onde parei, em artigo. -->
-  <div class="lei-onde" id="leiOnde" hidden></div>
+  <!-- SÓ COLE UMA LEI NOVA SE ELA AINDA NÃO EXISTE NO APP: se já foi
+       cadastrada (mesmo noutra disciplina/tópico), "usar uma lei já
+       guardada" acima evita uma cópia que envelhece separada. Visível só
+       quando este tópico ainda não tem nenhuma lei e há outras na
+       biblioteca (leiPintarFila decide). -->
+  <p class="nota" id="leiTextoAjuda" hidden></p>
 
   <div class="mat-topo">
     <!-- OS TRÊS MODOS SÃO UMA ESCOLHA, e se desenham como uma: encostados
@@ -5822,6 +5851,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 
   <div class="lei-blocos" id="leiBlocosCx" hidden></div>
+  <!-- SÓ EDITÁVEL ANTES DA PRIMEIRA GRAVAÇÃO. Com base já gravada, este
+       campo vira somente-leitura (leiPintarEdicaoLivre) — toda mudança
+       depois disso passa pelo ✏ por artigo ou por "atualizar para nova
+       versão", nunca por aqui. -->
+  <p class="nota" id="leiTextoTravado" hidden></p>
   <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
@@ -5916,6 +5950,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <textarea id="leiArtTexto" rows="12"
         style="width:100%;box-sizing:border-box"
         placeholder="Art. 35. Pertencem ao exercício financeiro:&#10;I - as receitas nele arrecadadas;"></textarea>
+      <!-- só aparece quando a lei já tem base gravada: nesse caso, salvar
+           não reescreve o texto colado — grava aqui, na camada de
+           leitura e edição, com a norma que motivou a mudança. -->
+      <div id="leiArtFonteCx" hidden>
+        <label class="nota" data-i18n="lei_art_fonte_rot"></label>
+        <input type="text" id="leiArtFonte" placeholder="EC 132/2023">
+      </div>
       <p class="nota" id="leiArtAviso"></p>
     </div>
   </div>
@@ -5924,6 +5965,58 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-cinza" id="btnLeiArtFechar" data-i18n="help_close"></button>
     <button class="btn btn-perigo" id="btnLeiArtApagar" data-i18n="lei_art_apagar"
       title="Retira este artigo da lei. Mostra o texto antes de perguntar."></button>
+  </div>
+</dialog>
+
+<!-- ATUALIZAR PARA NOVA VERSÃO — compara a lei gravada com uma versão
+     nova colada, artigo a artigo, e só grava na camada de alteração o que
+     for aceito nesta revisão. A base (leiTexto/l.texto) nunca é tocada
+     por este fluxo. -->
+<dialog id="dlgLeiAtualizar" class="ui-modal diag-modal">
+  <h3 data-i18n="lei_upd_titulo"></h3>
+  <p class="nota" data-i18n="lei_upd_intro"></p>
+
+  <div id="leiUpdPasso1">
+    <label class="nota" data-i18n="lei_upd_fonte_rot"></label>
+    <input type="text" id="leiUpdFonte" placeholder="EC 132/2023">
+    <label class="nota" data-i18n="lei_upd_colar_rot"></label>
+    <textarea id="leiUpdTexto" rows="12" style="width:100%;box-sizing:border-box"
+      placeholder="Cole aqui a nova versão completa da lei."></textarea>
+    <p class="nota" id="leiUpdAviso1"></p>
+    <div class="dlg-rodape">
+      <button class="btn btn-azul" id="btnLeiUpdComparar" data-i18n="lei_upd_comparar"></button>
+      <button class="btn btn-cinza" id="btnLeiUpdFechar1" data-i18n="help_close"></button>
+    </div>
+  </div>
+
+  <div id="leiUpdPasso2" hidden>
+    <div class="mat-topo">
+      <button class="btn-min" id="btnLeiUpdAnterior">&#8592;</button>
+      <span class="nota" id="leiUpdConta"></span>
+      <button class="btn-min" id="btnLeiUpdProximo">&#8594;</button>
+      <span class="mat-topo-dir nota" id="leiUpdResumo"></span>
+    </div>
+    <div id="leiUpdItem"></div>
+
+    <div class="mat-topo">
+      <button class="btn-min" id="btnLeiUpdIA" data-i18n="lei_upd_ia"></button>
+    </div>
+    <textarea id="leiUpdPrompt" rows="6" readonly hidden
+      style="width:100%;box-sizing:border-box"></textarea>
+    <div class="mat-topo" id="leiUpdPromptBarra" hidden>
+      <button class="btn-min" id="btnLeiUpdIACopiar" data-i18n="lei_cloze_copiar"></button>
+    </div>
+    <label class="nota" id="leiUpdExplicaRot" hidden></label>
+    <textarea id="leiUpdExplica" rows="4" hidden
+      style="width:100%;box-sizing:border-box"
+      placeholder="Cole aqui a explicação da IA, se pediu apoio."></textarea>
+
+    <div class="dlg-rodape">
+      <button class="btn btn-cinza" id="btnLeiUpdPular" data-i18n="lei_upd_pular"></button>
+      <button class="btn btn-verde" id="btnLeiUpdAceitar" data-i18n="lei_upd_aceitar"></button>
+      <button class="btn btn-azul" id="btnLeiUpdFinalizar" data-i18n="lei_upd_finalizar"></button>
+      <button class="btn btn-cinza" id="btnLeiUpdFechar2" data-i18n="help_close"></button>
+    </div>
   </div>
 </dialog>
 

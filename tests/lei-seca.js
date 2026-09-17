@@ -570,6 +570,59 @@ async function testes() {
        "L10p o artigo novo passou na frente da ementa da lei");
   }
 
+  /* ---- CAM: duas camadas — leiArtigosEfetivos e leiArtigoAlterar ----
+   *
+   * O que precisa valer: a base (`texto`) nunca é reescrita por essas
+   * duas funções — só a camada de alteração muda. Sem alteração nenhuma,
+   * a lista vigente é idêntica à base; com alteração, revogação ou
+   * artigo novo, a lista vigente muda e a base continua intacta. */
+  {
+    const { api } = rodar();
+    const lei = api.leiGuardar({ nome: "Lei de teste — camadas", texto: L4320 });
+
+    const semAlt = api.leiArtigosEfetivos(api.leiDe(lei.id));
+    ok(semAlt.map((a) => a.num).join(",")
+       === api.leiArtigos(L4320).map((a) => a.num).join(","),
+       "CAM1 sem alteracoes, a lista vigente deveria ser igual a base");
+
+    ok(api.leiArtigoAlterar(lei.id, "35",
+       { texto: "Art. 35. Redação nova.", fonteAlteracao: "EC 1" }),
+       "CAM2 leiArtigoAlterar recusou uma alteracao valida");
+    const l1 = api.leiDe(lei.id);
+    ok(l1.texto === L4320, "CAM3 a base mudou depois de leiArtigoAlterar");
+    const art35 = api.leiArtigosEfetivos(l1).filter((a) => a.num === "35")[0];
+    ok(!!art35 && art35.alterado === true && /Redação nova/.test(art35.texto),
+       "CAM4 o artigo alterado nao aparece com o texto novo na lista vigente");
+    ok(!!art35 && /Pertencem ao exercício/.test(art35.textoOriginal || ""),
+       "CAM5 o artigo alterado perdeu a redacao original de referencia");
+
+    /* revogar: o artigo continua na lista — nada some calado — mas
+     * marcado, e o texto continua acessível pela redação original */
+    ok(api.leiArtigoAlterar(lei.id, "9", { revogado: true, fonteAlteracao: "EC 2" }),
+       "CAM6 leiArtigoAlterar recusou uma revogacao");
+    const art9 = api.leiArtigosEfetivos(api.leiDe(lei.id))
+      .filter((a) => a.num === "9")[0];
+    ok(!!art9 && art9.revogado === true,
+       "CAM7 o artigo revogado sumiu da lista em vez de ficar marcado");
+
+    /* artigo que não existe na base entra na posição certa */
+    ok(api.leiArtigoAlterar(lei.id, "5",
+       { texto: "Art. 5º Acrescentado por emenda.", fonteAlteracao: "EC 3" }),
+       "CAM8 leiArtigoAlterar recusou um artigo novo");
+    const nums = api.leiArtigosEfetivos(api.leiDe(lei.id)).map((a) => a.num);
+    ok(nums.join(",") === "1,2,3,5,9,11,12-A,35,115",
+       "CAM9 o artigo novo da camada caiu no lugar errado: " + nums.join(","));
+
+    /* desfazer: dados nulo apaga a entrada e devolve a redação original */
+    ok(api.leiArtigoAlterar(lei.id, "35", null), "CAM10 desfazer recusou");
+    const art35depois = api.leiArtigosEfetivos(api.leiDe(lei.id))
+      .filter((a) => a.num === "35")[0];
+    ok(!art35depois.alterado,
+       "CAM11 desfazer nao devolveu a redacao original");
+    ok(api.leiDe(lei.id).texto === L4320,
+       "CAM12 a base nao ficou intocada depois de todo o vaivém");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

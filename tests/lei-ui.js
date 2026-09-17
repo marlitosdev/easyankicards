@@ -327,22 +327,31 @@ async function testes() {
     ok(itens.some((x) => /lei-art-item-on/.test(x.className || "")),
        "U18g a lista nao mostra qual artigo esta aberto");
 
-    /* gravar troca SÓ aquele artigo */
+    /* gravar troca SÓ aquele artigo — e vai para a CAMADA DE ALTERAÇÃO,
+     * nunca para a base: com a lei já gravada, "o usuário só altera a
+     * camada de leitura e edição" (o pedido) significa que o texto
+     * colado originalmente fica intocado byte a byte. */
     api.$("leiArtTexto").value =
       "Art. 35. Pertencem ao exercício financeiro (redação nova):\n"
       + "I - as receitas nele arrecadadas;";
     api.leiEdSalvar(false);
     const lei = api.leisLista()[0];
-    ok(/redação nova/.test(lei.texto),
-       "U18h a nova redacao nao entrou na lei");
+    ok(!/redação nova/.test(lei.texto),
+       "U18h a base foi reescrita — a mudanca deveria ir so para a "
+       + "camada de alteracao");
+    ok(/redação nova/.test((lei.alteracoes["35"] || {}).texto || ""),
+       "U18h2 a nova redacao nao entrou na camada de alteracao");
     ok(/Tributo é a receita derivada/.test(lei.texto),
-       "U18i editar o art. 35 apagou os outros artigos");
+       "U18i a base perdeu outros artigos so por editar o 35");
     ok(api.leiArtigos(lei.texto).length === 8,
-       "U18j a lei mudou de tamanho: " + api.leiArtigos(lei.texto).length);
+       "U18j a base mudou de tamanho: " + api.leiArtigos(lei.texto).length);
+    ok(api.leiArtigosEfetivos(lei).filter((a) => a.num === "35")[0].alterado === true,
+       "U18j2 o artigo vigente nao aparece marcado como alterado");
     ok(api.leiProgresso(lei.id).artigo === "35",
        "U18k editar o artigo derrubou o marcador");
 
-    /* ARTIGO NOVO ENTRA NO LUGAR CERTO, não no fim do arquivo.
+    /* ARTIGO NOVO ENTRA NO LUGAR CERTO, não no fim do arquivo — mas na
+     * lista VIGENTE (base + camada), já que ele nunca existiu na base.
      * O numero escolhido tem de NAO existir na lei de teste — pedir um
      * que ja existe faz a insercao ser recusada, a ordem continuar certa
      * por acaso, e o teste passar sem ter exercido nada. Foi o que
@@ -352,7 +361,7 @@ async function testes() {
     ok(api.leiEdSalvar(false) === true,
        "U18l1 nao consegui acrescentar o artigo: "
        + api.$("leiArtAviso").textContent);
-    const nums = api.leiArtigos(api.leisLista()[0].texto).map((a) => a.num);
+    const nums = api.leiArtigosEfetivos(api.leisLista()[0]).map((a) => a.num);
     ok(nums.join(",") === "1,2,3,5,9,11,12-A,35,115",
        "U18l o artigo novo caiu no lugar errado: " + nums.join(","));
 
@@ -1070,6 +1079,166 @@ async function testes() {
       ok(String(api.$("leiTexto").value || "") === "",
          "U21i a caixa de texto continuou mostrando a lei desvinculada");
     }
+  }
+
+  /* ---- U22: sem lei nenhuma, "usar uma lei já guardada" vem primeiro
+   * e em destaque — reutilizar é a escolha melhor que colar de novo ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id = api.leisLista()[0].id;
+
+    preparar(api, "Direito Financeiro", "Despesa pública");
+    api.leiAbrir("Direito Financeiro", "Despesa pública");
+    /* pelo id, dentro da fila viva — $() global pode devolver um botão
+     * desta id de uma renderização anterior; o mesmo cuidado do U2 */
+    const fila1 = () => api.$("leiFila").querySelectorAll(".lei-chip-add");
+    const bVinc = fila1().filter((b) => b.id === "btnLeiVincular")[0];
+    ok(!!bVinc && /lei-chip-destaque/.test(bVinc.className || ""),
+       "U22 sem lei no topico, o botao de vincular deveria vir em destaque");
+    const ajuda = api.$("leiTextoAjuda");
+    ok(!!ajuda && ajuda.hidden === false,
+       "U22b a nota do textarea vazio nao apareceu com outra lei disponivel");
+
+    api.leiLigar(id, api.matChave("Direito Financeiro", "Despesa pública"));
+    api.leiTrocarPara(id);
+    const bVinc2 = fila1().filter((b) => b.id === "btnLeiVincular")[0];
+    ok(!bVinc2, "U22c com o topico ja servido pela unica lei da biblioteca, "
+       + "o botao de vincular nao deveria mais aparecer");
+  }
+
+  /* ---- U23: o vínculo agrupa por disciplina — "reutilizar lei já
+   * existente NA DISCIPLINA" era o pedido, não na biblioteca inteira ---- */
+  {
+    const { api } = rodar();
+    const chFin = preparar(api, "Direito Financeiro", "Receita pública");
+    const leiFin = api.leiGuardar({ nome: "Lei 4.320/1964", texto: L4320 });
+    api.leiLigar(leiFin.id, chFin);
+
+    const chCE = preparar(api, "Direito Constitucional", "Orçamento na Constituição");
+    const leiCE = api.leiGuardar({ nome: "Constituição Federal de 1988", texto: L4320 });
+    api.leiLigar(leiCE.id, chCE);
+
+    preparar(api, "Direito Constitucional", "Fiscalização financeira");
+    api.leiAbrir("Direito Constitucional", "Fiscalização financeira");
+    api.leiVincularAbrir();
+    const grupos = api.$("leiVincCx").querySelectorAll(".lei-vinc-grupo")
+      .map((g) => g.textContent);
+    ok(grupos.some((g) => /Direito Constitucional/.test(g)),
+       "U23 faltou o rotulo do grupo da disciplina atual: " + grupos.join(" | "));
+    ok(grupos.some((g) => /outras/i.test(g)),
+       "U23b faltou o rotulo do grupo das outras disciplinas: " + grupos.join(" | "));
+
+    /* e a lei da MESMA disciplina vem antes da de outra disciplina */
+    const itens = api.$("leiVincCx").querySelectorAll(".duv-titulo")
+      .map((d) => d.textContent);
+    ok(itens.indexOf("Constituição Federal de 1988") >= 0
+       && itens.indexOf("Constituição Federal de 1988") < itens.indexOf("Lei 4.320/1964"),
+       "U23c a lei da disciplina atual nao veio antes da de outra disciplina: "
+       + itens.join(" | "));
+  }
+
+  /* ---- U24: atualizar para nova versão — a base NUNCA é reescrita, só
+   * o que for aceito na revisão vira alteração ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const baseAntes = api.leisLista()[0].texto;
+
+    api.leiAtualizarAbrir();
+    ok(api.$("dlgLeiAtualizar").open === true, "U24 a janela de atualizar nao abriu");
+
+    const novaVersao = L4320
+      .replace("Art. 35. Pertencem ao exercício financeiro:",
+                "Art. 35. Pertencem ao exercício financeiro (redação dada pela EC 9):")
+      .replace("Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.",
+                "Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.\n\n"
+                + "Art. 116. Artigo acrescentado por lei posterior.");
+    api.$("leiUpdFonte").value = "EC 9/2024";
+    api.$("leiUpdTexto").value = novaVersao;
+    ok(api.leiAtualizarComparar() === true, "U24b a comparacao nao encontrou diferenças");
+
+    const comparo = api.leiUpdComparoAtual();
+    ok(comparo.length === 2,
+       "U24c deveriam sair 2 diferenças (art. 35 mudou, art. 116 é novo): "
+       + comparo.length);
+
+    /* aceita só o primeiro item (o resto fica de fora, de propósito, para
+     * confirmar que "pular" realmente não entra na gravação) — mover
+     * para o item seguinte ANTES de pular, senão "pular" reescreveria o
+     * "aceito" que acabou de ser marcado no mesmo item */
+    api.leiUpdAceitar();
+    api.leiUpdMover(1);
+    api.leiUpdPular();
+
+    ok(api.leiAtualizarAplicar() === true, "U24d finalizar recusou com 1 aceito");
+
+    const leiDepois = api.leiDe(api.leisLista()[0].id);
+    ok(leiDepois.texto === baseAntes,
+       "U24e A BASE FOI REESCRITA pela atualização — isto não pode acontecer");
+    const efetivos = api.leiArtigosEfetivos(leiDepois);
+    const primeiro = comparo[0];
+    const alterado = efetivos.filter((a) => a.num === primeiro.num)[0];
+    ok(!!alterado && alterado.alterado === true,
+       "U24f o item aceito nao entrou na camada de alteracao");
+    const pulado = comparo[1];
+    const naoAlterado = efetivos.filter((a) => a.num === pulado.num)[0];
+    ok(!naoAlterado || !naoAlterado.alterado,
+       "U24g o item PULADO entrou na camada de alteracao mesmo assim");
+    ok(/EC 9/.test(leiDepois.versao || ""),
+       "U24h a procedencia nao registrou a norma da atualizacao");
+  }
+
+  /* ---- U25: a edição livre do texto inteiro só existe ANTES da
+   * primeira gravação — depois disso "editar" vira só leitura, e a
+   * marcação (que grava por outro caminho, direto no valor do campo)
+   * continua funcionando normalmente ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+
+    ok(api.$("leiTexto").readOnly === false,
+       "U25 antes da primeira gravação, o campo deveria estar editável");
+    ok(api.$("btnLeiSalvar").disabled === false,
+       "U25b antes da primeira gravação, gravar deveria estar ativo");
+
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    api.leiPintar();
+
+    ok(api.$("leiTexto").readOnly === true,
+       "U25c com a lei ja gravada, o campo deveria virar somente-leitura");
+    ok(api.$("btnLeiSalvar").disabled === true,
+       "U25d com a lei ja gravada, gravar deveria estar desativado");
+    api.leiTrocarModo("editar");
+    ok(api.$("leiTextoTravado").hidden === false,
+       "U25e a nota explicando o motivo do bloqueio nao apareceu");
+
+    /* A TRAVA É SÓ NA ENTRADA (textarea + botão), NÃO em leiGravar()
+     * em si — leiGravar() continua sendo o caminho que a marcação usa
+     * para persistir (matMarcarSelecao escreve "==destaque==" direto no
+     * valor do campo, por JS, e conta com leiGravar() no fechar/trocar
+     * de tela). Bloquear a função também travaria o grifo, que é um
+     * recurso à parte e ninguém pediu para travar. Simula exatamente
+     * esse padrão — valor mudado por JS, sem passar pelo botão — e
+     * confirma que ainda persiste. */
+    const idLei = api.leisLista()[0].id;
+    const comMarca = api.$("leiTexto").value
+      .replace("as receitas nêle arrecadadas", "as ==receitas nêle arrecadadas==");
+    api.$("leiTexto").value = comMarca;
+    api.leiGravar();
+    const l = api.leiDe(idLei);
+    ok(/==receitas nêle arrecadadas==/.test(l.texto),
+       "U25f uma mudança feita por JS (o caminho real da marcação) "
+       + "deveria continuar persistindo — só a digitação manual foi "
+       + "travada");
   }
 
   falhas.quantas = n;
