@@ -1043,25 +1043,68 @@ async function testes() {
     ok(api.matLimparColagem("um **negrito** aqui").includes("**negrito**"),
        "Y6 a conversão de itálico destruiu o negrito");
 
-    /* Z — cartões arquivados no material, pela origem que veio junto */
-    api.matGravar(api.matChave("Financeiro", "Receita"), "resumo",
-      { disciplina: "Financeiro", topico: "Receita", concurso: "TCE-PE" });
+    /* Z — gerar por um tópico devolve os cartões PELA BANCADA DE VERDADE,
+     * não por uma caixa solta.
+     *
+     * O RELATO REAL: os cartões gerados a partir de um tópico saíam
+     * "muito simples", sem a pré-visualização/legenda/avisos que a
+     * Bancada dá a tudo o mais — porque eles nunca passavam por ela. E
+     * fechar aquela tela e colar de novo podia apagar um trabalho que já
+     * estivesse em andamento na Bancada, se colasse por cima em vez de
+     * somar. As duas coisas são o que este bloco prova que NÃO acontece
+     * mais: a resposta da IA entra pela MESMA colarMaisTexto() que
+     * "Colar mais texto" já usa (soma, nunca substitui), e salvar no
+     * material continua sendo o "Salvar no material de estudo" que a
+     * Bancada já tinha (cmAbrir/dlgCartaoMat, testado à parte em
+     * cartoes-material.js) — não um caminho novo e mais fraco. */
+    api.$("editor").value = "@ Já estava aqui\nUma pergunta antiga :: uma resposta antiga";
     api.abrirGerar("texto base", { disciplina: "Financeiro", topico: "Receita" });
-    api.$("genTexto").value = "O que é receita? :: Ingresso :: fin\nE despesa? :: Saída :: fin";
-    api.guardarCartoesNoMaterial();
-    const chZ = api.matChave("Financeiro", "Receita");
-    ok(api.matContarCartoes(chZ) === 2,
-       `Z1 esperava 2 cartões guardados, veio ${api.matContarCartoes(chZ)}`);
-    ok(api.matObter(chZ).texto === "resumo",
-       "Z2 guardar os cartões apagou o resumo do tópico");
-    ok(api.matObter(chZ).concurso === "TCE-PE",
-       "Z3 os cartões perderam o concurso de origem");
-    /* e o app recusa quando o que está na caixa é o prompt, não a resposta */
-    api.$("genTexto").value = "Gere flashcards a partir do texto abaixo";
-    const antesZ = api.matContarCartoes(chZ);
-    api.guardarCartoesNoMaterial();
-    ok(api.matContarCartoes(chZ) === antesZ,
-       "Z4 guardou o prompt como se fossem cartões");
+    ok(api.$("dlgGerar").open === true, "Z1 a janela do prompt não abriu");
+    ok(!api.$("btnGenMaterial"),
+       "Z1b o botão de guardar no material direto desta tela ainda existe — "
+       + "ele pulava a pré-visualização da Bancada, e foi isso que criou "
+       + "cartões simples demais");
+    const origemZ = api.genOrigemAtual();
+    ok(origemZ && origemZ.disciplina === "Financeiro" && origemZ.topico === "Receita",
+       "Z1c a origem do tópico não ficou guardada");
+    ok(api.genPendenteAtual() === true,
+       "Z1d abrir o gerador não marcou que há uma resposta pendente");
+
+    api.$("btnGenFechar").onclick();
+    ok(api.$("dlgGerar").open === false, "Z2 fechar não fechou a janela");
+    ok(api.modoAtual === "cartoes", "Z2b fechar não levou de volta para a Bancada");
+    ok(api.$("genAviso").hidden === false,
+       "Z2c o aviso de \"cole a resposta aqui\" não apareceu na Bancada");
+    ok(/Receita/.test(api.$("genAviso").textContent || ""),
+       "Z2d o aviso não cita o tópico de origem: " + api.$("genAviso").textContent);
+    ok(/pulsa/.test(api.$("btnColarMais").className || ""),
+       "Z2e \"colar mais texto\" não pulsa enquanto há resposta pendente");
+
+    janela.__area = "O que é receita? :: Ingresso :: fin\nE despesa? :: Saída :: fin";
+    await api.colarMaisTexto();
+    ok(/Já estava aqui/.test(api.$("editor").value),
+       "Z3 colar a resposta da IA apagou o que já estava na Bancada — "
+       + "o cuidado pedido explicitamente era não deixar isso acontecer");
+    ok(/O que é receita\?/.test(api.$("editor").value),
+       "Z3b a resposta da IA não entrou na Bancada");
+    ok(api.genPendenteAtual() === false,
+       "Z4 colar a resposta não desligou o aviso de pendente");
+    ok(api.$("genAviso").hidden === true,
+       "Z4b o aviso continuou visível depois de colada a resposta");
+    ok(!/pulsa/.test(api.$("btnColarMais").className || ""),
+       "Z4c \"colar mais texto\" continuou pulsando depois de atendido");
+
+    /* apagar tudo começa do zero de verdade: a origem de uma geração
+     * anterior não pode rotular um lote seguinte sem relação nenhuma */
+    api.abrirGerar("outro texto", { disciplina: "Português", topico: "Crase" });
+    api.$("editor").value = "algo";
+    const pZ5 = api.$("btnApagarTudo").onclick();
+    api.uiModalResponder(true);
+    await pZ5;
+    ok(!api.genOrigemAtual(),
+       "Z5 apagar tudo não limpou a origem de uma geração anterior");
+    ok(api.genPendenteAtual() === false,
+       "Z5b apagar tudo não desligou o aviso de pendente de uma geração anterior");
 
     /* AA — o indicador da agenda. Ele nascia apagado mesmo havendo material:
      * matCarregar() só rodava dentro de matIniciar(), que executa DEPOIS do
@@ -2147,29 +2190,28 @@ async function testes() {
            "AJ1b matIniciar vem depois de hubIniciar: o hub nasce sem os ícones");
       }
 
-      /* AK — guardar cartões da bancada guarda SÓ os cartões.
-       * A função contava as linhas com "::" para validar e gravava a CAIXA
-       * INTEIRA — prompt junto. Um tópico ficou com 155 linhas, 17 cartões. */
+      /* AK — a resposta da IA que trouxe o prompt junto continua sendo
+       * PEGA — só que agora pelo mesmo aviso vermelho que a Bancada já
+       * mostra para qualquer colagem nessa situação (temPromptColado),
+       * em vez de uma regra ad-hoc só de dentro de guardarCartoesNoMaterial
+       * (que cortava tudo antes da primeira linha com "::" e gravava DIRETO
+       * no material, sem ninguém ver o aviso primeiro). É o mesmo cuidado
+       * de sempre, só que agora passando pelo mesmo filtro de tudo o mais. */
       {
-        api.limparMaterialTeste();
-        api.$("genTexto").value = ["Gere flashcards para Anki a partir do texto abaixo.",
+        api.$("editor").value = "";
+        janela.__area = ["Gere flashcards para Anki a partir do texto abaixo.",
           "REGRAS DE FORMATO (siga exatamente):",
           "O que e exercicio financeiro? :: Periodo de 12 meses :: fin",
           "Quando comeca? :: 1 de janeiro :: fin",
-          "Espero ter ajudado!"].join("\n");
-        api.genOrigemTeste({ disciplina: "Direito Financeiro", topico: "Lei 4.320" });
-        api.guardarCartoesNoMaterial();
-        const ch = api.matChave("Direito Financeiro", "Lei 4.320");
-        const guardado = String((api.matResumosAtual()[ch] || {}).cartoes || "");
-        ok(guardado, "AK1 nada foi guardado no material");
-        ok(!/Gere flashcards/.test(guardado),
-           `AK2 o prompt foi guardado junto com os cartões: ${guardado.slice(0, 80)}`);
-        ok(guardado.split("\n").filter(Boolean).length === 2,
-           `AK3 esperava 2 cartões guardados, veio `
-           + guardado.split("\n").filter(Boolean).length);
-        ok(/exercicio financeiro/.test(guardado),
-           "AK4 o conteúdo dos cartões se perdeu");
-        api.limparMaterialTeste();
+          "Responda SOMENTE com os cartões: sem numeração, marcadores ou comentários."]
+          .join("\n");
+        await api.colarMaisTexto();
+        ok(/exercicio financeiro/.test(api.$("editor").value),
+           "AK1 o conteúdo colado não chegou na Bancada");
+        ok(/parecem o PROMPT|look like the PROMPT/.test(api.$("sugestoes").textContent || ""),
+           "AK2 colar uma resposta com o prompt junto não acendeu o aviso "
+           + "de prompt colado — sem ele, o prompt pode virar cartão calado");
+        api.$("editor").value = "";
       }
 
       /* AL — GRAVAR E DESENHAR SÃO COISAS DIFERENTES.

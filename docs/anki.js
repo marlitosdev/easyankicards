@@ -101,6 +101,43 @@ function stableDeckId(name) {
   return 1000000000 + (h % 8999999999);
 }
 
+/* AGRUPA CARTÕES EM SUBBARALHOS, PELO TÍTULO DE CADA UM.
+ *
+ * "c.titulo || tituloGeral" é o MESMO valor que já vai no campo "manchete"
+ * do cartão dentro de buildApkg (o "c.titulo || titulo" dos campos) — não é
+ * um dado novo, é o que já existe sendo lido de novo para decidir ONDE o
+ * cartão mora no Anki, e não só o que aparece escrito nele.
+ *
+ * SEM TÍTULO NENHUM, tudo cai no MESMO deckName de sempre — comportamento
+ * idêntico ao de antes desta função existir, para quem nunca usou @título.
+ *
+ * COM TÍTULO, o subbaralho é "deckName::titulo" — e se o título JÁ tiver
+ * "::" dentro (a mesma convenção que btnTituloDeck, em app.js, já lê), a
+ * árvore de baralhos fica com o nível a mais sem nenhum código extra: o
+ * "::" do título e o "::" desta função são o mesmo separador do Anki.
+ *
+ * ID ESTÁVEL POR NOME (stableDeckId, acima): regenerar o mesmo pacote
+ * depois atualiza os mesmos baralhos no Anki em vez de duplicar — a mesma
+ * garantia que o baralho único já tinha, agora por subbaralho também. */
+function apkgAgruparDecks(cards, deckName, tituloGeral) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const decks = {};
+  const idPorNome = {};
+  const idPorCartao = (cards || []).map((c) => {
+    const sub = String((c && c.titulo) || tituloGeral || "").trim();
+    const nome = sub ? deckName + "::" + sub : deckName;
+    if (!idPorNome[nome]) {
+      const id = stableDeckId(nome);
+      const d = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+      d.id = id; d.name = nome; d.mod = nowSec;
+      decks[String(id)] = d;
+      idPorNome[nome] = id;
+    }
+    return idPorNome[nome];
+  });
+  return { decks, idPorCartao };
+}
+
 /* Identidade do cartao para o Anki. Reimportar o mesmo baralho ATUALIZA a
  * nota quando o guid coincide, e cria uma copia quando nao coincide.
  *
@@ -401,10 +438,8 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha) {
 
   const now = Date.now();
   const nowSec = Math.floor(now / 1000);
-  const deckId = stableDeckId(deckName);
-  const deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
-  deck.id = deckId; deck.name = deckName; deck.mod = nowSec;
-  const decks = {}; decks["1"] = DECK_DEFAULT; decks[String(deckId)] = deck;
+  const grupos = apkgAgruparDecks(cards, deckName, titulo);
+  const decks = Object.assign({ "1": DECK_DEFAULT }, grupos.decks);
 
   const models = modelosParaEstilo(estilo, alinha);
   const [MID_B, MID_C, MID_M] = (ESTILOS[estilo] || ESTILOS.classic).ids;
@@ -415,7 +450,8 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha) {
   );
 
   let id = now;
-  for (const c of cards) {
+  cards.forEach((c, indice) => {
+    const deckId = grupos.idPorCartao[indice];
     let mid, campos;
     if (c.kind === "mc") {
       mid = MID_M;
@@ -447,7 +483,7 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha) {
         [id++, noteId, deckId, ord, nowSec]
       );
     }
-  }
+  });
 
   const bytes = db.export();
   db.close();

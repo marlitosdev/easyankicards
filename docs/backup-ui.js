@@ -67,6 +67,15 @@ function atualizarSeloBase() {
     el.title = arq ? t("bk_selo_arq", { a: arq }) : t("bk_selo_ajuda_curta");
     el.classList.add(i.dias <= 7 ? "sb-ok" : (i.dias <= 21 ? "sb-aviso" : "sb-alerta"));
   }
+  /* O SELO MORA NO CABEÇALHO AGORA, e o cabeçalho tem altura medida
+   * (medirCabecalho, em app.js) para a barra de modos saber onde grudar
+   * por baixo dele. O texto do selo muda de tamanho ("nunca salva" vs
+   * "salva há 2 dias" vs um nome de arquivo comprido no title) e pode
+   * mudar quantas linhas o cabeçalho ocupa — sem remedir aqui, a barra
+   * de modos ficaria por cima do selo ou com um vão embaixo dele. */
+  if (typeof medirCabecalho === "function") {
+    try { medirCabecalho(); } catch (e) {}
+  }
 }
 
 /* Quem já usava o app antes do backup existir não tem "eac_backup_em", e o

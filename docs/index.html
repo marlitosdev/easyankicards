@@ -100,6 +100,12 @@ header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;
        box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:5}
 header h1{font-size:19px;margin:0;flex:1}
 header h1 small{display:block;font-size:11px;font-weight:400;color:var(--sutil);font-style:italic}
+/* BASE E DIAGNÓSTICO GANHAM LINHA PRÓPRIA no cabeçalho — "flex-basis:100%"
+   força a quebra mesmo quando ainda cabia espaço ao lado dos botões, que
+   é o comportamento que se quer: uma fileira de identidade (ícone, nome,
+   versão, ajuda, ⚙) e uma fileira de ferramentas de desenvolvimento
+   embaixo, nunca as duas disputando a mesma linha. */
+header .hdr-dev{flex-basis:100%;justify-content:flex-start;margin:0;gap:10px}
 /* SEM O PREFIXO "header" NAS CLASSES: tema/cor/idioma se mudaram para
    dentro de #dlgConfig, e continuam precisando exatamente desta
    aparência — um seletor escrito só para dentro do cabeçalho parava de
@@ -658,6 +664,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde-txt)}
 .quem-ia{background:rgba(139,92,246,.18);color:var(--info)}
 :root[data-theme="light"] .quem-ia{color:var(--info)}
+/* MESMO TOM ROXO DO "precisa da IA" acima — é a mesma ideia, "algo da IA
+   está pendente aqui". */
+.gen-aviso{font-size:12px;color:var(--info);background:rgba(139,92,246,.12);
+  border:1px solid rgba(139,92,246,.35);border-radius:8px;padding:7px 10px;
+  margin:6px 0}
 .mat-barra{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin:0 0 6px}
 .fmt{all:unset;cursor:pointer;width:28px;height:26px;border-radius:7px;
   display:inline-flex;align-items:center;justify-content:center;font-size:12px;
@@ -3716,6 +3727,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </button>
   <button class="hdr-btn hdr-config" id="btnHdrConfig" type="button"
           data-i18n-title="cfg_titulo">⚙</button>
+  <!-- BASE E DIAGNÓSTICO, PERTO DA VERSÃO — de propósito enquanto o app
+       está em desenvolvimento: são as duas coisas que se olha o tempo
+       todo ao testar (a base carregada e o registro de erros), e ficar
+       um toque a mais de distância (dentro de ⚙) atrapalhava esse uso.
+       Passado esse período, voltam a fazer sentido dentro de
+       Configurações, junto do resto do que se ajusta raramente. -->
+  <div class="hdr-dev rodape-tec" id="hdrDev">
+    <span class="selo-base" id="seloBase"></span>
+    <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
+    <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
+    <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
+  </div>
 </header>
 
 <dialog id="dlgConfig" class="ui-modal">
@@ -3745,20 +3768,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       </select>
     </div>
     <hr class="cfg-sep">
-    <!-- O RODAPÉ TÉCNICO INTEIRO MOROU NA BARRA FIXA por anos; ela ficava
-         de pé em toda tela do app só para mostrar isto, mesmo quando
-         ninguém tinha nada para diagnosticar. Agora mora aqui — a mesma
-         informação, um toque de distância em vez de sempre visível. -->
     <div id="status"></div>
+    <!-- BASE E DIAGNÓSTICO MORAM NO CABEÇALHO AGORA (enquanto o app está
+         em desenvolvimento — ver o comentário lá). "IA ligada" continua
+         aqui: é ajuste, não ferramenta de quem está testando o app. -->
     <div class="rodape-tec">
       <button type="button" id="btnChaveIA" class="chave-ia">
         <span class="chave-ia-luz" id="chaveIaLuz"></span>
         <span class="chave-ia-txt" id="chaveIaTxt"></span>
       </button>
-      <span class="selo-base" id="seloBase"></span>
-      <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
-      <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
-      <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
     </div>
   </div>
   <div class="dlg-rodape">
@@ -3817,6 +3835,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <span><i class="am-err"></i><span data-i18n="leg_err"></span></span>
         <span><i class="am-warn"></i><span data-i18n="leg_warn"></span></span>
       </div>
+      <!-- O CONVITE A COLAR A RESPOSTA DA IA, quando um prompt acabou de
+           ser copiado em dlgGerar (abrirGerar/pintarAvisoGeracaoPendente,
+           em app.js). Nasce escondido; some sozinho assim que a colagem
+           acontece — o convite é para o PRÓXIMO gesto, não uma faixa
+           permanente na tela. -->
+      <div id="genAviso" class="gen-aviso" hidden></div>
       <div class="linha-colar">
         <button class="btn btn-cinza" id="btnColarMais" data-i18n="paste_more"></button>
         <button class="btn btn-cinza" id="btnDesfazerColagem" disabled
@@ -3827,15 +3851,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
         <button class="btn btn-roxo" id="btnPromptCorrigir" data-i18n="fixprompt_btn"></button>
       </div>
+      <!-- A IA VEM PRIMEIRO DE PROPÓSITO. Colar/gerar com IA é o caminho
+           de 90% das sessões — "+ Novo cartão" é para quem já sabe
+           exatamente o que quer digitar à mão, o caso mais raro. A ordem
+           da tela ensina o caminho sem precisar de nenhuma frase dizendo
+           "comece por aqui". -->
+      <div class="toolbar-sec"><div class="cap" data-i18n="group_ai"></div>
+        <div class="toolbar">
+          <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
+        </div>
+      </div>
       <div class="toolbar-sec"><div class="cap" data-i18n="group_create"></div>
         <div class="toolbar">
           <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
           <button class="btn btn-roxo" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
-        </div>
-      </div>
-      <div class="toolbar-sec"><div class="cap" data-i18n="group_ai"></div>
-        <div class="toolbar">
-          <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
         </div>
       </div>
       <div class="toolbar-sec"><div class="cap" data-i18n="group_import"></div>
@@ -4413,7 +4442,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div id="genDone" style="font-size:12px;color:var(--verde-txt);margin-top:6px;min-height:16px"></div>
   </div>
   <div class="dlg-rodape">
-    <button class="btn btn-azul" id="btnGenMaterial" hidden></button>
     <button class="btn btn-verde" id="btnGenCopiar" data-i18n="gen_copy"></button>
     <button class="btn btn-cinza" id="btnGenFechar" data-i18n="help_close"></button>
   </div>
@@ -6480,6 +6508,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="toolbar" style="margin-bottom:8px">
       <button class="btn btn-roxo" id="btnTabFull" data-i18n="prompt_full_tab"></button>
       <button class="btn btn-ciano" id="btnTabMini" data-i18n="prompt_mini_tab"></button>
+      <button class="btn btn-azul" id="btnTabNotebook" data-i18n="prompt_notebooklm_tab"
+        title="Exige que a IA responda só com o que está nas fontes já carregadas no caderno, citando de onde tirou. Cita a disciplina/tópico do Título geral."></button>
     </div>
     <div id="promptDica" style="font-size:11.5px;color:var(--sutil);margin:0 0 6px"></div>
     <div id="promptTam" style="font-size:11.5px;margin:0 0 6px"></div>
