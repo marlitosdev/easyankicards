@@ -188,6 +188,124 @@ function leiArtigo(texto, num) {
   return leiArtigos(texto).filter((a) => a.num === alvo)[0] || null;
 }
 
+/* =====================================================================
+ * A LEI VIGENTE: TEXTO-BASE + ALTERAÇÕES POR CIMA
+ *
+ * `l.texto` (a "camada base") é o que foi colado, e nunca é reescrito por
+ * uma emenda — fica intacto para sempre poder mostrar a redação
+ * original. Toda alteração de artigo depois da criação da lei — edição
+ * manual de um artigo ou a comparação de uma versão nova colada (ver
+ * leiArtigoAlterar e o fluxo de dlgLeiAtualizar em lei-ui.js) — grava só
+ * em `l.alteracoes`, um mapa {numArtigo: {texto, fonteAlteracao, data,
+ * revogado?}}: a "camada de leitura e edição".
+ *
+ * Esta função funde as duas na hora de EXIBIR, sem tocar em nenhuma — é o
+ * que se lê é sempre o texto vigente, e o que fica gravado nunca perde a
+ * redação original.
+ *
+ * LIMITE CONHECIDO: a alteração é indexada só pelo NÚMERO do artigo, não
+ * pela ocorrência. Na Constituição, corpo e ADCT repetem os mesmos
+ * números — uma alteração no "art. 5º" cairia nos dois. Emenda não costuma
+ * mexer no ADCT pelo número baixo do corpo, e resolver isso pediria uma
+ * chave composta que este primeiro corte não vale a pena pagar.
+ * ===================================================================== */
+function leiArtigosEfetivos(l) {
+  const base = leiArtigos(l && l.texto);
+  const alt = (l && l.alteracoes) || {};
+  const achados = {};
+
+  const efetivos = base.map((a) => {
+    const ov = alt[a.num];
+    if (!ov) return a;
+    achados[a.num] = true;
+    if (ov.revogado) {
+      return Object.assign({}, a, { revogado: true, fonteAlteracao: ov.fonteAlteracao || "" });
+    }
+    const novoTxt = String(ov.texto || "");
+    const lido = leiArtigos(novoTxt)[0];
+    return Object.assign({}, a, {
+      texto: novoTxt,
+      corpo: lido ? lido.corpo : a.corpo,
+      ementa: lido ? lido.ementa : a.ementa,
+      alterado: true,
+      fonteAlteracao: ov.fonteAlteracao || "",
+      textoOriginal: a.texto,
+    });
+  });
+
+  /* artigos que só existem na camada de alteração (acrescentados por
+   * emenda, ex. "150-A") entram ao lado do vizinho de número mais baixo,
+   * pela mesma ordenação que leiNumOrdem já usa para o resto da lei */
+  const novos = Object.keys(alt)
+    .filter((num) => !achados[num] && !alt[num].revogado && String(alt[num].texto || "").trim())
+    .map((num) => {
+      const lido = leiArtigos(alt[num].texto)[0];
+      return {
+        num, numCru: (lido && lido.numCru) || num,
+        ordem: leiNumOrdem(num),
+        indice: -1,
+        linha: 0, linhaFim: 0,
+        rotulo: "Art. " + ((lido && lido.numCru) || num),
+        ementa: lido ? lido.ementa : "",
+        texto: alt[num].texto,
+        corpo: lido ? lido.corpo : alt[num].texto,
+        divisao: "", divisaoTipo: "",
+        alterado: true, novo: true,
+        fonteAlteracao: alt[num].fonteAlteracao || "",
+      };
+    })
+    .sort((x, y) => x.ordem - y.ordem);
+
+  if (!novos.length) return efetivos;
+
+  /* NÃO SE REORDENA A LISTA INTEIRA por ordem — a Constituição repete
+   * número entre corpo e ADCT, e dois artigos de MESMO "ordem" existem
+   * de propósito em posições diferentes do documento; um sort global
+   * reagruparia os dois "art. 1º" lado a lado, e o resto de lei-ui.js
+   * (ids, "onde parei") depende dessa posição real para desambiguar. Só
+   * os artigos NOVOS precisam achar seu lugar — inserção pontual, sem
+   * tocar a ordem relativa do que já estava certo. */
+  const resultado = efetivos.slice();
+  novos.forEach((novo) => {
+    let pos = resultado.length;
+    for (let i = 0; i < resultado.length; i++) {
+      if (resultado[i].ordem > novo.ordem) { pos = i; break; }
+    }
+    resultado.splice(pos, 0, novo);
+  });
+  return resultado;
+}
+
+/* Grava (ou apaga) UMA entrada da camada de alteração — nunca mexe na
+ * base. `dados` é {texto, fonteAlteracao, revogado?}; `dados` nulo apaga
+ * a entrada e devolve o artigo à redação original. */
+function leiArtigoAlterar(idLei, num, dados) {
+  const l = leiDe(idLei);
+  if (!l) return false;
+  const alvo = leiNumNormal(num);
+  const alt = Object.assign({}, l.alteracoes || {});
+  if (!dados) {
+    delete alt[alvo];
+  } else {
+    alt[alvo] = {
+      texto: dados.revogado ? "" : String(dados.texto || ""),
+      fonteAlteracao: String(dados.fonteAlteracao || ""),
+      data: leisHojeISO(),
+      revogado: !!dados.revogado,
+    };
+  }
+  const ok = leiGuardar({ id: idLei, alteracoes: alt });
+  if (ok) {
+    try {
+      reg("LEI", dados ? (dados.revogado ? "artigo revogado" : "artigo alterado")
+                        : "alteração de artigo desfeita",
+          (l.nome || idLei) + " · art. " + num
+          + (dados && dados.fonteAlteracao ? " · " + dados.fonteAlteracao : ""));
+    } catch (e) {}
+  }
+  return !!ok;
+}
+
 /* BLOCOS DE LEITURA.
  * A Lei 4.320 tem 115 artigos. "Li a lei" é uma pergunta que não se
  * responde com sim ou não, e um botão único de "li" transforma três
@@ -775,6 +893,7 @@ function leiGuardar(dados, gravar) {
     parei: "",
     pareiEm: "",
     blocos: {},          /* {nomeDoBloco: "2026-08-20"} */
+    alteracoes: {},       /* {numArtigo: {texto, fonteAlteracao, data, revogado?}} */
     criado: new Date().toISOString(),
   }, antigo, dados, { id, tocado: new Date().toISOString() });
   r.topicos = (r.topicos || []).filter((x, i, a) => x && a.indexOf(x) === i);
@@ -851,7 +970,7 @@ function leiParar(id, numArtigo) {
 function leiProgresso(id) {
   const r = leiDe(id);
   if (!r) return null;
-  const arts = leiArtigos(r.texto);
+  const arts = leiArtigosEfetivos(r);
   if (!arts.length) return { total: 0, lidos: 0, pct: 0, artigo: "" };
   const i = r.parei ? arts.findIndex((a) => a.num === r.parei) : -1;
   const lidos = i < 0 ? 0 : i + 1;
@@ -1128,7 +1247,8 @@ function leiQuantasLacunas(texto) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     LEIS_CHAVE, LEI_ART_POR_BLOCO,
-    leiNumNormal, leiNumOrdem, leiEmenta, leiArtigos, leiArtigo, leiBlocos,
+    leiNumNormal, leiNumOrdem, leiEmenta, leiArtigos, leiArtigo,
+    leiArtigosEfetivos, leiArtigoAlterar, leiBlocos,
     leiCitacoes, leiIdentificar, leiSubstituirArtigo, leiInserirArtigo,
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
     leiRotuloChave, leiCasarRotulo,
