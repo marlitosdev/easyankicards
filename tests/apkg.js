@@ -15,7 +15,8 @@ function carregar() {
   const src = fs.readFileSync(path.join(__dirname, "..", "docs", "parser.js"), "utf8")
     + fs.readFileSync(path.join(__dirname, "..", "docs", "anki.js"), "utf8");
   return new Function("window", src +
-    "; return {modelosParaEstilo,maisEmBlocos,linhasEmBlocos,guidDoCartao,ESTILOS};")({});
+    "; return {modelosParaEstilo,maisEmBlocos,linhasEmBlocos,guidDoCartao,ESTILOS," +
+    "apkgAgruparDecks,stableDeckId};")({});
 }
 
 function testes() {
@@ -67,6 +68,71 @@ function testes() {
   ok(A.linhasEmBlocos("R$ 40 / mes") === "R$ 40 / mes", "D2 quebrou um preco por mes");
   ok(A.linhasEmBlocos("entrada / saida") === "entrada / saida", "D3 quebrou um par de palavras");
   ok(/\.item \+ \.item\{border-top/.test(css), "D4 falta a regua entre itens da lista");
+
+  /* E — apkgAgruparDecks: um subbaralho por titulo, dentro do mesmo pacote.
+   * O RELATO REAL: exportar um lote com cartoes de disciplinas diferentes
+   * gerava sempre UM baralho so, achatado — mesmo cada cartao ja levando
+   * seu proprio titulo (a "manchete" que aparece no verso, no Anki). */
+  {
+    const semTitulo = [
+      { front: "a", back: "1", tags: [] },
+      { front: "b", back: "2", tags: [] },
+    ];
+    const g1 = A.apkgAgruparDecks(semTitulo, "Meu Baralho", "");
+    ok(Object.keys(g1.decks).length === 1,
+       "E1 sem titulo nenhum, virou mais de um baralho: "
+       + JSON.stringify(Object.keys(g1.decks)));
+    ok(g1.decks[String(g1.idPorCartao[0])].name === "Meu Baralho",
+       "E1b sem titulo, o baralho nao ficou com o nome puro: "
+       + g1.decks[String(g1.idPorCartao[0])].name);
+    ok(g1.idPorCartao[0] === g1.idPorCartao[1],
+       "E1c dois cartoes sem titulo foram parar em baralhos diferentes");
+
+    const doisTitulos = [
+      { front: "a", back: "1", tags: [], titulo: "Direito Tributário — Princípios" },
+      { front: "b", back: "2", tags: [], titulo: "Direito Constitucional — Controle" },
+      { front: "c", back: "3", tags: [], titulo: "Direito Tributário — Princípios" },
+    ];
+    const g2 = A.apkgAgruparDecks(doisTitulos, "ISS Caruaru 2026", "");
+    const nomes = Object.values(g2.decks).map((d) => d.name).sort();
+    ok(nomes.length === 2, "E2 dois titulos deviam virar dois baralhos: " + nomes.join(" | "));
+    ok(nomes.indexOf("ISS Caruaru 2026::Direito Tributário — Princípios") >= 0,
+       "E2b o subbaralho de tributário não ficou sob o baralho guarda-chuva: "
+       + nomes.join(" | "));
+    ok(nomes.indexOf("ISS Caruaru 2026::Direito Constitucional — Controle") >= 0,
+       "E2c o subbaralho de constitucional não ficou sob o baralho guarda-chuva: "
+       + nomes.join(" | "));
+    ok(g2.idPorCartao[0] === g2.idPorCartao[2],
+       "E2d os dois cartões de tributário foram parar em baralhos diferentes");
+    ok(g2.idPorCartao[0] !== g2.idPorCartao[1],
+       "E2e cartões de títulos diferentes foram parar no MESMO baralho");
+
+    /* titulo com "::" embutido: fica com um nivel a mais, sem codigo novo */
+    const aninhado = [{ front: "a", back: "1", tags: [],
+      titulo: "Direito Tributário::Princípios" }];
+    const g3 = A.apkgAgruparDecks(aninhado, "ISS Caruaru 2026", "");
+    const nome3 = g3.decks[String(g3.idPorCartao[0])].name;
+    ok(nome3 === "ISS Caruaru 2026::Direito Tributário::Princípios",
+       "E3 titulo com :: embutido nao virou 3 niveis: " + nome3);
+
+    /* mesmo nome de baralho, gerado de novo, tem de dar o MESMO id — e
+     * o mesmo id que stableDeckId(nome) sozinho daria — senao reexportar
+     * duplica o baralho no Anki em vez de atualizar */
+    const g4 = A.apkgAgruparDecks(doisTitulos, "ISS Caruaru 2026", "");
+    ok(g4.idPorCartao[0] === g2.idPorCartao[0],
+       "E4 reagrupar o mesmo lote deu um id de baralho diferente — "
+       + "reexportar duplicaria em vez de atualizar");
+    ok(g4.idPorCartao[0] === A.stableDeckId("ISS Caruaru 2026::Direito Tributário — Princípios"),
+       "E4b o id do subbaralho não bate com stableDeckId do mesmo nome");
+
+    /* sem titulo no cartao, mas com "titulo geral" — usa o geral, do
+     * mesmo jeito que buildApkg ja usa "c.titulo || titulo" para a
+     * manchete do cartao */
+    const g5 = A.apkgAgruparDecks(semTitulo, "Meu Baralho", "Geral X");
+    ok(g5.decks[String(g5.idPorCartao[0])].name === "Meu Baralho::Geral X",
+       "E5 o titulo geral nao foi usado como subbaralho quando o cartao "
+       + "nao tem titulo proprio: " + g5.decks[String(g5.idPorCartao[0])].name);
+  }
 
   return f;
 }

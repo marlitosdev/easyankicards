@@ -1,4 +1,4 @@
-# EasyAnkiCards (v16.15.0) · by MarlitosDev
+# EasyAnkiCards (v16.16.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -30,6 +30,7 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 
 **Entrada de texto**
 - Cole o resultado do prompt de IA ou digite. Botões **Selecionar tudo**, **Copiar tudo**, **Apagar tudo**, **Colar mais texto** (anexa ao final, rola e destaca a primeira linha nova) e **Desfazer última colagem**.
+- O botão **"Prompt para criar cartões com IA"** vem antes de "+ Novo cartão" e pulsa enquanto a bancada está vazia — é por onde começar. Gerar cartões a partir de um tópico do material abre o mesmo prompt e devolve a resposta **para dentro desta bancada** (por "Colar mais texto", que só anexa — nunca apaga o que já estava sendo digitado), em vez de uma caixa solta sem prévia; os cartões passam pela mesma verificação, legenda e avisos de sempre antes de irem para o material e para "estudar agora".
 - **Auto-save**: o texto é salvo automaticamente no navegador e recuperado ao reabrir — recarregar/fechar não perde nada.
 - **Numeração de linhas** ao lado do editor, com os números das linhas problemáticas em vermelho/laranja.
 - **Destaque de sintaxe** com **legenda** embaixo do editor. Pinta a estrutura, não o conteúdo: só os marcadores da lacuna (`{{c1::` e `}}`) levam fundo, e o texto dentro leva um sublinhado fino — antes a lacuna inteira ficava colorida e metade da tela virava mancha. Grifos em `::`, lacunas e `[MC]` com o texto real editável por cima — seleção do mouse sempre alinhada; interruptor para desligar.
@@ -67,8 +68,9 @@ O **texto é a única fonte de verdade**: o que você edita na tela é reescrito
 - Escolha de **alinhamento** (justificado com separação silábica, ou à esquerda) valendo para a prévia e para o `.apkg`. O bloco "Saiba mais" sai em blocos separados, com o termo em destaque; resposta longa deixa o formato de manchete e vira texto corrido.
 - Três **estilos visuais** (Esquematizado, Escuro, Papel) aplicados a todos os cartões do `.apkg`, com campos **"Saiba mais"** (link expansível) e **Título**.
 - `.apkg` gerado no aparelho (SQLite/WebAssembly); no celular abre a folha de compartilhamento → AnkiDroid importa direto. Reexportar o mesmo baralho atualiza, não duplica.
+- **Um `.apkg` só, com subbaralhos por título.** Cartões com títulos diferentes (ou de disciplinas/tópicos diferentes) exportam num único arquivo, cada um no seu subbaralho (`Baralho::Título`, via `::`, a mesma convenção que já existia para nomear o baralho) — o Anki importa tudo de uma vez, já organizado. Sem título, continua um baralho só, como sempre foi.
 - `.txt` com coluna de deck (Anki 23.10+): a pasta é criada na importação.
-- **Prompts prontos para IA** (completo e curto para Gemini Notebook), editáveis e salvos.
+- **Prompts prontos para IA**, em três formas: completo, curto (Gemini Notebook) e **NotebookLM** — este último já cita a disciplina e o tópico do cartão (ou o Título geral), para a IA responder só com o que está no caderno carregado. Editáveis e salvos.
 
 **Aparência, conforto e confiabilidade**
 - Temas Auto / Claro / Escuro / Preto (alto contraste) e seletor de **cor da letra**; controles do cabeçalho padronizados.
@@ -174,8 +176,10 @@ Quatro regras que o arquivo existe para garantir:
 
 "Salvar na nuvem" não usa credencial nenhuma: no celular abre a folha de
 compartilhamento do sistema (Drive, OneDrive, Dropbox); no computador deixa
-escolher uma pasta — se for a do Drive, a cópia sobe sozinha. O selo no rodapé
-mostra de quando é a sua base, verde até 7 dias, vermelho depois de 21.
+escolher uma pasta — se for a do Drive, a cópia sobe sozinha. O selo, no
+**cabeçalho do app, ao lado do número da versão** (fase de desenvolvimento —
+antes ficava dentro de Configurações), mostra de quando é a sua base, verde
+até 7 dias, vermelho depois de 21.
 
 ## Material de estudo
 
@@ -537,6 +541,28 @@ E duas regras de linguagem que valem para os três:
   nada" ensina a clicar em qualquer diálogo sem ler. Ele mostra onde a cópia
   ficou guardada, que é o que a pessoa vai precisar depois.
 
+## Duas bancadas de IA viraram uma
+
+Gerar cartões a partir de um tópico do material abria uma segunda tela,
+separada da Bancada de cartões de verdade: mesmo prompt, mas a resposta da IA
+caía numa caixa de texto solta, sem prévia, sem legenda de sintaxe, sem os
+avisos de cartão longo ou repetido. Os cartões que saíam de lá eram mais
+fracos não porque o prompt fosse pior — é o mesmo texto, com o mesmo
+`montarGen()` — e sim porque nunca passavam pelo filtro que a Bancada real já
+aplica a tudo.
+
+A correção não duplicou nada: fechar aquela tela leva para a Bancada, com um
+aviso de que uma resposta está pendente, e **"Colar mais texto"** — o mesmo
+botão de sempre — recebe o que a IA devolveu. Como esse botão só **anexa**
+(com uma linha em branco separando o que já havia do que chegou agora), o que
+você já estivesse escrevendo na Bancada continua lá; era esse o cuidado que
+não podia falhar. Dali em diante os cartões gerados por tópico passam pela
+mesma pré-visualização, legenda e avisos de qualquer outro cartão — e ganham
+de graça a exportação em `.apkg`/`.txt`, que a tela antiga nunca ofereceu.
+Guardar no material só aceita o que já passou por essa verificação; guardando
+com sucesso, um botão **"estudar agora"** leva direto para a revisão daquele
+tópico.
+
 ## Diagnóstico e registro
 
 O relatório **segue o modo**. Ele olhava sempre a bancada de cartões, e com o
@@ -562,6 +588,12 @@ Quem clicava não via o que estava levando, e a diferença entre "Diagnóstico" 
 painel: explica cada bloco, **mostra** o relatório com as divisórias e os erros
 destacados, e daí você copia ou baixa `.txt`. Uma caixa deixa tirar o texto dos
 cartões do relatório, para quem não quer enviar o próprio material.
+
+O botão saiu do menu de Configurações e foi para o **cabeçalho**, ao lado do
+selo da base e do número da versão — junto do resto do que só interessa
+durante o desenvolvimento do app, e fora do caminho de quem só quer estudar.
+"Leitura automática: N cartões", que reescrevia a mesma área de status a cada
+tecla digitada e acabava apagando avisos de outras ações, foi desligada.
 
 Quatro correções de fundo, cada uma nascida de uma falha real:
 

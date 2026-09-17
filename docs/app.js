@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.15.0";
+const VERSAO = "16.16.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1124,6 +1124,13 @@ function renderSugestoes(r, raw) {
    * "Nada a corrigir" apagado e conclui que não há mais o que fazer. */
   const paraIA = itens.some((it) => !it.fix && !it.acao && it.dot !== "dot-green");
   $("btnPromptCorrigir").classList.toggle("pulsa", paraIA);
+  /* O CONVITE PARA COMEÇAR. Bancada vazia, o primeiro gesto de 90% das
+   * sessões é colar/gerar com IA — o mesmo pulso que já guia para o
+   * prompt de correção guia para cá, só que baseado em "ainda não há
+   * nada" em vez de "sobrou problema". Para de pulsar assim que existe
+   * QUALQUER texto: o convite é para começar, não para ficar piscando
+   * durante a sessão inteira. */
+  if ($("btnPromptIA")) $("btnPromptIA").classList.toggle("pulsa", !raw.trim());
 
   itens.slice(0, 8).forEach((it) => {
     const div = document.createElement("div");
@@ -1658,7 +1665,12 @@ function resumo(r) {
   let s = t("summary", { n: r.cards.length, b: r.nBasic, c: r.nCloze });
   if (r.nSuspicious) s += t("summary_verify", { n: r.nSuspicious });
   $("resumo").textContent = s;
-  $("status").textContent = t("status_auto", { n: r.cards.length });
+  /* NÃO ESCREVA MAIS "leitura automática: N cartões" AQUI.
+   * Esta função roda a cada tecla — e #status também é onde mensagens de
+   * ação real aparecem ("salvo", "copiado", "excluído"). Escrever aqui
+   * TODA vez apagava essas mensagens quase imediatamente, na primeira
+   * tecla seguinte: a pessoa via "salvo" por uma fração de segundo e
+   * depois só "0 cartões", sem ter mudado nada de propósito. */
 }
 
 
@@ -3475,25 +3487,47 @@ function mostrarTamanho(idEl, texto) {
 
 let promptAtivo = "prompt_full";
 
-/* Os dois prompts são EDITÁVEIS. Se houver versão salva do usuário,
+/* Os três prompts são EDITÁVEIS. Se houver versão salva do usuário,
  * ela é carregada; "Restaurar" volta ao texto original do app. */
 function chaveSalva(tipo) { return "eac_prompt_" + tipo; }
+
+/* A DISCIPLINA/TÓPICO QUE O PROMPT DO CADERNO CITA.
+ * Preferência: veio de um tópico de verdade (genOrigem, quando o prompt
+ * nasceu de "gerar cartões" numa tela de material — ver abrirGerar) —
+ * senão, o Título geral que a Bancada já tem na tela, a mesma pista que
+ * o usuário já usa para nomear a manchete do cartão e o subbaralho do
+ * .apkg (ver apkgAgruparDecks, em anki.js). Sem os dois, um placeholder
+ * que aponta para o campo a preencher, em vez de citar "undefined". */
+function topicoDoPrompt() {
+  if (typeof genOrigem !== "undefined" && genOrigem) {
+    const j = [genOrigem.disciplina, genOrigem.topico].filter(Boolean).join(" — ");
+    if (j) return j;
+  }
+  return tituloGeral() || t("prompt_topico_vazio");
+}
 
 function mostrarPrompt(tipo) {
   promptAtivo = tipo;
   const salvo = localStorage.getItem(chaveSalva(tipo));
-  $("promptTexto").value = salvo || t(tipo);
+  $("promptTexto").value = salvo || (tipo === "prompt_notebooklm"
+    ? t(tipo, { topico: topicoDoPrompt() }) : t(tipo));
   $("promptDica").textContent = t("prompt_edit_hint")
     + (salvo ? "  (" + t("prompt_saved_badge") + ")" : "");
   $("btnPromptRestaurar").style.display = salvo ? "" : "none";
   $("btnTabFull").classList.toggle("ativa", tipo === "prompt_full");
   $("btnTabMini").classList.toggle("ativa", tipo === "prompt_mini");
+  if ($("btnTabNotebook")) {
+    $("btnTabNotebook").classList.toggle("ativa", tipo === "prompt_notebooklm");
+  }
   mostrarTamanho("promptTam", $("promptTexto").value);
 }
 
 $("btnPromptIA").onclick = () => { mostrarPrompt(promptAtivo); abrirModal("dlgPrompt"); };
 $("btnTabFull").onclick = () => mostrarPrompt("prompt_full");
 $("btnTabMini").onclick = () => mostrarPrompt("prompt_mini");
+if ($("btnTabNotebook")) {
+  $("btnTabNotebook").onclick = () => mostrarPrompt("prompt_notebooklm");
+}
 $("btnPromptSalvar").onclick = () => {
   localStorage.setItem(chaveSalva(promptAtivo), $("promptTexto").value);
   mostrarPrompt(promptAtivo);
@@ -3545,6 +3579,12 @@ async function colarMaisTexto() {
   toast("toast_pasted");
   // remove o brilho depois da animação, mas mantém o realce durante ela
   setTimeout(() => { linhaNovaColada = null; }, 2400);
+  /* A COLAGEM QUE O AVISO "COLE AQUI" ESTAVA PEDINDO ACABOU DE ACONTECER —
+   * o convite (e o pulso do botão) somem, porque já foram atendidos. */
+  if (typeof genPendente !== "undefined" && genPendente) {
+    genPendente = false;
+    if (typeof pintarAvisoGeracaoPendente === "function") pintarAvisoGeracaoPendente();
+  }
 }
 
 function desfazerColagem() {
@@ -3637,68 +3677,63 @@ function montarGen() {
   mostrarTamanho("genTam", $("genTexto").value);
   $("genDone").textContent = "";
 }
-/* A origem viaja junto: quando o prompt nasce de um tópico do edital, os
- * cartões que voltarem sabem a que assunto pertencem — e é isso que permite
- * arquivá-los no material sem o usuário reinformar disciplina e concurso. */
+/* A origem viaja junto: quando o prompt nasce de um tópico do edital, o
+ * prompt do caderno NotebookLM (topicoDoPrompt, mais acima) cita esse
+ * assunto, e o aviso de "cole aqui" nomeia o tópico certo. */
 let genOrigem = null;
+
+/* SE HÁ UM PROMPT COPIADO ESPERANDO A RESPOSTA DA IA VOLTAR.
+ * Liga ao abrir dlgGerar, desliga assim que ALGUMA colagem acontece na
+ * Bancada (colarMaisTexto) — o convite é para o PRÓXIMO gesto, não para
+ * ficar piscando depois dele. */
+let genPendente = false;
 
 function abrirGerar(texto, origem) {
   genTextoBase = texto || "";
   genOrigem = origem || null;
   genTipo = "prompt_full";
+  genPendente = true;
   montarGen();
-  const b = $("btnGenMaterial");
-  if (b) {
-    b.hidden = !genOrigem;
-    b.textContent = genOrigem
-      ? t("gen_guardar_material", { t: genOrigem.topico }) : "";
-  }
   abrirModal("dlgGerar");
 }
 
-/* Guarda o que estiver na caixa como CARTÕES do tópico. O texto colado aqui
- * é a resposta da IA, não o prompt — por isso o app confere antes: sem "::"
- * em nenhuma linha, não são cartões. */
-function guardarCartoesNoMaterial() {
-  if (!genOrigem) return;
-  const txt = $("genTexto").value;
-  /* GRAVA SÓ OS CARTÕES, não a caixa inteira.
-   * Esta função contava as linhas com "::" para validar e em seguida
-   * gravava o TEXTO TODO — prompt junto. O material de um tópico ficava com
-   * 155 linhas das quais 17 eram cartão, e o resto era "Gere flashcards
-   * para Anki...". O comentário antigo dizia que o texto ali era a resposta
-   * da IA; a caixa é a mesma onde o prompt é gerado, então quase nunca era. */
-  /* CORTA O PROMPT ANTES DE LER.
-   * O leitor do app é tolerante de propósito: linhas soltas antes do
-   * primeiro cartão viram parte da pergunta dele. Bom na bancada, péssimo
-   * aqui — "Gere flashcards para Anki..." acabava dentro da frente do
-   * primeiro cartão. O prompt está sempre no topo, então tudo que vem antes
-   * da primeira linha com "::" é descartado. */
-  const todas = String(txt).split("\n");
-  const primeiro = todas.findIndex((l) => /^[^\n#@+].*::/.test(l));
-  const util = primeiro > 0 ? todas.slice(primeiro).join("\n") : txt;
-  const r = parseText(util);
-  if (!r.cards.length) { uiAlert(t("gen_material_sem_cartoes")); return; }
-  const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
-    .replace(/\r?\n+/g, " ").trim();
-  const so = r.cards.map((c) => limpa(c.front) + " :: " + limpa(c.back)
-    + (c.tags && c.tags.length ? " :: " + c.tags.map((x) => String(x).replace(/::/g, "_")).join(" ") : ""));
-  const linhas = so.length;
-  const ch = matChave(genOrigem.disciplina, genOrigem.topico);
-  matGravarCartoes(ch, so.join("\n"), genOrigem);
-  reg("MATERIAL", "cartões guardados: " + genOrigem.topico, linhas + " cartões");
-  uiAlert(t("gen_material_ok", { n: linhas, t: genOrigem.topico }));
-  if (typeof matRender === "function") matRender();
+/* O AVISO "COLE AQUI" NA BANCADA DE VERDADE.
+ *
+ * ANTES: a resposta da IA era colada de volta na MESMA caixinha do
+ * prompt (#genTexto) e gravada dali — sem pré-visualização, sem legenda
+ * de cores, sem aviso de cartão mal formado. Os cartões que voltavam por
+ * esse caminho saíam mais simples do que os feitos na Bancada, e não por
+ * causa do prompt (é o MESMO texto, "prompt_full"/"prompt_mini" — ver
+ * montarGen) — era a falta do filtro que só a Bancada de verdade tem.
+ *
+ * AGORA: fechar dlgGerar leva para a Bancada, e a resposta entra por
+ * colarMaisTexto() — a MESMA função de "Colar mais texto", que já
+ * ACRESCENTA ao que estiver no editor (nunca substitui) com uma linha em
+ * branco de separação. Nenhum trabalho em andamento na Bancada é
+ * perdido: a resposta da IA só se soma a ele. Salvar no material
+ * continua sendo o botão "Salvar no material de estudo" que a Bancada já
+ * tem (cmAbrir/dlgCartaoMat) — ele já classifica por disciplina/tópico
+ * sozinho, inclusive quando um lote mistura vários assuntos, o que este
+ * fluxo nunca soube fazer. */
+function pintarAvisoGeracaoPendente() {
+  const el = $("genAviso");
+  if (el) {
+    el.hidden = !genPendente;
+    if (genPendente) {
+      el.textContent = genOrigem
+        ? t("gen_aviso_colar_topico", { t: genOrigem.topico })
+        : t("gen_aviso_colar");
+    }
+  }
+  if ($("btnColarMais")) $("btnColarMais").classList.toggle("pulsa", genPendente);
 }
+
 $("btnGenFull").onclick = () => { genTipo = "prompt_full"; montarGen(); };
 $("btnGenShort").onclick = () => { genTipo = "prompt_mini"; montarGen(); };
-/* Terminada a importacao, o proximo passo e' colar os cartoes — que
- * acontece na bancada. Voltar sozinho evita o usuario fechar a janela e
- * ficar olhando para a tela de ferramentas sem entender para onde ir. */
-$("btnGenMaterial").onclick = guardarCartoesNoMaterial;
 $("btnGenFechar").onclick = () => {
   $("dlgGerar").close();
-  if (typeof modoAtual !== "undefined" && modoAtual === "ferramentas") trocarModo("cartoes");
+  if (typeof modoAtual !== "undefined" && modoAtual !== "cartoes") trocarModo("cartoes");
+  pintarAvisoGeracaoPendente();
 };
 $("btnGenCopiar").onclick = async () => {
   try { await navigator.clipboard.writeText($("genTexto").value);
@@ -3896,6 +3931,12 @@ $("btnApagarTudo").onclick = async () => {
   respostasFechadas.clear();
   marcados.clear();
   localStorage.removeItem("eac_texto");
+  /* APAGAR TUDO É COMEÇAR DE NOVO — a origem de uma geração anterior (e o
+   * convite a colar a resposta dela) não podem sobreviver a essa decisão
+   * e rotular um lote seguinte, sem relação nenhuma, com um tópico velho. */
+  if (typeof genOrigem !== "undefined") genOrigem = null;
+  if (typeof genPendente !== "undefined") genPendente = false;
+  if (typeof pintarAvisoGeracaoPendente === "function") pintarAvisoGeracaoPendente();
   preview();
   toast("toast_cleared");
 };

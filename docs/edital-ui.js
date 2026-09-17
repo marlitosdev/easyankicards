@@ -5747,7 +5747,22 @@ async function cmGravarTudo() {
   if ($("btnCmDesfazer")) $("btnCmDesfazer").hidden = false;
   $("dlgCartaoMat").close();
   if (typeof matRenderLista === "function") { try { matRenderLista(); } catch (e) {} }
-  await uiAlert(t("cm_gravados", { n: r.novos, t: r.topicos, r: r.repetidos }));
+  /* UM SÓ TÓPICO, UM CONVITE DIRETO A ESTUDAR — gerar/salvar cartões não
+   * pode ser um fim solto; o passo seguinte natural é revisá-los agora,
+   * enquanto o assunto ainda está fresco. Com mais de um tópico no mesmo
+   * lote não há UM "aqui" óbvio para apontar — o alerta simples de sempre
+   * continua bastando nesse caso. */
+  const alvo = r.topicos === 1 ? r.recibo[0] : null;
+  if (alvo && typeof mcEstudarDireto === "function") {
+    const ir = await uiEscolha(t("cm_gravados_estudar",
+      { n: r.novos, t: alvo.topico, r: r.repetidos }), [
+      { valor: "estudar", rot: t("cm_estudar_agora"), classe: "btn-verde" },
+      { valor: "ok", rot: t("help_close") },
+    ]);
+    if (ir === "estudar") mcEstudarDireto(alvo.disciplina, alvo.topico);
+  } else {
+    await uiAlert(t("cm_gravados", { n: r.novos, t: r.topicos, r: r.repetidos }));
+  }
 }
 
 let cmUltimoRecibo = null;
