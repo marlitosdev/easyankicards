@@ -40,8 +40,12 @@ async function testes() {
        "R1c o quadro abriu sozinho — o pedido era ficar fechado por padrao");
     ok(api.$("btnRsAbrir").hidden === false,
        "R1d falta o gatilho para abrir o rascunho");
-    ok(api.$("btnRsAbrirCheia").hidden === false,
-       "R1d2 falta o gatilho da folha inteira");
+    /* "FOLHA INTEIRA" NÃO É MAIS UM GATILHO À PARTE — era um segundo
+     * botão duplicando btnRsCheia, que já mora dentro do rascunho
+     * aberto (ver tests/rascunho-painel.js, o bloco que abre normal e
+     * alcança a tela cheia por dentro). */
+    ok(api.$("btnRsAbrirCheia") === null,
+       "R1d2 o gatilho duplicado 'folha inteira' continua no HTML");
 
     /* recolhido nao aceita risco: caso contrario um toque na tela por
      * baixo do quadro fechado desenharia sem ninguem ver */
@@ -307,7 +311,8 @@ async function testes() {
     ok(riscos(api) === 1, "R6d nao consegui desenhar dentro da sessao");
 
     /* responder repinta a tela: o rascunho da questao NAO pode sumir */
-    api.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    api.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();  /* seleciona */
+    api.$("btnQsProxima").onclick();                                /* confirma (responde) */
     ok(riscos(api) === 1,
        "R6e responder apagou o rascunho que serviu para resolver a questao");
 

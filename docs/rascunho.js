@@ -345,7 +345,7 @@ function rsTemAlgo() {
  * ver de relance quais têm alguma coisa. */
 function rsPintarGatilhos() {
   const aberto = rsAberto();
-  const b1 = $("btnRsAbrir"), b2 = $("btnRsAbrirCheia");
+  const b1 = $("btnRsAbrir");
   const temSalvo = !!(rsQid && rsDaQuestao(rsQid));
   /* SÓ ESCONDE COM O PAINEL ABERTO — e nunca por não haver questão.
    *
@@ -371,7 +371,6 @@ function rsPintarGatilhos() {
       b1.append(selo);
     }
   }
-  if (b2) b2.hidden = aberto;
 }
 
 function rsAberto() {
@@ -655,20 +654,17 @@ function rsFerramenta(nome) { return rsBotoes[nome] || null; }
  * coisa não pode depender de essa coisa já ter sido montada: é ele quem
  * a monta. */
 function rsGatilhosIniciar() {
-  const b1 = $("btnRsAbrir"), b2 = $("btnRsAbrirCheia");
+  /* "FOLHA INTEIRA" MOROU FORA POR UMA VERSÃO, DUPLICANDO btnRsCheia.
+   * Era um segundo gatilho ("abrir já em tela cheia") ao lado de
+   * "abrir rascunho" — mas btnRsCheia, DENTRO do rascunho já aberto, já
+   * faz exatamente isso num toque a mais. Dois caminhos para o mesmo
+   * lugar não economizavam nada, só disputavam espaço na barra. */
+  const b1 = $("btnRsAbrir");
   if (b1) {
     b1.onclick = () => {
       if (!rsIniciado) rsIniciar();
       rsRecolher(false);
       rsCheiaTrocar(false);
-    };
-  }
-  if (b2) {
-    b2.textContent = t("rs_cheia");
-    b2.onclick = () => {
-      if (!rsIniciado) rsIniciar();
-      rsRecolher(false);
-      rsCheiaTrocar(true);
     };
   }
   rsPintarGatilhos();
