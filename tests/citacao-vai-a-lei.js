@@ -628,6 +628,92 @@ async function testes() {
     ok(!(api.leiDe("lei_b1").apelido || ""),
        "L57d vincular sem sigla gravou um apelido do nada");
   }
+  /* ==============================================================
+   * L59-L63: DUAS LEIS "CONSTITUCIONAIS" NA BIBLIOTECA
+   *
+   * O CASO REAL, segundo print: com a "CF/88" marcada para lembrar, o
+   * link continuava sem lei. Havia mais de uma lei casando com o
+   * rótulo — o ramo da Constituição contava as duas, dava dúvida, e
+   * IGNORAVA o apelido que o marcador acabara de gravar. Consertos: o
+   * apelido explícito vale em qualquer ramo; sem apelido, "CF" fica com
+   * a que se apresenta como federal; e cada tentativa que não abre
+   * deixa no registro o MOTIVO (nenhuma casou, ou quais deram dúvida).
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    api.leiGuardar({ id: "lei_cf", nome: "CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988",
+      especie: "Constituição", texto: "Art. 145. As taxas." });
+    api.leiGuardar({ id: "lei_cepe", nome: "Constituição do Estado de Pernambuco",
+      especie: "Constituição", texto: "Art. 1º. Estado." });
+    const ls = api.leisLista();
+    const idDe = (r) => (api.leiCasarRotulo(r, ls) || {}).id || null;
+
+    ok(idDe("CF/88") === "lei_cf",
+       "L59 com a estadual na biblioteca, 'CF/88' devia ficar com a federal: "
+       + idDe("CF/88"));
+    ok(idDe("Constituição Federal") === "lei_cf" && idDe("CRFB") === "lei_cf",
+       "L59a as outras formas da federal tambem");
+    ok(api.leiCasarRotulo("Constituição Estadual", ls) === null,
+       "L59b 'Constituição Estadual' nao pode ser adivinhada como a federal "
+       + "— com as duas presentes e sem apelido, e duvida");
+    ok(api.leiCandidatosDoRotulo("CF/88", ls).length >= 1,
+       "L59c leiCandidatosDoRotulo devia devolver a lista");
+  }
+  {
+    /* duas leis que se apresentam como federais (a CF guardada duas
+     * vezes): o nome não desempata — o apelido que a pessoa mandou
+     * lembrar é quem desempata */
+    const { api } = rodar();
+    api.leiGuardar({ id: "cf_a", nome: "CF 88", especie: "Constituição", texto: "Art. 145. A." });
+    api.leiGuardar({ id: "cf_b", nome: "CF/88 texto compilado", especie: "Constituição", texto: "Art. 145. B." });
+    const ls = () => api.leisLista();
+    ok(api.leiCasarRotulo("CF/88", ls()) === null,
+       "L60-pre com duas copias da CF, 'CF/88' devia dar duvida");
+    ok(api.leiCandidatosDoRotulo("CF/88", ls()).length === 2,
+       "L60 os candidatos devem ser as duas copias");
+    ok(api.leiApelidoAdicionar("cf_b", "CF/88") === true, "L61 nao gravou o apelido");
+    ok((api.leiCasarRotulo("CF/88", ls()) || {}).id === "cf_b",
+       "L61a o apelido gravado pelo marcador nao desempatou o ramo da "
+       + "Constituicao — o defeito do print");
+    /* e o apelido gravado por 'CF/88' é o mesmo que a citação 'CF 88' escreve? nao: outro rotulo */
+    ok(api.leiApelidoChave("CF/88") === "cf88",
+       "L61b a chave do apelido mudou: " + api.leiApelidoChave("CF/88"));
+  }
+  {
+    /* O REGISTRO: tentativa que não abriu deixa rastro com o motivo */
+    const { api } = rodar();
+    const ch = api.matChave(DISC, TOP);
+    api.leiGuardar({ id: "cf_a", nome: "CF 88", especie: "Constituição", texto: "Art. 145. A." });
+    api.leiGuardar({ id: "cf_b", nome: "CF/88 texto compilado", especie: "Constituição", texto: "Art. 145. B." });
+    api.leiLigar("cf_a", ch); api.leiLigar("cf_b", ch);
+    const q = { disciplina: DISC, topico: TOP, comentario: "" };
+    const cit = api.leiCitacoesNoTexto("art. 145, § 2º, da CF/88")[0];
+    const bt = api.document.createElement("button");
+    api.document.createElement("div").append(bt);
+    api.qsUiLeiIr(cit, q, bt);
+    const reg1 = api.registroTexto();
+    ok(/citação não resolvida/.test(reg1) && /CF\/88/.test(reg1),
+       "L62 a tentativa que nao abriu nao deixou rastro no registro");
+    ok(/2 leis casam/.test(reg1) && /CF 88/.test(reg1),
+       "L62a o registro nao diz POR QUE (2 leis casam) nem quais: "
+       + reg1.slice(-300));
+
+    /* sem nenhuma candidata: o motivo é outro */
+    api.qsFerFechar();
+    const cit2 = api.leiCitacoesNoTexto("art. 5º da LGT")[0];
+    api.qsUiLeiIr(cit2, q, bt);
+    ok(/nenhuma lei da biblioteca casa com "LGT"/.test(api.registroTexto()),
+       "L62b o motivo 'nenhuma casou' nao foi registrado");
+
+    /* marcou para lembrar mas continua sem resolver: FICA DITO */
+    api.qsFerFechar();
+    api.qsUiLeiIr(cit, q, bt);
+    const menu = api.$("qsLeiMenu");
+    Array.from(menu.children || []).find((b) => b.title
+      && String(b.textContent || "").indexOf("CF 88") >= 0).onclick();
+    ok((api.leiCasarRotulo("CF/88", api.leisLista()) || {}).id === "cf_a",
+       "L63 escolher pelo menu com o marcador nao resolveu a CF/88");
+  }
   {
     /* DESFAZER UM VÍNCULO ERRADO: o campo em "fonte e data" */
     const { api } = rodar();

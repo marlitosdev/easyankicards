@@ -1333,6 +1333,21 @@ function qsUiLeiLink(c, q, lista, doTopico) {
   return b;
 }
 
+/* POR QUE A CITAÇÃO NÃO ABRIU — em uma frase, para o registro. Antes o
+ * caminho do menu ("qual destas?") não deixava rastro nenhum: quem
+ * tocava num link "sem lei" e via o menu não tinha como mostrar depois
+ * o que o aplicativo tinha entendido. Distingue os dois motivos, que
+ * pedem consertos diferentes: NENHUMA lei casou (falta guardar ou
+ * apelidar) ou MAIS DE UMA casou (dúvida — e quais são). */
+function qsUiLeiMotivoFalha(c, lista) {
+  if (!c || !c.rotulo) return "a citação não nomeia lei";
+  let cand = [];
+  try { cand = leiCandidatosDoRotulo(c.rotulo, lista); } catch (e) { cand = []; }
+  if (!cand.length) return "nenhuma lei da biblioteca casa com \"" + c.rotulo + "\"";
+  return cand.length + " leis casam com \"" + c.rotulo + "\" (dúvida, não abriu nenhuma): "
+    + cand.map((l) => l.nome).join(" | ");
+}
+
 function qsUiLeiIr(c, q, botao) {
   if (!q || !q.disciplina || !q.topico) return;
   if (typeof leiAbrir !== "function") return;
@@ -1363,6 +1378,13 @@ function qsUiLeiIr(c, q, botao) {
         alvo.lei.nome + " · art. " + c.numCru + (alvo.ligada ? "" : " · lei não ligada ao tópico"));
     return;
   }
+
+  /* TODA tentativa que não abriu uma lei fica no registro, com o motivo */
+  try {
+    reg("QUESTOES", "citação não resolvida",
+        (c.rotulo || "sem rótulo") + " · art. " + c.numCru + " · "
+        + qsUiLeiMotivoFalha(c, lista));
+  } catch (e) {}
 
   if (alvo.motivo === "ambigua"
       || (alvo.motivo === "desconhecida" && doTopico.length > 0)) {
@@ -1500,6 +1522,15 @@ function qsUiLeiEscolher(botao, q, cit) {
         try {
           if (leiApelidoAdicionar(l.id, cit.rotulo)) {
             reg("QUESTOES", "sigla vinculada à lei à força", cit.rotulo + " → " + l.nome);
+          }
+          /* CONFERE SE A SIGLA REALMENTE PASSOU A RESOLVER. Gravar o
+           * apelido e a citação seguinte continuar sem abrir era o
+           * defeito do print, e ninguém via: agora fica dito no registro
+           * quando isso acontece, com o motivo. */
+          const casou = leiCasarRotulo(cit.rotulo, leisLista());
+          if (!casou || casou.id !== l.id) {
+            reg("QUESTOES", "sigla vinculada mas AINDA não resolve",
+                cit.rotulo + " → " + l.nome + " · " + qsUiLeiMotivoFalha(cit, leisLista()));
           }
         } catch (e) {}
       }
