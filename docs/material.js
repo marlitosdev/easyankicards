@@ -2582,9 +2582,13 @@ function matIniciar() {
   if ($("btnMmTirar")) $("btnMmTirar").onclick = async () => {
     const m = mmMarcaAberta;
     if (!m) return;
-    /* a pergunta mostra o trecho inteiro: quem confirma tem de estar
-     * vendo exatamente o que perde a cor */
-    if (!(await uiConfirm(t("mk_tirar_conf", { t: String(m.trecho).slice(0, 160) })))) return;
+    /* a pergunta mostra o TRECHO MARCADO (não o texto da nota — esse já
+     * apareceu no menu, um passo atrás): é o trecho que identifica qual
+     * marca some, cor ou nota. */
+    const msg = m.tipo === "nota"
+      ? t("lei_nota_excluir_conf", { t: String(m.trecho).slice(0, 160) })
+      : t("mk_tirar_conf", { t: String(m.trecho).slice(0, 160) });
+    if (!(await uiConfirm(msg))) return;
     if (!matTirarMarcaDe(m)) { uiAlert(t("mk_tirar_falhou")); return; }
     $("dlgMarcaMenu").close();
     try { matRender(); } catch (e) {}
@@ -2632,15 +2636,10 @@ function matIniciar() {
     if (!alvo || !alvo.getAttribute || !alvo.getAttribute("data-marca")) return;
     /* seleção em curso é gesto de marcar, não de abrir menu */
     if (String(matSelGuardada || "").trim().length > 2) return;
-    /* "nota" não é uma cor para trocar — é a única marca com texto
-     * preso a ela, então clicar nela abre direto a caixa de edição
-     * (a mesma janela do "+ nota" por artigo, em modo trecho) em vez
-     * do menu genérico de trocar-cor/tirar. */
-    if (alvo.getAttribute("data-marca") === "nota"
-        && typeof leiNotaTrechoAbrir === "function") {
-      leiNotaTrechoAbrir(String(alvo.textContent || ""));
-      return;
-    }
+    /* "nota" também passa pelo menu genérico — ver a nota (o title já
+     * mostra ela ao passar o mouse) e DEPOIS escolher editar ou excluir,
+     * em vez de cair direto no editor (matMenuDaMarca trata o ramo
+     * "nota" por dentro). */
     matMenuDaMarca(alvo);
   };
   /* CLIQUE NA MARCA. Um ouvinte só no container, e não um por <mark>:
@@ -3838,6 +3837,12 @@ function matTirarMarcaDe(m) {
   });
   if (!tirou) return false;
   matAplicarTexto(m.chave, campo, s2);
+  /* A NOTA MORA À PARTE (notasTrechos), NÃO NO "==@...==" QUE ACABOU DE
+   * SUMIR. Sem isto a nota fica órfã, presa a um trecho que não está mais
+   * marcado em lugar nenhum. No-op seguro para as outras seis marcas, que
+   * nunca têm entrada em notasTrechos. */
+  if (m.onde === "lei" && typeof leiNotaTrechoGuardar === "function")
+    leiNotaTrechoGuardar(leiIdAtual, m.trecho, "");
   matReg("marca", "marca retirada pela lista (" + m.tipo + ")",
          String(m.trecho).slice(0, 60) + (tirou > 1 ? " · " + tirou + " trechos" : ""));
   return true;
@@ -3977,10 +3982,10 @@ function matMarcaSobPonteiro(el) {
 const MAT_TIPOS_MENU = ["destaque", "importante", "duvida", "prova", "pegadinha"];
 const MAT_ROT_MARCA = { destaque: "mat_marca_d", importante: "mat_marca_i",
   duvida: "mat_marca_q", lei: "mat_marca_lei", prova: "mat_marca_prova",
-  pegadinha: "mat_marca_peg" };
+  pegadinha: "mat_marca_peg", nota: "lei_marca_nota" };
 const MAT_CLASSE_MARCA = { destaque: "marca-d", importante: "marca-i",
   duvida: "marca-q", lei: "marca-lei", prova: "marca-prova",
-  pegadinha: "marca-peg" };
+  pegadinha: "marca-peg", nota: "marca-nota" };
 
 let mmMarcaAberta = null;
 
@@ -3992,26 +3997,56 @@ function matMenuDaMarca(el) {
     { cor: t(MAT_ROT_MARCA[m.tipo] || "mat_marca_d") });
   $("mmTrecho").textContent = "\u201c" + String(m.trecho).slice(0, 200) + "\u201d";
 
-  /* TODAS as cores numa fileira, com a cor de cada uma no proprio botao:
-   * escolher cor lendo nome de cor e mais lento do que apontar a cor. */
   const cx = $("mmCores");
   cx.innerHTML = "";
-  MAT_TIPOS_MENU.filter((x) => x !== m.tipo).forEach((x) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "marca " + (MAT_CLASSE_MARCA[x] || "");
-    b.textContent = t(MAT_ROT_MARCA[x]);
-    b.onclick = () => {
-      if (!matTrocarCorDaMarca(m, x)) return;
-      $("dlgMarcaMenu").close();
-      try { matRender(); } catch (e) {}
-      matPintarContadores();
-    };
-    cx.append(b);
-  });
+  const ehNota = m.tipo === "nota";
+  /* "trocar por:" só faz sentido para as seis cores — nota não troca
+   * de cor nenhuma, e o rótulo sobrando ali parecia introduzir o botão
+   * de editar como se fosse uma opção de cor. */
+  if ($("mmTrocarRot")) $("mmTrocarRot").hidden = ehNota;
 
-  $("btnMmTirar").textContent = t("mk_menu_tirar");
-  $("btnMmTirar").title = t("mk_tirar_ajuda");
+  if (ehNota) {
+    /* NOTA N\u00c3O TEM COR PARA TROCAR \u2014 tem texto para editar. O menu
+     * mostra a nota (o title da marca j\u00e1 mostrou ao passar o mouse) e
+     * um bot\u00e3o s\u00f3, no lugar da fileira de cores. */
+    if (typeof leiNotaTrechoDe === "function" && typeof leiIdAtual !== "undefined" && leiIdAtual) {
+      const existente = leiNotaTrechoDe(leiIdAtual, m.trecho);
+      if (existente) {
+        const prev = document.createElement("p");
+        prev.className = "nota";
+        prev.textContent = existente.texto;
+        cx.append(prev);
+      }
+    }
+    const bEd = document.createElement("button");
+    bEd.type = "button";
+    bEd.className = "marca marca-nota";
+    bEd.textContent = t("lei_nota_editar");
+    bEd.onclick = () => {
+      $("dlgMarcaMenu").close();
+      if (typeof leiNotaTrechoAbrir === "function") leiNotaTrechoAbrir(m.trecho);
+    };
+    cx.append(bEd);
+  } else {
+    /* TODAS as cores numa fileira, com a cor de cada uma no proprio botao:
+     * escolher cor lendo nome de cor e mais lento do que apontar a cor. */
+    MAT_TIPOS_MENU.filter((x) => x !== m.tipo).forEach((x) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "marca " + (MAT_CLASSE_MARCA[x] || "");
+      b.textContent = t(MAT_ROT_MARCA[x]);
+      b.onclick = () => {
+        if (!matTrocarCorDaMarca(m, x)) return;
+        $("dlgMarcaMenu").close();
+        try { matRender(); } catch (e) {}
+        matPintarContadores();
+      };
+      cx.append(b);
+    });
+  }
+
+  $("btnMmTirar").textContent = t(ehNota ? "lei_nota_excluir" : "mk_menu_tirar");
+  $("btnMmTirar").title = t(ehNota ? "lei_nota_excluir_ajuda" : "mk_tirar_ajuda");
   const temLista = m.tipo === "prova" || m.tipo === "pegadinha";
   $("btnMmLista").hidden = !temLista;
   $("btnMmLista").textContent = t("mk_menu_lista");

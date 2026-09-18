@@ -94,11 +94,21 @@ function interpretarHtml(txt, fazerEl) {
    * texto — a dica recolhível "sumia" do DOM sem nenhum erro. */
   const re = /<(\/?)([a-zA-Z][\w-]*)((?:\s+[\w-]+(?:\s*=\s*"[^"]*")?)*)\s*(\/?)>/g;
   let pos = 0, m;
+  /* PARENTNODE DE VERDADE PARA QUEM NASCE DE innerHTML.
+   * Sem isto, todo nó que vem de "el.innerHTML = ..." (a leitura da lei,
+   * dos resumos, de qualquer painel montado por partes) tinha o pai
+   * sempre nulo — closest()/contains() por baixo desse nó nunca subiam
+   * nada, e insertBefore(novo, ref) não tinha como achar "ref" em
+   * childNodes nenhum, porque childNodes é sempre o do PAI. "raiz" é um
+   * ninho de mentira, sem elemento de verdade por trás — os filhos
+   * diretos dela ganham o pai certo depois, de quem lê o retorno. */
   const texto = (s) => {
     if (!s) return;
     const no = fazerEl("", "#text");
     no._texto = desescapar(s);
-    pilha[pilha.length - 1].children.push(no);
+    const pai = pilha[pilha.length - 1];
+    pai.children.push(no);
+    if (pai !== raiz) no.parentNode = pai;
   };
   while ((m = re.exec(txt)) !== null) {
     texto(txt.slice(pos, m.index));
@@ -122,7 +132,9 @@ function interpretarHtml(txt, fazerEl) {
         else if (k === "id") el.id = val === true ? "" : val;
         else el[k] = val;
       });
-    pilha[pilha.length - 1].children.push(el);
+    const pai = pilha[pilha.length - 1];
+    pai.children.push(el);
+    if (pai !== raiz) el.parentNode = pai;
     if (!sozinha && !VAZIAS.has(tag.toLowerCase())) pilha.push(el);
   }
   texto(txt.slice(pos));
@@ -196,7 +208,18 @@ function novoEl(id, tag, registro) {
     append(...ns) { ns.forEach((n) => { if (!n) return; n.parentNode = el; el.children.push(n); }); },
     appendChild(n) { if (n) n.parentNode = el; el.children.push(n); return n; },
     prepend() {}, remove() {},
-    insertBefore() {},
+    /* DE VERDADE, E NA POSIÇÃO CERTA. Era no-op — qualquer código que
+     * fatiasse um nó de texto para pendurar um link no meio (sem tocar
+     * no resto, como leiLigarCitacoesEm exige) parecia rodar e não
+     * mudava nada, calado: o nó novo nunca aparecia em lugar nenhum. */
+    insertBefore(novo, ref) {
+      if (!novo) return novo;
+      novo.parentNode = el;
+      const i = ref ? el.children.indexOf(ref) : -1;
+      if (i >= 0) el.children.splice(i, 0, novo);
+      else el.children.push(novo);
+      return novo;
+    },
     removeChild(n) {
       const i = el.children.indexOf(n);
       if (i >= 0) el.children.splice(i, 1);
@@ -336,7 +359,7 @@ function novoEl(id, tag, registro) {
       el.children.length = 0;
       el._texto = "";
       if (html) Array.from(interpretarHtml(html, novoEl))
-        .forEach((n) => el.children.push(n));
+        .forEach((n) => { n.parentNode = el; el.children.push(n); });
     },
   });
   /* ID COMO REGISTRO, NÃO COMO CAMPO — só quando "registro" existe.
@@ -723,6 +746,9 @@ function rodar() {
     leiUpdAceitar, leiUpdPular, leiUpdIA, leiAtualizarAplicar,
     leiUpdComparoAtual: () => leiUpdComparo, leiUpdIdxAtual: () => leiUpdIdx,
     leiPintarEdicaoLivre,
+    leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
+    leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
+    leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
     cmDefeitosDoCartao, cmMelAbrir, cmMelConferir, cmMelAplicar, cmMelIniciar, mcEstudarDireto, mcCartoesSalvos, mcEstMostraAtual: () => mcEstMostra,
     qsUiVoltarASessao,
     qsAndar, qsSessaoAtual, qsJaRespondida, qsSessaoRegistrada, qsPosicao,
