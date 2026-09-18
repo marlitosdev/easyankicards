@@ -8,6 +8,39 @@ async function testes() {
   let n = 0;
   const ok = (c, m) => { n++; if (!c) falhas.push(m); };
 
+  /* "MELHORAR ESTA QUESTÃO" (e "EMBARALHAR") não têm mais id fixo —
+   * nascem dentro do ⋮ do grifo a cada questão pintada (qsUiFerramentas,
+   * docs/questoes-ui.js), junto com "copiar a questão"/"ver registro".
+   * Quem os acha por id sozinho, como antes, não encontra mais nada.
+   * O simulador não entende seletor composto ("X Y") — casa() só aceita
+   * um bloco só (tag.classe[attr=val]) — então o achado é em dois
+   * passos: acha o(s) .qs-fer-menu, depois os botões DENTRO de cada um. */
+  const acharQsFer = (api, re) => {
+    const menus = api.$("qsSessCorpo").querySelectorAll(".qs-fer-menu");
+    for (const menu of menus) {
+      const achado = (menu.querySelectorAll("button") || [])
+        .filter((b) => re.test(b.textContent || ""))[0];
+      if (achado) return achado;
+    }
+    return null;
+  };
+
+  /* RESPONDER VIROU DOIS TOQUES: tocar numa alternativa só seleciona
+   * (b.onclick, docs/questoes-ui.js); quem grava de verdade agora é o
+   * botão grande, que vira "responder" enquanto falta confirmar. A
+   * maioria dos testes aqui não está examinando ESSE fluxo em si — está
+   * usando "responder a questão" como preparação de cenário para testar
+   * outra coisa — por isso um helper só, no lugar de repetir os dois
+   * toques em cada teste. Quem quer examinar o meio do caminho (o
+   * estado "selecionada, ainda não respondida") clica direto, sem usar
+   * este helper — ver U5/U6, mais abaixo, que é onde esse fluxo em si é
+   * testado a fundo. */
+  const responder = (api, op) => {
+    if (!op) return;
+    op.onclick();
+    api.$("btnQsProxima").onclick();
+  };
+
   /* os atalhos sairam da linha e foram para o "⋮": quatro icones por
    * linha, dez linhas na semana, quarenta alvos sem palavra nenhuma.
    * Dentro do menu cabe escrever o que cada um faz. */
@@ -121,30 +154,73 @@ async function testes() {
   ok(api.$("btnMatQuestoes").disabled === false, "U4d o botao continuou desabilitado");
   ok(api.$("qsDesfazer").hidden === false, "U4e nao ofereceu desfazer");
 
-  /* U5 — responder pelo resumo: gabarito só depois de escolher */
+  /* U5 — responder pelo resumo: SELECIONAR não é RESPONDER.
+   * O fluxo virou dois toques — tocar numa alternativa só marca a
+   * escolha; o botão grande (que vira "responder" enquanto falta
+   * confirmar) é quem grava de verdade. Aqui é onde esse meio do
+   * caminho é examinado a fundo; os outros testes deste arquivo usam o
+   * helper `responder()` para não repetir os dois toques toda vez. */
   api.qsUiResponderDoTopico();
   ok(api.$("dlgQsResponder").open === true, "U5 a sessao nao abriu");
   ok(api.$("qsSessCorpo").querySelectorAll(".qs-gab").length === 0,
      "U5b o gabarito apareceu ANTES de responder");
   ok(api.$("btnQsProxima").disabled === true,
-     "U5c deu para pular sem responder");
+     "U5c deu para responder sem escolher nada");
+  ok(api.$("btnQsProxima").textContent === api.t("qs_responder"),
+     "U5c2 o botao grande nao oferece 'responder' antes de escolher: "
+     + api.$("btnQsProxima").textContent);
   const ops = api.$("qsSessCorpo").querySelectorAll(".qs-op");
   ok(ops.length >= 2, "U5d a questao veio sem opcoes para escolher");
+
+  /* TOCAR SÓ SELECIONA */
   ops[0].onclick();
+  ok(api.$("qsSessCorpo").querySelectorAll(".qs-gab").length === 0,
+     "U5e selecionar uma alternativa ja revelou o gabarito — devia "
+     + "esperar a confirmacao");
+  ok(api.$("qsSessCorpo").querySelectorAll(".qs-op").every((b) => !b.disabled),
+     "U5f selecionar (sem confirmar) ja travou as alternativas");
+  const op0 = api.$("qsSessCorpo").querySelectorAll(".qs-op")[0];
+  ok(op0.className.indexOf("qs-op-sel") >= 0,
+     "U5g a alternativa tocada nao ganhou destaque de selecionada: "
+     + op0.className);
+  ok(api.$("btnQsProxima").disabled === false,
+     "U5h com uma selecionada, 'responder' continuou desabilitado");
+  ok(api.$("btnQsProxima").textContent === api.t("qs_responder"),
+     "U5h2 selecionar (sem confirmar) ja trocou o rotulo para 'proxima'");
+
+  /* TROCAR DE ESCOLHA ANTES DE CONFIRMAR — sem trava nenhuma, é só
+   * decisão em aberto */
+  const op1 = api.$("qsSessCorpo").querySelectorAll(".qs-op")[1];
+  op1.onclick();
+  ok(api.$("qsSessCorpo").querySelectorAll(".qs-op")[1].className.indexOf("qs-op-sel") >= 0
+     && api.$("qsSessCorpo").querySelectorAll(".qs-op")[0].className.indexOf("qs-op-sel") < 0,
+     "U5i trocar de alternativa antes de confirmar nao moveu o destaque");
+
+  /* SÓ "RESPONDER" GRAVA DE VERDADE */
+  api.$("btnQsProxima").onclick();
   ok(api.$("qsSessCorpo").querySelectorAll(".qs-gab").length === 1,
-     "U5e o gabarito nao apareceu depois de responder");
+     "U5j confirmar em 'responder' nao revelou o gabarito");
   ok(api.$("qsSessCorpo").querySelectorAll(".qs-op").every((b) => b.disabled),
-     "U5f depois de responder ainda dava para trocar a resposta");
-  ok(api.$("btnQsProxima").disabled === false, "U5g nao liberou a proxima");
+     "U5k depois de responder ainda dava para trocar a resposta");
+  ok(api.$("btnQsProxima").disabled === false, "U5l nao liberou a proxima");
+  ok(api.$("btnQsProxima").textContent === api.t("qs_proxima"),
+     "U5l2 respondida, o botao continuou oferecendo 'responder' em vez de 'proxima'");
   ok(api.$("qsSessCorpo").querySelectorAll(".qs-op-certa").length === 1,
-     "U5h nao marcou qual era a certa");
+     "U5m nao marcou qual era a certa");
+  /* A RESPOSTA GRAVADA FOI A ÚLTIMA ESCOLHIDA (a segunda opção, depois
+   * de trocar em U5i) — confirma que "responder" usa a seleção atual,
+   * não a primeira que foi tocada */
+  ok(api.qsJaRespondida().resp === ops[1].textContent.slice(0, 1),
+     "U5n 'responder' gravou a escolha errada — nao foi a ultima selecionada");
 
   /* U6 — a sequência anda e termina */
   api.$("btnQsProxima").onclick();
   ok(api.$("qsSessCorpo").querySelectorAll(".qs-enunciado").length === 1,
      "U6 nao foi para a segunda questao");
-  api.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
-  api.$("btnQsProxima").onclick();
+  ok(api.$("btnQsProxima").textContent === api.t("qs_responder"),
+     "U6a a questao nova nao voltou a pedir 'responder'");
+  responder(api, api.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
+  api.$("btnQsProxima").onclick();  /* avanca, agora que a 2a ja foi confirmada */
   ok(api.$("qsSessCorpo").querySelectorAll(".qs-fim").length === 1,
      "U6b a sessao nao mostrou o resultado no fim");
   ok(api.$("btnQsProxima").hidden === true, "U6c continuou oferecendo proxima no fim");
@@ -413,7 +489,7 @@ async function testes() {
      * dica antes da escolha e gabarito disfarcado */
     ok(a6.$("qsSessCorpo").querySelectorAll(".qs-bt-dica").length === 0,
        "G1 o botao de dica apareceu ANTES de responder");
-    a6.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    responder(a6, a6.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
 
     /* por RÓTULO, não por posição: um botão novo antes dele mudaria o
      * índice e o teste passaria a clicar em outra coisa sem avisar */
@@ -1530,8 +1606,9 @@ async function testes() {
     const num = (q) => (q ? q.enunciado.replace(/\D+/g, "") : "");
     for (let k = 0; k < 4; k++) {
       const ops = aR.$("qsSessCorpo").querySelectorAll(".qs-op");
-      (ops.filter((o) => /^C\)/.test(o.textContent))[0] || ops[0]).onclick();
-      aR.$("btnQsProxima").onclick();
+      (ops.filter((o) => /^C\)/.test(o.textContent))[0] || ops[0]).onclick();  /* seleciona */
+      aR.$("btnQsProxima").onclick();  /* confirma (responde) */
+      aR.$("btnQsProxima").onclick();  /* avanca */
     }
     const ses = aR.qsSessaoAtual();
     const erradas = ses.fila
@@ -1546,8 +1623,13 @@ async function testes() {
 
     bf.onclick();
     ok(aR.qsFiltroFalhasLigado() === true, "K7f o filtro nao ligou");
-    ok(/✓/.test(aR.$("btnQsSoFalhas").textContent || ""),
-       "K7g ligado, o botao nao mostra que esta ligado");
+    /* LIGAR O FILTRO REVELA UMA QUESTAO ERRADA — a tela sai de "rodada
+     * terminada" (onde bf, estatico, e quem mostra o estado) para "tem
+     * questao ativa" (onde bf fica escondido, e quem mostra o estado
+     * agora e o gemeo dentro do ⋮, ver qsUiFerramentas). */
+    const bfDentro = acharQsFer(aR, /errei/i);
+    ok(!!bfDentro && /✓/.test(bfDentro.textContent || ""),
+       "K7g ligado, o botao (agora dentro do ⋮) nao mostra que esta ligado");
 
     const vistas = [];
     for (let g = 0; g < 6 && aR.qsAtual(); g++) {
@@ -1639,9 +1721,10 @@ async function testes() {
 
     const resp = () => {
       const ops = aT.$("qsSessCorpo").querySelectorAll(".qs-op");
-      (ops.filter((o) => /^C\)/.test(o.textContent))[0] || ops[0]).onclick();
+      (ops.filter((o) => /^C\)/.test(o.textContent))[0] || ops[0]).onclick();  /* seleciona */
+      aT.$("btnQsProxima").onclick();  /* confirma (responde) */
     };
-    resp(); aT.$("btnQsProxima").onclick(); resp();
+    resp(); aT.$("btnQsProxima").onclick(); resp();  /* Q1, avanca, Q2 */
     ok(aT.$("btnQsEncerrar").hidden === false, "K9c o encerrar nao apareceu");
     ok(/2/.test(aT.$("btnQsEncerrar").textContent || ""),
        "K9d o botao nao mostra o placar que vai levar: " + aT.$("btnQsEncerrar").textContent);
@@ -1711,7 +1794,7 @@ async function testes() {
        "K10b nao viu a conversa da IA no meio do enunciado");
     ok(defeitos.indexOf("markdown") >= 0, "K10c nao viu o markdown cru");
 
-    const bm = aU.$("btnQsMelhorar");
+    const bm = acharQsFer(aU, /melhorar/i);
     ok(!!bm && bm.hidden === false, "K10d falta o botao de melhorar a questao");
     ok(/\d/.test(bm.textContent || ""),
        "K10e o botao nao avisa quantos problemas tem: " + bm.textContent);
@@ -1733,11 +1816,11 @@ async function testes() {
 
     /* responder ANTES de corrigir, para provar que o historico sobrevive */
     aU.$("dlgQsMelhorar").close();
-    aU.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    responder(aU, aU.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
     const tentativas = (aU.qsFiltrar({})[0].tentativas || []).length;
     ok(tentativas === 1, "K10m a resposta nao entrou no historico");
 
-    aU.$("btnQsMelhorar").onclick();
+    acharQsFer(aU, /melhorar/i).onclick();
     /* colagem que nao e questao nao pode virar questao */
     aU.$("qmColar").value = "desculpe, nao entendi seu pedido";
     aU.$("btnQmConferir").onclick();
@@ -1902,7 +1985,7 @@ async function testes() {
 
     /* historico vai para a BASE, depois das acoes */
     aW.qsUiResponderAbrir(aW.qsFiltrar({}), "aba", "t");
-    aW.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    responder(aW, aW.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
     aW.$("dlgQsResponder").close();
     aW.qsUiRender();
     const item2 = aW.$("qsLista").querySelectorAll(".qs-item")[0];
@@ -1938,7 +2021,7 @@ async function testes() {
     aX.qsUiResponderDoTopico();
     const totalDaRodada = aX.qsPlacar().total;
 
-    aX.$("btnQsMelhorar").onclick();
+    acharQsFer(aX, /melhorar/i).onclick();
     const tres = [1, 2, 3].map((i) => ["[QUESTAO]", "TIPO: CE", "BANCA: FGV",
       `ENUNCIADO: Afirmacao separada numero ${i}, agora sozinha e julgavel.`,
       "GABARITO: E", "COMENTARIO: porque viola o artigo.", "[/QUESTAO]"].join("\n"))
@@ -1987,7 +2070,7 @@ async function testes() {
     aY.qsAplicar(aY.qsLerResposta("? CE :: FGV :: Uma questao normal.\n= C :: c.",
       { disciplina: "D", topico: "T", chave: cY }).achados);
     aY.qsUiResponderDoTopico();
-    aY.$("btnQsMelhorar").onclick();
+    acharQsFer(aY, /melhorar/i).onclick();
     aY.$("qmColar").value = ["[QUESTAO]", "TIPO: CE", "BANCA: FGV",
       "ENUNCIADO: Uma afirmacao unica para julgar.", "GABARITO: C",
       "COMENTARIO: porque sim.", "[/QUESTAO]"].join("\n");
@@ -2038,6 +2121,267 @@ async function testes() {
     ok(!!prK.trim(),
        "K15e o prompt saiu vazio — sem texto de resumo, ele precisa ser "
        + "o prompt genérico de \"outro material\"");
+  }
+
+  /* ---- K16: embaralhar/só as que errei/melhorar moram no MESMO ⋮ que
+   * já existia (o do grifo — "copiar a questão"/"ver registro"), não
+   * num segundo do lado dele ---- */
+  {
+    const { api: aAA } = rodar();
+    aAA.matIniciar(); aAA.qsUiIniciar();
+    const cAA = aAA.matChave("D", "T");
+    aAA.matGravar(cAA, "x", { disciplina: "D", topico: "T" });
+    aAA.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aAA.qsAplicar(aAA.qsLerResposta(
+      "[QUESTAO] TIPO: ME ENUNCIADO: p1? A) a. B) b. GABARITO: A COMENTARIO: c.\n"
+      + "[QUESTAO] TIPO: ME ENUNCIADO: p2? A) a. B) b. GABARITO: B COMENTARIO: c.",
+      { disciplina: "D", topico: "T", chave: cAA }).achados);
+    aAA.qsUiResponderDoTopico();
+
+    /* SÓ UM ⋮ NA TELA — dois grupos "qs-fer-mais" lado a lado era
+     * exatamente o defeito relatado (o mesmo problema do "folha
+     * inteira" duplicado, resolvido do mesmo jeito: uma porta só). */
+    const maisGrupos = aAA.$("qsSessCorpo").querySelectorAll(".qs-fer-mais");
+    ok(maisGrupos.length === 1,
+       "K16 apareceu mais de um grupo de ⋮ na barra da questao · vieram "
+       + maisGrupos.length);
+    const bmMenu = maisGrupos[0].querySelectorAll(".qs-fer-menu")[0];
+    const bmBotao = maisGrupos[0].querySelectorAll("button")[0];
+    ok(!!bmMenu && !!bmBotao,
+       "K16a-pre nao achei o botao/menu do ⋮ que ja existia");
+
+    /* EMBARALHAR/MELHORAR nascem DENTRO do mesmo menu que já tinha
+     * "copiar a questão"/"ver registro desta sessão" — não têm mais id
+     * fixo (o primeiro desenho movia os botões estáticos para dentro
+     * daqui, e isso os destruía na questão seguinte, ao vivo no
+     * navegador — ver acharQsFer, no topo do arquivo). */
+    const bEmb = acharQsFer(aAA, /embaralhar/i);
+    ok(!!bEmb && bmMenu.contains(bEmb),
+       "K16b embaralhar nao esta dentro do MESMO menu ⋮ que ja existia");
+    const bMelh = acharQsFer(aAA, /melhorar/i);
+    ok(!!bMelh && bmMenu.contains(bMelh),
+       "K16c melhorar nao esta dentro do MESMO menu ⋮ que ja existia");
+
+    /* "SÓ AS QUE ERREI" CONTINUA ESTÁTICO (é o único dos três que
+     * também precisa existir fora de uma questão ativa, na tela de
+     * "rodada terminada" — ver K7) — mas fica escondido enquanto há
+     * questão na tela, porque quem aparece é o gêmeo aqui dentro. */
+    ok(aAA.$("btnQsSoFalhas").hidden === true,
+       "K16d o botao estatico de 'so as que errei' apareceu duplicado "
+       + "fora do ⋮ enquanto uma questao esta ativa");
+
+    /* O ⋮ ABRE mostrando o que já tinha JUNTO com o que chegou agora */
+    bmBotao.onclick({ stopPropagation: () => {} });
+    ok(bmMenu.hidden === false, "K16e o toque no ⋮ nao abriu o menu");
+    ok(/embaralhar/i.test(bmMenu.textContent || ""),
+       "K16f o menu aberto nao mostra 'embaralhar' junto com o resto");
+
+    /* CLICAR NUM ITEM FECHA O MENU — sem isso ele ficaria pairando por
+     * cima da questao repintada. */
+    acharQsFer(aAA, /embaralhar/i).onclick();
+    ok(bmMenu.hidden === true,
+       "K16g escolher 'embaralhar' nao fechou o menu");
+  }
+
+  /* ---- K17: a gaveta do rodape (encerrar/criar mais/fechar) ---- */
+  {
+    const { api: aBB } = rodar();
+    aBB.matIniciar(); aBB.qsUiIniciar();
+    const cBB = aBB.matChave("D", "T");
+    aBB.matGravar(cBB, "x", { disciplina: "D", topico: "T" });
+    aBB.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aBB.qsAplicar(aBB.qsLerResposta(
+      "[QUESTAO] TIPO: ME ENUNCIADO: p1? A) a. B) b. GABARITO: A COMENTARIO: c.",
+      { disciplina: "D", topico: "T", chave: cBB }).achados);
+    aBB.qsUiResponderDoTopico();
+
+    ok(aBB.$("qsRodape").hidden === true,
+       "K17 o rodape (encerrar/criar mais/fechar) nasce aberto — devia "
+       + "comecar recolhido, fora do caminho do comentario");
+    ok(/mostrar/i.test(aBB.$("btnQsRodapeAlternar").textContent || ""),
+       "K17a a alca nao oferece mostrar com o rodape fechado");
+
+    aBB.$("btnQsRodapeAlternar").onclick();
+    ok(aBB.$("qsRodape").hidden === false,
+       "K17b o toque na alca nao devolveu o rodape");
+    ok(/recolher/i.test(aBB.$("btnQsRodapeAlternar").textContent || ""),
+       "K17c aberta, a alca nao oferece recolher");
+
+    /* RESPONDER REPINTA A TELA INTEIRA — a gaveta nao pode fechar
+     * sozinha so porque a questao foi repintada */
+    responder(aBB, aBB.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
+    ok(aBB.$("qsRodape").hidden === false,
+       "K17d responder a questao recolheu o rodape que a pessoa tinha aberto");
+
+    aBB.$("btnQsRodapeAlternar").onclick();
+    ok(aBB.$("qsRodape").hidden === true,
+       "K17e o segundo toque na alca nao recolheu de volta");
+  }
+
+  /* ---- K18: recolher o enunciado, e riscar uma alternativa ---- */
+  {
+    const { api: aCC } = rodar();
+    aCC.matIniciar(); aCC.qsUiIniciar();
+    const cCC = aCC.matChave("D", "T");
+    aCC.matGravar(cCC, "x", { disciplina: "D", topico: "T" });
+    aCC.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aCC.qsAplicar(aCC.qsLerResposta(
+      "[QUESTAO] TIPO: ME ENUNCIADO: primeira? A) a. B) b. C) c. GABARITO: A COMENTARIO: c.\n"
+      + "[QUESTAO] TIPO: ME ENUNCIADO: segunda? A) a. B) b. GABARITO: B COMENTARIO: c.",
+      { disciplina: "D", topico: "T", chave: cCC }).achados);
+    aCC.qsUiResponderDoTopico();
+
+    /* ---- enunciado: recolhe, devolve, reseta na questao seguinte ---- */
+    ok(aCC.qsEnunColapsadoAtual() === false,
+       "K18 a questao nasceu com o enunciado ja recolhido");
+    ok(aCC.$("qsSessCorpo").querySelectorAll(".qs-enunciado.qs-enun-colapsado").length === 0,
+       "K18a a classe de recolhido apareceu sem ninguem pedir");
+
+    aCC.$("btnQsEnunAlternar").onclick();
+    ok(aCC.qsEnunColapsadoAtual() === true,
+       "K18b o toque no cabecalho nao recolheu o enunciado");
+    ok(aCC.$("qsSessCorpo").querySelectorAll(".qs-enunciado.qs-enun-colapsado").length === 1,
+       "K18c a classe de recolhido nao foi para o elemento desenhado");
+    ok(/expandir|ver enunciado/i.test(aCC.$("btnQsEnunAlternar").textContent || ""),
+       "K18d recolhido, o botao nao oferece expandir de volta");
+
+    aCC.$("btnQsEnunAlternar").onclick();
+    ok(aCC.qsEnunColapsadoAtual() === false,
+       "K18e o segundo toque nao devolveu o enunciado inteiro");
+
+    /* recolhe de novo, e confirma que TROCAR DE QUESTAO reseta sozinho —
+     * texto novo nao pode nascer escondido por uma decisao da anterior */
+    aCC.$("btnQsEnunAlternar").onclick();
+    ok(aCC.qsEnunColapsadoAtual() === true,
+       "K18f-pre precisa estar recolhido antes de trocar de questao");
+    aCC.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();  /* seleciona a 1a */
+    aCC.$("btnQsProxima").onclick();                                /* confirma (responde) */
+    aCC.$("btnQsProxima").onclick();                                /* vai para a 2a */
+    ok(aCC.qsEnunColapsadoAtual() === false,
+       "K18g o enunciado da questao NOVA nasceu recolhido, herdando da anterior");
+
+    /* ---- riscar: arrasto vira estado, some ao trocar/responder ---- */
+    ok(aCC.qsOpRiscada("A") === false,
+       "K18h-pre a alternativa ja nasceu riscada, o teste nao exercita nada");
+    aCC.qsOpRiscarAlternar("A");
+    ok(aCC.qsOpRiscada("A") === true,
+       "K18h marcar a alternativa como riscada nao mudou o estado");
+    ok(aCC.$("qsSessCorpo").querySelectorAll(".qs-op")
+       .filter((b) => /^A\)/.test(b.textContent))[0].className
+       .indexOf("qs-op-risc") >= 0,
+       "K18i a marca nao chegou ao botao desenhado");
+
+    /* MESMO GESTO DESFAZ */
+    aCC.qsOpRiscarAlternar("A");
+    ok(aCC.qsOpRiscada("A") === false,
+       "K18j riscar de novo nao desfez a marca");
+
+    /* CONSULTIVO, NAO TRAVA: uma alternativa riscada continua podendo
+     * ser a resposta escolhida */
+    aCC.qsOpRiscarAlternar("B");
+    const opB = aCC.$("qsSessCorpo").querySelectorAll(".qs-op")
+      .filter((b) => /^B\)/.test(b.textContent))[0];
+    ok(opB.className.indexOf("qs-op-risc") >= 0,
+       "K18k-pre a alternativa B nao ficou marcada para o proximo passo");
+    opB.onclick();  /* seleciona B, mesmo riscada */
+    ok(aCC.$("qsSessCorpo").querySelectorAll(".qs-op")
+       .filter((b) => /^B\)/.test(b.textContent))[0].className.indexOf("qs-op-sel") >= 0,
+       "K18k2 riscada nao pode ser selecionada — o traco nao e trava nenhuma");
+    aCC.$("btnQsProxima").onclick();  /* confirma */
+    ok(aCC.qsJaRespondida() && aCC.qsJaRespondida().resp === "B",
+       "K18k marcar uma alternativa como riscada impediu escolhe-la");
+
+    /* RESPONDER LIMPA AS MARCAS — não fazem sentido numa questão já
+     * fechada, onde as cores já contam a história de verdade */
+    ok(aCC.qsRiscadasAtual().size === 0,
+       "K18l responder a questao nao limpou as marcas de riscar");
+
+    /* qsOpGestoLigar não deve estourar mesmo sem addEventListener de
+     * verdade no simulador — é só a fiação de produção, verificada ao
+     * vivo no navegador; aqui o mínimo é não quebrar o resto da tela */
+    const elFake = aCC.document.createElement("button");
+    let ok2 = true;
+    try { aCC.qsOpGestoLigar(elFake, "A"); } catch (e) { ok2 = false; }
+    ok(ok2, "K18m qsOpGestoLigar quebrou ao ligar num botao comum");
+  }
+
+  /* ---- K19: "virar em cartões"/"incluir dica" moram ao lado do
+   * gabarito, menores — não soltos no fim do bloco ---- */
+  {
+    const { api: aDD } = rodar();
+    aDD.matIniciar(); aDD.qsUiIniciar();
+    const cDD = aDD.matChave("D", "T");
+    aDD.matGravar(cDD, "x", { disciplina: "D", topico: "T" });
+    aDD.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aDD.qsAplicar(aDD.qsLerResposta(
+      "[QUESTAO] TIPO: ME ENUNCIADO: p1? A) a. B) b. GABARITO: A COMENTARIO: c.",
+      { disciplina: "D", topico: "T", chave: cDD }).achados);
+    aDD.qsUiResponderDoTopico();
+    responder(aDD, aDD.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
+
+    const linha = aDD.$("qsSessCorpo").querySelectorAll(".qs-gab-linha")[0];
+    ok(!!linha, "K19 nao achei a linha que devia juntar gabarito e acoes");
+
+    const gabDentro = linha.querySelectorAll(".qs-gab")[0];
+    ok(!!gabDentro,
+       "K19a o texto do gabarito nao esta dentro da mesma linha das acoes");
+
+    const acoes = linha.querySelectorAll(".qs-gab-acoes")[0];
+    ok(!!acoes, "K19b nao achei o grupo de acoes ao lado do gabarito");
+    const botoesAcao = acoes.querySelectorAll("button");
+    ok(botoesAcao.length === 2,
+       "K19c deviam ser 2 botoes (cartoes + dica) ao lado do gabarito · vieram "
+       + botoesAcao.length);
+    ok(botoesAcao.every((b) => b.className.indexOf("qs-bt-mini") >= 0),
+       "K19d os botoes ao lado do gabarito nao ganharam a classe menor");
+    ok(/cart/i.test(botoesAcao[0].textContent || ""),
+       "K19e o primeiro botao da linha nao e o de virar em cartoes");
+    ok(/dica/i.test(botoesAcao[1].textContent || ""),
+       "K19f o segundo botao da linha nao e o de incluir/editar a dica");
+
+    /* CONTINUAM FUNCIONANDO — só mudaram de lugar e tamanho */
+    botoesAcao[0].onclick();
+    ok(aDD.$("dlgMatCartoes").open === true,
+       "K19g o botao de cartoes, menor, parou de abrir o painel de cartoes");
+  }
+
+  /* ---- K20: "pular" e "voltar" limpam a selecao em aberto ---- */
+  {
+    const { api: aEE } = rodar();
+    aEE.matIniciar(); aEE.qsUiIniciar();
+    const cEE = aEE.matChave("D", "T");
+    aEE.matGravar(cEE, "x", { disciplina: "D", topico: "T" });
+    aEE.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aEE.qsAplicar(aEE.qsLerResposta(
+      "[QUESTAO] TIPO: ME ENUNCIADO: p1? A) a. B) b. GABARITO: A COMENTARIO: c.\n"
+      + "[QUESTAO] TIPO: ME ENUNCIADO: p2? A) a. B) b. GABARITO: B COMENTARIO: c.",
+      { disciplina: "D", topico: "T", chave: cEE }).achados);
+    aEE.qsUiResponderDoTopico();
+
+    /* seleciona sem confirmar, depois pula — a escolha nao pode
+     * sobreviver escondida e valer sozinha quando a questao voltar */
+    aEE.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    ok(aEE.$("btnQsProxima").disabled === false,
+       "K20-pre selecionar nao habilitou 'responder', o cenario nao "
+       + "exercita nada");
+    aEE.$("btnQsPular").onclick();
+    ok(aEE.$("qsSessCorpo").querySelectorAll(".qs-enunciado").length === 1,
+       "K20 pular nao foi para a proxima questao");
+    ok(aEE.$("btnQsProxima").disabled === true,
+       "K20a a questao nova ja nasceu com 'responder' liberado — "
+       + "sobrou selecao da questao pulada");
+    ok(aEE.$("qsSessCorpo").querySelectorAll(".qs-op-sel").length === 0,
+       "K20b sobrou uma alternativa marcada como selecionada de outra questao");
+
+    /* voltar tambem nao pode reaproveitar a selecao da questao atual */
+    aEE.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    ok(aEE.$("btnQsProxima").disabled === false,
+       "K20c-pre selecionar na segunda questao nao habilitou 'responder'");
+    if (aEE.$("btnQsVoltar") && aEE.$("btnQsVoltar").hidden === false) {
+      aEE.$("btnQsVoltar").onclick();
+      ok(aEE.$("btnQsProxima").disabled === true,
+         "K20d voltar preservou a selecao em aberto da questao seguinte");
+    }
   }
 
   falhas.quantas = n;

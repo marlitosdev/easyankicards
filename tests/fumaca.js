@@ -161,7 +161,13 @@ function novoEl(id, tag, registro) {
      * na tela do teste e um no de verdade no navegador. Divergencia
      * silenciosa, que so aparece como celula com lixo escrito. */
     nodeType: (tag === "#text" ? 3 : 1),
-    checked: false, disabled: false, readOnly: false, open: false,
+    /* "hidden" NO NAVEGADOR É false POR PADRÃO, NUNCA undefined — é um
+     * IDL boolean refletido. Sem essa base aqui, todo botão nascido de
+     * document.createElement() (sem "hidden" no HTML e sem ninguém
+     * chamar ".hidden = false" à toa, porque em produção nunca precisa)
+     * media "escondido" com `!== false` e falhava por uma diferença de
+     * `undefined` que não existe fora do simulador. */
+    checked: false, disabled: false, readOnly: false, open: false, hidden: false,
     children: colecao(), dataset: {}, _attrs: {}, options: [], files: [], firstChild: null, parentNode: null, scrollTop: 0, selectionStart: 0, selectionEnd: 0,
     /* "childNodes" É O NOME QUE O NAVEGADOR USA para andar a árvore
      * incluindo os nós de texto. Sem ele, quem converte uma seleção em
@@ -717,6 +723,10 @@ function rodar() {
     qsUiFerramentas, qsUiPintarCores,
     qsFerMenu, qsFerFechar, qsFerPosicionar,
     qsFerAbertoAtual: () => qsFerAberto,
+    qsRodapeAbertoAtual: () => qsRodapeAberto,
+    qsEnunColapsadoAtual: () => qsEnunColapsado,
+    qsOpRiscada, qsOpRiscarAlternar, qsOpGestoLigar,
+    qsRiscadasAtual: () => qsRiscadas,
     /* dispara nos ouvintes do documento: e assim que o navegador conta
        ao app que houve um clique fora ou um Esc */
     docDisparar: (tipo, ev) => {

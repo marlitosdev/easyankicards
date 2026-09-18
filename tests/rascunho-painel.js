@@ -65,13 +65,11 @@ async function testes() {
     const { api } = rodar();
     /* NADA de rsIniciar, NADA de questão: o estado do arranque */
     api.qsUiIniciar();
-    const b1 = api.$("btnRsAbrir"), b2 = api.$("btnRsAbrirCheia");
-    ok(b1.hidden === false && b2.hidden === false,
-       "O0 os gatilhos nascem escondidos e so aparecem se algo mais rodar");
+    const b1 = api.$("btnRsAbrir");
+    ok(b1.hidden === false,
+       "O0 o gatilho nasce escondido e so aparece se algo mais rodar");
     ok(/\S/.test(b1.textContent || ""),
        "O0b o gatilho nasce sem rotulo — um botao sem texto e um botao invisivel");
-    ok(/\S/.test(b2.textContent || ""),
-       "O0c o gatilho da folha inteira nasce sem rotulo");
     /* o rótulo vem do HTML, então vale mesmo que nenhum JS tenha rodado */
     ok(/id="btnRsAbrir"[^>]*data-i18n=/.test(HTML.replace(/\n\s*/g, " ")),
        "O0d o rotulo do gatilho depende de JS em vez de vir do HTML");
@@ -85,31 +83,39 @@ async function testes() {
        "O0e clicar no gatilho sem questao carregada nao abriu nada");
   }
 
-  /* ---- O2: fechado não ocupa nada; os gatilhos é que aparecem ---- */
+  /* ---- O2: fechado não ocupa nada; o gatilho é que aparece ---- */
   {
     const { api } = rodar();
     api.rsIniciar();
     api.rsPrepararPara("q1");
     ok(api.$("rsCaixa").hidden === true,
        "O2 o rascunho fechado continua na tela");
-    ok(api.$("btnRsAbrir").hidden === false && api.$("btnRsAbrirCheia").hidden === false,
-       "O2b os dois gatilhos deviam estar a mao com o rascunho fechado");
+    ok(api.$("btnRsAbrir").hidden === false,
+       "O2b o gatilho devia estar a mao com o rascunho fechado");
 
-    ok(typeof api.$("btnRsAbrirCheia").onclick === "function",
-       "O2c-pre o gatilho da folha inteira nao esta ligado a nada");
-    if (typeof api.$("btnRsAbrirCheia").onclick === "function") {
-      api.$("btnRsAbrirCheia").onclick();
+    ok(typeof api.$("btnRsAbrir").onclick === "function",
+       "O2c-pre o gatilho nao esta ligado a nada");
+    if (typeof api.$("btnRsAbrir").onclick === "function") {
+      api.$("btnRsAbrir").onclick();
     }
-    /* o gatilho da folha inteira ABRE JÁ NELA: se abrisse no painel de
-     * 72% e coubesse à pessoa expandir depois, seriam dois toques para
-     * um pedido que ela já fez. */
-    ok(api.rsAberto() === true, "O2c o gatilho da folha inteira nao abriu");
-    ok(api.rsCheiaAtual() === true,
-       "O2d o gatilho da folha inteira abriu no painel pequeno");
-    ok(api.$("btnRsAbrir").hidden === true && api.$("btnRsAbrirCheia").hidden === true,
-       "O2e os gatilhos continuam na tela com o rascunho aberto");
+    ok(api.rsAberto() === true, "O2c o gatilho nao abriu o rascunho");
+    /* ABRE NO PAINEL PEQUENO — e a folha inteira, que era um gatilho a
+     * parte, agora e so mais um toque no btnRsCheia de dentro do
+     * rascunho ja aberto. Duplicar o gatilho la fora nao economizava
+     * nada: era um segundo caminho para o mesmo lugar. */
+    ok(api.rsCheiaAtual() === false,
+       "O2d o gatilho abriu direto na folha inteira, sem pedir");
+    ok(api.$("btnRsAbrir").hidden === true,
+       "O2e o gatilho continua na tela com o rascunho aberto");
     ok(api.$("rsCaixa").hidden === false,
        "O2f o painel nao apareceu ao abrir");
+
+    /* A TELA CHEIA CONTINUA A UM TOQUE, DE DENTRO */
+    ok(typeof api.$("btnRsCheia").onclick === "function",
+       "O2f2-pre o botao de folha inteira de dentro nao esta ligado a nada");
+    api.$("btnRsCheia").onclick();
+    ok(api.rsCheiaAtual() === true,
+       "O2f3 btnRsCheia, de dentro do rascunho aberto, nao alcancou a folha inteira");
 
     /* E FECHAR DEVOLVE A TELA. Era este o defeito do desenho anterior: a
      * caixa continuava lá, vazia, com barra de título e um botão de

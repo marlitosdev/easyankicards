@@ -18,6 +18,30 @@ let qsUiTextoBase = "";  /* o texto do resumo que abriu esta criação */
 let qsUiEscolhas = [];   /* o que a pessoa marcou para gravar, uma por questão */
 let qsUiRecibo = null;
 let qsUiVoltarPara = null;    /* quem abriu a sessão: resumo ou aba */
+/* A GAVETA DO RODAPÉ (encerrar/criar mais/fechar): recolhida por
+ * padrão, um toque devolve. Não é preferência salva — é atenção do
+ * momento — então não vai para localStorage; um recarregamento de
+ * página já a devolve fechada sozinho, e enquanto a sessão dura ela
+ * fica do jeito que a pessoa deixou entre uma questão e outra. */
+let qsRodapeAberto = false;
+/* O ENUNCIADO RECOLHIDO: ao contrário da gaveta do rodapé, este RESETA
+ * a cada questão nova — recolher é uma decisão sobre O QUE JÁ FOI LIDO
+ * nesta pergunta, não uma preferência de leitura. Ver qsAtual().id
+ * guardado junto: repintar a MESMA questão (responder, trocar filtro)
+ * não pode fechar o que a pessoa acabou de abrir. */
+let qsEnunColapsado = false;
+let qsEnunQid = "";
+/* AS ALTERNATIVAS RISCADAS DA QUESTÃO ATUAL: puro lembrete visual de
+ * quem está decidindo, nunca vai para qsResponder/qsSessao/histórico —
+ * marcar e desmarcar não é "responder", é rascunho por cima da própria
+ * pergunta. Reseta junto com qsEnunColapsado (mesmo gatilho de questão
+ * nova), e some sozinho ao responder de verdade. */
+let qsRiscadas = new Set();
+/* A ALTERNATIVA ESCOLHIDA, AINDA NÃO GRAVADA — selecionar não é mais
+ * responder. Reseta junto com qsEnunColapsado/qsRiscadas (mesma questão
+ * nova), e também limpa sozinha assim que qsResponder grava de
+ * verdade (ver o onclick das alternativas e o de btnQsProxima). */
+let qsSelecionada = "";
 
 function qsUiConcursoAtual() {
   try {
@@ -578,9 +602,104 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
          + (retomou ? " · " + qsPlacar().feitas + " já feitas" : ""));
 }
 
+/* A GAVETA DO RODAPÉ, no mesmo molde de leiGaveta (docs/lei-ui.js):
+ * alterna "hidden" sem persistir em lugar nenhum — quem quer ver
+ * "encerrar agora"/"criar mais questões"/"Fechar" pede uma vez, e o
+ * pedido vale até fechar a sessão. Chamada tanto pelo toque na alça
+ * quanto no fim de qsUiPintarSessao, para o rótulo nunca ficar
+ * desatualizado depois de repintar a questão. */
+function qsRodapePintar() {
+  const rod = $("qsRodape");
+  if (rod) rod.hidden = !qsRodapeAberto;
+  const alca = $("btnQsRodapeAlternar");
+  if (alca) {
+    alca.textContent = t(qsRodapeAberto ? "qs_rodape_recolher" : "qs_rodape_mostrar");
+    alca.title = t("qs_rodape_ajuda");
+  }
+}
+
+function qsOpRiscada(letra) { return qsRiscadas.has(letra); }
+
+/* LIGA/DESLIGA O TRAÇO — mesmo gesto para marcar e para desfazer, em vez
+ * de um jeito de marcar e outro de apagar. Pura função de estado; quem
+ * decide QUANDO chamar é o reconhecedor de gesto (qsOpGestoLigar) — dá
+ * para testar o efeito de um arrasto sem precisar simular um
+ * PointerEvent de verdade, que o simulador de testes não despacha. */
+function qsOpRiscarAlternar(letra) {
+  if (qsRiscadas.has(letra)) qsRiscadas.delete(letra); else qsRiscadas.add(letra);
+  qsUiPintarSessao();
+}
+
+/* =====================================================================
+ * ARRASTAR UMA ALTERNATIVA PARA A DIREITA RISCA ELA
+ *
+ * O MESMO BOTÃO JÁ RESPONDE NO TOQUE (onclick, acima) — o gesto de
+ * arrastar não pode competir com isso nem com o SCROLL da página, que é
+ * o gesto muito mais comum num elemento dentro de uma lista que rola.
+ * A saída, com Pointer Events unificados (toque/mouse/caneta, o mesmo
+ * padrão de docs/rascunho.js): não decide nada no pointerdown; no
+ * pointermove, se o deslocamento vertical passar o horizontal, é
+ * rolagem — desiste e deixa o navegador cuidar; só quando o horizontal
+ * (para a DIREITA) passa de um limiar é que vira um arrasto de verdade,
+ * e aí sim trava a rolagem (preventDefault) e mostra o traço crescendo.
+ *
+ * O CLIQUE NATIVO JÁ SE CUIDA SOZINHO: navegadores não disparam "click"
+ * depois de um pointerdown→pointermove(bastante)→pointerup — é assim
+ * que um arrasto não vira também uma resposta. Por isso esta função
+ * nunca precisa (nem tenta) impedir o onclick diretamente.
+ * ===================================================================== */
+function qsOpGestoLigar(el, letra) {
+  if (!el || typeof el.addEventListener !== "function") return;
+  const LIMIAR_ARRASTO = 24;   /* px para reconhecer "isto é um arrasto" */
+  const LIMIAR_RISCAR = 56;    /* px para confirmar a marca ao soltar */
+  let x0 = 0, y0 = 0, ativo = false, arrastando = false;
+
+  const limpar = () => {
+    ativo = false; arrastando = false;
+    el.classList.remove("qs-op-arrastando");
+    el.style.removeProperty("--qs-op-arrasto");
+  };
+  el.addEventListener("pointerdown", (ev) => {
+    x0 = ev.clientX; y0 = ev.clientY; ativo = true; arrastando = false;
+  });
+  el.addEventListener("pointermove", (ev) => {
+    if (!ativo) return;
+    const dx = ev.clientX - x0, dy = ev.clientY - y0;
+    if (!arrastando) {
+      /* rolando a lista, não arrastando a alternativa: desiste cedo */
+      if (Math.abs(dy) > Math.abs(dx) + 6) { ativo = false; return; }
+      if (dx > LIMIAR_ARRASTO) {
+        arrastando = true;
+        try { el.setPointerCapture(ev.pointerId); } catch (e) {}
+      }
+    }
+    if (arrastando) {
+      if (ev.preventDefault) ev.preventDefault();
+      const p2 = Math.min(1, Math.max(0, dx / (LIMIAR_RISCAR + 30)));
+      el.style.setProperty("--qs-op-arrasto", String(p2));
+      el.classList.add("qs-op-arrastando");
+    }
+  });
+  el.addEventListener("pointerup", (ev) => {
+    if (arrastando) {
+      const dx = ev.clientX - x0;
+      if (dx > LIMIAR_RISCAR) qsOpRiscarAlternar(letra);
+    }
+    limpar();
+  });
+  el.addEventListener("pointercancel", limpar);
+}
+
 function qsUiPintarSessao() {
   const q = qsAtual();
   const p = qsPlacar();
+  /* TROCOU DE QUESTÃO: o recolhido da anterior não é decisão sobre a de
+   * agora. Repintar a MESMA questão (responder, ligar um filtro) não
+   * mexe aqui — senão um clique em "embaralhar" fecharia o enunciado
+   * que a pessoa acabou de abrir. */
+  if (q && q.id !== qsEnunQid) {
+    qsEnunQid = q.id; qsEnunColapsado = false; qsRiscadas.clear(); qsSelecionada = "";
+  }
   /* DUAS INFORMAÇÕES, E NÃO UMA ESPREMIDA EM DUAS.
    *
    * "1 de 32" era respondidas+1 — progresso disfarçado de posição. Com
@@ -731,7 +850,6 @@ function qsUiPintarSessao() {
     }
     $("btnQsProxima").hidden = true;
     if ($("btnQsPular")) $("btnQsPular").hidden = true;
-    if ($("btnQsEmbaralhar")) $("btnQsEmbaralhar").hidden = true;
     if ($("btnQsSoFalhas")) {
       /* no fim da rodada o filtro continua à mão: é dali que se volta
        * para as erradas sem recomeçar tudo */
@@ -755,7 +873,7 @@ function qsUiPintarSessao() {
   de.textContent = [q.concurso, q.banca, q.disciplina, q.topico]
     .filter(Boolean).join(" · ");
   const en = document.createElement("div");
-  en.className = "qs-enunciado";
+  en.className = "qs-enunciado" + (qsEnunColapsado ? " qs-enun-colapsado" : "");
   en.textContent = q.enunciado;
   corpo.append(de);
   /* O GRIFO É O PRÓPRIO TEXTO, e não uma camada por cima dele.
@@ -789,6 +907,10 @@ function qsUiPintarSessao() {
   }
 
   const jaFoi = qsJaRespondida();
+  /* JÁ RESPONDIDA NÃO TEM "SELECIONADA" — é conceito de decisão em
+   * aberto; travar isso aqui evita que uma seleção velha (de antes de
+   * responder por outro caminho, ex. pular e voltar) sobreviva à toa. */
+  if (jaFoi) qsSelecionada = "";
   const opcoes = q.tipo === "ce"
     ? [{ letra: "C", txt: t("qs_certo") }, { letra: "E", txt: t("qs_errado") }]
     : q.opcoes;
@@ -798,20 +920,37 @@ function qsUiPintarSessao() {
   opcoes.forEach((o) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "qs-op";
+    /* RISCADA E SELECIONADA SÃO SÓ ANTES DE RESPONDER — depois disso as
+     * cores já contam a história de verdade (certa/errada), e qualquer
+     * uma das duas juntas confundiria mais do que ajudaria. */
+    let cls = "qs-op";
+    if (!jaFoi && qsOpRiscada(o.letra)) cls += " qs-op-risc";
+    if (!jaFoi && qsSelecionada === o.letra) cls += " qs-op-sel";
     if (jaFoi) {
       /* depois de responder, as cores contam a história: verde no gabarito,
        * vermelho só no que a pessoa escolheu e estava errado */
-      if (o.letra === q.gabarito) b.className += " qs-op-certa";
-      else if (o.letra === jaFoi.resp) b.className += " qs-op-errada";
-      b.disabled = true;
+      if (o.letra === q.gabarito) cls += " qs-op-certa";
+      else if (o.letra === jaFoi.resp) cls += " qs-op-errada";
     }
+    b.className = cls;
+    if (jaFoi) b.disabled = true;
     b.textContent = o.letra + ") " + o.txt;
+    /* TOCAR SÓ SELECIONA — quem responde de verdade é o botão grande
+     * (btnQsProxima, que vira "responder" enquanto não há resposta
+     * gravada). Antes o toque já respondia na hora; o pedido foi
+     * separar "escolher" de "confirmar", para dar chance de mudar de
+     * ideia antes de valer. */
     b.onclick = () => {
-      const r = qsResponder(o.letra);
-      if (!r) return;
+      if (jaFoi) return;
+      qsSelecionada = o.letra;
       qsUiPintarSessao();
     };
+    /* ARRASTAR PARA A DIREITA RISCA A ALTERNATIVA — lembrete de "isto
+     * está errado", sem impedir escolhê-la depois: o traço é conselho de
+     * quem está decidindo, não uma trava. Só liga enquanto ainda dá para
+     * responder; depois de jaFoi o botão já está desabilitado e não há
+     * mais decisão para marcar. */
+    if (!jaFoi) qsOpGestoLigar(b, o.letra);
     cx.append(b);
   });
   corpo.append(cx);
@@ -841,31 +980,30 @@ function qsUiPintarSessao() {
     gb.className = "qs-gab " + (jaFoi.acertou ? "qs-gab-ok" : "qs-gab-nao");
     gb.textContent = (jaFoi.acertou ? t("qs_acertou") : t("qs_errou"))
       + " · " + t("qs_gab_e", { g: q.gabarito });
-    depois.append(gb);
-    if (q.comentario) {
-      depois.append(qsUiDobra("qs_coment_tit", (el) => qsUiComentario(el, q)));
-    }
-    /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
-     * é gabarito disfarçado. */
+
+    /* "VIRAR EM CARTÕES" E "INCLUIR/EDITAR MINHA DICA", AO LADO DO
+     * GABARITO — moravam soltos no fim de tudo, do tamanho de qualquer
+     * outro botão, empurrando o comentário pra baixo à toa. São duas
+     * ações de bolso (o gesto comum nem usa nenhuma delas), então
+     * ficam pequenas e na mesma linha do "Errou · gabarito: X", que já
+     * é a linha mais curta do bloco — sobra espaço ali mesmo. */
     const minha = qsDicaDeQuestao(q.id);
-    if (minha) {
-      depois.append(qsUiDobra("qs_dica_dobra", (el) => {
-        el.className = "qs-minha-dica";
-        try { el.innerHTML = matParaHtml(String(minha)); }
-        catch (e) { el.textContent = String(minha); }
-      }));
-    }
+    const gbLinha = document.createElement("div");
+    gbLinha.className = "qs-gab-linha";
+    const acoes = document.createElement("span");
+    acoes.className = "qs-gab-acoes";
+
     const bc = document.createElement("button");
     bc.type = "button";
-    bc.className = "btn-min qs-bt-dica";
+    bc.className = "btn-min qs-bt-dica qs-bt-mini";
     bc.textContent = t("qs_cartao_btn");
     bc.title = t("qs_cartao_ajuda");
     bc.onclick = () => qsUiCartoesDaQuestao(q);
-    depois.append(bc);
+    acoes.append(bc);
 
     const bd = document.createElement("button");
     bd.type = "button";
-    bd.className = "btn-min qs-bt-dica";
+    bd.className = "btn-min qs-bt-dica qs-bt-mini";
     bd.textContent = t(minha ? "qs_dica_editar" : "qs_dica_incluir");
     bd.title = t("qs_dica_ajuda");
     bd.onclick = async () => {
@@ -877,16 +1015,45 @@ function qsUiPintarSessao() {
              q.enunciado.slice(0, 60));
       qsUiPintarSessao();
     };
-    depois.append(bd);
+    acoes.append(bd);
+
+    gbLinha.append(gb, acoes);
+    depois.append(gbLinha);
+
+    if (q.comentario) {
+      depois.append(qsUiDobra("qs_coment_tit", (el) => qsUiComentario(el, q)));
+    }
+    /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
+     * é gabarito disfarçado. */
+    if (minha) {
+      depois.append(qsUiDobra("qs_dica_dobra", (el) => {
+        el.className = "qs-minha-dica";
+        try { el.innerHTML = matParaHtml(String(minha)); }
+        catch (e) { el.textContent = String(minha); }
+      }));
+    }
     corpo.append(depois);
     /* A CAIXA SABE EM QUAL DOS DOIS ESTADOS ESTÁ. Sem esta classe o CSS
      * teria de adivinhar pela presença de um filho, e ":has()" não
      * existe em todo navegador que roda este aplicativo. */
     corpo.className = "qs-sess qs-fez";
   }
+  /* O BOTÃO GRANDE ALTERNA DE PAPEL: "responder" enquanto falta
+   * confirmar uma escolha, "próxima" depois de gravada — o mesmo lugar
+   * na tela, o mesmo gesto de "seguir em frente", só que o que ele FAZ
+   * muda com o estado. Ligado a uma seleção (desabilitado até haver
+   * uma) em vez de sempre pronto, porque não há o que responder sem
+   * ter escolhido nada ainda. */
   $("btnQsProxima").hidden = false;
-  $("btnQsProxima").disabled = !jaFoi;
-  $("btnQsProxima").textContent = t("qs_proxima");
+  if (jaFoi) {
+    $("btnQsProxima").disabled = false;
+    $("btnQsProxima").textContent = t("qs_proxima");
+    $("btnQsProxima").title = t("qs_proxima_ajuda");
+  } else {
+    $("btnQsProxima").disabled = !qsSelecionada;
+    $("btnQsProxima").textContent = t("qs_responder");
+    $("btnQsProxima").title = t("qs_responder_ajuda");
+  }
   /* PULAR não é errar: a questão fica pendente e volta depois.
    * EMBARALHAR mexe só no que falta — reordenar o que já passou mudaria
    * o histórico da rodada. */
@@ -932,28 +1099,16 @@ function qsUiPintarSessao() {
     b.textContent = t("qs_encerrar", { c: pl.certas, n: pl.feitas, pct: pl.pct });
     b.title = t("qs_encerrar_ajuda", { f: Math.max(0, pl.total - pl.feitas) });
   }
-  if ($("btnQsMelhorar")) {
-    const bm = $("btnQsMelhorar");
-    const qAtual = qsAtual();
-    bm.hidden = !qAtual;
-    if (qAtual) {
-      const d = qsDefeitos(qAtual);
-      bm.textContent = d.length ? t("qm_btn_n", { n: d.length }) : t("qm_btn");
-      bm.title = t("qm_btn_ajuda");
-      /* questão com defeito detectado se anuncia: a pessoa não precisa
-       * desconfiar do texto sozinha */
-      bm.className = "btn-min" + (d.length ? " qm-alerta" : "");
-    }
-  }
-  if ($("btnQsSoFalhas")) {
-    const b = $("btnQsSoFalhas");
-    const lig = qsFiltroFalhasLigado();
-    const nf = qsQuantasFalhas();
-    b.hidden = !qsPlacar().feitas;
-    b.textContent = t(lig ? "qs_so_falhas_on" : "qs_so_falhas", { n: nf });
-    b.title = t("qs_so_falhas_ajuda");
-    b.className = "btn-min" + (lig ? " qs-filtro-on" : "");
-  }
+  /* "MELHORAR ESTA QUESTÃO" só existe dentro de qsUiFerramentas agora —
+   * não faz sentido nenhum sem questão ativa, e questão ativa é
+   * exatamente quando aquele ⋮ é desenhado. Sem par estático para
+   * manter em dia aqui. */
+  /* "SÓ AS QUE ERREI" TEM DE FICAR ESCONDIDO AQUI — enquanto há questão
+   * na tela, quem aparece é o gêmeo dentro do ⋮ (qsUiFerramentas); o
+   * botão estático segue existindo só para a tela de "rodada
+   * terminada" (mais acima nesta função), onde aquele ⋮ nem é
+   * desenhado. */
+  if ($("btnQsSoFalhas")) $("btnQsSoFalhas").hidden = true;
   /* O JULGADO DESTA QUESTÃO.
    *
    * O botão diz quantos já existem no tópico, e é essa contagem que
@@ -1030,11 +1185,14 @@ function qsUiPintarSessao() {
       };
     }
   }
-  if ($("btnQsEmbaralhar")) {
-    const faltam = qsPendentes().length;
-    $("btnQsEmbaralhar").hidden = faltam < 2;
-    $("btnQsEmbaralhar").textContent = t("qs_embaralhar", { n: faltam });
-    $("btnQsEmbaralhar").title = t("qs_embaralhar_ajuda");
+  /* "EMBARALHAR" TAMBÉM SÓ EXISTE DENTRO DE qsUiFerramentas agora — o
+   * mesmo caso de "melhorar esta questão", acima. */
+  qsRodapePintar();
+  if ($("btnQsEnunAlternar")) {
+    const be = $("btnQsEnunAlternar");
+    be.hidden = !q;
+    be.textContent = t(qsEnunColapsado ? "qs_enun_expandir" : "qs_enun_recolher");
+    be.title = t("qs_enun_ajuda");
   }
 }
 
@@ -2347,8 +2505,24 @@ function qsUiIniciar() {
     if (!perguntar) { segue(); return; }
     return rsGuardarSeSair().then(segue, segue);
   };
-  if ($("btnQsProxima")) $("btnQsProxima").onclick = () =>
-    sairDaQuestao(() => { qsAndar(1); qsUiPintarSessao(); });
+  if ($("btnQsProxima")) {
+    $("btnQsProxima").onclick = () => {
+      /* AINDA NÃO RESPONDIDA: este toque É o "responder" — grava a
+       * escolha e revela o gabarito NO LUGAR, sem avançar (é a mesma
+       * tela mostrando o resultado, como já acontecia ao tocar numa
+       * alternativa antes deste pedido). Só troca para "avançar" na
+       * PRÓXIMA vez que o botão for tocado, já como "próxima". */
+      if (!qsJaRespondida()) {
+        if (!qsSelecionada) return;
+        const r = qsResponder(qsSelecionada);
+        if (!r) return;
+        qsRiscadas.clear();
+        qsUiPintarSessao();
+        return;
+      }
+      sairDaQuestao(() => { qsAndar(1); qsUiPintarSessao(); });
+    };
+  }
   if ($("btnQsPular")) {
     $("btnQsPular").onclick = () => sairDaQuestao(() => {
       const q = qsAtual();
@@ -2361,7 +2535,6 @@ function qsUiIniciar() {
   if ($("btnQsEncerrar")) {
     $("btnQsEncerrar").onclick = () => qsUiEncerrarComPlacar();
   }
-  if ($("btnQsMelhorar")) $("btnQsMelhorar").onclick = () => qsUiMelhorarAbrir();
   if ($("btnQmFechar")) $("btnQmFechar").onclick = () => $("dlgQsMelhorar").close();
   if ($("btnQmConferir")) {
     $("btnQmConferir").textContent = t("qm_conferir");
@@ -2386,18 +2559,12 @@ function qsUiIniciar() {
   }
   if ($("btnQsSoFalhas")) {
     $("btnQsSoFalhas").onclick = () => {
+      qsFerFechar();
       const lig = qsFiltroFalhas(!qsFiltroFalhasLigado());
       qsUiPintarSessao();
       if (lig && !qsAtual() && !qsQuantasFalhas()) uiAlert(t("qs_so_falhas_fim"));
       matReg("questao", "filtro de erradas " + (lig ? "ligado" : "desligado"),
              qsQuantasFalhas() + " interessam");
-    };
-  }
-  if ($("btnQsEmbaralhar")) {
-    $("btnQsEmbaralhar").onclick = () => {
-      const n = qsEmbaralharRestantes();
-      qsUiPintarSessao();
-      matReg("questao", "questões restantes embaralhadas", n + " pendentes");
     };
   }
   if ($("btnQsSessFechar")) {
@@ -2406,6 +2573,18 @@ function qsUiIniciar() {
       qsUiRender();
       if (qsUiVoltarPara === "resumo") qsUiPintarBotaoResumo();
     });
+  }
+  if ($("btnQsRodapeAlternar")) {
+    $("btnQsRodapeAlternar").onclick = () => {
+      qsRodapeAberto = !qsRodapeAberto;
+      qsRodapePintar();
+    };
+  }
+  if ($("btnQsEnunAlternar")) {
+    $("btnQsEnunAlternar").onclick = () => {
+      qsEnunColapsado = !qsEnunColapsado;
+      qsUiPintarSessao();
+    };
   }
   if ($("btnQsResponderTudo")) {
     $("btnQsResponderTudo").onclick = () => qsUiResponderAbrir(qsUiListaFiltrada(),
@@ -2618,6 +2797,65 @@ function qsUiFerramentas(q) {
     };
     menu.append(bl);
   } catch (e) {}
+  /* =====================================================================
+   * EMBARALHAR / SÓ AS QUE ERREI / MELHORAR ESTA QUESTÃO — o mesmo ⋮,
+   * não um segundo do lado dele.
+   *
+   * O PRIMEIRO DESENHO MOVIA os botões estáticos (btnQsEmbaralhar etc.)
+   * para dentro deste menu com .append() — funciona uma vez, e quebra
+   * na questão seguinte: #qsSessCorpo é esvaziado a cada repintura
+   * (qsUiPintarSessao), e um nó estático que passou a morar AQUI DENTRO
+   * é destruído junto, para sempre — $() nunca mais o acha. Só apareceu
+   * testando ao vivo no navegador: o simulador de testes guarda cada
+   * id num mapa próprio, não numa árvore de verdade, e não nota a
+   * diferença entre "escondido" e "destruído".
+   *
+   * O CONSERTO: construir os três do zero a cada questão, exatamente
+   * como "copiar a questão" e "ver registro" acima — nunca há nó
+   * emprestado para perder. */
+  const faltamEmb = qsPendentes().length;
+  if (faltamEmb >= 2) {
+    const be = document.createElement("button");
+    be.type = "button";
+    be.className = "btn-min";
+    be.textContent = t("qs_embaralhar", { n: faltamEmb });
+    be.title = t("qs_embaralhar_ajuda");
+    be.onclick = () => {
+      qsFerFechar();
+      const n = qsEmbaralharRestantes();
+      qsUiPintarSessao();
+      matReg("questao", "questões restantes embaralhadas", n + " pendentes");
+    };
+    menu.append(be);
+  }
+  /* SÓ AS QUE ERREI AINDA É UM BOTÃO ESTÁTICO — é o único dos três que
+   * também precisa aparecer na tela de "rodada terminada", sem questão
+   * ativa nenhuma (onde este ⋮ nem é desenhado). Aqui dentro é só uma
+   * cópia visual do mesmo estado; o clique aciona o botão de verdade
+   * (mesma lógica ligada uma vez só, em qsUiIniciar — nada duplicado). */
+  if (qsPlacar().feitas) {
+    const ligFalhas = qsFiltroFalhasLigado();
+    const bf = document.createElement("button");
+    bf.type = "button";
+    bf.className = "btn-min" + (ligFalhas ? " qs-filtro-on" : "");
+    bf.textContent = t(ligFalhas ? "qs_so_falhas_on" : "qs_so_falhas",
+      { n: qsQuantasFalhas() });
+    bf.title = t("qs_so_falhas_ajuda");
+    bf.onclick = () => {
+      const alvo = $("btnQsSoFalhas");
+      if (alvo && alvo.onclick) alvo.onclick();
+    };
+    menu.append(bf);
+  }
+  const dQ = qsDefeitos(q);
+  const bMelhorar = document.createElement("button");
+  bMelhorar.type = "button";
+  bMelhorar.className = "btn-min" + (dQ.length ? " qm-alerta" : "");
+  bMelhorar.textContent = dQ.length ? t("qm_btn_n", { n: dQ.length }) : t("qm_btn");
+  bMelhorar.title = t("qm_btn_ajuda");
+  bMelhorar.onclick = () => { qsFerFechar(); qsUiMelhorarAbrir(); };
+  menu.append(bMelhorar);
+
   mais.append(bm, menu);
   barra.append(mais);
   return barra;
