@@ -708,6 +708,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * cor: clicar abre o que foi escrito, não um menu de trocar cor. */
 .mat-leitura mark.m-nota{background:rgba(6,182,212,.28);
   border-bottom:2px dotted rgba(6,182,212,.9)}
+/* CITAÇÃO A OUTRA LEI, DENTRO DO TEXTO: parece link (sublinhado), não
+ * marca colorida — é outra lei, não algo que o usuário destacou. */
+.lei-cita-link{background:none;border:none;padding:0;margin:0;font:inherit;
+  color:var(--info);text-decoration:underline dotted;cursor:pointer}
+.lei-cita-link:hover{text-decoration-style:solid}
+.lei-cita-preview-txt{white-space:pre-wrap;max-height:40vh;overflow:auto;
+  border:1px solid var(--borda);border-radius:6px;padding:8px 10px}
 /* DICA incorporada ao resumo: precisa ser reconhecível de relance como
    acréscimo seu, não como parte do material original. */
 .mat-leitura .mat-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.10);
@@ -5742,7 +5749,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgMarcaMenu" class="ui-modal diag-modal">
   <h3 id="mmTitulo"></h3>
   <p class="nota" id="mmTrecho"></p>
-  <p class="nota" data-i18n="mm_trocar_rot"></p>
+  <p class="nota" id="mmTrocarRot" data-i18n="mm_trocar_rot"></p>
   <div class="mat-ctrl" id="mmCores"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMmTirar"></button>
@@ -5947,6 +5954,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiNotaSalvar" data-i18n="lei_nota_salvar"></button>
     <button class="btn btn-cinza" id="btnLeiNotaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiCitaPreview" class="ui-modal">
+  <h3 id="leiCitaPreviewTitulo"></h3>
+  <p class="nota" id="leiCitaPreviewArtigo"></p>
+  <p id="leiCitaPreviewTexto" class="lei-cita-preview-txt"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiCitaPreviewAbrir"
+      data-i18n="lei_cita_abrir_lei"></button>
+    <button class="btn btn-cinza" id="btnLeiCitaPreviewFechar"
+      data-i18n="help_close"></button>
   </div>
 </dialog>
 

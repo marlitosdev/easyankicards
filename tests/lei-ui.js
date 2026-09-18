@@ -1315,6 +1315,115 @@ async function testes() {
        "U26j a nota do artigo vazou para o registro de notas por trecho");
   }
 
+  /* ---- U27: nota — ver antes, editar/excluir ao clicar (não pula
+   * direto para o editor, que era o comportamento antigo) ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+
+    api.matSelGuardadaPor("as receitas nêle arrecadadas");
+    api.leiNotaTrechoMarcar();
+    api.$("leiNotaTexto").value = "isto é a receita orçamentária";
+    api.leiNotaSalvar();
+
+    const mk = api.$("leiLeitura").querySelectorAll("mark")
+      .filter((m) => m.getAttribute("data-marca") === "nota")[0];
+    ok(!!mk, "U27pre a marca de nota nao esta pintada na leitura");
+
+    /* VER ANTES DE CLICAR: o title já carrega o texto da nota — é o
+     * navegador que mostra isso como dica ao passar o mouse, sem
+     * nenhum componente novo. */
+    ok(mk.title === "isto é a receita orçamentária",
+       "U27 o title da marca nao mostra a nota antes de clicar · veio "
+       + JSON.stringify(mk.title));
+
+    /* CLICAR ABRE O MENU, NAO O EDITOR DIRETO */
+    api.matMenuDaMarca(mk);
+    ok(api.$("dlgMarcaMenu").open === true,
+       "U27b clicar na marca de nota nao abriu o menu");
+    ok(api.$("dlgLeiNota").open !== true,
+       "U27c clicar na marca de nota pulou direto para o editor — o "
+       + "pedido foi exatamente o contrario disso");
+
+    /* SEM FILEIRA DE COR: nota nao tem cor para trocar */
+    const botoesCor = api.$("mmCores").querySelectorAll("button.marca")
+      .filter((b) => !/editar/i.test(b.textContent || ""));
+    ok(botoesCor.length === 0,
+       "U27d o menu da nota ofereceu troca de cor, que nao faz sentido "
+       + "para ela · botoes: " + botoesCor.map((b) => b.textContent));
+
+    /* A PREVIA DO TEXTO JA GRAVADO TAMBEM APARECE DENTRO DO MENU */
+    ok(/orçamentária/.test(api.$("mmCores").textContent || ""),
+       "U27e o menu nao mostra o texto da nota ja gravada");
+
+    /* "trocar por:" e rotulo das CORES — para nota, sem fileira de cor
+     * nenhuma, ele so confundiria (parece introduzir o botao editar
+     * como se fosse uma opcao de cor) */
+    ok(api.$("mmTrocarRot").hidden === true,
+       "U27e2 o rotulo 'trocar por:' ficou visivel no menu da nota, sem "
+       + "fileira de cor nenhuma para introduzir");
+
+    /* "editar" continua acessivel dali, um clique adiante */
+    const bEditar = api.$("mmCores").querySelectorAll("button")
+      .filter((b) => /editar/i.test(b.textContent || ""))[0];
+    ok(!!bEditar, "U27f nao ha botao de editar no menu da nota");
+    bEditar.onclick();
+    ok(api.$("dlgLeiNota").open === true,
+       "U27g o botao editar do menu nao abriu a caixa da nota");
+    ok(api.$("leiNotaTexto").value === "isto é a receita orçamentária",
+       "U27h a caixa de edicao nao veio com o texto atual da nota");
+    api.$("dlgLeiNota").close();
+  }
+
+  /* ---- U28: excluir a nota tambem apaga o texto guardado — sem isso a
+   * nota fica orfa, presa a um trecho que nao esta mais marcado em
+   * lugar nenhum ---- */
+  {
+    const { api } = rodar();
+    const ch = preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id = api.leisLista()[0].id;
+
+    api.matSelGuardadaPor("as receitas nêle arrecadadas");
+    api.leiNotaTrechoMarcar();
+    api.$("leiNotaTexto").value = "isto é a receita orçamentária";
+    api.leiNotaSalvar();
+
+    ok(!!api.leiNotaTrechoDe(id, "as receitas nêle arrecadadas"),
+       "U28pre a nota nao foi gravada, o teste nao exercita nada");
+
+    const mk = api.$("leiLeitura").querySelectorAll("mark")
+      .filter((m) => m.getAttribute("data-marca") === "nota")[0];
+    api.matMenuDaMarca(mk);
+
+    /* rotulagem de "excluir a nota", nao a generica "tirar esta marca" */
+    ok(api.$("btnMmTirar").textContent === api.t("lei_nota_excluir"),
+       "U28a o botao de excluir a nota nao trocou de rotulo · veio "
+       + api.$("btnMmTirar").textContent);
+
+    const pr = api.$("btnMmTirar").onclick();
+    ok(api.uiPerguntando() === true, "U28b excluiu a nota sem perguntar");
+    /* a pergunta mostra o TRECHO MARCADO, nao o texto da nota (que ja
+     * apareceu no menu, um passo atras) — e o trecho que identifica qual
+     * marca vai sumir */
+    ok(/receitas n.le arrecadadas/i.test(api.$("uiModalMsg").textContent || ""),
+       "U28c a pergunta de exclusao nao mostra o trecho marcado · veio "
+       + api.$("uiModalMsg").textContent);
+    api.uiModalResponder(true);
+    await pr;
+
+    ok(!/==@as receitas/.test(api.leiTextoDoTopico(ch)),
+       "U28d a marca de nota continua no texto depois de excluida");
+    ok(!api.leiNotaTrechoDe(id, "as receitas nêle arrecadadas"),
+       "U28e a nota ficou orfa: a marca saiu mas o texto da nota "
+       + "continua guardado em notasTrechos");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

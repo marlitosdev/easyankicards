@@ -1131,6 +1131,24 @@ function leiPintarLeitura() {
     corpo.className = "lei-art-txt";
     corpo.innerHTML = matParaHtml(leiSemPontilhado(a.texto));
 
+    /* VER A NOTA ANTES DE CLICAR. A marca "nota" carrega texto — sem
+     * mostrar ele em algum lugar, a única forma de saber o que foi
+     * escrito é clicar e abrir o editor, que é exatamente o que o
+     * pedido de baixo tira do caminho (clicar abre um MENU, não o
+     * editor direto). O title já é a dica nativa do navegador (mouse
+     * parado em cima, ou toque longo no celular) — sem componente novo. */
+    if (l) {
+      corpo.querySelectorAll('mark[data-marca="nota"]').forEach((mk) => {
+        const nota = leiNotaTrechoDe(l.id, mk.textContent || "");
+        if (nota) mk.title = nota.texto;
+      });
+    }
+
+    /* CITAÇÃO DENTRO DA PRÓPRIA LEI TAMBÉM VIRA LINK — "nos termos do
+     * art. 5º da Lei 8.666" passa a abrir um preview daquele artigo,
+     * sem sair da leitura atual (ver leiLigarCitacoesEm). */
+    leiLigarCitacoesEm(corpo, a.num);
+
     bloco.append(cab, corpo);
 
     /* AVISO DO ARTIGO QUE MAIS CAI.
@@ -1163,6 +1181,144 @@ function leiPintarLeitura() {
 
     cx.append(bloco);
   });
+}
+
+/* =====================================================================
+ * CITAÇÃO DENTRO DA PRÓPRIA LEI — abre um preview, não a lei inteira
+ *
+ * "Nos termos do art. 156-A, §1º, da CF/88" dentro do texto de OUTRA lei
+ * já tinha tudo pronto para virar link — leiCitacoesNoTexto (posição +
+ * número + rótulo) e leiCasarRotulo (acha a lei certa na biblioteca, ou
+ * devolve null em caso de dúvida) já existiam para o mesmo gesto vindo
+ * do comentário de uma questão (qsUiComentario, docs/questoes-ui.js).
+ * Só nunca tinham sido ligados DENTRO do leitor da lei.
+ *
+ * POR QUE PREVIEW, E NÃO ABRIR A LEI CITADA: abrir substituiria a leitura
+ * atual inteira (só existe um <dialog id="dlgLeiSeca">, ver leiAtual/
+ * leiIdAtual) — trocar de tela e ter que voltar para uma pergunta que
+ * "o que esse artigo diz" já responde em duas linhas. Quem realmente quer
+ * navegar tem o botão "abrir a lei inteira" dentro do preview, que aí sim
+ * reaproveita leiAbrirNoArtigo — a MESMA porta que a questão já usa,
+ * inclusive o mesmo "voltar de onde vim" (leiVoltaPara).
+ * ===================================================================== */
+
+/* Percorre o HTML já desenhado (marcas, negrito, parágrafos) SÓ NOS NÓS
+ * DE TEXTO — nunca mexe nos elementos que matParaHtml já montou. Walker
+ * escrito à mão (não document.createTreeWalker) porque childNodes/
+ * nodeType já são o que o simulador dos testes sabe navegar; a API mais
+ * nova não tinha por que existir ali. */
+function leiLigarCitacoesEm(el, origemNum) {
+  if (!el || !el.childNodes) return;
+  Array.from(el.childNodes).forEach((no) => {
+    if (no.nodeType === 3) {                       // nó de texto
+      leiCitarNoTexto(no, origemNum);
+    } else if (no.nodeType === 1) {                 // elemento — desce
+      leiLigarCitacoesEm(no, origemNum);
+    }
+  });
+}
+
+function leiCitarNoTexto(noTexto, origemNum) {
+  /* textContent, não nodeValue: os dois valem o mesmo num nó de texto de
+   * verdade, mas o texto que nasce do innerHTML (matParaHtml) só ganha
+   * textContent no simulador dos testes — nodeValue ficava vazio ali. */
+  const txt = String(noTexto.textContent || "");
+  let cits = [];
+  try { if (typeof leiCitacoesNoTexto === "function") cits = leiCitacoesNoTexto(txt); }
+  catch (e) { cits = []; }
+  /* SÓ CITAÇÃO A OUTRA LEI, NOMEADA. Sem isto, o "Art. 5º." com que o
+   * PRÓPRIO artigo começa (o texto guardado carrega o número junto — ver
+   * leiArtigoAlterar) batia como citação de rótulo vazio e virava um
+   * link morto em cima do próprio título de cada artigo, em toda lei. */
+  cits = cits.filter((c) => c && c.rotulo);
+  if (!cits.length) return;
+  const pai = noTexto.parentNode;
+  if (!pai || !pai.insertBefore) return;
+
+  let pos = 0;
+  cits.forEach((c) => {
+    if (c.ini > pos) pai.insertBefore(document.createTextNode(txt.slice(pos, c.ini)), noTexto);
+    pai.insertBefore(leiCitacaoBotao(c, origemNum), noTexto);
+    pos = c.fim;
+  });
+  if (pos < txt.length) pai.insertBefore(document.createTextNode(txt.slice(pos)), noTexto);
+  pai.removeChild(noTexto);
+}
+
+function leiCitacaoBotao(c, origemNum) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "lei-cita-link";
+  b.textContent = c.texto;
+  b.title = t("lei_cita_link_ajuda");
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    leiCitacaoPreviewAbrir(c, origemNum);
+  };
+  return b;
+}
+
+let leiCitaPreviewOrigemArt = "";
+
+/* Resolve a lei citada, busca o artigo VIGENTE nela (leiArtigosEfetivos —
+ * mostra a redação alterada, se houver, com o mesmo selo da leitura
+ * normal) e abre um diálogo pequeno por cima, sem tocar em leiAtual/
+ * leiIdAtual da lei que está sendo lida agora. */
+function leiCitacaoPreviewAbrir(c, origemNum) {
+  if (!$("dlgLeiCitaPreview")) return;
+  leiCitaPreviewOrigemArt = origemNum || "";
+  let lei = null;
+  try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; }
+
+  if (!lei) {
+    $("leiCitaPreviewTitulo").textContent = c.rotulo
+      ? t("lei_cita_nao_achou_rotulo", { l: c.rotulo }) : t("lei_cita_nao_achou");
+    $("leiCitaPreviewArtigo").textContent = "";
+    $("leiCitaPreviewTexto").textContent = "";
+    $("btnLeiCitaPreviewAbrir").hidden = true;
+    abrirModal("dlgLeiCitaPreview");
+    return;
+  }
+
+  const efetivos = leiArtigosEfetivos(lei);
+  const art = efetivos.filter((x) => x.num === c.num)[0];
+  $("leiCitaPreviewTitulo").textContent = lei.nome;
+  if (!art) {
+    $("leiCitaPreviewArtigo").textContent = "";
+    $("leiCitaPreviewTexto").textContent = t("lei_cita_artigo_nao_achou", { a: c.numCru });
+  } else {
+    $("leiCitaPreviewArtigo").textContent = art.rotulo
+      + (art.alterado ? " " + t("lei_selo_alterado_curto", { f: art.fonteAlteracao || "?" }) : "")
+      + (art.revogado ? " " + t("lei_selo_revogado", { f: art.fonteAlteracao || "?" }) : "");
+    $("leiCitaPreviewTexto").textContent = art.texto;
+  }
+  leiCitaPreviewAlvo = { lei, num: c.num };
+  $("btnLeiCitaPreviewAbrir").hidden = false;
+  abrirModal("dlgLeiCitaPreview");
+  try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru); }
+  catch (e) {}
+}
+
+let leiCitaPreviewAlvo = null;
+
+/* O ESCAPE HATCH — quem realmente quer navegar. Reaproveita 100% do
+ * caminho que a questão já usa: leiAbrirNoArtigo empilha via
+ * showModal(), e leiVoltaPara volta para a lei e o artigo de origem
+ * quando a lei citada for fechada. */
+function leiCitacaoPreviewAbrirLeiInteira() {
+  if (!leiCitaPreviewAlvo || !leiCitaPreviewAlvo.lei) return;
+  const alvo = leiCitaPreviewAlvo;
+  const disciplina = leiAtual && leiAtual.disciplina;
+  const topico = leiAtual && leiAtual.topico;
+  const idOrigem = leiIdAtual;
+  const artOrigem = leiCitaPreviewOrigemArt;
+  $("dlgLeiCitaPreview").close();
+  if (disciplina && topico) {
+    leiVoltaPara = () => {
+      try { leiAbrirNoArtigo(disciplina, topico, idOrigem, artOrigem); } catch (e) {}
+    };
+  }
+  leiAbrirNoArtigo(disciplina, topico, alvo.lei.id, alvo.num);
 }
 
 /* =====================================================================
@@ -2638,6 +2794,10 @@ function leiIniciar() {
   liga("btnLeiNotaCopiar", "copiar sugestão de nota", () => leiNotaCopiarPrompt());
   liga("btnLeiNotaSalvar", "guardar nota do artigo", () => leiNotaSalvar());
   liga("btnLeiNotaFechar", "fechar a nota do artigo", () => $("dlgLeiNota").close());
+  liga("btnLeiCitaPreviewAbrir", "abrir a lei inteira da citação",
+    () => leiCitacaoPreviewAbrirLeiInteira());
+  liga("btnLeiCitaPreviewFechar", "fechar o preview da citação",
+    () => $("dlgLeiCitaPreview").close());
   liga("btnLeiVincFechar", "fechar o vínculo", () => $("dlgLeiVincular").close());
   liga("btnLeiClozeFechar", "fechar a lacuna", () => $("dlgLeiCloze").close());
   liga("btnLeiClozeConferir", "conferir a lacuna", () => leiClozeConferir());
@@ -2688,5 +2848,8 @@ if (typeof module !== "undefined" && module.exports) {
     leiPintarEdicaoLivre,
     leiNotaAbrir, leiNotaTrechoAbrir, leiNotaTrechoMarcar,
     leiNotaSugerir, leiNotaCopiarPrompt, leiNotaSalvar,
+    leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
+    leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
+    leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
   };
 }

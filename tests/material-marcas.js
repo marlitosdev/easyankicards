@@ -1417,6 +1417,8 @@ async function testes() {
        "N3c o menu nao diz em qual trecho estou mexendo");
     ok(/prova/i.test(aP.$("mmTitulo").textContent || ""),
        "N3c2 o menu nao diz de que cor e a marca: " + aP.$("mmTitulo").textContent);
+    ok(aP.$("mmTrocarRot").hidden !== true,
+       "N3c3 o rotulo 'trocar por:' sumiu para uma marca de cor comum");
 
     /* TODAS as cores cabem: com o modal generico de tres botoes, duas
      * das cinco ficavam inalcancaveis e nao havia como saber disso. */
