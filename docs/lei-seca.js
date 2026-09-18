@@ -701,7 +701,7 @@ function leiApelidoAdicionar(idLei, rotulo) {
   /* SIGLA É UMA PALAVRA SÓ: com espaço no meio o rótulo é uma frase, e
    * o campo "apelido" separa por espaço — viraria várias siglas falsas */
   if (leiTxtChave(rotulo).indexOf(" ") >= 0) return false;
-  const sg = leiTxtChave(rotulo).toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  const sg = leiApelidoChave(rotulo).toUpperCase();
   if (sg.length < 2 || sg.length > 16) return false;
   const tem = String(l.apelido || "").split(/[\s/,]+/).filter(Boolean);
   if (tem.map((x) => leiTxtChave(x).toUpperCase()).indexOf(sg) >= 0) return false;
@@ -717,10 +717,37 @@ function leiApelidoAdicionar(idLei, rotulo) {
  * guarda na cabeça uma regra que não é a que caiu na prova. Com null,
  * quem desenha abre a modal de vincular e a escolha volta para as mãos
  * de quem sabe. */
-function leiCasarRotulo(rotulo, lista) {
+/* A CHAVE DO APELIDO: o rótulo sem espaço nem pontuação ("CF/88" ->
+ * "cf88"), a mesma normalização de leiApelidoAdicionar — o que a pessoa
+ * mandou lembrar tem de casar com o que a citação diz, senão o
+ * marcador grava e a citação seguinte continua sem achar. */
+function leiApelidoChave(x) {
+  return leiTxtChave(x).replace(/[^a-z0-9-]/g, "");
+}
+
+/* QUAIS LEIS CASAM COM O RÓTULO — a lista inteira, para quem precisa
+ * dizer POR QUE não abriu (zero, ou mais de uma). leiCasarRotulo, logo
+ * abaixo, só devolve a lei quando sobra exatamente uma. */
+function leiCandidatosDoRotulo(rotulo, lista) {
   const alvo = leiRotuloChave(rotulo);
   const ls = lista || leisLista();
   let cand = [];
+
+  /* O APELIDO EXPLÍCITO GANHA EM QUALQUER RAMO. É a escolha da pessoa
+   * ("vincular à força"), e antes ela só valia no ramo das siglas: com
+   * duas leis parecidas com a Constituição na biblioteca (a federal e a
+   * estadual, ou a CF guardada duas vezes), o ramo da Constituição
+   * ignorava o apelido, "CF/88" continuava em dúvida e o marcador
+   * parecia não ter feito nada — o caso real do print. Só vale para o
+   * rótulo de uma palavra (é o que o apelido guarda), e duas leis com o
+   * mesmo apelido continuam sendo dúvida. */
+  const chaveAp = leiApelidoChave(rotulo);
+  if (chaveAp.length >= 2 && String(rotulo || "").trim().indexOf(" ") < 0) {
+    const explicitas = ls.filter((l) => String(l.apelido || "").split(/[\s/,]+/)
+      .filter(Boolean).some((x) => leiApelidoChave(x) === chaveAp));
+    if (explicitas.length) return explicitas;
+  }
+
   if (alvo.especie === "constituicao") {
     /* O NOME NA BIBLIOTECA TAMBÉM PODE SER A SIGLA, sem a palavra
      * "Constituição" escrita por extenso em lugar nenhum — "CF 88",
@@ -737,6 +764,20 @@ function leiCasarRotulo(rotulo, lista) {
       /constitui/.test(leiTxtChave(l.especie) + " " + leiTxtChave(l.nome))
       || /^(cf|crfb)/.test(leiTxtChave(l.apelido))
       || leiRotuloChave(l.nome).especie === "constituicao");
+    /* "CF", "CF/88", "CRFB", "Constituição Federal" são a FEDERAL. Com
+     * mais de uma lei "constitucional" na biblioteca (a estadual, por
+     * exemplo), fica a que se apresenta como federal — a menos que o
+     * rótulo já diga "estadual". Se ainda restar mais de uma, é dúvida. */
+    if (cand.length > 1 && !/estad|municip|distrit/.test(leiTxtChave(rotulo))) {
+      const federais = cand.filter((l) => {
+        const nm = leiTxtChave(l.nome);
+        if (/estad|municip|distrit|organica/.test(nm)) return false;
+        return /federa|republica|brasil de 1988/.test(nm)
+          || /^(cf|crfb)/.test(leiTxtChave(l.apelido))
+          || /^(cf|crfb)\b/.test(nm);
+      });
+      if (federais.length) cand = federais;
+    }
   } else if (alvo.sigla) {
     /* a sigla casa PRIMEIRO pelo APELIDO, que é campo que a pessoa
      * preencheu de propósito (ou mandou lembrar, ver
@@ -773,6 +814,11 @@ function leiCasarRotulo(rotulo, lista) {
       if (pe.length) cand = pe;
     }
   }
+  return cand;
+}
+
+function leiCasarRotulo(rotulo, lista) {
+  const cand = leiCandidatosDoRotulo(rotulo, lista);
   return cand.length === 1 ? cand[0] : null;
 }
 
@@ -1361,7 +1407,8 @@ if (typeof module !== "undefined" && module.exports) {
     leiArtigosEfetivos, leiArtigoAlterar, leiBlocos,
     leiCitacoes, leiIdentificar, leiSubstituirArtigo, leiInserirArtigo,
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
-    leiRotuloChave, leiCasarRotulo, leiSiglasDoNome, leiApelidoAdicionar,
+    leiRotuloChave, leiCasarRotulo, leiCandidatosDoRotulo, leiApelidoChave,
+    leiSiglasDoNome, leiApelidoAdicionar,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
     leiNotaDe, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoGuardar,
