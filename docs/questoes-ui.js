@@ -1388,8 +1388,12 @@ function qsUiLeiIr(c, q, botao) {
    * usa, o botão não fez nada. */
   leiAbrir(q.disciplina, q.topico);
   const temOutras = lista.length > doTopico.length;
+  /* sigla desconhecida e nenhuma lei no tópico: a lei que a pessoa
+   * escolher na janela de vincular passa a se chamar por essa sigla */
+  const siglaLembrar = (c.rotulo && /^[A-Za-z0-9-]{2,16}$/.test(String(c.rotulo).trim()))
+    ? String(c.rotulo).trim() : "";
   try {
-    if (temOutras && typeof leiVincularAbrir === "function") leiVincularAbrir();
+    if (temOutras && typeof leiVincularAbrir === "function") leiVincularAbrir(siglaLembrar);
     else if (typeof leiNovaAbrir === "function" && !doTopico.length) leiNovaAbrir();
   } catch (e) {}
   reg("QUESTOES", "citação sem lei vinculada",
@@ -1444,6 +1448,29 @@ function qsUiLeiEscolher(botao, q, cit) {
     : t("qs_lei_esc_tit", { n: doTopico.length });
   menu.append(rot);
 
+  /* O MARCADOR DE "VINCULAR À FORÇA". Quando a citação NOMEOU uma sigla
+   * que o aplicativo não reconheceu ("CTN"), escolher a lei aqui é a
+   * pessoa dizendo o que a sigla significa — e valia só desta vez: na
+   * citação seguinte, o mesmo menu de novo. Marcado (padrão), a escolha
+   * vira o apelido da lei e todo "CTN" dali em diante abre direto. Dá
+   * para desmarcar para uma consulta avulsa, e corrigir o apelido depois
+   * em "fonte e data" da lei. */
+  const podeLembrar = !!(cit && cit.rotulo && typeof leiApelidoAdicionar === "function"
+    && leiTxtChave(cit.rotulo).replace(/[^a-z0-9-]/g, "").length >= 2
+    && leiTxtChave(cit.rotulo).indexOf(" ") < 0);
+  let lembrar = null;
+  if (podeLembrar) {
+    const lb = document.createElement("label");
+    lb.className = "qs-lei-lembrar";
+    lembrar = document.createElement("input");
+    lembrar.type = "checkbox";
+    lembrar.checked = true;
+    lembrar.id = "qsLeiLembrar";
+    lb.append(lembrar, document.createTextNode(" " + t("qs_lei_lembrar", { l: cit.rotulo })));
+    lb.title = t("qs_lei_lembrar_ajuda");
+    menu.append(lb);
+  }
+
   doTopico.forEach((l) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -1467,7 +1494,15 @@ function qsUiLeiEscolher(botao, q, cit) {
     }
     b.title = t("qs_lei_esc_item", { l: l.nome });
     b.onclick = () => {
+      const lembrarEsta = !!(lembrar && lembrar.checked);
       qsFerFechar();
+      if (lembrarEsta) {
+        try {
+          if (leiApelidoAdicionar(l.id, cit.rotulo)) {
+            reg("QUESTOES", "sigla vinculada à lei à força", cit.rotulo + " → " + l.nome);
+          }
+        } catch (e) {}
+      }
       leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
       const num = cit ? cit.num : "";
       const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, num);
@@ -1496,7 +1531,9 @@ function qsUiLeiEscolher(botao, q, cit) {
       qsFerFechar();
       leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
       leiAbrir(q.disciplina, q.topico);
-      try { leiVincularAbrir(); } catch (e) {}
+      try {
+        leiVincularAbrir(lembrar && lembrar.checked ? cit.rotulo : "");
+      } catch (e) {}
     };
     menu.append(bv);
   }

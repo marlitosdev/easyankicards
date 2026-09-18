@@ -646,6 +646,69 @@ function leiRotuloChave(rotulo) {
   return { especie, numero, sigla: "" };
 }
 
+/* AS SIGLAS QUE O PRÓPRIO NOME DA LEI JÁ DIZ.
+ *
+ * O CASO REAL, com print: a Lei 5.172/1966 estava guardada como "Lei
+ * 5.172/1966 - Código Tributário Nacional" e a citação "art. 77 do CTN"
+ * caía em "CTN não está na sua biblioteca". A sigla só casava pelo campo
+ * "apelido" — e nada no aplicativo preenche esse campo: quem cola a lei
+ * nunca o vê. Na prática, toda sigla ficava desconhecida.
+ *
+ * A sigla de um código é as iniciais do título: Código Tributário
+ * Nacional → CTN, Código de Processo Civil → CPC, Consolidação das Leis
+ * do Trabalho → CLT. Vale para cada trecho do nome (antes/depois do
+ * hífen) e com/sem a palavra "Lei" na frente — "Lei de Responsabilidade
+ * Fiscal" é LRF, mas "Lei 5.172/1966 - Código Tributário Nacional" é
+ * CTN, não LCTN. Duas leis com as mesmas iniciais dão dúvida (mais de
+ * um candidato), e dúvida continua devolvendo null: não chuta. */
+const LEI_PALAVRAS_LIGACAO = ["de", "da", "do", "das", "dos", "e", "a", "o", "as",
+  "os", "em", "no", "na", "nos", "nas", "para", "por", "com", "sem", "ao", "aos"];
+const LEI_PALAVRAS_ESPECIE = ["lei", "complementar", "decreto", "decreto-lei",
+  "emenda", "constitucional", "medida", "provisoria", "resolucao", "portaria"];
+
+function leiSiglasDoNome(nome) {
+  const out = [];
+  const palavras = (txt) => leiTxtChave(txt).split(/[^a-z0-9]+/)
+    .filter((w) => w && !/\d/.test(w) && LEI_PALAVRAS_LIGACAO.indexOf(w) < 0);
+  const somar = (ws) => {
+    const s = ws.map((w) => w[0]).join("").toUpperCase();
+    if (s.length >= 2 && out.indexOf(s) < 0) out.push(s);
+  };
+  const semEspecie = (ws) => ws.filter((w) => LEI_PALAVRAS_ESPECIE.indexOf(w) < 0);
+  const trechos = String(nome || "").split(/\s[-–—·|:]\s|[–—()]/);
+  trechos.forEach((tr) => {
+    const t2 = tr.trim();
+    /* o trecho já é a própria sigla: "Lei 5.172/1966 (CTN)" */
+    if (/^[A-ZÀ-Ú]{2,8}$/.test(t2) && out.indexOf(t2) < 0) out.push(t2);
+    const ws = palavras(t2);
+    somar(ws);
+    somar(semEspecie(ws));
+  });
+  const todas = palavras(nome);
+  somar(todas);
+  somar(semEspecie(todas));
+  return out;
+}
+
+/* VINCULAR À FORÇA: guarda a sigla que a pessoa escolheu como apelido
+ * da lei. É o mesmo campo "apelido" que o casamento já lê, só que agora
+ * alguém o preenche. Devolve true se acrescentou (false: nada novo, ou
+ * o rótulo não parece uma sigla — "art. 5º da lei acima" não vira
+ * apelido de ninguém). */
+function leiApelidoAdicionar(idLei, rotulo) {
+  const l = leiDe(idLei);
+  if (!l) return false;
+  /* SIGLA É UMA PALAVRA SÓ: com espaço no meio o rótulo é uma frase, e
+   * o campo "apelido" separa por espaço — viraria várias siglas falsas */
+  if (leiTxtChave(rotulo).indexOf(" ") >= 0) return false;
+  const sg = leiTxtChave(rotulo).toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  if (sg.length < 2 || sg.length > 16) return false;
+  const tem = String(l.apelido || "").split(/[\s/,]+/).filter(Boolean);
+  if (tem.map((x) => leiTxtChave(x).toUpperCase()).indexOf(sg) >= 0) return false;
+  tem.push(sg);
+  return !!leiGuardar({ id: l.id, apelido: tem.join(" ") });
+}
+
 /* CASAR O RÓTULO COM A BIBLIOTECA.
  *
  * DEVOLVE null QUANDO HÁ DÚVIDA — zero candidatos ou mais de um. É a
@@ -675,10 +738,27 @@ function leiCasarRotulo(rotulo, lista) {
       || /^(cf|crfb)/.test(leiTxtChave(l.apelido))
       || leiRotuloChave(l.nome).especie === "constituicao");
   } else if (alvo.sigla) {
-    /* a sigla casa pelo APELIDO, que é campo que a pessoa preencheu de
-     * propósito — nunca pelo nome, senão "LEI" acharia todas */
+    /* a sigla casa PRIMEIRO pelo APELIDO, que é campo que a pessoa
+     * preencheu de propósito (ou mandou lembrar, ver
+     * leiApelidoAdicionar) — e por isso a escolha dela ganha do que o
+     * nome sugere: forçar "CTN" para outra lei tem de funcionar mesmo
+     * que uma terceira tenha as iniciais parecidas. Nunca pelo nome
+     * solto, senão "LEI" acharia todas. */
     const sg = leiTxtChave(alvo.sigla);
     cand = ls.filter((l) => leiTxtChave(l.apelido).split(/[\s/,]+/).indexOf(sg) >= 0);
+    if (!cand.length) {
+      /* sem apelido nenhum: as iniciais do título ("CTN" = Código
+       * Tributário Nacional) e, para o nome por extenso, o título
+       * inteiro dentro do nome guardado. Título por extenso só conta
+       * com DUAS palavras ou mais — uma palavra solta ("lei") acharia
+       * tudo. */
+      const porIniciais = ls.filter((l) =>
+        leiSiglasDoNome(l.nome).map((x) => leiTxtChave(x)).indexOf(sg) >= 0);
+      if (porIniciais.length) cand = porIniciais;
+      else if (sg.indexOf(" ") > 0) {
+        cand = ls.filter((l) => leiTxtChave(l.nome).indexOf(sg) >= 0);
+      }
+    }
   } else if (alvo.numero) {
     cand = ls.filter((l) => String(l.numero || "").replace(/[.]/g, "") === alvo.numero);
     /* lei colada sem cabeçalho não tem "numero" preenchido; o número
@@ -1281,7 +1361,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiArtigosEfetivos, leiArtigoAlterar, leiBlocos,
     leiCitacoes, leiIdentificar, leiSubstituirArtigo, leiInserirArtigo,
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
-    leiRotuloChave, leiCasarRotulo,
+    leiRotuloChave, leiCasarRotulo, leiSiglasDoNome, leiApelidoAdicionar,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
     leiNotaDe, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoGuardar,

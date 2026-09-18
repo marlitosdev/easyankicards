@@ -742,7 +742,7 @@ function rodar() {
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiPintar, leiIrArtigo, leiAbrirNoArtigo, leiIrAbrir, leiNovaAbrir,
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
-    leiRotuloChave, leiCasarRotulo,
+    leiRotuloChave, leiCasarRotulo, leiSiglasDoNome, leiApelidoAdicionar,
     leiSubstituirArtigo, leiInserirArtigo,
     leiArtigos, leiArtigo, leiBlocos, leiCitacoes, leiIdentificar, leiNumNormal,
     leiNumOrdem, leiEmenta, leisLerTudo, leisLista, leiId, leiDe, leiGuardar,
