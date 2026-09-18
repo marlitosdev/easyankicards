@@ -1988,10 +1988,21 @@ function leiDisciplinasDe(l) {
   return Object.keys(vistas);
 }
 
-function leiVincularAbrir() {
+function leiVincularAbrir(siglaParaLembrar) {
   const cx = $("leiVincCx");
   if (!cx) return;
   cx.innerHTML = "";
+  /* VINCULAR À FORÇA, POR ESTA PORTA TAMBÉM: quando a janela foi aberta
+   * a partir de uma citação de sigla desconhecida ("CTN"), escolher a
+   * lei aqui é dizer o que a sigla significa — e a sigla vira apelido
+   * da lei escolhida. A sigla fica na CLOSURE desta chamada, e não numa
+   * variável global à espera: uma variável esquecida vazaria para a
+   * próxima vez que alguém abrisse esta janela por outro motivo. */
+  const sigla = String(siglaParaLembrar || "");
+  if ($("leiVincLembrar")) {
+    $("leiVincLembrar").hidden = !sigla;
+    if (sigla) $("leiVincLembrar").textContent = t("lei_vinc_lembrar", { l: sigla });
+  }
   const minha = leisChaveComparavel(leiAtual.chave);
   const outras = leisLista().filter((l) =>
     !(l.topicos || []).some((c) => leisChaveComparavel(c) === minha));
@@ -2016,6 +2027,13 @@ function leiVincularAbrir() {
     b.textContent = t("lei_vincular_este");
     b.onclick = () => {
       leiLigar(l.id, leiAtual.chave);
+      if (sigla) {
+        try {
+          if (leiApelidoAdicionar(l.id, sigla)) {
+            leiReg("vinculo", "sigla vinculada à lei à força", sigla + " → " + l.nome);
+          }
+        } catch (e) {}
+      }
       $("dlgLeiVincular").close();
       leiTrocarPara(l.id);
     };
@@ -2066,6 +2084,10 @@ function leiProcAbrir() {
    * escolhendo, não o formulário chutando por ela. */
   $("leiProcData").value = l.consultadaEm || "";
   $("leiProcVersao").value = l.versao || "";
+  if ($("leiProcApelido")) {
+    $("leiProcApelido").value = String(l.apelido || "").split(/[\s/,]+/)
+      .filter(Boolean).join(", ");
+  }
   abrirModal("dlgLeiProc");
 }
 
@@ -2110,6 +2132,12 @@ function leiProcSalvar() {
     fonte: String($("leiProcFonte").value || "").trim(),
     consultadaEm: String($("leiProcData").value || "").trim(),
     versao: String($("leiProcVersao").value || "").trim(),
+    /* as siglas viram a lista do campo "apelido" que o casamento já lê;
+     * apagar uma daqui é como se desfaz um vínculo à força errado */
+    apelido: $("leiProcApelido")
+      ? String($("leiProcApelido").value || "").split(/[\s/,;]+/)
+          .filter(Boolean).map((x) => x.toUpperCase()).join(" ")
+      : leiDe(leiIdAtual).apelido || "",
   });
   $("dlgLeiProc").close();
   try { leiReg("procedencia", "procedência atualizada",

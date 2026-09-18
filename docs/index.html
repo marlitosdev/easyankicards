@@ -1517,6 +1517,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    lê como uma frase. A classe é própria para não mexer no ⋮ — a regra
    "[hidden]" continua vencendo as duas por especificidade. */
 .qs-lei-menu{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+/* O MARCADOR DE "VINCULAR À FORÇA" no menu de escolher a lei: uma linha,
+   antes das opções — quem escolhe já leu a pergunta, e a caixa está
+   marcada de saída (o gesto comum é querer lembrar). */
+.qs-lei-lembrar{display:flex;gap:6px;align-items:flex-start;font-size:11.5px;
+  color:var(--sutil);line-height:1.35;cursor:pointer}
+.qs-lei-lembrar input{margin-top:2px}
 .qs-fer-rot{font-size:11.5px;color:var(--sutil);text-transform:none}
 /* A NOTA DO ARTIGO, dentro do botão de cada lei — o que ajuda a
    escolher sem abrir as duas para conferir. */
@@ -5997,6 +6003,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <input type="date" id="leiProcData">
   <label class="nota" data-i18n="lei_proc_versao"></label>
   <input type="text" id="leiProcVersao" placeholder="atualizada até a EC 126/2022">
+  <label class="nota" data-i18n="lei_proc_apelido"></label>
+  <input type="text" id="leiProcApelido" placeholder="CTN, LRF">
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiProcSalvar" data-i18n="lei_proc_salvar"></button>
     <button class="btn btn-cinza" id="btnLeiProcFechar" data-i18n="help_close"></button>
@@ -6041,6 +6049,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgLeiVincular" class="ui-modal diag-modal">
   <h3 data-i18n="lei_vinc_titulo"></h3>
   <p class="nota" data-i18n="lei_vinc_ajuda"></p>
+  <p class="nota" id="leiVincLembrar" hidden></p>
   <div id="leiVincCx" class="duv-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiVincFechar" data-i18n="help_close"></button>

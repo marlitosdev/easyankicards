@@ -495,6 +495,157 @@ async function testes() {
        + "lei \"CF 88\" pelo caminho da tela: " + JSON.stringify(alvo));
   }
 
+  /* ==============================================================
+   * L51-L56: "CTN" NÃO ESTÁ NA BIBLIOTECA — MAS ESTÁ
+   *
+   * O CASO REAL, com print: a lei estava guardada como "Lei 5.172/1966 -
+   * Código Tributário Nacional" e a citação "art. 77 do CTN" caía em
+   * "não está na sua biblioteca". A sigla só casava pelo campo
+   * "apelido", que nada no aplicativo preenche. Dois consertos: a sigla
+   * se reconhece pelas iniciais do título, e quando não dá, a pessoa
+   * vincula à força — a escolha vira apelido da lei.
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    api.leiGuardar({ id: "lei_ctn_x", nome: "Lei 5.172/1966 - Código Tributário Nacional",
+      especie: "Lei", numero: "5.172", texto: "Art. 77. As taxas cobradas..." });
+    api.leiGuardar({ id: "lei_lrf_x", nome: "LC 101/2000 - Lei de Responsabilidade Fiscal",
+      especie: "Lei Complementar", numero: "101", texto: "Art. 1º. Esta Lei..." });
+    const ls = api.leisLista();
+    const idDe = (r) => (api.leiCasarRotulo(r, ls) || {}).id || null;
+
+    ok(idDe("CTN") === "lei_ctn_x",
+       "L51 'CTN' nao casou com 'Lei 5.172/1966 - Codigo Tributario Nacional' "
+       + "guardada sem apelido — o caso do print");
+    ok(idDe("Código Tributário Nacional") === "lei_ctn_x",
+       "L51a o nome por extenso tambem devia casar: " + idDe("Código Tributário Nacional"));
+    ok(idDe("LRF") === "lei_lrf_x",
+       "L51b 'LRF' nao casou com 'Lei de Responsabilidade Fiscal': " + idDe("LRF"));
+    ok(api.leiSiglasDoNome("Lei 5.172/1966 - Código Tributário Nacional").indexOf("CTN") >= 0
+       && api.leiSiglasDoNome("Lei 5.172/1966 - Código Tributário Nacional").indexOf("LCTN") >= 0,
+       "L51c as iniciais do nome saem com e sem a palavra 'Lei'");
+
+    /* NÃO CHUTA: sigla que ninguém tem, e palavra solta que acharia tudo */
+    ok(idDe("XPTO") === null, "L52 sigla sem dono casou com alguma lei");
+    ok(idDe("Lei") === null, "L52a a palavra solta 'Lei' casou — acharia todas");
+
+    /* DÚVIDA CONTINUA SENDO null: duas leis com as mesmas iniciais */
+    api.leiGuardar({ id: "lei_ctn_y", nome: "Outra - Código Tributário Nacional (versão)",
+      especie: "Lei", numero: "1", texto: "Art. 1º. x" });
+    ok(api.leiCasarRotulo("CTN", api.leisLista()) === null,
+       "L53 duas leis com as iniciais CTN: devia ser duvida (null), abriu uma "
+       + "calado");
+    /* E O APELIDO EXPLÍCITO DESEMPATA — é a escolha da pessoa */
+    ok(api.leiApelidoAdicionar("lei_ctn_x", "ctn") === true,
+       "L53a nao acrescentou o apelido");
+    ok((api.leiCasarRotulo("CTN", api.leisLista()) || {}).id === "lei_ctn_x",
+       "L53b o apelido explicito nao ganhou da sugestao do nome");
+    ok(api.leiApelidoAdicionar("lei_ctn_x", "CTN") === false,
+       "L53c acrescentar de novo devia ser no-op");
+    ok(api.leiApelidoAdicionar("lei_ctn_x", "art. 5º da lei acima") === false
+       && api.leiApelidoAdicionar("lei_ctn_x", "X") === false,
+       "L53d um rotulo que nao parece sigla virou apelido");
+  }
+  {
+    /* O MENU: "vincular à força" com o marcador */
+    const { api } = rodar();
+    const ch = api.matChave(DISC, TOP);
+    api.leiGuardar({ id: "lei_a1", nome: "Lei 5.172/1966", especie: "Lei",
+      numero: "5.172", texto: "Art. 77. As taxas." });
+    api.leiGuardar({ id: "lei_a2", nome: "Lei 4.320/1964", especie: "Lei",
+      numero: "4.320", texto: "Art. 12. A despesa." });
+    api.leiLigar("lei_a1", ch); api.leiLigar("lei_a2", ch);
+    const q = { disciplina: DISC, topico: TOP, comentario: "" };
+    const cit = api.leiCitacoesNoTexto("art. 77 do CTN")[0];
+    ok(api.qsUiLeiAlvo(cit, api.leisLista(), api.leisDoTopico(ch)).lei === null,
+       "L54-pre o cenario devia ter 'CTN' desconhecida (nome sem o titulo)");
+
+    const bt = api.document.createElement("button");
+    api.document.createElement("div").append(bt);
+    const menu = api.qsUiLeiEscolher(bt, q, cit);
+    const caixa = menu.querySelectorAll("input")[0];
+    ok(!!caixa && caixa.checked === true,
+       "L54 falta o marcador de lembrar a sigla, ou ele nasceu desmarcado");
+
+    /* marcado: escolher a lei vira apelido, e a citação seguinte abre direto */
+    const opcao = Array.from(menu.children || []).find((b) =>
+      String(b.textContent || "").indexOf("5.172") >= 0 && b.title);
+    ok(!!opcao, "L54a nao achei a opcao da lei 5.172 no menu");
+    opcao.onclick();
+    ok(/CTN/.test(api.leiDe("lei_a1").apelido || ""),
+       "L55 escolher a lei com o marcador ligado nao gravou 'CTN' como apelido: "
+       + JSON.stringify(api.leiDe("lei_a1").apelido));
+    ok((api.qsUiLeiAlvo(cit, api.leisLista(), api.leisDoTopico(ch)).lei || {}).id === "lei_a1",
+       "L55a depois de vincular, a mesma citacao ainda nao resolve sozinha");
+
+    /* desmarcado: consulta avulsa, nada é lembrado */
+    api.leiGuardar({ id: "lei_a2", apelido: "" });
+    const cit2 = api.leiCitacoesNoTexto("art. 12 do ZZZ")[0];
+    api.qsFerFechar();
+    const menu2 = api.qsUiLeiEscolher(bt, q, cit2);
+    menu2.querySelectorAll("input")[0].checked = false;
+    Array.from(menu2.children || []).find((b) =>
+      String(b.textContent || "").indexOf("4.320") >= 0 && b.title).onclick();
+    ok(!/ZZZ/.test(api.leiDe("lei_a2").apelido || ""),
+       "L56 com o marcador DESLIGADO a sigla foi lembrada mesmo assim");
+
+    /* citação SEM sigla nomeada: não há o que lembrar, não há marcador */
+    api.qsFerFechar();
+    const menu3 = api.qsUiLeiEscolher(bt, q, api.leiCitacoesNoTexto("o art. 12 e claro")[0]);
+    ok(menu3.querySelectorAll("input").length === 0,
+       "L56a o marcador apareceu numa citacao que nao nomeou sigla nenhuma");
+  }
+  {
+    /* A JANELA DE VINCULAR UMA LEI JÁ GUARDADA, aberta por uma sigla */
+    const { api } = rodar();
+    const ch = api.matChave(DISC, TOP);
+    api.matIniciar(); api.leiIniciar();
+    api.matGravar(ch, "Resumo.", { disciplina: DISC, topico: TOP });
+    api.leiGuardar({ id: "lei_b1", nome: "Lei 8.666/1993", especie: "Lei",
+      numero: "8.666", texto: "Art. 1º. Normas gerais." });
+    api.leiGuardar({ id: "lei_b2", nome: "Lei 4.320/1964", especie: "Lei",
+      numero: "4.320", texto: "Art. 12. A despesa." });
+    api.leiLigar("lei_b2", ch);
+    api.leiAbrir(DISC, TOP);
+    api.leiVincularAbrir("LICIT");
+    ok(api.$("leiVincLembrar").hidden === false
+       && /LICIT/.test(api.$("leiVincLembrar").textContent || ""),
+       "L57 a janela nao avisa que a sigla vai ser lembrada");
+    const bts = api.$("leiVincCx").querySelectorAll("button");
+    ok(bts.length === 1, "L57a devia ter 1 lei para vincular · " + bts.length);
+    bts[0].onclick();
+    ok(/LICIT/.test(api.leiDe("lei_b1").apelido || ""),
+       "L57b vincular por esta janela nao gravou a sigla como apelido");
+
+    /* aberta SEM sigla (o botão comum do leitor), nada é lembrado nem avisado */
+    api.leiGuardar({ id: "lei_b1", apelido: "" });
+    api.leiAbrir(DISC, TOP, "lei_b2");
+    api.leiDesligar("lei_b1", ch);
+    api.leiVincularAbrir();
+    ok(api.$("leiVincLembrar").hidden === true,
+       "L57c a janela aberta sem sigla ainda mostra o aviso de lembrar");
+    api.$("leiVincCx").querySelectorAll("button")[0].onclick();
+    ok(!(api.leiDe("lei_b1").apelido || ""),
+       "L57d vincular sem sigla gravou um apelido do nada");
+  }
+  {
+    /* DESFAZER UM VÍNCULO ERRADO: o campo em "fonte e data" */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.matGravar(api.matChave(DISC, TOP), "R.", { disciplina: DISC, topico: TOP });
+    api.leiGuardar({ id: "lei_c1", nome: "Lei 5.172/1966", especie: "Lei",
+      numero: "5.172", apelido: "CTN LRF", texto: "Art. 1º. x" });
+    api.leiLigar("lei_c1", api.matChave(DISC, TOP));
+    api.leiAbrir(DISC, TOP, "lei_c1");
+    api.leiProcAbrir();
+    ok(api.$("leiProcApelido").value === "CTN, LRF",
+       "L58 o campo de siglas nao mostra o apelido guardado: " + api.$("leiProcApelido").value);
+    api.$("leiProcApelido").value = "ctn";
+    api.leiProcSalvar();
+    ok(api.leiDe("lei_c1").apelido === "CTN",
+       "L58a apagar uma sigla do campo nao a desfez: " + api.leiDe("lei_c1").apelido);
+  }
+
   if (!n) falhas.push("nenhuma asserção rodou — o arquivo abortou no meio");
   return falhas;
 }
