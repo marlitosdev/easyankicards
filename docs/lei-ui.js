@@ -3316,10 +3316,12 @@ const LEI_NUMERACAO_MIN_ARTIGOS = 8;
 let leiPreCtx = null;
 
 /* Há o que limpar OU a numeração está fora de sequência? */
-function leiPreAnalisar(texto) {
-  const pre = leiPreprocessar(texto);
+function leiPreAnalisar(texto, opc) {
+  const pre = leiPreprocessar(texto, opc);
   const arts = leiArtigos(texto);
-  const num = arts.length >= LEI_NUMERACAO_MIN_ARTIGOS ? leiNumeracao(arts) : { problemas: [], graves: [] };
+  /* numeração não se critica numa lei que ALTERA: ela só cita artigos soltos */
+  const num = (arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !(opc && opc.semNumeracao))
+    ? leiNumeracao(arts) : { problemas: [], graves: [] };
   return { pre, num, deve: pre.mudancas.length > 0 || num.graves.length > 0 };
 }
 
@@ -3500,7 +3502,7 @@ function leiPrePintar() {
   const arts = leiArtigos(res.texto);
   const pn = $("leiPreNumeracao");
   pn.innerHTML = "";
-  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS) {
+  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao) {
     pn.hidden = true;
   } else {
     const num = leiNumeracao(arts);
@@ -3583,6 +3585,7 @@ function leiPreCancelar() {
  * A pessoa escolhe; escolher "só os presentes" é o modo seguro.
  * ===================================================================== */
 let leiUpdModoAusentes = "revogar";
+let leiUpdAlteradora = null;      /* {texto, par}: a lei que ALTERA, lida, enquanto se decide */
 let leiUpdInfo = null;
 let leiCobCtx = null;
 
@@ -3623,6 +3626,7 @@ function leiCobPintar() {
     av.append(d);
   });
   const ops = [];
+  if (c.g.alt) ops.push("alteracoes");
   if (c.g.baixa || c.g.alt) ops.push("presentes");
   if (c.g.baixa && !c.g.alt) ops.push("revogar");
   if (!c.g.baixa && !c.g.alt && c.g.ident) ops.push("continuar");
@@ -3935,6 +3939,9 @@ function leiAtualizarAbrir() {
   leiUpdIdx = -1;
   leiUpdModoAusentes = "revogar";
   leiUpdInfo = null;
+  leiUpdAlteradora = null;
+  if ($("leiUpdModoCompleta")) { $("leiUpdModoCompleta").checked = true; $("leiUpdModoAlt").checked = false; }
+  if ($("leiUpdGuardarAltCx")) $("leiUpdGuardarAltCx").hidden = true;
   abrirModal("dlgLeiAtualizar");
   leiReg("atualizacao", "janela de atualização aberta", "");
 }
@@ -3943,9 +3950,16 @@ function leiAtualizarComparar(opc) {
   const o = opc || {};
   const l = leiDe(leiIdAtual);
   if (!l) return false;
-  const fonte = String($("leiUpdFonte").value || "").trim();
   const novoTexto = String($("leiUpdTexto").value || "");
+  const modoAlt = !!(o.modoAlt || ($("leiUpdModoAlt") && $("leiUpdModoAlt").checked));
+  let fonte = String($("leiUpdFonte").value || "").trim();
+  /* lei que ALTERA: a norma que motivou a atualização é ela mesma — o título serve de fonte */
+  if (!fonte && modoAlt) {
+    const idf = leiIdentificar(novoTexto);
+    if (idf) { fonte = idf.curto; $("leiUpdFonte").value = fonte; }
+  }
   if (!fonte) { $("leiUpdAviso1").textContent = t("lei_upd_sem_fonte"); return false; }
+  if (modoAlt) return leiAtualizarAlteracoes(l, fonte, novoTexto, o);
   /* cada etapa que abre uma tela volta aqui, dizendo o que já foi feito */
   const seguinte = (extra) => leiAtualizarComparar(Object.assign({}, o, extra));
 
@@ -4009,6 +4023,12 @@ function leiAtualizarComparar(opc) {
     const g = leiUpdGuardas(l, novoTexto);
     if (g.avisos.length) {
       leiUpdGuardaAbrir(g, (escolha) => {
+        /* o texto é de uma lei que ALTERA: recomeça no modo "só alterações" */
+        if (escolha === "alteracoes") {
+          if ($("leiUpdModoAlt")) $("leiUpdModoAlt").checked = true;
+          leiAtualizarComparar({ modoAlt: true });
+          return;
+        }
         leiUpdModoAusentes = escolha === "presentes" ? "presentes" : "revogar";
         seguinte({ separado: true, limpo: true, conferido: true, guardado: true });
       });
@@ -4037,6 +4057,69 @@ function leiAtualizarComparar(opc) {
     + (cmp.soFormatacao.length ? " · " + cmp.soFormatacao.length + " só de formatação" : "")
     + (leiUpdModoAusentes === "presentes" ? " · só os artigos presentes" : ""));
   return true;
+}
+
+/* =====================================================================
+ * ATUALIZAR COM UMA LEI QUE ALTERA — "só alterações"
+ *
+ * O texto colado é a LC 95/2022, 112/2023 ou 145/2024: não traz o Código
+ * inteiro, traz artigos citados com "[...]", (NR), (AC) e REVOGADO. Aqui não
+ * se compara "lei inteira contra lei inteira": lê-se cada artigo-alvo por
+ * endereço (parágrafo, inciso, alínea), mescla-se no artigo VIGENTE e a
+ * pessoa decide, artigo a artigo, com o texto proposto ao lado do atual —
+ * e pode editar o texto proposto antes de aceitar. Os artigos que a lei
+ * alteradora NÃO cita nunca são tocados (nada vira "revogado" por ausência).
+ * ===================================================================== */
+function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
+  const seguinte = (extra) => leiAtualizarComparar(Object.assign({}, o, { modoAlt: true }, extra));
+  /* 1. limpeza (cabeçalho de página, anexos…) SEM tirar as aspas que separam o artigo citado */
+  if (!o.limpo) {
+    const an = leiPreAnalisar(novoTexto, { manterAspas: true, semNumeracao: true });
+    if (an.deve) {
+      leiRevisarColagemAbrir({
+        modo: "atualizar", texto: novoTexto, pre: an.pre, semNumeracao: true,
+        aoConfirmar: (res) => { $("leiUpdTexto").value = res.texto; seguinte({ limpo: true }); },
+      });
+      return false;
+    }
+  }
+  const texto = String($("leiUpdTexto").value || novoTexto);
+  const par = leiLerAlteradora(texto, l);
+  if (!par.blocos.length && !par.revogacoes.length) { uiAlert(t("lei_upd_alt_nenhuma")); return false; }
+  /* 2. o texto fala DESTA lei? */
+  if (!o.guardado && !leiAlteradoraCitaLei(texto, l)) {
+    leiUpdGuardaAbrir({ avisos: [{ k: "nao_cita", nome: l.nome }], baixa: false, alt: false, ident: true },
+      () => seguinte({ limpo: true, guardado: true }));
+    return false;
+  }
+  const itens = leiItensDaAlteradora(l, par);
+  if (!itens.length) { uiAlert(t("lei_upd_sem_mudanca")); return false; }
+  leiUpdComparo = itens;
+  leiUpdInfo = { soFormatacao: [], naoComparados: [], cobertura: { pct: 1 }, avisos: par.avisos, alteradora: par };
+  leiUpdModoAusentes = "presentes";
+  leiUpdAlteradora = { texto, par };
+  leiUpdIdx = 0;
+  leiUpdFonteGlobal = fonte;
+  $("leiUpdPasso1").hidden = true;
+  $("leiUpdPasso2").hidden = false;
+  leiUpdMostrar();
+  leiReg("atualizacao", "comparação de lei que altera aberta", fonte + " · " + itens.length + " artigos-alvo · "
+    + par.proprios + " artigos próprios da lei alteradora · " + par.avisos.length + " aviso(s)");
+  return true;
+}
+
+/* guardar também o texto da lei que ALTERA, como lei própria (sem vínculo com tópicos) */
+function leiGuardarAlteradora() {
+  const a = leiUpdAlteradora;
+  if (!a || !a.par.ident) return null;
+  const ident = a.par.ident;
+  const ente = leiEnteDoTexto(a.texto);
+  if (leiAcharIgual({ nome: ident.nome, especie: ident.especie, numero: ident.numero, ano: ident.ano, ente })) return null;
+  const r = leiGuardar({ id: leiIdLivre(ident.nome, ente), nome: ident.nome, especie: ident.especie,
+    numero: ident.numero, ano: ident.ano, texto: a.texto, topicos: [], consultadaEm: leisHojeISO(),
+    ...(ente ? { ente } : {}) });
+  try { leiReg("atualizacao", "lei que altera guardada na biblioteca", ident.nome); } catch (e) {}
+  return r;
 }
 
 function leiUpdMostrar() {
@@ -4091,6 +4174,28 @@ function leiUpdMostrar() {
       cx.append(r1, d);
     });
 
+  /* PARCIAL: o texto proposto é uma MESCLA — a pessoa pode conferir e corrigir antes de aceitar */
+  if (item.parcial && item.tipo !== "revogado") {
+    const rot = document.createElement("div");
+    rot.className = "qm-rot";
+    rot.textContent = t("lei_upd_proposto");
+    const ta = document.createElement("textarea");
+    ta.id = "leiUpdProposto";
+    ta.rows = 8;
+    ta.style.width = "100%";
+    ta.style.boxSizing = "border-box";
+    ta.value = item.novo;
+    ta.oninput = () => { item.novo = ta.value; };
+    cx.append(rot, ta);
+  }
+  if (leiUpdInfo && leiUpdInfo.avisos && leiUpdInfo.avisos.length) {
+    leiUpdInfo.avisos.slice(0, 6).forEach((a) => {
+      const n = document.createElement("div");
+      n.className = "nota";
+      n.textContent = t(a.k === "anexo" ? "lei_upd_anexo_nota" : "lei_upd_revogar_ausente", { t: a.texto, a: a.texto });
+      cx.append(n);
+    });
+  }
   if (leiUpdInfo) {
     if (leiUpdInfo.soFormatacao.length) {
       const n = document.createElement("div");
@@ -4171,11 +4276,22 @@ function leiAtualizarAplicar() {
 
   const alt = Object.assign({}, l.alteracoes || {});
   aceitos.forEach((item) => {
+    /* HISTÓRICO POR ARTIGO: cada lei que mexeu nele fica registrada, na ordem em que foi
+     * aplicada, com a data DA LEI (para avisar de aplicação fora de ordem) */
+    const prev = alt[item.num];
+    const hoje = leisHojeISO();
+    const hist = (prev && Array.isArray(prev.historico)) ? prev.historico.slice()
+      : (prev ? [{ fonte: prev.fonteAlteracao || "", data: prev.data || "", dataLei: prev.dataLei || "", tipo: "anterior" }] : []);
+    hist.push({ fonte: item.fonteItem || leiUpdFonteGlobal, data: hoje, dataLei: item.dataLei || "", tipo: item.tipo });
+    const fontes = [];
+    hist.forEach((h) => { if (h.fonte && fontes.indexOf(h.fonte) < 0) fontes.push(h.fonte); });
     alt[item.num] = {
       texto: item.tipo === "revogado" ? "" : item.novo,
-      fonteAlteracao: leiUpdFonteGlobal,
-      data: leisHojeISO(),
+      fonteAlteracao: fontes.join("; "),
+      data: hoje,
       revogado: item.tipo === "revogado",
+      historico: hist,
+      dataLei: item.dataLei || "",
     };
   });
 
@@ -4189,6 +4305,8 @@ function leiAtualizarAplicar() {
 
   leiReg("atualizacao", "versão atualizada",
          leiUpdFonteGlobal + " · " + aceitos.length + " artigos");
+  if (leiUpdAlteradora && $("leiUpdGuardarAlt") && $("leiUpdGuardarAlt").checked) leiGuardarAlteradora();
+  leiUpdAlteradora = null;
   $("dlgLeiAtualizar").close();
   leiUpdComparo = null;
   leiPintar();
@@ -4687,6 +4805,11 @@ function leiIniciar() {
   liga("btnLeiCobVoltar", "voltar da conferência da versão nova", () => leiCobCancelar());
   liga("btnLeiCobX", "fechar a conferência da versão nova", () => leiCobCancelar());
   liga("btnMatLeis", "abrir a biblioteca de leis", () => leiBibAbrir());
+  if ($("leiUpdModoAlt")) {
+    const mostrar = () => { $("leiUpdGuardarAltCx").hidden = !$("leiUpdModoAlt").checked; };
+    $("leiUpdModoAlt").onchange = mostrar;
+    $("leiUpdModoCompleta").onchange = mostrar;
+  }
   liga("btnQsVincX", "fechar vínculos de lei", () => $("dlgQsVinc").close());
   liga("btnQsVincFechar", "fechar vínculos de lei", () => $("dlgQsVinc").close());
   liga("btnQsVincEscX", "fechar escolha de lei", () => $("dlgQsVincEsc").close());

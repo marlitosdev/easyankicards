@@ -6372,6 +6372,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgLeiAtualizar" class="ui-modal diag-modal">
   <h3 data-i18n="lei_upd_titulo"></h3>
   <p class="nota" data-i18n="lei_upd_intro"></p>
+  <div id="leiUpdModoCx" class="lei-dup-lista">
+    <label class="lei-dup-op"><input type="radio" name="leiUpdModo" id="leiUpdModoCompleta" checked>
+      <span class="lei-dup-op-tit" data-i18n="lei_upd_modo_completa"></span></label>
+    <label class="lei-dup-op"><input type="radio" name="leiUpdModo" id="leiUpdModoAlt">
+      <span class="lei-dup-op-tit" data-i18n="lei_upd_modo_alt"></span></label>
+    <label class="lei-dup-original" id="leiUpdGuardarAltCx" hidden>
+      <input type="checkbox" id="leiUpdGuardarAlt" checked>
+      <span data-i18n="lei_upd_guardar_alt"></span></label>
+  </div>
 
   <div id="leiUpdPasso1">
     <label class="nota" data-i18n="lei_upd_fonte_rot"></label>
