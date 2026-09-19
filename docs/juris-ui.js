@@ -30,7 +30,8 @@ let jurValoresLidos = {};
 let jurParafraseColada = false;
 /* os campos do formulário (o relator existe no julgado, não na entrada) */
 const JUR_CAMPOS_FORM = { tribunal: "jurTribunal", classe: "jurClasse",
-  numero: "jurNumero", data: "jurData", orgao: "jurOrgao", fonte: "jurFonte" };
+  numero: "jurNumero", data: "jurData", orgao: "jurOrgao", fonte: "jurFonte",
+  precedentes: "jurPrecedentes" };
 let jurFiltroTag = "";          /* etiqueta escolhida na lista */
 /* "ler" ou "incluir" — ver jurPintarModo */
 let jurModo = "ler";
@@ -143,7 +144,7 @@ function jurTrocarModo(m) {
 
 function jurLimparForm() {
   ["jurColar", "jurTese", "jurResumo", "jurTribunal", "jurClasse", "jurNumero",
-   "jurData", "jurOrgao", "jurFonte"].forEach((id) => {
+   "jurData", "jurOrgao", "jurFonte", "jurPrecedentes"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
   jurEditando = "";
@@ -504,6 +505,7 @@ function jurColar() {
   põe("jurData", a.data);
   põe("jurOrgao", a.orgao);
   põe("jurFonte", a.fonte);
+  põe("jurPrecedentes", a.precedentes);
   if (a.categoria) jurCategoriaColada = a.categoria;
   /* o que a LEITURA pôs nos campos e que não está sob suspeita: "do texto" */
   Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
@@ -617,7 +619,8 @@ async function jurSalvar() {
     id: jurEditando || undefined,
     tribunal: v("jurTribunal"), classe: v("jurClasse"),
     numero: v("jurNumero"), data: v("jurData"), orgao: v("jurOrgao"),
-    fonte: v("jurFonte"), tese, texto, resumo: v("jurResumo"),
+    fonte: v("jurFonte"), precedentes: v("jurPrecedentes"),
+    tese, texto, resumo: v("jurResumo"),
     /* a categoria vem da colagem ou é deduzida da classe na hora de
      * desenhar — guardá-la evita recalcular e permite que um JSON traga
      * uma classificação que a classe sozinha não diria */
@@ -677,6 +680,7 @@ function jurEditar(id) {
   põe("jurTribunal", j.tribunal); põe("jurClasse", j.classe);
   põe("jurNumero", j.numero); põe("jurData", j.data);
   põe("jurOrgao", j.orgao); põe("jurFonte", j.fonte);
+  põe("jurPrecedentes", j.precedentes);
   põe("jurTese", j.tese); põe("jurResumo", j.resumo); põe("jurColar", j.texto);
   jurTagsColadas = (typeof jurTagsDe === "function") ? jurTagsDe(j) : [];
   jurConferirForm = {};
@@ -862,6 +866,8 @@ async function jurPedirIA() {
   const txt = jurPromptIA({
     topico: jurTopicoAtual ? jurTopicoAtual.nome : "",
     texto: bruto, campos,
+    pedirPrecedentes: /S[UÚ]MULA|REPETITIVO|REPERCUSS/i.test(
+      jurCategoriaColada || jurCategoria(campos.classe) || ""),
     tese: String(($("jurTese") || {}).value || "").trim(),
     resumo: String(($("jurResumo") || {}).value || "").trim(),
     tags: jurTagsColadas.slice(),
@@ -1359,6 +1365,15 @@ function jurPintarLista() {
       p.className = "jur-tese";
       jurEscreverTese(p, j.tese);
       li.append(p);
+    }
+
+    /* OS PRECEDENTES: de onde a súmula/o tema saiu. Uma linha, discreta —
+     * é para conferir, não para decorar. */
+    if (j.precedentes) {
+      const pr = document.createElement("div");
+      pr.className = "jur-prec";
+      pr.textContent = t("jur_prec_rot") + " " + j.precedentes;
+      li.append(pr);
     }
 
     /* O RESUMO VEM DEPOIS DA TESE, e menor.
