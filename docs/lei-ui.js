@@ -208,6 +208,7 @@ function leiLogAbrir() {
  * ligada a ele. O ponteiro fica no tópico, o texto fica na lei — é o
  * contrário de antes, e é o que impede cinco cópias da 4.320. */
 function leiDoTopicoAtual(chave) {
+  if (!chave && leiAtual && !leiAtual.chave && leiIdAtual) return leiDe(leiIdAtual);
   const r = (typeof matResumos !== "undefined" && matResumos[chave]) || {};
   if (r.leiId && leiDe(r.leiId)) return leiDe(r.leiId);
   const lista = leisDoTopico(chave);
@@ -261,7 +262,9 @@ function leiAplicarNoTopico(chave, novo) {
 function leiAbrir(disciplina, topico, id) {
   /* abrir outra lei descarta o desenho em andamento da anterior */
   leiPinturaCancelar();
-  leiAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
+  /* SEM TÓPICO (aberta pela Biblioteca), a chave é vazia — e tudo o que
+   * depende de um tópico (registrar leitura, cartões, a fila) sabe disso */
+  leiAtual = { disciplina, topico, chave: (disciplina || topico) ? matChave(disciplina, topico) : "" };
   /* migra na primeira abertura: quem tinha lei colada no campo antigo
    * encontra a mesma lei aqui, sem precisar refazer nada */
   try { leisMigrarDe(typeof matResumos !== "undefined" ? matResumos : {}); }
@@ -352,7 +355,7 @@ function leiPintar() {
 
   $("leiTitulo").textContent = l ? l.nome : t("lei_titulo", { tp: leiAtual.topico });
   $("leiSub").textContent = [r.concurso, leiAtual.disciplina, leiAtual.topico]
-    .filter(Boolean).join(" · ");
+    .filter(Boolean).join(" · ") || (leiAtual.chave ? "" : t("lei_avulsa_sub"));
 
   leiPintarFila();
   leiPintarProcedencia();
@@ -374,6 +377,20 @@ function leiPintarFila() {
   const cx = $("leiFila");
   if (!cx) return;
   cx.innerHTML = "";
+  if (!leiAtual.chave) {
+    /* aberta pela Biblioteca: só a própria lei, sem "desligar" nem "colar nova" */
+    const atual = leiIdAtual ? leiDe(leiIdAtual) : null;
+    if (atual) {
+      const rot = document.createElement("span");
+      rot.className = "lei-fila-rot";
+      rot.textContent = t("lei_avulsa_rot");
+      const chip = document.createElement("span");
+      chip.className = "lei-chip lei-chip-on";
+      chip.textContent = atual.nome;
+      cx.append(rot, chip);
+    }
+    return;
+  }
   const lista = leisDoTopico(leiAtual.chave);
 
   lista.forEach((l) => {
@@ -2258,11 +2275,37 @@ function leiGravar(opc) {
     /* primeira colagem: a lei nasce aqui, já identificada pelo próprio
      * cabeçalho quando ele veio junto */
     const ident = leiIdentificar(txt);
+    const ente = leiEnteDoTexto(txt);
     const nome = ident ? ident.nome
       : (leiAtual.disciplina + " — " + leiAtual.topico);
+    /* A LEI JÁ EXISTE NA BIBLIOTECA? Sem esta pergunta, colar a mesma lei num
+     * segundo tópico caía no mesmo registro e SUBSTITUÍA o texto e a lista de
+     * tópicos do primeiro. A pessoa escolhe: usar a que existe, usar e
+     * comparar, ou criar outra separada de propósito. */
+    if (!(opc && opc.jaVerificado)) {
+      const igual = leiAcharIgual({ nome, especie: ident ? ident.especie : "",
+        numero: ident ? ident.numero : "", ano: ident ? ident.ano : "", ente });
+      if (igual) {
+        leiJaAbrir({
+          igual, artigosColados: leiArtigos(txt).length,
+          iguais: leiNormalizaComparacao(igual.texto) === leiNormalizaComparacao(txt),
+          aoEscolher: (esc) => {
+            if (esc === "separada") {
+              leiGravar(Object.assign({}, opc || {},
+                { jaVerificado: true, separada: true, separado: true, limpo: true, conferido: true }));
+            } else leiUsarExistente(igual, txt, esc === "atualizar");
+          },
+        });
+        return "pendente";
+      }
+    }
     const alteracoes = (opc && opc.alteracoes) || {};
-    l = leiGuardar(Object.assign({ nome, texto: txt, topicos: [leiAtual.chave],
+    /* um id LIVRE, sempre: se o id do nome já é de outra lei (mesmo número em
+     * outra cidade), esta nasce com outro — nunca por cima do registro alheio */
+    l = leiGuardar(Object.assign({ id: leiIdLivre(nome, ente),
+      nome, texto: txt, topicos: [leiAtual.chave],
       consultadaEm: leisHojeISO() },
+      ente ? { ente } : {},
       Object.keys(alteracoes).length ? { alteracoes } : {},
       (opc && opc.repetidosOk && opc.repetidosOk.length) ? { repetidosOk: opc.repetidosOk } : {},
       (opc && opc.anexos && opc.anexos.length) ? { anexos: opc.anexos } : {},
@@ -2551,6 +2594,483 @@ function leiDupCancelar() {
   leiDupCtx = null;
   $("dlgLeiDup").close();
   try { leiReg("gravar", "artigos repetidos: voltou para revisar o texto", ""); } catch (e) {}
+}
+
+/* =====================================================================
+ * A LEI JÁ ESTÁ NA BIBLIOTECA — antes de criar outra por cima
+ *
+ * Colar a 4.320 num segundo tópico substituía o texto e apagava o vínculo
+ * do primeiro (ver "A LEI EXISTE UMA VEZ SÓ", lei-seca.js). Agora, quando o
+ * texto colado é de uma lei que a biblioteca já tem, a pessoa escolhe:
+ * usar a que existe (só liga este tópico), usar e comparar (atualizar
+ * versão) ou, de propósito, criar outra separada.
+ * ===================================================================== */
+let leiJaCtx = null;
+
+function leiJaAbrir(ctx) {
+  leiJaCtx = Object.assign({ escolha: "" }, ctx);
+  leiJaPintar();
+  abrirModal("dlgLeiJa");
+  try {
+    leiReg("gravar", "a lei colada já existe na biblioteca",
+      ctx.igual.nome + " · " + (ctx.igual.topicos || []).length + " tópico(s)");
+  } catch (e) {}
+}
+
+function leiJaPintar() {
+  const c = leiJaCtx;
+  if (!c) return;
+  const n = leiArtigos(c.igual.texto).length;
+  $("leiJaMsg").textContent = t("lei_ja_msg", { nome: c.igual.nome, n, t: (c.igual.topicos || []).length,
+    m: c.artigosColados, igual: t(c.iguais ? "lei_ja_igual" : "lei_ja_dif") });
+  const ox = $("leiJaOpcoes");
+  ox.innerHTML = "";
+  ["usar", "atualizar", "separada"].forEach((v) => {
+    if (v === "atualizar" && c.iguais) return;      /* texto igual: nada a comparar */
+    const lb = document.createElement("label");
+    lb.className = "lei-dup-op" + (c.escolha === v ? " sel" : "");
+    const r = document.createElement("input");
+    r.type = "radio";
+    r.name = "leiJa";
+    r.value = v;
+    r.checked = c.escolha === v;
+    r.onchange = () => { c.escolha = v; leiJaPintar(); };
+    const tx = document.createElement("span");
+    tx.className = "lei-dup-op-tit";
+    tx.textContent = t("lei_ja_o_" + v);
+    lb.append(r, tx);
+    ox.append(lb);
+  });
+  $("btnLeiJaConfirmar").disabled = !c.escolha;
+}
+
+function leiJaConfirmar() {
+  const c = leiJaCtx;
+  if (!c || !c.escolha) return false;
+  leiJaCtx = null;
+  $("dlgLeiJa").close();
+  try { leiReg("gravar", "lei já existente: escolha", c.escolha); } catch (e) {}
+  c.aoEscolher(c.escolha);
+  return true;
+}
+
+function leiJaCancelar() {
+  if ($("dlgLeiJa")) $("dlgLeiJa").close();
+  if (!leiJaCtx) return;
+  leiJaCtx = null;
+  try { leiReg("gravar", "lei já existente: voltou para revisar o texto", ""); } catch (e) {}
+}
+
+/* usar a lei que já existe neste tópico (e, se pedido, abrir a comparação) */
+function leiUsarExistente(igual, txt, comparar) {
+  leiSujo = false;
+  leiLigar(igual.id, leiAtual.chave);
+  leiTrocarPara(igual.id);
+  try { leiReg("gravar", "tópico ligado à lei que já existia", igual.nome + " · " + leiAtual.topico); } catch (e) {}
+  if (comparar) {
+    leiAtualizarAbrir();
+    $("leiUpdTexto").value = txt;
+  }
+  toast("lei_ligada");
+}
+
+/* =====================================================================
+ * A BIBLIOTECA DE LEIS — as leis do usuário, fora de qualquer tópico
+ *
+ * Cada lei existe uma vez; os tópicos só guardam o ponteiro. Aqui se vê o
+ * conjunto: onde cada lei é usada, quais não têm vínculo, e se faz o que a
+ * fonte única exige — ligar, desligar, apagar SABENDO onde é usada, e
+ * mesclar as que parecem a mesma.
+ * ===================================================================== */
+let leiBibFiltro = "todas";
+let leiBibTexto = "";
+let leiBibMeta = {};
+
+function leiConcursoAtualNome() {
+  try { return (typeof concursoAtual === "function" && (concursoAtual() || {}).nome) || ""; }
+  catch (e) { return ""; }
+}
+
+/* Onde a lei é usada: uma linha por tópico ligado, com o concurso que o
+ * edital diz (ou o do resumo). */
+function leiUsosDaLei(l, idx) {
+  const atual = leiConcursoAtualNome();
+  const porNorm = {};
+  if (typeof matResumos !== "undefined" && matResumos) {
+    Object.keys(matResumos).forEach((k) => { porNorm[leisChaveComparavel(k)] = matResumos[k]; });
+  }
+  return (l.topicos || []).map((chave) => {
+    const r = porNorm[leisChaveComparavel(chave)] || {};
+    const partes = String(chave).split("›");
+    const disciplina = r.disciplina || partes[0] || "";
+    const topico = r.topico || partes.slice(1).join("›") || "";
+    let concurso = r.concurso || "";
+    if (!concurso && typeof matConcursoDoTopico === "function") {
+      try { concurso = matConcursoDoTopico(disciplina, topico, atual, idx) || ""; } catch (e) { concurso = ""; }
+    }
+    return { chave, disciplina, topico, concurso };
+  });
+}
+
+/* quantos artigos e quantos alterados — memorizado: a lei inteira é lida de novo a cada desenho */
+function leiBibMetaDe(l) {
+  const k = l.id + "|" + (l.tocado || "") + "|" + String(l.texto || "").length;
+  if (!leiBibMeta[k]) {
+    const arts = leiArtigosEfetivos(l);
+    leiBibMeta[k] = { n: arts.length, alt: arts.filter((a) => a.alterado || a.revogado || a.novo).length,
+      parei: l.parei, pct: (leiProgresso(l.id) || {}).pct || 0 };
+  }
+  return leiBibMeta[k];
+}
+
+function leiBibLista() {
+  const idx = (typeof matIndiceConcursos === "function") ? matIndiceConcursos() : null;
+  const atual = leiConcursoAtualNome();
+  const q = leiTxtChave(leiBibTexto);
+  return leisLista().map((l) => ({ l, usos: leiUsosDaLei(l, idx) })).filter(({ l, usos }) => {
+    if (leiBibFiltro === "sem" && usos.length) return false;
+    if (leiBibFiltro === "concurso" && !(atual && usos.some((u) => u.concurso === atual))) return false;
+    if (!q) return true;
+    const palheiro = leiTxtChave([l.nome, l.apelido, l.numero, leiNumeroNorm(l.numero), l.ano,
+      l.ente, l.especie].join(" "));
+    return palheiro.indexOf(q) >= 0;
+  });
+}
+
+function leiBibAbrir() {
+  leiBibTexto = "";
+  if ($("leiBibBusca")) $("leiBibBusca").value = "";
+  leiBibPintar();
+  abrirModal("dlgLeiBib");
+  try { leiReg("lei", "biblioteca de leis aberta", leisLista().length + " leis"); } catch (e) {}
+}
+
+function leiBibPintar() {
+  const dlg = $("dlgLeiBib");
+  const rolagem = dlg && dlg.scrollTop ? dlg.scrollTop : 0;
+  const atual = leiConcursoAtualNome();
+  if ($("leiBibBusca")) $("leiBibBusca").placeholder = t("lei_bib_busca");
+  [["btnLeiBibTodas", "todas"], ["btnLeiBibConcurso", "concurso"], ["btnLeiBibSem", "sem"]].forEach(([id, f]) => {
+    const b = $(id);
+    if (!b) return;
+    b.classList.toggle("mat-ligado", leiBibFiltro === f);
+    if (f === "concurso") b.title = atual ? t("lei_bib_f_concurso_aj", { c: atual }) : t("lei_bib_f_concurso_sem");
+  });
+  const todas = leisLista();
+  const lista = leiBibLista();
+  const semVinculo = todas.filter((l) => !(l.topicos || []).length).length;
+  $("leiBibResumo").textContent = t("lei_bib_resumo", { n: lista.length, v: semVinculo });
+
+  const dup = leiDuplicadasNaBiblioteca();
+  $("leiBibDup").hidden = !dup.length;
+  if (dup.length) $("btnLeiBibDup").textContent = t("lei_bib_dup_aviso", { n: dup.length });
+
+  const cx = $("leiBibLista");
+  cx.innerHTML = "";
+  if (!lista.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("lei_bib_vazio");
+    cx.append(p);
+  }
+  lista.forEach((it) => cx.append(leiBibCartao(it)));
+  if (dlg && rolagem) dlg.scrollTop = rolagem;
+}
+
+function leiBibCartao({ l, usos }) {
+  const m = leiBibMetaDe(l);
+  const card = document.createElement("div");
+  card.className = "lei-bib-card";
+  card.id = "leiBib_" + l.id;
+
+  const tit = document.createElement("div");
+  tit.className = "lei-bib-tit";
+  tit.textContent = l.nome;
+  card.append(tit);
+
+  const meta = [];
+  meta.push(t("lei_bib_meta_artigos", { n: m.n }));
+  if (m.alt) meta.push(t("lei_bib_meta_alt", { n: m.alt }));
+  if ((l.anexos || []).length) meta.push(t("lei_bib_meta_anexos", { n: l.anexos.length }));
+  if (l.ente) meta.push(t("lei_bib_ente", { e: l.ente }));
+  if (l.apelido) meta.push(t("lei_bib_sigla", { s: l.apelido }));
+  if (m.parei) meta.push(t("lei_bib_meta_parei", { a: String(m.parei).toUpperCase(), p: m.pct }));
+  const l1 = document.createElement("div");
+  l1.className = "lei-bib-meta";
+  l1.textContent = meta.join(" · ");
+  card.append(l1);
+
+  const cons = new Set(usos.map((u) => u.concurso).filter(Boolean));
+  const l2 = document.createElement("div");
+  l2.className = "lei-bib-meta" + (usos.length ? "" : " lei-bib-sem");
+  l2.textContent = usos.length ? t("lei_bib_meta_uso", { t: usos.length, c: cons.size })
+                               : t("lei_bib_meta_sem");
+  card.append(l2);
+
+  if (usos.length) {
+    const det = document.createElement("details");
+    det.className = "lei-bib-usos";
+    const sm = document.createElement("summary");
+    sm.textContent = t("lei_bib_usos");
+    det.append(sm);
+    usos.forEach((u) => {
+      const li = document.createElement("div");
+      li.className = "lei-bib-uso";
+      const tx = document.createElement("span");
+      tx.textContent = [u.concurso, u.disciplina, u.topico].filter(Boolean).join(" › ");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min";
+      b.textContent = t("lei_bib_desvincular");
+      b.onclick = () => leiBibDesligar(l, u);
+      li.append(tx, b);
+      det.append(li);
+    });
+    card.append(det);
+  }
+
+  const acoes = document.createElement("div");
+  acoes.className = "lei-bib-acoes";
+  const mk = (id, txt, fn, extra) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min" + (extra ? " " + extra : "");
+    b.id = id + "_" + l.id;
+    b.textContent = t(txt);
+    b.onclick = fn;
+    acoes.append(b);
+  };
+  mk("btnLeiBibAbrir", "lei_bib_abrir", () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); }, "btn-min-ok");
+  mk("btnLeiBibLigar", "lei_bib_vincular", () => leiTopicoAbrir(l));
+  mk("btnLeiBibApagar", "lei_bib_apagar", () => leiBibApagar(l), "btn-min-perigo");
+  card.append(acoes);
+  return card;
+}
+
+/* abrir uma lei SEM tópico: o que depende de um tópico (registrar leitura,
+ * criar cartões, a fila de leis) fica de fora e diz por quê */
+function leiAbrirAvulsa(id) { leiAbrir("", "", id); }
+
+async function leiBibDesligar(l, u) {
+  const ok = await uiConfirm(t("lei_bib_desv_conf", { l: l.nome, tp: u.topico || u.chave }));
+  if (!ok) return false;
+  leiDesligarTopico(l, u.chave);
+  try { reg("LEI", "lei desvinculada do tópico (biblioteca)", l.nome + " · " + u.chave); } catch (e) {}
+  leiBibPintar();
+  return true;
+}
+
+/* tirar a lei de UM tópico: a lei continua na biblioteca e nos outros */
+function leiDesligarTopico(l, chave) {
+  leiDesligar(l.id, chave);
+  if (typeof matResumos !== "undefined") {
+    Object.keys(matResumos).forEach((k) => {
+      if (leisChaveComparavel(k) === leisChaveComparavel(chave) && matResumos[k].leiId === l.id) {
+        const resto = leisDoTopico(k);
+        matResumos[k].leiId = resto[0] ? resto[0].id : "";
+        try { matSalvar(); } catch (e) {}
+      }
+    });
+  }
+}
+
+/* APAGAR sabendo onde é usada */
+async function leiBibApagar(l) {
+  const usos = leiUsosDaLei(l, null);
+  const lista = usos.slice(0, 8).map((u) => "• " + [u.disciplina, u.topico].filter(Boolean).join(" › ")).join("\n")
+    + (usos.length > 8 ? "\n" + t("lei_num_mais", { n: usos.length - 8 }) : "");
+  const ok = await uiConfirm(usos.length
+    ? t("lei_bib_apagar_conf", { l: l.nome, t: usos.length, lista })
+    : t("lei_bib_apagar_livre", { l: l.nome }));
+  if (!ok) return false;
+  leiApagar(l.id);
+  if (leiIdAtual === l.id) leiIdAtual = "";
+  leiBibPintar();
+  if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+  toast("lei_bib_apagada");
+  return true;
+}
+
+/* ---- ligar uma lei a um tópico, a partir da Biblioteca ---- */
+let leiTopCtx = null;
+
+/* todos os tópicos que o app conhece: os dos editais (mesmo sem material
+ * ainda) e os que já têm resumo */
+function leiTopicosDisponiveis() {
+  const mapa = new Map();
+  const norm = (c) => leisChaveComparavel(c);
+  if (typeof editais !== "undefined" && Array.isArray(editais) && typeof lerEdital === "function") {
+    editais.forEach((e) => {
+      let r = null;
+      try { r = lerEdital(e.texto); } catch (x) { return; }
+      const cc = String(((r && r.cfg) || {}).concurso || "").trim();
+      ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+        const chave = matChave(d.nome, tp.nome);
+        if (!mapa.has(norm(chave))) mapa.set(norm(chave), { chave, disciplina: d.nome, topico: tp.nome, concurso: cc });
+      }));
+    });
+  }
+  if (typeof matListaCheia === "function") {
+    try {
+      matListaCheia().forEach((x) => {
+        if (!x.chave || mapa.has(norm(x.chave))) return;
+        mapa.set(norm(x.chave), { chave: x.chave, disciplina: x.disciplina || "", topico: x.topico || "", concurso: x.concurso || "" });
+      });
+    } catch (e) {}
+  }
+  return Array.from(mapa.values());
+}
+
+function leiTopicoAbrir(l) {
+  leiTopCtx = { l, busca: "" };
+  if ($("leiTopBusca")) $("leiTopBusca").value = "";
+  leiTopicoPintar();
+  abrirModal("dlgLeiTopico");
+}
+
+function leiTopicoPintar() {
+  const c = leiTopCtx;
+  if (!c) return;
+  const l = leiDe(c.l.id) || c.l;
+  $("leiTopTitulo").textContent = t("lei_top_titulo", { l: l.nome });
+  $("leiTopBusca").placeholder = t("lei_top_busca");
+  const q = leiTxtChave(c.busca);
+  const ja = new Set((l.topicos || []).map((x) => leisChaveComparavel(x)));
+  const todos = leiTopicosDisponiveis().filter((x) => !q
+    || leiTxtChave([x.concurso, x.disciplina, x.topico].join(" ")).indexOf(q) >= 0);
+  const cx = $("leiTopLista");
+  cx.innerHTML = "";
+  if (!todos.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("lei_top_vazio");
+    cx.append(p);
+  }
+  todos.slice(0, 60).forEach((x) => {
+    const li = document.createElement("div");
+    li.className = "lei-bib-uso";
+    const tx = document.createElement("span");
+    tx.textContent = [x.concurso, x.disciplina, x.topico].filter(Boolean).join(" › ");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min btn-min-ok";
+    const ligada = ja.has(leisChaveComparavel(x.chave));
+    b.textContent = t(ligada ? "lei_top_ja" : "lei_top_ligar");
+    b.disabled = ligada;
+    b.onclick = () => {
+      leiLigar(l.id, x.chave);
+      try { reg("LEI", "lei ligada a tópico (biblioteca)", l.nome + " · " + x.chave); } catch (e) {}
+      if (typeof matRender === "function") { try { matRender(); } catch (e2) {} }
+      leiTopicoPintar();
+      leiBibPintar();
+    };
+    li.append(tx, b);
+    cx.append(li);
+  });
+  if (todos.length > 60) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("lei_top_mais", { n: 60 });
+    cx.append(p);
+  }
+}
+
+/* ---- leis que parecem a mesma: escolher qual fica ---- */
+let leiMesCtx = null;
+
+function leiMesAbrir() {
+  const grupos = leiDuplicadasNaBiblioteca();
+  if (!grupos.length) { leiBibPintar(); return false; }
+  leiMesCtx = { grupos, i: 0, manter: "" };
+  leiMesPintar();
+  abrirModal("dlgLeiMes");
+  return true;
+}
+
+function leiMesInfo(l) {
+  return t("lei_mes_info", { a: leiArtigos(l.texto).length, t: (l.topicos || []).length,
+    n: Object.keys(l.notasArtigos || {}).length + (l.notasTrechos || []).length, c: String(l.texto || "").length });
+}
+
+function leiMesPintar() {
+  const c = leiMesCtx;
+  if (!c) return;
+  const g = c.grupos[c.i].map((l) => leiDe(l.id)).filter(Boolean);
+  if (g.length < 2) { leiMesProximo(); return; }
+  /* sugestão: a mais ligada a tópicos; empate, a de texto maior */
+  if (!c.manter || !g.some((l) => l.id === c.manter)) {
+    c.manter = g.slice().sort((a, b) => ((b.topicos || []).length - (a.topicos || []).length)
+      || (String(b.texto || "").length - String(a.texto || "").length))[0].id;
+  }
+  $("leiMesPasso").textContent = t("lei_mes_passo", { i: c.i + 1, n: c.grupos.length });
+  const cx = $("leiMesLista");
+  cx.innerHTML = "";
+  g.forEach((l) => {
+    const lb = document.createElement("label");
+    lb.className = "lei-dup-op" + (c.manter === l.id ? " sel" : "");
+    const r = document.createElement("input");
+    r.type = "radio";
+    r.name = "leiMes";
+    r.value = l.id;
+    r.checked = c.manter === l.id;
+    r.onchange = () => { c.manter = l.id; leiMesPintar(); };
+    const nome = document.createElement("span");
+    nome.className = "lei-dup-op-tit";
+    nome.textContent = t("lei_mes_manter") + ": " + l.nome;
+    const info = document.createElement("div");
+    info.className = "lei-pre-ctx";
+    info.textContent = leiMesInfo(l);
+    lb.append(r, nome, info);
+    cx.append(lb);
+  });
+  const mantida = g.filter((l) => l.id === c.manter)[0];
+  const maior = g.filter((l) => l.id !== c.manter
+    && leiArtigos(l.texto).length > leiArtigos(mantida.texto).length)[0];
+  $("leiMesAviso").hidden = !maior;
+  if (maior) $("leiMesAviso").textContent = t("lei_mes_texto_maior",
+    { a: leiArtigos(maior.texto).length, b: leiArtigos(mantida.texto).length });
+}
+
+function leiMesProximo() {
+  const c = leiMesCtx;
+  if (!c) return;
+  c.i++;
+  c.manter = "";
+  if (c.i >= c.grupos.length) {
+    leiMesCtx = null;
+    $("dlgLeiMes").close();
+    leiBibPintar();
+    return;
+  }
+  leiMesPintar();
+}
+
+function leiMesConfirmar() {
+  const c = leiMesCtx;
+  if (!c || !c.manter) return false;
+  const g = c.grupos[c.i].map((l) => l.id);
+  const res = leiMesclar(c.manter, g.filter((id) => id !== c.manter));
+  if (res) {
+    if (leiIdAtual && g.indexOf(leiIdAtual) >= 0) leiIdAtual = c.manter;
+    if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+    toast("lei_mes_pronto");
+  }
+  leiMesProximo();
+  return !!res;
+}
+
+function leiMesDistintas() {
+  const c = leiMesCtx;
+  if (!c) return false;
+  leiMarcarDistintas(c.grupos[c.i].map((l) => l.id));
+  leiMesProximo();
+  return true;
+}
+
+function leiMesFechar() {
+  if ($("dlgLeiMes")) $("dlgLeiMes").close();
+  leiMesCtx = null;
+  leiBibPintar();
 }
 
 /* =====================================================================
@@ -3004,6 +3524,7 @@ function leiDisciplinasDe(l) {
 function leiVincularAbrir(siglaParaLembrar) {
   const cx = $("leiVincCx");
   if (!cx) return;
+  if (!leiAtual || !leiAtual.chave) return;
   cx.innerHTML = "";
   /* VINCULAR À FORÇA, POR ESTA PORTA TAMBÉM: quando a janela foi aberta
    * a partir de uma citação de sigla desconhecida ("CTN"), escolher a
@@ -3097,6 +3618,7 @@ function leiProcAbrir() {
    * escolhendo, não o formulário chutando por ela. */
   $("leiProcData").value = l.consultadaEm || "";
   $("leiProcVersao").value = l.versao || "";
+  if ($("leiProcEnte")) $("leiProcEnte").value = l.ente || "";
   if ($("leiProcApelido")) {
     $("leiProcApelido").value = String(l.apelido || "").split(/[\s/,]+/)
       .filter(Boolean).join(", ");
@@ -3145,6 +3667,7 @@ function leiProcSalvar() {
     fonte: String($("leiProcFonte").value || "").trim(),
     consultadaEm: String($("leiProcData").value || "").trim(),
     versao: String($("leiProcVersao").value || "").trim(),
+    ente: $("leiProcEnte") ? String($("leiProcEnte").value || "").trim() : (leiDe(leiIdAtual).ente || ""),
     /* as siglas viram a lista do campo "apelido" que o casamento já lê;
      * apagar uma daqui é como se desfaz um vínculo à força errado */
     apelido: $("leiProcApelido")
@@ -3528,6 +4051,7 @@ function leiClozeConferir() {
 
 function leiClozeAplicar() {
   if (!leiClozeLidos.length || !leiAtual) return false;
+  if (!leiAtual.chave) { uiAlert(t("lei_avulsa_sem_topico")); return false; }
   const ch = leiAtual.chave;
   const antigo = String(((typeof matResumos !== "undefined" && matResumos[ch]) || {}).cartoes || "");
   const linhas = leiClozeLidos.map((c) => {
@@ -3661,6 +4185,7 @@ function leiRankingAbrir() {
  * inteira depois de ler um capítulo infla o estudo e desmonta o plano. */
 function leiRegistrarLeitura() {
   if (!leiAtual) return;
+  if (!leiAtual.chave) { uiAlert(t("lei_avulsa_sem_topico")); return; }
   const txt = String($("leiTexto").value || "");
   let palavras = (txt.match(/\S+/g) || []).length;
   let rotulo = "";
@@ -3933,6 +4458,24 @@ function leiIniciar() {
   liga("btnLeiCobConfirmar", "continuar depois da conferência", () => leiCobConfirmar());
   liga("btnLeiCobVoltar", "voltar da conferência da versão nova", () => leiCobCancelar());
   liga("btnLeiCobX", "fechar a conferência da versão nova", () => leiCobCancelar());
+  liga("btnMatLeis", "abrir a biblioteca de leis", () => leiBibAbrir());
+  liga("btnLeiBibX", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
+  liga("btnLeiBibFechar", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
+  liga("btnLeiBibTodas", "biblioteca: todas", () => { leiBibFiltro = "todas"; leiBibPintar(); });
+  liga("btnLeiBibConcurso", "biblioteca: do concurso atual", () => { leiBibFiltro = "concurso"; leiBibPintar(); });
+  liga("btnLeiBibSem", "biblioteca: sem vínculo", () => { leiBibFiltro = "sem"; leiBibPintar(); });
+  liga("btnLeiBibDup", "biblioteca: leis que parecem a mesma", () => leiMesAbrir());
+  if ($("leiBibBusca")) $("leiBibBusca").oninput = () => { leiBibTexto = $("leiBibBusca").value; leiBibPintar(); };
+  liga("btnLeiTopX", "fechar ligar a tópico", () => $("dlgLeiTopico").close());
+  liga("btnLeiTopFechar", "fechar ligar a tópico", () => $("dlgLeiTopico").close());
+  if ($("leiTopBusca")) $("leiTopBusca").oninput = () => { if (leiTopCtx) { leiTopCtx.busca = $("leiTopBusca").value; leiTopicoPintar(); } };
+  liga("btnLeiJaConfirmar", "confirmar lei já existente", () => leiJaConfirmar());
+  liga("btnLeiJaVoltar", "voltar da lei já existente", () => leiJaCancelar());
+  liga("btnLeiJaX", "fechar lei já existente", () => leiJaCancelar());
+  liga("btnLeiMesConfirmar", "mesclar leis", () => leiMesConfirmar());
+  liga("btnLeiMesDistintas", "leis diferentes", () => leiMesDistintas());
+  liga("btnLeiMesFechar", "fechar mesclagem", () => leiMesFechar());
+  liga("btnLeiMesX", "fechar mesclagem", () => leiMesFechar());
   liga("btnLeiUpdFechar1", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdFechar2", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdAnterior", "artigo anterior da comparação", () => leiUpdMover(-1));

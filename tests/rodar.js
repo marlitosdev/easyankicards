@@ -256,8 +256,8 @@ async function main() {
   const rnsP = await comVigia(Promise.resolve(require("./rodada-nao-some.js").testes()), "rodada-nao-some");
   const cvlP = await comVigia(Promise.resolve(require("./citacao-vai-a-lei.js").testes()), "citacao-vai-a-lei");
   const mnlP = await comVigia(Promise.resolve(require("./marca-na-lei.js").testes()), "marca-na-lei");
-  const cdlP = await comVigia(Promise.resolve(require("./citacao-dentro-da-lei.js").testes()), "citacao-dentro-da-lei"); const lcgP = await comVigia(Promise.resolve(require("./lei-colagem.js").testes()), "lei-colagem");
-  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP, cmP, lsP, luP, teP, vrP, dfP, mnP, rgP, arP, qhP, glP, etP, mkP, bgP, ecP, escP, rpP, rvP, enP, rxP, dfcP, bqP, cpP, apP, d2P, baP, vzP, rxTP, vrP2, clP, mzP, urP, juP, dbP, aqP, cqP, grP, bkqP, entP, rtP, ctP, atzP, jmP, mfP, ldlP, rnsP, cvlP, mnlP, cdlP, lcgP]).then(([tela,marcas, registroT, dqT, qsT, quT, rsT, faT, cmT, lsT, luT, teT, vrT, dfT, mnT, rgT, arT, qhT, glT, etT, mkT, bgT, ecT, escT, rpT, rvT, enT, rxT, dfcT, bqT, cpT, apT, d2T, baT, vzT, rxTT, vrT2, clT, mzT, urT, juT, dbT, aqT, cqT, grT, bkqT, entT, rtT, ctT, atzT, jmT, mfT, ldlT, rnsT, cvlT, mnlT, cdlT, lcgT]) => {
+  const cdlP = await comVigia(Promise.resolve(require("./citacao-dentro-da-lei.js").testes()), "citacao-dentro-da-lei"); const lcgP = await comVigia(Promise.resolve(require("./lei-colagem.js").testes()), "lei-colagem"); const lbbP = await comVigia(Promise.resolve(require("./lei-biblioteca.js").testes()), "lei-biblioteca");
+  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP, cmP, lsP, luP, teP, vrP, dfP, mnP, rgP, arP, qhP, glP, etP, mkP, bgP, ecP, escP, rpP, rvP, enP, rxP, dfcP, bqP, cpP, apP, d2P, baP, vzP, rxTP, vrP2, clP, mzP, urP, juP, dbP, aqP, cqP, grP, bkqP, entP, rtP, ctP, atzP, jmP, mfP, ldlP, rnsP, cvlP, mnlP, cdlP, lcgP, lbbP]).then(([tela,marcas, registroT, dqT, qsT, quT, rsT, faT, cmT, lsT, luT, teT, vrT, dfT, mnT, rgT, arT, qhT, glT, etT, mkT, bgT, ecT, escT, rpT, rvT, enT, rxT, dfcT, bqT, cpT, apT, d2T, baT, vzT, rxTT, vrT2, clT, mzT, urT, juT, dbT, aqT, cqT, grT, bkqT, entT, rtT, ctT, atzT, jmT, mfT, ldlT, rnsT, cvlT, mnlT, cdlT, lcgT, lbbT]) => {
     const extras = [["estrutura do HTML", estrutura],
                     ["carregamento do app", fumaca], ["prompt e colagem parcial", parcial],
                     ["tela: revisão, correção e registro", tela],
@@ -323,6 +323,7 @@ async function main() {
                     ["a marca cai onde voce apontou, e da para tirar", mnlT],
                     ["citacao dentro da lei abre um preview do artigo", cdlT],
                     ["colar um PDF de lei: limpar, criticar a numeração e ajudar a decidir", lcgT],
+                    ["a lei existe uma vez so: identidade, biblioteca e mesclagem", lbbT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];
