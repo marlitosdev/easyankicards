@@ -966,6 +966,7 @@ function rodar() {
     jurFechar, jurVoltarPara,
     jurVoltaParaPor: (f) => { jurVoltaPara = f; },
     matSoJuris, matListaCheia, matTemJuris, matJurisTexto, MAT_TIPOS,
+    matIndiceConcursos, matConcursoDoTopico,
     qsUiJuris, qsUiLei, leiVoltarPara,
     qsUiComentario, qsUiLeiAlvo, qsUiLeiLink, qsUiLeiIr, qsUiLeiEscolher,
     leiVoltaParaPor: (f) => { leiVoltaPara = f; },

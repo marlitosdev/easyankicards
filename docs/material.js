@@ -2107,10 +2107,63 @@ function matJurisTexto(chave) {
     .join(" ");
 }
 
+/* =====================================================================
+ * DE QUE CONCURSO É UM TÓPICO QUE SÓ TEM JULGADO
+ *
+ * O grupo "Sem concurso registrado" do material recebia todo tópico que
+ * tinha julgado e nenhum resumo. O resumo é gravado com o concurso do
+ * edital aberto; o julgado NUNCA gravou concurso nenhum — então a linha de
+ * visualização (matSoJuris) nascia com concurso "", e a SV 29 de um tópico
+ * do ISS Caruaru aparecia como se não fosse de concurso algum.
+ *
+ * A resposta está nos editais cadastrados: se a disciplina e o tópico
+ * aparecem em UM concurso só, é dele. Se aparecem em mais de um, o app não
+ * chuta (a menos que um deles seja o concurso aberto agora); e se não
+ * aparecem em nenhum, fica sem concurso — dizer "sem concurso" é
+ * verdadeiro, dizer o concurso errado não é.
+ *
+ * Nada disso é GRAVADO: é inferência de tela, feita a cada desenho, e
+ * acompanha o edital se ele mudar.
+ * ===================================================================== */
+function matIndiceConcursos() {
+  const idx = new Map();
+  if (typeof editais === "undefined" || !Array.isArray(editais)
+      || typeof lerEdital !== "function") return idx;
+  editais.forEach((e) => {
+    let r = null;
+    try { r = lerEdital(e.texto); } catch (x) { return; }
+    const cc = String(((r && r.cfg) || {}).concurso || "").trim();
+    if (!cc) return;
+    ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+      const k = matChaveNormal(matChave(d.nome, tp.nome));
+      const l = idx.get(k) || [];
+      if (l.indexOf(cc) < 0) l.push(cc);
+      idx.set(k, l);
+    }));
+  });
+  return idx;
+}
+
+function matConcursoDoTopico(disciplina, topico, preferido, idx) {
+  const lista = (idx || matIndiceConcursos())
+    .get(matChaveNormal(matChave(disciplina, topico))) || [];
+  if (lista.length === 1) return lista[0];
+  if (lista.length > 1 && preferido && lista.indexOf(preferido) >= 0) return preferido;
+  return "";
+}
+
 function matSoJuris() {
   if (typeof jurLista !== "function") return [];
   const vistas = new Set(Object.keys(matResumos).map(matChaveNormal));
   const porChave = new Map();
+  /* o índice dos editais só é montado se algum julgado precisar dele */
+  let indice = null;
+  const concursoDe = (j, r) => {
+    if (j.concurso) return j.concurso;
+    if (!indice) indice = matIndiceConcursos();
+    return matConcursoDoTopico(r.disciplina, r.topico,
+      (typeof concursoAtual === "function" ? concursoAtual().nome : ""), indice);
+  };
   jurLista().forEach((j) => {
     (j.topicos || []).forEach((c) => {
       const k = matChaveNormal(c);
@@ -2119,7 +2172,7 @@ function matSoJuris() {
       if (!r.topico) return;      /* chave estropiada não vira linha */
       porChave.set(k, {
         chave: c, disciplina: r.disciplina, topico: r.topico,
-        concurso: j.concurso || "", texto: "", cartoes: "",
+        concurso: concursoDe(j, r), texto: "", cartoes: "",
         soJuris: true,
         criado: j.criado || "", tocado: j.tocado || j.criado || "",
       });

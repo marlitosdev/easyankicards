@@ -659,7 +659,7 @@ function jurGravar(dados) {
   const antigo = tudo[id] || {};
   const r = Object.assign({
     id, tribunal: "", classe: "", numero: "", orgao: "", relator: "",
-    data: "", tese: "", texto: "", fonte: "", precedentes: "", topicos: [], tags: [],
+    data: "", tese: "", texto: "", fonte: "", precedentes: "", concurso: "", topicos: [], tags: [],
     /* O RESUMO É UM CAMPO À PARTE, e essa separação é o ponto.
      *
      * A tese é a proposição jurídica como ela é — a frase que se
@@ -857,7 +857,7 @@ function jurUnir(idFica, idVai) {
   }
   /* os campos que faltavam de um lado vêm do outro: unir tem de somar */
   const confA = Array.isArray(a.aConferir) ? a.aConferir.slice() : [];
-  ["tribunal", "classe", "numero", "data", "orgao", "relator", "fonte", "precedentes"]
+  ["tribunal", "classe", "numero", "data", "orgao", "relator", "fonte", "precedentes", "concurso"]
     .forEach((k) => {
       if (!String(a[k] || "").trim() && b[k]) {
         a[k] = b[k];
