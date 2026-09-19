@@ -226,6 +226,7 @@ function leiSinaisDoArtigo(a) {
     /* "pela Lei Complementar nº 018, de 09 de outubro de 2009" */
     return { tipo: "redacao", fonte: String(red[1]).replace(/^\s*pel[ao]s?\s+/i, "").trim() };
   }
+  if (/\(\s*renumerad[oa]\b[^)]*\)/i.test(corpo)) return { tipo: "renumerado", fonte: "" };
   if (LEI_RE_SINAL_REVOGADO.test(corpo)) return { tipo: "revogado", fonte: "" };
   if (LEI_RE_SINAL_VETADO.test(corpo)) return { tipo: "vetado", fonte: "" };
   if (String(corpo).replace(/\([^)]*\)/g, "").replace(/\s+/g, "").length < 6) {
@@ -238,7 +239,7 @@ function leiSinaisDoArtigo(a) {
 /* pontos de EVIDÊNCIA (o texto diz) — a posição entra à parte, só para
  * desempatar, e nunca vira "confiança" */
 function leiPontosDeSinal(tipo) {
-  return ({ redacao: 4, incluido: 1, revogado: -6, vetado: -6, vazio: -3 })[tipo] || 0;
+  return ({ redacao: 4, renumerado: 4, incluido: 1, revogado: -6, vetado: -6, vazio: -3 })[tipo] || 0;
 }
 
 function leiNormalizaTexto(s) {
@@ -268,31 +269,40 @@ function leiDuplicados(texto, ignorar) {
       corpo: a.corpo, pos: k, sinais: leiSinaisDoArtigo(a),
     }));
 
-    /* SUGESTÃO. Primeiro o que o TEXTO diz; a posição só desempata. */
-    let motivo = "posicao", confianca = "fraca", fonte = "";
-    let melhor = cands[cands.length - 1];
-    const ev = cands.map((c) => leiPontosDeSinal(c.sinais.tipo));
-    const maior = Math.max.apply(null, ev);
-    const segundo = ev.slice().sort((x, y) => y - x)[1];
-    if (maior - segundo >= 3) {
-      const i = ev.indexOf(maior);
-      melhor = cands[i];
-      confianca = "forte";
-      motivo = melhor.sinais.tipo === "redacao" ? "redacao"
-        : (cands.some((c) => c.sinais.tipo === "revogado") ? "revogado"
-          : (cands.some((c) => c.sinais.tipo === "vetado") ? "vetado" : "vazio"));
-      fonte = melhor.sinais.fonte || "";
-    } else if (cands.every((c) => leiNormalizaTexto(c.texto) === leiNormalizaTexto(cands[0].texto))) {
-      melhor = cands[0];
-      confianca = "forte";
-      motivo = "identico";
-    }
+    const sug = leiSugerirEntre(cands);
     grupos.push({
       num, numCru: L[0].numCru, rotulo: L[0].rotulo, candidatos: cands,
-      sugerido: melhor.indice, confianca, motivo, fonte,
+      sugerido: sug.melhor.indice, confianca: sug.confianca, motivo: sug.motivo, fonte: sug.fonte,
+      ordem: leiNumOrdem(num) * 1000,
     });
   });
-  return grupos.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
+  /* + o mesmo rótulo de parágrafo duas vezes no MESMO artigo */
+  leiRepetidosNoArtigo(texto, ignorar).forEach((g) => grupos.push(g));
+  return grupos.sort((x, y) => x.ordem - y.ordem);
+}
+
+/* SUGESTÃO. Primeiro o que o TEXTO diz; a posição só desempata. */
+function leiSugerirEntre(cands) {
+  let motivo = "posicao", confianca = "fraca", fonte = "";
+  let melhor = cands[cands.length - 1];
+  const ev = cands.map((c) => leiPontosDeSinal(c.sinais.tipo));
+  const maior = Math.max.apply(null, ev);
+  const segundo = ev.slice().sort((x, y) => y - x)[1];
+  if (maior - segundo >= 3) {
+    const i = ev.indexOf(maior);
+    melhor = cands[i];
+    confianca = "forte";
+    motivo = melhor.sinais.tipo === "redacao" ? "redacao"
+      : melhor.sinais.tipo === "renumerado" ? "renumerado"
+      : (cands.some((c) => c.sinais.tipo === "revogado") ? "revogado"
+        : (cands.some((c) => c.sinais.tipo === "vetado") ? "vetado" : "vazio"));
+    fonte = melhor.sinais.fonte || "";
+  } else if (cands.every((c) => leiNormalizaTexto(c.texto) === leiNormalizaTexto(cands[0].texto))) {
+    melhor = cands[0];
+    confianca = "forte";
+    motivo = "identico";
+  }
+  return { melhor, confianca, motivo, fonte };
 }
 
 /* As palavras de A que NÃO existem em B — o que muda de uma redação para a
@@ -333,7 +343,7 @@ function leiAplicarDuplicados(texto, grupos, decisoes) {
     const escolhido = g.candidatos.filter((c) => c.indice === d.manter)[0];
     if (!escolhido) { resumo.push({ num: g.num, acao: "todas" }); return; }
     const outros = g.candidatos.filter((c) => c !== escolhido);
-    const comoAlteracao = !!d.original && outros.length === 1
+    const comoAlteracao = !!d.original && !g.intra && outros.length === 1
       && escolhido.sinais.tipo === "redacao" && outros[0].sinais.tipo !== "redacao";
     const tirar = comoAlteracao ? [escolhido] : outros;
     tirar.forEach((c) => { for (let n = c.linha; n <= c.linhaFim; n++) fora[n] = true; });
@@ -427,6 +437,587 @@ function leiSepararColagem(texto) {
     artigos: cands.map((c) => ({ num: c.num, rotulo: c.rotulo })),
     quebras: (saida.match(/\n/g) || []).length - (src.match(/\n/g) || []).length,
   };
+}
+
+/* =====================================================================
+ * LIMPAR O TEXTO COLADO DE UM PDF — o app SUGERE, quem cola DECIDE
+ *
+ * O CASO REAL. Ctrl+A num PDF de lei (o Código Tributário de Caruaru, 296
+ * páginas) traz, além da lei: o cabeçalho da prefeitura a cada página, os
+ * Anexos de tabelas depois do último artigo, "Art . 382" com espaço,
+ * "Art. 356. A -" no lugar de 356-A, remissões que a quebra de linha jogou
+ * para o começo de uma linha ("…previstas no / artigo 16 desta Lei") e a
+ * redação velha ao lado da nova DENTRO do mesmo artigo. O leitor lia tudo
+ * isso como lei: artigos falsos, artigos cortados no meio, o Anexo inteiro
+ * dentro do último artigo — e, na atualização de versão, centenas de
+ * "mudou" e "revogado" que não eram nada disso.
+ *
+ * OS TIPOS DE ERRO (cada um tem um grupo abaixo e um teste):
+ *   1. TEXTO QUE NÃO É LEI      cabeçalho/rodapé repetido, número de página,
+ *                               caracteres invisíveis, Anexos.
+ *   2. CABEÇALHO NÃO RECONHECIDO "“ Art. 162" (citação de lei alteradora),
+ *                               "Art . 382", "Art. 356. A -".
+ *   3. CABEÇALHO FALSO          remissão ("artigo 16 desta Lei") ou divisão
+ *                               ("LIVRO II Regula…;") que a quebra de linha
+ *                               pôs no começo da linha.
+ *   4. REPETIÇÃO DENTRO DO ARTIGO  § velho e § novo (leiRepetidosNoArtigo).
+ * O que esta função NÃO faz: decidir. Cada mudança volta com o que estava,
+ * o que ficaria e por quê; quem aplica é leiAplicarPreprocesso, só com as
+ * escolhas de quem colou, e nada é gravado antes disso.
+ *
+ * Todas as mudanças são identificadas pela linha ORIGINAL (1 = primeira),
+ * então cada grupo pode ser aceito ou recusado sem mexer nos outros.
+ * ===================================================================== */
+
+/* linha que ENCERRA uma frase: o que vem depois pode ser um cabeçalho */
+const LEI_RE_FIM_FRASE = /[.:;!?)\]”"’']\s*$/;
+/* nota de vigência sozinha na linha: "(Redação dada pela…)" repete-se
+ * centenas de vezes e NÃO é cabeçalho de página */
+const LEI_RE_ANOTACAO_SOZINHA =
+  /^\s*[(\[_*]*\s*(?:reda[çc][ãa]o|inclu[íi]d|revogad|renumerad|vetad|vide\b|acrescentad|com\s+a\s+reda|produ[çc][ãa]o\s+de\s+efeito|vig[êe]ncia|\(?nr\)|\(?ac\))/i;
+const LEI_RE_PARAGRAFO =
+  /^\s*(?:§\s*(\d{1,3})\s*[ºo°ª]?|(Par[áa]grafo\s+[úu]nico))(?=[\s.\-–—:]|$)/i;
+const LEI_RE_INCISO = /^\s*[IVXLCDM]{1,7}\s*[-–—.)]\s/;
+const LEI_RE_ALINEA = /^\s*[a-z]\)\s/;
+const LEI_RE_ANEXO_MAIUSCULO = /^\s*ANEXO\s+([IVXLCDM]+|\d{1,3}|[ÚU]NICO)\b(.*)$/;
+const LEI_RE_ANEXO_SOZINHO = /^\s*Anexo\s+([IVXLCDM]+|\d{1,3}|[úu]nico)\s*$/;
+const LEI_RE_INVISIVEIS = /[­​-‍⁠﻿]/g;
+
+/* A linha tem cara de ESTRUTURA da lei (e por isso não pode ser tomada por
+ * cabeçalho de página repetido)? */
+function leiLinhaEstrutural(linha) {
+  const s = String(linha || "");
+  return LEI_RE_ARTIGO.test(s) || LEI_RE_DIVISAO.test(s)
+    || LEI_RE_PARAGRAFO.test(s) || LEI_RE_INCISO.test(s) || LEI_RE_ALINEA.test(s)
+    || LEI_RE_ANOTACAO_SOZINHA.test(s)
+    || LEI_RE_ANEXO_MAIUSCULO.test(s) || LEI_RE_ANEXO_SOZINHO.test(s);
+}
+
+/* números de página: só as formas que não deixam dúvida ("Página 3 de 296",
+ * "3 / 296") — o número solto só conta quando forma uma SEQUÊNCIA */
+const LEI_RE_PAGINA_CLARA =
+  /^\s*(?:(?:p[áa]g(?:ina)?\.?|page)\s*\d{1,4}(?:\s*(?:\/|de|of)\s*\d{1,4})?|[-–—]?\s*\d{1,4}\s*(?:\/|de)\s*\d{1,4}\s*[-–—]?)\s*$/i;
+const LEI_RE_PAGINA_SOLTA = /^\s*(\d{1,4})\s*$/;
+
+/* Só o que a linha ganha se for um cabeçalho de artigo escrito de um jeito
+ * que o leitor não reconhece. Devolve a linha corrigida, ou null. */
+function leiGrafiaDaLinha(linha) {
+  let s = String(linha);
+  const orig = s;
+  /* citação de lei alteradora: “ Art. 162 [...] */
+  s = s.replace(/^(\s*)[“”"«»]+\s*(?=Art(?:\.|igo)?\s*\d)/i, "$1");
+  /* "Art . 382" */
+  s = s.replace(/^(\s*)(Art)\s+\.\s*(?=\d)/i, "$1$2. ");
+  /* "Art. 356. A - texto"  =>  "Art. 356-A. texto" */
+  s = s.replace(/^(\s*)Art(?:\.|igo)?\s*(\d{1,4})\s*([ºo°ª]?)(?:\.\s*|\s+)([A-Z])\s*[-–—]\s*(?=\S)/,
+    (m0, ini, n, ord, letra) => ini + "Art. " + n + ord + "-" + letra + ". ");
+  /* "Parágra único" */
+  s = s.replace(/^(\s*)Par[áa]gra\s+([úu]nico)/i, "$1Parágrafo $2");
+  return s === orig ? null : s;
+}
+
+function leiPreprocessar(texto) {
+  const linhas = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n").split("\n");
+  const sem = linhas.map((x) => x.replace(LEI_RE_INVISIVEIS, ""));
+  const mudancas = [];
+  const trilha = (s) => String(s).replace(/\s+/g, " ").trim(); const cola = (s, n) => { const x = trilha(s); if (x.length <= n) return x; const c = x.slice(-n); const i = c.indexOf(" "); return i >= 0 && i < 24 ? c.slice(i + 1) : c; };
+
+  /* 1a. caracteres invisíveis (hífen opcional, espaço de largura zero…) */
+  const inv = [];
+  linhas.forEach((x, i) => { if (x !== sem[i]) inv.push(i + 1); });
+  if (inv.length) {
+    mudancas.push({ id: "inv", grupo: "invisiveis", linhas: inv, ocorrencias: inv.length,
+      antes: trilha(linhas[inv[0] - 1]).slice(0, 120), depois: trilha(sem[inv[0] - 1]).slice(0, 120) });
+  }
+
+  /* 1b. cabeçalho e rodapé repetidos a cada página */
+  const ondeEsta = {};
+  sem.forEach((x, i) => {
+    const k = trilha(x);
+    if (k.length < 20) return;
+    (ondeEsta[k] = ondeEsta[k] || []).push(i + 1);
+  });
+  const remover = {};                 /* linha (1..) já destinada a sair */
+  let n = 0;
+  Object.keys(ondeEsta).forEach((k) => {
+    const L = ondeEsta[k];
+    if (L.length < 3) return;
+    if (leiLinhaEstrutural(k)) return;
+    if (/^[\d\s.,;:()\-–—/%R$]+$/.test(k)) return;       /* linha de tabela, só números */
+    /* cabeçalho de página se repete ESPAÇADO; a mesma linha três vezes num
+     * trecho curto é linha de tabela ou frase repetida de verdade */
+    if ((L[L.length - 1] - L[0]) / (L.length - 1) < 5) return;
+    L.forEach((ln) => { remover[ln] = true; });
+    mudancas.push({ id: "cab:" + (n++), grupo: "cabecalho", linhas: L, ocorrencias: L.length,
+      antes: k.slice(0, 160), depois: "" });
+  });
+
+  /* 1c. número de página */
+  const pag = [];
+  sem.forEach((x, i) => { if (LEI_RE_PAGINA_CLARA.test(x)) pag.push(i + 1); });
+  /* número solto: só a SEQUÊNCIA +1, com 5 ou mais */
+  let cadeia = [];
+  const fechaCadeia = () => { if (cadeia.length >= 5) cadeia.forEach((c) => pag.push(c.ln)); cadeia = []; };
+  sem.forEach((x, i) => {
+    const m = x.match(LEI_RE_PAGINA_SOLTA);
+    if (!m) return;
+    const v = Number(m[1]);
+    if (cadeia.length && v === cadeia[cadeia.length - 1].v + 1) cadeia.push({ v, ln: i + 1 });
+    else { fechaCadeia(); cadeia = [{ v, ln: i + 1 }]; }
+  });
+  fechaCadeia();
+  const pagFim = Array.from(new Set(pag)).filter((ln) => !remover[ln]).sort((a, b) => a - b);
+  if (pagFim.length) {
+    pagFim.forEach((ln) => { remover[ln] = true; });
+    mudancas.push({ id: "pag", grupo: "pagina", linhas: pagFim, ocorrencias: pagFim.length,
+      antes: pagFim.slice(0, 4).map((ln) => trilha(sem[ln - 1])).join(" · "), depois: "" });
+  }
+
+  /* 2. cabeçalho de artigo escrito de um jeito que o leitor não reconhece.
+   * Daqui em diante trabalha-se sobre a linha JÁ corrigida, para que a
+   * checagem de remissão veja o mesmo texto que o leitor veria. */
+  const efetiva = sem.slice();
+  sem.forEach((x, i) => {
+    if (remover[i + 1]) return;
+    const g = leiGrafiaDaLinha(x);
+    if (g === null) return;
+    efetiva[i] = g;
+    mudancas.push({ id: "gra:" + (i + 1), grupo: "grafia", linhas: [i + 1],
+      antes: trilha(x).slice(0, 160), depois: trilha(g).slice(0, 160) });
+  });
+
+  /* 3. cabeçalho FALSO: remissão ou divisão que a quebra de linha pôs no
+   * começo da linha. */
+  const anteriorViva = (i) => {
+    for (let j = i - 1; j >= 0; j--) if (!remover[j + 1] && efetiva[j].trim()) return j;
+    return -1;
+  };
+  let ultimaOrdem = null;
+  efetiva.forEach((x, i) => {
+    if (remover[i + 1]) return;
+    const a = x.match(LEI_RE_ARTIGO);
+    const d = !a && x.match(LEI_RE_DIVISAO);
+    if (!a && !d) return;
+    const j = anteriorViva(i);
+    let falso = false, motivo = "";
+    if (a && j >= 0) {
+      const palavra = (x.match(/^[\s>*]*(art(?:igo)?)/i) || [])[1] || "";
+      const minuscula = palavra === palavra.toLowerCase();
+      const ord = leiNumOrdem(a[1]);
+      /* só um número que VOLTA é suspeito: quem cola um recorte (1, 2, 3, 9,
+       * 35…) tem saltos para frente de propósito. Compara o número BASE:
+       * "31" depois de "31-A" ainda é a mesma altura da lei. */
+      const cabe = ultimaOrdem === null
+        || Math.floor(ord / 100) >= Math.floor(ultimaOrdem / 100);
+      /* a linha de cima FECHOU a frase? Título de divisão, nome de capítulo em
+       * maiúsculas e anexo também contam como fechados: depois deles vem artigo */
+      const cima = efetiva[j].trim();
+      /* "CAPÍTULO II" e, na linha de baixo, "Da Receita": o NOME da divisão
+       * também não termina com ponto, e depois dele vem o artigo */
+      const nomeDeDivisao = cima.length <= 90 && (() => {
+        const jj = anteriorViva(j);
+        return jj >= 0 && LEI_RE_DIVISAO.test(efetiva[jj].trim());
+      })();
+      const fechou = LEI_RE_FIM_FRASE.test(cima) || LEI_RE_DIVISAO.test(cima)
+        || LEI_RE_ANEXO_MAIUSCULO.test(cima) || nomeDeDivisao
+        || (cima === cima.toUpperCase() && cima.length <= 110);
+      if (minuscula) { falso = true; motivo = "minuscula"; }
+      else if (!fechou && !cabe) { falso = true; motivo = "sequencia"; }
+    }
+    if (d && j >= 0 && /[;,]\s*$/.test(x)) { falso = true; motivo = "divisao"; }
+    if (falso) {
+      mudancas.push({ id: "rem:" + (i + 1), grupo: "remissao", linhas: [i + 1], motivo,
+        contexto: cola(efetiva[j], 110),
+        antes: trilha(x).slice(0, 160),
+        depois: cola(efetiva[j], 110) + " " + trilha(x).slice(0, 160) });
+      return;
+    }
+    if (a) ultimaOrdem = leiNumOrdem(a[1]);
+  });
+
+  /* 4. anexos: cada "ANEXO X" vai até o próximo anexo ou o próximo artigo */
+  const anx = [];
+  efetiva.forEach((x, i) => {
+    if (remover[i + 1]) return;
+    const m = x.match(LEI_RE_ANEXO_MAIUSCULO) || x.match(LEI_RE_ANEXO_SOZINHO);
+    if (m) anx.push(i);
+  });
+  anx.forEach((ini, k) => {
+    let fim = efetiva.length - 1;
+    for (let j = ini + 1; j < efetiva.length; j++) {
+      if (remover[j + 1]) continue;
+      if (k + 1 < anx.length && j === anx[k + 1]) { fim = j - 1; break; }
+      if (LEI_RE_ARTIGO.test(efetiva[j]) && /^[\s>*]*Art/.test(efetiva[j])) { fim = j - 1; break; }
+    }
+    while (fim > ini && (remover[fim + 1] || !efetiva[fim].trim())) fim--;
+    let titulo = trilha(efetiva[ini]);
+    const prox = efetiva[ini + 1] !== undefined ? trilha(efetiva[ini + 1]) : "";
+    if (prox && prox.length <= 110 && prox === prox.toUpperCase() && /[A-ZÀ-Ú]{3}/.test(prox)) titulo += " — " + prox;
+    let tam = 0;
+    for (let j = ini; j <= fim; j++) if (!remover[j + 1]) tam += efetiva[j].length;
+    mudancas.push({ id: "anx:" + (ini + 1), grupo: "anexo", linhas: [ini + 1, fim + 1],
+      titulo: titulo.slice(0, 140), tamanho: tam, decisaoPadrao: "separar",
+      antes: titulo.slice(0, 140), depois: "" });
+  });
+
+  const ordem = { invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, remissao: 4, anexo: 5 };
+  mudancas.sort((x, y) => (ordem[x.grupo] - ordem[y.grupo]) || (x.linhas[0] - y.linhas[0]));
+  return { mudancas, linhas: linhas.length };
+}
+
+/* Aplica as ESCOLHAS de quem colou. decisoes = { [id]: true|false } — e, nos
+ * anexos, "separar" | "manter" | "descartar". O que não foi decidido vale a
+ * sugestão (true / "separar"). Com TODAS as mudanças recusadas, devolve o
+ * texto exatamente como veio. NÃO grava nada.
+ * Devolve { texto, anexos:[{titulo,texto}], resumo }. */
+function leiAplicarPreprocesso(texto, mudancas, decisoes) {
+  const bruto = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n");
+  const dec = decisoes || {};
+  const cur = bruto.split("\n").map((t) => ({ t, x: false }));
+  const anexos = [];
+  const resumo = { invisiveis: 0, cabecalho: 0, pagina: 0, grafia: 0, remissao: 0,
+    anexosSeparados: 0, anexosDescartados: 0 };
+  const vale = (c) => (c.grupo === "anexo"
+    ? (dec[c.id] === undefined ? "separar" : dec[c.id])
+    : (dec[c.id] === undefined ? true : !!dec[c.id]));
+  let mexeu = false;
+
+  (mudancas || []).forEach((c) => {
+    if (c.grupo === "invisiveis" && vale(c)) {
+      cur.forEach((o) => { o.t = o.t.replace(LEI_RE_INVISIVEIS, ""); });
+      resumo.invisiveis = c.ocorrencias; mexeu = true;
+    }
+  });
+  (mudancas || []).forEach((c) => {
+    if ((c.grupo === "cabecalho" || c.grupo === "pagina") && vale(c)) {
+      c.linhas.forEach((ln) => { if (cur[ln - 1]) cur[ln - 1].x = true; });
+      resumo[c.grupo] += c.linhas.length; mexeu = true;
+    }
+  });
+  (mudancas || []).forEach((c) => {
+    if (c.grupo === "grafia" && vale(c) && cur[c.linhas[0] - 1] && !cur[c.linhas[0] - 1].x) {
+      const g = leiGrafiaDaLinha(cur[c.linhas[0] - 1].t);
+      if (g !== null) { cur[c.linhas[0] - 1].t = g; resumo.grafia++; mexeu = true; }
+    }
+  });
+  (mudancas || []).forEach((c) => {
+    if (c.grupo !== "remissao" || !vale(c)) return;
+    const i = c.linhas[0] - 1;
+    if (!cur[i] || cur[i].x) return;
+    let j = i - 1;
+    while (j >= 0 && (cur[j].x || !cur[j].t.trim())) j--;
+    if (j < 0) return;
+    cur[j].t = cur[j].t.replace(/\s+$/, "") + " " + cur[i].t.trim();
+    cur[i].x = true;
+    resumo.remissao++; mexeu = true;
+  });
+  (mudancas || []).forEach((c) => {
+    if (c.grupo !== "anexo") return;
+    const v = vale(c);
+    if (v !== "separar" && v !== "descartar") return;
+    const partes = [];
+    for (let ln = c.linhas[0]; ln <= c.linhas[1]; ln++) {
+      const o = cur[ln - 1];
+      if (o && !o.x) { partes.push(o.t); o.x = true; }
+    }
+    if (v === "separar") {
+      anexos.push({ titulo: c.titulo, texto: partes.join("\n").replace(/^\s+|\s+$/g, "") });
+      resumo.anexosSeparados++;
+    } else resumo.anexosDescartados++;
+    mexeu = true;
+  });
+
+  let saida = cur.filter((o) => !o.x).map((o) => o.t).join("\n");
+  if (mexeu) saida = saida.replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
+  return { texto: mexeu ? saida : bruto, anexos, resumo };
+}
+
+/* =====================================================================
+ * REPETIÇÃO DENTRO DO MESMO ARTIGO
+ *
+ * O PDF do Código de Caruaru (texto consolidado com tachados) traz, dentro
+ * do Art. 9º, o "§5º" antigo e o "§5º" novo ("Redação dada pela LC 018");
+ * no Art. 10, o "Parágrafo Único" antigo e o "§1º" novo ("Renumerado do
+ * parágrafo único"). Não são artigos repetidos — leiDuplicados não os via —,
+ * e a lei guardava as duas redações juntas, sem aviso.
+ *
+ * Aqui só se aponta o que é SUSPEITO: o mesmo rótulo de parágrafo duas vezes
+ * no mesmo artigo. O grupo sai no mesmo formato de leiDuplicados (a mesma
+ * tela escolhe qual fica), com `intra: true` — a redação substituída não
+ * pode virar "alteração", que só existe por artigo inteiro.
+ * ===================================================================== */
+function leiRepetidosNoArtigo(texto, ignorar) {
+  const conferidos = {};
+  (ignorar || []).forEach((n) => { conferidos[leiNumNormal(n)] = true; });
+  const grupos = [];
+  leiArtigos(texto).forEach((a) => {
+    const linhas = a.texto.split("\n");
+    const inicios = [];
+    linhas.forEach((ln, k) => {
+      if (k === 0) return;
+      const m = ln.match(LEI_RE_PARAGRAFO);
+      if (!m) return;
+      const resto = ln.slice(m[0].length);
+      /* "§ 4º do artigo 9º" no começo de uma linha é remissão, não parágrafo:
+       * o rótulo verdadeiro é seguido de pontuação ou de frase com maiúscula */
+      if (!/^\s*[.\-–—:]/.test(resto) && !/^\s*["“(]?[A-ZÀ-Ú]/.test(resto)) return;
+      inicios.push({ k, chave: m[1] ? "P" + Number(m[1]) : "PU",
+        rotulo: m[1] ? "§" + Number(m[1]) + "º" : "parágrafo único" });
+    });
+    if (inicios.length < 2) return;
+    inicios.forEach((p, idx) => {
+      let fim = (idx + 1 < inicios.length ? inicios[idx + 1].k : linhas.length) - 1;
+      while (fim > p.k && !linhas[fim].trim()) fim--;
+      p.fim = fim;
+      p.texto = linhas.slice(p.k, fim + 1).join("\n");
+      /* "Renumerado do parágrafo único" diz a QUAL parágrafo antigo este
+       * substitui: é o par do "Parágrafo Único" da mesma lei */
+      if (/\(\s*renumerad[oa]\s+do\s+par[áa]grafo\s+[úu]nico/i.test(p.texto)) {
+        p.chave = "PU"; p.rotulo = "parágrafo único";
+      }
+    });
+    const porChave = {};
+    inicios.forEach((p) => { (porChave[p.chave] = porChave[p.chave] || []).push(p); });
+    Object.keys(porChave).forEach((chave) => {
+      const L = porChave[chave];
+      const num = a.num + "#" + chave;
+      if (L.length < 2 || conferidos[leiNumNormal(num)]) return;
+      const cands = L.map((p, pos) => ({
+        indice: 1000000 + a.linha + p.k, linha: a.linha + p.k, linhaFim: a.linha + p.fim,
+        texto: p.texto, corpo: p.texto, pos, sinais: leiSinaisDoArtigo({ corpo: p.texto }),
+      }));
+      const s = leiSugerirEntre(cands);
+      grupos.push({
+        num, numCru: a.numCru + " — " + L[0].rotulo, rotulo: a.rotulo + " — " + L[0].rotulo,
+        candidatos: cands, sugerido: s.melhor.indice, confianca: s.confianca,
+        motivo: s.motivo, fonte: s.fonte, intra: true,
+        ordem: leiNumOrdem(a.num) * 1000 + 1 + Math.min(L[0].k, 900),
+      });
+    });
+  });
+  return grupos;
+}
+
+/* =====================================================================
+ * A NUMERAÇÃO DOS ARTIGOS TEM DE SER UMA SEQUÊNCIA
+ *
+ * É a prova dos nove do leitor: lida certa, a lei tem números que sobem de
+ * um em um. Um número ISOLADO (o "Art. 16" de uma remissão), um SALTO (parte
+ * do texto faltando ou artigo lido como texto) ou uma VOLTA (artigo colado
+ * dentro de outro, texto repetido) quase sempre é o LEITOR errando, não a
+ * lei. Isto só CRITICA — devolve os problemas para a tela mostrar; nunca
+ * corrige. Lei legítima também salta (artigo vetado, ADCT que recomeça):
+ * por isso cada problema tem gravidade, e só os graves abrem a conferência
+ * sozinhos.
+ *   isolado   grave    um número entre vizinhos que combinam entre si
+ *   volta     grave    o número desce (fora do recomeço em 1 ou 2)
+ *   salto     grave    faltam 3 ou mais números numa lei quase contínua;
+ *                      leve se faltam 1 ou 2, ou se o texto é um RECORTE
+ *   recomeco  leve     desce e recomeça em 1 ou 2 (ADCT, Anexos)
+ *
+ * RECORTE: quem cola só os artigos que interessam (1, 2, 3, 9, 11, 35, 115)
+ * tem saltos de propósito. Quando os artigos presentes cobrem menos de 60%
+ * do intervalo entre o primeiro e o último número, o texto é tratado como
+ * recorte e os saltos viram avisos leves. Número isolado e volta continuam
+ * graves em qualquer caso: esses são o sinal clássico de leitor errado.
+ * ===================================================================== */
+function leiNumeracao(artigos) {
+  const A = artigos || [];
+  const B = A.map((a) => Math.floor(a.ordem / 100));
+  const distintos = {};
+  B.forEach((b) => { distintos[b] = true; });
+  const faixa = B.length ? Math.max.apply(null, B) - Math.min.apply(null, B) + 1 : 1;
+  const recorte = Object.keys(distintos).length / faixa < 0.6;
+  const isolado = {};
+  for (let i = 1; i < A.length - 1; i++) {
+    const vizinhos = B[i + 1] - B[i - 1];
+    if (vizinhos >= 0 && vizinhos <= 3
+        && Math.abs(B[i] - B[i - 1]) > 3 && Math.abs(B[i] - B[i + 1]) > 3) isolado[i] = true;
+  }
+  const problemas = [];
+  let p = -1;
+  A.forEach((a, i) => {
+    if (isolado[i]) {
+      problemas.push({ tipo: "isolado", gravidade: "grave", num: a.num, numCru: a.numCru,
+        linha: a.linha, de: p >= 0 ? A[p].numCru : "", faltam: [], nFaltam: 0 });
+      return;
+    }
+    if (p >= 0) {
+      const d = B[i] - B[p];
+      if (d >= 2) {
+        const faltam = [];
+        for (let x = B[p] + 1; x < B[i] && faltam.length < 8; x++) faltam.push(x);
+        problemas.push({ tipo: "salto", gravidade: d - 1 >= 3 && !recorte ? "grave" : "leve", num: a.num,
+          numCru: a.numCru, linha: a.linha, de: A[p].numCru, faltam, nFaltam: d - 1 });
+      } else if (d < 0) {
+        const recomeco = B[i] <= 2;
+        problemas.push({ tipo: recomeco ? "recomeco" : "volta", gravidade: recomeco ? "leve" : "grave",
+          num: a.num, numCru: a.numCru, linha: a.linha, de: A[p].numCru, faltam: [], nFaltam: 0 });
+      }
+    }
+    p = i;
+  });
+  return { problemas, graves: problemas.filter((x) => x.gravidade === "grave"), recorte };
+}
+
+/* =====================================================================
+ * COMPARAR A VERSÃO GRAVADA COM UMA NOVA — e ajudar a decidir
+ *
+ * Os tipos de erro que a comparação por número pode cometer, e o que a
+ * cada um se faz (cada item leva a lista `alertas`, que a tela mostra ANTES
+ * de a pessoa aceitar ou recusar):
+ *   · "mudou" que é só formatação (aspas, travessão, º, espaço)  → não é
+ *     listado; conta-se à parte (soFormatacao).
+ *   · "mudou" que é só a nota de vigência ("Redação dada pela…")  → alerta
+ *     informativo `so_anotacao`.
+ *   · o texto novo é bem menor / quase outro artigo / traz "[...]" /
+ *     é um número isolado fora da sequência                       → alerta.
+ *   · "revogado" porque o artigo NÃO APARECEU no texto novo — o erro mais
+ *     caro: numa colagem incompleta viram centenas. Só existe no modo
+ *     "considerar a lei inteira" (ausentes = "revogar").
+ * ===================================================================== */
+function leiNormalizaComparacao(s) {
+  return String(s == null ? "" : s)
+    .replace(LEI_RE_INVISIVEIS, "")
+    .replace(/ /g, " ")
+    .replace(/[“”«»„]/g, '"').replace(/[‘’]/g, "'")
+    .replace(/[–—−]/g, "-")
+    .replace(/(\d)\s*[°ª]/g, "$1º")
+    .replace(/§\s+(\d)/g, "§$1")
+    .replace(/\s+([.,;:)])/g, "$1")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+/g, " ").trim();
+}
+
+/* Um número que está sozinho entre vizinhos distantes é remissão que virou
+ * "artigo" (ver leiPreprocessar) ou lixo de OCR. Devolve { num: true }. */
+function leiForaDaSequencia(artigos) {
+  const fora = {};
+  const A = artigos || [];
+  A.forEach((a, i) => {
+    if (i === 0 || i === A.length - 1) return;
+    const d1 = Math.abs(a.ordem - A[i - 1].ordem);
+    const d2 = Math.abs(a.ordem - A[i + 1].ordem);
+    if (d1 > 500 && d2 > 500) fora[a.num] = true;
+  });
+  return fora;
+}
+
+function leiPareceAlteradora(texto) {
+  const s = String(texto || "");
+  const sinais = [];
+  if ((s.match(/\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/g) || []).length >= 2) sinais.push("omitidos");
+  if ((s.match(/\(\s*(?:NR|AC)\s*\)/g) || []).length >= 3) sinais.push("nr_ac");
+  if (/passa(?:m)?\s+a\s+vigorar\s+com\s+as?\s+seguintes?\s+(?:altera[çc][õo]es|reda[çc][ãa]o)/i.test(s)) {
+    sinais.push("passa_a_vigorar");
+  }
+  if (/^\s*Altera\s+(?:a|o|as|os|dispositivos)\b/im.test(s.slice(0, 3000))) sinais.push("altera");
+  /* "[...]", "(NR)"/"(AC)" e "passa a vigorar…" bastam sozinhos: lei consolidada
+   * não os tem. "Altera a…" no título, sozinho, é menos: só conta com outro sinal */
+  const forte = sinais.some((x) => x === "omitidos" || x === "nr_ac" || x === "passa_a_vigorar");
+  return { sim: forte || sinais.length >= 2, sinais };
+}
+
+function leiConfereIdentidade(l, texto) {
+  const novo = leiIdentificar(texto);
+  if (!novo || !l || !l.numero) return { conflito: false, novo };
+  const num = (x) => String(x || "").replace(/[.\s]/g, "").replace(/^0+/, "");
+  const esp = (x) => String(x || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const conflito = num(l.numero) !== num(novo.numero)
+    || (l.ano && novo.ano && String(l.ano) !== String(novo.ano))
+    || (l.especie && novo.especie && esp(l.especie) !== esp(novo.especie));
+  return { conflito: !!conflito, novo };
+}
+
+function leiCoberturaDaAtualizacao(antigos, novos) {
+  const nn = {};
+  (novos || []).forEach((a) => { nn[a.num] = true; });
+  const todos = {};
+  (antigos || []).forEach((a) => { todos[a.num] = a; });
+  const nums = Object.keys(todos);
+  const ausentes = nums.filter((k) => !nn[k]);
+  return { total: nums.length, presentes: nums.length - ausentes.length, ausentes,
+    pct: nums.length ? (nums.length - ausentes.length) / nums.length : 1 };
+}
+
+/* Os alertas de UM item da comparação. Cada um: { k, sev } com k = o sufixo
+ * da chave de texto (lei_upd_al_<k>) e args para o texto. */
+function leiAlertasDaMudanca(item, ctx) {
+  const c = ctx || {};
+  const al = [];
+  const semNota = (s) => leiNormalizaComparacao(String(s || "").replace(/\([^)]*\)/g, ""));
+  const palavras = (s) => leiNormalizaComparacao(s).toLowerCase().split(/[^a-zà-ú0-9]+/i).filter(Boolean);
+  if (item.tipo === "mudou") {
+    if (semNota(item.antigo) === semNota(item.novo)) al.push({ k: "so_anotacao", sev: "info" });
+    if (/\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/.test(item.novo)) al.push({ k: "omitido", sev: "alerta" });
+    const a = leiNormalizaComparacao(item.antigo).length, b = leiNormalizaComparacao(item.novo).length;
+    if (a > 80 && b < a * 0.6) al.push({ k: "menor", sev: "alerta", pct: Math.round(b / a * 100) });
+    const pa = palavras(item.antigo), pb = new Set(palavras(item.novo));
+    if (pa.length >= 8) {
+      const comuns = pa.filter((w) => pb.has(w)).length;
+      const jac = comuns / (pa.length + pb.size - comuns);
+      if (jac < 0.35) al.push({ k: "outro", sev: "alerta", pct: Math.round(jac * 100) });
+    }
+    const nums = (s) => (String(s).match(/\d+(?:[.,]\d+)*/g) || []);
+    const na = nums(item.antigo).filter((x) => nums(item.novo).indexOf(x) < 0);
+    const nb = nums(item.novo).filter((x) => nums(item.antigo).indexOf(x) < 0);
+    if (na.length || nb.length) {
+      al.push({ k: na.length && nb.length ? "numeros" : (nb.length ? "numeros_novos" : "numeros_removidos"),
+        sev: "info", de: na.slice(0, 4).join(", "), para: nb.slice(0, 4).join(", ") });
+    }
+    if (/^\s*Art[^\n(]{0,20}\(\s*revogad/i.test(String(item.novo).replace(/\s+/g, " "))) {
+      al.push({ k: "revogado_no_texto", sev: "info" });
+    }
+  }
+  if (item.tipo === "novo" && c.fora && c.fora[item.num]) al.push({ k: "fora_sequencia", sev: "alerta" });
+  if (item.tipo === "revogado") {
+    al.push({ k: "ausente", sev: "aviso" });
+    if (c.cobertura && c.cobertura.pct < 0.9) al.push({ k: "ausente_incompleto", sev: "alerta", pct: Math.round(c.cobertura.pct * 100) });
+  }
+  return al;
+}
+
+/* A comparação em si, sem tela. opc.ausentes: "revogar" (padrão: o que não
+ * aparece no texto novo vira "possivelmente revogado") | "presentes" (só os
+ * artigos que estão nos dois textos são comparados). opc.ignorar: números
+ * que se repetem DE VERDADE na lei gravada (corpo e ADCT), que a comparação
+ * por número não sabe alinhar. */
+function leiCompararVersoes(textoAntigo, textoNovo, opc) {
+  const o = opc || {};
+  const modo = o.ausentes === "presentes" ? "presentes" : "revogar";
+  const ign = {};
+  (o.ignorar || []).forEach((n) => { ign[leiNumNormal(n)] = true; });
+  const antigos = leiArtigos(textoAntigo);
+  const novos = leiArtigos(textoNovo);
+  const porNumAntigo = {}, porNumNovo = {};
+  antigos.forEach((a) => { porNumAntigo[a.num] = a; });
+  novos.forEach((a) => { porNumNovo[a.num] = a; });
+  const cobertura = leiCoberturaDaAtualizacao(antigos, novos);
+  const fora = leiForaDaSequencia(novos);
+  const itens = [];
+  const soFormatacao = [];
+  const naoComparados = [];
+  Object.keys(porNumNovo).forEach((num) => {
+    if (ign[num]) { naoComparados.push(num); return; }
+    const a = porNumAntigo[num], b = porNumNovo[num];
+    if (!a) itens.push({ num, numCru: b.numCru, tipo: "novo", antigo: "", novo: b.texto, aceito: false, recusado: false });
+    else if (a.texto.replace(/\s+/g, " ").trim() !== b.texto.replace(/\s+/g, " ").trim()) {
+      if (leiNormalizaComparacao(a.texto) === leiNormalizaComparacao(b.texto)) soFormatacao.push(num);
+      else itens.push({ num, numCru: b.numCru, tipo: "mudou", antigo: a.texto, novo: b.texto, aceito: false, recusado: false });
+    }
+  });
+  if (modo === "revogar") {
+    Object.keys(porNumAntigo).forEach((num) => {
+      if (ign[num]) { if (naoComparados.indexOf(num) < 0) naoComparados.push(num); return; }
+      if (!porNumNovo[num]) {
+        itens.push({ num, numCru: porNumAntigo[num].numCru, tipo: "revogado",
+          antigo: porNumAntigo[num].texto, novo: "", aceito: false, recusado: false });
+      }
+    });
+  }
+  itens.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
+  itens.forEach((it) => { it.alertas = leiAlertasDaMudanca(it, { fora, cobertura }); });
+  return { itens, soFormatacao, naoComparados, cobertura };
 }
 
 /* =====================================================================

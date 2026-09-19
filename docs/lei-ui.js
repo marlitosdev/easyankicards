@@ -358,6 +358,7 @@ function leiPintar() {
   leiPintarProcedencia();
   leiPintarOnde();
   leiPintarBlocos();
+  leiPintarAnexos();
   leiJanelaAplicar();
   leiCheiaAplicar();
   if (leiModo !== "editar") leiTrocarModo(leiModo);
@@ -577,6 +578,21 @@ function leiPintarProcedencia() {
       bR.title = t("lei_dup_aviso_aj", { a: rep.map((g) => "art. " + g.numCru).join(", ") });
       bR.onclick = () => leiRevisarRepetidos();
       cx.append(bR);
+    }
+
+    /* NUMERAÇÃO FORA DE SEQUÊNCIA: quase sempre é o leitor que entendeu o
+     * texto errado (remissão lida como artigo, trecho faltando). Só CRITICA:
+     * o toque mostra onde; quem corrige é quem cola. */
+    const nm = leiNumeracaoDaLei(l);
+    if (nm.graves.length) {
+      const bN = document.createElement("button");
+      bN.className = "btn-min btn-min-perigo";
+      bN.id = "btnLeiNumeracao";
+      bN.textContent = t("lei_num_aviso", { n: nm.graves.length });
+      bN.title = t("lei_num_aviso_aj", { a: nm.graves.slice(0, 3).map((p) => "art. " + p.numCru).join(", ") });
+      bN.onclick = () => uiAlert(t("lei_pre_num_aviso") + "\n\n"
+        + leiNumeracaoLinhas(nm.problemas).map((p) => "• " + p.texto).slice(0, 15).join("\n"));
+      cx.append(bN);
     }
   }
 }
@@ -2209,13 +2225,31 @@ function leiGravar(opc) {
         return "pendente";
       }
     }
+    /* LIMPEZA DO TEXTO DE PDF vem antes dos repetidos: só depois de corrigir
+     * "Art . 382" e de unir a remissão partida o leitor enxerga os artigos
+     * (e os que se repetem) do jeito que são. A pessoa vê e aprova tudo em
+     * leiRevisarColagemAbrir; a marca "limpo" impede de perguntar de novo. */
+    if (!(opc && opc.limpo)) {
+      const an = leiPreAnalisar(txt);
+      if (an.deve) {
+        leiRevisarColagemAbrir({
+          modo: "criar", texto: txt, pre: an.pre,
+          aoConfirmar: (res) => {
+            $("leiTexto").value = res.texto;
+            leiGravar({ separado: true, limpo: true, anexos: res.anexos });
+          },
+        });
+        return "pendente";
+      }
+    }
     const grupos = (opc && opc.conferido) ? [] : leiDuplicados(txt);
     if (grupos.length) {
       leiDuplicadosAbrir({
         modo: "criar", texto: txt, grupos,
         aoConfirmar: (res) => {
           $("leiTexto").value = res.texto;
-          leiGravar({ conferido: true, alteracoes: res.alteracoes,
+          leiGravar({ separado: true, limpo: true, conferido: true,
+            anexos: opc && opc.anexos, alteracoes: res.alteracoes,
             repetidosOk: res.resumo.filter((r) => r.acao === "todas").map((r) => r.num) });
         },
       });
@@ -2231,6 +2265,7 @@ function leiGravar(opc) {
       consultadaEm: leisHojeISO() },
       Object.keys(alteracoes).length ? { alteracoes } : {},
       (opc && opc.repetidosOk && opc.repetidosOk.length) ? { repetidosOk: opc.repetidosOk } : {},
+      (opc && opc.anexos && opc.anexos.length) ? { anexos: opc.anexos } : {},
       ident ? { especie: ident.especie, numero: ident.numero, ano: ident.ano } : {}));
     if (!l) return;
     leiIdAtual = l.id;
@@ -2322,7 +2357,7 @@ function leiSepararPerguntar(sep, chave) {
  * grupo de duas ocorrências onde a escolhida traz "Redação dada pela…" e a
  * outra não (ver leiAplicarDuplicados) */
 function leiDupPodeOriginal(g, indice) {
-  if (!leiDupCtx || leiDupCtx.modo === "atualizar" || g.candidatos.length !== 2) return false;
+  if (!leiDupCtx || leiDupCtx.modo === "atualizar" || g.intra || g.candidatos.length !== 2) return false;
   if (leiDupCtx.protegidos && leiDupCtx.protegidos[g.num]) return false;
   const esc = g.candidatos.filter((c) => c.indice === indice)[0];
   const outro = g.candidatos.filter((c) => c.indice !== indice)[0];
@@ -2516,6 +2551,431 @@ function leiDupCancelar() {
   leiDupCtx = null;
   $("dlgLeiDup").close();
   try { leiReg("gravar", "artigos repetidos: voltou para revisar o texto", ""); } catch (e) {}
+}
+
+/* =====================================================================
+ * REVISAR A COLAGEM — limpeza do texto de um PDF, na criação e na atualização
+ *
+ * leiPreprocessar (lei-seca.js) SUGERE; esta tela mostra tudo — o que sairia
+ * riscado em vermelho, o que ficaria em verde —, deixa recusar grupo a grupo
+ * e item a item, e só o "finalizar" entrega o texto limpo a quem chamou.
+ * Enquanto isso NADA é criado, comparado ou gravado. Junto vai a CRÍTICA da
+ * numeração (leiNumeracao): artigos fora de sequência quase sempre são o
+ * leitor errando, e a pessoa vê onde antes de seguir.
+ * ===================================================================== */
+const LEI_PRE_GRUPOS = ["invisiveis", "cabecalho", "pagina", "grafia", "remissao", "anexo"];
+/* trecho colado com poucos artigos não tem sequência a criticar */
+const LEI_NUMERACAO_MIN_ARTIGOS = 8;
+let leiPreCtx = null;
+
+/* Há o que limpar OU a numeração está fora de sequência? */
+function leiPreAnalisar(texto) {
+  const pre = leiPreprocessar(texto);
+  const arts = leiArtigos(texto);
+  const num = arts.length >= LEI_NUMERACAO_MIN_ARTIGOS ? leiNumeracao(arts) : { problemas: [], graves: [] };
+  return { pre, num, deve: pre.mudancas.length > 0 || num.graves.length > 0 };
+}
+
+/* os problemas de numeração já escritos em frase, na ordem do texto */
+function leiNumeracaoLinhas(problemas) {
+  return (problemas || []).map((p) => ({
+    gravidade: p.gravidade,
+    texto: t("lei_num_" + p.tipo, { n: p.numCru, l: p.linha, de: p.de || "—",
+      f: (p.faltam || []).join(", ") + ((p.nFaltam || 0) > (p.faltam || []).length ? "…" : "") }),
+  }));
+}
+
+function leiRevisarColagemAbrir(ctx) {
+  leiPreCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  leiPreCtx.texto = String(leiPreCtx.texto == null ? "" : leiPreCtx.texto).replace(/\r\n?/g, "\n");
+  leiPreSugestoes();
+  leiPrePintar();
+  abrirModal("dlgLeiPre");
+  try {
+    leiReg(leiPreCtx.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem aberta",
+      leiPreCtx.pre.mudancas.length + " mudanças sugeridas: "
+      + LEI_PRE_GRUPOS.map((g) => g + " " + leiPreCtx.pre.mudancas.filter((m) => m.grupo === g).length)
+          .filter((x) => !/ 0$/.test(x)).join(" · "));
+  } catch (e) {}
+}
+
+/* tudo começa ACEITO — é a sugestão do app —, e anexos começam "separar" */
+function leiPreSugestoes() {
+  const c = leiPreCtx;
+  if (!c) return;
+  c.decisoes = {};
+  c.pre.mudancas.forEach((m) => { c.decisoes[m.id] = m.grupo === "anexo" ? "separar" : true; });
+}
+
+function leiPreAceita(c, m) {
+  const d = c.decisoes[m.id];
+  return m.grupo === "anexo" ? (d === "separar" || d === "descartar") : !!d;
+}
+
+function leiPreItemEl(c, m) {
+  const aceita = leiPreAceita(c, m);
+  const el = document.createElement("div");
+  el.className = "lei-pre-item" + (aceita ? "" : " off");
+  el.id = "leiPreItem_" + m.id;
+  const linhasTxt = (m.linhas || []).slice(0, 6).join(", ") + ((m.linhas || []).length > 6 ? "…" : "");
+  const linha = (cls, txt) => {
+    const s = document.createElement("span");
+    s.className = cls;
+    s.textContent = txt;
+    return s;
+  };
+
+  if (m.grupo === "anexo") {
+    const tit = document.createElement("div");
+    tit.className = "lei-pre-ctx";
+    tit.textContent = m.titulo + " · " + t("lei_pre_anexo_tam", { n: m.tamanho });
+    el.append(tit);
+    const op = document.createElement("div");
+    op.className = "lei-pre-anexo-op";
+    [["separar", c.modo === "atualizar" ? "lei_pre_anexo_separar_upd" : "lei_pre_anexo_separar"],
+     ["manter", "lei_pre_anexo_manter"], ["descartar", "lei_pre_anexo_descartar"]].forEach(([v, k]) => {
+      const lb = document.createElement("label");
+      const r = document.createElement("input");
+      r.type = "radio";
+      r.name = "leiPreAx_" + m.id;
+      r.value = v;
+      r.checked = c.decisoes[m.id] === v;
+      r.onchange = () => { c.decisoes[m.id] = v; leiPrePintar(); };
+      const tx = document.createElement("span");
+      tx.textContent = t(k);
+      lb.append(r, tx);
+      op.append(lb);
+    });
+    el.append(op);
+    return el;
+  }
+
+  const lb = document.createElement("label");
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = aceita;
+  cb.onchange = () => { c.decisoes[m.id] = cb.checked; leiPrePintar(); };
+  const corpo = document.createElement("span");
+  if (m.grupo === "invisiveis") {
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas_n", { n: m.ocorrencias })));
+  } else if (m.grupo === "cabecalho") {
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas", { n: m.ocorrencias, l: linhasTxt })));
+    corpo.append(linha("lei-pre-antes", m.antes));
+  } else if (m.grupo === "pagina") {
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas_n", { n: m.ocorrencias })));
+    corpo.append(linha("lei-pre-antes", m.antes));
+  } else if (m.grupo === "grafia") {
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] })));
+    corpo.append(linha("lei-pre-antes", m.antes));
+    corpo.append(linha("lei-pre-depois", m.depois));
+  } else {
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] }) + " — " + t("lei_pre_rem_" + m.motivo)));
+    corpo.append(linha("lei-pre-ctx", "… " + m.contexto));
+    corpo.append(linha("lei-pre-antes", m.antes));
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
+    corpo.append(linha("lei-pre-depois", m.depois));
+  }
+  lb.append(cb, corpo);
+  el.append(lb);
+  return el;
+}
+
+function leiPreGrupoEl(c, g, itens) {
+  const card = document.createElement("div");
+  card.className = "lei-pre-grupo";
+  card.id = "leiPreGrupo_" + g;
+  const cab = document.createElement("div");
+  cab.className = "lei-pre-cab";
+  const tit = document.createElement("span");
+  tit.textContent = t("lei_pre_g_" + g) + " (" + itens.length + ")";
+  cab.append(tit);
+  if (g !== "anexo") {
+    [["lei_pre_todos", true], ["lei_pre_nenhum", false]].forEach(([k, v]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min";
+      b.id = "btnLeiPre" + (v ? "Todos_" : "Nenhum_") + g;
+      b.textContent = t(k);
+      b.onclick = () => { itens.forEach((m) => { c.decisoes[m.id] = v; }); leiPrePintar(); };
+      cab.append(b);
+    });
+  }
+  card.append(cab);
+  const aj = document.createElement("div");
+  aj.className = "lei-pre-ajuda";
+  aj.textContent = t("lei_pre_h_" + g);
+  card.append(aj);
+
+  let lista = card;
+  if (itens.length > 30) {
+    const det = document.createElement("details");
+    const sm = document.createElement("summary");
+    sm.textContent = t("lei_pre_ver_itens", { n: itens.length });
+    det.append(sm);
+    card.append(det);
+    lista = det;
+  }
+  itens.forEach((m) => lista.append(leiPreItemEl(c, m)));
+
+  if (itens.some((m) => !leiPreAceita(c, m))) {
+    const co = document.createElement("div");
+    co.className = "lei-pre-consequencia";
+    co.textContent = t("lei_pre_c_" + g);
+    card.append(co);
+  }
+  return card;
+}
+
+function leiPrePintar() {
+  const c = leiPreCtx;
+  if (!c) return;
+  const dlg = $("dlgLeiPre");
+  const rolagem = dlg && dlg.scrollTop ? dlg.scrollTop : 0;
+  const atualizar = c.modo === "atualizar";
+  const soNum = !c.pre.mudancas.length;
+  $("leiPreTitulo").textContent = t(soNum ? "lei_pre_titulo_num"
+    : (atualizar ? "lei_pre_titulo_upd" : "lei_pre_titulo_criar"));
+  $("leiPreAjuda").textContent = t(soNum ? "lei_pre_ajuda_num" : "lei_pre_ajuda");
+  const aceitas = c.pre.mudancas.filter((m) => leiPreAceita(c, m)).length;
+  $("leiPreResumo").textContent = soNum ? "" : t("lei_pre_resumo", { n: c.pre.mudancas.length, a: aceitas });
+  $("btnLeiPreOriginal").hidden = soNum;
+
+  const cx = $("leiPreLista");
+  cx.innerHTML = "";
+  LEI_PRE_GRUPOS.forEach((g) => {
+    const itens = c.pre.mudancas.filter((m) => m.grupo === g);
+    if (itens.length) cx.append(leiPreGrupoEl(c, g, itens));
+  });
+
+  /* A CRÍTICA DA NUMERAÇÃO, sobre o texto COMO FICARIA com as escolhas de
+   * agora: recusar uma limpeza pode fazer aparecer (ou sumir) um salto */
+  const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
+  const arts = leiArtigos(res.texto);
+  const pn = $("leiPreNumeracao");
+  pn.innerHTML = "";
+  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS) {
+    pn.hidden = true;
+  } else {
+    const num = leiNumeracao(arts);
+    pn.hidden = false;
+    pn.className = "lei-pre-num" + (num.graves.length ? "" : " ok");
+    const cabN = document.createElement("div");
+    cabN.className = "lei-pre-cab";
+    cabN.textContent = num.graves.length ? t("lei_pre_num_aviso") : t("lei_pre_num_ok", { n: arts.length });
+    pn.append(cabN);
+    if (num.problemas.length) {
+      const ul = document.createElement("ul");
+      const ord = num.problemas.slice().sort((x, y) => (x.gravidade === y.gravidade ? 0 : x.gravidade === "grave" ? -1 : 1));
+      leiNumeracaoLinhas(ord).slice(0, 12).forEach((p) => {
+        const li = document.createElement("li");
+        li.className = p.gravidade;
+        li.textContent = p.texto;
+        ul.append(li);
+      });
+      if (ord.length > 12) {
+        const li = document.createElement("li");
+        li.textContent = t("lei_num_mais", { n: ord.length - 12 });
+        ul.append(li);
+      }
+      pn.append(ul);
+    }
+  }
+
+  const r = res.resumo;
+  $("leiPreFim").textContent = t("lei_pre_res", { cab: r.cabecalho + r.pagina, gra: r.grafia,
+    rem: r.remissao, anx: r.anexosSeparados, inv: r.invisiveis }) + " " + t("lei_pre_fim");
+  $("btnLeiPreConfirmar").textContent = t(atualizar ? "lei_pre_confirmar_upd" : "lei_pre_confirmar_criar");
+  if (dlg && rolagem) dlg.scrollTop = rolagem;
+}
+
+function leiPreConfirmar() {
+  const c = leiPreCtx;
+  if (!c) return false;
+  const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
+  leiPreCtx = null;
+  $("dlgLeiPre").close();
+  try {
+    leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: escolhas confirmadas",
+      JSON.stringify(res.resumo));
+  } catch (e) {}
+  c.aoConfirmar(res);
+  return true;
+}
+
+/* "usar o texto original": segue sem limpar nada */
+function leiPreOriginal() {
+  const c = leiPreCtx;
+  if (!c) return false;
+  leiPreCtx = null;
+  $("dlgLeiPre").close();
+  try {
+    leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: seguiu com o texto original", "");
+  } catch (e) {}
+  c.aoConfirmar({ texto: c.texto, anexos: [], resumo: {} });
+  return true;
+}
+
+function leiPreCancelar() {
+  if ($("dlgLeiPre")) $("dlgLeiPre").close();
+  if (!leiPreCtx) return;
+  const modo = leiPreCtx.modo;
+  leiPreCtx = null;
+  try { leiReg(modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: voltou para revisar o texto", ""); }
+  catch (e) {}
+}
+
+/* =====================================================================
+ * ANTES DE COMPARAR UMA VERSÃO NOVA — o texto é desta lei? é a lei inteira?
+ *
+ * Três coisas que a comparação artigo a artigo não sabe sozinha:
+ *   · o texto novo se apresenta como OUTRA lei (número/ano diferentes);
+ *   · o texto é de uma lei que ALTERA (traz "[...]", "(NR)", "passa a
+ *     vigorar…"): comparar trocaria artigos inteiros por trechos;
+ *   · o texto novo tem só uma fração dos artigos: colagem incompleta, ou
+ *     só as alterações. Nesse caso "não apareceu" NÃO é "foi revogado".
+ * A pessoa escolhe; escolher "só os presentes" é o modo seguro.
+ * ===================================================================== */
+let leiUpdModoAusentes = "revogar";
+let leiUpdInfo = null;
+let leiCobCtx = null;
+
+function leiUpdGuardas(l, novoTexto) {
+  const antigos = leiArtigos(l.texto);
+  const novos = leiArtigos(novoTexto);
+  const ident = leiConfereIdentidade(l, novoTexto);
+  const alt = leiPareceAlteradora(novoTexto);
+  const cob = leiCoberturaDaAtualizacao(antigos, novos);
+  const baixa = cob.total >= 10 && cob.pct < 0.5;
+  const avisos = [];
+  if (ident.conflito) avisos.push({ k: "identidade", novo: ident.novo.nome, gravada: l.nome });
+  if (alt.sim) avisos.push({ k: "alteradora", s: alt.sinais.map((x) => t("lei_cob_s_" + x)).join(", ") });
+  if (baixa) avisos.push({ k: "cobertura", n: cob.presentes, total: cob.total });
+  return { avisos, baixa, alt: alt.sim, ident: ident.conflito, cob };
+}
+
+function leiUpdGuardaAbrir(g, aoContinuar) {
+  leiCobCtx = { g, escolha: "", aoContinuar };
+  leiCobPintar();
+  abrirModal("dlgLeiCob");
+  try {
+    leiReg("atualizacao", "conferência da versão nova aberta",
+      g.avisos.map((a) => a.k).join(" · "));
+  } catch (e) {}
+}
+
+function leiCobPintar() {
+  const c = leiCobCtx;
+  if (!c) return;
+  $("leiCobAjuda").textContent = t("lei_cob_ajuda");
+  const av = $("leiCobAvisos");
+  av.innerHTML = "";
+  c.g.avisos.forEach((a) => {
+    const d = document.createElement("div");
+    d.className = "lei-upd-al alerta";
+    d.textContent = t("lei_cob_a_" + a.k, a);
+    av.append(d);
+  });
+  const ops = [];
+  if (c.g.baixa || c.g.alt) ops.push("presentes");
+  if (c.g.baixa && !c.g.alt) ops.push("revogar");
+  if (!c.g.baixa && !c.g.alt && c.g.ident) ops.push("continuar");
+  const ox = $("leiCobOpcoes");
+  ox.innerHTML = "";
+  ops.forEach((v) => {
+    const lb = document.createElement("label");
+    lb.className = "lei-dup-op" + (c.escolha === v ? " sel" : "");
+    const r = document.createElement("input");
+    r.type = "radio";
+    r.name = "leiCob";
+    r.value = v;
+    r.checked = c.escolha === v;
+    r.onchange = () => { c.escolha = v; leiCobPintar(); };
+    const tx = document.createElement("span");
+    tx.className = "lei-dup-op-tit";
+    tx.textContent = t("lei_cob_o_" + v);
+    lb.append(r, tx);
+    ox.append(lb);
+  });
+  $("btnLeiCobConfirmar").disabled = !c.escolha;
+  $("leiCobFim").textContent = t(c.escolha ? "lei_cob_pronto" : "lei_cob_escolha");
+}
+
+function leiCobConfirmar() {
+  const c = leiCobCtx;
+  if (!c || !c.escolha) return false;
+  leiCobCtx = null;
+  $("dlgLeiCob").close();
+  try { leiReg("atualizacao", "conferência da versão nova: escolha", c.escolha); } catch (e) {}
+  c.aoContinuar(c.escolha);
+  return true;
+}
+
+function leiCobCancelar() {
+  if ($("dlgLeiCob")) $("dlgLeiCob").close();
+  if (!leiCobCtx) return;
+  leiCobCtx = null;
+  try { leiReg("atualizacao", "conferência da versão nova: voltou para revisar o texto", ""); } catch (e) {}
+}
+
+/* A numeração de uma lei JÁ GUARDADA: o aviso ao lado dos repetidos */
+let leiNumeracaoMemo = { chave: "", res: null };
+function leiNumeracaoDaLei(l) {
+  const vazio = { problemas: [], graves: [] };
+  if (!l || !String(l.texto || "").trim()) return vazio;
+  const chave = l.id + "|" + leiHashTexto(l.texto);
+  if (leiNumeracaoMemo.chave !== chave) {
+    const arts = leiArtigos(l.texto);
+    leiNumeracaoMemo = { chave, res: arts.length >= LEI_NUMERACAO_MIN_ARTIGOS ? leiNumeracao(arts) : vazio };
+  }
+  return leiNumeracaoMemo.res;
+}
+
+/* Os ANEXOS separados na colagem: sob o texto da lei, um bloco recolhível por anexo */
+function leiPintarAnexos() {
+  const cx = $("leiAnexos");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const an = (l && l.anexos) || [];
+  if (!an.length) { cx.hidden = true; return; }
+  cx.hidden = false;
+  const h = document.createElement("div");
+  h.className = "duv-titulo";
+  h.textContent = t("lei_anexos_titulo", { n: an.length });
+  cx.append(h);
+  an.forEach((a) => {
+    const det = document.createElement("details");
+    det.className = "lei-anexo";
+    const sm = document.createElement("summary");
+    sm.textContent = a.titulo + " · " + t("lei_anexo_tam", { n: String(a.texto || "").length });
+    const tx = document.createElement("div");
+    tx.className = "lei-anexo-txt";
+    tx.textContent = a.texto || "";
+    det.append(sm, tx);
+    cx.append(det);
+  });
+}
+
+/* Pinta o texto com as palavras que NÃO existem no outro lado marcadas,
+ * preservando as quebras de linha (leiPalavrasDiferentes as achata) */
+function leiMarcarDiferencas(el, txt, contra) {
+  const limpa = (w) => String(w).toLowerCase().replace(/^[^a-z0-9à-ú]+|[^a-z0-9à-ú]+$/gi, "");
+  const contagem = {};
+  String(contra || "").split(/\s+/).forEach((w) => {
+    const k = limpa(w);
+    if (k) contagem[k] = (contagem[k] || 0) + 1;
+  });
+  String(txt || "").split(/(\s+)/).forEach((tok) => {
+    if (!tok) return;
+    if (/^\s+$/.test(tok)) { el.append(document.createTextNode(tok)); return; }
+    const k = limpa(tok);
+    if (k && contagem[k] > 0) { contagem[k]--; el.append(document.createTextNode(tok)); return; }
+    if (!k) { el.append(document.createTextNode(tok)); return; }
+    const m = document.createElement("mark");
+    m.className = "lei-upd-marca";
+    m.textContent = tok;
+    el.append(m);
+  });
 }
 
 function leiNovaAbrir() {
@@ -2723,19 +3183,25 @@ function leiAtualizarAbrir() {
   $("leiUpdPasso2").hidden = true;
   leiUpdComparo = null;
   leiUpdIdx = -1;
+  leiUpdModoAusentes = "revogar";
+  leiUpdInfo = null;
   abrirModal("dlgLeiAtualizar");
   leiReg("atualizacao", "janela de atualização aberta", "");
 }
 
 function leiAtualizarComparar(opc) {
+  const o = opc || {};
   const l = leiDe(leiIdAtual);
   if (!l) return false;
   const fonte = String($("leiUpdFonte").value || "").trim();
   const novoTexto = String($("leiUpdTexto").value || "");
   if (!fonte) { $("leiUpdAviso1").textContent = t("lei_upd_sem_fonte"); return false; }
-  /* TEXTO NOVO NUMA LINHA SÓ: propõe separar antes de tudo (sem isso dava
+  /* cada etapa que abre uma tela volta aqui, dizendo o que já foi feito */
+  const seguinte = (extra) => leiAtualizarComparar(Object.assign({}, o, extra));
+
+  /* 1. TEXTO NOVO NUMA LINHA SÓ: propõe separar antes de tudo (sem isso dava
    * "nenhum artigo" e a atualização morria com o texto certo na mão) */
-  if (!(opc && opc.separado)) {
+  if (!o.separado) {
     const sep = leiSepararColagem(novoTexto);
     if (sep.aplicavel) {
       leiSepararPerguntar(sep, "lei_sep_conf_upd").then((ok) => {
@@ -2744,65 +3210,82 @@ function leiAtualizarComparar(opc) {
                      sep.artigos.length + " artigos"); } catch (e) {}
         if (!ok) return;
         $("leiUpdTexto").value = sep.texto;
-        leiAtualizarComparar({ separado: true });
+        seguinte({ separado: true });
       });
       return false;
     }
   }
-  const novos = leiArtigos(novoTexto);
-  if (!novos.length) { $("leiUpdAviso1").textContent = t("lei_upd_sem_artigo"); return false; }
-  /* A COMPARAÇÃO É POR NÚMERO, UM ARTIGO POR NÚMERO. Com um artigo repetido
-   * no texto novo (o antigo tachado e o novo, como sai de um PDF), o mapa
-   * abaixo deixava a ÚLTIMA ocorrência ganhar sem dizer nada — e se a
-   * ordem fosse a inversa, valeria a antiga. A pessoa escolhe antes. */
-  if (!(opc && opc.conferido)) {
-    const grupos = leiDuplicados(novoTexto);
-    if (grupos.length) {
-      leiDuplicadosAbrir({
-        modo: "atualizar", texto: novoTexto, grupos,
+
+  /* 2. LIMPEZA DO TEXTO DE PDF (cabeçalho de página, anexos, "Art . 382",
+   * remissão partida) — a pessoa vê e aprova antes de qualquer comparação */
+  if (!o.limpo) {
+    const an = leiPreAnalisar(novoTexto);
+    if (an.deve) {
+      leiRevisarColagemAbrir({
+        modo: "atualizar", texto: novoTexto, pre: an.pre,
         aoConfirmar: (res) => {
           $("leiUpdTexto").value = res.texto;
-          leiAtualizarComparar({ conferido: true });
+          seguinte({ separado: true, limpo: true });
         },
       });
       return false;
     }
   }
-  const antigos = leiArtigos(l.texto);
 
-  const porNumAntigo = {};
-  antigos.forEach((a) => { porNumAntigo[a.num] = a; });
-  const porNumNovo = {};
-  novos.forEach((a) => { porNumNovo[a.num] = a; });
-  const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+  const novos = leiArtigos(novoTexto);
+  if (!novos.length) { $("leiUpdAviso1").textContent = t("lei_upd_sem_artigo"); return false; }
 
-  const itens = [];
-  Object.keys(porNumNovo).forEach((num) => {
-    const a = porNumAntigo[num];
-    const b = porNumNovo[num];
-    if (!a) {
-      itens.push({ num, numCru: b.numCru, tipo: "novo", antigo: "", novo: b.texto, aceito: false });
-    } else if (norm(a.texto) !== norm(b.texto)) {
-      itens.push({ num, numCru: b.numCru, tipo: "mudou", antigo: a.texto, novo: b.texto, aceito: false });
+  /* 3. A COMPARAÇÃO É POR NÚMERO, UM ARTIGO POR NÚMERO. Com um artigo repetido
+   * no texto novo (o antigo tachado e o novo, como sai de um PDF), o mapa
+   * deixava a ÚLTIMA ocorrência ganhar sem dizer nada — e se a ordem fosse a
+   * inversa, valeria a antiga. A pessoa escolhe antes. Os números que a lei
+   * gravada repete DE VERDADE (corpo e ADCT) já foram conferidos. */
+  if (!o.conferido) {
+    const grupos = leiDuplicados(novoTexto, l.repetidosOk);
+    if (grupos.length) {
+      leiDuplicadosAbrir({
+        modo: "atualizar", texto: novoTexto, grupos,
+        aoConfirmar: (res) => {
+          $("leiUpdTexto").value = res.texto;
+          seguinte({ separado: true, limpo: true, conferido: true });
+        },
+      });
+      return false;
     }
-  });
-  Object.keys(porNumAntigo).forEach((num) => {
-    if (!porNumNovo[num]) {
-      itens.push({ num, numCru: porNumAntigo[num].numCru, tipo: "revogado",
-        antigo: porNumAntigo[num].texto, novo: "", aceito: false });
+  }
+
+  /* 4. É desta lei? É a lei inteira? Ou só as alterações? */
+  if (!o.guardado) {
+    const g = leiUpdGuardas(l, novoTexto);
+    if (g.avisos.length) {
+      leiUpdGuardaAbrir(g, (escolha) => {
+        leiUpdModoAusentes = escolha === "presentes" ? "presentes" : "revogar";
+        seguinte({ separado: true, limpo: true, conferido: true, guardado: true });
+      });
+      return false;
     }
-  });
-  itens.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
+    leiUpdModoAusentes = "revogar";
+  }
 
-  if (!itens.length) { uiAlert(t("lei_upd_sem_mudanca")); return false; }
+  /* 5. a comparação em si (leiCompararVersoes), com os alertas de cada item */
+  const cmp = leiCompararVersoes(l.texto, novoTexto,
+    { ausentes: leiUpdModoAusentes, ignorar: l.repetidosOk });
+  if (!cmp.itens.length) {
+    uiAlert(t("lei_upd_sem_mudanca")
+      + (cmp.soFormatacao.length ? " " + t("lei_upd_soformat", { n: cmp.soFormatacao.length }) : ""));
+    return false;
+  }
 
-  leiUpdComparo = itens;
+  leiUpdComparo = cmp.itens;
+  leiUpdInfo = cmp;
   leiUpdIdx = 0;
   leiUpdFonteGlobal = fonte;
   $("leiUpdPasso1").hidden = true;
   $("leiUpdPasso2").hidden = false;
   leiUpdMostrar();
-  leiReg("atualizacao", "comparação aberta", fonte + " · " + itens.length + " diferenças");
+  leiReg("atualizacao", "comparação aberta", fonte + " · " + cmp.itens.length + " diferenças"
+    + (cmp.soFormatacao.length ? " · " + cmp.soFormatacao.length + " só de formatação" : "")
+    + (leiUpdModoAusentes === "presentes" ? " · só os artigos presentes" : ""));
   return true;
 }
 
@@ -2810,8 +3293,10 @@ function leiUpdMostrar() {
   if (!leiUpdComparo || leiUpdIdx < 0) return;
   const item = leiUpdComparo[leiUpdIdx];
   $("leiUpdConta").textContent = (leiUpdIdx + 1) + "/" + leiUpdComparo.length;
-  $("leiUpdResumo").textContent = t("lei_upd_aceitos",
-    { n: leiUpdComparo.filter((x) => x.aceito).length });
+  const ac = leiUpdComparo.filter((x) => x.aceito).length;
+  const re = leiUpdComparo.filter((x) => x.recusado).length;
+  $("leiUpdResumo").textContent = t("lei_upd_placar",
+    { a: ac, r: re, p: leiUpdComparo.length - ac - re });
   $("btnLeiUpdAnterior").disabled = leiUpdIdx <= 0;
   $("btnLeiUpdProximo").disabled = leiUpdIdx >= leiUpdComparo.length - 1;
 
@@ -2821,19 +3306,55 @@ function leiUpdMostrar() {
   h.className = "duv-titulo";
   h.textContent = "Art. " + item.numCru + " — " + t("lei_upd_tipo_" + item.tipo)
     + (item.aceito ? " · " + t("lei_upd_ok") : "");
+  if (item.recusado) {
+    const rc = document.createElement("span");
+    rc.className = "lei-upd-recusada";
+    rc.textContent = t("lei_upd_recusada");
+    h.append(rc);
+  }
   cx.append(h);
 
-  [["cm_mel_antes", item.antigo, "qm-antes"], ["cm_mel_depois", item.novo, "qm-depois"]]
-    .forEach(([rot, txt, cls]) => {
+  /* O QUE O APP SABE SOBRE ESTA MUDANÇA, antes de a pessoa decidir */
+  if ((item.alertas || []).length) {
+    const als = document.createElement("div");
+    als.className = "lei-upd-als";
+    item.alertas.forEach((a) => {
+      const d = document.createElement("div");
+      d.className = "lei-upd-al " + a.sev;
+      d.textContent = t("lei_upd_al_" + a.k, a);
+      als.append(d);
+    });
+    cx.append(als);
+  }
+
+  /* o texto INTEIRO de cada lado, com as palavras que só existem ali marcadas */
+  [["cm_mel_antes", item.antigo, "qm-antes", item.novo], ["cm_mel_depois", item.novo, "qm-depois", item.antigo]]
+    .forEach(([rot, txt, cls, contra]) => {
       if (!txt) return;   /* "novo" não tem antes; "revogado" não tem depois */
       const r1 = document.createElement("div");
       r1.className = "qm-rot";
       r1.textContent = t(rot);
       const d = document.createElement("div");
-      d.className = "qm-lado " + cls;
-      d.textContent = String(txt).slice(0, 1200);
+      d.className = "qm-lado lei-upd-lado " + cls;
+      if (item.tipo === "mudou") leiMarcarDiferencas(d, txt, contra);
+      else d.textContent = String(txt);
       cx.append(r1, d);
     });
+
+  if (leiUpdInfo) {
+    if (leiUpdInfo.soFormatacao.length) {
+      const n = document.createElement("div");
+      n.className = "nota";
+      n.textContent = t("lei_upd_soformat", { n: leiUpdInfo.soFormatacao.length });
+      cx.append(n);
+    }
+    if (leiUpdInfo.naoComparados.length) {
+      const n = document.createElement("div");
+      n.className = "nota";
+      n.textContent = t("lei_upd_naocomp", { n: leiUpdInfo.naoComparados.length });
+      cx.append(n);
+    }
+  }
 
   $("btnLeiUpdAceitar").textContent = t(item.aceito ? "lei_upd_aceito" : "lei_upd_aceitar");
   $("leiUpdPrompt").hidden = true;
@@ -2855,13 +3376,18 @@ function leiUpdAceitar() {
   if (!leiUpdComparo) return;
   const item = leiUpdComparo[leiUpdIdx];
   item.aceito = true;
+  item.recusado = false;
   item.explicacao = String(($("leiUpdExplica") || {}).value || "").trim();
   leiUpdMostrar();
 }
 
+/* RECUSAR é uma decisão, não um "depois": o artigo fica marcado como recusado
+ * (e não entra na gravação), e a contagem mostra quantos ainda esperam decisão */
 function leiUpdPular() {
   if (!leiUpdComparo) return;
-  leiUpdComparo[leiUpdIdx].aceito = false;
+  const item = leiUpdComparo[leiUpdIdx];
+  item.aceito = false;
+  item.recusado = true;
   if (leiUpdIdx < leiUpdComparo.length - 1) leiUpdMover(1);
   else leiUpdMostrar();
 }
@@ -3400,6 +3926,13 @@ function leiIniciar() {
   liga("btnLeiDupCancelar", "voltar da conferência de repetidos", () => leiDupCancelar());
   liga("btnLeiDupX", "fechar conferência de repetidos", () => leiDupCancelar());
   liga("btnLeiDupSugestoes", "voltar às sugestões", () => { leiDupSugestoes(); leiDupPintar(); });
+  liga("btnLeiPreConfirmar", "confirmar a revisão da colagem", () => leiPreConfirmar());
+  liga("btnLeiPreVoltar", "voltar da revisão da colagem", () => leiPreCancelar());
+  liga("btnLeiPreX", "fechar a revisão da colagem", () => leiPreCancelar());
+  liga("btnLeiPreOriginal", "usar o texto original", () => leiPreOriginal());
+  liga("btnLeiCobConfirmar", "continuar depois da conferência", () => leiCobConfirmar());
+  liga("btnLeiCobVoltar", "voltar da conferência da versão nova", () => leiCobCancelar());
+  liga("btnLeiCobX", "fechar a conferência da versão nova", () => leiCobCancelar());
   liga("btnLeiUpdFechar1", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdFechar2", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdAnterior", "artigo anterior da comparação", () => leiUpdMover(-1));
