@@ -2985,6 +2985,22 @@ body.split-lj{overflow:hidden}
 /* DOIS PROCESSOS NUMA FICHA SÓ: mesmo espírito do selo de categoria —
    avisa, não decide — mas na cor de atenção, porque aqui o problema
    trava campos (data/órgão/relator) para sempre, não é só informativo. */
+/* OS TRÊS PASSOS DA ENTRADA: o atual aceso, os outros apagados */
+.jur-passos{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 2px}
+.jur-passo{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;
+  border:1px solid var(--borda);color:var(--sutil)}
+.jur-passo.atual{background:var(--acao,#1d4ed8);border-color:var(--acao,#1d4ed8);color:#fff}
+.jur-passo.feito{color:var(--ok,#15803d);border-color:var(--ok,#15803d)}
+.jur-passo-ajuda{margin:2px 0 6px}
+/* DE ONDE VEIO CADA CAMPO: lido do texto, ou a conferir */
+.jur-origem{font-style:normal;font-size:10px;font-weight:700;margin-left:6px}
+.jur-origem.texto{color:var(--ok,#15803d)}
+.jur-origem.conferir{color:var(--atencao,#b45309)}
+.jur-oficial{font-size:12px;margin:4px 0 0}
+.jur-oficial a{color:var(--azul-txt,#2563eb)}
+.jur-memoria{margin:6px 0 2px}
+.jur-cpl-acoes{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.jur-oficial-lnk{font-size:10.5px;margin-left:4px;color:var(--azul-txt,#2563eb)}
 .jur-sel.conferir{background:transparent;border:1px solid var(--atencao,#f59e0b);
   color:var(--atencao,#b45309)}
 .jur-sel.dois-proc{background:transparent;border:1px solid var(--atencao,#f59e0b);
@@ -3082,6 +3098,7 @@ body.split-lj{overflow:hidden}
   padding:6px 11px;border-radius:999px;display:inline-block;
   background:var(--campo);border:1px solid var(--borda)}
 .jur-pilula.ok{border-color:var(--verde,#16a34a)}
+.jur-pilula.multi{border-radius:12px;display:block}
 .jur-pilula.aviso{border-color:var(--amarelo,#d97706);border-radius:10px;
   display:block}
 .jur-meta-btn{margin:10px 0 2px;font-size:11px}
@@ -4977,6 +4994,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- COLAR COM FORMATAÇÃO: o bloco cru do sítio do tribunal entra
        aqui e sai nos campos de baixo, com o que foi reconhecido escrito
        na tela antes de qualquer coisa ser salva. -->
+  <!-- OS TRÊS PASSOS À VISTA. O caminho era implícito (a caixa trocava de
+       papel conforme o conteúdo) e quem chegava não sabia o que vinha
+       depois de colar. Agora o passo em que se está fica aceso, e a linha
+       abaixo diz o que fazer nele. -->
+  <div class="jur-passos" id="jurPassos">
+    <span class="jur-passo" id="jurPasso1" data-i18n="jur_passo_1"></span>
+    <span class="jur-passo" id="jurPasso2" data-i18n="jur_passo_2"></span>
+    <span class="jur-passo" id="jurPasso3" data-i18n="jur_passo_3"></span>
+  </div>
+  <p class="nota jur-passo-ajuda" id="jurPassoAjuda"></p>
   <label class="nd-rot" data-i18n="jur_colar_rot"></label>
   <textarea id="jurColar" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="RE 574706 / PR — PARANÁ&#10;Relator(a): Min. CÁRMEN LÚCIA&#10;Julgamento: 15/03/2017 — Tribunal Pleno&#10;Tese: O ICMS não compõe a base de cálculo para fins de incidência do PIS e da COFINS."></textarea>
@@ -4985,6 +5012,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        colou; seis campos preenchidos a meia tela de distância fazem a
        pessoa confiar num palpite sem ver que houve palpite. -->
   <div id="jurColarAviso" class="jur-pilula" hidden></div>
+  <!-- ONDE CONFERIR: o site oficial do tribunal, quando o app o conhece -->
+  <div id="jurOficial" class="jur-oficial" hidden></div>
   <!-- UM BOTÃO PRINCIPAL QUE SABE EM QUE PASSO VOCÊ ESTÁ.
        Antes eram dois concorrentes — "ler e preencher" e "pedir à IA" —
        e escolher entre eles exigia saber de cor que o caminho é: colar
@@ -5010,6 +5039,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnJurColar" data-i18n="jur_colar_btn" data-i18n-title="jur_b_colar"></button>
     <button class="btn-min" id="btnJurPromptIA" hidden data-i18n="jur_prompt_ia" data-i18n-title="jur_b_prompt_ia"></button>
   </div>
+  <!-- MEMÓRIA É OPT-IN. Por padrão a IA só identifica o julgado; data,
+       órgão, relator e fonte vêm do texto oficial. Quem quiser a sugestão
+       de memória a pede aqui, e ela chega marcada "a conferir". -->
+  <label class="diag-op jur-memoria"><input type="checkbox" id="chkJurMemoria">
+    <span data-i18n="jur_memoria_chk" data-i18n-title="jur_memoria_aj"></span></label>
 
   <!-- A TESE E O RESUMO SÓ APARECEM QUANDO EXISTEM.
        Três caixas altas empilhadas — ementa, tese, resumo — enchiam a
@@ -5068,17 +5102,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <button type="button" class="btn-min jur-meta-btn" id="btnJurMeta"
     data-i18n="jur_meta_ver" data-i18n-title="jur_b_meta"></button>
   <div class="jur-campos" id="jurMetaCampos" hidden>
-    <label class="vk-lado"><span data-i18n="jur_c_tribunal"></span>
+    <label class="vk-lado"><span data-i18n="jur_c_tribunal"></span><em class="jur-origem" id="jurOrigem_tribunal"></em>
       <input type="text" id="jurTribunal" placeholder="STF"></label>
-    <label class="vk-lado"><span data-i18n="jur_c_classe"></span>
+    <label class="vk-lado"><span data-i18n="jur_c_classe"></span><em class="jur-origem" id="jurOrigem_classe"></em>
       <input type="text" id="jurClasse" placeholder="RE"></label>
-    <label class="vk-lado"><span data-i18n="jur_c_numero"></span>
+    <label class="vk-lado"><span data-i18n="jur_c_numero"></span><em class="jur-origem" id="jurOrigem_numero"></em>
       <input type="text" id="jurNumero" placeholder="574706"></label>
-    <label class="vk-lado"><span data-i18n="jur_c_data"></span>
+    <label class="vk-lado"><span data-i18n="jur_c_data" id="jurRotData"></span><em class="jur-origem" id="jurOrigem_data"></em>
       <input type="date" id="jurData"></label>
-    <label class="vk-lado"><span data-i18n="jur_c_orgao"></span>
+    <label class="vk-lado"><span data-i18n="jur_c_orgao"></span><em class="jur-origem" id="jurOrigem_orgao"></em>
       <input type="text" id="jurOrgao" placeholder="Tribunal Pleno"></label>
-    <label class="vk-lado"><span data-i18n="jur_c_fonte"></span>
+    <label class="vk-lado"><span data-i18n="jur_c_fonte"></span><em class="jur-origem" id="jurOrigem_fonte"></em>
       <input type="text" id="jurFonte" placeholder="portal do STF"></label>
   </div>
 
@@ -6359,6 +6393,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-azul" id="btnJurCplCopiar" data-i18n="jur_cpl_copiar"
       data-i18n-title="jur_cpl_copiar_aj"></button>
   </div>
+  <label class="diag-op jur-memoria"><input type="checkbox" id="chkJurCplMemoria">
+    <span data-i18n="jur_memoria_chk" data-i18n-title="jur_memoria_aj"></span></label>
 
   <!-- PASSO 2 -->
   <div class="jur-cpl-passo">
@@ -6373,6 +6409,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 
   <div id="jurCplSaida" class="jur-cpl-saida" hidden></div>
+  <!-- botões de cada apontamento da conferência (ex.: trocar a tese) -->
+  <div id="jurCplAcoes" class="jur-cpl-acoes"></div>
 
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnJurCplFechar" data-i18n="help_close"></button>

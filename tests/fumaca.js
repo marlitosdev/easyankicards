@@ -935,6 +935,8 @@ function rodar() {
     jurTrocarModo, jurPintarModo, jurMeta, jurMetaAberta,
     jurCartaoDe, jurGerarCartao,
     jurDoJson, jurCategoria, JUR_CATEGORIAS,
+    jurPassoAtual, jurPintarPassos, jurPintarOrigem, jurPintarOficial,
+    jurTeseSubstituir, jurCplPintarAcoes, jurPortalOficial,
     jurPromptPreencher, jurPedirIA, jurPromptIA, jurAchatar, jurDeMemoria,
     jurVerificarNoTexto, jurValorNoTexto, jurMarcarConferido,
     jurConferirFormAtual: () => jurConferirForm,

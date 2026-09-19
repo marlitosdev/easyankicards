@@ -507,6 +507,13 @@ function jurIdentificar(txt) {
     }
   }
 
+  /* "SV 29" — a abreviação que se digita à mão quando não há ementa
+   * nenhuma para colar, só o nome do julgado. */
+  if (!achado.classe) {
+    const sv = bruto.match(/(^|[^A-Za-z])SV\s*n?[º°.]?\s*(\d{1,3})(?!\d)/);
+    if (sv) { achado.classe = "Súmula Vinculante"; achado.numero = sv[2]; }
+  }
+
   /* A CASA DA CLASSE, quando a sigla não está escrita. O que aparece no
    * texto tem precedência: dedução não corrige ninguém. */
   if (!achado.tribunal && achado.classe && JUR_CASA[achado.classe]) {
@@ -575,6 +582,22 @@ function jurIdentificar(txt) {
   achado.tese = jurSemMarcacao(achado.tese).slice(0, 600);
   achado.categoria = jurCategoria(achado.classe);
   return achado;
+}
+
+/* ONDE CONFERIR, POR TRIBUNAL. Só a página de busca de cada um — não um
+ * endereço por julgado, que eu não teria como saber sem errar. O que a
+ * pessoa faz ali é digitar "Súmula Vinculante 29" e ler o texto oficial;
+ * o app não sabe mais do que isso, e não finge saber. */
+const JUR_PORTAIS = {
+  STF: { nome: "portal do STF", url: "https://portal.stf.jus.br/jurisprudencia/" },
+  STJ: { nome: "SCON — STJ", url: "https://scon.stj.jus.br/SCON/" },
+  TST: { nome: "jurisprudência do TST", url: "https://jurisprudencia.tst.jus.br/" },
+  TSE: { nome: "jurisprudência do TSE", url: "https://jurisprudencia.tse.jus.br/" },
+  TCU: { nome: "pesquisa do TCU", url: "https://pesquisa.apps.tcu.gov.br/" },
+};
+
+function jurPortalOficial(tribunal) {
+  return JUR_PORTAIS[String(tribunal || "").trim().toUpperCase()] || null;
 }
 
 /* Tira o que é marcação de texto, mantendo o que é texto. Não usa o
