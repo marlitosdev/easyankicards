@@ -830,6 +830,307 @@ async function testes() {
        "J13i o clique no botão real não abriu os dois painéis");
   }
 
+  /* =================================================================
+   * Q: NÃO CONFIAR NA MEMÓRIA DA IA — um pedido só, e a resposta é conferida
+   *
+   * O CASO REAL. A Súmula Vinculante 29, dada só pelo título, foi
+   * "completada" pela IA com data, fonte e "relator" que não conferem com
+   * o que os sítios oficiais publicam — e o app os gravou com a mesma cara
+   * do que veio do texto. O primeiro pedido dizia "não deduza", o segundo
+   * pedia para preencher: contratos opostos, e a resposta do segundo só
+   * podia vir de memória.
+   * =============================================================== */
+  const RESPOSTA_SV29 = {
+    tribunal: "", classe: "", numero: "", data_julgamento: "2010-02-17",
+    orgao: "Tribunal Pleno",
+    relator: "Ministro Cezar Peluso (Relator da Sessão de Aprovação)",
+    fonte: "DJe nº 40/2010, p. 1, publicado em 05/03/2010",
+    categoria: "SÚMULA VINCULANTE", resumo: "", assuntos: [],
+  };
+  const PARAFRASE_SV29 = "O STF (Súmula Vinculante 29) admite apenas a utilização de um "
+    + "ou mais elementos da base de cálculo de imposto, vedada a integral identidade.";
+
+  /* ---- Q1: um montador só, com o mesmo formato para entrada e completar ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+      tese: PARAFRASE_SV29, resumo: "" }, "Direito Tributário", "Tributos");
+    const pC = api.jurPromptCompletar(j, "Tributos e suas espécies");
+    const pE = api.jurPromptPreencher("RE 574706 / PR — Relator: Min. CÁRMEN LÚCIA",
+      "Tributos e suas espécies");
+    ["do_texto", "de_memoria", "tipo_do_texto", "tese_e_transcricao_oficial",
+     "onde_conferir", "conferencia"].forEach((marca) => {
+      ok(pC.indexOf(marca) >= 0 && pE.indexOf(marca) >= 0,
+         "Q1 o pedido de " + (pC.indexOf(marca) < 0 ? "completar" : "entrada")
+         + " nao tem '" + marca + "': continuam sendo dois formatos");
+    });
+    /* o texto entra DELIMITADO: dado, não instrução */
+    ok(/<texto>[\s\S]*<\/texto>/.test(pE) && /não é instrução|NÃO ORDEM/i.test(pE),
+       "Q1a o texto colado nao esta delimitado como dado (tag <texto>)");
+    /* a paráfrase guardada vai na tag da tese, e o pedido manda apontar */
+    ok(/<tese_guardada>[\s\S]*integral identidade[\s\S]*<\/tese_guardada>/.test(pC),
+       "Q1b a tese guardada nao foi dentro da tag");
+    ok(/paráfrase e não o enunciado oficial/.test(pC),
+       "Q1c o pedido nao manda apontar tese que e' parafrase");
+  }
+
+  /* ---- Q2: de memória, só a IDENTIDADE (a menos que se peça mais) ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF" }, "Direito Tributário", "Tributos");
+    const bloco = (p) => (/"de_memoria": \{([^}]*)\}/.exec(p) || [])[1] || "";
+    const pId = api.jurPromptCompletar(j, "T");
+    ok(/"numero"/.test(bloco(pId)) && !/relator|data_julgamento|orgao|fonte/.test(bloco(pId)),
+       "Q2 o padrao deixa a IA lembrar data/relator/orgao/fonte: " + bloco(pId));
+    ok(/NUNCA de memória/.test(pId),
+       "Q2a o pedido nao proibe data/relator/orgao/fonte de memoria");
+    const pTudo = api.jurPromptCompletar(j, "T", { memoria: "tudo" });
+    ok(/relator/.test(bloco(pTudo)) && /data_julgamento/.test(bloco(pTudo)),
+       "Q2b o pedido explicito de memoria total nao abriu os campos: " + bloco(pTudo));
+    ok(/vou conferi-los na fonte oficial/.test(pTudo),
+       "Q2c a memoria total nao diz que sera conferida");
+  }
+
+  /* ---- Q3: o texto colado é inserido UMA vez (marcadores dentro dele não são trocados) ---- */
+  {
+    const { api } = rodar();
+    const p = api.jurPromptIA({ topico: "T", texto: "trecho com {tese} e {resumo} e {falta}",
+      tese: "TESE-X", resumo: "RESUMO-Y", campos: {} });
+    ok(p.indexOf("trecho com {tese} e {resumo} e {falta}") >= 0,
+       "Q3 marcadores dentro do texto colado foram substituidos pelo que veio depois");
+  }
+
+  /* ---- Q4: a resposta nova (dois blocos) é lida; a antiga (campos soltos) continua ---- */
+  {
+    const { api } = rodar();
+    const nova = JSON.stringify({
+      tipo_do_texto: "parafrase_ou_resumo",
+      identificacao: "SV 29 do STF",
+      do_texto: { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+        tese_curta: PARAFRASE_SV29, tese_e_transcricao_oficial: false },
+      de_memoria: { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+        data_julgamento: "2010-02-03" },
+      onde_conferir: "portal.stf.jus.br, busca por Súmula Vinculante 29",
+    });
+    const a = api.jurDoJson(nova);
+    ok(a && a.tribunal === "STF" && a.classe === "Súmula Vinculante" && a.numero === "29",
+       "Q4 o bloco do_texto nao foi lido: " + JSON.stringify(a));
+    ok(a && a.teseOficial === false && /parafrase/.test(a.tipoDoTexto),
+       "Q4a o tipo do texto / tese nao-oficial nao chegaram: "
+       + JSON.stringify(a && [a.tipoDoTexto, a.teseOficial]));
+    ok(a && a.deMemoria.data === "2010-02-03" && /portal\.stf/.test(a.ondeConferir),
+       "Q4b o bloco de_memoria / onde_conferir nao chegaram");
+    /* a resposta ANTIGA, sem os blocos */
+    const velha = api.jurDoJson('{"tribunal":"STF","classe":"RE","numero":"574706","tese_curta":"x"}');
+    ok(velha && velha.tribunal === "STF" && velha.numero === "574706"
+       && velha.teseOficial === null && velha.deMemoria.classe === "",
+       "Q4c a resposta do formato antigo deixou de ser lida");
+  }
+
+  /* ---- Q5: a régua — cada campo é procurado no texto do jeito dele ---- */
+  {
+    const { api } = rodar();
+    const no = (c, v, b) => api.jurValorNoTexto(c, v, b);
+    const EMENTA = "RE 574.706 / PR — PARANÁ\nRelator(a): Min. CÁRMEN LÚCIA\n"
+      + "Julgamento: 15/03/2017 — Tribunal Pleno\nDJe nº 61, de 20/03/2017";
+    ok(no("data", "2017-03-15", EMENTA), "Q5 data escrita dd/mm/aaaa nao foi reconhecida");
+    ok(no("data", "2010-02-17", "aprovada em 17 de fevereiro de 2010"),
+       "Q5a data por extenso nao foi reconhecida");
+    ok(!no("data", "2010-02-17", EMENTA), "Q5b data que NAO esta no texto foi dada como confirmada");
+    ok(no("numero", "574706", EMENTA), "Q5c numero com ponto de milhar nao foi reconhecido");
+    ok(!no("numero", "574", EMENTA) && !no("numero", "706", EMENTA),
+       "Q5d pedaço de numero foi dado como confirmado (fichas partidas)");
+    ok(no("relator", "Ministra Cármen Lúcia", EMENTA), "Q5e relator por sobrenome nao foi reconhecido");
+    ok(!no("relator", "Ministro Cezar Peluso (Relator da Sessão de Aprovação)", EMENTA),
+       "Q5f relator que nao esta no texto foi dado como confirmado");
+    ok(!no("relator", "Ministro Carmen Rocha", EMENTA),
+       "Q5f2 um nome que so casa em parte com o texto foi dado como confirmado");
+    ok(no("orgao", "Tribunal Pleno", EMENTA) && !no("orgao", "Primeira Turma", EMENTA),
+       "Q5g orgao: confirma o que esta, nao o que nao esta");
+    ok(no("fonte", "DJe nº 61, de 20/03/2017", EMENTA)
+       && !no("fonte", "DJe nº 40/2010, p. 1, publicado em 05/03/2010", EMENTA),
+       "Q5h fonte: os numeros dela tem de estar todos no texto");
+    ok(!no("fonte", "portal do STF", EMENTA), "Q5i fonte sem numero nao se confere em texto");
+    ok(no("tribunal", "STF", "O STF decidiu") && !no("tribunal", "STF", "MANIFESTO do órgão"),
+       "Q5j sigla de tribunal: palavra inteira, nao pedaço");
+    ok(!no("data", "2010-02-17", ""), "Q5k sem texto de base nada e' verificavel");
+    /* o tribunal que a CLASSE ja diz (RE -> STF) nao e' suposicao da IA, desde que a
+     * classe esteja no texto; com a classe nao confirmada, a deducao nao vale */
+    const v1 = api.jurVerificarNoTexto({ tribunal: "STF", classe: "RE", numero: "574706" }, "RE 574706 / PR");
+    ok(v1.aConferir.length === 0, "Q5l tribunal deduzido da classe confirmada ficou a conferir: " + JSON.stringify(v1));
+    const v2 = api.jurVerificarNoTexto({ tribunal: "STF", classe: "RE", numero: "574706" }, "texto sem nada");
+    ok(v2.aConferir.indexOf("tribunal") >= 0, "Q5m tribunal com a classe NAO confirmada foi dado como confirmado");
+  }
+
+  /* ---- Q6: O CASO DA SV 29 — o que a IA lembrou e o texto não confirma fica "a conferir" ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+      tese: PARAFRASE_SV29 }, "Direito Tributário", "Tributos");
+    const r = api.jurCompletar(j.id, RESPOSTA_SV29);
+    const dep = api.jurDe(j.id);
+    ["data", "orgao", "relator", "fonte"].forEach((k) => {
+      ok(r.mudou.indexOf(k) >= 0, "Q6-pre o campo " + k + " nao foi preenchido");
+      ok(dep.aConferir.indexOf(k) >= 0,
+         "Q6 o campo '" + k + "', lembrado pela IA e ausente do texto guardado, foi "
+         + "gravado com a mesma cara de dado verificado: " + JSON.stringify(dep.aConferir));
+    });
+    ok(r.aConferir.length === 4, "Q6a o retorno nao diz quais ficaram a conferir: " + JSON.stringify(r.aConferir));
+    /* a tese continua intocada */
+    ok(dep.tese === PARAFRASE_SV29, "Q6b a tese foi alterada");
+  }
+
+  /* ---- Q7: com texto guardado, o que ele confirma NÃO fica a conferir ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "RE", numero: "574706",
+      texto: "Julgamento: 15/03/2017 — Tribunal Pleno\nRelator(a): Min. CÁRMEN LÚCIA" },
+      "Direito Tributário", "Tributos");
+    const r = api.jurCompletar(j.id, { do_texto: { data_julgamento: "2017-03-15",
+      orgao: "Tribunal Pleno", relator: "Cármen Lúcia", fonte: "DJe nº 999 de 01/01/2001" } });
+    const dep = api.jurDe(j.id);
+    ok(dep.data === "2017-03-15" && dep.orgao === "Tribunal Pleno" && dep.relator === "Cármen Lúcia",
+       "Q7-pre os campos nao foram preenchidos");
+    ok(dep.aConferir.length === 1 && dep.aConferir[0] === "fonte",
+       "Q7 so a fonte (que o texto nao traz) devia ficar a conferir: " + JSON.stringify(dep.aConferir));
+  }
+
+  /* ---- Q8: a memória só entra em campo VAZIO, e nasce "a conferir" ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF" }, "Direito Tributário", "Tributos");
+    api.jurCompletar(j.id, { de_memoria: { tribunal: "STJ", classe: "RE", numero: "833106" } });
+    const dep = api.jurDe(j.id);
+    ok(dep.tribunal === "STF", "Q8 a memoria sobrescreveu um campo preenchido: " + dep.tribunal);
+    ok(dep.classe === "RE" && dep.numero === "833106" && dep.aConferir.indexOf("classe") >= 0,
+       "Q8a a identidade lembrada nao entrou marcada a conferir: " + JSON.stringify(dep.aConferir));
+  }
+
+  /* ---- Q9: "conferi" limpa a marca (tudo, ou só alguns campos) ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", aConferir: ["data", "orgao", "fonte"] },
+      "Direito Tributário", "Tributos");
+    api.jurMarcarConferido(j.id, ["data"]);
+    ok(JSON.stringify(api.jurDe(j.id).aConferir) === JSON.stringify(["orgao", "fonte"]),
+       "Q9 conferir um campo mexeu nos outros: " + JSON.stringify(api.jurDe(j.id).aConferir));
+    api.jurMarcarConferido(j.id);
+    ok(api.jurDe(j.id).aConferir.length === 0, "Q9a conferir tudo nao limpou");
+  }
+
+  /* ---- Q10: na ENTRADA — a resposta volta pela mesma caixa e é conferida contra o texto ENVIADO ---- */
+  {
+    const { api } = rodar();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    let copiado = "";
+    api.navegador.clipboard = { writeText: async (x) => { copiado = x; } };
+    const EMENTA = "RE 574706 / PR — PARANÁ\nRelator(a): Min. CÁRMEN LÚCIA\n"
+      + "Julgamento: 15/03/2017 — Tribunal Pleno\nTese: O ICMS não compõe a base de cálculo do PIS.";
+    api.$("jurColar").value = EMENTA;
+    api.$("jurTribunal").value = "STF";
+    api.jurPedirIA();                      /* não se espera: termina num alerta */
+    await new Promise((r) => setTimeout(r, 5));
+    ok(/<texto>[\s\S]*574706[\s\S]*<\/texto>/.test(copiado),
+       "Q10-pre o pedido copiado nao leva o texto colado");
+    ok(/tribunal: STF/i.test(copiado),
+       "Q10a o pedido nao leva o que o formulario JA tem (a IA nao pode refazer): "
+       + copiado.slice(0, 300));
+    ok(api.jurTextoDoPedidoAtual() === EMENTA,
+       "Q10b o texto enviado nao ficou guardado para conferir a resposta");
+
+    /* a resposta substitui a caixa: data confirmada (está no texto), orgao NAO */
+    api.$("jurColar").value = JSON.stringify({ do_texto: { tribunal: "STF", classe: "RE",
+      numero: "574706", data_julgamento: "2017-03-15", orgao: "Primeira Turma",
+      tese_curta: "O ICMS não compõe a base de cálculo do PIS.",
+      tese_e_transcricao_oficial: true } });
+    api.jurAoColarNaCaixa();
+    await new Promise((r) => setTimeout(r, 5));
+    ok(api.$("jurData").value === "2017-03-15" && api.$("jurOrgao").value === "Primeira Turma",
+       "Q10c os campos da resposta nao entraram no formulario");
+    const conf = Object.keys(api.jurConferirFormAtual());
+    ok(conf.length === 1 && conf[0] === "orgao",
+       "Q10d so o orgao (que o texto enviado nao traz) devia ficar a conferir: " + JSON.stringify(conf));
+    ok(/a conferir/.test(api.$("jurColarAviso").textContent || ""),
+       "Q10e a pilula nao diz que ha campo a conferir: " + api.$("jurColarAviso").textContent);
+
+    /* guardar deixa o selo; corrigir o campo ANTES de guardar tira a marca */
+    api.$("jurTese").value = "O ICMS não compõe a base de cálculo do PIS.";
+    await api.jurSalvar();
+    const salvo = api.jurDoTopico(api.matChave("Direito Tributário", "Tributos"))[0];
+    ok(salvo && salvo.aConferir.length === 1 && salvo.aConferir[0] === "orgao",
+       "Q10f o julgado guardado perdeu a marca 'a conferir': " + JSON.stringify(salvo && salvo.aConferir));
+  }
+
+  /* ---- Q11: campo que a pessoa CORRIGIU deixa de ser suposição ---- */
+  {
+    const { api } = rodar();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurColar").value = JSON.stringify({ do_texto: { tribunal: "STF", classe: "ADI",
+      numero: "2405", orgao: "Tribunal Pleno", tese_curta: "tese de teste da adi" } });
+    api.jurAoColarNaCaixa();
+    await new Promise((r) => setTimeout(r, 5));
+    /* sem pedido anterior, nada e' verificavel: tudo a conferir */
+    ok(Object.keys(api.jurConferirFormAtual()).indexOf("orgao") >= 0,
+       "Q11-pre sem texto de base o orgao devia ficar a conferir");
+    api.$("jurOrgao").value = "Segunda Turma";        /* a pessoa conferiu e corrigiu */
+    await api.jurSalvar();
+    const salvo = api.jurDoTopico(api.matChave("Direito Tributário", "Tributos"))[0];
+    ok(salvo.orgao === "Segunda Turma" && salvo.aConferir.indexOf("orgao") < 0,
+       "Q11 o campo que a pessoa corrigiu continua marcado a conferir: "
+       + JSON.stringify(salvo.aConferir));
+    ok(salvo.aConferir.indexOf("classe") >= 0,
+       "Q11a o que a pessoa NAO mexeu perdeu a marca: " + JSON.stringify(salvo.aConferir));
+  }
+
+  /* ---- Q12: paráfrase avisa na pílula, e o "onde conferir" aparece ---- */
+  {
+    const { api } = rodar();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurColar").value = JSON.stringify({
+      tipo_do_texto: "parafrase_ou_resumo", onde_conferir: "portal.stf.jus.br, busca por SV 29",
+      do_texto: { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+        tese_curta: PARAFRASE_SV29, tese_e_transcricao_oficial: false } });
+    api.jurAoColarNaCaixa();
+    await new Promise((r) => setTimeout(r, 5));
+    const av = api.$("jurColarAviso").textContent || "";
+    ok(/paráfrase/.test(av),
+       "Q12 a pilula nao avisa que a frase colada nao e' o enunciado oficial: " + av);
+    ok(/portal\.stf\.jus\.br/.test(av), "Q12a a pilula nao diz onde conferir: " + av);
+  }
+
+  /* ---- Q13: a lista mostra o selo e o "conferi" limpa ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "RE", numero: "1",
+      data: "2017-03-15", aConferir: ["data"] }, "Direito Tributário", "Tributos");
+    api.jurAbrir("Direito Tributário", "Tributos", "ler");
+    const selos = api.$("jurLista").querySelectorAll(".jur-sel");
+    ok(selos.some((x) => /a conferir/.test(x.textContent || "")),
+       "Q13 a lista nao marca o julgado com dado a conferir: "
+       + selos.map((x) => x.textContent).join("|"));
+    const ic = api.$("jurLista").querySelectorAll(".jur-ic")
+      .filter((b) => /conferidos|confer/i.test(b.title || ""))[0];
+    ok(!!ic, "Q13a nao ha o botao de marcar como conferido");
+    if (ic) {
+      ic.onclick();
+      ok(api.jurDe(j.id).aConferir.length === 0, "Q13b 'conferi' nao limpou a marca");
+      ok(!api.$("jurLista").querySelectorAll(".jur-sel").some((x) => /a conferir/.test(x.textContent || "")),
+         "Q13c o selo continuou na lista depois de conferir");
+    }
+  }
+
+  /* ---- Q14: unir dois julgados leva a marca do campo que veio do outro ---- */
+  {
+    const { api } = rodar();
+    const a = guardar(api, { tribunal: "STF", classe: "RE", numero: "9" },
+      "Direito Tributário", "Tributos");
+    const b = guardar(api, { tribunal: "STF", classe: "RE", numero: "9", data: "2001-01-01",
+      aConferir: ["data"] }, "Direito Tributário", "Tributos");
+    const u = api.jurUnir(a.id, b.id);
+    ok(u && u.data === "2001-01-01" && u.aConferir.indexOf("data") >= 0,
+       "Q14 unir trouxe o campo mas perdeu a marca 'a conferir': " + JSON.stringify(u && u.aConferir));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

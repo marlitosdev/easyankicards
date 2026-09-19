@@ -162,6 +162,38 @@ function jurTem(chave) { return jurDoTopico(chave).length > 0; }
  * nunca é seguido à risca. Aceitar as duas grafias custa uma linha e
  * evita "não reconheci nada" num JSON quase certo.
  * ===================================================================== */
+/* A RESPOSTA NOVA TEM DOIS BLOCOS: "do_texto" (o que o texto colado diz) e
+ * "de_memoria" (o que a IA lembra). Achatar o primeiro por cima do nível
+ * de cima deixa o leitor antigo — que só conhece campos soltos — servindo
+ * às duas formas: uma resposta do prompt de antes continua sendo lida. */
+function jurAchatar(o) {
+  if (!o || typeof o !== "object") return {};
+  const dt = (o.do_texto && typeof o.do_texto === "object") ? o.do_texto : null;
+  return dt ? Object.assign({}, o, dt) : o;
+}
+
+/* O QUE A IA DISSE DE MEMÓRIA, só as chaves que o app sabe usar. Nunca vem
+ * tese aqui: a tese é do texto ou é da pessoa. */
+const JUR_CAMPOS_VERIFICAVEIS = ["tribunal", "classe", "numero", "data", "orgao",
+  "relator", "fonte"];
+
+function jurDeMemoria(o) {
+  const m = (o && o.de_memoria && typeof o.de_memoria === "object") ? o.de_memoria : {};
+  const pega = function () {
+    for (let i = 0; i < arguments.length; i++) {
+      const v = m[arguments[i]];
+      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+  return {
+    tribunal: pega("tribunal").toUpperCase(), classe: pega("classe"),
+    numero: pega("numero", "número"),
+    data: pega("data_julgamento", "data"), orgao: pega("orgao", "órgao"),
+    relator: pega("relator"), fonte: pega("fonte"),
+  };
+}
+
 function jurDoJson(bruto) {
   /* SEM GUARDA DE PRIMEIRO CARACTERE.
    *
@@ -176,6 +208,8 @@ function jurDoJson(bruto) {
   try { o = JSON.parse(txt); } catch (e) { return null; }
   if (Array.isArray(o)) o = o[0];
   if (!o || typeof o !== "object") return null;
+  const bruto0 = o;
+  o = jurAchatar(o);
   const pega = function () {
     for (let i = 0; i < arguments.length; i++) {
       const v = o[arguments[i]];
@@ -216,6 +250,14 @@ function jurDoJson(bruto) {
     })(),
     categoria: pega("categoria", "classificacao").toUpperCase(),
     ano: "", tribunalDeduzido: false,
+    /* O QUE A IA DIZ SOBRE O PRÓPRIO TEXTO que recebeu — e o que lembra.
+     * O app não confia em nenhum dos dois: ver jurVerificarNoTexto. */
+    tipoDoTexto: pega("tipo_do_texto"),
+    teseOficial: (typeof o.tese_e_transcricao_oficial === "boolean")
+      ? o.tese_e_transcricao_oficial : null,
+    ondeConferir: pega("onde_conferir"),
+    identificacao: pega("identificacao"),
+    deMemoria: jurDeMemoria(bruto0),
   };
   /* DATA SÓ SE FOR DATA: a caixa da tela é <input type="date"> e só
    * entende aaaa-mm-dd. Um ano solto vai para o campo do ano. */
@@ -238,8 +280,125 @@ function jurDoJson(bruto) {
   /* SEM NADA RECONHECÍVEL não é um julgado: pode ser qualquer outro
    * objeto colado por engano, e fingir que entendeu seria pior do que
    * cair no extrator de texto. */
-  if (!achado.classe && !achado.numero && !achado.tese) return null;
+  const mem = achado.deMemoria;
+  if (!achado.classe && !achado.numero && !achado.tese
+      && !mem.classe && !mem.numero) return null;
   return achado;
+}
+
+/* =====================================================================
+ * NÃO CONFIAR: CONFERIR NO TEXTO, MECANICAMENTE
+ *
+ * O CASO REAL. Pedi à IA que completasse data, órgão, relator e fonte da
+ * Súmula Vinculante 29, dada só pelo título. Ela respondeu de memória —
+ * e errou três dos quatro (a data era a da PUBLICAÇÃO, a fonte era outro
+ * número do DJe, o "relator" era o presidente da sessão; súmula vinculante
+ * nem tem relator). O app gravou tudo com a mesma cara de dado verificado.
+ *
+ * Pedir à IA que "não invente" é pedir por favor. O que funciona é um
+ * teste que o app faz sozinho: o valor devolvido APARECE no texto que a
+ * pessoa colou? Aparece → veio do texto (✓). Não aparece → a IA lembrou
+ * ou supôs, e o campo fica marcado "a conferir" até alguém conferir na
+ * fonte. Preencher continua permitido; o que não se permite é parecer
+ * verificado sem estar.
+ *
+ * Sem texto nenhum de base, nada é verificável: tudo o que a IA trouxe
+ * fica "a conferir". É o lado seguro do erro — custa um toque em
+ * "conferi"; o contrário custa decorar uma data errada.
+ * ===================================================================== */
+const JUR_MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+function jurSemAcento(s) {
+  return String(s || "").toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/* o valor está no texto? Cada campo tem a sua régua: número e data têm
+ * grafias, nome se compara sem acento e sem caixa. */
+function jurValorNoTexto(campo, valor, base) {
+  const v = String(valor || "").trim();
+  const b = String(base || "");
+  if (!v || !b.trim()) return false;
+  const bn = jurSemAcento(b);
+  if (campo === "data") {
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return false;
+    const dia = String(Number(m[3]));
+    const ano = m[1];
+    const re = new RegExp("(^|\\D)0?" + dia + "\\s*[./-]\\s*0?" + Number(m[2])
+      + "\\s*[./-]\\s*" + ano + "(\\D|$)");
+    if (re.test(b)) return true;
+    const extenso = new RegExp("(^|\\D)0?" + dia + "\\s*(?:de|d[oa])?\\s*"
+      + JUR_MESES[Number(m[2]) - 1] + "\\s*(?:de|do)?\\s*" + ano);
+    return extenso.test(bn);
+  }
+  if (campo === "numero") {
+    const d = v.replace(/\D+/g, "");
+    if (!d) return bn.indexOf(jurSemAcento(v)) >= 0;
+    /* por FICHAS numéricas do texto ("574.706/PR" -> 574706): remover os
+     * separadores do texto todo casaria pedaços de números diferentes */
+    const fichas = (b.match(/\d[\d.]*/g) || []).map((x) => x.replace(/\D/g, ""));
+    return fichas.indexOf(d) >= 0;
+  }
+  if (campo === "relator") {
+    /* o sobrenome basta: "Cármen Lúcia" no texto confirma "Min. Cármen
+     * Lúcia da Rocha". Palavras de título não contam. */
+    const nomes = jurSemAcento(v).replace(/\(.*?\)/g, " ")
+      .split(/[^a-z]+/).filter((p) => p.length >= 4
+        && !/^(ministro|ministra|relator|relatora|desembargador|conselheiro)$/.test(p));
+    return nomes.length > 0 && nomes.every((p) => bn.indexOf(p) >= 0);
+  }
+  if (campo === "fonte") {
+    /* uma fonte é confirmada quando TODOS os números dela (edição do DJe,
+     * página, dia) estão no texto; uma fonte sem número nenhum ("portal do
+     * tribunal") não se confere num texto */
+    const grupos = v.match(/\d+/g) || [];
+    if (!grupos.length) return false;
+    const soNum = b.match(/\d+/g) || [];
+    return grupos.every((g) => soNum.indexOf(g) >= 0);
+  }
+  /* tribunal, classe, órgão: a expressão inteira, sem acento nem caixa;
+   * a sigla de tribunal como palavra isolada */
+  const vn = jurSemAcento(v);
+  if (campo === "tribunal") {
+    return new RegExp("(^|[^a-z0-9])" + vn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      + "([^a-z0-9]|$)").test(bn);
+  }
+  return bn.replace(/\s+/g, " ").indexOf(vn.replace(/\s+/g, " ")) >= 0;
+}
+
+/* Recebe { campo: valor } do que a IA trouxe e o texto de base. Devolve
+ * { confirmados:[campos], aConferir:[campos] }. */
+function jurVerificarNoTexto(valores, base) {
+  const confirmados = [], aConferir = [];
+  JUR_CAMPOS_VERIFICAVEIS.forEach((k) => {
+    const v = String((valores || {})[k] || "").trim();
+    if (!v) return;
+    (jurValorNoTexto(k, v, base) ? confirmados : aConferir).push(k);
+  });
+  /* O TRIBUNAL QUE A CLASSE JÁ DIZ. "RE 574706" está no texto e a sigla
+   * STF não: o app já deduz um do outro (JUR_CASA), e essa dedução é regra
+   * dele, não palpite da IA — desde que a própria classe tenha sido
+   * confirmada no texto. */
+  const iT = aConferir.indexOf("tribunal");
+  const cl = String((valores || {}).classe || "").trim();
+  if (iT >= 0 && confirmados.indexOf("classe") >= 0
+      && JUR_CASA[cl] === String(valores.tribunal || "").trim().toUpperCase()) {
+    aConferir.splice(iT, 1);
+    confirmados.push("tribunal");
+  }
+  return { confirmados, aConferir };
+}
+
+/* "conferi": tira a marca de campos (ou de todos, sem lista) */
+function jurMarcarConferido(id, campos) {
+  const j = jurDe(id);
+  if (!j) return false;
+  const atuais = Array.isArray(j.aConferir) ? j.aConferir : [];
+  const resto = campos && campos.length
+    ? atuais.filter((k) => campos.indexOf(k) < 0) : [];
+  return !!jurGravar({ id, aConferir: resto });
 }
 
 /* =====================================================================
@@ -469,6 +628,9 @@ function jurGravar(dados) {
      * Por isso a IA preenche o RESUMO, e nunca reescreve a tese em cima
      * dela. Foi a diferença entre acrescentar e substituir. */
     resumo: "", categoria: "",
+    /* campos que a IA trouxe e que o texto colado NÃO confirma — ficam
+     * marcados até alguém conferir na fonte (jurMarcarConferido) */
+    aConferir: [],
     criado: new Date().toISOString(),
   }, antigo, dados, { id, tocado: new Date().toISOString() });
   r.topicos = (r.topicos || []).filter((x, i, a) => x && a.indexOf(x) === i);
@@ -650,8 +812,16 @@ function jurUnir(idFica, idVai) {
       + (String(a.texto || "").trim() ? "\n\n" : "") + extra.join("\n");
   }
   /* os campos que faltavam de um lado vêm do outro: unir tem de somar */
+  const confA = Array.isArray(a.aConferir) ? a.aConferir.slice() : [];
   ["tribunal", "classe", "numero", "data", "orgao", "relator", "fonte"]
-    .forEach((k) => { if (!String(a[k] || "").trim() && b[k]) a[k] = b[k]; });
+    .forEach((k) => {
+      if (!String(a[k] || "").trim() && b[k]) {
+        a[k] = b[k];
+        /* o campo que veio do outro lado leva a marca dele junto */
+        if ((b.aConferir || []).indexOf(k) >= 0 && confA.indexOf(k) < 0) confA.push(k);
+      }
+    });
+  a.aConferir = confA;
   (b.topicos || []).forEach((c) => {
     if (!(a.topicos || []).some((x) => jurChaveComparavel(x) === jurChaveComparavel(c))) {
       a.topicos = (a.topicos || []).concat([c]);
@@ -683,11 +853,71 @@ function jurUnir(idFica, idVai) {
  * porque campo nomeado não se confunde: "tese" no lugar de "resumo" é
  * um erro que um formato livre esconderia.
  * ===================================================================== */
-function jurPromptPreencher(texto, tituloTopico) {
+function jurPromptPreencher(texto, tituloTopico, campos) {
   const t2 = String(texto || "").trim();
   if (!t2) return "";
-  return t("jur_prompt_preencher", {
-    tp: tituloTopico || "", txt: t2.slice(0, 6000) });
+  return jurPromptIA({ topico: tituloTopico, texto: t2, campos });
+}
+
+/* =====================================================================
+ * UM PEDIDO SÓ À IA, MONTADO A PARTIR DO QUE EXISTE
+ *
+ * Eram dois textos com contratos opostos. O de ENTRADA dizia "não deduza
+ * número, data nem relator"; o de COMPLETAR dizia "preencha data, órgão,
+ * relator e fonte" — e, dado só o título do julgado, isso só se responde
+ * de memória. Quem colou uma frase solta da Súmula Vinculante 29 precisou
+ * dos dois em sequência, e o segundo devolveu de memória uma data, uma
+ * fonte e um "relator" que não conferem com o que os sítios oficiais
+ * publicam — gravados no julgado com a mesma cara do que veio do texto.
+ *
+ * AGORA UM PEDIDO, UM FORMATO, UMA LEITURA. O estado de quem pede (o
+ * formulário na entrada, o julgado guardado no completar) entra pelo
+ * mesmo montador, e a resposta tem dois blocos:
+ *   · "do_texto"   — só o que está escrito no texto colado;
+ *   · "de_memoria" — só a IDENTIDADE (tribunal, classe, número), a menos
+ *                    que a pessoa peça mais (opc.memoria === "tudo");
+ * e a IA diz de que TIPO é o texto que recebeu (ementa, enunciado
+ * oficial, paráfrase de terceiros…). Uma frase de resumo copiada como
+ * "tese" deixa de passar por transcrição do tribunal.
+ *
+ * O prompt PEDE isso; quem GARANTE é o app (jurVerificarNoTexto). Rodar a
+ * régua no que volta é o que torna a regra "não invente" verificável.
+ *
+ * estado: { topico, texto, tese, resumo, campos:{tribunal,classe,numero,
+ *   data,orgao,relator,fonte}, tags, titulo }
+ * ===================================================================== */
+function jurPromptIA(estado, opc) {
+  const e = estado || {};
+  const o = opc || {};
+  const campos = e.campos || {};
+  const tem = JUR_CAMPOS_META
+    .filter((c) => c.k !== "resumo" && String(campos[c.k] || "").trim())
+    .map((c) => t(c.i) + ": " + String(campos[c.k]).trim());
+  const tags = e.tags || [];
+  if (tags.length) tem.push(t("jur_f_tags") + ": " + tags.join(", "));
+  const resumo = String(e.resumo || "").trim();
+  const falta = JUR_CAMPOS_META
+    .filter((c) => c.k === "resumo" ? !resumo : !String(campos[c.k] || "").trim())
+    .map((c) => c.k);
+  if (!tags.length) falta.push("tags");
+  const tudo = o.memoria === "tudo";
+  const vals = {
+    tp: e.topico || "",
+    tit: e.titulo || [campos.tribunal, campos.classe, campos.numero]
+      .filter(Boolean).join(" ") || "(?)",
+    tem: tem.length ? tem.join("\n") : t("jur_nada_preenchido"),
+    falta: falta.length ? falta.join(", ") : t("jur_nada_faltando"),
+    txt: String(e.texto || "").trim().slice(0, 6000) || "(vazio)",
+    tese: String(e.tese || "").trim() || "(vazia)",
+    resumo: resumo || "(vazio)",
+    schema_memoria: t(tudo ? "jur_prompt_mem_tudo_schema" : "jur_prompt_mem_ident_schema"),
+    regra_memoria: t(tudo ? "jur_prompt_mem_tudo_regra" : "jur_prompt_mem_ident_regra"),
+  };
+  /* UMA PASSADA SÓ: o texto colado pode conter "{tese}" ou "{resumo}", e
+   * substituir marcador por marcador, em sequência, reescreveria o que veio
+   * de fora dentro do que já foi montado */
+  return t("jur_prompt_unico").replace(/\{(\w+)\}/g,
+    (m, k) => (Object.prototype.hasOwnProperty.call(vals, k) ? vals[k] : m));
 }
 
 /* =====================================================================
@@ -763,22 +993,17 @@ function jurPareceDoisProcessos(j) {
   return !!(j && j.numero && JUR_NUMERO_DUPLO.test(String(j.numero)));
 }
 
-function jurPromptCompletar(j, tituloTopico) {
+function jurPromptCompletar(j, tituloTopico, opc) {
   if (!j) return "";
-  const falta = jurFaltando(j);
-  const tem = JUR_CAMPOS_META.filter((c) => String(j[c.k] || "").trim())
-    .map((c) => t(c.i) + ": " + String(j[c.k]).trim());
-  const tags = jurTagsDe(j) || [];
-  if (tags.length) tem.push(t("jur_f_tags") + ": " + tags.join(", "));
-  return t("jur_prompt_completar", {
-    tp: tituloTopico || (j.topicos || [])[0] || "",
-    tit: jurTitulo(j),
-    tem: tem.length ? tem.join("\n") : t("jur_nada_preenchido"),
-    falta: falta.length ? falta.join(", ") : t("jur_nada_faltando"),
-    tese: String(j.tese || "").trim() || "(vazia)",
-    resumo: String(j.resumo || "").trim() || "(vazio)",
-    ementa: String(j.texto || "").trim().slice(0, 4000) || "(não guardei a ementa)",
-  });
+  const campos = {};
+  JUR_CAMPOS_META.forEach((c) => { campos[c.k] = j[c.k]; });
+  return jurPromptIA({
+    topico: tituloTopico || (j.topicos || [])[0] || "",
+    titulo: jurTitulo(j),
+    texto: String(j.texto || "").slice(0, 4000),
+    tese: j.tese, resumo: j.resumo, campos,
+    tags: jurTagsDe(j) || [],
+  }, opc);
 }
 
 /* =====================================================================
@@ -863,12 +1088,22 @@ function jurCompletar(id, dados) {
   if (!j || !dados || typeof dados !== "object") {
     return { mudou: [], ignorados: [], ok: false };
   }
+  const plano = jurAchatar(dados);
   const vindo = {
-    tribunal: dados.tribunal, classe: dados.classe, numero: dados.numero,
-    data: dados.data_julgamento || dados.data, orgao: dados.orgao,
-    relator: dados.relator, fonte: dados.fonte, resumo: dados.resumo,
-    categoria: dados.categoria,
+    tribunal: plano.tribunal, classe: plano.classe, numero: plano.numero,
+    data: plano.data_julgamento || plano.data, orgao: plano.orgao,
+    relator: plano.relator, fonte: plano.fonte, resumo: plano.resumo,
+    categoria: plano.categoria,
   };
+  /* O QUE A IA LEMBROU só entra onde o texto não trouxe nada — e
+   * a verificação logo abaixo o marca "a conferir" se o texto não o
+   * confirmar. Nunca substitui campo já preenchido. */
+  const mem = jurDeMemoria(dados);
+  JUR_CAMPOS_VERIFICAVEIS.forEach((k) => {
+    if (!String(vindo[k] === undefined || vindo[k] === null ? "" : vindo[k]).trim() && mem[k]) {
+      vindo[k] = mem[k];
+    }
+  });
   const mudou = [], ignorados = [];
   const novo = {};
   Object.keys(vindo).forEach((k) => {
@@ -901,9 +1136,19 @@ function jurCompletar(id, dados) {
   /* A TESE NUNCA ENTRA AQUI. Nem vazia: uma tese "transcrita" por quem
    * não tem a ementa na frente é invenção, e inventada ela seria
    * decorada exatamente como se fosse do tribunal. */
-  if (!mudou.length) return { mudou: [], ignorados, ok: true };
+  if (!mudou.length) return { mudou: [], ignorados, aConferir: [], ok: true };
+  /* CADA CAMPO NOVO É CONFERIDO NO TEXTO GUARDADO (ementa e tese). O que
+   * não aparece lá fica "a conferir" — ver jurVerificarNoTexto. */
+  const novos = {};
+  JUR_CAMPOS_VERIFICAVEIS.forEach((k) => { if (novo[k]) novos[k] = novo[k]; });
+  const ver = jurVerificarNoTexto(novos,
+    [j.texto, j.tese].filter(Boolean).join("\n"));
+  const antes = Array.isArray(j.aConferir) ? j.aConferir : [];
+  const juntas = antes.slice();
+  ver.aConferir.forEach((k) => { if (juntas.indexOf(k) < 0) juntas.push(k); });
+  novo.aConferir = juntas;
   novo.id = j.id;
-  return { mudou, ignorados, ok: !!jurGravar(novo) };
+  return { mudou, ignorados, aConferir: ver.aConferir, ok: !!jurGravar(novo) };
 }
 
 /* =====================================================================
