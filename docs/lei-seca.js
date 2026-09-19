@@ -249,14 +249,18 @@ function leiNormalizaTexto(s) {
  *   [{ num, numCru, rotulo, candidatos:[{ indice, linha, linhaFim, texto, corpo, pos, sinais }],
  *      sugerido: <indice global do artigo sugerido>, confianca: "forte"|"fraca",
  *      motivo: "redacao"|"revogado"|"vetado"|"vazio"|"identico"|"posicao", fonte }] */
-function leiDuplicados(texto) {
+function leiDuplicados(texto, ignorar) {
   const arts = leiArtigos(texto);
+  /* os números que a pessoa JÁ CONFERIU e mandou manter (a lei repete de
+   * verdade) não voltam a ser apontados */
+  const conferidos = {};
+  (ignorar || []).forEach((n) => { conferidos[leiNumNormal(n)] = true; });
   const porNum = {};
   arts.forEach((a) => { (porNum[a.num] = porNum[a.num] || []).push(a); });
   const grupos = [];
   Object.keys(porNum).forEach((num) => {
     const L = porNum[num];
-    if (L.length < 2) return;
+    if (L.length < 2 || conferidos[num]) return;
     const suspeito = L.some((a, i) => i > 0 && a.indice === L[i - 1].indice + 1);
     if (!suspeito) return;
     const cands = L.map((a, k) => ({
@@ -1220,6 +1224,7 @@ function leiGuardar(dados, gravar) {
     pareiEm: "",
     blocos: {},          /* {nomeDoBloco: "2026-08-20"} */
     alteracoes: {},       /* {numArtigo: {texto, fonteAlteracao, data, revogado?}} */
+    repetidosOk: [],      /* números repetidos que a pessoa conferiu e mandou MANTER */
     criado: new Date().toISOString(),
   }, antigo, dados, { id, tocado: new Date().toISOString() });
   r.topicos = (r.topicos || []).filter((x, i, a) => x && a.indexOf(x) === i);

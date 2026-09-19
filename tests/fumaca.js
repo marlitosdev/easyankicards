@@ -747,6 +747,7 @@ function rodar() {
     leiDuplicados, leiSinaisDoArtigo, leiPalavrasDiferentes, leiAplicarDuplicados,
     leiDuplicadosAbrir, leiDupPintar, leiDupConfirmar, leiDupCancelar, leiDupSugestoes,
     leiDupCtxAtual: () => leiDupCtx,
+    leiRepetidosDaLei, leiRevisarRepetidos,
     leiSujoDefinir: (v) => { leiSujo = v; },
     leiIdAtualValor: () => leiIdAtual,
     leiSiglasDoNome, leiApelidoAdicionar,

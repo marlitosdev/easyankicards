@@ -562,7 +562,68 @@ function leiPintarProcedencia() {
     bA.title = t("lei_atualizar_versao_ajuda");
     bA.onclick = () => leiAtualizarAbrir();
     cx.append(bA);
+
+    /* ARTIGOS REPETIDOS NUMA LEI JÁ GUARDADA. A conferência da criação só
+     * vale para o que se cola de agora em diante; a lei que entrou antes
+     * dela (ou que a pessoa mandou "manter" e mudou de ideia) precisa de
+     * um caminho de volta. O botão só aparece quando há o que revisar, e
+     * some sozinho depois que a pessoa resolve ou manda manter. */
+    const rep = leiRepetidosDaLei(l);
+    if (rep.length) {
+      const bR = document.createElement("button");
+      bR.className = "btn-min btn-min-perigo";
+      bR.id = "btnLeiRepetidos";
+      bR.textContent = t("lei_dup_aviso", { n: rep.length });
+      bR.title = t("lei_dup_aviso_aj", { a: rep.map((g) => "art. " + g.numCru).join(", ") });
+      bR.onclick = () => leiRevisarRepetidos();
+      cx.append(bR);
+    }
   }
+}
+
+/* Os repetidos de uma lei guardada, sem refazer a leitura a cada repintura
+ * (a lei inteira é parseada de novo em leiPintarLeitura, e este aviso roda
+ * junto): guarda o último resultado por lei + texto + números já conferidos. */
+let leiRepetidosMemo = { chave: "", grupos: [] };
+function leiRepetidosDaLei(l) {
+  if (!l || !String(l.texto || "").trim()) return [];
+  const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + (l.repetidosOk || []).join(",");
+  if (leiRepetidosMemo.chave !== chave) {
+    leiRepetidosMemo = { chave, grupos: leiDuplicados(l.texto, l.repetidosOk) };
+  }
+  return leiRepetidosMemo.grupos;
+}
+
+function leiRevisarRepetidos() {
+  /* marcas ainda não gravadas entram antes: a revisão parte do texto GUARDADO */
+  if (leiSujo && leiIdAtual) leiGravar();
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l) return false;
+  const grupos = leiDuplicados(l.texto, l.repetidosOk);
+  if (!grupos.length) { leiPintar(); return false; }
+  /* uma alteração já registrada para o número NÃO é sobrescrita: guardar a
+   * redação nova como "alteração" apagaria a que a pessoa fez à mão */
+  const protegidos = {};
+  Object.keys(l.alteracoes || {}).forEach((n) => { protegidos[n] = true; });
+  leiDuplicadosAbrir({
+    modo: "revisar", texto: l.texto, grupos, protegidos,
+    aoConfirmar: (res) => {
+      const alt = Object.assign({}, l.alteracoes || {}, res.alteracoes);
+      const ok = (l.repetidosOk || []).concat(
+        res.resumo.filter((r) => r.acao === "todas").map((r) => r.num))
+        .filter((n, i, a) => a.indexOf(n) === i);
+      leiGuardar({ id: l.id, texto: res.texto, alteracoes: alt, repetidosOk: ok });
+      $("leiTexto").value = res.texto;
+      leiSujo = false;
+      try { leiReg("gravar", "artigos repetidos resolvidos na lei",
+        l.nome + " · " + res.resumo.map((r) => "art. " + r.num + " → " + r.acao).join(" · ")); }
+      catch (e) {}
+      if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
+      leiPintar();
+      toast("lei_dup_revisado");
+    },
+  });
+  return true;
 }
 
 /* ONDE PAREI — em artigo, e com o botão de continuar dali. */
@@ -2190,7 +2251,8 @@ function leiGravar(opc) {
         modo: "criar", texto: txt, grupos,
         aoConfirmar: (res) => {
           $("leiTexto").value = res.texto;
-          leiGravar({ conferido: true, alteracoes: res.alteracoes });
+          leiGravar({ conferido: true, alteracoes: res.alteracoes,
+            repetidosOk: res.resumo.filter((r) => r.acao === "todas").map((r) => r.num) });
         },
       });
       return "pendente";
@@ -2204,6 +2266,7 @@ function leiGravar(opc) {
     l = leiGuardar(Object.assign({ nome, texto: txt, topicos: [leiAtual.chave],
       consultadaEm: leisHojeISO() },
       Object.keys(alteracoes).length ? { alteracoes } : {},
+      (opc && opc.repetidosOk && opc.repetidosOk.length) ? { repetidosOk: opc.repetidosOk } : {},
       ident ? { especie: ident.especie, numero: ident.numero, ano: ident.ano } : {}));
     if (!l) return;
     leiIdAtual = l.id;
@@ -2284,7 +2347,8 @@ let leiDupCtx = null;
  * grupo de duas ocorrências onde a escolhida traz "Redação dada pela…" e a
  * outra não (ver leiAplicarDuplicados) */
 function leiDupPodeOriginal(g, indice) {
-  if (!leiDupCtx || leiDupCtx.modo !== "criar" || g.candidatos.length !== 2) return false;
+  if (!leiDupCtx || leiDupCtx.modo === "atualizar" || g.candidatos.length !== 2) return false;
+  if (leiDupCtx.protegidos && leiDupCtx.protegidos[g.num]) return false;
   const esc = g.candidatos.filter((c) => c.indice === indice)[0];
   const outro = g.candidatos.filter((c) => c.indice !== indice)[0];
   return !!(esc && outro && esc.sinais.tipo === "redacao" && outro.sinais.tipo !== "redacao");
@@ -2317,8 +2381,11 @@ function leiDupPintar() {
   const c = leiDupCtx;
   if (!c) return;
   const atualizar = c.modo === "atualizar";
-  $("leiDupTitulo").textContent = t(atualizar ? "lei_dup_titulo_upd" : "lei_dup_titulo");
-  $("leiDupAjuda").textContent = t(atualizar ? "lei_dup_ajuda_upd" : "lei_dup_ajuda");
+  const revisar = c.modo === "revisar";
+  $("leiDupTitulo").textContent = t(atualizar ? "lei_dup_titulo_upd"
+    : (revisar ? "lei_dup_titulo_rev" : "lei_dup_titulo"));
+  $("leiDupAjuda").textContent = t(atualizar ? "lei_dup_ajuda_upd"
+    : (revisar ? "lei_dup_ajuda_rev" : "lei_dup_ajuda"));
   const fortes = c.grupos.filter((g) => g.confianca === "forte").length;
   $("leiDupResumo").textContent = t("lei_dup_resumo",
     { n: c.grupos.length, f: fortes, c: c.grupos.length - fortes });
@@ -2450,7 +2517,8 @@ function leiDupPintar() {
 
   const faltam = c.grupos.filter((g) => !c.decisoes[g.num]).length;
   $("btnLeiDupConfirmar").disabled = faltam > 0;
-  $("btnLeiDupConfirmar").textContent = t(atualizar ? "lei_dup_confirmar_upd" : "lei_dup_confirmar");
+  $("btnLeiDupConfirmar").textContent = t(atualizar ? "lei_dup_confirmar_upd"
+    : (revisar ? "lei_dup_confirmar_rev" : "lei_dup_confirmar"));
   $("leiDupFaltam").textContent = faltam ? t("lei_dup_faltam", { n: faltam }) : t("lei_dup_pronto");
 }
 
