@@ -384,6 +384,67 @@ async function testes() {
        "B11a idem para as questões: " + JSON.stringify(acha("questoes")));
   }
 
+  /* =================================================================
+   * D: A DIREÇÃO DA MUDANÇA, DE RELANCE, NA CONFERÊNCIA DO BACKUP
+   *
+   * POR QUE ISTO EXISTE. A tabela de conferência é a última parada antes
+   * de trocar a base inteira. Só as linhas que ENCOLHEM ficavam
+   * avermelhadas; as que crescem e as que ficam iguais eram texto cinza
+   * ("ganha 1", "sem mudança") que se lê igual. Quem escolhe entre dois
+   * arquivos varre a tabela procurando o que sobe e o que desce.
+   * =============================================================== */
+  {
+    const { api } = rodar();
+    api.$("editor").value = "P1 :: R1 :: t\n\nP2 :: R2 :: t";
+    api.autoSalvar();                                   /* agora: 2 cartões */
+    for (let i = 0; i < 3; i++) api.jurGravar({ tese: "julgado " + i });   /* agora: 3 julgados */
+    const bk = { app: "EasyAnkiCards", gerado: new Date().toISOString(),
+      dados: {
+        cartoes: { eac_texto: "" },                                        /* backup: 0 cartões  -> PERDE 2 */
+        edital: { eac_juris: JSON.stringify({ a: {}, b: {}, c: {} }) },    /* backup: 3 julgados -> IGUAL   */
+        material: { eac_questoes: JSON.stringify([1, 2, 3, 4, 5]) },       /* backup: 5 questões -> GANHA 5 */
+      } };
+    await api.bkLerArquivo({ name: "x.json", text: async () => JSON.stringify(bk) });
+    const linhas = Array.from(api.$("bkConfTabela").children || []);
+    const linha = (rot) => linhas.filter((r) => (r.children[0] || {}).textContent === rot)[0];
+    const cel = (r) => r.children[3];
+    const texto = (c) => String(c.textContent || "");
+    const perde = linha("cartões"), ganha = linha("questões"), igual = linha("julgados");
+    ok(perde && ganha && igual, "D-pre a tabela nao trouxe as tres linhas do cenario: "
+       + linhas.map((r) => r.children[0].textContent).join(", "));
+
+    /* a linha inteira carrega a direção */
+    ok(/bk-perde/.test(perde.className) && /bk-ganha/.test(ganha.className) && /bk-igual/.test(igual.className),
+       "D a classe da linha nao diz a direcao: " + [perde.className, ganha.className, igual.className].join(" | "));
+    /* seta E número: a cor nunca vai sozinha */
+    ok(/^▼/.test(texto(cel(perde))) && /perde 2/.test(texto(cel(perde))),
+       "D1 a linha que encolhe nao mostra seta para baixo e o numero: " + texto(cel(perde)));
+    ok(/^▲/.test(texto(cel(ganha))) && /ganha 5/.test(texto(cel(ganha))),
+       "D2 a linha que cresce nao mostra seta para cima e o numero: " + texto(cel(ganha)));
+    ok(!/[▲▼]/.test(texto(cel(igual))) && /sem mudança/.test(texto(cel(igual))),
+       "D3 a linha igual ganhou seta: " + texto(cel(igual)));
+    /* a seta e' enfeite para leitor de tela (o texto ja diz a mesma coisa) */
+    const seta = (r) => (cel(r).children || [])[0];
+    ok(seta(perde) && /bk-seta-perde/.test(seta(perde).className) && seta(perde).getAttribute("aria-hidden") === "true",
+       "D4 a seta de queda nao esta marcada como decorativa/com classe propria");
+    ok(seta(ganha) && /bk-seta-ganha/.test(seta(ganha).className), "D5 a seta de alta nao tem classe propria");
+    ok(!(seta(igual) && /bk-seta/.test(seta(igual).className || "")), "D6 a linha igual tem um elemento de seta");
+    ok(/bk-dif-perde/.test(cel(perde).className) && /bk-dif-ganha/.test(cel(ganha).className)
+       && /bk-dif-igual/.test(cel(igual).className), "D7 a celula da diferenca nao leva a direcao na classe");
+    /* o aviso geral continua acusando a perda */
+    ok(/grave/.test(api.$("bkConfAviso").className), "D8 o aviso de perda sumiu");
+
+    /* o CSS existe: verde e vermelho vivos, seta, e o neutro apagado */
+    const css = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/\.bk-tab tr\.bk-ganha\{[^}]*rgba\(34,197,94/.test(css), "D9 falta o fundo verde da linha que cresce");
+    ok(/\.bk-tab tr\.bk-perde\{[^}]*rgba\(239,68,68/.test(css), "D10 falta o fundo vermelho da linha que encolhe");
+    ok(/\.bk-seta-ganha\{[^}]*#22c55e/.test(css) && /\.bk-seta-perde\{[^}]*#ef4444/.test(css),
+       "D11 falta a cor viva das setas");
+    ok(/\.bk-tab tr\.bk-igual td\{[^}]*opacity/.test(css), "D12 a linha sem mudanca nao fica apagada");
+    ok(/data-theme="light"\] \.bk-tab tr\.bk-ganha td\{color:#15803d\}/.test(css),
+       "D13 falta o verde legivel no tema claro");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

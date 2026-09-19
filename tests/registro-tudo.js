@@ -796,6 +796,46 @@ async function testes() {
     ok(v && /duplas=250/.test(v.extra), "A15b os numeros da vinculacao nao vieram: " + JSON.stringify(v));
   }
 
+  /* ---- A16: o bloco "VINCULAÇÃO ENTRE EDITAIS" obedece ao período e à gravidade ---- */
+  {
+    /* O RELATÓRIO REAL: "período: só de hoje" e o bloco da vinculação
+     * trazia etapas de 03 e 04/09 — ele nasceu antes dos filtros e
+     * imprimia sempre tudo. */
+    const { api } = rodar();
+    const agora = new Date().toISOString();
+    const velho = new Date(Date.now() - 10 * 86400000).toISOString();
+    api.loja.setItem("eac_vinculo_log", JSON.stringify([
+      { q: velho, e: "faxina-apagar", d: { apagados: 246 }, a: [] },
+      { q: agora, e: "triagem-de-hoje", d: { duplas: 250 }, a: [] },
+    ]));
+    const rel = () => { api.rtIniciarTela({ assunto: "tudo" }); api.montarPainelDiag(); return api.diagTextoAtual(); };
+
+    api.definirPeriodo(0);
+    let r = rel();
+    ok(/VINCULAÇÃO ENTRE EDITAIS \(2 etapas registradas\)/.test(r) && /faxina-apagar/.test(r) && /triagem-de-hoje/.test(r),
+       "A16-pre sem periodo o bloco devia trazer as duas etapas: " + (r.match(/VINCULAÇÃO[^\n]*/) || [])[0]);
+
+    api.definirPeriodo(1);
+    r = rel();
+    ok(/triagem-de-hoje/.test(r) && !/faxina-apagar/.test(r),
+       "A16 'so de hoje' continua trazendo etapa de dias atras: " + (r.match(/faxina-apagar/) || ["(nao trouxe)"])[0]);
+    ok(/1 etapas no período, de 2 registradas/.test(r),
+       "A16a o cabecalho nao diz quantas etapas ha no periodo e no total: " + (r.match(/VINCULAÇÃO[^\n]*/) || [])[0]);
+
+    /* nenhuma etapa no período: o bloco some, sem cabeçalho vazio */
+    api.loja.setItem("eac_vinculo_log", JSON.stringify([{ q: velho, e: "faxina-apagar", d: {}, a: [] }]));
+    ok(!/VINCULAÇÃO ENTRE EDITAIS/.test(rel()), "A16b bloco sem nenhuma etapa no periodo ainda aparece");
+
+    /* "só erros e avisos": etapa de vinculação é andamento, não problema */
+    api.loja.setItem("eac_vinculo_log", JSON.stringify([{ q: agora, e: "triagem-de-hoje", d: {}, a: [] }]));
+    api.definirPeriodo(0);
+    api.rtIniciarTela({ assunto: "tudo", gravidade: "problemas" });
+    api.montarPainelDiag();
+    ok(!/VINCULAÇÃO ENTRE EDITAIS/.test(api.diagTextoAtual()),
+       "A16c 'so erros e avisos' ainda traz o bloco de vinculacao (andamento normal)");
+    api.definirPeriodo(0);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
