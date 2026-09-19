@@ -175,7 +175,7 @@ function jurAchatar(o) {
 /* O QUE A IA DISSE DE MEMÓRIA, só as chaves que o app sabe usar. Nunca vem
  * tese aqui: a tese é do texto ou é da pessoa. */
 const JUR_CAMPOS_VERIFICAVEIS = ["tribunal", "classe", "numero", "data", "orgao",
-  "relator", "fonte"];
+  "relator", "fonte", "precedentes"];
 
 function jurDeMemoria(o) {
   const m = (o && o.de_memoria && typeof o.de_memoria === "object") ? o.de_memoria : {};
@@ -191,6 +191,11 @@ function jurDeMemoria(o) {
     numero: pega("numero", "número"),
     data: pega("data_julgamento", "data"), orgao: pega("orgao", "órgao"),
     relator: pega("relator"), fonte: pega("fonte"),
+    precedentes: (function () {
+      const v = m.precedentes;
+      if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean).join("; ");
+      return v === undefined || v === null ? "" : String(v).trim();
+    })(),
   };
 }
 
@@ -225,6 +230,11 @@ function jurDoJson(bruto) {
     relator: pega("relator", "relatora"),
     orgao: pega("orgao", "\u00f3rgao", "orgao_julgador"),
     fonte: pega("fonte", "onde_encontrei", "link", "url"),
+    precedentes: (function () {
+      const v = o.precedentes !== undefined ? o.precedentes : o.precedentes_representativos;
+      if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean).join("; ");
+      return v === undefined || v === null ? "" : String(v).trim();
+    })(),
     tese: pega("tese_curta", "tese", "ementa"),
     resumo: pega("resumo_prova", "resumo", "resumo_curto", "explicacao"),
     /* A EMENTA LIMPA, quando a IA a devolveu. É ela que vai para o
@@ -349,13 +359,17 @@ function jurValorNoTexto(campo, valor, base) {
         && !/^(ministro|ministra|relator|relatora|desembargador|conselheiro)$/.test(p));
     return nomes.length > 0 && nomes.every((p) => bn.indexOf(p) >= 0);
   }
-  if (campo === "fonte") {
+  if (campo === "fonte" || campo === "precedentes") {
     /* uma fonte é confirmada quando TODOS os números dela (edição do DJe,
      * página, dia) estão no texto; uma fonte sem número nenhum ("portal do
      * tribunal") não se confere num texto */
-    const grupos = v.match(/\d+/g) || [];
+    /* "576.321" e "576321" são o mesmo número: compara por fichas sem o
+     * ponto de milhar, e ainda aceita os pedaços soltos ("40/2010") */
+    const fichas = (x) => (String(x).match(/\d[\d.]*/g) || [])
+      .map((f) => f.replace(/\D/g, "")).filter(Boolean);
+    const grupos = fichas(v);
     if (!grupos.length) return false;
-    const soNum = b.match(/\d+/g) || [];
+    const soNum = fichas(b).concat(b.match(/\d+/g) || []);
     return grupos.every((g) => soNum.indexOf(g) >= 0);
   }
   /* tribunal, classe, órgão: a expressão inteira, sem acento nem caixa;
@@ -477,6 +491,7 @@ function jurIdentificar(txt) {
   const bruto = String(txt || "");
   const achado = { tribunal: "", classe: "", numero: "", data: "",
                    relator: "", orgao: "", fonte: "", tese: "", ano: "",
+                   precedentes: "",
                    categoria: "", tribunalDeduzido: false };
   if (!bruto.trim()) return achado;
   /* JSON PRIMEIRO, quando for JSON: o resto do extrator trabalha com
@@ -545,6 +560,11 @@ function jurIdentificar(txt) {
       || bruto.match(/\b((?:19|20)\d{2})\b/);
     if (anoSo) achado.ano = anoSo[1];
   }
+
+  /* OS PRECEDENTES, para súmula e tema: os processos que os originaram.
+   * "Precedentes representativos: RE 576.321 QO-RG, AI 441038 AgR" */
+  const prec = bruto.match(/Precedentes?(?:\s+representativos?)?\s*:\s*([^\n]{4,300})/i);
+  if (prec) achado.precedentes = prec[1].trim();
 
   const rel = bruto.match(/Relator(?:\(a\))?\s*:?\s*(?:Min(?:istro|istra)?\.?\s*)?([^\n,;]{3,60})/i);
   if (rel) achado.relator = rel[1].trim();
@@ -639,7 +659,7 @@ function jurGravar(dados) {
   const antigo = tudo[id] || {};
   const r = Object.assign({
     id, tribunal: "", classe: "", numero: "", orgao: "", relator: "",
-    data: "", tese: "", texto: "", fonte: "", topicos: [], tags: [],
+    data: "", tese: "", texto: "", fonte: "", precedentes: "", topicos: [], tags: [],
     /* O RESUMO É UM CAMPO À PARTE, e essa separação é o ponto.
      *
      * A tese é a proposição jurídica como ela é — a frase que se
@@ -733,7 +753,8 @@ function jurTexto(lista) {
     const cab = jurTitulo(j)
       + (j.data ? " · " + String(j.data).split("-").reverse().join("/") : "")
       + (j.orgao ? " · " + j.orgao : "");
-    return cab + (j.tese ? "\n" + j.tese : "");
+    return cab + (j.tese ? "\n" + j.tese : "")
+      + (j.precedentes ? "\nPrecedentes: " + j.precedentes : "");
   }).join("\n\n");
 }
 
@@ -836,7 +857,7 @@ function jurUnir(idFica, idVai) {
   }
   /* os campos que faltavam de um lado vêm do outro: unir tem de somar */
   const confA = Array.isArray(a.aConferir) ? a.aConferir.slice() : [];
-  ["tribunal", "classe", "numero", "data", "orgao", "relator", "fonte"]
+  ["tribunal", "classe", "numero", "data", "orgao", "relator", "fonte", "precedentes"]
     .forEach((k) => {
       if (!String(a[k] || "").trim() && b[k]) {
         a[k] = b[k];
@@ -916,6 +937,9 @@ function jurPromptIA(estado, opc) {
   const tem = JUR_CAMPOS_META
     .filter((c) => c.k !== "resumo" && String(campos[c.k] || "").trim())
     .map((c) => t(c.i) + ": " + String(campos[c.k]).trim());
+  if (String(campos.precedentes || "").trim()) {
+    tem.push(t("jur_f_precedentes") + ": " + String(campos.precedentes).trim());
+  }
   const tags = e.tags || [];
   if (tags.length) tem.push(t("jur_f_tags") + ": " + tags.join(", "));
   const resumo = String(e.resumo || "").trim();
@@ -923,6 +947,7 @@ function jurPromptIA(estado, opc) {
     .filter((c) => c.k === "resumo" ? !resumo : !String(campos[c.k] || "").trim())
     .map((c) => c.k);
   if (!tags.length) falta.push("tags");
+  if (e.pedirPrecedentes && !String(campos.precedentes || "").trim()) falta.push("precedentes");
   const tudo = o.memoria === "tudo";
   const vals = {
     tp: e.topico || "",
@@ -982,11 +1007,23 @@ const JUR_CAMPOS_META = [
  * valor: uma lista vazia é falsy só depois de se olhar o comprimento —
  * e `[]` sozinho é verdadeiro, que é como uma checagem descuidada
  * concluiria que o julgado tem assunto. */
+/* súmula (vinculante ou não), tema repetitivo e repercussão geral nascem de
+ * processos anteriores; é para eles que "precedentes" faz sentido */
+function jurTemPrecedentes(j) {
+  if (!j) return false;
+  const cat = j.categoria || jurCategoria(j.classe);
+  return /S[U\u00da]MULA|REPETITIVO|REPERCUSS/i.test(cat || "");
+}
+
 function jurFaltando(j) {
   if (!j) return [];
   const falta = JUR_CAMPOS_META
     .filter((c) => !String(j[c.k] || "").trim())
     .map((c) => c.k);
+  /* PRECEDENTES SÓ SE COBRAM DE SÚMULA E TEMA: um acórdão isolado não
+   * tem "processos que o originaram", e contar o campo como vazio em todo
+   * julgado inflaria o "faltam N" de quem nunca teria o que preencher. */
+  if (jurTemPrecedentes(j) && !String(j.precedentes || "").trim()) falta.push("precedentes");
   if (!(jurTagsDe(j) || []).length) falta.push("tags");
   return falta;
 }
@@ -1020,7 +1057,9 @@ function jurPromptCompletar(j, tituloTopico, opc) {
   if (!j) return "";
   const campos = {};
   JUR_CAMPOS_META.forEach((c) => { campos[c.k] = j[c.k]; });
+  campos.precedentes = j.precedentes;
   return jurPromptIA({
+    pedirPrecedentes: jurTemPrecedentes(j),
     topico: tituloTopico || (j.topicos || [])[0] || "",
     titulo: jurTitulo(j),
     texto: String(j.texto || "").slice(0, 4000),
@@ -1117,6 +1156,8 @@ function jurCompletar(id, dados) {
     data: plano.data_julgamento || plano.data, orgao: plano.orgao,
     relator: plano.relator, fonte: plano.fonte, resumo: plano.resumo,
     categoria: plano.categoria,
+    precedentes: Array.isArray(plano.precedentes)
+      ? plano.precedentes.join("; ") : plano.precedentes,
   };
   /* O QUE A IA LEMBROU só entra onde o texto não trouxe nada — e
    * a verificação logo abaixo o marca "a conferir" se o texto não o

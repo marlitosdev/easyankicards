@@ -1333,6 +1333,141 @@ async function testes() {
        "S7d a lista nao traz o link oficial ao lado do 'a conferir'");
   }
 
+  /* =================================================================
+   * P: PRECEDENTES — os processos que originaram a súmula ou o tema
+   *
+   * POR QUE ISTO EXISTE. No caso da SV 29 a IA, sem ter onde pôr a
+   * informação certa (o RE 576.321 QO-RG que originou a súmula), pôs no
+   * "relator" o nome do presidente da sessão de aprovação. Súmula e tema
+   * não têm relator; têm PRECEDENTES.
+   * =============================================================== */
+
+  /* ---- P1: a leitura local acha "Precedentes: ..." no texto ---- */
+  {
+    const { api } = rodar();
+    const a = api.jurIdentificar("Súmula Vinculante 29\nPrecedentes representativos: "
+      + "RE 576.321 QO-RG, AI 441038 AgR\nOutra linha qualquer");
+    ok(/RE 576\.321 QO-RG, AI 441038 AgR/.test(a.precedentes) && !/Outra linha/.test(a.precedentes),
+       "P1 os precedentes nao foram lidos do texto (ou levaram a linha seguinte): "
+       + JSON.stringify(a.precedentes));
+    ok(api.jurIdentificar("RE 574706 / PR").precedentes === "",
+       "P1a inventou precedentes onde o texto nao diz nada");
+  }
+
+  /* ---- P2: a resposta da IA traz precedentes como texto ou como lista ---- */
+  {
+    const { api } = rodar();
+    const t1 = api.jurDoJson(JSON.stringify({ do_texto: { classe: "Súmula Vinculante", numero: "29",
+      precedentes: "RE 576321 QO-RG" } }));
+    ok(t1 && t1.precedentes === "RE 576321 QO-RG", "P2 precedentes em texto nao chegaram: " + (t1 && t1.precedentes));
+    const t2 = api.jurDoJson(JSON.stringify({ classe: "Tema", numero: "69",
+      precedentes: ["RE 574706", "RE 240785"] }));
+    ok(t2 && t2.precedentes === "RE 574706; RE 240785", "P2a lista de precedentes nao virou texto: " + (t2 && t2.precedentes));
+    const t3 = api.jurDoJson(JSON.stringify({ classe: "Tema", numero: "69",
+      de_memoria: { precedentes: ["RE 1", "RE 2"] } }));
+    ok(t3 && t3.deMemoria.precedentes === "RE 1; RE 2", "P2b precedentes de memoria nao chegaram");
+  }
+
+  /* ---- P3: "faltam precedentes" só para súmula e tema ---- */
+  {
+    const { api } = rodar();
+    const sum = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29" },
+      "Direito Tributário", "Tributos");
+    const acor = guardar(api, { tribunal: "STF", classe: "RE", numero: "574706" },
+      "Direito Tributário", "Tributos");
+    const tema = guardar(api, { tribunal: "STF", classe: "Tema", numero: "69" },
+      "Direito Tributário", "Tributos");
+    ok(api.jurFaltando(sum).indexOf("precedentes") >= 0, "P3 sumula sem precedentes nao conta como faltando");
+    ok(api.jurFaltando(tema).indexOf("precedentes") >= 0, "P3a tema sem precedentes nao conta como faltando");
+    ok(api.jurFaltando(acor).indexOf("precedentes") < 0,
+       "P3b um acordao isolado ganhou 'faltam precedentes' (inflaria o 'faltam N' de todos)");
+    api.jurGravar({ id: sum.id, precedentes: "RE 576321" });
+    ok(api.jurFaltando(api.jurDe(sum.id)).indexOf("precedentes") < 0, "P3c com precedentes ainda conta como faltando");
+  }
+
+  /* ---- P4: precedentes vindos da IA são conferidos no texto (todos os números) ---- */
+  {
+    const { api } = rodar();
+    const BASE = "Precedentes: RE 576.321 QO-RG e AI 441.038 AgR";
+    ok(api.jurValorNoTexto("precedentes", "RE 576321 QO-RG; AI 441038 AgR", BASE),
+       "P4 precedentes presentes no texto nao foram confirmados");
+    ok(!api.jurValorNoTexto("precedentes", "RE 576321; RE 999999", BASE),
+       "P4a um precedente que o texto nao traz foi dado como confirmado");
+    ok(!api.jurValorNoTexto("precedentes", "RE 576321", ""), "P4b sem texto de base nada se confirma");
+    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+      tese: "tese qualquer" }, "Direito Tributário", "Tributos");
+    const r = api.jurCompletar(j.id, { do_texto: { precedentes: "RE 576321 QO-RG" } });
+    ok(r.mudou.indexOf("precedentes") >= 0 && api.jurDe(j.id).aConferir.indexOf("precedentes") >= 0,
+       "P4c precedentes que a IA trouxe sem texto guardado nao ficaram a conferir: "
+       + JSON.stringify(api.jurDe(j.id).aConferir));
+    const k = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+      texto: BASE }, "Direito Tributário", "Tributos");
+    api.jurCompletar(k.id, { do_texto: { precedentes: "RE 576321 QO-RG; AI 441038 AgR" } });
+    ok(api.jurDe(k.id).precedentes && api.jurDe(k.id).aConferir.indexOf("precedentes") < 0,
+       "P4d precedentes confirmados no texto guardado ficaram a conferir");
+  }
+
+  /* ---- P5: o pedido à IA fala de precedentes só onde faz sentido ---- */
+  {
+    const { api } = rodar();
+    const sum = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29" },
+      "Direito Tributário", "Tributos");
+    const acor = guardar(api, { tribunal: "STF", classe: "RE", numero: "574706" },
+      "Direito Tributário", "Tributos");
+    const faltaDe = (p) => (/CAMPOS VAZIOS QUE QUERO PREENCHER: ([^\n]*)/.exec(p) || [])[1] || "";
+    ok(/precedentes/.test(faltaDe(api.jurPromptCompletar(sum, "T"))),
+       "P5 o pedido para uma sumula nao lista 'precedentes' entre os vazios");
+    ok(!/precedentes/.test(faltaDe(api.jurPromptCompletar(acor, "T"))),
+       "P5a o pedido para um acordao pede precedentes");
+    ok(/"precedentes":/.test(api.jurPromptCompletar(sum, "T")) && /processos que a originaram/.test(api.jurPromptCompletar(sum, "T")),
+       "P5b o formato/regra de precedentes nao esta no pedido");
+    const bloco = (p) => (/"de_memoria": \{([^}]*)\}/.exec(p) || [])[1] || "";
+    ok(!/precedentes/.test(bloco(api.jurPromptCompletar(sum, "T"))),
+       "P5c por padrao a IA pode lembrar precedentes de memoria");
+    ok(/precedentes/.test(bloco(api.jurPromptCompletar(sum, "T", { memoria: "tudo" }))),
+       "P5d a memoria total nao inclui precedentes");
+  }
+
+  /* ---- P6: na tela — colar, conferir, guardar, ver na lista, editar, limpar ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurColar").value = JSON.stringify({ do_texto: { tribunal: "STF", classe: "Súmula Vinculante",
+      numero: "29", precedentes: "RE 576321 QO-RG", tese_curta: "tese de teste" } });
+    api.jurAoColarNaCaixa();
+    await espera();
+    ok(api.$("jurPrecedentes").value === "RE 576321 QO-RG",
+       "P6 os precedentes da resposta nao entraram no formulario");
+    ok(/a conferir/.test(api.$("jurOrigem_precedentes").textContent || ""),
+       "P6a precedentes que o texto enviado nao traz nao mostram 'a conferir'");
+    await api.jurSalvar();
+    const salvo = api.jurDoTopico(api.matChave("Direito Tributário", "Tributos"))[0];
+    ok(salvo.precedentes === "RE 576321 QO-RG" && salvo.aConferir.indexOf("precedentes") >= 0,
+       "P6b o julgado guardado perdeu os precedentes ou a marca: " + JSON.stringify([salvo.precedentes, salvo.aConferir]));
+    api.jurAbrir("Direito Tributário", "Tributos", "ler");
+    const linhas = api.$("jurLista").querySelectorAll(".jur-prec");
+    ok(linhas.length === 1 && /RE 576321 QO-RG/.test(linhas[0].textContent || ""),
+       "P6c a lista nao mostra os precedentes");
+    api.jurEditar(salvo.id);
+    ok(api.$("jurPrecedentes").value === "RE 576321 QO-RG", "P6d editar nao carregou os precedentes");
+    api.jurLimparForm();
+    ok(api.$("jurPrecedentes").value === "", "P6e limpar os campos deixou os precedentes");
+    ok(/Precedentes: RE 576321 QO-RG/.test(api.jurTexto([salvo])), "P6f a copia do julgado perdeu os precedentes");
+  }
+
+  /* ---- P7: unir dois julgados leva os precedentes ---- */
+  {
+    const { api } = rodar();
+    const a = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29" },
+      "Direito Tributário", "Tributos");
+    const b = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+      precedentes: "RE 576321", aConferir: ["precedentes"] }, "Direito Tributário", "Tributos");
+    const u = api.jurUnir(a.id, b.id);
+    ok(u && u.precedentes === "RE 576321" && u.aConferir.indexOf("precedentes") >= 0,
+       "P7 unir perdeu os precedentes (ou a marca): " + JSON.stringify(u && [u.precedentes, u.aConferir]));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
