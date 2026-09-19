@@ -1523,6 +1523,171 @@ async function testes() {
     ok(!botaoRev(api), "RV10 o aviso ficou (memoria velha) depois de o texto perder o repetido");
   }
 
+  /* =================================================================
+   * SP: TEXTO COLADO NUMA LINHA SÓ
+   *
+   * POR QUE ISTO EXISTE. O leitor só reconhece "Art." no começo de uma
+   * linha. O Código Tributário de Caruaru colado sem quebras dava ZERO
+   * artigos: a lei virava um bloco de texto, e nada — ir ao artigo,
+   * marcar, conferir repetidos — funcionava.
+   * =============================================================== */
+  const PLANO = "LEI COMPLEMENTAR 015, DE 05 DE JANEIRO DE 2009 (Com Alterações pelas Leis Complementares N° 018/09; 023/10) Institui o Código Tributário e de rendas do município de Caruaru e dá outras providências. O Prefeito do Município de Caruaru, Estado de Pernambuco. Faço saber que a Câmara Legislativa Municipal aprovou e eu sanciono a seguinte Lei Complementar: DAS DISPOSIÇÕES PRELIMINARES Art. 1º. Este Código regula os direitos e obrigações que emanam das relações jurídicas referentes a tributos e demais rendas que constituem receita do Município de Caruaru. Art. 2º. O Código é constituído de 4 (quatro) Livros, com a matéria, assim distribuída: LIVRO I - Estabelece Normas Gerais de Direito Tributário aplicáveis ao Município; LIVRO II - Regula o Sistema Tributário Municipal; LIVRO III - Regula o Regime Contratual dos Preços Públicos Municipais; LIVRO IV - Estabelece as Disposições Gerais, Transitórias e Finais. Art. 3º O Código Tributário Municipal é subordinado: I - à Constituição Federal; II - ao Código Tributário Nacional e demais Leis Complementares da União; III – à Lei Orgânica do Município de Caruaru. Art. 3º. Compreendem o Sistema de Normas Tributárias do Município de Caruaru os princípios e as normas gerais estabelecidas pela Constituição Federal, além dos demais atos normativos, cuja aplicação dependerá da conformidade com a natureza do tributo. (Redação dada pela Lei Complementar nº 018, de 09 de outubro de 2009)";
+  const conduzirSep = async (api, aceitar) => {
+    for (let i = 0; i < 25; i++) { await Promise.resolve(); try { api._uiFechar(aceitar); } catch (e) {} }
+    await new Promise((r) => setTimeout(r, 5));
+  };
+
+  /* ---- SP1: o caso real — o leitor não achava nada; agora acha os quatro ---- */
+  {
+    const { api } = rodar();
+    ok(api.leiArtigos(PLANO).length === 0, "SP1-pre o texto em uma linha ja era lido (o teste nao mede nada)");
+    const r = api.leiSepararColagem(PLANO);
+    ok(r.aplicavel === true, "SP1 nao propos separar um texto todo numa linha");
+    ok(r.artigos.map((a) => a.num).join(",") === "1,2,3,3", "SP1a os artigos achados estao errados: " + r.artigos.map((a) => a.rotulo).join("|"));
+    ok(api.leiArtigos(r.texto).length === 4, "SP1b depois de separar o leitor nao enxerga 4 artigos: " + api.leiArtigos(r.texto).length);
+    /* nenhuma palavra muda: so entram quebras de linha */
+    ok(r.texto.replace(/\s+/g, " ").trim() === PLANO.replace(/\s+/g, " ").trim(),
+       "SP1c a separacao alterou palavras do texto");
+    /* incisos com linha propria (leitura) */
+    const linhas = r.texto.split("\n");
+    ok(linhas.some((l) => /^I - à Constituição Federal;/.test(l)) && linhas.some((l) => /^III – à Lei Orgânica/.test(l)),
+       "SP1d os incisos nao ganharam linha propria");
+    /* a lista LIVRO I.. NAO virou divisao da lei */
+    ok(!linhas.some((l) => /^LIVRO [IVX]+\b/.test(l)), "SP1e quebrou antes de um 'LIVRO n' da lista (isso viraria uma divisao da lei)");
+    /* e os repetidos passam a ser vistos */
+    ok(api.leiDuplicados(r.texto).length === 1 && api.leiDuplicados(r.texto)[0].num === "3",
+       "SP1f o art. 3o repetido nao foi visto depois de separar");
+  }
+
+  /* ---- SP2: remissão não é artigo novo ---- */
+  {
+    const { api } = rodar();
+    const t2 = "Art. 1º Este código trata do tributo. Art. 2º O prazo é de trinta dias, nos termos do art. 5º desta lei e conforme o Art. 9º do decreto. Art. 3º Fim.";
+    const r = api.leiSepararColagem(t2);
+    ok(r.aplicavel && r.artigos.map((a) => a.num).join(",") === "1,2,3",
+       "SP2 tomou uma remissao por artigo (ou nao achou os tres): " + r.artigos.map((a) => a.rotulo).join("|"));
+    /* remissão logo depois de um ponto final, mas com numero FORA DA SEQUENCIA */
+    const t3 = "Art. 6º Trata de A. Art. 7º Trata de B; Art. 2º do Decreto revoga o resto. Art. 8º Trata de C.";
+    const r3 = api.leiSepararColagem(t3);
+    ok(r3.aplicavel && r3.artigos.map((a) => a.num).join(",") === "6,7,8",
+       "SP2a uma remissao 'Art. 2º do Decreto' fora da sequencia virou artigo: " + r3.artigos.map((a) => a.rotulo).join("|"));
+    /* salto absurdo */
+    const t4 = "Art. 1º Um. Art. 2º Dois. Art. 900 Remissao solta. Art. 3º Tres.";
+    ok(api.leiSepararColagem(t4).artigos.map((a) => a.num).join(",") === "1,2,3", "SP2b um salto de sequencia foi aceito como artigo");
+  }
+
+  /* ---- SP3: o que não precisa de separação passa reto ---- */
+  {
+    const { api } = rodar();
+    ok(!api.leiSepararColagem("Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Tres.").aplicavel, "SP3 texto ja separado foi proposto de novo");
+    ok(!api.leiSepararColagem("Art. 1º Artigo único e ponto final.").aplicavel, "SP3a texto com um artigo so foi proposto");
+    ok(!api.leiSepararColagem("Este texto nao tem artigo nenhum, so um comentario sobre o art. 5º e o art. 6º.").aplicavel,
+       "SP3b texto sem cabecalhos foi proposto");
+    ok(!api.leiSepararColagem("").aplicavel && !api.leiSepararColagem(null).aplicavel, "SP3c vazio foi proposto");
+    /* já separado + um único embutido: 1 candidato a mais, não vale o incômodo? ao menos não quebra o que está certo */
+    const misto = api.leiSepararColagem("Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Tres. Art. 4º Quatro colado.\n");
+    ok(misto.aplicavel && api.leiArtigos(misto.texto).length === 4, "SP3d texto meio separado nao foi completado");
+  }
+
+  /* ---- SP4: § e parágrafo único ganham linha, sem tocar em remissões ---- */
+  {
+    const { api } = rodar();
+    const r = api.leiSepararColagem("Art. 1º O prazo e de dez dias. § 1º Contam-se em dias uteis, nos termos do § 2º do art. 4º. § 2º Excecoes. Parágrafo único. Vale para todos. Art. 2º Dois.");
+    const ls = r.texto.split("\n");
+    ok(ls.some((l) => /^§ 1º Contam-se/.test(l)) && ls.some((l) => /^§ 2º Excecoes/.test(l)) && ls.some((l) => /^Parágrafo único\. Vale/.test(l)),
+       "SP4 os paragrafos nao ganharam linha propria: " + JSON.stringify(ls));
+    ok(ls.filter((l) => /nos termos do § 2º do art\. 4º/.test(l)).length === 1, "SP4a quebrou uma remissao a '§ 2º' no meio da frase");
+  }
+
+  /* ---- SP5: na CRIAÇÃO, o texto em uma linha pede confirmação; aceitar separa e segue para os repetidos ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = PLANO;
+    const r = api.leiGravar();
+    ok(r === "pendente", "SP5 salvar um texto numa linha so nao devolveu 'pendente': " + r);
+    ok(api.leisLista().length === 0, "SP5a a lei foi criada ANTES da confirmacao");
+    await conduzirSep(api, true);
+    ok(api.$("leiTexto").value !== PLANO && api.leiArtigos(api.$("leiTexto").value).length === 4,
+       "SP5b aceitar nao separou o texto do editor");
+    ok(api.$("dlgLeiDup").open === true, "SP5c depois de separar, o art. 3o repetido nao abriu a conferencia");
+    ok(api.leisLista().length === 0, "SP5d a lei foi criada antes da conferencia dos repetidos");
+    api.$("btnLeiDupConfirmar").onclick();
+    const l = api.leisLista()[0];
+    ok(!!l && api.leiArtigos(l.texto).length === 3 && l.alteracoes && l.alteracoes["3"],
+       "SP5e a lei nao nasceu com 3 artigos e o 3o como alteracao: " + JSON.stringify(l && Object.keys(l.alteracoes || {})));
+  }
+
+  /* ---- SP6: recusar volta ao texto e não cria nada ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = PLANO;
+    api.leiGravar();
+    await conduzirSep(api, false);
+    ok(api.leisLista().length === 0 && api.$("leiTexto").value === PLANO && api.$("dlgLeiDup").open !== true,
+       "SP6 recusar criou a lei, mexeu no texto ou abriu outra conferencia");
+  }
+
+  /* ---- SP7: sem repetidos, aceitar cria a lei direto ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito", "T");
+    api.$("leiTexto").value = "Art. 1º Um artigo. Art. 2º Outro artigo. Art. 3º Mais um artigo.";
+    api.leiGravar();
+    await conduzirSep(api, true);
+    const l = api.leisLista()[0];
+    ok(!!l && api.leiArtigos(l.texto).length === 3 && api.$("dlgLeiDup").open !== true,
+       "SP7 texto numa linha sem repetidos nao virou uma lei com 3 artigos");
+  }
+
+  /* ---- SP8: texto normal nem pergunta ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito", "T");
+    api.$("leiTexto").value = "Art. 1º Um.\nArt. 2º Dois.";
+    const r = api.leiGravar();
+    ok(r !== "pendente" && api.leisLista().length === 1, "SP8 texto ja separado passou pela pergunta");
+  }
+
+  /* ---- SP9: ATUALIZAÇÃO — texto novo numa linha só era 'nenhum artigo'; agora propõe separar ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei 1/2000", texto: "Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Tres." });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdFonte").value = "LC 1/2001";
+    api.$("leiUpdTexto").value = "Art. 1º Um. Art. 2º Dois mudado. Art. 3º Tres.";
+    const r = api.leiAtualizarComparar();
+    ok(r === false && api.$("leiUpdPasso2").hidden === true, "SP9 a comparacao seguiu sem separar o texto novo");
+    ok(!/nenhum artigo|sem artigo/i.test(api.$("leiUpdAviso1").textContent || ""),
+       "SP9a a atualizacao morreu com 'nenhum artigo' em vez de propor separar: " + api.$("leiUpdAviso1").textContent);
+    await conduzirSep(api, true);
+    ok(api.$("leiUpdPasso2").hidden === false, "SP9b depois de aceitar a comparacao nao seguiu");
+    const item = (api.leiUpdComparoAtual() || []).filter((x) => x.num === "2")[0];
+    ok(item && item.tipo === "mudou" && /Dois mudado/.test(item.novo), "SP9c a comparacao nao viu a mudanca do art. 2o: " + JSON.stringify(item));
+  }
+
+  /* ---- SP10: atualização recusada não segue ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei 1/2000", texto: "Art. 1º Um.\nArt. 2º Dois." });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdFonte").value = "LC 1/2001";
+    api.$("leiUpdTexto").value = "Art. 1º Um. Art. 2º Dois mudado.";
+    api.leiAtualizarComparar();
+    await conduzirSep(api, false);
+    ok(api.$("leiUpdPasso2").hidden === true && api.$("leiUpdTexto").value === "Art. 1º Um. Art. 2º Dois mudado.",
+       "SP10 recusar seguiu com a comparacao ou mexeu no texto");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

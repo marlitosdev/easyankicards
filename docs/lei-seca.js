@@ -350,6 +350,86 @@ function leiAplicarDuplicados(texto, grupos, decisoes) {
 }
 
 /* =====================================================================
+ * TEXTO COLADO NUMA LINHA SÓ
+ *
+ * O leitor reconhece "Art." só no COMEÇO de uma linha. Um texto que chegou
+ * sem quebras (colado de um chat, de um site que achata o parágrafo, de um
+ * PDF em que cada artigo virou uma linha só) dava ZERO artigos — e a lei
+ * inteira virava um bloco de texto em que nada funciona.
+ *
+ * O QUE ISTO FAZ: procura cabeçalhos de artigo escritos DEPOIS de outro
+ * texto ("… nos termos da lei. Art. 3º O Código …") e propõe uma quebra de
+ * linha antes de cada um. Só propõe: quem cola vê quais artigos foram
+ * encontrados e confirma (lei-ui.js). É uma inserção de "\n" — nenhum
+ * caractere é perdido.
+ *
+ * O QUE NÃO SE TOMA POR CABEÇALHO (uma remissão não é um artigo novo):
+ *  · "Art." sem estar depois de ponto final, dois-pontos, ponto e vírgula,
+ *    parêntese ou de um TÍTULO EM MAIÚSCULAS ("DAS DISPOSIÇÕES PRELIMINARES
+ *    Art. 1º"): "nos termos do art. 5º" tem uma palavra comum antes;
+ *  · "art." em minúscula;
+ *  · número que fura a SEQUÊNCIA: menor que o anterior, ou que salta mais
+ *    de 50 artigos. "…; Art. 2º do Decreto…" dentro do art. 7º é remissão.
+ *
+ * PARA LER MELHOR, e só depois de achar os artigos, também quebra antes de
+ * "§ n", "Parágrafo único" e dos incisos romanos ("I - …") que vêm depois
+ * de ponto final, dois-pontos ou ponto e vírgula. NÃO quebra antes de
+ * LIVRO/TÍTULO/CAPÍTULO: numa lista ("LIVRO I - Estabelece…") isso
+ * viraria uma divisão da lei.
+ * ===================================================================== */
+const LEI_RE_ART_EMBUTIDO =
+  /(^|\n|[.:;)!?]["”')]*[ \t]+|[A-ZÀ-Ú]{3,}[ \t]+)(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?)(?=[\s.\-–—)])/g;
+
+function leiSepararColagem(texto) {
+  const src = String(texto || "");
+  const cands = [];
+  let m;
+  const re = new RegExp(LEI_RE_ART_EMBUTIDO.source, "g");
+  let anterior = null;
+  while ((m = re.exec(src)) !== null) {
+    const ord = leiNumOrdem(m[3]);
+    const dentroDaSequencia = anterior === null
+      || (ord >= anterior && ord - anterior <= 5000);
+    if (!dentroDaSequencia) continue;            /* remissão, não cabeçalho */
+    anterior = ord;
+    const ini = m.index + m[1].length;           /* onde começa o "Art" */
+    cands.push({
+      ini, ws: m.index + m[1].replace(/[ \t]+$/, "").length,
+      rotulo: m[2].replace(/\s+/g, " ").replace(/^Artigo/, "Art."),
+      num: leiNumNormal(m[3]),
+    });
+  }
+  const linhaArtigos = leiArtigos(src).length;
+  const vazio = { aplicavel: false, texto: src, artigos: [], quebras: 0 };
+  if (cands.length < 2 || cands.length <= linhaArtigos) return vazio;
+
+  /* 1) uma linha por artigo */
+  let saida = "";
+  let ultimo = 0;
+  cands.forEach((c) => {
+    saida += src.slice(ultimo, c.ws);
+    if (c.ws > 0 && src.charAt(c.ws - 1) !== "\n") saida += "\n";
+    ultimo = c.ini;
+  });
+  saida += src.slice(ultimo);
+
+  /* 2) legibilidade dentro do artigo */
+  saida = saida
+    .replace(/([.:;)])[ \t]+(§[ \t]*\d{1,3}[ \t]*[ºo°]?|Par[áa]grafo[ \t]+[úu]nico)/g, "$1\n$2")
+    .replace(/([:;.])[ \t]+([IVXL]{1,6}[ \t]*[-–—][ \t])/g, "$1\n$2");
+
+  const achados = leiArtigos(saida);
+  /* a prova dos nove: se depois de tudo o leitor não enxerga ao menos os
+   * cabeçalhos que se encontrou, a proposta não vale */
+  if (achados.length < cands.length) return vazio;
+  return {
+    aplicavel: true, texto: saida,
+    artigos: cands.map((c) => ({ num: c.num, rotulo: c.rotulo })),
+    quebras: (saida.match(/\n/g) || []).length - (src.match(/\n/g) || []).length,
+  };
+}
+
+/* =====================================================================
  * A LEI VIGENTE: TEXTO-BASE + ALTERAÇÕES POR CIMA
  *
  * `l.texto` (a "camada base") é o que foi colado, e nunca é reescrito por
@@ -1585,6 +1665,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiRotuloChave, leiCasarRotulo, leiCandidatosDoRotulo, leiApelidoChave,
     leiSiglasDoNome, leiApelidoAdicionar,
     leiDuplicados, leiSinaisDoArtigo, leiPalavrasDiferentes, leiAplicarDuplicados,
+    leiSepararColagem,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
     leiNotaDe, leiNotaDeEm, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoDeEm,

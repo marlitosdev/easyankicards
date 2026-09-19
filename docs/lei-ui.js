@@ -2193,6 +2193,22 @@ function leiGravar(opc) {
      * duas cópias (corpo e ADCT) reabriria a conferência para sempre.
      * Devolve "pendente" para quem chamou não fechar nem trocar de lei
      * no meio da escolha. */
+    /* TEXTO NUMA LINHA SÓ vem ANTES dos repetidos: só depois de separado o
+     * leitor enxerga os artigos (e os que se repetem) */
+    if (!(opc && opc.separado)) {
+      const sep = leiSepararColagem(txt);
+      if (sep.aplicavel) {
+        leiSepararPerguntar(sep).then((ok) => {
+          try { leiReg("gravar", ok ? "texto numa linha só: separado em artigos"
+                                   : "texto numa linha só: a pessoa voltou para revisar",
+                       sep.artigos.length + " artigos"); } catch (e) {}
+          if (!ok) return;
+          $("leiTexto").value = sep.texto;
+          leiGravar({ separado: true });
+        });
+        return "pendente";
+      }
+    }
     const grupos = (opc && opc.conferido) ? [] : leiDuplicados(txt);
     if (grupos.length) {
       leiDuplicadosAbrir({
@@ -2290,6 +2306,17 @@ function leiTrocarPara(id) {
  * "confirmar".
  * ===================================================================== */
 let leiDupCtx = null;
+
+/* O TEXTO VEIO NUMA LINHA SÓ? Mostra os artigos que se encontrou e pergunta
+ * se deve separar (nenhuma palavra muda; só entram quebras de linha). Devolve
+ * uma promessa de true/false — e só se aplica quando leiSepararColagem acha
+ * cabeçalhos que o leitor, por estarem no meio da linha, não enxergava. */
+function leiSepararPerguntar(sep, chave) {
+  const nomes = sep.artigos.map((a) => a.rotulo);
+  const lista = nomes.slice(0, 10).join(", ")
+    + (nomes.length > 10 ? " … " + t("lei_sep_mais", { n: nomes.length - 10 }) : "");
+  return uiConfirm(t(chave || "lei_sep_conf", { n: sep.artigos.length, lista }));
+}
 
 /* guardar a substituída como texto original só faz sentido na CRIAÇÃO, em
  * grupo de duas ocorrências onde a escolhida traz "Redação dada pela…" e a
@@ -2706,6 +2733,22 @@ function leiAtualizarComparar(opc) {
   const fonte = String($("leiUpdFonte").value || "").trim();
   const novoTexto = String($("leiUpdTexto").value || "");
   if (!fonte) { $("leiUpdAviso1").textContent = t("lei_upd_sem_fonte"); return false; }
+  /* TEXTO NOVO NUMA LINHA SÓ: propõe separar antes de tudo (sem isso dava
+   * "nenhum artigo" e a atualização morria com o texto certo na mão) */
+  if (!(opc && opc.separado)) {
+    const sep = leiSepararColagem(novoTexto);
+    if (sep.aplicavel) {
+      leiSepararPerguntar(sep, "lei_sep_conf_upd").then((ok) => {
+        try { leiReg("atualizacao", ok ? "texto novo numa linha só: separado em artigos"
+                                       : "texto novo numa linha só: a pessoa voltou para revisar",
+                     sep.artigos.length + " artigos"); } catch (e) {}
+        if (!ok) return;
+        $("leiUpdTexto").value = sep.texto;
+        leiAtualizarComparar({ separado: true });
+      });
+      return false;
+    }
+  }
   const novos = leiArtigos(novoTexto);
   if (!novos.length) { $("leiUpdAviso1").textContent = t("lei_upd_sem_artigo"); return false; }
   /* A COMPARAÇÃO É POR NÚMERO, UM ARTIGO POR NÚMERO. Com um artigo repetido
