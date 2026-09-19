@@ -22,6 +22,12 @@ let jurConferirForm = {};
  * pela mesma caixa e a substitui — sem guardar aqui, não haveria com que
  * comparar o que a IA devolveu (ver jurVerificarNoTexto). */
 let jurUltimoTextoPedido = "";
+/* os valores que a leitura do TEXTO colocou em cada campo: enquanto o
+ * campo continuar igual, ele mostra "✓ do texto". Se a pessoa mexeu,
+ * a marca some — o campo agora é dela. */
+let jurValoresLidos = {};
+/* a última resposta disse que a "tese" colada é paráfrase, não o enunciado */
+let jurParafraseColada = false;
 /* os campos do formulário (o relator existe no julgado, não na entrada) */
 const JUR_CAMPOS_FORM = { tribunal: "jurTribunal", classe: "jurClasse",
   numero: "jurNumero", data: "jurData", orgao: "jurOrgao", fonte: "jurFonte" };
@@ -144,6 +150,8 @@ function jurLimparForm() {
   jurCategoriaColada = "";
   jurTagsColadas = [];
   jurConferirForm = {};
+  jurValoresLidos = {};
+  jurParafraseColada = false;
   jurPintarTagsForm();
   jurPilulaLimpar();
   jurMeta(false);
@@ -333,6 +341,93 @@ function jurPintarPrincipal() {
   b.title = t("jur_principal_" + est + "_aj");
   /* o caminho local só se oferece quando há texto para ele ler */
   if ($("btnJurColar")) $("btnJurColar").disabled = est === "vazia";
+  jurPintarPassos();
+  jurPintarOrigem();
+}
+
+/* =====================================================================
+ * OS TRÊS PASSOS, À VISTA
+ *
+ * A entrada era uma caixa que trocava de papel (ementa, depois resposta
+ * da IA) e um botão que trocava de rótulo — o caminho existia, mas só na
+ * cabeça de quem já o conhecia. Agora o passo em que se está fica aceso
+ * e uma linha diz o que se faz nele:
+ *   1 · Cole      — caixa e campos vazios
+ *   2 · Confira   — há texto para ler, ainda sem campos
+ *   3 · Guarde    — há campos (lidos, digitados ou vindos da IA)
+ * ===================================================================== */
+function jurPassoAtual() {
+  const tem = (id) => !!String(($(id) || {}).value || "").trim();
+  if (["jurTese", "jurTribunal", "jurClasse", "jurNumero", "jurResumo"].some(tem)) return 3;
+  return jurEstadoDaCaixa() === "vazia" ? 1 : 2;
+}
+
+function jurPintarPassos() {
+  const cx = $("jurPassos");
+  if (!cx) return;
+  const p = jurPassoAtual();
+  [1, 2, 3].forEach((n) => {
+    const el = $("jurPasso" + n);
+    if (!el) return;
+    el.className = "jur-passo" + (n === p ? " atual" : (n < p ? " feito" : ""));
+    if (el.setAttribute) el.setAttribute("aria-current", n === p ? "step" : "false");
+  });
+  if ($("jurPassoAjuda")) $("jurPassoAjuda").textContent = t("jur_passo_aj_" + p);
+}
+
+/* =====================================================================
+ * DE ONDE VEIO CADA CAMPO
+ *
+ * Um campo preenchido não diz se foi lido do tribunal ou lembrado pela
+ * IA — e é essa diferença que decide se dá para decorar. Ao lado do
+ * rótulo: "✓ do texto" (leitura local ou confirmado no texto enviado) ou
+ * "⚠ a conferir" (a IA trouxe, o texto não confirma). Campo que a pessoa
+ * digitou ou corrigiu não leva marca nenhuma: é dela.
+ *
+ * O RÓTULO DA DATA ACOMPANHA A CATEGORIA: numa súmula, a data que importa
+ * é a da APROVAÇÃO — chamar de "data do julgamento" foi o que levou a IA
+ * (e a pessoa) a preencher com a data da publicação.
+ * ===================================================================== */
+function jurPintarOrigem() {
+  const val = (id) => String(($(id) || {}).value || "").trim();
+  Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
+    const el = $("jurOrigem_" + k);
+    if (!el) return;
+    const cur = val(JUR_CAMPOS_FORM[k]);
+    let estado = "";
+    if (cur && jurConferirForm[k] !== undefined
+        && String(jurConferirForm[k]).trim() === cur) estado = "conferir";
+    else if (cur && jurValoresLidos[k] === cur) estado = "texto";
+    el.className = "jur-origem" + (estado ? " " + estado : "");
+    el.textContent = estado ? t("jur_origem_" + estado) : "";
+  });
+  const cat = jurCategoriaColada
+    || (typeof jurCategoria === "function" ? jurCategoria(val("jurClasse")) : "");
+  if ($("jurRotData")) {
+    $("jurRotData").textContent = t(/S[UÚ]MULA/i.test(cat) ? "jur_c_data_sumula" : "jur_c_data");
+  }
+  jurPintarOficial();
+}
+
+/* O SITE OFICIAL, quando há o que conferir. Só o portal de busca do
+ * tribunal (jurPortalOficial): o app não sabe o endereço de cada julgado
+ * e não finge saber. Sem innerHTML — o texto do link é fixo, mas o
+ * hábito de montar nós vale mais que a exceção. */
+function jurPintarOficial() {
+  const cx = $("jurOficial");
+  if (!cx) return;
+  const portal = typeof jurPortalOficial === "function"
+    ? jurPortalOficial(($("jurTribunal") || {}).value) : null;
+  const precisa = Object.keys(jurConferirForm).length > 0 || jurParafraseColada;
+  cx.hidden = !(portal && precisa);
+  if (cx.hidden) return;
+  cx.textContent = t("jur_oficial_rot") + " ";
+  const a = document.createElement("a");
+  a.href = portal.url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = portal.nome;
+  cx.append(a);
 }
 
 function jurPrincipal() {
@@ -384,6 +479,8 @@ function jurColar() {
    * tudo o que veio no JSON, é CONFERIDO no texto que foi enviado. O que
    * não aparece lá fica marcado "a conferir" (jurVerificarNoTexto). */
   jurConferirForm = {};
+  jurValoresLidos = {};
+  jurParafraseColada = false;
   const sugeridos = [];
   if (doJson) {
     const mem = a.deMemoria || {};
@@ -408,6 +505,12 @@ function jurColar() {
   põe("jurOrgao", a.orgao);
   põe("jurFonte", a.fonte);
   if (a.categoria) jurCategoriaColada = a.categoria;
+  /* o que a LEITURA pôs nos campos e que não está sob suspeita: "do texto" */
+  Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
+    if (a[k] && jurConferirForm[k] === undefined) jurValoresLidos[k] = String(a[k]).trim();
+  });
+  jurParafraseColada = !!(doJson && (a.teseOficial === false
+    || /parafrase/i.test(a.tipoDoTexto || "")));
   /* A tese só é SUGERIDA quando o campo está vazio — quem já escreveu a
    * sua não pode perdê-la para um palpite. Vindo de JSON, substitui:
    * ali não houve palpite, houve um campo nomeado. */
@@ -477,11 +580,13 @@ function jurColar() {
     }
     av.textContent = linhas.join("\n");
     av.style.whiteSpace = "pre-line";
+    /* várias linhas não cabem numa pílula: vira caixa */
+    if (linhas.length > 1) av.className += " multi";
   }
   /* NÃO RECONHECEU NADA: aí os campos precisam aparecer, porque não há
    * o que conferir — há o que preencher. Reconheceu: ficam fechados,
    * e a pílula acima já mostra o que há dentro. */
-  jurMeta(!achou.length);
+  jurMeta(!achou.length || sugeridos.length > 0);
   /* preencheu alguma coisa: os campos aparecem, já com o conteúdo */
   jurConteudoVisivel();
   reg("JURIS", "ementa colada",
@@ -575,6 +680,8 @@ function jurEditar(id) {
   põe("jurTese", j.tese); põe("jurResumo", j.resumo); põe("jurColar", j.texto);
   jurTagsColadas = (typeof jurTagsDe === "function") ? jurTagsDe(j) : [];
   jurConferirForm = {};
+  jurValoresLidos = {};
+  jurParafraseColada = false;
   (j.aConferir || []).forEach((k) => {
     if (JUR_CAMPOS_FORM[k]) jurConferirForm[k] = String(j[k] || "").trim();
   });
@@ -758,7 +865,7 @@ async function jurPedirIA() {
     tese: String(($("jurTese") || {}).value || "").trim(),
     resumo: String(($("jurResumo") || {}).value || "").trim(),
     tags: jurTagsColadas.slice(),
-  });
+  }, { memoria: ($("chkJurMemoria") && $("chkJurMemoria").checked) ? "tudo" : "identidade" });
   const ok = await edColarCopiarTexto(txt, "", null);
   reg("JURIS", "prompt de leitura copiado", bruto.length + " caracteres");
   if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
@@ -812,6 +919,7 @@ function jurCompletarAbrir(id) {
     $("jurCplAlvo").textContent = jurTitulo(j) || t("jur_sem_titulo");
   }
   if ($("jurCplResposta")) $("jurCplResposta").value = "";
+  if ($("jurCplAcoes")) $("jurCplAcoes").innerHTML = "";
   if ($("jurCplSaida")) { $("jurCplSaida").hidden = true; $("jurCplSaida").textContent = ""; }
   jurCplPintarFalta();
   jurCplPintarLer();
@@ -855,7 +963,8 @@ function jurCplPintarLer() {
 async function jurCompletarPedir(id) {
   const j = jurDe(id || jurCplId);
   if (!j) return;
-  const txt = jurPromptCompletar(j, jurTopicoAtual ? jurTopicoAtual.nome : "");
+  const txt = jurPromptCompletar(j, jurTopicoAtual ? jurTopicoAtual.nome : "",
+    { memoria: ($("chkJurCplMemoria") && $("chkJurCplMemoria").checked) ? "tudo" : "identidade" });
   if (!txt) return;
   const ok = await edColarCopiarTexto(txt, "", null);
   const falta = jurFaltando(j);
@@ -917,6 +1026,7 @@ function jurCompletarLer() {
    * troca automática apagaria a palavra certa achando que era a errada,
    * e o erro sairia gravado com a autoridade de "o app corrigiu". */
   const conf = Array.isArray(dados.conferencia) ? dados.conferencia : [];
+  jurCplPintarAcoes(conf);
   if (conf.length) {
     partes.push("\n\n" + t("jur_conferencia_tit") + "\n"
       + conf.slice(0, 8).map((c) => t("jur_conferencia_linha", {
@@ -945,6 +1055,43 @@ function jurCompletarLer() {
   jurPintarLista();
 }
 
+/* A TESE NUNCA É TROCADA SOZINHA — mas apontar o erro e deixar a pessoa
+ * copiar a redação sugerida à mão era pedir um passo que o app sabe fazer.
+ * O botão mostra ANTES e DEPOIS, e só troca com o "sim"; a nova redação
+ * vem da memória da IA e entra marcada "a conferir" (campo "tese"). */
+function jurCplPintarAcoes(conf) {
+  const cx = $("jurCplAcoes");
+  if (!cx) return;
+  cx.innerHTML = "";
+  (conf || []).forEach((c) => {
+    if (!c || String(c.campo || "").toLowerCase() !== "tese") return;
+    const nova = String(c.sugestao || "").trim();
+    if (!nova) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min";
+    b.textContent = t("jur_tese_subst_btn");
+    b.onclick = () => jurTeseSubstituir(jurCplId, nova);
+    cx.append(b);
+  });
+}
+
+async function jurTeseSubstituir(id, nova) {
+  const j = jurDe(id);
+  if (!j || !String(nova || "").trim()) return false;
+  const antes = String(j.tese || "").trim();
+  if (antes === String(nova).trim()) return false;
+  if (!(await uiConfirm(t("jur_tese_subst_conf", { a: antes || "(vazia)", d: nova })))) return false;
+  const atuais = Array.isArray(j.aConferir) ? j.aConferir : [];
+  jurGravar({ id, tese: String(nova).trim(),
+    aConferir: atuais.indexOf("tese") >= 0 ? atuais : atuais.concat(["tese"]) });
+  reg("JURIS", "tese trocada pela redação sugerida (a conferir)", jurTitulo(j));
+  jurCplPintarFalta();
+  jurPintarLista();
+  toast("jur_tese_subst_feito");
+  return true;
+}
+
 function jurCplEscrever(txt) {
   const cx = $("jurCplSaida");
   if (!cx) return;
@@ -956,6 +1103,7 @@ function jurNomeCampo(k) {
   const c = (typeof JUR_CAMPOS_META !== "undefined" ? JUR_CAMPOS_META : [])
     .filter((x) => x.k === k)[0];
   if (c) return t(c.i);
+  if (k === "tese") return t("jur_f_tese");
   return k === "tags" ? t("jur_f_tags") : k;
 }
 
@@ -1128,6 +1276,17 @@ function jurPintarLista() {
     if (conferir.length) {
       const c = sel(t("jur_a_conferir_n", { n: conferir.length }), "conferir");
       c.title = t("jur_a_conferir_aj", { q: conferir.map(jurNomeCampo).join(", ") });
+      const portal = typeof jurPortalOficial === "function" ? jurPortalOficial(j.tribunal) : null;
+      if (portal) {
+        const a = document.createElement("a");
+        a.className = "jur-oficial-lnk";
+        a.href = portal.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = t("jur_oficial_lnk");
+        a.title = t("jur_oficial_rot") + " " + portal.nome;
+        cab.append(a);
+      }
     }
 
     /* AS AÇÕES NO CANTO, EM ÍCONES.
@@ -1427,6 +1586,16 @@ function jurIniciarTela() {
       $("jurColar").addEventListener("paste", jurAoColarNaCaixa);
     }
   }
+  /* PASSOS E ORIGEM ACOMPANHAM O QUE SE DIGITA nos campos */
+  ["jurTese", "jurResumo"].forEach((id) => {
+    if (!$(id)) return;
+    const antes = $(id).oninput;
+    $(id).oninput = () => { if (antes) antes(); jurPintarPassos(); };
+  });
+  Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
+    const el = $(JUR_CAMPOS_FORM[k]);
+    if (el) el.oninput = () => { jurPintarOrigem(); jurPintarPassos(); };
+  });
   jurPintarPrincipal();
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
   liga("btnJurFechar", () => jurFechar());

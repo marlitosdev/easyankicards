@@ -1131,6 +1131,208 @@ async function testes() {
        "Q14 unir trouxe o campo mas perdeu a marca 'a conferir': " + JSON.stringify(u && u.aConferir));
   }
 
+  /* =================================================================
+   * S: A TELA DE ENTRADA — três passos, origem de cada campo, memória opt-in
+   *
+   * POR QUE ISTO EXISTE. A entrada era uma caixa que trocava de papel e um
+   * botão que trocava de rótulo: o caminho só existia na cabeça de quem já
+   * o conhecia. E um campo preenchido não dizia se veio do tribunal ou da
+   * memória da IA — a diferença que decide se dá para decorar.
+   * =============================================================== */
+  const lerPassos = (api) => [1, 2, 3].map((n) => api.$("jurPasso" + n)).map((c) =>
+    /atual/.test(c.className || "") ? "A" : (/feito/.test(c.className || "") ? "F" : "-")).join("");
+  const espera = () => new Promise((r) => setTimeout(r, 5));
+
+  /* ---- S1: os três passos acompanham o estado ---- */
+  {
+    const { api } = rodar();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    ok(lerPassos(api) === "A--", "S1 vazio devia acender o passo 1: " + lerPassos(api));
+    const aj1 = api.$("jurPassoAjuda").textContent;
+    api.$("jurColar").value = "RE 574706 / PR — PARANÁ\nJulgamento: 15/03/2017 — Tribunal Pleno";
+    api.jurPintarPrincipal();
+    ok(lerPassos(api) === "FA-", "S1a com texto colado devia acender o passo 2: " + lerPassos(api));
+    const aj2 = api.$("jurPassoAjuda").textContent;
+    api.jurColar();
+    ok(lerPassos(api) === "FFA", "S1b com campos lidos devia acender o passo 3: " + lerPassos(api));
+    const aj3 = api.$("jurPassoAjuda").textContent;
+    ok(aj1 && aj2 && aj3 && aj1 !== aj2 && aj2 !== aj3,
+       "S1c a linha de ajuda nao muda com o passo: " + [aj1, aj2, aj3].join(" | "));
+    api.jurLimparForm();
+    ok(lerPassos(api) === "A--", "S1d limpar nao voltou ao passo 1: " + lerPassos(api));
+  }
+
+  /* ---- S2: só a identificação já serve ("STF SV 29"), sem ementa nenhuma ---- */
+  {
+    const { api } = rodar();
+    const a = api.jurIdentificar("STF SV 29");
+    ok(a.tribunal === "STF" && a.classe === "Súmula Vinculante" && a.numero === "29",
+       "S2 'STF SV 29' nao foi identificado: " + JSON.stringify([a.tribunal, a.classe, a.numero]));
+    ok(api.jurIdentificar("ASV 29 qualquer").classe === "",
+       "S2a 'SV' dentro de outra palavra virou classe");
+    ok(api.jurIdentificar("SV 2019 foi o ano").classe === "",
+       "S2b 'SV 2019' (ano de 4 digitos) virou súmula vinculante");
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurColar").value = "STF SV 29";
+    api.jurPintarPrincipal();
+    api.jurColar();
+    ok(api.$("jurTribunal").value === "STF" && api.$("jurClasse").value === "Súmula Vinculante"
+       && api.$("jurNumero").value === "29",
+       "S2c ler e preencher nao preencheu tribunal/classe/numero a partir da identificacao");
+  }
+
+  /* ---- S3: cada campo diz de onde veio ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.navegador.clipboard = { writeText: async () => {} };
+    const EMENTA = "RE 574706 / PR\nJulgamento: 15/03/2017 — Tribunal Pleno";
+    api.$("jurColar").value = EMENTA;
+    api.jurPedirIA();
+    await espera();
+    api.$("jurColar").value = JSON.stringify({ do_texto: { tribunal: "STF", classe: "RE",
+      numero: "574706", data_julgamento: "2017-03-15", orgao: "Primeira Turma",
+      tese_curta: "tese de teste" } });
+    api.jurAoColarNaCaixa();
+    await espera();
+    const o = (k) => api.$("jurOrigem_" + k);
+    ok(/do texto/.test(o("data").textContent || "") && /texto/.test(o("data").className),
+       "S3 a data confirmada no texto nao mostra 'do texto': " + o("data").textContent);
+    ok(/a conferir/.test(o("orgao").textContent || "") && /conferir/.test(o("orgao").className),
+       "S3a o orgao que o texto nao traz nao mostra 'a conferir': " + o("orgao").textContent);
+    ok(api.jurMetaAberta() === true,
+       "S3b ha campo a conferir e os campos continuam escondidos: ninguem ve o aviso");
+    ok(/multi/.test(api.$("jurColarAviso").className || ""),
+       "S3b2 a pilula com varias linhas continua em formato de pilula (vira oval): " + api.$("jurColarAviso").className);
+    /* corrigir o campo tira a marca: agora ele e' da pessoa */
+    api.$("jurOrgao").value = "Segunda Turma";
+    api.$("jurOrgao").oninput();
+    ok(!(o("orgao").textContent || ""),
+       "S3c o campo corrigido continua marcado: " + o("orgao").textContent);
+    /* e a leitura local (texto solto) marca 'do texto', nunca 'a conferir' */
+    api.jurLimparForm();
+    api.$("jurColar").value = EMENTA;
+    api.jurColar();
+    ok(/do texto/.test(o("numero").textContent || "") && !/conferir/.test(o("data").className),
+       "S3d a leitura local devia marcar 'do texto': " + o("numero").textContent);
+  }
+
+  /* ---- S4: o rótulo da data acompanha a categoria (súmula: "aprovada em") ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    const rot = () => api.$("jurRotData").textContent;
+    api.$("jurColar").value = "RE 574706 / PR";
+    api.jurColar();
+    const normal = rot();
+    ok(!/aprovada/.test(normal), "S4-pre o rotulo normal ja diz 'aprovada em': " + normal);
+    api.jurLimparForm();
+    api.$("jurColar").value = "STF SV 29";
+    api.jurColar();
+    ok(/aprovada em/.test(rot()),
+       "S4 numa sumula a data continua 'data do julgamento' (foi o que levou a preencher "
+       + "com a data da publicacao): " + rot());
+    api.$("jurClasse").value = "RE"; api.$("jurClasse").oninput();
+    api.jurLimparForm();
+    ok(rot() === normal, "S4a o rotulo nao voltou ao normal depois de limpar: " + rot());
+  }
+
+  /* ---- S5: memória é OPT-IN, na entrada e no completar ---- */
+  {
+    const { api } = rodar();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    let copiado = "";
+    api.navegador.clipboard = { writeText: async (x) => { copiado = x; } };
+    const bloco = (p) => (/"de_memoria": \{([^}]*)\}/.exec(p) || [])[1] || "";
+    api.$("jurColar").value = "STF SV 29";
+    api.jurPedirIA();
+    await espera();
+    ok(!/relator|data_julgamento/.test(bloco(copiado)),
+       "S5 sem marcar nada, o pedido ja deixa a IA lembrar data/relator: " + bloco(copiado));
+    api.$("chkJurMemoria").checked = true;
+    api.jurPedirIA();
+    await espera();
+    ok(/relator/.test(bloco(copiado)) && /data_julgamento/.test(bloco(copiado)),
+       "S5a marcar 'sugerir de memoria' nao abriu os campos no pedido: " + bloco(copiado));
+    /* completar */
+    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29" },
+      "Direito Tributário", "Tributos");
+    api.jurCompletarAbrir(j.id);
+    api.$("chkJurCplMemoria").checked = false;
+    await api.jurCompletarPedir(j.id);
+    ok(!/relator|data_julgamento/.test(bloco(copiado)), "S5b completar sem marcar ja abre a memoria");
+    api.$("chkJurCplMemoria").checked = true;
+    await api.jurCompletarPedir(j.id);
+    ok(/relator/.test(bloco(copiado)), "S5c completar marcado nao abriu a memoria");
+  }
+
+  /* ---- S6: o app oferece trocar a tese que a IA aponta — com antes/depois e "sim" ---- */
+  {
+    const { api } = rodar();
+    const OFICIAL = "É constitucional a adoção, no cálculo do valor de taxa, de um ou mais "
+      + "elementos da base de cálculo própria de determinado imposto, desde que não haja "
+      + "integral identidade entre uma base e outra.";
+    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29",
+      tese: PARAFRASE_SV29 }, "Direito Tributário", "Tributos");
+    api.jurAbrir("Direito Tributário", "Tributos", "ler");
+    api.jurCompletarAbrir(j.id);
+    api.$("jurCplResposta").value = JSON.stringify({ conferencia: [
+      { campo: "tese", trecho: PARAFRASE_SV29, problema: "nao e' o enunciado oficial", sugestao: OFICIAL },
+      { campo: "resumo", trecho: "x", problema: "y", sugestao: "z" }] });
+    api.jurCompletarLer();
+    const bts = Array.from(api.$("jurCplAcoes").children || []);
+    ok(bts.length === 1 && /tese/i.test(bts[0].textContent || ""),
+       "S6 a conferencia da tese nao virou botao (e so' a tese: " + bts.length + ")");
+    /* recusar: nada muda */
+    const conduzir = async (p, aceitar) => {
+      let pronto = false; p.then(() => { pronto = true; }, () => { pronto = true; });
+      for (let i = 0; i < 12 && !pronto; i++) { await Promise.resolve(); try { api._uiFechar(aceitar); } catch (e) {} }
+      return p;
+    };
+    const r1 = await conduzir(api.jurTeseSubstituir(j.id, OFICIAL), false);
+    ok(r1 === false && api.jurDe(j.id).tese === PARAFRASE_SV29,
+       "S6a recusar o 'antes/depois' trocou a tese mesmo assim");
+    const r2 = await conduzir(api.jurTeseSubstituir(j.id, OFICIAL), true);
+    const dep = api.jurDe(j.id);
+    ok(r2 === true && dep.tese === OFICIAL,
+       "S6b aceitar nao trocou a tese: " + dep.tese.slice(0, 40));
+    ok(dep.aConferir.indexOf("tese") >= 0,
+       "S6c a redacao que veio da memoria da IA nao ficou marcada 'a conferir': "
+       + JSON.stringify(dep.aConferir));
+    ok(api.jurNomeCampo("tese") === "tese", "S6d 'tese' nao tem nome legivel na lista de a conferir");
+  }
+
+  /* ---- S7: o link do site oficial aparece quando há o que conferir ---- */
+  {
+    const { api } = rodar();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurColar").value = JSON.stringify({ do_texto: { tribunal: "STF", classe: "Súmula Vinculante",
+      numero: "29", orgao: "Tribunal Pleno", tese_curta: "x" } });
+    api.jurAoColarNaCaixa();
+    await espera();
+    const cx = api.$("jurOficial");
+    const a = (cx.children || [])[0];
+    ok(cx.hidden === false && a && /portal\.stf\.jus\.br/.test(a.href || ""),
+       "S7 nao ha link do site oficial do STF quando ha campo a conferir");
+    ok(a && a.target === "_blank" && /noopener/.test(a.rel || ""),
+       "S7a o link abre na mesma aba ou sem noopener");
+    ok(api.jurPortalOficial("TRF1") === null, "S7b inventou um site para um tribunal que o app nao conhece");
+    /* sem nada a conferir, sem link */
+    api.jurLimparForm();
+    api.$("jurColar").value = "RE 574706 / PR";
+    api.jurColar();
+    ok(api.$("jurOficial").hidden === true, "S7c o link aparece sem haver nada a conferir");
+    /* na lista, ao lado do selo */
+    const j = guardar(api, { tribunal: "STF", classe: "RE", numero: "1", aConferir: ["data"] },
+      "Direito Tributário", "Tributos");
+    api.jurAbrir("Direito Tributário", "Tributos", "ler");
+    const lnk = api.$("jurLista").querySelectorAll(".jur-oficial-lnk");
+    ok(lnk.length >= 1 && /portal\.stf/.test(lnk[0].href || ""),
+       "S7d a lista nao traz o link oficial ao lado do 'a conferir'");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
