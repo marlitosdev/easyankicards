@@ -840,7 +840,6 @@ function rodar() {
     /* leitor: grade de artigos, lacuna parcial e o retorno do registro */
     leiIrAbrir, leiIrDigitando, leiPintarRecitar, leiPintarLeitura,
     leiComLacunas, leiQuantasLacunas, leiPalavraChave,
-    leiRecLacunaAtual: () => leiRecLacuna,
     regDepoisAtual: () => regDepois,
     leiTrocarModo, leiModoAtual: () => leiModo, leiSujoAtual: () => leiSujo,
     mcEstudoIniciar, mcEstudarAbrir, mcEstudarDireto, mcApontarTopico,

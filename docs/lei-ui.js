@@ -1971,12 +1971,15 @@ async function leiEdApagar() {
  * que se sabe, porque cada linha parece familiar quando está na frente.
  * Ver "Art. 167 — São vedados:" e ter de completar mostra o que
  * realmente ficou. */
-/* Modo do "recitar": falso esconde o artigo inteiro (como sempre foi),
- * verdadeiro mostra o artigo com as palavras-chave apagadas. Vive na
- * memória e não no armazenamento: é escolha de exercício, e a de hoje
- * não tem por que valer amanhã. */
-let leiRecLacuna = false;
-
+/* UM EXERCÍCIO SÓ: o artigo fechado. Houve um segundo, "texto com lacunas"
+ * (o artigo inteiro com prazos, percentuais e "salvo/vedado/somente"
+ * apagados), escolhido por um botão no alto da lista. Saiu: era lento — cada
+ * troca repintava todos os artigos, e a cada repintura o texto de cada um
+ * passava por leiComLacunas — e só escondia informação de pouca serventia
+ * para quem estava treinando. A necessidade de treinar com lacunas passa a
+ * ser atendida pela criação de cartões (leiClozeAbrir e o que vier dela),
+ * que é o lugar de repetir espaçado. leiComLacunas e leiQuantasLacunas
+ * ficam: os cartões de lacuna usam as duas. */
 function leiPintarRecitar() {
   const cx = $("leiRecitar");
   if (!cx) return;
@@ -1997,45 +2000,11 @@ function leiPintarRecitar() {
    * a tela mostra dois desenhos muito diferentes — artigos fechados ou
    * artigos com buracos — e nada dizia qual dos dois era, nem que havia
    * dois. */
-  cab.textContent = t(leiRecLacuna ? "lei_rec_modo_lac" : "lei_rec_modo_esc")
+  cab.textContent = t("lei_rec_modo_esc")
     + " " + t("lei_recitar_ajuda", {
       n: arts.length, v: Object.keys(leiRecitados).length,
     });
   cx.append(cab);
-
-  /* =================================================================
-   * DOIS GRAUS DE DIFICULDADE, E O MAIS FÁCIL É O QUE FALTAVA
-   *
-   * Esconder o artigo INTEIRO é um degrau alto: ou se recita de cor,
-   * ou se desiste e abre. E testa a coisa errada — que você lembra que
-   * existe um art. 150, não o que ele diz.
-   *
-   * A banca não troca o artigo, troca UMA palavra: "quinze" vira
-   * "trinta", "vedado" vira "permitido", "somente" some. No modo
-   * LACUNA o artigo aparece inteiro com essas palavras apagadas — o
-   * texto sustenta a memória e o que decide a assertiva é o que fica
-   * em branco.
-   * ================================================================= */
-  /* O BOTÃO MOSTRA O ESTADO, e não a ação.
-   *
-   * "apagar só as palavras-chave" é um convite: lido com a função já
-   * ligada, ele parece dizer que ela está desligada. E a única outra
-   * pista era um preenchimento de cor, que não se lê. Agora o rótulo
-   * diz em que exercício você está e o que o toque vai fazer — as duas
-   * coisas, porque uma sem a outra é a metade que confunde. */
-  const alt = document.createElement("button");
-  alt.type = "button";
-  alt.className = "btn-min lei-rec-alt" + (leiRecLacuna ? " lei-modo-on" : "");
-  alt.textContent = t(leiRecLacuna ? "lei_rec_lac_on" : "lei_rec_lac_off");
-  alt.title = t("lei_rec_lac_aj");
-  alt.onclick = () => {
-    leiRecLacuna = !leiRecLacuna;
-    try { leiReg("recitar", "modo de recitar trocado",
-                 leiRecLacuna ? "lacuna nas palavras-chave" : "artigo inteiro escondido"); }
-    catch (e) {}
-    leiPintarRecitar();
-  };
-  cx.append(alt);
 
   arts.forEach((a) => {
     const bloco = document.createElement("div");
@@ -2043,9 +2012,7 @@ function leiPintarRecitar() {
 
     const b = document.createElement("button");
     b.className = "lei-rec-cab";
-    const nLac = leiRecLacuna ? leiQuantasLacunas(a.texto) : 0;
-    b.textContent = a.rotulo + (a.ementa ? " — " + a.ementa : "")
-      + (nLac ? "  (" + t("lei_rec_lac_n", { n: nLac }) + ")" : "");
+    b.textContent = a.rotulo + (a.ementa ? " — " + a.ementa : "");
     b.title = t("lei_recitar_ver");
     b.onclick = () => {
       leiRecitados[a.num] = !leiRecitados[a.num];
@@ -2053,26 +2020,7 @@ function leiPintarRecitar() {
     };
     bloco.append(b);
 
-    /* NO MODO LACUNA O TEXTO APARECE SEMPRE — é o exercício. Abrir o
-     * artigo aqui quer dizer "mostre as palavras que você apagou", e
-     * não "mostre o artigo", que já está à vista. */
-    if (leiRecLacuna) {
-      const d = document.createElement("div");
-      d.className = "lei-rec-txt";
-      const aberto = !!leiRecitados[a.num];
-      leiComLacunas(a.texto).forEach((pd) => {
-        if (!pd.lacuna) { d.append(document.createTextNode(pd.txt)); return; }
-        const m = document.createElement("span");
-        m.className = "lei-lac" + (aberto ? " lei-lac-vista" : "");
-        /* MESMA LARGURA DA PALAVRA ESCONDIDA, e é de propósito: uma
-         * lacuna de tamanho fixo entregaria que ali cabia "trinta" e
-         * não "quinze". Aqui o traço acompanha o que sumiu. */
-        m.textContent = aberto ? pd.txt : "▁".repeat(Math.min(12, pd.txt.length));
-        if (!aberto) m.title = t("lei_lac_ajuda");
-        d.append(m);
-      });
-      bloco.append(d);
-    } else if (leiRecitados[a.num]) {
+    if (leiRecitados[a.num]) {
       const d = document.createElement("div");
       d.className = "lei-rec-txt";
       d.innerHTML = matParaHtml(a.texto);
