@@ -2851,7 +2851,7 @@ function qsUiFerramentas(q) {
    * estranho não vai fechar a sessão para procurar o registro: vai
    * desistir e concluir que o app quebrou.
    *
-   * Ele abre JÁ FILTRADO nos erros, porque é o que se procura. */
+   * Ele abre já no assunto "Questões" (erros e avisos entram sempre). */
   try {
     const bl = document.createElement("button");
     bl.type = "button";
@@ -2860,8 +2860,7 @@ function qsUiFerramentas(q) {
     bl.title = t("qs_ver_registro_aj");
     bl.onclick = () => {
       qsFerFechar();
-      if (typeof rtPorFiltroExterno === "function") rtPorFiltroExterno("erro");
-      if (typeof abrirDiagnostico === "function") abrirDiagnostico();
+      if (typeof abrirDiagnostico === "function") abrirDiagnostico({ assunto: "questoes" });
     };
     menu.append(bl);
   } catch (e) {}
