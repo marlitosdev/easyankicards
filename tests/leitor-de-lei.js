@@ -1385,6 +1385,157 @@ async function testes() {
     ok(api.leiAtualizarComparar() === true && api.$("dlgLeiDup").open !== true, "DU13 atualizacao sem repetidos passou pela conferencia");
   }
 
+  /* =================================================================
+   * RV: REVISAR OS ARTIGOS REPETIDOS DE UMA LEI JÁ GUARDADA
+   *
+   * POR QUE ISTO EXISTE. A conferência da criação (DU) só vale para o que
+   * se cola de agora em diante. A lei que já estava guardada com o artigo
+   * antigo e o novo lado a lado — como a de Caruaru — precisava de um
+   * caminho de volta, e quem manda "manter todas" precisa que o aviso pare.
+   * =============================================================== */
+  const LEI_REP = [
+    "Art. 1º Um artigo qualquer que nao repete.",
+    "Art. 2º O Codigo e subordinado a Constituicao Federal.",
+    "Art. 2º O Codigo compreende o Sistema de Normas Tributarias. (Redação dada pela Lei Complementar nº 018, de 09 de outubro de 2009)",
+    "Art. 3º Outro artigo comum.",
+  ].join("\n");
+  /* pelo painel (e nao por $("id")): o simulador guarda o elemento pelo id mesmo depois de ele sair da tela */
+  const botaoRev = (api) => achar(api.$("leiProc"), (c) => c.id === "btnLeiRepetidos")[0];
+  const abrirComRepetidos = (api, extra) => {
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar(Object.assign({ nome: "LC 015/2009", texto: LEI_REP }, extra || {}));
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal", l.id);
+    return l;
+  };
+
+  /* ---- RV1: lei guardada com repetidos mostra o aviso no cabeçalho; lei limpa não ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    ok(!!botaoRev(api) && /1 artigo/.test(botaoRev(api).textContent || ""),
+       "RV1 a lei com artigo repetido nao mostra o aviso 'revisar': " + (botaoRev(api) && botaoRev(api).textContent));
+    ok(/art\. 2º/.test(botaoRev(api).title || ""), "RV1a o aviso nao diz QUAL artigo esta repetido: " + botaoRev(api).title);
+    const { api: b } = rodar();
+    b.matIniciar(); b.leiIniciar();
+    const limpa = b.leiGuardar({ nome: "Lei 2/2000", texto: "Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Tres." });
+    b.leiAbrir("Direito", "T", limpa.id);
+    ok(!botaoRev(b), "RV1b lei sem repetidos ganhou o aviso");
+  }
+
+  /* ---- RV2: revisar abre a conferência (modo "revisar") com a sugestão segura marcada, sem alterar nada ainda ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    botaoRev(api).onclick();
+    ok(api.$("dlgLeiDup").open === true && api.leiDupCtxAtual().modo === "revisar", "RV2 nao abriu a conferencia em modo 'revisar'");
+    ok(/nesta lei/i.test(api.$("leiDupTitulo").textContent || ""), "RV2a o titulo nao diz que e' a lei ja guardada: " + api.$("leiDupTitulo").textContent);
+    ok(/atualizar a lei/i.test(api.$("btnLeiDupConfirmar").textContent || ""), "RV2b o botao nao diz que atualiza a lei: " + api.$("btnLeiDupConfirmar").textContent);
+    ok(api.leiDe(l.id).texto === LEI_REP, "RV2c a lei foi alterada ANTES do confirmar");
+    ok(radios(api, "2").filter((x) => x.checked).length === 1 && api.$("btnLeiDupConfirmar").disabled === false,
+       "RV2d a sugestao segura nao veio marcada");
+    ok(radios(api, "2").length === 3, "RV2e devia ter 'manter todas' (a lei pode repetir de verdade): " + radios(api, "2").length);
+  }
+
+  /* ---- RV3: confirmar atualiza a lei guardada: um artigo por número, redação anterior como original ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    botaoRev(api).onclick();
+    api.$("btnLeiDupConfirmar").onclick();
+    const dep = api.leiDe(l.id);
+    ok(api.leiArtigos(dep.texto).filter((x) => x.num === "2").length === 1, "RV3 a lei continuou com o art. 2o repetido");
+    ok(dep.alteracoes["2"] && /Sistema de Normas/.test(dep.alteracoes["2"].texto) && /subordinado/.test(dep.texto),
+       "RV3a a redacao nova nao virou alteracao (com a antiga como original): " + JSON.stringify(dep.alteracoes));
+    ok(api.leiArtigos(dep.texto).length === 3, "RV3b mexeu nos outros artigos");
+    ok(api.$("leiTexto").value === dep.texto, "RV3c o campo de texto nao acompanhou a lei atualizada");
+    ok(!botaoRev(api), "RV3d o aviso continua depois de resolvido");
+    ok(api.leiArtigosEfetivos(dep).filter((x) => x.num === "2")[0].alterado === true,
+       "RV3e o leitor nao mostra o art. 2o como alterado");
+  }
+
+  /* ---- RV4: "manter todas" faz o aviso PARAR (a repetição é legítima) e é lembrado ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    botaoRev(api).onclick();
+    radios(api, "2")[2].onchange();
+    api.$("btnLeiDupConfirmar").onclick();
+    const dep = api.leiDe(l.id);
+    ok(dep.texto === LEI_REP, "RV4 'manter todas' alterou o texto da lei");
+    ok((dep.repetidosOk || []).indexOf("2") >= 0, "RV4a a lei nao lembrou que o art. 2o foi conferido: " + JSON.stringify(dep.repetidosOk));
+    ok(!botaoRev(api), "RV4b o aviso continua depois de 'manter todas'");
+    ok(api.leiDuplicados(dep.texto, dep.repetidosOk).length === 0 && api.leiDuplicados(dep.texto).length === 1,
+       "RV4c leiDuplicados nao respeita a lista de conferidos (ou a lista apagou a deteccao geral)");
+  }
+
+  /* ---- RV5: cancelar não altera nada, e o aviso continua ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    botaoRev(api).onclick();
+    api.$("btnLeiDupCancelar").onclick();
+    ok(api.leiDe(l.id).texto === LEI_REP && !(api.leiDe(l.id).repetidosOk || []).length, "RV5 cancelar alterou a lei");
+    ok(!!botaoRev(api), "RV5a o aviso sumiu sem a pessoa resolver");
+  }
+
+  /* ---- RV6: uma alteração JÁ registrada para o número não é sobrescrita ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api, { alteracoes: { 2: { texto: "Art. 2º Minha alteracao feita a mao.", fonteAlteracao: "EC 1/2000", data: "2026-01-01", revogado: false } } });
+    botaoRev(api).onclick();
+    ok(achar(api.$("leiDupLista"), (c) => c.type === "checkbox").length === 0,
+       "RV6 ofereceu 'guardar como original' por cima de uma alteracao existente do mesmo artigo");
+    api.$("btnLeiDupConfirmar").onclick();
+    ok(/Minha alteracao feita a mao/.test(api.leiDe(l.id).alteracoes["2"].texto),
+       "RV6a a alteracao que a pessoa ja tinha foi sobrescrita: " + JSON.stringify(api.leiDe(l.id).alteracoes["2"]));
+  }
+
+  /* ---- RV7: marcas ainda não gravadas entram antes da revisão (não se perdem) ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    api.$("leiTexto").value = LEI_REP.replace("Um artigo qualquer", "==Um artigo== qualquer");
+    api.leiSujoDefinir(true);
+    botaoRev(api).onclick();
+    ok(/==Um artigo==/.test(api.leiDe(l.id).texto), "RV7 a marca ainda nao gravada nao foi guardada antes de revisar");
+    api.$("btnLeiDupConfirmar").onclick();
+    ok(/==Um artigo==/.test(api.leiDe(l.id).texto), "RV7a a revisao apagou a marca que a pessoa acabara de fazer");
+  }
+
+  /* ---- RV8: na CRIAÇÃO, "manter todas" ja fica registrado (o aviso nao aparece em seguida) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = LEI_REP;
+    api.leiGravar();
+    radios(api, "2")[2].onchange();
+    api.$("btnLeiDupConfirmar").onclick();
+    const l = api.leisLista()[0];
+    ok((l.repetidosOk || []).indexOf("2") >= 0, "RV8 'manter todas' na criacao nao foi lembrado: " + JSON.stringify(l.repetidosOk));
+    ok(!botaoRev(api), "RV8a o aviso apareceu logo depois de a pessoa mandar manter");
+  }
+
+  /* ---- RV9: corpo e ADCT nunca disparam o aviso ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const cf = api.leiGuardar({ nome: "Constituição Federal", texto: ["TÍTULO I", "Art. 1º Um.", "Art. 2º Dois.", "Art. 3º Tres.",
+      "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS", "Art. 1º Um do ADCT.", "Art. 2º Dois do ADCT."].join("\n") });
+    api.leiAbrir("Direito Constitucional", "CF", cf.id);
+    ok(!botaoRev(api), "RV9 corpo e ADCT dispararam o aviso de repetidos");
+  }
+
+  /* ---- RV10: o aviso acompanha a lei aberta (troca de lei, mesmo texto novo) ---- */
+  {
+    const { api } = rodar();
+    const l = abrirComRepetidos(api);
+    ok(!!botaoRev(api), "RV10-pre sem aviso");
+    api.leiGuardar({ id: l.id, texto: "Art. 1º Um.\nArt. 2º Dois." });
+    api.leiPintar();
+    ok(!botaoRev(api), "RV10 o aviso ficou (memoria velha) depois de o texto perder o repetido");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
