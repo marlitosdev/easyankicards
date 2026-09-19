@@ -359,6 +359,7 @@ function novoEl(id, tag, registro) {
    * deixava querySelectorAll cego para tudo que o app desenha por HTML. */
   let html = "";
   Object.defineProperty(el, "innerHTML", {
+    configurable: true,      /* um teste pode espionar quantas vezes o painel e' limpo */
     get: () => html,
     set: (v) => {
       html = v == null ? "" : String(v);
@@ -749,7 +750,7 @@ function rodar() {
     leiNumOrdem, leiEmenta, leisLerTudo, leisLista, leiId, leiDe, leiGuardar,
     leiApagar, leiLigar, leiDesligar, leisDoTopico, leiParar, leiProgresso,
     leiBlocoLido, leiBlocosLidos, leisMigrarDe, LEIS_CHAVE,
-    leiNotaDe, leiNotaGuardar, leiNotaAbrir, leiNotaSugerir, leiNotaSalvar,
+    leiNotaDe, leiNotaDeEm, leiNotaTrechoDeEm, leiNotaGuardar, leiNotaAbrir, leiNotaSugerir, leiNotaSalvar,
     leiNotaTrechoDe, leiNotaTrechoGuardar, leiNotaTrechoAbrir, leiNotaTrechoMarcar,
     leiNotaCopiarPrompt, matChaveDica,
     leiArtigosEfetivos, leiArtigoAlterar, leiEmCamada, leiDisciplinasDe,
@@ -824,6 +825,8 @@ function rodar() {
     qsBancoAtual: () => qsBanco,
     matTextoVivo, matAplicarTexto, matEditorAberto, matIrPara,
     matDuvidas, matResolverDuvida, matDuvidasAbrir, matPintarDuvidas,
+    leiPinturaPronta, leiPinturaCancelar, LEI_GRANDE,
+    leiFatiaDefinir: (ms) => { LEI_FATIA_MS = ms; },
     leiIniciar, leiAbrir, leiGravar, leiTem, leiFechar, leiRegistrarLeitura,
     /* leitor: grade de artigos, lacuna parcial e o retorno do registro */
     leiIrAbrir, leiIrDigitando, leiPintarRecitar, leiPintarLeitura,

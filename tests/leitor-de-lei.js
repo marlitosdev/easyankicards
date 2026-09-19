@@ -594,6 +594,295 @@ async function testes() {
        + "que a tela esconde o cabeçalho acima da dobra");
   }
 
+  /* =================================================================
+   * G: ABRIR UMA LEI GRANDE — andamento à vista, sem congelar a tela
+   *
+   * POR QUE ISTO EXISTE. Tocar no link de uma lei de 424 artigos deixava
+   * a tela parada por segundos: o diálogo só abria no FIM de leiAbrir, e
+   * a thread ocupada não deixa o navegador desenhar nada (medido: 717 ms
+   * parados no computador, 65% deles em leiNotaDe relendo a biblioteca
+   * inteira uma vez por artigo). Agora: o diálogo abre primeiro, com um
+   * painel de andamento; os artigos entram em pedaços, na ordem do
+   * documento; lei pequena continua síncrona.
+   * =============================================================== */
+  const leiGrande = (nArts) => {
+    const L = [];
+    for (let i = 1; i <= nArts; i++) {
+      L.push("Art. " + i + "º Texto do artigo " + i + ", nos termos do art. "
+        + (i + 1) + " desta lei.");
+    }
+    return L.join("\n");
+  };
+  const cedeTudo = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+  /* fatia de desenho zerada: cada quadro desenha UM artigo, então o
+   * desenho cede muitas vezes e dá para olhar o meio do caminho. (Não se
+   * mexe em performance.now: os testes rodam juntos e o relógio é de todos) */
+  const comRelogioLento = async (api, fn) => {
+    api.leiFatiaDefinir(0);
+    return fn();
+  };
+  const arvore = (api) => (api.$("leiLeitura").children || [])
+    .filter((c) => /lei-art\b|lei-div/.test(c.className || ""))
+    .map((c) => c.id + "|" + c.className + "|" + c.textContent);
+  const nArtsNaTela = (api) => (api.$("leiLeitura").children || [])
+    .filter((c) => /(^|\s)lei-art(\s|$)/.test(c.className || "")).length;
+
+  /* ---- G1: lei pequena continua síncrona (nada de painel, nada adiado) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei 1/2000", texto: leiGrande(8) });
+    api.leiAbrir("Direito", "T", l.id);
+    ok(nArtsNaTela(api) === 8,
+       "G1 lei pequena deixou de ser desenhada na hora: " + nArtsNaTela(api) + " de 8");
+    ok(api.$("leiCarga").hidden === true, "G1a lei pequena mostrou o painel de andamento");
+    ok(api.$("dlgLeiSeca").open === true, "G1b o dialogo nao abriu");
+  }
+
+  /* ---- G2: lei grande — o dialogo abre PRIMEIRO, com o painel; depois entram os artigos ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 1/2000", texto: leiGrande(150) });
+    api.leiAbrir("Direito", "T", l.id);
+    ok(api.$("dlgLeiSeca").open === true, "G2 o dialogo so abre depois de desenhar tudo (a tela fica parada)");
+    ok(api.$("leiCarga").hidden === false,
+       "G2a nao ha painel de andamento enquanto a lei grande carrega");
+    ok(/Lei Grande 1\/2000/.test(api.$("leiCargaTxt").textContent || ""),
+       "G2b o painel nao diz qual lei esta abrindo: " + api.$("leiCargaTxt").textContent);
+    ok(nArtsNaTela(api) < 150,
+       "G2c a lei grande foi desenhada inteira ANTES de devolver o controle: " + nArtsNaTela(api));
+    await api.leiPinturaPronta();
+    ok(nArtsNaTela(api) === 150,
+       "G2d ao final a lei nao esta inteira na tela: " + nArtsNaTela(api) + " de 150");
+    ok(api.$("leiCarga").hidden === true, "G2e o painel de andamento nao sumiu ao terminar");
+  }
+
+  /* ---- G3: o andamento ANDA, e diz a verdade ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 2/2000", texto: leiGrande(150) });
+    await comRelogioLento(api, async () => {
+      api.leiAbrir("Direito", "T", l.id);
+      const vistos = [];
+      for (let i = 0; i < 3000; i++) {
+        await Promise.resolve();
+        const feitos = nArtsNaTela(api);
+        const txt = api.$("leiCargaTxt").textContent || "";
+        if (feitos > 0 && feitos < 150 && !api.$("leiCarga").hidden) vistos.push({ feitos, txt });
+        if (api.$("leiCarga").hidden && feitos === 150) break;
+      }
+      const distintos = new Set(vistos.map((v) => v.feitos)).size;
+      ok(distintos >= 3,
+         "G3 o desenho nao foi em pedacos (ou nao cedeu a vez): so " + distintos + " estados intermediarios");
+      ok(vistos.every((v) => new RegExp("\\b" + v.feitos + " de 150").test(v.txt)),
+         "G3a o texto do painel nao acompanha o que esta na tela: "
+         + JSON.stringify(vistos.slice(0, 2)));
+      const largs = vistos.map((v) => parseInt(v.txt.replace(/\D+/, ""), 10));
+      ok(largs.every((x, i) => i === 0 || x >= largs[i - 1]),
+         "G3b o andamento andou para tras");
+    });
+    await api.leiPinturaPronta();
+  }
+
+  /* ---- G4: o resultado é IDÊNTICO ao da pintura síncrona (ordem e conteúdo) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 3/2000", texto: leiGrande(150) });
+    await comRelogioLento(api, async () => {
+      api.leiAbrir("Direito", "T", l.id);
+      await api.leiPinturaPronta();
+    });
+    const emPedacos = arvore(api);
+    api.leiPintar();                       /* pintura síncrona, do zero */
+    const sincrona = arvore(api);
+    ok(emPedacos.length === 150 && sincrona.length === 150,
+       "G4-pre esperava 150 blocos: " + emPedacos.length + "/" + sincrona.length);
+    ok(JSON.stringify(emPedacos) === JSON.stringify(sincrona),
+       "G4 desenhar em pedacos mudou a ordem ou o conteudo (as marcas contam a "
+       + "ocorrencia desde o inicio do painel: fora de ordem cairiam no lugar errado)");
+  }
+
+  /* ---- G5: fechar o dialogo no meio CANCELA o desenho ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 4/2000", texto: leiGrande(150) });
+    await comRelogioLento(api, async () => {
+      api.leiAbrir("Direito", "T", l.id);
+      for (let i = 0; i < 400 && nArtsNaTela(api) < 20; i++) await Promise.resolve();
+      const antes = nArtsNaTela(api);
+      api.$("dlgLeiSeca").close();
+      await api.leiPinturaPronta();
+      await cedeTudo();
+      ok(antes > 0 && antes < 150 && nArtsNaTela(api) <= antes + 40,
+         "G5 fechar o dialogo nao interrompeu o desenho: " + antes + " -> " + nArtsNaTela(api));
+      ok(nArtsNaTela(api) < 150, "G5a a lei continuou sendo desenhada com o dialogo fechado");
+      ok(api.$("leiCarga").hidden === true, "G5b o painel ficou preso na tela apos fechar");
+    });
+  }
+
+  /* ---- G6: repintar durante o carregamento refaz tudo na hora (e nao duplica) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 5/2000", texto: leiGrande(150) });
+    await comRelogioLento(api, async () => {
+      api.leiAbrir("Direito", "T", l.id);
+      for (let i = 0; i < 400 && nArtsNaTela(api) < 10; i++) await Promise.resolve();
+      api.leiPintar();                     /* ex.: marcar um trecho no meio do carregamento */
+      ok(nArtsNaTela(api) === 150,
+         "G6 repintar no meio deixou a lei incompleta: " + nArtsNaTela(api));
+      ok(api.$("leiCarga").hidden === true, "G6a o painel continuou depois da repintura completa");
+      await cedeTudo();
+      ok(nArtsNaTela(api) === 150,
+         "G6b a pintura antiga continuou escrevendo por cima (duplicou): " + nArtsNaTela(api));
+    });
+  }
+
+  /* ---- G7: a citação de outra tela vai ao artigo assim que o pedaço dele entra ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 6/2000", texto: leiGrande(150) });
+    let achou, inexistente;
+    await comRelogioLento(api, async () => {
+      achou = api.leiAbrirNoArtigo("Direito", "T", l.id, "120");
+      ok(achou === true,
+         "G7 artigo que existe foi dado como inexistente so porque ainda nao estava na tela");
+      ok(!api.$("leiArt_120"), "G7-pre o artigo ja estava na tela: o teste nao mede nada");
+      for (let i = 0; i < 6000 && !api.$("leiArt_120"); i++) await Promise.resolve();
+      await Promise.resolve();
+      /* o "pisca" do artigo se apaga por setTimeout (no simulador, na hora):
+       * a prova de que foi ao artigo e' o registro, que diz quantos ja
+       * estavam na tela — e tem de ser MENOS que a lei inteira */
+      const m = /art\. 120 · (\d+) de 150 artigos/.exec(api.leiLogTexto() || "");
+      ok(!!m && Number(m[1]) < 150 && Number(m[1]) >= 120,
+         "G7a a lei nao foi ao artigo pedido assim que ele entrou na tela: "
+         + (m ? m[0] : "sem registro"));
+      await api.leiPinturaPronta();
+    });
+    const { api: b } = rodar();
+    b.matIniciar(); b.leiIniciar();
+    const l2 = b.leiGuardar({ nome: "Lei Grande 7/2000", texto: leiGrande(150) });
+    inexistente = b.leiAbrirNoArtigo("Direito", "T", l2.id, "999");
+    ok(inexistente === false,
+       "G7b artigo que nao existe na lei foi dado como achado (a questao dira que foi aberto)");
+    await b.leiPinturaPronta();
+    ok(nArtsNaTela(b) === 150, "G7c a lei nao abriu inteira quando o artigo pedido nao existe");
+  }
+
+  /* ---- G8: a biblioteca não é relida uma vez por artigo ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 8/2000", texto: leiGrande(200) });
+    api.leiNotaGuardar(l.id, "5", "nota do cinco");
+    let leituras = 0;
+    const gi = api.loja.getItem;
+    api.loja.getItem = (k) => { if (k === "eac_leis") leituras++; return gi(k); };
+    api.leiAbrir("Direito", "T", l.id);
+    await api.leiPinturaPronta();
+    api.loja.getItem = gi;
+    ok(nArtsNaTela(api) === 200, "G8-pre a lei nao abriu inteira: " + nArtsNaTela(api));
+    /* antes eram ~2N+15 (mais de 400 para 200 artigos); agora e' um numero
+     * pequeno e que NAO cresce com o tamanho da lei */
+    ok(leituras > 0 && leituras <= 40,
+       "G8 a abertura reler a biblioteca inteira " + leituras + " vezes (uma por artigo?)");
+    /* e a nota continua chegando ao artigo certo */
+    const bloco = api.$("leiArt_5");
+    ok(!!bloco && /lei-art-b-nota/.test(bloco.innerHTML || bloco.textContent || "")
+       || (bloco && (bloco.querySelectorAll(".lei-art-b-nota") || []).length === 1),
+       "G8a a nota do artigo 5 nao apareceu no leitor");
+    ok(api.leiNotaDeEm(api.leiDe(l.id), "5") === "nota do cinco"
+       && api.leiNotaDe(l.id, "5") === "nota do cinco"
+       && api.leiNotaDeEm(null, "5") === "" && api.leiNotaTrechoDeEm(null, "x") === null,
+       "G8b leiNotaDeEm e leiNotaDe discordam (ou nao tratam lei ausente)");
+  }
+
+  /* ---- G9: uma pintura só por abertura ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei 2/2000", texto: leiGrande(8) });
+    let limpezas = 0;
+    const cx = api.$("leiLeitura");
+    const d = Object.getOwnPropertyDescriptor(cx, "innerHTML");
+    if (d && d.configurable && d.set) {
+      Object.defineProperty(cx, "innerHTML", {
+        configurable: true, enumerable: true, get: d.get,
+        set(v) { if (v === "") limpezas++; d.set.call(this, v); },
+      });
+      api.leiAbrir("Direito", "T", l.id);
+      ok(limpezas === 1,
+         "G9 abrir uma lei pintou a leitura " + limpezas + " vezes (era 2: uma no trocar-modo, outra no pintar)");
+    } else {
+      ok(false, "G9-pre nao consegui espionar o innerHTML da leitura no simulador");
+    }
+  }
+
+  /* ---- G10: as marcas de nota (uma por artigo) tampouco relem a biblioteca ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const L = [];
+    for (let i = 1; i <= 100; i++) L.push("Art. " + i + "º O prazo ==@marca " + i + "== e' de dez dias.");
+    const l = api.leiGuardar({ nome: "Lei Grande 9/2000", texto: L.join("\n") });
+    api.leiNotaTrechoGuardar(l.id, "marca 3", "anotacao da marca tres");
+    let leituras = 0;
+    const gi = api.loja.getItem;
+    api.loja.getItem = (k) => { if (k === "eac_leis") leituras++; return gi(k); };
+    api.leiAbrir("Direito", "T", l.id);
+    await api.leiPinturaPronta();
+    api.loja.getItem = gi;
+    ok(nArtsNaTela(api) === 100, "G10-pre a lei nao abriu inteira: " + nArtsNaTela(api));
+    ok(leituras > 0 && leituras <= 40,
+       "G10 as notas de trecho releram a biblioteca " + leituras + " vezes (uma por marca?)");
+    const m3 = (api.$("leiArt_3").querySelectorAll(".m-nota") || [])[0];
+    ok(!m3 || m3.title === "anotacao da marca tres",
+       "G10a a nota do trecho nao chegou como dica da marca: " + (m3 && m3.title));
+  }
+
+  /* ---- G11: pedir "ler" logo após abrir (o caminho da questão) não refaz tudo de uma vez ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Grande 10/2000", texto: leiGrande(150) });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiTrocarModo("ler");
+    ok(nArtsNaTela(api) < 150 && api.$("leiCarga").hidden === false,
+       "G11 leiTrocarModo('ler') logo apos abrir jogou fora o desenho em andamento e "
+       + "refez a lei inteira de uma vez (a tela volta a congelar): " + nArtsNaTela(api));
+    await api.leiPinturaPronta();
+    ok(nArtsNaTela(api) === 150, "G11a a lei nao terminou de entrar: " + nArtsNaTela(api));
+    /* e trocar de modo DEPOIS de pronta continua repintando na hora */
+    api.leiTrocarModo("editar");
+    api.leiTrocarModo("ler");
+    ok(nArtsNaTela(api) === 150 && api.$("leiCarga").hidden === true,
+       "G11b voltar ao modo ler depois de pronta nao repintou a lei: " + nArtsNaTela(api));
+  }
+
+  /* ---- G12: abrir outra lei no meio do carregamento troca o painel, sem misturar ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const a = api.leiGuardar({ nome: "Lei A 1/2000", texto: leiGrande(150) });
+    const b = api.leiGuardar({ nome: "Lei B 2/2000",
+      texto: leiGrande(120).replace(/Texto do artigo/g, "Redacao da B") });
+    api.leiAbrir("Direito", "T", a.id);
+    api.leiAbrir("Direito", "T", b.id);
+    await api.leiPinturaPronta();
+    await cedeTudo();
+    ok(nArtsNaTela(api) === 120,
+       "G12 abrir outra lei no meio deixou artigos da anterior ou faltou da nova: " + nArtsNaTela(api));
+    ok(/Redacao da B/.test(api.$("leiLeitura").textContent || "")
+       && !/Texto do artigo/.test(api.$("leiLeitura").textContent || ""),
+       "G12a o painel mistura texto das duas leis");
+    ok(api.$("leiCarga").hidden === true, "G12b o painel de andamento ficou preso");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

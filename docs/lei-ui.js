@@ -259,6 +259,8 @@ function leiAplicarNoTopico(chave, novo) {
  * ------------------------------------------------------------------ */
 
 function leiAbrir(disciplina, topico, id) {
+  /* abrir outra lei descarta o desenho em andamento da anterior */
+  leiPinturaCancelar();
   leiAtual = { disciplina, topico, chave: matChave(disciplina, topico) };
   /* migra na primeira abertura: quem tinha lei colada no campo antigo
    * encontra a mesma lei aqui, sem precisar refazer nada */
@@ -272,8 +274,18 @@ function leiAbrir(disciplina, topico, id) {
   leiSujo = false;
 
   $("leiTexto").value = l ? String(l.texto || "") : "";
-  leiTrocarModo(l && String(l.texto || "").trim() ? "ler" : "editar");
-  leiPintar();
+  /* UMA PINTURA SÓ. Antes o modo era trocado aqui (o que já pintava a
+   * leitura inteira) e leiPintar() pintava tudo de novo logo em seguida.
+   * Com lei para ler, só se ajusta o modo — quem pinta é leiPintar, uma
+   * vez; e se a lei for grande, ele pinta em pedaços, com o diálogo já
+   * aberto (leiAdiarPintura). */
+  if (l && String(l.texto || "").trim()) {
+    leiModo = "ler";
+    leiAdiarPintura = true;
+  } else {
+    leiTrocarModo("editar");
+  }
+  try { leiPintar(); } finally { leiAdiarPintura = false; }
   abrirModal("dlgLeiSeca");
   try { leiReg("lei", "lei seca aberta", topico + " · "
       + (l ? l.nome + " · " + leiArtigos(l.texto).length + " artigos"
@@ -306,7 +318,17 @@ function leiAbrirNoArtigo(disciplina, topico, idLei, num) {
   const temTexto = !!(l && String(l.texto || "").trim());
   if (temTexto && leiModo !== "ler") leiTrocarModo("ler");
   if (!num || !temTexto) return false;
-  const achou = leiIrArtigo(num);
+  let achou;
+  if (leiPintura) {
+    /* LEI GRANDE, AINDA ENTRANDO NA TELA: o artigo pode não estar no DOM
+     * ainda, mas a lista de artigos já foi lida — dá para dizer se ele
+     * existe, e a pintura vai até ele assim que o pedaço dele entrar */
+    const alvo = leiNumNormal(num);
+    achou = leiPintura.arts.some((a) => a.num === alvo);
+    if (achou) leiPintura.alvo = alvo;
+  } else {
+    achou = leiIrArtigo(num);
+  }
   try {
     leiReg("navegar", achou ? "aberta no artigo citado" : "artigo citado não existe nesta lei",
            (l ? l.nome : "—") + " · art. " + num);
@@ -320,6 +342,11 @@ function leiAbrirNoArtigo(disciplina, topico, idLei, num) {
 
 function leiPintar() {
   if (!leiAtual) return;
+  /* leiPintar é SEMPRE uma repintura completa (marcar, parei aqui, editar
+   * um artigo): descarta o desenho em pedaços que ainda estiver rodando —
+   * leiTrocarModo, mais abaixo, pintaria por cima de um painel pela metade.
+   * Só leiAbrir passa por aqui querendo pintar em pedaços (leiAdiarPintura) */
+  if (!leiAdiarPintura) leiPinturaCancelar();
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   const r = (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]) || {};
 
@@ -845,6 +872,10 @@ function leiGaveta(qual) {
 }
 
 function leiTrocarModo(modo) {
+  /* já se estava lendo, com a lei grande ainda entrando na tela: pedir
+   * "ler" de novo (o caminho da questão faz isso logo após leiAbrir) não
+   * pode jogar fora o desenho em andamento e refazê-lo todo de uma vez */
+  const jaEntrando = leiModo === "ler" && !!leiPintura;
   leiModo = ["ler", "editar", "recitar"].indexOf(modo) >= 0 ? modo : "ler";
   const ed = leiModo === "editar";
   const rec = leiModo === "recitar";
@@ -887,7 +918,7 @@ function leiTrocarModo(modo) {
     if (b && b.classList) b.classList.toggle("lei-modo-on", leiModo === m);
   });
 
-  if (leiModo === "ler") leiPintarLeitura();
+  if (leiModo === "ler" && !jaEntrando) leiPintarLeitura();
   if (rec) leiPintarRecitar();
   leiPintarEdicaoLivre();
 
@@ -958,6 +989,11 @@ function leiPintarEdicaoLivre() {
 function leiPintarLeitura() {
   const cx = $("leiLeitura");
   if (!cx) return;
+  /* uma pintura nova cancela a que ainda estiver em andamento (ver
+   * leiPinturaProgressiva): as duas escreveriam no mesmo painel */
+  leiPinturaCancelar();
+  const progressivo = leiAdiarPintura;
+  leiAdiarPintura = false;
   cx.innerHTML = "";
   cx.style.fontSize = leiFonte + "px";
   const bruto = String($("leiTexto").value || "");
@@ -982,8 +1018,10 @@ function leiPintarLeitura() {
   /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
    * dentro do laço releria o banco de questões a cada artigo */
   const ranking = {};
-  try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
-  catch (e) {}
+  const prepararRanking = () => {
+    try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
+    catch (e) {}
+  };
 
   if (!arts.length) {
     const p = document.createElement("p");
@@ -999,7 +1037,7 @@ function leiPintarLeitura() {
   /* quais números já foram desenhados: a Constituição repete quase todos
    * entre o corpo e o ADCT, e é isso que decide o id de cada bloco */
   const vistos = {};
-  arts.forEach((a) => {
+  const desenhar = (a) => {
     if (a.divisao && a.divisao !== divisao) {
       divisao = a.divisao;
       const h = document.createElement("div");
@@ -1118,7 +1156,7 @@ function leiPintarLeitura() {
     /* A NOTA — "do que trata este artigo", em poucas palavras. Ela é o
      * que ajuda a reconhecer uma citação sem abrir a lei: "art. 151" não
      * diz nada de cabeça, "art. 151 — isenção na exportação" diz. */
-    const temNota = l ? leiNotaDe(l.id, a.num) : "";
+    const temNota = l ? leiNotaDeEm(l, a.num) : "";
     const bNota = document.createElement("button");
     bNota.className = "btn-min lei-art-b" + (temNota ? " lei-art-b-nota" : "");
     bNota.textContent = temNota ? "📝" : t("lei_nota_add");
@@ -1139,7 +1177,7 @@ function leiPintarLeitura() {
      * parado em cima, ou toque longo no celular) — sem componente novo. */
     if (l) {
       corpo.querySelectorAll('mark[data-marca="nota"]').forEach((mk) => {
-        const nota = leiNotaTrechoDe(l.id, mk.textContent || "");
+        const nota = leiNotaTrechoDeEm(l, mk.textContent || "");
         if (nota) mk.title = nota.texto;
       });
     }
@@ -1180,7 +1218,147 @@ function leiPintarLeitura() {
     }
 
     cx.append(bloco);
+  };
+
+  /* LEI PEQUENA: síncrona, como sempre foi. LEI GRANDE ABRINDO: o diálogo
+   * abre primeiro, com o andamento à vista, e os artigos entram em
+   * pedaços (ver leiPinturaProgressiva). Repintar depois (marcar, parei
+   * aqui, trocar de modo) é sempre síncrono: a pessoa já está dentro. */
+  if (progressivo && arts.length > LEI_GRANDE) {
+    leiPinturaProgressiva(arts, desenhar, prepararRanking, l ? l.nome : "");
+    return;
+  }
+  prepararRanking();
+  arts.forEach(desenhar);
+}
+
+/* =====================================================================
+ * ABRIR UMA LEI GRANDE SEM CONGELAR A TELA
+ *
+ * O PROBLEMA. leiAbrir pintava a lei inteira ANTES de abrir o diálogo, e
+ * a thread principal ocupada não deixa o navegador desenhar nada: a
+ * pessoa tocava no link e a tela ficava parada por segundos (a CF/88 tem
+ * 424 artigos, o CTN 231), sem saber se o toque pegou.
+ *
+ * O CONSERTO tem duas metades. (1) O diálogo abre primeiro, com um painel
+ * dizendo qual lei e quanto falta, e o navegador ganha DOIS quadros para
+ * realmente desenhá-lo antes do trabalho pesado. (2) Os artigos entram em
+ * pedaços curtos, cedendo um quadro entre um e outro — e vão aparecendo
+ * na tela em vez de tudo de uma vez no fim.
+ *
+ * NA ORDEM DO DOCUMENTO, SEMPRE. matGuardarOffset conta as ocorrências
+ * de um trecho a partir do início do painel: desenhar o artigo pedido
+ * primeiro, ou de trás para a frente, faria uma marca cair na ocorrência
+ * errada — em silêncio. Em ordem, tudo o que vem antes de qualquer ponto
+ * onde a pessoa possa tocar já está desenhado.
+ *
+ * QUALQUER REPINTURA CANCELA A EM ANDAMENTO (leiPintarLeitura começa por
+ * leiPinturaCancelar): marcar, trocar de modo ou abrir outra lei durante
+ * o carregamento apenas refaz o painel por inteiro, na hora. Por isso
+ * nada precisa ficar desativado enquanto carrega.
+ * ===================================================================== */
+const LEI_GRANDE = 60;        /* artigos: acima disso a abertura mostra andamento */
+let LEI_FATIA_MS = 12;        /* quanto se desenha por quadro antes de ceder (let: o teste o zera) */
+let leiAdiarPintura = false;  /* leiAbrir pede: a PRÓXIMA pintura é a de abertura */
+let leiPintura = null;        /* a pintura em pedaços que está rodando, se houver */
+
+/* Cede o controle ao navegador até o próximo quadro. rAF sozinho não
+ * basta: numa aba escondida ele nunca dispara, e a lei ficaria pela
+ * metade para sempre — o setTimeout garante que o desenho continua. */
+function leiCedeQuadro() {
+  return new Promise((resolve) => {
+    let feito = false;
+    const fim = () => { if (!feito) { feito = true; resolve(); } };
+    try { requestAnimationFrame(fim); } catch (e) {}
+    setTimeout(fim, 60);
   });
+}
+
+/* resolve quando NÃO há mais pintura em pedaços em andamento (terminou ou
+ * foi cancelada) — para o teste, e para quem precise do texto todo */
+function leiPinturaPronta() {
+  return leiPintura ? leiPintura.pronta : Promise.resolve();
+}
+
+function leiPinturaCancelar() {
+  const p = leiPintura;
+  if (!p) return;
+  leiPintura = null;
+  leiCargaOcultar();
+  p.fim();
+}
+
+function leiCargaMostrar(texto, frac) {
+  const cx = $("leiCarga");
+  if (!cx) return;
+  cx.hidden = false;
+  if ($("leiCargaTxt")) $("leiCargaTxt").textContent = texto;
+  if ($("leiCargaBarra")) $("leiCargaBarra").style.width = Math.round((frac || 0) * 100) + "%";
+}
+
+function leiCargaOcultar() {
+  const cx = $("leiCarga");
+  if (cx) cx.hidden = true;
+}
+
+/* se a pessoa pediu um artigo específico e o pedaço dele já entrou, vai
+ * até ele (uma vez só) */
+function leiPinturaIrAoAlvo(p) {
+  if (!p.alvo) return;
+  const el = $("leiArt_" + p.alvo.replace(/[^A-Z0-9-]/gi, ""));
+  if (!el) return;
+  const num = p.alvo;
+  p.alvo = "";
+  leiIrArtigo(num);
+  try {
+    leiReg("navegar", "chegou ao artigo citado durante o carregamento",
+           "art. " + num + " · " + p.feitos + " de " + p.total + " artigos já na tela");
+  } catch (e) {}
+}
+
+function leiPinturaProgressiva(arts, desenhar, preparar, nome) {
+  const dlg = $("dlgLeiSeca");
+  let fim = () => {};
+  const pronta = new Promise((resolve) => { fim = resolve; });
+  const p = leiPintura = { arts, total: arts.length, feitos: 0, alvo: "", pronta, fim };
+  const nomeLei = nome || t("lei_carga_sem_nome");
+  leiCargaMostrar(t("lei_carga_abrindo", { nome: nomeLei }), 0);
+
+  const texto = () => t("lei_carga_desenhando", { i: p.feitos, n: p.total })
+    + (p.alvo ? " · " + t("lei_carga_indo", { a: p.alvo }) : "");
+
+  (async () => {
+    try {
+      await leiCedeQuadro();
+      await leiCedeQuadro();
+      if (leiPintura !== p) return;
+      preparar();
+      while (p.feitos < p.total) {
+        if (leiPintura !== p) return;
+        if (dlg && !dlg.open) { leiPinturaCancelar(); return; }
+        const t0 = performance.now();
+        do { desenhar(arts[p.feitos++]); }
+        while (p.feitos < p.total && performance.now() - t0 < LEI_FATIA_MS);
+        leiCargaMostrar(texto(), p.feitos / p.total);
+        leiPinturaIrAoAlvo(p);
+        if (p.feitos < p.total) await leiCedeQuadro();
+      }
+      if (leiPintura === p) {
+        leiPintura = null;
+        leiCargaOcultar();
+        leiPinturaIrAoAlvo(p);
+        fim();
+      }
+    } catch (e) {
+      /* um defeito no meio do desenho não pode deixar a lei pela metade
+       * em silêncio: registra, termina o que falta de uma vez e libera */
+      try { leiReg("erro", "falha ao desenhar a lei em pedaços", (e && e.message) || ""); } catch (x) {}
+      try { while (p.feitos < p.total) desenhar(arts[p.feitos++]); } catch (x) {}
+      if (leiPintura === p) leiPintura = null;
+      leiCargaOcultar();
+      fim();
+    }
+  })();
 }
 
 /* =====================================================================
