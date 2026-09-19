@@ -681,6 +681,7 @@ function leiPreprocessar(texto, opc) {
   const anx = [];
   efetiva.forEach((x, i) => {
     if (remover[i + 1]) return;
+    if (opc && opc.semAnexos) return;     /* lei que ALTERA: os anexos são lidos por leiAnexosDaAlteradora */
     const m = x.match(LEI_RE_ANEXO_MAIUSCULO) || x.match(LEI_RE_ANEXO_SOZINHO);
     if (m) anx.push(i);
   });
@@ -897,6 +898,7 @@ function leiEstruturaArtigo(texto, opc) {
     const tem = rot.tipo === "inciso" ? par.ultInc : rot.tipo === "alinea" ? paiAli.ultAli : paiIte.ultIte;
     const ex = rot.tipo === "inciso" ? e.inciso : rot.tipo === "alinea" ? e.alinea : e.item;
     if (!tem) return frag;                       /* sem irmão anterior: só em fragmento */
+    if (frag) return true;                       /* fragmento tem lacunas: II, V (III e IV não mudaram) */
     return rot.valor < ex.valor;                 /* recomeça (I depois de VII, a) depois de c)) */
   };
 
@@ -906,7 +908,7 @@ function leiEstruturaArtigo(texto, opc) {
     if (rot.tipo === "paragrafo") return true;
     const paiAli = inc || par, paiIte = ali || inc || par;
     const tem = rot.tipo === "inciso" ? par.ultInc : rot.tipo === "alinea" ? paiAli.ultAli : paiIte.ultIte;
-    return !tem;
+    return !tem || rot.valor > (tem.valorFim || tem.valor);       /* ou um salto para a frente */
   };
 
   const criar = (rot, li, inicioDeLinha, quebra) => {
@@ -1128,14 +1130,31 @@ function leiDataDaLei(texto) {
 
 /* Os cabeçalhos "Art. N" da lei alteradora, no meio de linha ou não, com a posição. */
 function leiCabecalhosAlteradora(s) {
-  const re = /(^|\n|[.:;)\]”"]\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})\s*([ºo°ª]?)(?:-([A-Z])(?![A-Za-zÀ-ú]))?(?!\d)/g;
+  /* Os sufixos aparecem de três jeitos: "Art. 273-A", "Art. 343A" e — nos PDFs consolidados —
+   * "Art. 356. B São responsáveis…" (número, ponto, LETRA, texto). O terceiro é ambíguo com o
+   * artigo definido ("Art. 10. O prazo…"): só vale sem ordinal, e as letras A, E e O só valem
+   * se a vizinha (B; D ou F; N ou P) aparece no mesmo número. */
+  const re = /(^|\n|[.:;)\]”"]\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})(?:([A-Z])(?![A-Za-zÀ-ú])|\s*([ºo°ª]?)(?:-([A-Z])(?![A-Za-zÀ-ú]))?(\.\s+([A-Z])(?=\s+[A-ZÀ-Ú(\["“]))?)(?!\d)/g;
   const hs = [];
   let m;
   while ((m = re.exec(s)) !== null) {
     const ini = m.index + m[1].length + m[2].length;
-    hs.push({ ini, fim: m.index + m[0].length, num: leiNumNormal(m[4] + (m[6] ? "-" + m[6] : "")),
-      numCru: m[4] + (m[6] ? "-" + m[6] : ""), inteiro: Number(m[4]), sufixo: m[6] || "", ord: m[5] });
+    const fimTotal = m.index + m[0].length;
+    const letraPonto = m[9] || "";
+    hs.push({ ini, fim: fimTotal, fimBase: fimTotal - (m[8] ? m[8].length : 0), inteiro: Number(m[4]),
+      sufixo: m[5] || m[7] || "", letraPonto, ord: m[6] || "", cru: m[4] });
   }
+  const tem = (int, L) => hs.some((x) => x.inteiro === int && x.letraPonto === L);
+  hs.forEach((h) => {
+    if (h.letraPonto) {
+      const L = h.letraPonto;
+      const vizinha = tem(h.inteiro, String.fromCharCode(L.charCodeAt(0) - 1)) || tem(h.inteiro, String.fromCharCode(L.charCodeAt(0) + 1));
+      const valida = h.ord === "" && (!/[AEO]/.test(L) || vizinha);
+      if (valida) h.sufixo = L; else h.fim = h.fimBase;
+    }
+    h.numCru = h.cru + (h.sufixo ? "-" + h.sufixo : "");
+    h.num = leiNumNormal(h.numCru);
+  });
   return hs;
 }
 
@@ -1164,10 +1183,10 @@ function leiLerBlocoAlterado(corpo) {
       nivel: u.nivel, valor: u.valor, sufixo: u.sufixo, unico: u.unico };
   });
   /* "Art. 274. A" + incisos: um caput que sobrou só com a letra inicial não é caput */
-  const caputVazio = cap.acao === "omitido" || cap.texto.length < 12;
+  const caputVazio = cap.acao === "omitido" || (cap.texto.length < 12 && cap.acao !== "rev");
   const parcial = temOmissao || (caputVazio && unidades.length > 0);
   return { caputTexto: caputVazio ? "" : cap.texto, caputAcao: caputVazio ? "omitido" : cap.acao,
-    unidades, parcial, temOmissao };
+    unidades, parcial, temOmissao, revogado: cap.acao === "rev" && !unidades.length && !temOmissao };
 }
 
 /* Onde entra um pedaço NOVO na lista plana do artigo: depois do irmão anterior
@@ -1250,11 +1269,14 @@ function leiMontarArtigo(prefixo, L) {
  *   { ident, curto, dataLei, blocos:[{num,numCru,corpo,bloco}], revogacoes:[{num,unidade}],
  *     avisos:[{k:"anexo",texto}], proprios:n } */
 function leiLerAlteradora(texto, alvo) {
-  const s = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n");
-  const ident = leiIdentificar(s);
+  const bruto = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n");
+  const ident = leiIdentificar(bruto);
+  /* os ANEXOS (tabelas no fim da lei alteradora) saem antes de ler os artigos */
+  const sep = leiAnexosDaAlteradora(bruto);
+  const s = sep.texto;
   const hs = leiCabecalhosAlteradora(s);
-  const par = { ident, curto: (ident && ident.curto) || "", dataLei: leiDataDaLei(s), blocos: [],
-    revogacoes: [], avisos: [], proprios: 0 };
+  const par = { ident, curto: (ident && ident.curto) || "", dataLei: leiDataDaLei(bruto), blocos: [],
+    revogacoes: [], avisos: [], proprios: 0, ordensAnexo: [], anexos: sep.anexos, textoSemAnexos: s };
   let proximo = 1;
   hs.forEach((h, i) => {
     const seg = s.slice(h.fim, i + 1 < hs.length ? hs[i + 1].ini : s.length);
@@ -1283,8 +1305,10 @@ function leiDiretivasDoArtigoProprio(seg, alvo, par) {
   frases.forEach((fr) => {
     const f = fr.replace(/\u0001/g, ".").replace(/\s+/g, " ").trim();
     if (!f) return;
-    if (/\banexos?\b/i.test(f) && /substitu|revog|alter|inclu|acrescent|nova reda/i.test(f)) {
-      par.avisos.push({ k: "anexo", texto: f.slice(0, 160) });
+    if (/\banexos?\b/i.test(f) && /substitu|revog|alter|inclu|acrescent|nova reda|passa(?:m)?\s+a\s+vigorar/i.test(f)) {
+      const oa = leiOrdemDeAnexo(f);
+      if (oa) par.ordensAnexo.push(oa);
+      else par.avisos.push({ k: "anexo", texto: f.slice(0, 160) });
       return;
     }
     if (!/^(?:fica(?:m)?\s+revogad|revog(?:a-se|am-se)|s[ãa]o\s+revogad)/i.test(f) || /passa(?:m)?\s+a\s+vigorar/i.test(f)) return;
@@ -1355,6 +1379,13 @@ function leiItensDaAlteradora(l, par) {
     return porItem[num];
   };
   par.blocos.forEach((b) => {
+    /* "Art. 383 (Revogado)": revogação do artigo inteiro — só se ele existe na lei gravada */
+    if (b.bloco.revogado) {
+      if (!porNum[b.num] && !porItem[b.num]) { par.avisos.push({ k: "revogar_ausente", texto: "art. " + b.numCru }); return; }
+      const rv = item(b.num, b.numCru);
+      rv.tipo = "revogado"; rv.novo = "";
+      return;
+    }
     const it = item(b.num, b.numCru);
     const base = correndo[b.num] !== undefined ? correndo[b.num] : it.antigo;
     it.blocos++;
@@ -1412,7 +1443,142 @@ function leiItensDaAlteradora(l, par) {
       { tipo: it.tipo, antigo: semNota(it.antigo), novo: semNota(it.novo), num: it.num }, {}).filter((a) => a.k !== "so_anotacao" && a.k !== "menor" && a.k !== "outro");
     it.alertas = al.concat(base);
   });
+  /* os ANEXOS que a lei substitui ou revoga entram como itens (depois dos artigos) */
+  const ax = leiItensDeAnexos(l, par);
+  ax.itens.forEach((x) => itens.push(x));
+  itens.avisos = par.avisos.concat(ax.avisos);
   return itens;
+}
+
+/* =====================================================================
+ * ANEXOS — tabelas que uma lei substitui, revoga ou cria
+ *
+ * O CASO REAL. A LC 145/2024 diz "Ficam substituídos os Anexos VI, VII e XV"
+ * e "Fica revogado o Anexo XI"; o texto dos anexos novos vem NO FIM da própria
+ * lei alteradora, cada um com o número dela ("ANEXO I") e, logo abaixo, o do
+ * Anexo do Código que ele substitui ("Anexo VI"). Tabela não se mescla por
+ * linha: o Anexo novo SUBSTITUI o antigo (ou o revoga), e a pessoa vê os dois
+ * textos antes de aceitar. O Anexo antigo fica guardado (textoOriginal) e o
+ * histórico registra qual lei mexeu nele.
+ *
+ * Os anexos de uma lei ficam em `l.anexos` ({titulo, texto, …}), separados do
+ * texto dos artigos (ver leiPreprocessar).
+ * ===================================================================== */
+function leiRomanoDoAnexo(s) {
+  const m = String(s || "").match(/anexo\s+([IVXLCDM]{1,8}|\d{1,3}|[úu]nico)\b/i);
+  return m ? m[1].toUpperCase() : "";
+}
+
+/* Os anexos de um texto, prontos para uma lei alteradora: junta o título
+ * PRÓPRIO ("ANEXO I", sozinho numa linha) ao anexo-alvo que vem logo abaixo
+ * ("Anexo VI" + a tabela). Devolve {texto: o texto SEM os anexos, anexos:
+ * [{proprio, alvo, titulo, texto}]}. */
+function leiAnexosDaAlteradora(texto) {
+  const r = leiPreprocessar(texto);
+  const dec = {};
+  r.mudancas.forEach((m) => { dec[m.id] = m.grupo === "anexo" ? "separar" : false; });
+  const ap = leiAplicarPreprocesso(texto, r.mudancas, dec);
+  const brutos = ap.anexos.slice();
+  const out = [];
+  for (let i = 0; i < brutos.length; i++) {
+    const a = brutos[i];
+    const soTitulo = String(a.texto || "").replace(/\s+/g, " ").trim().length <= String(a.titulo || "").length + 12;
+    if (soTitulo && brutos[i + 1]) {
+      const b = brutos[i + 1];
+      out.push({ proprio: a.titulo, alvo: leiRomanoDoAnexo(b.titulo) || leiRomanoDoAnexo(b.texto.split("\n")[0]),
+        titulo: b.titulo, texto: b.texto });
+      i++;
+    } else {
+      /* "ANEXO I" + "Anexo VI" na 1ª ou 2ª linha do próprio texto */
+      const linhas = String(a.texto || "").split("\n").map((x) => x.trim()).filter(Boolean);
+      const alvo = linhas.slice(1, 3).map(leiRomanoDoAnexo).filter(Boolean)[0] || "";
+      out.push({ proprio: a.titulo, alvo, titulo: a.titulo, texto: a.texto });
+    }
+  }
+  return { texto: ap.texto, anexos: out };
+}
+
+/* "Ficam substituídos os Anexos VI, VII e XV" → {acao:"substituir", alvos:["VI","VII","XV"]} */
+function leiOrdemDeAnexo(frase) {
+  const f = String(frase || "");
+  if (!/\banexos?\b/i.test(f)) return null;
+  const m = f.match(/anexos?\s+((?:[IVXLCDM]{1,8}|\d{1,3})(?:\s*(?:,|\be\b|\ba\b|\bao\b)\s*(?:[IVXLCDM]{1,8}|\d{1,3}))*)\b/i);
+  if (!m) return null;
+  /* "VI, VII e XV" e também a faixa "VI a VIII" (= VI, VII e VIII) */
+  const alvos = [];
+  const reAlvo = /([IVXLCDM]{1,8}|\d{1,3})(?:\s+(?:a|ao|até)\s+([IVXLCDM]{1,8}|\d{1,3}))?/gi;
+  let ma;
+  while ((ma = reAlvo.exec(m[1])) !== null) {
+    const x = ma[1].toUpperCase(), y = ma[2] ? ma[2].toUpperCase() : "";
+    const romano = /^[IVXLCDM]+$/.test(x);
+    const vx = romano ? leiRomanoValor(x) : Number(x);
+    const vy = !y ? 0 : (/^[IVXLCDM]+$/.test(y) ? leiRomanoValor(y) : Number(y));
+    if (y && vx > 0 && vy > vx && vy - vx < 40) {
+      for (let k = vx; k <= vy; k++) alvos.push(romano ? leiValorRomano(k) : String(k));
+    } else { alvos.push(x); if (y) alvos.push(y); }
+  }
+  if (!alvos.length) return null;
+  let acao = "alterar";
+  if (/revog/i.test(f)) acao = "revogar";
+  else if (/substitu|nova\s+reda|passa(?:m)?\s+a\s+vigorar/i.test(f)) acao = "substituir";
+  else if (/inclu|acrescent/i.test(f) && !/subitem|item\b/i.test(f)) acao = "incluir";
+  return { acao, alvos, texto: f.replace(/\s+/g, " ").trim().slice(0, 160) };
+}
+
+function leiAnexoDaLei(l, romano) {
+  return ((l && l.anexos) || []).filter((a) => leiRomanoDoAnexo(a.titulo) === romano)[0] || null;
+}
+
+/* Os itens de ANEXO que a lei alteradora propõe. Cada um: {num:"ANEXO:VI", rotulo:"Anexo VI",
+ * tipo: anexo_subst|anexo_rev, antigo, novo, alertas[]}. Ordens que não têm o texto do anexo
+ * novo, e as que só ALTERAM uma linha do anexo, viram aviso — nunca item que apagaria tabela. */
+function leiItensDeAnexos(l, par) {
+  const itens = [];
+  const avisos = [];
+  (par.ordensAnexo || []).forEach((o) => {
+    o.alvos.forEach((rom, idx) => {
+      const base = leiAnexoDaLei(l, rom);
+      if (o.acao === "revogar") {
+        itens.push({ num: "ANEXO:" + rom, numCru: rom, rotulo: "Anexo " + rom, tipo: "anexo_rev",
+          antigo: base ? base.texto : "", novo: "", parcial: false, problemas: [], fonteItem: par.curto,
+          dataLei: par.dataLei, aceito: false, recusado: false,
+          alertas: base ? [{ k: "anexo_revogar", sev: "aviso" }] : [{ k: "anexo_sem_base", sev: "alerta" }] });
+        return;
+      }
+      if (o.acao !== "substituir" && o.acao !== "incluir") { avisos.push({ k: "anexo", texto: o.texto }); return; }
+      const novos = par.anexos || [];
+      const novo = novos.filter((a) => a.alvo === rom)[0]
+        || (novos.length === o.alvos.length && !novos.some((a) => a.alvo) ? novos[idx] : null);
+      if (!novo) { avisos.push({ k: "anexo_sem_texto", texto: "Anexo " + rom }); return; }
+      itens.push({ num: "ANEXO:" + rom, numCru: rom, rotulo: "Anexo " + rom, tipo: "anexo_subst",
+        antigo: base ? base.texto : "", novo: novo.texto, parcial: false, problemas: [],
+        fonteItem: par.curto, dataLei: par.dataLei, aceito: false, recusado: false,
+        alertas: base ? [{ k: "anexo_tabela", sev: "info" }] : [{ k: "anexo_sem_base", sev: "alerta" }] });
+    });
+  });
+  return { itens, avisos };
+}
+
+/* Aplica UM item de anexo aceito à lista de anexos da lei e devolve a lista NOVA (não muda a
+ * recebida). O anexo antigo nunca se perde: fica em textoOriginal; o histórico diz qual lei mexeu. */
+function leiAplicarAnexo(anexos, item, ctx) {
+  const rom = String((item && item.num) || "").replace(/^ANEXO:/, "");
+  const c = ctx || {};
+  const lista = (anexos || []).map((a) => Object.assign({}, a));
+  let i = -1;
+  lista.forEach((a, k) => { if (i < 0 && leiRomanoDoAnexo(a.titulo) === rom) i = k; });
+  if (i < 0) { lista.push({ titulo: "ANEXO " + rom, texto: "" }); i = lista.length - 1; }
+  const a = lista[i];
+  const hist = Array.isArray(a.historico) ? a.historico.slice() : [];
+  hist.push({ fonte: c.fonte || "", data: c.data || "", dataLei: item.dataLei || "", tipo: item.tipo });
+  if (String(a.texto || "").trim() && a.textoOriginal === undefined) a.textoOriginal = a.texto;
+  if (item.tipo === "anexo_rev") a.revogado = true;
+  else { a.texto = String(item.novo || ""); a.revogado = false; }
+  const fontes = [];
+  hist.forEach((h) => { if (h.fonte && fontes.indexOf(h.fonte) < 0) fontes.push(h.fonte); });
+  a.fonteAlteracao = fontes.join("; ");
+  a.historico = hist;
+  return lista;
 }
 
 /* =====================================================================
@@ -3278,5 +3444,6 @@ if (typeof module !== "undefined" && module.exports) {
     citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar,
     leiDataDaLei, leiCabecalhosAlteradora, leiMarcaDoTrecho, leiLerBlocoAlterado, leiMesclarFragmento,
     leiMontarArtigo, leiLerAlteradora, leiAlteradoraCitaLei, leiDataUltimaAlteracao, leiItensDaAlteradora,
+    leiRomanoDoAnexo, leiAnexosDaAlteradora, leiOrdemDeAnexo, leiAnexoDaLei, leiItensDeAnexos, leiAplicarAnexo,
   };
 }
