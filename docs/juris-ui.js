@@ -14,6 +14,17 @@ let jurTopicoAtual = null;      /* {disciplina, nome, chave} */
 let jurEditando = "";           /* id em edição, "" para novo */
 let jurCategoriaColada = "";    /* categoria vinda da colagem/JSON */
 let jurTagsColadas = [];        /* etiquetas de assunto vindas do JSON */
+/* CAMPOS QUE A IA TROUXE E O TEXTO NÃO CONFIRMA: { campo: valor }. O valor
+ * fica junto para saber, ao guardar, se a pessoa o corrigiu (então deixou
+ * de ser suposição) ou o deixou como veio (continua "a conferir"). */
+let jurConferirForm = {};
+/* O texto que foi de fato enviado no último pedido à IA. A resposta chega
+ * pela mesma caixa e a substitui — sem guardar aqui, não haveria com que
+ * comparar o que a IA devolveu (ver jurVerificarNoTexto). */
+let jurUltimoTextoPedido = "";
+/* os campos do formulário (o relator existe no julgado, não na entrada) */
+const JUR_CAMPOS_FORM = { tribunal: "jurTribunal", classe: "jurClasse",
+  numero: "jurNumero", data: "jurData", orgao: "jurOrgao", fonte: "jurFonte" };
 let jurFiltroTag = "";          /* etiqueta escolhida na lista */
 /* "ler" ou "incluir" — ver jurPintarModo */
 let jurModo = "ler";
@@ -132,6 +143,7 @@ function jurLimparForm() {
   jurEditando = "";
   jurCategoriaColada = "";
   jurTagsColadas = [];
+  jurConferirForm = {};
   jurPintarTagsForm();
   jurPilulaLimpar();
   jurMeta(false);
@@ -368,6 +380,26 @@ function jurColar() {
    * texto anterior enquanto o JSON trazia a tese certa. */
   const doJson = String(bruto).trim()[0] === "{"
     && typeof jurDoJson === "function" && !!jurDoJson(bruto);
+  /* O QUE A IA LEMBROU entra onde o texto não trouxe nada — e, junto com
+   * tudo o que veio no JSON, é CONFERIDO no texto que foi enviado. O que
+   * não aparece lá fica marcado "a conferir" (jurVerificarNoTexto). */
+  jurConferirForm = {};
+  const sugeridos = [];
+  if (doJson) {
+    const mem = a.deMemoria || {};
+    Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
+      if (!a[k] && mem[k]) a[k] = mem[k];
+    });
+    const vals = {};
+    Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
+      if (a[k] && !(k === "tribunal" && a.tribunalDeduzido)) vals[k] = a[k];
+    });
+    const base = [jurUltimoTextoPedido, a.texto].filter(Boolean).join("\n");
+    jurVerificarNoTexto(vals, base).aConferir.forEach((k) => {
+      jurConferirForm[k] = a[k];
+      sugeridos.push(k);
+    });
+  }
   const põe = (id, v) => { if ($(id) && v) $(id).value = v; };
   põe("jurTribunal", a.tribunal);
   põe("jurClasse", a.classe);
@@ -429,9 +461,22 @@ function jurColar() {
   if (av) {
     av.hidden = false;
     av.className = "jur-pilula" + (achou.length ? " ok" : " aviso");
-    av.textContent = achou.length
+    const linhas = [achou.length
       ? t("jur_pilula", { c: pedacos.join(" · ") })
-      : t("jur_pilula_nada");
+      : t("jur_pilula_nada")];
+    /* O QUE NÃO SE PODE CONFIAR fica escrito ao lado do que se pode */
+    if (sugeridos.length) {
+      linhas.push("⚠ " + t("jur_pilula_memoria",
+        { q: sugeridos.map(jurNomeCampo).join(", ") }));
+    }
+    if (doJson && (a.teseOficial === false || /parafrase/i.test(a.tipoDoTexto || ""))) {
+      linhas.push("⚠ " + t("jur_pilula_parafrase"));
+    }
+    if (doJson && a.ondeConferir) {
+      linhas.push(t("jur_pilula_onde", { q: a.ondeConferir }));
+    }
+    av.textContent = linhas.join("\n");
+    av.style.whiteSpace = "pre-line";
   }
   /* NÃO RECONHECEU NADA: aí os campos precisam aparecer, porque não há
    * o que conferir — há o que preencher. Reconheceu: ficam fechados,
@@ -474,6 +519,10 @@ async function jurSalvar() {
     categoria: jurCategoriaColada
       || (typeof jurCategoria === "function" ? jurCategoria(v("jurClasse")) : ""),
     tags: jurTagsColadas.slice(),
+    /* "a conferir": o que a IA trouxe e a pessoa não corrigiu. Campo que
+     * ela mexeu deixa de ser suposição; campo fora do formulário (relator)
+     * mantém a marca que já tinha. */
+    aConferir: jurConferirAoGuardar(),
     topicos: jurEditando ? undefined : [jurTopicoAtual.chave],
   });
   if (!j) { await uiAlert(t("jur_nao_salvou")); return; }
@@ -493,6 +542,16 @@ async function jurSalvar() {
   jurPintarLista();
   jurRepintarTelas();
   jurReagirBtn("btnJurSalvar", t("jur_salvou"));
+}
+
+function jurConferirAoGuardar() {
+  const v = (id) => String(($(id) || {}).value || "").trim();
+  const ficam = Object.keys(jurConferirForm)
+    .filter((k) => v(JUR_CAMPOS_FORM[k]) === String(jurConferirForm[k] || "").trim());
+  const antigo = jurEditando ? jurDe(jurEditando) : null;
+  const fora = ((antigo && antigo.aConferir) || [])
+    .filter((k) => !JUR_CAMPOS_FORM[k]);
+  return ficam.concat(fora);
 }
 
 /* Depois de guardar, a agenda e o material precisam mostrar o selo novo
@@ -515,6 +574,10 @@ function jurEditar(id) {
   põe("jurOrgao", j.orgao); põe("jurFonte", j.fonte);
   põe("jurTese", j.tese); põe("jurResumo", j.resumo); põe("jurColar", j.texto);
   jurTagsColadas = (typeof jurTagsDe === "function") ? jurTagsDe(j) : [];
+  jurConferirForm = {};
+  (j.aConferir || []).forEach((k) => {
+    if (JUR_CAMPOS_FORM[k]) jurConferirForm[k] = String(j[k] || "").trim();
+  });
   jurPintarTagsForm();
   /* editar é incluir com os campos preenchidos: sem trocar de modo, o
    * formulário ficaria escondido e o clique não faria nada visível */
@@ -682,8 +745,20 @@ async function jurUnirPar(idFica, idVai) {
 async function jurPedirIA() {
   const bruto = String(($("jurColar") || {}).value || "").trim();
   if (!bruto) { await uiAlert(t("jur_prompt_ia_vazio")); return; }
-  const txt = jurPromptPreencher(bruto,
-    jurTopicoAtual ? jurTopicoAtual.nome : "");
+  const campos = {};
+  Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
+    campos[k] = String(($(JUR_CAMPOS_FORM[k]) || {}).value || "").trim();
+  });
+  /* O TEXTO ENVIADO FICA GUARDADO: a resposta volta pela mesma caixa e a
+   * apaga; é contra ele que se confere o que a IA devolver */
+  jurUltimoTextoPedido = bruto;
+  const txt = jurPromptIA({
+    topico: jurTopicoAtual ? jurTopicoAtual.nome : "",
+    texto: bruto, campos,
+    tese: String(($("jurTese") || {}).value || "").trim(),
+    resumo: String(($("jurResumo") || {}).value || "").trim(),
+    tags: jurTagsColadas.slice(),
+  });
   const ok = await edColarCopiarTexto(txt, "", null);
   reg("JURIS", "prompt de leitura copiado", bruto.length + " caracteres");
   if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
@@ -857,8 +932,13 @@ function jurCompletarLer() {
   if (dados.identificacao) {
     partes.push(t("jur_ident_tit", { q: String(dados.identificacao) }));
   }
+  if (r.aConferir && r.aConferir.length) {
+    partes.push(t("jur_completar_conferir",
+      { q: r.aConferir.map(jurNomeCampo).join(", ") }));
+  }
   reg("JURIS", "resposta de completar aplicada",
       jurTitulo(j) + " · preenchidos " + r.mudou.length
+      + " · a conferir " + ((r.aConferir || []).length)
       + " · apontamentos " + conf.length);
   jurCplEscrever(partes.join(""));
   jurCplPintarFalta();
@@ -1041,6 +1121,14 @@ function jurPintarLista() {
       o.textContent = j.orgao;
       cab.append(o);
     }
+    /* O QUE A IA TROUXE E NINGUÉM CONFERIU. Sem o selo, um dado lembrado
+     * e um dado lido do tribunal têm a mesma cara — e o primeiro é o que
+     * se decora errado. */
+    const conferir = Array.isArray(j.aConferir) ? j.aConferir : [];
+    if (conferir.length) {
+      const c = sel(t("jur_a_conferir_n", { n: conferir.length }), "conferir");
+      c.title = t("jur_a_conferir_aj", { q: conferir.map(jurNomeCampo).join(", ") });
+    }
 
     /* AS AÇÕES NO CANTO, EM ÍCONES.
      *
@@ -1085,6 +1173,15 @@ function jurPintarLista() {
             q: falta.map(jurNomeCampo).join(", ") })
         : t("jur_completar_ok"),
       falta.length ? "jur-ic-falta" : "", () => jurCompletarAbrir(j.id));
+    if (conferir.length) {
+      bt("✅", t("jur_conferi_aj"), "", () => {
+        jurMarcarConferido(j.id);
+        reg("JURIS", "campos conferidos na fonte",
+            jurTitulo(j) + " · " + conferir.join(", "));
+        jurPintarLista();
+        toast("jur_conferi_feito");
+      });
+    }
     bt("🃏", t("jur_card_dica"), "", () => jurGerarCartao(j.id));
     bt("✏️", t("jur_ed"), "", () => jurEditar(j.id));
     bt("📋", t("jur_cp"), "", async () => {
