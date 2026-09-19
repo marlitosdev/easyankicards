@@ -2664,11 +2664,9 @@ const UI = {
   "lei_aqui": "✓ parei aqui",
   "lei_modo_ler": "ler",
   "lei_modo_editar": "editar",
-  /* "RECITAR" DESCREVIA UM DOS DOIS EXERCÍCIOS, e não o modo.
-     Com o artigo fechado você de fato recita; com o texto em lacunas,
-     você completa — e "recitar" passou a nomear a metade errada. O que
-     os dois têm em comum é o verbo que importa: testar se você sabe,
-     em vez de reler e achar que sabe. */
+  /* O modo se chama "testar": o verbo que importa é checar se você sabe,
+     em vez de reler e achar que sabe. (Já houve dois exercícios — artigo
+     fechado e texto com lacunas —; ficou o primeiro.) */
   "lei_modo_recitar": "testar",
   "lei_blocos_btn": "capítulos",
   "lei_blocos_ajuda": "{lidos} de {n} capítulos lidos. Marcar um capítulo move o marcador para o último artigo dele.",
@@ -2692,17 +2690,8 @@ const UI = {
   "lei_ir_nao_achou": "Não há art. {a} nesta lei.",
   "lei_sem_artigos": "Esta lei ainda não tem artigo nenhum reconhecido. Cole o texto e grave.",
   "lei_recitar_ajuda": "{v} de {n} artigos revelados. Toque no artigo para ver o texto. Reler dá sensação de saber; completar mostra o que ficou.",
-  /* ---- RECITAR COM LACUNA ---- */
-  /* O RÓTULO DIZ O ESTADO E O QUE O TOQUE FAZ. Só a ação ("apagar as
-     palavras-chave") lido com a função já ligada parece dizer que ela
-     está desligada — que foi exatamente o relato. */
-  "lei_rec_lac_off": "○ artigo fechado · tocar para deixar o texto com lacunas",
-  "lei_rec_lac_on": "● texto com lacunas · tocar para fechar o artigo inteiro",
+  /* ---- TESTAR (RECITAR): um exercício só, o artigo fechado ---- */
   "lei_rec_modo_esc": "Exercício: ARTIGO FECHADO — você lê só o número e a ementa, e recita o resto de cabeça. Toque no artigo para conferir.",
-  "lei_rec_modo_lac": "Exercício: TEXTO COM LACUNAS — o artigo aparece inteiro, sem os prazos, percentuais e palavras que a banca troca. Toque no artigo para revelar o que sumiu.",
-  "lei_rec_lac_aj": "Troca entre os dois exercícios. Fechado, você recita de cor — é o mais difícil. Com lacunas, o texto sustenta a memória e some só o que decide a assertiva: prazos, percentuais, “salvo”, “vedado”, “somente”, “poderá”. O número dos artigos e das remissões nunca vira lacuna: é endereço, não conteúdo.",
-  "lei_rec_lac_n": "{n} lacunas",
-  "lei_lac_ajuda": "Toque no artigo para ver as palavras apagadas.",
   "lei_recitar_ver": "Ver o texto deste artigo.",
   "lei_recitar_vazio": "Sem artigos para recitar — cole a lei primeiro.",
   "lei_cloze_art": "virar cartões",
@@ -2803,8 +2792,8 @@ const UI = {
   "lei_aj_marcas_d": "As mesmas seis do resumo, de propósito: ter duas convenções seria pedir para você decorar o app em vez da lei. Selecione o trecho na leitura e clique na cor. A pegadinha é a que mais rende aqui — é na letra da lei que ela mora. As marcas ficam no texto da lei, então valem para todos os tópicos que a usam, e as dúvidas entram na lista geral de dúvidas.\n\nDOIS LIMITES QUE VOCÊ PRECISA CONHECER, porque são conhecidos e ainda não corrigidos:\n\n1. A marca é localizada PELO TEXTO selecionado, e aqui na lei o app ainda não sabe em qual ocorrência você clicou — ele pega a PRIMEIRA que estiver livre. Selecionando uma frase que se repete (o mesmo enunciado no título da seção e no caput do artigo, por exemplo), a cor pode aparecer na de cima. Frase longa erra menos que palavra solta.\n\n2. Na lei, clicar no trecho pintado ainda não abre o menu de tirar ou trocar a cor — isso só funciona no resumo. Para desfazer aqui, entre em “editar” e apague os “==” em volta do trecho: “==texto==” é destaque, “==?texto==” é dúvida, “==~texto==” é pegadinha, “==*texto==” é caiu na prova.",
   "lei_aj_cartoes_t": "Virar cartões (dentro de cada artigo)",
   "lei_aj_cartoes_d": "Gera um prompt para transformar AQUELE artigo em cartões de lacuna. O prompt manda esconder o que a banca troca — prazos, números, percentuais e os verbos de comando (deve/pode, vedado/permitido) — e manda etiquetar cada cartão com o número do artigo. A etiqueta importa: cartão de lei sem número de artigo é cartão órfão, e quando você erra na revisão não há como voltar ao texto. Você vê os cartões antes de qualquer coisa ser gravada.",
-  "lei_aj_recitar_t": "Testar (recitar): os dois exercícios",
-  "lei_aj_recitar_d": "É a diferença entre reconhecer e lembrar: reler a lei dá sensação de que se sabe, porque cada linha parece familiar quando está na frente.\n\nARTIGO FECHADO — mostra só o número e a ementa. Ver “Art. 167 — São vedados:” e ter de completar mostra o que ficou de verdade. É o mais difícil: ou se recita, ou se desiste.\n\nTEXTO COM LACUNAS — o artigo aparece inteiro, sem as palavras que a banca troca: prazos, percentuais, quóruns, “salvo”, “vedado”, “somente”, “poderá/deverá”. O texto sustenta a memória e some só o que decide a assertiva. É o degrau que faltava antes de esconder tudo.\n\nO botão no alto da lista troca entre os dois e DIZ EM QUAL VOCÊ ESTÁ (“○ artigo fechado” / “● texto com lacunas”). Toque no artigo para revelar. O número dos artigos e das remissões nunca vira lacuna: é endereço, não conteúdo — apagá-lo tornava o texto ilegível e não testava nada.",
+  "lei_aj_recitar_t": "Testar (recitar): o artigo fechado",
+  "lei_aj_recitar_d": "É a diferença entre reconhecer e lembrar: reler a lei dá sensação de que se sabe, porque cada linha parece familiar quando está na frente.\n\nO ARTIGO FECHADO mostra só o número e a ementa. Ver “Art. 167 — São vedados:” e ter de completar mostra o que ficou de verdade. Toque no artigo para conferir o texto.\n\nPara treinar com lacunas (prazos, percentuais, “salvo”, “vedado”, “somente”), use “virar cartões” num artigo: os cartões de lacuna são o lugar de repetir espaçado.",
   "lei_aj_ranking_t": "Artigos que mais caem",
   "lei_aj_ranking_d": "Conta as SUAS questões salvas e as SUAS marcas de “caiu na prova”, artigo por artigo, com o placar de acertos e erros de cada um. É uma amostra pequena, e por isso não diz o que mais cai no país — diz o que mais apareceu para você, que é o que dá para saber honestamente. Artigo citado que não é desta lei fica de fora.",
   "lei_aj_gravar_t": "Gravar",

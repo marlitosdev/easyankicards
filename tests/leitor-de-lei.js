@@ -373,55 +373,42 @@ async function testes() {
   }
 
   /* ==============================================================
-   * L7: O BOTÃO DO EXERCÍCIO DIZ EM QUE ESTADO ESTÁ
+   * L7: O EXERCÍCIO DE TESTAR É UM SÓ — O ARTIGO FECHADO
    *
-   * O RELATO: "o botão de ativar esta função está com funcionamento
-   * confuso". O rótulo era só a AÇÃO — "apagar só as palavras-chave" —
-   * e lido com a função já ligada ele parece dizer que ela está
-   * desligada. A única outra pista era um preenchimento de cor, que
-   * ninguém lê como estado.
+   * O botão que trocava para "texto com lacunas" saiu: era lento (cada
+   * troca repintava todos os artigos, e cada um passava por
+   * leiComLacunas) e só escondia informação de pouca serventia. A
+   * necessidade de treinar com lacunas passa para a criação de cartões,
+   * que precisa continuar tendo as funções de lacuna.
    * ============================================================== */
   {
     const { api } = rodar();
     abrirLei(api);
     api.leiTrocarModo("recitar");
-    const acha = () => {
-      const todos = [];
-      const varrer = (el) => {
-        Array.from(el.children || []).forEach((f) => { todos.push(f); varrer(f); });
-      };
-      varrer(api.$("leiRecitar"));
-      return todos.filter((x) => /lei-rec-alt/.test(x.className || ""))[0];
-    };
-    const b1 = acha();
-    ok(!!b1, "L7-pre o botão do exercício não está na tela");
-    const rot1 = String((b1 && b1.textContent) || "");
-    ok(b1 && !/lei-modo-on/.test(b1.className || ""),
-       "L7 o botão nasce marcado como ligado, e o exercício é o outro");
-
-    b1.onclick();
-    const b2 = acha();
-    const rot2 = String((b2 && b2.textContent) || "");
-    ok(rot1 !== rot2,
-       "L7a o rótulo é o mesmo nos dois estados: se ele diz sempre a "
-       + "mesma coisa, não está dizendo em qual você está: " + rot1);
-    ok(b2 && /lei-modo-on/.test(b2.className || ""),
-       "L7b ligado, o botão não se destaca dos outros");
-
-    /* ---- L7c: e a tela diz QUAL exercício está valendo ----
-     * Os dois desenhos são muito diferentes — artigos fechados ou
-     * artigos com buracos — e nada dizia qual era, nem que havia dois. */
-    const nota = Array.from(api.$("leiRecitar").children || [])
-      .filter((x) => (x.tag || "") === "p")[0];
-    ok(nota && /LACUNAS/i.test(nota.textContent || ""),
-       "L7c a tela não diz que o exercício de lacunas está valendo: "
-       + JSON.stringify(nota && nota.textContent));
-    b2.onclick();
-    const nota2 = Array.from(api.$("leiRecitar").children || [])
-      .filter((x) => (x.tag || "") === "p")[0];
-    ok(nota2 && /FECHADO/i.test(nota2.textContent || ""),
-       "L7d desligado, a tela continua anunciando o exercício de "
-       + "lacunas: " + JSON.stringify(nota2 && nota2.textContent));
+    const todos = [];
+    const varrer = (el) => { Array.from(el.children || []).forEach((f) => { todos.push(f); varrer(f); }); };
+    varrer(api.$("leiRecitar"));
+    ok(!todos.some((x) => /lei-rec-alt/.test(x.className || "")),
+       "L7 o botao que trocava para 'texto com lacunas' continua na tela");
+    ok(!todos.some((x) => /lei-lac/.test(x.className || "")),
+       "L7a ainda ha lacunas desenhadas no modo de testar");
+    const nota = Array.from(api.$("leiRecitar").children || []).filter((x) => (x.tag || "") === "p")[0];
+    ok(nota && /FECHADO/i.test(nota.textContent || "") && !/LACUNAS/i.test(nota.textContent || ""),
+       "L7b a tela nao anuncia so o exercicio de artigo fechado: " + JSON.stringify(nota && nota.textContent));
+    ok(!/lacuna/i.test(api.t("lei_aj_recitar_d").split("Para treinar")[0]),
+       "L7c a ajuda do modo continua descrevendo o exercicio de lacunas como uma opcao do botao");
+    ok(/virar cartões/.test(api.t("lei_aj_recitar_d")),
+       "L7d a ajuda nao aponta para onde ficou o treino com lacunas (os cartoes)");
+    /* toque no artigo continua revelando o texto (o exercicio em si) */
+    const cab = todos.filter((x) => /lei-rec-cab/.test(x.className || ""))[0];
+    ok(!!cab && typeof cab.onclick === "function", "L7e o artigo fechado perdeu o toque que revela o texto");
+    /* e as funcoes que os cartoes de lacuna usam CONTINUAM existindo */
+    ok(typeof api.leiComLacunas === "function" && typeof api.leiQuantasLacunas === "function"
+       && api.leiQuantasLacunas("O prazo é de quinze dias, salvo motivo justificado.") > 0,
+       "L7f as funcoes de lacuna, usadas pelos cartoes, sumiram junto com o botao");
+    /* as chaves de texto do botao removido nao ficam soltas */
+    ["lei_rec_lac_off", "lei_rec_lac_on", "lei_rec_modo_lac", "lei_rec_lac_aj", "lei_rec_lac_n", "lei_lac_ajuda"]
+      .forEach((k) => ok(api.t(k) === k, "L7g a chave '" + k + "' do botao removido ficou no dicionario"));
   }
 
   /* ---- L8: os dois botões da fila de leis são coisas diferentes ----
