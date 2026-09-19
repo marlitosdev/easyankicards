@@ -1117,6 +1117,274 @@ async function testes() {
        "C12 o desenho sincrono nao foi guardado: voltar ao modo ler redesenhou tudo");
   }
 
+  /* =================================================================
+   * DU: ARTIGOS REPETIDOS NO TEXTO COLADO — a pessoa escolhe qual fica
+   *
+   * POR QUE ISTO EXISTE. O Código Tributário de Caruaru, copiado do PDF,
+   * traz o "Art. 3º" antigo (tachado — e o tachado se perde ao copiar) e o
+   * novo, com "(Redação dada pela LC nº 018…)". A colagem guardava os dois
+   * sem aviso; "ir ao art. 3º" e a prévia de citação caíam no PRIMEIRO,
+   * justamente o substituído; e a atualização de versão comparava por
+   * número deixando a última ocorrência ganhar em silêncio.
+   * =============================================================== */
+  const CARUARU = [
+    "LEI COMPLEMENTAR 015, DE 05 DE JANEIRO DE 2009",
+    "DAS DISPOSIÇÕES PRELIMINARES",
+    "Art. 1º. Este Código regula os direitos e obrigações que emanam das relações jurídicas.",
+    "Art. 2º. O Código é constituído de 4 (quatro) Livros, com a matéria, assim distribuída:",
+    "Art. 3º O Código Tributário Municipal é subordinado:",
+    "I - à Constituição Federal;",
+    "II - ao Código Tributário Nacional e demais Leis Complementares da União;",
+    "III – à Lei Orgânica do Município de Caruaru.",
+    "Art. 3º. Compreendem o Sistema de Normas Tributárias do Município de Caruaru os princípios e as normas gerais estabelecidas pela Constituição Federal. (Redação dada pela Lei Complementar nº 018, de 09 de outubro de 2009)",
+    "Art. 4º. Outro artigo comum, sem repetição.",
+  ].join("\n");
+  const achar = (el, pred, acc) => {
+    acc = acc || [];
+    Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); achar(c, pred, acc); });
+    return acc;
+  };
+  const radios = (api, num) => achar(api.$("leiDupLista"), (c) => c.type === "radio" && c.name === "leiDup_" + num);
+  const gruposTela = (api) => Array.from(api.$("leiDupLista").children || []).filter((c) => /lei-dup-grupo/.test(c.className || ""));
+
+  /* ---- DU1: detecta o caso real e sugere a redação nova, com o motivo ---- */
+  {
+    const { api } = rodar();
+    const g = api.leiDuplicados(CARUARU);
+    ok(g.length === 1 && g[0].num === "3" && g[0].candidatos.length === 2,
+       "DU1 nao achou o Art. 3o repetido: " + JSON.stringify(g.map((x) => x.num)));
+    ok(g[0].confianca === "forte" && g[0].motivo === "redacao" && g[0].sugerido === g[0].candidatos[1].indice,
+       "DU1a nao sugeriu a redacao nova como segura: " + JSON.stringify([g[0].confianca, g[0].motivo, g[0].sugerido]));
+    ok(/Lei Complementar nº 018, de 09 de outubro de 2009/.test(g[0].fonte),
+       "DU1b nao leu a fonte da alteracao: " + g[0].fonte);
+    ok(g[0].candidatos[0].sinais.tipo === "" && g[0].candidatos[1].sinais.tipo === "redacao",
+       "DU1c os sinais de cada ocorrencia estao errados");
+  }
+
+  /* ---- DU2: o que NÃO é defeito não é apontado ---- */
+  {
+    const { api } = rodar();
+    /* corpo e ADCT repetem numeros de proposito (divisoes e posicoes diferentes) */
+    const CF = ["TÍTULO I", "Dos princípios", "Art. 1º Um.", "Art. 2º Dois.", "Art. 3º Tres.",
+      "TÍTULO II", "Dos direitos", "Art. 4º Quatro.", "Art. 5º Cinco.",
+      "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS",
+      "Art. 1º Um do ADCT.", "Art. 2º Dois do ADCT.", "Art. 5º Cinco do ADCT."].join("\n");
+    ok(api.leiDuplicados(CF).length === 0,
+       "DU2 corpo e ADCT (divisoes diferentes) foram apontados como repetidos: "
+       + JSON.stringify(api.leiDuplicados(CF).map((x) => x.num)));
+    ok(api.leiDuplicados("Art. 3º Um.\nArt. 3º-A Dois.\nArt. 4º Tres.").length === 0,
+       "DU2a 3o e 3o-A foram tomados como o mesmo artigo");
+    ok(api.leiDuplicados("Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Tres.").length === 0,
+       "DU2b lei sem repeticao foi apontada");
+  }
+
+  /* ---- DU3: a sugestão segue o que o TEXTO diz, na ordem em que estiver ---- */
+  {
+    const { api } = rodar();
+    const antes = api.leiDuplicados("Art. 4º (Revogado pela LC 9/2010)\nArt. 4º Texto que vale hoje para o contribuinte.")[0];
+    ok(antes.confianca === "forte" && antes.motivo === "revogado" && antes.sugerido === antes.candidatos[1].indice,
+       "DU3 o revogado vem primeiro e a sugestao nao e' a segunda: " + JSON.stringify([antes.confianca, antes.motivo]));
+    const invertido = api.leiDuplicados("Art. 4º Texto que vale hoje para o contribuinte.\nArt. 4º (Revogado pela LC 9/2010)")[0];
+    ok(invertido.sugerido === invertido.candidatos[0].indice && invertido.confianca === "forte",
+       "DU3a o revogado vem DEPOIS e a sugestao nao acompanhou o texto (nao pode ser 'a ultima ganha')");
+    const nova = api.leiDuplicados("Art. 5º Texto novo mesmo.\n(Redação dada pela LC 1/2001)\nArt. 5º Texto antigo mesmo.")[0];
+    ok(nova === undefined || nova.candidatos.length === 2, "DU3b-pre forma inesperada");
+    const igual = api.leiDuplicados("Art. 6º Mesmo texto exato aqui.\nArt. 6º Mesmo   texto exato aqui.")[0];
+    ok(igual.confianca === "forte" && igual.motivo === "identico" && igual.sugerido === igual.candidatos[0].indice,
+       "DU3c duas copias identicas nao foram tratadas como copia: " + JSON.stringify([igual.confianca, igual.motivo]));
+    const fraca = api.leiDuplicados("Art. 7º Uma redacao de um jeito.\nArt. 7º Outra redacao bem diferente.")[0];
+    ok(fraca.confianca === "fraca" && fraca.motivo === "posicao",
+       "DU3d sem nenhum indicio a sugestao devia ser fraca: " + JSON.stringify([fraca.confianca, fraca.motivo]));
+    const vazio = api.leiDuplicados("Art. 8º\nArt. 8º Texto completo do artigo oito aqui.")[0];
+    ok(vazio.confianca === "forte" && vazio.sugerido === vazio.candidatos[1].indice, "DU3e artigo sem texto nao foi descartado");
+    const vetado = api.leiDuplicados("Art. 9º Texto do artigo nove aqui mesmo. (Vetado)\nArt. 9º Outra redacao do nove diferente.")[0];
+    ok(vetado.confianca === "forte" && vetado.sugerido === vetado.candidatos[1].indice, "DU3f artigo vetado nao foi descartado");
+  }
+
+  /* ---- DU4: as palavras que distinguem uma redação da outra ficam marcadas ---- */
+  {
+    const { api } = rodar();
+    const p = api.leiPalavrasDiferentes("O Código é subordinado à Constituição", "O Código compreende a Constituição");
+    const dif = p.filter((x) => x.dif).map((x) => x.t);
+    ok(dif.indexOf("é") >= 0 && dif.indexOf("subordinado") >= 0 && dif.indexOf("Código") < 0 && dif.indexOf("Constituição") < 0,
+       "DU4 as palavras destacadas estao erradas: " + JSON.stringify(dif));
+    ok(api.leiPalavrasDiferentes("igual texto", "igual texto").every((x) => !x.dif), "DU4a texto igual ganhou destaque");
+    ok(api.leiPalavrasDiferentes("a a a", "a").filter((x) => x.dif).length === 2, "DU4b a repeticao nao contou por ocorrencia");
+  }
+
+  /* ---- DU5: aplicar as escolhas ---- */
+  {
+    const { api } = rodar();
+    const g = api.leiDuplicados(CARUARU);
+    const [a, b] = g[0].candidatos;
+    const so = (t2) => api.leiArtigos(t2).filter((x) => x.num === "3");
+    let r = api.leiAplicarDuplicados(CARUARU, g, { 3: { manter: b.indice, original: false } });
+    ok(so(r.texto).length === 1 && /Compreendem o Sistema/.test(so(r.texto)[0].texto) && !/subordinado/.test(r.texto),
+       "DU5 ficar com a nova nao deixou so a nova");
+    ok(api.leiArtigos(r.texto).length === 4 && /Art\. 4º\. Outro artigo comum/.test(r.texto),
+       "DU5a mexeu nos outros artigos: " + api.leiArtigos(r.texto).length);
+    r = api.leiAplicarDuplicados(CARUARU, g, { 3: { manter: a.indice, original: false } });
+    ok(so(r.texto).length === 1 && /subordinado/.test(r.texto) && !/Compreendem/.test(r.texto), "DU5b ficar com a 1a nao deixou so a 1a");
+    r = api.leiAplicarDuplicados(CARUARU, g, { 3: { manter: "todas" } });
+    ok(r.texto === CARUARU && so(r.texto).length === 2, "DU5c 'manter todas' alterou o texto");
+    /* guardar a substituída como original: base = antiga, alteração = nova */
+    r = api.leiAplicarDuplicados(CARUARU, g, { 3: { manter: b.indice, original: true } });
+    ok(so(r.texto).length === 1 && /subordinado/.test(r.texto), "DU5d com 'original' a base devia manter a redacao antiga");
+    ok(r.alteracoes["3"] && /Compreendem/.test(r.alteracoes["3"].texto)
+       && /Lei Complementar nº 018/.test(r.alteracoes["3"].fonteAlteracao),
+       "DU5e a redacao nova nao virou alteracao com a fonte: " + JSON.stringify(r.alteracoes));
+    const ef = api.leiArtigosEfetivos({ texto: r.texto, alteracoes: r.alteracoes }).filter((x) => x.num === "3");
+    ok(ef.length === 1 && ef[0].alterado === true && /Compreendem/.test(ef[0].texto) && /subordinado/.test(ef[0].textoOriginal),
+       "DU5f o leitor nao mostraria a redacao vigente com a original a um toque");
+    /* 'original' e' ignorado quando nao se aplica (a escolhida nao tem 'Redação dada') */
+    r = api.leiAplicarDuplicados(CARUARU, g, { 3: { manter: a.indice, original: true } });
+    ok(Object.keys(r.alteracoes).length === 0, "DU5g 'original' gerou alteracao para uma escolha sem 'Redacao dada'");
+  }
+
+  /* ---- DU6: na CRIAÇÃO, salvar não cria a lei: abre a conferência, com a sugestão segura marcada ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = CARUARU;
+    const r = api.leiGravar();
+    ok(r === "pendente", "DU6 salvar com repetidos nao devolveu 'pendente': " + r);
+    ok(api.$("dlgLeiDup").open === true, "DU6a a conferencia nao abriu");
+    ok(api.leisLista().length === 0, "DU6b a lei foi criada ANTES de a pessoa confirmar");
+    const g = gruposTela(api);
+    ok(g.length === 1 && /forte/.test(g[0].className), "DU6c a tela nao mostra o grupo com sugestao segura");
+    const rs = radios(api, "3");
+    ok(rs.length === 3, "DU6d esperava 2 ocorrencias + 'manter todas': " + rs.length);
+    const marcado = rs.filter((x) => x.checked)[0];
+    ok(marcado && String(marcado.value) === String(api.leiDupCtxAtual().grupos[0].sugerido),
+       "DU6e a sugestao segura nao veio marcada");
+    ok(api.$("btnLeiDupConfirmar").disabled === false, "DU6f com tudo sugerido o confirmar devia estar liberado");
+    ok(/Redação dada|Compreendem/.test((g[0].textContent || "")) && /sugerido/.test(g[0].textContent || "") && /redação nova/.test(g[0].textContent || ""),
+       "DU6g a tela nao marca visualmente a sugerida (chip 'sugerido' e 'redacao nova')");
+    ok(achar(g[0], (c) => /lei-dup-dif/.test(c.className || "")).length > 0, "DU6h nenhuma palavra diferente foi destacada");
+    /* ate aqui NADA foi criado; agora a pessoa confirma */
+    api.$("btnLeiDupConfirmar").onclick();
+    ok(api.$("dlgLeiDup").open === false, "DU6i a conferencia nao fechou ao confirmar");
+    const l = api.leisLista()[0];
+    ok(!!l && l.nome === "LC 015/2009", "DU6j a lei nao foi criada depois do confirmar: " + JSON.stringify(l && l.nome));
+    ok(api.leiArtigos(l.texto).filter((x) => x.num === "3").length === 1,
+       "DU6k a lei nasceu com o artigo repetido");
+    ok(l.alteracoes && l.alteracoes["3"] && /Compreendem/.test(l.alteracoes["3"].texto) && /subordinado/.test(l.texto),
+       "DU6l a redacao substituida nao ficou como original (padrao quando ha 'Redacao dada'): " + JSON.stringify(l.alteracoes));
+  }
+
+  /* ---- DU7: sem indício, a escolha é da pessoa: começa vazia e trava o confirmar ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito", "T");
+    api.$("leiTexto").value = "Art. 1º Um.\nArt. 2º Uma redacao de um jeito.\nArt. 2º Outra redacao bem diferente.\nArt. 3º Tres.";
+    ok(api.leiGravar() === "pendente", "DU7-pre nao abriu a conferencia");
+    ok(radios(api, "2").filter((x) => x.checked).length === 0, "DU7 a sugestao FRACA veio marcada (escolher so pela posicao)");
+    ok(api.$("btnLeiDupConfirmar").disabled === true, "DU7a o confirmar nao esta travado com um repetido sem escolha");
+    ok(/1 artigo|1 artigo\(s\)|Escolha em 1/.test(api.$("leiDupFaltam").textContent || ""),
+       "DU7b a tela nao diz quantas escolhas faltam: " + api.$("leiDupFaltam").textContent);
+    api.$("btnLeiDupConfirmar").onclick();
+    ok(api.leisLista().length === 0, "DU7c o confirmar travado ainda criou a lei");
+    const r2 = radios(api, "2")[1];
+    r2.onchange();
+    ok(api.$("btnLeiDupConfirmar").disabled === false, "DU7d escolher nao liberou o confirmar");
+    api.$("btnLeiDupConfirmar").onclick();
+    const l = api.leisLista()[0];
+    ok(!!l && /Outra redacao/.test(l.texto) && !/Uma redacao de um jeito/.test(l.texto),
+       "DU7e a lei nao ficou com a escolha da pessoa");
+  }
+
+  /* ---- DU8: cancelar volta ao texto, sem criar nada ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = CARUARU;
+    api.leiGravar();
+    api.$("btnLeiDupCancelar").onclick();
+    ok(api.$("dlgLeiDup").open === false && api.leisLista().length === 0, "DU8 cancelar criou a lei ou nao fechou");
+    ok(api.$("leiTexto").value === CARUARU, "DU8a cancelar mexeu no texto colado");
+    ok(api.leiDupCtxAtual() === null, "DU8b o contexto da conferencia sobrou");
+  }
+
+  /* ---- DU9: "manter todas" cria a lei com as duas ocorrencias (e nao reabre a conferencia) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = CARUARU;
+    api.leiGravar();
+    radios(api, "3")[2].onchange();
+    api.$("btnLeiDupConfirmar").onclick();
+    const l = api.leisLista()[0];
+    ok(!!l && api.leiArtigos(l.texto).filter((x) => x.num === "3").length === 2 && api.$("dlgLeiDup").open === false,
+       "DU9 'manter todas' nao criou a lei com as duas ou reabriu a conferencia");
+  }
+
+  /* ---- DU10: sem repetidos o fluxo e' o de sempre (cria na hora) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.leiAbrir("Direito", "T");
+    api.$("leiTexto").value = "Art. 1º Um.\nArt. 2º Dois.";
+    const r = api.leiGravar();
+    ok(r !== "pendente" && api.leisLista().length === 1 && api.$("dlgLeiDup").open !== true,
+       "DU10 texto sem repetidos passou pela conferencia");
+  }
+
+  /* ---- DU11: trocar de lei no meio da conferência não perde a colagem nem troca por baixo ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const outra = api.leiGuardar({ nome: "Lei 1/2000", texto: "Art. 1º Um." });
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal");
+    api.$("leiTexto").value = CARUARU;
+    api.leiSujoDefinir(true);
+    api.leiTrocarPara(outra.id);          /* grava a colagem antes de trocar — e a gravacao pede conferencia */
+    ok(api.$("dlgLeiDup").open === true, "DU11 trocar de lei com a colagem nao gravada nao abriu a conferencia");
+    ok(api.leiIdAtualValor() === "", "DU11a a lei foi trocada por baixo da conferencia: " + api.leiIdAtualValor());
+    ok(api.$("leiTexto").value === CARUARU, "DU11b a colagem foi perdida ao tentar trocar de lei");
+    api.$("btnLeiDupConfirmar").onclick();
+    const nova = api.leisLista().filter((x) => x.id !== outra.id)[0];
+    ok(!!nova && api.leiIdAtualValor() === nova.id, "DU11c depois de confirmar, a lei aberta devia ser a recem-criada");
+  }
+
+  /* ---- DU12: ATUALIZAÇÃO de versão — repetidos no texto NOVO são conferidos antes de comparar ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "LC 015/2009", texto: "Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Antigo tres do codigo." });
+    api.leiAbrir("Direito Tributário", "Código Tributário Municipal", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdFonte").value = "LC 018/2009";
+    api.$("leiUpdTexto").value = "Art. 1º Um.\nArt. 2º Dois.\nArt. 3º Antigo tres do codigo.\nArt. 3º Novo tres do codigo mudado. (Redação dada pela LC 018/2009)";
+    const r = api.leiAtualizarComparar();
+    ok(r === false && api.$("dlgLeiDup").open === true, "DU12 a atualizacao nao abriu a conferencia dos repetidos");
+    ok(api.$("leiUpdPasso2").hidden === true, "DU12a a comparacao abriu ANTES de a pessoa escolher");
+    ok(radios(api, "3").length === 2, "DU12b na atualizacao nao deve haver 'manter todas' (a comparacao usa um artigo por numero): " + radios(api, "3").length);
+    ok(achar(api.$("leiDupLista"), (c) => c.type === "checkbox").length === 0,
+       "DU12c a opcao 'guardar como original' apareceu na atualizacao (a comparacao ja guarda o original)");
+    ok(/versão nova/i.test(api.$("leiDupTitulo").textContent || ""), "DU12d o titulo nao diz que e' o texto NOVO: " + api.$("leiDupTitulo").textContent);
+    api.$("btnLeiDupConfirmar").onclick();
+    ok(api.$("leiUpdPasso2").hidden === false, "DU12e depois do confirmar a comparacao nao seguiu");
+    const item = (api.leiUpdComparoAtual() || []).filter((x) => x.num === "3")[0];
+    ok(item && item.tipo === "mudou" && /Novo tres/.test(item.novo) && /Antigo tres/.test(item.antigo),
+       "DU12f a comparacao nao usou a escolhida (a nova) contra a antiga: " + JSON.stringify(item));
+  }
+
+  /* ---- DU13: atualização sem repetidos segue como sempre ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "LC 015/2009", texto: "Art. 1º Um.\nArt. 2º Dois." });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdFonte").value = "LC 1/2001";
+    api.$("leiUpdTexto").value = "Art. 1º Um.\nArt. 2º Dois mudado.";
+    ok(api.leiAtualizarComparar() === true && api.$("dlgLeiDup").open !== true, "DU13 atualizacao sem repetidos passou pela conferencia");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

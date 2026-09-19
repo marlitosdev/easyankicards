@@ -189,6 +189,163 @@ function leiArtigo(texto, num) {
 }
 
 /* =====================================================================
+ * ARTIGOS REPETIDOS NO TEXTO COLADO
+ *
+ * O CASO REAL. O Código Tributário de Caruaru, copiado do PDF, traz o
+ * "Art. 3º" antigo (TACHADO no PDF) e o "Art. 3º" novo, com "(Redação
+ * dada pela Lei Complementar nº 018…)". O tachado se perde ao copiar como
+ * texto, e o leitor guardava os dois sem aviso — com o "ir ao art. 3º" e a
+ * prévia de citação caindo no PRIMEIRO, justamente o substituído. E a
+ * atualização de versão comparava por número com a ÚLTIMA ocorrência
+ * ganhando em silêncio.
+ *
+ * O QUE ISTO FAZ: acha os números repetidos que parecem DEFEITO, lê os
+ * sinais de vigência de cada ocorrência e SUGERE qual fica. Nunca decide:
+ * quem decide é quem cola (a tela mostra a lista e pede confirmação).
+ *
+ * O QUE NÃO É DEFEITO. A Constituição repete número entre o corpo e o ADCT
+ * de propósito, e uma lei com anexos pode recomeçar a numeração. Por isso
+ * só entram os repetidos LADO A LADO (posições consecutivas): o artigo
+ * antigo e o novo saem colados um no outro; corpo e ADCT ficam a
+ * centenas de artigos de distância. (Uma primeira versão também aceitava
+ * "mesma divisão", e apontava o art. 5º do ADCT como repetido do corpo:
+ * o cabeçalho do ADCT não é uma divisão reconhecida, então os artigos dele
+ * herdam a divisão do corpo.)
+ * ===================================================================== */
+const LEI_RE_SINAL_REDACAO =
+  /\(\s*(?:reda[çc][ãa]o\s+dada|nova\s+reda[çc][ãa]o|com\s+a\s+reda[çc][ãa]o)\s+([^)]*)\)/i;
+const LEI_RE_SINAL_REVOGADO = /\(\s*revogad[oa]\b[^)]*\)|\brevogad[oa]\s+pel[ao]\b/i;
+const LEI_RE_SINAL_VETADO = /\(\s*vetad[oa]\b[^)]*\)/i;
+const LEI_RE_SINAL_INCLUIDO = /\(\s*inclu[íi]d[oa]\s+pel[ao]\b[^)]*\)/i;
+
+/* O que o TEXTO de uma ocorrência diz sobre a própria vigência. */
+function leiSinaisDoArtigo(a) {
+  const corpo = String((a && a.corpo) || "");
+  const red = corpo.match(LEI_RE_SINAL_REDACAO);
+  if (red) {
+    /* "pela Lei Complementar nº 018, de 09 de outubro de 2009" */
+    return { tipo: "redacao", fonte: String(red[1]).replace(/^\s*pel[ao]s?\s+/i, "").trim() };
+  }
+  if (LEI_RE_SINAL_REVOGADO.test(corpo)) return { tipo: "revogado", fonte: "" };
+  if (LEI_RE_SINAL_VETADO.test(corpo)) return { tipo: "vetado", fonte: "" };
+  if (String(corpo).replace(/\([^)]*\)/g, "").replace(/\s+/g, "").length < 6) {
+    return { tipo: "vazio", fonte: "" };
+  }
+  if (LEI_RE_SINAL_INCLUIDO.test(corpo)) return { tipo: "incluido", fonte: "" };
+  return { tipo: "", fonte: "" };
+}
+
+/* pontos de EVIDÊNCIA (o texto diz) — a posição entra à parte, só para
+ * desempatar, e nunca vira "confiança" */
+function leiPontosDeSinal(tipo) {
+  return ({ redacao: 4, incluido: 1, revogado: -6, vetado: -6, vazio: -3 })[tipo] || 0;
+}
+
+function leiNormalizaTexto(s) {
+  return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/* Devolve os grupos de números repetidos SUSPEITOS:
+ *   [{ num, numCru, rotulo, candidatos:[{ indice, linha, linhaFim, texto, corpo, pos, sinais }],
+ *      sugerido: <indice global do artigo sugerido>, confianca: "forte"|"fraca",
+ *      motivo: "redacao"|"revogado"|"vetado"|"vazio"|"identico"|"posicao", fonte }] */
+function leiDuplicados(texto) {
+  const arts = leiArtigos(texto);
+  const porNum = {};
+  arts.forEach((a) => { (porNum[a.num] = porNum[a.num] || []).push(a); });
+  const grupos = [];
+  Object.keys(porNum).forEach((num) => {
+    const L = porNum[num];
+    if (L.length < 2) return;
+    const suspeito = L.some((a, i) => i > 0 && a.indice === L[i - 1].indice + 1);
+    if (!suspeito) return;
+    const cands = L.map((a, k) => ({
+      indice: a.indice, linha: a.linha, linhaFim: a.linhaFim, texto: a.texto,
+      corpo: a.corpo, pos: k, sinais: leiSinaisDoArtigo(a),
+    }));
+
+    /* SUGESTÃO. Primeiro o que o TEXTO diz; a posição só desempata. */
+    let motivo = "posicao", confianca = "fraca", fonte = "";
+    let melhor = cands[cands.length - 1];
+    const ev = cands.map((c) => leiPontosDeSinal(c.sinais.tipo));
+    const maior = Math.max.apply(null, ev);
+    const segundo = ev.slice().sort((x, y) => y - x)[1];
+    if (maior - segundo >= 3) {
+      const i = ev.indexOf(maior);
+      melhor = cands[i];
+      confianca = "forte";
+      motivo = melhor.sinais.tipo === "redacao" ? "redacao"
+        : (cands.some((c) => c.sinais.tipo === "revogado") ? "revogado"
+          : (cands.some((c) => c.sinais.tipo === "vetado") ? "vetado" : "vazio"));
+      fonte = melhor.sinais.fonte || "";
+    } else if (cands.every((c) => leiNormalizaTexto(c.texto) === leiNormalizaTexto(cands[0].texto))) {
+      melhor = cands[0];
+      confianca = "forte";
+      motivo = "identico";
+    }
+    grupos.push({
+      num, numCru: L[0].numCru, rotulo: L[0].rotulo, candidatos: cands,
+      sugerido: melhor.indice, confianca, motivo, fonte,
+    });
+  });
+  return grupos.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
+}
+
+/* As palavras de A que NÃO existem em B — o que muda de uma redação para a
+ * outra, para a tela poder destacar. Comparação sem caixa e sem pontuação
+ * das pontas; devolve [{ t, dif }] na ordem original de A. */
+function leiPalavrasDiferentes(a, b) {
+  const limpa = (w) => String(w).toLowerCase().replace(/^[^a-z0-9à-ú]+|[^a-z0-9à-ú]+$/gi, "");
+  const contagem = {};
+  String(b || "").split(/\s+/).forEach((w) => {
+    const k = limpa(w);
+    if (k) contagem[k] = (contagem[k] || 0) + 1;
+  });
+  return String(a || "").split(/\s+/).filter(Boolean).map((w) => {
+    const k = limpa(w);
+    if (k && contagem[k] > 0) { contagem[k]--; return { t: w, dif: false }; }
+    return { t: w, dif: !!k };
+  });
+}
+
+/* Aplica as ESCOLHAS de quem colou. decisoes = { [num]: { manter, original } }
+ *   manter   — o "indice" do artigo que fica, ou "todas" (a lei repete de verdade);
+ *   original — guardar a redação substituída como texto-base e a escolhida
+ *              como ALTERAÇÃO (o leitor mostra "alterado por …" e "ver a
+ *              redação original"). Só vale para grupos de duas ocorrências
+ *              em que a escolhida traz "Redação dada pela…" e a outra não.
+ * Devolve { texto, alteracoes, resumo }. NÃO grava nada. */
+function leiAplicarDuplicados(texto, grupos, decisoes) {
+  const linhas = String(texto || "").split("\n");
+  const fora = {};
+  const alteracoes = {};
+  const resumo = [];
+  (grupos || []).forEach((g) => {
+    const d = (decisoes || {})[g.num];
+    if (!d || d.manter === "todas" || d.manter === undefined) {
+      resumo.push({ num: g.num, acao: "todas" });
+      return;
+    }
+    const escolhido = g.candidatos.filter((c) => c.indice === d.manter)[0];
+    if (!escolhido) { resumo.push({ num: g.num, acao: "todas" }); return; }
+    const outros = g.candidatos.filter((c) => c !== escolhido);
+    const comoAlteracao = !!d.original && outros.length === 1
+      && escolhido.sinais.tipo === "redacao" && outros[0].sinais.tipo !== "redacao";
+    const tirar = comoAlteracao ? [escolhido] : outros;
+    tirar.forEach((c) => { for (let n = c.linha; n <= c.linhaFim; n++) fora[n] = true; });
+    if (comoAlteracao) {
+      alteracoes[g.num] = { texto: escolhido.texto, fonteAlteracao: escolhido.sinais.fonte || "",
+        data: leisHojeISO(), revogado: false };
+      resumo.push({ num: g.num, acao: "alteracao", fonte: escolhido.sinais.fonte || "" });
+    } else {
+      resumo.push({ num: g.num, acao: "manter", indice: escolhido.indice });
+    }
+  });
+  const final = linhas.filter((_, i) => !fora[i + 1]).join("\n").replace(/\n{3,}/g, "\n\n");
+  return { texto: final, alteracoes, resumo };
+}
+
+/* =====================================================================
  * A LEI VIGENTE: TEXTO-BASE + ALTERAÇÕES POR CIMA
  *
  * `l.texto` (a "camada base") é o que foi colado, e nunca é reescrito por
@@ -1422,6 +1579,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
     leiRotuloChave, leiCasarRotulo, leiCandidatosDoRotulo, leiApelidoChave,
     leiSiglasDoNome, leiApelidoAdicionar,
+    leiDuplicados, leiSinaisDoArtigo, leiPalavrasDiferentes, leiAplicarDuplicados,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
     leiNotaDe, leiNotaDeEm, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoDeEm,

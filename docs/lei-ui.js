@@ -2171,19 +2171,39 @@ async function leiIrDigitando(lista) {
  * GRAVAR, COLAR E VINCULAR
  * ------------------------------------------------------------------ */
 
-function leiGravar() {
+function leiGravar(opc) {
   if (!leiAtual) return;
   const txt = String($("leiTexto").value || "");
   let l = leiIdAtual ? leiDe(leiIdAtual) : null;
 
   if (!l) {
+    /* ARTIGOS REPETIDOS: ANTES de a lei nascer, a pessoa vê a lista e
+     * escolhe qual fica (leiDuplicadosAbrir). A lei só é criada no
+     * "confirmar", que volta aqui já com o texto resolvido e a marca
+     * "conferido" — sem ela, um número que a pessoa mandou manter nas
+     * duas cópias (corpo e ADCT) reabriria a conferência para sempre.
+     * Devolve "pendente" para quem chamou não fechar nem trocar de lei
+     * no meio da escolha. */
+    const grupos = (opc && opc.conferido) ? [] : leiDuplicados(txt);
+    if (grupos.length) {
+      leiDuplicadosAbrir({
+        modo: "criar", texto: txt, grupos,
+        aoConfirmar: (res) => {
+          $("leiTexto").value = res.texto;
+          leiGravar({ conferido: true, alteracoes: res.alteracoes });
+        },
+      });
+      return "pendente";
+    }
     /* primeira colagem: a lei nasce aqui, já identificada pelo próprio
      * cabeçalho quando ele veio junto */
     const ident = leiIdentificar(txt);
     const nome = ident ? ident.nome
       : (leiAtual.disciplina + " — " + leiAtual.topico);
+    const alteracoes = (opc && opc.alteracoes) || {};
     l = leiGuardar(Object.assign({ nome, texto: txt, topicos: [leiAtual.chave],
       consultadaEm: leisHojeISO() },
+      Object.keys(alteracoes).length ? { alteracoes } : {},
       ident ? { especie: ident.especie, numero: ident.numero, ano: ident.ano } : {}));
     if (!l) return;
     leiIdAtual = l.id;
@@ -2233,7 +2253,7 @@ function leiGravar() {
 }
 
 function leiTrocarPara(id) {
-  if (leiSujo) leiGravar();
+  if (leiSujo && leiGravar() === "pendente") return;   /* a pessoa ainda está escolhendo os artigos repetidos */
   leiIdAtual = id;
   const l = leiDe(id);
   $("leiTexto").value = l ? String(l.texto || "") : "";
@@ -2245,6 +2265,214 @@ function leiTrocarPara(id) {
   leiRecitados = {};
   leiTrocarModo("ler");
   leiPintar();
+}
+
+/* =====================================================================
+ * CONFERIR OS ARTIGOS REPETIDOS — criação e atualização
+ *
+ * A tela mostra, por número repetido, cada ocorrência com o que o TEXTO diz
+ * sobre a vigência dela (redação nova, revogado…) e as palavras que a
+ * distinguem da outra. O que tem indício vem MARCADO (sugestão segura); o
+ * que não tem começa VAZIO e o "confirmar" fica travado até a pessoa
+ * escolher: escolher pela posição, sem ninguém ter olhado, é o defeito que
+ * esta tela existe para evitar. Nada é criado nem comparado antes do
+ * "confirmar".
+ * ===================================================================== */
+let leiDupCtx = null;
+
+/* guardar a substituída como texto original só faz sentido na CRIAÇÃO, em
+ * grupo de duas ocorrências onde a escolhida traz "Redação dada pela…" e a
+ * outra não (ver leiAplicarDuplicados) */
+function leiDupPodeOriginal(g, indice) {
+  if (!leiDupCtx || leiDupCtx.modo !== "criar" || g.candidatos.length !== 2) return false;
+  const esc = g.candidatos.filter((c) => c.indice === indice)[0];
+  const outro = g.candidatos.filter((c) => c.indice !== indice)[0];
+  return !!(esc && outro && esc.sinais.tipo === "redacao" && outro.sinais.tipo !== "redacao");
+}
+
+function leiDupSugestoes() {
+  const c = leiDupCtx;
+  if (!c) return;
+  c.decisoes = {};
+  c.grupos.forEach((g) => {
+    if (g.confianca === "forte") {
+      c.decisoes[g.num] = { manter: g.sugerido, original: leiDupPodeOriginal(g, g.sugerido) };
+    }
+  });
+}
+
+function leiDuplicadosAbrir(ctx) {
+  leiDupCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  leiDupSugestoes();
+  leiDupPintar();
+  abrirModal("dlgLeiDup");
+  try {
+    leiReg("gravar", "artigos repetidos: conferência aberta",
+      leiDupCtx.grupos.map((g) => "art. " + g.numCru + " ×" + g.candidatos.length
+        + " (" + g.confianca + ")").join(" · "));
+  } catch (e) {}
+}
+
+function leiDupPintar() {
+  const c = leiDupCtx;
+  if (!c) return;
+  const atualizar = c.modo === "atualizar";
+  $("leiDupTitulo").textContent = t(atualizar ? "lei_dup_titulo_upd" : "lei_dup_titulo");
+  $("leiDupAjuda").textContent = t(atualizar ? "lei_dup_ajuda_upd" : "lei_dup_ajuda");
+  const fortes = c.grupos.filter((g) => g.confianca === "forte").length;
+  $("leiDupResumo").textContent = t("lei_dup_resumo",
+    { n: c.grupos.length, f: fortes, c: c.grupos.length - fortes });
+
+  const cx = $("leiDupLista");
+  cx.innerHTML = "";
+  c.grupos.forEach((g) => {
+    const dec = c.decisoes[g.num];
+    const card = document.createElement("div");
+    card.className = "lei-dup-grupo " + g.confianca;
+    card.id = "leiDupGrupo_" + g.num;
+
+    const cab = document.createElement("div");
+    cab.className = "lei-dup-cab";
+    const tit = document.createElement("span");
+    tit.textContent = t("lei_dup_grupo", { a: g.numCru, n: g.candidatos.length });
+    const forca = document.createElement("span");
+    forca.className = "lei-dup-forca " + g.confianca;
+    forca.textContent = t(g.confianca === "forte" ? "lei_dup_forte" : "lei_dup_fraca");
+    cab.append(tit, forca);
+    card.append(cab);
+
+    if (g.confianca === "forte") {
+      const mo = document.createElement("div");
+      mo.className = "lei-dup-motivo";
+      mo.textContent = t("lei_dup_m_" + g.motivo, { f: g.fonte });
+      card.append(mo);
+    }
+
+    /* uma opção por ocorrência; o texto de cada uma com as palavras que a
+     * distinguem da outra destacadas */
+    g.candidatos.forEach((cand) => {
+      const ref = g.candidatos.filter((o) => o !== cand)[0];
+      const marcada = dec && dec.manter === cand.indice;
+      const op = document.createElement("label");
+      op.className = "lei-dup-op" + (marcada ? " sel" : "")
+        + (g.confianca === "forte" && g.sugerido === cand.indice ? " sug" : "");
+      const r = document.createElement("input");
+      r.type = "radio";
+      r.name = "leiDup_" + g.num;
+      r.value = String(cand.indice);
+      r.checked = !!marcada;
+      r.onchange = () => {
+        c.decisoes[g.num] = { manter: cand.indice, original: leiDupPodeOriginal(g, cand.indice) };
+        leiDupPintar();
+      };
+      const nome = document.createElement("span");
+      nome.className = "lei-dup-op-tit";
+      nome.textContent = t("lei_dup_ocorrencia", { i: cand.pos + 1, l: cand.linha });
+      op.append(r, nome);
+      if (g.confianca === "forte" && g.sugerido === cand.indice) {
+        const sug = document.createElement("span");
+        sug.className = "lei-dup-chip sug";
+        sug.textContent = t("lei_dup_sugerido");
+        op.append(sug);
+      }
+      const chip = document.createElement("span");
+      const tp = cand.sinais.tipo;
+      chip.className = "lei-dup-chip " + (tp === "redacao" ? "ok"
+        : (tp === "revogado" || tp === "vetado" || tp === "vazio" ? "ruim" : ""));
+      chip.textContent = t("lei_dup_c_" + (tp || "nenhum"));
+      op.append(chip);
+
+      const palavras = leiPalavrasDiferentes(cand.corpo, ref ? ref.corpo : "");
+      const desenha = (lista) => {
+        const d = document.createElement("div");
+        d.className = "lei-dup-txt";
+        lista.forEach((p, i) => {
+          if (i) d.append(document.createTextNode(" "));
+          if (p.dif && ref) {
+            const m = document.createElement("mark");
+            m.className = "lei-dup-dif";
+            m.textContent = p.t;
+            d.append(m);
+          } else d.append(document.createTextNode(p.t));
+        });
+        return d;
+      };
+      op.append(desenha(palavras.slice(0, 48)));
+      if (palavras.length > 48) {
+        const det = document.createElement("details");
+        det.className = "lei-dup-mais";
+        const sm = document.createElement("summary");
+        sm.textContent = t("lei_dup_ver_tudo");
+        det.append(sm, desenha(palavras));
+        op.append(det);
+      }
+      card.append(op);
+    });
+
+    /* "manter todas" — só na criação: na atualização a comparação usa UM
+     * artigo por número, então a opção não teria como ser respeitada */
+    if (!atualizar) {
+      const op = document.createElement("label");
+      op.className = "lei-dup-op" + (dec && dec.manter === "todas" ? " sel" : "");
+      const r = document.createElement("input");
+      r.type = "radio";
+      r.name = "leiDup_" + g.num;
+      r.value = "todas";
+      r.checked = !!(dec && dec.manter === "todas");
+      r.onchange = () => { c.decisoes[g.num] = { manter: "todas", original: false }; leiDupPintar(); };
+      const nome = document.createElement("span");
+      nome.className = "lei-dup-op-tit";
+      nome.textContent = t("lei_dup_todas");
+      op.append(r, nome);
+      card.append(op);
+    }
+
+    if (dec && dec.manter !== "todas" && leiDupPodeOriginal(g, dec.manter)) {
+      const escolhido = g.candidatos.filter((x) => x.indice === dec.manter)[0];
+      const lb = document.createElement("label");
+      lb.className = "lei-dup-original";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.id = "leiDupOriginal_" + g.num;
+      cb.checked = !!dec.original;
+      cb.onchange = () => { dec.original = cb.checked; };
+      const tx = document.createElement("span");
+      tx.textContent = t("lei_dup_original", { f: escolhido.sinais.fonte || "…" });
+      lb.append(cb, tx);
+      card.append(lb);
+    }
+    cx.append(card);
+  });
+  const leg = document.createElement("div");
+  leg.className = "lei-dup-motivo";
+  leg.textContent = t("lei_dup_legenda");
+  cx.append(leg);
+
+  const faltam = c.grupos.filter((g) => !c.decisoes[g.num]).length;
+  $("btnLeiDupConfirmar").disabled = faltam > 0;
+  $("btnLeiDupConfirmar").textContent = t(atualizar ? "lei_dup_confirmar_upd" : "lei_dup_confirmar");
+  $("leiDupFaltam").textContent = faltam ? t("lei_dup_faltam", { n: faltam }) : t("lei_dup_pronto");
+}
+
+function leiDupConfirmar() {
+  const c = leiDupCtx;
+  if (!c || c.grupos.some((g) => !c.decisoes[g.num])) return false;
+  const res = leiAplicarDuplicados(c.texto, c.grupos, c.decisoes);
+  leiDupCtx = null;
+  $("dlgLeiDup").close();
+  try {
+    leiReg("gravar", "artigos repetidos: escolhas confirmadas",
+      res.resumo.map((r) => "art. " + r.num + " → " + r.acao).join(" · "));
+  } catch (e) {}
+  c.aoConfirmar(res);
+  return true;
+}
+
+function leiDupCancelar() {
+  if (!leiDupCtx) { if ($("dlgLeiDup")) $("dlgLeiDup").close(); return; }
+  leiDupCtx = null;
+  $("dlgLeiDup").close();
+  try { leiReg("gravar", "artigos repetidos: voltou para revisar o texto", ""); } catch (e) {}
 }
 
 function leiNovaAbrir() {
@@ -2456,7 +2684,7 @@ function leiAtualizarAbrir() {
   leiReg("atualizacao", "janela de atualização aberta", "");
 }
 
-function leiAtualizarComparar() {
+function leiAtualizarComparar(opc) {
   const l = leiDe(leiIdAtual);
   if (!l) return false;
   const fonte = String($("leiUpdFonte").value || "").trim();
@@ -2464,6 +2692,23 @@ function leiAtualizarComparar() {
   if (!fonte) { $("leiUpdAviso1").textContent = t("lei_upd_sem_fonte"); return false; }
   const novos = leiArtigos(novoTexto);
   if (!novos.length) { $("leiUpdAviso1").textContent = t("lei_upd_sem_artigo"); return false; }
+  /* A COMPARAÇÃO É POR NÚMERO, UM ARTIGO POR NÚMERO. Com um artigo repetido
+   * no texto novo (o antigo tachado e o novo, como sai de um PDF), o mapa
+   * abaixo deixava a ÚLTIMA ocorrência ganhar sem dizer nada — e se a
+   * ordem fosse a inversa, valeria a antiga. A pessoa escolhe antes. */
+  if (!(opc && opc.conferido)) {
+    const grupos = leiDuplicados(novoTexto);
+    if (grupos.length) {
+      leiDuplicadosAbrir({
+        modo: "atualizar", texto: novoTexto, grupos,
+        aoConfirmar: (res) => {
+          $("leiUpdTexto").value = res.texto;
+          leiAtualizarComparar({ conferido: true });
+        },
+      });
+      return false;
+    }
+  }
   const antigos = leiArtigos(l.texto);
 
   const porNumAntigo = {};
@@ -2935,8 +3180,11 @@ async function leiFechar() {
   if (leiSujo) {
     const r = await matPerguntarSaida();
     if (r !== "salvar" && r !== "sair") return;
-    if (r === "salvar") leiGravar();
-    else {
+    if (r === "salvar") {
+      /* a conferência de artigos repetidos abriu: não se fecha a lei por
+       * baixo dela, senão o "confirmar" voltaria para uma lei já fechada */
+      if (leiGravar() === "pendente") return;
+    } else {
       try { leiReg("gravar", "alterações descartadas",
                    leiAtual && leiAtual.topico); } catch (e) {}
     }
@@ -3089,6 +3337,10 @@ function leiIniciar() {
   liga("btnLeiProcFechar", "fechar a procedência", () => $("dlgLeiProc").close());
 
   liga("btnLeiUpdComparar", "comparar versão nova", () => leiAtualizarComparar());
+  liga("btnLeiDupConfirmar", "confirmar artigos repetidos", () => leiDupConfirmar());
+  liga("btnLeiDupCancelar", "voltar da conferência de repetidos", () => leiDupCancelar());
+  liga("btnLeiDupX", "fechar conferência de repetidos", () => leiDupCancelar());
+  liga("btnLeiDupSugestoes", "voltar às sugestões", () => { leiDupSugestoes(); leiDupPintar(); });
   liga("btnLeiUpdFechar1", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdFechar2", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdAnterior", "artigo anterior da comparação", () => leiUpdMover(-1));
