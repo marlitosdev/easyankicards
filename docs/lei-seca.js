@@ -975,7 +975,16 @@ function leiDe(id) {
  * entre corpo e ADCT é resolvida no leitor, não aqui — a nota vale para
  * a primeira ocorrência, que é a que qualquer citação de fora aponta). */
 function leiNotaDe(idLei, num) {
-  const l = leiDe(idLei);
+  return leiNotaDeEm(leiDe(idLei), num);
+}
+
+/* A MESMA CONSULTA, SOBRE UMA LEI JÁ EM MÃO. leiNotaDe(id, n) relê e
+ * parseia a biblioteca INTEIRA do localStorage a cada chamada — e o
+ * leitor pergunta uma vez por artigo (e duas por pintura). Numa
+ * Constituição de 424 artigos isso eram ~865 leituras+parses por abertura,
+ * dois terços do tempo que a tela ficava parada (medido: 467 de 717 ms).
+ * Quem já tem o registro da lei passa por aqui. */
+function leiNotaDeEm(l, num) {
   if (!l || !l.notasArtigos) return "";
   return l.notasArtigos[leiNumNormal(num)] || "";
 }
@@ -1001,7 +1010,11 @@ function leiNotaGuardar(idLei, num, texto) {
  * lugar da lei; `matChaveDica` já corta para 120 caracteres, suficiente
  * para distinguir na prática. */
 function leiNotaTrechoDe(idLei, trecho) {
-  const l = leiDe(idLei);
+  return leiNotaTrechoDeEm(leiDe(idLei), trecho);
+}
+
+/* idem, sobre uma lei já em mãos (ver leiNotaDeEm) */
+function leiNotaTrechoDeEm(l, trecho) {
   if (!l || !l.notasTrechos) return null;
   const k = matChaveDica(trecho);
   return l.notasTrechos.find((n) => n.k === k) || null;
@@ -1411,7 +1424,8 @@ if (typeof module !== "undefined" && module.exports) {
     leiSiglasDoNome, leiApelidoAdicionar,
     leiComLacunas, leiQuantasLacunas, leiSemPontilhado,
     leisLerTudo, leisLista, leiId, leiDe, leiGuardar, leiApagar,
-    leiNotaDe, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoGuardar,
+    leiNotaDe, leiNotaDeEm, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoDeEm,
+    leiNotaTrechoGuardar,
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
     leiParar, leiProgresso, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
     leisHojeISO,

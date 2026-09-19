@@ -1070,6 +1070,20 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * A fila de leis, a procedência e o "onde parei" ficam ACIMA do texto e
  * não crescem: são referência, não conteúdo. O que rola é a lei. */
 .lei-fila{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+/* ANDAMENTO DA LEI GRANDE: texto que anda + barra; o giro só existe para
+   quem não pediu menos movimento */
+.lei-carga{margin:6px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:8px;
+  background:var(--panel);font-size:13px;color:var(--texto)}
+.lei-carga[hidden]{display:none}
+.lei-carga-lin{display:flex;align-items:center;gap:8px}
+.lei-carga-trilho{height:6px;margin-top:6px;border-radius:3px;background:var(--borda);overflow:hidden}
+.lei-carga-trilho > span{display:block;height:100%;width:0;background:var(--acao);transition:width .15s linear}
+.lei-carga-giro{display:none;width:12px;height:12px;border:2px solid var(--borda);
+  border-top-color:var(--acao);border-radius:50%}
+@media (prefers-reduced-motion:no-preference){
+  .lei-carga-giro{display:inline-block;animation:leiGiro .8s linear infinite}
+}
+@keyframes leiGiro{to{transform:rotate(360deg)}}
 .lei-chip{font-size:11.5px;padding:4px 10px;border-radius:999px;cursor:pointer;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto);
   font-family:inherit}
@@ -6028,6 +6042,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="leiTextoTravado" hidden></p>
   <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
+  <!-- O ANDAMENTO DE UMA LEI GRANDE: aparece enquanto os artigos entram
+       na tela (leiPinturaProgressiva). role=status + aria-live: quem usa
+       leitor de tela ouve "Desenhando artigos 120 de 231". -->
+  <div class="lei-carga" id="leiCarga" role="status" aria-live="polite" hidden>
+    <div class="lei-carga-lin"><span class="lei-carga-giro" aria-hidden="true"></span><span id="leiCargaTxt"></span></div>
+    <div class="lei-carga-trilho" aria-hidden="true"><span id="leiCargaBarra"></span></div>
+  </div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
   <div class="mat-leitura" id="leiRecitar" hidden></div>
   <div class="dlg-rodape">
