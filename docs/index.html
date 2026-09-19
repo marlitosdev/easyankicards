@@ -2999,6 +2999,19 @@ body.split-lj{overflow:hidden}
 .jur-oficial{font-size:12px;margin:4px 0 0}
 .jur-oficial a{color:var(--azul-txt,#2563eb)}
 .jur-memoria{margin:6px 0 2px}
+/* O MENU "MAIS": um <details>, sem JS para abrir/fechar */
+.jur-mais{position:relative;align-self:center}
+.jur-mais > summary{list-style:none;cursor:pointer;user-select:none;display:inline-block}
+.jur-mais > summary::-webkit-details-marker{display:none}
+/* o corpo é um POPOVER: abre por cima do que está embaixo, sem empurrar o
+   formulário para baixo a cada toque */
+.jur-mais-corpo{position:absolute;z-index:6;left:0;top:calc(100% + 4px);
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+  min-width:250px;width:max-content;max-width:min(86vw,420px);
+  padding:8px 10px;border:1px solid var(--borda);border-radius:8px;
+  background:var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.jur-mais-corpo .diag-op{margin:0}
+.jur-mais-corpo .btn-min{text-align:left}
 .jur-prec{font-size:11.5px;color:var(--sutil);margin:2px 0 4px}
 .jur-cpl-acoes{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .jur-oficial-lnk{font-size:10.5px;margin-left:4px;color:var(--azul-txt,#2563eb)}
@@ -5039,12 +5052,31 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          gastar uma ida à IA por isso. -->
     <button class="btn-min" id="btnJurColar" data-i18n="jur_colar_btn" data-i18n-title="jur_b_colar"></button>
     <button class="btn-min" id="btnJurPromptIA" hidden data-i18n="jur_prompt_ia" data-i18n-title="jur_b_prompt_ia"></button>
+    <!-- O QUE NÃO É O CAMINHO PRINCIPAL MORA AQUI. A entrada tinha oito
+         botões de peso parecido (perguntar, ler, escrever à mão, ver os
+         dados, limpar, voltar…) e nada dizia quais eram o caminho e quais
+         eram utilidade. Ficam à vista o principal e o "ler e preencher";
+         o resto abre num só toque. Os ids continuam os mesmos, e cada item
+         mantém as regras de quando aparece. -->
+    <details class="jur-mais" id="jurMais">
+      <summary class="btn-min" data-i18n="jur_menu_mais" data-i18n-title="jur_menu_mais_aj"></summary>
+      <div class="jur-mais-corpo" id="jurMaisCorpo">
+        <!-- MEMÓRIA É OPT-IN. Por padrão a IA só identifica o julgado; data,
+             órgão, relator e fonte vêm do texto oficial. Quem quiser a
+             sugestão de memória a pede aqui, e ela chega "a conferir". -->
+        <label class="diag-op jur-memoria"><input type="checkbox" id="chkJurMemoria">
+          <span data-i18n="jur_memoria_chk" data-i18n-title="jur_memoria_aj"></span></label>
+        <!-- só existe enquanto os campos estão escondidos -->
+        <button type="button" class="btn-min" id="btnJurAMao"
+          data-i18n="jur_a_mao" data-i18n-title="jur_b_a_mao"></button>
+        <button class="btn-min" id="btnJurLimpar" data-i18n="jur_limpar" data-i18n-title="jur_b_limpar"></button>
+        <!-- só aparece quando há o que ler: sem julgado nenhum, "voltar para
+             a leitura" levaria a uma tela vazia -->
+        <button class="btn-min" id="btnJurVoltarLer" data-i18n="jur_voltar_ler"
+          hidden data-i18n-title="jur_b_voltar"></button>
+      </div>
+    </details>
   </div>
-  <!-- MEMÓRIA É OPT-IN. Por padrão a IA só identifica o julgado; data,
-       órgão, relator e fonte vêm do texto oficial. Quem quiser a sugestão
-       de memória a pede aqui, e ela chega marcada "a conferir". -->
-  <label class="diag-op jur-memoria"><input type="checkbox" id="chkJurMemoria">
-    <span data-i18n="jur_memoria_chk" data-i18n-title="jur_memoria_aj"></span></label>
 
   <!-- A TESE E O RESUMO SÓ APARECEM QUANDO EXISTEM.
        Três caixas altas empilhadas — ementa, tese, resumo — enchiam a
@@ -5091,10 +5123,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="jurTagsForm" class="jur-tags-form"></div>
   </div><!-- /jurConteudo -->
 
-  <!-- só existe enquanto os campos estão escondidos -->
-  <button type="button" class="btn-min" id="btnJurAMao"
-    data-i18n="jur_a_mao" data-i18n-title="jur_b_a_mao"></button>
-
   <!-- OS SEIS CAMPOS SÃO CONFERÊNCIA, NÃO DIGITAÇÃO.
        Quando "ler e preencher" funciona — que é quase sempre — eles já
        vêm certos e ninguém os toca; abertos, ocupam metade da tela e
@@ -5119,19 +5147,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <input type="text" id="jurFonte" placeholder="portal do STF"></label>
   </div>
 
-  <!-- O "GUARDAR" NÃO MORA MAIS AQUI.
-       Ele ficava depois de TRÊS caixas de texto altas — ementa, tese e
-       resumo — e portanto abaixo da dobra, enquanto o "Fechar", a ação
-       menos importante da tela, era o único preso no rodapé. Quem
-       terminava de escrever não via como salvar. A ação principal subiu
-       para a barra fixa; aqui ficou o que é utilidade. -->
-  <div class="jur-salvar-lin">
-    <button class="btn-min" id="btnJurLimpar" data-i18n="jur_limpar" data-i18n-title="jur_b_limpar"></button>
-    <!-- só aparece quando há o que ler: sem julgado nenhum, "voltar para
-         a leitura" levaria a uma tela vazia -->
-    <button class="btn-min" id="btnJurVoltarLer" data-i18n="jur_voltar_ler"
-      hidden data-i18n-title="jur_b_voltar"></button>
-  </div>
+  <!-- O "GUARDAR" NÃO MORA MAIS AQUI: subiu para a barra fixa. Limpar e
+       voltar para a leitura foram para o menu "mais" (ver acima). -->
   </div><!-- /jurForm -->
 
   <p class="nota" id="jurConta"></p>
