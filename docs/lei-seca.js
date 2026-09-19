@@ -542,11 +542,12 @@ const LEI_RE_PAGINA_SOLTA = /^\s*(\d{1,4})\s*$/;
 
 /* Só o que a linha ganha se for um cabeçalho de artigo escrito de um jeito
  * que o leitor não reconhece. Devolve a linha corrigida, ou null. */
-function leiGrafiaDaLinha(linha) {
+function leiGrafiaDaLinha(linha, opc) {
   let s = String(linha);
   const orig = s;
-  /* citação de lei alteradora: “ Art. 162 [...] */
-  s = s.replace(/^(\s*)[“”"«»]+\s*(?=Art(?:\.|igo)?\s*\d)/i, "$1");
+  /* citação de lei alteradora: “ Art. 162 [...]  (na atualização "só alterações" as
+   * aspas ficam: são o que separa o artigo citado do artigo da própria lei) */
+  if (!(opc && opc.manterAspas)) s = s.replace(/^(\s*)[“”"«»]+\s*(?=Art(?:\.|igo)?\s*\d)/i, "$1");
   /* "Art . 382" */
   s = s.replace(/^(\s*)(Art)\s+\.\s*(?=\d)/i, "$1$2. ");
   /* "Art. 356. A - texto"  =>  "Art. 356-A. texto" */
@@ -557,7 +558,7 @@ function leiGrafiaDaLinha(linha) {
   return s === orig ? null : s;
 }
 
-function leiPreprocessar(texto) {
+function leiPreprocessar(texto, opc) {
   const linhas = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n").split("\n");
   const sem = linhas.map((x) => x.replace(LEI_RE_INVISIVEIS, ""));
   const mudancas = [];
@@ -620,10 +621,10 @@ function leiPreprocessar(texto) {
   const efetiva = sem.slice();
   sem.forEach((x, i) => {
     if (remover[i + 1]) return;
-    const g = leiGrafiaDaLinha(x);
+    const g = leiGrafiaDaLinha(x, opc);
     if (g === null) return;
     efetiva[i] = g;
-    mudancas.push({ id: "gra:" + (i + 1), grupo: "grafia", linhas: [i + 1],
+    mudancas.push({ id: "gra:" + (i + 1), grupo: "grafia", linhas: [i + 1], manterAspas: !!(opc && opc.manterAspas),
       antes: trilha(x).slice(0, 160), depois: trilha(g).slice(0, 160) });
   });
 
@@ -737,7 +738,7 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
   });
   (mudancas || []).forEach((c) => {
     if (c.grupo === "grafia" && vale(c) && cur[c.linhas[0] - 1] && !cur[c.linhas[0] - 1].x) {
-      const g = leiGrafiaDaLinha(cur[c.linhas[0] - 1].t);
+      const g = leiGrafiaDaLinha(cur[c.linhas[0] - 1].t, { manterAspas: c.manterAspas });
       if (g !== null) { cur[c.linhas[0] - 1].t = g; resumo.grafia++; mexeu = true; }
     }
   });
@@ -899,6 +900,15 @@ function leiEstruturaArtigo(texto, opc) {
     return rot.valor < ex.valor;                 /* recomeça (I depois de VII, a) depois de c)) */
   };
 
+  /* em FRAGMENTO (lei que altera): o primeiro pedaço de um tipo pode começar em qualquer
+   * letra/número ("f) companhias aéreas") — o resto do artigo não está no texto */
+  const primeiroDoTipo = (rot) => {
+    if (rot.tipo === "paragrafo") return true;
+    const paiAli = inc || par, paiIte = ali || inc || par;
+    const tem = rot.tipo === "inciso" ? par.ultInc : rot.tipo === "alinea" ? paiAli.ultAli : paiIte.ultIte;
+    return !tem;
+  };
+
   const criar = (rot, li, inicioDeLinha, quebra) => {
     const u = { tipo: rot.tipo, valor: rot.valor, valorFim: rot.valorFim || 0, sufixo: rot.sufixo, unico: !!rot.unico, rotulo: rot.rotulo,
       chave: "", texto: "", linha: li, inicioDeLinha, quebra, nivel: 0, pai: null,
@@ -932,12 +942,12 @@ function leiEstruturaArtigo(texto, opc) {
   /* o próximo rótulo DENTRO da linha (trecho corrido): só o que está em ordem,
    * depois de fim de frase, e — para parágrafo — com pontuação ou maiúscula */
   const proximoInline = (s) => {
-    const re = /[.;:)\]”"]\s+(?=\S)/g;
+    const re = /[.;:)\]”"⟧]\s+(?=\S)/g;
     let m;
     while ((m = re.exec(s)) !== null) {
       const p = m.index + m[0].length;
       const rot = leiLerRotulo(s.slice(p));
-      if (rot && aceitaOrdem(rot)) return p;
+      if (rot && (aceitaOrdem(rot) || (frag && primeiroDoTipo(rot)))) return p;
     }
     return -1;
   };
@@ -956,6 +966,7 @@ function leiEstruturaArtigo(texto, opc) {
       if (rot) {
         if (aceitaOrdem(rot)) quebra = false;
         else if (inicio && aceitaQuebra(rot)) quebra = true;
+        else if (!inicio && frag && primeiroDoTipo(rot)) quebra = true;    /* 1º pedaço de um fragmento, no meio do trecho */
         else rot = null;
       }
       if (rot) { criar(rot, li, inicio, quebra); s = s.slice(rot.len); }
@@ -1074,6 +1085,334 @@ function leiRepetidosNoArtigo(texto, ignorar) {
     });
   });
   return grupos;
+}
+
+/* =====================================================================
+ * A LEI QUE ALTERA OUTRA — ler as alterações e propor o texto novo
+ *
+ * O CASO REAL. A LC 95/2022, a 112/2023 e a 145/2024 alteram o Código
+ * Tributário de Caruaru (LC 15/2009) SEM trazer a lei inteira: trazem só os
+ * dispositivos alterados, entre aspas, com marcas — "(NR)" nova redação,
+ * "(AC)" acréscimo, "REVOGADO", e "[...]" no lugar do que não mudou. O
+ * "Art. 1º" delas é da PRÓPRIA lei alteradora, não do Código. Colar isso na
+ * atualização "de lei inteira" produzia "Art. 1º mudou" e centenas de
+ * "revogado" (ver leiPreprocessar/leiUpdGuardas).
+ *
+ * O QUE ISTO FAZ, e o que NÃO faz:
+ *  1. Separa os artigos PRÓPRIOS da lei alteradora (a sequência 1º, 2º, 3º…)
+ *     dos artigos-ALVO (os citados). Nunca decide sozinho o texto novo.
+ *  2. De cada artigo-alvo lê os pedaços por endereço (parágrafo, inciso,
+ *     alínea) e a marca de cada um: nova redação, acréscimo, revogado ou
+ *     omitido "[...]". O artigo pode vir INTEIRO (sem "[...]") ou só em
+ *     PARTES — e uma parte pode mexer num inciso sem tocar o caput.
+ *  3. Monta o texto proposto MESCLANDO as partes no artigo vigente (leiMesclar
+ *     Fragmento). Onde não acha o dispositivo, diz qual — e a pessoa edita.
+ *  4. Lê as ordens de revogar ("Fica revogado o art. 5º", "Revoga-se o § 2º
+ *     do art. 296") e AVISA dos Anexos ("Ficam substituídos os Anexos…"), que
+ *     não são atualizados automaticamente.
+ * ===================================================================== */
+const LEI_RE_OMISSAO = /\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/g;
+const LEI_OMITIDO = "⟦…⟧";
+const LEI_MESES = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
+  julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+
+/* a data da lei, do título ("DE 23 DE DEZEMBRO DE 2024") → "2024-12-23" */
+function leiDataDaLei(texto) {
+  const cab = String(texto || "").slice(0, 3000);
+  const m = cab.match(/\bDE\s+(\d{1,2})[ºo°]?\s+DE\s+([A-Za-zçÇãÃ]+)\s+DE\s+(\d{4})/i);
+  if (!m) return "";
+  const mes = LEI_MESES[leiTxtChave(m[2])];
+  if (!mes) return "";
+  return m[3] + "-" + String(mes).padStart(2, "0") + "-" + String(m[1]).padStart(2, "0");
+}
+
+/* Os cabeçalhos "Art. N" da lei alteradora, no meio de linha ou não, com a posição. */
+function leiCabecalhosAlteradora(s) {
+  const re = /(^|\n|[.:;)\]”"]\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})\s*([ºo°ª]?)(?:-([A-Z])(?![A-Za-zÀ-ú]))?(?!\d)/g;
+  const hs = [];
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const ini = m.index + m[1].length + m[2].length;
+    hs.push({ ini, fim: m.index + m[0].length, num: leiNumNormal(m[4] + (m[6] ? "-" + m[6] : "")),
+      numCru: m[4] + (m[6] ? "-" + m[6] : ""), inteiro: Number(m[4]), sufixo: m[6] || "", ord: m[5] });
+  }
+  return hs;
+}
+
+/* A marca de um pedaço, e o texto sem a marca */
+function leiMarcaDoTrecho(txt) {
+  const t = String(txt || "");
+  const limpo = t.replace(/\(\s*(?:NR|AC)\s*\)/g, "").split(LEI_OMITIDO).join(" ").replace(/\s+/g, " ").trim();
+  let acao = "sem";
+  if (/\(\s*NR\s*\)/.test(t)) acao = "nr";
+  else if (/\(\s*AC\s*\)/.test(t)) acao = "ac";
+  else if (/^\(?\s*revogad[oa]s?\b/i.test(limpo) || /^\S{0,12}\s*\(?\s*revogad/i.test(limpo)) acao = "rev";
+  else if (!limpo) acao = "omitido";
+  return { acao, texto: limpo };
+}
+
+/* O corpo de UM artigo-alvo: caput + unidades com marca; inteiro ou parcial. */
+function leiLerBlocoAlterado(corpo) {
+  const s0 = String(corpo || "").replace(/[”"]/g, " ");
+  const temOmissao = new RegExp(LEI_RE_OMISSAO.source).test(s0);
+  const s = s0.replace(new RegExp(LEI_RE_OMISSAO.source, "g"), " " + LEI_OMITIDO + " ");
+  const est = leiEstruturaArtigo(s, { fragmento: true });
+  const cap = leiMarcaDoTrecho(est.caput.texto);
+  const unidades = est.unidades.map((u) => {
+    const mk = leiMarcaDoTrecho(u.texto);
+    return { tipo: u.tipo, chave: u.chave, rotulo: u.rotulo, texto: mk.texto, acao: mk.acao,
+      nivel: u.nivel, valor: u.valor, sufixo: u.sufixo, unico: u.unico };
+  });
+  /* "Art. 274. A" + incisos: um caput que sobrou só com a letra inicial não é caput */
+  const caputVazio = cap.acao === "omitido" || cap.texto.length < 12;
+  const parcial = temOmissao || (caputVazio && unidades.length > 0);
+  return { caputTexto: caputVazio ? "" : cap.texto, caputAcao: caputVazio ? "omitido" : cap.acao,
+    unidades, parcial, temOmissao };
+}
+
+/* Onde entra um pedaço NOVO na lista plana do artigo: depois do irmão anterior
+ * (com o que pende dele), ou antes do primeiro irmão, ou logo abaixo do pai. */
+function leiPosicaoDeInsercao(L, u) {
+  const paiChave = u.chave.indexOf(">") >= 0 ? u.chave.slice(0, u.chave.lastIndexOf(">")) : "";
+  const irmaos = [];
+  L.forEach((x, i) => {
+    if (i === 0 || x.tipo !== u.tipo) return;
+    const pc = x.chave.indexOf(">") >= 0 ? x.chave.slice(0, x.chave.lastIndexOf(">")) : "";
+    if (pc === paiChave) irmaos.push(i);
+  });
+  const antes = (x) => (x.unico ? 0 : (x.valor || 0)) * 100 + (x.sufixo ? x.sufixo.charCodeAt(0) - 64 : 0);
+  const meu = antes(u);
+  const fimDoSubtree = (i) => { let k = i + 1; while (k < L.length && (L[k].nivel || 0) > (L[i].nivel || 0)) k++; return k; };
+  let ant = -1;
+  irmaos.forEach((i) => { if (antes(L[i]) <= meu) ant = i; });
+  if (ant >= 0) return fimDoSubtree(ant);
+  if (irmaos.length) return irmaos[0];
+  if (u.tipo === "paragrafo") return L.length;
+  if (!paiChave) return 1;                                     /* logo depois do caput */
+  const pai = L.findIndex((x) => x.chave === paiChave);
+  return pai >= 0 ? pai + 1 : L.length;
+}
+
+/* MESCLA as partes de um artigo-alvo no artigo vigente. Só atua pelo ENDEREÇO
+ * (chave): "II" do caput, "P4A", "P2>II>b". Devolve o texto proposto e o que
+ * não conseguiu localizar. `opc.fonte` acrescenta "(Redação dada por …)". */
+function leiMesclarFragmento(baseTexto, bloco, opc) {
+  const fonte = opc && opc.fonte;
+  const est = leiEstruturaArtigo(baseTexto);
+  const h = String(baseTexto).split("\n")[0].match(LEI_RE_ARTIGO);
+  const prefixo = h ? h[0].replace(/\s+$/, "") : ((opc && opc.prefixo) || "");
+  const L = [{ tipo: "caput", chave: "caput", rotulo: "", texto: est.caput.texto, nivel: 0 }].concat(
+    est.unidades.map((u) => ({ tipo: u.tipo, chave: u.chave, rotulo: u.rotulo, texto: u.texto,
+      nivel: u.nivel, valor: u.valor, sufixo: u.sufixo, unico: u.unico })));
+  const problemas = [];
+  const nota = (acao) => (fonte ? (acao === "ac" ? " (Incluído por " : " (Redação dada por ") + fonte + ")" : "");
+  let mudou = 0;
+  if (bloco.caputTexto && bloco.caputAcao === "nr") { L[0].texto = bloco.caputTexto + nota("nr"); mudou++; }
+  bloco.unidades.forEach((u) => {
+    if (u.acao === "omitido") return;
+    const rot = leiRotuloDaUnidade({ tipo: u.tipo, unico: u.unico, valor: u.valor, sufixo: u.sufixo,
+      pai: u.chave.indexOf(">") >= 0 ? paiDe(L, u) : null });
+    const i = L.findIndex((x) => x.chave === u.chave && x.tipo === u.tipo);
+    if (u.acao === "rev") {
+      if (i >= 0) { L[i].texto = "(Revogado" + (fonte ? " por " + fonte : "") + ")"; mudou++; }
+      else problemas.push({ k: "nao_achou", unidade: rot });
+      return;
+    }
+    const acao = u.acao === "sem" ? (i >= 0 ? "nr" : "ac") : u.acao;
+    if (i >= 0) {
+      if (acao === "ac") problemas.push({ k: "ja_existia", unidade: rot });
+      L[i].texto = u.texto + nota(acao);
+      mudou++;
+      return;
+    }
+    if (acao === "nr") problemas.push({ k: "nao_existia", unidade: rot });
+    L.splice(leiPosicaoDeInsercao(L, u), 0, { tipo: u.tipo, chave: u.chave, rotulo: u.rotulo,
+      texto: u.texto + nota("ac"), nivel: u.nivel, valor: u.valor, sufixo: u.sufixo, unico: u.unico });
+    mudou++;
+  });
+  return { texto: leiMontarArtigo(prefixo, L), ok: problemas.length === 0, problemas, mudou };
+}
+
+function paiDe(L, u) {
+  const pc = u.chave.slice(0, u.chave.lastIndexOf(">"));
+  const x = L.filter((y) => y.chave === pc)[0];
+  return x ? { tipo: x.tipo, unico: x.unico, valor: x.valor, sufixo: x.sufixo, pai: null } : null;
+}
+
+/* a lista plana de volta em linhas: "Art. N. caput" + uma linha por pedaço */
+function leiMontarArtigo(prefixo, L) {
+  const cab = (String(prefixo || "") + " " + (L[0] ? L[0].texto : "")).trim();
+  const resto = L.slice(1).map((x) => (String(x.rotulo || "") + " " + String(x.texto || "")).trim());
+  return [cab].concat(resto).join("\n");
+}
+
+/* Lê a lei alteradora inteira. Devolve:
+ *   { ident, curto, dataLei, blocos:[{num,numCru,corpo,bloco}], revogacoes:[{num,unidade}],
+ *     avisos:[{k:"anexo",texto}], proprios:n } */
+function leiLerAlteradora(texto, alvo) {
+  const s = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n");
+  const ident = leiIdentificar(s);
+  const hs = leiCabecalhosAlteradora(s);
+  const par = { ident, curto: (ident && ident.curto) || "", dataLei: leiDataDaLei(s), blocos: [],
+    revogacoes: [], avisos: [], proprios: 0 };
+  let proximo = 1;
+  hs.forEach((h, i) => {
+    const seg = s.slice(h.fim, i + 1 < hs.length ? hs[i + 1].ini : s.length);
+    const omissaoLogo = /^\s*\.?\s*(?:\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\))/.test(seg);
+    h.proprio = h.inteiro === proximo && !h.sufixo && !omissaoLogo;
+    if (h.proprio) proximo++;
+    h.seg = seg;
+  });
+  hs.forEach((h) => {
+    if (h.proprio) {
+      par.proprios++;
+      leiDiretivasDoArtigoProprio(h.seg, alvo, par);
+      return;
+    }
+    par.blocos.push({ num: h.num, numCru: h.numCru, corpo: h.seg, bloco: leiLerBlocoAlterado(h.seg) });
+  });
+  return par;
+}
+
+/* As ordens do artigo PRÓPRIO que não trazem texto entre aspas:
+ * "Fica revogado o art. 5º", "Revogam-se os arts. 12 a 15", "Revoga-se o § 2º do
+ * art. 296", e as menções a Anexos (que só se avisam). */
+function leiDiretivasDoArtigoProprio(seg, alvo, par) {
+  /* "art. 5º" tem ponto: protege as abreviaturas antes de cortar as frases */
+  const frases = String(seg).replace(/\b(arts?|inc|n)\./gi, "$1\u0001").split(/[.;:]\s+/);
+  frases.forEach((fr) => {
+    const f = fr.replace(/\u0001/g, ".").replace(/\s+/g, " ").trim();
+    if (!f) return;
+    if (/\banexos?\b/i.test(f) && /substitu|revog|alter|inclu|acrescent|nova reda/i.test(f)) {
+      par.avisos.push({ k: "anexo", texto: f.slice(0, 160) });
+      return;
+    }
+    if (!/^(?:fica(?:m)?\s+revogad|revog(?:a-se|am-se)|s[ãa]o\s+revogad)/i.test(f) || /passa(?:m)?\s+a\s+vigorar/i.test(f)) return;
+    /* "§ 2º do art. 296", "parágrafo único do art. 5º", "inciso II do art. 10" */
+    const re = /(§\s*\d{1,3}[ºo°]?(?:-[A-Z])?|par[áa]grafo\s+[úu]nico|inciso\s+[IVXLC]{1,6})\s+do\s+art(?:igo)?\.?\s*(\d{1,4}(?:[ºo°])?(?:-[A-Z])?)/gi;
+    let m, achouSub = false;
+    while ((m = re.exec(f)) !== null) {
+      achouSub = true;
+      const sub = { incisos: [], paragrafos: [], alineas: [] };
+      leiLerSubEndereco(m[1], sub);
+      par.revogacoes.push({ num: leiNumNormal(m[2]), unidade: sub });
+    }
+    if (achouSub) return;
+    leiCitacoesNoTexto(f).forEach((c) => {
+      /* outra lei ("Revoga-se o art. 5º da Lei 123/2000") não é o alvo */
+      if (c.rotulo && alvo && !leiRotuloEhDaLei(c.rotulo, alvo)) return;
+      par.revogacoes.push({ num: c.num, unidade: null });
+    });
+  });
+}
+
+/* o rótulo citado ("Lei Complementar nº 015") é a lei-alvo? */
+function leiRotuloEhDaLei(rotulo, l) {
+  const k = leiRotuloChave(rotulo);
+  if (k.especie === "constituicao") return leiEspecieNorm(l.especie) === "cf";
+  if (k.numero && l.numero) return leiNumeroNorm(k.numero) === leiNumeroNorm(l.numero);
+  return false;
+}
+
+/* a lei alteradora fala DESTA lei? ("Lei Complementar nº 015 de 05 de janeiro de 2009") */
+function leiAlteradoraCitaLei(texto, l) {
+  if (!l || !l.numero) return true;
+  const n = leiNumeroNorm(l.numero);
+  const re = /(?:Lei(?:\s+Complementar)?|LC|Decreto(?:-Lei)?|Emenda\s+Constitucional|EC)\s*n?[ºo°.]?\s*0*([\d.]+)/gi;
+  let m;
+  const s = String(texto || "").slice(0, 60000);
+  while ((m = re.exec(s)) !== null) {
+    if (leiNumeroNorm(m[1]) === n) return true;
+  }
+  return false;
+}
+
+/* a data da alteração mais recente já aplicada a um artigo */
+function leiDataUltimaAlteracao(l, num) {
+  const a = ((l && l.alteracoes) || {})[num];
+  if (!a) return "";
+  const h = a.historico || [];
+  return h.map((x) => x.dataLei || "").filter(Boolean).sort().pop() || a.dataLei || "";
+}
+
+/* AS MUDANÇAS que a lei alteradora propõe, prontas para a tela de decidir.
+ * Cada item: { num, numCru, tipo: mudou|novo|revogado, antigo, novo, parcial,
+ * problemas[], fonteItem, dataLei, aceito:false, recusado:false, alertas[] }. */
+function leiItensDaAlteradora(l, par) {
+  const efetivos = leiArtigosEfetivos(l);
+  const porNum = {};
+  efetivos.forEach((a) => { if (!porNum[a.num]) porNum[a.num] = a; });
+  const correndo = {};                 /* o texto de cada artigo, conforme as alterações já lidas */
+  const itens = [];
+  const porItem = {};
+  const item = (num, numCru) => {
+    if (!porItem[num]) {
+      const base = porNum[num] && !porNum[num].revogado ? porNum[num].texto : "";
+      porItem[num] = { num, numCru, tipo: base ? "mudou" : "novo", antigo: base, novo: base, parcial: false,
+        problemas: [], fonteItem: par.curto, dataLei: par.dataLei, aceito: false, recusado: false, blocos: 0 };
+      itens.push(porItem[num]);
+    }
+    return porItem[num];
+  };
+  par.blocos.forEach((b) => {
+    const it = item(b.num, b.numCru);
+    const base = correndo[b.num] !== undefined ? correndo[b.num] : it.antigo;
+    it.blocos++;
+    if (!b.bloco.parcial) {
+      /* o artigo VEM INTEIRO: é a nova redação, sem mesclar */
+      const L = [{ tipo: "caput", chave: "caput", rotulo: "", texto: b.bloco.caputTexto, nivel: 0 }].concat(
+        b.bloco.unidades.filter((u) => u.acao !== "omitido").map((u) => ({ tipo: u.tipo, chave: u.chave,
+          rotulo: u.rotulo, texto: u.texto + (par.curto ? (u.acao === "ac" ? " (Incluído por " : " (Redação dada por ") + par.curto + ")" : ""),
+          nivel: u.nivel })));
+      L[0].texto = L[0].texto + (par.curto && L[0].texto ? " (Redação dada por " + par.curto + ")" : "");
+      correndo[b.num] = leiMontarArtigo("Art. " + b.numCru + ".", L);
+      return;
+    }
+    it.parcial = true;
+    if (!base) {
+      /* só partes de um artigo que a lei gravada NÃO tem */
+      const r = leiMesclarFragmento("Art. " + b.numCru + ".", b.bloco, { fonte: par.curto, prefixo: "Art. " + b.numCru + "." });
+      correndo[b.num] = r.texto;
+      it.problemas.push({ k: "artigo_sem_base", unidade: "" });
+      return;
+    }
+    const r = leiMesclarFragmento(base, b.bloco, { fonte: par.curto });
+    correndo[b.num] = r.texto;
+    r.problemas.forEach((p) => it.problemas.push(p));
+  });
+  Object.keys(correndo).forEach((n) => { porItem[n].novo = correndo[n]; });
+
+  /* as ordens de revogar */
+  par.revogacoes.forEach((rv) => {
+    const a = porNum[rv.num];
+    if (!a && !porItem[rv.num]) { par.avisos.push({ k: "revogar_ausente", texto: "art. " + rv.num }); return; }
+    const it = item(rv.num, (a && a.numCru) || rv.num);
+    if (!rv.unidade) { it.tipo = "revogado"; it.novo = ""; return; }
+    const un = leiAcharUnidades(it.novo || it.antigo, rv.unidade)[0];
+    if (!un) { it.problemas.push({ k: "nao_achou", unidade: "o dispositivo a revogar" }); return; }
+    const r = leiMesclarFragmento(it.novo || it.antigo, { caputTexto: "", caputAcao: "omitido", parcial: true,
+      unidades: [{ tipo: un.tipo, chave: un.chave, rotulo: un.rotulo, texto: "", acao: "rev", nivel: un.nivel,
+        valor: un.valor, sufixo: un.sufixo, unico: un.unico }] }, { fonte: par.curto });
+    it.novo = r.texto; it.parcial = true;
+  });
+
+  itens.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
+  itens.forEach((it) => {
+    const al = [];
+    if (it.parcial) al.push({ k: "parcial", sev: "info" });
+    it.problemas.forEach((p) => al.push({ k: p.k, sev: "alerta", u: p.unidade }));
+    const ult = leiDataUltimaAlteracao(l, it.num);
+    if (ult && it.dataLei && it.dataLei < ult) al.push({ k: "fora_ordem", sev: "alerta", d1: it.dataLei, d2: ult });
+    if (it.tipo === "revogado") al.push({ k: "revogado_pela_lei", sev: "info" });
+    else if (it.novo === it.antigo && !it.problemas.length) al.push({ k: "sem_efeito", sev: "aviso" });
+    /* a nota "(Redação dada por LC 145/2024)" acrescentada pela mescla não conta como número que mudou */
+    const semNota = (x) => String(x).replace(/\((?:Reda[çc][ãa]o dada|Inclu[íi]do|Revogado)[^)]*\)/gi, "")
+      .replace(/§+\s*\d{1,3}[ºo°]?(?:-[A-Z])?/g, "");        /* o rótulo do parágrafo também não é "número que mudou" */
+    const base = (it.tipo === "revogado" || it.novo === it.antigo) ? [] : leiAlertasDaMudanca(
+      { tipo: it.tipo, antigo: semNota(it.antigo), novo: semNota(it.novo), num: it.num }, {}).filter((a) => a.k !== "so_anotacao" && a.k !== "menor" && a.k !== "outro");
+    it.alertas = al.concat(base);
+  });
+  return itens;
 }
 
 /* =====================================================================
@@ -2937,5 +3276,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiEstruturaArtigo, leiLerRotulo, leiRomanoValor, leiValorRomano, leiRotuloDaUnidade,
     leiContextoDeLinhas, leiLerFaixaRevogada, leiAcharUnidades, leiConsumirEndereco,
     citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar,
+    leiDataDaLei, leiCabecalhosAlteradora, leiMarcaDoTrecho, leiLerBlocoAlterado, leiMesclarFragmento,
+    leiMontarArtigo, leiLerAlteradora, leiAlteradoraCitaLei, leiDataUltimaAlteracao, leiItensDaAlteradora,
   };
 }

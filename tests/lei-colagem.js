@@ -596,8 +596,8 @@ async function testes() {
     ok(/só \d+ dos 20/.test(av), "U10d nao avisou que tem so uma fração dos artigos: " + av);
     ok(a.$("btnLeiCobConfirmar").disabled === true, "U10e 'continuar' devia esperar a escolha da pessoa");
     const ops = achar(a.$("leiCobOpcoes"), (c) => c.type === "radio").map((c) => c.value);
-    ok(ops.join(",") === "presentes", "U10f para lei que ALTERA so a opcao segura devia existir (nunca 'revogar'): " + ops);
-    achar(a.$("leiCobOpcoes"), (c) => c.type === "radio")[0].onchange();
+    ok(ops.join(",") === "alteracoes,presentes", "U10f para lei que ALTERA so as opcoes seguras (ler como alteradora / so os presentes), nunca 'revogar': " + ops);
+    achar(a.$("leiCobOpcoes"), (c) => c.value === "presentes")[0].onchange();
     ok(a.$("btnLeiCobConfirmar").disabled === false, "U10g escolhida a opcao, 'continuar' devia liberar");
     a.$("btnLeiCobConfirmar").onclick();
     const it = a.leiUpdComparoAtual() || [];
