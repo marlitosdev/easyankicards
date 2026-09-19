@@ -696,6 +696,7 @@ async function testes() {
       await api.leiPinturaPronta();
     });
     const emPedacos = arvore(api);
+    api.leiCacheLimpar();                  /* sem cache: o desenho sincrono tem de sair do zero */
     api.leiPintar();                       /* pintura síncrona, do zero */
     const sincrona = arvore(api);
     ok(emPedacos.length === 150 && sincrona.length === 150,
@@ -881,6 +882,239 @@ async function testes() {
        && !/Texto do artigo/.test(api.$("leiLeitura").textContent || ""),
        "G12a o painel mistura texto das duas leis");
     ok(api.$("leiCarga").hidden === true, "G12b o painel de andamento ficou preso");
+  }
+
+  /* =================================================================
+   * C: O DESENHO PRONTO DA LEI GRANDE FICA GUARDADO (e o navegador só
+   *    desenha o que está na tela)
+   *
+   * POR QUE ISTO EXISTE. Medido na CF sintética (424 artigos), depois da
+   * 16.26.0: reabrir ou repintar ainda levava ~150 ms, quase todos de
+   * LAYOUT de 5,6 mil nós — não de montá-los. Duas peças: o cache dos
+   * nós já montados (pula o desenho) e content-visibility (pula o layout
+   * do que está fora da tela). Cache errado serviria "parei aqui", nota
+   * ou marca velha; content-visibility errado faria o salto ao artigo
+   * cair dez artigos antes do pedido.
+   * =============================================================== */
+  const primeiroNo = (api) => (api.$("leiLeitura").children || [])
+    .filter((c) => /(^|\s)lei-art(\s|$)/.test(c.className || ""))[0];
+  const abrirGrande = async (api, id) => {
+    api.leiAbrir("Direito", "T", id);
+    await api.leiPinturaPronta();
+  };
+
+  /* ---- C1: reabrir a mesma lei reaproveita os MESMOS nós (não desenha de novo) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 1/2000", texto: leiGrande(150) });
+    await abrirGrande(api, l.id);
+    const no1 = primeiroNo(api);
+    ok(api.leiCacheTamanho() === 1, "C1-pre a lei grande desenhada nao foi guardada: " + api.leiCacheTamanho());
+    api.$("dlgLeiSeca").close();
+    await abrirGrande(api, l.id);
+    ok(primeiroNo(api) === no1 && nArtsNaTela(api) === 150,
+       "C1 reabrir a mesma lei redesenhou tudo em vez de reaproveitar os nos");
+    ok(api.$("leiCarga").hidden === true, "C1a a reabertura pelo cache deixou o painel de andamento");
+    /* e o que veio do cache continua FUNCIONANDO: clicar no numero marca "parei" */
+    const bt = (api.$("leiArt_3").querySelectorAll(".lei-art-num") || [])[0];
+    ok(!!bt && typeof bt.onclick === "function", "C1b o botao do artigo perdeu o clique ao vir do cache");
+    bt.onclick();
+    ok(api.leiDe(l.id).parei === "3", "C1c o clique no numero (vindo do cache) nao marcou 'parei': " + api.leiDe(l.id).parei);
+  }
+
+  /* ---- C2: mudou o texto, o desenho é refeito ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 2/2000", texto: leiGrande(150) });
+    await abrirGrande(api, l.id);
+    const no1 = primeiroNo(api);
+    api.$("dlgLeiSeca").close();
+    api.leiGuardar({ id: l.id, texto: leiGrande(150) + "\nArt. 151º Artigo novo." });
+    await abrirGrande(api, l.id);
+    ok(primeiroNo(api) !== no1 && nArtsNaTela(api) === 151,
+       "C2 o texto mudou e a lei reabriu com o desenho velho: " + nArtsNaTela(api) + " artigos");
+  }
+
+  /* ---- C3: "parei aqui" mudou, o desenho é refeito (e mostra o marcador certo) ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 3/2000", texto: leiGrande(150) });
+    await abrirGrande(api, l.id);
+    api.$("dlgLeiSeca").close();
+    api.leiParar(l.id, "7");
+    await abrirGrande(api, l.id);
+    ok(/lei-art-parei/.test((api.$("leiArt_7") || {}).className || ""),
+       "C3 o 'parei aqui' mudou e a lei reabriu sem o marcador novo (cache servido velho)");
+  }
+
+  /* ---- C4: nota de artigo e nota de trecho mudaram ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const L = [];
+    for (let i = 1; i <= 100; i++) L.push("Art. " + i + "º O prazo ==@marca " + i + "== e' de dez dias.");
+    const l = api.leiGuardar({ nome: "Lei Cache 4/2000", texto: L.join("\n") });
+    await abrirGrande(api, l.id);
+    api.$("dlgLeiSeca").close();
+    api.leiNotaGuardar(l.id, "5", "nota nova do cinco");
+    api.leiNotaTrechoGuardar(l.id, "marca 3", "anotacao nova da marca tres");
+    await abrirGrande(api, l.id);
+    ok(/lei-art-b-nota/.test((api.$("leiArt_5").querySelectorAll(".lei-art-b-nota") || []).length ? "lei-art-b-nota" : ""),
+       "C4 a nota de artigo mudou e o desenho velho foi servido");
+    const m3 = (api.$("leiArt_3").querySelectorAll(".m-nota") || [])[0];
+    ok(!m3 || m3.title === "anotacao nova da marca tres",
+       "C4a a nota de trecho mudou e o desenho velho foi servido: " + (m3 && m3.title));
+  }
+
+  /* ---- C5: a chave cobre TUDO de que o desenho depende ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 5/2000", texto: leiGrande(80) });
+    const reg = api.leiDe(l.id);
+    const k = (o) => api.leiChavePintura(o.l || reg, o.bruto === undefined ? reg.texto : o.bruto, o.rank || {});
+    const base = k({});
+    ok(k({}) === base, "C5-pre a chave nao e' estavel");
+    ok(k({ bruto: reg.texto + " x" }) !== base, "C5 texto diferente, mesma chave");
+    ok(k({ l: Object.assign({}, reg, { parei: "9" }) }) !== base, "C5a 'parei' diferente, mesma chave");
+    ok(k({ l: Object.assign({}, reg, { notasArtigos: { 1: "x" } }) }) !== base, "C5b nota diferente, mesma chave");
+    ok(k({ l: Object.assign({}, reg, { alteracoes: { 1: { texto: "novo" } } }) }) !== base,
+       "C5c alteracao diferente, mesma chave");
+    ok(k({ rank: { 4: { num: "4", erros: 3, acertos: 1 } } }) !== base, "C5d ranking diferente, mesma chave");
+    ok(api.leiChavePintura(Object.assign({}, reg, { texto: "outro texto qualquer" }), reg.texto, {}) === base,
+       "C5e o texto GRAVADO entrou na chave (o que vale e' o texto do painel, que tem as marcas nao gravadas)");
+    ok(api.leiHashTexto("abc") !== api.leiHashTexto("abd") && api.leiHashTexto("ab") !== api.leiHashTexto("abb"),
+       "C5f o hash confunde textos proximos");
+  }
+
+  /* ---- C6: só lei grande, só duas, uma entrada por lei ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const peq = api.leiGuardar({ nome: "Lei Peq 1/2000", texto: leiGrande(8) });
+    api.leiAbrir("Direito", "T", peq.id);
+    ok(api.leiCacheTamanho() === 0, "C6 lei pequena entrou no cache");
+    api.$("dlgLeiSeca").close();
+    const ids = [];
+    for (let i = 1; i <= 3; i++) {
+      const g = api.leiGuardar({ nome: "Lei Grande C" + i + "/2000", texto: leiGrande(100 + i) });
+      ids.push(g.id);
+      await abrirGrande(api, g.id);
+      api.$("dlgLeiSeca").close();
+    }
+    ok(api.leiCacheTamanho() === 2, "C6a o cache passou do limite de duas leis: " + api.leiCacheTamanho());
+    ok(api.leiCacheIds().indexOf(ids[0]) < 0 && api.leiCacheIds().indexOf(ids[2]) >= 0,
+       "C6b saiu a lei errada (deve sair a menos recente): " + JSON.stringify(api.leiCacheIds()));
+    /* uma versao nova da MESMA lei substitui a velha, nao soma */
+    api.leiGuardar({ id: ids[2], texto: leiGrande(103) + "\nArt. 104º Novo." });
+    await abrirGrande(api, ids[2]);
+    ok(api.leiCacheIds().filter((x) => x === ids[2]).length === 1, "C6c a mesma lei ficou duas vezes no cache");
+  }
+
+  /* ---- C7: interromper o desenho NÃO guarda uma lei pela metade ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 7/2000", texto: leiGrande(150) });
+    api.leiFatiaDefinir(0);
+    api.leiAbrir("Direito", "T", l.id);
+    for (let i = 0; i < 400 && nArtsNaTela(api) < 20; i++) await Promise.resolve();
+    api.$("dlgLeiSeca").close();
+    await api.leiPinturaPronta();
+    await cedeTudo();
+    ok(api.leiCacheTamanho() === 0,
+       "C7 uma lei desenhada so ate a metade foi guardada no cache: " + api.leiCacheTamanho());
+  }
+
+  /* ---- C8: trocar de modo e voltar (sem mudar nada) não redesenha ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 8/2000", texto: leiGrande(150) });
+    await abrirGrande(api, l.id);
+    const no1 = primeiroNo(api);
+    api.leiTrocarModo("editar");
+    api.leiTrocarModo("ler");
+    ok(primeiroNo(api) === no1 && nArtsNaTela(api) === 150,
+       "C8 ler -> editar -> ler redesenhou a lei inteira");
+  }
+
+  /* ---- C9: a citação de outra tela vai ao artigo mesmo quando a lei vem do cache ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 9/2000", texto: leiGrande(150) });
+    await abrirGrande(api, l.id);
+    api.$("dlgLeiSeca").close();
+    const achou = api.leiAbrirNoArtigo("Direito", "T", l.id, "120");
+    ok(achou === true, "C9 artigo existente foi dado como inexistente ao reabrir pelo cache");
+    ok(/art\. 120/.test(api.leiLogTexto() || "") || nArtsNaTela(api) === 150,
+       "C9a a lei nao reabriu inteira pelo cache");
+    ok(api.leiAbrirNoArtigo("Direito", "T", l.id, "999") === false,
+       "C9b artigo inexistente foi dado como achado ao reabrir pelo cache");
+  }
+
+  /* ---- C10: só o painel de lei grande ganha content-visibility ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const peq = api.leiGuardar({ nome: "Lei Peq 2/2000", texto: leiGrande(8) });
+    api.leiAbrir("Direito", "T", peq.id);
+    ok(!/lei-cv/.test(api.$("leiLeitura").className || ""), "C10 painel de lei pequena ganhou 'lei-cv'");
+    api.$("dlgLeiSeca").close();
+    const g = api.leiGuardar({ nome: "Lei Grande CV/2000", texto: leiGrande(120) });
+    await abrirGrande(api, g.id);
+    ok(/lei-cv/.test(api.$("leiLeitura").className || ""), "C10a painel de lei grande sem 'lei-cv'");
+    api.$("dlgLeiSeca").close();
+    api.leiAbrir("Direito", "T", peq.id);
+    ok(!/lei-cv/.test(api.$("leiLeitura").className || ""),
+       "C10b o 'lei-cv' ficou no painel depois de abrir uma lei pequena");
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/\.lei-cv \.lei-art\{[^}]*content-visibility:auto/.test(html),
+       "C10c o CSS de content-visibility nao esta escopado em .lei-cv");
+    ok(!/(?<!\.lei-cv )\.lei-art\{[^}]*content-visibility/.test(html), "C10d content-visibility esta no .lei-art de TODA lei");
+    /* paint containment recorta o contorno para fora da caixa: o pisca desenha para dentro */
+    ok(/\.lei-art-pisca\{[^}]*outline-offset:-\d/.test(html),
+       "C10e o contorno do 'pisca' desenha para fora e sera recortado pelo content-visibility");
+  }
+
+  /* ---- C11: em lei grande o salto e' instantaneo e dado duas vezes; em lei pequena, um salto suave ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const g = api.leiGuardar({ nome: "Lei Grande J/2000", texto: leiGrande(120) });
+    await abrirGrande(api, g.id);
+    const chamadas = [];
+    api.$("leiArt_50").scrollIntoView = (o) => { chamadas.push(o && o.behavior); };
+    api.leiIrArtigo("50");
+    ok(chamadas.length === 2 && chamadas.every((b) => b === "auto"),
+       "C11 em lei grande o salto devia ser instantaneo e repetido: " + JSON.stringify(chamadas));
+    api.$("dlgLeiSeca").close();
+    const peq = api.leiGuardar({ nome: "Lei Peq 3/2000", texto: leiGrande(8) });
+    api.leiAbrir("Direito", "T", peq.id);
+    const c2 = [];
+    api.$("leiArt_5").scrollIntoView = (o) => { c2.push(o && o.behavior); };
+    api.leiIrArtigo("5");
+    ok(c2.length === 1 && c2[0] === "smooth", "C11a em lei pequena o salto devia continuar suave e unico: " + JSON.stringify(c2));
+  }
+
+  /* ---- C12: o desenho SINCRONO de lei grande (depois de mudar algo) tambem e' guardado ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ nome: "Lei Cache 12/2000", texto: leiGrande(150) });
+    await abrirGrande(api, l.id);
+    api.leiParar(l.id, "7");
+    api.leiPintar();                       /* repintura sincrona, com a lei mudada: nao ha entrada igual */
+    ok(/lei-art-parei/.test((api.$("leiArt_7") || {}).className || ""), "C12-pre a repintura nao mostrou o marcador");
+    const no1 = primeiroNo(api);
+    api.leiTrocarModo("editar");
+    api.leiTrocarModo("ler");
+    ok(primeiroNo(api) === no1 && nArtsNaTela(api) === 150,
+       "C12 o desenho sincrono nao foi guardado: voltar ao modo ler redesenhou tudo");
   }
 
   return Object.assign(falhas, { quantas: n });

@@ -1018,7 +1018,10 @@ function leiPintarLeitura() {
   /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
    * dentro do laço releria o banco de questões a cada artigo */
   const ranking = {};
+  let rankingFeito = false;
   const prepararRanking = () => {
+    if (rankingFeito) return;
+    rankingFeito = true;
     try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
     catch (e) {}
   };
@@ -1224,13 +1227,94 @@ function leiPintarLeitura() {
    * abre primeiro, com o andamento à vista, e os artigos entram em
    * pedaços (ver leiPinturaProgressiva). Repintar depois (marcar, parei
    * aqui, trocar de modo) é sempre síncrono: a pessoa já está dentro. */
+  /* JÁ FOI DESENHADA ANTES, EXATAMENTE ASSIM? Só lei grande e só com lei
+   * gravada. A pergunta barata vem primeiro (há entrada desta lei?): na
+   * primeira abertura ninguém paga o custo de montar a chave. */
+  const grande = !!l && arts.length > LEI_GRANDE;
+  /* lei grande: o navegador só desenha o que está na tela (content-visibility,
+   * ver .lei-cv no CSS); e leiIrArtigo sabe que ali o salto precisa de cuidado */
+  if (cx.classList) cx.classList.toggle("lei-cv", arts.length > LEI_GRANDE);
+  const chaveFn = () => leiChavePintura(l, bruto, ranking);
+  if (grande && leiCache.some((e) => e.id === l.id)) {
+    prepararRanking();
+    const nos = leiCacheLer(l.id, chaveFn());
+    if (nos) { nos.forEach((n) => cx.append(n)); return; }
+  }
   if (progressivo && arts.length > LEI_GRANDE) {
-    leiPinturaProgressiva(arts, desenhar, prepararRanking, l ? l.nome : "");
+    leiPinturaProgressiva(arts, desenhar, prepararRanking, l ? l.nome : "",
+      grande ? () => leiCacheGuardar(l.id, chaveFn(), Array.from(cx.children)) : null);
     return;
   }
   prepararRanking();
   arts.forEach(desenhar);
+  if (grande) leiCacheGuardar(l.id, chaveFn(), Array.from(cx.children));
 }
+
+/* =====================================================================
+ * O DESENHO PRONTO DE UMA LEI GRANDE FICA GUARDADO
+ *
+ * Reabrir a CF/88 desenhava os 424 artigos de novo, do zero — e quem
+ * estuda por questões faz isso o tempo todo: cada citação de uma questão
+ * abre a mesma lei. O que fica guardado são os PRÓPRIOS NÓS do DOM, não o
+ * HTML deles: cada botão do artigo (marcar "parei", lacuna, editar, nota,
+ * link de citação) é uma função ligada ao nó, e HTML escrito de volta
+ * perderia todas.
+ *
+ * A CHAVE É TUDO DE QUE O DESENHO DEPENDE, e nada além:
+ *   · o idioma (os rótulos dos botões);
+ *   · o registro da lei SEM o texto — notas, alterações, "parei aqui",
+ *     capítulos lidos, o que mais houver nele: guardar o desenho e servir
+ *     um "parei aqui" velho seria mentir sobre onde a pessoa está;
+ *   · o texto do painel (é dele que vêm as marcas, e marcar muda o texto);
+ *   · o ranking das questões (a borda vermelha e o aviso "cai nas suas
+ *     questões" vêm dele).
+ * Qualquer diferença, e o desenho é refeito — e o novo substitui o velho.
+ * Os links de citação não entram: eles só descobrem a lei citada no
+ * CLIQUE (leiCitacaoBotao), então não há o que envelheça no nó.
+ *
+ * SÓ LEI GRANDE, e no máximo duas: é onde o desenho pesa, e cada uma
+ * segura alguns milhares de nós na memória.
+ * ===================================================================== */
+const LEI_CACHE_MAX = 2;
+let leiCache = [];            /* [{ id, chave, nos }] — a mais recente por último */
+
+/* dois hashes de 32 bits (DJB2 e FNV-1a) e o tamanho: 300 mil caracteres
+ * em poucos milissegundos, e uma colisão exigiria as três coisas iguais */
+function leiHashTexto(s) {
+  const x = String(s);
+  let a = 5381, b = 2166136261;
+  for (let i = 0; i < x.length; i++) {
+    const c = x.charCodeAt(i);
+    a = (((a << 5) + a) + c) | 0;
+    b = Math.imul(b ^ c, 16777619);
+  }
+  return (a >>> 0).toString(36) + "." + (b >>> 0).toString(36) + "." + x.length;
+}
+
+function leiChavePintura(l, bruto, ranking) {
+  const resto = Object.assign({}, l);
+  delete resto.texto;
+  return [LANG, l.id, leiHashTexto(bruto), leiHashTexto(JSON.stringify(resto)),
+    leiHashTexto(JSON.stringify(ranking || {}))].join("|");
+}
+
+function leiCacheLer(id, chave) {
+  const i = leiCache.findIndex((e) => e.id === id && e.chave === chave);
+  if (i < 0) return null;
+  const e = leiCache.splice(i, 1)[0];
+  leiCache.push(e);
+  return e.nos;
+}
+
+function leiCacheGuardar(id, chave, nos) {
+  if (!chave || !nos || !nos.length) return;
+  /* UMA ENTRADA POR LEI: a versão nova substitui a velha, que já não serve */
+  leiCache = leiCache.filter((e) => e.id !== id);
+  leiCache.push({ id, chave, nos });
+  while (leiCache.length > LEI_CACHE_MAX) leiCache.shift();
+}
+
+function leiCacheLimpar() { leiCache = []; }
 
 /* =====================================================================
  * ABRIR UMA LEI GRANDE SEM CONGELAR A TELA
@@ -1316,7 +1400,7 @@ function leiPinturaIrAoAlvo(p) {
   } catch (e) {}
 }
 
-function leiPinturaProgressiva(arts, desenhar, preparar, nome) {
+function leiPinturaProgressiva(arts, desenhar, preparar, nome, aoTerminar) {
   const dlg = $("dlgLeiSeca");
   let fim = () => {};
   const pronta = new Promise((resolve) => { fim = resolve; });
@@ -1347,6 +1431,8 @@ function leiPinturaProgressiva(arts, desenhar, preparar, nome) {
         leiPintura = null;
         leiCargaOcultar();
         leiPinturaIrAoAlvo(p);
+        /* desenhada inteira, sem interrupção: vale guardar */
+        if (aoTerminar) { try { aoTerminar(); } catch (e) {} }
         fim();
       }
     } catch (e) {
@@ -1959,8 +2045,26 @@ function leiIrArtigo(num, indice) {
    * nenhum — e não tinha como saber que chegou aonde pediu. "start" põe
    * o topo do bloco — o cabeçalho — no topo da tela, que é o que "ir a
    * um artigo" promete: mostrar ONDE ele começa. */
+  /* EM LEI GRANDE O SALTO É INSTANTÂNEO, E DADO DUAS VEZES.
+   *
+   * Os artigos fora da tela não têm layout (content-visibility): ficam com
+   * um tamanho ESTIMADO. Um salto suave mira a posição calculada no
+   * começo e, conforme os artigos entram e ganham o tamanho real, o alvo
+   * se afasta — medido, terminava ~2400 px (dez artigos) antes do pedido.
+   * O salto instantâneo cai perto; o segundo, depois que o navegador
+   * desenhou os vizinhos, acerta o resto. Em lei pequena nada disso vale
+   * e o salto continua suave. */
+  const painelLei = $("leiLeitura");
+  const grandeLei = !!(painelLei && painelLei.classList && painelLei.classList.contains("lei-cv"));
   if (el.scrollIntoView) {
-    try { el.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) {}
+    try { el.scrollIntoView({ block: "start", behavior: grandeLei ? "auto" : "smooth" }); }
+    catch (e) {}
+    if (grandeLei) {
+      setTimeout(() => {
+        try { if (el.isConnected !== false) el.scrollIntoView({ block: "start", behavior: "auto" }); }
+        catch (e) {}
+      }, 120);
+    }
   }
   if (el.classList) {
     el.classList.add("lei-art-pisca");

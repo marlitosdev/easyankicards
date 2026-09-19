@@ -826,6 +826,9 @@ function rodar() {
     matTextoVivo, matAplicarTexto, matEditorAberto, matIrPara,
     matDuvidas, matResolverDuvida, matDuvidasAbrir, matPintarDuvidas,
     leiPinturaPronta, leiPinturaCancelar, LEI_GRANDE,
+    leiCacheLimpar, leiChavePintura, leiHashTexto,
+    leiCacheTamanho: () => leiCache.length,
+    leiCacheIds: () => leiCache.map((e) => e.id),
     leiFatiaDefinir: (ms) => { LEI_FATIA_MS = ms; },
     leiIniciar, leiAbrir, leiGravar, leiTem, leiFechar, leiRegistrarLeitura,
     /* leitor: grade de artigos, lacuna parcial e o retorno do registro */
