@@ -3698,11 +3698,25 @@ function leiPintarAnexos() {
     const det = document.createElement("details");
     det.className = "lei-anexo";
     const sm = document.createElement("summary");
-    sm.textContent = a.titulo + " · " + t("lei_anexo_tam", { n: String(a.texto || "").length });
+    const ult = (a.historico || []).slice(-1)[0];
+    sm.textContent = a.titulo + " · " + t("lei_anexo_tam", { n: String(a.texto || "").length })
+      + (a.revogado ? " · " + t("lei_anexo_revogado", { f: (ult && ult.fonte) || "—" })
+        : (a.textoOriginal !== undefined ? " · " + t("lei_anexo_subst", { f: (ult && ult.fonte) || "—" }) : ""));
     const tx = document.createElement("div");
     tx.className = "lei-anexo-txt";
     tx.textContent = a.texto || "";
     det.append(sm, tx);
+    if (a.textoOriginal !== undefined && String(a.textoOriginal).trim() && a.textoOriginal !== a.texto) {
+      const ant = document.createElement("details");
+      ant.className = "lei-anexo lei-anexo-anterior";
+      const s2 = document.createElement("summary");
+      s2.textContent = t("lei_anexo_anterior");
+      const t2 = document.createElement("div");
+      t2.className = "lei-anexo-txt";
+      t2.textContent = a.textoOriginal;
+      ant.append(s2, t2);
+      det.append(ant);
+    }
     cx.append(det);
   });
 }
@@ -3983,7 +3997,7 @@ function leiAtualizarComparar(opc) {
   /* 2. LIMPEZA DO TEXTO DE PDF (cabeçalho de página, anexos, "Art . 382",
    * remissão partida) — a pessoa vê e aprova antes de qualquer comparação */
   if (!o.limpo) {
-    const an = leiPreAnalisar(novoTexto);
+    const an = leiPreAnalisar(novoTexto, leiPareceAlteradora(novoTexto).sim ? { semAnexos: true } : undefined);
     if (an.deve) {
       leiRevisarColagemAbrir({
         modo: "atualizar", texto: novoTexto, pre: an.pre,
@@ -4074,7 +4088,7 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
   const seguinte = (extra) => leiAtualizarComparar(Object.assign({}, o, { modoAlt: true }, extra));
   /* 1. limpeza (cabeçalho de página, anexos…) SEM tirar as aspas que separam o artigo citado */
   if (!o.limpo) {
-    const an = leiPreAnalisar(novoTexto, { manterAspas: true, semNumeracao: true });
+    const an = leiPreAnalisar(novoTexto, { manterAspas: true, semNumeracao: true, semAnexos: true });
     if (an.deve) {
       leiRevisarColagemAbrir({
         modo: "atualizar", texto: novoTexto, pre: an.pre, semNumeracao: true,
@@ -4095,7 +4109,7 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
   const itens = leiItensDaAlteradora(l, par);
   if (!itens.length) { uiAlert(t("lei_upd_sem_mudanca")); return false; }
   leiUpdComparo = itens;
-  leiUpdInfo = { soFormatacao: [], naoComparados: [], cobertura: { pct: 1 }, avisos: par.avisos, alteradora: par };
+  leiUpdInfo = { soFormatacao: [], naoComparados: [], cobertura: { pct: 1 }, avisos: itens.avisos || par.avisos, alteradora: par };
   leiUpdModoAusentes = "presentes";
   leiUpdAlteradora = { texto, par };
   leiUpdIdx = 0;
@@ -4104,7 +4118,8 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
   $("leiUpdPasso2").hidden = false;
   leiUpdMostrar();
   leiReg("atualizacao", "comparação de lei que altera aberta", fonte + " · " + itens.length + " artigos-alvo · "
-    + par.proprios + " artigos próprios da lei alteradora · " + par.avisos.length + " aviso(s)");
+    + par.proprios + " artigos próprios da lei alteradora · " + leiUpdInfo.avisos.length + " aviso(s)"
+    + ((par.anexos || []).length ? " · " + par.anexos.length + " anexo(s) na lei alteradora" : ""));
   return true;
 }
 
@@ -4116,7 +4131,8 @@ function leiGuardarAlteradora() {
   const ente = leiEnteDoTexto(a.texto);
   if (leiAcharIgual({ nome: ident.nome, especie: ident.especie, numero: ident.numero, ano: ident.ano, ente })) return null;
   const r = leiGuardar({ id: leiIdLivre(ident.nome, ente), nome: ident.nome, especie: ident.especie,
-    numero: ident.numero, ano: ident.ano, texto: a.texto, topicos: [], consultadaEm: leisHojeISO(),
+    numero: ident.numero, ano: ident.ano, texto: a.par.textoSemAnexos || a.texto, topicos: [], consultadaEm: leisHojeISO(),
+    ...((a.par.anexos || []).length ? { anexos: a.par.anexos.map((x) => ({ titulo: x.proprio || x.titulo, texto: x.texto })) } : {}),
     ...(ente ? { ente } : {}) });
   try { leiReg("atualizacao", "lei que altera guardada na biblioteca", ident.nome); } catch (e) {}
   return r;
@@ -4137,7 +4153,7 @@ function leiUpdMostrar() {
   cx.innerHTML = "";
   const h = document.createElement("div");
   h.className = "duv-titulo";
-  h.textContent = "Art. " + item.numCru + " — " + t("lei_upd_tipo_" + item.tipo)
+  h.textContent = (item.rotulo || "Art. " + item.numCru) + " — " + t("lei_upd_tipo_" + item.tipo)
     + (item.aceito ? " · " + t("lei_upd_ok") : "");
   if (item.recusado) {
     const rc = document.createElement("span");
@@ -4169,7 +4185,7 @@ function leiUpdMostrar() {
       r1.textContent = t(rot);
       const d = document.createElement("div");
       d.className = "qm-lado lei-upd-lado " + cls;
-      if (item.tipo === "mudou") leiMarcarDiferencas(d, txt, contra);
+      if (item.tipo === "mudou" || (item.tipo === "anexo_subst" && item.antigo)) leiMarcarDiferencas(d, txt, contra);
       else d.textContent = String(txt);
       cx.append(r1, d);
     });
@@ -4192,7 +4208,8 @@ function leiUpdMostrar() {
     leiUpdInfo.avisos.slice(0, 6).forEach((a) => {
       const n = document.createElement("div");
       n.className = "nota";
-      n.textContent = t(a.k === "anexo" ? "lei_upd_anexo_nota" : "lei_upd_revogar_ausente", { t: a.texto, a: a.texto });
+      n.textContent = t(a.k === "anexo" ? "lei_upd_anexo_nota" : a.k === "anexo_sem_texto" ? "lei_upd_anexo_sem_texto"
+        : "lei_upd_revogar_ausente", { t: a.texto, a: a.texto });
       cx.append(n);
     });
   }
@@ -4255,7 +4272,7 @@ function leiUpdIA() {
   if (!leiUpdComparo) return;
   const item = leiUpdComparo[leiUpdIdx];
   $("leiUpdPrompt").value = t("lei_upd_ia_prompt", {
-    artigo: "Art. " + item.numCru,
+    artigo: item.rotulo || "Art. " + item.numCru,
     antigo: item.antigo || t("lei_upd_nao_existia"),
     novo: item.novo || t("lei_upd_revogado_texto"),
   });
@@ -4275,7 +4292,14 @@ function leiAtualizarAplicar() {
   if (!aceitos.length) { uiAlert(t("lei_upd_nenhum_aceito")); return false; }
 
   const alt = Object.assign({}, l.alteracoes || {});
+  let anexos = null;
   aceitos.forEach((item) => {
+    /* ANEXO: a tabela nova SUBSTITUI a antiga (que fica em textoOriginal) ou o anexo é marcado revogado */
+    if (/^ANEXO:/.test(item.num)) {
+      anexos = leiAplicarAnexo(anexos || l.anexos || [], item,
+        { fonte: item.fonteItem || leiUpdFonteGlobal, data: leisHojeISO() });
+      return;
+    }
     /* HISTÓRICO POR ARTIGO: cada lei que mexeu nele fica registrada, na ordem em que foi
      * aplicada, com a data DA LEI (para avisar de aplicação fora de ordem) */
     const prev = alt[item.num];
@@ -4298,6 +4322,7 @@ function leiAtualizarAplicar() {
   leiGuardar({
     id: leiIdAtual,
     alteracoes: alt,
+    ...(anexos ? { anexos } : {}),
     consultadaEm: leisHojeISO(),
     versao: (l.versao ? l.versao + "; " : "")
       + t("lei_upd_versao_sufixo", { f: leiUpdFonteGlobal }),

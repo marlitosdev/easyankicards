@@ -21,7 +21,7 @@
  *     proposto antes de aceitar.
  *  6. Cada artigo guarda o HISTÓRICO das leis que mexeram nele; aplicar uma lei
  *     mais antiga por cima de uma mais nova é avisado.
- *  7. Anexos são AVISADOS (ficam de fora), nunca tocados em silêncio.
+ *  7. Anexos: a ordem é lida e o tratamento fica em lei-anexos.js; sem o texto do anexo novo, é só aviso.
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
 
@@ -125,7 +125,8 @@ async function testes() {
     ok(par.blocos.map((b) => b.num).join(",") === "162,248", "A1b os artigos-alvo: " + par.blocos.map((b) => b.num));
     ok(par.blocos.every((b) => b.bloco.parcial), "A1c '[...]' deixa o artigo PARCIAL");
     ok(par.revogacoes.map((r) => r.num).join(",") === "5", "A1d 'Fica revogado o art. 5º' (desta lei): " + JSON.stringify(par.revogacoes));
-    ok(par.avisos.filter((a) => a.k === "anexo").length === 2 && /Anexos VI, VII e XV/.test(par.avisos[0].texto), "A1e os Anexos sao AVISADOS: " + JSON.stringify(par.avisos));
+    ok(par.ordensAnexo.length === 2 && par.ordensAnexo[0].acao === "substituir" && par.ordensAnexo[0].alvos.join() === "VI,VII,XV" && par.ordensAnexo[1].acao === "revogar" && par.ordensAnexo[1].alvos.join() === "XI",
+       "A1e as ordens sobre Anexos sao LIDAS (o tratamento esta em lei-anexos.js): " + JSON.stringify(par.ordensAnexo));
     const u248 = par.blocos[1].bloco.unidades.map((u) => u.chave + "/" + u.acao).join(",");
     ok(u248 === "I/omitido,I>f/nr,I>g/nr,I>h/nr,I>i/ac,II/nr", "A2 o endereco e a marca de cada pedaco do art. 248: " + u248);
     ok(par.blocos[0].bloco.unidades.map((u) => u.chave + "/" + u.acao).join(",") === "P4/ac,P5/ac", "A2a art. 162: " + par.blocos[0].bloco.unidades.map((u) => u.chave));
@@ -230,7 +231,7 @@ async function testes() {
     ok(r === true && api.$("leiUpdPasso2").hidden === false, "U2 a comparacao 'so alteracoes' devia abrir direto (a fonte vem do titulo): " + r + " " + api.$("dlgLeiPre").open);
     ok(api.$("leiUpdFonte").value === "LC 145/2024", "U2a a norma foi preenchida pelo titulo da lei: " + api.$("leiUpdFonte").value);
     const it = api.leiUpdComparoAtual();
-    ok(it.map((x) => x.num).join(",") === "5,162,248" && !it.some((x) => x.num === "300"), "U2b os itens sao so os artigos citados: " + it.map((x) => x.num + ":" + x.tipo));
+    ok(it.map((x) => x.num).join(",") === "5,162,248,ANEXO:XI" && !it.some((x) => x.num === "300"), "U2b os itens sao so os artigos citados (e o Anexo que a lei manda revogar): " + it.map((x) => x.num + ":" + x.tipo));
     ok(it.filter((x) => x.tipo === "revogado").length === 1 && it.filter((x) => x.tipo === "revogado")[0].num === "5", "U2c so o art. 5 (mandado revogar) e' 'revogado'");
     ok(api.leiUpdModoAusentesAtual() === "presentes", "U2d nunca revoga por ausencia");
     /* o texto proposto é editável e vale ao aceitar */

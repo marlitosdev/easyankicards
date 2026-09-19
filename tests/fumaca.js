@@ -771,6 +771,7 @@ function rodar() {
     leiDataDaLei, leiCabecalhosAlteradora, leiMarcaDoTrecho, leiLerBlocoAlterado, leiMesclarFragmento,
     leiMontarArtigo, leiLerAlteradora, leiAlteradoraCitaLei, leiDataUltimaAlteracao, leiItensDaAlteradora,
     leiAtualizarAlteracoes, leiGuardarAlteradora, leiUpdAlteradoraAtual: () => leiUpdAlteradora,
+    leiRomanoDoAnexo, leiAnexosDaAlteradora, leiOrdemDeAnexo, leiAnexoDaLei, leiItensDeAnexos, leiAplicarAnexo,
     leiMesAbrir, leiMesPintar, leiMesConfirmar, leiMesDistintas, leiMesCtxAtual: () => leiMesCtx,
     leiDuplicadosAbrir, leiDupPintar, leiDupConfirmar, leiDupCancelar, leiDupSugestoes,
     leiDupCtxAtual: () => leiDupCtx,
