@@ -1096,6 +1096,38 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-dup-mais > summary{cursor:pointer}
 .lei-dup-motivo{font-size:11.5px;color:var(--sutil);margin:2px 0 4px}
 .lei-dup-original{display:flex;align-items:flex-start;gap:7px;font-size:12px;margin-top:6px}
+/* REVISAR A COLAGEM (limpeza do texto de um PDF): um cartão por tipo de
+   limpeza; o que SAIRIA vem riscado em vermelho, o que ficaria em verde */
+.lei-pre-grupo{border:1px solid var(--borda);border-radius:10px;padding:9px 11px;background:var(--panel)}
+.lei-pre-cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:800;margin-bottom:2px}
+.lei-pre-ajuda{font-size:11.5px;color:var(--sutil);margin:2px 0 6px;line-height:1.45}
+.lei-pre-item{border:1px solid var(--borda);border-radius:8px;padding:6px 9px;margin:6px 0}
+.lei-pre-item.off{opacity:.65}
+.lei-pre-item > label{display:flex;align-items:flex-start;gap:7px;cursor:pointer;font-size:12px}
+.lei-pre-item > label > span{flex:1;min-width:0}
+.lei-pre-antes{display:block;font-size:12px;line-height:1.5;background:rgba(239,68,68,.12);border-radius:4px;padding:2px 5px;margin:3px 0;text-decoration:line-through;overflow-wrap:anywhere}
+.lei-pre-depois{display:block;font-size:12px;line-height:1.5;background:rgba(34,197,94,.14);border-radius:4px;padding:2px 5px;margin:3px 0;overflow-wrap:anywhere}
+.lei-pre-ctx{display:block;font-size:11.5px;color:var(--sutil);overflow-wrap:anywhere}
+.lei-pre-consequencia{font-size:11.5px;color:var(--atencao);margin:4px 0 0}
+.lei-pre-num{border:1px solid var(--laranja-borda,#e8940a);border-radius:10px;padding:9px 11px;background:var(--panel);margin-top:10px}
+.lei-pre-num.ok{border-color:rgba(34,197,94,.55)}
+.lei-pre-num ul{margin:4px 0 0 18px;padding:0;font-size:12px;line-height:1.5}
+.lei-pre-num li.grave{color:var(--erro)}
+.lei-pre-num li.leve{color:var(--sutil)}
+.lei-pre-anexo-op{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:4px}
+.lei-pre-anexo-op label{display:flex;align-items:center;gap:4px;cursor:pointer}
+/* AJUDA NA COMPARAÇÃO: o que o app sabe sobre a mudança, antes de decidir */
+.lei-upd-als{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+.lei-upd-al{font-size:11.5px;line-height:1.45;padding:4px 8px;border-radius:6px;border:1px solid var(--borda);color:var(--sutil)}
+.lei-upd-al.alerta{color:var(--erro);border-color:var(--erro);background:rgba(239,68,68,.10)}
+.lei-upd-al.aviso{color:var(--atencao);border-color:var(--atencao);background:rgba(250,204,21,.10)}
+.lei-upd-lado{max-height:260px;overflow:auto}
+.lei-upd-marca{background:rgba(250,204,21,.32);border-radius:3px;padding:0 1px}
+.lei-upd-recusada{font-size:11px;font-weight:700;color:var(--erro);margin-left:6px}
+.lei-anexos{margin-top:12px}
+.lei-anexo{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--panel)}
+.lei-anexo > summary{cursor:pointer;font-weight:700;font-size:12.5px}
+.lei-anexo-txt{white-space:pre-wrap;font-size:12px;line-height:1.5;margin-top:6px;max-height:340px;overflow:auto;overflow-wrap:anywhere}
 /* ANDAMENTO DA LEI GRANDE: texto que anda + barra; o giro só existe para
    quem não pediu menos movimento */
 .lei-carga{margin:6px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:8px;
@@ -6149,6 +6181,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
   <div class="mat-leitura" id="leiRecitar" hidden></div>
+  <div class="lei-anexos" id="leiAnexos" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiLido" data-i18n="lei_lido"
       title="Registra no diário que você leu, com o tempo estimado. Se um capítulo estiver aberto, conta só o tempo dele."></button>
@@ -6343,6 +6376,48 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiDupConfirmar" disabled></button>
     <button class="btn btn-cinza" id="btnLeiDupCancelar" data-i18n="lei_dup_cancelar"></button>
+  </div>
+</dialog>
+
+<!-- REVISAR A COLAGEM: o texto de um PDF traz cabeçalho de página, Anexos e
+     cabeçalhos de artigo mal reconhecidos. O app SUGERE a limpeza, grupo a
+     grupo (e item a item), com o que sairia riscado e o que ficaria em verde;
+     nada é criado nem comparado antes do "finalizar". Serve à CRIAÇÃO e à
+     ATUALIZAÇÃO (leiRevisarColagemAbrir, lei-ui.js). -->
+<dialog id="dlgLeiPre" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 id="leiPreTitulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiPreX" data-i18n-title="lei_pre_voltar">✖</button>
+  </div>
+  <p class="nota" id="leiPreAjuda"></p>
+  <div class="lei-dup-topo">
+    <span class="nota" id="leiPreResumo"></span>
+    <button class="btn-min" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
+  </div>
+  <div id="leiPreLista" class="lei-dup-lista"></div>
+  <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>
+  <p class="nota" id="leiPreFim"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiPreConfirmar"></button>
+    <button class="btn btn-cinza" id="btnLeiPreVoltar" data-i18n="lei_pre_voltar"></button>
+  </div>
+</dialog>
+
+<!-- ANTES DE COMPARAR UMA VERSÃO NOVA: o texto parece de outra lei, de uma lei
+     que ALTERA, ou incompleto? A pessoa escolhe o que fazer com os artigos que
+     não aparecem (leiUpdGuardaAbrir, lei-ui.js). -->
+<dialog id="dlgLeiCob" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_cob_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiCobX" data-i18n-title="lei_pre_voltar">✖</button>
+  </div>
+  <p class="nota" id="leiCobAjuda"></p>
+  <div id="leiCobAvisos" class="lei-dup-lista"></div>
+  <div id="leiCobOpcoes" class="lei-dup-lista"></div>
+  <p class="nota" id="leiCobFim"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiCobConfirmar" disabled data-i18n="lei_cob_continuar"></button>
+    <button class="btn btn-cinza" id="btnLeiCobVoltar" data-i18n="lei_pre_voltar"></button>
   </div>
 </dialog>
 
