@@ -1543,6 +1543,161 @@ async function testes() {
        "M4a a ajuda do passo 1 nao diz onde escrever a tese a mao: " + api.$("jurPassoAjuda").textContent);
   }
 
+  /* =================================================================
+   * CC: DE QUE CONCURSO É UM TÓPICO QUE SÓ TEM JULGADO
+   *
+   * POR QUE ISTO EXISTE. A SV 29, guardada num tópico do ISS Caruaru que
+   * ainda não tinha resumo, aparecia na estante em "Sem concurso
+   * registrado": o resumo é gravado com o concurso do edital aberto, mas
+   * o julgado nunca gravou concurso nenhum, e a linha só-de-julgado
+   * nascia com concurso vazio.
+   * =============================================================== */
+  const EDITAL_ISS = "# ISS Caruaru Auditor Fiscal | prova: 2026-11-29 | horas: 40\n"
+    + "@ Sistema Tributário Brasileiro :: 5\n+ Tributos e suas espécies :: 5\n+ Lançamento :: 5\n"
+    + "@ Português :: 4\n+ Crase :: 5";
+  const EDITAL_OUTRO = "# TCE Exemplo Auditor | prova: 2027-03-10 | horas: 30\n"
+    + "@ Sistema Tributário Brasileiro :: 5\n+ Tributos e suas espécies :: 5\n"
+    + "@ Direito Financeiro :: 4\n+ Restos a pagar :: 3";
+  const soJuris = (api, disc, top) => api.matSoJuris()
+    .filter((x) => x.disciplina === disc && x.topico === top)[0];
+  const gruposDe = (api) => Array.from(api.matAgrupado("").keys());
+
+  /* ---- CC1: tópico que só está num edital herda o concurso dele ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29" },
+      "Sistema Tributário Brasileiro", "Tributos e suas espécies");
+    const linha = soJuris(api, "Sistema Tributário Brasileiro", "Tributos e suas espécies");
+    ok(linha && linha.concurso === "ISS Caruaru Auditor Fiscal",
+       "CC1 o julgado de um topico do ISS Caruaru continua sem concurso: " + JSON.stringify(linha && linha.concurso));
+    ok(gruposDe(api).indexOf("ISS Caruaru Auditor Fiscal") >= 0 && gruposDe(api).indexOf("") < 0,
+       "CC1a a estante ainda joga o julgado em 'Sem concurso registrado': " + JSON.stringify(gruposDe(api)));
+  }
+
+  /* ---- CC2: a comparação ignora acento e caixa (o edital e o julgado podem diferir nisso) ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    guardar(api, { tribunal: "STF", classe: "RE", numero: "1" },
+      "sistema tributario brasileiro", "TRIBUTOS E SUAS ESPECIES");
+    const linha = api.matSoJuris()[0];
+    ok(linha && linha.concurso === "ISS Caruaru Auditor Fiscal",
+       "CC2 acento/caixa diferentes impediram de achar o edital: " + JSON.stringify(linha && linha.concurso));
+  }
+
+  /* ---- CC3: em dois editais de concursos diferentes, NÃO chuta ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    api.edCriar("TCE", EDITAL_OUTRO);
+    guardar(api, { tribunal: "STF", classe: "RE", numero: "2" },
+      "Sistema Tributário Brasileiro", "Tributos e suas espécies");
+    const linha = soJuris(api, "Sistema Tributário Brasileiro", "Tributos e suas espécies");
+    ok(linha && linha.concurso === "",
+       "CC3 o topico esta em dois concursos e o app escolheu um deles: " + JSON.stringify(linha && linha.concurso));
+    /* a menos que um dos dois seja o edital aberto agora: aí a pessoa disse qual */
+    ok(api.matConcursoDoTopico("Sistema Tributário Brasileiro", "Tributos e suas espécies",
+         "TCE Exemplo Auditor") === "TCE Exemplo Auditor",
+       "CC3a com o concurso aberto entre os candidatos, ele devia desempatar");
+    ok(api.matConcursoDoTopico("Sistema Tributário Brasileiro", "Tributos e suas espécies",
+         "Outro Concurso Qualquer") === "",
+       "CC3b o 'preferido' que nao esta entre os candidatos foi aceito");
+  }
+
+  /* ---- CC4: dois editais com o MESMO nome de concurso (ex.: uma cópia) não são ambiguidade ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    api.edCriar("ISS (copia)", EDITAL_ISS);
+    ok(api.matConcursoDoTopico("Português", "Crase") === "ISS Caruaru Auditor Fiscal",
+       "CC4 uma copia do mesmo edital foi tomada como um segundo concurso");
+  }
+
+  /* ---- CC5: tópico que não é de edital nenhum continua "sem concurso" (e diz a verdade) ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    guardar(api, { tribunal: "STF", classe: "RE", numero: "3" }, "Matéria Avulsa", "Tópico Solto");
+    const linha = soJuris(api, "Matéria Avulsa", "Tópico Solto");
+    ok(linha && linha.concurso === "", "CC5 um topico fora de qualquer edital ganhou concurso: " + JSON.stringify(linha && linha.concurso));
+    ok(gruposDe(api).indexOf("") >= 0, "CC5a o grupo 'sem concurso' devia continuar existindo para ele");
+  }
+
+  /* ---- CC6: o concurso que o julgado JÁ TEM vale mais que a inferência ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    guardar(api, { tribunal: "STF", classe: "RE", numero: "4", concurso: "Concurso Gravado" },
+      "Sistema Tributário Brasileiro", "Tributos e suas espécies");
+    ok(soJuris(api, "Sistema Tributário Brasileiro", "Tributos e suas espécies").concurso === "Concurso Gravado",
+       "CC6 a inferencia sobrescreveu o concurso que o julgado ja tinha");
+  }
+
+  /* ---- CC7: edital sem nome no cabeçalho não inventa concurso ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("Sem nome", "@ Português :: 4\n+ Crase :: 5");
+    ok(api.matConcursoDoTopico("Português", "Crase") === "",
+       "CC7 edital sem nome de concurso no cabecalho produziu um concurso");
+    /* e um edital sem nome NAO transforma um topico de um concurso so em ambiguidade */
+    api.edCriar("ISS", EDITAL_ISS);
+    ok(api.matConcursoDoTopico("Português", "Crase") === "ISS Caruaru Auditor Fiscal",
+       "CC7a um edital sem nome tornou ambiguo um topico que so pertence a um concurso");
+  }
+
+  /* ---- CC8: ao GUARDAR um julgado, o concurso já é gravado (e não é sobrescrito ao editar) ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    api.jurIniciarTela();
+    api.jurAbrir("Sistema Tributário Brasileiro", "Tributos e suas espécies", "incluir");
+    api.$("jurTese").value = "tese de teste da SV 29";
+    api.$("jurClasse").value = "Súmula Vinculante"; api.$("jurNumero").value = "29";
+    await api.jurSalvar();
+    const salvo = api.jurDoTopico(api.matChave("Sistema Tributário Brasileiro", "Tributos e suas espécies"))[0];
+    ok(salvo && salvo.concurso === "ISS Caruaru Auditor Fiscal",
+       "CC8 o julgado foi guardado sem o concurso do topico: " + JSON.stringify(salvo && salvo.concurso));
+    /* editar um julgado que ja tem concurso nao o troca (mesmo com outro edital aberto depois) */
+    api.jurGravar({ id: salvo.id, concurso: "Gravado Antes" });
+    api.jurEditar(salvo.id);
+    api.$("jurTese").value = "tese editada";
+    await api.jurSalvar();
+    ok(api.jurDe(salvo.id).concurso === "Gravado Antes",
+       "CC8a editar o julgado trocou o concurso que ele ja tinha: " + api.jurDe(salvo.id).concurso);
+    /* tópico fora de edital: guarda sem concurso (verdade > palpite) */
+    api.jurAbrir("Matéria Avulsa", "Tópico Solto", "incluir");
+    api.$("jurTese").value = "tese avulsa";
+    await api.jurSalvar();
+    const avulso = api.jurDoTopico(api.matChave("Matéria Avulsa", "Tópico Solto"))[0];
+    ok(avulso && !avulso.concurso, "CC8b um topico fora de edital ganhou concurso: " + JSON.stringify(avulso && avulso.concurso));
+  }
+
+  /* ---- CC9: quando o tópico GANHA um resumo, o concurso dele passa a ser o do resumo (não some do grupo) ---- */
+  {
+    const { api } = rodar();
+    api.edCriar("ISS", EDITAL_ISS);
+    guardar(api, { tribunal: "STF", classe: "RE", numero: "5" },
+      "Sistema Tributário Brasileiro", "Tributos e suas espécies");
+    api.matGravar(api.matChave("Sistema Tributário Brasileiro", "Tributos e suas espécies"), "resumo x",
+      { disciplina: "Sistema Tributário Brasileiro", topico: "Tributos e suas espécies",
+        concurso: "ISS Caruaru Auditor Fiscal" });
+    ok(soJuris(api, "Sistema Tributário Brasileiro", "Tributos e suas espécies") === undefined,
+       "CC9-pre o topico com resumo ainda vira linha so-de-julgado");
+    ok(gruposDe(api).length === 1 && gruposDe(api)[0] === "ISS Caruaru Auditor Fiscal",
+       "CC9 o topico com resumo e julgado saiu do grupo do concurso: " + JSON.stringify(gruposDe(api)));
+  }
+
+  /* ---- CC10: unir dois julgados leva o concurso ---- */
+  {
+    const { api } = rodar();
+    const a = guardar(api, { tribunal: "STF", classe: "RE", numero: "9" }, "Direito Tributário", "Tributos");
+    const b = guardar(api, { tribunal: "STF", classe: "RE", numero: "9", concurso: "ISS Caruaru Auditor Fiscal" },
+      "Direito Tributário", "Tributos");
+    const u = api.jurUnir(a.id, b.id);
+    ok(u && u.concurso === "ISS Caruaru Auditor Fiscal", "CC10 unir perdeu o concurso: " + JSON.stringify(u && u.concurso));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

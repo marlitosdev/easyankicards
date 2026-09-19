@@ -616,8 +616,18 @@ async function jurSalvar() {
    * número é uma etiqueta que não se revisa. */
   if (!tese && !texto) { await uiAlert(t("jur_falta")); return; }
 
+  /* O CONCURSO DO JULGADO: o dono do tópico nos editais cadastrados (ver
+   * matConcursoDoTopico). Quem já tem concurso o mantém; só se preenche o
+   * vazio — e vazio continua vazio quando o tópico não é de edital nenhum. */
+  const antigoJ = jurEditando ? jurDe(jurEditando) : null;
+  const concursoJ = (antigoJ && antigoJ.concurso)
+    || (typeof matConcursoDoTopico === "function"
+        ? matConcursoDoTopico(jurTopicoAtual.disciplina, jurTopicoAtual.nome,
+            (typeof concursoAtual === "function" ? concursoAtual().nome : ""))
+        : "");
   const j = jurGravar({
     id: jurEditando || undefined,
+    concurso: concursoJ,
     tribunal: v("jurTribunal"), classe: v("jurClasse"),
     numero: v("jurNumero"), data: v("jurData"), orgao: v("jurOrgao"),
     fonte: v("jurFonte"), precedentes: v("jurPrecedentes"),
