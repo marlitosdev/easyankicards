@@ -54,6 +54,7 @@ function jurAbrir(disciplina, topico, modo) {
   const sub = $("jurSub");
   if (sub) sub.textContent = t("jur_sub", { d: disciplina, t: topico });
   jurLimparForm();
+  if ($("jurMais")) $("jurMais").open = false;       /* o menu abre sempre fechado */
   const quantos = jurDoTopico(chave).length;
   jurModo = modo || (quantos ? "ler" : "incluir");
   /* pedir "ler" sem ter o que ler abriria uma tela vazia */
@@ -1613,6 +1614,17 @@ function jurIniciarTela() {
   });
   jurPintarPrincipal();
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
+  /* ESCOLHEU UM ITEM DO "MAIS", O MENU FECHA — senão ele ficaria aberto por
+   * cima do que o item acabou de mostrar. A caixa de "sugerir de memória"
+   * não fecha: é uma opção, não uma ação, e quem a marca ainda vai pedir. */
+  if ($("jurMaisCorpo")) {
+    $("jurMaisCorpo").onclick = (e) => {
+      const alvo = e && e.target;
+      if (alvo && String(alvo.tagName || "").toUpperCase() === "BUTTON" && $("jurMais")) {
+        $("jurMais").open = false;
+      }
+    };
+  }
   liga("btnJurFechar", () => jurFechar());
   liga("btnJurFecharTopo", () => jurFechar());
   /* ESC E O ✖ TÊM DE ACABAR NO MESMO LUGAR.

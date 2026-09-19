@@ -1468,6 +1468,81 @@ async function testes() {
        "P7 unir perdeu os precedentes (ou a marca): " + JSON.stringify(u && [u.precedentes, u.aConferir]));
   }
 
+  /* =================================================================
+   * M: O MENU "MAIS" DA ENTRADA — caminho principal à vista, utilidades num toque
+   *
+   * POR QUE ISTO EXISTE. A entrada tinha oito botões de peso parecido
+   * (perguntar à IA, ler e preencher, escrever à mão, ver os dados,
+   * limpar, voltar…). Nada dizia quais eram o caminho e quais eram
+   * utilidade — a mesma confusão do diálogo de diagnóstico.
+   * =============================================================== */
+  const htmlIdx = require("fs").readFileSync(
+    require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+  const dlgJuris = (() => {
+    const a = htmlIdx.indexOf('<dialog id="dlgJuris"');
+    return htmlIdx.slice(a, htmlIdx.indexOf("</dialog>", a));
+  })();
+  const posJ = (id) => dlgJuris.indexOf('id="' + id + '"');
+
+  /* ---- M1: o principal e o "ler e preencher" ficam FORA do menu; as utilidades DENTRO ---- */
+  {
+    const ini = posJ("jurMais");
+    const fim = dlgJuris.indexOf("</details>", ini);
+    ok(ini > 0 && fim > ini, "M1-pre nao ha o menu 'mais' (<details id=jurMais>) na entrada");
+    const dentro = (id) => posJ(id) > ini && posJ(id) < fim;
+    ["btnJurAMao", "btnJurLimpar", "btnJurVoltarLer", "chkJurMemoria"].forEach((id) => {
+      ok(dentro(id), "M1 '" + id + "' devia estar dentro do menu 'mais'");
+    });
+    ["btnJurPrincipal", "btnJurColar", "btnJurMeta"].forEach((id) => {
+      const vezes = dlgJuris.split('id="' + id + '"').length - 1;
+      ok(vezes === 1 && posJ(id) > 0 && !dentro(id),
+         "M1a '" + id + "' nao devia estar no menu (e' o caminho principal), nem duplicado: " + vezes + " vez(es)");
+    });
+    ok(dlgJuris.indexOf("jur-salvar-lin") < 0, "M1b sobrou a linha antiga de limpar/voltar fora do menu");
+    ok(/<details[^>]*id="jurMais"(?![^>]*\bopen\b)/.test(dlgJuris), "M1c o menu nasce aberto");
+  }
+
+  /* ---- M2: os itens mantêm as regras de quando aparecem ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    ok(api.$("btnJurVoltarLer").hidden === true, "M2 'voltar para a leitura' aparece sem haver o que ler");
+    guardar(api, { tribunal: "STF", classe: "RE", numero: "1" }, "Direito Tributário", "Tributos");
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    ok(api.$("btnJurVoltarLer").hidden === false, "M2a com julgado guardado 'voltar para a leitura' nao aparece");
+    ok(api.$("btnJurAMao").hidden === false, "M2b 'escrever a tese a mao' devia aparecer com os campos escondidos");
+    api.jurConteudoVisivel(true);
+    ok(api.$("btnJurAMao").hidden === true, "M2c 'escrever a tese a mao' continua depois que os campos abriram");
+  }
+
+  /* ---- M3: escolher um item fecha o menu; marcar a caixa de memória não ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurMais").open = true;
+    api.$("jurMaisCorpo").onclick({ target: { tagName: "INPUT" } });
+    ok(api.$("jurMais").open === true, "M3 marcar a caixa de memoria fechou o menu (quem a marca ainda vai pedir)");
+    api.$("jurMaisCorpo").onclick({ target: { tagName: "BUTTON" } });
+    ok(api.$("jurMais").open === false, "M3a escolher um botao do menu nao o fechou");
+    api.$("jurMais").open = true;
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    ok(api.$("jurMais").open === false, "M3b o menu reabriu ja aberto (deve nascer sempre fechado)");
+  }
+
+  /* ---- M4: o botão do menu funciona (limpar limpa) e a ajuda do passo 1 aponta para ele ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurTese").value = "algo";
+    api.$("btnJurLimpar").onclick();
+    ok(api.$("jurTese").value === "", "M4 o 'limpar' dentro do menu nao limpou");
+    ok(/mais/i.test(api.$("jurPassoAjuda").textContent || ""),
+       "M4a a ajuda do passo 1 nao diz onde escrever a tese a mao: " + api.$("jurPassoAjuda").textContent);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
