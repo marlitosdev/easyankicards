@@ -1124,6 +1124,16 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-upd-lado{max-height:260px;overflow:auto}
 .lei-upd-marca{background:rgba(250,204,21,.32);border-radius:3px;padding:0 1px}
 .lei-upd-recusada{font-size:11px;font-weight:700;color:var(--erro);margin-left:6px}
+/* BIBLIOTECA DE LEIS: um cartão por lei; o que a lei faz nos tópicos vem à vista */
+.lei-bib-card{border:1px solid var(--borda);border-radius:10px;padding:9px 11px;background:var(--panel)}
+.lei-bib-tit{font-weight:800;font-size:14px;overflow-wrap:anywhere}
+.lei-bib-meta{font-size:11.5px;color:var(--sutil);margin-top:2px;overflow-wrap:anywhere}
+.lei-bib-sem{color:var(--atencao)}
+.lei-bib-usos{font-size:12px;margin-top:6px}
+.lei-bib-usos > summary{cursor:pointer;color:var(--sutil)}
+.lei-bib-uso{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--borda)}
+.lei-bib-uso > span{flex:1;min-width:0;overflow-wrap:anywhere}
+.lei-bib-acoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .lei-anexos{margin-top:12px}
 .lei-anexo{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--panel)}
 .lei-anexo > summary{cursor:pointer;font-weight:700;font-size:12.5px}
@@ -4505,6 +4515,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <span class="mat-conta" id="matContagem"></span>
         <button class="btn-min" id="btnDuvidas" data-i18n="duv_btn"
           title="Junta num lugar só tudo que você marcou em azul como dúvida, em todos os resumos e leis secas. Serve para tirar as dúvidas de uma vez."></button>
+        <button class="btn-min" id="btnMatLeis" data-i18n="lei_bib_btn"
+          title="Abre a biblioteca das suas leis: cada lei existe uma vez só, e daqui se vê onde ela é usada."></button>
         <button class="btn-min" id="btnMatLogAba" data-i18n="mat_log_btn"></button>
         <!-- A INSTRUÇÃO VIRA BOTÃO.
              O parágrafo explicava bem — na primeira vez. Da segunda em
@@ -6204,6 +6216,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <input type="text" id="leiProcVersao" placeholder="atualizada até a EC 126/2022">
   <label class="nota" data-i18n="lei_proc_apelido"></label>
   <input type="text" id="leiProcApelido" placeholder="CTN, LRF">
+  <label class="nota" data-i18n="lei_proc_ente_rot"></label>
+  <input type="text" id="leiProcEnte" placeholder="Caruaru">
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiProcSalvar" data-i18n="lei_proc_salvar"></button>
     <button class="btn btn-cinza" id="btnLeiProcFechar" data-i18n="help_close"></button>
@@ -6418,6 +6432,76 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiCobConfirmar" disabled data-i18n="lei_cob_continuar"></button>
     <button class="btn btn-cinza" id="btnLeiCobVoltar" data-i18n="lei_pre_voltar"></button>
+  </div>
+</dialog>
+
+<!-- BIBLIOTECA DE LEIS: as leis do usuário, fora de qualquer tópico. Cada lei
+     existe UMA vez; os tópicos guardam só o ponteiro (leiBibAbrir, lei-ui.js). -->
+<dialog id="dlgLeiBib" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_bib_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiBibX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="lei_bib_ajuda"></p>
+  <input type="search" id="leiBibBusca" class="mat-busca" placeholder="Buscar">
+  <div class="mat-topo">
+    <button class="btn-min mat-ligado" id="btnLeiBibTodas" data-i18n="lei_bib_f_todas"></button>
+    <button class="btn-min" id="btnLeiBibConcurso" data-i18n="lei_bib_f_concurso"></button>
+    <button class="btn-min" id="btnLeiBibSem" data-i18n="lei_bib_f_sem"></button>
+  </div>
+  <p class="nota" id="leiBibResumo"></p>
+  <div id="leiBibDup" hidden>
+    <button class="btn-min btn-min-perigo" id="btnLeiBibDup"></button>
+  </div>
+  <div id="leiBibLista" class="lei-dup-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiBibFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- LIGAR UMA LEI A UM TÓPICO, a partir da Biblioteca -->
+<dialog id="dlgLeiTopico" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 id="leiTopTitulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiTopX" data-i18n-title="help_close">✖</button>
+  </div>
+  <input type="search" id="leiTopBusca" class="mat-busca" placeholder="Buscar">
+  <div id="leiTopLista" class="lei-dup-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiTopFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- A LEI COLADA JÁ ESTÁ NA BIBLIOTECA: usar a que existe, comparar, ou criar
+     outra separada de propósito (leiJaAbrir, lei-ui.js) -->
+<dialog id="dlgLeiJa" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_ja_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiJaX" data-i18n-title="lei_pre_voltar">✖</button>
+  </div>
+  <p class="nota" id="leiJaMsg"></p>
+  <div id="leiJaOpcoes" class="lei-dup-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiJaConfirmar" disabled data-i18n="lei_cob_continuar"></button>
+    <button class="btn btn-cinza" id="btnLeiJaVoltar" data-i18n="lei_pre_voltar"></button>
+  </div>
+</dialog>
+
+<!-- LEIS QUE PARECEM A MESMA: escolher qual fica; o resto é unido a ela
+     (leiMesAbrir, lei-ui.js) -->
+<dialog id="dlgLeiMes" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_mes_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiMesX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="lei_mes_ajuda"></p>
+  <p class="nota" id="leiMesPasso"></p>
+  <div id="leiMesLista" class="lei-dup-lista"></div>
+  <p class="lei-upd-al aviso" id="leiMesAviso" hidden></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiMesConfirmar" data-i18n="lei_mes_confirmar"></button>
+    <button class="btn btn-azul" id="btnLeiMesDistintas" data-i18n="lei_mes_distintas"></button>
+    <button class="btn btn-cinza" id="btnLeiMesFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

@@ -1733,7 +1733,7 @@ function leiIdentificar(texto, quantosArtigos) {
    * markdown ("**LEI Nº 8.666**", "# LEI...") sem abrir mão da âncora,
    * que é o que separa título de menção */
   const RE_TIT =
-    /^[\s*#>_-]*(LEI|LEI\s+COMPLEMENTAR|DECRETO[\s-]?LEI|DECRETO|EMENDA\s+CONSTITUCIONAL|MEDIDA\s+PROVIS[ÓO]RIA)\s*(?:N?[ºo°.]?\s*)?([\d.]{3,9})(?:\s*,?\s*DE\s+.{0,40}?(\d{4}))?/i;
+    /^[\s*#>_-]*(LEI|LEI\s+COMPLEMENTAR|DECRETO[\s-]?LEI|DECRETO|EMENDA\s+CONSTITUCIONAL|MEDIDA\s+PROVIS[ÓO]RIA)\s*(?:N?[ºo°.]?\s*)?([\d.]{3,9}|\d{1,2}(?=\s*,?\s*DE\s+))(?:\s*,?\s*DE\s+.{0,40}?(\d{4}))?/i;
   let m = null;
   const ate = Math.min(linhas.length, 40);
   for (let i = 0; i < ate && !m; i++) m = linhas[i].match(RE_TIT);
@@ -1911,6 +1911,8 @@ function leiApagar(id) {
   const nome = tudo[String(id)].nome;
   delete tudo[String(id)];
   if (!leisGravarTudo(tudo)) return false;
+  /* os tópicos que apontavam para ela param de apontar */
+  leiSoltarPonteiros(String(id), "");
   try { reg("LEI", "lei removida da biblioteca", nome || id); } catch (e) {}
   return true;
 }
@@ -2049,6 +2051,206 @@ function leisMigrarDe(resumos, gravar) {
     } catch (e) {}
   }
   return criadas;
+}
+
+/* =====================================================================
+ * A LEI EXISTE UMA VEZ SÓ — identidade, mesclagem e ponteiros
+ *
+ * O DEFEITO QUE MOTIVOU ISTO. Colar a Lei 4.320 num segundo tópico caía no
+ * MESMO registro (o id nasce do nome) e o leiGuardar da criação SUBSTITUÍA o
+ * texto e a lista de tópicos: o primeiro tópico perdia o vínculo e o texto
+ * antigo era trocado por baixo, sem aviso. Fonte única não é só "um
+ * registro": é nunca deixar duas coisas escreverem nele sem a pessoa saber.
+ *
+ * A IDENTIDADE de uma lei é espécie + número + ano (+ cidade/órgão quando se
+ * sabe): "Lei Complementar 15/2009" de Caruaru não é a de outro município.
+ * Sem número (a Constituição, um texto sem cabeçalho), vale o nome.
+ * ===================================================================== */
+function leiNumeroNorm(n) {
+  return String(n == null ? "" : n).replace(/[.\s]/g, "").replace(/^0+(?=\d)/, "");
+}
+
+function leiEspecieNorm(e) {
+  const k = leiTxtChave(e);
+  if (!k) return "";
+  if (/complementar|^lc$/.test(k)) return "lc";
+  if (/decreto.?lei/.test(k)) return "decreto-lei";
+  if (/decreto/.test(k)) return "decreto";
+  if (/emenda|^ec$/.test(k)) return "ec";
+  if (/medida/.test(k)) return "mp";
+  if (/constitui/.test(k)) return "cf";
+  if (/^lei/.test(k)) return "lei";
+  return k;
+}
+
+/* A cidade ou o órgão, lido do cabeçalho ("Prefeitura de Caruaru",
+ * "Município de Caruaru", "Estado de Pernambuco"). Só uma SUGESTÃO: a pessoa
+ * corrige na procedência. Vazio quando não há certeza. */
+function leiEnteDoTexto(texto) {
+  const linhas = String(texto || "").split("\n").slice(0, 40).join("\n");
+  const m = linhas.match(/(?:prefeitura|munic[ií]pio|c[âa]mara\s+municipal|estado|governo)\s+d[eoa]s?\s+([A-ZÀ-Ú][A-Za-zÀ-ú]+(?:\s+d[aeo]s?\s+[A-ZÀ-Ú][A-Za-zÀ-ú]+){0,2})/i);
+  if (!m) return "";
+  const nome = m[1].trim();
+  /* "Prefeitura de Caruaru" e nada mais — ignora o que vier depois de pontuação */
+  return nome.length >= 3 && nome.length <= 40 ? nome : "";
+}
+
+function leiChaveIdentidade(x) {
+  const num = leiNumeroNorm(x && x.numero);
+  if (!num) return "";
+  return [leiEspecieNorm(x.especie), num, String((x && x.ano) || "").trim(),
+    leiTxtChave((x && x.ente) || "")].join("|");
+}
+
+/* São a MESMA lei? Duas leis com número igual só são a mesma se nada do que
+ * se sabe delas se contradiz: espécie, ano e cidade só desempatam quando os
+ * DOIS lados os têm. Sem número, o nome igual decide. */
+function leiMesmaLei(a, b) {
+  if (!a || !b) return false;
+  const na = leiNumeroNorm(a.numero), nb = leiNumeroNorm(b.numero);
+  if (na && nb) {
+    if (na !== nb) return false;
+    const ea = leiEspecieNorm(a.especie), eb = leiEspecieNorm(b.especie);
+    if (ea && eb && ea !== eb) return false;
+    if (a.ano && b.ano && String(a.ano) !== String(b.ano)) return false;
+    const ta = leiTxtChave(a.ente), tb = leiTxtChave(b.ente);
+    if (ta && tb && ta !== tb) return false;
+    return true;
+  }
+  if (na || nb) return false;
+  const ka = leiTxtChave(a.nome), kb = leiTxtChave(b.nome);
+  return !!ka && ka === kb;
+}
+
+/* A lei da biblioteca que é a mesma de `x` — a que a pessoa disse "são
+ * diferentes" não conta. */
+function leiAcharIgual(x, exceto) {
+  return leisLista().filter((l) => l.id !== exceto
+    && !((l.distintasDe || []).indexOf(x && x.id) >= 0)
+    && leiMesmaLei(l, x))[0] || null;
+}
+
+/* Um id que NÃO esteja em uso — para criar uma lei separada de propósito,
+ * sem cair em cima do registro de outra. */
+function leiIdLivre(nome, ente) {
+  const tudo = leisLerTudo();
+  const base = leiId(nome);
+  if (!tudo[base]) return base;
+  if (ente) {
+    const c = leiId(String(nome || "") + " " + ente);
+    if (!tudo[c]) return c;
+  }
+  for (let i = 2; i < 200; i++) {
+    const c = base.slice(0, 44) + "-" + i;
+    if (!tudo[c]) return c;
+  }
+  return base + "-" + Date.now().toString(36);
+}
+
+/* GRUPOS DE LEIS QUE PARECEM A MESMA, para a pessoa escolher qual fica. */
+function leiDuplicadasNaBiblioteca() {
+  const L = leisLista();
+  const pai = {};
+  L.forEach((l) => { pai[l.id] = l.id; });
+  const raiz = (i) => (pai[i] === i ? i : (pai[i] = raiz(pai[i])));
+  for (let i = 0; i < L.length; i++) {
+    for (let j = i + 1; j < L.length; j++) {
+      if ((L[i].distintasDe || []).indexOf(L[j].id) >= 0
+          || (L[j].distintasDe || []).indexOf(L[i].id) >= 0) continue;
+      if (leiMesmaLei(L[i], L[j])) pai[raiz(L[j].id)] = raiz(L[i].id);
+    }
+  }
+  const grupos = {};
+  L.forEach((l) => { (grupos[raiz(l.id)] = grupos[raiz(l.id)] || []).push(l); });
+  return Object.keys(grupos).map((k) => grupos[k]).filter((g) => g.length > 1);
+}
+
+/* "São leis diferentes": cada uma lembra das outras, e o aviso some. */
+function leiMarcarDistintas(ids) {
+  const lista = (ids || []).filter(Boolean);
+  lista.forEach((id) => {
+    const l = leiDe(id);
+    if (!l) return;
+    const d = (l.distintasDe || []).slice();
+    lista.forEach((o) => { if (o !== id && d.indexOf(o) < 0) d.push(o); });
+    leiGuardar({ id, distintasDe: d });
+  });
+  return true;
+}
+
+/* Os ponteiros que os tópicos guardam para uma lei (matResumos[..].leiId).
+ * Apagar a lei sem soltá-los deixava o tópico dizendo "tem lei" (o selo do
+ * Material) sem lei nenhuma. `paraId` reaponta em vez de soltar. */
+function leiSoltarPonteiros(id, paraId) {
+  if (typeof matResumos === "undefined" || !matResumos) return 0;
+  let n = 0;
+  Object.keys(matResumos).forEach((k) => {
+    const r = matResumos[k];
+    if (r && r.leiId === id) { r.leiId = paraId || ""; n++; }
+  });
+  if (n && typeof matSalvar === "function") { try { matSalvar(); } catch (e) {} }
+  return n;
+}
+
+/* MESCLAR: `idMantida` fica; as outras entram nela e somem. Nada do que a
+ * pessoa fez se perde: tópicos, notas, marcas, "onde parei", alterações e
+ * apelidos são UNIDOS. Onde os dois lados têm algo diferente no mesmo lugar
+ * (a nota do mesmo artigo), fica a da lei mantida e a outra vem depois dela.
+ * O TEXTO é o da lei mantida — a escolha de qual fica é da pessoa. */
+function leiMesclar(idMantida, idsAbsorvidas) {
+  const kept = leiDe(idMantida);
+  const outras = (idsAbsorvidas || []).map((i) => leiDe(i)).filter((l) => l && l.id !== idMantida);
+  if (!kept || !outras.length) return null;
+  const r = { topicos: 0, notas: 0, marcas: 0 };
+  const dados = { id: kept.id };
+  const topicos = (kept.topicos || []).slice();
+  const notas = Object.assign({}, kept.notasArtigos || {});
+  const trechos = (kept.notasTrechos || []).slice();
+  const blocos = Object.assign({}, kept.blocos || {});
+  const alteracoes = Object.assign({}, kept.alteracoes || {});
+  const repetidosOk = (kept.repetidosOk || []).slice();
+  const anexos = (kept.anexos || []).slice();
+  const siglas = String(kept.apelido || "").split(/[\s/,]+/).filter(Boolean);
+  let parei = kept.parei || "", pareiEm = kept.pareiEm || "";
+
+  outras.forEach((o) => {
+    (o.topicos || []).forEach((t2) => { if (topicos.indexOf(t2) < 0) { topicos.push(t2); r.topicos++; } });
+    Object.keys(o.notasArtigos || {}).forEach((n) => {
+      const nova = o.notasArtigos[n];
+      if (!notas[n]) { notas[n] = nova; r.notas++; }
+      else if (notas[n].indexOf(nova) < 0) { notas[n] = notas[n] + "\n— " + nova; r.notas++; }
+    });
+    (o.notasTrechos || []).forEach((n) => {
+      if (!trechos.some((x) => x.k === n.k)) { trechos.push(n); r.notas++; }
+    });
+    Object.keys(o.blocos || {}).forEach((b) => {
+      if (!blocos[b] || String(o.blocos[b]) > String(blocos[b])) blocos[b] = o.blocos[b];
+    });
+    Object.keys(o.alteracoes || {}).forEach((n) => { if (!alteracoes[n]) alteracoes[n] = o.alteracoes[n]; });
+    (o.repetidosOk || []).forEach((n) => { if (repetidosOk.indexOf(n) < 0) repetidosOk.push(n); });
+    (o.anexos || []).forEach((a) => { if (!anexos.some((x) => x.titulo === a.titulo)) anexos.push(a); });
+    String(o.apelido || "").split(/[\s/,]+/).filter(Boolean).forEach((s) => {
+      if (siglas.map((x) => leiTxtChave(x)).indexOf(leiTxtChave(s)) < 0) siglas.push(s);
+    });
+    if (o.parei && (!parei || String(o.pareiEm || "") > String(pareiEm))) { parei = o.parei; pareiEm = o.pareiEm || ""; }
+    ["fonte", "consultadaEm", "versao", "especie", "numero", "ano", "ente"].forEach((c) => {
+      if (!kept[c] && o[c]) dados[c] = o[c];
+    });
+  });
+  r.marcas = 0;
+  Object.assign(dados, { topicos, notasArtigos: notas, notasTrechos: trechos, blocos,
+    alteracoes, repetidosOk, apelido: siglas.join(" "), parei, pareiEm });
+  if (anexos.length) dados.anexos = anexos;
+  const nova = leiGuardar(dados);
+  if (!nova) return null;
+  outras.forEach((o) => {
+    leiSoltarPonteiros(o.id, kept.id);
+    const tudo = leisLerTudo();
+    delete tudo[o.id];
+    leisGravarTudo(tudo);
+  });
+  try { reg("LEI", "leis mescladas", kept.nome + " ← " + outras.map((o) => o.nome).join(", ")); } catch (e) {}
+  return { lei: nova, resumo: r };
 }
 
 /* =====================================================================
@@ -2264,5 +2466,8 @@ if (typeof module !== "undefined" && module.exports) {
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
     leiParar, leiProgresso, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
     leisHojeISO,
+    leiNumeroNorm, leiEspecieNorm, leiEnteDoTexto, leiChaveIdentidade, leiMesmaLei,
+    leiAcharIgual, leiIdLivre, leiDuplicadasNaBiblioteca, leiMarcarDistintas,
+    leiSoltarPonteiros, leiMesclar,
   };
 }
