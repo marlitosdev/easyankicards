@@ -1150,7 +1150,18 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-div{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--sutil);font-weight:800;margin:16px 0 6px;
   border-bottom:1px solid var(--borda);padding-bottom:4px}
+/* CONTENT-VISIBILITY: o navegador NÃO calcula layout nem pinta o artigo que
+   está fora da tela. É o que mais pesa numa lei de 424 artigos (medido: a
+   repintura caiu de ~155 para ~35 ms, a reabertura de ~145 para ~62 ms).
+   "auto" no tamanho estimado lembra o tamanho REAL de cada artigo depois
+   de visto, e a busca da página (Ctrl+F) continua achando o texto. Sem
+   suporte, a propriedade é ignorada e nada muda.
+   ATENÇÃO: paint containment recorta o que passa da caixa — por isso o
+   contorno do "pisca" (.lei-art-pisca, abaixo) é desenhado PARA DENTRO. */
 .lei-art{border-left:3px solid var(--borda);padding:2px 0 2px 11px;margin:10px 0}
+/* SÓ NO PAINEL DE LEI GRANDE (a classe lei-cv é posta por leiPintarLeitura):
+   em lei pequena o ganho não existe e o salto suave continua exato */
+.lei-cv .lei-art{content-visibility:auto;contain-intrinsic-size:auto 200px}
 .lei-art-parei{border-left-color:var(--verde)}
 /* O PERIGO SE VÊ DE RELANCE, sem ler.
    Na véspera ninguém relê 115 artigos: percorre procurando o que já
@@ -1213,7 +1224,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    artigos a rolagem centralizou. Reaproveita o mesmo contorno pulsando
    já usado para saltos de busca no material (".mat-piscando",
    "@keyframes matPisca" — mesmo arquivo, mesma animação, sem duplicar). */
-.lei-art-pisca{outline:3px solid var(--info);outline-offset:3px;
+.lei-art-pisca{outline:3px solid var(--info);outline-offset:-3px;
   border-radius:4px;animation:matPisca .55s ease-in-out 4}
 @media (prefers-reduced-motion:reduce){
   .lei-art-pisca{animation:none;outline-color:var(--info)}
