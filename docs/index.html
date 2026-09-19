@@ -1070,6 +1070,32 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * A fila de leis, a procedência e o "onde parei" ficam ACIMA do texto e
  * não crescem: são referência, não conteúdo. O que rola é a lei. */
 .lei-fila{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+/* ARTIGOS REPETIDOS: cada número é um cartão; a sugestão forte vem marcada
+   em verde, a fraca pede que a pessoa escolha (borda âmbar) */
+.lei-dup-topo{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:4px 0 8px}
+.lei-dup-lista{display:flex;flex-direction:column;gap:12px}
+.lei-dup-grupo{border:1px solid var(--borda);border-radius:10px;padding:9px 11px;background:var(--panel)}
+.lei-dup-grupo.forte{border-color:rgba(34,197,94,.55)}
+.lei-dup-grupo.fraca{border-color:var(--laranja-borda,#e8940a)}
+.lei-dup-cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:800;margin-bottom:6px}
+.lei-dup-forca{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--borda);color:var(--sutil)}
+.lei-dup-forca.forte{color:var(--ok);border-color:var(--ok)}
+.lei-dup-forca.fraca{color:var(--atencao);border-color:var(--atencao)}
+.lei-dup-op{display:block;border:1px solid var(--borda);border-radius:8px;padding:7px 9px;margin:6px 0;cursor:pointer}
+.lei-dup-op.sel{border-color:var(--acao,#1d4ed8);background:rgba(37,99,235,.10)}
+.lei-dup-op.sug{box-shadow:inset 4px 0 0 #22c55e}
+.lei-dup-op input{margin-right:7px}
+.lei-dup-op-tit{font-weight:700;font-size:12.5px}
+.lei-dup-chip{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:999px;margin-left:6px;border:1px solid var(--borda);color:var(--sutil)}
+.lei-dup-chip.ok{color:var(--ok);border-color:var(--ok);background:rgba(34,197,94,.14)}
+.lei-dup-chip.ruim{color:var(--erro);border-color:var(--erro);background:rgba(239,68,68,.14)}
+.lei-dup-chip.sug{color:#fff;border-color:#16a34a;background:#16a34a}
+.lei-dup-txt{font-size:12.5px;line-height:1.55;margin-top:5px;color:var(--texto);overflow-wrap:anywhere}
+.lei-dup-dif{background:rgba(250,204,21,.32);border-radius:3px;padding:0 1px}
+.lei-dup-mais{font-size:11.5px;color:var(--sutil);margin-top:4px}
+.lei-dup-mais > summary{cursor:pointer}
+.lei-dup-motivo{font-size:11.5px;color:var(--sutil);margin:2px 0 4px}
+.lei-dup-original{display:flex;align-items:flex-start;gap:7px;font-size:12px;margin-top:6px}
 /* ANDAMENTO DA LEI GRANDE: texto que anda + barra; o giro só existe para
    quem não pediu menos movimento */
 .lei-carga{margin:6px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:8px;
@@ -6306,6 +6332,28 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn btn-azul" id="btnLeiUpdFinalizar" data-i18n="lei_upd_finalizar"></button>
       <button class="btn btn-cinza" id="btnLeiUpdFechar2" data-i18n="help_close"></button>
     </div>
+  </div>
+</dialog>
+
+<!-- ARTIGOS REPETIDOS NO TEXTO COLADO: a pessoa escolhe qual fica; o app
+     sugere (e marca) o que tem indício de vigência, mas nada é criado nem
+     comparado antes do "confirmar". Serve à CRIAÇÃO da lei e à ATUALIZAÇÃO
+     de versão (leiDuplicadosAbrir, lei-ui.js). -->
+<dialog id="dlgLeiDup" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 id="leiDupTitulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiDupX" data-i18n-title="lei_dup_cancelar">✖</button>
+  </div>
+  <p class="nota" id="leiDupAjuda"></p>
+  <div class="lei-dup-topo">
+    <span class="nota" id="leiDupResumo"></span>
+    <button class="btn-min" id="btnLeiDupSugestoes" data-i18n="lei_dup_usar"></button>
+  </div>
+  <div id="leiDupLista" class="lei-dup-lista"></div>
+  <p class="nota" id="leiDupFaltam"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiDupConfirmar" disabled></button>
+    <button class="btn btn-cinza" id="btnLeiDupCancelar" data-i18n="lei_dup_cancelar"></button>
   </div>
 </dialog>
 
