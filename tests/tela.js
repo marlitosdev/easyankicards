@@ -480,17 +480,24 @@ async function testes() {
     /* N8 — o painel tem de DIZER de qual bancada é o relatório. Com dois
      * modos, copiar o do lado errado e mandar para quem vai ajudar é erro
      * fácil e caro: o relatório parece certo e descreve outra coisa. */
+    /* (o diálogo abre no assunto do lugar de onde se veio: no modo edital,
+     * "Edital" — abrirDiagnostico usa diagAssuntoPadrao) */
+    ok(api.diagAssuntoPadrao() === "edital",
+       `N8-pre no modo edital o diálogo não abre em Edital: ${api.diagAssuntoPadrao()}`);
+    api.rtIniciarTela({ assunto: api.diagAssuntoPadrao() });
     api.montarPainelDiag();
     const rotulo = (api.$("diagAlvo").children || []).map((c) => c.textContent).join(" ");
-    ok(/edital/.test(rotulo), `N8 o painel não diz que o relatório é do edital: "${rotulo}"`);
+    ok(/edital/i.test(rotulo), `N8 o painel não diz que o relatório é do edital: "${rotulo}"`);
 
     /* e volta a olhar os cartões quando o modo volta */
     api.trocarModo("cartoes");
     ok(/Onde: bancada de cartões/.test(api.montarDiagnostico()),
        "N7 voltar para cartões não devolveu o foco");
+    api.rtIniciarTela({ assunto: api.diagAssuntoPadrao() });
     api.montarPainelDiag();
     const rot2 = (api.$("diagAlvo").children || []).map((c) => c.textContent).join(" ");
-    ok(/cart/.test(rot2), `N9 o rótulo não acompanhou a volta aos cartões: "${rot2}"`);
+    ok(!/edital/i.test(rot2) && /Tudo/.test(rot2),
+       `N9 o rótulo não acompanhou a volta aos cartões: "${rot2}"`);
 
     /* O — o painel. A tabela de 231 linhas responde "qual a ordem?", que se
      * pergunta uma vez; o painel responde "e agora?", que se pergunta todo

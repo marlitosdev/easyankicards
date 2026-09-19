@@ -2780,6 +2780,11 @@ function leiIniciar() {
     b.textContent = t("copied");
     setTimeout(() => { b.textContent = r; }, 1800);
   });
+  /* o caminho para ENVIAR: o relatório completo (com período, erros e
+   * o texto pronto para copiar/baixar/compartilhar), já em "Leis e vínculos" */
+  liga("btnLeiLogEnviar", "enviar relatório", () => {
+    if (typeof abrirDiagnostico === "function") abrirDiagnostico({ assunto: "leis" });
+  });
   liga("btnLeiLogLimpar", "apagar registro", async () => {
     if (!(await uiConfirm(t("lei_log_limpar_conf", { n: leiLog.length })))) return;
     leiLog = [];

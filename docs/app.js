@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.24.0";
+const VERSAO = "16.25.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4807,7 +4807,10 @@ function montarDiagnostico() {
     L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
       + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa
       + " | sessão " + SESSAO);
-    L.push("Onde: " + foco.onde);
+    /* "Onde" fala da bancada (cartões/edital): num relatório de Questões,
+     * Leis ou Material ela só confunde — o assunto já está no cabeçalho
+     * do registro */
+    if (DIAG_ASSUNTOS_COM_TEXTO.indexOf(diagAssunto) >= 0) L.push("Onde: " + foco.onde);
     /* DE QUAL VERSÃO O SERVICE WORKER ESTÁ SERVINDO.
      *
      * É a informação que faltava nas duas vezes em que "subi os
@@ -4855,13 +4858,18 @@ function montarDiagnostico() {
       + " (primeiro na L" + presos[0].line + ")");
   });
   L.push("");
-  const soModo = $("chkDiagModo") && $("chkDiagModo").checked
-    ? (typeof modoAtual !== "undefined" ? modoAtual : null) : null;
-  const nPer = registroFiltrado(soModo).length;
-  L.push("--- REGISTRO (" + nPer + " de " + registro.length + " eventos"
-    + (soModo ? ", filtrado: só " + soModo : "")
-    + (regPeriodo ? ", período: " + t("diag_per_" + regPeriodo) : "") + ") ---");
-  bloco(L, () => L.push(registroTexto(soModo)));
+  /* O REGISTRO SAI DO MESMO FILTRO QUE A PRÉVIA E A LINHA DO TEMPO
+   * USAM (assunto × período × gravidade, ver registro-tudo.js). Antes só
+   * o registro geral entrava aqui, filtrado por um "modo" que só
+   * conhecia edital e cartões: em Questões e Leis o relatório saía
+   * vazio ou sem os erros, e o log da lei nunca entrava. */
+  const rel = rtRelatorio(rtOpcoesAtuais());
+  const nomeAss = t("diag_ass_" + diagAssunto);
+  L.push("--- REGISTRO (assunto: " + nomeAss
+    + " · período: " + t("diag_per_" + regPeriodo)
+    + (diagGravidade === "problemas" ? " · só erros e avisos" : "")
+    + " · " + rel.n + " eventos) ---");
+  bloco(L, () => L.push(rel.n ? rel.texto : t("log_empty_assunto", { a: nomeAss })));
   L.push("");
   /* O REGISTRO DA VINCULAÇÃO ENTRA NO DIAGNÓSTICO.
    *
@@ -4871,7 +4879,8 @@ function montarDiagnostico() {
    * o que se cola num relato de problema: deixá-lo de fora obrigava a
    * abrir duas telas e juntar dois textos à mão. */
   try {
-    if (typeof vzLogLer === "function" && vzLogLer().length) {
+    if ((diagAssunto === "tudo" || diagAssunto === "edital")
+        && typeof vzLogLer === "function" && vzLogLer().length) {
       L.push("--- VINCULAÇÃO ENTRE EDITAIS (" + vzLogLer().length
              + " etapas registradas) ---");
       L.push(vzLogTexto());
@@ -4921,12 +4930,31 @@ function confirmarBotao(id, chave) {
   setTimeout(() => { b.textContent = antes; b.disabled = false; }, 1800);
 }
 
+/* O texto dos cartões só tem o que dizer nos relatórios da bancada
+ * (cartões, edital) ou no geral — em Questões, Leis e Material ele é
+ * ruído: a caixa some e o texto não vai. */
+const DIAG_ASSUNTOS_COM_TEXTO = ["tudo", "cartoes", "edital"];
+
 function montarPainelDiag() {
-  const comTexto = $("chkDiagTexto").checked;
+  const temTexto = DIAG_ASSUNTOS_COM_TEXTO.indexOf(diagAssunto) >= 0;
+  if ($("diagOpTexto")) $("diagOpTexto").hidden = !temTexto;
+  const comTexto = temTexto && $("chkDiagTexto").checked;
   let txt = montarDiagnostico();
   if (!comTexto) {
     const corte = txt.indexOf("\n--- TEXTO");
-    if (corte > 0) txt = txt.slice(0, corte) + "\n--- TEXTO (não incluído a pedido) ---";
+    /* nos assuntos sem bancada o bloco simplesmente não existe; nos
+     * outros, fica dito que foi deixado de fora */
+    if (corte > 0) txt = txt.slice(0, corte)
+      + (temTexto ? "\n--- TEXTO (não incluído a pedido) ---" : "");
+  }
+  /* OS DADOS DO APARELHO SAEM SE A PESSOA QUISER: a primeira linha (versão
+   * e sessão) fica sempre — sem ela ninguém sabe de que versão é o relato —
+   * e o resto do cabeçalho (navegador, armazenamento, estado) vai embora. */
+  if ($("chkDiagAparelho") && !$("chkDiagAparelho").checked) {
+    const ini = txt.indexOf("\n--- REGISTRO");
+    if (ini > 0) {
+      txt = txt.split("\n")[0] + "\n(dados do aparelho não incluídos a pedido)\n" + txt.slice(ini);
+    }
   }
   /* MASCARAR ANTES DE QUALQUER COISA.
    *
@@ -4941,52 +4969,73 @@ function montarPainelDiag() {
   diagTexto = txt;
   $("diagPre").innerHTML = pintarDiagnostico(txt);
   diagPintarPeriodos();
+  /* assunto e gravidade (com as contagens) e a linha do tempo, sempre do
+   * mesmo filtro que acabou de gerar o texto */
+  try { rtPintar(); } catch (e) {}
 
-  /* Diz, em cima e por extenso, DE QUAL bancada é este relatório. */
-  const foco = textoEmFoco();
+  /* Diz, em cima e por extenso, SOBRE O QUÊ é este relatório (o assunto
+   * que a pessoa escolheu — não mais a "bancada", que só existia para
+   * edital e cartões) e quanto ele leva. */
   const alvo = $("diagAlvo");
   alvo.innerHTML = "";
   const rot = document.createElement("span");
   rot.textContent = t("diag_alvo_rot");
   const nome = document.createElement("b");
-  nome.textContent = foco.onde;
+  nome.textContent = t("diag_ass_" + diagAssunto);
   const conta = document.createElement("span");
   conta.className = "da-conta";
   conta.textContent = t("diag_alvo_conta", {
-    l: (foco.txt || "").split(/\r?\n/).length,
-    c: (foco.txt || "").length,
-    e: registro.length,
+    e: rtRelatorio(rtOpcoesAtuais()).n,
+    c: txt.length,
   });
   alvo.append(rot, nome, conta);
 }
 
 let swDiagUltimo = null;
 
-async function abrirDiagnostico() {
+/* O ASSUNTO COM QUE O DIAGNÓSTICO ABRE: o de onde a pessoa veio. Quem está
+ * numa questão quer o registro das questões; quem está na lei, o das
+ * leis; no edital, o do edital. Só o rodapé geral abre em "tudo". */
+function diagAssuntoPadrao() {
+  const aberto = (id) => { const d = $(id); return !!(d && d.open); };
+  if (aberto("dlgLeiSeca") || aberto("dlgLeiLog")) return "leis";
+  if (aberto("dlgQsResponder") || aberto("dlgQuestoes")) return "questoes";
+  if (typeof modoAtual !== "undefined" && modoAtual === "edital") return "edital";
+  return "tudo";
+}
+
+/* opc = { assunto, gravidade } de quem chama por um botão "ver registro";
+ * sem nada, abre no assunto do lugar de onde a pessoa veio. */
+async function abrirDiagnostico(opc) {
+  const pedido = (opc && typeof opc === "object") ? opc : {};
   await medirArmazenamento();
   /* consultado ANTES de montar o texto: o relatório que se copia tem de
    * trazer isto, que é a primeira coisa a olhar quando "a versão não
    * mudou" */
   try { swDiagUltimo = await swDiagnostico(); } catch (e) { swDiagUltimo = null; }
-  /* No edital, o filtro por modo já vem ligado: quem está relatando um
-   * problema do plano não quer ler 180 eventos dos cartões para achar os
-   * seus três. Quem quiser tudo desmarca. */
-  if (typeof modoAtual !== "undefined" && modoAtual !== "cartoes")
-    $("chkDiagModo").checked = true;
-  montarPainelDiag();
+  /* os filtros nascem já no assunto certo (ver diagAssuntoPadrao) */
+  rtIniciarTela({
+    assunto: pedido.assunto || diagAssuntoPadrao(),
+    gravidade: pedido.gravidade,
+  });
+  /* "Compartilhar" só aparece onde o aparelho tem folha de compartilhamento */
+  if ($("btnDiagCompartilhar")) $("btnDiagCompartilhar").hidden = !diagPodeCompartilhar();
+  const g = $("diagTempo");
   /* A LINHA DO TEMPO NASCE FECHADA: ela é para quando a pergunta é "o
    * que aconteceu antes disto?", e mostrá-la sempre empurraria o
-   * diagnóstico — que é o que se copia — para baixo de quatrocentas
-   * linhas. Quem precisa dela toca numa aba. */
-  try { rtIniciarTela(); } catch (e) {}
+   * relatório — que é o que se copia — para baixo de quatrocentas
+   * linhas. */
+  if (g) g.open = false;
+  montarPainelDiag();
   reg("DIAGNOSTICO", "painel aberto",
-      registro.length + " eventos, foco: " + textoEmFoco().onde);
+      rtRelatorio(rtOpcoesAtuais()).n + " eventos, assunto: " + diagAssunto);
   abrirModal("dlgDiagnostico");
 }
 
-$("btnDiagnostico").onclick = abrirDiagnostico;
+$("btnDiagnostico").onclick = () => abrirDiagnostico();
 $("chkDiagTexto").onchange = montarPainelDiag;
-$("chkDiagModo").onchange = montarPainelDiag;
+$("chkDiagAparelho").onchange = montarPainelDiag;
+if ($("diagTempo")) $("diagTempo").addEventListener("toggle", () => rtPintar());
 /* botões de período, ao lado das outras opções do diagnóstico */
 function diagPintarPeriodos() {
   const cx = $("diagPeriodos");
@@ -4999,10 +5048,10 @@ function diagPintarPeriodos() {
     b.textContent = t("diag_per_" + p);
     b.title = t("diag_per_ajuda");
     b.setAttribute("aria-pressed", regPeriodo === p ? "true" : "false");
+    /* só refiltra: não reabre o diálogo nem mede o armazenamento de novo */
     b.onclick = () => {
       regPeriodo = p;
-      diagPintarPeriodos();
-      if (typeof abrirDiagnostico === "function") abrirDiagnostico(true);
+      montarPainelDiag();
     };
     cx.append(b);
   });
@@ -5021,21 +5070,54 @@ $("btnDiagCopiar").onclick = async () => {
   try {
     await navigator.clipboard.writeText(diagTexto);
     confirmarBotao("btnDiagCopiar", "diag_copiado");
-    toast(textoEmFoco().edital ? "toast_diag_copied_ed" : "toast_diag_copied_cd");
+    toast("toast_diag_copied");
   } catch (e) { uiAlert(t("toast_copy_fail")); }
 };
-$("btnDiagBaixar").onclick = () => {
-  /* nome com data e hora: dois relatórios do mesmo dia não se sobrescrevem */
+
+/* nome com data e hora: dois relatórios do mesmo dia não se sobrescrevem */
+function diagNomeArquivo() {
   const d = new Date();
   const car = (n) => String(n).padStart(2, "0");
-  const nome = "easyankicards-diagnostico-" + d.getFullYear() + car(d.getMonth() + 1)
+  return "easyankicards-diagnostico-" + d.getFullYear() + car(d.getMonth() + 1)
     + car(d.getDate()) + "-" + car(d.getHours()) + car(d.getMinutes()) + ".txt";
+}
+
+/* "ENVIAR": a folha de compartilhamento do aparelho (e-mail, WhatsApp…),
+ * onde ela existe. Preferimos mandar como arquivo .txt; se o aparelho só
+ * aceitar texto, vai o texto. O botão fica escondido onde não há
+ * navigator.share — copiar e baixar continuam sendo o caminho. */
+function diagPodeCompartilhar() {
+  return typeof navigator !== "undefined" && typeof navigator.share === "function";
+}
+if ($("btnDiagCompartilhar")) {
+  $("btnDiagCompartilhar").hidden = !diagPodeCompartilhar();
+  $("btnDiagCompartilhar").onclick = async () => {
+    if (!diagPodeCompartilhar()) return;
+    const nome = diagNomeArquivo();
+    const dados = { title: "EasyAnkiCards — diagnóstico" };
+    try {
+      const arq = new File([diagTexto], nome, { type: "text/plain" });
+      if (navigator.canShare && navigator.canShare({ files: [arq] })) dados.files = [arq];
+    } catch (e) {}
+    if (!dados.files) dados.text = diagTexto;
+    try {
+      await navigator.share(dados);
+      reg("DIAGNOSTICO", "compartilhado", diagAssunto + (dados.files ? " (arquivo)" : " (texto)"));
+      confirmarBotao("btnDiagCompartilhar", "diag_compartilhado");
+    } catch (e) {
+      /* fechar a folha sem escolher é AbortError — não é falha */
+      if (!e || e.name !== "AbortError") uiAlert(t("toast_copy_fail"));
+    }
+  };
+}
+$("btnDiagBaixar").onclick = () => {
+  const nome = diagNomeArquivo();
   const url = URL.createObjectURL(new Blob([diagTexto], { type: "text/plain;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url; a.download = nome;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  reg("DIAGNOSTICO", "baixado", nome + " (" + textoEmFoco().onde + ")");
+  reg("DIAGNOSTICO", "baixado", nome + " (" + diagAssunto + ")");
   confirmarBotao("btnDiagBaixar", "diag_baixado");
   toast("toast_diag_saved");
 };

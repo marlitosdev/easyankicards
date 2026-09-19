@@ -3320,6 +3320,21 @@ body.split-lj{overflow:hidden}
    numa coluna estreita e obrigava a rolar de lado. */
 /* botões na horizontal, ABAIXO do registro a que pertencem */
 .diag-periodos{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+/* A BARRA DE AÇÕES ACOMPANHA A ROLAGEM: Copiar/Baixar/Compartilhar são o
+   objetivo do diálogo e não podem ficar abaixo de tudo. */
+.diag-acoes{position:sticky;top:0;z-index:3;background:var(--panel);
+  padding:6px 0 8px;margin:6px 0 4px;border-bottom:1px solid var(--borda)}
+.diag-acoes .diag-alvo{margin:0 0 6px}
+.diag-botoes{display:flex;flex-wrap:wrap;gap:8px}
+.diag-botoes .btn{flex:0 1 auto}
+.diag-passo{margin:8px 0 2px}
+.diag-incluir .diag-op{display:flex;align-items:center;gap:8px;margin:2px 0;font-size:13px}
+.diag-passo-t{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;
+  color:var(--sutil);text-transform:uppercase;margin-bottom:2px}
+.diag-passo .rt-abas,.diag-passo .diag-periodos{margin:2px 0 4px}
+.diag-passo .rt-aba{font-size:12px;padding:6px 12px}
+.diag-tempo{margin:10px 0 2px}
+.diag-tempo > summary{cursor:pointer;font-size:12px;color:var(--sutil);padding:4px 0}
 .di-det{font-size:11px;color:var(--sutil);margin-top:3px}
 .di-obs{font-size:11px;color:var(--sutil);font-style:italic;margin-top:3px;
   border-left:2px solid var(--borda);padding-left:7px}
@@ -4601,41 +4616,73 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <dialog id="dlgDiagnostico" class="ui-modal diag-modal">
   <h3 data-i18n="diag_titulo"></h3>
-  <div class="diag-alvo" id="diagAlvo"></div>
   <p class="nota" data-i18n="diag_ajuda"></p>
-  <div class="diag-legenda">
-    <div><b data-i18n="diag_leg_amb_t"></b> <span data-i18n="diag_leg_amb"></span></div>
-    <div><b data-i18n="diag_leg_arm_t"></b> <span data-i18n="diag_leg_arm"></span></div>
-    <div><b data-i18n="diag_leg_est_t"></b> <span data-i18n="diag_leg_est"></span></div>
-    <div><b data-i18n="diag_leg_reg_t"></b> <span data-i18n="diag_leg_reg"></span></div>
-    <div><b data-i18n="diag_leg_txt_t"></b> <span data-i18n="diag_leg_txt"></span></div>
-  </div>
-  <label class="diag-op"><input type="checkbox" id="chkDiagTexto" checked>
-    <span data-i18n="diag_incluir_texto"></span></label>
-  <div class="diag-periodos" id="diagPeriodos"></div>
-  <label class="diag-op"><input type="checkbox" id="chkDiagModo">
-    <span data-i18n="diag_so_modo"></span></label>
 
-  <!-- A LINHA DO TEMPO ÚNICA.
-       Os cinco registros continuam cada um no seu lugar — ler o da
-       vinculação dentro da tela de vinculação é o que o torna útil ali.
-       O que faltava era poder olhar todos juntos, em ordem, quando a
-       pergunta é "o que aconteceu antes disto?". Esta aba não guarda
-       nada: lê as fontes e junta. -->
-  <div class="rt-abas" id="rtAbas"></div>
-  <!-- Só aparece com erro(s) na lista: um convite a limpar, não uma opção
-       sempre visível para algo que quase nunca tem o que limpar. -->
-  <button type="button" id="btnRtLimparErros" class="rt-limpar" hidden></button>
-  <div class="rt-lista" id="rtLista" hidden></div>
+  <!-- COPIAR / BAIXAR / COMPARTILHAR NO TOPO, junto do que vão levar.
+       Ficavam no rodapé, abaixo do relatório e dos filtros: quem não
+       rolava até lá concluía que não havia como "enviar". A barra
+       acompanha a rolagem. Nada é enviado sozinho — "compartilhar" só
+       existe onde o aparelho oferece a folha de compartilhamento. -->
+  <div class="diag-acoes" id="diagAcoes">
+    <div class="diag-alvo" id="diagAlvo"></div>
+    <div class="diag-botoes">
+      <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
+      <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
+      <button class="btn btn-cinza" id="btnDiagCompartilhar" data-i18n="diag_compartilhar" hidden></button>
+    </div>
+  </div>
+
+  <!-- UM SÓ MODELO DE FILTRO: assunto, período, gravidade. O que aparece
+       na prévia abaixo é exatamente o que os botões de cima levam. -->
+  <div class="diag-passo">
+    <span class="diag-passo-t" data-i18n="diag_passo_assunto"></span>
+    <div class="rt-abas" id="diagAssuntos"></div>
+  </div>
+  <div class="diag-passo">
+    <span class="diag-passo-t" data-i18n="diag_passo_periodo"></span>
+    <div class="diag-periodos" id="diagPeriodos"></div>
+  </div>
+  <div class="diag-passo">
+    <span class="diag-passo-t" data-i18n="diag_passo_grav"></span>
+    <div class="rt-abas" id="diagGravidade"></div>
+  </div>
+  <div class="diag-passo diag-incluir">
+    <span class="diag-passo-t" data-i18n="diag_passo_incluir"></span>
+    <label class="diag-op"><input type="checkbox" id="chkDiagAparelho" checked>
+      <span data-i18n="diag_incluir_aparelho"></span></label>
+    <label class="diag-op" id="diagOpTexto"><input type="checkbox" id="chkDiagTexto" checked>
+      <span data-i18n="diag_incluir_texto"></span></label>
+  </div>
 
   <pre id="diagPre" class="diag-pre"></pre>
+
+  <!-- A LINHA DO TEMPO COLORIDA, só para olhar — as mesmas linhas do
+       relatório, uma por linha, com hora e nível. Fechada: é para quando
+       a pergunta é "o que aconteceu antes disto?". -->
+  <details class="diag-tempo" id="diagTempo">
+    <summary data-i18n="diag_linha_tempo"></summary>
+    <!-- Só aparece com erro(s): um convite a limpar, não uma opção
+         sempre visível para algo que quase nunca tem o que limpar. -->
+    <button type="button" id="btnRtLimparErros" class="rt-limpar" hidden></button>
+    <div class="rt-lista" id="rtLista"></div>
+  </details>
+
+  <details class="diag-tempo">
+    <summary data-i18n="diag_legenda_tit"></summary>
+    <div class="diag-legenda">
+      <div><b data-i18n="diag_leg_amb_t"></b> <span data-i18n="diag_leg_amb"></span></div>
+      <div><b data-i18n="diag_leg_arm_t"></b> <span data-i18n="diag_leg_arm"></span></div>
+      <div><b data-i18n="diag_leg_est_t"></b> <span data-i18n="diag_leg_est"></span></div>
+      <div><b data-i18n="diag_leg_reg_t"></b> <span data-i18n="diag_leg_reg"></span></div>
+      <div><b data-i18n="diag_leg_txt_t"></b> <span data-i18n="diag_leg_txt"></span></div>
+    </div>
+  </details>
+
   <div class="dlg-rodape">
     <!-- A SAÍDA PARA QUANDO A ATUALIZAÇÃO NÃO CHEGA. Mora aqui porque
          é para cá que se vem quando algo está errado. -->
     <button class="btn btn-cinza" id="btnSwForcar" data-i18n="sw_forcar"
       data-i18n-title="sw_forcar_aj"></button>
-    <button class="btn btn-verde" id="btnDiagCopiar" data-i18n="diag_copiar"></button>
-    <button class="btn btn-azul" id="btnDiagBaixar" data-i18n="diag_baixar"></button>
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
@@ -6177,6 +6224,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Mostra só as falhas. Se algo não funcionou, a linha do erro está aqui."></button>
     <button class="btn-min" id="btnLeiLogCopiar" data-i18n="lei_log_copiar"
       title="Copia o registro inteiro para você colar num relato de problema."></button>
+    <button class="btn-min mat-ligado" id="btnLeiLogEnviar" data-i18n="lei_log_enviar"
+      data-i18n-title="lei_log_enviar_aj"></button>
     <span class="mat-topo-dir">
       <button class="btn-min btn-min-perigo" id="btnLeiLogLimpar" data-i18n="lei_log_limpar"
         title="Apaga o registro. Pergunta antes: depois de apagado não há como reconstituir."></button>
