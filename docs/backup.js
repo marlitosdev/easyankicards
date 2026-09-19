@@ -60,7 +60,7 @@ const BK_CHAVES = {
    * adiamentos e dispensas, sem uma linha de aviso: o pior tipo de
    * perda, porque a tela depois parece apenas "vazia", não quebrada. */
   material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
-             "eac_leis", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei"],
+             "eac_leis", "eac_cit_vinculos", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
    *
    * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de

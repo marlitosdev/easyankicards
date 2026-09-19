@@ -1134,6 +1134,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-bib-uso{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--borda)}
 .lei-bib-uso > span{flex:1;min-width:0;overflow-wrap:anywhere}
 .lei-bib-acoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+/* o trecho no texto, com os vizinhos, dentro da conferência de repetidos */
+.lei-ctx{font-size:11.5px;line-height:1.5;border-left:3px solid var(--borda);padding:4px 8px;margin:4px 0 8px;max-height:280px;overflow:auto}
+.lei-ctx-l{display:block;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--sutil)}
+.lei-ctx-alvo{color:var(--texto);background:rgba(37,99,235,.14);font-weight:600}
+.lei-ctx-n{display:inline-block;min-width:38px;opacity:.55;font-weight:400}
+.lei-unidade-alvo{background:rgba(250,204,21,.28);border-radius:4px;outline:2px solid rgba(250,204,21,.6)}
+.qs-lei-link-perm{border-bottom:2px solid var(--ok)}
+.qs-vinc-btn{margin:6px 0}
 .lei-anexos{margin-top:12px}
 .lei-anexo{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--panel)}
 .lei-anexo > summary{cursor:pointer;font-weight:700;font-size:12.5px}
@@ -6247,6 +6255,44 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- VÍNCULOS DE LEI DE UM COMENTÁRIO: o que o app entendeu em cada citação, corrigir
+     ("este vínculo está errado"), vincular um trecho selecionado e tornar permanente
+     (qsVincAbrir, questoes-ui.js) -->
+<dialog id="dlgQsVinc" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="qs_vinc_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnQsVincX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="qs_vinc_ajuda"></p>
+  <div id="qsVincSel"></div>
+  <h4 data-i18n="qs_vinc_lista"></h4>
+  <div id="qsVincLista" class="lei-dup-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnQsVincFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgQsVincEsc" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 id="qsVincEscTitulo"></h3>
+    <button type="button" class="dlg-x" id="btnQsVincEscX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" id="qsVincEscTrecho"></p>
+  <label class="nota" data-i18n="qs_vinc_lei_rot"></label>
+  <select id="qsVincLei" style="width:100%"></select>
+  <label class="nota" data-i18n="qs_vinc_arts_rot"></label>
+  <input type="text" id="qsVincArts" placeholder="77, 78, 79">
+  <label class="lei-dup-original">
+    <input type="checkbox" id="qsVincPerm" checked>
+    <span data-i18n="qs_vinc_perm"></span>
+  </label>
+  <p class="nota" id="qsVincEscAviso"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnQsVincEscOk" data-i18n="qs_vinc_ok"></button>
+    <button class="btn btn-cinza" id="btnQsVincEscCancelar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiCitaPreview" class="ui-modal">
   <h3 id="leiCitaPreviewTitulo"></h3>
   <p class="nota" id="leiCitaPreviewArtigo"></p>
@@ -6351,6 +6397,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
     <div class="mat-topo">
       <button class="btn-min" id="btnLeiUpdIA" data-i18n="lei_upd_ia"></button>
+    <button class="btn-min" id="btnLeiRelUpd" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
     <textarea id="leiUpdPrompt" rows="6" readonly hidden
       style="width:100%;box-sizing:border-box"></textarea>
@@ -6384,6 +6431,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="lei-dup-topo">
     <span class="nota" id="leiDupResumo"></span>
     <button class="btn-min" id="btnLeiDupSugestoes" data-i18n="lei_dup_usar"></button>
+    <button class="btn-min" id="btnLeiRelDup" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
   <div id="leiDupLista" class="lei-dup-lista"></div>
   <p class="nota" id="leiDupFaltam"></p>
@@ -6407,6 +6455,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="lei-dup-topo">
     <span class="nota" id="leiPreResumo"></span>
     <button class="btn-min" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
+    <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
   <div id="leiPreLista" class="lei-dup-lista"></div>
   <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>
@@ -6432,6 +6481,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiCobConfirmar" disabled data-i18n="lei_cob_continuar"></button>
     <button class="btn btn-cinza" id="btnLeiCobVoltar" data-i18n="lei_pre_voltar"></button>
+    <button class="btn-min" id="btnLeiRelCob" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
 </dialog>
 
@@ -6484,6 +6534,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiJaConfirmar" disabled data-i18n="lei_cob_continuar"></button>
     <button class="btn btn-cinza" id="btnLeiJaVoltar" data-i18n="lei_pre_voltar"></button>
+    <button class="btn-min" id="btnLeiRelJa" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
 </dialog>
 

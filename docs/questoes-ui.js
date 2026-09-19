@@ -1021,7 +1021,11 @@ function qsUiPintarSessao() {
     depois.append(gbLinha);
 
     if (q.comentario) {
-      depois.append(qsUiDobra("qs_coment_tit", (el) => qsUiComentario(el, q)));
+      let elCom = null;
+      depois.append(qsUiDobra("qs_coment_tit", (el) => { elCom = el; return qsUiComentario(el, q); }));
+      /* "🔗 vínculos de lei": ver o que o app entendeu em cada citação, corrigir uma
+       * ("este vínculo está errado") e vincular um trecho selecionado */
+      depois.append(qsVincBotao(q, () => elCom));
     }
     /* A SUA DICA, depois de responder — nunca antes: dica antes da escolha
      * é gabarito disfarçado. */
@@ -1260,6 +1264,8 @@ function qsUiComentario(el, q) {
   try {
     if (typeof leiCitacoesNoTexto === "function") cits = leiCitacoesNoTexto(txt);
   } catch (e) { cits = []; }
+  /* os vínculos PERMANENTES que a pessoa fixou valem por cima da leitura automática */
+  try { if (typeof citVinculosAplicar === "function") cits = citVinculosAplicar(txt, cits); } catch (e) {}
   /* sem citação — e este é o caso comum em Português e Informática — o
    * comentário continua sendo exatamente o texto, sem nada em volta */
   if (!cits.length) { el.textContent = txt; return el; }
@@ -1297,6 +1303,12 @@ function qsUiComentario(el, q) {
  * chutava a primeira, agora ele pergunta. */
 function qsUiLeiAlvo(c, lista, doTopico) {
   const dt = doTopico || [];
+  /* VÍNCULO FIXADO PELA PESSOA: a lei já vem escolhida, sem casar rótulo */
+  if (c && c.leiId) {
+    const fixa = (lista || []).filter((x) => x.id === c.leiId)[0];
+    if (fixa) return { lei: fixa, ligada: dt.some((x) => x.id === fixa.id) };
+    return { lei: null, motivo: "desconhecida" };
+  }
   if (c && c.rotulo && typeof leiCasarRotulo === "function") {
     let l = null;
     try { l = leiCasarRotulo(c.rotulo, lista); } catch (e) { l = null; }
@@ -1326,6 +1338,10 @@ function qsUiLeiLink(c, q, lista, doTopico) {
     ? t("qs_lei_link_ir", { l: alvo.lei.nome, a: c.numCru }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t("qs_lei_link_sem", { l: c.rotulo })
                 : t("qs_lei_link_qual", { a: c.numCru }));
+  if (c.permanente) {
+    b.classList.add("qs-lei-link-perm");
+    if (alvo.lei) b.title = t("qs_vinc_link_perm", { l: alvo.lei.nome, a: (c.artigos || []).map((a) => a.numCru).join(", ") || c.numCru || "" });
+  }
   b.onclick = (ev) => {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     qsUiLeiIr(c, q, b);
@@ -1369,8 +1385,8 @@ function qsUiLeiIr(c, q, botao) {
      * este tópico, ela abre do mesmo jeito — ler o artigo não pode
      * exigir uma decisão de arrumação primeiro. Vincular continua a um
      * toque, na fila de chips do próprio leitor. */
-    const achou = leiAbrirNoArtigo(q.disciplina, q.topico, alvo.lei.id, c.num);
-    if (!achou) {
+    const achou = leiAbrirNoArtigo(q.disciplina, q.topico, alvo.lei.id, c.num, c);
+    if (!achou && c.num) {
       try { uiAlert(t("qs_lei_link_nao_achou", { a: c.numCru, l: alvo.lei.nome })); }
       catch (e) {}
     }
@@ -1420,6 +1436,221 @@ function qsUiLeiIr(c, q, botao) {
   } catch (e) {}
   reg("QUESTOES", "citação sem lei vinculada",
       (c.rotulo || "sem rótulo") + " · art. " + c.numCru + " · " + q.topico);
+}
+
+/* =====================================================================
+ * "ESTE VÍNCULO ESTÁ ERRADO" e "VINCULAR ESTE TRECHO" — a citação que a
+ * pessoa conserta uma vez e vale sempre
+ *
+ * A leitura automática de uma citação erra (sigla que não conhece, frase fora
+ * do padrão). O botão "🔗 vínculos de lei" abaixo do comentário abre a lista
+ * do que o app entendeu em CADA citação — com a lei para onde cada uma leva
+ * — e deixa:
+ *  · corrigir uma citação ("este vínculo está errado"): escolher a lei certa e
+ *    os artigos;
+ *  · vincular um TRECHO SELECIONADO no comentário a uma lei e artigos;
+ *  · tornar o vínculo PERMANENTE (marcado por padrão): a mesma frase, em
+ *    qualquer questão, passa a abrir aquela lei; ou só abrir agora;
+ *  · remover um vínculo permanente.
+ * O vínculo é guardado pelo texto do trecho (citVinculoSalvar), não pela
+ * questão. A seleção é capturada ao APERTAR o botão: em alguns aparelhos o
+ * toque tira a seleção antes do clique.
+ * ===================================================================== */
+let qsVincCtx = null;
+
+function qsVincSelecao(el) {
+  try {
+    const s = typeof window !== "undefined" && window.getSelection ? window.getSelection() : null;
+    if (!s || !s.rangeCount) return "";
+    const txt = String(s.toString()).replace(/\s+/g, " ").trim();
+    if (!txt) return "";
+    if (el && el.contains && s.anchorNode && !el.contains(s.anchorNode)) return "";
+    return txt.slice(0, 300);
+  } catch (e) { return ""; }
+}
+
+function qsVincBotao(q, obterEl) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn-min qs-vinc-btn";
+  b.id = "btnQsVinc";
+  b.textContent = t("qs_vinc_btn");
+  b.title = t("qs_vinc_btn_aj");
+  let sel = "";
+  const guardar = () => { sel = qsVincSelecao(obterEl()); };
+  b.onmousedown = guardar;
+  b.ontouchstart = guardar;
+  b.onpointerdown = guardar;
+  b.onclick = () => { qsVincAbrir(q, obterEl(), sel || qsVincSelecao(obterEl())); sel = ""; };
+  return b;
+}
+
+function qsVincContexto(q) {
+  const ch = (typeof matChave === "function" && q && q.disciplina && q.topico) ? matChave(q.disciplina, q.topico) : "";
+  let lista = [], doTopico = [];
+  try {
+    lista = leisLista();
+    doTopico = (ch && typeof leisDoTopico === "function") ? leisDoTopico(ch) : [];
+  } catch (e) {}
+  return { ch, lista, doTopico };
+}
+
+function qsVincAbrir(q, el, selecao) {
+  qsVincCtx = { q, el, selecao: selecao || "" };
+  qsVincPintar();
+  abrirModal("dlgQsVinc");
+  try { reg("QUESTOES", "vínculos de lei do comentário abertos", (q && q.topico) || ""); } catch (e) {}
+}
+
+function qsVincPintar() {
+  const c = qsVincCtx;
+  if (!c) return;
+  const q = c.q;
+  const txt = String((q && q.comentario) || "");
+  const { lista, doTopico } = qsVincContexto(q);
+
+  const sel = $("qsVincSel");
+  sel.innerHTML = "";
+  if (c.selecao) {
+    const d = document.createElement("div");
+    d.className = "lei-pre-grupo";
+    const p = document.createElement("div");
+    p.className = "lei-pre-ctx";
+    p.textContent = t("qs_vinc_sel", { t: c.selecao });
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min btn-min-ok";
+    b.id = "btnQsVincSel";
+    b.textContent = t("qs_vinc_sel_btn");
+    b.onclick = () => qsVincEscolher({ trecho: c.selecao, cit: null });
+    d.append(p, b);
+    sel.append(d);
+  } else {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("qs_vinc_sem_sel");
+    sel.append(p);
+  }
+
+  let cits = [];
+  try { cits = citVinculosAplicar(txt, leiCitacoesNoTexto(txt)); } catch (e) { cits = []; }
+  const cx = $("qsVincLista");
+  cx.innerHTML = "";
+  if (!cits.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("qs_vinc_nenhuma");
+    cx.append(p);
+  }
+  cits.forEach((ct, i) => {
+    const alvo = qsUiLeiAlvo(ct, lista, doTopico);
+    const card = document.createElement("div");
+    card.className = "lei-bib-card";
+    card.id = "qsVincCit_" + i;
+    const tit = document.createElement("div");
+    tit.className = "lei-bib-tit";
+    tit.textContent = ct.texto;
+    const meta = document.createElement("div");
+    meta.className = "lei-bib-meta" + (alvo.lei ? "" : " lei-bib-sem");
+    meta.textContent = (alvo.lei ? t("qs_vinc_abre", { l: alvo.lei.nome, a: ct.numCru || "—" })
+      : t("qs_vinc_sem_lei", { l: ct.rotulo || "?" }))
+      + (ct.permanente ? " · " + t("qs_vinc_permanente") : "");
+    const ac = document.createElement("div");
+    ac.className = "lei-bib-acoes";
+    const errado = document.createElement("button");
+    errado.type = "button";
+    errado.className = "btn-min btn-min-perigo";
+    errado.id = "btnQsVincErrado_" + i;
+    errado.textContent = t("qs_vinc_errado");
+    errado.onclick = () => qsVincEscolher({ trecho: ct.texto, cit: ct, atual: alvo.lei });
+    ac.append(errado);
+    if (ct.permanente) {
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "btn-min";
+      rm.id = "btnQsVincRemover_" + i;
+      rm.textContent = t("qs_vinc_remover");
+      rm.onclick = () => {
+        citVinculoRemover(ct.vinculoK);
+        try { reg("QUESTOES", "vínculo permanente removido", ct.texto); } catch (e) {}
+        qsVincPintar();
+        try { qsUiPintarSessao(); } catch (e) {}
+      };
+      ac.append(rm);
+    }
+    card.append(tit, meta, ac);
+    cx.append(card);
+  });
+}
+
+/* a lei e os artigos certos, para um trecho */
+function qsVincEscolher(alvo) {
+  const c = qsVincCtx;
+  if (!c) return;
+  c.esc = alvo;
+  const { lista, doTopico } = qsVincContexto(c.q);
+  $("qsVincEscTitulo").textContent = t(alvo.cit ? "qs_vinc_esc_errado" : "qs_vinc_esc_novo");
+  $("qsVincEscTrecho").textContent = "“" + alvo.trecho + "”";
+  const s = $("qsVincLei");
+  s.innerHTML = "";
+  const vazio = document.createElement("option");
+  vazio.value = "";
+  vazio.textContent = t("qs_vinc_escolha");
+  s.append(vazio);
+  /* as leis do tópico primeiro: é onde está a resposta mais provável */
+  const ordem = doTopico.concat(lista.filter((l) => !doTopico.some((d) => d.id === l.id)));
+  ordem.forEach((l) => {
+    const o = document.createElement("option");
+    o.value = l.id;
+    o.textContent = l.nome + (doTopico.some((d) => d.id === l.id) ? " ★" : "");
+    s.append(o);
+  });
+  /* a lei que o app achou é justamente a que a pessoa disse estar errada: não
+   * vem marcada. Sem lei nenhuma achada e uma só no tópico, essa é a sugestão. */
+  s.value = (!alvo.atual && doTopico.length === 1) ? doTopico[0].id : "";
+  let arts = "";
+  try {
+    arts = alvo.cit
+      ? ((alvo.cit.artigos && alvo.cit.artigos.length)
+        ? alvo.cit.artigos.map((a) => a.numCru).join(", ") : (alvo.cit.numCru || ""))
+      : leiCitacoesNoTexto(alvo.trecho).map((x) => x.numCru).join(", ");
+  } catch (e) { arts = ""; }
+  $("qsVincArts").value = arts;
+  $("qsVincPerm").checked = true;
+  $("qsVincEscAviso").textContent = "";
+  abrirModal("dlgQsVincEsc");
+}
+
+function qsVincSalvar() {
+  const c = qsVincCtx;
+  if (!c || !c.esc) return false;
+  const leiId = String($("qsVincLei").value || "");
+  if (!leiId) { $("qsVincEscAviso").textContent = t("qs_vinc_sem_escolha"); return false; }
+  const l = leiDe(leiId);
+  if (!l) { $("qsVincEscAviso").textContent = t("qs_vinc_sem_escolha"); return false; }
+  const artigos = citLerArtigos($("qsVincArts").value);
+  const perm = !!$("qsVincPerm").checked;
+  const trecho = c.esc.trecho;
+  $("dlgQsVincEsc").close();
+  if (perm) {
+    const r = citVinculoSalvar({ trecho, leiId, artigos });
+    try { reg("QUESTOES", (c.esc.cit ? "vínculo corrigido (permanente)" : "vínculo criado (permanente)"),
+      trecho + " → " + l.nome + " · " + artigos.map((a) => a.numCru).join(", ")); } catch (e) {}
+    if (!r) { try { uiAlert(t("qs_vinc_erro_gravar")); } catch (e) {} return false; }
+    qsVincPintar();
+    try { qsUiPintarSessao(); } catch (e) {}
+    return true;
+  }
+  /* só desta vez: abre agora, sem guardar */
+  try { reg("QUESTOES", "vínculo usado só agora", trecho + " → " + l.nome); } catch (e) {}
+  const q = c.q;
+  if ($("dlgQsVinc").open) $("dlgQsVinc").close();
+  leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+  const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, artigos[0] ? artigos[0].num : "");
+  if (artigos[0] && !achou) {
+    try { uiAlert(t("qs_lei_link_nao_achou", { a: artigos[0].numCru, l: l.nome })); } catch (e) {}
+  }
+  return true;
 }
 
 /* =====================================================================
@@ -1536,7 +1767,7 @@ function qsUiLeiEscolher(botao, q, cit) {
       }
       leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
       const num = cit ? cit.num : "";
-      const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, num);
+      const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, num, cit);
       if (num && !achou) {
         try { uiAlert(t("qs_lei_link_nao_achou", { a: cit.numCru, l: l.nome })); }
         catch (e) {}

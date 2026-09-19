@@ -98,6 +98,31 @@ function leiEmenta(texto, limite) {
  * está. Tudo que vem ANTES do primeiro artigo (ementa da lei, preâmbulo,
  * "O PRESIDENTE DA REPÚBLICA…") fica de fora da lista — não é artigo e
  * contaria como um, estragando toda a numeração. */
+/* ARTIGOS REVOGADOS EM GRUPO.
+ * Texto consolidado de lei escreve "Arts. 12 a 15 (Revogados pela LC 9/2010)" numa
+ * linha só, no lugar de quatro artigos. O leitor só conhecia "Art. N": lia "Art. 12"
+ * com o resto ("a 15 (Revogados…)") como texto, e depois do 12 vinha o 16 — uma
+ * LACUNA de numeração que não existe, criticada como erro do leitor. Agora a
+ * linha vira UM item que cobre a faixa (faixaFim), marcado como revogado. Só vale
+ * com a palavra "revogad…", "vetad…" ou "suprimid…" na própria linha: "Art. 12 e
+ * 13 obrigam…" é artigo. */
+const LEI_RE_FAIXA = /^[\s>*]*(Arts?\.?|Artigos)\s*(\d{1,4})\s*[ºo°ª]?(?:-([A-Z]))?\s*(?:,|\be\b|\ba\b|\bao\b|até|–|-)\s*(?:o\s+)?(?:Arts?\.?\s*)?(\d{1,4})/i;
+
+function leiLerFaixaRevogada(linha) {
+  const s0 = String(linha || "");
+  const m = s0.match(LEI_RE_FAIXA);
+  if (!m) return null;
+  const k = s0.search(/revogad|vetad|suprimid/i);
+  if (k < 0) return null;
+  const nums = (s0.slice(0, k).match(/\d{1,4}/g) || []).map(Number);
+  if (nums.length < 2) return null;
+  const ini = Math.min.apply(null, nums), fim = Math.max.apply(null, nums);
+  if (fim - ini > 400) return null;
+  const sufixo = m[3] ? "-" + m[3] : "";
+  return { num: leiNumNormal(m[2] + sufixo), numCru: m[2] + sufixo + " a " + fim, fim, ini,
+    rotulo: "Arts. " + ini + " a " + fim, len: m[0].length };
+}
+
 function leiArtigos(texto) {
   const linhas = String(texto || "").split("\n");
   const artigos = [];
@@ -145,6 +170,16 @@ function leiArtigos(texto) {
       return;
     }
 
+    const fx = leiLerFaixaRevogada(linha);
+    if (fx) {
+      atual = {
+        num: fx.num, numCru: fx.numCru, ordem: leiNumOrdem(fx.num), linha: i + 1,
+        corpo: linha.slice(fx.len), linhas: [linha], faixaFim: fx.fim, rotuloFaixa: fx.rotulo,
+        divisao: divisao ? divisao.rotulo : "", divisaoTipo: divisao ? divisao.tipo : "",
+      };
+      artigos.push(atual);
+      return;
+    }
     const a = linha.match(LEI_RE_ARTIGO);
     if (a) {
       atual = {
@@ -174,7 +209,8 @@ function leiArtigos(texto) {
     indice: i,
     linha: a.linha,
     linhaFim: a.linha + a.linhas.length - 1,
-    rotulo: "Art. " + a.numCru,
+    rotulo: a.rotuloFaixa || "Art. " + a.numCru,
+    faixaFim: a.faixaFim || 0,
     ementa: leiEmenta(a.corpo),
     texto: a.linhas.join("\n").replace(/\s+$/, ""),
     corpo: a.corpo.trim(),
@@ -185,7 +221,12 @@ function leiArtigos(texto) {
 
 function leiArtigo(texto, num) {
   const alvo = leiNumNormal(num);
-  return leiArtigos(texto).filter((a) => a.num === alvo)[0] || null;
+  const todos = leiArtigos(texto);
+  /* um artigo dentro de um grupo revogado ("Arts. 12 a 15") também existe */
+  return todos.filter((a) => a.num === alvo)[0]
+    || todos.filter((a) => a.faixaFim && /^\d+$/.test(alvo)
+      && Number(alvo) >= Math.floor(a.ordem / 100) && Number(alvo) <= a.faixaFim)[0]
+    || null;
 }
 
 /* =====================================================================
@@ -733,6 +774,238 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
 }
 
 /* =====================================================================
+ * A ESTRUTURA DE UM ARTIGO — parágrafo, inciso, alínea e item, EM ORDEM
+ *
+ * A LC 95/1998 fixa a hierarquia: o ARTIGO se desdobra em PARÁGRAFOS (§ 1º,
+ * § 10, Parágrafo único); o artigo ou o parágrafo enumera INCISOS (I, II…);
+ * o inciso se desdobra em ALÍNEAS (a), b)…); a alínea, em ITENS (1., 2.…).
+ * Uma alteração legal muitas vezes mexe só num inciso ou numa alínea e não
+ * toca o caput — então o leitor precisa saber a QUAL parágrafo e a QUAL
+ * inciso cada pedaço pertence.
+ *
+ * O ERRO QUE MOTIVOU ISTO. A primeira versão da conferência de repetidos
+ * lia o rótulo do parágrafo só pelo número e ignorava o sufixo: "§ 4º",
+ * "§ 4º-A", "§ 4º-B" e "§ 4º-C" da Constituição viravam "o §4º aparece 4
+ * vezes", e a tela sugeria apagar três parágrafos legítimos. "§ 19" e
+ * "§ 19-A" também. O sufixo é parte do endereço: § 4º-A é OUTRO parágrafo.
+ *
+ * COMO SE LÊ, E POR QUÊ EM ORDEM. Um rótulo só vale se for o PRÓXIMO da
+ * sequência daquele nível: depois do inciso II espera-se o III (ou a alínea
+ * a); depois da alínea b, a c. Isso é o que separa "II" de inciso de um
+ * "II" de remissão ("os incisos II, III do caput") e é o que permite abrir
+ * um trecho corrido ("I - …; II - …; III - …") sem cortar frase. Rótulo fora
+ * de ordem no começo da linha vira unidade com `quebra:true` (sequência
+ * recomeçada — o sinal de redação velha ao lado da nova).
+ *
+ * Devolve { caput, unidades[] }. Cada unidade: tipo, rotulo (como escrito),
+ * chave (o endereço: "P4A", "P5>II", "P5>II>c"), texto próprio, linha (0 =
+ * primeira do artigo), inicioDeLinha, quebra, nivel, pai, e depois de lido,
+ * linhaFim/soLinhas (a extensão em linhas, com filhos).
+ * ===================================================================== */
+const LEI_RE_ROMANO = /^(?:M{0,3})(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/;
+
+function leiRomanoValor(s) {
+  const t = String(s || "");
+  if (!t || !LEI_RE_ROMANO.test(t)) return 0;
+  const v = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+  let total = 0;
+  for (let i = 0; i < t.length; i++) {
+    const a = v[t[i]], b = v[t[i + 1]] || 0;
+    total += a < b ? -a : a;
+  }
+  return total;
+}
+
+function leiValorRomano(n) {
+  const tab = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"],
+    [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let r = "", x = n;
+  tab.forEach(([v, s]) => { while (x >= v) { r += s; x -= v; } });
+  return r;
+}
+
+/* Lê UM rótulo no começo de `s`. Não julga se está na ordem: só diz o que é. */
+function leiLerRotulo(s) {
+  let m = String(s).match(/^Par[áa]grafo\s+[úu]nico(?![A-Za-zÀ-ú])\.?/i);
+  if (m) return { tipo: "paragrafo", unico: true, valor: 0, sufixo: "", rotulo: m[0], len: m[0].length };
+  /* § 4º · § 4º-A · § 10 · §4º.  (o sufixo é COLADO ao número: "§ 4º - A lei…" não é 4º-A) */
+  /* §§ 2º a 4º (Revogados): um só item que cobre a faixa */
+  m = String(s).match(/^§§\s*(\d{1,3})\s*[ºo°ª]?\s*(?:a|ao|e|,)\s*(\d{1,3})\s*[ºo°ª]?/);
+  if (m && /revogad|vetad/i.test(String(s).slice(0, 80))) {
+    return { tipo: "paragrafo", unico: false, valor: Number(m[1]), valorFim: Number(m[2]), sufixo: "", rotulo: m[0].trim(), len: m[0].length };
+  }
+  m = String(s).match(/^§\s*(\d{1,3})\s*[ºo°ª]?(?:-([A-Z])(?![A-Za-zÀ-ú]))?\s*\.?(?=\s|[-–—:]|$|[A-ZÀ-Ú])/);
+  if (m) return { tipo: "paragrafo", unico: false, valor: Number(m[1]), sufixo: m[2] || "", rotulo: m[0].trim(), len: m[0].length };
+  /* inciso: romano maiúsculo, com sufixo colado (XIV-A), seguido de - . ) : ou espaço */
+  /* II a IV (Revogados) */
+  m = String(s).match(/^([IVXLCDM]{1,8})\s+(?:a|ao)\s+([IVXLCDM]{1,8})(?=[\s.:-]*\(?\s*revogad)/i);
+  if (m && leiRomanoValor(m[1]) && leiRomanoValor(m[2])) {
+    return { tipo: "inciso", valor: leiRomanoValor(m[1]), valorFim: leiRomanoValor(m[2]), sufixo: "", rotulo: m[0].trim(), len: m[0].length };
+  }
+  m = String(s).match(/^([IVXLCDM]{1,8})(?:-([A-Z])(?![A-Za-zÀ-ú]))?(?:\s*[-–—.):]\s*|\s+)(?=\S)/);
+  if (m && leiRomanoValor(m[1])) {
+    return { tipo: "inciso", valor: leiRomanoValor(m[1]), sufixo: m[2] || "", rotulo: m[0].trim(), len: m[0].length };
+  }
+  /* alínea: a) b) … */
+  m = String(s).match(/^([a-z])\)\s*(?=\S)/);
+  if (m) return { tipo: "alinea", valor: m[1].charCodeAt(0) - 96, sufixo: "", rotulo: m[0].trim(), len: m[0].length };
+  /* item: 1. 2. … (só até 2 dígitos, com ponto ou parêntese e espaço depois) */
+  m = String(s).match(/^(\d{1,2})\s*[.)]\s+(?=\S)/);
+  if (m) return { tipo: "item", valor: Number(m[1]), sufixo: "", rotulo: m[0].trim(), len: m[0].length };
+  return null;
+}
+
+function leiEstruturaArtigo(texto, opc) {
+  const frag = !!(opc && opc.fragmento);
+  const linhas = String(texto == null ? "" : texto).split("\n");
+  const caput = { tipo: "caput", chave: "caput", rotulo: "", texto: "", linha: 0, inicioDeLinha: true,
+    nivel: 0, quebra: false, pai: null, ultInc: null, ultAli: null, ultIte: null };
+  const unidades = [];
+  let par = caput, inc = null, ali = null, cur = caput;
+
+  /* o que se ESPERA a seguir, em cada nível, dado onde a leitura está */
+  const proximo = (u) => u && { valor: (u.valorFim || u.valor) + 1, mesmoValor: (u.valorFim || u.valor), sufixo: u.sufixo };
+  const esperados = () => {
+    const paiAli = inc || par, paiIte = ali || inc || par;
+    return {
+      inciso: par.ultInc ? proximo(par.ultInc) : { valor: 1, mesmoValor: 0, sufixo: "" },
+      alinea: paiAli.ultAli ? proximo(paiAli.ultAli) : { valor: 1, mesmoValor: 0, sufixo: "" },
+      item: paiIte.ultIte ? proximo(paiIte.ultIte) : { valor: 1, mesmoValor: 0, sufixo: "" },
+    };
+  };
+  const naOrdem = (rot, esp) => {
+    if (!esp) return false;
+    if (rot.valor === esp.valor && !rot.sufixo) return true;
+    /* II-A depois de II */
+    if (rot.valor === esp.mesmoValor && rot.sufixo && esp.mesmoValor > 0) return true;
+    return false;
+  };
+  /* aceito EM ORDEM (vale em qualquer posição) */
+  const aceitaOrdem = (rot) => {
+    if (rot.tipo === "paragrafo") return true;
+    const e = esperados();
+    if (rot.tipo === "inciso") return naOrdem(rot, e.inciso);
+    if (rot.tipo === "alinea") return naOrdem(rot, e.alinea);
+    return naOrdem(rot, e.item);
+  };
+  /* fora de ordem no COMEÇO da linha: sequência recomeçada, ou o 1º pedaço de um fragmento */
+  const aceitaQuebra = (rot) => {
+    if (rot.tipo === "paragrafo") return true;
+    const e = esperados();
+    const paiAli = inc || par, paiIte = ali || inc || par;
+    const tem = rot.tipo === "inciso" ? par.ultInc : rot.tipo === "alinea" ? paiAli.ultAli : paiIte.ultIte;
+    const ex = rot.tipo === "inciso" ? e.inciso : rot.tipo === "alinea" ? e.alinea : e.item;
+    if (!tem) return frag;                       /* sem irmão anterior: só em fragmento */
+    return rot.valor < ex.valor;                 /* recomeça (I depois de VII, a) depois de c)) */
+  };
+
+  const criar = (rot, li, inicioDeLinha, quebra) => {
+    const u = { tipo: rot.tipo, valor: rot.valor, valorFim: rot.valorFim || 0, sufixo: rot.sufixo, unico: !!rot.unico, rotulo: rot.rotulo,
+      chave: "", texto: "", linha: li, inicioDeLinha, quebra, nivel: 0, pai: null,
+      ultInc: null, ultAli: null, ultIte: null };
+    if (rot.tipo === "paragrafo") {
+      u.chave = rot.unico ? "PU" : "P" + rot.valor + rot.sufixo;
+      u.nivel = 1; u.pai = caput; par = u; inc = null; ali = null;
+    } else if (rot.tipo === "inciso") {
+      const nome = leiValorRomano(rot.valor) + rot.sufixo;
+      u.chave = (par === caput ? "" : par.chave + ">") + nome;
+      u.nivel = 2; u.pai = par; par.ultInc = u; inc = u; ali = null;
+    } else if (rot.tipo === "alinea") {
+      const pai = inc || par;
+      u.chave = (pai === caput ? "" : pai.chave + ">") + String.fromCharCode(96 + rot.valor);
+      u.nivel = 3; u.pai = pai; pai.ultAli = u; ali = u;
+    } else {
+      const pai = ali || inc || par;
+      u.chave = (pai === caput ? "" : pai.chave + ">") + rot.valor;
+      u.nivel = 4; u.pai = pai; pai.ultIte = u;
+    }
+    unidades.push(u);
+    cur = u;
+    return u;
+  };
+
+  const juntar = (u, txt) => {
+    const t = String(txt || "").trim();
+    if (t) u.texto += (u.texto ? " " : "") + t;
+  };
+
+  /* o próximo rótulo DENTRO da linha (trecho corrido): só o que está em ordem,
+   * depois de fim de frase, e — para parágrafo — com pontuação ou maiúscula */
+  const proximoInline = (s) => {
+    const re = /[.;:)\]”"]\s+(?=\S)/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const p = m.index + m[0].length;
+      const rot = leiLerRotulo(s.slice(p));
+      if (rot && aceitaOrdem(rot)) return p;
+    }
+    return -1;
+  };
+
+  linhas.forEach((linha, li) => {
+    let s = String(linha);
+    if (li === 0) {
+      const a = s.match(LEI_RE_ARTIGO);
+      if (a) s = s.slice(a[0].length);
+    }
+    let inicio = true;
+    while (s.trim()) {
+      s = s.replace(/^\s+/, "");
+      let rot = leiLerRotulo(s);
+      let quebra = false;
+      if (rot) {
+        if (aceitaOrdem(rot)) quebra = false;
+        else if (inicio && aceitaQuebra(rot)) quebra = true;
+        else rot = null;
+      }
+      if (rot) { criar(rot, li, inicio, quebra); s = s.slice(rot.len); }
+      const p = proximoInline(s);
+      juntar(cur, p < 0 ? s : s.slice(0, p));
+      if (p < 0) break;
+      s = s.slice(p);
+      inicio = false;
+    }
+  });
+
+  /* a extensão de cada unidade em LINHAS, filhos incluídos: vai até a linha
+   * antes da próxima unidade de nível igual ou menor */
+  unidades.forEach((u, i) => {
+    let k = i + 1;
+    while (k < unidades.length && unidades[k].nivel > u.nivel) k++;
+    const prox = unidades[k];
+    let fim = prox ? prox.linha - 1 : linhas.length - 1;
+    let soLinhas = u.inicioDeLinha && (!prox || prox.inicioDeLinha);
+    if (prox && prox.linha === u.linha) { fim = u.linha; soLinhas = false; }
+    while (fim > u.linha && !String(linhas[fim] || "").trim()) fim--;
+    u.linhaFim = Math.max(u.linha, fim);
+    u.soLinhas = soLinhas;
+  });
+  return { caput, unidades, linhas: linhas.length };
+}
+
+/* "§ 4º-A" · "inciso II do § 5º" · "alínea c do inciso II" — para a tela dizer
+ * de qual pedaço se fala */
+function leiRotuloDaUnidade(u) {
+  if (!u) return "";
+  if (u.tipo === "paragrafo") return u.unico ? "parágrafo único" : "§" + u.valor + "º" + (u.sufixo ? "-" + u.sufixo : "");
+  const meu = u.tipo === "inciso" ? "inciso " + leiValorRomano(u.valor) + u.sufixo
+    : u.tipo === "alinea" ? "alínea " + String.fromCharCode(96 + u.valor) : "item " + u.valor;
+  const pai = u.pai && u.pai.tipo !== "caput" ? leiRotuloDaUnidade(u.pai) : "";
+  return pai ? meu + " do " + pai : meu;
+}
+
+/* As linhas ao redor de um trecho (1 = primeira linha do texto), com as do
+ * trecho marcadas — para a tela mostrar como o trecho está na lei. */
+function leiContextoDeLinhas(texto, linhaIni, linhaFim, antes, depois) {
+  const L = String(texto == null ? "" : texto).split("\n");
+  const de = Math.max(1, linhaIni - (antes || 0));
+  const ate = Math.min(L.length, linhaFim + (depois || 0));
+  const out = [];
+  for (let n = de; n <= ate; n++) out.push({ n, texto: L[n - 1], alvo: n >= linhaIni && n <= linhaFim });
+  return out;
+}
+
+/* =====================================================================
  * REPETIÇÃO DENTRO DO MESMO ARTIGO
  *
  * O PDF do Código de Caruaru (texto consolidado com tachados) traz, dentro
@@ -741,57 +1014,62 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
  * parágrafo único"). Não são artigos repetidos — leiDuplicados não os via —,
  * e a lei guardava as duas redações juntas, sem aviso.
  *
- * Aqui só se aponta o que é SUSPEITO: o mesmo rótulo de parágrafo duas vezes
- * no mesmo artigo. O grupo sai no mesmo formato de leiDuplicados (a mesma
- * tela escolhe qual fica), com `intra: true` — a redação substituída não
- * pode virar "alteração", que só existe por artigo inteiro.
+ * Só se aponta o que é SUSPEITO: o MESMO endereço (parágrafo com o mesmo
+ * número E sufixo; ou inciso/alínea repetidos LADO A LADO no mesmo pai) duas
+ * vezes no mesmo artigo. § 4º e § 4º-A são endereços diferentes e NUNCA são
+ * apontados. O grupo sai no formato de leiDuplicados (a mesma tela escolhe
+ * qual fica), com `intra: true` — a redação substituída não pode virar
+ * "alteração", que só existe por artigo inteiro. Só entra candidato que
+ * começa no começo de uma linha: o que está no meio de um trecho corrido
+ * não se corta por linha.
  * ===================================================================== */
 function leiRepetidosNoArtigo(texto, ignorar) {
   const conferidos = {};
   (ignorar || []).forEach((n) => { conferidos[leiNumNormal(n)] = true; });
   const grupos = [];
   leiArtigos(texto).forEach((a) => {
+    const est = leiEstruturaArtigo(a.texto);
     const linhas = a.texto.split("\n");
-    const inicios = [];
-    linhas.forEach((ln, k) => {
-      if (k === 0) return;
-      const m = ln.match(LEI_RE_PARAGRAFO);
-      if (!m) return;
-      const resto = ln.slice(m[0].length);
-      /* "§ 4º do artigo 9º" no começo de uma linha é remissão, não parágrafo:
-       * o rótulo verdadeiro é seguido de pontuação ou de frase com maiúscula */
-      if (!/^\s*[.\-–—:]/.test(resto) && !/^\s*["“(]?[A-ZÀ-Ú]/.test(resto)) return;
-      inicios.push({ k, chave: m[1] ? "P" + Number(m[1]) : "PU",
-        rotulo: m[1] ? "§" + Number(m[1]) + "º" : "parágrafo único" });
-    });
-    if (inicios.length < 2) return;
-    inicios.forEach((p, idx) => {
-      let fim = (idx + 1 < inicios.length ? inicios[idx + 1].k : linhas.length) - 1;
-      while (fim > p.k && !linhas[fim].trim()) fim--;
-      p.fim = fim;
-      p.texto = linhas.slice(p.k, fim + 1).join("\n");
-      /* "Renumerado do parágrafo único" diz a QUAL parágrafo antigo este
-       * substitui: é o par do "Parágrafo Único" da mesma lei */
-      if (/\(\s*renumerad[oa]\s+do\s+par[áa]grafo\s+[úu]nico/i.test(p.texto)) {
-        p.chave = "PU"; p.rotulo = "parágrafo único";
+    const porChave = {};
+    est.unidades.forEach((u, i) => { (porChave[u.tipo + "|" + u.chave] = porChave[u.tipo + "|" + u.chave] || []).push({ u, i }); });
+    /* "Renumerado do parágrafo único" diz a QUAL parágrafo antigo este substitui */
+    est.unidades.forEach((u, i) => {
+      if (u.tipo !== "paragrafo" || u.unico) return;
+      if (/\(\s*renumerad[oa]\s+do\s+par[áa]grafo\s+[úu]nico/i.test(u.texto)) {
+        (porChave["paragrafo|PU"] = porChave["paragrafo|PU"] || []).push({ u, i, renum: true });
       }
     });
-    const porChave = {};
-    inicios.forEach((p) => { (porChave[p.chave] = porChave[p.chave] || []).push(p); });
-    Object.keys(porChave).forEach((chave) => {
-      const L = porChave[chave];
-      const num = a.num + "#" + chave;
-      if (L.length < 2 || conferidos[leiNumNormal(num)]) return;
-      const cands = L.map((p, pos) => ({
-        indice: 1000000 + a.linha + p.k, linha: a.linha + p.k, linhaFim: a.linha + p.fim,
-        texto: p.texto, corpo: p.texto, pos, sinais: leiSinaisDoArtigo({ corpo: p.texto }),
-      }));
+    Object.keys(porChave).forEach((k) => {
+      let L = porChave[k].slice().sort((x, y) => x.i - y.i);
+      if (L.length < 2) return;
+      const u0 = L[0].u;
+      /* inciso, alínea e item: só repetidos LADO A LADO (o mesmo pai, sem irmão no meio) */
+      if (u0.tipo !== "paragrafo") {
+        const lado = [];
+        L.forEach((x, j) => { if (j > 0 && x.u.pai === L[j - 1].u.pai && x.i > L[j - 1].i
+          && !est.unidades.slice(L[j - 1].i + 1, x.i).some((y) => y.pai === x.u.pai && y.tipo === x.u.tipo)) {
+          if (lado.indexOf(L[j - 1]) < 0) lado.push(L[j - 1]);
+          lado.push(x);
+        } });
+        L = lado;
+        if (L.length < 2) return;
+      }
+      if (!L.every((x) => x.u.soLinhas)) return;
+      const num = a.num + "#" + u0.chave;
+      if (conferidos[leiNumNormal(num)]) return;
+      const cands = L.map((x, pos) => {
+        const ls = linhas.slice(x.u.linha, x.u.linhaFim + 1);
+        const t = ls.join("\n");
+        return { indice: 1000000 + (a.linha + x.u.linha) * 4 + pos, linha: a.linha + x.u.linha,
+          linhaFim: a.linha + x.u.linhaFim, texto: t, corpo: t, pos, sinais: leiSinaisDoArtigo({ corpo: t }) };
+      });
       const s = leiSugerirEntre(cands);
+      const rot = leiRotuloDaUnidade(u0);
       grupos.push({
-        num, numCru: a.numCru + " — " + L[0].rotulo, rotulo: a.rotulo + " — " + L[0].rotulo,
+        num, numCru: a.numCru + " — " + rot, rotulo: a.rotulo + " — " + rot,
         candidatos: cands, sugerido: s.melhor.indice, confianca: s.confianca,
         motivo: s.motivo, fonte: s.fonte, intra: true,
-        ordem: leiNumOrdem(a.num) * 1000 + 1 + Math.min(L[0].k, 900),
+        ordem: leiNumOrdem(a.num) * 1000 + 1 + Math.min(u0.linha, 900),
       });
     });
   });
@@ -824,6 +1102,8 @@ function leiRepetidosNoArtigo(texto, ignorar) {
 function leiNumeracao(artigos) {
   const A = artigos || [];
   const B = A.map((a) => Math.floor(a.ordem / 100));
+  /* E: até onde cada item vai — um grupo revogado ("Arts. 12 a 15") cobre a faixa */
+  const E = A.map((a, i) => (a.faixaFim && a.faixaFim >= B[i] ? a.faixaFim : B[i]));
   const distintos = {};
   B.forEach((b) => { distintos[b] = true; });
   const faixa = B.length ? Math.max.apply(null, B) - Math.min.apply(null, B) + 1 : 1;
@@ -843,10 +1123,10 @@ function leiNumeracao(artigos) {
       return;
     }
     if (p >= 0) {
-      const d = B[i] - B[p];
+      const d = B[i] - E[p];
       if (d >= 2) {
         const faltam = [];
-        for (let x = B[p] + 1; x < B[i] && faltam.length < 8; x++) faltam.push(x);
+        for (let x = E[p] + 1; x < B[i] && faltam.length < 8; x++) faltam.push(x);
         problemas.push({ tipo: "salto", gravidade: d - 1 >= 3 && !recorte ? "grave" : "leve", num: a.num,
           numCru: a.numCru, linha: a.linha, de: A[p].numCru, faltam, nFaltam: d - 1 });
       } else if (d < 0) {
@@ -1279,24 +1559,16 @@ const LEI_RE_CITACAO =
 function leiCitacoes(texto) {
   const achados = [];
   const vistos = {};
-  const s = String(texto || "");
-  let m;
-  LEI_RE_CITACAO.lastIndex = 0;
-  while ((m = LEI_RE_CITACAO.exec(s)) !== null) {
-    const num = leiNumNormal(m[1]);
-    if (!num || num === "0") continue;
-    /* o que vem logo depois: ", IV", ", § 2º", ", inciso II" */
-    const depois = s.slice(m.index + m[0].length, m.index + m[0].length + 24);
-    const inc = depois.match(/^\s*,?\s*(?:inc(?:iso)?\.?\s*)?([IVXLC]{1,6})\b/);
-    const par = depois.match(/^\s*,?\s*§\s*(\d{1,2}[ºo°]?)/);
-    if (!vistos[num]) {
-      vistos[num] = { num, ordem: leiNumOrdem(num), incisos: [], paragrafos: [], vezes: 0 };
-      achados.push(vistos[num]);
+  leiCitacoesNoTexto(texto).forEach((c) => {
+    if (!vistos[c.num]) {
+      vistos[c.num] = { num: c.num, ordem: leiNumOrdem(c.num), incisos: [], paragrafos: [], vezes: 0 };
+      achados.push(vistos[c.num]);
     }
-    vistos[num].vezes++;
-    if (inc && vistos[num].incisos.indexOf(inc[1]) < 0) vistos[num].incisos.push(inc[1]);
-    if (par && vistos[num].paragrafos.indexOf(par[1]) < 0) vistos[num].paragrafos.push(par[1]);
-  }
+    const v = vistos[c.num];
+    v.vezes++;
+    c.incisos.forEach((x) => { if (v.incisos.indexOf(x) < 0) v.incisos.push(x); });
+    c.paragrafos.forEach((x) => { if (v.paragrafos.indexOf(x) < 0) v.paragrafos.push(x); });
+  });
   return achados;
 }
 
@@ -1406,6 +1678,67 @@ function leiRotuloAntes(cauda) {
   return "";
 }
 
+/* O ENDEREÇO DENTRO DO ARTIGO, lido do trecho que a citação engoliu:
+ * ", IV" → inciso IV; "§ 2º" → parágrafo 2º; ", b)" → alínea b. */
+function leiLerSubEndereco(pedaco, sub) {
+  const p = String(pedaco);
+  let m;
+  if ((m = p.match(/inc(?:isos?)?\.?\s*([IVXLC]{1,6})/i))) sub.incisos.push(m[1].toUpperCase());
+  else if ((m = p.match(/^\s*(?:,|e|ou)?\s*([IVXLC]{1,6})(?![\wº])/))) sub.incisos.push(m[1]);
+  else if ((m = p.match(/§+\s*(\d{1,3}[ºo°]?)(?:\s*-\s*([A-Z]))?/))) sub.paragrafos.push(m[1] + (m[2] ? "-" + m[2] : ""));
+  else if (/par[áa]grafo\s+[úu]nico/i.test(p)) sub.paragrafos.push("único");
+  else if ((m = p.match(/par[áa]grafo\s+(\d{1,3}[ºo°]?)(?:\s*-\s*([A-Z]))?/i))) sub.paragrafos.push(m[1] + (m[2] ? "-" + m[2] : ""));
+  else if ((m = p.match(/(?:al[íi]nea\s*)?([a-z])\)|["'“”]([a-z])["'“”]|^\s*,\s*([a-k])/i))) {
+    sub.alineas.push((m[1] || m[2] || m[3]).toLowerCase());
+  }
+}
+
+/* Engole o endereço interno de UM artigo: parágrafo, inciso, alínea. Devolve o
+ * tamanho consumido e o que leu. "e V" só continua uma lista de incisos já
+ * começada ("…, I, II, IV e V"). */
+function leiConsumirEndereco(resto) {
+  let r = resto, len = 0, ultimoFoiInciso = false;
+  const sub = { incisos: [], paragrafos: [], alineas: [] };
+  for (let k = 0; k < 12; k++) {          /* teto: endereço não é infinito */
+    let achou = false;
+    for (let i = 0; i < LEI_SUB.length; i++) {
+      const t = r.match(LEI_SUB[i]);
+      if (t && t[0].length) {
+        leiLerSubEndereco(t[0], sub);
+        ultimoFoiInciso = i <= 1;
+        len += t[0].length; r = r.slice(t[0].length); achou = true;
+        break;
+      }
+    }
+    if (!achou && ultimoFoiInciso) {
+      const t = r.match(/^\s*(?:e|ou)\s+([IVXLC]{1,6})(?![\wº])/);
+      if (t) { sub.incisos.push(t[1]); len += t[0].length; r = r.slice(t[0].length); achou = true; }
+    }
+    if (!achou) break;
+  }
+  return { len, sub };
+}
+
+/* depois do número, estas palavras dizem que o número NÃO é outro artigo:
+ * "arts. 5º e 6º, 10 dias" */
+const LEI_RE_NAO_ARTIGO = /^\s*(?:dias?\b|m[êe]s(?:es)?\b|anos?\b|horas?\b|vezes\b|por\s+cento|%|UFMs?\b|reais\b|sal[áa]rios?\b|unidades\b|de\s+(?:janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro))/i;
+
+/* =====================================================================
+ * A CITAÇÃO É UMA LISTA — "arts. 77, 78 e 79 do CTN"
+ *
+ * O DEFEITO REAL. O comentário dizia "previstos nos arts. 77, 78 e 79 do
+ * CTN" e só "arts. 77" virava link, sem lei: depois do primeiro número a
+ * leitura parava, e o "do CTN" — que vale para os TRÊS artigos — nunca era
+ * alcançado. Agora, depois de um artigo, o leitor segue a lista ("," ";" "e"
+ * "ou" "a"), lê o endereço de cada um (inciso, parágrafo, alínea) e só então
+ * procura a lei. Cada artigo da lista vira o seu próprio pedaço clicável,
+ * todos com a mesma lei; o último engole o "do CTN". Se a lista não for
+ * de artigos (plural) e não acabar numa lei, volta a ser só o primeiro:
+ * "art. 5º, 10 dias" não vira duas citações.
+ *
+ * Cada item devolve incisos/paragrafos/alineas — o leitor usa para rolar até
+ * o inciso citado ("art. 153, I, II, IV e V").
+ * ===================================================================== */
 function leiCitacoesNoTexto(texto) {
   const s = String(texto || "");
   const out = [];
@@ -1417,42 +1750,174 @@ function leiCitacoesNoTexto(texto) {
       if (re.lastIndex === m.index) re.lastIndex++;
       continue;
     }
-    const ini = m.index;
+    const plural = /^(?:arts|artigos)/i.test(m[0].trim());
+    const itens = [];
     let fim = m.index + m[0].length;
-    let resto = s.slice(fim);
-    for (let k = 0; k < 8; k++) {          /* teto: endereço não é infinito */
-      let achou = false;
-      for (let i = 0; i < LEI_SUB.length; i++) {
-        const t = resto.match(LEI_SUB[i]);
-        if (t && t[0].length) {
-          fim += t[0].length;
-          resto = resto.slice(t[0].length);
-          achou = true;
-          break;
-        }
-      }
-      if (!achou) break;
+    const abrir = (ini, cru, n) => {
+      const e = leiConsumirEndereco(s.slice(fim));
+      fim += e.len;
+      itens.push({ ini, fim, num: n, numCru: String(cru).replace(/\s+/g, ""), sub: e.sub });
+    };
+    abrir(m.index, m[1], num);
+
+    /* a lista: ", 78", " e 79", "; e 154", " a 79" */
+    for (let k = 0; k < 14; k++) {
+      const c = s.slice(fim).match(/^(?:\s*[,;]\s*(?:(?:e|ou)\s+)?|\s+(?:e|ou|a|ao)\s+)(?:os?\s+)?(\d{1,4}(?:\s*[ºo°ª])?(?:\s*-\s*[A-Z])?)(?!\d)/);
+      if (!c) break;
+      if (LEI_RE_NAO_ARTIGO.test(s.slice(fim + c[0].length))) break;
+      const n2 = leiNumNormal(c[1]);
+      if (!n2 || n2 === "0") break;
+      const iniNum = fim + c[0].length - c[1].length;
+      fim += c[0].length;
+      abrir(iniNum, c[1], n2);
     }
+
+    /* a lei, que vale para a lista toda */
+    let resto = s.slice(fim);
     let rotulo = "";
     const p = resto.match(/^[\s,]*(?:(?:d[aoe]s?|de)\s+)?/i);
     const salto = p ? p[0].length : 0;
     const dep = resto.slice(salto);
     for (let j = 0; j < LEI_ROTULOS.length; j++) {
       const t2 = dep.match(LEI_ROTULOS[j]);
-      if (t2) { rotulo = t2[0]; fim += salto + t2[0].length; break; }
+      if (t2) { rotulo = t2[0]; itens[itens.length - 1].fim = fim + salto + t2[0].length; fim += salto + t2[0].length; break; }
     }
-    if (!rotulo) rotulo = leiRotuloAntes(s.slice(Math.max(0, ini - 48), ini));
-    out.push({
-      ini, fim, num,
-      numCru: String(m[1]).replace(/\s+/g, ""),
-      rotulo: rotulo || "",
-      texto: s.slice(ini, fim),
-    });
+    /* lista que NÃO é de artigos e não acaba numa lei: era só o primeiro */
+    if (itens.length > 1 && !plural && !rotulo) {
+      itens.length = 1;
+      fim = itens[0].fim;
+    }
+    if (!rotulo) rotulo = leiRotuloAntes(s.slice(Math.max(0, itens[0].ini - 48), itens[0].ini));
+    itens.forEach((it, idx) => out.push({
+      ini: it.ini, fim: it.fim, num: it.num, numCru: it.numCru,
+      rotulo: rotulo || "", texto: s.slice(it.ini, it.fim),
+      incisos: it.sub.incisos, paragrafos: it.sub.paragrafos, alineas: it.sub.alineas,
+      lista: itens.length > 1, itemDaLista: idx,
+    }));
     /* retomar DEPOIS do trecho inteiro: senão a lei que acabou de ser
      * consumida seria lida de novo como início de outra citação */
     re.lastIndex = fim > m.index ? fim : m.index + 1;
   }
   return out;
+}
+
+/* Quais unidades de um artigo uma citação aponta: ", I, II" no caput,
+ * "§ 4º-A", "§ 2º, II", "II, b)". Devolve as unidades da estrutura. */
+function leiAcharUnidades(textoArtigo, sub) {
+  const S = sub || {};
+  const est = leiEstruturaArtigo(textoArtigo);
+  const achadas = [];
+  const semOrd = (x) => String(x).replace(/[ºo°]/g, "");
+  const chavePar = (x) => {
+    if (/^[úu]nico$/i.test(x)) return "PU";
+    const m = semOrd(x).match(/^(\d+)(?:-([A-Z]))?$/);
+    return m ? "P" + Number(m[1]) + (m[2] || "") : "";
+  };
+  const base = (S.paragrafos || []).length ? chavePar(S.paragrafos[0]) : "";
+  const porChave = (k) => est.unidades.filter((u) => u.chave === k)[0];
+  if ((S.incisos || []).length) {
+    S.incisos.forEach((r) => {
+      const k = (base ? base + ">" : "") + r.toUpperCase();
+      const u = porChave(k);
+      if (u) {
+        achadas.push(u);
+        if ((S.alineas || []).length === 1 && S.incisos.length === 1) {
+          const a = porChave(k + ">" + S.alineas[0]);
+          if (a) achadas.push(a);
+        }
+      }
+    });
+  } else if (base) {
+    const u = porChave(base);
+    if (u) achadas.push(u);
+  }
+  return achadas;
+}
+
+/* =====================================================================
+ * O VÍNCULO PERMANENTE DE UM TRECHO DE COMENTÁRIO
+ *
+ * A leitura automática de "arts. 77, 78 e 79 do CTN" pode errar — sigla
+ * desconhecida, frase fora do padrão, lei com nome parecido. Quem estuda
+ * precisa poder dizer "este trecho é o CTN, artigos 77 a 79" UMA vez e ver
+ * o link certo dali em diante, em qualquer questão que traga a mesma frase,
+ * e poder desfazer ("este vínculo está errado"). O vínculo é guardado pelo
+ * TEXTO do trecho (normalizado), não pela questão: a mesma frase repetida em
+ * cem comentários é corrigida numa vez só, e melhorar a questão (o texto
+ * mudar) não perde nada — só deixa de casar o trecho que mudou.
+ *
+ * Cada vínculo: { k: chave do trecho, trecho, leiId, artigos:[{num,numCru}] }.
+ * ===================================================================== */
+const CIT_VINC_CHAVE = "eac_cit_vinculos";
+
+function citVinculosLer() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CIT_VINC_CHAVE) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch (e) { return []; }
+}
+
+function citVinculosGravar(lista) {
+  try { localStorage.setItem(CIT_VINC_CHAVE, JSON.stringify(lista || [])); return true; }
+  catch (e) { return false; }
+}
+
+function citChave(trecho) {
+  return leiTxtChave(trecho).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/* "77, 78 e 79" → [{num:"77",numCru:"77"}, …] — o que a pessoa digitou no campo de artigos */
+function citLerArtigos(texto) {
+  const out = [];
+  (String(texto || "").match(/\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?/g) || []).forEach((x) => {
+    const num = leiNumNormal(x);
+    if (num && num !== "0" && !out.some((o) => o.num === num)) {
+      out.push({ num, numCru: x.replace(/\s+/g, "") });
+    }
+  });
+  return out;
+}
+
+function citVinculoSalvar(v) {
+  const k = citChave(v && v.trecho);
+  if (!k || !v.leiId) return null;
+  const lista = citVinculosLer().filter((x) => x.k !== k);
+  const r = { k, trecho: String(v.trecho).replace(/\s+/g, " ").trim(), leiId: v.leiId,
+    artigos: (v.artigos || []).slice(0, 30), criado: new Date().toISOString() };
+  lista.push(r);
+  return citVinculosGravar(lista) ? r : null;
+}
+
+function citVinculoRemover(k) {
+  const lista = citVinculosLer();
+  const nova = lista.filter((x) => x.k !== k);
+  if (nova.length === lista.length) return false;
+  return citVinculosGravar(nova);
+}
+
+/* Sobrepõe os vínculos permanentes às citações lidas do texto: cada trecho
+ * guardado que aparece no texto vira UM pedaço clicável com a lei FIXA (leiId),
+ * no lugar do que a leitura automática tinha achado ali. */
+function citVinculosAplicar(texto, cits) {
+  const s = String(texto || "");
+  let saida = (cits || []).slice();
+  citVinculosLer().forEach((v) => {
+    const molde = String(v.trecho || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    if (!molde) return;
+    let re;
+    try { re = new RegExp(molde, "gi"); } catch (e) { return; }
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const ini = m.index, fim = m.index + m[0].length;
+      saida = saida.filter((c) => !(c.ini < fim && ini < c.fim));
+      const a0 = (v.artigos || [])[0] || {};
+      saida.push({ ini, fim, num: a0.num || "", numCru: a0.numCru || "", rotulo: "", texto: m[0],
+        incisos: [], paragrafos: [], alineas: [], leiId: v.leiId, permanente: true,
+        vinculoK: v.k, artigos: v.artigos || [] });
+      if (m[0].length === 0) re.lastIndex++;
+    }
+  });
+  return saida.sort((x, y) => x.ini - y.ini);
 }
 
 function leiRotuloChave(rotulo) {
@@ -2469,5 +2934,8 @@ if (typeof module !== "undefined" && module.exports) {
     leiNumeroNorm, leiEspecieNorm, leiEnteDoTexto, leiChaveIdentidade, leiMesmaLei,
     leiAcharIgual, leiIdLivre, leiDuplicadasNaBiblioteca, leiMarcarDistintas,
     leiSoltarPonteiros, leiMesclar,
+    leiEstruturaArtigo, leiLerRotulo, leiRomanoValor, leiValorRomano, leiRotuloDaUnidade,
+    leiContextoDeLinhas, leiLerFaixaRevogada, leiAcharUnidades, leiConsumirEndereco,
+    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar,
   };
 }
