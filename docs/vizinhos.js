@@ -144,9 +144,10 @@ function vzLogLimpar() {
   try { localStorage.removeItem(VZ_LOG_CHAVE); } catch (e) {}
 }
 
-/* O relatório em texto, para colar num relato de problema. */
-function vzLogTexto() {
-  const L = vzLogLer();
+/* O relatório em texto, para colar num relato de problema. Recebe,
+ * opcionalmente, a lista já filtrada (o diagnóstico filtra por período). */
+function vzLogTexto(lista) {
+  const L = Array.isArray(lista) ? lista : vzLogLer();
   if (!L.length) return t("vzl_vazio");
   return L.map((x) => {
     const cab = (x.q || "").slice(0, 16).replace("T", " ") + "  " + x.e;

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.31.0";
+const VERSAO = "16.32.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4878,13 +4878,28 @@ function montarDiagnostico() {
    * entrada e do de saída de cada etapa, lado a lado. E o diagnóstico é
    * o que se cola num relato de problema: deixá-lo de fora obrigava a
    * abrir duas telas e juntar dois textos à mão. */
+  /* O BLOCO OBEDECE AOS MESMOS FILTROS DO REGISTRO. Ele nasceu antes deles
+   * e imprimia SEMPRE tudo: um relatório "só de hoje" trazia etapas de dias
+   * atrás, e o que se vê passava a não ser o que se copia. Período filtra
+   * pelo instante de cada etapa; "só erros e avisos" o tira, porque uma
+   * etapa de vinculação é andamento, não problema (se falhou, o erro
+   * aparece no registro acima). */
   try {
     if ((diagAssunto === "tudo" || diagAssunto === "edital")
-        && typeof vzLogLer === "function" && vzLogLer().length) {
-      L.push("--- VINCULAÇÃO ENTRE EDITAIS (" + vzLogLer().length
-             + " etapas registradas) ---");
-      L.push(vzLogTexto());
-      L.push("");
+        && diagGravidade !== "problemas"
+        && typeof vzLogLer === "function") {
+      const todas = vzLogLer();
+      const dias = rtOpcoesAtuais().dias;
+      const doPeriodo = todas.filter((x) => rtDentroDoPeriodo(rtInstante(x.q), dias));
+      if (doPeriodo.length) {
+        L.push("--- VINCULAÇÃO ENTRE EDITAIS ("
+               + (doPeriodo.length === todas.length
+                  ? doPeriodo.length + " etapas registradas"
+                  : doPeriodo.length + " etapas no período, de " + todas.length + " registradas")
+               + ") ---");
+        L.push(vzLogTexto(doPeriodo));
+        L.push("");
+      }
     }
   } catch (e) {}
   bloco(L, () => {

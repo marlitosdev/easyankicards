@@ -218,16 +218,34 @@ function bkMostrarConferencia(nomeArq) {
   tb.innerHTML = "";
   cmp.linhas.forEach((l) => {
     const tr = document.createElement("tr");
-    if (l.perde) tr.className = "bk-perde";
+    /* A DIREÇÃO DA MUDANÇA É A LINHA INTEIRA, não só uma palavra na última
+     * coluna: quem escolhe qual arquivo restaurar varre a tabela de
+     * relance, e "perde 3" em cinza no fim da linha se lê tanto quanto o
+     * "sem mudança" das outras. Verde para o que o backup ACRESCENTA,
+     * vermelho para o que ENCOLHE, neutro para o que fica igual — e a
+     * cor nunca vai sozinha: seta e número dizem o mesmo (acessibilidade
+     * e impressão em preto e branco). */
+    const dir = l.perde ? "perde" : (l.ganha ? "ganha" : "igual");
+    tr.className = "bk-" + dir;
     const td = (txt, cls) => {
       const c = document.createElement("td");
       c.textContent = txt; if (cls) c.className = cls; return c;
     };
+    const dif = document.createElement("td");
+    dif.className = "bk-dif bk-dif-" + dir;
+    if (dir !== "igual") {
+      const seta = document.createElement("span");
+      seta.className = "bk-seta bk-seta-" + dir;
+      seta.setAttribute("aria-hidden", "true");
+      seta.textContent = dir === "perde" ? "▼" : "▲";
+      dif.append(seta, document.createTextNode(" "));
+    }
+    dif.append(document.createTextNode(l.perde
+      ? t("bk_dif_perde", { n: l.agora - l.backup })
+      : (l.ganha ? t("bk_dif_ganha", { n: l.backup - l.agora })
+                 : t("bk_dif_igual"))));
     tr.append(td(l.rotulo), td(String(l.agora), "bk-num"),
-              td(String(l.backup), "bk-num"),
-              td(l.perde ? t("bk_dif_perde", { n: l.agora - l.backup })
-                 : (l.ganha ? t("bk_dif_ganha", { n: l.backup - l.agora })
-                            : t("bk_dif_igual")), "bk-dif"));
+              td(String(l.backup), "bk-num"), dif);
     tb.append(tr);
   });
 

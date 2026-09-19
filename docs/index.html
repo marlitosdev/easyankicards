@@ -2119,9 +2119,25 @@ dialog.mat-amplo{max-height:96vh}
 .bk-aviso.grave{background:rgba(220,38,38,.16);border-color:rgba(220,38,38,.5)}
 .bk-tab{margin-top:4px}
 .bk-tab .bk-num{text-align:right;font-weight:700;width:70px}
-.bk-tab .bk-dif{font-size:11px;color:var(--sutil);width:120px}
-.bk-tab tr.bk-perde td{color:var(--erro)}
-:root[data-theme="light"] .bk-tab tr.bk-perde td{color:var(--erro)}
+.bk-tab .bk-dif{font-size:12px;color:var(--sutil);width:130px;white-space:nowrap}
+/* A DIREÇÃO DA MUDANÇA, DE RELANCE: verde sobe, vermelho encolhe, o resto
+   fica neutro. Fundo suave na linha inteira + borda viva à esquerda + seta
+   e texto em negrito na cor cheia (--ok / --erro já mudam com o tema). */
+.bk-tab tr.bk-ganha{background:rgba(34,197,94,.15)}
+.bk-tab tr.bk-perde{background:rgba(239,68,68,.17)}
+.bk-tab tr.bk-ganha td:first-child{box-shadow:inset 4px 0 0 #22c55e}
+.bk-tab tr.bk-perde td:first-child{box-shadow:inset 4px 0 0 #ef4444}
+.bk-tab tr.bk-ganha td{color:var(--ok);font-weight:700}
+.bk-tab tr.bk-perde td{color:var(--erro);font-weight:700}
+.bk-tab tr.bk-igual td{opacity:.72}
+.bk-tab .bk-dif-ganha,.bk-tab .bk-dif-perde{font-weight:800}
+.bk-seta{display:inline-block;width:1.15em;font-size:15px;line-height:1;text-align:center}
+.bk-seta-ganha{color:#22c55e}
+.bk-seta-perde{color:#ef4444}
+:root[data-theme="light"] .bk-tab tr.bk-ganha td{color:#15803d}
+:root[data-theme="light"] .bk-tab tr.bk-perde td{color:#b3261e}
+:root[data-theme="light"] .bk-seta-ganha{color:#16a34a}
+:root[data-theme="light"] .bk-seta-perde{color:#dc2626}
 /* ---- painel de diagnóstico ----
    Este bloco já sumiu uma vez: a reescrita do CSS dos modos (v8.59) cortou
    um intervalo que o continha, e o painel ficou sem formatação sem ninguém
