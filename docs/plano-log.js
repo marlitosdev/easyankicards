@@ -388,6 +388,7 @@ const PL_GAVETAS = [
   { k: "eac_edital_progresso", classe: "testemunho", i18n: "plog_g_progresso" },
   { k: "eac_editais", classe: "testemunho", i18n: "plog_g_editais" },
   { k: "eac_leis", classe: "testemunho", i18n: "plog_g_leis" },
+  { k: "eac_cit_vinculos", classe: "testemunho", i18n: "plog_g_citvinc" },
   { k: "eac_vinculos", classe: "testemunho", i18n: "plog_g_vinculos" },
   { k: "eac_deck", classe: "testemunho", i18n: "plog_g_deck" },
 ];

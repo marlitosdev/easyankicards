@@ -315,7 +315,7 @@ function leiAbrir(disciplina, topico, id) {
  * chamou precisa saber que o salto não aconteceu, para dizer isso em vez
  * de deixar a pessoa procurando na tela.
  * ===================================================================== */
-function leiAbrirNoArtigo(disciplina, topico, idLei, num) {
+function leiAbrirNoArtigo(disciplina, topico, idLei, num, sub) {
   leiAbrir(disciplina, topico, idLei);
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   const temTexto = !!(l && String(l.texto || "").trim());
@@ -331,6 +331,8 @@ function leiAbrirNoArtigo(disciplina, topico, idLei, num) {
     if (achou) leiPintura.alvo = alvo;
   } else {
     achou = leiIrArtigo(num);
+    /* a citação disse o INCISO/parágrafo: depois do salto ao artigo, rola até ele */
+    if (achou && sub) setTimeout(() => leiIrUnidade(num, sub), 450);
   }
   try {
     leiReg("navegar", achou ? "aberta no artigo citado" : "artigo citado não existe nesta lei",
@@ -1648,9 +1650,18 @@ function leiCitacaoPreviewAbrir(c, origemNum) {
     $("leiCitaPreviewArtigo").textContent = art.rotulo
       + (art.alterado ? " " + t("lei_selo_alterado_curto", { f: art.fonteAlteracao || "?" }) : "")
       + (art.revogado ? " " + t("lei_selo_revogado", { f: art.fonteAlteracao || "?" }) : "");
-    $("leiCitaPreviewTexto").textContent = art.texto;
+    let texto = art.texto;
+    /* o trecho CITADO (inciso, parágrafo), separado embaixo do artigo */
+    try {
+      const un = leiAcharUnidades(art.texto, c);
+      if (un.length) {
+        texto += "\n\n▶ " + t("lei_cita_trecho") + ":\n" + un.map((u) => leiRotuloDaUnidade(u) + " — "
+          + art.texto.split("\n").slice(u.linha, u.linhaFim + 1).join(" ").trim()).join("\n");
+      }
+    } catch (e) {}
+    $("leiCitaPreviewTexto").textContent = texto;
   }
-  leiCitaPreviewAlvo = { lei, num: c.num };
+  leiCitaPreviewAlvo = { lei, num: c.num, sub: c };
   $("btnLeiCitaPreviewAbrir").hidden = false;
   abrirModal("dlgLeiCitaPreview");
   try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru); }
@@ -1676,7 +1687,7 @@ function leiCitacaoPreviewAbrirLeiInteira() {
       try { leiAbrirNoArtigo(disciplina, topico, idOrigem, artOrigem); } catch (e) {}
     };
   }
-  leiAbrirNoArtigo(disciplina, topico, alvo.lei.id, alvo.num);
+  leiAbrirNoArtigo(disciplina, topico, alvo.lei.id, alvo.num, alvo.sub);
 }
 
 /* =====================================================================
@@ -2118,6 +2129,61 @@ function leiIrArtigo(num, indice) {
 }
 
 /* =====================================================================
+ * ROLAR ATÉ O INCISO CITADO
+ *
+ * "arts. 148, I, 153, I, II, IV e V; e 154, II" — a citação diz o INCISO, e
+ * levar só ao artigo obriga a procurar o inciso dentro dele. leiAcharUnidades
+ * (lei-seca.js) lê a estrutura do artigo (parágrafo, inciso, alínea, item) e
+ * diz quais linhas são as citadas; aqui a tela rola até a primeira e destaca
+ * todas. Quando o inciso vem no meio de um trecho corrido (uma linha só, "I -
+ * …; II - …"), a linha inteira é destacada: é o menor pedaço que a tela tem.
+ * ===================================================================== */
+function leiBlocoDoArtigo(num, indice) {
+  const alvo = leiNumNormal(num);
+  return (indice !== undefined && indice !== null && $("leiArtI_" + indice))
+    || $("leiArt_" + alvo.replace(/[^A-Z0-9-]/gi, ""));
+}
+
+/* os elementos de texto do artigo desenhado, na ordem em que aparecem */
+function leiLinhasDesenhadas(el, acc) {
+  acc = acc || [];
+  Array.from((el && el.children) || []).forEach((c) => {
+    const tag = String(c.tagName || c.tag || "").toUpperCase();
+    if (tag === "P" || tag === "LI" || (c.className && /mat-num/.test(c.className))) acc.push(c);
+    else leiLinhasDesenhadas(c, acc);
+  });
+  return acc;
+}
+
+function leiIrUnidade(num, sub) {
+  if (!sub || !((sub.incisos || []).length || (sub.paragrafos || []).length)) return false;
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l) return false;
+  const a = leiArtigosEfetivos(l).filter((x) => x.num === leiNumNormal(num))[0];
+  const bloco = leiBlocoDoArtigo(num);
+  if (!a || !bloco) return false;
+  const unidades = leiAcharUnidades(a.texto, sub);
+  if (!unidades.length) return false;
+  const linhas = a.texto.split("\n");
+  const so = (s) => String(s || "").replace(/==[!?§*~@]?|\*\*|_/g, "").replace(/[^0-9A-Za-zÀ-ú]/g, "").slice(0, 14).toLowerCase();
+  const desenhadas = leiLinhasDesenhadas(bloco);
+  const alvos = [];
+  unidades.forEach((u) => {
+    const ini = so(linhas[u.linha]);
+    if (!ini) return;
+    const el = desenhadas.filter((e) => so(e.textContent) === ini)[0];
+    if (el && alvos.indexOf(el) < 0) alvos.push(el);
+  });
+  if (!alvos.length) return false;
+  alvos.forEach((e) => { if (e.classList) e.classList.add("lei-unidade-alvo"); });
+  try { alvos[0].scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+  setTimeout(() => alvos.forEach((e) => { try { e.classList.remove("lei-unidade-alvo"); } catch (x) {} }), 4500);
+  try { leiReg("navegar", "rolou até o trecho citado", "art. " + num + " · " + unidades.map(leiRotuloDaUnidade).join(", ")); }
+  catch (e) {}
+  return true;
+}
+
+/* =====================================================================
  * IR A UM ARTIGO: UMA GRADE, NÃO UMA CAIXA DE DIGITAÇÃO
  *
  * Perguntar "qual artigo?" e esperar que a pessoa digite exige que ela
@@ -2424,9 +2490,12 @@ function leiDuplicadosAbrir(ctx) {
   leiDupPintar();
   abrirModal("dlgLeiDup");
   try {
-    leiReg("gravar", "artigos repetidos: conferência aberta",
-      leiDupCtx.grupos.map((g) => "art. " + g.numCru + " ×" + g.candidatos.length
-        + " (" + g.confianca + ")").join(" · "));
+    leiReg("gravar", "artigos repetidos: conferência aberta (" + leiDupCtx.modo + ")",
+      leiDupCtx.grupos.length + " grupo(s)");
+    /* uma linha por grupo, com as linhas das ocorrências e o sinal de cada uma */
+    leiDupCtx.grupos.slice(0, 40).forEach((g) => leiReg("gravar", "repetido: " + g.rotulo + " ×" + g.candidatos.length,
+      g.candidatos.map((x) => "L" + x.linha + "=" + (x.sinais.tipo || "—")).join(" ")
+        + " · sugestão " + g.confianca + "/" + g.motivo));
   } catch (e) {}
 }
 
@@ -2527,6 +2596,7 @@ function leiDupPintar() {
         op.append(det);
       }
       card.append(op);
+      card.append(leiDupContextoEl(c.texto, cand));
     });
 
     /* "manter todas" — só na criação: na atualização a comparação usa UM
@@ -2594,6 +2664,163 @@ function leiDupCancelar() {
   leiDupCtx = null;
   $("dlgLeiDup").close();
   try { leiReg("gravar", "artigos repetidos: voltou para revisar o texto", ""); } catch (e) {}
+}
+
+/* =====================================================================
+ * VER O TRECHO NO TEXTO, SEM FECHAR A TELA
+ *
+ * Escolher qual redação de um artigo repetido fica exige olhar como ela está
+ * na lei: o que vem antes, o que vem depois, se o vizinho já traz a redação
+ * nova. Antes só havia o texto da própria ocorrência; para conferir era
+ * preciso fechar a caixa e perder a escolha. Agora cada ocorrência tem um
+ * "ver no texto" que abre, DENTRO da mesma tela, as linhas ao redor, com as
+ * da ocorrência destacadas.
+ * ===================================================================== */
+function leiDupContextoEl(texto, cand) {
+  const det = document.createElement("details");
+  det.className = "lei-dup-mais lei-dup-ctx-det";
+  const sm = document.createElement("summary");
+  sm.textContent = t("lei_dup_ver_contexto");
+  det.append(sm);
+  const corpo = document.createElement("div");
+  corpo.className = "lei-ctx";
+  det.append(corpo);
+  const encher = () => {
+    if (corpo.dataset && corpo.dataset.pronto) return;
+    if (corpo.dataset) corpo.dataset.pronto = "1";
+    const ajuda = document.createElement("div");
+    ajuda.className = "lei-pre-ctx";
+    ajuda.textContent = t("lei_dup_ctx_ajuda");
+    corpo.append(ajuda);
+    leiContextoDeLinhas(texto, cand.linha, cand.linhaFim, 8, 8).forEach((x) => {
+      const s = document.createElement("span");
+      s.className = "lei-ctx-l" + (x.alvo ? " lei-ctx-alvo" : "");
+      const n = document.createElement("span");
+      n.className = "lei-ctx-n";
+      n.textContent = String(x.n);
+      s.append(n, document.createTextNode(String(x.texto).slice(0, 320) || " "));
+      corpo.append(s);
+    });
+  };
+  det.ontoggle = () => { if (det.open) encher(); };
+  det.encher = encher;
+  return det;
+}
+
+/* =====================================================================
+ * O RELATÓRIO DO FLUXO DE ATUALIZAÇÃO
+ *
+ * Quando algo dá errado numa tela do fluxo (colar, limpar, repetidos,
+ * conferir, comparar), a pessoa precisa mostrar O QUE ESTAVA NA TELA — o
+ * que o app entendeu, o que sugeriu, o que ela escolheu — e não só "deu
+ * errado". O botão "copiar relatório desta tela" junta isso, com a versão
+ * do app e as últimas linhas do registro, num texto só para colar numa
+ * conversa. Nada é enviado sozinho.
+ * ===================================================================== */
+function leiRelatorioFluxo(tela) {
+  const p = [];
+  const cortar = (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n || 200);
+  p.push("EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "?")
+    + " — relatório do fluxo da lei — " + new Date().toISOString());
+  p.push("Tela: " + (tela || "?"));
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (l) {
+    p.push("Lei aberta: " + l.nome + " (" + l.id + ") · " + leiArtigos(l.texto).length + " artigos · "
+      + (l.topicos || []).length + " tópico(s) · consultada em " + (l.consultadaEm || "?")
+      + " · versão: " + (l.versao || "—") + " · alterações: " + Object.keys(l.alteracoes || {}).length);
+  } else p.push("Lei aberta: nenhuma");
+  if ($("leiUpdFonte") && $("leiUpdFonte").value) p.push("Norma informada: " + cortar($("leiUpdFonte").value, 120));
+  if ($("leiUpdTexto") && $("leiUpdTexto").value) {
+    const tx = $("leiUpdTexto").value;
+    p.push("Texto colado: " + tx.length + " caracteres, " + tx.split("\n").length + " linhas, "
+      + leiArtigos(tx).length + " artigos reconhecidos · começa com: " + cortar(tx, 140));
+  }
+  if (leiPreCtx) {
+    const c = leiPreCtx;
+    p.push("— Revisão da colagem (" + c.modo + "): " + c.pre.mudancas.length + " mudança(s) sugerida(s)");
+    LEI_PRE_GRUPOS.forEach((g) => {
+      const it = c.pre.mudancas.filter((m) => m.grupo === g);
+      if (!it.length) return;
+      p.push("  · " + g + ": " + it.length + " (aceitas " + it.filter((m) => leiPreAceita(c, m)).length + ")");
+      it.slice(0, 6).forEach((m) => p.push("      " + m.id + " linha(s) " + (m.linhas || []).slice(0, 4).join(",")
+        + " · " + cortar(m.antes, 110) + (m.depois ? "  =>  " + cortar(m.depois, 110) : "")));
+    });
+  }
+  if (leiDupCtx) {
+    const c = leiDupCtx;
+    p.push("— Artigos repetidos (" + c.modo + "): " + c.grupos.length + " grupo(s)");
+    c.grupos.slice(0, 40).forEach((g) => {
+      const d = c.decisoes[g.num];
+      p.push("  · " + g.rotulo + " ×" + g.candidatos.length + " [" + g.confianca + "/" + g.motivo + "] escolha: "
+        + (d ? (d.manter === "todas" ? "manter todas" : "linha " + ((g.candidatos.filter((x) => x.indice === d.manter)[0] || {}).linha)) : "—"));
+      g.candidatos.forEach((x) => p.push("      linha " + x.linha + "-" + x.linhaFim + " (" + (x.sinais.tipo || "sem indício") + "): " + cortar(x.texto, 160)));
+    });
+  }
+  if (leiCobCtx) {
+    p.push("— Conferência da versão nova: " + leiCobCtx.g.avisos.map((a) => a.k).join(", ")
+      + " · escolha: " + (leiCobCtx.escolha || "—"));
+  }
+  if (leiUpdComparo) {
+    const it = leiUpdComparo;
+    p.push("— Comparação: " + it.length + " itens · aceitos " + it.filter((x) => x.aceito).length
+      + " · recusados " + it.filter((x) => x.recusado).length + " · modo dos ausentes: " + leiUpdModoAusentes);
+    it.slice(0, 40).forEach((x) => p.push("  · art. " + x.numCru + " " + x.tipo
+      + ((x.alertas || []).length ? " [" + x.alertas.map((a) => a.k).join(",") + "]" : "")));
+  }
+  if (leiJaCtx) p.push("— Lei já existente: " + leiJaCtx.igual.nome + " · escolha: " + (leiJaCtx.escolha || "—"));
+  p.push("— Registro (últimas 60 linhas)");
+  leiLog.slice(-60).forEach((x) => p.push("  " + String(x.q).slice(11, 19) + " [" + x.t + "] " + x.o + (x.d ? " — " + x.d : "")));
+  return p.join("\n");
+}
+
+function leiRelatorioCopiar(tela) {
+  const txt = leiRelatorioFluxo(tela);
+  try { leiReg("relatorio", "relatório do fluxo pedido", tela || ""); } catch (e) {}
+  const ok = () => { try { toast("lei_rel_copiado"); } catch (e) {} };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(ok, () => leiRelatorioMostrar(txt));
+      return txt;
+    }
+  } catch (e) {}
+  leiRelatorioMostrar(txt);
+  return txt;
+}
+
+/* sem área de transferência (navegador recusou), o relatório abre no visor do registro para copiar à mão */
+function leiRelatorioMostrar(txt) {
+  if ($("leiLogTexto")) $("leiLogTexto").value = txt;
+  abrirModal("dlgLeiLog");
+}
+
+/* UMA FALHA NO FLUXO NÃO PODE SER SILENCIOSA. Cada etapa do fluxo de colar e
+ * atualizar é envolvida: se estourar, vira uma linha [erro] no registro, com a
+ * etapa, e a pessoa é avisada de que pode copiar o relatório da tela. */
+let leiFluxoEnvolvido = false;
+function leiSeguro(nome, fn) {
+  return function () {
+    try { return fn.apply(this, arguments); }
+    catch (e) {
+      try { leiReg("erro", "falha em " + nome, ((e && e.message) || String(e)) + " · " + String((e && e.stack) || "").split("\n")[1]); }
+      catch (x) {}
+      try { uiAlert(t("lei_erro_fluxo", { e: nome })); } catch (x) {}
+      return false;
+    }
+  };
+}
+
+function leiEnvolverFluxo() {
+  if (leiFluxoEnvolvido) return;
+  leiFluxoEnvolvido = true;
+  /* eslint-disable no-func-assign */
+  leiAtualizarComparar = leiSeguro("atualizar: comparar", leiAtualizarComparar);
+  leiAtualizarAplicar = leiSeguro("atualizar: finalizar", leiAtualizarAplicar);
+  leiRevisarColagemAbrir = leiSeguro("revisar a colagem", leiRevisarColagemAbrir);
+  leiPreConfirmar = leiSeguro("revisar a colagem: finalizar", leiPreConfirmar);
+  leiDuplicadosAbrir = leiSeguro("artigos repetidos", leiDuplicadosAbrir);
+  leiDupConfirmar = leiSeguro("artigos repetidos: confirmar", leiDupConfirmar);
+  leiUpdGuardaAbrir = leiSeguro("conferir a versão nova", leiUpdGuardaAbrir);
+  leiUpdMostrar = leiSeguro("comparação: mostrar", leiUpdMostrar);
 }
 
 /* =====================================================================
@@ -4368,6 +4595,7 @@ function leiAjudaAbrir() {
  * ------------------------------------------------------------------ */
 
 function leiIniciar() {
+  leiEnvolverFluxo();
   leiLogCarregar();
   leiFonteCarregar();
   leiJanelaCarregar();
@@ -4459,6 +4687,16 @@ function leiIniciar() {
   liga("btnLeiCobVoltar", "voltar da conferência da versão nova", () => leiCobCancelar());
   liga("btnLeiCobX", "fechar a conferência da versão nova", () => leiCobCancelar());
   liga("btnMatLeis", "abrir a biblioteca de leis", () => leiBibAbrir());
+  liga("btnQsVincX", "fechar vínculos de lei", () => $("dlgQsVinc").close());
+  liga("btnQsVincFechar", "fechar vínculos de lei", () => $("dlgQsVinc").close());
+  liga("btnQsVincEscX", "fechar escolha de lei", () => $("dlgQsVincEsc").close());
+  liga("btnQsVincEscCancelar", "cancelar escolha de lei", () => $("dlgQsVincEsc").close());
+  liga("btnQsVincEscOk", "gravar vínculo de lei", () => qsVincSalvar());
+  liga("btnLeiRelDup", "relatório: artigos repetidos", () => leiRelatorioCopiar("artigos repetidos"));
+  liga("btnLeiRelPre", "relatório: revisar a colagem", () => leiRelatorioCopiar("revisar a colagem"));
+  liga("btnLeiRelCob", "relatório: conferir a versão nova", () => leiRelatorioCopiar("conferir a versão nova"));
+  liga("btnLeiRelUpd", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
+  liga("btnLeiRelJa", "relatório: lei já existente", () => leiRelatorioCopiar("lei já existente"));
   liga("btnLeiBibX", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
   liga("btnLeiBibFechar", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
   liga("btnLeiBibTodas", "biblioteca: todas", () => { leiBibFiltro = "todas"; leiBibPintar(); });
