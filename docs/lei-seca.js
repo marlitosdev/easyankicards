@@ -1838,7 +1838,7 @@ function leiDiagnosticarLei(texto) {
     const d = est.nos[id];
     if (d.nome || d.tipo === "DISPOSICOES" || d.tipo === "PARTE") return;
     const prox = arts.filter((a) => a.linha > d.linha)[0] || null;
-    itens.push({ tipo: "divisao_sem_nome", gravidade: "leve", rotulo: d.rotulo, num: prox ? prox.num : "",
+    itens.push({ tipo: "divisao_sem_nome", gravidade: "leve", rotulo: d.rotulo, nota: d.nota || "", divisaoId: d.id, num: prox ? prox.num : "",
       numCru: prox ? prox.numCru : "", indice: prox ? prox.indice : -1, linha: d.linha, linhaFim: d.linha });
   });
 

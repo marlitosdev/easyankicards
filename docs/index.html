@@ -1307,6 +1307,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-mapa-no{margin:3px 0 3px 8px;border-left:2px solid var(--borda);padding-left:8px}
 .lei-mapa-no>summary{cursor:pointer;font-size:12.5px;padding:3px 0}
 .lei-mapa-item{margin:6px 0}
+.lei-mapa-grupo{margin:8px 0;border:1px solid var(--borda);border-radius:10px;padding:6px 10px}
+.lei-mapa-grupo>summary{cursor:pointer;font-size:12.5px;font-weight:700}
 .lei-mapa-tit{font-weight:700;margin:10px 0 4px}
 .lei-mapa-acoes{display:flex;gap:6px;margin:4px 0}
 
@@ -6787,7 +6789,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="dlg-x" id="btnLeiMapaX" data-i18n-title="help_close">✖</button>
   </div>
   <p class="nota" data-i18n="lei_mapa_ajuda"></p>
-  <p class="nota" id="leiMapaResumo"></p>
+  <div class="lei-dup-topo">
+    <span class="nota" id="leiMapaResumo"></span>
+    <button class="btn-min" id="btnLeiRelMapa" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — os números, o que o app apontou (com as linhas do texto ao redor de cada ponto) e a árvore de divisões — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
+  </div>
   <div id="leiMapaConferir"></div>
   <div class="lei-mapa-tit" data-i18n="lei_mapa_arvore"></div>
   <div id="leiMapaArvore" class="lei-mapa-arvore"></div>
