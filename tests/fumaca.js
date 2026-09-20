@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "material.js",
-                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js",
+                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -711,6 +711,9 @@ function rodar() {
     },
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
+    decLer, decRegistrar, decRegistrarLote, decMarcar, decPorRegra, decExportar, decLimpar, decRecarregar,
+    decAbrir, decPintar, decCopiar, decBaixar, decApagar, decRiscoDoTexto, decTituloDaRegra,
+    decLimites: (max, chars) => { decMax = max; decMaxChars = chars; },
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
     leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,
