@@ -27,8 +27,9 @@ let decResumo = null;          /* as contagens por regra das decisões já dobra
 let decSeq = 0;
 let decFiltro = { area: "", decisao: "" };
 
-const DEC_AREAS = ["colagem", "repetidos", "versao", "apagar"];
-const DEC_DECISOES = ["aceitou", "recusou", "mudou", "escolheu", "sem_decisao"];
+const DEC_AREAS = ["colagem", "repetidos", "versao", "apagar", "ajuste"];
+/* "automatico": o app fez sozinho e a pessoa ainda não decidiu (conta como "sem decisão" nas taxas) */
+const DEC_DECISOES = ["aceitou", "recusou", "mudou", "escolheu", "sem_decisao", "automatico"];
 
 function decCarregar() {
   if (decLista) return;
