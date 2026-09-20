@@ -1227,7 +1227,21 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * pode estar desatualizado */
 .lei-velha{color:var(--atencao);font-weight:600}
 .lei-onde{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+.lei-onde-rot{font-size:12px;font-weight:800}
 .lei-onde-txt{font-size:12px;color:var(--sutil)}
+/* O BOTÃO FLUTUANTE: uma pílula no canto de baixo da leitura, ancorada numa linha de altura zero */
+.lei-flut-linha{position:relative;height:0;margin:0;padding:0;z-index:6}
+.lei-flut-linha[hidden]{display:none}
+.lei-flut{position:absolute;right:26px;bottom:10px;display:flex;align-items:center;gap:8px;
+  max-width:calc(100% - 44px);padding:5px 6px;border:1px solid var(--borda);border-radius:999px;
+  background:var(--panel);box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.lei-flut-btn{font-family:inherit;font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:999px;
+  border:1px solid var(--verde);background:none;color:var(--verde);cursor:pointer}
+.lei-flut-btn:hover{background:rgba(16,185,129,.14)}
+.lei-flut-on{background:var(--verde);color:#062b1d}
+.lei-flut-desfazer{border-color:var(--borda);color:var(--texto)}
+.lei-flut-aviso{font-size:11.5px;color:var(--texto);padding-left:8px}
+.lei-flut-aviso[hidden],.lei-flut-btn[hidden]{display:none}
 .lei-barra{flex:0 0 120px;height:6px;border-radius:999px;background:var(--borda);
   overflow:hidden}
 .lei-barra-in{height:100%;background:var(--verde);border-radius:999px}
@@ -1557,6 +1571,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   color:var(--info);cursor:pointer}
 .lei-art-num:hover{border-color:var(--info)}
 .lei-art-num-parei{color:var(--ok);border-color:var(--ok)}
+/* A BANDEIRINHA de marcar "parei aqui": um ícone discreto ao lado do número, que se acende ao passar
+   o mouse pelo artigo (no toque não há "passar", então já fica visível) */
+.lei-art-flag{background:none;border:1px solid transparent;padding:0 6px;border-radius:6px;
+  font-size:13px;line-height:1.5;color:var(--sutil);opacity:.5;cursor:pointer}
+.lei-art:hover .lei-art-flag,.lei-art-flag:focus-visible{opacity:1;color:var(--verde);border-color:var(--verde)}
+.lei-art-flag[hidden]{display:none}
+@media (hover:none){.lei-art-flag{opacity:.8}}
 
 /* O SELO DA CAMADA DE ALTERAÇÃO — diz, sem esconder nada, que aquele
  * artigo não é mais a redação original. Roxo (não vermelho: não é erro,
@@ -1568,8 +1589,6 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-selo-revogado{border-color:var(--atencao);color:var(--atencao);
   background:rgba(245,158,11,.10)}
 .lei-selo-alterado-curto{font-size:10px;color:#7c6cf5}
-.lei-onde-ir{background:none;border:none;padding:0;font-family:inherit;
-  cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 
 /* O aviso do artigo cobrado: discreto, e vermelho só quando você erra
    mais do que acerta nele. */
@@ -6292,6 +6311,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
   <div class="mat-leitura" id="leiRecitar" hidden></div>
+  <!-- O BOTÃO FLUTUANTE DO MARCADOR. A linha tem altura ZERO e fica logo abaixo da leitura: o botão
+       se ancora na borda de baixo dela (bottom) e sobe para dentro do painel — sem calcular posição
+       em JS, e acompanhando sozinho a janela, a leitura ampliada e a letra. -->
+  <div class="lei-flut-linha" id="leiFlutLinha" hidden>
+    <div class="lei-flut" id="leiFlut" role="group">
+      <span class="lei-flut-aviso" id="leiFlutAviso" role="status" aria-live="polite" hidden></span>
+      <button type="button" class="lei-flut-btn lei-flut-desfazer" id="btnLeiFlutDesfazer" data-i18n="lei_flut_desfazer" hidden></button>
+      <button type="button" class="lei-flut-btn" id="btnLeiFlut"></button>
+    </div>
+  </div>
   <div class="lei-anexos" id="leiAnexos" hidden></div>
   <div class="dlg-rodape">
     <span class="nota lei-estado" id="leiEstado"></span>

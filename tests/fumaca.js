@@ -710,7 +710,7 @@ function rodar() {
       return { hoje: gerLogSoHoje, erros: gerLogSoErros, tipo: gerLogTipo };
     },
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
-    leiGaveta,
+    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
     leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,
