@@ -1358,6 +1358,18 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-mapa-grupo{margin:8px 0;border:1px solid var(--borda);border-radius:10px;padding:6px 10px}
 .lei-mapa-grupo>summary{cursor:pointer;font-size:12.5px;font-weight:700}
 .lei-mapa-tit{font-weight:700;margin:10px 0 4px}
+/* A LINHA DE ESTADO: uma frase, verde (nada grave) ou vermelha (há o que conferir) */
+.lei-mapa-estado{margin:6px 0 8px;padding:6px 10px;border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);font-size:12.5px;font-weight:700}
+.lei-mapa-estado-ok{border-color:var(--verde);color:var(--verde)}
+.lei-mapa-estado-grave{border-color:#ef4444;color:#ef4444}
+/* a bolinha da gravidade de cada ponto: vermelha (grave), âmbar (aviso), cinza (leve) */
+.lei-mapa-item-compacto>.nota::before{content:"●";font-size:10px;margin-right:6px}
+.lei-mapa-g-grave>.nota::before{color:#ef4444}
+.lei-mapa-g-aviso>.nota::before{color:#f59e0b}
+.lei-mapa-g-leve>.nota::before{color:var(--sutil)}
+.lei-mapa-como{margin:2px 0 6px}
+.lei-mapa-como>summary{cursor:pointer;font-size:11.5px;color:var(--sutil)}
 /* divisão sem nome: uma linha só (onde está · ir · ver no texto), não um cartão de três linhas */
 .lei-mapa-item-compacto{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin:2px 0;padding:4px 0;
   border:none;border-bottom:1px solid var(--borda);border-radius:0;background:none}
@@ -6878,12 +6890,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <h3 id="leiMapaTitulo"></h3>
     <button type="button" class="dlg-x" id="btnLeiMapaX" data-i18n-title="help_close">✖</button>
   </div>
-  <p class="nota" data-i18n="lei_mapa_ajuda"></p>
   <div class="lei-dup-topo">
     <span class="nota" id="leiMapaResumo"></span>
-    <button class="btn-min" id="btnLeiRelMapa" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — os números, o que o app apontou (com as linhas do texto ao redor de cada ponto) e a árvore de divisões — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
+    <button class="btn-min" id="btnLeiRelMapa" data-i18n="lei_rel_btn_curto" title="Copia o que está nesta tela — os números, o que o app apontou (com as linhas do texto ao redor de cada ponto) e a árvore de divisões — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
   <div id="leiMapaConferir"></div>
+  <!-- COMO LER ESTA TELA: recolhido. Explicação que se lê uma vez não fica ocupando o topo. -->
+  <details class="lei-mapa-como">
+    <summary data-i18n="lei_mapa_como"></summary>
+    <p class="nota" data-i18n="lei_mapa_ajuda"></p>
+  </details>
   <div class="lei-mapa-tit" data-i18n="lei_mapa_arvore"></div>
   <div id="leiMapaArvore" class="lei-mapa-arvore"></div>
   <div class="dlg-rodape">

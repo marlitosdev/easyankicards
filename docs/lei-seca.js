@@ -61,14 +61,20 @@ const LEI_RE_DIVISAO =
 /* Divisão SEM número, escrita numa linha só: "Disposições Finais e Transitórias", "PARTE GERAL".
  * Só estas frases: uma linha qualquer em maiúsculas não é divisão. */
 const LEI_RE_DIVISAO_LIVRE =
-  /^[\s>*]*(DISPOSI[ÇC][ÕO]ES\s+(?:FINAIS|TRANSIT[ÓO]RIAS|PRELIMINARES)(?:\s+E\s+(?:FINAIS|TRANSIT[ÓO]RIAS|GERAIS))?|PARTE\s+(?:GERAL|ESPECIAL))\s*$/i;
+  /^[\s>*]*(DISPOSI[ÇC][ÕO]ES\s+(?:FINAIS|TRANSIT[ÓO]RIAS|PRELIMINARES)(?:\s+E\s+(?:FINAIS|TRANSIT[ÓO]RIAS|GERAIS))?|PARTE\s+(?:GERAL|ESPECIAL)|ATO\s+DAS\s+DISPOSI[ÇC][ÕO]ES\s+CONSTITUCIONAIS\s+TRANSIT[ÓO]RIAS)\s*$/i;
 
 /* A nota "(Redação dada pela LC 227, de 2026)" não é o NOME do capítulo. */
 const LEI_RE_NOTA_DIVISAO =
   /\(\s*(?:Reda[çc][ãa]o\s+dada|Inclu[íi]d[oa]|Revogad[oa]|Vetad[oa]|Vide|Vig[êe]ncia|Produ[çc][ãa]o\s+de\s+efeito|Renumerad[oa])[^)]*\)/gi;
 
 /* Quanto mais alto o nível, mais fundo na árvore: Parte › Livro › Título › Capítulo › Seção › Subseção */
-const LEI_NIVEL_DIVISAO = { PARTE: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 3, CAPITULO: 4, SECAO: 5, SUBSECAO: 6 };
+const LEI_NIVEL_DIVISAO = { PARTE: 1, ATO: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 3, CAPITULO: 4, SECAO: 5, SUBSECAO: 6 };
+
+/* O número do artigo como se MOSTRA: sem espaços, e com o ordinal escrito como ordinal. Texto de PDF
+ * traz "42O" (letra O) ou "1o"/"1°" no lugar do "º": é o mesmo artigo, e o "42O" ia para o mapa. */
+function leiNumCruLimpo(bruto) {
+  return String(bruto).replace(/\s+/g, "").replace(/(\d)[oO°]$/, "$1º");
+}
 
 /* Ordinal do artigo: "1º" e "1" são o MESMO artigo escrito de dois
  * jeitos. Sem normalizar, "onde parei" gravado como "1º" nunca mais
@@ -76,7 +82,7 @@ const LEI_NIVEL_DIVISAO = { PARTE: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 3, CAPIT
 function leiNumNormal(bruto) {
   return String(bruto || "")
     .replace(/\s+/g, "")
-    .replace(/[ºo°ª]$/i, "")
+    .replace(/(\d)[ºo°ª]$/i, "$1")
     .replace(/[–]/g, "-")
     .toUpperCase();
 }
@@ -164,7 +170,10 @@ function leiNomeDaDivisao(bruto) {
   const notas = [];
   const nome = String(bruto == null ? "" : bruto)
     .replace(LEI_RE_NOTA_DIVISAO, (m) => { notas.push(m.replace(/\s+/g, " ").trim()); return " "; })
-    .replace(/\s+/g, " ").replace(/^[\s.:\-–—]+|[\s.:\-–—]+$/g, "");
+    .replace(/\s+/g, " ").replace(/^[\s.:\-–—]+|[\s.:\-–—]+$/g, "")
+    /* o texto de um link do Planalto que veio junto ("… REFORMA AGRÁRIA Regulamento") não é o nome. Só
+     * quando vem depois de uma palavra em MAIÚSCULAS: "Da Vigência" e "Do Regulamento Geral" são nomes */
+    .replace(/([A-ZÀ-Ú]{2,})\s+(?:Regulamento|Regulamenta[çc][ãa]o|Vig[êe]ncia)$/, "$1");
   return { nome, nota: notas.join(" ") };
 }
 
@@ -212,11 +221,17 @@ function leiLerLei(texto) {
       const cru = String(linha).trim();
       if (!cru) return;                      /* linha em branco: continua esperando */
       esperaNome = false;
-      if (!leiCasarArtigo(linha) && cru.length <= 90 && divisao && !divisao.nome) {
+      /* Depois de uma NOTA de alteração o nome pode ser mais longo (o Planalto escreve "Seção V /
+       * (Redação dada pela EC 92/2016) / Do Tribunal Superior do Trabalho, dos Tribunais Regionais do
+       * Trabalho e dos Juízes do Trabalho"): a linha de nome aceita mais caracteres nesse caso */
+      const limite = divisao && divisao.nota ? 160 : 90;
+      if (!leiCasarArtigo(linha) && cru.length <= limite && divisao && !divisao.nome) {
         const n = leiNomeDaDivisao(cru);
         divisao.nome = n.nome;
         divisao.nota = [divisao.nota, n.nota].filter(Boolean).join(" ");
         rotular(divisao);
+        /* a linha trouxe SÓ a nota (o nome vem na seguinte): continua esperando o nome */
+        if (!n.nome) esperaNome = true;
         return;
       }
     }
@@ -242,7 +257,9 @@ function leiLerLei(texto) {
     const dl = linha.match(LEI_RE_DIVISAO_LIVRE);
     if (dl) {
       const base = dl[1].replace(/\s+/g, " ").trim();
-      divisao = abrir(/^PARTE/i.test(base) ? "PARTE" : "DISPOSICOES", "", base, "", "", i + 1);
+      /* "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS" (o ADCT) abre um ramo de topo: sem isto o
+       * cabeçalho caía DENTRO do último artigo do corpo, e os artigos do ADCT iam parar no último Título */
+      divisao = abrir(/^ATO/i.test(base) ? "ATO" : /^PARTE/i.test(base) ? "PARTE" : "DISPOSICOES", "", base, "", "", i + 1);
       esperaNome = false;
       atual = null;
       return;
@@ -262,7 +279,7 @@ function leiLerLei(texto) {
     if (a) {
       atual = {
         num: leiNumNormal(a[1]),
-        numCru: String(a[1]).replace(/\s+/g, ""),
+        numCru: leiNumCruLimpo(a[1]),
         ordem: leiNumOrdem(a[1]),
         linha: i + 1,
         corpo: linha.slice(a[0].length),
@@ -1747,7 +1764,29 @@ function leiAplicarAnexo(anexos, item, ctx) {
  * recorte e os saltos viram avisos leves. Número isolado e volta continuam
  * graves em qualquer caso: esses são o sinal clássico de leitor errado.
  * ===================================================================== */
+/* Os TRECHOS de uma lei: o corpo e cada ATO de topo (o ADCT). Cada trecho tem a sua numeração, que
+ * recomeça no art. 1º — isso é esperado, e por isso a numeração é conferida trecho a trecho. */
+function leiTrechosDaLei(artigos) {
+  const trechos = [];
+  (artigos || []).forEach((a) => {
+    const ato = /^ATO\|/.test(a.divisaoId || "");
+    const chave = ato ? String(a.divisaoId).split(">")[0] : "";
+    const ult = trechos[trechos.length - 1];
+    if (ult && ult.chave === chave) ult.artigos.push(a);
+    else trechos.push({ chave, rotulo: ato ? String((a.caminho || [])[0] || "") : "", artigos: [a] });
+  });
+  return trechos;
+}
+
 function leiNumeracao(artigos) {
+  const trechos = leiTrechosDaLei(artigos);
+  if (trechos.length <= 1) return leiNumeracaoTrecho(artigos);
+  const res = trechos.map((x) => leiNumeracaoTrecho(x.artigos));
+  const problemas = [].concat.apply([], res.map((r) => r.problemas));
+  return { problemas, graves: problemas.filter((x) => x.gravidade === "grave"), recorte: res.every((r) => r.recorte) };
+}
+
+function leiNumeracaoTrecho(artigos) {
   const A = artigos || [];
   const B = A.map((a) => Math.floor(a.ordem / 100));
   /* E: até onde cada item vai — um grupo revogado ("Arts. 12 a 15") cobre a faixa */
@@ -1836,7 +1875,7 @@ function leiDiagnosticarLei(texto) {
 
   Object.keys(est.nos).forEach((id) => {
     const d = est.nos[id];
-    if (d.nome || d.tipo === "DISPOSICOES" || d.tipo === "PARTE") return;
+    if (d.nome || d.tipo === "DISPOSICOES" || d.tipo === "PARTE" || d.tipo === "ATO") return;
     const prox = arts.filter((a) => a.linha > d.linha)[0] || null;
     itens.push({ tipo: "divisao_sem_nome", gravidade: "leve", rotulo: d.rotulo, nota: d.nota || "", divisaoId: d.id, num: prox ? prox.num : "",
       numCru: prox ? prox.numCru : "", indice: prox ? prox.indice : -1, linha: d.linha, linhaFim: d.linha });
@@ -1849,6 +1888,12 @@ function leiDiagnosticarLei(texto) {
   });
 
   itens.sort((x, y) => x.linha - y.linha);
+  /* o resumo fala do CORPO da lei e, à parte, de cada ATO de topo (ADCT): "1º a 250" e "1º a 138", e
+   * não um "1º a 138" que mistura os dois */
+  const trechos = leiTrechosDaLei(arts);
+  const corpo = trechos.filter((x) => !x.chave)[0] || trechos[0] || null;
+  const atos = trechos.filter((x) => x.chave).map((x) => ({ rotulo: x.rotulo, n: x.artigos.length,
+    de: x.artigos[0].numCru, ate: x.artigos[x.artigos.length - 1].numCru }));
   const porTipo = {};
   Object.keys(est.nos).forEach((id) => { porTipo[est.nos[id].tipo] = (porTipo[est.nos[id].tipo] || 0) + 1; });
   return {
@@ -1859,8 +1904,9 @@ function leiDiagnosticarLei(texto) {
       artigos: arts.length,
       divisoes: Object.keys(est.nos).length,
       porTipo,
-      de: arts.length ? arts[0].numCru : "",
-      ate: arts.length ? arts[arts.length - 1].numCru : "",
+      de: corpo ? corpo.artigos[0].numCru : "",
+      ate: corpo ? corpo.artigos[corpo.artigos.length - 1].numCru : "",
+      atos,
       graves: itens.filter((x) => x.gravidade === "grave").length,
     },
   };
