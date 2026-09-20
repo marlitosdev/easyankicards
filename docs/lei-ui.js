@@ -259,7 +259,7 @@ function leiAplicarNoTopico(chave, novo) {
  * ABRIR
  * ------------------------------------------------------------------ */
 
-function leiAbrir(disciplina, topico, id) {
+function leiAbrir(disciplina, topico, id, opc) {
   /* abrir outra lei descarta o desenho em andamento da anterior */
   leiPinturaCancelar();
   /* SEM TÓPICO (aberta pela Biblioteca), a chave é vazia — e tudo o que
@@ -297,6 +297,9 @@ function leiAbrir(disciplina, topico, id) {
   abrirModal("dlgLeiSeca");
   /* só agora há layout: o botão flutuante do marcador mede a posição dos artigos */
   leiFlutAtualizar();
+  /* RETOMAR: a lei abre já no marcador. Quem chega por uma citação ou por uma questão passa
+   * semRetomar: o artigo citado (ou o topo) manda, o marcador não. */
+  if (!(opc && opc.semRetomar)) leiRetomar();
   try { leiReg("lei", "lei seca aberta", topico + " · "
       + (l ? l.nome + " · " + leiArtigos(l.texto).length + " artigos"
            : "nenhuma lei ligada ainda"));
@@ -323,7 +326,7 @@ function leiAbrir(disciplina, topico, id) {
  * de deixar a pessoa procurando na tela.
  * ===================================================================== */
 function leiAbrirNoArtigo(disciplina, topico, idLei, num, sub) {
-  leiAbrir(disciplina, topico, idLei);
+  leiAbrir(disciplina, topico, idLei, { semRetomar: true });
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   const temTexto = !!(l && String(l.texto || "").trim());
   if (temTexto && leiModo !== "ler") leiTrocarModo("ler");
@@ -335,7 +338,7 @@ function leiAbrirNoArtigo(disciplina, topico, idLei, num, sub) {
      * existe, e a pintura vai até ele assim que o pedaço dele entrar */
     const alvo = leiNumNormal(num);
     achou = leiPintura.arts.some((a) => a.num === alvo);
-    if (achou) leiPintura.alvo = alvo;
+    if (achou) { leiPintura.alvo = alvo; leiPintura.alvoIdx = undefined; }
   } else {
     achou = leiIrArtigo(num);
     /* a citação disse o INCISO/parágrafo: depois do salto ao artigo, rola até ele */
@@ -367,9 +370,10 @@ function leiAbrirNoArtigo(disciplina, topico, idLei, num, sub) {
  *  · o botão flutuante confirma ("Marcado: parei no art. 7º. Já está salvo.") e oferece desfazer;
  *  · o marcador significa "li até este artigo": "continuar" vai ao seguinte.
  * ===================================================================== */
-let leiPareiVivo = "";          /* o marcador desta lei agora (artigos que nascem depois já o sabem) */
+let leiPareiIdx = -1;           /* a POSIÇÃO do artigo marcado agora (-1: nenhum): quem nasce depois já a sabe */
+let leiArtsVivos = [];          /* os artigos efetivos da leitura atual: o marcador se resolve por eles */
 let leiFlutAtivo = false;       /* há uma lei gravada na leitura: só então o botão flutuante existe */
-let leiFlutAviso = null;        /* a confirmação em curso: {tipo, numCru, antes} */
+let leiFlutAviso = null;        /* a confirmação em curso: {tipo, numCru, antes: {num, indice}} */
 let leiFlutTimer = null;
 let leiTopoTimer = null;
 
@@ -394,48 +398,73 @@ function leiArtMarcadoAplicar(bloco, marcado) {
   if (m.flag) m.flag.hidden = marcado;
 }
 
-function leiMarcadorNoDom(antes, novo) {
+/* "▶ continue aqui": o selo do artigo SEGUINTE ao marcador, onde a leitura recomeça. O elemento só
+ * nasce quando é preciso (é um artigo por vez, e não um por artigo da lei). */
+function leiArtContAplicar(bloco, cont) {
+  const m = bloco._lei;
+  if (!m || !m.cab) return;
+  m.continua = cont;
+  if (cont && !m.cont) {
+    const s = document.createElement("span");
+    s.className = "lei-art-cont";
+    s.textContent = t("lei_cont_aqui");
+    s.title = t("lei_cont_aqui_aj");
+    m.cab.append(s);
+    m.cont = s;
+  }
+  if (m.cont) m.cont.hidden = !cont;
+}
+
+/* põe cada artigo no estado do marcador de AGORA (só os que diferem): serve para a mudança no lugar e
+ * para os nós que voltam do desenho guardado */
+function leiMarcadorEmTodos(idx) {
   const cx = $("leiLeitura");
   if (!cx) return;
   Array.from(cx.querySelectorAll(".lei-art")).forEach((b) => {
-    if (!b._lei) return;
-    if (b._lei.num === antes || b._lei.num === novo) leiArtMarcadoAplicar(b, !!novo && b._lei.num === novo);
+    const m = b._lei;
+    if (!m) return;
+    const quer = idx >= 0 && m.indice === idx;
+    if (m.marcado !== quer) leiArtMarcadoAplicar(b, quer);
+    const querCont = idx >= 0 && m.indice === idx + 1;
+    if (!!m.continua !== querCont) leiArtContAplicar(b, querCont);
   });
 }
 
-/* nós vindos do desenho guardado: põe cada um no estado do marcador de AGORA (só os que diferem) */
-function leiMarcadorEmTodos(parei) {
+function leiNumCruDoIdx(indice, num) {
   const cx = $("leiLeitura");
-  if (!cx) return;
-  Array.from(cx.querySelectorAll(".lei-art")).forEach((b) => {
-    if (!b._lei) return;
-    const quer = !!parei && b._lei.num === parei;
-    if (b._lei.marcado !== quer) leiArtMarcadoAplicar(b, quer);
-  });
-}
-
-function leiNumCruDoDom(num) {
-  const cx = $("leiLeitura");
-  const b = cx ? Array.from(cx.querySelectorAll(".lei-art")).filter((x) => x._lei && x._lei.num === num)[0] : null;
+  const b = cx ? Array.from(cx.querySelectorAll(".lei-art")).filter((x) => x._lei && x._lei.indice === indice)[0] : null;
   return b ? b._lei.numCru : num;
 }
 
-/* Muda o marcador. num vazio = tirar. Devolve se mudou. */
-function leiMarcadorMudar(num, opc) {
+/* O alvo de leiMarcadorMudar: nada (= tirar), um artigo {num, indice} ou só o número (o 1º com ele) */
+function leiMarcadorAlvo(alvo) {
+  if (alvo === null || alvo === undefined || alvo === "") return { num: "", indice: -1 };
+  if (typeof alvo === "object") {
+    const num = leiNumNormal(alvo.num);
+    if (!num) return { num: "", indice: -1 };
+    return { num, indice: Number.isInteger(alvo.indice) ? alvo.indice : leiArtsVivos.findIndex((a) => a.num === num) };
+  }
+  const num = leiNumNormal(alvo);
+  return { num, indice: leiArtsVivos.findIndex((a) => a.num === num) };
+}
+
+/* Muda o marcador. alvo vazio = tirar. Devolve se mudou. */
+function leiMarcadorMudar(alvo, opc) {
   opc = opc || {};
   if (!leiIdAtual) return false;
   const l = leiDe(leiIdAtual);
   if (!l) return false;
-  const antes = l.parei || "";
-  const novo = num ? leiNumNormal(num) : "";
-  if (novo === antes) return false;
-  leiParar(leiIdAtual, novo);
-  leiPareiVivo = novo;
-  leiMarcadorNoDom(antes, novo);
+  const antes = { num: l.parei || "", indice: leiPareiIdx };
+  const novo = leiMarcadorAlvo(alvo);
+  if (novo.num === antes.num && novo.indice === antes.indice) return false;
+  leiParar(leiIdAtual, novo.num, novo.indice);
+  leiPareiIdx = novo.num ? novo.indice : -1;
+  leiMarcadorEmTodos(leiPareiIdx);
   leiPintarFila();
   leiPintarOnde();
   if (opc.aviso !== false) {
-    leiFlutAvisar(novo ? "marcado" : "removido", { numCru: leiNumCruDoDom(novo || antes), antes });
+    const citado = novo.num ? novo : antes;
+    leiFlutAvisar(novo.num ? "marcado" : "removido", { numCru: leiNumCruDoIdx(citado.indice, citado.num), antes });
   } else leiFlutAtualizar();
   return true;
 }
@@ -492,7 +521,7 @@ function leiFlutAtualizar() {
     b.hidden = true;
     desf.hidden = av.tipo === "desfeito";
     desf.onclick = () => {
-      leiMarcadorMudar(av.antes, { aviso: false });
+      leiMarcadorMudar(av.antes && av.antes.num ? av.antes : null, { aviso: false });
       leiFlutAvisar("desfeito", {});
     };
     linha.hidden = false;
@@ -502,12 +531,12 @@ function leiFlutAtualizar() {
   desf.hidden = true;
   const topo = leiArtigoDoTopo();
   if (!topo) { linha.hidden = true; return; }
-  const marcado = topo.num === leiPareiVivo;
+  const marcado = topo.indice === leiPareiIdx;
   b.hidden = false;
   b.className = "lei-flut-btn" + (marcado ? " lei-flut-on" : "");
   b.textContent = t(marcado ? "lei_flut_marcado" : "lei_flut_marcar", { a: topo.numCru });
   b.title = t(marcado ? "lei_flut_marcado_aj" : "lei_flut_marcar_aj", { a: topo.numCru });
-  b.onclick = () => leiMarcadorMudar(marcado ? "" : topo.num);
+  b.onclick = () => leiMarcadorMudar(marcado ? null : topo);
   linha.hidden = false;
 }
 
@@ -942,9 +971,8 @@ function leiPintarOnde() {
     ir.className = "btn-min lei-onde-marc";
     ir.textContent = t("lei_onde_ir", { a: p.artigo });
     ir.title = t("lei_ir_ao_marcador", { a: p.artigo });
-    /* SÓ O NÚMERO, AQUI: "parei" grava só o número (leiParar), e sem o índice de QUAL ocorrência
-     * foi marcada não há como saber se foi a do corpo ou a do ADCT. leiIrArtigo cai na primeira. */
-    ir.onclick = () => { leiTrocarModo("ler"); leiIrArtigo(p.artigo); };
+    /* A POSIÇÃO VAI JUNTO: o marcador guarda QUAL ocorrência foi marcada (o art. 5º do corpo ou o do ADCT) */
+    ir.onclick = () => { leiTrocarModo("ler"); leiIrArtigo(p.artigo, p.indice); };
     cx.append(ir);
   }
 }
@@ -1350,8 +1378,8 @@ function leiPintarLeitura() {
    * solta, então não tem o mesmo problema. */
   const arts = l ? leiArtigosEfetivos(Object.assign({}, l, { texto: bruto }))
                  : leiArtigos(bruto);
-  const parei = l ? l.parei : "";
-  leiPareiVivo = parei;
+  leiArtsVivos = arts;
+  leiPareiIdx = l ? leiIndiceDoMarcador(l, arts) : -1;
   leiFlutAtivo = !!l;
   /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
    * dentro do laço releria o banco de questões a cada artigo */
@@ -1381,7 +1409,8 @@ function leiPintarLeitura() {
   const desenhar = (a) => {
     /* o marcador VIVO, e não o do começo da pintura: numa lei grande que ainda está entrando na
      * tela a pessoa pode marcar, e os artigos que faltam nascem já sabendo */
-    const parei = leiPareiVivo;
+    const ehMarcado = a.indice === leiPareiIdx;
+    const ehCont = leiPareiIdx >= 0 && a.indice === leiPareiIdx + 1;
     if (a.divisao && a.divisao !== divisao) {
       divisao = a.divisao;
       const h = document.createElement("div");
@@ -1400,7 +1429,7 @@ function leiPintarLeitura() {
     const risco = ranking[a.num];
     const bloco = document.createElement("div");
     bloco.className = "lei-art"
-      + (a.num === parei ? " lei-art-parei" : "")
+      + (ehMarcado ? " lei-art-parei" : "")
       + (risco && risco.erros > risco.acertos ? " lei-art-perigo"
          : (risco && risco.prova ? " lei-art-caiu" : ""));
     /* =================================================================
@@ -1449,22 +1478,22 @@ function leiPintarLeitura() {
      * O número já estava lá, já é único, já é o endereço. Clicar nele
      * marca. Zero elementos novos na tela, mesma capacidade. */
     const rot = document.createElement("button");
-    rot.className = "lei-art-num" + (a.num === parei ? " lei-art-num-parei" : "");
-    rot.textContent = a.rotulo + (a.num === parei ? " " + t("lei_aqui_sinal") : "");
-    rot.title = a.num === parei ? t("lei_aqui_ajuda") : t("lei_parar_aqui_ajuda");
+    rot.className = "lei-art-num" + (ehMarcado ? " lei-art-num-parei" : "");
+    rot.textContent = a.rotulo + (ehMarcado ? " " + t("lei_aqui_sinal") : "");
+    rot.title = ehMarcado ? t("lei_aqui_ajuda") : t("lei_parar_aqui_ajuda");
     rot.type = "button";
     /* PARA QUEM NÃO VÊ A COR. O marcador se anuncia por três meios: a
      * cor da borda, o sinal no rótulo e — só agora — o aria-current,
      * que é o único que um leitor de tela entende. "location" é o valor
      * certo: não é a página atual nem um passo de um processo; é o
      * ponto do documento em que a pessoa está. */
-    if (a.num === parei) rot.setAttribute("aria-current", "location");
+    if (ehMarcado) rot.setAttribute("aria-current", "location");
     else if (rot.removeAttribute) rot.removeAttribute("aria-current");
     rot.onclick = () => {
       /* clicar de novo no artigo já marcado TIRA o marcador: sem isso, a
        * única forma de desmarcar seria marcar outro artigo qualquer.
        * Muda NO LUGAR (leiMarcadorMudar): repintar a lei inteira devolvia a leitura ao topo. */
-      leiMarcadorMudar(a.num === leiPareiVivo ? "" : a.num);
+      leiMarcadorMudar(a.indice === leiPareiIdx ? null : a);
     };
     cab.append(rot);
     /* A BANDEIRINHA: o gesto de marcar precisa ser VISÍVEL. O número sozinho parece título, e só
@@ -1475,10 +1504,11 @@ function leiPintarLeitura() {
     flag.textContent = "⚑";
     flag.title = t("lei_flag_ajuda", { a: a.numCru });
     flag.setAttribute("aria-label", t("lei_flag_ajuda", { a: a.numCru }));
-    flag.hidden = a.num === parei;
-    flag.onclick = () => leiMarcadorMudar(a.num);
+    flag.hidden = ehMarcado;
+    flag.onclick = () => leiMarcadorMudar(a);
     cab.append(flag);
-    bloco._lei = { num: a.num, numCru: a.numCru, indice: a.indice, rotulo: a.rotulo, rot, flag, marcado: a.num === parei };
+    bloco._lei = { num: a.num, numCru: a.numCru, indice: a.indice, rotulo: a.rotulo, rot, flag, cab, marcado: ehMarcado };
+    if (ehCont) leiArtContAplicar(bloco, true);
 
     /* SELO DE ALTERADO/REVOGADO — a camada de leitura e edição não é
      * invisível: quem lê precisa saber, de relance, que aquele artigo não
@@ -1592,7 +1622,7 @@ function leiPintarLeitura() {
   if (grande && leiCache.some((e) => e.id === l.id)) {
     prepararRanking();
     const nos = leiCacheLer(l.id, chaveFn());
-    if (nos) { nos.forEach((n) => cx.append(n)); leiMarcadorEmTodos(parei); return; }
+    if (nos) { nos.forEach((n) => cx.append(n)); leiMarcadorEmTodos(leiPareiIdx); return; }
   }
   if (progressivo && arts.length > LEI_GRANDE) {
     leiPinturaProgressiva(arts, desenhar, prepararRanking, l ? l.nome : "",
@@ -1663,6 +1693,7 @@ function leiChavePintura(l, bruto, ranking) {
    * reabrir (leiMarcadorEmTodos). Com ele na chave, cada "parei aqui" derrubava o desenho guardado —
    * e um nó alterado no lugar podia ser servido com a chave de um estado que já não era o dele. */
   delete resto.parei;
+  delete resto.pareiIndice;
   delete resto.pareiEm;
   /* "tocado" é só a hora da última gravação: muda a cada gravação e nada no desenho depende dela */
   delete resto.tocado;
@@ -1761,11 +1792,15 @@ function leiCargaOcultar() {
  * até ele (uma vez só) */
 function leiPinturaIrAoAlvo(p) {
   if (!p.alvo) return;
-  const el = $("leiArt_" + p.alvo.replace(/[^A-Z0-9-]/gi, ""));
+  /* com a POSIÇÃO do artigo pedido, espera ELE ser desenhado: o número sozinho já existe (a 1ª
+   * ocorrência) e o salto cairia no artigo errado, antes da hora */
+  if (p.alvoIdx !== undefined && p.feitos <= p.alvoIdx) return;
+  const el = p.alvoIdx !== undefined ? leiBlocoDoArtigo(p.alvo, p.alvoIdx) : $("leiArt_" + p.alvo.replace(/[^A-Z0-9-]/gi, ""));
   if (!el) return;
-  const num = p.alvo;
+  const num = p.alvo, idx = p.alvoIdx;
   p.alvo = "";
-  leiIrArtigo(num);
+  p.alvoIdx = undefined;
+  leiIrArtigo(num, idx);
   try {
     leiReg("navegar", "chegou ao artigo citado durante o carregamento",
            "art. " + num + " · " + p.feitos + " de " + p.total + " artigos já na tela");
@@ -2518,8 +2553,9 @@ function leiIrDados() {
   lista.forEach((r) => { ranking[r.num] = r; });
   const blocosPorNo = {};
   (l ? leiBlocos(texto) : []).forEach((b) => { (blocosPorNo[b.divisaoId] = blocosPorNo[b.divisaoId] || []).push(b); });
+  const efetivos = l ? leiArtigosEfetivos(l) : est.artigos;
   return { texto, l, est, arts: est.artigos, ranking, lista, blocosPorNo, lidos: (l && l.blocos) || {},
-    parei: l ? l.parei : "", efetivos: l ? leiArtigosEfetivos(l) : est.artigos, alertas: leiIrAlertas(texto) };
+    parei: l ? l.parei : "", pareiIdx: l ? leiIndiceDoMarcador(l, efetivos) : -1, efetivos, alertas: leiIrAlertas(texto) };
 }
 
 function leiIrIr(num, indice) {
@@ -2606,7 +2642,7 @@ function leiIrTemUnidades(texto) {
 function leiIrChipEl(d, a) {
   const cel = document.createElement("span");
   const est = d.ranking[a.num];
-  const ehErro = !!(est && est.erros > est.acertos), ehProva = !!(est && est.prova), ehParei = a.num === d.parei;
+  const ehErro = !!(est && est.erros > est.acertos), ehProva = !!(est && est.prova), ehParei = a.indice === d.pareiIdx;
   const sel = ehErro ? "erro" : ehProva ? "prova" : ehParei ? "parei" : "";
   const alerta = !!(d.alertas && d.alertas[a.indice]);
   cel.className = "lei-ir-cel" + (sel ? " lei-ir-cel-" + sel : "") + (alerta ? " lei-ir-cel-alerta" : "");
@@ -2662,7 +2698,7 @@ function leiIrMarcarBloco(d, b, lido, ev) {
   leiBlocoLido(d.l.id, b.chave, !lido);
   /* marcar o capítulo lido move o marcador para o último artigo dele: as duas coisas dizem a
    * mesma verdade, e deixá-las discordando é o começo de "o app não sabe onde eu estou" */
-  if (!lido) leiParar(d.l.id, b.ate);
+  if (!lido) leiParar(d.l.id, b.ate, b.artigos[b.artigos.length - 1].indice);
   try { leiReg("bloco", lido ? "capítulo desmarcado" : "capítulo lido", d.l.nome + " · " + b.nome); }
   catch (e) {}
   leiPintar();
@@ -2777,7 +2813,7 @@ function leiIrLinhaEl(d, a, r, u, textoArt) {
     if (r && r.erros) partes.push(pl(r.erros, "lei_rank_erros"));
     if (r && r.prova) partes.push(pl(r.prova, "lei_rank_prova"));
     if (r && r.incisos.length) partes.push(t("lei_rank_incisos", { i: r.incisos.join(", ") }));
-    if (a.num === d.parei) partes.unshift(t("lei_ir_dica_parei"));
+    if (a.indice === d.pareiIdx) partes.unshift(t("lei_ir_dica_parei"));
     sub.textContent = partes.join(" · ");
     if (r && r.erros > r.acertos) sub.classList.add("lei-velha");
   }
@@ -2797,7 +2833,7 @@ function leiIrPrimeiroArtigo(d, num) {
 /* o filtro: os artigos do ranking (mais caem, erros, caiu em prova) ou o do "parei" */
 function leiIrItensDoFiltro(d, filtro) {
   if (filtro === "parei") {
-    const a = d.parei ? leiIrPrimeiroArtigo(d, d.parei) : null;
+    const a = d.pareiIdx >= 0 ? d.arts[d.pareiIdx] : null;
     return a ? [{ a, r: d.ranking[a.num] || null }] : [];
   }
   let rs = d.lista.slice();
@@ -2931,7 +2967,7 @@ function leiIrPintar() {
     /* lei pequena abre inteira; lei grande abre só o ramo onde a pessoa parou */
     leiIrAbertos = new Set();
     const total = Object.keys(d.est.nos).length;
-    const pos = d.parei ? d.arts.findIndex((a) => a.num === d.parei) : -1;
+    const pos = d.pareiIdx;
     const marcar = (n) => {
       if (total <= 8 || (pos >= 0 && n.de >= 0 && n.de <= pos && pos <= n.ate)) leiIrAbertos.add(n.id);
       n.filhos.forEach(marcar);
@@ -3111,7 +3147,7 @@ function leiMapaAbrir() {
   const av = $("leiMapaArvore");
   av.innerHTML = "";
   const arts = dg.estrutura.artigos;
-  const pos = l.parei ? arts.findIndex((a) => a.num === l.parei) : -1;
+  const pos = leiIndiceDoMarcador(l, arts);
   dg.estrutura.raiz.forEach((no) => av.append(leiMapaNoEl(no, arts, pos)));
   abrirModal("dlgLeiMapa");
   try { leiReg("navegar", "mapa e conferência aberto", l.nome + " · " + r.artigos + " artigos · " + dg.itens.length + " a conferir"); }
@@ -3267,6 +3303,37 @@ function leiGravar(opc) {
   toast("lei_salva");
 }
 
+/* Ir a um artigo assim que a lei abrir: se ela ainda está entrando na tela (lei grande), o desenho vai
+ * até o artigo quando o pedaço dele entrar; senão, o salto é imediato. A POSIÇÃO evita cair na 1ª
+ * ocorrência de um número repetido. */
+function leiIrAoArtigoAoAbrir(num, indice) {
+  if (leiPintura) {
+    leiPintura.alvo = leiNumNormal(num);
+    leiPintura.alvoIdx = Number.isInteger(indice) ? indice : undefined;
+    return true;
+  }
+  return leiIrArtigo(num, indice);
+}
+
+/* A lei aberta vai ao artigo MARCADO (ele pisca); o seguinte leva "▶ continue aqui". */
+function leiRetomar() {
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l || !l.parei || leiModo !== "ler") return false;
+  const i = leiIndiceDoMarcador(l, leiArtsVivos);
+  if (i < 0) return false;
+  const a = leiArtsVivos[i];
+  leiIrAoArtigoAoAbrir(a.num, i);
+  try { leiReg("navegar", "aberta no marcador", l.nome + " · art. " + a.numCru); } catch (e) {}
+  return true;
+}
+
+/* Biblioteca: abre a lei já no artigo SEGUINTE ao marcador (onde a leitura recomeça) */
+function leiContinuarLei(id, prox) {
+  leiAbrir("", "", id, { semRetomar: true });
+  if (!prox) return false;
+  return leiIrAoArtigoAoAbrir(prox.num, prox.indice);
+}
+
 function leiTrocarPara(id) {
   if (leiSujo && leiGravar() === "pendente") return;   /* a pessoa ainda está escolhendo os artigos repetidos */
   leiIdAtual = id;
@@ -3280,6 +3347,7 @@ function leiTrocarPara(id) {
   leiRecitados = {};
   leiTrocarModo("ler");
   leiPintar();
+  leiRetomar();
 }
 
 /* =====================================================================
@@ -3823,7 +3891,8 @@ function leiBibMetaDe(l) {
   if (!leiBibMeta[k]) {
     const arts = leiArtigosEfetivos(l);
     leiBibMeta[k] = { n: arts.length, alt: arts.filter((a) => a.alterado || a.revogado || a.novo).length,
-      parei: l.parei, pct: (leiProgresso(l.id) || {}).pct || 0 };
+      parei: l.parei, pct: (leiProgresso(l.id) || {}).pct || 0,
+      prox: (() => { const p = leiProgresso(l.id); return p && p.lidos && p.proximo ? { num: p.proximo.num, indice: p.proximo.indice, numCru: p.proximo.numCru } : null; })() };
   }
   return leiBibMeta[k];
 }
@@ -3946,6 +4015,16 @@ function leiBibCartao({ l, usos }) {
     acoes.append(b);
   };
   mk("btnLeiBibAbrir", "lei_bib_abrir", () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); }, "btn-min-ok");
+  if (m.prox) {
+    /* tem marcador e ainda falta ler: um botão que já abre no artigo em que a leitura recomeça */
+    const bc = document.createElement("button");
+    bc.type = "button";
+    bc.className = "btn-min btn-min-ok";
+    bc.id = "btnLeiBibCont_" + l.id;
+    bc.textContent = t("lei_bib_continuar", { a: m.prox.numCru });
+    bc.onclick = () => { $("dlgLeiBib").close(); leiContinuarLei(l.id, m.prox); };
+    acoes.append(bc);
+  }
   mk("btnLeiBibMapa", "lei_mapa_btn", () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); leiMapaAbrir(); });
   mk("btnLeiBibLigar", "lei_bib_vincular", () => leiTopicoAbrir(l));
   mk("btnLeiBibApagar", "lei_bib_apagar", () => leiBibApagar(l), "btn-min-perigo");
@@ -5455,6 +5534,17 @@ function leiRegistrarLeitura() {
     catch (e) {}
   };
   abrirRegistro(item);
+  /* O "ONDE PAROU" DO REGISTRO JÁ VEM SUGERIDO com o marcador (ou o capítulo escolhido): eram dois
+   * "onde parei" que não se falavam. É só sugestão: o campo continua editável e o marcador não muda. */
+  try {
+    const oc = $("regOnde");
+    if (oc && !String(oc.value || "").trim()) {
+      const lp = leiIdAtual ? leiDe(leiIdAtual) : null;
+      const pp = lp && lp.parei ? leiProgresso(lp.id) : null;
+      if (pp && pp.lidos) oc.value = t("lei_reg_onde", { lei: lp.nome, a: pp.artigo });
+      else if (rotulo) oc.value = rotulo;
+    }
+  } catch (e) {}
   try { leiReg("leitura", "tela de registro aberta",
                "sugestão de " + min + " min · " + quanto); } catch (e) {}
 }
@@ -5756,7 +5846,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
     leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
-    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar,
+    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo, leiEmCamada,
     leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,
