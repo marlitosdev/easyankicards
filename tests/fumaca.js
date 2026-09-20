@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "material.js",
-                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js",
+                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -712,6 +712,9 @@ function rodar() {
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados,
+    lixLer, lixJogar, lixRestaurar, lixRestaurarUi, lixApagarDeVez, lixEsvaziar, lixContar, lixRisco, lixAvisoRisco,
+    lixInserirBloco, lixJuntar, lixRecusou, lixDesfazer, lixAbrir, lixPintar, lixRecarregar, lixTexto, lixAtualizarBotao,
+    lixLimites: (max, chars) => { lixMax = max; lixMaxChars = chars; },
     decLer, decRegistrar, decRegistrarLote, decMarcar, decPorRegra, decExportar, decLimpar, decRecarregar,
     decAbrir, decPintar, decCopiar, decBaixar, decApagar, decRiscoDoTexto, decTituloDaRegra,
     decLimites: (max, chars) => { decMax = max; decMaxChars = chars; },
@@ -834,7 +837,7 @@ function rodar() {
     navegador: navigator,
     regPeriodoPor: (p) => { regPeriodo = p; },
     qsUiRefazerPrompt, qsUiFonteAtual, qsUiEncerrarComPlacar,
-    qsGravarDica, qsDicaDeQuestao,
+    qsGravarDica, qsDicaDeQuestao, qsApagar,
     matDicasDoResumo, matDicasContar, matDicaSalvar, matNegritoNaCaixa,
     matMarcasDe, matContarMarcas, matDuvidas, matLinhaTorta, matConsertarPlano,
     matPainelMarcas, matPintarContadores, matTirarMarcaDe, matEditarMarca,

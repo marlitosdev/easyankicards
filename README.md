@@ -1,4 +1,4 @@
-# EasyAnkiCards (v16.53.0) · by MarlitosDev
+# EasyAnkiCards (v16.54.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 
@@ -100,7 +100,7 @@ easy-anki-cards/
 │   ├── questoes.js · questoes-ui.js · questoes-hist.js · copiar-questao.js
 │   ├── rascunho.js · fora-da-agenda.js · dificuldade.js
 │   ├── cartao-melhorar.js · backup.js · backup-ui.js
-│   ├── registro-tudo.js · decisoes.js · plano-log.js · geracao-log.js
+│   ├── registro-tudo.js · decisoes.js · lixeira.js · plano-log.js · geracao-log.js
 │   └── manifest.webmanifest · sw.js · icon-192/512.png · .nojekyll
 ├── src/easyankicards/     # desktop (janela nativa que carrega docs/) + CLI
 ├── scripts/build_exe.bat  # gera release\EasyAnkiCards.exe

@@ -615,6 +615,13 @@ function qsGravarDica(id, texto, gravar) {
   const q = qsBanco.filter((x) => x.id === id)[0];
   if (!q) return null;
   const limpo = String(texto || "").trim();
+  /* salvar vazio APAGA a dica que existia: vai para a lixeira (lixeira.js) */
+  if (!limpo && q.dica) {
+    try {
+      lixJogar({ tipo: "dica", via: "questao", motivo: "vazio", rotulo: String(q.dica).slice(0, 80),
+        onde: String(q.enunciado || "").slice(0, 60), dados: { id: q.id, texto: q.dica, enunciado: String(q.enunciado || "").slice(0, 120) } });
+    } catch (e) {}
+  }
   if (limpo) q.dica = limpo; else delete q.dica;
   q.tocado = new Date().toISOString();
   qsSalvar(gravar);
@@ -628,8 +635,16 @@ function qsDicaDeQuestao(id) {
 
 function qsApagar(id, gravar) {
   const antes = qsBanco.length;
+  const apagada = qsBanco.filter((q) => q.id === id)[0];
   qsBanco = qsBanco.filter((q) => q.id !== id);
   qsSalvar(gravar);
+  /* a questão inteira, com as respostas e a dica, vai para a lixeira (lixeira.js) */
+  if (apagada) {
+    try {
+      lixJogar({ tipo: "questao", via: "banco", rotulo: String(apagada.enunciado || "").slice(0, 90),
+        onde: [apagada.disciplina, apagada.topico].filter(Boolean).join(" · "), dados: { q: apagada } });
+    } catch (e) {}
+  }
   return antes - qsBanco.length;
 }
 

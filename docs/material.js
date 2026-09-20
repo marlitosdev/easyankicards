@@ -3512,7 +3512,7 @@ function mcEstAndar(passo) {
  * O parser já devolve, para cada cartão, a LINHA em que ele está. É por
  * ela que se apaga, levando junto o que pertence ao cartão: o título
  * "@" de cima e as continuações "+"/"*" de baixo. */
-function mcTextoSemCartao(bruto, c) {
+function mcTextoSemCartao(bruto, c, saida) {
   const linhas = String(bruto || "").split("\n");
   let k = (c && c.line ? c.line - 1 : -1);
 
@@ -3537,7 +3537,12 @@ function mcTextoSemCartao(bruto, c) {
   /* o título "@" de cima também: ele existe para o cartão abaixo dele */
   if (de > 0 && /^\s*@\s/.test(linhas[de - 1])) de--;
 
-  linhas.splice(de, ate - de + 1);
+  const sepAntes = de > 0 && !String(linhas[de - 1]).trim();
+  const sepDepois = ate + 1 < linhas.length && !String(linhas[ate + 1]).trim();
+  const tirado = linhas.splice(de, ate - de + 1);
+  /* quem quer guardar o que saiu (a lixeira) pede em `saida`: o bloco, a linha de onde saiu e se havia
+   * linha em branco de cada lado */
+  if (saida) { saida.bloco = tirado.join("\n"); saida.linha = de + 1; saida.sep = { antes: sepAntes, depois: sepDepois }; }
   /* não deixa dois brancos seguidos onde o cartão estava */
   return linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
 }
@@ -3546,18 +3551,30 @@ async function mcApagarCartao(indice) {
   const c = mcEstCartoes[indice];
   if (!c || !matAtual) return;
   const frente = String(c.front || "").slice(0, 120);
-  if (!(await uiConfirm(t("mc_apagar_1", { f: frente, v: String(c.back || "").slice(0, 120) })))) return;
+  const ondeLix = [matAtual.disciplina, matAtual.topico].filter(Boolean).join(" · ");
+  const riscoLix = { bloco: String(c.front || "") + "\n" + String(c.back || "") };
+  const aviso = typeof lixAvisoRisco === "function" ? lixAvisoRisco("cartao", riscoLix) : "";
+  if (!(await uiConfirm(t("mc_apagar_1", { f: frente, v: String(c.back || "").slice(0, 120) }) + aviso))) {
+    try { lixRecusou("cartao", ondeLix, frente, riscoLix); } catch (e) {}
+    return;
+  }
   if (!(await uiConfirm(t("mc_apagar_2", { f: frente })))) {
     matReg("cartoes", "exclusão de cartão cancelada na segunda pergunta", frente);
+    try { lixRecusou("cartao", ondeLix, frente, riscoLix); } catch (e) {}
     return;
   }
 
   const bruto = String((matResumos[matAtual.chave] || {}).cartoes || "");
-  const novo = mcTextoSemCartao(bruto, c);
+  const saida = {};
+  const novo = mcTextoSemCartao(bruto, c, saida);
   if (novo === null) { uiAlert(t("mc_apagar_nao_achou")); return; }
   matGravarCartoes(matAtual.chave, novo,
     { disciplina: matAtual.disciplina, topico: matAtual.topico });
   matReg("cartoes", "cartão apagado do tópico", frente);
+  try {
+    lixJogar({ tipo: "cartao", via: "material", rotulo: frente, onde: ondeLix,
+      dados: { chave: matAtual.chave, disciplina: matAtual.disciplina, topico: matAtual.topico, bloco: saida.bloco, linha: saida.linha, sep: saida.sep } });
+  } catch (e) {}
 
   mcEstCartoes = mcCartoesSalvos();
   if (!mcEstCartoes.length) { $("dlgMcEstudo").close(); }
@@ -4871,8 +4888,17 @@ function matGravarDica(chave, trecho, texto) {
   const r = matResumos[chave];
   if (!r) return null;
   const k = matChaveDica(trecho);
+  const anterior = (r.dicas || []).filter((d) => d.k === k)[0];
   r.dicas = (r.dicas || []).filter((d) => d.k !== k);
   const limpo = String(texto || "").trim();
+  /* salvar vazio APAGA a dica que existia: vai para a lixeira (lixeira.js), com o trecho a que estava presa */
+  if (!limpo && anterior && anterior.texto) {
+    try {
+      lixJogar({ tipo: "dica", via: "material", motivo: "vazio", rotulo: anterior.texto.slice(0, 80),
+        onde: [r.topico || chave, String(anterior.trecho || trecho).slice(0, 50)].filter(Boolean).join(" · "),
+        dados: { chave, trecho: anterior.trecho || String(trecho).slice(0, 200), texto: anterior.texto } });
+    } catch (e) {}
+  }
   if (limpo) {
     r.dicas.push({ k, trecho: String(trecho).slice(0, 200), texto: limpo,
                    criado: new Date().toISOString() });

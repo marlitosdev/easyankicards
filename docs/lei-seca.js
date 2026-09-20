@@ -3202,6 +3202,13 @@ function leiNotaGuardar(idLei, num, texto) {
   const notas = Object.assign({}, l.notasArtigos || {});
   const n = leiNumNormal(num);
   const limpo = String(texto || "").trim();
+  /* salvar vazio APAGA a nota que existia: vai para a lixeira (lixeira.js) */
+  if (!limpo && notas[n]) {
+    try {
+      lixJogar({ tipo: "nota", via: "artigo", motivo: "vazio", rotulo: String(notas[n]).slice(0, 80),
+        onde: (l.nome || idLei) + " · art. " + n, dados: { lei: idLei, num: n, texto: notas[n] } });
+    } catch (e) {}
+  }
   if (limpo) notas[n] = limpo; else delete notas[n];
   return !!leiGuardar({ id: idLei, notasArtigos: notas });
 }
@@ -3231,8 +3238,17 @@ function leiNotaTrechoGuardar(idLei, trecho, texto) {
   const l = leiDe(idLei);
   if (!l) return false;
   const k = matChaveDica(trecho);
+  const anterior = (l.notasTrechos || []).filter((n) => n.k === k)[0];
   const lista = (l.notasTrechos || []).filter((n) => n.k !== k);
   const limpo = String(texto || "").trim();
+  /* salvar vazio APAGA a nota que existia: vai para a lixeira (lixeira.js) */
+  if (!limpo && anterior && anterior.texto) {
+    try {
+      lixJogar({ tipo: "nota", via: "trecho", motivo: "vazio", rotulo: String(anterior.texto).slice(0, 80),
+        onde: (l.nome || idLei) + " · " + String(anterior.trecho || trecho).slice(0, 50),
+        dados: { lei: idLei, trecho: anterior.trecho || String(trecho).slice(0, 300), texto: anterior.texto } });
+    } catch (e) {}
+  }
   if (limpo) {
     lista.push({ k, trecho: String(trecho || "").slice(0, 300), texto: limpo,
                  criado: new Date().toISOString() });
