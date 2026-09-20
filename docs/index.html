@@ -1368,6 +1368,22 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-mapa-g-grave>.nota::before{color:#ef4444}
 .lei-mapa-g-aviso>.nota::before{color:#f59e0b}
 .lei-mapa-g-leve>.nota::before{color:var(--sutil)}
+/* DECISÕES: cada regra com a sua taxa de recusa, e cada decisão com o que seria tirado */
+.dec-regra{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:4px 0;border-bottom:1px solid var(--borda)}
+.dec-regra-tit{font-size:12.5px;font-weight:700}
+.dec-regra-alerta{border-left:3px solid #f59e0b;padding-left:8px}
+.dec-regra-aviso{font-size:11px;font-weight:700;color:#f59e0b}
+.dec-badge{font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:8px;border:1px solid var(--borda)}
+.dec-b-aceitou{color:var(--verde);border-color:var(--verde)}
+.dec-b-recusou{color:#ef4444;border-color:#ef4444}
+.dec-b-mudou{color:#f59e0b;border-color:#f59e0b}
+.dec-b-escolheu,.dec-b-sem_decisao{color:var(--sutil)}
+.dec-risco{font-size:10.5px;font-weight:700}
+.dec-risco-alto{color:#ef4444}.dec-risco-medio{color:#f59e0b}.dec-risco-baixo{color:var(--sutil)}
+.dec-trecho{font-size:11.5px;font-family:monospace;white-space:pre-wrap;word-break:break-word;margin:2px 0;color:var(--sutil)}
+.dec-depois{color:var(--verde)}
+.dec-acoes{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
+.dec-nota{flex:1 1 220px}
 .lei-mapa-como{margin:2px 0 6px}
 .lei-mapa-como>summary{cursor:pointer;font-size:11.5px;color:var(--sutil)}
 /* divisão sem nome: uma linha só (onde está · ir · ver no texto), não um cartão de três linhas */
@@ -6634,6 +6650,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <!-- BIBLIOTECA DE LEIS: as leis do usuário, fora de qualquer tópico. Cada lei
      existe UMA vez; os tópicos guardam só o ponteiro (leiBibAbrir, lei-ui.js). -->
+<!-- DECISÕES (decisoes.js): o histórico do que o app sugeriu tirar ou trocar e do que a pessoa decidiu.
+     É daqui que se descobre quais sugestões estão erradas. -->
+<dialog id="dlgDecisoes" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="dec_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnDecX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="dec_ajuda"></p>
+  <p class="nota" id="decResumo"></p>
+  <div id="decRegras"></div>
+  <div class="lei-ir-filtros" id="decFiltros"></div>
+  <div id="decLista" class="lei-dup-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnDecCopiar" data-i18n="dec_copiar"></button>
+    <button class="btn btn-cinza" id="btnDecBaixar" data-i18n="dec_baixar"></button>
+    <button class="btn btn-cinza btn-min-perigo" id="btnDecApagar" data-i18n="dec_apagar"></button>
+    <button class="btn btn-cinza" id="btnDecFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiBib" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="lei_bib_titulo"></h3>
@@ -6645,6 +6681,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min mat-ligado" id="btnLeiBibTodas" data-i18n="lei_bib_f_todas"></button>
     <button class="btn-min" id="btnLeiBibConcurso" data-i18n="lei_bib_f_concurso"></button>
     <button class="btn-min" id="btnLeiBibSem" data-i18n="lei_bib_f_sem"></button>
+    <span class="mat-topo-dir">
+      <button class="btn-min" id="btnLeiBibDecisoes" data-i18n="dec_botao" data-i18n-title="dec_botao_aj"></button>
+    </span>
   </div>
   <p class="nota" id="leiBibResumo"></p>
   <div id="leiBibDup" hidden>
@@ -6720,6 +6759,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Alterna entre mostrar só o dia de hoje e mostrar tudo o que está guardado."></button>
     <button class="btn-min" id="btnLeiLogErros" data-i18n="lei_log_erros"
       title="Mostra só as falhas. Se algo não funcionou, a linha do erro está aqui."></button>
+    <button class="btn-min" id="btnLeiLogDecisoes" data-i18n="dec_botao" data-i18n-title="dec_botao_aj"></button>
     <button class="btn-min" id="btnLeiLogCopiar" data-i18n="lei_log_copiar"
       title="Copia o registro inteiro para você colar num relato de problema."></button>
     <button class="btn-min mat-ligado" id="btnLeiLogEnviar" data-i18n="lei_log_enviar"
@@ -7437,6 +7477,7 @@ window.__sqlPromise = initSqlJs({
 <script src="grifo.js"></script>
 <script src="geracao-log.js"></script>
 <script src="registro-tudo.js"></script>
+<script src="decisoes.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>

@@ -2294,8 +2294,10 @@ async function leiEdApagar() {
     const a = leiArtigosEfetivos(l).filter((x) => x.num === leiEdNum)[0];
     if (!a) return false;
     const eraDaBase = !!leiArtigo(l.texto, leiEdNum);
-    if (!(await uiConfirm(t(eraDaBase ? "lei_art_revogar_conf" : "lei_art_apagar_conf", {
-      a: a.rotulo, txt: (a.corpo || "").slice(0, 160) })))) return false;
+    const conf = await uiConfirm(t(eraDaBase ? "lei_art_revogar_conf" : "lei_art_apagar_conf", {
+      a: a.rotulo, txt: (a.corpo || "").slice(0, 160) }));
+    leiDecApagar(eraDaBase ? "apagar.revogar" : "apagar.artigo", leiDecNomeAtual(), a.rotulo, a.texto || a.corpo || "", !!conf);
+    if (!conf) return false;
     const fonte = String(($("leiArtFonte") || {}).value || "").trim();
     leiArtigoAlterar(leiIdAtual, leiEdNum, eraDaBase ? { revogado: true, fonteAlteracao: fonte } : null);
     $("dlgLeiArt").close();
@@ -2309,8 +2311,10 @@ async function leiEdApagar() {
   if (!a) return false;
   /* mostra O QUE se perde antes de perguntar: "apagar o art. 35?" sem o
    * texto na frente é perguntar sobre um número */
-  if (!(await uiConfirm(t("lei_art_apagar_conf", {
-    a: a.rotulo, txt: a.corpo.slice(0, 160) })))) return false;
+  const conf2 = await uiConfirm(t("lei_art_apagar_conf", {
+    a: a.rotulo, txt: a.corpo.slice(0, 160) }));
+  leiDecApagar("apagar.artigo", leiDecNomeAtual(), a.rotulo, a.texto || a.corpo || "", !!conf2);
+  if (!conf2) return false;
   $("leiTexto").value = String(leiSubstituirArtigo(texto, leiEdNum, "") || "")
     .replace(/\n{3,}/g, "\n\n");
   leiSujo = true;
@@ -3583,6 +3587,7 @@ function leiDupConfirmar() {
   const c = leiDupCtx;
   if (!c || c.grupos.some((g) => !c.decisoes[g.num])) return false;
   const res = leiAplicarDuplicados(c.texto, c.grupos, c.decisoes);
+  leiDecRepetidos(c, res);
   leiDupCtx = null;
   $("dlgLeiDup").close();
   try {
@@ -4090,6 +4095,9 @@ async function leiBibApagar(l) {
   const ok = await uiConfirm(usos.length
     ? t("lei_bib_apagar_conf", { l: l.nome, t: usos.length, lista })
     : t("lei_bib_apagar_livre", { l: l.nome }));
+  leiDecApagar("apagar.lei", l.nome, t("dec_lei_ref", { n: leiArtigos(l.texto || "").length, u: usos.length }),
+    (l.nome || "") + " — " + t("dec_lei_ref", { n: leiArtigos(l.texto || "").length, u: usos.length }), !!ok,
+    { n: leiArtigos(l.texto || "").length });
   if (!ok) return false;
   leiApagar(l.id);
   if (leiIdAtual === l.id) leiIdAtual = "";
@@ -4518,9 +4526,132 @@ function leiPrePintar() {
   if (dlg && rolagem) dlg.scrollTop = rolagem;
 }
 
+/* ---------------------------------------------------------------------
+ * DECISÕES (decisoes.js): o que foi proposto, por quê, e o que a pessoa decidiu. Cada fluxo que
+ * sugere tirar ou trocar algo entrega aqui o que sugeriu e o que ficou decidido. Nunca quebra o
+ * fluxo: se o registro falhar, a decisão da pessoa vale do mesmo jeito.
+ * ------------------------------------------------------------------ */
+function leiDecNomeAtual() {
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  return (l && l.nome) || "";
+}
+
+function leiDecRefLinhas(nums) {
+  const L = nums || [];
+  return L.length === 1 ? t("dec_linha", { l: L[0] })
+    : t("dec_linhas", { l: L.slice(0, 5).join(", ") + (L.length > 5 ? "…" : "") });
+}
+
+/* A REVISÃO DO TEXTO COLADO: uma decisão por mudança sugerida, com as linhas que sairiam por inteiro
+ * (para poder restaurar depois). original = a pessoa usou o texto original: recusou tudo. */
+function leiDecColagem(c, original) {
+  try {
+    const mud = (c.pre && c.pre.mudancas) || [];
+    if (!mud.length) return;
+    const nome = leiDecNomeAtual() || t("dec_lei_nova");
+    const L = String(c.texto || "").split("\n");
+    decRegistrarLote(mud.map((m) => {
+      const anexo = m.grupo === "anexo";
+      const padrao = anexo ? "separar" : true;
+      const d = original ? (anexo ? "manter" : false) : (c.decisoes || {})[m.id];
+      let decisao, escolha = "";
+      if (anexo) {
+        decisao = d === "separar" ? "aceitou" : d === "descartar" ? "mudou" : "recusou";
+        escolha = d === "descartar" ? "descartar" : "";
+      } else decisao = d ? "aceitou" : "recusou";
+      const sai = m.grupo === "cabecalho" || m.grupo === "pagina" || anexo;
+      let nums = m.linhas || [];
+      if (anexo) { nums = []; for (let k = m.linhas[0]; k <= m.linhas[1] && nums.length < 60; k++) nums.push(k); }
+      const linhas = sai ? nums.slice(0, 60).map((k) => ({ linha: k, texto: L[k - 1] || "" })) : [];
+      const risco = m.grupo === "grafia" || m.grupo === "invisiveis" ? "baixo"
+        : m.grupo === "remissao" ? "medio"
+        : anexo ? (d === "descartar" ? "alto" : "medio")
+        : decRiscoDoTexto(linhas.map((x) => x.texto));
+      return {
+        area: "colagem", regra: "colagem." + m.grupo, origem: "app", lei: nome,
+        ref: anexo ? t("dec_linhas", { l: m.linhas[0] + "–" + m.linhas[1] }) : leiDecRefLinhas(m.linhas),
+        motivo: t("lei_pre_h_" + m.grupo) + (m.motivo ? " [" + m.motivo + "]" : ""),
+        risco, decisao, escolha,
+        via: original ? "texto_original" : (d === padrao ? "padrao" : "manual"),
+        proposta: { acao: anexo ? "separar" : (sai ? "remover" : "corrigir"), amostra: m.antes || "", depois: m.depois || "",
+          n: m.ocorrencias || nums.length || 1, linhas },
+      };
+    }));
+  } catch (e) {}
+}
+
+/* OS ARTIGOS REPETIDOS: uma decisão por número. "aceitou" = ficou o que o app sugeriu.
+ * O que SAIU DE VERDADE vem do resultado aplicado (res.resumo), e não do que a sugestão previa: numa lei
+ * guardada, a redação nova pode virar ALTERAÇÃO — a base fica com o texto antigo e é o texto novo que sai
+ * da base. As linhas gravadas são as que saíram, por inteiro, para dar para restaurar. */
+function leiDecRepetidos(c, res) {
+  try {
+    const nome = leiDecNomeAtual() || t("dec_lei_nova");
+    decRegistrarLote((c.grupos || []).map((g) => {
+      const d = (c.decisoes || {})[g.num] || {};
+      const aceitou = d.manter !== undefined && d.manter !== "todas" && d.manter === g.sugerido;
+      const cands = g.candidatos || [];
+      const ap = ((res && res.resumo) || []).filter((x) => x.num === g.num)[0] || {};
+      const sairia = cands.filter((x) => x.indice !== g.sugerido);
+      const saiu = ap.acao === "manter" ? cands.filter((x) => x.indice !== ap.indice)
+        : ap.acao === "alteracao" ? cands.filter((x) => x.indice === d.manter) : [];
+      const tirar = saiu;
+      return {
+        area: "repetidos", regra: "repetidos." + (g.intra ? "intra" : (g.motivo || "posicao")), origem: "app", lei: nome,
+        ref: "art. " + g.numCru,
+        motivo: (g.motivo || "") + (g.fonte ? " · " + g.fonte : "") + " · " + t("dec_confianca", { c: g.confianca }),
+        risco: g.confianca === "forte" ? "baixo" : "alto",
+        decisao: aceitou ? "aceitou" : "recusou",
+        escolha: aceitou ? "" : (d.manter === "todas" || d.manter === undefined ? t("dec_manter_todas") : t("dec_outra_ocorrencia")),
+        via: "item",
+        proposta: { acao: ap.acao === "alteracao" ? t("dec_rep_alteracao") : (ap.acao === "manter" ? t("dec_rep_remover") : t("dec_rep_nada")),
+          amostra: sairia[0] ? sairia[0].texto : "", n: tirar.length,
+          linhas: tirar.map((x) => ({ linha: x.linha, texto: x.texto })) },
+      };
+    }));
+  } catch (e) {}
+}
+
+/* A VERSÃO NOVA: uma decisão por artigo comparado (troca de redação, artigo novo, artigo que
+ * não aparece). Os alertas da comparação dizem o risco. */
+function leiDecVersao(itens, fonte) {
+  try {
+    const nome = leiDecNomeAtual();
+    decRegistrarLote((itens || []).map((item) => {
+      const al = item.alertas || [];
+      const alertas = al.map((a) => a.k + (a.sev ? ":" + a.sev : ""));
+      const tipo = /^ANEXO:/.test(item.num) ? "anexo" : item.tipo;
+      return {
+        area: "versao", regra: "versao." + tipo, origem: "app", lei: nome,
+        ref: /^ANEXO:/.test(item.num) ? String(item.num).replace(/^ANEXO:\s*/, "") : "art. " + (item.numCru || item.num),
+        motivo: (fonte || "") + (alertas.length ? " · " + t("dec_alertas") + " " + alertas.join(", ") : ""),
+        risco: al.some((a) => a.sev === "alerta") ? "alto" : (al.some((a) => a.sev === "aviso") ? "medio" : "baixo"),
+        decisao: item.aceito ? "aceitou" : (item.recusado ? "recusou" : "sem_decisao"),
+        via: item.explicacao ? "com_explicacao" : "item",
+        proposta: { acao: tipo === "revogado" ? "marcar como revogado (o artigo some da leitura)"
+            : tipo === "mudou" ? "trocar a redação" : tipo === "novo" ? "acrescentar o artigo" : "substituir o anexo",
+          amostra: item.antigo || "", depois: item.novo || "", n: 1, alertas },
+      };
+    }));
+  } catch (e) {}
+}
+
+/* O QUE A PESSOA PEDE PARA APAGAR (artigo, lei): também fica, com o que se perdia */
+function leiDecApagar(regra, lei, ref, amostra, aceitou, extra) {
+  try {
+    decRegistrar({
+      area: "apagar", regra, origem: "pessoa", lei, ref, motivo: t("dec_apagar_motivo"),
+      risco: regra === "apagar.lei" ? "alto" : "medio", decisao: aceitou ? "aceitou" : "recusou", via: "pedido",
+      proposta: Object.assign({ acao: regra === "apagar.lei" ? "apagar a lei da biblioteca" : (regra === "apagar.revogar" ? "marcar o artigo como revogado" : "apagar o artigo"),
+        amostra, n: 1 }, extra || {}),
+    });
+  } catch (e) {}
+}
+
 function leiPreConfirmar() {
   const c = leiPreCtx;
   if (!c) return false;
+  leiDecColagem(c, false);
   const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
   leiPreCtx = null;
   $("dlgLeiPre").close();
@@ -4536,6 +4667,7 @@ function leiPreConfirmar() {
 function leiPreOriginal() {
   const c = leiPreCtx;
   if (!c) return false;
+  leiDecColagem(c, true);
   leiPreCtx = null;
   $("dlgLeiPre").close();
   try {
@@ -4638,6 +4770,12 @@ function leiCobConfirmar() {
   leiCobCtx = null;
   $("dlgLeiCob").close();
   try { leiReg("atualizacao", "conferência da versão nova: escolha", c.escolha); } catch (e) {}
+  try {
+    decRegistrar({ area: "versao", regra: "versao.cobertura", origem: "app", lei: leiDecNomeAtual(),
+      motivo: ((c.g && c.g.avisos) || []).map((a) => a.k).join(" · "),
+      risco: c.escolha === "revogar" ? "alto" : "medio", decisao: "escolheu", escolha: c.escolha, via: "item",
+      proposta: { acao: t("lei_cob_o_" + c.escolha), n: 1 } });
+  } catch (e) {}
   c.aoContinuar(c.escolha);
   return true;
 }
@@ -5311,6 +5449,7 @@ function leiAtualizarAplicar() {
 
   leiReg("atualizacao", "versão atualizada",
          leiUpdFonteGlobal + " · " + aceitos.length + " artigos");
+  leiDecVersao(leiUpdComparo, leiUpdFonteGlobal);
   if (leiUpdAlteradora && $("leiUpdGuardarAlt") && $("leiUpdGuardarAlt").checked) leiGuardarAlteradora();
   leiUpdAlteradora = null;
   $("dlgLeiAtualizar").close();
