@@ -276,6 +276,7 @@ function leiAbrir(disciplina, topico, id) {
   leiIdAtual = l ? l.id : "";
   leiRecitados = {};
   leiBlocoAberto = "";
+  leiGavetaFechar();
   leiFilaAberta = false;
   leiSujo = false;
 
@@ -943,26 +944,78 @@ function leiCheiaAplicar() {
 
 function leiCheiaTrocar(sim) {
   leiCheia = sim === undefined ? !leiCheia : !!sim;
+  leiGavetaFechar();          /* a janela muda de tamanho: o pop-over ficaria no lugar antigo */
   if (leiCheia) { leiCheiaAplicar(); leiTrocarModo(leiModo); }
   else leiPintar();          /* leiPintar já chama leiCheiaAplicar */
   leiReg("leitura", leiCheia ? "leitura ampliada" : "leitura normal", "");
 }
 
-/* Abre uma gaveta e fecha a outra. */
+/* "EXIBIÇÃO" É UM POP-OVER, NÃO UMA FAIXA. Ela responde uma pergunta que se faz uma vez por sessão
+ * (tamanho da letra, da janela, leitura ampliada); como faixa, empurrava a lei para baixo cada vez
+ * que se abria. Agora flutua sob o botão, sem mexer em nada do que está embaixo, e fecha ao clicar
+ * fora, com Esc, ou quando a lei fecha. Fixo (position:fixed) e posicionado a partir do botão: um
+ * elemento fixed não é recortado pela rolagem da janela. */
+let leiPopAberto = null;      /* {fora, tecla} dos ouvintes do pop-over aberto */
+
+function leiGavetaFechar() {
+  const g = $("leiGavExibir");
+  if (g) g.hidden = true;
+  const b = $("btnLeiExibir");
+  if (b && b.classList) b.classList.toggle("btn-min-ok", false);
+  if (leiPopAberto) {
+    try {
+      document.removeEventListener("click", leiPopAberto.fora);
+      document.removeEventListener("keydown", leiPopAberto.tecla, true);
+    } catch (e) {}
+    leiPopAberto = null;
+  }
+}
+
+/* debaixo do botão, alinhado à esquerda dele e sem sair da janela; sem lugar embaixo, sobe */
+function leiGavetaPosicionar() {
+  const pop = $("leiGavExibir"), btn = $("btnLeiExibir");
+  if (!pop || !btn || pop.hidden !== false || !pop.style) return;
+  const r = (btn.getBoundingClientRect && btn.getBoundingClientRect()) || null;
+  if (!r) return;
+  const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
+  const altoJan = (typeof window !== "undefined" && window.innerHeight) || 640;
+  const larg = Math.min(340, jan - 16);
+  pop.style.left = Math.max(8, Math.min(r.left, jan - larg - 8)) + "px";
+  const alto = pop.offsetHeight || 0;
+  const cabe = r.bottom + 4 + alto <= altoJan - 8;
+  pop.style.top = (cabe || r.top - alto - 4 < 8 ? r.bottom + 4 : r.top - alto - 4) + "px";
+}
+
+/* Abre o pop-over (ou fecha, se já estava aberto). Devolve se abriu. */
 function leiGaveta(qual) {
-  const gavetas = ["leiGavExibir"];
   const alvo = $(qual);
   const abrindo = alvo ? alvo.hidden !== false : false;
-  gavetas.forEach((id) => {
-    const el = $(id);
-    if (el) el.hidden = !(abrindo && id === qual);
-  });
-  [["btnLeiExibir", "leiGavExibir"]]
-    .forEach(([bid, gid]) => {
-      const b = $(bid);
-      const g = $(gid);
-      if (b && b.classList) b.classList.toggle("btn-min-ok", !!(g && g.hidden === false));
-    });
+  leiGavetaFechar();
+  if (abrindo && alvo) {
+    alvo.hidden = false;
+    const b = $("btnLeiExibir");
+    if (b && b.classList) b.classList.toggle("btn-min-ok", true);
+    leiGavetaPosicionar();
+    /* o clique que ABRE também chega ao documento: quem está dentro do pop-over ou no botão não fecha */
+    const fora = (ev) => {
+      const alvoClique = ev && ev.target;
+      if (alvoClique && ((alvo.contains && alvo.contains(alvoClique)) || (b && b.contains && b.contains(alvoClique)))) return;
+      leiGavetaFechar();
+    };
+    const tecla = (ev) => {
+      if (ev && ev.key === "Escape") {
+        /* só o pop-over fecha: a lei continua aberta */
+        if (ev.preventDefault) ev.preventDefault();
+        if (ev.stopPropagation) ev.stopPropagation();
+        leiGavetaFechar();
+      }
+    };
+    leiPopAberto = { fora, tecla };
+    try {
+      document.addEventListener("click", fora);
+      document.addEventListener("keydown", tecla, true);
+    } catch (e) {}
+  }
   return abrindo;
 }
 
@@ -5222,6 +5275,7 @@ async function leiFechar() {
   /* sair da tela cheia ao fechar: reabrir a lei amputada de tudo, sem
    * ter pedido, parece defeito e nao recurso */
   if (leiCheia) leiCheiaTrocar(false);
+  leiGavetaFechar();
   $("dlgLeiSeca").close();
   leiAtual = null;
   leiVoltarPara();
@@ -5312,6 +5366,8 @@ function leiIniciar() {
   /* "IR PARA…" ABRE O MAPA DA LEI, direto. A gaveta de exibição continua gaveta. */
   liga("btnLeiNavegar", "ir para (mapa da lei)", () => leiIrAbrir());
   liga("btnLeiExibir", "gaveta exibição", () => leiGaveta("leiGavExibir"));
+  /* mexer na letra ou na janela pode deslocar o botão: o pop-over acompanha */
+  if ($("leiGavExibir")) $("leiGavExibir").onclick = () => leiGavetaPosicionar();
   liga("btnLeiFilaMais", "leis deste tópico", () => { leiFilaAberta = !leiFilaAberta; leiFilaAplicar(); });
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
   liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());

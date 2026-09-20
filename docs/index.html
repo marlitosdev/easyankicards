@@ -1357,7 +1357,6 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    dentro do leitor de lei, que empilha até três fileiras (modos, a
    gaveta aberta, as marcas) antes do texto começar. */
 #dlgLeiSeca .mat-topo{margin:5px 0 3px;padding-bottom:5px}
-#dlgLeiSeca .lei-gaveta{margin:1px 0 5px}
 #dlgLeiSeca .mat-barra{margin:0 0 4px}
 
 /* OS TRÊS MODOS SÃO UMA ESCOLHA SÓ, e por isso se desenham como uma.
@@ -1425,9 +1424,25 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 
 /* O TAMANHO DA JANELA — quatro larguras, e a altura cresce junto.
    Janela larga e baixa continuaria pedindo rolagem a cada dois artigos. */
-/* AS GAVETAS DO LEITOR: recuadas e com faixa própria, para se lerem
-   como "aberto a partir do botão acima" e não como mais uma fila. */
-.lei-gaveta{border-left:2px solid var(--acao);padding-left:9px;margin:2px 0 8px}
+/* O POP-OVER DE EXIBIÇÃO: flutua sob o botão (a posição vem do JS, a partir do retângulo dele) e não
+   empurra a lei. "display:flex" venceria o atributo hidden, por isso a regra do [hidden]. */
+.lei-pop{position:fixed;z-index:30;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;
+  width:min(340px,calc(100vw - 16px));padding:10px 12px;border:1px solid var(--borda);border-radius:12px;
+  background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.lei-pop[hidden]{display:none}
+.lei-pop-linha{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.lei-pop-linha>.nota{min-width:52px}
+/* AS SEIS MARCAS DO LEITOR SÃO PONTOS COLORIDOS, com a cor do grifo no texto; o nome vem na dica (title).
+   O rótulo escrito aparece a quem navega por teclado (foco) e em tela de toque, onde não há "passar o mouse". */
+.lei-marcas-pontos{gap:7px}
+.lei-marcas-pontos .marca{box-sizing:border-box;width:20px;height:20px;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;overflow:hidden;
+  font-size:0;line-height:1;border:2px solid var(--borda)}
+.lei-marcas-pontos .marca:hover{border-color:var(--acao)}
+.lei-marcas-pontos .marca:focus-visible{width:auto;height:auto;padding:3px 9px;border-radius:7px;font-size:10.5px;border-width:1px}
+@media (hover:none){
+  .lei-marcas-pontos .marca{width:auto;height:auto;padding:3px 9px;border-radius:7px;font-size:10.5px;border-width:1px}
+}
 .lei-janela{display:inline-flex;gap:4px;align-items:center;
   border:1px solid var(--borda);border-radius:8px;padding:1px 5px}
 .lei-janela .nota{min-width:56px;text-align:center;font-size:10.5px}
@@ -6211,29 +6226,31 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
        para a pessoa decorar o app em vez da lei. -->
-  <div class="mat-barra" id="leiMarcas">
+  <div class="mat-barra lei-marcas-pontos" id="leiMarcas">
     <button class="marca marca-d" id="btnLeiMarcaDest" data-i18n="mat_marca_d"
-      title="Grifa o trecho selecionado na leitura."></button>
+      title="Destaque — grifa o trecho selecionado na leitura."></button>
     <button class="marca marca-i" id="btnLeiMarcaImp" data-i18n="mat_marca_i"
-      title="Marca como importante."></button>
+      title="Importante — marca o trecho selecionado como importante."></button>
     <button class="marca marca-q" id="btnLeiMarcaDuv" data-i18n="mat_marca_q"
-      title="Marca como dúvida — entra na lista de dúvidas."></button>
+      title="Dúvida — marca o trecho e o coloca na lista de dúvidas."></button>
     <button class="marca marca-prova" id="btnLeiMarcaProva" data-i18n="mat_marca_prova"
-      title="Marca que este trecho já caiu em prova."></button>
+      title="Caiu na prova — marca que este trecho já foi cobrado em prova."></button>
     <button class="marca marca-peg" id="btnLeiMarcaPeg" data-i18n="mat_marca_peg"
-      title="Marca a pegadinha — na letra da lei é onde ela mais mora."></button>
+      title="Pegadinha — marca a pegadinha; na letra da lei é onde ela mais mora."></button>
     <button class="marca marca-nota" id="btnLeiMarcaNota" data-i18n="lei_marca_nota"
-      title="Marca o trecho selecionado e já abre a caixa para escrever uma anotação sua ali — diferente das outras, esta marca guarda o que você escreveu."></button>
+      title="Nota — marca o trecho selecionado e abre a caixa para escrever uma anotação sua ali; esta marca guarda o que você escreveu."></button>
   </div>
   </div>
 
 
-  <!-- A GAVETA DE EXIBIÇÃO. Fechada por padrão: responde uma pergunta que se faz
-       uma vez por sessão, não a cada artigo. "ir para…" não é gaveta: abre o mapa. -->
-  <div class="mat-topo lei-gaveta" id="leiGavExibir" hidden>
+  <!-- O POP-OVER DE EXIBIÇÃO. Fechado por padrão e FLUTUANTE (não empurra a lei): responde uma
+       pergunta que se faz uma vez por sessão, não a cada artigo. "ir para…" abre o mapa. -->
+  <div class="lei-pop" id="leiGavExibir" role="group" hidden>
+    <div class="lei-pop-linha">
     <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
       title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei."></button>
-    <span class="mat-sep"></span>
+    </div>
+    <div class="lei-pop-linha">
     <span class="nota" data-i18n="lei_letra_rot"></span>
     <button class="btn-min" id="btnLeiMenor" title="Letra menor.">A&#8722;</button>
     <!-- SEM ISTO, "A+" clicado demais (ou sem querer) não tem como ser
@@ -6242,7 +6259,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="lei-fonte-atual" id="leiFonteAtual" title="Tamanho atual da letra."></span>
     <button class="btn-min" id="btnLeiMaior" title="Letra maior.">A+</button>
     <button class="btn-min" id="btnLeiFonteReset" title="Volta a letra ao tamanho padrão.">↺</button>
-    <span class="mat-sep"></span>
+    </div>
+    <div class="lei-pop-linha">
     <!-- O OUTRO EIXO: o tamanho da JANELA. Letra maior serve a quem tem
          dificuldade de enxergar; janela maior serve a quem tem tela
          sobrando — num monitor grande a lei estava numa coluna estreita
@@ -6255,6 +6273,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min" id="btnLeiJanelaMais"
         title="Janela mais larga e mais alta — aproveita telas maiores.">&#8594;&#8592;</button>
     </span>
+    </div>
   </div>
 
   <!-- SÓ EDITÁVEL ANTES DA PRIMEIRA GRAVAÇÃO. Com base já gravada, este
