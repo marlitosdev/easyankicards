@@ -711,6 +711,7 @@ function rodar() {
     },
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
+    leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados,
     decLer, decRegistrar, decRegistrarLote, decMarcar, decPorRegra, decExportar, decLimpar, decRecarregar,
     decAbrir, decPintar, decCopiar, decBaixar, decApagar, decRiscoDoTexto, decTituloDaRegra,
     decLimites: (max, chars) => { decMax = max; decMaxChars = chars; },

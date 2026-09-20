@@ -1697,6 +1697,8 @@ function leiChavePintura(l, bruto, ranking) {
   delete resto.pareiEm;
   /* "tocado" é só a hora da última gravação: muda a cada gravação e nada no desenho depende dela */
   delete resto.tocado;
+  /* só registra o que o app já mostrou de ajustes (para o log): nada no desenho depende disso */
+  delete resto.ajustesVistos;
   return [LANG, l.id, leiHashTexto(bruto), leiHashTexto(leiJsonEstavel(resto)),
     leiHashTexto(JSON.stringify(ranking || {}))].join("|");
 }
@@ -2535,31 +2537,34 @@ let leiIrPrimeiro = null;         /* o que o Enter da busca faz */
  * ganham um sinal no mapa. As "divisões sem nome" NÃO entram: são leves e não afetam o artigo.
  * A conferência lê o texto todo, então o resultado fica guardado por texto. */
 let leiIrAlertasCache = { texto: null, alertas: {} };
-function leiIrAlertas(texto) {
-  if (leiIrAlertasCache.texto === texto) return leiIrAlertasCache.alertas;
+function leiIrAlertas(texto, opc) {
+  /* a chave leva também o que a pessoa mandou manter no original: mudar isso muda a leitura */
+  const chave = texto + "§§" + leiJsonEstavel((opc && opc.recusados) || {});
+  if (leiIrAlertasCache.texto === chave) return leiIrAlertasCache.alertas;
   const alertas = {};
   try {
-    leiDiagnosticarLei(texto).itens.forEach((it) => {
+    leiDiagnosticarLei(texto, opc).itens.forEach((it) => {
       if (it.indice >= 0 && (it.gravidade === "grave" || it.tipo === "titulo_no_artigo" || it.tipo === "sufixo_sem_base")) alertas[it.indice] = true;
     });
   } catch (e) {}
-  leiIrAlertasCache = { texto, alertas };
+  leiIrAlertasCache = { texto: chave, alertas };
   return alertas;
 }
 
 function leiIrDados() {
   const texto = String(($("leiTexto") || {}).value || "");
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
-  const est = leiEstruturaLei(texto);
+  const opc = l ? leiOpcDaLei(l) : undefined;
+  const est = leiEstruturaLei(texto, opc);
   const ranking = {};
   let lista = [];
   try { lista = leiRanking(leiIdAtual); } catch (e) { lista = []; }
   lista.forEach((r) => { ranking[r.num] = r; });
   const blocosPorNo = {};
-  (l ? leiBlocos(texto) : []).forEach((b) => { (blocosPorNo[b.divisaoId] = blocosPorNo[b.divisaoId] || []).push(b); });
+  (l ? leiBlocos(texto, opc) : []).forEach((b) => { (blocosPorNo[b.divisaoId] = blocosPorNo[b.divisaoId] || []).push(b); });
   const efetivos = l ? leiArtigosEfetivos(l) : est.artigos;
   return { texto, l, est, arts: est.artigos, ranking, lista, blocosPorNo, lidos: (l && l.blocos) || {},
-    parei: l ? l.parei : "", pareiIdx: l ? leiIndiceDoMarcador(l, efetivos) : -1, efetivos, alertas: leiIrAlertas(texto) };
+    parei: l ? l.parei : "", pareiIdx: l ? leiIndiceDoMarcador(l, efetivos) : -1, efetivos, alertas: leiIrAlertas(texto, opc) };
 }
 
 function leiIrIr(num, indice) {
@@ -3122,12 +3127,171 @@ function leiMapaGrupoEl(l, titulo, expl, itens) {
   return g;
 }
 
-function leiMapaAbrir() {
+/* ---------------------------------------------------------------------
+ * O QUE O APP AJUSTOU AO LER
+ *
+ * O leitor arruma sozinho alguns detalhes (separa a nota de alteração do nome do capítulo, tira o link
+ * grudado no nome, lê "42O" como "42º", lê "Art. 178 - A isenção" como o art. 178) e deixa de fora as
+ * linhas que não são de artigo nenhum. Antes isso era silencioso. Agora cada ajuste aparece aqui, com o
+ * que era e o que virou, e a pessoa pode MANTER O ORIGINAL — um a um ou todos de um tipo. O texto guardado
+ * nunca muda: é só o jeito de ler, e voltar atrás é o mesmo botão. Cada decisão vai para o histórico de
+ * decisões (decisoes.js), e a primeira vez que a pessoa vê cada tipo fica registrada como "automático".
+ * ------------------------------------------------------------------ */
+const LEI_AJ_TIPOS = ["nota", "link", "ordinal", "sufixo", "fora"];
+let leiAjAbertos = {};        /* os grupos abertos: sobrevivem a repintar */
+
+/* a frase de um ajuste; `a.recusado` diz se a frase é a do original mantido */
+function leiAjusteFrase(a) {
+  return t("aj_r_" + a.tipo + (a.recusado && !a.informativo ? "_orig" : ""), { r: a.rotulo, nota: a.nota, nome: a.nome,
+    link: a.link, de: a.de, para: a.para, letra: a.letra, n: a.n, antes: String(a.antes || "").slice(0, 120) });
+}
+
+function leiAjusteRisco(tipo, itens) {
+  if (tipo === "sufixo") return "alto";                       /* pode esconder um artigo de verdade (178-A) */
+  if (tipo === "fora") return decRiscoDoTexto(itens.map((a) => a.antes));
+  return "baixo";
+}
+
+/* uma linha no histórico de decisões, para um tipo de ajuste (um ou vários itens). Nunca quebra o fluxo. */
+function leiAjusteRegistrar(l, tipo, itens, decisao, via) {
+  try {
+    const proposto = (a) => leiAjusteFrase(Object.assign({}, a, { recusado: false }));
+    decRegistrar({
+      area: "ajuste", regra: "ajuste." + tipo, origem: decisao === "automatico" ? "app" : "pessoa",
+      lei: l.nome, ref: itens.length === 1 ? t("dec_linha", { l: itens[0].linha }) : "",
+      motivo: t("aj_p_" + tipo), risco: leiAjusteRisco(tipo, itens), decisao, via,
+      proposta: {
+        acao: decTituloDaRegra("ajuste." + tipo),
+        amostra: itens.slice(0, 3).map((a) => a.antes).join(" | "),
+        depois: itens.length === 1 ? proposto(itens[0]) : "",
+        n: itens.length,
+        linhas: itens.slice(0, 60).map((a) => ({ linha: a.linha, texto: a.antes + "  →  " + proposto(a) })),
+      },
+    });
+  } catch (e) {}
+}
+
+/* a primeira vez que a pessoa vê cada tipo de ajuste desta lei: fica no histórico como "automático" */
+function leiAjusteVistos(l, ajs) {
+  const vistos = Object.assign({}, l.ajustesVistos || {});
+  let novo = false;
+  LEI_AJ_TIPOS.forEach((tipo) => {
+    const itens = ajs.filter((a) => a.tipo === tipo);
+    if (!itens.length || vistos[tipo]) return;
+    leiAjusteRegistrar(l, tipo, itens, "automatico", "mapa");
+    vistos[tipo] = 1;
+    novo = true;
+  });
+  if (novo) leiGuardar({ id: l.id, ajustesVistos: vistos });
+}
+
+/* Manter o original (recusar) ou voltar ao ajuste, para um ou vários. Devolve quantos mudaram. */
+function leiAjusteDecidir(idLei, ids, recusar) {
+  const l = leiDe(idLei);
+  if (!l) return 0;
+  const dg = leiDiagnosticarLei(l.texto, leiOpcDaLei(l));
+  const alvo = dg.ajustes.filter((a) => ids.indexOf(a.id) >= 0 && !a.informativo && !!a.recusado !== !!recusar);
+  if (!alvo.length) return 0;
+  leiAjusteRecusar(idLei, alvo.map((a) => a.id), !!recusar);
+  LEI_AJ_TIPOS.forEach((tipo) => {
+    const itens = alvo.filter((a) => a.tipo === tipo);
+    if (itens.length) leiAjusteRegistrar(l, tipo, itens, recusar ? "recusou" : "aceitou", alvo.length > 1 ? "todos" : "item");
+  });
+  /* o mapa se repinta com a leitura nova, e o leitor também (é o que a pessoa vê ao voltar) */
+  leiMapaAbrir(true);
+  if (leiAtual && leiIdAtual === idLei) { try { leiPintar(); } catch (e) {} }
+  return alvo.length;
+}
+
+function leiAjusteItemEl(l, a) {
+  const el = document.createElement("div");
+  el.className = "duv-item lei-aj-item" + (a.recusado ? " lei-aj-recusado" : "");
+  el.title = a.antes;
+  const tx = document.createElement("div");
+  tx.className = "nota";
+  tx.textContent = t("dec_linha", { l: a.linha }) + " · " + leiAjusteFrase(a);
+  el.append(tx);
+  const acoes = document.createElement("div");
+  acoes.className = "lei-mapa-acoes";
+  if (!a.informativo) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min lei-aj-alt";
+    b.textContent = t(a.recusado ? "aj_usar" : "aj_manter");
+    b.onclick = () => leiAjusteDecidir(l.id, [a.id], !a.recusado);
+    acoes.append(b);
+  }
+  el.append(acoes);
+  el.append(leiDupContextoEl(l.texto, { linha: a.linha, linhaFim: a.linhaFim }));
+  return el;
+}
+
+/* o grupo inteiro: um recolhido por tipo, com a explicação e "manter todos" / "usar todos" */
+function leiAjustesEl(l, ajs) {
+  const g = document.createElement("details");
+  g.className = "lei-aj-grupo";
+  g.id = "leiAjGrupo";
+  g.open = !!leiAjAbertos.grupo;
+  g.ontoggle = () => { leiAjAbertos.grupo = g.open; };
+  const sm = document.createElement("summary");
+  sm.textContent = t("aj_titulo", { n: ajs.length });
+  const ex = document.createElement("p");
+  ex.className = "nota";
+  ex.textContent = t("aj_expl");
+  g.append(sm, ex);
+  LEI_AJ_TIPOS.forEach((tipo) => {
+    const itens = ajs.filter((a) => a.tipo === tipo);
+    if (!itens.length) return;
+    const d = document.createElement("details");
+    d.className = "lei-aj-tipo lei-aj-tipo-" + tipo;
+    d.open = !!leiAjAbertos[tipo];
+    d.ontoggle = () => { leiAjAbertos[tipo] = d.open; };
+    const s2 = document.createElement("summary");
+    s2.textContent = t("aj_t_" + tipo, { n: itens.length });
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("aj_p_" + tipo);
+    d.append(s2, p);
+    if (!itens[0].informativo) {
+      const ids = itens.map((a) => a.id);
+      const todos = document.createElement("div");
+      todos.className = "lei-mapa-acoes";
+      if (itens.some((a) => !a.recusado)) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn-min lei-aj-todos";
+        b.textContent = t("aj_manter_todos");
+        b.onclick = () => leiAjusteDecidir(l.id, ids, true);
+        todos.append(b);
+      }
+      if (itens.some((a) => a.recusado)) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn-min lei-aj-todos lei-aj-usar-todos";
+        b.textContent = t("aj_usar_todos");
+        b.onclick = () => leiAjusteDecidir(l.id, ids, false);
+        todos.append(b);
+      }
+      d.append(todos);
+    }
+    itens.slice(0, 40).forEach((a) => d.append(leiAjusteItemEl(l, a)));
+    if (itens.length > 40) {
+      const m = document.createElement("p");
+      m.className = "nota";
+      m.textContent = t("aj_mais", { n: itens.length - 40 });
+      d.append(m);
+    }
+    g.append(d);
+  });
+  return g;
+}
+
+function leiMapaAbrir(repintar) {
   const dlg = $("dlgLeiMapa");
   if (!dlg) return false;
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   if (!l || !String(l.texto || "").trim()) return false;
-  const dg = leiDiagnosticarLei(l.texto);
+  const dg = leiDiagnosticarLei(l.texto, leiOpcDaLei(l));
   const r = dg.resumo;
   leiMapaCtx = { id: l.id, dg };
   $("leiMapaTitulo").textContent = t("lei_mapa_titulo", { lei: l.nome });
@@ -3170,11 +3334,20 @@ function leiMapaAbrir() {
     cf.append(m);
   }
 
+  /* O QUE O APP AJUSTOU: um grupo recolhido, à parte (não mexe na linha de estado nem na conferência) */
+  const ajCx = $("leiMapaAjustes");
+  if (ajCx) {
+    ajCx.innerHTML = "";
+    if (dg.ajustes && dg.ajustes.length) ajCx.append(leiAjustesEl(l, dg.ajustes));
+  }
+  if (!repintar) { try { leiAjusteVistos(l, dg.ajustes || []); } catch (e) {} }
+
   const av = $("leiMapaArvore");
   av.innerHTML = "";
   const arts = dg.estrutura.artigos;
   const pos = leiIndiceDoMarcador(l, arts);
   dg.estrutura.raiz.forEach((no) => av.append(leiMapaNoEl(no, arts, pos)));
+  if (repintar) return true;
   abrirModal("dlgLeiMapa");
   try { leiReg("navegar", "mapa e conferência aberto", l.nome + " · " + r.artigos + " artigos · " + dg.itens.length + " a conferir"); }
   catch (e) {}
@@ -3729,6 +3902,15 @@ function leiRelatorioFluxo(tela) {
         }
       });
       if (dg.itens.length > 30) p.push("  …e mais " + (dg.itens.length - 30) + " item(ns)");
+      const ajs = dg.ajustes || [];
+      if (ajs.length) {
+        const pt = {};
+        ajs.forEach((x) => { pt[x.tipo] = (pt[x.tipo] || 0) + 1; });
+        p.push("  ajustes do leitor: " + ajs.length + " (recusados: " + ajs.filter((x) => x.recusado).length + ") — "
+          + Object.keys(pt).map((k) => k + " " + pt[k]).join(", "));
+        ajs.slice(0, 20).forEach((x) => p.push("  · [" + x.tipo + (x.recusado ? "/original mantido" : "") + "] linha " + x.linha + " — " + cortar(x.antes, 150)));
+        if (ajs.length > 20) p.push("  …e mais " + (ajs.length - 20) + " ajuste(s)");
+      }
       p.push("  árvore de divisões:");
       let feitas = 0;
       const anda = (no, fundo) => {
@@ -4792,9 +4974,9 @@ let leiNumeracaoMemo = { chave: "", res: null };
 function leiNumeracaoDaLei(l) {
   const vazio = { problemas: [], graves: [] };
   if (!l || !String(l.texto || "").trim()) return vazio;
-  const chave = l.id + "|" + leiHashTexto(l.texto);
+  const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + leiHashTexto(leiJsonEstavel(l.ajustesRecusados || {}));
   if (leiNumeracaoMemo.chave !== chave) {
-    const arts = leiArtigos(l.texto);
+    const arts = leiArtigos(l.texto, leiOpcDaLei(l));
     leiNumeracaoMemo = { chave, res: arts.length >= LEI_NUMERACAO_MIN_ARTIGOS ? leiNumeracao(arts) : vazio };
   }
   return leiNumeracaoMemo.res;
@@ -5628,7 +5810,7 @@ function leiRegistrarLeitura() {
   let palavras = (txt.match(/\S+/g) || []).length;
   let rotulo = "";
   if (leiBlocoAberto) {
-    const b = leiBlocos(txt).filter((x) => x.chave === leiBlocoAberto)[0];
+    const b = leiBlocos(txt, leiOpcDaLei(leiIdAtual ? leiDe(leiIdAtual) : null)).filter((x) => x.chave === leiBlocoAberto)[0];
     if (b) {
       palavras = b.artigos.reduce((s, a) => s + (a.texto.match(/\S+/g) || []).length, 0);
       rotulo = b.nome;

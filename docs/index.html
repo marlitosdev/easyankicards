@@ -1377,7 +1377,19 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .dec-b-aceitou{color:var(--verde);border-color:var(--verde)}
 .dec-b-recusou{color:#ef4444;border-color:#ef4444}
 .dec-b-mudou{color:#f59e0b;border-color:#f59e0b}
-.dec-b-escolheu,.dec-b-sem_decisao{color:var(--sutil)}
+.dec-b-escolheu,.dec-b-sem_decisao,.dec-b-automatico{color:var(--sutil)}
+/* O QUE O APP AJUSTOU AO LER: um grupo recolhido, com um subgrupo por tipo */
+.lei-aj-grupo{margin:8px 0;border:1px solid var(--borda);border-radius:10px;padding:6px 10px}
+.lei-aj-grupo>summary{cursor:pointer;font-size:12.5px;font-weight:700}
+.lei-aj-tipo{margin:6px 0 6px 6px;border-left:2px solid var(--borda);padding-left:8px}
+.lei-aj-tipo>summary{cursor:pointer;font-size:12.5px;padding:3px 0}
+.lei-aj-grupo>p.nota,.lei-aj-tipo>p.nota{font-size:12px;color:var(--sutil);margin:2px 0 6px}
+.lei-aj-item>.nota{font-size:13px}
+.lei-aj-item{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin:2px 0;padding:4px 0;border:none;
+  border-bottom:1px solid var(--borda);border-radius:0;background:none}
+.lei-aj-item>.nota{flex:1 1 220px;margin:0}
+.lei-aj-item .lei-mapa-acoes{margin:0}
+.lei-aj-recusado>.nota{color:#f59e0b}
 .dec-risco{font-size:10.5px;font-weight:700}
 .dec-risco-alto{color:#ef4444}.dec-risco-medio{color:#f59e0b}.dec-risco-baixo{color:var(--sutil)}
 .dec-trecho{font-size:11.5px;font-family:monospace;white-space:pre-wrap;word-break:break-word;margin:2px 0;color:var(--sutil)}
@@ -6935,6 +6947,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnLeiRelMapa" data-i18n="lei_rel_btn_curto" title="Copia o que está nesta tela — os números, o que o app apontou (com as linhas do texto ao redor de cada ponto) e a árvore de divisões — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
   <div id="leiMapaConferir"></div>
+  <!-- O QUE O APP AJUSTOU AO LER: recolhido, com "manter o original" (leiMapaAbrir, lei-ui.js) -->
+  <div id="leiMapaAjustes"></div>
   <!-- COMO LER ESTA TELA: recolhido. Explicação que se lê uma vez não fica ocupando o topo. -->
   <details class="lei-mapa-como">
     <summary data-i18n="lei_mapa_como"></summary>

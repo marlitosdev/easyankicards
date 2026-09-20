@@ -168,23 +168,35 @@ function leiCasarArtigo(linha) {
 /* Separa o NOME de uma divisão das notas de alteração que vêm coladas nele. */
 function leiNomeDaDivisao(bruto) {
   const notas = [];
+  let link = "";
+  const cru = String(bruto == null ? "" : bruto).replace(/\s+/g, " ").trim();
   const nome = String(bruto == null ? "" : bruto)
     .replace(LEI_RE_NOTA_DIVISAO, (m) => { notas.push(m.replace(/\s+/g, " ").trim()); return " "; })
     .replace(/\s+/g, " ").replace(/^[\s.:\-–—]+|[\s.:\-–—]+$/g, "")
     /* o texto de um link do Planalto que veio junto ("… REFORMA AGRÁRIA Regulamento") não é o nome. Só
      * quando vem depois de uma palavra em MAIÚSCULAS: "Da Vigência" e "Do Regulamento Geral" são nomes */
-    .replace(/([A-ZÀ-Ú]{2,})\s+(?:Regulamento|Regulamenta[çc][ãa]o|Vig[êe]ncia)$/, "$1");
-  return { nome, nota: notas.join(" ") };
+    .replace(/([A-ZÀ-Ú]{2,})\s+(Regulamento|Regulamenta[çc][ãa]o|Vig[êe]ncia)$/, (m, a, w) => { link = w; return a; });
+  return { nome, nota: notas.join(" "), link, bruto: cru };
 }
 
 /* O CORAÇÃO: lê o texto e devolve os artigos e as DIVISÕES (Parte › Livro › Título › Capítulo ›
  * Seção), com a árvore montada. Cada divisão tem um id ESTÁVEL — o caminho por tipo e número, não
  * o nome: "TITULO I>CAPITULO I#2" é o segundo "Capítulo I" dentro do Título I. É esse id que marca
  * "capítulo lido", e é por ele que dois "CAPÍTULO I — Disposições Gerais" deixam de ser o mesmo. */
-function leiLerLei(texto) {
+function leiLerLei(texto, opc) {
   const linhas = String(texto || "").split("\n");
   const artigos = [];
   const divisoes = [];
+  /* OS AJUSTES DO LEITOR. Tudo o que ele muda ou deixa de fora ao ler — separar a nota de alteração do
+   * nome, tirar o texto de link, ler "42O" como "42º", ler "Art. 178 - A isenção" como o art. 178, e as
+   * linhas que não entram em artigo nenhum — vira um item em `ajustes`: o id, o tipo, a linha, o texto de
+   * antes e os campos de cada tipo (a tela monta a frase; o porquê é o do tipo).
+   * `opc.recusados` ({id: true}) são os que a pessoa mandou MANTER NO ORIGINAL: o leitor não os faz.
+   * Nada disso altera o texto guardado: é só o jeito de ler. */
+  const rec = (opc && opc.recusados) || {};
+  const ajustes = [];
+  const fora = [];
+  const cortaAj = (x, n) => String(x == null ? "" : x).replace(/\s+/g, " ").trim().slice(0, n);
   let atual = null;
   let divisao = null;
   /* O Planalto quebra o cabeçalho em duas linhas com muita frequência:
@@ -198,6 +210,7 @@ function leiLerLei(texto) {
   let esperaNome = false;
   const pilha = [];
   const vezes = {};
+  const RE_LINK = /([A-ZÀ-Ú]{2,})\s+(?:Regulamento|Regulamenta[çc][ãa]o|Vig[êe]ncia)$/;
 
   const rotular = (d) => { d.rotulo = (d.rotuloBase + (d.nome ? " — " + d.nome : "")).trim(); };
   const abrir = (tipo, num, base, nome, nota, linha) => {
@@ -215,6 +228,32 @@ function leiLerLei(texto) {
     return d;
   };
 
+  /* põe o que veio numa linha de cabeçalho ou de nome no nome da divisão, e registra os ajustes:
+   * a nota separada e o texto de link tirado. Recusado = fica como veio, na ordem em que veio. */
+  const aplicarNome = (div, n, numLinha, linhaCrua) => {
+    const rNota = !!rec["nota:" + div.id], rLink = !!rec["link:" + div.id];
+    let parte = n.nome;
+    if (n.nota && rNota) parte = rLink ? n.bruto : n.bruto.replace(RE_LINK, "$1");
+    else if (n.link && rLink) parte = (n.nome + " " + n.link).trim();
+    div.nome = [div.nome, parte].filter(Boolean).join(" ");
+    div.nota = rNota ? "" : [div.nota, n.nota].filter(Boolean).join(" ");
+    rotular(div);
+    const registra = (tipo, extra, recusado) => {
+      const id = tipo + ":" + div.id;
+      const ja = ajustes.filter((x) => x.id === id)[0];
+      if (ja) {
+        ja.antes = cortaAj(ja.antes + " / " + linhaCrua, 200);
+        if (extra.nota) ja.nota = cortaAj([ja.nota, extra.nota].filter(Boolean).join(" "), 200);
+        return;
+      }
+      ajustes.push(Object.assign({ id, tipo, linha: numLinha, linhaFim: numLinha, antes: cortaAj(linhaCrua, 200),
+        recusado, divId: div.id, rotulo: div.rotuloBase, nome: "" }, extra));
+    };
+    if (n.nota) registra("nota", { nota: cortaAj(n.nota, 200) }, rNota);
+    if (n.link) registra("link", { link: n.link }, rLink);
+  };
+  let aguardaNome = false;         /* a divisão aberta ainda espera o NOME (só veio a nota, ou nada) */
+
   linhas.forEach((linha, i) => {
     const d = linha.match(LEI_RE_DIVISAO);
     if (!d && esperaNome) {
@@ -225,12 +264,11 @@ function leiLerLei(texto) {
        * (Redação dada pela EC 92/2016) / Do Tribunal Superior do Trabalho, dos Tribunais Regionais do
        * Trabalho e dos Juízes do Trabalho"): a linha de nome aceita mais caracteres nesse caso */
       const limite = divisao && divisao.nota ? 160 : 90;
-      if (!leiCasarArtigo(linha) && cru.length <= limite && divisao && !divisao.nome) {
+      if (!leiCasarArtigo(linha) && cru.length <= limite && divisao && aguardaNome) {
         const n = leiNomeDaDivisao(cru);
-        divisao.nome = n.nome;
-        divisao.nota = [divisao.nota, n.nota].filter(Boolean).join(" ");
-        rotular(divisao);
+        aplicarNome(divisao, n, i + 1, linha);
         /* a linha trouxe SÓ a nota (o nome vem na seguinte): continua esperando o nome */
+        aguardaNome = !n.nome;
         if (!n.nome) esperaNome = true;
         return;
       }
@@ -246,8 +284,11 @@ function leiLerLei(texto) {
       if (/^[IVXLCDM]+$/.test(num) && /^[A-Z]$/.test(nome)) {
         num += "-" + nome; base += "-" + nome; nome = "";
       }
-      divisao = abrir(tipo, num, base, nome, n.nota, i + 1);
-      esperaNome = !divisao.nome;
+      divisao = abrir(tipo, num, base, "", "", i + 1);
+      if (n.nome !== nome) n.nome = nome;             /* "TÍTULO V - A": o nome ficou vazio */
+      aplicarNome(divisao, n, i + 1, linha);
+      aguardaNome = !nome;
+      esperaNome = aguardaNome;
       /* a divisão também não é artigo: se o cabeçalho cair dentro do
        * texto do artigo anterior, o bloco seguinte herdaria o artigo
        * errado na hora de contar o progresso */
@@ -260,6 +301,7 @@ function leiLerLei(texto) {
       /* "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS" (o ADCT) abre um ramo de topo: sem isto o
        * cabeçalho caía DENTRO do último artigo do corpo, e os artigos do ADCT iam parar no último Título */
       divisao = abrir(/^ATO/i.test(base) ? "ATO" : /^PARTE/i.test(base) ? "PARTE" : "DISPOSICOES", "", base, "", "", i + 1);
+      aguardaNome = false;
       esperaNome = false;
       atual = null;
       return;
@@ -275,11 +317,29 @@ function leiLerLei(texto) {
       artigos.push(atual);
       return;
     }
-    const a = leiCasarArtigo(linha);
+    let a = leiCasarArtigo(linha);
     if (a) {
+      /* "Art. 178 - A isenção…": o leitor lê o art. 178 (o "A" é o começo do texto), e não o 178-A */
+      const brutoArt = linha.match(LEI_RE_ARTIGO);
+      if (brutoArt && leiNumNormal(brutoArt[1]) !== leiNumNormal(a[1])) {
+        const idS = "sufixo:" + (i + 1) + ":" + leiNumCruLimpo(brutoArt[1]);
+        const recS = !!rec[idS];
+        ajustes.push({ id: idS, tipo: "sufixo", linha: i + 1, linhaFim: i + 1, antes: cortaAj(linha, 200),
+          de: leiNumCruLimpo(brutoArt[1]), para: leiNumCruLimpo(a[1]), letra: String(brutoArt[1]).slice(-1), recusado: recS });
+        if (recS) a = brutoArt;
+      }
+      const cruBruto = String(a[1]).replace(/\s+/g, "");
+      let cruArt = leiNumCruLimpo(a[1]);
+      if (cruArt !== cruBruto) {
+        const idO = "ordinal:" + (i + 1) + ":" + cruBruto;
+        const recO = !!rec[idO];
+        ajustes.push({ id: idO, tipo: "ordinal", linha: i + 1, linhaFim: i + 1, antes: cortaAj(linha, 200),
+          de: cruBruto, para: cruArt, recusado: recO });
+        if (recO) cruArt = cruBruto;
+      }
       atual = {
         num: leiNumNormal(a[1]),
-        numCru: leiNumCruLimpo(a[1]),
+        numCru: cruArt,
         ordem: leiNumOrdem(a[1]),
         linha: i + 1,
         corpo: linha.slice(a[0].length),
@@ -293,12 +353,32 @@ function leiLerLei(texto) {
     if (atual) {
       atual.linhas.push(linha);
       if (String(linha).trim()) atual.corpo += "\n" + linha;
+    } else if (String(linha).trim()) {
+      fora.push({ linha: i + 1, texto: linha });       /* não entra em artigo nenhum: fica fora da leitura */
     }
   });
 
   divisoes.forEach((d) => { d.caminho = (d.pai ? d.pai.caminho : []).concat(d.rotulo); });
 
+  /* as linhas fora da leitura (o preâmbulo, o que vem entre uma divisão e o 1º artigo), em trechos */
+  const trechos = [];
+  fora.forEach((f) => {
+    const u = trechos[trechos.length - 1];
+    if (u && f.linha - u.fim <= 3) { u.fim = f.linha; u.linhas.push(f.texto); }
+    else trechos.push({ ini: f.linha, fim: f.linha, linhas: [f.texto] });
+  });
+  trechos.forEach((g) => ajustes.push({ id: "fora:" + g.ini, tipo: "fora", linha: g.ini, linhaFim: g.fim,
+    antes: cortaAj(g.linhas.join(" "), 240), n: g.linhas.length, informativo: true, recusado: false }));
+  /* o nome final da divisão (o nome pode ter vindo na linha seguinte à da nota) */
+  ajustes.forEach((a) => {
+    if (!a.divId) return;
+    const d = divisoes.filter((x) => x.id === a.divId)[0];
+    if (d) a.nome = cortaAj(d.nome, 120);
+  });
+  ajustes.sort((x, y) => x.linha - y.linha);
+
   return {
+    ajustes,
     divisoes,
     artigos: artigos.map((a, i) => ({
       num: a.num,
@@ -329,15 +409,35 @@ function leiLerLei(texto) {
  * vem ANTES do primeiro artigo (ementa da lei, preâmbulo, "O PRESIDENTE DA
  * REPÚBLICA…") fica de fora da lista — não é artigo e contaria como um,
  * estragando toda a numeração. */
-function leiArtigos(texto) {
-  return leiLerLei(texto).artigos;
+function leiArtigos(texto, opc) {
+  return leiLerLei(texto, opc).artigos;
+}
+
+/* As opções de leitura de UMA lei: os ajustes que a pessoa mandou manter no original */
+function leiOpcDaLei(l) {
+  return { recusados: (l && l.ajustesRecusados) || {} };
+}
+
+/* Manter o original (recusar) ou voltar ao ajuste do leitor. Só muda o jeito de LER: o texto guardado não muda. */
+function leiAjusteRecusar(idLei, ids, recusar) {
+  const l = leiDe(idLei);
+  const lista = [].concat(ids || []);
+  if (!l || !lista.length) return false;
+  const r = Object.assign({}, l.ajustesRecusados || {});
+  lista.forEach((id) => { if (recusar) r[id] = true; else delete r[id]; });
+  const ok = leiGuardar({ id: idLei, ajustesRecusados: r });
+  try {
+    reg("LEI", recusar ? "ajuste do leitor recusado (fica o original)" : "ajuste do leitor aceito de novo",
+      (l.nome || idLei) + " · " + lista.length + " ajuste(s)" + (lista.length === 1 ? " · " + lista[0] : ""));
+  } catch (e) {}
+  return !!ok;
 }
 
 /* A ÁRVORE DA LEI: cada nó é uma divisão, com os artigos que são DIRETAMENTE dela (índices em
  * `artigos`), os filhos, e o total/primeiro/último artigo do ramo inteiro. Artigos que vêm antes
  * de qualquer divisão ficam num nó virtual "(sem divisão)". */
-function leiEstruturaLei(texto) {
-  const lei = leiLerLei(texto);
+function leiEstruturaLei(texto, opc) {
+  const lei = leiLerLei(texto, opc);
   const nos = {};
   const raiz = [];
   const vazio = (d) => ({ id: d.id, tipo: d.tipo, nivel: d.nivel, num: d.num, nome: d.nome, nota: d.nota,
@@ -376,7 +476,7 @@ function leiEstruturaLei(texto) {
     n.de = de; n.ate = ate; n.total = total;
   };
   raiz.forEach(fechar);
-  return { raiz, nos, artigos: lei.artigos, semDivisao };
+  return { raiz, nos, artigos: lei.artigos, semDivisao, ajustes: lei.ajustes };
 }
 
 function leiArtigo(texto, num) {
@@ -1845,8 +1945,8 @@ function leiNumeracaoTrecho(artigos) {
  * ===================================================================== */
 const LEI_RE_TITULO_SOLTO = /^[\s>*]*[A-ZÀ-Ú][A-ZÀ-Ú ,\-–—]{6,66}[A-ZÀ-Ú]\s*$/;
 
-function leiDiagnosticarLei(texto) {
-  const est = leiEstruturaLei(texto);
+function leiDiagnosticarLei(texto, opc) {
+  const est = leiEstruturaLei(texto, opc);
   const arts = est.artigos;
   const itens = [];
   const existe = {};
@@ -1899,6 +1999,7 @@ function leiDiagnosticarLei(texto) {
   return {
     estrutura: est,
     itens,
+    ajustes: est.ajustes || [],
     numeracao: num,
     resumo: {
       artigos: arts.length,
@@ -2094,7 +2195,7 @@ function leiCompararVersoes(textoAntigo, textoNovo, opc) {
  * chave composta que este primeiro corte não vale a pena pagar.
  * ===================================================================== */
 function leiArtigosEfetivos(l) {
-  const base = leiArtigos(l && l.texto);
+  const base = leiArtigos(l && l.texto, leiOpcDaLei(l));
   const alt = (l && l.alteracoes) || {};
   const achados = {};
 
@@ -2202,8 +2303,8 @@ function leiArtigoAlterar(idLei, num, dados) {
  * bloco de 115 artigos. */
 const LEI_ART_POR_BLOCO = 15;
 
-function leiBlocos(texto) {
-  const arts = leiArtigos(texto);
+function leiBlocos(texto, opc) {
+  const arts = leiArtigos(texto, opc);
   if (!arts.length) return [];
 
   const temDivisao = arts.some((a) => a.divisao);
@@ -2283,7 +2384,7 @@ function leiMigrarBlocos(l) {
   const novo = Object.assign({}, antigo);
   let mudou = false;
   const casaram = {};
-  leiBlocos((l && l.texto) || "").forEach((b) => {
+  leiBlocos((l && l.texto) || "", leiOpcDaLei(l)).forEach((b) => {
     if (b.nome === b.chave || antigo[b.nome] === undefined) return;
     casaram[b.nome] = true;
     if (novo[b.chave] === undefined) { novo[b.chave] = antigo[b.nome]; mudou = true; }
@@ -3755,7 +3856,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiNotaDe, leiNotaDeEm, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoDeEm,
     leiNotaTrechoGuardar,
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
-    leiParar, leiProgresso, leiIndiceDoMarcador, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
+    leiParar, leiProgresso, leiIndiceDoMarcador, leiOpcDaLei, leiAjusteRecusar, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
     leisHojeISO,
     leiNumeroNorm, leiEspecieNorm, leiEnteDoTexto, leiChaveIdentidade, leiMesmaLei,
     leiAcharIgual, leiIdLivre, leiDuplicadasNaBiblioteca, leiMarcarDistintas,
