@@ -166,15 +166,15 @@ async function testes() {
     const dep = api.leiDe(l.id);
     ok(!("CAPÍTULO I — Disposições Gerais" in dep.blocos) && Object.keys(dep.blocos).length === 3, "U1 ao abrir, a lei antiga e' migrada: " + JSON.stringify(dep.blocos));
     api.leiIrAbrir();       /* os capitulos vivem no mapa; lei pequena abre inteira */
-    const linhas = () => api.$("leiIrGrade").querySelectorAll(".lei-bloco");
-    const lidas = () => Array.from(linhas()).map((x) => /lei-bloco-lido/.test(x.className || "") ? 1 : 0).join("");
+    /* cada capítulo é um bloco só: o botão de "marcar lido" mora no cabeçalho dele, na ordem do texto */
+    const chks = () => Array.from(api.$("leiIrGrade").querySelectorAll(".lei-bloco-chk"));
+    const lidas = () => chks().map((x) => /btn-min-ok/.test(x.className || "") ? 1 : 0).join("");
+    ok(api.$("leiIrGrade").querySelectorAll(".lei-bloco").length === 0 && chks().length === 5, "U1a5 cinco capitulos, todos com o botao no cabecalho: " + chks().length);
     ok(lidas() === "01101", "U1a os tres 'Capítulo I' aparecem lidos, como antes: " + lidas());
-    const chk = Array.from(linhas()[1].querySelectorAll("button")).filter((b) => /lei-bloco-chk/.test(b.className || ""))[0];
-    chk.onclick();
+    chks()[1].onclick();
     ok(lidas() === "00101", "U2 desmarcar UM capítulo não desmarca os de mesmo nome: " + lidas());
     ok(api.leiBlocosLidos(l.id) === 2, "U2a a lei guarda 2");
-    const chk2 = Array.from(linhas()[0].querySelectorAll("button")).filter((b) => /lei-bloco-chk/.test(b.className || ""))[0];
-    chk2.onclick();
+    chks()[0].onclick();
     ok(lidas() === "10101", "U3 marcar o Título I marca so ele: " + lidas());
   }
 
@@ -268,6 +268,19 @@ async function testes() {
     const itens = (el) => achar(el, (c) => /lei-mapa-item/.test(c.className || ""));
     ok(itens(grupo).length === 1 && itens(cf).length === 4, "G18a so ela vai para o grupo; as outras tres ficam a vista: " + itens(cf).length);
     ok(/⚠ = a leitura provavelmente está errada/.test(cf.textContent), "G18b a legenda dos sinais (⚠ e •) aparece");
+    /* a divisão sem nome é UMA LINHA (onde está · ir · ver no texto), e não um cartão de três linhas */
+    const it0 = itens(grupo)[0];
+    ok(/lei-mapa-item-compacto/.test(it0.className) && /^CAPÍTULO II · linha 12 · art\. 7º/.test(it0.textContent) && !/sem nome no texto guardado/.test(it0.textContent), "G18c a linha curta da divisao sem nome: " + it0.textContent.slice(0, 90));
+    ok(achar(cf, (c) => /lei-mapa-item-compacto/.test(c.className || "")).length === 1, "G18d so o grupo usa a linha compacta: os pontos que importam continuam completos");
+    ok(achar(it0, (c) => (c.tag === "button" || c.tagName === "BUTTON")).length === 1 && achar(it0, (c) => (c.tag === "summary" || c.tagName === "SUMMARY")).length === 1, "G18e a linha compacta guarda o 'ir ao artigo' e o 'ver no texto'");
+    ok(!/✏/.test(api.t("lei_mapa_ajuda")) && /“editar”/.test(api.t("lei_mapa_ajuda")), "G18f a explicacao nomeia o botao pelo nome (nao por um glifo minusculo): " + api.t("lei_mapa_ajuda"));
+    /* a árvore da conferência tem a mesma tipografia e o mesmo teto de recuo do mapa */
+    const dArv = Array.from(api.$("leiMapaArvore").children);
+    dArv[1].encher();
+    const cap2 = achar(dArv[1], (c) => (c.tag === "details" || c.tagName === "DETAILS") && /^TÍTULO I/.test(c.textContent || ""))[0];
+    cap2.encher();
+    const capII = achar(cap2, (c) => (c.tag === "details" || c.tagName === "DETAILS") && /^CAPÍTULO II/.test(c.textContent || ""))[0];
+    ok(/lei-mapa-no-alto/.test(dArv[1].className) && /lei-mapa-no-alto/.test(cap2.className) && !/lei-mapa-no-alto/.test(capII.className) && !/lei-mapa-no-alto/.test(dArv[0].className), "G18g Livro e Titulo em destaque; Capitulo e '(sem divisao)' nao (na arvore da conferencia tambem): " + [dArv[1].className, cap2.className, capII.className].join(" | "));
     const rel = api.leiRelatorioFluxo("mapa e conferência");
     ok(/Mapa e conferência de CTN rel \(lei_rel\): 13 artigos · 3 divisões \(LIVRO 1, TITULO 1, CAPITULO 1\) · numeração de 1º a 12/.test(rel), "G19 o relatorio traz os numeros: " + rel.split("\n").filter((x) => /Mapa e conferência/.test(x)).join("|"));
     ok(/a conferir: 4 \(graves: 1\) — /.test(rel) && /divisao_sem_nome 1/.test(rel) && /isolado 1/.test(rel), "G19a e o resumo do que foi apontado: " + rel.split("\n").filter((x) => /a conferir/.test(x)).join("|"));

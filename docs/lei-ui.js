@@ -556,8 +556,8 @@ function leiPintarProcedencia() {
     a.href = l.fonte;
     a.target = "_blank";
     a.rel = "noopener";
-    a.className = "lei-fonte";
-    a.textContent = t("lei_fonte_abrir");
+    a.className = "btn-min lei-mais-item lei-fonte";
+    a.textContent = t("lei_menu_fonte");
     a.title = l.fonte;
     corpo.append(a);
   }
@@ -581,8 +581,8 @@ function leiPintarProcedencia() {
   cx.append(menu);
 
   const b = document.createElement("button");
-  b.className = "btn-min";
-  b.textContent = t("lei_procedencia_editar");
+  b.className = "btn-min lei-mais-item";
+  b.textContent = t("lei_menu_editar");
   b.title = t("lei_procedencia_ajuda");
   b.onclick = fecha(() => leiProcAbrir());
   corpo.append(b);
@@ -592,9 +592,9 @@ function leiPintarProcedencia() {
    * resolve o caso de uma lei que ainda não existe. */
   if (String(l.texto || "").trim()) {
     const bA = document.createElement("button");
-    bA.className = "btn-min";
+    bA.className = "btn-min lei-mais-item";
     bA.id = "btnLeiAtualizarVersao";
-    bA.textContent = t("lei_atualizar_versao");
+    bA.textContent = t("lei_menu_atualizar");
     bA.title = t("lei_atualizar_versao_ajuda");
     bA.onclick = fecha(() => leiAtualizarAbrir());
     corpo.append(bA);
@@ -602,9 +602,9 @@ function leiPintarProcedencia() {
     /* MAPA E CONFERÊNCIA: como o app leu esta lei (divisões, artigos) e o que parece
      * lido errado — para a lei que já está guardada, não só na hora de colar */
     const bM = document.createElement("button");
-    bM.className = "btn-min";
+    bM.className = "btn-min lei-mais-item";
     bM.id = "btnLeiMapa";
-    bM.textContent = t("lei_mapa_btn");
+    bM.textContent = t("lei_menu_mapa");
     bM.title = t("lei_mapa_btn_aj");
     bM.onclick = fecha(() => leiMapaAbrir());
     corpo.append(bM);
@@ -629,6 +629,16 @@ function leiPintarProcedencia() {
      * texto errado (remissão lida como artigo, trecho faltando). Só CRITICA:
      * o toque mostra onde; quem corrige é quem cola. */
     const nm = leiNumeracaoDaLei(l);
+    /* o alerta aparece NO MENU (e um ponto no botão dele): a pessoa não precisa abrir para saber.
+     * O número é o de ARTIGOS sinalizados — os mesmos que o mapa marca com a borda tracejada. */
+    const nAl = Object.keys(leiIrAlertas(String(l.texto || ""))).length;
+    if (nAl) {
+      const al = document.createElement("span");
+      al.className = "lei-mais-alerta";
+      al.textContent = t(nAl === 1 ? "lei_menu_alerta_1" : "lei_menu_alerta", { n: nAl });
+      bM.append(al);
+      menu.className += " lei-mais-alerta-no";
+    }
     if (nm.graves.length) {
       const bN = document.createElement("button");
       bN.className = "btn-min btn-min-perigo";
@@ -2204,6 +2214,22 @@ let leiIrFiltro = "todos";
 let leiIrAbertos = null;          /* ids dos nós abertos: sobrevivem a repintar */
 let leiIrPrimeiro = null;         /* o que o Enter da busca faz */
 
+/* Os artigos que a conferência apontou (título dentro de artigo, sufixo sem base, numeração grave)
+ * ganham um sinal no mapa. As "divisões sem nome" NÃO entram: são leves e não afetam o artigo.
+ * A conferência lê o texto todo, então o resultado fica guardado por texto. */
+let leiIrAlertasCache = { texto: null, alertas: {} };
+function leiIrAlertas(texto) {
+  if (leiIrAlertasCache.texto === texto) return leiIrAlertasCache.alertas;
+  const alertas = {};
+  try {
+    leiDiagnosticarLei(texto).itens.forEach((it) => {
+      if (it.indice >= 0 && (it.gravidade === "grave" || it.tipo === "titulo_no_artigo" || it.tipo === "sufixo_sem_base")) alertas[it.indice] = true;
+    });
+  } catch (e) {}
+  leiIrAlertasCache = { texto, alertas };
+  return alertas;
+}
+
 function leiIrDados() {
   const texto = String(($("leiTexto") || {}).value || "");
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
@@ -2215,7 +2241,7 @@ function leiIrDados() {
   const blocosPorNo = {};
   (l ? leiBlocos(texto) : []).forEach((b) => { (blocosPorNo[b.divisaoId] = blocosPorNo[b.divisaoId] || []).push(b); });
   return { texto, l, est, arts: est.artigos, ranking, lista, blocosPorNo, lidos: (l && l.blocos) || {},
-    parei: l ? l.parei : "", efetivos: l ? leiArtigosEfetivos(l) : est.artigos };
+    parei: l ? l.parei : "", efetivos: l ? leiArtigosEfetivos(l) : est.artigos, alertas: leiIrAlertas(texto) };
 }
 
 function leiIrIr(num, indice) {
@@ -2277,21 +2303,44 @@ function leiIrUnidadesEl(d, a, est) {
   return painel;
 }
 
+/* "art. 1º" quando o ramo tem um artigo só; "arts. 2º a 5º (4)" nos outros */
+function leiMapaArtsTxt(no, arts) {
+  if (!no.total) return t("lei_mapa_vazio");
+  const de = arts[no.de].numCru, ate = arts[no.ate].numCru;
+  return no.total === 1 || de === ate ? t("lei_mapa_art_1", { de }) : t("lei_mapa_arts", { de, ate, n: no.total });
+}
+
+/* A CLASSE DE UM NÓ DA ÁRVORE. Livro e Título (nível 1 a 3) pesam mais que Capítulo e Seção, e
+ * o recuo PARA no 4º nível: a árvore não vira uma escada que empurra tudo para a direita. */
+function leiMapaNoClasse(no, fundo) {
+  return "lei-mapa-no" + (!no.virtual && no.nivel >= 1 && no.nivel <= 3 ? " lei-mapa-no-alto" : "")
+    + (fundo >= 3 ? " lei-mapa-no-raso" : "");
+}
+
+/* O artigo tem parágrafo, inciso ou alínea? Uma olhada barata no texto, para nem oferecer a seta
+ * onde não há o que abrir (a maioria dos artigos é só o caput). */
+function leiIrTemUnidades(texto) {
+  return /§\s*\d|[Pp]ar[áa]grafo\s+[úu]nico|(?:^|\n|[:;]\s*)(?:[IVXLCDM]{1,6}\s*[-–—)]|[a-z]\))\s/.test(String(texto || ""));
+}
+
+/* UM COMPONENTE POR ARTIGO: o número (leva ao artigo), o selo de questões e a seta (abre a
+ * estrutura) numa pílula só, com a cor do estado. Cada parte continua com o seu toque. */
 function leiIrChipEl(d, a) {
   const cel = document.createElement("span");
-  cel.className = "lei-ir-cel";
   const est = d.ranking[a.num];
+  const ehErro = !!(est && est.erros > est.acertos), ehProva = !!(est && est.prova), ehParei = a.num === d.parei;
+  const sel = ehErro ? "erro" : ehProva ? "prova" : ehParei ? "parei" : "";
+  const alerta = !!(d.alertas && d.alertas[a.indice]);
+  cel.className = "lei-ir-cel" + (sel ? " lei-ir-cel-" + sel : "") + (alerta ? " lei-ir-cel-alerta" : "");
   const b = document.createElement("button");
   b.type = "button";
-  b.className = "lei-ir-n"
-    + (a.num === d.parei ? " lei-ir-parei" : "")
-    + (est && est.prova ? " lei-ir-prova" : "")
-    + (est && est.erros > est.acertos ? " lei-ir-erro" : "");
+  b.className = "lei-ir-n" + (ehParei ? " lei-ir-parei" : "") + (ehProva ? " lei-ir-prova" : "") + (ehErro ? " lei-ir-erro" : "");
   b.textContent = a.numCru;
   const dicas = [];
-  if (a.num === d.parei) dicas.push(t("lei_ir_dica_parei"));
-  if (est && est.prova) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
+  if (ehParei) dicas.push(t("lei_ir_dica_parei"));
+  if (ehProva) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
   if (est && est.questoes) dicas.push(t("lei_ir_dica_q", { n: est.questoes }));
+  if (alerta) dicas.push(t("lei_ir_dica_alerta"));
   b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
   b.onclick = () => leiIrIr(a.num, a.indice);
   cel.append(b);
@@ -2302,23 +2351,73 @@ function leiIrChipEl(d, a) {
     q.title = t("lei_ir_dica_q", { n: est.questoes });
     cel.append(q);
   }
-  const m = document.createElement("button");
-  m.type = "button";
-  m.className = "lei-ir-mais";
-  m.textContent = "▾";
-  m.title = t("lei_ir_unidades");
-  let painel = null;
-  m.onclick = () => {
-    if (!painel) { painel = leiIrUnidadesEl(d, a, est); cel.append(painel); }
-    else painel.hidden = !painel.hidden;
-    m.textContent = painel.hidden ? "▾" : "▴";
-    if (cel.classList) cel.classList.toggle("lei-ir-cel-aberta", !painel.hidden);
-  };
-  cel.append(m);
+  const ef = (d.efetivos && d.efetivos[a.indice]) || a;
+  if (leiIrTemUnidades(ef.texto)) {
+    const m = document.createElement("button");
+    m.type = "button";
+    m.className = "lei-ir-mais";
+    m.textContent = "▾";
+    m.title = t("lei_ir_unidades");
+    let painel = null;
+    m.onclick = () => {
+      if (!painel) { painel = leiIrUnidadesEl(d, a, est); cel.append(painel); }
+      else painel.hidden = !painel.hidden;
+      m.textContent = painel.hidden ? "▾" : "▴";
+      if (cel.classList) cel.classList.toggle("lei-ir-cel-aberta", !painel.hidden);
+    };
+    cel.append(m);
+  }
   return cel;
 }
 
-/* uma linha por bloco de leitura do capítulo: ler só ele, quanto leva, e marcar como lido */
+/* ler só este bloco (o registro de estudo passa a contar só ele) e marcar como lido */
+function leiIrLerBloco(b, ev) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const de = b.artigos[0];
+  leiBlocoAberto = b.chave;
+  leiIrIr(de.num, de.indice);
+}
+function leiIrMarcarBloco(d, b, lido, ev) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  leiBlocoLido(d.l.id, b.chave, !lido);
+  /* marcar o capítulo lido move o marcador para o último artigo dele: as duas coisas dizem a
+   * mesma verdade, e deixá-las discordando é o começo de "o app não sabe onde eu estou" */
+  if (!lido) leiParar(d.l.id, b.ate);
+  try { leiReg("bloco", lido ? "capítulo desmarcado" : "capítulo lido", d.l.nome + " · " + b.nome); }
+  catch (e) {}
+  leiPintar();
+  leiIrPintar();
+}
+function leiIrBotaoLido(d, b) {
+  const lido = !!d.lidos[b.chave];
+  const chk = document.createElement("button");
+  chk.type = "button";
+  chk.className = "btn-min lei-bloco-chk" + (lido ? " btn-min-ok" : "");
+  chk.textContent = lido ? t("lei_bloco_lido", { d: d.lidos[b.chave] }) : t("lei_bloco_marcar");
+  chk.title = t("lei_bloco_marcar_ajuda");
+  chk.onclick = (ev) => leiIrMarcarBloco(d, b, lido, ev);
+  return chk;
+}
+
+/* as ações do capítulo NO CABEÇALHO dele (quando o capítulo é um bloco só): sem linha extra */
+function leiIrAcoesBloco(d, b) {
+  const cx = document.createElement("span");
+  cx.className = "lei-ir-acoes";
+  const de = b.artigos[0], ate = b.artigos[b.artigos.length - 1];
+  const ler = document.createElement("button");
+  ler.type = "button";
+  ler.className = "lei-ir-ler";
+  ler.textContent = t("lei_ir_bloco_ler_curto");
+  ler.title = t("lei_ir_bloco_ler", { de: de.numCru, ate: ate.numCru });
+  ler.onclick = (ev) => leiIrLerBloco(b, ev);
+  cx.append(ler);
+  if (d.l) cx.append(leiIrBotaoLido(d, b));
+  return cx;
+}
+
+/* capítulo partido em VÁRIOS blocos de leitura: uma linha por bloco, com o tempo dele */
 function leiIrBlocoEl(d, b) {
   const lido = !!d.lidos[b.chave];
   const linha = document.createElement("div");
@@ -2329,63 +2428,47 @@ function leiIrBlocoEl(d, b) {
   nome.className = "lei-bloco-nome";
   nome.textContent = t("lei_ir_bloco_ler", { de: de.numCru, ate: ate.numCru });
   nome.title = t("lei_bloco_ir", { de: b.de, ate: b.ate });
-  nome.onclick = () => {
-    /* o registro de estudo passa a contar só este capítulo */
-    leiBlocoAberto = b.chave;
-    leiIrIr(de.num, de.indice);
-  };
+  nome.onclick = (ev) => leiIrLerBloco(b, ev);
   const meta = document.createElement("span");
   meta.className = "lei-bloco-meta";
   meta.textContent = t("lei_bloco_meta", { n: b.quantos, min: b.minutos });
   linha.append(nome, meta);
-  if (d.l) {
-    const chk = document.createElement("button");
-    chk.type = "button";
-    chk.className = "btn-min lei-bloco-chk" + (lido ? " btn-min-ok" : "");
-    chk.textContent = lido ? t("lei_bloco_lido", { d: d.lidos[b.chave] }) : t("lei_bloco_marcar");
-    chk.title = t("lei_bloco_marcar_ajuda");
-    chk.onclick = () => {
-      leiBlocoLido(d.l.id, b.chave, !lido);
-      /* marcar o capítulo lido move o marcador para o último artigo dele: as duas coisas dizem a
-       * mesma verdade, e deixá-las discordando é o começo de "o app não sabe onde eu estou" */
-      if (!lido) leiParar(d.l.id, b.ate);
-      try { leiReg("bloco", lido ? "capítulo desmarcado" : "capítulo lido", d.l.nome + " · " + b.nome); }
-      catch (e) {}
-      leiPintar();
-      leiIrPintar();
-    };
-    linha.append(chk);
-  }
+  if (d.l) linha.append(leiIrBotaoLido(d, b));
   return linha;
 }
 
-function leiIrNoEl(d, no) {
+function leiIrNoEl(d, no, fundo) {
   const det = document.createElement("details");
-  det.className = "lei-mapa-no";
+  /* a partir do 4º nível o recuo para: a árvore não vira uma escada que empurra tudo para a direita */
+  det.className = leiMapaNoClasse(no, fundo);
   const sm = document.createElement("summary");
   const rs = leiIrResumoNo(d, no);
   let txt = no.rotulo;
-  if (no.total) txt += " · " + t("lei_mapa_arts", { de: d.arts[no.de].numCru, ate: d.arts[no.ate].numCru, n: no.total });
+  if (no.total) txt += " · " + leiMapaArtsTxt(no, d.arts);
   if (d.l && rs.blocos) {
     txt += " · ~" + rs.min + " min";
-    if (rs.lidos) txt += " · " + t("lei_ir_lidos", { k: rs.lidos, n: rs.blocos });
+    if (rs.lidos && rs.blocos > 1) txt += " · " + t("lei_ir_lidos", { k: rs.lidos, n: rs.blocos });
   }
   const todosLidos = !!(d.l && rs.blocos && rs.lidos === rs.blocos);
-  sm.textContent = (todosLidos ? "✓ " : "") + txt;
-  if (todosLidos) sm.className = "lei-ir-no-lido";
+  const rot = document.createElement("span");
+  rot.className = "lei-mapa-no-txt" + (todosLidos ? " lei-mapa-no-lido" : "");
+  rot.textContent = (todosLidos ? "✓ " : "") + txt;
+  sm.append(rot);
+  const blocos = d.blocosPorNo[no.id] || [];
+  if (blocos.length === 1) sm.append(leiIrAcoesBloco(d, blocos[0]));
   det.append(sm);
   let pronto = false;
   const encher = () => {
     if (pronto) return;
     pronto = true;
-    (d.blocosPorNo[no.id] || []).forEach((b) => det.append(leiIrBlocoEl(d, b)));
+    if (blocos.length > 1) blocos.forEach((b) => det.append(leiIrBlocoEl(d, b)));
     if (no.artigos.length) {
       const g = document.createElement("div");
       g.className = "lei-ir-grade";
       no.artigos.forEach((i) => g.append(leiIrChipEl(d, d.arts[i])));
       det.append(g);
     }
-    no.filhos.forEach((f) => det.append(leiIrNoEl(d, f)));
+    no.filhos.forEach((f) => det.append(leiIrNoEl(d, f, fundo + 1)));
   };
   det.ontoggle = () => {
     if (det.open) { leiIrAbertos.add(no.id); encher(); }
@@ -2409,9 +2492,12 @@ function leiIrLinhaEl(d, a, r, u, textoArt) {
   if (u) sub.textContent = String(u.texto || "").replace(/\s+/g, " ").slice(0, 160);
   else {
     const partes = [];
-    if (r && r.questoes) partes.push(t("lei_rank_questoes", { n: r.questoes }));
-    if (r && (r.erros || r.acertos)) partes.push(t("lei_rank_placar", { e: r.erros, a: r.acertos }));
-    if (r && r.prova) partes.push(t("lei_rank_prova", { n: r.prova }));
+    /* "17 questões · 14 acertos · 3 erros": no plural certo e sem contar o que é zero */
+    const pl = (n, k) => t(k + (n === 1 ? "_1" : ""), { n });
+    if (r && r.questoes) partes.push(pl(r.questoes, "lei_rank_questoes"));
+    if (r && r.acertos) partes.push(pl(r.acertos, "lei_rank_acertos"));
+    if (r && r.erros) partes.push(pl(r.erros, "lei_rank_erros"));
+    if (r && r.prova) partes.push(pl(r.prova, "lei_rank_prova"));
     if (r && r.incisos.length) partes.push(t("lei_rank_incisos", { i: r.incisos.join(", ") }));
     if (a.num === d.parei) partes.unshift(t("lei_ir_dica_parei"));
     sub.textContent = partes.join(" · ");
@@ -2483,7 +2569,10 @@ function leiIrPintar() {
   if (!cx) return;
   cx.innerHTML = "";
   const d = leiIrDados();
-  if ($("leiIrSub")) $("leiIrSub").textContent = t("lei_ir_sub", { n: d.arts.length });
+  if ($("leiIrSub")) $("leiIrSub").textContent = t(d.arts.length === 1 ? "lei_ir_sub_1" : "lei_ir_sub", { n: d.arts.length });
+  /* a legenda só faz sentido diante da árvore (nas listas e nos estados vazios ela é ruído) */
+  const leg = $("leiIrLegenda");
+  if (leg) leg.hidden = true;
   LEI_IR_FILTROS.forEach((f) => {
     const b = $("btnLeiIrF_" + f);
     if (b && b.classList) b.classList.toggle("mat-ligado", leiIrFiltro === f);
@@ -2503,6 +2592,16 @@ function leiIrPintar() {
       p.className = "nota";
       p.textContent = vazio;
       cx.append(p);
+      if (leiIrFiltro === "parei" && !q && d.arts.length) {
+        /* "onde parei" sem marcador: em vez de um beco sem saída, o começo da lei */
+        const b0 = document.createElement("button");
+        b0.type = "button";
+        b0.className = "btn-min lei-ir-comecar";
+        b0.textContent = t("lei_ir_comecar", { a: d.arts[0].numCru });
+        b0.onclick = () => leiIrIr(d.arts[0].num, d.arts[0].indice);
+        cx.append(b0);
+        leiIrPrimeiro = () => leiIrIr(d.arts[0].num, d.arts[0].indice);
+      }
       return;
     }
     itens.forEach((it) => {
@@ -2514,7 +2613,7 @@ function leiIrPintar() {
         tit.textContent = it.no.rotulo;
         const sub = document.createElement("div");
         sub.className = "nota";
-        sub.textContent = t("lei_mapa_arts", { de: d.arts[it.no.de].numCru, ate: d.arts[it.no.ate].numCru, n: it.no.total });
+        sub.textContent = leiMapaArtsTxt(it.no, d.arts);
         const b = document.createElement("button");
         b.type = "button";
         b.className = "btn-min";
@@ -2538,6 +2637,10 @@ function leiIrPintar() {
   }
 
   /* a árvore */
+  if (leg) {
+    leg.hidden = false;
+    if ($("leiIrLegAlerta")) $("leiIrLegAlerta").hidden = !Object.keys(d.alertas).length;
+  }
   const raiz = d.est.raiz;
   if (raiz.length === 1 && raiz[0].virtual) {
     /* lei sem nenhuma divisão: só os artigos */
@@ -2557,7 +2660,7 @@ function leiIrPintar() {
     };
     raiz.forEach(marcar);
   }
-  raiz.forEach((no) => cx.append(leiIrNoEl(d, no)));
+  raiz.forEach((no) => cx.append(leiIrNoEl(d, no, 0)));
 }
 
 function leiIrAbrir(opc) {
@@ -2603,13 +2706,12 @@ function leiMapaIr(num, indice) {
 }
 
 /* Um nó da árvore: recolhido, com os artigos dele só quando se abre (lei grande não pesa) */
-function leiMapaNoEl(no, arts, pos) {
+function leiMapaNoEl(no, arts, pos, fundo) {
+  fundo = fundo || 0;
   const det = document.createElement("details");
-  det.className = "lei-mapa-no";
+  det.className = leiMapaNoClasse(no, fundo);
   const sm = document.createElement("summary");
-  sm.textContent = no.rotulo + " · " + (no.total
-    ? t("lei_mapa_arts", { de: arts[no.de].numCru, ate: arts[no.ate].numCru, n: no.total })
-    : t("lei_mapa_vazio"));
+  sm.textContent = no.rotulo + " · " + leiMapaArtsTxt(no, arts);
   det.append(sm);
   let pronto = false;
   const encher = () => {
@@ -2630,7 +2732,7 @@ function leiMapaNoEl(no, arts, pos) {
       });
       det.append(g);
     }
-    no.filhos.forEach((f) => det.append(leiMapaNoEl(f, arts, pos)));
+    no.filhos.forEach((f) => det.append(leiMapaNoEl(f, arts, pos, fundo + 1)));
   };
   det.ontoggle = () => { if (det.open) encher(); };
   det.encher = encher;
@@ -2648,12 +2750,18 @@ function leiMapaFrase(it) {
   return f + (it.tipo === "divisao_sem_nome" && it.nota ? " " + t("lei_mapa_nota_no_lugar", { o: it.nota }) : "");
 }
 
-function leiMapaItemEl(l, it) {
+/* a linha curta de uma divisão sem nome: onde está, e só isso */
+function leiMapaFraseCurta(it) {
+  return t("lei_mapa_sem_nome_linha", { r: it.rotulo, l: it.linha, n: it.numCru })
+    + (it.nota ? " " + t("lei_mapa_nota_no_lugar", { o: it.nota }) : "");
+}
+
+function leiMapaItemEl(l, it, compacto) {
   const el = document.createElement("div");
-  el.className = "duv-item lei-mapa-item";
+  el.className = "duv-item lei-mapa-item" + (compacto ? " lei-mapa-item-compacto" : "");
   const tx = document.createElement("div");
   tx.className = "nota" + (it.gravidade === "grave" ? " lei-velha" : "");
-  tx.textContent = (it.gravidade === "grave" ? "⚠ " : "• ") + leiMapaFrase(it);
+  tx.textContent = compacto ? leiMapaFraseCurta(it) : (it.gravidade === "grave" ? "⚠ " : "• ") + leiMapaFrase(it);
   el.append(tx);
   const acoes = document.createElement("div");
   acoes.className = "lei-mapa-acoes";
@@ -2712,7 +2820,7 @@ function leiMapaAbrir() {
     ex.className = "nota";
     ex.textContent = t("lei_mapa_sem_nome_expl");
     g.append(sm, ex);
-    semNome.slice(0, 40).forEach((it) => g.append(leiMapaItemEl(l, it)));
+    semNome.slice(0, 40).forEach((it) => g.append(leiMapaItemEl(l, it, true)));
     cf.append(g);
   }
   if (dg.itens.length > 40) {
