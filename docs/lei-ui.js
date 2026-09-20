@@ -276,6 +276,7 @@ function leiAbrir(disciplina, topico, id) {
   leiIdAtual = l ? l.id : "";
   leiRecitados = {};
   leiBlocoAberto = "";
+  leiFilaAberta = false;
   leiSujo = false;
 
   $("leiTexto").value = l ? String(l.texto || "") : "";
@@ -537,6 +538,19 @@ function leiPintarProcedencia() {
   if (!l) { cx.hidden = true; return; }
   cx.hidden = false;
 
+  /* AS AÇÕES DE PROCEDÊNCIA MORAM NUM MENU ("fonte e versão"): eram quatro botões e um link numa
+   * faixa que só precisa dizer de quando é a lei. Os AVISOS (repetidos, numeração) ficam de fora
+   * do menu, à vista: são a única pista de que a leitura pode estar errada. */
+  const menu = document.createElement("details");
+  menu.className = "lei-mais";
+  const msm = document.createElement("summary");
+  msm.textContent = t("lei_proc_menu") + " ▾";
+  msm.title = t("lei_proc_menu_aj");
+  const corpo = document.createElement("div");
+  corpo.className = "lei-mais-corpo";
+  menu.append(msm, corpo);
+  const fecha = (fn) => () => { menu.open = false; return fn(); };
+
   if (l.fonte) {
     const a = document.createElement("a");
     a.href = l.fonte;
@@ -545,7 +559,7 @@ function leiPintarProcedencia() {
     a.className = "lei-fonte";
     a.textContent = t("lei_fonte_abrir");
     a.title = l.fonte;
-    cx.append(a);
+    corpo.append(a);
   }
 
   const d = document.createElement("span");
@@ -564,13 +578,14 @@ function leiPintarProcedencia() {
     d.textContent = t("lei_sem_procedencia");
   }
   cx.append(d);
+  cx.append(menu);
 
   const b = document.createElement("button");
   b.className = "btn-min";
   b.textContent = t("lei_procedencia_editar");
   b.title = t("lei_procedencia_ajuda");
-  b.onclick = () => leiProcAbrir();
-  cx.append(b);
+  b.onclick = fecha(() => leiProcAbrir());
+  corpo.append(b);
 
   /* ATUALIZAR PARA NOVA VERSÃO — só faz sentido com uma base já gravada:
    * sem base não há o que comparar, e "colar nova" (leiNovaAbrir) já
@@ -581,8 +596,8 @@ function leiPintarProcedencia() {
     bA.id = "btnLeiAtualizarVersao";
     bA.textContent = t("lei_atualizar_versao");
     bA.title = t("lei_atualizar_versao_ajuda");
-    bA.onclick = () => leiAtualizarAbrir();
-    cx.append(bA);
+    bA.onclick = fecha(() => leiAtualizarAbrir());
+    corpo.append(bA);
 
     /* MAPA E CONFERÊNCIA: como o app leu esta lei (divisões, artigos) e o que parece
      * lido errado — para a lei que já está guardada, não só na hora de colar */
@@ -591,8 +606,8 @@ function leiPintarProcedencia() {
     bM.id = "btnLeiMapa";
     bM.textContent = t("lei_mapa_btn");
     bM.title = t("lei_mapa_btn_aj");
-    bM.onclick = () => leiMapaAbrir();
-    cx.append(bM);
+    bM.onclick = fecha(() => leiMapaAbrir());
+    corpo.append(bM);
 
     /* ARTIGOS REPETIDOS NUMA LEI JÁ GUARDADA. A conferência da criação só
      * vale para o que se cola de agora em diante; a lei que entrou antes
@@ -871,12 +886,34 @@ function leiJanelaMudar(delta) {
  * Espalhar "esconde isto, mostra aquilo" por três funções foi como o
  * app já chegou uma vez a um estado em que a barra de marcas ficava
  * visível no modo errado. Aqui a regra é uma linha por elemento. */
+/* A FILA DE LEIS recolhe quando não há o que escolher: com UMA lei no tópico (ou aberta pela
+ * Biblioteca) ela repetia o título. O botão "leis" da barra a abre — para trocar, colar uma nova ou
+ * usar uma guardada. Com duas ou mais leis, ou nenhuma, a fila fica à vista: aí ela é a escolha. */
+let leiFilaAberta = false;
+function leiFilaColapsavel() {
+  if (!leiAtual || !leiIdAtual) return false;
+  if (!leiAtual.chave) return true;
+  const lista = leisDoTopico(leiAtual.chave);
+  return lista.length === 1 && lista[0].id === leiIdAtual;
+}
+function leiFilaAplicar() {
+  const fila = $("leiFila");
+  const colapsavel = leiFilaColapsavel();
+  if (fila) fila.hidden = leiCheia || (colapsavel && !leiFilaAberta);
+  const b = $("btnLeiFilaMais");
+  if (b) {
+    b.hidden = !colapsavel || leiCheia;
+    if (b.classList) b.classList.toggle("btn-min-ok", colapsavel && leiFilaAberta);
+  }
+}
+
 function leiCheiaAplicar() {
   const dlg = $("dlgLeiSeca");
   if (dlg && dlg.classList) dlg.classList.toggle("lei-cheia", leiCheia);
 
-  const ref = ["leiFila", "leiSub"];
+  const ref = ["leiSub"];
   ref.forEach((id) => { const el = $(id); if (el) el.hidden = leiCheia; });
+  leiFilaAplicar();
   /* procedência e marcador já se escondem sozinhos quando não há o que
    * mostrar; na tela cheia somem de qualquer forma */
   if (leiCheia) {
@@ -5105,6 +5142,7 @@ function leiIniciar() {
   /* "IR PARA…" ABRE O MAPA DA LEI, direto. A gaveta de exibição continua gaveta. */
   liga("btnLeiNavegar", "ir para (mapa da lei)", () => leiIrAbrir());
   liga("btnLeiExibir", "gaveta exibição", () => leiGaveta("leiGavExibir"));
+  liga("btnLeiFilaMais", "leis deste tópico", () => { leiFilaAberta = !leiFilaAberta; leiFilaAplicar(); });
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
   liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());
   liga("btnLeiAjudaFechar", "fechar ajuda", () => $("dlgLeiAjuda").close());

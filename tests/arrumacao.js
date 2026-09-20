@@ -197,14 +197,34 @@ async function testes() {
     const htmlLei = fs.readFileSync(
       path.join(__dirname, "..", "docs", "index.html"), "utf8");
     const bloco = htmlLei.slice(htmlLei.indexOf('<dialog id="dlgLeiSeca"'));
-    const barra = bloco.slice(bloco.indexOf('<div class="mat-topo">'),
-                              bloco.indexOf('<div class="mat-topo lei-gaveta"'));
+    /* a barra de trabalho e' a primeira ".mat-topo", ate' o seu </div> (as marcas, na mesma
+     * linha, sao outra fileira e nao contam como botoes da barra) */
+    const iBarra = bloco.indexOf('<div class="mat-topo">');
+    const barra = bloco.slice(iBarra, bloco.indexOf('</div>', iBarra));
     const naFila = (barra.match(/<button/g) || []).length;
     /* CATORZE BOTÕES NUMA FILA SÓ VIRAM RUÍDO. Os tres de modo sao UMA
      * escolha e ficam; o resto se divide por pergunta ("onde eu vou?" e
      * "como eu vejo?"), cada uma numa gaveta que abre sob demanda. */
-    ok(naFila > 0 && naFila <= 9,
-       "A3 a barra do leitor tem " + naFila + " botoes a vista (limite: 9)");
+    ok(naFila > 0 && naFila <= 6,
+       "A3 a barra do leitor tem " + naFila + " botoes a vista (limite: 6: os tres modos, ir para, exibicao e leis)");
+
+    /* AS FAIXAS DO TOPO: o cabecalho leva ajuda/registro/fechar; a barra e as marcas dividem UMA
+     * linha; gravar e registrar estudo moram juntos no rodape. */
+    const posDe = (trecho) => bloco.indexOf(trecho);
+    const cab = bloco.slice(posDe('<div class="lei-cab">'), posDe('<div class="lei-info"'));
+    ok(/id="btnLeiAjuda"/.test(cab) && /id="btnLeiLog"/.test(cab) && /id="btnLeiFechar"/.test(cab),
+       "A3j ajuda, registro e fechar estao no cabecalho, ao lado do titulo");
+    ok(/<div class="lei-info" id="leiInfo">\s*<div class="lei-proc" id="leiProc" hidden><\/div>\s*<div class="lei-onde" id="leiOnde" hidden><\/div>\s*<\/div>/.test(bloco),
+       "A3k a procedencia e o 'onde parei' estao na MESMA faixa (.lei-info)");
+    const linha = bloco.slice(posDe('<div class="lei-barra-linha">'), posDe('id="leiGavExibir"'));
+    ok(/id="btnLeiModoLer"/.test(linha) && /id="leiMarcas"/.test(linha) && /id="btnLeiMarcaNota"/.test(linha),
+       "A3l os modos e as seis marcas dividem uma linha so");
+    ok(!/id="btnLeiSalvar"/.test(linha), "A3m o gravar saiu da barra");
+    const rodape = bloco.slice(posDe('<div class="dlg-rodape">'), posDe('</dialog>'));
+    ok(/id="btnLeiSalvar"/.test(rodape) && /id="btnLeiLido"/.test(rodape) && /id="btnLeiFechar2"/.test(rodape),
+       "A3n o gravar, o registrar estudo e o fechar estao juntos no rodape");
+    ok(posDe('id="btnLeiSalvar"') < posDe('id="btnLeiLido"'), "A3o o gravar vem antes de 'registrar estudo'");
+    ok(api.t("lei_lido") === "Registrar estudo", "A3p o botao se chama 'Registrar estudo': " + api.t("lei_lido"));
 
     /* "IR PARA…" NAO E MAIS GAVETA: abre o mapa da lei direto. A gaveta de
      * exibicao continua, fechada, e clicar de novo fecha. */
