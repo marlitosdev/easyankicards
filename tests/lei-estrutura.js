@@ -253,6 +253,38 @@ async function testes() {
     ok(api.$("dlgLeiMapa").open === true && /CTN/.test(api.$("leiMapaTitulo").textContent) && api.$("dlgLeiBib").open !== true, "G15a abre a lei e o mapa: " + api.$("leiMapaTitulo").textContent);
   }
   {
+    /* AS DIVISÕES SEM NOME (o aviso mais comum) ficam num grupo recolhido e explicado, e o relatorio
+     * da tela leva tudo o que e' preciso para relatar: os numeros, cada ponto com as linhas ao redor e a arvore */
+    const r = rodar();
+    const api = r.api;
+    api.matIniciar(); api.leiIniciar();
+    const achar = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); achar(c, pred, acc); }); return acc; };
+    const l = api.leiGuardar({ id: "lei_rel", nome: "CTN rel", texto: CTN });
+    api.leiAbrir("Direito", "Tributário", l.id);
+    api.leiMapaAbrir();
+    const cf = api.$("leiMapaConferir");
+    const grupo = achar(cf, (c) => String(c.tag || c.tagName || "").toLowerCase() === "details" && /lei-mapa-grupo/.test(c.className || ""))[0];
+    ok(grupo && /Divisões sem nome \(1\)/.test(grupo.textContent) && /não afeta os artigos nem a numeração/.test(grupo.textContent), "G18 a divisao sem nome fica num grupo explicado: " + (grupo && grupo.textContent.slice(0, 120)));
+    const itens = (el) => achar(el, (c) => /lei-mapa-item/.test(c.className || ""));
+    ok(itens(grupo).length === 1 && itens(cf).length === 4, "G18a so ela vai para o grupo; as outras tres ficam a vista: " + itens(cf).length);
+    ok(/⚠ = a leitura provavelmente está errada/.test(cf.textContent), "G18b a legenda dos sinais (⚠ e •) aparece");
+    const rel = api.leiRelatorioFluxo("mapa e conferência");
+    ok(/Mapa e conferência de CTN rel \(lei_rel\): 13 artigos · 3 divisões \(LIVRO 1, TITULO 1, CAPITULO 1\) · numeração de 1º a 12/.test(rel), "G19 o relatorio traz os numeros: " + rel.split("\n").filter((x) => /Mapa e conferência/.test(x)).join("|"));
+    ok(/a conferir: 4 \(graves: 1\) — /.test(rel) && /divisao_sem_nome 1/.test(rel) && /isolado 1/.test(rel), "G19a e o resumo do que foi apontado: " + rel.split("\n").filter((x) => /a conferir/.test(x)).join("|"));
+    ok(/\[divisao_sem_nome\/leve\] linha 12 · art\. 7º/.test(rel) && />\s+12\| CAPÍTULO II/.test(rel) && /\s11\| Art\. 6º/.test(rel) && /\s13\| Art\. 7º/.test(rel), "G19b cada ponto vem com as linhas ao redor, e a linha do ponto marcada com >: " + rel.slice(rel.indexOf("divisao_sem_nome") - 5, rel.indexOf("divisao_sem_nome") + 260));
+    ok(/árvore de divisões:/.test(rel) && /LIVRO PRIMEIRO — SISTEMA TRIBUTÁRIO NACIONAL · arts\. 2º a 12 \(12\)/.test(rel) && /\n {8}CAPÍTULO II · arts\. 7º a 12 \(7\)/.test(rel), "G19c e a arvore de divisoes, com a hierarquia: " + rel.slice(rel.indexOf("árvore")));
+    ok(/— Registro \(últimas 60 linhas\)/.test(rel) && /EasyAnkiCards 16\./.test(rel), "G19d com a versao do app e o registro");
+    ok(!/Mapa e conferência de/.test(api.leiRelatorioFluxo("artigos repetidos")), "G19e o relatorio de OUTRA tela nao leva o mapa");
+    ok(typeof api.$("btnLeiRelMapa").onclick === "function" && /Mapa e conferência de/.test(api.leiRelatorioCopiar("mapa e conferência")), "G19f o botao 'copiar relatorio desta tela' existe no mapa e copia");
+    /* a nota que veio no lugar do nome aparece no ponto */
+    const n2 = api.leiGuardar({ id: "lei_nota", nome: "Com nota", texto: "CAPÍTULO IV (Incluído pela Lei Complementar nº 236, de 2026)\nArt. 208-A. Este Capítulo.\nSeção III — (Redação dada pela Lei Complementar nº 227, de 2026)\nArt. 209. Outro." });
+    api.leiAbrir("Direito", "Tributário", n2.id);
+    api.leiMapaAbrir();
+    const txt2 = api.$("leiMapaConferir").textContent;
+    ok(/Divisões sem nome \(2\)/.test(txt2) && /Veio só a nota: \(Incluído pela Lei Complementar nº 236, de 2026\)/.test(txt2) && /Veio só a nota: \(Redação dada pela Lei Complementar nº 227, de 2026\)/.test(txt2), "G20 a nota de alteração que veio no lugar do nome e' mostrada: " + txt2.slice(0, 260));
+    ok(/nota: \(Incluído/.test(api.leiRelatorioFluxo("mapa e conferência")) || /Veio só a nota/.test(api.leiRelatorioFluxo("mapa e conferência")), "G20a e vai no relatorio");
+  }
+  {
     /* lei sem problemas e lei sem texto */
     const r = rodar();
     const api = r.api;

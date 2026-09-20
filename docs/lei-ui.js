@@ -2639,15 +2639,21 @@ function leiMapaNoEl(no, arts, pos) {
   return det;
 }
 
+let leiMapaCtx = null;        /* o que o mapa está mostrando: o relatório da tela lê daqui */
+
+function leiMapaFrase(it) {
+  const f = it.tipo === "isolado" || it.tipo === "volta" || it.tipo === "salto" || it.tipo === "recomeco"
+    ? leiNumeracaoLinhas([it])[0].texto
+    : t("lei_mapa_s_" + it.tipo, { n: it.numCru, l: it.linha, t: it.texto, b: it.base, r: it.rotulo });
+  return f + (it.tipo === "divisao_sem_nome" && it.nota ? " " + t("lei_mapa_nota_no_lugar", { o: it.nota }) : "");
+}
+
 function leiMapaItemEl(l, it) {
   const el = document.createElement("div");
   el.className = "duv-item lei-mapa-item";
   const tx = document.createElement("div");
   tx.className = "nota" + (it.gravidade === "grave" ? " lei-velha" : "");
-  const frase = it.tipo === "isolado" || it.tipo === "volta" || it.tipo === "salto" || it.tipo === "recomeco"
-    ? leiNumeracaoLinhas([it])[0].texto
-    : t("lei_mapa_s_" + it.tipo, { n: it.numCru, l: it.linha, t: it.texto, b: it.base, r: it.rotulo });
-  tx.textContent = (it.gravidade === "grave" ? "⚠ " : "• ") + frase;
+  tx.textContent = (it.gravidade === "grave" ? "⚠ " : "• ") + leiMapaFrase(it);
   el.append(tx);
   const acoes = document.createElement("div");
   acoes.className = "lei-mapa-acoes";
@@ -2671,6 +2677,7 @@ function leiMapaAbrir() {
   if (!l || !String(l.texto || "").trim()) return false;
   const dg = leiDiagnosticarLei(l.texto);
   const r = dg.resumo;
+  leiMapaCtx = { id: l.id, dg };
   $("leiMapaTitulo").textContent = t("lei_mapa_titulo", { lei: l.nome });
   $("leiMapaResumo").textContent = t("lei_mapa_resumo", { n: r.artigos, d: r.divisoes, de: r.de || "—", ate: r.ate || "—" });
 
@@ -2686,7 +2693,28 @@ function leiMapaAbrir() {
     ok.textContent = t("lei_mapa_ok");
     cf.append(ok);
   }
-  dg.itens.slice(0, 40).forEach((it) => cf.append(leiMapaItemEl(l, it)));
+  if (dg.itens.length) {
+    const lg = document.createElement("p");
+    lg.className = "nota";
+    lg.textContent = t("lei_mapa_legenda");
+    cf.append(lg);
+  }
+  const semNome = dg.itens.filter((it) => it.tipo === "divisao_sem_nome");
+  dg.itens.filter((it) => it.tipo !== "divisao_sem_nome").slice(0, 40).forEach((it) => cf.append(leiMapaItemEl(l, it)));
+  if (semNome.length) {
+    /* DIVISÃO SEM NOME é o mais leve dos avisos e o mais comum: o nome se perde na cópia. Sete
+     * itens iguais empurravam para baixo o que importa, então ficam num grupo recolhido. */
+    const g = document.createElement("details");
+    g.className = "lei-mapa-grupo";
+    const sm = document.createElement("summary");
+    sm.textContent = t("lei_mapa_grupo_sem_nome", { n: semNome.length });
+    const ex = document.createElement("p");
+    ex.className = "nota";
+    ex.textContent = t("lei_mapa_sem_nome_expl");
+    g.append(sm, ex);
+    semNome.slice(0, 40).forEach((it) => g.append(leiMapaItemEl(l, it)));
+    cf.append(g);
+  }
   if (dg.itens.length > 40) {
     const mais = document.createElement("p");
     mais.className = "nota";
@@ -3198,6 +3226,40 @@ function leiRelatorioFluxo(tela) {
       + ((x.alertas || []).length ? " [" + x.alertas.map((a) => a.k).join(",") + "]" : "")));
   }
   if (leiJaCtx) p.push("— Lei já existente: " + leiJaCtx.igual.nome + " · escolha: " + (leiJaCtx.escolha || "—"));
+  if (leiMapaCtx && /mapa/i.test(tela || "")) {
+    /* O QUE O MAPA VIU, para quem relata: os números, cada item com o trecho do texto ao redor
+     * (o que a pessoa veria em "ver no texto") e a árvore de divisões. */
+    const lm = leiDe(leiMapaCtx.id);
+    const dg = leiMapaCtx.dg;
+    if (lm) {
+      const r = dg.resumo;
+      p.push("— Mapa e conferência de " + lm.nome + " (" + lm.id + "): " + r.artigos + " artigos · " + r.divisoes + " divisões ("
+        + Object.keys(r.porTipo).map((k) => k + " " + r.porTipo[k]).join(", ") + ") · numeração de " + r.de + " a " + r.ate);
+      const porTipo = {};
+      dg.itens.forEach((x) => { porTipo[x.tipo] = (porTipo[x.tipo] || 0) + 1; });
+      p.push("  a conferir: " + dg.itens.length + " (graves: " + r.graves + ")"
+        + (dg.itens.length ? " — " + Object.keys(porTipo).map((k) => k + " " + porTipo[k]).join(", ") : ""));
+      const linhas = String(lm.texto || "").split("\n");
+      dg.itens.slice(0, 30).forEach((x) => {
+        p.push("  · [" + x.tipo + "/" + x.gravidade + "] linha " + x.linha + (x.numCru ? " · art. " + x.numCru : "") + " — " + cortar(leiMapaFrase(x), 220));
+        for (let k = Math.max(1, x.linha - 1); k <= Math.min(linhas.length, (x.linhaFim || x.linha) + 2); k++) {
+          p.push("      " + (k >= x.linha && k <= (x.linhaFim || x.linha) ? ">" : " ") + String(k).padStart(5) + "| " + cortar(linhas[k - 1], 130));
+        }
+      });
+      if (dg.itens.length > 30) p.push("  …e mais " + (dg.itens.length - 30) + " item(ns)");
+      p.push("  árvore de divisões:");
+      let feitas = 0;
+      const anda = (no, fundo) => {
+        if (feitas >= 140) return;
+        feitas++;
+        p.push("    " + "  ".repeat(fundo) + no.rotulo + " · " + (no.total ? "arts. " + dg.estrutura.artigos[no.de].numCru + " a "
+          + dg.estrutura.artigos[no.ate].numCru + " (" + no.total + ")" : "sem artigos") + (no.nota ? " [nota: " + cortar(no.nota, 60) + "]" : ""));
+        no.filhos.forEach((f) => anda(f, fundo + 1));
+      };
+      dg.estrutura.raiz.forEach((no) => anda(no, 0));
+      if (feitas >= 140) p.push("    …(árvore cortada em 140 linhas)");
+    }
+  }
   p.push("— Registro (últimas 60 linhas)");
   leiLog.slice(-60).forEach((x) => p.push("  " + String(x.q).slice(11, 19) + " [" + x.t + "] " + x.o + (x.d ? " — " + x.d : "")));
   return p.join("\n");
@@ -5219,6 +5281,7 @@ function leiIniciar() {
   liga("btnQsVincEscCancelar", "cancelar escolha de lei", () => $("dlgQsVincEsc").close());
   liga("btnQsVincEscOk", "gravar vínculo de lei", () => qsVincSalvar());
   liga("btnLeiRelDup", "relatório: artigos repetidos", () => leiRelatorioCopiar("artigos repetidos"));
+  liga("btnLeiRelMapa", "relatório: mapa e conferência", () => leiRelatorioCopiar("mapa e conferência"));
   liga("btnLeiRelPre", "relatório: revisar a colagem", () => leiRelatorioCopiar("revisar a colagem"));
   liga("btnLeiRelCob", "relatório: conferir a versão nova", () => leiRelatorioCopiar("conferir a versão nova"));
   liga("btnLeiRelUpd", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
