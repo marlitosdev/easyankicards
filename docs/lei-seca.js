@@ -3186,14 +3186,28 @@ function leisChaveComparavel(c) {
  * se aumenta a fonte, quando se abre no celular, quando se cola mais um
  * capítulo no começo. "Parei no art. 35" sobrevive a tudo isso, e ainda
  * é dizível em voz alta. */
-function leiParar(id, numArtigo) {
+function leiParar(id, numArtigo, indice) {
   const r = leiDe(id);
   if (!r) return false;
-  leiGuardar({ id, parei: leiNumNormal(numArtigo), pareiEm: new Date().toISOString() });
+  const num = leiNumNormal(numArtigo);
+  /* O NÚMERO NÃO É CHAVE ÚNICA (a CF repete quase todos entre o corpo e o ADCT): o marcador guarda
+   * também a POSIÇÃO do artigo na lista. Sem ela, marcar o art. 5º do ADCT marcava o do corpo. */
+  leiGuardar({ id, parei: num, pareiIndice: (num && Number.isInteger(indice) && indice >= 0) ? indice : -1,
+    pareiEm: new Date().toISOString() });
   try {
     reg("LEI", "marcador movido", (r.nome || id) + " · art. " + numArtigo);
   } catch (e) {}
   return true;
+}
+
+/* A POSIÇÃO do artigo marcado na lista de artigos. Vale a posição guardada quando ela ainda aponta
+ * para um artigo com o mesmo número; senão (marcador antigo, sem posição, ou texto que mudou) vale a
+ * PRIMEIRA ocorrência do número — o que sempre valeu. -1 se não há marcador ou o artigo não existe. */
+function leiIndiceDoMarcador(r, arts) {
+  if (!r || !r.parei || !arts || !arts.length) return -1;
+  const i = Number.isInteger(r.pareiIndice) ? r.pareiIndice : -1;
+  if (i >= 0 && arts[i] && arts[i].num === r.parei) return i;
+  return arts.findIndex((a) => a.num === r.parei);
 }
 
 /* Quanto da lei já foi lido, medido em artigos até o marcador. É a
@@ -3204,13 +3218,14 @@ function leiProgresso(id) {
   if (!r) return null;
   const arts = leiArtigosEfetivos(r);
   if (!arts.length) return { total: 0, lidos: 0, pct: 0, artigo: "" };
-  const i = r.parei ? arts.findIndex((a) => a.num === r.parei) : -1;
+  const i = leiIndiceDoMarcador(r, arts);
   const lidos = i < 0 ? 0 : i + 1;
   return {
     total: arts.length,
     lidos,
     pct: Math.round((lidos / arts.length) * 100),
     artigo: r.parei || "",
+    indice: i,
     /* proximo VEM DE UMA POSIÇÃO (arts[lidos]), não de uma busca por
      * número — por isso carrega o próprio índice sem ambiguidade
      * nenhuma, mesmo quando o número dele se repete mais à frente no
@@ -3440,6 +3455,7 @@ function leiMesclar(idMantida, idsAbsorvidas) {
   const anexos = (kept.anexos || []).slice();
   const siglas = String(kept.apelido || "").split(/[\s/,]+/).filter(Boolean);
   let parei = kept.parei || "", pareiEm = kept.pareiEm || "";
+  let pareiIndice = Number.isInteger(kept.pareiIndice) ? kept.pareiIndice : -1;
 
   outras.forEach((o) => {
     (o.topicos || []).forEach((t2) => { if (topicos.indexOf(t2) < 0) { topicos.push(t2); r.topicos++; } });
@@ -3460,14 +3476,14 @@ function leiMesclar(idMantida, idsAbsorvidas) {
     String(o.apelido || "").split(/[\s/,]+/).filter(Boolean).forEach((s) => {
       if (siglas.map((x) => leiTxtChave(x)).indexOf(leiTxtChave(s)) < 0) siglas.push(s);
     });
-    if (o.parei && (!parei || String(o.pareiEm || "") > String(pareiEm))) { parei = o.parei; pareiEm = o.pareiEm || ""; }
+    if (o.parei && (!parei || String(o.pareiEm || "") > String(pareiEm))) { parei = o.parei; pareiEm = o.pareiEm || ""; pareiIndice = Number.isInteger(o.pareiIndice) ? o.pareiIndice : -1; }
     ["fonte", "consultadaEm", "versao", "especie", "numero", "ano", "ente"].forEach((c) => {
       if (!kept[c] && o[c]) dados[c] = o[c];
     });
   });
   r.marcas = 0;
   Object.assign(dados, { topicos, notasArtigos: notas, notasTrechos: trechos, blocos,
-    alteracoes, repetidosOk, apelido: siglas.join(" "), parei, pareiEm });
+    alteracoes, repetidosOk, apelido: siglas.join(" "), parei, pareiEm, pareiIndice });
   if (anexos.length) dados.anexos = anexos;
   const nova = leiGuardar(dados);
   if (!nova) return null;
@@ -3693,7 +3709,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiNotaDe, leiNotaDeEm, leiNotaGuardar, leiNotaTrechoDe, leiNotaTrechoDeEm,
     leiNotaTrechoGuardar,
     leiLigar, leiDesligar, leisDoTopico, leisChaveComparavel,
-    leiParar, leiProgresso, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
+    leiParar, leiProgresso, leiIndiceDoMarcador, leiBlocoLido, leiBlocosLidos, leisMigrarDe,
     leisHojeISO,
     leiNumeroNorm, leiEspecieNorm, leiEnteDoTexto, leiChaveIdentidade, leiMesmaLei,
     leiAcharIgual, leiIdLivre, leiDuplicadasNaBiblioteca, leiMarcarDistintas,

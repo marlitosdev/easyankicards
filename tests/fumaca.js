@@ -710,7 +710,7 @@ function rodar() {
       return { hoje: gerLogSoHoje, erros: gerLogSoErros, tipo: gerLogTipo };
     },
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
-    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar,
+    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,
     leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
     leiJanelaAtual: () => leiJanela,
@@ -783,7 +783,7 @@ function rodar() {
     leiSubstituirArtigo, leiInserirArtigo,
     leiArtigos, leiArtigo, leiBlocos, leiEstruturaLei, leiCasarArtigo, leiNomeDaDivisao, leiMigrarBlocos, leisMigrarBlocosDe, leiDiagnosticarLei, leiMapaAbrir, leiMapaIr, leiCitacoes, leiIdentificar, leiNumNormal,
     leiNumOrdem, leiEmenta, leisLerTudo, leisLista, leiId, leiDe, leiGuardar,
-    leiApagar, leiLigar, leiDesligar, leisDoTopico, leiParar, leiProgresso,
+    leiApagar, leiLigar, leiDesligar, leisDoTopico, leiParar, leiProgresso, leiIndiceDoMarcador,
     leiBlocoLido, leiBlocosLidos, leisMigrarDe, LEIS_CHAVE,
     leiNotaDe, leiNotaDeEm, leiNotaTrechoDeEm, leiNotaGuardar, leiNotaAbrir, leiNotaSugerir, leiNotaSalvar,
     leiNotaTrechoDe, leiNotaTrechoGuardar, leiNotaTrechoAbrir, leiNotaTrechoMarcar,

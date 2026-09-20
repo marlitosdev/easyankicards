@@ -1424,7 +1424,7 @@ function qsUiLeiIr(c, q, botao) {
    * "leiTexto" e chama leiPintar. Chamado com o leitor fechado ele
    * vincula de verdade e PINTA UM DIÁLOGO INVISÍVEL: da cadeira de quem
    * usa, o botão não fez nada. */
-  leiAbrir(q.disciplina, q.topico);
+  leiAbrir(q.disciplina, q.topico, undefined, { semRetomar: true });
   const temOutras = lista.length > doTopico.length;
   /* sigla desconhecida e nenhuma lei no tópico: a lei que a pessoa
    * escolher na janela de vincular passa a se chamar por essa sigla */
@@ -1792,7 +1792,7 @@ function qsUiLeiEscolher(botao, q, cit) {
     bv.onclick = () => {
       qsFerFechar();
       leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
-      leiAbrir(q.disciplina, q.topico);
+      leiAbrir(q.disciplina, q.topico, undefined, { semRetomar: true });
       try {
         leiVincularAbrir(lembrar && lembrar.checked ? cit.rotulo : "");
       } catch (e) {}
@@ -1808,7 +1808,7 @@ function qsUiLeiEscolher(botao, q, cit) {
   bn.onclick = () => {
     qsFerFechar();
     leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
-    leiAbrir(q.disciplina, q.topico);
+    leiAbrir(q.disciplina, q.topico, undefined, { semRetomar: true });
     try { leiNovaAbrir(); } catch (e) {}
   };
   menu.append(bn);
@@ -1832,7 +1832,7 @@ function qsUiLei(q) {
   const ch = (typeof matChave === "function")
     ? matChave(q.disciplina, q.topico) : "";
   const antes = (typeof leiTem === "function" && ch) ? leiTem(ch) : false;
-  leiAbrir(q.disciplina, q.topico);
+  leiAbrir(q.disciplina, q.topico, undefined, { semRetomar: true });
   /* LER, e não editar: no meio de uma prova o que se quer é conferir a
    * letra do artigo. leiAbrir já decide isso pelo conteúdo, mas dizer
    * aqui torna o comportamento independente daquela decisão. */
