@@ -1385,6 +1385,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-aj-tipo>summary{cursor:pointer;font-size:12.5px;padding:3px 0}
 .lei-aj-grupo>p.nota,.lei-aj-tipo>p.nota{font-size:12px;color:var(--sutil);margin:2px 0 6px}
 .lei-aj-item>.nota{font-size:13px}
+/* LIXEIRA: o aviso "apagado — desfazer" (popover: por cima de qualquer janela) e os itens */
+.lix-barra{position:fixed;inset:auto auto 18px 50%;margin:0;transform:translateX(-50%);max-width:min(92vw,520px);
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-radius:10px;font-size:12.5px;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda);box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.lix-item .lix-vez{margin-left:auto}
 .lei-aj-item{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin:2px 0;padding:4px 0;border:none;
   border-bottom:1px solid var(--borda);border-radius:0;background:none}
 .lei-aj-item>.nota{flex:1 1 220px;margin:0}
@@ -4163,6 +4168,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
     <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
     <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
+    <button type="button" id="btnLixeira" class="link-tec" data-i18n="lix_botao" data-i18n-title="lix_botao_aj"></button>
   </div>
 </header>
 
@@ -6682,6 +6688,29 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- LIXEIRA (lixeira.js): o que você apaga vem para cá antes de sumir de vez. -->
+<dialog id="dlgLixeira" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="lix_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLixX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="lix_ajuda"></p>
+  <p class="nota" id="lixResumo"></p>
+  <div class="lei-ir-filtros" id="lixFiltros"></div>
+  <div id="lixLista" class="lei-dup-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza btn-min-perigo" id="btnLixEsvaziar" data-i18n="lix_esvaziar"></button>
+    <button class="btn btn-cinza" id="btnLixFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- O AVISO "apagado — desfazer": popover, para ficar ACIMA de qualquer janela aberta (o cartão é apagado dentro de uma). -->
+<div class="lix-barra" id="barraLixeira" popover="manual" hidden>
+  <span id="lixTxt"></span>
+  <button class="btn-min btn-min-ok" id="btnLixDesfazer" data-i18n="lix_desfazer"></button>
+  <button class="btn-min" id="btnLixVer" data-i18n="lix_ver"></button>
+</div>
+
 <dialog id="dlgLeiBib" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="lei_bib_titulo"></h3>
@@ -7492,6 +7521,7 @@ window.__sqlPromise = initSqlJs({
 <script src="geracao-log.js"></script>
 <script src="registro-tudo.js"></script>
 <script src="decisoes.js"></script>
+<script src="lixeira.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>

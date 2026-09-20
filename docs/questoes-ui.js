@@ -2549,7 +2549,11 @@ function qsUiRender() {
       bDel.textContent = t("qs_apagar");
       bDel.title = t("qs_apagar_ajuda");
       bDel.onclick = async () => {
-        if (!(await uiConfirm(t("qs_apagar_conf", { e: q.enunciado.slice(0, 90) })))) return;
+        const aviso = typeof lixAvisoRisco === "function" ? lixAvisoRisco("questao", { q }) : "";
+        if (!(await uiConfirm(t("qs_apagar_conf", { e: q.enunciado.slice(0, 90) }) + aviso))) {
+          try { lixRecusou("questao", [q.disciplina, q.topico].filter(Boolean).join(" · "), q.enunciado.slice(0, 90), { q }); } catch (e) {}
+          return;
+        }
         qsApagar(q.id);
         qsUiPintarBotaoResumo();
         qsUiRender();

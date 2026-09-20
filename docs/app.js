@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.53.0";
+const VERSAO = "16.54.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -91,8 +91,18 @@ function recortarCartao(c) {
 
 async function excluirCartao(c) {
   const resumo = (c.front || "").slice(0, 70);
-  if (!(await uiConfirm(t("confirm_excluir", { f: resumo })))) return;
+  /* o que sai, por inteiro e com a linha de onde saiu: a lixeira (lixeira.js) devolve no mesmo lugar */
+  const linhasEd = $("editor").value.split("\n");
+  const bl = blocoDoCartao(linhasEd, c.line);
+  const paraLixo = { bloco: linhasEd.slice(bl.ini, bl.fim + 1).join("\n"), linha: bl.ini + 1,
+    sep: { antes: bl.ini > 0 && !String(linhasEd[bl.ini - 1]).trim(), depois: bl.fim + 1 < linhasEd.length && !String(linhasEd[bl.fim + 1]).trim() } };
+  const aviso = typeof lixAvisoRisco === "function" ? lixAvisoRisco("cartao", paraLixo) : "";
+  if (!(await uiConfirm(t("confirm_excluir", { f: resumo }) + aviso))) {
+    try { lixRecusou("cartao", t("lix_onde_editor"), resumo, paraLixo); } catch (e) {}
+    return;
+  }
   reg("EXCLUIR", "cartão da linha " + c.line, resumo);
+  try { lixJogar({ tipo: "cartao", via: "editor", rotulo: resumo, onde: t("lix_onde_editor"), dados: paraLixo }); } catch (e) {}
   tirarBlocoDoEditor(c.line);
   toast("toast_excluido");
 }
@@ -494,6 +504,9 @@ function uiTexto(titulo, valor, dois, extra) {
  * que aí usa show() (não-modal, sem backdrop, posicionável por CSS) —
  * e a inscrição se apaga sozinha depois de usada. */
 const _abrirNaoModalUmaVez = new Set();
+/* as janelas abertas por abrirModal, na ordem em que foram abertas: quem quer aparecer DENTRO da janela
+ * de cima (o aviso da lixeira) precisa saber qual é. A top layer do navegador não deixa perguntar. */
+const _modaisAbertos = new Set();
 
 function abrirModal(id) {
   const d = typeof id === "string" ? document.getElementById(id) : id;
@@ -501,7 +514,7 @@ function abrirModal(id) {
   const naoModal = _abrirNaoModalUmaVez.has(d.id);
   _abrirNaoModalUmaVez.delete(d.id);
   try {
-    if (!d.open) { if (naoModal) d.show(); else d.showModal(); }
+    if (!d.open) { if (naoModal) d.show(); else d.showModal(); _modaisAbertos.delete(d); _modaisAbertos.add(d); }
   } catch (e) {
     /* já aberto, ou não suporta modal: não é motivo para derrubar o fluxo */
     try { d.show && d.show(); } catch (x) {}
