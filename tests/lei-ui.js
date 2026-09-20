@@ -453,16 +453,17 @@ async function testes() {
 
     /* os capitulos agora vivem no MAPA ("ir para…"): lei pequena abre inteira */
     api.leiIrAbrir();
-    const blocos = api.$("leiIrGrade").querySelectorAll(".lei-bloco");
-    ok(blocos.length === 2,
-       "U5 deviam aparecer 2 capitulos, apareceram " + blocos.length);
-    const txt = blocos.map((b) => b.textContent).join(" | ");
+    /* cada capítulo (um bloco só) leva "ler" e "marcar lido" no próprio cabeçalho */
+    const marcas = api.$("leiIrGrade").querySelectorAll(".lei-bloco-chk");
+    ok(marcas.length === 2,
+       "U5 deviam aparecer 2 capitulos, apareceram " + marcas.length);
+    const txt = api.$("leiIrGrade").querySelectorAll("summary").map((b) => b.textContent).join(" | ");
     ok(/min/.test(txt),
        "U5b o capitulo nao diz quanto tempo leva — e o que decide se cabe hoje: "
        + txt);
-    ok(/artigos/.test(txt), "U5c o capitulo nao diz quantos artigos tem");
+    ok(/arts\./.test(txt), "U5c o capitulo nao diz quantos artigos tem");
 
-    const bMarcar = blocos[0].querySelectorAll("button")
+    const bMarcar = marcas
       .filter((b) => /marcar lido/i.test(b.textContent))[0];
     ok(!!bMarcar, "U5d falta o botao de marcar o capitulo como lido");
     bMarcar.onclick();
