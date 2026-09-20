@@ -3064,18 +3064,30 @@ function leiMapaFrase(it) {
   return f + (it.tipo === "divisao_sem_nome" && it.nota ? " " + t("lei_mapa_nota_no_lugar", { o: it.nota }) : "");
 }
 
-/* a linha curta de uma divisão sem nome: onde está, e só isso */
-function leiMapaFraseCurta(it) {
-  return t("lei_mapa_sem_nome_linha", { r: it.rotulo, l: it.linha, n: it.numCru })
-    + (it.nota ? " " + t("lei_mapa_nota_no_lugar", { o: it.nota }) : "");
+/* O rótulo curto de um ATO de topo: o ADCT aparece como "ADCT" */
+function leiRotuloAto(rot) {
+  return /TRANSIT[ÓO]RIAS/i.test(String(rot || "")) ? "ADCT" : String(rot || "");
 }
 
-function leiMapaItemEl(l, it, compacto) {
+/* a linha curta de um ponto: onde está e o quê, em UMA linha. A frase inteira (com a explicação) vai
+ * na dica do ponto e no relatório. */
+function leiMapaFraseCurta(it) {
+  if (it.tipo === "divisao_sem_nome") {
+    return t("lei_mapa_sem_nome_linha", { r: it.rotulo, l: it.linha, n: it.numCru })
+      + (it.nota ? " " + t("lei_mapa_nota_no_lugar", { o: it.nota }) : "");
+  }
+  return t("lei_mapa_c_" + it.tipo, { n: it.numCru, l: it.linha, t: it.texto, b: it.base, de: it.de || "—", k: it.nFaltam || 0 });
+}
+
+/* UM PONTO A CONFERIR, EM UMA LINHA: a bolinha da gravidade (vermelha, âmbar ou cinza), onde está e o
+ * quê, "ir ao artigo" e "ver no texto" (o trecho com os vizinhos). Antes eram três blocos por ponto. */
+function leiMapaItemEl(l, it) {
   const el = document.createElement("div");
-  el.className = "duv-item lei-mapa-item" + (compacto ? " lei-mapa-item-compacto" : "");
+  el.className = "duv-item lei-mapa-item lei-mapa-item-compacto lei-mapa-g-" + (it.gravidade || "leve");
+  el.title = leiMapaFrase(it);
   const tx = document.createElement("div");
-  tx.className = "nota" + (it.gravidade === "grave" ? " lei-velha" : "");
-  tx.textContent = compacto ? leiMapaFraseCurta(it) : (it.gravidade === "grave" ? "⚠ " : "• ") + leiMapaFrase(it);
+  tx.className = "nota";
+  tx.textContent = leiMapaFraseCurta(it);
   el.append(tx);
   const acoes = document.createElement("div");
   acoes.className = "lei-mapa-acoes";
@@ -3092,6 +3104,20 @@ function leiMapaItemEl(l, it, compacto) {
   return el;
 }
 
+/* um grupo RECOLHIDO de pontos, com uma frase que explica o que ele é */
+function leiMapaGrupoEl(l, titulo, expl, itens) {
+  const g = document.createElement("details");
+  g.className = "lei-mapa-grupo";
+  const sm = document.createElement("summary");
+  sm.textContent = titulo;
+  const ex = document.createElement("p");
+  ex.className = "nota";
+  ex.textContent = expl;
+  g.append(sm, ex);
+  itens.slice(0, 40).forEach((it) => g.append(leiMapaItemEl(l, it)));
+  return g;
+}
+
 function leiMapaAbrir() {
   const dlg = $("dlgLeiMapa");
   if (!dlg) return false;
@@ -3101,47 +3127,43 @@ function leiMapaAbrir() {
   const r = dg.resumo;
   leiMapaCtx = { id: l.id, dg };
   $("leiMapaTitulo").textContent = t("lei_mapa_titulo", { lei: l.nome });
-  $("leiMapaResumo").textContent = t("lei_mapa_resumo", { n: r.artigos, d: r.divisoes, de: r.de || "—", ate: r.ate || "—" });
+  /* o corpo da lei e, à parte, cada ATO de topo (o ADCT): "1º a 250 · ADCT de 1º a 138" */
+  $("leiMapaResumo").textContent = t("lei_mapa_resumo", { n: r.artigos, d: r.divisoes, de: r.de || "—", ate: r.ate || "—" })
+    + (r.atos || []).map((a) => " · " + t("lei_mapa_resumo_ato", { r: leiRotuloAto(a.rotulo), de: a.de, ate: a.ate })).join("");
 
+  /* A TELA É QUIETA: uma linha diz se há o que fazer. Só os pontos GRAVES ficam à vista; os avisos e as
+   * divisões sem nome (o mais comum, e o mais leve) ficam em grupos recolhidos. */
   const cf = $("leiMapaConferir");
   cf.innerHTML = "";
-  const tit = document.createElement("div");
-  tit.className = "lei-mapa-tit";
-  tit.textContent = t("lei_mapa_conferir", { n: dg.itens.length });
-  cf.append(tit);
-  if (!dg.itens.length) {
-    const ok = document.createElement("p");
-    ok.className = "nota";
-    ok.textContent = t("lei_mapa_ok");
-    cf.append(ok);
-  }
-  if (dg.itens.length) {
-    const lg = document.createElement("p");
-    lg.className = "nota";
-    lg.textContent = t("lei_mapa_legenda");
-    cf.append(lg);
-  }
+  const graves = dg.itens.filter((it) => it.gravidade === "grave");
   const semNome = dg.itens.filter((it) => it.tipo === "divisao_sem_nome");
-  dg.itens.filter((it) => it.tipo !== "divisao_sem_nome").slice(0, 40).forEach((it) => cf.append(leiMapaItemEl(l, it)));
-  if (semNome.length) {
-    /* DIVISÃO SEM NOME é o mais leve dos avisos e o mais comum: o nome se perde na cópia. Sete
-     * itens iguais empurravam para baixo o que importa, então ficam num grupo recolhido. */
-    const g = document.createElement("details");
-    g.className = "lei-mapa-grupo";
-    const sm = document.createElement("summary");
-    sm.textContent = t("lei_mapa_grupo_sem_nome", { n: semNome.length });
-    const ex = document.createElement("p");
-    ex.className = "nota";
-    ex.textContent = t("lei_mapa_sem_nome_expl");
-    g.append(sm, ex);
-    semNome.slice(0, 40).forEach((it) => g.append(leiMapaItemEl(l, it, true)));
-    cf.append(g);
+  const avisos = dg.itens.filter((it) => it.gravidade !== "grave" && it.tipo !== "divisao_sem_nome");
+  const pl = (n, k) => t(k + (n === 1 ? "_1" : ""), { n });
+  const resto = [];
+  if (avisos.length) resto.push(pl(avisos.length, "lei_mapa_n_avisos"));
+  if (semNome.length) resto.push(pl(semNome.length, "lei_mapa_n_sem_nome"));
+  const est = document.createElement("div");
+  if (!dg.itens.length) {
+    est.className = "lei-mapa-estado lei-mapa-estado-ok";
+    est.textContent = t("lei_mapa_ok");
+  } else {
+    est.className = "lei-mapa-estado " + (graves.length ? "lei-mapa-estado-grave" : "lei-mapa-estado-ok");
+    est.textContent = (graves.length ? t("lei_mapa_est_grave", { n: graves.length }) : t("lei_mapa_est_ok"))
+      + resto.map((x) => " · " + x).join("");
   }
-  if (dg.itens.length > 40) {
-    const mais = document.createElement("p");
-    mais.className = "nota";
-    mais.textContent = t("lei_mapa_mais", { n: dg.itens.length - 40 });
-    cf.append(mais);
+  cf.append(est);
+  graves.slice(0, 40).forEach((it) => cf.append(leiMapaItemEl(l, it)));
+  if (avisos.length) cf.append(leiMapaGrupoEl(l, t("lei_mapa_grupo_avisos", { n: avisos.length }), t("lei_mapa_avisos_expl"), avisos));
+  if (semNome.length) {
+    /* DIVISÃO SEM NOME é o mais leve dos avisos e o mais comum: o nome se perde na cópia */
+    cf.append(leiMapaGrupoEl(l, t("lei_mapa_grupo_sem_nome", { n: semNome.length }), t("lei_mapa_sem_nome_expl"), semNome));
+  }
+  const mais = Math.max(0, graves.length - 40) + Math.max(0, avisos.length - 40) + Math.max(0, semNome.length - 40);
+  if (mais > 0) {
+    const m = document.createElement("p");
+    m.className = "nota";
+    m.textContent = t("lei_mapa_mais", { n: mais });
+    cf.append(m);
   }
 
   const av = $("leiMapaArvore");
@@ -3688,7 +3710,8 @@ function leiRelatorioFluxo(tela) {
     if (lm) {
       const r = dg.resumo;
       p.push("— Mapa e conferência de " + lm.nome + " (" + lm.id + "): " + r.artigos + " artigos · " + r.divisoes + " divisões ("
-        + Object.keys(r.porTipo).map((k) => k + " " + r.porTipo[k]).join(", ") + ") · numeração de " + r.de + " a " + r.ate);
+        + Object.keys(r.porTipo).map((k) => k + " " + r.porTipo[k]).join(", ") + ") · numeração de " + r.de + " a " + r.ate
+        + (r.atos || []).map((a) => " · " + leiRotuloAto(a.rotulo) + " " + a.de + " a " + a.ate).join(""));
       const porTipo = {};
       dg.itens.forEach((x) => { porTipo[x.tipo] = (porTipo[x.tipo] || 0) + 1; });
       p.push("  a conferir: " + dg.itens.length + " (graves: " + r.graves + ")"
@@ -3706,8 +3729,8 @@ function leiRelatorioFluxo(tela) {
       const anda = (no, fundo) => {
         if (feitas >= 140) return;
         feitas++;
-        p.push("    " + "  ".repeat(fundo) + no.rotulo + " · " + (no.total ? "arts. " + dg.estrutura.artigos[no.de].numCru + " a "
-          + dg.estrutura.artigos[no.ate].numCru + " (" + no.total + ")" : "sem artigos") + (no.nota ? " [nota: " + cortar(no.nota, 60) + "]" : ""));
+        p.push("    " + "  ".repeat(fundo) + no.rotulo + " · " + leiMapaArtsTxt(no, dg.estrutura.artigos)
+          + (no.nota ? " [nota: " + cortar(no.nota, 60) + "]" : ""));
         no.filhos.forEach((f) => anda(f, fundo + 1));
       };
       dg.estrutura.raiz.forEach((no) => anda(no, 0));

@@ -228,9 +228,11 @@ async function testes() {
     const txt = api.$("dlgLeiMapa").textContent || "";
     ok(/13 artigos · 3 divisões · numeração de 1º a 12/.test(api.$("leiMapaResumo").textContent), "G10a o resumo na tela: " + api.$("leiMapaResumo").textContent);
     const itens = achar(api.$("leiMapaConferir"), (c) => /lei-mapa-item/.test(c.className || ""));
-    ok(itens.length === 4 && /SISTEMA DOS TRIBUTOS INDEVIDOS/.test(itens[0].textContent), "G11 quatro itens a conferir, o primeiro e' o titulo solto: " + itens.length + " " + (itens[0] && itens[0].textContent.slice(0, 80)));
+    const titulo = itens.filter((x) => /SISTEMA DOS TRIBUTOS INDEVIDOS/.test(x.textContent))[0];
+    ok(itens.length === 4 && !!titulo && /título solto/.test(titulo.textContent), "G11 quatro pontos a conferir, um deles o titulo solto: " + itens.length + " " + (titulo && titulo.textContent.slice(0, 80)));
+    ok(/isolado/.test(itens[0].textContent), "G11-0 o GRAVE (art. 40 isolado) vem primeiro, a vista: " + itens[0].textContent.slice(0, 60));
     ok(itens.every((it) => achar(it, (c) => c.tag === "summary" || c.tagName === "SUMMARY").length === 1), "G11a cada item tem 'ver no texto' (o trecho com os vizinhos)");
-    ok(achar(itens[0], (c) => c.tag === "button" || c.tagName === "BUTTON").length === 1, "G11b e o botao 'ir ao artigo'");
+    ok(achar(titulo, (c) => c.tag === "button" || c.tagName === "BUTTON").length === 1, "G11b e o botao 'ir ao artigo'");
     ok(!/undefined/.test(txt), "G11c nenhum texto 'undefined' na tela");
     /* a árvore: o ramo onde parei (art. 4º) já vem aberto */
     const arv = Array.from(api.$("leiMapaArvore").children);
@@ -263,15 +265,23 @@ async function testes() {
     api.leiAbrir("Direito", "Tributário", l.id);
     api.leiMapaAbrir();
     const cf = api.$("leiMapaConferir");
-    const grupo = achar(cf, (c) => String(c.tag || c.tagName || "").toLowerCase() === "details" && /lei-mapa-grupo/.test(c.className || ""))[0];
+    const grupos = achar(cf, (c) => String(c.tag || c.tagName || "").toLowerCase() === "details" && /lei-mapa-grupo/.test(c.className || ""));
+    const grupo = grupos.filter((g) => /Divisões sem nome/.test(g.textContent))[0];
     ok(grupo && /Divisões sem nome \(1\)/.test(grupo.textContent) && /não afeta os artigos nem a numeração/.test(grupo.textContent), "G18 a divisao sem nome fica num grupo explicado: " + (grupo && grupo.textContent.slice(0, 120)));
     const itens = (el) => achar(el, (c) => /lei-mapa-item/.test(c.className || ""));
-    ok(itens(grupo).length === 1 && itens(cf).length === 4, "G18a so ela vai para o grupo; as outras tres ficam a vista: " + itens(cf).length);
-    ok(/⚠ = a leitura provavelmente está errada/.test(cf.textContent), "G18b a legenda dos sinais (⚠ e •) aparece");
+    ok(itens(grupo).length === 1 && itens(cf).length === 4, "G18a so ela vai para o grupo dela; os outros pontos ficam nos avisos ou a vista: " + itens(cf).length);
+    /* A TELA É QUIETA: o grave fica a vista, fora de qualquer grupo; os avisos ficam recolhidos */
+    const avisos = grupos.filter((g) => /^Avisos \(2\)/.test(g.textContent))[0];
+    ok(!!avisos && avisos.open !== true && grupo.open !== true && itens(avisos).length === 2, "G18a1 o grupo 'Avisos (2)' e o das divisoes sem nome nascem RECOLHIDOS: " + grupos.map((g) => g.open).join(","));
+    ok(grupos.every((g) => !/isolado/.test(g.textContent)), "G18a2 o ponto grave nao esta dentro de nenhum grupo recolhido");
+    ok(/⚠ 1 a conferir · 2 avisos · 1 divisão sem nome/.test(cf.children[0].textContent) && /lei-mapa-estado-grave/.test(cf.children[0].className), "G18a3 a linha de estado diz o que ha: " + cf.children[0].textContent);
+    ok(itens(cf).filter((x) => /lei-mapa-g-grave/.test(x.className)).length === 1 && itens(cf).filter((x) => /lei-mapa-g-aviso/.test(x.className)).length === 2 && itens(cf).filter((x) => /lei-mapa-g-leve/.test(x.className)).length === 1, "G18b cada ponto leva a classe da sua gravidade (a bolinha vermelha, ambar ou cinza)");
     /* a divisão sem nome é UMA LINHA (onde está · ir · ver no texto), e não um cartão de três linhas */
     const it0 = itens(grupo)[0];
     ok(/lei-mapa-item-compacto/.test(it0.className) && /^CAPÍTULO II · linha 12 · art\. 7º/.test(it0.textContent) && !/sem nome no texto guardado/.test(it0.textContent), "G18c a linha curta da divisao sem nome: " + it0.textContent.slice(0, 90));
-    ok(achar(cf, (c) => /lei-mapa-item-compacto/.test(c.className || "")).length === 1, "G18d so o grupo usa a linha compacta: os pontos que importam continuam completos");
+    ok(achar(cf, (c) => /lei-mapa-item-compacto/.test(c.className || "")).length === 4, "G18d todo ponto e' UMA linha (nao tres blocos)");
+    const tit18 = itens(cf).filter((x) => /SISTEMA DOS TRIBUTOS INDEVIDOS/.test(x.textContent))[0];
+    ok(!!tit18 && /parece o título de uma divisão/.test(tit18.title || "") && !/parece o título/.test(tit18.textContent), "G18d1 a explicacao longa fica na dica; a linha e' curta");
     ok(achar(it0, (c) => (c.tag === "button" || c.tagName === "BUTTON")).length === 1 && achar(it0, (c) => (c.tag === "summary" || c.tagName === "SUMMARY")).length === 1, "G18e a linha compacta guarda o 'ir ao artigo' e o 'ver no texto'");
     ok(!/✏/.test(api.t("lei_mapa_ajuda")) && /“editar”/.test(api.t("lei_mapa_ajuda")), "G18f a explicacao nomeia o botao pelo nome (nao por um glifo minusculo): " + api.t("lei_mapa_ajuda"));
     /* a árvore da conferência tem a mesma tipografia e o mesmo teto de recuo do mapa */
