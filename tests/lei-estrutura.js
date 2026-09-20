@@ -165,7 +165,8 @@ async function testes() {
     api.leiAbrir("Direito", "Tributário", l.id);
     const dep = api.leiDe(l.id);
     ok(!("CAPÍTULO I — Disposições Gerais" in dep.blocos) && Object.keys(dep.blocos).length === 3, "U1 ao abrir, a lei antiga e' migrada: " + JSON.stringify(dep.blocos));
-    const linhas = () => api.$("leiBlocosCx").querySelectorAll(".lei-bloco");
+    api.leiIrAbrir();       /* os capitulos vivem no mapa; lei pequena abre inteira */
+    const linhas = () => api.$("leiIrGrade").querySelectorAll(".lei-bloco");
     const lidas = () => Array.from(linhas()).map((x) => /lei-bloco-lido/.test(x.className || "") ? 1 : 0).join("");
     ok(lidas() === "01101", "U1a os tres 'Capítulo I' aparecem lidos, como antes: " + lidas());
     const chk = Array.from(linhas()[1].querySelectorAll("button")).filter((b) => /lei-bloco-chk/.test(b.className || ""))[0];

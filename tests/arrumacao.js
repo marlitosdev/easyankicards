@@ -206,28 +206,22 @@ async function testes() {
     ok(naFila > 0 && naFila <= 9,
        "A3 a barra do leitor tem " + naFila + " botoes a vista (limite: 9)");
 
-    /* as gavetas nascem fechadas */
-    ok(api.$("leiGavNavegar").hidden === true,
-       "A3b a gaveta de navegacao nasceu aberta");
+    /* "IR PARA…" NAO E MAIS GAVETA: abre o mapa da lei direto. A gaveta de
+     * exibicao continua, fechada, e clicar de novo fecha. */
+    ok(!api.$("leiGavNavegar"), "A3b 'ir para…' ainda tem uma gaveta com tres botoes");
     ok(api.$("leiGavExibir").hidden === true,
        "A3c a gaveta de exibicao nasceu aberta");
-
-    api.$("btnLeiNavegar").onclick();
-    ok(api.$("leiGavNavegar").hidden === false, "A3d a gaveta nao abriu");
-    /* UMA DE CADA VEZ: duas abertas devolveriam a fila de catorze que
-     * elas existem para desfazer. */
     api.$("btnLeiExibir").onclick();
-    ok(api.$("leiGavExibir").hidden === false, "A3e a segunda gaveta nao abriu");
-    ok(api.$("leiGavNavegar").hidden === true,
-       "A3f as duas gavetas ficaram abertas ao mesmo tempo");
-    /* clicar de novo fecha */
+    ok(api.$("leiGavExibir").hidden === false, "A3e a gaveta de exibicao nao abriu");
     api.$("btnLeiExibir").onclick();
     ok(api.$("leiGavExibir").hidden === true,
        "A3g clicar de novo nao fechou a gaveta");
 
-    /* e os botoes continuam existindo — foram movidos, nao removidos */
-    ["btnLeiBlocos", "btnLeiIr", "btnLeiRank", "btnLeiCheia",
-     "btnLeiMaior", "btnLeiMenor", "btnLeiJanelaMais"].forEach((id) => {
+    /* os tres botoes viraram UMA tela (o mapa), e o resto continua existindo */
+    ["btnLeiBlocos", "btnLeiIr", "btnLeiRank"].forEach((id) => {
+      ok(!api.$(id), "A3i o botao " + id + " devia ter sido absorvido pelo mapa da lei");
+    });
+    ["btnLeiNavegar", "btnLeiCheia", "btnLeiMaior", "btnLeiMenor", "btnLeiJanelaMais"].forEach((id) => {
       ok(typeof api.$(id).onclick === "function",
          "A3h o botao " + id + " sumiu junto com a arrumacao");
     });

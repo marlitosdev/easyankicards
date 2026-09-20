@@ -321,7 +321,6 @@ async function testes() {
       ["btnLeiProcFechar", "dlgLeiProc"],
       ["btnLeiVincFechar", "dlgLeiVincular"],
       ["btnLeiClozeFechar", "dlgLeiCloze"],
-      ["btnLeiRankFechar", "dlgLeiRank"],
       ["btnLeiIrFechar", "dlgLeiIr"],
     ];
     FECHAM.forEach(([bid, did]) => {
