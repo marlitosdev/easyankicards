@@ -52,8 +52,23 @@ const LEI_RE_ARTIGO =
  * Serve para dois fins: partir a lei em blocos de leitura e dizer, ao
  * lado do artigo, em que parte da lei ele está — "art. 35, no capítulo
  * do exercício financeiro" localiza muito melhor que "art. 35". */
+/* O número da divisão pode vir por extenso ("LIVRO PRIMEIRO", "TÍTULO SEGUNDO" — o CTN e os códigos
+ * antigos), em romano com letra colada ("TÍTULO V-A"), em romano, "único" ou em algarismos. Cada
+ * alternativa fecha com "não vem letra depois": sem isso "C" de "CÍVICO" virava o romano 100. */
 const LEI_RE_DIVISAO =
-  /^[\s>*]*(LIVRO|PARTE|T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O)\s+([IVXLCDM]+|[ÚU]NIC[AO]|\d{1,3}[ªº]?)\b[\s.:\-–—]*(.*)$/i;
+  /^[\s>*]*(LIVRO|PARTE|T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O)\s+((?:PRIMEIR|SEGUND|TERCEIR|QUART|QUINT|SEXT|S[ÉE]TIM|OITAV|NON|D[ÉE]CIM)[OA](?![A-Za-zÀ-ú])|[IVXLCDM]+(?:-[A-Z])?(?![A-Za-zÀ-ú])|[ÚU]NIC[AO](?![A-Za-zÀ-ú])|\d{1,3}[ªº]?(?![A-Za-zÀ-ú0-9]))[\s.:\-–—]*(.*)$/i;
+
+/* Divisão SEM número, escrita numa linha só: "Disposições Finais e Transitórias", "PARTE GERAL".
+ * Só estas frases: uma linha qualquer em maiúsculas não é divisão. */
+const LEI_RE_DIVISAO_LIVRE =
+  /^[\s>*]*(DISPOSI[ÇC][ÕO]ES\s+(?:FINAIS|TRANSIT[ÓO]RIAS|PRELIMINARES)(?:\s+E\s+(?:FINAIS|TRANSIT[ÓO]RIAS|GERAIS))?|PARTE\s+(?:GERAL|ESPECIAL))\s*$/i;
+
+/* A nota "(Redação dada pela LC 227, de 2026)" não é o NOME do capítulo. */
+const LEI_RE_NOTA_DIVISAO =
+  /\(\s*(?:Reda[çc][ãa]o\s+dada|Inclu[íi]d[oa]|Revogad[oa]|Vetad[oa]|Vide|Vig[êe]ncia|Produ[çc][ãa]o\s+de\s+efeito|Renumerad[oa])[^)]*\)/gi;
+
+/* Quanto mais alto o nível, mais fundo na árvore: Parte › Livro › Título › Capítulo › Seção › Subseção */
+const LEI_NIVEL_DIVISAO = { PARTE: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 3, CAPITULO: 4, SECAO: 5, SUBSECAO: 6 };
 
 /* Ordinal do artigo: "1º" e "1" são o MESMO artigo escrito de dois
  * jeitos. Sem normalizar, "onde parei" gravado como "1º" nunca mais
@@ -123,9 +138,44 @@ function leiLerFaixaRevogada(linha) {
     rotulo: "Arts. " + ini + " a " + fim, len: m[0].length };
 }
 
-function leiArtigos(texto) {
+/* "Art. 178 - A isenção, salvo…" É O ARTIGO 178, não o 178-A.
+ *
+ * O CTN escreve o artigo 178 assim (hífen com espaços e o artigo "A" logo depois). A regex lê
+ * "- A" como sufixo de letra, e o leitor criava um "178-A" que não existe, deixando o 178 de fora
+ * da numeração. O sufixo de verdade vem colado ("Art. 178-A") ou, com espaços, seguido de outro
+ * começo de frase (maiúscula, número, aspas) ou do fim da linha. Letra minúscula, ou letra seguida
+ * de palavra em minúscula, é o artigo/pronome "a": fica no texto. */
+function leiCasarArtigo(linha) {
+  const s = String(linha == null ? "" : linha);
+  const a = s.match(LEI_RE_ARTIGO);
+  if (!a) return null;
+  const suf = a[1].match(/[-–]\s*([A-Za-z])$/);
+  if (!suf) return a;
+  if (!/\s[-–]|[-–]\s/.test(a[1])) return a;             /* colado ("178-A"): sufixo de verdade */
+  const resto = s.slice(a[0].length);
+  const proxima = (resto.match(/^\s*(\S)/) || [])[1] || "";
+  const minuscula = suf[1] !== suf[1].toUpperCase() || (proxima && proxima !== proxima.toUpperCase());
+  if (!minuscula) return a;
+  return s.match(/^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°ª])?)\s*[.\-–—)]?\s*/i) || a;
+}
+
+/* Separa o NOME de uma divisão das notas de alteração que vêm coladas nele. */
+function leiNomeDaDivisao(bruto) {
+  const notas = [];
+  const nome = String(bruto == null ? "" : bruto)
+    .replace(LEI_RE_NOTA_DIVISAO, (m) => { notas.push(m.replace(/\s+/g, " ").trim()); return " "; })
+    .replace(/\s+/g, " ").replace(/^[\s.:\-–—]+|[\s.:\-–—]+$/g, "");
+  return { nome, nota: notas.join(" ") };
+}
+
+/* O CORAÇÃO: lê o texto e devolve os artigos e as DIVISÕES (Parte › Livro › Título › Capítulo ›
+ * Seção), com a árvore montada. Cada divisão tem um id ESTÁVEL — o caminho por tipo e número, não
+ * o nome: "TITULO I>CAPITULO I#2" é o segundo "Capítulo I" dentro do Título I. É esse id que marca
+ * "capítulo lido", e é por ele que dois "CAPÍTULO I — Disposições Gerais" deixam de ser o mesmo. */
+function leiLerLei(texto) {
   const linhas = String(texto || "").split("\n");
   const artigos = [];
+  const divisoes = [];
   let atual = null;
   let divisao = null;
   /* O Planalto quebra o cabeçalho em duas linhas com muita frequência:
@@ -137,6 +187,24 @@ function leiArtigos(texto) {
    * de leitura se chamaria "CAPÍTULO II" — um algarismo romano nu, que
    * não diz do que trata e não ajuda a escolher o que ler hoje. */
   let esperaNome = false;
+  const pilha = [];
+  const vezes = {};
+
+  const rotular = (d) => { d.rotulo = (d.rotuloBase + (d.nome ? " — " + d.nome : "")).trim(); };
+  const abrir = (tipo, num, base, nome, nota, linha) => {
+    const nivel = LEI_NIVEL_DIVISAO[tipo] || 4;
+    while (pilha.length && pilha[pilha.length - 1].nivel >= nivel) pilha.pop();
+    const pai = pilha.length ? pilha[pilha.length - 1] : null;
+    const chave = num ? tipo + " " + num : tipo + "|" + base.toUpperCase().replace(/\s+/g, " ");
+    const k = (pai ? pai.id : "") + "|" + chave;
+    vezes[k] = (vezes[k] || 0) + 1;
+    const d = { id: (pai ? pai.id + ">" : "") + chave + (vezes[k] > 1 ? "#" + vezes[k] : ""),
+      tipo, nivel, num, nome, nota, rotuloBase: base, rotulo: "", linha, pai, caminho: [] };
+    rotular(d);
+    divisoes.push(d);
+    pilha.push(d);
+    return d;
+  };
 
   linhas.forEach((linha, i) => {
     const d = linha.match(LEI_RE_DIVISAO);
@@ -144,28 +212,38 @@ function leiArtigos(texto) {
       const cru = String(linha).trim();
       if (!cru) return;                      /* linha em branco: continua esperando */
       esperaNome = false;
-      if (!LEI_RE_ARTIGO.test(linha) && cru.length <= 90 && divisao && !divisao.nome) {
-        divisao.nome = cru.replace(/^[\s.:\-–—]+/, "");
-        divisao.rotulo = (divisao.rotuloBase + " — " + divisao.nome).trim();
+      if (!leiCasarArtigo(linha) && cru.length <= 90 && divisao && !divisao.nome) {
+        const n = leiNomeDaDivisao(cru);
+        divisao.nome = n.nome;
+        divisao.nota = [divisao.nota, n.nota].filter(Boolean).join(" ");
+        rotular(divisao);
         return;
       }
     }
     if (d) {
       const tipo = d[1].toUpperCase()
         .replace("Í", "I").replace("Ç", "C").replace("Ã", "A");
-      const base = (d[1] + " " + d[2]).replace(/\s+/g, " ").trim();
-      divisao = {
-        tipo,
-        num: d[2].toUpperCase(),
-        nome: String(d[3] || "").trim(),
-        rotuloBase: base,
-        rotulo: (base + (d[3] ? " — " + String(d[3]).trim() : "")).trim(),
-        linha: i + 1,
-      };
+      const n = leiNomeDaDivisao(d[3]);
+      let nome = n.nome;
+      let num = d[2].toUpperCase();
+      let base = (d[1] + " " + d[2]).replace(/\s+/g, " ").trim();
+      /* "TÍTULO V - A": a letra sozinha é o sufixo do número (Título V-A), não o nome */
+      if (/^[IVXLCDM]+$/.test(num) && /^[A-Z]$/.test(nome)) {
+        num += "-" + nome; base += "-" + nome; nome = "";
+      }
+      divisao = abrir(tipo, num, base, nome, n.nota, i + 1);
       esperaNome = !divisao.nome;
       /* a divisão também não é artigo: se o cabeçalho cair dentro do
        * texto do artigo anterior, o bloco seguinte herdaria o artigo
        * errado na hora de contar o progresso */
+      atual = null;
+      return;
+    }
+    const dl = linha.match(LEI_RE_DIVISAO_LIVRE);
+    if (dl) {
+      const base = dl[1].replace(/\s+/g, " ").trim();
+      divisao = abrir(/^PARTE/i.test(base) ? "PARTE" : "DISPOSICOES", "", base, "", "", i + 1);
+      esperaNome = false;
       atual = null;
       return;
     }
@@ -175,12 +253,12 @@ function leiArtigos(texto) {
       atual = {
         num: fx.num, numCru: fx.numCru, ordem: leiNumOrdem(fx.num), linha: i + 1,
         corpo: linha.slice(fx.len), linhas: [linha], faixaFim: fx.fim, rotuloFaixa: fx.rotulo,
-        divisao: divisao ? divisao.rotulo : "", divisaoTipo: divisao ? divisao.tipo : "",
+        div: divisao,
       };
       artigos.push(atual);
       return;
     }
-    const a = linha.match(LEI_RE_ARTIGO);
+    const a = leiCasarArtigo(linha);
     if (a) {
       atual = {
         num: leiNumNormal(a[1]),
@@ -189,8 +267,7 @@ function leiArtigos(texto) {
         linha: i + 1,
         corpo: linha.slice(a[0].length),
         linhas: [linha],
-        divisao: divisao ? divisao.rotulo : "",
-        divisaoTipo: divisao ? divisao.tipo : "",
+        div: divisao,
       };
       artigos.push(atual);
       return;
@@ -202,21 +279,87 @@ function leiArtigos(texto) {
     }
   });
 
-  return artigos.map((a, i) => ({
-    num: a.num,
-    numCru: a.numCru,
-    ordem: a.ordem,
-    indice: i,
-    linha: a.linha,
-    linhaFim: a.linha + a.linhas.length - 1,
-    rotulo: a.rotuloFaixa || "Art. " + a.numCru,
-    faixaFim: a.faixaFim || 0,
-    ementa: leiEmenta(a.corpo),
-    texto: a.linhas.join("\n").replace(/\s+$/, ""),
-    corpo: a.corpo.trim(),
-    divisao: a.divisao,
-    divisaoTipo: a.divisaoTipo,
-  }));
+  divisoes.forEach((d) => { d.caminho = (d.pai ? d.pai.caminho : []).concat(d.rotulo); });
+
+  return {
+    divisoes,
+    artigos: artigos.map((a, i) => ({
+      num: a.num,
+      numCru: a.numCru,
+      ordem: a.ordem,
+      indice: i,
+      linha: a.linha,
+      linhaFim: a.linha + a.linhas.length - 1,
+      rotulo: a.rotuloFaixa || "Art. " + a.numCru,
+      faixaFim: a.faixaFim || 0,
+      ementa: leiEmenta(a.corpo),
+      texto: a.linhas.join("\n").replace(/\s+$/, ""),
+      corpo: a.corpo.trim(),
+      divisao: a.div ? a.div.rotulo : "",
+      divisaoTipo: a.div ? a.div.tipo : "",
+      divisaoId: a.div ? a.div.id : "",
+      caminho: a.div ? a.div.caminho : [],
+    })),
+  };
+}
+
+/* Transforma o texto colado numa lista de artigos.
+ *
+ * Devolve, para cada artigo: o número (cru e normalizado), a ementa, o
+ * texto completo com os incisos e parágrafos que vêm abaixo dele, a
+ * linha onde começa (para o editor saber onde rolar) e a divisão em que
+ * está (`divisao`, o rótulo; `divisaoId` e `caminho`, a hierarquia). Tudo que
+ * vem ANTES do primeiro artigo (ementa da lei, preâmbulo, "O PRESIDENTE DA
+ * REPÚBLICA…") fica de fora da lista — não é artigo e contaria como um,
+ * estragando toda a numeração. */
+function leiArtigos(texto) {
+  return leiLerLei(texto).artigos;
+}
+
+/* A ÁRVORE DA LEI: cada nó é uma divisão, com os artigos que são DIRETAMENTE dela (índices em
+ * `artigos`), os filhos, e o total/primeiro/último artigo do ramo inteiro. Artigos que vêm antes
+ * de qualquer divisão ficam num nó virtual "(sem divisão)". */
+function leiEstruturaLei(texto) {
+  const lei = leiLerLei(texto);
+  const nos = {};
+  const raiz = [];
+  const vazio = (d) => ({ id: d.id, tipo: d.tipo, nivel: d.nivel, num: d.num, nome: d.nome, nota: d.nota,
+    rotulo: d.rotulo, caminho: d.caminho, linha: d.linha, pai: d.pai ? d.pai.id : "",
+    filhos: [], artigos: [], virtual: false, de: -1, ate: -1, total: 0 });
+  lei.divisoes.forEach((d) => {
+    const n = vazio(d);
+    nos[n.id] = n;
+    (d.pai ? nos[d.pai.id].filhos : raiz).push(n);
+  });
+  let semDivisao = null;
+  lei.artigos.forEach((a, i) => {
+    let n = a.divisaoId ? nos[a.divisaoId] : null;
+    if (!n) {
+      if (!semDivisao) {
+        semDivisao = vazio({ id: "", tipo: "", nivel: 0, num: "", nome: "", nota: "", rotulo: "(sem divisão)",
+          caminho: [], linha: 0, pai: null });
+        semDivisao.virtual = true;
+      }
+      n = semDivisao;
+    }
+    n.artigos.push(i);
+  });
+  if (semDivisao) raiz.unshift(semDivisao);
+  const fechar = (n) => {
+    let de = n.artigos.length ? n.artigos[0] : -1;
+    let ate = n.artigos.length ? n.artigos[n.artigos.length - 1] : -1;
+    let total = n.artigos.length;
+    n.filhos.forEach((f) => {
+      fechar(f);
+      if (!f.total) return;
+      if (de < 0 || f.de < de) de = f.de;
+      if (f.ate > ate) ate = f.ate;
+      total += f.total;
+    });
+    n.de = de; n.ate = ate; n.total = total;
+  };
+  raiz.forEach(fechar);
+  return { raiz, nos, artigos: lei.artigos, semDivisao };
 }
 
 function leiArtigo(texto, num) {
@@ -637,7 +780,7 @@ function leiPreprocessar(texto, opc) {
   let ultimaOrdem = null;
   efetiva.forEach((x, i) => {
     if (remover[i + 1]) return;
-    const a = x.match(LEI_RE_ARTIGO);
+    const a = leiCasarArtigo(x);
     const d = !a && x.match(LEI_RE_DIVISAO);
     if (!a && !d) return;
     const j = anteriorViva(i);
@@ -957,7 +1100,7 @@ function leiEstruturaArtigo(texto, opc) {
   linhas.forEach((linha, li) => {
     let s = String(linha);
     if (li === 0) {
-      const a = s.match(LEI_RE_ARTIGO);
+      const a = leiCasarArtigo(s);
       if (a) s = s.slice(a[0].length);
     }
     let inicio = true;
@@ -1218,7 +1361,7 @@ function leiPosicaoDeInsercao(L, u) {
 function leiMesclarFragmento(baseTexto, bloco, opc) {
   const fonte = opc && opc.fonte;
   const est = leiEstruturaArtigo(baseTexto);
-  const h = String(baseTexto).split("\n")[0].match(LEI_RE_ARTIGO);
+  const h = leiCasarArtigo(String(baseTexto).split("\n")[0]);
   const prefixo = h ? h[0].replace(/\s+$/, "") : ((opc && opc.prefixo) || "");
   const L = [{ tipo: "caput", chave: "caput", rotulo: "", texto: est.caput.texto, nivel: 0 }].concat(
     est.unidades.map((u) => ({ tipo: u.tipo, chave: u.chave, rotulo: u.rotulo, texto: u.texto,
@@ -1646,6 +1789,84 @@ function leiNumeracao(artigos) {
 }
 
 /* =====================================================================
+ * MAPA E CONFERÊNCIA DA LEITURA — de uma lei que JÁ está guardada
+ *
+ * A conferência da colagem (leiPreprocessar, leiNumeracao) só roda na hora de criar ou
+ * atualizar. A lei que entrou antes dela — ou que foi colada com o leitor de outra época — não
+ * tinha como ser conferida: só o aviso "numeração fora de sequência", sem dizer onde nem por quê.
+ * Isto lê o texto GUARDADO (nunca o reescreve) e devolve:
+ *   estrutura  a árvore de divisões (leiEstruturaLei) e os artigos;
+ *   resumo     quantos artigos, quantas divisões, de que número a que número;
+ *   itens      o que conferir, na ordem do texto — cada um com a linha e o artigo:
+ *     numeração          os problemas de leiNumeracao (isolado, volta, salto, recomeço);
+ *     titulo_no_artigo   linha toda em maiúsculas dentro do artigo: é o cabeçalho de uma
+ *                        divisão que o leitor não reconheceu ("SISTEMA TRIBUTÁRIO NACIONAL");
+ *     sufixo_sem_base    "178-A" sem 178, com os vizinhos em sequência: o "Art. 178 - A isenção…";
+ *     divisao_sem_nome   divisão cujo nome não veio.
+ * ===================================================================== */
+const LEI_RE_TITULO_SOLTO = /^[\s>*]*[A-ZÀ-Ú][A-ZÀ-Ú ,\-–—]{6,66}[A-ZÀ-Ú]\s*$/;
+
+function leiDiagnosticarLei(texto) {
+  const est = leiEstruturaLei(texto);
+  const arts = est.artigos;
+  const itens = [];
+  const existe = {};
+  const porLinha = {};
+  arts.forEach((a) => { existe[a.num] = true; porLinha[a.linha] = a; });
+  const daLinha = (linha) => {
+    let ach = null;
+    arts.forEach((a) => { if (a.linha <= linha && a.linhaFim >= linha) ach = a; });
+    return ach;
+  };
+
+  arts.forEach((a, i) => {
+    a.texto.split("\n").forEach((s, k) => {
+      if (k === 0 || !s.trim() || !LEI_RE_TITULO_SOLTO.test(s) || leiLerRotulo(s.trim())) return;
+      itens.push({ tipo: "titulo_no_artigo", gravidade: "aviso", num: a.num, numCru: a.numCru,
+        indice: a.indice, linha: a.linha + k, linhaFim: a.linha + k, texto: s.trim().slice(0, 70) });
+    });
+    const m = a.num.match(/^(\d+)-([A-Z])$/);
+    if (m && !existe[m[1]] && arts[i - 1] && arts[i + 1]
+        && Math.floor(arts[i - 1].ordem / 100) === Number(m[1]) - 1
+        && Math.floor(arts[i + 1].ordem / 100) === Number(m[1]) + 1) {
+      itens.push({ tipo: "sufixo_sem_base", gravidade: "aviso", num: a.num, numCru: a.numCru,
+        indice: a.indice, linha: a.linha, linhaFim: a.linhaFim, base: m[1] });
+    }
+  });
+
+  Object.keys(est.nos).forEach((id) => {
+    const d = est.nos[id];
+    if (d.nome || d.tipo === "DISPOSICOES" || d.tipo === "PARTE") return;
+    const prox = arts.filter((a) => a.linha > d.linha)[0] || null;
+    itens.push({ tipo: "divisao_sem_nome", gravidade: "leve", rotulo: d.rotulo, num: prox ? prox.num : "",
+      numCru: prox ? prox.numCru : "", indice: prox ? prox.indice : -1, linha: d.linha, linhaFim: d.linha });
+  });
+
+  const num = arts.length >= 8 ? leiNumeracao(arts) : { problemas: [], graves: [], recorte: false };
+  num.problemas.forEach((p) => {
+    const a = porLinha[p.linha] || daLinha(p.linha);
+    itens.push(Object.assign({}, p, { indice: a ? a.indice : -1, linhaFim: a ? a.linhaFim : p.linha }));
+  });
+
+  itens.sort((x, y) => x.linha - y.linha);
+  const porTipo = {};
+  Object.keys(est.nos).forEach((id) => { porTipo[est.nos[id].tipo] = (porTipo[est.nos[id].tipo] || 0) + 1; });
+  return {
+    estrutura: est,
+    itens,
+    numeracao: num,
+    resumo: {
+      artigos: arts.length,
+      divisoes: Object.keys(est.nos).length,
+      porTipo,
+      de: arts.length ? arts[0].numCru : "",
+      ate: arts.length ? arts[arts.length - 1].numCru : "",
+      graves: itens.filter((x) => x.gravidade === "grave").length,
+    },
+  };
+}
+
+/* =====================================================================
  * COMPARAR A VERSÃO GRAVADA COM UMA NOVA — e ajudar a decidir
  *
  * Os tipos de erro que a comparação por número pode cometer, e o que a
@@ -1944,10 +2165,10 @@ function leiBlocos(texto) {
 
   if (temDivisao) {
     arts.forEach((a) => {
-      const nome = a.divisao || "(sem divisão)";
       const ult = blocos[blocos.length - 1];
-      if (ult && ult.nome === nome) ult.artigos.push(a);
-      else blocos.push({ nome, tipo: a.divisaoTipo || "", artigos: [a] });
+      if (ult && ult.divisaoId === (a.divisaoId || "")) ult.artigos.push(a);
+      else blocos.push({ nome: a.divisao || "(sem divisão)", divisaoId: a.divisaoId || "",
+        caminho: a.caminho || [], tipo: a.divisaoTipo || "", artigos: [a] });
     });
     /* Capítulo com dois artigos ao lado de um com quarenta é uma lista
      * inútil para planejar. Blocos muito grandes são partidos; muito
@@ -1961,6 +2182,7 @@ function leiBlocos(texto) {
       for (let i = 0; i < partes; i++) {
         partidos.push({
           nome: b.nome + " (" + (i + 1) + "/" + partes + ")",
+          divisaoId: b.divisaoId, caminho: b.caminho, parte: (i + 1) + "/" + partes,
           tipo: b.tipo,
           artigos: b.artigos.slice(i * tam, (i + 1) * tam),
         });
@@ -1974,6 +2196,8 @@ function leiBlocos(texto) {
       blocos.push({
         nome: "Arts. " + pedaco[0].numCru + " a "
               + pedaco[pedaco.length - 1].numCru,
+        chave: "arts:" + pedaco[0].numCru + "-" + pedaco[pedaco.length - 1].numCru,
+        caminho: [],
         tipo: "",
         artigos: pedaco,
       });
@@ -1983,6 +2207,9 @@ function leiBlocos(texto) {
   return blocos.map((b, i) => ({
     id: "b" + i,
     nome: b.nome,
+    /* a CHAVE é o que se grava em l.blocos: estável e única (ver leiMigrarBlocos) */
+    chave: b.chave || ("d:" + (b.divisaoId || "-") + (b.parte ? "|" + b.parte : "")),
+    caminho: b.caminho || [],
     tipo: b.tipo,
     indice: i,
     de: b.artigos[0].num,
@@ -1995,6 +2222,36 @@ function leiBlocos(texto) {
     minutos: Math.max(3, Math.round(
       b.artigos.reduce((s, a) => s + (a.texto.match(/\S+/g) || []).length, 0) / 75)),
   }));
+}
+
+/* CAPÍTULO LIDO: A CHAVE É O ID DO BLOCO, NÃO O NOME.
+ *
+ * Até a 16.42 `l.blocos` guardava a data pela NOME do capítulo. No CTN há vários "CAPÍTULO I —
+ * Disposições Gerais": marcar um marcava todos. Agora a chave é `b.chave` (o id da divisão, com
+ * "|1/2" nos blocos partidos). Esta função traduz o que já estava gravado: cada nome antigo vira a
+ * chave de TODO bloco que tinha aquele nome — o que a pessoa via marcado continua marcado, e daí
+ * em diante cada capítulo se marca sozinho. Nome que não existe mais no texto fica como está. */
+function leiMigrarBlocos(l) {
+  const antigo = (l && l.blocos) || {};
+  const novo = Object.assign({}, antigo);
+  let mudou = false;
+  const casaram = {};
+  leiBlocos((l && l.texto) || "").forEach((b) => {
+    if (b.nome === b.chave || antigo[b.nome] === undefined) return;
+    casaram[b.nome] = true;
+    if (novo[b.chave] === undefined) { novo[b.chave] = antigo[b.nome]; mudou = true; }
+  });
+  Object.keys(casaram).forEach((k) => { delete novo[k]; mudou = true; });
+  return { blocos: novo, mudou };
+}
+
+function leisMigrarBlocosDe(id) {
+  const l = leiDe(id);
+  if (!l || !l.texto) return false;
+  const m = leiMigrarBlocos(l);
+  if (!m.mudou) return false;
+  leiGuardar({ id, blocos: m.blocos });
+  return true;
 }
 
 /* ---------------------------------------------------------------------
@@ -3422,7 +3679,8 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     LEIS_CHAVE, LEI_ART_POR_BLOCO,
     leiNumNormal, leiNumOrdem, leiEmenta, leiArtigos, leiArtigo,
-    leiArtigosEfetivos, leiArtigoAlterar, leiBlocos,
+    leiArtigosEfetivos, leiArtigoAlterar, leiBlocos, leiEstruturaLei, leiCasarArtigo, leiNomeDaDivisao,
+    leiMigrarBlocos, leisMigrarBlocosDe, leiDiagnosticarLei,
     leiCitacoes, leiIdentificar, leiSubstituirArtigo, leiInserirArtigo,
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
     leiRotuloChave, leiCasarRotulo, leiCandidatosDoRotulo, leiApelidoChave,

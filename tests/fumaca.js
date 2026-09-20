@@ -781,7 +781,7 @@ function rodar() {
     leiIdAtualValor: () => leiIdAtual,
     leiSiglasDoNome, leiApelidoAdicionar,
     leiSubstituirArtigo, leiInserirArtigo,
-    leiArtigos, leiArtigo, leiBlocos, leiCitacoes, leiIdentificar, leiNumNormal,
+    leiArtigos, leiArtigo, leiBlocos, leiEstruturaLei, leiCasarArtigo, leiNomeDaDivisao, leiMigrarBlocos, leisMigrarBlocosDe, leiDiagnosticarLei, leiMapaAbrir, leiMapaIr, leiCitacoes, leiIdentificar, leiNumNormal,
     leiNumOrdem, leiEmenta, leisLerTudo, leisLista, leiId, leiDe, leiGuardar,
     leiApagar, leiLigar, leiDesligar, leisDoTopico, leiParar, leiProgresso,
     leiBlocoLido, leiBlocosLidos, leisMigrarDe, LEIS_CHAVE,
