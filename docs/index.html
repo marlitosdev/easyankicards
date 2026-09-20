@@ -1207,8 +1207,6 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    um botão "marcar lido" do tamanho de um botão normal (herdado de
    .btn-min inteiro) ao lado de cada capítulo custa tanta altura quanto
    duas linhas de artigo. Nenhuma função sai daqui — só o padding. */
-.lei-blocos{max-height:26vh;overflow-y:auto;border:1px solid var(--borda);
-  border-radius:9px;padding:6px 8px;margin:4px 0 8px;background:var(--campo)}
 .lei-bloco{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
   padding:4px 0;border-bottom:1px solid var(--borda)}
 .lei-bloco:last-child{border-bottom:none}
@@ -1252,22 +1250,33 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgLeiSeca #leiLeitura, #dlgLeiSeca #leiRecitar{overflow-x:hidden}
 
 /* A GRADE DE ARTIGOS */
-.lei-ir-grade{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 10px;
-  max-height:52vh;overflow-y:auto}
+.lei-ir-grade{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 8px}
+/* O MAPA: o corpo rola, as divisões e os artigos ficam dentro dele */
+.lei-ir-corpo{max-height:52vh;overflow-y:auto;margin:8px 0 10px}
+#dlgLeiIr.lei-ir-dlg[open]{width:min(760px,96vw);max-width:96vw}
+.lei-ir-busca{width:100%;box-sizing:border-box;margin:4px 0 2px;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);font:inherit}
+.lei-ir-filtros{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+/* um artigo = o número (toque para ir), o selo de questões e a seta dos parágrafos/incisos */
+.lei-ir-cel{display:inline-flex;flex-wrap:wrap;align-items:center;gap:3px}
+.lei-ir-cel-aberta{flex:0 0 100%}
+.lei-ir-q{font-size:10px;font-weight:700;color:var(--sutil);min-width:14px;text-align:center}
+.lei-ir-mais{font-family:inherit;font-size:11px;padding:3px 6px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--borda);background:none;color:var(--sutil)}
+.lei-ir-mais:hover{border-color:var(--acao);color:var(--acao)}
+.lei-ir-un{flex:0 0 100%;margin:4px 0 6px 10px;border-left:2px solid var(--borda);padding-left:6px}
+.lei-ir-u{display:flex;gap:8px;width:100%;box-sizing:border-box;text-align:left;background:none;border:none;
+  border-radius:6px;color:var(--texto);font-family:inherit;font-size:12px;padding:3px 6px;cursor:pointer}
+.lei-ir-u:hover{background:var(--campo)}
+.lei-ir-u2{padding-left:18px}.lei-ir-u3{padding-left:30px}.lei-ir-u4{padding-left:42px}
+.lei-ir-u-rot{flex:0 0 auto;font-weight:700;min-width:34px}
+.lei-ir-u-tx{color:var(--sutil);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lei-ir-u-cai .lei-ir-u-rot{color:#f59e0b}
+.lei-ir-no-lido{color:var(--sutil)}
 .lei-ir-n{font-family:inherit;font-size:11.5px;font-weight:700;
   padding:5px 9px;border-radius:7px;cursor:pointer;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
 .lei-ir-n:hover{border-color:var(--acao)}
-/* O CABEÇALHO DE DIVISÃO DENTRO DA GRADE.
-   "flex-basis:100%" porque a grade é flex-wrap: sem isso o título
-   entraria na fila como se fosse mais um número. Fica grudado no topo
-   enquanto se rola, que é o que responde "o 1º que estou vendo agora é
-   do corpo ou do ADCT?" — a pergunta que a Constituição inteira faz. */
-.lei-ir-div{flex:0 0 100%;position:sticky;top:0;z-index:1;
-  font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
-  color:var(--sutil);background:var(--panel);
-  padding:6px 2px 3px;margin-top:4px;border-bottom:1px solid var(--borda)}
-.lei-ir-div:first-child{margin-top:0}
 .lei-ir-parei{border-color:var(--verde);color:var(--verde)}
 .lei-ir-prova{border-color:#f59e0b;color:#f59e0b}
 .lei-ir-erro{border-color:#ef4444;color:#ef4444}
@@ -6135,16 +6144,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 
 
-  <!-- AS DUAS GAVETAS. Fechadas por padrão: elas respondem perguntas que
-       se fazem uma vez por sessão, não a cada artigo. -->
-  <div class="mat-topo lei-gaveta" id="leiGavNavegar" hidden>
-    <button class="btn-min" id="btnLeiBlocos" data-i18n="lei_blocos_btn"
-      title="Abre a lista de capítulos, com quantos artigos e quantos minutos cada um leva. Ler 115 artigos de uma vez não é uma sessão de estudo."></button>
-    <button class="btn-min" id="btnLeiIr" data-i18n="lei_ir_btn"
-      title="Vai direto a um artigo pelo número."></button>
-    <button class="btn-min" id="btnLeiRank" data-i18n="lei_rank_btn"
-      title="Mostra quais artigos mais aparecem NAS SUAS questões e como você tem se saído em cada um."></button>
-  </div>
+  <!-- A GAVETA DE EXIBIÇÃO. Fechada por padrão: responde uma pergunta que se faz
+       uma vez por sessão, não a cada artigo. "ir para…" não é gaveta: abre o mapa. -->
   <div class="mat-topo lei-gaveta" id="leiGavExibir" hidden>
     <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
       title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei."></button>
@@ -6190,7 +6191,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-topo-dir"><span class="nota" id="leiEstado"></span></span>
   </div>
 
-  <div class="lei-blocos" id="leiBlocosCx" hidden></div>
   <!-- SÓ EDITÁVEL ANTES DA PRIMEIRA GRAVAÇÃO. Com base já gravada, este
        campo vira somente-leitura (leiPintarEdicaoLivre) — toda mudança
        depois disso passa pelo ✏ por artigo ou por "atualizar para nova
@@ -6768,24 +6768,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
-<dialog id="dlgLeiIr" class="ui-modal diag-modal">
+<dialog id="dlgLeiIr" class="ui-modal diag-modal lei-ir-dlg">
   <h3 data-i18n="lei_ir_titulo"></h3>
   <p class="nota" id="leiIrSub"></p>
-  <div id="leiIrGrade" class="lei-ir-grade"></div>
+  <input type="search" id="leiIrBusca" class="lei-ir-busca" data-i18n-ph="lei_ir_busca_ph" autocomplete="off">
+  <div class="lei-ir-filtros">
+    <button class="btn-min mat-ligado" id="btnLeiIrF_todos" data-i18n="lei_ir_f_todos"></button>
+    <button class="btn-min" id="btnLeiIrF_caem" data-i18n="lei_ir_f_caem"
+      data-i18n-title="lei_ir_f_caem_aj"></button>
+    <button class="btn-min" id="btnLeiIrF_erros" data-i18n="lei_ir_f_erros"></button>
+    <button class="btn-min" id="btnLeiIrF_prova" data-i18n="lei_ir_f_prova"></button>
+    <button class="btn-min" id="btnLeiIrF_parei" data-i18n="lei_ir_f_parei"></button>
+  </div>
+  <div id="leiIrGrade" class="lei-ir-corpo"></div>
   <p class="nota" data-i18n="lei_ir_legenda"></p>
   <div class="dlg-rodape">
-    <button class="btn btn-cinza" id="btnLeiIrDigitar" data-i18n="lei_ir_digitar"
-      data-i18n-title="lei_ir_digitar_aj"></button>
     <button class="btn btn-cinza" id="btnLeiIrFechar" data-i18n="help_close"></button>
-  </div>
-</dialog>
-
-<dialog id="dlgLeiRank" class="ui-modal diag-modal">
-  <h3 id="leiRankTitulo"></h3>
-  <p class="nota" data-i18n="lei_rank_ajuda"></p>
-  <div id="leiRankCx" class="duv-lista"></div>
-  <div class="dlg-rodape">
-    <button class="btn btn-cinza" id="btnLeiRankFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

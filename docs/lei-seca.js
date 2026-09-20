@@ -2209,6 +2209,7 @@ function leiBlocos(texto) {
     nome: b.nome,
     /* a CHAVE é o que se grava em l.blocos: estável e única (ver leiMigrarBlocos) */
     chave: b.chave || ("d:" + (b.divisaoId || "-") + (b.parte ? "|" + b.parte : "")),
+    divisaoId: b.divisaoId || "",
     caminho: b.caminho || [],
     tipo: b.tipo,
     indice: i,

@@ -364,7 +364,6 @@ function leiPintar() {
   leiPintarFila();
   leiPintarProcedencia();
   leiPintarOnde();
-  leiPintarBlocos();
   leiPintarAnexos();
   leiJanelaAplicar();
   leiCheiaAplicar();
@@ -737,65 +736,6 @@ function leiPintarOnde() {
   }
 }
 
-/* BLOCOS — ler por capítulo, com o tempo de cada um. */
-function leiPintarBlocos() {
-  const cx = $("leiBlocosCx");
-  if (!cx) return;
-  cx.innerHTML = "";
-  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
-  if (!l) return;
-  const blocos = leiBlocos(l.texto);
-  const lidos = l.blocos || {};
-
-  const cab = document.createElement("div");
-  cab.className = "nota";
-  cab.textContent = t("lei_blocos_ajuda", {
-    n: blocos.length,
-    lidos: blocos.filter((b) => lidos[b.chave]).length,
-  });
-  cx.append(cab);
-
-  blocos.forEach((b) => {
-    const linha = document.createElement("div");
-    linha.className = "lei-bloco" + (lidos[b.chave] ? " lei-bloco-lido" : "");
-
-    const nome = document.createElement("button");
-    nome.className = "lei-bloco-nome";
-    nome.textContent = b.nome;
-    nome.title = (b.caminho.length > 1 ? b.caminho.slice(0, -1).join(" › ") + " · " : "")
-      + t("lei_bloco_ir", { de: b.de, ate: b.ate });
-    nome.onclick = () => {
-      leiBlocoAberto = b.chave;
-      leiTrocarModo(leiModo === "recitar" ? "recitar" : "ler");
-      leiIrArtigo(b.de);
-    };
-
-    const meta = document.createElement("span");
-    meta.className = "lei-bloco-meta";
-    meta.textContent = t("lei_bloco_meta", { n: b.quantos, min: b.minutos });
-
-    const chk = document.createElement("button");
-    chk.className = "btn-min lei-bloco-chk" + (lidos[b.chave] ? " btn-min-ok" : "");
-    chk.textContent = lidos[b.chave] ? t("lei_bloco_lido", { d: lidos[b.chave] })
-                                     : t("lei_bloco_marcar");
-    chk.title = t("lei_bloco_marcar_ajuda");
-    chk.onclick = () => {
-      leiBlocoLido(l.id, b.chave, !lidos[b.chave]);
-      /* marcar o capítulo lido move o marcador para o último artigo
-       * dele: as duas coisas dizem a mesma verdade, e deixá-las
-       * discordando é o começo de "o app não sabe onde eu estou" */
-      if (!lidos[b.chave]) leiParar(l.id, b.ate);
-      try { leiReg("bloco", (lidos[b.chave] ? "capítulo desmarcado" : "capítulo lido"),
-               l.nome + " · " + b.nome);
-      } catch (e) {}
-      leiPintar();
-    };
-
-    linha.append(nome, meta, chk);
-    cx.append(linha);
-  });
-}
-
 /* ---------------------------------------------------------------------
  * MODOS DE LEITURA
  * ------------------------------------------------------------------ */
@@ -940,7 +880,7 @@ function leiCheiaAplicar() {
   /* procedência e marcador já se escondem sozinhos quando não há o que
    * mostrar; na tela cheia somem de qualquer forma */
   if (leiCheia) {
-    ["leiProc", "leiOnde", "leiBlocosCx"].forEach((id) => {
+    ["leiProc", "leiOnde"].forEach((id) => {
       const el = $(id); if (el) el.hidden = true;
     });
   }
@@ -963,14 +903,14 @@ function leiCheiaTrocar(sim) {
 
 /* Abre uma gaveta e fecha a outra. */
 function leiGaveta(qual) {
-  const gavetas = ["leiGavNavegar", "leiGavExibir"];
+  const gavetas = ["leiGavExibir"];
   const alvo = $(qual);
   const abrindo = alvo ? alvo.hidden !== false : false;
   gavetas.forEach((id) => {
     const el = $(id);
     if (el) el.hidden = !(abrindo && id === qual);
   });
-  [["btnLeiNavegar", "leiGavNavegar"], ["btnLeiExibir", "leiGavExibir"]]
+  [["btnLeiExibir", "leiGavExibir"]]
     .forEach(([bid, gid]) => {
       const b = $(bid);
       const g = $(gid);
@@ -2176,7 +2116,15 @@ function leiIrUnidade(num, sub) {
   if (!a || !bloco) return false;
   const unidades = leiAcharUnidades(a.texto, sub);
   if (!unidades.length) return false;
-  const linhas = a.texto.split("\n");
+  return leiRolarParaUnidades(bloco, a.texto, unidades, num);
+}
+
+/* Rola até as linhas desenhadas que correspondem às unidades e as destaca. As unidades vêm de
+ * leiEstruturaArtigo (cada uma sabe a linha do artigo em que começa); a tela é achada pelo início
+ * do texto da linha, o que funciona tanto para uma citação ("art. 148, I") quanto para o toque no
+ * mapa. */
+function leiRolarParaUnidades(bloco, textoArt, unidades, num) {
+  const linhas = String(textoArt || "").split("\n");
   const so = (s) => String(s || "").replace(/==[!?§*~@]?|\*\*|_/g, "").replace(/[^0-9A-Za-zÀ-ú]/g, "").slice(0, 14).toLowerCase();
   const desenhadas = leiLinhasDesenhadas(bloco);
   const alvos = [];
@@ -2196,88 +2144,403 @@ function leiIrUnidade(num, sub) {
 }
 
 /* =====================================================================
- * IR A UM ARTIGO: UMA GRADE, NÃO UMA CAIXA DE DIGITAÇÃO
+ * IR PARA… — O MAPA DA LEI
  *
- * Perguntar "qual artigo?" e esperar que a pessoa digite exige que ela
- * SAIBA o número — e quem está lendo uma lei nova quase nunca sabe:
- * quer voltar "àquele que falava de prazo", que estava "lá pelo meio".
- * Digitar também erra: "8" e "8º" e "8-A" são três coisas, e a caixa
- * respondia "não achei" para duas delas.
+ * Eram três botões atrás de "ir para…": "capítulos", "ir ao artigo" e "artigos que mais
+ * caem". Agora "ir para…" abre UMA tela, o mapa da lei:
+ *   · a árvore de divisões (Livro › Título › Capítulo › Seção), com os artigos de cada uma;
+ *   · cada artigo é um toque que leva até ele; a seta ▾ abre os parágrafos, incisos e alíneas
+ *     dele, e cada um leva direto ao trecho;
+ *   · o que era "artigos que mais caem" vive nos próprios artigos: o número de questões suas,
+ *     a borda laranja de "caiu em prova", a vermelha de "erra mais do que acerta", o inciso que
+ *     já apareceu nas suas questões — e um filtro que lista só esses, na ordem do ranking;
+ *   · o que era "capítulos" vive nos próprios capítulos: quantos artigos e minutos, "marcar
+ *     lido" (que leva o marcador ao fim do capítulo) e, ao tocar o nome, o registro de estudo
+ *     passa a contar só aquele capítulo;
+ *   · uma busca: "150", "148 I", "40 §4", o nome de um capítulo ou uma palavra do artigo.
  *
- * A grade mostra o que EXISTE. Não há como pedir um artigo que não há,
- * não há grafia para acertar, e a numeração inteira à vista dá a
- * dimensão da lei — que é informação por si só.
- *
- * OS SELOS VIAJAM JUNTO: o artigo onde parei e os que mais caem nas
- * suas questões vêm marcados na própria grade. É onde a pergunta "por
- * onde eu continuo?" costuma ser respondida.
+ * Nada aqui é desenhado até ser aberto: lei de 424 artigos abre com os títulos, e os artigos
+ * de um capítulo só entram na tela quando ele se abre.
  * ===================================================================== */
-function leiIrAbrir() {
-  const arts = leiArtigos(String($("leiTexto").value || ""));
-  if (!arts.length) { uiAlert(t("lei_sem_artigos")); return; }
-  const cx = $("leiIrGrade");
-  if (!cx) {
-    /* sem a grade no HTML, a caixa antiga — nunca ficar sem caminho */
-    return leiIrDigitando(arts);
-  }
-  cx.innerHTML = "";
-  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
-  const parei = l ? l.parei : "";
-  const ranking = {};
-  try { leiRanking(leiIdAtual).forEach((r) => { ranking[r.num] = r; }); }
-  catch (e) {}
+const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei"];
+let leiIrFiltro = "todos";
+let leiIrAbertos = null;          /* ids dos nós abertos: sobrevivem a repintar */
+let leiIrPrimeiro = null;         /* o que o Enter da busca faz */
 
-  /* A GRADE PRECISA DIZER ONDE CADA FAIXA COMEÇA.
-   *
-   * Com 424 números iguais em fila, "1º" aparece duas vezes e não há
-   * como saber que o segundo é o ADCT — a pessoa clica no primeiro,
-   * chega ao lugar errado e conclui que a grade está quebrada. O
-   * cabeçalho de divisão não é enfeite: é o que transforma a repetição
-   * de numeração da Constituição de defeito aparente em informação.
-   *
-   * E é por isso que a lista NÃO é ordenada por número: a ordem é a do
-   * documento. Ordenar embaralharia o art. 5º do ADCT com o do corpo e
-   * destruiria a única coisa que os distingue — a posição. */
-  let divGrade = "";
-  arts.forEach((a) => {
-    if (a.divisao && a.divisao !== divGrade) {
-      divGrade = a.divisao;
-      const h = document.createElement("div");
-      h.className = "lei-ir-div";
-      h.textContent = divGrade;
-      cx.append(h);
-    }
+function leiIrDados() {
+  const texto = String(($("leiTexto") || {}).value || "");
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const est = leiEstruturaLei(texto);
+  const ranking = {};
+  let lista = [];
+  try { lista = leiRanking(leiIdAtual); } catch (e) { lista = []; }
+  lista.forEach((r) => { ranking[r.num] = r; });
+  const blocosPorNo = {};
+  (l ? leiBlocos(texto) : []).forEach((b) => { (blocosPorNo[b.divisaoId] = blocosPorNo[b.divisaoId] || []).push(b); });
+  return { texto, l, est, arts: est.artigos, ranking, lista, blocosPorNo, lidos: (l && l.blocos) || {},
+    parei: l ? l.parei : "", efetivos: l ? leiArtigosEfetivos(l) : est.artigos };
+}
+
+function leiIrIr(num, indice) {
+  if ($("dlgLeiIr") && $("dlgLeiIr").open) $("dlgLeiIr").close();
+  if (leiModo === "editar") leiTrocarModo("ler");
+  /* o índice viaja junto: é o que separa o art. 5º do corpo do art. 5º do ADCT */
+  return leiIrArtigo(num, indice);
+}
+
+function leiIrIrUnidade(a, u, textoArt) {
+  if ($("dlgLeiIr") && $("dlgLeiIr").open) $("dlgLeiIr").close();
+  if (leiModo === "editar") leiTrocarModo("ler");
+  const bloco = leiBlocoDoArtigo(a.num, a.indice);
+  if (bloco && leiRolarParaUnidades(bloco, textoArt, [u], a.num)) return true;
+  return leiIrArtigo(a.num, a.indice);
+}
+
+function leiIrResumoNo(d, no) {
+  let min = 0, blocos = 0, lidos = 0;
+  const visita = (n) => {
+    (d.blocosPorNo[n.id] || []).forEach((b) => { blocos++; min += b.minutos; if (d.lidos[b.chave]) lidos++; });
+    n.filhos.forEach(visita);
+  };
+  visita(no);
+  return { min, blocos, lidos };
+}
+
+/* os parágrafos, incisos e alíneas de UM artigo — desenhados só quando a seta é tocada */
+function leiIrUnidadesEl(d, a, est) {
+  const painel = document.createElement("div");
+  painel.className = "lei-ir-un";
+  const ef = (d.efetivos && d.efetivos[a.indice]) || a;
+  const e = leiEstruturaArtigo(ef.texto);
+  if (!e.unidades.length) {
+    const n = document.createElement("div");
+    n.className = "nota";
+    n.textContent = t("lei_ir_sem_unidades");
+    painel.append(n);
+    return painel;
+  }
+  const cobrados = (est && est.incisos) || [];
+  e.unidades.forEach((u) => {
     const b = document.createElement("button");
     b.type = "button";
-    const est = ranking[a.num];
-    b.className = "lei-ir-n"
-      + (a.num === parei ? " lei-ir-parei" : "")
-      + (est && est.prova ? " lei-ir-prova" : "")
-      + (est && est.erros > est.acertos ? " lei-ir-erro" : "");
-    b.textContent = a.numCru;
-    const dicas = [];
-    if (a.num === parei) dicas.push(t("lei_ir_dica_parei"));
-    if (est && est.prova) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
-    if (est && est.questoes) dicas.push(t("lei_ir_dica_q", { n: est.questoes }));
-    b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
-    b.onclick = () => {
-      $("dlgLeiIr").close();
-      /* o índice viaja junto: é o que separa o art. 5º do corpo do art.
-       * 5º do ADCT, e a grade é quem sabe em qual dos dois se clicou */
-      leiIrArtigo(a.num, a.indice);
-    };
-    cx.append(b);
+    const rom = u.tipo === "inciso" ? ((u.rotulo.match(/^[IVXLCDM]+/i) || [""])[0]).toUpperCase() : "";
+    const cai = !!rom && cobrados.indexOf(rom) >= 0;
+    b.className = "lei-ir-u lei-ir-u" + Math.min(4, Math.max(1, u.nivel || 1)) + (cai ? " lei-ir-u-cai" : "");
+    const r = document.createElement("span");
+    r.className = "lei-ir-u-rot";
+    r.textContent = String(u.rotulo || u.chave).replace(/\s*[-–]$/, "");
+    const x = document.createElement("span");
+    x.className = "lei-ir-u-tx";
+    x.textContent = String(u.texto || "").replace(/\s+/g, " ").slice(0, 80);
+    b.append(r, x);
+    b.title = cai ? t("lei_ir_u_cai") : String(u.texto || "").replace(/\s+/g, " ").slice(0, 200);
+    b.onclick = () => leiIrIrUnidade(a, u, ef.texto);
+    painel.append(b);
   });
-  if ($("leiIrSub")) {
-    $("leiIrSub").textContent = t("lei_ir_sub", { n: arts.length });
+  return painel;
+}
+
+function leiIrChipEl(d, a) {
+  const cel = document.createElement("span");
+  cel.className = "lei-ir-cel";
+  const est = d.ranking[a.num];
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "lei-ir-n"
+    + (a.num === d.parei ? " lei-ir-parei" : "")
+    + (est && est.prova ? " lei-ir-prova" : "")
+    + (est && est.erros > est.acertos ? " lei-ir-erro" : "");
+  b.textContent = a.numCru;
+  const dicas = [];
+  if (a.num === d.parei) dicas.push(t("lei_ir_dica_parei"));
+  if (est && est.prova) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
+  if (est && est.questoes) dicas.push(t("lei_ir_dica_q", { n: est.questoes }));
+  b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
+  b.onclick = () => leiIrIr(a.num, a.indice);
+  cel.append(b);
+  if (est && est.questoes) {
+    const q = document.createElement("span");
+    q.className = "lei-ir-q";
+    q.textContent = String(est.questoes);
+    q.title = t("lei_ir_dica_q", { n: est.questoes });
+    cel.append(q);
   }
+  const m = document.createElement("button");
+  m.type = "button";
+  m.className = "lei-ir-mais";
+  m.textContent = "▾";
+  m.title = t("lei_ir_unidades");
+  let painel = null;
+  m.onclick = () => {
+    if (!painel) { painel = leiIrUnidadesEl(d, a, est); cel.append(painel); }
+    else painel.hidden = !painel.hidden;
+    m.textContent = painel.hidden ? "▾" : "▴";
+    if (cel.classList) cel.classList.toggle("lei-ir-cel-aberta", !painel.hidden);
+  };
+  cel.append(m);
+  return cel;
+}
+
+/* uma linha por bloco de leitura do capítulo: ler só ele, quanto leva, e marcar como lido */
+function leiIrBlocoEl(d, b) {
+  const lido = !!d.lidos[b.chave];
+  const linha = document.createElement("div");
+  linha.className = "lei-bloco" + (lido ? " lei-bloco-lido" : "");
+  const de = b.artigos[0], ate = b.artigos[b.artigos.length - 1];
+  const nome = document.createElement("button");
+  nome.type = "button";
+  nome.className = "lei-bloco-nome";
+  nome.textContent = t("lei_ir_bloco_ler", { de: de.numCru, ate: ate.numCru });
+  nome.title = t("lei_bloco_ir", { de: b.de, ate: b.ate });
+  nome.onclick = () => {
+    /* o registro de estudo passa a contar só este capítulo */
+    leiBlocoAberto = b.chave;
+    leiIrIr(de.num, de.indice);
+  };
+  const meta = document.createElement("span");
+  meta.className = "lei-bloco-meta";
+  meta.textContent = t("lei_bloco_meta", { n: b.quantos, min: b.minutos });
+  linha.append(nome, meta);
+  if (d.l) {
+    const chk = document.createElement("button");
+    chk.type = "button";
+    chk.className = "btn-min lei-bloco-chk" + (lido ? " btn-min-ok" : "");
+    chk.textContent = lido ? t("lei_bloco_lido", { d: d.lidos[b.chave] }) : t("lei_bloco_marcar");
+    chk.title = t("lei_bloco_marcar_ajuda");
+    chk.onclick = () => {
+      leiBlocoLido(d.l.id, b.chave, !lido);
+      /* marcar o capítulo lido move o marcador para o último artigo dele: as duas coisas dizem a
+       * mesma verdade, e deixá-las discordando é o começo de "o app não sabe onde eu estou" */
+      if (!lido) leiParar(d.l.id, b.ate);
+      try { leiReg("bloco", lido ? "capítulo desmarcado" : "capítulo lido", d.l.nome + " · " + b.nome); }
+      catch (e) {}
+      leiPintar();
+      leiIrPintar();
+    };
+    linha.append(chk);
+  }
+  return linha;
+}
+
+function leiIrNoEl(d, no) {
+  const det = document.createElement("details");
+  det.className = "lei-mapa-no";
+  const sm = document.createElement("summary");
+  const rs = leiIrResumoNo(d, no);
+  let txt = no.rotulo;
+  if (no.total) txt += " · " + t("lei_mapa_arts", { de: d.arts[no.de].numCru, ate: d.arts[no.ate].numCru, n: no.total });
+  if (d.l && rs.blocos) {
+    txt += " · ~" + rs.min + " min";
+    if (rs.lidos) txt += " · " + t("lei_ir_lidos", { k: rs.lidos, n: rs.blocos });
+  }
+  const todosLidos = !!(d.l && rs.blocos && rs.lidos === rs.blocos);
+  sm.textContent = (todosLidos ? "✓ " : "") + txt;
+  if (todosLidos) sm.className = "lei-ir-no-lido";
+  det.append(sm);
+  let pronto = false;
+  const encher = () => {
+    if (pronto) return;
+    pronto = true;
+    (d.blocosPorNo[no.id] || []).forEach((b) => det.append(leiIrBlocoEl(d, b)));
+    if (no.artigos.length) {
+      const g = document.createElement("div");
+      g.className = "lei-ir-grade";
+      no.artigos.forEach((i) => g.append(leiIrChipEl(d, d.arts[i])));
+      det.append(g);
+    }
+    no.filhos.forEach((f) => det.append(leiIrNoEl(d, f)));
+  };
+  det.ontoggle = () => {
+    if (det.open) { leiIrAbertos.add(no.id); encher(); }
+    else leiIrAbertos.delete(no.id);
+  };
+  det.encher = encher;
+  if (leiIrAbertos.has(no.id)) { det.open = true; encher(); }
+  return det;
+}
+
+/* uma linha da lista (filtro ou busca): o artigo, o que se sabe dele, e o botão de ir */
+function leiIrLinhaEl(d, a, r, u, textoArt) {
+  const item = document.createElement("div");
+  item.className = "duv-item";
+  const tit = document.createElement("div");
+  tit.className = "duv-titulo";
+  tit.textContent = a.rotulo + (u ? " · " + String(u.rotulo || u.chave).replace(/\s*[-–]$/, "") : "")
+    + (!u && a.ementa ? " — " + a.ementa : "");
+  const sub = document.createElement("div");
+  sub.className = "nota";
+  if (u) sub.textContent = String(u.texto || "").replace(/\s+/g, " ").slice(0, 160);
+  else {
+    const partes = [];
+    if (r && r.questoes) partes.push(t("lei_rank_questoes", { n: r.questoes }));
+    if (r && (r.erros || r.acertos)) partes.push(t("lei_rank_placar", { e: r.erros, a: r.acertos }));
+    if (r && r.prova) partes.push(t("lei_rank_prova", { n: r.prova }));
+    if (r && r.incisos.length) partes.push(t("lei_rank_incisos", { i: r.incisos.join(", ") }));
+    if (a.num === d.parei) partes.unshift(t("lei_ir_dica_parei"));
+    sub.textContent = partes.join(" · ");
+    if (r && r.erros > r.acertos) sub.classList.add("lei-velha");
+  }
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn-min";
+  b.textContent = t("lei_rank_ver");
+  b.onclick = () => (u ? leiIrIrUnidade(a, u, textoArt) : leiIrIr(a.num, a.indice));
+  item.append(tit, sub, b);
+  return item;
+}
+
+function leiIrPrimeiroArtigo(d, num) {
+  return d.arts.filter((a) => a.num === num)[0] || null;
+}
+
+/* o filtro: os artigos do ranking (mais caem, erros, caiu em prova) ou o do "parei" */
+function leiIrItensDoFiltro(d, filtro) {
+  if (filtro === "parei") {
+    const a = d.parei ? leiIrPrimeiroArtigo(d, d.parei) : null;
+    return a ? [{ a, r: d.ranking[a.num] || null }] : [];
+  }
+  let rs = d.lista.slice();
+  if (filtro === "erros") rs = rs.filter((r) => r.erros > r.acertos).sort((x, y) => (y.erros - y.acertos) - (x.erros - x.acertos));
+  if (filtro === "prova") rs = rs.filter((r) => r.prova > 0).sort((x, y) => y.prova - x.prova);
+  return rs.map((r) => ({ a: leiIrPrimeiroArtigo(d, r.num), r })).filter((x) => x.a);
+}
+
+/* A BUSCA. "150", "art. 150", "148 I", "40 §4", "12-A"; senão o nome de uma divisão ou uma
+ * palavra do artigo. Com endereço ("148 I") o resultado é o INCISO, com o artigo logo acima. */
+function leiIrBuscarItens(d, q) {
+  const s = String(q || "").trim();
+  const itens = [];
+  const norm = (x) => leisChaveComparavel(x);
+  const m = s.match(/^(?:art(?:igos?)?\.?\s*)?(\d{1,4})\s*[ºo°ª]?\s*(?:-\s*([A-Za-z]))?\s*(.*)$/i);
+  if (m) {
+    const num = leiNumNormal(m[1] + (m[2] ? "-" + m[2] : ""));
+    const resto = String(m[3] || "").trim();
+    const exatos = d.arts.filter((a) => a.num === num);
+    if (resto && exatos.length) {
+      const cita = leiCitacoesNoTexto("art. " + m[1] + (m[2] ? "-" + m[2] : "") + " " + resto)[0];
+      exatos.forEach((a) => {
+        const ef = (d.efetivos && d.efetivos[a.indice]) || a;
+        itens.push({ a, r: d.ranking[a.num] || null });
+        if (cita) leiAcharUnidades(ef.texto, cita).forEach((u) => itens.push({ a, r: null, u, textoArt: ef.texto }));
+      });
+      return itens;
+    }
+    if (!resto) {
+      exatos.forEach((a) => itens.push({ a, r: d.ranking[a.num] || null }));
+      d.arts.filter((a) => a.num !== num && a.num.indexOf(num) === 0).slice(0, 30)
+        .forEach((a) => itens.push({ a, r: d.ranking[a.num] || null }));
+      if (itens.length) return itens;
+    }
+  }
+  const k = norm(s);
+  if (!k) return itens;
+  Object.keys(d.est.nos).map((id) => d.est.nos[id]).filter((no) => norm(no.rotulo).indexOf(k) >= 0 && no.total)
+    .slice(0, 12).forEach((no) => itens.push({ no }));
+  d.arts.filter((a) => norm(a.rotulo + " " + a.ementa + " " + a.corpo).indexOf(k) >= 0).slice(0, 30)
+    .forEach((a) => itens.push({ a, r: d.ranking[a.num] || null }));
+  return itens;
+}
+
+function leiIrPintar() {
+  const cx = $("leiIrGrade");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const d = leiIrDados();
+  if ($("leiIrSub")) $("leiIrSub").textContent = t("lei_ir_sub", { n: d.arts.length });
+  LEI_IR_FILTROS.forEach((f) => {
+    const b = $("btnLeiIrF_" + f);
+    if (b && b.classList) b.classList.toggle("mat-ligado", leiIrFiltro === f);
+  });
+  leiIrPrimeiro = null;
+  const q = String(($("leiIrBusca") || {}).value || "").trim();
+  const lista = (itens, vazio) => {
+    cx.className = "lei-ir-corpo";
+    if (leiIrFiltro === "caem" && !q) {
+      const aj = document.createElement("p");
+      aj.className = "nota";
+      aj.textContent = t("lei_rank_ajuda");
+      cx.append(aj);
+    }
+    if (!itens.length) {
+      const p = document.createElement("p");
+      p.className = "nota";
+      p.textContent = vazio;
+      cx.append(p);
+      return;
+    }
+    itens.forEach((it) => {
+      if (it.no) {
+        const linha = document.createElement("div");
+        linha.className = "duv-item";
+        const tit = document.createElement("div");
+        tit.className = "duv-titulo";
+        tit.textContent = it.no.rotulo;
+        const sub = document.createElement("div");
+        sub.className = "nota";
+        sub.textContent = t("lei_mapa_arts", { de: d.arts[it.no.de].numCru, ate: d.arts[it.no.ate].numCru, n: it.no.total });
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn-min";
+        b.textContent = t("lei_rank_ver");
+        const a0 = d.arts[it.no.de];
+        b.onclick = () => leiIrIr(a0.num, a0.indice);
+        linha.append(tit, sub, b);
+        cx.append(linha);
+        return;
+      }
+      cx.append(leiIrLinhaEl(d, it.a, it.r, it.u, it.textoArt));
+    });
+    const p0 = itens[0];
+    if (p0) leiIrPrimeiro = () => (p0.no ? leiIrIr(d.arts[p0.no.de].num, d.arts[p0.no.de].indice)
+      : p0.u ? leiIrIrUnidade(p0.a, p0.u, p0.textoArt) : leiIrIr(p0.a.num, p0.a.indice));
+  };
+  if (q) return lista(leiIrBuscarItens(d, q), t("lei_ir_busca_vazia", { q }));
+  if (leiIrFiltro !== "todos") {
+    return lista(leiIrItensDoFiltro(d, leiIrFiltro),
+      leiIrFiltro === "parei" ? t("lei_ir_sem_parei") : t("lei_rank_vazio"));
+  }
+
+  /* a árvore */
+  const raiz = d.est.raiz;
+  if (raiz.length === 1 && raiz[0].virtual) {
+    /* lei sem nenhuma divisão: só os artigos */
+    cx.className = "lei-ir-corpo lei-ir-grade";
+    raiz[0].artigos.forEach((i) => cx.append(leiIrChipEl(d, d.arts[i])));
+    return;
+  }
+  cx.className = "lei-ir-corpo";
+  if (leiIrAbertos === null) {
+    /* lei pequena abre inteira; lei grande abre só o ramo onde a pessoa parou */
+    leiIrAbertos = new Set();
+    const total = Object.keys(d.est.nos).length;
+    const pos = d.parei ? d.arts.findIndex((a) => a.num === d.parei) : -1;
+    const marcar = (n) => {
+      if (total <= 8 || (pos >= 0 && n.de >= 0 && n.de <= pos && pos <= n.ate)) leiIrAbertos.add(n.id);
+      n.filhos.forEach(marcar);
+    };
+    raiz.forEach(marcar);
+  }
+  raiz.forEach((no) => cx.append(leiIrNoEl(d, no)));
+}
+
+function leiIrAbrir(opc) {
+  const texto = String(($("leiTexto") || {}).value || "");
+  const arts = leiArtigos(texto);
+  if (!arts.length) { uiAlert(t("lei_sem_artigos")); return; }
+  if (!$("leiIrGrade")) {
+    /* sem o mapa no HTML, a caixa antiga — nunca ficar sem caminho */
+    return leiIrDigitando(arts);
+  }
+  leiIrFiltro = (opc && opc.filtro) || "todos";
+  leiIrAbertos = null;
+  if ($("leiIrBusca")) $("leiIrBusca").value = "";
+  leiIrPintar();
   abrirModal("dlgLeiIr");
-  try { leiReg("navegar", "grade de artigos aberta", arts.length + " artigos"); }
+  try { leiReg("navegar", "mapa da lei aberto", arts.length + " artigos"); }
   catch (e) {}
 }
 
-/* O caminho antigo, guardado inteiro: ele ainda serve numa lei de
- * trezentos artigos, onde a grade é grande demais para o olho. */
+/* O caminho antigo, guardado inteiro: só entra se o mapa não existir no HTML. */
 async function leiIrDigitando(lista) {
   const arts = lista || leiArtigos(String($("leiTexto").value || ""));
   if (!arts.length) { uiAlert(t("lei_sem_artigos")); return; }
@@ -4626,58 +4889,6 @@ function leiRanking(id) {
                  || b.erros - a.erros);
 }
 
-function leiRankingAbrir() {
-  const cx = $("leiRankCx");
-  if (!cx) return;
-  cx.innerHTML = "";
-  const lista = leiRanking(leiIdAtual);
-  const l = leiDe(leiIdAtual) || {};
-  $("leiRankTitulo").textContent = t("lei_rank_titulo", { lei: l.nome || "—" });
-
-  if (!lista.length) {
-    const p = document.createElement("p");
-    p.className = "nota";
-    /* dizer POR QUE está vazio: sem isto a tela parece quebrada, quando
-     * na verdade só falta a pessoa salvar questões desta lei */
-    p.textContent = t("lei_rank_vazio");
-    cx.append(p);
-  }
-
-  lista.forEach((r) => {
-    const item = document.createElement("div");
-    item.className = "duv-item";
-
-    const tit = document.createElement("div");
-    tit.className = "duv-titulo";
-    tit.textContent = r.rotulo + (r.ementa ? " — " + r.ementa : "");
-
-    const sub = document.createElement("div");
-    sub.className = "nota";
-    const partes = [];
-    if (r.questoes) partes.push(t("lei_rank_questoes", { n: r.questoes }));
-    if (r.erros || r.acertos) {
-      partes.push(t("lei_rank_placar", { e: r.erros, a: r.acertos }));
-    }
-    if (r.prova) partes.push(t("lei_rank_prova", { n: r.prova }));
-    if (r.incisos.length) partes.push(t("lei_rank_incisos", { i: r.incisos.join(", ") }));
-    sub.textContent = partes.join(" · ");
-    if (r.erros > r.acertos) sub.classList.add("lei-velha");
-
-    const b = document.createElement("button");
-    b.className = "btn-min";
-    b.textContent = t("lei_rank_ver");
-    b.onclick = () => {
-      $("dlgLeiRank").close();
-      leiTrocarModo("ler");
-      leiIrArtigo(r.num);
-    };
-
-    item.append(tit, sub, b);
-    cx.append(item);
-  });
-  abrirModal("dlgLeiRank");
-}
-
 /* ---------------------------------------------------------------------
  * REGISTRAR LEITURA
  * ------------------------------------------------------------------ */
@@ -4827,8 +5038,8 @@ async function leiFechar() {
  * tela de questões e as bordas coloridas do artigo. Ajuda que não
  * acompanha a tela vira a segunda fonte de verdade, e a errada. */
 const LEI_AJUDA = [
-  "fila", "proc", "consulta", "onde", "modos", "capitulos", "artigo",
-  "editar", "marcas", "sinais", "cartoes", "cai", "recitar", "ranking",
+  "fila", "proc", "consulta", "onde", "modos", "mapa",
+  "editar", "marcas", "sinais", "cartoes", "cai", "recitar",
   "cheia", "gravar", "lido", "log",
 ];
 
@@ -4881,23 +5092,19 @@ function leiIniciar() {
   liga("btnLeiModoEditar", "editar", () => leiTrocarModo("editar"));
   liga("btnLeiModoRecitar", "recitar", () => leiTrocarModo("recitar"));
   liga("btnLeiSalvar", "gravar", () => leiGravar());
-  liga("btnLeiBlocos", "capítulos", () => {
-    const cx = $("leiBlocosCx");
-    if (cx) cx.hidden = !cx.hidden;
-  });
-  liga("btnLeiIr", "ir ao artigo", () => leiIrAbrir());
-  liga("btnLeiIrDigitar", "ir ao artigo digitando", () => {
-    $("dlgLeiIr").close();
-    leiIrDigitando();
-  });
-  liga("btnLeiIrFechar", "fechar a grade de artigos", () => $("dlgLeiIr").close());
+  liga("btnLeiIrFechar", "fechar o mapa da lei", () => $("dlgLeiIr").close());
+  LEI_IR_FILTROS.forEach((f) => liga("btnLeiIrF_" + f, "mapa: " + f, () => { leiIrFiltro = f; leiIrPintar(); }));
+  if ($("leiIrBusca")) {
+    $("leiIrBusca").addEventListener("input", () => leiIrPintar());
+    $("leiIrBusca").addEventListener("keydown", (ev) => {
+      if (ev && ev.key === "Enter" && leiIrPrimeiro) { ev.preventDefault(); leiIrPrimeiro(); }
+    });
+  }
   liga("btnLeiMapaFechar", "fechar o mapa", () => $("dlgLeiMapa").close());
   liga("btnLeiMapaX", "fechar o mapa", () => $("dlgLeiMapa").close());
-  /* AS GAVETAS. Uma de cada vez: duas abertas devolveriam a fila de
-   * catorze botões que elas existem para desfazer. */
-  liga("btnLeiNavegar", "gaveta ir para", () => leiGaveta("leiGavNavegar"));
+  /* "IR PARA…" ABRE O MAPA DA LEI, direto. A gaveta de exibição continua gaveta. */
+  liga("btnLeiNavegar", "ir para (mapa da lei)", () => leiIrAbrir());
   liga("btnLeiExibir", "gaveta exibição", () => leiGaveta("leiGavExibir"));
-  liga("btnLeiRank", "artigos que mais caem", () => leiRankingAbrir());
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
   liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());
   liga("btnLeiAjudaFechar", "fechar ajuda", () => $("dlgLeiAjuda").close());
@@ -5030,7 +5237,6 @@ function leiIniciar() {
     b.textContent = t("copied");
     setTimeout(() => { b.textContent = r; }, 1800);
   });
-  liga("btnLeiRankFechar", "fechar os artigos que mais caem", () => $("dlgLeiRank").close());
 
   /* as seis marcas, as MESMAS do resumo */
   [["btnLeiMarcaDest", "destaque"], ["btnLeiMarcaImp", "importante"],
@@ -5053,7 +5259,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiAbrirNoArtigo, leiIrAbrir, leiNovaAbrir,
     leiTrocarModo, leiModoAtual, leiPintar, leiIrArtigo, leiTrocarPara,
     leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiCamposDoNome, leiClozeAbrir,
-    leiClozeConferir, leiClozeAplicar, leiRanking, leiRankingAbrir,
+    leiClozeConferir, leiClozeAplicar, leiRanking, leiIrPintar, leiIrIr,
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
     leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,

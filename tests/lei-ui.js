@@ -451,7 +451,9 @@ async function testes() {
     api.leiGravar();
     const id = api.leisLista()[0].id;
 
-    const blocos = api.$("leiBlocosCx").querySelectorAll(".lei-bloco");
+    /* os capitulos agora vivem no MAPA ("ir para…"): lei pequena abre inteira */
+    api.leiIrAbrir();
+    const blocos = api.$("leiIrGrade").querySelectorAll(".lei-bloco");
     ok(blocos.length === 2,
        "U5 deviam aparecer 2 capitulos, apareceram " + blocos.length);
     const txt = blocos.map((b) => b.textContent).join(" | ");
@@ -605,9 +607,10 @@ async function testes() {
     ok(rank.some((r) => r.num === "11"),
        "U8f citacao no COMENTARIO da questao nao foi contada");
 
-    api.leiRankingAbrir();
-    ok(api.$("dlgLeiRank").open === true, "U8g a janela do ranking nao abriu");
-    const linha = api.$("leiRankCx").textContent || "";
+    /* o ranking agora e' um filtro do mapa ("ir para…" › "mais caem") */
+    api.leiIrAbrir({ filtro: "caem" });
+    ok(api.$("dlgLeiIr").open === true, "U8g o mapa nao abriu com o filtro 'mais caem'");
+    const linha = api.$("leiIrGrade").textContent || "";
     ok(/Art\. 35/.test(linha), "U8h a lista nao mostra o artigo");
     ok(/2 erros|erros/.test(linha),
        "U8i a lista nao mostra como voce se saiu: " + linha.slice(0, 120));
@@ -678,7 +681,6 @@ async function testes() {
     api.$("leiTexto").value = L4320;
     api.leiGravar();
     api.leiTrocarModo("ler");
-    api.$("btnLeiBlocos").onclick();          /* deixa os capítulos abertos */
 
     ok(api.$("leiFila").hidden === false, "U10 a fila devia estar visivel antes");
     api.$("btnLeiCheia").onclick();
@@ -688,7 +690,7 @@ async function testes() {
      * servem antes e depois de ler, nao durante. Era o texto que estava
      * espremido numa faixa com barra de rolagem propria. */
     [["leiFila", "a fila de leis"], ["leiProc", "a procedencia"],
-     ["leiOnde", "o marcador"], ["leiBlocosCx", "a lista de capitulos"],
+     ["leiOnde", "o marcador"],
      ["leiMarcas", "a barra de marcas"]].forEach(([id, nome]) => {
       ok(api.$(id).hidden === true,
          "U10b " + nome + " continuou na tela na leitura ampliada");
@@ -859,7 +861,7 @@ async function testes() {
      * pegava, porque nenhum perguntava se o botao AINDA funcionava. */
     api.leiIniciar();
     api.leiAbrir("Direito Financeiro", "Receita pública");
-    ["btnLeiModoLer", "btnLeiModoEditar", "btnLeiModoRecitar", "btnLeiBlocos",
+    ["btnLeiModoLer", "btnLeiModoEditar", "btnLeiModoRecitar", "btnLeiNavegar",
      "btnLeiCheia", "btnLeiAjuda", "btnLeiLog", "btnLeiMaior", "btnLeiMenor",
      "btnLeiMarcaDest", "btnLeiMarcaImp", "btnLeiMarcaDuv",
      "btnLeiMarcaProva", "btnLeiMarcaPeg"].forEach((id) => {
@@ -868,7 +870,7 @@ async function testes() {
     });
     /* clicar em cada um nao pode gerar linha de erro */
     const errosAntes = api.leiLog0();
-    ["btnLeiModoLer", "btnLeiModoRecitar", "btnLeiModoLer", "btnLeiBlocos",
+    ["btnLeiModoLer", "btnLeiModoRecitar", "btnLeiModoLer", "btnLeiNavegar",
      "btnLeiMaior", "btnLeiMenor"].forEach((id) => api.$(id).onclick());
     ok(api.leiLog0() === errosAntes,
        "U14e clicar nos botoes gerou " + (api.leiLog0() - errosAntes)
