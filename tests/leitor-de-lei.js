@@ -965,7 +965,9 @@ async function testes() {
     const base = k({});
     ok(k({}) === base, "C5-pre a chave nao e' estavel");
     ok(k({ bruto: reg.texto + " x" }) !== base, "C5 texto diferente, mesma chave");
-    ok(k({ l: Object.assign({}, reg, { parei: "9" }) }) !== base, "C5a 'parei' diferente, mesma chave");
+    /* O MARCADOR SAIU DA CHAVE (16.49.0): ele muda no lugar e e' reaplicado aos nos ao reabrir. Com ele na
+     * chave, cada "parei aqui" derrubava o desenho guardado da lei inteira. */
+    ok(k({ l: Object.assign({}, reg, { parei: "9", pareiEm: "2026-01-01" }) }) === base, "C5a o marcador entrou na chave (cada 'parei aqui' refaria a lei inteira)");
     ok(k({ l: Object.assign({}, reg, { notasArtigos: { 1: "x" } }) }) !== base, "C5b nota diferente, mesma chave");
     ok(k({ l: Object.assign({}, reg, { alteracoes: { 1: { texto: "novo" } } }) }) !== base,
        "C5c alteracao diferente, mesma chave");

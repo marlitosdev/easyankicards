@@ -141,12 +141,13 @@ async function testes() {
        "U3g continuar devia levar ao art. 115: "
        + (bCont && bCont.textContent));
 
-    /* O RÓTULO É O ATALHO PARA O PONTO ONDE PAROU.
-     * Dizer "parei no art. 35" e obrigar a procurar o art. 35 na rolagem
-     * e dar a informacao e cobrar o trabalho. */
-    const bIr = api.$("leiOnde").querySelectorAll(".lei-onde-txt")[0];
+    /* O CAMINHO DE VOLTA É UM BOTÃO DE VERDADE ("ir ao art. 35"), e não uma frase
+     * que só se descobre ser link. Dizer "art. 35" e obrigar a procurar o art. 35 na
+     * rolagem e dar a informacao e cobrar o trabalho. */
+    const bIr = api.$("leiOnde").querySelectorAll("button")
+      .filter((b) => /ir ao art. 35/.test(b.textContent))[0];
     ok(!!bIr && typeof bIr.onclick === "function",
-       "U3h a frase 'parei no art. 35' nao leva ao artigo");
+       "U3h o botao 'ir ao art. 35' nao leva ao artigo");
 
     /* clicar de novo no mesmo numero TIRA o marcador: sem isso, so daria
      * para desmarcar marcando outro artigo qualquer */
