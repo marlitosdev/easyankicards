@@ -1069,7 +1069,30 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 /* ---- LEI SECA ------------------------------------------------------
  * A fila de leis, a procedência e o "onde parei" ficam ACIMA do texto e
  * não crescem: são referência, não conteúdo. O que rola é a lei. */
-.lei-fila{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.lei-fila{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+/* O CABEÇALHO, A FAIXA DE INFORMAÇÃO E A BARRA DE TRABALHO: cada uma é UMA linha (quebra só
+   se a janela for estreita). O que era referência não compete mais com a lei pelo espaço. */
+.lei-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.lei-cab-tit{min-width:0;flex:1 1 auto}
+.lei-cab-tit h3{margin:0 0 1px}
+#leiSub{margin:0 0 3px;font-size:11.5px}
+.lei-info{display:flex;flex-wrap:wrap;gap:2px 16px;align-items:center;margin:0 0 2px}
+.lei-barra-linha{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin:4px 0;
+  padding-bottom:6px;border-bottom:1px solid var(--borda)}
+.lei-barra-linha .mat-topo{margin:0;padding:0;border:none}
+.lei-barra-linha .mat-barra{margin:0}
+.lei-estado{align-self:center}
+.lei-estado:empty{display:none}
+/* o menu "fonte e versão": um botão que abre a lista das ações de procedência */
+.lei-mais{position:relative}
+.lei-mais>summary{list-style:none;cursor:pointer;font-family:inherit;font-size:11px;padding:2px 8px;
+  border-radius:7px;border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.lei-mais>summary::-webkit-details-marker{display:none}
+.lei-mais[open]>summary{border-color:var(--acao);color:var(--acao)}
+.lei-mais-corpo{position:absolute;z-index:6;top:calc(100% + 4px);left:0;min-width:230px;display:flex;
+  flex-direction:column;gap:4px;padding:8px;border:1px solid var(--borda);border-radius:10px;
+  background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.lei-mais-corpo .btn-min{text-align:left}
 /* ARTIGOS REPETIDOS: cada número é um cartão; a sugestão forte vem marcada
    em verde, a fraca pede que a pessoa escolha (borda âmbar) */
 .lei-dup-topo{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:4px 0 8px}
@@ -1190,14 +1213,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-fila-rot{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--sutil);font-weight:800;align-self:center;margin-right:2px;
   cursor:help}
-.lei-proc{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 6px;
+.lei-proc{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin:0;
   font-size:11.5px}
 .lei-proc-txt{color:var(--sutil)}
 .lei-fonte{color:var(--info);text-decoration:underline}
 /* a cor de alerta aqui NÃO é decoração: é a única pista de que o texto
  * pode estar desatualizado */
 .lei-velha{color:var(--atencao);font-weight:600}
-.lei-onde{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 8px}
+.lei-onde{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
 .lei-onde-txt{font-size:12px;color:var(--sutil)}
 .lei-barra{flex:0 0 120px;height:6px;border-radius:999px;background:var(--borda);
   overflow:hidden}
@@ -6083,16 +6106,31 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <dialog id="dlgLeiSeca" class="ui-modal diag-modal">
-  <h3 id="leiTitulo"></h3>
-  <p class="nota" id="leiSub"></p>
+  <!-- O CABEÇALHO É UMA FAIXA: o título e o subtítulo à esquerda; ajuda, registro e fechar
+       à direita. Ajuda e registro têm forma própria (redondos): são recursos de quando algo dá
+       errado ou de quando se está aprendendo o app, não de quem está lendo a lei. -->
+  <div class="lei-cab">
+    <div class="lei-cab-tit">
+      <h3 id="leiTitulo"></h3>
+      <p class="nota" id="leiSub"></p>
+    </div>
+    <span class="lei-apoio">
+      <button class="lei-redondo" id="btnLeiAjuda"
+        title="Ajuda: explica, um a um, para que serve cada recurso desta janela.">?</button>
+      <button class="lei-redondo" id="btnLeiLog"
+        title="Registro: só o que aconteceu aqui dentro — o que você marcou, gravou e leu, e os erros. Serve para relatar um problema.">☰</button>
+      <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
+        title="Fecha a lei. Se houver mudança não salva, pergunta antes."></button>
+    </span>
+  </div>
 
-  <!-- De onde veio e de quando é, perto do título — é a primeira
-       pergunta ao reabrir uma lei, não uma nota de rodapé. Lei muda; sem
-       carimbo de data não há como saber que o texto envelheceu. -->
-  <div class="lei-proc" id="leiProc" hidden></div>
-
-  <!-- Onde parei, em artigo — a segunda pergunta, logo abaixo. -->
-  <div class="lei-onde" id="leiOnde" hidden></div>
+  <!-- UMA FAIXA SÓ para as duas primeiras perguntas de quem reabre uma lei: de onde ela veio e de
+       quando é (lei muda; sem carimbo de data não há como saber que o texto envelheceu) e onde
+       eu parei, em artigo. -->
+  <div class="lei-info" id="leiInfo">
+    <div class="lei-proc" id="leiProc" hidden></div>
+    <div class="lei-onde" id="leiOnde" hidden></div>
+  </div>
 
   <!-- Quais leis servem ESTE tópico. Uma lei pode servir vários tópicos:
        é o que evita colar a mesma 4.320 cinco vezes. -->
@@ -6105,6 +6143,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        biblioteca (leiPintarFila decide). -->
   <p class="nota" id="leiTextoAjuda" hidden></p>
 
+  <!-- A BARRA DE TRABALHO É UMA LINHA: os modos, "ir para…", "exibição", "leis" e, ao lado,
+       as seis marcas. Antes eram três faixas (a barra, a gaveta de navegação e as marcas). -->
+  <div class="lei-barra-linha">
   <div class="mat-topo">
     <!-- OS TRÊS MODOS SÃO UMA ESCOLHA, e se desenham como uma: encostados
          e dentro de uma borda só. Soltos, tinham a mesma forma de
@@ -6119,28 +6160,30 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Esconde o texto e mostra só o número e a ementa de cada artigo. Serve para conferir o que você realmente lembra — reler dá sensação de saber."></button>
     </span>
     <span class="mat-sep"></span>
-    <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar"
-      title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
-    <!-- CATORZE BOTÕES NUMA FILA SÓ VIRAM RUÍDO.
-         Os três primeiros (ler/editar/recitar) são UMA escolha, e ficam.
-         O resto se divide por PERGUNTA: "onde eu vou?" e "como eu vejo?".
-         Cada gaveta abre sob demanda; fechadas, a barra tem sete alvos em
-         vez de catorze. -->
-    <button class="btn-min" id="btnLeiNavegar" data-i18n="lei_gav_navegar"
-      title="Capítulos, ir a um artigo pelo número, e os artigos que mais caem nas suas questões."></button>
+    <!-- O QUE SE FAZ COM A LEI: ir a algum lugar (o mapa), ajustar a vista, e trocar de lei.
+         O "gravar" e o "registrar estudo" vivem no rodapé, juntos. -->
+    <button class="btn-min btn-min-ok" id="btnLeiNavegar" data-i18n="lei_gav_navegar"
+      title="O mapa da lei: capítulos, artigos, parágrafos e incisos, e os artigos que mais caem nas suas questões."></button>
     <button class="btn-min" id="btnLeiExibir" data-i18n="lei_gav_exibir"
       title="Tamanho da letra, tamanho da janela e leitura ampliada."></button>
-    <!-- ajuda e registro ficam FORA da fila de trabalho, à direita e com
-         forma própria: são recursos de quando algo dá errado ou de quando
-         se está aprendendo o app, não de quem está lendo a lei. -->
-    <span class="mat-topo-dir lei-apoio">
-      <button class="lei-redondo" id="btnLeiAjuda"
-        title="Ajuda: explica, um a um, para que serve cada recurso desta janela.">?</button>
-      <button class="lei-redondo" id="btnLeiLog"
-        title="Registro: só o que aconteceu aqui dentro — o que você marcou, gravou e leu, e os erros. Serve para relatar um problema.">☰</button>
-      <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
-        title="Fecha a lei. Se houver mudança não salva, pergunta antes."></button>
-    </span>
+    <button class="btn-min" id="btnLeiFilaMais" data-i18n="lei_fila_btn" data-i18n-title="lei_fila_btn_aj" hidden></button>
+  </div>
+  <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
+       para a pessoa decorar o app em vez da lei. -->
+  <div class="mat-barra" id="leiMarcas">
+    <button class="marca marca-d" id="btnLeiMarcaDest" data-i18n="mat_marca_d"
+      title="Grifa o trecho selecionado na leitura."></button>
+    <button class="marca marca-i" id="btnLeiMarcaImp" data-i18n="mat_marca_i"
+      title="Marca como importante."></button>
+    <button class="marca marca-q" id="btnLeiMarcaDuv" data-i18n="mat_marca_q"
+      title="Marca como dúvida — entra na lista de dúvidas."></button>
+    <button class="marca marca-prova" id="btnLeiMarcaProva" data-i18n="mat_marca_prova"
+      title="Marca que este trecho já caiu em prova."></button>
+    <button class="marca marca-peg" id="btnLeiMarcaPeg" data-i18n="mat_marca_peg"
+      title="Marca a pegadinha — na letra da lei é onde ela mais mora."></button>
+    <button class="marca marca-nota" id="btnLeiMarcaNota" data-i18n="lei_marca_nota"
+      title="Marca o trecho selecionado e já abre a caixa para escrever uma anotação sua ali — diferente das outras, esta marca guarda o que você escreveu."></button>
+  </div>
   </div>
 
 
@@ -6173,24 +6216,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </span>
   </div>
 
-  <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
-       para a pessoa decorar o app em vez da lei. -->
-  <div class="mat-barra" id="leiMarcas">
-    <button class="marca marca-d" id="btnLeiMarcaDest" data-i18n="mat_marca_d"
-      title="Grifa o trecho selecionado na leitura."></button>
-    <button class="marca marca-i" id="btnLeiMarcaImp" data-i18n="mat_marca_i"
-      title="Marca como importante."></button>
-    <button class="marca marca-q" id="btnLeiMarcaDuv" data-i18n="mat_marca_q"
-      title="Marca como dúvida — entra na lista de dúvidas."></button>
-    <button class="marca marca-prova" id="btnLeiMarcaProva" data-i18n="mat_marca_prova"
-      title="Marca que este trecho já caiu em prova."></button>
-    <button class="marca marca-peg" id="btnLeiMarcaPeg" data-i18n="mat_marca_peg"
-      title="Marca a pegadinha — na letra da lei é onde ela mais mora."></button>
-    <button class="marca marca-nota" id="btnLeiMarcaNota" data-i18n="lei_marca_nota"
-      title="Marca o trecho selecionado e já abre a caixa para escrever uma anotação sua ali — diferente das outras, esta marca guarda o que você escreveu."></button>
-    <span class="mat-topo-dir"><span class="nota" id="leiEstado"></span></span>
-  </div>
-
   <!-- SÓ EDITÁVEL ANTES DA PRIMEIRA GRAVAÇÃO. Com base já gravada, este
        campo vira somente-leitura (leiPintarEdicaoLivre) — toda mudança
        depois disso passa pelo ✏ por artigo ou por "atualizar para nova
@@ -6209,8 +6234,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="mat-leitura" id="leiRecitar" hidden></div>
   <div class="lei-anexos" id="leiAnexos" hidden></div>
   <div class="dlg-rodape">
+    <span class="nota lei-estado" id="leiEstado"></span>
+    <button class="btn btn-azul" id="btnLeiSalvar" data-i18n="lei_salvar"
+      title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
     <button class="btn btn-verde" id="btnLeiLido" data-i18n="lei_lido"
-      title="Registra no diário que você leu, com o tempo estimado. Se um capítulo estiver aberto, conta só o tempo dele."></button>
+      title="Registra no diário o seu estudo desta lei, com o tempo estimado. Se um capítulo estiver aberto no mapa, conta só o tempo dele."></button>
     <button class="btn btn-cinza" id="btnLeiFechar2" data-i18n="help_close"
       title="Fecha a lei."></button>
   </div>

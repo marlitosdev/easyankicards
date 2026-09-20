@@ -682,7 +682,11 @@ async function testes() {
     api.leiGravar();
     api.leiTrocarModo("ler");
 
-    ok(api.$("leiFila").hidden === false, "U10 a fila devia estar visivel antes");
+    /* COM UMA LEI SO A FILA REPETIRIA O TITULO: fica recolhida atras do botao "leis" da barra */
+    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false,
+       "U10 com uma lei so, a fila fica recolhida e o botao 'leis' aparece");
+    api.$("btnLeiFilaMais").onclick();
+    ok(api.$("leiFila").hidden === false, "U10a o botao 'leis' abre a fila");
     api.$("btnLeiCheia").onclick();
 
     /* NA LEITURA AMPLIADA SÓ FICA A LEI.
@@ -703,7 +707,8 @@ async function testes() {
        "U10e o botao nao oferece a saida: " + api.$("btnLeiCheia").textContent);
 
     api.$("btnLeiCheia").onclick();
-    ok(api.$("leiFila").hidden === false, "U10f sair da tela cheia nao trouxe a fila de volta");
+    ok(api.$("leiFila").hidden === false, "U10f sair da tela cheia nao trouxe a fila de volta (aberta pela pessoa)");
+    ok(api.$("btnLeiFilaMais").hidden === false, "U10f2 nem o botao 'leis'");
     ok(api.$("leiOnde").hidden === false, "U10g sair nao trouxe o marcador de volta");
     ok(!/lei-cheia/.test(api.$("dlgLeiSeca").className || ""),
        "U10h a janela ficou presa no modo ampliado");
@@ -713,8 +718,9 @@ async function testes() {
     api.$("btnLeiCheia").onclick();
     await api.$("btnLeiFechar").onclick();
     api.leiAbrir("Direito Financeiro", "Receita pública");
-    ok(api.$("leiFila").hidden === false,
+    ok(!/lei-cheia/.test(api.$("dlgLeiSeca").className || "") && api.$("leiOnde").hidden === false,
        "U10i reabriu ainda em tela cheia, sem ninguem ter pedido");
+    ok(api.$("leiFila").hidden === true, "U10j reaberta, a fila volta a nascer recolhida (uma lei so)");
   }
 
   /* ---- U11: a letra escolhida fica ---- */
