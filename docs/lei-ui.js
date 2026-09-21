@@ -3313,7 +3313,7 @@ function leiMapaAbrir(repintar) {
   const est = document.createElement("div");
   if (!dg.itens.length) {
     est.className = "lei-mapa-estado lei-mapa-estado-ok";
-    est.textContent = t("lei_mapa_ok");
+    est.textContent = t(dg.alteradora ? "lei_mapa_ok_alt" : "lei_mapa_ok");
   } else {
     est.className = "lei-mapa-estado " + (graves.length ? "lei-mapa-estado-grave" : "lei-mapa-estado-ok");
     est.textContent = (graves.length ? t("lei_mapa_est_grave", { n: graves.length }) : t("lei_mapa_est_ok"))
@@ -4491,7 +4491,7 @@ function leiPreAnalisar(texto, opc) {
   const pre = leiPreprocessar(texto, opc);
   const arts = leiArtigos(texto);
   /* numeração não se critica numa lei que ALTERA: ela só cita artigos soltos */
-  const num = (arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !(opc && opc.semNumeracao))
+  const num = (arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !(opc && opc.semNumeracao) && !leiPareceAlteradora(texto).sim)
     ? leiNumeracao(arts) : { problemas: [], graves: [] };
   return { pre, num, deve: pre.mudancas.length > 0 || num.graves.length > 0 };
 }
@@ -4673,7 +4673,7 @@ function leiPrePintar() {
   const arts = leiArtigos(res.texto);
   const pn = $("leiPreNumeracao");
   pn.innerHTML = "";
-  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao) {
+  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao || leiPareceAlteradora(res.texto).sim) {
     pn.hidden = true;
   } else {
     const num = leiNumeracao(arts);
@@ -4977,7 +4977,7 @@ function leiNumeracaoDaLei(l) {
   const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + leiHashTexto(leiJsonEstavel(l.ajustesRecusados || {}));
   if (leiNumeracaoMemo.chave !== chave) {
     const arts = leiArtigos(l.texto, leiOpcDaLei(l));
-    leiNumeracaoMemo = { chave, res: arts.length >= LEI_NUMERACAO_MIN_ARTIGOS ? leiNumeracao(arts) : vazio };
+    leiNumeracaoMemo = { chave, res: arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !leiPareceAlteradora(l.texto).sim ? leiNumeracao(arts) : vazio };
   }
   return leiNumeracaoMemo.res;
 }
