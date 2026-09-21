@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.55.0";
+const VERSAO = "16.55.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -602,13 +602,30 @@ document.addEventListener("keydown", (e) => {
 
 let toastTimer = null;
 
-function toast(chave) {
+/* O AVISO CURTO PRECISA SER VISTO. Era um div comum: uma janela modal aberta (showModal) fica na camada de cima
+ * do navegador, ACIMA de qualquer elemento da página — então todo aviso disparado de dentro de uma janela
+ * ("relatório copiado", "gravado"…) aparecia por baixo dela, e a pessoa apertava o botão sem ver reação nenhuma.
+ * Agora é um popover: entra na camada de cima, acima das janelas. Não recebe clique, então a janela modal
+ * (que deixa o resto inerte) não o atrapalha. Sem suporte a popover, fica como antes. */
+function toastMsg(texto, ms) {
   const el = $("toast");
-  el.textContent = t(chave);
+  if (!el) return;
+  el.textContent = String(texto == null ? "" : texto);
   el.classList.add("on");
+  try {
+    if (el.matches && el.matches(":popover-open") && el.hidePopover) el.hidePopover();
+    if (el.showPopover) el.showPopover();
+  } catch (e) {}
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("on"), 1800);
+  toastTimer = setTimeout(() => {
+    el.classList.remove("on");
+    setTimeout(() => {
+      try { if (!el.classList.contains("on") && el.hidePopover && el.matches(":popover-open")) el.hidePopover(); } catch (e) {}
+    }, 260);
+  }, ms || 1800);
 }
+
+function toast(chave) { toastMsg(t(chave), 1800); }
 
 /* ------------- balão de dica universal (hover / toque longo) -------- */
 
