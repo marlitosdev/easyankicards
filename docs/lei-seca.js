@@ -196,6 +196,10 @@ function leiLerLei(texto, opc) {
   const rec = (opc && opc.recusados) || {};
   const ajustes = [];
   const fora = [];
+  /* AS CITAÇÕES: as linhas dentro de um artigo citado (entre aspas) são texto do artigo que ALTERA, não artigos
+   * desta lei. Cada bloco vira um ajuste "citacao": a pessoa pode mandar tratar como texto comum. */
+  const cit = leiLerCitacoes(linhas, rec);
+  const citadas = cit.citadas;
   const cortaAj = (x, n) => String(x == null ? "" : x).replace(/\s+/g, " ").trim().slice(0, n);
   let atual = null;
   let divisao = null;
@@ -255,6 +259,13 @@ function leiLerLei(texto, opc) {
   let aguardaNome = false;         /* a divisão aberta ainda espera o NOME (só veio a nota, ou nada) */
 
   linhas.forEach((linha, i) => {
+    if (citadas.has(i + 1)) {
+      if (atual) {
+        atual.linhas.push(linha);
+        if (String(linha).trim()) atual.corpo += "\n" + linha;
+      } else if (String(linha).trim()) fora.push({ linha: i + 1, texto: linha });
+      return;
+    }
     const d = linha.match(LEI_RE_DIVISAO);
     if (!d && esperaNome) {
       const cru = String(linha).trim();
@@ -374,6 +385,10 @@ function leiLerLei(texto, opc) {
     if (!a.divId) return;
     const d = divisoes.filter((x) => x.id === a.divId)[0];
     if (d) a.nome = cortaAj(d.nome, 120);
+  });
+  cit.blocos.forEach((b) => {
+    ajustes.push({ id: b.id, tipo: "citacao", linha: b.linha, linhaFim: b.fim, antes: cortaAj(linhas[b.linha - 1], 200),
+      rotulo: b.rotulo, alvo: b.alvo ? b.alvo.curto : "", n: b.n, recusado: !!b.recusado });
   });
   ajustes.sort((x, y) => x.linha - y.linha);
 
@@ -822,6 +837,11 @@ function leiPreprocessar(texto, opc) {
   const linhas = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n").split("\n");
   const sem = linhas.map((x) => x.replace(LEI_RE_INVISIVEIS, ""));
   const mudancas = [];
+  /* OS BLOCOS DE ALTERAÇÃO NÃO SE LIMPAM. O fechamento "...... ” (NR)" repetido não é rodapé de página, a aspa de
+   * “Art. 9º ...... é o que marca o artigo citado, e essa linha não é frase quebrada: as três limpezas as
+   * destruíam (na LC 214: 326 linhas, 72 aspas e 32 colagens). O texto fica como veio. */
+  const cit = leiLerCitacoes(sem);
+  const protegidas = cit.citadas;
   const trilha = (s) => String(s).replace(/\s+/g, " ").trim(); const cola = (s, n) => { const x = trilha(s); if (x.length <= n) return x; const c = x.slice(-n); const i = c.indexOf(" "); return i >= 0 && i < 24 ? c.slice(i + 1) : c; };
 
   /* 1a. caracteres invisíveis (hífen opcional, espaço de largura zero…) */
@@ -832,9 +852,25 @@ function leiPreprocessar(texto, opc) {
       antes: trilha(linhas[inv[0] - 1]).slice(0, 120), depois: trilha(sem[inv[0] - 1]).slice(0, 120) });
   }
 
+  /* AS LINHAS DE UM ANEXO são tabela: o cabeçalho de uma tabela se repete de propósito (na LC 214, "Receita
+   * Bruta em 12 Meses" aparece 8 vezes, uma por anexo do Simples). Tomá-lo por cabeçalho de página e sugerir
+   * apagar estraga o anexo. Vale o mesmo critério dos anexos mais abaixo: do título do anexo até o próximo
+   * artigo. Na atualização por lei alteradora (semAnexos) os anexos não são separados, e nada disto vale. */
+  const emAnexo = {};
+  if (!(opc && opc.semAnexos)) {
+    let dentroAx = false;
+    sem.forEach((x, i) => {
+      if (protegidas.has(i + 1)) return;
+      if (LEI_RE_ANEXO_MAIUSCULO.test(x) || LEI_RE_ANEXO_SOZINHO.test(x)) dentroAx = true;
+      else if (dentroAx && LEI_RE_ARTIGO.test(x) && /^[\s>*]*Art/.test(x)) dentroAx = false;
+      if (dentroAx) emAnexo[i + 1] = true;
+    });
+  }
+
   /* 1b. cabeçalho e rodapé repetidos a cada página */
   const ondeEsta = {};
   sem.forEach((x, i) => {
+    if (protegidas.has(i + 1) || emAnexo[i + 1]) return;
     const k = trilha(x);
     if (k.length < 20) return;
     (ondeEsta[k] = ondeEsta[k] || []).push(i + 1);
@@ -880,7 +916,7 @@ function leiPreprocessar(texto, opc) {
    * checagem de remissão veja o mesmo texto que o leitor veria. */
   const efetiva = sem.slice();
   sem.forEach((x, i) => {
-    if (remover[i + 1]) return;
+    if (remover[i + 1] || protegidas.has(i + 1)) return;
     const g = leiGrafiaDaLinha(x, opc);
     if (g === null) return;
     efetiva[i] = g;
@@ -896,7 +932,7 @@ function leiPreprocessar(texto, opc) {
   };
   let ultimaOrdem = null;
   efetiva.forEach((x, i) => {
-    if (remover[i + 1]) return;
+    if (remover[i + 1] || protegidas.has(i + 1)) return;
     const a = leiCasarArtigo(x);
     const d = !a && x.match(LEI_RE_DIVISAO);
     if (!a && !d) return;
@@ -940,7 +976,7 @@ function leiPreprocessar(texto, opc) {
   /* 4. anexos: cada "ANEXO X" vai até o próximo anexo ou o próximo artigo */
   const anx = [];
   efetiva.forEach((x, i) => {
-    if (remover[i + 1]) return;
+    if (remover[i + 1] || protegidas.has(i + 1)) return;
     if (opc && opc.semAnexos) return;     /* lei que ALTERA: os anexos são lidos por leiAnexosDaAlteradora */
     const m = x.match(LEI_RE_ANEXO_MAIUSCULO) || x.match(LEI_RE_ANEXO_SOZINHO);
     if (m) anx.push(i);
@@ -965,7 +1001,7 @@ function leiPreprocessar(texto, opc) {
 
   const ordem = { invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, remissao: 4, anexo: 5 };
   mudancas.sort((x, y) => (ordem[x.grupo] - ordem[y.grupo]) || (x.linhas[0] - y.linhas[0]));
-  return { mudancas, linhas: linhas.length };
+  return { mudancas, linhas: linhas.length, blocos: cit.blocos, protegidas: protegidas.size };
 }
 
 /* Aplica as ESCOLHAS de quem colou. decisoes = { [id]: true|false } — e, nos
@@ -2087,18 +2123,144 @@ function leiPareceAlteradora(texto) {
   return { sim: forte || sinais.length >= 2, sinais };
 }
 
-/* A PARCELA DO TEXTO (0 a 1) que está dentro de artigos CITADOS entre aspas: de uma linha que abre com
- * “Art. … até a que fecha com ” (ou ” (NR), ” (AC)). A linha “Art. 9º ...... (o caput não mudou) não fecha. */
-function leiParcelaCitada(texto) {
-  let dentro = false, citado = 0, total = 0;
-  String(texto || "").split("\n").forEach((s) => {
-    const n = s.length + 1;
-    total += n;
-    const abre = /^\s*[“"«]\s*Art(?:\.|igo)?\s*\d/i.test(s);
-    if (!dentro && abre) dentro = true;
-    if (dentro) citado += n;
-    if (dentro && /[”"»]\s*(?:\((?:NR|AC|VETADO)\))?\s*\.?\s*$/.test(s) && !(abre && /\.{6,}\s*$/.test(s))) dentro = false;
+/* =====================================================================
+ * AS CITAÇÕES: artigos de OUTRA lei, entre aspas, dentro de um artigo desta
+ *
+ * O Planalto traz, nas leis que alteram outras, o artigo que ALTERA e, logo abaixo, o texto novo do artigo
+ * ALTERADO entre aspas:
+ *
+ *   Art. 496. A Lei nº 5.172, de 25 de outubro de 1966 - Código Tributário Nacional, passa a vigorar com as
+ *   seguintes alterações:
+ *   “Art. 9º ..................................        <- o artigo 9º do CTN, sem mudar o caput
+ *   IV - cobrar impostos ... sobre:
+ *   ...................................... ” (NR)       <- fecha; (NR) = nova redação, (AC) = acréscimo
+ *
+ * A LC 214/2025 tem 49 desses artigos e 88 citados. Tratados como texto da própria lei, eles viravam artigos
+ * falsos (o 9º depois do 496º), cabeçalho repetido (o fechamento repetido 58 vezes), aspa "corrigida" e linha
+ * "colada" na frase de cima. Aqui se acha CADA REGIÃO citada (da linha que abre com aspas até a que fecha) e o
+ * artigo que altera e a lei-alvo dele. Só regiões FECHADAS contam: uma aspa que nunca fecha não engole o texto.
+ * ===================================================================== */
+const LEI_RE_ABRE_CITACAO = /^\s*[“"«]\s*Art(?:\.|igo)?\s*\d/i;
+/* fecha com aspas, a marca (NR)/(AC)/(VETADO) e — no Planalto — notas editoriais depois dela: "” (NR)   (Vide Lei nº 227)" */
+const LEI_RE_NOTA_DEPOIS = "(?:\\s*\\((?:Vide|Vig[êe]ncia|Regulamento|Produ[çc][ãa]o|Reda[çc][ãa]o|Inclu[ií]d|Revogad)[^)]*\\))*";
+const LEI_RE_FECHA_CITACAO = new RegExp("[”\"»]\\s*(?:\\((?:NR|AC|VETADO)\\))?" + LEI_RE_NOTA_DEPOIS + "\\s*\\.?\\s*$");
+const LEI_RE_INTRO_ALTERACAO = /^\s*Art(?:\.|igo)?\s*\d+[ºo°]?(?:-[A-Z]+)?\.?\s+(?:Os|As|O|A)\s+(.+?),?\s+passa(?:m)?\s+a\s+vigorar/i;
+const LEI_RE_VIGENCIA_PROPRIA = /^\s*Art(?:\.|igo)?\s*\d+[ºo°]?(?:-[A-Z]+)?\.?\s+Esta\s+(?:Lei|Emenda|Medida)/i;
+
+function leiContaAspas(s) {
+  const c = (re) => (String(s).match(re) || []).length;
+  return { o: c(/[“«]/g), c: c(/[”»]/g), r: c(/"/g) };
+}
+
+/* a linha FECHA uma citação? termina com aspas, e sobra uma aspa de fechar (não é "a" de uma alínea) */
+function leiLinhaFechaCitacao(s) {
+  if (!LEI_RE_FECHA_CITACAO.test(s)) return false;
+  const q = leiContaAspas(s);
+  return q.c > q.o || (q.c === q.o && q.r % 2 === 1);
+}
+
+/* a linha ABRE e FECHA a citação sozinha: “Art. 5º Texto.” (NR) */
+function leiLinhaCitacaoInteira(s) {
+  if (!LEI_RE_FECHA_CITACAO.test(s)) return false;
+  const q = leiContaAspas(s);
+  return (q.o > 0 && q.o === q.c) || (q.r >= 2 && q.r % 2 === 0);
+}
+
+function leiMarcaDoFecho(s) {
+  const m = String(s).match(new RegExp("\\((NR|AC|VETADO)\\)" + LEI_RE_NOTA_DEPOIS + "\\s*\\.?\\s*$"));
+  return m ? m[1] : "";
+}
+
+/* as regiões citadas FECHADAS: [{ ini, fim, marca }] com índices de linha 0-based */
+function leiRegioesCitadas(linhas) {
+  const regioes = [];
+  let ini = -1;
+  for (let i = 0; i < linhas.length; i++) {
+    const s = linhas[i];
+    if (ini < 0) {
+      if (!LEI_RE_ABRE_CITACAO.test(s)) continue;
+      if (leiLinhaCitacaoInteira(s)) regioes.push({ ini: i, fim: i, marca: leiMarcaDoFecho(s) });
+      else ini = i;
+      continue;
+    }
+    /* a citação que NUNCA fechou não engole o resto: uma nova alteração ou a vigência da própria lei a encerra */
+    if (LEI_RE_INTRO_ALTERACAO.test(s) || LEI_RE_VIGENCIA_PROPRIA.test(s)) { ini = -1; continue; }
+    if (leiLinhaFechaCitacao(s)) { regioes.push({ ini, fim: i, marca: leiMarcaDoFecho(s) }); ini = -1; }
+  }
+  return regioes;
+}
+
+/* "Lei nº 5.172, de 25 de outubro de 1966 - Código Tributário Nacional" => { curto, nome } */
+function leiAlvoDaAlteracao(bruto) {
+  const s = String(bruto || "").replace(/\s+/g, " ").replace(/\s*[:;]\s*$/, "").trim();
+  const nome = (s.match(/\s[-–—]\s+([^,;]+?)\s*$/) || [])[1] || "";
+  const m = s.match(/(Lei Complementar|Lei|Decreto-Lei|Decreto Legislativo|Decreto|Medida Provisória|Emenda Constitucional)\s+n[ºo°.]*\s*([\d.]+(?:-\d+)?)/i);
+  if (m) {
+    const ano = (s.slice(m.index + m[0].length).match(/(\d{4})/) || [])[1] || "";
+    return { bruto: s.slice(0, 140), nome, curto: m[1] + " nº " + m[2] + (ano ? "/" + ano : "") };
+  }
+  if (/Ato das Disposi[çc][õo]es Constitucionais Transit[óo]rias/i.test(s)) return { bruto: s.slice(0, 140), nome: "", curto: "ADCT" };
+  if (/Constitui[çc][ãa]o Federal/i.test(s)) return { bruto: s.slice(0, 140), nome: "", curto: "Constituição Federal" };
+  return { bruto: s.slice(0, 140), nome, curto: s.slice(0, 70) };
+}
+
+/* Os BLOCOS DE ALTERAÇÃO de um texto: cada artigo próprio que "passa a vigorar com as seguintes alterações"
+ * e as regiões citadas dele. `rec` = { "citacao:<linha>": true } são os que a pessoa mandou tratar como texto
+ * comum (não entram em `citadas`).
+ *   blocos: [{ id, linha, rotulo, alvo, trechos:[{ ini, fim, marca, artigos:[{ linha, num, numCru, semMudanca }] }],
+ *             fim, n, recusado }]      (linha, ini, fim: 1-based)
+ *   citadas: Set das linhas (1-based) que estão dentro de uma citação */
+function leiLerCitacoes(linhas, rec) {
+  rec = rec || {};
+  const regioes = leiRegioesCitadas(linhas);
+  const dentro = {};
+  regioes.forEach((r) => { for (let k = r.ini; k <= r.fim; k++) dentro[k] = true; });
+  const eventos = [];
+  regioes.forEach((r) => eventos.push({ i: r.ini, tipo: "regiao", r }));
+  linhas.forEach((s, i) => {
+    if (dentro[i]) return;
+    if (LEI_RE_INTRO_ALTERACAO.test(s)) eventos.push({ i, tipo: "intro", s });
+    else if (leiCasarArtigo(s) && !LEI_RE_ABRE_CITACAO.test(s)) eventos.push({ i, tipo: "corte" });
   });
+  eventos.sort((a, b) => a.i - b.i);
+  const blocos = [];
+  let atual = null;
+  const rotuloDe = (s) => (String(s).match(/^\s*(Art(?:\.|igo)?\s*\d+[ºo°]?(?:-[A-Z]+)?)/i) || ["", "Art."])[1].replace(/^Artigo/i, "Art.");
+  eventos.forEach((ev) => {
+    if (ev.tipo === "intro") {
+      const g = ev.s.match(LEI_RE_INTRO_ALTERACAO);
+      atual = { id: "citacao:" + (ev.i + 1), linha: ev.i + 1, rotulo: rotuloDe(ev.s), alvo: leiAlvoDaAlteracao(g[1]), trechos: [], fim: ev.i + 1, n: 0, recusado: !!rec["citacao:" + (ev.i + 1)] };
+      blocos.push(atual);
+    } else if (ev.tipo === "corte") {
+      atual = null;
+    } else {
+      if (!atual) {
+        atual = { id: "citacao:o" + (ev.r.ini + 1), linha: ev.r.ini + 1, rotulo: "", alvo: null, trechos: [], fim: ev.r.fim + 1, n: 0, recusado: false };
+        atual.recusado = !!rec[atual.id];
+        blocos.push(atual);
+      }
+      const artigos = [];
+      for (let k = ev.r.ini; k <= ev.r.fim; k++) {
+        const a = String(linhas[k]).match(/^\s*[“"«]?\s*Art(?:\.|igo)?\s*(\d+[ºo°]?(?:\s*-\s*[A-Z]+)?)\.?\s*(.*)$/i);
+        if (a) artigos.push({ linha: k + 1, num: leiNumNormal(a[1]), numCru: leiNumCruLimpo(a[1]), semMudanca: /^\.{5,}\s*(?:[”"»]\s*(?:\((?:NR|AC)\))?)?\s*$/.test(a[2]) });
+      }
+      atual.trechos.push({ ini: ev.r.ini + 1, fim: ev.r.fim + 1, marca: ev.r.marca, artigos });
+      atual.fim = ev.r.fim + 1;
+      atual.n += artigos.length;
+    }
+  });
+  const citadas = new Set();
+  blocos.forEach((b) => { if (!b.recusado) b.trechos.forEach((t) => { for (let k = t.ini; k <= t.fim; k++) citadas.add(k); }); });
+  return { blocos, citadas, regioes };
+}
+
+/* A PARCELA DO TEXTO (0 a 1) que está dentro de artigos CITADOS entre aspas (regiões fechadas). */
+function leiParcelaCitada(texto) {
+  const linhas = String(texto || "").split("\n");
+  const regioes = leiRegioesCitadas(linhas);
+  let citado = 0, total = 0;
+  linhas.forEach((s) => { total += s.length + 1; });
+  regioes.forEach((r) => { for (let k = r.ini; k <= r.fim; k++) citado += linhas[k].length + 1; });
   return total ? citado / total : 0;
 }
 

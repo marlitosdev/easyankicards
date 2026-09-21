@@ -32,7 +32,7 @@ async function testes() {
     if (i % 6 === 1) L.push("Presidência da República — Subchefia para Assuntos Jurídicos");
     L.push("Art. " + i + "º Texto próprio do artigo " + i + ", que trata do imposto e da sua incidência.");
   }
-  L.push("“Art. 30. Artigo citado entre aspas, com o texto da nova redação.” (NR)");
+  L.push("Art . 25 Texto com um espaço a mais antes do ponto.");
   L.push("ANEXO I", "TABELA DE ALÍQUOTAS POR PRODUTO", "Produto A 10%", "Produto B 12%", "Produto C 15%");
   L.push("ANEXO II", "CLASSIFICAÇÃO DE MERCADORIAS", "0101.21.00 Cavalos reprodutores", "0101.29.00 Outros cavalos", "0102.21.00 Bovinos");
   const TEXTO = L.join("\n");
@@ -95,7 +95,7 @@ async function testes() {
     const alvo = linhas.filter((x) => cls(x, "lei-ctx-alvo"));
     ok(linhas.length >= 5 && alvo.length === 1, "V2 mostra as linhas ao redor, com UMA destacada: " + linhas.length + "/" + alvo.length);
     const numAlvo = achar(alvo[0], (c) => cls(c, "lei-ctx-n"))[0].textContent;
-    ok(Number(numAlvo) === m.linhas[0] && /Art\. 30/.test(alvo[0].textContent), "V3 a destacada e' a linha do item, na numeracao da colagem: linha " + numAlvo + " / esperado " + m.linhas[0]);
+    ok(Number(numAlvo) === m.linhas[0] && /Art \. 25/.test(alvo[0].textContent), "V3 a destacada e' a linha do item, na numeracao da colagem: linha " + numAlvo + " / esperado " + m.linhas[0]);
     const cab = pre.mudancas.filter((x) => x.grupo === "cabecalho")[0];
     const itCab = achar(api.$("leiPreGrupo_cabecalho"), (c) => cls(c, "lei-pre-item"))[0];
     const dCab = achar(itCab, (c) => cls(c, "lei-dup-ctx-det"))[0];
