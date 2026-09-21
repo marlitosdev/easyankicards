@@ -712,6 +712,7 @@ function rodar() {
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados, leiEhAlteradora, leiParcelaCitada, leiRegioesCitadas, leiLerCitacoes, leiAlvoDaAlteracao, leiLinhaFechaCitacao, leiLinhaCitacaoInteira, leiMarcaDoFecho, leiContaAspas,
+    toast, toastMsg, leiPreAvisar, leiPreMarcarFeito, leiPreCancelar, leiPreOriginal, leiPreConfirmar, leiPreAceita,
     leiCorpoHtml, leiChipsDeAlteracao, leiPreBlocosEl, leiBlocoArtigosTxt, leiPintarLeitura, leiAjusteRisco, leiPreItemEl, leiPreAnexoVerEl,
     lixLer, lixJogar, lixRestaurar, lixRestaurarUi, lixApagarDeVez, lixEsvaziar, lixContar, lixRisco, lixAvisoRisco,
     lixInserirBloco, lixJuntar, lixRecusou, lixDesfazer, lixAbrir, lixPintar, lixRecarregar, lixTexto, lixAtualizarBotao,

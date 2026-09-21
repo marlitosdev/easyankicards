@@ -299,7 +299,9 @@ async function testes() {
     ok(d.length === 6 && r1.regra === "ajuste.ordinal" && r1.decisao === "recusou" && r1.origem === "pessoa" && r1.via === "item" && r1.proposta.n === 1 && r1.ref === "linha 10" && r1.lei === "Lei de Ajustes",
       "D7 recusar UM: um registro novo, 'recusou', pedido pela pessoa, via item, com a linha: " + JSON.stringify([r1.regra, r1.decisao, r1.via, r1.ref]));
     ok(/3O/.test(r1.proposta.linhas[0].texto) && /3º/.test(r1.proposta.linhas[0].texto), "D7a e o que era e o que virou: " + r1.proposta.linhas[0].texto);
+    ok(/^Mantido o original em 1 ajuste\(s\)/.test(api.$("toast").textContent), "D7b recusar diz o que fez (aviso acima da janela): " + api.$("toast").textContent);
     achar(item("ordinal"), (c) => cls(c, "lei-aj-alt"))[0].onclick();
+    ok(/^Voltou ao ajuste do app em 1 ajuste\(s\)/.test(api.$("toast").textContent), "D7c voltar ao ajuste tambem diz: " + api.$("toast").textContent);
     const ultimo = () => api.decLer().slice(-1)[0];
     const r2 = ultimo();
     ok(r2.regra === "ajuste.ordinal" && r2.decisao === "aceitou" && r2.via === "item", "D8 voltar ao ajuste: 'aceitou'");

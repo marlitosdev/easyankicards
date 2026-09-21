@@ -892,13 +892,14 @@ function leiPreprocessar(texto, opc) {
 
   /* 1c. número de página */
   const pag = [];
-  sem.forEach((x, i) => { if (LEI_RE_PAGINA_CLARA.test(x)) pag.push(i + 1); });
+  /* (um número de item de tabela de anexo — 1, 2, 3, 4… — não é número de página: na LC 214 eram 445 linhas) */
+  sem.forEach((x, i) => { if (!emAnexo[i + 1] && LEI_RE_PAGINA_CLARA.test(x)) pag.push(i + 1); });
   /* número solto: só a SEQUÊNCIA +1, com 5 ou mais */
   let cadeia = [];
   const fechaCadeia = () => { if (cadeia.length >= 5) cadeia.forEach((c) => pag.push(c.ln)); cadeia = []; };
   sem.forEach((x, i) => {
     const m = x.match(LEI_RE_PAGINA_SOLTA);
-    if (!m) return;
+    if (!m || emAnexo[i + 1]) return;
     const v = Number(m[1]);
     if (cadeia.length && v === cadeia[cadeia.length - 1].v + 1) cadeia.push({ v, ln: i + 1 });
     else { fechaCadeia(); cadeia = [{ v, ln: i + 1 }]; }

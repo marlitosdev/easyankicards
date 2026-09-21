@@ -384,6 +384,9 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   border:1px solid var(--borda);line-height:1.3}
 .btn-min:hover:not(:disabled){border-color:var(--sutil);background:var(--panel)}
 .btn-min:disabled{opacity:.45;cursor:default}
+/* TODO botão mostra que foi apertado (só filtro e sombra interna: NÃO mexe em transform, que vários botões usam para se posicionar) */
+button:not(:disabled):active{filter:brightness(.85);box-shadow:inset 0 2px 5px rgba(0,0,0,.3)}
+button:focus-visible{outline:2px solid var(--acao,#3b82f6);outline-offset:2px}
 .btn-min.btn-azul{background:var(--azul,#2563eb);border-color:transparent;color:#fff}
 .btn-min.btn-cinza{background:var(--campo);color:var(--texto)}
 /* ---- painel de foco ---- */
@@ -539,6 +542,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   border-radius:20px;box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;
   transition:opacity .2s, transform .2s;pointer-events:none;max-width:88vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(-6px)}
+/* popover: sem isto o navegador o estica pela tela (inset:0) e o centraliza */
+#toast[popover]{inset:auto auto 96px 50%;margin:0;border:0;overflow:visible}
 .tipbox{position:fixed;z-index:99;background:#2b2b2b;color:#f2f2f2;font-size:12px;
   padding:6px 9px;border-radius:7px;max-width:280px;line-height:1.35;
   box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
@@ -1406,6 +1411,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-cit-cab{font-size:11px;font-weight:700;color:var(--acao);margin:2px 0}
 .lei-cit-fim{font-size:11px;color:var(--sutil);margin:2px 0}
 .lei-pre-alt-item{margin:2px 0}
+.lei-pre-sticky{position:sticky;top:0;z-index:4;background:var(--panel);padding:2px 0 4px;margin:0 0 4px}
+.lei-pre-aviso{margin:4px 0 0;padding:6px 10px;border-radius:8px;border:1px solid var(--verde);font-size:12.5px;line-height:1.4}
 .lei-pre-anexo-txt{font-family:monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;
   background:var(--campo);border:1px solid var(--borda);border-radius:8px;padding:6px 8px;margin:4px 0}
 .dec-risco{font-size:10.5px;font-weight:700}
@@ -4788,7 +4795,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </aside>
 
-<div id="toast"></div>
+<div id="toast" popover="manual" role="status" aria-live="polite"></div>
 
 <!-- Só o que se exporta fica aqui — chave da IA, base e diagnóstico
      moraram nesta barra por anos e agora vivem em ⚙ Configurações
@@ -6646,10 +6653,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="dlg-x" id="btnLeiPreX" data-i18n-title="lei_pre_voltar">✖</button>
   </div>
   <p class="nota" id="leiPreAjuda"></p>
-  <div class="lei-dup-topo">
-    <span class="nota" id="leiPreResumo"></span>
-    <button class="btn-min" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
-    <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
+  <!-- FIXO NO TOPO: o contador e a frase do que acabou de acontecer ficam à vista mesmo com a lista rolada -->
+  <div class="lei-pre-sticky">
+    <div class="lei-dup-topo">
+      <span class="nota" id="leiPreResumo"></span>
+      <button class="btn-min" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
+      <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
+    </div>
+    <p class="lei-pre-aviso" id="leiPreAviso" role="status" aria-live="polite" hidden></p>
   </div>
   <div id="leiPreLista" class="lei-dup-lista"></div>
   <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>

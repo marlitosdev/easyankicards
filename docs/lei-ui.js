@@ -3267,6 +3267,7 @@ function leiAjusteDecidir(idLei, ids, recusar) {
   /* o mapa se repinta com a leitura nova, e o leitor também (é o que a pessoa vê ao voltar) */
   leiMapaAbrir(true);
   if (leiAtual && leiIdAtual === idLei) { try { leiPintar(); } catch (e) {} }
+  toastMsg(t(recusar ? "aj_fez_manter" : "aj_fez_usar", { n: alvo.length }), 3200);
   return alvo.length;
 }
 
@@ -4608,6 +4609,7 @@ function leiNumeracaoLinhas(problemas) {
 
 function leiRevisarColagemAbrir(ctx) {
   leiPreCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  leiPreAvisar("");
   leiPreCtx.texto = String(leiPreCtx.texto == null ? "" : leiPreCtx.texto).replace(/\r\n?/g, "\n");
   leiPreSugestoes();
   leiPrePintar();
@@ -4696,7 +4698,11 @@ function leiPreItemEl(c, m) {
       r.name = "leiPreAx_" + m.id;
       r.value = v;
       r.checked = c.decisoes[m.id] === v;
-      r.onchange = () => { c.decisoes[m.id] = v; leiPrePintar(); };
+      r.onchange = () => {
+        c.decisoes[m.id] = v;
+        leiPrePintar();
+        leiPreAvisar(t("lei_pre_av_anx_" + v, { a: m.titulo }));
+      };
       const tx = document.createElement("span");
       tx.textContent = t(k);
       lb.append(r, tx);
@@ -4710,7 +4716,11 @@ function leiPreItemEl(c, m) {
   const cb = document.createElement("input");
   cb.type = "checkbox";
   cb.checked = aceita;
-  cb.onchange = () => { c.decisoes[m.id] = cb.checked; leiPrePintar(); };
+  cb.onchange = () => {
+    c.decisoes[m.id] = cb.checked;
+    leiPrePintar();
+    leiPreAvisar(t(cb.checked ? "lei_pre_av_sim" : "lei_pre_av_nao", { g: t("lei_pre_g_" + m.grupo), l: leiDecRefLinhas(m.linhas) }));
+  };
   const corpo = document.createElement("span");
   if (m.grupo === "invisiveis") {
     corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas_n", { n: m.ocorrencias })));
@@ -4736,6 +4746,34 @@ function leiPreItemEl(c, m) {
   /* de ONDE vem: o trecho da colagem ao redor da primeira linha do item */
   if ((m.linhas || []).length) el.append(leiDupContextoEl(c.texto, { linha: m.linhas[0], linhaFim: m.linhas[0] }));
   return el;
+}
+
+/* O RETORNO DA REVISÃO DA COLAGEM. Apertar "aceitar todos" / "recusar todos" só apagava ou acendia os itens lá
+ * embaixo e mexia num contador que sai da tela; quando tudo já estava aceito (o padrão), "aceitar todos" não
+ * mudava NADA e parecia morto. Agora: uma frase fixa no topo diz o que aconteceu (e o que NÃO mudou), e o botão
+ * apertado fica verde por um instante. */
+let leiPreAvisoTimer = null;
+let leiPreFeitoTimer = null;
+function leiPreAvisar(txt) {
+  const el = $("leiPreAviso");
+  if (!el) return;
+  el.textContent = txt || "";
+  el.hidden = !txt;
+  if (typeof clearTimeout === "function") clearTimeout(leiPreAvisoTimer);
+  if (txt && typeof setTimeout === "function") {
+    leiPreAvisoTimer = setTimeout(() => { el.hidden = true; }, 12000);
+    if (leiPreAvisoTimer && leiPreAvisoTimer.unref) leiPreAvisoTimer.unref();
+  }
+}
+function leiPreMarcarFeito(id) {
+  const b = $(id);
+  if (!b || !b.classList) return;
+  b.classList.add("btn-salvo");
+  if (typeof clearTimeout === "function") clearTimeout(leiPreFeitoTimer);
+  if (typeof setTimeout === "function") {
+    leiPreFeitoTimer = setTimeout(() => { const x = $(id); if (x && x.classList) x.classList.remove("btn-salvo"); }, 1600);
+    if (leiPreFeitoTimer && leiPreFeitoTimer.unref) leiPreFeitoTimer.unref();
+  }
 }
 
 /* "art. 9º, art. 44, art. 3º …": os artigos que o bloco cita */
@@ -4800,7 +4838,13 @@ function leiPreGrupoEl(c, g, itens) {
       b.className = "btn-min";
       b.id = "btnLeiPre" + (v ? "Todos_" : "Nenhum_") + g;
       b.textContent = t(k);
-      b.onclick = () => { itens.forEach((m) => { c.decisoes[m.id] = v; }); leiPrePintar(); };
+      b.onclick = () => {
+        const mudaram = itens.filter((m) => !!leiPreAceita(c, m) !== v).length;
+        itens.forEach((m) => { c.decisoes[m.id] = v; });
+        leiPrePintar();
+        leiPreMarcarFeito(b.id);
+        leiPreAvisar(t("lei_pre_av_" + (v ? "todos" : "nenhum") + (mudaram ? "" : "_ja"), { g: t("lei_pre_g_" + g), n: itens.length, c: mudaram }));
+      };
       cab.append(b);
     });
   }
@@ -5020,12 +5064,15 @@ function leiPreConfirmar() {
   if (!c) return false;
   leiDecColagem(c, false);
   const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
+  const aceitas = c.pre.mudancas.filter((m) => leiPreAceita(c, m)).length;
   leiPreCtx = null;
   $("dlgLeiPre").close();
+  leiPreAvisar("");
   try {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: escolhas confirmadas",
       JSON.stringify(res.resumo));
   } catch (e) {}
+  toastMsg(t("lei_pre_t_confirmado", { n: aceitas, a: (res.resumo && res.resumo.anexosSeparados) || 0 }), 3200);
   c.aoConfirmar(res);
   return true;
 }
@@ -5037,9 +5084,11 @@ function leiPreOriginal() {
   leiDecColagem(c, true);
   leiPreCtx = null;
   $("dlgLeiPre").close();
+  leiPreAvisar("");
   try {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: seguiu com o texto original", "");
   } catch (e) {}
+  toastMsg(t("lei_pre_t_original"), 3200);
   c.aoConfirmar({ texto: c.texto, anexos: [], resumo: {} });
   return true;
 }
@@ -5049,8 +5098,10 @@ function leiPreCancelar() {
   if (!leiPreCtx) return;
   const modo = leiPreCtx.modo;
   leiPreCtx = null;
+  leiPreAvisar("");
   try { leiReg(modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: voltou para revisar o texto", ""); }
   catch (e) {}
+  toastMsg(t("lei_pre_t_voltar"), 3200);
 }
 
 /* =====================================================================
