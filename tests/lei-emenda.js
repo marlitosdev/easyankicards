@@ -1,0 +1,188 @@
+/* =====================================================================
+ * A EMENDA NÃO TEM "PARÁGRAFOS REPETIDOS" — o caso da EC 132/2023
+ *
+ * A pessoa vinculou a EC 132/2023 (uma lei que ALTERA a Constituição) e a tela "artigos repetidos" apontou
+ * 22 grupos: "Art. 1º — §4º ×2", "Art. 2º — §1º ×7"… Nenhum era repetição. O "Art. 1º" da emenda traz, entre
+ * aspas, a nova redação de vários artigos da Constituição (Art. 43, 145, 146, 149-C…), cada um com o seu
+ * §1º, §2º, §3º. Como os artigos citados não são artigos DA emenda, todos os parágrafos caem no mesmo
+ * artigo — e o mesmo endereço se repete, de verdade, mas em artigos diferentes da lei alterada.
+ *
+ * O QUE PRECISA SER VERDADE:
+ *  1. Numa lei que altera outra, os parágrafos repetidos dentro do artigo NÃO são apontados.
+ *  2. Numa lei consolidada, o §5º velho e o §5º novo do mesmo artigo CONTINUAM apontados (é o que o
+ *     detector existe para pegar).
+ *  3. Numa lei que altera outra, o artigo INTEIRO repetido (mesmo número, lado a lado) continua apontado:
+ *     só se calou a repetição de parágrafo.
+ *  4. A tela: a lei guardada não mostra o aviso de repetidos nem abre a conferência.
+ *  5. A NUMERAÇÃO também não se confere numa lei que altera outra: os artigos que ela cita (o 156-A e o
+ *     156-B entre o 1º e o 2º) vêm soltos no meio dela, e saíam "faltam 154 artigos depois do 1º" e "a
+ *     numeração recomeça". A linha de estado do mapa diz que a numeração não foi conferida — não afirma
+ *     que "segue uma sequência". Numa lei consolidada o salto continua apontado.
+ * ===================================================================== */
+const fs = require("fs");
+const { rodar } = require("./fumaca.js");
+
+async function testes() {
+  const falhas = [];
+  let n = 0;
+  const ok = (c, m) => { n++; if (!c) falhas.push(m); };
+  const { api: p } = rodar();
+
+  /* trechos do texto oficial da EC 132/2023 (planalto.gov.br), com as reticências de "sem alteração" */
+  const PTS = ".".repeat(60);
+  const EC = [
+    "EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023",
+    "Altera o Sistema Tributário Nacional.",
+    "As Mesas da Câmara dos Deputados e do Senado Federal, nos termos do § 3º do art. 60 da Constituição Federal, promulgam a seguinte Emenda ao texto constitucional:",
+    "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+    "\"Art. 43. " + PTS, PTS,
+    "§ 4º Sempre que possível, a concessão dos incentivos regionais a que se refere o § 2º, III, considerará critérios de sustentabilidade ambiental e redução das emissões de carbono.\" (NR)",
+    "\"Art. 145. " + PTS, PTS,
+    "§ 3º O Sistema Tributário Nacional deve observar os princípios da simplicidade, da transparência, da justiça tributária, da cooperação e da defesa do meio ambiente.",
+    "§ 4º As alterações na legislação tributária buscarão atenuar efeitos regressivos.\" (NR)",
+    "\"Art. 146. " + PTS, PTS, "III - " + PTS, PTS,
+    "c) adequado tratamento tributário ao ato cooperativo praticado pelas sociedades cooperativas, inclusive em relação aos tributos previstos nos arts. 156-A e 195, V;",
+    "§ 1º " + PTS,
+    "§ 2º É facultado ao optante pelo regime único de que trata o § 1º apurar e recolher os tributos previstos nos arts. 156-A e 195, V.",
+    "§ 3º Na hipótese de o recolhimento dos tributos previstos nos arts. 156-A e 195, V, ser realizado por meio do regime único de que trata o § 1º, enquanto perdurar a opção:",
+    "I - não será permitida a apropriação de créditos dos tributos previstos nos arts. 156-A e 195, V, pelo contribuinte optante pelo regime único; e",
+    "II - será permitida a apropriação de créditos pelo adquirente não optante pelo regime único de que trata o § 1º.",
+    "\"Art. 149-C. O produto da arrecadação do imposto previsto no art. 156-A e da contribuição prevista no art. 195, V, incidentes sobre operações contratadas pela administração pública direta.",
+    "§ 1º As operações de que trata o caput poderão ter alíquotas reduzidas de modo uniforme, nos termos de lei complementar.",
+    "§ 2º Lei complementar poderá prever hipóteses em que não se aplicará o disposto no caput e no § 1º.",
+    "§ 3º Nas importações efetuadas pela administração pública direta, o disposto no art. 150, VI, \"a\", será implementado na forma do disposto no caput e no § 1º.\"",
+    "Art. 2º O Ato das Disposições Constitucionais Transitórias passa a vigorar com as seguintes alterações:",
+    "\"Art. 92-B. " + PTS,
+    "§ 1º Para assegurar o disposto no caput, serão utilizados, isolada ou cumulativamente, instrumentos fiscais, econômicos ou financeiros.",
+    "§ 2º Lei complementar instituirá Fundo de Sustentabilidade e Diversificação Econômica do Estado do Amazonas.",
+    "\"Art. 124. Lei complementar disporá sobre a compensação.",
+    "§ 1º O montante recolhido na forma do caput será compensado com o valor devido das contribuições.",
+    "§ 2º Caso o contribuinte não possua débitos suficientes para efetuar a compensação de que trata o § 1º, o valor recolhido poderá ser compensado com qualquer outro tributo.\"",
+    "Art. 3º Esta Emenda Constitucional entra em vigor na data de sua publicação.",
+  ].join("\n");
+
+  /* ---- 1: a emenda ---- */
+  {
+    ok(p.leiPareceAlteradora(EC).sim === true, "E1 (o texto e' reconhecido como lei que altera outra)");
+    ok(p.leiArtigos(EC).map((a) => a.rotulo).join("|") === "Art. 1º|Art. 2º|Art. 3º", "E1a os artigos da emenda sao 1º, 2º e 3º (os citados nao sao artigos dela)");
+    ok(p.leiRepetidosNoArtigo(EC).length === 0, "E2 nenhum paragrafo repetido dentro do artigo: " + p.leiRepetidosNoArtigo(EC).map((g) => g.rotulo));
+    ok(p.leiDuplicados(EC).length === 0, "E3 a conferencia de repetidos da emenda fica vazia: " + p.leiDuplicados(EC).map((g) => g.rotulo));
+    /* mais avisos de "alteradora": so' as marcas (NR), sem 'passa a vigorar' */
+    const soNR = ["Art. 1º Altera dispositivos.", "§ 1º Um. (NR)", "§ 1º Dois. (NR)", "§ 1º Tres. (NR)", "Art. 2º Vigencia."].join("\n");
+    ok(p.leiPareceAlteradora(soNR).sim && p.leiRepetidosNoArtigo(soNR).length === 0, "E4 com as marcas (NR) tambem");
+  }
+
+  /* ---- 2: o que continua apontado ---- */
+  {
+    const consolidada = ["Art. 9º O tributo e' devido.", "§ 5º A Lei determinará medidas para os consumidores.",
+      "§ 5º A Lei determinará medidas para os consumidores dos tributos municipais. (Redação dada pela Lei Complementar nº 018, de 2009)",
+      "Art. 10. Outro artigo."].join("\n");
+    ok(p.leiPareceAlteradora(consolidada).sim === false, "F0 (a lei consolidada nao parece alteradora)");
+    const g = p.leiDuplicados(consolidada);
+    ok(g.length === 1 && g[0].num === "9#P5" && g[0].intra === true, "F1 numa lei consolidada o §5º velho e o novo do mesmo artigo CONTINUAM apontados: " + JSON.stringify(g.map((x) => x.num)));
+    /* artigo inteiro repetido numa lei que altera outra: continua */
+    const dupArt = EC.replace("Art. 3º Esta Emenda", "Art. 3º Texto um do artigo.\nArt. 3º Texto dois do artigo.\nArt. 4º Esta Emenda");
+    const g2 = p.leiDuplicados(dupArt);
+    ok(g2.length === 1 && g2[0].num === "3" && !g2[0].intra, "F2 o artigo INTEIRO repetido, lado a lado, continua apontado mesmo numa emenda: " + JSON.stringify(g2.map((x) => x.num)));
+  }
+
+  /* ---- 3: a tela ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ id: "lei_ec132", nome: "Emenda Constitucional 132/2023", texto: EC });
+    ok(api.leiRepetidosDaLei(l).length === 0, "T1 a lei guardada nao tem repetidos a mostrar");
+    api.leiAbrir("Direito", "Reforma tributária", l.id);
+    ok(api.leiRevisarRepetidos() === false && !api.$("dlgLeiDup").open, "T2 'revisar repetidos' nao abre a conferencia: nao ha o que revisar");
+    /* a mesma lei, marcada como consolidada por engano de texto, ainda abre (controle da tela) */
+    const cons = ["Art. 9º O tributo e' devido.", "§ 5º Um.", "§ 5º Dois. (Redação dada pela Lei Complementar nº 018, de 2009)", "Art. 10. Outro."].join("\n");
+    const l2 = api.leiGuardar({ id: "lei_cons", nome: "Lei Consolidada", texto: cons });
+    api.leiAbrir("Direito", "Consolidada", l2.id);
+    ok(api.leiRepetidosDaLei(l2).length === 1 && api.leiRevisarRepetidos() === true && api.$("dlgLeiDup").open, "T3 controle: numa lei consolidada a conferencia abre");
+  }
+
+  /* ---- 4: a numeracao ---- */
+  const PT2 = ".".repeat(40);
+  const EC2 = [
+    "EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023",
+    "Altera o Sistema Tributário Nacional.",
+    "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+    "\"Art. 43. " + PT2,
+    "§ 4º Sempre que possível, a concessão dos incentivos regionais considerará critérios ambientais.\" (NR)",
+    "\"Art. 146. " + PT2,
+    "§ 4º As alterações na legislação tributária buscarão atenuar efeitos regressivos.\" (NR)",
+    "Art. 156-A. Lei complementar instituirá imposto sobre bens e serviços.",
+    "§ 1º O imposto será informado pelo princípio da neutralidade.",
+    "Art. 156-B. Compete ao Comitê Gestor do Imposto sobre Bens e Serviços.",
+    "§ 1º O Comitê terá independência técnica.\" (NR)",
+    "Art. 2º O Ato das Disposições Constitucionais Transitórias passa a vigorar com as seguintes alterações:",
+    "\"Art. 124. Lei complementar disporá sobre a compensação.\" (AC)",
+    "Art. 3º Esta Emenda entra em vigor na data de sua publicação.",
+    "Art. 4º Ficam revogados dispositivos.",
+    "Art. 5º Cumpra-se.",
+    "Art. 6º Publique-se.",
+    "Art. 7º Registre-se.",
+  ].join("\n");
+  /* a MESMA estrutura, sem nenhuma marca de lei que altera outra */
+  const CONSOL = EC2.replace("Altera o Sistema Tributário Nacional.", "Dispõe sobre o Sistema Tributário Nacional.")
+    .replace("passa a vigorar com as seguintes alterações", "vigora").replace("passa a vigorar com as seguintes alterações", "vigora")
+    .replace(/ \(NR\)| \(AC\)/g, "");
+  {
+    const dg = p.leiDiagnosticarLei(EC2);
+    ok(p.leiArtigos(EC2).map((a) => a.numCru).join(",") === "1º,156-A,156-B,2º,3º,4º,5º,6º,7º", "N0 (a emenda tem o 156-A e o 156-B soltos entre o 1º e o 2º)");
+    ok(dg.alteradora === true && dg.itens.length === 0 && dg.resumo.graves === 0 && dg.numeracao.problemas.length === 0,
+      "N1 a conferencia da emenda nao aponta salto nem recomeco: " + JSON.stringify(dg.itens.map((i) => i.tipo)));
+    ok(p.leiPareceAlteradora(CONSOL).sim === false, "N2 (a copia sem as marcas nao parece alteradora)");
+    const dc = p.leiDiagnosticarLei(CONSOL);
+    ok(dc.alteradora === false && dc.itens.map((i) => i.tipo).sort().join(",") === "recomeco,salto", "N3 numa lei consolidada os MESMOS dois avisos continuam: " + JSON.stringify(dc.itens.map((i) => i.tipo)));
+  }
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ id: "lei_ec2", nome: "EC 132", texto: EC2 });
+    ok(api.leiNumeracaoDaLei(l).problemas.length === 0 && api.leiNumeracaoDaLei(l).graves.length === 0, "N4 o aviso de numeracao da lei guardada fica vazio");
+    ok(api.leiPreAnalisar(EC2).num.problemas.length === 0 && api.leiPreAnalisar(CONSOL).num.problemas.length === 2, "N5 a analise da colagem: nada na emenda, os dois na consolidada");
+    api.leiAbrir("Direito", "Reforma", l.id);
+    api.leiMapaAbrir();
+    const cf = api.$("leiMapaConferir");
+    ok(cf.children.length === 1 && /lei-mapa-estado-ok/.test(cf.children[0].className) && /^✓ Nada suspeito: não achei título solto dentro de artigo\. Esta lei altera outra, então a numeração não é conferida/.test(cf.children[0].textContent),
+      "N6 a linha de estado diz que a numeracao nao foi conferida (e nao que 'segue uma sequencia'): " + cf.textContent.slice(0, 120));
+    ok(!/segue uma sequência/.test(cf.textContent), "N6a nao afirma o que nao conferiu");
+    const l2 = api.leiGuardar({ id: "lei_cons2", nome: "Lei consolidada", texto: CONSOL });
+    api.leiAbrir("Direito", "Consolidada", l2.id);
+    api.leiMapaAbrir();
+    ok(/^⚠|^✓ Nada grave/.test(api.$("leiMapaConferir").children[0].textContent) && /2 avisos/.test(api.$("leiMapaConferir").children[0].textContent), "N7 controle: a consolidada mostra os 2 avisos: " + api.$("leiMapaConferir").children[0].textContent);
+  }
+  {
+    /* a consolidada LIMPA (sem nada a apontar): a linha de estado afirma a numeracao, porque conferiu */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const limpa = []; for (let i = 1; i <= 9; i++) limpa.push("Art. " + i + "º Texto " + i + ".");
+    const l = api.leiGuardar({ id: "lei_limpa", nome: "Lei limpa", texto: limpa.join("\n") });
+    api.leiAbrir("Direito", "Limpa", l.id);
+    api.leiMapaAbrir();
+    ok(/^✓ Nada suspeito: a numeração segue uma sequência/.test(api.$("leiMapaConferir").children[0].textContent), "N9 numa lei consolidada limpa a linha de estado afirma a sequencia (conferiu): " + api.$("leiMapaConferir").children[0].textContent.slice(0, 80));
+  }
+  {
+    /* a revisao da colagem: o painel da numeracao aparece na consolidada e NAO na emenda */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const abre = (texto) => {
+      api.leiRevisarColagemAbrir({ modo: "criar", texto, pre: api.leiPreprocessar(texto), aoConfirmar() {} });
+      return api.$("leiPreNumeracao").hidden;
+    };
+    ok(abre(EC2) === true, "N10 a revisao da colagem de uma emenda nao mostra o painel de numeracao");
+    api.$("dlgLeiPre").close();
+    ok(abre(CONSOL) === false, "N11 controle: numa lei consolidada com salto o painel de numeracao aparece");
+  }
+  const chaves2 = ["lei_mapa_ok_alt"];
+  {
+    const i18n = fs.readFileSync(require("path").join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    const conta = (k) => (i18n.match(new RegExp("\\n  \"" + k + "\": ", "g")) || []).length;
+    ok(chaves2.every((k) => conta(k) === 2), "N8 a frase nova existe em portugues E em ingles");
+  }
+
+  return Object.assign(falhas, { quantas: n });
+}
+
+module.exports = { testes };

@@ -1297,6 +1297,11 @@ function leiContextoDeLinhas(texto, linhaIni, linhaFim, antes, depois) {
  * não se corta por linha.
  * ===================================================================== */
 function leiRepetidosNoArtigo(texto, ignorar) {
+  /* LEI QUE ALTERA OUTRA (emenda, lei complementar alteradora): o "Art. 1º" dela traz, entre aspas, a nova
+   * redação de VÁRIOS artigos de outra lei, cada um com os seus §1º, §2º, §3º… Como os artigos citados não
+   * são artigos desta lei, todos esses parágrafos caem no mesmo artigo e o mesmo endereço se repete de
+   * verdade — em artigos diferentes da lei alterada. Não é repetição: a EC 132/2023 dava 22 grupos falsos. */
+  if (leiPareceAlteradora(texto).sim) return [];
   const conferidos = {};
   (ignorar || []).forEach((n) => { conferidos[leiNumNormal(n)] = true; });
   const grupos = [];
@@ -1981,7 +1986,11 @@ function leiDiagnosticarLei(texto, opc) {
       numCru: prox ? prox.numCru : "", indice: prox ? prox.indice : -1, linha: d.linha, linhaFim: d.linha });
   });
 
-  const num = arts.length >= 8 ? leiNumeracao(arts) : { problemas: [], graves: [], recorte: false };
+  /* LEI QUE ALTERA OUTRA (a EC 132/2023): os artigos que ela cita vêm soltos no meio dela — o 156-A e o 156-B
+   * entre o 1º e o 2º —, então não há sequência a conferir. Sem isto, saíam "faltam 154 artigos depois do 1º"
+   * e "a numeração recomeça", que não são defeito de nada. A tela diz que a numeração não foi conferida. */
+  const alteradora = leiPareceAlteradora(texto).sim;
+  const num = arts.length >= 8 && !alteradora ? leiNumeracao(arts) : { problemas: [], graves: [], recorte: false };
   num.problemas.forEach((p) => {
     const a = porLinha[p.linha] || daLinha(p.linha);
     itens.push(Object.assign({}, p, { indice: a ? a.indice : -1, linhaFim: a ? a.linhaFim : p.linha }));
@@ -2000,6 +2009,7 @@ function leiDiagnosticarLei(texto, opc) {
     estrutura: est,
     itens,
     ajustes: est.ajustes || [],
+    alteradora,
     numeracao: num,
     resumo: {
       artigos: arts.length,
