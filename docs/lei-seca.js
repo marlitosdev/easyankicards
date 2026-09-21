@@ -566,8 +566,8 @@ function leiNormalizaTexto(s) {
  *   [{ num, numCru, rotulo, candidatos:[{ indice, linha, linhaFim, texto, corpo, pos, sinais }],
  *      sugerido: <indice global do artigo sugerido>, confianca: "forte"|"fraca",
  *      motivo: "redacao"|"revogado"|"vetado"|"vazio"|"identico"|"posicao", fonte }] */
-function leiDuplicados(texto, ignorar) {
-  const arts = leiArtigos(texto);
+function leiDuplicados(texto, ignorar, opc) {
+  const arts = leiArtigos(texto, opc);
   /* os números que a pessoa JÁ CONFERIU e mandou manter (a lei repete de
    * verdade) não voltam a ser apontados */
   const conferidos = {};
@@ -593,7 +593,7 @@ function leiDuplicados(texto, ignorar) {
     });
   });
   /* + o mesmo rótulo de parágrafo duas vezes no MESMO artigo */
-  leiRepetidosNoArtigo(texto, ignorar).forEach((g) => grupos.push(g));
+  leiRepetidosNoArtigo(texto, ignorar, opc).forEach((g) => grupos.push(g));
   return grupos.sort((x, y) => x.ordem - y.ordem);
 }
 
@@ -653,7 +653,8 @@ function leiAplicarDuplicados(texto, grupos, decisoes) {
   (grupos || []).forEach((g) => {
     const d = (decisoes || {})[g.num];
     if (!d || d.manter === "todas" || d.manter === undefined) {
-      resumo.push({ num: g.num, acao: "todas" });
+      /* auto: o app manteve tudo SOZINHO (nada foi apagado e a pessoa não disse que a lei repete de verdade) */
+      resumo.push({ num: g.num, acao: "todas", auto: !!(d && d.auto) });
       return;
     }
     const escolhido = g.candidatos.filter((c) => c.indice === d.manter)[0];
@@ -801,6 +802,16 @@ const LEI_RE_INVISIVEIS = /[­​-‍⁠﻿]/g;
 
 /* A linha tem cara de ESTRUTURA da lei (e por isso não pode ser tomada por
  * cabeçalho de página repetido)? */
+/* LINHA DE CONTEÚDO, NÃO DE CABEÇALHO DE PÁGINA. Um item numerado ("1. os incisos I e II do caput; e") ou uma
+ * linha que termina em ";" ou ":" é parte de uma lista da lei. Ela pode se repetir de verdade (a LC 214 repete
+ * "1. os incisos I e II do caput; e" em quatro alíneas) e não é o cabeçalho do PDF: tomá-la por cabeçalho
+ * APAGAVA texto de lei por padrão. Cabeçalho de página não começa com numeração nem termina assim. */
+const LEI_RE_ITEM_NUMERADO = /^\s*\d{1,3}\s*[.)]\s+\S/;
+function leiLinhaDeConteudo(linha) {
+  const s = String(linha || "").trim();
+  return LEI_RE_ITEM_NUMERADO.test(s) || /[;:]\s*$/.test(s) || /[;,]\s*(?:e|ou)\s*$/i.test(s);
+}
+
 function leiLinhaEstrutural(linha) {
   const s = String(linha || "");
   return LEI_RE_ARTIGO.test(s) || LEI_RE_DIVISAO.test(s)
@@ -880,7 +891,7 @@ function leiPreprocessar(texto, opc) {
   Object.keys(ondeEsta).forEach((k) => {
     const L = ondeEsta[k];
     if (L.length < 3) return;
-    if (leiLinhaEstrutural(k)) return;
+    if (leiLinhaEstrutural(k) || leiLinhaDeConteudo(k)) return;
     if (/^[\d\s.,;:()\-–—/%R$]+$/.test(k)) return;       /* linha de tabela, só números */
     /* cabeçalho de página se repete ESPAÇADO; a mesma linha três vezes num
      * trecho curto é linha de tabela ou frase repetida de verdade */
@@ -1333,7 +1344,7 @@ function leiContextoDeLinhas(texto, linhaIni, linhaFim, antes, depois) {
  * começa no começo de uma linha: o que está no meio de um trecho corrido
  * não se corta por linha.
  * ===================================================================== */
-function leiRepetidosNoArtigo(texto, ignorar) {
+function leiRepetidosNoArtigo(texto, ignorar, opc) {
   /* LEI QUE ALTERA OUTRA (emenda, lei complementar alteradora): o "Art. 1º" dela traz, entre aspas, a nova
    * redação de VÁRIOS artigos de outra lei, cada um com os seus §1º, §2º, §3º… Como os artigos citados não
    * são artigos desta lei, todos esses parágrafos caem no mesmo artigo e o mesmo endereço se repete de
@@ -1342,8 +1353,16 @@ function leiRepetidosNoArtigo(texto, ignorar) {
   const conferidos = {};
   (ignorar || []).forEach((n) => { conferidos[leiNumNormal(n)] = true; });
   const grupos = [];
-  leiArtigos(texto).forEach((a) => {
-    const est = leiEstruturaArtigo(a.texto);
+  /* AS LINHAS CITADAS NÃO SÃO DESTE ARTIGO. Numa lei que só ALTERA outras em alguns artigos (a LC 214: 8% do
+   * texto), o "Art. 517" traz entre aspas os §§ 1º, 2º, 3º… do art. 13 da LC 123, e o mesmo endereço se repete
+   * de mentira: eram 17 dos 20 grupos que a pessoa tinha de decidir. As linhas citadas ficam em branco só para
+   * ler a estrutura (as posições das linhas não mudam); os blocos que a pessoa mandou tratar como texto comum
+   * (opc.recusados) voltam a valer como texto do artigo. */
+  const cit = leiLerCitacoes(String(texto == null ? "" : texto).split("\n"), (opc && opc.recusados) || {});
+  leiArtigos(texto, opc).forEach((a) => {
+    const proprio = cit.citadas.size
+      ? a.texto.split("\n").map((ln, k) => (cit.citadas.has(a.linha + k) ? "" : ln)).join("\n") : a.texto;
+    const est = leiEstruturaArtigo(proprio);
     const linhas = a.texto.split("\n");
     const porChave = {};
     est.unidades.forEach((u, i) => { (porChave[u.tipo + "|" + u.chave] = porChave[u.tipo + "|" + u.chave] || []).push({ u, i }); });
