@@ -106,6 +106,8 @@ async function testes() {
 
   /* ---- 4: a numeracao ---- */
   const PT2 = ".".repeat(40);
+  /* a emenda cujo FECHAMENTO das aspas se perdeu na copia (o " (NR) virou (NR)): a citacao que nunca fecha nao e' lida como citacao
+   * (regra de seguranca), os artigos citados voltam a contar como artigos, e e' o caso em que a numeracao ainda tem o que informar */
   const EC2 = [
     "EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023",
     "Altera o Sistema Tributário Nacional.",
@@ -127,7 +129,7 @@ async function testes() {
     "Art. 5º Cumpra-se.",
     "Art. 6º Publique-se.",
     "Art. 7º Registre-se.",
-  ].join("\n");
+  ].join("\n").replace(/["”]\s*\((NR|AC)\)/g, " ($1)");
   /* a MESMA estrutura, sem nenhuma marca de lei que altera outra */
   const CONSOL = EC2.replace("EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023", "LEI Nº 132, DE 20 DE DEZEMBRO DE 2023").replace("Altera o Sistema Tributário Nacional.", "Dispõe sobre o Sistema Tributário Nacional.")
     .replace("passa a vigorar com as seguintes alterações", "vigora").replace("passa a vigorar com as seguintes alterações", "vigora")
@@ -202,9 +204,10 @@ async function testes() {
     /* um numero isolado seria GRAVE numa lei consolidada: na emenda e' informacao 'leve', e nao vira grave no resumo */
     const EC4 = EC3.replace("Art. 6º Seis, com", "Art. 40º Isolado, com uma redação nova que ocupa bastante espaço.\nArt. 6º Seis, com");
     const grave = p.leiDiagnosticarLei(CONSOL.replace("Art. 4º Ficam revogados dispositivos.", "Art. 40º Isolado.\nArt. 4º Ficam revogados dispositivos."));
-    const d4 = p.leiDiagnosticarLei(EC4);
+    const semFecho = (x) => x.replace(/["”]\s*\((NR|AC)\)/g, " ($1)");
+    const d4 = p.leiDiagnosticarLei(semFecho(EC4));
     ok(grave.itens.some((i) => i.gravidade === "grave"), "I3a (controle: na consolidada o numero isolado e' GRAVE)");
-    ok(p.leiPareceAlteradora(EC4).sim && d4.numeracaoInfo.some((i) => i.tipo === "isolado") && d4.numeracaoInfo.every((i) => i.gravidade === "leve") && d4.resumo.graves === 0 && d4.itens.length === 0,
+    ok(p.leiEhAlteradora(semFecho(EC4)) && d4.numeracaoInfo.some((i) => i.tipo === "isolado") && d4.numeracaoInfo.every((i) => i.gravidade === "leve") && d4.resumo.graves === 0 && d4.itens.length === 0,
       "I3b na emenda o mesmo numero isolado e' informacao 'leve': nao conta como grave nem como aviso: " + JSON.stringify(d4.numeracaoInfo.map((i) => i.tipo + "/" + i.gravidade)));
   }
   {
@@ -312,7 +315,7 @@ async function testes() {
     ok(p.leiEhAlteradora(semCitacao) === false, "Q2 e sem as aspas (e sem marcas suficientes) nao");
     const { api } = rodar();
     api.matIniciar(); api.leiIniciar();
-    ok(api.leiPreprocessar(soAspas).mudancas.some((m) => m.grupo === "grafia"), "Q3 (a limpeza sugere tirar as aspas do artigo citado)");
+    ok(!api.leiPreprocessar(soAspas).mudancas.some((m) => m.grupo === "grafia"), "Q3 o bloco citado FECHADO e' poupado: a limpeza nao sugere tirar as aspas");
     api.leiRevisarColagemAbrir({ modo: "criar", texto: soAspas, pre: api.leiPreprocessar(soAspas), aoConfirmar() {} });
     ok(api.$("leiPreNumeracao").hidden === true, "Q4 a revisao avalia o texto ORIGINAL (com as aspas): o painel de numeracao fica escondido, mesmo com a grafia aceita");
   }

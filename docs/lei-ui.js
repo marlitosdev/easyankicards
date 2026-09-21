@@ -1350,6 +1350,66 @@ function leiPintarEdicaoLivre() {
  * Cada artigo vira um bloco com âncora própria — é o que permite rolar
  * até ele, marcar "parei aqui" e gerar lacuna só dele. Um texto corrido
  * não permitiria nenhuma das três. */
+/* A CITAÇÃO NO LEITOR — só de leitura; o texto guardado não muda. O artigo que ALTERA outra lei ganha um
+ * indicador ("altera a Lei nº 5.172/1966 (CTN) · art. 9º"), e cada trecho citado, uma borda e um selo com o
+ * artigo da outra lei ("art. 9º de Lei nº 5.172/1966 · caput sem mudança") e a marca do fim ((NR) nova redação). */
+function leiChipsDeAlteracao(a, cit) {
+  if (!cit || !cit.blocos) return null;
+  const bs = cit.blocos.filter((b) => !b.recusado && b.trechos.length && b.linha >= a.linha && b.linha <= a.linhaFim);
+  if (!bs.length) return null;
+  const box = document.createElement("div");
+  box.className = "lei-alt-chips";
+  bs.forEach((b) => {
+    const s = document.createElement("span");
+    s.className = "lei-alt-chip";
+    s.textContent = t(b.alvo ? "lei_alt_chip" : "lei_alt_chip_sem", { lei: b.alvo ? b.alvo.curto : "", arts: leiBlocoArtigosTxt(b, 6) });
+    if (b.alvo && b.alvo.bruto) s.title = b.alvo.bruto;
+    box.append(s);
+  });
+  return box;
+}
+
+function leiCitacaoHtml(L, ini, fim, a, b, tr) {
+  const lei = b.alvo ? b.alvo.curto : t("lei_cit_lei_outra");
+  const cortes = tr.artigos.map((x) => x.linha - a.linha).filter((k) => k >= ini && k <= fim);
+  if (!cortes.length || cortes[0] !== ini) cortes.unshift(ini);
+  let html = "";
+  cortes.forEach((k, i) => {
+    const ate = i + 1 < cortes.length ? cortes[i + 1] - 1 : fim;
+    const ar = tr.artigos.filter((x) => x.linha - a.linha === k)[0];
+    const cab = ar ? t(ar.semMudanca ? "lei_cit_cab_sem" : "lei_cit_cab", { a: ar.numCru, lei }) : "";
+    html += '<div class="lei-citacao">' + (cab ? '<div class="lei-cit-cab">' + matEscapar(cab) + "</div>" : "")
+      + matParaHtml(leiSemPontilhado(L.slice(k, ate + 1).join("\n")))
+      + (ate === fim && tr.marca ? '<div class="lei-cit-fim">' + matEscapar(t("lei_cit_fim_" + tr.marca.toLowerCase())) + "</div>" : "")
+      + "</div>";
+  });
+  return html;
+}
+
+function leiCorpoHtml(a, cit) {
+  const base = () => matParaHtml(leiSemPontilhado(a.texto));
+  if (!cit || !cit.blocos || a.alterado || a.revogado) return base();
+  const itens = [];
+  cit.blocos.forEach((b) => {
+    if (b.recusado) return;
+    b.trechos.forEach((tr) => { if (tr.ini >= a.linha && tr.fim <= a.linhaFim) itens.push({ b, tr }); });
+  });
+  if (!itens.length) return base();
+  itens.sort((x, y) => x.tr.ini - y.tr.ini);
+  const L = String(a.texto).split("\n");
+  const peca = (de, ate) => matParaHtml(leiSemPontilhado(L.slice(de, ate).join("\n")));
+  let html = "", pos = 0;
+  itens.forEach(({ b, tr }) => {
+    const ini = tr.ini - a.linha, fim = tr.fim - a.linha;
+    if (ini < pos || fim >= L.length) return;
+    if (ini > pos) html += peca(pos, ini);
+    html += leiCitacaoHtml(L, ini, fim, a, b, tr);
+    pos = fim + 1;
+  });
+  if (pos < L.length) html += peca(pos, L.length);
+  return html;
+}
+
 function leiPintarLeitura() {
   const cx = $("leiLeitura");
   if (!cx) return;
@@ -1379,6 +1439,8 @@ function leiPintarLeitura() {
   const arts = l ? leiArtigosEfetivos(Object.assign({}, l, { texto: bruto }))
                  : leiArtigos(bruto);
   leiArtsVivos = arts;
+  /* as citações de outras leis (só se há uma linha que abre com aspas + "Art."): o custo é zero nas demais */
+  const cit = /^\s*[“"«]\s*Art/m.test(bruto) ? leiLerCitacoes(bruto.split("\n"), l ? leiOpcDaLei(l).recusados : {}) : null;
   leiPareiIdx = l ? leiIndiceDoMarcador(l, arts) : -1;
   leiFlutAtivo = !!l;
   /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
@@ -1551,10 +1613,11 @@ function leiPintarLeitura() {
     bNota.onclick = () => leiNotaAbrir(a);
 
     cab.append(bCloze, bEd, bNota);
+    const chips = leiChipsDeAlteracao(a, cit);
 
     const corpo = document.createElement("div");
     corpo.className = "lei-art-txt";
-    corpo.innerHTML = matParaHtml(leiSemPontilhado(a.texto));
+    corpo.innerHTML = leiCorpoHtml(a, cit);
 
     /* VER A NOTA ANTES DE CLICAR. A marca "nota" carrega texto — sem
      * mostrar ele em algum lugar, a única forma de saber o que foi
@@ -1574,7 +1637,9 @@ function leiPintarLeitura() {
      * sem sair da leitura atual (ver leiLigarCitacoesEm). */
     leiLigarCitacoesEm(corpo, a.num);
 
-    bloco.append(cab, corpo);
+    bloco.append(cab);
+    if (chips) bloco.append(chips);
+    bloco.append(corpo);
 
     /* AVISO DO ARTIGO QUE MAIS CAI.
      * O ranking já existia, mas numa janela à parte — e quem está lendo a
@@ -3137,17 +3202,19 @@ function leiMapaGrupoEl(l, titulo, expl, itens) {
  * nunca muda: é só o jeito de ler, e voltar atrás é o mesmo botão. Cada decisão vai para o histórico de
  * decisões (decisoes.js), e a primeira vez que a pessoa vê cada tipo fica registrada como "automático".
  * ------------------------------------------------------------------ */
-const LEI_AJ_TIPOS = ["nota", "link", "ordinal", "sufixo", "fora"];
+const LEI_AJ_TIPOS = ["nota", "link", "ordinal", "sufixo", "citacao", "fora"];
 let leiAjAbertos = {};        /* os grupos abertos: sobrevivem a repintar */
 
 /* a frase de um ajuste; `a.recusado` diz se a frase é a do original mantido */
 function leiAjusteFrase(a) {
-  return t("aj_r_" + a.tipo + (a.recusado && !a.informativo ? "_orig" : ""), { r: a.rotulo, nota: a.nota, nome: a.nome,
+  return t("aj_r_" + a.tipo + (a.recusado && !a.informativo ? "_orig" : ""), { r: a.rotulo || (a.tipo === "citacao" ? t("dec_linha", { l: a.linha }) : a.rotulo),
+    lei: a.alvo || t("lei_cit_lei_outra"), nota: a.nota, nome: a.nome,
     link: a.link, de: a.de, para: a.para, letra: a.letra, n: a.n, antes: String(a.antes || "").slice(0, 120) });
 }
 
 function leiAjusteRisco(tipo, itens) {
   if (tipo === "sufixo") return "alto";                       /* pode esconder um artigo de verdade (178-A) */
+  if (tipo === "citacao") return "medio";                     /* muda quais linhas contam como artigo */
   if (tipo === "fora") return decRiscoDoTexto(itens.map((a) => a.antes));
   return "baixo";
 }
@@ -4549,7 +4616,8 @@ function leiRevisarColagemAbrir(ctx) {
     leiReg(leiPreCtx.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem aberta",
       leiPreCtx.pre.mudancas.length + " mudanças sugeridas: "
       + LEI_PRE_GRUPOS.map((g) => g + " " + leiPreCtx.pre.mudancas.filter((m) => m.grupo === g).length)
-          .filter((x) => !/ 0$/.test(x)).join(" · "));
+          .filter((x) => !/ 0$/.test(x)).join(" · ")
+      + ((leiPreCtx.pre.blocos || []).length ? " · " + leiPreCtx.pre.blocos.length + " bloco(s) de alteração de outras leis mantido(s) como vieram" : ""));
   } catch (e) {}
 }
 
@@ -4670,6 +4738,52 @@ function leiPreItemEl(c, m) {
   return el;
 }
 
+/* "art. 9º, art. 44, art. 3º …": os artigos que o bloco cita */
+function leiBlocoArtigosTxt(b, max) {
+  const nums = [];
+  b.trechos.forEach((tr) => tr.artigos.forEach((a) => nums.push(t("lei_cit_art_curto", { a: a.numCru }))));
+  return nums.slice(0, max).join(", ") + (nums.length > max ? " …" : "");
+}
+
+/* OS BLOCOS DE ALTERAÇÃO DE OUTRAS LEIS, na revisão da colagem: só informação, sem decisão. O artigo desta
+ * lei diz "passa a vigorar com as seguintes alterações" e o texto novo vem entre aspas; as linhas com pontos
+ * ("Art. 9º ......") dizem qual artigo da outra lei muda. As limpezas de cabeçalho, grafia e remissão NÃO
+ * mexem nesse texto — e aqui se vê o que foi poupado. */
+function leiPreBlocosEl(c) {
+  const bl = (c.pre && c.pre.blocos) || [];
+  const card = document.createElement("div");
+  card.className = "lei-pre-grupo lei-pre-alt";
+  card.id = "leiPreGrupo_alteracao";
+  const cab = document.createElement("div");
+  cab.className = "lei-pre-cab";
+  const tit = document.createElement("span");
+  tit.textContent = t("lei_pre_alt_titulo", { n: bl.length });
+  cab.append(tit);
+  card.append(cab);
+  const aj = document.createElement("div");
+  aj.className = "lei-pre-ajuda";
+  aj.textContent = t("lei_pre_alt_ajuda");
+  card.append(aj);
+  const det = document.createElement("details");
+  const sm = document.createElement("summary");
+  sm.textContent = t("lei_pre_ver_itens", { n: bl.length });
+  det.append(sm);
+  bl.forEach((b) => {
+    const it = document.createElement("div");
+    it.className = "lei-pre-item lei-pre-alt-item";
+    const tx = document.createElement("div");
+    tx.className = "lei-pre-ctx";
+    tx.textContent = t(b.alvo ? "lei_pre_alt_item" : "lei_pre_alt_item_sem", {
+      r: b.rotulo || t("dec_linha", { l: b.linha }), lei: b.alvo ? b.alvo.curto : "", arts: leiBlocoArtigosTxt(b, 6) });
+    if (b.alvo && b.alvo.nome) tx.title = b.alvo.nome;
+    it.append(tx);
+    it.append(leiDupContextoEl(c.texto, { linha: b.linha, linhaFim: Math.min(b.fim, b.linha + 2) }));
+    det.append(it);
+  });
+  card.append(det);
+  return card;
+}
+
 function leiPreGrupoEl(c, g, itens) {
   const card = document.createElement("div");
   card.className = "lei-pre-grupo";
@@ -4736,6 +4850,7 @@ function leiPrePintar() {
     const itens = c.pre.mudancas.filter((m) => m.grupo === g);
     if (itens.length) cx.append(leiPreGrupoEl(c, g, itens));
   });
+  if (((c.pre && c.pre.blocos) || []).length) cx.append(leiPreBlocosEl(c));
 
   /* A CRÍTICA DA NUMERAÇÃO, sobre o texto COMO FICARIA com as escolhas de
    * agora: recusar uma limpeza pode fazer aparecer (ou sumir) um salto */
