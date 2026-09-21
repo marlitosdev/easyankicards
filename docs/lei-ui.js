@@ -3286,6 +3286,31 @@ function leiAjustesEl(l, ajs) {
   return g;
 }
 
+/* A NUMERAÇÃO DE UMA LEI QUE ALTERA OUTRA, SÓ COMO INFORMAÇÃO. Os artigos que ela cita vêm soltos no meio
+ * dela, então "faltam 154 artigos" e "a numeração recomeça" não são aviso de nada — mas a pessoa pode querer
+ * saber. Um bloco RECOLHIDO, à parte da conferência: não entra na linha de estado nem na contagem de avisos. */
+function leiNumInfoEl(l, pontos) {
+  const g = document.createElement("details");
+  g.className = "lei-aj-grupo lei-info-grupo";
+  g.id = "leiInfoGrupo";
+  g.open = !!leiAjAbertos.info;
+  g.ontoggle = () => { leiAjAbertos.info = g.open; };
+  const sm = document.createElement("summary");
+  sm.textContent = t("lei_info_num_titulo", { n: pontos.length });
+  const ex = document.createElement("p");
+  ex.className = "nota";
+  ex.textContent = t("lei_info_num_expl");
+  g.append(sm, ex);
+  pontos.slice(0, 40).forEach((it) => g.append(leiMapaItemEl(l, it)));
+  if (pontos.length > 40) {
+    const m = document.createElement("p");
+    m.className = "nota";
+    m.textContent = t("lei_info_num_mais", { n: pontos.length - 40 });
+    g.append(m);
+  }
+  return g;
+}
+
 function leiMapaAbrir(repintar) {
   const dlg = $("dlgLeiMapa");
   if (!dlg) return false;
@@ -3341,6 +3366,11 @@ function leiMapaAbrir(repintar) {
     if (dg.ajustes && dg.ajustes.length) ajCx.append(leiAjustesEl(l, dg.ajustes));
   }
   if (!repintar) { try { leiAjusteVistos(l, dg.ajustes || []); } catch (e) {} }
+  const infoCx = $("leiMapaInfo");
+  if (infoCx) {
+    infoCx.innerHTML = "";
+    if (dg.numeracaoInfo && dg.numeracaoInfo.length) infoCx.append(leiNumInfoEl(l, dg.numeracaoInfo));
+  }
 
   const av = $("leiMapaArvore");
   av.innerHTML = "";
@@ -3902,6 +3932,10 @@ function leiRelatorioFluxo(tela) {
         }
       });
       if (dg.itens.length > 30) p.push("  …e mais " + (dg.itens.length - 30) + " item(ns)");
+      if (dg.numeracaoInfo && dg.numeracaoInfo.length) {
+        p.push("  numeração (só informação; lei que altera outra): " + dg.numeracaoInfo.length + " — "
+          + dg.numeracaoInfo.map((x) => x.tipo + " art. " + x.numCru + " linha " + x.linha).join(" · "));
+      }
       const ajs = dg.ajustes || [];
       if (ajs.length) {
         const pt = {};

@@ -1988,13 +1988,18 @@ function leiDiagnosticarLei(texto, opc) {
 
   /* LEI QUE ALTERA OUTRA (a EC 132/2023): os artigos que ela cita vêm soltos no meio dela — o 156-A e o 156-B
    * entre o 1º e o 2º —, então não há sequência a conferir. Sem isto, saíam "faltam 154 artigos depois do 1º"
-   * e "a numeração recomeça", que não são defeito de nada. A tela diz que a numeração não foi conferida. */
+   * e "a numeração recomeça", que não são defeito de nada. Não viram aviso — mas a pessoa pode querer ver: o que
+   * a conferência normal apontaria vai em `numeracaoInfo`, sempre "leve", para a tela mostrar RECOLHIDO como
+   * informação. */
   const alteradora = leiPareceAlteradora(texto).sim;
-  const num = arts.length >= 8 && !alteradora ? leiNumeracao(arts) : { problemas: [], graves: [], recorte: false };
-  num.problemas.forEach((p) => {
+  const numReal = arts.length >= 8 ? leiNumeracao(arts) : { problemas: [], graves: [], recorte: false };
+  const num = alteradora ? { problemas: [], graves: [], recorte: false } : numReal;
+  const comIndice = (p) => {
     const a = porLinha[p.linha] || daLinha(p.linha);
-    itens.push(Object.assign({}, p, { indice: a ? a.indice : -1, linhaFim: a ? a.linhaFim : p.linha }));
-  });
+    return Object.assign({}, p, { indice: a ? a.indice : -1, linhaFim: a ? a.linhaFim : p.linha });
+  };
+  num.problemas.forEach((p) => { itens.push(comIndice(p)); });
+  const numeracaoInfo = alteradora ? numReal.problemas.map((p) => Object.assign(comIndice(p), { gravidade: "leve" })) : [];
 
   itens.sort((x, y) => x.linha - y.linha);
   /* o resumo fala do CORPO da lei e, à parte, de cada ATO de topo (ADCT): "1º a 250" e "1º a 138", e
@@ -2010,6 +2015,7 @@ function leiDiagnosticarLei(texto, opc) {
     itens,
     ajustes: est.ajustes || [],
     alteradora,
+    numeracaoInfo,
     numeracao: num,
     resumo: {
       artigos: arts.length,
