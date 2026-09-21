@@ -11,8 +11,10 @@
  *  1. O aviso curto é um popover (vai para a camada de cima, acima das janelas) e continua funcionando onde o
  *     navegador não tem popover.
  *  2. Todo botão mostra que foi apertado (:active) e onde está o foco.
- *  3. Na revisão da colagem, uma frase FIXA NO TOPO diz o que o clique fez — inclusive "nada mudou" — e o botão
- *     apertado fica verde por um instante; marcar/desmarcar um item e escolher o destino de um anexo também dizem.
+ *  3. Na revisão da colagem, uma frase FIXA NO TOPO diz o que o clique fez — inclusive "nada mudou"; marcar/
+ *     desmarcar um item e escolher o destino de um anexo também dizem.
+ *  3b. "aceitar todos" / "recusar todos" mostram o ESTADO do grupo o tempo todo (não só um piscar): ligado quando
+ *     todas estão aceitas / nenhuma está; nenhum dos dois quando o grupo está misto; e um contador "N de M aceitas".
  *  4. Confirmar / seguir com o original / voltar mostram um aviso (a janela fecha, o resultado precisa ficar dito),
  *     e a frase velha não sobra quando a revisão reabre.
  *  5. Manter/voltar um ajuste do leitor também diz o que fez.
@@ -83,6 +85,8 @@ async function testes() {
     ok(/filter:brightness/.test(ativo) && /box-shadow:inset/.test(ativo), "C3 todo botao apertado escurece e afunda: " + ativo);
     ok(!/transform/.test(ativo), "C3a sem 'transform' (varios botoes usam para se posicionar)");
     ok(/button:focus-visible\{[^}]*outline:/.test(html), "C4 o botao com foco pelo teclado tem contorno");
+    ok(/\.lei-pre-cab \.btn-min\[aria-pressed="true"\]\{[^}]*background:var\(--verde\)/.test(html) && /\.lei-pre-nao\[aria-pressed="true"\]\{[^}]*background:var\(--vermelho\)/.test(html) && /\[aria-pressed="true"\]::before\{content:"✓ "\}/.test(html),
+      "C7 o botao LIGADO e' cheio (verde; 'recusar' em vermelho) e traz um visto, para nao depender so' da cor");
     ok(/\.lei-pre-sticky\{[^}]*position:sticky;top:0/.test(html) && /\.lei-pre-aviso\{/.test(html), "C5 o topo da revisao (contador + frase) fica fixo");
     ok(/<div class="lei-pre-sticky">[\s\S]*id="leiPreResumo"[\s\S]*id="leiPreAviso" role="status" aria-live="polite" hidden/.test(html), "C6 a frase fica dentro do topo fixo, escondida ate haver o que dizer, e e' anunciada por leitor de tela");
   }
@@ -92,25 +96,35 @@ async function testes() {
   abrir();
   ok(aviso().hidden === true, "R0 ao abrir a revisao nao ha frase");
   const grupo = (g) => api.$("leiPreGrupo_" + g);
-  const botao = (g, k) => api.$("btnLeiPre" + k + "_" + g);
+  /* procurados DENTRO do card do grupo: achar pelo id aceitaria um botao ou contador solto, fora da tela */
+  const botao = (g, k) => achar(api.$("leiPreGrupo_" + g), (c) => c.id === "btnLeiPre" + k + "_" + g)[0];
   const itens = (g) => achar(grupo(g), (c) => cls(c, "lei-pre-item"));
   const nCab = pre.mudancas.filter((m) => m.grupo === "cabecalho").length;
+  const lig = (g, k) => botao(g, k).getAttribute("aria-pressed");
+  const cont = (g) => { const e = achar(api.$("leiPreGrupo_" + g), (c) => c.id === "leiPreCont_" + g)[0]; return e ? e.textContent : "(ausente)"; };
+  {
+    ok(lig("cabecalho", "Todos") === "true" && lig("cabecalho", "Nenhum") === "false" && cls(botao("cabecalho", "Todos"), "lei-pre-on") && cont("cabecalho") === nCab + " de " + nCab + " aceitas",
+      "E0 ao abrir tudo esta aceito: 'aceitar todos' LIGADO, 'recusar todos' desligado, contador: " + [lig("cabecalho", "Todos"), lig("cabecalho", "Nenhum"), cont("cabecalho")]);
+  }
   {
     ok(nCab >= 1, "R0a (ha cabecalho repetido na colagem de teste)");
     botao("cabecalho", "Nenhum").onclick();
     ok(!aviso().hidden && /recusada/.test(aviso().textContent) && aviso().textContent.indexOf("alteradas agora: " + nCab + ".") > 0 && /como veio/.test(aviso().textContent),
       "R1 'recusar todos': a frase diz o que aconteceu e quantos mudaram: " + aviso().textContent);
-    ok(cls(botao("cabecalho", "Nenhum"), "btn-salvo"), "R2 o botao apertado fica verde (e e' o botao NOVO, depois de a tela se repintar)");
-    ok(!cls(botao("cabecalho", "Todos"), "btn-salvo"), "R2a e so' ele");
+    ok(lig("cabecalho", "Nenhum") === "true" && cls(botao("cabecalho", "Nenhum"), "lei-pre-nao") && lig("cabecalho", "Todos") === "false" && !cls(botao("cabecalho", "Todos"), "lei-pre-on"),
+      "R2 depois de 'recusar todos': ELE fica ligado (e o outro desligado) — o botao NOVO, depois de a tela se repintar");
+    ok(cont("cabecalho") === "0 de " + nCab + " aceitas", "R2a e o contador do grupo acompanha: " + cont("cabecalho"));
     botao("cabecalho", "Nenhum").onclick();
     ok(/já estava tudo recusado — nada mudou/.test(aviso().textContent), "R3 apertar de novo diz que NADA mudou (nao parece morto): " + aviso().textContent);
     botao("cabecalho", "Todos").onclick();
     ok(/aceita/.test(aviso().textContent) && aviso().textContent.indexOf("alteradas agora: " + nCab + ".") > 0 && /Serão aplicadas/.test(aviso().textContent), "R4 'aceitar todos' depois de recusar: mudaram todos: " + aviso().textContent);
     botao("cabecalho", "Todos").onclick();
     ok(/já estava tudo aceito — nada mudou/.test(aviso().textContent), "R5 aceitar quando ja esta tudo aceito: 'nada mudou': " + aviso().textContent);
-    ok(cls(botao("cabecalho", "Todos"), "btn-salvo"), "R5a mesmo quando nada muda, o botao mostra que foi apertado");
+    ok(lig("cabecalho", "Todos") === "true" && lig("cabecalho", "Nenhum") === "false", "R5a mesmo quando nada muda, o botao mostra que esta ligado");
     api.soltarAdiados();
-    ok(aviso().hidden === true && !cls(botao("cabecalho", "Todos"), "btn-salvo"), "R6 passado o tempo, a frase some e o botao volta ao normal");
+    ok(aviso().hidden === true, "R6 passado o tempo, a frase some");
+    ok(lig("cabecalho", "Todos") === "true" && cls(botao("cabecalho", "Todos"), "lei-pre-on") && lig("cabecalho", "Nenhum") === "false",
+      "R6a mas o botao NAO volta ao normal com o tempo: continua ligado enquanto o grupo estiver todo aceito");
     api.segurarAdiados();
   }
   {
@@ -124,9 +138,18 @@ async function testes() {
     const cb = achar(it, (c) => c.type === "checkbox")[0];
     cb.checked = false; cb.onchange();
     ok(/fica como veio/.test(aviso().textContent) && /linha \d+/.test(aviso().textContent), "R7 desmarcar UM item: diz que fica como veio e qual linha: " + aviso().textContent);
+    ok(lig("grafia", "Todos") === "false" && lig("grafia", "Nenhum") === "false" && cont("grafia") === "1 de 2 aceitas",
+      "E1 grupo MISTO (1 de 2): nenhum dos dois botoes fica ligado, e o contador diz quantas: " + [lig("grafia", "Todos"), lig("grafia", "Nenhum"), cont("grafia")]);
     const cb2 = achar(itens("grafia")[0], (c) => c.type === "checkbox")[0];
     cb2.checked = true; cb2.onchange();
     ok(/será aplicada ao gravar/.test(aviso().textContent), "R8 marcar de volta: diz que sera aplicada: " + aviso().textContent);
+    ok(lig("grafia", "Todos") === "true" && cont("grafia") === "2 de 2 aceitas", "E2 marcar o ultimo item liga 'aceitar todos' sozinho: " + [lig("grafia", "Todos"), cont("grafia")]);
+    achar(itens("grafia")[0], (c) => c.type === "checkbox")[0].checked = false;
+    achar(itens("grafia")[0], (c) => c.type === "checkbox")[0].onchange();
+    achar(itens("grafia")[1], (c) => c.type === "checkbox")[0].checked = false;
+    achar(itens("grafia")[1], (c) => c.type === "checkbox")[0].onchange();
+    ok(lig("grafia", "Nenhum") === "true" && lig("grafia", "Todos") === "false" && cont("grafia") === "0 de 2 aceitas", "E3 desmarcar o ultimo item liga 'recusar todos' sozinho: " + [lig("grafia", "Nenhum"), cont("grafia")]);
+    botao("grafia", "Todos").onclick();
   }
   {
     const anexo = () => achar(itens("anexo")[0], (c) => c.type === "radio");

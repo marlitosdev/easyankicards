@@ -4750,10 +4750,10 @@ function leiPreItemEl(c, m) {
 
 /* O RETORNO DA REVISÃO DA COLAGEM. Apertar "aceitar todos" / "recusar todos" só apagava ou acendia os itens lá
  * embaixo e mexia num contador que sai da tela; quando tudo já estava aceito (o padrão), "aceitar todos" não
- * mudava NADA e parecia morto. Agora: uma frase fixa no topo diz o que aconteceu (e o que NÃO mudou), e o botão
- * apertado fica verde por um instante. */
+ * mudava NADA e parecia morto. Agora: uma frase fixa no topo diz o que aconteceu (e o que NÃO mudou), e os dois
+ * botões mostram o ESTADO do grupo o tempo todo — ver leiPreGrupoEl. (Antes o botão só piscava verde por 1,6 s e
+ * voltava ao normal: não dizia se estava ligado.) */
 let leiPreAvisoTimer = null;
-let leiPreFeitoTimer = null;
 function leiPreAvisar(txt) {
   const el = $("leiPreAviso");
   if (!el) return;
@@ -4763,16 +4763,6 @@ function leiPreAvisar(txt) {
   if (txt && typeof setTimeout === "function") {
     leiPreAvisoTimer = setTimeout(() => { el.hidden = true; }, 12000);
     if (leiPreAvisoTimer && leiPreAvisoTimer.unref) leiPreAvisoTimer.unref();
-  }
-}
-function leiPreMarcarFeito(id) {
-  const b = $(id);
-  if (!b || !b.classList) return;
-  b.classList.add("btn-salvo");
-  if (typeof clearTimeout === "function") clearTimeout(leiPreFeitoTimer);
-  if (typeof setTimeout === "function") {
-    leiPreFeitoTimer = setTimeout(() => { const x = $(id); if (x && x.classList) x.classList.remove("btn-salvo"); }, 1600);
-    if (leiPreFeitoTimer && leiPreFeitoTimer.unref) leiPreFeitoTimer.unref();
   }
 }
 
@@ -4832,17 +4822,27 @@ function leiPreGrupoEl(c, g, itens) {
   tit.textContent = t("lei_pre_g_" + g) + " (" + itens.length + ")";
   cab.append(tit);
   if (g !== "anexo") {
+    /* O ESTADO DO GRUPO, sempre à vista: quantas estão aceitas, e qual dos dois botões descreve o grupo agora
+     * (todas aceitas → "aceitar todos" ligado; nenhuma → "recusar todos" ligado; misto → nenhum dos dois).
+     * É recalculado a cada repintura, então acompanha também as escolhas item a item. */
+    const aceitas = itens.filter((m) => leiPreAceita(c, m)).length;
+    const cont = document.createElement("span");
+    cont.className = "lei-pre-cont";
+    cont.id = "leiPreCont_" + g;
+    cont.textContent = t("lei_pre_g_cont", { a: aceitas, n: itens.length });
+    cab.append(cont);
     [["lei_pre_todos", true], ["lei_pre_nenhum", false]].forEach(([k, v]) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn-min";
+      const ligado = itens.length > 0 && aceitas === (v ? itens.length : 0);
+      b.className = "btn-min" + (ligado ? " lei-pre-on" + (v ? "" : " lei-pre-nao") : "");
       b.id = "btnLeiPre" + (v ? "Todos_" : "Nenhum_") + g;
+      b.setAttribute("aria-pressed", ligado ? "true" : "false");
       b.textContent = t(k);
       b.onclick = () => {
         const mudaram = itens.filter((m) => !!leiPreAceita(c, m) !== v).length;
         itens.forEach((m) => { c.decisoes[m.id] = v; });
         leiPrePintar();
-        leiPreMarcarFeito(b.id);
         leiPreAvisar(t("lei_pre_av_" + (v ? "todos" : "nenhum") + (mudaram ? "" : "_ja"), { g: t("lei_pre_g_" + g), n: itens.length, c: mudaram }));
       };
       cab.append(b);
