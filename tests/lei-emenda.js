@@ -16,8 +16,11 @@
  *  4. A tela: a lei guardada não mostra o aviso de repetidos nem abre a conferência.
  *  5. A NUMERAÇÃO também não se confere numa lei que altera outra: os artigos que ela cita (o 156-A e o
  *     156-B entre o 1º e o 2º) vêm soltos no meio dela, e saíam "faltam 154 artigos depois do 1º" e "a
- *     numeração recomeça". A linha de estado do mapa diz que a numeração não foi conferida — não afirma
+ *     numeração recomeça". A linha de estado do mapa diz que a numeração não conta como aviso — não afirma
  *     que "segue uma sequência". Numa lei consolidada o salto continua apontado.
+ *  6. Mas a pessoa pode querer ver: o que a conferência normal apontaria aparece como INFORMAÇÃO, num bloco
+ *     RECOLHIDO, à parte da conferência — fora da linha de estado, da contagem de avisos e do grupo de
+ *     ajustes. Guarda se estava aberto ao repintar, vai para o relatório, e só existe quando há o que mostrar.
  * ===================================================================== */
 const fs = require("fs");
 const { rodar } = require("./fumaca.js");
@@ -145,8 +148,8 @@ async function testes() {
     api.leiAbrir("Direito", "Reforma", l.id);
     api.leiMapaAbrir();
     const cf = api.$("leiMapaConferir");
-    ok(cf.children.length === 1 && /lei-mapa-estado-ok/.test(cf.children[0].className) && /^✓ Nada suspeito: não achei título solto dentro de artigo\. Esta lei altera outra, então a numeração não é conferida/.test(cf.children[0].textContent),
-      "N6 a linha de estado diz que a numeracao nao foi conferida (e nao que 'segue uma sequencia'): " + cf.textContent.slice(0, 120));
+    ok(cf.children.length === 1 && /lei-mapa-estado-ok/.test(cf.children[0].className) && /^✓ Nada suspeito: não achei título solto dentro de artigo\. Esta lei altera outra, então a numeração não conta como aviso/.test(cf.children[0].textContent),
+      "N6 a linha de estado diz que a numeracao nao conta como aviso (e nao que 'segue uma sequencia'): " + cf.textContent.slice(0, 120));
     ok(!/segue uma sequência/.test(cf.textContent), "N6a nao afirma o que nao conferiu");
     const l2 = api.leiGuardar({ id: "lei_cons2", nome: "Lei consolidada", texto: CONSOL });
     api.leiAbrir("Direito", "Consolidada", l2.id);
@@ -175,11 +178,66 @@ async function testes() {
     api.$("dlgLeiPre").close();
     ok(abre(CONSOL) === false, "N11 controle: numa lei consolidada com salto o painel de numeracao aparece");
   }
-  const chaves2 = ["lei_mapa_ok_alt"];
+  /* ---- 5: a numeracao como INFORMACAO recolhivel ---- */
+  const EC3 = ["EMENDA X", "Altera dispositivos.", "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:", "\"Art. 5º Texto.\" (NR)",
+    "Art. 2º Dois.", "Art. 3º Tres.", "Art. 4º Quatro.", "Art. 5º Cinco.", "Art. 6º Seis.", "Art. 7º Sete.", "Art. 8º Oito. (AC)", "Art. 9º Nove. (NR)"].join("\n");
+  {
+    const dg = p.leiDiagnosticarLei(EC2);
+    ok(dg.numeracaoInfo.map((i) => i.tipo).sort().join(",") === "recomeco,salto" && dg.numeracaoInfo.every((i) => i.gravidade === "leve" && i.indice >= 0 && i.linha > 0),
+      "I1 o que a conferencia normal apontaria vai em numeracaoInfo, sempre 'leve': " + JSON.stringify(dg.numeracaoInfo.map((i) => i.tipo + "/" + i.gravidade)));
+    ok(p.leiDiagnosticarLei(CONSOL).numeracaoInfo.length === 0, "I2 numa lei consolidada nao ha 'informacao': os mesmos pontos sao AVISOS");
+    ok(p.leiPareceAlteradora(EC3).sim && p.leiDiagnosticarLei(EC3).numeracaoInfo.length === 0, "I3 emenda com a numeracao em ordem: nada a informar");
+    /* um numero isolado seria GRAVE numa lei consolidada: na emenda e' informacao 'leve', e nao vira grave no resumo */
+    const EC4 = EC3.replace("Art. 6º Seis.", "Art. 40º Isolado.\nArt. 6º Seis.");
+    const grave = p.leiDiagnosticarLei(CONSOL.replace("Art. 4º Ficam revogados dispositivos.", "Art. 40º Isolado.\nArt. 4º Ficam revogados dispositivos."));
+    const d4 = p.leiDiagnosticarLei(EC4);
+    ok(grave.itens.some((i) => i.gravidade === "grave"), "I3a (controle: na consolidada o numero isolado e' GRAVE)");
+    ok(p.leiPareceAlteradora(EC4).sim && d4.numeracaoInfo.some((i) => i.tipo === "isolado") && d4.numeracaoInfo.every((i) => i.gravidade === "leve") && d4.resumo.graves === 0 && d4.itens.length === 0,
+      "I3b na emenda o mesmo numero isolado e' informacao 'leve': nao conta como grave nem como aviso: " + JSON.stringify(d4.numeracaoInfo.map((i) => i.tipo + "/" + i.gravidade)));
+  }
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const ach = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); ach(c, pred, acc); }); return acc; };
+    const cls = (c, k) => new RegExp("(^|\\s)" + k + "(\\s|$)").test(c.className || "");
+    const l = api.leiGuardar({ id: "lei_ec2b", nome: "EC 132", texto: EC2 });
+    api.leiAbrir("Direito", "Reforma", l.id);
+    api.leiMapaAbrir();
+    const info = api.$("leiMapaInfo");
+    const g = ach(info, (c) => cls(c, "lei-info-grupo"))[0];
+    ok(info.children.length === 1 && g && g.open !== true, "I4 um bloco de informacao RECOLHIDO");
+    const sm = ach(g, (c) => String(c.tag || c.tagName).toLowerCase() === "summary")[0];
+    ok(/^Numeração \(só informação\) · 2 ponto\(s\)$/.test(sm.textContent), "I5 o titulo diz o que e' e quantos: " + sm.textContent);
+    ok(/altera outra.*não é tratada como aviso/.test(g.textContent), "I5a e explica por que nao e' aviso");
+    const linhas = ach(g, (c) => cls(c, "lei-mapa-item"));
+    ok(linhas.length === 2 && linhas.every((x) => cls(x, "lei-mapa-g-leve")) && /156-A/.test(linhas[0].textContent) && /recomeça/.test(linhas[1].textContent),
+      "I6 cada ponto em uma linha, cinza ('leve'), com 'ir ao artigo' e 'ver no texto': " + linhas.map((x) => x.textContent.slice(0, 60)));
+    ok(ach(g, (c) => cls(c, "btn-min")).length >= 2, "I6a (com o botao 'ir ao artigo')");
+    const cf = api.$("leiMapaConferir");
+    ok(cf.children.length === 1 && !ach(cf, (c) => cls(c, "lei-info-grupo")).length && !/ponto\(s\)/.test(cf.textContent) && api.$("leiMapaAjustes").children.length <= 1 && !ach(api.$("leiMapaAjustes"), (c) => cls(c, "lei-info-grupo")).length,
+      "I7 a informacao fica FORA da conferencia, da linha de estado e do grupo de ajustes");
+    /* o que estava aberto continua aberto ao repintar */
+    g.open = true; g.ontoggle();
+    api.leiMapaAbrir(true);
+    ok(ach(api.$("leiMapaInfo"), (c) => cls(c, "lei-info-grupo"))[0].open === true, "I8 aberto continua aberto depois de repintar");
+    const rel = api.leiRelatorioFluxo("mapa e conferência");
+    ok(/numeração \(só informação; lei que altera outra\): 2 — salto art\. 156-A .*recomeco art\. 2º/.test(rel) && /a conferir: 0/.test(rel), "I9 o relatorio traz a informacao (e continua dizendo 0 a conferir): " + rel.split("\n").filter((x) => /só informação/.test(x)).join("|"));
+    /* controles: a consolidada mostra AVISOS e nenhuma informacao; a emenda em ordem, nada */
+    const l2 = api.leiGuardar({ id: "lei_cons3", nome: "Consolidada", texto: CONSOL });
+    api.leiAbrir("Direito", "C", l2.id);
+    api.leiMapaAbrir();
+    ok(api.$("leiMapaInfo").children.length === 0, "I10 controle: a lei consolidada nao tem bloco de informacao (os pontos sao avisos)");
+    const l3 = api.leiGuardar({ id: "lei_ec3", nome: "EC ok", texto: EC3 });
+    api.leiAbrir("Direito", "E", l3.id);
+    api.leiMapaAbrir();
+    ok(api.$("leiMapaInfo").children.length === 0, "I11 emenda com a numeracao em ordem: sem bloco (nada a informar)");
+  }
+  const chaves2 = ["lei_mapa_ok_alt", "lei_info_num_titulo", "lei_info_num_expl", "lei_info_num_mais"];
   {
     const i18n = fs.readFileSync(require("path").join(__dirname, "..", "docs", "i18n.js"), "utf8");
     const conta = (k) => (i18n.match(new RegExp("\\n  \"" + k + "\": ", "g")) || []).length;
-    ok(chaves2.every((k) => conta(k) === 2), "N8 a frase nova existe em portugues E em ingles");
+    ok(chaves2.every((k) => conta(k) === 2), "N8 as frases novas existem em portugues E em ingles");
+    ok(/<div id="leiMapaAjustes"><\/div>\s*<!--[^>]*-->\s*<div id="leiMapaInfo"><\/div>/.test(fs.readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8")), "N9a o espaco da informacao existe, depois dos ajustes");
   }
 
   return Object.assign(falhas, { quantas: n });
