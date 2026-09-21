@@ -711,7 +711,7 @@ function rodar() {
     },
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
-    leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados,
+    leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados, leiEhAlteradora, leiParcelaCitada, leiPreItemEl, leiPreAnexoVerEl,
     lixLer, lixJogar, lixRestaurar, lixRestaurarUi, lixApagarDeVez, lixEsvaziar, lixContar, lixRisco, lixAvisoRisco,
     lixInserirBloco, lixJuntar, lixRecusou, lixDesfazer, lixAbrir, lixPintar, lixRecarregar, lixTexto, lixAtualizarBotao,
     lixLimites: (max, chars) => { lixMax = max; lixMaxChars = chars; },
