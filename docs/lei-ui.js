@@ -855,9 +855,11 @@ function leiPintarProcedencia() {
 let leiRepetidosMemo = { chave: "", grupos: [] };
 function leiRepetidosDaLei(l) {
   if (!l || !String(l.texto || "").trim()) return [];
-  const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + (l.repetidosOk || []).join(",");
+  const rec = l.ajustesRecusados || {};
+  const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + (l.repetidosOk || []).join(",")
+    + "|" + Object.keys(rec).filter((k) => rec[k]).sort().join(",");
   if (leiRepetidosMemo.chave !== chave) {
-    leiRepetidosMemo = { chave, grupos: leiDuplicados(l.texto, l.repetidosOk) };
+    leiRepetidosMemo = { chave, grupos: leiDuplicados(l.texto, l.repetidosOk, leiOpcDaLei(l)) };
   }
   return leiRepetidosMemo.grupos;
 }
@@ -867,7 +869,7 @@ function leiRevisarRepetidos() {
   if (leiSujo && leiIdAtual) leiGravar();
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   if (!l) return false;
-  const grupos = leiDuplicados(l.texto, l.repetidosOk);
+  const grupos = leiDuplicados(l.texto, l.repetidosOk, leiOpcDaLei(l));
   if (!grupos.length) { leiPintar(); return false; }
   /* uma alteração já registrada para o número NÃO é sobrescrita: guardar a
    * redação nova como "alteração" apagaria a que a pessoa fez à mão */
@@ -878,7 +880,7 @@ function leiRevisarRepetidos() {
     aoConfirmar: (res) => {
       const alt = Object.assign({}, l.alteracoes || {}, res.alteracoes);
       const ok = (l.repetidosOk || []).concat(
-        res.resumo.filter((r) => r.acao === "todas").map((r) => r.num))
+        res.resumo.filter((r) => r.acao === "todas" && !r.auto).map((r) => r.num))
         .filter((n, i, a) => a.indexOf(n) === i);
       leiGuardar({ id: l.id, texto: res.texto, alteracoes: alt, repetidosOk: ok });
       $("leiTexto").value = res.texto;
@@ -3510,7 +3512,7 @@ function leiGravar(opc) {
           $("leiTexto").value = res.texto;
           leiGravar({ separado: true, limpo: true, conferido: true,
             anexos: opc && opc.anexos, alteracoes: res.alteracoes,
-            repetidosOk: res.resumo.filter((r) => r.acao === "todas").map((r) => r.num) });
+            repetidosOk: res.resumo.filter((r) => r.acao === "todas" && !r.auto).map((r) => r.num) });
         },
       });
       return "pendente";
@@ -3682,6 +3684,16 @@ function leiDupPodeOriginal(g, indice) {
   return !!(esc && outro && esc.sinais.tipo === "redacao" && outro.sinais.tipo !== "redacao");
 }
 
+/* SÓ SE DECIDE ONDE HÁ INDÍCIO. O mesmo parágrafo/inciso duas vezes DENTRO de um artigo, sem "Redação dada…"
+ * em nenhuma das duas (a LC 214 traz "II … ; e / II … ." nos arts. 444 e 462: erro de numeração do próprio
+ * texto), não pede escolha: manter as duas não apaga nada, e a pessoa vê e decide se quiser. Ficam num bloco
+ * recolhido "só para conferir" e não travam o confirmar. Na ATUALIZAÇÃO a comparação usa um artigo por número
+ * e não há "manter todas": ali seguem como antes. Artigo INTEIRO repetido sem indício continua pedindo escolha. */
+function leiDupSoConferir(g, modo) {
+  return modo !== "atualizar" && !!g.intra && g.confianca === "fraca";
+}
+let leiDupConferAberto = false;
+
 function leiDupSugestoes() {
   const c = leiDupCtx;
   if (!c) return;
@@ -3689,12 +3701,15 @@ function leiDupSugestoes() {
   c.grupos.forEach((g) => {
     if (g.confianca === "forte") {
       c.decisoes[g.num] = { manter: g.sugerido, original: leiDupPodeOriginal(g, g.sugerido) };
+    } else if (leiDupSoConferir(g, c.modo)) {
+      c.decisoes[g.num] = { manter: "todas", original: false, auto: true };
     }
   });
 }
 
 function leiDuplicadosAbrir(ctx) {
   leiDupCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  leiDupConferAberto = false;
   leiDupSugestoes();
   leiDupPintar();
   abrirModal("dlgLeiDup");
@@ -3718,12 +3733,15 @@ function leiDupPintar() {
   $("leiDupAjuda").textContent = t(atualizar ? "lei_dup_ajuda_upd"
     : (revisar ? "lei_dup_ajuda_rev" : "lei_dup_ajuda"));
   const fortes = c.grupos.filter((g) => g.confianca === "forte").length;
-  $("leiDupResumo").textContent = t("lei_dup_resumo",
-    { n: c.grupos.length, f: fortes, c: c.grupos.length - fortes });
+  const soConf = c.grupos.filter((g) => leiDupSoConferir(g, c.modo)).length;
+  $("leiDupResumo").textContent = soConf
+    ? t("lei_dup_resumo_conf", { n: c.grupos.length, f: fortes, d: c.grupos.length - fortes - soConf, c: soConf })
+    : t("lei_dup_resumo", { n: c.grupos.length, f: fortes, c: c.grupos.length - fortes });
 
   const cx = $("leiDupLista");
   cx.innerHTML = "";
-  c.grupos.forEach((g) => {
+  const criaCard = (g) => {
+    const conf = leiDupSoConferir(g, c.modo);
     const dec = c.decisoes[g.num];
     const card = document.createElement("div");
     card.className = "lei-dup-grupo " + g.confianca;
@@ -3735,7 +3753,7 @@ function leiDupPintar() {
     tit.textContent = t("lei_dup_grupo", { a: g.numCru, n: g.candidatos.length });
     const forca = document.createElement("span");
     forca.className = "lei-dup-forca " + g.confianca;
-    forca.textContent = t(g.confianca === "forte" ? "lei_dup_forte" : "lei_dup_fraca");
+    forca.textContent = t(g.confianca === "forte" ? "lei_dup_forte" : (conf ? "lei_dup_fraca_conf" : "lei_dup_fraca"));
     cab.append(tit, forca);
     card.append(cab);
 
@@ -3743,6 +3761,11 @@ function leiDupPintar() {
       const mo = document.createElement("div");
       mo.className = "lei-dup-motivo";
       mo.textContent = t("lei_dup_m_" + g.motivo, { f: g.fonte });
+      card.append(mo);
+    } else if (g.intra) {
+      const mo = document.createElement("div");
+      mo.className = "lei-dup-motivo";
+      mo.textContent = t("lei_dup_fraca_intra");
       card.append(mo);
     }
 
@@ -3840,8 +3863,25 @@ function leiDupPintar() {
       lb.append(cb, tx);
       card.append(lb);
     }
-    cx.append(card);
-  });
+    return card;
+  };
+  const conferir = [];
+  c.grupos.forEach((g) => { if (leiDupSoConferir(g, c.modo)) conferir.push(g); else cx.append(criaCard(g)); });
+  if (conferir.length) {
+    const det = document.createElement("details");
+    det.id = "leiDupConfer";
+    det.className = "lei-dup-confer";
+    det.open = !!leiDupConferAberto;
+    det.ontoggle = () => { leiDupConferAberto = det.open; };
+    const sm = document.createElement("summary");
+    sm.textContent = t("lei_dup_conferir_sm", { n: conferir.length });
+    const ex = document.createElement("p");
+    ex.className = "nota";
+    ex.textContent = t("lei_dup_conferir_ajuda");
+    det.append(sm, ex);
+    conferir.forEach((g) => det.append(criaCard(g)));
+    cx.append(det);
+  }
   const leg = document.createElement("div");
   leg.className = "lei-dup-motivo";
   leg.textContent = t("lei_dup_legenda");
@@ -5012,7 +5052,7 @@ function leiDecRepetidos(c, res) {
         ref: "art. " + g.numCru,
         motivo: (g.motivo || "") + (g.fonte ? " · " + g.fonte : "") + " · " + t("dec_confianca", { c: g.confianca }),
         risco: g.confianca === "forte" ? "baixo" : "alto",
-        decisao: aceitou ? "aceitou" : "recusou",
+        decisao: d.auto ? "automatico" : (aceitou ? "aceitou" : "recusou"),
         escolha: aceitou ? "" : (d.manter === "todas" || d.manter === undefined ? t("dec_manter_todas") : t("dec_outra_ocorrencia")),
         via: "item",
         proposta: { acao: ap.acao === "alteracao" ? t("dec_rep_alteracao") : (ap.acao === "manter" ? t("dec_rep_remover") : t("dec_rep_nada")),
