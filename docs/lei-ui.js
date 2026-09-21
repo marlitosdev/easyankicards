@@ -4525,7 +4525,7 @@ function leiPreAnalisar(texto, opc) {
   const pre = leiPreprocessar(texto, opc);
   const arts = leiArtigos(texto);
   /* numeração não se critica numa lei que ALTERA: ela só cita artigos soltos */
-  const num = (arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !(opc && opc.semNumeracao) && !leiPareceAlteradora(texto).sim)
+  const num = (arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !(opc && opc.semNumeracao) && !leiEhAlteradora(texto))
     ? leiNumeracao(arts) : { problemas: [], graves: [] };
   return { pre, num, deve: pre.mudancas.length > 0 || num.graves.length > 0 };
 }
@@ -4566,6 +4566,35 @@ function leiPreAceita(c, m) {
   return m.grupo === "anexo" ? (d === "separar" || d === "descartar") : !!d;
 }
 
+/* O CONTEÚDO DE UM ANEXO, para quem vai decidir o que fazer com ele. Antes a tela dizia só "ANEXO IV · 6830
+ * caracteres" e pedia para escolher entre guardar, manter ou descartar: a pessoa confirmava 29 anexos sem ver
+ * nenhum. Agora cada um mostra uma amostra e abre o texto inteiro (recolhido, e continua aberto ao repintar). */
+function leiPreLinhasDaColagem(c) {
+  if (!c._linhas) c._linhas = String(c.texto || "").split("\n");
+  return c._linhas;
+}
+function leiPreAnexoVerEl(c, m) {
+  const det = document.createElement("details");
+  det.className = "lei-pre-anexo-ver";
+  c.anexoAberto = c.anexoAberto || {};
+  det.open = !!c.anexoAberto[m.id];
+  const sm = document.createElement("summary");
+  const nl = m.linhas[1] - m.linhas[0] + 1;
+  sm.textContent = t("lei_pre_anexo_ver" + (nl === 1 ? "_1" : ""), { n: nl });
+  const box = document.createElement("div");
+  box.className = "lei-pre-anexo-txt";
+  const encher = () => {
+    if (box._pronto) return;
+    box._pronto = true;
+    box.textContent = leiPreLinhasDaColagem(c).slice(m.linhas[0] - 1, m.linhas[1]).join("\n");
+  };
+  det.ontoggle = () => { c.anexoAberto[m.id] = det.open; if (det.open) encher(); };
+  det.encher = encher;
+  det.append(sm, box);
+  if (det.open) encher();
+  return det;
+}
+
 function leiPreItemEl(c, m) {
   const aceita = leiPreAceita(c, m);
   const el = document.createElement("div");
@@ -4584,6 +4613,11 @@ function leiPreItemEl(c, m) {
     tit.className = "lei-pre-ctx";
     tit.textContent = m.titulo + " · " + t("lei_pre_anexo_tam", { n: m.tamanho });
     el.append(tit);
+    /* uma amostra do que é: as primeiras linhas depois do título */
+    const amostra = leiPreLinhasDaColagem(c).slice(m.linhas[0], m.linhas[1]).map((x) => String(x).replace(/\s+/g, " ").trim())
+      .filter(Boolean).slice(0, 2).join(" · ").slice(0, 200);
+    if (amostra) { const am = document.createElement("div"); am.className = "lei-pre-anexo-amostra"; am.textContent = "» " + amostra; el.append(am); }
+    el.append(leiPreAnexoVerEl(c, m));
     const op = document.createElement("div");
     op.className = "lei-pre-anexo-op";
     [["separar", c.modo === "atualizar" ? "lei_pre_anexo_separar_upd" : "lei_pre_anexo_separar"],
@@ -4631,6 +4665,8 @@ function leiPreItemEl(c, m) {
   }
   lb.append(cb, corpo);
   el.append(lb);
+  /* de ONDE vem: o trecho da colagem ao redor da primeira linha do item */
+  if ((m.linhas || []).length) el.append(leiDupContextoEl(c.texto, { linha: m.linhas[0], linhaFim: m.linhas[0] }));
   return el;
 }
 
@@ -4707,7 +4743,7 @@ function leiPrePintar() {
   const arts = leiArtigos(res.texto);
   const pn = $("leiPreNumeracao");
   pn.innerHTML = "";
-  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao || leiPareceAlteradora(res.texto).sim) {
+  if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao || leiEhAlteradora(c.texto)) {
     pn.hidden = true;
   } else {
     const num = leiNumeracao(arts);
@@ -5011,7 +5047,7 @@ function leiNumeracaoDaLei(l) {
   const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + leiHashTexto(leiJsonEstavel(l.ajustesRecusados || {}));
   if (leiNumeracaoMemo.chave !== chave) {
     const arts = leiArtigos(l.texto, leiOpcDaLei(l));
-    leiNumeracaoMemo = { chave, res: arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !leiPareceAlteradora(l.texto).sim ? leiNumeracao(arts) : vazio };
+    leiNumeracaoMemo = { chave, res: arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !leiEhAlteradora(l.texto) ? leiNumeracao(arts) : vazio };
   }
   return leiNumeracaoMemo.res;
 }

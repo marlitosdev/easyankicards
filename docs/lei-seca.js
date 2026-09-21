@@ -1301,7 +1301,7 @@ function leiRepetidosNoArtigo(texto, ignorar) {
    * redação de VÁRIOS artigos de outra lei, cada um com os seus §1º, §2º, §3º… Como os artigos citados não
    * são artigos desta lei, todos esses parágrafos caem no mesmo artigo e o mesmo endereço se repete de
    * verdade — em artigos diferentes da lei alterada. Não é repetição: a EC 132/2023 dava 22 grupos falsos. */
-  if (leiPareceAlteradora(texto).sim) return [];
+  if (leiEhAlteradora(texto)) return [];
   const conferidos = {};
   (ignorar || []).forEach((n) => { conferidos[leiNumNormal(n)] = true; });
   const grupos = [];
@@ -1991,7 +1991,7 @@ function leiDiagnosticarLei(texto, opc) {
    * e "a numeração recomeça", que não são defeito de nada. Não viram aviso — mas a pessoa pode querer ver: o que
    * a conferência normal apontaria vai em `numeracaoInfo`, sempre "leve", para a tela mostrar RECOLHIDO como
    * informação. */
-  const alteradora = leiPareceAlteradora(texto).sim;
+  const alteradora = leiEhAlteradora(texto);
   const numReal = arts.length >= 8 ? leiNumeracao(arts) : { problemas: [], graves: [], recorte: false };
   const num = alteradora ? { problemas: [], graves: [], recorte: false } : numReal;
   const comIndice = (p) => {
@@ -2085,6 +2085,45 @@ function leiPareceAlteradora(texto) {
    * não os tem. "Altera a…" no título, sozinho, é menos: só conta com outro sinal */
   const forte = sinais.some((x) => x === "omitidos" || x === "nr_ac" || x === "passa_a_vigorar");
   return { sim: forte || sinais.length >= 2, sinais };
+}
+
+/* A PARCELA DO TEXTO (0 a 1) que está dentro de artigos CITADOS entre aspas: de uma linha que abre com
+ * “Art. … até a que fecha com ” (ou ” (NR), ” (AC)). A linha “Art. 9º ...... (o caput não mudou) não fecha. */
+function leiParcelaCitada(texto) {
+  let dentro = false, citado = 0, total = 0;
+  String(texto || "").split("\n").forEach((s) => {
+    const n = s.length + 1;
+    total += n;
+    const abre = /^\s*[“"«]\s*Art(?:\.|igo)?\s*\d/i.test(s);
+    if (!dentro && abre) dentro = true;
+    if (dentro) citado += n;
+    if (dentro && /[”"»]\s*(?:\((?:NR|AC|VETADO)\))?\s*\.?\s*$/.test(s) && !(abre && /\.{6,}\s*$/.test(s))) dentro = false;
+  });
+  return total ? citado / total : 0;
+}
+
+/* A lei É, no essencial, uma alteração de outra? Dois sinais que vêm de quem estuda:
+ *  1. é uma EMENDA CONSTITUCIONAL — pela própria espécie, ela existe para alterar a Constituição;
+ *  2. é uma lei em que a MAIORIA dos artigos é de alteração de outra lei (a LC 95/2022 de Caruaru).
+ * A EC 132/2023 é (60% do texto são artigos citados da CF): a numeração e os parágrafos repetidos dela não
+ * fazem sentido. A LC 214/2025 NÃO é: só 8% do texto são 43 artigos que alteram outras leis, no meio de 544
+ * artigos dela — e a numeração dela vale. Fora a emenda, só o texto que "parece alteradora" E onde qualquer
+ * destes é grande: a parte citada entre aspas (30%), a fração de artigos que dizem "passa a vigorar…" (a
+ * maioria: 50%) ou a densidade das marcas (NR)/(AC): 0,3 por artigo E 0,2 por KB, as duas juntas. As marcas
+ * NÃO dependem das aspas — a limpeza da colagem (grafia) as tira, e uma emenda salva sem aspas continua sendo
+ * emenda. Medido nos textos oficiais, sem as aspas: EC 132 = 0,48 por artigo e 0,38 por KB; LC 214 = 0,12 por
+ * artigo e 0,09 por KB. */
+function leiEhAlteradora(texto) {
+  const ident = leiIdentificar(texto);
+  if (ident && ident.especie === "Emenda Constitucional") return true;
+  if (!leiPareceAlteradora(texto).sim) return false;
+  if (leiParcelaCitada(texto) >= 0.3) return true;
+  const arts = leiArtigos(texto);
+  if (!arts.length) return false;
+  const intros = arts.filter((a) => /passa(?:m)?\s+a\s+vigorar|ficam?\s+acrescid|ficam?\s+revogad/i.test(String(a.texto).slice(0, 300))).length;
+  const marcas = (String(texto || "").match(/\(\s*(?:NR|AC)\s*\)/g) || []).length;
+  const kb = String(texto || "").length / 1000;
+  return intros / arts.length >= 0.5 || (marcas / arts.length >= 0.3 && marcas / kb >= 0.2);
 }
 
 function leiConfereIdentidade(l, texto) {
