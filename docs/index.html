@@ -1136,6 +1136,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-pre-cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:800;margin-bottom:2px}
 .lei-pre-cont{font-weight:600;font-size:12px;color:var(--sutil)}
 /* o que CONSTA COMO REVOGADO/VETADO no texto: esmaecido, sem sumir */
+.lei-ir-cel-rev{opacity:.55}
+.lei-ir-u-rev{opacity:.6;font-style:italic}
+.lei-art-disp-rev{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--laranja-borda);color:var(--laranja-txt);background:var(--laranja-claro);cursor:default}
+.lei-rec-rev{font-style:italic}
+.lei-arq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px}
 .lei-art-rev{opacity:.72}
 .lei-art-txt-rev{font-style:italic;color:var(--sutil)}
 .lei-linha-rev{opacity:.6;font-style:italic}
@@ -6383,6 +6388,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        depois disso passa pelo ✏ por artigo ou por "atualizar para nova
        versão", nunca por aqui. -->
   <p class="nota" id="leiTextoTravado" hidden></p>
+  <div class="lei-arq" id="leiArquivoBox">
+    <button type="button" class="btn-min" id="btnLeiArquivo" data-i18n="lei_arq_btn"></button>
+    <input type="file" id="leiArquivoHtml" accept=".htm,.html,text/html" hidden>
+    <span class="nota" data-i18n="lei_arq_ajuda"></span>
+  </div>
   <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
   <!-- O ANDAMENTO DE UMA LEI GRANDE: aparece enquanto os artigos entram
@@ -6592,6 +6602,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <label class="nota" data-i18n="lei_upd_fonte_rot"></label>
     <input type="text" id="leiUpdFonte" placeholder="EC 132/2023">
     <label class="nota" data-i18n="lei_upd_colar_rot"></label>
+    <div class="lei-arq" id="leiUpdArquivoBox">
+      <button type="button" class="btn-min" id="btnLeiUpdArquivo" data-i18n="lei_arq_btn"></button>
+      <input type="file" id="leiUpdArquivoHtml" accept=".htm,.html,text/html" hidden>
+      <span class="nota" data-i18n="lei_arq_ajuda"></span>
+    </div>
     <textarea id="leiUpdTexto" rows="12" style="width:100%;box-sizing:border-box"
       placeholder="Cole aqui a nova versão completa da lei."></textarea>
     <p class="nota" id="leiUpdAviso1"></p>
