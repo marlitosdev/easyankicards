@@ -2716,6 +2716,7 @@ function leiAlertasDaMudanca(item, ctx) {
       al.push({ k: "revogado_no_texto", sev: "info" });
     }
   }
+  if (/_texto$/.test(item.tipo)) al.push({ k: "revogado_texto", sev: "info" });
   if (item.tipo === "novo" && c.fora && c.fora[item.num]) al.push({ k: "fora_sequencia", sev: "alerta" });
   if (item.tipo === "revogado") {
     al.push({ k: "ausente", sev: "aviso" });
@@ -2750,6 +2751,12 @@ function leiCompararVersoes(textoAntigo, textoNovo, opc) {
     if (!a) itens.push({ num, numCru: b.numCru, tipo: "novo", antigo: "", novo: b.texto, aceito: false, recusado: false });
     else if (a.texto.replace(/\s+/g, " ").trim() !== b.texto.replace(/\s+/g, " ").trim()) {
       if (leiNormalizaComparacao(a.texto) === leiNormalizaComparacao(b.texto)) soFormatacao.push(num);
+      /* O TEXTO NOVO, SOZINHO, JÁ DIZ QUE O ARTIGO FOI REVOGADO/VETADO/SUPRIMIDO (leiRevogacaoDoArtigo, já
+       * calculado em b.revogacao por leiArtigos). Comparar isso como "mudou de redação" gerava alarme falso
+       * ("só 9% das palavras coincidem", "texto bem menor") para uma mudança que é exatamente o esperado — e
+       * perdia a fonte PRECISA que o texto novo traz (pode ser diferente lei da que a pessoa digitou no topo). */
+      else if (b.revogacao) itens.push({ num, numCru: b.numCru, tipo: b.revogacao.tipo + "_texto", antigo: a.texto, novo: b.texto,
+        revogacao: b.revogacao, fonteItem: b.revogacao.fonte || "", aceito: false, recusado: false });
       else itens.push({ num, numCru: b.numCru, tipo: "mudou", antigo: a.texto, novo: b.texto, aceito: false, recusado: false });
     }
   });

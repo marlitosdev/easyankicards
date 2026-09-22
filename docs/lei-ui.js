@@ -5127,6 +5127,7 @@ function leiDecVersao(itens, fonte) {
         decisao: item.aceito ? "aceitou" : (item.recusado ? "recusou" : "sem_decisao"),
         via: item.explicacao ? "com_explicacao" : "item",
         proposta: { acao: tipo === "revogado" ? "marcar como revogado (o artigo some da leitura)"
+            : /_texto$/.test(tipo) ? "marcar como revogado (o próprio texto novo já diz isso)"
             : tipo === "mudou" ? "trocar a redação" : tipo === "novo" ? "acrescentar o artigo" : "substituir o anexo",
           amostra: item.antigo || "", depois: item.novo || "", n: 1, alertas },
       };
@@ -5829,6 +5830,7 @@ function leiUpdMostrar() {
   const h = document.createElement("div");
   h.className = "duv-titulo";
   h.textContent = (item.rotulo || "Art. " + item.numCru) + " — " + t("lei_upd_tipo_" + item.tipo)
+    + (item.revogacao && item.revogacao.fonte ? " · " + item.revogacao.fonte : "")
     + (item.aceito ? " · " + t("lei_upd_ok") : "");
   if (item.recusado) {
     const rc = document.createElement("span");
@@ -5984,11 +5986,12 @@ function leiAtualizarAplicar() {
     hist.push({ fonte: item.fonteItem || leiUpdFonteGlobal, data: hoje, dataLei: item.dataLei || "", tipo: item.tipo });
     const fontes = [];
     hist.forEach((h) => { if (h.fonte && fontes.indexOf(h.fonte) < 0) fontes.push(h.fonte); });
+    const ehRevogado = item.tipo === "revogado" || /_texto$/.test(item.tipo);
     alt[item.num] = {
-      texto: item.tipo === "revogado" ? "" : item.novo,
+      texto: ehRevogado ? "" : item.novo,
       fonteAlteracao: fontes.join("; "),
       data: hoje,
-      revogado: item.tipo === "revogado",
+      revogado: ehRevogado,
       historico: hist,
       dataLei: item.dataLei || "",
     };
