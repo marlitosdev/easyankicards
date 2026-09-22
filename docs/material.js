@@ -510,7 +510,7 @@ function matProvaCartao(b, idx, resp) {
   return h;
 }
 
-function matParaHtml(txt, prova) {
+function matParaHtml(txt, prova, opc) {
   const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
   let emLista = false;
@@ -623,7 +623,9 @@ function matParaHtml(txt, prova) {
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
     if (!s) { fecharLista(); return; }
     fecharLista();
-    saida.push("<p>" + inline(s) + "</p>");
+    /* opc.classeDaLinha: uma classe para o parágrafo (a lei esmaece o dispositivo que consta como revogado) */
+    const cl = opc && opc.classeDaLinha ? opc.classeDaLinha(s) : "";
+    saida.push("<p" + (cl ? ' class="' + cl + '"' : "") + ">" + inline(s) + "</p>");
   });
   if (emLista) saida.push("</ul>");
   return saida.join("\n");

@@ -407,6 +407,8 @@ function leiLerLei(texto, opc) {
       ementa: leiEmenta(a.corpo),
       texto: a.linhas.join("\n").replace(/\s+$/, ""),
       corpo: a.corpo.trim(),
+      /* consta como revogado/vetado no PRÓPRIO texto ({tipo, fonte}) — só identificação, nada é apagado */
+      revogacao: leiRevogacaoDoArtigo(a.linhas),
       divisao: a.div ? a.div.rotulo : "",
       divisaoTipo: a.div ? a.div.tipo : "",
       divisaoId: a.div ? a.div.id : "",
@@ -533,6 +535,84 @@ const LEI_RE_SINAL_REDACAO =
 const LEI_RE_SINAL_REVOGADO = /\(\s*revogad[oa]\b[^)]*\)|\brevogad[oa]\s+pel[ao]\b/i;
 const LEI_RE_SINAL_VETADO = /\(\s*vetad[oa]\b[^)]*\)/i;
 const LEI_RE_SINAL_INCLUIDO = /\(\s*inclu[íi]d[oa]\s+pel[ao]\b[^)]*\)/i;
+
+/* =====================================================================
+ * O QUE O PRÓPRIO TEXTO DIZ QUE ESTÁ REVOGADO, VETADO OU SUPRIMIDO
+ *
+ * O texto consolidado deixa a marca no lugar do dispositivo: "§ 8º (Revogado).  (Redação dada pela LC 227)",
+ * "III - (VETADO);", "Art. 217. (Revogado pela Lei Complementar nº 227, de 2026)", "ANEXO XIV" seguido de
+ * "(Revogado pela …)". A LC 214 traz 34 revogados e 31 vetados. O app guardava e mostrava tudo isso como
+ * texto comum: um anexo revogado entrava na lei como qualquer anexo, e o artigo revogado como um artigo a estudar.
+ *
+ * SÓ CONTA A LINHA QUE É SÓ ISSO: o número do dispositivo, a marca entre parênteses e, no máximo, notas
+ * editoriais ("Redação dada…", "Produção de efeitos"). "Fica revogado o art. 5º" (ordem de uma lei alteradora),
+ * "(Revogado) e depois texto que voltou a valer" e um § com texto e uma nota de redação NÃO são revogados.
+ * Nada é apagado nem movido: é só identificação.
+ * ===================================================================== */
+const LEI_ENUM_REVOG = "(?:Art(?:igos?|s?\\.?)\\s*\\d{1,4}\\s*[ºo°ª]?(?:\\s*-\\s*[A-Z])?(?:\\s*(?:a|ao|e)\\s*(?:Art\\.?\\s*)?\\d{1,4}\\s*[ºo°ª]?(?:-[A-Z])?)?"
+  + "|§+\\s*\\d{1,3}\\s*[ºo°ª]?(?:\\s*-\\s*[A-Z])?(?:\\s*(?:a|ao|e)\\s*§?\\s*\\d{1,3}\\s*[ºo°ª]?)?"
+  + "|Par[áa]grafo\\s+[úu]nico|[IVXLCDM]{1,8}(?:\\s*-\\s*[A-Z])?(?=\\s*[-–—])(?:\\s*(?:a|ao)\\s*[IVXLCDM]{1,8})?"
+  + "|[a-z]\\)|\\d{1,3}\\s*[.)]|ANEXO\\s+[IVXLCDM]+)";
+const LEI_NOTA_REVOG = "((?:[Rr]evogad|REVOGAD|[Vv]etad|VETAD|[Ss]uprimid|SUPRIMID)[oaOA]s?)\\b([^)]*)\\)\\s*(.*)$";
+const LEI_RE_REVOG_LINHA = new RegExp("^[\\s>*]*" + LEI_ENUM_REVOG + "\\s*[.\\-–—:]*\\s*\\(\\s*" + LEI_NOTA_REVOG);
+const LEI_RE_REVOG_BARE = new RegExp("^\\s*\\(\\s*" + LEI_NOTA_REVOG);
+const LEI_RE_EDITORIAL = /^\s*(?:Produ[çc][ãa]o\s+de\s+efeitos?|Vig[êe]ncia|Regulamento|\(\s*(?:Reda[çc][ãa]o\s+dada|Vide|Inclu[íi]d)[^)]*\))\s*[.;]?\s*$/i;
+
+/* a fonte: "pela Lei Complementar nº 227, de 2026" na própria marca, ou na nota de redação que vem depois */
+function leiFonteDaRevogacao(nota, cauda) {
+  let f = String(nota || "").replace(/^\s*(?:pel[ao]s?|por)\s+/i, "").replace(/[\s.;,]+$/, "").trim();
+  if (!f) {
+    const m = String(cauda || "").match(/\(\s*(?:Reda[çc][ãa]o\s+dada|Inclu[íi]d[oa]|Revogad[oa]|Vetad[oa])\s+(?:pel[ao]s?|por)\s+([^)]*)\)/i);
+    if (m) f = m[1].trim();
+  }
+  return f;
+}
+
+function leiRevogacaoDeMatch(m) {
+  if (!m) return null;
+  const cauda = m[3];
+  const resto = cauda.replace(/\([^)]*\)/g, "").replace(/\b(?:Produ[çc][ãa]o\s+de\s+efeitos?|Vig[êe]ncia|Regulamento|Vide)\b/gi, "").replace(/[\s.;:,\-–—]+/g, "");
+  if (resto) return null;
+  const k = m[1].toLowerCase();
+  return { tipo: /^vet/.test(k) ? "vetado" : /^supr/.test(k) ? "suprimido" : "revogado", fonte: leiFonteDaRevogacao(m[2], cauda) };
+}
+
+/* uma linha que é SÓ a marca de um dispositivo (com o número dele à frente) → { tipo, fonte }, ou null */
+function leiRevogacaoDaLinha(linha) {
+  const s = String(linha == null ? "" : linha).replace(/\s+/g, " ").trim();
+  return s ? leiRevogacaoDeMatch(s.match(LEI_RE_REVOG_LINHA)) : null;
+}
+
+/* o ARTIGO inteiro consta como revogado: o cabeçalho é a marca, e o resto são só outras marcas ou notas editoriais */
+function leiRevogacaoDoArtigo(linhas) {
+  if (!linhas || !linhas.length) return null;
+  const r0 = leiRevogacaoDaLinha(linhas[0]);
+  if (!r0) return null;
+  for (let k = 1; k < linhas.length; k++) {
+    const s = String(linhas[k] == null ? "" : linhas[k]).replace(/\s+/g, " ").trim();
+    if (!s) continue;
+    if (leiRevogacaoDaLinha(s) || LEI_RE_EDITORIAL.test(s) || leiRevogacaoDeMatch(s.match(LEI_RE_REVOG_BARE))) continue;
+    return null;
+  }
+  return r0;
+}
+
+/* o ANEXO inteiro consta como revogado: o título (com a marca, ou só ele) e, no máximo, uma linha de subtítulo em
+ * maiúsculas; o resto, só a marca e notas editoriais. Tabela ou texto no corpo → NÃO é revogado. */
+function leiRevogacaoDoAnexo(linhas) {
+  const L = (linhas || []).map((x) => String(x == null ? "" : x).replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (!L.length) return null;
+  let achada = leiRevogacaoDaLinha(L[0]);
+  let subtitulos = 0;
+  for (let k = 1; k < L.length; k++) {
+    const b = leiRevogacaoDeMatch(L[k].match(LEI_RE_REVOG_BARE));
+    if (b) { if (!achada || (!achada.fonte && b.fonte)) achada = b; continue; }
+    if (LEI_RE_EDITORIAL.test(L[k])) continue;
+    if (!subtitulos && L[k].length <= 110 && L[k] === L[k].toUpperCase() && /[A-ZÀ-Ú]{3}/.test(L[k])) { subtitulos++; continue; }
+    return null;
+  }
+  return achada;
+}
 
 /* O que o TEXTO de uma ocorrência diz sobre a própria vigência. */
 function leiSinaisDoArtigo(a) {
@@ -826,6 +906,170 @@ const LEI_RE_PAGINA_CLARA =
   /^\s*(?:(?:p[áa]g(?:ina)?\.?|page)\s*\d{1,4}(?:\s*(?:\/|de|of)\s*\d{1,4})?|[-–—]?\s*\d{1,4}\s*(?:\/|de)\s*\d{1,4}\s*[-–—]?)\s*$/i;
 const LEI_RE_PAGINA_SOLTA = /^\s*(\d{1,4})\s*$/;
 
+/* =====================================================================
+ * O TACHADO DO PLANALTO — o texto antigo e o revogado
+ *
+ * O Planalto marca o texto substituído ou revogado SÓ com o risco: na LC 214 são 607 trechos tachados no HTML
+ * (9 tabelas de anexo inteiras e 49 trechos de prosa, entre eles o inciso II antigo do art. 152). O texto puro
+ * perde o risco: o texto antigo aparece ao lado do novo (e vira "artigo repetido"), e as tabelas revogadas
+ * entram como se valessem. Copiando COM FORMATAÇÃO, o risco viaja no HTML da área de transferência.
+ *
+ * COMO ENTRA: o texto puro continua sendo a base (é o que a pessoa colaria de qualquer jeito). O HTML só diz QUAIS
+ * letras estão riscadas — as duas versões precisam ter as MESMAS letras, na mesma ordem (ignorando espaço); se não
+ * tiverem, nada é marcado (nunca se marca no lugar errado). Cada trecho riscado vira ~~trecho~~ dentro da linha,
+ * sem mudar o número de linhas. A revisão da colagem mostra os trechos e a pessoa decide (aceitar = sai da lei;
+ * recusar = fica como texto comum); nenhuma marca ~~ chega a ser guardada.
+ * ===================================================================== */
+const LEI_RE_TCH_G = /~~([^~\n]+?)~~/g;
+const LEI_ENTIDADES = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", ordm: "º", ordf: "ª", sect: "§", ndash: "–", mdash: "—",
+  ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’", hellip: "…", bull: "•", middot: "·", deg: "°", laquo: "«", raquo: "»",
+  aacute: "á", agrave: "à", acirc: "â", atilde: "ã", ccedil: "ç", eacute: "é", ecirc: "ê", iacute: "í", oacute: "ó", ocirc: "ô",
+  otilde: "õ", uacute: "ú", uuml: "ü", Aacute: "Á", Agrave: "À", Acirc: "Â", Atilde: "Ã", Ccedil: "Ç", Eacute: "É", Ecirc: "Ê",
+  Iacute: "Í", Oacute: "Ó", Ocirc: "Ô", Otilde: "Õ", Uacute: "Ú" };
+function leiDecodificarEntidades(s) {
+  return String(s).replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z]{2,8}));/g, (m, d, h, nome) => {
+    if (d || h) { try { return String.fromCodePoint(d ? Number(d) : parseInt(h, 16)); } catch (e) { return m; } }
+    return Object.prototype.hasOwnProperty.call(LEI_ENTIDADES, nome) ? LEI_ENTIDADES[nome] : m;
+  });
+}
+
+/* o HTML da área de transferência em pedaços de texto, com "riscado ou não" em cada um. Sem DOM (roda nos testes) */
+function leiSegmentosDoHtml(html) {
+  const seg = [];
+  const pilha = [];
+  let riscado = 0, pulando = 0;
+  const VAZIAS = { br: 1, img: 1, hr: 1, meta: 1, link: 1, input: 1, wbr: 1 };
+  const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>|([^<]+)/g;
+  let m;
+  while ((m = re.exec(String(html == null ? "" : html)))) {
+    if (m[4] !== undefined) { if (!pulando) seg.push({ t: leiDecodificarEntidades(m[4]), s: riscado > 0 }); continue; }
+    if (!m[2]) continue;
+    const tag = m[2].toLowerCase();
+    if (VAZIAS[tag]) { if (tag === "br" && !m[1] && !pulando) seg.push({ t: "\n", s: false }); continue; }
+    if (m[1]) {
+      for (let k = pilha.length - 1; k >= 0; k--) {
+        if (pilha[k].tag !== tag) continue;
+        pilha.splice(k).forEach((e) => { if (e.r) riscado--; if (e.p) pulando--; });
+        break;
+      }
+      continue;
+    }
+    if (/\/\s*$/.test(m[3])) continue;
+    const e = { tag, r: tag === "strike" || tag === "s" || tag === "del" || /text-decoration(?:-line)?\s*:[^;"']*line-through/i.test(m[3]),
+      p: tag === "script" || tag === "style" || tag === "head" || tag === "title" };
+    if (e.r) riscado++;
+    if (e.p) pulando++;
+    pilha.push(e);
+  }
+  return seg;
+}
+
+/* o texto puro com ~~…~~ em volta do que o HTML tem riscado → { texto, n, motivo } (n = trechos marcados) */
+function leiMarcarTachado(plain, html) {
+  plain = String(plain == null ? "" : plain);
+  const seg = leiSegmentosDoHtml(html);
+  const tem = /[\p{L}\p{N}]/u;
+  if (!seg.some((x) => x.s && tem.test(x.t))) return { texto: plain, n: 0, motivo: "sem_tachado" };
+  for (const f of [/\s/, /[^\p{L}\p{N}]/u]) {
+    const hc = [], hs = [], pi = [];
+    seg.forEach((sg) => { for (let i = 0; i < sg.t.length; i++) if (!f.test(sg.t[i])) { hc.push(sg.t[i]); hs.push(sg.s); } });
+    for (let i = 0; i < plain.length; i++) if (!f.test(plain[i])) pi.push(i);
+    if (hc.length !== pi.length) continue;
+    let igual = true;
+    /* sem diferenciar maiúscula: o CSS do Planalto usa text-transform:uppercase ("com bens e serviços" no HTML vira
+     * maiúsculo no texto copiado). Só a CAIXA pode diferir — as letras, na mesma ordem, têm de ser as mesmas. */
+    for (let k = 0; k < pi.length; k++) if (hc[k] !== plain[pi[k]] && hc[k].toLowerCase() !== plain[pi[k]].toLowerCase()) { igual = false; break; }
+    if (!igual) continue;
+    const flag = new Array(plain.length).fill(false);
+    pi.forEach((pos, k) => { flag[pos] = hs[k]; });
+    /* o que o filtro descartou (pontuação, no 2º filtro) acompanha o riscado que vem logo antes */
+    if (f.source !== "\\s") for (let i = 1; i < plain.length; i++) if (!flag[i] && f.test(plain[i]) && !/\s/.test(plain[i]) && flag[i - 1]) flag[i] = true;
+    let n = 0;
+    const saida = plain.split("\n").reduce((acc, linha, li, todas) => {
+      const ini = acc.pos;
+      let out = "", k = 0;
+      while (k < linha.length) {
+        if (!flag[ini + k] || /\s/.test(linha[k])) { out += linha[k]; k++; continue; }
+        let fim = k;
+        while (fim < linha.length && (flag[ini + fim] || /\s/.test(linha[fim]))) fim++;
+        while (fim > k && /\s/.test(linha[fim - 1])) fim--;
+        const trecho = linha.slice(k, fim);
+        if (tem.test(trecho) && trecho.indexOf("~") < 0) { out += "~~" + trecho + "~~"; n++; } else out += trecho;
+        k = fim;
+      }
+      acc.linhas.push(out);
+      acc.pos = ini + linha.length + 1;
+      return acc;
+    }, { linhas: [], pos: 0 }).linhas.join("\n");
+    return { texto: saida, n, motivo: n ? "" : "sem_tachado" };
+  }
+  return { texto: plain, n: 0, motivo: "nao_alinhou" };
+}
+
+/* tira os trechos marcados (remover) ou só as marcas, deixando o texto (não remover) */
+function leiTirarTachado(linha, remover) {
+  const s = String(linha == null ? "" : linha);
+  if (!remover) return s.replace(LEI_RE_TCH_G, "$1");
+  const r = s.replace(/[ \t]*~~([^~\n]+?)~~[ \t]*/g, (m, x, off, todo) => (off === 0 || off + m.length === todo.length ? "" : " "));
+  return r.trim() ? r : "";
+}
+function leiTirarMarcasTachado(texto) { return String(texto == null ? "" : texto).replace(LEI_RE_TCH_G, "$1"); }
+
+/* SÓ O IDENTIFICADOR DO DISPOSITIVO ESTÁ RISCADO ("ANEXO XIV", "Art. 217.", "§ 5º", "I -", "c)") e a nota
+ * "(Revogado pela …)" fica ao lado, sem risco: é assim que o Planalto mostra um dispositivo revogado. Tirar o
+ * número apagaria QUAL dispositivo foi revogado e deixaria a nota solta (o título do anexo XIV sumiria e a nota
+ * iria parar no fim do anexo anterior). Por isso esse trecho vem com padrão "manter" (como texto comum). */
+const LEI_RE_IDENT_RISCADO = /^(?:ANEXO\s+[IVXLCDM]+|Art(?:igos?|s?\.?)\s*\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|§+\s*\d{1,3}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|Par[áa]grafo\s+[úu]nico\s*\.?|[IVXLCDM]{1,8}(?:\s*-\s*[A-Z])?\s*[-–—]?|[a-z]\)|\d{1,3}\s*[.)])$/;
+const LEI_RE_NOTA_REV_INI = /^\s*\(\s*(?:Revogad|REVOGAD|Vetad|VETAD|Suprimid)/;
+function leiLinhaSoIdentificadorRiscado(linhas, i) {
+  const x = String(linhas[i]);
+  const segs = x.match(LEI_RE_TCH_G) || [];
+  if (!segs.length || !segs.every((s) => LEI_RE_IDENT_RISCADO.test(s.slice(2, -2).trim()))) return false;
+  let nota = leiTirarTachado(x, true).trim();
+  for (let k = i + 1; !nota && k < linhas.length && k < i + 4; k++) nota = String(linhas[k]).trim();
+  return LEI_RE_NOTA_REV_INI.test(nota);
+}
+
+/* os itens da revisão: cada corrida de linhas com trecho riscado (linhas em branco no meio não a quebram) */
+function leiAcharTachados(linhas) {
+  const marcadas = [];
+  linhas.forEach((x, i) => {
+    const m = String(x).match(LEI_RE_TCH_G);
+    if (m) marcadas.push({ i, n: m.length, inteira: !leiTirarTachado(x, true).trim(), ident: leiLinhaSoIdentificadorRiscado(linhas, i) });
+  });
+  const corridas = [];
+  marcadas.forEach((mk) => {
+    const ult = corridas[corridas.length - 1];
+    /* só junta se TUDO entre as duas é branco (as células de uma tabela riscada vêm separadas por várias linhas em branco) */
+    const gapVazio = ult && linhas.slice(ult[ult.length - 1].i + 1, mk.i).every((x) => !String(x).trim());
+    /* uma corrida é toda de identificadores (mantidos) ou toda de texto riscado: as duas coisas não se misturam */
+    if (ult && gapVazio && ult[ult.length - 1].ident === mk.ident) ult.push(mk); else corridas.push([mk]);
+  });
+  const trilha = (s) => String(s).replace(/\s+/g, " ").trim();
+  return corridas.map((c) => {
+    const nums = c.map((x) => x.i + 1);
+    const inteiras = c.filter((x) => x.inteira).length;
+    const janela = linhas.slice(c[c.length - 1].i + 1, c[c.length - 1].i + 6).filter((x) => String(x).trim()).slice(0, 3).join(" ");
+    const proprio = c.map((x) => leiTirarTachado(linhas[x.i], false)).join(" ") + " " + c.map((x) => leiTirarTachado(linhas[x.i], true)).join(" ");
+    const ident = c[0].ident;
+    const tipo = ident ? "identificador"
+      : c.length >= 8 && inteiras >= c.length * 0.8 ? "tabela"
+      : /Reda[çc][ãa]o\s+dada|Inclu[íi]d[oa]|Nova\s+reda/i.test(proprio + " " + janela) ? "substituido"
+      : /Revogad/i.test(proprio + " " + janela) ? "revogado" : "outro";
+    const primeira = linhas[c[0].i];
+    /* a prévia CENTRADA no primeiro trecho riscado: numa linha longa o começo escondia o que ia sair */
+    const ini = trilha(primeira.slice(0, primeira.indexOf("~~")).replace(/~~/g, "")).length;
+    const previa = (s) => {
+      const x = trilha(s);
+      if (x.length <= 160) return x;
+      const a = Math.max(0, ini - 40);
+      return (a ? "…" : "") + x.slice(a, a + 150) + (a + 150 < x.length ? "…" : "");
+    };
+    return { id: "tch:" + (c[0].i + 1), grupo: "tachado", linhas: nums, ocorrencias: c.reduce((a, x) => a + x.n, 0), tipo, mantido: ident,
+      antes: previa(leiTirarTachado(primeira, false)), depois: previa(leiTirarTachado(primeira, true)) };
+  });
+}
+
 /* Só o que a linha ganha se for um cabeçalho de artigo escrito de um jeito
  * que o leitor não reconhece. Devolve a linha corrigida, ou null. */
 function leiGrafiaDaLinha(linha, opc) {
@@ -846,7 +1090,12 @@ function leiGrafiaDaLinha(linha, opc) {
 
 function leiPreprocessar(texto, opc) {
   const linhas = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n").split("\n");
-  const sem = linhas.map((x) => x.replace(LEI_RE_INVISIVEIS, ""));
+  const sem0 = linhas.map((x) => x.replace(LEI_RE_INVISIVEIS, ""));
+  /* OS TRECHOS RISCADOS (~~…~~, ver leiMarcarTachado): as outras limpezas analisam o texto COMO FICARIA sem eles */
+  const tachados = leiAcharTachados(linhas);
+  const mantidas = {};
+  tachados.forEach((it) => { if (it.mantido) it.linhas.forEach((ln) => { mantidas[ln] = true; }); });
+  const sem = tachados.length ? sem0.map((x, i) => (x.indexOf("~~") >= 0 ? leiTirarTachado(x, !mantidas[i + 1]) : x)) : sem0;
   const mudancas = [];
   /* OS BLOCOS DE ALTERAÇÃO NÃO SE LIMPAM. O fechamento "...... ” (NR)" repetido não é rodapé de página, a aspa de
    * “Art. 9º ...... é o que marca o artigo citado, e essa linha não é frase quebrada: as três limpezas as
@@ -857,11 +1106,12 @@ function leiPreprocessar(texto, opc) {
 
   /* 1a. caracteres invisíveis (hífen opcional, espaço de largura zero…) */
   const inv = [];
-  linhas.forEach((x, i) => { if (x !== sem[i]) inv.push(i + 1); });
+  linhas.forEach((x, i) => { if (x !== sem0[i]) inv.push(i + 1); });
   if (inv.length) {
     mudancas.push({ id: "inv", grupo: "invisiveis", linhas: inv, ocorrencias: inv.length,
-      antes: trilha(linhas[inv[0] - 1]).slice(0, 120), depois: trilha(sem[inv[0] - 1]).slice(0, 120) });
+      antes: trilha(linhas[inv[0] - 1]).slice(0, 120), depois: trilha(sem0[inv[0] - 1]).slice(0, 120) });
   }
+  tachados.forEach((it) => mudancas.push(it));
 
   /* AS LINHAS DE UM ANEXO são tabela: o cabeçalho de uma tabela se repete de propósito (na LC 214, "Receita
    * Bruta em 12 Meses" aparece 8 vezes, uma por anexo do Simples). Tomá-lo por cabeçalho de página e sugerir
@@ -1006,12 +1256,16 @@ function leiPreprocessar(texto, opc) {
     if (prox && prox.length <= 110 && prox === prox.toUpperCase() && /[A-ZÀ-Ú]{3}/.test(prox)) titulo += " — " + prox;
     let tam = 0;
     for (let j = ini; j <= fim; j++) if (!remover[j + 1]) tam += efetiva[j].length;
-    mudancas.push({ id: "anx:" + (ini + 1), grupo: "anexo", linhas: [ini + 1, fim + 1],
+    const anxMud = { id: "anx:" + (ini + 1), grupo: "anexo", linhas: [ini + 1, fim + 1],
       titulo: titulo.slice(0, 140), tamanho: tam, decisaoPadrao: "separar",
-      antes: titulo.slice(0, 140), depois: "" });
+      antes: titulo.slice(0, 140), depois: "" };
+    /* o anexo cujo corpo é só "(Revogado pela …)": continua sendo separado (nada se perde), mas marcado */
+    const anxRev = leiRevogacaoDoAnexo(efetiva.slice(ini, fim + 1).filter((_, q) => !remover[ini + q + 1]));
+    if (anxRev) anxMud.revogado = anxRev;
+    mudancas.push(anxMud);
   });
 
-  const ordem = { invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, remissao: 4, anexo: 5 };
+  const ordem = { tachado: -1, invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, remissao: 4, anexo: 5 };
   mudancas.sort((x, y) => (ordem[x.grupo] - ordem[y.grupo]) || (x.linhas[0] - y.linhas[0]));
   return { mudancas, linhas: linhas.length, blocos: cit.blocos, protegidas: protegidas.size };
 }
@@ -1028,10 +1282,29 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
   const anexos = [];
   const resumo = { invisiveis: 0, cabecalho: 0, pagina: 0, grafia: 0, remissao: 0,
     anexosSeparados: 0, anexosDescartados: 0 };
+  let anexosRevogados = 0;
   const vale = (c) => (c.grupo === "anexo"
     ? (dec[c.id] === undefined ? "separar" : dec[c.id])
-    : (dec[c.id] === undefined ? true : !!dec[c.id]));
+    : (dec[c.id] === undefined ? !c.mantido : !!dec[c.id]));
   let mexeu = false;
+  let tachadoRemovido = 0;
+
+  /* os trechos riscados: aceitar = o trecho sai (a linha some se era só ele); recusar = fica como texto comum,
+   * sem as marcas. Nenhuma marca ~~ sai daqui. */
+  (mudancas || []).forEach((c) => {
+    if (c.grupo !== "tachado") return;
+    const tirar = vale(c);
+    c.linhas.forEach((ln) => {
+      const o = cur[ln - 1];
+      if (!o) return;
+      const novo = leiTirarTachado(o.t, tirar);
+      if (novo === o.t) return;
+      if (tirar && o.t.trim() && !novo.trim()) o.x = true;
+      o.t = novo;
+      mexeu = true;
+    });
+    if (tirar) tachadoRemovido += c.ocorrencias;
+  });
 
   (mudancas || []).forEach((c) => {
     if (c.grupo === "invisiveis" && vale(c)) {
@@ -1072,14 +1345,25 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
       if (o && !o.x) { partes.push(o.t); o.x = true; }
     }
     if (v === "separar") {
-      anexos.push({ titulo: c.titulo, texto: partes.join("\n").replace(/^\s+|\s+$/g, "") });
+      const novo = { titulo: c.titulo, texto: partes.join("\n").replace(/^\s+|\s+$/g, "") };
+      if (c.revogado) {
+        /* o mesmo formato que uma lei alteradora deixa ao revogar um anexo (leiAplicarAnexo) */
+        novo.revogado = true;
+        novo.fonteAlteracao = c.revogado.fonte || "";
+        novo.historico = [{ fonte: c.revogado.fonte || "", data: "", dataLei: "", tipo: "anexo_rev" }];
+        anexosRevogados++;
+      }
+      anexos.push(novo);
       resumo.anexosSeparados++;
     } else resumo.anexosDescartados++;
     mexeu = true;
   });
 
+  cur.forEach((o) => { if (o.t.indexOf("~~") >= 0) { const s = leiTirarMarcasTachado(o.t); if (s !== o.t) { o.t = s; mexeu = true; } } });
   let saida = cur.filter((o) => !o.x).map((o) => o.t).join("\n");
   if (mexeu) saida = saida.replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
+  if (anexosRevogados) resumo.anexosRevogados = anexosRevogados;
+  if (tachadoRemovido) resumo.tachado = tachadoRemovido;
   return { texto: mexeu ? saida : bruto, anexos, resumo };
 }
 
@@ -3527,6 +3811,8 @@ function leiGuardar(dados, gravar) {
     criado: new Date().toISOString(),
   }, antigo, dados, { id, tocado: new Date().toISOString() });
   r.topicos = (r.topicos || []).filter((x, i, a) => x && a.indexOf(x) === i);
+  /* a marca ~~…~~ do tachado (leiMarcarTachado) é só da colagem: nunca é guardada */
+  if (typeof r.texto === "string" && r.texto.indexOf("~~") >= 0) r.texto = leiTirarMarcasTachado(r.texto);
   tudo[id] = r;
   if (!leisGravarTudo(tudo)) return null;
   if (gravar) gravar(LEIS_CHAVE, JSON.stringify(tudo));
