@@ -1388,8 +1388,11 @@ function leiCitacaoHtml(L, ini, fim, a, b, tr) {
   return html;
 }
 
+/* o § / inciso / alínea que consta como revogado ou vetado no texto: o parágrafo fica esmaecido */
+const leiOptLinhaRev = { classeDaLinha: (s) => (leiRevogacaoDaLinha(s) ? "lei-linha-rev" : "") };
+
 function leiCorpoHtml(a, cit) {
-  const base = () => matParaHtml(leiSemPontilhado(a.texto));
+  const base = () => matParaHtml(leiSemPontilhado(a.texto), null, leiOptLinhaRev);
   if (!cit || !cit.blocos || a.alterado || a.revogado) return base();
   const itens = [];
   cit.blocos.forEach((b) => {
@@ -1399,7 +1402,7 @@ function leiCorpoHtml(a, cit) {
   if (!itens.length) return base();
   itens.sort((x, y) => x.tr.ini - y.tr.ini);
   const L = String(a.texto).split("\n");
-  const peca = (de, ate) => matParaHtml(leiSemPontilhado(L.slice(de, ate).join("\n")));
+  const peca = (de, ate) => matParaHtml(leiSemPontilhado(L.slice(de, ate).join("\n")), null, leiOptLinhaRev);
   let html = "", pos = 0;
   itens.forEach(({ b, tr }) => {
     const ini = tr.ini - a.linha, fim = tr.fim - a.linha;
@@ -1590,6 +1593,16 @@ function leiPintarLeitura() {
       }
       cab.append(selo);
     }
+    /* O ARTIGO QUE CONSTA COMO REVOGADO/VETADO NO PRÓPRIO TEXTO: selo e esmaecido. Só identificação — o texto
+     * continua guardado e visível, e a camada de alteração (acima), quando existe, manda. */
+    if (a.revogacao && !a.alterado && !a.revogado) {
+      const selo = document.createElement("span");
+      selo.className = "lei-selo-alt lei-selo-revogado lei-selo-txt";
+      selo.textContent = t("lei_selo_txt_" + a.revogacao.tipo) + (a.revogacao.fonte ? " · " + a.revogacao.fonte : "");
+      selo.title = t("lei_selo_txt_ajuda");
+      cab.append(selo);
+      bloco.classList.add("lei-art-rev");
+    }
 
     const bCloze = document.createElement("button");
     bCloze.className = "btn-min lei-art-b";
@@ -1618,7 +1631,7 @@ function leiPintarLeitura() {
     const chips = leiChipsDeAlteracao(a, cit);
 
     const corpo = document.createElement("div");
-    corpo.className = "lei-art-txt";
+    corpo.className = "lei-art-txt" + (a.revogacao && !a.alterado && !a.revogado ? " lei-art-txt-rev" : "");
     corpo.innerHTML = leiCorpoHtml(a, cit);
 
     /* VER A NOTA ANTES DE CLICAR. A marca "nota" carrega texto — sem
@@ -4623,7 +4636,7 @@ function leiMesFechar() {
  * numeração (leiNumeracao): artigos fora de sequência quase sempre são o
  * leitor errando, e a pessoa vê onde antes de seguir.
  * ===================================================================== */
-const LEI_PRE_GRUPOS = ["invisiveis", "cabecalho", "pagina", "grafia", "remissao", "anexo"];
+const LEI_PRE_GRUPOS = ["tachado", "invisiveis", "cabecalho", "pagina", "grafia", "remissao", "anexo"];
 /* trecho colado com poucos artigos não tem sequência a criticar */
 const LEI_NUMERACAO_MIN_ARTIGOS = 8;
 let leiPreCtx = null;
@@ -4668,7 +4681,7 @@ function leiPreSugestoes() {
   const c = leiPreCtx;
   if (!c) return;
   c.decisoes = {};
-  c.pre.mudancas.forEach((m) => { c.decisoes[m.id] = m.grupo === "anexo" ? "separar" : true; });
+  c.pre.mudancas.forEach((m) => { c.decisoes[m.id] = m.grupo === "anexo" ? "separar" : !m.mantido; });
 }
 
 function leiPreAceita(c, m) {
@@ -4723,6 +4736,12 @@ function leiPreItemEl(c, m) {
     tit.className = "lei-pre-ctx";
     tit.textContent = m.titulo + " · " + t("lei_pre_anexo_tam", { n: m.tamanho });
     el.append(tit);
+    if (m.revogado) {
+      const rv = document.createElement("div");
+      rv.className = "lei-pre-anexo-rev";
+      rv.textContent = t("lei_pre_anx_rev", { f: m.revogado.fonte || "—" });
+      el.append(rv);
+    }
     /* uma amostra do que é: as primeiras linhas depois do título */
     const amostra = leiPreLinhasDaColagem(c).slice(m.linhas[0], m.linhas[1]).map((x) => String(x).replace(/\s+/g, " ").trim())
       .filter(Boolean).slice(0, 2).join(" · ").slice(0, 200);
@@ -4770,6 +4789,11 @@ function leiPreItemEl(c, m) {
   } else if (m.grupo === "pagina") {
     corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas_n", { n: m.ocorrencias })));
     corpo.append(linha("lei-pre-antes", m.antes));
+  } else if (m.grupo === "tachado") {
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_tch_item", { n: m.ocorrencias, l: linhasTxt }) + " — " + t("lei_pre_tch_" + m.tipo)));
+    corpo.append(linha("lei-pre-antes", m.antes));
+    corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
+    corpo.append(linha("lei-pre-depois", m.depois || t("lei_pre_tch_vazio")));
   } else if (m.grupo === "grafia") {
     corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] })));
     corpo.append(linha("lei-pre-antes", m.antes));
@@ -5003,19 +5027,19 @@ function leiDecColagem(c, original) {
     const L = String(c.texto || "").split("\n");
     decRegistrarLote(mud.map((m) => {
       const anexo = m.grupo === "anexo";
-      const padrao = anexo ? "separar" : true;
+      const padrao = anexo ? "separar" : !m.mantido;
       const d = original ? (anexo ? "manter" : false) : (c.decisoes || {})[m.id];
       let decisao, escolha = "";
       if (anexo) {
         decisao = d === "separar" ? "aceitou" : d === "descartar" ? "mudou" : "recusou";
         escolha = d === "descartar" ? "descartar" : "";
       } else decisao = d ? "aceitou" : "recusou";
-      const sai = m.grupo === "cabecalho" || m.grupo === "pagina" || anexo;
+      const sai = m.grupo === "cabecalho" || m.grupo === "pagina" || m.grupo === "tachado" || anexo;
       let nums = m.linhas || [];
       if (anexo) { nums = []; for (let k = m.linhas[0]; k <= m.linhas[1] && nums.length < 60; k++) nums.push(k); }
       const linhas = sai ? nums.slice(0, 60).map((k) => ({ linha: k, texto: L[k - 1] || "" })) : [];
       const risco = m.grupo === "grafia" || m.grupo === "invisiveis" ? "baixo"
-        : m.grupo === "remissao" ? "medio"
+        : m.grupo === "remissao" || m.grupo === "tachado" ? "medio"
         : anexo ? (d === "descartar" ? "alto" : "medio")
         : decRiscoDoTexto(linhas.map((x) => x.texto));
       return {
@@ -5129,7 +5153,35 @@ function leiPreOriginal() {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: seguiu com o texto original", "");
   } catch (e) {}
   toastMsg(t("lei_pre_t_original"), 3200);
-  c.aoConfirmar({ texto: c.texto, anexos: [], resumo: {} });
+  /* "o texto original" mantém tudo, mas as marcas do tachado (só da colagem) nunca ficam */
+  c.aoConfirmar({ texto: leiTirarMarcasTachado(c.texto), anexos: [], resumo: {} });
+  return true;
+}
+
+/* COLAR COM FORMATAÇÃO: o Planalto risca o texto antigo/revogado, e o risco só viaja no HTML da área de
+ * transferência. Se o HTML traz trecho riscado, o texto puro (o de sempre) entra com ~~ em volta do que estava
+ * riscado, e a revisão da colagem mostra esses trechos para a pessoa decidir. Se as duas versões não batem
+ * letra por letra, cola como veio e avisa — nunca marca no lugar errado. Sem trecho riscado, nada muda. */
+function leiColarComTachado(ev) {
+  const cd = ev && ev.clipboardData;
+  if (!cd || !cd.getData || ev.defaultPrevented) return false;
+  const html = cd.getData("text/html");
+  if (!html || !/line-through|<strike|<s[\s>]|<del[\s>]/i.test(html)) return false;
+  const plain = cd.getData("text/plain");
+  if (!plain) return false;
+  const r = leiMarcarTachado(plain, html);
+  if (!r.n) {
+    if (r.motivo === "nao_alinhou") { toastMsg(t("lei_col_tch_nao"), 6000); try { leiReg("gravar", "colagem com tachado: não foi possível localizar os trechos", ""); } catch (e) {} }
+    return false;
+  }
+  if (ev.preventDefault) ev.preventDefault();
+  const ta = ev.target;
+  const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
+  ta.value = String(ta.value || "").slice(0, a) + r.texto + String(ta.value || "").slice(b);
+  ta.selectionStart = ta.selectionEnd = a + r.texto.length;
+  try { if (ta.dispatchEvent && typeof Event === "function") ta.dispatchEvent(new Event("input", { bubbles: true })); } catch (e) {}
+  toastMsg(t("lei_col_tch_ok", { n: r.n }), 6000);
+  try { leiReg("gravar", "colagem com tachado: " + r.n + " trecho(s) riscado(s) identificado(s)", ""); } catch (e) {}
   return true;
 }
 
@@ -6365,6 +6417,11 @@ function leiIniciar() {
   liga("btnLeiDupX", "fechar conferência de repetidos", () => leiDupCancelar());
   liga("btnLeiDupSugestoes", "voltar às sugestões", () => { leiDupSugestoes(); leiDupPintar(); });
   liga("btnLeiPreConfirmar", "confirmar a revisão da colagem", () => leiPreConfirmar());
+  /* uma vez só por campo: dois ouvintes colariam o texto duas vezes */
+  ["leiTexto", "leiUpdTexto"].forEach((id) => {
+    const ta = $(id);
+    if (ta && ta.addEventListener && !ta._colarTachado) { ta._colarTachado = true; ta.addEventListener("paste", leiColarComTachado); }
+  });
   liga("btnLeiPreVoltar", "voltar da revisão da colagem", () => leiPreCancelar());
   liga("btnLeiPreX", "fechar a revisão da colagem", () => leiPreCancelar());
   liga("btnLeiPreOriginal", "usar o texto original", () => leiPreOriginal());

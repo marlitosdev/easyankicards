@@ -255,7 +255,9 @@ function novoEl(id, tag, registro) {
       }
       return null;
     },
-    addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true,
+    /* os ouvintes ficam guardados em _ouv (nao sao disparados sozinhos): o teste consegue provar que um foi LIGADO */
+    addEventListener(tipo, fn) { el._ouv = el._ouv || {}; (el._ouv[tipo] = el._ouv[tipo] || []).push(fn); },
+    removeEventListener() {}, dispatchEvent: () => true,
     /* atributos DE VERDADE: eram no-op, e getAttribute devolvia sempre null.
      * Qualquer coisa guardada em atributo — aria-pressed, data-*, role —
      * ficava invisível para o teste, que então nao conseguia perguntar
@@ -712,7 +714,8 @@ function rodar() {
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados, leiEhAlteradora, leiParcelaCitada, leiRegioesCitadas, leiLerCitacoes, leiAlvoDaAlteracao, leiLinhaFechaCitacao, leiLinhaCitacaoInteira, leiMarcaDoFecho, leiContaAspas,
-    toast, toastMsg, leiPreAvisar, leiPreCancelar, leiLinhaDeConteudo, leiDupSoConferir, leiPreOriginal, leiPreConfirmar, leiPreAceita,
+    toast, toastMsg, leiPreAvisar, leiPreCancelar, leiLinhaDeConteudo, leiDupSoConferir, leiRevogacaoDaLinha, leiRevogacaoDoArtigo, leiRevogacaoDoAnexo, leiOptLinhaRev, leiPintarAnexos,
+    leiMarcarTachado, leiSegmentosDoHtml, leiTirarTachado, leiTirarMarcasTachado, leiAcharTachados, leiColarComTachado, leiPreOriginal, leiPreConfirmar, leiPreAceita,
     leiCorpoHtml, leiChipsDeAlteracao, leiPreBlocosEl, leiBlocoArtigosTxt, leiPintarLeitura, leiAjusteRisco, leiPreItemEl, leiPreAnexoVerEl,
     lixLer, lixJogar, lixRestaurar, lixRestaurarUi, lixApagarDeVez, lixEsvaziar, lixContar, lixRisco, lixAvisoRisco,
     lixInserirBloco, lixJuntar, lixRecusou, lixDesfazer, lixAbrir, lixPintar, lixRecarregar, lixTexto, lixAtualizarBotao,
