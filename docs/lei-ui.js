@@ -1325,6 +1325,7 @@ function leiPintarEdicaoLivre() {
   const travado = leiEmCamada();
   const cx = $("leiTexto");
   if (cx) cx.readOnly = travado;
+  if ($("leiArquivoBox")) $("leiArquivoBox").hidden = travado || leiModo !== "editar";
   /* "GRAVAR" FICA ATIVO — de propósito, mesmo com a base travada.
    *
    * A trava real já é o campo ser somente-leitura: ninguém senta e
@@ -1602,6 +1603,14 @@ function leiPintarLeitura() {
       selo.title = t("lei_selo_txt_ajuda");
       cab.append(selo);
       bloco.classList.add("lei-art-rev");
+    }
+    /* o artigo tem texto, mas alguns dos seus parágrafos/incisos/alíneas constam como revogados ou vetados */
+    if (a.dispRevogados && !a.revogacao && !a.revogado) {
+      const dr = document.createElement("span");
+      dr.className = "lei-art-disp-rev";
+      dr.textContent = t("lei_art_disp_rev", { n: a.dispRevogados });
+      dr.title = t("lei_art_disp_rev_ajuda", { n: a.dispRevogados });
+      cab.append(dr);
     }
 
     const bCloze = document.createElement("button");
@@ -2043,13 +2052,16 @@ function leiCitacaoPreviewAbrir(c, origemNum) {
   } else {
     $("leiCitaPreviewArtigo").textContent = art.rotulo
       + (art.alterado ? " " + t("lei_selo_alterado_curto", { f: art.fonteAlteracao || "?" }) : "")
-      + (art.revogado ? " " + t("lei_selo_revogado", { f: art.fonteAlteracao || "?" }) : "");
+      + (art.revogado ? " " + t("lei_selo_revogado", { f: art.fonteAlteracao || "?" }) : "")
+      + (!art.revogado && art.revogacao ? " · " + t("lei_selo_txt_" + art.revogacao.tipo) + (art.revogacao.fonte ? " · " + art.revogacao.fonte : "") : "");
     let texto = art.texto;
     /* o trecho CITADO (inciso, parágrafo), separado embaixo do artigo */
     try {
       const un = leiAcharUnidades(art.texto, c);
       if (un.length) {
-        texto += "\n\n▶ " + t("lei_cita_trecho") + ":\n" + un.map((u) => leiRotuloDaUnidade(u) + " — "
+        /* o trecho que a questão cita consta como revogado/vetado: o aviso vem ANTES do texto */
+        const avisoRev = un.some((u) => leiRevogacaoDoArtigo(art.texto.split("\n").slice(u.linha, u.linhaFim + 1))) ? t("lei_cita_trecho_rev") + "\n" : "";
+        texto += "\n\n▶ " + t("lei_cita_trecho") + ":\n" + avisoRev + un.map((u) => leiRotuloDaUnidade(u) + " — "
           + art.texto.split("\n").slice(u.linha, u.linhaFim + 1).join(" ").trim()).join("\n");
       }
     } catch (e) {}
@@ -2427,7 +2439,10 @@ function leiPintarRecitar() {
   if (!cx) return;
   cx.innerHTML = "";
   cx.style.fontSize = leiFonte + "px";
-  const arts = leiArtigos(String($("leiTexto").value || ""));
+  const todas = leiArtigos(String($("leiTexto").value || ""));
+  /* o que consta como revogado ou vetado não se recita */
+  const arts = todas.filter((a) => !leiArtigoRevogado(a));
+  const foraRev = todas.length - arts.length;
   if (!arts.length) {
     const p = document.createElement("p");
     p.className = "nota";
@@ -2447,6 +2462,12 @@ function leiPintarRecitar() {
       n: arts.length, v: Object.keys(leiRecitados).length,
     });
   cx.append(cab);
+  if (foraRev) {
+    const fr = document.createElement("p");
+    fr.className = "nota lei-rec-rev";
+    fr.textContent = t("lei_rec_rev_fora", { n: foraRev });
+    cx.append(fr);
+  }
 
   arts.forEach((a) => {
     const bloco = document.createElement("div");
@@ -2691,7 +2712,7 @@ function leiIrUnidadesEl(d, a, est) {
     b.type = "button";
     const rom = u.tipo === "inciso" ? ((u.rotulo.match(/^[IVXLCDM]+/i) || [""])[0]).toUpperCase() : "";
     const cai = !!rom && cobrados.indexOf(rom) >= 0;
-    b.className = "lei-ir-u lei-ir-u" + Math.min(4, Math.max(1, u.nivel || 1)) + (cai ? " lei-ir-u-cai" : "");
+    b.className = "lei-ir-u lei-ir-u" + Math.min(4, Math.max(1, u.nivel || 1)) + (cai ? " lei-ir-u-cai" : "") + (u.revogacao ? " lei-ir-u-rev" : "");
     const r = document.createElement("span");
     r.className = "lei-ir-u-rot";
     r.textContent = String(u.rotulo || u.chave).replace(/\s*[-–]$/, "");
@@ -2699,7 +2720,7 @@ function leiIrUnidadesEl(d, a, est) {
     x.className = "lei-ir-u-tx";
     x.textContent = String(u.texto || "").replace(/\s+/g, " ").slice(0, 80);
     b.append(r, x);
-    b.title = cai ? t("lei_ir_u_cai") : String(u.texto || "").replace(/\s+/g, " ").slice(0, 200);
+    b.title = u.revogacao ? t("lei_ir_u_rev") : cai ? t("lei_ir_u_cai") : String(u.texto || "").replace(/\s+/g, " ").slice(0, 200);
     b.onclick = () => leiIrIrUnidade(a, u, ef.texto);
     painel.append(b);
   });
@@ -2734,7 +2755,8 @@ function leiIrChipEl(d, a) {
   const ehErro = !!(est && est.erros > est.acertos), ehProva = !!(est && est.prova), ehParei = a.indice === d.pareiIdx;
   const sel = ehErro ? "erro" : ehProva ? "prova" : ehParei ? "parei" : "";
   const alerta = !!(d.alertas && d.alertas[a.indice]);
-  cel.className = "lei-ir-cel" + (sel ? " lei-ir-cel-" + sel : "") + (alerta ? " lei-ir-cel-alerta" : "");
+  const revogado = leiArtigoRevogado(a);
+  cel.className = "lei-ir-cel" + (sel ? " lei-ir-cel-" + sel : "") + (alerta ? " lei-ir-cel-alerta" : "") + (revogado ? " lei-ir-cel-rev" : "");
   const b = document.createElement("button");
   b.type = "button";
   b.className = "lei-ir-n" + (ehParei ? " lei-ir-parei" : "") + (ehProva ? " lei-ir-prova" : "") + (ehErro ? " lei-ir-erro" : "");
@@ -2744,6 +2766,7 @@ function leiIrChipEl(d, a) {
   if (ehProva) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
   if (est && est.questoes) dicas.push(t("lei_ir_dica_q", { n: est.questoes }));
   if (alerta) dicas.push(t("lei_ir_dica_alerta"));
+  if (revogado) dicas.push(t("lei_ir_dica_rev"));
   b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
   b.onclick = () => leiIrIr(a.num, a.indice);
   cel.append(b);
@@ -5162,6 +5185,33 @@ function leiPreOriginal() {
  * transferência. Se o HTML traz trecho riscado, o texto puro (o de sempre) entra com ~~ em volta do que estava
  * riscado, e a revisão da colagem mostra esses trechos para a pessoa decidir. Se as duas versões não batem
  * letra por letra, cola como veio e avisa — nunca marca no lugar errado. Sem trecho riscado, nada muda. */
+/* põe o texto no campo, no lugar do cursor (ou da seleção), e deixa o cursor depois dele */
+function leiInserirNoCampo(ta, texto) {
+  const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
+  ta.value = String(ta.value || "").slice(0, a) + texto + String(ta.value || "").slice(b);
+  ta.selectionStart = ta.selectionEnd = a + texto.length;
+  try { if (ta.dispatchEvent && typeof Event === "function") ta.dispatchEvent(new Event("input", { bubbles: true })); } catch (e) {}
+}
+
+/* ABRIR O ARQUIVO .htm SALVO DA PÁGINA da lei: o risco do texto antigo, as tabelas e os acentos vêm completos, sem
+ * depender da área de transferência. Vai para o campo como o colar com formatação: os trechos riscados entram com
+ * ~~ e a revisão da colagem pergunta o que fazer com eles. */
+async function leiArquivoHtmlLido(file, alvoId) {
+  const ta = $(alvoId);
+  if (!ta || !file) return false;
+  let r = null;
+  try { r = leiTextoDeArquivoHtml(await file.arrayBuffer()); } catch (e) { r = null; }
+  if (!r || !String(r.texto || "").trim()) {
+    toastMsg(t(r ? "lei_arq_vazio" : "lei_arq_erro"), 7000);
+    try { leiReg("gravar", "arquivo .htm: não foi possível ler", String(file.name || "")); } catch (e) {}
+    return false;
+  }
+  leiInserirNoCampo(ta, r.texto);
+  toastMsg(r.n ? t("lei_arq_ok", { n: r.n }) : t("lei_arq_ok0", { c: r.texto.length }), 8000);
+  try { leiReg("gravar", "arquivo .htm lido: " + r.texto.length + " caractere(s), " + r.n + " trecho(s) riscado(s)", String(file.name || "")); } catch (e) {}
+  return true;
+}
+
 function leiColarComTachado(ev) {
   const cd = ev && ev.clipboardData;
   if (!cd || !cd.getData || ev.defaultPrevented) return false;
@@ -5175,11 +5225,7 @@ function leiColarComTachado(ev) {
     return false;
   }
   if (ev.preventDefault) ev.preventDefault();
-  const ta = ev.target;
-  const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
-  ta.value = String(ta.value || "").slice(0, a) + r.texto + String(ta.value || "").slice(b);
-  ta.selectionStart = ta.selectionEnd = a + r.texto.length;
-  try { if (ta.dispatchEvent && typeof Event === "function") ta.dispatchEvent(new Event("input", { bubbles: true })); } catch (e) {}
+  leiInserirNoCampo(ev.target, r.texto);
   toastMsg(t("lei_col_tch_ok", { n: r.n }), 6000);
   try { leiReg("gravar", "colagem com tachado: " + r.n + " trecho(s) riscado(s) identificado(s)", ""); } catch (e) {}
   return true;
@@ -5981,18 +6027,26 @@ function leiAtualizarAplicar() {
 let leiClozeArt = null;
 let leiClozeLidos = [];
 
-function leiClozeAbrir(a) {
+function leiClozeAbrir(a, confirmado) {
   if (!a || !$("dlgLeiCloze")) return;
+  /* o artigo que consta como revogado/vetado: cartão dele é estudar o que não vale — pergunta antes */
+  if (!confirmado && leiArtigoRevogado(a)) {
+    uiConfirm(t("lei_cloze_rev_conf", { a: a.rotulo })).then((sim) => { if (sim) leiClozeAbrir(a, true); });
+    return;
+  }
   leiClozeArt = a;
   leiClozeLidos = [];
   const l = leiDe(leiIdAtual) || {};
+  /* os § / incisos / alíneas revogados ficam de fora do que a IA vê (o artigo INTEIRO revogado foi confirmado acima) */
+  const limpo = a.revogacao || a.revogado ? { texto: a.texto, n: 0 } : leiSemDispositivosRevogados(a.texto);
   $("leiClozeTitulo").textContent = t("lei_cloze_titulo", { a: a.rotulo });
   $("leiClozePrompt").value = t("lei_cloze_prompt", {
     lei: l.nome || "—",
     artigo: a.rotulo,
     etiqueta: leiEtiquetaDe(l, a),
-    texto: a.texto,
+    texto: limpo.texto,
   });
+  if (limpo.n) toastMsg(t("lei_cloze_rev_fora", { n: limpo.n }), 5000);
   $("leiClozeColar").value = "";
   $("leiClozePrevia").innerHTML = "";
   $("leiClozePrevia").hidden = true;
@@ -6418,6 +6472,18 @@ function leiIniciar() {
   liga("btnLeiDupSugestoes", "voltar às sugestões", () => { leiDupSugestoes(); leiDupPintar(); });
   liga("btnLeiPreConfirmar", "confirmar a revisão da colagem", () => leiPreConfirmar());
   /* uma vez só por campo: dois ouvintes colariam o texto duas vezes */
+  liga("btnLeiArquivo", "abrir arquivo .htm salvo", () => { if ($("leiArquivoHtml")) $("leiArquivoHtml").click(); });
+  liga("btnLeiUpdArquivo", "abrir arquivo .htm salvo (atualização)", () => { if ($("leiUpdArquivoHtml")) $("leiUpdArquivoHtml").click(); });
+  [["leiArquivoHtml", "leiTexto"], ["leiUpdArquivoHtml", "leiUpdTexto"]].forEach(([inp, alvo]) => {
+    const el = $(inp);
+    if (el && el.addEventListener && !el._arquivoLigado) {
+      el._arquivoLigado = true;
+      el.addEventListener("change", () => {
+        const f = el.files && el.files[0];
+        if (f) leiArquivoHtmlLido(f, alvo).then(() => { try { el.value = ""; } catch (e) {} });
+      });
+    }
+  });
   ["leiTexto", "leiUpdTexto"].forEach((id) => {
     const ta = $(id);
     if (ta && ta.addEventListener && !ta._colarTachado) { ta._colarTachado = true; ta.addEventListener("paste", leiColarComTachado); }

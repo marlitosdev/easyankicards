@@ -409,6 +409,7 @@ function leiLerLei(texto, opc) {
       corpo: a.corpo.trim(),
       /* consta como revogado/vetado no PRÓPRIO texto ({tipo, fonte}) — só identificação, nada é apagado */
       revogacao: leiRevogacaoDoArtigo(a.linhas),
+      dispRevogados: leiContarRevogados(a.linhas),
       divisao: a.div ? a.div.rotulo : "",
       divisaoTipo: a.div ? a.div.tipo : "",
       divisaoId: a.div ? a.div.id : "",
@@ -578,9 +579,32 @@ function leiRevogacaoDeMatch(m) {
 }
 
 /* uma linha que é SÓ a marca de um dispositivo (com o número dele à frente) → { tipo, fonte }, ou null */
+const LEI_RE_REVOG_RAPIDO = /evogad|EVOGAD|etad|ETAD|uprimid|UPRIMID/;
 function leiRevogacaoDaLinha(linha) {
+  if (!LEI_RE_REVOG_RAPIDO.test(String(linha == null ? "" : linha))) return null;
   const s = String(linha == null ? "" : linha).replace(/\s+/g, " ").trim();
   return s ? leiRevogacaoDeMatch(s.match(LEI_RE_REVOG_LINHA)) : null;
+}
+
+/* o artigo consta como revogado/vetado: pela camada de alteração (revogado) OU pelo próprio texto (revogacao) */
+function leiArtigoRevogado(a) { return !!(a && (a.revogado || a.revogacao)); }
+
+/* quantos dispositivos DENTRO do artigo (§, inciso, alínea) constam como revogados — o cabeçalho não conta */
+function leiContarRevogados(linhas) {
+  let n = 0;
+  for (let k = 1; k < (linhas || []).length; k++) if (leiRevogacaoDaLinha(linhas[k])) n++;
+  return n;
+}
+
+/* o texto sem as linhas que são SÓ a marca de revogado/vetado (a primeira linha, o cabeçalho, fica sempre) →
+ * { texto, n }. Para o que vai virar cartão: lacuna de "§ 8º (Revogado)" é estudar o que não vale. */
+function leiSemDispositivosRevogados(texto) {
+  let n = 0;
+  const saida = String(texto == null ? "" : texto).split("\n").filter((ln, i) => {
+    if (i > 0 && leiRevogacaoDaLinha(ln)) { n++; return false; }
+    return true;
+  }).join("\n");
+  return { texto: saida, n };
 }
 
 /* o ARTIGO inteiro consta como revogado: o cabeçalho é a marca, e o resto são só outras marcas ou notas editoriais */
@@ -934,17 +958,33 @@ function leiDecodificarEntidades(s) {
 }
 
 /* o HTML da área de transferência em pedaços de texto, com "riscado ou não" em cada um. Sem DOM (roda nos testes) */
-function leiSegmentosDoHtml(html) {
+/* a quebra de cada bloco: "\u0001" = uma quebra, "\u0002" = linha em branco. Quebras vizinhas se FUNDEM (o
+ * fecha-</tr> e o abre-<tr> dão UMA quebra, e não uma linha em branco): ver leiHtmlParaTexto */
+const LEI_BLOCOS_HTML = { p: "\u0002", div: "\u0001", tr: "\u0001", li: "\u0001", table: "\u0001", ul: "\u0001", ol: "\u0001", blockquote: "\u0001", pre: "\u0001", center: "\u0001",
+  section: "\u0001", article: "\u0001", h1: "\u0002", h2: "\u0002", h3: "\u0002", h4: "\u0002", h5: "\u0002", h6: "\u0002", hr: "\u0002" };
+function leiSegmentosDoHtml(html, opc) {
   const seg = [];
   const pilha = [];
+  const blocos = !!(opc && opc.blocos);
   let riscado = 0, pulando = 0;
   const VAZIAS = { br: 1, img: 1, hr: 1, meta: 1, link: 1, input: 1, wbr: 1 };
   const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>|([^<]+)/g;
   let m;
   while ((m = re.exec(String(html == null ? "" : html)))) {
-    if (m[4] !== undefined) { if (!pulando) seg.push({ t: leiDecodificarEntidades(m[4]), s: riscado > 0 }); continue; }
+    if (m[4] !== undefined) {
+      if (!pulando) {
+        const tx = leiDecodificarEntidades(m[4]);
+        /* no modo "blocos" o texto sai como o navegador o mostra: espaço e quebra de linha do código valem UM espaço */
+        seg.push({ t: blocos ? tx.replace(/[ \t\r\n\f\u00a0]+/g, " ") : tx, s: riscado > 0 });
+      }
+      continue;
+    }
     if (!m[2]) continue;
     const tag = m[2].toLowerCase();
+    if (blocos && !pulando && (LEI_BLOCOS_HTML[tag] || tag === "td" || tag === "th")) {
+      if (m[1] && (tag === "td" || tag === "th")) seg.push({ t: "\t", s: false });
+      else if (!(tag === "td" || tag === "th")) seg.push({ t: LEI_BLOCOS_HTML[tag], s: false });
+    }
     if (VAZIAS[tag]) { if (tag === "br" && !m[1] && !pulando) seg.push({ t: "\n", s: false }); continue; }
     if (m[1]) {
       for (let k = pilha.length - 1; k >= 0; k--) {
@@ -1004,6 +1044,37 @@ function leiMarcarTachado(plain, html) {
     return { texto: saida, n, motivo: n ? "" : "sem_tachado" };
   }
   return { texto: plain, n: 0, motivo: "nao_alinhou" };
+}
+
+/* O HTML DE UMA PÁGINA SALVA → texto puro, com as quebras que o navegador faria (parágrafo, linha de tabela, célula com tab) */
+function leiHtmlParaTexto(html) {
+  return leiSegmentosDoHtml(html, { blocos: true }).map((x) => x.t).join("")
+    .replace(/[ \t\n]*([\u0001\u0002][\u0001\u0002 \t\n]*)/g, (m, r) => (r.indexOf("\u0002") >= 0 ? "\n\n" : "\n"))
+    .replace(/[ \t]*\n[ \t]*/g, "\n").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
+}
+
+/* os bytes de um arquivo .htm → texto. O Planalto salva em windows-1252 (ISO-8859-1): decodificar como UTF-8 troca
+ * "ç" e "ã" por lixo. O charset vem da tag <meta>; sem ela, UTF-8 se for válido, senão windows-1252. */
+function leiCharsetDoHtml(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let cab = "";
+  for (let i = 0; i < Math.min(u8.length, 4096); i++) cab += String.fromCharCode(u8[i]);
+  const m = cab.match(/charset\s*=\s*["']?\s*([A-Za-z0-9_\-]+)/i);
+  return m ? m[1].toLowerCase() : "";
+}
+function leiDecodificarArquivoHtml(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const cs = leiCharsetDoHtml(u8);
+  if (cs) { try { return new TextDecoder(cs).decode(u8); } catch (e) { /* charset que o navegador não conhece: cai abaixo */ } }
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(u8); } catch (e) { return new TextDecoder("windows-1252").decode(u8); }
+}
+/* o arquivo → { texto, n, motivo }: o texto puro (sem a página em volta) com ~~ em volta do que está riscado */
+function leiTextoDeArquivoHtml(bytes) {
+  const html = typeof bytes === "string" ? bytes : leiDecodificarArquivoHtml(bytes);
+  const plain = leiHtmlParaTexto(html);
+  if (!plain) return { texto: "", n: 0, motivo: "vazio" };
+  const r = leiMarcarTachado(plain, html);
+  return { texto: r.texto, n: r.n, motivo: r.motivo };
 }
 
 /* tira os trechos marcados (remover) ou só as marcas, deixando o texto (não remover) */
@@ -1584,6 +1655,8 @@ function leiEstruturaArtigo(texto, opc) {
     while (fim > u.linha && !String(linhas[fim] || "").trim()) fim--;
     u.linhaFim = Math.max(u.linha, fim);
     u.soLinhas = soLinhas;
+    /* a unidade inteira consta como revogada/vetada no texto ({tipo, fonte}) */
+    u.revogacao = u.inicioDeLinha ? leiRevogacaoDoArtigo(linhas.slice(u.linha, u.linhaFim + 1)) : null;
   });
   return { caput, unidades, linhas: linhas.length };
 }
@@ -3905,11 +3978,15 @@ function leiProgresso(id) {
   const arts = leiArtigosEfetivos(r);
   if (!arts.length) return { total: 0, lidos: 0, pct: 0, artigo: "" };
   const i = leiIndiceDoMarcador(r, arts);
-  const lidos = i < 0 ? 0 : i + 1;
+  /* O QUE CONSTA COMO REVOGADO OU VETADO NÃO É ESTUDADO: não entra no total, não conta como lido e o "próximo"
+   * pula por cima. (Antes um artigo revogado era o "continuar no art. X".) */
+  const vivos = arts.filter((a) => !leiArtigoRevogado(a));
+  const lidos = i < 0 ? 0 : arts.slice(0, i + 1).filter((a) => !leiArtigoRevogado(a)).length;
   return {
-    total: arts.length,
+    total: vivos.length,
+    revogados: arts.length - vivos.length,
     lidos,
-    pct: Math.round((lidos / arts.length) * 100),
+    pct: vivos.length ? Math.round((lidos / vivos.length) * 100) : 0,
     artigo: r.parei || "",
     indice: i,
     /* proximo VEM DE UMA POSIÇÃO (arts[lidos]), não de uma busca por
@@ -3917,7 +3994,7 @@ function leiProgresso(id) {
      * nenhuma, mesmo quando o número dele se repete mais à frente no
      * documento (o corpo da Constituição e o ADCT, por exemplo). Ver o
      * uso em leiPintarOnde. */
-    proximo: (arts[lidos] || null),
+    proximo: (arts.slice(i + 1).filter((a) => !leiArtigoRevogado(a))[0] || null),
   };
 }
 
