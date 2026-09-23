@@ -5664,6 +5664,7 @@ function leiAtualizarAbrir() {
   $("leiUpdFonte").value = "";
   $("leiUpdTexto").value = "";
   $("leiUpdAviso1").textContent = "";
+  $("leiUpdAviso1").className = "nota";
   $("leiUpdPasso1").hidden = false;
   $("leiUpdPasso2").hidden = true;
   leiUpdComparo = null;
@@ -5679,6 +5680,7 @@ function leiAtualizarAbrir() {
 
 function leiAtualizarComparar(opc) {
   const o = opc || {};
+  $("leiUpdAviso1").className = "nota";
   const l = leiDe(leiIdAtual);
   if (!l) return false;
   const novoTexto = String($("leiUpdTexto").value || "");
@@ -5689,7 +5691,12 @@ function leiAtualizarComparar(opc) {
     const idf = leiIdentificar(novoTexto);
     if (idf) { fonte = idf.curto; $("leiUpdFonte").value = fonte; }
   }
-  if (!fonte) { $("leiUpdAviso1").textContent = t("lei_upd_sem_fonte"); return false; }
+  if (!fonte) {
+    $("leiUpdAviso1").textContent = t("lei_upd_sem_fonte");
+    $("leiUpdAviso1").className = "nota lei-upd-al alerta";
+    $("leiUpdFonte").focus();
+    return false;
+  }
   if (modoAlt) return leiAtualizarAlteracoes(l, fonte, novoTexto, o);
   /* cada etapa que abre uma tela volta aqui, dizendo o que já foi feito */
   const seguinte = (extra) => leiAtualizarComparar(Object.assign({}, o, extra));
@@ -5728,7 +5735,12 @@ function leiAtualizarComparar(opc) {
   }
 
   const novos = leiArtigos(novoTexto);
-  if (!novos.length) { $("leiUpdAviso1").textContent = t("lei_upd_sem_artigo"); return false; }
+  if (!novos.length) {
+    $("leiUpdAviso1").textContent = t("lei_upd_sem_artigo");
+    $("leiUpdAviso1").className = "nota lei-upd-al alerta";
+    $("leiUpdTexto").focus();
+    return false;
+  }
 
   /* 3. A COMPARAÇÃO É POR NÚMERO, UM ARTIGO POR NÚMERO. Com um artigo repetido
    * no texto novo (o antigo tachado e o novo, como sai de um PDF), o mapa
@@ -6590,6 +6602,7 @@ function leiIniciar() {
   liga("btnLeiRelPre", "relatório: revisar a colagem", () => leiRelatorioCopiar("revisar a colagem"));
   liga("btnLeiRelCob", "relatório: conferir a versão nova", () => leiRelatorioCopiar("conferir a versão nova"));
   liga("btnLeiRelUpd", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
+  liga("btnLeiRelUpd1", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
   liga("btnLeiRelJa", "relatório: lei já existente", () => leiRelatorioCopiar("lei já existente"));
   liga("btnLeiBibX", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
   liga("btnLeiBibFechar", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
