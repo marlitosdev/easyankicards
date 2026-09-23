@@ -3955,6 +3955,48 @@ function leiDesligar(id, chaveTopico) {
   return true;
 }
 
+/* Quando uma lei sai de UM tópico, e ela era a PREFERIDA dele (matResumos[chave].leiId),
+ * outra lei ligada ao mesmo tópico assume o lugar sozinha — sem isso, leiDoTopicoAtual
+ * continuaria devolvendo a lei que acabou de sair, como se nada tivesse mudado. Função
+ * PURA (não desliga nada, não grava nada): só diz o que VAI acontecer, para quem chama
+ * avisar a pessoa ANTES de fazer, com o nome de quem assume — não depois, como um fato
+ * consumado. */
+function leiConsequenciaDesligar(l, chave) {
+  const restantes = leisDoTopico(chave).filter((x) => x.id !== l.id);
+  /* a chave pode vir escrita com um acento de diferença do que ficou gravado (o mesmo
+   * motivo de leisDoTopico tolerar isso) — sem comparar normalizado, o "era a preferida?"
+   * dava falso negativo sempre que a grafia divergisse um pouco */
+  const alvo = leisChaveComparavel(chave);
+  let eraPreferida = false;
+  if (typeof matResumos !== "undefined" && matResumos) {
+    Object.keys(matResumos).forEach((k) => {
+      if (leisChaveComparavel(k) === alvo && matResumos[k].leiId === l.id) eraPreferida = true;
+    });
+  }
+  return { eraPreferida, restantes, proxima: eraPreferida ? (restantes[0] || null) : null };
+}
+
+/* tirar a lei de UM tópico: a lei continua na biblioteca e nos outros que a usam. Se ela
+ * era a preferida deste tópico, a próxima da fila assume o ponteiro (matResumos[chave].leiId)
+ * — sem isso, o tópico continuaria "preferindo" uma lei que não está mais ligada a ele.
+ * Quem chama deve ter usado leiConsequenciaDesligar ANTES desta, para avisar a pessoa do
+ * que vai acontecer (o "continua isso, ou some" de leiDesligarTopico não é escolha da
+ * pessoa — é só a mecânica; o AVISO é responsabilidade de quem pergunta). */
+function leiDesligarTopico(l, chave) {
+  const cons = leiConsequenciaDesligar(l, chave);
+  leiDesligar(l.id, chave);
+  if (cons.eraPreferida && typeof matResumos !== "undefined" && matResumos) {
+    const alvo = leisChaveComparavel(chave);
+    Object.keys(matResumos).forEach((k) => {
+      if (leisChaveComparavel(k) === alvo && matResumos[k].leiId === l.id) {
+        matResumos[k].leiId = cons.proxima ? cons.proxima.id : "";
+      }
+    });
+    try { matSalvar(); } catch (e) {}
+  }
+  return cons;
+}
+
 /* As leis de um tópico. Tolera as variações de acento e espaço da chave
  * pelo mesmo motivo de matChaveViva: um acento de diferença entre o que
  * o edital escreveu e o que ficou gravado abriria duas gavetas. */

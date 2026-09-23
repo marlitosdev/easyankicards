@@ -1034,16 +1034,25 @@ async function testes() {
          "U21a cancelar o desvincular já desligou a lei mesmo assim");
     }
 
-    /* DESVINCULAR A 4.320 deste tópico (que está sendo lida agora) */
+    /* DESVINCULAR A 4.320 deste tópico (que está sendo lida agora) — ela É a preferida
+     * (matResumos[ch].leiId, gravado quando a lei foi criada) e sobra a LC 101: a
+     * confirmação precisa dizer isso ANTES de acontecer, não só a tela trocar sozinha
+     * depois — foi exatamente essa troca muda que confundiu um usuário de verdade. */
     {
+      ok(api.matResumosAtual()[ch].leiId === id4320, "U21a2 (confere o cenario) a 4.320 e' a preferida do topico antes de desvincular");
       const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
         .filter((b) => /4\.320/.test(b.textContent))[0];
       const x = alvo.parentNode.children.find(
         (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
       const p = x.onclick();
+      const msg = api.$("uiModalMsg").textContent;
+      ok(/4\.320/.test(msg) && /LC 101/.test(msg),
+        "U21a3 a confirmacao nomeia as DUAS leis (a que sai e a que assume), nao so' a que sai: " + msg);
       api.uiModalResponder(true);
       await p;
 
+      ok(api.matResumosAtual()[ch].leiId === "lei_lc101",
+        "U21a4 o ponteiro da preferida do topico foi para a LC 101 (a que sobrou), nao ficou preso na 4.320: " + api.matResumosAtual()[ch].leiId);
       ok(!api.leisDoTopico(ch).some((l) => l.id === id4320),
          "U21b a 4.320 continua ligada a \"Despesa pública\" depois do "
          + "desvincular");
@@ -1089,6 +1098,91 @@ async function testes() {
       ok(String(api.$("leiTexto").value || "") === "",
          "U21i a caixa de texto continuou mostrando a lei desvinculada");
     }
+  }
+
+  /* ---- U21j: desvincular pelo chip uma lei que a pessoa está LENDO mas que NÃO é a
+   * preferida do tópico (ela trocou de chip na mão antes) — a leitura ainda precisa pular
+   * pra qualquer lei que sobrar, mesmo sem essa lei "ser a preferida" de ninguém. */
+  {
+    const { api } = rodar();
+    const ch = preparar(api, "Direito Financeiro", "Restos a pagar");
+    api.leiAbrir("Direito Financeiro", "Restos a pagar");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id4320 = api.leisLista()[0].id;
+    api.leiGuardar({ id: "lei_lc101c", nome: "LC 101/2000", especie: "Lei Complementar", numero: "101",
+      texto: "Art. 1º. Normas de finanças públicas." });
+    api.leiLigar("lei_lc101c", ch);
+    /* a 4.320 continua sendo a preferida do topico; a pessoa troca na mao pra LC 101 */
+    api.leiTrocarPara("lei_lc101c");
+    ok(api.matResumosAtual()[ch].leiId === "lei_lc101c", "U21j-pre (leiTrocarPara tambem move a preferida — nao e' o caso que quero: preciso da 4.320 preferida e a LC 101 so' aberta)");
+    /* corrige: forca a 4.320 de volta como preferida, sem mexer no que esta na tela agora */
+    api.matResumosAtual()[ch].leiId = id4320;
+    ok(api.leiIdAtualValor() === "lei_lc101c" && api.matResumosAtual()[ch].leiId === id4320,
+      "U21j0 cenario: lendo a LC 101, mas a preferida do topico continua sendo a 4.320");
+
+    const alvo = api.$("leiFila").querySelectorAll(".lei-chip").filter((b) => /LC 101/.test(b.textContent))[0];
+    const x = alvo.parentNode.children.find((c) => (c.className || "").indexOf("lei-chip-x") >= 0);
+    const p = x.onclick();
+    api.uiModalResponder(true);
+    await p;
+
+    ok(api.matResumosAtual()[ch].leiId === id4320, "U21j1 a preferida do topico nao mudou (a LC 101 nunca foi a preferida)");
+    ok(api.leiIdAtualValor() === id4320, "U21j2 a leitura pulou pra 4.320 (a que sobrou) mesmo sem ela ser 'a proxima preferida' — e' so' a que restou na tela: " + api.leiIdAtualValor());
+    ok(String(api.$("leiTexto").value || "").indexOf("prestação pecuniária") >= 0 || String(api.$("leiTexto").value || "") === L4320,
+      "U21j3 a caixa de texto mostra a 4.320: " + String(api.$("leiTexto").value || "").slice(0, 60));
+  }
+
+  /* ---- U29: "atualizar versão" diz QUAL lei está sendo atualizada, e deixa escolher
+   * quando o tópico tem mais de uma — pedido direto do usuário depois do incidente real
+   * (atualizou o registro da emenda em vez da Constituição sem perceber, porque a tela
+   * nunca dizia qual lei estava prestes a mudar nem dava como trocar dali). ---- */
+  {
+    const { api } = rodar();
+    const ch = preparar(api, "Direito Financeiro", "Despesa pública");
+    api.leiAbrir("Direito Financeiro", "Despesa pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    const id4320 = api.leisLista()[0].id;
+    api.leiGuardar({ id: "lei_lc101b", nome: "LC 101/2000", especie: "Lei Complementar", numero: "101",
+      texto: "Art. 1º. Normas de finanças públicas." });
+    api.leiLigar("lei_lc101b", ch);
+
+    api.leiAbrir("Direito Financeiro", "Despesa pública");
+    ok(api.leiIdAtualValor() === id4320, "U29-pre a 4.320 e' a que abre (era a que gravou primeiro)");
+    api.leiAtualizarAbrir();
+
+    const cx = api.$("leiUpdLeiAtualCx");
+    const chips = cx.querySelectorAll(".lei-chip");
+    ok(chips.length === 2, "U29a com duas leis no topico, o seletor mostra as duas: " + chips.length);
+    ok(/mais de uma lei/.test(cx.textContent), "U29b o aviso explica por que tem escolha: " + cx.textContent);
+    const chip4320 = chips.filter((c) => /4\.320/.test(c.textContent))[0];
+    const chipLC = chips.filter((c) => /LC 101/.test(c.textContent))[0];
+    ok(/(^|\s)lei-chip-on(\s|$)/.test(chip4320.className) && !/(^|\s)lei-chip-on(\s|$)/.test(chipLC.className),
+      "U29c a lei que abriu (4.320) vem marcada como a atual, a outra nao: " + chip4320.className + " / " + chipLC.className);
+
+    /* trocar pela LC 101 direto dali, sem fechar o dialogo de atualizar */
+    chipLC.onclick();
+    ok(api.leiIdAtualValor() === "lei_lc101b", "U29d clicar na LC 101 trocou a lei atual: " + api.leiIdAtualValor());
+    ok(String(api.$("leiTexto").value || "").indexOf("finanças públicas") >= 0,
+      "U29e o leitor por baixo tambem trocou de texto (leiTrocarPara de verdade, nao so' um rotulo)");
+    ok(api.matResumosAtual()[ch].leiId === "lei_lc101b",
+      "U29f escolher aqui tambem vira a preferida do topico dai pra frente: " + api.matResumosAtual()[ch].leiId);
+    const chipsDepois = api.$("leiUpdLeiAtualCx").querySelectorAll(".lei-chip");
+    const chipLCDepois = chipsDepois.filter((c) => /LC 101/.test(c.textContent))[0];
+    ok(/(^|\s)lei-chip-on(\s|$)/.test(chipLCDepois.className), "U29g o seletor repintou: agora a LC 101 e' que vem marcada");
+  }
+  {
+    /* controle: SO' uma lei no topico — nenhum seletor, so' o nome */
+    const { api } = rodar();
+    preparar(api, "Direito Tributário", "Código Tributário");
+    api.leiAbrir("Direito Tributário", "Código Tributário");
+    api.$("leiTexto").value = "Art. 1º. Texto qualquer.";
+    api.leiGravar();
+    api.leiAtualizarAbrir();
+    const cx = api.$("leiUpdLeiAtualCx");
+    ok(cx.querySelectorAll(".lei-chip").length === 0, "U29h com uma lei so', nao aparece nenhum chip pra escolher");
+    ok(/Atualizando:/.test(cx.textContent), "U29i mesmo com uma lei so', o nome dela aparece (a pessoa sempre sabe qual e'): " + cx.textContent);
   }
 
   /* ---- U22: sem lei nenhuma, "usar uma lei já guardada" vem primeiro

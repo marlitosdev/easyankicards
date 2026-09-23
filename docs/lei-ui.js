@@ -619,24 +619,24 @@ function leiPintarFila() {
     x.setAttribute("aria-label", x.title);
     x.onclick = async (ev) => {
       if (ev && ev.stopPropagation) ev.stopPropagation();
-      const ok = await uiConfirm(
-        t("lei_chip_desvincular_conf", { l: l.nome, tp: leiAtual.topico }));
+      const cons = leiConsequenciaDesligar(l, leiAtual.chave);
+      const msg = cons.eraPreferida && cons.proxima
+        ? t("lei_chip_desvincular_conf_troca", { l: l.nome, tp: leiAtual.topico, outra: cons.proxima.nome })
+        : t("lei_chip_desvincular_conf", { l: l.nome, tp: leiAtual.topico });
+      const ok = await uiConfirm(msg);
       if (!ok) return;
-      leiDesligar(l.id, leiAtual.chave);
+      /* leiDesligarTopico já desliga E, se esta lei era a preferida do tópico, reaponta
+       * matResumos[chave].leiId para a que sobrar — sem isso leiDoTopicoAtual continuaria
+       * devolvendo a lei que acabou de sair, como se nada tivesse mudado. A TELA (o que
+       * está aberto agora) segue outra regra: se era ESTA lei que a pessoa estava lendo,
+       * a leitura pula para QUALQUER outra que sobre (cons.restantes[0], já calculado
+       * acima) — mesmo quando a lei aberta não era a "preferida" do tópico (ex.: a pessoa
+       * trocou de chip na mão). "proxima" só existe quando eraPreferida; para a tela, o
+       * que importa é só "sobrou alguma?". */
+      leiDesligarTopico(l, leiAtual.chave);
       reg("LEI", "lei desvinculada do topico", l.nome + " · " + leiAtual.topico);
-      const resto = leisDoTopico(leiAtual.chave);
-      /* O PONTEIRO PREFERIDO DO TÓPICO (matResumos[chave].leiId) pode
-       * continuar apontando para a lei que acabou de sair — sem
-       * corrigir, leiDoTopicoAtual voltaria a devolvê-la na próxima vez
-       * que o tópico abrisse, como se o desvincular não tivesse
-       * acontecido. */
-      if (typeof matResumos !== "undefined" && matResumos[leiAtual.chave]
-          && matResumos[leiAtual.chave].leiId === l.id) {
-        matResumos[leiAtual.chave].leiId = resto[0] ? resto[0].id : "";
-        matSalvar();
-      }
       if (leiIdAtual === l.id) {
-        if (resto[0]) leiTrocarPara(resto[0].id);
+        if (cons.restantes[0]) leiTrocarPara(cons.restantes[0].id);
         else {
           leiIdAtual = "";
           $("leiTexto").value = "";
@@ -4428,26 +4428,16 @@ function leiBibCartao({ l, usos }) {
 function leiAbrirAvulsa(id) { leiAbrir("", "", id); }
 
 async function leiBibDesligar(l, u) {
-  const ok = await uiConfirm(t("lei_bib_desv_conf", { l: l.nome, tp: u.topico || u.chave }));
+  const cons = leiConsequenciaDesligar(l, u.chave);
+  const msg = cons.eraPreferida && cons.proxima
+    ? t("lei_bib_desv_conf_troca", { l: l.nome, tp: u.topico || u.chave, outra: cons.proxima.nome })
+    : t("lei_bib_desv_conf", { l: l.nome, tp: u.topico || u.chave });
+  const ok = await uiConfirm(msg);
   if (!ok) return false;
   leiDesligarTopico(l, u.chave);
   try { reg("LEI", "lei desvinculada do tópico (biblioteca)", l.nome + " · " + u.chave); } catch (e) {}
   leiBibPintar();
   return true;
-}
-
-/* tirar a lei de UM tópico: a lei continua na biblioteca e nos outros */
-function leiDesligarTopico(l, chave) {
-  leiDesligar(l.id, chave);
-  if (typeof matResumos !== "undefined") {
-    Object.keys(matResumos).forEach((k) => {
-      if (leisChaveComparavel(k) === leisChaveComparavel(chave) && matResumos[k].leiId === l.id) {
-        const resto = leisDoTopico(k);
-        matResumos[k].leiId = resto[0] ? resto[0].id : "";
-        try { matSalvar(); } catch (e) {}
-      }
-    });
-  }
 }
 
 /* APAGAR sabendo onde é usada */
@@ -5659,8 +5649,45 @@ let leiUpdComparo = null;    /* [{num, numCru, tipo, antigo, novo, aceito}] */
 let leiUpdIdx = -1;
 let leiUpdFonteGlobal = "";
 
+/* QUAL LEI está sendo atualizada — sempre visível, nunca implícito. Um tópico com mais de
+ * uma lei ligada (ex.: a Constituição e uma emenda dela, as duas guardadas) ganha um
+ * seletor aqui: sem ele, "atualizar versão" agia sobre QUALQUER lei que por acaso estivesse
+ * aberta (leiIdAtual) sem dizer qual — foi assim que uma pessoa atualizou o registro da
+ * própria emenda em vez da Constituição, sem perceber, e só descobriu pelos resultados
+ * estranhos da comparação. */
+function leiUpdLeiAtualPintar() {
+  const cx = $("leiUpdLeiAtualCx");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const l = leiDe(leiIdAtual);
+  const lista = (leiAtual && leiAtual.chave) ? leisDoTopico(leiAtual.chave) : [];
+  if (lista.length > 1) {
+    const rot = document.createElement("div");
+    rot.className = "nota";
+    rot.textContent = t("lei_upd_qual_lei");
+    cx.append(rot);
+    const linha = document.createElement("div");
+    linha.className = "lei-upd-lei-lista";
+    lista.forEach((x) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "lei-chip" + (x.id === leiIdAtual ? " lei-chip-on" : "");
+      b.textContent = x.nome;
+      b.onclick = () => { leiTrocarPara(x.id); leiUpdLeiAtualPintar(); };
+      linha.append(b);
+    });
+    cx.append(linha);
+  } else {
+    const rot = document.createElement("div");
+    rot.className = "nota";
+    rot.textContent = t("lei_upd_lei_atual", { l: l ? l.nome : "" });
+    cx.append(rot);
+  }
+}
+
 function leiAtualizarAbrir() {
   if (!$("dlgLeiAtualizar") || !leiIdAtual) return;
+  leiUpdLeiAtualPintar();
   $("leiUpdFonte").value = "";
   $("leiUpdTexto").value = "";
   $("leiUpdAviso1").textContent = "";

@@ -1142,6 +1142,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-rec-rev{font-style:italic}
 .lei-arq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px}
 .lei-upd-seguros{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 8px;border:1px solid var(--verde-borda);border-radius:8px;background:var(--verde-claro)}
+.lei-upd-lei-atual{margin:0 0 10px}
+.lei-upd-lei-lista{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .lei-art-rev{opacity:.72}
 .lei-art-txt-rev{font-style:italic;color:var(--sutil)}
 .lei-linha-rev{opacity:.6;font-style:italic}
@@ -6600,6 +6602,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 
   <div id="leiUpdPasso1">
+    <div id="leiUpdLeiAtualCx" class="lei-upd-lei-atual"></div>
     <label class="nota" data-i18n="lei_upd_fonte_rot"></label>
     <input type="text" id="leiUpdFonte" placeholder="EC 132/2023">
     <label class="nota" data-i18n="lei_upd_colar_rot"></label>
