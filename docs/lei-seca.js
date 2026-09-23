@@ -1182,7 +1182,10 @@ function leiPreprocessar(texto, opc) {
     mudancas.push({ id: "inv", grupo: "invisiveis", linhas: inv, ocorrencias: inv.length,
       antes: trilha(linhas[inv[0] - 1]).slice(0, 120), depois: trilha(sem0[inv[0] - 1]).slice(0, 120) });
   }
-  tachados.forEach((it) => mudancas.push(it));
+  /* os identificadores (mantido:true) NUNCA entram em \`mudancas\`: nada que se marque em \`decisoes\` chega a eles.
+   * Ficam à parte, em \`identificadores\`, só para a tela mostrar o que foi poupado e por quê. */
+  const identificadores = [];
+  tachados.forEach((it) => { if (it.mantido) identificadores.push(it); else mudancas.push(it); });
 
   /* AS LINHAS DE UM ANEXO são tabela: o cabeçalho de uma tabela se repete de propósito (na LC 214, "Receita
    * Bruta em 12 Meses" aparece 8 vezes, uma por anexo do Simples). Tomá-lo por cabeçalho de página e sugerir
@@ -1338,7 +1341,7 @@ function leiPreprocessar(texto, opc) {
 
   const ordem = { tachado: -1, invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, remissao: 4, anexo: 5 };
   mudancas.sort((x, y) => (ordem[x.grupo] - ordem[y.grupo]) || (x.linhas[0] - y.linhas[0]));
-  return { mudancas, linhas: linhas.length, blocos: cit.blocos, protegidas: protegidas.size };
+  return { mudancas, linhas: linhas.length, blocos: cit.blocos, protegidas: protegidas.size, identificadores };
 }
 
 /* Aplica as ESCOLHAS de quem colou. decisoes = { [id]: true|false } — e, nos

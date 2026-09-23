@@ -186,28 +186,52 @@ async function testes() {
       "Art. 3º Tres.", "~~Art. 217.~~ (Revogado pela Lei Complementar nº 227, de 2026)", "~~§ 9º Texto antigo do nove~~", "§ 9º Texto novo do nove. (Redação dada pela LC 1)"].join("\n");
     const pre = p.leiPreprocessar(T);
     const tch = pre.mudancas.filter((m) => m.grupo === "tachado");
-    ok(tch.length === 3 && tch.filter((m) => m.mantido).length === 2 && tch.filter((m) => !m.mantido).length === 1, "K1 2 identificadores (mantidos) e 1 texto antigo (sai): " + JSON.stringify(tch.map((m) => [m.id, m.tipo, m.mantido])));
+    /* OS IDENTIFICADORES NUNCA ENTRAM EM mudancas — não são decisão, não podem ser marcados */
+    ok(tch.length === 1 && !tch[0].mantido, "K1 so' o texto antigo (que sai) fica em mudancas; os 2 identificadores NAO: " + JSON.stringify(tch.map((m) => [m.id, m.tipo, m.mantido])));
+    ok((pre.identificadores || []).length === 2 && pre.identificadores.every((m) => m.mantido), "K1a os 2 identificadores ficam à parte, em 'identificadores', informativos: " + JSON.stringify(pre.identificadores.map((m) => [m.id, m.tipo])));
     const ax = pre.mudancas.filter((m) => m.grupo === "anexo");
     ok(ax.length === 3 && ax.filter((m) => /^ANEXO XIV/.test(m.titulo))[0] && ax.filter((m) => /^ANEXO XIV/.test(m.titulo))[0].revogado, "K2 as outras limpezas veem o titulo do anexo XIV (nao riscado no que ficara): 3 anexos, o XIV revogado: " + JSON.stringify(ax.map((m) => [m.titulo, !!m.revogado])));
     const res = p.leiAplicarPreprocesso(T, pre.mudancas, {});
     ok(res.texto.indexOf("~~") < 0 && res.anexos.length === 3 && res.anexos.filter((a) => /^ANEXO XIV/.test(a.titulo))[0].revogado === true && /ANEXO XIV/.test(res.anexos.filter((a) => /^ANEXO XIV/.test(a.titulo))[0].texto), "K3 padrao: o numero do anexo XIV FICA (com a nota) e o anexo e' guardado como revogado; o XIII nao ganha a nota solta: " + JSON.stringify(res.anexos.map((a) => [a.titulo, a.revogado, a.texto.slice(0, 60)])));
     ok(/Art\. 217\. \(Revogado pela Lei Complementar nº 227, de 2026\)/.test(res.texto) && !/Texto antigo do nove/.test(res.texto) && /§ 9º Texto novo do nove/.test(res.texto), "K4 'Art. 217. (Revogado…)' fica como veio; o § 9º antigo sai e o novo fica: " + JSON.stringify(res.texto.split("\n").slice(-4)));
     ok(res.resumo.tachado === 1, "K5 so' o que saiu de verdade e' contado: " + JSON.stringify(res.resumo));
+    ok(p.leiArtigos(res.texto).some((a) => a.num === "217"), "K5a o Art. 217 continua existindo como artigo (o padrao nao apaga a identidade dele): " + p.leiArtigos(res.texto).map((a) => a.num).join(","));
     const XIII = res.anexos.filter((a) => /^ANEXO XIII/.test(a.titulo))[0];
     ok(!/Revogado/.test(XIII.texto), "K6 a nota de revogacao nao para no anexo anterior: " + JSON.stringify(XIII.texto));
-    /* a pessoa manda tirar o identificador */
-    const d2 = {}; pre.mudancas.filter((m) => m.grupo === "tachado").forEach((m) => { d2[m.id] = true; });
+    /* mesmo que ALGUEM force dec[id]=true para o id de um identificador, nao tem efeito: o item nao esta em mudancas,
+     * entao o laco que aplica as decisoes nunca o encontra — a protecao nao depende de a pessoa "nao marcar a caixa" */
+    const idsIdent = pre.identificadores.map((m) => m.id);
+    const d2 = {}; idsIdent.forEach((id) => { d2[id] = true; }); pre.mudancas.forEach((m) => { d2[m.id] = true; });
     const r2 = p.leiAplicarPreprocesso(T, pre.mudancas, d2);
-    ok(r2.texto.indexOf("~~") < 0 && !/Art\. 217\./.test(r2.texto) && /\(Revogado pela Lei Complementar nº 227, de 2026\)/.test(r2.texto), "K7 aceitando tirar o identificador (escolha da pessoa): o numero sai, a nota fica");
-    /* na tela: o item vem DESMARCADO */
+    ok(r2.texto.indexOf("~~") < 0 && /Art\. 217\./.test(r2.texto) && /ANEXO XIV/.test(r2.texto) && !/Texto antigo do nove/.test(r2.texto),
+      "K7 forcar dec[id]=true para os identificadores NAO tira o numero (nao ha caminho para removê-los); o texto antigo (que esta em mudancas de verdade) sai normalmente: " + r2.texto.split("\n").slice(-6).join(" | "));
+    /* na tela: nao ha caixa nenhuma para os identificadores */
     const api = iniciar();
     api.leiRevisarColagemAbrir({ modo: "criar", texto: T, pre: api.leiPreprocessar(T), aoConfirmar() {} });
-    const itens = achar(api.$("leiPreGrupo_tachado"), (c) => cls(c, "lei-pre-item"));
-    const marcados = itens.map((it) => achar(it, (c) => c.type === "checkbox")[0].checked);
-    ok(itens.length === 3 && marcados.join() === "false,false,true" && /a nota diz que foi revogado/.test(itens[0].textContent) && /2 aceita|1 de 3 aceitas/.test(api.$("leiPreCont_tachado").textContent), "K8 na revisao os 2 identificadores vem DESMARCADOS (mantidos) e o texto antigo marcado: " + marcados + " / " + api.$("leiPreCont_tachado").textContent);
+    const itensDecisao = achar(api.$("leiPreGrupo_tachado"), (c) => cls(c, "lei-pre-item"));
+    ok(itensDecisao.length === 1 && achar(itensDecisao[0], (c) => c.type === "checkbox").length === 1, "K8 so' 1 item COM caixa de decisao no grupo tachado (o texto antigo): " + itensDecisao.length);
+    const blocoIdent = api.$("leiPreGrupo_identificador");
+    ok(!!blocoIdent && /Identificadores revogados mantidos \(2\)/.test(blocoIdent.textContent) && achar(blocoIdent, (c) => c.type === "checkbox").length === 0,
+      "K8a os 2 identificadores aparecem num bloco SEPARADO, so' informativo, SEM nenhuma caixa: " + (blocoIdent && blocoIdent.textContent.slice(0, 60)));
+    ok(/Tirar o número apagaria QUAL dispositivo foi revogado/.test(blocoIdent.textContent), "K8b o bloco explica por que ficam de fora da decisao");
+    ok(/linha 12: Art\. 217\./.test(blocoIdent.textContent), "K8c o item do bloco mostra a linha e o texto: " + blocoIdent.textContent.match(/linha \d+: [^\n]{0,40}/g));
+    ok(/revisão da colagem aberta — \d+ mudanças sugeridas: tachado \d+ · anexo \d+ · 2 identificador\(es\) revogado\(s\) mantido\(s\) \(informativo, sem decisão\)/.test(api.leiRelatorioFluxo("revisar a colagem")),
+      "K8d o registro (linha gravada ao abrir a revisao) soma os identificadores mantidos: " + api.leiRelatorioFluxo("revisar a colagem").split("\n").filter((l) => /revisão da colagem aberta/.test(l)));
+    ok(/identificadores revogados mantidos \(informativo, sem decisão — nunca são removidos\): 2/.test(api.leiRelatorioFluxo("revisar a colagem")),
+      "K8e com a tela AINDA ABERTA, o resumo por grupo do relatorio tambem lista os identificadores: " + api.leiRelatorioFluxo("revisar a colagem").split("\n").filter((l) => /identificador/.test(l)));
+    achar(itensDecisao[0], (c) => c.type === "checkbox")[0].checked = false; achar(itensDecisao[0], (c) => c.type === "checkbox")[0].onchange();
     api.leiPreConfirmar();
     const dr = api.decLer().filter((x) => x.regra === "colagem.tachado");
-    ok(dr.length === 3 && dr.filter((x) => x.via === "padrao").length === 3, "K9 os 3 no historico como 'padrao' (o padrao dos identificadores e' manter, e nao foi mudado)");
+    ok(dr.length === 1, "K9 so' o item que ERA decisao entra no historico (os identificadores, que nunca foram decisao, nao entram): " + dr.length);
+    ok(/2 identificador\(es\) revogado\(s\) mantido\(s\) \(informativo, sem decisão\)/.test(api.leiRelatorioFluxo("revisar a colagem")),
+      "K9a mesmo com a tela ja fechada, a LINHA DE REGISTRO gravada ao abrir continua no relatorio do fluxo: " + api.leiRelatorioFluxo("revisar a colagem").slice(-250));
+  }
+  {
+    /* sem nenhum identificador: o bloco nao aparece de jeito nenhum */
+    const api = iniciar();
+    const T2 = "Art. 1º Um ~~texto velho~~ novo.";
+    api.leiRevisarColagemAbrir({ modo: "criar", texto: T2, pre: api.leiPreprocessar(T2), aoConfirmar() {} });
+    ok(!api.$("leiPreGrupo_identificador"), "K10 sem identificadores, o bloco informativo nem existe na tela");
   }
 
   /* ---- 6: o anexo revogado (etapa 1) ---- */
@@ -258,13 +282,18 @@ async function testes() {
     const T = ["Art. 1º Um.", "~~ANEXO XIV~~", "(Revogado pela Lei Complementar nº 227, de 2026)", "~~1,0%~~", "~~2,0%~~", "Art. 2º Dois ~~velho~~ novo."].join("\n");
     api.leiRevisarColagemAbrir({ modo: "criar", texto: T, pre: api.leiPreprocessar(T), aoConfirmar() {} });
     const texto = api.$("leiPreLista").textContent;
-    ok(!/lei_[a-z]+_[a-z_0-9]+/.test(texto) && !/lei_pre_[a-z_]+/.test(api.$("leiPreGrupo_tachado").textContent), "T1 a tela do grupo nao mostra nenhuma chave de traducao crua: " + (texto.match(/lei_[a-z_0-9]+/g) || []).join(","));
+    ok(!/lei_[a-z]+_[a-z_0-9]+/.test(texto) && !/lei_pre_[a-z_]+/.test(api.$("leiPreGrupo_tachado").textContent) && !/lei_pre_[a-z_]+/.test(api.$("leiPreGrupo_identificador").textContent),
+      "T1 a tela do grupo (e a do bloco de identificadores) nao mostra nenhuma chave de traducao crua: " + (texto.match(/lei_[a-z_0-9]+/g) || []).join(","));
+    /* recusar o unico item do grupo (o texto antigo) para a frase de consequencia aparecer */
+    achar(api.$("leiPreGrupo_tachado"), (c) => c.type === "checkbox")[0].checked = false;
+    achar(api.$("leiPreGrupo_tachado"), (c) => c.type === "checkbox")[0].onchange();
     ok(/Recusando, o trecho tachado fica no texto como texto comum/.test(api.$("leiPreGrupo_tachado").textContent), "T2 a consequencia de recusar aparece no grupo");
   }
 
   /* ---- 8: os textos ---- */
   {
-    const chaves = ["lei_pre_g_tachado", "lei_pre_h_tachado", "lei_pre_c_tachado", "lei_pre_tch_identificador", "lei_pre_tch_item", "lei_pre_tch_tabela", "lei_pre_tch_substituido", "lei_pre_tch_revogado", "lei_pre_tch_outro", "lei_pre_tch_vazio", "lei_col_tch_ok", "lei_col_tch_nao"];
+    const chaves = ["lei_pre_g_tachado", "lei_pre_h_tachado", "lei_pre_c_tachado", "lei_pre_tch_identificador", "lei_pre_tch_item", "lei_pre_tch_tabela", "lei_pre_tch_substituido", "lei_pre_tch_revogado", "lei_pre_tch_outro", "lei_pre_tch_vazio", "lei_col_tch_ok", "lei_col_tch_nao",
+      "lei_pre_ident_titulo", "lei_pre_ident_ajuda", "lei_pre_ident_item"];
     const linhas = (k) => (i18n.match(new RegExp("\\n  \"" + k + "\": (.*),\\r?\\n", "g")) || []);
     const campos = (s) => (s.match(/\{\w+\}/g) || []).sort().join(",");
     ok(chaves.every((k) => linhas(k).length === 2 && campos(linhas(k)[0]) === campos(linhas(k)[1])), "I1 as frases existem em portugues e em ingles, com os mesmos campos");
