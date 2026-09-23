@@ -2032,7 +2032,16 @@ function leiAlteradoraCitaLei(texto, l) {
   const n = leiNumeroNorm(l.numero);
   const re = /(?:Lei(?:\s+Complementar)?|LC|Decreto(?:-Lei)?|Emenda\s+Constitucional|EC)\s*n?[ºo°.]?\s*0*([\d.]+)/gi;
   let m;
-  const s = String(texto || "").slice(0, 60000);
+  const s0 = String(texto || "").slice(0, 60000);
+  /* O TÍTULO PRÓPRIO ("EMENDA CONSTITUCIONAL Nº 132, DE...") NÃO É CITAÇÃO — é a lei se apresentando, não
+   * citando outra. Sem cortar essa parte, reabrir a MESMA lei salva como "lei que altera" (guardada via
+   * "guardar também o texto da lei que altera") e colar o texto dela de novo fazia o app achar que ela
+   * "cita a si mesma" pelo próprio título — e o aviso de "esse texto não fala desta lei" nunca disparava
+   * (caso real: "Emenda Constitucional 132/2023" salva como lei própria, atualizada com a EC 132 de novo).
+   * A citação de verdade do alvo sempre aparece a partir do primeiro "Art. 1º" (ementa às vezes cita antes,
+   * mas o corpo do Art. 1º sempre repete: "A Lei Complementar nº 015 ... passa a vigorar ..."). */
+  const primeiroArt = s0.search(/\bArt\.?\s*1[ºo°]?\b/);
+  const s = primeiroArt >= 0 ? s0.slice(primeiroArt) : s0;
   while ((m = re.exec(s)) !== null) {
     if (leiNumeroNorm(m[1]) === n) return true;
   }

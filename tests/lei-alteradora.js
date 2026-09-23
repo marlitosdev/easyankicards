@@ -458,6 +458,70 @@ async function testes() {
     ok(valor(linhas("lei_upd_explica_rot")[0]) !== valor(linhas("lei_upd_explica_ph")[0]), "P7b o rotulo e o placeholder nao sao o mesmo texto repetido");
   }
 
+  /* ==============================================================
+   * Q: A LEI ALTERADORA "SE CITANDO" — bug real (o usuario reproduziu)
+   *
+   * "Guardar também o texto da lei que altera na biblioteca" salva a emenda como lei propria — com o
+   * MESMO numero que o titulo dela ("EMENDA CONSTITUCIONAL Nº 132"). Reabrir esse registro e colar a
+   * MESMA emenda de novo em "atualizar versão" fazia leiAlteradoraCitaLei() achar que "132" no titulo
+   * da EC contava como citação da lei nº 132 aberta — e o aviso "esse texto não fala desta lei" (que
+   * já existia, para a lei ERRADA) nunca disparava. O alvo de verdade da emenda (a Constituição) nunca
+   * aparecia citado por numero nenhuma, so' pelo nome "Constituição Federal".
+   * ============================================================== */
+  const EC132_MINI = [
+    "EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023",
+    "Altera o Sistema Tributário Nacional.",
+    "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+    "\"Art. 43. .............................................................................................................",
+    "§ 4º Sempre que possível, a concessão dos incentivos regionais considerará critérios ambientais.\" (NR)",
+    "Art. 2º Esta Emenda Constitucional entra em vigor na data de sua publicação.",
+  ].join("\n");
+  {
+    /* unidade: leiAlteradoraCitaLei sozinha */
+    const lEmendaPropria = { numero: "132", especie: "Emenda Constitucional" };
+    const lCF = { numero: "", especie: "Constituição" };
+    ok(p.leiAlteradoraCitaLei(EC132_MINI, lEmendaPropria) === false,
+      "Q1 o titulo da propria emenda ('EMENDA CONSTITUCIONAL Nº 132') NAO conta como citacao da lei nº 132 aberta");
+    ok(p.leiAlteradoraCitaLei(EC132_MINI, lCF) === true, "Q1a lei sem numero (a Constituicao) nunca precisa de citacao numerica: sempre passa");
+    /* a citacao de verdade, dentro do corpo (Art. 1º), continua funcionando (nao regride LC145/95/112) */
+    ok(p.leiAlteradoraCitaLei(LC145, { numero: "15", especie: "Lei Complementar" }) === true, "Q1b a citacao real, no corpo do Art. 1º, continua sendo achada");
+    ok(p.leiAlteradoraCitaLei(LC145, { numero: "999", especie: "Lei Complementar" }) === false, "Q1c uma lei que de fato nao e' citada continua sem aviso falso-positivo");
+  }
+  {
+    /* tela: reabrir a emenda salva como lei propria e colar ela mesma de novo — o aviso agora aparece */
+    const r = rodar();
+    const api = r.api;
+    api.matIniciar(); api.leiIniciar();
+    const lEmenda = api.leiGuardar({ id: "lei_emenda-constitucional-132-2023", nome: "Emenda Constitucional 132/2023",
+      especie: "Emenda Constitucional", numero: "132", ano: "2023", texto: "Art. 1º A Constituição Federal passa a vigorar...\nArt. 2º Esta Emenda entra em vigor..." });
+    api.leiAbrir("Direito Constitucional", "Emendas", lEmenda.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdModoAlt").checked = true;
+    api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdTexto").value = EC132_MINI;
+    const res = api.leiAtualizarComparar();
+    ok(res === false && api.$("dlgLeiCob").open === true && api.$("leiUpdPasso2").hidden === true,
+      "Q2 colar a MESMA emenda sobre o registro dela mesma agora PARA na conferencia, em vez de despejar a lista de itens direto: " + res);
+    const av = achar(api.$("leiCobAvisos"), () => true).map((c) => c.textContent).join(" | ");
+    ok(/não cita.*Emenda Constitucional 132\/2023/.test(av), "Q2a o aviso nomeia a lei aberta, avisando que o texto nao fala dela: " + av);
+    const ops = achar(api.$("leiCobOpcoes"), (c) => c.type === "radio").map((c) => c.value);
+    ok(ops.join(",") === "continuar", "Q2b so' a opcao de seguir mesmo assim (nao ha 'baixa cobertura' nem 'e alteradora' aqui)");
+    /* escolhendo seguir mesmo assim, a comparacao abre (a pessoa foi avisada e decidiu prosseguir) */
+    api.leiCobCtxAtual().escolha = "continuar";
+    api.leiCobConfirmar();
+    ok(api.$("dlgLeiCob").open === false && api.$("leiUpdPasso2").hidden === false, "Q3 escolhido 'continuar', a comparacao abre normalmente");
+  }
+  {
+    /* controle: o caso LEGITIMO (LC145 sobre a LC 15/2009 de verdade) NAO aciona esse aviso */
+    const { api } = montar();
+    api.$("leiUpdModoAlt").checked = true;
+    api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdTexto").value = LC145;
+    const res = api.leiAtualizarComparar();
+    ok(res === true && api.$("dlgLeiCob").open !== true && api.$("leiUpdPasso2").hidden === false,
+      "Q4 controle: a atualizacao legitima (LC145 sobre a LC15/2009) continua indo direto pra comparacao, sem aviso falso: " + res);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
