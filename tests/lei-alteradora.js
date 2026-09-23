@@ -23,6 +23,8 @@
  *     mais antiga por cima de uma mais nova é avisado.
  *  7. Anexos: a ordem é lida e o tratamento fica em lei-anexos.js; sem o texto do anexo novo, é só aviso.
  * ===================================================================== */
+const fs = require("fs");
+const path = require("path");
 const { rodar } = require("./fumaca.js");
 
 const BASE = [
@@ -402,6 +404,58 @@ async function testes() {
       "R1 (caso real, EC 132/2023) o caput do art. 43 da Constituição continua o ORIGINAL, nao os pontos copiados do Planalto: " + JSON.stringify(i43.novo));
     ok(/§ 4º Sempre que possível.*\(Incluído por/.test(i43.novo), "R1a o § 4º novo entra certo");
     ok(!/\.{5,}/.test(i43.novo), "R1b nenhum ponto sobra no texto proposto de verdade");
+  }
+
+  /* ==============================================================
+   * P: "PEDIR APOIO DA IA" — o rótulo estava em branco (nunca recebia texto em
+   * lugar nenhum do código) e o placeholder ficava preso em português, direto
+   * no HTML. Quem via só o campo (fora do fluxo do botão) não tinha como saber
+   * pra que servia. Agora os dois vêm do i18n, e o rótulo diz o efeito real:
+   * é opcional, fica só no histórico da decisão, e não muda o texto da lei.
+   * ============================================================== */
+  {
+    const { api } = montar();
+    api.$("leiUpdModoAlt").checked = true;
+    api.$("leiUpdTexto").value = LC145;
+    api.leiAtualizarComparar();
+    ok(api.$("leiUpdPrompt").hidden === true && api.$("leiUpdPromptBarra").hidden === true
+      && api.$("leiUpdExplicaRot").hidden === true && api.$("leiUpdExplica").hidden === true,
+      "P1 antes de pedir apoio da IA, a caixa do prompt e a da explicação ficam escondidas");
+
+    api.leiUpdIA();
+    ok(api.$("leiUpdPrompt").hidden === false && api.$("leiUpdPromptBarra").hidden === false
+      && api.$("leiUpdExplicaRot").hidden === false && api.$("leiUpdExplica").hidden === false,
+      "P2 'pedir apoio da IA' mostra as duas caixas");
+    const item0 = api.leiUpdComparoAtual()[0];
+    ok(api.$("leiUpdPrompt").value.includes(item0.rotulo || "Art. " + item0.numCru)
+      && api.$("leiUpdPrompt").value.includes(item0.novo || ""),
+      "P2a o prompt monta com o artigo e o texto novo do item atual: " + api.$("leiUpdPrompt").value.slice(0, 80));
+    ok(api.$("leiUpdExplicaRot").textContent.length > 10, "P3 o rotulo NAO fica em branco (o bug real): " + JSON.stringify(api.$("leiUpdExplicaRot").textContent));
+    ok(/opcional/i.test(api.$("leiUpdExplicaRot").textContent) && /não muda/i.test(api.$("leiUpdExplicaRot").textContent),
+      "P3a o rotulo deixa claro pra pessoa o que vai acontecer: e' opcional e nao muda a lei: " + api.$("leiUpdExplicaRot").textContent);
+    ok(api.$("leiUpdExplica").placeholder && api.$("leiUpdExplica").placeholder.length > 5,
+      "P4 o placeholder tambem nao fica em branco: " + JSON.stringify(api.$("leiUpdExplica").placeholder));
+
+    /* o que a pessoa cola ali acompanha a decisao, sem entrar no texto do artigo */
+    api.$("leiUpdExplica").value = "A IA explicou que isso so' acrescenta um paragrafo novo.";
+    api.leiUpdAceitar();
+    ok(api.leiUpdComparoAtual()[0].explicacao === "A IA explicou que isso so' acrescenta um paragrafo novo.", "P5 a explicacao colada fica presa a decisao do item");
+    ok(!/A IA explicou/.test(api.leiUpdComparoAtual()[0].novo), "P5a a explicacao NAO entra no texto proposto do artigo (nao muda a lei)");
+    api.leiAtualizarAplicar();
+    const dr = api.decLer().filter((x) => x.area === "versao")[0];
+    ok(dr && dr.via === "com_explicacao", "P6 o historico da decisao registra que veio COM explicacao: " + (dr && dr.via));
+  }
+
+  /* os textos: pt e en, os dois preenchidos, e o rotulo diferente do placeholder (nao e' o mesmo texto duplicado) */
+  {
+    const i18n = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    const linhas = (k) => (i18n.match(new RegExp("\\n  \"" + k + "\": \"([^\"]*)\",\\r?\\n", "g")) || []);
+    ok(linhas("lei_upd_explica_rot").length === 2 && linhas("lei_upd_explica_ph").length === 2,
+      "P7 as duas chaves existem em portugues e em ingles");
+    const valor = (l) => (l.match(/: "([^"]*)"/) || [, ""])[1];
+    ok(linhas("lei_upd_explica_rot").every((l) => valor(l).length > 10) && linhas("lei_upd_explica_ph").every((l) => valor(l).length > 5),
+      "P7a nenhuma das quatro frases fica vazia");
+    ok(valor(linhas("lei_upd_explica_rot")[0]) !== valor(linhas("lei_upd_explica_ph")[0]), "P7b o rotulo e o placeholder nao sao o mesmo texto repetido");
   }
 
   return Object.assign(falhas, { quantas: n });

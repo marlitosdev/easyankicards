@@ -6030,7 +6030,9 @@ function leiUpdIA() {
   });
   $("leiUpdPrompt").hidden = false;
   $("leiUpdPromptBarra").hidden = false;
+  $("leiUpdExplicaRot").textContent = t("lei_upd_explica_rot");
   $("leiUpdExplicaRot").hidden = false;
+  $("leiUpdExplica").placeholder = t("lei_upd_explica_ph");
   $("leiUpdExplica").hidden = false;
   leiReg("atualizacao", "apoio de IA pedido", "Art. " + item.numCru);
 }
