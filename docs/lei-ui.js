@@ -5166,7 +5166,7 @@ function leiDecVersao(itens, fonte) {
         motivo: (fonte || "") + (alertas.length ? " · " + t("dec_alertas") + " " + alertas.join(", ") : ""),
         risco: al.some((a) => a.sev === "alerta") ? "alto" : (al.some((a) => a.sev === "aviso") ? "medio" : "baixo"),
         decisao: item.aceito ? "aceitou" : (item.recusado ? "recusou" : "sem_decisao"),
-        via: item.explicacao ? "com_explicacao" : "item",
+        via: item.explicacao ? "com_explicacao" : (item.viaLote ? "lote_sem_risco" : "item"),
         proposta: { acao: tipo === "revogado" ? "marcar como revogado (o artigo some da leitura)"
             : /_texto$/.test(tipo) ? "marcar como revogado (o próprio texto novo já diz isso)"
             : tipo === "mudou" ? "trocar a redação" : tipo === "novo" ? "acrescentar o artigo" : "substituir o anexo",
@@ -5855,6 +5855,29 @@ function leiGuardarAlteradora() {
   return r;
 }
 
+/* o primeiro item que precisa de atenção de verdade (nem seguro, nem já decidido) — ou 0, se não houver
+ * nenhum (todos seguros, ou a lista está vazia). É para onde a tela abre e para onde "aceitar os sem risco"
+ * pula: o primeiro clique da pessoa cai em algo que importa, não num item óbvio. */
+function leiUpdPrimeiroAtencao(itens) {
+  const i = (itens || []).findIndex((it) => it.seguro === false && !it.aceito && !it.recusado);
+  return i >= 0 ? i : 0;
+}
+
+/* ACEITA DE UMA VEZ os itens SEM RISCO ainda sem decisão — nunca os que têm alerta de "alerta" ou "aviso".
+ * Ver o comentário de leiItensDaAlteradora/leiCompararVersoes sobre o que conta como seguro. */
+function leiUpdAceitarSeguros() {
+  if (!leiUpdComparo) return;
+  let n = 0;
+  leiUpdComparo.forEach((it) => {
+    if (it.seguro && !it.aceito && !it.recusado) { it.aceito = true; it.recusado = false; it.viaLote = true; n++; }
+  });
+  if (!n) return;
+  leiUpdIdx = leiUpdPrimeiroAtencao(leiUpdComparo);
+  leiUpdMostrar();
+  toastMsg(t("lei_upd_seguros_aceitos", { n }), 3500);
+  try { leiReg("atualizacao", "aceitou de uma vez os itens sem risco", n + " item(ns)"); } catch (e) {}
+}
+
 function leiUpdMostrar() {
   if (!leiUpdComparo || leiUpdIdx < 0) return;
   const item = leiUpdComparo[leiUpdIdx];
@@ -5863,6 +5886,16 @@ function leiUpdMostrar() {
   const re = leiUpdComparo.filter((x) => x.recusado).length;
   $("leiUpdResumo").textContent = t("lei_upd_placar",
     { a: ac, r: re, p: leiUpdComparo.length - ac - re });
+  /* a barra "aceitar os sem risco": só aparece enquanto sobrar item seguro sem decisão */
+  const segPend = leiUpdComparo.filter((x) => x.seguro && !x.aceito && !x.recusado).length;
+  const atnPend = leiUpdComparo.filter((x) => x.seguro === false && !x.aceito && !x.recusado).length;
+  if ($("leiUpdSegurosBar")) {
+    $("leiUpdSegurosBar").hidden = segPend === 0;
+    if (segPend) {
+      $("leiUpdSegurosTxt").textContent = t("lei_upd_seguros_txt", { n: segPend, a: atnPend });
+      $("btnLeiUpdAceitarSeguros").textContent = t("lei_upd_seguros_btn", { n: segPend });
+    }
+  }
   $("btnLeiUpdAnterior").disabled = leiUpdIdx <= 0;
   $("btnLeiUpdProximo").disabled = leiUpdIdx >= leiUpdComparo.length - 1;
 
@@ -5872,6 +5905,7 @@ function leiUpdMostrar() {
   h.className = "duv-titulo";
   h.textContent = (item.rotulo || "Art. " + item.numCru) + " — " + t("lei_upd_tipo_" + item.tipo)
     + (item.revogacao && item.revogacao.fonte ? " · " + item.revogacao.fonte : "")
+    + (item.seguro === false ? " · " + t("lei_upd_atencao_badge") : "")
     + (item.aceito ? " · " + t("lei_upd_ok") : "");
   if (item.recusado) {
     const rc = document.createElement("span");
@@ -6579,6 +6613,7 @@ function leiIniciar() {
   liga("btnLeiUpdAceitar", "aceitar alteração", () => leiUpdAceitar());
   liga("btnLeiUpdPular", "pular alteração", () => leiUpdPular());
   liga("btnLeiUpdFinalizar", "finalizar atualização", () => leiAtualizarAplicar());
+  liga("btnLeiUpdAceitarSeguros", "aceitar de uma vez os itens sem risco", () => leiUpdAceitarSeguros());
   liga("btnLeiUpdIA", "pedir apoio da IA", () => leiUpdIA());
   liga("btnLeiUpdIACopiar", "copiar prompt de apoio", () => {
     try { navigator.clipboard.writeText($("leiUpdPrompt").value); } catch (e) {}

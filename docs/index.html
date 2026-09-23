@@ -1141,6 +1141,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-art-disp-rev{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--laranja-borda);color:var(--laranja-txt);background:var(--laranja-claro);cursor:default}
 .lei-rec-rev{font-style:italic}
 .lei-arq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px}
+.lei-upd-seguros{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 8px;border:1px solid var(--verde-borda);border-radius:8px;background:var(--verde-claro)}
 .lei-art-rev{opacity:.72}
 .lei-art-txt-rev{font-style:italic;color:var(--sutil)}
 .lei-linha-rev{opacity:.6;font-style:italic}
@@ -6622,6 +6623,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <span class="nota" id="leiUpdConta"></span>
       <button class="btn-min" id="btnLeiUpdProximo">&#8594;</button>
       <span class="mat-topo-dir nota" id="leiUpdResumo"></span>
+    </div>
+    <div class="lei-upd-seguros" id="leiUpdSegurosBar" hidden>
+      <span class="nota" id="leiUpdSegurosTxt"></span>
+      <button class="btn-min" id="btnLeiUpdAceitarSeguros"></button>
     </div>
     <div id="leiUpdItem"></div>
 

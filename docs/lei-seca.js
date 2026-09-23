@@ -2127,6 +2127,7 @@ function leiItensDaAlteradora(l, par) {
   /* os ANEXOS que a lei substitui ou revoga entram como itens (depois dos artigos) */
   const ax = leiItensDeAnexos(l, par);
   ax.itens.forEach((x) => itens.push(x));
+  itens.forEach((it) => { it.seguro = !(it.alertas || []).some((a) => a.sev === "alerta" || a.sev === "aviso"); });
   itens.avisos = par.avisos.concat(ax.avisos);
   return itens;
 }
@@ -2774,6 +2775,10 @@ function leiCompararVersoes(textoAntigo, textoNovo, opc) {
   }
   itens.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
   itens.forEach((it) => { it.alertas = leiAlertasDaMudanca(it, { fora, cobertura }); });
+  /* SEM RISCO: nenhum alerta de severidade "alerta" (precisa de atenção) ou "aviso" (incerto — ex.: artigo
+   * AUSENTE, que "ausência não é prova de revogação"). Só "info" (nota, número que mudou, revogado pela
+   * própria lei) conta como seguro — o botão "aceitar os sem risco" só mexe nesses. */
+  itens.forEach((it) => { it.seguro = !it.alertas.some((a) => a.sev === "alerta" || a.sev === "aviso"); });
   return { itens, soFormatacao, naoComparados, cobertura };
 }
 
