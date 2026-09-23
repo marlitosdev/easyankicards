@@ -5940,16 +5940,20 @@ function leiUpdMostrar() {
     cx.append(als);
   }
 
-  /* o texto INTEIRO de cada lado, com as palavras que só existem ali marcadas */
-  [["cm_mel_antes", item.antigo, "qm-antes", item.novo], ["cm_mel_depois", item.novo, "qm-depois", item.antigo]]
-    .forEach(([rot, txt, cls, contra]) => {
-      if (!txt) return;   /* "novo" não tem antes; "revogado" não tem depois */
+  /* o texto INTEIRO de cada lado, com as palavras que só existem ali marcadas. "Novo" não tem "como está";
+   * "revogado" não tem "como ficaria" — mas o lado FALTANTE continua aparecendo, dizendo isso, em vez de
+   * simplesmente sumir da tela: sem essa nota, quem via só "COMO FICARIA" (sem nenhum "COMO ESTÁ" do lado)
+   * não tinha como saber se o artigo já existia antes ou não — parecia faltar metade da tela. */
+  [["cm_mel_antes", item.antigo, "qm-antes", item.novo, "lei_upd_nao_existia"],
+   ["cm_mel_depois", item.novo, "qm-depois", item.antigo, "lei_upd_revogado_texto"]]
+    .forEach(([rot, txt, cls, contra, faltaChave]) => {
       const r1 = document.createElement("div");
       r1.className = "qm-rot";
       r1.textContent = t(rot);
       const d = document.createElement("div");
-      d.className = "qm-lado lei-upd-lado " + cls;
-      if (item.tipo === "mudou" || (item.tipo === "anexo_subst" && item.antigo)) leiMarcarDiferencas(d, txt, contra);
+      d.className = "qm-lado lei-upd-lado " + cls + (txt ? "" : " nota");
+      if (!txt) d.textContent = t(faltaChave);
+      else if (item.tipo === "mudou" || (item.tipo === "anexo_subst" && item.antigo)) leiMarcarDiferencas(d, txt, contra);
       else d.textContent = String(txt);
       cx.append(r1, d);
     });
