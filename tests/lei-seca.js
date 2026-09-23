@@ -369,6 +369,43 @@ async function testes() {
        "L5i desligar do ultimo topico apagou a lei — a lei nao e do topico");
   }
 
+  /* ---- L5j: leiConsequenciaDesligar — o que VAI acontecer, antes de fazer ----
+   * função pura: quem chama usa isto para avisar a pessoa ANTES de desvincular, não
+   * depois — o defeito real era a troca do ponteiro acontecer calada. */
+  {
+    const { api } = rodar();
+    const ch = "direito financeiro›despesa pública";
+    const preferida = api.leiGuardar({ nome: "Lei 4.320/1964", texto: L4320, topicos: [ch] });
+    const outra = api.leiGuardar({ nome: "LC 101/2000", texto: "Art. 1º Normas gerais." });
+    api.leiLigar(outra.id, ch);
+    api.matResumosAtual()[ch] = api.matResumosAtual()[ch] || {};
+    api.matResumosAtual()[ch].leiId = preferida.id;
+
+    const cons1 = api.leiConsequenciaDesligar(preferida, ch);
+    ok(cons1.eraPreferida === true, "L5j1 a 4.320 e' a preferida: " + cons1.eraPreferida);
+    ok(cons1.restantes.length === 1 && cons1.restantes[0].id === outra.id, "L5j2 sobra so' a LC 101: " + JSON.stringify(cons1.restantes.map((x) => x.nome)));
+    ok(cons1.proxima && cons1.proxima.id === outra.id, "L5j3 a proxima preferida seria a LC 101: " + JSON.stringify(cons1.proxima));
+
+    const cons2 = api.leiConsequenciaDesligar(outra, ch);
+    ok(cons2.eraPreferida === false, "L5j4 a LC 101 NAO e' a preferida (a 4.320 e'): " + cons2.eraPreferida);
+    ok(cons2.proxima === null, "L5j5 sem ser a preferida, nao ha 'proxima' nenhuma (nada muda de qualquer forma)");
+
+    /* pura: so' devolve a resposta, nao desliga nem grava nada sozinha */
+    ok(api.leisDoTopico(ch).length === 2 && api.matResumosAtual()[ch].leiId === preferida.id,
+      "L5j6 leiConsequenciaDesligar NAO mexeu em nada — nem no vinculo, nem no ponteiro");
+
+    /* a chave com acento/maiuscula/espaco a mais continua achando o ponteiro certo (o
+     * mesmo motivo de leisDoTopico tolerar isso — ver L5f, que faz o mesmo replace) */
+    const consVar = api.leiConsequenciaDesligar(preferida, "Direito Financeiro › Despesa Publica  ".replace(" › ", "›"));
+    ok(consVar.eraPreferida === true, "L5j7 uma variacao de grafia da mesma chave ainda acha que a 4.320 e' a preferida: " + consVar.eraPreferida);
+
+    /* sem nenhuma OUTRA lei sobrando, 'proxima' fica null (o topico cai pro estado vazio) */
+    api.leiDesligar(outra.id, ch);
+    const cons3 = api.leiConsequenciaDesligar(preferida, ch);
+    ok(cons3.eraPreferida === true && cons3.restantes.length === 0 && cons3.proxima === null,
+      "L5j8 sem sobrar nenhuma outra, a proxima e' null (nao 'a mesma que esta saindo' nem um erro): " + JSON.stringify(cons3));
+  }
+
   /* ---- L6: onde parei é um ARTIGO ---- */
   {
     const { api } = rodar();

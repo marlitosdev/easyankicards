@@ -236,6 +236,40 @@ async function testes() {
     ok(a.leiDe(l4320.id) && /Texto A/.test(a.leiDe(l4320.id).texto), "B6b desligar apagou a lei");
   }
   {
+    /* desligar a PREFERIDA de um tópico que tem OUTRA lei ligada — o caso real que
+     * confundiu um usuário: ele nunca soube que a outra lei tinha assumido o lugar. */
+    const { a, ch1, l4320 } = montar();
+    const lrf = a.leiGuardar({ nome: "LC 101/2000", especie: "Lei Complementar", numero: "101", ano: "2000",
+      texto: T("D", 5), topicos: [ch1] });
+    a.matResumosAtual()[ch1].leiId = l4320.id;
+    a.leiBibAbrir();
+    const usos = a.leiUsosDaLei(a.leiDe(l4320.id), null);
+    const p1 = a.leiBibDesligar(a.leiDe(l4320.id), usos.filter((u) => /Receita/.test(u.topico))[0]);
+    ok(/4\.320/.test(a.$("uiModalMsg").textContent) && /101/.test(a.$("uiModalMsg").textContent),
+      "B6c a confirmacao da biblioteca tambem nomeia as duas leis (a que sai e a que assume): " + a.$("uiModalMsg").textContent);
+    await conduzir(a, true);
+    await p1;
+    ok(a.matResumosAtual()[ch1].leiId === lrf.id,
+      "B6d o ponteiro preferido do topico foi para a LC 101 (a que sobrou), nao ficou preso na 4.320 nem foi limpo a toa: " + a.matResumosAtual()[ch1].leiId);
+    ok(a.leiDe(l4320.id) && !a.leiDe(l4320.id).topicos.includes(ch1), "B6e a 4.320 realmente saiu do topico");
+  }
+  {
+    /* controle: desligar uma lei que NAO era a preferida (mesmo com outra sobrando) nao
+     * troca nada — o ponteiro so' se mexe quando a que sai era a que estava apontada */
+    const { a, ch1, l4320 } = montar();
+    const lrf = a.leiGuardar({ nome: "LC 101/2000", especie: "Lei Complementar", numero: "101", ano: "2000",
+      texto: T("D", 5), topicos: [ch1] });
+    a.matResumosAtual()[ch1].leiId = l4320.id;
+    a.leiBibAbrir();
+    const usos = a.leiUsosDaLei(a.leiDe(lrf.id), null);
+    const p1 = a.leiBibDesligar(a.leiDe(lrf.id), usos[0]);
+    ok(a.$("uiModalMsg").textContent === a.t("lei_bib_desv_conf", { l: "LC 101/2000", tp: usos[0].topico || usos[0].chave }),
+      "B6f desligar a que NAO e' a preferida usa o aviso simples de sempre, sem falar de troca nenhuma: " + a.$("uiModalMsg").textContent);
+    await conduzir(a, true);
+    await p1;
+    ok(a.matResumosAtual()[ch1].leiId === l4320.id, "B6g o ponteiro continua na 4.320 — ela nunca deixou de ser a preferida");
+  }
+  {
     /* ligar a um tópico, a partir da biblioteca */
     const { a, ch3, livre } = montar();
     a.leiTopicoAbrir(a.leiDe(livre.id));
