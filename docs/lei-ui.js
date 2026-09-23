@@ -4031,6 +4031,9 @@ function leiRelatorioFluxo(tela) {
       it.slice(0, 6).forEach((m) => p.push("      " + m.id + " linha(s) " + (m.linhas || []).slice(0, 4).join(",")
         + " · " + cortar(m.antes, 110) + (m.depois ? "  =>  " + cortar(m.depois, 110) : "")));
     });
+    if ((c.pre.identificadores || []).length) {
+      p.push("  · identificadores revogados mantidos (informativo, sem decisão — nunca são removidos): " + c.pre.identificadores.length);
+    }
   }
   if (leiDupCtx) {
     const c = leiDupCtx;
@@ -4695,7 +4698,8 @@ function leiRevisarColagemAbrir(ctx) {
       leiPreCtx.pre.mudancas.length + " mudanças sugeridas: "
       + LEI_PRE_GRUPOS.map((g) => g + " " + leiPreCtx.pre.mudancas.filter((m) => m.grupo === g).length)
           .filter((x) => !/ 0$/.test(x)).join(" · ")
-      + ((leiPreCtx.pre.blocos || []).length ? " · " + leiPreCtx.pre.blocos.length + " bloco(s) de alteração de outras leis mantido(s) como vieram" : ""));
+      + ((leiPreCtx.pre.blocos || []).length ? " · " + leiPreCtx.pre.blocos.length + " bloco(s) de alteração de outras leis mantido(s) como vieram" : "")
+      + ((leiPreCtx.pre.identificadores || []).length ? " · " + leiPreCtx.pre.identificadores.length + " identificador(es) revogado(s) mantido(s) (informativo, sem decisão)" : ""));
   } catch (e) {}
 }
 
@@ -4899,6 +4903,42 @@ function leiPreBlocosEl(c) {
   return card;
 }
 
+/* OS IDENTIFICADORES REVOGADOS RISCADOS ("Art. 217.", "ANEXO XIV", "§ 5º"...): só informação, nunca decisão — ver
+ * o comentário de leiPreprocessar/leiAcharTachados. Tirá-los apagaria QUAL dispositivo foi revogado, então nem
+ * aparecem como algo para marcar; a pessoa só vê que existem e por que ficam. */
+function leiPreIdentificadoresEl(c) {
+  const it = (c.pre && c.pre.identificadores) || [];
+  const card = document.createElement("div");
+  card.className = "lei-pre-grupo lei-pre-alt";
+  card.id = "leiPreGrupo_identificador";
+  const cab = document.createElement("div");
+  cab.className = "lei-pre-cab";
+  const tit = document.createElement("span");
+  tit.textContent = t("lei_pre_ident_titulo", { n: it.length });
+  cab.append(tit);
+  card.append(cab);
+  const aj = document.createElement("div");
+  aj.className = "lei-pre-ajuda";
+  aj.textContent = t("lei_pre_ident_ajuda");
+  card.append(aj);
+  const det = document.createElement("details");
+  const sm = document.createElement("summary");
+  sm.textContent = t("lei_pre_ver_itens", { n: it.length });
+  det.append(sm);
+  it.forEach((m) => {
+    const el = document.createElement("div");
+    el.className = "lei-pre-item lei-pre-alt-item";
+    const tx = document.createElement("div");
+    tx.className = "lei-pre-ctx";
+    tx.textContent = t("lei_pre_ident_item", { l: m.linhas[0], t: m.antes });
+    el.append(tx);
+    el.append(leiDupContextoEl(c.texto, { linha: m.linhas[0], linhaFim: m.linhas[m.linhas.length - 1] }));
+    det.append(el);
+  });
+  card.append(det);
+  return card;
+}
+
 function leiPreGrupoEl(c, g, itens) {
   const card = document.createElement("div");
   card.className = "lei-pre-grupo";
@@ -4982,6 +5022,7 @@ function leiPrePintar() {
     if (itens.length) cx.append(leiPreGrupoEl(c, g, itens));
   });
   if (((c.pre && c.pre.blocos) || []).length) cx.append(leiPreBlocosEl(c));
+  if (((c.pre && c.pre.identificadores) || []).length) cx.append(leiPreIdentificadoresEl(c));
 
   /* A CRÍTICA DA NUMERAÇÃO, sobre o texto COMO FICARIA com as escolhas de
    * agora: recusar uma limpeza pode fazer aparecer (ou sumir) um salto */
