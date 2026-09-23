@@ -1794,7 +1794,14 @@ function leiRepetidosNoArtigo(texto, ignorar, opc) {
  *     do art. 296") e AVISA dos Anexos ("Ficam substituídos os Anexos…"), que
  *     não são atualizados automaticamente.
  * ===================================================================== */
-const LEI_RE_OMISSAO = /\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/g;
+/* Emenda constitucional (e outras leis "de Diário Oficial") marca o omitido com uma FILEIRA NUA de pontos —
+ * "Art. 43. ......................... § 4º Sempre que possível..." — sem colchete nem parêntese, diferente do
+ * "[...]" que uma lei ordinária costuma trazer. Cinco ou mais pontos (o mesmo limiar de leiSemPontilhado, que já
+ * lida com isso só na LEITURA): quatro ainda podem ser uma abreviação com ponto final grudado. Sem reconhecer essa
+ * fileira aqui, a mescla da "lei que altera" (leiLerBlocoAlterado) achava "temOmissao: false" e tratava o artigo
+ * como colado por INTEIRO — o caput virava a própria fileira de pontos, sem alerta nenhum (visto colando a EC
+ * 132/2023 de verdade: o caput do art. 43 e de outros ficava ". ..................... (Redação dada por …)"). */
+const LEI_RE_OMISSAO = /\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)|\.{5,}/g;
 const LEI_OMITIDO = "⟦…⟧";
 const LEI_MESES = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
   julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
@@ -2492,7 +2499,7 @@ function leiForaDaSequencia(artigos) {
 function leiPareceAlteradora(texto) {
   const s = String(texto || "");
   const sinais = [];
-  if ((s.match(/\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/g) || []).length >= 2) sinais.push("omitidos");
+  if ((s.match(new RegExp(LEI_RE_OMISSAO.source, "g")) || []).length >= 2) sinais.push("omitidos");
   if ((s.match(/\(\s*(?:NR|AC)\s*\)/g) || []).length >= 3) sinais.push("nr_ac");
   if (/passa(?:m)?\s+a\s+vigorar\s+com\s+as?\s+seguintes?\s+(?:altera[çc][õo]es|reda[çc][ãa]o)/i.test(s)) {
     sinais.push("passa_a_vigorar");
@@ -2700,7 +2707,7 @@ function leiAlertasDaMudanca(item, ctx) {
   const palavras = (s) => leiNormalizaComparacao(s).toLowerCase().split(/[^a-zà-ú0-9]+/i).filter(Boolean);
   if (item.tipo === "mudou") {
     if (semNota(item.antigo) === semNota(item.novo)) al.push({ k: "so_anotacao", sev: "info" });
-    if (/\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/.test(item.novo)) al.push({ k: "omitido", sev: "alerta" });
+    if (new RegExp(LEI_RE_OMISSAO.source).test(item.novo)) al.push({ k: "omitido", sev: "alerta" });
     const a = leiNormalizaComparacao(item.antigo).length, b = leiNormalizaComparacao(item.novo).length;
     if (a > 80 && b < a * 0.6) al.push({ k: "menor", sev: "alerta", pct: Math.round(b / a * 100) });
     const pa = palavras(item.antigo), pb = new Set(palavras(item.novo));

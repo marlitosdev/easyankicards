@@ -324,6 +324,86 @@ async function testes() {
     ok(a["91"].historico.length === 1 && a["91"].fonteAlteracao === "LC 112/2023", "U9b art. 91 so pela 112");
   }
 
+  /* ==============================================================
+   * O: O PONTILHADO DAS EMENDAS CONSTITUCIONAIS (bug real, EC 132/2023)
+   *
+   * A Câmara/Senado (emenda constitucional) marca o trecho omitido com uma FILEIRA NUA de pontos —
+   * "Art. 43. ......................... § 4º Sempre que possível..." — sem colchete nem parêntese, diferente
+   * do "[...]" que a Lei Complementar municipal usa (ver LC145/LC95/LC112 acima). Colando a EC 132/2023 de
+   * verdade (copiada do Planalto) para atualizar a Constituição, o caput de CADA artigo citado virava a
+   * própria fileira de pontos na mescla — sem nenhum alerta — porque só "[...]"/"(...)" contavam como omissão.
+   * ============================================================== */
+  const PONTOS = ".".repeat(60);
+  const EC_PONTILHADO = [
+    "EMENDA CONSTITUCIONAL Nº 999, DE 1º DE JANEIRO DE 2026",
+    "Altera a Lei Complementar nº 15, de 05 de janeiro de 2009.",
+    "Art. 1º A Lei Complementar nº 015, de 05 de janeiro de 2009, passa a vigorar com as seguintes alterações:",
+    "\"Art. 106. " + PONTOS,
+    "Parágrafo único. A multa de mora fica reduzida em até 30% (trinta por cento) se o pagamento for à vista.\" (AC)",
+    "\"Art. 173. " + PONTOS,
+    "Parágrafo único. Cabe à Secretaria a cobrança, ressalvada a competência da Procuradoria-Geral.\" (NR)",
+    "Art. 2º Esta Emenda entra em vigor na data de sua publicação.",
+  ].join("\n");
+  {
+    const alt = p.leiPareceAlteradora(EC_PONTILHADO);
+    ok(alt.sim === true && alt.sinais.includes("omitidos"), "O1 a fileira nua de pontos (sem colchete) conta como sinal de omissao, como o '[...]': " + JSON.stringify(alt));
+
+    /* NEM TODO PONTO E' OMISSAO: uma reticencia comum de frase ("etc...", "a saber...") tem 3 pontos, e o
+     * limiar de 5+ existe por isso (o mesmo de leiSemPontilhado) — baixar o limiar faria prosa comum virar
+     * "artigo parcial" por engano */
+    const b295 = p.leiLerBlocoAlterado("Art. 295. O disposto neste artigo não se aplica a hipóteses de isenção, remissão, etc... nem a outras exceções previstas em lei.\"");
+    ok(b295.temOmissao === false && b295.parcial === false, "O1a tres pontos de reticencia comum NAO contam como omissao do dispositivo: " + JSON.stringify(b295));
+
+    const par = p.leiLerAlteradora(EC_PONTILHADO, lei());
+    const b106 = par.blocos.filter((b) => b.num === "106")[0], b173 = par.blocos.filter((b) => b.num === "173")[0];
+    ok(b106 && b106.bloco.temOmissao === true && b106.bloco.parcial === true && b106.bloco.caputAcao === "omitido" && b106.bloco.caputTexto === "",
+      "O2 o caput do 106 (so' pontos) e' reconhecido como OMITIDO, nao como o texto novo: " + JSON.stringify(b106 && b106.bloco));
+    ok(b173 && b173.bloco.temOmissao === true && b173.bloco.caputAcao === "omitido", "O2a o mesmo vale pro 173: " + JSON.stringify(b173 && b173.bloco));
+
+    const itens = p.leiItensDaAlteradora(lei(), par);
+    const i106 = itens.filter((x) => x.num === "106")[0], i173 = itens.filter((x) => x.num === "173")[0];
+    ok(/^Art\. 106\. A multa de mora será reduzida em até 10%\.$/m.test(i106.novo), "O3 o caput do 106 continua o ORIGINAL da base (nao vira pontos): " + JSON.stringify(i106.novo));
+    ok(/Parágrafo único\. A multa de mora fica reduzida em até 30%.*\(Incluído por/.test(i106.novo), "O3a o paragrafo novo (AC) entra certo: " + i106.novo);
+    ok(!/\.{5,}/.test(i106.novo), "O3b nenhuma fileira de pontos sobra no texto proposto: " + JSON.stringify(i106.novo));
+    ok(/^Art\. 173\. Cessa a competência da Secretaria\.$/m.test(i173.novo), "O4 o caput do 173 tambem continua o ORIGINAL (o NR era so' do paragrafo): " + JSON.stringify(i173.novo));
+    ok(/Parágrafo único\. Cabe à Secretaria a cobrança, ressalvada a competência da Procuradoria-Geral.*\(Redação dada por/.test(i173.novo), "O4a o paragrafo (NR) troca certo: " + i173.novo);
+    ok(!/\.{5,}/.test(i173.novo), "O4b idem, sem pontos sobrando: " + JSON.stringify(i173.novo));
+
+    /* o mesmo alerta que "[...]" ja dava (ver U10i em lei-colagem.js), agora tambem para o pontilhado nu —
+     * caminho da "lei INTEIRA" (leiCompararVersoes), nao o da lei que altera */
+    const cmpAntes = "Art. 9º Texto antigo do artigo nove, por inteiro e com bastante conteudo proprio.";
+    const cmpDepois = "Art. 9º " + PONTOS + " Texto novo, so' o final. " + PONTOS;
+    const cmp = p.leiCompararVersoes(cmpAntes, cmpDepois, {});
+    const it9 = cmp.itens.filter((x) => x.num === "9")[0];
+    ok(it9 && it9.alertas.some((a) => a.k === "omitido" && a.sev === "alerta"), "O5 na comparacao de 'lei inteira', o pontilhado nu tambem dispara o alerta de trecho omitido: " + JSON.stringify(it9 && it9.alertas));
+  }
+
+  /* O caso REAL: trecho copiado literalmente do site do Planalto (EC 132/2023, art. 43 da Constituição) —
+   * a mesma emenda que expôs o defeito. Prova que o conserto vale para o texto de verdade, nao so' pro fixture. */
+  {
+    const ART43_EC132 = [
+      "\"Art. 43. .............................................................................................................",
+      ".....................................................................................................................................",
+      "§ 4º Sempre que possível, a concessão dos incentivos regionais a que se refere o § 2º, III, considerará critérios de sustentabilidade ambiental e redução das emissões de carbono.\" (NR)",
+    ].join("\n");
+    const texto = [
+      "EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023",
+      "Altera o Sistema Tributário Nacional.",
+      "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+      ART43_EC132,
+      "Art. 2º Esta Emenda Constitucional entra em vigor na data de sua publicação.",
+    ].join("\n");
+    const cfFake = lei({ id: "cf88", nome: "Constituição Federal de 1988", especie: "Constituição", numero: "", ano: "1988",
+      texto: "Art. 43. Para efeitos administrativos, a União poderá articular sua ação em um mesmo complexo geoeconômico e social." });
+    const par = p.leiLerAlteradora(texto, cfFake);
+    const itens = p.leiItensDaAlteradora(cfFake, par);
+    const i43 = itens.filter((x) => x.num === "43")[0];
+    ok(/^Art\. 43\. Para efeitos administrativos, a União poderá articular sua ação em um mesmo complexo geoeconômico e social\.$/m.test(i43.novo),
+      "R1 (caso real, EC 132/2023) o caput do art. 43 da Constituição continua o ORIGINAL, nao os pontos copiados do Planalto: " + JSON.stringify(i43.novo));
+    ok(/§ 4º Sempre que possível.*\(Incluído por/.test(i43.novo), "R1a o § 4º novo entra certo");
+    ok(!/\.{5,}/.test(i43.novo), "R1b nenhum ponto sobra no texto proposto de verdade");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
