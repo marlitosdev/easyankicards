@@ -576,6 +576,58 @@ async function testes() {
       "S5a o relatorio do Passo 1 mostra a norma e o texto colado, mesmo sem ter comparado ainda: " + txt.slice(0, 300));
   }
 
+  /* ==============================================================
+   * T: O LADO QUE FALTA — bug real relatado pelo usuário (print da tela)
+   *
+   * Um artigo "novo" (que ainda não existe na lei aberta) mostrava SÓ "COMO FICARIA" — o bloco inteiro de
+   * "COMO ESTÁ" simplesmente não aparecia, sem nenhuma explicação. A pessoa via a tela pela metade e não
+   * tinha como saber se isso era um bug ou se o artigo realmente não existia antes. O mesmo valia ao
+   * contrário, para um artigo revogado (sem "COMO FICARIA"). Agora o lado que falta continua aparecendo,
+   * com uma nota dizendo por que está vazio, em vez de só sumir da tela.
+   * ============================================================== */
+  const clsTem = (c, k) => new RegExp("(^|\\s)" + k + "(\\s|$)").test(c.className || "");
+  {
+    /* tipo "novo": a lei aberta so' tem os artigos 1º/2º dela mesma; o Art. 43 citado pela emenda nao existe */
+    const r = rodar();
+    const api = r.api;
+    api.matIniciar(); api.leiIniciar();
+    const lEmenda = api.leiGuardar({ nome: "Constituição Federal de 1988", especie: "Constituição", numero: "", ano: "1988",
+      texto: "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:\nArt. 2º Esta Emenda entra em vigor na data de sua publicação." });
+    api.leiAbrir("Direito Constitucional", "Emendas", lEmenda.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdModoAlt").checked = true;
+    api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdFonte").value = "Constituição Federal";
+    api.$("leiUpdTexto").value = ["Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+      "\"Art. 43. Texto novo do artigo 43, que nao existe nesta base.\" (AC)", "Art. 2º Esta Emenda entra em vigor..."].join("\n");
+    api.leiAtualizarComparar();
+    const i43 = api.leiUpdComparoAtual().filter((x) => x.num === "43")[0];
+    ok(i43.tipo === "novo" && !i43.antigo, "T1 confirma o cenario: tipo 'novo', sem texto antigo");
+    api.leiUpdMostrar();
+    const lados = achar(api.$("leiUpdItem"), (c) => clsTem(c, "lei-upd-lado"));
+    ok(lados.length === 2, "T2 os DOIS lados aparecem agora, mesmo sem texto antigo (antes so' vinha 1): " + lados.length);
+    ok(clsTem(lados[0], "qm-antes") && /não existia/.test(lados[0].textContent), "T2a o lado 'como esta' mostra a nota de que nao existia: " + lados[0].textContent);
+    ok(clsTem(lados[0], "nota"), "T2b o lado da nota tem estilo diferente do texto real (classe 'nota')");
+    ok(clsTem(lados[1], "qm-depois") && !clsTem(lados[1], "nota") && /Texto novo do artigo 43/.test(lados[1].textContent),
+      "T2c o lado 'como ficaria' continua mostrando o texto de verdade, sem a nota: " + lados[1].textContent);
+  }
+  {
+    /* tipo "revogado" (por ORDEM explicita da lei alteradora): o art. 5 e' revogado, novo = "" */
+    const { api } = montar();
+    api.$("leiUpdModoAlt").checked = true;
+    api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdTexto").value = LC145;
+    api.leiAtualizarComparar();
+    const idx5 = api.leiUpdComparoAtual().findIndex((x) => x.num === "5");
+    ok(api.leiUpdComparoAtual()[idx5].tipo === "revogado" && !api.leiUpdComparoAtual()[idx5].novo, "T3 confirma o cenario: tipo 'revogado', sem texto novo");
+    while (api.leiUpdIdxAtual() !== idx5) api.leiUpdMover(api.leiUpdIdxAtual() < idx5 ? 1 : -1);
+    const lados = achar(api.$("leiUpdItem"), (c) => clsTem(c, "lei-upd-lado"));
+    ok(lados.length === 2, "T4 os DOIS lados aparecem, mesmo sem texto novo (revogado): " + lados.length);
+    ok(clsTem(lados[1], "qm-depois") && clsTem(lados[1], "nota") && /possivelmente revogado/.test(lados[1].textContent),
+      "T4a o lado 'como ficaria' mostra a nota de revogado, com a classe 'nota': " + lados[1].textContent);
+    ok(clsTem(lados[0], "qm-antes") && !clsTem(lados[0], "nota"), "T4b o lado 'como esta' continua mostrando o texto real, sem a nota");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
