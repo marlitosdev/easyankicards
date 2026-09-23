@@ -522,6 +522,60 @@ async function testes() {
       "Q4 controle: a atualizacao legitima (LC145 sobre a LC15/2009) continua indo direto pra comparacao, sem aviso falso: " + res);
   }
 
+  /* ==============================================================
+   * S: "COMPARAR NÃO PROSSEGUE" — bug real relatado pelo usuário
+   *
+   * Clicar "comparar" sem preencher a norma (o campo só tinha o PLACEHOLDER "EC 132/2023", nunca digitado
+   * de verdade) parava a tela sem abrir nada — só um <p class="nota"> discreto, do mesmo tom cinza de
+   * qualquer outra dica da tela, aparecia colado acima dos botões. Ninguém notava; parecia que o botão
+   * simplesmente não fazia nada. O mesmo valia pro aviso de "nenhum artigo reconhecido" no texto colado.
+   * Agora os dois ganham o MESMO destaque vermelho da conferência de versão (".lei-upd-al.alerta") e jogam
+   * o foco de volta pro campo que precisa de atenção — e Passo 1 ganha um botão de relatório, igual ao que
+   * já existe no Passo 2, para poder relatar um problema mesmo antes de conseguir comparar.
+   * ============================================================== */
+  {
+    const { api } = montar();
+    let focouFonte = 0;
+    api.$("leiUpdFonte").focus = () => { focouFonte++; };
+    ok(api.$("leiUpdAviso1").className === "nota", "S1 sem nenhum erro ainda, o aviso e' so' uma nota comum");
+    /* texto simples de "lei inteira" (sem "[...]"/NR/AC — nao aciona nenhum dialogo de limpeza no meio do
+     * caminho), so' falta a norma */
+    const novoBaseSimples = BASE.replace("Tributo é toda prestação pecuniária.", "Tributo é toda prestação pecuniária, em moeda corrente nacional.");
+    api.$("leiUpdTexto").value = novoBaseSimples;
+    const res = api.leiAtualizarComparar();
+    ok(res === false, "S2 sem norma, comparar realmente para (devolve false)");
+    ok(api.$("leiUpdAviso1").textContent.length > 10, "S2a o aviso tem texto de verdade: " + JSON.stringify(api.$("leiUpdAviso1").textContent));
+    ok(api.$("leiUpdAviso1").className === "nota lei-upd-al alerta", "S2b o aviso agora ganha o MESMO destaque vermelho da conferencia de versao (nao e' mais uma nota discreta que passa despercebida): " + api.$("leiUpdAviso1").className);
+    ok(focouFonte > 0, "S2c o foco volta pro campo da norma — a pessoa nao precisa procurar o que falta");
+    /* corrigido e clicado de novo: o alerta vermelho sai (nao fica um erro velho vermelho pra sempre na tela) */
+    api.$("leiUpdFonte").value = "LC 145/2024";
+    const res2 = api.leiAtualizarComparar();
+    ok(res2 === true, "S3 corrigido, agora prossegue: " + res2);
+    ok(api.$("leiUpdAviso1").className === "nota", "S3a o destaque vermelho do erro anterior sai assim que o proximo clique nao falha mais");
+  }
+  {
+    const { api } = montar();
+    let focouTexto = 0;
+    api.$("leiUpdTexto").focus = () => { focouTexto++; };
+    api.$("leiUpdFonte").value = "norma qualquer";
+    api.$("leiUpdTexto").value = "isto nao tem nenhum 'Art. N' reconhecivel, so' um paragrafo solto de prosa comum.";
+    const res = api.leiAtualizarComparar();
+    ok(res === false && /nenhum artigo/i.test(api.$("leiUpdAviso1").textContent), "S4 texto sem nenhum artigo reconhecivel tambem para, com aviso: " + api.$("leiUpdAviso1").textContent);
+    ok(api.$("leiUpdAviso1").className === "nota lei-upd-al alerta", "S4a mesmo destaque vermelho");
+    ok(focouTexto > 0, "S4b o foco vai pra caixa do texto colado, dessa vez (e' ela que precisa de atencao)");
+  }
+  {
+    /* o botao de relatorio no Passo 1 — igual ao que ja existe no Passo 2 (btnLeiRelUpd), so' que aqui
+     * dando pra relatar um problema MESMO SEM conseguir comparar ainda */
+    const { api } = montar();
+    ok(typeof api.$("btnLeiRelUpd1").onclick === "function", "S5 o botao de relatorio existe e esta ligado no Passo 1");
+    api.$("leiUpdFonte").value = "EC 132/2023";
+    api.$("leiUpdTexto").value = "Art. 43. texto qualquer, so' pra aparecer no relatorio.";
+    const txt = api.leiRelatorioCopiar("atualizar a lei");
+    ok(/Norma informada: EC 132\/2023/.test(txt) && /Texto colado: \d+ caracteres/.test(txt),
+      "S5a o relatorio do Passo 1 mostra a norma e o texto colado, mesmo sem ter comparado ainda: " + txt.slice(0, 300));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
