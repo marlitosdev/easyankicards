@@ -130,10 +130,11 @@ async function testes() {
     "Art. 6º Publique-se.",
     "Art. 7º Registre-se.",
   ].join("\n").replace(/["”]\s*\((NR|AC)\)/g, " ($1)");
-  /* a MESMA estrutura, sem nenhuma marca de lei que altera outra */
+  /* a MESMA estrutura, sem nenhuma marca de lei que altera outra — e SEM o pontilhado do omitido: uma lei
+   * consolidada de verdade nunca traz "..............." no lugar de texto, isso só existe numa emenda/comparação */
   const CONSOL = EC2.replace("EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023", "LEI Nº 132, DE 20 DE DEZEMBRO DE 2023").replace("Altera o Sistema Tributário Nacional.", "Dispõe sobre o Sistema Tributário Nacional.")
     .replace("passa a vigorar com as seguintes alterações", "vigora").replace("passa a vigorar com as seguintes alterações", "vigora")
-    .replace(/ \(NR\)| \(AC\)/g, "");
+    .replace(/ \(NR\)| \(AC\)/g, "").split(PT2).join("Texto do dispositivo, por inteiro, como consta na lei consolidada.");
   {
     const dg = p.leiDiagnosticarLei(EC2);
     ok(p.leiArtigos(EC2).map((a) => a.numCru).join(",") === "1º,156-A,156-B,2º,3º,4º,5º,6º,7º", "N0 (a emenda tem o 156-A e o 156-B soltos entre o 1º e o 2º)");
