@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "material.js",
-                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js",
+                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -808,6 +808,9 @@ function rodar() {
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
+    cqNormal, cqRevelado, cqTokens, cqJaccard, cqAgrupar, cqPontuar, cqMelhor, cqAcrescimos, cqInserirSaibaMais,
+    cqLerBiblioteca, cqRelatorio, cqAssinatura, cqIgnorar, cqIgnorados, cqReexibirIgnorados, cqResolverGrupo,
+    cqAbrir, cqCalcular, cqPintar, cqAplicar, cqAplicarTudo, CQ_LIM, cqRelAtual: () => cqRel, cqNotasAtual: () => cqNotas,
     pcPadrao, pcResolver, pcListaFrentes, pcFrentesDoTopico, PC_LIM, cmExtrasCartao, cmBlocoCartao,
     cmDefeitosDoCartao, cmMelAbrir, cmMelConferir, cmMelAplicar, cmMelIniciar, mcEstudarDireto, mcCartoesSalvos, mcEstMostraAtual: () => mcEstMostra,
     qsUiVoltarASessao,

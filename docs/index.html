@@ -4132,6 +4132,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   padding:6px 9px;border-radius:0 8px 8px 0;margin-bottom:5px;font-size:11.5px;
   line-height:1.45}
 .qm-bts{display:flex;gap:6px;flex-wrap:wrap;margin:5px 0 8px}
+.cq-lista{max-height:58vh;overflow:auto}
+.cq-grupo{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:0 0 10px}
+.cq-grupo-tit{font-weight:600;font-size:13px;margin-bottom:6px}
+.cq-item{padding:6px 8px;border-radius:6px;margin:4px 0;border:1px solid transparent;font-size:13px;line-height:1.4}
+.cq-item.cq-sugerido{border-color:var(--verde,#2e9e5b);background:rgba(46,158,91,.10)}
+.cq-f{font-weight:600}
+.cq-v{opacity:.85}
+.cq-onde{font-size:11px;opacity:.65;margin:2px 0 4px}
 .qm-comparar{border:1px solid var(--borda);border-radius:9px;padding:9px;margin:6px 0}
 .qm-lado{font-size:11.5px;line-height:1.5;margin-bottom:7px;white-space:pre-wrap}
 .qm-antes{color:var(--sutil)}
@@ -4783,6 +4791,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          nunca separaria as três coisas. -->
     <span class="mat-f-dica" data-i18n="mat_tipos_dica"></span>
     <div class="mat-tipos" id="matTipos"></div>
+    <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
@@ -7147,6 +7156,21 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgCartRep" class="ui-modal diag-modal">
+  <h3 data-i18n="cq_titulo"></h3>
+  <p class="nota" data-i18n="cq_ajuda"></p>
+  <p class="nota" id="cqResumo"></p>
+  <div id="cqLista" class="cq-lista"></div>
+  <div class="qm-bts">
+    <button type="button" class="btn-min" id="btnCqMais" data-i18n="cq_mais" hidden></button>
+    <button type="button" class="btn-min" id="btnCqReexibir" hidden></button>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnCqTudo" data-i18n="cq_tudo_btn" hidden></button>
+    <button class="btn btn-cinza" id="btnCqFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMcEstudo" class="ui-modal diag-modal">
   <h3 id="mcEstTitulo"></h3>
   <p class="nota" id="mcEstSub"></p>
@@ -7628,6 +7652,7 @@ window.__sqlPromise = initSqlJs({
 <script src="registro-tudo.js"></script>
 <script src="decisoes.js"></script>
 <script src="lixeira.js"></script>
+<script src="cartao-qualidade.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>
