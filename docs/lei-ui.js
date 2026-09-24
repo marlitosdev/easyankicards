@@ -5660,10 +5660,10 @@ let leiLadoCtx = null;
 const LEI_LADO_MAX = 2000;      /* linhas desenhadas de uma vez, sem o filtro "só o que mudou" */
 const LEI_LADO_CONTEXTO = 2;    /* linhas iguais mantidas em volta de cada diferença no filtro */
 
-function leiLadoAbrir(antigo, novo, origem) {
+function leiLadoAbrir(antigo, novo, origem, aviso) {
   const d = leiDiffLinhas(antigo, novo);
   const r = d.resumo;
-  leiLadoCtx = { d, foco: -1, abertas: new Set(), soMudou: !d.mesmoTexto && d.linhas.length > 300 };
+  leiLadoCtx = { d, aviso: aviso || "", foco: -1, abertas: new Set(), soMudou: !d.mesmoTexto && d.linhas.length > 300 };
   if ($("leiLadoSoMudou")) $("leiLadoSoMudou").checked = leiLadoCtx.soMudou;
   leiLadoPintar();
   abrirModal("dlgLeiLado");
@@ -5737,7 +5737,7 @@ function leiLadoPintar() {
     desenhadas++;
     i++;
   }
-  $("leiLadoNota").textContent = cortou ? t("lei_lado_cortado", { n: LEI_LADO_MAX }) : "";
+  $("leiLadoNota").textContent = [c.aviso, cortou ? t("lei_lado_cortado", { n: LEI_LADO_MAX }) : ""].filter(Boolean).join(" ");
   $("leiLadoBarra").hidden = c.d.mesmoTexto;
   leiLadoPos();
 }
@@ -5767,10 +5767,10 @@ function leiLadoIr(delta) {
 function leiLadoDoAtualizar() {
   const l = leiDe(leiIdAtual);
   if (!l) return false;
-  if ($("leiUpdModoAlt") && $("leiUpdModoAlt").checked) { uiAlert(t("lei_lado_so_inteira")); return false; }
   const novo = String($("leiUpdTexto").value || "");
   if (!novo.trim()) { uiAlert(t("lei_lado_sem_novo")); return false; }
-  leiLadoAbrir(l.texto, novo, "atualizar versão");
+  const modoAlt = !!($("leiUpdModoAlt") && $("leiUpdModoAlt").checked);
+  leiLadoAbrir(l.texto, novo, "atualizar versão" + (modoAlt ? ", só alterações" : ""), modoAlt ? t("lei_lado_so_inteira") : "");
   return true;
 }
 
