@@ -5649,6 +5649,131 @@ let leiUpdComparo = null;    /* [{num, numCru, tipo, antigo, novo, aceito}] */
 let leiUpdIdx = -1;
 let leiUpdFonteGlobal = "";
 
+/* =====================================================================
+ * CONFERIR LADO A LADO — o texto gravado e o colado, INTEIROS, linha a linha
+ *
+ * Só leitura: nunca grava nada. leiDiffLinhas (lei-seca.js) devolve as linhas alinhadas; aqui elas
+ * viram duas colunas, com as palavras que mudaram marcadas nas linhas alteradas. Quando os dois
+ * textos são iguais, o painel EXPLICA isso (em vez de um aviso que some sem deixar rastro).
+ * ===================================================================== */
+let leiLadoCtx = null;
+const LEI_LADO_MAX = 2000;      /* linhas desenhadas de uma vez, sem o filtro "só o que mudou" */
+const LEI_LADO_CONTEXTO = 2;    /* linhas iguais mantidas em volta de cada diferença no filtro */
+
+function leiLadoAbrir(antigo, novo, origem) {
+  const d = leiDiffLinhas(antigo, novo);
+  const r = d.resumo;
+  leiLadoCtx = { d, foco: -1, abertas: new Set(), soMudou: !d.mesmoTexto && d.linhas.length > 300 };
+  if ($("leiLadoSoMudou")) $("leiLadoSoMudou").checked = leiLadoCtx.soMudou;
+  leiLadoPintar();
+  abrirModal("dlgLeiLado");
+  try {
+    leiReg("atualizacao", "lado a lado aberto" + (origem ? " (" + origem + ")" : ""),
+      d.mesmoTexto ? "textos iguais, linha a linha" + (r.soFormato ? " · só formato em " + r.soFormato : "")
+        : r.mudadas + " alterada(s) · " + r.soAntigo + " só no gravado · " + r.soNovo + " só no colado");
+  } catch (e) {}
+  return d;
+}
+
+function leiLadoPintar() {
+  const c = leiLadoCtx;
+  if (!c) return;
+  const r = c.d.resumo;
+  const res = $("leiLadoResumo");
+  res.className = "lei-upd-al " + (c.d.mesmoTexto ? "aviso" : "alerta");
+  res.textContent = c.d.mesmoTexto
+    ? t("lei_lado_iguais") + (r.soFormato ? " " + t("lei_lado_so_formato", { n: r.soFormato }) : "")
+    : t("lei_lado_resumo", { m: r.mudadas, a: r.soAntigo, n: r.soNovo, i: r.iguais });
+  const soMudou = !!($("leiLadoSoMudou") && $("leiLadoSoMudou").checked);
+  c.soMudou = soMudou;
+  const cx = $("leiLadoGrade");
+  cx.innerHTML = "";
+  c.dif = [];
+  const linhas = c.d.linhas;
+  /* quais linhas aparecem: no filtro, as diferentes + um pouco de contexto; as outras viram faixa */
+  const mostrar = new Array(linhas.length).fill(!soMudou);
+  if (soMudou) {
+    linhas.forEach((l, i) => {
+      if (l.tipo === "igual") return;
+      for (let k = Math.max(0, i - LEI_LADO_CONTEXTO); k <= Math.min(linhas.length - 1, i + LEI_LADO_CONTEXTO); k++) mostrar[k] = true;
+    });
+    c.abertas.forEach((i) => { if (i >= 0 && i < mostrar.length) mostrar[i] = true; });
+  }
+  let desenhadas = 0, cortou = false, i = 0;
+  while (i < linhas.length) {
+    if (!mostrar[i]) {
+      let j = i;
+      while (j < linhas.length && !mostrar[j]) j++;
+      const ini = i, n = j - i;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "lei-lado-faixa";
+      b.textContent = t("lei_lado_faixa", { n });
+      b.onclick = () => { for (let k = ini; k < ini + n; k++) c.abertas.add(k); leiLadoPintar(); };
+      cx.append(b);
+      i = j;
+      continue;
+    }
+    if (!soMudou && desenhadas >= LEI_LADO_MAX) { cortou = true; break; }
+    const l = linhas[i];
+    const lin = document.createElement("div");
+    lin.className = "lei-lado-lin " + l.tipo;
+    [["esq", l.esq, l.dir], ["dir", l.dir, l.esq]].forEach(([, lado, contra]) => {
+      const cel = document.createElement("div");
+      cel.className = "lei-lado-cel";
+      if (lado) {
+        const n = document.createElement("span");
+        n.className = "lei-lado-n";
+        n.textContent = String(lado.n);
+        const tx = document.createElement("span");
+        if (l.tipo === "mudou") leiMarcarDiferencas(tx, lado.txt, contra ? contra.txt : "");
+        else tx.textContent = lado.txt;
+        cel.append(n, tx);
+      }
+      lin.append(cel);
+    });
+    if (l.tipo !== "igual") c.dif.push(lin);
+    cx.append(lin);
+    desenhadas++;
+    i++;
+  }
+  $("leiLadoNota").textContent = cortou ? t("lei_lado_cortado", { n: LEI_LADO_MAX }) : "";
+  $("leiLadoBarra").hidden = c.d.mesmoTexto;
+  leiLadoPos();
+}
+
+function leiLadoPos() {
+  const c = leiLadoCtx;
+  if (!c) return;
+  const n = c.dif.length;
+  $("leiLadoPos").textContent = n && c.foco >= 0 ? t("lei_lado_pos", { i: c.foco + 1, n }) : (n ? String(n) : "");
+  $("btnLeiLadoAnt").disabled = !n;
+  $("btnLeiLadoProx").disabled = !n;
+}
+
+function leiLadoIr(delta) {
+  const c = leiLadoCtx;
+  if (!c || !c.dif || !c.dif.length) return;
+  const n = c.dif.length;
+  if (c.foco >= 0 && c.dif[c.foco]) c.dif[c.foco].className = c.dif[c.foco].className.replace(/ lei-lado-atual/g, "");
+  c.foco = c.foco < 0 ? (delta > 0 ? 0 : n - 1) : (c.foco + delta + n) % n;
+  const el = c.dif[c.foco];
+  el.className += " lei-lado-atual";
+  try { el.scrollIntoView({ block: "center" }); } catch (e) {}
+  leiLadoPos();
+}
+
+/* Passo 1 / Passo 2 do atualizar: o texto GRAVADO da lei aberta × o texto que está na caixa */
+function leiLadoDoAtualizar() {
+  const l = leiDe(leiIdAtual);
+  if (!l) return false;
+  if ($("leiUpdModoAlt") && $("leiUpdModoAlt").checked) { uiAlert(t("lei_lado_so_inteira")); return false; }
+  const novo = String($("leiUpdTexto").value || "");
+  if (!novo.trim()) { uiAlert(t("lei_lado_sem_novo")); return false; }
+  leiLadoAbrir(l.texto, novo, "atualizar versão");
+  return true;
+}
+
 /* QUAL LEI está sendo atualizada — sempre visível, nunca implícito. Um tópico com mais de
  * uma lei ligada (ex.: a Constituição e uma emenda dela, as duas guardadas) ganha um
  * seletor aqui: sem ele, "atualizar versão" agia sobre QUALQUER lei que por acaso estivesse
@@ -5811,8 +5936,9 @@ function leiAtualizarComparar(opc) {
   const cmp = leiCompararVersoes(l.texto, novoTexto,
     { ausentes: leiUpdModoAusentes, ignorar: l.repetidosOk });
   if (!cmp.itens.length) {
-    uiAlert(t("lei_upd_sem_mudanca")
-      + (cmp.soFormatacao.length ? " " + t("lei_upd_soformat", { n: cmp.soFormatacao.length }) : ""));
+    /* NENHUMA DIFERENÇA por artigo: em vez de um aviso que some, o painel lado a lado mostra os dois
+     * textos e explica que são iguais (ou o que difere só na formatação) */
+    leiLadoAbrir(l.texto, novoTexto, "nenhuma diferença");
     return false;
   }
 
@@ -6634,6 +6760,13 @@ function leiIniciar() {
   liga("btnLeiRelCob", "relatório: conferir a versão nova", () => leiRelatorioCopiar("conferir a versão nova"));
   liga("btnLeiRelUpd", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
   liga("btnLeiRelUpd1", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
+  liga("btnLeiUpdLado", "ver lado a lado (passo 1)", () => leiLadoDoAtualizar());
+  liga("btnLeiUpdLado2", "ver lado a lado (passo 2)", () => leiLadoDoAtualizar());
+  liga("btnLeiLadoAnt", "diferença anterior", () => leiLadoIr(-1));
+  liga("btnLeiLadoProx", "próxima diferença", () => leiLadoIr(1));
+  liga("btnLeiLadoFechar", "fechar lado a lado", () => $("dlgLeiLado").close());
+  liga("btnLeiLadoX", "fechar lado a lado (x)", () => $("dlgLeiLado").close());
+  if ($("leiLadoSoMudou")) $("leiLadoSoMudou").onchange = () => leiLadoPintar();
   liga("btnLeiRelJa", "relatório: lei já existente", () => leiRelatorioCopiar("lei já existente"));
   liga("btnLeiBibX", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
   liga("btnLeiBibFechar", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());

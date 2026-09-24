@@ -1144,6 +1144,19 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-upd-seguros{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 8px;border:1px solid var(--verde-borda);border-radius:8px;background:var(--verde-claro)}
 .lei-upd-lei-atual{margin:0 0 10px}
 .lei-upd-lei-lista{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.lei-lado-grade{max-height:52vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;font-size:12px;line-height:1.45}
+.lei-lado-cab,.lei-lado-lin{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.lei-lado-cab{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--sutil);padding:4px 0 2px}
+.lei-lado-cab>div{padding:0 8px}
+.lei-lado-cel{display:flex;gap:6px;padding:2px 8px;border-bottom:1px solid var(--borda);white-space:pre-wrap;word-break:break-word;min-width:0}
+.lei-lado-cel+.lei-lado-cel{border-left:1px solid var(--borda)}
+.lei-lado-n{color:var(--sutil);min-width:34px;text-align:right;flex:none}
+.lei-lado-lin.mudou .lei-lado-cel{background:rgba(250,204,21,.10)}
+.lei-lado-lin.so_antigo .lei-lado-cel:first-child{background:rgba(239,68,68,.14)}
+.lei-lado-lin.so_novo .lei-lado-cel:last-child{background:rgba(34,197,94,.14)}
+.lei-lado-lin.lei-lado-atual .lei-lado-cel{outline:2px solid var(--acao);outline-offset:-2px}
+.lei-lado-faixa{display:block;width:100%;text-align:center;font-size:11px;color:var(--sutil);background:transparent;border:0;border-bottom:1px dashed var(--borda);padding:4px;cursor:pointer}
+.lei-lado-cel mark.lei-upd-marca{background:rgba(250,204,21,.45);color:inherit}
 .lei-art-rev{opacity:.72}
 .lei-art-txt-rev{font-style:italic;color:var(--sutil)}
 .lei-linha-rev{opacity:.6;font-style:italic}
@@ -6617,6 +6630,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="dlg-rodape">
       <button class="btn btn-azul" id="btnLeiUpdComparar" data-i18n="lei_upd_comparar"></button>
       <button class="btn btn-cinza" id="btnLeiUpdFechar1" data-i18n="help_close"></button>
+      <button class="btn-min" id="btnLeiUpdLado" data-i18n="lei_lado_btn"></button>
       <button class="btn-min" id="btnLeiRelUpd1" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — a lei aberta, a norma informada, o texto colado — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
   </div>
@@ -6636,6 +6650,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
     <div class="mat-topo">
       <button class="btn-min" id="btnLeiUpdIA" data-i18n="lei_upd_ia"></button>
+      <button class="btn-min" id="btnLeiUpdLado2" data-i18n="lei_lado_btn"></button>
     <button class="btn-min" id="btnLeiRelUpd" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
     <textarea id="leiUpdPrompt" rows="6" readonly hidden
@@ -6711,6 +6726,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <!-- ANTES DE COMPARAR UMA VERSÃO NOVA: o texto parece de outra lei, de uma lei
      que ALTERA, ou incompleto? A pessoa escolhe o que fazer com os artigos que
      não aparecem (leiUpdGuardaAbrir, lei-ui.js). -->
+<dialog id="dlgLeiLado" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 id="leiLadoTitulo" data-i18n="lei_lado_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiLadoX">✖</button>
+  </div>
+  <div id="leiLadoResumo" class="lei-upd-al"></div>
+  <div class="mat-topo" id="leiLadoBarra">
+    <button class="btn-min" id="btnLeiLadoAnt" data-i18n="lei_lado_ant"></button>
+    <button class="btn-min" id="btnLeiLadoProx" data-i18n="lei_lado_prox"></button>
+    <span class="nota" id="leiLadoPos"></span>
+    <label class="nota"><input type="checkbox" id="leiLadoSoMudou"> <span data-i18n="lei_lado_so_mudou"></span></label>
+  </div>
+  <div class="lei-lado-cab"><div data-i18n="lei_lado_col_antigo"></div><div data-i18n="lei_lado_col_novo"></div></div>
+  <div id="leiLadoGrade" class="lei-lado-grade"></div>
+  <p class="nota" id="leiLadoNota"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiLadoFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiCob" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="lei_cob_titulo"></h3>

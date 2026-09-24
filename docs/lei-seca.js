@@ -2491,6 +2491,136 @@ function leiNormalizaComparacao(s) {
     .replace(/\s+/g, " ").trim();
 }
 
+/* =====================================================================
+ * LADO A LADO, LINHA A LINHA — a conferência dos dois textos INTEIROS
+ *
+ * Função pura (sem tela). Compara as linhas pela forma NORMALIZADA (aspas, travessão, espaço de
+ * sobra não são "alteração"), ignora linhas em branco (mas guarda o número original de cada uma)
+ * e devolve as linhas alinhadas: igual | mudou | so_antigo | so_novo.
+ *
+ * O ALGORITMO NÃO PODE SER O(n·m): a Constituição inteira (~10 mil linhas) contra uma emenda de
+ * 1,3 mil daria dezenas de milhões de células. Tira prefixo/sufixo comum, ancora nas linhas ÚNICAS
+ * que aparecem nos dois lados (estilo "patience"), e só faz LCS completo nos vãos pequenos.
+ * ===================================================================== */
+function leiDiffLinhas(antigo, novo) {
+  const prep = (txt) => {
+    const out = [];
+    String(txt == null ? "" : txt).split(/\r?\n/).forEach((raw, i) => {
+      const k = leiNormalizaComparacao(raw);
+      if (k) out.push({ n: i + 1, raw: raw.replace(/\s+$/, ""), k });
+    });
+    return out;
+  };
+  const A = prep(antigo), B = prep(novo);
+  const ops = [];   /* {t:"=", a, b} | {t:"-", a} | {t:"+", b} */
+  const igual = (i, j) => { ops.push({ t: "=", a: i, b: j }); };
+
+  function vao(aLo, aHi, bLo, bHi) {
+    while (aLo < aHi && bLo < bHi && A[aLo].k === B[bLo].k) { igual(aLo, bLo); aLo++; bLo++; }
+    const sufixo = [];
+    while (aLo < aHi && bLo < bHi && A[aHi - 1].k === B[bHi - 1].k) { aHi--; bHi--; sufixo.push([aHi, bHi]); }
+    meio(aLo, aHi, bLo, bHi);
+    for (let s = sufixo.length - 1; s >= 0; s--) igual(sufixo[s][0], sufixo[s][1]);
+  }
+
+  function meio(aLo, aHi, bLo, bHi) {
+    if (aLo >= aHi) { for (let j = bLo; j < bHi; j++) ops.push({ t: "+", b: j }); return; }
+    if (bLo >= bHi) { for (let i = aLo; i < aHi; i++) ops.push({ t: "-", a: i }); return; }
+    /* linhas únicas nos dois lados, dentro deste vão */
+    const contA = new Map(), contB = new Map();
+    for (let i = aLo; i < aHi; i++) contA.set(A[i].k, (contA.get(A[i].k) || 0) + 1);
+    for (let j = bLo; j < bHi; j++) contB.set(B[j].k, (contB.get(B[j].k) || 0) + 1);
+    const posB = new Map();
+    for (let j = bLo; j < bHi; j++) if (contB.get(B[j].k) === 1 && contA.get(B[j].k) === 1) posB.set(B[j].k, j);
+    const pares = [];
+    for (let i = aLo; i < aHi; i++) { const j = posB.get(A[i].k); if (j !== undefined && contA.get(A[i].k) === 1) pares.push([i, j]); }
+    if (pares.length) {
+      /* maior subsequência crescente em j (ancoras que não se cruzam) */
+      const n = pares.length, tam = new Array(n).fill(1), ant = new Array(n).fill(-1);
+      const cauda = [];   /* índices em pares */
+      for (let x = 0; x < n; x++) {
+        let lo = 0, hi = cauda.length;
+        while (lo < hi) { const m = (lo + hi) >> 1; if (pares[cauda[m]][1] < pares[x][1]) lo = m + 1; else hi = m; }
+        if (lo > 0) ant[x] = cauda[lo - 1];
+        cauda[lo] = x;
+      }
+      const ancoras = [];
+      for (let x = cauda[cauda.length - 1]; x >= 0; x = ant[x]) ancoras.push(pares[x]);
+      ancoras.reverse();
+      let pa = aLo, pb = bLo;
+      ancoras.forEach(([i, j]) => { vao(pa, i, pb, j); igual(i, j); pa = i + 1; pb = j + 1; });
+      vao(pa, aHi, pb, bHi);
+      return;
+    }
+    /* sem âncora: LCS completo se couber; senão, tudo sai como removido + adicionado */
+    const na = aHi - aLo, nb = bHi - bLo;
+    if (na * nb > 4000000) {
+      for (let i = aLo; i < aHi; i++) ops.push({ t: "-", a: i });
+      for (let j = bLo; j < bHi; j++) ops.push({ t: "+", b: j });
+      return;
+    }
+    const w = nb + 1, tab = new Int32Array((na + 1) * w);
+    for (let i = na - 1; i >= 0; i--) for (let j = nb - 1; j >= 0; j--) {
+      tab[i * w + j] = A[aLo + i].k === B[bLo + j].k ? tab[(i + 1) * w + j + 1] + 1
+        : Math.max(tab[(i + 1) * w + j], tab[i * w + j + 1]);
+    }
+    let i = 0, j = 0;
+    while (i < na && j < nb) {
+      if (A[aLo + i].k === B[bLo + j].k) { igual(aLo + i, bLo + j); i++; j++; }
+      else if (tab[(i + 1) * w + j] >= tab[i * w + j + 1]) { ops.push({ t: "-", a: aLo + i }); i++; }
+      else { ops.push({ t: "+", b: bLo + j }); j++; }
+    }
+    while (i < na) { ops.push({ t: "-", a: aLo + i }); i++; }
+    while (j < nb) { ops.push({ t: "+", b: bLo + j }); j++; }
+  }
+
+  vao(0, A.length, 0, B.length);
+
+  /* palavras em comum — para juntar "removida" + "adicionada" vizinhas numa linha ALTERADA */
+  const palavras = (k) => new Set(k.toLowerCase().split(/[^a-zà-ú0-9]+/i).filter(Boolean));
+  const parecidas = (x, y) => {
+    const p = palavras(x), q = palavras(y);
+    if (!p.size || !q.size) return 0;
+    let c = 0; p.forEach((w) => { if (q.has(w)) c++; });
+    return c / (p.size + q.size - c);
+  };
+
+  const linhas = [];
+  const lado = (L, i) => ({ n: L[i].n, txt: L[i].raw });
+  let x = 0;
+  while (x < ops.length) {
+    if (ops[x].t === "=") {
+      const o = ops[x++];
+      linhas.push({ tipo: "igual", esq: lado(A, o.a), dir: lado(B, o.b), soFormato: A[o.a].raw.trim() !== B[o.b].raw.trim() });
+      continue;
+    }
+    const dels = [], adds = [];
+    while (x < ops.length && ops[x].t !== "=") { (ops[x].t === "-" ? dels : adds).push(ops[x]); x++; }
+    let d = 0;
+    adds.forEach((ad) => {
+      let melhor = -1, nota = 0.4;
+      for (let k = d; k < Math.min(dels.length, d + 6); k++) {
+        const s = parecidas(A[dels[k].a].k, B[ad.b].k);
+        if (s >= nota) { nota = s; melhor = k; }
+      }
+      if (melhor < 0) { linhas.push({ tipo: "so_novo", esq: null, dir: lado(B, ad.b), soFormato: false }); return; }
+      for (; d < melhor; d++) linhas.push({ tipo: "so_antigo", esq: lado(A, dels[d].a), dir: null, soFormato: false });
+      linhas.push({ tipo: "mudou", esq: lado(A, dels[melhor].a), dir: lado(B, ad.b), soFormato: false });
+      d = melhor + 1;
+    });
+    for (; d < dels.length; d++) linhas.push({ tipo: "so_antigo", esq: lado(A, dels[d].a), dir: null, soFormato: false });
+  }
+
+  const resumo = { iguais: 0, mudadas: 0, soAntigo: 0, soNovo: 0, soFormato: 0 };
+  linhas.forEach((l) => {
+    if (l.tipo === "igual") { resumo.iguais++; if (l.soFormato) resumo.soFormato++; }
+    else if (l.tipo === "mudou") resumo.mudadas++;
+    else if (l.tipo === "so_antigo") resumo.soAntigo++;
+    else resumo.soNovo++;
+  });
+  return { linhas, resumo, mesmoTexto: !resumo.mudadas && !resumo.soAntigo && !resumo.soNovo };
+}
+
 /* Um número que está sozinho entre vizinhos distantes é remissão que virou
  * "artigo" (ver leiPreprocessar) ou lixo de OCR. Devolve { num: true }. */
 function leiForaDaSequencia(artigos) {
