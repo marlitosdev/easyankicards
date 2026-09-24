@@ -4140,6 +4140,20 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .cq-f{font-weight:600}
 .cq-v{opacity:.85}
 .cq-onde{font-size:11px;opacity:.65;margin:2px 0 4px}
+.ger-grade{display:grid;grid-template-columns:200px 1fr 300px;gap:10px;min-height:44vh}
+.ger-col{min-width:0;max-height:52vh;overflow:auto}
+.ger-pasta{padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1.35}
+.ger-pasta:hover{background:rgba(127,127,127,.15)}
+.ger-atual{background:rgba(46,158,91,.18);font-weight:600}
+.ger-top{padding-left:22px;font-size:12px}
+.ger-seta{display:inline-block;width:14px;cursor:pointer}
+.ger-item{display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid var(--borda);cursor:pointer;font-size:13px;line-height:1.4}
+.ger-foco{background:rgba(46,158,91,.14)}
+.ger-corpo{flex:1;min-width:0}
+.ger-f{font-weight:600}
+.ger-v{opacity:.85}
+.ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+@media (max-width:760px){.ger-grade{grid-template-columns:1fr}.ger-col{max-height:30vh}}
 .ce-item{display:flex;gap:8px;align-items:flex-start;padding:6px 4px;border-bottom:1px solid var(--borda);font-size:13px;line-height:1.4;cursor:pointer}
 .ce-corpo{display:flex;flex-direction:column;flex:1}
 .ce-nota{font-weight:700;display:inline}
@@ -4803,6 +4817,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="mat-tipos" id="matTipos"></div>
     <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
     <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
+    <button type="button" class="btn-min btn-min-ok" id="btnGerCartoes" data-i18n="ger_btn" data-i18n-title="ger_btn_aj"></button>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
@@ -7215,6 +7230,58 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgGerCartoes" class="ui-modal diag-modal" style="max-width:1100px;width:96vw">
+  <h3 data-i18n="ger_titulo"></h3>
+  <p class="nota" data-i18n="ger_ajuda"></p>
+  <div class="ger-barra">
+    <input type="search" id="gerBusca" class="mat-busca" data-i18n-ph="ger_busca_ph" style="flex:1;min-width:160px">
+    <select id="gerFiltro">
+      <option value="todos" data-i18n="ger_f_todos"></option>
+      <option value="abaixo" data-i18n="ger_f_abaixo"></option>
+      <option value="repetidos" data-i18n="ger_f_repetidos"></option>
+      <option value="sem_artigo" data-i18n="ger_f_sem_artigo"></option>
+      <option value="basico" data-i18n="ger_f_basico"></option>
+      <option value="cloze" data-i18n="ger_f_cloze"></option>
+      <option value="mc" data-i18n="ger_f_mc"></option>
+    </select>
+    <span class="nota" id="gerResumo"></span>
+  </div>
+  <div class="ger-grade">
+    <div class="ger-col" id="gerArvore"></div>
+    <div class="ger-col">
+      <div id="gerLista"></div>
+      <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
+    </div>
+    <div class="ger-col">
+      <div id="gerPrevia"></div>
+      <div id="gerEditorCx" hidden>
+        <p class="nota" data-i18n="ger_edit_rot"></p>
+        <textarea id="gerEditor" rows="7" style="width:100%;box-sizing:border-box"></textarea>
+        <div class="qm-bts">
+          <button type="button" class="btn-min btn-min-ok" id="btnGerEditSalvar" data-i18n="ger_edit_salvar"></button>
+          <button type="button" class="btn-min" id="btnGerEditCancelar" data-i18n="ger_edit_cancelar"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ger-barra">
+    <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
+    <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
+    <span class="nota" id="gerSel"></span>
+    <span class="nota" data-i18n="ger_mover"></span>
+    <select id="gerDestino"></select>
+    <button type="button" class="btn-min btn-min-ok" id="btnGerMover" data-i18n="ger_mover_btn" disabled></button>
+    <button type="button" class="btn-min btn-min-perigo" id="btnGerApagar" data-i18n="ger_apagar" disabled></button>
+    <button type="button" class="btn-min" id="btnGerEditar" data-i18n="ger_editar" disabled></button>
+    <button type="button" class="btn-min" id="btnGerMelhorar" data-i18n="ger_melhorar" disabled></button>
+  </div>
+  <p class="nota" id="gerMsg"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnGerDesfazer" data-i18n="ger_desfazer" hidden></button>
+    <button class="btn btn-cinza" id="btnGerFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMcEstudo" class="ui-modal diag-modal">
   <h3 id="mcEstTitulo"></h3>
   <p class="nota" id="mcEstSub"></p>
@@ -7698,6 +7765,7 @@ window.__sqlPromise = initSqlJs({
 <script src="lixeira.js"></script>
 <script src="cartao-qualidade.js"></script>
 <script src="cartao-elevar.js"></script>
+<script src="gerenciador.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>
