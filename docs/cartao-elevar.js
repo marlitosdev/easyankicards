@@ -189,7 +189,7 @@ function ceDesfazerLote() {
 }
 
 /* ---- a tela ---- */
-let ceNotas = [], ceSel = new Set(), ceMostrando = CE_LIM.visiveis, ceConf = null, cePedido = null;
+let ceForcadas = null, ceNotas = [], ceSel = new Set(), ceMostrando = CE_LIM.visiveis, ceConf = null, cePedido = null;
 
 function ceEl(tag, cls, txt) {
   const e = document.createElement(tag);
@@ -199,7 +199,9 @@ function ceEl(tag, cls, txt) {
 }
 
 function ceCalcular() {
-  ceNotas = ceLerAbaixo();
+  ceNotas = ceForcadas
+    ? ceForcadas.map((n) => Object.assign({ nota: ceNota(n.card), defeitos: ceDefeitos(n.card) }, n))
+    : ceLerAbaixo();
   ceSel = new Set([...ceSel].filter((i) => i < ceNotas.length));
   return ceNotas;
 }
@@ -304,7 +306,7 @@ async function ceAplicar() {
   if (!aceitos.length) { uiAlert(t("ce_nenhum_aceito")); return; }
   if (!(await uiConfirm(t("ce_conf_aplicar", { n: aceitos.length })))) return;
   const r = ceAplicarLote(aceitos);
-  ceConf = null; cePedido = null; ceSel = new Set();
+  ceConf = null; cePedido = null; ceSel = new Set(); ceForcadas = null;
   $("ceComparar").hidden = true; $("btnCeAplicar").hidden = true;
   $("cePromptCx").hidden = true; $("ceColarCx").hidden = true; $("ceColar").value = "";
   ceCalcular(); cePintar();
@@ -320,7 +322,9 @@ async function ceDesfazer() {
   $("ceMsg").textContent = t("ce_desfeito", { n: r.desfeitos, m: r.pulados });
 }
 
-function ceAbrir() {
+/* opc.notas: abre com ESTES cartões (vindos do gerenciador), abaixo do padrão ou não. */
+function ceAbrir(opc) {
+  ceForcadas = opc && Array.isArray(opc.notas) ? opc.notas : null;
   ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null;
   ceCalcular();
   $("ceMsg").textContent = "";

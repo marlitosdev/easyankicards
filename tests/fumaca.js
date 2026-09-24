@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "material.js",
-                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js",
+                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -808,6 +808,11 @@ function rodar() {
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
+    gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
+    gerAcaoApagar, gerAcaoMover, gerAcaoEditar, gerAcaoSalvarEdicao, gerAcaoMelhorar, gerAcaoDesfazer, GER_LIM, GER_FILTROS,
+    gerNotasAtual: () => gerNotas, gerVisAtual: () => gerVis, gerSelAtual: () => gerSel, gerFocoAtual: () => gerFoco,
+    gerPastaAtual: () => gerPasta, gerSelTeste: (s) => { gerSel = new Set(s); }, gerFocoTeste: (i) => { gerFoco = i; },
+    gerPastaTeste: (p) => { gerPasta = p; },
     ceDefeitos, ceNota, ceAbaixo, ceTagsUnicas, ceLerAbaixo, ceFontes, ceMontarPrompt, ceSubstituir, ceConferir,
     ceAplicarLote, ceRecibo, ceDesfazerLote, ceCalcular, cePintar, ceMarcarPiores, ceGerarPrompt, ceConferirColagem, ceAplicar, ceDesfazer, ceAbrir,
     CE_LIM, CE_PESOS, ceNotasAtual: () => ceNotas, ceSelAtual: () => ceSel, ceConfAtual: () => ceConf, cePedidoAtual: () => cePedido,
