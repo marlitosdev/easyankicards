@@ -801,7 +801,7 @@ function rodar() {
     leiNotaTrechoDe, leiNotaTrechoGuardar, leiNotaTrechoAbrir, leiNotaTrechoMarcar,
     leiNotaCopiarPrompt, matChaveDica,
     leiArtigosEfetivos, leiArtigoAlterar, leiEmCamada, leiDisciplinasDe,
-    leiAtualizarAbrir, leiAtualizarComparar, leiUpdMostrar, leiUpdMover, leiUpdLeiAtualPintar, leiLadoAbrir, leiLadoPintar, leiLadoIr, leiLadoDoAtualizar, leiLadoCtxAtual: () => leiLadoCtx,
+    leiAtualizarAbrir, leiAtualizarComparar, leiUpdMostrar, leiUpdMover, leiUpdLeiAtualPintar, leiLadoAbrir, leiLadoPintar, leiLadoIr, leiLadoDoAtualizar, leiLadoEscolher, leiLadoRestaurar, leiLadoProsseguir, leiLadoTextoFinal, leiLadoPadrao, leiLadoCtxAtual: () => leiLadoCtx,
     leiUpdAceitar, leiUpdPular, leiUpdIA, leiAtualizarAplicar,
     leiUpdComparoAtual: () => leiUpdComparo, leiUpdIdxAtual: () => leiUpdIdx,
     leiPintarEdicaoLivre,
@@ -1129,6 +1129,9 @@ function rodar() {
     if (process.env.PILHA) console.log(e.stack);
   }
   if (api) {
+    /* o "conferir lado a lado antes de comparar" vem LIGADO no app; a suite antiga exercita o fluxo direto,
+     * entao comeca desligado — os testes do lado a lado o ligam de proposito */
+    try { api.$("leiUpdLadoAuto").checked = false; } catch (e) {}
     api.segurarAdiados = () => { _adiados = []; };
     api.soltarAdiados = () => {
       const fila = _adiados || []; _adiados = null;
