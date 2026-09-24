@@ -11,7 +11,7 @@ function carregar() {
   const api = new Function("matResumos", "t", src + `
     return { CM_GERAL, cmNormal, cmChave, cmChaveGeral, cmClassificarLocal,
              cmPrompt, cmLerResposta, cmLinhaCartao, cmAplicar, cmContar,
-             cmParaGerais, cmDesfazer };`)(
+             cmParaGerais, cmDesfazer, cmExtrasCartao, cmBlocoCartao };`)(
     matResumos, (k, p) => k + " " + JSON.stringify(p || {}));
   api._mat = matResumos;
   api._ler = (ch) => (matResumos[ch] && matResumos[ch].cartoes) || "";
@@ -358,6 +358,39 @@ function testes() {
     api.cmDesfazer(rec, api._gravar, api._ler);
     ok(api._ler(ch) === "Escrita depois :: Resposta :: x",
        `C13 desfazer apagou o que foi escrito depois: ${JSON.stringify(api._ler(ch))}`);
+  }
+
+  /* ---- C14: o titulo e o saiba mais VIAJAM com o cartao ----
+   * cmLinhaCartao devolvia so "pergunta :: resposta :: tags": o "@" e os "+"
+   * sumiam ao gravar no material, e o cartao do botao "N cartoes" ficava sem
+   * a trilha e sem a literalidade que o da bancada mantem. */
+  {
+    const api = carregar();
+    const ch = api.cmChave("Direito Financeiro", "Restos a pagar");
+    const destino = { disciplina: "Direito Financeiro", topico: "Restos a pagar" };
+    const item = (f, extra) => ({ card: Object.assign({ front: f, back: "R " + f, tags: [] }, extra), destino });
+    const rec = api.cmAplicar([
+      item("Primeira?", { titulo: "Lei > Restos", more: "Literalidade — Art. 36<br>Exemplo — empenho" }),
+      item("Segunda?", { more: "Exemplo — empenho" }),
+    ], "TCE", api._gravar);
+    const linhas = api._ler(ch).split("\n");
+    ok(linhas[0] === "@ Lei > Restos" && /^Primeira\? ::/.test(linhas[1]) && linhas[2] === "+ Literalidade — Art. 36" && linhas[3] === "+ Exemplo — empenho",
+       `C14 o bloco do cartao nao foi gravado inteiro: ${JSON.stringify(linhas)}`);
+    ok(rec.novos === 2, `C14a contou ${rec.novos} cartoes novos, devia ser 2 (linhas + e @ nao contam)`);
+
+    /* repetir a mesma frente: nao duplica, mesmo com as linhas + no meio */
+    const de = api.cmAplicar([item("Primeira?", { more: "Outra coisa" })], "TCE", api._gravar);
+    ok(de.novos === 0 && de.repetidos === 1, `C14b a frente repetida entrou de novo: ${JSON.stringify(de)}`);
+    /* uma linha "+" igual a de outro cartao nao pode fazer o cartao passar por repetido */
+    const dif = api.cmAplicar([item("Exemplo — empenho", {})], "TCE", api._gravar);
+    ok(dif.novos === 1, "C14c uma pergunta igual a uma linha + de outro cartao foi tomada por repetida");
+
+    /* desfazer tira o bloco todo e so ele: a linha "+ Exemplo — empenho" do
+     * cartao ANTIGO tem de ficar */
+    const antes = api._ler(ch);
+    const rec2 = api.cmAplicar([item("Terceira?", { titulo: "Lei > Restos", more: "Exemplo — empenho" })], "TCE", api._gravar);
+    api.cmDesfazer(rec2, api._gravar, api._ler);
+    ok(api._ler(ch) === antes, `C14d desfazer mexeu no que ja estava la (linhas + iguais): ${JSON.stringify(api._ler(ch))}`);
   }
 
   return falhas;

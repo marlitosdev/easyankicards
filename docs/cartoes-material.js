@@ -216,6 +216,29 @@ function cmLinhaCartao(c, concurso) {
   return limpa(c.front) + " :: " + limpa(c.back) + (tags.length ? " :: " + tags.join(" ") : "");
 }
 
+/* O CARTÃO INTEIRO, NÃO SÓ A LINHA.
+ * "@ título" (acima) e "+ saiba mais" (abaixo) eram jogados fora ao gravar no
+ * material — por isso o cartão do botão "N cartões" perdia a trilha e a
+ * explicação que o da bancada mantém. Devolve as linhas do bloco, na ordem em
+ * que o leitor do app as espera. MC continua degradando para Básico (as
+ * alternativas não cabem numa linha só). */
+function cmExtrasCartao(c) {
+  const um = (s) => String(s || "").replace(/\s*::\s*/g, " — ").replace(/\r?\n+/g, " ").trim();
+  const antes = [], depois = [];
+  const tit = um(c && c.titulo);
+  if (tit) antes.push("@ " + tit);
+  String((c && c.more) || "").split(/<br\s*\/?>|\r?\n/i).forEach((l) => {
+    const x = um(l).replace(/^\+\s*/, "");
+    if (x) depois.push("+ " + x);
+  });
+  return { antes, depois };
+}
+
+function cmBlocoCartao(c, concurso) {
+  const e = cmExtrasCartao(c);
+  return e.antes.concat([cmLinhaCartao(c, concurso)], e.depois);
+}
+
 /* Idempotente: salvar duas vezes o mesmo lote não duplica nada. A
  * comparação é pela FRENTE do cartão, que é o que identifica a pergunta —
  * o verso pode ter sido corrigido no meio do caminho. */
@@ -240,15 +263,16 @@ function cmAplicar(destinos, concurso, gravar) {
     const antes = (typeof matResumos === "object" && matResumos[ch]
       && matResumos[ch].cartoes) || "";
     const jaTem = new Set(antes.split("\n")
+      .filter((l) => !/^\s*[@+]/.test(l))
       .map((l) => cmNormal(l.split("::")[0])).filter(Boolean));
 
     const linhas = [];
     g.itens.forEach((d) => {
-      const linha = cmLinhaCartao(d.card, concurso);
-      const frente = cmNormal(linha.split("::")[0]);
+      const bloco = cmBlocoCartao(d.card, concurso);
+      const frente = cmNormal(cmLinhaCartao(d.card, concurso).split("::")[0]);
       if (jaTem.has(frente)) { repetidos++; return; }
       jaTem.add(frente);
-      linhas.push(linha);
+      bloco.forEach((l) => linhas.push(l));
       novos++;
     });
     if (!linhas.length) return;
@@ -271,11 +295,17 @@ function cmDesfazer(recibo, gravar, lerAtual) {
   ((recibo && recibo.recibo) || []).forEach((r) => {
     const atual = lerAtual(r.chave);
     if (!atual) return;
-    const fora = new Set(r.linhas);
-    const sobrou = atual.split("\n").filter((l) => {
-      if (!fora.has(l)) return true;
+    /* Conta as ocorrências: uma linha "+ …" igual à de OUTRO cartão que já
+     * estava lá não pode sair junto — só o tanto que o recibo gravou. */
+    const fora = new Map();
+    r.linhas.forEach((l) => fora.set(l, (fora.get(l) || 0) + 1));
+    /* De trás para a frente: o que o recibo gravou foi acrescentado no fim. */
+    const sobrou = atual.split("\n").reverse().filter((l) => {
+      const n = fora.get(l) || 0;
+      if (!n) return true;
+      fora.set(l, n - 1);
       removidas++; return false;
-    });
+    }).reverse();
     if (sobrou.length === atual.split("\n").length) return;
     topicos++;
     gravar(r.chave, sobrou.join("\n").replace(/^\s+|\s+$/g, ""),

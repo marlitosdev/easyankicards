@@ -2880,6 +2880,7 @@ function matCartoesPrompt() {
   const r = matResumos[matAtual.chave] || {};
   const txt = mcPromptDeFora || t("mc_prompt", {
     d: matAtual.disciplina, tp: matAtual.topico,
+    frentes: pcFrentesDoTopico(matAtual.disciplina, matAtual.topico),
     resumo: String(r.texto || ""),
     tags: matEtiquetasTopico(matAtual.disciplina, matAtual.topico,
       r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
@@ -3252,7 +3253,9 @@ async function matCartoesSalvar() {
     mcPromptDeFora ? "questao" : "resumo");
   const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
     .replace(/\r?\n+/g, " ").trim();
-  const linhas = novos.map((c) =>
+  const linhas = novos.map((c) => {
+    const ex = cmExtrasCartao(c);
+    return ex.antes.concat([
     limpa(c.front) + " :: " + limpa(c.back) + " :: "
     /* SEM REPETIR. O prompt manda a IA escrever exatamente as etiquetas
      * do tópico no terceiro campo, e aqui elas eram acrescentadas OUTRA
@@ -3260,7 +3263,9 @@ async function matCartoesSalvar() {
      * de estudo as mostrava duas vezes seguidas. O Anki junta iguais na
      * importação, então o estrago era invisível lá e permanente aqui. */
     + matJuntarTags(tags,
-        (c.tags || []).map((x) => String(x).replace(/::/g, "_"))).join(" "));
+        (c.tags || []).map((x) => String(x).replace(/::/g, "_"))).join(" ")
+    ], ex.depois);
+  }).reduce((a, b) => a.concat(b), []);
 
   const antes = String(reg0.cartoes || "").replace(/\s*$/, "");
   matGravarCartoes(matAtual.chave, (antes ? antes + "\n" : "") + linhas.join("\n"),
