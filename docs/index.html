@@ -4140,6 +4140,16 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .cq-f{font-weight:600}
 .cq-v{opacity:.85}
 .cq-onde{font-size:11px;opacity:.65;margin:2px 0 4px}
+.ce-item{display:flex;gap:8px;align-items:flex-start;padding:6px 4px;border-bottom:1px solid var(--borda);font-size:13px;line-height:1.4;cursor:pointer}
+.ce-corpo{display:flex;flex-direction:column;flex:1}
+.ce-nota{font-weight:700;display:inline}
+.ce-def{font-size:11px;color:var(--vermelho,#d9534f)}
+.ce-erro{background:rgba(217,83,79,.15);border:1px solid #d9534f;border-radius:6px;padding:6px 8px;margin:4px 0;font-size:13px}
+.ce-aviso{background:rgba(240,173,78,.15);border:1px solid #f0ad4e;border-radius:6px;padding:6px 8px;margin:4px 0;font-size:12px}
+.ce-cmp{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:8px 0}
+.ce-par{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ce-lado pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:4px 0 0;max-height:220px;overflow:auto}
+@media (max-width:640px){.ce-par{grid-template-columns:1fr}}
 .qm-comparar{border:1px solid var(--borda);border-radius:9px;padding:9px;margin:6px 0}
 .qm-lado{font-size:11.5px;line-height:1.5;margin-bottom:7px;white-space:pre-wrap}
 .qm-antes{color:var(--sutil)}
@@ -4792,6 +4802,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-f-dica" data-i18n="mat_tipos_dica"></span>
     <div class="mat-tipos" id="matTipos"></div>
     <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
+    <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
@@ -7171,6 +7182,39 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgCartElevar" class="ui-modal diag-modal">
+  <h3 data-i18n="ce_titulo"></h3>
+  <p class="nota" data-i18n="ce_ajuda"></p>
+  <p class="nota" id="ceResumo"></p>
+  <div class="qm-bts">
+    <button type="button" class="btn-min" id="btnCeMarcar" data-i18n="ce_marcar"></button>
+    <button type="button" class="btn-min" id="btnCeLimpar" data-i18n="ce_limpar"></button>
+    <span class="nota" id="ceSel"></span>
+  </div>
+  <div id="ceLista" class="cq-lista"></div>
+  <div class="qm-bts">
+    <button type="button" class="btn-min" id="btnCeMais" data-i18n="ce_mais" hidden></button>
+    <button type="button" class="btn-min btn-min-ok" id="btnCePrompt" data-i18n="ce_gerar" disabled></button>
+  </div>
+  <div id="cePromptCx" hidden>
+    <p class="nota" data-i18n="ce_prompt_rot"></p>
+    <textarea id="cePrompt" rows="6" readonly style="width:100%;box-sizing:border-box"></textarea>
+    <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnCeCopiar" data-i18n="ce_copiar"></button></div>
+  </div>
+  <div id="ceColarCx" hidden>
+    <p class="nota" data-i18n="ce_colar_rot"></p>
+    <textarea id="ceColar" rows="5" style="width:100%;box-sizing:border-box" data-i18n-ph="ce_colar_ph"></textarea>
+    <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnCeConferir" data-i18n="ce_conferir"></button></div>
+  </div>
+  <div id="ceComparar" hidden></div>
+  <p class="nota" id="ceMsg"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnCeAplicar" hidden></button>
+    <button class="btn btn-cinza" id="btnCeDesfazer" data-i18n="ce_desfazer" hidden></button>
+    <button class="btn btn-cinza" id="btnCeFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMcEstudo" class="ui-modal diag-modal">
   <h3 id="mcEstTitulo"></h3>
   <p class="nota" id="mcEstSub"></p>
@@ -7653,6 +7697,7 @@ window.__sqlPromise = initSqlJs({
 <script src="decisoes.js"></script>
 <script src="lixeira.js"></script>
 <script src="cartao-qualidade.js"></script>
+<script src="cartao-elevar.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>
