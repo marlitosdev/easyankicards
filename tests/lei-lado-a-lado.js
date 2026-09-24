@@ -176,7 +176,9 @@ async function testes() {
     api._uiFechar(true);
     api.$("leiUpdTexto").value = base;
     api.$("leiUpdModoAlt").checked = true;
-    ok(api.leiLadoDoAtualizar() === false && /lei INTEIRA/.test(api.$("uiModalMsg").textContent), "A5 no modo 'so' alteracoes' explica por que nao vale: " + api.$("uiModalMsg").textContent);
+    ok(api.leiLadoDoAtualizar() === true && api.$("dlgLeiLado").open === true, "A5 no modo 'so' alteracoes' o painel TAMBEM abre (o botao nao pode recusar)");
+    ok(/Modo “só alterações”/.test(api.$("leiLadoNota").textContent), "A5a e explica o modo numa nota: " + api.$("leiLadoNota").textContent);
+    ok(api.leiLogTexto().indexOf("atualizar versão, só alterações") >= 0, "A5b o registro diz o modo");
   }
 
   return Object.assign(falhas, { quantas: n });
