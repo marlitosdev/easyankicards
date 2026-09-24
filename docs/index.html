@@ -1157,6 +1157,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-lado-lin.lei-lado-atual .lei-lado-cel{outline:2px solid var(--acao);outline-offset:-2px}
 .lei-lado-faixa{display:block;width:100%;text-align:center;font-size:11px;color:var(--sutil);background:transparent;border:0;border-bottom:1px dashed var(--borda);padding:4px;cursor:pointer}
 .lei-lado-cel mark.lei-upd-marca{background:rgba(250,204,21,.45);color:inherit}
+.lei-lado-acoes{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:6px;padding:3px 8px 5px 48px;border-bottom:1px solid var(--borda)}
+.lei-lado-esc.on{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+.lei-lado-lin.esc-n .lei-lado-cel{opacity:.55;text-decoration:line-through}
+.lei-lado-lin.mudou.esc-g .lei-lado-cel:last-of-type{opacity:.5}
+.lei-lado-lin.mudou.esc-c .lei-lado-cel:first-of-type{opacity:.5}
 .lei-art-rev{opacity:.72}
 .lei-art-txt-rev{font-style:italic;color:var(--sutil)}
 .lei-linha-rev{opacity:.6;font-style:italic}
@@ -6627,10 +6632,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <textarea id="leiUpdTexto" rows="12" style="width:100%;box-sizing:border-box"
       placeholder="Cole aqui a nova versão completa da lei."></textarea>
     <p class="nota" id="leiUpdAviso1"></p>
+    <label class="nota"><input type="checkbox" id="leiUpdLadoAuto" checked> <span data-i18n="lei_lado_auto"></span></label>
     <div class="dlg-rodape">
       <button class="btn btn-azul" id="btnLeiUpdComparar" data-i18n="lei_upd_comparar"></button>
       <button class="btn btn-cinza" id="btnLeiUpdFechar1" data-i18n="help_close"></button>
-      <button class="btn-min" id="btnLeiUpdLado" data-i18n="lei_lado_btn"></button>
       <button class="btn-min" id="btnLeiRelUpd1" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — a lei aberta, a norma informada, o texto colado — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
   </div>
@@ -6742,6 +6747,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="leiLadoGrade" class="lei-lado-grade"></div>
   <p class="nota" id="leiLadoNota"></p>
   <div class="dlg-rodape">
+    <span class="nota" id="leiLadoContador"></span>
+    <button class="btn-min" id="btnLeiLadoRestaurar" hidden data-i18n="lei_lado_restaurar"></button>
+    <button class="btn btn-verde" id="btnLeiLadoProsseguir" hidden data-i18n="lei_lado_prosseguir"></button>
     <button class="btn btn-cinza" id="btnLeiLadoFechar" data-i18n="help_close"></button>
   </div>
 </dialog>

@@ -156,7 +156,7 @@ async function testes() {
     const l = api.leiGuardar({ nome: "Lei Complementar 15/2009", especie: "Lei Complementar", numero: "15", ano: "2009", texto: base });
     api.leiAbrir("Direito", "T", l.id);
     api.leiAtualizarAbrir();
-    ok(typeof api.$("btnLeiUpdLado").onclick === "function", "A1 o botao existe e esta ligado no Passo 1");
+    ok(typeof api.$("btnLeiUpdLado2").onclick === "function" && !api.$("btnLeiUpdLado"), "A1 o botao de consulta existe no Passo 2 e o do Passo 1 foi incorporado ao comparar");
     api.$("leiUpdFonte").value = "atualização";
     api.$("leiUpdTexto").value = base;
     const r = api.leiAtualizarComparar();
@@ -179,6 +179,140 @@ async function testes() {
     ok(api.leiLadoDoAtualizar() === true && api.$("dlgLeiLado").open === true, "A5 no modo 'so' alteracoes' o painel TAMBEM abre (o botao nao pode recusar)");
     ok(/Modo “só alterações”/.test(api.$("leiLadoNota").textContent), "A5a e explica o modo numa nota: " + api.$("leiLadoNota").textContent);
     ok(api.leiLogTexto().indexOf("atualizar versão, só alterações") >= 0, "A5b o registro diz o modo");
+  }
+
+  /* ---- 5: COMPARAR ABRE O LADO A LADO (escolha por linha + prosseguir) ---- */
+  {
+    /* montagem do texto final, pura */
+    const d = p.leiDiffLinhas("Art. 1º Um.\nArt. 2º Dois antigo.\nArt. 3º So gravado.", "Art. 1º Um.\nArt. 2º Dois novo.\nArt. 4º So colado.");
+    const tp = d.linhas.map((l) => l.tipo).join(",");
+    ok(tp === "igual,mudou,so_novo,so_antigo", "E0 (cenario) " + tp);
+    ok(p.leiLadoPadrao("mudou") === "c" && p.leiLadoPadrao("so_novo") === "c" && p.leiLadoPadrao("so_antigo") === "n", "E1 o padrao de cada tipo: colada, colada, excluir");
+    ok(p.leiLadoTextoFinal(d.linhas, {}) === null, "E1a sem escolha fora do padrao: null (nao mexe no texto)");
+    let f = p.leiLadoTextoFinal(d.linhas, { 1: "g" });
+    ok(f && f.texto === "Art. 1º Um.\nArt. 2º Dois antigo.\nArt. 4º So colado." && f.mantidas === 1 && f.fora === 1, "E2 manter a gravada numa linha alterada: " + JSON.stringify(f));
+    f = p.leiLadoTextoFinal(d.linhas, { 3: "g" });
+    ok(f && /Art\. 3º So gravado\./.test(f.texto) && /Dois novo/.test(f.texto), "E3 manter uma linha so da gravada: ela entra no texto: " + JSON.stringify(f));
+    f = p.leiLadoTextoFinal(d.linhas, { 2: "n" });
+    ok(f && !/So colado/.test(f.texto) && f.excluidas === 1, "E4 excluir uma linha so da colada: ela some: " + JSON.stringify(f));
+    f = p.leiLadoTextoFinal(d.linhas, { 1: "n" });
+    ok(f && !/Dois/.test(f.texto) && f.excluidas === 1, "E5 excluir uma linha alterada: some dos dois lados: " + JSON.stringify(f));
+    ok(p.leiLadoTextoFinal(d.linhas, { 1: "c", 2: "c", 3: "n" }) === null, "E5a escolher explicitamente o padrao tambem vale como sem escolha");
+  }
+  const cenario = () => {
+    const api = iniciar();
+    const arts = (n) => Array.from({ length: n }, (_, i) => "Art. " + (i + 1) + "º Texto do artigo " + (i + 1) + " com redação própria e completa da lei.");
+    const base = arts(12).join("\n");
+    const l = api.leiGuardar({ nome: "Lei Complementar 15/2009", especie: "Lei Complementar", numero: "15", ano: "2009", texto: base });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdLadoAuto").checked = true;
+    api.$("leiUpdFonte").value = "atualização";
+    const novo = arts(12);
+    novo[2] = "Art. 3º Texto ALTERADO do artigo 3 com redação própria e completa da lei.";
+    novo.splice(11, 1);
+    novo.push("Art. 13. Disposições transitórias sobre prazos.");
+    return { api, l, base, novo: novo.join("\n") };
+  };
+  {
+    const { api, novo } = cenario();
+    api.$("leiUpdTexto").value = novo;
+    const r = api.leiAtualizarComparar();
+    ok(r === false && api.$("dlgLeiLado").open === true && api.$("leiUpdPasso2").hidden === true,
+      "C1 comparar abre o lado a lado sozinho (a comparacao por artigo ainda nao abriu): " + r);
+    ok(api.$("btnLeiLadoProsseguir").hidden === false && /voltar/.test(api.$("btnLeiLadoFechar").textContent), "C1a aparecem prosseguir e voltar");
+    const acoes = api.$("leiLadoGrade").querySelectorAll(".lei-lado-acoes");
+    ok(acoes.length === 3, "C2 uma barra de escolha para cada linha diferente: " + acoes.length);
+    const marcados = api.$("leiLadoGrade").querySelectorAll(".lei-lado-esc").filter((b) => /(^|\s)on(\s|$)/.test(b.className)).map((b) => b.textContent);
+    ok(marcados.join("|") === "usar a colada|usar esta linha|excluir a linha", "C2a o padrao vem marcado em cada barra: " + marcados.join("|"));
+
+    const idx = (tipo) => api.leiLadoCtxAtual().d.linhas.findIndex((x) => x.tipo === tipo);
+    api.leiLadoEscolher(idx("mudou"), "g");
+    api.leiLadoEscolher(idx("so_novo"), "n");
+    ok(/2 escolha\(s\) diferente\(s\) do padrão/.test(api.$("leiLadoContador").textContent), "C3 o contador mostra as escolhas: " + api.$("leiLadoContador").textContent);
+    const lin = api.leiLadoCtxAtual().linEl[idx("mudou")].lin;
+    ok(/esc-g/.test(lin.className), "C3a a linha mostra a escolha feita: " + lin.className);
+    api.leiLadoEscolher(idx("mudou"), "c");
+    ok(/1 escolha\(s\)/.test(api.$("leiLadoContador").textContent), "C3b voltar ao padrao numa linha tira a escolha da conta: " + api.$("leiLadoContador").textContent);
+    api.leiLadoEscolher(idx("mudou"), "g");
+
+    api.$("btnLeiLadoProsseguir").onclick();
+    ok(api.$("dlgLeiLado").open === false && api.$("leiUpdPasso2").hidden === false, "C4 prosseguir fecha o painel e abre a comparacao por artigo");
+    const txt = api.$("leiUpdTexto").value;
+    ok(/Texto do artigo 3 com redação/.test(txt) && !/ALTERADO/.test(txt), "C4a a linha alterada ficou com a versao GRAVADA (a escolha valeu): " + txt.split("\n")[2]);
+    ok(!/Art\. 12/.test(txt) && !/Art\. 13\./.test(txt), "C4b o art. 12 (so na gravada) ficou de fora (padrao) e o art. 13 (so na colada) foi excluido pela escolha");
+    const nums = api.leiUpdComparoAtual().map((x) => x.num);
+    ok(!nums.includes("3") && !nums.includes("13") && nums.includes("12"), "C4c por artigo: o 3 (mantido gravado) e o 13 (excluido) nao aparecem; o 12 (ausente na colada) aparece: " + nums);
+    ok(api.leiLogTexto().indexOf("escolha(s) fora do padrão") >= 0, "C4d o registro guarda as escolhas");
+  }
+  {
+    /* mantendo a gravada em TUDO o que difere, sobra o texto gravado: nada a comparar por artigo (e sem laco) */
+    const { api, novo } = cenario();
+    api.$("leiUpdTexto").value = novo;
+    api.leiAtualizarComparar();
+    const ix = (tipo) => api.leiLadoCtxAtual().d.linhas.findIndex((x) => x.tipo === tipo);
+    api.leiLadoEscolher(ix("mudou"), "g"); api.leiLadoEscolher(ix("so_antigo"), "g"); api.leiLadoEscolher(ix("so_novo"), "n");
+    api.$("btnLeiLadoProsseguir").onclick();
+    ok(api.$("leiUpdPasso2").hidden === true && api.$("dlgLeiLado").open !== true && /Nenhuma diferença/.test(api.$("uiModalMsg").textContent),
+      "C4e escolhendo a gravada em tudo, avisa que nao ha diferenca por artigo (sem reabrir o painel)");
+  }
+  {
+    /* sem escolha: o texto colado segue INTOCADO (inclusive as linhas em branco) */
+    const { api, novo } = cenario();
+    const comBranco = novo.replace("\nArt. 5º", "\n\nArt. 5º");
+    api.$("leiUpdTexto").value = comBranco;
+    api.leiAtualizarComparar();
+    api.$("btnLeiLadoProsseguir").onclick();
+    ok(api.$("leiUpdTexto").value === comBranco, "C5 sem escolha fora do padrao, a caixa do texto colado nao e tocada");
+    ok(api.$("leiUpdPasso2").hidden === false && api.leiUpdComparoAtual().some((x) => x.num === "3"), "C5a e a comparacao por artigo abre normalmente");
+  }
+  {
+    /* voltar nao muda nada; comparar de novo reabre */
+    const { api, novo } = cenario();
+    api.$("leiUpdTexto").value = novo;
+    api.leiAtualizarComparar();
+    api.leiLadoEscolher(api.leiLadoCtxAtual().d.linhas.findIndex((x) => x.tipo === "mudou"), "g");
+    api.$("btnLeiLadoFechar").onclick();
+    ok(api.$("dlgLeiLado").open === false && api.$("leiUpdPasso2").hidden === true && api.$("leiUpdTexto").value === novo, "C6 voltar fecha sem mudar o texto nem abrir a comparacao");
+    api.leiAtualizarComparar();
+    ok(api.$("dlgLeiLado").open === true && Object.keys(api.leiLadoCtxAtual().esc).length === 0, "C6a comparar de novo reabre o painel, do zero");
+    api.leiLadoEscolher(api.leiLadoCtxAtual().d.linhas.findIndex((x) => x.tipo === "mudou"), "n");
+    api.$("btnLeiLadoRestaurar").onclick();
+    ok(Object.keys(api.leiLadoCtxAtual().esc).length === 0 && api.$("leiLadoContador").textContent === "", "C6b restaurar o padrao limpa as escolhas");
+  }
+  {
+    /* textos iguais: sem prosseguir (nao ha o que comparar) e sem laco */
+    const { api, base } = cenario();
+    api.$("leiUpdTexto").value = base;
+    api.leiAtualizarComparar();
+    ok(api.$("dlgLeiLado").open === true && api.$("btnLeiLadoProsseguir").hidden === true && /iguais/.test(api.$("leiLadoResumo").textContent),
+      "C7 textos iguais: o painel explica e NAO oferece prosseguir");
+  }
+  {
+    /* opt-out: com a caixa desmarcada o comparar vai direto para os artigos */
+    const { api, novo } = cenario();
+    api.$("leiUpdLadoAuto").checked = false;
+    api.$("leiUpdTexto").value = novo;
+    ok(api.leiAtualizarComparar() === true && api.$("dlgLeiLado").open !== true && api.$("leiUpdPasso2").hidden === false, "C8 caixa desmarcada: comparar vai direto para a comparacao por artigo");
+  }
+  {
+    /* modo so alteracoes: o painel abre so para LER, e prosseguir continua o fluxo */
+    const api = iniciar();
+    const base = "Art. 5º. Tributo é toda prestação pecuniária.\nArt. 162. Os contribuintes devem se inscrever.\n§ 1º A inscrição é obrigatória.";
+    const l = api.leiGuardar({ nome: "LC 015/2009", especie: "Lei Complementar", numero: "15", ano: "2009", texto: base });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdLadoAuto").checked = true;
+    api.$("leiUpdModoAlt").checked = true; api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdTexto").value = ["LEI COMPLEMENTAR Nº 145, DE 23 DE DEZEMBRO DE 2024", "Altera a Lei Complementar nº 15, de 05 de janeiro de 2009.",
+      "Art. 1º A Lei Complementar nº 015 de 05 de janeiro de 2009, passa a vigorar com as seguintes alterações:",
+      "“ Art. 162 [...]", "§4º Novo parágrafo da lei. (AC)", "Art. 2º Esta Lei entra em vigor."].join("\n");
+    api.leiAtualizarComparar();
+    ok(api.$("dlgLeiLado").open === true && api.$("leiUpdPasso2").hidden === true, "M1 no modo so alteracoes o comparar tambem abre o painel");
+    ok(api.$("leiLadoGrade").querySelectorAll(".lei-lado-acoes").length === 0 && api.$("btnLeiLadoRestaurar").hidden === true, "M1a mas SO para ler: sem escolha por linha");
+    ok(api.$("btnLeiLadoProsseguir").hidden === false, "M1b e com prosseguir");
+    api.$("btnLeiLadoProsseguir").onclick();
+    ok(api.$("leiUpdPasso2").hidden === false && api.leiUpdComparoAtual().some((x) => x.num === "162"), "M2 prosseguir segue para a comparacao das alteracoes por artigo");
   }
 
   return Object.assign(falhas, { quantas: n });

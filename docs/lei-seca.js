@@ -2621,6 +2621,29 @@ function leiDiffLinhas(antigo, novo) {
   return { linhas, resumo, mesmoTexto: !resumo.mudadas && !resumo.soAntigo && !resumo.soNovo };
 }
 
+/* A ESCOLHA POR LINHA do lado a lado: "g" = manter a GRAVADA, "c" = usar a COLADA, "n" = excluir a linha.
+ * O padrão é seguir o texto colado: linha alterada -> a colada; só no gravado -> sai (a colada não a tem);
+ * só no colado -> entra. */
+function leiLadoPadrao(tipo) { return tipo === "so_antigo" ? "n" : "c"; }
+
+/* Monta o texto que segue para a comparação por artigo a partir das linhas e das escolhas
+ * (escolhas: { índice-da-linha: "g"|"c"|"n" }). Devolve null quando NENHUMA escolha difere do padrão —
+ * quem chama então deixa o texto colado intocado (preserva linhas em branco e formatação de origem). */
+function leiLadoTextoFinal(linhas, escolhas) {
+  const esc = escolhas || {};
+  let fora = 0, mantidas = 0, excluidas = 0;
+  const saida = [];
+  linhas.forEach((l, i) => {
+    const v = esc[i] || leiLadoPadrao(l.tipo);
+    if (l.tipo !== "igual" && v !== leiLadoPadrao(l.tipo)) { fora++; if (v === "g") mantidas++; else excluidas++; }
+    if (l.tipo === "igual") saida.push(l.dir.txt);
+    else if (l.tipo === "mudou") { if (v === "g") saida.push(l.esq.txt); else if (v === "c") saida.push(l.dir.txt); }
+    else if (l.tipo === "so_antigo") { if (v === "g") saida.push(l.esq.txt); }
+    else if (v === "c") saida.push(l.dir.txt);
+  });
+  return fora ? { texto: saida.join("\n"), fora, mantidas, excluidas } : null;
+}
+
 /* Um número que está sozinho entre vizinhos distantes é remissão que virou
  * "artigo" (ver leiPreprocessar) ou lixo de OCR. Devolve { num: true }. */
 function leiForaDaSequencia(artigos) {

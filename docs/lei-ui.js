@@ -5660,11 +5660,17 @@ let leiLadoCtx = null;
 const LEI_LADO_MAX = 2000;      /* linhas desenhadas de uma vez, sem o filtro "só o que mudou" */
 const LEI_LADO_CONTEXTO = 2;    /* linhas iguais mantidas em volta de cada diferença no filtro */
 
-function leiLadoAbrir(antigo, novo, origem, aviso) {
+function leiLadoAbrir(antigo, novo, origem, aviso, opc) {
   const d = leiDiffLinhas(antigo, novo);
   const r = d.resumo;
-  leiLadoCtx = { d, aviso: aviso || "", foco: -1, abertas: new Set(), soMudou: !d.mesmoTexto && d.linhas.length > 300 };
+  const o = opc || {};
+  /* MODO CONFERÊNCIA (aberto pelo "comparar"): escolha por linha (editavel) e "prosseguir" (aoProsseguir).
+   * Textos iguais: nada a escolher nem a prosseguir — a menos que quem chamou force (semTravaIguais). */
+  leiLadoCtx = { d, aviso: aviso || "", foco: -1, abertas: new Set(), soMudou: !d.mesmoTexto && d.linhas.length > 300,
+    editavel: !!o.editavel && !d.mesmoTexto, aoProsseguir: o.aoProsseguir || null,
+    prosseguir: !!o.aoProsseguir && (!d.mesmoTexto || !!o.semTravaIguais), esc: {}, linEl: {} };
   if ($("leiLadoSoMudou")) $("leiLadoSoMudou").checked = leiLadoCtx.soMudou;
+  $("btnLeiLadoFechar").textContent = t(leiLadoCtx.aoProsseguir ? "lei_lado_voltar" : "help_close");
   leiLadoPintar();
   abrirModal("dlgLeiLado");
   try {
@@ -5718,6 +5724,7 @@ function leiLadoPintar() {
     const l = linhas[i];
     const lin = document.createElement("div");
     lin.className = "lei-lado-lin " + l.tipo;
+    const idxLinha = i;
     [["esq", l.esq, l.dir], ["dir", l.dir, l.esq]].forEach(([, lado, contra]) => {
       const cel = document.createElement("div");
       cel.className = "lei-lado-cel";
@@ -5733,13 +5740,94 @@ function leiLadoPintar() {
       lin.append(cel);
     });
     if (l.tipo !== "igual") c.dif.push(lin);
+    if (c.editavel && l.tipo !== "igual") {
+      const ac = document.createElement("div");
+      ac.className = "lei-lado-acoes";
+      const ops = l.tipo === "mudou" ? [["g", "lei_lado_ac_g"], ["c", "lei_lado_ac_c"], ["n", "lei_lado_ac_n"]]
+        : l.tipo === "so_antigo" ? [["g", "lei_lado_ac_manter"], ["n", "lei_lado_ac_n"]]
+        : [["c", "lei_lado_ac_usar"], ["n", "lei_lado_ac_n"]];
+      const botoes = {};
+      ops.forEach(([v, chave]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn-min lei-lado-esc";
+        b.textContent = t(chave);
+        b.onclick = () => leiLadoEscolher(idxLinha, v);
+        botoes[v] = b;
+        ac.append(b);
+      });
+      lin.append(ac);
+      c.linEl[idxLinha] = { lin, botoes };
+      leiLadoMarcarEscolha(idxLinha);
+    }
     cx.append(lin);
     desenhadas++;
     i++;
   }
   $("leiLadoNota").textContent = [c.aviso, cortou ? t("lei_lado_cortado", { n: LEI_LADO_MAX }) : ""].filter(Boolean).join(" ");
   $("leiLadoBarra").hidden = c.d.mesmoTexto;
+  $("btnLeiLadoProsseguir").hidden = !c.prosseguir;
+  $("btnLeiLadoRestaurar").hidden = !c.editavel;
+  leiLadoContar();
   leiLadoPos();
+}
+
+/* a escolha atual de uma linha diferente (a padrão, se a pessoa não mexeu) */
+function leiLadoEscolhaDe(i) {
+  const c = leiLadoCtx;
+  return (c.esc[i]) || leiLadoPadrao(c.d.linhas[i].tipo);
+}
+
+function leiLadoMarcarEscolha(i) {
+  const c = leiLadoCtx;
+  const e = c.linEl[i];
+  if (!e) return;
+  const v = leiLadoEscolhaDe(i);
+  e.lin.className = e.lin.className.replace(/ esc-[gcn]/g, "") + " esc-" + v;
+  Object.keys(e.botoes).forEach((k) => {
+    const on = k === v;
+    e.botoes[k].className = "btn-min lei-lado-esc" + (on ? " on" : "");
+    e.botoes[k].setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+function leiLadoContar() {
+  const c = leiLadoCtx;
+  const n = Object.keys(c.esc).length;
+  $("leiLadoContador").textContent = c.editavel && n ? t("lei_lado_esc_n", { n }) : "";
+}
+
+/* escolher (sem repintar a grade: rolagem e foco ficam onde estão) */
+function leiLadoEscolher(i, v) {
+  const c = leiLadoCtx;
+  if (!c || !c.editavel || !c.d.linhas[i] || c.d.linhas[i].tipo === "igual") return;
+  if (v === leiLadoPadrao(c.d.linhas[i].tipo)) delete c.esc[i]; else c.esc[i] = v;
+  leiLadoMarcarEscolha(i);
+  leiLadoContar();
+}
+
+function leiLadoRestaurar() {
+  const c = leiLadoCtx;
+  if (!c) return;
+  c.esc = {};
+  leiLadoPintar();
+}
+
+/* PROSSEGUIR: monta o texto com as escolhas (null = nenhuma fora do padrão) e devolve para quem abriu */
+function leiLadoProsseguir() {
+  const c = leiLadoCtx;
+  if (!c || !c.aoProsseguir) return false;
+  const f = c.editavel ? leiLadoTextoFinal(c.d.linhas, c.esc) : null;
+  const cb = c.aoProsseguir;
+  $("dlgLeiLado").close();
+  leiLadoCtx = null;
+  try {
+    leiReg("atualizacao", "lado a lado: prosseguir", f
+      ? f.fora + " escolha(s) fora do padrão · " + f.mantidas + " linha(s) da gravada mantida(s) · " + f.excluidas + " excluída(s)"
+      : "sem escolhas fora do padrão — texto colado intocado");
+  } catch (e) {}
+  cb(f ? f.texto : null, f);
+  return true;
 }
 
 function leiLadoPos() {
@@ -5933,11 +6021,30 @@ function leiAtualizarComparar(opc) {
   }
 
   /* 5. a comparação em si (leiCompararVersoes), com os alertas de cada item */
+  /* O LADO A LADO É O PRIMEIRO PASSO DO "COMPARAR": a pessoa vê os dois textos inteiros, linha a linha,
+   * escolhe por linha qual lado vale (ou exclui) e só então prossegue para os artigos. */
+  if (!o.ladoVisto && $("leiUpdLadoAuto") && $("leiUpdLadoAuto").checked) {
+    leiLadoAbrir(l.texto, novoTexto, "comparar", "", {
+      editavel: true,
+      aoProsseguir: (texto) => {
+        if (texto != null) $("leiUpdTexto").value = texto;
+        seguinte({ separado: true, limpo: true, conferido: true, guardado: true, ladoVisto: true });
+      },
+    });
+    return false;
+  }
   const cmp = leiCompararVersoes(l.texto, novoTexto,
     { ausentes: leiUpdModoAusentes, ignorar: l.repetidosOk });
   if (!cmp.itens.length) {
-    /* NENHUMA DIFERENÇA por artigo: em vez de um aviso que some, o painel lado a lado mostra os dois
-     * textos e explica que são iguais (ou o que difere só na formatação) */
+    const soFmt = cmp.soFormatacao.length ? " " + t("lei_upd_soformat", { n: cmp.soFormatacao.length }) : "";
+    if (o.ladoVisto) {
+      /* a pessoa já viu os dois textos e prosseguiu: só diz que, por artigo, não sobrou nada a atualizar */
+      try { leiReg("atualizacao", "comparação por artigo: nenhuma diferença", ""); } catch (e) {}
+      uiAlert(t("lei_upd_sem_mudanca") + soFmt);
+      return false;
+    }
+    /* NENHUMA DIFERENÇA por artigo (conferência desligada): o painel lado a lado mostra os dois textos
+     * e explica que são iguais (ou o que difere só na formatação) */
     leiLadoAbrir(l.texto, novoTexto, "nenhuma diferença");
     return false;
   }
@@ -5986,6 +6093,14 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
   if (!o.guardado && !leiAlteradoraCitaLei(texto, l)) {
     leiUpdGuardaAbrir({ avisos: [{ k: "nao_cita", nome: l.nome }], baixa: false, alt: false, ident: true },
       () => seguinte({ limpo: true, guardado: true }));
+    return false;
+  }
+  if (!o.ladoVisto && $("leiUpdLadoAuto") && $("leiUpdLadoAuto").checked) {
+    /* só leitura: o texto colado é uma lei que ALTERA outra — escolher linha aqui não faz sentido */
+    leiLadoAbrir(l.texto, texto, "comparar, só alterações", t("lei_lado_so_inteira"), {
+      semTravaIguais: true,
+      aoProsseguir: () => seguinte({ limpo: true, guardado: true, ladoVisto: true }),
+    });
     return false;
   }
   const itens = leiItensDaAlteradora(l, par);
@@ -6760,11 +6875,12 @@ function leiIniciar() {
   liga("btnLeiRelCob", "relatório: conferir a versão nova", () => leiRelatorioCopiar("conferir a versão nova"));
   liga("btnLeiRelUpd", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
   liga("btnLeiRelUpd1", "relatório: atualizar a lei", () => leiRelatorioCopiar("atualizar a lei"));
-  liga("btnLeiUpdLado", "ver lado a lado (passo 1)", () => leiLadoDoAtualizar());
   liga("btnLeiUpdLado2", "ver lado a lado (passo 2)", () => leiLadoDoAtualizar());
   liga("btnLeiLadoAnt", "diferença anterior", () => leiLadoIr(-1));
   liga("btnLeiLadoProx", "próxima diferença", () => leiLadoIr(1));
   liga("btnLeiLadoFechar", "fechar lado a lado", () => $("dlgLeiLado").close());
+  liga("btnLeiLadoProsseguir", "lado a lado: prosseguir", () => leiLadoProsseguir());
+  liga("btnLeiLadoRestaurar", "lado a lado: restaurar o padrão", () => leiLadoRestaurar());
   liga("btnLeiLadoX", "fechar lado a lado (x)", () => $("dlgLeiLado").close());
   if ($("leiLadoSoMudou")) $("leiLadoSoMudou").onchange = () => leiLadoPintar();
   liga("btnLeiRelJa", "relatório: lei já existente", () => leiRelatorioCopiar("lei já existente"));
