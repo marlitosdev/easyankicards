@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.68.0";
+const VERSAO = "16.69.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3699,7 +3699,10 @@ $("btnImportarReabrir").onclick = () => {
 let genTipo = "prompt_full";
 let genTextoBase = "";
 function montarGen() {
-  const p = t(genTipo).replace("[cole aqui o material de estudo]", genTextoBase)
+  const p = t(genTipo, {
+    frentes: (genOrigem && typeof pcFrentesDoTopico === "function")
+      ? pcFrentesDoTopico(genOrigem.disciplina, genOrigem.topico) : [],
+  }).replace("[cole aqui o material de estudo]", genTextoBase)
     .replace("[paste your study material here]", genTextoBase);
   $("genTexto").value = p;
   $("btnGenFull").classList.toggle("ativa", genTipo === "prompt_full");

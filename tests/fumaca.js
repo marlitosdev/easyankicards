@@ -15,7 +15,7 @@ const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
-                  "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
+                  "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
 
 /* Seletor de pobre: entende "tag" e "tag[attr=valor]", que é tudo que o
  * app usa. Sem isso não dá para testar tela em lista (a bandeja de
@@ -808,6 +808,7 @@ function rodar() {
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
+    pcPadrao, pcResolver, pcListaFrentes, pcFrentesDoTopico, PC_LIM, cmExtrasCartao, cmBlocoCartao,
     cmDefeitosDoCartao, cmMelAbrir, cmMelConferir, cmMelAplicar, cmMelIniciar, mcEstudarDireto, mcCartoesSalvos, mcEstMostraAtual: () => mcEstMostra,
     qsUiVoltarASessao,
     qsAndar, qsSessaoAtual, qsJaRespondida, qsSessaoRegistrada, qsPosicao,
