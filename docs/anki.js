@@ -124,7 +124,9 @@ function apkgAgruparDecks(cards, deckName, tituloGeral) {
   const decks = {};
   const idPorNome = {};
   const idPorCartao = (cards || []).map((c) => {
-    const sub = String((c && c.titulo) || tituloGeral || "").trim();
+    /* c.deck: o subbaralho escolhido para o cartão (ex.: "Disciplina::Tópico"), que NÃO
+     * é a manchete — o título continua sendo só o cabeçalho impresso no cartão. */
+    const sub = String((c && (c.deck || c.titulo)) || tituloGeral || "").trim();
     const nome = sub ? deckName + "::" + sub : deckName;
     if (!idPorNome[nome]) {
       const id = stableDeckId(nome);
@@ -592,6 +594,23 @@ async function lerApkg(arrayBuffer) {
     } catch (e) { /* segue com heurística */ }
   }
 
+  /* baralho de cada nota: id do baralho -> nome, e nota -> baralho do primeiro cartão dela */
+  const nomeDeckPorId = {}, didPorNota = {};
+  try {
+    const d = db.exec("SELECT decks FROM col")[0];
+    const js = JSON.parse(d.values[0][0]);
+    Object.keys(js).forEach((k) => { nomeDeckPorId[k] = String(js[k].name || ""); });
+  } catch (e) {
+    try {
+      const r = db.exec("SELECT id, name FROM decks")[0];
+      (r ? r.values : []).forEach(([id, nome]) => { nomeDeckPorId[id] = String(nome).replace(/\x1f/g, "::"); });
+    } catch (e2) { /* sem nomes de baralho */ }
+  }
+  try {
+    const r = db.exec("SELECT nid, did FROM cards")[0];
+    (r ? r.values : []).forEach(([nid, did]) => { if (!(nid in didPorNota)) didPorNota[nid] = did; });
+  } catch (e) { /* sem baralho por nota */ }
+
   // nome do baralho (primeiro que não seja Default)
   let deckNome = "";
   try {
@@ -606,10 +625,10 @@ async function lerApkg(arrayBuffer) {
     } catch (e2) { /* sem nome */ }
   }
 
-  const res = db.exec("SELECT mid, flds, tags FROM notes");
+  const res = db.exec("SELECT id, mid, flds, tags FROM notes");
   const linhas = res.length ? res[0].values : [];
   const cards = [];
-  linhas.forEach(([mid, flds, tags]) => {
+  linhas.forEach(([nid, mid, flds, tags]) => {
     const campos = String(flds).split("\x1f").map(_limparHtml);
     const m = modelos[mid] || {};
     const nomes = (m.campos || []).map((n) => String(n || "").toLowerCase());
@@ -664,6 +683,8 @@ async function lerApkg(arrayBuffer) {
       tags: tagArr, ownTags: tagArr,
       more: mais,
       titulo: iTitulo >= 0 ? (campos[iTitulo] || "") : "",
+      /* o baralho de origem, para não perder a organização do pacote */
+      deck: (() => { const n = nomeDeckPorId[didPorNota[nid]] || ""; return n === "Default" ? "" : n; })(),
     });
   });
   db.close();

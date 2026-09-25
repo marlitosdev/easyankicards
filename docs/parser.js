@@ -398,7 +398,7 @@ function exportTxtString(result, deckName) {
   const lines = ["#separator:tab", "#html:true", "#notetype column:1",
                  "#deck column:2", "#deck:" + deckName, "#tags column:6"];
   for (const c of cardsParaExportar(result.cards)) {
-    lines.push([c.kind === "cloze" ? "Cloze" : "Basic", deckName,
+    lines.push([c.kind === "cloze" ? "Cloze" : "Basic", c.deck ? deckName + "::" + c.deck : deckName,
                 campo(c.front), campo(c.back), campo(c.more || ""),
                 c.tags.join(" ")].join("\t"));
   }

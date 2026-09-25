@@ -9,17 +9,37 @@
 const fs = require("fs");
 const path = require("path");
 
+/* Um sql.js e um JSZip de mentira, so' para o leitor de .apkg (lerApkg): devolvem o que
+ * o banco do Anki devolveria, dependendo do cenario (formato antigo ou novo). */
+let CENARIO = "antigo";
+class FakeDb {
+  exec(sql) {
+    const notas = [[1, 100, "Q1?\x1fR1", " t1 "], [2, 100, "Q2?\x1fR2", ""], [3, 100, "Q3?\x1fR3", ""]];
+    if (/SELECT models FROM col/.test(sql)) return [{ values: [[JSON.stringify({ 100: { type: 0, flds: [{ name: "Frente" }, { name: "Verso" }] } })]] }];
+    if (/SELECT decks FROM col/.test(sql)) {
+      if (CENARIO === "novo") throw new Error("no such column: decks");
+      return [{ values: [[JSON.stringify({ 1: { name: "Default" }, 11: { name: "Raiz::Trib::ISS" }, 12: { name: "Raiz::Const" } })]] }];
+    }
+    if (/SELECT id, name FROM decks/.test(sql)) return [{ values: [[1, "Default"], [11, "Raiz\x1fTrib\x1fISS"], [12, "Raiz\x1fConst"]] }];
+    if (/SELECT id, mid, flds, tags FROM notes/.test(sql)) return [{ values: notas }];
+    if (/SELECT nid, did FROM cards/.test(sql)) return [{ values: [[1, 11], [1, 12], [2, 12], [3, 1]] }];
+    throw new Error("sql inesperado: " + sql);
+  }
+  close() {}
+}
+const FakeJSZip = { loadAsync: async () => ({ file: (n) => (n === "collection.anki2" ? { async: async () => new Uint8Array([1]) } : null) }) };
+
 function carregar() {
   /* anki.js usa itensDaLista, que mora no parser — carrega os dois juntos,
    * que e' como o navegador tambem os enxerga */
   const src = fs.readFileSync(path.join(__dirname, "..", "docs", "parser.js"), "utf8")
     + fs.readFileSync(path.join(__dirname, "..", "docs", "anki.js"), "utf8");
-  return new Function("window", src +
+  return new Function("window", "JSZip", src +
     "; return {modelosParaEstilo,maisEmBlocos,linhasEmBlocos,guidDoCartao,ESTILOS," +
-    "apkgAgruparDecks,stableDeckId};")({});
+    "apkgAgruparDecks,stableDeckId,exportTxtString,lerApkg};")({ __sqlPromise: Promise.resolve({ Database: FakeDb }) }, FakeJSZip);
 }
 
-function testes() {
+async function testes() {
   const A = carregar();
   const f = [];
   const ok = (c, m) => { if (!c) f.push(m); };
@@ -132,6 +152,37 @@ function testes() {
     ok(g5.decks[String(g5.idPorCartao[0])].name === "Meu Baralho::Geral X",
        "E5 o titulo geral nao foi usado como subbaralho quando o cartao "
        + "nao tem titulo proprio: " + g5.decks[String(g5.idPorCartao[0])].name);
+  }
+
+  /* F — c.deck: um subbaralho por PASTA do gerenciador, sem mexer na manchete do cartao */
+  {
+    const cs = [
+      { kind: "basic", front: "a", back: "b", tags: [], deck: "Tributário::ISS", titulo: "Trilha X" },
+      { kind: "basic", front: "c", back: "d", tags: [], deck: "Tributário::IPTU" },
+      { kind: "basic", front: "e", back: "f", tags: [], deck: "Tributário::ISS" },
+      { kind: "basic", front: "g", back: "h", tags: [] },
+    ];
+    const g = A.apkgAgruparDecks(cs, "Meu Pacote", "");
+    const nome = (i) => g.decks[String(g.idPorCartao[i])].name;
+    ok(nome(0) === "Meu Pacote::Tributário::ISS" && nome(1) === "Meu Pacote::Tributário::IPTU" && nome(3) === "Meu Pacote", `F1 deck por cartao: ${[0, 1, 3].map(nome)}`);
+    ok(g.idPorCartao[0] === g.idPorCartao[2] && Object.keys(g.decks).length === 3, "F2 cartoes da mesma pasta dividem o baralho; 3 baralhos no total");
+    ok(nome(0) !== "Meu Pacote::Trilha X", "F3 o deck tem precedencia sobre o titulo (que continua so' a manchete)");
+    ok(g.idPorCartao[0] === A.stableDeckId("Meu Pacote::Tributário::ISS"), "F4 o id do baralho continua estavel por nome");
+    const txt = A.exportTxtString({ cards: cs }, "Meu Pacote").split("\n");
+    ok(txt[6].split("\t")[1] === "Meu Pacote::Tributário::ISS" && txt[8].split("\t")[1] === "Meu Pacote::Tributário::ISS" && txt[9].split("\t")[1] === "Meu Pacote", `F5 o .txt tambem leva o baralho de cada cartao: ${txt.slice(6, 10).map((l) => l.split("\t")[1])}`);
+  }
+
+  /* G — lerApkg devolve o baralho de cada cartao (o que o import para uma pasta usa) */
+  {
+    CENARIO = "antigo";
+    const r = await A.lerApkg(new ArrayBuffer(1));
+    const decks = r.cards.map((c) => c.deck);
+    ok(r.cards.length === 3 && decks[0] === "Raiz::Trib::ISS" && decks[1] === "Raiz::Const" && decks[2] === "", `G1 baralho de cada nota (a nota 1 tem cartoes em 2 baralhos: vale o primeiro; 'Default' vira vazio): ${JSON.stringify(decks)}`);
+    ok(r.deck === "Raiz::Trib::ISS" && r.cards[0].tags.join() === "t1", "G2 o nome do pacote e as etiquetas continuam como antes");
+    CENARIO = "novo";
+    const r2 = await A.lerApkg(new ArrayBuffer(1));
+    ok(r2.cards.map((c) => c.deck).join("|") === "Raiz::Trib::ISS|Raiz::Const|", `G3 formato novo (tabela decks, nomes com separador de campo): ${r2.cards.map((c) => c.deck)}`);
+    CENARIO = "antigo";
   }
 
   return f;
