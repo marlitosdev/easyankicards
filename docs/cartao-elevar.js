@@ -123,6 +123,16 @@ const CE_CHAVE_REV = "eac_ce_revisados";
  * um cartão completado ainda pode precisar de conferência de fatos. */
 const CE_OBJETIVOS = ["completar", "fatos", "dividir", "forma"];
 let ceObjetivo = "completar";
+/* O ESCOPO e a BUSCA: "fila" é a lista do objetivo; "bancada" só os cartões do texto da bancada; "todos" a biblioteca
+ * inteira SEM o filtro do objetivo (é aqui que se marca à mão qualquer cartão, achando-o pela busca). O prompt pode ser
+ * o CURTO, para IA com pouco espaço: sem a fonte e com as regras em poucas linhas. */
+const CE_ESCOPOS = ["fila", "bancada", "todos"];
+let ceEscopo = "fila", ceBusca = "", ceCurto = false;
+function ceFiltrarBusca(lista) {
+  const q = cqNormal(ceBusca);
+  if (!q) return lista;
+  return lista.filter((n) => cqNormal(cqRevelado(n.card) + " " + String(n.card.back || "") + " " + [n.disciplina, n.topico].join(" ")).indexOf(q) >= 0);
+}
 const CE_RISCO_RE = /\b(art\.?|artigo|s[úu]mula|lei|inciso)\b|§|\d{2,}|\d+\s*%|R\$|\b(19|20)\d{2}\b/i;
 const CE_ALVO = {
   fatos: (c) => CE_RISCO_RE.test(String(c.front || "") + " " + String(c.back || "") + " " + String(c.more || "")),
@@ -224,8 +234,10 @@ function ceMontarPrompt(itens) {
   const fontes = ceFontes(itens);
   return {
     blocos,
-    texto: t(ceObjetivo === "completar" || CE_OBJETIVOS.indexOf(ceObjetivo) < 0 ? "ce_prompt" : "ce_prompt_" + ceObjetivo,
-      { n: itens.length, trechos, fontes: fontes || t("ce_sem_fonte") }),
+    texto: ceCurto
+      ? t("ce_prompt_curto", { n: itens.length, trechos, objetivo: t("ce_curto_" + (CE_OBJETIVOS.indexOf(ceObjetivo) < 0 ? "completar" : ceObjetivo)) })
+      : t(ceObjetivo === "completar" || CE_OBJETIVOS.indexOf(ceObjetivo) < 0 ? "ce_prompt" : "ce_prompt_" + ceObjetivo,
+        { n: itens.length, trechos, fontes: fontes || t("ce_sem_fonte") }),
   };
 }
 
@@ -363,6 +375,7 @@ const CE_DICAS = {
   btnCePrompt: "ce_tip_prompt", btnCeCopiar: "ce_tip_copiar", btnCeColarClip: "ce_tip_colar", btnCeConferir: "ce_tip_conferir",
   btnCeAplicar: "ce_tip_aplicar", btnCeNova: "ce_tip_nova", btnCeDescartar: "ce_tip_descartar",
   btnCeDesfazer: "ce_tip_desfazer", btnCeFechar: "ce_tip_fechar", ceObjetivo: "ce_tip_obj",
+  ceEscopo: "ce_tip_escopo", ceBusca: "ce_tip_busca", ceCurto: "ce_tip_curto",
 };
 
 /* troca o objetivo: refaz a fila e já marca os piores. Só antes de gerar o prompt (depois, a rodada está em andamento). */
@@ -378,12 +391,30 @@ function ceTrocarObjetivo(obj) {
   return true;
 }
 
+/* escopo, busca e prompt curto: refazem a lista (só antes de gerar o prompt) */
+function ceMudarFiltro(campo, valor) {
+  if (cePasso > 1) return false;
+  if (campo === "escopo") { if (CE_ESCOPOS.indexOf(valor) < 0) return false; ceEscopo = valor; }
+  else if (campo === "busca") ceBusca = String(valor || "").trim().slice(0, 80);
+  else if (campo === "curto") { ceCurto = !!valor; return true; }
+  else return false;
+  ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null;
+  ceCalcular();
+  if (campo === "escopo" && ceEscopo !== "todos") ceMarcarPiores(); else cePintar();
+  ceStatus(ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada_obj"), ceNotas.length ? "" : "ok");
+  return true;
+}
+
 function cePintarObjetivos() {
   const sel = $("ceObjetivo");
   if (!sel) return;
   sel.innerHTML = "";
   CE_OBJETIVOS.forEach((o) => { const op = document.createElement("option"); op.value = o; op.textContent = t("ce_obj_" + o); sel.append(op); });
   sel.value = ceObjetivo;
+  const es = $("ceEscopo");
+  if (es) { es.innerHTML = ""; CE_ESCOPOS.forEach((o) => { const op = document.createElement("option"); op.value = o; op.textContent = t("ce_esc_" + o); es.append(op); }); es.value = ceEscopo; }
+  if ($("ceBusca")) $("ceBusca").value = ceBusca;
+  if ($("ceCurto")) $("ceCurto").checked = ceCurto;
 }
 
 function ceEl(tag, cls, txt) {
@@ -417,17 +448,23 @@ function ceCalcular() {
     /* "fracos" são os DA FILA; os já trabalhados aparecem à parte, senão a conta nunca chega a zero */
     if (n.nivel === "fraco") { if (n.revisado) ceStats.escondidos++; else ceStats.fracos++; } else if (n.nivel === "medio") ceStats.medios++; else ceStats.bons++;
   });
-  if (!ceForcadas && ceObjetivo !== "completar") {
-    const alvo = todas.filter((n) => ceServeAoObjetivo(ceObjetivo, n.card));
-    ceStats.fila = alvo.filter((n) => !n.revisado).length;
-    ceStats.escondidos = alvo.length - ceStats.fila;
-    ceNotas = alvo.filter((n) => !n.revisado).sort(cePiores);
-    ceSel = new Set([...ceSel].filter((i) => i < ceNotas.length));
-    return ceNotas;
+  if (ceForcadas) {
+    ceNotas = ceForcadas.map((n) => { const a = ceAvaliar(n.card); return Object.assign({ nivel: a.nivel, nota: a.nota, defeitos: a.falhas }, n); });
+  } else if (ceEscopo === "todos") {
+    ceNotas = ceFiltrarBusca(todas.slice().sort(cePiores));
+  } else {
+    let base;
+    if (ceObjetivo !== "completar") {
+      const alvo = todas.filter((n) => ceServeAoObjetivo(ceObjetivo, n.card));
+      ceStats.fila = alvo.filter((n) => !n.revisado).length;
+      ceStats.escondidos = alvo.length - ceStats.fila;
+      base = alvo.filter((n) => !n.revisado).sort(cePiores);
+    } else {
+      base = todas.filter((n) => (n.nivel === "fraco" || (ceIncluirMedios && n.nivel === "medio")) && !n.revisado).sort(cePiores);
+    }
+    if (ceEscopo === "bancada") base = base.filter((n) => cqEhBancada(n.chave));
+    ceNotas = ceFiltrarBusca(base);
   }
-  ceNotas = ceForcadas
-    ? ceForcadas.map((n) => { const a = ceAvaliar(n.card); return Object.assign({ nivel: a.nivel, nota: a.nota, defeitos: a.falhas }, n); })
-    : todas.filter((n) => (n.nivel === "fraco" || (ceIncluirMedios && n.nivel === "medio")) && !n.revisado).sort(cePiores);
   ceSel = new Set([...ceSel].filter((i) => i < ceNotas.length));
   return ceNotas;
 }
@@ -476,7 +513,7 @@ function cePintarRodape() {
   });
   /* enquanto há prompt/resposta em andamento, a escolha dos cartões fica travada: nenhum clique a desfaz */
   const travada = p > 1;
-  ["btnCeMarcar", "btnCeLimpar", "ceObjetivo"].forEach((id) => { if ($(id)) $(id).disabled = travada; });
+  ["btnCeMarcar", "btnCeLimpar", "ceObjetivo", "ceEscopo", "ceBusca", "ceCurto"].forEach((id) => { if ($(id)) $(id).disabled = travada; });
   try { $("ceEscolha").open = p === 1; } catch (e) {}
   $("cePromptCx").hidden = p !== 2 || !cePedido;
   $("ceColarCx").hidden = p !== 2;
@@ -485,7 +522,9 @@ function cePintarRodape() {
 
 function cePintar() {
   const r = ceStats;
-  $("ceResumo").textContent = r.total && !ceForcadas && ceObjetivo !== "completar"
+  $("ceResumo").textContent = r.total && !ceForcadas && (ceEscopo !== "fila" || ceBusca)
+    ? t("ce_resumo_escopo", { n: ceNotas.length, e: t("ce_esc_" + ceEscopo) })
+    : r.total && !ceForcadas && ceObjetivo !== "completar"
     ? t("ce_resumo_obj", { n: r.fila, esc: r.escondidos || 0 })
     : r.total
     ? t("ce_resumo", { r: ceRodada, f: r.fracos, m: r.medios, b: r.bons, n: r.total })
@@ -688,6 +727,8 @@ async function ceDesfazer() {
 function ceAbrir(opc) {
   ceForcadas = opc && Array.isArray(opc.notas) ? opc.notas : null;
   ceObjetivo = opc && CE_OBJETIVOS.indexOf(opc.objetivo) >= 0 ? opc.objetivo : "completar";
+  ceEscopo = opc && CE_ESCOPOS.indexOf(opc.escopo) >= 0 ? opc.escopo : "fila";
+  ceBusca = ""; ceCurto = false;
   cePintarObjetivos();
   ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null; cePasso = 1; ceRodada = 1;
   $("ceColar").value = ""; $("cePrompt").value = "";
@@ -703,6 +744,9 @@ if (typeof document !== "undefined" && $("btnCartElevar")) {
   $("btnCartElevar").onclick = () => ceAbrir();
   if ($("btnBancaElevar")) $("btnBancaElevar").onclick = () => ceAbrir();
   if ($("ceObjetivo")) $("ceObjetivo").onchange = () => { if (!ceTrocarObjetivo($("ceObjetivo").value)) $("ceObjetivo").value = ceObjetivo; };
+  if ($("ceEscopo")) $("ceEscopo").onchange = () => { if (!ceMudarFiltro("escopo", $("ceEscopo").value)) $("ceEscopo").value = ceEscopo; };
+  if ($("ceBusca")) $("ceBusca").oninput = () => { if (!ceMudarFiltro("busca", $("ceBusca").value)) $("ceBusca").value = ceBusca; };
+  if ($("ceCurto")) $("ceCurto").onchange = () => { if (!ceMudarFiltro("curto", $("ceCurto").checked)) $("ceCurto").checked = ceCurto; };
   if ($("btnCeFechar")) $("btnCeFechar").onclick = async () => {
     if (cePasso > 1 && !(await uiConfirm(t("ce_conf_fechar")))) return;
     $("dlgCartElevar").close();
