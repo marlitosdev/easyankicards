@@ -786,7 +786,7 @@ async function testes() {
     const botoes = (h) => [...h.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
     const { a } = montar();
     /* 1. nenhum botao sem explicacao (e nenhuma explicacao sem botao) */
-    const ids = botoes(dialogo("dlgGerCartoes")).concat(botoes(dialogo("dlgGerNovaPasta")));
+    const ids = botoes(dialogo("dlgGerCartoes")).concat(botoes(dialogo("dlgGerNovaPasta")), botoes(dialogo("dlgGerClassificar")));
     const faltam = ids.filter((id) => !a.GER_DICAS[id]);
     ok(ids.length >= 17 && faltam.length === 0, "G18a todo botao das janelas do gerenciador tem explicacao (falta: " + faltam.join(",") + ")");
     const sobram = Object.keys(a.GER_DICAS).filter((id) => html.indexOf('id="' + id + '"') < 0);
@@ -1134,6 +1134,163 @@ async function testes() {
     ok(/arrasta ou move cartões para os tópicos/.test(a.t("ger_btn_aj")) && /desfaz a última ação/.test(a.t("ger_btn_aj")), "G20n a explicacao diz o que da' para fazer la dentro");
   }
 
+  /* ---- G21: pastas livres dentro do edital e classificar a Bancada pelo edital ---- */
+  {
+    const ev = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { dados: {}, setData(k, v) { this.dados[k] = v; }, setDragImage(el) { this.img = el; }, effectAllowed: "", dropEffect: "" } });
+    const MB = (comBancada) => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      const edA = a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5\n@ Direito Financeiro :: 4\n+ Receita Pública :: 4");
+      const edB = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20\n@ Português :: 5\n+ Crase :: 5");
+      a.$("editor").value = comBancada === false ? "" : "Fato gerador? :: Serviço :: iss\nBase de calculo? :: valor :: sistema_tributario_brasileiro\nPergunta solta? :: resp";
+      return { a, edA, edB, k: (d, t) => a.matChave(d, t) };
+    };
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const topo = (a, nome) => linhas(a, "ger-top").find((e) => e.textContent.replace(/^\s*[▾▸]\s*/, "").indexOf(nome) === 0);
+
+    /* material: pasta livre nao herda o edital aberto e nao e' orfa */
+    {
+      const { a, k } = MB();
+      a.$("editalTexto").value = "# Concurso Aberto | prova: 2027-01-01";
+      a.matGravarCartoes(k("Livre", "A"), "P? :: R", { disciplina: "Livre", topico: "A", pastaLivre: true });
+      a.matGravarCartoes(k("Livre", "B"), "P? :: R", { disciplina: "Livre", topico: "B" });
+      ok(a.matResumosAtual()[k("Livre", "A")].concurso === "" && a.matResumosAtual()[k("Livre", "A")].pastaLivre === true, "G21a pasta livre nao herda o edital aberto e fica marcada");
+      ok(a.matResumosAtual()[k("Livre", "B")].concurso === "Concurso Aberto" && !a.matResumosAtual()[k("Livre", "B")].pastaLivre, "G21b sem a marca continua herdando (comportamento de sempre)");
+      a.matGravarCartoes(k("Livre", "A"), "P? :: R\nQ? :: S", { disciplina: "Livre", topico: "A" });
+      ok(a.matResumosAtual()[k("Livre", "A")].pastaLivre === true && a.matResumosAtual()[k("Livre", "A")].concurso === "", "G21c a marca sobrevive a gravacoes seguintes (sem meta)");
+      const POS = "# X | prova: 2027-01-01\n@ Direito Financeiro :: 5\n+ Receita Pública :: 5";
+      const orf = a.preMaterialOrfao({ [k("Livre", "A")]: a.matResumosAtual()[k("Livre", "A")], [k("Livre", "B")]: a.matResumosAtual()[k("Livre", "B")] }, POS).map((o) => o.topico);
+      ok(orf.join() === "B", "G21d pasta livre NAO aparece como material orfao na virada de edital (a outra aparece): " + orf.join());
+    }
+    /* criar pasta dentro do edital */
+    {
+      const { a, k } = MB();
+      const r = a.gerCriarPasta("Licitações", "Lei 14.133 — modalidades", "ISS Caruaru Auditor");
+      ok(r.ok && !r.existe && r.nome === "ISS Caruaru Auditor › Licitações › Lei 14.133 — modalidades" && a.gerPastasCriadas()[0].edital === "ISS Caruaru Auditor", "G21e a pasta criada guarda o edital: " + JSON.stringify(a.gerPastasCriadas()[0]));
+      const m = a.gerModeloEditais(a.gerNotasAtual(), a.gerPastasVazias(a.gerNotasAtual()));
+      const raizA = m.roots.find((x) => x.nome === "ISS Caruaru Auditor");
+      const disc = raizA.filhos.find((d) => d.nome === "Licitações");
+      ok(disc && disc.filhos[0].livre === true && disc.filhos[0].vazia === true && !disc.filhos[0].virtual && disc.filhos[0].concurso === "ISS Caruaru Auditor" && !m.roots.some((x) => x.nome === "Sem edital"), "G21f a pasta nova aparece DENTRO do edital (livre, vazia, com o edital) e nao em 'Sem edital'");
+      const igual = a.gerCriarPasta("Sistema Tributario Brasileiro", "iss", "ISS Caruaru Auditor");
+      ok(igual.chave === k("Sistema Tributário Brasileiro", "ISS") && igual.ok && igual.existe === true && igual.plano === true && a.gerPastasCriadas().length === 1, "G21g topico que ja e' do plano do edital: abre o do plano, sem criar pasta livre repetida");
+      const semEd = a.gerCriarPasta("Avulsas", "Coisas", "Edital que nao existe");
+      ok(semEd.ok && a.gerPastasCriadas().find((x) => x.topico === "Coisas").edital === "" && a.gerModeloEditais(a.gerNotasAtual(), a.gerPastasVazias(a.gerNotasAtual())).roots.some((x) => x.nome === "Sem edital"), "G21h edital desconhecido: a pasta vai para 'Sem edital'");
+    }
+    /* a janelinha: edital, contexto e sugestoes */
+    {
+      const { a, k } = MB();
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "ISS"), "P? :: R", { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.gerAbrir();
+      const raizB = linhas(a, "ger-ed").find((e) => /TCE-PE/.test(e.textContent));
+      raizB.onclick();
+      a.$("btnGerNovaPasta").onclick();
+      const ops = achar(a.$("gerNpEdital"), (e) => e.tag === "option").map((o) => o.value);
+      ok(ops.join("|") === "|ISS Caruaru Auditor|TCE-PE" && a.$("gerNpEdital").value === "TCE-PE", "G21i a janelinha lista os editais e ja vem com o da pasta aberta: " + ops.join("|") + " / " + a.$("gerNpEdital").value);
+      const sug = () => achar(a.$("gerNpDiscLista"), (e) => e.tag === "option").map((o) => o.value);
+      ok(sug().indexOf("Português") >= 0 && sug().indexOf("Direito Financeiro") < 0 || sug().indexOf("Português") >= 0, "G21j sugere as disciplinas do plano do edital escolhido: " + sug().join("|"));
+      a.$("gerNpEdital").value = "ISS Caruaru Auditor"; a.$("gerNpEdital").onchange();
+      ok(sug().indexOf("Direito Financeiro") >= 0 && sug().indexOf("Sistema Tributário Brasileiro") >= 0, "G21k trocar o edital troca as sugestoes: " + sug().join("|"));
+      ok(new Set(sug()).size === sug().length, "G21k2 a mesma disciplina (no material e no plano do edital) aparece UMA vez so' nas sugestoes: " + sug().join("|"));
+      a.$("gerNpDisc").value = "Licitações"; a.$("gerNpTop").value = "Lei 14.133";
+      a.$("btnGerNpOk").onclick();
+      const linha = topo(a, "Lei 14.133");
+      ok(a.$("dlgGerNovaPasta").open === false && linha && cls(linha, "ger-vazia") && a.gerPastasCriadas()[0].edital === "ISS Caruaru Auditor", "G21l criar pela janelinha: a pasta ja aparece (o caminho abre sozinho) dentro do edital escolhido");
+      /* contexto sem edital */
+      a.gerAbrir();
+      a.$("btnGerNovaPasta").onclick();
+      ok(a.$("gerNpEdital").value === "", "G21m sem pasta de edital aberta o edital vem vazio");
+      a.$("btnGerNpCancelar").onclick();
+    }
+    /* mover para a pasta livre do edital: nasce com o edital, marcada, e nao e' orfa */
+    {
+      const { a, k } = MB();
+      a.gerCriarPasta("Licitações", "Lei 14.133", "ISS Caruaru Auditor");
+      a.gerAbrir();
+      a.gerAbertosAtual().add(a.gerModeloEditais(a.gerNotasAtual(), a.gerPastasVazias(a.gerNotasAtual())).roots.find((x) => x.nome === "ISS Caruaru Auditor").id + "|licitacoes"); a.gerPintar();
+      const chave = k("Licitações", "Lei 14.133");
+      const iB = linhasDaLista(a).findIndex((l) => /solta/.test(l.textContent));
+      linhasDaLista(a)[iB].ondragstart(ev());
+      const alvo = topo(a, "Lei 14.133");
+      await conduzir(a, alvo.ondrop(ev()));
+      const e = a.matResumosAtual()[chave];
+      ok(e && e.concurso === "ISS Caruaru Auditor" && e.pastaLivre === true && /solta/.test(e.cartoes), "G21n o cartao movido para a pasta livre cria o topico com o edital e a marca de pasta livre: " + JSON.stringify(e && { c: e.concurso, l: e.pastaLivre }));
+      ok(a.preMaterialOrfao(a.matResumosAtual(), "# X | prova: 2027-01-01\n@ Outra :: 5\n+ Coisa :: 5").every((o) => o.chave !== chave), "G21o e a virada de edital nao a trata como orfa");
+      /* mover para um topico COMUM (do plano) nao o marca como pasta livre */
+      a.gerAbrir();
+      const iC = linhasDaLista(a).findIndex((l) => /Base de calculo/.test(l.textContent));
+      const ck2 = achar(a.$("gerLista"), (e) => e.tag === "input");
+      ck2[iC].checked = true; ck2[iC].onchange();
+      await conduzir(a, a.gerEscolherDestino(k("Sistema Tributário Brasileiro", "ISS"), "ISS Caruaru Auditor"));
+      const ei = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "ISS")];
+      ok(ei && /Base de calculo/.test(ei.cartoes) && !ei.pastaLivre, "G21o2 mover para um topico do plano do edital NAO o marca como pasta livre");
+    }
+    /* classificar a Bancada pelo edital */
+    {
+      const { a, k, edA, edB } = MB();
+      ok(a.$("btnGerClassificar").hidden === true, "G21p (o botao nasce escondido)");
+      a.gerAbrir();
+      ok(a.$("btnGerClassificar").hidden === true, "G21q sem abrir a Bancada o botao de classificar nao aparece");
+      linhas(a, "ger-ed").find((e) => /Bancada/.test(e.textContent)).onclick();
+      ok(a.$("btnGerClassificar").hidden === false, "G21r com a Bancada aberta o botao aparece");
+      linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+      ok(a.$("btnGerClassificar").hidden === true, "G21s e some ao sair da Bancada");
+      /* o nucleo */
+      const notas = a.gerNotasAtual().filter((n) => n.chave === a.CQ_BANCADA);
+      const c0 = a.gerClassificar(notas, edA, false);
+      ok(c0.total === 3 && c0.classificados === 1 && c0.grupos.length === 1 && c0.grupos[0].topico === "ISS" && c0.soDisciplina.length === 1 && c0.semPista.length === 1, "G21t so' por topico: 1 classificado, 1 so' casa com a disciplina, 1 sem pista: " + JSON.stringify({ c: c0.classificados, d: c0.soDisciplina.length, s: c0.semPista.length }));
+      const c1 = a.gerClassificar(notas, edA, true);
+      ok(c1.classificados === 2 && c1.grupos.length === 2 && c1.grupos.some((g) => g.gerais && g.topico === "(assuntos gerais)") && c1.semPista.length === 1, "G21u incluindo a disciplina: 2 classificados (um em 'assuntos gerais')");
+      ok(a.gerClassificar(notas, edB, true).classificados === 0, "G21v com outro edital nada casa");
+      /* a tela */
+      linhas(a, "ger-ed").find((e) => /Bancada/.test(e.textContent)).onclick();
+      a.$("btnGerClassificar").onclick();
+      const dlg = a.$("dlgGerClassificar");
+      ok(dlg.open === true && a.$("gerClEdital").value === edA.id && /3 cartões na Bancada: 1 classificados em 1 tópicos · 1 só casam com a disciplina · 1 sem pista/.test(a.$("gerClResumo").textContent), "G21w a janela abre com o edital certo e o resumo: " + a.$("gerClResumo").textContent);
+      ok(achar(a.$("gerClLista"), (e) => cls(e, "ger-cl-item")).length === 1 && /Sistema Tributário Brasileiro › ISS — 1/.test(a.$("gerClLista").textContent) && a.$("btnGerClMover").disabled === false, "G21x mostra o resultado por topico antes de mover");
+      a.$("gerClGerais").checked = true; a.$("gerClGerais").onchange();
+      ok(achar(a.$("gerClLista"), (e) => cls(e, "ger-cl-item")).length === 2 && /assuntos gerais/.test(a.$("gerClLista").textContent), "G21y marcar 'incluir a disciplina' acrescenta o grupo de assuntos gerais");
+      a.$("gerClEdital").value = edB.id; a.$("gerClEdital").onchange();
+      ok(a.$("btnGerClMover").disabled === true && /0 classificados/.test(a.$("gerClResumo").textContent), "G21z edital sem nenhum casamento: o botao de mover desliga");
+      const antesNada = a.$("editor").value;
+      a.$("btnGerClMover").onclick();
+      ok(dlg.open === true && /Nenhum cartão foi classificado/.test(a.$("gerClResumo").textContent) && a.$("editor").value === antesNada, "G21z2 mover sem nenhum classificado: explica, nao fecha e nao mexe em nada");
+      a.$("btnGerClFechar").onclick();
+      ok(dlg.open === false && a.$("editor").value === antesNada, "G21z3 'Cancelar' fecha sem mover");
+      a.$("btnGerClassificar").onclick();
+      a.$("gerClGerais").checked = true;
+      a.$("gerClEdital").value = edA.id; a.$("gerClEdital").onchange();
+      const antesEd = a.$("editor").value;
+      a.$("btnGerClMover").onclick();
+      ok(dlg.open === false, "G21za mover fecha a janela");
+      const cISS = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "ISS")], cGer = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "(assuntos gerais)")];
+      ok(cISS && cISS.concurso === "ISS Caruaru Auditor" && /Fato gerador/.test(cISS.cartoes) && cGer && cGer.concurso === "ISS Caruaru Auditor" && /Base de calculo/.test(cGer.cartoes), "G21zb os cartoes foram para os topicos do edital, com o edital gravado (inclusive 'assuntos gerais')");
+      ok(a.$("editor").value === "Pergunta solta? :: resp" && /2 cartão\(ões\) classificado\(s\) em 2 tópico\(s\)/.test(a.$("gerMsg").textContent) && /1 ficaram na Bancada/.test(a.$("gerMsg").textContent) && a.$("btnGerMsgDesfazer").hidden === false, "G21zc sobra so' o sem pista na Bancada e o aviso conta tudo, com desfazer: " + a.$("gerMsg").textContent);
+      await conduzir(a, a.$("btnGerMsgDesfazer").onclick());
+      const d1 = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "ISS")], d2 = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "(assuntos gerais)")];
+      ok(a.$("editor").value === antesEd && !/Fato gerador/.test((d1 || {}).cartoes || "") && !/Base de calculo/.test((d2 || {}).cartoes || ""), "G21zd UM desfazer volta tudo (os dois topicos e a Bancada)");
+    }
+    /* casos de recusa e repetido */
+    {
+      const { a, k } = MB(false);
+      a.gerAbrir();
+      a.gerAbrirClassificar();
+      ok(a.$("dlgGerClassificar").open !== true && /vazia/.test(a.$("gerMsg").textContent), "G21ze Bancada vazia: avisa e nao abre a janela: " + a.$("gerMsg").textContent);
+      const sem = rodar().api; sem.matIniciar(); sem.edIniciar(); sem.$("editor").value = "P? :: R :: iss";
+      sem.gerAbrir();
+      achar(sem.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => /Texto do editor/.test(e.textContent)).onclick();
+      ok(sem.$("btnGerClassificar").hidden === true, "G21zf0 sem nenhum edital cadastrado o botao de classificar nem aparece (mesmo com a Bancada aberta)");
+      sem.gerAbrirClassificar();
+      ok(sem.$("dlgGerClassificar").open !== true && /Cadastre um edital/.test(sem.$("gerMsg").textContent), "G21zf sem nenhum edital: explica o que fazer");
+      const { a: b, k: kb } = MB();
+      b.matGravarCartoes(kb("Sistema Tributário Brasileiro", "ISS"), "Fato gerador? :: Ja estava la", { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      b.gerAbrir();
+      linhas(b, "ger-ed").find((e) => /Bancada/.test(e.textContent)).onclick();
+      b.gerAbrirClassificar();
+      b.$("btnGerClMover").onclick();
+      ok(/1 já existia\(m\) no destino/.test(b.$("gerMsg").textContent) && /Fato gerador/.test(b.$("editor").value), "G21zg pergunta que o destino ja tem nao e' duplicada: o cartao fica na Bancada e o aviso conta: " + b.$("gerMsg").textContent);
+    }
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
@@ -1143,7 +1300,7 @@ async function testes() {
     ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column/.test(html) && /\.ger-grande\{width:98vw/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e modo ampliado no CSS");
     ok(/\.ger-pasta\.ger-alvo\{/.test(html) && /\.ger-ghost\{/.test(html) && /\.ger-item\.ger-indo\{/.test(html), "G13d CSS do destaque da pasta, da pilula e da linha esmaecida");
     ok(/id="gerAgrupar"/.test(html) && /\.ger-modo-edital \.ger-top\{/.test(html) && /\.ger-ed\{/.test(html), "G13f seletor da visao por edital e o recuo dos niveis");
-    ok(/id="gerNpErro" role="alert"/.test(html) && /id="btnGerNovaPasta"/.test(html) && /id="btnGerMarcarTodos"/.test(html) && /\.ger-vazia\{/.test(html) && /\.ger-x\{/.test(html), "G13e botoes de nova pasta e marcar todos, e o estilo da pasta vazia");
+    ok(/id="gerClResumo" role="status" aria-live="polite"/.test(html) && /id="gerNpErro" role="alert"/.test(html) && /id="btnGerNovaPasta"/.test(html) && /id="btnGerMarcarTodos"/.test(html) && /\.ger-vazia\{/.test(html) && /\.ger-x\{/.test(html), "G13e botoes de nova pasta e marcar todos, e o estilo da pasta vazia");
     ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
   }
 

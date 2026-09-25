@@ -159,13 +159,17 @@ function matGravar(chave, texto, meta) {
 function matGravarCartoes(chave, texto, meta) {
   const limpo = String(texto || "").trim();
   const antigo = matResumos[chave] || {};
-  matResumos[chave] = Object.assign({}, antigo, {
+  /* PASTA LIVRE: criada pela pessoa na biblioteca de cartões, fora do plano de qualquer edital. Não herda o
+   * edital que estiver aberto (senão "Sem edital" viraria o do momento) e a virada de edital não a trata
+   * como material órfão (preMaterialOrfao ignora `pastaLivre`). */
+  const livre = !!((meta && meta.pastaLivre) || antigo.pastaLivre);
+  matResumos[chave] = Object.assign({}, antigo, livre ? { pastaLivre: true } : {}, {
     texto: antigo.texto || "",
     cartoes: limpo,
     disciplina: (meta && meta.disciplina) || antigo.disciplina || "",
     topico: (meta && meta.topico) || antigo.topico || "",
     concurso: (meta && meta.concurso) || antigo.concurso
-      || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
+      || (livre ? "" : (typeof concursoAtual === "function" ? concursoAtual().nome : "")),
     criado: antigo.criado || new Date().toISOString(),
     tocado: new Date().toISOString(),
   });
