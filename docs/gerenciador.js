@@ -29,7 +29,9 @@ const GER_DICAS = {
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
   btnGerMsgDesfazer: "ger_tip_msg_desfazer", btnGerMover: "ger_tip_mover", btnGerApagar: "ger_tip_apagar",
   btnGerMelhorar: "ger_tip_melhorar", btnGerDesfazer: "ger_tip_desfazer", btnGerFechar: "ger_tip_fechar",
-  btnGerNpOk: "ger_tip_np_ok", btnGerNpCancelar: "ger_tip_np_cancelar",
+  btnGerNpOk: "ger_tip_np_ok", btnGerNpCancelar: "ger_tip_np_cancelar", gerNpEdital: "ger_tip_np_edital",
+  btnGerClassificar: "ger_tip_classificar", btnGerClMover: "ger_tip_cl_mover", btnGerClFechar: "ger_tip_cl_fechar",
+  gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -164,8 +166,9 @@ function gerLimparNome(s) {
 }
 
 /* Cria a pasta (só o registro): devolve { ok, chave, nome, existe } ou { ok:false, motivo }. */
-function gerCriarPasta(disciplina, topico) {
+function gerCriarPasta(disciplina, topico, edital) {
   const d = gerLimparNome(disciplina), tp = gerLimparNome(topico);
+  const ed = edital ? (typeof editais !== "undefined" ? editais : []).find((e) => e.nome === edital) : null;
   if (!d || !tp) return { ok: false, motivo: "vazia" };
   if (d.length > 80 || tp.length > 120) return { ok: false, motivo: "longa" };
   const alvo = matChaveNormal(matChave(d, tp));
@@ -174,11 +177,19 @@ function gerCriarPasta(disciplina, topico) {
   const viva = matChaveViva(d, tp);
   const noMaterial = !!matResumos[viva];
   const chave = jaCriada ? jaCriada.chave : viva;
-  const nome = d + " › " + tp;
+  const nome = (ed ? ed.nome + " › " : "") + d + " › " + tp;
+  /* tópico que JÁ é do plano deste edital: a pasta já existe (é a virtual) */
+  if (ed) {
+    let plano = [];
+    try { plano = lerEdital(ed.texto || "").disciplinas; } catch (e) { plano = []; }
+    const doPlano = [];
+    plano.forEach((pd) => pd.topicos.forEach((pt) => { if (matChaveNormal(matChave(pd.nome, pt.nome)) === alvo) doPlano.push([pd.nome, pt.nome]); }));
+    if (doPlano.length) return { ok: true, existe: true, chave: matChaveViva(doPlano[0][0], doPlano[0][1]), nome, plano: true };
+  }
   /* já visível na árvore: tem cartão, ou já foi criada aqui */
   const comCartao = noMaterial && String(matResumos[viva].cartoes || "").trim();
   if (jaCriada || comCartao) return { ok: true, existe: true, chave, nome };
-  criadas.push({ chave, disciplina: noMaterial ? (matResumos[viva].disciplina || d) : d, topico: noMaterial ? (matResumos[viva].topico || tp) : tp, criada: new Date().toISOString() });
+  criadas.push({ chave, disciplina: noMaterial ? (matResumos[viva].disciplina || d) : d, topico: noMaterial ? (matResumos[viva].topico || tp) : tp, edital: ed ? ed.nome : "", criada: new Date().toISOString() });
   gerPastasGravar(criadas);
   try { matReg("cartoes", "gerenciador: pasta criada", nome); } catch (e) {}
   return { ok: true, existe: false, chave, nome };
@@ -199,13 +210,10 @@ function gerRemoverPastaVazia(chave) {
 /* Move os cartões para o tópico `destChave`. O bloco (com @ e +) vai como
  * está; pergunta que o destino já tem NÃO é duplicada — o cartão fica onde
  * estava e é contado à parte. Devolve { movidos, repetidos, naoAchou }. */
-function gerMover(notas, destChave, concurso) {
-  const dest = gerPastaInfo(destChave);
-  const r = { movidos: 0, repetidos: 0, naoAchou: 0 };
-  if (!dest) return r;
-  const antes = {};
+function gerMoverNucleo(notas, destChave, concurso, dest, antes, r) {
   const guarda = (ch) => { if (!(ch in antes)) { antes[ch] = gerTexto(ch); cqVersaoBancada("antes de mover cartões", [ch]); } };
   guarda(destChave);
+  const livre = gerPastasCriadas().some((x) => x.chave === destChave);
   notas.forEach((n) => {
     if (n.chave === destChave) return;
     guarda(n.chave);
@@ -219,12 +227,35 @@ function gerMover(notas, destChave, concurso) {
     /* o edital só entra quando o tópico ainda NÃO tem dono: um tópico pertence a um edital só (é o que o
      * "Salvar no material de estudo" também faz), e gravar de novo trocaria o dono de quem já estava lá */
     const meta = { disciplina: dest.disciplina, topico: dest.topico };
+    if (livre) meta.pastaLivre = true;
     if (concurso && !cqEhBancada(destChave) && !(matResumos[destChave] || {}).concurso) meta.concurso = concurso;
     cqGravar(destChave, (at ? at + "\n" : "") + saida.bloco, meta);
     r.movidos++;
   });
+}
+
+function gerMover(notas, destChave, concurso, info) {
+  const dest = info || gerPastaInfo(destChave);
+  const r = { movidos: 0, repetidos: 0, naoAchou: 0 };
+  if (!dest) return r;
+  const antes = {};
+  gerMoverNucleo(notas, destChave, concurso, dest, antes, r);
   gerRegistrar(antes);
   try { matReg("cartoes", "gerenciador: cartões movidos", r.movidos + " para " + (dest.topico || destChave) + ", " + r.repetidos + " repetido(s)"); } catch (e) {}
+  return r;
+}
+
+/* Vários destinos numa ação só (a classificação pelo edital): UM recibo, então "desfazer" volta tudo. */
+function gerMoverGrupos(grupos, concurso) {
+  const r = { movidos: 0, repetidos: 0, naoAchou: 0, topicos: 0 };
+  const antes = {};
+  (grupos || []).forEach((g) => {
+    const antesN = r.movidos;
+    gerMoverNucleo(g.notas, g.chave, concurso, { disciplina: g.disciplina, topico: g.topico }, antes, r);
+    if (r.movidos > antesN) r.topicos++;
+  });
+  gerRegistrar(antes);
+  try { matReg("cartoes", "gerenciador: classificados pelo edital", r.movidos + " cartões em " + r.topicos + " tópicos, " + r.repetidos + " repetido(s)"); } catch (e) {}
   return r;
 }
 
@@ -380,8 +411,9 @@ function gerModeloEditais(notas, vazias) {
   });
   /* 3. pastas criadas aqui (sem cartão ainda) ficam em "Sem edital" */
   (vazias || []).forEach((p) => {
-    const root = raiz("sem:", t("ger_sem_edital"), "sem", "");
-    noTop(root, noDisc(root, p.disciplina), p.chave, p.topico);
+    const dono = p.edital ? eds.find((e) => e.nomes.has(cqNormal(p.edital))) : null;
+    const root = dono ? raizes.get(dono.id) : raiz("sem:", t("ger_sem_edital"), "sem", "");
+    noTop(root, noDisc(root, p.disciplina), p.chave, p.topico, { livre: true });
   });
   semEdital.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt"));
   const roots = (banca.filhos.length ? [banca] : []).concat(doEdital, semEdital);
@@ -474,6 +506,8 @@ function gerPintarLista() {
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
   $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
+  const naBancada = !!gerPasta && (gerPasta.chave === CQ_BANCADA || gerPasta.id === "bancada");
+  $("btnGerClassificar").hidden = !(naBancada && typeof editais !== "undefined" && editais.length && gerBancadaNotas().length);
   $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
   const pastaVazia = !!(gerPasta && gerPasta.chave && !gerNotas.some((n) => n.chave === gerPasta.chave));
   if (pastaVazia) cx.append(gerEl("p", "nota", t("ger_pasta_vazia")));
@@ -815,30 +849,152 @@ function gerAmpliar() {
 /* "＋ Nova pasta": uma janelinha com a disciplina (já preenchida com a da pasta aberta, com as existentes
  * como sugestão) e o nome da pasta. Erro de nome aparece DENTRO dela, sem fechar. (O uiPrompt antigo não
  * usa showModal e ficava invisível por baixo do gerenciador.) */
-function gerAbrirNovaPasta() {
-  const atual = gerPasta && gerPasta.chave ? gerPastaInfo(gerPasta.chave) : (gerPasta ? { disciplina: gerPasta.disciplina } : null);
+/* o edital da pasta aberta (para a pasta nova nascer dentro dele): raiz/disciplina do edital ou tópico dele */
+function gerEditalDoContexto() {
+  if (!gerPasta) return "";
+  const m = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas));
+  if (gerPasta.id) {
+    const r = m.roots.find((x) => x.tipo === "edital" && (gerPasta.id === x.id || gerPasta.id.indexOf(x.id + "|") === 0));
+    return r ? r.concurso : "";
+  }
+  if (gerPasta.chave) {
+    const r = m.roots.find((x) => x.tipo === "edital" && x.chaves.has(gerPasta.chave));
+    return r ? r.concurso : "";
+  }
+  return "";
+}
+
+/* disciplinas sugeridas: as que já existem + as do plano do edital escolhido */
+function gerPreencherDiscsNp() {
   const banca = t("cq_bancada_disc");
-  $("gerNpDisc").value = (atual && atual.disciplina && atual.disciplina !== banca) ? atual.disciplina : "";
-  $("gerNpTop").value = "";
-  $("gerNpErro").textContent = "";
   const dl = $("gerNpDiscLista");
   dl.innerHTML = "";
-  gerArvore(gerNotas, gerPastasVazias(gerNotas)).map((d) => d.disciplina).filter((d) => d && d !== "—" && d !== banca).forEach((d) => {
+  const nomes = [];
+  gerArvore(gerNotas, gerPastasVazias(gerNotas)).forEach((d) => nomes.push(d.disciplina));
+  const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.nome === $("gerNpEdital").value);
+  if (ed) { try { lerEdital(ed.texto || "").disciplinas.forEach((d) => nomes.push(d.nome)); } catch (e) {} }
+  const vistos = new Set();
+  nomes.filter((d) => d && d !== "—" && d !== banca).forEach((d) => {
+    const k = cqNormal(d);
+    if (vistos.has(k)) return;
+    vistos.add(k);
     const o = document.createElement("option");
     o.value = d;
     dl.append(o);
   });
+}
+
+function gerAbrirNovaPasta() {
+  const atual = gerPasta && gerPasta.chave ? gerPastaInfo(gerPasta.chave) : (gerPasta ? { disciplina: gerPasta.disciplina } : null);
+  const sel = $("gerNpEdital");
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = t("ger_np_sem_edital");
+  sel.append(o0);
+  (typeof editais !== "undefined" ? editais : []).forEach((e) => {
+    const o = document.createElement("option");
+    o.value = e.nome; o.textContent = e.nome;
+    sel.append(o);
+  });
+  const ctx = gerEditalDoContexto();
+  sel.value = (typeof editais !== "undefined" ? editais : []).some((e) => e.nome === ctx) ? ctx : "";
+  const banca = t("cq_bancada_disc");
+  $("gerNpDisc").value = (atual && atual.disciplina && atual.disciplina !== banca) ? atual.disciplina : "";
+  $("gerNpTop").value = "";
+  $("gerNpErro").textContent = "";
+  gerPreencherDiscsNp();
   abrirModal("dlgGerNovaPasta");
   try { ($("gerNpDisc").value ? $("gerNpTop") : $("gerNpDisc")).focus(); } catch (e) {}
 }
 
 function gerConfirmarNovaPasta() {
-  const r = gerCriarPasta($("gerNpDisc").value, $("gerNpTop").value);
+  const r = gerCriarPasta($("gerNpDisc").value, $("gerNpTop").value, $("gerNpEdital").value);
   if (!r.ok) { $("gerNpErro").textContent = t(r.motivo === "longa" ? "ger_np_longa" : "ger_np_vazia"); return r; }
   $("dlgGerNovaPasta").close();
   gerPasta = { chave: r.chave };
-  gerCalcular(); gerPintarDestinos(); gerPintar();
+  gerCalcular(); gerAbrirCaminhoDe(r.chave); gerPintarDestinos(); gerPintar();
   gerAviso(t(r.existe ? "ger_np_existe" : "ger_np_criada", { n: r.nome }), false);
+  return r;
+}
+
+/* abre (na visão por edital) o edital e a disciplina onde está a pasta, para ela aparecer */
+function gerAbrirCaminhoDe(chave) {
+  gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.forEach((r) => {
+    r.filhos.forEach((d) => {
+      const tops = d.tipo === "disc" ? d.filhos : [d];
+      if (tops.some((tp) => tp.chave === chave)) { gerAbertos.add(r.id); if (d.tipo === "disc") gerAbertos.add(d.id); }
+    });
+  });
+}
+
+/* ---- classificar a Bancada pelo edital ----
+ * A MESMA sugestão do "Salvar no material de estudo" (cmClassificarLocal: etiquetas do cartão × tópicos do
+ * edital), só que aqui a pessoa vê o resultado por tópico antes de mover, e desfaz tudo de uma vez. */
+function gerBancadaNotas() { return gerNotas.filter((n) => cqEhBancada(n.chave)); }
+
+function gerClassificar(notas, ed, comGerais) {
+  const itens = cmClassificarLocal(notas.map((n) => n.card), cmPlanoDoEdital(ed));
+  const mapa = new Map(), semPista = [], soDisciplina = [];
+  itens.forEach((x, i) => {
+    const n = notas[i];
+    if (!x.sugestao) { semPista.push(n); return; }
+    const gerais = x.sugestao.topico === CM_GERAL;
+    if (gerais && !comGerais) { soDisciplina.push(n); return; }
+    const chave = matChaveViva(x.sugestao.disciplina, x.sugestao.topico);
+    if (!mapa.has(chave)) mapa.set(chave, { chave, disciplina: x.sugestao.disciplina, topico: x.sugestao.topico, gerais, notas: [] });
+    mapa.get(chave).notas.push(n);
+  });
+  const grupos = [...mapa.values()];
+  return { grupos, semPista, soDisciplina, total: notas.length, classificados: grupos.reduce((s, g) => s + g.notas.length, 0) };
+}
+
+function gerClEdital() {
+  return (typeof editais !== "undefined" ? editais : []).find((e) => e.id === $("gerClEdital").value) || null;
+}
+
+function gerPintarClassificar() {
+  const ed = gerClEdital();
+  const cx = $("gerClLista");
+  cx.innerHTML = "";
+  if (!ed) { $("gerClResumo").textContent = t("ger_cl_sem_edital"); $("btnGerClMover").disabled = true; return null; }
+  const c = gerClassificar(gerBancadaNotas(), ed, $("gerClGerais").checked);
+  $("gerClResumo").textContent = t("ger_cl_resumo", { t: c.total, c: c.classificados, g: c.grupos.length, d: c.soDisciplina.length, s: c.semPista.length });
+  c.grupos.forEach((g) => {
+    cx.append(gerEl("div", "ger-cl-item", g.disciplina + " › " + g.topico + " — " + g.notas.length));
+  });
+  $("btnGerClMover").disabled = !c.classificados;
+  return c;
+}
+
+function gerAbrirClassificar() {
+  const lista = (typeof editais !== "undefined" ? editais : []);
+  if (!lista.length) { gerAviso(t("ger_cl_sem_edital"), false); return; }
+  if (!gerBancadaNotas().length) { gerAviso(t("ger_cl_sem_cartoes"), false); return; }
+  const sel = $("gerClEdital");
+  sel.innerHTML = "";
+  lista.forEach((e) => {
+    const o = document.createElement("option");
+    o.value = e.id; o.textContent = e.nome;
+    sel.append(o);
+  });
+  const ctx = gerEditalDoContexto();
+  const dono = lista.find((e) => e.nome === ctx) || lista.find((e) => e.id === (typeof editalAtual !== "undefined" ? editalAtual : null)) || lista[0];
+  sel.value = dono.id;
+  $("gerClGerais").checked = false;
+  gerPintarClassificar();
+  abrirModal("dlgGerClassificar");
+}
+
+function gerConfirmarClassificar() {
+  const ed = gerClEdital();
+  if (!ed) return null;
+  const c = gerClassificar(gerBancadaNotas(), ed, $("gerClGerais").checked);
+  if (!c.classificados) { $("gerClResumo").textContent = t("ger_cl_nada"); return null; }
+  $("dlgGerClassificar").close();
+  const r = gerMoverGrupos(c.grupos, ed.nome);
+  gerCalcular(); gerPintar(); gerPintarDestinos();
+  try { matRender(); } catch (e) {}
+  gerAviso(t("ger_cl_feito", { n: r.movidos, k: r.topicos, r: r.repetidos, s: c.semPista.length + c.soDisciplina.length }), true);
   return r;
 }
 
@@ -893,6 +1049,12 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerLimpar").onclick = () => { gerSel = new Set(); gerPintarLista(); gerPintarAcoes(); flashBotao($("btnGerLimpar")); };
   $("btnGerMarcarTodos").onclick = () => { gerMarcarTodos(); flashBotao($("btnGerMarcarTodos")); };
   $("btnGerNovaPasta").onclick = gerAbrirNovaPasta;
+  $("gerNpEdital").onchange = gerPreencherDiscsNp;
+  $("btnGerClassificar").onclick = gerAbrirClassificar;
+  $("gerClEdital").onchange = gerPintarClassificar;
+  $("gerClGerais").onchange = gerPintarClassificar;
+  $("btnGerClMover").onclick = gerConfirmarClassificar;
+  $("btnGerClFechar").onclick = () => $("dlgGerClassificar").close();
   $("gerAgrupar").onchange = () => gerTrocarAgrupar($("gerAgrupar").value);
   $("btnGerNpOk").onclick = gerConfirmarNovaPasta;
   $("btnGerNpCancelar").onclick = () => $("dlgGerNovaPasta").close();

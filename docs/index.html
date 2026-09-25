@@ -4188,6 +4188,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-modo-edital .ger-disc{padding-left:16px}
 .ger-modo-edital .ger-top{padding-left:36px}
 .ger-np-erro{color:var(--erro);min-height:18px;margin:8px 0 0}
+.ger-cl-gerais{display:flex;gap:6px;align-items:center;font-size:12px;margin:8px 0}
+.ger-cl-lista{max-height:36vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:4px 8px;font-size:13px}
+.ger-cl-item{padding:3px 0;border-bottom:1px solid var(--borda)}
 .ger-x{float:right;opacity:.55;cursor:pointer;padding:0 4px}
 .ger-x:hover{opacity:1}
 .ger-top[draggable="true"]{cursor:grab}
@@ -7353,12 +7356,28 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <label class="nota" for="gerNpDisc" data-i18n="ger_np_disc_rot" style="display:block;margin:6px 0 3px"></label>
   <input type="text" id="gerNpDisc" list="gerNpDiscLista" maxlength="80" autocomplete="off" style="width:100%;box-sizing:border-box">
   <datalist id="gerNpDiscLista"></datalist>
+  <label class="nota" for="gerNpEdital" data-i18n="ger_np_edital_rot" style="display:block;margin:10px 0 3px"></label>
+  <select id="gerNpEdital" style="width:100%;box-sizing:border-box"></select>
   <label class="nota" for="gerNpTop" data-i18n="ger_np_top_rot" style="display:block;margin:10px 0 3px"></label>
   <input type="text" id="gerNpTop" maxlength="120" autocomplete="off" style="width:100%;box-sizing:border-box">
   <p class="nota ger-np-erro" id="gerNpErro" role="alert"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnGerNpOk" data-i18n="ger_np_criar"></button>
     <button class="btn btn-cinza" id="btnGerNpCancelar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgGerClassificar" class="ui-modal diag-modal" style="max-width:520px">
+  <h3 data-i18n="ger_classificar"></h3>
+  <p class="nota" data-i18n="ger_cl_ajuda"></p>
+  <label class="nota" for="gerClEdital" data-i18n="ger_cl_edital_rot" style="display:block;margin:6px 0 3px"></label>
+  <select id="gerClEdital" style="width:100%;box-sizing:border-box"></select>
+  <label class="ger-cl-gerais"><input type="checkbox" id="gerClGerais"> <span data-i18n="ger_cl_gerais"></span></label>
+  <p class="nota" id="gerClResumo" role="status" aria-live="polite"></p>
+  <div id="gerClLista" class="ger-cl-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnGerClMover" data-i18n="ger_cl_mover"></button>
+    <button class="btn btn-cinza" id="btnGerClFechar" data-i18n="cancel_btn"></button>
   </div>
 </dialog>
 
@@ -7397,6 +7416,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
         <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
+        <button type="button" class="btn-min btn-min-ok" id="btnGerClassificar" data-i18n="ger_classificar" hidden></button>
       </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>

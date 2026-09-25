@@ -176,6 +176,8 @@ function preMaterialOrfao(resumos, txtPos) {
   Object.keys(resumos || {}).forEach((k) => {
     const r = resumos[k];
     if (!r) return;
+    /* pasta livre (criada na biblioteca de cartões) não é do plano de edital nenhum: não é órfã */
+    if (r.pastaLivre) return;
     const temConteudo = String(r.texto || "").trim() || String(r.cartoes || "").trim();
     if (!temConteudo) return;
     const alvo = preNormal(r.disciplina) + "›" + preNormal(r.topico);
