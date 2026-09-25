@@ -1915,7 +1915,7 @@ function matRegistrarLeitura() {
     const r = lerEdital($("editalTexto").value);
     const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas,
       prova: $("edProva").value, feitos: edProgresso });
-    item = plano.itens.find((x) => x.chave === matAtual.chave) || null;
+    item = edAcharItemDoTopico(plano.itens, matAtual.chave);
   } catch (e) { item = null; }
   if (item) item = Object.assign({}, item, { minutos: min });
   else item = { disciplina: matAtual.disciplina, nome: matAtual.topico,

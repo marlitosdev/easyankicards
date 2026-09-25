@@ -72,7 +72,7 @@ function edAvisarGravacaoRecusada(alvo, texto, motivo) {
   } catch (e) {}
 }
 
-function edChave(it) { return (it.disciplina + "›" + it.nome).toLowerCase(); }
+function edChave(it) { return it.ramoId && it.chave ? it.chave : (it.disciplina + "›" + it.nome).toLowerCase(); }
 
 function edNumeros(n) {
   const g = $("editalNums");
@@ -412,8 +412,9 @@ function edLinhaTopico(i, semDisciplina) {
    * selos passam para baixo quando não cabem, em vez de serem cortados. */
   const tit = document.createElement("span");
   tit.className = "ed-item-titulo";
-  tit.textContent = i.nome;
+  tit.textContent = i.titulo || i.nome;
   nome.append(tit);
+  if (i.ramoId) tit.title = t("ram_item_dica", { r: i.ramo, n: i.ramoDe, t: i.nome, p: i.ramoPeso }) + (i.ramoNota ? " " + i.ramoNota : "");
   /* Selo além da cor: quem imprime em preto e branco, ou não distingue
    * azul de cinza, continua sabendo o que é revisão. */
   if (i.ehRevisao) {
@@ -787,6 +788,19 @@ function edLinhaTopico(i, semDisciplina) {
       item.onclick = (e2) => { e2.stopPropagation(); menu.hidden = true; b.onclick(e2); };
       menu.append(item);
     });
+    /* RAMOS: a divisão do tópico (e o peso de cada parte) se ajusta daqui mesmo, sem sair do plano */
+    if (typeof ramAbrirEditor === "function") {
+      const rb = document.createElement("button");
+      rb.type = "button";
+      rb.className = "btn-min ed-menu-item ed-menu-ramos" + (i.ramoId ? " tem" : "");
+      rb.textContent = t(i.ramoId ? "ram_menu_ajustar" : "ram_menu_criar");
+      rb.title = t("ram_tip_menu");
+      rb.onclick = (e2) => {
+        e2.stopPropagation(); menu.hidden = true;
+        ramAbrirEditor({ editalId: i.edital || (typeof editalAtual !== "undefined" ? editalAtual : ""), disciplina: i.disciplina, topico: i.nome, chave: ch });
+      };
+      menu.append(rb);
+    }
     li.append(menu);
   };
 
@@ -1499,7 +1513,8 @@ function edItemDoPlano(disciplina, nome) {
       horas: Number($("edHoras").value) || r.cfg.horas,
       prova: $("edProva").value, feitos: edProgresso });
     const alvo = matChaveNormal(matChave(disciplina, nome));
-    return plano.itens.filter((x) => matChaveNormal(x.chave) === alvo)[0] || null;
+    return plano.itens.filter((x) => matChaveNormal(x.chave) === alvo)[0]
+      || plano.itens.filter((x) => matChaveNormal(x.topicoChave || x.chave) === alvo)[0] || null;
   } catch (e) { return null; }
 }
 
@@ -3895,8 +3910,7 @@ function vkPendentesDoEdital() {
     prova: $("edProva").value, feitos: edProgresso });
   /* só os PENDENTES: comparar o que já foi estudado aqui é desperdício e
    * ainda polui a conferência com pares inúteis */
-  return plano.itens.filter((i) => !i.feito)
-    .map((i) => ({ disciplina: i.disciplina, nome: i.nome }));
+  return edTopicosPendentes(plano.itens);
 }
 
 /* Os editais que podem entrar na comparação. */
@@ -3938,8 +3952,7 @@ function vkPendentesDe(id) {
   const s2 = typeof edSituacao === "function" ? edSituacao(e) : {};
   const plano = montarPlano(r, { horas: (r.cfg || {}).horas || 10,
     prova: s2.prova, feitos: e.progresso || {} });
-  return plano.itens.filter((i) => !i.feito)
-    .map((i) => ({ disciplina: i.disciplina, nome: i.nome }));
+  return edTopicosPendentes(plano.itens);
 }
 
 /* O que foi estudado NUM edital: o diário filtrado pelo concurso dele. */

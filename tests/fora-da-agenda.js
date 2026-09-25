@@ -440,7 +440,8 @@ async function testes() {
     if (mais) mais.onclick({ stopPropagation() {} });
     const itens = [];
     const anda4 = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-menu-item/.test(f.className || "")) itens.push(f.textContent);
+      /* o "dividir em ramos" e' sempre oferecido: nao e' um material que falte */
+      if (/ed-menu-item/.test(f.className || "") && !/ed-menu-ramos/.test(f.className)) itens.push(f.textContent);
       anda4(f);
     });
     anda4(li);

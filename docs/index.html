@@ -4186,6 +4186,13 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-pasta.ger-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
 .ger-pasta.ger-alvo-no{opacity:.45;cursor:not-allowed}
 .ger-vazia{font-style:italic;opacity:.8}
+.ger-ramo{padding-left:52px;font-size:12px}
+.ger-ramo-geral{opacity:.75}
+.ger-modo-edital .ger-ramo{padding-left:56px}
+.ram-lista{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto;margin:6px 0}
+.ram-linha{display:grid;grid-template-columns:minmax(120px,2fr) 84px minmax(90px,2fr) auto auto auto;gap:6px;align-items:center}
+.ram-nome,.ram-nota,.ram-peso{box-sizing:border-box;width:100%;min-width:0}
+@media (max-width:640px){.ram-linha{grid-template-columns:1fr 84px auto auto auto}.ram-nota{grid-column:1 / -1}}
 .ger-agrupar{font-size:11px;max-width:100%}
 .ger-ed{font-weight:700}
 .ger-modo-edital .ger-disc{padding-left:16px}
@@ -7384,6 +7391,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgRamos" class="ui-modal diag-modal" style="max-width:720px">
+  <h3 id="ramTit"></h3>
+  <p class="nota" data-i18n="ram_ajuda"></p>
+  <div id="ramLista" class="ram-lista"></div>
+  <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnRamMais" data-i18n="ram_mais"></button></div>
+  <p class="nota ger-np-erro" id="ramMsg" role="status" aria-live="polite"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnRamSalvar" data-i18n="ram_salvar"></button>
+    <button class="btn btn-cinza" id="btnRamFechar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgGerCartoes" class="ui-modal diag-modal">
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
@@ -7421,6 +7440,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
         <button type="button" class="btn-min btn-min-ok" id="btnGerClassificar" data-i18n="ger_classificar" hidden></button>
         <button type="button" class="btn-min" id="btnGerExportar" data-i18n="ger_exportar" hidden></button>
+        <button type="button" class="btn-min btn-min-ok" id="btnGerRamos" data-i18n="ger_ramos" hidden></button>
       </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
@@ -8003,6 +8023,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cartao-qualidade.js"></script>
 <script src="cartao-elevar.js"></script>
 <script src="gerenciador.js"></script>
+<script src="ramos.js"></script>
 <script src="pacote.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>

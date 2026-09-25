@@ -72,12 +72,15 @@ function plPorDisciplina(plano, r) {
     }
     return linhas[nome];
   };
+  /* tópico com ramos = vários itens: conta o TÓPICO uma vez; pendente se algum ramo falta */
+  const contados = new Set(), pendentesDe = new Set();
   (plano.itens || []).forEach((i) => {
     const L = pega(i.disciplina);
     L.fatiaProva = i.fatiaDisc == null ? L.fatiaProva : i.fatiaDisc;
     L.pesoDisc = i.disciplinaPeso;
-    L.topicos++;
-    if (!i.feito) L.pendentes++;
+    const k = i.disciplina + "|" + (i.topicoChave || i.chave);
+    if (!contados.has(k)) { contados.add(k); L.topicos++; }
+    if (!i.feito && !pendentesDe.has(k)) { pendentesDe.add(k); L.pendentes++; }
   });
   ((r && r.disciplinas) || []).forEach((d) => {
     if (linhas[d.nome]) {

@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "material.js",
-                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "pacote.js",
+                  "cartao-melhorar.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "ramos.js", "pacote.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -642,7 +642,7 @@ function rodar() {
     abrirFoco, fecharFoco, mostrarFoco, blocoMarcado, problemasNavegaveis,
     renderSugestoes, detectoresAtivos, resumoTexto, t, correcaoDeTudo, temLixoIA, corrigirLixoIA,
     cartoesDependentes, MODOS, trocarModo, montarBarraModos, montarDiagnostico,
-    lerEdital, priorizar, montarPlano, semanaAtual, semanasAte, edDetectores,
+    lerEdital, priorizar, montarPlano, edPesosDosRamos, edAcharItemDoTopico, edTopicosPendentes, semanaAtual, semanasAte, edDetectores,
     temPesosIguais, ritmoDoPlano, agendar, edPintarRitmo,
     panoramaDisciplinas, lacunasCriticas, edMudarPeso, edTrocarVista, edPintarPainel, diagnosticoPlano,
     edConferirColagem, edAplicarColagem, edSimular, edMudarHoras, edMarcar,
@@ -823,6 +823,7 @@ function rodar() {
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
     PAC_DICAS, pacDetectarEdital, pacMarcar, pacTemEditais, pacEditalDeAtual: () => pacEditalDe, pacInfoAtual: () => pacInfo, pacAbrir, gerChavesDaPasta, gerExportarPasta, apkgAgruparDecks,
     gerClassificar, gerMoverGrupos, gerAbrirClassificar, gerConfirmarClassificar, gerPintarClassificar, gerBancadaNotas, gerEditalDoContexto, gerAbrirCaminhoDe, gerPreencherDiscsNp,
+    ramIdDoCartao, ramCartaoComRamo, ramRetagar, ramAtribuir, ramAplicar, ramAbrirEditor, ramAdicionar, ramSalvar, ramMover, ramPintar, RAM_DICAS, RAM_GERAL, gerContextoRamos, gerAbrirRamos, gerTemRecibo, gerConfirmarRamo, gerSoltarRamo, gerDesfazerUltima, ramLinhasAtual: () => ramLinhas, ramCtxAtual: () => ramCtx,
     gerDestinoConcursoAtual: () => gerDestinoConcurso, gerModeloEditais, gerTrocarAgrupar, gerAbertosAtual: () => gerAbertos, gerAgruparAtual: () => gerAgrupar, gerVirtuaisAtual: () => gerVirtuais, gerSobreNo, gerNomesDoEdital, GER_CHAVE_AGRUPAR,
     GER_DICAS, CE_DICAS, dicasDosBotoes, flashBotao, tipShow, tipHide, tipHospedeiro,
     gerPastasCriadas, gerCriarPasta, gerRemoverPastaVazia, gerAbrirNovaPasta, gerConfirmarNovaPasta, gerPastaInfo, gerIniciarArrastoPasta, gerMarcarTodos, gerPastasVazias, GER_CHAVE_PASTAS,
@@ -858,7 +859,7 @@ function rodar() {
     regTipoAtual: () => regTipo, abrirRegistro, confirmarRegistro,
     regAtualTeste: () => regAtual, edMarcarProgresso,
     regDeLeitura, regSugerir, matRegistrarLeitura,
-    regQuestoesDoFormulario, regPintarQuestoes, edItemDoPlano,
+    regQuestoesDoFormulario, regPintarQuestoes, edItemDoPlano, edChave,
     ndAbrir, ndAplicarIA, ndLerRespostaIA, ndMontarPrompt, edExplicarCor,
     hubViradaDePagina, edSituacao, edCarregarLista, edCriar,
     edPintarBlocos, edCumprimentoBlocos, hubEdAlternar, hubEdVisivel,
@@ -934,7 +935,7 @@ function rodar() {
     bkIniciar, bkAbrirPainel, bkMostrarConferencia, atualizarSeloBase, idadeBase,
     get edDiario() { return edDiario; },
     registroTexto, faixaDe,
-    edCorrecaoDeTudo, edRender, edIniciar, edParaTexto, horasTexto,
+    edRamoId, edRamosDoTopico, edEditarRamos, edLinhasRamos, tirarNumeracaoEdital, temNumeracaoEdital, normalizarMarcadores, edCorrecaoDeTudo, edRender, edIniciar, edParaTexto, horasTexto,
     /* hub dos editais (8.68): sem exportar, nada do modo novo e testavel */
     hubIniciar, hubRender, hubNovo, hubVoltar, hubRenomear, hubAbrirEdital,
     hubPintarLista, hubPintarAgenda, hubGravarAberto,

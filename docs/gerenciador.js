@@ -30,7 +30,7 @@ const GER_DICAS = {
   btnGerMsgDesfazer: "ger_tip_msg_desfazer", btnGerMover: "ger_tip_mover", btnGerApagar: "ger_tip_apagar",
   btnGerMelhorar: "ger_tip_melhorar", btnGerDesfazer: "ger_tip_desfazer", btnGerFechar: "ger_tip_fechar",
   btnGerNpOk: "ger_tip_np_ok", btnGerNpCancelar: "ger_tip_np_cancelar", gerNpEdital: "ger_tip_np_edital",
-  btnGerClassificar: "ger_tip_classificar", btnGerExportar: "ger_tip_exportar", btnGerClMover: "ger_tip_cl_mover", btnGerClFechar: "ger_tip_cl_fechar",
+  btnGerClassificar: "ger_tip_classificar", btnGerExportar: "ger_tip_exportar", btnGerRamos: "ger_tip_ramos", btnGerClMover: "ger_tip_cl_mover", btnGerClFechar: "ger_tip_cl_fechar",
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
 };
 
@@ -75,6 +75,11 @@ function gerFiltrar(notas, o) {
     const p = opc.pasta;
     if (p && p.chaves && !p.chaves.has(n.chave)) return;
     if (p && p.chave && n.chave !== p.chave) return;
+    if (p && p.ramo) {
+      const id = ramIdDoCartao(n.card);
+      if (p.ramo === RAM_GERAL) { if (id && p.conhecidos && p.conhecidos.has(id)) return; }
+      else if (id !== p.ramo) return;
+    }
     if (p && !p.chave && !p.chaves && p.disciplina && (n.disciplina || "—") !== p.disciplina) return;
     const c = n.card;
     if (filtro === "abaixo" && !ceAbaixo(c)) return;
@@ -97,14 +102,20 @@ function gerFiltrar(notas, o) {
 function gerTexto(chave) { return cqTexto(chave); }
 
 /* Guarda o texto de antes/depois dos tópicos tocados: é o que permite desfazer. */
-function gerRegistrar(antes) {
+function gerRegistrar(antes, extra) {
   const itens = Object.keys(antes).filter((ch) => antes[ch] !== gerTexto(ch)).map((ch) => ({
     chave: ch, antes: antes[ch], depois: gerTexto(ch),
     disciplina: (matResumos[ch] || {}).disciplina, topico: (matResumos[ch] || {}).topico }));
   try {
-    if (itens.length) localStorage.setItem(GER_CHAVE_RECIBO, JSON.stringify({ quando: new Date().toISOString(), itens }));
+    if (itens.length || (extra && extra.edital)) localStorage.setItem(GER_CHAVE_RECIBO, JSON.stringify({ quando: new Date().toISOString(), itens, edital: (extra && extra.edital) || undefined }));
   } catch (e) {}
   return itens.length;
+}
+
+/* há o que desfazer? (cartões movidos/apagados/etiquetados OU o texto do edital, quando só os ramos mudaram) */
+function gerTemRecibo() {
+  const rec = gerRecibo();
+  return !!(rec && ((rec.itens && rec.itens.length) || rec.edital));
 }
 
 function gerRecibo() {
@@ -114,9 +125,20 @@ function gerRecibo() {
 /* Só desfaz o tópico que continua como a ação o deixou. */
 function gerDesfazerUltima() {
   const rec = gerRecibo();
-  if (!rec || !rec.itens) return { desfeitos: 0, pulados: 0 };
+  if (!rec || !(rec.itens || rec.edital)) return { desfeitos: 0, pulados: 0 };
   let desfeitos = 0, pulados = 0;
-  rec.itens.forEach((it) => {
+  /* o texto do edital (ramos): só volta se continua como a ação o deixou */
+  if (rec.edital) {
+    const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === rec.edital.id);
+    if (ed && ed.texto === rec.edital.depois) {
+      ed.texto = rec.edital.antes;
+      try { edSalvarLista(); } catch (e) {}
+      try { if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = ed.texto; edRender(); } } catch (e) {}
+      desfeitos++;
+    } else pulados++;
+  }
+  const itensDoRecibo = rec.itens || [];
+  itensDoRecibo.forEach((it) => {
     if (gerTexto(it.chave) !== it.depois) { pulados++; return; }
     cqVersaoBancada("antes de desfazer a última ação", [it.chave]);
     cqGravar(it.chave, it.antes, { disciplina: it.disciplina, topico: it.topico });
@@ -350,6 +372,14 @@ function gerModeloEditais(notas, vazias) {
   const virtuais = new Map();
   const cont = new Map();
   (notas || []).forEach((n) => cont.set(n.chave, (cont.get(n.chave) || 0) + 1));
+  /* quantos cartões de cada RAMO (etiqueta ram_<id>) em cada tópico */
+  const contRamo = new Map();
+  (notas || []).forEach((n) => {
+    const id = ramIdDoCartao(n.card);
+    if (!id) return;
+    if (!contRamo.has(n.chave)) contRamo.set(n.chave, new Map());
+    const mm = contRamo.get(n.chave); mm.set(id, (mm.get(id) || 0) + 1);
+  });
   const lista = (typeof editais !== "undefined" && Array.isArray(editais)) ? editais : [];
   const eds = lista.map((ed) => ({ ed, nomes: gerNomesDoEdital(ed), id: "ed:" + ed.id }));
   const raizes = new Map(), doEdital = [], semEdital = [];
@@ -388,6 +418,16 @@ function gerModeloEditais(notas, vazias) {
       d.topicos.forEach((tp) => {
         const chave = matChaveViva(d.nome, tp.nome);
         const no = noTop(root, disc, chave, tp.nome, { virtual: !cont.get(chave) });
+        no.plano = { editalId: e.ed.id, disciplina: d.nome, topico: tp.nome };
+        if (tp.ramos && tp.ramos.length && !no.ramos) {
+          const mm = contRamo.get(chave) || new Map();
+          const conhecidos = new Set(tp.ramos.map((rm) => rm.id));
+          no.ramos = tp.ramos.map((rm) => ({ tipo: "ramo", id: root.id + "|rm|" + chave + "|" + rm.id, ramoId: rm.id, nome: rm.nome, peso: rm.peso,
+            herdado: rm.herdado, nota: rm.nota, abs: rm.abs, chave, concurso: root.concurso, total: mm.get(rm.id) || 0, conhecidos }));
+          const soma = no.ramos.reduce((a, x) => a + x.total, 0);
+          no.semRamo = Math.max(0, no.total - soma);
+          no.conhecidos = conhecidos;
+        }
         if (!virtuais.has(chave)) virtuais.set(chave, { disciplina: d.nome, topico: tp.nome, concurso: e.ed.nome || "" });
         const dono = (matResumos[chave] || {}).concurso;
         if (dono && !e.nomes.has(cqNormal(dono))) no.compartilhado = dono;
@@ -422,10 +462,35 @@ function gerModeloEditais(notas, vazias) {
 }
 
 /* a linha de UM tópico (pasta): usada pelas duas visões */
+/* a linha de um RAMO do tópico (ou o "geral do tópico"): clicar lista os cartões dele; soltar cartões aqui os liga a ele */
+function gerLinhaRamo(cx, rm, concurso) {
+  const geral = rm.ramoId === RAM_GERAL;
+  const peso = !geral && !rm.herdado ? " ★" + (rm.abs > 0 ? rm.abs + (rm.unidade === "p" ? "p" : "q") : rm.peso) : "";
+  const ativo = !!gerPasta && gerPasta.chave === rm.chave && gerPasta.ramo === rm.ramoId;
+  const li = gerEl("div", "ger-pasta ger-ramo" + (geral ? " ger-ramo-geral" : "") + (rm.total === 0 ? " ger-vazia" : "") + (ativo ? " ger-atual" : ""),
+    "↳ " + rm.nome + " (" + rm.total + ")" + peso);
+  li.title = geral ? t("ger_tip_ramo_geral") : t("ger_tip_ramo", { r: rm.nome }) + (rm.nota ? " — " + rm.nota : "");
+  li.onclick = () => { gerPasta = { chave: rm.chave, ramo: rm.ramoId, conhecidos: rm.conhecidos, concurso: concurso || rm.concurso }; gerRefiltrar(); gerPintar(); };
+  li.ondragover = (ev) => gerSobreAlvo(ev, rm.chave, li, true);
+  li.ondragleave = () => gerSaiuAlvo(li);
+  li.ondrop = (ev) => gerSoltarRamo(ev, rm);
+  cx.append(li);
+}
+
 function gerLinhaTopico(cx, tp, concurso) {
   const marca = tp.compartilhado ? " ↔" : "";
-  const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")" + marca);
-  li.onclick = () => { gerPasta = { chave: tp.chave }; gerRefiltrar(); gerPintar(); };
+  const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave && !gerPasta.ramo ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")" + marca);
+  /* tópico COM ramos: uma seta abre e fecha os ramos dele */
+  const idRamos = "rm|" + tp.chave + "|" + (concurso || "");
+  const ramosAbertos = !!tp.ramos && gerAbertos.has(idRamos);
+  if (tp.ramos) {
+    const seta = gerEl("span", "ger-seta", ramosAbertos ? "▾" : "▸");
+    seta.title = t("ger_tip_seta_ramos");
+    seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); ramosAbertos ? gerAbertos.delete(idRamos) : gerAbertos.add(idRamos); gerPintarArvore(); };
+    li.textContent = "";
+    li.append(seta, gerEl("span", "", " " + tp.topico + " (" + tp.total + ")" + marca));
+  }
+  li.onclick = () => { gerPasta = { chave: tp.chave, concurso: concurso }; gerRefiltrar(); gerPintar(); };
   li.title = tp.compartilhado ? t("ger_tip_compartilhado", { e: tp.compartilhado })
     : t(tp.vazia ? (tp.virtual ? "ger_tip_pasta_edital_vazia" : "ger_tip_pasta_vazia") : "ger_tip_pasta");
   if (tp.vazia && !tp.virtual) {
@@ -449,6 +514,10 @@ function gerLinhaTopico(cx, tp, concurso) {
   li.ondragleave = () => gerSaiuAlvo(li);
   li.ondrop = (ev) => gerSoltar(ev, tp.chave, concurso);
   cx.append(li);
+  if (ramosAbertos) {
+    tp.ramos.forEach((rm) => gerLinhaRamo(cx, rm, concurso));
+    if (tp.semRamo > 0) gerLinhaRamo(cx, { ramoId: RAM_GERAL, nome: t("ger_ramo_geral"), total: tp.semRamo, chave: tp.chave, concurso, conhecidos: tp.conhecidos, herdado: true });
+  }
 }
 
 /* um nó da árvore por edital (edital, disciplina ou tópico) */
@@ -507,6 +576,7 @@ function gerPintarLista() {
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
   $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
   $("btnGerExportar").hidden = !gerPasta;
+  $("btnGerRamos").hidden = !gerContextoRamos();
   const naBancada = !!gerPasta && (gerPasta.chave === CQ_BANCADA || gerPasta.id === "bancada");
   $("btnGerClassificar").hidden = !(naBancada && typeof editais !== "undefined" && editais.length && gerBancadaNotas().length);
   $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
@@ -564,8 +634,7 @@ function gerPintarAcoes() {
   $("gerTotal").textContent = t("ger_total", { n: gerNotas.length });
   $("btnGerEditar").disabled = gerFoco < 0;
   $("btnGerPreApagar").disabled = gerFoco < 0;
-  const rec = gerRecibo();
-  const tem = !!(rec && rec.itens && rec.itens.length);
+  const tem = gerTemRecibo();
   $("btnGerDesfazer").hidden = !tem;
   if (!tem) $("btnGerMsgDesfazer").hidden = true;
   if (!k) gerFecharDestinos();
@@ -575,8 +644,7 @@ function gerPintarAcoes() {
 function gerAviso(texto, comDesfazer) {
   $("gerMsg").textContent = texto || "";
   $("gerMsgCx").hidden = !texto;
-  const rec = gerRecibo();
-  $("btnGerMsgDesfazer").hidden = !(comDesfazer && rec && rec.itens && rec.itens.length);
+  $("btnGerMsgDesfazer").hidden = !(comDesfazer && gerTemRecibo());
 }
 
 /* ---- destino: um seletor com busca (o <select> nativo estourava a tela) ---- */
@@ -760,9 +828,9 @@ function gerAlvoValido(chave) {
   return !!gerArrasto && !!chave && gerArrasto.notas.some((n) => n.chave !== chave);
 }
 
-function gerSobreAlvo(ev, chave, el) {
+function gerSobreAlvo(ev, chave, el, aceitaMesma) {
   if (!gerArrasto) return;
-  const ok = gerAlvoValido(chave);
+  const ok = aceitaMesma ? !!chave : gerAlvoValido(chave);
   if (ok && ev && ev.preventDefault) ev.preventDefault();    /* é o preventDefault que permite soltar */
   try { if (ev && ev.dataTransfer) ev.dataTransfer.dropEffect = ok ? "move" : "none"; } catch (e) {}
   if (el && el.classList) { el.classList.toggle("ger-alvo", ok); el.classList.toggle("ger-alvo-no", !ok); }
@@ -786,6 +854,28 @@ function gerSobreNo(ev, id) {
   if (ev && ev.preventDefault) ev.preventDefault();
   if (gerHoverTimer) clearTimeout(gerHoverTimer);
   gerHoverTimer = setTimeout(() => { gerHoverTimer = null; gerAbertos.add(id); gerPintarArvore(); }, 600);
+}
+
+/* soltar cartões num RAMO: liga-os a ele (os de outro tópico são movidos para o tópico do ramo) */
+function gerSoltarRamo(ev, rm) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const ms = gerArrasto && gerArrasto.notas;
+  gerFimArrasto();
+  if (!ms) return Promise.resolve();
+  return gerConfirmarRamo(ms, rm);
+}
+
+async function gerConfirmarRamo(ms, rm) {
+  if (!ms || !ms.length) return;
+  const geral = rm.ramoId === RAM_GERAL;
+  const fora = ms.filter((n) => n.chave !== rm.chave).length;
+  const msg = t(geral ? "ger_conf_ramo_geral" : "ger_conf_ramo", { n: ms.length, r: rm.nome })
+    + (fora ? "\n\n" + t("ger_conf_ramo_fora", { f: fora }) : "");
+  if (!(await uiConfirm(msg))) return;
+  const r = ramAtribuir(ms, rm.chave, geral ? "" : rm.ramoId, rm.concurso);
+  gerCalcular(); gerAbrirCaminhoDe(rm.chave); gerPintar(); gerPintarDestinos();
+  try { matRender(); } catch (e) {}
+  gerAviso(t("ger_feito_ramo", { n: r.ligados, m: r.movidos }), true);
 }
 
 function gerSoltar(ev, chave, concurso) {
@@ -859,6 +949,7 @@ function gerEditalDoContexto() {
     return r ? r.concurso : "";
   }
   if (gerPasta.chave) {
+    if (gerPasta.concurso && m.roots.some((x) => x.tipo === "edital" && x.concurso === gerPasta.concurso && x.chaves.has(gerPasta.chave))) return gerPasta.concurso;
     const r = m.roots.find((x) => x.tipo === "edital" && x.chaves.has(gerPasta.chave));
     return r ? r.concurso : "";
   }
@@ -1019,6 +1110,31 @@ function gerExportarPasta() {
   return p;
 }
 
+/* o tópico do PLANO de um edital que está aberto na lista (é dele que os ramos são lidos e escritos) */
+function gerContextoRamos() {
+  if (!gerPasta || !gerPasta.chave) return null;
+  const pref = gerEditalDoContexto();
+  let achado = null;
+  gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.forEach((r) => {
+    if (r.tipo !== "edital") return;
+    r.filhos.forEach((d) => (d.filhos || []).forEach((tp) => {
+      if (tp.chave === gerPasta.chave && tp.plano && (!achado || r.concurso === pref)) achado = Object.assign({ chave: tp.chave, concurso: r.concurso }, tp.plano);
+    }));
+  });
+  return achado;
+}
+
+function gerAbrirRamos() {
+  const ctx = gerContextoRamos();
+  if (!ctx) return false;
+  ctx.depois = (r) => {
+    gerCalcular(); gerAbertos.add("rm|" + ctx.chave + "|" + ctx.concurso); gerAbrirCaminhoDe(ctx.chave); gerPintar();
+    try { matRender(); } catch (e) {}
+    gerAviso(t("ram_salvo", { n: r.ramos.length, c: r.retag }), true);
+  };
+  return ramAbrirEditor(ctx);
+}
+
 /* marca TODOS os cartões da lista de agora (não só os 60 à vista): é o "mover todos desta pasta" */
 function gerMarcarTodos() {
   gerSel = new Set(gerVis.map((_, i) => i));
@@ -1073,6 +1189,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("gerNpEdital").onchange = gerPreencherDiscsNp;
   $("btnGerClassificar").onclick = gerAbrirClassificar;
   $("btnGerExportar").onclick = gerExportarPasta;
+  $("btnGerRamos").onclick = gerAbrirRamos;
   $("gerClEdital").onchange = gerPintarClassificar;
   $("gerClGerais").onchange = gerPintarClassificar;
   $("btnGerClMover").onclick = gerConfirmarClassificar;
