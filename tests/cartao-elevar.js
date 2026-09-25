@@ -285,7 +285,104 @@ async function testes() {
     ok(r3.trocados === 0 && r3.naoAchou === 1 && m2.a.ceRecibo() === null, `E7k cartao que sumiu: nada trocado e sem recibo: ${JSON.stringify(r3)}`);
   }
 
-  /* ---- E8: a tela, em 3 passos ---- */
+  /* ---- E9: os OBJETIVOS (a revisao manual antiga, agora no mesmo fluxo) ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const mo = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
+      const ch = a.matChave("Proc", "Recursos");
+      a.matGravarCartoes(ch, [
+        "Qual o prazo do recurso? :: 10 dias",
+        "Explique o efeito do recurso? :: " + "palavra e mais palavra sem numero ".repeat(9),
+        "Recurso :: Serviço",
+        "Qual o prazo do agravo? :: 15 dias úteis, contados da intimação, conforme o art. 1003 §5º do CPC, e a contagem só corre em dias úteis :: y" + String.fromCharCode(10) + "+ Saiba mais — literalidade do CPC",
+        "Qual é o fato gerador do imposto predial? :: A propriedade de imóvel urbano, com a resposta explicada por extenso e com clareza :: x"].join(NL + NL),
+        { disciplina: "Proc", topico: "Recursos" });
+      return { a, ch };
+    };
+    const { a, ch } = mo();
+    const cards = a.cqLerBiblioteca().map((n) => n.card);
+    const por = (re) => cards.find((c) => re.test(c.front));
+    const c10 = por(/prazo/), cLongo = por(/Explique/), cForma = por(/^Recurso$/), cBom = por(/predial/);
+    const alvo = (o, c) => a.ceServeAoObjetivo(o, c);
+    ok(alvo("fatos", { front: "Qual?", back: "5%" }) && alvo("fatos", { front: "Qual a sumula?", back: "vinculante" }), "E9-a1 o risco reconhece percentual de um digito e a palavra sumula (sem numero)");
+    ok(alvo("forma", { kind: "basic", front: "Q?", back: "sim" }) && !alvo("forma", { kind: "basic", front: "Qual a regra geral aplicavel?", back: "sim" }), "E9-a2 forma: o cartao curto demais (menos de 25 caracteres) entra");
+    const semObj = a.cqHash(a.cqNormal(a.cqRevelado(c10) + " | " + String(c10.back || "")));
+    ok(a.ceChaveCartao(c10, "completar") === semObj && a.ceChaveCartao(c10) === semObj, "E9-a3 a chave de 'completar' e' EXATAMENTE a de antes (o registro de trabalhados que ja existe continua valendo)");
+    ok(alvo("fatos", c10) && !alvo("fatos", cLongo) && !alvo("fatos", cForma) && !alvo("fatos", cBom), "E9 'conferir fatos' pega so' o cartao com numero/data/artigo");
+    ok(alvo("dividir", cLongo) && !alvo("dividir", c10) && !alvo("dividir", cBom), "E9a 'dividir' pega so' o cartao longo (mais de 220 caracteres)");
+    ok(alvo("forma", cForma) && !alvo("forma", c10) && !alvo("forma", cBom), "E9b 'forma' pega o curto/sem pergunta");
+    ok(alvo("completar", c10) && alvo("completar", cBom) && a.ceServeAoObjetivo("completar", null) === false, "E9c 'completar' serve a qualquer cartao (a fila dele e' pelo nivel)");
+    ok(alvo("fatos", { front: "Sumula 331?", back: "x" }) && alvo("fatos", { front: "Quanto? ", back: "R$ 5", more: "" }) && alvo("fatos", { front: "Qual?", back: "em 2021" }) && alvo("fatos", { front: "Qual?", back: "50%" }) && alvo("fatos", { front: "Qual?", back: "§ 2º" }) && !alvo("fatos", { front: "Qual?", back: "sem dado nenhum aqui" }) && alvo("fatos", { front: "Q?", back: "x", more: "art. 5" }), "E9d o risco reconhece sumula, R$, ano, percentual, paragrafo e o saiba mais");
+    ok(alvo("forma", { kind: "basic", front: "Pergunta comprida sem interrogacao final", back: "resposta boa e completa" }) && alvo("forma", { kind: "basic", front: "Pergunta comprida com interrogacao?", back: "" }) && !alvo("forma", { kind: "cloze", front: "A {{c1::regra}} vale para todos os casos previstos", back: "" }) && !alvo("forma", { kind: "basic", front: "Pergunta comprida com interrogacao?", back: "resposta boa" }), "E9e forma: sem pergunta, sem resposta (cloze nao conta); pergunta e resposta boas ficam de fora");
+    ok(a.ceServeAoObjetivo("inexistente", c10) === true, "E9f objetivo desconhecido nao filtra (cai no de sempre)");
+    ok(JSON.stringify(a.CE_OBJETIVOS) === JSON.stringify(["completar", "fatos", "dividir", "forma"]), "E9g os 4 objetivos");
+
+    /* a tela */
+    a.ceAbrir();
+    const sel = a.$("ceObjetivo");
+    ok(a.ceObjetivoAtual() === "completar" && sel.value === "completar" && sel.children.length === 4 && /Completar/.test(sel.children[0].textContent) && /Conferir fatos/.test(sel.children[1].textContent), "E9h abre em 'completar' com as 4 opcoes no seletor");
+    ok(sel.getAttribute("aria-description") === a.t("ce_tip_obj"), "E9i o seletor tem a explicacao");
+    const pedir = () => { a.$("btnCePrompt").onclick(); return a.$("cePrompt").value; };
+    sel.value = "fatos"; sel.onchange();
+    ok(a.ceObjetivoAtual() === "fatos" && a.ceNotasAtual().length === 2 && /prazo do recurso/.test(a.ceNotasAtual()[0].card.front) && /agravo/.test(a.ceNotasAtual()[1].card.front) && a.ceSelAtual().size === 2, "E9j trocar para 'fatos' refaz a fila (2 cartoes, o pior primeiro) e ja marca");
+    ok(a.ceTrocarObjetivo("nao-existe") === false && a.ceObjetivoAtual() === "fatos", "E9n0 objetivo invalido e' recusado (antes de gerar o prompt)");
+    a.ceAbrir({ notas: a.cqLerBiblioteca().filter((n) => /Recurso$/.test(n.card.front)) });
+    ok(a.ceNotasAtual().length === 1 && /Rodada/.test(a.$("ceResumo").textContent), "E9j2 com cartoes escolhidos no gerenciador vale a lista deles e o resumo de sempre");
+    ok(a.ceTrocarObjetivo("fatos") === true && a.ceNotasAtual().length === 2, "E9j3 trocar o objetivo larga a escolha do gerenciador e volta para a fila do objetivo");
+    ok(/2 cartão\(ões\) na fila deste objetivo/.test(a.$("ceResumo").textContent), "E9k o resumo fala da fila do objetivo: " + a.$("ceResumo").textContent);
+    const pf = pedir();
+    ok(/CONFERIR OS FATOS/.test(pf) && /@@ 1/.test(pf) && /prazo do recurso/.test(pf) && !/ELEVAR/.test(pf) && !/\{[a-z_]+\}/.test(pf), "E9l o prompt de 'fatos' e' o de conferir (com a ancora, o cartao e nenhum {campo} sobrando): " + pf.slice(0, 80));
+    ok(/nunca.*perca|NUNCA|Preserve|preserv/i.test(pf) || /NUNCA invente/.test(pf), "E9l2 o prompt de fatos proibe inventar");
+    /* no meio da rodada nao troca */
+    ok(a.cePassoAtual() === 2 && a.$("ceObjetivo").disabled === true && a.ceTrocarObjetivo("forma") === false && a.ceObjetivoAtual() === "fatos", "E9m no passo 2 o seletor trava e a troca e' recusada");
+    sel.value = "forma"; sel.onchange();
+    ok(a.ceObjetivoAtual() === "fatos" && sel.value === "fatos", "E9n o seletor volta para o objetivo atual quando a troca e' recusada");
+    a.$("btnCeDescartar").onclick && a.$("btnCeDescartar").onclick();
+    /* memoria separada */
+    a.ceAbrir({ objetivo: "forma" });
+    ok(a.ceObjetivoAtual() === "forma" && a.$("ceObjetivo").value === "forma" && a.ceNotasAtual().length === 1 && /^Recurso$/.test(a.ceNotasAtual()[0].card.front), "E9o abrir ja no objetivo 'forma'");
+    ok(/ARRUMAR A FORMA/.test(pedir()), "E9p o prompt de 'forma'");
+    a.ceAbrir({ objetivo: "dividir" });
+    ok(a.ceNotasAtual().length === 1 && /Explique/.test(a.ceNotasAtual()[0].card.front), "E9q objetivo 'dividir': o cartao longo");
+    ok(/DIVIDIR/.test(pedir()) && /NENHUMA informação/.test(a.$("cePrompt").value), "E9r o prompt de 'dividir' proibe perder informacao");
+    a.ceAbrir({ objetivo: "invalido" });
+    ok(a.ceObjetivoAtual() === "completar", "E9s objetivo invalido na abertura cai em 'completar'");
+    ok(/ELEVAR/.test(pedir()), "E9t o de sempre continua o de sempre");
+    /* a memoria de trabalhados e' por objetivo */
+    a.ceAbrir({ objetivo: "dividir" });
+    a.ceMarcarRevisados([cLongo]);
+    a.ceTrocarObjetivo("dividir");
+    ok(a.ceNotasAtual().length === 0 && /Nenhum cartão na fila deste objetivo/.test(a.$("ceMsg").textContent), "E9t2 objetivo sem cartao na fila: a mensagem diz");
+    a.ceAbrir({ objetivo: "fatos" });
+    a.ceMarcarRevisados([c10]);
+    a.ceCalcular();
+    ok(a.ceNotasAtual().length === 1 && /agravo/.test(a.ceNotasAtual()[0].card.front) && a.ceStatsAtual().escondidos === 1 && a.ceStatsAtual().fila === 1, "E9u cartao trabalhado em 'fatos' sai da fila de 'fatos'");
+    a.cePintar();
+    ok(/1 cartão\(ões\) na fila deste objetivo.*trabalhados neste objetivo: 1/.test(a.$("ceResumo").textContent), "E9u1 o resumo conta a fila e os ja trabalhados: " + a.$("ceResumo").textContent);
+    ok(a.ceRevisado(c10, a.ceRevLer()) === true, "E9u2 e conta como trabalhado nesse objetivo");
+    a.ceAbrir({ objetivo: "completar" });
+    ok(a.ceRevisado(c10, a.ceRevLer()) === false, "E9v mas continua candidato em 'completar' (memoria separada)");
+    ok(a.ceChaveCartao(c10, "fatos") !== a.ceChaveCartao(c10, "completar") && a.ceChaveCartao(c10, "completar") === a.ceChaveCartao(c10) && a.ceChaveCartao(c10, "fatos") !== a.ceChaveCartao(c10, "forma"), "E9w a chave de memoria leva o objetivo (e a de 'completar' e' a de antes)");
+    /* cartoes escolhidos no gerenciador mandam sobre o objetivo */
+    const forc = a.cqLerBiblioteca().filter((n) => /Recurso$/.test(n.card.front));
+    a.ceAbrir({ notas: forc, objetivo: "fatos" });
+    ok(/Rodada/.test(a.$("ceResumo").textContent), "E9x0 com cartoes escolhidos o resumo e' o de sempre, mesmo com objetivo");
+    ok(a.ceNotasAtual().length === 1 && /^Recurso$/.test(a.ceNotasAtual()[0].card.front), "E9x os cartoes escolhidos no gerenciador valem sobre a fila do objetivo");
+    /* a conferencia: 'continua fraco' so' faz sentido em 'completar' */
+    const resp = "@@ 1" + NL + "Qual o prazo do recurso? :: 10 dias";
+    a.ceAbrir({ objetivo: "completar" });
+    const it = a.ceLerAbaixo().filter((n) => /prazo/.test(n.card.front));
+    const bl = a.ceMontarPrompt(it).blocos;
+    const cc = a.ceConferir(resp, it, bl);
+    a.ceAbrir({ objetivo: "fatos" });
+    const cf = a.ceConferir(resp, it, bl);
+    ok(cc.itens.length === 1 && cc.itens[0].avisos.some((x) => x.id === "continua"), "E9y em 'completar' o cartao que volta fraco e' avisado");
+    ok(cf.itens.length === 1 && !cf.itens[0].avisos.some((x) => x.id === "continua"), "E9z em 'fatos' NAO se cobra nivel (o pedido era conferir, nao completar)");
+  }
+
+    /* ---- E8: a tela, em 3 passos ---- */
   {
     const { a, c1, janela } = montar();
     a.ceAbrir();
