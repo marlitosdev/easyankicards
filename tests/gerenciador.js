@@ -1291,6 +1291,54 @@ async function testes() {
     }
   }
 
+  /* ---- G22: "Exportar esta pasta" leva a pasta para o montador de pacote ---- */
+  {
+    const ME = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      const edA = a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5\n@ Direito Financeiro :: 4\n+ Receita Pública :: 4");
+      const k = (d, t) => a.matChave(d, t);
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "ISS"), "ISS 0? :: R0 zz0\nISS 1? :: R1 zz1", { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.$("editor").value = "Cartão da bancada? :: Resposta";
+      return { a, edA, k };
+    };
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const { a, k } = ME();
+    a.gerAbrir();
+    ok(a.$("btnGerExportar").hidden === true, "G22a sem pasta aberta o botao de exportar nao aparece");
+    linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+    ok(a.$("btnGerExportar").hidden === false, "G22b com uma pasta aberta ele aparece");
+    const pe = a.gerChavesDaPasta();
+    ok(pe.edital === "ISS Caruaru Auditor" && pe.chaves.length === 3 && pe.chaves.indexOf(k("Sistema Tributário Brasileiro", "IPTU")) >= 0, "G22c o edital leva TODOS os topicos do plano (inclusive os vazios): " + JSON.stringify(pe));
+    a.gerAbertosAtual().add(a.gerModeloEditais(a.gerNotasAtual(), []).roots.find((r) => r.nome === "ISS Caruaru Auditor").id + "|sistema tributario brasileiro"); a.gerPintar();
+    linhas(a, "ger-disc").find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
+    const pd = a.gerChavesDaPasta();
+    ok(pd.edital === "ISS Caruaru Auditor" && pd.chaves.length === 2, "G22d a disciplina leva os topicos dela e o edital");
+    achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => /^ISS/.test(e.textContent.replace(/^\s*[▾▸]\s*/, "").trim())).onclick();
+    const pt = a.gerChavesDaPasta();
+    ok(pt.chaves.length === 1 && pt.chaves[0] === k("Sistema Tributário Brasileiro", "ISS") && pt.edital === "ISS Caruaru Auditor", "G22e o topico leva a chave dele e o edital do contexto");
+    achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => /Texto do editor/.test(e.textContent)).onclick();
+    const pb = a.gerChavesDaPasta();
+    ok(pb.chaves[0] === a.CQ_BANCADA && pb.edital === "", "G22f a Bancada vai sem edital");
+    a.$("gerAgrupar").value = "disciplina"; a.$("gerAgrupar").onchange();
+    achar(a.$("gerArvore"), (e) => cls(e, "ger-disc")).find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
+    const pdis = a.gerChavesDaPasta();
+    ok(pdis.chaves.length === 1 && pdis.edital === "", "G22g na visao por disciplina: os topicos da disciplina, sem edital");
+    /* clicar */
+    a.$("gerAgrupar").value = "edital"; a.$("gerAgrupar").onchange();
+    linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+    a.$("btnGerExportar").onclick();
+    ok(a.$("dlgGerCartoes").open === false && a.$("dlgPacote").open === true && a.pacSelAtual().size === 3 && [...a.pacEditalDeAtual().values()].every((v) => v === "ISS Caruaru Auditor"), "G22h clicar em exportar fecha a biblioteca e abre o montador ja com a pasta marcada, sob o edital");
+    ok(/notas? em \d+ baralho/.test(a.$("pacPrevia").textContent) && a.$("btnPacApkg").disabled === false, "G22i a previsao ja aparece");
+    a.$("dlgPacote").close();
+    /* pasta sem topico */
+    const b = rodar().api; b.matIniciar(); b.edIniciar(); b.$("editor").value = "";
+    b.gerAbrir();
+    ok(b.$("btnGerExportar").hidden === true, "G22j (sem pasta aberta)");
+    b.gerExportarPasta();
+    ok(b.$("dlgPacote").open !== true && /nenhum|não tem tópicos/.test(b.$("gerMsg").textContent), "G22k sem nada para exportar: avisa e nao abre o montador: " + b.$("gerMsg").textContent);
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");

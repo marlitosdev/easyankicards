@@ -4148,6 +4148,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .cq-onde{font-size:11px;opacity:.65;margin:2px 0 4px}
 .pac-disc{display:block;font-weight:600;font-size:13px;margin-top:6px;cursor:pointer}
 .pac-top{display:block;padding-left:20px;font-size:12px;cursor:pointer}
+.pac-ed-raiz{font-weight:700}
+.pac-ed-disc{padding-left:14px}
+.pac-ed-top{padding-left:34px}
 .pac-arv{max-height:34vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
 /* Gerenciador: a janela é uma coluna flexível — título, busca, avisos e rodapé ficam FIXOS e só as
  * três colunas rolam (antes o diálogo inteiro rolava por cima delas). Colunas 22% / 43% / 35%. */
@@ -7417,6 +7420,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
         <button type="button" class="btn-min btn-min-ok" id="btnGerClassificar" data-i18n="ger_classificar" hidden></button>
+        <button type="button" class="btn-min" id="btnGerExportar" data-i18n="ger_exportar" hidden></button>
       </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
@@ -7469,6 +7473,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="pacArvore" class="pac-arv"></div>
   <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
     <input type="text" id="pacNome" style="width:100%;box-sizing:border-box"></label>
+  <div id="pacOpcEdital" hidden>
+    <label class="nota" style="display:block"><input type="checkbox" id="pacComEdital" checked> <span data-i18n="pac_com_edital"></span></label>
+    <label class="nota" style="display:block"><input type="checkbox" id="pacVazios"> <span data-i18n="pac_vazios"></span></label>
+  </div>
   <label class="nota" style="display:block"><input type="checkbox" id="pacSemRep" checked> <span data-i18n="pac_sem_rep"></span></label>
   <label class="nota" style="display:block"><input type="checkbox" id="pacSemFracos"> <span data-i18n="pac_sem_fracos"></span></label>
   <p class="nota" id="pacPrevia"></p>
@@ -7483,6 +7491,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <input type="file" id="pacArquivo" accept=".apkg">
   <div id="pacImpCx" hidden>
     <p class="nota" id="pacImpResumo"></p>
+    <label class="nota" id="pacImpEditalCx" style="display:block" hidden><input type="checkbox" id="pacImpComEdital"> <span data-i18n="pac_imp_com_edital"></span></label>
     <label class="nota" style="display:block"><input type="radio" name="pacModo" id="pacModoDecks" checked> <span data-i18n="pac_modo_decks"></span></label>
     <label class="nota" style="display:block"><input type="radio" name="pacModo" id="pacModoTopico"> <span data-i18n="pac_modo_topico"></span> <select id="pacImpDestino"></select></label>
     <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnPacImportar" data-i18n="pac_import_btn" disabled></button></div>

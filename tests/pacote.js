@@ -275,6 +275,212 @@ async function testes() {
     ok(volta.length === 2 && volta[0].kind === "cloze", "P10a o cartao de lacuna volta como lacuna");
   }
 
+  /* ---- P10: exportar pastas COMPLETAS por edital (Edital::Disciplina::Topico) ---- */
+  {
+    const ME = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      const edA = a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5\n+ Taxas :: 3\n@ Direito Financeiro :: 4\n+ Receita Pública :: 4");
+      const edB = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20\n@ Direito Financeiro :: 5\n+ Receita Pública :: 5\n+ Créditos Adicionais :: 3");
+      a.$("editor").value = "";
+      const k = (d, t) => a.matChave(d, t);
+      const cs = (pref, n) => Array.from({ length: n }, (_, i) => pref + " " + i + "? :: Resposta " + pref + i + " zz" + pref + i).join("\n");
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "ISS"), cs("ISS", 3), { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.matGravarCartoes(k("Direito Financeiro", "Receita Pública"), cs("Receita", 2), { disciplina: "Direito Financeiro", topico: "Receita Pública", concurso: "TCE-PE" });
+      return { a, edA, edB, k };
+    };
+    const deps = (cap) => ({ construir: async (cards, raiz, est, tit, al, extras) => { cap.cards = cards; cap.raiz = raiz; cap.extras = extras; return new Uint8Array([1]); }, entregar: async (b, nome) => { cap.nome = nome; } });
+    const linhas = (a, c) => achar(a.$("pacArvore"), (e) => cls(e, c));
+
+    /* nomes de baralho */
+    {
+      const { a } = montar();
+      ok(a.pacNomeDeck({ edital: "ISS", disciplina: "Trib", topico: "ISS" }, true) === "ISS::Trib::ISS" && a.pacNomeDeck({ edital: "ISS", disciplina: "Trib", topico: "ISS" }, false) === "Trib::ISS" && a.pacNomeDeck({ edital: "ISS", disciplina: "Trib", topico: "ISS" }) === "Trib::ISS", "P10a com a pasta do edital: Edital::Disciplina::Topico; sem: como sempre");
+      ok(a.pacNomeDeck({ edital: "A :: B", disciplina: "Trib", topico: "ISS" }, true) === "A — B::Trib::ISS" && a.pacNomeDeck({ edital: "", disciplina: "Trib", topico: "ISS" }, true) === "Trib::ISS", "P10b '::' no nome do edital nao cria nivel; sem edital nao sobra nivel vazio");
+      const cs = a.pacCartoes([{ card: { front: "P", back: "R", tags: [] }, edital: "ISS", disciplina: "Trib", topico: "ISS" }], true);
+      ok(cs[0].deck === "ISS::Trib::ISS" && a.pacCartoes([{ card: { front: "P", back: "R" }, edital: "ISS", disciplina: "Trib", topico: "ISS" }])[0].deck === "Trib::ISS", "P10c pacCartoes leva o baralho com o edital so' quando pedido");
+    }
+    /* baralhos vazios no arquivo .apkg */
+    {
+      const { a } = montar();
+      const g = a.apkgAgruparDecks([{ front: "P", deck: "A::B" }], "Raiz", "", ["Ed::Disc::Vazio", "  ", "A::B"]);
+      const nomes = Object.values(g.decks).map((d) => d.name).sort();
+      ok(nomes.join("|") === "Raiz::A::B|Raiz::Ed::Disc::Vazio" && g.idPorCartao.length === 1, "P10d baralhos vazios entram no arquivo (raiz + nome), sem repetir e sem nome em branco: " + nomes.join("|"));
+      const g2 = a.apkgAgruparDecks([{ front: "P", deck: "A::B" }], "Raiz", "");
+      ok(Object.keys(g2.decks).length === 1, "P10e sem extras o arquivo e' o mesmo de sempre");
+      const g3 = a.apkgAgruparDecks([], "Raiz", "", ["X::Y"]);
+      ok(Object.keys(g3.decks).length === 1 && Object.values(g3.decks)[0].name === "Raiz::X::Y", "P10f dá para gerar so' baralhos vazios");
+      ok(JSON.stringify(Object.keys(a.apkgAgruparDecks([], "Raiz", "", ["X::Y"]).decks)) === JSON.stringify(Object.keys(g3.decks)), "P10g o id do baralho e' estavel (reimportar atualiza, nao duplica)");
+      const codAnki = fs.readFileSync(path.join(__dirname, "..", "docs", "anki.js"), "utf8");
+      ok(/async function buildApkg\(cards, deckName, estilo, titulo, alinha, extras\)/.test(codAnki) && /apkgAgruparDecks\(cards, deckName, titulo, extras\)/.test(codAnki), "P10g2 o buildApkg repassa os baralhos vazios para o agrupador");
+    }
+    /* pacMontar: edital e vazios */
+    {
+      const { a, k } = ME();
+      const notas = a.cqLerBiblioteca();
+      const sel = new Set([k("Sistema Tributário Brasileiro", "ISS"), k("Sistema Tributário Brasileiro", "IPTU")]);
+      const info = new Map([[k("Sistema Tributário Brasileiro", "IPTU"), { edital: "ISS Caruaru Auditor", disciplina: "Sistema Tributário Brasileiro", topico: "IPTU" }]]);
+      const editalDe = new Map([[k("Sistema Tributário Brasileiro", "ISS"), "ISS Caruaru Auditor"], [k("Sistema Tributário Brasileiro", "IPTU"), "ISS Caruaru Auditor"]]);
+      const m1 = a.pacMontar(notas, sel, { comEdital: true, editalDe, info, vazios: true });
+      ok(m1.itens.length === 3 && m1.itens.every((n) => n.edital === "ISS Caruaru Auditor") && [...m1.decks.keys()].sort().join("|") === "ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU|ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS" && m1.decks.get("ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU") === 0 && m1.vazios.length === 1, "P10h com edital e vazios: o topico sem cartao vira baralho vazio (0) e sai em 'vazios': " + JSON.stringify([...m1.decks]));
+      const m2 = a.pacMontar(notas, sel, { comEdital: true, editalDe, info, vazios: false });
+      ok(m2.vazios.length === 0 && m2.decks.size === 1, "P10i sem a opcao de vazios o topico sem cartao fica de fora");
+      const m3 = a.pacMontar(notas, sel, { comEdital: false, editalDe, info, vazios: true });
+      ok([...m3.decks.keys()].sort().join("|") === "Sistema Tributário Brasileiro::IPTU|Sistema Tributário Brasileiro::ISS", "P10j sem a pasta do edital: Disciplina::Topico");
+      const info2 = new Map(info); info2.set(k("Sistema Tributário Brasileiro", "ISS"), { edital: "ISS Caruaru Auditor", disciplina: "Sistema Tributário Brasileiro", topico: "ISS" });
+      const m4 = a.pacMontar(notas, new Set([k("Sistema Tributário Brasileiro", "ISS")]), { comEdital: true, editalDe, info: info2, vazios: true });
+      ok(m4.vazios.length === 0 && m4.decks.get("ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS") === 3, "P10k topico com cartao nunca e' 'vazio' (mesmo que o mapa o cite) e a contagem dele nao e' zerada");
+      const info3 = new Map(info); info3.set("outra›chave", { edital: "ISS Caruaru Auditor", disciplina: "Sistema Tributário Brasileiro", topico: "ISS" });
+      const m4b = a.pacMontar(notas, new Set([k("Sistema Tributário Brasileiro", "ISS"), "outra›chave"]), { comEdital: true, editalDe, info: info3, vazios: true });
+      ok(m4b.vazios.length === 0 && m4b.decks.get("ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS") === 3, "P10k2 baralho vazio com o MESMO nome de um que tem cartao nao apaga a contagem nem entra como vazio");
+      const m5 = a.pacMontar(notas, sel, { comEdital: true, vazios: true });
+      ok([...m5.decks.keys()].every((d) => d.split("::").length === 2), "P10l sem o mapa de editais nada quebra (Disciplina::Topico)");
+    }
+    /* a tela: arvore por edital, caixas de tres estados, exportar */
+    {
+      const { a, k, edA } = ME();
+      a.pacAbrir();
+      a.$("pacSemRep").checked = false;
+      ok(a.$("pacOpcEdital").hidden === false && a.$("pacComEdital").checked === true && a.$("pacVazios").checked === false, "P10m com edital cadastrado aparecem as opcoes (pasta do edital ligada, vazios desligado)");
+      const raizes = linhas(a, "pac-ed-raiz").map((e) => e.textContent.trim());
+      ok(raizes.join("|") === "ISS Caruaru Auditor (5)|TCE-PE (2)", "P10n a arvore tem uma raiz por edital, na ordem da lista: " + raizes.join("|"));
+      const tops = linhas(a, "pac-ed-top").map((e) => e.textContent.trim());
+      ok(tops.indexOf("Taxas (0)") >= 0 && tops.indexOf("Créditos Adicionais (0)") >= 0 && tops.indexOf("ISS (3)") < tops.indexOf("IPTU (0)"), "P10o os topicos do plano aparecem na ordem do edital, tambem os sem cartao: " + tops.join("|"));
+      /* marcar o edital A inteiro */
+      const rA = linhas(a, "pac-ed-raiz")[0];
+      const ckA = achar(rA, (e) => e.tag === "input")[0];
+      ok(ckA.checked === false && ckA.indeterminate === false, "P10p (a caixa comeca vazia)");
+      ckA.checked = true; ckA.onchange();
+      ok(a.pacSelAtual().size === 4 && [...a.pacEditalDeAtual().values()].every((v) => v === "ISS Caruaru Auditor"), "P10q marcar o edital marca TODOS os topicos dele (inclusive os vazios) e guarda de qual edital: " + a.pacSelAtual().size);
+      ok(achar(linhas(a, "pac-ed-raiz")[0], (e) => e.tag === "input")[0].checked === true, "P10r a caixa do edital fica marcada");
+      /* o topico compartilhado (Receita Publica) marcado sob A vale so' uma vez */
+      const rB = linhas(a, "pac-ed-raiz")[1];
+      const ckB = achar(rB, (e) => e.tag === "input")[0];
+      ok(ckB.indeterminate === true && ckB.checked === false, "P10s edital B: 'Receita Publica' ja marcada (via A) deixa a caixa em estado PARCIAL");
+      ckB.checked = true; ckB.onchange();
+      ok(a.pacSelAtual().size === 5 && a.pacEditalDeAtual().get(k("Direito Financeiro", "Receita Pública")) === "ISS Caruaru Auditor" && a.pacEditalDeAtual().get(k("Direito Financeiro", "Créditos Adicionais")) === "TCE-PE", "P10t topico compartilhado marcado sob dois editais: fica com o primeiro (sai UMA vez so'), os outros sob o B");
+      /* previa e exportacao */
+      ok(/notas? em \d+ baralho/.test(a.$("pacPrevia").textContent) && achar(a.$("pacDecks"), (e) => cls(e, "cq-onde")).some((e) => /ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS — 3/.test(e.textContent)), "P10u a previa lista os baralhos com o edital: " + achar(a.$("pacDecks"), (e) => cls(e, "cq-onde")).map((e) => e.textContent).join(" ; "));
+      a.$("pacVazios").checked = true; a.$("pacVazios").onchange();
+      ok(/vazio\(s\) incluído/.test(a.$("pacPrevia").textContent) && a.$("btnPacApkg").disabled === false, "P10v com 'vazios' a previa conta os baralhos vazios");
+      const cap = {};
+      const r = await a.pacExportar("apkg", deps(cap));
+      ok(r.ok && cap.cards.every((c) => /^(ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS|ISS Caruaru Auditor::Direito Financeiro::Receita Pública)$/.test(c.deck)) && cap.cards.length === 5 && cap.extras.length === 3, "P10w o .apkg sai com os baralhos Edital::Disciplina::Topico e leva os vazios (Taxas, IPTU, Creditos): " + JSON.stringify(cap.extras));
+      ok(cap.extras.every((e) => e.split("::").length === 3) && cap.extras.some((e) => /^TCE-PE::Direito Financeiro::Créditos Adicionais$/.test(e)), "P10x cada baralho vazio tem o caminho completo");
+      /* o mapa de editais: marcar, desmarcar e marcar de novo sob OUTRO edital */
+      const kR = k("Direito Financeiro", "Receita Pública");
+      a.$("btnPacLimpar").onclick();
+      ok(a.pacEditalDeAtual().size === 0, "P10y0 limpar tambem esquece de que edital era cada topico");
+      a.pacMarcar(kR, true, "ISS Caruaru Auditor"); a.pacMarcar(kR, false); a.pacMarcar(kR, true, "TCE-PE");
+      ok(a.pacEditalDeAtual().get(kR) === "TCE-PE" && a.pacSelAtual().has(kR), "P10y1 desmarcar esquece o edital: marcar de novo sob outro vale o novo");
+      a.pacMarcar(kR, true, "ISS Caruaru Auditor");
+      ok(a.pacEditalDeAtual().get(kR) === "TCE-PE", "P10y2 marcar de novo sem desmarcar mantem o primeiro");
+      /* marcar UM topico pela caixa dele leva o edital da raiz onde ele esta */
+      a.$("btnPacLimpar").onclick();
+      const ckCred = achar(linhas(a, "pac-ed-top").find((e) => /Créditos Adicionais/.test(e.textContent)), (e) => e.tag === "input")[0];
+      ckCred.checked = true; ckCred.onchange();
+      ok(a.pacEditalDeAtual().get(k("Direito Financeiro", "Créditos Adicionais")) === "TCE-PE", "P10y3 marcar um topico pela caixa dele guarda o edital da raiz onde ele esta");
+      /* abrir de novo com outra pasta nao herda o mapa da vez anterior */
+      a.pacAbrir({ chaves: [kR], edital: "TCE-PE" });
+      a.pacAbrir({ chaves: [k("Sistema Tributário Brasileiro", "ISS")], edital: "ISS Caruaru Auditor" });
+      ok(a.pacEditalDeAtual().size === 1 && a.pacSelAtual().size === 1 && !a.pacEditalDeAtual().has(kR), "P10y4 abrir de novo comeca do zero (nada sobra da marcacao anterior)");
+      a.$("pacSemRep").checked = false;
+      a.$("btnPacTudo").onclick();
+      a.$("pacVazios").checked = true; a.$("pacVazios").onchange();
+      /* sem a pasta do edital */
+      a.$("pacComEdital").checked = false; a.$("pacComEdital").onchange();
+      const cap2 = {};
+      await a.pacExportar("apkg", deps(cap2));
+      ok(cap2.cards.every((c) => c.deck.split("::").length === 2) && cap2.extras.every((e) => e.split("::").length === 2), "P10y desligar 'pasta do edital' volta a Disciplina::Topico (cartoes e vazios)");
+      /* txt nao leva vazios */
+      a.$("pacComEdital").checked = true;
+      let txt = "";
+      await a.pacExportar("txt", { entregar: async (b) => { txt = new TextDecoder().decode(b); } });
+      ok(/ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS/.test(txt) && !/Créditos Adicionais/.test(txt), "P10z o .txt tem os baralhos aninhados com o edital, sem os vazios");
+      /* so' vazios */
+      a.$("btnPacLimpar").onclick();
+      const ck2 = achar(linhas(a, "pac-ed-top").find((e) => /Taxas/.test(e.textContent)), (e) => e.tag === "input")[0];
+      ck2.checked = true; ck2.onchange();
+      ok(a.$("btnPacApkg").disabled === false && a.$("btnPacTxt").disabled === true && !/Marque ao menos/.test(a.$("pacPrevia").textContent) && /1 baralho\(s\) vazio\(s\) incluído/.test(a.$("pacPrevia").textContent), "P10za so' topicos vazios marcados: o .apkg pode sair (estrutura pronta), o .txt nao, e a previa fala dos vazios: " + a.$("pacPrevia").textContent);
+      const cap3 = {};
+      ok((await a.pacExportar("txt", { entregar: async () => {} })).ok === false, "P10zaa .txt so' com baralhos vazios nao exporta (nao ha o que escrever)");
+      const r3 = await a.pacExportar("apkg", deps(cap3));
+      ok(r3.ok && cap3.cards.length === 0 && cap3.extras.length === 1, "P10zb .apkg so' com a estrutura vazia");
+      a.$("pacVazios").checked = false; a.$("pacVazios").onchange();
+      ok(a.$("btnPacApkg").disabled === true, "P10zc sem 'vazios' nada a exportar: desliga");
+      a.$("btnPacTudo").onclick();
+      ok(a.pacSelAtual().size === 5 && a.pacEditalDeAtual().get(k("Sistema Tributário Brasileiro", "ISS")) === "ISS Caruaru Auditor", "P10zd 'marcar tudo' marca todos os topicos do plano, cada um sob o edital dele");
+    }
+    /* sem edital a tela e' a de sempre */
+    {
+      const { a } = montar();
+      a.pacAbrir();
+      ok(a.$("pacOpcEdital").hidden === true && linhas(a, "pac-ed-raiz").length === 0 && linhas(a, "pac-disc").length === 2, "P10ze sem edital cadastrado nada muda na tela");
+      ok(a.$("pacComEdital").checked === false, "P10zf (e a pasta do edital nao vem ligada)");
+    }
+    /* importar: o 1o nivel e' o edital */
+    {
+      ok(JSON.stringify(montar().a.pacSepararDeck("Raiz::ISS Caruaru::Sistema Tributário::ISS::Sub", "Raiz", true)) === JSON.stringify({ edital: "ISS Caruaru", disciplina: "Sistema Tributário", topico: "ISS › Sub" }) && JSON.stringify(montar().a.pacSepararDeck("Raiz::Trib::ISS", "Raiz", true)) === JSON.stringify({ disciplina: "Trib", topico: "ISS" }), "P10zg com edital: o 1o nivel e' o edital; com menos de 3 niveis nada muda");
+      const { a, edA, k } = ME();
+      const cardsPac = [
+        { kind: "basic", front: "Fato gerador? " , back: "Servico", tags: [], deck: "Raiz::ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS" },
+        { kind: "basic", front: "Quem paga? ", back: "Proprietario", tags: [], deck: "Raiz::ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU" },
+      ];
+      ok(a.pacDetectarEdital(cardsPac) === true && a.pacDetectarEdital([{ front: "P", deck: "Raiz::Trib::ISS" }, { front: "Q", deck: "Raiz::Trib::IPTU" }]) === false && a.pacDetectarEdital([{ front: "P", deck: "Raiz::Outro::Trib::ISS" }, { front: "Q", deck: "Raiz::Outro::Trib::IPTU" }]) === false, "P10zh detecta o pacote que veio com a pasta de um edital CADASTRADO (e so' esse)");
+      const r = a.pacImportar(cardsPac, "decks", undefined, true);
+      const e1 = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "ISS")], e2 = a.matResumosAtual()[k("Sistema Tributário Brasileiro", "IPTU")];
+      ok(r.novos === 2 && r.topicos === 2 && e1.concurso === "ISS Caruaru Auditor" && e1.disciplina === "Sistema Tributário Brasileiro" && e1.topico === "ISS" && e2.concurso === "ISS Caruaru Auditor", "P10zi importar com edital: o topico nasce com o edital dono, a disciplina e o topico certos: " + JSON.stringify({ c: e1 && e1.concurso, d: e1 && e1.disciplina }));
+      const r2 = a.pacImportar(cardsPac, "decks", undefined, true);
+      ok(r2.novos === 0 && r2.repetidos === 2, "P10zj reimportar nao duplica");
+      const outro = [{ kind: "basic", front: "Receita? ", back: "x", tags: [], deck: "ISS Caruaru Auditor::Direito Financeiro::Receita Pública" }, { kind: "basic", front: "Receita 2? ", back: "y", tags: [], deck: "ISS Caruaru Auditor::Direito Financeiro::Receita Pública" }];
+      a.pacImportar(outro, "decks", undefined, true);
+      ok(a.matResumosAtual()[k("Direito Financeiro", "Receita Pública")].concurso === "TCE-PE" && /Receita 2/.test(a.matResumosAtual()[k("Direito Financeiro", "Receita Pública")].cartoes), "P10zk topico que ja tem dono NAO troca de edital ao importar");
+      ok(a.pacDetectarEdital([{ front: "P", deck: "Raiz::ISS Caruaru Auditor::Trib::ISS" }, { front: "Q", deck: "Raiz::Outro::Trib::IPTU" }]) === false, "P10zk0 basta UM baralho fora do padrao para nao ligar sozinho");
+      const cCaixa = [{ kind: "basic", front: "Caixa? ", back: "z", tags: [], deck: "iss caruaru auditor::Nova Disciplina::Novo Topico" }];
+      a.pacImportar(cCaixa, "decks", undefined, true);
+      ok(a.matResumosAtual()[k("Nova Disciplina", "Novo Topico")].concurso === "ISS Caruaru Auditor", "P10zk1 o edital e' gravado com o NOME CADASTRADO (caixa/acento do baralho nao importam)");
+      const chavesAntes = Object.keys(a.matResumosAtual()).length;
+      const cAcento = [{ kind: "basic", front: "Sem acento? ", back: "z", tags: [], deck: "ISS Caruaru Auditor::Sistema Tributario Brasileiro::ISS" }];
+      a.pacImportar(cAcento, "decks", undefined, true);
+      ok(Object.keys(a.matResumosAtual()).length === chavesAntes && /Sem acento/.test(a.matResumosAtual()[k("Sistema Tributário Brasileiro", "ISS")].cartoes), "P10zk2 baralho sem acento cai no topico que ja existe (chave viva), sem criar um topico paralelo");
+      const sem = a.pacImportar([{ kind: "basic", front: "Livre? ", back: "z", tags: [], deck: "Trib::ISS" }], "decks");
+      ok(sem.novos === 1 && a.matResumosAtual()[k("Trib", "ISS")].disciplina === "Trib", "P10zl importar sem a opcao continua igual (Disciplina::Topico)");
+      /* a tela de importar */
+      a.pacAbrir();
+      await a.pacLerArquivo(new Uint8Array([1]), { ler: async () => ({ cards: cardsPac, deck: "Raiz" }) });
+      ok(a.$("pacImpComEdital").checked === true && a.$("pacImpEditalCx").hidden === false, "P10zm ao ler um pacote com a pasta do edital a caixa nasce LIGADA");
+      const novoPac = [
+        { kind: "basic", front: "Tela 1? ", back: "a", tags: [], deck: "Raiz::ISS Caruaru Auditor::Disciplina da Tela::Topico da Tela" },
+        { kind: "basic", front: "Tela 2? ", back: "b", tags: [], deck: "Raiz::ISS Caruaru Auditor::Disciplina da Tela::Outro Topico" },
+      ];
+      await a.pacLerArquivo(new Uint8Array([1]), { ler: async () => ({ cards: novoPac, deck: "Raiz" }) });
+      await conduzir(a, a.$("btnPacImportar").onclick());
+      const et = a.matResumosAtual()[k("Disciplina da Tela", "Topico da Tela")];
+      ok(et && et.concurso === "ISS Caruaru Auditor" && et.disciplina === "Disciplina da Tela", "P10zm2 importar pela tela com a caixa ligada leva o edital: " + JSON.stringify(et && { c: et.concurso, d: et.disciplina }));
+      a.pacAbrir();
+      await a.pacLerArquivo(new Uint8Array([1]), { ler: async () => ({ cards: cardsPac, deck: "Raiz" }) });
+      await a.pacLerArquivo(new Uint8Array([1]), { ler: async () => ({ cards: [{ front: "P", deck: "Raiz::Trib::ISS" }, { front: "Q", deck: "Raiz::Trib::IPTU" }], deck: "Raiz" }) });
+      ok(a.$("pacImpComEdital").checked === false, "P10zn e desligada quando o pacote nao e' assim");
+    }
+    /* explicacao de cada controle da janela */
+    {
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      const i18n = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+      const ini = html.indexOf('<dialog id="dlgPacote"');
+      const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
+      const ids = [...dlg.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]).concat([...dlg.matchAll(/<input type="checkbox"[^>]*\bid="(\w+)"/g)].map((m) => m[1]));
+      const { a } = ME();
+      const faltam = ids.filter((id) => !a.PAC_DICAS[id]);
+      ok(ids.length >= 10 && faltam.length === 0, "P10zo todo botao e opcao do montador tem explicacao (falta: " + faltam.join(",") + ")");
+      ok(Object.keys(a.PAC_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "P10zp nenhuma explicacao aponta para controle que nao existe");
+      const semIdioma = Object.values(a.PAC_DICAS).filter((kk) => i18n.split('"' + kk + '": ').length - 1 < 2 || a.t(kk).length < 20);
+      ok(semIdioma.length === 0, "P10zq explicacoes em portugues e ingles: " + semIdioma.join(","));
+      a.pacAbrir();
+      const mal = Object.keys(a.PAC_DICAS).filter((id) => { const e = a.$(id); return !(e._dicaLigada === true && e._ouv.mouseenter.length === 1 && e.getAttribute("aria-description") === a.t(a.PAC_DICAS[id])); });
+      ok(mal.length === 0, "P10zr cada controle recebeu o balao: " + mal.join(","));
+    }
+  }
+
   /* ---- P9: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
