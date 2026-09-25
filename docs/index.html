@@ -328,6 +328,11 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .barra-revisao .rev-links{display:flex;gap:14px;justify-content:center;margin-top:7px}
 .rev-topo{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
 .rev-topo .btn{flex:1 1 auto}
+/* A Biblioteca de cartões é o centro do app: primeira da fila, largura total, cor de ação e uma linha de apoio */
+.btn-biblioteca{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;flex:1 1 100%;padding:12px 16px;font-size:15px;font-weight:800;text-align:center;box-sizing:border-box}
+.btn-biblioteca .bib-tit{line-height:1.2}
+.btn-biblioteca .bib-sub{font-size:11px;font-weight:500;opacity:.92}
+.rev-topo .btn.btn-biblioteca{flex:1 1 100%}
 /* selos de revisão (só visual; não vão para o cartão exportado) */
 .card-badge-rev{font-size:11px;font-weight:800;margin:2px 0 4px;display:inline-block;
   padding:2px 8px;border-radius:6px;letter-spacing:.2px}
@@ -4491,10 +4496,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="grupo">
       <label data-i18n="preview_label"></label>
       <div class="rev-topo">
+        <button class="btn btn-azul btn-biblioteca" id="btnBancaGer"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
         <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
         <button class="btn btn-cinza" id="btnBancaRep" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
         <button class="btn btn-cinza" id="btnBancaElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
-        <button class="btn btn-cinza" id="btnBancaGer" data-i18n="ger_btn" data-i18n-title="ger_btn_aj"></button>
         <button class="btn btn-verde" id="btnRevFinalizar" style="display:none" data-i18n="review_finish"></button>
         <button class="btn" id="btnRevCancelar" style="display:none;background:#b91c1c" data-i18n="review_cancel"></button>
       </div>
@@ -4909,9 +4914,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          nunca separaria as três coisas. -->
     <span class="mat-f-dica" data-i18n="mat_tipos_dica"></span>
     <div class="mat-tipos" id="matTipos"></div>
+    <button type="button" class="btn btn-azul btn-biblioteca" id="btnGerCartoes"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
     <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
     <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
-    <button type="button" class="btn-min btn-min-ok" id="btnGerCartoes" data-i18n="ger_btn" data-i18n-title="ger_btn_aj"></button>
     <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>

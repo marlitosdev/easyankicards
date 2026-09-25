@@ -884,6 +884,7 @@ function gerAbrir() {
 if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerCartoes").onclick = gerAbrir;
   if ($("btnBancaGer")) $("btnBancaGer").onclick = gerAbrir;
+  dicasDosBotoes({ btnGerCartoes: "ger_btn_aj", btnBancaGer: "ger_btn_aj" });
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
   $("gerBusca").oninput = () => { gerRefiltrar(); gerPintar(); };
   $("gerFiltro").onchange = () => { gerRefiltrar(); gerPintar(); };
