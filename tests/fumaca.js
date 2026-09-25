@@ -819,6 +819,7 @@ function rodar() {
     ceDefeitos, ceNota, ceAbaixo, ceTagsUnicas, ceLerAbaixo, ceFontes, ceMontarPrompt, ceSubstituir, ceConferir,
     ceAplicarLote, ceRecibo, ceDesfazerLote, ceCalcular, cePintar, ceMarcarPiores, ceGerarPrompt, ceConferirColagem, ceAplicar, ceDesfazer, ceAbrir,
     CE_LIM, CE_PESOS, ceNotasAtual: () => ceNotas, ceSelAtual: () => ceSel, ceConfAtual: () => ceConf, cePedidoAtual: () => cePedido,
+    cqResolverLote, cqDesfazerLote, cqRecibo, cqHash, cqCarga, cqAcaoDesfazer, cqOcupadoAtual: () => cqOcupado, lixJogarLote, lixRemoverIds,
     CQ_BANCADA, cqEhBancada, cqTexto, cqGravar, cqViaLixeira, cqVersaoBancada,
     cqNormal, cqRevelado, cqTokens, cqJaccard, cqAgrupar, cqPontuar, cqMelhor, cqAcrescimos, cqInserirSaibaMais,
     cqLerBiblioteca, cqRelatorio, cqAssinatura, cqIgnorar, cqIgnorados, cqReexibirIgnorados, cqResolverGrupo,

@@ -4133,6 +4133,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   line-height:1.45}
 .qm-bts{display:flex;gap:6px;flex-wrap:wrap;margin:5px 0 8px}
 .cq-lista{max-height:58vh;overflow:auto}
+.cq-carga{border:1px solid var(--borda);border-radius:8px;padding:12px;margin:8px 0;background:rgba(127,127,127,.08)}
 .cq-grupo{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:0 0 10px}
 .cq-grupo-tit{font-weight:600;font-size:13px;margin-bottom:6px}
 .cq-item{padding:6px 8px;border-radius:6px;margin:4px 0;border:1px solid transparent;font-size:13px;line-height:1.4}
@@ -7193,6 +7194,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <h3 data-i18n="cq_titulo"></h3>
   <p class="nota" data-i18n="cq_ajuda"></p>
   <p class="nota" id="cqResumo"></p>
+  <div id="cqCarga" class="cq-carga" hidden>
+    <div id="cqCargaTxt" class="nota"></div>
+    <progress id="cqProg" max="100" value="0" style="width:100%"></progress>
+    <div class="nota" data-i18n="cq_carga_aviso"></div>
+  </div>
   <div id="cqLista" class="cq-lista"></div>
   <div class="qm-bts">
     <button type="button" class="btn-min" id="btnCqMais" data-i18n="cq_mais" hidden></button>
@@ -7200,6 +7206,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnCqTudo" data-i18n="cq_tudo_btn" hidden></button>
+    <button class="btn btn-cinza" id="btnCqDesfazer" data-i18n="cq_desfazer_btn" hidden></button>
     <button class="btn btn-cinza" id="btnCqFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
