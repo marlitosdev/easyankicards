@@ -99,6 +99,33 @@ async function testes() {
     ok(api.parseText(r).cards.length === 1 && /Taxa de Fiscalização Sanitária/.test(api.parseText(r).cards[0].more), "L6f continua sendo UM cartao, com a explicacao inteira no saiba mais");
   }
 
+  /* ---- L9: "*" abaixo do cartao e' explicacao VALIDA (o app aceita * e +): nao e' sobra da IA ---- */
+  {
+    ok(C("Q :: A :: t\n\n* Esquema — X") === "Q :: A :: t\n\n* Esquema — X" && C("Q :: A\n* Esquema — X") === "Q :: A\n* Esquema — X", "L9 o corretor de sobras nao mexe na explicacao escrita com *");
+    ok(!api.temLixoIA("Q :: A\n\n* Esquema — X") && !api.temLixoIA("Q :: A\n* Esquema — X"), "L9a e o detector nao acende (senao um baralho inteiro com * viraria erro)");
+  }
+
+  /* ---- L10: "Também cobrado" que so repete o cartao ---- */
+  {
+    /* reforcos: numero novo e' fato novo; palavra de ligacao nao conta; o detector acende */
+    ok(C("Prazo do recurso? :: O prazo é de 60 dias contados da ciência.\n+ Também cobrado — O prazo é de 30 dias contados da ciência.") === "Prazo do recurso? :: O prazo é de 60 dias contados da ciência.\n+ Também cobrado — O prazo é de 30 dias contados da ciência.", "L10x outro NUMERO, outro fato: fica, mesmo repetindo as palavras");
+    ok(C("Alfa beta :: gama para com por\n+ Também cobrado — tributos para com por") === "Alfa beta :: gama para com por\n+ Também cobrado — tributos para com por", "L10y palavras de ligacao repetidas nao bastam para dizer que e' a mesma coisa");
+    ok(api.temLixoIA("Q :: Estão instituídos 3 impostos municipais.\n+ Também cobrado — Estão instituídos 3 impostos municipais.") && !api.temLixoIA("Q :: A resposta\n+ Também cobrado — outra coisa totalmente diferente"), "L10z o detector acende para o redundante e nao para o novo");
+    const base = "Quantos impostos estão no art. 236? :: Estão instituídos 3 impostos municipais. :: t\n";
+    ok(C(base + "+ Quantidade — 3 impostos.\n+ Também cobrado — Estão instituídos 3 impostos municipais.") === base + "+ Quantidade — 3 impostos.", `L10 repete a propria resposta: sai: ${JSON.stringify(C(base + "+ Quantidade — 3 impostos.\n+ Também cobrado — Estão instituídos 3 impostos municipais."))}`);
+    ok(C(base + "+ Também cobrado — São instituídos 16 tributos no total, entre impostos, taxas e contribuições.") === base + "+ Também cobrado — São instituídos 16 tributos no total, entre impostos, taxas e contribuições.", "L10a informacao NOVA fica");
+    const dup = base + "+ Também cobrado — São instituídos 16 tributos no total.\n+ Também cobrado — Estão instituídos 16 tributos ao todo.\n+ Também cobrado — São 16 tributos no total instituídos.";
+    ok((C(dup).match(/Também cobrado/g) || []).length === 1, `L10b as versoes do MESMO fato novo ficam uma vez so': ${JSON.stringify(C(dup))}`);
+    ok(C(base + "+ Nota — a\n+ Nota — a") === base + "+ Nota — a", "L10c linha + identica repetida no mesmo cartao sai");
+    ok(C("Alfa :: Beta gama\n+ Também cobrado — Beta gama\n\nDelta :: Épsilon zeta\n+ Também cobrado — Beta gama") === "Alfa :: Beta gama\n\nDelta :: Épsilon zeta\n+ Também cobrado — Beta gama", "L10d cada cartao e' comparado so' com o PROPRIO texto");
+    ok(C("+ Também cobrado — X sozinho") === "+ Também cobrado — X sozinho", "L10e sem cartao acima nao ha o que comparar");
+    /* o cartao real do relatorio: 9 linhas + com 4 'Tambem cobrado' que repetem o que ja esta dito */
+    const real = "@ Impostos de Caruaru — Espécies\nQuais são os 3 impostos municipais previstos no artigo 236 do CTM de Caruaru? :: O Imposto Sobre Serviços de Qualquer Natureza (ISS), o Imposto sobre a Propriedade Predial e Territorial Urbana (IPTU) e o Imposto sobre a Transmissão Inter Vivos de Bens Imóveis (ITBI). :: ctm_caruaru, impostos\n+ Espécies — ISS, IPTU e ITBI.\n+ Também cobrado — Estão instituídos 3 impostos municipais.\n+ Quantidade — 3 impostos.\n+ Também cobrado — São instituídos no total 16 tributos.\n+ Total — 16 tributos.\n+ Também cobrado — Estão instituídos 3 impostos.\n+ Quantidade — 3 impostos municipais.\n+ Também cobrado — Estão instituídos 16 tributos ao todo.\n+ Totalidade — 16 tributos.";
+    const rr = C(real).split("\n");
+    ok(rr.filter((x) => /Também cobrado/.test(x)).length === 1 && /16 tributos/.test(rr.join(" ")) && rr.length <= 8, `L10f o cartao real caiu de 9 linhas + para ${rr.length - 2}: ${JSON.stringify(rr.slice(2))}`);
+    ok(/Espécies — ISS, IPTU e ITBI\./.test(rr.join("\n")) && /Quantidade — 3 impostos\./.test(rr.join("\n")) && /Total — 16 tributos\./.test(rr.join("\n")), "L10g as linhas com 'Termo — explicacao' propria ficam");
+  }
+
   /* ---- L7: na cadeia de "Corrigir erros" ---- */
   {
     const sujo = "P {{c1::x}} (Fonte: a.pdf) :: obs [1]\n+ Exato! Isso: * A * B";

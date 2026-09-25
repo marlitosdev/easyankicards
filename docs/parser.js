@@ -538,13 +538,33 @@ function reInterjIA() { return new RegExp(IA_ANTES + IA_INTERJ + "!\\s+", "gm");
 function reFonteIA() { return /\s*\(\s*Fonte\s*:\s*([^)]*?)\s*\)/i; }
 const RE_LISTA_IA = /\s\*\s+(?=[^\s\d*])/;
 
+/* Palavras de conteúdo de um trecho (para comparar linhas "+" sem depender de igualdade exata). */
+const IA_STOP = new Set(("de da do das dos em no na nos nas um uma para por com que se ao aos sao estao foi ser sua seu suas seus "
+  + "como mais entre pelo pela todo toda todos todas art").split(" "));
+function iaPalavras(s) {
+  const r = new Set();
+  /* números contam (3 impostos e 16 tributos são fatos diferentes), mesmo curtos */
+  String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]+/g, " ")
+    .split(/\s+/).forEach((w) => { if ((w.length > 2 || /\d/.test(w)) && !IA_STOP.has(w)) r.add(w); });
+  return r;
+}
+function iaContido(a, b) {
+  if (!a.size) return 1;
+  let c = 0, numNovo = false;
+  a.forEach((w) => { if (b.has(w)) c++; else if (/\d/.test(w)) numNovo = true; });
+  /* um NÚMERO que o cartão não tem é fato novo (prazo de 30 dias x 60 dias), por mais palavras que se repitam */
+  return numNovo ? 0 : c / a.size;
+}
+
 function temLixoIA(raw) {
   const s = String(raw || "");
   return /\[\d{1,3}(?:\s*[,;–-]\s*\d{1,3})*\]/.test(s)
     || new RegExp(IA_ANTES + IA_INTERJ + "!\\s+", "m").test(s)
     || /^(?!\s*\+).*\(\s*Fonte\s*:/im.test(s)
     || /^\s*\+.*\s\*\s+[^\s\d*]/m.test(s)
-    || /^\s*\+.*\s1\.\s+\S.*\s2\.\s+\S/m.test(s);
+    || /^\s*\+.*\s1\.\s+\S.*\s2\.\s+\S/m.test(s)
+    /* "Também cobrado" que só repete o que o cartão já diz */
+    || (/^\s*\+\s*Também cobrado\s*—/m.test(s) && corrigirLixoIA(s) !== s);
 }
 
 function corrigirLixoIA(raw) {
@@ -579,7 +599,30 @@ function corrigirLixoIA(raw) {
     saida.push(l);
   });
   solta();
-  return saida.join(fim);
+  /* "+ Também cobrado — ..." que nao acrescenta nada ao cartao (a resposta de uma pergunta parecida, com outras palavras),
+   * e linha "+" identica a outra do mesmo cartao, saem. */
+  const limpo = [];
+  let base = null, vistas = null;
+  saida.forEach((l) => {
+    if (/^\s*\+/.test(l) && base) {
+      const conteudo = l.replace(/^\s*\+\s*/, "");
+      const chave = conteudo.toLowerCase().replace(/\s+/g, " ").trim();
+      if (vistas.has(chave)) return;
+      const tc = /^Também cobrado\s*—/.test(conteudo);
+      if (tc) {
+        const alvo = iaPalavras(conteudo.replace(/^Também cobrado\s*—\s*/, ""));
+        if (iaContido(alvo, base) >= 0.6) return;
+      }
+      vistas.add(chave);
+      iaPalavras(conteudo.replace(/^Também cobrado\s*—\s*/, "")).forEach((w) => base.add(w));
+      limpo.push(l);
+      return;
+    }
+    if (l.trim() && !/^\s*[+@#]/.test(l)) { base = iaPalavras(l); vistas = new Set(); }
+    else if (!/^\s*\+/.test(l) && l.trim()) { base = null; }
+    limpo.push(l);
+  });
+  return limpo.join(fim);
 }
 
 /* Resposta quebrada em varias linhas: a IA escreveu "• item" / "1. item" em
