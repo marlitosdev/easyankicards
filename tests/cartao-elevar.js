@@ -482,6 +482,36 @@ async function testes() {
     ok(fila0 >= 1, "E10z4 (fila inicial nao vazia)");
   }
 
+    /* ---- E11: o botao antigo da revisao manual leva ao Elevar (U3) ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const mk = () => {
+      const r = rodar(); const x = r.api;
+      x.matIniciar(); x.edIniciar();
+      x.$("editor").value = "Pergunta da bancada? :: sim";
+      return x;
+    };
+    /* a) abrir o novo */
+    let x = mk();
+    let pr = x.$("btnRevisar").onclick();
+    ok(/Elevar cartões/.test(x.$("uiModalMsg").textContent) && /à mão/.test(x.$("uiModalMsg").textContent), "E11 o botao antigo explica que agora abre o Elevar: " + x.$("uiModalMsg").textContent.slice(0, 60));
+    ok(x.$("uiModalOk").textContent === x.t("rev_migrou_novo") && x.$("uiModalCancel").textContent === x.t("rev_migrou_antigo") && x.$("uiModalCancel").style.display !== "none", "E11a as duas saidas tem rotulo (abrir o novo / usar a antiga)");
+    x.$("uiModalOk").onclick();
+    ok((await pr) === "novo" && x.$("dlgCartElevar").open === true && x.ceEscopoAtual() === "bancada" && x.ceObjetivoAtual() === "completar", "E11b abrir o novo: o Elevar abre ja no escopo da bancada (onde a revisao antiga agia)");
+    ok(x.$("btnRevisar").style.display !== "none", "E11c abrir o novo NAO entra no modo revisao antigo");
+    /* b) usar a antiga */
+    x = mk();
+    pr = x.$("btnRevisar").onclick();
+    x.$("uiModalCancel").onclick();
+    ok((await pr) === "antigo" && x.$("dlgCartElevar").open !== true && x.$("btnRevisar").style.display === "none", "E11d escolher a antiga entra no modo revisao como antes (ainda existe por esta versao)");
+    /* c) fechar sem escolher (Esc / clique fora) */
+    x = mk();
+    pr = x.$("btnRevisar").onclick();
+    x._uiFechar(false);
+    ok((await pr) === "" && x.$("btnRevisar").style.display !== "none", "E11e sem escolher nada, nada abre e a revisao antiga tambem nao entra");
+    ok(x.$("dlgCartElevar").open !== true, "E11f o Elevar nao abriu sozinho");
+  }
+
     /* ---- E8: a tela, em 3 passos ---- */
   {
     const { a, c1, janela } = montar();
