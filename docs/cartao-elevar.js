@@ -152,15 +152,15 @@ function ceAplicarLote(aceitos) {
   let trocados = 0, naoAchou = 0;
   aceitos.forEach((it) => {
     const ch = it.nota.chave;
-    const bruto = String((matResumos[ch] || {}).cartoes || "");
-    if (!(ch in antes)) antes[ch] = bruto;
+    const bruto = cqTexto(ch);
+    if (!(ch in antes)) { antes[ch] = bruto; cqVersaoBancada("antes de elevar cartões ao padrão", [ch]); }
     const novo = ceSubstituir(bruto, it.nota.card, it.depois);
     if (novo === null) { naoAchou++; return; }
-    matGravarCartoes(ch, novo, { disciplina: it.nota.disciplina, topico: it.nota.topico });
+    cqGravar(ch, novo, { disciplina: it.nota.disciplina, topico: it.nota.topico });
     tocados.add(ch); trocados++;
   });
-  const itens = [...tocados].map((ch) => ({ chave: ch, antes: antes[ch], depois: String(matResumos[ch].cartoes || ""),
-    disciplina: matResumos[ch].disciplina, topico: matResumos[ch].topico }));
+  const itens = [...tocados].map((ch) => ({ chave: ch, antes: antes[ch], depois: cqTexto(ch),
+    disciplina: (matResumos[ch] || {}).disciplina, topico: (matResumos[ch] || {}).topico }));
   if (itens.length) {
     try { localStorage.setItem(CE_CHAVE_RECIBO, JSON.stringify({ quando: new Date().toISOString(), itens })); } catch (e) {}
   }
@@ -179,8 +179,9 @@ function ceDesfazerLote() {
   if (!rec || !rec.itens) return { desfeitos: 0, pulados: 0 };
   let desfeitos = 0, pulados = 0;
   rec.itens.forEach((it) => {
-    if (String((matResumos[it.chave] || {}).cartoes || "") !== it.depois) { pulados++; return; }
-    matGravarCartoes(it.chave, it.antes, { disciplina: it.disciplina, topico: it.topico });
+    if (cqTexto(it.chave) !== it.depois) { pulados++; return; }
+    cqVersaoBancada("antes de desfazer a rodada", [it.chave]);
+    cqGravar(it.chave, it.antes, { disciplina: it.disciplina, topico: it.topico });
     desfeitos++;
   });
   if (!pulados) { try { localStorage.removeItem(CE_CHAVE_RECIBO); } catch (e) {} }
@@ -336,7 +337,8 @@ function ceAbrir(opc) {
 }
 
 if (typeof document !== "undefined" && $("btnCartElevar")) {
-  $("btnCartElevar").onclick = ceAbrir;
+  $("btnCartElevar").onclick = () => ceAbrir();
+  if ($("btnBancaElevar")) $("btnBancaElevar").onclick = () => ceAbrir();
   if ($("btnCeFechar")) $("btnCeFechar").onclick = () => $("dlgCartElevar").close();
   if ($("btnCeMais")) $("btnCeMais").onclick = () => { ceMostrando += CE_LIM.visiveis; cePintar(); };
   if ($("btnCeMarcar")) $("btnCeMarcar").onclick = ceMarcarPiores;

@@ -520,6 +520,65 @@ function reNegrito() { return new RegExp(MD_NEGRITO, "g"); }
 function temMarkdown(raw) { return new RegExp(MD_NEGRITO).test(raw); }
 function corrigirMarkdown(raw) { return raw.replace(reNegrito(), "<b>$1</b>"); }
 
+/* ===================================================================
+ * SOBRAS DA IA
+ * O NotebookLM e cia. deixam no cartão o que era para a conversa: as
+ * citações "[1, 2]" da fonte, o "Exato!" de quem confirma a pergunta,
+ * listas com "*" ou "1." dentro de UMA linha "+", e o "(Fonte: arquivo.pdf,
+ * pág. 3)" dentro da pergunta — que no cartão de lacuna vira parte da frase
+ * que se estuda. Nada disso é matéria. A citação e o "Exato!" saem; a lista
+ * vira uma linha "+" por item; e a fonte NÃO se perde: vira "+ Fonte — ...".
+ * (Como o resto da cadeia segura, roda sobre o texto e devolve o texto.)
+ * =================================================================== */
+function reCitacaoIA() { return /\s*\[\d{1,3}(?:\s*[,;–-]\s*\d{1,3})*\]/g; }
+const IA_INTERJ = "(?:Exato|Exatamente|Correto|Certo|Perfeito|Claro|Isso mesmo|Com certeza|Muito bem)";
+/* onde "Exato!" é interjeição: começo, depois de "— " ou " :: ", ou depois do ponto final da frase anterior */
+const IA_ANTES = "(^|\\s—\\s|\\s::\\s|^\\s*\\+\\s+|[.!?]\\s+)";
+function reInterjIA() { return new RegExp(IA_ANTES + IA_INTERJ + "!\\s+", "gm"); }
+function reFonteIA() { return /\s*\(\s*Fonte\s*:\s*([^)]*?)\s*\)/i; }
+const RE_LISTA_IA = /\s\*\s+(?=[^\s\d*])/;
+
+function temLixoIA(raw) {
+  const s = String(raw || "");
+  return /\[\d{1,3}(?:\s*[,;–-]\s*\d{1,3})*\]/.test(s)
+    || new RegExp(IA_ANTES + IA_INTERJ + "!\\s+", "m").test(s)
+    || /^(?!\s*\+).*\(\s*Fonte\s*:/im.test(s)
+    || /^\s*\+.*\s\*\s+[^\s\d*]/m.test(s)
+    || /^\s*\+.*\s1\.\s+\S.*\s2\.\s+\S/m.test(s);
+}
+
+function corrigirLixoIA(raw) {
+  const fim = /\r\n/.test(raw) ? "\r\n" : "\n";
+  const saida = [];
+  let fontes = [];
+  const solta = () => { fontes.forEach((f) => saida.push("+ Fonte — " + f)); fontes = []; };
+  String(raw).split(/\r?\n/).forEach((linha) => {
+    let l = linha.replace(reCitacaoIA(), "").replace(reInterjIA(), "$1");
+    if (/^\s*\+/.test(l)) {
+      /* linha de explicação: uma lista dentro dela vira uma linha "+" por item */
+      let partes = RE_LISTA_IA.test(l) ? l.split(RE_LISTA_IA) : [l];
+      /* a numerada (1. 2. 3.) só conta com pelo menos dois itens; pode vir DENTRO de um item de "*" */
+      partes = partes.reduce((acc, p) => acc.concat(
+        /\s1\.\s+\S/.test(p) && /\s2\.\s+\S/.test(p) ? p.split(/\s(?=\d{1,2}\.\s+\S)/) : [p]), []);
+      partes.forEach((p) => {
+        const t2 = p.trim().replace(/^\+\s*/, "");
+        if (!t2) return;
+        saida.push("+ " + t2);
+      });
+      return;
+    }
+    /* qualquer outra linha encerra as "+" do cartão anterior: a fonte guardada entra agora */
+    solta();
+    if (l.trim() && !/^\s*[@#]/.test(l)) {
+      let m;
+      while ((m = l.match(reFonteIA()))) { fontes.push(m[1].replace(/\s+/g, " ").trim()); l = l.replace(reFonteIA(), ""); }
+    }
+    saida.push(l);
+  });
+  solta();
+  return saida.join(fim);
+}
+
 /* Resposta quebrada em varias linhas: a IA escreveu "• item" / "1. item" em
  * linhas soltas e cada uma virou um cartao torto. Nao ha conserto automatico
  * seguro (nao da para adivinhar onde a resposta terminava) — por isso o
@@ -691,6 +750,7 @@ function problemasDoTexto(raw, r) {
   // P11: o cartão com markdown ficava de fora do prompt).
   const porLinha = [
     [temMarkdown, "fixg_markdown"],
+    [temLixoIA, "fixg_lixo_ia"],
     [temTituloGrudado, "fixg_title_glued"],
     [temMarcadores, "fixg_bullets"],
     [temTagsQueSaoTexto, "fixg_tags_text"],
@@ -777,6 +837,7 @@ function detectoresAtivos(raw) {
     tags_que_sao_texto: temTagsQueSaoTexto(raw),
     lacuna_opcoes_longas: temLacunaOpcoesLongas(raw),
     markdown: temMarkdown(raw),
+    lixo_ia: temLixoIA(raw),
     tags_na_explicacao: temTagsNaExplicacao(raw),
     cloze_repetida: temClozeRepetida(raw),
     espacos: temEspacosRuins(raw),

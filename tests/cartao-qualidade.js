@@ -114,7 +114,7 @@ async function testes() {
   /* ---- Q5: biblioteca, relatorio, resolver (de verdade, entre topicos) ---- */
   const montar = () => {
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const c1 = a.matChave("Tributário", "ISS retenção"), c2 = a.matChave("Tributário", "ISS geral");
     a.matGravarCartoes(c1, [
       "@ Trilha", "Qual o prazo de recolhimento do ISS retido pelo tomador? :: Até o dia 09 do mês seguinte :: x",
@@ -256,7 +256,7 @@ async function testes() {
   {
     /* biblioteca vazia e sem repeticao */
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     a.cqAbrir();
     ok(/Ainda não há cartões/.test(a.$("cqResumo").textContent), `Q8 biblioteca vazia: ${a.$("cqResumo").textContent}`);
     const c = a.matChave("D", "T");

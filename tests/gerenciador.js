@@ -49,7 +49,7 @@ async function testes() {
 
   const montar = () => {
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const iss = a.matChave("Trib", "ISS"), iptu = a.matChave("Trib", "IPTU"), pri = a.matChave("Const", "Princípios");
     a.matGravarCartoes(iss, [
       "@ Trilha ISS", "Qual o fato gerador do ISS? :: Serviço :: x", "+ Nota antiga", "",
@@ -306,7 +306,7 @@ async function testes() {
   {
     /* o lote do elevar tem teto tambem quando vem do gerenciador */
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const ch = a.matChave("D", "T");
     a.matGravarCartoes(ch, Array.from({ length: 20 }, (_, i) => "Pergunta numero" + i + " unica" + (i * 7) + "? :: Resp " + i).join("\n"), { disciplina: "D", topico: "T" });
     a.gerAbrir();
@@ -318,7 +318,7 @@ async function testes() {
   {
     /* paginacao */
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const ch = a.matChave("D", "T");
     a.matGravarCartoes(ch, Array.from({ length: 70 }, (_, i) => `Pergunta numero${i} unica${i * 3}? :: Resposta ${i}`).join("\n"), { disciplina: "D", topico: "T" });
     a.gerAbrir();
@@ -326,7 +326,7 @@ async function testes() {
     a.$("btnGerMais").onclick();
     ok(linhasDaLista(a).length === 70 && a.$("btnGerMais").hidden === true, "G12a mostrar mais traz o resto");
     /* biblioteca vazia */
-    const v = rodar().api; v.matIniciar(); v.edIniciar();
+    const v = rodar().api; v.matIniciar(); v.edIniciar(); v.$("editor").value = "";
     v.gerAbrir();
     ok(/Ainda não há cartões/.test(v.$("gerResumo").textContent), `G12b biblioteca vazia: ${v.$("gerResumo").textContent}`);
   }

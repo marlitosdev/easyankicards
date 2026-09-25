@@ -67,7 +67,7 @@ async function testes() {
   /* ---- montar uma biblioteca ---- */
   const montar = () => {
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const c1 = a.matChave("Trib", "ISS"), c2 = a.matChave("Trib", "IPTU");
     a.matGravarCartoes(c1, [
       "@ Trilha ISS", "Qual o fato gerador do ISS? :: Serviço :: x", "+ Nota antiga",
@@ -293,7 +293,7 @@ async function testes() {
   {
     /* o lote tem teto */
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const ch = a.matChave("D", "T");
     a.matGravarCartoes(ch, Array.from({ length: 20 }, (_, i) => `Pergunta numero ${i}? :: Resp ${i}`).join("\n"), { disciplina: "D", topico: "T" });
     a.ceAbrir();
@@ -309,7 +309,7 @@ async function testes() {
   {
     /* biblioteca sem cartoes / sem nada abaixo */
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     a.ceAbrir();
     ok(/Ainda não há cartões/.test(a.$("ceResumo").textContent), `E10 biblioteca vazia: ${a.$("ceResumo").textContent}`);
     const ch = a.matChave("D", "T");
