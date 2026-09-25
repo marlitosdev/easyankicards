@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.79.0";
+const VERSAO = "16.79.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -960,7 +960,7 @@ function corrigirComSeguranca(fn, texto, simular) {
     // as travas continuam valendo: a prévia mostra o texto SEM a mudança
     // que seria bloqueada, para não prometer o que não vai acontecer
     if (fn.limpeza) return novo;
-    if (depois.cartoes < antes.cartoes || depois.saibaMais < antes.saibaMais
+    if (depois.cartoes < antes.cartoes || (depois.saibaMais < antes.saibaMais && !fn.reduzSaibaMais)
         || depois.tags < antes.tags) return texto;
     return novo;
   }
@@ -985,7 +985,10 @@ function corrigirComSeguranca(fn, texto, simular) {
     reg("BLOQUEIO", "correção cancelada: perderia cartões");
     return texto;
   }
-  if (depois.saibaMais < antes.saibaMais) {
+  /* Tirar linha "+" REPETIDA ou redundante é o pedido, não perda (fn.reduzSaibaMais). Sem isso o
+   * botão ficava bloqueado para sempre num texto com "+" repetido: a prévia voltava igual e nada
+   * era corrigido. As travas de cartões e de etiquetas continuam valendo. */
+  if (depois.saibaMais < antes.saibaMais && !fn.reduzSaibaMais) {
     uiAlert(t("fix_would_lose_more", { a: antes.saibaMais, d: depois.saibaMais }));
     ultimoAjuste.bloqueado = "saibaMais";
     reg("BLOQUEIO", "correção cancelada: perderia Saiba mais");
@@ -1053,6 +1056,8 @@ function correcaoDeTudo(raw) {
   }
   if (!aplicadas.length) return null;
   const tudo = (t0) => aplicadas.reduce((acc, f) => f(acc), t0);
+  /* a composta só pode reduzir "+" se alguma das aplicadas tira "+" de propósito */
+  tudo.reduzSaibaMais = aplicadas.some((f) => f.reduzSaibaMais || f.limpeza);
   /* o nome aparece no registro e no diálogo de conferência */
   Object.defineProperty(tudo, "name",
     { value: aplicadas.map((f) => f.name).join(" + ") });

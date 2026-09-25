@@ -812,7 +812,7 @@ function rodar() {
     pacAbrir, pacExportar, pacLerArquivo, pacAcaoImportar, pacPintar, cmCampo,
     pacNotasAtual: () => pacNotas, pacSelAtual: () => pacSel, pacLidoAtual: () => pacLido, pacSelTeste: (s) => { pacSel = new Set(s); },
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
-    gerAbrirDestinos, gerEscolherDestino, gerAmpliar, gerAviso, gerAcaoApagarAberto, gerDestinosLista, gerFecharDestinos, gerPintarDestinosLista, gerGrandeLer, GER_CHAVE_GRANDE,
+    corrigirComSeguranca, gerAbrirDestinos, gerEscolherDestino, gerAmpliar, gerAviso, gerAcaoApagarAberto, gerDestinosLista, gerFecharDestinos, gerPintarDestinosLista, gerGrandeLer, GER_CHAVE_GRANDE,
     gerAcaoApagar, gerAcaoMover, gerAcaoEditar, gerAcaoSalvarEdicao, gerAcaoMelhorar, gerAcaoDesfazer, GER_LIM, GER_FILTROS,
     gerNotasAtual: () => gerNotas, gerVisAtual: () => gerVis, gerSelAtual: () => gerSel, gerFocoAtual: () => gerFoco,
     gerPastaAtual: () => gerPasta, gerSelTeste: (s) => { gerSel = new Set(s); }, gerFocoTeste: (i) => { gerFoco = i; },

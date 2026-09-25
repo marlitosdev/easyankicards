@@ -105,6 +105,55 @@ async function testes() {
     ok(!api.temLixoIA("Q :: A\n\n* Esquema — X") && !api.temLixoIA("Q :: A\n* Esquema — X"), "L9a e o detector nao acende (senao um baralho inteiro com * viraria erro)");
   }
 
+  /* ---- L11: o botao "Corrigir erros" NAO pode ficar bloqueado por causa de "+" repetido ----
+   * A trava "nao perder saiba mais" cancelava a correcao inteira quando ela tirava "+" repetido/redundante
+   * (o proprio pedido). A previa voltava igual, o botao "nao finalizava" e nada era corrigido. */
+  {
+    const txt = [
+      "@ Impostos", "Quais os 3 impostos do artigo 236? :: ISS, IPTU e ITBI, conforme o artigo 236 do CTM de Caruaru. :: ctm",
+      "+ Espécies — ISS, IPTU e ITBI.", "+ Também cobrado — Estão instituídos 3 impostos municipais.", "+ Quantidade — 3 impostos.",
+      "+ Também cobrado — Estão instituídos 3 impostos.", "+ Quantidade — 3 impostos.", "",
+      "Outra pergunta? :: Outra resposta longa o suficiente. :: ctm", "+ Nota — a", "+ Nota — a", ""].join("\n");
+    const fn = api.correcaoDeTudo(txt);
+    ok(fn && fn.reduzSaibaMais === true, "L11 a correcao composta que tira '+' de proposito avisa a trava");
+    ok(api.resumoTexto(fn(txt)).saibaMais < api.resumoTexto(txt).saibaMais, "L11a (o teste so' vale se a correcao de fato reduz os '+')");
+    ok(api.corrigirComSeguranca(fn, txt, true) === fn(txt), "L11b a PREVIA do botao mostra a correcao (nao devolve o texto igual)");
+    ok(api.corrigirComSeguranca(fn, txt, false) === fn(txt), "L11c aplicar de verdade tambem passa pela trava");
+    /* as OUTRAS travas continuam valendo */
+    const perdeCartao = (t0) => t0.split("\n\n")[0];
+    ok(api.corrigirComSeguranca(perdeCartao, txt, true) === txt, "L11d a trava de CARTOES continua bloqueando");
+    const perdeMais = (t0) => t0.split("\n").filter((l) => !/^\+/.test(l)).join("\n");
+    ok(api.corrigirComSeguranca(perdeMais, txt, true) === txt, "L11e uma correcao qualquer que apague '+' sem avisar continua bloqueada");
+    const perdeTag = (t0) => t0.replace(/ :: ctm/g, "");
+    ok(api.corrigirComSeguranca(perdeTag, txt, true) === txt, "L11f a trava de ETIQUETAS continua bloqueando");
+    const comReduz = Object.assign((t0) => t0.split("\n").filter((l) => !/^\+ Nota/.test(l)).join("\n"), { reduzSaibaMais: true });
+    ok(api.corrigirComSeguranca(comReduz, txt, true) !== txt, "L11g quem avisa que reduz '+' passa");
+    const cartaoSome = Object.assign((t0) => t0.split("\n\n")[0], { reduzSaibaMais: true });
+    ok(api.corrigirComSeguranca(cartaoSome, txt, true) === txt, "L11h avisar que reduz '+' NAO libera perder cartao");
+    /* reforcos: cada peca da composta, e a trava de aplicar */
+    ok(api.corrigirComSeguranca(perdeMais, txt, false) === txt, "L11k aplicar de verdade: '+' apagado sem aviso continua bloqueado");
+    const so1 = "Pergunta? :: Resposta longa o bastante para o cartao. :: t\n+ Nota — a\n+ Nota — a\n";
+    const fSo1 = api.correcaoDeTudo(so1);
+    ok(fSo1 && fSo1.name === "corrigirMaisRepetido" && fSo1.reduzSaibaMais === true, "L11l so' 'linha repetida' na composta: tambem libera (e' limpeza)");
+    const so2 = "Alfa beta :: Gama delta epsilon zeta eta teta iota kappa lambda mi ni ksi omicron pi ro sigma. :: t\n+ Espécie — Gama delta epsilon.\n+ Também cobrado — Gama delta epsilon zeta eta.\n";
+    const fSo2 = api.correcaoDeTudo(so2);
+    ok(fSo2 && fSo2.name === "corrigirLixoIA" && fSo2.reduzSaibaMais === true && api.resumoTexto(fSo2(so2)).saibaMais < api.resumoTexto(so2).saibaMais, "L11m so' 'Tambem cobrado redundante' na composta: libera por causa do corretor de lixo da IA");
+    const so3 = "Pergunta ,sem espaco  duplo :: Resposta longa o bastante para o cartao ,ok. :: t\n";
+    const fSo3 = api.correcaoDeTudo(so3);
+    ok(fSo3 && fSo3.name === "corrigirEspacos" && !fSo3.reduzSaibaMais, "L11n correcao que nao tira '+' NAO ganha a liberacao");
+    const sem = "Pergunta um? :: Resposta um\n\nPergunta dois? :: Resposta dois";
+    const soma = Object.assign((t0) => t0.split("\n\n")[0], { reduzSaibaMais: true });
+    ok(api.resumoTexto(soma(sem)).cartoes < api.resumoTexto(sem).cartoes && api.corrigirComSeguranca(soma, sem, true) === sem, "L11o (sem etiquetas) avisar que reduz '+' NAO libera perder cartao");
+    /* a tela de ponta a ponta: o botao abre com a correcao e aplica */
+    api.$("editor").value = txt;
+    api.preview();
+    ok(api.$("btnNormalizar").disabled === false, "L11i o botao esta ativo");
+    api.$("btnNormalizar").onclick();
+    api.$("btnNormAplicar").onclick();
+    const v = api.$("editor").value;
+    ok(v !== txt && (v.match(/^\+/gm) || []).length === 4 && !/Nota — a\n\+ Nota — a/.test(v), "L11j apertar 'Corrigir erros' e aplicar realmente limpa o texto: " + (v.match(/^\+/gm) || []).length + " linhas +");
+  }
+
   /* ---- L10: "Também cobrado" que so repete o cartao ---- */
   {
     /* reforcos: numero novo e' fato novo; palavra de ligacao nao conta; o detector acende */
