@@ -201,6 +201,15 @@ function cmLerResposta(txt, itens, plano) {
  * ETIQUETA — assim a marca viaja com o cartão, aparece na revisão e
  * sobrevive à exportação de volta para o Anki.
  * ------------------------------------------------------------------ */
+/* O "::" separa os campos do material, então sobra-se um "::" solto dentro do
+ * texto vira " — ". MAS o "::" DENTRO de uma lacuna ({{c1::resposta::dica}}) é
+ * da lacuna, não do material: trocá-lo estraga o cartão ("{{c1 — resposta}}" não
+ * é lacuna nenhuma, e o cartão vira texto solto). Só se mexe fora das lacunas. */
+function cmCampo(s) {
+  return String(s || "").split(/(\{\{c\d+::[\s\S]*?\}\})/).map((p, i) => (i % 2 ? p : p.replace(/\s*::\s*/g, " — ")))
+    .join("").replace(/\r?\n+/g, " ").trim();
+}
+
 function cmLinhaCartao(c, concurso) {
   /* O "::" é o separador de campos do material. Qualquer "::" que sobre
    * dentro do texto OU das etiquetas cria um campo a mais, e o leitor do
@@ -208,7 +217,7 @@ function cmLinhaCartao(c, concurso) {
    * hierárquica "Direito Financeiro::Restos a pagar", o cartão voltava com
    * tags ["TCE-PE_2026"] e a disciplina PERDIDA. A hierarquia do Anki é
    * bonita, mas aqui ela custa o dado; então vira "_". */
-  const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ").replace(/\r?\n+/g, " ").trim();
+  const limpa = cmCampo;
   const achata = (tg) => String(tg).replace(/::/g, "_").replace(/\s+/g, "_");
   const tags = (c.tags || []).map(achata).filter(Boolean);
   const marca = "concurso_" + String(concurso || "").replace(/\s+/g, "_");
@@ -223,7 +232,7 @@ function cmLinhaCartao(c, concurso) {
  * que o leitor do app as espera. MC continua degradando para Básico (as
  * alternativas não cabem numa linha só). */
 function cmExtrasCartao(c) {
-  const um = (s) => String(s || "").replace(/\s*::\s*/g, " — ").replace(/\r?\n+/g, " ").trim();
+  const um = cmCampo;
   const antes = [], depois = [];
   const tit = um(c && c.titulo);
   if (tit) antes.push("@ " + tit);

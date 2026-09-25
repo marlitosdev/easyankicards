@@ -3251,8 +3251,7 @@ async function matCartoesSalvar() {
     || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
   const tags = matEtiquetasTopico(matAtual.disciplina, matAtual.topico, concurso,
     mcPromptDeFora ? "questao" : "resumo");
-  const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ")
-    .replace(/\r?\n+/g, " ").trim();
+  const limpa = cmCampo;
   const linhas = novos.map((c) => {
     const ex = cmExtrasCartao(c);
     return ex.antes.concat([

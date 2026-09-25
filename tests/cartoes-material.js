@@ -11,7 +11,7 @@ function carregar() {
   const api = new Function("matResumos", "t", src + `
     return { CM_GERAL, cmNormal, cmChave, cmChaveGeral, cmClassificarLocal,
              cmPrompt, cmLerResposta, cmLinhaCartao, cmAplicar, cmContar,
-             cmParaGerais, cmDesfazer, cmExtrasCartao, cmBlocoCartao };`)(
+             cmParaGerais, cmDesfazer, cmExtrasCartao, cmBlocoCartao, cmCampo };`)(
     matResumos, (k, p) => k + " " + JSON.stringify(p || {}));
   api._mat = matResumos;
   api._ler = (ch) => (matResumos[ch] && matResumos[ch].cartoes) || "";
@@ -358,6 +358,20 @@ function testes() {
     api.cmDesfazer(rec, api._gravar, api._ler);
     ok(api._ler(ch) === "Escrita depois :: Resposta :: x",
        `C13 desfazer apagou o que foi escrito depois: ${JSON.stringify(api._ler(ch))}`);
+  }
+
+  /* ---- C15: a lacuna sobrevive ao gravar no material ----
+   * O "::" solto virava " — " em TODO o campo, inclusive dentro de {{c1::resposta::dica}}:
+   * a lacuna virava "{{c1 — resposta}}", que nao e' lacuna, e o cartao estava perdido. */
+  {
+    const api = carregar();
+    ok(api.cmCampo("O prazo é de {{c1::30 dias}}.") === "O prazo é de {{c1::30 dias}}.", "C15 a lacuna simples foi estragada");
+    ok(api.cmCampo("É {{c1::municipal::municipal ou estadual?}} o ISS") === "É {{c1::municipal::municipal ou estadual?}} o ISS", "C15a a lacuna com dica foi estragada");
+    ok(api.cmCampo("A :: B {{c1::x}} C :: D") === "A — B {{c1::x}} C — D", `C15b o :: solto FORA da lacuna continua virando travessao: ${api.cmCampo("A :: B {{c1::x}} C :: D")}`);
+    ok(api.cmCampo("{{c1::a}} e {{c2::b::dica}}") === "{{c1::a}} e {{c2::b::dica}}", "C15c duas lacunas");
+    ok(api.cmCampo("linha 1\nlinha 2") === "linha 1 linha 2" && api.cmCampo(null) === "", "C15d quebra de linha vira espaco; nulo vira vazio");
+    const linha = api.cmLinhaCartao({ front: "O ISS é de {{c1::municipal::A ou B?}}.", back: "obs :: x", tags: ["t"] }, "TCE");
+    ok(/^O ISS é de \{\{c1::municipal::A ou B\?\}\}\. :: obs — x :: t concurso_TCE$/.test(linha), `C15e a linha do cartao de lacuna: ${linha}`);
   }
 
   /* ---- C14: o titulo e o saiba mais VIAJAM com o cartao ----

@@ -4140,6 +4140,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .cq-f{font-weight:600}
 .cq-v{opacity:.85}
 .cq-onde{font-size:11px;opacity:.65;margin:2px 0 4px}
+.pac-disc{display:block;font-weight:600;font-size:13px;margin-top:6px;cursor:pointer}
+.pac-top{display:block;padding-left:20px;font-size:12px;cursor:pointer}
+.pac-arv{max-height:34vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
 .ger-grade{display:grid;grid-template-columns:200px 1fr 300px;gap:10px;min-height:44vh}
 .ger-col{min-width:0;max-height:52vh;overflow:auto}
 .ger-pasta{padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1.35}
@@ -4818,6 +4821,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
     <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
     <button type="button" class="btn-min btn-min-ok" id="btnGerCartoes" data-i18n="ger_btn" data-i18n-title="ger_btn_aj"></button>
+    <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
@@ -7282,6 +7286,40 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgPacote" class="ui-modal diag-modal">
+  <h3 data-i18n="pac_titulo"></h3>
+  <p class="nota" data-i18n="pac_ajuda"></p>
+  <div class="qm-bts">
+    <button type="button" class="btn-min" id="btnPacTudo" data-i18n="pac_marcar_tudo"></button>
+    <button type="button" class="btn-min" id="btnPacLimpar" data-i18n="pac_limpar"></button>
+  </div>
+  <div id="pacArvore" class="pac-arv"></div>
+  <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
+    <input type="text" id="pacNome" style="width:100%;box-sizing:border-box"></label>
+  <label class="nota" style="display:block"><input type="checkbox" id="pacSemRep" checked> <span data-i18n="pac_sem_rep"></span></label>
+  <label class="nota" style="display:block"><input type="checkbox" id="pacSemFracos"> <span data-i18n="pac_sem_fracos"></span></label>
+  <p class="nota" id="pacPrevia"></p>
+  <div id="pacDecks"></div>
+  <div class="qm-bts">
+    <button type="button" class="btn-min btn-min-ok" id="btnPacApkg" data-i18n="pac_apkg" disabled></button>
+    <button type="button" class="btn-min" id="btnPacTxt" data-i18n="pac_txt" disabled></button>
+  </div>
+  <hr>
+  <h4 data-i18n="pac_import_tit"></h4>
+  <p class="nota" data-i18n="pac_import_ajuda"></p>
+  <input type="file" id="pacArquivo" accept=".apkg">
+  <div id="pacImpCx" hidden>
+    <p class="nota" id="pacImpResumo"></p>
+    <label class="nota" style="display:block"><input type="radio" name="pacModo" id="pacModoDecks" checked> <span data-i18n="pac_modo_decks"></span></label>
+    <label class="nota" style="display:block"><input type="radio" name="pacModo" id="pacModoTopico"> <span data-i18n="pac_modo_topico"></span> <select id="pacImpDestino"></select></label>
+    <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnPacImportar" data-i18n="pac_import_btn" disabled></button></div>
+  </div>
+  <p class="nota" id="pacMsg"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnPacFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgMcEstudo" class="ui-modal diag-modal">
   <h3 id="mcEstTitulo"></h3>
   <p class="nota" id="mcEstSub"></p>
@@ -7766,6 +7804,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cartao-qualidade.js"></script>
 <script src="cartao-elevar.js"></script>
 <script src="gerenciador.js"></script>
+<script src="pacote.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
 <script src="questoes-hist.js"></script>
