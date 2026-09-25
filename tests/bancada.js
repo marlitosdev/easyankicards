@@ -179,8 +179,7 @@ async function testes() {
     const l2 = achar(a.$("gerLista"), (e) => cls(e, "ger-item"));
     const i2 = l2.findIndex((l) => /IPTU/.test(l.textContent));
     ck2[i2].checked = true; ck2[i2].onchange();
-    a.$("gerDestino").value = mat;
-    await conduzir(a, a.$("btnGerMover").onclick());
+    await conduzir(a, a.gerEscolherDestino(mat));
     ok(!/IPTU/.test(a.$("editor").value) && /Quem paga o IPTU/.test(a.matResumosAtual()[mat].cartoes), "B5d mover da bancada para o material: sai de la, entra aqui");
     await conduzir(a, a.$("btnGerDesfazer").onclick());
     ok(/Quem paga o IPTU/.test(a.$("editor").value) && !/IPTU/.test(a.matResumosAtual()[mat].cartoes), "B5e desfazer volta os dois lados");

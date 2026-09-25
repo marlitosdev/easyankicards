@@ -172,6 +172,7 @@ function gerEditar(nota, texto) {
 /* ---- a tela ---- */
 let gerNotas = [], gerVis = [], gerPasta = null, gerSel = new Set(), gerFoco = -1,
   gerMostrando = GER_LIM.visiveis, gerFechados = new Set(), gerEditando = false;
+const GER_CHAVE_GRANDE = "eac_ger_grande";
 
 function gerEl(tag, cls, txt) {
   const e = document.createElement(tag);
@@ -182,14 +183,17 @@ function gerEl(tag, cls, txt) {
 
 function gerCalcular() {
   gerNotas = cqLerBiblioteca();
-  /* a marcação e o foco são por POSIÇÃO na lista de agora: depois de mexer, zera */
-  gerSel = new Set(); gerFoco = -1; gerEditando = false;
   gerRefiltrar();
 }
 
+/* A marcação e o foco são por POSIÇÃO na lista de agora: qualquer mudança da lista (pasta, busca,
+ * filtro, depois de uma ação) zera a marcação — senão as marcas apontariam para OUTROS cartões.
+ * O foco vai para o primeiro cartão, para a prévia nunca ficar em branco. */
 function gerRefiltrar() {
   gerVis = gerFiltrar(gerNotas, { pasta: gerPasta, busca: $("gerBusca").value, filtro: $("gerFiltro").value });
   gerMostrando = GER_LIM.visiveis;
+  gerSel = new Set(); gerEditando = false;
+  gerFoco = gerVis.length ? 0 : -1;
 }
 
 function gerPintarArvore() {
@@ -246,6 +250,7 @@ function gerPintarPrevia() {
   const idx = gerFoco >= 0 ? gerVis[gerFoco] : undefined;
   const n = idx === undefined ? null : gerNotas[idx];
   $("gerEditorCx").hidden = !(n && gerEditando);
+  $("gerPreAcoes").hidden = !n;
   if (!n) { cx.append(gerEl("p", "nota", t("ger_previa_vazia"))); return; }
   try { renderCartaoEstilizado(cx, n.card, true, { estudo: false }); } catch (e) { cx.append(gerEl("pre", "", cardToLine(n.card))); }
   const def = ceDefeitos(n.card);
@@ -255,13 +260,75 @@ function gerPintarPrevia() {
   cx.append(nivel);
 }
 
+/* Duas barras: com NADA marcado, um rodapé fino (total e desfazer); com cartões marcados, a barra
+ * de ações sobe (mover, apagar, elevar). Antes o seletor de destino ocupava o rodapé o tempo todo. */
 function gerPintarAcoes() {
   const k = gerSel.size;
   $("gerSel").textContent = t("ger_sel", { n: k });
   ["btnGerApagar", "btnGerMover", "btnGerMelhorar"].forEach((id) => { $(id).disabled = !k; });
+  $("btnGerMelhorar").textContent = k > CE_LIM.lote ? t("ger_elevar_de", { n: CE_LIM.lote, k }) : t("ger_elevar", { n: k });
+  $("gerAcoes").hidden = !k;
+  $("gerTotal").textContent = t("ger_total", { n: gerNotas.length });
   $("btnGerEditar").disabled = gerFoco < 0;
+  $("btnGerPreApagar").disabled = gerFoco < 0;
   const rec = gerRecibo();
-  $("btnGerDesfazer").hidden = !(rec && rec.itens && rec.itens.length);
+  const tem = !!(rec && rec.itens && rec.itens.length);
+  $("btnGerDesfazer").hidden = !tem;
+  if (!tem) $("btnGerMsgDesfazer").hidden = true;
+  if (!k) gerFecharDestinos();
+}
+
+/* O aviso do que acabou de acontecer, com "desfazer" ao lado (a mesma última ação do rodapé). */
+function gerAviso(texto, comDesfazer) {
+  $("gerMsg").textContent = texto || "";
+  $("gerMsgCx").hidden = !texto;
+  const rec = gerRecibo();
+  $("btnGerMsgDesfazer").hidden = !(comDesfazer && rec && rec.itens && rec.itens.length);
+}
+
+/* ---- destino: um seletor com busca (o <select> nativo estourava a tela) ---- */
+function gerDestinosLista() {
+  return Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico))
+    .sort((a, b) => String((a.r.disciplina || "") + (a.r.topico || "")).localeCompare(String((b.r.disciplina || "") + (b.r.topico || "")), "pt"))
+    .map((x) => ({ ch: x.ch, nome: [x.r.disciplina, x.r.topico].filter(Boolean).join(" › ") }));
+}
+
+function gerFecharDestinos() {
+  const p = $("gerPop");
+  if (p) p.hidden = true;
+}
+
+function gerPintarDestinosLista() {
+  const q = cqNormal($("gerPopBusca").value || "");
+  const cx = $("gerPopLista");
+  cx.innerHTML = "";
+  const itens = gerDestinosLista().filter((d) => !q || cqNormal(d.nome).indexOf(q) >= 0);
+  if (!itens.length) cx.append(gerEl("p", "nota", t("ger_pop_vazio")));
+  itens.slice(0, 80).forEach((d) => {
+    const b = gerEl("div", "ger-pop-item", d.nome);
+    b.setAttribute("role", "option");
+    b.onclick = () => gerEscolherDestino(d.ch);
+    cx.append(b);
+  });
+  if (itens.length > 80) cx.append(gerEl("p", "nota", t("ger_pop_mais", { n: itens.length - 80 })));
+  return itens;
+}
+
+function gerAbrirDestinos() {
+  if (!gerSel.size) return;
+  const p = $("gerPop");
+  if (!p.hidden) { gerFecharDestinos(); return; }
+  $("gerPopBusca").value = "";
+  gerPintarDestinosLista();
+  p.hidden = false;
+  try { $("gerPopBusca").focus(); } catch (e) {}
+}
+
+/* Escolheu o destino na lista: já pergunta e move. */
+function gerEscolherDestino(ch) {
+  $("gerDestino").value = ch;
+  gerFecharDestinos();
+  return gerAcaoMover();
 }
 
 function gerPintarDestinos() {
@@ -280,14 +347,21 @@ function gerPintar() { gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); g
 
 function gerMarcados() { return [...gerSel].sort((a, b) => a - b).map((pos) => gerNotas[gerVis[pos]]).filter(Boolean); }
 
-async function gerAcaoApagar() {
-  const ms = gerMarcados();
+async function gerAcaoApagar(lista) {
+  const ms = Array.isArray(lista) ? lista : gerMarcados();
   if (!ms.length) return;
   if (!(await uiConfirm(t("ger_conf_apagar", { n: ms.length })))) return;
   const r = gerApagar(ms);
   gerCalcular(); gerPintarDestinos(); gerPintar();
   try { matRender(); } catch (e) {}
-  $("gerMsg").textContent = t("ger_feito_apagar", { n: r.apagados, m: r.naoAchou });
+  gerAviso(t("ger_feito_apagar", { n: r.apagados, m: r.naoAchou }), true);
+}
+
+/* o botão "lixeira" da prévia: só o cartão aberto */
+function gerAcaoApagarAberto() {
+  const idx = gerFoco >= 0 ? gerVis[gerFoco] : undefined;
+  if (idx === undefined) return Promise.resolve();
+  return gerAcaoApagar([gerNotas[idx]]);
 }
 
 async function gerAcaoMover() {
@@ -300,7 +374,7 @@ async function gerAcaoMover() {
   const r = gerMover(ms, dest);
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
-  $("gerMsg").textContent = t("ger_feito_mover", { n: r.movidos, m: r.repetidos, k: r.naoAchou });
+  gerAviso(t("ger_feito_mover", { n: r.movidos, m: r.repetidos, k: r.naoAchou }), true);
 }
 
 function gerAcaoEditar() {
@@ -318,7 +392,7 @@ function gerAcaoSalvarEdicao() {
   if (!r.ok) { uiAlert(t(r.motivo === "sem_cartao" ? "ger_edit_sem_cartao" : "ger_edit_nao_achou")); return; }
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
-  $("gerMsg").textContent = t("ger_feito_editar");
+  gerAviso(t("ger_feito_editar"), true);
 }
 
 function gerAcaoMelhorar() {
@@ -333,13 +407,33 @@ async function gerAcaoDesfazer() {
   const r = gerDesfazerUltima();
   gerCalcular(); gerPintarDestinos(); gerPintar();
   try { matRender(); } catch (e) {}
-  $("gerMsg").textContent = t("ger_desfeito", { n: r.desfeitos, m: r.pulados });
+  gerAviso(t("ger_desfeito", { n: r.desfeitos, m: r.pulados }), false);
+}
+
+/* Janela maior: o botão alterna entre o tamanho normal e quase a tela toda, e a escolha fica
+ * lembrada. (O canto da janela também dá para arrastar.) */
+function gerGrandeLer() {
+  try { return localStorage.getItem(GER_CHAVE_GRANDE) === "1"; } catch (e) { return false; }
+}
+function gerAplicarTamanho(grande) {
+  const d = $("dlgGerCartoes");
+  d.classList.toggle("ger-grande", !!grande);
+  if (!grande) { try { d.style.width = ""; d.style.height = ""; } catch (e) {} }
+  $("btnGerAmpliar").textContent = t(grande ? "ger_reduzir" : "ger_ampliar");
+  $("btnGerAmpliar").setAttribute("aria-pressed", grande ? "true" : "false");
+}
+function gerAmpliar() {
+  const grande = !$("dlgGerCartoes").classList.contains("ger-grande");
+  try { localStorage.setItem(GER_CHAVE_GRANDE, grande ? "1" : "0"); } catch (e) {}
+  gerAplicarTamanho(grande);
 }
 
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set();
-  $("gerBusca").value = ""; $("gerFiltro").value = "todos"; $("gerMsg").textContent = "";
+  $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
+  gerFecharDestinos();
   gerCalcular(); gerPintarDestinos(); gerPintar();
+  gerAplicarTamanho(gerGrandeLer());
   abrirModal("dlgGerCartoes");
   try { matReg("cartoes", "gerenciador aberto", gerNotas.length + " cartões"); } catch (e) {}
 }
@@ -348,13 +442,31 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerCartoes").onclick = gerAbrir;
   if ($("btnBancaGer")) $("btnBancaGer").onclick = gerAbrir;
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
-  $("gerBusca").oninput = () => { gerSel = new Set(); gerFoco = -1; gerRefiltrar(); gerPintar(); };
-  $("gerFiltro").onchange = () => { gerSel = new Set(); gerFoco = -1; gerRefiltrar(); gerPintar(); };
+  $("gerBusca").oninput = () => { gerRefiltrar(); gerPintar(); };
+  $("gerFiltro").onchange = () => { gerRefiltrar(); gerPintar(); };
   $("btnGerMais").onclick = () => { gerMostrando += GER_LIM.visiveis; gerPintarLista(); };
   $("btnGerMarcar").onclick = () => { gerSel = new Set(gerVis.slice(0, gerMostrando).map((_, i) => i)); gerPintarLista(); gerPintarAcoes(); };
   $("btnGerLimpar").onclick = () => { gerSel = new Set(); gerPintarLista(); gerPintarAcoes(); };
   $("btnGerApagar").onclick = gerAcaoApagar;
-  $("btnGerMover").onclick = gerAcaoMover;
+  $("btnGerMover").onclick = gerAbrirDestinos;
+  $("gerPopBusca").oninput = gerPintarDestinosLista;
+  $("gerPopBusca").onkeydown = (ev) => {
+    if (!ev) return;
+    if (ev.key === "Escape") { ev.stopPropagation && ev.stopPropagation(); ev.preventDefault && ev.preventDefault(); gerFecharDestinos(); }
+    else if (ev.key === "Enter") { ev.preventDefault && ev.preventDefault(); const it = gerPintarDestinosLista(); if (it.length) gerEscolherDestino(it[0].ch); }
+  };
+  $("btnGerAmpliar").onclick = gerAmpliar;
+  $("btnGerPreApagar").onclick = gerAcaoApagarAberto;
+  $("btnGerMsgDesfazer").onclick = gerAcaoDesfazer;
+  if (typeof document.addEventListener === "function") {
+    document.addEventListener("mousedown", (ev) => {
+      const p = $("gerPop");
+      if (!p || p.hidden) return;
+      const alvo = ev && ev.target;
+      const dentro = (e) => { for (let x = e; x; x = x.parentNode) { if (x === p || x === $("btnGerMover")) return true; } return false; };
+      if (!dentro(alvo)) gerFecharDestinos();
+    });
+  }
   $("btnGerEditar").onclick = gerAcaoEditar;
   $("btnGerEditSalvar").onclick = gerAcaoSalvarEdicao;
   $("btnGerEditCancelar").onclick = () => { gerEditando = false; gerPintarPrevia(); };
