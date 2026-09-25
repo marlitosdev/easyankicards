@@ -161,6 +161,8 @@ function novoEl(id, tag, registro) {
      * na tela do teste e um no de verdade no navegador. Divergencia
      * silenciosa, que so aparece como celula com lixo escrito. */
     nodeType: (tag === "#text" ? 3 : 1),
+    /* o navegador tem tagName em maiusculas (o codigo do app procura por "DIALOG") */
+    tagName: String(tag || "").replace(/^<|>$/g, "").toUpperCase(),
     /* "hidden" NO NAVEGADOR É false POR PADRÃO, NUNCA undefined — é um
      * IDL boolean refletido. Sem essa base aqui, todo botão nascido de
      * document.createElement() (sem "hidden" no HTML e sem ninguém
@@ -212,8 +214,15 @@ function novoEl(id, tag, registro) {
      * pendurado no lugar errado: o codigo caia no catch, ia para o
      * body, e o teste nao tinha como notar. */
     append(...ns) { ns.forEach((n) => { if (!n) return; n.parentNode = el; el.children.push(n); }); },
+    /* irmao logo depois (o uiPrompt injeta o campo de texto abaixo da mensagem) */
+    after(...ns) {
+      const pai = el.parentNode;
+      ns.forEach((n) => { if (!n) return; n.parentNode = pai; if (pai && pai.children) { const i = pai.children.indexOf(el); pai.children.splice(i + 1, 0, n); } });
+    },
     appendChild(n) { if (n) n.parentNode = el; el.children.push(n); return n; },
-    prepend() {}, remove() {},
+    prepend() {},
+    /* como no navegador: sai da lista de filhos do pai */
+    remove() { const pai = el.parentNode; if (pai && pai.children) { const i = pai.children.indexOf(el); if (i >= 0) pai.children.splice(i, 1); } el.parentNode = null; },
     /* DE VERDADE, E NA POSIÇÃO CERTA. Era no-op — qualquer código que
      * fatiasse um nó de texto para pendurar um link no meio (sem tocar
      * no resto, como leiLigarCitacoesEm exige) parecia rodar e não
@@ -812,6 +821,8 @@ function rodar() {
     pacAbrir, pacExportar, pacLerArquivo, pacAcaoImportar, pacPintar, cmCampo,
     pacNotasAtual: () => pacNotas, pacSelAtual: () => pacSel, pacLidoAtual: () => pacLido, pacSelTeste: (s) => { pacSel = new Set(s); },
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
+    GER_DICAS, CE_DICAS, dicasDosBotoes, flashBotao, tipShow, tipHide, tipHospedeiro,
+    gerPastasCriadas, gerCriarPasta, gerRemoverPastaVazia, gerAbrirNovaPasta, gerConfirmarNovaPasta, gerPastaInfo, gerIniciarArrastoPasta, gerMarcarTodos, gerPastasVazias, GER_CHAVE_PASTAS,
     gerConfirmarMover, gerPrevisaoMover, gerIniciarArrasto, gerFimArrasto, gerSobreAlvo, gerSaiuAlvo, gerSoltar, gerAlvoValido, gerSobreDisciplina, gerNomeDestino, gerArrastoAtual: () => gerArrasto, gerFechadosAtual: () => gerFechados,
     corrigirComSeguranca, gerAbrirDestinos, gerEscolherDestino, gerAmpliar, gerAviso, gerAcaoApagarAberto, gerDestinosLista, gerFecharDestinos, gerPintarDestinosLista, gerGrandeLer, GER_CHAVE_GRANDE,
     gerAcaoApagar, gerAcaoMover, gerAcaoEditar, gerAcaoSalvarEdicao, gerAcaoMelhorar, gerAcaoDesfazer, GER_LIM, GER_FILTROS,

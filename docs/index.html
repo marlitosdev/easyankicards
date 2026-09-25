@@ -4177,6 +4177,11 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 #dlgGerCartoes.ger-arrastando .ger-top{outline:1px dashed rgba(127,127,127,.55);outline-offset:-1px}
 .ger-pasta.ger-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
 .ger-pasta.ger-alvo-no{opacity:.45;cursor:not-allowed}
+.ger-vazia{font-style:italic;opacity:.8}
+.ger-np-erro{color:var(--erro);min-height:18px;margin:8px 0 0}
+.ger-x{float:right;opacity:.55;cursor:pointer;padding:0 4px}
+.ger-x:hover{opacity:1}
+.ger-top[draggable="true"]{cursor:grab}
 .ger-rodape{align-items:center}
 .ger-rodape .nota{margin-right:auto}
 .ger-pasta{padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1.35}
@@ -4237,7 +4242,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ce-cmp-cab{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ce-det summary{cursor:pointer;font-size:12px;margin:4px 0}
 #ceEscolha > summary{cursor:pointer;font-weight:700;padding:4px 0}
-.btn-feito{outline:2px solid #2e9e5b;filter:brightness(1.1)}
+/* retorno de "fiz": ✓ + contorno verde por um instante (flashBotao); botão de liga/desliga aceso enquanto ligado */
+.btn-feito{outline:2px solid var(--ok);outline-offset:1px;filter:brightness(1.1)}
+.btn-feito::before{content:"✓ ";font-weight:800}
+.btn-min[aria-pressed="true"]{border-color:var(--acao);background:rgba(46,158,91,.18)}
+.ger-acoes .btn-min:not(:disabled):active{background:rgba(255,255,255,.35)}
+.ger-acoes .btn-min.btn-feito{outline-color:#fff}
 .ce-rodape{position:sticky;bottom:0;background:var(--panel)}
 .ce-prim{min-width:180px}
 @media (max-width:640px){.ce-passos{flex-direction:column}.ce-prim{min-width:0;flex:1 1 100%}}
@@ -7329,6 +7339,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<dialog id="dlgGerNovaPasta" class="ui-modal diag-modal" style="max-width:460px">
+  <h3 data-i18n="ger_nova_pasta"></h3>
+  <label class="nota" for="gerNpDisc" data-i18n="ger_np_disc_rot" style="display:block;margin:6px 0 3px"></label>
+  <input type="text" id="gerNpDisc" list="gerNpDiscLista" maxlength="80" autocomplete="off" style="width:100%;box-sizing:border-box">
+  <datalist id="gerNpDiscLista"></datalist>
+  <label class="nota" for="gerNpTop" data-i18n="ger_np_top_rot" style="display:block;margin:10px 0 3px"></label>
+  <input type="text" id="gerNpTop" maxlength="120" autocomplete="off" style="width:100%;box-sizing:border-box">
+  <p class="nota ger-np-erro" id="gerNpErro" role="alert"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnGerNpOk" data-i18n="ger_np_criar"></button>
+    <button class="btn btn-cinza" id="btnGerNpCancelar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgGerCartoes" class="ui-modal diag-modal">
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
@@ -7349,11 +7373,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="nota" id="gerResumo"></span>
   </div>
   <div class="ger-grade">
-    <div class="ger-col" id="gerArvore"></div>
+    <div class="ger-col">
+      <div class="ger-ferr"><button type="button" class="btn-min btn-min-ok" id="btnGerNovaPasta" data-i18n="ger_nova_pasta"></button></div>
+      <div id="gerArvore"></div>
+    </div>
     <div class="ger-col">
       <div class="ger-ferr">
         <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
         <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
+        <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
       </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
