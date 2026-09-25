@@ -276,8 +276,129 @@ function cqResolverGrupo(notas, grupo, manter, mesclar) {
   return { removidos, mesclados };
 }
 
+/* ---- LOTE ----
+ * "Resolver todos" chamava cqResolverGrupo 273 vezes, e cada cartão removido reescrevia o
+ * texto INTEIRO da bancada, repintava os 955 cartões, regravava a lixeira e o armazenamento:
+ * 181 ms por cartão no baralho real, mais de dois minutos de app congelado. Aqui o trabalho
+ * todo é feito em MEMÓRIA, em pedaços que devolvem o controle ao navegador (para a barra de
+ * progresso andar), e cada pasta é gravada UMA vez no fim. */
+function cqHash(s) {
+  s = String(s || "");
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36) + "." + s.length;
+}
+
+function cqCede() { return new Promise((r) => setTimeout(r, 0)); }
+
+const CQ_CHAVE_RECIBO = "eac_cq_recibo";
+const CQ_MOTIVO_LOTE = "antes de resolver repetidos (lote)";
+
+function cqRecibo() {
+  try { return JSON.parse(localStorage.getItem(CQ_CHAVE_RECIBO) || "null"); } catch (e) { return null; }
+}
+
+async function cqResolverLote(notas, grupos, opc) {
+  const o = opc || {};
+  const cede = o.cede || cqCede;
+  const meta = {}, antes = {}, textos = {};
+  grupos.forEach((g) => g.itens.forEach((i) => {
+    const ch = notas[i].chave;
+    if (!(ch in textos)) { textos[ch] = cqTexto(ch); antes[ch] = textos[ch]; meta[ch] = { disciplina: notas[i].disciplina, topico: notas[i].topico }; }
+  }));
+  const chaves = Object.keys(textos);
+  cqVersaoBancada(CQ_MOTIVO_LOTE, chaves);
+  const lixo = [];
+  let removidos = 0, mesclados = 0, erros = 0;
+  const total = grupos.length;
+  for (let gi = 0; gi < total; gi++) {
+    const g = grupos[gi];
+    const fica = notas[g.melhor];
+    const outros = g.itens.filter((i) => i !== g.melhor);
+    let pode = true;
+    if (o.mesclar !== false) {
+      const novas = [];
+      outros.forEach((i) => cqAcrescimos(fica.card, notas[i].card).forEach((l) => { if (novas.indexOf(l) < 0) novas.push(l); }));
+      if (novas.length) {
+        const novo = cqInserirSaibaMais(textos[fica.chave], fica.card, novas);
+        if (novo === null) { erros++; pode = false; } else { textos[fica.chave] = novo; mesclados += novas.length; }
+      }
+    }
+    if (pode) {
+      outros.forEach((i) => {
+        const n = notas[i];
+        const saida = {};
+        const novo = mcTextoSemCartao(textos[n.chave], n.card, saida);
+        if (novo === null) return;
+        textos[n.chave] = novo; removidos++;
+        lixo.push({ tipo: "cartao", via: cqViaLixeira(n.chave), motivo: "repetido",
+          rotulo: String(n.card.front || "").slice(0, 90), onde: [n.disciplina, n.topico].filter(Boolean).join(" · "),
+          dados: { chave: n.chave, disciplina: n.disciplina, topico: n.topico, bloco: saida.bloco, linha: saida.linha, sep: saida.sep } });
+      });
+    }
+    if (o.progresso && ((gi + 1) % 10 === 0 || gi === total - 1)) { o.progresso(gi + 1, total); await cede(); }
+  }
+  /* uma gravação por pasta */
+  chaves.forEach((ch) => { if (textos[ch] !== antes[ch]) cqGravar(ch, textos[ch], meta[ch]); });
+  let lixIds = [];
+  try { if (lixo.length) lixIds = typeof lixJogarLote === "function" ? lixJogarLote(lixo, "repetidos") : []; } catch (e) {}
+  /* recibo: o material guarda o ANTES (são textos pequenos); a bancada guarda só uma impressão do
+   * DEPOIS, porque o texto de antes já está no Histórico (a foto acima) — copiá-lo de novo para o
+   * armazenamento, já cheio, arriscaria travar o salvamento do editor. */
+  try {
+    const itens = [];
+    chaves.forEach((ch) => {
+      if (textos[ch] === antes[ch]) return;
+      itens.push(cqEhBancada(ch)
+        ? { chave: ch, bancada: true, depois: cqHash(cqTexto(ch)) }
+        : { chave: ch, antes: antes[ch], depois: cqHash(cqTexto(ch)), disciplina: meta[ch].disciplina, topico: meta[ch].topico });
+    });
+    if (itens.length) localStorage.setItem(CQ_CHAVE_RECIBO, JSON.stringify({ quando: new Date().toISOString(), itens, lixIds }));
+    else localStorage.removeItem(CQ_CHAVE_RECIBO);
+  } catch (e) {}
+  try { matReg("cartoes", "repetidos resolvidos em lote", removidos + " para a lixeira, " + mesclados + " linha(s) juntadas, " + erros + " erro(s), " + total + " grupos"); } catch (e) {}
+  return { grupos: total, removidos, mesclados, erros };
+}
+
+/* Desfaz o lote — só o que continua exatamente como o lote deixou. */
+function cqDesfazerLote() {
+  const rec = cqRecibo();
+  if (!rec || !rec.itens) return { desfeitos: 0, pulados: 0 };
+  let desfeitos = 0, pulados = 0;
+  rec.itens.forEach((it) => {
+    if (cqHash(cqTexto(it.chave)) !== it.depois) { pulados++; return; }
+    if (it.bancada) {
+      const h = (typeof historico !== "undefined" ? historico : []).filter((v) => v.m === CQ_MOTIVO_LOTE).pop();
+      if (!h) { pulados++; return; }
+      cqGravar(it.chave, h.txt, {});
+    } else {
+      cqGravar(it.chave, it.antes, { disciplina: it.disciplina, topico: it.topico });
+    }
+    desfeitos++;
+  });
+  if (!pulados) {
+    try { if (typeof lixRemoverIds === "function") lixRemoverIds(rec.lixIds); } catch (e) {}
+    try { localStorage.removeItem(CQ_CHAVE_RECIBO); } catch (e) {}
+  }
+  try { matReg("cartoes", "resolução em lote desfeita", desfeitos + " pasta(s), " + pulados + " pulada(s)"); } catch (e) {}
+  return { desfeitos, pulados };
+}
+
 /* ---- a tela ---- */
-let cqNotas = [], cqRel = null, cqMostrando = CQ_LIM.visiveis;
+let cqNotas = [], cqRel = null, cqMostrando = CQ_LIM.visiveis, cqOcupado = false;
+
+/* A tela de carga: texto + barra. Enquanto ela está à vista, nada mais na janela responde. */
+function cqCarga(mostrar, texto, pct) {
+  const c = $("cqCarga");
+  if (!c) return;
+  c.hidden = !mostrar;
+  cqOcupado = !!mostrar;
+  if (mostrar) {
+    $("cqCargaTxt").textContent = texto || "";
+    $("cqProg").value = Math.max(0, Math.min(100, pct || 0));
+  }
+  ["btnCqTudo", "btnCqMais", "btnCqFechar", "btnCqReexibir", "btnCqDesfazer"].forEach((id) => { if ($(id)) $(id).disabled = !!mostrar; });
+}
 
 function cqEl(tag, cls, txt) {
   const e = document.createElement(tag);
@@ -302,6 +423,7 @@ function cqTrecho(s, n) { s = String(s || "").replace(/\s+/g, " ").trim(); retur
 
 function cqPintar() {
   const r = cqRel || cqCalcular();
+  if ($("btnCqDesfazer")) { const rec = cqRecibo(); $("btnCqDesfazer").hidden = !(rec && rec.itens && rec.itens.length); }
   $("cqResumo").textContent = r.total
     ? t("cq_resumo", { n: r.total, g: r.grupos.length, r: r.redundantes, p: r.pct })
     : t("cq_sem_cartoes");
@@ -341,6 +463,7 @@ function cqPintar() {
 }
 
 async function cqAplicar(g, manter, mesclar) {
+  if (cqOcupado) return;
   const outros = g.itens.length - 1;
   const n = cqNotas[manter];
   if (!(await uiConfirm(t(mesclar ? "cq_conf_mesclar" : "cq_conf_manter", { n: outros, f: cqTrecho(cqRevelado(n.card), 100) })))) return;
@@ -351,20 +474,40 @@ async function cqAplicar(g, manter, mesclar) {
 }
 
 async function cqAplicarTudo() {
+  if (cqOcupado) return;
   const r = cqRel || cqCalcular();
   if (!r.grupos.length) return;
   if (!(await uiConfirm(t("cq_conf_tudo", { g: r.grupos.length, r: r.redundantes })))) return;
-  /* de trás para a frente do relatório: cada grupo lê o texto atual do tópico,
-   * então a ordem não importa — o que importa é resolver todos com as notas
-   * lidas uma vez, cada cartão por sua própria linha/raw */
-  let tirados = 0, juntas = 0;
-  r.grupos.forEach((g) => {
-    const x = cqResolverGrupo(cqNotas, g.itens, g.melhor, true);
-    tirados += x.removidos || 0; juntas += x.mesclados || 0;
-  });
+  const t0 = Date.now();
+  cqCarga(true, t("cq_carga_preparando"), 0);
+  await cqCede();                      /* deixa a barra aparecer antes do trabalho pesado */
+  let x;
+  try {
+    x = await cqResolverLote(cqNotas, r.grupos, {
+      mesclar: true,
+      progresso: (i, n) => cqCarga(true, t("cq_carga_resolvendo", { i, g: n }), Math.round(100 * i / n)),
+    });
+  } catch (e) {
+    cqCarga(false);
+    uiAlert(t("cq_erro_lote", { e: String(e && e.message || e) }));
+    return;
+  }
+  cqCarga(true, t("cq_carga_atualizando"), 100);
+  await cqCede();
   cqCalcular(); cqPintar();
   try { matRender(); } catch (e) {}
-  uiAlert(t("cq_feito", { n: tirados, m: juntas }));
+  cqCarga(false);
+  uiAlert(t("cq_feito_lote", { n: x.removidos, m: x.mesclados, g: x.grupos, s: Math.max(1, Math.round((Date.now() - t0) / 1000)) })
+    + (x.erros ? "\n\n" + t("cq_feito_erros", { k: x.erros }) : ""));
+}
+
+async function cqAcaoDesfazer() {
+  if (cqOcupado) return;
+  if (!(await uiConfirm(t("cq_conf_desfazer")))) return;
+  const d = cqDesfazerLote();
+  cqCalcular(); cqPintar();
+  try { matRender(); } catch (e) {}
+  uiAlert(t("cq_desfeito", { n: d.desfeitos, m: d.pulados }));
 }
 
 function cqAbrir() {
@@ -381,5 +524,6 @@ if (typeof document !== "undefined" && $("btnCartRepetidos")) {
   if ($("btnCqFechar")) $("btnCqFechar").onclick = () => $("dlgCartRep").close();
   if ($("btnCqMais")) $("btnCqMais").onclick = () => { cqMostrando += CQ_LIM.visiveis; cqPintar(); };
   if ($("btnCqTudo")) $("btnCqTudo").onclick = cqAplicarTudo;
+  if ($("btnCqDesfazer")) $("btnCqDesfazer").onclick = cqAcaoDesfazer;
   if ($("btnCqReexibir")) $("btnCqReexibir").onclick = () => { cqReexibirIgnorados(); cqCalcular(); cqPintar(); };
 }

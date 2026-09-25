@@ -121,6 +121,58 @@ function lixJogar(o) {
   return item;
 }
 
+/* VÁRIOS DE UMA VEZ.
+ * lixJogar grava a lixeira inteira no armazenamento, pesa o que já tem e avisa na tela a CADA
+ * item — bom para um cartão, desastroso para 900: era o que travava o app ao resolver os
+ * cartões repetidos de um baralho grande (181 ms por cartão, mais de dois minutos no total).
+ * Aqui entra tudo de uma vez: um corte, uma gravação, um registro no histórico de decisões e
+ * UM aviso. O limite (últimos 300) é o mesmo — por isso quem chama guarda o seu próprio recibo
+ * para desfazer o lote inteiro. Devolve os ids dos itens que ficaram guardados. */
+function lixJogarLote(lista, onde) {
+  lixCarregar();
+  const agora = new Date().toISOString();
+  const ids = [];
+  (lista || []).forEach((o) => {
+    const dados = (o && o.dados) || {};
+    const item = {
+      id: "x" + Date.now().toString(36) + (lixSeq++).toString(36) + Math.random().toString(36).slice(2, 5),
+      q: agora, v: typeof VERSAO !== "undefined" ? VERSAO : "",
+      tipo: o.tipo, via: o.via || "", rotulo: lixCortar(o.rotulo, 90), onde: lixCortar(o.onde, 120),
+      risco: o.risco || lixRisco(o.tipo, dados), motivo: o.motivo || "pedido", dados,
+    };
+    lixLista.push(item); ids.push(item.id);
+  });
+  while (lixLista.length > lixMax) lixLista.shift();
+  const pesos = lixLista.map((r) => JSON.stringify(r).length);
+  let tam = pesos.reduce((s, x) => s + x, 0), corte = 0;
+  while (tam > lixMaxChars && corte < lixLista.length - 1) tam -= pesos[corte++];
+  if (corte) lixLista.splice(0, corte);
+  lixGravar();
+  const vivos = new Set(lixLista.map((x) => x.id));
+  const ficaram = ids.filter((id) => vivos.has(id));
+  if (ficaram.length) lixUltimo = ficaram[ficaram.length - 1];
+  try {
+    if (typeof decRegistrar === "function") {
+      decRegistrar({ area: "apagar", regra: "apagar.cartao", origem: "pessoa", lei: lixCortar(onde || "", 120),
+        ref: (lista || []).length + " cartões", motivo: t("dec_apagar_motivo"), risco: "medio", decisao: "aceitou", via: "pedido",
+        proposta: { acao: t("lix_acao_cartao"), amostra: (lista || []).slice(0, 3).map((o) => lixCortar(o.rotulo, 60)).join(" | "), n: (lista || []).length, linhas: [] } });
+    }
+  } catch (e) {}
+  lixAtualizarBotao();
+  lixMostrar(t("lix_lote_msg", { n: (lista || []).length, max: lixMax }), false);
+  return ficaram;
+}
+
+/* tira da lixeira os ids dados (o desfazer de um lote não pode deixar cópia para trás) */
+function lixRemoverIds(ids) {
+  lixCarregar();
+  const fora = new Set(ids || []);
+  const antes = lixLista.length;
+  lixLista = lixLista.filter((x) => !fora.has(x.id));
+  if (lixLista.length !== antes) { lixGravar(); lixAtualizarBotao(); }
+  return antes - lixLista.length;
+}
+
 function lixNomeCurto(item) {
   return t("lix_tipo1_" + item.tipo) + (item.rotulo ? " “" + item.rotulo.slice(0, 50) + "”" : "");
 }
