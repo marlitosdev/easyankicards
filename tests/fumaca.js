@@ -822,6 +822,7 @@ function rodar() {
     cqNormal, cqRevelado, cqTokens, cqJaccard, cqAgrupar, cqPontuar, cqMelhor, cqAcrescimos, cqInserirSaibaMais,
     cqLerBiblioteca, cqRelatorio, cqAssinatura, cqIgnorar, cqIgnorados, cqReexibirIgnorados, cqResolverGrupo,
     cqAbrir, cqCalcular, cqPintar, cqAplicar, cqAplicarTudo, CQ_LIM, cqRelAtual: () => cqRel, cqNotasAtual: () => cqNotas,
+    pcTipo, pcQtd, pcEscolhaLer, pcEscolhaGuardar, PC_TIPOS, PC_QTDS,
     pcPadrao, pcResolver, pcListaFrentes, pcFrentesDoTopico, PC_LIM, cmExtrasCartao, cmBlocoCartao,
     cmDefeitosDoCartao, cmMelAbrir, cmMelConferir, cmMelAplicar, cmMelIniciar, mcEstudarDireto, mcCartoesSalvos, mcEstMostraAtual: () => mcEstMostra,
     qsUiVoltarASessao,

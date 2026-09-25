@@ -175,6 +175,70 @@ async function testes() {
     ok(!/Já existem cartões/.test(a.$("genTexto").value) && /texto-base/.test(a.$("genTexto").value), "P10f sem topico, o prompt da bancada nao devia trazer lista");
   }
 
+  /* ---- T: tipo de cartao e quantidade (16.74.0) ---- */
+  {
+    const rico = api.pcTipo("rico"), ce = api.pcTipo("certo_errado"), dir = api.pcTipo("direta"), lac = api.pcTipo("lacuna");
+    ok(/Certo\/Errado/.test(rico) && /pergunta direta/.test(rico) && /lacuna com dica/.test(rico) && /Não use o mesmo tipo para tudo/.test(rico), "T1 o tipo misto pede os tres tipos e diversidade");
+    ok(/SÓ Certo\/Errado/.test(ce) && /metade verdadeiras e metade falsas/.test(ce) && /UM detalhe/.test(ce), "T1a Certo/Errado: so' esse, metade falsas, troca UM detalhe");
+    ok(/SÓ pergunta direta/.test(dir) && /sem lacunas e sem Certo\/Errado/.test(dir), "T1b pergunta direta");
+    ok(/SÓ lacuna/.test(lac) && /30 ou 60\?/.test(lac), "T1c lacuna com dica dicotomica");
+    ok(new Set([rico, ce, dir, lac]).size === 4, "T1d os quatro tipos tem texto proprio");
+    ok(api.pcTipo("inexistente") === rico && api.pcTipo(undefined) === rico && api.pcTipo(null) === rico, "T1e tipo desconhecido cai no misto");
+    const auto = api.pcQtd("auto");
+    ok(auto === api.pcQtd(undefined) && auto === api.pcQtd("0") && auto === api.pcQtd("abc") && auto === api.pcQtd(-5) && /sem número fixo/.test(auto) && !/no máximo/.test(auto), "T2 sem numero valido: 'pelo conteudo', sem numero fixo");
+    const n20 = api.pcQtd("20");
+    ok(/no máximo 20 cartões/.test(n20) && /para chegar a 20/.test(n20) && /entregue menos/.test(n20) && api.pcQtd(30) === api.pcQtd("30"), "T2a com numero: e' um TETO, e nunca repetir para chegar a ele");
+    ok(!/exatamente|EXATAMENTE/.test(n20), "T2b o numero nunca e' uma meta exata");
+    const r = api.pcResolver("[{pc_tipo}] [{pc_qtd}] [{padrao_revisar}]", { tipo: "direta", qtd: "10" });
+    ok(r.indexOf(dir) >= 0 && r.indexOf(api.pcQtd("10")) >= 0 && /NÃO PERCA/.test(r) && !/\{pc_|\{padrao_/.test(r), "T3 o resolvedor troca os tres marcadores com os parametros");
+    const r0 = api.pcResolver("{pc_tipo}|{pc_qtd}");
+    ok(r0 === rico + "|" + auto, "T3a sem parametros: misto e pelo conteudo");
+  }
+  {
+    const base = { d: "Direito", tp: "ISS", resumo: "R", tags: "a", frentes: [] };
+    const misto = api.t("mc_prompt", base);
+    ok(misto.indexOf(api.pcTipo("rico")) >= 0 && misto.indexOf(api.pcQtd("auto")) >= 0, "T4 sem escolha o prompt do topico e' misto e 'pelo conteudo'");
+    const ce = api.t("mc_prompt", Object.assign({}, base, { tipo: "certo_errado", qtd: "20" }));
+    ok(ce.indexOf(api.pcTipo("certo_errado")) >= 0 && /no máximo 20 cartões/.test(ce) && ce.indexOf(api.pcTipo("rico")) < 0, "T4a Certo/Errado com teto de 20 chega ao prompt (e o misto nao)");
+    ok(!/\{pc_|\{padrao_|\{tipo\}|\{qtd\}/.test(misto + ce) && /NÃO REPITA/.test(ce) && /TAMANHO E PROFUNDIDADE/.test(ce), "T4b nada sobra sem resolver e os blocos de gerar continuam");
+    ok(!/\b25\b/.test(misto), "T4c nenhum '25 fixos' no prompt");
+    const qs = api.t("qs_cartao_prompt", { d: "D", tp: "T", banca: "CESPE", tags: "x", enunciado: "E", opcoes: "A) 1", gabarito: "A", comentario: "C", dica: "—" });
+    ok(/Caiu em prova ▸/.test(qs) && /BANCA: CESPE/.test(qs) && /Sem banca informada/.test(qs), "T5 o prompt da questao manda a linha 'Caiu em prova' so' quando ha banca");
+    ok(/TAMANHO E PROFUNDIDADE/.test(qs) && /Certo\/Errado/.test(qs) && /@ Lei > Tópico/.test(qs) && !/caber de cabeça/.test(qs) && !/cabe de cabeça/.test(qs) && !/\{pc_|\{padrao_/.test(qs), "T5a o prompt da questao usa o padrao unico (tipo, tamanho, qualidade) e o cartao rico");
+    ok(/NÃO copie a questão/.test(qs), "T5b continua proibindo copiar a questao");
+    const lei = api.t("lei_cloze_prompt", { lei: "L", artigo: "1", texto: "T", etiqueta: "e" });
+    ok(/30 ou 60\?/.test(lei) && /10\. Não copie estas regras/.test(lei) && /Não parafraseie/.test(lei), "T6 o prompt de lei pede dica dicotomica sem abrir mao da redacao literal");
+  }
+  {
+    /* a escolha na tela chega ao prompt, e fica guardada */
+    const r0 = rodar(); const a = r0.api;
+    a.matIniciar(); a.edIniciar();
+    const ch = a.matChave("Trib", "ISS");
+    a.matGravar(ch, "O ISS incide sobre servicos.", { disciplina: "Trib", topico: "ISS" });
+    a.matAbrirEditor({ disciplina: "Trib", nome: "ISS" }, true);
+    a.matCartoesAbrir();
+    ok(a.$("mcTipo").value === "rico" && a.$("mcQtd").value === "auto", "T7 padrao da tela: misto e pelo conteudo");
+    a.$("mcTipo").value = "certo_errado"; a.$("mcTipo").onchange();
+    a.$("mcQtd").value = "20"; a.$("mcQtd").onchange();
+    ok(a.pcEscolhaLer().tipo === "certo_errado" && a.pcEscolhaLer().qtd === "20", "T7a a escolha fica guardada");
+    a.matCartoesPrompt();
+    const txt = a.$("mcPromptTexto").value;
+    ok(/SÓ Certo\/Errado/.test(txt) && /no máximo 20 cartões/.test(txt) && /O ISS incide/.test(txt), "T7b o prompt copiado leva o tipo e o teto escolhidos");
+    a.$("mcTipo").value = "lacuna"; a.$("mcQtd").value = "auto";
+    a.matCartoesAbrir();
+    ok(a.$("mcTipo").value === "certo_errado" && a.$("mcQtd").value === "20", "T7c reabrir o painel restaura a escolha guardada");
+    /* valor estragado no armazenamento (versao antiga, edicao a mao): cai no padrao, nao no lixo */
+    a.loja.setItem("eac_pc_tipo", "tipo que nao existe"); a.loja.setItem("eac_pc_qtd", "999");
+    ok(a.pcEscolhaLer().tipo === "rico" && a.pcEscolhaLer().qtd === "auto", "T7d0 valor invalido guardado volta ao padrao ao ler");
+    a.pcEscolhaGuardar("certo_errado", "20");
+    a.pcEscolhaGuardar("valor invalido", "999");
+    ok(a.pcEscolhaLer().tipo === "certo_errado" && a.pcEscolhaLer().qtd === "20", "T7d valor invalido nao sobrescreve a escolha");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/id="mcTipo"[\s\S]*?value="rico"[\s\S]*?value="certo_errado"[\s\S]*?value="direta"[\s\S]*?value="lacuna"/.test(html) && /id="mcQtd"[\s\S]*?value="auto"[\s\S]*?value="10"[\s\S]*?value="20"[\s\S]*?value="30"[\s\S]*?value="50"/.test(html), "T7e o HTML tem os seletores com todas as opcoes");
+    const src = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    ok((src.match(/"pc_tipo_certo_errado"/g) || []).length === 2 && (src.match(/"pc_qtd_n"/g) || []).length === 2 && (src.match(/"pc_qtd_op_50"/g) || []).length === 2, "T7f os textos existem em PT e EN");
+  }
+
   /* ---- P9: contrato — nenhum texto do app manda encurtar resposta ---- */
   {
     const src = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
