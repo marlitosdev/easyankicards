@@ -69,7 +69,7 @@ function gerFiltrar(notas, o) {
 
 /* ---- ações (puras em relação à tela) ---- */
 
-function gerTexto(chave) { return String((matResumos[chave] || {}).cartoes || ""); }
+function gerTexto(chave) { return cqTexto(chave); }
 
 /* Guarda o texto de antes/depois dos tópicos tocados: é o que permite desfazer. */
 function gerRegistrar(antes) {
@@ -93,7 +93,8 @@ function gerDesfazerUltima() {
   let desfeitos = 0, pulados = 0;
   rec.itens.forEach((it) => {
     if (gerTexto(it.chave) !== it.depois) { pulados++; return; }
-    matGravarCartoes(it.chave, it.antes, { disciplina: it.disciplina, topico: it.topico });
+    cqVersaoBancada("antes de desfazer a última ação", [it.chave]);
+    cqGravar(it.chave, it.antes, { disciplina: it.disciplina, topico: it.topico });
     desfeitos++;
   });
   if (!pulados) { try { localStorage.removeItem(GER_CHAVE_RECIBO); } catch (e) {} }
@@ -111,7 +112,7 @@ function gerMover(notas, destChave) {
   const r = { movidos: 0, repetidos: 0, naoAchou: 0 };
   if (!dest) return r;
   const antes = {};
-  const guarda = (ch) => { if (!(ch in antes)) antes[ch] = gerTexto(ch); };
+  const guarda = (ch) => { if (!(ch in antes)) { antes[ch] = gerTexto(ch); cqVersaoBancada("antes de mover cartões", [ch]); } };
   guarda(destChave);
   notas.forEach((n) => {
     if (n.chave === destChave) return;
@@ -121,7 +122,7 @@ function gerMover(notas, destChave) {
     const saida = {};
     const novo = mcTextoSemCartao(gerTexto(n.chave), n.card, saida);
     if (novo === null) { r.naoAchou++; return; }
-    matGravarCartoes(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
+    cqGravar(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
     const at = gerTexto(destChave).replace(/\s*$/, "");
     matGravarCartoes(destChave, (at ? at + "\n" : "") + saida.bloco, { disciplina: dest.disciplina, topico: dest.topico });
     r.movidos++;
@@ -136,14 +137,14 @@ function gerApagar(notas) {
   const antes = {};
   let apagados = 0, naoAchou = 0;
   notas.forEach((n) => {
-    if (!(n.chave in antes)) antes[n.chave] = gerTexto(n.chave);
+    if (!(n.chave in antes)) { antes[n.chave] = gerTexto(n.chave); cqVersaoBancada("antes de apagar cartões", [n.chave]); }
     const saida = {};
     const novo = mcTextoSemCartao(gerTexto(n.chave), n.card, saida);
     if (novo === null) { naoAchou++; return; }
-    matGravarCartoes(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
+    cqGravar(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
     apagados++;
     try {
-      lixJogar({ tipo: "cartao", via: "material", rotulo: String(n.card.front || "").slice(0, 90),
+      lixJogar({ tipo: "cartao", via: cqViaLixeira(n.chave), rotulo: String(n.card.front || "").slice(0, 90),
         onde: [n.disciplina, n.topico].filter(Boolean).join(" · "),
         dados: { chave: n.chave, disciplina: n.disciplina, topico: n.topico, bloco: saida.bloco, linha: saida.linha, sep: saida.sep } });
     } catch (e) {}
@@ -161,7 +162,8 @@ function gerEditar(nota, texto) {
   const antes = { [nota.chave]: gerTexto(nota.chave) };
   const novo = ceSubstituir(antes[nota.chave], nota.card, texto);
   if (novo === null) return { ok: false, motivo: "nao_achou" };
-  matGravarCartoes(nota.chave, novo, { disciplina: nota.disciplina, topico: nota.topico });
+  cqVersaoBancada("antes de editar um cartão", [nota.chave]);
+  cqGravar(nota.chave, novo, { disciplina: nota.disciplina, topico: nota.topico });
   gerRegistrar(antes);
   try { matReg("cartoes", "gerenciador: cartão editado", String(nota.card.front || "").slice(0, 60)); } catch (e) {}
   return { ok: true, cartoes: cs.length };
@@ -339,6 +341,7 @@ function gerAbrir() {
 
 if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerCartoes").onclick = gerAbrir;
+  if ($("btnBancaGer")) $("btnBancaGer").onclick = gerAbrir;
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
   $("gerBusca").oninput = () => { gerSel = new Set(); gerFoco = -1; gerRefiltrar(); gerPintar(); };
   $("gerFiltro").onchange = () => { gerSel = new Set(); gerFoco = -1; gerRefiltrar(); gerPintar(); };

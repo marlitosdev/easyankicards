@@ -150,9 +150,49 @@ function cqInserirSaibaMais(bruto, c, novas) {
 
 /* ---- a biblioteca ---- */
 
-/* Todos os cartões do material, cada um com o lugar de onde veio. */
+/* A BANCADA TAMBÉM É UMA PASTA.
+ * O baralho recém-gerado mora no texto do editor, não no material; obrigar a
+ * mandar tudo para o material antes de achar repetidos ou elevar cartões era
+ * um passo que a pessoa não sabia que existia. Aqui a bancada entra na
+ * biblioteca como a pasta "Bancada › Texto do editor", e todas as ferramentas
+ * leem e gravam pelo MESMO par (cqTexto / cqGravar), que sabe qual é qual. */
+const CQ_BANCADA = "@bancada";
+function cqEhBancada(chave) { return chave === CQ_BANCADA; }
+
+function cqTexto(chave) {
+  if (cqEhBancada(chave)) return String((typeof document !== "undefined" && $("editor") && $("editor").value) || "");
+  return String(((typeof matResumos === "object" && matResumos[chave]) || {}).cartoes || "");
+}
+
+/* Grava o texto de uma pasta. Na bancada é o editor, com o mesmo gesto que o resto do app usa. */
+function cqGravar(chave, texto, meta) {
+  if (cqEhBancada(chave)) {
+    $("editor").value = texto;
+    try { autoSalvar(); } catch (e) {}
+    try { preview(); } catch (e) {}
+    return;
+  }
+  matGravarCartoes(chave, texto, meta);
+}
+
+/* A bancada tem histórico de versões: uma foto ANTES da ação (uma só, não uma por cartão). */
+function cqVersaoBancada(motivo, chaves) {
+  if (!(chaves || []).some(cqEhBancada)) return;
+  try { guardarVersao(motivo); } catch (e) {}
+}
+
+/* De onde o cartão apagado volta, na lixeira. */
+function cqViaLixeira(chave) { return cqEhBancada(chave) ? "editor" : "material"; }
+
+/* Todos os cartões do material E da bancada, cada um com o lugar de onde veio. */
 function cqLerBiblioteca() {
   const notas = [];
+  try {
+    const eb = cqTexto(CQ_BANCADA);
+    if (eb.trim()) {
+      parseText(eb).cards.forEach((c) => notas.push({ chave: CQ_BANCADA, disciplina: t("cq_bancada_disc"), topico: t("cq_bancada_top"), card: c }));
+    }
+  } catch (e) { /* bancada ilegível: fica só o material */ }
   if (typeof matResumos !== "object") return notas;
   Object.keys(matResumos).forEach((chave) => {
     const r = matResumos[chave];
@@ -203,27 +243,29 @@ function cqResolverGrupo(notas, grupo, manter, mesclar) {
   const fica = notas[manter];
   let mesclados = 0, removidos = 0;
   const outros = grupo.filter((i) => i !== manter);
+  /* UMA foto do editor para a ação inteira (o histórico guarda poucas versões) */
+  cqVersaoBancada("antes de resolver repetidos", [fica.chave].concat(outros.map((i) => notas[i].chave)));
   if (mesclar) {
     const novas = [];
     outros.forEach((i) => cqAcrescimos(fica.card, notas[i].card).forEach((l) => { if (novas.indexOf(l) < 0) novas.push(l); }));
     if (novas.length) {
-      const bruto = String((matResumos[fica.chave] || {}).cartoes || "");
+      const bruto = cqTexto(fica.chave);
       const novo = cqInserirSaibaMais(bruto, fica.card, novas);
       if (novo === null) return { removidos: 0, mesclados: 0, erro: "mesclar" };
-      matGravarCartoes(fica.chave, novo, { disciplina: fica.disciplina, topico: fica.topico });
+      cqGravar(fica.chave, novo, { disciplina: fica.disciplina, topico: fica.topico });
       mesclados = novas.length;
     }
   }
   outros.forEach((i) => {
     const n = notas[i];
-    const bruto = String((matResumos[n.chave] || {}).cartoes || "");
+    const bruto = cqTexto(n.chave);
     const saida = {};
     const novo = mcTextoSemCartao(bruto, n.card, saida);
     if (novo === null) return;
-    matGravarCartoes(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
+    cqGravar(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
     removidos++;
     try {
-      lixJogar({ tipo: "cartao", via: "material", motivo: "repetido",
+      lixJogar({ tipo: "cartao", via: cqViaLixeira(n.chave), motivo: "repetido",
         rotulo: String(n.card.front || "").slice(0, 90),
         onde: [n.disciplina, n.topico].filter(Boolean).join(" · "),
         dados: { chave: n.chave, disciplina: n.disciplina, topico: n.topico,
@@ -335,6 +377,7 @@ function cqAbrir() {
 
 if (typeof document !== "undefined" && $("btnCartRepetidos")) {
   $("btnCartRepetidos").onclick = cqAbrir;
+  if ($("btnBancaRep")) $("btnBancaRep").onclick = () => cqAbrir();
   if ($("btnCqFechar")) $("btnCqFechar").onclick = () => $("dlgCartRep").close();
   if ($("btnCqMais")) $("btnCqMais").onclick = () => { cqMostrando += CQ_LIM.visiveis; cqPintar(); };
   if ($("btnCqTudo")) $("btnCqTudo").onclick = cqAplicarTudo;

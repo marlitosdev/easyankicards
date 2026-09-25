@@ -49,7 +49,7 @@ async function testes() {
 
   const montar = () => {
     const r = rodar(); const a = r.api;
-    a.matIniciar(); a.edIniciar();
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
     const iss = a.matChave("Trib", "ISS"), iptu = a.matChave("Trib", "IPTU"), pri = a.matChave("Const", "Princípios");
     a.matGravarCartoes(iss, [
       "@ Trilha ISS", "Qual o fato gerador do ISS? :: Serviço :: x", "+ Nota antiga", "",

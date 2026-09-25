@@ -666,7 +666,11 @@ async function lerApkg(arrayBuffer) {
     // "#" no início vira comentário no editor; "@ + *" são metadados.
     // Preserva o conteúdo trocando por uma forma equivalente e visível.
     frente = frente.replace(/^\s*#\s*/, "nº ").replace(/^\s*[@+*]\s*/, "");
-    const ehCloze = m.tipo === 1 || /\{\{c\d+::/.test(frente);
+    /* LACUNA É QUEM TEM LACUNA. O tipo do modelo lido da "config" do pacote novo é só um
+     * palpite ("cloze" aparece até no CSS de um modelo Básico), e quando errava, TODO cartão
+     * Básico virava lacuna e o VERSO era jogado fora — 843 respostas perdidas num baralho
+     * real. Uma nota do Anki sem {{c1::...}} nunca é cartão de lacuna. */
+    const ehCloze = /\{\{c\d+::/.test(frente);
     let verso = ehCloze ? "" : (campos[iVerso] || "");
     let mais = iMais >= 0 ? (campos[iMais] || "") : (ehCloze && iVerso >= 0 ? (campos[iVerso] || "") : "");
     // Cartão básico SEM verso seria descartado pelo parser ("verso vazio").

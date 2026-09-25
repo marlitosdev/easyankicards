@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.74.0";
+const VERSAO = "16.75.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1027,6 +1027,7 @@ const CADEIA_SEGURA = [
   [temTagsQueSaoTexto, corrigirTagsQueSaoTexto],
   [temMarcadores, removerMarcadoresTexto],
   [temMarkdown, corrigirMarkdown],
+  [temLixoIA, corrigirLixoIA],
   [temMaisJunto, corrigirMaisJunto],
   [temEspacosRuins, corrigirEspacos],
 ];
@@ -1130,6 +1131,7 @@ function renderSugestoes(r, raw) {
     [temTagsQueSaoTexto, "crit_pairs_tags", "fix_tags_text", corrigirTagsQueSaoTexto, "dot-org"],
     [temMarcadores, "crit_bullets", "fix_bullets", removerMarcadoresTexto, "dot-org"],
     [temMarkdown, "crit_markdown", "fix_markdown", corrigirMarkdown, "dot-org"],
+    [temLixoIA, "crit_lixo_ia", "fix_lixo_ia", corrigirLixoIA, "dot-org"],
     [temMaisJunto, "crit_mais_junto", "fix_mais_junto", corrigirMaisJunto, "dot-blue"],
     [temEspacosRuins, "crit_espacos", "fix_espacos", corrigirEspacos, "dot-blue"],
   ];

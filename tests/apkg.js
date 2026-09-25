@@ -15,6 +15,17 @@ let CENARIO = "antigo";
 class FakeDb {
   exec(sql) {
     const notas = [[1, 100, "Q1?\x1fR1", " t1 "], [2, 100, "Q2?\x1fR2", ""], [3, 100, "Q3?\x1fR3", ""]];
+    if (CENARIO === "config") {
+      /* pacote novo: nomes dos campos na tabela "fields"; o tipo so' na "config" (que traz a palavra
+       * "cloze" ate' no CSS do modelo Basico) */
+      if (/SELECT models FROM col|SELECT decks FROM col/.test(sql)) throw new Error("formato novo");
+      if (/FROM fields/.test(sql)) return [{ values: [[100, 0, "Frente"], [100, 1, "Verso"], [100, 2, "Saiba mais"], [100, 3, "Título"], [200, 0, "Texto"], [200, 1, "Extra"]] }];
+      if (/FROM notetypes/.test(sql)) return [{ values: [[100, new TextEncoder().encode("css .card{} .cloze{color:blue}")], [200, new TextEncoder().encode("cloze model")]] }];
+      if (/SELECT id, name FROM decks/.test(sql)) return [{ values: [[1, "Default"], [11, "Raiz\x1fTrib"]] }];
+      if (/SELECT id, mid, flds, tags FROM notes/.test(sql)) return [{ values: [[1, 100, "Q1?\x1fR1 resposta\x1fExtra 1\x1fTitulo 1", " t1 "], [2, 200, "O prazo é {{c1::30 dias}}\x1fobs", ""]] }];
+      if (/SELECT nid, did FROM cards/.test(sql)) return [{ values: [[1, 11], [2, 11]] }];
+      throw new Error("sql inesperado: " + sql);
+    }
     if (/SELECT models FROM col/.test(sql)) return [{ values: [[JSON.stringify({ 100: { type: 0, flds: [{ name: "Frente" }, { name: "Verso" }] } })]] }];
     if (/SELECT decks FROM col/.test(sql)) {
       if (CENARIO === "novo") throw new Error("no such column: decks");
@@ -182,6 +193,11 @@ async function testes() {
     CENARIO = "novo";
     const r2 = await A.lerApkg(new ArrayBuffer(1));
     ok(r2.cards.map((c) => c.deck).join("|") === "Raiz::Trib::ISS|Raiz::Const|", `G3 formato novo (tabela decks, nomes com separador de campo): ${r2.cards.map((c) => c.deck)}`);
+    CENARIO = "config";
+    const r3 = await A.lerApkg(new ArrayBuffer(1));
+    ok(r3.cards.length === 2 && r3.cards[0].kind === "basic" && r3.cards[0].back === "R1 resposta", `G4 modelo Basico com a palavra 'cloze' na config continua BASICO e guarda o VERSO: ${JSON.stringify(r3.cards[0])}`);
+    ok(r3.cards[0].more === "Extra 1" && r3.cards[0].titulo === "Titulo 1" && r3.cards[0].deck === "Raiz::Trib", "G5 explicacao, titulo e baralho do Basico tambem");
+    ok(r3.cards[1].kind === "cloze" && /\{\{c1::30 dias\}\}/.test(r3.cards[1].front) && r3.cards[1].more === "obs", "G6 e a nota que tem lacuna continua sendo lacuna");
     CENARIO = "antigo";
   }
 
