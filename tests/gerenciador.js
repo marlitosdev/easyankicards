@@ -1100,6 +1100,40 @@ async function testes() {
     }
   }
 
+  /* ---- G20: a Biblioteca de cartoes e' a porta de entrada: nome, lugar e destaque ---- */
+  {
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const i18n = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    const { a } = montar();
+    /* bancada: dentro do grupo, ANTES de todos os outros botoes de cartoes */
+    const ini = html.indexOf('<div class="rev-topo">');
+    const grupo = html.slice(ini, html.indexOf("</div>", ini));
+    const ordem = [...grupo.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
+    ok(ordem[0] === "btnBancaGer" && ordem.indexOf("btnRevisar") > 0 && ordem.indexOf("btnBancaElevar") > 0 && ordem.indexOf("btnBancaRep") > 0, "G20a na bancada a Biblioteca e' o PRIMEIRO botao da fila: " + ordem.join(","));
+    /* material: primeiro, antes de repetidos/elevar/pacote */
+    const iG = html.indexOf('id="btnGerCartoes"');
+    ok(iG > 0 && iG < html.indexOf('id="btnCartRepetidos"') && iG < html.indexOf('id="btnCartElevar"') && iG < html.indexOf('id="btnPacote"'), "G20b no material tambem vem antes das ferramentas");
+    /* destaque: cor de acao, largura total, com a linha de apoio */
+    const tag = (id) => { const i = html.indexOf('id="' + id + '"'); const a0 = html.lastIndexOf("<button", i); return html.slice(a0, html.indexOf("</button>", i)); };
+    ok(["btnBancaGer", "btnGerCartoes"].every((id) => /class="[^"]*\bbtn-azul\b[^"]*\bbtn-biblioteca\b/.test(tag(id)) && /bib-tit/.test(tag(id)) && /bib-sub/.test(tag(id)) && /data-i18n="ger_btn_sub"/.test(tag(id))), "G20c os dois botoes usam a cor de acao, o estilo de destaque e a linha de apoio");
+    ok(!/data-i18n-title/.test(tag("btnBancaGer")) && !/data-i18n-title/.test(tag("btnGerCartoes")), "G20d sem 'title' nativo junto do balao (eram dois baloes)");
+    ok(/\.btn-biblioteca\{[^}]*width:100%[^}]*font-size:15px[^}]*\}/.test(html) && /\.rev-topo \.btn\.btn-biblioteca\{flex:1 1 100%\}/.test(html), "G20e CSS: largura total e letra maior que os outros botoes (15px contra 11-13px)");
+    /* os ids nao mudaram: as ligacoes e os testes seguem valendo */
+    ok(typeof a.$("btnBancaGer").onclick === "function" && typeof a.$("btnGerCartoes").onclick === "function", "G20f os dois botoes continuam abrindo a biblioteca");
+    a.$("btnBancaGer").onclick();
+    ok(a.$("dlgGerCartoes").open === true, "G20g clicar na Biblioteca da bancada abre a janela");
+    a.$("dlgGerCartoes").close();
+    a.$("btnGerCartoes").onclick();
+    ok(a.$("dlgGerCartoes").open === true, "G20h e o do material tambem");
+    /* nome nos dois idiomas, no botao e no titulo da janela */
+    ok(a.t("ger_btn") === "Biblioteca de cartões" && a.t("ger_titulo") === "Biblioteca de cartões" && /"ger_btn": "Card library"/.test(i18n) && /"ger_titulo": "Card library"/.test(i18n), "G20i o nome novo vale no botao e no titulo, em portugues e ingles");
+    ok(a.t("ger_btn_sub").length > 25 && /"ger_btn_sub": "Folders by exam/.test(i18n), "G20j a linha de apoio existe nos dois idiomas");
+    ok(i18n.split('"ger_btn": "Gerenciar cartões"').length === 1 && i18n.split('"ger_titulo": "Gerenciador de cartões"').length === 1, "G20l o nome antigo saiu do rotulo e do titulo");
+    /* a explicacao (balao) vale para os dois botoes de fora */
+    ok(["btnBancaGer", "btnGerCartoes"].every((id) => a.$(id)._dicaLigada === true && a.$(id).getAttribute("aria-description") === a.t("ger_btn_aj") && a.$(id)._ouv.mouseenter.length === 1), "G20m os dois botoes tem o balao de explicacao (passar o mouse / segurar) e texto para leitor de tela");
+    ok(/arrasta ou move cartões para os tópicos/.test(a.t("ger_btn_aj")) && /desfaz a última ação/.test(a.t("ger_btn_aj")), "G20n a explicacao diz o que da' para fazer la dentro");
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
