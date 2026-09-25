@@ -858,6 +858,248 @@ async function testes() {
     ok(a.$("btnGerAmpliar").getAttribute("aria-pressed") === "true", "G18y o botao de ampliar fica marcado como ligado");
   }
 
+  /* ---- G19: visao por EDITAL (Edital › Disciplina › Tópico) ---- */
+  {
+    const ev = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { dados: {}, setData(k, v) { this.dados[k] = v; }, setDragImage(el) { this.img = el; }, effectAllowed: "", dropEffect: "" } });
+    const ME = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      const edA = a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5\n@ Direito Financeiro :: 4\n+ Receita Pública :: 4");
+      const edB = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20\n@ Direito Financeiro :: 5\n+ Receita Pública :: 5\n+ Créditos Adicionais :: 3");
+      const cs = (pref, n) => Array.from({ length: n }, (_, i) => pref + " " + i + "? :: Resposta " + pref + i + " zz" + pref + i).join("\n");
+      const k = (d, t) => a.matChave(d, t);
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "ISS"), cs("ISS", 3), { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "IPTU"), cs("IPTU", 2), { disciplina: "Sistema Tributário Brasileiro", topico: "IPTU", concurso: "ISS Caruaru" });
+      a.matGravarCartoes(k("Direito Financeiro", "Receita Pública"), cs("Receita", 2), { disciplina: "Direito Financeiro", topico: "Receita Pública", concurso: "TCE-PE" });
+      a.matGravarCartoes(k("Português", "Crase"), cs("Crase", 1), { disciplina: "Português", topico: "Crase", concurso: "Concurso Apagado" });
+      a.matGravarCartoes(k("Livre", "Solta"), cs("Solta", 1), { disciplina: "Livre", topico: "Solta" });
+      a.$("editor").value = "Cartão da bancada? :: Resposta da bancada";
+      return { a, edA, edB, k };
+    };
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const raizes = (a) => linhas(a, "ger-ed").map((e) => e.textContent.replace(/^\s*[▾▸]\s*/, "").trim());
+    const abrirDisc = (a, nome) => {
+      const l = linhas(a, "ger-disc").find((e) => e.textContent.indexOf(nome) >= 0);
+      l.children[0].onclick({ stopPropagation() {} });
+    };
+    const topo = (a, nome) => linhas(a, "ger-top").find((e) => e.textContent.replace(/^\s*[▾▸]\s*/, "").indexOf(nome) === 0);
+
+    /* modo padrao e escolha lembrada */
+    {
+      const { a } = ME();
+      a.gerAbrir();
+      ok(a.gerAgruparAtual() === "edital" && a.$("gerAgrupar").value === "edital", "G19a com edital cadastrado a arvore abre POR EDITAL");
+      a.$("gerAgrupar").value = "disciplina"; a.$("gerAgrupar").onchange();
+      ok(a.gerAgruparAtual() === "disciplina" && a.lojaLer(a.GER_CHAVE_AGRUPAR) === "disciplina" && linhas(a, "ger-ed").length === 0, "G19b trocar para 'por disciplina' funciona e fica lembrado");
+      a.$("dlgGerCartoes").close(); a.gerAbrir();
+      ok(a.gerAgruparAtual() === "disciplina", "G19c a escolha lembrada vale na proxima abertura");
+      a.$("gerAgrupar").value = "edital"; a.$("gerAgrupar").onchange();
+      ok(a.gerAgruparAtual() === "edital" && a.lojaLer(a.GER_CHAVE_AGRUPAR) === "edital", "G19d e volta");
+      const b = rodar().api; b.matIniciar(); b.edIniciar(); b.gerAbrir();
+      ok(b.gerAgruparAtual() === "disciplina", "G19e sem nenhum edital cadastrado o padrao continua 'por disciplina'");
+    }
+    /* as raizes e os totais */
+    {
+      const { a } = ME();
+      a.gerAbrir();
+      const r = raizes(a);
+      ok(r.join("|") === "Bancada (1)|ISS Caruaru Auditor (7)|TCE-PE (2)|Concurso Apagado (1)|Sem edital (1)", "G19f raizes: Bancada, cada edital (na ordem da lista), edital que sumiu e 'Sem edital': " + r.join("|"));
+      ok(a.$("gerArvore").classList.contains("ger-modo-edital"), "G19g a arvore ganha o modo edital (recuo dos niveis)");
+      ok(linhas(a, "ger-top").length === 1 && /Texto do editor/.test(linhas(a, "ger-top")[0].textContent) && linhas(a, "ger-disc").length > 0 && linhas(a, "ger-disc").every((e) => /▸/.test(e.textContent)), "G19h no comeco as raizes estao abertas e as disciplinas FECHADAS (so' a Bancada mostra o topico dela)");
+    }
+    /* o plano do edital: ordem, tópicos vazios */
+    {
+      const { a, edA } = ME();
+      a.gerAbrir();
+      const discs = linhas(a, "ger-disc").map((e) => e.textContent.replace(/^\s*[▾▸]\s*/, "").trim());
+      ok(discs.join("|") === "Sistema Tributário Brasileiro (5)|Direito Financeiro (2)|Direito Financeiro (2)|Português (1)|Livre (1)", "G19i disciplinas na ordem do edital, com o total: " + discs.join("|"));
+      abrirDisc(a, "Sistema Tributário Brasileiro");
+      const tops = linhas(a, "ger-top").map((e) => e.textContent.replace(/^\s*[▾▸]\s*/, "").trim());
+      ok(tops.indexOf("ISS (3)") >= 0 && tops.indexOf("IPTU (2)") >= 0 && tops.indexOf("ISS (3)") < tops.indexOf("IPTU (2)"), "G19j topicos na ordem do edital: " + tops.join("|"));
+      abrirDisc(a, "Direito Financeiro");
+      const vz = linhas(a, "ger-top").find((e) => /Créditos Adicionais \(0\)/.test(e.textContent));
+      ok(!vz || cls(vz, "ger-vazia"), "G19k (o topico so' do plano B ainda esta recolhido)");
+    }
+    /* topico do plano sem cartao: pasta vazia virtual; compartilhado */
+    {
+      const { a } = ME();
+      a.gerAbrir();
+      /* abre as disciplinas do TCE-PE (a 2a "Direito Financeiro") */
+      const m = a.gerModeloEditais(a.gerNotasAtual(), []);
+      const tce = m.roots.find((r) => r.nome === "TCE-PE"), iss = m.roots.find((r) => r.nome === "ISS Caruaru Auditor");
+      const cred = tce.filhos[0].filhos.find((t) => t.topico === "Créditos Adicionais");
+      ok(cred && cred.vazia === true && cred.virtual === true && cred.total === 0, "G19l topico do plano SEM cartao e' pasta vazia virtual");
+      const recA = iss.filhos.find((d) => d.nome === "Direito Financeiro").filhos[0], recB = tce.filhos[0].filhos.find((t) => t.topico === "Receita Pública");
+      ok(recA.total === 2 && recB.total === 2 && recA.compartilhado === "TCE-PE" && !recB.compartilhado, "G19m topico em dois editais: mesmos cartoes nos dois e o que nao e' dono avisa 'compartilhado com': " + JSON.stringify({ a: recA.compartilhado, b: recB.compartilhado }));
+      ok(m.virtuais.get(a.matChave("Direito Financeiro", "Créditos Adicionais")).concurso === "TCE-PE", "G19n o plano registra de que edital e' cada topico virtual");
+      const emIss = iss.filhos.find((d) => d.nome === "Sistema Tributário Brasileiro");
+      ok(emIss.filhos.some((t) => t.topico === "IPTU" && t.total === 2), "G19o cartao gravado com o NOME DO CABECALHO do edital (# ISS Caruaru) tambem cai no edital certo");
+      ok(a.gerNomesDoEdital(a.matResumosAtual && { nome: "X", texto: "# ISS Caruaru | prova: 2027-01-01" }).has("iss caruaru") && a.gerNomesDoEdital({ nome: "X", texto: "" }).has("x"), "G19p o edital responde pelo nome dele e pelo do cabecalho");
+    }
+    /* clicar nos nós lista os cartoes certos */
+    {
+      const { a } = ME();
+      a.gerAbrir();
+      const rA = linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent));
+      rA.onclick();
+      ok(linhasDaLista(a).length === 7, "G19q clicar no edital lista todos os cartoes dele (7): " + linhasDaLista(a).length);
+      abrirDisc(a, "Sistema Tributário Brasileiro");
+      linhas(a, "ger-disc").find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
+      ok(linhasDaLista(a).length === 5 && cls(linhas(a, "ger-disc").find((e) => /Sistema Tributário/.test(e.textContent)), "ger-atual"), "G19r clicar na disciplina lista os cartoes dela e destaca a linha");
+      topo(a, "ISS").onclick();
+      ok(linhasDaLista(a).length === 3, "G19s clicar no topico lista so' os dele");
+      linhas(a, "ger-ed").find((e) => /Bancada/.test(e.textContent)).onclick();
+      ok(linhasDaLista(a).length === 1 && /bancada/.test(linhasDaLista(a)[0].textContent), "G19t a Bancada e' uma raiz e lista os cartoes do editor");
+      a.$("btnGerNovaPasta").onclick();
+      a.$("btnGerNpCancelar").onclick();
+      linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+      a.$("btnGerNovaPasta").onclick();
+      ok(a.$("gerNpDisc").value === "", "G19u nova pasta a partir de um edital nao inventa disciplina");
+      a.$("btnGerNpCancelar").onclick();
+    }
+    /* mover para topico do edital: nasce no material COM o edital */
+    {
+      const { a, k } = ME();
+      a.gerAbrir();
+      const m = a.gerModeloEditais(a.gerNotasAtual(), []);
+      const tce = m.roots.find((r) => r.nome === "TCE-PE");
+      a.gerAbertosAtual().add(tce.id + "|direito financeiro"); a.gerPintar();
+      const dest = a.gerNomeDestino(k("Direito Financeiro", "Créditos Adicionais"), "TCE-PE");
+      ok(dest === "TCE-PE › Direito Financeiro › Créditos Adicionais", "G19v o destino mostra o edital na frente: " + dest);
+      ok(a.gerDestinosLista().some((d) => d.nome === "ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS" && d.concurso === "ISS Caruaru Auditor") && a.gerDestinosLista()[0].ch === a.CQ_BANCADA, "G19w a lista de destinos traz o plano dos editais (com o edital de cada um) e a Bancada");
+      /* o cartao da Bancada vai para o topico virtual */
+      const iB = linhasDaLista(a).findIndex((l) => /bancada/.test(l.textContent));
+      const ck = achar(a.$("gerLista"), (e) => e.tag === "input");
+      ck[iB].checked = true; ck[iB].onchange();
+      const chave = k("Direito Financeiro", "Créditos Adicionais");
+      const pn = a.gerEscolherDestino(chave, "TCE-PE");
+      await Promise.resolve();
+      ok(/Mover 1 cartão\(ões\) para “TCE-PE › Direito Financeiro › Créditos Adicionais”/.test((a.$("uiModalMsg") || {}).textContent || ""), "G19x a confirmacao diz o edital, a disciplina e o topico: " + (a.$("uiModalMsg") || {}).textContent);
+      await conduzir(a, pn);
+      const e = a.matResumosAtual()[chave];
+      ok(e && e.concurso === "TCE-PE" && e.disciplina === "Direito Financeiro" && e.topico === "Créditos Adicionais" && /bancada/.test(e.cartoes) && a.$("editor").value.indexOf("bancada") < 0, "G19y o topico do edital nasce no material COM o edital (igual ao 'Salvar no material'): " + JSON.stringify({ c: e && e.concurso, d: e && e.disciplina }));
+      await conduzir(a, a.$("btnGerMsgDesfazer").onclick());
+      ok(/bancada/.test(a.$("editor").value) && !/bancada/.test(((a.matResumosAtual()[chave] || {}).cartoes) || ""), "G19z desfazer devolve o cartao a Bancada");
+    }
+    /* soltar (arrastar) num topico do edital */
+    {
+      const { a, k } = ME();
+      a.gerAbrir();
+      const m = a.gerModeloEditais(a.gerNotasAtual(), []);
+      const tce = m.roots.find((r) => r.nome === "TCE-PE");
+      a.gerAbertosAtual().add(tce.id + "|direito financeiro"); a.gerPintar();
+      const chave = k("Direito Financeiro", "Créditos Adicionais");
+      const iB = linhasDaLista(a).findIndex((l) => /bancada/.test(l.textContent));
+      linhasDaLista(a)[iB].ondragstart(ev());
+      const alvos = linhas(a, "ger-top").filter((e) => /Créditos Adicionais/.test(e.textContent));
+      ok(alvos.length === 1 && /ainda sem cartões/.test(alvos[0].title), "G19z1 o topico vazio do edital explica o que e': " + (alvos[0] && alvos[0].title));
+      const eo = ev(); alvos[0].ondragover(eo);
+      ok(eo.prevented === true && cls(alvos[0], "ger-alvo"), "G19z2 o topico do plano aceita soltar");
+      await conduzir(a, alvos[0].ondrop(ev()));
+      ok((a.matResumosAtual()[chave] || {}).concurso === "TCE-PE", "G19z3 soltar no topico do edital grava o edital dono");
+    }
+    /* topico que ja tem dono: nao troca o dono */
+    {
+      const { a, k } = ME();
+      a.gerAbrir();
+      const chave = k("Direito Financeiro", "Receita Pública");
+      const iB = linhasDaLista(a).findIndex((l) => /bancada/.test(l.textContent));
+      const ck = achar(a.$("gerLista"), (e) => e.tag === "input");
+      ck[iB].checked = true; ck[iB].onchange();
+      await conduzir(a, a.gerEscolherDestino(chave, "ISS Caruaru Auditor"));
+      ok((a.matResumosAtual()[chave] || {}).concurso === "TCE-PE" && /bancada/.test(a.matResumosAtual()[chave].cartoes), "G19z4 mover pelo edital A para um topico cujo dono e' o B mantem o dono (um topico pertence a um edital so')");
+    }
+    /* sem edital e pastas criadas aqui */
+    {
+      const { a } = ME();
+      a.gerCriarPasta("Minhas pastas", "Revisão");
+      a.gerAbrir();
+      const m = a.gerModeloEditais(a.gerNotasAtual(), a.gerPastasVazias(a.gerNotasAtual()));
+      const sem = m.roots.find((r) => r.nome === "Sem edital");
+      ok(sem && sem.filhos.some((d) => d.nome === "Minhas pastas" && d.filhos[0].vazia && !d.filhos[0].virtual), "G19z5 pasta criada aqui fica em 'Sem edital' (removivel, nao e' do plano)");
+      ok(m.roots.find((r) => r.nome === "Concurso Apagado"), "G19z6 material de edital que nao existe mais aparece com o nome gravado");
+    }
+    /* segurar o cartao abre o no fechado */
+    {
+      const { a } = ME();
+      a.gerAbrir();
+      const disc = linhas(a, "ger-disc")[0];
+      const id = a.gerModeloEditais(a.gerNotasAtual(), []).roots[1].id + "|sistema tributario brasileiro";
+      ok(!a.gerAbertosAtual().has(id), "G19z7 (a disciplina comeca fechada)");
+      const pos = 0;
+      linhasDaLista(a)[pos].ondragstart(ev());
+      const e2 = ev(); disc.ondragover(e2);
+      ok(e2.prevented === true && a.gerAbertosAtual().has(id), "G19z8 segurar o cartao sobre a disciplina fechada a abre");
+      linhasDaLista(a)[pos].ondragend();
+      const e3 = ev(); a.gerSobreNo(e3, "outro-id");
+      ok(e3.prevented === false && !a.gerAbertosAtual().has("outro-id"), "G19z9 sem arrasto nada abre");
+    }
+    /* reforcos da visao por edital */
+    {
+      const { a, k } = ME();
+      a.gerAbrir();
+      const idA = a.gerModeloEditais(a.gerNotasAtual(), []).roots.find((r) => r.nome === "ISS Caruaru Auditor").id;
+      const idB = a.gerModeloEditais(a.gerNotasAtual(), []).roots.find((r) => r.nome === "TCE-PE").id;
+      /* trocar de visao zera a pasta aberta */
+      topo(a, "Texto do editor").onclick();
+      ok(a.gerPastaAtual() && a.gerPastaAtual().chave === a.CQ_BANCADA, "G19zc (abriu uma pasta)");
+      a.$("gerAgrupar").value = "disciplina"; a.$("gerAgrupar").onchange();
+      ok(a.gerPastaAtual() === null, "G19zd trocar de visao zera a pasta aberta");
+      a.$("gerAgrupar").value = "edital"; a.$("gerAgrupar").onchange();
+      /* nova pasta a partir de uma disciplina do edital: vem preenchida */
+      a.gerAbertosAtual().add(idA + "|sistema tributario brasileiro"); a.gerPintar();
+      linhas(a, "ger-disc").find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
+      a.$("btnGerNovaPasta").onclick();
+      ok(a.$("gerNpDisc").value === "Sistema Tributário Brasileiro", "G19ze nova pasta a partir de uma disciplina do edital ja vem com o nome dela: " + a.$("gerNpDisc").value);
+      a.$("btnGerNpCancelar").onclick();
+      /* topicos compartilhado / virtual / normal na arvore */
+      a.gerAbertosAtual().add(idA + "|direito financeiro"); a.gerAbertosAtual().add(idB + "|direito financeiro"); a.gerPintar();
+      const recA = linhas(a, "ger-top").filter((e) => /Receita Pública/.test(e.textContent));
+      ok(recA.length === 2 && /↔/.test(recA[0].textContent) && /TCE-PE/.test(recA[0].title) && !/↔/.test(recA[1].textContent), "G19zf o topico compartilhado tem a marca ↔ e explica de quem e' (so' no edital que nao e' o dono): " + recA.map((e) => e.textContent + "/" + e.title.slice(0, 30)).join(" | "));
+      const cred = linhas(a, "ger-top").find((e) => /Créditos Adicionais/.test(e.textContent));
+      ok(cred && achar(cred, (e) => cls(e, "ger-x")).length === 0 && !cred.draggable, "G19zg topico do plano sem cartao nao tem o x de remover nem e' arrastavel");
+      const real = linhas(a, "ger-top").find((e) => /Receita Pública/.test(e.textContent) && !/↔/.test(e.textContent));
+      ok(real.draggable === true, "G19zh topico com cartao e' arrastavel");
+      /* destinos: o nome segue o edital, mesmo quando o topico esta nos dois */
+      const chave = k("Direito Financeiro", "Receita Pública");
+      ok(a.gerNomeDestino(chave, "ISS Caruaru Auditor") === "ISS Caruaru Auditor › Direito Financeiro › Receita Pública" && a.gerNomeDestino(chave, "TCE-PE") === "TCE-PE › Direito Financeiro › Receita Pública", "G19zi o mesmo topico em dois editais tem um nome de destino para cada edital");
+      /* o seletor carrega o edital do item escolhido (clique e Enter) */
+      achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta"))[0].onclick();
+      const iB = linhasDaLista(a).findIndex((l) => /bancada/.test(l.textContent));
+      const ck = achar(a.$("gerLista"), (e) => e.tag === "input");
+      ck[iB].checked = true; ck[iB].onchange();
+      a.$("btnGerMover").onclick();
+      a.$("gerPopBusca").value = "Créditos Adicionais"; a.$("gerPopBusca").oninput();
+      const item = achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item"))[0];
+      ok(item && /Créditos Adicionais/.test(item.textContent), "G19zj (o item do edital B esta no seletor)");
+      const pc = item.onclick();
+      await Promise.resolve();
+      ok(a.gerDestinoConcursoAtual() === "TCE-PE", "G19zk clicar no item do seletor leva o edital dele: " + a.gerDestinoConcursoAtual());
+      await negar(a, pc);
+      a.gerEscolherDestino(chave, undefined);
+      await negar(a, Promise.resolve());
+      a.$("btnGerMover").onclick();
+      a.$("gerPopBusca").value = "Créditos Adicionais"; a.$("gerPopBusca").oninput();
+      const pe = a.$("gerPopBusca").onkeydown({ key: "Enter", preventDefault() {} });
+      await Promise.resolve();
+      ok(a.gerDestinoConcursoAtual() === "TCE-PE", "G19zl Enter no seletor tambem leva o edital do primeiro item: " + a.gerDestinoConcursoAtual());
+      for (let i = 0; i < 6; i++) { await Promise.resolve(); a.uiModalResponder(false); }
+      /* a explicacao do seletor de visao existe nos dois idiomas */
+      ok(a.GER_DICAS.gerAgrupar === "ger_tip_agrupar" && a.t("ger_tip_agrupar").length > 30, "G19zm o seletor de visao tem explicacao");
+    }
+    /* a seta abre e fecha */
+    {
+      const { a } = ME();
+      a.gerAbrir();
+      const d0 = linhas(a, "ger-disc")[0];
+      d0.children[0].onclick({ stopPropagation() {} });
+      const d1 = linhas(a, "ger-disc")[0];
+      ok(/▾/.test(d1.textContent) && linhas(a, "ger-top").length > 1, "G19za a seta abre a disciplina");
+      d1.children[0].onclick({ stopPropagation() {} });
+      ok(/▸/.test(linhas(a, "ger-disc")[0].textContent), "G19zb e fecha de novo");
+    }
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
@@ -866,6 +1108,7 @@ async function testes() {
     ok(/"gerenciador\.js"/.test(sw), "G13a o modulo nao esta no cache offline");
     ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column/.test(html) && /\.ger-grande\{width:98vw/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e modo ampliado no CSS");
     ok(/\.ger-pasta\.ger-alvo\{/.test(html) && /\.ger-ghost\{/.test(html) && /\.ger-item\.ger-indo\{/.test(html), "G13d CSS do destaque da pasta, da pilula e da linha esmaecida");
+    ok(/id="gerAgrupar"/.test(html) && /\.ger-modo-edital \.ger-top\{/.test(html) && /\.ger-ed\{/.test(html), "G13f seletor da visao por edital e o recuo dos niveis");
     ok(/id="gerNpErro" role="alert"/.test(html) && /id="btnGerNovaPasta"/.test(html) && /id="btnGerMarcarTodos"/.test(html) && /\.ger-vazia\{/.test(html) && /\.ger-x\{/.test(html), "G13e botoes de nova pasta e marcar todos, e o estilo da pasta vazia");
     ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
   }

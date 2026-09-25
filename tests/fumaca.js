@@ -821,6 +821,7 @@ function rodar() {
     pacAbrir, pacExportar, pacLerArquivo, pacAcaoImportar, pacPintar, cmCampo,
     pacNotasAtual: () => pacNotas, pacSelAtual: () => pacSel, pacLidoAtual: () => pacLido, pacSelTeste: (s) => { pacSel = new Set(s); },
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
+    gerDestinoConcursoAtual: () => gerDestinoConcurso, gerModeloEditais, gerTrocarAgrupar, gerAbertosAtual: () => gerAbertos, gerAgruparAtual: () => gerAgrupar, gerVirtuaisAtual: () => gerVirtuais, gerSobreNo, gerNomesDoEdital, GER_CHAVE_AGRUPAR,
     GER_DICAS, CE_DICAS, dicasDosBotoes, flashBotao, tipShow, tipHide, tipHospedeiro,
     gerPastasCriadas, gerCriarPasta, gerRemoverPastaVazia, gerAbrirNovaPasta, gerConfirmarNovaPasta, gerPastaInfo, gerIniciarArrastoPasta, gerMarcarTodos, gerPastasVazias, GER_CHAVE_PASTAS,
     gerConfirmarMover, gerPrevisaoMover, gerIniciarArrasto, gerFimArrasto, gerSobreAlvo, gerSaiuAlvo, gerSoltar, gerAlvoValido, gerSobreDisciplina, gerNomeDestino, gerArrastoAtual: () => gerArrasto, gerFechadosAtual: () => gerFechados,

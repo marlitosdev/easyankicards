@@ -4178,6 +4178,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-pasta.ger-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
 .ger-pasta.ger-alvo-no{opacity:.45;cursor:not-allowed}
 .ger-vazia{font-style:italic;opacity:.8}
+.ger-agrupar{font-size:11px;max-width:100%}
+.ger-ed{font-weight:700}
+.ger-modo-edital .ger-disc{padding-left:16px}
+.ger-modo-edital .ger-top{padding-left:36px}
 .ger-np-erro{color:var(--erro);min-height:18px;margin:8px 0 0}
 .ger-x{float:right;opacity:.55;cursor:pointer;padding:0 4px}
 .ger-x:hover{opacity:1}
@@ -7374,7 +7378,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="ger-grade">
     <div class="ger-col">
-      <div class="ger-ferr"><button type="button" class="btn-min btn-min-ok" id="btnGerNovaPasta" data-i18n="ger_nova_pasta"></button></div>
+      <div class="ger-ferr">
+        <button type="button" class="btn-min btn-min-ok" id="btnGerNovaPasta" data-i18n="ger_nova_pasta"></button>
+        <select id="gerAgrupar" class="ger-agrupar">
+          <option value="edital" data-i18n="ger_agrupar_edital"></option>
+          <option value="disciplina" data-i18n="ger_agrupar_disc"></option>
+        </select>
+      </div>
       <div id="gerArvore"></div>
     </div>
     <div class="ger-col">

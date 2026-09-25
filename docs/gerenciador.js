@@ -18,11 +18,12 @@ const GER_LIM = { visiveis: 60 };
 const GER_FILTROS = ["todos", "abaixo", "repetidos", "sem_artigo", "basico", "cloze", "mc"];
 const GER_CHAVE_RECIBO = "eac_ger_recibo";
 const GER_CHAVE_PASTAS = "eac_ger_pastas";
+const GER_CHAVE_AGRUPAR = "eac_ger_agrupar";
 
 /* A explicação de CADA controle das duas janelas (o gerenciador e a de nova pasta): id → chave do texto.
  * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
 const GER_DICAS = {
-  btnGerAmpliar: "ger_tip_ampliar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
+  btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
@@ -70,8 +71,9 @@ function gerFiltrar(notas, o) {
   const saida = [];
   notas.forEach((n, i) => {
     const p = opc.pasta;
+    if (p && p.chaves && !p.chaves.has(n.chave)) return;
     if (p && p.chave && n.chave !== p.chave) return;
-    if (p && !p.chave && p.disciplina && (n.disciplina || "—") !== p.disciplina) return;
+    if (p && !p.chave && !p.chaves && p.disciplina && (n.disciplina || "—") !== p.disciplina) return;
     const c = n.card;
     if (filtro === "abaixo" && !ceAbaixo(c)) return;
     if (filtro === "repetidos" && !rep.has(i)) return;
@@ -151,7 +153,9 @@ function gerPastaInfo(ch) {
   const r = matResumos[ch];
   if (r) return { disciplina: r.disciplina, topico: r.topico };
   const p = gerPastasCriadas().find((x) => x.chave === ch);
-  return p ? { disciplina: p.disciplina, topico: p.topico } : null;
+  if (p) return { disciplina: p.disciplina, topico: p.topico };
+  const v = gerVirtuais.get(ch);
+  return v ? { disciplina: v.disciplina, topico: v.topico } : null;
 }
 
 /* Nomes: espaços arrumados; "›" trocado (é o separador da chave) e "::" (é nível de baralho no Anki). */
@@ -195,7 +199,7 @@ function gerRemoverPastaVazia(chave) {
 /* Move os cartões para o tópico `destChave`. O bloco (com @ e +) vai como
  * está; pergunta que o destino já tem NÃO é duplicada — o cartão fica onde
  * estava e é contado à parte. Devolve { movidos, repetidos, naoAchou }. */
-function gerMover(notas, destChave) {
+function gerMover(notas, destChave, concurso) {
   const dest = gerPastaInfo(destChave);
   const r = { movidos: 0, repetidos: 0, naoAchou: 0 };
   if (!dest) return r;
@@ -212,7 +216,11 @@ function gerMover(notas, destChave) {
     if (novo === null) { r.naoAchou++; return; }
     cqGravar(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
     const at = gerTexto(destChave).replace(/\s*$/, "");
-    cqGravar(destChave, (at ? at + "\n" : "") + saida.bloco, { disciplina: dest.disciplina, topico: dest.topico });
+    /* o edital só entra quando o tópico ainda NÃO tem dono: um tópico pertence a um edital só (é o que o
+     * "Salvar no material de estudo" também faz), e gravar de novo trocaria o dono de quem já estava lá */
+    const meta = { disciplina: dest.disciplina, topico: dest.topico };
+    if (concurso && !cqEhBancada(destChave) && !(matResumos[destChave] || {}).concurso) meta.concurso = concurso;
+    cqGravar(destChave, (at ? at + "\n" : "") + saida.bloco, meta);
     r.movidos++;
   });
   gerRegistrar(antes);
@@ -269,6 +277,8 @@ function gerEditar(nota, texto) {
 /* ---- a tela ---- */
 let gerNotas = [], gerVis = [], gerPasta = null, gerSel = new Set(), gerFoco = -1,
   gerMostrando = GER_LIM.visiveis, gerFechados = new Set(), gerEditando = false;
+/* a visão da árvore: "edital" (Edital › Disciplina › Tópico) ou "disciplina" (a de antes) */
+let gerAgrupar = "disciplina", gerAbertos = new Set(), gerVirtuais = new Map(), gerDestinoConcurso;
 const GER_CHAVE_GRANDE = "eac_ger_grande";
 
 function gerEl(tag, cls, txt) {
@@ -293,15 +303,157 @@ function gerRefiltrar() {
   gerFoco = gerVis.length ? 0 : -1;
 }
 
+/* ---- visão por EDITAL: Edital › Disciplina › Tópico ----
+ * Fonte das pastas: o plano de cada edital (lerEdital — inclui os tópicos SEM cartão, como pastas vazias
+ * que só viram tópico do material quando chega o primeiro cartão) + o que já está no material, agrupado
+ * pelo `concurso` gravado no tópico (o mesmo campo que "Salvar no material de estudo" preenche). A chave
+ * do tópico é a mesma nos dois caminhos (matChaveViva): mover aqui == salvar por lá. */
+function gerNomesDoEdital(ed) {
+  const s = new Set();
+  if (ed && ed.nome) s.add(cqNormal(ed.nome));
+  try { const c = lerEdital((ed && ed.texto) || "").cfg.concurso; if (c) s.add(cqNormal(c)); } catch (e) {}
+  return s;
+}
+
+function gerModeloEditais(notas, vazias) {
+  const virtuais = new Map();
+  const cont = new Map();
+  (notas || []).forEach((n) => cont.set(n.chave, (cont.get(n.chave) || 0) + 1));
+  const lista = (typeof editais !== "undefined" && Array.isArray(editais)) ? editais : [];
+  const eds = lista.map((ed) => ({ ed, nomes: gerNomesDoEdital(ed), id: "ed:" + ed.id }));
+  const raizes = new Map(), doEdital = [], semEdital = [];
+  const raiz = (id, nome, tipo, concurso) => {
+    if (!raizes.has(id)) {
+      const r = { tipo, id, nome, concurso, total: 0, chaves: new Set(), filhos: [], _discs: new Map() };
+      raizes.set(id, r);
+      (tipo === "edital" ? doEdital : semEdital).push(r);
+    }
+    return raizes.get(id);
+  };
+  const noDisc = (root, disciplina) => {
+    const nome = disciplina || "—", k = cqNormal(nome);
+    let d = root._discs.get(k);
+    if (!d) {
+      d = { tipo: "disc", id: root.id + "|" + k, nome, disciplina: nome, total: 0, chaves: new Set(), filhos: [], _tops: new Map() };
+      root._discs.set(k, d); root.filhos.push(d);
+    }
+    return d;
+  };
+  const noTop = (root, disc, chave, nomeTopico, extra) => {
+    if (disc._tops.has(chave)) return disc._tops.get(chave);
+    const tp = Object.assign({ tipo: "top", chave, topico: nomeTopico || "—", total: cont.get(chave) || 0, concurso: root.concurso }, extra);
+    tp.vazia = tp.total === 0;
+    disc._tops.set(chave, tp); disc.filhos.push(tp);
+    disc.total += tp.total; disc.chaves.add(chave); root.total += tp.total; root.chaves.add(chave);
+    return tp;
+  };
+  /* 1. os editais, na ordem da lista, com o plano completo */
+  eds.forEach((e) => {
+    const root = raiz(e.id, e.ed.nome || "—", "edital", e.ed.nome || "");
+    let plano = [];
+    try { plano = lerEdital(e.ed.texto || "").disciplinas; } catch (err) { plano = []; }
+    plano.forEach((d) => {
+      const disc = noDisc(root, d.nome);
+      d.topicos.forEach((tp) => {
+        const chave = matChaveViva(d.nome, tp.nome);
+        const no = noTop(root, disc, chave, tp.nome, { virtual: !cont.get(chave) });
+        if (!virtuais.has(chave)) virtuais.set(chave, { disciplina: d.nome, topico: tp.nome, concurso: e.ed.nome || "" });
+        const dono = (matResumos[chave] || {}).concurso;
+        if (dono && !e.nomes.has(cqNormal(dono))) no.compartilhado = dono;
+      });
+    });
+  });
+  /* 2. os cartões: cada um vai para o edital do tópico dele (ou para "Sem edital") */
+  const banca = { tipo: "bancada", id: "bancada", nome: t("cq_bancada_disc"), total: 0, chaves: new Set(), filhos: [] };
+  (notas || []).forEach((n) => {
+    if (cqEhBancada(n.chave)) {
+      if (!banca.filhos.length) {
+        banca.filhos.push({ tipo: "top", chave: CQ_BANCADA, topico: t("cq_bancada_top"), total: cont.get(CQ_BANCADA) || 0, vazia: false, concurso: undefined });
+        banca.total = cont.get(CQ_BANCADA) || 0; banca.chaves.add(CQ_BANCADA);
+      }
+      return;
+    }
+    const c = (matResumos[n.chave] || {}).concurso || "";
+    const dono = c ? eds.find((e) => e.nomes.has(cqNormal(c))) : null;
+    const root = dono ? raizes.get(dono.id) : raiz("sem:" + cqNormal(c), c || t("ger_sem_edital"), "sem", "");
+    noTop(root, noDisc(root, n.disciplina), n.chave, n.topico);
+  });
+  /* 3. pastas criadas aqui (sem cartão ainda) ficam em "Sem edital" */
+  (vazias || []).forEach((p) => {
+    const root = raiz("sem:", t("ger_sem_edital"), "sem", "");
+    noTop(root, noDisc(root, p.disciplina), p.chave, p.topico);
+  });
+  semEdital.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt"));
+  const roots = (banca.filhos.length ? [banca] : []).concat(doEdital, semEdital);
+  roots.forEach((r) => { delete r._discs; r.filhos.forEach((d) => { delete d._tops; }); });
+  return { roots, virtuais };
+}
+
+/* a linha de UM tópico (pasta): usada pelas duas visões */
+function gerLinhaTopico(cx, tp, concurso) {
+  const marca = tp.compartilhado ? " ↔" : "";
+  const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")" + marca);
+  li.onclick = () => { gerPasta = { chave: tp.chave }; gerRefiltrar(); gerPintar(); };
+  li.title = tp.compartilhado ? t("ger_tip_compartilhado", { e: tp.compartilhado })
+    : t(tp.vazia ? (tp.virtual ? "ger_tip_pasta_edital_vazia" : "ger_tip_pasta_vazia") : "ger_tip_pasta");
+  if (tp.vazia && !tp.virtual) {
+    const x = gerEl("span", "ger-x", " ✕");
+    x.title = t("ger_pasta_remover");
+    x.setAttribute("role", "button");
+    x.onclick = (ev) => {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      gerRemoverPastaVazia(tp.chave);
+      if (gerPasta && gerPasta.chave === tp.chave) gerPasta = null;
+      gerRefiltrar(); gerPintar(); gerPintarDestinos();
+    };
+    li.append(x);
+  } else if (!tp.vazia) {
+    /* a pasta inteira é arrastável: leva todos os cartões dela */
+    li.draggable = true;
+    li.ondragstart = (ev) => gerIniciarArrastoPasta(ev, tp.chave);
+    li.ondragend = gerFimArrasto;
+  }
+  li.ondragover = (ev) => gerSobreAlvo(ev, tp.chave, li);
+  li.ondragleave = () => gerSaiuAlvo(li);
+  li.ondrop = (ev) => gerSoltar(ev, tp.chave, concurso);
+  cx.append(li);
+}
+
+/* um nó da árvore por edital (edital, disciplina ou tópico) */
+function gerPintarNo(cx, no) {
+  if (no.tipo === "top") { gerLinhaTopico(cx, no, no.concurso); return; }
+  const aberto = gerAbertos.has(no.id);
+  const ativa = !!gerPasta && gerPasta.id === no.id;
+  const cab = gerEl("div", "ger-pasta " + (no.tipo === "disc" ? "ger-disc" : "ger-ed") + (ativa ? " ger-atual" : ""));
+  const seta = gerEl("span", "ger-seta", aberto ? "▾" : "▸");
+  seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerAbertos.delete(no.id) : gerAbertos.add(no.id); gerPintarArvore(); };
+  seta.title = t("ger_tip_seta");
+  cab.append(seta, gerEl("span", "", " " + no.nome + " (" + no.total + ")"));
+  cab.title = t(no.tipo === "disc" ? "ger_tip_disciplina" : (no.tipo === "edital" ? "ger_tip_edital" : (no.tipo === "bancada" ? "ger_tip_bancada" : "ger_tip_sem_edital")));
+  cab.onclick = () => { gerPasta = { chaves: no.chaves, id: no.id, disciplina: no.tipo === "disc" ? no.disciplina : undefined }; gerRefiltrar(); gerPintar(); };
+  cab.ondragover = (ev) => gerSobreNo(ev, no.id);
+  cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
+  cx.append(cab);
+  if (aberto) no.filhos.forEach((f) => gerPintarNo(cx, f));
+}
+
 function gerPintarArvore() {
   const cx = $("gerArvore");
   cx.innerHTML = "";
+  cx.classList.toggle("ger-modo-edital", gerAgrupar === "edital");
   const tudo = gerEl("div", "ger-pasta" + (!gerPasta ? " ger-atual" : ""), t("ger_todos", { n: gerNotas.length }));
   tudo.onclick = () => { gerPasta = null; gerRefiltrar(); gerPintar(); };
   cx.append(tudo);
+  if (gerAgrupar === "edital") {
+    const m = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas));
+    gerVirtuais = m.virtuais;
+    m.roots.forEach((r) => gerPintarNo(cx, r));
+    return;
+  }
+  gerVirtuais = new Map();
   gerArvore(gerNotas, gerPastasVazias(gerNotas)).forEach((d) => {
     const aberto = !gerFechados.has(d.disciplina);
-    const ativa = gerPasta && !gerPasta.chave && gerPasta.disciplina === d.disciplina;
+    const ativa = gerPasta && !gerPasta.chave && !gerPasta.chaves && gerPasta.disciplina === d.disciplina;
     const cab = gerEl("div", "ger-pasta ger-disc" + (ativa ? " ger-atual" : ""));
     const seta = gerEl("span", "ger-seta", aberto ? "▾" : "▸");
     seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerFechados.add(d.disciplina) : gerFechados.delete(d.disciplina); gerPintarArvore(); };
@@ -312,32 +464,7 @@ function gerPintarArvore() {
     cab.ondragover = (ev) => { gerSobreDisciplina(ev, d.disciplina); };
     cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
     cx.append(cab);
-    if (aberto) d.topicos.forEach((tp) => {
-      const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")");
-      li.onclick = () => { gerPasta = { chave: tp.chave }; gerRefiltrar(); gerPintar(); };
-      li.title = t(tp.vazia ? "ger_tip_pasta_vazia" : "ger_tip_pasta");
-      if (tp.vazia) {
-        const x = gerEl("span", "ger-x", " ✕");
-        x.title = t("ger_pasta_remover");
-        x.setAttribute("role", "button");
-        x.onclick = (ev) => {
-          if (ev && ev.stopPropagation) ev.stopPropagation();
-          gerRemoverPastaVazia(tp.chave);
-          if (gerPasta && gerPasta.chave === tp.chave) gerPasta = null;
-          gerRefiltrar(); gerPintar(); gerPintarDestinos();
-        };
-        li.append(x);
-      } else {
-        /* a pasta inteira é arrastável: leva todos os cartões dela */
-        li.draggable = true;
-        li.ondragstart = (ev) => gerIniciarArrastoPasta(ev, tp.chave);
-        li.ondragend = gerFimArrasto;
-      }
-      li.ondragover = (ev) => gerSobreAlvo(ev, tp.chave, li);
-      li.ondragleave = () => gerSaiuAlvo(li);
-      li.ondrop = (ev) => gerSoltar(ev, tp.chave);
-      cx.append(li);
-    });
+    if (aberto) d.topicos.forEach((tp) => gerLinhaTopico(cx, tp, undefined));
   });
 }
 
@@ -420,6 +547,17 @@ function gerAviso(texto, comDesfazer) {
 /* ---- destino: um seletor com busca (o <select> nativo estourava a tela) ---- */
 function gerDestinosLista() {
   const banca = { ch: CQ_BANCADA, nome: [t("cq_bancada_disc"), t("cq_bancada_top")].join(" › ") };
+  if (gerAgrupar === "edital") {
+    const out = [banca];
+    gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.forEach((r) => {
+      if (r.tipo === "bancada") return;
+      r.filhos.forEach((d) => d.filhos.forEach((tp) => {
+        out.push({ ch: tp.chave, concurso: r.tipo === "edital" ? r.concurso : undefined,
+          nome: (r.tipo === "edital" ? [r.nome, d.nome, tp.topico] : [d.nome, tp.topico]).join(" › ") });
+      }));
+    });
+    return out;
+  }
   const vivos = Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico));
   const tem = new Set(vivos.map((x) => x.ch));
   gerPastasCriadas().forEach((p) => { if (!tem.has(p.chave)) vivos.push({ ch: p.chave, r: { disciplina: p.disciplina, topico: p.topico } }); });
@@ -427,8 +565,9 @@ function gerDestinosLista() {
     .sort((a, b) => String((a.r.disciplina || "") + (a.r.topico || "")).localeCompare(String((b.r.disciplina || "") + (b.r.topico || "")), "pt"))
     .map((x) => ({ ch: x.ch, nome: [x.r.disciplina, x.r.topico].filter(Boolean).join(" › ") })));
 }
-function gerNomeDestino(ch) {
-  const d = gerDestinosLista().find((x) => x.ch === ch);
+function gerNomeDestino(ch, concurso) {
+  const l = gerDestinosLista();
+  const d = l.find((x) => x.ch === ch && (concurso === undefined || x.concurso === concurso)) || l.find((x) => x.ch === ch);
   return d ? d.nome : String(ch);
 }
 
@@ -447,7 +586,7 @@ function gerPintarDestinosLista() {
     const b = gerEl("div", "ger-pop-item", d.nome);
     b.setAttribute("role", "option");
     b.title = t("ger_tip_destino", { d: d.nome });
-    b.onclick = () => gerEscolherDestino(d.ch);
+    b.onclick = () => gerEscolherDestino(d.ch, d.concurso);
     cx.append(b);
   });
   if (itens.length > 80) cx.append(gerEl("p", "nota", t("ger_pop_mais", { n: itens.length - 80 })));
@@ -465,8 +604,9 @@ function gerAbrirDestinos() {
 }
 
 /* Escolheu o destino na lista: já pergunta e move. */
-function gerEscolherDestino(ch) {
+function gerEscolherDestino(ch, concurso) {
   $("gerDestino").value = ch;
+  gerDestinoConcurso = concurso;
   gerFecharDestinos();
   return gerAcaoMover();
 }
@@ -504,21 +644,21 @@ function gerAcaoApagarAberto() {
 
 /* Mover {ms} para {dest}: mostra o que vai acontecer (quantos vão, quantos o destino já tem) e só
  * move se você confirmar. É o que o botão "Mover para…" e o arrastar-e-soltar chamam. */
-async function gerConfirmarMover(ms, dest) {
+async function gerConfirmarMover(ms, dest, concurso) {
   if (!ms || !ms.length || !dest) return;
   const prev = gerPrevisaoMover(ms, dest);
   if (!prev.validos.length) { gerAviso(t("ger_mover_mesmo"), false); return; }
-  const msg = t("ger_conf_mover", { n: prev.validos.length, d: gerNomeDestino(dest) })
+  const msg = t("ger_conf_mover", { n: prev.validos.length, d: gerNomeDestino(dest, concurso) })
     + (prev.repetidos ? "\n\n" + t("ger_conf_mover_rep", { r: prev.repetidos }) : "");
   if (!(await uiConfirm(msg))) return;
-  const r = gerMover(prev.validos, dest);
+  const r = gerMover(prev.validos, dest, concurso);
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
   gerAviso(t("ger_feito_mover", { n: r.movidos, m: r.repetidos, k: r.naoAchou }), true);
 }
 
 async function gerAcaoMover() {
-  return gerConfirmarMover(gerMarcados(), $("gerDestino").value);
+  return gerConfirmarMover(gerMarcados(), $("gerDestino").value, gerDestinoConcurso);
 }
 
 /* ---- arrastar e soltar (mouse) ----
@@ -605,12 +745,20 @@ function gerSobreDisciplina(ev, disc) {
   gerHoverTimer = setTimeout(() => { gerHoverTimer = null; gerFechados.delete(disc); gerPintarArvore(); }, 600);
 }
 
-function gerSoltar(ev, chave) {
+/* o mesmo, na visão por edital: nó fechado abre ao segurar o cartão em cima */
+function gerSobreNo(ev, id) {
+  if (!gerArrasto || gerAbertos.has(id)) return;
+  if (ev && ev.preventDefault) ev.preventDefault();
+  if (gerHoverTimer) clearTimeout(gerHoverTimer);
+  gerHoverTimer = setTimeout(() => { gerHoverTimer = null; gerAbertos.add(id); gerPintarArvore(); }, 600);
+}
+
+function gerSoltar(ev, chave, concurso) {
   if (ev && ev.preventDefault) ev.preventDefault();
   const ms = gerArrasto && gerArrasto.notas;
   gerFimArrasto();
   if (!ms || !chave) return Promise.resolve();
-  return gerConfirmarMover(ms, chave);
+  return gerConfirmarMover(ms, chave, concurso);
 }
 
 function gerAcaoEditar() {
@@ -700,11 +848,33 @@ function gerMarcarTodos() {
   gerPintarLista(); gerPintarAcoes();
 }
 
+function gerAgruparPadrao() {
+  let v = "";
+  try { v = localStorage.getItem(GER_CHAVE_AGRUPAR) || ""; } catch (e) {}
+  if (v === "edital" || v === "disciplina") return v;
+  return (typeof editais !== "undefined" && Array.isArray(editais) && editais.length) ? "edital" : "disciplina";
+}
+
+/* abre as raízes (edital, sem edital, bancada) e deixa as disciplinas fechadas: um edital tem dezenas de tópicos */
+function gerAbrirRaizes() {
+  gerAbertos = new Set(gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.map((r) => r.id));
+}
+
+function gerTrocarAgrupar(v) {
+  gerAgrupar = v === "edital" ? "edital" : "disciplina";
+  try { localStorage.setItem(GER_CHAVE_AGRUPAR, gerAgrupar); } catch (e) {}
+  $("gerAgrupar").value = gerAgrupar;
+  gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
+  gerCalcular(); gerAbrirRaizes(); gerPintarDestinos(); gerPintar();
+}
+
 function gerAbrir() {
-  gerPasta = null; gerFechados = new Set();
+  gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
+  gerAgrupar = gerAgruparPadrao();
+  $("gerAgrupar").value = gerAgrupar;
   $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
   gerFecharDestinos();
-  gerCalcular(); gerPintarDestinos(); gerPintar();
+  gerCalcular(); gerAbrirRaizes(); gerPintarDestinos(); gerPintar();
   gerAplicarTamanho(gerGrandeLer());
   dicasDosBotoes(GER_DICAS);
   abrirModal("dlgGerCartoes");
@@ -722,6 +892,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerLimpar").onclick = () => { gerSel = new Set(); gerPintarLista(); gerPintarAcoes(); flashBotao($("btnGerLimpar")); };
   $("btnGerMarcarTodos").onclick = () => { gerMarcarTodos(); flashBotao($("btnGerMarcarTodos")); };
   $("btnGerNovaPasta").onclick = gerAbrirNovaPasta;
+  $("gerAgrupar").onchange = () => gerTrocarAgrupar($("gerAgrupar").value);
   $("btnGerNpOk").onclick = gerConfirmarNovaPasta;
   $("btnGerNpCancelar").onclick = () => $("dlgGerNovaPasta").close();
   ["gerNpDisc", "gerNpTop"].forEach((id) => {
@@ -733,7 +904,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("gerPopBusca").onkeydown = (ev) => {
     if (!ev) return;
     if (ev.key === "Escape") { ev.stopPropagation && ev.stopPropagation(); ev.preventDefault && ev.preventDefault(); gerFecharDestinos(); }
-    else if (ev.key === "Enter") { ev.preventDefault && ev.preventDefault(); const it = gerPintarDestinosLista(); if (it.length) gerEscolherDestino(it[0].ch); }
+    else if (ev.key === "Enter") { ev.preventDefault && ev.preventDefault(); const it = gerPintarDestinosLista(); if (it.length) gerEscolherDestino(it[0].ch, it[0].concurso); }
   };
   $("btnGerAmpliar").onclick = gerAmpliar;
   $("btnGerPreApagar").onclick = gerAcaoApagarAberto;
