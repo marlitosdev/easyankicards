@@ -108,7 +108,7 @@ function gerFrenteChave(linha) { return cmNormal(String(linha).split("::")[0]); 
  * está; pergunta que o destino já tem NÃO é duplicada — o cartão fica onde
  * estava e é contado à parte. Devolve { movidos, repetidos, naoAchou }. */
 function gerMover(notas, destChave) {
-  const dest = matResumos[destChave];
+  const dest = cqEhBancada(destChave) ? { disciplina: t("cq_bancada_disc"), topico: t("cq_bancada_top") } : matResumos[destChave];
   const r = { movidos: 0, repetidos: 0, naoAchou: 0 };
   if (!dest) return r;
   const antes = {};
@@ -124,12 +124,21 @@ function gerMover(notas, destChave) {
     if (novo === null) { r.naoAchou++; return; }
     cqGravar(n.chave, novo, { disciplina: n.disciplina, topico: n.topico });
     const at = gerTexto(destChave).replace(/\s*$/, "");
-    matGravarCartoes(destChave, (at ? at + "\n" : "") + saida.bloco, { disciplina: dest.disciplina, topico: dest.topico });
+    cqGravar(destChave, (at ? at + "\n" : "") + saida.bloco, { disciplina: dest.disciplina, topico: dest.topico });
     r.movidos++;
   });
   gerRegistrar(antes);
   try { matReg("cartoes", "gerenciador: cartões movidos", r.movidos + " para " + (dest.topico || destChave) + ", " + r.repetidos + " repetido(s)"); } catch (e) {}
   return r;
+}
+
+/* O que o mover vai fazer, ANTES de fazer: quantos vão de fato, quantos o destino já tem (esses ficam
+ * onde estão) e quantos já estão na pasta de destino. */
+function gerPrevisaoMover(notas, destChave) {
+  const validos = (notas || []).filter((n) => n.chave !== destChave);
+  const jaTem = new Set(gerTexto(destChave).split("\n").filter((l) => !/^\s*[@+*]/.test(l)).map(gerFrenteChave).filter(Boolean));
+  const repetidos = validos.filter((n) => jaTem.has(gerFrenteChave(n.card.raw || n.card.front))).length;
+  return { validos, repetidos, vao: validos.length - repetidos, jaNoDestino: (notas || []).length - validos.length };
 }
 
 /* Apaga (para a lixeira, que restaura no mesmo lugar). */
@@ -210,10 +219,15 @@ function gerPintarArvore() {
     seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerFechados.add(d.disciplina) : gerFechados.delete(d.disciplina); gerPintarArvore(); };
     cab.append(seta, gerEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
     cab.onclick = () => { gerPasta = { disciplina: d.disciplina }; gerRefiltrar(); gerPintar(); };
+    cab.ondragover = (ev) => { gerSobreDisciplina(ev, d.disciplina); };
+    cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
     cx.append(cab);
     if (aberto) d.topicos.forEach((tp) => {
       const li = gerEl("div", "ger-pasta ger-top" + (gerPasta && gerPasta.chave === tp.chave ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")");
       li.onclick = () => { gerPasta = { chave: tp.chave }; gerRefiltrar(); gerPintar(); };
+      li.ondragover = (ev) => gerSobreAlvo(ev, tp.chave, li);
+      li.ondragleave = () => gerSaiuAlvo(li);
+      li.ondrop = (ev) => gerSoltar(ev, tp.chave);
       cx.append(li);
     });
   });
@@ -239,6 +253,9 @@ function gerPintarLista() {
     corpo.append(onde);
     lin.append(ck, corpo);
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); };
+    lin.draggable = true;
+    lin.ondragstart = (ev) => gerIniciarArrasto(ev, pos);
+    lin.ondragend = gerFimArrasto;
     cx.append(lin);
   });
   $("btnGerMais").hidden = gerVis.length <= gerMostrando;
@@ -288,9 +305,14 @@ function gerAviso(texto, comDesfazer) {
 
 /* ---- destino: um seletor com busca (o <select> nativo estourava a tela) ---- */
 function gerDestinosLista() {
-  return Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico))
+  const banca = { ch: CQ_BANCADA, nome: [t("cq_bancada_disc"), t("cq_bancada_top")].join(" › ") };
+  return [banca].concat(Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico))
     .sort((a, b) => String((a.r.disciplina || "") + (a.r.topico || "")).localeCompare(String((b.r.disciplina || "") + (b.r.topico || "")), "pt"))
-    .map((x) => ({ ch: x.ch, nome: [x.r.disciplina, x.r.topico].filter(Boolean).join(" › ") }));
+    .map((x) => ({ ch: x.ch, nome: [x.r.disciplina, x.r.topico].filter(Boolean).join(" › ") })));
+}
+function gerNomeDestino(ch) {
+  const d = gerDestinosLista().find((x) => x.ch === ch);
+  return d ? d.nome : String(ch);
 }
 
 function gerFecharDestinos() {
@@ -334,13 +356,11 @@ function gerEscolherDestino(ch) {
 function gerPintarDestinos() {
   const sel = $("gerDestino");
   sel.innerHTML = "";
-  Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico))
-    .sort((a, b) => String((a.r.disciplina || "") + (a.r.topico || "")).localeCompare(String((b.r.disciplina || "") + (b.r.topico || "")), "pt"))
-    .forEach((x) => {
-      const o = document.createElement("option");
-      o.value = x.ch; o.textContent = [x.r.disciplina, x.r.topico].filter(Boolean).join(" › ");
-      sel.append(o);
-    });
+  gerDestinosLista().forEach((x) => {
+    const o = document.createElement("option");
+    o.value = x.ch; o.textContent = x.nome;
+    sel.append(o);
+  });
 }
 
 function gerPintar() { gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); gerPintarAcoes(); }
@@ -364,17 +384,107 @@ function gerAcaoApagarAberto() {
   return gerAcaoApagar([gerNotas[idx]]);
 }
 
-async function gerAcaoMover() {
-  const ms = gerMarcados();
-  const dest = $("gerDestino").value;
-  if (!ms.length || !dest) return;
-  const nome = ($("gerDestino").options && $("gerDestino").selectedOptions && $("gerDestino").selectedOptions[0])
-    ? $("gerDestino").selectedOptions[0].textContent : [matResumos[dest].disciplina, matResumos[dest].topico].join(" › ");
-  if (!(await uiConfirm(t("ger_conf_mover", { n: ms.length, d: nome })))) return;
-  const r = gerMover(ms, dest);
+/* Mover {ms} para {dest}: mostra o que vai acontecer (quantos vão, quantos o destino já tem) e só
+ * move se você confirmar. É o que o botão "Mover para…" e o arrastar-e-soltar chamam. */
+async function gerConfirmarMover(ms, dest) {
+  if (!ms || !ms.length || !dest) return;
+  const prev = gerPrevisaoMover(ms, dest);
+  if (!prev.validos.length) { gerAviso(t("ger_mover_mesmo"), false); return; }
+  const msg = t("ger_conf_mover", { n: prev.validos.length, d: gerNomeDestino(dest) })
+    + (prev.repetidos ? "\n\n" + t("ger_conf_mover_rep", { r: prev.repetidos }) : "");
+  if (!(await uiConfirm(msg))) return;
+  const r = gerMover(prev.validos, dest);
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
   gerAviso(t("ger_feito_mover", { n: r.movidos, m: r.repetidos, k: r.naoAchou }), true);
+}
+
+async function gerAcaoMover() {
+  return gerConfirmarMover(gerMarcados(), $("gerDestino").value);
+}
+
+/* ---- arrastar e soltar (mouse) ----
+ * Arrastar um cartão MARCADO leva todos os marcados; um não marcado leva só ele. Soltar numa pasta da
+ * árvore pergunta e move (o mesmo mover do botão, com o mesmo desfazer). Em tela de toque o navegador
+ * não arrasta: lá vale o botão "Mover para…". */
+let gerArrasto = null, gerHoverTimer = null, gerGhost = null;
+
+function gerNotasDoArrasto(pos) {
+  if (gerSel.has(pos)) return gerMarcados();
+  const n = gerNotas[gerVis[pos]];
+  return n ? [n] : [];
+}
+
+function gerIniciarArrasto(ev, pos) {
+  const ms = gerNotasDoArrasto(pos);
+  if (!ms.length) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
+  gerArrasto = { notas: ms, pos };
+  const texto = ms.length === 1 ? t("ger_arrastando_1") : t("ger_arrastando", { n: ms.length });
+  try {
+    const dt = ev.dataTransfer;
+    dt.effectAllowed = "move";
+    dt.setData("text/plain", texto);
+    /* a pílula que acompanha o ponteiro: quantos cartões estão indo */
+    const g = document.createElement("div");
+    g.className = "ger-ghost"; g.textContent = texto;
+    document.body.append(g);
+    gerGhost = g;
+    if (dt.setDragImage) dt.setDragImage(g, 14, 14);
+  } catch (e) {}
+  try { $("dlgGerCartoes").classList.add("ger-arrastando"); } catch (e) {}
+  gerPintarMarcaArrasto(true);
+}
+
+/* as linhas que estão sendo arrastadas ficam esmaecidas */
+function gerPintarMarcaArrasto(ligar) {
+  const cx = $("gerLista");
+  Array.from(cx.children || []).forEach((el, i) => {
+    if (el.classList) el.classList.toggle("ger-indo", !!ligar && !!gerArrasto && gerArrasto.notas.some((n) => n === gerNotas[gerVis[i]]));
+  });
+}
+
+function gerFimArrasto() {
+  gerArrasto = null;
+  if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; }
+  try { if (gerGhost && gerGhost.parentNode) gerGhost.parentNode.removeChild(gerGhost); } catch (e) {}
+  gerGhost = null;
+  try { $("dlgGerCartoes").classList.remove("ger-arrastando"); } catch (e) {}
+  gerPintarMarcaArrasto(false);
+  const filhos = Array.from($("gerArvore").children || []);
+  filhos.forEach((el) => { if (el.classList) el.classList.remove("ger-alvo", "ger-alvo-no"); });
+}
+
+/* só é alvo uma pasta que receba ALGUM dos cartões (soltar na própria pasta não faz nada) */
+function gerAlvoValido(chave) {
+  return !!gerArrasto && !!chave && gerArrasto.notas.some((n) => n.chave !== chave);
+}
+
+function gerSobreAlvo(ev, chave, el) {
+  if (!gerArrasto) return;
+  const ok = gerAlvoValido(chave);
+  if (ok && ev && ev.preventDefault) ev.preventDefault();    /* é o preventDefault que permite soltar */
+  try { if (ev && ev.dataTransfer) ev.dataTransfer.dropEffect = ok ? "move" : "none"; } catch (e) {}
+  if (el && el.classList) { el.classList.toggle("ger-alvo", ok); el.classList.toggle("ger-alvo-no", !ok); }
+}
+
+function gerSaiuAlvo(el) {
+  if (el && el.classList) el.classList.remove("ger-alvo", "ger-alvo-no");
+}
+
+/* Disciplina fechada não mostra os tópicos: segurando o cartão em cima dela por um instante, ela abre. */
+function gerSobreDisciplina(ev, disc) {
+  if (!gerArrasto || !gerFechados.has(disc)) return;
+  if (ev && ev.preventDefault) ev.preventDefault();
+  if (gerHoverTimer) clearTimeout(gerHoverTimer);
+  gerHoverTimer = setTimeout(() => { gerHoverTimer = null; gerFechados.delete(disc); gerPintarArvore(); }, 600);
+}
+
+function gerSoltar(ev, chave) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const ms = gerArrasto && gerArrasto.notas;
+  gerFimArrasto();
+  if (!ms || !chave) return Promise.resolve();
+  return gerConfirmarMover(ms, chave);
 }
 
 function gerAcaoEditar() {

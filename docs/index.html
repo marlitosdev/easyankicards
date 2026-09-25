@@ -4169,6 +4169,14 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-pop #gerPopLista{overflow:auto;min-height:0}
 .ger-pop-item{padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
 .ger-pop-item:hover{background:rgba(46,158,91,.18)}
+/* arrastar e soltar cartões nas pastas: a linha some um pouco, a pílula acompanha o ponteiro e a pasta
+ * sob o ponteiro ganha fundo e borda */
+.ger-item{cursor:grab}
+.ger-item.ger-indo{opacity:.45}
+.ger-ghost{position:fixed;top:-300px;left:-300px;padding:6px 14px;border-radius:999px;background:var(--acao);color:#fff;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none}
+#dlgGerCartoes.ger-arrastando .ger-top{outline:1px dashed rgba(127,127,127,.55);outline-offset:-1px}
+.ger-pasta.ger-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
+.ger-pasta.ger-alvo-no{opacity:.45;cursor:not-allowed}
 .ger-rodape{align-items:center}
 .ger-rodape .nota{margin-right:auto}
 .ger-pasta{padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1.35}
