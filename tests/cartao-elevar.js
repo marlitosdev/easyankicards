@@ -504,6 +504,39 @@ async function testes() {
     ok(a.cePassoAtual() === 1 && a.cePedidoAtual() === null, "E12j reabrir a janela comeca de novo, no passo 1");
   }
 
+  /* ---- E13: cada botao da janela tem explicacao e retorno visual ---- */
+  {
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const i18n = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    const ini = html.indexOf('<dialog id="dlgCartElevar"');
+    const dlgHtml = html.slice(ini, html.indexOf("</dialog>", ini));
+    const ids = [...dlgHtml.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
+    const { a } = montar();
+    const faltam = ids.filter((id) => !a.CE_DICAS[id]);
+    ok(ids.length >= 12 && faltam.length === 0, "E13a todo botao do Elevar tem explicacao (falta: " + faltam.join(",") + ")");
+    ok(Object.keys(a.CE_DICAS).every((id) => dlgHtml.indexOf('id="' + id + '"') >= 0), "E13b nenhuma explicacao aponta para botao que nao existe");
+    const semIdioma = Object.values(a.CE_DICAS).filter((k) => i18n.split('"' + k + '": ').length - 1 < 2 || a.t(k).length < 15);
+    ok(semIdioma.length === 0, "E13c explicacoes em portugues e ingles, com texto de verdade: " + semIdioma.join(","));
+    a.ceAbrir();
+    const mal = Object.keys(a.CE_DICAS).filter((id) => { const e = a.$(id); return !(e._dicaLigada === true && e._ouv.mouseenter.length === 1 && e.getAttribute("aria-description") === a.t(a.CE_DICAS[id])); });
+    ok(mal.length === 0, "E13d cada botao recebeu o balao e o texto para leitor de tela: " + mal.join(","));
+    a.$("dlgCartElevar").close(); a.ceAbrir();
+    ok(Object.keys(a.CE_DICAS).every((id) => a.$(id)._ouv.mouseenter.length === 1), "E13e reabrir nao liga o balao duas vezes");
+    a.segurarAdiados();
+    a.$("btnCeLimpar").onclick();
+    ok(cls(a.$("btnCeLimpar"), "btn-feito"), "E13f 'limpar marcacao' mostra o retorno");
+    a.$("btnCeMarcar").onclick();
+    ok(cls(a.$("btnCeMarcar"), "btn-feito"), "E13g 'marcar os piores' tambem");
+    a.$("btnCeMais").onclick();
+    ok(cls(a.$("btnCeMais"), "btn-feito"), "E13h 'mostrar mais' tambem");
+    await a.$("btnCePrompt").onclick();
+    ok(a.$("btnCePrompt").dataset.feito === "Prompt copiado" && a.$("btnCePrompt").textContent === "Prompt copiado", "E13i o retorno do 'copiar' diz o que aconteceu, sem repetir o ✓ (ele vem do CSS): " + a.$("btnCePrompt").textContent);
+    a.$("btnCeCopiar").onclick();
+    ok(cls(a.$("btnCeCopiar"), "btn-feito"), "E13j 'copiar' da caixa do prompt tambem");
+    a.soltarAdiados();
+    ok(!cls(a.$("btnCeLimpar"), "btn-feito") && !cls(a.$("btnCeCopiar"), "btn-feito") && /Copiar o prompt de novo/.test(a.$("btnCePrompt").textContent), "E13k o retorno some e o texto do botao volta");
+  }
+
   /* ---- E11: o modulo esta no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");

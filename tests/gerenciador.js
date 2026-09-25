@@ -603,6 +603,261 @@ async function testes() {
     }
   }
 
+  /* ---- G17: pastas — criar, pasta vazia, mover a pasta inteira, marcar todos ---- */
+  {
+    const ev = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { dados: {}, setData(k, v) { this.dados[k] = v; }, setDragImage(el) { this.img = el; }, effectAllowed: "", dropEffect: "" } });
+    const linhaTop = (a, nome) => achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => e.textContent.indexOf(nome) === 0);
+    const M = () => { const m = montar(); m.a.gerAbrir(); return m; };
+    const responder = async (a, valor) => {
+      for (let i = 0; i < 8 && !a.$("uiPromptInput"); i++) await Promise.resolve();
+      await Promise.resolve();
+      if (valor === null) { a.uiModalResponder(false); return; }
+      a.$("uiPromptInput").value = valor;
+      a.uiModalResponder(true);
+    };
+
+    /* o nucleo */
+    {
+      const { a } = M();
+      const antesMat = JSON.stringify(a.matResumosAtual());
+      ok(a.gerCriarPasta("", "x").motivo === "vazia" && a.gerCriarPasta("Disc", "   ").motivo === "vazia", "G17a disciplina e nome sao obrigatorios");
+      ok(a.gerCriarPasta("D".repeat(81), "x").motivo === "longa" && a.gerCriarPasta("d", "T".repeat(121)).motivo === "longa", "G17b nome grande demais e' recusado");
+      const r = a.gerCriarPasta("  Revisão   final ", "Pegadinhas  do › ISS :: hoje");
+      ok(r.ok && r.existe === false && r.nome === "Revisão final › Pegadinhas do - ISS - hoje" && a.gerPastasCriadas().length === 1, "G17c cria a pasta e arruma o nome (espacos, '›' e '::'): " + JSON.stringify(r));
+      ok(JSON.stringify(a.matResumosAtual()) === antesMat, "G17d criar a pasta NAO toca no material nem no edital (so' o registro da pasta)");
+      const r2 = a.gerCriarPasta("REVISAO FINAL", "pegadinhas do - iss - hoje");
+      ok(r2.ok && r2.existe === true && r2.chave === r.chave && a.gerPastasCriadas().length === 1, "G17e mesmo nome (sem diferenciar acento ou caixa) nao duplica: abre a que existe");
+      const r3 = a.gerCriarPasta("Trib", "ISS");
+      ok(r3.ok && r3.existe === true && a.gerPastasCriadas().length === 1, "G17f pasta que ja tem cartoes e' so' aberta, sem virar pasta vazia");
+      a.matGravarCartoes(r.chave, "Pergunta? :: Resposta", { disciplina: "Revisão final", topico: "Pegadinhas do - ISS - hoje" });
+      a.gerAbrir();
+      ok(a.gerPastasVazias(a.gerNotasAtual()).length === 0 && a.gerPastasCriadas().length === 1, "G17c2 pasta criada que ja recebeu cartao nao conta como vazia (mas o registro dela continua)");
+      ok(a.gerPastaInfo(r.chave).topico === "Pegadinhas do - ISS - hoje" && a.gerPastaInfo("nao-existe") === null, "G17g gerPastaInfo acha a pasta criada aqui (e devolve null para o que nao existe)");
+    }
+    /* a arvore, o destino, o mover para a pasta vazia e o desfazer */
+    {
+      const { a, iss } = M();
+      const r = a.gerCriarPasta("Revisão", "Pegadinhas");
+      a.gerAbrir();
+      const linha = linhaTop(a, "Pegadinhas");
+      ok(!!linha && /\(0\)/.test(linha.textContent) && cls(linha, "ger-vazia") && !linha.draggable, "G17h a pasta nova aparece na arvore como vazia (0) e nao e' arrastavel");
+      ok(achar(a.$("gerArvore"), (e) => cls(e, "ger-disc")).some((e) => /Revisão/.test(e.textContent)), "G17i a disciplina nova tambem aparece");
+      ok(achar(a.$("gerDestino"), (e) => e.tag === "option").length === 5 && a.gerDestinosLista().some((d) => d.ch === r.chave && /Revisão › Pegadinhas/.test(d.nome)), "G17j a pasta vazia e' destino possivel (seletor e busca)");
+      linha.onclick();
+      ok(a.gerPastaAtual().chave === r.chave && /Pasta vazia/.test(a.$("gerLista").textContent), "G17k abrir a pasta vazia explica o que fazer");
+      /* arrastar um cartao para a pasta vazia */
+      a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
+      const todas = achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta"));
+      todas[0].onclick();
+      const i = linhasDaLista(a).findIndex((l) => /alíquota/.test(l.textContent));
+      linhasDaLista(a)[i].ondragstart(ev());
+      const alvo = linhaTop(a, "Pegadinhas");
+      const eo = ev(); alvo.ondragover(eo);
+      ok(eo.prevented === true && cls(alvo, "ger-alvo"), "G17l a pasta vazia aceita soltar");
+      await conduzir(a, alvo.ondrop(ev()));
+      const mat = a.matResumosAtual()[r.chave];
+      ok(mat && mat.disciplina === "Revisão" && mat.topico === "Pegadinhas" && /alíquota máxima/.test(mat.cartoes) && !/alíquota/.test(a.matResumosAtual()[iss].cartoes), "G17m o primeiro cartao faz o topico nascer no material, com a disciplina e o nome escolhidos");
+      const linha2 = linhaTop(a, "Pegadinhas");
+      ok(linha2 && /\(1\)/.test(linha2.textContent) && !cls(linha2, "ger-vazia") && linha2.draggable === true, "G17n a pasta deixa de ser vazia e vira arrastavel");
+      await conduzir(a, a.$("btnGerMsgDesfazer").onclick());
+      ok(/alíquota/.test(a.matResumosAtual()[iss].cartoes) && !/alíquota/.test((a.matResumosAtual()[r.chave] || {}).cartoes || ""), "G17o desfazer devolve o cartao e a pasta volta a ser vazia");
+      ok(!!linhaTop(a, "Pegadinhas") && cls(linhaTop(a, "Pegadinhas"), "ger-vazia"), "G17p (a pasta continua existindo, vazia)");
+    }
+    /* remover pasta vazia */
+    {
+      const { a } = M();
+      const r = a.gerCriarPasta("Revisão", "Temporaria");
+      a.gerAbrir();
+      const x = achar(linhaTop(a, "Temporaria"), (e) => cls(e, "ger-x"))[0];
+      ok(!!x && x.title.length > 0, "G17q a pasta vazia tem o x de remover");
+      linhaTop(a, "Temporaria").onclick();
+      ok(a.gerPastaAtual() && a.gerPastaAtual().chave === r.chave, "G17q2 (abriu a pasta vazia)");
+      let parou = false;
+      x.onclick({ stopPropagation() { parou = true; } });
+      ok(!linhaTop(a, "Temporaria") && a.gerPastasCriadas().length === 0 && a.gerPastaAtual() === null && parou === true, "G17r o x remove a pasta vazia, fecha a pasta aberta e nao deixa o clique chegar na linha");
+      ok(a.gerRemoverPastaVazia(a.matChave("Trib", "ISS")) === false && a.gerNotasAtual().length > 0, "G17s remover NAO mexe em pasta com cartoes");
+      const r2 = a.gerCriarPasta("Revisão", "Com cartao");
+      a.matGravarCartoes(r2.chave, "Pergunta? :: Resposta", { disciplina: "Revisão", topico: "Com cartao" });
+      ok(a.gerRemoverPastaVazia(r2.chave) === false && /Pergunta/.test(a.matResumosAtual()[r2.chave].cartoes), "G17t pasta que ja recebeu cartao nao e' removida como vazia");
+    }
+    /* mover a PASTA inteira, arrastando a linha da arvore */
+    {
+      const { a, iss, iptu } = M();
+      const li = linhaTop(a, "ISS");
+      ok(li.draggable === true && typeof li.ondragstart === "function", "G17u a linha de um topico com cartoes e' arrastavel");
+      a.$("gerBusca").value = "alíquota"; a.$("gerBusca").oninput();
+      const e1 = ev(); linhaTop(a, "ISS").ondragstart(e1);
+      ok(a.gerArrastoAtual().notas.length === 3 && /Movendo 3 cartões/.test(e1.dataTransfer.dados["text/plain"]), "G17v arrastar a pasta leva TODOS os cartoes dela (mesmo com filtro na lista)");
+      const ep = ev(); linhaTop(a, "ISS").ondragover(ep);
+      ok(ep.prevented === false, "G17w soltar a pasta nela mesma nao vale");
+      await conduzir(a, linhaTop(a, "IPTU").ondrop(ev()));
+      ok(/3 movido/.test(a.$("gerMsg").textContent) && !/Qual/.test(a.matResumosAtual()[iss].cartoes) && a.parseText(a.matResumosAtual()[iptu].cartoes, []).cards.length === 4, "G17x os 3 cartoes da pasta foram para o destino: " + a.$("gerMsg").textContent);
+      a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
+      ok(!linhaTop(a, "ISS"), "G17y a pasta de origem sai da arvore quando fica sem cartoes");
+    }
+    /* marcar todos (alem dos 60 a vista) */
+    {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
+      const ch = a.matChave("D", "Grande");
+      a.matGravarCartoes(ch, Array.from({ length: 70 }, (_, i) => "Pergunta " + i + " zz" + i + " yy" + i + " ww" + i + " :: r").join("\n"), { disciplina: "D", topico: "Grande" });
+      a.gerAbrir();
+      ok(linhasDaLista(a).length === 60 && a.$("btnGerMarcarTodos").hidden === false && /marcar todos \(70\)/.test(a.$("btnGerMarcarTodos").textContent), "G17z o botao 'marcar todos' diz quantos");
+      a.$("btnGerMarcar").onclick();
+      ok(a.gerSelAtual().size === 60, "G17z1 'marcar os visiveis' pega so' os 60 a vista");
+      a.$("btnGerMarcarTodos").onclick();
+      ok(a.gerSelAtual().size === 70 && a.$("gerAcoes").hidden === false && /70 marcado/.test(a.$("gerSel").textContent), "G17z2 'marcar todos' pega a lista toda, alem dos 60");
+      a.$("gerBusca").value = "Pergunta 6"; a.$("gerBusca").oninput();
+      ok(a.$("btnGerMarcarTodos").hidden === false && /marcar todos \(11\)/.test(a.$("btnGerMarcarTodos").textContent), "G17z3 respeita a busca (Pergunta 6, 60..69 => 11)");
+      a.$("gerBusca").value = "Pergunta 69"; a.$("gerBusca").oninput();
+      ok(a.$("btnGerMarcarTodos").hidden === true, "G17z4 com um so' cartao o botao some");
+    }
+    /* a Bancada nao e' disciplina: nem preenche nem e' sugerida */
+    {
+      const { a } = montar();
+      a.$("editor").value = "Cartão da bancada? :: Resposta da bancada";
+      a.gerAbrir();
+      linhaTop(a, "Texto do editor").onclick();
+      a.$("btnGerNovaPasta").onclick();
+      ok(a.$("gerNpDisc").value === "", "G17y0 com a Bancada aberta a disciplina NAO vem preenchida com 'Bancada': " + a.$("gerNpDisc").value);
+      const sug = achar(a.$("gerNpDiscLista"), (e) => e.tag === "option").map((o) => o.value);
+      ok(sug.indexOf("Bancada") < 0 && sug.indexOf("Trib") >= 0, "G17y1 'Bancada' nao entra nas sugestoes de disciplina: " + sug.join("|"));
+      a.$("btnGerNpCancelar").onclick();
+    }
+    /* a janelinha de nova pasta (a tela) */
+    {
+      const { a } = M();
+      const dlg = a.$("dlgGerNovaPasta");
+      linhaTop(a, "ISS").onclick();
+      a.$("btnGerNovaPasta").onclick();
+      ok(dlg.open === true && a.$("gerNpDisc").value === "Trib" && a.$("gerNpTop").value === "", "G17z5 abre uma janelinha com a disciplina da pasta aberta ja preenchida");
+      const sugestoes = achar(a.$("gerNpDiscLista"), (e) => e.tag === "option").map((o) => o.value);
+      ok(sugestoes.indexOf("Trib") >= 0 && sugestoes.indexOf("Bancada") < 0, "G17z5a as disciplinas existentes sao sugeridas (a Bancada nao e' disciplina): " + sugestoes.join("|"));
+      /* nome vazio: erro dentro da janela, sem fechar nem criar */
+      a.$("gerNpTop").value = "   ";
+      a.$("btnGerNpOk").onclick();
+      ok(dlg.open === true && /Nada foi criado/.test(a.$("gerNpErro").textContent) && a.gerPastasCriadas().length === 0, "G17z6 nome vazio: o erro aparece na propria janela, que continua aberta");
+      a.$("gerNpTop").value = "T".repeat(121);
+      a.$("btnGerNpOk").onclick();
+      ok(dlg.open === true && /grande demais/.test(a.$("gerNpErro").textContent), "G17z6b nome grande demais tambem e' explicado la dentro");
+      /* criar */
+      a.$("gerNpDisc").value = "Revisão"; a.$("gerNpTop").value = "Pegadinhas";
+      a.$("btnGerNpOk").onclick();
+      ok(dlg.open === false && a.gerPastasCriadas().length === 1 && a.gerPastaAtual() && /Pegadinhas/.test(a.$("gerMsg").textContent) && /criada/.test(a.$("gerMsg").textContent) && /Pasta vazia/.test(a.$("gerLista").textContent), "G17z7 criar: a janelinha fecha, a pasta abre e o aviso diz o que fazer: " + a.$("gerMsg").textContent);
+      ok(achar(a.$("gerDestino"), (e) => e.tag === "option").length === 5 && a.gerDestinosLista().some((d) => /Revisão › Pegadinhas/.test(d.nome)), "G17z7b criar pela tela ja coloca a pasta na lista de destinos");
+      /* cancelar */
+      a.$("btnGerNovaPasta").onclick();
+      a.$("gerNpDisc").value = "Outra"; a.$("gerNpTop").value = "Cancelada";
+      a.$("gerNpTop").value = "   "; a.$("btnGerNpOk").onclick();
+      ok(/Nada foi criado/.test(a.$("gerNpErro").textContent), "G17z7c (o erro estava na tela)");
+      a.$("gerNpTop").value = "Cancelada";
+      a.$("btnGerNpCancelar").onclick();
+      a.$("btnGerNovaPasta").onclick();
+      ok(a.$("gerNpTop").value === "" && a.$("gerNpErro").textContent === "", "G17z7d reabrir a janelinha limpa o nome e o erro da vez anterior");
+      a.$("btnGerNpCancelar").onclick();
+      a.$("btnGerNovaPasta").onclick();
+      a.$("gerNpDisc").value = "Outra"; a.$("gerNpTop").value = "Cancelada";
+      a.$("btnGerNpCancelar").onclick();
+      ok(dlg.open === false && a.gerPastasCriadas().length === 1, "G17z8 cancelar fecha sem criar");
+      /* Enter confirma */
+      a.$("btnGerNovaPasta").onclick();
+      a.$("gerNpDisc").value = "Revisão"; a.$("gerNpTop").value = "Por enter";
+      const ent = { key: "Enter", prevented: false, preventDefault() { this.prevented = true; } };
+      a.$("gerNpTop").onkeydown(ent);
+      ok(dlg.open === false && a.gerPastasCriadas().length === 2 && ent.prevented === true, "G17z9 Enter no campo confirma");
+      a.$("btnGerNovaPasta").onclick();
+      a.$("gerNpDisc").value = "Revisão"; a.$("gerNpTop").value = "Outra tecla";
+      a.$("gerNpDisc").onkeydown({ key: "a", preventDefault() {} });
+      ok(dlg.open === true && a.gerPastasCriadas().length === 2, "G17z9b outra tecla nao confirma");
+      a.$("btnGerNpCancelar").onclick();
+      /* mesmo nome: abre a que existe */
+      a.$("btnGerNovaPasta").onclick();
+      a.$("gerNpDisc").value = "revisao"; a.$("gerNpTop").value = "PEGADINHAS";
+      a.$("btnGerNpOk").onclick();
+      ok(dlg.open === false && a.gerPastasCriadas().length === 2 && /já existe/.test(a.$("gerMsg").textContent), "G17z9c pasta com o mesmo nome: abre a que existe (sem duplicar)");
+    }
+  }
+
+  /* ---- G18: cada controle tem EXPLICACAO e retorno visual ---- */
+  {
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const i18n = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    const dialogo = (id) => { const a = html.indexOf('<dialog id="' + id + '"'); return html.slice(a, html.indexOf("</dialog>", a)); };
+    const botoes = (h) => [...h.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
+    const { a } = montar();
+    /* 1. nenhum botao sem explicacao (e nenhuma explicacao sem botao) */
+    const ids = botoes(dialogo("dlgGerCartoes")).concat(botoes(dialogo("dlgGerNovaPasta")));
+    const faltam = ids.filter((id) => !a.GER_DICAS[id]);
+    ok(ids.length >= 17 && faltam.length === 0, "G18a todo botao das janelas do gerenciador tem explicacao (falta: " + faltam.join(",") + ")");
+    const sobram = Object.keys(a.GER_DICAS).filter((id) => html.indexOf('id="' + id + '"') < 0);
+    ok(sobram.length === 0, "G18b nenhuma explicacao aponta para botao que nao existe: " + sobram.join(","));
+    /* 2. o texto existe nos dois idiomas e explica de verdade (nao e' so' o nome do botao) */
+    const chaves = Object.values(a.GER_DICAS).concat(["ger_tip_linha", "ger_tip_caixa", "ger_tip_disciplina", "ger_tip_seta", "ger_tip_pasta", "ger_tip_pasta_vazia", "ger_tip_destino"]);
+    const semIdioma = chaves.filter((k) => i18n.split('"' + k + '": ').length - 1 < 2);
+    ok(semIdioma.length === 0, "G18c toda explicacao existe em portugues E ingles: " + semIdioma.join(","));
+    const curtas = chaves.filter((k) => a.t(k, { d: "X" }).length < 20 || a.t(k, { d: "X" }) === k);
+    ok(curtas.length === 0, "G18d a explicacao diz o que o botao faz (nao e' vazia nem so' a chave): " + curtas.join(","));
+    /* 3. ligado ao abrir, uma vez so' */
+    a.gerAbrir();
+    const mal = Object.keys(a.GER_DICAS).filter((id) => { const e = a.$(id); return !(e._dicaLigada === true && e._ouv && e._ouv.mouseenter && e._ouv.mouseenter.length === 1 && e.getAttribute("aria-description") === a.t(a.GER_DICAS[id])); });
+    ok(mal.length === 0, "G18e cada controle recebeu o balao (passar o mouse) e o texto para leitor de tela: " + mal.join(","));
+    a.$("btnGerFechar").setAttribute("aria-description", "texto velho");
+    a.$("dlgGerCartoes").close(); a.gerAbrir();
+    ok(Object.keys(a.GER_DICAS).every((id) => a.$(id)._ouv.mouseenter.length === 1), "G18f reabrir a janela nao liga o balao duas vezes");
+    ok(a.$("btnGerFechar").getAttribute("aria-description") === a.t("ger_tip_fechar"), "G18f2 reabrir atualiza o texto da explicacao (troca de idioma)");
+    ok(JSON.stringify(a.dicasDosBotoes({ naoExisteEsteId: "ger_tip_fechar", btnGerFechar: "ger_tip_fechar" })) === JSON.stringify(["naoExisteEsteId"]), "G18f3 a funcao devolve os ids que nao achou (nada some em silencio)");
+    /* 4. o balao aparece DENTRO da janela aberta (no <body> ele ficaria atras dela) */
+    const btn = a.$("btnGerFechar");
+    ok(a.tipHospedeiro(btn) === a.$("dlgGerCartoes"), "G18g o balao de um botao da janela pendura-se na propria janela");
+    btn._ouv.mouseenter[0]();
+    const balao = achar(a.$("dlgGerCartoes"), (e) => cls(e, "tipbox"));
+    ok(balao.length === 1 && balao[0].textContent === a.t("ger_tip_fechar"), "G18h passar o mouse mostra a explicacao do botao dentro da janela");
+    btn._ouv.mouseleave[0]();
+    ok(achar(a.$("dlgGerCartoes"), (e) => cls(e, "tipbox")).length === 0, "G18i tirar o mouse some com o balao");
+    ok(a.tipHospedeiro(a.$("btnApkg")) !== a.$("dlgGerCartoes"), "G18j botao fora de janela continua com o balao no corpo da pagina");
+    const dlg = a.$("dlgGerCartoes"); dlg.close();
+    ok(a.tipHospedeiro(btn) !== dlg, "G18k janela fechada nao hospeda balao");
+    a.gerAbrir();
+    /* 5. retorno visual: o botao mostra que agiu */
+    a.segurarAdiados();
+    a.$("btnGerMarcar").onclick();
+    ok(cls(a.$("btnGerMarcar"), "btn-feito"), "G18l 'marcar os visiveis' mostra o retorno (btn-feito)");
+    a.$("btnGerLimpar").onclick();
+    ok(cls(a.$("btnGerLimpar"), "btn-feito"), "G18m 'limpar' tambem");
+    a.$("btnGerMarcarTodos").onclick();
+    ok(cls(a.$("btnGerMarcarTodos"), "btn-feito"), "G18n 'marcar todos' tambem");
+    a.$("btnGerEditar").onclick();
+    ok(cls(a.$("btnGerEditar"), "btn-feito"), "G18o 'editar' tambem");
+    a.$("btnGerMais").onclick();
+    ok(cls(a.$("btnGerMais"), "btn-feito"), "G18p 'mostrar mais' tambem");
+    a.soltarAdiados();
+    ok(!cls(a.$("btnGerMarcar"), "btn-feito") && !cls(a.$("btnGerEditar"), "btn-feito"), "G18q o retorno some depois de um instante");
+    /* repetir nao empilha */
+    a.segurarAdiados();
+    a.$("btnGerMarcar").onclick(); a.$("btnGerMarcar").onclick();
+    a.soltarAdiados();
+    ok(!cls(a.$("btnGerMarcar"), "btn-feito"), "G18r apertar duas vezes seguidas nao deixa o retorno preso");
+    /* 6. linhas, caixas, pastas e itens do seletor explicam */
+    a.gerAbrir();
+    const lin = linhasDaLista(a)[0];
+    ok(/Arraste/.test(lin.title) && achar(lin, (e) => e.tag === "input")[0].title.length > 10, "G18s a linha do cartao e a caixa de marcar explicam o clique e o arrastar");
+    const topo = achar(a.$("gerArvore"), (e) => cls(e, "ger-top"))[0];
+    ok(/arrastad/.test(topo.title), "G18t a pasta explica que aceita cartoes arrastados");
+    a.gerCriarPasta("Rev", "Vazia"); a.gerAbrir();
+    const vz = achar(a.$("gerArvore"), (e) => cls(e, "ger-vazia"))[0];
+    ok(/Pasta vazia/.test(vz.title), "G18u a pasta vazia explica o que e'");
+    const disc = achar(a.$("gerArvore"), (e) => cls(e, "ger-disc"))[0];
+    ok(/disciplina/.test(disc.title) && disc.children[0].title.length > 5, "G18v a disciplina e a setinha explicam");
+    achar(a.$("gerLista"), (e) => e.tag === "input")[0].checked = true; achar(a.$("gerLista"), (e) => e.tag === "input")[0].onchange();
+    a.$("btnGerMover").onclick();
+    const item = achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item"))[0];
+    ok(/Mover os cartões marcados para/.test(item.title) && item.title.indexOf(item.textContent) >= 0, "G18w cada destino do seletor diz para onde vai: " + item.title);
+    /* 7. CSS do retorno */
+    ok(/\.btn-feito::before\{content:"✓ "/.test(html) && /\.btn-min\[aria-pressed="true"\]\{border-color:var\(--acao\)/.test(html), "G18x o CSS mostra o ✓ do retorno e o botao ligado (ampliar)");
+    a.$("btnGerAmpliar").onclick();
+    ok(a.$("btnGerAmpliar").getAttribute("aria-pressed") === "true", "G18y o botao de ampliar fica marcado como ligado");
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
@@ -611,6 +866,7 @@ async function testes() {
     ok(/"gerenciador\.js"/.test(sw), "G13a o modulo nao esta no cache offline");
     ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column/.test(html) && /\.ger-grande\{width:98vw/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e modo ampliado no CSS");
     ok(/\.ger-pasta\.ger-alvo\{/.test(html) && /\.ger-ghost\{/.test(html) && /\.ger-item\.ger-indo\{/.test(html), "G13d CSS do destaque da pasta, da pilula e da linha esmaecida");
+    ok(/id="gerNpErro" role="alert"/.test(html) && /id="btnGerNovaPasta"/.test(html) && /id="btnGerMarcarTodos"/.test(html) && /\.ger-vazia\{/.test(html) && /\.ger-x\{/.test(html), "G13e botoes de nova pasta e marcar todos, e o estilo da pasta vazia");
     ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
   }
 

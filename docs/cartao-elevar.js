@@ -336,6 +336,14 @@ function ceDesfazerLote() {
 let ceForcadas = null, ceNotas = [], ceSel = new Set(), ceMostrando = CE_LIM.visiveis, ceConf = null, cePedido = null;
 let cePasso = 1, ceRodada = 1, ceStats = { total: 0, fracos: 0, medios: 0, bons: 0, escondidos: 0 }, ceIncluirMedios = false;
 
+/* A explicação de cada botão desta janela: id → chave do texto (o teste confere que nenhum fica de fora). */
+const CE_DICAS = {
+  btnCeMarcar: "ce_tip_marcar", btnCeLimpar: "ce_tip_limpar", btnCeMais: "ce_tip_mais", btnCeMostrarRev: "ce_tip_mostrar_rev",
+  btnCePrompt: "ce_tip_prompt", btnCeCopiar: "ce_tip_copiar", btnCeColarClip: "ce_tip_colar", btnCeConferir: "ce_tip_conferir",
+  btnCeAplicar: "ce_tip_aplicar", btnCeNova: "ce_tip_nova", btnCeDescartar: "ce_tip_descartar",
+  btnCeDesfazer: "ce_tip_desfazer", btnCeFechar: "ce_tip_fechar",
+};
+
 function ceEl(tag, cls, txt) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -394,7 +402,7 @@ function ceFlash(id, texto) {
   b.classList.add("btn-feito");
   const antes = b.dataset.rotulo || b.textContent;
   b.dataset.rotulo = antes;
-  b.textContent = "✓ " + texto;
+  b.textContent = texto;               /* o "✓" vem do CSS (.btn-feito::before) */
   setTimeout(() => { b.classList.remove("btn-feito"); b.textContent = b.dataset.rotulo; }, 1600);
 }
 
@@ -632,6 +640,7 @@ function ceAbrir(opc) {
   ceCalcular();
   ceMarcarPiores();
   ceStatus(ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada"), ceNotas.length ? "" : "ok");
+  dicasDosBotoes(CE_DICAS);
   abrirModal("dlgCartElevar");
   try { matReg("cartoes", "elevar ao padrão aberto", ceNotas.length + " na fila"); } catch (e) {}
 }
@@ -643,11 +652,11 @@ if (typeof document !== "undefined" && $("btnCartElevar")) {
     if (cePasso > 1 && !(await uiConfirm(t("ce_conf_fechar")))) return;
     $("dlgCartElevar").close();
   };
-  if ($("btnCeMais")) $("btnCeMais").onclick = () => { ceMostrando += CE_LIM.visiveis; cePintar(); };
-  if ($("btnCeMarcar")) $("btnCeMarcar").onclick = ceMarcarPiores;
-  if ($("btnCeLimpar")) $("btnCeLimpar").onclick = () => { if (cePasso > 1) return; ceSel = new Set(); cePintar(); };
+  if ($("btnCeMais")) $("btnCeMais").onclick = () => { ceMostrando += CE_LIM.visiveis; cePintar(); flashBotao($("btnCeMais")); };
+  if ($("btnCeMarcar")) $("btnCeMarcar").onclick = () => { ceMarcarPiores(); if (cePasso === 1) flashBotao($("btnCeMarcar")); };
+  if ($("btnCeLimpar")) $("btnCeLimpar").onclick = () => { if (cePasso > 1) return; ceSel = new Set(); cePintar(); flashBotao($("btnCeLimpar")); };
   if ($("btnCePrompt")) $("btnCePrompt").onclick = () => (cePasso === 1 ? ceGerarPrompt() : ceCopiarPrompt());
-  if ($("btnCeCopiar")) $("btnCeCopiar").onclick = ceCopiarPrompt;
+  if ($("btnCeCopiar")) $("btnCeCopiar").onclick = () => { flashBotao($("btnCeCopiar")); return ceCopiarPrompt(); };
   if ($("btnCeColarClip")) $("btnCeColarClip").onclick = ceColarDaArea;
   if ($("btnCeConferir")) $("btnCeConferir").onclick = ceConferirColagem;
   if ($("btnCeAplicar")) $("btnCeAplicar").onclick = ceAplicar;

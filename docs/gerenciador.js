@@ -17,9 +17,24 @@
 const GER_LIM = { visiveis: 60 };
 const GER_FILTROS = ["todos", "abaixo", "repetidos", "sem_artigo", "basico", "cloze", "mc"];
 const GER_CHAVE_RECIBO = "eac_ger_recibo";
+const GER_CHAVE_PASTAS = "eac_ger_pastas";
+
+/* A explicação de CADA controle das duas janelas (o gerenciador e a de nova pasta): id → chave do texto.
+ * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
+const GER_DICAS = {
+  btnGerAmpliar: "ger_tip_ampliar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
+  btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos",
+  btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
+  btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
+  btnGerMsgDesfazer: "ger_tip_msg_desfazer", btnGerMover: "ger_tip_mover", btnGerApagar: "ger_tip_apagar",
+  btnGerMelhorar: "ger_tip_melhorar", btnGerDesfazer: "ger_tip_desfazer", btnGerFechar: "ger_tip_fechar",
+  btnGerNpOk: "ger_tip_np_ok", btnGerNpCancelar: "ger_tip_np_cancelar",
+};
 
 /* Árvore disciplina › tópico, com contagem. */
-function gerArvore(notas) {
+/* `vazias`: pastas criadas aqui que ainda não têm cartão — sem elas a árvore (montada só dos cartões)
+ * nunca mostraria uma pasta nova. */
+function gerArvore(notas, vazias) {
   const d = new Map();
   (notas || []).forEach((n) => {
     const nd = n.disciplina || "—", nt = n.topico || "—";
@@ -27,6 +42,12 @@ function gerArvore(notas) {
     const x = d.get(nd); x.total++;
     if (!x.topicos.has(n.chave)) x.topicos.set(n.chave, { topico: nt, chave: n.chave, total: 0 });
     x.topicos.get(n.chave).total++;
+  });
+  (vazias || []).forEach((p) => {
+    const nd = p.disciplina || "—";
+    if (!d.has(nd)) d.set(nd, { disciplina: nd, total: 0, topicos: new Map() });
+    const x = d.get(nd);
+    if (!x.topicos.has(p.chave)) x.topicos.set(p.chave, { topico: p.topico || "—", chave: p.chave, total: 0, vazia: true });
   });
   const cmp = (a, b) => String(a).localeCompare(String(b), "pt");
   return [...d.values()].sort((a, b) => cmp(a.disciplina, b.disciplina)).map((x) => ({
@@ -104,11 +125,78 @@ function gerDesfazerUltima() {
 
 function gerFrenteChave(linha) { return cmNormal(String(linha).split("::")[0]); }
 
+/* ---- pastas criadas aqui ----
+ * Um tópico do material só existe quando tem texto ou cartão. Para a pessoa poder criar a pasta ANTES de
+ * ter o que pôr nela, as pastas novas ficam numa lista própria (eac_ger_pastas) e aparecem na árvore
+ * como vazias; quando o primeiro cartão chega, o tópico nasce no material (o mesmo que "Salvar no
+ * material" já faz com disciplina e tópico livres). Nada do edital é tocado. */
+function gerPastasCriadas() {
+  try {
+    const l = JSON.parse(localStorage.getItem(GER_CHAVE_PASTAS) || "[]");
+    return Array.isArray(l) ? l.filter((x) => x && x.chave && x.topico) : [];
+  } catch (e) { return []; }
+}
+function gerPastasGravar(l) {
+  try { localStorage.setItem(GER_CHAVE_PASTAS, JSON.stringify(l.slice(-300))); } catch (e) {}
+}
+/* as criadas aqui que NÃO têm cartão agora (as com cartão já aparecem sozinhas) */
+function gerPastasVazias(notas) {
+  const com = new Set((notas || []).map((n) => n.chave));
+  return gerPastasCriadas().filter((p) => !com.has(p.chave));
+}
+
+/* De onde vêm disciplina e tópico de um destino: Bancada, tópico do material ou pasta criada aqui. */
+function gerPastaInfo(ch) {
+  if (cqEhBancada(ch)) return { disciplina: t("cq_bancada_disc"), topico: t("cq_bancada_top") };
+  const r = matResumos[ch];
+  if (r) return { disciplina: r.disciplina, topico: r.topico };
+  const p = gerPastasCriadas().find((x) => x.chave === ch);
+  return p ? { disciplina: p.disciplina, topico: p.topico } : null;
+}
+
+/* Nomes: espaços arrumados; "›" trocado (é o separador da chave) e "::" (é nível de baralho no Anki). */
+function gerLimparNome(s) {
+  return String(s || "").replace(/›/g, "-").replace(/\s*::\s*/g, " - ").replace(/\s+/g, " ").trim();
+}
+
+/* Cria a pasta (só o registro): devolve { ok, chave, nome, existe } ou { ok:false, motivo }. */
+function gerCriarPasta(disciplina, topico) {
+  const d = gerLimparNome(disciplina), tp = gerLimparNome(topico);
+  if (!d || !tp) return { ok: false, motivo: "vazia" };
+  if (d.length > 80 || tp.length > 120) return { ok: false, motivo: "longa" };
+  const alvo = matChaveNormal(matChave(d, tp));
+  const criadas = gerPastasCriadas();
+  const jaCriada = criadas.find((x) => matChaveNormal(x.chave) === alvo);
+  const viva = matChaveViva(d, tp);
+  const noMaterial = !!matResumos[viva];
+  const chave = jaCriada ? jaCriada.chave : viva;
+  const nome = d + " › " + tp;
+  /* já visível na árvore: tem cartão, ou já foi criada aqui */
+  const comCartao = noMaterial && String(matResumos[viva].cartoes || "").trim();
+  if (jaCriada || comCartao) return { ok: true, existe: true, chave, nome };
+  criadas.push({ chave, disciplina: noMaterial ? (matResumos[viva].disciplina || d) : d, topico: noMaterial ? (matResumos[viva].topico || tp) : tp, criada: new Date().toISOString() });
+  gerPastasGravar(criadas);
+  try { matReg("cartoes", "gerenciador: pasta criada", nome); } catch (e) {}
+  return { ok: true, existe: false, chave, nome };
+}
+
+/* Só remove pasta VAZIA criada aqui (nunca mexe em cartão nem em tópico do material). */
+function gerRemoverPastaVazia(chave) {
+  const tem = cqLerBiblioteca().some((n) => n.chave === chave);
+  if (tem) return false;
+  const l = gerPastasCriadas();
+  const nova = l.filter((x) => x.chave !== chave);
+  if (nova.length === l.length) return false;
+  gerPastasGravar(nova);
+  try { matReg("cartoes", "gerenciador: pasta vazia removida", chave); } catch (e) {}
+  return true;
+}
+
 /* Move os cartões para o tópico `destChave`. O bloco (com @ e +) vai como
  * está; pergunta que o destino já tem NÃO é duplicada — o cartão fica onde
  * estava e é contado à parte. Devolve { movidos, repetidos, naoAchou }. */
 function gerMover(notas, destChave) {
-  const dest = cqEhBancada(destChave) ? { disciplina: t("cq_bancada_disc"), topico: t("cq_bancada_top") } : matResumos[destChave];
+  const dest = gerPastaInfo(destChave);
   const r = { movidos: 0, repetidos: 0, naoAchou: 0 };
   if (!dest) return r;
   const antes = {};
@@ -211,20 +299,40 @@ function gerPintarArvore() {
   const tudo = gerEl("div", "ger-pasta" + (!gerPasta ? " ger-atual" : ""), t("ger_todos", { n: gerNotas.length }));
   tudo.onclick = () => { gerPasta = null; gerRefiltrar(); gerPintar(); };
   cx.append(tudo);
-  gerArvore(gerNotas).forEach((d) => {
+  gerArvore(gerNotas, gerPastasVazias(gerNotas)).forEach((d) => {
     const aberto = !gerFechados.has(d.disciplina);
     const ativa = gerPasta && !gerPasta.chave && gerPasta.disciplina === d.disciplina;
     const cab = gerEl("div", "ger-pasta ger-disc" + (ativa ? " ger-atual" : ""));
     const seta = gerEl("span", "ger-seta", aberto ? "▾" : "▸");
     seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerFechados.add(d.disciplina) : gerFechados.delete(d.disciplina); gerPintarArvore(); };
     cab.append(seta, gerEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
+    cab.title = t("ger_tip_disciplina");
+    seta.title = t("ger_tip_seta");
     cab.onclick = () => { gerPasta = { disciplina: d.disciplina }; gerRefiltrar(); gerPintar(); };
     cab.ondragover = (ev) => { gerSobreDisciplina(ev, d.disciplina); };
     cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
     cx.append(cab);
     if (aberto) d.topicos.forEach((tp) => {
-      const li = gerEl("div", "ger-pasta ger-top" + (gerPasta && gerPasta.chave === tp.chave ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")");
+      const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")");
       li.onclick = () => { gerPasta = { chave: tp.chave }; gerRefiltrar(); gerPintar(); };
+      li.title = t(tp.vazia ? "ger_tip_pasta_vazia" : "ger_tip_pasta");
+      if (tp.vazia) {
+        const x = gerEl("span", "ger-x", " ✕");
+        x.title = t("ger_pasta_remover");
+        x.setAttribute("role", "button");
+        x.onclick = (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          gerRemoverPastaVazia(tp.chave);
+          if (gerPasta && gerPasta.chave === tp.chave) gerPasta = null;
+          gerRefiltrar(); gerPintar(); gerPintarDestinos();
+        };
+        li.append(x);
+      } else {
+        /* a pasta inteira é arrastável: leva todos os cartões dela */
+        li.draggable = true;
+        li.ondragstart = (ev) => gerIniciarArrastoPasta(ev, tp.chave);
+        li.ondragend = gerFimArrasto;
+      }
       li.ondragover = (ev) => gerSobreAlvo(ev, tp.chave, li);
       li.ondragleave = () => gerSaiuAlvo(li);
       li.ondrop = (ev) => gerSoltar(ev, tp.chave);
@@ -238,7 +346,11 @@ function gerPintarLista() {
   cx.innerHTML = "";
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
-  if (gerNotas.length && !gerVis.length) cx.append(gerEl("p", "nota", t("ger_nenhum")));
+  $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
+  $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
+  const pastaVazia = !!(gerPasta && gerPasta.chave && !gerNotas.some((n) => n.chave === gerPasta.chave));
+  if (pastaVazia) cx.append(gerEl("p", "nota", t("ger_pasta_vazia")));
+  else if (gerNotas.length && !gerVis.length) cx.append(gerEl("p", "nota", t("ger_nenhum")));
   gerVis.slice(0, gerMostrando).forEach((idx, pos) => {
     const n = gerNotas[idx];
     const lin = gerEl("div", "ger-item" + (pos === gerFoco ? " ger-foco" : ""));
@@ -254,6 +366,8 @@ function gerPintarLista() {
     lin.append(ck, corpo);
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); };
     lin.draggable = true;
+    lin.title = t("ger_tip_linha");
+    ck.title = t("ger_tip_caixa");
     lin.ondragstart = (ev) => gerIniciarArrasto(ev, pos);
     lin.ondragend = gerFimArrasto;
     cx.append(lin);
@@ -306,7 +420,10 @@ function gerAviso(texto, comDesfazer) {
 /* ---- destino: um seletor com busca (o <select> nativo estourava a tela) ---- */
 function gerDestinosLista() {
   const banca = { ch: CQ_BANCADA, nome: [t("cq_bancada_disc"), t("cq_bancada_top")].join(" › ") };
-  return [banca].concat(Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico))
+  const vivos = Object.keys(matResumos).map((ch) => ({ ch, r: matResumos[ch] })).filter((x) => x.r && (x.r.disciplina || x.r.topico));
+  const tem = new Set(vivos.map((x) => x.ch));
+  gerPastasCriadas().forEach((p) => { if (!tem.has(p.chave)) vivos.push({ ch: p.chave, r: { disciplina: p.disciplina, topico: p.topico } }); });
+  return [banca].concat(vivos
     .sort((a, b) => String((a.r.disciplina || "") + (a.r.topico || "")).localeCompare(String((b.r.disciplina || "") + (b.r.topico || "")), "pt"))
     .map((x) => ({ ch: x.ch, nome: [x.r.disciplina, x.r.topico].filter(Boolean).join(" › ") })));
 }
@@ -329,6 +446,7 @@ function gerPintarDestinosLista() {
   itens.slice(0, 80).forEach((d) => {
     const b = gerEl("div", "ger-pop-item", d.nome);
     b.setAttribute("role", "option");
+    b.title = t("ger_tip_destino", { d: d.nome });
     b.onclick = () => gerEscolherDestino(d.ch);
     cx.append(b);
   });
@@ -416,7 +534,15 @@ function gerNotasDoArrasto(pos) {
 }
 
 function gerIniciarArrasto(ev, pos) {
-  const ms = gerNotasDoArrasto(pos);
+  return gerComecarArrasto(ev, gerNotasDoArrasto(pos), pos);
+}
+
+/* Arrastar uma PASTA (linha da árvore) leva todos os cartões dela, com ou sem filtro na lista. */
+function gerIniciarArrastoPasta(ev, chave) {
+  return gerComecarArrasto(ev, gerNotas.filter((n) => n.chave === chave), -1);
+}
+
+function gerComecarArrasto(ev, ms, pos) {
   if (!ms.length) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
   gerArrasto = { notas: ms, pos };
   const texto = ms.length === 1 ? t("ger_arrastando_1") : t("ger_arrastando", { n: ms.length });
@@ -538,12 +664,49 @@ function gerAmpliar() {
   gerAplicarTamanho(grande);
 }
 
+/* "＋ Nova pasta": uma janelinha com a disciplina (já preenchida com a da pasta aberta, com as existentes
+ * como sugestão) e o nome da pasta. Erro de nome aparece DENTRO dela, sem fechar. (O uiPrompt antigo não
+ * usa showModal e ficava invisível por baixo do gerenciador.) */
+function gerAbrirNovaPasta() {
+  const atual = gerPasta && gerPasta.chave ? gerPastaInfo(gerPasta.chave) : (gerPasta ? { disciplina: gerPasta.disciplina } : null);
+  const banca = t("cq_bancada_disc");
+  $("gerNpDisc").value = (atual && atual.disciplina && atual.disciplina !== banca) ? atual.disciplina : "";
+  $("gerNpTop").value = "";
+  $("gerNpErro").textContent = "";
+  const dl = $("gerNpDiscLista");
+  dl.innerHTML = "";
+  gerArvore(gerNotas, gerPastasVazias(gerNotas)).map((d) => d.disciplina).filter((d) => d && d !== "—" && d !== banca).forEach((d) => {
+    const o = document.createElement("option");
+    o.value = d;
+    dl.append(o);
+  });
+  abrirModal("dlgGerNovaPasta");
+  try { ($("gerNpDisc").value ? $("gerNpTop") : $("gerNpDisc")).focus(); } catch (e) {}
+}
+
+function gerConfirmarNovaPasta() {
+  const r = gerCriarPasta($("gerNpDisc").value, $("gerNpTop").value);
+  if (!r.ok) { $("gerNpErro").textContent = t(r.motivo === "longa" ? "ger_np_longa" : "ger_np_vazia"); return r; }
+  $("dlgGerNovaPasta").close();
+  gerPasta = { chave: r.chave };
+  gerCalcular(); gerPintarDestinos(); gerPintar();
+  gerAviso(t(r.existe ? "ger_np_existe" : "ger_np_criada", { n: r.nome }), false);
+  return r;
+}
+
+/* marca TODOS os cartões da lista de agora (não só os 60 à vista): é o "mover todos desta pasta" */
+function gerMarcarTodos() {
+  gerSel = new Set(gerVis.map((_, i) => i));
+  gerPintarLista(); gerPintarAcoes();
+}
+
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set();
   $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
   gerFecharDestinos();
   gerCalcular(); gerPintarDestinos(); gerPintar();
   gerAplicarTamanho(gerGrandeLer());
+  dicasDosBotoes(GER_DICAS);
   abrirModal("dlgGerCartoes");
   try { matReg("cartoes", "gerenciador aberto", gerNotas.length + " cartões"); } catch (e) {}
 }
@@ -554,9 +717,16 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
   $("gerBusca").oninput = () => { gerRefiltrar(); gerPintar(); };
   $("gerFiltro").onchange = () => { gerRefiltrar(); gerPintar(); };
-  $("btnGerMais").onclick = () => { gerMostrando += GER_LIM.visiveis; gerPintarLista(); };
-  $("btnGerMarcar").onclick = () => { gerSel = new Set(gerVis.slice(0, gerMostrando).map((_, i) => i)); gerPintarLista(); gerPintarAcoes(); };
-  $("btnGerLimpar").onclick = () => { gerSel = new Set(); gerPintarLista(); gerPintarAcoes(); };
+  $("btnGerMais").onclick = () => { gerMostrando += GER_LIM.visiveis; gerPintarLista(); flashBotao($("btnGerMais")); };
+  $("btnGerMarcar").onclick = () => { gerSel = new Set(gerVis.slice(0, gerMostrando).map((_, i) => i)); gerPintarLista(); gerPintarAcoes(); flashBotao($("btnGerMarcar")); };
+  $("btnGerLimpar").onclick = () => { gerSel = new Set(); gerPintarLista(); gerPintarAcoes(); flashBotao($("btnGerLimpar")); };
+  $("btnGerMarcarTodos").onclick = () => { gerMarcarTodos(); flashBotao($("btnGerMarcarTodos")); };
+  $("btnGerNovaPasta").onclick = gerAbrirNovaPasta;
+  $("btnGerNpOk").onclick = gerConfirmarNovaPasta;
+  $("btnGerNpCancelar").onclick = () => $("dlgGerNovaPasta").close();
+  ["gerNpDisc", "gerNpTop"].forEach((id) => {
+    $(id).onkeydown = (ev) => { if (ev && ev.key === "Enter") { if (ev.preventDefault) ev.preventDefault(); gerConfirmarNovaPasta(); } };
+  });
   $("btnGerApagar").onclick = gerAcaoApagar;
   $("btnGerMover").onclick = gerAbrirDestinos;
   $("gerPopBusca").oninput = gerPintarDestinosLista;
@@ -577,7 +747,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
       if (!dentro(alvo)) gerFecharDestinos();
     });
   }
-  $("btnGerEditar").onclick = gerAcaoEditar;
+  $("btnGerEditar").onclick = () => { gerAcaoEditar(); flashBotao($("btnGerEditar")); };
   $("btnGerEditSalvar").onclick = gerAcaoSalvarEdicao;
   $("btnGerEditCancelar").onclick = () => { gerEditando = false; gerPintarPrevia(); };
   $("btnGerMelhorar").onclick = gerAcaoMelhorar;

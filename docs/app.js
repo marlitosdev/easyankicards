@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.80.0";
+const VERSAO = "16.81.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -631,12 +631,22 @@ function toast(chave) { toastMsg(t(chave), 1800); }
 
 let tipBox = null;
 
+/* Onde pendurar o balão: dentro do <dialog> aberto que contém o botão. Um <dialog> aberto por showModal()
+ * vive na camada de topo do navegador — um balão pendurado no <body> sai ATRÁS dele, por mais z-index
+ * que tenha (por isso as dicas dos botões das janelas nunca apareciam). */
+function tipHospedeiro(el) {
+  for (let e = el; e; e = e.parentNode) {
+    if (String(e.tagName || "").toUpperCase() === "DIALOG") return e.open ? e : document.body;
+  }
+  return document.body;
+}
+
 function tipShow(el, texto) {
   tipHide();
   tipBox = document.createElement("div");
   tipBox.className = "tipbox";
   tipBox.textContent = texto();
-  document.body.append(tipBox);
+  tipHospedeiro(el).append(tipBox);
   const r = el.getBoundingClientRect();
   const top = r.bottom + 8 + tipBox.offsetHeight > innerHeight
     ? r.top - tipBox.offsetHeight - 8 : r.bottom + 8;
@@ -645,6 +655,31 @@ function tipShow(el, texto) {
 }
 
 function tipHide() { if (tipBox) { tipBox.remove(); tipBox = null; } }
+
+/* Dica de função em vários botões de uma vez: {idDoBotao: "chave_i18n"}. Liga o balão (mouse: passar por
+ * cima; toque: segurar) UMA vez por botão e deixa o texto também para leitor de tela (aria-description).
+ * Chamar de novo só atualiza o texto (troca de idioma). Devolve os ids que não achou. */
+function dicasDosBotoes(mapa) {
+  const faltou = [];
+  Object.keys(mapa || {}).forEach((id) => {
+    const el = $(id);
+    if (!el) { faltou.push(id); return; }
+    el.setAttribute("aria-description", t(mapa[id]));
+    if (el._dicaLigada) return;
+    el._dicaLigada = true;
+    attachTip(el, mapa[id]);
+  });
+  return faltou;
+}
+
+/* O retorno de "fiz": o botão ganha um ✓ e um contorno verde por um instante (classe btn-feito; o ✓ vem
+ * do CSS, então o texto do botão não muda e nada fica preso se a tela se repintar). */
+function flashBotao(el, ms) {
+  if (!el) return;
+  if (el._flashT) clearTimeout(el._flashT);
+  el.classList.add("btn-feito");
+  el._flashT = setTimeout(() => { el.classList.remove("btn-feito"); el._flashT = null; }, ms || 1500);
+}
 
 function attachTip(el, keyOrFn) {
   const texto = typeof keyOrFn === "function" ? keyOrFn : () => t(keyOrFn);
