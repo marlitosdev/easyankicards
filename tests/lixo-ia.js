@@ -52,7 +52,7 @@ async function testes() {
   {
     ok(C("+ Distribuição: * A * B * C") === "+ Distribuição:\n+ A\n+ B\n+ C", `L3 bullets: ${JSON.stringify(C("+ Distribuição: * A * B * C"))}`);
     ok(C("+ * A * B") === "+ A\n+ B", `L3a bullet logo no inicio: ${JSON.stringify(C("+ * A * B"))}`);
-    ok(C("+ Lista: 1. Um 2. Dois 3. Três") === "+ Lista:\n+ 1. Um\n+ 2. Dois\n+ 3. Três", `L3b numerada: ${JSON.stringify(C("+ Lista: 1. Um 2. Dois 3. Três"))}`);
+    ok(C("+ Lista: 1. Um 2. Dois 3. Três") === "+ Lista:\n+ Um\n+ Dois\n+ Três", `L3b numerada: ${JSON.stringify(C("+ Lista: 1. Um 2. Dois 3. Três"))}`);
     ok(C("+ Conta: 2 * 3 é 6") === "+ Conta: 2 * 3 é 6" && C("+ Art. 1. Da lei") === "+ Art. 1. Da lei" && C("+ Só 1. Um item") === "+ Só 1. Um item", "L3c '2 * 3', 'Art. 1.' e um item numerado so' ficam");
     ok(C("Pergunta * com asterisco :: resposta * outra") === "Pergunta * com asterisco :: resposta * outra", "L3d linha de cartao (nao +) nao e' separada");
     ok(C("+ Um\n+ Dois\n+ Tres") === "+ Um\n+ Dois\n+ Tres", "L3e linhas + normais ficam");
@@ -94,6 +94,7 @@ async function testes() {
     ok(l[2] === "+ Quantitativo global — 16 tributos. O <b>artigo 236 do Código Tributário Municipal (CTM) de Caruaru</b> institui <b>16 tributos no total</b>. A distribuição do quantitativo global de 16 tributos estrutura-se em:", `L6b a primeira linha + ficou limpa: ${l[2]}`);
     ok(l.length >= 12 && l.slice(2).every((x) => /^\+ \S/.test(x)), `L6c virou uma linha + por item: ${l.length} linhas`);
     ok((r.match(/<b>/g) || []).length === (real.match(/<b>/g) || []).length, "L6d nenhum negrito se perdeu");
+    ok(!/^\+ \d{1,2}\.\s/m.test(r) && l.indexOf("+ Taxa de Fiscalização Sanitária") >= 0 && l.indexOf("+ Taxa de Licenciamento Ambiental (TLA)") >= 0, "L6d2 a numeracao \"1.\" saiu do inicio das linhas, mas o texto de cada item ficou");
     ["ISS", "IPTU", "Taxa de Licenciamento Ambiental (TLA)", "Taxa de Fiscalização Sanitária"].forEach((w) => ok(r.indexOf(w) >= 0, `L6e o conteudo '${w}' se perdeu`));
     ok(api.parseText(r).cards.length === 1 && /Taxa de Fiscalização Sanitária/.test(api.parseText(r).cards[0].more), "L6f continua sendo UM cartao, com a explicacao inteira no saiba mais");
   }
