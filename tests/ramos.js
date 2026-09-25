@@ -155,6 +155,84 @@ async function testes() {
     ok(p2.itens.length === 2 && p2.itens[0].ramoId === "a" && p2.itens[0].prioridade === 100 && p2.itens[1].prioridade < 100 && p2.itens.every((i) => i.topicoChave === "d›t"), "R23v na 2a fase o topico tambem se divide em ramos, na mesma ordem de peso: " + JSON.stringify(p2.itens.map((i) => [i.ramoId, i.prioridade])));
   }
 
+  /* ---- R25: propor ramos pelo indice da lei (local) ---- */
+  {
+    const ROM = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV", "XXV"];
+    const arts = (ns) => ns.map((n) => "Art. " + n + " Texto.");
+    const lei = (titulos) => {
+      const out = ["LEI Nº 1"];
+      titulos.forEach((t, i) => {
+        out.push("TÍTULO " + ROM[i], t.nome);
+        if (t.caps) t.caps.forEach((c) => { out.push("CAPÍTULO " + c.num, c.nome); arts(c.arts).forEach((x) => out.push(x)); });
+        else arts(t.arts).forEach((x) => out.push(x));
+      });
+      return out.join("\n");
+    };
+    const T = (nome, arts) => ({ nome, arts });
+    const s3 = api.ramSugerirDaLei(lei([T("DAS PARTES", ["1", "2", "3", "4"]), T("DOS ATOS", ["5"]), T("DO FIM", ["6", "7"])]));
+    ok(s3.ramos.length === 3 && s3.ramos[0].nome === "TÍTULO I — DAS PARTES" && s3.ramos[1].nome === "TÍTULO II — DOS ATOS" && s3.divisoes === 3 && s3.cortou === 0, "R25 lei com 3 titulos: um ramo por titulo, com o rotulo da lei: " + JSON.stringify(s3.ramos.map((r) => r.nome)));
+    ok(s3.ramos.map((r) => r.peso).join() === "5,1,3" && s3.ramos.map((r) => r.nota).join("|") === "arts. 1 a 4|art. 5|arts. 6 a 7", "R25a peso pelo tamanho (o maior = 5, minimo 1) e nota com os artigos: " + s3.ramos.map((r) => r.peso + "/" + r.nota));
+    const dois = api.ramSugerirDaLei(lei([{ nome: "DAS PARTES", caps: [{ num: "I", nome: "Um", arts: ["1", "2"] }, { num: "II", nome: "Dois", arts: ["3"] }] }, { nome: "DO FIM", caps: [{ num: "I", nome: "Tres", arts: ["4", "5"] }] }]));
+    ok(dois.ramos.length === 3 && /^CAPÍTULO I — Um/.test(dois.ramos[0].nome) && dois.divisoes === 2, "R25b com menos de 3 titulos desce para os capitulos: " + JSON.stringify(dois.ramos.map((r) => r.nome)));
+    const C2 = (n1, n2) => ({ nome: "T", caps: [{ num: "I", nome: "a", arts: [n1] }, { num: "II", nome: "b", arts: [n2] }] });
+    const tres = api.ramSugerirDaLei(lei([C2("1", "2"), C2("3", "4"), C2("5", "6")]));
+    ok(tres.ramos.length === 3 && tres.ramos.every((r) => /^TÍTULO/.test(r.nome)), "R25b2 com 3 titulos ja basta: nao desce para os capitulos: " + JSON.stringify(tres.ramos.map((r) => r.nome)));
+    const misto = api.ramSugerirDaLei(lei([{ nome: "A", caps: [{ num: "I", nome: "cheio", arts: ["1", "2"] }, { num: "II", nome: "vazio", arts: [] }] }, T("B", ["3"])]));
+    ok(misto.ramos.length === 2 && /CAPÍTULO I — cheio/.test(misto.ramos[0].nome) && /TÍTULO II — B/.test(misto.ramos[1].nome), "R25b3 ao descer: capitulo vazio some e o titulo SEM capitulos fica como ramo: " + JSON.stringify(misto.ramos.map((r) => r.nome)));
+    const desigual = api.ramSugerirDaLei(lei([T("PEQUENO", ["1"]), T("GRANDE", Array.from({ length: 30 }, (x, i) => String(i + 2))), T("MEDIO", ["40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54"])]));
+    ok(desigual.ramos[0].peso === "1" && desigual.ramos[1].peso === "5", "R25b4 o peso nunca cai abaixo de 1 (divisao minuscula) nem passa de 5: " + desigual.ramos.map((r) => r.peso));
+    const longo = api.ramSugerirDaLei(["LEI Nº 1", "TÍTULO I – " + "DAS PARTES E ATOS ".repeat(8).trim(), "Art. 1 Texto.", "TÍTULO II", "B", "Art. 2 Texto.", "TÍTULO III", "C", "Art. 3 Texto."].join("\n"));
+    ok(longo.ramos[0].nome.length === 70, "R25b5 nome muito comprido e cortado em 70: " + longo.ramos[0].nome.length);
+    const um = api.ramSugerirDaLei(lei([T("ÚNICO", ["1", "2"])]));
+    ok(um.ramos.length === 1 && um.ramos[0].peso === "5", "R25c uma divisao so' sem filhos: um ramo");
+    ok(api.ramSugerirDaLei("Art. 1 Texto.\nArt. 2 Texto.").ramos.length === 0 && api.ramSugerirDaLei("").ramos.length === 0 && api.ramSugerirDaLei(null).ramos.length === 0 && api.ramSugerirDaLei("   ").divisoes === 0, "R25d sem divisoes ou sem texto: nenhuma proposta (e sem quebrar)");
+    const mtos = api.ramSugerirDaLei(lei(Array.from({ length: 25 }, (x, i) => T("D" + i, [String(i + 1)]))));
+    ok(mtos.ramos.length === 20 && mtos.cortou === 5 && mtos.divisoes === 25, "R25e mais de 20 divisoes: mostra 20 e diz quantas cortou: " + mtos.ramos.length + "/" + mtos.cortou);
+    const rev = api.ramSugerirDaLei(lei([T("DAS PARTES", ["1"]), T("VAZIO", []), T("DOS ATOS", ["2"]), T("DO FIM", ["3"])]));
+    ok(rev.ramos.length === 3 && !rev.ramos.some((r) => /VAZIO/.test(r.nome)), "R25f divisao sem artigo nao vira ramo");
+  }
+
+  /* ---- R27: ler a resposta da IA (pura) ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const r = api.ramLerRespostaIA(["Claro! Aqui estão os ramos:", "", "++ Modalidades de licitação :: 5 :: pregão e concorrência", "- Fase preparatória :: 4", "* Contratos administrativos", "1. Sanções :: 3 :: arts. 155 a 163", "• Nulidades :: 2", "Espero ter ajudado!"].join(NL));
+    ok(r.ramos.length === 5 && r.ignoradas === 2, "R27 aceita ++, -, *, numerado e bolinha; ignora a conversa (2 linhas): " + JSON.stringify(r.ramos.map((x) => x.nome)) + " ign=" + r.ignoradas);
+    ok(r.ramos[0].peso === "5" && r.ramos[0].nota === "pregão e concorrência" && r.ramos[1].peso === "4" && r.ramos[2].peso === "" && r.ramos[3].nota === "arts. 155 a 163", "R27a peso e nota de cada linha; sem peso fica em branco (igual aos irmaos)");
+    const ruim = api.ramLerRespostaIA(["++ A :: muito", "++ B :: 9", "++ a :: 3", "++ :: 2"].join(NL));
+    ok(ruim.ramos.length === 2 && ruim.avisos.length >= 3, "R27b peso invalido, fora da faixa, repetido e sem nome viram AVISO (nao somem): " + JSON.stringify(ruim.avisos) + " " + ruim.ramos.length);
+    ok(ruim.ramos[0].peso === "" && ruim.ramos[1].peso === "5", "R27c peso invalido volta ao igual-aos-irmaos; peso fora da faixa e grampeado");
+    ok(api.ramLerRespostaIA("").ramos.length === 0 && api.ramLerRespostaIA(null).ramos.length === 0 && api.ramLerRespostaIA("so conversa aqui").ramos.length === 0 && api.ramLerRespostaIA("so conversa aqui").ignoradas === 1, "R27d vazio, nulo e so' conversa: nada (e sem quebrar)");
+    const muitos = api.ramLerRespostaIA(Array.from({ length: 40 }, (x, i) => "++ Ramo " + (i + 1) + " :: 3").join(NL));
+    ok(muitos.ramos.length === 30 && muitos.cortou === 10, "R27e mais de 30 ramos: entram 30 e conta o corte");
+    const cp = api.ramLerRespostaIA("++ Nome :: 4 :: uma nota :: com dois pontos");
+    ok(cp.ramos.length === 1 && cp.ramos[0].nome === "Nome", "R27f linha com '::' a mais nao quebra");
+    const sub = api.ramLerRespostaIA("+++ X :: 2" + NL + "-- Y :: 3");
+    ok(sub.ramos.map((x) => x.nome).join() === "X,Y", "R27g marcadores repetidos (+++, --) sao limpos: " + sub.ramos.map((x) => x.nome));
+  }
+
+  /* ---- R29: pesos pelos registros (pura) ---- */
+  {
+    const nomes = ["Modalidades de licitação", "Fase preparatória", "Contratos administrativos", "Sanções administrativas"];
+    const txt = ["A modalidade de licitação pregão exige...", "Na modalidade de licitação concorrência, o prazo...", "Sobre contratos administrativos, a duração...", "As sanções administrativas previstas..."];
+    const r = api.ramPesosPorRegistros(nomes, txt);
+    ok(r.map((x) => x.citacoes).join() === "2,0,1,1", "R29 conta quantos registros falam de cada ramo (radicais, com plural/acento): " + r.map((x) => x.citacoes));
+    ok(r.map((x) => x.peso).join() === "5,,3,3", "R29a o mais citado vale 5, os demais proporcionais; sem citacao fica SEM peso: " + r.map((x) => x.peso));
+    const um = api.ramPesosPorRegistros(["A licitação", "B contrato"], ["licitação licitação", "outro assunto"]);
+    ok(um[0].peso === "5" && um[1].peso === "" , "R29b so' um ramo citado: ele leva 5 e o outro nada");
+    const fraco = api.ramPesosPorRegistros(["Modalidades de licitação", "Contratos administrativos"], Array.from({ length: 20 }, () => "modalidade de licitação").concat(["contratos administrativos"]));
+    ok(fraco[0].peso === "5" && fraco[1].peso === "1", "R29c o ramo pouco citado recebe o minimo 1 (nunca 0): " + fraco.map((x) => x.peso));
+    ok(api.ramPesosPorRegistros(["Modalidades"], []).every((x) => x.peso === "" && x.citacoes === 0) && api.ramPesosPorRegistros([], ["x"]).length === 0 && api.ramPesosPorRegistros(null, null).length === 0, "R29d sem registros, sem ramos ou nulo: nada (e sem quebrar)");
+    const meio = api.ramPesosPorRegistros(["Contratos administrativos"], ["so' contratos aqui", "administrativos sem o resto"]);
+    ok(meio[0].citacoes === 0, "R29e o texto precisa trazer a MAIORIA das palavras do ramo (so' uma de duas nao vale)");
+    const gen = api.ramPesosPorRegistros(["TÍTULO II — DAS LICITAÇÕES"], ["a licitação é..."]);
+    ok(gen[0].citacoes === 1, "R29f 'TITULO', numero romano e palavras de ligacao nao contam como palavra do ramo: " + gen[0].citacoes);
+    const tres = api.ramPesosPorRegistros(["Sanções administrativas pecuniárias"], ["as sanções pecuniárias previstas"]);
+    ok(tres[0].citacoes === 1, "R29g2 basta a MAIORIA das palavras (2 de 3)");
+    ok(api.ramPesosPorRegistros(["Ato lei"], ["ato lei"])[0].citacoes === 0 && [...api.ramRadicais("Contratos para obras")].join() === "contra,obras" && [...api.ramRadicais("Título XIII")].length === 0, "R29g3 palavras de 3 letras, de ligacao (para) e numero romano (XIII) nao contam como palavra do ramo");
+    ok(api.ramPesosPorRegistros(["TÍTULO I"], ["titulo i"])[0].peso === "", "R29g ramo so' com palavra generica nao tem indicio");
+    ok([...api.ramRadicais("Sanções administrativas")].join() === "sancoe,admini", "R29h radical = 6 primeiras letras sem acento: " + [...api.ramRadicais("Sanções administrativas")]);
+  }
+
   /* ---- R4: a ida e volta do texto ---- */
   {
     const r = api.lerEdital(BASE);
@@ -477,6 +555,133 @@ async function testes() {
       l.onclick();
       ok(a.gerContextoRamos() === null && a.$("btnGerRamos").hidden === true, "R22b topico sem lugar no plano do edital nao tem ramos a editar");
     }
+    /* R26: o botao "propor pelo indice da lei" no editor */
+    {
+      const { a, ed, chave } = MT();
+      const ctx = { editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave };
+      a.ramAbrirEditor(ctx);
+      ok(a.$("btnRamLei").disabled === true && a.$("btnRamLei").getAttribute("aria-description") === a.t("ram_tip_lei_sem"), "R26 sem lei carregada o botao fica desligado e explica por que");
+      a.ramProporDaLei();
+      ok(/Não achei/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 3, "R26a sem lei: avisa e nao mexe na lista");
+      a.$("btnRamFechar").onclick();
+      a.matResumosAtual()[chave].leiTexto = "   ";
+      a.ramAbrirEditor(ctx);
+      ok(a.$("btnRamLei").disabled === true, "R26a2 lei so' com espacos conta como sem lei");
+      a.$("btnRamFechar").onclick();
+      a.matResumosAtual()[chave].leiTexto = ["LEI Nº 14.133", "TÍTULO I", "PARTES", "Art. 1 Texto.", "Art. 2 Texto.", "TÍTULO II", "ATOS", "Art. 3 Texto.", "TÍTULO III", "FIM", "Art. 4 Texto."].join("\n");
+      a.ramAbrirEditor(ctx);
+      ok(a.$("btnRamLei").disabled === false && a.$("btnRamLei").getAttribute("aria-description") === a.t("ram_tip_lei"), "R26b com lei carregada o botao liga");
+      const antes = a.ramLinhasAtual().map((l) => l.nome).join("|");
+      a.$("btnRamLei").onclick();
+      const dep = a.ramLinhasAtual();
+      ok(dep.length === 6 && dep.slice(0, 3).map((l) => l.nome).join("|") === antes && dep[3].nome === "TÍTULO I — PARTES" && dep[3].peso === "5" && /arts\. 1 a 2/.test(dep[3].nota), "R26c acrescenta os ramos da lei DEPOIS dos que a pessoa ja tinha (nao apaga nada): " + dep.map((l) => l.nome));
+      ok(a.$("ramLista").children.length === 6, "R26c2 a lista na tela foi repintada com os novos ramos: " + a.$("ramLista").children.length);
+      ok(/3 ramo\(s\) novo/.test(a.$("ramMsg").textContent), "R26d diz quantos entraram: " + a.$("ramMsg").textContent);
+      a.$("btnRamLei").onclick();
+      ok(a.ramLinhasAtual().length === 6 && /0 ramo/.test(a.$("ramMsg").textContent), "R26e propor de novo nao duplica");
+      const r = a.ramSalvar();
+      const salvos = a.edRamosDoTopico(ed.texto, "Licitações", "Lei 14.133").map((x) => x.nome);
+      ok(r.ok && salvos.length === 6 && salvos[3] === "TÍTULO I — PARTES", "R26f salvar grava as propostas no edital: " + salvos);
+    }
+
+    {
+      const { a, ed, chave } = MT();
+      const muitos = ["LEI Nº 1"];
+      for (let i = 1; i <= 25; i++) { muitos.push("TÍTULO " + i, "D" + i, "Art. " + i + " Texto."); }
+      a.matResumosAtual()[chave].leiTexto = muitos.join("\n");
+      a.ramAbrirEditor({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave });
+      a.$("btnRamLei").onclick();
+      ok(a.ramLinhasAtual().length === 3 + 20 && /primeiros/.test(a.$("ramMsg").textContent) && /5/.test(a.$("ramMsg").textContent), "R26g lei com mais de 20 divisoes: entram 20 e a mensagem avisa do corte: " + a.$("ramMsg").textContent);
+    }
+
+    /* R28: pedir a IA e conferir a resposta no editor */
+    {
+      const { a, ed, chave } = MT();
+      const ctx = { editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave };
+      a.ramAbrirEditor(ctx);
+      ok(a.$("ramIaBox").hidden === true, "R28 a caixa de colar fica escondida ate pedir a IA");
+      const pedido = await a.$("btnRamIa").onclick();
+      ok(a.$("ramMsg").textContent === a.t("ram_ia_copiado"), "R28a0 o botao 'Pedir a IA' funciona e avisa que copiou");
+      const copiado = await a.navegador.clipboard.readText();
+      ok(a.$("ramIaBox").hidden === false && copiado === pedido && /Lei 14\.133/.test(pedido) && /Licitações/.test(pedido) && /ISS Caruaru Auditor/.test(pedido), "R28a o pedido e' copiado e traz topico, disciplina e concurso");
+      ok(/Modalidades/.test(pedido) && /Contratos/.test(pedido) && /não repita|sem repetir|without repeating/i.test(pedido), "R28b o pedido lista os ramos que a pessoa ja tem, para a IA nao repetir");
+      ok(/\+\+ Nome do ramo :: peso :: nota/.test(pedido) && /1 a 5/.test(pedido) && !/\{[a-z]+\}/.test(pedido), "R28c o pedido diz o formato, a escala de peso e nao deixa {campo} sem preencher");
+      ok(!/Índice da lei/.test(pedido) && !/questão/.test(pedido), "R28d sem lei e sem questoes o pedido nao fala de indice nem de questoes");
+      a.$("btnRamFechar").onclick();
+      a.matResumosAtual()[chave].leiTexto = ["LEI Nº 1", "TÍTULO I", "PARTES", "Art. 1 T.", "Art. 2 T.", "TÍTULO II", "ATOS", "Art. 3 T.", "TÍTULO III", "FIM", "Art. 4 T."].join(String.fromCharCode(10));
+      a.ramAbrirEditor(ctx);
+      a.qsBancoPor([{ chave, banca: "X", enunciado: "?" }, { chave, banca: "X", enunciado: "??" }]);
+      const p2 = await a.ramPedirIA();
+      ok(/2 questão/.test(p2), "R28e2 com questoes guardadas do topico o pedido diz quantas sao: " + p2.slice(-160));
+      a.qsBancoPor([]);
+      /* clipboard indisponivel: o pedido vai para a caixa, para copiar de la */
+      const orig = a.navegador.clipboard.writeText;
+      a.navegador.clipboard.writeText = async () => { throw new Error("negado"); };
+      a.$("ramColar").value = "";
+      const p3 = await a.ramPedirIA();
+      a.navegador.clipboard.writeText = orig;
+      ok(a.$("ramColar").value === p3 && p3.length > 100 && a.$("ramMsg").textContent === a.t("ram_ia_copie_manual"), "R28e3 sem permissao de copiar, o pedido aparece na caixa e a mensagem manda copiar de la");
+      ok(/Índice da lei/.test(p2) && /TÍTULO I — PARTES \(arts\. 1 a 2\)/.test(p2), "R28e com lei carregada o pedido leva o indice dela (com os artigos): " + p2.slice(-200));
+      /* conferir */
+      const NL = String.fromCharCode(10);
+      a.$("ramColar").value = ["Aqui vai:", "++ Modalidades :: 2 :: outra nota", "++ Sanções :: 4 :: arts. 155 a 163", "- Nulidades :: 3", "++ Erro :: muito"].join(NL);
+      const antes = a.ramLinhasAtual().map((l) => l.nome + "/" + l.peso);
+      const r = a.$("btnRamConferir").onclick();
+      const dep = a.ramLinhasAtual();
+      ok(r.novos === 3 && r.jaExistiam === 1 && dep.length === 6, "R28f acrescenta so os 3 ramos novos; o que ja existia (Modalidades) nao duplica: " + dep.map((l) => l.nome));
+      ok(dep.slice(0, 3).map((l) => l.nome + "/" + l.peso).join() === antes.join() && dep[0].peso === "5" && dep[0].nota === "pregão", "R28g o que a pessoa ja tinha fica INTACTO (peso e nota nao sao trocados pela IA)");
+      ok(dep[3].nome === "Sanções" && dep[3].peso === "4" && dep[3].nota === "arts. 155 a 163" && dep[4].nome === "Nulidades" && dep[5].nome === "Erro" && dep[5].peso === "", "R28h os novos entram na ordem com peso e nota; peso invalido volta ao igual");
+      ok(/3 ramo\(s\) novo/.test(a.$("ramMsg").textContent) && /1 já existia/.test(a.$("ramMsg").textContent) && /1 linha\(s\) de conversa/.test(a.$("ramMsg").textContent) && /1 aviso/.test(a.$("ramMsg").textContent), "R28i a conferencia diz o que entrou, o que ja existia, o que ignorou e os avisos: " + a.$("ramMsg").textContent);
+      ok(a.$("ramLista").children.length === 6, "R28j a tela foi repintada");
+      ok(a.edRamosDoTopico(ed.texto, "Licitações", "Lei 14.133").length === 3, "R28k conferir NAO grava no edital (so' ao salvar)");
+      a.$("ramColar").value = "nada util aqui";
+      const nada = a.ramConferirIA();
+      ok(nada.ramos.length === 0 && /Não achei ramos/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 6, "R28l resposta sem ramos: avisa e nao mexe na lista");
+      a.$("ramColar").value = "++ Sanções :: 4";
+      ok(a.ramConferirIA().novos === 0 && a.ramLinhasAtual().length === 6, "R28m colar de novo o mesmo nao duplica");
+      const cortar = Array.from({ length: 35 }, (x, i) => "++ Extra " + (i + 1) + " :: 3").join(String.fromCharCode(10));
+      a.$("ramColar").value = cortar;
+      a.ramConferirIA();
+      ok(/primeiros/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 6 + 30, "R28l2 resposta com mais de 30 ramos: entram 30 e a mensagem avisa do corte: " + a.$("ramMsg").textContent);
+      a.$("btnRamFechar").onclick();
+      a.ramAbrirEditor(ctx);
+      ok(a.$("ramIaBox").hidden === true && a.$("ramColar").value === "", "R28n ao reabrir o editor a caixa volta escondida e vazia");
+      a.$("btnRamFechar").onclick();
+    }
+
+    /* R30: o botao "pesos pelas minhas questoes" */
+    {
+      const { a, ed, chave } = MT();
+      const ctx = { editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave };
+      a.ramAbrirEditor(ctx);
+      a.$("btnRamPesos").onclick();
+      ok(a.$("ramMsg").textContent === a.t("ram_pesos_nada"), "R30 sem questoes nem julgados: diz que nao ha base");
+      a.qsBancoPor([{ chave, enunciado: "A modalidade pregão ...", comentario: "", opcoes: [] }, { chave, enunciado: "Sobre isto", comentario: "comentario-unico sobre contratos", opcoes: [] }, { chave: "outro›topico", enunciado: "modalidade modalidade", opcoes: [] }]);
+      a.jurGravarTudo({ j1: { id: "j1", tese: "tese-unica: as modalidades de licitação incluem o pregão", topicos: [chave] }, j2: { id: "j2", tese: "modalidade em outro topico", topicos: ["x›y"] } });
+      const tx = a.ramTextosDoTopico(chave);
+      ok(tx.length === 3 && !tx.some((x) => /outro topico|modalidade modalidade/.test(x)), "R30a le as questoes e os julgados DESTE topico (nao os de outros): " + tx.length);
+      ok(tx.some((x) => /comentario-unico/.test(x)) && tx.some((x) => /tese-unica/.test(x)), "R30a2 usa o comentario da questao e a tese do julgado");
+      const txtAntes = ed.texto;
+      const l0 = a.ramLinhasAtual();
+      l0[1].peso = "2"; l0[1].nota = "minha nota";
+      const r = a.$("btnRamPesos").onclick();
+      const dep = a.ramLinhasAtual();
+      ok(/1 já tinham peso/.test(a.$("ramMsg").textContent) || /2 já tinham peso/.test(a.$("ramMsg").textContent), "R30b0 a mensagem conta os que ja tinham peso: " + a.$("ramMsg").textContent);
+      ok(dep[0].peso === "5" && dep[1].peso === "2" && dep[1].nota === "minha nota", "R30b o peso que a pessoa JA tinha nao muda; o ramo 'Modalidades' (peso 5 dela) segue: " + dep.map((l) => l.nome + "/" + l.peso));
+      a.$("btnRamFechar").onclick();
+      a.ramAbrirEditor(ctx);
+      const l1 = a.ramLinhasAtual();
+      l1[0].peso = ""; l1[1].peso = "";
+      a.ramPintar();
+      const r2 = a.ramPesosDosRegistros();
+      ok(r2.aplicados === 1 && l1[0].peso !== "" && l1[1].peso === "" && r2.semIndicio === 1 && r2.textos === 3, "R30c com o peso em branco, o ramo citado recebe peso; o sem citacao fica em branco: " + JSON.stringify([r2.aplicados, r2.semIndicio, l1.map((l) => l.peso)]));
+      ok(/1 ramo\(s\) receberam peso a partir de 3/.test(a.$("ramMsg").textContent) && /1 sem citação/.test(a.$("ramMsg").textContent), "R30d a mensagem conta o que foi feito: " + a.$("ramMsg").textContent);
+      ok(ed.texto === txtAntes, "R30e nao grava no edital ate salvar");
+      ok(achar(a.$("ramLista").children[0], (e) => cls(e, "ram-peso"))[0].value === l1[0].peso && l1[0].peso !== "", "R30f a tela mostra o peso novo (foi repintada)");
+      a.$("btnRamFechar").onclick();
+      a.qsBancoPor([]); a.jurGravarTudo({});
+    }
+
     /* R24: o plano mostra e ajusta os ramos */
     {
       const { a, ed } = MT();
@@ -548,16 +753,17 @@ async function testes() {
     const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
     const ids = [...dlg.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
     const { a, ed } = MT();
-    ok(ids.length === 3 && ids.every((id) => a.RAM_DICAS[id]) && Object.keys(a.RAM_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "R20 todo botao do editor de ramos tem explicacao");
+    ok(ids.length === 7 && ids.every((id) => a.RAM_DICAS[id]) && Object.keys(a.RAM_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "R20 todo botao do editor de ramos tem explicacao");
     const chaves = Object.values(a.RAM_DICAS).concat(["ram_tip_nome", "ram_tip_peso", "ram_tip_nota", "ram_tip_sobe", "ram_tip_desce", "ram_tip_apagar", "ger_tip_ramos", "ger_tip_ramo", "ger_tip_ramo_geral", "ger_tip_seta_ramos"]);
     ok(chaves.every((kk) => i18n.split('"' + kk + '": ').length - 1 >= 2 && a.t(kk, { r: "X" }).length > 15), "R20a as explicacoes existem em portugues e ingles");
     a.gerAbrir(); abrirTopicoLei(a, ed);
     linhas(a, "ger-top").find((e) => /Lei 14\.133/.test(e.textContent)).onclick();
     a.$("btnGerRamos").onclick();
-    ok(Object.keys(a.RAM_DICAS).every((id) => a.$(id)._dicaLigada === true && a.$(id).getAttribute("aria-description") === a.t(a.RAM_DICAS[id])), "R20b os botoes recebem o balao ao abrir o editor");
+    ok(Object.keys(a.RAM_DICAS).filter((id) => id !== "btnRamLei").every((id) => a.$(id)._dicaLigada === true && a.$(id).getAttribute("aria-description") === a.t(a.RAM_DICAS[id])), "R20b os botoes recebem o balao ao abrir o editor");
     const l0 = achar(a.$("ramLista"), (e) => cls(e, "ram-linha"))[0];
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
+    ok(/\.ram-colar\{width:100%/.test(html), "R20f CSS da caixa de colar a resposta da IA");
     ok(/\.ram-linha\{display:grid/.test(html) && /\n\.ger-ramo\{padding-left:52px/.test(html), "R20e CSS do editor e da linha do ramo");
   }
 
