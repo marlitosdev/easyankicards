@@ -382,6 +382,106 @@ async function testes() {
     ok(cf.itens.length === 1 && !cf.itens[0].avisos.some((x) => x.id === "continua"), "E9z em 'fatos' NAO se cobra nivel (o pedido era conferir, nao completar)");
   }
 
+    /* ---- E10: escopo (fila / bancada / todos), busca e prompt curto ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const r = rodar(); const a = r.api;
+    a.matIniciar(); a.edIniciar();
+    a.$("editor").value = "Pergunta da bancada? :: sim";
+    const ch = a.matChave("Proc", "Recursos");
+    a.matGravarCartoes(ch, [
+      "Qual o prazo do recurso? :: 10 dias",
+      "Qual o prazo do agravo? :: 15 dias úteis, contados da intimação, conforme o art. 1003 §5º do CPC, e a contagem só corre em dias úteis :: y" + NL + "+ Saiba mais — literalidade do CPC",
+      "Qual é o fato gerador do imposto predial? :: A propriedade de imóvel urbano, com a resposta explicada por extenso e com clareza :: x"].join(NL + NL),
+      { disciplina: "Proc", topico: "Recursos" });
+    const total = a.cqLerBiblioteca().length;
+    a.ceAbrir();
+    ok(a.ceEscopoAtual() === "fila" && a.$("ceEscopo").value === "fila" && a.$("ceEscopo").children.length === 3 && a.ceBuscaAtual() === "" && a.ceCurtoAtual() === false, "E10 abre com a fila do objetivo, sem busca e sem prompt curto");
+    ok(a.$("ceEscopo").getAttribute("aria-description") === a.t("ce_tip_escopo") && a.$("ceBusca").getAttribute("aria-description") === a.t("ce_tip_busca") && a.$("ceCurto").getAttribute("aria-description") === a.t("ce_tip_curto"), "E10a os tres controles novos tem explicacao");
+    const fila0 = a.ceNotasAtual().length;
+    a.$("ceEscopo").value = "bancada"; a.$("ceEscopo").onchange();
+    ok(a.ceEscopoAtual() === "bancada" && a.ceNotasAtual().length === 1 && a.ceNotasAtual().every((n) => a.cqEhBancada(n.chave)) && a.ceSelAtual().size === 1, "E10b 'so a bancada': so' os cartoes do texto da bancada, ja marcados: " + a.ceNotasAtual().length);
+    ok(/1 cartão\(ões\) em “Só a bancada”/.test(a.$("ceResumo").textContent), "E10c o resumo diz o escopo: " + a.$("ceResumo").textContent);
+    a.$("ceEscopo").value = "todos"; a.$("ceEscopo").onchange();
+    const nt = a.ceNotasAtual();
+    ok(nt.length === total && nt.some((n) => /predial/.test(n.card.front)) && nt.some((n) => a.cqEhBancada(n.chave)), "E10d 'todos': a biblioteca inteira, ate' o cartao bom (sem filtro de nivel): " + nt.length + "/" + total);
+    ok(nt.every((n, i) => i === 0 || nt[i - 1].nota <= n.nota), "E10e 'todos' vem com os piores primeiro");
+    ok(a.ceSelAtual().size === 0 && a.$("btnCePrompt").disabled === true, "E10f em 'todos' nada vem marcado: a escolha e' sua (marcar a mao)");
+    /* busca */
+    a.$("ceBusca").value = "AGRAVO"; a.$("ceBusca").oninput();
+    ok(a.ceBuscaAtual() === "AGRAVO" && a.ceNotasAtual().length === 1 && /agravo/.test(a.ceNotasAtual()[0].card.front), "E10g a busca acha o cartao (sem diferenciar maiuscula)");
+    a.$("ceBusca").value = "intimacao"; a.$("ceBusca").oninput();
+    ok(a.ceNotasAtual().length === 1, "E10h a busca ignora acento e olha a resposta tambem");
+    a.$("ceBusca").value = "recursos"; a.$("ceBusca").oninput();
+    ok(a.ceNotasAtual().length === 3, "E10i a busca olha tambem o topico/disciplina: " + a.ceNotasAtual().length);
+    a.$("ceBusca").value = "zzzz"; a.$("ceBusca").oninput();
+    ok(a.ceNotasAtual().length === 0 && /Nenhum cartão/.test(a.$("ceMsg").textContent), "E10j sem resultado: a mensagem diz");
+    a.$("ceBusca").value = "  agravo  "; a.$("ceBusca").oninput();
+    ok(a.ceBuscaAtual() === "agravo", "E10k a busca tira os espacos das pontas");
+    a.$("ceBusca").value = "INTIMAÇÃO"; a.$("ceBusca").oninput();
+    ok(a.ceNotasAtual().length === 1, "E10k2 a busca com acento e maiuscula tambem acha (a consulta e' normalizada como o texto)");
+    a.$("ceBusca").value = "x".repeat(100); a.$("ceBusca").oninput();
+    ok(a.ceBuscaAtual().length === 80, "E10k3 a busca tem limite de 80 caracteres");
+    a.$("ceBusca").value = ""; a.$("ceBusca").oninput();
+    /* a busca vale tambem na fila do objetivo */
+    a.$("ceEscopo").value = "fila"; a.$("ceEscopo").onchange();
+    const nFila = a.ceNotasAtual().length;
+    a.$("ceBusca").value = "bancada"; a.$("ceBusca").oninput();
+    ok(nFila > 1 && a.ceNotasAtual().length === 1 && /1 cartão\(ões\) em “A fila do objetivo”/.test(a.$("ceResumo").textContent), "E10k4 na fila do objetivo a busca tambem filtra e o resumo aparece: " + nFila + " -> " + a.ceNotasAtual().length + " | " + a.$("ceResumo").textContent);
+    a.$("ceBusca").value = ""; a.$("ceBusca").oninput();
+    a.$("ceEscopo").value = "todos"; a.$("ceEscopo").onchange();
+    /* marcar a mao um cartao que NAO estaria na fila */
+    a.$("ceBusca").value = "predial"; a.$("ceBusca").oninput();
+    const ck = achar(a.$("ceLista"), (e) => e.tag === "input");
+    ok(ck.length === 1, "E10l achou o cartao bom pela busca");
+    ck[0].checked = true; ck[0].onchange();
+    ok(a.ceSelAtual().size === 1 && a.$("btnCePrompt").disabled === false, "E10m marcar a mao um cartao que nao e' da fila");
+    a.$("ceCurto").checked = true; a.$("ceCurto").onchange();
+    ok(a.ceCurtoAtual() === true && a.ceSelAtual().size === 1, "E10n ligar o prompt curto nao mexe na escolha");
+    a.$("btnCePrompt").onclick();
+    const pc = a.$("cePrompt").value;
+    ok(/COMPLETAR ao padrão/.test(pc) && /@@ 1/.test(pc) && /predial/.test(pc) && !/FONTE:/.test(pc) && !/\{[a-z_]+\}/.test(pc), "E10o o prompt curto leva o objetivo, a ancora e o cartao marcado a mao, sem a fonte: " + pc.slice(0, 90));
+    a.ceAbrir({ objetivo: "fatos", escopo: "todos" });
+    a.$("ceCurto").checked = true; a.$("ceCurto").onchange();
+    a.$("ceBusca").value = "prazo do recurso"; a.$("ceBusca").oninput();
+    const ck2 = achar(a.$("ceLista"), (e) => e.tag === "input"); ck2[0].checked = true; ck2[0].onchange();
+    a.$("btnCePrompt").onclick();
+    ok(/CONFERIR OS FATOS/.test(a.$("cePrompt").value) && !/COMPLETAR ao padrão/.test(a.$("cePrompt").value), "E10o2 o prompt curto acompanha o objetivo escolhido: " + a.$("cePrompt").value.slice(0, 60));
+    a.ceAbrir({ escopo: "todos" }); a.$("ceCurto").checked = true; a.$("ceCurto").onchange();
+    a.$("ceBusca").value = "predial"; a.$("ceBusca").oninput();
+    const ck3 = achar(a.$("ceLista"), (e) => e.tag === "input"); ck3[0].checked = true; ck3[0].onchange();
+    a.$("btnCePrompt").onclick();
+    ok(pc.length < 900 && /NENHUMA|nenhuma informação/.test(pc), "E10p e e' curto, mas ainda proibe perder informacao: " + pc.length);
+    ok(a.ceMudarFiltro("escopo", "fila") === false && a.ceMudarFiltro("busca", "x") === false && a.ceMudarFiltro("curto", false) === false && a.$("ceEscopo").disabled === true && a.$("ceBusca").disabled === true && a.$("ceCurto").disabled === true, "E10q no meio da rodada os tres travam");
+    a.$("ceEscopo").value = "fila"; a.$("ceEscopo").onchange();
+    ok(a.$("ceEscopo").value === "todos" && a.ceEscopoAtual() === "todos", "E10r o seletor volta ao valor atual se a troca e' recusada");
+    a.$("ceBusca").value = "outra"; a.$("ceBusca").oninput();
+    ok(a.$("ceBusca").value === "predial", "E10s a busca volta ao valor atual se a troca e' recusada");
+    a.$("ceCurto").checked = false; a.$("ceCurto").onchange();
+    ok(a.$("ceCurto").checked === true, "E10t o prompt curto volta ao valor atual se a troca e' recusada");
+    /* reabrir zera */
+    a.ceAbrir();
+    ok(a.ceEscopoAtual() === "fila" && a.ceBuscaAtual() === "" && a.ceCurtoAtual() === false && a.$("ceBusca").value === "" && a.$("ceCurto").checked === false && a.$("ceEscopo").value === "fila", "E10u ao reabrir volta ao padrao (fila, sem busca, prompt completo)");
+    ok(/ELEVAR/.test((() => { a.$("btnCePrompt").onclick(); return a.$("cePrompt").value; })()) && /FONTE:/.test(a.$("cePrompt").value), "E10v o prompt completo continua o de sempre");
+    a.ceAbrir({ escopo: "todos" });
+    ok(a.ceEscopoAtual() === "todos" && a.ceNotasAtual().length === total, "E10w abrir ja em 'todos'");
+    a.ceAbrir({ escopo: "invalido" });
+    ok(a.ceEscopoAtual() === "fila", "E10x escopo invalido cai em 'fila'");
+    ok(a.ceMudarFiltro("escopo", "nada") === false && a.ceMudarFiltro("campo-x", "1") === false, "E10y escopo e campo invalidos sao recusados");
+    a.ceAbrir({ notas: a.cqLerBiblioteca().filter((n) => /agravo/.test(n.card.front)), escopo: "bancada" });
+    ok(a.ceNotasAtual().length === 1 && /agravo/.test(a.ceNotasAtual()[0].card.front), "E10z cartoes escolhidos no gerenciador mandam sobre o escopo");
+    a.ceAbrir({ notas: a.cqLerBiblioteca().filter((n) => /agravo|recurso/.test(n.card.front)), escopo: "todos" });
+    ok(/Rodada/.test(a.$("ceResumo").textContent), "E10z0 com cartoes escolhidos o resumo e' o de sempre, mesmo em 'todos'");
+    a.$("ceBusca").value = "zzzz"; a.$("ceBusca").oninput();
+    ok(a.ceNotasAtual().length === 2, "E10z1 a busca nao esconde os cartoes que voce escolheu no gerenciador");
+    /* completar + bancada */
+    a.ceAbrir({ escopo: "bancada", objetivo: "fatos" });
+    ok(a.ceNotasAtual().length === 0, "E10z2 objetivo 'fatos' + bancada: a bancada nao tem cartao de risco");
+    a.$("ceBusca").value = "bancada"; a.$("ceBusca").oninput();
+    ok(a.ceNotasAtual().length === 0, "E10z3 a busca so' filtra o que ja esta no escopo");
+    ok(fila0 >= 1, "E10z4 (fila inicial nao vazia)");
+  }
+
     /* ---- E8: a tela, em 3 passos ---- */
   {
     const { a, c1, janela } = montar();
