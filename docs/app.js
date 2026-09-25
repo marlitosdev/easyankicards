@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.93.0";
+const VERSAO = "16.94.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2400,7 +2400,18 @@ function sairRevisao() {
   preview();
 }
 
-$("btnRevisar").onclick = entrarRevisao;
+/* A REVISÃO MANUAL VIROU O "MELHORAR CARTÕES" (o Elevar): o botão antigo agora leva para lá, dizendo isso. Por uma
+ * versão a revisão antiga ainda pode ser escolhida; depois ela sai. */
+async function revisarCartoes() {
+  const v = await uiEscolha(t("rev_migrou"), [
+    { rot: t("rev_migrou_novo"), valor: "novo", classe: "btn-verde" },
+    { rot: t("rev_migrou_antigo"), valor: "antigo", classe: "btn-cinza" },
+  ]);
+  if (v === "antigo") { entrarRevisao(); return "antigo"; }
+  if (v === "novo") { ceAbrir({ escopo: "bancada" }); return "novo"; }
+  return "";
+}
+$("btnRevisar").onclick = revisarCartoes;
 $("btnRevFinalizar").onclick = () => { sairRevisao(); toast("toast_review_finished"); };
 $("btnRevCancelar").onclick = async () => {
   if (!(await uiConfirm(t("review_cancel_confirm")))) return;
