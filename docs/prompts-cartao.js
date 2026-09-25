@@ -59,10 +59,40 @@ function pcPadrao(tipo, opc) {
   return nomes.map((n) => pcBloco(n, opc)).join("\n\n");
 }
 
-/* Resolve os marcadores {padrao_*} de um texto de prompt. */
+/* TIPO DE CARTÃO e QUANTIDADE do gerador de tópico. O "misto" espelha os bons baralhos
+ * (pergunta direta, Certo/Errado e lacuna com dica); os demais forçam um tipo só.
+ * A quantidade era fixa; agora é "pelo conteúdo" ou um teto — nunca um número a atingir. */
+const PC_TIPOS = ["rico", "certo_errado", "direta", "lacuna"];
+const PC_QTDS = ["auto", "10", "20", "30", "50"];
+const PC_CHAVE_TIPO = "eac_pc_tipo", PC_CHAVE_QTD = "eac_pc_qtd";
+
+function pcTipo(tipo) { return t("pc_tipo_" + (PC_TIPOS.indexOf(tipo) >= 0 ? tipo : "rico")); }
+function pcQtd(q) { const n = parseInt(q, 10); return n > 0 ? t("pc_qtd_n", { n }) : t("pc_qtd_auto"); }
+
+/* A escolha da pessoa fica guardada (tolerando armazenamento indisponível). */
+function pcEscolhaLer() {
+  let tipo = "rico", qtd = "auto";
+  try {
+    const a = localStorage.getItem(PC_CHAVE_TIPO), b = localStorage.getItem(PC_CHAVE_QTD);
+    if (PC_TIPOS.indexOf(a) >= 0) tipo = a;
+    if (PC_QTDS.indexOf(b) >= 0) qtd = b;
+  } catch (e) {}
+  return { tipo, qtd };
+}
+function pcEscolhaGuardar(tipo, qtd) {
+  try {
+    if (PC_TIPOS.indexOf(tipo) >= 0) localStorage.setItem(PC_CHAVE_TIPO, tipo);
+    if (PC_QTDS.indexOf(qtd) >= 0) localStorage.setItem(PC_CHAVE_QTD, qtd);
+  } catch (e) {}
+}
+
+/* Resolve os marcadores {padrao_*}, {pc_tipo} e {pc_qtd} de um texto de prompt. */
 function pcResolver(texto, opc) {
-  return String(texto).replace(/\{padrao_(gerar|revisar|corrigir)\}/g,
-    (_, tipo) => pcPadrao(tipo, opc));
+  return String(texto).replace(/\{(padrao_(?:gerar|revisar|corrigir)|pc_tipo|pc_qtd)\}/g, (_, nome) => {
+    if (nome === "pc_tipo") return pcTipo(opc && opc.tipo);
+    if (nome === "pc_qtd") return pcQtd(opc && opc.qtd);
+    return pcPadrao(nome.slice(7), opc);
+  });
 }
 
 /* As perguntas que o tópico já tem, para a IA não reescrevê-las. Lê o mesmo

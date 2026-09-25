@@ -2863,6 +2863,7 @@ function matCartoesAbrir(opts) {
   $("mcSub").textContent = (o.sub || t("mc_sub", {
     d: matAtual.disciplina, tp: matAtual.topico, n: jaTem }));
   $("mcTexto").value = "";
+  if ($("mcTipo") && typeof pcEscolhaLer === "function") { const e = pcEscolhaLer(); $("mcTipo").value = e.tipo; $("mcQtd").value = e.qtd; }
   if ($("mcPromptVer")) { $("mcPromptVer").hidden = true; $("mcPromptVer").open = false; }
   if ($("mcPromptTexto")) $("mcPromptTexto").value = "";
   $("mcAviso").hidden = true;
@@ -2881,6 +2882,8 @@ function matCartoesPrompt() {
   const txt = mcPromptDeFora || t("mc_prompt", {
     d: matAtual.disciplina, tp: matAtual.topico,
     frentes: pcFrentesDoTopico(matAtual.disciplina, matAtual.topico),
+    tipo: $("mcTipo") && $("mcTipo").value ? $("mcTipo").value : "rico",
+    qtd: $("mcQtd") && $("mcQtd").value ? $("mcQtd").value : "auto",
     resumo: String(r.texto || ""),
     tags: matEtiquetasTopico(matAtual.disciplina, matAtual.topico,
       r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
@@ -3310,6 +3313,9 @@ function matCartoesVer() {
 function matCartoesIniciar() {
   if ($("btnMatCartoes")) $("btnMatCartoes").onclick = matCartoesAbrir;
   if ($("btnMcPrompt")) $("btnMcPrompt").onclick = matCartoesPrompt;
+  const guardaEscolha = () => { if ($("mcTipo") && typeof pcEscolhaGuardar === "function") pcEscolhaGuardar($("mcTipo").value, $("mcQtd").value); };
+  if ($("mcTipo")) $("mcTipo").onchange = guardaEscolha;
+  if ($("mcQtd")) $("mcQtd").onchange = guardaEscolha;
   if ($("btnMcSalvar")) $("btnMcSalvar").onclick = matCartoesSalvar;
   if ($("btnMcVer")) $("btnMcVer").onclick = matCartoesVer;
   /* pelos dois botões novos passa o envoltório que registra a falha: um
