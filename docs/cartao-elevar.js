@@ -117,8 +117,28 @@ function ceRotuloNivel(c) { return t("ce_nivel_" + ceNivel(c)); }
 /* ---- o registro do que já foi trabalhado ---- */
 const CE_CHAVE_REV = "eac_ce_revisados";
 
-/* a chave leva frente E verso: cartão editado depois (ou outro com a mesma pergunta) é candidato de novo */
-function ceChaveCartao(c) { return cqHash(cqNormal(cqRevelado(c) + " | " + String((c && c.back) || ""))); }
+/* OS OBJETIVOS (o que se quer melhorar). "completar" é o de sempre (níveis e requisitos). Os outros vieram da revisão
+ * manual antiga, agora no mesmo fluxo: conferir os fatos (números, datas, artigos), dividir cartões longos e arrumar a
+ * forma (curtos, sem resposta, sem pergunta). Cada um tem a sua fila, o seu prompt e a sua memória de "já trabalhado" —
+ * um cartão completado ainda pode precisar de conferência de fatos. */
+const CE_OBJETIVOS = ["completar", "fatos", "dividir", "forma"];
+let ceObjetivo = "completar";
+const CE_RISCO_RE = /\b(art\.?|artigo|s[úu]mula|lei|inciso)\b|§|\d{2,}|\d+\s*%|R\$|\b(19|20)\d{2}\b/i;
+const CE_ALVO = {
+  fatos: (c) => CE_RISCO_RE.test(String(c.front || "") + " " + String(c.back || "") + " " + String(c.more || "")),
+  dividir: (c) => (String(c.front || "") + String(c.back || "")).length > 220,
+  forma: (c) => (String(c.front || "") + " " + String(c.back || "")).replace(/\{\{c\d+::|\}\}/g, "").trim().length < 25
+    || (c.kind !== "cloze" && c.kind !== "mc" && !String(c.back || "").trim())
+    || (c.kind === "basic" && !/\?\s*$/.test(String(c.front || "").trim())),
+};
+function ceServeAoObjetivo(obj, c) { return !!c && (obj === "completar" || !CE_ALVO[obj] ? true : CE_ALVO[obj](c)); }
+
+/* a chave leva frente E verso: cartão editado depois (ou outro com a mesma pergunta) é candidato de novo.
+ * Fora do objetivo "completar" a chave leva o objetivo junto (a memória de cada um é separada). */
+function ceChaveCartao(c, obj) {
+  const o = obj === undefined ? ceObjetivo : obj;
+  return cqHash(cqNormal(cqRevelado(c) + " | " + String((c && c.back) || "")) + (o && o !== "completar" ? " |obj:" + o : ""));
+}
 
 function ceRevLer() {
   try { const m = JSON.parse(localStorage.getItem(CE_CHAVE_REV) || "{}"); return m && typeof m === "object" ? m : {}; } catch (e) { return {}; }
@@ -204,7 +224,8 @@ function ceMontarPrompt(itens) {
   const fontes = ceFontes(itens);
   return {
     blocos,
-    texto: t("ce_prompt", { n: itens.length, trechos, fontes: fontes || t("ce_sem_fonte") }),
+    texto: t(ceObjetivo === "completar" || CE_OBJETIVOS.indexOf(ceObjetivo) < 0 ? "ce_prompt" : "ce_prompt_" + ceObjetivo,
+      { n: itens.length, trechos, fontes: fontes || t("ce_sem_fonte") }),
   };
 }
 
@@ -268,7 +289,7 @@ function ceConferir(resposta, itens, blocos) {
     try { novos = parseText(a.novo, []).cards; } catch (e) {}
     const avs = novos.map(ceAvaliar);
     const pior = avs.length ? avs.slice().sort((x, y) => x.nota - y.nota)[0] : null;
-    if (pior && pior.nivel === "fraco") av.push({ id: "continua", n: a.id });
+    if (ceObjetivo === "completar" && pior && pior.nivel === "fraco") av.push({ id: "continua", n: a.id });
     const antes = ceAvaliar(n.card);
     saida.push({ nota: n, id: a.id, antes: a.texto, depois: a.novo, cartoes: a.cartoes, cobertura: cob.pct,
                  notaDepois: pior ? pior.nota : 0, nivelAntes: antes.nivel, nivelDepois: pior ? pior.nivel : "fraco",
@@ -341,8 +362,29 @@ const CE_DICAS = {
   btnCeMarcar: "ce_tip_marcar", btnCeLimpar: "ce_tip_limpar", btnCeMais: "ce_tip_mais", btnCeMostrarRev: "ce_tip_mostrar_rev",
   btnCePrompt: "ce_tip_prompt", btnCeCopiar: "ce_tip_copiar", btnCeColarClip: "ce_tip_colar", btnCeConferir: "ce_tip_conferir",
   btnCeAplicar: "ce_tip_aplicar", btnCeNova: "ce_tip_nova", btnCeDescartar: "ce_tip_descartar",
-  btnCeDesfazer: "ce_tip_desfazer", btnCeFechar: "ce_tip_fechar",
+  btnCeDesfazer: "ce_tip_desfazer", btnCeFechar: "ce_tip_fechar", ceObjetivo: "ce_tip_obj",
 };
+
+/* troca o objetivo: refaz a fila e já marca os piores. Só antes de gerar o prompt (depois, a rodada está em andamento). */
+function ceTrocarObjetivo(obj) {
+  if (cePasso > 1 || CE_OBJETIVOS.indexOf(obj) < 0) return false;
+  ceObjetivo = obj;
+  ceForcadas = null;
+  ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null;
+  ceCalcular();
+  ceMarcarPiores();
+  ceStatus(ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada_obj"), ceNotas.length ? "" : "ok");
+  try { matReg("cartoes", "melhorar cartões: objetivo " + obj, ceNotas.length + " na fila"); } catch (e) {}
+  return true;
+}
+
+function cePintarObjetivos() {
+  const sel = $("ceObjetivo");
+  if (!sel) return;
+  sel.innerHTML = "";
+  CE_OBJETIVOS.forEach((o) => { const op = document.createElement("option"); op.value = o; op.textContent = t("ce_obj_" + o); sel.append(op); });
+  sel.value = ceObjetivo;
+}
 
 function ceEl(tag, cls, txt) {
   const e = document.createElement(tag);
@@ -375,6 +417,14 @@ function ceCalcular() {
     /* "fracos" são os DA FILA; os já trabalhados aparecem à parte, senão a conta nunca chega a zero */
     if (n.nivel === "fraco") { if (n.revisado) ceStats.escondidos++; else ceStats.fracos++; } else if (n.nivel === "medio") ceStats.medios++; else ceStats.bons++;
   });
+  if (!ceForcadas && ceObjetivo !== "completar") {
+    const alvo = todas.filter((n) => ceServeAoObjetivo(ceObjetivo, n.card));
+    ceStats.fila = alvo.filter((n) => !n.revisado).length;
+    ceStats.escondidos = alvo.length - ceStats.fila;
+    ceNotas = alvo.filter((n) => !n.revisado).sort(cePiores);
+    ceSel = new Set([...ceSel].filter((i) => i < ceNotas.length));
+    return ceNotas;
+  }
   ceNotas = ceForcadas
     ? ceForcadas.map((n) => { const a = ceAvaliar(n.card); return Object.assign({ nivel: a.nivel, nota: a.nota, defeitos: a.falhas }, n); })
     : todas.filter((n) => (n.nivel === "fraco" || (ceIncluirMedios && n.nivel === "medio")) && !n.revisado).sort(cePiores);
@@ -426,7 +476,7 @@ function cePintarRodape() {
   });
   /* enquanto há prompt/resposta em andamento, a escolha dos cartões fica travada: nenhum clique a desfaz */
   const travada = p > 1;
-  ["btnCeMarcar", "btnCeLimpar"].forEach((id) => { if ($(id)) $(id).disabled = travada; });
+  ["btnCeMarcar", "btnCeLimpar", "ceObjetivo"].forEach((id) => { if ($(id)) $(id).disabled = travada; });
   try { $("ceEscolha").open = p === 1; } catch (e) {}
   $("cePromptCx").hidden = p !== 2 || !cePedido;
   $("ceColarCx").hidden = p !== 2;
@@ -435,7 +485,9 @@ function cePintarRodape() {
 
 function cePintar() {
   const r = ceStats;
-  $("ceResumo").textContent = r.total
+  $("ceResumo").textContent = r.total && !ceForcadas && ceObjetivo !== "completar"
+    ? t("ce_resumo_obj", { n: r.fila, esc: r.escondidos || 0 })
+    : r.total
     ? t("ce_resumo", { r: ceRodada, f: r.fracos, m: r.medios, b: r.bons, n: r.total })
       + (r.escondidos ? " · " + t("ce_resumo_esc", { n: r.escondidos }) : "")
     : t("cq_sem_cartoes");
@@ -635,6 +687,8 @@ async function ceDesfazer() {
 /* opc.notas: abre com ESTES cartões (vindos do gerenciador), fracos ou não. */
 function ceAbrir(opc) {
   ceForcadas = opc && Array.isArray(opc.notas) ? opc.notas : null;
+  ceObjetivo = opc && CE_OBJETIVOS.indexOf(opc.objetivo) >= 0 ? opc.objetivo : "completar";
+  cePintarObjetivos();
   ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null; cePasso = 1; ceRodada = 1;
   $("ceColar").value = ""; $("cePrompt").value = "";
   ceCalcular();
@@ -648,6 +702,7 @@ function ceAbrir(opc) {
 if (typeof document !== "undefined" && $("btnCartElevar")) {
   $("btnCartElevar").onclick = () => ceAbrir();
   if ($("btnBancaElevar")) $("btnBancaElevar").onclick = () => ceAbrir();
+  if ($("ceObjetivo")) $("ceObjetivo").onchange = () => { if (!ceTrocarObjetivo($("ceObjetivo").value)) $("ceObjetivo").value = ceObjetivo; };
   if ($("btnCeFechar")) $("btnCeFechar").onclick = async () => {
     if (cePasso > 1 && !(await uiConfirm(t("ce_conf_fechar")))) return;
     $("dlgCartElevar").close();
