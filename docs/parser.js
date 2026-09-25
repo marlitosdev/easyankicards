@@ -624,6 +624,8 @@ function corrigirLixoIA(raw) {
   });
   return limpo.join(fim);
 }
+/* tira linha "+" repetida/redundante DE PROPÓSITO: a trava de "não perder saiba mais" deixa passar */
+corrigirLixoIA.reduzSaibaMais = true;
 
 /* Resposta quebrada em varias linhas: a IA escreveu "• item" / "1. item" em
  * linhas soltas e cada uma virou um cartao torto. Nao ha conserto automatico
