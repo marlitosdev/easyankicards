@@ -20,6 +20,16 @@
 const ED_CFG_RE = /^#\s*(.*)$/;
 const ED_DISC_RE = /^@\s*(.+)$/;
 const ED_TOP_RE = /^[+\-*·•]\s*(.+)$/;   /* aceita o que a pessoa digita */
+/* RAMIFICAÇÃO DO TÓPICO: "++ Modalidades de licitação :: 5 :: cai sempre". Vem logo abaixo do tópico dela.
+ * Precisa ser reconhecida ANTES do tópico: sem isso o regex acima engoliria a linha como um tópico chamado
+ * "+ Modalidades…". O tópico continua sendo a unidade (progresso, agenda, vínculos); o ramo só o detalha. */
+const ED_RAMO_RE = /^\+\+\s*(.+)$/;
+
+/* identificador estável do ramo (vira a etiqueta ram_<id> dos cartões) */
+function edRamoId(nome) {
+  return String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+}
 
 function edPartes(linha) {
   return linha.split("::").map((s) => s.trim());
@@ -267,6 +277,21 @@ function lerEdital(raw) {
       return;
     }
 
+    const mr = s.match(ED_RAMO_RE);
+    if (mr) {
+      const p = edPartes(mr[1]);
+      const topo = atual && atual.topicos[atual.topicos.length - 1];
+      if (!topo) { achados.push({ linha: n, tipo: "ramo_sem_topico", txt: p[0] }); return; }
+      if (!p[0]) { achados.push({ linha: n, tipo: "ramo_sem_nome", txt: s }); return; }
+      const id = edRamoId(p[0]);
+      topo.ramos = topo.ramos || [];
+      if (topo.ramos.some((x) => x.id === id)) { achados.push({ linha: n, tipo: "ramo_repetido", txt: p[0] }); return; }
+      const pr = edPeso(p[1], achados, n);
+      topo.ramos.push({ id, nome: p[0], peso: pr.peso, herdado: !!pr.herdado, abs: pr.abs || null, unidade: pr.unidade || "",
+        nota: p.slice(2).join(" :: "), linha: n });
+      return;
+    }
+
     const mt = s.match(ED_TOP_RE);
     if (mt) {
       const p = edPartes(mt[1]);
@@ -345,15 +370,43 @@ function lerEdital(raw) {
  *
  * `fatores` é um mapa "disciplina›topico" (minúsculas) → número. Quem
  * não passa nada continua com o comportamento de sempre. */
-function priorizar(r, fatores) {
+/* Pesos dos ramos de um tópico, na mesma régua: as quantidades do edital ("12q") só valem quando TODOS os
+ * ramos as trazem (senão as escalas se misturam); do contrário vale a estrela 1–5 (3 quando não há). */
+function edPesosDosRamos(ramos) {
+  const rs = ramos || [];
+  const abs = rs.length > 0 && rs.every((x) => x.abs > 0);
+  return rs.map((x) => (abs ? x.abs : (x.peso > 0 ? x.peso : 3)));
+}
+
+/* O item do plano de um tópico: o do próprio tópico ou, se ele tem ramos, o primeiro ramo dele. */
+function edAcharItemDoTopico(itens, chave) {
+  const l = itens || [];
+  return l.find((x) => x.chave === chave) || l.find((x) => x.topicoChave === chave) || null;
+}
+/* Os tópicos PENDENTES de uma lista de itens (um tópico com ramos entra uma vez só). */
+function edTopicosPendentes(itens) {
+  const vistos = new Set(), out = [];
+  (itens || []).forEach((i) => {
+    const k = i.topicoChave || i.chave;
+    if (i.feito || vistos.has(k)) return;
+    vistos.add(k); out.push({ disciplina: i.disciplina, nome: i.nome });
+  });
+  return out;
+}
+
+/* opc.ramos: um tópico COM ramos vira um item por ramo. A MASSA do tópico se conserva (a soma do "bruto" dos
+ * ramos é o "bruto" do tópico: a fatia da disciplina e a cobertura não mudam); só a ORDEM muda — o ramo de peso
+ * acima da média do tópico sobe, o abaixo desce. Tópico sem ramos: item único, como sempre. */
+function priorizar(r, fatores, opc) {
   const fs = fatores || {};
+  const comRamos = !!(opc && opc.ramos);
   const itens = [];
   r.disciplinas.forEach((d) => {
     d.topicos.forEach((t) => {
       const bruto = d.peso * t.peso;
       const f = Number(fs[(d.nome + "›" + t.nome).toLowerCase()]);
       const fator = isFinite(f) && f > 0 ? f : 1;
-      itens.push({
+      const base = {
         disciplina: d.nome, disciplinaPeso: d.peso,
         nome: t.nome, peso: t.peso, motivo: t.motivo, linha: t.linha,
         bruto,
@@ -361,6 +414,20 @@ function priorizar(r, fatores) {
         brutoOrdem: bruto * fator,
         fase2: !!t.fase2, pesoF2: t.pesoF2 || null,
         brutoF2: t.fase2 ? d.peso * (t.pesoF2 || t.peso) : 0,
+      };
+      if (!comRamos || !t.ramos || !t.ramos.length) { itens.push(base); return; }
+      const ws = edPesosDosRamos(t.ramos);
+      const soma = ws.reduce((a, b) => a + b, 0) || 1;
+      const media = soma / ws.length;
+      t.ramos.forEach((rm, k) => {
+        itens.push(Object.assign({}, base, {
+          ramo: rm.nome, ramoId: rm.id, ramoNota: rm.nota || "", ramoPeso: ws[k], ramoDe: ws.length,
+          linha: rm.linha || base.linha,
+          bruto: bruto * ws[k] / soma,
+          brutoOrdem: bruto * (ws[k] / media) * fator,
+          brutoF2: base.brutoF2 * ws[k] / soma,
+          brutoF2Ordem: base.brutoF2 * (ws[k] / media),
+        }));
       });
     });
   });
@@ -508,7 +575,7 @@ function montarPlano(r, opcoes) {
   const acertos = o.acertos || (o.acertos === null ? {} : edAcertos(
     (typeof edDiario !== "undefined" && edDiario) || [],
     (typeof qsBanco !== "undefined" && qsBanco) || []));
-  let todos = priorizar(r, fatores);
+  let todos = priorizar(r, fatores, { ramos: true });
   /* NA SEGUNDA FASE, SÓ O QUE CAI NELA — e com o peso DELA.
    *
    * A discursiva não cobra o edital inteiro: cobra um recorte, e um
@@ -520,13 +587,13 @@ function montarPlano(r, opcoes) {
     todos = todos.filter((i) => i.fase2);
     /* o máximo tem de ser da MESMA régua que o numerador, senão a
      * prioridade de um tópico difícil passa de 100 */
-    const maxF2 = todos.reduce(
-      (m, i) => Math.max(m, i.brutoF2 * (i.fator || 1)), 0) || 1;
+    const ordemF2 = (i) => (i.brutoF2Ordem !== undefined ? i.brutoF2Ordem : i.brutoF2) * (i.fator || 1);
+    const maxF2 = todos.reduce((m, i) => Math.max(m, ordemF2(i)), 0) || 1;
     todos.forEach((i) => {
       i.bruto = i.brutoF2;
       /* a dificuldade acompanha o tópico para a segunda fase: é o mesmo
        * assunto e a mesma insegurança, com outro peso de prova */
-      i.brutoOrdem = i.brutoF2 * (i.fator || 1);
+      i.brutoOrdem = ordemF2(i);
       i.prioridade = Math.round((i.brutoOrdem / maxF2) * 100);
     });
     todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
@@ -535,10 +602,14 @@ function montarPlano(r, opcoes) {
     const f = faixaDe(i.prioridade);
     i.faixa = f.id;
     i.minutos = f.minutos;
-    i.chave = (i.disciplina + "›" + i.nome).toLowerCase();
+    /* o ramo tem chave PRÓPRIA (progresso, diário e revisão por ramo); a do tópico continua em topicoChave */
+    i.topicoChave = (i.disciplina + "›" + i.nome).toLowerCase();
+    i.chave = i.ramoId ? i.topicoChave + "›#" + i.ramoId : i.topicoChave;
+    i.titulo = i.ramo ? i.nome + " › " + i.ramo : i.nome;
     /* dois estados, não um: estudar e revisar são coisas diferentes, e a
      * segunda é a que fixa. "revisado" implica "estudado". */
-    const m = marcaDe(i.chave);
+    /* tópico dado como feito antes de ter ramos: os ramos herdam a marca */
+    const m = marcaDe(i.chave) || (i.ramoId ? marcaDe(i.topicoChave) : null);
     i.estado = m && m.e;
     i.quando = m && m.d;
     i.dias = m && m.d ? Math.floor((Date.now() - new Date(m.d + "T00:00:00")) / 86400000) : null;
@@ -1270,14 +1341,15 @@ function semanasAte(prova, hoje) {
 const ED_NUM_RE = /^(\d+(?:\.\d+)*)[).\-–—]?\s+(?=\S)/;
 function temNumeracaoEdital(raw) {
   return String(raw || "").split(/\r?\n/).some((l) => {
-    const m = l.trim().match(ED_TOP_RE) || l.trim().match(ED_DISC_RE);
+    const m = l.trim().match(ED_RAMO_RE) || l.trim().match(ED_TOP_RE) || l.trim().match(ED_DISC_RE);
     return !!m && ED_NUM_RE.test(m[1]);
   });
 }
 function tirarNumeracaoEdital(raw) {
   return String(raw || "").split(/\r?\n/).map((l) => {
     const s = l.trim();
-    const mt = s.match(ED_TOP_RE), md = s.match(ED_DISC_RE);
+    const mr = s.match(ED_RAMO_RE), mt = s.match(ED_TOP_RE), md = s.match(ED_DISC_RE);
+    if (mr) return "++ " + mr[1].replace(ED_NUM_RE, "");
     if (mt) return "+ " + mt[1].replace(ED_NUM_RE, "");
     if (md) return "@ " + md[1].replace(ED_NUM_RE, "");
     return l;
@@ -1474,6 +1546,60 @@ function diagnosticoPlano(r, plano) {
   return achados;
 }
 
+/* Os ramos de um tópico, lidos do texto do edital ([] se não houver ou se o tópico não existir). */
+function edRamosDoTopico(texto, disciplina, topico) {
+  const r = lerEdital(texto);
+  const d = r.disciplinas.find((x) => edNormalizar(x.nome) === edNormalizar(disciplina));
+  const tp = d && d.topicos.find((x) => edNormalizar(x.nome) === edNormalizar(topico));
+  return tp ? (tp.ramos || []).map((x) => Object.assign({}, x)) : [];
+}
+
+/* Troca TODOS os ramos de um tópico pela lista dada e devolve { texto, ramos, avisos } — ou null se o tópico
+ * não existe. O resto do texto (cabeçalho, blocos, fase 2, comentários, outros tópicos) não é tocado.
+ * ramos: [{ nome, peso?, nota? }] na ordem desejada; nome vazio sai; nome repetido sai (fica o primeiro);
+ * peso 1..5 (ou "12q"); sem peso = igual aos irmãos. */
+function edEditarRamos(texto, disciplina, topico, ramos) {
+  const r = lerEdital(texto);
+  const d = r.disciplinas.find((x) => edNormalizar(x.nome) === edNormalizar(disciplina));
+  const tp = d && d.topicos.find((x) => edNormalizar(x.nome) === edNormalizar(topico));
+  if (!tp) return null;
+  const avisos = [];
+  const vistos = new Set(), lista = [];
+  (ramos || []).forEach((x) => {
+    const nome = String((x && x.nome) || "").replace(/\s*::\s*/g, " - ").replace(/\s+/g, " ").trim();
+    if (!nome) { avisos.push({ tipo: "sem_nome" }); return; }
+    const id = edRamoId(nome);
+    if (!id || vistos.has(id)) { avisos.push({ tipo: "repetido", nome }); return; }
+    vistos.add(id);
+    const bruto = x.peso === undefined || x.peso === null ? "" : String(x.peso).trim();
+    const ach = [];
+    const pr = bruto === "" ? { peso: 3, herdado: true } : edPeso(bruto, ach, 0);
+    if (ach.length) avisos.push({ tipo: "peso", nome, txt: bruto });
+    lista.push({ id, nome, peso: pr.peso, herdado: !!pr.herdado, abs: pr.abs || null, unidade: pr.unidade || "",
+      nota: String((x && x.nota) || "").replace(/\s*::\s*/g, " - ").trim() });
+  });
+  const eol = /\r\n/.test(texto) ? "\r\n" : "\n";
+  const linhas = String(texto).split(/\r?\n/);
+  const i = tp.linha - 1;
+  /* a região dos ramos: depois da linha do tópico, linhas em branco e "++" até a primeira outra coisa */
+  let fim = i + 1;
+  while (fim < linhas.length && (!linhas[fim].trim() || ED_RAMO_RE.test(linhas[fim].trim()))) fim++;
+  const restoDaRegiao = linhas.slice(i + 1, fim).filter((l) => !ED_RAMO_RE.test(l.trim()));
+  const novo = linhas.slice(0, i + 1).concat(edLinhasRamos({ ramos: lista }), restoDaRegiao, linhas.slice(fim));
+  return { texto: novo.join(eol), ramos: lista, avisos };
+}
+
+/* As linhas "++" de um tópico, como foram lidas (peso só quando a pessoa o escreveu; sem peso nem nota, só o nome). */
+function edLinhasRamos(tp) {
+  return ((tp && tp.ramos) || []).map((rm) => {
+    const partes = [rm.nome];
+    const peso = rm.abs > 0 ? String(rm.abs) + (rm.unidade === "p" ? "p" : "q") : String(rm.peso);
+    if (!rm.herdado || rm.nota) partes.push(rm.herdado ? "" : peso);
+    if (rm.nota) partes.push(rm.nota);
+    return "++ " + partes.join(" :: ");
+  });
+}
+
 /* Devolve o texto canônico a partir da estrutura — é o que permite o
  * usuário mexer no peso pela tabela e o editor acompanhar. */
 function edParaTexto(r) {
@@ -1543,6 +1669,7 @@ function edParaTexto(r) {
         m = (m ? m + " " : "") + "!d" + p;
       }
       L.push("+ " + t.nome + " :: " + t.peso + (m ? " :: " + m : ""));
+      edLinhasRamos(t).forEach((x) => L.push(x));
     });
     L.push("");
   });
@@ -1598,6 +1725,7 @@ function edRecolocarPerdidos(txtNovo, perdidos, txtAntigo) {
       const peso = tp.peso == null ? 3 : tp.peso;
       const motivo = String(tp.motivo || "").trim();
       saida.push("+ " + x.t + " :: " + peso + (motivo ? " :: " + motivo : ""));
+      edLinhasRamos(tp).forEach((l) => saida.push(l));
       postos++;
     });
     delete porDisc[discAtual];
