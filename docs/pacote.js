@@ -16,18 +16,53 @@
 /* ---- núcleo (sem tela) ---- */
 
 /* O nome do baralho de uma pasta. "::" dentro do nome viraria nível a mais. */
-function pacNomeDeck(n, comEdital) {
+function pacNomeDeck(n, comEdital, ramo) {
   const limpa = (s) => String(s || "").replace(/\s*::\s*/g, " — ").replace(/\s+/g, " ").trim();
   const d = limpa(n.disciplina), t2 = limpa(n.topico);
   /* com o edital: Edital::Disciplina::Tópico — o Anki mostra o edital como a pasta de cima */
   const ed = comEdital ? limpa(n.edital) : "";
-  return [ed, d, t2].filter(Boolean).join("::") || "Sem pasta";
+  /* com ramos: ...::Tópico::Ramo (subbaralho do tópico) */
+  return [ed, d, t2, limpa(ramo)].filter(Boolean).join("::") || "Sem pasta";
+}
+
+/* O NOME do ramo de um cartão (pela etiqueta ram_ e pelos ramos do tópico no texto do edital). "" se o cartão não
+ * está em ramo, se o tópico não tem ramos ou se a etiqueta aponta para um ramo que não existe mais. */
+function pacRamoDoCartao(n) {
+  const id = typeof ramIdDoCartao === "function" ? ramIdDoCartao(n.card) : "";
+  if (!id) return "";
+  const lista = (typeof editais !== "undefined" && Array.isArray(editais)) ? editais : [];
+  const dono = (typeof matResumos !== "undefined" && (matResumos[n.chave] || {}).concurso) || "";
+  const ordem = lista.filter((e) => cmNormal(e.nome) === cmNormal(n.edital || "")).concat(lista.filter((e) => cmNormal(e.nome) === cmNormal(dono)), lista);
+  for (const e of ordem) {
+    const r = edRamosDoTopico(e.texto || "", n.disciplina, n.topico).find((x) => x.id === id);
+    if (r) return r.nome;
+  }
+  return "";
+}
+
+/* Importar: "Tópico › Ramo" (o pacote veio com subbaralho de ramo) volta a ser o TÓPICO com o ramo, quando o edital
+ * conhece esse ramo; senão fica como está. Devolve { topico, ramoId } ou null. */
+function pacResolverRamo(edital, disciplina, topicoJunto) {
+  const partes = String(topicoJunto || "").split(" › ").map((x) => x.trim()).filter(Boolean);
+  if (partes.length < 2) return null;
+  const lista = (typeof editais !== "undefined" && Array.isArray(editais)) ? editais : [];
+  const cand = edital ? lista.filter((e) => cmNormal(e.nome) === cmNormal(edital)) : lista;
+  for (let k = partes.length - 1; k >= 1; k--) {
+    const base = partes.slice(0, k).join(" › "), ramo = partes.slice(k).join(" › ");
+    const id = edRamoId(ramo);
+    for (const e of cand) {
+      const r = edRamosDoTopico(e.texto || "", disciplina, base).find((x) => x.id === id);
+      if (r) return { topico: base, ramoId: r.id };
+    }
+  }
+  return null;
 }
 
 /* O que entra no pacote: as notas das pastas marcadas, menos (opcionalmente)
  * os repetidos — fica o mais completo de cada grupo — e os abaixo do padrão. */
 function pacMontar(notas, sel, opc) {
   const o = opc || {};
+  const nomeDeck = (n) => pacNomeDeck(n, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
   /* o edital de cada tópico marcado (Map chave → nome): sai como a pasta de cima do baralho */
   const editalDe = o.editalDe || new Map();
   const marcadas = (notas || []).filter((n) => sel && sel.has(n.chave)).map((n) => Object.assign({}, n, { edital: editalDe.get(n.chave) || "" }));
@@ -45,7 +80,7 @@ function pacMontar(notas, sel, opc) {
   }
   const itens = marcadas.filter((_, i) => manter[i]);
   const decks = new Map();
-  itens.forEach((n) => { const d = pacNomeDeck(n, o.comEdital); decks.set(d, (decks.get(d) || 0) + 1); });
+  itens.forEach((n) => { const d = nomeDeck(n); decks.set(d, (decks.get(d) || 0) + 1); });
   /* baralhos vazios: tópico marcado SEM nenhum cartão (ex.: tópico do edital ainda por preencher) */
   const vazios = [];
   if (o.vazios && o.info && sel) {
@@ -61,8 +96,8 @@ function pacMontar(notas, sel, opc) {
 }
 
 /* Os cartões como o buildApkg / exportTxtString os querem: com o baralho da pasta. */
-function pacCartoes(itens, comEdital) {
-  return (itens || []).map((n) => Object.assign({}, n.card, { deck: pacNomeDeck(n, comEdital), tags: (n.card.tags || []).slice() }));
+function pacCartoes(itens, comEdital, comRamos) {
+  return (itens || []).map((n) => Object.assign({}, n.card, { deck: pacNomeDeck(n, comEdital, comRamos ? pacRamoDoCartao(n) : ""), tags: (n.card.tags || []).slice() }));
 }
 
 /* Nome de arquivo seguro para o pacote. */
@@ -110,8 +145,10 @@ function pacRaizComum(cards) {
 }
 
 /* Uma linha "@ … / pergunta :: resposta :: etiquetas / + …" por cartão importado. */
-function pacBlocoImportado(c) {
+function pacBlocoImportado(c, ramoId) {
   const tags = (c.ownTags || c.tags || []).map((x) => String(x).replace(/::/g, "_").replace(/\s+/g, "_"));
+  /* o subbaralho do ramo vira a etiqueta do ramo (uma só: troca a que já vier) */
+  if (ramoId) { for (let i = tags.length - 1; i >= 0; i--) if (/^ram_/i.test(tags[i])) tags.splice(i, 1); tags.push("ram_" + ramoId); }
   const limpo = Object.assign({}, c, {
     front: cmCampo(c.front), back: cmCampo(c.back), titulo: cmCampo(c.titulo),
     more: String(c.more || "").split(/<br\s*\/?>|\r?\n/i).map(cmCampo).filter(Boolean).join("<br>"),
@@ -130,7 +167,7 @@ function pacImportar(cards, modo, destChave, comEdital) {
   const tocados = new Set();
   const frentes = {};
   (cards || []).forEach((c) => {
-    let ch, disc, top, edital = "";
+    let ch, disc, top, edital = "", ramoId = "";
     if (modo === "topico") {
       const d = matResumos[destChave];
       if (!d) return;
@@ -138,6 +175,8 @@ function pacImportar(cards, modo, destChave, comEdital) {
     } else {
       const s = pacSepararDeck(c.deck, raiz, comEdital);
       disc = s.disciplina; top = s.topico; edital = s.edital || "";
+      const rr = pacResolverRamo(edital, disc, top);
+      if (rr) { top = rr.topico; ramoId = rr.ramoId; }
       ch = matChaveViva(disc, top);
     }
     if (!(ch in antes)) antes[ch] = gerTexto(ch);
@@ -154,7 +193,7 @@ function pacImportar(cards, modo, destChave, comEdital) {
       const ed = (typeof editais !== "undefined" ? editais : []).find((e) => cmNormal(e.nome) === cmNormal(edital));
       meta.concurso = ed ? ed.nome : edital;
     }
-    matGravarCartoes(ch, (at ? at + "\n\n" : "") + pacBlocoImportado(c), meta);
+    matGravarCartoes(ch, (at ? at + "\n\n" : "") + pacBlocoImportado(c, ramoId), meta);
     tocados.add(ch); r.novos++;
   });
   r.topicos = tocados.size;
@@ -172,7 +211,7 @@ let pacInfo = new Map();       /* chave → { edital, disciplina, topico } dos t
 const PAC_DICAS = {
   btnPacTudo: "pac_tip_tudo", btnPacLimpar: "pac_tip_limpar", btnPacApkg: "pac_tip_apkg", btnPacTxt: "pac_tip_txt",
   btnPacImportar: "pac_tip_importar", btnPacFechar: "pac_tip_fechar", pacComEdital: "pac_tip_com_edital",
-  pacVazios: "pac_tip_vazios", pacImpComEdital: "pac_tip_imp_com_edital", pacSemRep: "pac_tip_sem_rep", pacSemFracos: "pac_tip_sem_fracos",
+  pacVazios: "pac_tip_vazios", pacRamos: "pac_tip_ramos", pacImpComEdital: "pac_tip_imp_com_edital", pacSemRep: "pac_tip_sem_rep", pacSemFracos: "pac_tip_sem_fracos",
 };
 
 function pacEl(tag, cls, txt) {
@@ -186,7 +225,7 @@ function pacTemEditais() { return typeof editais !== "undefined" && Array.isArra
 
 function pacOpcoes() {
   return { semRepetidos: $("pacSemRep").checked, semFracos: $("pacSemFracos").checked,
-    comEdital: $("pacComEdital").checked, vazios: $("pacVazios").checked && pacTemEditais(), editalDe: pacEditalDe, info: pacInfo };
+    comEdital: $("pacComEdital").checked, comRamos: $("pacRamos").checked, vazios: $("pacVazios").checked && pacTemEditais(), editalDe: pacEditalDe, info: pacInfo };
 }
 
 /* marcar/desmarcar UM tópico (guardando de qual edital ele foi marcado) */
@@ -275,7 +314,7 @@ async function pacExportar(formato, deps) {
   if (!p.itens.length && !(formato !== "txt" && p.vazios.length)) return { ok: false };
   const raiz = String($("pacNome").value || "").trim() || "EasyAnkiCards";
   const comEdital = $("pacComEdital").checked;
-  const cards = pacCartoes(p.itens, comEdital);
+  const cards = pacCartoes(p.itens, comEdital, $("pacRamos").checked);
   try {
     if (formato === "txt") {
       const txt = exportTxtString({ cards }, raiz);
@@ -376,6 +415,7 @@ if (typeof document !== "undefined" && $("btnPacote")) {
   $("pacComEdital").onchange = pacPintarPrevia;
   $("pacVazios").onchange = pacPintarPrevia;
   $("pacSemRep").onchange = pacPintarPrevia;
+  $("pacRamos").onchange = pacPintarPrevia;
   $("pacSemFracos").onchange = pacPintarPrevia;
   $("btnPacApkg").onclick = () => pacExportar("apkg");
   $("btnPacTxt").onclick = () => pacExportar("txt");

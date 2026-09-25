@@ -682,6 +682,73 @@ async function testes() {
       a.qsBancoPor([]); a.jurGravarTudo({});
     }
 
+    /* R31: exportar com subbaralho por ramo e importar de volta */
+    {
+      const { a, ed, chave, k } = MT();
+      a.gerAbrir();
+      const notas = a.gerNotasAtual();
+      const ch2 = k("Direito Financeiro", "Receita Pública");
+      const sel = new Set([chave, ch2]);
+      const editalDe = new Map([[chave, "ISS Caruaru Auditor"], [ch2, "ISS Caruaru Auditor"]]);
+      const nomes = (m) => [...m.decks.entries()].map(([d, n]) => d + "=" + n).sort().join(" | ");
+      const m1 = a.pacMontar(notas, sel, { comEdital: true, comRamos: true, editalDe });
+      const pre = "ISS Caruaru Auditor::Licitações::Lei 14.133";
+      ok(m1.decks.get(pre + "::Modalidades") === 1 && m1.decks.get(pre + "::Fase preparatória") === 1 && m1.decks.get(pre + "::Contratos") === 1, "R31 com subbaralho por ramo: um baralho por ramo (Edital::Disciplina::Topico::Ramo): " + nomes(m1));
+      ok(m1.decks.get(pre) === 2, "R31a o que nao esta em ramo (e a etiqueta de ramo que nao existe mais) fica no baralho do topico: " + nomes(m1));
+      ok(m1.decks.get("ISS Caruaru Auditor::Direito Financeiro::Receita Pública") === 1 && m1.decks.size === 5, "R31b topico SEM ramos no edital: a etiqueta ram_ solta nao cria subbaralho: " + nomes(m1));
+      const m0 = a.pacMontar(notas, sel, { comEdital: true, comRamos: false, editalDe });
+      ok(m0.decks.get(pre) === 5 && m0.decks.size === 2, "R31c sem a opcao, tudo no baralho do topico como sempre: " + nomes(m0));
+      const m2 = a.pacMontar(notas, sel, { comEdital: false, comRamos: true, editalDe });
+      ok(m2.decks.get("Licitações::Lei 14.133::Modalidades") === 1, "R31d o subbaralho de ramo tambem funciona sem a pasta do edital");
+      const cs = a.pacCartoes(m1.itens, true, true);
+      ok(cs.some((c) => c.deck === pre + "::Contratos" && /Contrato\?/.test(c.front)) && cs.every((c) => Array.isArray(c.tags)), "R31e os cartoes exportados levam o baralho do ramo (e as etiquetas)");
+      ok(a.pacCartoes(m1.itens, true, false).every((c) => c.deck.split("::").length <= 4 && !/::Modalidades$/.test(c.deck)), "R31f pacCartoes sem ramos nao usa subbaralho");
+      ok(a.pacNomeDeck({ edital: "E", disciplina: "D", topico: "T" }, true, "R :: x") === "E::D::T::R — x" && a.pacNomeDeck({ disciplina: "D", topico: "T" }, false, "") === "D::T", "R31g o nome do ramo com '::' nao cria nivel a mais");
+      ok(a.pacRamoDoCartao({ card: { ownTags: ["ram_modalidades"] }, chave, disciplina: "Licitações", topico: "Lei 14.133", edital: "ISS Caruaru Auditor" }) === "Modalidades" && a.pacRamoDoCartao({ card: { ownTags: ["x"] }, chave, disciplina: "Licitações", topico: "Lei 14.133" }) === "" && a.pacRamoDoCartao({ card: { ownTags: ["ram_zzz"] }, chave, disciplina: "Licitações", topico: "Lei 14.133" }) === "", "R31h o nome do ramo vem da etiqueta + texto do edital; sem etiqueta ou com ramo inexistente: vazio");
+      ok(a.pacRamoDoCartao({ card: { ownTags: ["ram_modalidades"] }, chave, disciplina: "Licitações", topico: "Lei 14.133" }) === "Modalidades", "R31i sem o edital informado acha o ramo pelo edital dono do topico");
+      ok(a.$("pacRamos").checked === true, "R31i2 a opcao de subbaralho por ramo existe e vem ligada");
+      /* dois editais com o mesmo topico: o ramo vem do edital da pasta */
+      const ed2 = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20" + String.fromCharCode(10) + "@ Licitações :: 5" + String.fromCharCode(10) + "+ Lei 14.133 :: 5" + String.fromCharCode(10) + "++ So do TCE");
+      ok(a.pacRamoDoCartao({ card: { ownTags: ["ram_so_do_tce"] }, chave, disciplina: "Licitações", topico: "Lei 14.133", edital: "TCE-PE" }) === "So do TCE" && a.pacRamoDoCartao({ card: { ownTags: ["ram_so_do_tce"] }, chave, disciplina: "Licitações", topico: "Lei 14.133", edital: "ISS Caruaru Auditor" }) === "So do TCE", "R31h2 procura o ramo no edital informado e, se nao esta la, nos outros");
+      const ed3 = a.edCriar("Ed3", "# Ed3 | prova: 2027-08-01 | horas: 20" + String.fromCharCode(10) + "@ D :: 5" + String.fromCharCode(10) + "+ Tópico › Sub :: 5" + String.fromCharCode(10) + "++ Ramo Um");
+      ok(JSON.stringify(a.pacResolverRamo("Ed3", "D", "Tópico › Sub › Ramo Um")) === JSON.stringify({ topico: "Tópico › Sub", ramoId: "ramo_um" }), "R31p2 topico que ja tem ' › ' no nome: acha o corte certo entre topico e ramo: " + JSON.stringify(a.pacResolverRamo("Ed3", "D", "Tópico › Sub › Ramo Um")));
+      /* a tela de exportar respeita a opcao */
+      {
+        a.pacAbrir(); a.$("btnPacTudo").onclick();
+        const cap = {};
+        const deps = { construir: async (cards, raiz, estilo, x, al, extras) => { cap.cards = cards; return new Uint8Array(1); }, entregar: async () => {} };
+        a.$("pacComEdital").checked = true;
+        a.$("pacRamos").checked = true;
+        await a.pacExportar("apkg", deps);
+        ok(cap.cards && cap.cards.some((c) => /::Lei 14\.133::Modalidades$/.test(c.deck)), "R31q exportar com a opcao ligada: o subbaralho do ramo sai no pacote: " + (cap.cards || []).map((c) => c.deck).join(" | "));
+        a.$("pacRamos").checked = false; a.$("pacRamos").onchange();
+        cap.cards = null;
+        await a.pacExportar("apkg", deps);
+        ok(cap.cards && !cap.cards.some((c) => /::Modalidades$/.test(c.deck)), "R31r exportar com a opcao desligada: sem subbaralho de ramo");
+        ok(/Modalidades/.test(a.$("pacDecks").textContent) === false, "R31s a previa acompanha a opcao desligada");
+        a.$("pacRamos").checked = true; a.$("pacRamos").onchange && a.$("pacRamos").onchange();
+        ok(/Modalidades/.test(a.$("pacDecks").textContent), "R31t a previa mostra o subbaralho com a opcao ligada");
+        a.$("btnPacFechar").onclick();
+      }
+      /* importar de volta */
+      const F = (front, tags, deck) => ({ kind: "basic", front, back: "resp", tags, ownTags: tags, deck });
+      const imp = a.pacImportar([
+        F("Novo1? ", [], "Raiz::ISS Caruaru Auditor::Licitações::Lei 14.133::Modalidades"),
+        F("Novo2? ", ["ram_contratos", "x"], "Raiz::ISS Caruaru Auditor::Licitações::Lei 14.133::Modalidades"),
+        F("Novo3? ", [], "Raiz::ISS Caruaru Auditor::Licitações::Lei 14.133::Inventado"),
+        F("Novo4? ", [], "Raiz::ISS Caruaru Auditor::Licitações::Lei 14.133"),
+      ], "decks", undefined, true);
+      const cart = a.matResumosAtual()[chave].cartoes;
+      ok(/Novo1\? :: resp :: ram_modalidades\s*$/m.test(cart), "R31j o subbaralho do ramo volta como TOPICO + etiqueta do ramo: " + cart.split("\n").filter((l) => /Novo/.test(l)));
+      ok(/Novo2\? :: resp :: x, ram_modalidades\s*$/m.test(cart) && !/Novo2[^\n]*ram_contratos/.test(cart), "R31k a etiqueta de ramo que ja vinha e' TROCADA pela do subbaralho (as outras ficam)");
+      ok(!a.matResumosAtual()[k("Licitações", "Lei 14.133 › Modalidades")] && !!a.matResumosAtual()[k("Licitações", "Lei 14.133 › Inventado")], "R31l ramo que o edital nao conhece continua virando topico proprio (como antes); o conhecido nao cria topico");
+      ok(/Novo4\? :: resp\s*$/m.test(cart) && imp.novos === 4, "R31m cartao no baralho do topico entra sem etiqueta de ramo");
+      const semEd = a.pacImportar([F("Novo5? ", [], "Licitações::Lei 14.133::Fase preparatória")], "decks", undefined, false);
+      ok(/Novo5\? :: resp :: ram_fase_preparatoria\s*$/m.test(a.matResumosAtual()[chave].cartoes), "R31n sem a pasta do edital tambem resolve o ramo (disciplina::topico::ramo)");
+      ok(a.pacResolverRamo("", "Licitações", "Lei 14.133") === null && a.pacResolverRamo("", "Licitações", "") === null && a.pacResolverRamo("Outro Edital", "Licitações", "Lei 14.133 › Modalidades") === null, "R31o sem separador, vazio ou edital que nao e' o dono: nada");
+      ok(JSON.stringify(a.pacResolverRamo("", "Licitações", "Lei 14.133 › Modalidades")) === JSON.stringify({ topico: "Lei 14.133", ramoId: "modalidades" }), "R31p sem edital informado procura em todos");
+    }
+
     /* R24: o plano mostra e ajusta os ramos */
     {
       const { a, ed } = MT();

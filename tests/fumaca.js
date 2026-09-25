@@ -817,7 +817,7 @@ function rodar() {
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
-    pacNomeDeck, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
+    pacNomeDeck, pacRamoDoCartao, pacResolverRamo, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
     pacAbrir, pacExportar, pacLerArquivo, pacAcaoImportar, pacPintar, cmCampo,
     pacNotasAtual: () => pacNotas, pacSelAtual: () => pacSel, pacLidoAtual: () => pacLido, pacSelTeste: (s) => { pacSel = new Set(s); },
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
