@@ -220,7 +220,7 @@ async function testes() {
     a.$("btnGerLimpar").onclick();
     ok(a.gerSelAtual().size === 0 && a.$("btnGerApagar").disabled === true, "G7l limpar marcacao");
     /* destinos */
-    ok(achar(a.$("gerDestino"), (e) => e.tag === "option").length === 3, "G7m o seletor de destino lista os topicos");
+    ok(achar(a.$("gerDestino"), (e) => e.tag === "option").length === 4, "G7m o seletor de destino lista os topicos e a Bancada");
   }
   {
     /* apagar pela tela: pergunta antes */
@@ -366,7 +366,7 @@ async function testes() {
     ck[0].checked = true;
     const c2 = achar(a.$("gerLista"), (e) => e.tag === "input"); c2[0].checked = true; c2[0].onchange();
     a.$("btnGerMover").onclick();
-    ok(a.$("gerPop").hidden === false && achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item")).length === 3, "G14k o seletor lista os 3 topicos");
+    ok(a.$("gerPop").hidden === false && achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item")).length === 4 && /Bancada/.test(a.$("gerPopLista").textContent), "G14k o seletor lista os 3 topicos e a Bancada");
     a.$("gerPopBusca").value = "iptu"; a.$("gerPopBusca").oninput();
     const itens = achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item"));
     ok(itens.length === 1 && /IPTU/.test(itens[0].textContent), "G14l digitar filtra os destinos (sem diferenciar acento ou maiuscula)");
@@ -442,6 +442,167 @@ async function testes() {
     ok(!a.$("dlgGerCartoes").classList.contains("ger-grande") && a.$("dlgGerCartoes").style.width === "" && a.lojaLer("eac_ger_grande") === "0", "G15c reduzir volta ao normal (e limpa o tamanho arrastado)");
   }
 
+  /* ---- G16: arrastar e soltar cartoes nas pastas ---- */
+  {
+    const ev = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { dados: {}, setData(k, v) { this.dados[k] = v; }, setDragImage(el) { this.img = el; }, effectAllowed: "", dropEffect: "" } });
+    const linhaTop = (a, nome) => achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => e.textContent.indexOf(nome) === 0);
+    const cx = (a) => achar(a.$("gerLista"), (e) => e.tag === "input");
+    const idxDe = (a, re) => linhasDaLista(a).findIndex((l) => re.test(l.textContent));
+    const M = () => { const m = montar(); m.a.gerAbrir(); return m; };
+
+    /* linhas arrastaveis */
+    {
+      const { a } = M();
+      ok(linhasDaLista(a).length > 0 && linhasDaLista(a).every((l) => l.draggable === true && typeof l.ondragstart === "function"), "G16a toda linha da lista e' arrastavel");
+      ok(achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).every((e) => typeof e.ondrop === "function" && typeof e.ondragover === "function"), "G16b todo topico da arvore aceita soltar");
+    }
+    /* quem vai: um nao marcado leva so' ele; um marcado leva todos os marcados */
+    {
+      const { a } = M();
+      const i = idxDe(a, /alíquota/), j = idxDe(a, /IPTU/);
+      const e1 = ev();
+      linhasDaLista(a)[i].ondragstart(e1);
+      ok(a.gerArrastoAtual() && a.gerArrastoAtual().notas.length === 1 && /alíquota/.test(a.gerArrastoAtual().notas[0].card.front), "G16c arrastar um cartao NAO marcado leva so' ele");
+      ok(/Movendo 1 cartão/.test(e1.dataTransfer.dados["text/plain"]) && e1.dataTransfer.img && /Movendo 1 cartão/.test(e1.dataTransfer.img.textContent), "G16d a pilula 'Movendo N cartoes' acompanha o ponteiro");
+      ok(a.$("dlgGerCartoes").classList.contains("ger-arrastando") && cls(linhasDaLista(a)[i], "ger-indo") && !cls(linhasDaLista(a)[j], "ger-indo"), "G16e enquanto arrasta: janela em modo arrastar e so' a linha levada esmaece");
+      const ghost = e1.dataTransfer.img;
+      ok(!!ghost.parentNode, "G16f0 (a pilula esta no corpo da pagina enquanto arrasta)");
+      linhasDaLista(a)[i].ondragend();
+      ok(a.gerArrastoAtual() === null && !a.$("dlgGerCartoes").classList.contains("ger-arrastando") && !cls(linhasDaLista(a)[i], "ger-indo") && !ghost.parentNode, "G16f soltar fora (dragend) limpa tudo, inclusive a pilula");
+      /* marcados */
+      const ck = cx(a);
+      ck[i].checked = true; ck[i].onchange(); ck[j].checked = true; ck[j].onchange();
+      const e2 = ev();
+      linhasDaLista(a)[j].ondragstart(e2);
+      ok(a.gerArrastoAtual().notas.length === 2 && /Movendo 2 cartões/.test(e2.dataTransfer.dados["text/plain"]), "G16g arrastar um cartao MARCADO leva todos os marcados");
+      linhasDaLista(a)[j].ondragend();
+      const k = idxDe(a, /fato gerador do ISS\?/);
+      linhasDaLista(a)[k].ondragstart(ev());
+      ok(a.gerArrastoAtual().notas.length === 1 && a.gerSelAtual().size === 2, "G16h arrastar um NAO marcado leva so' ele e nao mexe na marcacao");
+      linhasDaLista(a)[k].ondragend();
+    }
+    /* alvos */
+    {
+      const { a } = M();
+      const i = idxDe(a, /alíquota/);
+      linhasDaLista(a)[i].ondragstart(ev());
+      const outro = linhaTop(a, "IPTU"), proprio = linhaTop(a, "ISS");
+      const eo = ev(); outro.ondragover(eo);
+      ok(eo.prevented === true && cls(outro, "ger-alvo") && eo.dataTransfer.dropEffect === "move", "G16i sobre outra pasta: permite soltar e a pasta ganha destaque");
+      outro.ondragleave();
+      ok(!cls(outro, "ger-alvo"), "G16j sair da pasta tira o destaque");
+      const ep = ev(); proprio.ondragover(ep);
+      ok(ep.prevented === false && cls(proprio, "ger-alvo-no") && !cls(proprio, "ger-alvo") && ep.dataTransfer.dropEffect === "none", "G16k sobre a PROPRIA pasta do cartao nao permite soltar");
+      linhasDaLista(a)[i].ondragend();
+      ok(!cls(proprio, "ger-alvo-no"), "G16l dragend tira a marca de pasta invalida");
+      const es = ev(); outro.ondragover(es);
+      ok(es.prevented === false, "G16m sem arrasto em andamento a arvore nao aceita soltar");
+    }
+    /* mistura: cartoes de duas pastas arrastados para uma delas — vale para os de fora */
+    {
+      const { a, iss, iptu } = M();
+      const ck = cx(a);
+      const iI = idxDe(a, /alíquota/), iP = idxDe(a, /IPTU/);
+      ck[iI].checked = true; ck[iI].onchange(); ck[iP].checked = true; ck[iP].onchange();
+      linhasDaLista(a)[iI].ondragstart(ev());
+      const alvo = linhaTop(a, "IPTU");
+      const eo = ev(); alvo.ondragover(eo);
+      ok(eo.prevented === true && cls(alvo, "ger-alvo"), "G16k2 arrastar cartoes de duas pastas: a pasta de um deles ainda e' alvo (vale para os de fora)");
+      const pn = alvo.ondrop(ev());
+      await Promise.resolve();
+      ok(/Mover 1 cartão\(ões\)/.test((a.$("uiModalMsg") || {}).textContent || ""), "G16k3 a confirmacao conta so' os que estao de fora da pasta");
+      await negar(a, pn);
+    }
+    /* soltar: pergunta com a previsao; NAO nao mexe; SIM move e oferece desfazer */
+    {
+      const { a, iss, iptu } = M();
+      const i = idxDe(a, /alíquota/);
+      const antes = JSON.stringify(a.matResumosAtual());
+      linhasDaLista(a)[i].ondragstart(ev());
+      const alvo = linhaTop(a, "IPTU");
+      const edrop = ev();
+      const pn = alvo.ondrop(edrop);
+      ok(edrop.prevented === true, "G16n0 soltar cancela o comportamento padrao do navegador (senao ele abre/abandona a pagina)");
+      await Promise.resolve();
+      const msg = (a.$("uiModalMsg") || {}).textContent || "";
+      ok(/Mover 1 cartão\(ões\) para “Trib › IPTU”/.test(msg) && /transferido para o tópico de destino/.test(msg) && !/já existe/.test(msg), "G16n a confirmacao explica o que vai acontecer: " + msg);
+      await negar(a, pn);
+      ok(JSON.stringify(a.matResumosAtual()) === antes && a.gerArrastoAtual() === null, "G16o dizer NAO ao soltar nao mexe em nada (e o arrasto termina)");
+      linhasDaLista(a)[i].ondragstart(ev());
+      await conduzir(a, linhaTop(a, "IPTU").ondrop(ev()));
+      ok(/alíquota/.test(a.matResumosAtual()[iptu].cartoes) && !/alíquota/.test(a.matResumosAtual()[iss].cartoes) && /1 movido/.test(a.$("gerMsg").textContent) && a.$("btnGerMsgDesfazer").hidden === false, "G16p soltar e confirmar move o cartao e o aviso oferece desfazer");
+      await conduzir(a, a.$("btnGerMsgDesfazer").onclick());
+      ok(/alíquota/.test(a.matResumosAtual()[iss].cartoes) && !/alíquota/.test(a.matResumosAtual()[iptu].cartoes), "G16q o desfazer devolve o cartao arrastado");
+    }
+    /* repetidos avisados antes; soltar na mesma pasta nao faz nada */
+    {
+      const { a, iss, iptu } = M();
+      a.matGravarCartoes(iptu, a.matResumosAtual()[iptu].cartoes + "\nQual a alíquota máxima do ISS? :: outra coisa qualquer", { disciplina: "Trib", topico: "IPTU" });
+      a.gerAbrir();
+      const i = idxDe(a, /alíquota máxima do ISS\? Serviços/);
+      const idx = i >= 0 ? i : linhasDaLista(a).findIndex((l) => /alíquota/.test(l.textContent) && /ISS/.test(l.textContent));
+      const prev = a.gerPrevisaoMover([a.gerNotasAtual().find((n) => n.chave === iss && /alíquota/.test(n.card.front))], iptu);
+      ok(prev.repetidos === 1 && prev.vao === 0 && prev.validos.length === 1, "G16r a previsao conta a pergunta que o destino ja tem: " + JSON.stringify({ r: prev.repetidos, v: prev.vao }));
+      const notaIss = a.gerNotasAtual().findIndex((n) => n.chave === iss && /alíquota/.test(n.card.front));
+      const pos = a.gerVisAtual().indexOf(notaIss);
+      linhasDaLista(a)[pos].ondragstart(ev());
+      const pn = linhaTop(a, "IPTU").ondrop(ev());
+      await Promise.resolve();
+      const msg = (a.$("uiModalMsg") || {}).textContent || "";
+      ok(/1 já existe\(m\) no destino/.test(msg) && /não será\(ão\) duplicado/.test(msg), "G16s a confirmacao avisa que o destino ja tem a pergunta: " + msg);
+      await negar(a, pn);
+      /* soltar na propria pasta */
+      linhasDaLista(a)[pos].ondragstart(ev());
+      await conduzir(a, linhaTop(a, "ISS").ondrop(ev()));
+      ok(/já estão nessa pasta/.test(a.$("gerMsg").textContent), "G16t soltar na propria pasta so' avisa, sem mover nada: " + a.$("gerMsg").textContent);
+    }
+    /* varios cartoes de uma vez */
+    {
+      const { a, iss, iptu } = M();
+      const ck = cx(a);
+      const ii = linhasDaLista(a).map((l, i) => (/Trib · ISS/.test(l.textContent) ? i : -1)).filter((i) => i >= 0);
+      ii.forEach((i) => { ck[i].checked = true; ck[i].onchange(); });
+      linhasDaLista(a)[ii[0]].ondragstart(ev());
+      ok(a.gerArrastoAtual().notas.length === ii.length && ii.length === 3, "G16u tres cartoes marcados, todos vao");
+      await conduzir(a, linhaTop(a, "IPTU").ondrop(ev()));
+      ok(/3 movido/.test(a.$("gerMsg").textContent) && !/Qual/.test(a.matResumosAtual()[iss].cartoes), "G16v os tres foram movidos de uma vez: " + a.$("gerMsg").textContent);
+    }
+    /* Bancada como destino */
+    {
+      const { a, iss } = montar();
+      a.$("editor").value = "Cartão da bancada? :: Resposta da bancada";
+      a.gerAbrir();
+      const bancada = linhaTop(a, "Texto do editor");
+      ok(!!bancada, "G16w a Bancada aparece na arvore e recebe cartoes");
+      const i = linhasDaLista(a).findIndex((l) => /alíquota/.test(l.textContent));
+      linhasDaLista(a)[i].ondragstart(ev());
+      await conduzir(a, bancada.ondrop(ev()));
+      ok(/alíquota máxima do ISS/.test(a.$("editor").value) && !/alíquota/.test(a.matResumosAtual()[iss].cartoes) && /Cartão da bancada/.test(a.$("editor").value), "G16x soltar na Bancada leva o cartao para o editor sem apagar o que la' estava");
+      await conduzir(a, a.$("btnGerMsgDesfazer").onclick());
+      ok(!/alíquota/.test(a.$("editor").value) && /alíquota/.test(a.matResumosAtual()[iss].cartoes), "G16y desfazer devolve o cartao ao material e limpa a Bancada");
+    }
+    /* disciplina fechada abre ao segurar o cartao em cima */
+    {
+      const { a } = M();
+      const cab = achar(a.$("gerArvore"), (e) => cls(e, "ger-disc"))[0];
+      const disc = cab.textContent.replace(/^\s*[▾▸]\s*/, "").replace(/\s*\(\d+\)\s*$/, "");
+      cab.children[0].onclick();
+      ok(a.gerFechadosAtual().has(disc), "G16z0 (fechou a disciplina)");
+      linhasDaLista(a)[0].ondragstart(ev());
+      const cab2 = achar(a.$("gerArvore"), (e) => cls(e, "ger-disc")).find((e) => e.textContent.indexOf(disc) >= 0);
+      const ed = ev(); cab2.ondragover(ed);
+      ok(ed.prevented === true && !a.gerFechadosAtual().has(disc), "G16z1 segurar o cartao sobre uma disciplina fechada a abre (para alcancar os topicos)");
+      linhasDaLista(a)[0].ondragend();
+      linhasDaLista(a)[0].ondragend();
+      const es = ev(); const cab3 = achar(a.$("gerArvore"), (e) => cls(e, "ger-disc"))[0];
+      cab3.children[0].onclick();
+      const fechada = achar(a.$("gerArvore"), (e) => cls(e, "ger-disc"))[0];
+      const disc3 = fechada.textContent.replace(/^\s*[▾▸]\s*/, "").replace(/\s*\(\d+\)\s*$/, "");
+      fechada.ondragover(es);
+      ok(es.prevented === false && a.gerFechadosAtual().has(disc3), "G16z2 sem arrasto, passar o mouse numa disciplina fechada nao a abre");
+    }
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
@@ -449,6 +610,7 @@ async function testes() {
     ok(/<script src="gerenciador\.js"><\/script>/.test(html) && /id="btnGerCartoes"/.test(html) && /id="dlgGerCartoes"/.test(html), "G13 falta o script, o botao ou a janela no index.html");
     ok(/"gerenciador\.js"/.test(sw), "G13a o modulo nao esta no cache offline");
     ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column/.test(html) && /\.ger-grande\{width:98vw/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e modo ampliado no CSS");
+    ok(/\.ger-pasta\.ger-alvo\{/.test(html) && /\.ger-ghost\{/.test(html) && /\.ger-item\.ger-indo\{/.test(html), "G13d CSS do destaque da pasta, da pilula e da linha esmaecida");
     ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
   }
 
