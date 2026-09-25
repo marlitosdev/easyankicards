@@ -30,7 +30,7 @@ const GER_DICAS = {
   btnGerMsgDesfazer: "ger_tip_msg_desfazer", btnGerMover: "ger_tip_mover", btnGerApagar: "ger_tip_apagar",
   btnGerMelhorar: "ger_tip_melhorar", btnGerDesfazer: "ger_tip_desfazer", btnGerFechar: "ger_tip_fechar",
   btnGerNpOk: "ger_tip_np_ok", btnGerNpCancelar: "ger_tip_np_cancelar", gerNpEdital: "ger_tip_np_edital",
-  btnGerClassificar: "ger_tip_classificar", btnGerClMover: "ger_tip_cl_mover", btnGerClFechar: "ger_tip_cl_fechar",
+  btnGerClassificar: "ger_tip_classificar", btnGerExportar: "ger_tip_exportar", btnGerClMover: "ger_tip_cl_mover", btnGerClFechar: "ger_tip_cl_fechar",
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
 };
 
@@ -506,6 +506,7 @@ function gerPintarLista() {
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
   $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
+  $("btnGerExportar").hidden = !gerPasta;
   const naBancada = !!gerPasta && (gerPasta.chave === CQ_BANCADA || gerPasta.id === "bancada");
   $("btnGerClassificar").hidden = !(naBancada && typeof editais !== "undefined" && editais.length && gerBancadaNotas().length);
   $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
@@ -998,6 +999,26 @@ function gerConfirmarClassificar() {
   return r;
 }
 
+/* "Exportar esta pasta": abre o montador de pacote já com a pasta (edital, disciplina ou tópico) marcada */
+function gerChavesDaPasta() {
+  if (!gerPasta) return { chaves: [], edital: "" };
+  if (gerPasta.chaves) {
+    const r = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.find((x) => gerPasta.id === x.id || String(gerPasta.id).indexOf(x.id + "|") === 0);
+    return { chaves: [...gerPasta.chaves], edital: r && r.tipo === "edital" ? r.concurso : "" };
+  }
+  if (gerPasta.chave) return { chaves: [gerPasta.chave], edital: gerEditalDoContexto() };
+  if (gerPasta.disciplina) return { chaves: [...new Set(gerNotas.filter((n) => (n.disciplina || "—") === gerPasta.disciplina).map((n) => n.chave))], edital: "" };
+  return { chaves: [], edital: "" };
+}
+
+function gerExportarPasta() {
+  const p = gerChavesDaPasta();
+  if (!p.chaves.length) { gerAviso(t("ger_exp_nada"), false); return null; }
+  $("dlgGerCartoes").close();
+  pacAbrir(p);
+  return p;
+}
+
 /* marca TODOS os cartões da lista de agora (não só os 60 à vista): é o "mover todos desta pasta" */
 function gerMarcarTodos() {
   gerSel = new Set(gerVis.map((_, i) => i));
@@ -1051,6 +1072,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerNovaPasta").onclick = gerAbrirNovaPasta;
   $("gerNpEdital").onchange = gerPreencherDiscsNp;
   $("btnGerClassificar").onclick = gerAbrirClassificar;
+  $("btnGerExportar").onclick = gerExportarPasta;
   $("gerClEdital").onchange = gerPintarClassificar;
   $("gerClGerais").onchange = gerPintarClassificar;
   $("btnGerClMover").onclick = gerConfirmarClassificar;

@@ -119,15 +119,11 @@ function stableDeckId(name) {
  * ID ESTÁVEL POR NOME (stableDeckId, acima): regenerar o mesmo pacote
  * depois atualiza os mesmos baralhos no Anki em vez de duplicar — a mesma
  * garantia que o baralho único já tinha, agora por subbaralho também. */
-function apkgAgruparDecks(cards, deckName, tituloGeral) {
+function apkgAgruparDecks(cards, deckName, tituloGeral, extras) {
   const nowSec = Math.floor(Date.now() / 1000);
   const decks = {};
   const idPorNome = {};
-  const idPorCartao = (cards || []).map((c) => {
-    /* c.deck: o subbaralho escolhido para o cartão (ex.: "Disciplina::Tópico"), que NÃO
-     * é a manchete — o título continua sendo só o cabeçalho impresso no cartão. */
-    const sub = String((c && (c.deck || c.titulo)) || tituloGeral || "").trim();
-    const nome = sub ? deckName + "::" + sub : deckName;
+  const garantir = (nome) => {
     if (!idPorNome[nome]) {
       const id = stableDeckId(nome);
       const d = JSON.parse(JSON.stringify(DECK_TEMPLATE));
@@ -136,7 +132,16 @@ function apkgAgruparDecks(cards, deckName, tituloGeral) {
       idPorNome[nome] = id;
     }
     return idPorNome[nome];
+  };
+  const idPorCartao = (cards || []).map((c) => {
+    /* c.deck: o subbaralho escolhido para o cartão (ex.: "Disciplina::Tópico"), que NÃO
+     * é a manchete — o título continua sendo só o cabeçalho impresso no cartão. */
+    const sub = String((c && (c.deck || c.titulo)) || tituloGeral || "").trim();
+    return garantir(sub ? deckName + "::" + sub : deckName);
   });
+  /* baralhos SEM cartão: a estrutura completa (ex.: os tópicos do edital ainda vazios) sai também;
+   * o Anki cria sozinho os níveis de cima ("Edital", "Edital::Disciplina") */
+  (extras || []).forEach((sub) => { const s = String(sub || "").trim(); if (s) garantir(deckName + "::" + s); });
   return { decks, idPorCartao };
 }
 
@@ -431,7 +436,7 @@ function montarModeloMC(models) {
 }
 
 /* cards: [{kind:"basic"|"cloze"|"mc", front, back, tags, options?, correct?}] */
-async function buildApkg(cards, deckName, estilo, titulo, alinha) {
+async function buildApkg(cards, deckName, estilo, titulo, alinha, extras) {
   estilo = estilo || "classic";
   titulo = titulo === undefined ? "" : titulo;
   const SQL = await window.__sqlPromise;   /* initSqlJs, ver index.html */
@@ -440,7 +445,7 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha) {
 
   const now = Date.now();
   const nowSec = Math.floor(now / 1000);
-  const grupos = apkgAgruparDecks(cards, deckName, titulo);
+  const grupos = apkgAgruparDecks(cards, deckName, titulo, extras);
   const decks = Object.assign({ "1": DECK_DEFAULT }, grupos.decks);
 
   const models = modelosParaEstilo(estilo, alinha);

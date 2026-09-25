@@ -821,6 +821,7 @@ function rodar() {
     pacAbrir, pacExportar, pacLerArquivo, pacAcaoImportar, pacPintar, cmCampo,
     pacNotasAtual: () => pacNotas, pacSelAtual: () => pacSel, pacLidoAtual: () => pacLido, pacSelTeste: (s) => { pacSel = new Set(s); },
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
+    PAC_DICAS, pacDetectarEdital, pacMarcar, pacTemEditais, pacEditalDeAtual: () => pacEditalDe, pacInfoAtual: () => pacInfo, pacAbrir, gerChavesDaPasta, gerExportarPasta, apkgAgruparDecks,
     gerClassificar, gerMoverGrupos, gerAbrirClassificar, gerConfirmarClassificar, gerPintarClassificar, gerBancadaNotas, gerEditalDoContexto, gerAbrirCaminhoDe, gerPreencherDiscsNp,
     gerDestinoConcursoAtual: () => gerDestinoConcurso, gerModeloEditais, gerTrocarAgrupar, gerAbertosAtual: () => gerAbertos, gerAgruparAtual: () => gerAgrupar, gerVirtuaisAtual: () => gerVirtuais, gerSobreNo, gerNomesDoEdital, GER_CHAVE_AGRUPAR,
     GER_DICAS, CE_DICAS, dicasDosBotoes, flashBotao, tipShow, tipHide, tipHospedeiro,
