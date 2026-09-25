@@ -247,12 +247,13 @@ async function testes() {
     const ck = achar(a.$("gerLista"), (e) => e.tag === "input");
     const alvo = linhasDaLista(a).findIndex((l) => /alíquota/.test(l.textContent));
     ck[alvo].checked = true; ck[alvo].onchange();
-    a.$("gerDestino").value = iptu;
     const antes = JSON.stringify(a.matResumosAtual());
-    await negar(a, a.$("btnGerMover").onclick());
-    ok(JSON.stringify(a.matResumosAtual()) === antes, "G9 dizer NAO em 'mover' nao mexe em nada");
-    await conduzir(a, a.$("btnGerMover").onclick());
-    ok(/alíquota/.test(a.matResumosAtual()[iptu].cartoes) && !/alíquota/.test(a.matResumosAtual()[iss].cartoes) && /1 movido/.test(a.$("gerMsg").textContent), `G9a mover pela tela: ${a.$("gerMsg").textContent}`);
+    a.$("btnGerMover").onclick();
+    ok(a.$("gerPop").hidden === false, "G9-pre o botao 'Mover para…' abre o seletor de destino");
+    await negar(a, a.gerEscolherDestino(iptu));
+    ok(JSON.stringify(a.matResumosAtual()) === antes && a.$("gerPop").hidden === true, "G9 dizer NAO em 'mover' nao mexe em nada (e o seletor fecha)");
+    await conduzir(a, a.gerEscolherDestino(iptu));
+    ok(/alíquota/.test(a.matResumosAtual()[iptu].cartoes) && !/alíquota/.test(a.matResumosAtual()[iss].cartoes) && /1 movido/.test(a.$("gerMsg").textContent) && a.$("gerMsgCx").hidden === false && a.$("btnGerMsgDesfazer").hidden === false, `G9a mover pela tela: ${a.$("gerMsg").textContent}`);
   }
   {
     /* editar pela tela */
@@ -332,12 +333,123 @@ async function testes() {
     ok(/Ainda não há cartões/.test(v.$("gerResumo").textContent), `G12b biblioteca vazia: ${v.$("gerResumo").textContent}`);
   }
 
+  /* ---- G14: layout, barra contextual, seletor com busca, aviso com desfazer, janela maior ---- */
+  {
+    const { a, iss, iptu, pri } = montar();
+    a.gerAbrir();
+    ok(a.gerFocoAtual() === 0 && a.$("gerPreAcoes").hidden === false && a.$("gerPrevia").children.length >= 1, "G14a a previa ja abre com o primeiro cartao (nunca em branco)");
+    ok(a.$("gerAcoes").hidden === true && /\d+ cartões no total/.test(a.$("gerTotal").textContent), "G14b sem marcacao so' o rodape fino: a barra de acoes fica escondida");
+    const ck = achar(a.$("gerLista"), (e) => e.tag === "input");
+    ck[0].checked = true; ck[0].onchange();
+    ok(a.$("gerAcoes").hidden === false && /1 marcado/.test(a.$("gerSel").textContent), "G14c marcar um cartao faz a barra de acoes subir");
+    ok(/Elevar ao padrão \(1\)/.test(a.$("btnGerMelhorar").textContent), "G14d o botao de elevar diz quantos");
+    a.$("btnGerMarcar").onclick(); a.$("btnGerLimpar").onclick();
+    ok(a.$("gerAcoes").hidden === true, "G14e limpar a marcacao esconde a barra");
+
+    /* a marcacao e' por posicao: trocar de pasta/busca/filtro NAO pode deixar marcas apontando para outro cartao */
+    a.$("btnGerMarcar").onclick();
+    ok(a.gerSelAtual().size > 0, "G14f (marcou)");
+    a.$("gerBusca").value = "IPTU"; a.$("gerBusca").oninput();
+    ok(a.gerSelAtual().size === 0 && a.$("gerAcoes").hidden === true, "G14g buscar zera a marcacao");
+    a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
+    a.$("btnGerMarcar").onclick();
+    const pastas = achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta"));
+    pastas[pastas.length - 1].onclick();
+    ok(a.gerSelAtual().size === 0, "G14h trocar de pasta tambem zera a marcacao (antes ficava marcando outros cartoes)");
+    a.$("gerBusca").value = "zzzznaoexiste"; a.$("gerBusca").oninput();
+    ok(a.gerFocoAtual() === -1 && a.$("gerPreAcoes").hidden === true && /Nenhum cartão para mostrar/.test(a.$("gerPrevia").textContent), "G14i sem cartao na lista a previa explica e as acoes dela somem");
+    a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
+
+    /* seletor de destino com busca */
+    a.$("btnGerMover").onclick();
+    ok(a.$("gerPop").hidden === true, "G14j sem marcacao o seletor nao abre");
+    ck[0].checked = true;
+    const c2 = achar(a.$("gerLista"), (e) => e.tag === "input"); c2[0].checked = true; c2[0].onchange();
+    a.$("btnGerMover").onclick();
+    ok(a.$("gerPop").hidden === false && achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item")).length === 3, "G14k o seletor lista os 3 topicos");
+    a.$("gerPopBusca").value = "iptu"; a.$("gerPopBusca").oninput();
+    const itens = achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item"));
+    ok(itens.length === 1 && /IPTU/.test(itens[0].textContent), "G14l digitar filtra os destinos (sem diferenciar acento ou maiuscula)");
+    a.$("gerPopBusca").value = "zzz"; a.$("gerPopBusca").oninput();
+    ok(achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item")).length === 0 && /Nenhum tópico/.test(a.$("gerPopLista").textContent), "G14m sem resultado o seletor avisa");
+    a.$("btnGerMover").onclick();
+    ok(a.$("gerPop").hidden === true, "G14n clicar de novo no botao fecha o seletor");
+    a.$("btnGerMover").onclick();
+    a.$("gerPopBusca").onkeydown({ key: "Escape", preventDefault() {}, stopPropagation() {} });
+    ok(a.$("gerPop").hidden === true, "G14o Esc fecha o seletor");
+    a.$("btnGerLimpar").onclick();
+    a.$("btnGerMover").onclick();
+    ok(a.$("gerPop").hidden === true, "G14p (sem marcacao nao abre)");
+
+    /* Enter escolhe o primeiro resultado */
+    const m2 = montar(); m2.a.gerAbrir();
+    const cm = achar(m2.a.$("gerLista"), (e) => e.tag === "input");
+    const idx = achar(m2.a.$("gerLista"), (e) => cls(e, "ger-item")).findIndex((l) => /alíquota/.test(l.textContent));
+    cm[idx].checked = true; cm[idx].onchange();
+    m2.a.$("btnGerMover").onclick();
+    m2.a.$("gerPopBusca").value = "iptu"; m2.a.$("gerPopBusca").oninput();
+    const pe = m2.a.$("gerPopBusca").onkeydown({ key: "Enter", preventDefault() {} });
+    ok(m2.a.$("gerDestino").value === m2.iptu, "G14q Enter escolhe o primeiro resultado da busca");
+    await conduzir(m2.a, Promise.resolve());
+    for (let i = 0; i < 6; i++) { await Promise.resolve(); m2.a.uiModalResponder(false); }
+  }
+  {
+    /* o aviso traz o desfazer; apagar so' o cartao aberto (lixeira da previa) */
+    const { a, iss } = montar();
+    a.gerAbrir();
+    const alvo = achar(a.$("gerLista"), (e) => cls(e, "ger-item")).findIndex((l) => /alíquota/.test(l.textContent));
+    achar(a.$("gerLista"), (e) => cls(e, "ger-item"))[alvo].onclick();
+    await conduzir(a, a.$("btnGerPreApagar").onclick());
+    ok(!/alíquota/.test(a.matResumosAtual()[iss].cartoes) && /1 cartão\(ões\) apagado/.test(a.$("gerMsg").textContent) && a.$("btnGerMsgDesfazer").hidden === false, "G14r a lixeira da previa apaga so' o cartao aberto e o aviso oferece desfazer");
+    await conduzir(a, a.$("btnGerMsgDesfazer").onclick());
+    ok(/alíquota/.test(a.matResumosAtual()[iss].cartoes) && a.$("btnGerMsgDesfazer").hidden === true && a.$("btnGerDesfazer").hidden === true, "G14s o 'desfazer' do aviso desfaz e some junto com o do rodape");
+    a.gerAbrir();
+    ok(a.$("gerMsgCx").hidden === true, "G14t reabrir limpa o aviso");
+    /* editar: aviso tambem */
+    a.$("btnGerEditar").onclick();
+    ok(a.$("gerEditorCx").hidden === false, "G14u editar abre o editor na coluna da direita");
+  }
+  {
+    /* reforcos: mais de 15 marcados, lixeira sem cartao, busca sem diferenciar maiuscula/acento */
+    const { a, pri } = montar();
+    const gr = a.matChave("Grande", "Lote");
+    a.matGravarCartoes(gr, Array.from({ length: 20 }, (_, i) => "Pergunta grande " + i + " zz" + i + " yy" + i + " ww" + i + " :: r").join("\n"), { disciplina: "Grande", topico: "Lote" });
+    a.gerAbrir();
+    a.$("btnGerMarcar").onclick();
+    ok(a.gerSelAtual().size > 15 && /Elevar ao padrão \(15 de \d+\)/.test(a.$("btnGerMelhorar").textContent), "G14v com mais de 15 marcados o botao diz que so' 15 vao por rodada: " + a.$("btnGerMelhorar").textContent);
+    a.$("gerBusca").value = "zzzznaoexiste"; a.$("gerBusca").oninput();
+    ok(a.$("btnGerPreApagar").disabled === true && a.$("btnGerEditar").disabled === true, "G14w sem cartao aberto a lixeira e o editar da previa ficam desligados");
+    a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
+    a.$("gerBusca").value = "PRINCIPIOS"; a.$("gerBusca").oninput();
+    ok(linhasDaLista(a).length >= 1, "G14x a busca ignora maiuscula e acento");
+    a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
+    a.$("btnGerMarcar").onclick(); a.$("btnGerMover").onclick();
+    a.$("gerPopBusca").value = "PRINCIPIOS"; a.$("gerPopBusca").oninput();
+    ok(achar(a.$("gerPopLista"), (e) => cls(e, "ger-pop-item")).length === 1, "G14y o seletor de destino tambem ignora maiuscula e acento");
+  }
+  {
+    /* janela maior: alterna, lembra, e reduzir devolve o tamanho normal */
+    const r = rodar(); const a = r.api;
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
+    a.gerAbrir();
+    ok(!a.$("dlgGerCartoes").classList.contains("ger-grande") && /ampliar/.test(a.$("btnGerAmpliar").textContent), "G15 abre no tamanho normal");
+    a.$("btnGerAmpliar").onclick();
+    ok(a.$("dlgGerCartoes").classList.contains("ger-grande") && /reduzir/.test(a.$("btnGerAmpliar").textContent) && a.$("btnGerAmpliar").getAttribute("aria-pressed") === "true" && a.lojaLer("eac_ger_grande") === "1", "G15a ampliar aumenta a janela e lembra a escolha");
+    a.$("dlgGerCartoes").close(); a.gerAbrir();
+    ok(a.$("dlgGerCartoes").classList.contains("ger-grande"), "G15b a janela abre ampliada na proxima vez");
+    a.$("dlgGerCartoes").style.width = "700px";
+    a.$("btnGerAmpliar").onclick();
+    ok(!a.$("dlgGerCartoes").classList.contains("ger-grande") && a.$("dlgGerCartoes").style.width === "" && a.lojaLer("eac_ger_grande") === "0", "G15c reduzir volta ao normal (e limpa o tamanho arrastado)");
+  }
+
   /* ---- G13: no app ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
     const sw = fs.readFileSync(path.join(__dirname, "..", "docs", "sw.js"), "utf8");
     ok(/<script src="gerenciador\.js"><\/script>/.test(html) && /id="btnGerCartoes"/.test(html) && /id="dlgGerCartoes"/.test(html), "G13 falta o script, o botao ou a janela no index.html");
     ok(/"gerenciador\.js"/.test(sw), "G13a o modulo nao esta no cache offline");
+    ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column/.test(html) && /\.ger-grande\{width:98vw/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e modo ampliado no CSS");
+    ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
   }
 
   return Object.assign(falhas, { quantas: n });

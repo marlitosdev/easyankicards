@@ -4144,8 +4144,33 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .pac-disc{display:block;font-weight:600;font-size:13px;margin-top:6px;cursor:pointer}
 .pac-top{display:block;padding-left:20px;font-size:12px;cursor:pointer}
 .pac-arv{max-height:34vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
-.ger-grade{display:grid;grid-template-columns:200px 1fr 300px;gap:10px;min-height:44vh}
-.ger-col{min-width:0;max-height:52vh;overflow:auto}
+/* Gerenciador: a janela é uma coluna flexível — título, busca, avisos e rodapé ficam FIXOS e só as
+ * três colunas rolam (antes o diálogo inteiro rolava por cima delas). Colunas 22% / 43% / 35%. */
+#dlgGerCartoes{width:min(1100px,96vw);max-width:98vw;min-width:min(680px,96vw);resize:both}
+#dlgGerCartoes.ger-grande{width:98vw;height:94vh}
+#dlgGerCartoes[open]{display:flex;flex-direction:column;max-height:94vh;margin:auto;overflow:hidden}
+#dlgGerCartoes[open] > *{flex:0 0 auto}
+#dlgGerCartoes[open] > .ger-grade{flex:1 1 auto;min-height:min(260px,40vh)}
+.ger-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ger-cab h3{margin:0}
+.ger-como{margin:4px 0}
+.ger-como summary{cursor:pointer;font-size:12px;opacity:.8}
+.ger-grade{display:grid;grid-template-columns:22fr 43fr 35fr;grid-template-rows:minmax(0,1fr);gap:10px;min-height:0}
+.ger-col{min-width:0;min-height:0;overflow:auto}
+.ger-ferr{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;background:var(--panel);padding:2px 0 6px;z-index:1}
+.ger-pre-acoes{display:flex;gap:6px;position:sticky;top:0;background:var(--panel);padding:2px 0 6px;z-index:1}
+.ger-toast{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:6px 0;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:600;background:rgba(46,158,91,.18);border:1px solid #2e9e5b}
+.ger-acoes{position:relative;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0;padding:8px 10px;border-radius:10px;background:var(--acao);color:#fff}
+.ger-acoes .btn-min{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.35)}
+.ger-acoes .btn-min:disabled{opacity:.5}
+.ger-sel{font-weight:700;margin-right:auto}
+.ger-pop{position:absolute;left:8px;bottom:calc(100% + 6px);width:min(520px,92%);max-height:44vh;display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;border:1px solid var(--borda);background:var(--panel);color:inherit;box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:5}
+.ger-pop[hidden]{display:none}
+.ger-pop #gerPopLista{overflow:auto;min-height:0}
+.ger-pop-item{padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+.ger-pop-item:hover{background:rgba(46,158,91,.18)}
+.ger-rodape{align-items:center}
+.ger-rodape .nota{margin-right:auto}
 .ger-pasta{padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1.35}
 .ger-pasta:hover{background:rgba(127,127,127,.15)}
 .ger-atual{background:rgba(46,158,91,.18);font-weight:600}
@@ -4157,7 +4182,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-f{font-weight:600}
 .ger-v{opacity:.85}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
-@media (max-width:760px){.ger-grade{grid-template-columns:1fr}.ger-col{max-height:30vh}}
+@media (max-width:760px){#dlgGerCartoes[open]{overflow:auto}.ger-grade{grid-template-columns:1fr;grid-template-rows:none}.ger-col{max-height:34vh}}
 .ce-item{display:flex;gap:8px;align-items:flex-start;padding:6px 4px;border-bottom:1px solid var(--borda);font-size:13px;line-height:1.4;cursor:pointer}
 .ce-corpo{display:flex;flex-direction:column;flex:1}
 .ce-nota{font-weight:700;display:inline}
@@ -7296,9 +7321,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
-<dialog id="dlgGerCartoes" class="ui-modal diag-modal" style="max-width:1100px;width:96vw">
-  <h3 data-i18n="ger_titulo"></h3>
-  <p class="nota" data-i18n="ger_ajuda"></p>
+<dialog id="dlgGerCartoes" class="ui-modal diag-modal">
+  <div class="ger-cab">
+    <h3 data-i18n="ger_titulo"></h3>
+    <button type="button" class="btn-min" id="btnGerAmpliar" aria-pressed="false"></button>
+  </div>
+  <details class="ger-como"><summary data-i18n="ger_como"></summary><p class="nota" data-i18n="ger_ajuda"></p></details>
   <div class="ger-barra">
     <input type="search" id="gerBusca" class="mat-busca" data-i18n-ph="ger_busca_ph" style="flex:1;min-width:160px">
     <select id="gerFiltro">
@@ -7315,10 +7343,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="ger-grade">
     <div class="ger-col" id="gerArvore"></div>
     <div class="ger-col">
+      <div class="ger-ferr">
+        <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
+        <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
+      </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
     </div>
     <div class="ger-col">
+      <div class="ger-pre-acoes" id="gerPreAcoes" hidden>
+        <button type="button" class="btn-min" id="btnGerEditar" data-i18n="ger_editar" disabled></button>
+        <button type="button" class="btn-min btn-min-perigo" id="btnGerPreApagar" data-i18n="ger_lixeira" disabled></button>
+      </div>
       <div id="gerPrevia"></div>
       <div id="gerEditorCx" hidden>
         <p class="nota" data-i18n="ger_edit_rot"></p>
@@ -7330,19 +7366,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       </div>
     </div>
   </div>
-  <div class="ger-barra">
-    <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
-    <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
-    <span class="nota" id="gerSel"></span>
-    <span class="nota" data-i18n="ger_mover"></span>
-    <select id="gerDestino"></select>
+  <div class="ger-toast" id="gerMsgCx" role="status" aria-live="polite" hidden>
+    <span id="gerMsg"></span>
+    <button type="button" class="btn-min" id="btnGerMsgDesfazer" data-i18n="ger_desfazer_curto" hidden></button>
+  </div>
+  <div class="ger-acoes" id="gerAcoes" hidden>
+    <span class="ger-sel" id="gerSel"></span>
     <button type="button" class="btn-min btn-min-ok" id="btnGerMover" data-i18n="ger_mover_btn" disabled></button>
     <button type="button" class="btn-min btn-min-perigo" id="btnGerApagar" data-i18n="ger_apagar" disabled></button>
-    <button type="button" class="btn-min" id="btnGerEditar" data-i18n="ger_editar" disabled></button>
-    <button type="button" class="btn-min" id="btnGerMelhorar" data-i18n="ger_melhorar" disabled></button>
+    <button type="button" class="btn-min" id="btnGerMelhorar" disabled></button>
+    <div class="ger-pop" id="gerPop" hidden>
+      <input type="search" id="gerPopBusca" class="mat-busca" data-i18n-ph="ger_pop_busca_ph" autocomplete="off">
+      <div id="gerPopLista" role="listbox"></div>
+    </div>
+    <select id="gerDestino" hidden></select>
   </div>
-  <p class="nota" id="gerMsg"></p>
-  <div class="dlg-rodape">
+  <div class="dlg-rodape ger-rodape">
+    <span class="nota" id="gerTotal"></span>
     <button class="btn btn-cinza" id="btnGerDesfazer" data-i18n="ger_desfazer" hidden></button>
     <button class="btn btn-cinza" id="btnGerFechar" data-i18n="help_close"></button>
   </div>
