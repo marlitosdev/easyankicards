@@ -124,12 +124,19 @@ function cqMelhor(cards, grupo) {
 function cqAcrescimos(fica, outro) {
   const um = (s) => String(s || "").replace(/\s*::\s*/g, " — ").replace(/\r?\n+/g, " ").trim();
   const linhas = [];
-  const tenho = cqTokens(String(fica.back || "") + " " + String(fica.more || ""));
+  /* Comparar por palavras COM números: "3 impostos" e "16 tributos" são fatos diferentes, e a mesma
+   * resposta com outras palavras ("Estão instituídos 3 impostos") não é fato novo. Antes o corte era
+   * frouxo (90%) e cada parafraseado deixava uma linha "Também cobrado" quase igual — um cartão real
+   * chegou a 9 linhas "+". */
+  const pal = (s) => { const r = new Set(); cqNormal(s).split(" ").forEach((w) => { if ((w.length > 2 || /\d/.test(w)) && !CQ_STOP.has(w)) r.add(w); }); return r; };
+  const tenho = pal(String(fica.front || "") + " " + String(fica.back || "") + " " + String(fica.more || ""));
   const tenhoTxt = cqNormal(String(fica.more || ""));
-  if (cqContido(cqTokens(outro.back), tenho) < 0.9 && um(outro.back)) linhas.push("+ Também cobrado — " + um(outro.back));
+  /* número que o cartão não tem = fato novo (prazo de 30 dias x 60 dias), por mais palavras que se repitam */
+  const numNovo = (s) => [...s].some((w) => /\d/.test(w) && !tenho.has(w));
+  if (um(outro.back) && (numNovo(pal(outro.back)) || cqContido(pal(outro.back), tenho) < 0.6)) linhas.push("+ Também cobrado — " + um(outro.back));
   String(outro.more || "").split(/<br\s*\/?>|\r?\n/i).forEach((l) => {
     const x = um(l).replace(/^[+*]\s*/, "");
-    if (x && tenhoTxt.indexOf(cqNormal(x)) < 0 && cqContido(cqTokens(x), tenho) < 0.9) linhas.push("+ " + x);
+    if (x && tenhoTxt.indexOf(cqNormal(x)) < 0 && (numNovo(pal(x)) || cqContido(pal(x), tenho) < 0.75)) linhas.push("+ " + x);
   });
   return linhas;
 }

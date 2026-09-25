@@ -97,6 +97,16 @@ async function testes() {
     ok(!a.some((l) => /caso Y/.test(l)), `Q3b duplicou linha que o cartao ja tem: ${JSON.stringify(a)}`);
     const igual = api.cqAcrescimos(fica, B("P?", "Resposta A completa sobre o tema X"));
     ok(igual.length === 0, `Q3c resposta que nao acrescenta nada foi acrescentada: ${JSON.stringify(igual)}`);
+    /* a mesma resposta com outras palavras NAO e' fato novo; outro numero e' */
+    const bx = B("Quantos impostos?", "Estão instituídos 3 impostos municipais.", { more: "Quantidade — 3 impostos." });
+    ok(api.cqAcrescimos(bx, B("Quantos impostos o CTM institui?", "Estão instituídos 3 impostos.", {})).length === 0, "Q3e parafrase da resposta nao vira 'Tambem cobrado'");
+    ok(api.cqAcrescimos(bx, B("Quantos tributos?", "São instituídos 16 tributos no total.", {})).length === 1, "Q3f outro numero, outro fato: entra");
+    /* reforcos: a pergunta tambem e' o que o cartao ja diz; linha + parafraseada sai; numero novo entra */
+    const bp = B("Qual o prazo do recurso administrativo?", "Trinta dias.", {});
+    ok(api.cqAcrescimos(bp, B("P?", "prazo recurso administrativo", {})).length === 0, "Q3g resposta que so' repete a PERGUNTA do cartao nao entra");
+    ok(api.cqAcrescimos(bx, B("Quantos impostos?", "Estão instituídos 3 impostos.", { more: "Estão instituídos impostos municipais 3" })).length === 0, "Q3h linha + parafraseada nao entra");
+    ok(api.cqAcrescimos(B("Prazo do recurso?", "O prazo é de 60 dias contados da ciência.", {}), B("Prazo?", "O prazo é de 30 dias contados da ciência.", {})).length === 1, "Q3i mesmas palavras com outro numero: e' fato novo");
+    ok(api.cqAcrescimos(B("Prazo do recurso?", "O prazo é de 60 dias contados da ciência.", {}), B("Prazo?", "x", { more: "O prazo é de 30 dias contados da ciência." })).length === 1, "Q3j idem numa linha +");
     const sujo = api.cqAcrescimos(fica, B("P?", "com :: dois pontos\ne quebra", {}));
     ok(sujo.every((l) => !/::|\n/.test(l)), `Q3d o :: ou a quebra de linha vazou para o material: ${JSON.stringify(sujo)}`);
   }

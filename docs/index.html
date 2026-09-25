@@ -4168,6 +4168,46 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ce-par{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ce-lado pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:4px 0 0;max-height:220px;overflow:auto}
 @media (max-width:640px){.ce-par{grid-template-columns:1fr}}
+/* Elevar cartões — roteiro em 3 passos.
+ * Título, passos e MENSAGEM no alto e os botões no rodapé ficam fixos: só o meio rola. Antes o
+ * botão de colar ficava no fim de uma lista longa e ninguém achava. */
+#dlgCartElevar[open]{display:flex;flex-direction:column;max-height:92vh;margin:auto}
+#dlgCartElevar[open] > *{flex:0 0 auto}
+#dlgCartElevar[open] > .ce-rola{flex:1 1 auto;min-height:80px;overflow:auto}
+.ce-passos{display:flex;gap:6px;list-style:none;margin:6px 0;padding:0}
+.ce-passo{flex:1;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--borda);opacity:.55;display:flex;gap:6px;align-items:center}
+.ce-passo b{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;background:var(--borda);font-size:11px;flex:0 0 auto}
+.ce-passo-atual{opacity:1;border-color:var(--acao);font-weight:700}
+.ce-passo-atual b{background:var(--acao);color:#fff}
+.ce-passo-feito{opacity:.9}
+.ce-passo-feito b{background:#2e9e5b;color:#fff}
+.ce-passo-feito b::before{content:"✓"}
+.ce-passo-feito b{font-size:0}
+.ce-passo-feito b::before{font-size:12px}
+.ce-msg{min-height:20px;margin:4px 0;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:600;background:rgba(128,128,128,.12)}
+.ce-msg:empty{display:none}
+.ce-msg-ok{background:rgba(46,158,91,.18);border:1px solid #2e9e5b}
+.ce-msg-aviso{background:rgba(240,173,78,.18);border:1px solid #f0ad4e}
+.ce-nivel{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+.ce-nivel::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.ce-nivel-fraco{color:var(--erro);background:rgba(217,83,79,.14);border-color:rgba(217,83,79,.5)}
+.ce-nivel-medio{color:var(--atencao);background:rgba(240,173,78,.16);border-color:rgba(240,173,78,.6)}
+.ce-nivel-bom{color:var(--ok);background:rgba(46,158,91,.14);border-color:rgba(46,158,91,.5)}
+.ce-topo{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap}
+.ce-checks{list-style:none;margin:4px 0;padding:0;font-size:12px}
+.ce-check{padding:1px 0}
+.ce-ok{color:var(--ok)}
+.ce-falta{color:var(--erro)}
+.ce-desej{color:var(--atencao)}
+.ce-mudou{font-size:12px;margin:4px 0}
+.ce-seta{opacity:.6}
+.ce-cmp-cab{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ce-det summary{cursor:pointer;font-size:12px;margin:4px 0}
+#ceEscolha > summary{cursor:pointer;font-weight:700;padding:4px 0}
+.btn-feito{outline:2px solid #2e9e5b;filter:brightness(1.1)}
+.ce-rodape{position:sticky;bottom:0;background:var(--panel)}
+.ce-prim{min-width:180px}
+@media (max-width:640px){.ce-passos{flex-direction:column}.ce-prim{min-width:0;flex:1 1 100%}}
 .qm-comparar{border:1px solid var(--borda);border-radius:9px;padding:9px;margin:6px 0}
 .qm-lado{font-size:11.5px;line-height:1.5;margin-bottom:7px;white-space:pre-wrap}
 .qm-antes{color:var(--sutil)}
@@ -7213,32 +7253,44 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <dialog id="dlgCartElevar" class="ui-modal diag-modal">
   <h3 data-i18n="ce_titulo"></h3>
-  <p class="nota" data-i18n="ce_ajuda"></p>
-  <p class="nota" id="ceResumo"></p>
-  <div class="qm-bts">
-    <button type="button" class="btn-min" id="btnCeMarcar" data-i18n="ce_marcar"></button>
-    <button type="button" class="btn-min" id="btnCeLimpar" data-i18n="ce_limpar"></button>
-    <span class="nota" id="ceSel"></span>
+  <ol class="ce-passos" aria-label="passos">
+    <li id="cePasso1" class="ce-passo"><b>1</b> <span data-i18n="ce_p1"></span></li>
+    <li id="cePasso2" class="ce-passo"><b>2</b> <span data-i18n="ce_p2"></span></li>
+    <li id="cePasso3" class="ce-passo"><b>3</b> <span data-i18n="ce_p3"></span></li>
+  </ol>
+  <p class="ce-msg" id="ceMsg" role="status" aria-live="polite"></p>
+  <div class="ce-rola">
+    <p class="nota" id="ceResumo"></p>
+    <details id="ceEscolha" open>
+      <summary id="ceEscolhaTit"></summary>
+      <p class="nota" data-i18n="ce_ajuda"></p>
+      <div class="qm-bts">
+        <button type="button" class="btn-min" id="btnCeMarcar" data-i18n="ce_marcar"></button>
+        <button type="button" class="btn-min" id="btnCeLimpar" data-i18n="ce_limpar"></button>
+        <button type="button" class="btn-min" id="btnCeMostrarRev" data-i18n="ce_mostrar_rev" hidden></button>
+        <span class="nota" id="ceSel"></span>
+      </div>
+      <div id="ceLista" class="cq-lista"></div>
+      <div class="qm-bts"><button type="button" class="btn-min" id="btnCeMais" data-i18n="ce_mais" hidden></button></div>
+    </details>
+    <div id="cePromptCx" hidden>
+      <p class="nota" data-i18n="ce_prompt_rot"></p>
+      <textarea id="cePrompt" rows="4" readonly style="width:100%;box-sizing:border-box"></textarea>
+      <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnCeCopiar" data-i18n="ce_copiar"></button></div>
+    </div>
+    <div id="ceColarCx" hidden>
+      <p class="nota" data-i18n="ce_colar_rot"></p>
+      <textarea id="ceColar" rows="5" style="width:100%;box-sizing:border-box" data-i18n-ph="ce_colar_ph"></textarea>
+    </div>
+    <div id="ceComparar" hidden></div>
   </div>
-  <div id="ceLista" class="cq-lista"></div>
-  <div class="qm-bts">
-    <button type="button" class="btn-min" id="btnCeMais" data-i18n="ce_mais" hidden></button>
-    <button type="button" class="btn-min btn-min-ok" id="btnCePrompt" data-i18n="ce_gerar" disabled></button>
-  </div>
-  <div id="cePromptCx" hidden>
-    <p class="nota" data-i18n="ce_prompt_rot"></p>
-    <textarea id="cePrompt" rows="6" readonly style="width:100%;box-sizing:border-box"></textarea>
-    <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnCeCopiar" data-i18n="ce_copiar"></button></div>
-  </div>
-  <div id="ceColarCx" hidden>
-    <p class="nota" data-i18n="ce_colar_rot"></p>
-    <textarea id="ceColar" rows="5" style="width:100%;box-sizing:border-box" data-i18n-ph="ce_colar_ph"></textarea>
-    <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnCeConferir" data-i18n="ce_conferir"></button></div>
-  </div>
-  <div id="ceComparar" hidden></div>
-  <p class="nota" id="ceMsg"></p>
-  <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnCeAplicar" hidden></button>
+  <div class="dlg-rodape ce-rodape">
+    <button class="btn btn-verde ce-prim" id="btnCePrompt" disabled></button>
+    <button class="btn btn-verde ce-prim" id="btnCeColarClip" data-i18n="ce_b_colar" hidden></button>
+    <button class="btn btn-cinza" id="btnCeConferir" data-i18n="ce_b_conferir" hidden></button>
+    <button class="btn btn-verde ce-prim" id="btnCeAplicar" hidden></button>
+    <button class="btn btn-cinza" id="btnCeNova" data-i18n="ce_b_nova" hidden></button>
+    <button class="btn btn-cinza" id="btnCeDescartar" data-i18n="ce_b_descartar" hidden></button>
     <button class="btn btn-cinza" id="btnCeDesfazer" data-i18n="ce_desfazer" hidden></button>
     <button class="btn btn-cinza" id="btnCeFechar" data-i18n="help_close"></button>
   </div>

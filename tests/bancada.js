@@ -223,7 +223,7 @@ async function testes() {
     ok(a.$("dlgCartRep").open === true, "B7a o botao da bancada abre o radar");
     a.$("dlgCartRep").close();
     a.$("btnBancaElevar").onclick();
-    ok(a.$("dlgCartElevar").open === true && /3 de 4/.test(a.$("ceResumo").textContent), `B7b o botao da bancada abre o elevar: ${a.$("ceResumo").textContent}`);
+    ok(a.$("dlgCartElevar").open === true && /3 fracos/.test(a.$("ceResumo").textContent), `B7b o botao da bancada abre o elevar: ${a.$("ceResumo").textContent}`);
     a.$("dlgCartElevar").close();
     a.$("btnBancaGer").onclick();
     ok(a.$("dlgGerCartoes").open === true && /4 de 4 cartões/.test(a.$("gerResumo").textContent), `B7c o botao da bancada abre o gerenciador: ${a.$("gerResumo").textContent}`);

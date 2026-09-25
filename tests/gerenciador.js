@@ -211,7 +211,8 @@ async function testes() {
     a.$("gerFiltro").value = "todos"; a.$("gerFiltro").onchange();
     /* previa */
     linhasDaLista(a)[0].onclick();
-    ok(a.gerFocoAtual() === 0 && a.$("gerPrevia").children.length >= 1 && /nota/.test(a.$("gerPrevia").textContent), "G7i clicar no cartao mostra a previa com a nota");
+    ok(a.gerFocoAtual() === 0 && a.$("gerPrevia").children.length >= 1 && /Fraco|Quase lá|Completo/.test(a.$("gerPrevia").textContent), "G7i clicar no cartao mostra a previa com o nivel");
+    ok(a.$("gerLista").children.length >= 1 && JSON.stringify(a.$("gerLista").children.map((c) => (function ach(e) { return [e].concat((e.children || []).flatMap(ach)); })(c)).flat().filter((e) => /ce-nivel/.test(e.className || "")).length) > 0, "G7j cada linha da lista mostra o selo do nivel");
     ok(a.$("btnGerEditar").disabled === false && a.$("btnGerApagar").disabled === true, "G7j editar liga com foco; apagar so' com marcacao");
     /* marcar */
     a.$("btnGerMarcar").onclick();

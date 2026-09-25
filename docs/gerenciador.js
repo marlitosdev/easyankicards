@@ -230,7 +230,9 @@ function gerPintarLista() {
     const corpo = gerEl("div", "ger-corpo");
     corpo.append(gerEl("div", "ger-f", cqTrecho(cqRevelado(n.card), 140)));
     corpo.append(gerEl("div", "ger-v", cqTrecho(n.card.back, 120)));
-    corpo.append(gerEl("div", "cq-onde", [n.disciplina, n.topico].filter(Boolean).join(" · ") + " · " + t("ger_nota", { n: ceNota(n.card) })));
+    const onde = gerEl("div", "cq-onde");
+    onde.append(ceSelo(ceNivel(n.card)), document.createTextNode(" " + [n.disciplina, n.topico].filter(Boolean).join(" · ")));
+    corpo.append(onde);
     lin.append(ck, corpo);
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); };
     cx.append(lin);
@@ -247,7 +249,10 @@ function gerPintarPrevia() {
   if (!n) { cx.append(gerEl("p", "nota", t("ger_previa_vazia"))); return; }
   try { renderCartaoEstilizado(cx, n.card, true, { estudo: false }); } catch (e) { cx.append(gerEl("pre", "", cardToLine(n.card))); }
   const def = ceDefeitos(n.card);
-  cx.append(gerEl("div", "cq-onde", t("ger_nota", { n: ceNota(n.card) }) + (def.length ? " · " + def.map((d) => t("ce_def_" + d)).join(" · ") : "")));
+  const nivel = gerEl("div", "cq-onde");
+  nivel.append(ceSelo(ceNivel(n.card)));
+  if (def.length) nivel.append(document.createTextNode(" " + t("ce_falta", { x: def.map((d) => t("ce_def_" + d)).join(" · ") })));
+  cx.append(nivel);
 }
 
 function gerPintarAcoes() {
