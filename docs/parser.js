@@ -559,7 +559,10 @@ function corrigirLixoIA(raw) {
       let partes = RE_LISTA_IA.test(l) ? l.split(RE_LISTA_IA) : [l];
       /* a numerada (1. 2. 3.) só conta com pelo menos dois itens; pode vir DENTRO de um item de "*" */
       partes = partes.reduce((acc, p) => acc.concat(
-        /\s1\.\s+\S/.test(p) && /\s2\.\s+\S/.test(p) ? p.split(/\s(?=\d{1,2}\.\s+\S)/) : [p]), []);
+        /\s1\.\s+\S/.test(p) && /\s2\.\s+\S/.test(p)
+          /* o número era a ordem dentro da lista; agora cada item tem a sua linha "+", e o "1." só sujaria o texto */
+          ? p.split(/\s(?=\d{1,2}\.\s+\S)/).map((x, i) => (i ? x.replace(/^\d{1,2}\.\s+/, "") : x))
+          : [p]), []);
       partes.forEach((p) => {
         const t2 = p.trim().replace(/^\+\s*/, "");
         if (!t2) return;
