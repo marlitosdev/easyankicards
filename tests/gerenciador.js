@@ -342,7 +342,7 @@ async function testes() {
     const ck = achar(a.$("gerLista"), (e) => e.tag === "input");
     ck[0].checked = true; ck[0].onchange();
     ok(a.$("gerAcoes").hidden === false && /1 marcado/.test(a.$("gerSel").textContent), "G14c marcar um cartao faz a barra de acoes subir");
-    ok(/Elevar ao padrão \(1\)/.test(a.$("btnGerMelhorar").textContent), "G14d o botao de elevar diz quantos");
+    ok(/Melhorar cartões \(1\)/.test(a.$("btnGerMelhorar").textContent), "G14d o botao de melhorar diz quantos");
     a.$("btnGerMarcar").onclick(); a.$("btnGerLimpar").onclick();
     ok(a.$("gerAcoes").hidden === true, "G14e limpar a marcacao esconde a barra");
 
@@ -416,7 +416,7 @@ async function testes() {
     a.matGravarCartoes(gr, Array.from({ length: 20 }, (_, i) => "Pergunta grande " + i + " zz" + i + " yy" + i + " ww" + i + " :: r").join("\n"), { disciplina: "Grande", topico: "Lote" });
     a.gerAbrir();
     a.$("btnGerMarcar").onclick();
-    ok(a.gerSelAtual().size > 15 && /Elevar ao padrão \(15 de \d+\)/.test(a.$("btnGerMelhorar").textContent), "G14v com mais de 15 marcados o botao diz que so' 15 vao por rodada: " + a.$("btnGerMelhorar").textContent);
+    ok(a.gerSelAtual().size > 15 && /Melhorar cartões \(15 de \d+\)/.test(a.$("btnGerMelhorar").textContent), "G14v com mais de 15 marcados o botao diz que so' 15 vao por rodada: " + a.$("btnGerMelhorar").textContent);
     a.$("gerBusca").value = "zzzznaoexiste"; a.$("gerBusca").oninput();
     ok(a.$("btnGerPreApagar").disabled === true && a.$("btnGerEditar").disabled === true, "G14w sem cartao aberto a lixeira e o editar da previa ficam desligados");
     a.$("gerBusca").value = ""; a.$("gerBusca").oninput();
@@ -1109,7 +1109,7 @@ async function testes() {
     const ini = html.indexOf('<div class="rev-topo">');
     const grupo = html.slice(ini, html.indexOf("</div>", ini));
     const ordem = [...grupo.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
-    ok(ordem[0] === "btnBancaGer" && ordem.indexOf("btnRevisar") > 0 && ordem.indexOf("btnBancaElevar") > 0 && ordem.indexOf("btnBancaRep") > 0, "G20a na bancada a Biblioteca e' o PRIMEIRO botao da fila: " + ordem.join(","));
+    ok(ordem[0] === "btnBancaGer" && ordem.indexOf("btnRevisar") < 0 && ordem.indexOf("btnBancaElevar") > 0 && ordem.indexOf("btnBancaRep") > 0 && ordem.length === 3, "G20a na bancada a Biblioteca e' o PRIMEIRO botao da fila e ficam so' tres (Biblioteca, Melhorar, Repetidos; o botao da revisao antiga saiu): " + ordem.join(","));
     /* material: primeiro, antes de repetidos/elevar/pacote */
     const iG = html.indexOf('id="btnGerCartoes"');
     ok(iG > 0 && iG < html.indexOf('id="btnCartRepetidos"') && iG < html.indexOf('id="btnCartElevar"') && iG < html.indexOf('id="btnPacote"'), "G20b no material tambem vem antes das ferramentas");

@@ -44,51 +44,23 @@ async function testes() {
   api.preview();
   ok(naTela() === 3, `T1 esperava 3 cartões na tela, veio ${naTela()}`);
 
-  api.entrarRevisao();
-  ok(api.modoRevisao, "T2 não entrou no modo de revisão");
-  api.preview();
-  ok(naTela() === 3, `T3 na revisão, esperava 3 cartões, veio ${naTela()}`);
-
-  // marca os dois primeiros como JÁ REVISADOS (é o que acontece depois de
-  // uma rodada com a IA) e liga o filtro
-  const cards = api.parseAtual().cards;
-  api.revisados.add(api.chaveRev(cards[0]));
-  api.revisados.add(api.chaveRev(cards[1]));
-
-  api.$("chkOcultarRev").checked = false;
-  api.preview();
-  ok(naTela() === 3, `T4 filtro desligado deve mostrar tudo, veio ${naTela()}`);
-  ok(api.ocultos === 0, `T5 filtro desligado não esconde nada, ocultos=${api.ocultos}`);
-
-  api.$("chkOcultarRev").checked = true;
-  api.preview();
-  ok(naTela() === 1, `T6 filtro ligado devia sobrar 1 cartão, veio ${naTela()}`);
-  ok(api.ocultos === 2, `T7 devia contar 2 ocultos, veio ${api.ocultos}`);
-
-  // a marca é por FRENTE: mexer no texto (mudando os números de linha) não
-  // pode fazer os cartões já revisados reaparecerem
-  api.$("editor").value = "# comentário novo no topo\n\n" + TEXTO;
-  api.preview();
-  ok(naTela() === 1, `T8 após editar o texto, ainda devia sobrar 1, veio ${naTela()}`);
-
-  // fora do modo de revisão o filtro não vale: nada some do baralho
-  api.sairRevisao();
-  api.preview();
-  ok(naTela() === 3, `T9 fora da revisão deve mostrar tudo, veio ${naTela()}`);
-  ok(api.$("chkOcultarRev").checked === false, "T10 sair da revisão deve desmarcar o filtro");
-
-  // sair da revisão NÃO apaga o histórico: é ele que sustenta a próxima rodada
-  ok(api.revisados.size === 2, `T11 histórico devia sobreviver, tem ${api.revisados.size}`);
-
-  // o link de limpar histórico só existe quando há histórico
-  api.entrarRevisao();
-  ok(api.$("btnLimparRevisados").style.display === "",
-     "T11b com histórico, o link de limpar devia aparecer");
-  api.revisados.clear();
-  api.atualizarContagemRevisao();
-  ok(api.$("btnLimparRevisados").style.display === "none",
-     "T11c sem histórico, o link de limpar devia sumir");
-  api.sairRevisao();
+  /* O MODO DE REVISÃO ANTIGO NÃO EXISTE MAIS (virou o "Melhorar cartões"): a prévia é sempre a mesma, sem caixas de
+   * marcação, sem selos de "já revisado" e sem filtros. */
+  {
+    const fs2 = require("fs"), path2 = require("path");
+    const html = fs2.readFileSync(path2.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ["barraRevisao", "btnRevisar", "btnRevFinalizar", "btnRevCancelar", "dlgRevCopiar", "dlgColarRev", "chkFiltro", "chkOcultarRev", "btnCopiarMarcados", "btnSubstituirMarcados"]
+      .forEach((id) => ok(html.indexOf('id="' + id + '"') < 0, "T2 o elemento do modo de revisao antigo ('" + id + "') foi removido da tela"));
+    ok(!/\.barra-revisao|\.card-badge-rev|\.chk-rev|\.em-revisao/.test(html), "T2b o CSS do modo antigo foi removido");
+    api.preview();
+    ok(naTela() === 3, `T3 a prévia mostra os 3 cartões, veio ${naTela()}`);
+    const temCaixa = (n) => (n.children || []).some((f) => /chk-rev|card-badge-rev/.test(f.className || "") || temCaixa(f));
+    ok(!Array.from(api.$("cartoes").children).some(temCaixa), "T4 os cartões não têm mais caixa de marcação nem selo de revisado");
+    /* editar o texto não muda o que aparece */
+    api.$("editor").value = "# comentário novo no topo\n\n" + TEXTO;
+    api.preview();
+    ok(naTela() === 3, `T8 depois de editar o texto continuam 3 cartões, veio ${naTela()}`);
+  }
 
   // cartão gigante (artigo inteiro importado) não pode ocupar a prévia toda
   {

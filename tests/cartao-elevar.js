@@ -483,37 +483,30 @@ async function testes() {
     ok(fila0 >= 1, "E10z4 (fila inicial nao vazia)");
   }
 
-    /* ---- E11: o botao antigo da revisao manual leva ao Elevar (U3) ---- */
+    /* ---- E11: a revisao manual antiga saiu; o "Melhorar cartoes" e' a ferramenta so' (U3, fase C) ---- */
   {
     const NL = String.fromCharCode(10);
-    const mk = () => {
-      const r = rodar(); const x = r.api;
-      x.matIniciar(); x.edIniciar();
-      x.$("editor").value = "Pergunta da bancada? :: sim";
-      return x;
-    };
-    /* a) abrir o novo */
-    let x = mk();
-    let pr = x.$("btnRevisar").onclick();
-    ok(/Elevar cartões/.test(x.$("uiModalMsg").textContent) && /à mão/.test(x.$("uiModalMsg").textContent), "E11 o botao antigo explica que agora abre o Elevar: " + x.$("uiModalMsg").textContent.slice(0, 60));
-    ok(x.$("uiModalOk").textContent === x.t("rev_migrou_novo") && x.$("uiModalCancel").textContent === x.t("rev_migrou_antigo") && x.$("uiModalCancel").style.display !== "none", "E11a as duas saidas tem rotulo (abrir o novo / usar a antiga)");
-    x.$("uiModalOk").onclick();
-    ok((await pr) === "novo" && x.$("dlgCartElevar").open === true && x.ceEscopoAtual() === "bancada" && x.ceObjetivoAtual() === "completar", "E11b abrir o novo: o Elevar abre ja no escopo da bancada (onde a revisao antiga agia)");
-    ok(x.$("btnRevisar").style.display !== "none", "E11c abrir o novo NAO entra no modo revisao antigo");
-    /* b) usar a antiga */
-    x = mk();
-    pr = x.$("btnRevisar").onclick();
-    x.$("uiModalCancel").onclick();
-    ok((await pr) === "antigo" && x.$("dlgCartElevar").open !== true && x.$("btnRevisar").style.display === "none", "E11d escolher a antiga entra no modo revisao como antes (ainda existe por esta versao)");
-    /* c) fechar sem escolher (Esc / clique fora) */
-    x = mk();
-    pr = x.$("btnRevisar").onclick();
-    x._uiFechar(false);
-    ok((await pr) === "" && x.$("btnRevisar").style.display !== "none", "E11e sem escolher nada, nada abre e a revisao antiga tambem nao entra");
-    ok(x.$("dlgCartElevar").open !== true, "E11f o Elevar nao abriu sozinho");
+    const fs2 = require("fs"), path2 = require("path");
+    const html = fs2.readFileSync(path2.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const i18n = fs2.readFileSync(path2.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    ok(html.indexOf('id="btnRevisar"') < 0 && html.indexOf('id="barraRevisao"') < 0 && html.indexOf('id="dlgRevCopiar"') < 0 && html.indexOf('id="dlgColarRev"') < 0, "E11 o botao, a barra e os dialogos da revisao antiga nao existem mais");
+    ok(!/"rev_migrou/.test(i18n), "E11a as mensagens do aviso de migracao do botao antigo tambem saíram");
+    const r = rodar(); const x = r.api;
+    x.matIniciar(); x.edIniciar();
+    x.$("editor").value = "Pergunta da bancada? :: sim";
+    x.$("btnBancaElevar").onclick();
+    ok(x.$("dlgCartElevar").open === true && x.ceEscopoAtual() === "bancada" && x.ceObjetivoAtual() === "completar", "E11b o botao da bancada abre o Melhorar cartoes ja no escopo da bancada (onde a revisao antiga agia)");
+    ok(x.$("ceObjetivo").children.length === 4 && x.$("ceEscopo").children.length === 3 && !!x.$("btnCeAtCurtos") && !!x.$("ceCurto"), "E11c e ele tem TUDO: 4 objetivos, 3 escopos, atalhos de marcacao e prompt curto");
+    ok(/Melhorar cartões/.test(x.$("dlgCartElevar").textContent) || /Melhorar cartões/.test(x.t("ce_titulo")), "E11d o titulo e' 'Melhorar cartoes'");
+    ok(x.t("ce_btn") === "Melhorar cartões" && x.t("ce_titulo") === "Melhorar cartões" && x.t("ger_elevar", { n: 3 }) === "✨ Melhorar cartões (3)", "E11e o nome novo vale no botao da bancada, no do material, no titulo e no gerenciador");
+    ok(!/Elevar/.test(x.t("ce_btn_aj")) && !/Elevar/.test(x.t("ger_tip_melhorar")) && !/elevar/i.test(x.t("ger_ajuda")), "E11f os textos de ajuda nao falam mais em 'Elevar'");
+    x.$("dlgCartElevar").close();
+    x.$("btnCartElevar") && x.$("btnCartElevar").onclick();
+    ok(x.$("dlgCartElevar").open === true && x.ceEscopoAtual() === "fila", "E11g o botao do Material abre na fila (a biblioteca inteira), sem escopo da bancada");
+    x.$("dlgCartElevar").close();
   }
 
-    /* ---- E12: o que veio da revisao manual — atalhos, previa, ver no texto, prompt editavel, autocorrecao e sem ancora ---- */
+  /* ---- E12: o que veio da revisao manual — atalhos, previa, ver no texto, prompt editavel, autocorrecao e sem ancora ---- */
   {
     const NL = String.fromCharCode(10);
     const mk = () => {

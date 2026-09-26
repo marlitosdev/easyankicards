@@ -307,25 +307,9 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
    ocupa no máximo a largura disponível e quebra de linha se faltar
    espaço, em vez de estourar o painel. */
 .nota-export{font-size:11.5px;color:var(--sutil);margin:4px 0 2px;line-height:1.4}
-.barra-revisao{background:var(--laranja-claro);border:1px solid var(--laranja-borda);
-  border-radius:10px;padding:9px 11px;margin:2px 0 8px}
-.barra-revisao .rev-titulo{font-size:12px;font-weight:800;color:var(--laranja-txt);
-  text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-.barra-revisao .rev-botoes{display:flex;flex-wrap:wrap;gap:5px}
-.barra-revisao .rev-botoes .btn{padding:4px 9px;font-size:11px}
 /* Três grupos com papéis diferentes: MARCAR (critérios), VER (estados) e
    AÇÕES (o que leva o trabalho adiante). Mesma forma dentro de cada grupo;
    o que só desfaz virou link, para não disputar atenção com o resto. */
-.barra-revisao .rev-grupo{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
-  margin-top:7px;font-size:11.5px;color:var(--texto)}
-.barra-revisao .rev-rot{font-size:10.5px;font-weight:800;letter-spacing:.4px;
-  text-transform:uppercase;opacity:.65;min-width:52px}
-.barra-revisao .rev-ver{gap:12px}
-.barra-revisao .rev-contagem{color:var(--laranja-txt);font-weight:700;
-  margin-left:auto;text-align:right}
-.barra-revisao .rev-acoes{display:flex;gap:6px;margin-top:9px}
-.barra-revisao .rev-acoes .btn{flex:1 1 0;min-width:0;padding:7px 8px;font-size:12px}
-.barra-revisao .rev-links{display:flex;gap:14px;justify-content:center;margin-top:7px}
 .rev-topo{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
 .rev-topo .btn{flex:1 1 auto}
 /* A Biblioteca de cartões é o centro do app: primeira da fila, largura total, cor de ação e uma linha de apoio */
@@ -334,13 +318,7 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 .btn-biblioteca .bib-sub{font-size:11px;font-weight:500;opacity:.92}
 .rev-topo .btn.btn-biblioteca{flex:1 1 100%}
 /* selos de revisão (só visual; não vão para o cartão exportado) */
-.card-badge-rev{font-size:11px;font-weight:800;margin:2px 0 4px;display:inline-block;
-  padding:2px 8px;border-radius:6px;letter-spacing:.2px}
-.card-badge-sel{color:var(--erro);background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.35)}
-.card-badge-rev-ok{color:var(--verde-txt);background:rgba(26,127,55,.10);border:1px solid rgba(26,127,55,.35)}
 /* trava visual das demais funções durante a revisão */
-.em-revisao .trava{opacity:.4;pointer-events:none;filter:grayscale(.4)}
-#colarRevSug .sug{margin-bottom:4px}
 /* área de revisão com numeração de linhas, rolagem e expansão */
 .rev-wrap{position:relative;background:var(--campo);border:1px solid var(--borda);
   border-radius:8px;overflow:hidden}
@@ -354,8 +332,6 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   padding:8px 8px 8px 42px;border:0;background:transparent;color:var(--texto);
   overflow-y:auto;box-sizing:border-box}
 .rev-wrap.expandido textarea{height:62vh}
-.card .chk-rev{display:flex;align-items:center;gap:4px;font-weight:400;font-size:11px;
-  color:var(--laranja-txt)}
 .prev-controles{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:2px 0 6px}
 .prev-controles label{display:flex;align-items:center;gap:5px;font-size:11.5px;
   color:var(--sutil);min-width:0}
@@ -4541,57 +4517,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <label data-i18n="preview_label"></label>
       <div class="rev-topo">
         <button class="btn btn-azul btn-biblioteca" id="btnBancaGer"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
-        <button class="btn btn-ciano" id="btnRevisar" data-i18n="review_btn"></button>
         <button class="btn btn-cinza" id="btnBancaRep" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
         <button class="btn btn-cinza" id="btnBancaElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
-        <button class="btn btn-verde" id="btnRevFinalizar" style="display:none" data-i18n="review_finish"></button>
-        <button class="btn" id="btnRevCancelar" style="display:none;background:#b91c1c" data-i18n="review_cancel"></button>
       </div>
       <div class="grupo-titulo-geral">
         <label for="tituloGeral"><span data-i18n="gen_title_label"></span></label>
         <input type="text" id="tituloGeral">
         <div class="nota" data-i18n="gen_title_note"></div>
-      </div>
-      <div id="barraRevisao" class="barra-revisao" style="display:none">
-        <div class="rev-titulo" data-i18n="review_bar"></div>
-
-        <!-- 1. MARCAR: critérios que selecionam cartões. Todos com a mesma
-             forma e o mesmo peso — são alternativas entre si. -->
-        <div class="rev-grupo">
-          <span class="rev-rot" data-i18n="rev_group_mark"></span>
-          <div class="rev-botoes">
-            <button class="btn btn-cinza" id="selTodos" data-i18n="sel_all"></button>
-            <button class="btn btn-cinza" id="selCurtos" data-i18n="sel_short"></button>
-            <button class="btn btn-cinza" id="selSemResp" data-i18n="sel_noanswer"></button>
-            <button class="btn btn-cinza" id="selSemPerg" data-i18n="sel_noquestion"></button>
-            <button class="btn btn-cinza" id="selLongos" data-i18n="sel_long"></button>
-            <button class="btn btn-cinza" id="selDup" data-i18n="sel_dup"></button>
-            <button class="btn btn-cinza" id="selRisco" data-i18n="sel_risky"></button>
-          </div>
-        </div>
-
-        <!-- 2. VER: o que aparece na tela. Caixas de seleção, não botões,
-             porque são estados que ficam ligados. -->
-        <div class="rev-grupo rev-ver">
-          <span class="rev-rot" data-i18n="rev_group_view"></span>
-          <label class="chk-2col"><input type="checkbox" id="chkFiltro">
-            <span data-i18n="filter_marked"></span></label>
-          <label class="chk-2col"><input type="checkbox" id="chkOcultarRev">
-            <span data-i18n="hide_reviewed"></span></label>
-          <span id="revContagem" class="rev-contagem"></span>
-        </div>
-
-        <!-- 3. AÇÕES: as duas que movem o trabalho adiante, mesma largura.
-             O que apenas desfaz marcação virou link, para não competir. -->
-        <div class="rev-acoes">
-          <button class="btn btn-azul" id="btnCopiarMarcados" data-i18n="copy_marked"></button>
-          <button class="btn btn-verde" id="btnSubstituirMarcados" data-i18n="replace_marked"></button>
-        </div>
-        <div class="rev-links">
-          <button type="button" class="link-tec" id="selLimpar" data-i18n="sel_clear"></button>
-          <button type="button" class="link-tec" id="btnLimparRevisados"
-                  data-i18n="clear_reviewed" style="display:none"></button>
-        </div>
       </div>
       <div class="prev-controles">
         <label><span data-i18n="style_panel_label"></span>
@@ -5132,29 +5064,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
-<dialog id="dlgColarRev" style="max-width:720px;width:94%">
-  <div style="padding:16px">
-    <h3 style="margin:0 0 6px" data-i18n="pastepanel_title"></h3>
-    <div class="nota" data-i18n="pastepanel_note" style="margin-bottom:8px"></div>
-    <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px">
-      <button type="button" class="btn btn-azul" id="btnColarRevColar"
-              style="padding:3px 10px;font-size:11px" data-i18n="pastepanel_paste"></button>
-      <button type="button" class="btn btn-cinza" id="btnColarRevExpandir"
-              style="padding:3px 10px;font-size:11px" data-i18n="panel_expand"></button>
-    </div>
-    <div class="rev-wrap" id="colarRevWrap">
-      <div class="rev-nums" id="colarRevNums" aria-hidden="true"></div>
-      <textarea id="colarRevTexto" spellcheck="false"></textarea>
-    </div>
-    <div id="colarRevSug" style="margin-top:8px"></div>
-    <div id="colarRevStatus" style="font-size:12px;margin-top:6px;min-height:16px"></div>
-  </div>
-  <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnColarRevFinalizar" data-i18n="pastepanel_finish"></button>
-    <button class="btn btn-roxo" id="btnColarRevPrompt" data-i18n="fixprompt_btn"></button>
-    <button class="btn btn-cinza" id="btnColarRevFechar" data-i18n="help_close"></button>
-  </div>
-</dialog>
 
 <dialog id="dlgDiagnostico" class="ui-modal diag-modal">
   <h3 data-i18n="diag_titulo"></h3>
@@ -7944,25 +7853,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
-<dialog id="dlgRevCopiar">
-  <div style="padding:16px">
-    <h3 style="margin:0 0 10px" data-i18n="revcopy_title"></h3>
-    <div class="toolbar" style="margin-bottom:8px">
-      <button class="btn btn-roxo" id="btnRevTabFull" data-i18n="revcopy_full_tab"></button>
-      <button class="btn btn-ciano" id="btnRevTabShort" data-i18n="revcopy_short_tab"></button>
-    </div>
-    <div class="nota" data-i18n="revcopy_note" style="margin-bottom:6px"></div>
-    <textarea id="revCopyTexto"
-      style="width:100%;min-height:240px;font-family:ui-monospace,Consolas,monospace;
-             font-size:12px;line-height:1.4"></textarea>
-    <div id="revCopyTam" style="font-size:11.5px;margin-top:6px"></div>
-    <div id="revCopyDone" style="font-size:12px;color:var(--verde-txt);margin-top:6px;min-height:16px"></div>
-  </div>
-  <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnRevCopyCopiar" data-i18n="revcopy_copy"></button>
-    <button class="btn btn-cinza" id="btnRevCopyFechar" data-i18n="help_close"></button>
-  </div>
-</dialog>
 
 <dialog id="dlgPrompt">
   <div style="padding:16px">

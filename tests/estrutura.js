@@ -20,7 +20,6 @@ const VAZIAS = new Set(["br", "hr", "img", "input", "meta", "link", "source",
 const NINHOS = [
   ["cartoes", "grupo"],
   ["resumo", "grupo"],
-  ["barraRevisao", "grupo"],
   ["editor", "grupo"],
   ["sugestoes", "grupo"],
   ["editor", "painelEsquerdo"],
