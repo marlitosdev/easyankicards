@@ -155,28 +155,36 @@ function horPintar() {
   cx.append(res);
   if (m.semMinutos) cx.append(gerEl("p", "nota", t("hor_sem_minutos", { n: m.semMinutos })));
   const leg = gerEl("div", "hor-legenda");
-  [["hor-est", t("hor_leg_est")], ["hor-rev", t("hor_leg_rev")], ["hor-plano", t("hor_leg_plano")], ["hor-corte", t("hor_leg_corte")], ["hor-seguro", t("hor_leg_seguro")]].forEach(([c, r]) => {
+  /* as linhas de corte só entram na legenda quando alguma coluna tem uma (blocos com mínimo no edital) */
+  const temCorte = m.disciplinas.some((d) => d.corteMin !== null);
+  [["hor-est", t("hor_leg_est")], ["hor-rev", t("hor_leg_rev")], ["hor-plano", t("hor_leg_plano")]]
+    .concat(temCorte ? [["hor-corte", t("hor_leg_corte")], ["hor-seguro", t("hor_leg_seguro")]] : []).forEach(([c, r]) => {
     const it = gerEl("span", "hor-leg"); it.append(gerEl("i", "hor-leg-i " + c), document.createTextNode(" " + r));
     leg.append(it);
   });
   cx.append(leg);
-  const maxMin = Math.max(60, ...m.disciplinas.map((d) => Math.max(d.totalMin, d.planejadoMin, d.seguroMin || 0)));
-  const px = (min) => Math.max(0, (min / maxMin) * HOR_ALTURA);
+  /* CADA COLUNA É UMA TRILHA DE ALTURA FIXA = as horas PLANEJADAS daquela disciplina (100%). O azul e o roxo sobem
+   * da base como fração da meta; as linhas de corte ficam na mesma escala (o mínimo é % do planejado). Assim todas as
+   * colunas têm o mesmo topo e o mesmo rótulo, e o que muda é o quanto da meta foi cumprido — as horas absolutas vão no
+   * rótulo de cima ("2h45 de 30h"). Passou da meta: a trilha enche e mostra o "+". */
   const graf = gerEl("div", "hor-graf");
   m.disciplinas.forEach((d) => {
     const col = gerEl("div", "hor-col" + (d.alerta ? " hor-col-alerta" : "") + (horDiscAberta === d.nome ? " hor-col-aberta" : ""));
     col.title = d.nome + " — " + t("hor_tip_col", { e: horTexto(d.estudoMin), r: horTexto(d.revisaoMin), p: horTexto(d.planejadoMin), a: d.feitas, n: d.unidades })
       + (d.bloco ? " — " + t("hor_tip_corte", { p: d.bloco.minPct, h: horTexto(d.corteMin) }) : "");
-    col.append(gerEl("div", "hor-topo", horTexto(d.totalMin)));
-    const area = gerEl("div", "hor-area");
+    const topo = gerEl("div", "hor-topo");
+    topo.append(gerEl("b", "", horTexto(d.totalMin)), gerEl("span", "hor-topo-de", t("hor_de", { p: horTexto(d.planejadoMin) })));
+    col.append(topo);
+    const area = gerEl("div", "hor-area" + (d.totalMin > d.planejadoMin ? " hor-excede" : ""));
     area.style.height = HOR_ALTURA + "px";
-    const plano2 = gerEl("div", "hor-plano"); plano2.style.height = px(d.planejadoMin) + "px";
-    const est = gerEl("div", "hor-est"); est.style.height = px(d.estudoMin) + "px";
-    const rev = gerEl("div", "hor-rev"); rev.style.height = px(d.revisaoMin) + "px"; rev.style.bottom = px(d.estudoMin) + "px";
-    area.append(plano2, est, rev);
-    if (d.corteMin !== null) {
-      const c = gerEl("div", "hor-corte" + (d.bloco.abaixo ? " hor-corte-risco" : "")); c.style.bottom = px(d.corteMin) + "px"; area.append(c);
-      const s = gerEl("div", "hor-seguro"); s.style.bottom = px(d.seguroMin) + "px"; area.append(s);
+    const base = d.planejadoMin || Math.max(60, d.totalMin);
+    const pEst = Math.min(100, (d.estudoMin / base) * 100), pRev = Math.min(100 - pEst, (d.revisaoMin / base) * 100);
+    const est = gerEl("div", "hor-est"); est.style.height = pEst.toFixed(2) + "%";
+    const rev = gerEl("div", "hor-rev"); rev.style.height = pRev.toFixed(2) + "%";
+    area.append(rev, est);
+    if (d.corteMin !== null && d.planejadoMin) {
+      const c = gerEl("div", "hor-corte" + (d.bloco.abaixo ? " hor-corte-risco" : "")); c.style.bottom = ((d.corteMin / d.planejadoMin) * 100).toFixed(2) + "%"; area.append(c);
+      const s = gerEl("div", "hor-seguro"); s.style.bottom = ((d.seguroMin / d.planejadoMin) * 100).toFixed(2) + "%"; area.append(s);
     }
     col.append(area);
     const prog = gerEl("div", "hor-prog");
@@ -184,7 +192,8 @@ function horPintar() {
     prog.append(barra);
     col.append(prog, gerEl("div", "hor-un", t("hor_un", { a: d.feitas, n: d.unidades })));
     col.append(gerEl("div", "hor-nome", d.nome), gerEl("div", "hor-pesop", t("cov_peso", { p: d.pesoPct.toFixed(1) })));
-    if (d.alerta) col.append(gerEl("div", "hor-alerta", "⚠ " + t("hor_alerta", { p: Math.round(d.revisaoPct * 100) })));
+    /* o alerta ocupa SEMPRE a mesma linha (vazia quando não há), para as colunas terminarem alinhadas */
+    col.append(gerEl("div", "hor-alerta", d.alerta ? "⚠ " + t("hor_alerta", { p: Math.round(d.revisaoPct * 100) }) : ""));
     col.onclick = () => { horDiscAberta = horDiscAberta === d.nome ? "" : d.nome; horPintar(); };
     graf.append(col);
   });
@@ -193,7 +202,15 @@ function horPintar() {
   const esc = m.disciplinas.find((d) => d.nome === horDiscAberta);
   if (esc) {
     const det = gerEl("div", "hor-det");
-    det.append(gerEl("h4", "", esc.nome + " — " + t("hor_tip_col", { e: horTexto(esc.estudoMin), r: horTexto(esc.revisaoMin), p: horTexto(esc.planejadoMin), a: esc.feitas, n: esc.unidades })));
+    det.append(gerEl("h4", "", esc.nome));
+    const rx = gerEl("ul", "hor-rx");
+    [t("hor_rx_peso", { p: esc.pesoPct.toFixed(1) }),
+      t("hor_rx_horas", { h: horTexto(esc.totalMin), p: horTexto(esc.planejadoMin) }),
+      t("hor_rx_mix", { e: horTexto(esc.estudoMin), r: horTexto(esc.revisaoMin) }),
+      t("hor_rx_assuntos", { a: esc.feitas, n: esc.unidades })]
+      .concat(esc.bloco ? [t("hor_tip_corte", { p: esc.bloco.minPct, h: horTexto(esc.corteMin) })] : [])
+      .forEach((x) => rx.append(gerEl("li", "", x)));
+    det.append(rx);
     esc.topicos.forEach((tp) => {
       const l = gerEl("div", "hor-top" + (tp.revisaoMin > 0 && tp.estudoMin === 0 ? " hor-top-so-rev" : ""));
       l.append(gerEl("span", "hor-top-nome", tp.nome), gerEl("span", "hor-top-h", t("hor_top_h", { e: horTexto(tp.estudoMin), r: horTexto(tp.revisaoMin), a: tp.feitas, n: tp.unidades })));

@@ -2071,6 +2071,7 @@ async function testes() {
         "[MC] Qual verbo admite a passiva? :: intransitivo | transitivo direto * | de ligação :: porque exige objeto direto",
       ].join("\n");
       a.matGravarCartoes(a.matChave(D, T), txt, { disciplina: D, topico: T });
+      a.estcModoForcar("sequencia");
       /* as unidades: basico 1 + lacuna 2 (c1, c2) + mc 1 = 4 */
       a.gerAbrirNoTopico(D, T, { estudar: true });
       const at = () => a.estcAtual();
@@ -2278,14 +2279,116 @@ async function testes() {
       const cols = achar(a.$("horCorpo"), (e) => cls(e, "hor-col"));
       ok(cols.length === 2 && /Licitações/.test(cols[0].textContent), "R63c uma coluna por disciplina, a de maior peso a esquerda: " + cols.map((c) => c.textContent.slice(0, 20)).join("|"));
       const est = achar(cols[0], (e) => cls(e, "hor-est"))[0], rev = achar(cols[1], (e) => cls(e, "hor-rev"))[0];
-      ok(parseFloat(est.style.height) > 0 && parseFloat(rev.style.height) > parseFloat(achar(cols[1], (e) => cls(e, "hor-est"))[0].style.height), "R63d as colunas tem altura proporcional as horas (revisao maior que estudo em Direito Financeiro)");
-      ok(achar(cols[1], (e) => cls(e, "hor-alerta")).length === 1 && achar(cols[0], (e) => cls(e, "hor-alerta")).length === 0, "R63e a disciplina que so' revisou mostra o alerta");
+      const est1 = achar(cols[1], (e) => cls(e, "hor-est"))[0];
+      ok(/%$/.test(est.style.height) && parseFloat(est.style.height) > 0 && parseFloat(rev.style.height) > 0 && parseFloat(est1.style.height) + parseFloat(rev.style.height) <= 100.0001, "R63d as camadas sao fracao da META planejada (a trilha e' sempre 100%): " + est.style.height + " / " + rev.style.height);
+      ok(achar(cols[0], (e) => cls(e, "hor-area")).length === 1 && achar(cols, (e) => cls(e, "hor-area")).every((x) => x.style.height === achar(cols[0], (e) => cls(e, "hor-area"))[0].style.height), "R63d2 todas as trilhas tem a MESMA altura (os rotulos ficam alinhados no mesmo topo)");
+      ok(achar(cols[1], (e) => cls(e, "hor-alerta"))[0].textContent.length > 0 && achar(cols[0], (e) => cls(e, "hor-alerta"))[0].textContent === "", "R63e a disciplina que so' revisou mostra o alerta (as outras deixam a linha vazia, alinhada)");
+      ok(!/horas até o corte/.test(a.$("horCorpo").textContent), "R63e2 sem bloco com minimo, a legenda NAO mostra as linhas de corte");
       cols[0].onclick();
       ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-det")).length === 1 && achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).length >= 3, "R63f clicar na coluna abre os topicos e ramos");
       a.$("horPeriodo").value = "7"; a.$("horPeriodo").onchange();
       ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-col")).length === 2, "R63g o filtro de periodo repinta");
       a.$("btnHorX").onclick();
       ok(a.$("dlgHoras").open === false, "R63h o X fecha");
+    }
+
+    /* R64: o AGENDADOR (De novo · Dificil · Bom · Facil) — funcoes puras */
+    {
+      const { a } = MT();
+      const T0 = new Date(2026, 8, 26, 10, 0, 0).getTime(), MIN = 60000, DIA = 86400000;
+      const g1 = a.agdResponder(null, 3, T0);
+      ok(g1.s === "learn" && g1.st === 1 && g1.due === T0 + 10 * MIN, "R64a cartao novo + Bom: vai para o 2o passo (10 min)");
+      const g2 = a.agdResponder(g1, 3, T0 + 10 * MIN);
+      ok(g2.s === "review" && g2.iv === 1 && g2.due === T0 + 10 * MIN + DIA, "R64b Bom no ultimo passo: forma-se em 1 dia");
+      ok(a.agdResponder(null, 1, T0).due === T0 + MIN && a.agdResponder(null, 2, T0).due === T0 + MIN, "R64c novo + De novo ou Dificil: volta em 1 min");
+      const fa = a.agdResponder(null, 4, T0);
+      ok(fa.s === "review" && fa.iv === 4, "R64d novo + Facil: forma-se direto em 4 dias");
+      const rev = (iv, ez) => ({ s: "review", st: 0, iv, ez: ez || 2.5, due: T0, n: 3, l: 0 });
+      const iv = (r, n) => a.agdResponder(r, n, T0).iv;
+      ok(iv(rev(1), 2) === 2 && iv(rev(1), 3) === 3 && iv(rev(1), 4) === 4, "R64e revisao de 1 dia: Dificil 2, Bom 3, Facil 4 (sempre crescendo)");
+      ok(iv(rev(10), 2) === 12 && iv(rev(10), 3) === 25 && iv(rev(10), 4) === 33, "R64f revisao de 10 dias: Dificil 12, Bom 25 (x2,5), Facil 33 (x2,5 x1,3)");
+      const lapso = a.agdResponder(rev(10), 1, T0);
+      ok(lapso.s === "relearn" && lapso.l === 1 && Math.abs(lapso.ez - 2.3) < 1e-9 && lapso.due === T0 + 10 * MIN, "R64g De novo numa revisao e' um LAPSO: reaprende em 10 min e a facilidade cai 0,20");
+      const volta = a.agdResponder(lapso, 3, T0);
+      ok(volta.s === "review" && volta.iv === 1, "R64h ao acertar o reaprendizado, volta como revisao de 1 dia");
+      let r = rev(5); for (let k = 0; k < 30; k++) r = Object.assign({}, a.agdResponder(r, 1, T0), { s: "review", iv: 5 });
+      ok(Math.abs(r.ez - 1.3) < 1e-9, "R64i a facilidade nunca passa de 1,3 para baixo: " + r.ez);
+      ok(a.agdResponder(rev(10), 4, T0).ez > 2.5 && a.agdResponder(rev(10), 2, T0).ez < 2.5 && a.agdResponder(rev(10), 3, T0).ez === 2.5, "R64j Facil sobe a facilidade, Dificil desce, Bom mantem");
+      const prev = a.agdPrevisao(rev(10), T0);
+      ok(prev.length === 4 && prev[0] === 10 * MIN && prev[1] === 12 * DIA && prev[2] === 25 * DIA && prev[3] === 33 * DIA, "R64k a previsao dos 4 botoes bate com o que cada nota faria");
+      const orig = rev(10); a.agdResponder(orig, 3, T0);
+      ok(orig.iv === 10 && orig.n === 3, "R64l responder NAO altera o registro de entrada");
+      const fmt = (ms) => a.agdFormatar(ms);
+      ok(fmt(30000) === "<1min" && fmt(10 * MIN) === "10min" && fmt(3 * 60 * MIN) === "3h" && fmt(3 * DIA) === "3d" && fmt(45 * DIA) === "1,5mes" && fmt(400 * DIA) === "1,1a", "R64m formato dos intervalos: " + [fmt(30000), fmt(10 * MIN), fmt(3 * 60 * MIN), fmt(3 * DIA), fmt(45 * DIA), fmt(400 * DIA)].join(" "));
+      /* a fila */
+      const us = ["u1", "u2", "u3", "u4", "u5", "u6"].map((id) => ({ id }));
+      const regs = {
+        u1: { s: "review", iv: 3, ez: 2.5, due: T0 - DIA },
+        u2: { s: "review", iv: 3, ez: 2.5, due: T0 + 2 * DIA },
+        u3: { s: "learn", st: 0, iv: 0, ez: 2.5, due: T0 - MIN },
+        u4: { s: "learn", st: 1, iv: 0, ez: 2.5, due: T0 + 5 * MIN },
+      };
+      const f0 = a.agdFila(us, regs, { novos: 0 }, T0, { novosDia: 1 });
+      ok(f0.proxima.id === "u3" && f0.conta.novos === 1 && f0.conta.aprender === 2 && f0.conta.revisar === 1, "R64n a fila comeca pelo aprendizado vencido; conta: 1 novo (limite do dia), 2 aprendendo, 1 revisao: " + JSON.stringify(f0.conta));
+      const r2 = Object.assign({}, regs, { u3: { s: "review", iv: 1, ez: 2.5, due: T0 + DIA } });
+      ok(a.agdFila(us, r2, { novos: 0 }, T0, { novosDia: 1 }).proxima.id === "u1", "R64o depois vem a revisao do dia");
+      const r3 = Object.assign({}, r2, { u1: { s: "review", iv: 3, ez: 2.5, due: T0 + 3 * DIA } });
+      ok(a.agdFila(us, r3, { novos: 0 }, T0, { novosDia: 1 }).proxima.id === "u5", "R64p depois os cartoes novos");
+      const f3 = a.agdFila(us, r3, { novos: 1 }, T0, { novosDia: 1 });
+      ok(f3.proxima.id === "u4" && f3.conta.novos === 0, "R64q com o limite de novos do dia esgotado, so' sobra o aprendizado que vence em breve (u4, 5 min)");
+      const r4 = Object.assign({}, r3, { u4: { s: "learn", st: 1, iv: 0, ez: 2.5, due: T0 + 60 * MIN } });
+      const f4 = a.agdFila(us, r4, { novos: 1 }, T0, { novosDia: 1 });
+      ok(f4.proxima === null && f4.quando !== null && f4.quando <= T0 + 60 * MIN, "R64r nada mais agora: proxima nula e diz QUANDO volta o proximo");
+      const muitos = Array.from({ length: 25 }, (_, i) => ({ id: "n" + i }));
+      ok(a.agdFila(muitos, {}, { novos: 5 }, T0, {}).conta.novos === 15 && a.agdFila(muitos, {}, { novos: 0 }, T0, {}).conta.novos === 20, "R64s o limite padrao e' 20 novos por dia, descontando os ja vistos hoje");
+      ok(a.agdFimDoDia(T0) > T0 && a.agdFimDoDia(T0) - T0 < DIA && new Date(a.agdFimDoDia(T0)).getHours() === 23, "R64t revisao vence no DIA marcado (ate' o fim do dia local)");
+    }
+    /* R65: o player no modo AGENDADO */
+    {
+      const { a } = MT();
+      const D = "Direito Financeiro", T = "Agenda R65";
+      a.matGravarCartoes(a.matChave(D, T), ["Pergunta um? :: Resposta um zz1", "Pergunta dois? :: Resposta dois zz2", "Pergunta tres? :: Resposta tres zz3"].join("\n"), { disciplina: D, topico: T });
+      a.estcModoForcar("agendado");
+      a.gerAbrirNoTopico(D, T, { estudar: true });
+      const notaTxt = (n) => achar(a.$("btnEstNota" + n), () => true).map((e) => e.textContent).join("|");
+      ok(a.estcModoAtual() === "agendado" && a.estcFilaAtual().conta.novos === 3 && a.$("estNotas").hidden === true && a.$("btnEstVirar").hidden === false && a.$("estNav").hidden === true && a.$("estContagem").hidden === false, "R65a abre no modo agendado: 3 novos, so' 'mostrar resposta' e os contadores");
+      const cn = () => achar(a.$("estContagem"), (e) => /est-cn /.test(e.className + " ")).map((e) => e.textContent).join("/");
+      ok(cn() === "3/0/0" && achar(a.$("estContagem"), (e) => cls(e, "est-cn-atual"))[0].textContent === "3", "R65b contadores novos/aprendendo/revisao, com o da vez sublinhado: " + cn());
+      a.$("btnEstVirar").onclick();
+      ok(a.$("estNotas").hidden === false && a.$("btnEstVirar").hidden === true, "R65c depois de mostrar a resposta aparecem as 4 notas no lugar do botao");
+      ok(/1min/.test(notaTxt(1)) && /1min/.test(notaTxt(2)) && /10min/.test(notaTxt(3)) && /4d/.test(notaTxt(4)) && /De novo/.test(notaTxt(1)) && /Bom/.test(notaTxt(3)), "R65d cada nota mostra o intervalo previsto: " + [1, 2, 3, 4].map(notaTxt).join(" ; "));
+      const id1 = a.estcAtual().un[a.estcAtual().i].id;
+      a.$("btnEstNota3").onclick();
+      const reg1 = a.estcRegsAtual()[id1];
+      ok(reg1 && reg1.s === "learn" && reg1.st === 1 && JSON.parse(a.lojaLer(a.ESTC_CH_REGS))[id1].st === 1, "R65e responder grava o registro do cartao (e no armazenamento do navegador)");
+      ok(cn() === "2/1/0" && a.estcAtual().rev === false && a.estcAtual().un[a.estcAtual().i].id !== id1, "R65f passa a um cartao NOVO (o aprendizado so' vence em 10 min): " + cn());
+      a.$("btnEstVirar").onclick(); a.$("btnEstNota4").onclick();
+      a.$("btnEstVirar").onclick(); a.$("btnEstNota4").onclick();
+      ok(a.estcAtual().un[a.estcAtual().i].id === id1, "R65g sem novos, volta o cartao em aprendizado (dentro da margem de 20 min)");
+      a.$("btnEstVirar").onclick(); a.$("btnEstNota3").onclick();
+      ok(a.estcAtual().i === -1 && achar(a.$("estCartao"), (e) => cls(e, "est-fim")).length === 1 && /volta em/.test(a.$("estCartao").textContent), "R65h acabou a fila: mensagem 'por hoje e' so', dizendo quando volta o proximo");
+      ok(a.estcRegsAtual()[id1].s === "review" && a.estcRegsAtual()[id1].iv === 1, "R65i o cartao que passou pelos dois passos virou revisao de 1 dia");
+      /* trocar para sequencia */
+      const ver = achar(a.$("estCartao"), (e) => e.tag === "button")[0];
+      ver.onclick();
+      ok(a.estcModoAtual() === "sequencia" && a.lojaLer(a.ESTC_CH_MODO) === "sequencia" && a.$("estNav").hidden === false && a.$("estNotas").hidden === true, "R65j 'passar em sequencia' troca o modo (lembrado) e mostra o anterior/proximo");
+      a.estcTrocarModo("agendado");
+      ok(a.estcModoAtual() === "agendado" && a.estcAtual().i === -1, "R65k voltar ao agendado mantem a agenda (nada vence agora)");
+      /* o limite de novos por dia */
+      a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
+      a.AGD.novosDia = 1;
+      a.lojaGravar(a.ESTC_CH_REGS, "{}"); a.lojaGravar("eac_cartao_estudo_dia", "{}");
+      a.gerAbrirNoTopico(D, T, { estudar: true });
+      ok(a.estcFilaAtual().conta.novos === 1, "R65l o limite de novos por dia vale (1): " + JSON.stringify(a.estcFilaAtual().conta));
+      a.AGD.novosDia = 20; a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
+      /* editar o cartao nao apaga o historico dele: o guid nasce do texto, entao o registro MIGRA */
+      const velho = a.parseText("Pergunta velha? :: Resposta velha zz9").cards[0], novo = a.parseText("Pergunta velha? :: Resposta melhorada zz9").cards[0];
+      const idsA = a.estcIdsDoCard(velho), idsB = a.estcIdsDoCard(novo);
+      ok(idsA[0] !== idsB[0], "R65m editar o texto MUDA a identidade (guid), por isso o historico precisa migrar");
+      a.lojaGravar(a.ESTC_CH_REGS, JSON.stringify({ [idsA[0]]: { s: "review", iv: 7, ez: 2.5, due: 0, n: 5, l: 0 } }));
+      ok(a.estcMigrarAgenda(idsA, idsB) === true, "R65n a migracao acontece");
+      const depois = JSON.parse(a.lojaLer(a.ESTC_CH_REGS));
+      ok(depois[idsB[0]] && depois[idsB[0]].iv === 7 && !depois[idsA[0]], "R65o o historico (intervalo de 7 dias) passou para o cartao editado e o registro antigo saiu");
     }
 
     /* R39: exigir a trilha completa para dar o ramo como estudado */
