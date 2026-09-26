@@ -1125,6 +1125,99 @@ async function testes() {
       a.$("dlgRegistro").close();
     }
 
+    /* R40: PULAR um ramo (não vou estudar) */
+    {
+      const { a, ed, chave } = MT();
+      const hoje = new Date().toISOString().slice(0, 10);
+      const r0 = a.lerEdital(ed.texto);
+      const plano = (feitos) => a.montarPlano(r0, { horas: 20, prova: "2027-06-01", feitos: feitos || {}, fatores: null, acertos: null });
+      const itDe = (feitos) => plano(feitos).itens.find((i) => i.nome === "Lei 14.133");
+      const ch = itDe().chave;
+      const K = (id) => ch + "›#" + id;
+      const pul = { [K("fase_preparatoria")]: { e: "pulado", d: hoje } };
+      const i1 = itDe(pul);
+      ok(i1.ramosPulados === 1 && i1.ramos[1].pulado === true && i1.ramos[1].feito === false && i1.ramos[0].pulado === false, "R40 ramo com a marca 'pulado': fica pulado, NAO estudado, e o contador soma 1");
+      ok(i1.sessao.indexOf("fase_preparatoria") < 0 && i1.sessao.length > 0, "R40a o ramo pulado nunca entra na sessao da vez");
+      ok(Math.abs(a.edRestante(i1) - 8 / 11) < 1e-9 && a.edCredito(i1) === 0, "R40b o pulado sai do que FALTA (8/11) e nao gera credito: " + a.edRestante(i1) + " / " + a.edCredito(i1));
+      ok(i1.minutos === i1.ramos.filter((r) => !r.pulado).reduce((x, r) => x + r.minutos, 0), "R40c o tempo reservado soma so' os ramos que faltam");
+      const i2 = itDe(Object.assign({ [K("modalidades")]: { e: "feito", d: hoje } }, pul));
+      ok(Math.abs(a.edCredito(i2) - 5 / 8) < 1e-9 && i2.feito === false && i2.parcial === true, "R40d com 1 estudado e 1 pulado o credito e' 5/8 (renormalizado) e o topico segue parcial: " + a.edCredito(i2));
+      const i3 = itDe(Object.assign({ [K("modalidades")]: { e: "feito", d: hoje }, [K("contratos")]: { e: "feito", d: hoje } }, pul));
+      ok(i3.feito === true && a.edCredito(i3) === 1 && a.edRestante(i3) === 0 && i3.ramosFeitos === 2 && i3.ramosPulados === 1, "R40e estudados os outros, o topico CONCLUI (o pulado nao segura) com credito 1");
+      const i3r = itDe(Object.assign({ [K("modalidades")]: { e: "revisado", d: hoje }, [K("contratos")]: { e: "revisado", d: hoje } }, pul));
+      ok(i3r.revisado === true && a.edCreditoRev(i3r) === 1 && i3r.estado === "revisado", "R40f revisados os outros, o topico conta como revisado");
+      /* registrar nao toca no pulado */
+      const prog = Object.assign({}, pul);
+      const it = itDe(prog);
+      it.ramosEscolhidos = ["fase_preparatoria", "contratos"];
+      const mud = a.edRamosRegistrar(prog, it, "feito", hoje);
+      ok(mud.length === 1 && mud[0].id === "contratos" && prog[K("fase_preparatoria")].e === "pulado", "R40g registrar estudo ignora o ramo pulado mesmo se escolhido");
+      const it2 = itDe(pul);
+      const m2 = a.edRamosRegistrar({}, it2, "feito", hoje);
+      ok(m2.every((x) => x.id !== "fase_preparatoria"), "R40h a sessao padrao tambem nao marca o pulado");
+      /* pular / voltar */
+      const pr = {};
+      const base = itDe(pr);
+      const mp = a.edRamosPular(pr, base, ["fase_preparatoria"], true, hoje);
+      ok(mp.length === 1 && pr[K("fase_preparatoria")].e === "pulado" && pr[K("fase_preparatoria")].d === hoje, "R40i pular grava a marca com a data");
+      const mp2 = a.edRamosPular(pr, itDe(pr), ["fase_preparatoria"], true, hoje);
+      ok(mp2.length === 0, "R40j pular de novo o mesmo ramo nao faz nada");
+      const pr2 = { [K("modalidades")]: { e: "feito", d: hoje } };
+      ok(a.edRamosPular(pr2, itDe(pr2), ["modalidades"], true, hoje).length === 0 && pr2[K("modalidades")].e === "feito", "R40k ramo ja estudado nao pode ser pulado");
+      const pr3 = {};
+      const mt = a.edRamosPular(pr3, itDe(pr3), ["modalidades", "fase_preparatoria", "contratos"], true, hoje);
+      ok(mt.length === 2 && !pr3[K("contratos")], "R40l NUNCA se pula o ultimo ramo ativo: de 3 pedidos, so' 2 valem");
+      a.edRamosDesfazer(pr3, { chave: ch }, mt);
+      ok(Object.keys(pr3).length === 0, "R40m o desfazer devolve as marcas de antes");
+      const mv = a.edRamosPular(pr, itDe(pr), ["fase_preparatoria"], false, hoje);
+      ok(mv.length === 1 && !pr[K("fase_preparatoria")] && a.edRamosPular({}, itDe({}), ["contratos"], false, hoje).length === 0, "R40n voltar apaga a marca (e voltar um ramo que nao esta pulado nao faz nada)");
+      /* painel */
+      const pp = a.edPainelRamos(plano(Object.assign({ [K("modalidades")]: { e: "feito", d: hoje } }, pul)), "Licitações");
+      ok(pp.pulados === 1 && pp.pendentes === 1 && pp.feitos === 1 && pp.pctFeito === 63, "R40o painel: 1 pulado, 1 pendente, 1 estudado e 63% (5 de 8 do que ainda vale): " + pp.pctFeito);
+      ok(pp.linhas.map((x) => x.estado).join() === "feito,pulado,pend", "R40p o estado do ramo no painel e' 'pulado'");
+      ok(a.edPainelRamos(plano(pul), "Licitações", "pendentes").linhas.length === 2 && a.edPainelRamos(plano(pul), "Licitações", "pulados").linhas.map((x) => x.ramo.nome).join() === "Fase preparatória", "R40q filtro 'pendentes' esconde o pulado e o filtro 'pulados' mostra so' ele");
+      /* tela */
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.abrirDisciplina("Licitações");
+      const lins = () => Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className));
+      const fase = () => lins().find((l) => /Fase preparat/.test(l.children[1].textContent));
+      ok(fase().children.length === 6 && fase().children[5].textContent === "Pular" && fase().children[5].hidden === false, "R40r cada linha tem o botao 'Pular'");
+      fase().children[5].onclick();
+      const ch2 = a.edItemDoPlano("Licitações", "Lei 14.133").chave;
+      ok(a.edProgressoAtual()[ch2 + "›#fase_preparatoria"].e === "pulado", "R40s clicar em 'Pular' grava a marca no progresso");
+      ok(/dsc-ramo-pulado/.test(fase().className) && fase().children[4].hidden === true && fase().children[5].textContent === "Voltar" && /pulado/.test(a.$("dscRamosResumo").textContent), "R40t a linha vira 'pulada': sem botao de estudar, com 'Voltar', e o resumo conta o pulado: " + a.$("dscRamosResumo").textContent);
+      ok(Array.from(a.$("dscRamosFiltro").children).some((o) => o.value === "pulados"), "R40u com ramo pulado o filtro ganha a opcao 'pulados'");
+      fase().children[5].onclick();
+      ok(!a.edProgressoAtual()[ch2 + "›#fase_preparatoria"] && /dsc-ramo-pulado/.test(fase().className) === false, "R40v 'Voltar' apaga a marca e a linha volta ao normal");
+      a.$("dlgDisciplina").close();
+      /* a agenda: o chip do ramo pulado */
+      a.edProgressoPor({ [ch2 + "›#fase_preparatoria"]: { e: "pulado", d: hoje } });
+      const itP = a.edItemDoPlano("Licitações", "Lei 14.133");
+      const linhaP = a.edRamosNaLinha(itP);
+      const achaCls = (el, c, acc) => { acc = acc || []; if (new RegExp("(^|\\s)" + c + "(\\s|$)").test(el.className || "")) acc.push(el); Array.from(el.children || []).forEach((x) => achaCls(x, c, acc)); return acc; };
+      ok(achaCls(linhaP, "ed-ramo-pulado").length === 1 && /pulado/.test(achaCls(linhaP, "ed-ramo-pulado")[0].title), "R40w0 a agenda mostra o ramo pulado com o seu proprio estilo");
+      a.abrirRegistro(itP);
+      const linReg = Array.from(a.$("regRamos").children).find((l) => /Fase preparat/.test(l.textContent));
+      ok(linReg.children[0].disabled === true && /pulado/.test(linReg.textContent), "R40w1 na janela de registro o ramo pulado aparece como 'pulado' e nao pode ser marcado: " + linReg.textContent);
+      a.$("dlgRegistro").close();
+      /* com os outros ramos estudados, a linha da agenda fala de REVISAO (o pulado nao conta como pendente) */
+      a.edProgressoPor({ [ch2 + "›#fase_preparatoria"]: { e: "pulado", d: hoje }, [ch2 + "›#modalidades"]: { e: "feito", d: hoje }, [ch2 + "›#contratos"]: { e: "feito", d: hoje } });
+      const itQ = a.edItemDoPlano("Licitações", "Lei 14.133");
+      const resQ = achaCls(a.edRamosNaLinha(itQ), "ed-ramos-resumo")[0].textContent;
+      ok(resQ === a.t("ed_ramos_revisar", { f: itQ.ramosFeitos, n: itQ.ramosTotal, v: itQ.ramosVencidos }), "R40w2 sem ramo a estudar (so' o pulado sobra) a linha fala de revisar: " + resQ);
+      /* ramo estudado nao tem o botao Pular */
+      a.abrirDisciplina("Licitações");
+      const linF = Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className)).find((l) => /Modalidades/.test(l.children[1].textContent));
+      ok(linF.children[5].hidden === true, "R40w3 ramo ja estudado nao tem o botao 'Pular'");
+      a.$("dlgDisciplina").close();
+      /* a data do topico revisado ignora a do ramo pulado */
+      const iRv = itDe({ [K("modalidades")]: { e: "revisado", d: "2026-03-01" }, [K("contratos")]: { e: "revisado", d: "2026-03-02" }, [K("fase_preparatoria")]: { e: "pulado", d: "2099-12-31" } });
+      ok(iRv.revisado === true && iRv.quando === "2026-03-02", "R40w4 a data do topico revisado nao vem do ramo pulado: " + iRv.quando);
+      const html = fs.readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.ed-ramo-pulado\{/.test(html) && /\.dsc-ramo-pulado /.test(html), "R40w o estilo do ramo pulado existe no CSS");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

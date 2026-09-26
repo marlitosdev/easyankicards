@@ -99,7 +99,7 @@ function edRamosNaLinha(i) {
   cx.className = "ed-ramos";
   const resumo = document.createElement("span");
   resumo.className = "ed-ramos-resumo";
-  const pend = rs.filter((r) => !r.feito);
+  const pend = rs.filter((r) => !r.feito && !r.pulado);
   resumo.textContent = pend.length
     ? t("ed_ramos_resumo", { f: i.ramosFeitos, n: i.ramosTotal, p: (i.sessaoNomes || []).join(", "), m: horasTexto(i.minutosSessao || i.minutos) })
     : t("ed_ramos_revisar", { f: i.ramosFeitos, n: i.ramosTotal, v: i.ramosVencidos });
@@ -110,7 +110,7 @@ function edRamosNaLinha(i) {
   cx.append(chips);
   let aberto = false;
   const matRamos = edMaterialDosRamos(i);
-  const estadoDe = (r) => (r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend");
+  const estadoDe = (r) => (r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend");
   const pintar = () => {
     chips.innerHTML = "";
     rs.slice(0, aberto ? rs.length : ED_RAMOS_LIM).forEach((r) => {
@@ -1623,7 +1623,7 @@ function regPintarFormas() {
  * ainda pendente; revisão só ramo já estudado e não revisado. Os minutos sugeridos acompanham a escolha (soma do
  * tempo dos ramos; metade na revisão) e o tempo gravado é repartido entre os ramos pelo peso. */
 let regRamosSel = new Set();
-function regRamosElegivel(r) { return regTipo === "revisado" ? (r.feito && !r.revisado) : !r.feito; }
+function regRamosElegivel(r) { return regTipo === "revisado" ? (r.feito && !r.revisado) : (!r.feito && !r.pulado); }
 function regRamosPadrao(i) {
   const rs = i.ramos || [];
   if (regTipo === "revisado") {
@@ -1660,8 +1660,8 @@ function regRamosPintar(i, refazerMinutos) {
     nm.textContent = r.nome + " ★" + (r.peso || 3);
     const st = document.createElement("span");
     st.className = "reg-ramo-est";
-    st.textContent = el ? "≈ " + horasTexto(r.minutos) : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
-    lin.title = r.nome + " — " + t("ed_ramo_" + (r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend")) + (r.nota ? " — " + r.nota : "");
+    st.textContent = r.pulado ? t("ed_ramo_pulado") : el ? "≈ " + horasTexto(r.minutos) : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
+    lin.title = r.nome + " — " + t("ed_ramo_" + (r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend")) + (r.nota ? " — " + r.nota : "");
     lin.append(ck, nm, st);
     cx.append(lin);
   });
@@ -2065,6 +2065,25 @@ function edDespedir(item, estado, linhas) {
   else refazer();
 }
 
+/* PULAR / VOLTAR um ramo (o edital DONO do item recebe a marca; nenhum registro no diário: não foi estudo). */
+function edPularRamo(item, ramoId, pular) {
+  const alvo = (typeof edAberto === "function") ? edAberto() : null;
+  const deOutro = item.edital && (!alvo || String(item.edital) !== String(alvo.id));
+  let prog = edProgresso, dono = null;
+  if (deOutro) {
+    dono = (typeof editais !== "undefined" ? editais : []).filter((e) => String(e.id) === String(item.edital))[0];
+    if (!dono) return [];
+    dono.progresso = dono.progresso || {};
+    prog = dono.progresso;
+  }
+  const mud = edRamosPular(prog, item, [ramoId], pular, hojeISO());
+  if (!mud.length) return mud;
+  if (dono) { dono.tocado = new Date().toISOString(); if (typeof edSalvarLista === "function") edSalvarLista(); } else edSalvar();
+  reg("EDITAL-PROGRESSO", (pular ? "pulou o ramo" : "voltou o ramo") + ": " + item.nome + " › " + ramoId, item.disciplina || "");
+  if (typeof edRender === "function") edRender();
+  return mud;
+}
+
 /* Grava o estado no edital DONO do item, que nem sempre é o aberto. */
 let edUltimasMudancasRamos = null;
 function edMarcarProgresso(i, estado) {
@@ -2365,7 +2384,7 @@ function dscPintarRamos(plano, nome) {
   const p = edPainelRamos(plano, nome, dscRamosFiltro);
   bl.hidden = !p.total;
   if (!p.total) return p;
-  $("dscRamosResumo").textContent = t("ed_dsc_ramos_resumo", { f: p.feitos, n: p.total, p: p.pctFeito, v: p.vencidos });
+  $("dscRamosResumo").textContent = t("ed_dsc_ramos_resumo", { f: p.feitos, n: p.total, p: p.pctFeito, v: p.vencidos }) + (p.pulados ? t("ed_dsc_ramos_pulados", { n: p.pulados }) : "");
   const barra = $("dscRamosBarra");
   barra.innerHTML = "";
   barra.append(edBarra(p.pctFeito, p.pctRevisado, 100));
@@ -2373,7 +2392,7 @@ function dscPintarRamos(plano, nome) {
   if (sel) {
     sel.innerHTML = "";
     [["todos", t("ed_dsc_ramos_f_todos", { n: p.total })], ["pendentes", t("ed_dsc_ramos_f_pend", { n: p.pendentes })],
-      ["revisar", t("ed_dsc_ramos_f_rev", { n: p.vencidos })]].forEach(([v, rot]) => {
+      ["revisar", t("ed_dsc_ramos_f_rev", { n: p.vencidos })]].concat(p.pulados ? [["pulados", t("ed_dsc_ramos_f_pul", { n: p.pulados })]] : []).forEach(([v, rot]) => {
       const o = document.createElement("option"); o.value = v; o.textContent = rot; sel.append(o);
     });
     sel.value = dscRamosFiltro;
@@ -2409,7 +2428,15 @@ function dscPintarRamos(plano, nome) {
     falta.className = "dsc-ramo-falta";
     falta.textContent = usaveis ? (tr.faltam.length ? t("ed_dsc_ramo_falta", { x: tr.passos.filter((p) => tr.faltam.indexOf(p.id) >= 0).map((p) => t("ed_passo_" + p.id)).join(", ") }) : t("ed_dsc_ramo_trilha_ok")) : "";
     falta.title = t("ed_trilha_tit") + ": " + edTrilhaTexto(tr);
-    lin.append(est, tx, pe, falta, bt);
+    bt.hidden = !!x.ramo.pulado;
+    const pl = document.createElement("button");
+    pl.type = "button";
+    pl.className = "btn-min dsc-ramo-pular";
+    pl.hidden = !!x.ramo.feito;
+    pl.textContent = t(x.ramo.pulado ? "ed_dsc_ramo_voltar" : "ed_dsc_ramo_pular");
+    pl.title = t(x.ramo.pulado ? "ed_dsc_ramo_voltar_tip" : "ed_dsc_ramo_pular_tip");
+    pl.onclick = () => { edPularRamo(x.item, x.ramo.id, !x.ramo.pulado); edPintarModalDisciplina(nome); };
+    lin.append(est, tx, pe, falta, bt, pl);
     cx.append(lin);
   });
   return p;
