@@ -247,6 +247,36 @@ function ramContaCitacoes(nome, textos) {
   });
   return n;
 }
+/* ACERTO POR RAMO: as tentativas das questões do tópico cujo texto cita o ramo (mesma regra dos pesos). Uma questão que cita
+ * dois ramos conta nos dois. Devolve { ramoId: { feitas, certas, pct } } (pct null sem tentativas). O acerto só DIAGNOSTICA:
+ * abaixo do corte, com amostra mínima, o painel destaca o ramo — não mexe em peso nem em prioridade. */
+const RAM_ACERTO_AMOSTRA = 5, RAM_ACERTO_CORTE = 60;
+function ramAcertosDoTopico(chave, ramos, banco) {
+  const bq = banco !== undefined ? (banco || []) : (typeof qsBanco !== "undefined" ? qsBanco : []);
+  const rs = ramos || [];
+  const out = {};
+  rs.forEach((r) => { out[r.id] = { feitas: 0, certas: 0, pct: null }; });
+  const rads = rs.map((r) => ramRadicais(r.nome));
+  const mesma = (q) => q && (q.chave === chave || (typeof qsChaveNormal === "function" && qsChaveNormal(q.chave) === qsChaveNormal(chave)));
+  bq.filter(mesma).forEach((q) => {
+    const tent = q.tentativas || [];
+    if (!tent.length) return;
+    const d = ramRadicais([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" "));
+    if (!d.size) return;
+    rs.forEach((r, k) => {
+      const rad = rads[k];
+      if (!rad.size) return;
+      let c = 0; rad.forEach((w) => { if (d.has(w)) c++; });
+      if (c < Math.max(1, Math.ceil(rad.size * 0.6))) return;
+      tent.forEach((tt) => { out[r.id].feitas++; if (tt && tt.acertou) out[r.id].certas++; });
+    });
+  });
+  rs.forEach((r) => { const x = out[r.id]; x.pct = x.feitas ? Math.round((x.certas / x.feitas) * 100) : null; });
+  return out;
+}
+/* o ramo está FRACO quando há amostra suficiente e o acerto está abaixo do corte */
+function ramAcertoFraco(x) { return !!x && x.feitas >= RAM_ACERTO_AMOSTRA && x.pct !== null && x.pct < RAM_ACERTO_CORTE; }
+
 /* O MATERIAL DE CADA RAMO de um tópico: { ramoId: { lei, cartoes, questoes, juris } } (quantidades; lei = 1 se o tópico tem lei
  * carregada). Cartões pela etiqueta ram_; questões e julgados pelas palavras do nome do ramo. */
 function ramMaterialDoTopico(chave, ramos) {
