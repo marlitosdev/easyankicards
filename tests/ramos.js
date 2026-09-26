@@ -2221,6 +2221,73 @@ async function testes() {
       ok(a.$("bancAlvoBox").hidden === true && a.lojaLer(a.BANC_ALVO_CHAVE) === null, "R61g sair do topico esconde o alvo e esquece a escolha");
     }
 
+    /* R62: HORAS POR ASSUNTO — estudo novo x revisao por disciplina, topico e ramo (funcao pura sobre o plano e o diario) */
+    {
+      const { a, ed } = MT();
+      a.edAbrir(ed.id); a.$("editalTexto").value = ed.texto;
+      const { plano } = a.horDoAberto();
+      const lei = plano.itens.find((i) => i.nome === "Lei 14.133"), conv = plano.itens.find((i) => i.nome === "Convênios"), rec = plano.itens.find((i) => i.nome === "Receita Pública");
+      const rid = lei.ramos.map((r) => r.id);
+      const dia = (d, c, ac, m, rm) => ({ d, c, a: ac, m, rm: rm ? rm.map((id) => ({ id })) : undefined });
+      const diario = [
+        dia("2026-09-01", lei.chave, "feito", 90, [rid[0]]),                 /* so' o ramo 1 */
+        dia("2026-09-02", lei.chave, "feito", 60, [rid[0], rid[1]]),        /* dividido pelos pesos: 5 e 3 */
+        dia("2026-09-03", conv.chave, "revisado", 30),
+        dia("2026-09-04", rec.chave, "revisado", 100),
+        dia("2026-09-05", rec.chave, "feito", 30),
+        dia("2026-09-06", rec.chave, "pendente", 500),                       /* pendente nao conta */
+        dia("2026-09-07", lei.chave, "feito", 0),                            /* sem minutos: avisado, nao somado */
+        dia("2026-09-08", "outro>topico", "feito", 45),                      /* de outro edital: fora */
+        dia("2020-01-01", conv.chave, "feito", 999),                         /* antigo: so' entra sem periodo */
+      ];
+      const m = a.horMapa(plano, diario, { desde: "2026-01-01" });
+      const dl = m.disciplinas.find((d) => d.nome === "Licitações"), df = m.disciplinas.find((d) => d.nome === "Direito Financeiro");
+      ok(dl.estudoMin === 150 && dl.revisaoMin === 30 && df.estudoMin === 30 && df.revisaoMin === 100, "R62a estudo e revisao separados por disciplina: " + [dl.estudoMin, dl.revisaoMin, df.estudoMin, df.revisaoMin].join("/"));
+      ok(m.semMinutos === 1 && m.fora === 1, "R62b registro sem minutos e registro de outro edital ficam de fora (e sao contados): " + m.semMinutos + "/" + m.fora);
+      const tl = dl.topicos.find((x) => x.nome === "Lei 14.133");
+      const r0 = tl.ramos.find((r) => r.id === rid[0]), r1 = tl.ramos.find((r) => r.id === rid[1]), r2 = tl.ramos.find((r) => r.id === rid[2]);
+      ok(Math.abs(r0.estudoMin - (90 + 60 * 5 / 8)) < 1e-9 && Math.abs(r1.estudoMin - 60 * 3 / 8) < 1e-9 && r2.estudoMin === 0, "R62c as horas vao para o RAMO: o registro de dois ramos se divide pelo peso deles: " + r0.estudoMin + "/" + r1.estudoMin + "/" + r2.estudoMin);
+      ok(Math.abs(r0.estudoMin + r1.estudoMin + r2.estudoMin - tl.estudoMin) < 1e-9, "R62d a soma dos ramos fecha com a do topico");
+      ok(a.horMapa(plano, diario, {}).disciplinas.find((d) => d.nome === "Licitações").revisaoMin === 30 && a.horMapa(plano, diario, {}).total.estudoMin === 150 + 30 + 999, "R62e sem periodo entra tudo (inclusive o antigo)");
+      ok(m.disciplinas[0].nome === "Licitações" && m.disciplinas.every((d, i) => !i || m.disciplinas[i - 1].pesoPct >= d.pesoPct), "R62f as disciplinas vem na ordem do PESO");
+      ok(df.alerta === true && dl.alerta === false, "R62g alerta so' quando >= 2h, mais da metade e' revisao e ainda ha assunto por cumprir (Direito Financeiro 77%): " + df.revisaoPct.toFixed(2));
+      ok(dl.unidades === 4 && dl.feitas === 0 && df.unidades === 1, "R62h assuntos = ramos (quando ha) ou o proprio topico: " + dl.unidades + "/" + df.unidades);
+      /* corte: fracao do planejado da disciplina, com e sem folga */
+      const pl = JSON.parse(JSON.stringify({ x: 1 })); pl.x = 0;
+      const comBloco = Object.assign({}, plano, { blocos: [{ nome: "Bloco A", disciplinas: ["Direito Financeiro"], minPct: 50, abaixo: true }] });
+      const mb = a.horMapa(comBloco, diario, {});
+      const dfb = mb.disciplinas.find((d) => d.nome === "Direito Financeiro");
+      ok(dfb.corteMin !== null && Math.abs(dfb.corteMin - dfb.planejadoMin * 0.5) < 1e-9 && Math.abs(dfb.seguroMin - dfb.planejadoMin * 0.625) < 1e-9 && dfb.bloco.abaixo === true, "R62i o corte vira horas: 50% do planejado, e com folga de 25%: " + dfb.corteMin + " / " + dfb.seguroMin);
+      ok(dl.corteMin === null && a.horTexto(750) === "12h30" && a.horTexto(45) === "45min" && a.horTexto(120) === "2h", "R62j sem bloco nao ha linha de corte; formato das horas");
+      const vazio = a.horMapa(plano, [], {});
+      ok(vazio.total.totalMin === 0 && vazio.disciplinas.every((d) => d.alerta === false && d.revisaoPct === 0), "R62k sem registro nenhum: tudo zero, sem alerta e sem dividir por zero");
+    }
+    /* R63: a tela das horas por assunto */
+    {
+      const { a, ed } = MT();
+      a.edAbrir(ed.id); a.$("editalTexto").value = ed.texto;
+      const { plano } = a.horDoAberto();
+      const lei = plano.itens.find((i) => i.nome === "Lei 14.133"), rec = plano.itens.find((i) => i.nome === "Receita Pública");
+      const hoje = new Date(); const p2 = (n) => String(n).padStart(2, "0");
+      const iso = hoje.getFullYear() + "-" + p2(hoje.getMonth() + 1) + "-" + p2(hoje.getDate());
+      a.edDiarioDefinir([{ d: iso, c: lei.chave, a: "feito", m: 90, rm: [{ id: lei.ramos[0].id }], cc: "ISS Caruaru" }, { d: iso, c: rec.chave, a: "revisado", m: 150, cc: "ISS Caruaru" }, { d: iso, c: rec.chave, a: "feito", m: 30, cc: "ISS Caruaru" }]);
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(["hor-graf", "hor-col", "hor-est", "hor-rev", "hor-plano", "hor-corte", "hor-seguro", "hor-prog", "hor-det", "hor-alerta"].every((c) => html.indexOf("." + c) >= 0) && /dialog\.hor-dlg\[open\]/.test(html), "R63a as classes do grafico tem CSS (e a janela tem a regra [open])");
+      a.$("btnEdHoras").onclick();
+      ok(a.$("dlgHoras").open === true, "R63b o botao do edital abre as horas por assunto");
+      const cols = achar(a.$("horCorpo"), (e) => cls(e, "hor-col"));
+      ok(cols.length === 2 && /Licitações/.test(cols[0].textContent), "R63c uma coluna por disciplina, a de maior peso a esquerda: " + cols.map((c) => c.textContent.slice(0, 20)).join("|"));
+      const est = achar(cols[0], (e) => cls(e, "hor-est"))[0], rev = achar(cols[1], (e) => cls(e, "hor-rev"))[0];
+      ok(parseFloat(est.style.height) > 0 && parseFloat(rev.style.height) > parseFloat(achar(cols[1], (e) => cls(e, "hor-est"))[0].style.height), "R63d as colunas tem altura proporcional as horas (revisao maior que estudo em Direito Financeiro)");
+      ok(achar(cols[1], (e) => cls(e, "hor-alerta")).length === 1 && achar(cols[0], (e) => cls(e, "hor-alerta")).length === 0, "R63e a disciplina que so' revisou mostra o alerta");
+      cols[0].onclick();
+      ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-det")).length === 1 && achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).length >= 3, "R63f clicar na coluna abre os topicos e ramos");
+      a.$("horPeriodo").value = "7"; a.$("horPeriodo").onchange();
+      ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-col")).length === 2, "R63g o filtro de periodo repinta");
+      a.$("btnHorX").onclick();
+      ok(a.$("dlgHoras").open === false, "R63h o X fecha");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
