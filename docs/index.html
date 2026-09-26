@@ -4359,6 +4359,19 @@ button.ed-st-item{cursor:pointer}
 .ram-lei-prev{margin-top:6px}
 .ram-lei-texto{max-height:180px;overflow:auto;white-space:pre-wrap;font-size:12px;background:var(--fundo-2,transparent);border:1px solid var(--borda);border-radius:6px;padding:6px;margin:4px 0 0}
 .vka-inverso{margin-top:6px}
+.cm-dica{margin:6px 0 0;min-height:1.3em}
+.cm-rodape{justify-content:space-between;align-items:center;gap:10px}
+.cm-rodape-esq{display:flex;gap:8px;align-items:center}
+.cm-passos{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.cm-passo{display:inline-flex;align-items:center;gap:8px;text-align:left}
+.cm-passo-txt{display:flex;flex-direction:column;line-height:1.15}
+.cm-passo small{font-size:10.5px;font-weight:400;opacity:.8}
+.cm-passo-opc{font-weight:600}
+.cm-passo-fim{font-weight:800;padding-left:16px;padding-right:18px}
+.cm-n{display:inline-grid;place-items:center;flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.2);font-weight:800;font-size:12px}
+.cm-seta{color:var(--sutil);font-weight:700}
+.cm-proximo{box-shadow:0 0 0 2px var(--acao)}
+@media (max-width:640px){.cm-rodape{flex-direction:column-reverse;align-items:stretch}.cm-passos{justify-content:center}.cm-rodape-esq{justify-content:center}}
 .reg-espelho{border:1px dashed var(--borda);border-radius:8px;padding:6px 8px;margin:6px 0}
 .reg-espelho-lin{display:block;font-size:13px;margin:2px 0}
 .reg-trilha-abrir{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
@@ -5303,14 +5316,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnCmTodos" data-i18n="cm_filtro_todos"></button>
   </div>
   <div id="cmLista" class="vk-lista"></div>
-  <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnCmGravar" data-i18n="cm_gravar"></button>
-    <button class="btn btn-roxo" id="btnCmPrompt" data-i18n="cm_prompt_btn"></button>
-    <button class="btn btn-azul" id="btnCmColar" data-i18n="cm_colar_btn"></button>
-    <button class="btn btn-cinza" id="btnCmFechar" data-i18n="cancel_btn"></button>
-    <!-- Sem desfazer, o primeiro erro é permanente. Foi o que aconteceu com
-         843 cartões no uso real. -->
-    <button class="btn-min btn-min-perigo" id="btnCmDesfazer" data-i18n="cm_desfazer" hidden></button>
+  <!-- O RODAPÉ NA ORDEM DE EXECUÇÃO, da esquerda para a direita: sair | ① pedir à IA (opcional) → ② colar a resposta
+       (opcional) → ③ gravar. O passo que vem agora ganha um contorno (cm-proximo); a dica acima diz por quê. -->
+  <p class="nota cm-dica" id="cmDica" role="status" aria-live="polite"></p>
+  <div class="dlg-rodape cm-rodape">
+    <span class="cm-rodape-esq">
+      <button class="btn btn-cinza" id="btnCmFechar" data-i18n="cancel_btn"></button>
+      <!-- Sem desfazer, o primeiro erro é permanente. Foi o que aconteceu com
+           843 cartões no uso real. -->
+      <button class="btn-min btn-min-perigo" id="btnCmDesfazer" data-i18n="cm_desfazer" hidden></button>
+    </span>
+    <span class="cm-passos" role="group" data-i18n-title="cm_passos_rot">
+      <button class="btn btn-cinza cm-passo cm-passo-opc" id="btnCmPrompt" data-i18n-title="cm_prompt_tip"><span class="cm-n">1</span><span class="cm-passo-txt"><span data-i18n="cm_prompt_btn"></span><small data-i18n="cm_opcional"></small></span></button>
+      <span class="cm-seta" aria-hidden="true">→</span>
+      <button class="btn btn-cinza cm-passo cm-passo-opc" id="btnCmColar" data-i18n-title="cm_colar_tip"><span class="cm-n">2</span><span class="cm-passo-txt"><span data-i18n="cm_colar_btn"></span><small data-i18n="cm_opcional"></small></span></button>
+      <span class="cm-seta" aria-hidden="true">→</span>
+      <button class="btn btn-verde cm-passo cm-passo-fim" id="btnCmGravar"><span class="cm-n">3</span><span class="cm-passo-txt"><span id="cmGravarTxt" data-i18n="cm_gravar"></span></span></button>
+    </span>
   </div>
 </dialog>
 
