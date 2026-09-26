@@ -1038,8 +1038,11 @@ function gerAcaoEditar() {
 function gerAcaoSalvarEdicao() {
   const idx = gerFoco >= 0 ? gerVis[gerFoco] : undefined;
   if (idx === undefined) return;
+  const idsAntes = typeof estcIdsDoCard === "function" ? estcIdsDoCard(gerNotas[idx].card) : [];
   const r = gerEditar(gerNotas[idx], $("gerEditor").value);
   if (!r.ok) { uiAlert(t(r.motivo === "sem_cartao" ? "ger_edit_sem_cartao" : "ger_edit_nao_achou")); return; }
+  /* o histórico de estudo acompanha o cartão editado (o guid nasce do texto, e o texto mudou) */
+  try { const novo = parseText(String($("gerEditor").value || ""), []).cards[0]; if (novo && idsAntes.length) estcMigrarAgenda(idsAntes, estcIdsDoCard(novo)); } catch (e) {}
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
   gerAviso(t("ger_feito_editar"), true);

@@ -16,11 +16,57 @@
  * ===================================================================== */
 
 let estcUn = [], estcI = 0, estcRev = false, estcEsc = -1, estcSaiba = false, estcChave = "";
+/* MODO: "agendado" (De novo · Difícil · Bom · Fácil, com o agendador do Anki) ou "sequencia" (passar pela lista sem agenda) */
+const ESTC_CH_MODO = "eac_est_modo", ESTC_CH_REGS = "eac_cartao_estudo", ESTC_CH_DIA = "eac_cartao_estudo_dia", ESTC_CH_NOVOS = "eac_est_novos_dia";
+let estcModo = "agendado", estcRegs = {}, estcDia = { d: "", novos: 0 }, estcFila = null;
 
 const ESTC_DICAS = {
   btnEstX: "est_tip_x", btnEstMais: "est_tip_mais", btnEstAnt: "est_tip_ant", btnEstProx: "est_tip_prox",
   btnEstVirar: "est_tip_virar", btnGerEstudar: "est_tip_estudar",
+  btnEstNota1: "est_tip_nota1", btnEstNota2: "est_tip_nota2", btnEstNota3: "est_tip_nota3", btnEstNota4: "est_tip_nota4",
 };
+
+/* ---- a AGENDA dos cartões: um registro por unidade de estudo (guid#cN), guardado no navegador ---- */
+function estcHojeISO() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+}
+function estcLerJSON(chave, pad) {
+  try { const j = JSON.parse(localStorage.getItem(chave) || "null"); return j && typeof j === "object" ? j : pad; } catch (e) { return pad; }
+}
+function estcCarregarAgenda() {
+  estcRegs = estcLerJSON(ESTC_CH_REGS, {});
+  const d = estcLerJSON(ESTC_CH_DIA, { d: "", novos: 0 });
+  estcDia = d.d === estcHojeISO() ? d : { d: estcHojeISO(), novos: 0 };
+  try { const n = Math.round(Number(localStorage.getItem(ESTC_CH_NOVOS))); if (n >= 0 && n <= 999 && localStorage.getItem(ESTC_CH_NOVOS) !== null) AGD.novosDia = n; } catch (e) {}
+}
+function estcSalvarAgenda() {
+  try { localStorage.setItem(ESTC_CH_REGS, JSON.stringify(estcRegs)); localStorage.setItem(ESTC_CH_DIA, JSON.stringify(estcDia)); } catch (e) {}
+}
+function estcModoLer() {
+  try { return localStorage.getItem(ESTC_CH_MODO) === "sequencia" ? "sequencia" : "agendado"; } catch (e) { return "agendado"; }
+}
+/* escolhe a próxima unidade pelo agendador (estcI = -1 quando não há mais nada por agora) */
+function estcProxima() {
+  estcFila = agdFila(estcUn, estcRegs, estcDia, Date.now());
+  estcI = estcFila.proxima ? estcUn.indexOf(estcFila.proxima) : -1;
+  estcRev = false; estcEsc = -1; estcSaiba = false;
+}
+/* o histórico de um cartão acompanha uma EDIÇÃO dele: o guid nasce do texto, então editar mudaria a identidade */
+function estcIdsDoCard(card) { return estcUnidades([{ nota: { card }, pos: 0 }]).map((u) => u.id); }
+function estcMigrarAgenda(idsAntes, idsDepois) {
+  const regs = estcLerJSON(ESTC_CH_REGS, {});
+  let mudou = false;
+  idsAntes.forEach((id, k) => {
+    const novo = idsDepois[k];
+    if (!novo || novo === id || !regs[id]) return;
+    if (!regs[novo]) regs[novo] = regs[id];
+    delete regs[id]; mudou = true;
+  });
+  if (mudou) { try { localStorage.setItem(ESTC_CH_REGS, JSON.stringify(regs)); } catch (e) {} estcRegs = regs; }
+  return mudou;
+}
+function estcUnidadesTxt() { return { min: t("agd_u_min"), h: t("agd_u_h"), d: t("agd_u_d"), mes: t("agd_u_mes"), a: t("agd_u_ano") }; }
 
 /* o texto guarda quebra de linha como "<br>": vira quebra de verdade (o CSS preserva) */
 function estcTxt(s) { return String(s == null ? "" : s).replace(/<br\s*\/?>/gi, "\n"); }
@@ -76,6 +122,7 @@ function estcSaibaMais(cx, more) {
 function estcPintar() {
   const cx = $("estCartao");
   cx.innerHTML = "";
+  if (estcModo === "agendado" && estcI < 0) { estcPintarFim(cx); return; }
   const u = estcUn[estcI];
   if (!u) return;
   estcMenuFechar();
@@ -126,10 +173,84 @@ function estcPintar() {
       cx.append(sb, corpo);
     }
   }
-  $("estContador").textContent = t("est_pos", { n: estcI + 1, t: estcUn.length });
-  const ultimo = estcI >= estcUn.length - 1;
-  $("btnEstVirar").textContent = !estcRev ? t("est_virar") : (ultimo ? t("est_concluir") : t("est_prox"));
-  $("btnEstVirar").className = "est-virar" + (estcRev ? " est-virar-prox" : "");
+  estcPintarBase(u);
+}
+
+/* a parte de baixo: no modo AGENDADO, "mostrar resposta" e depois os quatro botões com o intervalo de cada um e os
+ * contadores (novos · aprendendo · revisão); em SEQUÊNCIA, o botão grande e o anterior/próximo. */
+function estcPintarBase(u) {
+  const ag = estcModo === "agendado";
+  $("estNav").hidden = ag; $("estContagem").hidden = !ag;
+  $("estNotas").hidden = !(ag && estcRev && u);
+  $("btnEstVirar").hidden = ag && estcRev;
+  if (ag) {
+    const c = (estcFila && estcFila.conta) || { novos: 0, aprender: 0, revisar: 0 };
+    const reg = u ? estcRegs[u.id] : null;
+    const cat = !u ? "" : (!reg ? "novos" : ((reg.s === "learn" || reg.s === "relearn") ? "aprender" : "revisar"));
+    $("estContagem").innerHTML = "";
+    [["novos", c.novos], ["aprender", c.aprender], ["revisar", c.revisar]].forEach(([k, n]) => {
+      $("estContagem").append(gerEl("span", "est-cn est-cn-" + k + (cat === k ? " est-cn-atual" : ""), String(n)));
+    });
+    if (u && estcRev) {
+      const prev = agdPrevisao(reg, Date.now());
+      const sug = u.nota.card.kind === "mc" && estcEsc >= 0 ? (estcEsc === u.nota.card.correct ? 3 : 1) : 0;
+      [1, 2, 3, 4].forEach((n, k) => {
+        const b = $("btnEstNota" + n);
+        b.className = "est-nota est-nota-" + n + (sug === n ? " est-nota-sug" : "");
+        b.innerHTML = "";
+        b.append(gerEl("span", "est-nota-t", agdFormatar(prev[k], estcUnidadesTxt())), gerEl("span", "est-nota-r", t("est_nota" + n)));
+      });
+    }
+    $("btnEstVirar").textContent = t("est_virar");
+    $("btnEstVirar").className = "est-virar";
+  } else {
+    $("estContador").textContent = t("est_pos", { n: estcI + 1, t: estcUn.length });
+    const ultimo = estcI >= estcUn.length - 1;
+    $("btnEstVirar").textContent = !estcRev ? t("est_virar") : (ultimo ? t("est_concluir") : t("est_prox"));
+    $("btnEstVirar").className = "est-virar" + (estcRev ? " est-virar-prox" : "");
+  }
+}
+
+/* nada mais por agora: diz quando volta o próximo cartão e oferece passar pela lista em sequência */
+function estcPintarFim(cx) {
+  $("estOnde").textContent = "";
+  const c = (estcFila && estcFila.conta) || { novos: 0, aprender: 0, revisar: 0 };
+  const box = gerEl("div", "est-fim");
+  box.append(gerEl("div", "est-fim-tit", t("agd_fim")));
+  const q = estcFila && estcFila.quando;
+  box.append(gerEl("div", "est-fim-sub", q ? t("agd_volta", { q: agdFormatar(Math.max(0, q - Date.now()), estcUnidadesTxt()) }) : t("agd_tudo")));
+  const seq = gerEl("button", "btn-min", t("agd_ver_sequencia")); seq.type = "button";
+  seq.onclick = () => estcTrocarModo("sequencia");
+  const fe = gerEl("button", "btn-min", t("help_close")); fe.type = "button";
+  fe.onclick = estcFechar;
+  box.append(seq, fe);
+  cx.append(box);
+  estcPintarBase(null);
+  $("btnEstVirar").hidden = true;
+  $("estContagem").hidden = false; $("estNav").hidden = true; $("estNotas").hidden = true;
+  void c;
+}
+
+/* responde o cartão da vez (1 De novo · 2 Difícil · 3 Bom · 4 Fácil) e passa ao próximo pelo agendador */
+function estcNota(n) {
+  if (estcModo !== "agendado" || !estcRev) return;
+  const u = estcUn[estcI];
+  if (!u) return;
+  const antes = estcRegs[u.id];
+  if (!antes) estcDia.novos = (estcDia.novos || 0) + 1;
+  estcRegs[u.id] = agdResponder(antes, n, Date.now());
+  estcSalvarAgenda();
+  estcProxima();
+  estcPintar();
+}
+
+function estcTrocarModo(modo) {
+  estcModo = modo === "sequencia" ? "sequencia" : "agendado";
+  try { localStorage.setItem(ESTC_CH_MODO, estcModo); } catch (e) {}
+  estcRev = false; estcEsc = -1; estcSaiba = false;
+  if (estcModo === "agendado") { estcCarregarAgenda(); estcProxima(); }
+  else { if (estcI < 0) estcI = 0; }
+  estcPintar();
 }
 
 function estcEscolher(i) {
@@ -154,6 +275,7 @@ function estcIr(passo) {
 /* o botão grande: 1º toque revela; 2º toque passa para o próximo (no último, conclui) */
 function estcVirar() {
   if (!estcUn.length) return;
+  if (estcModo === "agendado") { if (estcI >= 0 && !estcRev) { estcRev = true; estcPintar(); } return; }
   if (!estcRev) { estcRev = true; estcPintar(); return; }
   if (estcI >= estcUn.length - 1) {
     const n = estcUn.length;
@@ -191,6 +313,8 @@ function estcAbrir(opt) {
   estcI = 0;
   if (o.retomar && estcChave && typeof mcPareiDe === "function") estcI = Math.min(estcUn.length - 1, mcPareiDe(estcChave, estcUn.length));
   estcRev = false; estcEsc = -1; estcSaiba = false;
+  estcModo = estcModoLer();
+  if (estcModo === "agendado") { estcCarregarAgenda(); estcProxima(); }
   dicasDosBotoes(ESTC_DICAS);
   estcPintar();
   abrirModal("dlgGerEstudo");
@@ -216,6 +340,8 @@ function estcMenuMontar() {
   const u = estcUn[estcI];
   if (!u) return;
   const item = (rot, fn) => { const b = gerEl("button", "est-menu-i", rot); b.type = "button"; b.onclick = () => { estcMenuFechar(); fn(); }; m.append(b); };
+  item(t(estcModo === "agendado" ? "est_m_modo_seq" : "est_m_modo_agd"), () => estcTrocarModo(estcModo === "agendado" ? "sequencia" : "agendado"));
+  if (estcModo === "agendado") item(t("est_m_novos", { n: AGD.novosDia }), estcMudarNovos);
   item(t("est_m_editar"), () => { estcFechar(); gerFoco = u.pos; if (gerEhCelular()) gerVista("previa"); gerAcaoEditar(); });
   item(t("est_m_apagar"), estcApagar);
   item(t("est_m_melhorar"), () => { estcFechar(); $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota] }); });
@@ -223,6 +349,16 @@ function estcMenuMontar() {
     /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
     item(t("est_m_criar"), () => { estcFechar(); bancAlvoDefinir(u.nota.disciplina, u.nota.topico); });
   }
+}
+
+async function estcMudarNovos() {
+  const v = await uiTexto(t("est_novos_tit"), String(AGD.novosDia));
+  if (v === null || v === undefined) return;
+  const n = Math.round(Number(String(v).replace(",", ".")));
+  if (!(n >= 0 && n <= 999)) return;
+  AGD.novosDia = n;
+  try { localStorage.setItem(ESTC_CH_NOVOS, String(n)); } catch (e) {}
+  estcProxima(); estcPintar();
 }
 
 async function estcApagar() {
@@ -236,6 +372,7 @@ async function estcApagar() {
   estcUn = estcUnidades(lista);
   if (!estcUn.length) { estcFechar(); return; }
   estcI = Math.min(estcI, estcUn.length - 1); estcRev = false; estcEsc = -1; estcSaiba = false;
+  if (estcModo === "agendado") estcProxima();
   estcPintar();
 }
 
@@ -250,6 +387,7 @@ if (typeof document !== "undefined" && $("dlgGerEstudo")) {
   $("btnEstAnt").onclick = () => estcIr(-1);
   $("btnEstProx").onclick = () => estcIr(1);
   $("btnEstVirar").onclick = estcVirar;
+  [1, 2, 3, 4].forEach((n) => { $("btnEstNota" + n).onclick = () => estcNota(n); });
   $("btnEstMais").onclick = () => { const m = $("estMenu"); if (!m.hidden) { estcMenuFechar(); return; } estcMenuMontar(); m.hidden = false; };
   $("btnGerEstudar").onclick = () => estcAbrir({});
   const dlg = $("dlgGerEstudo");
@@ -257,6 +395,10 @@ if (typeof document !== "undefined" && $("dlgGerEstudo")) {
   dlg.onkeydown = (ev) => {
     if (!ev) return;
     const alvo = ev.target && ev.target.tagName;
+    /* agendado: 1-4 dão a nota (depois de mostrar a resposta) e espaço/Enter dão "Bom", como no Anki */
+    if (estcModo === "agendado" && estcRev && /^[1-4]$/.test(ev.key || "")) { if (ev.preventDefault) ev.preventDefault(); estcNota(+ev.key); return; }
+    if (estcModo === "agendado" && estcRev && (ev.key === " " || ev.key === "Enter") && alvo !== "BUTTON") { if (ev.preventDefault) ev.preventDefault(); estcNota(3); return; }
+    if (estcModo === "agendado" && (ev.key === "ArrowRight" || ev.key === "ArrowLeft")) return;
     if (ev.key === "ArrowRight") { if (ev.preventDefault) ev.preventDefault(); estcIr(1); return; }
     if (ev.key === "ArrowLeft") { if (ev.preventDefault) ev.preventDefault(); estcIr(-1); return; }
     const u = estcUn[estcI];

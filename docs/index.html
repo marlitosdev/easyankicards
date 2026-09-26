@@ -4309,24 +4309,25 @@ dialog.hor-dlg[open]{display:flex;flex-direction:column;width:min(1100px,97vw);h
 .hor-seguro{border-top:2px dashed #f0ad4e;height:0}
 .hor-leg-i.hor-plano{height:10px}
 .hor-leg-i.hor-corte,.hor-leg-i.hor-seguro{height:0;border-radius:0}
-.hor-graf{display:flex;gap:10px;align-items:flex-end;overflow-x:auto;padding:4px 2px 10px}
+.hor-graf{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;padding:4px 2px 10px}
 .hor-col{flex:0 0 96px;display:flex;flex-direction:column;align-items:stretch;gap:3px;cursor:pointer;padding:4px;border-radius:8px;border:1px solid transparent}
 .hor-col:hover{background:rgba(127,127,127,.1)}
 .hor-col-aberta{border-color:var(--acao);background:rgba(127,127,127,.08)}
 .hor-col-alerta{border-color:#f0ad4e}
-.hor-topo{text-align:center;font-size:12px;font-weight:700}
-.hor-area{position:relative;width:100%;border-bottom:2px solid var(--borda)}
-.hor-area > .hor-plano{position:absolute;left:0;right:0;bottom:0;box-sizing:border-box}
-.hor-area > .hor-est{position:absolute;left:14%;right:14%;bottom:0}
-.hor-area > .hor-rev{position:absolute;left:14%;right:14%}
-.hor-area > .hor-corte,.hor-area > .hor-seguro{position:absolute;left:-2px;right:-2px}
+.hor-topo{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:2.6em;text-align:center;font-size:13px;line-height:1.2}
+.hor-topo-de{font-size:10.5px;color:var(--sutil);font-weight:400}
+.hor-area{position:relative;width:100%;box-sizing:border-box;border:2px dashed rgba(127,127,127,.7);border-radius:6px;background:rgba(127,127,127,.06);display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.hor-area > .hor-est,.hor-area > .hor-rev{width:100%;flex:0 0 auto}
+.hor-area > .hor-corte,.hor-area > .hor-seguro{position:absolute;left:0;right:0}
+.hor-excede{border-color:#5b8def;border-style:solid}
+.hor-rx{margin:0 0 8px;padding-left:18px;font-size:13px;line-height:1.5}
 .hor-corte-risco{border-top-width:3px}
 .hor-prog{height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden}
 .hor-prog-b{height:100%;background:#2e9e5b}
 .hor-un{text-align:center;font-size:11px;color:var(--sutil)}
-.hor-nome{text-align:center;font-size:12px;font-weight:700;line-height:1.25;overflow-wrap:anywhere;max-height:4.9em;overflow:hidden}
+.hor-nome{text-align:center;font-size:12px;font-weight:700;line-height:1.25;height:2.5em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .hor-pesop{text-align:center;font-size:10.5px;color:var(--sutil)}
-.hor-alerta{text-align:center;font-size:10.5px;color:#f0ad4e;font-weight:700}
+.hor-alerta{text-align:center;font-size:10.5px;color:#f0ad4e;font-weight:700;min-height:2.4em;line-height:1.2}
 .hor-det{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--borda);background:rgba(127,127,127,.06)}
 .hor-det h4{margin:0 0 8px}
 .hor-top,.hor-ramo{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;padding:4px 6px;border-radius:6px;font-size:13px}
@@ -4434,6 +4435,25 @@ dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);he
 .est-virar:focus-visible{outline:3px solid #fff}
 .est-virar-prox{background:#2e9e5b}
 .est-nav{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.est-notas{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.est-notas[hidden],.est-contagem[hidden],.est-nav[hidden],.est-virar[hidden]{display:none}
+.est-nota{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px;border-radius:12px;color:#fff;font-weight:800;text-align:center}
+.est-nota-t{font-size:12px;font-weight:600;opacity:.9}
+.est-nota-r{font-size:15px}
+.est-nota-1{background:#c0443f}
+.est-nota-2{background:#d4862a}
+.est-nota-3{background:#2e9e5b}
+.est-nota-4{background:#2f6be0}
+.est-nota:focus-visible{outline:3px solid #fff}
+.est-nota-sug{outline:3px solid #fff;outline-offset:2px}
+.est-contagem{display:flex;justify-content:center;gap:18px;font-size:15px;font-weight:800}
+.est-cn-novos{color:#5b8def}
+.est-cn-aprender{color:#ff6b66}
+.est-cn-revisar{color:#39b56b}
+.est-cn-atual{text-decoration:underline}
+.est-fim{padding:26px 20px;display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center}
+.est-fim-tit{font-size:20px;font-weight:800}
+.est-fim-sub{font-size:15px;opacity:.85}
 .est-seta{min-width:56px;font-size:18px;padding:8px 14px}
 .est-contador{font-size:13px;color:var(--sutil)}
 @media (max-width:760px){
@@ -7905,7 +7925,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="est-cartao" id="estCartao"></div>
   <div class="est-base">
     <button type="button" class="est-virar" id="btnEstVirar"></button>
-    <div class="est-nav">
+    <!-- as quatro notas do agendador (aparecem depois de mostrar a resposta): o intervalo de cada uma em cima -->
+    <div class="est-notas" id="estNotas" hidden>
+      <button type="button" class="est-nota est-nota-1" id="btnEstNota1"></button>
+      <button type="button" class="est-nota est-nota-2" id="btnEstNota2"></button>
+      <button type="button" class="est-nota est-nota-3" id="btnEstNota3"></button>
+      <button type="button" class="est-nota est-nota-4" id="btnEstNota4"></button>
+    </div>
+    <div class="est-contagem" id="estContagem" hidden></div>
+    <div class="est-nav" id="estNav">
       <button type="button" class="btn-min est-seta" id="btnEstAnt" aria-label="Cartão anterior">←</button>
       <span class="est-contador" id="estContador"></span>
       <button type="button" class="btn-min est-seta" id="btnEstProx" aria-label="Próximo cartão">→</button>
@@ -8477,6 +8505,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cartao-qualidade.js"></script>
 <script src="cartao-elevar.js"></script>
 <script src="gerenciador.js"></script>
+<script src="agendador-cartoes.js"></script>
 <script src="estudo-cartoes.js"></script>
 <script src="cobertura-cartoes.js"></script>
 <script src="banca-alvo.js"></script>

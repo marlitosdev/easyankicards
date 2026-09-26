@@ -78,7 +78,9 @@ const BK_CHAVES = {
      * a letra pequena de volta é desfazer uma decisão de acessibilidade */
     "eac_qs_tamanho",
     /* a meta de ramos por semana, por edital */
-    "eac_meta_ramos"],
+    "eac_meta_ramos",
+    /* a agenda de estudo dos cartões (quando cada um volta), o modo e o limite de novos por dia */
+    "eac_cartao_estudo", "eac_cartao_estudo_dia", "eac_est_modo", "eac_est_novos_dia"],
 };
 
 function bkLer(k) {
