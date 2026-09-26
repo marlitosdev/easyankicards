@@ -396,14 +396,19 @@ function edEstadoDosRamos(i, marcaDe, hoje) {
     r.dias = dias(r.quando);
     r.feito = r.estado === "feito" || r.estado === "revisado";
     r.revisado = r.estado === "revisado";
+    /* PULADO: a pessoa decidiu não estudar este ramo (não cai, já domina). Não é estudo — não gera crédito — mas sai da
+     * lista do que falta, do tempo reservado e da conta de conclusão do tópico. */
+    r.pulado = r.estado === "pulado";
     r.venceu = r.feito && !r.revisado && (r.dias === null || r.dias >= REV_DIAS);
   });
   const N = i.ramos.length;
   i.ramosTotal = N;
   i.ramosFeitos = i.ramos.filter((r) => r.feito).length;
   i.ramosVencidos = i.ramos.filter((r) => r.venceu).length;
-  i.feito = i.ramosFeitos === N;
-  i.revisado = i.ramos.every((r) => r.revisado);
+  const ativos = i.ramos.filter((r) => !r.pulado);
+  i.ramosPulados = N - ativos.length;
+  i.feito = ativos.length > 0 && ativos.every((r) => r.feito);
+  i.revisado = ativos.length > 0 && ativos.every((r) => r.revisado);
   i.parcial = i.ramosFeitos > 0 && !i.feito;
   i.estado = i.revisado ? "revisado" : (i.feito ? "feito" : null);
   /* a data que conta para a revisão: a do ramo estudado há MAIS tempo e ainda não revisado; sem data = vencido */
@@ -411,7 +416,7 @@ function edEstadoDosRamos(i, marcaDe, hoje) {
   if (i.feito && !i.revisado) {
     i.quando = naoRev.some((r) => !r.quando) ? null : naoRev.map((r) => r.quando).sort()[0];
   } else if (i.revisado) {
-    i.quando = i.ramos.map((r) => r.quando).sort().pop() || null;
+    i.quando = ativos.map((r) => r.quando).sort().pop() || null;
   } else i.quando = null;
   i.dias = dias(i.quando);
   return i;
@@ -427,7 +432,7 @@ function edTempoDosRamos(i, faixaMin) {
   i.ramos.forEach((r) => { r.minutos = Math.max(10, arred(total * r.share)); });
   i.minutos = total;
   i.minutosTotal = total;
-  const pend = i.ramos.filter((r) => !r.feito);
+  const pend = i.ramos.filter((r) => !r.feito && !r.pulado);
   let sessao = [], soma = 0;
   if (pend.length) {
     pend.forEach((r) => { if (!sessao.length || soma + r.minutos <= faixaMin) { sessao.push(r); soma += r.minutos; } });
@@ -459,11 +464,11 @@ function edRamosRegistrar(prog, item, estado, hoje) {
   else if (escolhidos) {
     /* a pessoa escolheu os ramos na janela de registro: vale a escolha, dentro do que faz sentido — estudo só de
      * ramo pendente; revisão só de ramo já estudado e ainda não revisado */
-    alvo = rs.filter((r) => escolhidos.indexOf(r.id) >= 0 && (estado === "revisado" ? (r.feito && !r.revisado) : !r.feito));
+    alvo = rs.filter((r) => escolhidos.indexOf(r.id) >= 0 && (estado === "revisado" ? (r.feito && !r.revisado) : (!r.feito && !r.pulado)));
   } else if (estado === "revisado") {
     alvo = rs.filter((r) => r.feito && !r.revisado);
     if (!alvo.length) alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0);
-  } else alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0 && !r.feito);
+  } else alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0 && !r.feito && !r.pulado);
   const mud = [];
   alvo.forEach((r) => {
     const k = ch(r);
@@ -474,6 +479,27 @@ function edRamosRegistrar(prog, item, estado, hoje) {
     mud.push({ id: "_topo", ant: prog[item.chave] === undefined ? null : prog[item.chave] });
     delete prog[item.chave];
   }
+  return mud;
+}
+/* PULAR / VOLTAR: marca (ou desfaz a marca de) ramos que a pessoa decidiu não estudar. Só pula ramo ainda pendente e nunca o
+ * último ramo ativo do tópico. Devolve [{ id, ant }] como o registro, e o desfazer é o mesmo. */
+function edRamosPular(prog, item, ids, pular, hoje) {
+  const rs = item.ramos || [];
+  const alvo = rs.filter((r) => (ids || []).indexOf(r.id) >= 0);
+  const mud = [];
+  let ativos = rs.filter((r) => !r.pulado).length;
+  alvo.forEach((r) => {
+    const k = item.chave + "›#" + r.id;
+    if (pular) {
+      if (r.feito || r.pulado || ativos <= 1) return;
+      mud.push({ id: r.id, ant: prog[k] === undefined ? null : prog[k] });
+      prog[k] = { e: "pulado", d: hoje };
+      ativos--;
+    } else if (r.pulado) {
+      mud.push({ id: r.id, ant: prog[k] === undefined ? null : prog[k] });
+      delete prog[k];
+    }
+  });
   return mud;
 }
 /* o inverso: devolve as marcas de antes */
@@ -488,17 +514,25 @@ function edRamosDesfazer(prog, item, mud) {
  * das partes (share) dos ramos estudados (ou revisados). Por isso estudar o ramo que mais vale conta mais, e um tópico
  * pela metade conta como metade — em vez de valer zero até o último ramo. */
 function edCredito(i) {
-  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.feito ? r.share : 0), 0);
+  if (i && i.ramos && i.ramos.length) {
+    const pul = i.ramos.reduce((a, r) => a + (r.pulado ? r.share : 0), 0);
+    const f = i.ramos.reduce((a, r) => a + (r.feito ? r.share : 0), 0);
+    return pul > 0 ? (pul < 1 ? f / (1 - pul) : 0) : f;
+  }
   return i && i.feito ? 1 : 0;
 }
 function edCreditoRev(i) {
-  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.revisado ? r.share : 0), 0);
+  if (i && i.ramos && i.ramos.length) {
+    const pul = i.ramos.reduce((a, r) => a + (r.pulado ? r.share : 0), 0);
+    const f = i.ramos.reduce((a, r) => a + (r.revisado ? r.share : 0), 0);
+    return pul > 0 ? (pul < 1 ? f / (1 - pul) : 0) : f;
+  }
   return i && i.revisado ? 1 : 0;
 }
 /* Quanto do valor do tópico AINDA FALTA estudar (1 = nada estudado; 0 = tudo). É o que decide a posição na agenda: um
  * tópico de peso alto com quase todos os ramos feitos já não é o mais urgente. */
 function edRestante(i) {
-  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.feito ? 0 : r.share), 0);
+  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.feito || r.pulado ? 0 : r.share), 0);
   return i && i.feito ? 0 : 1;
 }
 
@@ -1466,16 +1500,16 @@ function edPainelRamos(plano, disciplina, filtro) {
       todas.push({
         topico: i.nome, topicoChave: i.chave, item: i, ramo: r, relevancia,
         relPct: Math.round((relevancia / totalBruto) * 1000) / 10,
-        estado: r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend",
+        estado: r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend",
         ordem: i.linha,
       });
     });
   });
   todas.sort((a, b) => b.relevancia - a.relevancia || a.ordem - b.ordem || a.ramo.linha - b.ramo.linha);
   const soma = (f) => todas.filter(f).reduce((a, x) => a + x.relevancia, 0);
-  const totalRel = soma(() => true) || 1;
+  const totalRel = soma((x) => !x.ramo.pulado) || 1;
   const f = filtro || "todos";
-  const linhas = todas.filter((x) => f === "pendentes" ? !x.ramo.feito : f === "revisar" ? x.ramo.venceu : true);
+  const linhas = todas.filter((x) => f === "pendentes" ? (!x.ramo.feito && !x.ramo.pulado) : f === "pulados" ? x.ramo.pulado : f === "revisar" ? x.ramo.venceu : true);
   const topicos = [];
   itens.filter((i) => i.ramos && i.ramos.length).forEach((i) => topicos.push({
     nome: i.nome, total: i.ramosTotal, feitos: i.ramosFeitos, vencidos: i.ramosVencidos, chave: i.chave }));
@@ -1483,7 +1517,8 @@ function edPainelRamos(plano, disciplina, filtro) {
     disciplina, linhas, topicos,
     total: todas.length,
     feitos: todas.filter((x) => x.ramo.feito).length,
-    pendentes: todas.filter((x) => !x.ramo.feito).length,
+    pendentes: todas.filter((x) => !x.ramo.feito && !x.ramo.pulado).length,
+    pulados: todas.filter((x) => x.ramo.pulado).length,
     vencidos: todas.filter((x) => x.ramo.venceu).length,
     revisados: todas.filter((x) => x.ramo.revisado).length,
     pctFeito: Math.round((soma((x) => x.ramo.feito) / totalRel) * 100),
