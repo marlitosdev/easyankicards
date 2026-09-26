@@ -143,7 +143,8 @@ header .hdr-ajuda .hdr-ic{display:none}
    antes de qualquer conteúdo aparecer. A versão, que morava no
    subtítulo, continua alcançável no Diagnóstico (dentro de ⚙). */
 @media (max-width:760px){
-  header h1 small{display:none}
+  /* no celular some só o "by MarlitosDev": o NÚMERO DA VERSÃO fica (é ele que diz se a atualização chegou) */
+  header h1 .hdr-por{display:none}
   header .hdr-ajuda .hdr-ic{display:inline}
   header .hdr-ajuda .hdr-txt{display:none}
   header .hdr-ajuda{width:34px;justify-content:center;padding:0;font-size:15px}
@@ -4715,7 +4716,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <body>
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
-  <h1>EasyAnkiCards <small>by MarlitosDev · <span id="versao"></span></small></h1>
+  <h1>EasyAnkiCards <small><span class="hdr-por">by MarlitosDev · </span><span id="versao"></span></small></h1>
   <button class="hdr-btn hdr-ajuda" id="btnAjuda">
     <span class="hdr-ic" aria-hidden="true">❓</span>
     <span class="hdr-txt" data-i18n="help_btn"></span>
