@@ -12,14 +12,16 @@
  *   - Os intervalos dos quatro botões sempre crescem (Difícil < Bom < Fácil, ao menos +1 dia de diferença).
  *   - Novos por dia: 20. Revisão vence no DIA marcado (não na hora).
  *
- * O registro de um cartão: { s: "learn"|"review"|"relearn", st: passo, iv: dias, ez: facilidade, due: ms, n: vezes, l: lapsos }.
- * Cartão SEM registro é NOVO.
+ * O registro de um cartão: { s: "learn"|"review"|"relearn", st: passo, iv: dias, ez: facilidade, due: ms, n: vezes, l: lapsos,
+ *   h: últimas notas (1 a 4, da mais antiga à mais nova, no máximo 8), t: quando foi a última resposta (ms) }.
+ * Cartão SEM registro é NOVO. `h` e `t` existem para medir a RETENÇÃO RECENTE (o total de lapsos não diz se o cartão
+ * está melhorando); registros anteriores à 17.27.0 não os têm, e quem os lê precisa tratar a falta como "sem histórico".
  * ===================================================================== */
 const AGD = {
   passos: [1, 10], passosRel: [10], graduar: 1, facil: 4,
   ease0: 2.5, easeMin: 1.3, difIvl: 1.2, bonus: 1.3, novosDia: 20, adiante: 20,
 };
-const AGD_MIN = 60000, AGD_DIA = 86400000;
+const AGD_MIN = 60000, AGD_DIA = 86400000, AGD_HIST = 8;
 
 /* fim do dia local de `agora` (último ms) */
 function agdFimDoDia(agora) {
@@ -33,6 +35,8 @@ function agdResponder(reg, nota, agora) {
   const dias = (n) => agora + n * AGD_DIA;
   const min = (n) => agora + n * AGD_MIN;
   r.n = (r.n || 0) + 1;
+  r.h = ((reg && reg.h) || []).concat([nota]).slice(-AGD_HIST);
+  r.t = agora;
   if (r.s === "learn" || r.s === "relearn") {
     const passos = r.s === "relearn" ? AGD.passosRel : AGD.passos;
     const st = Math.min(r.st || 0, passos.length - 1);
