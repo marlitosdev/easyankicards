@@ -2448,6 +2448,98 @@ async function testes() {
       a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
     }
 
+    /* R66: DOMINIO DO ASSUNTO — a regra do semaforo (funcoes puras) */
+    {
+      const { a } = MT();
+      const S = (o) => Object.assign({ estudo: { estado: "estudado", dias: 3, venceu: false }, acerto: null, retencao: null, auto: null }, o);
+      const ac = (pct, n) => ({ n: n === undefined ? 10 : n, pct, valido: (n === undefined ? 10 : n) >= 5 });
+      const rt = (pct, n) => ({ respostas: n === undefined ? 20 : n, pct, valido: (n === undefined ? 20 : n) >= 10, cartoes: 5 });
+      const nv = (o) => a.domNivel(S(o)).nivel;
+      ok(nv({ estudo: { estado: "nunca" } }) === "cinza", "R66a nunca estudado e sem sinal: cinza");
+      ok(nv({}) === "azul", "R66b estudado no prazo sem nenhuma medida: azul 'estudado, nao medido'");
+      ok(nv({ acerto: ac(90) }) === "verde" && nv({ retencao: rt(95) }) === "verde", "R66c acerto ou retencao solidos, no prazo: verde");
+      ok(nv({ acerto: ac(70) }) === "amarelo" && nv({ retencao: rt(80) }) === "amarelo", "R66d desempenho mediano: amarelo");
+      ok(nv({ acerto: ac(50) }) === "vermelho" && nv({ retencao: rt(60) }) === "vermelho", "R66e abaixo do corte de risco: vermelho");
+      ok(nv({ estudo: { estado: "estudado", dias: 0, venceu: false }, acerto: ac(40) }) === "vermelho", "R66f estudar HOJE nao desmente o erro: continua vermelho");
+      ok(nv({ acerto: ac(60) }) === "amarelo" && nv({ acerto: ac(59.9) }) === "vermelho" && nv({ acerto: ac(75) }) === "verde" && nv({ acerto: ac(74.9) }) === "amarelo", "R66g cortes exatos: 60 ja' nao e' vermelho, 75 ja' e' verde");
+      ok(nv({ retencao: rt(70) }) === "amarelo" && nv({ retencao: rt(69.9) }) === "vermelho" && nv({ retencao: rt(85) }) === "verde", "R66h cortes da retencao: 70 e 85");
+      const venc = { estado: "estudado", dias: 40, venceu: true };
+      ok(nv({ estudo: venc, acerto: ac(90) }) === "amarelo" && a.domNivel(S({ estudo: venc, acerto: ac(90) })).motivos[0].cod === "revisao_vencida", "R66i revisao vencida vira amarelo mesmo com bom acerto (contra a ilusao de dominio)");
+      ok(nv({ estudo: venc, acerto: ac(40) }) === "vermelho", "R66j vermelho vence a revisao vencida");
+      ok(nv({ acerto: ac(10, 4) }) === "azul" && nv({ acerto: ac(10, 5) }) === "vermelho", "R66k abaixo da amostra minima (4) o acerto NAO decide; com 5 decide");
+      ok(nv({ retencao: rt(10, 9) }) === "azul" && nv({ retencao: rt(10, 10) }) === "vermelho", "R66l retencao: 9 respostas nao decidem, 10 decidem");
+      ok(nv({ auto: { nivel: "alta", vencida: false } }) === "vermelho" && nv({ auto: { nivel: "alta", vencida: true } }) === "azul", "R66m 'inseguro' vigente e' vermelho; vencido nao pesa");
+      const div = a.domNivel(S({ acerto: ac(40), auto: { nivel: "baixa", vencida: false } }));
+      ok(div.nivel === "vermelho" && div.motivos.some((m) => m.cod === "divergencia_domino"), "R66n declarar 'domino' NAO anula o medido: vermelho, com a divergencia no motivo");
+      ok(a.domNivel(S({ auto: { nivel: "baixa", vencida: false } })).motivos.some((m) => m.cod === "declarou_domino") && nv({ auto: { nivel: "baixa", vencida: false } }) === "azul", "R66o 'domino' sem medida fica azul, com a nota do que foi declarado");
+      ok(nv({ estudo: { estado: "nunca" }, auto: { nivel: "baixa", vencida: false } }) === "cinza", "R66p 'domino' declarado num assunto nunca estudado continua cinza");
+      const semMarca = a.domNivel(S({ estudo: { estado: "nunca" }, acerto: ac(90) }));
+      ok(semMarca.nivel === "verde" && semMarca.semMarcaEstudo === true, "R66q medida sem marca de estudo: avalia pela medida e avisa que falta a marca");
+      ok(a.domNivel(S({ acerto: ac(70), retencao: rt(95) })).nivel === "amarelo" && a.domNivel(S({ acerto: ac(95), retencao: rt(60) })).nivel === "vermelho", "R66r com dois sinais vale o PIOR");
+      /* acerto recente: janela das ultimas 10, sem data = mais antigas */
+      const tent = Array.from({ length: 12 }, (_, i) => ({ q: "2026-09-" + String(i + 1).padStart(2, "0"), acertou: i >= 7 }));
+      const ra = a.domAcerto(tent);
+      ok(ra.n === 10 && ra.certas === 5 && Math.abs(ra.pct - 50) < 1e-9 && ra.historicoN === 12 && Math.abs(ra.historicoPct - 500 / 12) < 1e-9, "R66s o acerto usa as ULTIMAS 10 (50%) e guarda o historico inteiro (41,7%) para a tooltip");
+      const embaralhado = tent.slice().reverse();
+      ok(a.domAcerto(embaralhado).pct === 50, "R66t a ordem vem da DATA, nao da posicao na lista");
+      const semData = [{ acertou: false }, { acertou: false }, { acertou: false }, { acertou: false }, { acertou: false }].concat(Array.from({ length: 10 }, (_, i) => ({ q: "2026-09-" + String(i + 1).padStart(2, "0"), acertou: true })));
+      ok(a.domAcerto(semData).pct === 100, "R66u tentativa SEM data e' tratada como a mais antiga (sai da janela)");
+      ok(a.domAcerto([]).pct === null && a.domAcerto([]).valido === false && a.domAcerto([{ q: "x" }]).n === 0, "R66v sem tentativas validas: sem numero (nao e' zero)");
+      /* retencao dos cartoes */
+      const rr = a.domRetencao([{ s: "review", iv: 30, h: [3, 3, 1, 3, 3] }, { s: "learn", iv: 0, h: [1, 1, 3, 3, 3] }, { s: "review", iv: 5 }]);
+      ok(rr.respostas === 10 && Math.abs(rr.pct - 70) < 1e-9 && rr.valido === true && rr.semHistorico === 1 && rr.maduros === 1 && rr.cartoes === 3, "R66w retencao: nota 1 = nao lembrei; cartao anterior a 17.27.0 (sem historico) e' contado a parte: " + JSON.stringify(rr));
+      ok(a.domRetencao([]).pct === null && a.domRetencao(null).valido === false, "R66x sem cartoes respondidos: sem numero");
+    }
+    /* R67: o mapa de dominio sobre a cobertura (peso, ramos herdando, pulados, reforcar) */
+    {
+      const { a } = MT();
+      const texto = ["# X | prova: 2027-06-01 | horas: 20", "@ Disc A :: 5", "+ Topico 1 :: 5", "++ Ramo x :: 5", "++ Ramo y :: 5", "++ Ramo z :: 5", "+ Topico 2 :: 5", "@ Disc B :: 5", "+ Topico 3 :: 5"].join("\n");
+      const plano = a.lerEdital(texto).disciplinas;
+      const ch = (d, t) => d + "|" + t;
+      const cob = a.covMapa(plano, { top: new Map(), ramo: new Map() }, ch);
+      const E = {
+        estudo: {
+          [ch("Disc A", "Topico 1")]: { estado: "estudado", dias: 2, venceu: false },
+          [ch("Disc A", "Topico 1") + "›#ramo_x"]: { estado: "estudado", dias: 2, venceu: false },
+          [ch("Disc A", "Topico 1") + "›#ramo_y"]: { estado: "nunca" },
+          [ch("Disc A", "Topico 1") + "›#ramo_z"]: { estado: "nunca", pulado: true },
+          [ch("Disc A", "Topico 2")]: { estado: "estudado", dias: 2, venceu: false },
+          [ch("Disc B", "Topico 3")]: { estado: "nunca" },
+        },
+        tentativas: { [ch("Disc A", "Topico 1")]: Array.from({ length: 6 }, (_, i) => ({ q: "2026-09-0" + (i + 1), acertou: i < 2 })), [ch("Disc A", "Topico 2")]: Array.from({ length: 6 }, (_, i) => ({ q: "2026-09-0" + (i + 1), acertou: true })) },
+        cartoes: {}, auto: {},
+      };
+      const m = a.domMapa(cob, E);
+      const da = m.disciplinas.find((d) => d.nome === "Disc A"), db = m.disciplinas.find((d) => d.nome === "Disc B");
+      const t1 = da.topicos.find((t) => t.nome === "Topico 1"), t2 = da.topicos.find((t) => t.nome === "Topico 2");
+      ok(t1.ramos.find((r) => r.ramoId === "ramo_x").nivel === "vermelho" && t1.ramos.find((r) => r.ramoId === "ramo_y").nivel === "vermelho", "R67a o ramo HERDA o acerto do topico (33%: vermelho), inclusive o ramo nunca estudado que tem sinal medido do topico");
+      ok(t1.ramos.find((r) => r.ramoId === "ramo_x").herdadoAcerto === true, "R67b o acerto do ramo vem marcado como herdado");
+      ok(t1.ramos.find((r) => r.ramoId === "ramo_z").nivel === "pulado" && t1.nivel === "vermelho", "R67c ramo PULADO fica fora da conta e o topico assume o pior dos ramos que contam");
+      ok(t2.nivel === "verde" && db.topicos[0].nivel === "cinza", "R67d topico sem ramos: verde com 6/6 acertos; disciplina B nunca estudada: cinza");
+      const totalDist = Object.keys(m.resumo.distribuicao).reduce((x, k) => x + m.resumo.distribuicao[k], 0);
+      const pesoPulado = cob.folhas.find((f) => f.ramoId === "ramo_z").pesoPct;
+      ok(Math.abs(totalDist - (100 - pesoPulado)) < 1e-9, "R67f a distribuicao soma 100% MENOS o peso do que foi pulado: " + totalDist.toFixed(2));
+      ok(m.reforcar.every((f) => f.nivel !== "verde") && m.reforcar[0].urgencia >= m.reforcar[m.reforcar.length - 1].urgencia, "R67g 'reforcar' nao lista verde e vem do mais urgente ao menos");
+      const u0 = m.reforcar[0];
+      ok(Math.abs(u0.urgencia - u0.pesoPct * a.DOM.fatores[u0.nivel]) < 1e-9, "R67h urgencia = peso x fator do nivel (o fator so' ORDENA)");
+      const ordemNiveis = m.reforcar.map((f) => f.nivel);
+      ok(ordemNiveis.indexOf("vermelho") >= 0 && ordemNiveis.indexOf("cinza") >= 0, "R67i o cinza (nunca estudado, peso alto) tambem entra em 'reforcar'");
+      const m2 = a.domMapa(cob, E, { fatores: { vermelho: 0, amarelo: 0, cinza: 5, azul: 0, verde: 0 } });
+      ok(m2.reforcar.every((f) => f.nivel === "cinza"), "R67j os fatores sao ajustaveis");
+    }
+    /* R68: o adaptador reune os dados do app (estudo, questoes, cartoes, autoavaliacao) */
+    {
+      const { a, ed } = MT();
+      const velho = a.parseText("Modalidades? :: Pregão e concorrência :: ram_modalidades").cards[0];
+      const idc = a.estcIdsDoCard(velho)[0];
+      a.lojaGravar(a.ESTC_CH_REGS, JSON.stringify({ [idc]: { s: "review", iv: 30, ez: 2.5, due: 0, n: 12, l: 0, h: Array.from({ length: 11 }, () => 3), t: 1 } }));
+      const m = a.domDoEdital(ed);
+      const leaf = m.folhas.find((f) => f.tipo === "ramo" && f.ramoId === "modalidades");
+      ok(leaf && leaf.sinais.retencao.respostas === 11 && leaf.sinais.retencao.pct === 100 && leaf.sinais.retencao.valido === true, "R68a a retencao do RAMO vem dos cartoes dele (etiqueta ram_), lida da agenda: " + (leaf && JSON.stringify(leaf.sinais.retencao)));
+      const outro = m.folhas.find((f) => f.tipo === "ramo" && f.ramoId === "fase_preparatoria");
+      ok(outro && outro.sinais.retencao.respostas === 0 && outro.nivel === "cinza", "R68b o ramo sem cartao respondido e sem estudo: cinza");
+      ok(m.resumo.folhas > 0 && Math.abs(m.resumo.total - Object.keys(m.resumo.distribuicao).reduce((x, k) => x + m.resumo.distribuicao[k], 0)) < 1e-9, "R68c o resumo fecha");
+    }
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
