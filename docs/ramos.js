@@ -205,16 +205,52 @@ function ramPesosPorRegistros(nomes, textos) {
   return conta;
 }
 
-/* os textos que a pessoa já registrou deste tópico (questões e julgados) */
-function ramTextosDoTopico(chave) {
-  const out = [];
+/* os textos que a pessoa já registrou deste tópico, POR FONTE: { questoes: [...], juris: [...] } */
+function ramTextosPorFonte(chave) {
+  const questoes = [], juris = [];
   try {
     (typeof qsBanco !== "undefined" ? qsBanco : []).filter((q) => q.chave === chave || (typeof qsChaveNormal === "function" && qsChaveNormal(q.chave) === qsChaveNormal(chave)))
-      .forEach((q) => out.push([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" ")));
+      .forEach((q) => questoes.push([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" ")));
   } catch (e) {}
   try {
-    (typeof jurDoTopico === "function" ? jurDoTopico(chave) : []).forEach((j) => out.push([j.tese, j.tese_curta, j.ementa, j.resumo, j.tema].join(" ")));
+    (typeof jurDoTopico === "function" ? jurDoTopico(chave) : []).forEach((j) => juris.push([j.tese, j.tese_curta, j.ementa, j.resumo, j.tema].join(" ")));
   } catch (e) {}
+  return { questoes, juris };
+}
+/* os textos de questões e julgados juntos (para os pesos pelos registros) */
+function ramTextosDoTopico(chave) {
+  const f = ramTextosPorFonte(chave);
+  return f.questoes.concat(f.juris);
+}
+/* quantos dos textos citam o ramo (mesma regra dos pesos: a maioria dos radicais do nome) */
+function ramContaCitacoes(nome, textos) {
+  const rad = ramRadicais(nome);
+  if (!rad.size) return 0;
+  const minimo = Math.max(1, Math.ceil(rad.size * 0.6));
+  let n = 0;
+  (textos || []).map((x) => ramRadicais(x)).filter((x) => x.size).forEach((d) => {
+    let c = 0; rad.forEach((w) => { if (d.has(w)) c++; });
+    if (c >= minimo) n++;
+  });
+  return n;
+}
+/* O MATERIAL DE CADA RAMO de um tópico: { ramoId: { lei, cartoes, questoes, juris } } (quantidades; lei = 1 se o tópico tem lei
+ * carregada). Cartões pela etiqueta ram_; questões e julgados pelas palavras do nome do ramo. */
+function ramMaterialDoTopico(chave, ramos) {
+  const rs = ramos || [];
+  const out = {};
+  let cards = [];
+  try { cards = parseText(String((typeof matResumos !== "undefined" && (matResumos[chave] || {}).cartoes) || ""), []).cards; } catch (e) { cards = []; }
+  const fontes = ramTextosPorFonte(chave);
+  const temLei = (typeof leiTem === "function") ? !!leiTem(chave) : false;
+  rs.forEach((r) => {
+    out[r.id] = {
+      lei: temLei ? 1 : 0,
+      cartoes: cards.filter((c) => ramIdDoCartao(c) === r.id).length,
+      questoes: ramContaCitacoes(r.nome, fontes.questoes),
+      juris: ramContaCitacoes(r.nome, fontes.juris),
+    };
+  });
   return out;
 }
 

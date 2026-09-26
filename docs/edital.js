@@ -502,6 +502,54 @@ function edRestante(i) {
   return i && i.feito ? 0 : 1;
 }
 
+/* A TRILHA DE UM RAMO: estudar um assunto é mais que ler — a lei seca, as questões, os cartões e a jurisprudência dele.
+ * Cada passo corresponde a uma FORMA de estudo do registro (lei seca, questões, flashcards, jurisprudência). A cobertura sai do
+ * DIÁRIO (registros que tocaram o ramo, com as formas usadas); só contam os passos que TÊM material ("disponível"). */
+const ED_PASSOS = [
+  { id: "lei", forma: "leiseca", peso: 40 },
+  { id: "questoes", forma: "questoes", peso: 30 },
+  { id: "cartoes", forma: "flashcards", peso: 20 },
+  { id: "juris", forma: "juris", peso: 10 },
+];
+/* forma -> data do registro mais recente que a usou naquele ramo (rm = ramos marcados; rp = ramos só com progresso parcial) */
+function edCoberturaDoRamo(diario, topicoChave, ramoId) {
+  const cob = {};
+  (diario || []).forEach((x) => {
+    if (!x || x.c !== topicoChave || x.a === "pendente") return;
+    const tocou = (x.rm || []).some((m) => m.id === ramoId) || (x.rp || []).some((m) => m.id === ramoId);
+    if (!tocou) return;
+    (x.f || []).forEach((f) => { if (!cob[f] || String(x.d) > String(cob[f])) cob[f] = x.d; });
+  });
+  return cob;
+}
+/* disponivel: { lei, questoes, cartoes, juris } (quantidade de material de cada tipo; 0 = não há) */
+function edTrilhaDoRamo(cobertura, disponivel) {
+  const dis = disponivel || {};
+  const passos = ED_PASSOS.map((p) => {
+    const n = Number(dis[p.id]) || 0;
+    const quando = (cobertura && cobertura[p.forma]) || null;
+    return { id: p.id, forma: p.forma, peso: p.peso, disponivel: n > 0, n, feito: !!quando, quando };
+  });
+  const faltam = passos.filter((p) => p.disponivel && !p.feito).map((p) => p.id);
+  return { passos, faltam, completo: faltam.length === 0 };
+}
+/* A SESSÃO COMBINADA: reparte os minutos do ramo entre os passos que ainda faltam e têm material, pelo peso de cada um
+ * (lei 40, questões 30, cartões 20, jurisprudência 10), de 5 em 5 minutos; o último leva o resto. Pouco tempo: só os
+ * passos que cabem (5 min cada), os mais pesados primeiro. */
+function edSessaoCombinada(trilha, minutos) {
+  const ps = ((trilha && trilha.passos) || []).filter((p) => p.disponivel && !p.feito);
+  const total = Number(minutos) || 0;
+  if (!ps.length || total < 5) return [];
+  const usar = ps.slice(0, Math.max(1, Math.min(ps.length, Math.floor(total / 5))));
+  const soma = usar.reduce((a, p) => a + p.peso, 0);
+  let acum = 0;
+  return usar.map((p, k) => {
+    const m = k === usar.length - 1 ? Math.max(5, total - acum) : Math.max(5, Math.round((total * p.peso) / soma / 5) * 5);
+    acum += m;
+    return { id: p.id, forma: p.forma, minutos: m };
+  });
+}
+
 /* O item do plano de um tópico: o do próprio tópico ou, se ele tem ramos, o primeiro ramo dele. */
 function edAcharItemDoTopico(itens, chave) {
   const l = itens || [];
