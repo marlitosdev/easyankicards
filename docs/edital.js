@@ -1648,7 +1648,8 @@ function panoramaDisciplinas(plano) {
       total: d.itens.length, feitos: feitos.length, revisados: revs.length,
       intocados: intocados.length,
       altaIntocada: intocados.filter((i) => i.faixa === "alta").length,
-      bruto, fatia: Math.round((bruto / totalBruto) * 100),
+      /* a fatia EXATA (questões do edital) quando o plano a tem — a mesma que a agenda usa em "vale N% da prova" */
+      bruto, fatia: plano.fatiaExata && plano.fatia && plano.fatia[d.nome] != null ? plano.fatia[d.nome] : Math.round((bruto / totalBruto) * 100),
       pesoFeito: Math.round((d.itens.reduce((a, i) => a + i.bruto * edCredito(i), 0) / (bruto || 1)) * 100),
       pesoRevisado: Math.round((d.itens.reduce((a, i) => a + i.bruto * edCreditoRev(i), 0) / (bruto || 1)) * 100),
       /* lacuna = fatia da prova ainda não estudada. É a régua da ordenação:

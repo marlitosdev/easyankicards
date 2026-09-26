@@ -6,8 +6,14 @@
  * pede: o peso vira uma fatia do total, a fatia vira um alvo de cartões, e a distância entre o que existe e o
  * alvo vira uma faixa (vazio, pouco, ok, excesso).
  *
- * DUAS RÉGUAS, AS MESMAS DO PLANO: o peso do tópico é peso da disciplina × peso do tópico (o "bruto" do plano) e o
- * dos ramos é a divisão desse peso pela régua dos ramos (edPesosDosRamos). Nada de peso novo é inventado.
+ * O PESO DA PROVA, em ordem de confiança:
+ *   1. Quando TODAS as disciplinas trazem o número de questões no edital ("5q", "20q"), a fatia da disciplina é esse
+ *      número sobre o total — é a divisão real da prova (mesma regra da "fatia exata" do plano). Dentro da disciplina, a
+ *      fatia se reparte pelo peso dos tópicos.
+ *   2. Sem os números: peso da disciplina × peso do tópico (o "bruto" do plano). É uma ESTIMATIVA, e favorece disciplinas
+ *      com muitos tópicos — por isso a tela diz qual das duas bases está em uso.
+ *   3. 2ª FASE (discursiva): só contam os tópicos marcados para ela, com o peso dela (`pesoF2`).
+ * O peso dos ramos é a divisão do peso do tópico pela régua dos ramos (edPesosDosRamos).
  *
  * O ALVO NÃO É SÓ PROPORCIONAL. Com 40 cartões espalhados por 200 tópicos a proporção pede 0,2 cartão por tópico,
  * o que não ensina nada. Por isso há também um MÍNIMO por folha (tópico sem ramos, ou ramo): abaixo dele é "pouco"
@@ -49,11 +55,18 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
   const o = Object.assign({}, COV, opc || {});
   const ct = (cont && cont.top) || new Map(), cr = (cont && cont.ramo) || new Map();
   const ds = disciplinas || [];
-  const somaBruto = ds.reduce((a, d) => a + d.topicos.reduce((b, t) => b + d.peso * t.peso, 0), 0) || 1;
-  /* o total de cartões do escopo: só os dos tópicos DESTE plano */
+  const fase = o.fase === 2 ? 2 : 1;
+  /* o peso de UM tópico nesta fase (na 2ª, o que não é da discursiva pesa zero e fica de fora) */
+  const wDe = (t) => (fase === 2 ? (t.fase2 ? (t.pesoF2 || t.peso) : 0) : t.peso);
+  const somaBruto = ds.reduce((a, d) => a + d.topicos.reduce((b, t) => b + d.peso * wDe(t), 0), 0) || 1;
+  const comAbs = ds.filter((d) => d.abs > 0);
+  const exata = fase === 1 && comAbs.length > 0 && comAbs.length === ds.length;
+  const somaAbs = exata ? comAbs.reduce((a, d) => a + d.abs, 0) : 0;
+  /* o total de cartões do escopo: só os dos tópicos DESTE plano (e desta fase) */
   let total = 0;
   const chaves = new Set();
   ds.forEach((d) => d.topicos.forEach((t) => {
+    if (!wDe(t)) return;
     const ch = chaveDe(d.nome, t.nome);
     if (chaves.has(ch)) return;
     chaves.add(ch); total += ct.get(ch) || 0;
@@ -62,14 +75,16 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
   const folhas = [];
   const vistos = new Set();
   const disciplinasOut = ds.map((d) => {
-    const dOut = { nome: d.nome, peso: d.peso, pesoPct: 0, cartoes: 0, cartoesPct: 0, topicos: [] };
+    const dOut = { nome: d.nome, peso: d.peso, abs: d.abs || 0, pesoPct: 0, cartoes: 0, cartoesPct: 0, topicos: [] };
+    const somaW = d.topicos.reduce((a, t) => a + wDe(t), 0) || 1;
     d.topicos.forEach((t) => {
+      if (!wDe(t)) return;
       const chave = chaveDe(d.nome, t.nome);
-      const share = (d.peso * t.peso) / somaBruto;
+      const share = exata ? (d.abs / somaAbs) * (wDe(t) / somaW) : (d.peso * wDe(t)) / somaBruto;
       const n = ct.get(chave) || 0;
       const jaContado = vistos.has(chave);     /* o mesmo tópico repetido no plano não soma duas vezes */
       vistos.add(chave);
-      const tOut = { nome: t.nome, chave, pesoPct: share * 100, cartoes: n, ramos: [], semRamo: 0 };
+      const tOut = { nome: t.nome, chave, pesoPct: share * 100, cartoes: n, ramos: [], semRamo: 0, fase2: !!t.fase2 };
       const rs = t.ramos || [];
       if (rs.length) {
         const pesos = edPesosDosRamos(rs), soma = pesos.reduce((a, b) => a + b, 0) || 1;
@@ -102,6 +117,8 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
     });
     return dOut;
   });
+  /* na 2ª fase, disciplina sem nenhum tópico da discursiva não entra */
+  for (let i = disciplinasOut.length - 1; i >= 0; i--) if (!disciplinasOut[i].topicos.length) disciplinasOut.splice(i, 1);
   disciplinasOut.forEach((d) => {
     d.cartoesPct = total ? (d.cartoes / total) * 100 : 0;
     d.lacuna = d.cartoesPct - d.pesoPct;             /* negativo = tem menos cartões do que o peso pede */
@@ -130,7 +147,8 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
   const sobrando = folhas.filter((f) => f.faixa === "excesso")
     .map((f) => Object.assign({}, f, { sobra: f.cartoes - Math.max(f.alvo, Math.round(f.alvoProp)) }))
     .sort((a, b) => b.sobra - a.sobra);
-  return { total, disciplinas: disciplinasOut, folhas, resumo, faltando, sobrando };
+  return { total, disciplinas: disciplinasOut, folhas, resumo, faltando, sobrando, fase, somaAbs,
+    base: fase === 2 ? "fase2" : (exata ? "questoes" : "estimado") };
 }
 
 /* O mapa de UM edital cadastrado, com os cartões da biblioteca de agora. */
@@ -187,18 +205,30 @@ function covLinhaAcoes(pai, disciplina, topico) {
   pai.append(ac);
 }
 
+/* o edital tem 2ª fase com tópicos marcados para ela? */
+function covTemFase2(ed) {
+  try {
+    const r = lerEdital((ed && ed.texto) || "");
+    return !!(r.cfg && r.cfg.fase2 && r.cfg.fase2.prova) && r.disciplinas.some((d) => d.topicos.some((t) => t.fase2));
+  } catch (e) { return false; }
+}
+
 function covPintar() {
   const cx = $("covCorpo");
   cx.innerHTML = "";
   const ed = (editais || []).find((e) => String(e.id) === String(covEditalId));
   if (!ed) { cx.append(gerEl("p", "nota", t("cov_sem_edital"))); return; }
-  const m = covDoEdital(ed, cqLerBiblioteca(), covMinimos());
+  const temF2 = covTemFase2(ed);
+  $("covFase").hidden = !temF2;
+  const fase = temF2 && $("covFase").value === "2" ? 2 : 1;
+  const m = covDoEdital(ed, cqLerBiblioteca(), Object.assign(covMinimos(), { fase }));
   const r = m.resumo;
   if (!r.folhas) { cx.append(gerEl("p", "nota", t("cov_sem_topicos"))); return; }
   const man = gerEl("div", "cov-manchete" + (r.pesoSemCartaoPct >= 10 ? " cov-manchete-alerta" : ""));
   man.append(gerEl("b", "", t("cov_manchete", { p: Math.round(r.pesoSemCartaoPct) })),
     document.createTextNode(" " + t("cov_manchete2", { p: Math.round(r.pesoAbaixoPct), n: r.cartoes })));
   cx.append(man);
+  cx.append(gerEl("p", "nota cov-base", t("cov_base_" + m.base, { n: m.somaAbs })));
   const leg = gerEl("div", "cov-legenda");
   [["vazio", r.vazias], ["pouco", r.pouco], ["ok", r.ok], ["excesso", r.excesso]].forEach(([f, n]) => {
     const it = gerEl("span", "cov-leg"); it.append(gerEl("i", "cov-seg cov-f-" + f), document.createTextNode(" " + t("cov_f_" + f) + " (" + n + ")"));
@@ -219,7 +249,9 @@ function covPintar() {
     if (!det.hidden) linha.className = "cov-disc cov-aberta";
     d.topicos.forEach((tp) => {
       const tl = gerEl("div", "cov-top cov-f-borda-" + tp.faixa);
-      tl.append(gerEl("span", "cov-top-nome", tp.nome), gerEl("span", "cov-top-n", t("cov_cartoes_de", { n: tp.cartoes, a: tp.alvo })));
+      tl.append(gerEl("span", "cov-top-nome", tp.nome));
+      if (tp.fase2 && m.fase === 1) tl.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
+      tl.append(gerEl("span", "cov-top-n", t("cov_cartoes_de", { n: tp.cartoes, a: tp.alvo })));
       covLinhaAcoes(tl, d.nome, tp.nome);
       det.append(tl);
       if (tp.ramos.length) {
@@ -263,15 +295,17 @@ function covAbrir(editalId, disciplina) {
   sel.value = covEditalId;
   const mn = covMinimos();
   $("covMinTop").value = String(mn.minTopico); $("covMinRamo").value = String(mn.minRamo);
+  $("covFase").value = "1";
   covPintar();
-  dicasDosBotoes({ btnGerCobertura: "cov_tip_abrir", btnCovX: "cov_tip_x", covEdital: "cov_tip_edital", covMinTop: "cov_tip_min", covMinRamo: "cov_tip_min" });
+  dicasDosBotoes({ covFase: "cov_tip_fase", btnGerCobertura: "cov_tip_abrir", btnCovX: "cov_tip_x", covEdital: "cov_tip_edital", covMinTop: "cov_tip_min", covMinRamo: "cov_tip_min" });
   abrirModal("dlgCobertura");
 }
 
 if (typeof document !== "undefined" && $("dlgCobertura")) {
   $("btnGerCobertura").onclick = () => covAbrir();
   $("btnCovX").onclick = () => $("dlgCobertura").close();
-  $("covEdital").onchange = () => { covEditalId = $("covEdital").value; covPintar(); };
+  $("covEdital").onchange = () => { covEditalId = $("covEdital").value; $("covFase").value = "1"; covPintar(); };
+  $("covFase").onchange = covPintar;
   const salvarMin = () => {
     try { localStorage.setItem(COV_CHAVE_MIN, JSON.stringify({ t: $("covMinTop").value, r: $("covMinRamo").value })); } catch (e) {}
     covPintar();

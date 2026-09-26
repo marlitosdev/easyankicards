@@ -2167,6 +2167,37 @@ async function testes() {
       const dup = a.covMapa([{ nome: "A", peso: 1, topicos: [{ nome: "T", peso: 1 }] }, { nome: "B", peso: 1, topicos: [{ nome: "T", peso: 1 }] }], { top: new Map([["A|T", 6]]), ramo: new Map() }, (d) => "A|T");
       ok(dup.total === 6, "R59m o mesmo topico repetido no plano nao soma os cartoes duas vezes: " + dup.total);
     }
+    /* R59n: o PESO da prova vem das QUESTOES do edital quando todas as disciplinas as trazem (e nao do numero de topicos) */
+    {
+      const { a } = MT();
+      const ch = (d, t) => d + "|" + t;
+      const vazio = { top: new Map(), ramo: new Map() };
+      /* Tecnologia: 20 questoes e 3 topicos; Financas: 10 questoes e 12 topicos. Pela estimativa (estrelas x estrelas) Financas ganharia. */
+      const txt = ["# X | prova: 2027-06-01 | horas: 20", "@ Tecnologia :: 20q", "+ T1 :: 3", "+ T2 :: 3", "+ T3 :: 3",
+        "@ Financas :: 10q"].concat(Array.from({ length: 12 }, (_, i) => "+ F" + i + " :: 5")).join("\n");
+      const plano = a.lerEdital(txt).disciplinas;
+      const m = a.covMapa(plano, vazio, ch);
+      const tec = m.disciplinas.find((d) => d.nome === "Tecnologia"), fin = m.disciplinas.find((d) => d.nome === "Financas");
+      ok(m.base === "questoes" && m.somaAbs === 30 && Math.abs(tec.pesoPct - 100 * 20 / 30) < 1e-9 && Math.abs(fin.pesoPct - 100 * 10 / 30) < 1e-9, "R59n com questoes em todas as disciplinas o peso e' a fatia REAL da prova (20q de 30 = 66,7%): " + tec.pesoPct.toFixed(1) + " / " + fin.pesoPct.toFixed(1) + " (" + m.base + ")");
+      ok(tec.topicos.every((t) => Math.abs(t.pesoPct - 100 * 20 / 30 / 3) < 1e-9), "R59o dentro da disciplina a fatia se reparte pelo peso dos topicos");
+      ok(Math.abs(m.folhas.reduce((x, f) => x + f.pesoPct, 0) - 100) < 1e-9, "R59p o peso das folhas continua somando 100%");
+      /* uma disciplina sem numero: volta para a estimativa, e a tela avisa */
+      const mist = a.lerEdital(txt.replace("@ Financas :: 10q", "@ Financas :: 4")).disciplinas;
+      ok(a.covMapa(mist, vazio, ch).base === "estimado", "R59q basta UMA disciplina sem numero de questoes para a base voltar a ser 'estimado'");
+      /* 2a fase: so' os topicos marcados, com o peso dela */
+      const f2 = ["# X | prova: 2026-12-20 | horas: 20", "# fase 2: Disc | prova: 2027-01-10 | horas: 20", "@ A :: 5", "+ A1 :: 5 :: motivo !d", "+ A2 :: 5", "@ B :: 5", "+ B1 :: 5"].join("\n");
+      const pf = a.lerEdital(f2).disciplinas;
+      const m2 = a.covMapa(pf, vazio, ch, { fase: 2 });
+      ok(m2.base === "fase2" && m2.disciplinas.length === 1 && m2.disciplinas[0].nome === "A" && m2.folhas.length === 1 && Math.abs(m2.folhas[0].pesoPct - 100) < 1e-9, "R59r na 2a fase so' contam os topicos da discursiva (disciplina B, sem topico dela, sai): " + m2.disciplinas.map((d) => d.nome).join(","));
+      const m1 = a.covMapa(pf, vazio, ch, { fase: 1 });
+      ok(m1.folhas.length === 3 && m1.disciplinas[0].topicos[0].fase2 === true && m1.disciplinas[0].topicos[1].fase2 === false, "R59s na 1a fase entram todos, e o topico da discursiva fica marcado");
+      /* as horas usam a mesma fatia exata */
+      const ed = a.edCriar("Exato", txt);
+      a.edAbrir(ed.id); a.$("editalTexto").value = ed.texto;
+      const pl = a.horDoAberto().plano;
+      const h = a.horMapa(pl, [], {});
+      ok(h.disciplinas[0].nome === "Tecnologia" && Math.abs(h.disciplinas[0].pesoPct - 100 * 20 / 30) < 1.0, "R59t nas horas por assunto a disciplina de maior peso real tambem vem primeiro: " + h.disciplinas.map((d) => d.nome + "=" + d.pesoPct.toFixed(1)).join(", "));
+    }
     /* R60: a tela da cobertura */
     {
       const { a } = MT();
