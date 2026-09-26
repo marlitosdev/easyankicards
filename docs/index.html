@@ -4274,10 +4274,36 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-item{display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid var(--borda);cursor:pointer;font-size:13px;line-height:1.4}
 .ger-foco{background:rgba(46,158,91,.14)}
 .ger-corpo{flex:1;min-width:0}
-.ger-f{font-weight:600}
-.ger-v{opacity:.85}
+.ger-f{font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ger-v{opacity:.8;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
+.ger-v::before{content:"→ ";opacity:.6}
+.ger-v:empty{display:none}
+/* cartão da lista: uma faixa colorida pelo tipo e uma linha de fichas (tipo, nível, onde está) */
+.ger-item{border-left:4px solid var(--ger-tp,transparent);border-radius:6px;margin:3px 0;padding:8px 8px;background:rgba(127,127,127,.06)}
+.ger-item.ger-tp-basic{--ger-tp:#5b8def}
+.ger-item.ger-tp-cloze{--ger-tp:#2ec4b6}
+.ger-item.ger-tp-mc{--ger-tp:#f0ad4e}
+.ger-item.ger-foco{background:rgba(46,158,91,.20);outline:1px solid var(--acao);outline-offset:-1px}
+.ger-item .cq-onde{display:flex;gap:6px;flex-wrap:wrap;align-items:center;opacity:.9;margin:5px 0 0}
+.ger-tipo{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(127,127,127,.2);white-space:nowrap}
+.ger-tipo-basic{color:#5b8def}
+.ger-tipo-cloze{color:#2ec4b6}
+.ger-tipo-mc{color:#f0ad4e}
+.ger-onde-lin{font-size:11px;opacity:.7}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
+/* ---- GRADUAÇÃO VISUAL DA ÁRVORE: cada nível tem a sua cor, faixa lateral, peso e recuo ----
+ * edital (azul) › disciplina (verde-água) › tópico (âmbar) › ramo (roxo). A cor da faixa vem de --ger-nv. */
+#gerArvore .ger-pasta{border-left:4px solid var(--ger-nv,transparent);margin:2px 0}
+#gerArvore .ger-ed{--ger-nv:#5b8def;background:rgba(91,141,239,.16);font-weight:800;font-size:14px;padding-top:7px;padding-bottom:7px;margin-top:8px}
+#gerArvore .ger-disc{--ger-nv:#2ec4b6;background:rgba(46,196,182,.11);font-weight:700;font-size:13px;margin-left:10px}
+#gerArvore .ger-top{--ger-nv:#f0ad4e;background:rgba(240,173,78,.07);font-weight:500;margin-left:22px;padding-left:10px}
+#gerArvore .ger-ramo{--ger-nv:#b388ff;background:rgba(179,136,255,.09);font-size:12px;margin-left:36px;padding-left:10px;border-left-style:dotted}
+#gerArvore .ger-modo-edital .ger-disc,#gerArvore.ger-modo-edital .ger-disc{padding-left:6px}
+#gerArvore.ger-modo-edital .ger-top{padding-left:10px}
+#gerArvore.ger-modo-edital .ger-ramo{padding-left:10px}
+#gerArvore .ger-pasta.ger-atual{background:rgba(46,158,91,.30);outline:1px solid var(--acao);outline-offset:-1px;font-weight:800}
+#gerArvore .ger-pasta:not(.ger-ed):not(.ger-disc):not(.ger-top):not(.ger-ramo){font-weight:700}
 .ger-cab-acoes{display:inline-flex;align-items:center;gap:6px}
 .ger-abas{display:none}
 .ger-aba{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 0;text-align:center;padding:9px 6px;font-size:13px;font-weight:700;

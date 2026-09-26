@@ -590,7 +590,7 @@ function gerPintarLista() {
   else if (gerNotas.length && !gerVis.length) cx.append(gerEl("p", "nota", t("ger_nenhum")));
   gerVis.slice(0, gerMostrando).forEach((idx, pos) => {
     const n = gerNotas[idx];
-    const lin = gerEl("div", "ger-item" + (pos === gerFoco ? " ger-foco" : ""));
+    const lin = gerEl("div", "ger-item ger-tp-" + (n.card.kind === "cloze" ? "cloze" : (n.card.kind === "mc" ? "mc" : "basic")) + (pos === gerFoco ? " ger-foco" : ""));
     const ck = gerEl("input"); ck.type = "checkbox"; ck.checked = gerSel.has(pos);
     ck.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
     ck.onchange = () => { ck.checked ? gerSel.add(pos) : gerSel.delete(pos); gerPintarAcoes(); };
@@ -598,7 +598,10 @@ function gerPintarLista() {
     corpo.append(gerEl("div", "ger-f", cqTrecho(cqRevelado(n.card), 140)));
     corpo.append(gerEl("div", "ger-v", cqTrecho(n.card.back, 120)));
     const onde = gerEl("div", "cq-onde");
-    onde.append(ceSelo(ceNivel(n.card)), document.createTextNode(" " + [n.disciplina, n.topico].filter(Boolean).join(" · ")));
+    const tp = n.card.kind === "cloze" ? "cloze" : (n.card.kind === "mc" ? "mc" : "basic");
+    onde.append(gerEl("span", "ger-tipo ger-tipo-" + tp, t("ger_tipo_" + tp)), ceSelo(ceNivel(n.card)));
+    /* dentro de UM tópico o "onde" é sempre o mesmo: só aparece quando a lista mistura pastas */
+    if (!(gerPasta && gerPasta.chave)) onde.append(gerEl("span", "ger-onde-lin", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
     corpo.append(onde);
     lin.append(ck, corpo);
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); if (gerEhCelular()) gerVista("previa"); };
