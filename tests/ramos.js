@@ -2286,6 +2286,16 @@ async function testes() {
       ok(!/horas até o corte/.test(a.$("horCorpo").textContent), "R63e2 sem bloco com minimo, a legenda NAO mostra as linhas de corte");
       cols[0].onclick();
       ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-det")).length === 1 && achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).length >= 3, "R63f clicar na coluna abre os topicos e ramos");
+      const btsDet = achar(a.$("horCorpo"), (e) => cls(e, "hor-det")).length ? achar(achar(a.$("horCorpo"), (e) => cls(e, "hor-det"))[0], (e) => e.tag === "button") : [];
+      ok(btsDet.some((b) => /Estudar \(5\)/.test(b.textContent)) && btsDet.some((b) => /Criar cartões/.test(b.textContent)) && btsDet.some((b) => /cobertura de cartões/.test(b.textContent)), "R63f2 o detalhe liga aos cartoes: estudar (5) no topico que tem, criar no que nao tem, e ver a cobertura: " + btsDet.map((b) => b.textContent).join(" | "));
+      btsDet.find((b) => /Estudar/.test(b.textContent)).onclick();
+      ok(a.$("dlgGerEstudo").open === true && a.$("dlgHoras").open === false, "R63f3 'Estudar' no topico abre o player dos cartoes dele");
+      a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
+      a.$("btnEdHoras").onclick(); achar(a.$("horCorpo"), (e) => cls(e, "hor-col"))[0].onclick();
+      const bts2 = achar(achar(a.$("horCorpo"), (e) => cls(e, "hor-det"))[0], (e) => e.tag === "button");
+      bts2.find((b) => /cobertura de cartões/.test(b.textContent)).onclick();
+      ok(a.$("dlgCobertura").open === true && a.covDiscAbertaAtual() === "Licitações" && a.$("dlgHoras").open === false, "R63f4 'ver a cobertura' abre a cobertura JA na disciplina");
+      a.$("btnCovX").onclick(); a.$("btnEdHoras").onclick(); achar(a.$("horCorpo"), (e) => cls(e, "hor-col"))[0].onclick();
       a.$("horPeriodo").value = "7"; a.$("horPeriodo").onchange();
       ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-col")).length === 2, "R63g o filtro de periodo repinta");
       a.$("btnHorX").onclick();
