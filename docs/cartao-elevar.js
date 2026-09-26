@@ -190,8 +190,40 @@ function ceTagsUnicas(notas) {
   return [...cont.entries()].filter((e) => e[1] === 1).map((e) => e[0]).sort();
 }
 
+/* MIGRAÇÃO DO "JÁ REVISADO" DA REVISÃO MANUAL ANTIGA. Ela guardava só a FRENTE (normalizada) de cada cartão revisado em
+ * "eac_revisados". Uma vez só, cada cartão da biblioteca cuja frente está nesse registro entra na memória do Elevar como
+ * "trabalhado" nos 4 objetivos — a revisão antiga era geral —, para não voltar à fila. Não apaga nada do registro antigo
+ * (continua no backup) e não pisa em marca que o Elevar já tenha. */
+const CE_CHAVE_MIG = "eac_ce_migrou_revisados";
+let ceUltimaMigracao = null;
+function ceFrenteAntiga(c) { return String((c && c.front) || "").toLowerCase().replace(/\s+/g, " ").trim(); }
+function ceMigrarRevisados() {
+  try { if (localStorage.getItem(CE_CHAVE_MIG)) return null; } catch (e) { return null; }
+  const hoje = new Date().toISOString().slice(0, 10);
+  let antigos = new Set();
+  try {
+    const g = JSON.parse(localStorage.getItem("eac_revisados") || "[]");
+    if (Array.isArray(g)) antigos = new Set(g.map((x) => String(x)));
+  } catch (e) { antigos = new Set(); }
+  const res = { antigos: antigos.size, migrados: 0 };
+  if (antigos.size) {
+    const m = ceRevLer();
+    cqLerBiblioteca().forEach((n) => {
+      if (!antigos.has(ceFrenteAntiga(n.card))) return;
+      CE_OBJETIVOS.forEach((o) => { const k = ceChaveCartao(n.card, o); if (!m[k]) m[k] = { ok: 1, q: hoje, mig: 1 }; });
+      res.migrados++;
+    });
+    ceRevGravar(m);
+  }
+  try { localStorage.setItem(CE_CHAVE_MIG, JSON.stringify({ q: hoje, antigos: res.antigos, migrados: res.migrados })); } catch (e) {}
+  try { matReg("cartoes", "revisão manual antiga migrada para o Melhorar cartões", res.migrados + " cartão(ões) de " + res.antigos + " no registro antigo"); } catch (e) {}
+  ceUltimaMigracao = res;
+  return res;
+}
+
 /* Classifica a biblioteca: cada nota ganha { nivel, nota, defeitos, revisado }. */
 function ceClassificar(notas) {
+  ceMigrarRevisados();
   const rev = ceRevLer();
   return (notas || []).map((n) => {
     const a = ceAvaliar(n.card);
@@ -855,9 +887,11 @@ function ceAbrir(opc) {
   cePintarObjetivos();
   ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null; cePasso = 1; ceRodada = 1;
   $("ceColar").value = ""; $("cePrompt").value = "";
+  ceUltimaMigracao = null;
   ceCalcular();
   ceMarcarPiores();
-  ceStatus(ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada"), ceNotas.length ? "" : "ok");
+  ceStatus((ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada"))
+    + (ceUltimaMigracao && ceUltimaMigracao.migrados ? " " + t("ce_mig_msg", { n: ceUltimaMigracao.migrados }) : ""), ceNotas.length ? "" : "ok");
   dicasDosBotoes(CE_DICAS);
   abrirModal("dlgCartElevar");
   try { matReg("cartoes", "elevar ao padrão aberto", ceNotas.length + " na fila"); } catch (e) {}

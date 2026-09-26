@@ -690,6 +690,87 @@ async function testes() {
     ok(["ce-atalhos", "ce-acoes-item", "ce-ver", "ce-previa"].every((c) => html.indexOf("." + c + "{") >= 0), "E12-css as classes dos atalhos, da previa e do 'ver no texto' tem regra de CSS");
   }
 
+  /* ---- E13: migracao do "ja revisado" da revisao manual antiga ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const mk = (antigo) => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar(); a.$("editor").value = "Pergunta   da  BANCADA? :: sim";
+      a.matGravarCartoes(a.matChave("Proc", "Recursos"), [
+        "Qual o prazo do recurso? :: 10 dias",
+        "Qual o efeito do recurso? :: Suspende",
+        "Recurso :: Serviço"].join(NL + NL), { disciplina: "Proc", topico: "Recursos" });
+      if (antigo !== undefined) a.loja.setItem("eac_revisados", typeof antigo === "string" ? antigo : JSON.stringify(antigo));
+      return a;
+    };
+    const cartao = (a, re) => a.cqLerBiblioteca().find((n) => re.test(n.card.front)).card;
+    /* sem registro antigo: nada a migrar, mas marca que ja' olhou */
+    {
+      const a = mk();
+      const r = a.ceMigrarRevisados();
+      ok(r && r.antigos === 0 && r.migrados === 0 && !!a.loja.getItem(a.CE_CHAVE_MIG) && a.ceMigrarRevisados() === null, "E13 sem registro antigo: nada migra, a marca fica e a segunda chamada nao faz nada");
+    }
+    /* com registro antigo */
+    {
+      const a = mk(["qual o prazo do recurso?", "pergunta da bancada?", "cartao que ja nao existe?"]);
+      const c1 = cartao(a, /prazo/), c2 = cartao(a, /efeito/), cb = cartao(a, /BANCADA/);
+      ok(a.ceRevisado(c1, a.ceRevLer()) === false, "E13a (antes) o cartao ainda e' candidato");
+      a.ceAbrir();
+      const m = a.ceRevLer();
+      ok(/^\d{4}-\d{2}-\d{2}$/.test(m[a.ceChaveCartao(c1, "completar")].q), "E13b2 a marca migrada guarda a data da migracao");
+      ok(a.CE_OBJETIVOS.every((o) => a.ceRevisado(c1, m) === true && !!m[a.ceChaveCartao(c1, o)] && m[a.ceChaveCartao(c1, o)].mig === 1 && m[a.ceChaveCartao(c1, o)].ok === 1), "E13b o cartao do registro antigo entra como TRABALHADO nos 4 objetivos (com a marca de migrado)");
+      ok(m[a.ceChaveCartao(cb, "completar")] && m[a.ceChaveCartao(cb, "fatos")], "E13c a frente e' comparada normalizada (caixa e espacos): o cartao da bancada tambem migra");
+      ok(!m[a.ceChaveCartao(c2, "completar")] && !m[a.ceChaveCartao(c2, "forma")] && a.ceRevisado(c2, m) === false, "E13d cartao que NAO estava no registro antigo continua candidato");
+      ok(a.ceNotasAtual().every((n) => !/prazo|BANCADA/.test(n.card.front)) && a.ceNotasAtual().some((n) => /efeito/.test(n.card.front)), "E13e a fila do Elevar ja abre sem os migrados: " + a.ceNotasAtual().map((n) => n.card.front));
+      ok(/2 cartão\(ões\) que você já tinha revisado/.test(a.$("ceMsg").textContent), "E13f a janela avisa quantos foram marcados (2; o terceiro do registro nao existe mais): " + a.$("ceMsg").textContent);
+      const info = JSON.parse(a.loja.getItem(a.CE_CHAVE_MIG));
+      ok(info.antigos === 3 && info.migrados === 2 && /^\d{4}-\d{2}-\d{2}$/.test(info.q), "E13g fica gravado quando, quantos havia e quantos migraram: " + JSON.stringify(info));
+      ok(a.loja.getItem("eac_revisados").indexOf("cartao que ja nao existe") > 0, "E13h o registro antigo NAO e' apagado (continua no backup)");
+      /* reabrir nao repete nem avisa de novo */
+      const antes = JSON.stringify(a.ceRevLer());
+      a.ceAbrir();
+      ok(JSON.stringify(a.ceRevLer()) === antes && !/já tinha revisado/.test(a.$("ceMsg").textContent), "E13i reabrir: nada muda e o aviso nao repete");
+      /* mesmo alterando o registro antigo depois, nao migra de novo */
+      a.loja.setItem("eac_revisados", JSON.stringify(["qual o efeito do recurso?"]));
+      a.ceAbrir();
+      ok(a.ceRevisado(c2, a.ceRevLer()) === false, "E13j depois de migrado, mudancas no registro antigo nao valem (migracao unica)");
+    }
+    /* registro antigo so' com cartoes que nao existem mais: nao avisa nada */
+    {
+      const a = mk(["cartao que sumiu?", "outro que sumiu?"]);
+      a.ceAbrir();
+      ok(JSON.parse(a.loja.getItem(a.CE_CHAVE_MIG)).migrados === 0 && !/já tinha revisado/.test(a.$("ceMsg").textContent), "E13r nenhum cartao do registro antigo existe mais: migra 0 e nao mostra aviso");
+    }
+    /* nao pisa em marca existente */
+    {
+      const a = mk(["qual o prazo do recurso?"]);
+      const c1 = cartao(a, /prazo/);
+      a.ceMarcarTentativa([c1]);
+      const antes = a.ceRevLer()[a.ceChaveCartao(c1, "completar")];
+      ok(antes && antes.t === 1, "E13k (preparo) o Elevar ja tinha 1 tentativa nesse cartao");
+      a.ceAbrir();
+      const dep = a.ceRevLer();
+      ok(dep[a.ceChaveCartao(c1, "completar")].t === 1 && !dep[a.ceChaveCartao(c1, "completar")].ok && dep[a.ceChaveCartao(c1, "fatos")] && dep[a.ceChaveCartao(c1, "fatos")].mig === 1, "E13l a marca que o Elevar ja tinha NAO e' sobrescrita (so' preenche o que falta)");
+    }
+    /* registro antigo invalido */
+    {
+      const a = mk("isto nao e json");
+      ok(a.ceMigrarRevisados().antigos === 0 && !!a.loja.getItem(a.CE_CHAVE_MIG), "E13m registro antigo ilegivel: nao quebra e nao migra nada");
+      const b = mk({ nao: "array" });
+      ok(b.ceMigrarRevisados().migrados === 0, "E13n registro que nao e' lista: ignorado");
+      const c = mk([123, null, "qual o prazo do recurso?"]);
+      ok(c.ceMigrarRevisados().migrados === 1, "E13o itens estranhos na lista nao atrapalham");
+    }
+    /* a classificacao tambem dispara a migracao (ex.: pelo gerenciador) */
+    {
+      const a = mk(["qual o prazo do recurso?"]);
+      const cl = a.ceClassificar(a.cqLerBiblioteca());
+      ok(cl.find((n) => /prazo/.test(n.card.front)).revisado === true && cl.find((n) => /efeito/.test(n.card.front)).revisado === false, "E13p classificar a biblioteca (por qualquer tela) ja migra: o cartao antigo aparece como revisado");
+    }
+    ok(a13frente("  Qual   O Prazo? ") === "qual o prazo?" && a13frente(null) === "", "E13q a frente antiga e' normalizada como a revisao manual fazia (caixa, espacos)");
+    function a13frente(x) { return mk().ceFrenteAntiga(x === null ? null : { front: x }); }
+  }
+
   /* ---- E8: a tela, em 3 passos ---- */
   {
     const { a, c1, janela } = montar();
