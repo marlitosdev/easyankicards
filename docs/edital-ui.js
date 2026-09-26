@@ -1598,6 +1598,65 @@ function regPintarFormas() {
   });
 }
 
+/* OS RAMOS NA JANELA DE REGISTRO. Tópico com ramos: uma lista com caixas ("o que você estudou?" / "o que você
+ * revisou?"). O que a agenda propôs já vem marcado; dá para marcar vários ou o tópico todo. Estudo só aceita ramo
+ * ainda pendente; revisão só ramo já estudado e não revisado. Os minutos sugeridos acompanham a escolha (soma do
+ * tempo dos ramos; metade na revisão) e o tempo gravado é repartido entre os ramos pelo peso. */
+let regRamosSel = new Set();
+function regRamosElegivel(r) { return regTipo === "revisado" ? (r.feito && !r.revisado) : !r.feito; }
+function regRamosPadrao(i) {
+  const rs = i.ramos || [];
+  if (regTipo === "revisado") {
+    const venc = rs.filter((r) => r.venceu);
+    return (venc.length ? venc : rs.filter(regRamosElegivel)).map((r) => r.id);
+  }
+  return (i.sessao || []).filter((id) => { const r = rs.find((x) => x.id === id); return r && regRamosElegivel(r); });
+}
+function regRamosMinutos(i) {
+  const soma = (i.ramos || []).filter((r) => regRamosSel.has(r.id)).reduce((a, r) => a + (r.minutos || 0), 0);
+  return regTipo === "revisado" ? Math.max(5, Math.round(soma / 2 / 5) * 5) : soma;
+}
+function regRamosPintar(i, refazerMinutos) {
+  const bl = $("regRamosBloco");
+  if (!bl) return;
+  const rs = (i && i.ramos) || [];
+  bl.hidden = !rs.length;
+  if (!rs.length) return;
+  $("regRamosRot").textContent = t(regTipo === "revisado" ? "ed_reg_ramos_revisao" : "ed_reg_ramos_estudo");
+  const cx = $("regRamos");
+  cx.innerHTML = "";
+  rs.forEach((r) => {
+    const el = regRamosElegivel(r);
+    const lin = document.createElement("label");
+    lin.className = "reg-ramo-lin" + (el ? "" : " reg-ramo-indisp");
+    const ck = document.createElement("input");
+    ck.type = "checkbox"; ck.checked = el && regRamosSel.has(r.id); ck.disabled = !el;
+    ck.onchange = () => {
+      if (ck.checked) regRamosSel.add(r.id); else regRamosSel.delete(r.id);
+      regRamosPintar(i, true);
+    };
+    const nm = document.createElement("span");
+    nm.className = "reg-ramo-nome";
+    nm.textContent = r.nome + " ★" + (r.peso || 3);
+    const st = document.createElement("span");
+    st.className = "reg-ramo-est";
+    st.textContent = el ? "≈ " + horasTexto(r.minutos) : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
+    lin.title = r.nome + " — " + t("ed_ramo_" + (r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend")) + (r.nota ? " — " + r.nota : "");
+    lin.append(ck, nm, st);
+    cx.append(lin);
+  });
+  const n = regRamosSel.size, min = regRamosMinutos(i);
+  $("regRamosResumo").textContent = n ? t("ed_reg_ramos_resumo", { n, m: horasTexto(min) }) : t("ed_reg_ramos_nenhum");
+  if (refazerMinutos && n) { $("regMinutos").value = min; $("regMinSlider").value = Math.min(240, min); }
+  const nomes = rs.filter((r) => regRamosSel.has(r.id)).map((r) => r.nome);
+  /* até 3 nomes; com mais, só a contagem (o título não vira um parágrafo) */
+  $("regTitulo").textContent = i.nome + (nomes.length ? " › " + (nomes.length > 3 ? t("ed_reg_ramos_n", { n: nomes.length }) : nomes.join(", ")) : "");
+}
+function regRamosIniciar(i) {
+  regRamosSel = new Set(regRamosPadrao(i));
+  regRamosPintar(i, false);
+}
+
 function regPintarBotoes() {
   const b = $("btnRegEstudo");
   if (b) {
@@ -1637,7 +1696,7 @@ function abrirRegistro(i) {
   regHumor = "media";
   regDif = "";
   const minReg = i.minutosSessao || i.minutos;
-  $("regTitulo").textContent = i.nome + (i.sessaoNomes && i.sessaoNomes.length ? " › " + i.sessaoNomes.join(", ") : "");
+  $("regTitulo").textContent = i.nome;
   $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
   $("regMinutos").value = minReg;
   $("regMinSlider").value = Math.min(240, minReg);
@@ -1677,6 +1736,7 @@ function abrirRegistro(i) {
 
   regTipo = i.feito ? "revisado" : "feito";
   regPintarBotoes();
+  regRamosIniciar(i);
   abrirModal("dlgRegistro");
 }
 
@@ -1777,6 +1837,13 @@ function regPintarAtalhos() {
 function confirmarRegistro(estado) {
   if (!regAtual) return;
   const item = regAtual;
+  /* tópico com ramos: a escolha vai junto (e sem nenhum ramo marcado não há o que registrar) */
+  if (item.ramos && item.ramos.length && estado) {
+    const eleg = item.ramos.filter(regRamosElegivel);
+    const escolha = eleg.filter((r) => regRamosSel.has(r.id)).map((r) => r.id);
+    if (eleg.length && !escolha.length) { try { uiAlert(t("ed_reg_ramos_nenhum")); } catch (e) {} return; }
+    item.ramosEscolhidos = escolha;
+  }
   const depois = regDepois;
   regDepois = null;
   $("dlgRegistro").close();
@@ -1958,7 +2025,24 @@ function edMarcar(i, estado, detalhe, semRender) {
     try { reg("ERRO", "registro sem edital dono: " + i.nome, String(i.edital)); }
     catch (e) {}
   }
-  anotarDiario(i, estado || "pendente", Object.assign({}, detalhe || {}, { rm: edUltimasMudancasRamos }));
+  /* o tempo do registro se reparte entre os ramos tocados, pelo peso de cada um */
+  let rm = edUltimasMudancasRamos;
+  const minTotal = detalhe && detalhe.minutos;
+  if (rm && rm.length && minTotal && estado) {
+    const ramosTocados = rm.filter((x) => x.id !== "_topo");
+    const pesos = ramosTocados.map((x) => { const r = (i.ramos || []).find((y) => y.id === x.id); return r ? r.w : 1; });
+    const soma = pesos.reduce((a, b) => a + b, 0) || 1;
+    /* o último ramo leva o RESTO: a soma das partes fecha sempre no total registrado */
+    let acum = 0;
+    rm = rm.map((x) => {
+      const k = ramosTocados.indexOf(x);
+      if (k < 0) return x;
+      const m = k === ramosTocados.length - 1 ? minTotal - acum : Math.round(minTotal * pesos[k] / soma);
+      acum += m;
+      return Object.assign({}, x, { m });
+    });
+  }
+  anotarDiario(i, estado || "pendente", Object.assign({}, detalhe || {}, { rm }));
   /* Sem pesos, o registro dizia "peso undefined×undefined" — pior que não
    * dizer nada, porque parece dado e não é. */
   const temPeso = i.disciplinaPeso != null && i.peso != null;
@@ -3390,6 +3474,15 @@ function edIniciar() {
     regPintarFormas();
     regPintarQuestoes();
     regPintarBotoes();
+    if (regAtual && regAtual.ramos) {
+      regRamosIniciar(regAtual);
+      if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
+    }
+  };
+  if ($("btnRegRamosTodos")) $("btnRegRamosTodos").onclick = () => {
+    if (!regAtual || !regAtual.ramos) return;
+    regRamosSel = new Set(regAtual.ramos.filter(regRamosElegivel).map((r) => r.id));
+    regRamosPintar(regAtual, true);
   };
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";

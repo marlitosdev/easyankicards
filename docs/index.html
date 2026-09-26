@@ -3993,6 +3993,12 @@ body.split-lj{overflow:hidden}
   background:var(--campo);color:var(--texto);font-size:13px}
 .reg-lin-col{font-size:12.5px}
 .reg-formas{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.reg-ramos{display:flex;flex-direction:column;gap:3px;margin-top:6px;max-height:34vh;overflow:auto}
+.reg-ramo-lin{display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid var(--borda);border-radius:8px;cursor:pointer}
+.reg-ramo-nome{flex:1 1 auto;font-size:12.5px;font-weight:600}
+.reg-ramo-est{font-size:11px;color:var(--sutil);white-space:nowrap}
+.reg-ramo-indisp{opacity:.55;cursor:default}
+.reg-ramos-acoes{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
 .reg-forma{all:unset;cursor:pointer;padding:6px 11px;border-radius:8px;font-size:11.5px;
   font-weight:600;border:1px solid var(--borda);color:var(--sutil);background:var(--campo)}
 .reg-forma.ativa{background:var(--roxo,#8b5cf6);border-color:transparent;color:#fff}
@@ -5227,6 +5233,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgRegistro" class="ui-modal">
   <h3 data-i18n="ed_reg_tit"></h3>
   <div class="reg-topico"><b id="regTitulo"></b><div class="nota" id="regSub"></div></div>
+  <!-- Tópico COM ramos: o que foi estudado/revisado, ramo a ramo -->
+  <div class="reg-lin-col" id="regRamosBloco" hidden>
+    <span id="regRamosRot"></span>
+    <span class="mat-f-dica" data-i18n="ed_reg_ramos_dica"></span>
+    <div class="reg-ramos" id="regRamos"></div>
+    <div class="reg-ramos-acoes">
+      <button type="button" class="btn-min" id="btnRegRamosTodos" data-i18n="ed_reg_ramos_todos" data-i18n-title="ed_reg_ramos_todos_tip"></button>
+      <span class="nota" id="regRamosResumo"></span>
+    </div>
+  </div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_min"></span>
     <div class="reg-tempo">
       <input type="range" id="regMinSlider" min="5" max="240" step="5" value="60">
