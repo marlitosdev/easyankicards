@@ -2653,6 +2653,64 @@ async function testes() {
       a.$("btnDomX").onclick();
     }
 
+    /* R71: EVOLUCAO do dominio no tempo (retrato diario, coluna semanal, diferenca) */
+    {
+      const { a, ed } = MT();
+      const mapa = (v, r, c) => ({ resumo: { total: 100, distribuicao: { verde: v, amarelo: 0, azul: 0, vermelho: r, cinza: c } },
+        disciplinas: [{ nome: "D1", pesoPct: 60, distribuicao: { verde: v * 0.6, amarelo: 0, azul: 0, vermelho: 0, cinza: 60 - v * 0.6 } }, { nome: "D2", pesoPct: 40, distribuicao: { verde: 0, amarelo: 0, azul: 0, vermelho: r, cinza: 40 - r } }] });
+      const s1 = a.domSnapDe(mapa(10, 5, 85), "e1", 1, "2026-09-01");
+      ok(s1.d === "2026-09-01" && s1.ed === "e1" && s1.f === 1 && s1.dist.verde === 10 && s1.dist.cinza === 85 && s1.discs.length === 2 && s1.discs[0].n === "D1" && s1.discs[0].verde === 10, "R71a o retrato guarda so' percentuais: total e por disciplina (verde de D1 = 10% do peso dela): " + JSON.stringify(s1.discs[0]));
+      ok(a.domSnapDe({ resumo: { total: 0, distribuicao: {} }, disciplinas: [] }, "e1", 1, "2026-09-01") === null, "R71b mapa vazio nao gera retrato");
+      let lista = a.domSnapsGravar([], s1);
+      lista = a.domSnapsGravar(lista, a.domSnapDe(mapa(20, 5, 75), "e1", 1, "2026-09-01"));
+      ok(lista.length === 1 && lista[0].dist.verde === 20, "R71c no mesmo dia, edital e fase o retrato e' SUBSTITUIDO (vale o ultimo estado do dia)");
+      lista = a.domSnapsGravar(lista, a.domSnapDe(mapa(20, 5, 75), "e2", 1, "2026-09-01"));
+      lista = a.domSnapsGravar(lista, a.domSnapDe(mapa(20, 5, 75), "e1", 2, "2026-09-01"));
+      ok(lista.length === 3, "R71d edital e fase diferentes guardam retratos separados");
+      const muitos = Array.from({ length: 12 }, (_, i) => a.domSnapDe(mapa(i, 0, 100 - i), "e1", 1, "2026-01-" + String(i + 10)));
+      const cortada = muitos.reduce((l, x) => a.domSnapsGravar(l, x, 5), []);
+      ok(cortada.length === 5 && cortada[0].d === "2026-01-17" && cortada[4].d === "2026-01-21", "R71e o limite descarta os retratos MAIS ANTIGOS");
+      ok(a.domSegunda("2026-09-27") === "2026-09-21" && a.domSegunda("2026-09-21") === "2026-09-21" && a.domSegunda("2026-09-28") === "2026-09-28", "R71f a semana comeca na segunda-feira (domingo 27 ainda e' da semana de 21)");
+      /* serie semanal: o ultimo retrato de cada semana */
+      const dias = ["2026-09-01", "2026-09-03", "2026-09-08", "2026-09-10", "2026-09-15", "2026-09-27", "2026-09-28"];
+      const todos = dias.map((d, i) => a.domSnapDe(mapa(i * 10, 0, 100 - i * 10), "e1", 1, d));
+      const serie = a.domSerie(todos, "e1", 1);
+      ok(serie.length === 5 && serie[0].d === "2026-09-03" && serie[1].d === "2026-09-10" && serie[3].d === "2026-09-27" && serie[4].d === "2026-09-28", "R71g uma coluna por semana, com o ULTIMO retrato dela: " + serie.map((x) => x.d).join(","));
+      ok(a.domSerie(todos, "e1", 1, 2).length === 2 && a.domSerie(todos, "e1", 1, 2)[1].d === "2026-09-28" && a.domSerie(todos, "outro", 1).length === 0 && a.domSerie(todos, "e1", 2).length === 0, "R71h o limite de colunas guarda as mais recentes; outro edital ou fase nao mistura");
+      /* referencia e diferenca */
+      ok(a.domReferencia(todos, "e1", 1, "2026-09-28", 28) && a.domReferencia(todos, "e1", 1, "2026-09-28", 28).d === "2026-09-01", "R71i sem retrato com 28 dias, usa o MAIS ANTIGO desde que tenha 6+ dias de diferenca");
+      ok(a.domReferencia(todos, "e1", 1, "2026-09-05", 28) === null || a.domReferencia(todos, "e1", 1, "2026-09-05", 28).d === "2026-09-01", "R71j historia curta demais (4 dias) nao serve de referencia");
+      const bom = a.domReferencia(todos, "e1", 1, "2026-09-10", 7);
+      ok(bom && bom.d === "2026-09-03", "R71k com historia suficiente pega o retrato mais recente que ja tenha os dias pedidos: " + (bom && bom.d));
+      const dl = a.domDelta(todos[6], todos[0]);
+      ok(dl.total.verde === 60 && dl.total.cinza === -60 && dl.desde === "2026-09-01" && dl.disciplinas.D1.verde === 60 && dl.disciplinas.D2.vermelho === 0, "R71l a diferenca e' em PONTOS percentuais (verde +60, cinza -60), por disciplina tambem: " + JSON.stringify(dl.total));
+      ok(a.domDelta(null, todos[0]) === null && a.domDelta(todos[0], null) === null, "R71m sem um dos dois retratos nao ha diferenca");
+      /* guardar no navegador e tirar o retrato de hoje sozinho */
+      a.domSnapsSalvar([]);
+      const n1 = a.domSnapGarantirTodos();
+      const guardados = a.domSnapsLer();
+      ok(n1 >= 1 && guardados.length === n1 && guardados.every((x) => x.d === a.domHojeISO() && x.f === 1), "R71n ao abrir o app o retrato de hoje e' tirado SOZINHO (1a fase) para os editais ativos: " + n1);
+      ok(a.domSnapGarantirTodos() === 0 && a.domSnapsLer().length === guardados.length, "R71o so' uma vez por dia: chamar de novo nao repete");
+      /* a tela */
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(["dom-evo", "dom-evo-resumo", "dom-evo-graf", "dom-evo-col", "dom-evo-pilha", "dom-evo-seg", "dom-evo-dia", "dom-evo-disc"].every((c) => html.indexOf("." + c) >= 0), "R71p as classes do grafico tem CSS");
+      a.gerAbrir();
+      a.$("btnGerDominio").onclick();
+      const evo = () => achar(a.$("domCorpo"), (e) => cls(e, "dom-evo"))[0];
+      ok(evo() && /guardado sozinho|Volte em alguns dias/.test(evo().textContent) && achar(evo(), (e) => cls(e, "dom-evo-col")).length === 0, "R71q com um retrato so', a tela explica que a curva comeca agora");
+      /* com historia: coloca retratos antigos do edital aberto e repinta */
+      const edId = a.$("domEdital").value;
+      const hist = [["2026-08-10", 5], ["2026-08-24", 10], ["2026-09-07", 20]].map(([d, v]) => a.domSnapDe(mapa(v, 2, 98 - v), edId, 1, d));
+      a.domSnapsSalvar(a.domSnapsLer().concat(hist));
+      a.$("btnDomX").onclick(); a.$("btnGerDominio").onclick();
+      const cols = achar(evo(), (e) => cls(e, "dom-evo-col"));
+      ok(cols.length === 4, "R71r a tela desenha uma coluna por semana (3 antigas + hoje): " + cols.length);
+      const segs = achar(cols[0], (e) => cls(e, "dom-evo-seg"));
+      ok(segs.length === 5 && segs.every((x) => /dom-n-/.test(x.className)) && Math.abs(segs.reduce((x, e) => x + parseFloat(e.style.height), 0) - 100) < 0.5, "R71s cada coluna e' uma pilha de 5 niveis que soma 100%");
+      ok(/Desde \d\d\/\d\d\/2026:/.test(evo().textContent) && /verde [+-]?[\d,]+ pt/.test(evo().textContent), "R71t o resumo diz a mudanca em pontos desde o retrato de referencia: " + evo().textContent.slice(0, 120));
+      a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

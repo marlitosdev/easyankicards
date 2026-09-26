@@ -4318,6 +4318,17 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-chip-alerta{border-color:#f0ad4e;color:#f0ad4e;font-weight:700}
 .dom-chip-fraco{opacity:.65;font-style:italic}
 .dom-herdado{border-style:dashed}
+.dom-evo{margin:10px 0}
+.dom-evo h4{margin:0 0 4px}
+.dom-evo-resumo{font-size:13px;margin:2px 0 6px}
+.dom-evo-graf{display:flex;gap:4px;align-items:flex-end;overflow-x:auto;padding:4px 0}
+.dom-evo-col{flex:0 0 28px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.dom-evo-pilha{width:100%;height:90px;display:flex;flex-direction:column-reverse;border-radius:4px;overflow:hidden;background:rgba(127,127,127,.15)}
+.dom-evo-seg{width:100%;flex:0 0 auto}
+.dom-evo-dia{font-size:9.5px;color:var(--sutil)}
+.dom-evo-disc{font-size:11px;font-weight:700;white-space:nowrap}
+.dom-evo-sobe{color:#39b56b}
+.dom-evo-desce{color:#ff6b66}
 .dom-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
 .dom-filtro{all:unset;box-sizing:border-box;cursor:pointer;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--borda);background:rgba(127,127,127,.1)}
 .dom-filtro.ativa{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
@@ -8587,6 +8598,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cobertura-cartoes.js"></script>
 <script src="dominio-assunto.js"></script>
 <script src="dominio-ui.js"></script>
+<script src="dominio-evolucao.js"></script>
 <script src="banca-alvo.js"></script>
 <script src="horas-assunto.js"></script>
 <script src="ramos.js"></script>
