@@ -1,5 +1,5 @@
 /* ===================================================================
- * ELEVAR CARTÕES ANTIGOS AO PADRÃO
+ * MELHORAR CARTÕES (antes "elevar ao padrão" + revisão manual: uma ferramenta só)
  *
  * Medido num baralho real: verso com menos de 100 caracteres em 759 de
  * 843 cartões, só 16% citando artigo, cloze sem dica e "pergunta+resposta"
@@ -899,7 +899,8 @@ function ceAbrir(opc) {
 
 if (typeof document !== "undefined" && $("btnCartElevar")) {
   $("btnCartElevar").onclick = () => ceAbrir();
-  if ($("btnBancaElevar")) $("btnBancaElevar").onclick = () => ceAbrir();
+  /* na bancada o "Melhorar cartões" já abre só nos cartões dela (onde a revisão manual antiga agia) */
+  if ($("btnBancaElevar")) $("btnBancaElevar").onclick = () => ceAbrir({ escopo: "bancada" });
   if ($("ceObjetivo")) $("ceObjetivo").onchange = () => { if (!ceTrocarObjetivo($("ceObjetivo").value)) $("ceObjetivo").value = ceObjetivo; };
   if ($("ceEscopo")) $("ceEscopo").onchange = () => { if (!ceMudarFiltro("escopo", $("ceEscopo").value)) $("ceEscopo").value = ceEscopo; };
   if ($("ceBusca")) $("ceBusca").oninput = () => { if (!ceMudarFiltro("busca", $("ceBusca").value)) $("ceBusca").value = ceBusca; };

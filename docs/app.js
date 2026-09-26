@@ -29,18 +29,13 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.100.0";
+const VERSAO = "17.0.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
 let editando = null;
 let cardDivs = [];            // [{line, div}] da última renderização
 let respostasFechadas = new Set();  // por padrão TODOS mostram a resposta
-let marcados = new Set();     // chaves de cartões marcados para revisão
-let modoRevisao = false;      // barra de revisão visível
-let revisaoSnapshot = null;   // texto do editor ao ENTRAR (para cancelar)
-let revisados = new Set();     // frentes de cartões já revisados (verde, persistente)
-let ocultosRevisao = 0;        // quantos o filtro "ocultar já revisados" escondeu
 
 /* ===================================================================
  * GAVETA DE RECORTES  (v8.36)
@@ -1334,23 +1329,6 @@ function renderCorpoCartao(div, c) {
 
 function chave(c) { return c.line + "|" + c.front; }
 
-/* A marca "já revisado" precisa sobreviver a edições e ao recarregar a
- * página, então NÃO pode depender do número da linha: usa só a frente,
- * normalizada. É guardada no navegador (eac_revisados). */
-function chaveRev(c) {
-  return (c.front || "").toLowerCase().replace(/\s+/g, " ").trim();
-}
-function carregarRevisados() {
-  try {
-    const g = JSON.parse(localStorage.getItem("eac_revisados") || "[]");
-    return new Set(Array.isArray(g) ? g : []);
-  } catch (e) { return new Set(); }
-}
-function salvarRevisados() {
-  try { guardar("eac_revisados", JSON.stringify([...revisados])); }
-  catch (e) {}
-}
-
 /* ==================================================================
  * HISTÓRICO DO TEXTO — a rede que faltava
  *
@@ -1583,9 +1561,6 @@ function parseAtual() {
   return parseText($("editor").value, []);
 }
 
-/* recupera as marcas de "já revisado" da sessão anterior */
-revisados = carregarRevisados();
-
 function reescreverEditor(cards, warnings) {
   let texto = cards.map(cardToLine).join("\n\n");
   if (warnings && warnings.length)
@@ -1608,16 +1583,7 @@ function preview() {
   box.classList.toggle("duas",
     $("chk2col").checked && matchMedia("(min-width:760px)").matches);
 
-  const filtrando = $("chkFiltro") && $("chkFiltro").checked;
-  const ocultandoRev = modoRevisao && $("chkOcultarRev") && $("chkOcultarRev").checked;
-  ocultosRevisao = 0;
   r.cards.forEach((c, idx) => {
-    if (filtrando && !marcados.has(chave(c))) return;   // mostra só marcados
-    // esconde o que já passou por uma rodada de revisão (a marca verde),
-    // para sobrar na tela apenas o que ainda não foi conferido
-    if (ocultandoRev && revisados.has(chaveRev(c)) && !marcados.has(chave(c))) {
-      ocultosRevisao++; return;
-    }
     const div = document.createElement("div");
     div.className = "card" + (c.issues.length ? " suspeito" : "")
 ;
@@ -1628,30 +1594,7 @@ function preview() {
     const sp = document.createElement("span");
     sp.className = "titulo"; sp.textContent = titulo;
     cab.append(sp);
-    // durante a revisão: checkbox "marcar" + selo de texto (só visual)
-    if (modoRevisao) {
-      const lblR = document.createElement("label");
-      lblR.className = "chk-rev";
-      const chkR = document.createElement("input");
-      chkR.type = "checkbox"; chkR.checked = marcados.has(chave(c));
-      chkR.onchange = () => {
-        if (chkR.checked) { marcados.add(chave(c)); revisados.delete(chaveRev(c)); salvarRevisados(); }
-        else marcados.delete(chave(c));
-        atualizarContagemRevisao();
-        preview();
-      };
-      lblR.append(chkR, document.createTextNode(t("review_mark")));
-      cab.append(lblR);
-    }
     div.append(cab);
-    if (modoRevisao && (marcados.has(chave(c)) || revisados.has(chaveRev(c)))) {
-      const rev = revisados.has(chaveRev(c));
-      const selo = document.createElement("div");
-      selo.className = "card-badge-rev " + (rev ? "card-badge-rev-ok" : "card-badge-sel");
-      selo.textContent = "● " + t(rev ? "badge_reviewed" : "badge_selected");
-      div.append(selo);
-    }
-
     if (editando === chave(c)) {
       c.kind === "mc" ? montarEdicaoMC(div, c, r, idx) : montarEdicao(div, c, r, idx);
     } else {
@@ -2279,167 +2222,6 @@ function uiPrompt(rotulo, valorInicial) {
 }
 
 
-/* --------------------- revisão por marcação ------------------------- */
-
-function atualizarContagemRevisao() {
-  // link de limpar histórico: só aparece quando há histórico para limpar
-  const lim = $("btnLimparRevisados");
-  if (lim) lim.style.display = revisados.size ? "" : "none";
-  const el = $("revContagem");
-  if (!el) return;
-  let txt = marcados.size ? t("marked_count", { n: marcados.size }) : t("marked_none");
-  if (ocultosRevisao) txt += " · " + t("rev_hidden_count", { n: ocultosRevisao });
-  el.textContent = txt;
-}
-
-/* Marca todos os cartões do resultado atual que atendem a um critério. */
-function marcarPor(criterio) {
-  if (!ultimoResult) return;
-  ultimoResult.cards.forEach((c) => { if (criterio(c)) marcados.add(chave(c)); });
-  atualizarContagemRevisao();
-  preview();
-}
-
-// critérios objetivos (forma) + risco de conteúdo (números/datas/artigos)
-const CRIT = {
-  curtos:  (c) => (c.front + " " + (c.back || "")).replace(/\{\{c\d+::|\}\}/g, "").trim().length < 25,
-  semResp: (c) => c.kind !== "cloze" && c.kind !== "mc" && !(c.back || "").trim(),
-  semPerg: (c) => c.kind === "basic" && !/\?\s*$/.test((c.front || "").trim()),
-  longos:  (c) => (c.front + (c.back || "")).length > 220,
-  risco:   (c) => /\b(art\.?|artigo|s[úu]mula|lei|§|inciso)\b|\d{2,}|\d+\s*%|R\$|\b(19|20)\d{2}\b/i.test(c.front + " " + (c.back || "") + " " + (c.more || "")),
-};
-
-function marcarDuplicados() {
-  if (!ultimoResult) return;
-  const vistos = {};
-  ultimoResult.cards.forEach((c) => {
-    const k = c.front.toLowerCase().trim();
-    if (vistos[k]) { marcados.add(chave(c)); marcados.add(vistos[k]); }
-    else vistos[k] = chave(c);
-  });
-  atualizarContagemRevisao();
-  preview();
-}
-
-/* Copia os cartões marcados no formato do texto (pronto para colar numa IA). */
-/* Cartões marcados como texto (para embutir no prompt de revisão). */
-function textoMarcados() {
-  return ultimoResult.cards.filter((c) => marcados.has(chave(c)))
-    .map(cardToLine).join("\n\n");
-}
-
-let revCopyTipo = "rev_prompt_full";
-function montarRevCopy() {
-  const cards = textoMarcados();
-  $("revCopyTexto").value = t(revCopyTipo).replace("{cards}", cards);
-  $("btnRevTabFull").classList.toggle("ativa", revCopyTipo === "rev_prompt_full");
-  $("btnRevTabShort").classList.toggle("ativa", revCopyTipo === "rev_prompt_short");
-  mostrarTamanho("revCopyTam", $("revCopyTexto").value);
-  $("revCopyDone").textContent = "";
-}
-
-/* Abre a janela EDITÁVEL com o prompt + cartões marcados. */
-function copiarMarcados() {
-  if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
-  revCopyTipo = "rev_prompt_full";
-  montarRevCopy();
-  abrirModal("dlgRevCopiar");
-}
-$("btnRevTabFull").onclick = () => { revCopyTipo = "rev_prompt_full"; montarRevCopy(); };
-$("btnRevTabShort").onclick = () => { revCopyTipo = "rev_prompt_short"; montarRevCopy(); };
-$("btnRevCopyFechar").onclick = () => $("dlgRevCopiar").close();
-$("btnRevCopyCopiar").onclick = async () => {
-  try {
-    await navigator.clipboard.writeText($("revCopyTexto").value);
-    $("revCopyDone").textContent = t("revcopy_done");   // mensagem: copiado + próximo passo
-    toast("toast_copied_marked");
-  } catch (e) { uiAlert(t("paste_denied")); }
-};
-
-// elementos que ficam TRAVADOS durante a revisão (só o painel de revisão fica ativo)
-/* Travados durante a revisão: só o que ALTERA o conteúdo. Controles de
- * visualização (colunas, estilo) continuam livres — travá-los era um bug. */
-const TRAVAR = ["btnNovoCartao","btnMCRapido","btnPromptIA","btnNormalizar",
-  "btnColarMais","btnDesfazerColagem","btnSelecionarTudo","btnCopiarTudo",
-  "btnApagarTudo","btnTxt","btnApkg","tituloGeral","btnApkgImport","btnImportar"];
-
-function travarFuncoes(travar) {
-  document.body.classList.toggle("em-revisao", travar);
-  TRAVAR.forEach((id) => { const el = $(id); if (el) el.disabled = travar; });
-  $("editor").readOnly = travar;   // editor só-leitura durante a revisão
-}
-
-function entrarRevisao() {
-  modoRevisao = true;
-  revisaoSnapshot = $("editor").value;   // ponto de restauração p/ cancelar
-  marcados.clear();   // "já revisado" NÃO é apagado: é o histórico entre rodadas
-  $("barraRevisao").style.display = "";
-  $("btnRevisar").style.display = "none";
-  $("btnRevFinalizar").style.display = "";
-  $("btnRevCancelar").style.display = "";
-  travarFuncoes(true);
-  atualizarContagemRevisao();
-  preview();
-  // se já houve rodadas anteriores, avisa que dá para esconder o que já foi
-  // conferido — é o que deixa a tela só com o que ainda falta
-  const jaRev = parseAtual().cards.filter((c) => revisados.has(chaveRev(c))).length;
-  toast(jaRev ? t("toast_review_started_hint", { n: jaRev }) : t("toast_review_started"));
-}
-
-function sairRevisao() {
-  modoRevisao = false;
-  revisaoSnapshot = null;
-  marcados.clear();
-  $("chkFiltro").checked = false;
-  $("chkOcultarRev").checked = false;
-  $("barraRevisao").style.display = "none";
-  $("btnRevisar").style.display = "";
-  $("btnRevFinalizar").style.display = "none";
-  $("btnRevCancelar").style.display = "none";
-  travarFuncoes(false);
-  preview();
-}
-
-/* A REVISÃO MANUAL VIROU O "MELHORAR CARTÕES" (o Elevar): o botão antigo agora leva para lá, dizendo isso. Por uma
- * versão a revisão antiga ainda pode ser escolhida; depois ela sai. */
-async function revisarCartoes() {
-  const v = await uiEscolha(t("rev_migrou"), [
-    { rot: t("rev_migrou_novo"), valor: "novo", classe: "btn-verde" },
-    { rot: t("rev_migrou_antigo"), valor: "antigo", classe: "btn-cinza" },
-  ]);
-  if (v === "antigo") { entrarRevisao(); return "antigo"; }
-  if (v === "novo") { ceAbrir({ escopo: "bancada" }); return "novo"; }
-  return "";
-}
-$("btnRevisar").onclick = revisarCartoes;
-$("btnRevFinalizar").onclick = () => { sairRevisao(); toast("toast_review_finished"); };
-$("btnRevCancelar").onclick = async () => {
-  if (!(await uiConfirm(t("review_cancel_confirm")))) return;
-  if (revisaoSnapshot !== null) { $("editor").value = revisaoSnapshot; autoSalvar(); }
-  sairRevisao();
-  toast("toast_review_cancelled");
-};
-$("selTodos").onclick = () => marcarPor(() => true);
-$("selCurtos").onclick = () => marcarPor(CRIT.curtos);
-$("selSemResp").onclick = () => marcarPor(CRIT.semResp);
-$("selSemPerg").onclick = () => marcarPor(CRIT.semPerg);
-$("selLongos").onclick = () => marcarPor(CRIT.longos);
-$("selRisco").onclick = () => marcarPor(CRIT.risco);
-$("selDup").onclick = marcarDuplicados;
-$("selLimpar").onclick = () => { marcados.clear(); atualizarContagemRevisao(); preview(); };
-$("chkFiltro").onchange = () => preview();
-$("chkOcultarRev").onchange = () => { preview(); atualizarContagemRevisao(); };
-$("btnLimparRevisados").onclick = async () => {
-  if (!revisados.size) { uiAlert(t("rev_clear_none")); return; }
-  if (!(await uiConfirm(t("rev_clear_confirm", { n: revisados.size })))) return;
-  revisados.clear(); salvarRevisados();
-  reg("REVISAO", "histórico de 'já revisado' apagado");
-  $("chkOcultarRev").checked = false;
-  preview(); atualizarContagemRevisao();
-  toast("toast_rev_cleared");
-};
-$("btnCopiarMarcados").onclick = copiarMarcados;
-
 /* Remove o BLOCO de um cartão (título @ acima + linha + explicação +)
  * do array de linhas, sem tocar nos vizinhos. */
 function removerBlocoCartao(linhas, linhaCartao) {
@@ -2451,213 +2233,6 @@ function removerBlocoCartao(linhas, linhaCartao) {
   if (ini - 1 >= 0 && linhas[ini - 1].trim().startsWith("@")) ini--;
   linhas.splice(ini, fim - ini + 1);
 }
-
-/* Fecha o ciclo com a IA: cola a correção, REMOVE os cartões marcados e
- * insere a versão corrigida no lugar — sem duplicar nem sobrar os antigos. */
-async function substituirMarcados() {
-  if (!ultimoResult || !marcados.size) { uiAlert(t("marked_none")); return; }
-  // tenta pré-preencher com a área de transferência; se não der, abre vazio
-  // para o usuário colar (Ctrl+V) e editar dentro do próprio painel.
-  let correcao = "";
-  try { correcao = await navigator.clipboard.readText(); } catch (e) { correcao = ""; }
-  abrirColarRev(correcao || "");
-}
-
-/* Painel temporário: mostra a correção colada, faz as MESMAS críticas do
- * editor (linhas ignoradas, cartões a verificar, marcadores, título grudado,
- * tags que são texto), com "Ver no texto" e "Corrigir" — e só libera o
- * "Finalizar" quando o texto está sem erros. */
-let colarRevMarcados = null;   // linhas dos marcados no editor (para remover)
-
-function abrirColarRev(correcao) {
-  colarRevMarcados = ultimoResult.cards
-    .filter((c) => marcados.has(chave(c))).map((c) => c.line).sort((a, b) => b - a);
-  $("colarRevTexto").value = correcao.replace(/^\s+/, "");
-  $("colarRevTexto").placeholder = t("colarrev_ph");
-  analisarColarRev();
-  abrirModal("dlgColarRev");
-  setTimeout(() => $("colarRevTexto").focus(), 60);
-}
-
-/* Corrige um trecho e reanalisa (usada pelos botões do painel). */
-function corrigirColarRev(fn) {
-  $("colarRevTexto").value = corrigirComSeguranca(fn, $("colarRevTexto").value);
-  analisarColarRev();
-  toast("toast_fixed");
-}
-
-/* Leva à linha dentro do textarea do painel. */
-function irLinhaColarRev(n) {
-  const ta = $("colarRevTexto");
-  const linhas = ta.value.split("\n");
-  if (n < 1 || n > linhas.length) return;
-  let ini = 0; for (let i = 0; i < n - 1; i++) ini += linhas[i].length + 1;
-  ta.focus(); ta.setSelectionRange(ini, ini + linhas[n - 1].length);
-}
-
-function renderNumsColarRev() {
-  const ta = $("colarRevTexto"), nums = $("colarRevNums");
-  if (!ta || !nums) return;
-  const n = ta.value.split("\n").length;
-  let html = "";
-  for (let i = 1; i <= n; i++) html += i + "\n";
-  nums.textContent = html;
-  nums.scrollTop = ta.scrollTop;
-}
-
-function analisarColarRev() {
-  renderNumsColarRev();
-  const raw = $("colarRevTexto").value;
-  const r = parseText(raw, []);
-  const box = $("colarRevSug");
-  box.innerHTML = "";
-  const itens = [];
-  (r.warnLines || []).forEach((n, i) =>
-    itens.push({ dot: "dot-red", txt: r.warnings[i], linha: n }));
-  r.cards.filter((c) => c.issues.length).forEach((c) => {
-    const item = { dot: "dot-org", txt: t("card_line") + " " + c.line + ": " + c.issues[0], linha: c.line };
-    // avisos de "alternativa longa na lacuna" têm correção automática
-    if (temLacunaOpcoesLongas(cardToLine(c))) {
-      item.fix = corrigirLacunaOpcoesLongas; item.fixTxt = t("fix_lacuna_ops");
-    }
-    itens.push(item);
-  });
-  let correcao = null, critTxt = t("crit_bullets");
-  if (temPromptVazado(raw))
-    itens.push({ dot: "dot-red", txt: t("crit_prompt_leak"),
-                 fixTxt: t("fix_prompt_leak"), fix: corrigirPromptVazado });
-  if (temMaisRepetido(raw))
-    itens.push({ dot: "dot-org", txt: t("crit_mais_rep"),
-                 fixTxt: t("fix_mais_rep"), fix: corrigirMaisRepetido });
-  if (temPromptVazado(raw)) { correcao = corrigirPromptVazado; critTxt = t("crit_prompt_leak"); }
-  else if (temMaisRepetido(raw)) { correcao = corrigirMaisRepetido; critTxt = t("crit_mais_rep"); }
-  else if (temClozeRepetida(raw)) { correcao = corrigirClozeRepetida; critTxt = t("crit_cloze_rep"); }
-  else if (temTagsNaExplicacao(raw)) { correcao = corrigirTagsNaExplicacao; critTxt = t("crit_tags_in_more"); }
-  else if (temTituloGrudado(raw)) { correcao = corrigirTituloGrudado; critTxt = t("crit_title_glued"); }
-  else if (temOrfaosExplicacao(raw)) { correcao = corrigirOrfaosExplicacao; critTxt = t("crit_orphans"); }
-  else if (temLacunaOpcoesLongas(raw)) { correcao = corrigirLacunaOpcoesLongas; critTxt = t("crit_lacuna_ops"); }
-  else if (temTagsQueSaoTexto(raw)) { correcao = corrigirTagsQueSaoTexto; critTxt = t("crit_pairs_tags"); }
-  else if (temMarcadores(raw)) { correcao = removerMarcadoresTexto; critTxt = t("crit_bullets"); }
-  if (correcao) itens.push({ dot: "dot-org", txt: critTxt, fixTxt: t("fix_now"), fix: correcao });
-
-  itens.slice(0, 8).forEach((it) => {
-    const div = document.createElement("div");
-    div.className = "sug";
-    const dot = document.createElement("span"); dot.className = "dot " + it.dot;
-    const sp = document.createElement("span"); sp.textContent = it.txt;
-    /* Quem resolve cada coisa. A lista misturava dois mundos: o que o app
-     * arruma sozinho (formato) e o que só a IA arruma (dividir um cartão
-     * longo, encurtar alternativa). Sem essa marca o usuário clica em
-     * "Corrigir" esperando que resolva tudo — e conclui que está quebrado. */
-    const daIA = !(it.fix || it.acao);
-    const quem = document.createElement("span");
-    quem.className = "sug-quem " + (daIA ? "quem-ia" : "quem-app");
-    quem.textContent = t(daIA ? "quem_ia" : "quem_app");
-    if (daIA) {
-      /* O crachá diz QUEM resolve; o ícone diz COMO. Passar o mouse mostra
-       * a dica; tocar (celular, onde não existe "passar o mouse") abre o
-       * mesmo texto num aviso. */
-      const info = document.createElement("button");
-      info.className = "sug-info";
-      info.type = "button";
-      info.textContent = "?";
-      info.title = t("quem_ia_dica");
-      info.setAttribute("aria-label", t("quem_ia_dica"));
-      info.onclick = (e) => { e.stopPropagation(); uiAlert(t("quem_ia_dica")); };
-      quem.append(info);
-    }
-    div.append(dot, quem, sp);
-    if (it.linha) div.append(botaoMini("goto_error", "btn-cinza", () => irLinhaColarRev(it.linha)));
-    if (it.fix) div.append(botaoMini("fix_now", "btn-azul", () => corrigirColarRev(it.fix)));
-    box.append(div);
-  });
-
-  // pode finalizar? (sem linhas ignoradas e sem cartões a verificar)
-  const problemas = r.warnings.length + r.nSuspicious + (correcao ? 1 : 0);
-  const podeFinalizar = problemas === 0 && r.cards.length > 0;
-  $("btnColarRevFinalizar").disabled = !podeFinalizar;
-  const st = $("colarRevStatus");
-  st.textContent = podeFinalizar ? t("pastepanel_clean") : t("pastepanel_haserr", { n: problemas });
-  st.style.color = podeFinalizar ? "var(--verde)" : "var(--laranja)";
-}
-
-/* Só ao finalizar: remove os marcados e insere a correção; marca os novos
- * cartões como "já revisado" (verde). */
-function finalizarColarRev() {
-  const correcao = $("colarRevTexto").value;
-  const rNovo = parseText(correcao, []);
-  colagemAnterior = { texto: $("editor").value };
-  const linhas = $("editor").value.split("\n");
-  (colarRevMarcados || []).forEach((ln) => removerBlocoCartao(linhas, ln));
-  let base = linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
-  const juntado = base ? base + "\n\n" + correcao.replace(/^\s+/, "") : correcao.replace(/^\s+/, "");
-  $("editor").value = juntado;
-
-  const qtd = (colarRevMarcados || []).length;
-  marcados.clear();
-  // marca os cartões vindos da correção como "já revisado"
-  parseAtual().cards.forEach((c) => {
-    if (rNovo.cards.some((n) => n.front === c.front)) revisados.add(chaveRev(c));
-  });
-  salvarRevisados();
-  $("btnDesfazerColagem").disabled = false;
-  linhaNovaColada = base ? base.split("\n").length + 2 : 1;
-  autoSalvar();
-  $("dlgColarRev").close();
-  atualizarContagemRevisao();
-  preview();
-  irParaLinha(linhaNovaColada);
-  setTimeout(() => { linhaNovaColada = null; }, 2400);
-  toast(t("toast_replaced", { n: qtd }));
-}
-
-$("colarRevTexto").addEventListener("input", analisarColarRev);
-$("colarRevTexto").addEventListener("scroll", () => {
-  $("colarRevNums").scrollTop = $("colarRevTexto").scrollTop;
-});
-$("btnColarRevExpandir").onclick = () => {
-  const w = $("colarRevWrap");
-  const exp = w.classList.toggle("expandido");
-  $("btnColarRevExpandir").textContent = t(exp ? "panel_collapse" : "panel_expand");
-};
-attachTip($("btnColarRevExpandir"), "tip_panel_expand");
-$("btnColarRevFinalizar").onclick = finalizarColarRev;
-$("btnColarRevFechar").onclick = () => $("dlgColarRev").close();
-/* Fecha o ciclo do "Prompt de correção": o usuário sai daqui com o prompt,
- * vai à IA e volta com o texto corrigido. Este botão troca o conteúdo do
- * painel pela resposta da IA sem precisar selecionar tudo à mão. */
-$("btnColarRevColar").onclick = async () => {
-  let novo = "";
-  try { novo = await navigator.clipboard.readText(); }
-  catch (e) { uiAlert(t("paste_denied_manual")); return; }
-  if (!novo.trim()) { uiAlert(t("paste_empty")); return; }
-  const atual = $("colarRevTexto").value.trim();
-  if (atual && atual !== novo.trim()
-      && !(await uiConfirm(t("pastepanel_replace_confirm")))) return;
-  $("colarRevTexto").value = novo.replace(/^\s+/, "");
-  analisarColarRev();
-  $("colarRevTexto").focus();
-  toast("toast_pasted_fix");
-};
-attachTip($("btnColarRevColar"), "tip_pastepanel_paste");
-
-$("btnColarRevPrompt").onclick = () => abrirPromptCorrecao($("colarRevTexto").value);
-attachTip($("btnColarRevPrompt"), "tip_fixprompt");
-$("btnSubstituirMarcados").onclick = substituirMarcados;
-attachTip($("btnRevisar"), "tip_review_btn");
-attachTip($("selTodos"), "tip_sel_all");
-attachTip($("selCurtos"), "tip_sel_short");
-attachTip($("selSemResp"), "tip_sel_noanswer");
-attachTip($("selSemPerg"), "tip_sel_noquestion");
-attachTip($("selLongos"), "tip_sel_long");
-attachTip($("selDup"), "tip_sel_dup");
-attachTip($("selRisco"), "tip_sel_risky");
-attachTip($("selLimpar"), "tip_sel_clear");
-attachTip($("chkFiltro"), "tip_filter");
-attachTip($("chkOcultarRev"), "tip_hide_reviewed");
-attachTip($("btnLimparRevisados"), "tip_clear_reviewed");
-attachTip($("btnCopiarMarcados"), "tip_copy_marked");
-attachTip($("btnSubstituirMarcados"), "tip_replace_marked");
 
 /* --------------------------- edição inline -------------------------- */
 
@@ -3623,7 +3198,6 @@ $("btnPromptRestaurar").onclick = () => {
 };
 $("btnPromptFechar").onclick = () => $("dlgPrompt").close();
 $("promptTexto").addEventListener("input", () => mostrarTamanho("promptTam", $("promptTexto").value));
-$("revCopyTexto").addEventListener("input", () => mostrarTamanho("revCopyTam", $("revCopyTexto").value));
 $("genTexto").addEventListener("input", () => mostrarTamanho("genTam", $("genTexto").value));
 $("btnPromptCopiar").onclick = async () => {
   await navigator.clipboard.writeText($("promptTexto").value);
@@ -3969,7 +3543,7 @@ window.addEventListener("pywebviewready", () => {
 [["btnSelecionarTudo","select_all"],["btnCopiarTudo","copy_all"],["btnApagarTudo","clear_all"],
  ["btnColarMais","paste_more"],["btnDesfazerColagem","undo_paste"],["btnNovoCartao","tip_new"],
  ["btnMCRapido","tip_mc"],["btnPromptIA","tip_prompt"],["btnApkgImport","tip_apkg_import"],
- ["btnRevisar","tip_review_btn"],["btnNormalizar","normalize_tooltip"],
+ ["btnNormalizar","normalize_tooltip"],
  ["btnTxt","export_txt_tooltip"],["btnApkg","export_apkg_tooltip"],["btnAjuda","help_tooltip"],
  ["chkDestaque","tip_highlight"],["selTema","tip_theme"],["corLetra","tip_textcolor"],
  ["btnCorReset","textcolor_reset"],["selIdioma","tip_lang"],["chk2col","tip_two_cols"],
@@ -4015,7 +3589,6 @@ $("btnApagarTudo").onclick = async () => {
   $("editor").value = "";
   textoAnterior = "";
   respostasFechadas.clear();
-  marcados.clear();
   localStorage.removeItem("eac_texto");
   /* APAGAR TUDO É COMEÇAR DE NOVO — a origem de uma geração anterior (e o
    * convite a colar a resposta dela) não podem sobreviver a essa decisão
@@ -4486,15 +4059,11 @@ let fixOrigem = "editor";      // onde a correção será aplicada
 
 /* Onde está o texto em foco: o painel de colagem, se aberto; senão o editor. */
 function alvoDoTexto() {
-  const noPainel = $("dlgColarRev") && $("dlgColarRev").open;
-  return {
-    onde: noPainel ? "colarRev" : "editor",
-    el: noPainel ? $("colarRevTexto") : $("editor"),
-  };
+  return { onde: "editor", el: $("editor") };
 }
 
 function montarFixPrompt() {
-  const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+  const el = $("editor");
   const raw = (el.value || "").trim();
   const r = parseText(raw, []);
   if (fixModo === "parcial") {
@@ -4680,7 +4249,7 @@ $("btnFixPromptColar").onclick = async () => {
   try { resp = await navigator.clipboard.readText(); }
   catch (e) { uiAlert(t("paste_denied_manual")); return; }
   if (!resp.trim()) { uiAlert(t("paste_empty")); return; }
-  const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+  const el = $("editor");
   limparConferencia();
 
   if (fixModo === "inteiro") {
@@ -4745,7 +4314,7 @@ $("btnFixPromptColar").onclick = async () => {
 
 $("btnFixPromptAplicar").onclick = () => {
   if (!fixPendente) return;
-  const el = fixOrigem === "colarRev" ? $("colarRevTexto") : $("editor");
+  const el = $("editor");
   aplicarTextoCorrigido(el, fixPendente.novo, fixPendente.trechos);
   limparConferencia();
 };
@@ -4765,7 +4334,7 @@ function aplicarTextoCorrigido(el, novo, nTrechos) {
   if (el.id === "editor") {
     $("btnDesfazerColagem").disabled = false;
     autoSalvar(); preview();
-  } else analisarColarRev();
+  }
   $("dlgFixPrompt").close();
   reg("APLICAR", nTrechos ? nTrechos + " trecho(s) substituído(s)" : "texto inteiro substituído",
     antes.cartoesReais + "→" + depois.cartoesReais + " cartões");
@@ -4789,8 +4358,6 @@ const DIAG_MAX = 30000;   // texto muito grande vai cortado, com aviso
  * volta o texto dos cartões e não tinha como perceber a troca. O foco
  * segue o modo. */
 function textoEmFoco() {
-  if ($("dlgColarRev") && $("dlgColarRev").open)
-    return { onde: "painel de colagem", txt: $("colarRevTexto").value };
   if (typeof modoAtual !== "undefined" && modoAtual === "edital")
     return { onde: "bancada do edital", txt: $("editalTexto").value, edital: true };
   return { onde: "bancada de cartões", txt: $("editor").value };

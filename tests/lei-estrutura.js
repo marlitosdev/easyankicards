@@ -296,7 +296,7 @@ async function testes() {
     ok(/a conferir: 4 \(graves: 1\) — /.test(rel) && /divisao_sem_nome 1/.test(rel) && /isolado 1/.test(rel), "G19a e o resumo do que foi apontado: " + rel.split("\n").filter((x) => /a conferir/.test(x)).join("|"));
     ok(/\[divisao_sem_nome\/leve\] linha 12 · art\. 7º/.test(rel) && />\s+12\| CAPÍTULO II/.test(rel) && /\s11\| Art\. 6º/.test(rel) && /\s13\| Art\. 7º/.test(rel), "G19b cada ponto vem com as linhas ao redor, e a linha do ponto marcada com >: " + rel.slice(rel.indexOf("divisao_sem_nome") - 5, rel.indexOf("divisao_sem_nome") + 260));
     ok(/árvore de divisões:/.test(rel) && /LIVRO PRIMEIRO — SISTEMA TRIBUTÁRIO NACIONAL · arts\. 2º a 12 \(12\)/.test(rel) && /\n {8}CAPÍTULO II · arts\. 7º a 12 \(7\)/.test(rel), "G19c e a arvore de divisoes, com a hierarquia: " + rel.slice(rel.indexOf("árvore")));
-    ok(/— Registro \(últimas 60 linhas\)/.test(rel) && /EasyAnkiCards 16\./.test(rel), "G19d com a versao do app e o registro");
+    ok(/— Registro \(últimas 60 linhas\)/.test(rel) && /EasyAnkiCards \d+\.\d+\.\d+/.test(rel), "G19d com a versao do app e o registro");
     ok(!/Mapa e conferência de/.test(api.leiRelatorioFluxo("artigos repetidos")), "G19e o relatorio de OUTRA tela nao leva o mapa");
     ok(typeof api.$("btnLeiRelMapa").onclick === "function" && /Mapa e conferência de/.test(api.leiRelatorioCopiar("mapa e conferência")), "G19f o botao 'copiar relatorio desta tela' existe no mapa e copia");
     /* a nota que veio no lugar do nome aparece no ponto */

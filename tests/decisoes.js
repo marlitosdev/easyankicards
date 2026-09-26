@@ -47,7 +47,7 @@ async function testes() {
     const api = iniciar();
     const id = api.decRegistrar(base());
     const l = api.decLer();
-    ok(l.length === 1 && l[0].id === id && /^\d{4}-\d\d-\d\dT/.test(l[0].q) && /^16\./.test(l[0].v) && l[0].origem === "app" && l[0].feedback === "", "S1 o registro tem id, data, versao do app e os campos padrao: " + JSON.stringify(l[0]).slice(0, 160));
+    ok(l.length === 1 && l[0].id === id && /^\d{4}-\d\d-\d\dT/.test(l[0].q) && /^\d+\.\d+\.\d+$/.test(l[0].v) && l[0].origem === "app" && l[0].feedback === "", "S1 o registro tem id, data, versao do app e os campos padrao: " + JSON.stringify(l[0]).slice(0, 160));
     const guardado = JSON.parse(api.lojaLer("eac_decisoes"));
     ok(guardado.length === 1 && guardado[0].regra === "colagem.cabecalho", "S1a e foi gravado no armazenamento");
     /* cada texto e' limitado */
@@ -132,7 +132,7 @@ async function testes() {
     const linhas = api.decExportar().split("\n");
     ok(linhas.length === 4 && linhas[3] === "", "S8 uma linha por registro mais o cabecalho, terminando em quebra: " + linhas.length);
     const cab = JSON.parse(linhas[0]);
-    ok(cab.tipo === "cabecalho" && cab.registros === 2 && /^16\./.test(cab.app) && cab.regras.length === 2 && !!cab.gerado, "S8a o cabecalho traz versao, total e as estatisticas por regra");
+    ok(cab.tipo === "cabecalho" && cab.registros === 2 && /^\d+\.\d+\.\d+$/.test(cab.app) && cab.regras.length === 2 && !!cab.gerado, "S8a o cabecalho traz versao, total e as estatisticas por regra");
     ok(JSON.parse(linhas[1]).tipo === "decisao" && JSON.parse(linhas[1]).regra === "colagem.grafia" && JSON.parse(linhas[2]).decisao === "recusou", "S8b cada linha e' uma decisao completa em JSON");
     /* limpar zera TAMBEM as contagens do que ja tinha sido dobrado */
     const apiD = iniciar();
