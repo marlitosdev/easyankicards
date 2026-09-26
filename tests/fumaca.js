@@ -642,7 +642,7 @@ function rodar() {
     abrirFoco, fecharFoco, mostrarFoco, blocoMarcado, problemasNavegaveis,
     renderSugestoes, detectoresAtivos, resumoTexto, t, correcaoDeTudo, temLixoIA, corrigirLixoIA,
     cartoesDependentes, cartaoLongo, limiteLongo, problemasDoTexto, MODOS, trocarModo, montarBarraModos, montarDiagnostico,
-    lerEdital, priorizar, montarPlano, edPesosDosRamos, edAcharItemDoTopico, edTopicosPendentes, semanaAtual, semanasAte, edDetectores,
+    lerEdital, priorizar, montarPlano, edEstadoDosRamos, edTempoDosRamos, edRamosRegistrar, edRamosDesfazer, edPesosDosRamos, edAcharItemDoTopico, edTopicosPendentes, semanaAtual, semanasAte, edDetectores,
     temPesosIguais, ritmoDoPlano, agendar, edPintarRitmo,
     panoramaDisciplinas, lacunasCriticas, edMudarPeso, edTrocarVista, edPintarPainel, diagnosticoPlano,
     edConferirColagem, edAplicarColagem, edSimular, edMudarHoras, edMarcar,

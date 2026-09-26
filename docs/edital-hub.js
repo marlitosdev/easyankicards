@@ -415,7 +415,7 @@ function hubPintarAgenda() {
 
   if (linhas.length > HUB_AGENDA_CURTA) {
     const b = document.createElement("button");
-    b.type = "button"; b.className = "ed-abrir";
+    b.type = "button"; b.className = "btn-min ed-abrir";
     b.textContent = hubAgendaAberta ? t("ed_agenda_menos")
       : t("ed_agenda_mais", { n: linhas.length - HUB_AGENDA_CURTA });
     b.onclick = () => { hubAgendaAberta = !hubAgendaAberta; hubPintarAgenda(); };

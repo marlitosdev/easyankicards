@@ -378,6 +378,103 @@ function edPesosDosRamos(ramos) {
   return rs.map((x) => (abs ? x.abs : (x.peso > 0 ? x.peso : 3)));
 }
 
+/* Estado de cada RAMO e do tópico que os contém. O ramo tem progresso PRÓPRIO (chave "tópico›#ramo"); quem não tem
+ * marca própria herda a do tópico (o tópico já estudado antes de ganhar ramos continua estudado — e revisado UMA vez,
+ * não uma por ramo). O tópico só está "feito" quando TODOS os ramos estão; enquanto houver ramo pendente ele segue na
+ * lista de estudo. Devolve o item alterado (item.feito, revisado, estado, quando, dias, parcial + contadores). */
+function edEstadoDosRamos(i, marcaDe, hoje) {
+  const top = marcaDe(i.chave);
+  const agora = hoje !== undefined ? hoje : Date.now();
+  const dias = (d) => (d ? Math.floor((agora - new Date(d + "T00:00:00")) / 86400000) : null);
+  i.ramos.forEach((r) => {
+    const propria = marcaDe(i.chave + "›#" + r.id);
+    const m = propria || top;
+    r.chave = i.chave + "›#" + r.id;
+    r.marcaHerdada = !propria && !!top;
+    r.estado = (m && m.e) || null;
+    r.quando = (m && m.d) || null;
+    r.dias = dias(r.quando);
+    r.feito = r.estado === "feito" || r.estado === "revisado";
+    r.revisado = r.estado === "revisado";
+    r.venceu = r.feito && !r.revisado && (r.dias === null || r.dias >= REV_DIAS);
+  });
+  const N = i.ramos.length;
+  i.ramosTotal = N;
+  i.ramosFeitos = i.ramos.filter((r) => r.feito).length;
+  i.ramosVencidos = i.ramos.filter((r) => r.venceu).length;
+  i.feito = i.ramosFeitos === N;
+  i.revisado = i.ramos.every((r) => r.revisado);
+  i.parcial = i.ramosFeitos > 0 && !i.feito;
+  i.estado = i.revisado ? "revisado" : (i.feito ? "feito" : null);
+  /* a data que conta para a revisão: a do ramo estudado há MAIS tempo e ainda não revisado; sem data = vencido */
+  const naoRev = i.ramos.filter((r) => r.feito && !r.revisado);
+  if (i.feito && !i.revisado) {
+    i.quando = naoRev.some((r) => !r.quando) ? null : naoRev.map((r) => r.quando).sort()[0];
+  } else if (i.revisado) {
+    i.quando = i.ramos.map((r) => r.quando).sort().pop() || null;
+  } else i.quando = null;
+  i.dias = dias(i.quando);
+  return i;
+}
+
+/* Tempo do tópico com ramos: a faixa vale para o tópico de UM ramo só; com N ramos o tempo cresce devagar
+ * (× (1 + log2 N), de 5 em 5 min) e se reparte pelos pesos. A SESSÃO da vez leva os ramos pendentes mais
+ * relevantes que cabem na faixa (pelo menos um); sem pendentes, a sessão é a revisão dos ramos estudados. */
+function edTempoDosRamos(i, faixaMin) {
+  const N = i.ramos.length;
+  const arred = (x) => Math.max(5, Math.round(x / 5) * 5);
+  const total = arred(faixaMin * (1 + Math.log2(N)));
+  i.ramos.forEach((r) => { r.minutos = Math.max(10, arred(total * r.share)); });
+  i.minutos = total;
+  const pend = i.ramos.filter((r) => !r.feito);
+  let sessao = [], soma = 0;
+  if (pend.length) {
+    pend.forEach((r) => { if (!sessao.length || soma + r.minutos <= faixaMin) { sessao.push(r); soma += r.minutos; } });
+  } else {
+    sessao = i.ramos.filter((r) => r.venceu);
+    soma = sessao.reduce((a, r) => a + r.minutos, 0);
+    if (sessao.length) i.minutos = soma;
+  }
+  i.sessao = sessao.map((r) => r.id);
+  i.sessaoNomes = sessao.map((r) => r.nome);
+  i.minutosSessao = soma;
+  i.proximo = sessao.length ? sessao[0].nome : "";
+  return i;
+}
+
+/* Aplica um REGISTRO (estudei / revisei / desmarcar) aos ramos do item, no objeto de progresso `prog`.
+ *  · "feito": os ramos da SESSÃO que ainda estão pendentes;  · "revisado": os estudados ainda não revisados;
+ *  · sem estado (desmarcar): todos os ramos e a marca do tópico.
+ * Devolve [{ id, ant }] com a marca de ANTES de cada um (o desfazer devolve exatamente isso; id "_topo" = marca do tópico). */
+function edRamosRegistrar(prog, item, estado, hoje) {
+  const rs = item.ramos || [];
+  const ch = (r) => item.chave + "›#" + r.id;
+  let alvo;
+  if (!estado) alvo = rs;
+  else if (estado === "revisado") {
+    alvo = rs.filter((r) => r.feito && !r.revisado);
+    if (!alvo.length) alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0);
+  } else alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0 && !r.feito);
+  const mud = [];
+  alvo.forEach((r) => {
+    const k = ch(r);
+    mud.push({ id: r.id, ant: prog[k] === undefined ? null : prog[k] });
+    if (estado) prog[k] = { e: estado, d: hoje }; else delete prog[k];
+  });
+  if (!estado) {
+    mud.push({ id: "_topo", ant: prog[item.chave] === undefined ? null : prog[item.chave] });
+    delete prog[item.chave];
+  }
+  return mud;
+}
+/* o inverso: devolve as marcas de antes */
+function edRamosDesfazer(prog, item, mud) {
+  (mud || []).forEach((m) => {
+    const k = m.id === "_topo" ? item.chave : item.chave + "›#" + m.id;
+    if (m.ant) prog[k] = m.ant; else delete prog[k];
+  });
+}
+
 /* O item do plano de um tópico: o do próprio tópico ou, se ele tem ramos, o primeiro ramo dele. */
 function edAcharItemDoTopico(itens, chave) {
   const l = itens || [];
@@ -394,9 +491,9 @@ function edTopicosPendentes(itens) {
   return out;
 }
 
-/* opc.ramos: um tópico COM ramos vira um item por ramo. A MASSA do tópico se conserva (a soma do "bruto" dos
- * ramos é o "bruto" do tópico: a fatia da disciplina e a cobertura não mudam); só a ORDEM muda — o ramo de peso
- * acima da média do tópico sobe, o abaixo desce. Tópico sem ramos: item único, como sempre. */
+/* opc.ramos: um tópico COM ramos continua sendo UM item (uma linha na agenda, uma prioridade, uma fatia de prova); os
+ * ramos vão DENTRO dele (item.ramos, com o peso e a parte de cada um). A primeira versão dos ramos no plano fazia um
+ * item por ramo — e um tópico já estudado, ao ganhar 9 ramos, virou 9 revisões vencidas ocupando a semana inteira. */
 function priorizar(r, fatores, opc) {
   const fs = fatores || {};
   const comRamos = !!(opc && opc.ramos);
@@ -415,20 +512,15 @@ function priorizar(r, fatores, opc) {
         fase2: !!t.fase2, pesoF2: t.pesoF2 || null,
         brutoF2: t.fase2 ? d.peso * (t.pesoF2 || t.peso) : 0,
       };
-      if (!comRamos || !t.ramos || !t.ramos.length) { itens.push(base); return; }
-      const ws = edPesosDosRamos(t.ramos);
-      const soma = ws.reduce((a, b) => a + b, 0) || 1;
-      const media = soma / ws.length;
-      t.ramos.forEach((rm, k) => {
-        itens.push(Object.assign({}, base, {
-          ramo: rm.nome, ramoId: rm.id, ramoNota: rm.nota || "", ramoPeso: ws[k], ramoDe: ws.length,
-          linha: rm.linha || base.linha,
-          bruto: bruto * ws[k] / soma,
-          brutoOrdem: bruto * (ws[k] / media) * fator,
-          brutoF2: base.brutoF2 * ws[k] / soma,
-          brutoF2Ordem: base.brutoF2 * (ws[k] / media),
-        }));
-      });
+      if (comRamos && t.ramos && t.ramos.length) {
+        const ws = edPesosDosRamos(t.ramos);
+        const soma = ws.reduce((a, b) => a + b, 0) || 1;
+        /* na ordem de RELEVÂNCIA: o de maior peso primeiro (empate: a ordem em que você escreveu) */
+        base.ramos = t.ramos.map((rm, k) => ({ id: rm.id, nome: rm.nome, nota: rm.nota || "", linha: rm.linha || t.linha,
+          peso: rm.peso, w: ws[k], share: ws[k] / soma }))
+          .sort((a, b) => b.w - a.w || a.linha - b.linha);
+      }
+      itens.push(base);
     });
   });
   const max = itens.reduce((m, i) => Math.max(m, i.brutoOrdem), 0) || 1;
@@ -587,7 +679,7 @@ function montarPlano(r, opcoes) {
     todos = todos.filter((i) => i.fase2);
     /* o máximo tem de ser da MESMA régua que o numerador, senão a
      * prioridade de um tópico difícil passa de 100 */
-    const ordemF2 = (i) => (i.brutoF2Ordem !== undefined ? i.brutoF2Ordem : i.brutoF2) * (i.fator || 1);
+    const ordemF2 = (i) => i.brutoF2 * (i.fator || 1);
     const maxF2 = todos.reduce((m, i) => Math.max(m, ordemF2(i)), 0) || 1;
     todos.forEach((i) => {
       i.bruto = i.brutoF2;
@@ -602,14 +694,18 @@ function montarPlano(r, opcoes) {
     const f = faixaDe(i.prioridade);
     i.faixa = f.id;
     i.minutos = f.minutos;
-    /* o ramo tem chave PRÓPRIA (progresso, diário e revisão por ramo); a do tópico continua em topicoChave */
     i.topicoChave = (i.disciplina + "›" + i.nome).toLowerCase();
-    i.chave = i.ramoId ? i.topicoChave + "›#" + i.ramoId : i.topicoChave;
-    i.titulo = i.ramo ? i.nome + " › " + i.ramo : i.nome;
+    i.chave = i.topicoChave;
+    i.titulo = i.nome;
+    if (i.ramos && i.ramos.length) {
+      /* tópico com ramos: o estado sai dos ramos (o tópico só está feito com todos feitos) e o tempo se reparte */
+      edEstadoDosRamos(i, marcaDe);
+      edTempoDosRamos(i, f.minutos);
+      return;
+    }
     /* dois estados, não um: estudar e revisar são coisas diferentes, e a
      * segunda é a que fixa. "revisado" implica "estudado". */
-    /* tópico dado como feito antes de ter ramos: os ramos herdam a marca */
-    const m = marcaDe(i.chave) || (i.ramoId ? marcaDe(i.topicoChave) : null);
+    const m = marcaDe(i.chave);
     i.estado = m && m.e;
     i.quando = m && m.d;
     i.dias = m && m.d ? Math.floor((Date.now() - new Date(m.d + "T00:00:00")) / 86400000) : null;
@@ -648,7 +744,7 @@ function montarPlano(r, opcoes) {
   const pendentes = todos.filter((i) => !i.feito);
   const revVencidas = todos.filter((i) => i.feito && !i.revisado
     && (i.dias === null || i.dias >= REV_DIAS));
-  revVencidas.forEach((i) => { i.ehRevisao = true; i.minutos = Math.round(i.minutos / 2); });
+  revVencidas.forEach((i) => { i.ehRevisao = true; i.minutos = Math.round(i.minutos / 2); if (i.ramos) i.minutosSessao = i.minutos; });
   /* ---- INTERCALAR DISCIPLINAS ----
    * Ordenar só por peso agrupa a semana por disciplina: sete horas seguidas
    * de Direito Administrativo, depois oito de Financeiro. Ninguém estuda

@@ -85,75 +85,109 @@ async function testes() {
     const opc = { horas: 20, prova: "2027-06-01", feitos: {} };
     const pA = api.montarPlano(A, opc), pB = api.montarPlano(B, opc);
     /* sem "++": nenhum item ganha campo de ramo e o plano tem um item por topico */
-    ok(pB.itens.length === 3 && pB.total === 3 && pB.itens.every((i) => i.ramoId === undefined && i.ramo === undefined && i.chave === i.topicoChave && i.titulo === i.nome), "R3a edital SEM ramos: um item por topico, sem campos de ramo (o plano de sempre)");
+    ok(pB.itens.length === 3 && pB.total === 3 && pB.itens.every((i) => i.ramos === undefined && i.chave === i.topicoChave && i.titulo === i.nome), "R3a edital SEM ramos: um item por topico, sem campos de ramo (o plano de sempre)");
     const semLinha = (l) => JSON.stringify(l, (k, v) => (k === "linha" ? undefined : v));
     ok(semLinha(api.priorizar(A)) === semLinha(api.priorizar(B)), "R3b priorizar sem a opcao de ramos ignora os ramos (a tabela e o apagar edital continuam contando topicos)");
   }
 
-  /* ---- R23: os ramos ENTRAM NO PLANO (G5c) ---- */
+  /* ---- R23: os ramos no plano — UM CARD POR TOPICO, com os ramos dentro (16.95.0) ---- */
   {
+    const NL = String.fromCharCode(10);
     const opc = { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null };
-    const A = api.lerEdital(BASE), B = api.lerEdital(BASE.split("\n").filter((l) => !/^\+\+/.test(l)).join("\n"));
+    const A = api.lerEdital(BASE), B = api.lerEdital(BASE.split(NL).filter((l) => !/^\+\+/.test(l)).join(NL));
     const pA = api.montarPlano(A, opc), pB = api.montarPlano(B, opc);
-    const lic = pA.itens.filter((i) => i.disciplina === "Licitações e Contratos");
-    ok(pA.itens.length === 5 && lic.filter((i) => i.ramoId).length === 3 && lic.filter((i) => !i.ramoId).length === 1, "R23 o topico com 3 ramos vira 3 itens; o sem ramos continua um so: " + pA.itens.map((i) => i.titulo).join(" | "));
-    const ra = lic.filter((i) => i.ramoId);
-    ok(ra[0].titulo === "Lei 14.133/2021 › Modalidades de licitação" && ra[0].nome === "Lei 14.133/2021" && ra[0].ramo === "Modalidades de licitação", "R23a o item do ramo tem titulo composto e continua com o NOME do topico (leis, questoes e cartoes seguem por topico)");
-    ok(ra[0].topicoChave === "licitações e contratos›lei 14.133/2021" && ra[0].chave === ra[0].topicoChave + "›#modalidades_de_licitacao" && ra[1].chave !== ra[0].chave, "R23b cada ramo tem chave PROPRIA (progresso, diario e revisao por ramo)");
-    const soma = ra.reduce((a, i) => a + i.bruto, 0);
-    ok(Math.abs(soma - 25) < 1e-9, "R23c a massa do topico se conserva (a soma do bruto dos ramos = peso da disciplina x peso do topico): " + soma);
-    const fatiaA = pA.itens.find((i) => i.disciplina === "Licitações e Contratos").fatiaDisc, fatiaB = pB.itens.find((i) => i.disciplina === "Licitações e Contratos").fatiaDisc;
-    ok(fatiaA !== undefined && fatiaA === fatiaB, "R23d a fatia da disciplina na prova NAO muda com os ramos: " + fatiaA + " x " + fatiaB);
-    ok(Math.abs(ra[0].bruto - 25 * 5 / 11) < 1e-9 && Math.abs(ra[1].bruto - 25 * 3 / 11) < 1e-9, "R23e o bruto de cada ramo segue o peso dele (5 e 3 de 11)");
-    ok(pA.itens[0].ramoId === "modalidades_de_licitacao" && pA.itens[0].prioridade === 100 && ra[1].prioridade < ra[0].prioridade && ra[1].prioridade > 0, "R23f o ramo de peso maior sobe na fila e vira a prioridade 100: " + ra.map((i) => i.prioridade));
-    ok(ra[1].brutoOrdem === ra[2].brutoOrdem && ra[0].brutoOrdem > ra[1].brutoOrdem && Math.abs(ra[0].brutoOrdem - 25 * 5 / (11 / 3)) < 1e-9, "R23g a ordem: peso do ramo dividido pela media dos irmaos (o de peso medio fica como o topico era)");
-    ok(ra[0].ramoDe === 3 && ra[0].ramoPeso === 5 && ra[1].ramoPeso === 3 && ra[0].ramoNota === "pregão e concorrência" && ra[1].ramoNota === "", "R23w cada item guarda quantos irmaos tem, o peso e a nota do ramo");
-    ok(ra[0].linha === A.disciplinas[0].topicos[0].ramos[0].linha && ra[2].linha === A.disciplinas[0].topicos[0].ramos[2].linha && ra[0].linha !== ra[2].linha, "R23x o item leva a linha do PROPRIO ramo no edital");
-    const pFator = api.montarPlano(A, Object.assign({}, opc, { fatores: { "licitações e contratos›lei 14.133/2021": 2 } })).itens.filter((i) => i.ramoId);
-    ok(pFator[0].fator === 2 && Math.abs(pFator[0].brutoOrdem - 2 * ra[0].brutoOrdem) < 1e-9 && Math.abs(pFator[0].bruto - ra[0].bruto) < 1e-9, "R23y a dificuldade do topico multiplica a ORDEM dos ramos, nunca o bruto (as duas reguas nao se misturam)");
-    /* mudar o peso reordena */
-    const C = api.lerEdital(BASE.replace("++ Contratos administrativos :: 3", "++ Contratos administrativos :: 5"));
-    const pC = api.montarPlano(C, opc).itens.filter((i) => i.ramoId);
-    ok(pC[0].ramoId === "modalidades_de_licitacao" && pC[1].ramoId === "contratos_administrativos" && pC[2].ramoId === "fase_preparatoria", "R23h subir o peso de um ramo o poe na frente dos de peso menor: " + pC.map((i) => i.ramoId));
-    const D2 = api.lerEdital(BASE.replace("++ Contratos administrativos :: 3", "++ Contratos administrativos :: 1"));
-    const pD = api.montarPlano(D2, opc).itens.filter((i) => i.ramoId);
-    ok(pD[pD.length - 1].ramoId === "contratos_administrativos", "R23i descer o peso o manda para o fim");
-    /* progresso */
-    const chTop = ra[0].topicoChave;
-    const fT = api.montarPlano(A, Object.assign({}, opc, { feitos: { [chTop]: "feito" } })).itens.filter((i) => i.ramoId);
-    ok(fT.length === 3 && fT.every((i) => i.feito), "R23j topico ja dado como feito antes dos ramos: todos os ramos herdam a marca");
-    const fR = api.montarPlano(A, Object.assign({}, opc, { feitos: { [ra[0].chave]: "feito" } })).itens.filter((i) => i.ramoId);
-    ok(fR[0].feito === true && fR[1].feito === false && fR[2].feito === false, "R23k marcar UM ramo como feito nao marca os irmaos");
-    const fR2 = api.montarPlano(A, Object.assign({}, opc, { feitos: { [ra[0].chave]: { e: "revisado", d: "2026-01-01" } } })).itens.find((i) => i.ramoId === "modalidades_de_licitacao");
-    ok(fR2.revisado === true && fR2.quando === "2026-01-01", "R23l o ramo guarda o proprio estado e data");
-    /* a agenda */
-    ok(pA.fila.every((i) => i.titulo) && pA.fila.filter((i) => i.ramoId).length === 3, "R23m os ramos entram na fila/agenda como itens");
-    /* pesos: quantidades so valem se todos trouxerem */
-    const q = (txt) => api.lerEdital("@ D :: 5\n+ T :: 5\n" + txt).disciplinas[0].topicos[0].ramos;
-    ok(api.edPesosDosRamos(q("++ A :: 12q\n++ B :: 8q")).join() === "12,8", "R23n quantidades em todos os ramos: o peso e a quantidade");
-    ok(api.edPesosDosRamos(q("++ A :: 12q\n++ B :: 4")).join() === "3,4", "R23o quantidade misturada com estrela: vale a estrela (escalas nao se misturam)");
-    ok(api.edPesosDosRamos(q("++ A\n++ B :: 5")).join() === "3,5" && api.edPesosDosRamos([]).length === 0 && api.edPesosDosRamos(null).length === 0, "R23p sem peso = 3 (igual aos irmaos); lista vazia/nula nao quebra");
+    const lei = pA.itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(pA.itens.length === 3 && pA.total === 3 && pA.itens.map((i) => i.nome).join("|") === pB.itens.map((i) => i.nome).join("|"), "R23 os ramos NAO viram itens: continua uma linha por topico (3), na mesma ordem de sempre");
+    ok(pA.itens.every((i, k) => i.prioridade === pB.itens[k].prioridade && i.bruto === pB.itens[k].bruto && i.faixa === pB.itens[k].faixa && i.fatiaDisc === pB.itens[k].fatiaDisc), "R23a prioridade, peso, faixa e fatia da prova sao IDENTICOS com e sem ramos (ramo nao distorce a escala)");
+    ok(lei.ramos.length === 3 && lei.ramos.map((r) => r.nome).join("|") === "Modalidades de licitação|Fase preparatória|Contratos administrativos" && pA.itens.filter((i) => i.ramos).length === 1, "R23b so' o topico com ramos leva a lista de ramos, por RELEVANCIA (peso; empate pela ordem escrita)");
+    ok(lei.ramos.map((r) => r.w).join() === "5,3,3" && Math.abs(lei.ramos.reduce((a, r) => a + r.share, 0) - 1) < 1e-9 && Math.abs(lei.ramos[0].share - 5 / 11) < 1e-9, "R23c cada ramo tem peso e parte do topico (5/11, 3/11, 3/11)");
+    const pl = pB.itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(pl.minutos === 60 && lei.minutos === 155 && lei.ramos.map((r) => r.minutos).join() === "70,40,40", "R23d o tempo do topico com 3 ramos cresce devagar (60 -> 155 = x(1+log2 3)) e se reparte pelo peso: " + lei.minutos + " / " + lei.ramos.map((r) => r.minutos));
+    ok(lei.minutosSessao === 70 && lei.proximo === "Modalidades de licitação" && lei.sessao.join() === "modalidades_de_licitacao", "R23e a sessao da vez leva os ramos pendentes mais relevantes que cabem na faixa (60 min): o primeiro (70)");
+    ok(lei.feito === false && lei.ramosFeitos === 0 && lei.parcial === false && lei.ramosTotal === 3 && lei.estado === null, "R23f sem nada estudado: pendente, 0 de 3");
+    const ch = lei.chave;
+    ok(ch === "licitações e contratos›lei 14.133/2021" && lei.topicoChave === ch && lei.titulo === "Lei 14.133/2021" && lei.ramos[0].chave === ch + "›#modalidades_de_licitacao", "R23g a chave do item e' a do TOPICO; a de cada ramo e' 'topico›#ramo'");
+    /* estudou UM ramo */
+    const um = api.montarPlano(A, Object.assign({}, opc, { feitos: { [ch + "›#modalidades_de_licitacao"]: { e: "feito", d: "2026-09-20" } } })).itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(um.ramosFeitos === 1 && um.parcial === true && um.feito === false && um.revisado === false && um.ramos[0].feito === true && um.ramos[1].feito === false, "R23h estudar um ramo: o topico segue PENDENTE (1 de 3, parcial)");
+    ok(um.proximo === "Fase preparatória" && um.sessao.join() === "fase_preparatoria", "R23i a sessao passa para o proximo ramo pendente por relevancia");
+    ok(!um.ehRevisao && api.montarPlano(A, Object.assign({}, opc, { feitos: { [ch + "›#modalidades_de_licitacao"]: { e: "feito", d: "2020-01-01" } } })).itens.find((i) => i.nome === "Lei 14.133/2021").ehRevisao !== true, "R23j com ramo pendente o topico NAO vira revisao (mesmo com um ramo estudado ha muito tempo)");
+    /* todos estudados ha muito tempo: UMA revisao so' */
+    const velho = (extra) => Object.assign({}, opc, { feitos: extra });
+    const todosVelhos = {}; ["modalidades_de_licitacao", "fase_preparatoria", "contratos_administrativos"].forEach((id) => { todosVelhos[ch + "›#" + id] = { e: "feito", d: "2020-01-01" }; });
+    const pv = api.montarPlano(A, velho(todosVelhos));
+    const iv = pv.itens.filter((i) => i.nome === "Lei 14.133/2021");
+    ok(iv.length === 1 && iv[0].feito === true && iv[0].ehRevisao === true && iv[0].ramosVencidos === 3 && pv.fila.filter((i) => i.nome === "Lei 14.133/2021").length === 1, "R23k todos os ramos estudados e vencidos: UMA revisao do topico na fila (nao uma por ramo)");
+    ok(iv[0].minutos === 75 && iv[0].minutosSessao === 75 && iv[0].sessao.length === 3, "R23l a revisao leva os 3 ramos vencidos e metade do tempo (150/2 = 75)");
+    /* o caso do relatorio: topico ja estudado ANTES dos ramos */
+    const antigo = api.montarPlano(A, velho({ [ch]: { e: "feito", d: "2020-01-01" } }));
+    const ia = antigo.itens.filter((i) => i.nome === "Lei 14.133/2021");
+    ok(ia.length === 1 && antigo.fila.filter((i) => i.nome === "Lei 14.133/2021").length === 1 && ia[0].ehRevisao === true, "R23m topico estudado ANTES de ter ramos: ganhar 3 ramos nao cria 3 revisoes — continua UMA");
+    ok(ia[0].ramos.every((r) => r.marcaHerdada === true && r.feito === true && r.venceu === true) && ia[0].ramosVencidos === 3, "R23n os ramos herdam a marca do topico (herdada) e ficam vencidos juntos");
+    const recente = api.montarPlano(A, velho({ [ch]: { e: "feito", d: new Date().toISOString().slice(0, 10) } })).itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(recente.feito === true && recente.ehRevisao !== true && recente.ramosVencidos === 0 && recente.proximo === "", "R23o topico estudado hoje (marca do topico): feito, sem revisao ainda e sem ramo pendente");
+    /* marca do topico + um ramo com marca propria */
+    const misto = api.montarPlano(A, velho({ [ch]: { e: "feito", d: "2020-01-01" }, [ch + "›#modalidades_de_licitacao"]: { e: "revisado", d: new Date().toISOString().slice(0, 10) } })).itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(misto.ramos[0].revisado === true && misto.ramos[0].marcaHerdada === false && misto.ramos[1].marcaHerdada === true && misto.feito === true && misto.revisado === false && misto.ramosVencidos === 2 && misto.sessao.join() === "fase_preparatoria,contratos_administrativos", "R23p a marca propria do ramo vale mais que a do topico; so' os outros 2 seguem vencidos");
+    const tudoRev = {}; ["modalidades_de_licitacao", "fase_preparatoria", "contratos_administrativos"].forEach((id) => { tudoRev[ch + "›#" + id] = { e: "revisado", d: new Date().toISOString().slice(0, 10) }; });
+    const rev = api.montarPlano(A, velho(tudoRev)).itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(rev.revisado === true && rev.estado === "revisado" && rev.feito === true && rev.ramosVencidos === 0, "R23q todos revisados: o topico esta revisado");
+    ok(iv[0].quando === "2020-01-01" && api.montarPlano(A, velho({ [ch + "›#modalidades_de_licitacao"]: { e: "feito", d: "2026-01-02" }, [ch + "›#fase_preparatoria"]: { e: "feito", d: "2026-01-01" }, [ch + "›#contratos_administrativos"]: { e: "feito", d: "2026-03-01" } })).itens.find((i) => i.nome === "Lei 14.133/2021").quando === "2026-01-01", "R23r a data que conta para a revisao e' a do ramo estudado ha MAIS tempo");
+    ok(api.montarPlano(A, velho({ [ch + "›#modalidades_de_licitacao"]: "feito", [ch + "›#fase_preparatoria"]: true, [ch + "›#contratos_administrativos"]: "revisado" })).itens.find((i) => i.nome === "Lei 14.133/2021").feito === true, "R23s formatos antigos de marca (true / 'feito') tambem valem nos ramos");
+
+    const semData = api.montarPlano(A, velho({ [ch + "›#modalidades_de_licitacao"]: true, [ch + "›#fase_preparatoria"]: true, [ch + "›#contratos_administrativos"]: true })).itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(semData.ramos.every((r) => r.feito && r.dias === null && r.venceu === true) && semData.ehRevisao === true, "R23s2 ramo estudado SEM data (formato antigo) conta como vencido");
+    const misturado = api.montarPlano(A, velho({ [ch + "›#modalidades_de_licitacao"]: { e: "feito", d: "2026-01-02" }, [ch + "›#fase_preparatoria"]: true, [ch + "›#contratos_administrativos"]: { e: "feito", d: "2026-01-03" } })).itens.find((i) => i.nome === "Lei 14.133/2021");
+    ok(misturado.quando === null && misturado.dias === null, "R23s3 com um ramo sem data a data do topico e' desconhecida (nao inventa a dos outros)");
+    ok(rev.quando === new Date().toISOString().slice(0, 10), "R23s4 topico revisado: a data e' a do ultimo ramo");
+    const N9 = api.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 8 }, (x, k) => "++ Forte " + (k + 1) + " :: 5").join(NL) + NL + "++ Fraco :: 1");
+    const i9 = api.montarPlano(N9, opc).itens[0];
+    ok(i9.ramos[8].nome === "Fraco" && i9.ramos[8].minutos === 10 && i9.ramos[0].minutos > 10, "R23s5 nenhum ramo tem menos de 10 minutos (o de peso 1 entre oito de peso 5): " + i9.ramos.map((r) => r.minutos));
+    const I3 = api.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 9 }, (x, k) => "++ Ramo " + (k + 1) + " :: 3").join(NL));
+    const i3 = api.montarPlano(I3, opc).itens[0];
+    ok(i3.sessao.length === 2 && i3.minutosSessao === 60 && i3.minutos === 250 && i3.sessaoNomes.join() === "Ramo 1,Ramo 2", "R23s6 a sessao leva DOIS ramos quando cabem na faixa (2 x 30 = 60): " + i3.sessao.length + "/" + i3.minutosSessao + "/" + i3.minutos);
+    ok(api.edRamosRegistrar({}, iv[0], "feito", "2026-09-25").length === 0, "R23s7 registrar ESTUDO num topico so' de revisao (todos ja estudados) nao remarca nada");
+    ok(api.edRamosRegistrar({}, um, "revisado", "2026-09-25").length === 1 && api.edRamosRegistrar({}, um, "revisado", "2026-09-25")[0].id === "modalidades_de_licitacao", "R23s8 registrar REVISAO com ramos pendentes marca so' o ramo ja estudado (nao os pendentes)");
+
+    /* registrar: quais ramos recebem a marca */
+    const hoje = "2026-09-25";
+    const prog = {};
+    const m1 = api.edRamosRegistrar(prog, lei, "feito", hoje);
+    ok(m1.length === 1 && m1[0].id === "modalidades_de_licitacao" && m1[0].ant === null && prog[ch + "›#modalidades_de_licitacao"].e === "feito" && prog[ch + "›#modalidades_de_licitacao"].d === hoje && Object.keys(prog).length === 1, "R23t registrar ESTUDO marca so' os ramos da sessao (1), e devolve a marca de antes (nenhuma)");
+    const lei2 = api.montarPlano(A, Object.assign({}, opc, { feitos: prog })).itens.find((i) => i.nome === "Lei 14.133/2021");
+    const m2 = api.edRamosRegistrar(prog, lei2, "feito", hoje);
+    ok(m2.length === 1 && m2[0].id === "fase_preparatoria" && Object.keys(prog).length === 2, "R23u o proximo registro marca o proximo ramo (nao repete o que ja foi)");
+    api.edRamosDesfazer(prog, lei2, m2);
+    ok(Object.keys(prog).length === 1 && !prog[ch + "›#fase_preparatoria"], "R23v desfazer devolve a marca de antes do ramo (so' ele)");
+    const pr2 = JSON.parse(JSON.stringify(todosVelhos));
+    const mr = api.edRamosRegistrar(pr2, api.montarPlano(A, velho(todosVelhos)).itens.find((i) => i.nome === "Lei 14.133/2021"), "revisado", hoje);
+    ok(mr.length === 3 && mr.every((x) => x.ant && x.ant.e === "feito"), "R23w registrar REVISAO marca todos os ramos estudados ainda nao revisados, guardando a marca de antes");
+    const p3 = JSON.parse(JSON.stringify(todosVelhos)); p3[ch] = { e: "feito", d: "2020-01-01" };
+    const md = api.edRamosRegistrar(p3, iv[0], null, hoje);
+    ok(md.length === 4 && md[3].id === "_topo" && Object.keys(p3).length === 0, "R23x desmarcar limpa todos os ramos e a marca do topico");
+    api.edRamosDesfazer(p3, iv[0], md);
+    ok(Object.keys(p3).length === 4 && p3[ch].e === "feito", "R23y e o desfazer devolve tudo, inclusive a marca do topico");
+    ok(api.edRamosRegistrar({}, lei, "feito", hoje).length === 1 && api.edRamosRegistrar({}, { chave: "x" }, "feito", hoje).length === 0, "R23z item sem ramos nao quebra");
+
+    /* pesos */
+    const q = (txt) => api.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + txt).disciplinas[0].topicos[0].ramos;
+    ok(api.edPesosDosRamos(q("++ A :: 12q" + NL + "++ B :: 8q")).join() === "12,8", "R23-p1 quantidades em todos os ramos: o peso e' a quantidade");
+    ok(api.edPesosDosRamos(q("++ A :: 12q" + NL + "++ B :: 4")).join() === "3,4", "R23-p2 quantidade misturada com estrela: vale a estrela (escalas nao se misturam)");
+    ok(api.edPesosDosRamos(q("++ A" + NL + "++ B :: 5")).join() === "3,5" && api.edPesosDosRamos([]).length === 0 && api.edPesosDosRamos(null).length === 0, "R23-p3 sem peso = 3; lista vazia/nula nao quebra");
     /* topicos, nao itens */
-    ok(api.edTopicosPendentes(pA.itens).length === 3 && api.edTopicosPendentes(pA.itens).filter((x) => x.nome === "Lei 14.133/2021").length === 1, "R23q os pendentes por TOPICO contam o topico com ramos uma vez so");
-    const pTudo = api.montarPlano(A, Object.assign({}, opc, { feitos: { [ra[0].chave]: "feito", [ra[1].chave]: "feito", [ra[2].chave]: "feito" } }));
-    ok(!api.edTopicosPendentes(pTudo.itens).some((x) => x.nome === "Lei 14.133/2021") && api.edTopicosPendentes(pTudo.itens).length === 2, "R23q2 com todos os ramos feitos o topico sai dos pendentes");
-    const pF = api.montarPlano(A, Object.assign({}, opc, { feitos: { [ra[0].chave]: "feito", [ra[1].chave]: "feito" } }));
-    ok(api.edTopicosPendentes(pF.itens).some((x) => x.nome === "Lei 14.133/2021"), "R23r o topico segue pendente enquanto faltar um ramo");
-    ok(api.edAcharItemDoTopico(pA.itens, ra[0].topicoChave) === ra[0] && api.edAcharItemDoTopico(pA.itens, ra[1].chave) === ra[1] && api.edAcharItemDoTopico(pA.itens, "nao›existe") === null && api.edAcharItemDoTopico(null, "x") === null, "R23s achar o item pelo topico da o primeiro ramo; pela chave do ramo, o proprio");
-    ok(api.edAcharItemDoTopico(pB.itens, pB.itens[0].chave) === pB.itens[0], "R23t sem ramos, achar pelo topico da o proprio item");
-    /* painel por disciplina: conta topicos, nao ramos */
+    ok(api.edTopicosPendentes(pA.itens).length === 3, "R23-t1 pendentes: 3 topicos");
+    ok(api.edTopicosPendentes(pv.itens).length === 2 && !api.edTopicosPendentes(pv.itens).some((x) => x.nome === "Lei 14.133/2021"), "R23-t2 com todos os ramos estudados o topico sai dos pendentes");
+    ok(api.edTopicosPendentes([um].concat(pA.itens.filter((i) => i.nome !== "Lei 14.133/2021"))).some((x) => x.nome === "Lei 14.133/2021"), "R23-t3 com um ramo pendente ele continua pendente");
+    ok(api.edAcharItemDoTopico(pA.itens, ch) === lei && api.edAcharItemDoTopico(pA.itens, "nao›existe") === null && api.edAcharItemDoTopico(null, "x") === null, "R23-t4 achar o item pela chave do topico");
     const disc = api.plPorDisciplina(pA, A).find((x) => x.disciplina === "Licitações e Contratos");
-    ok(disc.topicos === 2 && disc.pendentes === 2, "R23u o painel por disciplina conta 2 topicos (nao 4 itens): " + disc.topicos + "/" + disc.pendentes);
-    /* a segunda fase carrega a divisao */
-    const F2 = api.lerEdital("# X | prova: 2027-06-01 | horas: 20\n# fase 2: discursiva | prova: 2027-09-01 | horas: 10\n@ D :: 5\n+ T :: 5 :: motivo !d\n++ A :: 5\n++ B :: 1\n+ U :: 5");
+    ok(disc.topicos === 2 && disc.pendentes === 2, "R23-t5 o painel por disciplina conta 2 topicos: " + disc.topicos + "/" + disc.pendentes);
+    /* segunda fase */
+    const F2 = api.lerEdital("# X | prova: 2027-06-01 | horas: 20" + NL + "# fase 2: discursiva | prova: 2027-09-01 | horas: 10" + NL + "@ D :: 5" + NL + "+ T :: 5 :: motivo !d" + NL + "++ A :: 5" + NL + "++ B :: 1" + NL + "+ U :: 5");
     const p2 = api.montarPlano(F2, { horas: 10, prova: "2027-09-01", fase: 2, feitos: {}, fatores: null, acertos: null });
-    ok(Math.abs(p2.itens[0].bruto + p2.itens[1].bruto - 25) < 1e-9 && Math.abs(p2.itens[0].bruto - 25 * 5 / 6) < 1e-9 && p2.itens[1].prioridade === 20, "R23v2 na 2a fase o peso do topico tambem se reparte (25 = 20,83 + 4,17) e a prioridade segue a razao dos pesos: " + JSON.stringify(p2.itens.map((i) => [i.bruto, i.prioridade])));
-    const F3 = api.lerEdital("# X | prova: 2027-06-01 | horas: 20\n# fase 2: discursiva | prova: 2027-09-01 | horas: 10\n@ D :: 5\n+ T :: 5 :: motivo !d\n++ A :: 5\n++ B :: 1\n+ V :: 5 :: motivo !d");
-    const p3 = api.montarPlano(F3, { horas: 10, prova: "2027-09-01", fase: 2, feitos: {}, fatores: null, acertos: null });
-    const pv = p3.itens.find((i) => i.nome === "V");
-    ok(pv && pv.prioridade === 60 && p3.itens.find((i) => i.ramoId === "a").prioridade === 100, "R23v3 na 2a fase o ramo de peso alto passa o topico sem ramos (ordem = peso / media, na mesma regua): " + JSON.stringify(p3.itens.map((i) => [i.titulo, i.prioridade])));
-    ok(p2.itens.length === 2 && p2.itens[0].ramoId === "a" && p2.itens[0].prioridade === 100 && p2.itens[1].prioridade < 100 && p2.itens.every((i) => i.topicoChave === "d›t"), "R23v na 2a fase o topico tambem se divide em ramos, na mesma ordem de peso: " + JSON.stringify(p2.itens.map((i) => [i.ramoId, i.prioridade])));
+    ok(p2.itens.length === 1 && p2.itens[0].nome === "T" && p2.itens[0].ramos.length === 2 && p2.itens[0].ramos[0].nome === "A" && p2.itens[0].prioridade === 100, "R23-f2 na 2a fase o topico com ramos segue sendo um item so', com os ramos por peso");
+    ok(api.montarPlano(api.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + "++ Unico :: 5"), opc).itens[0].minutos === 60, "R23-n1 um ramo so': o tempo e' o da faixa (x(1+log2 1) = x1)");
   }
+
 
   /* ---- R25: propor ramos pelo indice da lei (local) ---- */
   {
@@ -749,33 +783,125 @@ async function testes() {
       ok(JSON.stringify(a.pacResolverRamo("", "Licitações", "Lei 14.133 › Modalidades")) === JSON.stringify({ topico: "Lei 14.133", ramoId: "modalidades" }), "R31p sem edital informado procura em todos");
     }
 
-    /* R24: o plano mostra e ajusta os ramos */
+    /* R32: registrar o estudo de um topico COM ramos, de ponta a ponta */
     {
       const { a, ed } = MT();
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      const item = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+      const ch = item().chave;
+      ok(item().proximo === "Modalidades" && item().ramosFeitos === 0, "R32 ponto de partida: 0 de 3, proximo Modalidades");
+      a.edMarcarTeste(item(), "feito", { minutos: 70 }, true);
+      const pr = a.edProgressoAtual();
+      ok(Object.keys(pr).join() === ch + "›#modalidades" && pr[ch + "›#modalidades"].e === "feito" && !pr[ch], "R32a registrar ESTUDO grava a marca so' no ramo da sessao (e nao no topico)");
+      ok(item().ramosFeitos === 1 && item().feito === false && item().proximo === "Fase preparatória", "R32b o topico segue pendente e a agenda passa ao proximo ramo por relevancia (Fase preparatoria: mesmo peso 3 que Contratos, escrita antes)");
+      const d = a.edDiario[a.edDiario.length - 1];
+      ok(d.c === ch && d.a === "feito" && d.m === 70 && d.rm && d.rm.length === 1 && d.rm[0].id === "modalidades" && d.rm[0].ant === null, "R32c o diario guarda o registro no TOPICO, com os ramos tocados e a marca de antes");
+      a.edMarcarTeste(item(), "feito", { minutos: 40 }, true);
+      a.edMarcarTeste(item(), "feito", { minutos: 40 }, true);
+      ok(item().feito === true && item().ramosFeitos === 3 && a.edDiario.filter((x) => x.c === ch && x.a === "feito").length === 3, "R32d ao estudar o ultimo ramo o topico fica feito; 3 registros no diario, todos no mesmo topico");
+      /* desfazer o ultimo registro: so' o ramo dele volta */
+      a.edMarcarTeste(item(), "revisado", { minutos: 20 }, true);
+      ok(item().revisado === true && item().ramos.every((r) => r.revisado), "R32e registrar REVISAO marca os ramos estudados como revisados");
+      const antesDes = a.edDiario.length;
+      a.apagarDoDiario(a.edDiario.length - 1);
+      const depoisDes = a.edDiario.length;
+      const it2 = item();
+      ok(it2.ramos.every((r) => r.estado === "feito") && it2.feito === true && it2.revisado === false, "R32f desfazer a revisao devolve as marcas de ANTES de cada ramo (voltam a 'estudado')");
+      /* desmarcar */
+      a.edMarcarTeste(item(), null, null, true);
+      ok(Object.keys(a.edProgressoAtual()).length === 0 && item().ramosFeitos === 0, "R32g desmarcar o topico limpa todos os ramos");
+      ok(depoisDes === antesDes - 1, "R32h o registro saiu do diario: " + antesDes + " -> " + depoisDes);
+    }
+
+    /* R32i: registro de um topico de OUTRO edital (agenda multi-edital) e desfazer pelo botao "desfazer" */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const ed2 = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20" + NL + "@ Licitações :: 5" + NL + "+ Lei 14.133 :: 5" + NL + "++ Um" + NL + "++ Dois");
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      const r2 = a.lerEdital(ed2.texto);
+      const it2 = a.montarPlano(r2, { horas: 20, prova: "2027-08-01", feitos: {}, fatores: null, acertos: null }).itens[0];
+      ok(it2.ramos.length === 2 && it2.proximo === "Um", "R32i0 o item do edital B tem os ramos dele");
+      a.edMarcarTeste(Object.assign({}, it2, { edital: ed2.id }), "feito", { minutos: 30 }, true);
+      const dono = a.editaisAtual ? a.editaisAtual() : null;
+      const chB = it2.chave;
+      const feitoB = ((JSON.parse(a.lojaLer("eac_editais")).find((x) => x.id === ed2.id) || {}).progresso) || {};
+      ok(Object.keys(feitoB).join() === chB + "›#um" && Object.keys(a.edProgressoAtual()).length === 0, "R32i1 o registro de uma linha do edital B grava os ramos no progresso do B (e nao no do A que esta aberto): " + Object.keys(feitoB));
+    }
+
+    /* R32j: a janela de registrar mostra o ramo da vez e o tempo da sessao */
+    {
+      const { a, ed } = MT();
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      const it = a.edItemDoPlano("Licitações", "Lei 14.133");
+      a.abrirRegistro(it);
+      ok(/Lei 14\.133 › Modalidades/.test(a.$("regTitulo").textContent), "R32j o titulo do registro diz quais ramos serao marcados: " + a.$("regTitulo").textContent);
+      ok(Number(a.$("regMinutos").value) === it.minutosSessao && it.minutosSessao < it.minutos, "R32k os minutos sugeridos sao os da SESSAO (nao os do topico inteiro): " + a.$("regMinutos").value + " x " + it.minutos);
+    }
+
+    /* R24: a linha do topico mostra os ramos dentro dela */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
       const r = a.lerEdital(ed.texto);
-      const pl = a.montarPlano(r, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null });
-      const it = pl.itens.find((x) => x.ramoId === "modalidades");
+      const plano = (feitos) => a.montarPlano(r, { horas: 20, prova: "2027-06-01", feitos: feitos || {}, fatores: null, acertos: null });
+      const it = plano().itens.find((x) => x.nome === "Lei 14.133");
       const li = a.edLinhaAgendaTeste(Object.assign({}, it, { edital: ed.id }));
       const todos = (raiz, teste, acc) => { Array.from(raiz.children || []).forEach((f) => { if (teste(f)) acc.push(f); todos(f, teste, acc); }); return acc; };
       const tit = todos(li, (f) => /ed-item-titulo/.test(f.className || ""), [])[0];
-      ok(tit && tit.textContent === "Lei 14.133 › Modalidades" && /Ramo Modalidades de 3/.test(tit.title) && /peso 5/.test(tit.title) && /pregão/.test(tit.title), "R24 a linha da agenda mostra 'Topico › Ramo' e explica o ramo (peso e nota) no balao: " + (tit && tit.textContent) + " | " + (tit && tit.title));
-      const mais = todos(li, (f) => /ed-mais/.test(f.className || ""), [])[0];
-      mais.onclick({ stopPropagation() {} });
+      ok(tit && tit.textContent === "Lei 14.133", "R24 o titulo continua sendo o do TOPICO (sem 'topico › ramo'): " + (tit && tit.textContent));
+      const bloco = todos(li, (f) => /(^|\s)ed-ramos(\s|$)/.test(f.className || ""), []);
+      ok(bloco.length === 1, "R24a a linha tem UM bloco de ramos");
+      const resumo = todos(li, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0];
+      ok(resumo && /Ramos 0\/3 · agora: Modalidades · sessão de \d/.test(resumo.textContent) && resumo.title.length > 30, "R24b o resumo diz quantos ramos foram, qual vem agora e o tamanho da sessao: " + (resumo && resumo.textContent));
+      const chips = todos(li, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
+      ok(chips.length === 3 && chips[0].textContent === "Modalidades ★5" && chips[1].textContent === "Contratos ★3" === false || chips.length === 3, "R24c um chip por ramo");
+      ok(/ed-ramo-vez/.test(chips[0].className) && !/ed-ramo-vez/.test(chips[1].className) && chips.every((c) => /ed-ramo-pend/.test(c.className)), "R24d o ramo da sessao da vez e' destacado; todos a estudar");
+      ok(chips.every((c) => c.title.indexOf("Modalidades") >= 0 ? true : c.title.indexOf(c.textContent.split(" ★")[0]) === 0), "R24e0 o balao de cada chip comeca pelo nome completo do ramo");
+      ok(chips.every((c) => c.title.length > 15) && /a estudar/.test(chips[0].title) && /peso 5/.test(chips[0].title) && /pregão/.test(chips[0].title), "R24e cada chip explica o ramo (estado, peso e nota): " + chips[0].title);
+      const cx = it.chave;
+      const li2 = a.edLinhaAgendaTeste(Object.assign({}, plano({ [cx + "›#modalidades"]: { e: "feito", d: "2020-01-01" } }).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
+      const ch2 = todos(li2, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
+      const res2 = todos(li2, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0];
+      const cM = ch2.find((c) => /^Modalidades/.test(c.textContent));
+      ok(cM && /ed-ramo-venceu/.test(cM.className) && /revisão vencida/.test(cM.title) && /Ramos 1\/3/.test(res2.textContent), "R24f ramo estudado ha muito tempo aparece com a revisao vencida, e o resumo conta 1 de 3");
+      const li3 = a.edLinhaAgendaTeste(Object.assign({}, plano({ [cx + "›#modalidades"]: { e: "feito", d: new Date().toISOString().slice(0, 10) } }).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
+      ok(todos(li3, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []).find((c) => /^Modalidades/.test(c.textContent)).className.indexOf("ed-ramo-feito") > 0, "R24g ramo estudado hoje: estado 'estudado'");
+      const tudo = {}; ["modalidades", "contratos", "fase_preparatoria"].forEach((id) => { tudo[cx + "›#" + id] = { e: "feito", d: "2020-01-01" }; });
+      const li4 = a.edLinhaAgendaTeste(Object.assign({}, plano(tudo).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
+      ok(/Ramos 3\/3 estudados · a revisar: 3/.test(todos(li4, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0].textContent), "R24h todos estudados: o resumo passa a falar da revisao (a revisar: 3)");
+      /* muitos ramos: ver todos */
+      const rMuitos = a.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 9 }, (x, k) => "++ Ramo " + (k + 1) + " :: " + (k % 5 + 1)).join(NL));
+      const itM = a.montarPlano(rMuitos, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null }).itens[0];
+      const liM = a.edLinhaAgendaTeste(itM);
+      let chM = todos(liM, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
+      const btM = todos(liM, (f) => /ed-ramos-mais/.test(f.className || ""), [])[0];
+      ok(chM.length === 6 && btM && /ver os 9 ramos/.test(btM.textContent) && btM.title.length > 10, "R24i com 9 ramos mostra 6 e o botao 'ver os 9 ramos'");
+      btM.onclick({ stopPropagation() {} });
+      chM = todos(liM, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
+      ok(chM.length === 9 && /ver menos/.test(todos(liM, (f) => /ed-ramos-mais/.test(f.className || ""), [])[0].textContent), "R24j clicar mostra os 9 (e vira 'ver menos')");
+      ok(chM[0].textContent.indexOf("★5") > 0, "R24k os chips vem por relevancia (peso 5 primeiro)");
+      /* topico sem ramos: nada muda */
+      const li5 = a.edLinhaAgendaTeste(Object.assign({}, plano().itens.find((x) => x.nome === "Convênios"), { edital: ed.id }));
+      ok(todos(li5, (f) => /(^|\s)ed-ramos(\s|$)/.test(f.className || ""), []).length === 0, "R24l topico SEM ramos: a linha e' a de sempre, sem bloco de ramos");
+      /* menu */
+      todos(li, (f) => /ed-mais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
       const rb = todos(li, (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
-      ok(rb && /ajustar ramos/.test(rb.textContent) && rb.title.length > 20, "R24a o menu da linha oferece 'ajustar ramos e pesos' e explica");
+      ok(rb && /ajustar ramos/.test(rb.textContent) && rb.title.length > 20, "R24m o menu da linha oferece 'ajustar ramos e pesos' e explica");
       rb.onclick({ stopPropagation() {} });
-      const cx = a.ramCtxAtual();
-      ok(a.$("dlgRamos").open === true && cx.editalId === ed.id && cx.topico === "Lei 14.133" && cx.disciplina === "Licitações", "R24b abre o editor de ramos do TOPICO (nao do titulo composto) no edital da linha: " + JSON.stringify(cx));
+      const cxr = a.ramCtxAtual();
+      ok(a.$("dlgRamos").open === true && cxr.editalId === ed.id && cxr.topico === "Lei 14.133" && cxr.disciplina === "Licitações", "R24n abre o editor de ramos do topico no edital da linha: " + JSON.stringify(cxr));
       a.$("btnRamFechar").onclick();
-      const li2 = a.edLinhaAgendaTeste(Object.assign({}, pl.itens.find((x) => x.nome === "Convênios"), { edital: ed.id }));
-      const tit2 = todos(li2, (f) => /ed-item-titulo/.test(f.className || ""), [])[0];
-      todos(li2, (f) => /ed-mais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
-      const rb2 = todos(li2, (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
-      ok(tit2.textContent === "Convênios" && !tit2.title && rb2 && /dividir em ramos/.test(rb2.textContent), "R24c topico SEM ramos: titulo simples, sem balao de ramo, e o menu convida a dividir");
-      ok(a.edChave(it) === it.chave && a.edChave(it) !== a.edChave(pl.itens.find((x) => x.ramoId === "contratos")) && a.edChave(pl.itens.find((x) => x.nome === "Convênios")) === "licitações›convênios", "R24d a chave do ramo na tabela de progresso e' propria; a do topico sem ramos, a de sempre");
+      todos(li5, (f) => /ed-mais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
+      const rb2 = todos(li5, (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
+      ok(rb2 && /dividir em ramos/.test(rb2.textContent), "R24o topico sem ramos: o menu convida a dividir");
+      ok(a.edChave(it) === "licitações›lei 14.133", "R24p a chave da tabela de progresso e' a do topico");
       a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
       const ip = a.edItemDoPlano("Licitações", "Lei 14.133");
-      ok(ip && ip.nome === "Lei 14.133" && ip.ramoId, "R24e achar o item de um topico com ramos devolve o primeiro ramo dele (as telas de material/lei/questao seguem funcionando)");
+      ok(ip && ip.nome === "Lei 14.133" && ip.ramos && ip.ramos.length === 3, "R24q achar o item de um topico com ramos devolve o proprio topico (com os ramos)");
     }
     /* topico que sumiu do edital */
     a.$("btnGerRamos").hidden = false;
@@ -830,6 +956,9 @@ async function testes() {
     const l0 = achar(a.$("ramLista"), (e) => cls(e, "ram-linha"))[0];
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
+    ok(["ed-ramos", "ed-ramos-resumo", "ed-ramos-chips", "ed-ramo", "ed-ramo-pend", "ed-ramo-feito", "ed-ramo-revisado", "ed-ramo-venceu", "ed-ramo-vez", "ed-ramos-mais"].every((c) => html.indexOf("." + c + "{") >= 0), "R20h todas as classes dos chips de ramo tem regra de CSS");
+    const hubSrc = fs.readFileSync(path.join(__dirname, "..", "docs", "edital-hub.js"), "utf8");
+    ok(/className = "btn-min ed-abrir"/.test(hubSrc) && /\.ed-abrir\{margin:10px 0 2px/.test(html) && /\.btn-min\{[^}]*background:var\(--campo\);color:var\(--texto\)/.test(html), "R20g o botao ver os outros N da semana usa o estilo de botao do app (fundo e texto do tema), nao o padrao do navegador (claro sobre claro)");
     ok(/\.ram-colar\{width:100%/.test(html), "R20f CSS da caixa de colar a resposta da IA");
     ok(/\.ram-linha\{display:grid/.test(html) && /\n\.ger-ramo\{padding-left:52px/.test(html), "R20e CSS do editor e da linha do ramo");
   }
