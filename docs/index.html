@@ -4292,6 +4292,52 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-onde-lin{font-size:11px;opacity:.7}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
+/* ---- ESTUDAR OS CARTÕES (player): cartão creme como no Anki, botão grande embaixo ---- */
+dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);height:min(92vh,920px);max-height:94vh;margin:auto;padding:12px 14px;overflow:hidden}
+.est-topo{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.est-onde{flex:1;min-width:0;font-size:12px;color:var(--sutil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.est-topo-acoes{display:inline-flex;align-items:center;gap:6px}
+.est-mais{font-size:18px;line-height:1;padding:4px 10px}
+.est-menu{display:flex;flex-direction:column;gap:2px;margin:6px 0;padding:6px;border-radius:10px;border:1px solid var(--borda);background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.est-menu[hidden]{display:none}
+.est-menu-i{all:unset;box-sizing:border-box;cursor:pointer;padding:10px 12px;border-radius:8px;font-size:14px}
+.est-menu-i:hover,.est-menu-i:focus-visible{background:rgba(127,127,127,.2)}
+.est-cartao{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;margin:8px 0;border-radius:14px;background:#fffaf0;color:#3a2b16;box-shadow:0 3px 12px rgba(0,0,0,.35)}
+.est-cab{background:#e8dcc4;color:#4a3820;text-align:center;font-style:italic;letter-spacing:.4px;padding:9px 14px;font-size:14px;border-radius:14px 14px 0 0}
+.est-frente,.est-verso{padding:16px 18px}
+.est-txt{font-size:19px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.est-resp{font-weight:600}
+.est-hr{border-top:1px solid #cdbfa3;margin:6px 0 14px}
+.est-cl{color:#1d5fd1;font-weight:800}
+.est-cl-r{background:rgba(29,95,209,.13);border-radius:4px;padding:0 3px}
+.est-ops{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.est-op{all:unset;box-sizing:border-box;display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:12px;border-radius:12px;border:2px solid #d9c9a5;background:#fff;font-size:17px;line-height:1.4;color:#3a2b16}
+.est-op:hover:not(:disabled){border-color:#1d5fd1}
+.est-op:disabled{cursor:default}
+.est-op-l{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:#e8dcc4;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+.est-op-t{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.est-op-ok{border-color:#2e9e5b;background:#e3f5e9}
+.est-op-ok .est-op-l{background:#2e9e5b;color:#fff}
+.est-op-erro{border-color:#d9534f;background:#fbe6e5}
+.est-op-erro .est-op-l{background:#d9534f;color:#fff}
+.est-just{font-size:16px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px 14px;border-radius:10px;background:#f3ead6;color:#5a4630;margin-top:6px}
+.est-saiba-b{all:unset;box-sizing:border-box;display:block;cursor:pointer;margin:6px 18px 12px;padding:10px;text-align:center;border-radius:999px;background:#e8dcc4;color:#8a4a10;font-weight:800;font-size:14px;letter-spacing:.4px;width:calc(100% - 36px)}
+.est-saiba{margin:0 18px 16px;padding:12px 14px;border-radius:10px;background:#f3ead6;color:#4a3820;font-size:15px;line-height:1.5}
+.est-saiba[hidden]{display:none}
+.est-saiba-l{margin:0 0 8px}
+.est-base{flex:0 0 auto;display:flex;flex-direction:column;gap:8px}
+.est-virar{all:unset;box-sizing:border-box;cursor:pointer;text-align:center;width:100%;padding:16px;border-radius:14px;background:#2f6be0;color:#fff;font-size:18px;font-weight:800}
+.est-virar:focus-visible{outline:3px solid #fff}
+.est-virar-prox{background:#2e9e5b}
+.est-nav{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.est-seta{min-width:56px;font-size:18px;padding:8px 14px}
+.est-contador{font-size:13px;color:var(--sutil)}
+@media (max-width:760px){
+  dialog.est-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
+    padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
+  .est-txt{font-size:18px}
+  .est-virar{padding:18px}
+}
 /* ---- GRADUAÇÃO VISUAL DA ÁRVORE: cada nível tem a sua cor, faixa lateral, peso e recuo ----
  * edital (azul) › disciplina (verde-água) › tópico (âmbar) › ramo (roxo). A cor da faixa vem de --ger-nv. */
 #gerArvore .ger-pasta{border-left:4px solid var(--ger-nv,transparent);margin:2px 0}
@@ -4304,6 +4350,22 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 #gerArvore.ger-modo-edital .ger-ramo{padding-left:10px}
 #gerArvore .ger-pasta.ger-atual{background:rgba(46,158,91,.30);outline:1px solid var(--acao);outline-offset:-1px;font-weight:800}
 #gerArvore .ger-pasta:not(.ger-ed):not(.ger-disc):not(.ger-top):not(.ger-ramo){font-weight:700}
+/* selo da prova na linha do edital, e o indicador "onde estou" no alto da lista de cartões */
+.ger-prova{margin-left:6px;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;vertical-align:1px}
+.ger-prova-prox{background:rgba(217,83,79,.22);color:#ff8a85}
+.ger-prova-longe{background:rgba(127,127,127,.22);color:var(--sutil)}
+.ger-prova-enc{background:rgba(127,127,127,.15);color:var(--sutil);font-style:italic}
+#gerArvore .ger-ed.ger-enc{opacity:.55}
+.ger-onde{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow:hidden;background:var(--panel);padding:4px 0 6px;font-size:12px}
+.ger-col-cartoes .ger-ferr{top:34px}
+.ger-onde-chip{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 9px;border-radius:999px;font-weight:700;border:1px solid transparent}
+.ger-onde-ed{background:rgba(91,141,239,.2);border-color:#5b8def}
+.ger-onde-disc{background:rgba(46,196,182,.16);border-color:#2ec4b6}
+.ger-onde-top{background:rgba(240,173,78,.16);border-color:#f0ad4e}
+.ger-onde-ramo{background:rgba(179,136,255,.18);border-color:#b388ff}
+.ger-onde-todos{background:rgba(46,158,91,.2);border-color:#2e9e5b}
+.ger-onde-sep{opacity:.55;flex:0 0 auto}
+.ger-onde-n{margin-left:auto;flex:0 0 auto;opacity:.7;padding-left:6px;white-space:nowrap}
 .ger-cab-acoes{display:inline-flex;align-items:center;gap:6px}
 .ger-abas{display:none}
 .ger-aba{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 0;text-align:center;padding:9px 6px;font-size:13px;font-weight:700;
@@ -7642,12 +7704,21 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <option value="edital" data-i18n="ger_agrupar_edital"></option>
           <option value="disciplina" data-i18n="ger_agrupar_disc"></option>
         </select>
+        <select id="gerOrdenar" class="ger-agrupar">
+          <option value="prova" data-i18n="ger_ordem_prova"></option>
+          <option value="nome" data-i18n="ger_ordem_nome"></option>
+          <option value="cartoes" data-i18n="ger_ordem_cartoes"></option>
+          <option value="cadastro" data-i18n="ger_ordem_cadastro"></option>
+        </select>
         <label class="ger-ocultar"><input type="checkbox" id="gerOcultarVazias"> <span data-i18n="ger_ocultar_vazias"></span></label>
       </div>
       <div id="gerArvore"></div>
     </div>
     <div class="ger-col ger-col-cartoes">
+      <!-- ONDE ESTOU: edital › disciplina › tópico › ramo da pasta que a lista mostra agora, cada nível na cor da árvore -->
+      <div class="ger-onde" id="gerOnde" role="status"></div>
       <div class="ger-ferr">
+        <button type="button" class="btn-min btn-min-ok" id="btnGerEstudar" hidden></button>
         <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
         <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
@@ -7693,6 +7764,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="nota" id="gerTotal"></span>
     <button class="btn btn-cinza" id="btnGerDesfazer" data-i18n="ger_desfazer" hidden></button>
     <button class="btn btn-cinza" id="btnGerFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- ESTUDAR OS CARTÕES DA BIBLIOTECA: um cartão por vez, no jeito do Anki (frente → mostrar resposta → verso → próximo). -->
+<dialog id="dlgGerEstudo" class="ui-modal est-dlg">
+  <div class="est-topo">
+    <span class="est-onde" id="estOnde"></span>
+    <span class="est-topo-acoes">
+      <button type="button" class="btn-min est-mais" id="btnEstMais" aria-label="Mais ações">⋮</button>
+      <button type="button" class="qs-x" id="btnEstX" aria-label="Fechar">✕</button>
+    </span>
+  </div>
+  <div class="est-menu" id="estMenu" hidden></div>
+  <div class="est-cartao" id="estCartao"></div>
+  <div class="est-base">
+    <button type="button" class="est-virar" id="btnEstVirar"></button>
+    <div class="est-nav">
+      <button type="button" class="btn-min est-seta" id="btnEstAnt" aria-label="Cartão anterior">←</button>
+      <span class="est-contador" id="estContador"></span>
+      <button type="button" class="btn-min est-seta" id="btnEstProx" aria-label="Próximo cartão">→</button>
+    </div>
   </div>
 </dialog>
 
@@ -8227,6 +8319,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cartao-qualidade.js"></script>
 <script src="cartao-elevar.js"></script>
 <script src="gerenciador.js"></script>
+<script src="estudo-cartoes.js"></script>
 <script src="ramos.js"></script>
 <script src="pacote.js"></script>
 <script src="dificuldade.js"></script>

@@ -2061,6 +2061,63 @@ async function testes() {
       a.$("btnGerX").onclick();
     }
 
+    /* R58: o PLAYER de estudo da biblioteca — abre pela agenda na pasta do topico; basico, lacuna (uma unidade por cN) e multipla escolha */
+    {
+      const { a } = MT();
+      const D = "Direito Financeiro", T = "Estudo R58";
+      const txt = [
+        "Qual o prazo? :: 30 dias :: tag1",
+        "A alíquota é {{c1::fixada no ano anterior::A ou B?}} e a vigência é {{c2::no exercício seguinte}} :: justificativa da lacuna",
+        "[MC] Qual verbo admite a passiva? :: intransitivo | transitivo direto * | de ligação :: porque exige objeto direto",
+      ].join("\n");
+      a.matGravarCartoes(a.matChave(D, T), txt, { disciplina: D, topico: T });
+      /* as unidades: basico 1 + lacuna 2 (c1, c2) + mc 1 = 4 */
+      a.gerAbrirNoTopico(D, T, { estudar: true });
+      const at = () => a.estcAtual();
+      ok(a.$("dlgGerCartoes").open === true && a.$("dlgGerEstudo").open === true, "R58a a agenda abre a biblioteca E o player de estudo");
+      ok(at().un.length === 4 && at().un.filter((u) => u.cn === 1 || u.cn === 2).length === 2, "R58b o cartao de lacuna com c1 e c2 vira DUAS unidades de estudo (basico 1 + lacuna 2 + mc 1 = 4): " + at().un.length);
+      ok(new Set(at().un.map((u) => u.id)).size === 4, "R58c cada unidade tem identidade propria (guid#cN)");
+      ok(a.gerCaminhoDaPasta().map((x) => x.nome).slice(-2).join("|") === D + "|" + T, "R58e a biblioteca ficou NA pasta do topico: " + JSON.stringify(a.gerCaminhoDaPasta()));
+      ok(at().i === 0 && at().rev === false, "R58f comeca no primeiro cartao, com a resposta escondida");
+      /* basico: virar mostra o verso; virar de novo passa ao proximo */
+      const texto = () => achar(a.$("estCartao"), () => true).map((e) => e.textContent || "").join(" ");
+      ok(/Qual o prazo/.test(texto()) && !/30 dias/.test(texto()), "R58g a frente aparece e o verso NAO");
+      a.$("btnEstVirar").onclick();
+      ok(at().rev === true && /30 dias/.test(texto()) && a.$("btnEstVirar").textContent === a.t("est_prox"), "R58h 'mostrar resposta' revela o verso e o botao passa a 'proximo'");
+      a.$("btnEstVirar").onclick();
+      ok(at().i === 1 && at().rev === false, "R58i o segundo toque passa ao proximo cartao");
+      /* lacuna c1: escondida mostra a dica, a c2 ja vem preenchida */
+      const marcas = () => achar(a.$("estCartao"), (e) => cls(e, "est-cl")).map((e) => e.textContent);
+      ok(marcas().join("|") === "[A ou B?]" && /no exercício seguinte/.test(texto()), "R58j lacuna c1 escondida mostra a dica e a c2 aparece ja preenchida: " + marcas().join("|"));
+      a.$("btnEstVirar").onclick();
+      ok(marcas().join("|") === "fixada no ano anterior" && achar(a.$("estCartao"), (e) => cls(e, "est-cl-r")).length === 1 && /justificativa da lacuna/.test(texto()), "R58k revelada, a c1 vira a resposta destacada e aparece a justificativa: " + marcas().join("|"));
+      a.$("btnEstVirar").onclick();
+      const m2 = marcas().join("|");
+      ok(at().i === 2 && m2 === "[…]" && /fixada no ano anterior/.test(texto()), "R58l na segunda unidade e' a c2 que se esconde (sem dica: [...]) e a c1 ja vem preenchida: " + m2);
+      /* multipla escolha: tocar numa alternativa revela e marca certo/errado */
+      a.estcIr(1);
+      const ops = () => achar(a.$("estCartao"), (e) => cls(e, "est-op"));
+      ok(ops().length === 3 && at().rev === false, "R58m a multipla escolha mostra tres alternativas para tocar");
+      ops()[0].onclick();
+      ok(at().rev === true && at().esc === 0 && cls(ops()[0], "est-op-erro") && cls(ops()[1], "est-op-ok"), "R58n tocar numa errada revela: a errada fica vermelha e a certa verde");
+      ok(/porque exige objeto direto/.test(texto()), "R58o a justificativa aparece depois de responder");
+      /* retomar: fecha no 4o cartao e reabre na mesma pasta */
+      a.$("dlgGerEstudo").close();
+      a.$("dlgGerCartoes").close();
+      a.gerAbrirNoTopico(D, T, { estudar: true });
+      ok(at().i === 3, "R58p ao reabrir a pasta o estudo RETOMA de onde parou: " + at().i);
+      /* concluir: no ultimo cartao, virar e virar de novo fecha o player */
+      a.$("btnEstVirar").onclick(); a.$("btnEstVirar").onclick();
+      ok(a.$("dlgGerEstudo").open === false && a.$("dlgGerCartoes").open === true, "R58q terminar a lista fecha o player e devolve a biblioteca");
+      a.gerAbrirNoTopico(D, T, { estudar: true });
+      ok(at().i === 0, "R58r depois de concluir, o proximo estudo recomeca do primeiro");
+      a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
+      /* o botao Estudar na barra dos cartoes conta o que entra */
+      a.gerAbrirNoTopico(D, T);
+      ok(a.$("btnGerEstudar").hidden === false && /3/.test(a.$("btnGerEstudar").textContent), "R58s o botao 'Estudar' da lista mostra quantas notas entram: " + a.$("btnGerEstudar").textContent);
+      a.$("dlgGerCartoes").close();
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

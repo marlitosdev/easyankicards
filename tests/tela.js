@@ -2174,13 +2174,14 @@ async function testes() {
         /* O atalho da agenda leva a VER os cartões, não a editá-los: o
          * gesto ali é "quero revisar", e o caminho antigo abria o resumo
          * em modo edição antes de mostrar cartão nenhum. */
-        ok(api.$("dlgMcEstudo").open,
-           "AI4 o atalho da agenda não abriu o leitor de cartões");
+        ok(api.$("dlgGerEstudo").open && api.$("dlgGerCartoes").open,
+           "AI4 o atalho da agenda não abriu a biblioteca no player de estudo");
         ok(api.$("dlgMaterial").open !== true,
            "AI4b o atalho passou pelo resumo no caminho");
         ok(api.modoAtual === modoAntes,
            `AI5 abrir os cartões trocou o modo do app: ${modoAntes} → ${api.modoAtual}`);
-        api.$("dlgMcEstudo").close();
+        api.$("dlgGerEstudo").close();
+        api.$("dlgGerCartoes").close();
         api.$("dlgMatCartoes").close();
         api.$("dlgMaterial").close();
 

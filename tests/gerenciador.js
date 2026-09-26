@@ -877,7 +877,8 @@ async function testes() {
       return { a, edA, edB, k };
     };
     const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
-    const raizes = (a) => linhas(a, "ger-ed").map((e) => e.textContent.replace(/^\s*[▾▸]\s*/, "").trim());
+    /* só o nome e o total: o selo da prova ("prova em 248 d") é outro <span> da mesma linha */
+    const raizes = (a) => linhas(a, "ger-ed").map((e) => (e.children[1] ? e.children[1].textContent : e.textContent).replace(/^\s*[▾▸]\s*/, "").trim());
     const abrirDisc = (a, nome) => {
       const l = linhas(a, "ger-disc").find((e) => e.textContent.indexOf(nome) >= 0);
       l.children[0].onclick({ stopPropagation() {} });
@@ -903,7 +904,44 @@ async function testes() {
       const { a } = ME();
       a.gerAbrir();
       const r = raizes(a);
-      ok(r.join("|") === "Bancada (1)|ISS Caruaru Auditor (7)|TCE-PE (2)|Concurso Apagado (1)|Sem edital (1)", "G19f raizes: Bancada, cada edital (na ordem da lista), edital que sumiu e 'Sem edital': " + r.join("|"));
+      ok(r.join("|") === "Bancada (1)|ISS Caruaru Auditor (7)|TCE-PE (2)|Concurso Apagado (1)|Sem edital (1)", "G19f raizes: Bancada, cada edital (pela prova mais proxima), edital que sumiu e 'Sem edital': " + r.join("|"));
+      /* ---- ORDEM: a prova mais proxima primeiro, os encerrados por ultimo; outras ordens a gosto ---- */
+      {
+        const rr = rodar(); const b = rr.api;
+        b.matIniciar(); b.edIniciar();
+        b.edCriar("ZZ Encerrado", "# ZZ | prova: 2020-01-01 | horas: 20\n@ Disc A :: 5\n+ Top A :: 5");
+        b.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20\n@ Disc B :: 5\n+ Top B :: 5");
+        b.edCriar("AAA Perto", "# AAA | prova: 2026-12-31 | horas: 20\n@ Disc C :: 5\n+ Top C :: 5");
+        const cs2 = (n) => Array.from({ length: n }, (_, i) => "Pergunta " + n + "-" + i + "? :: Resposta " + n + i + " qq" + n + i).join("\n");
+        b.matGravarCartoes(b.matChave("Disc B", "Top B"), cs2(2), { disciplina: "Disc B", topico: "Top B", concurso: "TCE-PE" });
+        b.matGravarCartoes(b.matChave("Disc C", "Top C"), cs2(1), { disciplina: "Disc C", topico: "Top C", concurso: "AAA Perto" });
+        b.gerAbrir();
+        const nomes = () => raizes(b).filter((x) => !/^Bancada/.test(x)).map((x) => x.replace(/ \(\d+\)$/, "")).join("|");
+        ok(b.gerOrdemAtual() === "prova" && b.$("gerOrdenar").value === "prova", "G19f2 a ordem padrao e' 'prova mais proxima'");
+        ok(nomes() === "AAA Perto|TCE-PE|ZZ Encerrado", "G19f3 padrao: prova mais proxima primeiro, ENCERRADO por ultimo (mesmo tendo sido cadastrado primeiro): " + nomes());
+        const enc = linhas(b, "ger-ed").find((e) => /ZZ Encerrado/.test(e.textContent));
+        const per = linhas(b, "ger-ed").find((e) => /AAA Perto/.test(e.textContent));
+        ok(cls(enc, "ger-enc") && /encerrado/.test(enc.textContent) && /prova em \d+ d/.test(per.textContent), "G19f4 o edital encerrado fica apagado e diz 'encerrado'; o proximo diz em quantos dias e' a prova");
+        b.$("gerOrdenar").value = "cadastro"; b.$("gerOrdenar").onchange();
+        ok(nomes() === "ZZ Encerrado|TCE-PE|AAA Perto" && b.lojaLer(b.GER_CHAVE_ORDEM) === "cadastro", "G19f5 'ordem de cadastro' respeita a ordem em que foram criados, e a escolha fica lembrada: " + nomes());
+        b.$("gerOrdenar").value = "nome"; b.$("gerOrdenar").onchange();
+        ok(nomes() === "AAA Perto|TCE-PE|ZZ Encerrado", "G19f6 'nome' ordena de A a Z: " + nomes());
+        b.$("gerOrdenar").value = "cartoes"; b.$("gerOrdenar").onchange();
+        ok(nomes() === "TCE-PE|AAA Perto|ZZ Encerrado", "G19f7 'mais cartoes' poe quem tem mais cartoes na frente: " + nomes());
+        b.$("dlgGerCartoes").close(); b.gerAbrir();
+        ok(b.gerOrdemAtual() === "cartoes", "G19f8 a ordem escolhida volta na proxima abertura");
+        b.$("gerOrdenar").value = "prova"; b.$("gerOrdenar").onchange();
+        /* ---- o indicador de ONDE ESTOU, acima da lista ---- */
+        const chips = () => achar(b.$("gerOnde"), (e) => cls(e, "ger-onde-chip")).map((e) => e.textContent);
+        ok(chips().join("|") === "Todos os cartões", "G19g1 sem pasta escolhida o indicador diz 'todos os cartoes': " + chips().join("|"));
+        b.gerAbertosAtual().add(b.gerModeloEditais(b.gerNotasAtual(), []).roots.find((r) => r.nome === "TCE-PE").id + "|disc b"); b.gerPintar();
+        const topB = achar(b.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => /Top B/.test(e.textContent));
+        topB.onclick();
+        ok(chips().join("|") === "TCE-PE|Disc B|Top B", "G19g2 numa pasta de topico o indicador mostra edital, disciplina e topico: " + chips().join("|"));
+        const classes = achar(b.$("gerOnde"), (e) => cls(e, "ger-onde-chip")).map((e) => e.className.split(" ").filter((x) => /^ger-onde-(ed|disc|top|ramo)$/.test(x))[0]);
+        ok(classes.join("|") === "ger-onde-ed|ger-onde-disc|ger-onde-top", "G19g3 cada nivel tem a sua cor: " + classes.join("|"));
+        ok(/2 cartões/.test(b.$("gerOnde").textContent), "G19g4 o indicador diz quantos cartoes a pasta tem");
+      }
       ok(a.$("gerArvore").classList.contains("ger-modo-edital"), "G19g a arvore ganha o modo edital (recuo dos niveis)");
       ok(linhas(a, "ger-top").length === 1 && /Texto do editor/.test(linhas(a, "ger-top")[0].textContent) && linhas(a, "ger-disc").length > 0 && linhas(a, "ger-disc").every((e) => /▸/.test(e.textContent)), "G19h no comeco as raizes estao abertas e as disciplinas FECHADAS (so' a Bancada mostra o topico dela)");
     }

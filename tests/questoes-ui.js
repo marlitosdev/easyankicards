@@ -1324,16 +1324,18 @@ async function testes() {
     ok(!!bc, "K1 a linha perdeu o atalho dos cartoes (nem na linha, nem no menu)");
     if (!bc) { falhas.quantas = n; return falhas; }
     bc.onclick({ stopPropagation() {} });
-    ok(aL.$("dlgMcEstudo").open === true,
-       "K1b o atalho da agenda nao abriu o leitor de cartoes");
+    ok(aL.$("dlgGerEstudo").open === true && aL.$("dlgGerCartoes").open === true,
+       "K1b o atalho da agenda nao abriu a biblioteca no player de estudo");
     ok(aL.$("dlgMaterial").open === false,
        "K1c o atalho abriu o RESUMO no caminho, que nao tem a ver com o gesto");
-    ok(aL.mcEstMostraAtual() === false,
-       "K1d o leitor abriu com a resposta a mostra — assim nao e teste, e leitura");
+    ok(aL.estcAtual().rev === false,
+       "K1d o player abriu com a resposta a mostra — assim nao e teste, e leitura");
 
-    /* criar mais cartoes DAQUI */
-    ok(aL.$("btnMcEstCriar").hidden === false, "K1e falta o botao de criar mais cartoes");
-    aL.$("btnMcEstCriar").onclick();
+    /* criar mais cartoes DAQUI (menu do player) */
+    aL.estcMenuMontar();
+    const itCriar = Array.from(aL.$("estMenu").children).find((b) => b.textContent === aL.t("est_m_criar"));
+    ok(!!itCriar, "K1e falta o item de criar mais cartoes no menu do player");
+    itCriar.onclick();
     ok(aL.$("dlgMatCartoes").open === true, "K1f criar mais nao abriu a criacao");
     ok(aL.$("dlgMaterial").open === false,
        "K1g criar mais passou pelo resumo");
@@ -1342,7 +1344,7 @@ async function testes() {
     ok(/cart/i.test(aL.$("btnMcFechar").textContent),
        "K1i o voltar devia levar de volta aos cartoes: " + aL.$("btnMcFechar").textContent);
     aL.$("btnMcFechar").onclick();
-    ok(aL.$("dlgMcEstudo").open === true, "K1j voltar nao devolveu ao leitor");
+    ok(aL.$("dlgGerEstudo").open === true, "K1j voltar nao devolveu ao player");
 
     /* topico SEM cartao nenhum: vai direto para a criacao */
     const cVazio = aL.matChave("Direito Financeiro", "Sem cartoes");
