@@ -311,6 +311,7 @@ async function testes() {
     const semObj = a.cqHash(a.cqNormal(a.cqRevelado(c10) + " | " + String(c10.back || "")));
     ok(a.ceChaveCartao(c10, "completar") === semObj && a.ceChaveCartao(c10) === semObj, "E9-a3 a chave de 'completar' e' EXATAMENTE a de antes (o registro de trabalhados que ja existe continua valendo)");
     ok(alvo("fatos", c10) && !alvo("fatos", cLongo) && !alvo("fatos", cForma) && !alvo("fatos", cBom), "E9 'conferir fatos' pega so' o cartao com numero/data/artigo");
+    ok(!alvo("dividir", { kind: "cloze", front: "Qual? {{c1::Nao}}, " + "palavra ".repeat(28), back: "" }) && alvo("dividir", { kind: "cloze", front: "Qual? {{c1::Nao}}, " + "palavra ".repeat(45), back: "" }), "E9a0 'dividir' usa o limite de lacuna (320): cloze de ~240 nao entra, de ~380 entra");
     ok(alvo("dividir", cLongo) && !alvo("dividir", c10) && !alvo("dividir", cBom), "E9a 'dividir' pega so' o cartao longo (mais de 220 caracteres)");
     ok(alvo("forma", cForma) && !alvo("forma", c10) && !alvo("forma", cBom), "E9b 'forma' pega o curto/sem pergunta");
     ok(alvo("completar", c10) && alvo("completar", cBom) && a.ceServeAoObjetivo("completar", null) === false, "E9c 'completar' serve a qualquer cartao (a fila dele e' pelo nivel)");

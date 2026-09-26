@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "16.94.0";
+const VERSAO = "16.94.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1125,8 +1125,8 @@ function renderSugestoes(r, raw) {
   const vistos = {};
   let longos = 0, dups = 0;
   r.cards.forEach((c) => {
-    if ((c.front + c.back).length > 220 && longos < 2) {
-      itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line }), linha: c.line }); longos++;
+    if (cartaoLongo(c) && longos < 2) {
+      itens.push({ dot: "dot-org", txt: t("crit_long", { n: c.line, lim: limiteLongo(c) }), linha: c.line }); longos++;
     }
   });
   // frentes repetidas: um item por GRUPO, com todas as linhas. Antes o

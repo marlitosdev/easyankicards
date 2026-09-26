@@ -1201,12 +1201,50 @@ async function testes() {
       /* dois falsos positivos que NAO podem ser marcados */
       "O que e a Letra Financeira do Tesouro? :: Titulo publico pos-fixado a Selic :: fin",
       "Qual costuma ser a alternativa mais barata de financiamento? :: O capital proprio retido :: fin",
+      /* caso real (denuncia espontanea): "Qual a alternativa ..." em portugues comum, nao de multipla escolha */
+      "Qual a alternativa ao pagamento direto do tributo na denuncia espontanea quando o valor depender de apuracao? Deve ser efetuado o {{c1::deposito do valor arbitravel}}. :: ctm",
+      "Qual a alternativa financeira na denuncia espontanea quando o valor do tributo depender de apuracao previa? E indispensavel o {{c1::deposito da quantia arbitravel}}. :: ctm",
+      "Qual alternativa processual resta ao contribuinte apos o prazo? :: A acao anulatoria :: ctm",
     ].join("\n\n");
     api.$("editor").value = PRESO;
     const rP = api.parseAtual();
     const presos = api.cartoesDependentes(rP);
-    ok(presos.length === 2, `J1 esperava 2 cartoes presos, veio ${presos.length}`);
+    ok(presos.length === 2, `J1 esperava 2 cartoes presos, veio ${presos.length}: ${presos.map((c) => c.front).join(" | ")}`);
+    const depFn = (txt) => api.cartoesDependentes({ cards: [{ front: txt, back: "x", titulo: "" }] }).length;
+    ok(depFn("Qual alternativa apresenta a regra do prazo?") === 1 && depFn("Qual a alternativa correta?") === 1 && depFn("Qual alternativa indica o conceito de mora?") === 1 && depFn("Qual a alternativa é a que define o tributo?") === 1, "J1b 'Qual alternativa <verbo de prova>' continua sendo marcada (multipla escolha)");
+    ok(depFn("Qual a alternativa ao pagamento direto?") === 0 && depFn("Qual a alternativa financeira na denuncia espontanea?") === 0 && depFn("Qual alternativa processual resta?") === 0, "J1c 'Qual a alternativa' em portugues comum NAO e' marcada (caso real: denuncia espontanea)");
     ok(/Questao 17/.test(presos[0].front || ""), "J2 apontou o cartao errado");
+    /* K — o limite de "cartao longo": lacuna conta a pergunta e a resposta juntas, entao tem folga */
+    {
+      const pad = (n) => "palavra ".repeat(Math.ceil(n / 8)).slice(0, n);
+      const basico = (n) => ({ kind: "basic", front: "Pergunta?", back: pad(n - 9) });
+      const cloze = (n) => ({ kind: "cloze", front: "Qual? {{c1::Nao}}, " + pad(n - 19), back: "" });
+      ok(api.cartaoLongo(basico(221)) === true && api.cartaoLongo(basico(220)) === false, "K1 basico: passa de 220 caracteres = longo");
+      ok(api.cartaoLongo(cloze(250)) === false && api.cartaoLongo(cloze(320)) === false && api.cartaoLongo(cloze(321)) === true, "K2 lacuna: o limite sobe para 320 (a frente ja traz pergunta e resposta)");
+      ok(api.limiteLongo(basico(10)) === 220 && api.limiteLongo(cloze(30)) === 320 && api.limiteLongo({ front: "O {{c2::x}} vale", back: "" }) === 320 && api.limiteLongo(null) === 220 && api.cartaoLongo(null) === false, "K3 o limite de cada tipo (e nulo nao quebra)");
+      /* o caso real: cloze de ~230 caracteres de uma ideia so' */
+      const real = "A entrega de declaracao fiscal obrigatoria sem o concomitante pagamento configura denuncia espontanea em Caruaru? {{c1::Nao}}, a mera apresentacao de declaracao formal sem o recolhimento nao configura denuncia espontanea. :: ctm, denuncia";
+      api.$("editor").value = real;
+      const rr = api.parseAtual();
+      ok(rr.cards.length === 1 && (rr.cards[0].front + rr.cards[0].back).length > 220 && api.cartaoLongo(rr.cards[0]) === false, "K4 o cloze real (mais de 220, uma ideia so') nao e' mais tido como longo: " + (rr.cards[0].front + rr.cards[0].back).length);
+      api.renderSugestoes(rr, real);
+      const textoSug = (el) => [el.textContent || "", ...(el.children || []).map(textoSug)].join(" ");
+      const painel = textoSug(api.$("sugestoes"));
+      ok(!/muito longo/.test(painel), "K5 o painel de sugestoes nao pede para dividir o cloze de uma ideia so'");
+      ok(depFn("Qual alternativa completamente viavel resta?") === 0, "K4c o verbo de prova precisa ser a palavra inteira ('completa' nao vale em 'completamente')");
+      const pClozeCurto = api.problemasDoTexto(real, rr);
+      ok(!pClozeCurto.achados.some((x) => /longo demais/.test(x.msg)), "K4d o pedido de correcao NAO manda dividir o cloze de uma ideia so'");
+      const longoB = "Pergunta comprida? :: " + "palavra ".repeat(40) + ":: x";
+      api.$("editor").value = longoB;
+      const rb = api.parseAtual();
+      api.renderSugestoes(rb, longoB);
+      ok(/muito longo \(>220 caracteres\)/.test(textoSug(api.$("sugestoes"))), "K6 cartao basico longo continua avisado, dizendo o limite (220)");
+      const longoC = "Qual? {{c1::Nao}}, " + "palavra ".repeat(45) + ":: x";
+      api.$("editor").value = longoC;
+      api.renderSugestoes(api.parseAtual(), longoC);
+      ok(/muito longo \(>320 caracteres\)/.test(textoSug(api.$("sugestoes"))), "K7 lacuna acima de 320 e' avisada, dizendo o limite certo (320)");
+    }
+
     api.renderSugestoes(rP, PRESO);
     const temJ = (el, cls) => (el.children || []).some(
       (f) => new RegExp(cls).test(f.className || "") || temJ(f, cls));

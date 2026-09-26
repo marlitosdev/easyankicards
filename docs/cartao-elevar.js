@@ -136,7 +136,7 @@ function ceFiltrarBusca(lista) {
 const CE_RISCO_RE = /\b(art\.?|artigo|s[úu]mula|lei|inciso)\b|§|\d{2,}|\d+\s*%|R\$|\b(19|20)\d{2}\b/i;
 const CE_ALVO = {
   fatos: (c) => CE_RISCO_RE.test(String(c.front || "") + " " + String(c.back || "") + " " + String(c.more || "")),
-  dividir: (c) => (String(c.front || "") + String(c.back || "")).length > 220,
+  dividir: (c) => cartaoLongo(c),
   forma: (c) => (String(c.front || "") + " " + String(c.back || "")).replace(/\{\{c\d+::|\}\}/g, "").trim().length < 25
     || (c.kind !== "cloze" && c.kind !== "mc" && !String(c.back || "").trim())
     || (c.kind === "basic" && !/\?\s*$/.test(String(c.front || "").trim())),
