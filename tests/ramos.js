@@ -1092,6 +1092,23 @@ async function testes() {
       a.abrirRegistro(it());
       const bl = a.$("regTrilha");
       ok(bl.hidden === false && /Modalidades: lei ✓ · questões ✓ · cartões ○ · julgados —/.test(bl.textContent) && /Sessão combinada sugerida: 70min cartões\./.test(bl.textContent), "R38g o registro mostra a trilha do ramo marcado e a sessao combinada (so' o que falta, com o tempo do ramo): " + bl.textContent);
+      const abrirBt = achar2(bl, (f) => /reg-trilha-abrir-btn/.test(f.className || ""), []);
+      ok(abrirBt.map((b) => b.textContent).join("|") === ["lei", "questoes", "cartoes"].map((x) => a.t("ed_passo_abrir", { x: a.t("ed_passo_" + x) })).join("|"), "R38g2 um botao 'Abrir' por passo COM material (lei, questoes, cartoes; julgados nao): " + abrirBt.map((b) => b.textContent));
+      ok(a.edAbrirPasso(it(), "nao_existe") === "" && a.edAbrirPasso(null, "lei") === "", "R38g3 passo desconhecido ou item vazio: nao abre nada");
+      ok(a.edAbrirPasso(it(), "lei") === "lei", "R38g3b o passo existente abre e devolve o id dele");
+      a.abrirRegistro(it());
+      const abriuDe = (k) => {
+        a.abrirRegistro(it());
+        const bs = achar2(a.$("regTrilha"), (f) => /reg-trilha-abrir-btn/.test(f.className || ""), []);
+        bs[k].onclick();
+        return bs[k].abriu;
+      };
+      ok(abriuDe(0) === "lei" && abriuDe(1) === "questoes" && abriuDe(2) === "cartoes", "R38g3c cada botao abre O SEU material (lei, questoes, cartoes)");
+      a.abrirRegistro(it());
+      a.$("dlgRegistro").open = true;
+      abrirBt[0].onclick();
+      ok(a.$("dlgRegistro").open === false, "R38g4 abrir o material fecha a janela de registro (aberta, ela deixaria o resto inerte)");
+      a.abrirRegistro(it());
       a.$("btnRegOutro").onclick();
       ok(a.$("regTrilha").hidden === true, "R38h na REVISAO nao ha trilha");
       a.$("dlgRegistro").close();
@@ -1531,7 +1548,7 @@ async function testes() {
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
     ok(["dsc-ramos", "dsc-ramos-lista", "dsc-ramo-lin", "dsc-ramo-nome", "dsc-ramo-peso", "dsc-ramo-btn"].every((c) => html.indexOf("." + c + "{") >= 0), "R20j as classes do painel de ramos da disciplina tem regra de CSS");
-    ok(["reg-trilha", "reg-trilha-lin", "dsc-ramo-falta", "dsc-ramo-semmat"].every((c) => html.indexOf("." + c + "{") >= 0), "R20k as classes da trilha (registro e painel) tem regra de CSS");
+    ok(["reg-trilha", "reg-trilha-lin", "dsc-ramo-falta", "dsc-ramo-semmat", "reg-trilha-abrir"].every((c) => html.indexOf("." + c + "{") >= 0), "R20k as classes da trilha (registro e painel) tem regra de CSS");
     ok(["reg-ramos", "reg-ramo-lin", "reg-ramo-nome", "reg-ramo-est", "reg-ramo-indisp", "reg-ramos-acoes"].every((c) => html.indexOf("." + c + "{") >= 0), "R20i as classes da lista de ramos no registro tem regra de CSS");
     ok(["ed-ramos", "ed-ramos-resumo", "ed-ramos-chips", "ed-ramo", "ed-ramo-pend", "ed-ramo-feito", "ed-ramo-revisado", "ed-ramo-venceu", "ed-ramo-vez", "ed-ramos-mais"].every((c) => html.indexOf("." + c + "{") >= 0), "R20h todas as classes dos chips de ramo tem regra de CSS");
     const hubSrc = fs.readFileSync(path.join(__dirname, "..", "docs", "edital-hub.js"), "utf8");

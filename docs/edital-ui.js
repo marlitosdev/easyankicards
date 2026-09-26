@@ -1675,6 +1675,22 @@ function regRamosPintar(i, refazerMinutos) {
 }
 /* A TRILHA dos ramos marcados (até 3): o que já foi feito (lei, questões, cartões, jurisprudência) e a sessão combinada sugerida
  * para o que falta, com o tempo do ramo repartido entre os passos. Só no estudo (na revisão não há trilha). */
+/* ABRIR O MATERIAL DE UM PASSO da trilha (lei seca, questões, cartões, julgados) do tópico do item. Devolve o id do passo
+ * quando abriu, ou "" quando o destino não existe. A janela de registro se fecha antes: aberta, ela deixaria o resto inerte. */
+function edAbrirPasso(i, passo) {
+  if (!i) return "";
+  const alvo = {
+    lei: () => (typeof leiAbrir === "function" ? leiAbrir(i.disciplina, i.nome) : null),
+    questoes: () => (typeof qsUiResponderDireto === "function" ? qsUiResponderDireto(i.disciplina, i.nome) : null),
+    cartoes: () => (typeof mcEstudarDireto === "function" ? mcEstudarDireto(i.disciplina, i.nome) : null),
+    juris: () => (typeof jurAbrir === "function" ? jurAbrir(i.disciplina, i.nome) : null),
+  }[passo];
+  if (!alvo) return "";
+  try { const dlg = $("dlgRegistro"); if (dlg && dlg.open) dlg.close(); } catch (e) {}
+  try { alvo(); } catch (e) { return ""; }
+  return passo;
+}
+
 function regTrilhaPintar(i) {
   const bl = $("regTrilha");
   if (!bl) return;
@@ -1700,6 +1716,21 @@ function regTrilhaPintar(i) {
       lin.append(sg);
     } else if (tr.completo && tr.passos.some((p) => p.disponivel)) {
       const ok = document.createElement("div"); ok.className = "nota"; ok.textContent = t("ed_trilha_completa"); lin.append(ok);
+    }
+    const usaveis = tr.passos.filter((p) => p.disponivel);
+    if (usaveis.length) {
+      const ab = document.createElement("div");
+      ab.className = "reg-trilha-abrir";
+      usaveis.forEach((p) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn-min reg-trilha-abrir-btn";
+        b.textContent = t("ed_passo_abrir", { x: t("ed_passo_" + p.id) });
+        b.title = t("ed_passo_abrir_tip");
+        b.onclick = () => { b.abriu = edAbrirPasso(i, p.id); };
+        ab.append(b);
+      });
+      lin.append(ab);
     }
     bl.append(lin);
   });
