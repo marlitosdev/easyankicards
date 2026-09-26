@@ -254,6 +254,39 @@ async function testes() {
     ok(api.edDiscComFolga(pb3.blocos, pb3.itens, {}).length === 0, "R36w estudado mas NAO revisado: nao libera tempo (a revisao por ramo pesa)");
   }
 
+    /* ---- R37: a trilha do ramo (Fase 5) — pura ---- */
+  {
+    ok(api.ED_PASSOS.map((x) => x.id + ":" + x.forma + ":" + x.peso).join() === "lei:leiseca:40,questoes:questoes:30,cartoes:flashcards:20,juris:juris:10", "R37 os 4 passos da trilha, cada um ligado a uma FORMA de estudo, com peso 40/30/20/10");
+    const D = [
+      { c: "t", a: "feito", d: "2026-09-01", f: ["leiseca", "leitura"], rm: [{ id: "x", ant: null }] },
+      { c: "t", a: "feito", d: "2026-09-10", f: ["leiseca"], rm: [{ id: "x", ant: null }, { id: "y", ant: null }] },
+      { c: "t", a: "feito", d: "2026-09-05", f: ["questoes"], rp: [{ id: "x" }] },
+      { c: "t", a: "feito", d: "2026-09-06", f: ["flashcards"], rm: [{ id: "y" }] },
+      { c: "outro", a: "feito", d: "2026-09-07", f: ["juris"], rm: [{ id: "x" }] },
+      { c: "t", a: "pendente", d: "2026-09-08", f: ["juris"], rm: [{ id: "x" }] },
+      { c: "t", a: "feito", d: "2026-09-09", f: ["juris"] },
+      null,
+    ];
+    const cx = api.edCoberturaDoRamo(D, "t", "x");
+    ok(cx.leiseca === "2026-09-10" && cx.leitura === "2026-09-01" && cx.questoes === "2026-09-05" && !cx.flashcards && !cx.juris, "R37a a cobertura do ramo vem do diario: a data MAIS RECENTE de cada forma, so' dos registros que tocaram o ramo (rm ou rp), do mesmo topico e nao 'pendente': " + JSON.stringify(cx));
+    ok(JSON.stringify(api.edCoberturaDoRamo(D, "t", "y")) === JSON.stringify({ leiseca: "2026-09-10", flashcards: "2026-09-06" }) && Object.keys(api.edCoberturaDoRamo(null, "t", "x")).length === 0 && Object.keys(api.edCoberturaDoRamo(D, "t", "nao")).length === 0, "R37b outro ramo do mesmo topico tem a sua cobertura; diario vazio ou ramo sem registro: nada");
+    const tr = api.edTrilhaDoRamo({ leiseca: "2026-09-10" }, { lei: 1, questoes: 5, cartoes: 3, juris: 0 });
+    ok(tr.passos.map((x) => x.id + (x.disponivel ? "+" : "-") + (x.feito ? "F" : "p")).join() === "lei+F,questoes+p,cartoes+p,juris-p" && tr.faltam.join() === "questoes,cartoes" && tr.completo === false && tr.passos[1].n === 5, "R37c a trilha: lei feita; questoes e cartoes faltam; jurisprudencia sem material nao conta: " + tr.faltam);
+    ok(api.edTrilhaDoRamo({ leiseca: "d", questoes: "d", flashcards: "d" }, { lei: 1, questoes: 2, cartoes: 1, juris: 0 }).completo === true, "R37d trilha completa: todos os passos COM material foram feitos");
+    ok(api.edTrilhaDoRamo({}, {}).faltam.length === 0 && api.edTrilhaDoRamo(null, null).passos.length === 4 && api.edTrilhaDoRamo({ juris: "d" }, { juris: 0 }).passos[3].feito === true, "R37e sem material nada falta; nulos nao quebram; passo feito mesmo sem material fica marcado");
+    ok(api.edSessaoCombinada(api.edTrilhaDoRamo({}, { lei: 1, questoes: 1, cartoes: 1, juris: 1 }), 60).map((x) => x.id + ":" + x.minutos).join() === "lei:25,questoes:20,cartoes:10,juris:5", "R37f a sessao combinada reparte 60 min pelos pesos, de 5 em 5, e o ultimo leva o resto (25+20+10+5)");
+    const so3 = api.edSessaoCombinada(api.edTrilhaDoRamo({ leiseca: "d" }, { lei: 1, questoes: 1, cartoes: 1, juris: 1 }), 60);
+    ok(so3.map((x) => x.id + ":" + x.minutos).join() === "questoes:30,cartoes:20,juris:10" && so3.reduce((x, y) => x + y.minutos, 0) === 60, "R37g so' os passos que faltam entram, e a soma fecha no total (30+20+10)");
+    ok(api.edCoberturaDoRamo([{ c: "t", a: "feito", d: "2026-09-10", f: ["leiseca"], rm: [{ id: "x" }] }, { c: "t", a: "feito", d: "2026-09-01", f: ["leiseca"], rm: [{ id: "x" }] }], "t", "x").leiseca === "2026-09-10", "R37b2 a data mais recente vale mesmo quando o registro mais antigo vem depois no diario");
+    const sc = (mn, dis) => api.edSessaoCombinada(api.edTrilhaDoRamo({ leiseca: "d" }, Object.assign({ lei: 1 }, dis)), mn);
+    ok(sc(45, { questoes: 1, cartoes: 1, juris: 1 }).map((x) => x.minutos).join() === "25,15,5" && sc(45, { questoes: 1, cartoes: 1, juris: 1 }).map((x) => x.forma).join() === "questoes,flashcards,juris", "R37h0 45 min: o ultimo leva o RESTO (25+15+5, nao 25+15+10) e cada item traz a forma de estudo dele");
+    ok(sc(25, { questoes: 1, cartoes: 1, juris: 1 }).map((x) => x.minutos).join() === "15,10,5", "R37h1 25 min: o ultimo passo nunca fica com menos de 5 (15+10+5)");
+    ok(api.edSessaoCombinada(api.edTrilhaDoRamo({}, { lei: 1, questoes: 1, cartoes: 1, juris: 1 }), 12).map((x) => x.id).join() === "lei,questoes" && api.edSessaoCombinada(api.edTrilhaDoRamo({}, { lei: 1 }), 4).length === 0 && api.edSessaoCombinada(api.edTrilhaDoRamo({ leiseca: "d" }, { lei: 1 }), 60).length === 0 && api.edSessaoCombinada(null, 60).length === 0, "R37h pouco tempo: so' os mais pesados que cabem; menos de 5 min ou nada faltando: sem sessao; nulo nao quebra");
+    ok(api.edSessaoCombinada(api.edTrilhaDoRamo({}, { juris: 1 }), 30).map((x) => x.id + ":" + x.minutos).join() === "juris:30", "R37i um passo so' leva o tempo todo");
+    /* citacoes */
+    ok(api.ramContaCitacoes("Modalidades de licitação", ["a modalidade de licitação pregão", "outra coisa", "licitação sem a outra palavra"]) === 1 && api.ramContaCitacoes("TÍTULO I", ["titulo i"]) === 0 && api.ramContaCitacoes("X", null) === 0, "R37j contar citacoes: a maioria dos radicais do nome; nome so' com palavra generica nao conta");
+  }
+
     /* ---- R25: propor ramos pelo indice da lei (local) ---- */
   {
     const ROM = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV", "XXV"];
@@ -948,7 +981,7 @@ async function testes() {
       ok(a.$("dlgDisciplina").open === true && a.$("dscRamosBloco").hidden === false && linhas().length === 3, "R34m o painel da disciplina mostra o bloco de ramos (3 linhas)");
       ok(/0 de 3 ramos estudados · 0%/.test(a.$("dscRamosResumo").textContent) && a.$("dscRamosBarra").children.length === 1, "R34n resumo ponderado e barra: " + a.$("dscRamosResumo").textContent);
       const tx = (l) => Array.from(l.children).map((c) => c.textContent);
-      ok(tx(linhas()[0])[1] === "Lei 14.133 › Modalidades" && /★5 · 32,5% da disciplina/.test(tx(linhas()[0])[2]) && tx(linhas()[0])[0] === "a estudar" && tx(linhas()[0])[3] === "estudar", "R34o cada linha: estado, 'topico › ramo', estrelas e quanto vale, botao: " + tx(linhas()[0]));
+      ok(tx(linhas()[0])[1] === "Lei 14.133 › Modalidades" && /★5 · 32,5% da disciplina/.test(tx(linhas()[0])[2]) && tx(linhas()[0])[0] === "a estudar" && tx(linhas()[0])[4] === "estudar", "R34o cada linha: estado, 'topico › ramo', estrelas e quanto vale, botao: " + tx(linhas()[0]));
       ok(Array.from(a.$("dscRamosFiltro").children).map((o) => o.textContent).join("|") === "todos (3)|a estudar (3)|a revisar (0)", "R34p o filtro mostra as contagens");
       a.$("dscRamosFiltro").value = "revisar"; a.$("dscRamosFiltro").onchange();
       ok(a.$("dscRamosFiltro").value === "revisar", "R34q0 o filtro escolhido continua selecionado depois de repintar");
@@ -956,22 +989,22 @@ async function testes() {
       a.$("dscRamosFiltro").value = "todos"; a.$("dscRamosFiltro").onchange();
       ok(linhas().length === 3, "R34r voltar a 'todos'");
       /* botao: abre o registro com o ramo marcado */
-      linhas()[1].children[3].onclick();
+      linhas()[1].children[4].onclick();
       ok(a.$("dlgDisciplina").open === false && a.$("dlgRegistro").open === true && /Lei 14\.133 › Fase preparatória$/.test(a.$("regTitulo").textContent) && a.$("regRamosRot").textContent === "O que você estudou?", "R34s o botao 'estudar' fecha o painel e abre o registro JA com aquele ramo marcado: " + a.$("regTitulo").textContent);
       a.$("dlgRegistro").close();
       /* ramo ja estudado: o botao vira 'revisar' e o registro abre em REVISAO */
       a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
       a.abrirDisciplina("Licitações");
-      ok(tx(linhas()[0])[0] === "revisão vencida" && tx(linhas()[0])[3] === "revisar" && /1 com revisão vencida/.test(a.$("dscRamosResumo").textContent), "R34t ramo estudado ha muito tempo: 'revisao vencida' e botao 'revisar'");
+      ok(tx(linhas()[0])[0] === "revisão vencida" && tx(linhas()[0])[4] === "revisar" && /1 com revisão vencida/.test(a.$("dscRamosResumo").textContent), "R34t ramo estudado ha muito tempo: 'revisao vencida' e botao 'revisar'");
       ok(/1 de 3 ramos estudados · 45%/.test(a.$("dscRamosResumo").textContent) && Array.from(a.$("dscRamosFiltro").children).map((o) => o.textContent).join("|") === "todos (3)|a estudar (2)|a revisar (1)", "R34t2 o resumo usa o progresso de ESTUDO (45%) e o filtro conta os pendentes (2) e os a revisar (1): " + a.$("dscRamosResumo").textContent);
-      linhas()[0].children[3].onclick();
+      linhas()[0].children[4].onclick();
       ok(a.$("regRamosRot").textContent === "O que você revisou?" && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent) && a.$("regRamos").children[0].children[0].checked === true && a.$("regRamos").children[1].children[0].disabled === true, "R34u o botao 'revisar' abre o registro em REVISAO com o ramo marcado (e os pendentes desabilitados)");
       ok(a.regFormasAtual().join() === "revisao", "R34u2 abrir por um ramo ja estudado troca a forma padrao para 'revisao' (o tempo vai para a conta certa)");
       a.$("dlgRegistro").close();
       /* ramo JA REVISADO: nao e' elegivel, entao abre sem ele marcado */
       a.edProgressoPor({ [ch + "›#modalidades"]: { e: "revisado", d: hoje } });
       a.abrirDisciplina("Licitações");
-      linhas()[0].children[3].onclick();
+      linhas()[0].children[4].onclick();
       ok(a.$("regRamos").children[0].children[0].checked === false && a.$("regRamos").children[0].children[0].disabled === true, "R34u3 ramo ja revisado nao pode ser marcado: o registro abre sem ele");
       a.$("dlgRegistro").close();
       /* disciplina sem ramos: o bloco some */
@@ -1014,6 +1047,130 @@ async function testes() {
       linkDe(liA) && linkDe(liA).onclick({ stopPropagation() {} });
       ok(a.$("dlgDisciplina").open === true && a.$("editalTexto").value === ed.texto, "R35f linha sem 'edital' (edital unico aberto): abre o painel direto");
       a.$("dlgDisciplina").close();
+    }
+
+    /* R38: a trilha na tela — agenda, painel da disciplina e registro (Fase 5) */
+    {
+      const { a, ed, chave } = MT();
+      const NL = String.fromCharCode(10);
+      const hoje = new Date().toISOString().slice(0, 10);
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.matResumosAtual()[chave].leiTexto = "Art. 1 Texto da lei.";
+      a.qsBancoPor([{ chave, enunciado: "Sobre a modalidade pregão...", comentario: "", opcoes: [] }, { chave, enunciado: "Outra modalidade de licitação", comentario: "", opcoes: [] }]);
+      const mat = a.ramMaterialDoTopico(chave, a.edItemDoPlano("Licitações", "Lei 14.133").ramos);
+      ok(mat.modalidades.lei === 1 && mat.modalidades.cartoes === 1 && mat.modalidades.questoes === 2 && mat.modalidades.juris === 0, "R38 o material do ramo: lei (do topico), 1 cartao com a etiqueta ram_, 2 questoes que citam o ramo, 0 julgados: " + JSON.stringify(mat.modalidades));
+      ok(mat.contratos.cartoes === 1 && mat.contratos.questoes === 0 && mat.fase_preparatoria.cartoes === 1, "R38a cada ramo tem os seus numeros");
+      const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+      const achar2 = (raiz, teste, acc) => { Array.from(raiz.children || []).forEach((f) => { if (teste(f)) acc.push(f); achar2(f, teste, acc); }); return acc; };
+      const chips = () => achar2(a.edLinhaAgendaTeste(Object.assign({}, it(), { edital: ed.id })), (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
+      ok(/trilha: lei ○ · questões ○ \(2\) · cartões ○ · julgados —/.test(chips()[0].title), "R38b o balao do chip mostra a trilha do ramo: " + chips()[0].title);
+      a.edDiario.push({ d: hoje, c: it().chave, n: "Lei", a: "feito", f: ["leiseca", "questoes"], rm: [{ id: "modalidades", ant: null }] });
+      ok(/trilha: lei ✓ · questões ✓ · cartões ○ · julgados —/.test(chips()[0].title) && /trilha: lei ○/.test(chips()[1].title), "R38c depois de um registro com lei e questoes o ramo mostra ✓ nesses passos (e os outros ramos nao): " + chips()[0].title);
+      a.abrirRegistro(it());
+      ok(/Jurisprudência/.test(a.$("regFormas").textContent) && a.$("regFormas").children.length === 9, "R38d 'Jurisprudencia' aparece entre as formas de estudo do registro (9 formas): " + a.$("regFormas").children.length);
+      a.$("dlgRegistro").close();
+      /* painel da disciplina */
+      a.abrirDisciplina("Licitações");
+      const lin = () => Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className));
+      const falta = (l) => achar2(l, (f) => /dsc-ramo-falta/.test(f.className || ""), [])[0];
+      ok(falta(lin()[0]).textContent === "falta: cartões" && /trilha: lei ✓ · questões ✓ · cartões ○/.test(falta(lin()[0]).title), "R38e o painel da disciplina diz o que FALTA de cada ramo: " + falta(lin()[0]).textContent);
+      ok(falta(lin()[1]).textContent === "falta: lei, cartões", "R38f o ramo sem registro: falta lei e cartoes (sem questoes: nao ha): " + falta(lin()[1]).textContent);
+      a.$("dlgDisciplina").close();
+      /* registro: sessao combinada */
+      a.abrirRegistro(it());
+      const bl = a.$("regTrilha");
+      ok(bl.hidden === false && /Modalidades: lei ✓ · questões ✓ · cartões ○ · julgados —/.test(bl.textContent) && /Sessão combinada sugerida: 70min cartões\./.test(bl.textContent), "R38g o registro mostra a trilha do ramo marcado e a sessao combinada (so' o que falta, com o tempo do ramo): " + bl.textContent);
+      a.$("btnRegOutro").onclick();
+      ok(a.$("regTrilha").hidden === true, "R38h na REVISAO nao ha trilha");
+      a.$("dlgRegistro").close();
+      a.edDiario.push({ d: hoje, c: it().chave, n: "Lei", a: "feito", f: ["flashcards"], rm: [{ id: "modalidades", ant: null }] });
+      a.abrirRegistro(it());
+      ok(/Trilha completa/.test(a.$("regTrilha").textContent), "R38i com tudo feito o registro diz 'trilha completa': " + a.$("regTrilha").textContent);
+      a.$("dlgRegistro").close();
+      a.abrirDisciplina("Licitações");
+      ok(falta(Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className))[0]).textContent === "trilha ✓", "R38i2 ramo com a trilha completa: o painel da disciplina diz 'trilha ✓'");
+      a.$("dlgDisciplina").close();
+      /* na REVISAO nao ha trilha, mesmo com ramo marcado */
+      a.edProgressoPor({ [it().chave + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
+      a.abrirRegistro(it());
+      a.$("btnRegOutro").onclick();
+      ok(a.$("regRamos").children[0].children[0].checked === true && a.$("regTrilha").hidden === true, "R38i3 na revisao com ramo marcado a trilha continua escondida");
+      a.$("dlgRegistro").close();
+    }
+    /* R38-b: ramos SEM material nao aparecem na trilha; no maximo 3 linhas */
+    {
+      const { a } = MT();
+      const NL = String.fromCharCode(10);
+      const mkEd = (n) => "# X | prova: 2027-06-01 | horas: 20" + NL + "@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: n }, (x, k) => "++ Ramo" + String.fromCharCode(65 + k)).join(NL);
+      a.$("editalTexto").value = mkEd(2); a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      const itS = () => a.edItemDoPlano("D", "T");
+      a.abrirRegistro(itS());
+      ok(a.$("regTrilha").hidden === true, "R38j ramos sem NENHUM material (sem lei, cartoes, questoes ou julgados): nao ha trilha para mostrar");
+      a.abrirDisciplina("D");
+      const l0 = Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className))[0];
+      const f0 = Array.from(l0.children).find((f) => /dsc-ramo-falta/.test(f.className || ""));
+      ok(f0.textContent === "", "R38k o painel da disciplina nao diz 'falta' de um ramo sem material");
+      a.$("dlgDisciplina").close();
+      a.$("dlgRegistro").close();
+      /* 5 ramos com material (lei do topico): so' 3 linhas */
+      const chS = itS().chave;
+      a.$("editalTexto").value = mkEd(5);
+      a.matGravarCartoes(a.matChave("D", "T"), "X? :: y", { disciplina: "D", topico: "T" });
+      a.matResumosAtual()[a.matChave("D", "T")].leiTexto = "Art. 1 Texto.";
+      a.abrirRegistro(a.edItemDoPlano("D", "T"));
+      a.$("btnRegRamosTodos").onclick();
+      ok(a.$("regTrilha").hidden === false && a.$("regTrilha").children.length === 3, "R38l com 5 ramos marcados a trilha mostra no maximo 3 linhas: " + a.$("regTrilha").children.length);
+      a.$("dlgRegistro").close();
+    }
+
+    /* R39: exigir a trilha completa para dar o ramo como estudado */
+    {
+      const { a, ed, chave } = MT();
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.matResumosAtual()[chave].leiTexto = "Art. 1 Texto da lei.";
+      a.qsBancoPor([{ chave, enunciado: "Sobre a modalidade pregão...", comentario: "", opcoes: [] }]);
+      const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+      const ch = it().chave;
+      const formas = (...fs) => { const f = a.regFormasAtual(); f.length = 0; fs.forEach((x) => f.push(x)); };
+      a.abrirRegistro(it());
+      ok(a.$("regRamosExigir").checked === false && a.loja.getItem("eac_ramo_exigir") === null, "R39 a opcao vem DESLIGADA (o comportamento de sempre)");
+      a.$("regRamosExigir").checked = true; a.$("regRamosExigir").onchange();
+      ok(a.loja.getItem("eac_ramo_exigir") === "1", "R39a ligar a opcao fica guardado");
+      formas("flashcards");
+      a.confirmarRegistroTeste("feito");
+      ok(Object.keys(a.edProgressoAtual()).length === 0 && it().ramosFeitos === 0, "R39b com a trilha INCOMPLETA (so' cartoes; faltam lei e questoes) o ramo NAO ganha a marca de estudado");
+      const d1 = a.edDiario[a.edDiario.length - 1];
+      ok(d1.a === "feito" && d1.rp && d1.rp[0].id === "modalidades" && !d1.rm && d1.f.join() === "flashcards" && d1.m > 0, "R39c mas o progresso fica no diario (rp) com as formas e o tempo: " + JSON.stringify(d1.rp));
+      ok(a.edCoberturaDoRamo(a.edDiario, ch, "modalidades").flashcards === d1.d, "R39d e conta para a cobertura da trilha");
+      a.abrirRegistro(it());
+      ok(a.$("regRamosExigir").checked === true, "R39e a opcao continua ligada na proxima vez");
+      formas("leiseca", "questoes");
+      a.confirmarRegistroTeste("feito");
+      ok(it().ramos[0].id === "modalidades" && it().ramos[0].feito === true && a.edProgressoAtual()[ch + "›#modalidades"].e === "feito", "R39f completando a trilha (lei + questoes, somando o que ja havia) o ramo ganha a marca de estudado");
+      const d2 = a.edDiario[a.edDiario.length - 1];
+      ok(d2.rm && d2.rm[0].id === "modalidades" && !d2.rp, "R39g o registro que completa marca o ramo (rm) e nao tem rp");
+      /* na REVISAO a opcao nao interfere: revisar marca os ramos estudados */
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
+      a.abrirRegistro(it());
+      a.$("btnRegOutro").onclick();
+      a.confirmarRegistroTeste("revisado");
+      ok(a.edProgressoAtual()[ch + "›#modalidades"].e === "revisado", "R39f2 com a opcao ligada, REVISAR marca como revisado normalmente (a opcao so' vale para estudar)");
+      /* ramo sem material nenhum: nao ha o que exigir */
+      a.abrirRegistro(it());
+      const cont = a.$("regRamos").children[1];
+      if (cont) { const ck = cont.children[0]; ck.checked = true; ck.onchange(); }
+      a.$("dlgRegistro").close();
+      /* desligada: marca direto */
+      a.edProgressoPor({});
+      a.$("regRamosExigir") && (a.loja.setItem("eac_ramo_exigir", "0"));
+      a.abrirRegistro(it());
+      ok(a.$("regRamosExigir").checked === false, "R39h desligar volta ao normal");
+      formas("flashcards");
+      a.confirmarRegistroTeste("feito");
+      ok(it().ramos.find((r) => r.id === "modalidades").feito === true, "R39i com a opcao desligada um registro so' de cartoes ja marca o ramo (como sempre)");
     }
 
     /* R33: a janela de registro escolhe os ramos (Fase 2) */
@@ -1234,6 +1391,7 @@ async function testes() {
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
     ok(["dsc-ramos", "dsc-ramos-lista", "dsc-ramo-lin", "dsc-ramo-nome", "dsc-ramo-peso", "dsc-ramo-btn"].every((c) => html.indexOf("." + c + "{") >= 0), "R20j as classes do painel de ramos da disciplina tem regra de CSS");
+    ok(["reg-trilha", "reg-trilha-lin", "dsc-ramo-falta"].every((c) => html.indexOf("." + c + "{") >= 0), "R20k as classes da trilha (registro e painel) tem regra de CSS");
     ok(["reg-ramos", "reg-ramo-lin", "reg-ramo-nome", "reg-ramo-est", "reg-ramo-indisp", "reg-ramos-acoes"].every((c) => html.indexOf("." + c + "{") >= 0), "R20i as classes da lista de ramos no registro tem regra de CSS");
     ok(["ed-ramos", "ed-ramos-resumo", "ed-ramos-chips", "ed-ramo", "ed-ramo-pend", "ed-ramo-feito", "ed-ramo-revisado", "ed-ramo-venceu", "ed-ramo-vez", "ed-ramos-mais"].every((c) => html.indexOf("." + c + "{") >= 0), "R20h todas as classes dos chips de ramo tem regra de CSS");
     const hubSrc = fs.readFileSync(path.join(__dirname, "..", "docs", "edital-hub.js"), "utf8");

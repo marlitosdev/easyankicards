@@ -77,6 +77,21 @@ function edChave(it) { return (it.disciplina + "›" + it.nome).toLowerCase(); }
 /* OS RAMOS DENTRO DA LINHA DO TÓPICO. Uma linha por tópico (a agenda não se enche de itens do mesmo assunto); o
  * resumo diz quantos ramos já foram e qual vem agora, e os chips mostram cada ramo por relevância e por estado:
  * a estudar, estudado, revisão vencida ou revisado. O da sessão da vez ganha destaque. */
+/* A TRILHA do ramo em texto: "lei ✓ · questões ○ (5) · cartões ○ (3) · julgados —" (✓ feito, ○ falta, — não há material) */
+function edTrilhaTexto(trilha) {
+  return (trilha ? trilha.passos : []).map((p) => t("ed_passo_" + p.id) + " "
+    + (p.feito ? "✓" : p.disponivel ? "○" + (p.id !== "lei" && p.n > 1 ? " (" + p.n + ")" : "") : "—")).join(" · ");
+}
+function edMaterialDosRamos(i) {
+  try {
+    return typeof ramMaterialDoTopico === "function"
+      ? ramMaterialDoTopico(typeof matChaveViva === "function" ? matChaveViva(i.disciplina, i.nome) : matChave(i.disciplina, i.nome), i.ramos) : {};
+  } catch (e) { return {}; }
+}
+function edTrilhaDoRamoUI(i, r, mat) {
+  return edTrilhaDoRamo(edCoberturaDoRamo(typeof edDiario !== "undefined" ? edDiario : [], i.chave, r.id), (mat || {})[r.id]);
+}
+
 const ED_RAMOS_LIM = 6;
 function edRamosNaLinha(i) {
   const rs = i.ramos || [];
@@ -94,6 +109,7 @@ function edRamosNaLinha(i) {
   chips.className = "ed-ramos-chips";
   cx.append(chips);
   let aberto = false;
+  const matRamos = edMaterialDosRamos(i);
   const estadoDe = (r) => (r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend");
   const pintar = () => {
     chips.innerHTML = "";
@@ -103,7 +119,8 @@ function edRamosNaLinha(i) {
       c.className = "ed-ramo ed-ramo-" + est + ((i.sessao || []).indexOf(r.id) >= 0 && !r.revisado ? " ed-ramo-vez" : "");
       c.textContent = (r.nome.length > 30 ? r.nome.slice(0, 29) + "…" : r.nome) + " ★" + (r.peso || 3);
       c.title = r.nome + " — " + t("ed_ramo_" + est) + (r.quando ? " (" + r.quando + ")" : "") + " — " + t("ed_ramo_peso", { p: r.peso || 3 })
-        + (r.nota ? " — " + r.nota : "") + (r.marcaHerdada ? " — " + t("ed_ramo_herdado") : "");
+        + (r.nota ? " — " + r.nota : "") + (r.marcaHerdada ? " — " + t("ed_ramo_herdado") : "")
+        + " — " + t("ed_trilha_tit") + ": " + edTrilhaTexto(edTrilhaDoRamoUI(i, r, matRamos));
       chips.append(c);
     });
     if (rs.length > ED_RAMOS_LIM) {
@@ -1120,6 +1137,7 @@ function anotarDiario(i, acao, detalhe) {
                   obs: (detalhe && detalhe.obs) || null,
                   /* ramos afetados por este registro (e a marca de ANTES de cada um, para o desfazer) */
                   rm: (detalhe && detalhe.rm && detalhe.rm.length) ? detalhe.rm : undefined,
+                  rp: (detalhe && detalhe.rp && detalhe.rp.length) ? detalhe.rp.map((id) => ({ id })) : undefined,
                   cc: concursoAtual().nome });
   salvarDiario();
 }
@@ -1439,7 +1457,7 @@ function abrirDiario() {
  * teórico — e é a diferença entre elas que explica por que um tópico "com
  * 3h de estudo" continua caindo. */
 const ED_FORMAS = ["leitura", "videoaula", "questoes", "leiseca",
-                   "flashcards", "resumo", "mapa", "revisao"];
+                   "flashcards", "resumo", "mapa", "revisao", "juris"];
 /* Produtividade percebida. Três níveis: cinco viram uma decisão demorada
  * sobre algo que é sensação, não medida. */
 const ED_HUMOR = ["ruim", "media", "boa"];
@@ -1650,12 +1668,47 @@ function regRamosPintar(i, refazerMinutos) {
   const n = regRamosSel.size, min = regRamosMinutos(i);
   $("regRamosResumo").textContent = n ? t("ed_reg_ramos_resumo", { n, m: horasTexto(min) }) : t("ed_reg_ramos_nenhum");
   if (refazerMinutos && n) { $("regMinutos").value = min; $("regMinSlider").value = Math.min(240, min); }
+  regTrilhaPintar(i);
   const nomes = rs.filter((r) => regRamosSel.has(r.id)).map((r) => r.nome);
   /* até 3 nomes; com mais, só a contagem (o título não vira um parágrafo) */
   $("regTitulo").textContent = i.nome + (nomes.length ? " › " + (nomes.length > 3 ? t("ed_reg_ramos_n", { n: nomes.length }) : nomes.join(", ")) : "");
 }
+/* A TRILHA dos ramos marcados (até 3): o que já foi feito (lei, questões, cartões, jurisprudência) e a sessão combinada sugerida
+ * para o que falta, com o tempo do ramo repartido entre os passos. Só no estudo (na revisão não há trilha). */
+function regTrilhaPintar(i) {
+  const bl = $("regTrilha");
+  if (!bl) return;
+  bl.innerHTML = "";
+  const rs = ((i && i.ramos) || []).filter((r) => regRamosSel.has(r.id)).slice(0, 3);
+  bl.hidden = !rs.length || regTipo === "revisado";
+  if (bl.hidden) return;
+  const mat = edMaterialDosRamos(i);
+  rs.forEach((r) => {
+    const tr = edTrilhaDoRamoUI(i, r, mat);
+    if (!tr.passos.some((p) => p.disponivel || p.feito)) return;
+    const lin = document.createElement("div");
+    lin.className = "reg-trilha-lin";
+    const nm = document.createElement("b"); nm.textContent = r.nome + ": ";
+    const st = document.createElement("span"); st.textContent = edTrilhaTexto(tr);
+    lin.append(nm, st);
+    const comb = edSessaoCombinada(tr, r.minutos);
+    if (comb.length) {
+      const sg = document.createElement("div");
+      sg.className = "nota";
+      sg.textContent = t("ed_sessao_comb", { x: comb.map((c) => c.minutos + "min " + t("ed_passo_" + c.id)).join(" + ") });
+      sg.title = t("ed_sessao_comb_tip");
+      lin.append(sg);
+    } else if (tr.completo && tr.passos.some((p) => p.disponivel)) {
+      const ok = document.createElement("div"); ok.className = "nota"; ok.textContent = t("ed_trilha_completa"); lin.append(ok);
+    }
+    bl.append(lin);
+  });
+  if (!bl.children.length) bl.hidden = true;
+}
 function regRamosIniciar(i) {
   regRamosSel = new Set(regRamosPadrao(i));
+  const ex = $("regRamosExigir");
+  if (ex) { try { ex.checked = localStorage.getItem("eac_ramo_exigir") === "1"; } catch (e) { ex.checked = false; } }
   regRamosPintar(i, false);
 }
 
@@ -1856,7 +1909,21 @@ function confirmarRegistro(estado) {
     const eleg = item.ramos.filter(regRamosElegivel);
     const escolha = eleg.filter((r) => regRamosSel.has(r.id)).map((r) => r.id);
     if (eleg.length && !escolha.length) { try { uiAlert(t("ed_reg_ramos_nenhum")); } catch (e) {} return; }
-    item.ramosEscolhidos = escolha;
+    /* "só dar o ramo como estudado com a trilha completa" (opcional): o ramo cujos passos ainda faltam fica só com o
+     * progresso parcial no diário (rp) e NÃO ganha a marca de estudado */
+    item.ramosParciais = [];
+    const exigir = !!($("regRamosExigir") && $("regRamosExigir").checked);
+    if (exigir && estado === "feito") {
+      const mat = edMaterialDosRamos(item), hoje2 = hojeISO();
+      const agora = {}; regFormas.forEach((f) => { agora[f] = hoje2; });
+      item.ramosEscolhidos = escolha.filter((id) => {
+        const r = item.ramos.find((x) => x.id === id);
+        const cob = Object.assign({}, edCoberturaDoRamo(typeof edDiario !== "undefined" ? edDiario : [], item.chave, id), agora);
+        const ok = edTrilhaDoRamo(cob, (mat || {})[id]).completo;
+        if (!ok && r) item.ramosParciais.push(id);
+        return ok;
+      });
+    } else item.ramosEscolhidos = escolha;
   }
   const depois = regDepois;
   regDepois = null;
@@ -1889,6 +1956,7 @@ function confirmarRegistro(estado) {
      * porque "0 de 0" e "não fiz questões" são coisas diferentes na conta
      * de acerto depois */
     questoes: qDados,
+    rp: item.ramosParciais || [],
     onde: String(($("regOnde") || {}).value || "").trim() || null,
     obs: String(($("regObs") || {}).value || "").trim() || null,
   }, linhas.length > 0);
@@ -2314,6 +2382,7 @@ function dscPintarRamos(plano, nome) {
   const cx = $("dscRamosLista");
   cx.innerHTML = "";
   if (!p.linhas.length) cx.append(Object.assign(document.createElement("p"), { className: "nota", textContent: t("ed_dsc_ramos_vazio") }));
+  const matPorTopico = {};
   p.linhas.forEach((x) => {
     const lin = document.createElement("div");
     lin.className = "dsc-ramo-lin dsc-ramo-" + x.estado;
@@ -2334,7 +2403,13 @@ function dscPintarRamos(plano, nome) {
     bt.textContent = t(x.ramo.feito ? "ed_dsc_ramo_revisar" : "ed_dsc_ramo_estudar");
     bt.title = t("ed_dsc_ramo_btn_tip");
     bt.onclick = () => { $("dlgDisciplina").close(); abrirRegistro(x.item, { ramo: x.ramo.id }); };
-    lin.append(est, tx, pe, bt);
+    const tr = edTrilhaDoRamoUI(x.item, x.ramo, matPorTopico[x.item.chave] || (matPorTopico[x.item.chave] = edMaterialDosRamos(x.item)));
+    const usaveis = tr.passos.filter((p) => p.disponivel).length;
+    const falta = document.createElement("span");
+    falta.className = "dsc-ramo-falta";
+    falta.textContent = usaveis ? (tr.faltam.length ? t("ed_dsc_ramo_falta", { x: tr.passos.filter((p) => tr.faltam.indexOf(p.id) >= 0).map((p) => t("ed_passo_" + p.id)).join(", ") }) : t("ed_dsc_ramo_trilha_ok")) : "";
+    falta.title = t("ed_trilha_tit") + ": " + edTrilhaTexto(tr);
+    lin.append(est, tx, pe, falta, bt);
     cx.append(lin);
   });
   return p;
@@ -3559,6 +3634,7 @@ function edIniciar() {
       if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
     }
   };
+  if ($("regRamosExigir")) $("regRamosExigir").onchange = () => { try { localStorage.setItem("eac_ramo_exigir", $("regRamosExigir").checked ? "1" : "0"); } catch (e) {} };
   if ($("btnRegRamosTodos")) $("btnRegRamosTodos").onclick = () => {
     if (!regAtual || !regAtual.ramos) return;
     regRamosSel = new Set(regAtual.ramos.filter(regRamosElegivel).map((r) => r.id));
