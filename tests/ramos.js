@@ -915,6 +915,42 @@ async function testes() {
       a.$("dlgDisciplina").close();
     }
 
+    /* R35: o nome da disciplina na agenda do topo abre o painel mesmo sem edital aberto */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const ed2 = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20" + NL + "@ Licitações :: 5" + NL + "+ Lei 14.133 :: 5" + NL + "++ Um" + NL + "++ Dois");
+      const itemDe = (e, prova) => a.montarPlano(a.lerEdital(e.texto), { horas: 20, prova, feitos: {}, fatores: null, acertos: null }).itens.find((x) => x.nome === "Lei 14.133");
+      const linkDe = (li) => { const r = []; const anda = (x) => Array.from(x.children || []).forEach((f) => { if (/ed-item-disc-link/.test(f.className || "")) r.push(f); anda(f); }); anda(li); return r[0]; };
+      a.hubVoltar();
+      const li = a.edLinhaAgendaTeste(Object.assign({}, itemDe(ed2, "2027-08-01"), { edital: ed2.id }));
+      const lk = linkDe(li);
+      ok(!!lk && lk.textContent === "Licitações", "R35 a linha da agenda tem o link com o nome da disciplina");
+      lk.onclick({ stopPropagation() {} });
+      ok(a.$("dlgDisciplina").open === true && a.$("dscTitulo").textContent === "Licitações" && a.$("editalTexto").value === ed2.texto, "R35a SEM edital aberto: abre o edital da linha (B) e depois o painel da disciplina dele: " + a.$("dscTitulo").textContent);
+      ok(a.$("dscRamosBloco").hidden === false && /Lei 14\.133 › Um/.test(a.$("dscRamosLista").textContent), "R35b o painel mostra os ramos do edital certo (B, nao o A)");
+      a.$("dlgDisciplina").close();
+      /* com OUTRO edital aberto: troca */
+      a.hubAbrirEdital(ed.id);
+      ok(a.$("editalTexto").value === ed.texto, "R35c (A aberto)");
+      const liB = a.edLinhaAgendaTeste(Object.assign({}, itemDe(ed2, "2027-08-01"), { edital: ed2.id }));
+      linkDe(liB).onclick({ stopPropagation() {} });
+      ok(a.$("editalTexto").value === ed2.texto && /Lei 14\.133 › Um/.test(a.$("dscRamosLista").textContent), "R35d com o edital A aberto e a linha do B: abre o B (o painel nao mostra a disciplina do A)");
+      a.$("dlgDisciplina").close();
+      /* mesmo edital: NAO recarrega (texto em edicao fica) */
+      a.$("editalTexto").value = ed2.texto + NL + "+ Tópico novo :: 3";
+      const liB2 = a.edLinhaAgendaTeste(Object.assign({}, itemDe(ed2, "2027-08-01"), { edital: ed2.id }));
+      linkDe(liB2).onclick({ stopPropagation() {} });
+      ok(/Tópico novo/.test(a.$("editalTexto").value), "R35e com o edital da linha ja aberto o texto em edicao NAO e' recarregado");
+      a.$("dlgDisciplina").close();
+      /* linha sem edital (edital unico aberto): abre direto */
+      a.hubAbrirEdital(ed.id);
+      const liA = a.edLinhaAgendaTeste(itemDe(ed, "2027-06-01"));
+      linkDe(liA) && linkDe(liA).onclick({ stopPropagation() {} });
+      ok(a.$("dlgDisciplina").open === true && a.$("editalTexto").value === ed.texto, "R35f linha sem 'edital' (edital unico aberto): abre o painel direto");
+      a.$("dlgDisciplina").close();
+    }
+
     /* R33: a janela de registro escolhe os ramos (Fase 2) */
     {
       const { a, ed } = MT();

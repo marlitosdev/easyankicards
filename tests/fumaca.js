@@ -664,7 +664,7 @@ function rodar() {
       return semanaAtual(p);
     },
     abrirDiagPlano, abrirRegistro, confirmarRegistro, completarDiario,
-    abrirDisciplina, edPintarRitmo, copiarPlano, verPlano, gerarPromptDoDiag,
+    abrirDisciplina, edAbrirDisciplinaDaLinha, edPintarRitmo, copiarPlano, verPlano, gerarPromptDoDiag,
     montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual,
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,

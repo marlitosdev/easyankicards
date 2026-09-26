@@ -554,7 +554,7 @@ function edLinhaTopico(i, semDisciplina) {
     bd.className = "ed-item-disc-link";
     bd.textContent = i.disciplina;
     bd.title = t("ed_abrir_disc", { d: i.disciplina });
-    bd.onclick = (ev) => { ev.stopPropagation(); abrirDisciplina(i.disciplina); };
+    bd.onclick = (ev) => { ev.stopPropagation(); edAbrirDisciplinaDaLinha(i); };
     porq.append(bd, document.createTextNode(" · " + edPorque(i, true)));
   } else porq.textContent = edPorque(i, true);
   meio.append(nome, porq);
@@ -2423,6 +2423,18 @@ function edPintarModalDisciplina(nome) {
 /* Rolar até o cartão era pior que não fazer nada: o usuário perdia o lugar
  * onde estava e ainda tinha de achar o que abriu. A disciplina passa a ter
  * uma janela própria, com o panorama dela — e fechar devolve a tela intacta. */
+/* Clicar no nome da disciplina numa linha da AGENDA DO TOPO (que junta todos os editais): o painel da disciplina lê o
+ * edital ABERTO, e ali pode não haver nenhum (ou ser outro). Então a linha abre primeiro o edital DELA — o mesmo gesto
+ * de "abrir" do hub, que salva o que estava aberto — e só depois o painel. Com o edital certo já aberto, não recarrega
+ * nada (o texto que estiver sendo editado fica como está). */
+function edAbrirDisciplinaDaLinha(i) {
+  const aberto = (typeof edAberto === "function") ? edAberto() : null;
+  if (i.edital && (!aberto || String(aberto.id) !== String(i.edital)) && typeof hubAbrirEdital === "function") {
+    hubAbrirEdital(i.edital);
+  }
+  abrirDisciplina(i.disciplina);
+}
+
 function abrirDisciplina(nome) {
   const d = edPintarModalDisciplina(nome);
   if (!d) return;
