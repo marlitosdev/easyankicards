@@ -4292,6 +4292,54 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-onde-lin{font-size:11px;opacity:.7}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
+/* ---- HORAS POR ASSUNTO: colunas por disciplina (estudo novo x revisão), corte e ramos cumpridos ---- */
+dialog.hor-dlg[open]{display:flex;flex-direction:column;width:min(1100px,97vw);height:min(92vh,900px);max-height:94vh;margin:auto;overflow:hidden}
+.hor-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hor-cab h3{margin:0}
+.hor-barra{display:flex;gap:10px;align-items:center;margin:6px 0}
+.hor-corpo{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.hor-resumo{padding:8px 12px;border-radius:10px;background:rgba(91,141,239,.14);border:1px solid #5b8def;margin-bottom:8px;font-size:14px}
+.hor-legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:6px 0 10px}
+.hor-leg{display:inline-flex;align-items:center;gap:5px}
+.hor-leg-i{display:inline-block;width:16px;height:10px;border-radius:2px}
+.hor-est{background:#5b8def}
+.hor-rev{background:#b388ff}
+.hor-plano{border:2px dashed rgba(127,127,127,.7);background:transparent}
+.hor-corte{border-top:2px dashed #d9534f;height:0}
+.hor-seguro{border-top:2px dashed #f0ad4e;height:0}
+.hor-leg-i.hor-plano{height:10px}
+.hor-leg-i.hor-corte,.hor-leg-i.hor-seguro{height:0;border-radius:0}
+.hor-graf{display:flex;gap:10px;align-items:flex-end;overflow-x:auto;padding:4px 2px 10px}
+.hor-col{flex:0 0 96px;display:flex;flex-direction:column;align-items:stretch;gap:3px;cursor:pointer;padding:4px;border-radius:8px;border:1px solid transparent}
+.hor-col:hover{background:rgba(127,127,127,.1)}
+.hor-col-aberta{border-color:var(--acao);background:rgba(127,127,127,.08)}
+.hor-col-alerta{border-color:#f0ad4e}
+.hor-topo{text-align:center;font-size:12px;font-weight:700}
+.hor-area{position:relative;width:100%;border-bottom:2px solid var(--borda)}
+.hor-area > .hor-plano{position:absolute;left:0;right:0;bottom:0;box-sizing:border-box}
+.hor-area > .hor-est{position:absolute;left:14%;right:14%;bottom:0}
+.hor-area > .hor-rev{position:absolute;left:14%;right:14%}
+.hor-area > .hor-corte,.hor-area > .hor-seguro{position:absolute;left:-2px;right:-2px}
+.hor-corte-risco{border-top-width:3px}
+.hor-prog{height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden}
+.hor-prog-b{height:100%;background:#2e9e5b}
+.hor-un{text-align:center;font-size:11px;color:var(--sutil)}
+.hor-nome{text-align:center;font-size:12px;font-weight:700;line-height:1.25;overflow-wrap:anywhere;max-height:4.9em;overflow:hidden}
+.hor-pesop{text-align:center;font-size:10.5px;color:var(--sutil)}
+.hor-alerta{text-align:center;font-size:10.5px;color:#f0ad4e;font-weight:700}
+.hor-det{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--borda);background:rgba(127,127,127,.06)}
+.hor-det h4{margin:0 0 8px}
+.hor-top,.hor-ramo{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;padding:4px 6px;border-radius:6px;font-size:13px}
+.hor-top{background:rgba(127,127,127,.1);margin-top:4px;font-weight:600}
+.hor-top-so-rev{border-left:4px solid #f0ad4e}
+.hor-ramo{margin-left:16px;font-size:12px}
+.hor-ramo-pulado{opacity:.5;text-decoration:line-through}
+.hor-top-nome{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
+.hor-top-h{color:var(--sutil);white-space:nowrap;font-weight:400}
+@media (max-width:760px){
+  dialog.hor-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
+    padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
+}
 /* ---- TÓPICO-ALVO DA BANCADA ---- */
 .banc-alvo{margin:8px 0;padding:10px 12px;border-radius:12px;border:2px solid #f0ad4e;background:rgba(240,173,78,.12)}
 .banc-alvo[hidden]{display:none}
@@ -5034,6 +5082,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="ed-voltar-linha">
       <button class="btn-min" id="btnEdVoltar" data-i18n="hub_voltar"></button>
       <span class="ed-aberto-nome" id="edNomeAberto"></span>
+      <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
       <button class="btn-min" id="btnEdRenomear" data-i18n="hub_renomear"></button>
     </div>
   <div class="duas-colunas">
@@ -7879,6 +7928,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="cov-corpo" id="covCorpo"></div>
 </dialog>
 
+<!-- HORAS POR ASSUNTO: estudo novo x revisão por disciplina (na ordem do peso), com ramos cumpridos e os pontos de corte -->
+<dialog id="dlgHoras" class="ui-modal hor-dlg">
+  <div class="hor-cab">
+    <h3 data-i18n="hor_titulo"></h3>
+    <button type="button" class="qs-x" id="btnHorX" aria-label="Fechar">✕</button>
+  </div>
+  <p class="nota" data-i18n="hor_sub"></p>
+  <div class="hor-barra">
+    <select id="horPeriodo">
+      <option value="tudo" data-i18n="hor_p_tudo"></option>
+      <option value="7" data-i18n="hor_p7"></option>
+      <option value="30" data-i18n="hor_p30"></option>
+      <option value="90" data-i18n="hor_p90"></option>
+    </select>
+  </div>
+  <div class="hor-corpo" id="horCorpo"></div>
+</dialog>
+
 <dialog id="dlgPacote" class="ui-modal diag-modal">
   <h3 data-i18n="pac_titulo"></h3>
   <p class="nota" data-i18n="pac_ajuda"></p>
@@ -8413,6 +8480,7 @@ window.__sqlPromise = initSqlJs({
 <script src="estudo-cartoes.js"></script>
 <script src="cobertura-cartoes.js"></script>
 <script src="banca-alvo.js"></script>
+<script src="horas-assunto.js"></script>
 <script src="ramos.js"></script>
 <script src="pacote.js"></script>
 <script src="dificuldade.js"></script>
