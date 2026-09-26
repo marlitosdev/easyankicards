@@ -4340,7 +4340,7 @@ button.ed-st-item{cursor:pointer}
 .ed-ramo-pulado{color:var(--sutil);border-style:dotted;text-decoration:line-through}
 .lei-faixa-alvo{border:1px solid var(--borda);border-left:4px solid var(--acao);border-radius:8px;padding:6px 10px;margin:6px 0;font-size:13px}
 .lei-faixa-lin{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0}
-.lei-faixa-sel{max-width:100%;min-width:180px}
+.lei-faixa-sel{max-width:min(100%,420px);min-width:180px}
 .lei-alt-chip-rec{cursor:pointer;background:transparent;font:inherit}
 .lei-lacuna{cursor:pointer;color:var(--info);border-bottom:1px dotted var(--info);font-style:normal}
 .lei-lacuna-vazia{cursor:default;color:var(--sutil);border-bottom:0}
@@ -5192,15 +5192,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-f-dica" data-i18n="ed_reg_ramos_dica"></span>
     <div class="reg-ramos" id="regRamos"></div>
     <div id="regTrilha" class="reg-trilha" hidden></div>
-    <div id="regEspelho" class="reg-espelho" hidden>
-      <p class="nota" data-i18n="ed_esp_tit"></p>
-      <div id="regEspelhoLista"></div>
-    </div>
     <label class="nota" style="display:block;margin-top:6px"><input type="checkbox" id="regRamosExigir" data-i18n-title="ed_reg_exigir_tip"> <span data-i18n="ed_reg_exigir"></span></label>
     <div class="reg-ramos-acoes">
       <button type="button" class="btn-min" id="btnRegRamosTodos" data-i18n="ed_reg_ramos_todos" data-i18n-title="ed_reg_ramos_todos_tip"></button>
       <span class="nota" id="regRamosResumo"></span>
     </div>
+  </div>
+  <!-- FORA do bloco de ramos: o espelho vale também para tópico SEM ramos, e aquele bloco fica escondido nele -->
+  <div id="regEspelho" class="reg-espelho" hidden>
+    <p class="nota" data-i18n="ed_esp_tit"></p>
+    <div id="regEspelhoLista"></div>
   </div>
   <div class="reg-lin-col"><span data-i18n="ed_reg_min"></span>
     <div class="reg-tempo">
