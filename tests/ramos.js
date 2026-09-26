@@ -1229,6 +1229,42 @@ async function testes() {
       ok(/\.ed-ramo-pulado\{/.test(html) && /\.dsc-ramo-pulado /.test(html), "R40w o estilo do ramo pulado existe no CSS");
     }
 
+    /* R41: acerto POR RAMO (diagnostico) */
+    {
+      const { a, ed, chave } = MT();
+      const tent = (n, c) => Array.from({ length: n }, (x, k) => ({ acertou: k < c }));
+      const banco = [
+        { chave, enunciado: "Sobre as modalidades previstas", comentario: "", opcoes: [], tentativas: tent(6, 2) },
+        { chave, enunciado: "Os contratos administrativos", comentario: "", opcoes: [], tentativas: tent(3, 3) },
+        { chave, enunciado: "As modalidades e os contratos", comentario: "", opcoes: [], tentativas: tent(2, 1) },
+        { chave: "outra›coisa", enunciado: "modalidades", comentario: "", opcoes: [], tentativas: tent(9, 0) },
+        { chave, enunciado: "modalidades sem tentativa", comentario: "", opcoes: [], tentativas: [] },
+        { chave, enunciado: "Assunto sem relacao alguma", comentario: "", opcoes: [], tentativas: tent(4, 0) },
+      ];
+      const ramos = [{ id: "modalidades", nome: "Modalidades" }, { id: "fase_preparatoria", nome: "Fase preparatória" }, { id: "contratos", nome: "Contratos" }];
+      const r = a.ramAcertosDoTopico(chave, ramos, banco);
+      ok(r.modalidades.feitas === 8 && r.modalidades.certas === 3 && r.modalidades.pct === 38, "R41 acerto do ramo = tentativas das questoes que o citam (6+2 feitas, 2+1 certas): " + JSON.stringify(r.modalidades));
+      ok(r.contratos.feitas === 5 && r.contratos.certas === 4 && r.contratos.pct === 80, "R41a questao que cita DOIS ramos conta nos dois: " + JSON.stringify(r.contratos));
+      ok(r.fase_preparatoria.feitas === 0 && r.fase_preparatoria.pct === null, "R41b ramo sem questao: sem percentual (nao e' 0%)");
+      ok(a.ramAcertosDoTopico(chave, ramos, []).modalidades.pct === null && Object.keys(a.ramAcertosDoTopico(chave, [], banco)).length === 0 && a.ramAcertosDoTopico(chave, null, null).x === undefined, "R41c sem banco ou sem ramos nao quebra");
+      ok(a.ramAcertoFraco({ feitas: 5, pct: 59 }) === true && a.ramAcertoFraco({ feitas: 5, pct: 60 }) === false && a.ramAcertoFraco({ feitas: 4, pct: 0 }) === false && a.ramAcertoFraco({ feitas: 0, pct: null }) === false && a.ramAcertoFraco(null) === false, "R41d fraco = abaixo de 60% COM pelo menos 5 tentativas");
+      /* tela */
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.qsBancoPor(banco);
+      a.abrirDisciplina("Licitações");
+      const lins = () => Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className));
+      const de = (nome) => lins().find((l) => l.children[1].textContent.indexOf(nome) >= 0);
+      ok(/· acerto 38% \(8\)/.test(de("Modalidades").children[2].textContent) && /dsc-ramo-fraco/.test(de("Modalidades").className), "R41e o painel mostra 'acerto 38% (8)' e destaca o ramo fraco: " + de("Modalidades").children[2].textContent);
+      ok(/acerto 80% \(5\)/.test(de("Contratos").children[2].textContent) && !/dsc-ramo-fraco/.test(de("Contratos").className), "R41f ramo forte: mostra o acerto sem destaque");
+      ok(!/acerto/.test(de("Fase").children[2].textContent) && !/dsc-ramo-fraco/.test(de("Fase").className), "R41g ramo sem questao: nada de acerto");
+      ok(/ATENÇÃO/.test(de("Modalidades").children[2].title) && !/ATENÇÃO/.test(de("Contratos").children[2].title), "R41h o balao do ramo fraco explica o alerta");
+      a.$("dlgDisciplina").close();
+      a.qsBancoPor([]);
+      const html = fs.readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.dsc-ramo-fraco /.test(html), "R41i o destaque do ramo fraco tem regra de CSS");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

@@ -2401,10 +2401,13 @@ function dscPintarRamos(plano, nome) {
   const cx = $("dscRamosLista");
   cx.innerHTML = "";
   if (!p.linhas.length) cx.append(Object.assign(document.createElement("p"), { className: "nota", textContent: t("ed_dsc_ramos_vazio") }));
-  const matPorTopico = {};
+  const matPorTopico = {}, acPorTopico = {};
   p.linhas.forEach((x) => {
     const lin = document.createElement("div");
-    lin.className = "dsc-ramo-lin dsc-ramo-" + x.estado;
+    const ac = (typeof ramAcertosDoTopico === "function")
+      ? ((acPorTopico[x.item.chave] || (acPorTopico[x.item.chave] = ramAcertosDoTopico(typeof matChaveViva === "function" ? matChaveViva(x.item.disciplina, x.item.nome) : matChave(x.item.disciplina, x.item.nome), x.item.ramos)))[x.ramo.id]) : null;
+    const fraco = typeof ramAcertoFraco === "function" && ramAcertoFraco(ac);
+    lin.className = "dsc-ramo-lin dsc-ramo-" + x.estado + (fraco ? " dsc-ramo-fraco" : "");
     const est = document.createElement("span");
     est.className = "ed-ramo ed-ramo-" + x.estado;
     est.textContent = t("ed_ramo_" + x.estado);
@@ -2416,6 +2419,10 @@ function dscPintarRamos(plano, nome) {
     pe.className = "dsc-ramo-peso";
     pe.textContent = "★" + (x.ramo.peso || 3) + " · " + t("ed_dsc_ramo_vale", { p: String(x.relPct).replace(".", ",") });
     pe.title = t("ed_dsc_ramo_vale_tip");
+    if (ac && ac.feitas) {
+      pe.textContent += " · " + t("ed_dsc_ramo_acerto", { p: ac.pct, n: ac.feitas });
+      pe.title += " — " + t(fraco ? "ed_dsc_ramo_acerto_fraco_tip" : "ed_dsc_ramo_acerto_tip", { p: ac.pct, n: ac.feitas, c: RAM_ACERTO_CORTE, m: RAM_ACERTO_AMOSTRA });
+    }
     const bt = document.createElement("button");
     bt.type = "button";
     bt.className = "btn-min dsc-ramo-btn";
