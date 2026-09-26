@@ -127,6 +127,8 @@ function domPintar() {
   });
   cx.append(leg);
   cx.append(gerEl("p", "nota cov-base", t(m.base === "questoes" ? "dom_base_questoes" : (m.base === "fase2" ? "cov_base_fase2" : "dom_base_estimado"))));
+  /* a evolução no tempo (retrato semanal) e a diferença de cada disciplina desde o retrato de referência */
+  const dlt = domEvolucaoPintar(cx, m, ed.id, fase);
   /* as disciplinas, na ordem do peso */
   const ordem = m.disciplinas.slice().sort((a, b) => (b.pesoPct - a.pesoPct) || (a.nome < b.nome ? -1 : 1));
   const lista = gerEl("div", "cov-lista");
@@ -139,6 +141,8 @@ function domPintar() {
     const dd = d.distribuicao, ds = Object.keys(dd).reduce((x, k) => x + dd[k], 0) || 1;
     cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_peso", { p: d.pesoPct.toFixed(1) })),
       gerEl("span", "cov-n" + (dd.vermelho ? " cov-n-alerta" : ""), t("dom_disc_n", { v: Math.round((dd.verde / ds) * 100), r: Math.round((dd.vermelho / ds) * 100), c: Math.round((dd.cinza / ds) * 100) })));
+    const dd2 = dlt && dlt.disciplinas[d.nome];
+    if (dd2 && dd2.verde !== 0) cab.append(gerEl("span", "dom-evo-disc" + (dd2.verde > 0 ? " dom-evo-sobe" : " dom-evo-desce"), t("dom_evo_disc", { v: (dd2.verde > 0 ? "+" : "") + String(dd2.verde).replace(".", ",") })));
     linha.append(cab);
     const tira = gerEl("div", "cov-tira");
     const somaTop = d.topicos.reduce((x, tp) => x + tp.pesoPct, 0) || 1;
