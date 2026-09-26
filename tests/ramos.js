@@ -810,6 +810,17 @@ async function testes() {
       ok(/1 ramo\(s\) receberam peso a partir de 3/.test(a.$("ramMsg").textContent) && /1 sem citação/.test(a.$("ramMsg").textContent), "R30d a mensagem conta o que foi feito: " + a.$("ramMsg").textContent);
       ok(ed.texto === txtAntes, "R30e nao grava no edital ate salvar");
       ok(achar(a.$("ramLista").children[0], (e) => cls(e, "ram-peso"))[0].value === l1[0].peso && l1[0].peso !== "", "R30f a tela mostra o peso novo (foi repintada)");
+      /* divergencia: o peso dela fica, mas o app AVISA quando os registros dizem outra coisa */
+      const sugerido0 = l1[0].peso;
+      l1[0].peso = "1";
+      const r3 = a.ramPesosDosRegistros();
+      ok(l1[0].peso === "1" && r3.divergencias.length === 1 && r3.divergencias[0].meu === 1 && String(r3.divergencias[0].sugerido) === sugerido0 && /divergem/.test(a.$("ramMsg").textContent) && a.$("ramMsg").textContent.indexOf(l1[0].nome) >= 0, "R30g peso dela (1) longe do que os registros sugerem (" + sugerido0 + "): so' avisa, nao troca: " + a.$("ramMsg").textContent);
+      l1[0].peso = sugerido0;
+      ok(a.ramPesosDosRegistros().divergencias.length === 0 && !/divergem/.test(a.$("ramMsg").textContent), "R30h peso igual ao sugerido: sem aviso");
+      const dv = (l, r) => a.ramDivergencias(l, r);
+      ok(dv([{ nome: "A", peso: "3" }], [{ peso: "5", citacoes: 4 }]).length === 1 && dv([{ nome: "A", peso: "4" }], [{ peso: "5", citacoes: 4 }]).length === 0, "R30i limite: diferenca de 2 estrelas avisa, de 1 nao");
+      ok(dv([{ nome: "A", peso: "" }], [{ peso: "5" }]).length === 0 && dv([{ nome: "A", peso: "12q" }], [{ peso: "5" }]).length === 0 && dv([{ nome: "A", peso: "1" }], [{ peso: "" }]).length === 0 && dv([{ nome: "A", peso: "5" }], [{ peso: "" }]).length === 0 && dv([{ nome: "A", peso: "7" }], [{ peso: "2" }]).length === 0 && dv(null, null).length === 0, "R30j sem peso dela, peso em quantidade, ramo sem indicio ou entrada vazia: sem aviso");
+      ok(dv([{ nome: "A", peso: "5" }], [{ peso: "2", citacoes: 1 }])[0].sugerido === 2, "R30k tambem avisa quando ela pos MAIS do que os registros mostram");
       a.$("btnRamFechar").onclick();
       a.qsBancoPor([]); a.jurGravarTudo({});
     }

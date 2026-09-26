@@ -205,6 +205,19 @@ function ramPesosPorRegistros(nomes, textos) {
   return conta;
 }
 
+/* DIVERGÊNCIAS: ramos em que o peso que a pessoa pôs difere em 2 estrelas ou mais do que os registros sugerem. Só avisa —
+ * o peso dela nunca é trocado. linhas: [{nome, peso}]; res: o resultado de ramPesosPorRegistros (mesma ordem). */
+function ramDivergencias(linhas, res) {
+  const out = [];
+  (linhas || []).forEach((l, i) => {
+    const x = (res || [])[i];
+    const meu = String((l && l.peso) || "").trim();
+    if (!x || !x.peso || !/^[1-5]$/.test(meu)) return;
+    if (Math.abs(Number(meu) - Number(x.peso)) >= 2) out.push({ nome: l.nome, meu: Number(meu), sugerido: Number(x.peso), citacoes: x.citacoes });
+  });
+  return out;
+}
+
 /* os textos que a pessoa já registrou deste tópico, POR FONTE: { questoes: [...], juris: [...] } */
 function ramTextosPorFonte(chave) {
   const questoes = [], juris = [];
@@ -353,8 +366,10 @@ function ramPesosDosRegistros() {
     l.peso = x.peso; aplicados++;
   });
   ramPintar();
-  $("ramMsg").textContent = t("ram_pesos_ok", { a: aplicados, n: textos.length, s: semIndicio, j: jaTinham });
-  return { textos: textos.length, aplicados, semIndicio, jaTinham, res };
+  const divergencias = ramDivergencias(ramLinhas, res);
+  $("ramMsg").textContent = t("ram_pesos_ok", { a: aplicados, n: textos.length, s: semIndicio, j: jaTinham })
+    + (divergencias.length ? " " + t("ram_pesos_diverg", { l: divergencias.map((d) => d.nome + " (★" + d.meu + " → " + d.sugerido + ")").join("; ") }) : "");
+  return { textos: textos.length, aplicados, semIndicio, jaTinham, res, divergencias };
 }
 
 /* copia o pedido para a IA e abre a caixa onde se cola a resposta */
