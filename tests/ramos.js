@@ -2540,6 +2540,48 @@ async function testes() {
       ok(outro && outro.sinais.retencao.respostas === 0 && outro.nivel === "cinza", "R68b o ramo sem cartao respondido e sem estudo: cinza");
       ok(m.resumo.folhas > 0 && Math.abs(m.resumo.total - Object.keys(m.resumo.distribuicao).reduce((x, k) => x + m.resumo.distribuicao[k], 0)) < 1e-9, "R68c o resumo fecha");
     }
+    /* R69: a TELA do dominio dos assuntos */
+    {
+      const { a, ed } = MT();
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(["dom-dist", "dom-seg", "dom-leg-i", "dom-n-verde", "dom-n-amarelo", "dom-n-azul", "dom-n-vermelho", "dom-n-cinza", "dom-b-vermelho", "dom-top", "dom-ramo", "dom-nivel", "dom-porque", "dom-chips", "dom-chip", "dom-herdado"].every((c) => html.indexOf("." + c) >= 0) && /dialog\.dom-dlg\[open\]/.test(html), "R69a as classes da tela tem CSS (e a janela tem a regra [open])");
+      /* um cartao com retencao ruim no ramo 'modalidades' + duas questoes erradas no topico */
+      const velho = a.parseText("Modalidades? :: Pregão e concorrência :: ram_modalidades").cards[0];
+      const idc = a.estcIdsDoCard(velho)[0];
+      a.lojaGravar(a.ESTC_CH_REGS, JSON.stringify({ [idc]: { s: "learn", iv: 0, ez: 2.5, due: 0, n: 12, l: 6, h: [1, 1, 3, 1, 1, 3, 1, 1, 3, 1, 1, 3], t: 1 } }));
+      a.gerAbrir();
+      a.$("btnGerDominio").onclick();
+      ok(a.$("dlgDominio").open === true && a.$("domEdital").children.length >= 1 && a.$("domFase").hidden === true, "R69b o botao da biblioteca abre o dominio (sem seletor de fase quando o edital nao tem 2a fase)");
+      const cx = () => a.$("domCorpo");
+      ok(/do peso da prova ainda não foi estudado/.test(cx().textContent), "R69c a manchete diz quanto do peso ainda nao foi estudado");
+      const seg = achar(cx(), (e) => cls(e, "dom-seg"));
+      ok(seg.length >= 1 && seg.every((e) => /dom-n-(verde|amarelo|azul|vermelho|cinza)/.test(e.className)), "R69d a barra de distribuicao tem um segmento por nivel presente");
+      const somaW = seg.reduce((x, e) => x + parseFloat(e.style.width), 0);
+      ok(Math.abs(somaW - 100) < 0.05, "R69e os segmentos somam 100% da barra: " + somaW.toFixed(2));
+      const discs = achar(cx(), (e) => cls(e, "cov-disc"));
+      const pesos = discs.map((d) => Number((/peso ([\d.]+)%/.exec(d.textContent) || [])[1]));
+      ok(discs.length === 2 && pesos.every((x, i) => !i || pesos[i - 1] >= x), "R69f as disciplinas vem na ordem do peso: " + pesos.join(","));
+      const det = achar(discs[0], (e) => cls(e, "cov-det"))[0];
+      ok(det.hidden === true, "R69g os topicos comecam recolhidos");
+      achar(discs[0], (e) => cls(e, "cov-disc-cab"))[0].onclick();
+      ok(det.hidden === false && a.domDiscAbertaAtual() === discs[0].textContent.split("peso")[0].trim(), "R69h clicar na disciplina abre os topicos");
+      const ramoLin = achar(det, (e) => cls(e, "dom-ramo")).find((e) => /Modalidades/.test(e.textContent));
+      ok(ramoLin && /dom-b-vermelho/.test(ramoLin.className) && /Porque:.*cartões lembrados em/.test(ramoLin.textContent), "R69i o ramo com retencao ruim (33%) fica VERMELHO e diz o motivo: " + (ramoLin && ramoLin.textContent.slice(0, 120)));
+      const chips = achar(ramoLin, (e) => cls(e, "dom-chip")).map((e) => e.textContent);
+      ok(chips.length >= 3 && chips.some((c) => /nunca estudado/.test(c)) && chips.some((c) => /cartões: 33% lembrados/.test(c)), "R69j cada folha mostra os sinais em chips (estudo, acerto, cartoes): " + chips.join(" | "));
+      const reforcar = achar(cx(), (e) => cls(e, "cov-bloco")).pop();
+      ok(reforcar && /O que reforçar primeiro/.test(reforcar.textContent) && /peso [\d.]+% × 3/.test(reforcar.textContent), "R69k a lista 'o que reforcar primeiro' mostra a conta (peso x fator do nivel)");
+      const botoes = achar(reforcar, (e) => e.tag === "button").map((b) => b.textContent);
+      ok(botoes.some((b) => /Abrir/.test(b)) && botoes.some((b) => /Estudar|Criar/.test(b)), "R69l cada item de 'reforcar' leva a biblioteca e ao estudo/criacao");
+      a.$("btnDomX").onclick();
+      ok(a.$("dlgDominio").open === false, "R69m o X fecha");
+      /* aberto pelo edital */
+      a.edAbrir(ed.id); a.$("editalTexto").value = ed.texto;
+      a.$("btnEdDominio").onclick();
+      ok(a.$("dlgDominio").open === true && String(a.$("domEdital").value) === String(ed.id), "R69n o botao do cabecalho do edital abre o dominio JA nesse edital");
+      a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
