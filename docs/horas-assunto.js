@@ -93,7 +93,8 @@ function horMapa(plano, diario, opc) {
     const seguroMin = bl ? plan * Math.min(100, bl.minPct * ED_FOLGA_MINIMO) / 100 : null;
     const revisaoPct = total ? rev / total : 0;
     return {
-      nome, peso: its[0].disciplinaPeso, pesoPct: (bruto / totalBruto) * 100,
+      /* a fatia EXATA (questões do edital) quando o plano a tem; senão a estimada (peso × peso) */
+      nome, peso: its[0].disciplinaPeso, pesoPct: plano.fatiaExata && plano.fatia && plano.fatia[nome] != null ? plano.fatia[nome] : (bruto / totalBruto) * 100,
       estudoMin: est, revisaoMin: rev, totalMin: total, planejadoMin: plan, revisaoPct,
       unidades: unTotal, feitas: unFeitas, revisadas: unRev, pendentes: unTotal - unFeitas,
       bloco: bl ? { nome: bl.nome, minPct: bl.minPct, abaixo: !!bl.abaixo, apertado: !!bl.apertado } : null,

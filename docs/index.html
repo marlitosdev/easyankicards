@@ -4391,6 +4391,8 @@ dialog.cov-dlg[open]{display:flex;flex-direction:column;width:min(900px,96vw);he
 .cov-top-nome,.cov-item-nome{flex:1 1 180px;min-width:0;overflow-wrap:anywhere}
 .cov-top-n,.cov-item-n{font-size:12px;color:var(--sutil);white-space:nowrap}
 .cov-nota-sem{opacity:.75;font-style:italic}
+.cov-base{margin:4px 0 8px}
+.cov-f2{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:rgba(179,136,255,.22);color:#c9a8ff;white-space:nowrap}
 .cov-acoes{display:inline-flex;gap:6px}
 .cov-bloco{margin-top:14px}
 .cov-bloco h4{margin:0 0 6px}
@@ -7952,6 +7954,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" data-i18n="cov_sub"></p>
   <div class="cov-barra">
     <select id="covEdital"></select>
+    <select id="covFase" hidden>
+      <option value="1" data-i18n="cov_fase1"></option>
+      <option value="2" data-i18n="cov_fase2"></option>
+    </select>
     <label class="cov-min"><span data-i18n="cov_min_top"></span> <input type="number" id="covMinTop" min="1" max="50"></label>
     <label class="cov-min"><span data-i18n="cov_min_ramo"></span> <input type="number" id="covMinRamo" min="1" max="50"></label>
   </div>
