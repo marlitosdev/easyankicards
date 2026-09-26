@@ -102,7 +102,7 @@ async function testes() {
     ok(lei.ramos.length === 3 && lei.ramos.map((r) => r.nome).join("|") === "Modalidades de licitação|Fase preparatória|Contratos administrativos" && pA.itens.filter((i) => i.ramos).length === 1, "R23b so' o topico com ramos leva a lista de ramos, por RELEVANCIA (peso; empate pela ordem escrita)");
     ok(lei.ramos.map((r) => r.w).join() === "5,3,3" && Math.abs(lei.ramos.reduce((a, r) => a + r.share, 0) - 1) < 1e-9 && Math.abs(lei.ramos[0].share - 5 / 11) < 1e-9, "R23c cada ramo tem peso e parte do topico (5/11, 3/11, 3/11)");
     const pl = pB.itens.find((i) => i.nome === "Lei 14.133/2021");
-    ok(pl.minutos === 60 && lei.minutos === 155 && lei.ramos.map((r) => r.minutos).join() === "70,40,40", "R23d o tempo do topico com 3 ramos cresce devagar (60 -> 155 = x(1+log2 3)) e se reparte pelo peso: " + lei.minutos + " / " + lei.ramos.map((r) => r.minutos));
+    ok(pl.minutos === 60 && lei.minutosTotal === 155 && lei.minutos === 150 && lei.ramos.map((r) => r.minutos).join() === "70,40,40", "R23d o tempo do topico com 3 ramos cresce devagar (60 -> 155 = x(1+log2 3)) e se reparte pelo peso; o plano reserva a soma dos ramos pendentes (150): " + lei.minutosTotal + " / " + lei.minutos + " / " + lei.ramos.map((r) => r.minutos));
     ok(lei.minutosSessao === 70 && lei.proximo === "Modalidades de licitação" && lei.sessao.join() === "modalidades_de_licitacao", "R23e a sessao da vez leva os ramos pendentes mais relevantes que cabem na faixa (60 min): o primeiro (70)");
     ok(lei.feito === false && lei.ramosFeitos === 0 && lei.parcial === false && lei.ramosTotal === 3 && lei.estado === null, "R23f sem nada estudado: pendente, 0 de 3");
     const ch = lei.chave;
@@ -145,7 +145,7 @@ async function testes() {
     ok(i9.ramos[8].nome === "Fraco" && i9.ramos[8].minutos === 10 && i9.ramos[0].minutos > 10, "R23s5 nenhum ramo tem menos de 10 minutos (o de peso 1 entre oito de peso 5): " + i9.ramos.map((r) => r.minutos));
     const I3 = api.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 9 }, (x, k) => "++ Ramo " + (k + 1) + " :: 3").join(NL));
     const i3 = api.montarPlano(I3, opc).itens[0];
-    ok(i3.sessao.length === 2 && i3.minutosSessao === 60 && i3.minutos === 250 && i3.sessaoNomes.join() === "Ramo 1,Ramo 2", "R23s6 a sessao leva DOIS ramos quando cabem na faixa (2 x 30 = 60): " + i3.sessao.length + "/" + i3.minutosSessao + "/" + i3.minutos);
+    ok(i3.sessao.length === 2 && i3.minutosSessao === 60 && i3.minutosTotal === 250 && i3.minutos === 270 && i3.sessaoNomes.join() === "Ramo 1,Ramo 2", "R23s6 a sessao leva DOIS ramos quando cabem na faixa (2 x 30 = 60): " + i3.sessao.length + "/" + i3.minutosSessao + "/" + i3.minutos);
     ok(api.edRamosRegistrar({}, iv[0], "feito", "2026-09-25").length === 0, "R23s7 registrar ESTUDO num topico so' de revisao (todos ja estudados) nao remarca nada");
     ok(api.edRamosRegistrar({}, um, "revisado", "2026-09-25").length === 1 && api.edRamosRegistrar({}, um, "revisado", "2026-09-25")[0].id === "modalidades_de_licitacao", "R23s8 registrar REVISAO com ramos pendentes marca so' o ramo ja estudado (nao os pendentes)");
 
@@ -189,7 +189,72 @@ async function testes() {
   }
 
 
-  /* ---- R25: propor ramos pelo indice da lei (local) ---- */
+  /* ---- R36: pesos e prioridade entre topicos (Fase 4) ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const hoje = new Date().toISOString().slice(0, 10);
+    const E = api.lerEdital("# X | prova: 2027-06-01 | horas: 20" + NL + "@ D :: 5" + NL + "+ Pesado :: 5" + NL + "++ A :: 3" + NL + "++ B :: 3" + NL + "++ C :: 3" + NL + "+ Medio :: 4");
+    const opc = { horas: 20, prova: "2027-06-01", fatores: null, acertos: null };
+    const P = (feitos, o) => api.montarPlano(E, Object.assign({}, opc, { feitos: feitos || {} }, o || {}));
+    const it = (pl, nome) => pl.itens.find((i) => i.nome === nome);
+    const ch = "d›pesado";
+    const marca = (ids, d) => { const m = {}; ids.forEach((id) => { m[ch + "›#" + id] = { e: "feito", d: d || hoje }; }); return m; };
+    /* nada estudado: tudo como antes */
+    const p0 = P();
+    ok(p0.itens.map((i) => i.nome).join() === "Pesado,Medio" && it(p0, "Pesado").prioridade === 100 && it(p0, "Pesado").restante === 1 && it(p0, "Medio").prioridade === 80, "R36 nada estudado: o assunto pesado segue no topo (100) e o medio em 80");
+    ok(it(p0, "Pesado").prioridadeBase === 100 && it(p0, "Medio").restante === 1, "R36a restante = 1 quando nada foi estudado");
+    /* 2 de 3 estudados: o que FALTA e' 1/3 */
+    const p1 = P(marca(["a", "b"]));
+    ok(Math.abs(it(p1, "Pesado").restante - 1 / 3) < 1e-9, "R36b o que falta do topico com 2 de 3 ramos estudados: 1/3");
+    ok(p1.itens.map((i) => i.nome).join() === "Medio,Pesado" && it(p1, "Medio").prioridade === 100 && it(p1, "Pesado").prioridade === 42, "R36c com quase tudo estudado o assunto PESADO passa para depois do medio intocado (prioridade 42 x 100): " + p1.itens.map((i) => i.nome + ":" + i.prioridade));
+    ok(it(p1, "Pesado").prioridadeBase === 100, "R36d a prioridade de BASE (do topico inteiro) fica guardada");
+    ok(Math.abs(it(p1, "Pesado").brutoOrdem - 25 / 3) < 1e-9 && it(p1, "Pesado").bruto === 25, "R36e a ordem usa o que falta (25/3) mas o peso do topico na prova (bruto 25) NAO muda");
+    /* um ramo so' estudado: falta 2/3 = 16,7 < 20 do medio */
+    const p2 = P(marca(["a"]));
+    ok(Math.abs(it(p2, "Pesado").restante - 2 / 3) < 1e-9 && p2.itens.map((i) => i.nome).join() === "Medio,Pesado" && it(p2, "Pesado").prioridade === 83, "R36f com 1 de 3 estudado o que falta (2/3 de 25 = 16,7) ja fica atras do medio (20): " + it(p2, "Pesado").prioridade);
+    /* topico todo estudado: revisao mantem a prioridade do topico */
+    const pAll = P(marca(["a", "b", "c"], "2020-01-01"));
+    ok(it(pAll, "Pesado").feito === true && it(pAll, "Pesado").prioridade === 100 && it(pAll, "Pesado").ehRevisao === true && it(pAll, "Pesado").restante === 0, "R36g topico todo estudado: a REVISAO segue com a prioridade do topico (100), nao com zero");
+    /* o tempo dos ramos nao encolhe */
+    ok(it(p0, "Pesado").minutosTotal === it(p1, "Pesado").minutosTotal && it(p0, "Pesado").ramos[0].minutos === it(p1, "Pesado").ramos[0].minutos, "R36h o orcamento do topico e o tempo de cada ramo nao encolhem porque outros ramos ficaram prontos: " + it(p0, "Pesado").minutosTotal + " x " + it(p1, "Pesado").minutosTotal);
+    ok(it(p0, "Pesado").minutos === 150 && it(p1, "Pesado").minutos === 50 && it(p2, "Pesado").minutos === 100, "R36h2 o plano reserva SO' O QUE FALTA (150 -> 100 -> 50 min conforme os ramos ficam prontos): " + [it(p0, "Pesado").minutos, it(p2, "Pesado").minutos, it(p1, "Pesado").minutos]);
+    ok(it(p1, "Pesado").faixa === "baixa" && it(p0, "Pesado").faixa === "alta", "R36i (a FAIXA de exibicao acompanha a posicao: alta -> baixa)");
+    /* sem ramos nada muda */
+    const Eb = api.lerEdital("@ D :: 5" + NL + "+ Pesado :: 5" + NL + "+ Medio :: 4");
+    const pb = api.montarPlano(Eb, Object.assign({}, opc, { feitos: {} }));
+    ok(pb.itens.map((i) => i.prioridade).join() === "100,80" && pb.itens.every((i) => i.restante === 1), "R36j sem ramos: prioridade e ordem exatamente como antes (100, 80)");
+    const pbf = api.montarPlano(Eb, Object.assign({}, opc, { feitos: { "d›pesado": { e: "feito", d: hoje } } }));
+    ok(pbf.itens.find((i) => i.nome === "Pesado").restante === 0, "R36k sem ramos e estudado: restante 0");
+    /* dificuldade multiplica o que falta */
+    const pf = P(marca(["a", "b"]), { fatores: { "d›pesado": 3 } });
+    ok(it(pf, "Pesado").prioridade === 100 && it(pf, "Pesado").brutoOrdem === 25 / 3 * 3, "R36l a dificuldade (fator 3) multiplica o que FALTA: 25 x 1/3 x 3 = 25 > 20 do medio, entao o pesado volta ao topo");
+    /* credito de progresso */
+    ok(api.edCredito(it(p1, "Pesado")) > 0.66 && api.edCredito(it(p1, "Pesado")) < 0.67 && api.edCredito(it(p0, "Pesado")) === 0 && api.edCredito(it(pAll, "Pesado")) === 1, "R36m credito do topico com ramos = parte estudada (2/3), 0 sem nada, 1 com tudo");
+    ok(api.edCredito({ feito: true }) === 1 && api.edCredito({ feito: false }) === 0 && api.edCredito(null) === 0 && api.edCreditoRev({ revisado: true }) === 1 && api.edCreditoRev(null) === 0 && api.edRestante(null) === 1, "R36n sem ramos o credito e' tudo ou nada; nulo nao quebra");
+    const pr = P({ [ch + "›#a"]: { e: "revisado", d: hoje }, [ch + "›#b"]: { e: "feito", d: hoje } });
+    ok(Math.abs(api.edCreditoRev(it(pr, "Pesado")) - 1 / 3) < 1e-9 && Math.abs(api.edCredito(it(pr, "Pesado")) - 2 / 3) < 1e-9, "R36o credito de revisao: so' o ramo revisado conta (1/3); o de estudo conta os 2");
+    /* progresso do plano, das disciplinas e dos blocos usam o credito parcial */
+    ok(P(marca(["a"])).peso.pctFeito === 19 && P().peso.pctFeito === 0, "R36p o progresso do plano dá credito parcial: 1 de 3 ramos do topico pesado = 19% (era 0%): " + P(marca(["a"])).peso.pctFeito);
+    const dsc = api.panoramaDisciplinas(P(marca(["a"]))).find((x) => x.nome === "D");
+    ok(dsc.pesoFeito === 19 && dsc.feitos === 0 && dsc.pesoRevisado === 0, "R36q o panorama da disciplina: 19% do peso estudado, 0 topicos inteiros feitos: " + dsc.pesoFeito + "/" + dsc.feitos);
+    const dr = api.panoramaDisciplinas(P({ [ch + "›#a"]: { e: "revisado", d: hoje } })).find((x) => x.nome === "D");
+    ok(dr.pesoRevisado === 19 && dr.pesoFeito === 19, "R36r o peso revisado tambem conta por ramo (19%)");
+    const EB = api.lerEdital("# X | prova: 2027-06-01 | horas: 20" + NL + "& Bloco | minimo: 50%" + NL + "@ D :: 5" + NL + "+ Pesado :: 5" + NL + "++ A :: 3" + NL + "++ B :: 3" + NL + "++ C :: 3");
+    const pbl = api.montarPlano(EB, Object.assign({}, opc, { feitos: marca(["a", "b"]) }));
+    ok(pbl.blocos.length === 1 && pbl.blocos[0].pct === 67, "R36s a cobertura do bloco com minimo tambem usa o credito parcial (2 de 3 = 67%): " + JSON.stringify(pbl.blocos.map((b) => b.pct)));
+    const sp = api.somarPeso([{ bruto: 10, ramos: [{ share: 0.5, feito: true, revisado: true }, { share: 0.5, feito: false, revisado: false }] }, { bruto: 10, feito: true, revisado: true }]);
+    ok(sp.total === 20 && sp.feito === 15 && sp.revisado === 15 && sp.pctFeito === 75 && sp.pctRevisado === 75, "R36t somarPeso com credito parcial (estudo e revisao): " + JSON.stringify(sp));
+    ok(pbl.blocos[0].linhas[0].cobertura === 67, "R36u a cobertura POR DISCIPLINA dentro do bloco tambem usa o credito parcial (67%): " + pbl.blocos[0].linhas[0].cobertura);
+    const revs = {}; ["a", "b"].forEach((id) => { revs[ch + "›#" + id] = { e: "revisado", d: hoje }; });
+    const EB2 = api.lerEdital("# X | prova: 2027-06-01 | horas: 20" + NL + "& Bloco | minimo: 50%" + NL + "@ D :: 5" + NL + "+ Pesado :: 5" + NL + "++ A :: 3" + NL + "++ B :: 3" + NL + "++ C :: 3");
+    const pb2 = api.montarPlano(EB2, Object.assign({}, opc, { feitos: revs }));
+    const fora = api.edDiscComFolga(pb2.blocos, pb2.itens, {});
+    ok(fora.length === 1 && fora[0].cobertura === 67 && fora[0].revisao === 100, "R36v a disciplina com folga (cobertura e revisao) conta o credito por ramo: " + JSON.stringify(fora));
+    const pb3 = api.montarPlano(EB2, Object.assign({}, opc, { feitos: marca(["a", "b"]) }));
+    ok(api.edDiscComFolga(pb3.blocos, pb3.itens, {}).length === 0, "R36w estudado mas NAO revisado: nao libera tempo (a revisao por ramo pesa)");
+  }
+
+    /* ---- R25: propor ramos pelo indice da lei (local) ---- */
   {
     const ROM = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV", "XXV"];
     const arts = (ns) => ns.map((n) => "Art. " + n + " Texto.");
@@ -1036,6 +1101,22 @@ async function testes() {
       a.abrirRegistro(conv);
       ok(a.$("regRamosBloco").hidden === true && a.$("regTitulo").textContent === "Convênios", "R33q topico SEM ramos: nada de lista de ramos");
       a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+    }
+
+    /* R36-ui: a barra de progresso do topico usa o orcamento do topico INTEIRO, nao so' o que falta */
+    {
+      const { a, ed } = MT();
+      const r0 = a.lerEdital(ed.texto);
+      const plano = a.montarPlano(r0, { horas: 20, prova: "2027-06-01", feitos: { "licitações›lei 14.133›#modalidades": { e: "feito", d: new Date().toISOString().slice(0, 10) } }, fatores: null, acertos: null });
+      const it = plano.itens.find((x) => x.nome === "Lei 14.133");
+      const li = a.edLinhaAgendaTeste(Object.assign({}, it, { edital: ed.id }));
+      const achar2 = (raiz, teste, acc) => { Array.from(raiz.children || []).forEach((f) => { if (teste(f)) acc.push(f); achar2(f, teste, acc); }); return acc; };
+      const barra = achar2(li, (f) => /it-barra/.test(f.className || ""), [])[0];
+      ok(it.minutosTotal === 155 && it.minutos === 80 && barra && /2h35/.test(barra.title) && !/1h20/.test(barra.title), "R36-ui a barra mede contra o orcamento do topico inteiro (2h35), enquanto o plano reserva so' o que falta (1h20): " + (barra && barra.title));
+      const itRev = Object.assign({}, it, { ehRevisao: true, minutosTotal: 155, minutos: 30 });
+      const liR = a.edLinhaAgendaTeste(Object.assign({}, itRev, { edital: ed.id }));
+      const barraR = achar2(liR, (f) => /it-barra/.test(f.className || ""), [])[0];
+      ok(barraR && /30min/.test(barraR.title) && !/2h35/.test(barraR.title), "R36-ui2 numa REVISAO a barra continua medindo contra o orcamento da revisao (30min), nao o do topico");
     }
 
     /* R24: a linha do topico mostra os ramos dentro dela */

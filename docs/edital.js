@@ -426,10 +426,14 @@ function edTempoDosRamos(i, faixaMin) {
   const total = arred(faixaMin * (1 + Math.log2(N)));
   i.ramos.forEach((r) => { r.minutos = Math.max(10, arred(total * r.share)); });
   i.minutos = total;
+  i.minutosTotal = total;
   const pend = i.ramos.filter((r) => !r.feito);
   let sessao = [], soma = 0;
   if (pend.length) {
     pend.forEach((r) => { if (!sessao.length || soma + r.minutos <= faixaMin) { sessao.push(r); soma += r.minutos; } });
+    /* o que o plano reserva é o que FALTA (ramos pendentes); o orçamento do tópico inteiro fica em minutosTotal, para a
+     * barra de progresso (tempo já posto x orçamento) não mudar de régua a cada ramo estudado */
+    i.minutos = pend.reduce((a, r) => a + r.minutos, 0);
   } else {
     sessao = i.ramos.filter((r) => r.venceu);
     soma = sessao.reduce((a, r) => a + r.minutos, 0);
@@ -478,6 +482,24 @@ function edRamosDesfazer(prog, item, mud) {
     const k = m.id === "_topo" ? item.chave : item.chave + "›#" + m.id;
     if (m.ant) prog[k] = m.ant; else delete prog[k];
   });
+}
+
+/* CRÉDITO DE PROGRESSO (0 a 1): quanto do valor do tópico já foi cumprido. Sem ramos é tudo ou nada; com ramos, a soma
+ * das partes (share) dos ramos estudados (ou revisados). Por isso estudar o ramo que mais vale conta mais, e um tópico
+ * pela metade conta como metade — em vez de valer zero até o último ramo. */
+function edCredito(i) {
+  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.feito ? r.share : 0), 0);
+  return i && i.feito ? 1 : 0;
+}
+function edCreditoRev(i) {
+  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.revisado ? r.share : 0), 0);
+  return i && i.revisado ? 1 : 0;
+}
+/* Quanto do valor do tópico AINDA FALTA estudar (1 = nada estudado; 0 = tudo). É o que decide a posição na agenda: um
+ * tópico de peso alto com quase todos os ramos feitos já não é o mais urgente. */
+function edRestante(i) {
+  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.feito ? 0 : r.share), 0);
+  return i && i.feito ? 0 : 1;
 }
 
 /* O item do plano de um tópico: o do próprio tópico ou, se ele tem ramos, o primeiro ramo dele. */
@@ -695,17 +717,14 @@ function montarPlano(r, opcoes) {
     });
     todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
   }
+  /* PASSADA 1: identidade e ESTADO de cada item (o dos ramos sai dos ramos). */
   todos.forEach((i) => {
-    const f = faixaDe(i.prioridade);
-    i.faixa = f.id;
-    i.minutos = f.minutos;
     i.topicoChave = (i.disciplina + "›" + i.nome).toLowerCase();
     i.chave = i.topicoChave;
     i.titulo = i.nome;
     if (i.ramos && i.ramos.length) {
-      /* tópico com ramos: o estado sai dos ramos (o tópico só está feito com todos feitos) e o tempo se reparte */
+      /* tópico com ramos: o estado sai dos ramos (o tópico só está feito com todos feitos) */
       edEstadoDosRamos(i, marcaDe);
-      edTempoDosRamos(i, f.minutos);
       return;
     }
     /* dois estados, não um: estudar e revisar são coisas diferentes, e a
@@ -716,6 +735,30 @@ function montarPlano(r, opcoes) {
     i.dias = m && m.d ? Math.floor((Date.now() - new Date(m.d + "T00:00:00")) / 86400000) : null;
     i.feito = i.estado === "feito" || i.estado === "revisado";
     i.revisado = i.estado === "revisado";
+  });
+  /* A POSIÇÃO PELO QUE AINDA FALTA. Tópico com ramos e pendência vale, na fila de ESTUDO, o que falta dele
+   * (bruto × parte pendente × dificuldade): um assunto de peso alto com um ramo pendente já não passa à frente de um
+   * assunto médio intocado, e um assunto pesado com tudo pendente segue no topo. Revisão e tópico sem ramos não
+   * mudam. Só re-normaliza a prioridade (0-100) quando algum item foi ajustado. */
+  let ajustou = false;
+  todos.forEach((i) => {
+    i.restante = edRestante(i);
+    i.prioridadeBase = i.prioridade;
+    if (i.ramos && i.ramos.length && !i.feito && i.restante < 1) { i.brutoOrdem *= i.restante; ajustou = true; }
+  });
+  if (ajustou) {
+    const maxO = todos.reduce((m, i) => Math.max(m, i.brutoOrdem), 0) || 1;
+    todos.forEach((i) => { i.prioridade = Math.round((i.brutoOrdem / maxO) * 100); });
+    todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
+  }
+  /* PASSADA 2: faixa e tempo (o tempo dos ramos depende da faixa). */
+  todos.forEach((i) => {
+    const f = faixaDe(i.prioridade);
+    i.faixa = f.id;
+    i.minutos = f.minutos;
+    /* o TEMPO dos ramos vem da faixa do tópico INTEIRO (a de antes de descontar o que já foi estudado): o tempo de
+     * um ramo não encolhe porque outros ficaram prontos; só a posição na fila muda */
+    if (i.ramos && i.ramos.length) edTempoDosRamos(i, faixaDe(i.prioridadeBase).minutos);
   });
 
   /* Fatia de cada disciplina na prova: entra no motivo porque é o argumento
@@ -945,8 +988,9 @@ function montarPlano(r, opcoes) {
 function somarPeso(itens) {
   const soma = (f) => itens.filter(f).reduce((a, i) => a + i.bruto, 0);
   const total = soma(() => true) || 1;
-  const feito = soma((i) => i.feito);
-  const revisado = soma((i) => i.revisado);
+  /* com crédito parcial: um tópico com 3 de 9 ramos estudados conta a parte que vale, não zero */
+  const feito = itens.reduce((a, i) => a + i.bruto * edCredito(i), 0);
+  const revisado = itens.reduce((a, i) => a + i.bruto * edCreditoRev(i), 0);
   return {
     total, feito, revisado,
     pctFeito: Math.round((feito / total) * 100),
@@ -1047,7 +1091,7 @@ function edCumprimentoBlocos(r, itens, acertos) {
     const nomes = b.disciplinas || [];
     const meus = (itens || []).filter((i) => nomes.indexOf(i.disciplina) >= 0);
     const total = meus.reduce((a, i) => a + i.bruto, 0);
-    const feito = meus.filter((i) => i.feito).reduce((a, i) => a + i.bruto, 0);
+    const feito = meus.reduce((a, i) => a + i.bruto * edCredito(i), 0);
     const pct = total ? Math.round((feito / total) * 100) : 0;
 
     /* o peso do bloco na prova inteira: um bloco com corte que vale 15%
@@ -1091,7 +1135,7 @@ function edCumprimentoBlocos(r, itens, acertos) {
     const linhas = nomes.map((nome) => {
       const dela = meus.filter((i) => i.disciplina === nome);
       const tt = dela.reduce((a, i) => a + i.bruto, 0);
-      const ft = dela.filter((i) => i.feito).reduce((a, i) => a + i.bruto, 0);
+      const ft = dela.reduce((a, i) => a + i.bruto * edCredito(i), 0);
       const a = ac[nome] || {};
       const amostra = a.amostra || 0;
       const acerto = amostra >= ED_AMOSTRA_MINIMA ? a.pct : null;
@@ -1214,8 +1258,8 @@ function edDiscComFolga(blocos, itens, emRisco) {
     const d = porDisc[i.disciplina] || (porDisc[i.disciplina] =
       { total: 0, feito: 0, revisado: 0 });
     d.total += i.bruto;
-    if (i.feito) d.feito += i.bruto;
-    if (i.revisado) d.revisado += i.bruto;
+    d.feito += i.bruto * edCredito(i);
+    d.revisado += i.bruto * edCreditoRev(i);
   });
 
   /* o mínimo que vale para cada disciplina, quando existe */
@@ -1423,9 +1467,8 @@ function panoramaDisciplinas(plano) {
       intocados: intocados.length,
       altaIntocada: intocados.filter((i) => i.faixa === "alta").length,
       bruto, fatia: Math.round((bruto / totalBruto) * 100),
-      pesoFeito: Math.round((d.itens.filter((i) => i.feito)
-        .reduce((a, i) => a + i.bruto, 0) / (bruto || 1)) * 100),
-      pesoRevisado: Math.round((revs.reduce((a, i) => a + i.bruto, 0) / (bruto || 1)) * 100),
+      pesoFeito: Math.round((d.itens.reduce((a, i) => a + i.bruto * edCredito(i), 0) / (bruto || 1)) * 100),
+      pesoRevisado: Math.round((d.itens.reduce((a, i) => a + i.bruto * edCreditoRev(i), 0) / (bruto || 1)) * 100),
       /* lacuna = fatia da prova ainda não estudada. É a régua da ordenação:
          não adianta ordenar por fatia se a disciplina já está pronta. */
       lacuna: Math.round((pesoIntocado / totalBruto) * 100),
