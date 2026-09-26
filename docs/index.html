@@ -4292,6 +4292,62 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-onde-lin{font-size:11px;opacity:.7}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
+/* ---- TÓPICO-ALVO DA BANCADA ---- */
+.banc-alvo{margin:8px 0;padding:10px 12px;border-radius:12px;border:2px solid #f0ad4e;background:rgba(240,173,78,.12)}
+.banc-alvo[hidden]{display:none}
+.banc-alvo-tit{font-size:14px}
+.banc-alvo-sub{font-size:12px;color:var(--sutil);margin:2px 0 8px}
+.banc-alvo-passos{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.banc-alvo-p{font-size:12px;color:var(--sutil);flex:1 1 200px}
+.banc-alvo-prompt{margin-top:8px}
+.banc-alvo-prompt textarea{width:100%;box-sizing:border-box;font-size:12px}
+.banc-alvo-fim{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+/* ---- COBERTURA DE CARTÕES: faixas por disciplina, segmentos por tópico ---- */
+dialog.cov-dlg[open]{display:flex;flex-direction:column;width:min(900px,96vw);height:min(92vh,900px);max-height:94vh;margin:auto;overflow:hidden}
+.cov-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cov-cab h3{margin:0}
+.cov-barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.cov-min{font-size:12px;color:var(--sutil);display:inline-flex;align-items:center;gap:4px}
+.cov-min input{width:56px}
+.cov-corpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.cov-manchete{padding:10px 12px;border-radius:10px;background:rgba(46,158,91,.16);border:1px solid #2e9e5b;margin-bottom:8px;font-size:14px}
+.cov-manchete-alerta{background:rgba(217,83,79,.16);border-color:#d9534f}
+.cov-legenda{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin:4px 0 10px}
+.cov-leg{display:inline-flex;align-items:center;gap:4px}
+.cov-leg .cov-seg{display:inline-block;width:12px;height:12px;border-radius:3px}
+.cov-tira{display:flex;width:100%;height:16px;border-radius:6px;overflow:hidden;background:rgba(127,127,127,.15);gap:1px}
+.cov-seg{height:100%;min-width:2px}
+.cov-f-vazio{background:#d9534f}
+.cov-f-pouco{background:#f0ad4e}
+.cov-f-ok{background:#2e9e5b}
+.cov-f-excesso{background:#5b8def}
+.cov-lista{display:flex;flex-direction:column;gap:10px}
+.cov-disc{padding:8px 10px;border-radius:10px;border:1px solid var(--borda);background:rgba(127,127,127,.06)}
+.cov-disc-cab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;cursor:pointer;margin-bottom:6px}
+.cov-nome{flex:1 1 auto;min-width:0}
+.cov-peso{font-size:12px;color:var(--sutil);white-space:nowrap}
+.cov-n{font-size:12px;white-space:nowrap;color:var(--sutil)}
+.cov-n-alerta{color:#ff8a85;font-weight:700}
+.cov-det{margin-top:8px;display:flex;flex-direction:column;gap:4px}
+.cov-det[hidden]{display:none}
+.cov-aberta{border-color:var(--acao)}
+.cov-top,.cov-ramo,.cov-item{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 8px;border-radius:6px;background:rgba(127,127,127,.08);border-left:4px solid transparent;font-size:13px}
+.cov-ramo{margin-left:18px;font-size:12px}
+.cov-f-borda-vazio{border-left-color:#d9534f}
+.cov-f-borda-pouco{border-left-color:#f0ad4e}
+.cov-f-borda-ok{border-left-color:#2e9e5b}
+.cov-f-borda-excesso{border-left-color:#5b8def}
+.cov-top-nome,.cov-item-nome{flex:1 1 180px;min-width:0;overflow-wrap:anywhere}
+.cov-top-n,.cov-item-n{font-size:12px;color:var(--sutil);white-space:nowrap}
+.cov-nota-sem{opacity:.75;font-style:italic}
+.cov-acoes{display:inline-flex;gap:6px}
+.cov-bloco{margin-top:14px}
+.cov-bloco h4{margin:0 0 6px}
+.cov-bloco .cov-item{margin-bottom:4px}
+@media (max-width:760px){
+  dialog.cov-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
+    padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
+}
 /* ---- ESTUDAR OS CARTÕES (player): cartão creme como no Anki, botão grande embaixo ---- */
 dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);height:min(92vh,920px);max-height:94vh;margin:auto;padding:12px 14px;overflow:hidden}
 .est-topo{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -4685,6 +4741,25 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <button class="btn-min" id="btnAmpliar" data-i18n="bancada_ampliar"
                   aria-pressed="false" title=""></button>
         </span>
+      </div>
+      <!-- O TÓPICO-ALVO DA BANCADA: "Criar mais cartões deste tópico" (player, cobertura, agenda) traz a pessoa até aqui, com o
+           tópico escolhido: prompt já pronto para ele, e "Salvar neste tópico" grava os cartões da bancada direto nele. -->
+      <div class="banc-alvo" id="bancAlvoBox" hidden>
+        <div class="banc-alvo-tit"><span data-i18n="banc_alvo_tit"></span> <b id="bancAlvoNome"></b></div>
+        <div class="banc-alvo-sub" id="bancAlvoSub"></div>
+        <div class="banc-alvo-passos">
+          <button type="button" class="btn btn-azul" id="btnBancAlvoPrompt" data-i18n="banc_alvo_p1" data-i18n-title="banc_alvo_tip_prompt"></button>
+          <span class="banc-alvo-p" data-i18n="banc_alvo_p2"></span>
+          <button type="button" class="btn btn-verde" id="btnBancAlvoSalvar" data-i18n="banc_alvo_p3" data-i18n-title="banc_alvo_tip_salvar"></button>
+        </div>
+        <details class="banc-alvo-prompt" id="bancAlvoPromptVer" hidden>
+          <summary data-i18n="banc_alvo_prompt_ver"></summary>
+          <textarea id="bancAlvoPromptTxt" readonly rows="6"></textarea>
+        </details>
+        <div class="banc-alvo-fim">
+          <button type="button" class="btn-min" id="btnBancAlvoDesfazer" data-i18n="banc_alvo_desfazer" data-i18n-title="banc_alvo_tip_desfazer" hidden></button>
+          <button type="button" class="btn-min" id="btnBancAlvoSair" data-i18n="banc_alvo_sair" data-i18n-title="banc_alvo_tip_sair"></button>
+        </div>
       </div>
       <label class="bancada-sub" data-i18n="editor_label"></label>
       <div class="linha-editor">
@@ -7669,6 +7744,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
     <span class="ger-cab-acoes">
+      <button type="button" class="btn-min" id="btnGerCobertura" data-i18n="cov_btn"></button>
       <button type="button" class="btn-min" id="btnGerAmpliar" aria-pressed="false"></button>
       <!-- O X, sempre no canto superior direito (no telefone o "Fechar" do rodapé fica longe do polegar e do olho) -->
       <button type="button" class="qs-x" id="btnGerX" aria-label="Fechar">✕</button>
@@ -7786,6 +7862,21 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min est-seta" id="btnEstProx" aria-label="Próximo cartão">→</button>
     </div>
   </div>
+</dialog>
+
+<!-- COBERTURA DE CARTÕES: tenho cartões para todos os tópicos e ramos do edital, na proporção do peso? -->
+<dialog id="dlgCobertura" class="ui-modal cov-dlg">
+  <div class="cov-cab">
+    <h3 data-i18n="cov_titulo"></h3>
+    <button type="button" class="qs-x" id="btnCovX" aria-label="Fechar">✕</button>
+  </div>
+  <p class="nota" data-i18n="cov_sub"></p>
+  <div class="cov-barra">
+    <select id="covEdital"></select>
+    <label class="cov-min"><span data-i18n="cov_min_top"></span> <input type="number" id="covMinTop" min="1" max="50"></label>
+    <label class="cov-min"><span data-i18n="cov_min_ramo"></span> <input type="number" id="covMinRamo" min="1" max="50"></label>
+  </div>
+  <div class="cov-corpo" id="covCorpo"></div>
 </dialog>
 
 <dialog id="dlgPacote" class="ui-modal diag-modal">
@@ -8320,6 +8411,8 @@ window.__sqlPromise = initSqlJs({
 <script src="cartao-elevar.js"></script>
 <script src="gerenciador.js"></script>
 <script src="estudo-cartoes.js"></script>
+<script src="cobertura-cartoes.js"></script>
+<script src="banca-alvo.js"></script>
 <script src="ramos.js"></script>
 <script src="pacote.js"></script>
 <script src="dificuldade.js"></script>

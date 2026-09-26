@@ -2118,6 +2118,109 @@ async function testes() {
       a.$("dlgGerCartoes").close();
     }
 
+    /* R59: COBERTURA DE CARTOES — peso x cartoes, por disciplina, topico e ramo (funcao pura) */
+    {
+      const { a } = MT();
+      /* peso: A = 5x5 (topico Contratos, com 2 ramos) + 5x5 (Concessoes); B = 5x1 (Outros): total 55 */
+      const texto = [
+        "# X | prova: 2027-06-01 | horas: 20",
+        "@ Direito Administrativo :: 5",
+        "+ Contratos administrativos :: 5",
+        "++ Prazos :: 5",
+        "++ Sancoes :: 5",
+        "+ Concessoes publicas :: 5",
+        "@ Portugues :: 5",
+        "+ Crase :: 1",
+      ].join("\n");
+      const plano = a.lerEdital(texto).disciplinas;
+      const ch = (d, t) => d + "|" + t;
+      const cont = { top: new Map([[ch("Direito Administrativo", "Contratos administrativos"), 80], [ch("Portugues", "Crase"), 4]]),
+        ramo: new Map([[ch("Direito Administrativo", "Contratos administrativos"), new Map([["prazos", 80]])]]) };
+      const m = a.covMapa(plano, cont, ch);
+      const da = m.disciplinas.find((d) => d.nome === "Direito Administrativo"), pt = m.disciplinas.find((d) => d.nome === "Portugues");
+      ok(m.total === 84, "R59a o total e' so' o dos topicos do edital: " + m.total);
+      ok(Math.abs(da.pesoPct + pt.pesoPct - 100) < 1e-9 && Math.abs(pt.pesoPct - 100 * 5 / 55) < 1e-9, "R59b os pesos sao fatias da mesma prova (25+25+5 = 55): " + da.pesoPct.toFixed(2) + " / " + pt.pesoPct.toFixed(2));
+      const conc = da.topicos.find((t) => t.nome === "Concessoes publicas");
+      ok(conc.cartoes === 0 && conc.faixa === "vazio", "R59c o topico importante SEM nenhum cartao e' 'vazio' (concessoes)");
+      const contr = da.topicos.find((t) => t.nome === "Contratos administrativos");
+      const rp = contr.ramos.find((r) => r.ramoId === "prazos"), rs = contr.ramos.find((r) => r.ramoId === "sancoes");
+      ok(rp.faixa === "excesso" && rs.cartoes === 0 && rs.faixa === "vazio", "R59d dentro do topico com muito cartao, o ramo com 80 esta em excesso e o ramo sem etiqueta esta vazio: " + rp.faixa + "/" + rs.faixa);
+      const crase = pt.topicos[0];
+      ok(crase.cartoes === 4 && crase.faixa === "pouco", "R59e abaixo do minimo por topico (5) e' 'pouco' mesmo sendo proporcional ao peso: " + crase.faixa);
+      /* folhas: ramos no lugar do topico que os tem; nada conta duas vezes */
+      ok(m.folhas.length === 4 && m.folhas.filter((f) => f.tipo === "ramo").length === 2, "R59f as folhas sao os ramos (quando ha) e os topicos sem ramos: " + m.folhas.length);
+      ok(Math.abs(m.folhas.reduce((x, f) => x + f.pesoPct, 0) - 100) < 1e-9, "R59g o peso das folhas soma 100%");
+      /* manchete: peso sem nenhum cartao */
+      const semCartao = 100 * (25 / 55 / 2 + 25 / 55);      /* ramo sancoes (metade de 25) + concessoes (25) */
+      ok(Math.abs(m.resumo.pesoSemCartaoPct - semCartao) < 1e-6, "R59h o peso sem cartao e' o de sancoes + concessoes: " + m.resumo.pesoSemCartaoPct.toFixed(2) + " vs " + semCartao.toFixed(2));
+      /* onde falta: o mais urgente (peso alto, nada de cartao) na frente */
+      ok(m.faltando[0].topico === "Concessoes publicas" && m.faltando.every((f) => f.faixa === "vazio" || f.faixa === "pouco"), "R59i 'onde falta' comeca pelo mais urgente: " + m.faltando.map((f) => f.topico + (f.ramoNome ? ":" + f.ramoNome : "")).join(", "));
+      ok(m.sobrando.length === 1 && m.sobrando[0].ramoId === "prazos" && m.sobrando[0].sobra > 0, "R59j 'onde sobra' lista o ramo em excesso");
+      /* sem nenhum cartao no edital: tudo vazio, sem dividir por zero */
+      const vazio = a.covMapa(plano, { top: new Map(), ramo: new Map() }, ch);
+      ok(vazio.total === 0 && vazio.folhas.every((f) => f.faixa === "vazio") && Math.abs(vazio.resumo.pesoSemCartaoPct - 100) < 1e-9, "R59k sem cartao nenhum: tudo vazio e 100% do peso sem cartao");
+      /* os minimos sao ajustaveis */
+      const alto = a.covMapa(plano, cont, ch, { minTopico: 10 });
+      ok(alto.disciplinas.find((d) => d.nome === "Portugues").topicos[0].alvo === 10, "R59l o minimo por topico e' ajustavel (alvo passa a 10)");
+      /* topico repetido em duas disciplinas: o cartao nao conta duas vezes no total */
+      const dup = a.covMapa([{ nome: "A", peso: 1, topicos: [{ nome: "T", peso: 1 }] }, { nome: "B", peso: 1, topicos: [{ nome: "T", peso: 1 }] }], { top: new Map([["A|T", 6]]), ramo: new Map() }, (d) => "A|T");
+      ok(dup.total === 6, "R59m o mesmo topico repetido no plano nao soma os cartoes duas vezes: " + dup.total);
+    }
+    /* R60: a tela da cobertura */
+    {
+      const { a } = MT();
+      const D = "Direito Administrativo";
+      a.matGravarCartoes(a.matChave(D, "Contratos administrativos"), Array.from({ length: 6 }, (_, i) => "Pergunta " + i + "? :: Resposta " + i + " zz" + i).join("\n"), { disciplina: D, topico: "Contratos administrativos" });
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(["cov-tira", "cov-seg", "cov-f-vazio", "cov-f-pouco", "cov-f-ok", "cov-f-excesso", "cov-manchete", "cov-disc", "cov-det", "cov-item"].every((c) => html.indexOf("." + c) >= 0) && /dialog\.cov-dlg\[open\]/.test(html), "R60a as classes da tela de cobertura tem CSS (e a janela tem a regra [open])");
+      a.gerAbrir();
+      a.$("btnGerCobertura").onclick();
+      ok(a.$("dlgCobertura").open === true && a.$("covEdital").children.length >= 1, "R60b o botao da biblioteca abre a cobertura, com o seletor de edital");
+      const txt = () => achar(a.$("covCorpo"), () => true).map((e) => e.textContent || "").join(" ");
+      const tiras = achar(a.$("covCorpo"), (e) => cls(e, "cov-tira"));
+      ok(tiras.length >= 1 && /do peso da prova está sem nenhum cartão/.test(a.$("covCorpo").textContent), "R60c aparece a manchete e uma faixa por disciplina");
+      const disc = achar(a.$("covCorpo"), (e) => cls(e, "cov-disc"));
+      const pesos = disc.map((d) => Number((/peso ([\d.]+)%/.exec(d.textContent) || [])[1]));
+      ok(pesos.length >= 1 && pesos.every((p, i) => !i || pesos[i - 1] >= p), "R60d as disciplinas vem na ordem do PESO: " + pesos.join(","));
+      const cab = achar(disc[0], (e) => cls(e, "cov-disc-cab"))[0];
+      const det = achar(disc[0], (e) => cls(e, "cov-det"))[0];
+      ok(det.hidden === true, "R60e os topicos comecam recolhidos");
+      cab.onclick();
+      ok(det.hidden === false, "R60f clicar na disciplina abre os topicos");
+      a.$("covMinTop").value = "9"; a.$("covMinTop").onchange();
+      ok(a.covMinimos().minTopico === 9 && a.lojaLer(a.COV_CHAVE_MIN) !== null, "R60g o minimo por topico escolhido fica lembrado");
+      a.$("btnCovX").onclick();
+      ok(a.$("dlgCobertura").open === false, "R60h o X fecha a cobertura");
+      a.$("dlgGerCartoes").close();
+    }
+
+    /* R61: "criar mais cartoes deste topico" leva a BANCADA, com o topico como alvo (prompt pronto, salvar direto nele) */
+    {
+      const { a } = MT();
+      const D = "Direito Financeiro", T = "Concessoes R61";
+      const ch = a.matChave(D, T);
+      a.matGravarCartoes(ch, "Pergunta existente? :: resposta existente zz1", { disciplina: D, topico: T });
+      a.$("editor").value = "Pergunta nova um? :: Resposta nova um zzA\nPergunta existente? :: resposta existente zz1";
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(["banc-alvo", "banc-alvo-tit", "banc-alvo-sub", "banc-alvo-passos", "banc-alvo-p", "banc-alvo-prompt", "banc-alvo-fim"].every((c) => html.indexOf("." + c) >= 0), "R61a as classes do alvo da bancada tem CSS");
+      a.bancAlvoDefinir(D, T);
+      ok(a.modoAtual === "cartoes" && a.$("bancAlvoBox").hidden === false && /Concessoes R61/.test(a.$("bancAlvoNome").textContent) && /1 cartão/.test(a.$("bancAlvoSub").textContent), "R61b leva a bancada e mostra o alvo e quantos cartoes ele ja tem: " + a.$("bancAlvoSub").textContent);
+      ok(JSON.parse(a.lojaLer(a.BANC_ALVO_CHAVE)).topico === T, "R61c o alvo fica lembrado");
+      a.bancAlvoPrompt();
+      const pr = a.$("bancAlvoPromptTxt").value;
+      ok(/Concessoes R61/.test(pr) && /Pergunta existente\?/.test(pr) && a.$("bancAlvoPromptVer").hidden === false, "R61d o prompt traz o topico e os cartoes que ele JA tem (para a IA nao repetir)");
+      /* salvar: grava os cartoes da bancada no topico, sem duplicar o que ja existe, com recibo e desfazer */
+      const salvando = a.bancAlvoSalvar();
+      await new Promise((r) => setImmediate(r)); a.uiModalResponder(true);
+      await new Promise((r) => setImmediate(r)); a.uiModalResponder("ok");
+      await salvando;
+      const salvo = a.matResumosAtual()[ch].cartoes;
+      ok(/Pergunta nova um/.test(salvo) && (salvo.match(/Pergunta existente/g) || []).length === 1, "R61e salvar grava o cartao novo no topico e NAO duplica o que ja existia: " + salvo.replace(/\n/g, " | "));
+      ok(a.$("btnBancAlvoDesfazer").hidden === false, "R61f depois de salvar aparece o desfazer");
+      a.bancAlvoSair();
+      ok(a.$("bancAlvoBox").hidden === true && a.lojaLer(a.BANC_ALVO_CHAVE) === null, "R61g sair do topico esconde o alvo e esquece a escolha");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

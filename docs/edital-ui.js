@@ -709,8 +709,7 @@ function edLinhaTopico(i, semDisciplina) {
      * cartões, abre o leitor; não tendo, abre a criação. */
     try {
       if (nCards) { estcEstudarTopico(i.disciplina, i.nome); return; }
-      mcApontarTopico(i.disciplina, i.nome);
-      matCartoesAbrir({ semGravarResumo: true });
+      bancAlvoDefinir(i.disciplina, i.nome);
     } catch (e) {}
   };
 

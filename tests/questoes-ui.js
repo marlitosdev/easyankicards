@@ -1336,27 +1336,25 @@ async function testes() {
     const itCriar = Array.from(aL.$("estMenu").children).find((b) => b.textContent === aL.t("est_m_criar"));
     ok(!!itCriar, "K1e falta o item de criar mais cartoes no menu do player");
     itCriar.onclick();
-    ok(aL.$("dlgMatCartoes").open === true, "K1f criar mais nao abriu a criacao");
+    /* "criar mais" leva a BANCADA, com este topico como alvo (nada de caixinha a parte) */
+    ok(aL.$("dlgGerEstudo").open === false && aL.$("dlgGerCartoes").open === false && aL.$("dlgMatCartoes").open === false, "K1f criar mais fecha o player e a biblioteca e NAO abre o painel antigo");
+    ok(aL.modoAtual === "cartoes" && aL.$("bancAlvoBox").hidden === false && aL.bancAlvoAtual().topico === "Leis Orcamentarias", "K1f2 leva a bancada de cartoes, com o topico como alvo");
     ok(aL.$("dlgMaterial").open === false,
        "K1g criar mais passou pelo resumo");
     ok(aL.matResumosAtual()[cL].texto === "Resumo.",
        "K1h abrir a criacao daqui sobrescreveu o resumo");
-    ok(/cart/i.test(aL.$("btnMcFechar").textContent),
-       "K1i o voltar devia levar de volta aos cartoes: " + aL.$("btnMcFechar").textContent);
-    aL.$("btnMcFechar").onclick();
-    ok(aL.$("dlgGerEstudo").open === true, "K1j voltar nao devolveu ao player");
+    aL.$("btnBancAlvoSair").onclick();
 
-    /* topico SEM cartao nenhum: vai direto para a criacao */
+    /* topico SEM cartao nenhum: tambem vai para a bancada, com o topico como alvo */
     const cVazio = aL.matChave("Direito Financeiro", "Sem cartoes");
     aL.matGravar(cVazio, "y", { disciplina: "Direito Financeiro", topico: "Sem cartoes" });
-    aL.$("dlgMcEstudo").close();
     const li2 = aL.edLinhaAgendaTeste({ disciplina: "Direito Financeiro",
       nome: "Sem cartoes", chave: cVazio });
     const bc2 = atalhoDa(li2, /cart/i);
     ok(!!bc2, "K1k2 sem cartoes o menu tem de oferecer criar");
     if (bc2) bc2.onclick({ stopPropagation() {} });
-    ok(aL.$("dlgMatCartoes").open === true,
-       "K1k topico sem cartoes devia levar direto a criacao");
+    ok(aL.bancAlvoAtual() && aL.bancAlvoAtual().topico === "Sem cartoes" && aL.$("dlgMatCartoes").open === false,
+       "K1k topico sem cartoes devia levar a bancada, com o topico como alvo");
     ok(aL.$("dlgMaterial").open === false, "K1l e ainda assim sem abrir o resumo");
   }
 
