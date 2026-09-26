@@ -1615,7 +1615,7 @@ async function testes() {
       /* consulta do artigo inteiro */
       ok(a.leiConsultaAbrir(regs[idA]) === true && /Consulta · art\. 43 de Constituição Federal/.test(a.$("leiConsultaTit").textContent) && /JÁ traz a redação desta emenda/.test(a.$("leiConsultaAviso").textContent) && a.$("dlgLeiConsulta").open === true, "R47s a janela de consulta abre com o titulo e o aviso de que a lei da biblioteca ja' traz a emenda");
       const linhasC = a.$("leiConsultaCorpo").children;
-      ok(linhasC.length === 11 && /lei-cons-fora/.test(linhasC[0].className) && /lei-cons-alterado/.test(linhasC[10].className) && /escrito pela emenda/.test(linhasC[10].textContent) && /não está na emenda/.test(linhasC[0].textContent), "R47t a consulta mostra o artigo inteiro: o § 4º destacado ('escrito pela emenda') e o resto em cinza ('nao esta' na emenda')");
+      ok(linhasC.length === 11 && /lei-cons-fora/.test(linhasC[0].className) && /lei-cons-alterado/.test(linhasC[10].className) && /escrito pela emenda/.test(linhasC[10].textContent) && !/não está na emenda/.test(linhasC[0].textContent) && /Em cinza: o que a emenda não escreve/.test(a.$("leiConsultaAviso").textContent), "R47t a consulta mostra o artigo inteiro: o § 4º destacado ('escrito pela emenda') e o resto em cinza, explicado na legenda do aviso (sem etiqueta em cada linha)");
       a.$("dlgLeiConsulta").close();
       /* a escolha e' do usuario e fica guardada na lei que altera */
       const cf2 = a.leiGuardar({ nome: "CF/88 compilada (outra cópia)", texto: CFVELHA, topicos: [] });
@@ -1757,7 +1757,37 @@ async function testes() {
       a.confirmarRegistroTeste("feito");
       ok(ed2.progresso[kM].e === "revisado" && ed2.progresso[kM].d === "2026-01-01" && !a.edDiario.some((x) => x.esp), "R49r destino ja' revisado nao e' rebaixado nem ganha linha de espelho");
       const html49 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      const iB = html49.indexOf('id="regRamosBloco"'), iE = html49.lastIndexOf("<div", html49.indexOf('id="regEspelho"'));
+      let prof = 1, pos = html49.indexOf(">", iB) + 1;
+      const reTag = /<div\b|<\/div>/g; reTag.lastIndex = pos;
+      let mt; while ((mt = reTag.exec(html49)) && mt.index < iE) prof += mt[0] === "</div>" ? -1 : 1;
+      ok(iB > 0 && iE > iB && prof === 0, "R49s0 o bloco do espelho esta' FORA do bloco de ramos (que fica escondido em topico sem ramos): profundidade " + prof);
       ok(/\.reg-espelho\{/.test(html49) && /\.reg-espelho-lin\{/.test(html49) && /id="regEspelho" class="reg-espelho" hidden/.test(html49), "R49s o bloco do espelho existe na janela (escondido) e tem CSS");
+    }
+
+    /* R50: a lei do topico, sem preferida guardada, e' a que BATE com o nome (nao a 1a em ordem alfabetica) */
+    {
+      const { a } = MT();
+      const NL = String.fromCharCode(10);
+      const CF = ["CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", "TÍTULO I", "Dos Princípios Fundamentais", "Art. 1º A República Federativa...", "Art. 2º São Poderes da União..."].join(NL);
+      const EC = ["EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023", "", "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:", '"Art. 43. ' + ".".repeat(60), "", '§ 4º Texto novo." (NR)'].join(NL);
+      const disc = "Reforma Tributária", top = "Emenda Constitucional nº 132/2023", chave = a.matChave(disc, top);
+      const cf = a.leiGuardar({ nome: "CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", texto: CF, topicos: [chave] });
+      const ec = a.leiGuardar({ nome: "Emenda Constitucional 132/2023", texto: EC, topicos: [chave] });
+      ok(a.leisDoTopico(chave)[0].id === cf.id, "R50pre a ordem alfabetica poe a Constituicao primeiro (o defeito de antes)");
+      ok(a.leiDoTopicoAtual(chave).id === ec.id && a.leiTextoDoTopico(chave) === EC, "R50 sem preferida guardada, a lei que BATE com o nome do topico (a emenda) e' a do topico, nao a 1a alfabetica: " + a.leiDoTopicoAtual(chave).nome);
+      a.leiAbrir(disc, top);
+      ok(a.$("leiTexto").value === EC, "R50a abrir a lei do topico abre a EMENDA");
+      a.$("dlgLeiSeca").close();
+      a.matResumosAtual()[chave] = { disciplina: disc, topico: top, leiId: cf.id };
+      ok(a.leiDoTopicoAtual(chave).id === cf.id, "R50b a preferida GUARDADA continua mandando (a pessoa fixou a Constituicao)");
+      delete a.matResumosAtual()[chave];
+      const chave2 = a.matChave("Direito", "Princípios tributários");
+      a.leiLigar(cf.id, chave2); a.leiLigar(ec.id, chave2);
+      ok(a.leiDoTopicoAtual(chave2).id === cf.id, "R50c topico cujo nome nao cita numero de norma: nada a comparar, vale a primeira (como sempre)");
+      const chave3 = a.matChave("Direito", "Lei 14.133/2021");
+      a.leiLigar(cf.id, chave3); a.leiLigar(ec.id, chave3);
+      ok(a.leiDoTopicoAtual(chave3).id === cf.id, "R50d topico que cita OUTRA norma (Lei 14.133/2021), com nenhuma das duas batendo: fica a primeira");
     }
 
     /* R39: exigir a trilha completa para dar o ramo como estudado */

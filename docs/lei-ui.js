@@ -327,6 +327,14 @@ function leiDoTopicoAtual(chave) {
   const r = (typeof matResumos !== "undefined" && matResumos[chave]) || {};
   if (r.leiId && leiDe(r.leiId)) return leiDe(r.leiId);
   const lista = leisDoTopico(chave);
+  /* SEM PREFERIDA GUARDADA, a lei que BATE com o nome do tópico ("Emenda Constitucional nº 132/2023") vence a ordem
+   * alfabética: com a Constituição e a emenda ligadas ao mesmo tópico, "CONSTITUIÇÃO…" vinha primeiro e era ela que abria
+   * (e alimentava o índice dos ramos). Nome sem número de norma: nada a comparar, vale a primeira, como sempre. */
+  if (lista.length > 1 && typeof ramLeiCombina === "function") {
+    const nome = String(chave || "").split("›").slice(1).join("›");
+    const boa = nome ? lista.find((l) => ramLeiCombina(nome, l) === true) : null;
+    if (boa) return boa;
+  }
   return lista[0] || null;
 }
 
@@ -1566,6 +1574,7 @@ function leiFaixaAlvoPintar(ctx) {
     const p = ctx.porCurto[cu];
     const lin = document.createElement("div");
     lin.className = "lei-faixa-lin";
+    lin.title = t("lei_alvo_faixa_tip");
     const tx = document.createElement("span");
     tx.textContent = t("lei_alvo_faixa", { lei: cu, n: p.artigos });
     lin.append(tx);
@@ -1584,6 +1593,7 @@ function leiFaixaAlvoPintar(ctx) {
       const nota = document.createElement("span");
       nota.className = "nota";
       nota.textContent = t(p.decidida ? "lei_alvo_decidida" : "lei_alvo_sugerida", { m: p.escolhida.motivo });
+      nota.title = p.escolhida.motivo;
       lin.append(sel, nota);
     } else {
       const b = document.createElement("button");
@@ -1662,10 +1672,14 @@ function leiConsultaAbrir(reg) {
     lin.style.paddingLeft = (Math.max(0, (d.nivel || 1) - 1) * 14) + "px";
     const tx = document.createElement("span");
     tx.textContent = ((d.rotulo ? d.rotulo + " " : "") + String(d.texto || "")).trim();
-    const tag = document.createElement("small");
-    tag.className = "lei-cons-tag";
-    tag.textContent = " · " + t("lei_cons_tag_" + d.etiqueta);
-    lin.append(tx, tag);
+    lin.append(tx);
+    /* só o que a emenda ESCREVE leva etiqueta; o resto é cinza (a legenda está no aviso do topo) */
+    if (d.etiqueta === "alterado") {
+      const tag = document.createElement("small");
+      tag.className = "lei-cons-tag";
+      tag.textContent = " · " + t("lei_cons_tag_alterado");
+      lin.append(tag);
+    }
     cx.append(lin);
   });
   try { leiReg("consulta", "consulta à lei alterada", reg.alvoCurto + " art. " + reg.numCru + " · " + alvoLei.nome); } catch (e) {}
