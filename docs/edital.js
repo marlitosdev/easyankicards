@@ -1359,6 +1359,47 @@ function agendar(itens, cfg) {
  * toquei?". Progresso médio esconde isso — 40% do plano feito pode ser
  * 100% das leves e 0% da que vale 15% da prova.
  * ------------------------------------------------------------------ */
+/* O PAINEL DOS RAMOS DE UMA DISCIPLINA. Uma linha por ramo de cada tópico da disciplina, em ordem de RELEVÂNCIA
+ * ABSOLUTA: peso da disciplina × peso do tópico × parte do ramo no tópico (o quanto aquele pedaço vale na prova). Assim
+ * um ramo de assunto pesado vem antes de assunto leve, mesmo que o assunto pesado tenha muitos ramos. O progresso é
+ * PONDERADO pela relevância (estudar o ramo que mais vale conta mais), não pela contagem.
+ * filtro: "todos" | "pendentes" (a estudar) | "revisar" (estudados com revisão vencida). */
+function edPainelRamos(plano, disciplina, filtro) {
+  const itens = ((plano && plano.itens) || []).filter((i) => i.disciplina === disciplina);
+  const totalBruto = itens.reduce((a, i) => a + (i.bruto || 0), 0) || 1;
+  const todas = [];
+  itens.filter((i) => i.ramos && i.ramos.length).forEach((i) => {
+    i.ramos.forEach((r) => {
+      const relevancia = (i.bruto || 0) * r.share;
+      todas.push({
+        topico: i.nome, topicoChave: i.chave, item: i, ramo: r, relevancia,
+        relPct: Math.round((relevancia / totalBruto) * 1000) / 10,
+        estado: r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend",
+        ordem: i.linha,
+      });
+    });
+  });
+  todas.sort((a, b) => b.relevancia - a.relevancia || a.ordem - b.ordem || a.ramo.linha - b.ramo.linha);
+  const soma = (f) => todas.filter(f).reduce((a, x) => a + x.relevancia, 0);
+  const totalRel = soma(() => true) || 1;
+  const f = filtro || "todos";
+  const linhas = todas.filter((x) => f === "pendentes" ? !x.ramo.feito : f === "revisar" ? x.ramo.venceu : true);
+  const topicos = [];
+  itens.filter((i) => i.ramos && i.ramos.length).forEach((i) => topicos.push({
+    nome: i.nome, total: i.ramosTotal, feitos: i.ramosFeitos, vencidos: i.ramosVencidos, chave: i.chave }));
+  return {
+    disciplina, linhas, topicos,
+    total: todas.length,
+    feitos: todas.filter((x) => x.ramo.feito).length,
+    pendentes: todas.filter((x) => !x.ramo.feito).length,
+    vencidos: todas.filter((x) => x.ramo.venceu).length,
+    revisados: todas.filter((x) => x.ramo.revisado).length,
+    pctFeito: Math.round((soma((x) => x.ramo.feito) / totalRel) * 100),
+    pctRevisado: Math.round((soma((x) => x.ramo.revisado) / totalRel) * 100),
+    proximo: todas.find((x) => !x.ramo.feito) || null,
+  };
+}
+
 function panoramaDisciplinas(plano) {
   const porNome = new Map();
   plano.itens.forEach((i) => {

@@ -842,6 +842,79 @@ async function testes() {
       ok(Number(a.$("regMinutos").value) === it.minutosSessao && it.minutosSessao < it.minutos, "R32k os minutos sugeridos sao os da SESSAO (nao os do topico inteiro): " + a.$("regMinutos").value + " x " + it.minutos);
     }
 
+    /* R34: o painel "Ramos da disciplina" (Fase 3) */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const hoje = new Date().toISOString().slice(0, 10);
+      const r0 = a.lerEdital(ed.texto);
+      const plano = (feitos) => a.montarPlano(r0, { horas: 20, prova: "2027-06-01", feitos: feitos || {}, fatores: null, acertos: null });
+      const ch = plano().itens.find((i) => i.nome === "Lei 14.133").chave;
+      const p0 = a.edPainelRamos(plano(), "Licitações");
+      ok(p0.total === 3 && p0.pendentes === 3 && p0.feitos === 0 && p0.pctFeito === 0 && p0.vencidos === 0 && p0.linhas.length === 3, "R34 painel sem nada estudado: 3 ramos pendentes, 0%");
+      ok(p0.linhas.map((x) => x.ramo.nome).join("|") === "Modalidades|Fase preparatória|Contratos" && p0.linhas.every((x) => x.topico === "Lei 14.133"), "R34a ordem por relevancia (peso do ramo; empate pela ordem escrita)");
+      ok(p0.linhas.map((x) => x.relPct).join() === "32.5,19.5,19.5" && Math.abs(p0.linhas[0].relevancia - 25 * 5 / 11) < 1e-9, "R34b quanto cada ramo vale na disciplina: 32,5% / 19,5% / 19,5% (25 x 5/11 sobre o bruto 35 da disciplina): " + p0.linhas.map((x) => x.relPct));
+      ok(p0.proximo && p0.proximo.ramo.nome === "Modalidades" && p0.topicos.length === 1 && p0.topicos[0].nome === "Lei 14.133" && p0.topicos[0].total === 3 && p0.topicos[0].feitos === 0, "R34c proximo ramo e resumo por topico");
+      const p1 = a.edPainelRamos(plano({ [ch + "›#modalidades"]: { e: "feito", d: hoje }, [ch + "›#fase_preparatoria"]: { e: "feito", d: "2020-01-01" } }), "Licitações");
+      ok(p1.feitos === 2 && p1.pendentes === 1 && p1.vencidos === 1 && p1.revisados === 0 && p1.pctFeito === 73, "R34d progresso PONDERADO: os 2 ramos estudados valem 73% (nao 67% da contagem): " + p1.pctFeito);
+      ok(p1.linhas.map((x) => x.estado).join() === "feito,venceu,pend", "R34e estado de cada ramo: estudado, revisao vencida, pendente");
+      ok(a.edPainelRamos(plano({ [ch + "›#modalidades"]: { e: "feito", d: hoje }, [ch + "›#fase_preparatoria"]: { e: "feito", d: "2020-01-01" } }), "Licitações", "pendentes").linhas.map((x) => x.ramo.nome).join() === "Contratos", "R34f filtro 'a estudar': so' os pendentes");
+      ok(a.edPainelRamos(plano({ [ch + "›#modalidades"]: { e: "feito", d: hoje }, [ch + "›#fase_preparatoria"]: { e: "feito", d: "2020-01-01" } }), "Licitações", "revisar").linhas.map((x) => x.ramo.nome).join() === "Fase preparatória", "R34g filtro 'a revisar': so' os vencidos");
+      ok(a.edPainelRamos(plano(), "Licitações", "qualquer").linhas.length === 3, "R34h filtro desconhecido = todos");
+      const p2 = a.edPainelRamos(plano({ [ch + "›#modalidades"]: { e: "revisado", d: hoje } }), "Licitações");
+      ok(p2.linhas[0].estado === "revisado", "R34i0 ramo revisado tem o estado 'revisado' (nao so' 'estudado')");
+      ok(p2.revisados === 1 && p2.pctRevisado === 45 && p2.pctFeito === 45, "R34i revisado conta como estudado e tem a sua propria barra (45%)");
+      const tudo = {}; ["modalidades", "fase_preparatoria", "contratos"].forEach((id) => { tudo[ch + "›#" + id] = { e: "feito", d: hoje }; });
+      const p3 = a.edPainelRamos(plano(tudo), "Licitações");
+      ok(p3.pctFeito === 100 && p3.proximo === null && p3.pendentes === 0, "R34j tudo estudado: 100% e nenhum proximo");
+      const pf = a.edPainelRamos(plano(), "Direito Financeiro");
+      ok(pf.total === 0 && pf.linhas.length === 0 && pf.proximo === null && a.edPainelRamos(plano(), "Nao existe").total === 0 && a.edPainelRamos(null, "x").total === 0, "R34k disciplina sem ramos (ou inexistente, ou sem plano): vazio e sem quebrar");
+      /* relevancia ABSOLUTA: assunto pesado com ramos vem antes de assunto leve */
+      const rAbs = a.lerEdital("# X | prova: 2027-06-01 | horas: 20" + NL + "@ D :: 5" + NL + "+ Leve :: 2" + NL + "++ L1 :: 3" + NL + "++ L2 :: 3" + NL + "+ Pesado :: 5" + NL + "++ P1 :: 3" + NL + "++ P2 :: 3");
+      const pAbs = a.edPainelRamos(a.montarPlano(rAbs, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null }), "D");
+      ok(pAbs.linhas.map((x) => x.ramo.nome).join() === "P1,P2,L1,L2" && pAbs.linhas[0].relevancia === 12.5 && pAbs.linhas[2].relevancia === 5, "R34l ramo de assunto de peso alto (12,5) vem ANTES de ramo de assunto leve (5), mesmo com o topico leve escrito primeiro: " + pAbs.linhas.map((x) => x.ramo.nome));
+      const pFat = a.edPainelRamos(a.montarPlano(rAbs, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: { "d›leve": 3 } }), "D");
+      ok(a.montarPlano(rAbs, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: { "d›leve": 3 } }).itens[0].nome === "Leve" && pFat.linhas.map((x) => x.ramo.nome).join() === "P1,P2,L1,L2", "R34l2 a lista se ordena por RELEVANCIA na prova, nao pela ordem da agenda (a dificuldade pode por 'Leve' na frente na agenda, e o painel continua com o Pesado primeiro)");
+      /* a tela */
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.abrirDisciplina("Licitações");
+      const linhas = () => Array.from(a.$("dscRamosLista").children || []).filter((l) => /dsc-ramo-lin/.test(l.className));
+      ok(a.$("dlgDisciplina").open === true && a.$("dscRamosBloco").hidden === false && linhas().length === 3, "R34m o painel da disciplina mostra o bloco de ramos (3 linhas)");
+      ok(/0 de 3 ramos estudados · 0%/.test(a.$("dscRamosResumo").textContent) && a.$("dscRamosBarra").children.length === 1, "R34n resumo ponderado e barra: " + a.$("dscRamosResumo").textContent);
+      const tx = (l) => Array.from(l.children).map((c) => c.textContent);
+      ok(tx(linhas()[0])[1] === "Lei 14.133 › Modalidades" && /★5 · 32,5% da disciplina/.test(tx(linhas()[0])[2]) && tx(linhas()[0])[0] === "a estudar" && tx(linhas()[0])[3] === "estudar", "R34o cada linha: estado, 'topico › ramo', estrelas e quanto vale, botao: " + tx(linhas()[0]));
+      ok(Array.from(a.$("dscRamosFiltro").children).map((o) => o.textContent).join("|") === "todos (3)|a estudar (3)|a revisar (0)", "R34p o filtro mostra as contagens");
+      a.$("dscRamosFiltro").value = "revisar"; a.$("dscRamosFiltro").onchange();
+      ok(a.$("dscRamosFiltro").value === "revisar", "R34q0 o filtro escolhido continua selecionado depois de repintar");
+      ok(linhas().length === 0 && /Nenhum ramo neste filtro/.test(a.$("dscRamosLista").textContent), "R34q filtro sem resultado: mensagem");
+      a.$("dscRamosFiltro").value = "todos"; a.$("dscRamosFiltro").onchange();
+      ok(linhas().length === 3, "R34r voltar a 'todos'");
+      /* botao: abre o registro com o ramo marcado */
+      linhas()[1].children[3].onclick();
+      ok(a.$("dlgDisciplina").open === false && a.$("dlgRegistro").open === true && /Lei 14\.133 › Fase preparatória$/.test(a.$("regTitulo").textContent) && a.$("regRamosRot").textContent === "O que você estudou?", "R34s o botao 'estudar' fecha o painel e abre o registro JA com aquele ramo marcado: " + a.$("regTitulo").textContent);
+      a.$("dlgRegistro").close();
+      /* ramo ja estudado: o botao vira 'revisar' e o registro abre em REVISAO */
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
+      a.abrirDisciplina("Licitações");
+      ok(tx(linhas()[0])[0] === "revisão vencida" && tx(linhas()[0])[3] === "revisar" && /1 com revisão vencida/.test(a.$("dscRamosResumo").textContent), "R34t ramo estudado ha muito tempo: 'revisao vencida' e botao 'revisar'");
+      ok(/1 de 3 ramos estudados · 45%/.test(a.$("dscRamosResumo").textContent) && Array.from(a.$("dscRamosFiltro").children).map((o) => o.textContent).join("|") === "todos (3)|a estudar (2)|a revisar (1)", "R34t2 o resumo usa o progresso de ESTUDO (45%) e o filtro conta os pendentes (2) e os a revisar (1): " + a.$("dscRamosResumo").textContent);
+      linhas()[0].children[3].onclick();
+      ok(a.$("regRamosRot").textContent === "O que você revisou?" && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent) && a.$("regRamos").children[0].children[0].checked === true && a.$("regRamos").children[1].children[0].disabled === true, "R34u o botao 'revisar' abre o registro em REVISAO com o ramo marcado (e os pendentes desabilitados)");
+      ok(a.regFormasAtual().join() === "revisao", "R34u2 abrir por um ramo ja estudado troca a forma padrao para 'revisao' (o tempo vai para a conta certa)");
+      a.$("dlgRegistro").close();
+      /* ramo JA REVISADO: nao e' elegivel, entao abre sem ele marcado */
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "revisado", d: hoje } });
+      a.abrirDisciplina("Licitações");
+      linhas()[0].children[3].onclick();
+      ok(a.$("regRamos").children[0].children[0].checked === false && a.$("regRamos").children[0].children[0].disabled === true, "R34u3 ramo ja revisado nao pode ser marcado: o registro abre sem ele");
+      a.$("dlgRegistro").close();
+      /* disciplina sem ramos: o bloco some */
+      a.abrirDisciplina("Direito Financeiro");
+      ok(a.$("dscRamosBloco").hidden === true, "R34v disciplina sem ramos: o bloco nao aparece");
+      a.$("dlgDisciplina").close();
+    }
+
     /* R33: a janela de registro escolhe os ramos (Fase 2) */
     {
       const { a, ed } = MT();
@@ -1043,6 +1116,7 @@ async function testes() {
     const l0 = achar(a.$("ramLista"), (e) => cls(e, "ram-linha"))[0];
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
+    ok(["dsc-ramos", "dsc-ramos-lista", "dsc-ramo-lin", "dsc-ramo-nome", "dsc-ramo-peso", "dsc-ramo-btn"].every((c) => html.indexOf("." + c + "{") >= 0), "R20j as classes do painel de ramos da disciplina tem regra de CSS");
     ok(["reg-ramos", "reg-ramo-lin", "reg-ramo-nome", "reg-ramo-est", "reg-ramo-indisp", "reg-ramos-acoes"].every((c) => html.indexOf("." + c + "{") >= 0), "R20i as classes da lista de ramos no registro tem regra de CSS");
     ok(["ed-ramos", "ed-ramos-resumo", "ed-ramos-chips", "ed-ramo", "ed-ramo-pend", "ed-ramo-feito", "ed-ramo-revisado", "ed-ramo-venceu", "ed-ramo-vez", "ed-ramos-mais"].every((c) => html.indexOf("." + c + "{") >= 0), "R20h todas as classes dos chips de ramo tem regra de CSS");
     const hubSrc = fs.readFileSync(path.join(__dirname, "..", "docs", "edital-hub.js"), "utf8");

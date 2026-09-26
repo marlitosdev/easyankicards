@@ -3888,6 +3888,12 @@ body.split-lj{overflow:hidden}
 :root[data-theme="light"] .dp-item.grave .dp-selo{color:var(--erro)}
 .dsc-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
 .dsc-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.dsc-ramos{margin:10px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:10px}
+.dsc-ramos-lista{display:flex;flex-direction:column;gap:3px;margin-top:6px;max-height:30vh;overflow:auto}
+.dsc-ramo-lin{display:flex;align-items:center;gap:8px;padding:3px 4px;border-bottom:1px solid var(--borda)}
+.dsc-ramo-nome{flex:1 1 auto;font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.dsc-ramo-peso{font-size:11px;color:var(--sutil);white-space:nowrap}
+.dsc-ramo-btn{padding:2px 8px;font-size:11px}
 .dsc-num{padding:9px 10px;border-radius:9px;background:var(--campo);
   border:1px solid var(--borda);text-align:center}
 .dsc-num b{display:block;font-size:18px;line-height:1.1}
@@ -7757,6 +7763,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dsc-acoes" id="dscAcoes"></div>
   <div class="dsc-resumo" id="dscResumo"></div>
   <div id="dscPontos"></div>
+  <!-- Fase 3: os ramos da disciplina, cumpridos e pendentes, por relevância -->
+  <div id="dscRamosBloco" class="dsc-ramos" hidden>
+    <div class="ed-caixa-tit" data-i18n="ed_dsc_ramos_tit"></div>
+    <p class="nota" id="dscRamosResumo"></p>
+    <div id="dscRamosBarra"></div>
+    <label class="nota" style="display:block;margin-top:6px"><span data-i18n="ed_dsc_ramos_ver"></span>
+      <select id="dscRamosFiltro" data-i18n-title="ed_dsc_ramos_filtro_tip"></select></label>
+    <div id="dscRamosLista" class="dsc-ramos-lista"></div>
+  </div>
   <div id="dscLista" style="max-height:46vh;overflow:auto;margin:10px 0"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnDscFechar" data-i18n="help_close"></button>

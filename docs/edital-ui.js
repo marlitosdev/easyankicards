@@ -1671,7 +1671,7 @@ function regPintarBotoes() {
   }
 }
 
-function abrirRegistro(i) {
+function abrirRegistro(i, opc) {
   /* enriquece AQUI, num lugar so: qualquer porta de entrada nova ganha
    * o mesmo tratamento sem precisar lembrar disto */
   const aberto = (typeof edAberto === "function") ? edAberto() : null;
@@ -1735,8 +1735,20 @@ function abrirRegistro(i) {
   regDifPintar(i);
 
   regTipo = i.feito ? "revisado" : "feito";
+  /* aberto por um ramo especifico (painel da disciplina): o tipo e a marca seguem o estado DELE */
+  const rEsc = opc && opc.ramo ? (i.ramos || []).find((x) => x.id === opc.ramo) : null;
+  if (rEsc) {
+    regTipo = rEsc.feito ? "revisado" : "feito";
+    regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
+    regPintarFormas();
+    regPintarQuestoes();
+  }
   regPintarBotoes();
   regRamosIniciar(i);
+  if (rEsc && regRamosElegivel(rEsc)) {
+    regRamosSel = new Set([rEsc.id]);
+    regRamosPintar(i, true);
+  }
   abrirModal("dlgRegistro");
 }
 
@@ -2274,6 +2286,58 @@ function edTabelaComparativa(linhas) {
  * tudo) sem chamar showModal() de novo — o navegador lança erro em
  * <dialog> já aberto — e sem duplicar o registro de "panorama aberto"
  * a cada troca de peso. */
+/* OS RAMOS DA DISCIPLINA: cumpridos e pendentes, por relevância, com progresso ponderado. Clicar no botão de um ramo abre
+ * o registro já com ele marcado (estudo se está pendente; revisão se já foi estudado). */
+let dscRamosFiltro = "todos";
+function dscPintarRamos(plano, nome) {
+  const bl = $("dscRamosBloco");
+  if (!bl) return null;
+  const p = edPainelRamos(plano, nome, dscRamosFiltro);
+  bl.hidden = !p.total;
+  if (!p.total) return p;
+  $("dscRamosResumo").textContent = t("ed_dsc_ramos_resumo", { f: p.feitos, n: p.total, p: p.pctFeito, v: p.vencidos });
+  const barra = $("dscRamosBarra");
+  barra.innerHTML = "";
+  barra.append(edBarra(p.pctFeito, p.pctRevisado, 100));
+  const sel = $("dscRamosFiltro");
+  if (sel) {
+    sel.innerHTML = "";
+    [["todos", t("ed_dsc_ramos_f_todos", { n: p.total })], ["pendentes", t("ed_dsc_ramos_f_pend", { n: p.pendentes })],
+      ["revisar", t("ed_dsc_ramos_f_rev", { n: p.vencidos })]].forEach(([v, rot]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = rot; sel.append(o);
+    });
+    sel.value = dscRamosFiltro;
+    sel.onchange = () => { dscRamosFiltro = sel.value; dscPintarRamos(plano, nome); };
+  }
+  const cx = $("dscRamosLista");
+  cx.innerHTML = "";
+  if (!p.linhas.length) cx.append(Object.assign(document.createElement("p"), { className: "nota", textContent: t("ed_dsc_ramos_vazio") }));
+  p.linhas.forEach((x) => {
+    const lin = document.createElement("div");
+    lin.className = "dsc-ramo-lin dsc-ramo-" + x.estado;
+    const est = document.createElement("span");
+    est.className = "ed-ramo ed-ramo-" + x.estado;
+    est.textContent = t("ed_ramo_" + x.estado);
+    const tx = document.createElement("span");
+    tx.className = "dsc-ramo-nome";
+    tx.textContent = x.topico + " › " + x.ramo.nome;
+    tx.title = x.ramo.nome + (x.ramo.nota ? " — " + x.ramo.nota : "") + (x.ramo.quando ? " (" + x.ramo.quando + ")" : "");
+    const pe = document.createElement("span");
+    pe.className = "dsc-ramo-peso";
+    pe.textContent = "★" + (x.ramo.peso || 3) + " · " + t("ed_dsc_ramo_vale", { p: String(x.relPct).replace(".", ",") });
+    pe.title = t("ed_dsc_ramo_vale_tip");
+    const bt = document.createElement("button");
+    bt.type = "button";
+    bt.className = "btn-min dsc-ramo-btn";
+    bt.textContent = t(x.ramo.feito ? "ed_dsc_ramo_revisar" : "ed_dsc_ramo_estudar");
+    bt.title = t("ed_dsc_ramo_btn_tip");
+    bt.onclick = () => { $("dlgDisciplina").close(); abrirRegistro(x.item, { ramo: x.ramo.id }); };
+    lin.append(est, tx, pe, bt);
+    cx.append(lin);
+  });
+  return p;
+}
+
 function edPintarModalDisciplina(nome) {
   const r = lerEdital($("editalTexto").value);
   const plano = montarPlano(r, { horas: Number($("edHoras").value),
@@ -2341,6 +2405,8 @@ function edPintarModalDisciplina(nome) {
    * da grade antiga — continua existindo, só que aqui */
   const pontosCx = $("dscPontos");
   if (pontosCx) { pontosCx.innerHTML = ""; pontosCx.append(edPontos(d.itens)); }
+
+  dscPintarRamos(plano, nome);
 
   const lista = $("dscLista");
   lista.innerHTML = "";
