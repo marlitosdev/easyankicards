@@ -208,7 +208,7 @@ function leiRelatorioVinculos(opc) {
     const guardada = [l.especie, l.numero, l.ano].filter(Boolean).join(" ");
     const lida = x ? [x.especie, x.numero, x.ano].filter(Boolean).join(" ") : "(o texto não tem cabeçalho reconhecível)";
     /* só é divergência quando o campo guardado EXISTE e discorda (campo vazio é falta de dado, não conflito) */
-    const diverge = !!x && ((!!dig(l.numero) && dig(x.numero) !== dig(l.numero)) || (!!l.ano && !!x.ano && String(x.ano) !== String(l.ano)));
+    const diverge = !!leiIdentidadeDivergente(l);
     L.push("");
     L.push("[" + (i + 1) + "] " + (l.nome || "(sem nome)"));
     L.push("    id: " + l.id);
@@ -249,6 +249,32 @@ function leiRelatorioVinculos(opc) {
   return L.join("\n");
 }
 
+/* a tela: lista o que vai mudar, pergunta, corrige, e deixa desfazer. `confirmar` existe para o teste. */
+function leiIdentBotoes() {
+  const b = $("btnLeiLogIdentDesfazer");
+  if (b) b.hidden = !leiIdentidadesRecibo().length;
+}
+async function leiIdentidadeTela(confirmar) {
+  const fmt = (x) => [x.especie, x.numero, x.ano].filter(Boolean).join(" ") || "—";
+  const lista = leiIdentidadesDivergentes();
+  if (!lista.length) { if ($("leiLogTexto")) $("leiLogTexto").value = t("lei_ident_nenhuma"); return []; }
+  const linhas = lista.map((x) => "• " + x.nome + ": " + fmt(x.de) + " → " + fmt(x.para)).join("\n");
+  const conf = confirmar || uiConfirm;
+  if (!(await conf(t("lei_ident_conf", { n: lista.length, l: linhas })))) return [];
+  const r = leiCorrigirIdentidades();
+  try { leiReg("lei", "identificação das leis corrigida", r.length + " lei(s)"); } catch (e) {}
+  if ($("leiLogTexto")) $("leiLogTexto").value = t("lei_ident_ok", { n: r.length, l: linhas });
+  leiIdentBotoes();
+  return r;
+}
+function leiIdentidadeDesfazerTela() {
+  const n = leiIdentidadesDesfazer();
+  try { leiReg("lei", "identificação das leis desfeita", n + " lei(s)"); } catch (e) {}
+  if ($("leiLogTexto")) $("leiLogTexto").value = t("lei_ident_desfeita", { n });
+  leiIdentBotoes();
+  return n;
+}
+
 function leiLogPintar() {
   if (!$("leiLogTexto")) return;
   $("leiLogTexto").value = leiLogTexto();
@@ -271,6 +297,7 @@ function leiLogPintar() {
 
 function leiLogAbrir() {
   leiLogPintar();
+  leiIdentBotoes();
   abrirModal("dlgLeiLog");
 }
 
@@ -6902,6 +6929,8 @@ function leiIniciar() {
     b.textContent = t("copied");
     setTimeout(() => { b.textContent = r; }, 1800);
   };
+  liga("btnLeiLogIdent", "corrigir identificação das leis", () => leiIdentidadeTela());
+  liga("btnLeiLogIdentDesfazer", "desfazer a correção da identificação", () => leiIdentidadeDesfazerTela());
   liga("btnLeiLogVinc", "copiar leis e vínculos", () => copiaVinc("btnLeiLogVinc", false));
   liga("btnLeiLogVincTexto", "copiar leis e vínculos com o texto", () => copiaVinc("btnLeiLogVincTexto", true));
   /* o caminho para ENVIAR: o relatório completo (com período, erros e
