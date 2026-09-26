@@ -1282,6 +1282,80 @@ async function testes() {
       ok(/\.dsc-ramo-fraco /.test(html), "R41i o destaque do ramo fraco tem regra de CSS");
     }
 
+    /* R42: QUAL LEI alimenta o indice dos ramos — alerta, escolha e previa */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const idn = a.ramIdentidadeDoNome;
+      ok(JSON.stringify(idn("Emenda Constitucional nº 132/2023")) === '{"numero":"132","ano":"2023"}' && JSON.stringify(idn("Lei 14.133/2021")) === '{"numero":"14133","ano":"2021"}' && JSON.stringify(idn("Lei 8.666")) === '{"numero":"8666","ano":""}' && JSON.stringify(idn("LC 214/25")) === '{"numero":"214","ano":"2025"}' && idn("Lei 8.666/93").ano === "1993", "R42 o numero e o ano que o nome do topico cita: " + JSON.stringify([idn("Emenda Constitucional nº 132/2023"), idn("Lei 14.133/2021"), idn("Lei 8.666"), idn("LC 214/25")]));
+      ok(idn("Princípios constitucionais tributários") === null && idn("CF/88 - art. 145") === null && idn("") === null, "R42a sem numero no nome: null (nao da' para alertar)");
+      const CF = ["CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", "TÍTULO I", "Dos Princípios Fundamentais", "Art. 1º A República Federativa...", "Art. 2º São Poderes da União...", "Art. 3º Constituem objetivos...",
+        "TÍTULO II", "Dos Direitos e Garantias Fundamentais", "Art. 5º Todos são iguais perante a lei...", "Art. 6º São direitos sociais...", "TÍTULO VI", "Da Tributação e do Orçamento", "Art. 145. A União, os Estados...", "Art. 146. Cabe à lei complementar..."].join(NL);
+      const EC = ["EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023", "Altera o Sistema Tributário Nacional.", "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+        '"Art. 43. ...', "...", "§ 4º Sempre que possível, os incentivos regionais considerarão critérios de sustentabilidade. (NR)", '"Art. 145. ...', "§ 3º O Sistema Tributário Nacional deve observar a simplicidade. (NR)",
+        '"Art. 156-A. Lei complementar instituirá imposto sobre bens e serviços. (AC)', "Art. 2º O Ato das Disposições Constitucionais Transitórias passa a vigorar com as seguintes alterações:",
+        '"Art. 124. Lei complementar estabelecerá a transição. (NR)', "Art. 3º Esta Emenda Constitucional entra em vigor na data de sua publicação."].join(NL);
+      const disc = "Reforma Tributária", top = "Emenda Constitucional nº 132/2023";
+      const chave = a.matChave(disc, top);
+      const cf = a.leiGuardar({ nome: "Constituição Federal", texto: CF, topicos: [chave] });
+      const ec = a.leiGuardar({ nome: "Emenda Constitucional 132/2023", texto: EC, topicos: [] });
+      ok(a.ramLeiCombina(top, ec) === true && a.ramLeiCombina(top, cf) === false && a.ramLeiCombina("Princípios tributários", cf) === null && a.ramLeiCombina(top, null) === null, "R42b a emenda bate com o nome do topico; a Constituicao (sem numero) NAO bate; sem numero no nome: null");
+      ok(a.ramLeiCombina("Lei 14.133/2021", { numero: "8666", ano: "1993", texto: "" }) === false && a.ramLeiCombina("EC 132/2022", ec) === false && a.ramLeiCombina("Lei 132", ec) === true, "R42c numero diferente, ano diferente (mesmo numero) e nome sem ano");
+      ok(a.ramLeiCombina("Lei 14.133/2021", { numero: "8666", ano: "2021", texto: "" }) === false && a.ramLeiCombina("EC 132/2023", { numero: "133", ano: "2023", texto: "" }) === false, "R42c2 mesmo ano, numero diferente: nao bate");
+      /* texto colado na versao antiga (sem lei na biblioteca) */
+      const chaveV = a.matChave("Reforma Tributária", "Texto antigo");
+      a.matResumosAtual()[chaveV] = { disciplina: "Reforma Tributária", topico: "Texto antigo", leiTexto: CF };
+      const cv = a.ramLeisCandidatas(chaveV, "Texto antigo").filter((c) => c.id === "__topico");
+      ok(cv.length === 1 && cv[0].atual === true && a.ramTextoDaLei({ leiId: "__topico", chave: chaveV }) === CF, "R42c3 o texto colado no topico (versao antiga) tambem e' candidato e a fonte do indice");
+      /* o ERRO REAL: o topico so' esta' ligado a Constituicao, a emenda esta' na biblioteca -> o app usava a Constituicao calado */
+      ok(a.leiDoTopicoAtual(chave).id === cf.id, "R42d (o defeito) sem escolha, a lei do topico e' a Constituicao");
+      const cands = a.ramLeisCandidatas(chave, top);
+      ok(cands.length === 2 && cands[0].id === ec.id && cands[0].combina === true && cands[0].doTopico === false && cands[1].id === cf.id && cands[1].atual === true && cands[1].combina === false, "R42e candidatas: a que BATE primeiro (mesmo de outro topico), a atual depois com combina=false: " + JSON.stringify(cands.map((c) => [c.nome, c.combina, c.atual])));
+      const pad = a.ramLeiPadrao(cands);
+      ok(pad.id === ec.id && pad.trocada === true, "R42f ao abrir vem marcada a que bate, avisando que trocou");
+      ok(a.ramLeiPadrao([]).id === "" && a.ramLeiPadrao([{ id: "x", atual: true, combina: null }]).id === "x" && a.ramLeiPadrao([{ id: "x", atual: true, combina: false }]).id === "x" && a.ramLeiPadrao([{ id: "y", atual: false, combina: false }]).id === "", "R42g sem candidata melhor, fica a atual; sem atual e sem uma que bata, nada vem marcado (nao se escolhe lei ao acaso)");
+      const ctx = { editalId: ed.id, disciplina: disc, topico: top, chave, depois() {} };
+      a.ramAbrirEditor(ctx);
+      ok(a.ramLeiEscolhida().id === ec.id && a.$("ramLeiBox").hidden === false && a.$("ramLeiSel").children.length === 2 && a.$("ramLeiSel").value === ec.id, "R42h a janela abre com a caixa da lei e a emenda marcada");
+      ok(/deixei marcada/.test(a.$("ramLeiAviso").textContent) && a.ramLeiBloqueada() === false && a.$("ramLeiMesmoLinha").hidden === true && a.$("btnRamLeiFixar").hidden === false, "R42i avisa da troca; nada bloqueado; oferece 'usar como a lei do topico': " + a.$("ramLeiAviso").textContent);
+      const p0 = a.ramProporDaLei();
+      ok(p0.ramos.length === 0 && /Não achei divisões/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 0, "R42j a emenda nao tem titulos: nao inventa ramos (antes vinham os Titulos da Constituicao)");
+      const ped = a.ramPedidoIA(ctx, []);
+      ok(ped.indexOf("Dos Princípios Fundamentais") < 0 && ped.indexOf("TÍTULO") < 0, "R42k o pedido a IA NAO traz o indice da Constituicao");
+      /* escolher a Constituicao: alerta e trava ate ver o texto */
+      a.ramLeiTrocar(cf.id);
+      ok(a.ramLeiBloqueada() === true && /ATENÇÃO/.test(a.$("ramLeiAviso").textContent) && a.$("ramLeiMesmoLinha").hidden === false, "R42l escolher lei que nao bate: alerta e trava");
+      const p1 = a.ramProporDaLei();
+      ok(p1.bloqueada === true && a.ramLinhasAtual().length === 0 && /não bate/.test(a.$("ramMsg").textContent), "R42m com a trava, 'propor pela lei' nao acrescenta nada");
+      ok((await a.ramPedirIA()) === null && /não bate/.test(a.$("ramMsg").textContent), "R42n com a trava, o pedido a IA tambem nao sai");
+      a.ramLeiVer();
+      ok(a.$("ramLeiPrev").hidden === false && /Constituição Federal": 7 artigo\(s\)/.test(a.$("ramLeiPrevCab").textContent) && /TÍTULO I — Dos Princípios Fundamentais/.test(a.$("ramLeiPrevCab").textContent) && /REPÚBLICA FEDERATIVA/.test(a.$("ramLeiPrevTexto").textContent), "R42o a previa mostra o que a lei e' (artigos, divisoes, o que o indice proporia) e o comeco do texto: " + a.$("ramLeiPrevCab").textContent);
+      a.$("ramLeiMesmo").checked = true; a.$("ramLeiMesmo").onchange();
+      ok(a.ramLeiBloqueada() === false, "R42p 'usar mesmo assim' destrava");
+      const p2 = a.ramProporDaLei();
+      ok(p2.ramos.length === 3 && a.ramLinhasAtual().some((l) => /Dos Princípios Fundamentais/.test(l.nome)), "R42q destravado, o indice da Constituicao entra (a pessoa decidiu ver e usar)");
+      ok(a.ramPedidoIA(ctx, []).indexOf("Dos Princípios Fundamentais") >= 0, "R42r e o pedido a IA passa a trazer o indice da lei ESCOLHIDA");
+      a.ramLeiTrocar(ec.id);
+      ok(a.$("ramLeiMesmo").checked === false && a.ramLeiBloqueada() === false, "R42s trocar de lei zera o 'mesmo assim'");
+      ok(a.$("ramLeiPrev").hidden === false && /ALTERA outra/.test(a.$("ramLeiPrevCab").textContent) && /Sem divisões/.test(a.$("ramLeiPrevCab").textContent) && /A Constituição Federal passa a vigorar/.test(a.$("ramLeiPrevTexto").textContent), "R42t a previa da emenda diz que ela ALTERA outra lei e nao tem divisoes: " + a.$("ramLeiPrevCab").textContent);
+      a.ramLeiVer();
+      ok(a.$("ramLeiPrev").hidden === true, "R42u 'ver o texto' de novo recolhe a previa");
+      /* fixar */
+      ok(a.ramLeiFixar() === true && a.leiDoTopicoAtual(chave).id === ec.id && a.leisDoTopico(chave).some((l) => l.id === ec.id) && a.matResumosAtual()[chave].leiId === ec.id, "R42v 'usar como a lei do topico' liga a emenda, torna-a a preferida e o app passa a abrir ELA");
+      ok(a.$("btnRamLeiFixar").hidden === true && a.ramLeiFixar() === true, "R42w depois de fixada o botao some (e fixar de novo e' inofensivo)");
+      a.$("dlgRamos").close();
+      a.ramAbrirEditor(ctx);
+      ok(a.ramLeiEscolhida().id === ec.id && !/deixei marcada/.test(a.$("ramLeiAviso").textContent) && /bate com o nome/.test(a.$("ramLeiAviso").textContent), "R42x reaberto: a emenda e' a atual e o app so' confirma que bate");
+      a.$("dlgRamos").close();
+      /* topico sem numero no nome: nada de alerta, comportamento de sempre */
+      const ctx2 = { editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave: a.matChave("Licitações", "Lei 14.133"), depois() {} };
+      a.ramAbrirEditor(ctx2);
+      ok(a.ramLeiBloqueada() === false && !/ATENÇÃO/.test(a.$("ramLeiAviso").textContent), "R42y topico cujo nome nao bate com nenhuma lei conhecida: sem alerta e sem trava");
+      a.$("dlgRamos").close();
+      const html42 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.ram-lei-box\{/.test(html42) && /\.ram-lei-texto\{/.test(html42), "R42z a caixa da lei tem CSS");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
@@ -1537,7 +1611,7 @@ async function testes() {
     const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
     const ids = [...dlg.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
     const { a, ed } = MT();
-    ok(ids.length === 7 && ids.every((id) => a.RAM_DICAS[id]) && Object.keys(a.RAM_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "R20 todo botao do editor de ramos tem explicacao");
+    ok(ids.length === 9 && ids.every((id) => a.RAM_DICAS[id]) && Object.keys(a.RAM_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "R20 todo botao do editor de ramos tem explicacao");
     const chaves = Object.values(a.RAM_DICAS).concat(["ram_tip_nome", "ram_tip_peso", "ram_tip_nota", "ram_tip_sobe", "ram_tip_desce", "ram_tip_apagar", "ger_tip_ramos", "ger_tip_ramo", "ger_tip_ramo_geral", "ger_tip_seta_ramos"]);
     ok(chaves.every((kk) => i18n.split('"' + kk + '": ').length - 1 >= 2 && a.t(kk, { r: "X" }).length > 15), "R20a as explicacoes existem em portugues e ingles");
     a.gerAbrir(); abrirTopicoLei(a, ed);

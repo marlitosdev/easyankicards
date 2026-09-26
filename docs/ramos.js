@@ -141,12 +141,90 @@ function ramSugerirDaLei(texto) {
 /* ASSISTÊNCIA DE IA: o app monta o pedido (com o índice da lei e o que a pessoa já tem), a IA responde com linhas
  * "++ Ramo :: peso :: nota", a pessoa cola, e o app CONFERE antes de acrescentar. Quem calcula é o app; a IA só sugere
  * ramos e pesos, e nada entra sem passar pelo editor (onde a pessoa ajusta e só então salva). */
+/* QUAL LEI ALIMENTA O ÍNDICE. O app usava, calado, a "lei do tópico" (a preferida ou a primeira ligada a ele): um tópico
+ * ligado à Constituição e à emenda que a altera entregava o índice da Constituição inteira — Títulos I a IX e ADCT — para
+ * quem estudava só a emenda, e ninguém via de onde vinha. Agora a pessoa vê e escolhe (ctx.leiId) antes de qualquer proposta. */
+function ramTextoDaLei(ctx) {
+  if (!ctx) return "";
+  if (ctx.leiId === "__topico") {
+    const r = (typeof matResumos !== "undefined" && matResumos[ctx.chave]) || {};
+    return String(r.leiTexto || "");
+  }
+  if (ctx.leiId && typeof leiDe === "function") {
+    const l = leiDe(ctx.leiId);
+    if (l) return String(l.texto || "");
+  }
+  return typeof leiTextoDoTopico === "function" ? String(leiTextoDoTopico(ctx.chave) || "") : "";
+}
+
+/* O NÚMERO (e o ano) que o nome do tópico cita: "Emenda Constitucional nº 132/2023" → { numero: "132", ano: "2023" };
+ * "Lei 14.133/2021" → 14133 / 2021; "Lei 8.666" → 8666 sem ano; sem número ("Princípios tributários"), null. */
+function ramIdentidadeDoNome(nome) {
+  const s = String(nome || "");
+  let m = s.match(/(\d{1,3}(?:\.\d{3})+|\d{1,5})\s*\/\s*(\d{4}|\d{2})(?!\d)/);
+  if (m) {
+    const a = m[2].length === 2 ? (Number(m[2]) > 50 ? "19" : "20") + m[2] : m[2];
+    return { numero: m[1].replace(/\./g, "").replace(/^0+/, ""), ano: a };
+  }
+  m = s.match(/(?:\bn[ºo°.]*\s*|\blei\s+|\blc\s+|\bec\s+|\bmp\s+)(\d{1,3}(?:\.\d{3})+|\d{1,5})(?!\d)/i);
+  return m ? { numero: m[1].replace(/\./g, "").replace(/^0+/, ""), ano: "" } : null;
+}
+/* a lei bate com o nome do tópico? true / false (o nome cita um número e a lei é OUTRA) / null (o nome não cita número:
+ * não dá para dizer, então não se alerta). A Constituição não tem número: contra um tópico que cita "nº 132/2023" ela NÃO bate. */
+function ramLeiCombina(nomeTopico, lei) {
+  const id = ramIdentidadeDoNome(nomeTopico);
+  if (!id || !lei) return null;
+  let num = String(lei.numero || "").replace(/\D/g, "").replace(/^0+/, ""), ano = String(lei.ano || "");
+  if (!num && typeof leiIdentificar === "function" && lei.texto) {
+    const x = leiIdentificar(lei.texto);
+    if (x) { num = String(x.numero || "").replace(/\D/g, "").replace(/^0+/, ""); ano = ano || String(x.ano || ""); }
+  }
+  if (!num) return /constitui[çc][ãa]o/i.test(String(nomeTopico || ""));
+  if (num !== id.numero) return false;
+  if (id.ano && ano && String(id.ano) !== ano) return false;
+  return true;
+}
+/* as leis que podem alimentar o índice: as ligadas ao tópico e as demais da biblioteca, as que BATEM com o nome primeiro */
+function ramLeisCandidatas(chave, nomeTopico) {
+  const lista = typeof leisLista === "function" ? leisLista() : [];
+  const doTopico = new Set((typeof leisDoTopico === "function" ? leisDoTopico(chave) : []).map((l) => l.id));
+  const atual = typeof leiDoTopicoAtual === "function" ? leiDoTopicoAtual(chave) : null;
+  const out = lista.filter((l) => String(l.texto || "").trim()).map((l) => ({
+    id: l.id, nome: l.nome || l.apelido || l.id, doTopico: doTopico.has(l.id), atual: !!atual && atual.id === l.id,
+    combina: ramLeiCombina(nomeTopico, l) }));
+  const r = (typeof matResumos !== "undefined" && matResumos[chave]) || null;
+  if (r && String(r.leiTexto || "").trim() && !out.some((x) => x.atual)) {
+    out.push({ id: "__topico", nome: t("ram_lei_colada"), doTopico: true, atual: true, combina: null });
+  }
+  const pri = (x) => (x.combina === true ? 0 : x.atual ? 1 : x.doTopico ? 2 : 3);
+  return out.sort((a, b) => pri(a) - pri(b) || String(a.nome).localeCompare(String(b.nome)));
+}
+/* qual delas vem marcada ao abrir: a lei atual do tópico; se ela NÃO bate com o nome e alguma outra bate, a que bate
+ * (trocada = true, para a tela avisar). Só marca — nada é proposto até a pessoa mandar. */
+function ramLeiPadrao(cands) {
+  const lista = cands || [];
+  const atual = lista.find((c) => c.atual);
+  if (atual && atual.combina !== false) return { id: atual.id, trocada: false };
+  const boa = lista.find((c) => c.combina === true);
+  if (boa) return { id: boa.id, trocada: !!atual };
+  return { id: atual ? atual.id : "", trocada: false };
+}
+/* a prévia da lei escolhida: o que ela é e o que o índice proporia, antes de aceitar */
+function ramLeiResumo(texto) {
+  const tx = String(texto || "");
+  let artigos = 0, alteradora = false, ramos = [], divisoes = 0;
+  try { artigos = typeof leiArtigos === "function" ? leiArtigos(tx).length : 0; } catch (e) {}
+  try { alteradora = typeof leiEhAlteradora === "function" ? !!leiEhAlteradora(tx) : false; } catch (e) {}
+  try { const s = ramSugerirDaLei(tx); ramos = s.ramos; divisoes = s.divisoes; } catch (e) {}
+  return { artigos, alteradora, ramos, divisoes, inicio: tx.slice(0, 2500), tamanho: tx.length };
+}
+
 const RAM_MAX_IA = 30;
 function ramPedidoIA(ctx, atuais) {
   const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ctx.editalId) || {};
   let indice = "";
   try {
-    const s = ramSugerirDaLei(typeof leiTextoDoTopico === "function" ? leiTextoDoTopico(ctx.chave) : "");
+    const s = ramSugerirDaLei(ramTextoDaLei(ctx));
     if (s.ramos.length) indice = t("ram_prompt_indice") + "\n" + s.ramos.map((r) => "- " + r.nome + (r.nota ? " (" + r.nota + ")" : "")).join("\n") + "\n";
   } catch (e) {}
   let nq = 0;
@@ -301,7 +379,7 @@ function ramMaterialDoTopico(chave, ramos) {
 let ramCtx = null, ramLinhas = [];
 
 const RAM_DICAS = {
-  btnRamLei: "ram_tip_lei", btnRamPesos: "ram_tip_pesos", btnRamIa: "ram_tip_ia", btnRamConferir: "ram_tip_conferir", btnRamMais: "ram_tip_mais", btnRamSalvar: "ram_tip_salvar", btnRamFechar: "ram_tip_fechar",
+  btnRamLei: "ram_tip_lei", btnRamLeiVer: "ram_tip_lei_ver", btnRamLeiFixar: "ram_tip_lei_fixar", btnRamPesos: "ram_tip_pesos", btnRamIa: "ram_tip_ia", btnRamConferir: "ram_tip_conferir", btnRamMais: "ram_tip_mais", btnRamSalvar: "ram_tip_salvar", btnRamFechar: "ram_tip_fechar",
 };
 
 function ramEl(tag, cls, txt) {
@@ -352,23 +430,114 @@ function ramAbrirEditor(ctx) {
   const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ctx.editalId);
   if (!ed) return false;
   ramCtx = ctx;
+  try {
+    ctx.leiCands = ramLeisCandidatas(ctx.chave, ctx.topico);
+    const pad = ramLeiPadrao(ctx.leiCands);
+    ctx.leiId = pad.id; ctx.leiTrocada = pad.trocada;
+  } catch (e) { ctx.leiCands = []; ctx.leiId = ""; ctx.leiTrocada = false; }
+  if ($("ramLeiMesmo")) $("ramLeiMesmo").checked = false;
+  if ($("ramLeiPrev")) $("ramLeiPrev").hidden = true;
   ramLinhas = edRamosDoTopico(ed.texto || "", ctx.disciplina, ctx.topico).map((r) => ({
     idOrig: r.id, nome: r.nome, peso: r.herdado ? "" : (r.abs > 0 ? r.abs + (r.unidade === "p" ? "p" : "q") : String(r.peso)), nota: r.nota || "" }));
   $("ramTit").textContent = t("ram_titulo", { t: ctx.topico });
   $("ramMsg").textContent = "";
   $("ramIaBox").hidden = true; $("ramColar").value = "";
   ramPintar();
-  const temLei = typeof leiTextoDoTopico === "function" && String(leiTextoDoTopico(ctx.chave) || "").trim().length > 0;
-  $("btnRamLei").disabled = !temLei;
-  dicasDosBotoes(Object.assign({}, RAM_DICAS, { btnRamLei: temLei ? "ram_tip_lei" : "ram_tip_lei_sem" }));
+  ramLeiPintar();
   abrirModal("dlgRamos");
+  return true;
+}
+
+/* a caixa "Lei usada para o índice": escolha, alerta e prévia */
+function ramLeiEscolhida() {
+  const c = ramCtx && (ramCtx.leiCands || []).find((x) => x.id === ramCtx.leiId);
+  return c || null;
+}
+/* lei que NÃO bate com o nome do tópico só serve depois de a pessoa ver o texto e marcar "usar mesmo assim" */
+function ramLeiBloqueada() {
+  const c = ramLeiEscolhida();
+  return !!c && c.combina === false && !($("ramLeiMesmo") && $("ramLeiMesmo").checked);
+}
+function ramLeiPintar() {
+  if (!ramCtx) return;
+  const cands = ramCtx.leiCands || [];
+  const box = $("ramLeiBox");
+  if (box) box.hidden = !cands.length;
+  const sel = $("ramLeiSel");
+  if (sel) {
+    sel.innerHTML = "";
+    if (!ramCtx.leiId) { const o0 = document.createElement("option"); o0.value = ""; o0.textContent = t("ram_lei_nenhuma"); sel.append(o0); }
+    cands.forEach((c) => {
+      const o = document.createElement("option");
+      o.value = c.id;
+      o.textContent = c.nome + (c.combina === true ? " ✓" : c.combina === false ? " ⚠" : "") + (c.doTopico ? "" : " · " + t("ram_lei_de_fora"));
+      sel.append(o);
+    });
+    sel.value = ramCtx.leiId;
+  }
+  const c = ramLeiEscolhida();
+  const av = $("ramLeiAviso");
+  if (av) {
+    av.textContent = !c ? "" : c.combina === false ? t("ram_lei_nao_combina", { t: ramCtx.topico, l: c.nome })
+      : (ramCtx.leiTrocada && c.combina === true ? t("ram_lei_trocada", { l: c.nome }) : (c.combina === true ? t("ram_lei_combina", { l: c.nome }) : ""));
+    av.className = "nota" + (c && c.combina === false ? " ger-np-erro" : "");
+  }
+  if ($("ramLeiMesmoLinha")) $("ramLeiMesmoLinha").hidden = !(c && c.combina === false);
+  const fixar = $("btnRamLeiFixar");
+  if (fixar) fixar.hidden = !c || c.atual || c.id === "__topico";
+  const tem = String(ramTextoDaLei(ramCtx) || "").trim().length > 0;
+  $("btnRamLei").disabled = !tem;
+  dicasDosBotoes(Object.assign({}, RAM_DICAS, { btnRamLei: tem ? "ram_tip_lei" : "ram_tip_lei_sem" }));
+  const prev = $("ramLeiPrev");
+  if (prev && !prev.hidden) ramLeiPintarPrevia();
+}
+function ramLeiPintarPrevia() {
+  const prev = $("ramLeiPrev");
+  if (!prev || !ramCtx) return;
+  const x = ramLeiResumo(ramTextoDaLei(ramCtx));
+  const c = ramLeiEscolhida();
+  $("ramLeiPrevCab").textContent = t("ram_lei_prev_cab", { l: c ? c.nome : "—", a: x.artigos, d: x.divisoes, k: Math.round(x.tamanho / 1000) })
+    + (x.alteradora ? " " + t("ram_lei_prev_alteradora") : "")
+    + (x.ramos.length ? " " + t("ram_lei_prev_indice", { r: x.ramos.slice(0, 4).map((r) => r.nome).join("; ") + (x.ramos.length > 4 ? "…" : "") }) : " " + t("ram_lei_prev_sem_indice"));
+  $("ramLeiPrevTexto").textContent = x.inicio + (x.tamanho > x.inicio.length ? "\n…" : "");
+}
+function ramLeiTrocar(id) {
+  if (!ramCtx) return;
+  ramCtx.leiId = id; ramCtx.leiTrocada = false;
+  if ($("ramLeiMesmo")) $("ramLeiMesmo").checked = false;
+  ramLeiPintar();
+}
+function ramLeiVer() {
+  const prev = $("ramLeiPrev");
+  if (!prev) return;
+  prev.hidden = !prev.hidden;
+  if (!prev.hidden) ramLeiPintarPrevia();
+}
+/* guarda a escolha como a lei do tópico (liga a lei ao tópico e a torna a preferida dele) */
+function ramLeiFixar() {
+  const c = ramLeiEscolhida();
+  if (!c || !ramCtx || c.id === "__topico") return false;
+  leiLigar(c.id, ramCtx.chave);
+  /* o ponteiro mora no registro do tópico; sem registro, ele nasce aqui — sem ele a "lei do tópico" continua sendo a
+   * primeira da lista em ordem alfabética, que era justamente o defeito */
+  if (typeof matResumos !== "undefined") {
+    const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ramCtx.editalId) || {};
+    const antigo = matResumos[ramCtx.chave] || { disciplina: ramCtx.disciplina, topico: ramCtx.topico, concurso: ed.nome || "", criado: new Date().toISOString() };
+    matResumos[ramCtx.chave] = Object.assign({}, antigo, { leiId: c.id, tocado: new Date().toISOString() });
+    try { matSalvar(); } catch (e) {}
+  }
+  ramCtx.leiCands = ramLeisCandidatas(ramCtx.chave, ramCtx.topico);
+  ramCtx.leiId = c.id;
+  ramLeiPintar();
+  $("ramMsg").textContent = t("ram_lei_fixada", { l: c.nome });
   return true;
 }
 
 /* acrescenta (nunca substitui) os ramos propostos pela lei: o que a pessoa já tem fica como está */
 function ramProporDaLei() {
   if (!ramCtx) return null;
-  const s = ramSugerirDaLei(typeof leiTextoDoTopico === "function" ? leiTextoDoTopico(ramCtx.chave) : "");
+  if (ramLeiBloqueada()) { $("ramMsg").textContent = t("ram_lei_bloqueada"); return { ramos: [], cortou: 0, divisoes: 0, bloqueada: true }; }
+  const s = ramSugerirDaLei(ramTextoDaLei(ramCtx));
   if (!s.ramos.length) { $("ramMsg").textContent = t("ram_lei_nada"); return s; }
   const tem = new Set(ramLinhas.map((l) => edRamoId(l.nome)));
   let novos = 0;
@@ -405,6 +574,7 @@ function ramPesosDosRegistros() {
 /* copia o pedido para a IA e abre a caixa onde se cola a resposta */
 async function ramPedirIA() {
   if (!ramCtx) return null;
+  if (ramLeiBloqueada()) { $("ramMsg").textContent = t("ram_lei_bloqueada"); return null; }
   const pedido = ramPedidoIA(ramCtx, ramLinhas.map((l) => String(l.nome || "").trim()).filter(Boolean));
   $("ramIaBox").hidden = false;
   try { await navigator.clipboard.writeText(pedido); $("ramMsg").textContent = t("ram_ia_copiado"); }
@@ -454,6 +624,12 @@ function ramSalvar() {
 if (typeof document !== "undefined" && $("btnRamSalvar")) {
   $("btnRamMais").onclick = ramAdicionar;
   $("btnRamLei").onclick = ramProporDaLei;
+  if ($("ramLeiSel")) {
+    $("ramLeiSel").onchange = () => ramLeiTrocar($("ramLeiSel").value);
+    $("btnRamLeiVer").onclick = ramLeiVer;
+    $("btnRamLeiFixar").onclick = ramLeiFixar;
+    $("ramLeiMesmo").onchange = () => ramLeiPintar();
+  }
   $("btnRamIa").onclick = ramPedirIA;
   $("btnRamPesos").onclick = ramPesosDosRegistros;
   $("btnRamConferir").onclick = ramConferirIA;
