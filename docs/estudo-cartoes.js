@@ -220,11 +220,8 @@ function estcMenuMontar() {
   item(t("est_m_apagar"), estcApagar);
   item(t("est_m_melhorar"), () => { estcFechar(); $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota] }); });
   if (u.nota.chave !== CQ_BANCADA) {
-    item(t("est_m_criar"), () => {
-      estcFechar(); $("dlgGerCartoes").close();
-      mcApontarTopico(u.nota.disciplina, u.nota.topico);
-      matCartoesAbrir({ semGravarResumo: true, voltarPara: "cartoes" });
-    });
+    /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
+    item(t("est_m_criar"), () => { estcFechar(); bancAlvoDefinir(u.nota.disciplina, u.nota.topico); });
   }
 }
 
