@@ -513,7 +513,184 @@ async function testes() {
     ok(x.$("dlgCartElevar").open !== true, "E11f o Elevar nao abriu sozinho");
   }
 
-    /* ---- E8: a tela, em 3 passos ---- */
+    /* ---- E12: o que veio da revisao manual — atalhos, previa, ver no texto, prompt editavel, autocorrecao e sem ancora ---- */
+  {
+    const NL = String.fromCharCode(10);
+    const mk = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      a.$("editor").value = "Pergunta da bancada? :: sim";
+      const ch = a.matChave("Proc", "Recursos");
+      a.matGravarCartoes(ch, [
+        "Qual o prazo do recurso? :: 10 dias",
+        "Explique o efeito do recurso? :: " + "palavra e mais palavra sem numero ".repeat(9),
+        "Recurso :: Serviço",
+        "Qual a regra X? :: Resposta A",
+        "Qual a regra X? :: Resposta B",
+        "Qual é o fato gerador do imposto predial? :: " + RICO + " :: x" + NL + "+ Literalidade — Art. 8º-A"].join(NL + NL),
+        { disciplina: "Proc", topico: "Recursos" });
+      return { a, ch, r };
+    };
+    const { a, ch } = mk();
+    const frente = (i) => a.ceNotasAtual()[i].card.front;
+    const marcados = () => [...a.ceSelAtual()].map((i) => a.ceNotasAtual()[i].card.front).sort();
+    /* predicados */
+    const C = a.CE_CRIT;
+    ok(C.semResp({ kind: "basic", front: "Q?", back: "" }) && !C.semResp({ kind: "basic", front: "Q?", back: "r" }) && !C.semResp({ kind: "cloze", front: "A {{c1::b}}", back: "" }) && !C.semResp({ kind: "mc", front: "Q?", back: "" }), "E12 'sem resposta': so' basico sem verso (cloze e MC nao contam)");
+    ok(C.semPerg({ kind: "basic", front: "Sem interrogacao", back: "r" }) && !C.semPerg({ kind: "basic", front: "Com?", back: "r" }) && !C.semPerg({ kind: "cloze", front: "Sem interrogacao", back: "" }), "E12a 'sem pergunta': so' basico cuja frente nao termina em ?");
+    ok(C.curtos({ front: "A", back: "B" }) && !C.curtos({ front: "Uma pergunta media aqui?", back: "e uma resposta" }) && C.curtos({ front: "{{c1::x}} y", back: "" }), "E12b 'curtos': menos de 25 caracteres (o marcador de lacuna nao conta)");
+    ok(C.todos({}) === true && Object.keys(a.CE_ATALHOS).length === 7 && a.CE_ATALHOS.btnCeAtRepetidos === "repetidos", "E12c os 7 atalhos existem");
+    a.ceAbrir();
+    /* atalho: curtos */
+    ok(a.$("btnCeAtCurtos").getAttribute("aria-description") === a.t("ce_tip_at_curtos") && a.$("btnCeAtRepetidos").getAttribute("aria-description") === a.t("ce_tip_at_repetidos") && Object.keys(a.CE_ATALHOS).every((id) => a.$(id).getAttribute("aria-description")), "E12d todo atalho tem explicacao");
+    ok(a.ceNotasAtual().length < 7, "E12e0 antes do atalho a lista e' a FILA do objetivo (so' os fracos)");
+    a.$("btnCeAtCurtos").onclick();
+    ok(a.ceEscopoAtual() === "todos" && a.$("ceEscopo").value === "todos" && a.ceNotasAtual().length === 7, "E12e marcar por criterio passa a lista para 'Todos' (sem o filtro do objetivo): " + a.ceNotasAtual().length);
+    ok(achar(a.$("ceLista"), (e) => e.tag === "input").filter((x) => x.checked).length === a.ceSelAtual().size, "E12e2 a lista na tela mostra as caixas marcadas (foi repintada)");
+    ok(marcados().join("|") === "Pergunta da bancada?|Recurso" && /2 marcado\(s\) — 2 cartão\(ões\) “Curtos”/.test(a.$("ceMsg").textContent), "E12f curtos marca so os cartoes curtos (o da bancada e Recurso): " + marcados() + " | " + a.$("ceMsg").textContent);
+    a.$("btnCeAtCurtos").onclick();
+    ok(a.ceSelAtual().size === 2 && /0 marcado\(s\) — 2 cartão\(ões\)/.test(a.$("ceMsg").textContent), "E12e3 marcar de novo o mesmo criterio nao conta em dobro: " + a.$("ceMsg").textContent);
+    ok(a.ceMarcarPor("nao-existe") === null && C.risco({ front: "Q?", back: "x", more: "art. 5" }) && !C.risco({ front: "Q?", back: "sem dado", more: "" }), "E12e4 criterio invalido nao quebra; 'de risco' olha tambem o saiba mais");
+    a.$("btnCeAtRisco").onclick();
+    ok(marcados().includes("Qual o prazo do recurso?") && marcados().includes("Recurso"), "E12g os atalhos SOMAM a selecao (nao a limpam)");
+    a.$("btnCeLimpar").onclick();
+    a.$("btnCeAtLongos").onclick();
+    ok(marcados().length === 2 && marcados().some((x) => /Explique/.test(x)) && marcados().some((x) => /fato gerador/.test(x)), "E12h longos marca os dois cartoes longos (o basico e o rico): " + marcados());
+    a.$("btnCeLimpar").onclick();
+    a.$("btnCeAtSemPerg").onclick();
+    ok(marcados().join("|") === "Recurso", "E12i 'sem pergunta' marca so' o que nao termina em ?");
+    a.$("btnCeLimpar").onclick();
+    a.$("btnCeAtRepetidos").onclick();
+    ok(marcados().join("|") === "Qual a regra X?|Qual a regra X?", "E12j 'repetidos' marca AS DUAS pontas do grupo: " + marcados());
+    a.$("btnCeLimpar").onclick();
+    a.$("btnCeAtTodos").onclick();
+    ok(a.ceSelAtual().size === a.ceNotasAtual().length && a.ceNotasAtual().length === 7, "E12k 'todos' marca todos os cartoes (7 com o da bancada)");
+    a.$("btnCeLimpar").onclick();
+    a.$("btnCeAtSemResp").onclick();
+    ok(a.ceSelAtual().size === 0 && /Nenhum cartão “Sem resposta”/.test(a.$("ceMsg").textContent), "E12l criterio sem nenhum cartao: diz que nao ha");
+    /* limite da rodada */
+    {
+      const { a: b } = mk();
+      b.matGravarCartoes(b.matChave("Proc", "Curtos"), Array.from({ length: 20 }, (x, k) => "A" + k + " :: B").join(NL + NL), { disciplina: "Proc", topico: "Curtos" });
+      b.ceAbrir();
+      const r = b.ceMarcarPor("curtos");
+      ok(b.ceSelAtual().size === 15 && r.achou >= 21 && r.corte >= 6 && /Só cabem 15 por rodada/.test(b.$("ceMsg").textContent), "E12m mais de 15 no criterio: marca 15 e avisa que o resto fica para a proxima: " + b.$("ceMsg").textContent);
+    }
+    /* cartoes escolhidos no gerenciador: o atalho larga a escolha */
+    {
+      const { a: g } = mk();
+      g.ceAbrir({ notas: g.cqLerBiblioteca().filter((n) => /prazo/.test(n.card.front)) });
+      ok(g.ceNotasAtual().length === 1, "E12m3 (preparo) so' o cartao escolhido");
+      g.ceMarcarPor("todos");
+      ok(g.ceNotasAtual().length === 7 && g.ceEscopoAtual() === "todos", "E12m4 o atalho larga a escolha do gerenciador e passa a lista para 'Todos'");
+    }
+    /* travado no meio da rodada */
+    a.$("btnCeLimpar").onclick();
+    a.$("btnCeAtLongos").onclick();
+    a.$("btnCePrompt").onclick();
+    ok(a.cePassoAtual() === 2 && a.ceMarcarPor("curtos") === null, "E12n no passo 2 os atalhos nao fazem nada");
+    ok(achar(a.$("ceLista"), (e) => e.tag === "button" && e.textContent === "ver no texto").length === 0, "E12n2 no passo 2 nao ha 'ver no texto' (a rodada esta em andamento)");
+    /* prompt editavel e tamanho */
+    ok(!a.$("cePrompt").readOnly && /\d/.test(a.$("cePromptTam").textContent), "E12o o pedido e' editavel e o tamanho aparece: " + a.$("cePromptTam").textContent);
+    a.$("cePrompt").value = a.$("cePrompt").value + "x".repeat(5000); a.$("cePrompt").oninput();
+    ok(/5[.,]?\d{3}|\d[.,]?\d{3}/.test(a.$("cePromptTam").textContent), "E12p editar atualiza o tamanho");
+    ok(a.$("cePrompt").getAttribute("aria-description") === a.t("ce_tip_prompt_edit"), "E12q o campo do pedido tem explicacao");
+    a.ceDescartar && a.ceDescartar();
+  }
+  {
+    /* previa e ver no texto */
+    const { a } = (() => { const r = rodar(); const x = r.api; x.matIniciar(); x.edIniciar(); x.$("editor").value = "Pergunta da bancada? :: sim"; x.matGravarCartoes(x.matChave("Proc", "R"), "Qual o prazo? :: 10", { disciplina: "Proc", topico: "R" }); return { a: x }; })();
+    a.ceAbrir();
+    const achar2 = (raiz, teste, acc) => { Array.from(raiz.children || []).forEach((f) => { if (teste(f)) acc.push(f); achar2(f, teste, acc); }); return acc; };
+    const itens = achar2(a.$("ceLista"), (f) => /ce-item/.test(f.className || ""), []);
+    const bs = achar2(itens[0], (f) => /ce-ver/.test(f.className || ""), []);
+    ok(itens.length === 2 && bs.length >= 1 && bs[0].textContent === "ver cartão" && bs[0].title.length > 10, "E12r cada item tem 'ver cartao' com explicacao");
+    const prev = achar2(itens[0], (f) => /ce-previa/.test(f.className || ""), [])[0];
+    ok(prev && prev.hidden === true, "E12s a previa comeca escondida");
+    bs[0].onclick({ preventDefault() {}, stopPropagation() {} });
+    ok(prev.hidden === false && prev.children.length > 0 && bs[0].textContent === "ocultar cartão", "E12t clicar mostra o cartao inteiro (renderizado) e o botao vira 'ocultar'");
+    bs[0].onclick({ preventDefault() {}, stopPropagation() {} });
+    ok(prev.hidden === true && bs[0].textContent === "ver cartão", "E12u clicar de novo esconde");
+    /* ver no texto: so' cartao da bancada */
+    const daBancada = itens.find((it) => /Pergunta da bancada/.test(it.textContent));
+    const outro = itens.find((it) => /Qual o prazo/.test(it.textContent));
+    const vt = (it) => achar2(it, (f) => /ce-ver/.test(f.className || "") && f.textContent === "ver no texto", [])[0];
+    ok(vt(daBancada) && !vt(outro), "E12v 'ver no texto' so' nos cartoes da bancada");
+    vt(daBancada).onclick({ preventDefault() {}, stopPropagation() {} });
+    ok(a.$("dlgCartElevar").open === false && a.$("editor").selectionStart === 0 && a.$("editor").selectionEnd === "Pergunta da bancada? :: sim".length, "E12w 'ver no texto' fecha a janela e seleciona a linha do cartao no editor");
+  }
+  {
+    /* autocorrecao e resposta sem ancora */
+    const NL = String.fromCharCode(10);
+    const r = rodar(); const a = r.api;
+    a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
+    const ch = a.matChave("Proc", "Recursos");
+    a.matGravarCartoes(ch, ["Qual o prazo do recurso? :: 10 dias", "Qual o efeito do recurso? :: Suspende"].join(NL + NL), { disciplina: "Proc", topico: "Recursos" });
+    const bom = (q, r2) => q + " :: " + r2 + " com uma explicacao bem mais completa para passar de cem caracteres e ensinar de verdade o assunto ao aluno estudando :: x" + NL + "+ Saiba mais — Art. 1";
+    /* autocorrecao: unidade */
+    const aj = [];
+    const semRep = a.ceCorrigirBloco(bom("Q1?", "R1") + NL + "+ Saiba mais — Art. 1" + NL + "+ Saiba mais — Art. 1", aj);
+    ok(aj.indexOf("corrigirMaisRepetido") >= 0 && semRep.split("Saiba mais — Art. 1").length === 2, "E12x a autocorrecao tira linha '+' repetida do bloco: " + JSON.stringify(aj));
+    const ac = a.ceAutoCorrigir("@@ 1" + NL + bom("Q1?", "R1") + NL + "+ Saiba mais — Art. 1" + NL + NL + "@@ 2" + NL + bom("Q2?", "R2"));
+    ok(/^@@ 1/.test(ac.texto) && /@@ 2/.test(ac.texto) && ac.ajustes.length >= 1 && !/Art\. 1\n\+ Saiba mais — Art\. 1/.test(ac.texto), "E12y as ancoras '@@ N' sao preservadas e o bloco corrigido");
+    const semAnc = a.ceAutoCorrigir(bom("Q1?", "R1") + NL + "+ Saiba mais — Art. 1" + NL + "+ Saiba mais — Art. 1");
+    ok(semAnc.ajustes.indexOf("corrigirMaisRepetido") >= 0 && semAnc.texto.split("Saiba mais — Art. 1").length === 2, "E12y2 resposta SEM ancoras tambem e' corrigida (o texto inteiro)");
+    ok(a.ceAutoCorrigir("").texto === "" && a.ceAutoCorrigir(null).ajustes.length === 0, "E12z texto vazio ou nulo nao quebra");
+    const limpo = a.ceAutoCorrigir("@@ 1" + NL + bom("Q1?", "R1"));
+    ok(limpo.ajustes.length === 0, "E12z2 texto sem defeito: nenhum ajuste");
+    /* fluxo completo: 2 cartoes marcados, resposta COM ancoras e defeito */
+    a.ceAbrir(); a.ceMudarFiltro("escopo", "todos"); a.$("btnCeAtTodos").onclick();
+    a.$("btnCePrompt").onclick();
+    const n = a.ceNotasAtual().length;
+    ok(a.cePassoAtual() === 2 && a.ceSelAtual().size === 2 && n === 2, "E12z3 preparo: 2 cartoes marcados, prompt gerado");
+    const [c0, c1] = [...a.ceSelAtual()].sort().map((i) => a.ceNotasAtual()[i].card.front);
+    a.$("ceColar").value = "@@ 1" + NL + bom(c0, "R1") + NL + "+ Saiba mais — Art. 1" + NL + NL + "@@ 2" + NL + bom(c1, "R2");
+    a.ceConferirColagem();
+    ok(a.cePassoAtual() === 3 && a.ceConfAtual() && a.ceConfAtual().itens.length === 2 && a.ceConfAtual().autoAjustes.length >= 1 && /ajuste\(s\) automático\(s\)/.test(a.$("ceMsg").textContent), "E12z4 a conferencia aplica os ajustes automaticos e diz quantos: " + a.$("ceMsg").textContent);
+    a.$("btnCeDescartar").onclick && a.$("btnCeDescartar").onclick();
+    /* sem ancora, mesmo numero de cartoes: pergunta e associa pela ordem */
+    const e = rodar(); const b = e.api;
+    b.matIniciar(); b.edIniciar(); b.$("editor").value = "";
+    b.matGravarCartoes(b.matChave("Proc", "Recursos"), ["Qual o prazo do recurso? :: 10 dias", "Qual o efeito do recurso? :: Suspende"].join(NL + NL), { disciplina: "Proc", topico: "Recursos" });
+    const gerar = () => { b.ceAbrir(); b.ceMudarFiltro("escopo", "todos"); b.$("btnCeAtTodos").onclick(); b.$("btnCePrompt").onclick(); };
+    gerar();
+    const ordem = [...b.ceSelAtual()].sort((x, y) => x - y).map((i) => b.ceNotasAtual()[i].card.front);
+    b.$("ceColar").value = bom(ordem[0], "Novo 1") + NL + NL + bom(ordem[1], "Novo 2");
+    const p1 = b.ceConferirColagem();
+    ok(/2 cartão\(ões\)/.test(b.$("uiModalMsg").textContent) && /NA ORDEM/.test(b.$("uiModalMsg").textContent), "E12z5 sem ancoras e com o mesmo numero de cartoes: pergunta antes de associar pela ordem");
+    b._uiFechar(true);
+    await p1;
+    ok(b.ceConfAtual() && b.ceConfAtual().semAncora === true && b.ceConfAtual().itens.length === 2 && b.ceConfAtual().itens[0].depois.indexOf("Novo 1") >= 0 && /ORDEM/.test(b.$("ceMsg").textContent) && b.cePassoAtual() === 3, "E12z6 aceitando, cada resposta vai para o cartao da MESMA posicao e o antes/depois aparece");
+    /* recusar */
+    const g = rodar(); const c = g.api;
+    c.matIniciar(); c.edIniciar(); c.$("editor").value = "";
+    c.matGravarCartoes(c.matChave("Proc", "Recursos"), ["Qual o prazo do recurso? :: 10 dias", "Qual o efeito do recurso? :: Suspende"].join(NL + NL), { disciplina: "Proc", topico: "Recursos" });
+    c.ceAbrir(); c.ceMudarFiltro("escopo", "todos"); c.$("btnCeAtTodos").onclick(); c.$("btnCePrompt").onclick();
+    c.$("ceColar").value = bom("Qual o prazo do recurso?", "Novo 1") + NL + NL + bom("Qual o efeito do recurso?", "Novo 2");
+    const p2 = c.ceConferirColagem();
+    c._uiFechar(false);
+    await p2;
+    ok(c.ceConfAtual() === null && c.cePassoAtual() === 2 && /nada foi associado/.test(c.$("ceMsg").textContent), "E12z7 recusando, nada e' associado e a rodada continua no passo 2");
+    /* numero diferente */
+    c.$("ceColar").value = bom("Qual o prazo do recurso?", "Novo 1");
+    const p3 = c.ceConferirColagem();
+    ok(/1 cartão\(ões\)/.test(c.$("uiModalMsg").textContent) && /marcou 2/.test(c.$("uiModalMsg").textContent), "E12z8 sem ancoras e com numero DIFERENTE de cartoes: avisa e nao associa");
+    c._uiFechar(true);
+    await p3;
+    ok(c.ceConfAtual() === null && c.cePassoAtual() === 2, "E12z9 nada foi conferido");
+    /* com ancoras nao pergunta */
+    c.$("ceColar").value = "@@ 1" + NL + bom("Qual o prazo do recurso?", "Novo 1") + NL + NL + "@@ 2" + NL + bom("Qual o efeito do recurso?", "Novo 2");
+    await c.ceConferirColagem();
+    ok(c.ceConfAtual() && c.ceConfAtual().semAncora === false && c.ceConfAtual().itens.length === 2, "E12z10 com ancoras o fluxo e' o de sempre (nao pergunta nada)");
+  }
+
+  /* CSS dos elementos criados pelo codigo (o teste de estrutura so' ve o que esta no HTML) */
+  {
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(["ce-atalhos", "ce-acoes-item", "ce-ver", "ce-previa"].every((c) => html.indexOf("." + c + "{") >= 0), "E12-css as classes dos atalhos, da previa e do 'ver no texto' tem regra de CSS");
+  }
+
+  /* ---- E8: a tela, em 3 passos ---- */
   {
     const { a, c1, janela } = montar();
     a.ceAbrir();

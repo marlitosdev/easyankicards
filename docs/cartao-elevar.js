@@ -370,12 +370,91 @@ let ceForcadas = null, ceNotas = [], ceSel = new Set(), ceMostrando = CE_LIM.vis
 let cePasso = 1, ceRodada = 1, ceStats = { total: 0, fracos: 0, medios: 0, bons: 0, escondidos: 0 }, ceIncluirMedios = false;
 
 /* A explicação de cada botão desta janela: id → chave do texto (o teste confere que nenhum fica de fora). */
+/* ATALHOS DE MARCAÇÃO (vieram da revisão manual antiga): marcam de uma vez os cartões que atendem a um critério.
+ * Sempre olham a lista SEM o filtro do objetivo ("todos"), e respeitam o limite de cartões por rodada. */
+const CE_CRIT = {
+  todos: () => true,
+  curtos: (c) => (String(c.front || "") + " " + String(c.back || "")).replace(/\{\{c\d+::|\}\}/g, "").trim().length < 25,
+  semResp: (c) => c.kind !== "cloze" && c.kind !== "mc" && !String(c.back || "").trim(),
+  semPerg: (c) => c.kind === "basic" && !/\?\s*$/.test(String(c.front || "").trim()),
+  longos: (c) => cartaoLongo(c),
+  risco: (c) => CE_RISCO_RE.test(String(c.front || "") + " " + String(c.back || "") + " " + String(c.more || "")),
+};
+const CE_ATALHOS = { btnCeAtTodos: "todos", btnCeAtCurtos: "curtos", btnCeAtSemResp: "semResp", btnCeAtSemPerg: "semPerg",
+  btnCeAtLongos: "longos", btnCeAtRisco: "risco", btnCeAtRepetidos: "repetidos" };
+function ceMarcarPor(chave) {
+  if (cePasso > 1) return null;
+  if (ceForcadas) { ceForcadas = null; }
+  if (ceEscopo !== "todos") { ceEscopo = "todos"; if ($("ceEscopo")) $("ceEscopo").value = "todos"; ceSel = new Set(); ceCalcular(); }
+  const alvos = [];
+  if (chave === "repetidos") {
+    const grupos = cqAgrupar(ceNotas.map((n) => n.card));
+    grupos.forEach((g) => g.forEach((i) => alvos.push(i)));
+    alvos.sort((a, b) => a - b);
+  } else {
+    const f = CE_CRIT[chave];
+    if (!f) return null;
+    ceNotas.forEach((n, i) => { if (f(n.card)) alvos.push(i); });
+  }
+  let marcou = 0;
+  alvos.forEach((i) => { if (!ceSel.has(i) && ceSel.size < CE_LIM.lote) { ceSel.add(i); marcou++; } });
+  const maxI = alvos.length ? Math.max(...alvos.filter((i) => ceSel.has(i)), 0) : 0;
+  ceMostrando = Math.max(ceMostrando, maxI + 1);
+  cePintar();
+  const corte = alvos.filter((i) => !ceSel.has(i)).length;
+  ceStatus(alvos.length ? t("ce_at_ok", { n: marcou, m: alvos.length, c: t("ce_at_" + chave) }) + (corte ? " " + t("ce_at_corte", { max: CE_LIM.lote }) : "") : t("ce_at_nenhum", { c: t("ce_at_" + chave) }), alvos.length ? (corte ? "aviso" : "ok") : "aviso");
+  return { marcou, achou: alvos.length, corte };
+}
+
+/* AS CORREÇÕES AUTOMÁTICAS DO PAINEL ANTIGO, agora na resposta colada: prompt que vazou, "+" repetido, lacuna repetida,
+ * tags na explicação, título grudado, "+" órfão, alternativa longa na lacuna, tags que são texto, marcadores.
+ * Cada bloco "@@ N" é corrigido separadamente (as âncoras não são tocadas) e só vale se não perder cartão. */
+const CE_AUTO = [
+  ["corrigirPromptVazado", (x) => temPromptVazado(x), (x) => corrigirPromptVazado(x)],
+  ["corrigirMaisRepetido", (x) => temMaisRepetido(x), (x) => corrigirMaisRepetido(x)],
+  ["corrigirClozeRepetida", (x) => temClozeRepetida(x), (x) => corrigirClozeRepetida(x)],
+  ["corrigirTagsNaExplicacao", (x) => temTagsNaExplicacao(x), (x) => corrigirTagsNaExplicacao(x)],
+  ["corrigirTituloGrudado", (x) => temTituloGrudado(x), (x) => corrigirTituloGrudado(x)],
+  ["corrigirOrfaosExplicacao", (x) => temOrfaosExplicacao(x), (x) => corrigirOrfaosExplicacao(x)],
+  ["corrigirLacunaOpcoesLongas", (x) => temLacunaOpcoesLongas(x), (x) => corrigirLacunaOpcoesLongas(x)],
+  ["corrigirTagsQueSaoTexto", (x) => temTagsQueSaoTexto(x), (x) => corrigirTagsQueSaoTexto(x)],
+  ["removerMarcadoresTexto", (x) => temMarcadores(x), (x) => removerMarcadoresTexto(x)],
+];
+function ceCorrigirBloco(txt, ajustes) {
+  let t2 = txt;
+  CE_AUTO.forEach(([nome, detecta, corrige]) => {
+    let dispara = false;
+    try { dispara = !!detecta(t2); } catch (e) { dispara = false; }
+    if (!dispara) return;
+    let novo = t2;
+    try { novo = corrige(t2); } catch (e) { return; }
+    if (typeof novo !== "string" || novo === t2) return;
+    let antes = 0, depois = 0;
+    try { antes = parseText(t2, []).cards.length; depois = parseText(novo, []).cards.length; } catch (e) { return; }
+    if (depois < antes) return;
+    t2 = novo; ajustes.push(nome);
+  });
+  return t2;
+}
+function ceAutoCorrigir(resposta) {
+  const ajustes = [];
+  const txt = String(resposta || "");
+  let blocos = null;
+  try { blocos = separarBlocosMarcados(txt); } catch (e) { blocos = null; }
+  if (!blocos || !blocos.size) return { texto: ceCorrigirBloco(txt, ajustes), ajustes };
+  const partes = [];
+  blocos.forEach((corpo, id) => { partes.push("@@ " + id + "\n" + ceCorrigirBloco(corpo, ajustes).replace(/^\s+|\s+$/g, "")); });
+  return { texto: partes.join("\n\n"), ajustes };
+}
+
 const CE_DICAS = {
   btnCeMarcar: "ce_tip_marcar", btnCeLimpar: "ce_tip_limpar", btnCeMais: "ce_tip_mais", btnCeMostrarRev: "ce_tip_mostrar_rev",
   btnCePrompt: "ce_tip_prompt", btnCeCopiar: "ce_tip_copiar", btnCeColarClip: "ce_tip_colar", btnCeConferir: "ce_tip_conferir",
   btnCeAplicar: "ce_tip_aplicar", btnCeNova: "ce_tip_nova", btnCeDescartar: "ce_tip_descartar",
   btnCeDesfazer: "ce_tip_desfazer", btnCeFechar: "ce_tip_fechar", ceObjetivo: "ce_tip_obj",
   ceEscopo: "ce_tip_escopo", ceBusca: "ce_tip_busca", ceCurto: "ce_tip_curto",
+  btnCeAtTodos: "ce_tip_at_todos", btnCeAtCurtos: "ce_tip_at_curtos", btnCeAtSemResp: "ce_tip_at_semResp", btnCeAtSemPerg: "ce_tip_at_semPerg",
+  btnCeAtLongos: "ce_tip_at_longos", btnCeAtRisco: "ce_tip_at_risco", btnCeAtRepetidos: "ce_tip_at_repetidos", cePrompt: "ce_tip_prompt_edit",
 };
 
 /* troca o objetivo: refaz a fila e já marca os piores. Só antes de gerar o prompt (depois, a rodada está em andamento). */
@@ -552,6 +631,24 @@ function cePintar() {
     const falta = n.defeitos.length ? t("ce_falta", { x: n.defeitos.map((d) => t("ce_def_" + d)).join(" · ") }) : "";
     if (falta) corpo.append(ceEl("span", "ce-def", falta));
     corpo.append(ceEl("span", "cq-onde", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
+    /* prévia do cartão inteiro, como ele fica no baralho (a lista mostra só um trecho) */
+    const acoesI = ceEl("span", "ce-acoes-item");
+    const previa = ceEl("div", "ce-previa"); previa.hidden = true;
+    const bv = ceEl("button", "btn-min ce-ver", t("ce_ver_cartao")); bv.type = "button"; bv.title = t("ce_ver_cartao_tip");
+    bv.onclick = (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      previa.hidden = !previa.hidden;
+      bv.textContent = t(previa.hidden ? "ce_ver_cartao" : "ce_ocultar_cartao");
+      if (!previa.hidden && !previa.children.length) { try { renderCartaoEstilizado(previa, n.card, true); } catch (e) { previa.textContent = cardToLine(n.card); } }
+    };
+    acoesI.append(bv);
+    /* cartão da BANCADA: leva ao texto dele no editor */
+    if (cePasso === 1 && cqEhBancada(n.chave) && n.card && n.card.line) {
+      const bt = ceEl("button", "btn-min ce-ver", t("ce_no_texto")); bt.type = "button"; bt.title = t("ce_no_texto_tip");
+      bt.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); try { $("dlgCartElevar").close(); irParaLinha(n.card.line); } catch (e) {} };
+      acoesI.append(bt);
+    }
+    corpo.append(acoesI, previa);
     lin.append(ck, corpo);
     cx.append(lin);
   });
@@ -580,6 +677,7 @@ function ceGerarPrompt() {
     try { matReg("cartoes", "prompt em lote para elevar ao padrão", itens.length + " cartões"); } catch (e) {}
   }
   $("cePrompt").value = cePedido.texto;
+  try { mostrarTamanho("cePromptTam", $("cePrompt").value); } catch (e) {}
   if (cePasso === 1) cePasso = 2;
   cePintar();
   try { $("ceColar").focus(); } catch (e) {}
@@ -613,16 +711,41 @@ async function ceColarDaArea() {
   }
 }
 
-function ceConferirColagem() {
+async function ceConferirColagem() {
   if (!cePedido) return;
-  const resposta = $("ceColar").value;
+  let resposta = $("ceColar").value;
   if (!resposta.trim()) { ceStatus(t("ce_colar_vazio"), "aviso"); uiAlert(t("ce_colar_vazio")); return; }
+  /* 1) as correções automáticas do painel antigo */
+  const auto = ceAutoCorrigir(resposta);
+  resposta = auto.texto;
+  /* 2) resposta SEM âncoras: se vieram exatamente tantos cartões quanto os marcados, dá para associar NA ORDEM — só com
+   *    a sua confirmação e com o antes/depois à vista (associar errado troca um cartão pelo de outro assunto) */
+  let semAncora = false;
+  if (!/^\s*@@\s*\d+\s*$/m.test(resposta)) {
+    let cards = [];
+    try { cards = parseText(resposta, []).cards; } catch (e) { cards = []; }
+    const n = cePedido.itens.length;
+    if (cards.length === n && n > 0) {
+      const ok = await uiConfirm(t("ce_sem_ancora_conf", { n }));
+      if (!ok) { ceStatus(t("ce_sem_ancora_recusou"), "aviso"); return; }
+      resposta = cards.map((c, k) => "@@ " + (k + 1) + "\n" + cardToLine(c)).join("\n\n");
+      semAncora = true;
+    } else if (cards.length) {
+      ceStatus(t("ce_sem_ancora_erro", { k: cards.length, n }), "aviso");
+      uiAlert(t("ce_sem_ancora_erro", { k: cards.length, n }));
+      return;
+    }
+  }
   ceConf = ceConferir(resposta, cePedido.itens, cePedido.blocos);
+  ceConf.autoAjustes = auto.ajustes;
+  ceConf.semAncora = semAncora;
   cePasso = 3;
   cePintarComparacao();
   cePintarRodape();
   const n = ceConf.itens.length;
-  ceStatus(ceConf.erros.length && !n ? t("ce_msg_conf_erro") : t("ce_msg_colou", { n }), ceConf.erros.length ? "aviso" : "ok");
+  ceStatus((ceConf.erros.length && !n ? t("ce_msg_conf_erro") : t("ce_msg_colou", { n }))
+    + (auto.ajustes.length ? " " + t("ce_auto_msg", { n: auto.ajustes.length }) : "")
+    + (semAncora ? " " + t("ce_sem_ancora_msg") : ""), ceConf.erros.length ? "aviso" : "ok");
   try { $("ceComparar").scrollIntoView(); } catch (e) {}
 }
 
@@ -747,6 +870,8 @@ if (typeof document !== "undefined" && $("btnCartElevar")) {
   if ($("ceEscopo")) $("ceEscopo").onchange = () => { if (!ceMudarFiltro("escopo", $("ceEscopo").value)) $("ceEscopo").value = ceEscopo; };
   if ($("ceBusca")) $("ceBusca").oninput = () => { if (!ceMudarFiltro("busca", $("ceBusca").value)) $("ceBusca").value = ceBusca; };
   if ($("ceCurto")) $("ceCurto").onchange = () => { if (!ceMudarFiltro("curto", $("ceCurto").checked)) $("ceCurto").checked = ceCurto; };
+  Object.keys(CE_ATALHOS).forEach((id) => { if ($(id)) $(id).onclick = () => { ceMarcarPor(CE_ATALHOS[id]); }; });
+  if ($("cePrompt")) $("cePrompt").oninput = () => { try { mostrarTamanho("cePromptTam", $("cePrompt").value); } catch (e) {} };
   if ($("btnCeFechar")) $("btnCeFechar").onclick = async () => {
     if (cePasso > 1 && !(await uiConfirm(t("ce_conf_fechar")))) return;
     $("dlgCartElevar").close();

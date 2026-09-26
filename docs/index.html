@@ -4233,6 +4233,10 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-v{opacity:.85}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 @media (max-width:760px){#dlgGerCartoes[open]{overflow:auto}.ger-grade{grid-template-columns:1fr;grid-template-rows:none}.ger-col{max-height:34vh}}
+.ce-atalhos{align-items:center;gap:6px;margin:6px 0}
+.ce-acoes-item{display:flex;gap:6px;margin-top:3px}
+.ce-ver{padding:1px 8px;font-size:10.5px}
+.ce-previa{margin-top:6px;max-width:100%}
 .ce-item{display:flex;gap:8px;align-items:flex-start;padding:6px 4px;border-bottom:1px solid var(--borda);font-size:13px;line-height:1.4;cursor:pointer}
 .ce-corpo{display:flex;flex-direction:column;flex:1}
 .ce-nota{font-weight:700;display:inline}
@@ -7376,12 +7380,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min" id="btnCeMostrarRev" data-i18n="ce_mostrar_rev" hidden></button>
         <span class="nota" id="ceSel"></span>
       </div>
+      <div class="qm-bts ce-atalhos" id="ceAtalhos">
+        <span class="nota" data-i18n="ce_at_rot"></span>
+        <button type="button" class="btn-min" id="btnCeAtTodos" data-i18n="ce_at_todos"></button>
+        <button type="button" class="btn-min" id="btnCeAtCurtos" data-i18n="ce_at_curtos"></button>
+        <button type="button" class="btn-min" id="btnCeAtSemResp" data-i18n="ce_at_semResp"></button>
+        <button type="button" class="btn-min" id="btnCeAtSemPerg" data-i18n="ce_at_semPerg"></button>
+        <button type="button" class="btn-min" id="btnCeAtLongos" data-i18n="ce_at_longos"></button>
+        <button type="button" class="btn-min" id="btnCeAtRisco" data-i18n="ce_at_risco"></button>
+        <button type="button" class="btn-min" id="btnCeAtRepetidos" data-i18n="ce_at_repetidos"></button>
+      </div>
       <div id="ceLista" class="cq-lista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnCeMais" data-i18n="ce_mais" hidden></button></div>
     </details>
     <div id="cePromptCx" hidden>
       <p class="nota" data-i18n="ce_prompt_rot"></p>
-      <textarea id="cePrompt" rows="4" readonly style="width:100%;box-sizing:border-box"></textarea>
+      <textarea id="cePrompt" rows="4" style="width:100%;box-sizing:border-box"></textarea>
+      <div id="cePromptTam" style="font-size:11.5px;margin-top:4px"></div>
       <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnCeCopiar" data-i18n="ce_copiar"></button></div>
     </div>
     <div id="ceColarCx" hidden>
