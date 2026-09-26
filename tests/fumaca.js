@@ -641,7 +641,7 @@ function rodar() {
     matCartoesSalvar, matCartoesVer, matEtiquetasTopico, matContarCartoes, parseAtual, gruposDuplicados, recortarDuplicados, renderRecortes,
     abrirFoco, fecharFoco, mostrarFoco, blocoMarcado, problemasNavegaveis,
     renderSugestoes, detectoresAtivos, resumoTexto, t, correcaoDeTudo, temLixoIA, corrigirLixoIA,
-    cartoesDependentes, MODOS, trocarModo, montarBarraModos, montarDiagnostico,
+    cartoesDependentes, cartaoLongo, limiteLongo, problemasDoTexto, MODOS, trocarModo, montarBarraModos, montarDiagnostico,
     lerEdital, priorizar, montarPlano, edPesosDosRamos, edAcharItemDoTopico, edTopicosPendentes, semanaAtual, semanasAte, edDetectores,
     temPesosIguais, ritmoDoPlano, agendar, edPintarRitmo,
     panoramaDisciplinas, lacunasCriticas, edMudarPeso, edTrocarVista, edPintarPainel, diagnosticoPlano,

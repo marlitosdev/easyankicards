@@ -782,7 +782,7 @@ function problemasDoTexto(raw, r) {
   const vistos = {};
   r.cards.forEach((c) => {
     const tam = (c.front + c.back).length;
-    if (tam > 220) {
+    if (cartaoLongo(c)) {
       // um cartão de 2.000 caracteres não vira dois de 1.000: vira uma dezena.
       // A sugestão acompanha o tamanho, senão a IA divide ao meio e para.
       add(c.line, t("crit_long_msg", { n: Math.max(2, Math.round(tam / 200)), t: tam }));
@@ -1463,7 +1463,10 @@ const RE_DEPENDENTE = [
   /* a segunda safra veio de um caso real que passou batido pela primeira:
    * "Qual alternativa indica... A alternativa correta é a D) ..." — nao cita
    * numero de questao nem "Letra X", mas e' o mesmo defeito */
-  /\bqual\s+(a\s+)?alternativa\b/i,
+  /* "Qual a alternativa ao pagamento...?" / "Qual a alternativa financeira...?" é português comum (caso real: dois
+   * cartões de denúncia espontânea sinalizados à toa). Só vale quando a "alternativa" é a de múltipla escolha: vem
+   * seguida do verbo de prova ("indica", "apresenta", "contém", "é"…). */
+  /\bqual\s+(a\s+)?alternativa\s+(indica|apresenta|cont[ée]m|traz|est[áa]|[ée]|mostra|cita|diz|expressa|corresponde|completa|preenche|define|descreve|representa|refere)(?![a-zà-ú])/i,
   /\balternativa\s+(correta|incorreta|verdadeira|errada|falsa)\b/i,
   /\b[ée]\s+a\s+[A-E]\)/i,
   /\bop[çc][ãa]o\s+correta\b/i,
@@ -1471,6 +1474,14 @@ const RE_DEPENDENTE = [
 
 /* Recebe o resultado do parse: so' o CARTAO importa. A explicacao pode
  * citar a prova por direito ("caiu na FGV 2024"); a pergunta, nao. */
+/* CARTÃO LONGO DEMAIS. O limite é 220 caracteres (pergunta + resposta). Num cartão de LACUNA, porém, a frente já traz a
+ * pergunta E a frase-resposta (o formato "pergunta? {{c1::resposta}}, explicação"), então o mesmo conteúdo conta duas
+ * vezes: o limite sobe para 320. Sem isso o app mandava dividir cartões de uma ideia só (caso real: cloze de ~230
+ * caracteres) e a IA, com razão, devolvia o cartão como estava — e o aviso nunca saía. */
+const LIM_LONGO = 220, LIM_LONGO_CLOZE = 320;
+function limiteLongo(c) { return /\{\{c\d+::/.test(String((c && c.front) || "")) ? LIM_LONGO_CLOZE : LIM_LONGO; }
+function cartaoLongo(c) { return !!c && (String(c.front || "") + String(c.back || "")).length > limiteLongo(c); }
+
 function cartoesDependentes(r) {
   return (r.cards || []).filter((c) => {
     /* o TITULO conta: "Metodos Preditivos — Gabarito da Questao" aparece no
