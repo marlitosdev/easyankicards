@@ -4076,6 +4076,51 @@ function leiGuardar(dados, gravar) {
   return r;
 }
 
+/* ---- a IDENTIDADE GUARDADA × a IDENTIDADE DO TEXTO ----
+ * Versões antigas batizaram leis pela linha errada (a Constituição inteira ficou como "Emenda Constitucional 106/2020").
+ * Um campo guardado que EXISTE e discorda do que o texto diz é divergência; campo vazio é falta de dado, não conflito. */
+const LEI_IDENT_RECIBO = "eac_lei_ident_recibo";
+function leiIdentidadeDivergente(l) {
+  const tx = String((l && l.texto) || "");
+  if (!tx.trim()) return null;
+  let x = null;
+  try { x = leiIdentificar(tx); } catch (e) {}
+  if (!x) return null;
+  const dig = (v) => String(v || "").replace(/\D/g, "").replace(/^0+/, "");
+  const esp = (v) => String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const diverge = (!!dig(l.numero) && dig(x.numero) !== dig(l.numero))
+    || (!!l.ano && !!x.ano && String(x.ano) !== String(l.ano))
+    || (!!esp(l.especie) && !!esp(x.especie) && esp(l.especie) !== esp(x.especie));
+  if (!diverge) return null;
+  return { de: { especie: l.especie || "", numero: l.numero || "", ano: l.ano || "" },
+    para: { especie: x.especie || "", numero: x.numero || "", ano: x.ano || "" } };
+}
+function leiIdentidadesDivergentes() {
+  return leisLista().map((l) => {
+    const d = leiIdentidadeDivergente(l);
+    return d ? { id: l.id, nome: l.nome, de: d.de, para: d.para } : null;
+  }).filter(Boolean);
+}
+/* corrige TODAS as divergentes (só os campos especie/numero/ano; o nome, o id, o texto e os vínculos não mudam) e guarda o
+ * recibo do que havia antes, para desfazer */
+function leiCorrigirIdentidades() {
+  const lista = leiIdentidadesDivergentes();
+  const recibo = lista.map((x) => ({ id: x.id, de: x.de }));
+  lista.forEach((x) => leiGuardar({ id: x.id, especie: x.para.especie, numero: x.para.numero, ano: x.para.ano }));
+  try { localStorage.setItem(LEI_IDENT_RECIBO, JSON.stringify(recibo)); } catch (e) {}
+  return lista;
+}
+function leiIdentidadesRecibo() {
+  try { const r = JSON.parse(localStorage.getItem(LEI_IDENT_RECIBO) || "[]"); return Array.isArray(r) ? r : []; } catch (e) { return []; }
+}
+function leiIdentidadesDesfazer() {
+  const recibo = leiIdentidadesRecibo();
+  let n = 0;
+  recibo.forEach((x) => { if (leiDe(x.id)) { leiGuardar({ id: x.id, especie: x.de.especie, numero: x.de.numero, ano: x.de.ano }); n++; } });
+  try { localStorage.removeItem(LEI_IDENT_RECIBO); } catch (e) {}
+  return n;
+}
+
 function leiApagar(id) {
   const tudo = leisLerTudo();
   if (!tudo[String(id)]) return false;

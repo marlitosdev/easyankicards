@@ -1395,6 +1395,28 @@ async function testes() {
       a.$("btnLeiLogVincTexto").onclick();
       ok(a.$("leiLogTexto").value.indexOf("==== TEXTO [") >= 0, "R44h o botao '... com o texto das leis' inclui o texto");
       ok(a.leiRelatorioVinculos.length === 1 || true, "R44i (existe)");
+      /* R45: corrigir a identificacao guardada das leis */
+      const errada = a.leiDe(cfErrada.id);
+      const dv = a.leiIdentidadeDivergente(errada);
+      ok(dv && dv.de.especie === "Emenda Constitucional" && dv.de.numero === "106" && dv.de.ano === "2020" && dv.para.especie === "Constituição" && dv.para.numero === "" && dv.para.ano === "1988", "R45 a Constituicao gravada como 'Emenda 106/2020' e' divergente: de 106/2020 para Constituicao/1988: " + JSON.stringify(dv));
+      ok(a.leiIdentidadeDivergente(a.leiDe(ec.id)) === null && a.leiIdentidadeDivergente({ texto: EC, especie: "Emenda Constitucional", numero: "132", ano: "2023" }) === null && a.leiIdentidadeDivergente({ texto: "", numero: "9" }) === null && a.leiIdentidadeDivergente({ texto: "sem cabecalho nenhum" , numero: "9" }) === null, "R45a campo vazio, campo igual, sem texto e texto sem cabecalho: nao sao divergencia");
+      ok(a.leiIdentidadeDivergente({ texto: EC, especie: "Lei", numero: "132", ano: "2023" }) !== null && a.leiIdentidadeDivergente({ texto: EC, especie: "", numero: "", ano: "1999" }) !== null && a.leiIdentidadeDivergente({ texto: EC, especie: "", numero: "77", ano: "" }) !== null, "R45b divergem tambem: so' a especie errada, so' o ano errado, so' o numero errado");
+      ok(a.leiIdentidadesDivergentes().length === 1 && a.leiIdentidadesDivergentes()[0].id === cfErrada.id, "R45c a lista das divergentes na biblioteca: so' a errada");
+      a.$("dlgLeiLog").open = true;
+      const antes = JSON.stringify(a.leiDe(cfErrada.id));
+      ok((await a.leiIdentidadeTela(async () => false)).length === 0 && JSON.stringify(a.leiDe(cfErrada.id)) === antes && a.leiIdentidadesRecibo().length === 0, "R45d recusando a pergunta, NADA muda");
+      let perguntou = "";
+      const rr = await a.leiIdentidadeTela(async (txt) => { perguntou = txt; return true; });
+      const dep = a.leiDe(cfErrada.id);
+      ok(rr.length === 1 && dep.especie === "Constituição" && dep.numero === "" && dep.ano === "1988" && dep.nome === errada.nome && dep.texto === errada.texto && JSON.stringify(dep.topicos) === JSON.stringify(errada.topicos), "R45e corrigiu so' especie/numero/ano: nome, texto e vinculos intactos");
+      ok(/1 lei\(s\)/.test(perguntou) && perguntou.indexOf("CONSTITUIÇÃO DA REPÚBLICA") >= 0 && perguntou.indexOf("Emenda Constitucional 106 2020 → Constituição 1988") >= 0, "R45f a pergunta lista o que vai mudar (de -> para): " + perguntou);
+      ok(/Corrigi 1 lei/.test(a.$("leiLogTexto").value) && a.leiIdentidadesRecibo().length === 1 && a.$("btnLeiLogIdentDesfazer").hidden === false, "R45g avisa o que fez, guarda o recibo e mostra o 'desfazer'");
+      ok((a.leiRelatorioVinculos().match(/⚠ DIVERGE/g) || []).length === 0, "R45h o relatorio de vinculos deixa de marcar a divergencia");
+      ok((await a.leiIdentidadeTela(async () => true)).length === 0 && /Nenhuma lei/.test(a.$("leiLogTexto").value), "R45i sem divergencia: diz que nao ha nada a corrigir (nem pergunta)");
+      ok(a.leiIdentidadeDesfazerTela() === 1 && a.leiDe(cfErrada.id).especie === "Emenda Constitucional" && a.leiDe(cfErrada.id).numero === "106" && a.leiDe(cfErrada.id).ano === "2020" && a.leiIdentidadesRecibo().length === 0 && a.$("btnLeiLogIdentDesfazer").hidden === true && /Desfeito: 1 lei/.test(a.$("leiLogTexto").value), "R45j desfazer devolve os campos de antes, apaga o recibo e esconde o botao");
+      ok(a.leiIdentidadeDesfazerTela() === 0, "R45k desfazer sem recibo nao faz nada");
+      const html45 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/id="btnLeiLogIdent"/.test(html45) && /id="btnLeiLogIdentDesfazer"[^>]*hidden/.test(html45), "R45l os botoes estao no log do leitor (o desfazer nasce escondido)");
       const html44 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
       ok(/id="btnLeiLogVinc"/.test(html44) && /id="btnLeiLogVincTexto"/.test(html44), "R44j os dois botoes estao no log do leitor");
       const html42 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
