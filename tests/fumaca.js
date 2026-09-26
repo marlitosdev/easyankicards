@@ -835,7 +835,7 @@ function rodar() {
     gerPastaTeste: (p) => { gerPasta = p; },
     ceAvaliar, ceNivel, ceChecar, ceNormalizarResposta, ceMarcarRevisados, ceMarcarTentativa, ceRevisado, ceRevLer, ceRevGravar, ceRevLimpar, ceProximaRodada, ceDescartar, ceTrocarSelecao, ceColarDaArea, ceClassificar, CE_REQ, CE_ART_RE,
     ceDefeitos, ceNota, ceAbaixo, ceTagsUnicas, ceLerAbaixo, ceFontes, ceMontarPrompt, ceSubstituir, ceConferir,
-    ceTrocarObjetivo, ceMudarFiltro, ceEscopoAtual: () => ceEscopo, ceBuscaAtual: () => ceBusca, ceCurtoAtual: () => ceCurto, CE_ESCOPOS, ceObjetivoAtual: () => ceObjetivo, CE_OBJETIVOS, CE_ALVO, ceServeAoObjetivo, ceChaveCartao, ceAplicarLote, ceRecibo, ceDesfazerLote, ceCalcular, cePintar, ceMarcarPiores, ceGerarPrompt, ceConferirColagem, ceAplicar, ceDesfazer, ceAbrir,
+    ceTrocarObjetivo, ceMarcarPor, ceAutoCorrigir, ceCorrigirBloco, CE_CRIT, CE_ATALHOS, CE_AUTO, ceMudarFiltro, ceEscopoAtual: () => ceEscopo, ceBuscaAtual: () => ceBusca, ceCurtoAtual: () => ceCurto, CE_ESCOPOS, ceObjetivoAtual: () => ceObjetivo, CE_OBJETIVOS, CE_ALVO, ceServeAoObjetivo, ceChaveCartao, ceAplicarLote, ceRecibo, ceDesfazerLote, ceCalcular, cePintar, ceMarcarPiores, ceGerarPrompt, ceConferirColagem, ceAplicar, ceDesfazer, ceAbrir,
     CE_LIM, cePassoAtual: () => cePasso, ceRodadaAtual: () => ceRodada, ceStatsAtual: () => ceStats, ceNotasAtual: () => ceNotas, ceSelAtual: () => ceSel, ceConfAtual: () => ceConf, cePedidoAtual: () => cePedido,
     cqResolverLote, cqDesfazerLote, cqRecibo, cqHash, cqCarga, cqAcaoDesfazer, cqOcupadoAtual: () => cqOcupado, lixJogarLote, lixRemoverIds,
     CQ_BANCADA, cqEhBancada, cqTexto, cqGravar, cqViaLixeira, cqVersaoBancada,
