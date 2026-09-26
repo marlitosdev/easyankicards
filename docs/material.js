@@ -3634,7 +3634,12 @@ function mcEstudarDireto(disciplina, topico) {
 }
 
 function mcEstudoIniciar() {
-  if ($("btnMcEstudar")) $("btnMcEstudar").onclick = () => mcEstudarAbrir(0);
+  /* "estudar em tela" leva ao player da biblioteca (o leitor antigo só resta na conferência dos cartões colados) */
+  if ($("btnMcEstudar")) $("btnMcEstudar").onclick = () => {
+    if (!matAtual || typeof estcEstudarTopico !== "function") { mcEstudarAbrir(0); return; }
+    $("dlgMatCartoes").close();
+    estcEstudarTopico(matAtual.disciplina, matAtual.topico);
+  };
   if ($("btnMcEstAnt")) $("btnMcEstAnt").onclick = () => mcEstAndar(-1);
   if ($("btnMcEstProx")) $("btnMcEstProx").onclick = () => mcEstAndar(1);
   if ($("btnMcEstVirar")) $("btnMcEstVirar").onclick = () => {

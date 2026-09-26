@@ -2389,6 +2389,11 @@ async function testes() {
       ok(a.estcMigrarAgenda(idsA, idsB) === true, "R65n a migracao acontece");
       const depois = JSON.parse(a.lojaLer(a.ESTC_CH_REGS));
       ok(depois[idsB[0]] && depois[idsB[0]].iv === 7 && !depois[idsA[0]], "R65o o historico (intervalo de 7 dias) passou para o cartao editado e o registro antigo saiu");
+      /* o "estudar em tela" do painel antigo de cartoes leva ao player novo */
+      a.mcApontarTopico(D, T); a.matCartoesAbrir({ semGravarResumo: true });
+      a.$("btnMcEstudar").onclick();
+      ok(a.$("dlgGerEstudo").open === true && a.$("dlgMcEstudo").open !== true && a.$("dlgMatCartoes").open !== true, "R65p o botao 'estudar em tela' do painel antigo abre o PLAYER da biblioteca, nao o leitor antigo");
+      a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
     }
 
     /* R39: exigir a trilha completa para dar o ramo como estudado */
