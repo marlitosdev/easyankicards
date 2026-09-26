@@ -23,6 +23,7 @@ const GER_CHAVE_AGRUPAR = "eac_ger_agrupar";
 /* A explicação de CADA controle das duas janelas (o gerenciador e a de nova pasta): id → chave do texto.
  * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
 const GER_DICAS = {
+  btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
   btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
@@ -543,7 +544,7 @@ function gerPintarArvore() {
   cx.innerHTML = "";
   cx.classList.toggle("ger-modo-edital", gerAgrupar === "edital");
   const tudo = gerEl("div", "ger-pasta" + (!gerPasta ? " ger-atual" : ""), t("ger_todos", { n: gerNotas.length }));
-  tudo.onclick = () => { gerPasta = null; gerRefiltrar(); gerPintar(); };
+  tudo.onclick = () => { gerPasta = null; gerRefiltrar(); gerPintar(); if (gerEhCelular()) gerVista("cartoes"); };
   cx.append(tudo);
   if (gerAgrupar === "edital") {
     const m = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas));
@@ -596,7 +597,7 @@ function gerPintarLista() {
     onde.append(ceSelo(ceNivel(n.card)), document.createTextNode(" " + [n.disciplina, n.topico].filter(Boolean).join(" · ")));
     corpo.append(onde);
     lin.append(ck, corpo);
-    lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); };
+    lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); if (gerEhCelular()) gerVista("previa"); };
     lin.draggable = true;
     lin.title = t("ger_tip_linha");
     ck.title = t("ger_tip_caixa");
@@ -724,7 +725,35 @@ function gerPintarDestinos() {
   });
 }
 
-function gerPintar() { gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); gerPintarAcoes(); }
+/* ---- AS ABAS DO TELEFONE (pastas / cartões / prévia): só valem em tela estreita; em tela larga as três colunas seguem lado a lado ---- */
+let gerVistaAtual = "pastas", gerVistaPasta = "null", gerCelularForcado = null;
+function gerEhCelular() {
+  if (gerCelularForcado !== null) return gerCelularForcado;
+  try { return !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width:760px)").matches); } catch (e) { return false; }
+}
+function gerVista(v) {
+  if (["pastas", "cartoes", "previa"].indexOf(v) < 0) return gerVistaAtual;
+  gerVistaAtual = v;
+  const dlg = $("dlgGerCartoes");
+  if (dlg && dlg.classList) {
+    ["pastas", "cartoes", "previa"].forEach((x) => dlg.classList.toggle("ger-v-" + x, x === v));
+  }
+  [["btnGerAbaPastas", "pastas"], ["btnGerAbaCartoes", "cartoes"], ["btnGerAbaPrevia", "previa"]].forEach(([id, x]) => {
+    const b = $(id); if (b) b.setAttribute("aria-selected", x === v ? "true" : "false");
+  });
+  return v;
+}
+/* escolher uma pasta leva aos cartões (só no telefone); tocar num cartão leva à prévia (no clique do próprio cartão) */
+function gerVistaDecidir() {
+  const ab = $("btnGerAbaCartoes");
+  if (ab) ab.textContent = t("ger_aba_cartoes", { n: gerVis.length });
+  const chave = JSON.stringify(gerPasta || null);
+  const mudouPasta = chave !== gerVistaPasta;
+  gerVistaPasta = chave;
+  if (!gerEhCelular()) return;
+  if (mudouPasta && gerPasta) gerVista("cartoes");
+}
+function gerPintar() { gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); gerPintarAcoes(); gerVistaDecidir(); }
 
 function gerMarcados() { return [...gerSel].sort((a, b) => a - b).map((pos) => gerNotas[gerVis[pos]]).filter(Boolean); }
 
@@ -1167,6 +1196,8 @@ function gerAbrir() {
   $("gerAgrupar").value = gerAgrupar;
   $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
   gerFecharDestinos();
+  gerVistaPasta = "null";
+  gerVista("pastas");
   gerCalcular(); gerAbrirRaizes(); gerPintarDestinos(); gerPintar();
   gerAplicarTamanho(gerGrandeLer());
   dicasDosBotoes(GER_DICAS);
@@ -1179,6 +1210,10 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   if ($("btnBancaGer")) $("btnBancaGer").onclick = gerAbrir;
   dicasDosBotoes({ btnGerCartoes: "ger_btn_aj", btnBancaGer: "ger_btn_aj" });
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
+  $("btnGerX").onclick = () => $("dlgGerCartoes").close();
+  $("btnGerAbaPastas").onclick = () => gerVista("pastas");
+  $("btnGerAbaCartoes").onclick = () => gerVista("cartoes");
+  $("btnGerAbaPrevia").onclick = () => gerVista("previa");
   $("gerBusca").oninput = () => { gerRefiltrar(); gerPintar(); };
   $("gerFiltro").onchange = () => { gerRefiltrar(); gerPintar(); };
   $("btnGerMais").onclick = () => { gerMostrando += GER_LIM.visiveis; gerPintarLista(); flashBotao($("btnGerMais")); };

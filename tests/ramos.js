@@ -2000,6 +2000,47 @@ async function testes() {
       ok(["cm-rodape", "cm-rodape-esq", "cm-passos", "cm-passo", "cm-passo-opc", "cm-passo-fim", "cm-n", "cm-seta", "cm-proximo", "cm-dica"].every((c) => css.indexOf("." + c + "{") >= 0), "R55h todas as classes do rodape tem regra de CSS");
     }
 
+    /* R56: a biblioteca de cartoes no CELULAR — tela cheia, X, e tres abas (pastas / cartoes / previa) */
+    {
+      const { a } = MT();
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      const ini = html.indexOf('<dialog id="dlgGerCartoes"');
+      const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
+      ok(/class="ui-modal diag-modal ger-v-pastas"/.test(dlg.slice(0, 120)) && dlg.indexOf('id="btnGerX"') > 0 && dlg.indexOf('id="btnGerX"') < dlg.indexOf('class="ger-abas"'), "R56 a biblioteca nasce na aba 'pastas' e tem o X no cabecalho (antes das abas)");
+      ok(dlg.indexOf('id="btnGerAbaPastas"') < dlg.indexOf('id="btnGerAbaCartoes"') && dlg.indexOf('id="btnGerAbaCartoes"') < dlg.indexOf('id="btnGerAbaPrevia"') && /ger-col ger-col-pastas/.test(dlg) && /ger-col ger-col-cartoes/.test(dlg) && /ger-col ger-col-previa/.test(dlg), "R56a tres abas na ordem pastas, cartoes, previa; cada coluna sabe de qual aba e'");
+      ok(/@media \(max-width:760px\)\{\s*#dlgGerCartoes\[open\]\{width:100vw!important;max-width:none!important;min-width:0!important;height:100vh;height:100dvh/.test(html) && /#dlgGerCartoes\.ger-v-cartoes \.ger-col-cartoes/.test(html) && !/\.ger-col\{max-height:34vh\}/.test(html), "R56b no celular a caixa e' a TELA INTEIRA e cada aba mostra so' a sua coluna (a rolagem-dentro-de-rolagem de 34vh saiu)");
+      ok(["ger-cab-acoes", "ger-abas", "ger-aba", "ger-col-pastas", "ger-col-cartoes", "ger-col-previa"].every((c) => html.indexOf("." + c) >= 0), "R56c as classes novas tem CSS");
+      /* celular: escolher pasta -> cartoes; tocar num cartao -> previa; abas manuais */
+      a.gerCelularForcar(true);
+      a.gerAbrir();
+      ok(a.gerVistaAtualLer() === "pastas" && a.$("dlgGerCartoes").className.indexOf("ger-v-pastas") >= 0 && a.$("btnGerAbaPastas").getAttribute("aria-selected") === "true" && /Cartões \(\d+\)/.test(a.$("btnGerAbaCartoes").textContent), "R56d ao abrir no celular: aba 'pastas' ativa, e a aba dos cartoes mostra a contagem: " + a.$("btnGerAbaCartoes").textContent);
+      const pastas = achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta"));
+      pastas[1].onclick();
+      ok(a.gerVistaAtualLer() === "cartoes" && a.$("dlgGerCartoes").className.indexOf("ger-v-cartoes") >= 0 && a.$("dlgGerCartoes").className.indexOf("ger-v-pastas") < 0 && a.$("btnGerAbaCartoes").getAttribute("aria-selected") === "true" && a.$("btnGerAbaPastas").getAttribute("aria-selected") === "false", "R56e escolher uma pasta leva a aba 'cartoes' (e so' ela fica marcada)");
+      const itens = achar(a.$("gerLista"), (e) => cls(e, "ger-item"));
+      ok(itens.length > 0, "R56e0 ha cartoes na pasta escolhida");
+      itens[0].onclick();
+      ok(a.gerVistaAtualLer() === "previa" && a.$("dlgGerCartoes").className.indexOf("ger-v-previa") >= 0, "R56f tocar num cartao leva a aba 'previa'");
+      a.$("btnGerAbaPastas").onclick();
+      ok(a.gerVistaAtualLer() === "pastas", "R56g as abas tambem se trocam a mao");
+      a.$("btnGerAbaCartoes").onclick();
+      a.$("btnGerAbaPrevia").onclick();
+      ok(a.gerVistaAtualLer() === "previa" && a.gerVista("qualquer") === "previa", "R56h aba desconhecida nao muda nada");
+      a.gerVista("pastas");
+      a.$("gerArvore") && achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta"))[0].onclick();
+      ok(a.gerVistaAtualLer() === "cartoes", "R56i 'Todos os cartoes' tambem leva a aba 'cartoes'");
+      a.$("btnGerX").onclick();
+      ok(a.$("dlgGerCartoes").open === false, "R56j o X fecha a biblioteca");
+      /* tela larga: as abas nao mudam nada sozinhas */
+      a.gerCelularForcar(false);
+      a.gerAbrir();
+      achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta"))[1].onclick();
+      achar(a.$("gerLista"), (e) => cls(e, "ger-item"))[0].onclick();
+      ok(a.gerVistaAtualLer() === "pastas", "R56k em tela larga escolher pasta ou cartao NAO troca de aba (as tres colunas ja' estao a' vista)");
+      a.$("btnGerX").onclick();
+      a.gerCelularForcar(null);
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

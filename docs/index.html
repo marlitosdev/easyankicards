@@ -4277,7 +4277,31 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-f{font-weight:600}
 .ger-v{opacity:.85}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
-@media (max-width:760px){#dlgGerCartoes[open]{overflow:auto}.ger-grade{grid-template-columns:1fr;grid-template-rows:none}.ger-col{max-height:34vh}}
+.ger-cab-acoes{display:inline-flex;align-items:center;gap:6px}
+.ger-abas{display:none}
+.ger-aba{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 0;text-align:center;padding:9px 6px;font-size:13px;font-weight:700;
+  border-bottom:3px solid transparent;color:var(--sutil)}
+.ger-aba[aria-selected="true"]{color:var(--texto);border-bottom-color:var(--acao)}
+.ger-aba:focus-visible{outline:2px solid var(--acao);outline-offset:-2px}
+/* ---- BIBLIOTECA DE CARTÕES NO TELEFONE: tela inteira, uma aba por vez ----
+ * Três colunas empilhadas de 34vh cada, dentro de uma caixa que também rolava, davam rolagem dentro de rolagem e
+ * pedaços de cada coluna cortados. Agora a caixa é a tela; cada aba tem a altura toda e rola sozinha. */
+@media (max-width:760px){
+  #dlgGerCartoes[open]{width:100vw!important;max-width:none!important;min-width:0!important;height:100vh;height:100dvh;
+    max-height:100dvh!important;margin:0!important;border-radius:0!important;border:0!important;resize:none;overflow:hidden;
+    padding:calc(6px + env(safe-area-inset-top,0px)) 12px calc(6px + env(safe-area-inset-bottom,0px))!important}
+  #dlgGerCartoes #btnGerAmpliar{display:none}
+  #dlgGerCartoes .ger-abas{display:flex;border-bottom:1px solid var(--borda);margin:2px 0 4px}
+  #dlgGerCartoes .ger-grade{display:block;flex:1 1 auto;min-height:0!important;overflow:hidden}
+  #dlgGerCartoes .ger-col{display:none;height:100%;max-height:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  #dlgGerCartoes.ger-v-pastas .ger-col-pastas,
+  #dlgGerCartoes.ger-v-cartoes .ger-col-cartoes,
+  #dlgGerCartoes.ger-v-previa .ger-col-previa{display:block}
+  #dlgGerCartoes .ger-barra #gerBusca{flex:1 1 100%;min-width:0}
+  #dlgGerCartoes .ger-como{margin:2px 0}
+  #dlgGerCartoes .ger-item{padding:10px 6px}
+  #dlgGerCartoes .ger-pasta{padding:9px 6px}
+}
 .ce-atalhos{align-items:center;gap:6px;margin:6px 0}
 .ce-acoes-item{display:flex;gap:6px;margin-top:3px}
 .ce-ver{padding:1px 8px;font-size:10.5px}
@@ -7550,10 +7574,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
-<dialog id="dlgGerCartoes" class="ui-modal diag-modal">
+<dialog id="dlgGerCartoes" class="ui-modal diag-modal ger-v-pastas">
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
-    <button type="button" class="btn-min" id="btnGerAmpliar" aria-pressed="false"></button>
+    <span class="ger-cab-acoes">
+      <button type="button" class="btn-min" id="btnGerAmpliar" aria-pressed="false"></button>
+      <!-- O X, sempre no canto superior direito (no telefone o "Fechar" do rodapé fica longe do polegar e do olho) -->
+      <button type="button" class="qs-x" id="btnGerX" aria-label="Fechar">✕</button>
+    </span>
+  </div>
+  <!-- NO TELEFONE, TRÊS ABAS EM VEZ DE TRÊS COLUNAS: pastas → cartões → prévia, uma por vez, na tela inteira. Escolher uma
+       pasta leva aos cartões; escolher um cartão leva à prévia. Em tela larga as abas nem aparecem (as três colunas ficam
+       lado a lado, como sempre). -->
+  <div class="ger-abas" role="tablist">
+    <button type="button" class="ger-aba" id="btnGerAbaPastas" role="tab" data-i18n="ger_aba_pastas"></button>
+    <button type="button" class="ger-aba" id="btnGerAbaCartoes" role="tab"></button>
+    <button type="button" class="ger-aba" id="btnGerAbaPrevia" role="tab" data-i18n="ger_aba_previa"></button>
   </div>
   <details class="ger-como"><summary data-i18n="ger_como"></summary><p class="nota" data-i18n="ger_ajuda"></p></details>
   <div class="ger-barra">
@@ -7570,7 +7606,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="nota" id="gerResumo"></span>
   </div>
   <div class="ger-grade">
-    <div class="ger-col">
+    <div class="ger-col ger-col-pastas">
       <div class="ger-ferr">
         <button type="button" class="btn-min btn-min-ok" id="btnGerNovaPasta" data-i18n="ger_nova_pasta"></button>
         <select id="gerAgrupar" class="ger-agrupar">
@@ -7580,7 +7616,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       </div>
       <div id="gerArvore"></div>
     </div>
-    <div class="ger-col">
+    <div class="ger-col ger-col-cartoes">
       <div class="ger-ferr">
         <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
         <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
@@ -7592,7 +7628,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
     </div>
-    <div class="ger-col">
+    <div class="ger-col ger-col-previa">
       <div class="ger-pre-acoes" id="gerPreAcoes" hidden>
         <button type="button" class="btn-min" id="btnGerEditar" data-i18n="ger_editar" disabled></button>
         <button type="button" class="btn-min btn-min-perigo" id="btnGerPreApagar" data-i18n="ger_lixeira" disabled></button>
