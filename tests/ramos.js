@@ -1568,6 +1568,7 @@ async function testes() {
       const l145 = a.leiLacunasDoBloco(b145.corpo, art145.texto);
       ok(l145.casou && l145.lacunas.length === 1 && l145.lacunas[0].descricao === "caput" && l145.semMarcador.length === 1 && l145.semMarcador[0].descricao === "§§ 1º e 2º", "R47i o que fica entre o caput omitido e o § 3º escrito, sem marca propria, vai para 'semMarcador' (§§ 1º e 2º): " + JSON.stringify([l145.lacunas.map((x) => x.descricao), l145.semMarcador.map((x) => x.descricao)]));
       ok(a.leiDescreverLacuna([{ chave: "P1", tipo: "paragrafo", rotulo: "§ 1º", nivel: 1 }]) === "§ 1º" && a.leiDescreverLacuna([{ chave: "II", tipo: "inciso", rotulo: "II -", nivel: 2 }, { chave: "III", tipo: "inciso", rotulo: "III -", nivel: 2 }]) === "II e III" && a.leiDescreverLacuna([{ chave: "caput", tipo: "caput", rotulo: "", nivel: 0 }, { chave: "I", tipo: "inciso", rotulo: "I -", nivel: 2 }, { chave: "I>a", tipo: "alinea", rotulo: "a)", nivel: 3 }]) === "caput, I", "R47j a descricao: § singular, incisos 'II e III', o filho ja' esta' dentro do pai");
+      ok(a.leiDescreverLacuna([{ chave: "I", tipo: "inciso", rotulo: "I –", nivel: 2 }, { chave: "II", tipo: "inciso", rotulo: "II –", nivel: 2 }, { chave: "III", tipo: "inciso", rotulo: "III —", nivel: 2 }]) === "I a III", "R47j0 o travessao (– e —) do CTN tambem sai do rotulo dos incisos");
       /* casos de borda das lacunas, com blocos escritos a mao */
       const bl = (...linhas) => linhas.join(NL);
       /* (1) dispositivo omitido COM filhos: "§ 2º ....." leva junto os incisos (menos o que a emenda escreve) */
@@ -1623,6 +1624,16 @@ async function testes() {
       ok(a.leiDe(ec.id).alvos["Constituição Federal"] === cf2.id && a.leiAlvoCtxAtual().porCurto["Constituição Federal"].escolhida.id === cf2.id && a.leiAlvoCtxAtual().porCurto["Constituição Federal"].decidida === true && /Escolha sua/.test(a.$("leiFaixaAlvo").textContent), "R47u escolher outra lei: guarda em l.alvos da emenda, a faixa passa a dizer 'Escolha sua' e a leitura usa a escolhida");
       const idB = Object.keys(a.leiLacunasRegAtual()).find((k) => a.leiLacunasRegAtual()[k].num === "43" && a.leiLacunasRegAtual()[k].lacuna.descricao === "§§ 1º a 3º");
       ok(!!idB && a.leiLacunasRegAtual()[idB].leiAlvoId === cf2.id, "R47v os chips passam a apontar para a lei ESCOLHIDA");
+      /* R53: o ADCT sozinho e' reconhecido pelo TEXTO (menu do site antes, linha-titulo depois) */
+      const ADCTSITE = ["Pular para o conteúdo", "Senado Federal", "Acessibilidade", "[Detalhes da Norma]", "Este texto não substitui o original publicado no Diário Oficial.", "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS", "", "Art. 1º O Presidente da República, o Presidente do Supremo Tribunal Federal e os membros do Congresso Nacional prestarão o compromisso.", "Art. 124. Lei complementar estabelecerá a transição."].join(NL);
+      const idAdct = a.leiIdentificar(ADCTSITE);
+      ok(!!idAdct && idAdct.especie === "ADCT" && idAdct.curto === "ADCT" && idAdct.ano === "1988" && idAdct.numero === "", "R53 texto do ADCT colado do site (com o menu antes) e' identificado como ADCT: " + JSON.stringify(idAdct));
+      ok(a.leiIdentificar(CF).especie === "Constituição" && a.leiIdentificar(["Art. 1º Texto.", "Segundo o ato das disposições constitucionais transitórias, algo ocorre.", "Art. 2º Outro."].join(NL)) === null && a.leiIdentificar(["Art. 1º Texto.", "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS art. 5º dispõe", "Art. 2º Outro."].join(NL)) === null, "R53a a Constituicao (que traz o titulo do ADCT como divisao) continua Constituicao; mencao no meio de linha nao e' titulo");
+      const adctSem = a.leiGuardar({ nome: "Lei sem nome util", texto: ADCTSITE, topicos: [] });
+      const cAd = a.leiAlvosCandidatos({ curto: "ADCT" }, [a.leiDe(adctSem.id), a.leiDe(cf.id)]);
+      ok(cAd.length === 2 && cAd[0].id === adctSem.id && cAd[0].confianca === "alta" && /lei separada do ADCT/.test(cAd[0].motivo), "R53b o ADCT e' achado pelo TEXTO mesmo com um nome que nao diz ADCT (alta, antes da Constituicao)");
+      ok(/^Art\. 124\./.test(a.leiArtigoDoAlvo(a.leiDe(adctSem.id), "ADCT", "124").texto), "R53c e o artigo 124 dele e' achado (lei separada vale toda)");
+      a.leiApagar(adctSem.id);
       /* R48: o caminho de volta — a lei ALTERADA mostra por quem foi alterada */
       const rec = a.leiAlteracoesRecebidas(a.leiDe(cf.id));
       ok(Object.keys(rec).sort().join() === "adct|124,corpo|145,corpo|43" && rec["corpo|43"][0].id === ec.id && rec["corpo|43"][0].rotulo === "Art. 1º" && rec["corpo|43"][0].num === "1" && rec["adct|124"][0].rotulo === "Art. 2º" && rec["adct|124"][0].num === "2", "R48 a Constituicao sabe quem a altera: corpo art. 43 e 145 (pelo art. 1º da emenda) e ADCT art. 124 (pelo art. 2º): " + Object.keys(rec).sort().join());
@@ -1788,6 +1799,168 @@ async function testes() {
       const chave3 = a.matChave("Direito", "Lei 14.133/2021");
       a.leiLigar(cf.id, chave3); a.leiLigar(ec.id, chave3);
       ok(a.leiDoTopicoAtual(chave3).id === cf.id, "R50d topico que cita OUTRA norma (Lei 14.133/2021), com nenhuma das duas batendo: fica a primeira");
+    }
+
+    /* R51: META EM RAMOS ESCOLHIDA ("quero N por semana") */
+    {
+      const { a, ed } = MT();
+      const HOJE = "2026-09-24";
+      const hojeReal = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+      const r0 = a.lerEdital(ed.texto);
+      const plano = (feitos) => a.montarPlano(r0, { horas: 20, prova: "2027-06-01", feitos: feitos || {}, fatores: null, acertos: null });
+      const pl0 = plano();
+      const ch = pl0.itens.find((i) => i.nome === "Lei 14.133").chave;
+      const M2 = a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: 2 });
+      ok(M2.n === 2 && M2.pendentes === 2 && M2.sobra === 1 && M2.maxRamos === 2 && M2.cumprida === false && M2.ramos.map((x) => x.nome).join("|") === "Modalidades|Fase preparatória", "R51 com meta de 2 ramos: os 2 mais relevantes, o 3o sobra: " + JSON.stringify([M2.n, M2.sobra, M2.ramos.map((x) => x.nome)]));
+      const dEst = [{ d: HOJE, c: ch, a: "feito", rm: [{ id: "modalidades" }] }];
+      const pE = plano({ [ch + "›#modalidades"]: { e: "feito", d: HOJE } });
+      const Mc = a.edMetaDeRamos(pE, dEst, { hoje: HOJE, maxRamos: 1 });
+      ok(Mc.n === 1 && Mc.feitos === 1 && Mc.pendentes === 0 && Mc.sobra === 2 && Mc.cumprida === true, "R51a meta de 1 e 1 ja' estudado: cumprida, nenhum pendente entra: " + JSON.stringify([Mc.n, Mc.pendentes, Mc.cumprida]));
+      const Md = a.edMetaDeRamos(pE, dEst, { hoje: HOJE, maxRamos: 2 });
+      ok(Md.n === 2 && Md.feitos === 1 && Md.pendentes === 1 && Md.cumprida === false, "R51b meta de 2 com 1 estudado: entra 1 pendente (o estudado conta na meta)");
+      ok(a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: 10 }).n === 3 && a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: 3 }).sobra === 0, "R51c meta maior que o que existe: nada muda");
+      const m1 = M2.ramos[0].minutos;
+      ok(a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: 3, minutos: m1 }).n === 1, "R51d o TEMPO continua valendo: meta de 3 ramos mas so' cabe 1 no tempo da semana");
+      ok(a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: -3 }).n === 3 && a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: "abc" }).n === 3 && a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: 0 }).maxRamos === 0 && a.edMetaDeRamos(pl0, [], { hoje: HOJE, maxRamos: 2.9 }).n === 2, "R51e meta invalida, negativa ou zero = so' o tempo decide; 2,9 vira 2");
+      const Mp = a.edMetaDeRamos(pl0, [{ d: HOJE, c: ch, a: "feito", rp: [{ id: "contratos" }] }], { hoje: HOJE, maxRamos: 1 });
+      ok(Mp.parciais === 1 && Mp.n === 1 && Mp.cumprida === false, "R51f um ramo PARCIAL ocupa uma vaga da meta mas nao a cumpre");
+      /* guardar a escolha */
+      const G = a.edMetaRamosSalvar, L = a.edMetaRamosLer;
+      ok(L("x") === 0 && G("x", 5) === 5 && L("x") === 5 && G("y", "7") === 7 && L("x") === 5 && L("y") === 7, "R51g guarda por edital: x = 5, y = 7, cada um o seu");
+      ok(G("x", 999) === 60 && L("x") === 60 && G("x", "abc") === 0 && L("x") === 0 && a.loja.getItem("eac_meta_ramos").indexOf('"x"') < 0 && L("y") === 7, "R51h limite de 60, texto vira 0, e 0 APAGA a escolha (o outro edital fica)");
+      a.loja.setItem("eac_meta_ramos", "isso nao e json");
+      ok(L("x") === 0, "R51i valor guardado corrompido: 0, sem quebrar");
+      a.loja.removeItem("eac_meta_ramos");
+      /* tela */
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.edDiario.length = 0;
+      const plT = plano();
+      a.edPintarRitmo(plT);
+      const inp = () => achar(a.$("edRitmo"), (e) => cls(e, "ac-meta-n"))[0];
+      ok(!!inp() && inp().value === "" && achar(a.$("edRitmo"), (e) => cls(e, "ac-meta-chip")).length === 3, "R51j a tela traz o campo 'quero __ ramos por semana' (vazio) e os 3 chips");
+      inp().value = "2"; inp().onchange();
+      ok(L("") === 2, "R51k digitar 2 guarda a meta deste edital");
+      a.edPintarRitmo(plT);
+      ok(inp().value === "2" && achar(a.$("edRitmo"), (e) => cls(e, "ac-meta-chip")).length === 2 && /Quero/.test(a.$("edRitmo").textContent), "R51l com meta de 2 a lista mostra 2 ramos e o campo lembra o 2");
+      a.edDiario.push({ d: hojeReal(), c: ch, n: "Lei 14.133", disc: "Licitações", a: "feito", m: 30, rm: [{ id: "modalidades" }, { id: "fase_preparatoria" }] });
+      const plF = plano({ [ch + "›#modalidades"]: { e: "feito", d: hojeReal() }, [ch + "›#fase_preparatoria"]: { e: "feito", d: hojeReal() } });
+      a.edPintarRitmo(plF);
+      ok(/Meta cumprida/.test(a.$("edRitmo").textContent), "R51m 2 ramos estudados com meta de 2: a tela diz 'Meta cumprida'");
+      a.loja.removeItem("eac_meta_ramos"); a.edDiario.length = 0;
+      ok(/"eac_meta_ramos"/.test(fs.readFileSync(path.join(__dirname, "..", "docs", "backup.js"), "utf8")) && /\.ac-meta-n\{/.test(fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8")), "R51n a meta entra no backup (preferencias) e o campo tem CSS");
+    }
+
+    /* R52: o gesto INVERSO do espelho — "estudei para o outro edital; dar como estudado AQUI" */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const ED2 = ["# SEFAZ Alagoas | prova: 2027-08-01 | horas: 20", "@ Licitações :: 5", "+ Nova Lei de Licitações :: 5", "++ Modalidades :: 5", "++ Contratos :: 3"].join(NL);
+      const ed2 = a.edCriar("SEFAZ Alagoas", ED2);
+      const chOrig = a.vkChave("Licitações", "Lei 14.133"), chDest = a.vkChave("Licitações", "Nova Lei de Licitações");
+      a.vkAplicar([{ de: { chave: chOrig }, para: { chave: chDest }, conf: "ALTA" }], ed2.id, "estudei");
+      const kLa = "licitações›lei 14.133";
+      const kAqui = "licitações›nova lei de licitações";
+      ed.progresso = { [kLa + "›#modalidades"]: { e: "feito", d: "2026-08-01" } };
+      const D = "Nova Lei de Licitações";
+      const oDe = () => a.vkEspelhosDe("Licitações", D, ed2.id, [ed, ed2], { incluirEncerrados: true })[0];
+      const o = oDe();
+      ok(!!o && o.editalId === ed.id && o.estadoAtual === null && o.ramosEstudados.length === 1 && o.ramosEstudados[0].id === "modalidades" && o.ramosEstudados[0].e === "feito" && o.ramosEstudados[0].d === "2026-08-01", "R52 o destino traz tambem os ramos ja' estudados la': " + JSON.stringify(o));
+      const inf = a.vkaInversoInfo(o, "Licitações", D, ed2.id);
+      ok(inf.estado === "feito" && inf.idsLa.join() === "modalidades" && inf.muda === true && inf.aberto === false && inf.dest.chave === kAqui && inf.dest.ramos.join() === "modalidades,contratos", "R52a o que seria gravado aqui: estado 'feito', ramo Modalidades (o de mesmo id), sem gravar ainda: " + JSON.stringify([inf.estado, inf.idsLa, inf.muda]));
+      ok(Object.keys(ed2.progresso).length === 0, "R52b so' calcular nao grava nada");
+      ok((await a.edDarComoEstudadoAqui(o, "Licitações", D, ed2.id, async () => false)).length === 0 && Object.keys(ed2.progresso).length === 0, "R52c recusando a pergunta, nada muda");
+      let perguntou = "";
+      a.edDiario.length = 0;
+      const mud = await a.edDarComoEstudadoAqui(o, "Licitações", D, ed2.id, async (txt) => { perguntou = txt; return true; });
+      const ult = a.edDiario[a.edDiario.length - 1];
+      ok(mud.length === 1 && ed2.progresso[kAqui + "›#modalidades"].e === "feito" && ed2.progresso[kAqui + "›#modalidades"].esp === ed.id && !ed2.progresso[kAqui + "›#contratos"], "R52d confirmando, o ramo de mesmo id fica estudado aqui, com a origem: " + JSON.stringify(ed2.progresso));
+      ok(!!ult && ult.esp === ed.id && ult.m === 0 && ult.edE === ed2.id && ult.c === kAqui && ult.a === "feito" && ult.esm.length === 1 && /SEFAZ Alagoas/.test(perguntou) && /Lei 14\.133/.test(perguntou), "R52e o diario ganha a linha (0 minuto, origem, edital) e a pergunta diz de onde vem e para onde vai: " + perguntou);
+      ok((await a.edDarComoEstudadoAqui(o, "Licitações", D, ed2.id, async () => true)).length === 0, "R52f de novo: ja' consta, nada a fazer");
+      a.apagarDoDiario(a.edDiario.length - 1);
+      ok(Object.keys(ed2.progresso).length === 0 && a.edDiario.length === 0, "R52g apagar a linha do diario DESFAZ o que foi dado como estudado aqui");
+      /* origem sem ramos: o topico inteiro; revisado -> revisado */
+      ed.progresso = { [kLa]: { e: "revisado", d: "2026-08-02" } };
+      const o2 = oDe();
+      const inf2 = a.vkaInversoInfo(o2, "Licitações", D, ed2.id);
+      ok(o2.estadoAtual === "revisado" && inf2.estado === "revisado" && inf2.idsLa.length === 0, "R52h topico inteiro revisado la': revisado aqui, no topico todo");
+      const m2 = await a.edDarComoEstudadoAqui(o2, "Licitações", D, ed2.id, async () => true);
+      ok(m2.length === 1 && m2[0].k === kAqui && ed2.progresso[kAqui].e === "revisado", "R52i grava a marca do topico (os ramos daqui herdam)");
+      a.apagarDoDiario(a.edDiario.length - 1);
+      ed.progresso = { [kLa + "›#modalidades"]: { e: "revisado", d: "2026-08-01" }, [kLa + "›#contratos"]: { e: "feito", d: "2026-08-02" } };
+      ok(a.vkaInversoInfo(oDe(), "Licitações", D, ed2.id).estado === "feito", "R52j ramos misturados (um revisado, um so' estudado): vale o mais fraco ('feito')");
+      ed.progresso = { [kLa + "›#modalidades"]: { e: "revisado", d: "2026-08-01" }, [kLa + "›#contratos"]: { e: "revisado", d: "2026-08-02" } };
+      ok(a.vkaInversoInfo(oDe(), "Licitações", D, ed2.id).estado === "revisado", "R52k todos os ramos revisados: 'revisado'");
+      ed.progresso = {};
+      ok(a.vkaInversoInfo(oDe(), "Licitações", D, ed2.id).estado === null && a.vkaInversoInfo(oDe(), "Licitações", D, ed2.id).muda === false && (await a.edDarComoEstudadoAqui(oDe(), "Licitações", D, ed2.id, async () => true)).length === 0, "R52l nada estudado la': sem estado, sem gravar");
+      ok(a.vkaInversoInfo(o, "Licitações", "Topico que nao existe", ed2.id) === null && a.vkaInversoInfo(o, "Licitações", D, "id-que-nao-existe") === null, "R52m topico ou edital inexistente: null");
+      /* aqui ja' esta' estudado: nao muda, botao desabilitado */
+      ed.progresso = { [kLa + "›#modalidades"]: { e: "feito", d: "2026-08-01" } };
+      ed2.progresso = { [kAqui]: { e: "revisado", d: "2026-08-05" } };
+      ok(a.vkaInversoInfo(oDe(), "Licitações", D, ed2.id).muda === false, "R52n aqui ja' revisado: nada a mudar");
+      ed2.progresso = {};
+      /* a gaveta do acervo */
+      a.vkaAbrir("Licitações", D, ed2.id);
+      let bts = achar(a.$("vkaLista"), (e) => cls(e, "vka-inverso-bt"));
+      ok(bts.length === 1 && bts[0].disabled === false && /Dar como estudado aqui/.test(bts[0].textContent), "R52o a gaveta do acervo tem o botao 'Dar como estudado aqui': " + bts.map((b) => b.textContent));
+      a.$("dlgVkAcervo").close();
+      await a.edDarComoEstudadoAqui(oDe(), "Licitações", D, ed2.id, async () => true);
+      a.vkaAbrir("Licitações", D, ed2.id);
+      bts = achar(a.$("vkaLista"), (e) => cls(e, "vka-inverso-bt"));
+      ok(bts.length === 1 && bts[0].disabled === true && /Já consta como estudado aqui/.test(bts[0].textContent), "R52p depois de dar como estudado, o botao fica desabilitado ('Ja' consta')");
+      a.$("dlgVkAcervo").close();
+      ed2.progresso = {}; a.edDiario.length = 0; ed.progresso = {};
+      a.vkaAbrir("Licitações", D, ed2.id);
+      ok(achar(a.$("vkaLista"), (e) => cls(e, "vka-inverso-bt")).length === 0, "R52q nada estudado la': a gaveta nao mostra o botao");
+      a.$("dlgVkAcervo").close();
+      /* origem em edital ENCERRADO tambem serve (e' o caso tipico) */
+      const ed3 = a.edCriar("Concurso encerrado", ["# Velho | prova: 2020-01-01 | horas: 20", "@ Licitações :: 5", "+ Nova Lei de Licitações :: 5"].join(NL));
+      ed3.progresso = { [kAqui]: { e: "feito", d: "2019-12-01" } };
+      ok(a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2, ed3]).map((x) => x.editalId).indexOf(ed3.id) < 0 && a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2, ed3], { incluirEncerrados: true }).map((x) => x.editalId).indexOf(ed3.id) >= 0, "R52r o edital encerrado NAO recebe espelho, mas serve de ORIGEM na gaveta");
+      /* a gaveta oferece UMA linha por edital que tem estudo marcado (aqui: so' o encerrado; o ed2 nao tem nada) */
+      a.vkaAbrir("Licitações", "Lei 14.133", ed.id);
+      const btsE = achar(a.$("vkaLista"), (e) => cls(e, "vka-inverso-bt"));
+      ok(btsE.length === 1 && /Concurso encerrado/.test(btsE[0].title) && btsE[0].disabled === false, "R52r2 na gaveta de 'Lei 14.133', o estudo marcado no edital ENCERRADO gera o botao (e o edital sem estudo nao): " + btsE.map((b) => b.title.slice(0, 60)));
+      a.$("dlgVkAcervo").close();
+      ed2.progresso = { [kAqui]: { e: "feito", d: "2026-09-01" } };
+      a.vkaAbrir("Licitações", "Lei 14.133", ed.id);
+      ok(achar(a.$("vkaLista"), (e) => cls(e, "vka-inverso-bt")).length === 2, "R52r3 dois editais com estudo marcado: dois botoes, um para cada");
+      a.$("dlgVkAcervo").close();
+      const html52 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.vka-inverso\{/.test(html52), "R52s o botao tem CSS");
+    }
+
+    /* R54: a consulta funciona para LEI COMUM que altera outra (LC alterando o CTN) */
+    {
+      const { a } = MT();
+      const NL = String.fromCharCode(10);
+      const pts = ".".repeat(60);
+      const CTN = ["LEI Nº 5.172, DE 25 DE OUTUBRO DE 1966", "", "Dispõe sobre o Sistema Tributário Nacional.", "",
+        "Art. 156. Extinguem o crédito tributário:", "I – o pagamento;", "II – a compensação;", "III – a transação;", "IV – remissão.", "Parágrafo único. A lei disporá sobre as condições.",
+        "Art. 157. Outro artigo qualquer do Código."].join(NL);
+      const LC = ["LEI COMPLEMENTAR Nº 999, DE 5 DE JANEIRO DE 2026", "", "Altera a Lei nº 5.172, de 25 de outubro de 1966 (Código Tributário Nacional).", "",
+        "Art. 1º O art. 156 da Lei nº 5.172, de 25 de outubro de 1966 (Código Tributário Nacional), passa a vigorar com as seguintes alterações:", "",
+        '"Art. 156. ' + pts, "", pts, "", 'IV – remissão, com o texto novo da lei complementar." (NR)', "",
+        "Art. 2º Esta Lei Complementar entra em vigor na data de sua publicação."].join(NL);
+      const ctn = a.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", texto: CTN, topicos: [] });
+      const lc = a.leiGuardar({ nome: "LC 999/2026", texto: LC, topicos: [] });
+      const cit = a.leiLerCitacoes(LC.split(NL), {});
+      ok(cit.blocos.length === 1 && cit.blocos[0].alvo.curto === "Lei nº 5.172/1966" && cit.blocos[0].n === 1, "R54 a LC cita a Lei nº 5.172/1966 (1 artigo): " + JSON.stringify(cit.blocos.map((b) => [b.alvo && b.alvo.curto, b.n])));
+      const cands = a.leiAlvosCandidatos(cit.blocos[0].alvo, a.leisLista().filter((x) => x.id !== lc.id));
+      ok(cands.length === 1 && cands[0].id === ctn.id && cands[0].confianca === "alta", "R54a o CTN da biblioteca e' a candidata (numero e ano batem)");
+      const art = a.leiArtigoDoAlvo(a.leiDe(ctn.id), "Lei nº 5.172/1966", "156");
+      const seg = LC.split(NL).slice(6, 11).join(NL);
+      const info = a.leiLacunasDoBloco(seg, art.texto);
+      ok(info.casou && info.lacunas.length === 2 && info.lacunas[0].descricao === "caput" && info.lacunas[1].descricao === "I a III" && info.lacunas[1].n === 3 && info.semMarcador.length === 1 && info.semMarcador[0].descricao === "Parágrafo único", "R54b as lacunas do art. 156: caput; incisos I a III (sem travessao); o paragrafo unico, que vem depois do IV escrito e nao tem marca, fica em semMarcador: " + JSON.stringify([info.lacunas.map((x) => [x.descricao, x.n]), info.semMarcador.map((x) => x.descricao)]));
+      ok(info.mostradas.IV === true, "R54c o inciso IV e' o que a LC escreve");
+      const cons = a.leiArtigoParaConsulta(seg, art.texto);
+      ok(cons.incorpora === false && cons.mesclou === true && /texto novo da lei complementar/.test(cons.texto) && cons.dispositivos.filter((d) => d.etiqueta === "alterado").length === 1, "R54d o CTN da biblioteca AINDA nao traz a redacao: previa mesclada com o IV novo, so' ele 'alterado'");
+      a.leiAbrir("X", "Y", lc.id);
+      ok(a.leiAlvoCtxAtual().porCurto["Lei nº 5.172/1966"].escolhida.id === ctn.id && /Esta lei ALTERA Lei nº 5\.172\/1966/.test(a.$("leiFaixaAlvo").textContent), "R54e ao ler a LC, a faixa sugere o CTN");
+      a.$("dlgLeiSeca").close();
+      const rel = a.leiRecebidasVolta ? "" : "";
+      const rec = a.leiAlteracoesRecebidas(a.leiDe(ctn.id));
+      ok(Object.keys(rec).join() === "tudo|156" && rec["tudo|156"][0].id === lc.id && rec["tudo|156"][0].rotulo === "Art. 1º", "R54f o CTN sabe que o art. 156 foi alterado pela LC (secao 'tudo': lei comum nao tem ADCT)");
     }
 
     /* R39: exigir a trilha completa para dar o ramo como estudado */

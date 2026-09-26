@@ -1511,7 +1511,7 @@ function edMetaDeRamos(plano, diario, opc) {
   const hoje = o.hoje || (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10));
   const sem = edSemanaCalendario(hoje);
   const orcamento = o.minutos || (plano && plano.porSemana) || 0;
-  const vazio = { ramos: [], n: 0, feitos: 0, parciais: 0, pendentes: 0, minutos: 0, minutosFeitos: 0, sobra: 0, orcamento, semana: sem };
+  const vazio = { ramos: [], n: 0, feitos: 0, parciais: 0, pendentes: 0, minutos: 0, minutosFeitos: 0, sobra: 0, orcamento, semana: sem, maxRamos: 0, cumprida: false };
   if (!plano || !plano.itens || !orcamento) return vazio;
   const feitosSem = edRamosDaSemana(diario, sem);
   const feitas = [], pend = [];
@@ -1531,8 +1531,12 @@ function edMetaDeRamos(plano, diario, opc) {
   const ordena = (a, b) => b.relevancia - a.relevancia || a.ord - b.ord;
   feitas.sort(ordena); pend.sort(ordena);
   let resta = orcamento - feitas.reduce((a, x) => a + x.minutos, 0);
-  const dentro = [];
+  let dentro = [];
   pend.forEach((x) => { if (x.minutos <= resta) { dentro.push(x); resta -= x.minutos; } });
+  /* META EM RAMOS ESCOLHIDA ("quero 5 por semana"): o total da meta (estudados + parciais + pendentes) não passa dela; o
+   * que sobra é o tempo que decide, como antes */
+  const maxRamos = Math.max(0, Math.floor(Number(o.maxRamos) || 0));
+  if (maxRamos) dentro = dentro.slice(0, Math.max(0, maxRamos - feitas.length));
   const ramos = feitas.concat(dentro).sort(ordena);
   const soma = (l) => l.reduce((a, x) => a + x.minutos, 0);
   return {
@@ -1542,6 +1546,7 @@ function edMetaDeRamos(plano, diario, opc) {
     pendentes: dentro.length,
     minutos: soma(ramos), minutosFeitos: soma(feitas.filter((x) => x.estado === "feito")),
     sobra: candidatosPend - dentro.length, orcamento, semana: sem,
+    maxRamos, cumprida: maxRamos > 0 && feitas.filter((x) => x.estado === "feito").length >= maxRamos,
   };
 }
 

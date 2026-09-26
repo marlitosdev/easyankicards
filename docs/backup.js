@@ -76,7 +76,9 @@ const BK_CHAVES = {
     /* o tamanho da caixa de responder: quem escolheu letra maior
      * escolheu por precisar dela, e restaurar num aparelho novo com
      * a letra pequena de volta é desfazer uma decisão de acessibilidade */
-    "eac_qs_tamanho"],
+    "eac_qs_tamanho",
+    /* a meta de ramos por semana, por edital */
+    "eac_meta_ramos"],
 };
 
 function bkLer(k) {
