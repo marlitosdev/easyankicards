@@ -25,8 +25,8 @@
  *
  * Agora os três andam juntos, e o invariante E16 (tests/estrutura.js)
  * derruba a suíte se um deles ficar para trás. */
-const CACHE = "easyankicards-v17.18.0";
-const SW_VERSION = "17.18.0";
+const CACHE = "easyankicards-v17.18.1";
+const SW_VERSION = "17.18.1";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
   "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",
@@ -78,7 +78,9 @@ self.addEventListener("fetch", (e) => {
 
   // arquivos do app: rede primeiro (atualiza sozinho), cache como reserva
   e.respondWith(
-    fetch(req).then((resp) => {
+    /* "no-cache" = revalida com o servidor a cada pedido. Sem isso o cache HTTP do navegador (GitHub Pages: 10 min)
+     * podia entregar o index.html novo com um .js antigo, e a tela nova rodava com o código velho. */
+    fetch(req, { cache: "no-cache" }).then((resp) => {
       const cp = resp.clone();
       caches.open(CACHE).then((c) => c.put(req, cp));
       return resp;
