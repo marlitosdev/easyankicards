@@ -1191,7 +1191,11 @@ function apagarDoDiario(idx) {
   const ultimoDoTopico = edDiario.reduce(
     (m, y, k) => (y.c === x.c ? k : m), -1) === idx;
   edDiario.splice(idx, 1);
-  if (ultimoDoTopico && x.rm && x.rm.length) {
+  const eraEspelho = !!x.esp;
+  edEspelhosDesfazer(x);
+  if (eraEspelho) {
+    /* a linha de espelho é de OUTRO edital: já foi devolvida lá; nada a fazer no progresso deste */
+  } else if (ultimoDoTopico && x.rm && x.rm.length) {
     /* registro de um tópico COM ramos: devolve a marca de antes de cada ramo que ele tocou */
     edRamosDesfazer(edProgresso, { chave: x.c }, x.rm);
   } else if (ultimoDoTopico) {
@@ -1831,6 +1835,8 @@ function abrirRegistro(i, opc) {
   }
   regPintarBotoes();
   regRamosIniciar(i);
+  /* o espelho (vínculos) é pintado UMA vez ao abrir: repintar a cada ramo marcado apagaria a escolha dele */
+  try { regEspelhoPintar(i); } catch (e) {}
   if (rEsc && regRamosElegivel(rEsc)) {
     regRamosSel = new Set([rEsc.id]);
     regRamosPintar(i, true);
@@ -1932,9 +1938,97 @@ function regPintarAtalhos() {
   cx.append(zerar);
 }
 
+/* ---- espelhar o registro em outro edital (vínculos): a pessoa marca, o app pergunta, o desfazer devolve ---- */
+let regEspelhoDests = [];
+const regEspelhoSel = new Set();
+function regEspelhoChave(d) { return d.editalId + "|" + d.chave; }
+function regEspelhoPintar(i) {
+  const box = $("regEspelho"), cx = $("regEspelhoLista");
+  regEspelhoSel.clear();
+  regEspelhoDests = [];
+  if (!box || !cx) return;
+  cx.innerHTML = "";
+  box.hidden = true;
+  if (!i || typeof vkEspelhosDe !== "function") return;
+  const origem = i.edital || ((typeof edAberto === "function" && edAberto()) ? edAberto().id : "");
+  let dests = [];
+  try { dests = vkEspelhosDe(i.disciplina, i.nome, origem, typeof editais !== "undefined" ? editais : []); } catch (e) { dests = []; }
+  regEspelhoDests = dests;
+  if (!dests.length) return;
+  box.hidden = false;
+  dests.forEach((d) => {
+    const lin = document.createElement("label");
+    lin.className = "reg-espelho-lin";
+    const ck = document.createElement("input");
+    ck.type = "checkbox";
+    ck.onchange = () => { if (ck.checked) regEspelhoSel.add(regEspelhoChave(d)); else regEspelhoSel.delete(regEspelhoChave(d)); };
+    const tx = document.createElement("span");
+    tx.textContent = " " + t("ed_esp_lin", { e: d.editalNome || "—", t: d.disciplina + " › " + d.topico })
+      + (d.estadoAtual ? " · " + t("ed_esp_ja", { s: t("ed_ramo_" + (d.estadoAtual === "revisado" ? "revisado" : "feito")) }) : "");
+    lin.append(ck, tx);
+    cx.append(lin);
+  });
+}
+function edEspelhoRestaurar(y) {
+  const E = (typeof editais !== "undefined" ? editais : []).find((e) => String(e.id) === String(y.edE));
+  if (!E) return false;
+  const aberto = typeof edAberto === "function" && edAberto() && String(edAberto().id) === String(E.id);
+  const prog = aberto ? edProgresso : (E.progresso = E.progresso || {});
+  edEspelhoDesfazerMarcas(prog, y.esm);
+  if (aberto) edSalvar(); else { E.tocado = new Date().toISOString(); if (typeof edSalvarLista === "function") edSalvarLista(); }
+  return true;
+}
+/* desfaz o que um registro do diário espelhou: se x é o registro de ORIGEM, todos os espelhos dele (e as linhas deles no diário);
+ * se x é um espelho, só ele. Devolve quantos desfez. */
+function edEspelhosDesfazer(x) {
+  if (!x) return 0;
+  if (x.esp) { edEspelhoRestaurar(x); return 1; }
+  if (!x.eid) return 0;
+  let n = 0;
+  for (let k = edDiario.length - 1; k >= 0; k--) {
+    const y = edDiario[k];
+    if (y && y.espDe === x.eid) { edEspelhoRestaurar(y); edDiario.splice(k, 1); n++; }
+  }
+  return n;
+}
+/* grava as marcas nos editais escolhidos, DEPOIS de edMarcar (que já anotou o registro de origem no diário). As linhas de
+ * espelho entram no diário logo ANTES da de origem (o "último registro do tópico" continua sendo o de origem) com minutos 0
+ * — o tempo não conta duas vezes — e sem elas o diário "completaria" o tópico do outro edital com minutos inventados. */
+function edEspelharRegistro(item, estado, dests, idsRamos) {
+  if (!estado || !dests || !dests.length) return [];
+  let idx = -1;
+  for (let k = edDiario.length - 1; k >= 0; k--) { if (edDiario[k] && edDiario[k].c === item.chave && edDiario[k].a === estado) { idx = k; break; } }
+  if (idx < 0) return [];
+  const src = edDiario[idx];
+  const hoje = hojeISO();
+  const origem = item.edital || ((typeof edAberto === "function" && edAberto()) ? edAberto().id : "") || "-";
+  const feitos = [];
+  dests.forEach((d) => {
+    const E = (typeof editais !== "undefined" ? editais : []).find((e) => String(e.id) === String(d.editalId));
+    if (!E) return;
+    const aberto = typeof edAberto === "function" && edAberto() && String(edAberto().id) === String(E.id);
+    const prog = aberto ? edProgresso : (E.progresso = E.progresso || {});
+    const mud = edEspelharMarcas(prog, d, estado, idsRamos || [], hoje, origem);
+    if (mud.length) feitos.push({ E, aberto, d, mud });
+  });
+  if (!feitos.length) return [];
+  src.eid = "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  feitos.forEach((f) => {
+    edDiario.splice(idx, 0, { d: hoje, c: f.d.chave, n: f.d.topico, disc: f.d.disciplina, p: 0, m: 0, f: null, a: estado,
+      esp: origem, espDe: src.eid, edE: f.E.id, esm: f.mud, cc: f.E.nome || "" });
+    idx++;
+    if (f.aberto) edSalvar(); else { f.E.tocado = new Date().toISOString(); }
+  });
+  if (feitos.some((f) => !f.aberto) && typeof edSalvarLista === "function") edSalvarLista();
+  salvarDiario();
+  try { reg("EDITAL-PROGRESSO", "espelho: " + estado + " · " + item.nome, feitos.map((f) => f.E.nome + " › " + f.d.topico).join("; ")); } catch (e) {}
+  return feitos;
+}
+
 function confirmarRegistro(estado) {
   if (!regAtual) return;
   const item = regAtual;
+  const espSel = estado ? regEspelhoDests.filter((d) => regEspelhoSel.has(regEspelhoChave(d))) : [];
   /* tópico com ramos: a escolha vai junto (e sem nenhum ramo marcado não há o que registrar) */
   if (item.ramos && item.ramos.length && estado) {
     const eleg = item.ramos.filter(regRamosElegivel);
@@ -1991,6 +2085,10 @@ function confirmarRegistro(estado) {
     onde: String(($("regOnde") || {}).value || "").trim() || null,
     obs: String(($("regObs") || {}).value || "").trim() || null,
   }, linhas.length > 0);
+  if (espSel.length) {
+    const ids = (edUltimasMudancasRamos || []).filter((x) => x.id !== "_topo").map((x) => x.id);
+    try { edEspelharRegistro(item, estado, espSel, ids); } catch (e) { try { reg("ERRO", "espelho falhou", (e && e.message) || ""); } catch (x) {} }
+  }
   if (typeof depois === "function") { try { depois(minCerto, estado); } catch (e) {} }
   /* O item some da agenda no mesmo instante em que o diálogo fecha, e some
    * calado: dá a impressão de que sumiu, não de que foi guardado. A saída
@@ -2057,6 +2155,7 @@ function edDesfazerUltimoRegistro() {
   const ultimoDoTopico = edDiario.reduce(
     (m, y, k) => (y.c === x.c ? k : m), -1) === idx;
   edDiario.splice(idx, 1);
+  edEspelhosDesfazer(x);
   if (ultimoDoTopico && x.rm && x.rm.length) {
     /* registro de um tópico COM ramos: devolve a marca de antes de cada ramo que ele tocou */
     edRamosDesfazer(edProgresso, { chave: x.c }, x.rm);

@@ -4358,6 +4358,8 @@ button.ed-st-item{cursor:pointer}
 .ram-lei-sel{max-width:100%;flex:1;min-width:200px}
 .ram-lei-prev{margin-top:6px}
 .ram-lei-texto{max-height:180px;overflow:auto;white-space:pre-wrap;font-size:12px;background:var(--fundo-2,transparent);border:1px solid var(--borda);border-radius:6px;padding:6px;margin:4px 0 0}
+.reg-espelho{border:1px dashed var(--borda);border-radius:8px;padding:6px 8px;margin:6px 0}
+.reg-espelho-lin{display:block;font-size:13px;margin:2px 0}
 .reg-trilha-abrir{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .reg-trilha-abrir-btn{font-size:11px;padding:2px 8px}
 .ac-meta-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
@@ -5190,6 +5192,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-f-dica" data-i18n="ed_reg_ramos_dica"></span>
     <div class="reg-ramos" id="regRamos"></div>
     <div id="regTrilha" class="reg-trilha" hidden></div>
+    <div id="regEspelho" class="reg-espelho" hidden>
+      <p class="nota" data-i18n="ed_esp_tit"></p>
+      <div id="regEspelhoLista"></div>
+    </div>
     <label class="nota" style="display:block;margin-top:6px"><input type="checkbox" id="regRamosExigir" data-i18n-title="ed_reg_exigir_tip"> <span data-i18n="ed_reg_exigir"></span></label>
     <div class="reg-ramos-acoes">
       <button type="button" class="btn-min" id="btnRegRamosTodos" data-i18n="ed_reg_ramos_todos" data-i18n-title="ed_reg_ramos_todos_tip"></button>

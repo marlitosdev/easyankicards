@@ -548,6 +548,48 @@ function vkDesfazer(a, b) {
 }
 
 /* =====================================================================
+ * ESPELHAR O REGISTRO EM OUTRO EDITAL (só com o seu "sim", a cada registro)
+ *
+ * O vínculo diz "estes dois tópicos são o mesmo assunto" e, de propósito, nunca marca nada como estudado (ver abaixo). O
+ * espelho é o gesto explícito de quem acabou de estudar: no registro, a pessoa marca "valeu também para o outro edital" e só
+ * então a marca é gravada lá — com a origem anotada, sem somar minutos e com desfazer. Esta função só acha os DESTINOS: os
+ * tópicos dos outros editais (ativos) ligados, por vínculo de confiança ALTA, ao tópico registrado.
+ * Devolve [{ editalId, editalNome, disciplina, topico, chave, ramos:[ids], estadoAtual }] — chave = a do progresso do edital.
+ * ===================================================================== */
+function vkEspelhosDe(disciplina, topico, origemId, listaEditais, opc) {
+  const propria = vkChave(disciplina, topico);
+  const outros = new Set();
+  vinculos.forEach((v) => {
+    if (vkArquivado(v) || (v.conf || "ALTA") !== "ALTA") return;
+    if (v.a === propria && v.b !== propria) outros.add(v.b);
+    else if (v.b === propria && v.a !== propria) outros.add(v.a);
+  });
+  if (!outros.size) return [];
+  const out = [];
+  const vistos = {};
+  (listaEditais || []).forEach((E) => {
+    if (!E || String(E.id) === String(origemId)) return;
+    if (!(opc && opc.incluirEncerrados) && typeof edSituacao === "function") {
+      let g = ""; try { g = edSituacao(E).grupo; } catch (e) {}
+      if (g === "encerrado") return;
+    }
+    let r = null;
+    try { r = lerEdital(E.texto || ""); } catch (e) { return; }
+    ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+      if (!outros.has(vkChave(d.nome, tp.nome))) return;
+      const chave = (d.nome + "›" + tp.nome).toLowerCase();
+      const k = E.id + "|" + chave;
+      if (vistos[k]) return;
+      vistos[k] = true;
+      const marca = (E.progresso || {})[chave] || null;
+      out.push({ editalId: E.id, editalNome: E.nome || "", disciplina: d.nome, topico: tp.nome, chave,
+        ramos: (tp.ramos || []).map((x) => x.id), estadoAtual: marca ? marca.e : null });
+    }));
+  });
+  return out;
+}
+
+/* =====================================================================
  * O ACERVO DO OUTRO CONCURSO
  *
  * Vincular dois tópicos nunca deve marcar nada como estudado. "Já vi
