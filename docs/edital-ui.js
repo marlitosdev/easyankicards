@@ -530,7 +530,7 @@ function edLinhaTopico(i, semDisciplina) {
                              { c: (doOutro && doOutro.ondeConsta)
                                   || (doEstudo && doEstudo.concurso) || "?" }));
     b.title = jaEst.temAlgo ? t("vka_selo_aj") : t("vka_selo_coincide_aj");
-    b.onclick = (ev) => { ev.stopPropagation(); vkaAbrir(i.disciplina, i.nome); };
+    b.onclick = (ev) => { ev.stopPropagation(); vkaAbrir(i.disciplina, i.nome, i.edital || ""); };
     nome.append(b);
   }
 
@@ -2301,6 +2301,20 @@ function edMarcar(i, estado, detalhe, semRender) {
  * observado ao lado do necessário mostra o tamanho do ajuste — e sobre isso
  * dá para agir. As duas barras usam a MESMA escala, senão a comparação
  * mente. */
+/* a meta em ramos que a pessoa escolheu, por edital (0 = a que o tempo da semana comporta) */
+function edMetaRamosLer(idEd) {
+  try { const m = JSON.parse(localStorage.getItem("eac_meta_ramos") || "{}"); return Math.max(0, Math.floor(Number(m[idEd]) || 0)); } catch (e) { return 0; }
+}
+function edMetaRamosSalvar(idEd, n) {
+  const v = Math.max(0, Math.min(60, Math.floor(Number(n) || 0)));
+  try {
+    const m = JSON.parse(localStorage.getItem("eac_meta_ramos") || "{}");
+    if (v) m[idEd] = v; else delete m[idEd];
+    localStorage.setItem("eac_meta_ramos", JSON.stringify(m));
+  } catch (e) {}
+  return v;
+}
+
 function edPintarRitmo(plano) {
   const box = $("edRitmo");
   box.innerHTML = "";
@@ -2388,7 +2402,8 @@ function edPintarRitmo(plano) {
 
   /* ---------- 2b. META DA SEMANA EM RAMOS (só aparece com ramos no edital) ---------- */
   try {
-    const M = edMetaDeRamos(plano, edDiario);
+    const idEd = (typeof edAberto === "function" && edAberto()) ? edAberto().id : "";
+    const M = edMetaDeRamos(plano, edDiario, { maxRamos: edMetaRamosLer(idEd) });
     if (M.n) {
       const mb = document.createElement("div");
       mb.className = "ac-bloco ac-meta-ramos";
@@ -2401,6 +2416,24 @@ function edPintarRitmo(plano) {
       mt.textContent = t("ed_meta_ramos_txt", { n: M.n, h: horasTexto(M.minutos), f: M.feitos, p: M.parciais })
         + (M.sobra ? " " + t("ed_meta_ramos_sobra", { s: M.sobra }) : "");
       mb.append(mr, mt);
+      /* "quero N ramos por semana": vazio = o que o tempo da semana comporta */
+      const ql = document.createElement("label");
+      ql.className = "nota ac-meta-quero";
+      const qi = document.createElement("input");
+      qi.type = "number"; qi.min = "0"; qi.max = "60"; qi.step = "1";
+      qi.className = "ac-meta-n";
+      qi.value = M.maxRamos ? String(M.maxRamos) : "";
+      qi.placeholder = "—";
+      qi.title = t("ed_meta_ramos_quero_tip");
+      qi.onchange = () => { edMetaRamosSalvar(idEd, qi.value); if (typeof edRender === "function") edRender(); };
+      ql.append(document.createTextNode(t("ed_meta_ramos_quero") + " "), qi, document.createTextNode(" " + t("ed_meta_ramos_por_semana")));
+      mb.append(ql);
+      if (M.cumprida) {
+        const ok = document.createElement("div");
+        ok.className = "nota ac-meta-ok";
+        ok.textContent = t("ed_meta_ramos_cumprida");
+        mb.append(ok);
+      }
       const cs = document.createElement("div");
       cs.className = "ac-meta-chips";
       M.ramos.slice(0, 12).forEach((x) => {
@@ -4305,8 +4338,48 @@ function vkAcervoDoTopico(disciplina, topico) {
 /* ------------------------------------------------------------------
  * A GAVETA DE CONSULTA
  * ------------------------------------------------------------------ */
-function vkaAbrir(disciplina, topico) {
+/* O GESTO INVERSO DO ESPELHO: "estudei isto para OUTRO edital; dar como estudado AQUI". Só o app propõe; a pessoa confirma, e o
+ * desfazer está no diário (a linha nasce como espelho, com 0 minuto). Devolve o que seria/foi gravado. */
+function vkaInversoInfo(o, disciplina, topico, aquiId) {
+  const lista = typeof editais !== "undefined" ? editais : [];
+  const AQUI = lista.find((e) => String(e.id) === String(aquiId));
+  if (!AQUI) return null;
+  let tp = null;
+  try { (lerEdital(AQUI.texto || "").disciplinas || []).forEach((d) => (d.topicos || []).forEach((x) => { if (!tp && vkChave(d.nome, x.nome) === vkChave(disciplina, topico)) tp = { d, x }; })); } catch (e) {}
+  if (!tp) return null;
+  const aberto = !!(typeof edAberto === "function" && edAberto() && String(edAberto().id) === String(AQUI.id));
+  const prog = aberto ? edProgresso : (AQUI.progresso = AQUI.progresso || {});
+  const dest = { chave: (tp.d.nome + "›" + tp.x.nome).toLowerCase(), ramos: (tp.x.ramos || []).map((r) => r.id), disciplina: tp.d.nome, topico: tp.x.nome };
+  /* o que foi feito LÁ: os ramos estudados (se houver marcas de ramo) ou o tópico inteiro */
+  const idsLa = (o.ramosEstudados || []).map((r) => r.id);
+  const estado = idsLa.length ? ((o.ramosEstudados || []).every((r) => r.e === "revisado") ? "revisado" : "feito") : (o.estadoAtual === "revisado" ? "revisado" : (o.estadoAtual === "feito" ? "feito" : null));
+  if (!estado) return { AQUI, aberto, prog, dest, estado: null, idsLa, muda: false };
+  const seco = edEspelharMarcas(JSON.parse(JSON.stringify(prog)), dest, estado, idsLa, hojeISO(), o.editalId);
+  return { AQUI, aberto, prog, dest, estado, idsLa, muda: seco.length > 0 };
+}
+async function edDarComoEstudadoAqui(o, disciplina, topico, aquiId, confirmar) {
+  const inf = vkaInversoInfo(o, disciplina, topico, aquiId);
+  if (!inf || !inf.estado || !inf.muda) return [];
+  const conf = confirmar || uiConfirm;
+  if (!(await conf(t("vka_inverso_conf", { e: o.editalNome, t: o.topico, s: t("ed_ramo_" + (inf.estado === "revisado" ? "revisado" : "feito")), a: inf.AQUI.nome || "" })))) return [];
+  const hoje = hojeISO();
+  const mud = edEspelharMarcas(inf.prog, inf.dest, inf.estado, inf.idsLa, hoje, o.editalId);
+  if (!mud.length) return [];
+  edDiario.push({ d: hoje, c: inf.dest.chave, n: inf.dest.topico, disc: inf.dest.disciplina, p: 0, m: 0, f: null, a: inf.estado,
+    esp: o.editalId || "-", edE: inf.AQUI.id, esm: mud, cc: inf.AQUI.nome || "" });
+  if (inf.aberto) edSalvar(); else { inf.AQUI.tocado = new Date().toISOString(); if (typeof edSalvarLista === "function") edSalvarLista(); }
+  salvarDiario();
+  try { reg("EDITAL-PROGRESSO", "espelho inverso: " + inf.estado + " · " + inf.dest.topico, "de " + o.editalNome); } catch (e) {}
+  if (typeof edRender === "function") edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  return mud;
+}
+
+function vkaAbrir(disciplina, topico, editalAqui) {
   const ac = vkAcervoDoTopico(disciplina, topico);
+  let outrosEd = [];
+  const aquiId = editalAqui || ((typeof edAberto === "function" && edAberto()) ? edAberto().id : "");
+  try { outrosEd = vkEspelhosDe(disciplina, topico, aquiId, typeof editais !== "undefined" ? editais : [], { incluirEncerrados: true }); } catch (e) { outrosEd = []; }
   const sub = $("vkaSub");
   if (sub) sub.textContent = t("vka_sub", { d: disciplina, t: topico });
   const box = $("vkaLista");
@@ -4387,6 +4460,26 @@ function vkaAbrir(disciplina, topico) {
       acervo.append(n);
     }
     li.append(acervo);
+    /* "dar como estudado aqui": só quando LÁ há estudo marcado no edital e aqui ainda não consta */
+    /* o mesmo assunto pode constar em mais de um edital: uma linha para cada um que tem estudo marcado */
+    outrosEd.filter((z) => vkChave(z.disciplina, z.topico) === vkChave(x.disciplina, x.topico)).forEach((oLa) => {
+    if (oLa.estadoAtual || (oLa.ramosEstudados || []).length) {
+      const inf = vkaInversoInfo(oLa, disciplina, topico, aquiId);
+      if (inf && inf.estado) {
+        const lin = document.createElement("div");
+        lin.className = "vka-inverso";
+        const bi = document.createElement("button");
+        bi.type = "button";
+        bi.className = "btn-min vka-inverso-bt";
+        bi.disabled = !inf.muda;
+        bi.textContent = t(inf.muda ? "vka_inverso" : "vka_inverso_ja");
+        bi.title = t("vka_inverso_tip", { e: oLa.editalNome });
+        bi.onclick = async () => { const r = await edDarComoEstudadoAqui(oLa, disciplina, topico, aquiId); if (r.length) vkaAbrir(disciplina, topico, editalAqui); };
+        lin.append(bi);
+        li.append(lin);
+      }
+    }
+    });
     box.append(li);
   });
 

@@ -3880,6 +3880,12 @@ function leiIdentificar(texto, quantosArtigos) {
     return { especie: "Constituição", numero: "", ano: "1988",
              nome: "Constituição Federal de 1988", curto: "CF/88" };
   }
+  /* O ADCT SOZINHO: a linha-título "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS" (linha inteira, nada mais) sem o título da
+   * Constituição. Colado da página do Senado, o texto vem com o menu do site antes (visto no backup real) e antes não era
+   * reconhecido. A Constituição inteira já saiu acima; uma menção no meio de um parágrafo não é linha-título. */
+  if (linhas.some((x) => /^ato das disposi[çc][õo]es constitucionais transit[óo]rias\.?$/i.test(x))) {
+    return { especie: "ADCT", numero: "", ano: "1988", nome: "ADCT - Ato das Disposições Constitucionais Transitórias", curto: "ADCT" };
+  }
 
   /* 2. O TÍTULO NO COMEÇO DA LINHA */
   /* o "[\s*#>_-]*" na frente aceita o enfeite que vem de PDF e de
@@ -4120,7 +4126,7 @@ function leiAlvosCandidatos(alvo, leis) {
     if (curto === "Constituição Federal") {
       if (x && x.especie === "Constituição") out.push(Object.assign(base, { confianca: "alta", motivo: "identificada pelo texto como a Constituição" }));
     } else if (curto === "ADCT") {
-      const soAdct = LEI_RE_ADCT.test(String(l.nome || "")) && !(x && x.especie === "Constituição");
+      const soAdct = (LEI_RE_ADCT.test(String(l.nome || "")) || !!(x && x.especie === "ADCT")) && !(x && x.especie === "Constituição");
       if (soAdct) out.push(Object.assign(base, { confianca: "alta", motivo: "lei separada do ADCT" }));
       else if (x && x.especie === "Constituição" && leiSecoes(tx).adct) out.push(Object.assign(base, { confianca: "media", motivo: "o ADCT é uma divisão da Constituição" }));
     } else if (m && x) {
@@ -4138,7 +4144,9 @@ function leiAlvosCandidatos(alvo, leis) {
 function leiArtigoDoAlvo(leiAlvo, alvoCurto, num) {
   if (!leiAlvo || !leiAlvo.texto) return null;
   const n = leiNumNormal(num);
-  const soAdct = LEI_RE_ADCT.test(String(leiAlvo.nome || "")) && !leiSecoes(leiAlvo.texto).adct;
+  let idAlvo = null;
+  try { idAlvo = leiIdentificar(leiAlvo.texto); } catch (e) {}
+  const soAdct = (LEI_RE_ADCT.test(String(leiAlvo.nome || "")) || !!(idAlvo && idAlvo.especie === "ADCT")) && !leiSecoes(leiAlvo.texto).adct;
   const secao = alvoCurto === "ADCT" ? (soAdct ? "tudo" : "adct") : (alvoCurto === "Constituição Federal" ? "corpo" : "tudo");
   return leiArtigosDaSecao(leiAlvo.texto, secao).find((a) => a.num === n) || null;
 }
@@ -4149,7 +4157,7 @@ function leiDispositivos(textoArtigo) {
     est.unidades.map((u) => ({ tipo: u.tipo, chave: u.chave, rotulo: u.rotulo, texto: u.texto, nivel: u.nivel || 1 })));
 }
 function leiDescreverLacuna(entradas) {
-  const rot = (e) => String(e.rotulo || e.chave).replace(/\s*-\s*$/, "").trim();
+  const rot = (e) => String(e.rotulo || e.chave).replace(/\s*[-–—.]\s*$/, "").trim();
   const set = new Set(entradas.map((e) => e.chave));
   /* só os dispositivos de TOPO da lacuna: o filho ("I>a") já está dentro do pai ("I") quando o pai também faz parte dela */
   const topo = entradas.filter((e) => e.chave === "caput" || !(e.chave.indexOf(">") >= 0 && set.has(e.chave.slice(0, e.chave.lastIndexOf(">")))));

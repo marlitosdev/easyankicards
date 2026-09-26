@@ -582,8 +582,11 @@ function vkEspelhosDe(disciplina, topico, origemId, listaEditais, opc) {
       if (vistos[k]) return;
       vistos[k] = true;
       const marca = (E.progresso || {})[chave] || null;
+      const ramosIds = (tp.ramos || []).map((x) => x.id);
+      /* os ramos já estudados/revisados LÁ (para o gesto inverso, "dar como estudado aqui") */
+      const ramosEstudados = ramosIds.map((id) => { const m = (E.progresso || {})[chave + "›#" + id]; return m && (m.e === "feito" || m.e === "revisado") ? { id, e: m.e, d: m.d || "" } : null; }).filter(Boolean);
       out.push({ editalId: E.id, editalNome: E.nome || "", disciplina: d.nome, topico: tp.nome, chave,
-        ramos: (tp.ramos || []).map((x) => x.id), estadoAtual: marca ? marca.e : null });
+        ramos: ramosIds, estadoAtual: marca ? marca.e : null, dataAtual: marca ? (marca.d || "") : "", ramosEstudados });
     }));
   });
   return out;
