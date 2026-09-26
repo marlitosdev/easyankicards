@@ -2542,7 +2542,7 @@ function matRender() {
             /* vai DIRETO aos cartões: sem abrir o resumo no caminho */
             outras.push({ rot: t("mat_ver_cartoes_n", { n: nCart }),
               dica: t("mat_ver_cartoes_ajuda", { n: nCart, tp: x.topico }),
-              faz: () => mcEstudarDireto(x.disciplina, x.topico) });
+              faz: () => estcEstudarTopico(x.disciplina, x.topico) });
             /* e um caminho para MEXER neles, que aí sim é outra tarefa */
             outras.push({ rot: t("mat_mexer_cartoes"),
               dica: t("mat_mexer_cartoes_ajuda"),
@@ -3338,7 +3338,7 @@ function matCartoesIniciar() {
       if (mcVoltarPara === "questoes" && typeof qsUiVoltarASessao === "function") {
         qsUiVoltarASessao();
       } else if (mcVoltarPara === "cartoes" && matAtual) {
-        try { mcEstudarAbrir(0); } catch (e) {}
+        try { estcEstudarTopico(matAtual.disciplina, matAtual.topico); } catch (e) {}
       }
       mcVoltarPara = null;
     };

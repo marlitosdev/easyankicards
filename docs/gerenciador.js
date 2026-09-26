@@ -20,13 +20,16 @@ const GER_CHAVE_RECIBO = "eac_ger_recibo";
 const GER_CHAVE_PASTAS = "eac_ger_pastas";
 const GER_CHAVE_AGRUPAR = "eac_ger_agrupar";
 const GER_CHAVE_VAZIAS = "eac_ger_ocultar_vazias";
+const GER_CHAVE_ORDEM = "eac_ger_ordem";
+const GER_ORDENS = ["prova", "nome", "cartoes", "cadastro"];
+let gerOrdem = "prova";
 let gerOcultarVazias = false;
 
 /* A explicação de CADA controle das duas janelas (o gerenciador e a de nova pasta): id → chave do texto.
  * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
 const GER_DICAS = {
   btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
-  btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
+  btnGerEstudar: "est_tip_estudar", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
@@ -371,6 +374,33 @@ function gerNomesDoEdital(ed) {
   return s;
 }
 
+/* Situação da prova de um edital, para ordenar: quem tem prova marcada vem primeiro (a mais próxima na frente, mesmo que
+ * ainda longe), depois os sem data, e por último os já ENCERRADOS (o que acabou há menos tempo vem antes). */
+function gerSituacaoEdital(ed) {
+  try { if (typeof edSituacao === "function") return edSituacao(ed); } catch (e) {}
+  return { grupo: "sem_data", dias: null };
+}
+function gerChaveProva(sit) {
+  if (sit && sit.dias !== null && sit.dias !== undefined) return [0, sit.dias];
+  if (sit && sit.grupo === "encerrado") return [2, sit.desde || 0];
+  return [1, 0];
+}
+/* Ordena {raizes} (editais) e, nas ordens "nome" e "cartoes", também disciplinas e tópicos de dentro. */
+function gerOrdenarEditais(doEdital, ord) {
+  const nomeCmp = (a, b) => String(a.nome || a.topico || "").localeCompare(String(b.nome || b.topico || ""), "pt");
+  if (ord === "nome") doEdital.sort(nomeCmp);
+  else if (ord === "cartoes") doEdital.sort((a, b) => (b.total - a.total) || nomeCmp(a, b));
+  else if (ord === "cadastro") doEdital.sort((a, b) => a.cad - b.cad);
+  else doEdital.sort((a, b) => {
+    const ka = gerChaveProva(a.sit), kb = gerChaveProva(b.sit);
+    return (ka[0] - kb[0]) || (ka[1] - kb[1]) || (a.cad - b.cad);
+  });
+  if (ord === "nome" || ord === "cartoes") {
+    const cmp = ord === "nome" ? nomeCmp : (a, b) => (b.total - a.total) || nomeCmp(a, b);
+    doEdital.forEach((r) => { r.filhos.sort(cmp); r.filhos.forEach((d) => d.filhos.sort(cmp)); });
+  }
+}
+
 function gerModeloEditais(notas, vazias) {
   const virtuais = new Map();
   const cont = new Map();
@@ -459,6 +489,11 @@ function gerModeloEditais(notas, vazias) {
     noTop(root, noDisc(root, p.disciplina), p.chave, p.topico, { livre: true });
   });
   semEdital.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt"));
+  doEdital.forEach((r) => {
+    const i = eds.findIndex((e) => e.id === r.id);
+    r.cad = i; r.sit = gerSituacaoEdital(eds[i].ed);
+  });
+  gerOrdenarEditais(doEdital, gerOrdem);
   const roots = (banca.filhos.length ? [banca] : []).concat(doEdital, semEdital);
   roots.forEach((r) => { delete r._discs; r.filhos.forEach((d) => { delete d._tops; }); });
   return { roots, virtuais };
@@ -535,6 +570,14 @@ function gerPintarNo(cx, no) {
   seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerAbertos.delete(no.id) : gerAbertos.add(no.id); gerPintarArvore(); };
   seta.title = t("ger_tip_seta");
   cab.append(seta, gerEl("span", "", " " + no.nome + " (" + no.total + ")"));
+  if (no.tipo === "edital" && no.sit) {
+    const s = no.sit;
+    let rot, cls;
+    if (s.dias !== null && s.dias !== undefined) { rot = s.dias === 0 ? t("ger_prova_hoje") : t("ger_prova_dias", { n: s.dias }); cls = s.grupo === "proximo" ? "ger-prova-prox" : "ger-prova-longe"; }
+    else if (s.grupo === "encerrado") { rot = t("ger_prova_enc"); cls = "ger-prova-enc"; cab.className += " ger-enc"; }
+    else { rot = t("ger_prova_sem"); cls = "ger-prova-longe"; }
+    cab.append(gerEl("span", "ger-prova " + cls, rot));
+  }
   cab.title = t(no.tipo === "disc" ? "ger_tip_disciplina" : (no.tipo === "edital" ? "ger_tip_edital" : (no.tipo === "bancada" ? "ger_tip_bancada" : "ger_tip_sem_edital")));
   cab.onclick = () => { gerPasta = { chaves: no.chaves, id: no.id, disciplina: no.tipo === "disc" ? no.disciplina : undefined }; gerRefiltrar(); gerPintar(); };
   cab.ondragover = (ev) => gerSobreNo(ev, no.id);
@@ -557,7 +600,12 @@ function gerPintarArvore() {
     return;
   }
   gerVirtuais = new Map();
-  gerArvore(gerNotas, gerPastasVazias(gerNotas)).forEach((d) => {
+  const arv = gerArvore(gerNotas, gerPastasVazias(gerNotas));
+  if (gerOrdem === "cartoes") {
+    arv.sort((a, b) => (b.total - a.total) || String(a.disciplina).localeCompare(String(b.disciplina), "pt"));
+    arv.forEach((d) => d.topicos.sort((a, b) => (b.total - a.total) || String(a.topico).localeCompare(String(b.topico), "pt")));
+  }
+  arv.forEach((d) => {
     const aberto = !gerFechados.has(d.disciplina);
     const ativa = gerPasta && !gerPasta.chave && !gerPasta.chaves && gerPasta.disciplina === d.disciplina;
     const cab = gerEl("div", "ger-pasta ger-disc" + (ativa ? " ger-atual" : ""));
@@ -574,9 +622,65 @@ function gerPintarArvore() {
   });
 }
 
+/* O caminho da pasta aberta agora: [{tipo: "ed"|"disc"|"top"|"ramo", nome}] — vazio quando é "todos os cartões". */
+function gerCaminhoDaPasta() {
+  const p = gerPasta;
+  if (!p) return [];
+  const tipoDe = (no) => (no.tipo === "disc" ? "disc" : (no.tipo === "top" ? "top" : (no.tipo === "ramo" ? "ramo" : "ed")));
+  const roots = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots;
+  const nomeRamo = (tp) => {
+    if (!p.ramo) return null;
+    if (p.ramo === RAM_GERAL) return t("ger_ramo_geral");
+    const rm = (tp.ramos || []).find((x) => x.ramoId === p.ramo);
+    return rm ? rm.nome : String(p.ramo);
+  };
+  const acha = (no, trilha) => {
+    const aqui = trilha.concat([no]);
+    if (p.id && no.id === p.id) return aqui;
+    if (no.tipo === "top" && p.chave && no.chave === p.chave) return aqui;
+    for (const f of no.filhos || []) { const r = acha(f, aqui); if (r) return r; }
+    return null;
+  };
+  let achado = null;
+  if (p.chave && p.concurso) {
+    const raiz = roots.find((r) => r.concurso === p.concurso);
+    if (raiz) achado = acha(raiz, []);
+  }
+  for (let i = 0; !achado && i < roots.length; i++) achado = acha(roots[i], []);
+  if (achado) {
+    const out = achado.map((no) => ({ tipo: tipoDe(no), nome: no.nome || no.topico || "" }));
+    const fim = achado[achado.length - 1];
+    const rn = fim.tipo === "top" ? nomeRamo(fim) : null;
+    if (rn) out.push({ tipo: "ramo", nome: rn });
+    return out;
+  }
+  /* pasta sem lugar no modelo (ex.: por disciplina) */
+  if (p.chave) { const i = gerPastaInfo(p.chave); return i ? [{ tipo: "disc", nome: i.disciplina || "—" }, { tipo: "top", nome: i.topico || "—" }] : []; }
+  if (p.disciplina) return [{ tipo: "disc", nome: p.disciplina }];
+  return [];
+}
+
+function gerPintarOnde() {
+  const cx = $("gerOnde");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const cam = gerCaminhoDaPasta();
+  const rot = { ed: "ger_onde_ed", disc: "ger_onde_disc", top: "ger_onde_top", ramo: "ger_onde_ramo" };
+  if (!cam.length) cx.append(gerEl("span", "ger-onde-chip ger-onde-todos", t("ger_onde_todos")));
+  cam.forEach((p, i) => {
+    if (i) cx.append(gerEl("span", "ger-onde-sep", "›"));
+    const c = gerEl("span", "ger-onde-chip ger-onde-" + p.tipo, p.nome);
+    c.title = t(rot[p.tipo]) + ": " + p.nome;
+    cx.append(c);
+  });
+  cx.append(gerEl("span", "ger-onde-n", t("ger_onde_n", { n: gerVis.length })));
+  cx.title = cam.map((p) => p.nome).join(" › ") || t("ger_onde_todos");
+}
+
 function gerPintarLista() {
   const cx = $("gerLista");
   cx.innerHTML = "";
+  gerPintarOnde();
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
   $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
@@ -642,6 +746,7 @@ function gerPintarAcoes() {
   $("gerTotal").textContent = t("ger_total", { n: gerNotas.length });
   $("btnGerEditar").disabled = gerFoco < 0;
   $("btnGerPreApagar").disabled = gerFoco < 0;
+  if (typeof estcRotulo === "function") estcRotulo();
   const tem = gerTemRecibo();
   $("btnGerDesfazer").hidden = !tem;
   if (!tem) $("btnGerMsgDesfazer").hidden = true;
@@ -1189,6 +1294,18 @@ function gerAbrirRaizes() {
   gerAbertos = new Set(gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.map((r) => r.id));
 }
 
+function gerOrdemPadrao() {
+  let v = "";
+  try { v = localStorage.getItem(GER_CHAVE_ORDEM) || ""; } catch (e) {}
+  return GER_ORDENS.indexOf(v) >= 0 ? v : "prova";
+}
+function gerTrocarOrdem(v) {
+  gerOrdem = GER_ORDENS.indexOf(v) >= 0 ? v : "prova";
+  try { localStorage.setItem(GER_CHAVE_ORDEM, gerOrdem); } catch (e) {}
+  $("gerOrdenar").value = gerOrdem;
+  gerPintarArvore(); gerPintarDestinos();
+}
+
 function gerTrocarAgrupar(v) {
   gerAgrupar = v === "edital" ? "edital" : "disciplina";
   try { localStorage.setItem(GER_CHAVE_AGRUPAR, gerAgrupar); } catch (e) {}
@@ -1203,6 +1320,8 @@ function gerAbrir() {
   $("gerAgrupar").value = gerAgrupar;
   try { gerOcultarVazias = localStorage.getItem(GER_CHAVE_VAZIAS) === "1"; } catch (e) { gerOcultarVazias = false; }
   $("gerOcultarVazias").checked = gerOcultarVazias;
+  gerOrdem = gerOrdemPadrao();
+  $("gerOrdenar").value = gerOrdem;
   $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
   gerFecharDestinos();
   gerVistaPasta = "null";
@@ -1212,6 +1331,38 @@ function gerAbrir() {
   dicasDosBotoes(GER_DICAS);
   abrirModal("dlgGerCartoes");
   try { matReg("cartoes", "gerenciador aberto", gerNotas.length + " cartões"); } catch (e) {}
+}
+
+/* Expande, na árvore, o caminho até o tópico (edital › disciplina › tópico), para a pasta aparecer à vista. */
+function gerAbrirCaminho(chave) {
+  if (gerAgrupar !== "edital") {
+    const r = matResumos[chave];
+    if (r && r.disciplina) gerFechados.delete(r.disciplina);
+    return;
+  }
+  const acha = (no, trilha) => {
+    if (no.tipo === "top") return no.chave === chave ? trilha : null;
+    for (const f of no.filhos || []) { const r = acha(f, trilha.concat(no.id)); if (r) return r; }
+    return null;
+  };
+  for (const raiz of gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots) {
+    const tr = acha(raiz, []);
+    if (tr) { tr.forEach((id) => gerAbertos.add(id)); return; }
+  }
+}
+
+/* A PORTA DA AGENDA: abre a biblioteca JÁ na pasta do tópico e, com `estudar`, começa direto pelo player. */
+function gerAbrirNoTopico(disciplina, topico, opt) {
+  const o = opt || {};
+  const chave = matChaveViva(disciplina, topico);
+  gerAbrir();
+  const r = matResumos[chave];
+  gerPasta = { chave, concurso: (r && r.concurso) || undefined };
+  gerAbrirCaminho(chave);
+  gerRefiltrar(); gerPintar();
+  if (gerEhCelular()) gerVista("cartoes");
+  try { const a = document.querySelector("#gerArvore .ger-atual"); if (a && a.scrollIntoView) a.scrollIntoView({ block: "center" }); } catch (e) {}
+  if (o.estudar && gerVis.length && typeof estcAbrir === "function") estcAbrir({ retomar: true });
 }
 
 if (typeof document !== "undefined" && $("btnGerCartoes")) {
@@ -1239,6 +1390,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerClMover").onclick = gerConfirmarClassificar;
   $("btnGerClFechar").onclick = () => $("dlgGerClassificar").close();
   $("gerAgrupar").onchange = () => gerTrocarAgrupar($("gerAgrupar").value);
+  $("gerOrdenar").onchange = () => gerTrocarOrdem($("gerOrdenar").value);
   $("gerOcultarVazias").onchange = () => {
     gerOcultarVazias = !!$("gerOcultarVazias").checked;
     try { localStorage.setItem(GER_CHAVE_VAZIAS, gerOcultarVazias ? "1" : "0"); } catch (e) {}

@@ -708,7 +708,7 @@ function edLinhaTopico(i, semDisciplina) {
      * resumo, que não tem nada a ver com o gesto. Agora vai direto: tendo
      * cartões, abre o leitor; não tendo, abre a criação. */
     try {
-      if (nCards) { mcEstudarDireto(i.disciplina, i.nome); return; }
+      if (nCards) { estcEstudarTopico(i.disciplina, i.nome); return; }
       mcApontarTopico(i.disciplina, i.nome);
       matCartoesAbrir({ semGravarResumo: true });
     } catch (e) {}
@@ -806,7 +806,7 @@ function edLinhaTopico(i, semDisciplina) {
   estudar.onclick = (ev) => {
     ev.stopPropagation();
     if (temTxt) { matAbrirEditor(i, "ler"); return; }
-    if (nCard) { try { mcEstudarDireto(i.disciplina, i.nome); } catch (e) {} return; }
+    if (nCard) { try { estcEstudarTopico(i.disciplina, i.nome); } catch (e) {} return; }
     matAbrirEditor(i);
   };
 
@@ -1686,7 +1686,7 @@ function edAbrirPasso(i, passo) {
   const alvo = {
     lei: () => (typeof leiAbrir === "function" ? leiAbrir(i.disciplina, i.nome) : null),
     questoes: () => (typeof qsUiResponderDireto === "function" ? qsUiResponderDireto(i.disciplina, i.nome) : null),
-    cartoes: () => (typeof mcEstudarDireto === "function" ? mcEstudarDireto(i.disciplina, i.nome) : null),
+    cartoes: () => (typeof estcEstudarTopico === "function" ? estcEstudarTopico(i.disciplina, i.nome) : null),
     juris: () => (typeof jurAbrir === "function" ? jurAbrir(i.disciplina, i.nome) : null),
   }[passo];
   if (!alvo) return "";
@@ -6396,13 +6396,13 @@ async function cmGravarTudo() {
    * lote não há UM "aqui" óbvio para apontar — o alerta simples de sempre
    * continua bastando nesse caso. */
   const alvo = r.topicos === 1 ? r.recibo[0] : null;
-  if (alvo && typeof mcEstudarDireto === "function") {
+  if (alvo && typeof estcEstudarTopico === "function") {
     const ir = await uiEscolha(t("cm_gravados_estudar",
       { n: r.novos, t: alvo.topico, r: r.repetidos }), [
       { valor: "estudar", rot: t("cm_estudar_agora"), classe: "btn-verde" },
       { valor: "ok", rot: t("help_close") },
     ]);
-    if (ir === "estudar") mcEstudarDireto(alvo.disciplina, alvo.topico);
+    if (ir === "estudar") estcEstudarTopico(alvo.disciplina, alvo.topico);
   } else {
     await uiAlert(t("cm_gravados", { n: r.novos, t: r.topicos, r: r.repetidos }));
   }
