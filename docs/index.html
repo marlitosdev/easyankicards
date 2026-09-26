@@ -1009,6 +1009,31 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * empate entre ".lei-j-*" e ".lei-cheia" na leitura da lei. */
 #dlgQsResponder .qs-enunciado.qs-enun-colapsado{max-height:2.8em;overflow:hidden;
   position:relative}
+/* ---- NO TELEFONE A QUESTÃO É A TELA INTEIRA ----
+ * A caixa flutuante deixava uma margem de fundo à mostra (e rolando), o rodapé recolhido escondia como sair e os campos
+ * de leitura ficavam apertados. Tela cheia, sem borda, sob a barra do aparelho; o cabeçalho fica no alto com o X. */
+@media (max-width:760px){
+  #dlgQsResponder[open]{width:100vw!important;max-width:none!important;height:100vh;height:100dvh;
+    max-height:100dvh!important;margin:0!important;border-radius:0!important;border:0!important;
+    padding:calc(6px + env(safe-area-inset-top,0px)) 12px calc(6px + env(safe-area-inset-bottom,0px))!important}
+  #dlgQsResponder .qs-cab{position:sticky;top:0;z-index:6;background:var(--panel);padding:2px 0 4px}
+  #dlgQsResponder .qs-cab .qs-tam{font-size:0;padding:0;width:38px;height:38px;border-radius:50%}
+  #dlgQsResponder #btnQsTamanho::before{content:"Aa";font-size:14px;font-weight:800}
+  #dlgQsResponder #btnQsEnunAlternar::before{content:"⇕";font-size:17px}
+  #dlgQsResponder .qs-cor{width:24px;height:24px}
+  #dlgQsResponder .qs-op{padding:10px 12px;font-size:15px;line-height:1.45}
+  /* ENUNCIADO, ALTERNATIVAS E COMENTÁRIO ROLAM JUNTOS. Antes o enunciado tinha uma caixinha de rolagem própria e, com
+   * alternativas longas, encolhia até uma linha — o campo de leitura ficava minúsculo. No telefone a leitura é UMA coluna
+   * que rola (como nos aplicativos de prova); ficam fixas embaixo só as ferramentas e o "responder/próxima". */
+  #dlgQsResponder #qsSessCorpo{overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  #dlgQsResponder .qs-enunciado{flex:0 0 auto;max-height:none;overflow:visible;font-size:17px;line-height:1.62}
+  #dlgQsResponder .qs-fez .qs-enunciado{max-height:none;min-height:0;flex:0 0 auto;overflow:visible}
+  /* nada dentro da coluna de leitura ENCOLHE: se encolhesse, o texto vazaria por cima do que vem depois */
+  #dlgQsResponder #qsSessCorpo > *{flex-shrink:0!important}
+  #dlgQsResponder .qs-opcoes{position:static;box-shadow:none}
+  #dlgQsResponder .qs-depois{flex:0 0 auto;overflow:visible;font-size:15.5px}
+  #dlgQsResponder .qs-coment,#dlgQsResponder .qs-minha-dica{font-size:15.5px;line-height:1.6;color:var(--texto)}
+}
 /* O DEGRADÊ AVISA QUE FALTA TEXTO — sem ele, "recolhido" parece
    simplesmente "é isso, acabou", e ninguém pede para ver mais do que
    não sabe que existe. */
@@ -2012,6 +2037,47 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgQsResponder.qs-t2 .qs-op,
 #dlgQsResponder.qs-t2 .qs-coment{font-size:16.5px;line-height:1.68}
 .qs-tam{flex:0 0 auto;white-space:nowrap}
+/* ---- O CABEÇALHO DA QUESTÃO: título à esquerda, ferramentas e o X à direita, tudo numa linha ---- */
+.qs-cab{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+.qs-cab h3{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qs-cab-acoes{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+.qs-x{all:unset;box-sizing:border-box;cursor:pointer;flex:0 0 auto;width:38px;height:38px;border-radius:50%;
+  display:inline-grid;place-items:center;border:1px solid var(--borda);color:var(--texto);
+  background:var(--campo);font-size:18px;line-height:1;font-weight:700}
+.qs-x:hover{border-color:var(--erro);color:var(--erro)}
+.qs-x:focus-visible{outline:2px solid var(--acao);outline-offset:2px}
+/* ---- LER EM TELA CHEIA ---- */
+dialog.qs-ler[open]{position:fixed;inset:0;width:100vw;max-width:none;height:100vh;height:100dvh;max-height:none;margin:0;
+  border-radius:0;border:0;padding:calc(8px + env(safe-area-inset-top,0px)) 14px calc(8px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;overscroll-behavior:contain;z-index:10000}
+.qs-ler-cab{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding-bottom:6px;border-bottom:1px solid var(--borda)}
+.qs-ler-tit{flex:1 1 auto;min-width:0}
+.qs-ler-tit h3{margin:0;font-size:16px}
+.qs-ler-tit .nota{margin:0;font-size:11.5px}
+.qs-ler-acoes{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+.qs-ler-corpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 2px 18px;
+  font-size:var(--qs-ler-fs,19px);line-height:1.72;white-space:pre-wrap;overflow-wrap:anywhere}
+.qs-ler-corpo .qs-coment,.qs-ler-corpo .qs-minha-dica{font-size:inherit;line-height:inherit;color:var(--texto);margin:0}
+.qs-ler-rodape{flex:0 0 auto;padding-top:8px;border-top:1px solid var(--borda)}
+.qs-ler-rodape .qs-bt-grande{width:100%;min-height:48px;font-size:16px}
+.qs-dobra-cheia{margin-left:8px;font-size:11px;padding:2px 8px;vertical-align:middle;text-transform:none;letter-spacing:0}
+.qs-bt-ir{min-width:44px}
+/* ---- A ALTERNATIVA COM A LETRA NUM CÍRCULO, e o resultado como ícone (✓ / ✕), como nos aplicativos de prova ---- */
+.qs-op{display:flex;align-items:flex-start;gap:10px}
+.qs-op-l{flex:0 0 auto;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;
+  background:var(--borda);color:var(--texto);font-weight:800;font-size:12.5px}
+.qs-op-p{display:none}
+.qs-op-t{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.qs-op-certa .qs-op-l{background:var(--ok);color:#fff;font-size:0}
+.qs-op-certa .qs-op-l::before{content:"✓";font-size:16px}
+.qs-op-errada .qs-op-l{background:var(--erro);color:#fff;font-size:0}
+.qs-op-errada .qs-op-l::before{content:"✕";font-size:15px}
+.qs-op-sel .qs-op-l{background:var(--info);color:#fff}
+/* ---- TRAVA A ROLAGEM DA PÁGINA POR TRÁS DE UMA JANELA ABERTA. Sem isto, no telefone o dedo que rola fora do texto
+   (ou depois do fim dele) rolava o aplicativo por trás — o fundo se mexia com a questão aberta ---- */
+html.tem-modal{overflow:hidden;overscroll-behavior:none}
+html:has(dialog:modal){overflow:hidden;overscroll-behavior:none}
+#dlgQsResponder{overscroll-behavior:contain}
 .qs-opcoes{display:flex;flex-direction:column;gap:6px}
 .qs-op{text-align:left;padding:9px 12px;border-radius:8px;border:1px solid var(--borda);
   background:var(--campo);color:var(--texto);font-size:13.5px;line-height:1.4;cursor:pointer;
@@ -6175,9 +6241,25 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- LER EM TELA CHEIA: o gabarito comentado e a sua dica, num painel só para ler — letra grande e ajustável, X no canto e um
+     botão grande para voltar à questão no mesmo ponto. -->
+<dialog id="dlgQsLer" class="ui-modal qs-ler">
+  <div class="qs-ler-cab">
+    <div class="qs-ler-tit"><h3 id="qsLerTit"></h3><p class="nota" id="qsLerSub"></p></div>
+    <span class="qs-ler-acoes">
+      <button type="button" class="btn-min" id="btnQsLerMenos" aria-label="A−">A−</button>
+      <button type="button" class="btn-min" id="btnQsLerMais" aria-label="A+">A+</button>
+      <button type="button" class="qs-x" id="btnQsLerX" data-i18n-title="qs_ler_voltar" aria-label="Fechar">✕</button>
+    </span>
+  </div>
+  <div class="qs-ler-corpo" id="qsLerCorpo"></div>
+  <div class="qs-ler-rodape"><button type="button" class="btn btn-azul qs-bt-grande" id="btnQsLerVoltar" data-i18n="qs_ler_voltar"></button></div>
+</dialog>
+
 <dialog id="dlgQsResponder" class="ui-modal diag-modal">
-  <div class="vka-cab">
+  <div class="vka-cab qs-cab">
     <h3 data-i18n="qs_sess_titulo"></h3>
+    <span class="qs-cab-acoes">
     <!-- O TAMANHO DA CAIXA E DA LETRA, no cabeçalho.
          Enunciado de prova é texto longo e cheio de vírgula, lido com
          atenção; a caixa padrão foi dimensionada para caber em telefone
@@ -6194,6 +6276,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          questão nova (qsUiPintarSessao): recolher é uma decisão sobre
          ESTA leitura, texto novo não pode nascer escondido. -->
     <button type="button" class="btn-min qs-tam" id="btnQsEnunAlternar"></button>
+    <!-- O X DE FECHAR, SEMPRE NO CANTO SUPERIOR DIREITO: a saída morava no rodapé, recolhida ("mostrar saídas"), e num
+         telefone a pessoa não achava como sair da questão. Faz o mesmo que "Fechar" do rodapé. -->
+    <button type="button" class="qs-x" id="btnQsX" data-i18n-title="qs_x_tip" aria-label="Fechar">✕</button>
+    </span>
   </div>
   <p class="nota" id="qsSessPlacar"></p>
   <!-- CORPO E RASCUNHO NO MESMO ENVOLTÓRIO.
@@ -6317,6 +6403,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        vezes, e os outros dois não podem competir com ele pelo polegar. -->
   <div class="qs-barra qs-barra-principal">
     <button class="btn-min qs-bt-andar" id="btnQsVoltar" hidden></button>
+    <button class="btn-min qs-bt-andar qs-bt-ir" id="btnQsIr" data-i18n="qs_ir" data-i18n-title="qs_ir_tip" hidden></button>
     <button class="btn btn-verde qs-bt-grande" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
     <button class="btn-min qs-bt-andar" id="btnQsPular" data-i18n="qs_pular" hidden></button>

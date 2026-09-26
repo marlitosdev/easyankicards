@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "17.16.0";
+const VERSAO = "17.17.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -503,13 +503,27 @@ const _abrirNaoModalUmaVez = new Set();
  * de cima (o aviso da lixeira) precisa saber qual é. A top layer do navegador não deixa perguntar. */
 const _modaisAbertos = new Set();
 
+/* a página por trás de uma janela modal não rola: quando a última fecha, a classe sai */
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("close", (ev) => {
+    try {
+      if (!ev || !ev.target || ev.target.tagName !== "DIALOG") return;
+      const algum = Array.from(document.querySelectorAll("dialog")).some((x) => x !== ev.target && x.open);
+      if (!algum) document.documentElement.classList.remove("tem-modal");
+    } catch (e) {}
+  }, true);
+}
+
 function abrirModal(id) {
   const d = typeof id === "string" ? document.getElementById(id) : id;
   if (!d) return null;
   const naoModal = _abrirNaoModalUmaVez.has(d.id);
   _abrirNaoModalUmaVez.delete(d.id);
   try {
-    if (!d.open) { if (naoModal) d.show(); else d.showModal(); _modaisAbertos.delete(d); _modaisAbertos.add(d); }
+    if (!d.open) {
+      if (naoModal) d.show(); else { d.showModal(); document.documentElement.classList.add("tem-modal"); }
+      _modaisAbertos.delete(d); _modaisAbertos.add(d);
+    }
   } catch (e) {
     /* já aberto, ou não suporta modal: não é motivo para derrubar o fluxo */
     try { d.show && d.show(); } catch (x) {}

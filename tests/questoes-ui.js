@@ -2384,6 +2384,77 @@ async function testes() {
     }
   }
 
+  /* ---- K21: RESPONDER NO CELULAR — X sempre visivel, ler em tela cheia, ir para a questao, letra no circulo, sem rolar o fundo ---- */
+  {
+    const fs = require("fs"), path = require("path"), RAIZ = path.join(__dirname, "..");
+    const { api: aFF } = rodar();
+    aFF.matIniciar(); aFF.qsUiIniciar();
+    const cFF = aFF.matChave("D", "T");
+    aFF.matGravar(cFF, "x", { disciplina: "D", topico: "T" });
+    aFF.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
+    aFF.qsAplicar(aFF.qsLerResposta(
+      "[QUESTAO] TIPO: ME ENUNCIADO: p1? A) a. B) b. GABARITO: A COMENTARIO: O comentario da primeira questao.\n"
+      + "[QUESTAO] TIPO: ME ENUNCIADO: p2? A) a. B) b. GABARITO: B COMENTARIO: c2.\n"
+      + "[QUESTAO] TIPO: ME ENUNCIADO: p3? A) a. B) b. GABARITO: A COMENTARIO: c3.",
+      { disciplina: "D", topico: "T", chave: cFF }).achados);
+    aFF.qsUiResponderDoTopico();
+    const html = fs.readFileSync(path.join(RAIZ, "docs", "index.html"), "utf8");
+    const ini = html.indexOf('<dialog id="dlgQsResponder"');
+    const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
+    /* o X: no cabecalho, antes do placar, e faz o mesmo que "Fechar" do rodape */
+    ok(dlg.indexOf('id="btnQsX"') > 0 && dlg.indexOf('id="btnQsX"') < dlg.indexOf('id="qsSessPlacar"') && /class="qs-x" id="btnQsX"/.test(dlg), "K21 o X de fechar esta' no CABECALHO da caixa de questoes (antes do placar), sempre visivel");
+    aFF.$("btnQsX").onclick();
+    ok(aFF.$("dlgQsResponder").open === false, "K21a o X fecha a sessao de questoes");
+    aFF.qsUiResponderDoTopico();
+    /* letra no circulo, texto continua "A) ..." */
+    const op = aFF.$("qsSessCorpo").querySelectorAll(".qs-op")[0];
+    ok(/^A\) /.test(op.textContent) && aFF.$("qsSessCorpo").querySelectorAll(".qs-op-l").length === 2 && aFF.$("qsSessCorpo").querySelectorAll(".qs-op-l")[0].textContent === "A", "K21b a alternativa tem a letra num circulo (.qs-op-l) e o texto do botao continua 'A) ...': " + JSON.stringify(op.textContent));
+    /* ir para a questao */
+    ok(aFF.$("btnQsIr").hidden === false, "K21c o botao 'Ir para…' aparece com mais de uma questao");
+    ok(aFF.qsPosicao().pos === 1, "K21c0 comeca na 1a");
+    /* tela cheia: gabarito comentado depois de responder */
+    aFF.$("qsSessCorpo").querySelectorAll(".qs-op")[0].onclick();
+    aFF.$("btnQsProxima").onclick();
+    const cheia = aFF.$("qsSessCorpo").querySelectorAll(".qs-dobra-cheia");
+    ok(cheia.length >= 1 && /tela cheia/.test(cheia[0].textContent), "K21d o gabarito comentado ganhou o botao '⤢ tela cheia': " + cheia.length);
+    cheia[0].onclick({ preventDefault() {}, stopPropagation() {} });
+    ok(aFF.$("dlgQsLer").open === true && /comentado/i.test(aFF.$("qsLerTit").textContent) && aFF.$("qsLerCorpo").textContent.indexOf(aFF.qsAtual().comentario) >= 0 && aFF.qsAtual().comentario.length > 1 && /questão 1 de 3/.test(aFF.$("qsLerSub").textContent), "K21e o leitor abre com o titulo, o texto do comentario e a posicao (questao 1 de 3): " + aFF.$("qsLerTit").textContent + " | " + aFF.$("qsLerSub").textContent + " | " + aFF.$("qsLerCorpo").textContent);
+    /* letra ajustavel e guardada */
+    const fs0 = aFF.qsLerFsLer();
+    aFF.$("btnQsLerMais").onclick();
+    ok(aFF.qsLerFsLer() > fs0 && aFF.loja.getItem("eac_qs_ler_fs") === String(aFF.qsLerFsLer()), "K21f 'A+' aumenta a letra do leitor e guarda: " + fs0 + " -> " + aFF.qsLerFsLer());
+    for (let k = 0; k < 10; k++) aFF.$("btnQsLerMais").onclick();
+    const teto = aFF.qsLerFsLer();
+    for (let k = 0; k < 10; k++) aFF.$("btnQsLerMenos").onclick();
+    ok(teto === 30 && aFF.qsLerFsLer() === 15, "K21g a letra do leitor tem teto (30) e piso (15): " + teto + " / " + aFF.qsLerFsLer());
+    aFF.$("btnQsLerVoltar").onclick();
+    ok(aFF.$("dlgQsLer").open === false && aFF.$("dlgQsResponder").open === true && aFF.qsPosicao().pos === 1, "K21h 'Voltar a questao' fecha o leitor e devolve a MESMA questao");
+    cheia[0].onclick({ preventDefault() {}, stopPropagation() {} });
+    aFF.$("btnQsLerX").onclick();
+    ok(aFF.$("dlgQsLer").open === false && aFF.$("dlgQsResponder").open === true, "K21i o X do leitor fecha so' o leitor (a questao continua)");
+    /* a dica */
+    aFF.qsGravarDica(aFF.qsAtual().id, "**Minha** dica sobre a questao.");
+    aFF.qsUiPintarSessao();
+    const dobras = aFF.$("qsSessCorpo").querySelectorAll(".qs-dobra-cheia");
+    ok(dobras.length === 2, "K21j com dica guardada, o comentario E a dica tem o botao de tela cheia: " + dobras.length);
+    dobras[1].onclick({ preventDefault() {}, stopPropagation() {} });
+    ok(aFF.$("dlgQsLer").open === true && /dica/i.test(aFF.$("qsLerTit").textContent) && /dica sobre a questao/.test(aFF.$("qsLerCorpo").textContent), "K21k o leitor tambem abre a dica: " + aFF.$("qsLerTit").textContent);
+    aFF.$("btnQsLerVoltar").onclick();
+    /* ir para: pula sem responder */
+    const respAntes = aFF.qsPlacar().feitas;
+    const promise = aFF.qsUiIrPara();
+    aFF.$("txtLivreCampo").value = "3";
+    aFF.$("btnTxtLivreOk").onclick();
+    await promise;
+    ok(aFF.qsPosicao().pos === 3 && aFF.qsPlacar().feitas === respAntes, "K21l 'Ir para 3' anda ate' a 3a SEM responder (o placar nao muda): pos " + aFF.qsPosicao().pos);
+    /* CSS: tela cheia no celular, trava do fundo, classes com regra */
+    ok(/@media \(max-width:760px\)\{\s*#dlgQsResponder\[open\]\{width:100vw!important;max-width:none!important;height:100vh;height:100dvh/.test(html), "K21m no celular a caixa das questoes ocupa a TELA INTEIRA (100vw x 100dvh, sem margem)");
+    ok(/html\.tem-modal\{overflow:hidden/.test(html) && /html:has\(dialog:modal\)\{overflow:hidden/.test(html), "K21n a pagina por tras de uma janela aberta NAO rola (html.tem-modal e :has(dialog:modal))");
+    ok(["qs-cab", "qs-cab-acoes", "qs-x", "qs-ler-cab", "qs-ler-corpo", "qs-ler-rodape", "qs-dobra-cheia", "qs-op-l", "qs-op-p", "qs-op-t", "qs-bt-ir"].every((c) => html.indexOf("." + c + "{") >= 0), "K21o as classes novas tem regra de CSS");
+    const app = fs.readFileSync(path.join(RAIZ, "docs", "app.js"), "utf8");
+    ok(/classList\.add\("tem-modal"\)/.test(app) && /classList\.remove\("tem-modal"\)/.test(app), "K21p abrir uma janela modal trava o fundo e fechar a ultima destrava");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
