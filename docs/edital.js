@@ -450,8 +450,13 @@ function edRamosRegistrar(prog, item, estado, hoje) {
   const rs = item.ramos || [];
   const ch = (r) => item.chave + "›#" + r.id;
   let alvo;
+  const escolhidos = Array.isArray(item.ramosEscolhidos) ? item.ramosEscolhidos : null;
   if (!estado) alvo = rs;
-  else if (estado === "revisado") {
+  else if (escolhidos) {
+    /* a pessoa escolheu os ramos na janela de registro: vale a escolha, dentro do que faz sentido — estudo só de
+     * ramo pendente; revisão só de ramo já estudado e ainda não revisado */
+    alvo = rs.filter((r) => escolhidos.indexOf(r.id) >= 0 && (estado === "revisado" ? (r.feito && !r.revisado) : !r.feito));
+  } else if (estado === "revisado") {
     alvo = rs.filter((r) => r.feito && !r.revisado);
     if (!alvo.length) alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0);
   } else alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0 && !r.feito);

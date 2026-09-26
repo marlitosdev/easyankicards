@@ -842,6 +842,93 @@ async function testes() {
       ok(Number(a.$("regMinutos").value) === it.minutosSessao && it.minutosSessao < it.minutos, "R32k os minutos sugeridos sao os da SESSAO (nao os do topico inteiro): " + a.$("regMinutos").value + " x " + it.minutos);
     }
 
+    /* R33: a janela de registro escolhe os ramos (Fase 2) */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      const item = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+      const linhas = () => Array.from(a.$("regRamos").children || []);
+      const marcas = () => linhas().map((l) => l.children[0].checked);
+      const ch = item().chave;
+      a.abrirRegistro(item());
+      ok(a.$("regRamosBloco").hidden === false && linhas().length === 3 && a.$("regRamosRot").textContent === "O que você estudou?", "R33 topico com ramos: a janela mostra a lista dos 3 ramos ('O que voce estudou?')");
+      ok(marcas().join() === "true,false,false" && /Modalidades ★5/.test(linhas()[0].children[1].textContent) && /Fase preparatória ★3/.test(linhas()[1].children[1].textContent), "R33a vem marcado so' o ramo que a agenda propos, na ordem de relevancia");
+      ok(Number(a.$("regMinutos").value) === 70 && /1 ramo\(s\) marcado\(s\) · 1h10 sugeridos/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
+      const ck1 = linhas()[1].children[0]; ck1.checked = true; ck1.onchange();
+      ok(marcas().join() === "true,true,false" && Number(a.$("regMinutos").value) === 110 && /2 ramo/.test(a.$("regRamosResumo").textContent) && /Modalidades, Fase preparatória$/.test(a.$("regTitulo").textContent), "R33c marcar outro ramo soma o tempo (70+40) e entra no titulo: " + a.$("regMinutos").value);
+      linhas()[0].children[0].checked = false; linhas()[0].children[0].onchange();
+      ok(marcas().join() === "false,true,false" && Number(a.$("regMinutos").value) === 40, "R33d desmarcar tira o tempo dele");
+      a.$("btnRegRamosTodos").onclick();
+      const rM = a.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 5 }, (x, k) => "++ R" + (k + 1)).join(NL));
+      const itM = a.montarPlano(rM, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null }).itens[0];
+      a.abrirRegistro(Object.assign({}, itM, { porque: "x" }));
+      a.$("btnRegRamosTodos").onclick();
+      ok(/T › 5 ramos$/.test(a.$("regTitulo").textContent), "R33e0 com mais de 3 ramos marcados o titulo diz so' a contagem (T › 5 ramos): " + a.$("regTitulo").textContent);
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+      a.abrirRegistro(item());
+      a.$("btnRegRamosTodos").onclick();
+      ok(marcas().join() === "true,true,true" && Number(a.$("regMinutos").value) === 150, "R33e 'o topico todo' marca todos (150 min)");
+      /* nenhum marcado: nao registra */
+      ok(/1h10/.test(linhas()[0].children[2].textContent) && /40|min/.test(linhas()[1].children[2].textContent) && Number(a.$("regMinSlider").value) === 150, "R33e2 cada ramo mostra o tempo estimado (Modalidades 1h10) e o controle deslizante acompanha (150)");
+      linhas().forEach((l) => { l.children[0].checked = false; l.children[0].onchange(); });
+      ok(/Marque pelo menos um ramo/.test(a.$("regRamosResumo").textContent) && Number(a.$("regMinutos").value) !== 0, "R33f sem ramo marcado o resumo pede para marcar (e o tempo nao vira zero)");
+      const antes = a.edDiario.length;
+      a.confirmarRegistroTeste("feito");
+      ok(/Marque pelo menos um ramo para registrar/.test(a.$("uiModalMsg").textContent), "R33g0 tentar registrar sem ramo mostra o aviso");
+      a._uiFechar && a._uiFechar(true);
+      ok(a.$("dlgRegistro").open === true && a.edDiario.length === antes && Object.keys(a.edProgressoAtual()).length === 0, "R33g sem ramo marcado o registro NAO acontece e a janela continua aberta");
+      /* registrar dois ramos (o 1o e o 3o) com 55 min: o tempo se reparte pelo peso */
+      linhas()[0].children[0].checked = true; linhas()[0].children[0].onchange();
+      linhas()[2].children[0].checked = true; linhas()[2].children[0].onchange();
+      a.$("regMinutos").value = 88;
+      a.confirmarRegistroTeste("feito");
+      const pr = a.edProgressoAtual();
+      ok(Object.keys(pr).sort().join() === [ch + "›#contratos", ch + "›#modalidades"].sort().join() && pr[ch + "›#contratos"].e === "feito", "R33h so' os ramos escolhidos ganham a marca (o 1o e o 3o, nao o 2o): " + Object.keys(pr));
+      const d = a.edDiario[a.edDiario.length - 1];
+      ok(d.rm.length === 2 && d.rm.reduce((x, y) => x + y.m, 0) === 88 && d.rm.find((x) => x.id === "modalidades").m === 55 && d.rm.find((x) => x.id === "contratos").m === 33, "R33i o tempo do registro (88) se reparte entre os ramos pelo peso (5:3 = 55 e 33): " + JSON.stringify(d.rm.map((x) => [x.id, x.m])));
+      ok(item().ramosFeitos === 2 && item().feito === false && item().proximo === "Fase preparatória", "R33j o topico segue pendente com o ramo que faltou");
+      /* cem minutos em dois ramos (5:3): as partes fecham em 100 */
+      a.edProgressoPor({});
+      a.abrirRegistro(item());
+      a.$("btnRegRamosTodos").onclick();
+      linhas()[1].children[0].checked = false; linhas()[1].children[0].onchange();
+      a.$("regMinutos").value = 100;
+      a.confirmarRegistroTeste("feito");
+      const d2 = a.edDiario[a.edDiario.length - 1];
+      ok(d2.rm.length === 2 && d2.rm.reduce((x, y) => x + y.m, 0) === 100 && d2.rm[0].m === 63 && d2.rm[1].m === 37, "R33i2 as partes do tempo fecham SEMPRE no total (100 = 63 + 37; o ultimo leva o resto): " + JSON.stringify(d2.rm.map((x) => x.m)));
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2026-09-25" }, [ch + "›#contratos"]: { e: "feito", d: "2026-09-25" } });
+      /* revisao: so' ramo ja estudado */
+      a.abrirRegistro(item());
+      ok(a.$("regRamosRot").textContent === "O que você estudou?" && marcas().join() === "false,true,false", "R33k topico ainda com pendencia abre em ESTUDO: so' o ramo pendente marcado, os estudados desabilitados");
+      ok(linhas()[0].children[0].disabled === true && linhas()[1].children[0].disabled === false && /já estudado/.test(linhas()[0].children[2].textContent), "R33l ramo ja estudado fica desabilitado, dizendo 'ja estudado'");
+      a.$("btnRegOutro").onclick();
+      ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === true && linhas()[0].children[0].disabled === false && /ainda não estudado/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO inverte: so' os estudados podem ser escolhidos");
+      ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
+      a.$("btnRegRamosTodos").onclick();
+      ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === 55, "R33o 'o topico todo' na revisao marca so' os elegiveis (e o tempo so' deles: 55): " + a.$("regMinutos").value);
+      linhas()[2].children[0].checked = false; linhas()[2].children[0].onchange();
+      a.confirmarRegistroTeste("revisado");
+      const pr2 = a.edProgressoAtual();
+      ok(pr2[ch + "›#modalidades"].e === "revisado" && pr2[ch + "›#contratos"].e === "feito", "R33p a revisao marca so' o ramo escolhido");
+      /* revisao: o padrao e' o que esta VENCIDO (nao todos os estudados) */
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" }, [ch + "›#contratos"]: { e: "feito", d: new Date().toISOString().slice(0, 10) } });
+      a.abrirRegistro(item());
+      a.$("btnRegOutro").onclick();
+      ok(marcas().join() === "true,false,false", "R33p2 na revisao ja vem marcado so' o ramo VENCIDO (o estudado hoje fica de fora, mas pode ser marcado): " + marcas());
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+      /* a escolha respeita o que faz sentido, mesmo vinda de fora */
+      const itU = a.montarPlano(a.lerEdital(ed.texto), { horas: 20, prova: "2027-06-01", feitos: { [ch + "›#modalidades"]: { e: "feito", d: "2026-09-25" } }, fatores: null, acertos: null }).itens.find((i) => i.nome === "Lei 14.133");
+      ok(a.edRamosRegistrar({}, Object.assign({}, itU, { ramosEscolhidos: ["modalidades", "fase_preparatoria"] }), "feito", "2026-09-25").map((x) => x.id).join() === "fase_preparatoria", "R33p3 registrar ESTUDO com escolha que inclui ramo ja estudado: so' o pendente entra");
+      ok(a.edRamosRegistrar({}, Object.assign({}, itU, { ramosEscolhidos: ["modalidades", "fase_preparatoria"] }), "revisado", "2026-09-25").map((x) => x.id).join() === "modalidades", "R33p4 registrar REVISAO com escolha que inclui ramo pendente: so' o estudado entra");
+      /* topico sem ramos: a janela e' a de sempre */
+      const conv = a.edItemDoPlano("Licitações", "Convênios");
+      a.abrirRegistro(conv);
+      ok(a.$("regRamosBloco").hidden === true && a.$("regTitulo").textContent === "Convênios", "R33q topico SEM ramos: nada de lista de ramos");
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+    }
+
     /* R24: a linha do topico mostra os ramos dentro dela */
     {
       const { a, ed } = MT();
@@ -956,6 +1043,7 @@ async function testes() {
     const l0 = achar(a.$("ramLista"), (e) => cls(e, "ram-linha"))[0];
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
+    ok(["reg-ramos", "reg-ramo-lin", "reg-ramo-nome", "reg-ramo-est", "reg-ramo-indisp", "reg-ramos-acoes"].every((c) => html.indexOf("." + c + "{") >= 0), "R20i as classes da lista de ramos no registro tem regra de CSS");
     ok(["ed-ramos", "ed-ramos-resumo", "ed-ramos-chips", "ed-ramo", "ed-ramo-pend", "ed-ramo-feito", "ed-ramo-revisado", "ed-ramo-venceu", "ed-ramo-vez", "ed-ramos-mais"].every((c) => html.indexOf("." + c + "{") >= 0), "R20h todas as classes dos chips de ramo tem regra de CSS");
     const hubSrc = fs.readFileSync(path.join(__dirname, "..", "docs", "edital-hub.js"), "utf8");
     ok(/className = "btn-min ed-abrir"/.test(hubSrc) && /\.ed-abrir\{margin:10px 0 2px/.test(html) && /\.btn-min\{[^}]*background:var\(--campo\);color:var\(--texto\)/.test(html), "R20g o botao ver os outros N da semana usa o estilo de botao do app (fundo e texto do tema), nao o padrao do navegador (claro sobre claro)");
