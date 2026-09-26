@@ -6138,6 +6138,7 @@ async function cmAbrir() {
   const valido = (editais || []).some((e) => e.id === editalAtual);
   sel.value = valido ? editalAtual : editais[0].id;
   sel.onchange = () => cmRecalcular(r.cards);
+  cmPromptCopiado = false;
   cmRecalcular(r.cards);
   abrirModal("dlgCartaoMat");
   reg("CARTAO-MATERIAL", "conferência aberta", r.cards.length + " cartões");
@@ -6170,8 +6171,30 @@ function cmRecalcular(cards) {
   cmPintar();
 }
 
+/* o passo da vez: 1 = pedir à IA (há cartões sem destino), 2 = colar a resposta (o prompt já foi copiado), 3 = gravar */
+let cmPromptCopiado = false;
+function cmPassoDaVez() {
+  const sem = cmItens.filter((x) => !x.destino).length;
+  if (!sem) return 3;
+  return cmPromptCopiado ? 2 : 1;
+}
+function cmPintarFluxo() {
+  const c = cmContar(cmItens);
+  const sem = cmItens.filter((x) => !x.destino).length;
+  const passo = cmPassoDaVez();
+  if ($("cmGravarTxt")) $("cmGravarTxt").textContent = c.comDestino ? t("cm_gravar_n", { n: c.comDestino }) : t("cm_gravar");
+  if ($("cmDica")) $("cmDica").textContent = sem
+    ? t(cmPromptCopiado ? "cm_dica_colar" : "cm_dica_faltam", { n: sem })
+    : t("cm_dica_pronto", { n: c.comDestino });
+  [["btnCmPrompt", 1], ["btnCmColar", 2], ["btnCmGravar", 3]].forEach(([id, n]) => {
+    const b = $(id);
+    if (b && b.classList) b.classList.toggle("cm-proximo", passo === n);
+  });
+}
+
 function cmPintar() {
   const c = cmContar(cmItens);
+  cmPintarFluxo();
   $("cmResumo").textContent = t("cm_resumo", {
     t: c.total, d: c.comDestino, u: c.comSugestao, s: c.sem_pista });
 
@@ -6303,6 +6326,8 @@ function cmGerarPrompt() {
   try { navigator.clipboard.writeText(txt); } catch (e) {}
   reg("CARTAO-MATERIAL", "prompt gerado", semDestino.length + " cartões sem destino");
   toast("cm_prompt_copiado");
+  cmPromptCopiado = true;
+  cmPintarFluxo();
 }
 
 function cmConferirColagem() {
@@ -6342,6 +6367,7 @@ function cmAplicarColagem() {
   });
   reg("CARTAO-MATERIAL", "classificação da IA aplicada", r.achados.length + " cartões");
   $("dlgCmColar").close();
+  cmPromptCopiado = false;
   cmPintar();
 }
 

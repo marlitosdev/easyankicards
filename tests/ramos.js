@@ -1963,6 +1963,43 @@ async function testes() {
       ok(Object.keys(rec).join() === "tudo|156" && rec["tudo|156"][0].id === lc.id && rec["tudo|156"][0].rotulo === "Art. 1º", "R54f o CTN sabe que o art. 156 foi alterado pela LC (secao 'tudo': lei comum nao tem ADCT)");
     }
 
+    /* R55: o rodape de "Salvar cartoes no material" na ORDEM DE EXECUCAO (esquerda -> direita) */
+    {
+      const { a } = MT();
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      const ini = html.indexOf('<dialog id="dlgCartaoMat"');
+      const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
+      const pos = (id) => dlg.indexOf('id="' + id + '"');
+      ok(pos("btnCmFechar") > 0 && pos("btnCmFechar") < pos("btnCmPrompt") && pos("btnCmPrompt") < pos("btnCmColar") && pos("btnCmColar") < pos("btnCmGravar"), "R55 a ordem no rodape: Cancelar, depois 1 Criar prompt, 2 Colar resposta, 3 Gravar");
+      const ns = [...dlg.matchAll(/class="cm-n">(\d)</g)].map((m) => m[1]).join("");
+      ok(ns === "123" && /id="btnCmGravar"[^>]*><span class="cm-n">3/.test(dlg) && /id="btnCmPrompt"[^>]*><span class="cm-n">1/.test(dlg) && /id="btnCmColar"[^>]*><span class="cm-n">2/.test(dlg), "R55a os passos vem numerados 1, 2, 3 (cada numero no seu botao)");
+      ok(pos("cmDica") > 0 && pos("cmDica") < pos("btnCmFechar") && /class="btn btn-verde cm-passo cm-passo-fim" id="btnCmGravar"/.test(dlg) && (dlg.match(/cm-seta/g) || []).length === 2, "R55b a dica fica acima do rodape, o 3 e' o botao principal (verde) e ha duas setas entre os passos");
+      ok(/data-i18n="cm_opcional"/.test(dlg.slice(pos("btnCmPrompt"), pos("btnCmColar"))) && /data-i18n="cm_opcional"/.test(dlg.slice(pos("btnCmColar"), pos("btnCmGravar"))) && !/cm_opcional/.test(dlg.slice(pos("btnCmGravar"))), "R55c os passos 1 e 2 dizem 'opcional'; o 3 nao");
+      /* o passo da vez */
+      const itens = a.cmItensAtual();
+      itens.length = 0;
+      itens.push({ n: 1, destino: null, via: "sem_pista" }, { n: 2, destino: { chave: "x" }, via: "etiqueta" });
+      ok(a.cmPassoDaVez() === 1, "R55d ha cartao sem destino e o prompt ainda nao foi copiado: passo 1");
+      a.cmPintarFluxo();
+      ok(a.$("btnCmPrompt").className.indexOf("cm-proximo") >= 0 && a.$("btnCmGravar").className.indexOf("cm-proximo") < 0 && /Faltam 1 cartão/.test(a.$("cmDica").textContent) && a.$("cmGravarTxt").textContent === "Gravar 1 no material", "R55e passo 1 destacado; a dica diz quantos faltam; o botao de gravar diz quantos serao gravados: " + a.$("cmDica").textContent + " | " + a.$("cmGravarTxt").textContent);
+      /* copiar o prompt leva ao passo 2 */
+      itens.length = 0;
+      itens.push({ n: 1, destino: null, via: "sem_pista", card: { front: "O que sao restos a pagar?", back: "Despesas empenhadas e nao pagas", tags: [] } });
+      a.cmGerarPrompt();
+      ok(a.cmPassoDaVez() === 2 && a.$("btnCmColar").className.indexOf("cm-proximo") >= 0 && a.$("btnCmPrompt").className.indexOf("cm-proximo") < 0 && /Prompt copiado/.test(a.$("cmDica").textContent), "R55e2 depois de copiar o prompt, o passo da vez e' o 2 (colar a resposta): " + a.$("cmDica").textContent);
+      itens[0].destino = { chave: "x" };
+      a.cmPintarFluxo();
+      ok(a.cmPassoDaVez() === 3 && a.$("btnCmGravar").className.indexOf("cm-proximo") >= 0, "R55e3 quando todos passam a ter destino (colagem aceita), o passo da vez e' o 3 mesmo com o prompt ja' copiado");
+      itens.length = 0;
+      itens.push({ n: 1, destino: { chave: "x" }, via: "ia" }, { n: 2, destino: { chave: "y" }, via: "ia" }, { n: 3, destino: { chave: "z" }, via: "ia" });
+      a.cmPintarFluxo();
+      ok(a.cmPassoDaVez() === 3 && a.$("btnCmGravar").className.indexOf("cm-proximo") >= 0 && a.$("btnCmPrompt").className.indexOf("cm-proximo") < 0 && /Todos os 3 cartões têm destino/.test(a.$("cmDica").textContent) && a.$("cmGravarTxt").textContent === "Gravar 3 no material", "R55f todos com destino: passo 3 destacado, dica 'e' so' gravar', botao 'Gravar 3 no material'");
+      itens.length = 0;
+      ok(a.$("cmGravarTxt") && (a.cmPintarFluxo(), a.$("cmGravarTxt").textContent === "Gravar no material"), "R55g sem nenhum cartao com destino o botao volta ao texto simples");
+      const css = html;
+      ok(["cm-rodape", "cm-rodape-esq", "cm-passos", "cm-passo", "cm-passo-opc", "cm-passo-fim", "cm-n", "cm-seta", "cm-proximo", "cm-dica"].every((c) => css.indexOf("." + c + "{") >= 0), "R55h todas as classes do rodape tem regra de CSS");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
