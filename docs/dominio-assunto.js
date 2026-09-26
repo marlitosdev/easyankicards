@@ -31,6 +31,25 @@ const DOM = {
   retencaoRisco: 70, retencaoSeguro: 85,
   fatores: { vermelho: 3, amarelo: 2, cinza: 2, azul: 1.5, verde: 0 },   /* só ORDENAM "o que reforçar primeiro" */
 };
+/* OS CORTES SÃO AJUSTÁVEIS (guardados no navegador). Só valem os que fazem sentido: 1 a 99 e risco menor que seguro. */
+const DOM_CH_LIM = "eac_dom_limites";
+function domLimitesLer() {
+  const pad = { acertoRisco: DOM.acertoRisco, acertoSeguro: DOM.acertoSeguro, retencaoRisco: DOM.retencaoRisco, retencaoSeguro: DOM.retencaoSeguro };
+  let j = {};
+  try { j = JSON.parse(localStorage.getItem(DOM_CH_LIM) || "{}") || {}; } catch (e) { j = {}; }
+  const ok = (v) => { const n = Math.round(Number(v)); return n >= 1 && n <= 99 ? n : null; };
+  const out = {};
+  [["acertoRisco", "acertoSeguro"], ["retencaoRisco", "retencaoSeguro"]].forEach(([r, s]) => {
+    const a = ok(j[r]), b = ok(j[s]);
+    out[r] = a !== null ? a : pad[r]; out[s] = b !== null ? b : pad[s];
+    if (out[r] >= out[s]) { out[r] = pad[r]; out[s] = pad[s]; }      /* corte de risco tem de ser MENOR que o de segurança */
+  });
+  return out;
+}
+function domLimitesGravar(l) {
+  try { localStorage.setItem(DOM_CH_LIM, JSON.stringify(l)); } catch (e) {}
+  return domLimitesLer();
+}
 const DOM_NIVEIS = ["vermelho", "amarelo", "cinza", "azul", "verde"];   /* do pior ao melhor, para o "pior dos ramos" */
 
 /* Acerto RECENTE de um tópico: as últimas `janela` tentativas (sem data = as mais antigas). */
@@ -86,7 +105,8 @@ function domNivel(s, opc) {
   const medido = !!(ac || rt);
   const estudado = est.estado !== "nunca" || medido;
   const nota = au === "baixa" ? [{ cod: "declarou_domino" }] : [];
-  if (vermelhos.length) return { nivel: "vermelho", motivos: vermelhos.concat(motivos), semMarcaEstudo: est.estado === "nunca" };
+  /* vermelho vence, mas a revisão vencida continua à vista (o filtro "revisão vencida" e a tooltip a mostram) */
+  if (vermelhos.length) return { nivel: "vermelho", motivos: vermelhos.concat(motivos, est.venceu ? [{ cod: "revisao_vencida", dias: est.dias }] : []), semMarcaEstudo: est.estado === "nunca" };
   if (!estudado && !au) return { nivel: "cinza", motivos: [{ cod: "nunca_estudado" }] };
   if (!estudado) return { nivel: "cinza", motivos: [{ cod: "nunca_estudado" }].concat(nota) };
   if (est.venceu) return { nivel: "amarelo", motivos: [{ cod: "revisao_vencida", dias: est.dias }].concat(medianos, solidos) };
@@ -116,8 +136,11 @@ function domMapa(cob, entradas, opc) {
       : Object.keys(car[chave] || {}).reduce((a, k) => a.concat(car[chave][k]), []);
     const acerto = domAcerto(tent[chave], o);
     const retencao = domRetencao(regs, o);
-    const r = domNivel({ estudo, acerto, retencao, auto: aut[chave] }, o);
-    return Object.assign({ sinais: { estudo, acerto, retencao, auto: aut[chave] || null }, herdadoAcerto: !!ramoId }, r);
+    const autoRamo = ramoId ? aut[chave + "›#" + ramoId] : null;
+    const auto = autoRamo || aut[chave] || null;
+    const autoHerdada = !!ramoId && !autoRamo && !!aut[chave];
+    const r = domNivel({ estudo, acerto, retencao, auto }, o);
+    return Object.assign({ sinais: { estudo, acerto, retencao, auto }, herdadoAcerto: !!ramoId, autoHerdada }, r);
   };
   const disciplinas = cob.disciplinas.map((d) => {
     const dist = distrib();
@@ -151,6 +174,9 @@ function domMapa(cob, entradas, opc) {
   return { disciplinas, folhas, reforcar, resumo, base: cob.base, fase: cob.fase };
 }
 
+/* o nome com que a autoavaliação de um RAMO é guardada no módulo de dificuldade */
+function domChaveAuto(topico, ramoId) { return String(topico) + "›#" + String(ramoId); }
+
 /* REÚNE as entradas do app para um edital (a única função daqui que lê o resto do sistema). */
 function domEntradas(ed, plano, notas, banco, regs) {
   const estudo = {}, tentativas = {}, cartoes = {}, auto = {};
@@ -162,6 +188,10 @@ function domEntradas(ed, plano, notas, banco, regs) {
       estudo[chave + "›#" + r.id] = { estado: r.revisado ? "revisado" : (r.feito ? "estudado" : "nunca"), quando: r.quando || null, dias: r.dias === undefined ? null : r.dias, venceu: venceu(r), pulado: !!r.pulado, herdado: !!r.marcaHerdada };
     });
     try { const d = difDe(i.disciplina, i.nome); if (d && d.nivel) auto[chave] = { nivel: d.nivel, vencida: !!d.vencida, dias: d.dias }; } catch (e) {}
+    /* autoavaliação por RAMO: guardada como um "tópico" de nome tópico›#ramo, só para o Domínio (não mexe na fila do plano) */
+    (i.ramos || []).forEach((r) => {
+      try { const d = difDe(i.disciplina, domChaveAuto(i.nome, r.id)); if (d && d.nivel) auto[chave + "›#" + r.id] = { nivel: d.nivel, vencida: !!d.vencida, dias: d.dias }; } catch (e) {}
+    });
   });
   (banco || []).forEach((q) => {
     if (!q || !q.disciplina || !q.topico) return;
@@ -188,5 +218,5 @@ function domDoEdital(ed, opc) {
   const plano = montarPlano(r, { horas: (r.cfg || {}).horas || 10, prova: (r.cfg || {}).prova, feitos: (ed && ed.progresso) || {} });
   const regs = estcLerJSON(ESTC_CH_REGS, {});
   const banco = typeof qsTodas === "function" ? qsTodas() : [];
-  return domMapa(cob, domEntradas(ed, plano, notas, banco, regs), opc);
+  return domMapa(cob, domEntradas(ed, plano, notas, banco, regs), Object.assign(domLimitesLer(), opc || {}));
 }

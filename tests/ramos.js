@@ -2466,6 +2466,7 @@ async function testes() {
       const venc = { estado: "estudado", dias: 40, venceu: true };
       ok(nv({ estudo: venc, acerto: ac(90) }) === "amarelo" && a.domNivel(S({ estudo: venc, acerto: ac(90) })).motivos[0].cod === "revisao_vencida", "R66i revisao vencida vira amarelo mesmo com bom acerto (contra a ilusao de dominio)");
       ok(nv({ estudo: venc, acerto: ac(40) }) === "vermelho", "R66j vermelho vence a revisao vencida");
+      ok(a.domNivel(S({ estudo: venc, acerto: ac(40) })).motivos.some((m) => m.cod === "revisao_vencida"), "R66j2 no vermelho a revisao vencida continua listada nos motivos (para o filtro e a tooltip)");
       ok(nv({ acerto: ac(10, 4) }) === "azul" && nv({ acerto: ac(10, 5) }) === "vermelho", "R66k abaixo da amostra minima (4) o acerto NAO decide; com 5 decide");
       ok(nv({ retencao: rt(10, 9) }) === "azul" && nv({ retencao: rt(10, 10) }) === "vermelho", "R66l retencao: 9 respostas nao decidem, 10 decidem");
       ok(nv({ auto: { nivel: "alta", vencida: false } }) === "vermelho" && nv({ auto: { nivel: "alta", vencida: true } }) === "azul", "R66m 'inseguro' vigente e' vermelho; vencido nao pesa");
@@ -2580,6 +2581,76 @@ async function testes() {
       a.$("btnEdDominio").onclick();
       ok(a.$("dlgDominio").open === true && String(a.$("domEdital").value) === String(ed.id), "R69n o botao do cabecalho do edital abre o dominio JA nesse edital");
       a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
+    }
+
+    /* R70: DOMINIO fase 3 — cortes ajustaveis, autoavaliacao por ramo, filtros e acoes */
+    {
+      const { a, ed } = MT();
+      /* cortes ajustaveis */
+      ok(JSON.stringify(a.domLimitesLer()) === JSON.stringify({ acertoRisco: 60, acertoSeguro: 75, retencaoRisco: 70, retencaoSeguro: 85 }), "R70a sem escolha, os cortes sao os padrao (60/75 e 70/85)");
+      a.domLimitesGravar({ acertoRisco: 50, acertoSeguro: 80, retencaoRisco: 65, retencaoSeguro: 90 });
+      ok(a.domLimitesLer().acertoRisco === 50 && a.domLimitesLer().retencaoSeguro === 90 && JSON.parse(a.lojaLer(a.DOM_CH_LIM)).acertoSeguro === 80, "R70b os cortes escolhidos ficam guardados");
+      a.domLimitesGravar({ acertoRisco: 80, acertoSeguro: 70, retencaoRisco: 0, retencaoSeguro: 200 });
+      ok(a.domLimitesLer().acertoRisco === 60 && a.domLimitesLer().acertoSeguro === 75 && a.domLimitesLer().retencaoRisco === 70 && a.domLimitesLer().retencaoSeguro === 85, "R70c corte de risco >= seguranca, ou fora de 1 a 99, volta ao padrao");
+      const S = (o) => Object.assign({ estudo: { estado: "estudado", dias: 3, venceu: false }, acerto: null, retencao: null, auto: null }, o);
+      const ac = (pct) => ({ n: 10, pct, valido: true });
+      ok(a.domNivel(S({ acerto: ac(55) })).nivel === "vermelho" && a.domNivel(S({ acerto: ac(55) }), { acertoRisco: 50, acertoSeguro: 80 }).nivel === "amarelo" && a.domNivel(S({ acerto: ac(78) }), { acertoRisco: 50, acertoSeguro: 80 }).nivel === "amarelo", "R70d o nivel respeita os cortes escolhidos");
+      /* autoavaliacao por ramo */
+      const idA = a.domChaveAuto("Lei 14.133", "modalidades");
+      a.difDefinir("Licitações", idA, "alta", "declarada");
+      ok(a.difDe("Licitações", "Lei 14.133").nivel === "" , "R70e a avaliacao do RAMO nao mexe na do topico (nem na fila do plano)");
+      const m = a.domDoEdital(ed);
+      const modal = m.folhas.find((f) => f.tipo === "ramo" && f.ramoId === "modalidades"), fase = m.folhas.find((f) => f.tipo === "ramo" && f.ramoId === "fase_preparatoria");
+      ok(modal.sinais.auto && modal.sinais.auto.nivel === "alta" && modal.nivel === "vermelho" && modal.motivos.some((x) => x.cod === "inseguro") && (!fase.sinais.auto), "R70f o ramo marcado 'inseguro' fica vermelho e o irmao (sem marca) nao: " + modal.nivel + "/" + fase.nivel);
+      a.difDefinir("Licitações", "Lei 14.133", "baixa", "declarada");
+      const m2 = a.domDoEdital(ed);
+      const fase2 = m2.folhas.find((f) => f.tipo === "ramo" && f.ramoId === "fase_preparatoria");
+      ok(fase2.sinais.auto && fase2.sinais.auto.nivel === "baixa" && fase2.autoHerdada === true, "R70g o ramo SEM marca propria herda a do topico (marcado como herdada)");
+      /* a tela: filtros, autoavaliacao e acoes */
+      a.gerAbrir();
+      a.$("btnGerDominio").onclick();
+      const cx = () => a.$("domCorpo");
+      const filtros = () => achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"));
+      ok(filtros().length === 5 && /todos \(\d+\)/.test(filtros()[0].textContent) && filtros()[0].className.indexOf("ativa") >= 0, "R70h cinco filtros com a contagem, 'todos' ativo: " + filtros().map((f) => f.textContent).join(" | "));
+      const nVerm = Number(/\((\d+)\)/.exec(filtros()[1].textContent)[1]);
+      ok(nVerm === 1, "R70i o filtro vermelho conta 1 folha (o ramo marcado inseguro): " + nVerm);
+      filtros()[1].onclick();
+      const ramosVis = achar(cx(), (e) => cls(e, "dom-ramo"));
+      ok(ramosVis.length === 1 && /Modalidades/.test(ramosVis[0].textContent) && achar(cx(), (e) => cls(e, "cov-disc")).length === 1, "R70j com o filtro vermelho so' o ramo vermelho e a sua disciplina aparecem (e ja abertos)");
+      ok(achar(cx(), (e) => cls(e, "cov-det")).every((d) => d.hidden === false), "R70k com filtro ativo as disciplinas que sobram vem abertas");
+      achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"))[0].onclick();
+      ok(achar(cx(), (e) => cls(e, "cov-disc")).length === 2, "R70l 'todos' traz tudo de volta");
+      /* autoavaliacao pela tela */
+      const disc = achar(cx(), (e) => cls(e, "cov-disc"))[0];
+      achar(disc, (e) => cls(e, "cov-disc-cab"))[0].onclick();
+      const rl = achar(cx(), (e) => cls(e, "dom-ramo")).find((e) => /Contratos/.test(e.textContent));
+      const bMed = achar(rl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "inseguro");
+      bMed.onclick();
+      ok(a.difDe("Licitações", a.domChaveAuto("Lei 14.133", "contratos")).nivel === "alta", "R70m o botao 'inseguro' do ramo grava a avaliacao dele");
+      const rl2 = achar(cx(), (e) => cls(e, "dom-ramo")).find((e) => /Contratos/.test(e.textContent));
+      ok(achar(rl2, (e) => cls(e, "dom-auto-b")).some((e) => e.textContent === "inseguro" && e.className.indexOf("ativa") >= 0) && /dom-b-vermelho/.test(rl2.className), "R70n a tela repinta: o botao fica ativo e o ramo vermelho");
+      achar(rl2, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "limpar").onclick();
+      ok(a.difDe("Licitações", a.domChaveAuto("Lei 14.133", "contratos")).nivel === "", "R70o 'limpar' apaga a avaliacao do ramo");
+      /* o botao do topico grava no modulo de dificuldade do PLANO */
+      const tl = achar(cx(), (e) => cls(e, "dom-top")).find((e) => /Lei 14.133/.test(e.textContent));
+      achar(tl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "médio").onclick();
+      ok(a.difDe("Licitações", "Lei 14.133").nivel === "media", "R70p no TOPICO a avaliacao e' a mesma do plano (a fila muda)");
+      /* as acoes: questoes sempre; registrar so' no edital aberto */
+      const botoes = (el) => achar(el, (e) => e.tag === "button").map((b) => b.textContent);
+      ok(botoes(tl).some((b) => /Questões/.test(b)) && !botoes(tl).some((b) => /Registrar/.test(b)), "R70q o topico tem 'Questoes' e, sem o edital aberto na tela, NAO oferece 'Registrar'");
+      a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
+      a.edAbrir(ed.id); a.$("editalTexto").value = ed.texto;
+      a.$("btnEdDominio").onclick();
+      const tl2 = achar(a.$("domCorpo"), (e) => cls(e, "dom-top")).find((e) => /Lei 14.133/.test(e.textContent));
+      ok(botoes(tl2).some((b) => /Registrar/.test(b)), "R70r com o edital aberto o topico oferece 'Registrar' (estudo ou revisao)");
+      /* cortes pela tela */
+      a.$("domAcRisco").value = "40"; a.$("domAcRisco").onchange();
+      ok(a.domLimitesLer().acertoRisco === 40 && a.$("domAcRisco").value === "40", "R70s mudar um corte na tela grava e repinta");
+      a.$("domAcRisco").value = "90"; a.$("domAcRisco").onchange();
+      ok(a.domLimitesLer().acertoRisco === 60 && a.$("domAcRisco").value === "60", "R70t corte invalido (risco maior que seguranca) volta ao padrao na tela");
+      a.$("btnDomPadrao").onclick();
+      ok(a.lojaLer(a.DOM_CH_LIM) === null, "R70u 'restaurar o padrao' apaga a escolha");
+      a.$("btnDomX").onclick();
     }
 
     /* R39: exigir a trilha completa para dar o ramo como estudado */

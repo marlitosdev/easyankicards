@@ -6,7 +6,48 @@
  * herdado do tópico leva contorno tracejado. Embaixo, "o que reforçar primeiro".
  * (A regra do nível e os números estão em dominio-assunto.js; aqui só se desenha.)
  * ===================================================================== */
-let domEditalId = "", domDiscAberta = "";
+let domEditalId = "", domDiscAberta = "", domFiltro = "todos";
+const DOM_FILTROS = ["todos", "vermelho", "vencida", "azul", "cinza"];
+
+/* a folha passa pelo filtro escolhido? */
+function domCasa(x) {
+  if (domFiltro === "todos") return true;
+  if (domFiltro === "vencida") return (x.motivos || []).some((m) => m.cod === "revisao_vencida");
+  return x.nivel === domFiltro;
+}
+
+/* MINHA AVALIAÇÃO: inseguro · médio · domino (e limpar). No tópico vale para o plano também; no ramo, só para o Domínio. */
+function domAutoWidget(pai, disciplina, nomeGuardado, ehRamo) {
+  const atual = difDe(disciplina, nomeGuardado);
+  const box = gerEl("div", "dom-auto");
+  box.append(gerEl("span", "dom-minha", t("dom_minha") + (atual.vencida ? " (" + t("dom_auto_venc") + ")" : "")));
+  [["alta", "dom_auto_b_alta"], ["media", "dom_auto_b_media"], ["baixa", "dom_auto_b_baixa"]].forEach(([n, chave]) => {
+    const b = gerEl("button", "dom-auto-b" + (atual.nivel === n ? " ativa" : ""), t(chave)); b.type = "button";
+    b.title = t(ehRamo ? "dom_tip_auto_ramo" : "dom_tip_auto_topico");
+    b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); difDefinir(disciplina, nomeGuardado, n, "declarada"); domPintar(); };
+    box.append(b);
+  });
+  if (atual.nivel) {
+    const l = gerEl("button", "dom-auto-b", t("dom_auto_limpar")); l.type = "button";
+    l.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); difApagar(disciplina, nomeGuardado); domPintar(); };
+    box.append(l);
+  }
+  pai.append(box);
+}
+
+/* "Registrar" estudo ou revisão: só quando o edital do Domínio é o que está aberto na tela do edital (o registro grava lá) */
+function domBotaoRegistrar(pai, disciplina, topico, ramoId) {
+  if (String(domEditalId) !== String(editalAtual)) return;
+  const rg = gerEl("button", "btn-min", t("dom_registrar")); rg.type = "button";
+  rg.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    const it = edItemDoPlano(disciplina, topico);
+    if (!it) return;
+    $("dlgDominio").close();
+    abrirRegistro(it, ramoId ? { ramo: ramoId } : undefined);
+  };
+  pai.append(rg);
+}
 
 function domMotivoTxt(m) {
   return t("dom_m_" + m.cod, { pct: m.pct, n: m.n, dias: m.dias === null || m.dias === undefined ? "?" : m.dias });
@@ -44,6 +85,10 @@ function domLinhaAcoes(pai, disciplina, topico, cartoes) {
   const go = gerEl("button", "btn-min btn-min-ok", cartoes ? t("hor_estudar", { n: cartoes }) : t("hor_criar")); go.type = "button";
   go.onclick = () => { $("dlgDominio").close(); if (cartoes) estcEstudarTopico(disciplina, topico); else bancAlvoDefinir(disciplina, topico); };
   ac.append(go);
+  const qu = gerEl("button", "btn-min", t("dom_questoes")); qu.type = "button";
+  qu.onclick = () => { $("dlgDominio").close(); qsUiResponderDireto(disciplina, topico); };
+  ac.append(qu);
+  domBotaoRegistrar(ac, disciplina, topico, "");
   pai.append(ac);
 }
 
@@ -57,6 +102,8 @@ function domPintar() {
   const fase = temF2 && $("domFase").value === "2" ? 2 : 1;
   const m = domDoEdital(ed, { fase });
   if (!m.resumo.folhas) { cx.append(gerEl("p", "nota", t("cov_sem_topicos"))); return; }
+  domPintarFiltros(m);
+  domPreencherCortes();
   const dist = m.resumo.distribuicao, tot = m.resumo.total || 1;
   const man = gerEl("div", "cov-manchete" + (dist.cinza + dist.vermelho >= 20 ? " cov-manchete-alerta" : ""));
   man.append(gerEl("b", "", t("dom_manchete", { s: Math.round((dist.cinza / tot) * 100), v: Math.round((dist.vermelho / tot) * 100) })));
@@ -84,7 +131,10 @@ function domPintar() {
   const ordem = m.disciplinas.slice().sort((a, b) => (b.pesoPct - a.pesoPct) || (a.nome < b.nome ? -1 : 1));
   const lista = gerEl("div", "cov-lista");
   ordem.forEach((d) => {
-    const linha = gerEl("div", "cov-disc" + (domDiscAberta === d.nome ? " cov-aberta" : ""));
+    const casaTopo = (tp) => (tp.ramos.length ? tp.ramos.some(domCasa) : domCasa(tp));
+    if (domFiltro !== "todos" && !d.topicos.some(casaTopo)) return;
+    const abertaAqui = domDiscAberta === d.nome || domFiltro !== "todos";
+    const linha = gerEl("div", "cov-disc" + (abertaAqui ? " cov-aberta" : ""));
     const cab = gerEl("div", "cov-disc-cab");
     const dd = d.distribuicao, ds = Object.keys(dd).reduce((x, k) => x + dd[k], 0) || 1;
     cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_peso", { p: d.pesoPct.toFixed(1) })),
@@ -99,19 +149,22 @@ function domPintar() {
       tira.append(seg);
     });
     linha.append(tira);
-    const det = gerEl("div", "cov-det"); det.hidden = domDiscAberta !== d.nome;
+    const det = gerEl("div", "cov-det"); det.hidden = !abertaAqui;
     d.topicos.forEach((tp) => {
+      if (domFiltro !== "todos" && !casaTopo(tp)) return;
       const tl = gerEl("div", "dom-top dom-b-" + tp.nivel);
       const topo = gerEl("div", "dom-top-cab");
       topo.append(gerEl("span", "dom-nivel dom-n-" + tp.nivel, tp.nivel === "pulado" ? "—" : t("dom_n_" + tp.nivel)), gerEl("span", "cov-top-nome", tp.nome));
       if (tp.fase2 && m.fase === 1) topo.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
       domLinhaAcoes(topo, d.nome, tp.nome, tp.cartoes);
       tl.append(topo);
+      domAutoWidget(tl, d.nome, tp.nome, false);
       if (!tp.ramos.length && tp.sinais) {
         const pq = domPorque(tp.motivos); if (pq) tl.append(gerEl("div", "dom-porque", pq));
         const ch = gerEl("div", "dom-chips"); domChips(ch, tp); tl.append(ch);
       }
       tp.ramos.forEach((rm) => {
+        if (domFiltro !== "todos" && !domCasa(rm)) return;
         const rl = gerEl("div", "dom-ramo dom-b-" + rm.nivel + (rm.pulado ? " hor-ramo-pulado" : ""));
         const rc = gerEl("div", "dom-top-cab");
         rc.append(gerEl("span", "dom-nivel dom-n-" + rm.nivel, rm.nivel === "pulado" ? "—" : t("dom_n_" + rm.nivel)), gerEl("span", "cov-top-nome", "↳ " + rm.ramoNome));
@@ -119,6 +172,8 @@ function domPintar() {
         if (!rm.pulado) {
           const pq = domPorque(rm.motivos); if (pq) rl.append(gerEl("div", "dom-porque", pq));
           const ch = gerEl("div", "dom-chips"); domChips(ch, rm); rl.append(ch);
+          domAutoWidget(rl, d.nome, domChaveAuto(tp.nome, rm.ramoId), true);
+          const bt = gerEl("div", "cov-acoes"); domBotaoRegistrar(bt, d.nome, tp.nome, rm.ramoId); if (bt.children.length) rl.append(bt);
         }
         tl.append(rl);
       });
@@ -146,8 +201,32 @@ function domPintar() {
   }
 }
 
+/* os filtros: chips com a contagem de folhas (tópicos sem ramo ou ramos) de cada situação */
+function domPintarFiltros(m) {
+  const cx = $("domFiltros");
+  cx.innerHTML = "";
+  DOM_FILTROS.forEach((f) => {
+    const n = f === "todos" ? m.folhas.length : m.folhas.filter((x) => (f === "vencida" ? (x.motivos || []).some((mm) => mm.cod === "revisao_vencida") : x.nivel === f)).length;
+    const b = gerEl("button", "dom-filtro" + (domFiltro === f ? " ativa" : ""), t("dom_f_" + f) + " (" + n + ")"); b.type = "button";
+    b.onclick = () => { domFiltro = f; domPintar(); };
+    cx.append(b);
+  });
+}
+
+/* os cortes do semáforo */
+function domPreencherCortes() {
+  const l = domLimitesLer();
+  $("domAcRisco").value = String(l.acertoRisco); $("domAcSeguro").value = String(l.acertoSeguro);
+  $("domRtRisco").value = String(l.retencaoRisco); $("domRtSeguro").value = String(l.retencaoSeguro);
+}
+function domSalvarCortes() {
+  domLimitesGravar({ acertoRisco: $("domAcRisco").value, acertoSeguro: $("domAcSeguro").value, retencaoRisco: $("domRtRisco").value, retencaoSeguro: $("domRtSeguro").value });
+  domPintar();
+}
+
 function domAbrir(editalId, disciplina) {
   domDiscAberta = disciplina || "";
+  domFiltro = "todos";
   const eds = covEditaisOrdenados();
   const sel = $("domEdital");
   sel.innerHTML = "";
@@ -166,4 +245,6 @@ if (typeof document !== "undefined" && $("dlgDominio")) {
   $("btnDomX").onclick = () => $("dlgDominio").close();
   $("domEdital").onchange = () => { domEditalId = $("domEdital").value; $("domFase").value = "1"; domPintar(); };
   $("domFase").onchange = domPintar;
+  ["domAcRisco", "domAcSeguro", "domRtRisco", "domRtSeguro"].forEach((id) => { $(id).onchange = domSalvarCortes; });
+  $("btnDomPadrao").onclick = () => { try { localStorage.removeItem(DOM_CH_LIM); } catch (e) {} domPintar(); };
 }

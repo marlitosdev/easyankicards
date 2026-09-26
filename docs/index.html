@@ -4318,6 +4318,19 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-chip-alerta{border-color:#f0ad4e;color:#f0ad4e;font-weight:700}
 .dom-chip-fraco{opacity:.65;font-style:italic}
 .dom-herdado{border-style:dashed}
+.dom-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.dom-filtro{all:unset;box-sizing:border-box;cursor:pointer;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--borda);background:rgba(127,127,127,.1)}
+.dom-filtro.ativa{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+.dom-filtro:focus-visible{outline:2px solid var(--acao)}
+.dom-ajustes{font-size:12px;margin:4px 0}
+.dom-ajustes summary{cursor:pointer;color:var(--sutil)}
+.dom-aj-l{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.dom-aj-l input{width:58px}
+.dom-auto{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.dom-minha{font-size:11px;color:var(--sutil)}
+.dom-auto-b{all:unset;box-sizing:border-box;cursor:pointer;font-size:11px;padding:2px 9px;border-radius:999px;border:1px solid var(--borda)}
+.dom-auto-b.ativa{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+.dom-auto-b:focus-visible{outline:2px solid var(--acao)}
 @media (max-width:760px){
   dialog.dom-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
     padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
@@ -8027,6 +8040,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <option value="2" data-i18n="cov_fase2"></option>
     </select>
   </div>
+  <div class="dom-filtros" id="domFiltros"></div>
+  <details class="dom-ajustes">
+    <summary data-i18n="dom_ajustes"></summary>
+    <div class="dom-aj-l"><span data-i18n="dom_aj_acerto"></span> <input type="number" id="domAcRisco" min="1" max="99"> / <input type="number" id="domAcSeguro" min="1" max="99"></div>
+    <div class="dom-aj-l"><span data-i18n="dom_aj_ret"></span> <input type="number" id="domRtRisco" min="1" max="99"> / <input type="number" id="domRtSeguro" min="1" max="99"></div>
+    <button type="button" class="btn-min" id="btnDomPadrao" data-i18n="dom_aj_padrao"></button>
+    <p class="nota" data-i18n="dom_aj_nota"></p>
+  </details>
   <div class="cov-corpo" id="domCorpo"></div>
 </dialog>
 
