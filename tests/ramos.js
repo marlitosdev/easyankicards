@@ -2382,6 +2382,17 @@ async function testes() {
       ok(f4.proxima === null && f4.quando !== null && f4.quando <= T0 + 60 * MIN, "R64r nada mais agora: proxima nula e diz QUANDO volta o proximo");
       const muitos = Array.from({ length: 25 }, (_, i) => ({ id: "n" + i }));
       ok(a.agdFila(muitos, {}, { novos: 5 }, T0, {}).conta.novos === 15 && a.agdFila(muitos, {}, { novos: 0 }, T0, {}).conta.novos === 20, "R64s o limite padrao e' 20 novos por dia, descontando os ja vistos hoje");
+      /* FASE 0: o historico recente de cada cartao (ultimas 8 notas) e a hora da ultima resposta */
+      let hh = null; const notas = [3, 3, 1, 3, 2, 3, 3, 4, 3, 1];
+      notas.forEach((n, k) => { hh = a.agdResponder(hh, n, T0 + k * MIN); });
+      ok(JSON.stringify(hh.h) === JSON.stringify(notas.slice(-8)) && hh.h.length === 8, "R64u guarda as ULTIMAS 8 notas, da mais antiga a mais nova: " + hh.h.join(","));
+      ok(hh.t === T0 + 9 * MIN && hh.n === 10, "R64v guarda a hora da ultima resposta");
+      const um = a.agdResponder(null, 3, T0);
+      ok(JSON.stringify(um.h) === "[3]" && um.t === T0, "R64w o primeiro cartao ja nasce com historico de 1 nota");
+      const antigo = { s: "review", st: 0, iv: 5, ez: 2.5, due: T0, n: 4, l: 1 };
+      const dep = a.agdResponder(antigo, 2, T0);
+      ok(JSON.stringify(dep.h) === "[2]" && antigo.h === undefined, "R64x registro anterior a 17.27.0 (sem historico) recomeça o historico sem quebrar, e a entrada nao muda");
+      ok(a.agdPrevisao(hh, T0).length === 4 && hh.h.length === 8, "R64y a previsao dos botoes nao mexe no historico");
       ok(a.agdFimDoDia(T0) > T0 && a.agdFimDoDia(T0) - T0 < DIA && new Date(a.agdFimDoDia(T0)).getHours() === 23, "R64t revisao vence no DIA marcado (ate' o fim do dia local)");
     }
     /* R65: o player no modo AGENDADO */
