@@ -1656,6 +1656,110 @@ async function testes() {
       a.$("dlgLeiSeca").close();
     }
 
+    /* R49: ESPELHAR o registro em outro edital ligado por vinculo */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const ED2 = ["# SEFAZ Alagoas | prova: 2027-08-01 | horas: 20", "@ Licitações :: 5", "+ Nova Lei de Licitações :: 5", "++ Modalidades :: 5", "++ Contratos :: 3", "@ Outra :: 3", "+ Tópico B :: 3"].join(NL);
+      const ed2 = a.edCriar("SEFAZ Alagoas", ED2);
+      const chOrig = a.vkChave("Licitações", "Lei 14.133"), chDest = a.vkChave("Licitações", "Nova Lei de Licitações");
+      ok(a.vkAplicar([{ de: { chave: chOrig }, para: { chave: chDest }, conf: "ALTA" }], ed2.id, "estudei").novos === 1, "R49pre vinculo criado");
+      const dests = a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2]);
+      ok(dests.length === 1 && dests[0].editalId === ed2.id && dests[0].disciplina === "Licitações" && dests[0].topico === "Nova Lei de Licitações" && dests[0].chave === "licitações›nova lei de licitações" && dests[0].ramos.join() === "modalidades,contratos" && dests[0].estadoAtual === null, "R49 destino do espelho: o topico do outro edital ligado por vinculo (com a chave do progresso, os ramos e o estado atual): " + JSON.stringify(dests));
+      ok(a.vkEspelhosDe("Licitações", "Nova Lei de Licitações", ed2.id, [ed, ed2]).map((d) => d.topico).join() === "Lei 14.133" && a.vkEspelhosDe("Licitações", "Lei 14.133", ed2.id, [ed, ed2]).length === 0 && a.vkEspelhosDe("Licitações", "Sem vinculo", ed.id, [ed, ed2]).length === 0, "R49a vale nos dois sentidos; nunca devolve o proprio edital; sem vinculo, nada");
+      a.vkAplicar([{ de: { chave: chOrig }, para: { chave: a.vkChave("Outra", "Tópico B") }, conf: "MEDIA" }], ed2.id, "estudei");
+      ok(a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2]).length === 1, "R49b vinculo de confianca MEDIA nao gera espelho");
+      ok(a.vkArquivar([{ a: chOrig, b: chDest }], true) === 1 && a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2]).length === 0 && a.vkArquivar([{ a: chOrig, b: chDest }], false) === 1 && a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2]).length === 1, "R49b2 vinculo ARQUIVADO nao gera espelho (e volta a gerar ao desarquivar)");
+      ed2.progresso["licitações›nova lei de licitações"] = { e: "feito", d: "2026-01-01" };
+      ok(a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2])[0].estadoAtual === "feito", "R49b3 o destino traz o estado que o topico ja' tem la'");
+      delete ed2.progresso["licitações›nova lei de licitações"];
+      const ed3 = a.edCriar("Concurso encerrado", ["# Velho | prova: 2020-01-01 | horas: 20", "@ Licitações :: 5", "+ Nova Lei de Licitações :: 5"].join(NL));
+      ok(a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2, ed3]).length === 1 && a.vkEspelhosDe("Licitações", "Lei 14.133", ed.id, [ed, ed2, ed3], { incluirEncerrados: true }).length === 2, "R49c edital ENCERRADO fora (a menos que peça)");
+      /* as marcas, puras */
+      const H = "2026-09-26";
+      const p1 = {};
+      const m1 = a.edEspelharMarcas(p1, { chave: "c", ramos: [] }, "feito", [], H, "O");
+      ok(m1.length === 1 && m1[0].k === "c" && m1[0].ant === null && JSON.stringify(p1.c) === JSON.stringify({ e: "feito", d: H, esp: "O" }), "R49d topico sem ramos: grava a marca com data e origem");
+      ok(a.edEspelharMarcas({ c: { e: "revisado", d: "2026-01-01" } }, { chave: "c", ramos: [] }, "revisado", [], H, "O").length === 0, "R49e0 revisado no destino e revisao de origem: nada");
+      ok(a.edEspelharMarcas({ c: { e: "revisado", d: "2026-01-01" } }, { chave: "c", ramos: [] }, "feito", [], H, "O").length === 0 && a.edEspelharMarcas({ c: { e: "feito", d: "2026-01-01" } }, { chave: "c", ramos: [] }, "feito", [], H, "O").length === 0, "R49e nunca rebaixa nem repete: revisado e feito ja' no destino nao sao tocados");
+      const p2 = { c: { e: "feito", d: "2026-01-01" } };
+      const m2 = a.edEspelharMarcas(p2, { chave: "c", ramos: [] }, "revisado", [], H, "O");
+      ok(m2.length === 1 && p2.c.e === "revisado" && m2[0].ant.e === "feito", "R49f revisao sobe o estado (feito -> revisado) e guarda o de antes");
+      const p3 = {};
+      const m3 = a.edEspelharMarcas(p3, { chave: "c", ramos: ["a", "b"] }, "feito", ["a", "x"], H, "O");
+      ok(m3.length === 1 && m3[0].k === "c›#a" && !p3["c›#x"] && !p3["c›#b"], "R49g com ramos: so' o de MESMO id no destino (a); o 'x' que nao existe la' e o 'b' que nao foi tocado ficam");
+      ok(a.edEspelharMarcas({}, { chave: "c", ramos: ["a"] }, "feito", ["z"], H, "O").length === 0 && a.edEspelharMarcas({ c: { e: "feito", d: "x" } }, { chave: "c", ramos: ["a"] }, "feito", ["a"], H, "O").length === 0 && a.edEspelharMarcas({ "c›#a": { e: "feito", d: "x" } }, { chave: "c", ramos: ["a"] }, "feito", ["a"], H, "O").length === 0, "R49h sem ramo em comum: nada; ramo ja' herdando o topico estudado (ou ja' estudado): nada");
+      const p4 = {};
+      const m4 = a.edEspelharMarcas(p4, { chave: "c", ramos: ["a"] }, "feito", [], H, "O");
+      ok(m4.length === 1 && m4[0].k === "c", "R49i origem sem ramos e destino com ramos: marca o topico (os ramos herdam)");
+      a.edEspelhoDesfazerMarcas(p3, m3); a.edEspelhoDesfazerMarcas(p2, m2);
+      ok(Object.keys(p3).length === 0 && p2.c.e === "feito", "R49j desfazer devolve o que havia (apaga o que nao havia, restaura o que havia)");
+      /* a tela: registrar com o espelho marcado */
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.edDiario.length = 0;
+      const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+      a.abrirRegistro(it());
+      ok(a.$("regEspelho").hidden === false && a.regEspelhoDestsAtual().length === 1 && a.$("regEspelhoLista").children.length === 1 && /SEFAZ Alagoas › Licitações › Nova Lei de Licitações/.test(a.$("regEspelhoLista").textContent), "R49k a janela de registro oferece o espelho (desmarcado): " + a.$("regEspelhoLista").textContent);
+      a.$("dlgRegistro").close();
+      ok(!!a.edItemDoPlano("Licitações", "Convênios"), "R49k1 (o topico sem vinculo existe no plano)");
+      a.abrirRegistro(a.edItemDoPlano("Licitações", "Convênios"));
+      ok(a.$("regEspelho").hidden === true && a.regEspelhoDestsAtual().length === 0, "R49k2 topico sem vinculo: o bloco do espelho fica escondido");
+      a.$("dlgRegistro").close();
+      ed2.progresso["licitações›nova lei de licitações"] = { e: "feito", d: "2026-01-01" };
+      a.abrirRegistro(it());
+      ok(/lá já consta como estudado/.test(a.$("regEspelhoLista").textContent), "R49k3 a linha diz o que ja' consta la': " + a.$("regEspelhoLista").textContent);
+      a.$("dlgRegistro").close();
+      delete ed2.progresso["licitações›nova lei de licitações"];
+      a.abrirRegistro(it());
+      a.confirmarRegistroTeste("feito");
+      ok(Object.keys(ed2.progresso).length === 0 && a.edDiario.every((x) => !x.esp), "R49l sem marcar o espelho, NADA e' gravado no outro edital");
+      a.edProgressoPor({}); a.edDiario.length = 0;
+      a.abrirRegistro(it());
+      const ck = a.$("regEspelhoLista").children[0].children[0];
+      ck.checked = true; ck.onchange();
+      const rkx = a.$("regRamos").children[2].children[0];
+      rkx.checked = false; rkx.onchange();
+      ok(a.$("regEspelhoLista").children[0].children[0].checked === true && a.regEspelhoDestsAtual().length === 1, "R49l2 marcar/desmarcar um ramo NAO apaga a escolha do espelho");
+      a.confirmarRegistroTeste("feito");
+      const kM = "licitações›nova lei de licitações›#modalidades";
+      ok(ed2.progresso[kM] && ed2.progresso[kM].e === "feito" && ed2.progresso[kM].esp === "-" && !ed2.progresso["licitações›nova lei de licitações›#fase_preparatoria"], "R49m marcado o espelho, o ramo de mesmo id (Modalidades) fica estudado no outro edital, com a origem; o que la' nao existe nao: " + JSON.stringify(ed2.progresso));
+      const iSrc = a.edDiario.findIndex((x) => x.eid), iMir = a.edDiario.findIndex((x) => x.esp);
+      ok(iSrc >= 0 && iMir >= 0 && iMir < iSrc && a.edDiario[iMir].espDe === a.edDiario[iSrc].eid && a.edDiario[iMir].m === 0 && a.edDiario[iMir].edE === ed2.id && a.edDiario[iMir].c === "licitações›nova lei de licitações" && a.edDiario[iSrc].m > 0, "R49n o diario ganha a linha do espelho ANTES da de origem, com 0 minuto (o tempo nao conta duas vezes), ligada a ela");
+      /* desfazer o registro de ORIGEM leva o espelho junto */
+      a.apagarDoDiario(a.edDiario.findIndex((x) => x.eid));
+      ok(Object.keys(ed2.progresso).length === 0 && a.edDiario.length === 0, "R49o apagar o registro de origem desfaz o espelho no outro edital e some com a linha dele: " + JSON.stringify(ed2.progresso));
+      /* "desfazer o ultimo registro" tambem devolve o espelho */
+      a.edProgressoPor({});
+      a.abrirRegistro(it());
+      const ck1 = a.$("regEspelhoLista").children[0].children[0];
+      ck1.checked = true; ck1.onchange();
+      a.confirmarRegistroTeste("feito");
+      ok(!!ed2.progresso[kM], "R49o2 (de novo) espelhado");
+      a.edDesfazerUltimoRegistro();
+      ok(Object.keys(ed2.progresso).length === 0 && a.edDiario.length === 0, "R49o3 'desfazer o ultimo registro' devolve o outro edital e tira a linha do espelho: " + JSON.stringify(ed2.progresso));
+      /* desfazer SO' o espelho */
+      a.edProgressoPor({});
+      a.abrirRegistro(it());
+      const ck2 = a.$("regEspelhoLista").children[0].children[0];
+      ck2.checked = true; ck2.onchange();
+      a.confirmarRegistroTeste("feito");
+      ok(!!ed2.progresso[kM], "R49p (de novo) espelhado");
+      const progAntes = JSON.stringify(a.edProgressoAtual());
+      a.apagarDoDiario(a.edDiario.findIndex((x) => x.esp));
+      ok(Object.keys(ed2.progresso).length === 0 && a.edDiario.some((x) => x.eid) && JSON.stringify(a.edProgressoAtual()) === progAntes, "R49q apagar so' a linha do ESPELHO devolve o outro edital e nao mexe no progresso deste");
+      /* o topico do outro edital ja' estudado nao e' rebaixado */
+      a.edDiario.length = 0; a.edProgressoPor({});
+      ed2.progresso[kM] = { e: "revisado", d: "2026-01-01" };
+      a.abrirRegistro(it());
+      const ck3 = a.$("regEspelhoLista").children[0].children[0];
+      ck3.checked = true; ck3.onchange();
+      a.confirmarRegistroTeste("feito");
+      ok(ed2.progresso[kM].e === "revisado" && ed2.progresso[kM].d === "2026-01-01" && !a.edDiario.some((x) => x.esp), "R49r destino ja' revisado nao e' rebaixado nem ganha linha de espelho");
+      const html49 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.reg-espelho\{/.test(html49) && /\.reg-espelho-lin\{/.test(html49) && /id="regEspelho" class="reg-espelho" hidden/.test(html49), "R49s o bloco do espelho existe na janela (escondido) e tem CSS");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

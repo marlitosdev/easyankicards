@@ -502,6 +502,34 @@ function edRamosPular(prog, item, ids, pular, hoje) {
   });
   return mud;
 }
+/* ESPELHAR MARCAS num progresso de OUTRO edital. dest = { chave, ramos:[ids] } (um destino de vkEspelhosDe); estado = "feito" |
+ * "revisado"; idsRamosOrigem = os ramos que o registro de origem tocou ([] = o tópico inteiro). Regras:
+ *  · com ramos na origem: só os ramos de MESMO id no destino; sem ramo em comum, nada;
+ *  · sem ramos na origem: a marca do tópico (que os ramos do destino herdam);
+ *  · nunca rebaixa nem repete: quem já está no mesmo estado (ou acima) no destino não é tocado.
+ * Devolve [{ k, ant }] — o que havia antes de cada chave, para o desfazer. */
+function edEspelharMarcas(prog, dest, estado, idsRamosOrigem, hoje, origemId) {
+  const rank = (m) => (m ? (m.e === "revisado" ? 2 : m.e === "feito" ? 1 : 0) : 0);
+  const alvo = estado === "revisado" ? 2 : 1;
+  const mud = [];
+  const grava = (k) => {
+    mud.push({ k, ant: prog[k] === undefined ? null : prog[k] });
+    prog[k] = { e: estado, d: hoje, esp: origemId };
+  };
+  if (idsRamosOrigem && idsRamosOrigem.length) {
+    idsRamosOrigem.forEach((id) => {
+      if ((dest.ramos || []).indexOf(id) < 0) return;
+      const k = dest.chave + "›#" + id;
+      if (Math.max(rank(prog[k]), rank(prog[dest.chave])) >= alvo) return;
+      grava(k);
+    });
+  } else if (rank(prog[dest.chave]) < alvo) grava(dest.chave);
+  return mud;
+}
+function edEspelhoDesfazerMarcas(prog, mud) {
+  (mud || []).forEach((m) => { if (m.ant) prog[m.k] = m.ant; else delete prog[m.k]; });
+}
+
 /* o inverso: devolve as marcas de antes */
 function edRamosDesfazer(prog, item, mud) {
   (mud || []).forEach((m) => {
