@@ -619,10 +619,12 @@ function edLinhaTopico(i, semDisciplina) {
    * O orçamento da linha (i.minutos) é o da revisão — metade do de um
    * tópico novo. Medir contra ele o tempo de TODA a vida do tópico dava
    * "1h15 de 30min" numa revisão que sequer tinha começado. */
+  /* tópico com ramos em estudo: o orçamento da barra é o do tópico INTEIRO (o plano reserva só o que falta) */
+  const orcMin = (!i.ehRevisao && i.minutosTotal) ? i.minutosTotal : i.minutos;
   const totalMin = minutosDoTopico(i.chave);
   const desdeQuando = i.ehRevisao ? ultimaConclusao(i.chave) : "";
   const feitoMin = i.ehRevisao ? minutosDeRevisao(i.chave) : totalMin;
-  const pctReal = i.minutos ? Math.round((feitoMin / i.minutos) * 100) : 0;
+  const pctReal = orcMin ? Math.round((feitoMin / orcMin) * 100) : 0;
   const pctT = Math.min(100, pctReal);
   const excedeu = pctReal > 115;      /* folga: 34min de 30min não é notícia */
   const barraT = document.createElement("div");
@@ -633,9 +635,9 @@ function edLinhaTopico(i, semDisciplina) {
   fillT.style.width = pctT + "%";
   barraT.append(fillT);
   barraT.title = excedeu
-    ? t("ed_it_barra_mais", { f: horasTexto(feitoMin), p: horasTexto(i.minutos),
-        pct: pctReal, extra: horasTexto(feitoMin - i.minutos) })
-    : t("ed_it_barra", { f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT });
+    ? t("ed_it_barra_mais", { f: horasTexto(feitoMin), p: horasTexto(orcMin),
+        pct: pctReal, extra: horasTexto(feitoMin - orcMin) })
+    : t("ed_it_barra", { f: horasTexto(feitoMin), p: horasTexto(orcMin), pct: pctT });
   meio.append(barraT);
   /* O NÚMERO AO LADO DA BARRA. Barra sozinha se lê "mais ou menos pela
    * metade" — e "25min de 1h" é uma decisão diferente de "50min de 1h".
@@ -649,9 +651,9 @@ function edLinhaTopico(i, semDisciplina) {
     const num = document.createElement("div");
     num.className = "it-num" + (excedeu ? " excedeu" : (pctT >= 100 ? " cheio" : ""));
     num.textContent = (excedeu
-      ? t("ed_it_num_mais", { f: horasTexto(feitoMin), p: horasTexto(i.minutos),
-          extra: horasTexto(feitoMin - i.minutos) })
-      : t("ed_it_num", { f: horasTexto(feitoMin), p: horasTexto(i.minutos), pct: pctT }))
+      ? t("ed_it_num_mais", { f: horasTexto(feitoMin), p: horasTexto(orcMin),
+          extra: horasTexto(feitoMin - orcMin) })
+      : t("ed_it_num", { f: horasTexto(feitoMin), p: horasTexto(orcMin), pct: pctT }))
       + (i.ehRevisao ? " " + t("ed_it_de_revisao") : "");
     meio.append(num);
   }
