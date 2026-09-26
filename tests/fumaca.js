@@ -758,7 +758,7 @@ function rodar() {
     leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
     leiTrocarPara, leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiCamposDoNome,
     leiClozeAbrir, leiClozeConferir, leiClozeAplicar, leiRanking, leiIrPintar, leiIrIr,
-    leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
+    leiTextoDoTopico, leiAvisoNomePintar, leiRelatorioVinculos, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiPintar, leiIrArtigo, leiAbrirNoArtigo, leiIrAbrir, leiNovaAbrir,
     leiTxtChave, leiEspecieChave, leiRotuloAntes, leiCitacoesNoTexto,
     leiRotuloChave, leiCasarRotulo, leiCandidatosDoRotulo, leiApelidoChave,

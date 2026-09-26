@@ -175,6 +175,80 @@ function leiLogTexto() {
   }).join("\n");
 }
 
+/* RELATÓRIO DE LEIS E VÍNCULOS — para relatar erro de vinculação sem mandar o backup inteiro. Por lei: id, campos
+ * guardados × identidade lida do TEXTO (divergência é a pista de nome trocado), tamanho, artigos, se altera outra lei, o
+ * começo do texto e os tópicos a que está ligada (com a marca de "preferida" ou "usada por ser a primeira"). Depois, os
+ * tópicos com mais de uma lei e qual delas o app abre. Com opc.comTexto, o texto de cada lei vai junto. */
+function leiRelatorioVinculos(opc) {
+  const comTexto = !!(opc && opc.comTexto);
+  const leis = typeof leisLista === "function" ? leisLista() : [];
+  const dig = (v) => String(v || "").replace(/\D/g, "").replace(/^0+/, "");
+  const resumos = (typeof matResumos !== "undefined" && matResumos) || {};
+  const nomeDe = (chave) => {
+    const r = resumos[chave];
+    if (r && r.topico) return { disciplina: r.disciplina || "", topico: r.topico, concurso: r.concurso || "" };
+    const p = String(chave).split("›");
+    return { disciplina: p[0] || "", topico: p.slice(1).join("›") || p[0] || "", concurso: "" };
+  };
+  const preferida = (chave) => {
+    const alvo = leisChaveComparavel(chave);
+    const k = Object.keys(resumos).find((x) => leisChaveComparavel(x) === alvo && resumos[x] && resumos[x].leiId);
+    return k ? resumos[k].leiId : "";
+  };
+  const L = [];
+  L.push("LEIS E VÍNCULOS · EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "?") + " · " + new Date().toISOString().slice(0, 16).replace("T", " "));
+  L.push(leis.length + " lei(s) na biblioteca");
+  const chaves = [];
+  leis.forEach((l, i) => {
+    let x = null, arts = "?", alt = "?";
+    const tx = String(l.texto || "");
+    try { x = tx ? leiIdentificar(tx) : null; } catch (e) {}
+    try { arts = tx ? leiArtigos(tx).length : 0; } catch (e) {}
+    try { alt = tx ? (leiEhAlteradora(tx) ? "sim" : "não") : "—"; } catch (e) {}
+    const guardada = [l.especie, l.numero, l.ano].filter(Boolean).join(" ");
+    const lida = x ? [x.especie, x.numero, x.ano].filter(Boolean).join(" ") : "(o texto não tem cabeçalho reconhecível)";
+    /* só é divergência quando o campo guardado EXISTE e discorda (campo vazio é falta de dado, não conflito) */
+    const diverge = !!x && ((!!dig(l.numero) && dig(x.numero) !== dig(l.numero)) || (!!l.ano && !!x.ano && String(x.ano) !== String(l.ano)));
+    L.push("");
+    L.push("[" + (i + 1) + "] " + (l.nome || "(sem nome)"));
+    L.push("    id: " + l.id);
+    L.push("    campos guardados: " + (guardada || "—") + " · identidade lida do texto: " + lida + (diverge ? "  ⚠ DIVERGE" : ""));
+    L.push("    " + tx.length + " caracteres · " + arts + " artigo(s) próprios · altera outra lei: " + alt);
+    L.push("    começo do texto: " + tx.slice(0, 160).replace(/\s+/g, " ").trim());
+    const tops = l.topicos || [];
+    L.push("    ligada a " + tops.length + " tópico(s):");
+    tops.forEach((c) => {
+      if (chaves.indexOf(c) < 0) chaves.push(c);
+      const n = nomeDe(c);
+      const abre = (typeof leiDoTopicoAtual === "function" ? leiDoTopicoAtual(c) : null);
+      const pref = preferida(c);
+      const marca = pref === l.id ? "preferida do tópico" : (pref ? "há outra preferida" : (abre && abre.id === l.id ? "sem preferida: usada por ser a 1ª ligada" : "sem preferida"));
+      let bate = null;
+      try { bate = typeof ramLeiCombina === "function" ? ramLeiCombina(n.topico, l) : null; } catch (e) {}
+      L.push("      - " + (n.disciplina ? n.disciplina + " › " : "") + n.topico + (n.concurso ? " [" + n.concurso + "]" : "") + " · " + marca
+        + (bate === false ? " · ⚠ NÃO BATE com o nome do tópico" : ""));
+    });
+  });
+  const multi = chaves.filter((c) => (typeof leisDoTopico === "function" ? leisDoTopico(c) : []).length > 1);
+  L.push("");
+  L.push("TÓPICOS COM MAIS DE UMA LEI (" + multi.length + "):");
+  multi.forEach((c) => {
+    const n = nomeDe(c), pref = preferida(c);
+    const abre = leiDoTopicoAtual(c);
+    L.push("  - " + (n.disciplina ? n.disciplina + " › " : "") + n.topico + " · o app abre: " + (abre ? abre.nome : "—")
+      + " · preferida guardada: " + (pref ? ((leiDe(pref) || {}).nome || pref) : "nenhuma (vale a 1ª ligada, em ordem alfabética)"));
+    leisDoTopico(c).forEach((l) => L.push("      · " + l.nome));
+  });
+  if (comTexto) {
+    leis.forEach((l, i) => {
+      L.push("");
+      L.push("==== TEXTO [" + (i + 1) + "] " + (l.nome || "") + " ====");
+      L.push(String(l.texto || ""));
+    });
+  }
+  return L.join("\n");
+}
+
 function leiLogPintar() {
   if (!$("leiLogTexto")) return;
   $("leiLogTexto").value = leiLogTexto();
@@ -259,6 +333,19 @@ function leiAplicarNoTopico(chave, novo) {
  * ABRIR
  * ------------------------------------------------------------------ */
 
+/* AVISO: a lei aberta não bate com o nome do tópico (o tópico cita "EC 132/2023" e a lei é a Constituição). Só avisa — a
+ * escolha é da pessoa ("usar uma lei já guardada" troca; o editor de ramos também deixa fixar). */
+function leiAvisoNomePintar() {
+  const el = $("leiAvisoNome");
+  if (!el) return false;
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const nome = leiAtual && leiAtual.topico;
+  const ruim = !!(l && nome && typeof ramLeiCombina === "function" && ramLeiCombina(nome, l) === false);
+  el.hidden = !ruim;
+  el.textContent = ruim ? t("lei_aviso_nome", { t: nome, l: l.nome }) : "";
+  return ruim;
+}
+
 function leiAbrir(disciplina, topico, id, opc) {
   /* abrir outra lei descarta o desenho em andamento da anterior */
   leiPinturaCancelar();
@@ -294,6 +381,7 @@ function leiAbrir(disciplina, topico, id, opc) {
     leiTrocarModo("editar");
   }
   try { leiPintar(); } finally { leiAdiarPintura = false; }
+  leiAvisoNomePintar();
   abrirModal("dlgLeiSeca");
   /* só agora há layout: o botão flutuante do marcador mede a posição dos artigos */
   leiFlutAtualizar();
@@ -3682,6 +3770,7 @@ function leiTrocarPara(id) {
   leiRecitados = {};
   leiTrocarModo("ler");
   leiPintar();
+  leiAvisoNomePintar();
   leiRetomar();
 }
 
@@ -6803,6 +6892,18 @@ function leiIniciar() {
     b.textContent = t("copied");
     setTimeout(() => { b.textContent = r; }, 1800);
   });
+  /* copiar SÓ o que interessa a um erro de vinculação: as leis, o que o app lê nelas e a que tópicos estão ligadas */
+  const copiaVinc = (idBtn, comTexto) => {
+    let txt = "";
+    try { txt = leiRelatorioVinculos({ comTexto }); } catch (e) { txt = "erro ao montar o relatório: " + (e && e.message); }
+    if ($("leiLogTexto")) $("leiLogTexto").value = txt;
+    try { navigator.clipboard.writeText(txt); } catch (e) {}
+    const b = $(idBtn), r = b.textContent;
+    b.textContent = t("copied");
+    setTimeout(() => { b.textContent = r; }, 1800);
+  };
+  liga("btnLeiLogVinc", "copiar leis e vínculos", () => copiaVinc("btnLeiLogVinc", false));
+  liga("btnLeiLogVincTexto", "copiar leis e vínculos com o texto", () => copiaVinc("btnLeiLogVincTexto", true));
   /* o caminho para ENVIAR: o relatório completo (com período, erros e
    * o texto pronto para copiar/baixar/compartilhar), já em "Leis e vínculos" */
   liga("btnLeiLogEnviar", "enviar relatório", () => {

@@ -174,11 +174,12 @@ function ramIdentidadeDoNome(nome) {
 function ramLeiCombina(nomeTopico, lei) {
   const id = ramIdentidadeDoNome(nomeTopico);
   if (!id || !lei) return null;
-  let num = String(lei.numero || "").replace(/\D/g, "").replace(/^0+/, ""), ano = String(lei.ano || "");
-  if (!num && typeof leiIdentificar === "function" && lei.texto) {
-    const x = leiIdentificar(lei.texto);
-    if (x) { num = String(x.numero || "").replace(/\D/g, "").replace(/^0+/, ""); ano = ano || String(x.ano || ""); }
-  }
+  /* A IDENTIDADE VEM DO TEXTO, não dos campos guardados: no backup real a Constituição inteira (700 mil caracteres) estava
+   * gravada como "Emenda Constitucional 106/2020" — uma versão antiga do app batizou a lei por uma linha do índice de
+   * emendas. Confiar nos campos faria a Constituição "bater" com um tópico da EC 106. Sem cabeçalho no texto, valem os campos. */
+  const dig = (v) => String(v || "").replace(/\D/g, "").replace(/^0+/, "");
+  const x = typeof leiIdentificar === "function" && lei.texto ? leiIdentificar(lei.texto) : null;
+  const num = x ? dig(x.numero) : dig(lei.numero), ano = x ? String(x.ano || "") : String(lei.ano || "");
   if (!num) return /constitui[çc][ãa]o/i.test(String(nomeTopico || ""));
   if (num !== id.numero) return false;
   if (id.ano && ano && String(id.ano) !== ano) return false;
