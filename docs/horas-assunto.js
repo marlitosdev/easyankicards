@@ -211,9 +211,24 @@ function horPintar() {
       .concat(esc.bloco ? [t("hor_tip_corte", { p: esc.bloco.minPct, h: horTexto(esc.corteMin) })] : [])
       .forEach((x) => rx.append(gerEl("li", "", x)));
     det.append(rx);
+    /* LIGAÇÃO COM OS CARTÕES: da disciplina para a cobertura e, em cada tópico, estudar os cartões que ele tem ou criar */
+    const ac = gerEl("div", "hor-acoes");
+    const vc = gerEl("button", "btn-min", t("hor_ver_cobertura")); vc.type = "button";
+    vc.onclick = () => { $("dlgHoras").close(); covAbrir(editalAtual, esc.nome); };
+    ac.append(vc);
+    det.append(ac);
+    const cont = covContar(cqLerBiblioteca());
     esc.topicos.forEach((tp) => {
       const l = gerEl("div", "hor-top" + (tp.revisaoMin > 0 && tp.estudoMin === 0 ? " hor-top-so-rev" : ""));
       l.append(gerEl("span", "hor-top-nome", tp.nome), gerEl("span", "hor-top-h", t("hor_top_h", { e: horTexto(tp.estudoMin), r: horTexto(tp.revisaoMin), a: tp.feitas, n: tp.unidades })));
+      const nc = cont.top.get(matChaveViva(esc.nome, tp.nome)) || 0;
+      const b = gerEl("button", "btn-min" + (nc ? " btn-min-ok" : ""), nc ? t("hor_estudar", { n: nc }) : t("hor_criar")); b.type = "button";
+      b.onclick = (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        $("dlgHoras").close();
+        if (nc) estcEstudarTopico(esc.nome, tp.nome); else bancAlvoDefinir(esc.nome, tp.nome);
+      };
+      l.append(b);
       det.append(l);
       tp.ramos.forEach((r) => {
         const rl = gerEl("div", "hor-ramo" + (r.pulado ? " hor-ramo-pulado" : ""));

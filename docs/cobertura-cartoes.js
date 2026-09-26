@@ -147,7 +147,7 @@ function covDoEdital(ed, notas, opc) {
  * DENTRO de cada disciplina qual pedaço do peso está sem material. Clicar na disciplina abre os tópicos e os ramos.
  * ===================================================================== */
 const COV_CHAVE_MIN = "eac_cov_min";
-let covEditalId = "";
+let covEditalId = "", covDiscAberta = "";
 
 function covMinimos() {
   let j = {};
@@ -215,7 +215,8 @@ function covPintar() {
       gerEl("span", "cov-n" + (d.vazias ? " cov-n-alerta" : ""), t("cov_disc_n", { n: d.cartoes, v: d.vazias, p: d.pouco })));
     linha.append(cab);
     covSegmentos(linha, d.topicos, d.pesoPct);
-    const det = gerEl("div", "cov-det"); det.hidden = true;
+    const det = gerEl("div", "cov-det"); det.hidden = d.nome !== covDiscAberta;
+    if (!det.hidden) linha.className = "cov-disc cov-aberta";
     d.topicos.forEach((tp) => {
       const tl = gerEl("div", "cov-top cov-f-borda-" + tp.faixa);
       tl.append(gerEl("span", "cov-top-nome", tp.nome), gerEl("span", "cov-top-n", t("cov_cartoes_de", { n: tp.cartoes, a: tp.alvo })));
@@ -252,7 +253,8 @@ function covPintar() {
   if (m.sobrando.length) cx.append(bloco("cov_onde_sobra", m.sobrando, "sobra"));
 }
 
-function covAbrir(editalId) {
+function covAbrir(editalId, disciplina) {
+  covDiscAberta = disciplina || "";
   const eds = covEditaisOrdenados();
   const sel = $("covEdital");
   sel.innerHTML = "";
