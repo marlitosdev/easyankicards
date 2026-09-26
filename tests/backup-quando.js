@@ -67,11 +67,13 @@ async function testes() {
    * ============================================================== */
   {
     const { api } = rodar();
-    /* ONTEM, uma hora mais tarde no relógio do que agora: sempre menos
-     * de 24 horas atrás (23h), e sempre no dia anterior — em qualquer
-     * hora do dia em que este teste rode. */
+    /* ONTEM às 23h30: sempre menos de 24 horas atrás (as horas desde a meia-noite + 30 min) e sempre no dia anterior —
+     * em qualquer hora do dia em que este teste rode. (A versão antiga era "agora - 23h", que cai no MESMO dia quando o
+     * teste roda entre 23h e 24h: o teste falhava só nessa hora.) */
     const agora = new Date();
-    const ontemTarde = new Date(agora.getTime() - 23 * 3600000);
+    const ontemTarde = new Date(agora);
+    ontemTarde.setDate(ontemTarde.getDate() - 1);
+    ontemTarde.setHours(23, 30, 0, 0);
     const horas = (agora.getTime() - ontemTarde.getTime()) / 3600000;
     ok(horas < 24,
        "Q1c-pre o cenario tem 24h ou mais e a divisao por 24 ja acertaria "
