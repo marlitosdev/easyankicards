@@ -389,6 +389,8 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
   border:1px solid var(--borda);line-height:1.3}
 .btn-min:hover:not(:disabled){border-color:var(--sutil);background:var(--panel)}
 .btn-min:disabled{opacity:.45;cursor:default}
+/* "ver os outros N da semana": sem regra própria ele caía no botão padrão do navegador (fundo claro, texto claro do tema escuro) e ficava ilegível */
+.ed-abrir{margin:10px 0 2px;padding:7px 14px;font-size:12px}
 /* TODO botão mostra que foi apertado (só filtro e sombra interna: NÃO mexe em transform, que vários botões usam para se posicionar) */
 button:not(:disabled):active{filter:brightness(.85);box-shadow:inset 0 2px 5px rgba(0,0,0,.3)}
 button:focus-visible{outline:2px solid var(--acao,#3b82f6);outline-offset:2px}
@@ -4330,6 +4332,18 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ed-st-item.tem{color:var(--info);border-color:var(--acao)}
 .ed-st-item{transition:border-color .12s}
 button.ed-st-item{cursor:pointer}
+/* os RAMOS dentro da linha do topico: resumo + chips por estado (a estudar / estudado / revisao vencida / revisado) */
+.ed-ramos{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 2px}
+.ed-ramos-resumo{font-size:11.5px;font-weight:700;color:var(--texto)}
+.ed-ramos-chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.ed-ramo{display:inline-block;font-size:10.5px;font-weight:600;line-height:1.5;padding:1px 8px;border-radius:999px;
+  border:1px solid var(--borda);color:var(--sutil);background:transparent;white-space:nowrap}
+.ed-ramo-pend{color:var(--texto);border-style:dashed}
+.ed-ramo-feito{color:var(--verde-txt);border-color:var(--verde)}
+.ed-ramo-revisado{color:var(--verde-txt);background:var(--verde-claro);border-color:var(--verde)}
+.ed-ramo-venceu{color:var(--laranja);border-color:var(--laranja-borda)}
+.ed-ramo-vez{box-shadow:0 0 0 2px var(--acao);font-weight:800}
+.ed-ramos-mais{padding:1px 8px;font-size:10.5px}
 button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-st-1{font-weight:800;background:rgba(47,107,220,.14)}
 .ed-menu-vazio{font-size:11px;color:var(--sutil);padding:2px 0}

@@ -72,7 +72,53 @@ function edAvisarGravacaoRecusada(alvo, texto, motivo) {
   } catch (e) {}
 }
 
-function edChave(it) { return it.ramoId && it.chave ? it.chave : (it.disciplina + "›" + it.nome).toLowerCase(); }
+function edChave(it) { return (it.disciplina + "›" + it.nome).toLowerCase(); }
+
+/* OS RAMOS DENTRO DA LINHA DO TÓPICO. Uma linha por tópico (a agenda não se enche de itens do mesmo assunto); o
+ * resumo diz quantos ramos já foram e qual vem agora, e os chips mostram cada ramo por relevância e por estado:
+ * a estudar, estudado, revisão vencida ou revisado. O da sessão da vez ganha destaque. */
+const ED_RAMOS_LIM = 6;
+function edRamosNaLinha(i) {
+  const rs = i.ramos || [];
+  const cx = document.createElement("div");
+  cx.className = "ed-ramos";
+  const resumo = document.createElement("span");
+  resumo.className = "ed-ramos-resumo";
+  const pend = rs.filter((r) => !r.feito);
+  resumo.textContent = pend.length
+    ? t("ed_ramos_resumo", { f: i.ramosFeitos, n: i.ramosTotal, p: (i.sessaoNomes || []).join(", "), m: horasTexto(i.minutosSessao || i.minutos) })
+    : t("ed_ramos_revisar", { f: i.ramosFeitos, n: i.ramosTotal, v: i.ramosVencidos });
+  resumo.title = t("ed_ramos_tip");
+  cx.append(resumo);
+  const chips = document.createElement("span");
+  chips.className = "ed-ramos-chips";
+  cx.append(chips);
+  let aberto = false;
+  const estadoDe = (r) => (r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend");
+  const pintar = () => {
+    chips.innerHTML = "";
+    rs.slice(0, aberto ? rs.length : ED_RAMOS_LIM).forEach((r) => {
+      const c = document.createElement("span");
+      const est = estadoDe(r);
+      c.className = "ed-ramo ed-ramo-" + est + ((i.sessao || []).indexOf(r.id) >= 0 && !r.revisado ? " ed-ramo-vez" : "");
+      c.textContent = (r.nome.length > 30 ? r.nome.slice(0, 29) + "…" : r.nome) + " ★" + (r.peso || 3);
+      c.title = r.nome + " — " + t("ed_ramo_" + est) + (r.quando ? " (" + r.quando + ")" : "") + " — " + t("ed_ramo_peso", { p: r.peso || 3 })
+        + (r.nota ? " — " + r.nota : "") + (r.marcaHerdada ? " — " + t("ed_ramo_herdado") : "");
+      chips.append(c);
+    });
+    if (rs.length > ED_RAMOS_LIM) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min ed-ramos-mais";
+      b.textContent = aberto ? t("ed_ramos_menos") : t("ed_ramos_todos", { n: rs.length });
+      b.title = t("ed_ramos_todos_tip");
+      b.onclick = (ev) => { ev.stopPropagation(); aberto = !aberto; pintar(); };
+      chips.append(b);
+    }
+  };
+  pintar();
+  return cx;
+}
 
 function edNumeros(n) {
   const g = $("editalNums");
@@ -414,7 +460,6 @@ function edLinhaTopico(i, semDisciplina) {
   tit.className = "ed-item-titulo";
   tit.textContent = i.titulo || i.nome;
   nome.append(tit);
-  if (i.ramoId) tit.title = t("ram_item_dica", { r: i.ramo, n: i.ramoDe, t: i.nome, p: i.ramoPeso }) + (i.ramoNota ? " " + i.ramoNota : "");
   /* Selo além da cor: quem imprime em preto e branco, ou não distingue
    * azul de cinza, continua sabendo o que é revisão. */
   if (i.ehRevisao) {
@@ -792,8 +837,8 @@ function edLinhaTopico(i, semDisciplina) {
     if (typeof ramAbrirEditor === "function") {
       const rb = document.createElement("button");
       rb.type = "button";
-      rb.className = "btn-min ed-menu-item ed-menu-ramos" + (i.ramoId ? " tem" : "");
-      rb.textContent = t(i.ramoId ? "ram_menu_ajustar" : "ram_menu_criar");
+      rb.className = "btn-min ed-menu-item ed-menu-ramos" + (i.ramos && i.ramos.length ? " tem" : "");
+      rb.textContent = t(i.ramos && i.ramos.length ? "ram_menu_ajustar" : "ram_menu_criar");
       rb.title = t("ram_tip_menu");
       rb.onclick = (e2) => {
         e2.stopPropagation(); menu.hidden = true;
@@ -869,6 +914,7 @@ function edLinhaTopico(i, semDisciplina) {
     b.onclick = (ev) => { ev.stopPropagation(); x.alvo.onclick(ev); };
     status.append(b);
   });
+  if (i.ramos && i.ramos.length) meio.append(edRamosNaLinha(i));
   if (status.children.length) meio.append(status);
 
   li.append(chk, fora, pt, meio, estudar, mais, rev, min);
@@ -1070,6 +1116,8 @@ function anotarDiario(i, acao, detalhe) {
                   q: (detalhe && detalhe.questoes) || null,
                   onde: (detalhe && detalhe.onde) || null,
                   obs: (detalhe && detalhe.obs) || null,
+                  /* ramos afetados por este registro (e a marca de ANTES de cada um, para o desfazer) */
+                  rm: (detalhe && detalhe.rm && detalhe.rm.length) ? detalhe.rm : undefined,
                   cc: concursoAtual().nome });
   salvarDiario();
 }
@@ -1123,7 +1171,10 @@ function apagarDoDiario(idx) {
   const ultimoDoTopico = edDiario.reduce(
     (m, y, k) => (y.c === x.c ? k : m), -1) === idx;
   edDiario.splice(idx, 1);
-  if (ultimoDoTopico) {
+  if (ultimoDoTopico && x.rm && x.rm.length) {
+    /* registro de um tópico COM ramos: devolve a marca de antes de cada ramo que ele tocou */
+    edRamosDesfazer(edProgresso, { chave: x.c }, x.rm);
+  } else if (ultimoDoTopico) {
     const ant = edDiario.filter((y) => y.c === x.c).pop();
     if (ant && ant.a !== "pendente") edProgresso[x.c] = { e: ant.a, d: ant.d };
     else delete edProgresso[x.c];
@@ -1585,10 +1636,11 @@ function abrirRegistro(i) {
   regFormas = i.feito ? ["revisao"] : ["leitura"];
   regHumor = "media";
   regDif = "";
-  $("regTitulo").textContent = i.nome;
+  const minReg = i.minutosSessao || i.minutos;
+  $("regTitulo").textContent = i.nome + (i.sessaoNomes && i.sessaoNomes.length ? " › " + i.sessaoNomes.join(", ") : "");
   $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
-  $("regMinutos").value = i.minutos;
-  $("regMinSlider").value = Math.min(240, i.minutos);
+  $("regMinutos").value = minReg;
+  $("regMinSlider").value = Math.min(240, minReg);
   ["regQFeitas", "regQCertas", "regQPctCampo", "regOnde", "regObs"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
@@ -1825,7 +1877,10 @@ function edDesfazerUltimoRegistro() {
   const ultimoDoTopico = edDiario.reduce(
     (m, y, k) => (y.c === x.c ? k : m), -1) === idx;
   edDiario.splice(idx, 1);
-  if (ultimoDoTopico) {
+  if (ultimoDoTopico && x.rm && x.rm.length) {
+    /* registro de um tópico COM ramos: devolve a marca de antes de cada ramo que ele tocou */
+    edRamosDesfazer(edProgresso, { chave: x.c }, x.rm);
+  } else if (ultimoDoTopico) {
     const ant = edDiario.filter((y) => y.c === x.c).pop();
     if (ant && ant.a !== "pendente") edProgresso[x.c] = { e: ant.a, d: ant.d };
     else delete edProgresso[x.c];
@@ -1862,11 +1917,15 @@ function edDespedir(item, estado, linhas) {
 }
 
 /* Grava o estado no edital DONO do item, que nem sempre é o aberto. */
+let edUltimasMudancasRamos = null;
 function edMarcarProgresso(i, estado) {
   const alvo = (typeof edAberto === "function") ? edAberto() : null;
   const deOutro = i.edital && (!alvo || String(i.edital) !== String(alvo.id));
+  edUltimasMudancasRamos = null;
+  const comRamos = !!(i.ramos && i.ramos.length);
   if (!deOutro) {
-    if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
+    if (comRamos) edUltimasMudancasRamos = edRamosRegistrar(edProgresso, i, estado, hojeISO());
+    else if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
     else delete edProgresso[i.chave];
     edSalvar();
     return true;
@@ -1885,7 +1944,8 @@ function edMarcarProgresso(i, estado) {
     .filter((e) => String(e.id) === String(i.edital))[0];
   if (!dono) return false;
   dono.progresso = dono.progresso || {};
-  if (estado) dono.progresso[i.chave] = { e: estado, d: hojeISO() };
+  if (comRamos) edUltimasMudancasRamos = edRamosRegistrar(dono.progresso, i, estado, hojeISO());
+  else if (estado) dono.progresso[i.chave] = { e: estado, d: hojeISO() };
   else delete dono.progresso[i.chave];
   dono.tocado = new Date().toISOString();
   if (typeof edSalvarLista === "function") edSalvarLista();
@@ -1898,7 +1958,7 @@ function edMarcar(i, estado, detalhe, semRender) {
     try { reg("ERRO", "registro sem edital dono: " + i.nome, String(i.edital)); }
     catch (e) {}
   }
-  anotarDiario(i, estado || "pendente", detalhe);
+  anotarDiario(i, estado || "pendente", Object.assign({}, detalhe || {}, { rm: edUltimasMudancasRamos }));
   /* Sem pesos, o registro dizia "peso undefined×undefined" — pior que não
    * dizer nada, porque parece dado e não é. */
   const temPeso = i.disciplinaPeso != null && i.peso != null;
