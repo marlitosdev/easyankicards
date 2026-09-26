@@ -234,6 +234,51 @@ function qsUiVoltarASessao() {
  * uma, que é a forma mais rápida de a pessoa desistir de usar. */
 const QS_DOBRAS = {};
 
+/* LER EM TELA CHEIA (gabarito comentado, sua dica): o conteúdo é montado DE NOVO por 'encher' — clonar o nó perderia os
+ * links de lei, que são botões com função. A letra tem passos e é guardada; fechar devolve a mesma questão. */
+const QS_LER_FS = [15, 17, 19, 22, 26, 30];
+function qsLerFsLer() {
+  try { const v = Number(localStorage.getItem("eac_qs_ler_fs")); return QS_LER_FS.indexOf(v) >= 0 ? v : 19; } catch (e) { return 19; }
+}
+function qsLerFsAplicar(px) {
+  const c = $("qsLerCorpo");
+  if (c && c.style) c.style.setProperty("--qs-ler-fs", px + "px");
+  try { localStorage.setItem("eac_qs_ler_fs", String(px)); } catch (e) {}
+  return px;
+}
+function qsLerFsMudar(d) {
+  const i = QS_LER_FS.indexOf(qsLerFsLer());
+  const j = Math.max(0, Math.min(QS_LER_FS.length - 1, (i < 0 ? 2 : i) + d));
+  return qsLerFsAplicar(QS_LER_FS[j]);
+}
+function qsUiLerAbrir(chaveTitulo, encher) {
+  const box = $("qsLerCorpo");
+  if (!box || typeof encher !== "function") return false;
+  box.innerHTML = "";
+  const interno = document.createElement("div");
+  box.append(interno);
+  encher(interno);
+  $("qsLerTit").textContent = t(chaveTitulo);
+  const pos = typeof qsPosicao === "function" ? qsPosicao() : { pos: 0, total: 0 };
+  $("qsLerSub").textContent = pos.total ? t("qs_ler_sub", { i: pos.pos, n: pos.total }) : "";
+  qsLerFsAplicar(qsLerFsLer());
+  if (box.scrollTop !== undefined) box.scrollTop = 0;
+  abrirModal("dlgQsLer");
+  try { reg("QUESTOES", "leitura em tela cheia", t(chaveTitulo)); } catch (e) {}
+  return true;
+}
+/* IR PARA A QUESTÃO Nº: anda sem responder (o placar não muda) */
+async function qsUiIrPara() {
+  const pos = typeof qsPosicao === "function" ? qsPosicao() : { pos: 0, total: 0 };
+  if (!pos.total) return false;
+  const txt = await uiTexto(t("qs_ir_tit", { n: pos.total }), String(pos.pos));
+  if (txt === null) return false;
+  const alvo = Math.floor(Number(String(txt).replace(/\D/g, "")));
+  if (!alvo || alvo < 1 || alvo > pos.total) { try { toast("qs_ir_invalido"); } catch (e) {} return false; }
+  if (alvo !== pos.pos) { qsAndar(alvo - pos.pos); qsUiPintarSessao(); }
+  return true;
+}
+
 function qsUiDobra(chaveTitulo, encher) {
   const cx = document.createElement("details");
   cx.className = "qs-dobra";
@@ -249,6 +294,14 @@ function qsUiDobra(chaveTitulo, encher) {
   const cab = document.createElement("summary");
   cab.className = "qs-dobra-cab";
   cab.textContent = t(chaveTitulo);
+  /* "⤢ tela cheia": o mesmo conteúdo num painel de leitura, com letra grande, X e "voltar à questão" */
+  const cheia = document.createElement("button");
+  cheia.type = "button";
+  cheia.className = "btn-min qs-dobra-cheia";
+  cheia.textContent = t("qs_ler_cheia");
+  cheia.title = t("qs_ler_cheia_tip");
+  cheia.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); qsUiLerAbrir(chaveTitulo, encher); };
+  cab.append(cheia);
   cx.append(cab);
   const corpo = document.createElement("div");
   encher(corpo);
@@ -934,7 +987,11 @@ function qsUiPintarSessao() {
     }
     b.className = cls;
     if (jaFoi) b.disabled = true;
-    b.textContent = o.letra + ") " + o.txt;
+    /* A LETRA NUM CÍRCULO (o ") " fica escondido, mas o texto continua "B) ..." para quem lê o DOM) */
+    const bl = document.createElement("span"); bl.className = "qs-op-l"; bl.textContent = o.letra;
+    const bp = document.createElement("span"); bp.className = "qs-op-p"; bp.textContent = ") ";
+    const bt2 = document.createElement("span"); bt2.className = "qs-op-t"; bt2.textContent = String(o.txt);
+    b.append(bl, bp, bt2);
     /* TOCAR SÓ SELECIONA — quem responde de verdade é o botão grande
      * (btnQsProxima, que vira "responder" enquanto não há resposta
      * gravada). Antes o toque já respondia na hora; o pedido foi
@@ -1037,6 +1094,13 @@ function qsUiPintarSessao() {
       }));
     }
     corpo.append(depois);
+    /* NO TELEFONE a coluna de leitura rola inteira: depois de responder, leva o gabarito e o comentário para o TOPO da
+     * área visível (o enunciado fica logo acima, a um gesto), em vez de deixá-los abaixo da dobra */
+    try {
+      if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width:760px)").matches) {
+        setTimeout(() => { try { corpo.scrollTop = Math.max(0, depois.offsetTop - 10); } catch (e) {} }, 0);
+      }
+    } catch (e) {}
     /* A CAIXA SABE EM QUAL DOS DOIS ESTADOS ESTÁ. Sem esta classe o CSS
      * teria de adivinhar pela presença de um filho, e ":has()" não
      * existe em todo navegador que roda este aplicativo. */
@@ -1087,6 +1151,11 @@ function qsUiPintarSessao() {
     b.textContent = t("qs_voltar");
     b.title = t("qs_voltar_ajuda");
     b.onclick = () => { qsAndar(-1); qsUiPintarSessao(); };
+  }
+  if ($("btnQsIr")) {
+    const bi = $("btnQsIr");
+    const s3 = qsSessaoAtual();
+    bi.hidden = !s3 || !s3.fila || s3.fila.length < 2;
   }
   /* SÓ AS QUE ERREI — liga e desliga no meio da rodada.
    * Aparece a partir do momento em que existe o que filtrar; antes da
@@ -2877,6 +2946,12 @@ function qsUiIniciar() {
       if (qsUiVoltarPara === "resumo") qsUiPintarBotaoResumo();
     });
   }
+  if ($("btnQsX")) $("btnQsX").onclick = () => { const f = $("btnQsSessFechar"); if (f && typeof f.onclick === "function") f.onclick(); };
+  if ($("btnQsLerX")) $("btnQsLerX").onclick = () => $("dlgQsLer").close();
+  if ($("btnQsLerVoltar")) $("btnQsLerVoltar").onclick = () => $("dlgQsLer").close();
+  if ($("btnQsLerMenos")) $("btnQsLerMenos").onclick = () => qsLerFsMudar(-1);
+  if ($("btnQsLerMais")) $("btnQsLerMais").onclick = () => qsLerFsMudar(1);
+  if ($("btnQsIr")) $("btnQsIr").onclick = () => qsUiIrPara();
   if ($("btnQsRodapeAlternar")) {
     $("btnQsRodapeAlternar").onclick = () => {
       qsRodapeAberto = !qsRodapeAberto;
