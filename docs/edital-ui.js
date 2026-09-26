@@ -2287,6 +2287,37 @@ function edPintarRitmo(plano) {
   rit.append(rTxt);
   box.append(rit);
 
+  /* ---------- 2b. META DA SEMANA EM RAMOS (só aparece com ramos no edital) ---------- */
+  try {
+    const M = edMetaDeRamos(plano, edDiario);
+    if (M.n) {
+      const mb = document.createElement("div");
+      mb.className = "ac-bloco ac-meta-ramos";
+      const mr = document.createElement("div");
+      mr.className = "ac-rot";
+      mr.textContent = t("ed_meta_ramos_rot");
+      mr.title = t("ed_meta_ramos_tip");
+      const mt = document.createElement("div");
+      mt.className = "ac-num";
+      mt.textContent = t("ed_meta_ramos_txt", { n: M.n, h: horasTexto(M.minutos), f: M.feitos, p: M.parciais })
+        + (M.sobra ? " " + t("ed_meta_ramos_sobra", { s: M.sobra }) : "");
+      mb.append(mr, mt);
+      const cs = document.createElement("div");
+      cs.className = "ac-meta-chips";
+      M.ramos.slice(0, 12).forEach((x) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "ed-ramo ac-meta-chip ed-ramo-" + (x.estado === "feito" ? "feito" : x.estado === "parcial" ? "venceu" : "pend");
+        b.textContent = (x.estado === "feito" ? "✓ " : x.estado === "parcial" ? "◐ " : "") + x.nome.slice(0, 32) + " · " + x.topico.slice(0, 24);
+        b.title = t("ed_meta_ramos_chip_tip", { r: x.nome, t: x.topico, m: horasTexto(x.minutos), e: t("ed_meta_ramos_e_" + x.estado) });
+        b.onclick = () => { if (x.estado === "pend" && typeof abrirRegistro === "function") abrirRegistro(x.item, { ramo: x.ramoId }); };
+        cs.append(b);
+      });
+      mb.append(cs);
+      box.append(mb);
+    }
+  } catch (e) {}
+
   /* ---------- 3. PROJEÇÃO — a única linha acionável da tela ----------
    * Responde "vale a pena manter este ritmo?". O cálculo ja existia
    * (ritmoDoPlano.alcance) e nunca chegava a ser desenhado. */
@@ -2433,6 +2464,8 @@ function dscPintarRamos(plano, nome) {
   cx.innerHTML = "";
   if (!p.linhas.length) cx.append(Object.assign(document.createElement("p"), { className: "nota", textContent: t("ed_dsc_ramos_vazio") }));
   const matPorTopico = {}, acPorTopico = {};
+  const metaSemana = {};
+  try { edMetaDeRamos(plano, edDiario).ramos.forEach((m) => { metaSemana[m.topicoChave + "›" + m.ramoId] = m.estado; }); } catch (e) {}
   p.linhas.forEach((x) => {
     const lin = document.createElement("div");
     const ac = (typeof ramAcertosDoTopico === "function")
@@ -2450,6 +2483,10 @@ function dscPintarRamos(plano, nome) {
     pe.className = "dsc-ramo-peso";
     pe.textContent = "★" + (x.ramo.peso || 3) + " · " + t("ed_dsc_ramo_vale", { p: String(x.relPct).replace(".", ",") });
     pe.title = t("ed_dsc_ramo_vale_tip");
+    if (metaSemana && metaSemana[x.item.chave + "›" + x.ramo.id]) {
+      pe.textContent += " · " + t("ed_dsc_ramo_semana");
+      lin.className += " dsc-ramo-semana";
+    }
     if (ac && ac.feitas) {
       pe.textContent += " · " + t("ed_dsc_ramo_acerto", { p: ac.pct, n: ac.feitas });
       pe.title += " — " + t(fraco ? "ed_dsc_ramo_acerto_fraco_tip" : "ed_dsc_ramo_acerto_tip", { p: ac.pct, n: ac.feitas, c: RAM_ACERTO_CORTE, m: RAM_ACERTO_AMOSTRA });

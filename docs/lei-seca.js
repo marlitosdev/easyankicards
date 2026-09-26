@@ -4076,6 +4076,240 @@ function leiGuardar(dados, gravar) {
   return r;
 }
 
+/* =====================================================================
+ * CONSULTAR A LEI ALTERADA (G6) — só leitura; nada aqui grava.
+ *
+ * Uma emenda (ou lei que altera outra) traz só PARTE de cada artigo alterado: o resto vem como "…". Quem estuda precisa
+ * ler o trecho correspondente na lei alterada. Estas funções acham a lei alterada NA BIBLIOTECA (sem exigir que ela esteja
+ * ligada ao tópico), o artigo dela, e dizem a que dispositivos (caput, §§, incisos) pertence cada "…".
+ * ===================================================================== */
+const LEI_RE_ADCT = /disposi[çc][õo]es\s+constitucionais\s+transit[óo]rias|\bADCT\b/i;
+let leiSecMemo = { k: "", v: null };
+function leiSecoes(texto) {
+  const tx = String(texto || "");
+  const k = tx.length + ":" + tx.slice(0, 40) + ":" + tx.slice(-40);
+  if (leiSecMemo.k === k) return leiSecMemo.v;
+  const est = leiEstruturaLei(tx);
+  const no = est.raiz.filter((n) => !n.virtual && n.total > 0).find((n) => LEI_RE_ADCT.test(String(n.rotulo || n.nome || "")));
+  const v = { est, adct: no ? { de: no.de, ate: no.ate } : null };
+  leiSecMemo = { k, v };
+  return v;
+}
+/* os artigos de uma seção: "adct" (a divisão ATO DAS DISPOSIÇÕES…), "corpo" (o resto) ou "tudo" — a numeração REPETE entre o
+ * corpo e o ADCT (há dois "art. 43"), então o número sozinho não basta */
+function leiArtigosDaSecao(texto, secao) {
+  const s = leiSecoes(texto);
+  const dentro = (i) => !!s.adct && i >= s.adct.de && i <= s.adct.ate;
+  return s.est.artigos.filter((a, i) => (secao === "adct" ? dentro(i) : secao === "corpo" ? !dentro(i) : true));
+}
+/* "Constituição Federal", "ADCT" ou "Lei nº 5.172/1966" (o que leiAlvoDaAlteracao devolve) → a lei da biblioteca que pode ser
+ * essa, da mais provável para a menos: [{ id, nome, confianca: "alta"|"media", motivo, tamanho }] */
+function leiAlvosCandidatos(alvo, leis) {
+  const curto = String((alvo && alvo.curto) || "");
+  const lista = leis || (typeof leisLista === "function" ? leisLista() : []);
+  const sem = (v) => String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+  const dig = (v) => String(v || "").replace(/\D/g, "").replace(/^0+/, "");
+  const out = [];
+  const m = curto.match(/^(.+?)\s+n[ºo°.]*\s*([\d.]+(?:-\d+)?)(?:\/(\d{4}))?$/i);
+  lista.forEach((l) => {
+    const tx = String(l.texto || "");
+    if (!tx.trim()) return;
+    let x = null;
+    try { x = leiIdentificar(tx); } catch (e) {}
+    const base = { id: l.id, nome: l.nome || l.id, tamanho: tx.length };
+    if (curto === "Constituição Federal") {
+      if (x && x.especie === "Constituição") out.push(Object.assign(base, { confianca: "alta", motivo: "identificada pelo texto como a Constituição" }));
+    } else if (curto === "ADCT") {
+      const soAdct = LEI_RE_ADCT.test(String(l.nome || "")) && !(x && x.especie === "Constituição");
+      if (soAdct) out.push(Object.assign(base, { confianca: "alta", motivo: "lei separada do ADCT" }));
+      else if (x && x.especie === "Constituição" && leiSecoes(tx).adct) out.push(Object.assign(base, { confianca: "media", motivo: "o ADCT é uma divisão da Constituição" }));
+    } else if (m && x) {
+      const espOk = sem(x.especie) === sem(m[1]);
+      const numOk = dig(x.numero) === dig(m[2]);
+      const anoOk = !m[3] || !x.ano || String(x.ano) === m[3];
+      if (espOk && numOk && anoOk) out.push(Object.assign(base, { confianca: "alta", motivo: "número e ano batem" }));
+      else if (numOk && anoOk) out.push(Object.assign(base, { confianca: "media", motivo: "mesmo número, outra espécie" }));
+    }
+  });
+  const peso = (c) => (c.confianca === "alta" ? 0 : 1);
+  return out.sort((a, b) => peso(a) - peso(b) || b.tamanho - a.tamanho);
+}
+/* o artigo da lei alterada (o objeto de leiEstruturaLei) para um bloco de alteração; alvoCurto vem de leiAlvoDaAlteracao */
+function leiArtigoDoAlvo(leiAlvo, alvoCurto, num) {
+  if (!leiAlvo || !leiAlvo.texto) return null;
+  const n = leiNumNormal(num);
+  const soAdct = LEI_RE_ADCT.test(String(leiAlvo.nome || "")) && !leiSecoes(leiAlvo.texto).adct;
+  const secao = alvoCurto === "ADCT" ? (soAdct ? "tudo" : "adct") : (alvoCurto === "Constituição Federal" ? "corpo" : "tudo");
+  return leiArtigosDaSecao(leiAlvo.texto, secao).find((a) => a.num === n) || null;
+}
+/* a lista plana de dispositivos de um artigo: caput + § / incisos / alíneas, cada um com o endereço (chave) */
+function leiDispositivos(textoArtigo) {
+  const est = leiEstruturaArtigo(textoArtigo);
+  return [{ tipo: "caput", chave: "caput", rotulo: "", texto: est.caput.texto, nivel: 0 }].concat(
+    est.unidades.map((u) => ({ tipo: u.tipo, chave: u.chave, rotulo: u.rotulo, texto: u.texto, nivel: u.nivel || 1 })));
+}
+function leiDescreverLacuna(entradas) {
+  const rot = (e) => String(e.rotulo || e.chave).replace(/\s*-\s*$/, "").trim();
+  const set = new Set(entradas.map((e) => e.chave));
+  /* só os dispositivos de TOPO da lacuna: o filho ("I>a") já está dentro do pai ("I") quando o pai também faz parte dela */
+  const topo = entradas.filter((e) => e.chave === "caput" || !(e.chave.indexOf(">") >= 0 && set.has(e.chave.slice(0, e.chave.lastIndexOf(">")))));
+  const grupos = [];
+  topo.forEach((e) => {
+    const g = grupos[grupos.length - 1];
+    if (g && g.tipo === e.tipo) g.itens.push(e); else grupos.push({ tipo: e.tipo, itens: [e] });
+  });
+  const txt = grupos.map((g) => {
+    if (g.tipo === "caput") return "caput";
+    const r = g.itens.map(rot);
+    const par = r.length >= 2 && r.every((x) => /^§/.test(x));
+    const ult = par ? r[r.length - 1].replace(/^§\s*/, "") : r[r.length - 1];
+    let d = r.length >= 3 ? r[0] + " a " + ult : (r.length === 2 ? r[0] + " e " + ult : r[0]);
+    if (par) d = d.replace(/^§/, "§§");
+    return d;
+  });
+  return txt.join(", ");
+}
+/* AS LACUNAS DE UM BLOCO: as marcas de omissão ("…", fileira de pontos, [...]) do artigo citado na emenda, cada uma com os
+ * dispositivos do artigo-alvo que ela representa. Lê o bloco na ordem em que está escrito; cada dispositivo escrito (caput,
+ * § 4º, inciso II…) tem as marcas que vêm nele:
+ *   · dispositivo SEM texto ("§ 1º ....", "Art. 43. …"): a 1ª marca é o texto dele — e dos seus filhos — omitido;
+ *   · as demais marcas (linhas só de pontos) são o que vem DEPOIS dele, até o próximo dispositivo escrito.
+ * O que sobra sem marca (o "§ 1º" seguido direto do "§ 2º" escrito) é listado à parte (semMarcador). Nada é adivinhado
+ * por contagem: cada marca do texto vira exatamente uma lacuna, na ordem. */
+function leiLacunasDoBloco(corpo, textoAlvo) {
+  const s0 = String(corpo || "").replace(/[”"]/g, " ");
+  const marcas = (s0.match(new RegExp(LEI_RE_OMISSAO.source, "g")) || []).length;
+  const s = s0.replace(new RegExp(LEI_RE_OMISSAO.source, "g"), " " + LEI_OMITIDO + " ");
+  const est = leiEstruturaArtigo(s, { fragmento: true });
+  const L = leiDispositivos(textoAlvo);
+  const pos = {};
+  L.forEach((d, p) => { if (pos[d.chave] === undefined) pos[d.chave] = p; });
+  const conta = (tx) => (String(tx || "").split(LEI_OMITIDO).length - 1);
+  const real = (tx) => String(tx || "").split(LEI_OMITIDO).join("").replace(/\((?:NR|AC)\)/gi, "").replace(/[^A-Za-zÀ-ú0-9]/g, "").length > 2;
+  const fichas = [{ chave: "caput", texto: est.caput.texto }].concat(est.unidades.map((u) => ({ chave: u.chave, texto: u.texto })));
+  const mostradas = {};
+  fichas.forEach((f) => { if (real(f.texto)) mostradas[f.chave] = true; });
+  const descendentes = (p) => { let k = p + 1; while (k < L.length && L[k].chave.indexOf(L[p].chave + ">") === 0) k++; return k; };
+  const lacunas = [];
+  const semMarcador = [];
+  let k = 0;
+  fichas.forEach((f, fi) => {
+    const p = pos[f.chave];
+    const nMarcas = conta(f.texto);
+    let proxima = L.length;
+    for (let x = fi + 1; x < fichas.length; x++) { if (pos[fichas[x].chave] !== undefined) { proxima = pos[fichas[x].chave]; break; } }
+    const propria = !real(f.texto) && nMarcas >= 1 ? 1 : 0;
+    let inicio = p === undefined ? proxima : p + 1;
+    if (propria) {
+      let entradas = [];
+      if (p !== undefined) { const fim = descendentes(p); entradas = L.slice(p, fim).filter((d) => !mostradas[d.chave]); inicio = fim; }
+      lacunas.push({ k: k++, tipo: "propria", chave: f.chave, entradas, n: entradas.length, descricao: entradas.length ? leiDescreverLacuna(entradas) : "" });
+    }
+    const gaps = nMarcas - propria;
+    const resto = p === undefined ? [] : L.slice(Math.min(inicio, proxima), proxima).filter((d) => !mostradas[d.chave]);
+    for (let g = 0; g < gaps; g++) {
+      const entradas = g === 0 ? resto : [];
+      lacunas.push({ k: k++, tipo: "depois", chave: f.chave, entradas, n: entradas.length, descricao: entradas.length ? leiDescreverLacuna(entradas) : "" });
+    }
+    if (gaps === 0 && resto.length) semMarcador.push({ k: -1, tipo: "sem_marca", chave: f.chave, entradas: resto, n: resto.length, descricao: leiDescreverLacuna(resto), semMarcador: true });
+  });
+  const bloco = leiLerBlocoAlterado(corpo);
+  return { lacunas, semMarcador, marcadores: marcas, casou: lacunas.length === marcas, bloco, mostradas, dispositivos: L };
+}
+/* O artigo-alvo como a pessoa vai LER na consulta: os dispositivos com a etiqueta "alterado" (a emenda escreve) ou "fora"
+ * (não está na emenda: vem da lei alterada). incorpora = a lei da biblioteca JÁ traz a redação da emenda (texto compilado);
+ * senão, o artigo é o MESCLADO (prévia: a emenda dentro do artigo da biblioteca). Nada é gravado. */
+function leiArtigoParaConsulta(corpo, textoAlvo) {
+  const info = leiLacunasDoBloco(corpo, textoAlvo);
+  /* só letras e números: aspas curvas x retas, pontuação e espaços diferem entre o texto da emenda e o compilado */
+  const norm = (s) => leiNormalizaComparacao(String(s || "").replace(/\((?:NR|AC|Redação[^)]*|Incluíd[^)]*)\)/gi, "")).toLowerCase().replace(/[^a-z0-9à-ú]/g, "");
+  const base = norm(textoAlvo);
+  const consta = (tx) => { const f = norm(tx); return f.length > 0 && base.indexOf(f.slice(0, 80)) >= 0 && base.indexOf(f.slice(-60)) >= 0; };
+  const tocadas = info.bloco.unidades.filter((u) => u.acao === "nr" || u.acao === "ac" || u.acao === "sem");
+  const comCaput = info.bloco.caputTexto && info.bloco.caputAcao === "nr" ? [{ texto: info.bloco.caputTexto }] : [];
+  const conferir = tocadas.concat(comCaput);
+  const incorpora = conferir.length > 0 && conferir.every((u) => consta(u.texto));
+  let texto = textoAlvo, mesclou = false;
+  if (!incorpora) { const m = leiMesclarFragmento(textoAlvo, info.bloco); texto = m.texto; mesclou = m.mudou > 0; }
+  const disp = leiDispositivos(texto).map((d) => Object.assign({}, d, { etiqueta: info.mostradas[d.chave] ? "alterado" : "fora" }));
+  return { dispositivos: disp, incorpora, mesclou, texto, lacunas: info.lacunas, semMarcador: info.semMarcador, casou: info.casou };
+}
+
+/* O CAMINHO DE VOLTA: quais leis da biblioteca ALTERAM esta (e em que artigos). Devolve
+ * { "corpo|145": [{ id, nome, curto, rotulo, num }], "adct|124": [...], "tudo|5": [...] } — a chave é seção|número do artigo
+ * ALTERADO nesta lei; rotulo/num são do artigo PRÓPRIO da lei alteradora que o altera ("Art. 1º"). Com memo: o custo é ler
+ * cada lei da biblioteca que tem artigo entre aspas, uma vez, até algum texto mudar. */
+let leiRecebidasMemo = { k: "", v: null };
+function leiAlteracoesRecebidas(leiAlvo, leis) {
+  if (!leiAlvo || !String(leiAlvo.texto || "").trim()) return {};
+  const lista = leis || (typeof leisLista === "function" ? leisLista() : []);
+  const k = leiAlvo.id + "|" + lista.map((x) => x.id + ":" + (x.tocado || "") + ":" + String(x.texto || "").length).join(",");
+  if (leiRecebidasMemo.k === k) return leiRecebidasMemo.v;
+  const out = {};
+  const temAdct = !!leiSecoes(leiAlvo.texto).adct;
+  lista.forEach((x) => {
+    if (x.id === leiAlvo.id) return;
+    const tx = String(x.texto || "");
+    if (!/^\s*[“"«]\s*Art/m.test(tx)) return;
+    let cit = null;
+    try { cit = leiLerCitacoes(tx.split("\n"), {}); } catch (e) { return; }
+    let curtoX = x.nome || x.id;
+    try { const idn = leiIdentificar(tx); if (idn && idn.curto) curtoX = idn.curto; } catch (e) {}
+    cit.blocos.forEach((b) => {
+      if (!b.alvo || !b.alvo.curto || !b.trechos.length) return;
+      if (!leiAlvosCandidatos(b.alvo, [leiAlvo]).length) return;
+      const secao = b.alvo.curto === "ADCT" ? (temAdct ? "adct" : "tudo") : (b.alvo.curto === "Constituição Federal" ? "corpo" : "tudo");
+      const num = leiNumNormal(String(b.rotulo || "").replace(/^Art\.?\s*/i, ""));
+      b.trechos.forEach((tr) => tr.artigos.forEach((ar) => {
+        const kk = secao + "|" + ar.num;
+        (out[kk] = out[kk] || []);
+        if (!out[kk].some((y) => y.id === x.id && y.num === num)) out[kk].push({ id: x.id, nome: x.nome || x.id, curto: curtoX, rotulo: b.rotulo, num });
+      }));
+    });
+  });
+  leiRecebidasMemo = { k, v: out };
+  return out;
+}
+/* o que UMA lei alteradora faz, por alvo, para o relatório: quantos artigos, qual lei a biblioteca oferece e quantos artigos a
+ * lei consultada JÁ traz (texto compilado) */
+function leiAlteracoesDe(l, leis) {
+  const tx = String((l && l.texto) || "");
+  if (!/^\s*[“"«]\s*Art/m.test(tx)) return [];
+  const lista = (leis || (typeof leisLista === "function" ? leisLista() : [])).filter((x) => x.id !== l.id);
+  let cit = null;
+  try { cit = leiLerCitacoes(tx.split("\n"), {}); } catch (e) { return []; }
+  const por = {};
+  cit.blocos.forEach((b) => {
+    if (b.recusado || !b.alvo || !b.alvo.curto || !b.trechos.length) return;
+    const cu = b.alvo.curto;
+    if (!por[cu]) {
+      const cands = leiAlvosCandidatos(b.alvo, lista);
+      por[cu] = { curto: cu, artigos: 0, comLacuna: 0, jaTrazem: 0, candidata: cands[0] || null, achados: 0 };
+    }
+    const p = por[cu];
+    const leiC = p.candidata ? lista.find((x) => x.id === p.candidata.id) : null;
+    const lns = tx.split("\n");
+    b.trechos.forEach((tr) => {
+      const cortes = tr.artigos.map((a) => a.linha);
+      tr.artigos.forEach((ar, i) => {
+        p.artigos++;
+        if (!leiC) return;
+        const art = leiArtigoDoAlvo(leiC, cu, ar.num);
+        if (!art) return;
+        p.achados++;
+        const fim = i + 1 < cortes.length ? cortes[i + 1] - 1 : tr.fim;
+        const seg = lns.slice(ar.linha - 1, fim).join("\n");
+        try {
+          const info = leiLacunasDoBloco(seg, art.texto);
+          if (info.lacunas.length || info.semMarcador.length) p.comLacuna++;
+          if (leiArtigoParaConsulta(seg, art.texto).incorpora) p.jaTrazem++;
+        } catch (e) {}
+      });
+    });
+  });
+  return Object.keys(por).map((k) => por[k]);
+}
+
 /* ---- a IDENTIDADE GUARDADA × a IDENTIDADE DO TEXTO ----
  * Versões antigas batizaram leis pela linha errada (a Constituição inteira ficou como "Emenda Constitucional 106/2020").
  * Um campo guardado que EXISTE e discorda do que o texto diz é divergência; campo vazio é falta de dado, não conflito. */

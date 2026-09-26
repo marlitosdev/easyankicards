@@ -1452,6 +1452,72 @@ function ritmoDoPlano(plano, diario) {
 }
 
 /* ------------------------------------------------------------------
+ * META DA SEMANA EM RAMOS — a agenda diz "quanto" (minutos) e "quais tópicos"; aqui, "quais RAMOS".
+ * Só informa: não muda a fila do plano.
+ *   · a semana é a de calendário (segunda a domingo) da data dada;
+ *   · entram os ramos que já foram ESTUDADOS ou deixados PARCIAIS esta semana (do diário: "rm" / "rp") e os ramos
+ *     PENDENTES (não pulados) dos tópicos da agenda desta semana (semana 1 do plano), pela relevância
+ *     (peso do tópico × parte do ramo), gastando o orçamento da semana (minutos) — os já feitos entram sempre;
+ *   · sem ramos no edital, n = 0 e a tela não mostra nada.
+ * ------------------------------------------------------------------ */
+function edSemanaCalendario(hoje) {
+  const d = new Date(String(hoje) + "T00:00:00");
+  const dow = (d.getDay() + 6) % 7;
+  const f = (x) => x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+  const ini = new Date(d); ini.setDate(d.getDate() - dow);
+  const fim = new Date(ini); fim.setDate(ini.getDate() + 6);
+  return { ini: f(ini), fim: f(fim) };
+}
+/* { "tópico›ramo": "feito" | "parcial" } com o que o diário registrou entre ini e fim (datas ISO) */
+function edRamosDaSemana(diario, sem) {
+  const out = {};
+  (diario || []).forEach((x) => {
+    if (!x || !x.d || x.d === "?" || x.a === "pendente" || x.d < sem.ini || x.d > sem.fim) return;
+    if (x.a === "feito") (x.rm || []).forEach((m) => { if (m && m.id && m.id !== "_topo") out[x.c + "›" + m.id] = "feito"; });
+    (x.rp || []).forEach((m) => { if (m && m.id && !out[x.c + "›" + m.id]) out[x.c + "›" + m.id] = "parcial"; });
+  });
+  return out;
+}
+function edMetaDeRamos(plano, diario, opc) {
+  const o = opc || {};
+  const hoje = o.hoje || (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10));
+  const sem = edSemanaCalendario(hoje);
+  const orcamento = o.minutos || (plano && plano.porSemana) || 0;
+  const vazio = { ramos: [], n: 0, feitos: 0, parciais: 0, pendentes: 0, minutos: 0, minutosFeitos: 0, sobra: 0, orcamento, semana: sem };
+  if (!plano || !plano.itens || !orcamento) return vazio;
+  const feitosSem = edRamosDaSemana(diario, sem);
+  const feitas = [], pend = [];
+  let candidatosPend = 0;
+  plano.itens.forEach((i) => {
+    if (!i.ramos || !i.ramos.length) return;
+    const daAgenda = i.semana === 1 || i.semana === null || i.semana === undefined;
+    i.ramos.forEach((r) => {
+      if (r.pulado) return;
+      const e = feitosSem[i.chave + "›" + r.id];
+      const linha = { item: i, topico: i.nome, topicoChave: i.chave, ramoId: r.id, nome: r.nome, minutos: r.minutos || 0,
+        relevancia: (i.bruto || 0) * (r.share || 0), ord: (i.linha || 0) * 1000 + (r.linha || 0) };
+      if (e) { linha.estado = e; feitas.push(linha); return; }
+      if (!r.feito && daAgenda) { linha.estado = "pend"; pend.push(linha); candidatosPend++; }
+    });
+  });
+  const ordena = (a, b) => b.relevancia - a.relevancia || a.ord - b.ord;
+  feitas.sort(ordena); pend.sort(ordena);
+  let resta = orcamento - feitas.reduce((a, x) => a + x.minutos, 0);
+  const dentro = [];
+  pend.forEach((x) => { if (x.minutos <= resta) { dentro.push(x); resta -= x.minutos; } });
+  const ramos = feitas.concat(dentro).sort(ordena);
+  const soma = (l) => l.reduce((a, x) => a + x.minutos, 0);
+  return {
+    ramos, n: ramos.length,
+    feitos: feitas.filter((x) => x.estado === "feito").length,
+    parciais: feitas.filter((x) => x.estado === "parcial").length,
+    pendentes: dentro.length,
+    minutos: soma(ramos), minutosFeitos: soma(feitas.filter((x) => x.estado === "feito")),
+    sobra: candidatosPend - dentro.length, orcamento, semana: sem,
+  };
+}
+
+/* ------------------------------------------------------------------
  * AGENDA: dia e hora sugeridos
  * "1h" diz quanto, não quando — e "quando" é o que falta para virar
  * compromisso. Com os dias de estudo e o horário de início, cada tópico

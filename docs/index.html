@@ -4338,12 +4338,31 @@ button.ed-st-item{cursor:pointer}
 .ed-ramo-revisado{color:var(--verde-txt);background:var(--verde-claro);border-color:var(--verde)}
 .ed-ramo-venceu{color:var(--laranja);border-color:var(--laranja-borda)}
 .ed-ramo-pulado{color:var(--sutil);border-style:dotted;text-decoration:line-through}
+.lei-faixa-alvo{border:1px solid var(--borda);border-left:4px solid var(--acao);border-radius:8px;padding:6px 10px;margin:6px 0;font-size:13px}
+.lei-faixa-lin{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0}
+.lei-faixa-sel{max-width:100%;min-width:180px}
+.lei-alt-chip-rec{cursor:pointer;background:transparent;font:inherit}
+.lei-lacuna{cursor:pointer;color:var(--info);border-bottom:1px dotted var(--info);font-style:normal}
+.lei-lacuna-vazia{cursor:default;color:var(--sutil);border-bottom:0}
+.lei-lac-aberta{margin:4px 0 8px 12px;padding:6px 8px;border-left:3px solid var(--borda);color:var(--sutil);font-style:italic;background:transparent}
+.lei-lac-cab{font-size:11px;font-style:normal;font-weight:700;margin-bottom:2px}
+.lei-lac-lin{font-size:13px;margin:1px 0}
+.lei-lac-bt{margin-top:4px;font-style:normal}
+.lei-cons-corpo{max-height:60vh;overflow:auto;margin-top:6px}
+.lei-cons-lin{padding:3px 6px;margin:2px 0;border-left:3px solid transparent}
+.lei-cons-alterado{border-left-color:var(--acao);background:var(--info-fundo,transparent);font-weight:600}
+.lei-cons-fora{color:var(--sutil)}
+.lei-cons-tag{font-weight:400;font-size:10.5px}
+.lei-cons-aviso{font-weight:600}
 .ram-lei-box{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:6px 0}
 .ram-lei-sel{max-width:100%;flex:1;min-width:200px}
 .ram-lei-prev{margin-top:6px}
 .ram-lei-texto{max-height:180px;overflow:auto;white-space:pre-wrap;font-size:12px;background:var(--fundo-2,transparent);border:1px solid var(--borda);border-radius:6px;padding:6px;margin:4px 0 0}
 .reg-trilha-abrir{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .reg-trilha-abrir-btn{font-size:11px;padding:2px 8px}
+.ac-meta-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.ac-meta-chip{cursor:pointer;background:transparent;font:inherit;font-size:10.5px}
+.dsc-ramo-semana .dsc-ramo-peso{font-weight:700}
 .dsc-ramo-semmat{color:var(--sutil);font-style:italic}
 .dsc-ramo-fraco .dsc-ramo-peso{color:var(--laranja);font-weight:700}
 .dsc-ramo-pulado .dsc-ramo-nome{color:var(--sutil);text-decoration:line-through}
@@ -6537,6 +6556,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="lei-carga-lin"><span class="lei-carga-giro" aria-hidden="true"></span><span id="leiCargaTxt"></span></div>
     <div class="lei-carga-trilho" aria-hidden="true"><span id="leiCargaBarra"></span></div>
   </div>
+  <div class="lei-faixa-alvo" id="leiFaixaAlvo" role="status" hidden></div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
   <div class="mat-leitura" id="leiRecitar" hidden></div>
   <!-- O BOTÃO FLUTUANTE DO MARCADOR. A linha tem altura ZERO e fica logo abaixo da leitura: o botão
@@ -7007,6 +7027,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="leiAjudaCx" class="duv-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiAjudaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<dialog id="dlgLeiConsulta" class="ui-modal diag-modal">
+  <h3 id="leiConsultaTit"></h3>
+  <p class="nota" id="leiConsultaSub"></p>
+  <p class="nota lei-cons-aviso" id="leiConsultaAviso" role="status"></p>
+  <div id="leiConsultaCorpo" class="lei-cons-corpo"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiConsultaFechar" data-i18n="lei_cons_fechar"></button>
   </div>
 </dialog>
 
