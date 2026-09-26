@@ -4293,6 +4293,35 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-onde-lin{font-size:11px;opacity:.7}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
+/* ---- DOMÍNIO DOS ASSUNTOS: níveis de confiança (verde · amarelo · azul · vermelho · cinza) ---- */
+dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);height:min(92vh,920px);max-height:94vh;margin:auto;overflow:hidden}
+.dom-n-verde{background:#2e9e5b;color:#fff}
+.dom-n-amarelo{background:#f0ad4e;color:#3a2a08}
+.dom-n-azul{background:#4fb3e8;color:#08283a}
+.dom-n-vermelho{background:#d9534f;color:#fff}
+.dom-n-cinza{background:#7c8593;color:#fff}
+.dom-dist{display:flex;width:100%;height:30px;border-radius:8px;overflow:hidden;gap:1px;margin:8px 0}
+.dom-seg{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;min-width:2px}
+.dom-leg-i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.dom-top,.dom-ramo{padding:6px 8px;border-radius:6px;background:rgba(127,127,127,.08);border-left:4px solid transparent;font-size:13px}
+.dom-ramo{margin:6px 0 0 18px;font-size:12px;border-left-style:dashed}
+.dom-top-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dom-nivel{font-size:10.5px;font-weight:800;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.dom-b-verde{border-left-color:#2e9e5b}
+.dom-b-amarelo{border-left-color:#f0ad4e}
+.dom-b-azul{border-left-color:#4fb3e8}
+.dom-b-vermelho{border-left-color:#d9534f}
+.dom-b-cinza,.dom-b-pulado{border-left-color:#7c8593}
+.dom-porque{font-size:12px;color:var(--sutil);margin:4px 0 2px}
+.dom-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.dom-chip{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--borda);background:rgba(127,127,127,.12)}
+.dom-chip-alerta{border-color:#f0ad4e;color:#f0ad4e;font-weight:700}
+.dom-chip-fraco{opacity:.65;font-style:italic}
+.dom-herdado{border-style:dashed}
+@media (max-width:760px){
+  dialog.dom-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
+    padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
+}
 /* ---- HORAS POR ASSUNTO: colunas por disciplina (estudo novo x revisão), corte e ramos cumpridos ---- */
 dialog.hor-dlg[open]{display:flex;flex-direction:column;width:min(1100px,97vw);height:min(92vh,900px);max-height:94vh;margin:auto;overflow:hidden}
 .hor-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -5107,6 +5136,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min" id="btnEdVoltar" data-i18n="hub_voltar"></button>
       <span class="ed-aberto-nome" id="edNomeAberto"></span>
       <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
+      <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
       <button class="btn-min" id="btnEdRenomear" data-i18n="hub_renomear"></button>
     </div>
   <div class="duas-colunas">
@@ -7818,6 +7848,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <h3 data-i18n="ger_titulo"></h3>
     <span class="ger-cab-acoes">
       <button type="button" class="btn-min" id="btnGerCobertura" data-i18n="cov_btn"></button>
+      <button type="button" class="btn-min" id="btnGerDominio" data-i18n="dom_btn"></button>
       <button type="button" class="btn-min" id="btnGerAmpliar" aria-pressed="false"></button>
       <!-- O X, sempre no canto superior direito (no telefone o "Fechar" do rodapé fica longe do polegar e do olho) -->
       <button type="button" class="qs-x" id="btnGerX" aria-label="Fechar">✕</button>
@@ -7980,6 +8011,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </select>
   </div>
   <div class="hor-corpo" id="horCorpo"></div>
+</dialog>
+
+<!-- DOMÍNIO DOS ASSUNTOS: o quanto EU confio no que estudei (estudo, questões, cartões e autoavaliação), por disciplina, tópico e ramo -->
+<dialog id="dlgDominio" class="ui-modal dom-dlg">
+  <div class="cov-cab">
+    <h3 data-i18n="dom_titulo"></h3>
+    <button type="button" class="qs-x" id="btnDomX" aria-label="Fechar">✕</button>
+  </div>
+  <p class="nota" data-i18n="dom_sub"></p>
+  <div class="cov-barra">
+    <select id="domEdital"></select>
+    <select id="domFase" hidden>
+      <option value="1" data-i18n="cov_fase1"></option>
+      <option value="2" data-i18n="cov_fase2"></option>
+    </select>
+  </div>
+  <div class="cov-corpo" id="domCorpo"></div>
 </dialog>
 
 <dialog id="dlgPacote" class="ui-modal diag-modal">
@@ -8517,6 +8565,7 @@ window.__sqlPromise = initSqlJs({
 <script src="estudo-cartoes.js"></script>
 <script src="cobertura-cartoes.js"></script>
 <script src="dominio-assunto.js"></script>
+<script src="dominio-ui.js"></script>
 <script src="banca-alvo.js"></script>
 <script src="horas-assunto.js"></script>
 <script src="ramos.js"></script>
