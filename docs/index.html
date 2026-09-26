@@ -4277,6 +4277,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-f{font-weight:600}
 .ger-v{opacity:.85}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
 .ger-cab-acoes{display:inline-flex;align-items:center;gap:6px}
 .ger-abas{display:none}
 .ger-aba{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 0;text-align:center;padding:9px 6px;font-size:13px;font-weight:700;
@@ -4297,7 +4298,9 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
   #dlgGerCartoes.ger-v-pastas .ger-col-pastas,
   #dlgGerCartoes.ger-v-cartoes .ger-col-cartoes,
   #dlgGerCartoes.ger-v-previa .ger-col-previa{display:block}
-  #dlgGerCartoes .ger-barra #gerBusca{flex:1 1 100%;min-width:0}
+  #dlgGerCartoes .ger-barra #gerBusca{flex:1 1 100%!important;min-width:0!important;font-size:16px}
+  #dlgGerCartoes .ger-barra #gerFiltro{flex:1 1 auto;min-width:0}
+  #dlgGerCartoes .ger-ocultar{padding:6px 2px;font-size:13px}
   #dlgGerCartoes .ger-como{margin:2px 0}
   #dlgGerCartoes .ger-item{padding:10px 6px}
   #dlgGerCartoes .ger-pasta{padding:9px 6px}
@@ -7613,6 +7616,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <option value="edital" data-i18n="ger_agrupar_edital"></option>
           <option value="disciplina" data-i18n="ger_agrupar_disc"></option>
         </select>
+        <label class="ger-ocultar"><input type="checkbox" id="gerOcultarVazias"> <span data-i18n="ger_ocultar_vazias"></span></label>
       </div>
       <div id="gerArvore"></div>
     </div>

@@ -19,6 +19,8 @@ const GER_FILTROS = ["todos", "abaixo", "repetidos", "sem_artigo", "basico", "cl
 const GER_CHAVE_RECIBO = "eac_ger_recibo";
 const GER_CHAVE_PASTAS = "eac_ger_pastas";
 const GER_CHAVE_AGRUPAR = "eac_ger_agrupar";
+const GER_CHAVE_VAZIAS = "eac_ger_ocultar_vazias";
+let gerOcultarVazias = false;
 
 /* A explicação de CADA controle das duas janelas (o gerenciador e a de nova pasta): id → chave do texto.
  * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
@@ -479,6 +481,8 @@ function gerLinhaRamo(cx, rm, concurso) {
 }
 
 function gerLinhaTopico(cx, tp, concurso) {
+  /* "ocultar pastas vazias": some só o que não tem cartão e não é a pasta aberta agora */
+  if (gerOcultarVazias && !tp.total && !(gerPasta && gerPasta.chave === tp.chave)) return;
   const marca = tp.compartilhado ? " ↔" : "";
   const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave && !gerPasta.ramo ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")" + marca);
   /* tópico COM ramos: uma seta abre e fecha os ramos dele */
@@ -1194,6 +1198,8 @@ function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
   gerAgrupar = gerAgruparPadrao();
   $("gerAgrupar").value = gerAgrupar;
+  try { gerOcultarVazias = localStorage.getItem(GER_CHAVE_VAZIAS) === "1"; } catch (e) { gerOcultarVazias = false; }
+  $("gerOcultarVazias").checked = gerOcultarVazias;
   $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
   gerFecharDestinos();
   gerVistaPasta = "null";
@@ -1230,6 +1236,11 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerClMover").onclick = gerConfirmarClassificar;
   $("btnGerClFechar").onclick = () => $("dlgGerClassificar").close();
   $("gerAgrupar").onchange = () => gerTrocarAgrupar($("gerAgrupar").value);
+  $("gerOcultarVazias").onchange = () => {
+    gerOcultarVazias = !!$("gerOcultarVazias").checked;
+    try { localStorage.setItem(GER_CHAVE_VAZIAS, gerOcultarVazias ? "1" : "0"); } catch (e) {}
+    gerPintarArvore();
+  };
   $("btnGerNpOk").onclick = gerConfirmarNovaPasta;
   $("btnGerNpCancelar").onclick = () => $("dlgGerNovaPasta").close();
   ["gerNpDisc", "gerNpTop"].forEach((id) => {
