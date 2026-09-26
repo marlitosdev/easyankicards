@@ -4338,6 +4338,10 @@ button.ed-st-item{cursor:pointer}
 .ed-ramo-revisado{color:var(--verde-txt);background:var(--verde-claro);border-color:var(--verde)}
 .ed-ramo-venceu{color:var(--laranja);border-color:var(--laranja-borda)}
 .ed-ramo-pulado{color:var(--sutil);border-style:dotted;text-decoration:line-through}
+.ram-lei-box{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:6px 0}
+.ram-lei-sel{max-width:100%;flex:1;min-width:200px}
+.ram-lei-prev{margin-top:6px}
+.ram-lei-texto{max-height:180px;overflow:auto;white-space:pre-wrap;font-size:12px;background:var(--fundo-2,transparent);border:1px solid var(--borda);border-radius:6px;padding:6px;margin:4px 0 0}
 .reg-trilha-abrir{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .reg-trilha-abrir-btn{font-size:11px;padding:2px 8px}
 .dsc-ramo-semmat{color:var(--sutil);font-style:italic}
@@ -7370,6 +7374,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgRamos" class="ui-modal diag-modal" style="max-width:720px">
   <h3 id="ramTit"></h3>
   <p class="nota" data-i18n="ram_ajuda"></p>
+  <div id="ramLeiBox" class="ram-lei-box" hidden>
+    <label class="nota" for="ramLeiSel" data-i18n="ram_lei_sel"></label>
+    <div class="qm-bts"><select id="ramLeiSel" class="ram-lei-sel"></select> <button type="button" class="btn-min" id="btnRamLeiVer" data-i18n="ram_lei_ver"></button> <button type="button" class="btn-min" id="btnRamLeiFixar" data-i18n="ram_lei_fixar" hidden></button></div>
+    <p class="nota" id="ramLeiAviso" role="status"></p>
+    <label class="nota" id="ramLeiMesmoLinha" hidden><input type="checkbox" id="ramLeiMesmo"> <span data-i18n="ram_lei_mesmo"></span></label>
+    <div id="ramLeiPrev" class="ram-lei-prev" hidden><p class="nota" id="ramLeiPrevCab"></p><pre id="ramLeiPrevTexto" class="ram-lei-texto"></pre></div>
+  </div>
   <div id="ramLista" class="ram-lista"></div>
   <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnRamMais" data-i18n="ram_mais"></button> <button type="button" class="btn-min" id="btnRamLei" data-i18n="ram_lei"></button> <button type="button" class="btn-min" id="btnRamPesos" data-i18n="ram_pesos"></button> <button type="button" class="btn-min" id="btnRamIa" data-i18n="ram_ia"></button></div>
   <div id="ramIaBox" hidden>
