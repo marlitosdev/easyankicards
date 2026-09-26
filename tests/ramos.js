@@ -2041,6 +2041,26 @@ async function testes() {
       a.gerCelularForcar(null);
     }
 
+    /* R57: "ocultar pastas vazias" na arvore da biblioteca + busca em linha propria no celular */
+    {
+      const { a } = MT();
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/id="gerOcultarVazias"/.test(html) && /\.ger-ocultar\{/.test(html) && /#gerBusca\{flex:1 1 100%!important/.test(html), "R57a caixa 'ocultar pastas vazias' existe, tem CSS, e a busca ocupa a linha inteira no celular (vence o style inline)");
+      a.gerCelularForcar(false);
+      a.gerCriarPasta("Revisão", "Pegadinhas R57");
+      a.gerAbrir();
+      a.gerTrocarAgrupar("disciplina");
+      const conta = () => achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).length;
+      const vazias = () => achar(a.$("gerArvore"), (e) => cls(e, "ger-top") && /\(0\)/.test(e.textContent || "")).length;
+      a.gerOcultarVaziasForcar(false); a.gerPintar();
+      const antes = conta(), vAntes = vazias();
+      a.gerOcultarVaziasForcar(true); a.gerPintar();
+      const depois = conta(), vDepois = vazias();
+      ok(vAntes >= 1 && vDepois === 0 && depois === antes - vAntes && depois >= 1, "R57b ocultar tira so' as pastas com (0) e mantem as com cartoes: antes " + antes + " (" + vAntes + " vazias), depois " + depois + " (" + vDepois + ")");
+      a.gerOcultarVaziasForcar(false);
+      a.$("btnGerX").onclick();
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
