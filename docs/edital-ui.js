@@ -2433,8 +2433,9 @@ function dscPintarRamos(plano, nome) {
     const usaveis = tr.passos.filter((p) => p.disponivel).length;
     const falta = document.createElement("span");
     falta.className = "dsc-ramo-falta";
-    falta.textContent = usaveis ? (tr.faltam.length ? t("ed_dsc_ramo_falta", { x: tr.passos.filter((p) => tr.faltam.indexOf(p.id) >= 0).map((p) => t("ed_passo_" + p.id)).join(", ") }) : t("ed_dsc_ramo_trilha_ok")) : "";
-    falta.title = t("ed_trilha_tit") + ": " + edTrilhaTexto(tr);
+    falta.textContent = usaveis ? (tr.faltam.length ? t("ed_dsc_ramo_falta", { x: tr.passos.filter((p) => tr.faltam.indexOf(p.id) >= 0).map((p) => t("ed_passo_" + p.id)).join(", ") }) : t("ed_dsc_ramo_trilha_ok")) : t("ed_dsc_ramo_sem_material");
+    if (!usaveis) falta.className += " dsc-ramo-semmat";
+    falta.title = usaveis ? t("ed_trilha_tit") + ": " + edTrilhaTexto(tr) : t("ed_dsc_ramo_sem_material_tip");
     bt.hidden = !!x.ramo.pulado;
     const pl = document.createElement("button");
     pl.type = "button";

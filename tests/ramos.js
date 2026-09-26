@@ -1122,7 +1122,7 @@ async function testes() {
       a.abrirDisciplina("D");
       const l0 = Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className))[0];
       const f0 = Array.from(l0.children).find((f) => /dsc-ramo-falta/.test(f.className || ""));
-      ok(f0.textContent === "", "R38k o painel da disciplina nao diz 'falta' de um ramo sem material");
+      ok(f0.textContent === "sem material" && /semmat/.test(f0.className) && /ram_/.test(f0.title) && !/falta/i.test(f0.textContent), "R38k ramo sem NENHUM material: o painel diz 'sem material' (nao 'falta') e o balao ensina como criar: " + f0.textContent + " / " + f0.title);
       a.$("dlgDisciplina").close();
       a.$("dlgRegistro").close();
       /* 5 ramos com material (lei do topico): so' 3 linhas */
@@ -1531,7 +1531,7 @@ async function testes() {
     ok(achar(l0, (e) => e.tag === "button").every((b) => b.title.length > 5) && achar(l0, (e) => e.tag === "input" || e.tag === "select").every((c) => c.title.length > 5), "R20c cada campo e botao de uma linha explica a funcao");
     ok(/<script src="ramos\.js"><\/script>/.test(html) && /"ramos\.js"/.test(sw), "R20d o modulo esta na pagina e no cache offline");
     ok(["dsc-ramos", "dsc-ramos-lista", "dsc-ramo-lin", "dsc-ramo-nome", "dsc-ramo-peso", "dsc-ramo-btn"].every((c) => html.indexOf("." + c + "{") >= 0), "R20j as classes do painel de ramos da disciplina tem regra de CSS");
-    ok(["reg-trilha", "reg-trilha-lin", "dsc-ramo-falta"].every((c) => html.indexOf("." + c + "{") >= 0), "R20k as classes da trilha (registro e painel) tem regra de CSS");
+    ok(["reg-trilha", "reg-trilha-lin", "dsc-ramo-falta", "dsc-ramo-semmat"].every((c) => html.indexOf("." + c + "{") >= 0), "R20k as classes da trilha (registro e painel) tem regra de CSS");
     ok(["reg-ramos", "reg-ramo-lin", "reg-ramo-nome", "reg-ramo-est", "reg-ramo-indisp", "reg-ramos-acoes"].every((c) => html.indexOf("." + c + "{") >= 0), "R20i as classes da lista de ramos no registro tem regra de CSS");
     ok(["ed-ramos", "ed-ramos-resumo", "ed-ramos-chips", "ed-ramo", "ed-ramo-pend", "ed-ramo-feito", "ed-ramo-revisado", "ed-ramo-venceu", "ed-ramo-vez", "ed-ramos-mais"].every((c) => html.indexOf("." + c + "{") >= 0), "R20h todas as classes dos chips de ramo tem regra de CSS");
     const hubSrc = fs.readFileSync(path.join(__dirname, "..", "docs", "edital-hub.js"), "utf8");
