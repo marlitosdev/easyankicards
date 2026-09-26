@@ -239,6 +239,20 @@ function leiRelatorioVinculos(opc) {
       + " · preferida guardada: " + (pref ? ((leiDe(pref) || {}).nome || pref) : "nenhuma (vale a 1ª ligada, em ordem alfabética)"));
     leisDoTopico(c).forEach((l) => L.push("      · " + l.nome));
   });
+  L.push("");
+  L.push("LEIS QUE ALTERAM OUTRAS (alvo → lei da biblioteca que o app consultaria):");
+  let algumaAlteradora = false;
+  leis.forEach((l) => {
+    let al = [];
+    try { al = leiAlteracoesDe(l, leis); } catch (e) {}
+    al.forEach((p) => {
+      algumaAlteradora = true;
+      L.push("  - " + (l.nome || l.id) + " altera " + p.curto + ": " + p.artigos + " artigo(s) citado(s) · "
+        + (p.candidata ? "consultaria «" + p.candidata.nome + "» (" + p.candidata.confianca + "; " + p.candidata.motivo + ") · achou " + p.achados + " artigo(s), " + p.comLacuna + " com trecho omitido, " + p.jaTrazem + " já constam na lei consultada"
+          : "⚠ " + p.curto + " NÃO está na biblioteca"));
+    });
+  });
+  if (!algumaAlteradora) L.push("  (nenhuma)");
   if (comTexto) {
     leis.forEach((l, i) => {
       L.push("");
@@ -1487,6 +1501,178 @@ function leiChipsDeAlteracao(a, cit) {
   return box;
 }
 
+/* =====================================================================
+ * CONSULTAR A LEI ALTERADA (G6): a faixa no topo, o "…" que diz o que representa e a janela de consulta.
+ * Tudo é leitura: nada aqui grava no texto, no tópico nem no marcador. A lei consultada vem da BIBLIOTECA — não precisa estar
+ * ligada ao tópico. O app SUGERE a lei; quem decide é a pessoa (a escolha fica guardada na lei que altera: l.alvos).
+ * ===================================================================== */
+let leiRecebidasAtual = null;       /* o caminho de volta da leitura atual: { mapa, adct } */
+let leiAlvoCtx = null;              /* { porCurto: { "Constituição Federal": { cands, escolhida, lei, artigos, ... } } } da leitura atual */
+const leiLacunasReg = {};           /* id do "…" → o que ele representa (para a expansão e a consulta) */
+const leiAlvoSessao = {};           /* escolha sem lei gravada ainda (colagem inicial) */
+
+function leiAlvosCtx(l, cit) {
+  if (!cit || !cit.blocos) return null;
+  const porCurto = {};
+  const biblioteca = (typeof leisLista === "function" ? leisLista() : []).filter((x) => !l || x.id !== l.id);
+  cit.blocos.forEach((b) => {
+    if (b.recusado || !b.alvo || !b.alvo.curto || !b.trechos.length) return;
+    const cu = b.alvo.curto;
+    if (!porCurto[cu]) {
+      const cands = leiAlvosCandidatos(b.alvo, biblioteca);
+      const pref = (l && l.alvos && l.alvos[cu]) || leiAlvoSessao[(l ? l.id : "") + "|" + cu] || "";
+      const esc = cands.find((c) => c.id === pref) || cands[0] || null;
+      porCurto[cu] = { curto: cu, cands, sugerida: cands[0] || null, escolhida: esc, decidida: !!(pref && esc && esc.id === pref),
+        lei: esc ? leiDe(esc.id) : null, artigos: 0 };
+    }
+    b.trechos.forEach((tr) => { porCurto[cu].artigos += tr.artigos.length; });
+  });
+  return Object.keys(porCurto).length ? { porCurto } : null;
+}
+/* o selo do artigo da lei ALTERADA: "alterado por EC 132/2023 · art. 1º" — clique abre a emenda no artigo que o altera */
+function leiChipsRecebidos(a, rc) {
+  if (!rc || !rc.mapa) return null;
+  const dentroAdct = !!rc.adct && a.indice >= rc.adct.de && a.indice <= rc.adct.ate;
+  const lista = (rc.mapa[(dentroAdct ? "adct" : "corpo") + "|" + a.num] || []).concat(rc.mapa["tudo|" + a.num] || []);
+  if (!lista.length) return null;
+  const box = document.createElement("div");
+  box.className = "lei-alt-chips lei-alt-recebidas";
+  lista.forEach((x) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "lei-alt-chip lei-alt-chip-rec";
+    b.textContent = t("lei_alt_recebida", { e: x.curto, a: x.rotulo });
+    b.title = t("lei_alt_recebida_tip", { e: x.nome });
+    b.onclick = () => { try { leiAbrirNoArtigo("", "", x.id, x.num); } catch (e) {} };
+    box.append(b);
+  });
+  return box;
+}
+function leiAlvoEscolher(curto, id) {
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (l) leiGuardar({ id: l.id, alvos: Object.assign({}, l.alvos || {}, { [curto]: id }) });
+  else leiAlvoSessao["|" + curto] = id;
+  try { leiReg("consulta", "lei consultada escolhida", curto + " → " + ((leiDe(id) || {}).nome || id)); } catch (e) {}
+  leiPintar();
+}
+/* a faixa acima da leitura: "esta lei ALTERA a Constituição Federal…", qual lei será consultada e o que fazer se não há */
+function leiFaixaAlvoPintar(ctx) {
+  const box = $("leiFaixaAlvo");
+  if (!box) return;
+  box.innerHTML = "";
+  box.hidden = !ctx;
+  if (!ctx) return;
+  Object.keys(ctx.porCurto).forEach((cu) => {
+    const p = ctx.porCurto[cu];
+    const lin = document.createElement("div");
+    lin.className = "lei-faixa-lin";
+    const tx = document.createElement("span");
+    tx.textContent = t("lei_alvo_faixa", { lei: cu, n: p.artigos });
+    lin.append(tx);
+    if (p.cands.length) {
+      const sel = document.createElement("select");
+      sel.className = "lei-faixa-sel";
+      sel.title = t("lei_alvo_sel_tip");
+      p.cands.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = c.nome + (c.confianca === "alta" ? "" : " (" + t("lei_alvo_media") + ")");
+        sel.append(o);
+      });
+      sel.value = p.escolhida.id;
+      sel.onchange = () => leiAlvoEscolher(cu, sel.value);
+      const nota = document.createElement("span");
+      nota.className = "nota";
+      nota.textContent = t(p.decidida ? "lei_alvo_decidida" : "lei_alvo_sugerida", { m: p.escolhida.motivo });
+      lin.append(sel, nota);
+    } else {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min";
+      b.textContent = t("lei_alvo_adicionar");
+      b.title = t("lei_alvo_adicionar_tip", { lei: cu });
+      b.onclick = () => { if (typeof leiBibAbrir === "function") leiBibAbrir(); };
+      const nota = document.createElement("span");
+      nota.className = "nota";
+      nota.textContent = t("lei_alvo_ausente", { lei: cu });
+      lin.append(nota, b);
+    }
+    box.append(lin);
+  });
+}
+/* o "…" de um artigo citado: com o alvo achado, ele diz a que dispositivos corresponde ("= §§ 1º a 3º · art. 43 de Constituição Federal") */
+function leiLacunaChip(id, reg) {
+  const lac = reg.lacuna;
+  if (!lac.n) return '<span class="lei-lacuna lei-lacuna-vazia" title="' + matEscapar(t("lei_lac_vazia_tip")) + '">…</span>';
+  const rot = t("lei_lac_de", { d: lac.descricao, a: reg.numCru, lei: reg.alvoCurto });
+  return '<span class="lei-lacuna" role="button" tabindex="0" data-lac="' + id + '" title="' + matEscapar(t("lei_lac_tip")) + '">… ' + matEscapar("= " + rot) + "</span>";
+}
+function leiLacunaClique(ev) {
+  let el = ev && ev.target;
+  while (el && !(el.getAttribute && el.getAttribute("data-lac"))) el = el.parentNode;
+  if (!el) return false;
+  const id = el.getAttribute("data-lac");
+  const reg = leiLacunasReg[id];
+  if (!reg) return false;
+  let ancora = el;
+  while (ancora.parentNode && ancora.tagName !== "P" && !(ancora.className && /lei-citacao/.test(ancora.className))) ancora = ancora.parentNode;
+  if (!ancora.parentNode) ancora = el;
+  const pai = ancora.parentNode;
+  const ja = Array.from(pai.children || []).find((x) => x.getAttribute && x.getAttribute("data-para") === id);
+  if (ja) { pai.removeChild(ja); return true; }
+  const box = document.createElement("div");
+  box.className = "lei-lac-aberta";
+  box.setAttribute("data-para", id);
+  const cab = document.createElement("div");
+  cab.className = "lei-lac-cab";
+  cab.textContent = t("lei_lac_cab", { d: reg.lacuna.descricao, a: reg.numCru, lei: reg.alvoCurto });
+  box.append(cab);
+  reg.lacuna.entradas.forEach((e) => {
+    const lin = document.createElement("div");
+    lin.className = "lei-lac-lin";
+    lin.style.paddingLeft = (Math.max(0, (e.nivel || 1) - 1) * 14) + "px";
+    lin.textContent = ((e.rotulo ? e.rotulo + " " : "") + String(e.texto || "")).trim();
+    box.append(lin);
+  });
+  const bt = document.createElement("button");
+  bt.type = "button";
+  bt.className = "btn-min lei-lac-bt";
+  bt.textContent = t("lei_lac_artigo");
+  bt.title = t("lei_lac_artigo_tip");
+  bt.onclick = () => leiConsultaAbrir(reg);
+  box.append(bt);
+  pai.insertBefore(box, ancora.nextSibling);
+  try { leiReg("consulta", "trecho omitido aberto", reg.alvoCurto + " art. " + reg.numCru + " · " + reg.lacuna.descricao); } catch (e) {}
+  return true;
+}
+/* a janela de consulta: o artigo INTEIRO da lei alterada, com o que a emenda escreve destacado e o resto em cinza */
+function leiConsultaAbrir(reg) {
+  const alvoLei = leiDe(reg.leiAlvoId);
+  const art = alvoLei ? leiArtigoDoAlvo(alvoLei, reg.alvoCurto, reg.num) : null;
+  if (!art) return false;
+  const c = leiArtigoParaConsulta(reg.corpo, art.texto);
+  $("leiConsultaTit").textContent = t("lei_cons_tit", { a: reg.numCru, lei: reg.alvoCurto });
+  $("leiConsultaSub").textContent = t("lei_cons_sub", { l: alvoLei.nome, d: alvoLei.consultadaEm || alvoLei.versao || "—" });
+  $("leiConsultaAviso").textContent = t(c.incorpora ? "lei_cons_incorpora" : (c.mesclou ? "lei_cons_previa" : "lei_cons_sem_mudanca"));
+  const cx = $("leiConsultaCorpo");
+  cx.innerHTML = "";
+  c.dispositivos.forEach((d) => {
+    const lin = document.createElement("div");
+    lin.className = "lei-cons-lin lei-cons-" + d.etiqueta;
+    lin.style.paddingLeft = (Math.max(0, (d.nivel || 1) - 1) * 14) + "px";
+    const tx = document.createElement("span");
+    tx.textContent = ((d.rotulo ? d.rotulo + " " : "") + String(d.texto || "")).trim();
+    const tag = document.createElement("small");
+    tag.className = "lei-cons-tag";
+    tag.textContent = " · " + t("lei_cons_tag_" + d.etiqueta);
+    lin.append(tx, tag);
+    cx.append(lin);
+  });
+  try { leiReg("consulta", "consulta à lei alterada", reg.alvoCurto + " art. " + reg.numCru + " · " + alvoLei.nome); } catch (e) {}
+  abrirModal("dlgLeiConsulta");
+  return true;
+}
+
 function leiCitacaoHtml(L, ini, fim, a, b, tr) {
   const lei = b.alvo ? b.alvo.curto : t("lei_cit_lei_outra");
   const cortes = tr.artigos.map((x) => x.linha - a.linha).filter((k) => k >= ini && k <= fim);
@@ -1496,8 +1682,35 @@ function leiCitacaoHtml(L, ini, fim, a, b, tr) {
     const ate = i + 1 < cortes.length ? cortes[i + 1] - 1 : fim;
     const ar = tr.artigos.filter((x) => x.linha - a.linha === k)[0];
     const cab = ar ? t(ar.semMudanca ? "lei_cit_cab_sem" : "lei_cit_cab", { a: ar.numCru, lei }) : "";
+    let seg = L.slice(k, ate + 1).join("\n");
+    const segOrig = seg;
+    let chipInfo = null;
+    const pAlvo = leiAlvoCtx && b.alvo ? leiAlvoCtx.porCurto[b.alvo.curto] : null;
+    if (pAlvo && pAlvo.lei && ar) {
+      try {
+        const artAlvo = leiArtigoDoAlvo(pAlvo.lei, b.alvo.curto, ar.num);
+        if (artAlvo) {
+          const info = leiLacunasDoBloco(seg, artAlvo.texto);
+          if (info.casou && info.lacunas.length) {
+            let n = 0;
+            seg = seg.replace(new RegExp(LEI_RE_OMISSAO.source, "g"), () => "⟦LAC" + (n++) + "⟧").replace(/(^|\n)\.\s+(⟦LAC)/g, "$1$2");
+            chipInfo = { info };
+          }
+        }
+      } catch (e) { chipInfo = null; seg = segOrig; }
+    }
+    let corpoHtml = matParaHtml(leiSemPontilhado(seg));
+    if (chipInfo) {
+      corpoHtml = corpoHtml.replace(/⟦LAC(\d+)⟧/g, (m, i) => {
+        const lac = chipInfo.info.lacunas[Number(i)];
+        if (!lac) return "…";
+        const id = "lac" + b.linha + "_" + ar.num + "_" + i;
+        leiLacunasReg[id] = { alvoCurto: b.alvo.curto, num: ar.num, numCru: ar.numCru, leiAlvoId: pAlvo.escolhida.id, lacuna: lac, corpo: segOrig };
+        return leiLacunaChip(id, leiLacunasReg[id]);
+      });
+    }
     html += '<div class="lei-citacao">' + (cab ? '<div class="lei-cit-cab">' + matEscapar(cab) + "</div>" : "")
-      + matParaHtml(leiSemPontilhado(L.slice(k, ate + 1).join("\n")))
+      + corpoHtml
       + (ate === fim && tr.marca ? '<div class="lei-cit-fim">' + matEscapar(t("lei_cit_fim_" + tr.marca.toLowerCase())) + "</div>" : "")
       + "</div>";
   });
@@ -1562,6 +1775,10 @@ function leiPintarLeitura() {
   leiArtsVivos = arts;
   /* as citações de outras leis (só se há uma linha que abre com aspas + "Art."): o custo é zero nas demais */
   const cit = /^\s*[“"«]\s*Art/m.test(bruto) ? leiLerCitacoes(bruto.split("\n"), l ? leiOpcDaLei(l).recusados : {}) : null;
+  try { leiAlvoCtx = leiAlvosCtx(l, cit); } catch (e) { leiAlvoCtx = null; }
+  leiRecebidasAtual = null;
+  try { if (l && !leiAlvoCtx) leiRecebidasAtual = { mapa: leiAlteracoesRecebidas(Object.assign({}, l, { texto: bruto })), adct: leiSecoes(bruto).adct }; } catch (e) { leiRecebidasAtual = null; }
+  leiFaixaAlvoPintar(leiAlvoCtx);
   leiPareiIdx = l ? leiIndiceDoMarcador(l, arts) : -1;
   leiFlutAtivo = !!l;
   /* a estatística é calculada UMA vez para a lei inteira: fazer a conta
@@ -1753,6 +1970,7 @@ function leiPintarLeitura() {
 
     cab.append(bCloze, bEd, bNota);
     const chips = leiChipsDeAlteracao(a, cit);
+    const recebidas = leiChipsRecebidos(a, leiRecebidasAtual);
 
     const corpo = document.createElement("div");
     corpo.className = "lei-art-txt" + (a.revogacao && !a.alterado && !a.revogado ? " lei-art-txt-rev" : "");
@@ -1778,6 +1996,7 @@ function leiPintarLeitura() {
 
     bloco.append(cab);
     if (chips) bloco.append(chips);
+    if (recebidas) bloco.append(recebidas);
     bloco.append(corpo);
 
     /* AVISO DO ARTIGO QUE MAIS CAI.
@@ -6929,6 +7148,11 @@ function leiIniciar() {
     b.textContent = t("copied");
     setTimeout(() => { b.textContent = r; }, 1800);
   };
+  liga("btnLeiConsultaFechar", "fechar a consulta", () => $("dlgLeiConsulta").close());
+  if ($("leiLeitura")) {
+    $("leiLeitura").addEventListener("click", (ev) => leiLacunaClique(ev));
+    $("leiLeitura").addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { if (leiLacunaClique(ev)) ev.preventDefault(); } });
+  }
   liga("btnLeiLogIdent", "corrigir identificação das leis", () => leiIdentidadeTela());
   liga("btnLeiLogIdentDesfazer", "desfazer a correção da identificação", () => leiIdentidadeDesfazerTela());
   liga("btnLeiLogVinc", "copiar leis e vínculos", () => copiaVinc("btnLeiLogVinc", false));

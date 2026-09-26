@@ -1423,6 +1423,239 @@ async function testes() {
       ok(/\.ram-lei-box\{/.test(html42) && /\.ram-lei-texto\{/.test(html42), "R42z a caixa da lei tem CSS");
     }
 
+    /* R46: META DA SEMANA EM RAMOS */
+    {
+      const { a, ed } = MT();
+      const HOJE = "2026-09-24";
+      const hojeReal = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+      ok(JSON.stringify(a.edSemanaCalendario("2026-09-26")) === '{"ini":"2026-09-21","fim":"2026-09-27"}' && JSON.stringify(a.edSemanaCalendario("2026-09-21")) === '{"ini":"2026-09-21","fim":"2026-09-27"}' && JSON.stringify(a.edSemanaCalendario("2026-09-27")) === '{"ini":"2026-09-21","fim":"2026-09-27"}' && JSON.stringify(a.edSemanaCalendario("2026-03-01")) === '{"ini":"2026-02-23","fim":"2026-03-01"}', "R46 a semana vai de segunda a domingo (sabado, segunda, domingo e virada de mes)");
+      const sem = { ini: "2026-09-21", fim: "2026-09-27" };
+      const dia = [
+        { d: "2026-09-22", c: "k", a: "feito", rm: [{ id: "a" }, { id: "_topo" }], rp: [{ id: "b" }, { id: "a" }] },
+        { d: "2026-09-20", c: "k", a: "feito", rm: [{ id: "velho" }] },
+        { d: "2026-09-28", c: "k", a: "feito", rm: [{ id: "futuro" }] },
+        { d: "2026-09-23", c: "k", a: "pendente", rm: [{ id: "desmarcado" }], rp: [{ id: "desmarcado2" }] },
+        { d: "2026-09-23", c: "k", a: "revisado", rm: [{ id: "revisto" }], rp: [{ id: "c" }] },
+        { d: "?", c: "k", a: "feito", rm: [{ id: "semdata" }] },
+        { d: "2026-09-27", c: "outro", a: "feito", rm: [{ id: "a" }] },
+      ];
+      const rd = a.edRamosDaSemana(dia, sem);
+      ok(JSON.stringify(rd) === JSON.stringify({ "k›a": "feito", "k›b": "parcial", "k›c": "parcial", "outro›a": "feito" }), "R46a do diario: estudado (feito vence parcial), parcial; fora da semana, desmarcado, revisado, sem data e o marcador do topico nao contam: " + JSON.stringify(rd));
+      ok(Object.keys(a.edRamosDaSemana(null, sem)).length === 0 && Object.keys(a.edRamosDaSemana([null, {}], sem)).length === 0, "R46b diario vazio ou lixo: nada");
+      const r0 = a.lerEdital(ed.texto);
+      const plano = (feitos) => a.montarPlano(r0, { horas: 20, prova: "2027-06-01", feitos: feitos || {}, fatores: null, acertos: null });
+      const pl0 = plano();
+      const it0 = pl0.itens.find((i) => i.nome === "Lei 14.133");
+      const ch = it0.chave;
+      const M0 = a.edMetaDeRamos(pl0, [], { hoje: HOJE });
+      ok(M0.n === 3 && M0.feitos === 0 && M0.parciais === 0 && M0.pendentes === 3 && M0.ramos.map((x) => x.nome).join("|") === "Modalidades|Fase preparatória|Contratos" && M0.minutos === M0.ramos.reduce((s2, x) => s2 + x.minutos, 0) && M0.minutos > 0 && M0.sobra === 0, "R46c sem registro: os 3 ramos do topico com ramos, pelos mais relevantes, e o tempo somado: " + JSON.stringify([M0.n, M0.minutos, M0.ramos.map((x) => x.nome)]));
+      ok(M0.semana.ini === "2026-09-21" && M0.orcamento === pl0.porSemana && M0.ramos.every((x) => x.estado === "pend" && x.item && x.topicoChave === ch), "R46d traz a semana, o orcamento da semana e o estado de cada ramo");
+      /* estudado esta semana: continua na meta (senao "4 de 6" viraria "0 de 2" ao estudar) */
+      const dEst = [{ d: HOJE, c: ch, a: "feito", rm: [{ id: "modalidades" }] }];
+      const M1 = a.edMetaDeRamos(plano({ [ch + "›#modalidades"]: { e: "feito", d: HOJE } }), dEst, { hoje: HOJE });
+      ok(M1.n === 3 && M1.feitos === 1 && M1.pendentes === 2 && M1.ramos[0].estado === "feito" && M1.minutosFeitos === M1.ramos[0].minutos, "R46e o ramo estudado esta semana CONTINUA na meta como feito (n segue 3): " + JSON.stringify([M1.n, M1.feitos, M1.ramos.map((x) => x.estado)]));
+      const M1b = a.edMetaDeRamos(plano({ [ch + "›#modalidades"]: { e: "feito", d: "2026-09-10" } }), [{ d: "2026-09-10", c: ch, a: "feito", rm: [{ id: "modalidades" }] }], { hoje: HOJE });
+      ok(M1b.n === 2 && M1b.feitos === 0, "R46f estudado em OUTRA semana: nao entra (ja' esta' feito, nao e' meta desta semana)");
+      const M1c = a.edMetaDeRamos(plano(), [{ d: HOJE, c: ch, a: "feito", rp: [{ id: "contratos" }] }], { hoje: HOJE });
+      ok(M1c.parciais === 1 && M1c.feitos === 0 && M1c.ramos.find((x) => x.ramoId === "contratos").estado === "parcial" && M1c.n === 3, "R46g ramo deixado parcial esta semana aparece como parcial");
+      /* o que ja' foi estudado GASTA o orcamento: com so' 1 min sobrando, nenhum pendente cabe */
+      const mMod = M0.ramos[0].minutos;
+      const M1d = a.edMetaDeRamos(plano({ [ch + "›#modalidades"]: { e: "feito", d: HOJE } }), dEst, { hoje: HOJE, minutos: mMod + 1 });
+      ok(M1d.n === 1 && M1d.feitos === 1 && M1d.pendentes === 0 && M1d.sobra === 2, "R46e2 o ramo estudado consome o orcamento da semana: sobrando so' 1 min, nenhum pendente entra: " + JSON.stringify([M1d.n, M1d.pendentes, M1d.sobra]));
+      ok(a.edMetaDeRamos(Object.assign({}, pl0, { porSemana: 0 }), dEst, { hoje: HOJE }).n === 0, "R46e3 sem orcamento de semana nao ha meta (nem com ramo estudado)");
+      /* ordem: a RELEVANCIA (peso do topico x parte do ramo), nao a ordem em que estao escritos */
+      const NL46 = String.fromCharCode(10);
+      const rAbs = a.lerEdital("# X | prova: 2027-06-01 | horas: 20" + NL46 + "@ D :: 5" + NL46 + "+ Leve :: 2" + NL46 + "++ L1 :: 3" + NL46 + "++ L2 :: 3" + NL46 + "+ Pesado :: 5" + NL46 + "++ P1 :: 3" + NL46 + "++ P2 :: 3");
+      const plAbs = a.montarPlano(rAbs, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null });
+      ok(a.edMetaDeRamos(plAbs, [], { hoje: HOJE }).ramos.map((x) => x.nome).join() === "P1,P2,L1,L2", "R46e4 ramos do topico pesado vem ANTES dos do leve, mesmo escritos depois: " + a.edMetaDeRamos(plAbs, [], { hoje: HOJE }).ramos.map((x) => x.nome).join());
+      /* pulado */
+      const M2 = a.edMetaDeRamos(plano({ [ch + "›#fase_preparatoria"]: { e: "pulado", d: HOJE } }), [], { hoje: HOJE });
+      ok(M2.n === 2 && M2.ramos.every((x) => x.ramoId !== "fase_preparatoria"), "R46h ramo pulado fora da meta");
+      /* orcamento */
+      const m1 = M0.ramos[0].minutos;
+      const M3 = a.edMetaDeRamos(pl0, [], { hoje: HOJE, minutos: m1 });
+      ok(M3.n === 1 && M3.ramos[0].nome === "Modalidades" && M3.sobra === 2 && M3.minutos <= m1, "R46i com orcamento so' para um ramo: entra o mais relevante e 'sobra' conta os outros 2: " + JSON.stringify([M3.n, M3.sobra]));
+      ok(a.edMetaDeRamos(pl0, [], { hoje: HOJE, minutos: 1 }).n === 0 && a.edMetaDeRamos(Object.assign({}, pl0, { porSemana: 0 }), [], { hoje: HOJE }).n === 0 && a.edMetaDeRamos(null, [], { hoje: HOJE }).n === 0, "R46j sem orcamento (ou plano vazio): nada");
+      const M4 = a.edMetaDeRamos(pl0, dEst, { hoje: HOJE, minutos: 1 });
+      ok(M4.n === 1 && M4.feitos === 1, "R46k o que ja' foi estudado entra SEMPRE, mesmo estourando o orcamento");
+      /* so' a agenda desta semana */
+      const plS = Object.assign({}, pl0, { itens: pl0.itens.map((i) => (i.chave === ch ? Object.assign({}, i, { semana: 2 }) : i)) });
+      ok(a.edMetaDeRamos(plS, [], { hoje: HOJE }).n === 0 && a.edMetaDeRamos(plS, dEst, { hoje: HOJE }).n === 1, "R46l topico da agenda de OUTRA semana nao entra; mas o ramo estudado esta semana entra");
+      const plN = Object.assign({}, pl0, { itens: pl0.itens.map((i) => (i.chave === ch ? Object.assign({}, i, { semana: null }) : i)) });
+      ok(a.edMetaDeRamos(plN, [], { hoje: HOJE }).n === 3, "R46m sem cronograma (semana nula) o topico vale");
+      /* sem ramos no edital */
+      const r1 = a.lerEdital("# X | prova: 2027-06-01 | horas: 20\n@ D :: 5\n+ T :: 5\n+ U :: 3");
+      const pl1 = a.montarPlano(r1, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null });
+      ok(a.edMetaDeRamos(pl1, [], { hoje: HOJE }).n === 0, "R46n edital sem ramos: meta em ramos vazia (comportamento de sempre)");
+      /* tela: acompanhamento e painel da disciplina */
+      a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+      a.edProgressoPor({});
+      a.edDiario.length = 0;
+      a.edDiario.push({ d: hojeReal(), c: ch, n: "Lei 14.133", disc: "Licitações", a: "feito", m: 30, rm: [{ id: "modalidades" }] });
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: hojeReal() } });
+      const plT = a.montarPlano(a.lerEdital(ed.texto), { horas: 20, prova: "2027-06-01", feitos: { [ch + "›#modalidades"]: { e: "feito", d: hojeReal() } }, fatores: null, acertos: null });
+      a.edPintarRitmo(plT);
+      const bloco = achar(a.$("edRitmo"), (e) => cls(e, "ac-meta-ramos"))[0];
+      const chips = achar(bloco || a.$("edRitmo"), (e) => cls(e, "ac-meta-chip"));
+      ok(!!bloco && /Meta da semana em ramos/.test(bloco.textContent) && /3 ramo\(s\)/.test(bloco.textContent) && /estudados 1/.test(bloco.textContent) && chips.length === 3, "R46o o acompanhamento mostra a meta da semana em ramos e um chip por ramo: " + (bloco ? bloco.textContent.slice(0, 160) : "sem bloco"));
+      ok(/^✓ Modalidades/.test(chips[0].textContent) && !/^✓/.test(chips[1].textContent) && cls(chips[0], "ed-ramo-feito"), "R46p o ramo estudado vem marcado com ✓");
+      chips[1].onclick();
+      ok(a.$("dlgRegistro").open === true, "R46q clicar num ramo PENDENTE abre o registro dele");
+      a.$("dlgRegistro").close();
+      a.abrirDisciplina("Licitações");
+      const lin46 = Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className));
+      ok(lin46.length === 3 && lin46.every((l) => /dsc-ramo-semana/.test(l.className) && /esta semana/.test(l.children[2].textContent)), "R46r o painel da disciplina marca 'esta semana' nos ramos da meta");
+      a.$("dlgDisciplina").close();
+      a.edDiario.length = 0;
+      const html46 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.ac-meta-chips\{/.test(html46) && /\.ac-meta-chip\{/.test(html46), "R46s a meta tem CSS");
+    }
+
+    /* R47: CONSULTAR A LEI ALTERADA — a que dispositivos pertence cada "..." da emenda */
+    {
+      const { a, ed } = MT();
+      const NL = String.fromCharCode(10);
+      const pts = (n) => ".".repeat(n);
+      const EC = ["EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023", "", "Altera o Sistema Tributário Nacional.", "",
+        "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:", "",
+        '"Art. 43. ' + pts(60), "", pts(60), "", '§ 4º Sempre que possível, a concessão dos incentivos regionais a que se refere o § 2º, III, considerará critérios de sustentabilidade ambiental e redução das emissões de carbono." (NR)', "",
+        '"Art. 145. ' + pts(60), "", '§ 3º O Sistema Tributário Nacional deverá observar os princípios da simplicidade." (NR)', "",
+        "Art. 2º O Ato das Disposições Constitucionais Transitórias passa a vigorar com as seguintes alterações:", "",
+        '"Art. 124. Lei complementar estabelecerá a transição." (NR)', "",
+        "Art. 3º Esta Emenda Constitucional entra em vigor na data de sua publicação."].join(NL);
+      const cfTxt = (par4) => ["CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", "TÍTULO III", "Da Organização do Estado",
+        "Art. 43. Para efeitos administrativos, a União poderá articular sua ação em um mesmo complexo geoeconômico e social.",
+        "§ 1º Lei complementar disporá sobre:", "I - as condições para integração de regiões em desenvolvimento;", "II - a composição dos organismos regionais.",
+        "§ 2º Os incentivos regionais compreenderão, além de outros, na forma da lei:", "I - igualdade de tarifas;", "II - juros favorecidos;", "III - isenções de tributos federais;", "IV - prioridade para o aproveitamento dos rios.",
+        "§ 3º Nas áreas a que se refere o § 2º, IV, a União incentivará a recuperação de terras áridas.",
+        par4,
+        "TÍTULO VI", "Da Tributação e do Orçamento",
+        "Art. 145. A União, os Estados, o Distrito Federal e os Municípios poderão instituir os seguintes tributos:",
+        "§ 1º Sempre que possível, os impostos terão caráter pessoal.", "§ 2º As taxas não poderão ter base de cálculo própria de impostos.", "§ 3º O Sistema Tributário Nacional deverá observar os princípios da simplicidade.",
+        "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS",
+        "Art. 43. Artigo 43 do ADCT, sem relação com o do corpo.", "Art. 124. Lei complementar estabelecerá a transição."].join(NL);
+      const CF = cfTxt("§ 4º Sempre que possível, a concessão dos incentivos regionais a que se refere o § 2º, III, considerará critérios de sustentabilidade ambiental e redução das emissões de carbono.");
+      const CFVELHA = cfTxt("§ 4º Redação antiga do parágrafo quarto.");
+      /* seccoes: o numero repete entre o corpo e o ADCT */
+      ok(a.leiSecoes(CF).adct !== null && a.leiArtigosDaSecao(CF, "adct").map((x) => x.num).join() === "43,124" && a.leiArtigosDaSecao(CF, "corpo").map((x) => x.num).join() === "43,145" && a.leiArtigosDaSecao(CF, "tudo").length === 4, "R47 o ADCT e' uma secao da Constituicao: adct = 43,124; corpo = 43,145 (o numero repete)");
+      const cf = a.leiGuardar({ nome: "Constituição Federal", texto: CF, topicos: [] });
+      const ec = a.leiGuardar({ nome: "Emenda Constitucional 132/2023", texto: EC, topicos: [] });
+      const leisAll = () => a.leisLista();
+      const cc = a.leiAlvosCandidatos({ curto: "Constituição Federal" }, leisAll());
+      ok(cc.length === 1 && cc[0].id === cf.id && cc[0].confianca === "alta", "R47a candidata para 'Constituicao Federal': so' a Constituicao (a emenda nao entra)");
+      const ca = a.leiAlvosCandidatos({ curto: "ADCT" }, leisAll());
+      ok(ca.length === 1 && ca[0].id === cf.id && ca[0].confianca === "media" && /divisão/.test(ca[0].motivo), "R47b sem lei do ADCT separada, a candidata do ADCT e' a Constituicao (confianca media, 'o ADCT e' uma divisao')");
+      const adct = a.leiGuardar({ nome: "ADCT - Ato das Disposições Constitucionais Transitórias", texto: "Art. 1º Texto do ADCT.", topicos: [] });
+      const ca2 = a.leiAlvosCandidatos({ curto: "ADCT" }, leisAll());
+      ok(ca2.length === 2 && ca2[0].id === adct.id && ca2[0].confianca === "alta" && ca2[1].id === cf.id, "R47c com a lei do ADCT separada, ela vem primeiro (alta) e a Constituicao depois");
+      /* a ordem: confianca alta antes da media, mesmo que a media venha antes em ordem alfabetica */
+      const adctZ = a.leiGuardar({ nome: "Z ADCT separado (outra cópia)", texto: "Art. 1º Outro texto do ADCT, mais longo que o outro.", topicos: [] });
+      const ca3 = a.leiAlvosCandidatos({ curto: "ADCT" }, leisAll());
+      ok(ca3.length === 3 && ca3[2].id === cf.id && ca3[2].confianca === "media" && ca3[0].confianca === "alta" && ca3[1].confianca === "alta", "R47c2 as de confianca ALTA vem antes da media (a Constituicao, alfabeticamente no meio, fica por ultimo)");
+      a.leiApagar(adctZ.id);
+      ok(a.leiAlvosCandidatos({ curto: "Emenda Constitucional nº 132/2023" }, leisAll()).map((x) => x.id).join() === ec.id && a.leiAlvosCandidatos({ curto: "Lei nº 132/2023" }, leisAll())[0].confianca === "media" && a.leiAlvosCandidatos({ curto: "Emenda Constitucional nº 132/2022" }, leisAll()).length === 0 && a.leiAlvosCandidatos({ curto: "Emenda Constitucional nº 133/2023" }, leisAll()).length === 0 && a.leiAlvosCandidatos(null, leisAll()).length === 0, "R47d alvo numerado: numero e ano batem = alta; outra especie = media; outro ano = nenhuma; alvo vazio = nenhuma");
+      const cfRec = () => a.leiDe(cf.id);
+      ok(/^Art\. 43\. Para efeitos/.test(a.leiArtigoDoAlvo(cfRec(), "Constituição Federal", "43").texto) && /^Art\. 43\. Artigo 43 do ADCT/.test(a.leiArtigoDoAlvo(cfRec(), "ADCT", "43").texto) && a.leiArtigoDoAlvo(cfRec(), "Constituição Federal", "124") === null && a.leiArtigoDoAlvo(cfRec(), "ADCT", "124") !== null && a.leiArtigoDoAlvo(null, "ADCT", "1") === null, "R47e o artigo certo: 'art. 43' do corpo x do ADCT; 124 so' existe no ADCT");
+      ok(/Texto do ADCT/.test(a.leiArtigoDoAlvo(a.leiDe(adct.id), "ADCT", "1").texto), "R47f lei do ADCT separada: vale toda ela");
+      /* as lacunas do exemplo do usuario: art. 43 */
+      const par = a.leiLerAlteradora(EC, null);
+      const b43 = par.blocos.find((b) => b.num === "43"), b145 = par.blocos.find((b) => b.num === "145");
+      const art43 = a.leiArtigoDoAlvo(cfRec(), "Constituição Federal", "43");
+      const lc = a.leiLacunasDoBloco(b43.corpo, art43.texto);
+      ok(lc.casou && lc.marcadores === 2 && lc.lacunas.length === 2 && lc.lacunas[0].descricao === "caput" && lc.lacunas[0].n === 1 && lc.lacunas[1].descricao === "§§ 1º a 3º" && lc.lacunas[1].n === 9 && lc.semMarcador.length === 0 && Object.keys(lc.mostradas).join() === "P4", "R47g art. 43 (o exemplo): a 1a marca e' o CAPUT; a 2a sao os §§ 1º a 3º (9 dispositivos: 1º, I, II, 2º, I a IV, 3º); so' o § 4º e' escrito: " + JSON.stringify(lc.lacunas.map((x) => [x.descricao, x.n])));
+      ok(lc.lacunas[1].entradas.map((e) => e.chave).join() === "P1,P1>I,P1>II,P2,P2>I,P2>II,P2>III,P2>IV,P3" && /Lei complementar disporá/.test(lc.lacunas[1].entradas[0].texto), "R47h as entradas da lacuna sao os dispositivos certos, com o texto da lei alterada");
+      const art145 = a.leiArtigoDoAlvo(cfRec(), "Constituição Federal", "145");
+      const l145 = a.leiLacunasDoBloco(b145.corpo, art145.texto);
+      ok(l145.casou && l145.lacunas.length === 1 && l145.lacunas[0].descricao === "caput" && l145.semMarcador.length === 1 && l145.semMarcador[0].descricao === "§§ 1º e 2º", "R47i o que fica entre o caput omitido e o § 3º escrito, sem marca propria, vai para 'semMarcador' (§§ 1º e 2º): " + JSON.stringify([l145.lacunas.map((x) => x.descricao), l145.semMarcador.map((x) => x.descricao)]));
+      ok(a.leiDescreverLacuna([{ chave: "P1", tipo: "paragrafo", rotulo: "§ 1º", nivel: 1 }]) === "§ 1º" && a.leiDescreverLacuna([{ chave: "II", tipo: "inciso", rotulo: "II -", nivel: 2 }, { chave: "III", tipo: "inciso", rotulo: "III -", nivel: 2 }]) === "II e III" && a.leiDescreverLacuna([{ chave: "caput", tipo: "caput", rotulo: "", nivel: 0 }, { chave: "I", tipo: "inciso", rotulo: "I -", nivel: 2 }, { chave: "I>a", tipo: "alinea", rotulo: "a)", nivel: 3 }]) === "caput, I", "R47j a descricao: § singular, incisos 'II e III', o filho ja' esta' dentro do pai");
+      /* casos de borda das lacunas, com blocos escritos a mao */
+      const bl = (...linhas) => linhas.join(NL);
+      /* (1) dispositivo omitido COM filhos: "§ 2º ....." leva junto os incisos (menos o que a emenda escreve) */
+      const cA = a.leiLacunasDoBloco(bl('"Art. 43. ' + pts(60), "", "§ 2º " + pts(60), "", '§ 3º Nas áreas a que se refere o § 2º, IV, texto novo." (NR)'), art43.texto);
+      ok(cA.casou && cA.lacunas.map((x) => x.tipo + ":" + x.chave + ":" + x.descricao + ":" + x.n).join("|") === "propria:caput:caput:1|propria:P2:§ 2º:5" && cA.semMarcador.map((x) => x.descricao).join() === "§ 1º,§ 4º", "R47y '§ 2º ....' omitido leva o § 2º e seus 4 incisos (5); o § 1º (antes) e o § 4º (depois do § 3º escrito), sem marca, vao para semMarcador: " + JSON.stringify(cA.lacunas.map((x) => [x.tipo, x.chave, x.descricao, x.n])));
+      /* (2) o que a emenda escreve DENTRO do omitido nao conta como omitido */
+      const cB = a.leiLacunasDoBloco(bl('"Art. 43. ' + pts(60), "", "§ 2º " + pts(60), "", "III - isenções de tributos federais, texto novo." + '" (NR)'), art43.texto);
+      const propB = cB.lacunas.find((x) => x.chave === "P2");
+      ok(!!propB && propB.n === 4 && propB.entradas.every((e) => e.chave !== "P2>III") && cB.mostradas["P2>III"] === true, "R47z '§ 2º ....' e depois o inciso III escrito: a lacuna do § 2º tem 4 (nao inclui o III que a emenda escreve): " + (propB ? propB.entradas.map((e) => e.chave).join() : "sem"));
+      /* (3) a marca vai so' ate' o proximo dispositivo escrito: o que vem depois dele e' outra coisa */
+      const cC = a.leiLacunasDoBloco(bl('"Art. 43. ' + pts(60), "", pts(60), "", "§ 2º Os incentivos regionais, texto novo." + '" (NR)'), art43.texto);
+      ok(cC.casou && cC.lacunas.length === 2 && cC.lacunas[1].tipo === "depois" && cC.lacunas[1].descricao === "§ 1º" && cC.lacunas[1].n === 3 && cC.semMarcador.length === 1 && /§§ 3º e 4º|§ 3º/.test(cC.semMarcador[0].descricao), "R47aa a marca depois do caput cobre so' o que vai ate' o § 2º escrito (§ 1º, com 3 dispositivos); o que vem depois do § 2º (§§ 3º e 4º) e' 'semMarcador': " + JSON.stringify([cC.lacunas.map((x) => [x.descricao, x.n]), cC.semMarcador.map((x) => x.descricao)]));
+      /* (4) duas marcas seguidas: a 1a leva os dispositivos, a 2a fica sem nada e o chip dela e' so' um "…" */
+      const cD = a.leiLacunasDoBloco(bl('"Art. 43. Caput reescrito pela emenda.', "", pts(60), "", pts(60), "", "§ 4º Texto novo." + '" (NR)'), art43.texto);
+      ok(cD.lacunas.length === 2 && cD.lacunas[0].n === 9 && cD.lacunas[1].n === 0 && cD.lacunas[1].descricao === "", "R47bb duas marcas seguidas: a primeira cobre os 9 dispositivos e a segunda fica vazia");
+      ok(/lei-lacuna-vazia/.test(a.leiLacunaChip("x1", { lacuna: cD.lacunas[1], numCru: "43", alvoCurto: "Constituição Federal" })) && !/data-lac/.test(a.leiLacunaChip("x1", { lacuna: cD.lacunas[1], numCru: "43", alvoCurto: "Constituição Federal" })) && /data-lac="x2"/.test(a.leiLacunaChip("x2", { lacuna: cD.lacunas[0], numCru: "43", alvoCurto: "Constituição Federal" })), "R47cc a marca vazia vira um '…' comum (sem clique); a que cobre algo, um chip clicavel");
+      /* consulta */
+      const cons = a.leiArtigoParaConsulta(b43.corpo, art43.texto);
+      ok(cons.incorpora === true && cons.mesclou === false && cons.dispositivos.length === 11 && cons.dispositivos.filter((d) => d.etiqueta === "alterado").map((d) => d.chave).join() === "P4" && cons.dispositivos[0].etiqueta === "fora", "R47k a Constituicao da biblioteca JA' traz o § 4º: incorpora, 11 dispositivos, so' o § 4º 'alterado', o resto 'fora'");
+      const artVelho = a.leiArtigosDaSecao(CFVELHA, "corpo").find((x) => x.num === "43");
+      const cons2 = a.leiArtigoParaConsulta(b43.corpo, artVelho.texto);
+      ok(cons2.incorpora === false && cons2.mesclou === true && /emissões de carbono/.test(cons2.texto) && !/Redação antiga/.test(cons2.texto), "R47l Constituicao de ANTES da emenda: previa mesclada (o § 4º da emenda no lugar do antigo)");
+      const artAspas = { texto: art43.texto.replace("emissões de carbono.", "emissões de “carbono”;  ") };
+      ok(a.leiArtigoParaConsulta(b43.corpo, artAspas.texto).incorpora === true, "R47l2 aspas curvas, pontuacao e espacos diferentes nao impedem de reconhecer que a lei da biblioteca ja' traz a redacao");
+      /* tela: faixa, sugestao e escolha */
+      const disc = "Reforma Tributária", top = "Emenda Constitucional nº 132/2023";
+      const chave = a.matChave(disc, top);
+      a.leiLigar(ec.id, chave);
+      a.leiAbrir(disc, top, ec.id);
+      const ctx = a.leiAlvoCtxAtual();
+      ok(!!ctx && ctx.porCurto["Constituição Federal"].escolhida.id === cf.id && ctx.porCurto["Constituição Federal"].decidida === false && ctx.porCurto["ADCT"].escolhida.id === adct.id && ctx.porCurto["Constituição Federal"].artigos === 2 && ctx.porCurto["ADCT"].artigos === 1, "R47m ao ler a emenda o app SUGERE a lei de cada alvo (a Constituicao e o ADCT separado), sem que estejam ligadas ao topico");
+      const faixa = a.$("leiFaixaAlvo");
+      ok(faixa.hidden === false && /Esta lei ALTERA Constituição Federal: 2 artigo/.test(faixa.textContent) && /Esta lei ALTERA ADCT/.test(faixa.textContent) && /Sugestão do app/.test(faixa.textContent) && !/Escolha sua/.test(faixa.textContent), "R47n a faixa avisa que a lei ALTERA a Constituicao e que a lei consultada e' sugestao: " + faixa.textContent.slice(0, 200));
+      const regs = a.leiLacunasRegAtual();
+      const chavesReg = Object.keys(regs);
+      ok(chavesReg.length >= 2 && chavesReg.some((k) => regs[k].num === "43" && regs[k].lacuna.descricao === "caput") && chavesReg.some((k) => regs[k].num === "43" && regs[k].lacuna.descricao === "§§ 1º a 3º") && chavesReg.every((k) => regs[k].leiAlvoId === cf.id || regs[k].leiAlvoId === adct.id), "R47o cada '...' do art. 43 virou um chip registrado (caput; §§ 1º a 3º), apontando para a lei sugerida: " + chavesReg.join());
+      const idA = chavesReg.find((k) => regs[k].num === "43" && regs[k].lacuna.descricao === "§§ 1º a 3º");
+      const html47 = Array.from(a.$("leiLeitura").querySelectorAll(".lei-art-txt")).map((e) => e.innerHTML).join("");
+      ok(html47.indexOf('data-lac="' + idA + '"') >= 0 && /= §§ 1º a 3º · art\. 43 de Constituição Federal/.test(html47), "R47p o texto da leitura traz o chip '= §§ 1º a 3º · art. 43 de Constituição Federal'");
+      /* clicar no chip: expande, e clicar de novo recolhe */
+      const pai = { children: [], insertBefore(b) { this.children.push(b); }, removeChild(x) { this.children = this.children.filter((y) => y !== x); } };
+      const chip = { tagName: "P", className: "", parentNode: pai, nextSibling: null, getAttribute: (k) => (k === "data-lac" ? idA : null) };
+      ok(a.leiLacunaClique({ target: chip }) === true && pai.children.length === 1 && /Não está escrito na emenda — vem de Constituição Federal, art\. 43: §§ 1º a 3º/.test(pai.children[0].textContent) && /Lei complementar disporá sobre/.test(pai.children[0].textContent) && /Os incentivos regionais compreenderão/.test(pai.children[0].textContent), "R47q clicar no chip mostra, no lugar, o texto da lei alterada (§§ 1º a 3º), com o aviso 'nao esta' escrito na emenda'");
+      ok(a.leiLacunaClique({ target: chip }) === true && pai.children.length === 0 && a.leiLacunaClique({ target: { getAttribute: () => null, parentNode: null } }) === false && a.leiLacunaClique(null) === false, "R47r clicar de novo recolhe; clicar fora de um chip nao faz nada");
+      /* consulta do artigo inteiro */
+      ok(a.leiConsultaAbrir(regs[idA]) === true && /Consulta · art\. 43 de Constituição Federal/.test(a.$("leiConsultaTit").textContent) && /JÁ traz a redação desta emenda/.test(a.$("leiConsultaAviso").textContent) && a.$("dlgLeiConsulta").open === true, "R47s a janela de consulta abre com o titulo e o aviso de que a lei da biblioteca ja' traz a emenda");
+      const linhasC = a.$("leiConsultaCorpo").children;
+      ok(linhasC.length === 11 && /lei-cons-fora/.test(linhasC[0].className) && /lei-cons-alterado/.test(linhasC[10].className) && /escrito pela emenda/.test(linhasC[10].textContent) && /não está na emenda/.test(linhasC[0].textContent), "R47t a consulta mostra o artigo inteiro: o § 4º destacado ('escrito pela emenda') e o resto em cinza ('nao esta' na emenda')");
+      a.$("dlgLeiConsulta").close();
+      /* a escolha e' do usuario e fica guardada na lei que altera */
+      const cf2 = a.leiGuardar({ nome: "CF/88 compilada (outra cópia)", texto: CFVELHA, topicos: [] });
+      a.leiAlvoEscolher("Constituição Federal", cf2.id);
+      ok(a.leiDe(ec.id).alvos["Constituição Federal"] === cf2.id && a.leiAlvoCtxAtual().porCurto["Constituição Federal"].escolhida.id === cf2.id && a.leiAlvoCtxAtual().porCurto["Constituição Federal"].decidida === true && /Escolha sua/.test(a.$("leiFaixaAlvo").textContent), "R47u escolher outra lei: guarda em l.alvos da emenda, a faixa passa a dizer 'Escolha sua' e a leitura usa a escolhida");
+      const idB = Object.keys(a.leiLacunasRegAtual()).find((k) => a.leiLacunasRegAtual()[k].num === "43" && a.leiLacunasRegAtual()[k].lacuna.descricao === "§§ 1º a 3º");
+      ok(!!idB && a.leiLacunasRegAtual()[idB].leiAlvoId === cf2.id, "R47v os chips passam a apontar para a lei ESCOLHIDA");
+      /* R48: o caminho de volta — a lei ALTERADA mostra por quem foi alterada */
+      const rec = a.leiAlteracoesRecebidas(a.leiDe(cf.id));
+      ok(Object.keys(rec).sort().join() === "adct|124,corpo|145,corpo|43" && rec["corpo|43"][0].id === ec.id && rec["corpo|43"][0].rotulo === "Art. 1º" && rec["corpo|43"][0].num === "1" && rec["adct|124"][0].rotulo === "Art. 2º" && rec["adct|124"][0].num === "2", "R48 a Constituicao sabe quem a altera: corpo art. 43 e 145 (pelo art. 1º da emenda) e ADCT art. 124 (pelo art. 2º): " + Object.keys(rec).sort().join());
+      ok(Object.keys(a.leiAlteracoesRecebidas(a.leiDe(ec.id))).length === 0 && Object.keys(a.leiAlteracoesRecebidas(null)).length === 0 && (() => { const r1 = a.leiAlteracoesRecebidas(a.leiDe(cf.id)); return r1 === a.leiAlteracoesRecebidas(a.leiDe(cf.id)) && JSON.stringify(r1) === JSON.stringify(rec); })(), "R48a a emenda nao e' alterada por ninguem; sem lei, vazio; a segunda chamada usa o memo (mesmo objeto)");
+      const recAdct = a.leiAlteracoesRecebidas(a.leiDe(adct.id));
+      ok(Object.keys(recAdct).join() === "tudo|124", "R48a2 a lei do ADCT separada so' recebe o que alterou o ADCT (o art. 124), nao os artigos da Constituicao do corpo: " + Object.keys(recAdct).join());
+      const adctArts = a.leiArtigosDaSecao(CF, "adct"), corpoArts = a.leiArtigosDaSecao(CF, "corpo");
+      const rcx = { mapa: rec, adct: a.leiSecoes(CF).adct };
+      const chip43 = a.leiChipsRecebidos({ num: "43", indice: corpoArts[0].indice }, rcx);
+      ok(!!chip43 && chip43.children.length === 1 && /alterado por .* · Art\. 1º/.test(chip43.children[0].textContent), "R48b o artigo 43 do CORPO ganha o selo 'alterado por … · Art. 1º': " + (chip43 && chip43.textContent));
+      ok(a.leiChipsRecebidos({ num: "43", indice: adctArts[0].indice }, rcx) === null && a.leiChipsRecebidos({ num: "124", indice: adctArts[1].indice }, rcx) !== null && a.leiChipsRecebidos({ num: "43", indice: corpoArts[0].indice }, null) === null, "R48c o art. 43 do ADCT NAO ganha o selo do art. 43 do corpo (a numeracao repete); o 124 do ADCT ganha");
+      a.leiAbrir("", "", cf.id);
+      const selos = a.$("leiLeitura").querySelectorAll(".lei-alt-chip-rec");
+      ok(selos.length === 3 && selos.every((b) => /alterado por/.test(b.textContent)), "R48d lendo a Constituicao, 3 artigos ganham o selo (43, 145 e o 124 do ADCT): " + selos.length);
+      selos[0].onclick();
+      ok(a.$("leiTexto").value === EC && a.$("leiFaixaAlvo").hidden === false, "R48e clicar no selo abre a EMENDA (e a faixa dela aparece)");
+      const rel = a.leiRelatorioVinculos();
+      ok(/LEIS QUE ALTERAM OUTRAS/.test(rel) && /Emenda Constitucional 132\/2023 altera Constituição Federal: 2 artigo\(s\) citado\(s\) · consultaria «Constituição Federal» \(alta; identificada pelo texto como a Constituição\) · achou 2 artigo\(s\), 2 com trecho omitido, 2 já constam na lei consultada/.test(rel), "R48f o relatorio traz, por alvo, a lei que seria consultada e quantos artigos ja' constam: " + (rel.split("\n").filter((l) => /altera /.test(l)).join(" || ")));
+      ok(/altera ADCT: 1 artigo\(s\) citado\(s\) · consultaria «ADCT - Ato das Disposições Constitucionais Transitórias» \(alta; lei separada do ADCT\) · achou 0 artigo\(s\)/.test(rel), "R48g o ADCT separado e' a candidata (alta) e o relatorio diz que nao achou o art. 124 nela");
+      ok(a.leiAlteracoesDe(a.leiDe(cf.id)).length === 0 && a.leiAlteracoesDe({ texto: "Art. 1º Texto." }).length === 0, "R48h lei sem artigo entre aspas: nao altera ninguem");
+      a.$("dlgLeiSeca").close();
+      /* sem a lei alterada na biblioteca */
+      a.leiApagar(cf.id); a.leiApagar(cf2.id); a.leiApagar(adct.id);
+      ok(/altera Constituição Federal: 2 artigo\(s\) citado\(s\) · ⚠ Constituição Federal NÃO está na biblioteca/.test(a.leiRelatorioVinculos()), "R48i sem a Constituicao na biblioteca, o relatorio avisa: '⚠ Constituição Federal NÃO está na biblioteca'");
+      a.leiAbrir(disc, top, ec.id);
+      ok(a.leiAlvoCtxAtual().porCurto["Constituição Federal"].escolhida === null && /não está na biblioteca/.test(a.$("leiFaixaAlvo").textContent) && Object.keys(a.leiLacunasRegAtual()).filter((k) => a.leiLacunasRegAtual()[k].leiAlvoId === cf.id).length >= 0 && /abrir a Biblioteca de leis/.test(a.$("leiFaixaAlvo").textContent), "R47w sem a Constituicao na biblioteca: a faixa diz que nao esta' e oferece abrir a Biblioteca (a leitura segue sem chips)");
+      /* lei que nao altera ninguem: sem faixa */
+      const lisa = a.leiGuardar({ nome: "Lei simples", texto: "Art. 1º Texto qualquer da lei.", topicos: [] });
+      a.leiAbrir("X", "Y", lisa.id);
+      ok(a.$("leiFaixaAlvo").hidden === true && a.leiAlvoCtxAtual() === null, "R47x lei comum: sem faixa e sem contexto de alvo");
+      a.$("dlgLeiSeca").close();
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();
