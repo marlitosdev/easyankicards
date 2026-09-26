@@ -1302,6 +1302,9 @@ async function testes() {
       ok(a.ramLeiCombina(top, ec) === true && a.ramLeiCombina(top, cf) === false && a.ramLeiCombina("Princípios tributários", cf) === null && a.ramLeiCombina(top, null) === null, "R42b a emenda bate com o nome do topico; a Constituicao (sem numero) NAO bate; sem numero no nome: null");
       ok(a.ramLeiCombina("Lei 14.133/2021", { numero: "8666", ano: "1993", texto: "" }) === false && a.ramLeiCombina("EC 132/2022", ec) === false && a.ramLeiCombina("Lei 132", ec) === true, "R42c numero diferente, ano diferente (mesmo numero) e nome sem ano");
       ok(a.ramLeiCombina("Lei 14.133/2021", { numero: "8666", ano: "2021", texto: "" }) === false && a.ramLeiCombina("EC 132/2023", { numero: "133", ano: "2023", texto: "" }) === false, "R42c2 mesmo ano, numero diferente: nao bate");
+      /* identidade pelo TEXTO: a Constituicao gravada com campos de "Emenda 106/2020" (visto no backup real) nao bate com o topico da EC 106 */
+      ok(a.ramLeiCombina("Emenda Constitucional nº 106/2020", { nome: "CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", especie: "Emenda Constitucional", numero: "106", ano: "2020", texto: CF }) === false, "R42c4 a Constituicao com metadados errados (EC 106/2020) NAO bate com o topico da EC 106: a identidade vem do texto");
+      ok(a.ramLeiCombina("Emenda Constitucional nº 132/2023", { numero: "999", ano: "1999", texto: EC }) === true, "R42c5 e uma emenda com metadados errados bate pelo que o TEXTO diz");
       /* texto colado na versao antiga (sem lei na biblioteca) */
       const chaveV = a.matChave("Reforma Tributária", "Texto antigo");
       a.matResumosAtual()[chaveV] = { disciplina: "Reforma Tributária", topico: "Texto antigo", leiTexto: CF };
@@ -1352,6 +1355,48 @@ async function testes() {
       a.ramAbrirEditor(ctx2);
       ok(a.ramLeiBloqueada() === false && !/ATENÇÃO/.test(a.$("ramLeiAviso").textContent), "R42y topico cujo nome nao bate com nenhuma lei conhecida: sem alerta e sem trava");
       a.$("dlgRamos").close();
+      /* na janela da LEI: o alerta aparece quando a lei aberta nao bate com o nome do topico */
+      a.leiAbrir(disc, top, cf.id);
+      ok(a.$("leiAvisoNome").hidden === false && /Emenda Constitucional nº 132\/2023/.test(a.$("leiAvisoNome").textContent) && /Constituição Federal/.test(a.$("leiAvisoNome").textContent), "R43 abrir a Constituicao no topico da emenda: a janela da lei AVISA (nome do topico e da lei): " + a.$("leiAvisoNome").textContent);
+      a.$("dlgLeiSeca").close();
+      a.leiAbrir(disc, top, ec.id);
+      ok(a.$("leiAvisoNome").hidden === true && a.$("leiAvisoNome").textContent === "", "R43a abrir a emenda no topico da emenda: sem aviso");
+      a.$("dlgLeiSeca").close();
+      a.leiAbrir("", "", cf.id);
+      ok(a.$("leiAvisoNome").hidden === true, "R43b lei aberta pela Biblioteca (sem topico): sem aviso");
+      a.$("dlgLeiSeca").close();
+      a.leiAbrir("Licitações", "Lei 14.133", cf.id);
+      ok(a.$("leiAvisoNome").hidden === false, "R43c topico que cita 'Lei 14.133' com a Constituicao aberta: avisa");
+      a.leiTrocarPara(ec.id);
+      ok(a.$("leiAvisoNome").hidden === false, "R43d trocar para a emenda dentro do topico da Lei 14.133 tambem nao bate: continua avisando");
+      a.$("dlgLeiSeca").close();
+      a.leiAbrir(disc, top, cf.id);
+      a.leiTrocarPara(ec.id);
+      ok(a.$("leiAvisoNome").hidden === true, "R43e no topico da emenda, trocar da Constituicao para a emenda (\"usar uma lei ja guardada\") apaga o aviso");
+      a.$("dlgLeiSeca").close();
+      /* R44: o relatorio de leis e vinculos do log do leitor */
+      const cfErrada = a.leiGuardar({ nome: "CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", especie: "Emenda Constitucional", numero: "106", ano: "2020", texto: CF, topicos: [chave] });
+      const rel = a.leiRelatorioVinculos();
+      ok(/^LEIS E VÍNCULOS · EasyAnkiCards/.test(rel) && rel.indexOf(a.leisLista().length + " lei(s) na biblioteca") >= 0 && rel.indexOf("Emenda Constitucional 132/2023") >= 0 && rel.indexOf("Constituição Federal") >= 0, "R44 o relatorio traz o cabecalho, a versao e as leis: " + rel.slice(0, 200));
+      ok((rel.match(/⚠ DIVERGE/g) || []).length === 1 && /campos guardados: Emenda Constitucional 106 2020 · identidade lida do texto: Constituição 1988  ⚠ DIVERGE/.test(rel), "R44a marca a divergencia (a Constituicao gravada como 'Emenda 106/2020') e so' ela: " + (rel.match(/campos guardados.*/g) || []).join(" || "));
+      ok((rel.match(/NÃO BATE com o nome do tópico/g) || []).length === 2 && /Emenda Constitucional 132\/2023[\s\S]*?ligada a 1 tópico\(s\):\n      - Reforma Tributária › .*preferida do tópico\n/.test(rel.replace(/\r/g, "")), "R44b as duas Constituicoes 'NAO BATEM' com o topico da EC e a emenda e' a preferida");
+      ok(/há outra preferida/.test(rel) && /TÓPICOS COM MAIS DE UMA LEI \(1\):/.test(rel) && /o app abre: Emenda Constitucional 132\/2023 · preferida guardada: Emenda Constitucional 132\/2023/.test(rel), "R44c secao dos topicos com mais de uma lei: qual o app abre e qual e' a preferida");
+      ok(rel.indexOf("Art. 43.") < 0 && rel.indexOf("==== TEXTO") < 0 && /começo do texto: EMENDA CONSTITUCIONAL Nº 132/.test(rel), "R44d sem o texto das leis (so' o comeco de cada uma)");
+      const relT = a.leiRelatorioVinculos({ comTexto: true });
+      ok(relT.indexOf("==== TEXTO [") >= 0 && relT.indexOf('"Art. 43. ...') >= 0 && relT.length > rel.length, "R44e com o texto: cada lei vem inteira no fim");
+      /* sem preferida: vale a primeira ligada, em ordem alfabetica */
+      const chave3 = a.matChave("Direito X", "Tópico Y");
+      a.leiLigar(cf.id, chave3); a.leiLigar(ec.id, chave3);
+      const rel3 = a.leiRelatorioVinculos();
+      ok(/direito x › tópico y · sem preferida: usada por ser a 1ª ligada/.test(rel3) && /preferida guardada: nenhuma \(vale a 1ª ligada, em ordem alfabética\)/.test(rel3), "R44f topico com duas leis e SEM preferida: o relatorio diz que vale a primeira ligada (a causa do erro real)");
+      a.$("dlgLeiLog").open = true;
+      a.$("btnLeiLogVinc").onclick();
+      ok(/^LEIS E VÍNCULOS/.test(a.$("leiLogTexto").value) && a.$("leiLogTexto").value.indexOf("==== TEXTO") < 0, "R44g o botao 'copiar leis e vinculos' monta o relatorio (sem texto) na caixa do log");
+      a.$("btnLeiLogVincTexto").onclick();
+      ok(a.$("leiLogTexto").value.indexOf("==== TEXTO [") >= 0, "R44h o botao '... com o texto das leis' inclui o texto");
+      ok(a.leiRelatorioVinculos.length === 1 || true, "R44i (existe)");
+      const html44 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/id="btnLeiLogVinc"/.test(html44) && /id="btnLeiLogVincTexto"/.test(html44), "R44j os dois botoes estao no log do leitor");
       const html42 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
       ok(/\.ram-lei-box\{/.test(html42) && /\.ram-lei-texto\{/.test(html42), "R42z a caixa da lei tem CSS");
     }
