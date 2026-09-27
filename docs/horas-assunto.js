@@ -360,8 +360,27 @@ function horAbrirDisc(nome) {
 }
 let horRamosFechados = new Set();
 
+/* "ver maior": em telas maiores que a de um celular (o botão some abaixo disso), usa mais largura — lembrado entre
+ * sessões do mesmo jeito que o material e o "2 colunas" já fazem (eac_mat_amplo, eac_2col). */
+let horGrande = false;
+function horPintarGrande() {
+  $("dlgHoras").classList.toggle("hor-grande", horGrande);
+  const b = $("btnHorGrande");
+  if (b) {
+    b.textContent = t(horGrande ? "hor_compacto" : "hor_grande"); b.title = t("hor_grande_tip");
+    b.setAttribute("aria-pressed", horGrande ? "true" : "false");
+  }
+}
+function horTrocarGrande() {
+  horGrande = !horGrande;
+  horPintarGrande();
+  try { localStorage.setItem("eac_hor_grande", horGrande ? "1" : "0"); } catch (e) {}
+}
+
 function horAbrir() {
   horDiscAberta = ""; horBusca = ""; horFiltro = "tudo"; horRamosFechados = new Set();
+  try { horGrande = localStorage.getItem("eac_hor_grande") === "1"; } catch (e) { horGrande = false; }
+  horPintarGrande();
   horPintar();
   dicasDosBotoes({ btnEdHoras: "hor_tip_abrir", btnHorX: "hor_tip_x", horPeriodo: "hor_tip_periodo" });
   abrirModal("dlgHoras");
@@ -370,5 +389,6 @@ function horAbrir() {
 if (typeof document !== "undefined" && $("dlgHoras")) {
   $("btnEdHoras").onclick = horAbrir;
   $("btnHorX").onclick = () => $("dlgHoras").close();
+  $("btnHorGrande").onclick = horTrocarGrande;
   $("horPeriodo").onchange = horPintar;
 }

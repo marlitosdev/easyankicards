@@ -4345,8 +4345,11 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 }
 /* ---- HORAS POR ASSUNTO: colunas por disciplina (estudo novo x revisão), corte e ramos cumpridos ---- */
 dialog.hor-dlg[open]{display:flex;flex-direction:column;width:min(1100px,97vw);height:min(92vh,900px);max-height:94vh;margin:auto;overflow:hidden}
+@media (min-width:761px){dialog.hor-dlg.hor-grande[open]{width:min(1600px,97vw);max-width:97vw}}
 .hor-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.hor-cab h3{margin:0}
+.hor-cab h3{margin:0;flex:1 1 auto}
+.hor-grande-btn{white-space:nowrap}
+@media (max-width:760px){.hor-grande-btn{display:none}}
 .hor-barra{display:flex;gap:10px;align-items:center;margin:6px 0}
 .hor-corpo{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
 .hor-resumo{padding:8px 12px;border-radius:10px;background:rgba(91,141,239,.14);border:1px solid #5b8def;margin-bottom:8px;font-size:14px}
@@ -8048,6 +8051,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgHoras" class="ui-modal hor-dlg">
   <div class="hor-cab">
     <h3 data-i18n="hor_titulo"></h3>
+    <button type="button" class="btn-min hor-grande-btn" id="btnHorGrande"></button>
     <button type="button" class="qs-x" id="btnHorX" aria-label="Fechar">✕</button>
   </div>
   <p class="nota" data-i18n="hor_sub"></p>
