@@ -293,7 +293,6 @@ function horPintar() {
       vc.onclick = () => { $("dlgHoras").close(); covAbrir(editalAtual, d.nome); };
       ac.append(vc);
       det.append(ac);
-      const cont = covContar(cqLerBiblioteca());
       (topsQueCasam.length || (!horBusca.trim() && horFiltro === "tudo") ? topsQueCasam : d.topicos).forEach((tp) => {
         const chave = (d.nome + "›" + tp.nome).toLowerCase();
         const tl = gerEl("div", "hor-top hor-niv-" + tp.nivel + (tp.revisaoMin > 0 && tp.estudoMin === 0 ? " hor-top-so-rev" : ""));
@@ -306,14 +305,18 @@ function horPintar() {
         const seta = temRamos ? gerEl("span", "hor-top-seta", ramosAbertos ? "▾" : "▸") : gerEl("span", "hor-top-seta", "");
         if (temRamos) seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (ramosAbertos) horRamosFechados.add(idAb); else horRamosFechados.delete(idAb); horPintar(); };
         tl.append(cx1, seta, gerEl("span", "hor-top-nome", tp.nome), gerEl("span", "hor-top-h", t("hor_top_h", { e: horTexto(tp.estudoMin), r: horTexto(tp.revisaoMin), a: tp.feitas, n: tp.unidades })));
-        const nc = cont.top.get(matChaveViva(d.nome, tp.nome)) || 0;
-        const bt = gerEl("button", "btn-min" + (nc ? " btn-min-ok" : ""), nc ? t("hor_estudar", { n: nc }) : t("hor_criar")); bt.type = "button";
-        bt.onclick = (ev) => {
-          if (ev && ev.stopPropagation) ev.stopPropagation();
-          $("dlgHoras").close();
-          if (nc) estcEstudarTopico(d.nome, tp.nome); else bancAlvoDefinir(d.nome, tp.nome);
-        };
-        tl.append(bt);
+        /* os mesmos 5 materiais e o mesmo "⋮" da Agenda da semana (edRecursosDoTopico/edMontarStatusEMenu, em
+         * edital-ui.js) — abrir qualquer um deles fecha esta janela primeiro, como o botão único fazia antes. */
+        const r = edRecursosDoTopico(d.nome, tp.nome);
+        ["doc", "crt", "lei", "jur", "qst"].forEach((k) => {
+          const orig = r[k].onclick;
+          r[k].onclick = (ev) => { $("dlgHoras").close(); orig(ev); };
+        });
+        const { status, estudar, mais } = edMontarStatusEMenu(tl, d.nome, tp.nome, tp.ramos, editalAtual, r);
+        const origEstudar = estudar.onclick;
+        estudar.onclick = (ev) => { $("dlgHoras").close(); origEstudar(ev); };
+        tl.append(estudar, mais);
+        if (status.children.length) tl.append(status);
         det.append(tl);
         if (temRamos && ramosAbertos) tp.ramos.forEach((r) => {
           const nivR = tp.nivelRamos.get(r.id) || tp.nivel;
