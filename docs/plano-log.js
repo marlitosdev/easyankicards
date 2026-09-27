@@ -415,11 +415,22 @@ function plTamanho(n) {
 /* Todas as gavetas, medidas, maiores primeiro. As desconhecidas entram
  * como "outros" — uma chave nova não pode sumir do inventário só porque
  * a lista acima não foi atualizada. */
+/* "eac_leis" (17.38.0) pode já ter migrado para o IndexedDB — plBytes(k) mede o
+ * localStorage e mostraria 0 (a linha some do inventário, parecendo que as leis
+ * sumiram). leisLerTudo() lê de onde quer que estejam de verdade (cache em
+ * memória ou localStorage) — mede por aí, do mesmo jeito que plBytes mede as
+ * outras (UTF-16, dois bytes por caractere). */
+function plBytesLeis() {
+  if (typeof leisLerTudo !== "function") return plBytes("eac_leis");
+  try { return JSON.stringify(leisLerTudo()).length * 2; } catch (e) { return plBytes("eac_leis"); }
+}
+
 function plArmazenamento() {
   const vistas = {};
   const linhas = PL_GAVETAS.map((g) => {
     vistas[g.k] = 1;
-    return { chave: g.k, classe: g.classe, i18n: g.i18n, bytes: plBytes(g.k) };
+    return { chave: g.k, classe: g.classe, i18n: g.i18n,
+              bytes: g.k === "eac_leis" ? plBytesLeis() : plBytes(g.k) };
   });
   let outros = 0;
   try {
