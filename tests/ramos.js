@@ -2331,6 +2331,20 @@ async function testes() {
       ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-col")).length === 2, "R63g o filtro de periodo repinta");
       a.$("btnHorX").onclick();
       ok(a.$("dlgHoras").open === false, "R63h o X fecha");
+
+      /* R63i — "ver maior": some no celular, alterna e lembra entre aberturas */
+      const html2 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/@media \(max-width:760px\)\{\.hor-grande-btn\{display:none\}\}/.test(html2), "R63i1 o botao de ver maior some no celular (CSS)");
+      a.$("btnEdHoras").onclick();
+      ok(a.horGrandeAtual() === false && a.$("dlgHoras").classList.contains("hor-grande") === false, "R63i2 comeca compacto");
+      a.horTrocarGrande();
+      ok(a.horGrandeAtual() === true && a.$("dlgHoras").classList.contains("hor-grande") === true, "R63i3 alternar liga a classe");
+      a.$("btnHorX").onclick();
+      a.$("btnEdHoras").onclick();
+      ok(a.horGrandeAtual() === true && a.$("dlgHoras").classList.contains("hor-grande") === true, "R63i4 reabrir lembra a preferencia (localStorage)");
+      a.horTrocarGrande();
+      a.$("btnHorX").onclick();
+      ok(a.horGrandeAtual() === false, "R63i5 alternar de volta desliga");
     }
 
     /* R64: o AGENDADOR (De novo · Dificil · Bom · Facil) — funcoes puras */
