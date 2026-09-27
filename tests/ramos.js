@@ -1225,6 +1225,12 @@ async function testes() {
       const linhaP = a.edRamosNaLinha(itP);
       const achaCls = (el, c, acc) => { acc = acc || []; if (new RegExp("(^|\\s)" + c + "(\\s|$)").test(el.className || "")) acc.push(el); Array.from(el.children || []).forEach((x) => achaCls(x, c, acc)); return acc; };
       ok(achaCls(linhaP, "ed-ramo-pulado").length === 1 && /pulado/.test(achaCls(linhaP, "ed-ramo-pulado")[0].title), "R40w0 a agenda mostra o ramo pulado com o seu proprio estilo");
+      /* Fase 3 — o proprio chip do ramo (na agenda) abre o mesmo menu de materiais do ramo (cartoes/questoes/
+       * jurisprudencia), sem precisar de outro botao na linha ja cheia. */
+      const chipModAgenda = achaCls(linhaP, "ed-ramo").find((c) => /Modalidades/.test(c.textContent));
+      ok(!!chipModAgenda && typeof chipModAgenda.onclick === "function" && /ed-ramo-clic/.test(chipModAgenda.className), "R40w0b o chip do ramo na agenda esta clicavel");
+      chipModAgenda.onclick({ stopPropagation() {} });
+      ok(achaCls(linhaP, "ed-menu-item").length > 0 && achaCls(linhaP, "ed-menu-item").some((b) => /cart(ã|a)o/i.test(b.textContent)), "R40w0c clicar no chip abre o menu de materiais do ramo, com o item de cartoes: " + achaCls(linhaP, "ed-menu-item").map((b) => b.textContent).join(" | "));
       a.abrirRegistro(itP);
       const linReg = Array.from(a.$("regRamos").children).find((l) => /Fase preparat/.test(l.textContent));
       ok(linReg.children[0].disabled === true && /pulado/.test(linReg.textContent), "R40w1 na janela de registro o ramo pulado aparece como 'pulado' e nao pode ser marcado: " + linReg.textContent);
@@ -2324,14 +2330,44 @@ async function testes() {
       btsDet.find((b) => /5 cart(õ|o)es/.test(b.textContent)).onclick();
       ok(a.$("dlgGerEstudo").open === true && a.$("dlgHoras").open === false, "R63f3 a etiqueta '5 cartões' abre o player dos cartoes dele e fecha as horas por assunto");
       a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
-      /* R63f2b — o "⋮" do tópico sem nada ainda oferece criar cartões (o mesmo menu "só o que falta" da agenda) */
+      /* R63f2b — o "⋮" do tópico sem nada ainda oferece criar cartões (o mesmo menu "só o que falta" da agenda).
+       * O "⋮" tem de vir de DENTRO da linha do tópico ("Convênios"), não de uma das linhas de ramo (Fase 3 deu
+       * ramo o seu próprio "⋮" também, com a mesma classe ed-mais). */
       a.$("btnEdHoras").onclick(); cols[0].onclick();
-      const btsDet2 = achar(achar(a.$("horCorpo"), (e) => cls(e, "hor-det"))[0], (e) => e.tag === "button");
-      const maisConvenios = btsDet2.filter((b) => cls(b, "ed-mais"))[1];
-      ok(!!maisConvenios, "R63f2b achou o '⋮' do segundo tópico (Convênios)");
+      const linhaConvenios = achar(a.$("horCorpo"), (e) => cls(e, "hor-top")).find((e) => /Convênios/.test(e.textContent));
+      ok(!!linhaConvenios, "R63f2b achou a linha do tópico Convênios");
+      const maisConvenios = achar(linhaConvenios, (e) => cls(e, "ed-mais"))[0];
+      ok(!!maisConvenios, "R63f2b2 achou o '⋮' do tópico Convênios");
       maisConvenios.onclick({ stopPropagation() {} });
-      const itensMenu = achar(a.$("horCorpo"), (e) => cls(e, "ed-menu-item"));
+      const itensMenu = achar(linhaConvenios, (e) => cls(e, "ed-menu-item"));
       ok(itensMenu.some((b) => /criar cart(õ|o)es/i.test(b.textContent)), "R63f2c o menu do tópico sem cartão oferece 'criar cartões': " + itensMenu.map((b) => b.textContent).join(" | "));
+
+      /* R63f2d-g — Fase 3: o "⋮" da linha do RAMO (não do tópico) abre cartões/questões/jurisprudência DESTE
+       * ramo. Cartões usa a contagem REAL do ramo (etiqueta ram_modalidades: 1, não os 5 do tópico inteiro).
+       * Questões/jurisprudência ainda não têm vínculo por ramo, então perguntam antes de abrir os do tópico. */
+      a.$("btnEdHoras").onclick(); cols[0].onclick();
+      const linhaModalidades = achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).find((e) => /Modalidades/.test(e.textContent));
+      ok(!!linhaModalidades, "R63f2d achou a linha do ramo Modalidades");
+      const maisModalidades = achar(linhaModalidades, (e) => cls(e, "ed-mais"))[0];
+      ok(!!maisModalidades, "R63f2d2 achou o '⋮' do ramo Modalidades");
+      maisModalidades.onclick({ stopPropagation() {} });
+      const itensRamo = achar(linhaModalidades, (e) => cls(e, "ed-menu-item"));
+      ok(itensRamo.some((b) => /^1 cart(ã|a)o$/.test(b.textContent)), "R63f2e o cartão do ramo usa a contagem REAL do ramo (1), não a do tópico inteiro (5): " + itensRamo.map((b) => b.textContent).join(" | "));
+      itensRamo.find((b) => /^1 cart(ã|a)o$/.test(b.textContent)).onclick({ stopPropagation() {} });
+      ok(a.$("dlgGerEstudo").open === true && a.$("dlgHoras").open === false, "R63f2f o cartão do ramo abre o player e fecha as horas por assunto");
+      a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
+
+      a.$("btnEdHoras").onclick(); cols[0].onclick();
+      const linhaModalidades2 = achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).find((e) => /Modalidades/.test(e.textContent));
+      achar(linhaModalidades2, (e) => cls(e, "ed-mais"))[0].onclick({ stopPropagation() {} });
+      const itemQst = achar(linhaModalidades2, (e) => cls(e, "ed-menu-item")).find((b) => /criar quest/i.test(b.textContent));
+      ok(!!itemQst, "R63f2g o ramo sem vínculo de questões oferece 'criar questões' (a do tópico inteiro)");
+      const negando = itemQst.onclick({ stopPropagation() {} });
+      await new Promise((r) => setImmediate(r)); a.uiModalResponder(false);
+      await negando;
+      ok(a.$("dlgHoras").open === true, "R63f2h recusar a pergunta 'tópico inteiro?' não fecha nem navega");
+
+      a.$("btnHorX").onclick();
       a.$("btnEdHoras").onclick(); achar(a.$("horCorpo"), (e) => cls(e, "hor-col"))[0].onclick();
       const bts2 = achar(achar(a.$("horCorpo"), (e) => cls(e, "hor-det"))[0], (e) => e.tag === "button");
       bts2.find((b) => /cobertura de cartões/.test(b.textContent)).onclick();
