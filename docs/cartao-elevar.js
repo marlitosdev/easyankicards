@@ -775,9 +775,11 @@ async function ceConferirColagem() {
   cePintarComparacao();
   cePintarRodape();
   const n = ceConf.itens.length;
+  const naoMelhoraram = ceConf.itens.filter((x) => x.avisos.some((a) => a.id === "continua")).length;
   ceStatus((ceConf.erros.length && !n ? t("ce_msg_conf_erro") : t("ce_msg_colou", { n }))
     + (auto.ajustes.length ? " " + t("ce_auto_msg", { n: auto.ajustes.length }) : "")
-    + (semAncora ? " " + t("ce_sem_ancora_msg") : ""), ceConf.erros.length ? "aviso" : "ok");
+    + (semAncora ? " " + t("ce_sem_ancora_msg") : "")
+    + (naoMelhoraram ? " " + t("ce_continua_msg", { n: naoMelhoraram }) : ""), (ceConf.erros.length || naoMelhoraram) ? "aviso" : "ok");
   try { $("ceComparar").scrollIntoView(); } catch (e) {}
 }
 
@@ -791,7 +793,7 @@ function cePintarComparacao() {
   c.itens.forEach((it) => {
     const box = ceEl("div", "ce-cmp");
     const ck = ceEl("input"); ck.type = "checkbox";
-    it.aceitar = !it.avisos.some((a) => a.id === "encolheu" || a.id === "perdeu");
+    it.aceitar = !it.avisos.some((a) => a.id === "encolheu" || a.id === "perdeu" || a.id === "continua");
     ck.checked = it.aceitar;
     ck.onchange = () => { it.aceitar = ck.checked; atualizaBotao(); };
     const cab = ceEl("label", "cq-grupo-tit ce-cmp-cab");

@@ -30,7 +30,7 @@ let gerOcultarVazias = false;
 const GER_DICAS = {
   btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
   btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
-  btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos",
+  btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos", btnGerMarcarFracos: "ger_tip_marcar_fracos", btnGerMarcarLacunas: "ger_tip_marcar_lacunas",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
   btnGerMsgDesfazer: "ger_tip_msg_desfazer", btnGerMover: "ger_tip_mover", btnGerApagar: "ger_tip_apagar",
@@ -530,7 +530,7 @@ function gerLinhaTopico(cx, tp, concurso) {
     li.textContent = "";
     li.append(seta, gerEl("span", "", " " + tp.topico + " (" + tp.total + ")" + marca));
   }
-  li.onclick = () => { gerPasta = { chave: tp.chave, concurso: concurso }; gerRefiltrar(); gerPintar(); };
+  li.onclick = () => { gerPasta = { chave: tp.chave, concurso: concurso }; if (tp.ramos && !ramosAbertos) gerAbertos.add(idRamos); gerRefiltrar(); gerPintar(); };
   li.title = tp.compartilhado ? t("ger_tip_compartilhado", { e: tp.compartilhado })
     : t(tp.vazia ? (tp.virtual ? "ger_tip_pasta_edital_vazia" : "ger_tip_pasta_vazia") : "ger_tip_pasta");
   if (tp.vazia && !tp.virtual) {
@@ -579,7 +579,7 @@ function gerPintarNo(cx, no) {
     cab.append(gerEl("span", "ger-prova " + cls, rot));
   }
   cab.title = t(no.tipo === "disc" ? "ger_tip_disciplina" : (no.tipo === "edital" ? "ger_tip_edital" : (no.tipo === "bancada" ? "ger_tip_bancada" : "ger_tip_sem_edital")));
-  cab.onclick = () => { gerPasta = { chaves: no.chaves, id: no.id, disciplina: no.tipo === "disc" ? no.disciplina : undefined }; gerRefiltrar(); gerPintar(); };
+  cab.onclick = () => { gerPasta = { chaves: no.chaves, id: no.id, disciplina: no.tipo === "disc" ? no.disciplina : undefined }; if (!aberto) gerAbertos.add(no.id); gerRefiltrar(); gerPintar(); };
   cab.ondragover = (ev) => gerSobreNo(ev, no.id);
   cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
   cx.append(cab);
@@ -614,7 +614,7 @@ function gerPintarArvore() {
     cab.append(seta, gerEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
     cab.title = t("ger_tip_disciplina");
     seta.title = t("ger_tip_seta");
-    cab.onclick = () => { gerPasta = { disciplina: d.disciplina }; gerRefiltrar(); gerPintar(); };
+    cab.onclick = () => { gerPasta = { disciplina: d.disciplina }; if (!aberto) gerFechados.delete(d.disciplina); gerRefiltrar(); gerPintar(); };
     cab.ondragover = (ev) => { gerSobreDisciplina(ev, d.disciplina); };
     cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
     cx.append(cab);
@@ -684,13 +684,26 @@ function gerPintarLista() {
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
   $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
+  const nFracos = gerVisFracos().length, nLacunas = gerVisLacunas().length;
+  $("btnGerMarcarFracos").textContent = t("ger_marcar_fracos", { n: nFracos });
+  $("btnGerMarcarFracos").hidden = nFracos === 0;
+  $("btnGerMarcarLacunas").textContent = t("ger_marcar_lacunas", { n: nLacunas });
+  $("btnGerMarcarLacunas").hidden = nLacunas === 0;
   $("btnGerExportar").hidden = !gerPasta;
   $("btnGerRamos").hidden = !gerContextoRamos();
   const naBancada = !!gerPasta && (gerPasta.chave === CQ_BANCADA || gerPasta.id === "bancada");
   $("btnGerClassificar").hidden = !(naBancada && typeof editais !== "undefined" && editais.length && gerBancadaNotas().length);
   $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
   const pastaVazia = !!(gerPasta && gerPasta.chave && !gerNotas.some((n) => n.chave === gerPasta.chave));
-  if (pastaVazia) cx.append(gerEl("p", "nota", t("ger_pasta_vazia")));
+  if (pastaVazia) {
+    cx.append(gerEl("p", "nota", t("ger_pasta_vazia")));
+    const info = gerPastaInfo(gerPasta.chave);
+    if (info && info.disciplina && info.topico) {
+      const bc = gerEl("button", "btn-min btn-min-ok", t("hor_criar")); bc.type = "button";
+      bc.onclick = () => bancAlvoDefinir(info.disciplina, info.topico);
+      cx.append(bc);
+    }
+  }
   else if (gerNotas.length && !gerVis.length) cx.append(gerEl("p", "nota", t("ger_nenhum")));
   gerVis.slice(0, gerMostrando).forEach((idx, pos) => {
     const n = gerNotas[idx];
@@ -1280,8 +1293,18 @@ function gerAbrirRamos() {
 }
 
 /* marca TODOS os cartões da lista de agora (não só os 60 à vista): é o "mover todos desta pasta" */
+function gerVisComCriterio(teste) {
+  return gerVis.reduce((acc, idx, pos) => { if (teste(gerNotas[idx].card)) acc.push(pos); return acc; }, []);
+}
+function gerVisFracos() { return typeof ceAbaixo === "function" ? gerVisComCriterio(ceAbaixo) : []; }
+function gerVisLacunas() { return gerVisComCriterio((c) => c && c.kind === "cloze"); }
+
 function gerMarcarTodos() {
   gerSel = new Set(gerVis.map((_, i) => i));
+  gerPintarLista(); gerPintarAcoes();
+}
+function gerMarcarPor(posicoes) {
+  gerSel = new Set(posicoes);
   gerPintarLista(); gerPintarAcoes();
 }
 
@@ -1394,6 +1417,8 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerMarcar").onclick = () => { gerSel = new Set(gerVis.slice(0, gerMostrando).map((_, i) => i)); gerPintarLista(); gerPintarAcoes(); flashBotao($("btnGerMarcar")); };
   $("btnGerLimpar").onclick = () => { gerSel = new Set(); gerPintarLista(); gerPintarAcoes(); flashBotao($("btnGerLimpar")); };
   $("btnGerMarcarTodos").onclick = () => { gerMarcarTodos(); flashBotao($("btnGerMarcarTodos")); };
+  $("btnGerMarcarFracos").onclick = () => { gerMarcarPor(gerVisFracos()); flashBotao($("btnGerMarcarFracos")); };
+  $("btnGerMarcarLacunas").onclick = () => { gerMarcarPor(gerVisLacunas()); flashBotao($("btnGerMarcarLacunas")); };
   $("btnGerNovaPasta").onclick = gerAbrirNovaPasta;
   $("gerNpEdital").onchange = gerPreencherDiscsNp;
   $("btnGerClassificar").onclick = gerAbrirClassificar;

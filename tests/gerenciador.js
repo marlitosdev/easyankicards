@@ -1390,6 +1390,62 @@ async function testes() {
     ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
   }
 
+
+
+  /* ---- G23: marcar fracos / marcar lacunas direto (sem passar pelo seletor), abrir a pasta ao
+   * selecionar (nao so' pela setinha) e "Criar cartões" numa pasta vazia (pedidos do usuario) ---- */
+  {
+    const montarG23 = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
+      const iss = a.matChave("Trib", "ISS"), iptu = a.matChave("Trib", "IPTU"), pri = a.matChave("Const", "Princípios");
+      a.matGravarCartoes(iss, [
+        "Fato gerador? :: Serviço :: x", "",
+        "Alíquota máxima? :: " + RICO + " :: x", "+ Literalidade — Art. 8º-A"].join("\n"), { disciplina: "Trib", topico: "ISS" });
+      a.matGravarCartoes(iptu, "Quem paga o IPTU? :: O proprietário :: y", { disciplina: "Trib", topico: "IPTU" });
+      a.matGravarCartoes(pri, "O prazo é de {{c1::30 dias}} (art. 5º) :: z\n+ Literalidade — Art. 5º, LXXVIII", { disciplina: "Const", topico: "Princípios" });
+      return a;
+    };
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const a = montarG23();
+    a.gerAbrir();
+    /* Trib/ISS: "Fato gerador?" fraco (curto, sem saiba mais) + "Alíquota?" bom = 1 fraco; Trib/IPTU: 1 fraco;
+     * Const/Princípios: 1 cloze, bom (tem saiba mais e citacao) — nao entra em fracos */
+    ok(a.$("btnGerMarcarFracos").hidden === false && /marcar fracos \(2\)/.test(a.$("btnGerMarcarFracos").textContent), "G23a o botao mostra a CONTAGEM certa de fracos na lista de agora: " + a.$("btnGerMarcarFracos").textContent);
+    ok(a.$("btnGerMarcarLacunas").hidden === false && /marcar lacunas \(1\)/.test(a.$("btnGerMarcarLacunas").textContent), "G23b e a de lacunas: " + a.$("btnGerMarcarLacunas").textContent);
+    a.$("btnGerMarcarFracos").onclick();
+    const fracosMarcados = Array.from(a.gerSelAtual()).map((pos) => a.gerNotasAtual()[a.gerVisAtual()[pos]].card);
+    ok(a.gerSelAtual().size === 2 && fracosMarcados.every((c) => a.ceAbaixo(c)) && fracosMarcados.every((c) => c.kind !== "cloze"), "G23c clicar marca exatamente os fracos, nada mais: " + fracosMarcados.map((c) => c.front));
+    a.$("btnGerMarcarLacunas").onclick();
+    const lacunasMarcadas = Array.from(a.gerSelAtual()).map((pos) => a.gerNotasAtual()[a.gerVisAtual()[pos]].card);
+    ok(a.gerSelAtual().size === 1 && lacunasMarcadas.every((c) => c.kind === "cloze"), "G23d e clicar em lacunas troca a marcacao para so' as lacunas: " + lacunasMarcadas.map((c) => c.kind));
+    /* dentro da pasta IPTU (so' 1 fraco, nenhuma lacuna): so' o botao de fracos aparece */
+    const topoIptu = linhas(a, "ger-top").find((e) => /IPTU/.test(e.textContent));
+    topoIptu.onclick();
+    ok(a.$("btnGerMarcarFracos").hidden === false && /\(1\)/.test(a.$("btnGerMarcarFracos").textContent) && a.$("btnGerMarcarLacunas").hidden === true, "G23e dentro da pasta IPTU: so' o botao de fracos aparece, com a conta certa: " + a.$("btnGerMarcarFracos").textContent);
+
+    /* abrir a pasta clicando no NOME tambem revela o que tem dentro — antes so' a setinha fazia isso */
+    a.gerFechadosAtual().add("Trib"); a.gerPintar();
+    ok(!linhas(a, "ger-top").some((e) => /ISS|IPTU/.test(e.textContent)), "G23f com 'Trib' fechada, ISS e IPTU nao aparecem");
+    const discTrib = linhas(a, "ger-disc").find((e) => /Trib/.test(e.textContent));
+    discTrib.onclick();
+    ok(a.gerFechadosAtual().has("Trib") === false && linhas(a, "ger-top").some((e) => /ISS/.test(e.textContent)) && linhas(a, "ger-top").some((e) => /IPTU/.test(e.textContent)), "G23g clicar no NOME da disciplina fechada seleciona E ABRE, sem precisar mirar na seta");
+    /* clicar de novo (ja aberta) nao fecha por engano — so' a seta fecha */
+    const discTrib2 = linhas(a, "ger-disc").find((e) => /Trib/.test(e.textContent));
+    discTrib2.onclick();
+    ok(a.gerFechadosAtual().has("Trib") === false, "G23h clicar no nome de novo NAO fecha (so' a seta fecha, de proposito)");
+
+    /* pasta vazia ganha o botao "Criar cartões", que aponta a bancada para ela */
+    a.gerCriarPasta("Revisão", "Pegadinhas");
+    a.$("dlgGerCartoes").close(); a.gerAbrir();
+    const vazia = achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => /Pegadinhas/.test(e.textContent));
+    vazia.onclick();
+    const criar = achar(a.$("gerLista"), (e) => e.tag === "button").find((e) => /Criar cartões/.test(e.textContent));
+    ok(!!criar, "G23i a pasta vazia mostra um botao para criar cartões nela");
+    if (criar) criar.onclick();
+    ok(!!criar && a.$("dlgGerCartoes").open === false && a.bancAlvoAtual() && a.bancAlvoAtual().disciplina === "Revisão" && a.bancAlvoAtual().topico === "Pegadinhas", "G23j clicar aponta a bancada para ESTA pasta (disciplina e topico certos): " + (criar ? JSON.stringify(a.bancAlvoAtual()) : "sem botao"));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

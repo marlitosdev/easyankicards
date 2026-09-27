@@ -1025,6 +1025,41 @@ async function testes() {
     ok(/\.ce-rodape\{position:sticky;bottom:0/.test(html) && /class="ce-msg" id="ceMsg"/.test(html) && /id="cePasso1"[\s\S]*id="cePasso2"[\s\S]*id="cePasso3"/.test(html), "E11b o rodape fica fixo, a mensagem fica no alto e ha 3 passos");
   }
 
+
+  /* ---- E14: "continua Fraco" nao pode sair aplicado e escondido para sempre (relato do usuario:
+   * "apliquei a melhoria e os cartoes continuam Fracos"). Ate aqui so' "encolheu" e "perdeu" vinham
+   * desmarcados por padrao; "continua" (o pedido era ELEVAR e o cartao permanece abaixo do padrao)
+   * nao desmarcava nada — a pessoa aplicava sem perceber, e ceMarcarRevisados nao distingue sucesso
+   * de fracasso: o cartao saia "trabalhado" para sempre, continuando Fraco, e sumindo da fila. ---- */
+  {
+    const { a, c2 } = montar();
+    a.ceAbrir();
+    a.$("btnCeLimpar").onclick();
+    const ab = a.ceNotasAtual();
+    const ix = ab.findIndex((x) => /IPTU/.test(x.card.front));
+    const ck = achar(a.$("ceLista"), (e) => e.tag === "input")[ix];
+    ck.checked = true; ck.onchange();
+    await a.$("btnCePrompt").onclick();
+    /* resposta bem mais longa que o original e sem nenhuma palavra do "antes" perdida — nao encolhe,
+     * nao perde cobertura — mas segue sem "+ Saiba mais": ainda e' Fraco */
+    a.$("ceColar").value = "@@ 1\nQuem paga o IPTU? :: O proprietário do imóvel, o titular do domínio útil ou o possuidor a qualquer título é responsável pelo pagamento do tributo junto ao município competente";
+    a.$("btnCeConferir").onclick();
+    const caixa = achar(a.$("ceComparar"), (e) => e.tag === "input")[0];
+    ok(caixa && caixa.checked === false, "E14a 'continua Fraco' (sem encolher nem perder conteúdo) vem DESMARCADO por padrão, como encolheu/perdeu: " + (caixa && caixa.checked));
+    ok(/Aplicar os 0 aceitos/.test(a.$("btnCeAplicar").textContent), "E14b o botao mostra 0 aceitos com a caixa desmarcada: " + a.$("btnCeAplicar").textContent);
+    ok(/1 continua\(m\) abaixo do padrão/.test(a.$("ceMsg").textContent) && /vieram DESMARCADOS/.test(a.$("ceMsg").textContent), "E14c a mensagem do passo 2 avisa, sem precisar ler cartao por cartao: " + a.$("ceMsg").textContent);
+    /* clicar Aplicar com a unica caixa desmarcada nao troca nada nem finge sucesso */
+    const antes = a.matResumosAtual()[c2].cartoes;
+    a.$("btnCeAplicar").onclick();
+    ok(a.matResumosAtual()[c2].cartoes === antes, "E14d sem nada marcado, aplicar nao muda o texto do cartao");
+    ok(a.ceRevisado(ab[ix].card) === false, "E14e o cartao NAO fica marcado como 'trabalhado' so' por ter voltado fraco — continua candidato para a proxima rodada");
+    /* marcar a mao mesmo assim ainda e' possivel: a decisao e' da pessoa, nao do app */
+    caixa.checked = true; caixa.onchange();
+    ok(/Aplicar os 1 aceitos/.test(a.$("btnCeAplicar").textContent), "E14f marcar a mao volta a habilitar a aplicacao: " + a.$("btnCeAplicar").textContent);
+    await conduzir(a, a.$("btnCeAplicar").onclick());
+    ok(/junto ao município competente/.test(a.matResumosAtual()[c2].cartoes), "E14g aceito a mao, o texto troca do mesmo jeito de sempre");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
