@@ -391,6 +391,7 @@ const PL_GAVETAS = [
   { k: "eac_edital_progresso", classe: "testemunho", i18n: "plog_g_progresso" },
   { k: "eac_editais", classe: "testemunho", i18n: "plog_g_editais" },
   { k: "eac_leis", classe: "testemunho", i18n: "plog_g_leis" },
+  { k: "eac_decisoes", classe: "testemunho", i18n: "plog_g_decisoes" },
   { k: "eac_cit_vinculos", classe: "testemunho", i18n: "plog_g_citvinc" },
   { k: "eac_vinculos", classe: "testemunho", i18n: "plog_g_vinculos" },
   { k: "eac_deck", classe: "testemunho", i18n: "plog_g_deck" },
@@ -425,12 +426,19 @@ function plBytesLeis() {
   try { return JSON.stringify(leisLerTudo()).length * 2; } catch (e) { return plBytes("eac_leis"); }
 }
 
+/* mesma história para "eac_decisoes" (17.39.0, Fase B) */
+function plBytesDecisoes() {
+  if (typeof decLer !== "function") return plBytes("eac_decisoes");
+  try { return JSON.stringify(decLer()).length * 2; } catch (e) { return plBytes("eac_decisoes"); }
+}
+
 function plArmazenamento() {
   const vistas = {};
   const linhas = PL_GAVETAS.map((g) => {
     vistas[g.k] = 1;
     return { chave: g.k, classe: g.classe, i18n: g.i18n,
-              bytes: g.k === "eac_leis" ? plBytesLeis() : plBytes(g.k) };
+              bytes: g.k === "eac_leis" ? plBytesLeis()
+                : g.k === "eac_decisoes" ? plBytesDecisoes() : plBytes(g.k) };
   });
   let outros = 0;
   try {

@@ -97,12 +97,19 @@ function bkLerLeis() {
   catch (e) { return bkLer("eac_leis"); }
 }
 
+/* "eac_decisoes" (17.39.0, Fase B) — mesma história de "eac_leis": pode já ter migrado
+ * para o IndexedDB, e decLer() sabe de onde ler de qualquer jeito. */
+function bkLerDecisoes() {
+  try { return typeof decLer === "function" ? JSON.stringify(decLer()) : bkLer("eac_decisoes"); }
+  catch (e) { return bkLer("eac_decisoes"); }
+}
+
 function montarBackup() {
   const dados = {};
   Object.keys(BK_CHAVES).forEach((grupo) => {
     dados[grupo] = {};
     BK_CHAVES[grupo].forEach((k) => {
-      const v = k === "eac_leis" ? bkLerLeis() : bkLer(k);
+      const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
   });
@@ -240,6 +247,10 @@ function restaurarBackup(bk) {
   aplicar.forEach(([k, v]) => {
     if (k === "eac_leis" && typeof leisGravarTudo === "function") {
       try { leisGravarTudo(JSON.parse(v) || {}); } catch (e) {}
+      return;
+    }
+    if (k === "eac_decisoes" && typeof decDefinirTudo === "function") {
+      try { decDefinirTudo(JSON.parse(v) || []); } catch (e) {}
       return;
     }
     try { localStorage.setItem(k, v); } catch (e) {}

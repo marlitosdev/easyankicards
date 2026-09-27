@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "material.js",
-                  "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "dominio-evolucao.js", "banca-alvo.js", "horas-assunto.js", "ramos.js", "pacote.js",
+                  "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "dominio-evolucao.js", "banca-alvo.js", "horas-assunto.js", "ramos.js", "pacote.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -727,6 +727,7 @@ function rodar() {
     lixInserirBloco, lixJuntar, lixRecusou, lixDesfazer, lixAbrir, lixPintar, lixRecarregar, lixTexto, lixAtualizarBotao,
     lixLimites: (max, chars) => { lixMax = max; lixMaxChars = chars; },
     decLer, decRegistrar, decRegistrarLote, decMarcar, decPorRegra, decExportar, decLimpar, decRecarregar,
+    decDefinirTudo, decCacheForcarTeste, decCacheAtual, decIdbSuportado,
     decAbrir, decPintar, decCopiar, decBaixar, decApagar, decRiscoDoTexto, decTituloDaRegra,
     decLimites: (max, chars) => { decMax = max; decMaxChars = chars; },
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo,

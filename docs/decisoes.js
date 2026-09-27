@@ -31,7 +31,16 @@ const DEC_AREAS = ["colagem", "repetidos", "versao", "apagar", "ajuste"];
 /* "automatico": o app fez sozinho e a pessoa ainda não decidiu (conta como "sem decisão" nas taxas) */
 const DEC_DECISOES = ["aceitou", "recusou", "mudou", "escolheu", "sem_decisao", "automatico"];
 
+/* SÍNCRONA de propósito, com o IndexedDB por baixo (idb-decisoes.js, 17.39.0): antes de
+ * migrar (_decCache ainda null) lê o localStorage de sempre; depois, usa a cópia que já
+ * está em memória — nunca espera promessa nenhuma.
+ * A MIGRAÇÃO PODE TERMINAR DEPOIS que algo já leu daqui (decLista já virou [] ou o que
+ * havia no localStorage, o que por si só é "truthy" e passaria batido pelo `if (decLista)
+ * return` de sempre). Por isso o cache é conferido PRIMEIRO, a cada chamada, e nunca fica
+ * escondido atrás do "já carreguei uma vez" — senão uma leitura muito cedo (antes da
+ * promessa da migração resolver) travaria decLista na versão velha para a sessão inteira. */
 function decCarregar() {
+  if (_decCache) { decLista = _decCache; return; }
   if (decLista) return;
   try { decLista = JSON.parse(localStorage.getItem(DEC_CHAVE) || "[]"); } catch (e) { decLista = []; }
   if (!Array.isArray(decLista)) decLista = [];
@@ -43,6 +52,14 @@ function decLer() { decCarregar(); return decLista; }
 
 /* volta a ler do armazenamento (depois de restaurar um backup, por exemplo) */
 function decRecarregar() { decLista = null; decResumo = null; decCarregar(); }
+
+/* substitui a lista inteira e grava — o mesmo contrato de leisGravarTudo(o), para a
+ * restauração de backup (backup.js) poder repor as decisões sem depender do localStorage
+ * direto, que pode já não ser onde elas moram. */
+function decDefinirTudo(lista) {
+  decLista = Array.isArray(lista) ? lista : [];
+  decGravar();
+}
 
 function decCortar(s, n) { return String(s == null ? "" : s).replace(/\s+$/, "").slice(0, n); }
 
@@ -91,6 +108,17 @@ function decPodar() {
 }
 
 function decGravar() {
+  /* "eac_decisoes_resumo" não migrou (fica pequeno para sempre, ver idb-decisoes.js) — sempre no
+   * localStorage. "eac_decisoes" (decLista), depois de migrado, grava em memória na hora e manda a
+   * gravação de verdade para o IndexedDB em segundo plano, sem que quem chamou espere por ela. */
+  if (_decCache) {
+    _decCache = decLista;
+    try { localStorage.setItem(DEC_RESUMO_CHAVE, JSON.stringify(decResumo)); } catch (e) {}
+    decIdbGravarTudo(_decCache).catch(() => {
+      try { uiAlert(t("dec_sem_espaco")); } catch (e2) {}
+    });
+    return true;
+  }
   const tenta = () => {
     localStorage.setItem(DEC_CHAVE, JSON.stringify(decLista));
     localStorage.setItem(DEC_RESUMO_CHAVE, JSON.stringify(decResumo));
@@ -104,6 +132,8 @@ function decGravar() {
     return true;
   } catch (e) { return false; }
 }
+/* começa a migração em segundo plano assim que DEC_CHAVE existe — não trava nada */
+if (typeof decIdbMigrar === "function") decIdbMigrar();
 
 /* Registra várias decisões numa gravação só. Devolve os ids. */
 function decRegistrarLote(regs) {
