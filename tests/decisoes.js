@@ -496,6 +496,55 @@ async function testes() {
     ok(api.decTituloDaRegra("colagem.cabecalho") === api.t("lei_pre_g_cabecalho") && api.decTituloDaRegra("regra.desconhecida") === "regra.desconhecida", "T5 o titulo da regra: o da revisao para a colagem, e o proprio nome se nao ha texto");
   }
 
+  /* ==============================================================
+   * P (17.39.0, Fase B): PERSISTÊNCIA — eac_decisoes migrou do localStorage (mesmo
+   * problema das leis: teto fixo de 5-10 MB) para o IndexedDB. decLer/decGravar
+   * continuam SÍNCRONAS de propósito. O Node deste runner não tem indexedDB de
+   * verdade; o que dá para testar é a troca de comportamento em torno do cache em
+   * memória (_decCache), que é o que qualquer navegador de verdade também
+   * atravessa antes/depois da migração terminar (ver tests/lei-biblioteca.js
+   * bloco P, mesmo padrão).
+   * ============================================================== */
+  {
+    const api = iniciar();
+    ok(api.decIdbSuportado() === false, "P1 sem indexedDB (Node), decIdbSuportado diz que não — mantém tudo no localStorage aqui");
+    api.decRegistrar(base({ regra: "colagem.cabecalho" }));
+    ok(api.decLer().length === 1, "P2 sem cache (ainda não migrou), decLer le do localStorage normalmente");
+
+    /* P2b — A CORRIDA DE VERDADE: a migração pode terminar DEPOIS que algo já leu daqui
+     * (decLer já rodou em P2, então decLista já é [1 item], um valor "truthy" que passaria
+     * batido pelo antigo "if (decLista) return"). Sem chamar decRecarregar(), força o cache
+     * e confere que a PRÓXIMA leitura pega o cache mesmo assim — sabotagem real já achou
+     * este bug uma vez (a ordem "if (decLista) return" antes do "if (_decCache)" sobrevivia
+     * a P3 porque P3 sempre passa por decRecarregar() antes, o que mascarava o problema). */
+    api.decCacheForcarTeste([{ id: "d_race", q: "2026-01-01T00:00:00.000Z", regra: "colagem.cabecalho", decisao: "aceitou" }]);
+    ok(api.decLer().length === 1 && api.decLer()[0].id === "d_race",
+       "P2b a migração terminando DEPOIS de uma leitura anterior tem de valer na leitura seguinte, sem precisar de decRecarregar(): "
+       + JSON.stringify(api.decLer()));
+
+    /* P3 — o caminho normal (decRecarregar depois de migrar, como um recarregamento de página faria) */
+    api.decCacheForcarTeste([{ id: "d1", q: "2026-01-01T00:00:00.000Z", regra: "colagem.cabecalho", decisao: "aceitou" }]);
+    api.decRecarregar();
+    ok(api.decLer().length === 1 && api.decLer()[0].id === "d1", "P3 com o cache ativo, decLer devolve o que esta em memoria, nao mais o localStorage");
+
+    /* gravar com o cache ativo: atualiza a memoria NA HORA (mutação por referência já cobre o
+     * caminho comum de decRegistrar/decRegistrarLote, que empurram para a MESMA decLista) */
+    api.decRegistrar(base({ regra: "colagem.anexo" }));
+    ok(api.decCacheAtual() && api.decCacheAtual().length === 2, "P4 gravar com o cache ativo atualiza a memoria imediatamente");
+
+    /* P4b — decDefinirTudo (o caminho da restauração de backup): um array NOVO, não derivado
+     * de decLer(), tem de substituir o cache de verdade — o mesmo tipo de sabotagem que pegou
+     * um bug real em leisGravarTudo (ver lei-biblioteca.js P4b) também se aplica aqui. */
+    api.decDefinirTudo([{ id: "d_restaurado", q: "2026-02-02T00:00:00.000Z", regra: "versao.cobertura", decisao: "recusou" }]);
+    ok(api.decCacheAtual() && api.decCacheAtual().length === 1 && api.decCacheAtual()[0].id === "d_restaurado",
+       "P4b decDefinirTudo com um array novo substitui o cache de verdade: " + JSON.stringify(api.decCacheAtual()));
+
+    /* a gravação de verdade no IndexedDB falha (não existe em Node) — isso tem de aparecer, não sumir calado */
+    await new Promise((r) => setImmediate(r));
+    ok(/n.o h. espa.o/i.test(api.$("uiModalMsg").textContent || ""), "P5 a falha da gravação em segundo plano avisa a pessoa: " + (api.$("uiModalMsg") || {}).textContent);
+    try { api._uiFechar(true); } catch (e) {}
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

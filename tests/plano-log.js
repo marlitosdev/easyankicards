@@ -350,6 +350,17 @@ async function testes() {
     ok(leisLinha && leisLinha.bytes > 900,
        "R7i o inventario mostra zero para as leis que ja migraram para o indexedDB: "
        + JSON.stringify(leisLinha));
+
+    /* R7j (17.39.0) — mesma história para "eac_decisoes" (idb-decisoes.js, Fase B).
+     * decCarregar() já rodou uma vez sozinho (decLista virou [], que é truthy) antes daqui —
+     * decRecarregar() zera para o cache forçado valer, o mesmo passo que P3 usa em tests/decisoes.js. */
+    api.decCacheForcarTeste([{ id: "d1", q: "2026-01-01T00:00:00.000Z", motivo: "x".repeat(500) }]);
+    api.decRecarregar();
+    const a3 = api.plArmazenamento();
+    const decLinha = a3.linhas.filter((x) => x.chave === "eac_decisoes")[0];
+    ok(decLinha && decLinha.bytes > 900,
+       "R7j o inventario mostra zero para as decisoes que ja migraram para o indexedDB: "
+       + JSON.stringify(decLinha));
   }
 
   /* ---- R8: rascunho só sai se a questão já foi respondida, e há tempo ---- */

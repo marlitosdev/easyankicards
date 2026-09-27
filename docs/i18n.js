@@ -1006,6 +1006,7 @@ const UI = {
   "plog_g_progresso": "Progresso nos tópicos",
   "plog_g_editais": "Editais",
   "plog_g_leis": "Leis guardadas",
+  "plog_g_decisoes": "Decisões (histórico de sugestões)",
   "plog_g_citvinc": "Vínculos de lei dos comentários",
   "plog_g_vinculos": "Vínculos entre tópicos",
   "plog_g_deck": "Baralho em edição",
@@ -4022,6 +4023,7 @@ const UI = {
   "lei_carga_indo": "indo ao art. {a}",
   "lei_carga_sem_nome": "a lei",
   "leis_sem_espaco": "Não há espaço no navegador para guardar esta lei. Faça um backup e apague o que não usa mais.",
+  "dec_sem_espaco": "Não há espaço no navegador para guardar esta decisão. Faça um backup e apague o que não usa mais.",
   "lei_gav_navegar": "ir para…",
   "lei_fila_btn": "leis",
   "lei_fila_btn_aj": "As leis deste tópico: trocar de lei, colar uma nova ou usar uma já guardada.",
@@ -5105,6 +5107,7 @@ const UI = {
   "lei_menu_alerta": "{n} alerts",
   "lei_ir_busca_vazia": "Nothing found for “{q}”.",
   "leis_sem_espaco": "No room left in the browser to store this law.",
+  "dec_sem_espaco": "No room left in the browser to store this decision. Back up and delete what you no longer use.",
 
   "app_title": "EasyAnkiCards",
   "brand": "by MarlitosDev",
