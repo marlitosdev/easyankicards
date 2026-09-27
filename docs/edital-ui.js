@@ -117,7 +117,11 @@ function edRamosNaLinha(i) {
       c.textContent = (r.nome.length > 30 ? r.nome.slice(0, 29) + "…" : r.nome) + " ★" + (r.peso || 3);
       c.title = r.nome + " — " + t("ed_ramo_" + est) + (r.quando ? " (" + r.quando + ")" : "") + " — " + t("ed_ramo_peso", { p: r.peso || 3 })
         + (r.nota ? " — " + r.nota : "") + (r.marcaHerdada ? " — " + t("ed_ramo_herdado") : "")
-        + " — " + t("ed_trilha_tit") + ": " + edTrilhaTexto(edTrilhaDoRamoUI(i, r, matRamos));
+        + " — " + t("ed_trilha_tit") + ": " + edTrilhaTexto(edTrilhaDoRamoUI(i, r, matRamos))
+        + " — " + t("ram_materiais_ajuda");
+      /* clicar no chip abre cartões/questões/jurisprudência DESTE ramo — a mesma sistemática de "Horas por
+       * assunto" (edLigarMenuDoRamo), sem precisar de outro botão espremido na linha. */
+      if (typeof edLigarMenuDoRamo === "function") edLigarMenuDoRamo(c, cx, i.disciplina, i.nome, r);
       chips.append(c);
     });
     if (rs.length > ED_RAMOS_LIM) {
@@ -582,6 +586,66 @@ function edMontarStatusEMenu(container, disciplina, nome, ramos, editalId, r) {
   };
 
   return { status, estudar, mais };
+}
+
+/* FASE 3 — os materiais de um RAMO específico, a partir do chip de ramo (Agenda da semana) ou da linha do ramo
+ * (Horas por assunto). Cartões já têm vínculo real por ramo (etiqueta ram_, ramMaterialDoTopico); questões e
+ * jurisprudência ainda não — por isso perguntam antes de abrir/criar as do tópico inteiro, em vez de fingir que
+ * sabem separar. Liga o clique em `trigger` (o próprio chip, ou um botão) e ancora o popover em `container`
+ * (o pai onde o menu deve nascer, para o "⋮ do tópico" e o "⋮ do ramo" não brigarem pelo mesmo `.ed-menu`). */
+function edLigarMenuDoRamo(trigger, container, disciplina, topico, ramo, ch) {
+  trigger.classList.add("ed-ramo-clic");
+  if (!trigger.title) trigger.title = t("ram_materiais_ajuda");
+  trigger.onclick = (ev) => {
+    if (ev) ev.stopPropagation();
+    edFecharMenus(container);
+    const antigo = container.querySelector(".ed-menu");
+    if (antigo) { antigo.hidden = !antigo.hidden; return; }
+    const chave = ch || ((typeof matChaveViva === "function") ? matChaveViva(disciplina, topico) : matChave(disciplina, topico));
+    const mat = (typeof ramMaterialDoTopico === "function") ? (ramMaterialDoTopico(chave, [ramo])[ramo.id] || {}) : {};
+    const nCards = mat.cartoes || 0;
+    const menu = document.createElement("div");
+    menu.className = "ed-menu";
+
+    const fecharHoras = () => { if ($("dlgHoras") && $("dlgHoras").open) $("dlgHoras").close(); };
+
+    const crt = document.createElement("button");
+    crt.type = "button";
+    crt.className = "btn-min ed-menu-item" + (nCards ? " tem" : "");
+    crt.textContent = nCards === 1 ? t("ed_st_cartao") : nCards ? t("ed_st_cartoes", { n: nCards }) : t("ed_menu_cartoes");
+    crt.title = t(nCards ? "ed_crt_ver" : "ed_crt_novo", { n: topico, c: nCards });
+    crt.onclick = (e2) => {
+      e2.stopPropagation(); menu.hidden = true;
+      fecharHoras();
+      try {
+        if (nCards) { estcEstudarTopico(disciplina, topico); return; }
+        bancAlvoDefinir(disciplina, topico);
+      } catch (e) {}
+    };
+    menu.append(crt);
+
+    const pergunta = (tipo, n1Key, nKey, verKey, novoKey, novoLabelKey, confirmaKey, abrirFn) => {
+      const nn = mat[tipo] || 0;
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "btn-min ed-menu-item" + (nn ? " tem" : "");
+      item.textContent = nn === 1 ? t(n1Key) : nn ? t(nKey, { n: nn }) : t(novoLabelKey);
+      item.title = t(nn ? verKey : novoKey, { n: nn, tp: topico });
+      item.onclick = async (e2) => {
+        e2.stopPropagation(); menu.hidden = true;
+        if (!(await uiConfirm(t(confirmaKey, { t: topico })))) return;
+        fecharHoras();
+        try { abrirFn(disciplina, topico); } catch (e) {}
+      };
+      menu.append(item);
+    };
+    pergunta("questoes", "ed_st_questao", "ed_st_questoes", "ed_qst_ver", "ed_qst_novo", "ed_menu_questoes", "ram_confirma_qst",
+      (d, n) => qsUiResponderDireto(d, n));
+    pergunta("juris", "ed_st_juris_1", "ed_st_juris", "ed_jur_ver", "ed_jur_novo", "ed_menu_juris_nova", "ram_confirma_jur",
+      (d, n) => jurAbrir(d, n));
+
+    container.append(menu);
+  };
 }
 
 function edLinhaTopico(i, semDisciplina) {

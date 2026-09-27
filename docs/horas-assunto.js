@@ -322,6 +322,11 @@ function horPintar() {
           const nivR = tp.nivelRamos.get(r.id) || tp.nivel;
           const rl = gerEl("div", "hor-ramo hor-niv-" + nivR + (r.pulado ? " hor-ramo-pulado" : ""));
           rl.append(gerEl("span", "hor-top-nome", (r.revisado ? "↻ " : (r.feito ? "✓ " : "○ ")) + r.nome), gerEl("span", "hor-top-h", t("hor_ramo_h", { e: horTexto(r.estudoMin), r: horTexto(r.revisaoMin) })));
+          /* os materiais DESTE ramo (cartões de verdade pela etiqueta ram_; questões e jurisprudência perguntam
+           * antes de abrir os do tópico inteiro) — mesma sistemática do chip de ramo na Agenda da semana. */
+          const rmais = gerEl("button", "btn-min ed-mais"); rmais.type = "button";
+          edLigarMenuDoRamo(rmais, rl, d.nome, tp.nome, r);
+          rl.append(rmais);
           det.append(rl);
         });
       });
