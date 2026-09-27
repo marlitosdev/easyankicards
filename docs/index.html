@@ -4271,7 +4271,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-pasta:hover{background:rgba(127,127,127,.15)}
 .ger-atual{background:rgba(46,158,91,.18);font-weight:600}
 .ger-top{padding-left:22px;font-size:12px}
-.ger-seta{display:inline-block;width:14px;cursor:pointer}
+.ger-seta{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;margin:-3px -6px -3px -2px;cursor:pointer;border-radius:5px}
+.ger-seta:hover{background:rgba(127,127,127,.18)}
 .ger-item{display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid var(--borda);cursor:pointer;font-size:13px;line-height:1.4}
 .ger-foco{background:rgba(46,158,91,.14)}
 .ger-corpo{flex:1;min-width:0}
@@ -7941,6 +7942,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div class="ger-ferr">
         <button type="button" class="btn-min btn-min-ok" id="btnGerEstudar" hidden></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
+        <button type="button" class="btn-min" id="btnGerMarcarFracos" hidden></button>
+        <button type="button" class="btn-min" id="btnGerMarcarLacunas" hidden></button>
         <button type="button" class="btn-min ger-ferr-mais" id="btnGerFerrMais" aria-expanded="false">⋯</button>
         <button type="button" class="btn-min ger-sec" id="btnGerMarcar" data-i18n="ger_marcar"></button>
         <button type="button" class="btn-min ger-sec" id="btnGerLimpar" data-i18n="ger_limpar"></button>

@@ -131,7 +131,7 @@ async function testes() {
       b.a.ceAbrir(); b.a.$("btnCeMarcar").onclick(); b.a.$("btnCePrompt").onclick();
       const its = b.a.cePedidoAtual().itens;
       const i1 = its.findIndex((x) => /IPTU/.test(x.card.front)) + 1, i2 = its.findIndex((x) => /^Prazo de recolhimento/.test(x.card.front)) + 1;
-      b.a.$("ceColar").value = "@@ " + i1 + "\nQuem paga o IPTU? :: O proprietário do imóvel, o titular do domínio útil ou o possuidor a qualquer título, conforme o art. 34 do CTN :: y\n+ Literalidade — Art. 34 do CTN: contribuinte do imposto é o proprietário\n\n@@ " + i2 + "\nPrazo de recolhimento do ISS retido pelo tomador :: Até o dia 09 do mês seguinte ao da retenção, conforme o art. 40 da lei municipal, sob pena de multa :: x\n+ Literalidade — Art. 40: o tomador recolhe até o dia 09";
+      b.a.$("ceColar").value = "@@ " + i1 + "\nQuem paga o IPTU? :: O proprietário do imóvel, o titular do domínio útil ou o possuidor a qualquer título, conforme o art. 34 do CTN :: y\n+ Literalidade — Art. 34 do CTN: contribuinte do imposto é o proprietário\n\n@@ " + i2 + "\nPrazo de recolhimento do ISS retido pelo tomador :: Até o dia 09 do mês seguinte ao da retenção, conforme o art. 40 da lei municipal, sob pena de multa e juros de mora previstos no regulamento tributário municipal :: x\n+ Literalidade — Art. 40: o tomador recolhe até o dia 09";
       b.a.$("btnCeConferir").onclick();
       const h1 = historico(b.a).length;
       await conduzir(b.a, b.a.$("btnCeAplicar").onclick());
@@ -145,7 +145,7 @@ async function testes() {
     a.ceAbrir();
     a.$("btnCeMarcar").onclick(); a.$("btnCePrompt").onclick();
     const id2 = a.cePedidoAtual().itens.findIndex((x) => /IPTU/.test(x.card.front)) + 1;
-    a.$("ceColar").value = "@@ " + id2 + "\nQuem paga o IPTU? :: O proprietário do imóvel, o titular do domínio útil ou o possuidor, conforme o art. 34 do CTN :: y\n+ Literalidade — Art. 34 do CTN";
+    a.$("ceColar").value = "@@ " + id2 + "\nQuem paga o IPTU? :: O proprietário do imóvel, o titular do domínio útil ou o possuidor a qualquer título, conforme o art. 34 do Código Tributário Nacional, responde pelo tributo :: y\n+ Literalidade — Art. 34 do CTN";
     a.$("btnCeConferir").onclick();
     await conduzir(a, a.$("btnCeAplicar").onclick());
     a.$("editor").value = a.$("editor").value + "\nEscrevi depois :: agora";
