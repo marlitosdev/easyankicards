@@ -87,12 +87,22 @@ function bkLer(k) {
   try { return localStorage.getItem(k); } catch (e) { return null; }
 }
 
+/* "eac_leis" (17.38.0) pode já não estar no localStorage — migrou para o IndexedDB, e
+ * leisLerTudo() sabe de onde ler de qualquer jeito (cache em memória ou localStorage,
+ * conforme a migração já tenha terminado ou não). Ler/gravar essa chave sempre passa por
+ * leisLerTudo/leisGravarTudo em vez do localStorage direto, senão um backup feito depois
+ * da migração sairia sem lei nenhuma. */
+function bkLerLeis() {
+  try { return typeof leisLerTudo === "function" ? JSON.stringify(leisLerTudo()) : bkLer("eac_leis"); }
+  catch (e) { return bkLer("eac_leis"); }
+}
+
 function montarBackup() {
   const dados = {};
   Object.keys(BK_CHAVES).forEach((grupo) => {
     dados[grupo] = {};
     BK_CHAVES[grupo].forEach((k) => {
-      const v = bkLer(k);
+      const v = k === "eac_leis" ? bkLerLeis() : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
   });
@@ -228,6 +238,10 @@ function restaurarBackup(bk) {
   });
   if (!aplicar.length) throw new Error("backup vazio");
   aplicar.forEach(([k, v]) => {
+    if (k === "eac_leis" && typeof leisGravarTudo === "function") {
+      try { leisGravarTudo(JSON.parse(v) || {}); } catch (e) {}
+      return;
+    }
     try { localStorage.setItem(k, v); } catch (e) {}
   });
   return aplicar.length;

@@ -340,6 +340,16 @@ async function testes() {
      * existir: limpar espaço nunca toca no que não se reconstitui. */
     ok(janela.localStorage.getItem("eac_edital_diario") !== null,
        "R7h a limpeza levou o diario de estudo junto");
+
+    /* R7i (17.38.0) — "eac_leis" pode ter migrado para o IndexedDB (idb-leis.js): sem
+     * localStorage nenhum para medir, a linha não pode sumir do inventário como se as
+     * leis tivessem sumido — plArmazenamento mede pelo que leisLerTudo() devolve. */
+    api.leisCacheForcarTeste({ lei_a: { id: "lei_a", nome: "Lei A", texto: "x".repeat(500) } });
+    const a2 = api.plArmazenamento();
+    const leisLinha = a2.linhas.filter((x) => x.chave === "eac_leis")[0];
+    ok(leisLinha && leisLinha.bytes > 900,
+       "R7i o inventario mostra zero para as leis que ja migraram para o indexedDB: "
+       + JSON.stringify(leisLinha));
   }
 
   /* ---- R8: rascunho só sai se a questão já foi respondida, e há tempo ---- */

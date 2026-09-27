@@ -3923,7 +3923,15 @@ function leiIdentificar(texto, quantosArtigos) {
  * PARTE 2 — A BIBLIOTECA
  * ------------------------------------------------------------------ */
 
+/* SÍNCRONAS DE PROPÓSITO, mesmo com o IndexedDB por baixo (17.38.0): leiDe/leiGuardar/
+ * leisLista e o que depende deles somam mais de cem pontos de uso espalhados por vários
+ * arquivos — trocar por promessas ali quebraria a leitura de uma lei no meio de qualquer
+ * tela. Antes de migrar (_leisCache ainda null), leem/escrevem o localStorage de sempre.
+ * Depois de migrar, leisLerTudo devolve a cópia que já está em memória (leisIdbMigrar
+ * carregou uma vez) e leisGravarTudo atualiza essa cópia na hora — quem chamou nunca
+ * espera — e manda a gravação de verdade para o IndexedDB em segundo plano. Ver idb-leis.js. */
 function leisLerTudo() {
+  if (_leisCache) return _leisCache;
   try {
     const v = JSON.parse(localStorage.getItem(LEIS_CHAVE) || "{}");
     return v && typeof v === "object" ? v : {};
@@ -3931,12 +3939,21 @@ function leisLerTudo() {
 }
 
 function leisGravarTudo(o) {
+  if (_leisCache) {
+    _leisCache = o || {};
+    leisIdbGravarTudo(_leisCache).catch(() => {
+      try { uiAlert(t("leis_sem_espaco")); } catch (e2) {}
+    });
+    return true;
+  }
   try { localStorage.setItem(LEIS_CHAVE, JSON.stringify(o || {})); return true; }
   catch (e) {
     try { uiAlert(t("leis_sem_espaco")); } catch (e2) {}
     return false;
   }
 }
+/* começa a migração em segundo plano assim que LEIS_CHAVE existe — não trava nada */
+if (typeof leisIdbMigrar === "function") leisIdbMigrar();
 
 function leisHojeISO() {
   const d = new Date();

@@ -372,6 +372,43 @@ async function testes() {
        "M5 'sao leis diferentes' devia manter as duas e parar de avisar");
   }
 
+  /* P — PERSISTÊNCIA (17.38.0): eac_leis migrou do localStorage (teto fixo de 5-10 MB,
+   * a causa de "não há espaço no navegador para guardar esta lei") para o IndexedDB
+   * (cota muito maior). leisLerTudo/leisGravarTudo continuam SÍNCRONAS de propósito —
+   * leiDe/leiGuardar/leisLista e tudo que depende deles (mais de cem pontos de uso,
+   * em vários arquivos) não podem virar promessa. O Node deste runner não tem
+   * indexedDB de verdade; o que dá para testar aqui é a troca de comportamento em
+   * torno do cache em memória (_leisCache) — a parte que qualquer navegador de
+   * verdade também atravessa antes/depois da migração terminar. */
+  {
+    const a = iniciar();
+    ok(a.leisIdbSuportado() === false, "P1 sem indexedDB (Node), leisIdbSuportado diz que não — é o sinal que mantém tudo no localStorage aqui");
+    a.leiGuardar({ nome: "Lei do localStorage", texto: T("LS", 3) });
+    ok(a.leisLista().length === 1 && a.leisLista()[0].nome === "Lei do localStorage", "P2 sem cache (ainda não migrou), leisLerTudo lê do localStorage normalmente");
+
+    /* força o estado "já migrou" (o que um navegador de verdade faz sozinho, via leisIdbMigrar) */
+    a.leisCacheForcarTeste({ lei_x: { id: "lei_x", nome: "Lei do cache", texto: T("C", 2) } });
+    ok(a.leisLista().length === 1 && a.leisLista()[0].nome === "Lei do cache", "P3 com o cache ativo, leisLerTudo devolve o que está em memória, não mais o localStorage");
+
+    /* gravar com o cache ativo: atualiza a memória NA HORA, sem esperar o IndexedDB */
+    a.leiGuardar({ nome: "Lei nova no cache", texto: T("N", 2) });
+    ok(a.leisCacheAtual() && Object.keys(a.leisCacheAtual()).length === 2, "P4 gravar com o cache ativo atualiza a memória imediatamente (leitura própria sem esperar promessa)");
+
+    /* P4b — um objeto NOVO (não a mesma referência que leisLerTudo devolveu), exatamente como a
+     * restauração de backup faz (leisGravarTudo(JSON.parse(texto_do_arquivo))): sabotagem real já
+     * pegou aqui uma vez — tirar a atualização do cache "sobrevivia" ao P4 porque leiGuardar muta a
+     * MESMA referência que leisLerTudo devolveu, mascarando a falta da atribuição. */
+    a.leisGravarTudo({ lei_restaurada: { id: "lei_restaurada", nome: "Lei restaurada do backup" } });
+    ok(a.leisCacheAtual() && Object.keys(a.leisCacheAtual()).length === 1
+      && a.leisCacheAtual().lei_restaurada.nome === "Lei restaurada do backup",
+      "P4b gravar um objeto novo (não derivado de leisLerTudo) substitui o cache de verdade: " + JSON.stringify(a.leisCacheAtual()));
+
+    /* a gravação de verdade no IndexedDB falha (não existe em Node) — isso tem de aparecer para a pessoa, não sumir calado */
+    await new Promise((r) => setImmediate(r));
+    ok(/n.o h. espa.o/i.test(a.$("uiModalMsg").textContent || ""), "P5 a falha da gravação em segundo plano avisa a pessoa (mesmo aviso de sempre), não fica muda: " + (a.$("uiModalMsg") || {}).textContent);
+    try { a._uiFechar(true); } catch (e) {}
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
