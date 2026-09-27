@@ -8,11 +8,8 @@
 let edProgresso = {};      /* nome do tópico -> true */
 let edCorrecaoPendente = null;
 
-/* H5 — "Buscar tópico" (antes "Lista completa").
- * Estado próprio: o que se procura, sob qual filtro, e o que está marcado
- * para a ação em lote. */
-let edBusca = "";
-let edFiltro = "tudo";
+/* A marcação em lote (H5, "Buscar tópico") virou parte da sanfona de "Horas por
+ * assunto" (docs/horas-assunto.js); o estado que sobrevive é só a seleção em si. */
 let edSelecao = new Set();
 
 function edSalvar() {
@@ -263,11 +260,8 @@ function edRegistrarConteudo(r) {
 
 /* ==================================================================
  * O PAINEL
- * A tabela de 231 linhas responde "qual é a ordem?", que é uma pergunta
- * que se faz uma vez. O painel responde "e agora?", que se faz todo dia.
- * Por isso ele abre por padrão e a tabela vira a segunda aba.
+ * Responde "e agora?", que se faz todo dia — por isso é a única vista.
  * ================================================================== */
-let edVista = localStorage.getItem("eac_edital_vista") || "painel";
 let edAbertas = {};
 /* "Mapa das disciplinas": recolhido por padrão, e a ordem escolhida —
  * nenhum dos dois é lembrado entre sessões, igual edAbertas: é estado de
@@ -3235,14 +3229,6 @@ function edMudarPeso(disc, peso) {
   edRender();
 }
 
-function edPintarLote() {
-  const barra = $("edLote");
-  if (!barra) return;
-  barra.classList.toggle("mostra", edSelecao.size > 0);
-  const c = $("edLoteConta");
-  if (c) c.textContent = t("ed_lote_conta", { n: edSelecao.size });
-}
-
 async function edLoteAplicar(marcar) {
   if (!edSelecao.size) return;
   const n = edSelecao.size;
@@ -3259,15 +3245,6 @@ async function edLoteAplicar(marcar) {
   edRender();
   if (typeof hubPintarAgenda === "function") hubPintarAgenda();
   toast(marcar ? "ed_lote_feito_ok" : "ed_colado");
-}
-
-function edTrocarVista(v) {
-  edVista = v;
-  localStorage.setItem("eac_edital_vista", v);
-  $("edPainel").hidden = v !== "painel";
-  $("edListaBox").hidden = v !== "lista";
-  $("btnVistaPainel").classList.toggle("ativa", v === "painel");
-  $("btnVistaLista").classList.toggle("ativa", v === "lista");
 }
 
 /* ------------------------------------------------------------------
@@ -3714,74 +3691,6 @@ function edRender() {
   edSimular();
   completarDiario(plano.itens);
   edPintarPainel(r, plano);
-  edTrocarVista(edVista);
-
-  const tb = $("edTabela");
-  tb.innerHTML = "";
-
-  /* filtra ANTES de desenhar: 232 linhas é o que tornava esta tela inútil */
-  const q = edBusca.trim().toLowerCase();
-  const visiveis = itens.filter((i) => {
-    if (edFiltro === "pendentes" && i.feito) return false;
-    if (edFiltro === "feitos" && !i.feito) return false;
-    if (edFiltro === "alta" && i.faixa !== "alta") return false;
-    if (!q) return true;
-    return (i.nome + " " + i.disciplina).toLowerCase().includes(q);
-  });
-  edPintarLote();
-
-  if (!visiveis.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6; td.className = "esq-vazio";
-    /* a mensagem muda conforme a causa: "edital vazio" e "nada neste
-     * filtro" são problemas diferentes e pedem ações diferentes */
-    td.textContent = itens.length ? t("ed_busca_vazia") : t("ed_vazio");
-    tr.append(td); tb.append(tr); edSalvar(); return;
-  }
-  visiveis.forEach((i) => {
-    const tr = document.createElement("tr");
-    const feito = !!i.feito;
-    if (feito) tr.className = "ed-feito";
-    const cel = (txt, cls) => {
-      const td = document.createElement("td");
-      td.textContent = txt; if (cls) td.className = cls; return td;
-    };
-    const tdNome = cel(i.nome);
-    if (i.motivo) { tdNome.title = i.motivo; tdNome.classList.add("ed-tem-motivo"); }
-    /* caixa de SELEÇÃO (lote), separada da caixa de "estudado": marcar
-     * cem tópicos um a um na agenda é o que ninguém faz — e quem chega
-     * com meio edital já estudado precisa exatamente disso */
-    const sel = document.createElement("input");
-    sel.type = "checkbox";
-    sel.className = "ed-sel";
-    sel.checked = edSelecao.has(i.chave);
-    sel.title = t("ed_lote_conta", { n: edSelecao.size });
-    sel.onchange = () => {
-      if (sel.checked) edSelecao.add(i.chave); else edSelecao.delete(i.chave);
-      edPintarLote();
-    };
-    tr.append((() => { const td = document.createElement("td"); td.append(sel); return td; })());
-
-    const chk = document.createElement("input");
-    chk.type = "checkbox"; chk.checked = feito;
-    chk.onchange = () => {
-      if (chk.checked) edProgresso[edChave(i)] = true;
-      else delete edProgresso[edChave(i)];
-      reg("EDITAL-PROGRESSO", (chk.checked ? "feito: " : "desfeito: ") + i.nome);
-      edRender();
-    };
-    const tdOk = document.createElement("td");
-    tdOk.append(chk);
-    const tdPri = cel(String(i.prioridade), "ed-pri faixa-" + i.faixa);
-    const pt = document.createElement("span");
-    pt.className = "ed-ponto ponto-" + i.faixa;
-    tdPri.prepend(pt);
-    tr.append(tdNome, cel(i.disciplina, "ed-disc"), tdPri,
-              cel(i.semana ? t("ed_sem_n", { n: i.semana })
-                           : (i.feito ? "—" : t("ed_fora")), "ed-h"), tdOk);
-    tb.append(tr);
-  });
   edSalvar();
 }
 
@@ -3921,24 +3830,6 @@ function edIniciar() {
     edRender();
   };
   $("btnEditalDiag").onclick = abrirDiagPlano;
-  $("btnVistaPainel").onclick = () => edTrocarVista("painel");
-  $("btnVistaLista").onclick = () => edTrocarVista("lista");
-  if ($("edBuscaTop")) $("edBuscaTop").addEventListener("input", () => {
-    edBusca = $("edBuscaTop").value; edRender();
-  });
-  [["edFiltroTudo", "tudo"], ["edFiltroPend", "pendentes"],
-   ["edFiltroAlta", "alta"], ["edFiltroFeitos", "feitos"]].forEach(([id, k]) => {
-    if (!$(id)) return;
-    $(id).onclick = () => {
-      edFiltro = k;
-      ["edFiltroTudo", "edFiltroPend", "edFiltroAlta", "edFiltroFeitos"]
-        .forEach((x) => $(x) && $(x).classList.toggle("ativa", x === id));
-      edRender();
-    };
-  });
-  if ($("btnLoteFeito")) $("btnLoteFeito").onclick = () => edLoteAplicar(true);
-  if ($("btnLoteDesfazer")) $("btnLoteDesfazer").onclick = () => edLoteAplicar(false);
-  if ($("btnLoteNada")) $("btnLoteNada").onclick = () => { edSelecao.clear(); edRender(); };
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
    * eu embarquei um botão morto */
   if ($("btnDesfazerReg")) $("btnDesfazerReg").onclick = edDesfazerUltimoRegistro;
@@ -3985,27 +3876,30 @@ function edIniciar() {
    * tem de mudar junto, senão a IA recebe um alvo velho */
   if ($("ndNome")) $("ndNome").addEventListener("input", ndPintarPrompt);
   if ($("btnNdFechar")) $("btnNdFechar").onclick = () => $("dlgNovaDisc").close();
-  $("btnEditalCsv").onclick = () => {
-    const r = lerEdital($("editalTexto").value);
-    const plano = montarPlano(r, { horas: Number($("edHoras").value),
-      prova: $("edProva").value, feitos: edProgresso });
-    const itens = plano.itens;
-    /* ponto e vírgula e vírgula decimal: é o que o Excel em português abre
-       com dois cliques, sem assistente de importação */
-    const linhas = ["Disciplina;Peso disc.;Tópico;Peso tóp.;Prioridade;Faixa;Semana;Minutos;Feito;Por quê"];
-    itens.forEach((i) => linhas.push([i.disciplina, i.disciplinaPeso, i.nome, i.peso,
-      i.prioridade, i.faixa, i.semana || "fora", i.minutos,
-      i.feito ? "sim" : "não", i.motivo || ""]
-      .map((c) => String(c).replace(/;/g, ",")).join(";")));
-    const url = URL.createObjectURL(new Blob(["﻿" + linhas.join("\n")],
-      { type: "text/csv;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = "edital-priorizado.csv";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    reg("EDITAL", "csv baixado", itens.length + " tópicos");
-  };
   edRender();
+}
+
+/* CSV do plano priorizado — chamado pela sanfona de "Horas por assunto"
+ * (docs/horas-assunto.js, #btnHorCsv). */
+function edGerarCsv() {
+  const r = lerEdital($("editalTexto").value);
+  const plano = montarPlano(r, { horas: Number($("edHoras").value),
+    prova: $("edProva").value, feitos: edProgresso });
+  const itens = plano.itens;
+  /* ponto e vírgula e vírgula decimal: é o que o Excel em português abre
+     com dois cliques, sem assistente de importação */
+  const linhas = ["Disciplina;Peso disc.;Tópico;Peso tóp.;Prioridade;Faixa;Semana;Minutos;Feito;Por quê"];
+  itens.forEach((i) => linhas.push([i.disciplina, i.disciplinaPeso, i.nome, i.peso,
+    i.prioridade, i.faixa, i.semana || "fora", i.minutos,
+    i.feito ? "sim" : "não", i.motivo || ""]
+    .map((c) => String(c).replace(/;/g, ",")).join(";")));
+  const url = URL.createObjectURL(new Blob(["﻿" + linhas.join("\n")],
+    { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "edital-priorizado.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  reg("EDITAL", "csv baixado", itens.length + " tópicos");
 }
 
 /* =====================================================================

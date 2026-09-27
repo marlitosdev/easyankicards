@@ -373,8 +373,8 @@ async function testes() {
       "Anexo I do edital de abertura"].join("\n");
     api.$("editalTexto").value = ED;
     api.edRender();
-    ok(api.$("edTabela").children.length === 3,
-       `M1 esperava 3 tópicos na tabela, veio ${api.$("edTabela").children.length}`);
+    const m1n = api.horDoAberto().plano.itens.length;
+    ok(m1n === 3, `M1 esperava 3 tópicos no plano, veio ${m1n}`);
     ok(/semanas/.test(api.$("edRestam").textContent || ""),
        "M2 não mostrou o tempo até a prova");
     ok(!api.$("btnEditalCorrigir").disabled,
@@ -1547,31 +1547,36 @@ async function testes() {
       ok(medidores <= 1,
          `AC15b a cobertura da prova aparece ${medidores} vezes na tela do edital`);
 
-      /* AC16 — H5: "Buscar tópico" (era "Lista completa").
-       * Tudo que a tabela mostrava já existia na agenda e no panorama. O
-       * que só ela faz é achar um tópico pelo nome e marcar vários de uma
-       * vez — quem chega com meio edital já estudado não vai clicar cem
-       * vezes na agenda. */
+      /* AC16 — Assuntos: busca, filtro e marcação em lote fundidos na
+       * sanfona de "Horas por assunto" (era a tabela de "Buscar tópico").
+       * Só o tópico da disciplina ABERTA aparece; busca/filtro decidem
+       * também se a própria disciplina aparece na lista. */
       api.hubAbrirEdital(e1.id);
-      api.trocarVistaTeste("lista");
-      /* conta só linhas de TÓPICO: quando o filtro não acha nada, a tabela
-       * desenha uma linha de aviso, e contá-la como resultado quebrava a
-       * conta de partição (1 + 2 ≠ 2 no caso normal) */
-      const linhas = () => (api.$("edTabela").children || []).filter((tr) =>
-        !(tr.children || []).some((td) =>
-          (td.className || "").split(/\s+/).includes("esq-vazio"))).length;
-      const linhasComAviso = () => (api.$("edTabela").children || []).length;
-      api.buscarTeste("");
-      const todas = linhas();
-      ok(todas >= 1, "AC16 a tabela de busca veio vazia com edital carregado");
+      api.horAbrir();
+      api.horAbrirDisc("Financeiro");
+      const achar2 = (el, cls) => {
+        const out = [];
+        const anda = (e) => Array.from(e.children || []).forEach((f) => {
+          if ((f.className || "").split(/\s+/).includes(cls)) out.push(f);
+          anda(f);
+        });
+        if (el) anda(el);
+        return out;
+      };
+      const topicos = () => achar2(api.$("horLista"), "hor-top").length;
+      const discs = () => achar2(api.$("horLista"), "hor-drow").length;
+      const avisoVazio = () => achar2(api.$("horLista"), "nota").length;
+      api.horBuscaTeste("");
+      const todas = topicos();
+      ok(todas >= 1, "AC16 a sanfona veio vazia com edital carregado");
 
-      api.buscarTeste("Receita");
-      ok(linhas() < todas && linhas() >= 1,
-         `AC16b a busca não filtrou (${linhas()} de ${todas})`);
-      api.buscarTeste("zzzznaoexiste");
-      ok(linhas() === 0 && linhasComAviso() === 1,
-         "AC16c busca sem resultado devia mostrar uma linha de aviso e nenhum tópico");
-      api.buscarTeste("");
+      api.horBuscaTeste("Receita");
+      ok(topicos() < todas && topicos() >= 1,
+         `AC16b a busca não filtrou (${topicos()} de ${todas})`);
+      api.horBuscaTeste("zzzznaoexiste");
+      ok(topicos() === 0 && discs() === 0 && avisoVazio() === 1,
+         "AC16c busca sem resultado devia esconder a disciplina e mostrar um aviso");
+      api.horBuscaTeste("");
 
       /* AC16d — a invariante real: estudados + pendentes = tudo.
        * Duas armadilhas que este teste me pregou antes de morder:
@@ -1584,16 +1589,25 @@ async function testes() {
       const marcando = api.edLoteAplicar(true);
       api.uiModalResponder(true);
       await marcando;
-      api.filtroTeste("feitos");
-      const soFeitos = linhas();
-      api.filtroTeste("pendentes");
-      const soPend = linhas();
-      api.filtroTeste("tudo");
-      const tudo = linhas();
+      const nomesTop = () => achar2(api.$("horLista"), "hor-top-nome").map((e) => e.textContent || "");
+      api.horFiltroTeste("estudados");
+      const soFeitos = topicos();
+      const nomesFeitos = nomesTop();
+      api.horFiltroTeste("pendentes");
+      const soPend = topicos();
+      const nomesPend = nomesTop();
+      api.horFiltroTeste("tudo");
+      const tudo = topicos();
       ok(soFeitos > 0 && soPend > 0,
          `AC16d-pre o cenário precisa de tópicos dos dois lados (${soFeitos}/${soPend})`);
       ok(soFeitos + soPend === tudo,
          `AC16d os filtros não particionam a lista: ${soFeitos} + ${soPend} ≠ ${tudo}`);
+      /* AC16d2 — a partição sozinha não pega os filtros trocados entre si
+       * (a soma continua batendo mesmo com "estudados" e "pendentes"
+       * invertidos). Aqui confere o NOME: "Receita AC" é o único marcado
+       * como feito neste ponto (AC7b + este bloco marcaram o mesmo). */
+      ok(nomesFeitos.every((n) => /Receita AC/.test(n)) && !nomesPend.some((n) => /Receita AC/.test(n)),
+         `AC16d2 "estudados"/"pendentes" vieram trocados: feitos=${nomesFeitos.join("|")} pendentes=${nomesPend.join("|")}`);
 
       /* marcação em lote: muda progresso, então pergunta antes */
       api.limparProgressoTeste();
@@ -2622,7 +2636,7 @@ async function testes() {
      * cabeçalho do "mapa das disciplinas", v16.15 — sucessor de
      * .ed-card-nome) repetiria o defeito de .btn-min se não declarasse */
     ["\\.btn-min", "\\.modo-btn", "\\.bancada-nome", "\\.barra-recuperar",
-     "\\.edm-cab", "\\.ed-reg", "\\.reg-forma", "\\.ed-aba"].forEach((sel) => {
+     "\\.edm-cab", "\\.ed-reg", "\\.reg-forma"].forEach((sel) => {
       const re = new RegExp(sel + "\\{[^}]*\\}");
       const m = CSSTXT.match(re);
       ok(!!m, `F3 nao achei a regra ${sel}`);

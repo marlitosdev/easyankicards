@@ -303,8 +303,7 @@ async function testes() {
       });
       return out;
     };
-    const chips = achar(api.$("edAgendaTopo"), "ed-st-jur", [])
-      .concat(achar(api.$("edTabela"), "ed-st-jur", []));
+    const chips = achar(api.$("edAgendaTopo"), "ed-st-jur", []);
     ok(chips.length > 0,
        "J10 o julgado guardado nao aparece na agenda");
     /* o "|| {}" evita que a falha acima derrube o arquivo com

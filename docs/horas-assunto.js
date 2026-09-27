@@ -123,6 +123,13 @@ function horTexto(min) {
  * ===================================================================== */
 const HOR_ALTURA = 190;
 let horDiscAberta = "";
+/* "Assuntos": a sanfona de todas as disciplinas (abaixo do gráfico), com a MESMA cor de confiança do Domínio,
+ * busca + filtro (herdados de "Buscar tópico") e marcar vários de uma vez (edSelecao/edLoteAplicar, os de sempre). */
+const HOR_FILTROS = ["tudo", "pendentes", "vermelho", "estudados"];
+let horBusca = "", horFiltro = "tudo";
+const HOR_NIVEL_ORDEM = ["vermelho", "amarelo", "azul", "verde", "cinza"];
+/* o pior dos ramos, quando o tópico nao tem nivel proprio (tópico sem ramo sempre tem) */
+function horPiorNivel(a, b) { return HOR_NIVEL_ORDEM.indexOf(a) <= HOR_NIVEL_ORDEM.indexOf(b) ? a : b; }
 
 /* o edital ABERTO na tela do edital: plano do texto de agora + o diário deste concurso */
 function horDoAberto() {
@@ -131,6 +138,27 @@ function horDoAberto() {
   const nome = (r.cfg && r.cfg.concurso) || "";
   const diario = (edDiario || []).filter((x) => !x.cc || !nome || x.cc === nome);
   return { r, plano, diario };
+}
+
+/* o mapa de confiança (Domínio) do MESMO edital e fase, indexado por disciplina e tópico — nada é medido de novo */
+function horNiveis(ed, fase) {
+  let m = null;
+  try { m = domDoEdital(ed, { fase }); } catch (e) { m = null; }
+  const porDisc = new Map();
+  (m ? m.disciplinas : []).forEach((d) => {
+    const porTop = new Map();
+    d.topicos.forEach((tp) => porTop.set(tp.nome, tp));
+    porDisc.set(d.nome, porTop);
+  });
+  return porDisc;
+}
+function horCasa(tp, disc) {
+  if (horFiltro === "pendentes" && tp.feito) return false;
+  if (horFiltro === "estudados" && !tp.feito) return false;
+  if (horFiltro === "vermelho" && tp.nivel !== "vermelho") return false;
+  const q = horBusca.trim().toLowerCase();
+  if (!q) return true;
+  return (tp.nome + " " + disc).toLowerCase().includes(q);
 }
 
 function horPeriodo() {
@@ -195,54 +223,145 @@ function horPintar() {
     col.append(gerEl("div", "hor-nome", d.nome), gerEl("div", "hor-pesop", t("cov_peso", { p: d.pesoPct.toFixed(1) })));
     /* o alerta ocupa SEMPRE a mesma linha (vazia quando não há), para as colunas terminarem alinhadas */
     col.append(gerEl("div", "hor-alerta", d.alerta ? "⚠ " + t("hor_alerta", { p: Math.round(d.revisaoPct * 100) }) : ""));
-    col.onclick = () => { horDiscAberta = horDiscAberta === d.nome ? "" : d.nome; horPintar(); };
+    col.onclick = () => { horAbrirDisc(d.nome); };
     graf.append(col);
   });
   cx.append(graf);
-  /* o detalhe da disciplina escolhida: tópicos e ramos, com as horas de cada um */
-  const esc = m.disciplinas.find((d) => d.nome === horDiscAberta);
-  if (esc) {
-    const det = gerEl("div", "hor-det");
-    det.append(gerEl("h4", "", esc.nome));
-    const rx = gerEl("ul", "hor-rx");
-    [t("hor_rx_peso", { p: esc.pesoPct.toFixed(1) }),
-      t("hor_rx_horas", { h: horTexto(esc.totalMin), p: horTexto(esc.planejadoMin) }),
-      t("hor_rx_mix", { e: horTexto(esc.estudoMin), r: horTexto(esc.revisaoMin) }),
-      t("hor_rx_assuntos", { a: esc.feitas, n: esc.unidades })]
-      .concat(esc.bloco ? [t("hor_tip_corte", { p: esc.bloco.minPct, h: horTexto(esc.corteMin) })] : [])
-      .forEach((x) => rx.append(gerEl("li", "", x)));
-    det.append(rx);
-    /* LIGAÇÃO COM OS CARTÕES: da disciplina para a cobertura e, em cada tópico, estudar os cartões que ele tem ou criar */
-    const ac = gerEl("div", "hor-acoes");
-    const vc = gerEl("button", "btn-min", t("hor_ver_cobertura")); vc.type = "button";
-    vc.onclick = () => { $("dlgHoras").close(); covAbrir(editalAtual, esc.nome); };
-    ac.append(vc);
-    det.append(ac);
-    const cont = covContar(cqLerBiblioteca());
-    esc.topicos.forEach((tp) => {
-      const l = gerEl("div", "hor-top" + (tp.revisaoMin > 0 && tp.estudoMin === 0 ? " hor-top-so-rev" : ""));
-      l.append(gerEl("span", "hor-top-nome", tp.nome), gerEl("span", "hor-top-h", t("hor_top_h", { e: horTexto(tp.estudoMin), r: horTexto(tp.revisaoMin), a: tp.feitas, n: tp.unidades })));
-      const nc = cont.top.get(matChaveViva(esc.nome, tp.nome)) || 0;
-      const b = gerEl("button", "btn-min" + (nc ? " btn-min-ok" : ""), nc ? t("hor_estudar", { n: nc }) : t("hor_criar")); b.type = "button";
-      b.onclick = (ev) => {
-        if (ev && ev.stopPropagation) ev.stopPropagation();
-        $("dlgHoras").close();
-        if (nc) estcEstudarTopico(esc.nome, tp.nome); else bancAlvoDefinir(esc.nome, tp.nome);
-      };
-      l.append(b);
-      det.append(l);
-      tp.ramos.forEach((r) => {
-        const rl = gerEl("div", "hor-ramo" + (r.pulado ? " hor-ramo-pulado" : ""));
-        rl.append(gerEl("span", "hor-top-nome", (r.revisado ? "↻ " : (r.feito ? "✓ " : "○ ")) + r.nome), gerEl("span", "hor-top-h", t("hor_ramo_h", { e: horTexto(r.estudoMin), r: horTexto(r.revisaoMin) })));
-        det.append(rl);
-      });
+  /* a confiança (Domínio) do MESMO edital e fase, e a bandeira ligada onto cada tópico/ramo (nada é medido de novo) */
+  const fase = plano.fase && plano.fase.n === 2 ? 2 : 1;
+  const niveis = horNiveis({ texto: $("editalTexto").value }, fase);
+  m.disciplinas.forEach((d) => {
+    const porTop = niveis.get(d.nome) || new Map();
+    d.topicos.forEach((tp) => {
+      const dm = porTop.get(tp.nome);
+      tp.nivel = dm ? dm.nivel : "cinza";
+      tp.nivelRamos = new Map((dm && dm.ramos || []).map((r) => [r.ramoId, r.nivel]));
     });
-    cx.append(det);
-  }
+  });
+  /* a legenda da confiança: só entra quando há de fato tópicos avaliados (o mesmo mapa existe sempre, mas a legenda
+   * é ruído numa tela sem nenhum sinal ainda) */
+  const legNiv = gerEl("div", "hor-legenda2");
+  ["verde", "amarelo", "azul", "vermelho", "cinza"].forEach((k) => {
+    const it = gerEl("span", "hor-leg"); it.title = t("dom_ajuda_" + k);
+    it.append(gerEl("i", "hor-leg-i dom-n-" + k), document.createTextNode(" " + t("dom_n_" + k)));
+    legNiv.append(it);
+  });
+  cx.append(legNiv);
+  /* busca + filtro + o botão de estudar/registrar seguem os mesmos critérios de sempre (herdados de "Buscar tópico") */
+  const barra = gerEl("div", "hor-busca-barra");
+  const busca = gerEl("input"); busca.type = "search"; busca.id = "horBusca"; busca.className = "mat-busca";
+  busca.placeholder = t("hor_busca_ph"); busca.value = horBusca;
+  busca.oninput = () => { horBusca = busca.value; horPintar(); };
+  barra.append(busca);
+  cx.append(barra);
+  const filtros = gerEl("div", "hor-filtros");
+  HOR_FILTROS.forEach((f) => {
+    const b = gerEl("button", "hor-filtro" + (horFiltro === f ? " ativa" : ""), t("hor_f_" + f)); b.type = "button"; b.id = "horFiltro" + f[0].toUpperCase() + f.slice(1);
+    b.onclick = () => { horFiltro = f; horPintar(); };
+    filtros.append(b);
+  });
+  cx.append(filtros);
+  /* a sanfona: TODAS as disciplinas, a que foi clicada (no gráfico ou na própria lista) vem primeiro e já aberta */
+  const lista = gerEl("div", "hor-lista"); lista.id = "horLista";
+  const ordem = m.disciplinas.slice().sort((a, b) => (a.nome === horDiscAberta ? -1 : 0) - (b.nome === horDiscAberta ? -1 : 0));
+  let algumTopico = false;
+  ordem.forEach((d) => {
+    const topsQueCasam = d.topicos.filter((tp) => horCasa(tp, d.nome));
+    if (!topsQueCasam.length && (horBusca.trim() || horFiltro !== "tudo")) return;
+    algumTopico = true;
+    const aberta = d.nome === horDiscAberta;
+    const row = gerEl("div", "hor-drow" + (aberta ? " hor-drow-aberta" : "")); row.id = "hor-disc-" + d.nome.replace(/\W+/g, "-");
+    const cab = gerEl("div", "hor-drow-cab");
+    cab.append(gerEl("i", "hor-drow-seta", aberta ? "▾" : "▸"));
+    const meio = gerEl("div", "hor-drow-meio");
+    const linha1 = gerEl("div", "hor-drow-l1");
+    linha1.append(gerEl("span", "", d.nome), gerEl("span", "hor-drow-peso", t("cov_peso", { p: d.pesoPct.toFixed(1) })));
+    meio.append(linha1);
+    const trilho = gerEl("div", "hor-drow-trilho");
+    const base = d.planejadoMin || Math.max(60, d.totalMin);
+    const pEst = Math.min(100, (d.estudoMin / base) * 100), pRev = Math.min(100 - pEst, (d.revisaoMin / base) * 100);
+    trilho.append(gerEl("div", "hor-drow-est", ""), gerEl("div", "hor-drow-rev", ""));
+    trilho.children[0].style.width = pEst.toFixed(2) + "%"; trilho.children[1].style.width = pRev.toFixed(2) + "%";
+    meio.append(trilho, gerEl("div", "hor-un", t("hor_un", { a: d.feitas, n: d.unidades })));
+    cab.append(meio);
+    row.append(cab);
+    cab.onclick = () => horAbrirDisc(d.nome);
+    if (aberta) {
+      const det = gerEl("div", "hor-det");
+      const ac = gerEl("div", "hor-acoes");
+      const vc = gerEl("button", "btn-min", t("hor_ver_cobertura")); vc.type = "button";
+      vc.onclick = () => { $("dlgHoras").close(); covAbrir(editalAtual, d.nome); };
+      ac.append(vc);
+      det.append(ac);
+      const cont = covContar(cqLerBiblioteca());
+      (topsQueCasam.length || (!horBusca.trim() && horFiltro === "tudo") ? topsQueCasam : d.topicos).forEach((tp) => {
+        const chave = (d.nome + "›" + tp.nome).toLowerCase();
+        const tl = gerEl("div", "hor-top hor-niv-" + tp.nivel + (tp.revisaoMin > 0 && tp.estudoMin === 0 ? " hor-top-so-rev" : ""));
+        const cx1 = gerEl("input"); cx1.type = "checkbox"; cx1.className = "hor-sel"; cx1.checked = edSelecao.has(chave);
+        cx1.onchange = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (cx1.checked) edSelecao.add(chave); else edSelecao.delete(chave); horPintarLote(); };
+        cx1.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+        const temRamos = tp.ramos && tp.ramos.length > 0;
+        const idAb = "hr|" + chave;
+        const ramosAbertos = !horRamosFechados.has(idAb);
+        const seta = temRamos ? gerEl("span", "hor-top-seta", ramosAbertos ? "▾" : "▸") : gerEl("span", "hor-top-seta", "");
+        if (temRamos) seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (ramosAbertos) horRamosFechados.add(idAb); else horRamosFechados.delete(idAb); horPintar(); };
+        tl.append(cx1, seta, gerEl("span", "hor-top-nome", tp.nome), gerEl("span", "hor-top-h", t("hor_top_h", { e: horTexto(tp.estudoMin), r: horTexto(tp.revisaoMin), a: tp.feitas, n: tp.unidades })));
+        const nc = cont.top.get(matChaveViva(d.nome, tp.nome)) || 0;
+        const bt = gerEl("button", "btn-min" + (nc ? " btn-min-ok" : ""), nc ? t("hor_estudar", { n: nc }) : t("hor_criar")); bt.type = "button";
+        bt.onclick = (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          $("dlgHoras").close();
+          if (nc) estcEstudarTopico(d.nome, tp.nome); else bancAlvoDefinir(d.nome, tp.nome);
+        };
+        tl.append(bt);
+        det.append(tl);
+        if (temRamos && ramosAbertos) tp.ramos.forEach((r) => {
+          const nivR = tp.nivelRamos.get(r.id) || tp.nivel;
+          const rl = gerEl("div", "hor-ramo hor-niv-" + nivR + (r.pulado ? " hor-ramo-pulado" : ""));
+          rl.append(gerEl("span", "hor-top-nome", (r.revisado ? "↻ " : (r.feito ? "✓ " : "○ ")) + r.nome), gerEl("span", "hor-top-h", t("hor_ramo_h", { e: horTexto(r.estudoMin), r: horTexto(r.revisaoMin) })));
+          det.append(rl);
+        });
+      });
+      row.append(det);
+    }
+    lista.append(row);
+  });
+  if (!algumTopico) lista.append(gerEl("p", "nota", t("ed_busca_vazia")));
+  cx.append(lista);
+  /* marcar vários de uma vez: os MESMOS edSelecao/edLoteAplicar de sempre (o "Buscar tópico" antigo usava estes) */
+  const lote = gerEl("div", "hor-lote"); lote.id = "horLote";
+  const conta = gerEl("span", ""); conta.id = "horLoteConta";
+  const bFeito = gerEl("button", "btn-min", t("ed_lote_feito")); bFeito.type = "button"; bFeito.id = "btnHorLoteFeito";
+  bFeito.onclick = async () => { await edLoteAplicar(true); horPintar(); };
+  const bDesf = gerEl("button", "btn-min", t("ed_lote_desfazer")); bDesf.type = "button"; bDesf.id = "btnHorLoteDesfazer";
+  bDesf.onclick = async () => { await edLoteAplicar(false); horPintar(); };
+  const bNada = gerEl("button", "btn-min", t("ed_lote_limpar")); bNada.type = "button"; bNada.id = "btnHorLoteNada";
+  bNada.onclick = () => { edSelecao.clear(); horPintar(); };
+  lote.append(conta, bFeito, bDesf, bNada);
+  cx.append(lote);
+  horPintarLote();
+  const csv = gerEl("button", "btn btn-verde", t("ed_csv")); csv.type = "button"; csv.id = "btnHorCsv";
+  csv.onclick = () => edGerarCsv();
+  cx.append(csv);
 }
 
+/* a barrinha de "N marcados" some sozinha quando não há nada marcado — o mesmo padrão do "Buscar tópico" antigo */
+function horPintarLote() {
+  const b = $("horLote"); if (!b) return;
+  b.classList.toggle("mostra", edSelecao.size > 0);
+  const c = $("horLoteConta"); if (c) c.textContent = t("ed_lote_conta", { n: edSelecao.size });
+}
+
+/* a disciplina clicada (no gráfico ou na sanfona) sobe para o topo da lista, já aberta, e a tela rola até ela */
+function horAbrirDisc(nome) {
+  horDiscAberta = horDiscAberta === nome ? "" : nome;
+  horPintar();
+  if (horDiscAberta) { try { const el = $("hor-disc-" + nome.replace(/\W+/g, "-")); if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" }); } catch (e) {} }
+}
+let horRamosFechados = new Set();
+
 function horAbrir() {
-  horDiscAberta = "";
+  horDiscAberta = ""; horBusca = ""; horFiltro = "tudo"; horRamosFechados = new Set();
   horPintar();
   dicasDosBotoes({ btnEdHoras: "hor_tip_abrir", btnHorX: "hor_tip_x", horPeriodo: "hor_tip_periodo" });
   abrirModal("dlgHoras");

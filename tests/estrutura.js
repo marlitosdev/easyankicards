@@ -43,7 +43,6 @@ const NINHOS = [
   ["btnHistorico", "secFerramentas"],
   ["barraRecuperar", "painelEsquerdo"],
   ["editalTexto", "painelEdital"],
-  ["edTabela", "secEdital"],
   ["bancadaNome", "painelEsquerdo"],
 ];
 

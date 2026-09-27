@@ -639,9 +639,9 @@ function rodar() {
     abrirFoco, fecharFoco, mostrarFoco, blocoMarcado, problemasNavegaveis,
     renderSugestoes, detectoresAtivos, resumoTexto, t, correcaoDeTudo, temLixoIA, corrigirLixoIA,
     cartoesDependentes, cartaoLongo, limiteLongo, problemasDoTexto, MODOS, trocarModo, montarBarraModos, montarDiagnostico,
-    lerEdital, priorizar, montarPlano, edEstadoDosRamos, edTempoDosRamos, ED_PASSOS, edCoberturaDoRamo, edTrilhaDoRamo, edSessaoCombinada, edTrilhaTexto, edMaterialDosRamos, edCredito, edCreditoRev, edRestante, somarPeso, edPainelRamos, edRamosRegistrar, edRamosDesfazer, edRamosPular, edPularRamo, edRamosNaLinha, vkEspelhosDe, vkArquivar, vkChave, gerVista, gerVistaDecidir, DOM_SNAP_CHAVE, domSnapDe, domSnapsGravar, domSegunda, domSerie, domReferencia, domDelta, domSnapsLer, domSnapsSalvar, domSnapGravarHoje, domSnapGarantirTodos, domHojeISO, domLimitesLer, domLimitesGravar, DOM_CH_LIM, domChaveAuto, domFiltroForcar: (v) => { domFiltro = v; }, domAbrir, domPintar, domPorque, domDiscAbertaAtual: () => domDiscAberta, DOM, DOM_NIVEIS, domAcerto, domRetencao, domNivel, domMapa, domEntradas, domDoEdital, covDiscAbertaAtual: () => covDiscAberta, AGD, agdResponder, agdPrevisao, agdFormatar, agdFila, agdFimDoDia, estcNota, estcTrocarModo, estcProxima, estcIdsDoCard, estcMigrarAgenda, estcRegsAtual: () => estcRegs, estcModoAtual: () => estcModo, estcModoForcar: (m) => { try { localStorage.setItem(ESTC_CH_MODO, m); } catch (e) {} }, estcFilaAtual: () => estcFila, ESTC_CH_REGS, ESTC_CH_MODO, HOR, horMapa, horTexto, horDoAberto, horPintar, horAbrir, edDiarioAtual: () => edDiario, edDiarioDefinir: (v) => { edDiario = v; }, bancAlvoDefinir, bancAlvoTextoPrompt, bancAlvoPrompt, bancAlvoSalvar, bancAlvoSair, bancAlvoAtual: () => bancAlvo, BANC_ALVO_CHAVE, COV, covFaixa, covContar, covMapa, covDoEdital, covAbrir, covPintar, covMinimos, COV_CHAVE_MIN, GER_CHAVE_ORDEM, gerTrocarOrdem, gerCaminhoDaPasta, gerPintarOnde, gerOrdemAtual: () => gerOrdem, gerAbrirNoTopico, gerAbrirCaminho, estcUnidades, estcAbrir, estcVirar, estcIr, estcEscolher, estcPintar, estcRotulo, estcMenuMontar, estcApagar, estcEstudarTopico, estcAtual: () => ({ un: estcUn, i: estcI, rev: estcRev, esc: estcEsc, chave: estcChave }), gerOcultarVaziasForcar: (v) => { gerOcultarVazias = v; }, gerVistaAtualLer: () => gerVistaAtual, gerCelularForcar: (v) => { gerCelularForcado = v; }, qsUiLerAbrir, qsUiIrPara, qsLerFsLer, qsLerFsMudar, qsUiDobra, cmPassoDaVez, cmPintarFluxo, cmItensAtual: () => cmItens, vkaInversoInfo, edDarComoEstudadoAqui, vkaAbrir, edMetaRamosLer, edMetaRamosSalvar, edEspelharMarcas, edEspelhoDesfazerMarcas, edEspelhosDesfazer, edEspelharRegistro, regEspelhoPintar, regEspelhoDestsAtual: () => regEspelhoDests, edSemanaCalendario, edPintarRitmo, edRamosDaSemana, edMetaDeRamos, edAbrirPasso, edPesosDosRamos, edAcharItemDoTopico, edTopicosPendentes, semanaAtual, semanasAte, edDetectores,
+    lerEdital, priorizar, montarPlano, edEstadoDosRamos, edTempoDosRamos, ED_PASSOS, edCoberturaDoRamo, edTrilhaDoRamo, edSessaoCombinada, edTrilhaTexto, edMaterialDosRamos, edCredito, edCreditoRev, edRestante, somarPeso, edPainelRamos, edRamosRegistrar, edRamosDesfazer, edRamosPular, edPularRamo, edRamosNaLinha, vkEspelhosDe, vkArquivar, vkChave, gerVista, gerVistaDecidir, DOM_SNAP_CHAVE, domSnapDe, domSnapsGravar, domSegunda, domSerie, domReferencia, domDelta, domSnapsLer, domSnapsSalvar, domSnapGravarHoje, domSnapGarantirTodos, domHojeISO, domLimitesLer, domLimitesGravar, DOM_CH_LIM, domChaveAuto, domFiltroForcar: (v) => { domFiltro = v; }, domAbrir, domPintar, domPorque, domDiscAbertaAtual: () => domDiscAberta, DOM, DOM_NIVEIS, domAcerto, domRetencao, domNivel, domMapa, domEntradas, domDoEdital, covDiscAbertaAtual: () => covDiscAberta, AGD, agdResponder, agdPrevisao, agdFormatar, agdFila, agdFimDoDia, estcNota, estcTrocarModo, estcProxima, estcIdsDoCard, estcMigrarAgenda, estcRegsAtual: () => estcRegs, estcModoAtual: () => estcModo, estcModoForcar: (m) => { try { localStorage.setItem(ESTC_CH_MODO, m); } catch (e) {} }, estcFilaAtual: () => estcFila, ESTC_CH_REGS, ESTC_CH_MODO, HOR, horMapa, horTexto, horDoAberto, horPintar, horAbrir, horAbrirDisc, horDiscAbertaAtual: () => horDiscAberta, edDiarioAtual: () => edDiario, edDiarioDefinir: (v) => { edDiario = v; }, bancAlvoDefinir, bancAlvoTextoPrompt, bancAlvoPrompt, bancAlvoSalvar, bancAlvoSair, bancAlvoAtual: () => bancAlvo, BANC_ALVO_CHAVE, COV, covFaixa, covContar, covMapa, covDoEdital, covAbrir, covPintar, covMinimos, COV_CHAVE_MIN, GER_CHAVE_ORDEM, gerTrocarOrdem, gerCaminhoDaPasta, gerPintarOnde, gerOrdemAtual: () => gerOrdem, gerAbrirNoTopico, gerAbrirCaminho, estcUnidades, estcAbrir, estcVirar, estcIr, estcEscolher, estcPintar, estcRotulo, estcMenuMontar, estcApagar, estcEstudarTopico, estcAtual: () => ({ un: estcUn, i: estcI, rev: estcRev, esc: estcEsc, chave: estcChave }), gerOcultarVaziasForcar: (v) => { gerOcultarVazias = v; }, gerVistaAtualLer: () => gerVistaAtual, gerCelularForcar: (v) => { gerCelularForcado = v; }, qsUiLerAbrir, qsUiIrPara, qsLerFsLer, qsLerFsMudar, qsUiDobra, cmPassoDaVez, cmPintarFluxo, cmItensAtual: () => cmItens, vkaInversoInfo, edDarComoEstudadoAqui, vkaAbrir, edMetaRamosLer, edMetaRamosSalvar, edEspelharMarcas, edEspelhoDesfazerMarcas, edEspelhosDesfazer, edEspelharRegistro, regEspelhoPintar, regEspelhoDestsAtual: () => regEspelhoDests, edSemanaCalendario, edPintarRitmo, edRamosDaSemana, edMetaDeRamos, edAbrirPasso, edPesosDosRamos, edAcharItemDoTopico, edTopicosPendentes, semanaAtual, semanasAte, edDetectores,
     temPesosIguais, ritmoDoPlano, agendar, edPintarRitmo,
-    panoramaDisciplinas, lacunasCriticas, edMudarPeso, edTrocarVista, edPintarPainel, diagnosticoPlano,
+    panoramaDisciplinas, lacunasCriticas, edMudarPeso, edPintarPainel, diagnosticoPlano,
     edConferirColagem, edAplicarColagem, edSimular, edMudarHoras, edMarcar,
     abrirDiario, apagarDoDiario, edDesfazerUltimoRegistro, edMostrarDesfazer, estatisticasDiario, edPorque,
     abrirRegistro, edDespedir, edMarcarLinhasSaindo,
@@ -937,12 +937,11 @@ function rodar() {
     hubIniciar, hubRender, hubNovo, hubVoltar, hubRenomear, hubAbrirEdital,
     hubPintarLista, hubPintarAgenda, hubGravarAberto,
     hubPref, hubPrefGravar, bancAlternar, bancAplicar,
-    /* H5 — busca, filtros e lote (8.72) */
-    edLoteAplicar, edPintarLote,
+    /* Assuntos (17.x) — busca, filtros e lote fundidos em horas-assunto.js */
+    edLoteAplicar, horPintarLote,
     limparProgressoTeste: () => { edProgresso = {}; edSalvar(); },
-    trocarVistaTeste: (v) => edTrocarVista(v),
-    buscarTeste: (q) => { edBusca = q; edRender(); },
-    filtroTeste: (k) => { edFiltro = k; edRender(); },
+    horBuscaTeste: (q) => { horBusca = q; horPintar(); },
+    horFiltroTeste: (k) => { horFiltro = k; horPintar(); },
     selecionarTeste: (n) => {
       edSelecao.clear();
       const r = lerEdital($("editalTexto").value);
@@ -950,7 +949,7 @@ function rodar() {
       r.disciplinas.forEach((d) => d.topicos.forEach((tp) => {
         if (posto++ < n) edSelecao.add((d.nome + "›" + tp.nome).toLowerCase());
       }));
-      edPintarLote();
+      horPintarLote();
     },
     /* auditoria do registro (8.70) */
     t, editaisLista: () => editais, guardar, registroTexto,
