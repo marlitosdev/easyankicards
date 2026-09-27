@@ -720,7 +720,7 @@ function rodar() {
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados, leiEhAlteradora, leiParcelaCitada, leiRegioesCitadas, leiLerCitacoes, leiAlvoDaAlteracao, leiLinhaFechaCitacao, leiLinhaCitacaoInteira, leiMarcaDoFecho, leiContaAspas,
-    toast, toastMsg, leiPreAvisar, leiPreCancelar, leiLinhaDeConteudo, leiDupSoConferir, leiRevogacaoDaLinha, leiRevogacaoDoArtigo, leiRevogacaoDoAnexo, leiOptLinhaRev, leiPintarAnexos,
+    toast, toastMsg, leiPreAvisar, leiPreCancelar, leiLinhaDeConteudo, leiDupSoConferir, leiRevogacaoDaLinha, leiRevogacaoDoArtigo, leiRevogacaoDoAnexo, leiOptLinhaRev, leiPintarAnexos, leiAnexosAlternar, leiAnexosOcultosLer,
     leiMarcarTachado, leiSegmentosDoHtml, leiTirarTachado, leiArtigoRevogado, leiContarRevogados, leiSemDispositivosRevogados, leiHtmlParaTexto, leiCharsetDoHtml, leiDecodificarArquivoHtml, leiTextoDeArquivoHtml, leiArquivoHtmlLido, leiInserirNoCampo, leiIrUnidadesEl, leiIrChipEl, leiCitacaoPreviewAbrir, leiTrocarModo, leiPreIdentificadoresEl, leiUpdPrimeiroAtencao, leiUpdAceitarSeguros, leiTirarMarcasTachado, leiAcharTachados, leiColarComTachado, leiPreOriginal, leiPreConfirmar, leiPreAceita,
     leiCorpoHtml, leiChipsDeAlteracao, leiPreBlocosEl, leiBlocoArtigosTxt, leiPintarLeitura, leiAjusteRisco, leiPreItemEl, leiPreAnexoVerEl,
     lixLer, lixJogar, lixRestaurar, lixRestaurarUi, lixApagarDeVez, lixEsvaziar, lixContar, lixRisco, lixAvisoRisco,

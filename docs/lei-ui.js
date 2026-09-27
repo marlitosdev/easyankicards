@@ -5737,6 +5737,26 @@ function leiNumeracaoDaLei(l) {
   return leiNumeracaoMemo.res;
 }
 
+/* ESCONDER OS 29 ANEXOS DE UMA LEI GRANDE, SEM APAGAR NADA.
+ * Cada anexo já nasce recolhido (um <details> fechado) — mas numa lei como a LC 214/2025,
+ * só as 29 LINHAS de "▸ ANEXO N · tal caracteres" empurram a leitura para baixo da tela.
+ * Um interruptor único esconde a lista inteira (lembrado entre leis, do mesmo jeito que
+ * "ver maior" em Horas por assunto e "ampliar" na Biblioteca de cartões): quem está lendo
+ * o corpo da lei não vê nenhuma linha de anexo até pedir para ver. */
+let _leiAnexosOcultos = null;
+function leiAnexosOcultosLer() {
+  if (_leiAnexosOcultos === null) {
+    try { _leiAnexosOcultos = localStorage.getItem("eac_lei_anexos_ocultos") === "1"; }
+    catch (e) { _leiAnexosOcultos = false; }
+  }
+  return _leiAnexosOcultos;
+}
+function leiAnexosAlternar() {
+  _leiAnexosOcultos = !leiAnexosOcultosLer();
+  try { localStorage.setItem("eac_lei_anexos_ocultos", _leiAnexosOcultos ? "1" : "0"); } catch (e) {}
+  leiPintarAnexos();
+}
+
 /* Os ANEXOS separados na colagem: sob o texto da lei, um bloco recolhível por anexo */
 function leiPintarAnexos() {
   const cx = $("leiAnexos");
@@ -5746,10 +5766,21 @@ function leiPintarAnexos() {
   const an = (l && l.anexos) || [];
   if (!an.length) { cx.hidden = true; return; }
   cx.hidden = false;
+  const ocultos = leiAnexosOcultosLer();
   const h = document.createElement("div");
-  h.className = "duv-titulo";
-  h.textContent = t("lei_anexos_titulo", { n: an.length });
+  h.className = "duv-titulo lei-anexos-cab";
+  const tit = document.createElement("span");
+  tit.textContent = t("lei_anexos_titulo", { n: an.length });
+  h.append(tit);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-min lei-anexos-alternar";
+  btn.textContent = t(ocultos ? "lei_anexos_mostrar" : "lei_anexos_ocultar");
+  btn.title = t("lei_anexos_ocultar_tip");
+  btn.onclick = leiAnexosAlternar;
+  h.append(btn);
   cx.append(h);
+  if (ocultos) return;
   an.forEach((a) => {
     const det = document.createElement("details");
     det.className = "lei-anexo";

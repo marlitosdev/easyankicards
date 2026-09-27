@@ -273,6 +273,30 @@ async function testes() {
     ok(/II\/rev/.test(u5) && /V\/nr/.test(u5), "R5a o mesmo, um inciso por linha: " + u5);
   }
 
+  /* ==============================================================
+   * V (17.40.0): OCULTAR TODOS OS ANEXOS DE UMA VEZ — leis grandes (a LC 214/2025
+   * real tem 29) empurram a leitura para baixo da tela só com as linhas fechadas dos
+   * anexos; um interruptor único esconde a lista inteira, sem apagar nada, e lembra
+   * a escolha entre leis (localStorage), do mesmo jeito que "ver maior"/"ampliar".
+   * ============================================================== */
+  {
+    const { api } = montar();
+    api.leiPintarAnexos();
+    const cx = () => api.$("leiAnexos");
+    ok(achar(cx(), (c) => c.tag === "details" || c.tagName === "DETAILS").length === 2, "V1 comeca mostrando os 2 anexos (nada oculto por padrao)");
+    const btn = () => achar(cx(), (c) => /lei-anexos-alternar/.test(c.className || ""))[0];
+    ok(!!btn() && btn().textContent === api.t("lei_anexos_ocultar"), "V2 o botao comeca dizendo 'ocultar': " + (btn() && btn().textContent));
+    btn().onclick();
+    ok(achar(cx(), (c) => c.tag === "details" || c.tagName === "DETAILS").length === 0, "V3 clicar oculta os anexos (nenhum <details> na tela)");
+    ok(btn().textContent === api.t("lei_anexos_mostrar"), "V3a o botao vira 'mostrar': " + btn().textContent);
+    ok(api.lojaLer("eac_lei_anexos_ocultos") === "1", "V3b a escolha fica guardada");
+    /* repintar de novo (como abrir outra lei faria) tem de continuar oculto */
+    api.leiPintarAnexos();
+    ok(achar(cx(), (c) => c.tag === "details" || c.tagName === "DETAILS").length === 0 && btn().textContent === api.t("lei_anexos_mostrar"), "V4 repintar mantem oculto (a escolha nao e' por lei, e' geral)");
+    btn().onclick();
+    ok(achar(cx(), (c) => c.tag === "details" || c.tagName === "DETAILS").length === 2 && api.lojaLer("eac_lei_anexos_ocultos") === "0", "V5 clicar de novo mostra tudo outra vez");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
