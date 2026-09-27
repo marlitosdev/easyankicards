@@ -4396,6 +4396,22 @@ dialog.hor-dlg[open]{display:flex;flex-direction:column;width:min(1100px,97vw);h
   dialog.hor-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
     padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
 }
+/* ---- BIBLIOTECA NO TELEFONE: ajuda em folha própria e barra de botões enxuta ---- */
+.ger-ajuda-b{display:none;font-weight:800;min-width:34px}
+.ger-ferr-mais{display:none;font-size:18px;line-height:1;padding:4px 12px}
+dialog.ger-ajuda[open]{display:flex;flex-direction:column;width:min(520px,94vw);max-height:90vh;margin:auto;overflow:auto}
+.ger-ajuda-l{margin:8px 0;padding-left:20px;font-size:15px;line-height:1.55}
+.ger-ajuda-l li{margin:0 0 10px}
+.ger-ajuda-fim{display:flex;justify-content:flex-end}
+@media (max-width:760px){
+  #dlgGerCartoes .ger-como{display:none}
+  #dlgGerCartoes .ger-ajuda-b{display:inline-flex}
+  #dlgGerCartoes .ger-ferr-mais{display:inline-flex;align-items:center}
+  #dlgGerCartoes .ger-ferr:not(.ger-ferr-aberto) .ger-sec{display:none}
+  #dlgGerCartoes .ger-ferr .ger-sec[hidden]{display:none}
+  dialog.ger-ajuda[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
+    padding:calc(10px + env(safe-area-inset-top,0px)) 16px calc(12px + env(safe-area-inset-bottom,0px))}
+}
 /* ---- TÓPICO-ALVO DA BANCADA ---- */
 .banc-alvo{margin:8px 0;padding:10px 12px;border-radius:12px;border:2px solid #f0ad4e;background:rgba(240,173,78,.12)}
 .banc-alvo[hidden]{display:none}
@@ -7871,6 +7887,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
     <span class="ger-cab-acoes">
+      <button type="button" class="btn-min ger-ajuda-b" id="btnGerAjuda" aria-label="Ajuda">?</button>
       <button type="button" class="btn-min" id="btnGerCobertura" data-i18n="cov_btn"></button>
       <button type="button" class="btn-min" id="btnGerDominio" data-i18n="dom_btn"></button>
       <button type="button" class="btn-min" id="btnGerAmpliar" aria-pressed="false"></button>
@@ -7923,12 +7940,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div class="ger-onde" id="gerOnde" role="status"></div>
       <div class="ger-ferr">
         <button type="button" class="btn-min btn-min-ok" id="btnGerEstudar" hidden></button>
-        <button type="button" class="btn-min" id="btnGerMarcar" data-i18n="ger_marcar"></button>
-        <button type="button" class="btn-min" id="btnGerLimpar" data-i18n="ger_limpar"></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
-        <button type="button" class="btn-min btn-min-ok" id="btnGerClassificar" data-i18n="ger_classificar" hidden></button>
-        <button type="button" class="btn-min" id="btnGerExportar" data-i18n="ger_exportar" hidden></button>
-        <button type="button" class="btn-min btn-min-ok" id="btnGerRamos" data-i18n="ger_ramos" hidden></button>
+        <button type="button" class="btn-min ger-ferr-mais" id="btnGerFerrMais" aria-expanded="false">⋯</button>
+        <button type="button" class="btn-min ger-sec" id="btnGerMarcar" data-i18n="ger_marcar"></button>
+        <button type="button" class="btn-min ger-sec" id="btnGerLimpar" data-i18n="ger_limpar"></button>
+        <button type="button" class="btn-min btn-min-ok ger-sec" id="btnGerClassificar" data-i18n="ger_classificar" hidden></button>
+        <button type="button" class="btn-min ger-sec" id="btnGerExportar" data-i18n="ger_exportar" hidden></button>
+        <button type="button" class="btn-min btn-min-ok ger-sec" id="btnGerRamos" data-i18n="ger_ramos" hidden></button>
       </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
@@ -7998,6 +8016,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min est-seta" id="btnEstProx" aria-label="Próximo cartão">→</button>
     </div>
   </div>
+</dialog>
+
+<!-- COMO USAR A BIBLIOTECA, no telefone: uma folha por cima (o texto corrido empurrava a lista para fora da tela) -->
+<dialog id="dlgGerAjuda" class="ui-modal ger-ajuda">
+  <div class="cov-cab">
+    <h3 data-i18n="ger_ajuda_tit"></h3>
+    <button type="button" class="qs-x" id="btnGerAjudaX" aria-label="Fechar">✕</button>
+  </div>
+  <ul class="ger-ajuda-l">
+    <li data-i18n="ger_am_1"></li>
+    <li data-i18n="ger_am_2"></li>
+    <li data-i18n="ger_am_3"></li>
+    <li data-i18n="ger_am_4"></li>
+    <li data-i18n="ger_am_5"></li>
+    <li data-i18n="ger_am_6"></li>
+  </ul>
+  <div class="ger-ajuda-fim"><button type="button" class="btn btn-azul" id="btnGerAjudaOk" data-i18n="ger_am_ok"></button></div>
 </dialog>
 
 <!-- COBERTURA DE CARTÕES: tenho cartões para todos os tópicos e ramos do edital, na proporção do peso? -->

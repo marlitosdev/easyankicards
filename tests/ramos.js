@@ -2711,6 +2711,35 @@ async function testes() {
       a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
     }
 
+    /* R72: biblioteca no telefone — ajuda em folha propria e barra de botoes enxuta */
+    {
+      const { a } = MT();
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(["ger-ajuda-b", "ger-ferr-mais", "ger-sec", "ger-ajuda-l", "ger-ajuda-fim", "ger-ferr-aberto"].every((c) => html.indexOf("." + c) >= 0) && /dialog\.ger-ajuda\[open\]/.test(html), "R72a as classes novas tem CSS (e a folha de ajuda tem a regra [open])");
+      ok(/#dlgGerCartoes \.ger-ferr:not\(\.ger-ferr-aberto\) \.ger-sec\{display:none\}/.test(html) && /#dlgGerCartoes \.ger-como\{display:none\}/.test(html), "R72b no telefone o texto corrido some e os botoes secundarios ficam atras do menu");
+      const dlg = html.slice(html.indexOf('<dialog id="dlgGerCartoes"'), html.indexOf("</dialog>", html.indexOf('<dialog id="dlgGerCartoes"')));
+      ["btnGerMarcar", "btnGerLimpar", "btnGerClassificar", "btnGerExportar", "btnGerRamos"].forEach((id) => {
+        ok(new RegExp('class="[^"]*ger-sec[^"]*" id="' + id + '"').test(dlg), "R72c " + id + " e' botao secundario (vai para o menu)");
+      });
+      ok(!/class="[^"]*ger-sec[^"]*" id="(btnGerEstudar|btnGerMarcarTodos)"/.test(dlg), "R72d 'Estudar' e 'Marcar todos' ficam sempre a' vista");
+      a.gerAbrir();
+      a.$("btnGerAjuda").onclick();
+      ok(a.$("dlgGerAjuda").open === true, "R72e o botao ? abre a folha de ajuda");
+      const pt = a.t("ger_am_1") + a.t("ger_am_2") + a.t("ger_am_3") + a.t("ger_am_4") + a.t("ger_am_5") + a.t("ger_am_6");
+      ok(!/arraste/i.test(pt) && /toque/i.test(pt), "R72f o texto do telefone fala em TOQUE, nao em arrastar");
+      a.$("btnGerAjudaOk").onclick();
+      ok(a.$("dlgGerAjuda").open === false, "R72g 'Entendi' fecha a ajuda");
+      const ferr = a.$("btnGerFerrMais").parentNode;
+      ok(!/ger-ferr-aberto/.test(ferr.className), "R72h a barra abre recolhida");
+      a.$("btnGerFerrMais").onclick();
+      ok(/ger-ferr-aberto/.test(ferr.className) && a.$("btnGerFerrMais").getAttribute("aria-expanded") === "true", "R72i o botao ... abre os secundarios");
+      a.$("btnGerFerrMais").onclick();
+      ok(!/ger-ferr-aberto/.test(ferr.className) && a.$("btnGerFerrMais").getAttribute("aria-expanded") === "false", "R72j e fecha de novo");
+      a.$("btnGerFerrMais").onclick(); a.$("dlgGerCartoes").close(); a.gerAbrir();
+      ok(!/ger-ferr-aberto/.test(a.$("btnGerFerrMais").parentNode.className), "R72k ao reabrir a biblioteca a barra volta recolhida");
+      a.$("dlgGerCartoes").close();
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

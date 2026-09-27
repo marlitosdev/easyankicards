@@ -29,7 +29,7 @@ let gerOcultarVazias = false;
  * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
 const GER_DICAS = {
   btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
-  btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
+  btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
@@ -1328,6 +1328,7 @@ function gerAbrir() {
   $("gerBusca").value = ""; $("gerFiltro").value = "todos"; gerAviso("", false);
   gerFecharDestinos();
   gerVistaPasta = "null";
+  try { const f = $("btnGerFerrMais").parentNode; f.className = "ger-ferr"; $("btnGerFerrMais").setAttribute("aria-expanded", "false"); } catch (e) {}
   gerVista("pastas");
   gerCalcular(); gerAbrirRaizes(); gerPintarDestinos(); gerPintar();
   gerAplicarTamanho(gerGrandeLer());
@@ -1374,6 +1375,16 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   dicasDosBotoes({ btnGerCartoes: "ger_btn_aj", btnBancaGer: "ger_btn_aj" });
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
   $("btnGerX").onclick = () => $("dlgGerCartoes").close();
+  /* ajuda em folha própria (telefone) e o menu ⋯ dos botões secundários da lista */
+  $("btnGerAjuda").onclick = () => abrirModal("dlgGerAjuda");
+  $("btnGerAjudaX").onclick = () => $("dlgGerAjuda").close();
+  $("btnGerAjudaOk").onclick = () => $("dlgGerAjuda").close();
+  $("btnGerFerrMais").onclick = () => {
+    const f = $("btnGerFerrMais").parentNode;
+    const aberto = String(f.className).indexOf("ger-ferr-aberto") < 0;
+    f.className = "ger-ferr" + (aberto ? " ger-ferr-aberto" : "");
+    $("btnGerFerrMais").setAttribute("aria-expanded", aberto ? "true" : "false");
+  };
   $("btnGerAbaPastas").onclick = () => gerVista("pastas");
   $("btnGerAbaCartoes").onclick = () => gerVista("cartoes");
   $("btnGerAbaPrevia").onclick = () => gerVista("previa");
