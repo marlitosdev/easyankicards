@@ -346,8 +346,7 @@ async function testes() {
       });
       return out;
     };
-    const selos = achar(api.$("edAgendaTopo"), [])
-      .concat(achar(api.$("edTabela"), []));
+    const selos = achar(api.$("edAgendaTopo"), []);
     ok(selos.length > 0,
        "D7 o vinculo sem material nao pos selo nenhum na tela — era "
        + "exatamente o buraco: avisar DEPOIS de estudar nao serve");
