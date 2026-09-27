@@ -1563,52 +1563,102 @@ function leiAlvoEscolher(curto, id) {
   try { leiReg("consulta", "lei consultada escolhida", curto + " → " + ((leiDe(id) || {}).nome || id)); } catch (e) {}
   leiPintar();
 }
-/* a faixa acima da leitura: "esta lei ALTERA a Constituição Federal…", qual lei será consultada e o que fazer se não há */
+/* ACIMA de um pequeno número de leis citadas, a faixa some de linha em linha — a LC 214/2025
+ * real altera ~35 leis, e 35 linhas de "Esta lei ALTERA Lei nº X…" empurram o Art. 1º para
+ * fora da tela, o mesmo problema que a lista de anexos tinha (ver leiAnexosOcultosLer). Acima
+ * do limite, some só um resumo ("altera N outras leis · M fora da sua biblioteca") com um botão
+ * para expandir a lista inteira; a escolha de expandir fica lembrada entre leis, do mesmo jeito. */
+const LEI_FAIXA_ALVO_LIMITE = 3;
+let _leiFaixaAlvoExpandida = null;
+function leiFaixaAlvoExpandidaLer() {
+  if (_leiFaixaAlvoExpandida === null) {
+    try { _leiFaixaAlvoExpandida = localStorage.getItem("eac_lei_faixa_alvo_expandida") === "1"; }
+    catch (e) { _leiFaixaAlvoExpandida = false; }
+  }
+  return _leiFaixaAlvoExpandida;
+}
+function leiFaixaAlvoAlternar() {
+  _leiFaixaAlvoExpandida = !leiFaixaAlvoExpandidaLer();
+  try { localStorage.setItem("eac_lei_faixa_alvo_expandida", _leiFaixaAlvoExpandida ? "1" : "0"); } catch (e) {}
+  leiFaixaAlvoPintar(leiAlvoCtx);
+}
+/* uma linha da faixa: "esta lei ALTERA a Constituição Federal…", qual lei será consultada e o que fazer se não há */
+function leiFaixaAlvoLinha(cu, p) {
+  const lin = document.createElement("div");
+  lin.className = "lei-faixa-lin";
+  lin.title = t("lei_alvo_faixa_tip");
+  const tx = document.createElement("span");
+  tx.textContent = t("lei_alvo_faixa", { lei: cu, n: p.artigos });
+  lin.append(tx);
+  if (p.cands.length) {
+    const sel = document.createElement("select");
+    sel.className = "lei-faixa-sel";
+    sel.title = t("lei_alvo_sel_tip");
+    p.cands.forEach((c) => {
+      const o = document.createElement("option");
+      o.value = c.id;
+      o.textContent = c.nome + (c.confianca === "alta" ? "" : " (" + t("lei_alvo_media") + ")");
+      sel.append(o);
+    });
+    sel.value = p.escolhida.id;
+    sel.onchange = () => leiAlvoEscolher(cu, sel.value);
+    const nota = document.createElement("span");
+    nota.className = "nota";
+    nota.textContent = t(p.decidida ? "lei_alvo_decidida" : "lei_alvo_sugerida", { m: p.escolhida.motivo });
+    nota.title = p.escolhida.motivo;
+    lin.append(sel, nota);
+  } else {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min";
+    b.textContent = t("lei_alvo_adicionar");
+    b.title = t("lei_alvo_adicionar_tip", { lei: cu });
+    b.onclick = () => { if (typeof leiBibAbrir === "function") leiBibAbrir(); };
+    const nota = document.createElement("span");
+    nota.className = "nota";
+    nota.textContent = t("lei_alvo_ausente", { lei: cu });
+    lin.append(nota, b);
+  }
+  return lin;
+}
 function leiFaixaAlvoPintar(ctx) {
   const box = $("leiFaixaAlvo");
   if (!box) return;
   box.innerHTML = "";
   box.hidden = !ctx;
   if (!ctx) return;
-  Object.keys(ctx.porCurto).forEach((cu) => {
-    const p = ctx.porCurto[cu];
+  const curtos = Object.keys(ctx.porCurto);
+  const muitas = curtos.length > LEI_FAIXA_ALVO_LIMITE;
+  if (muitas && !leiFaixaAlvoExpandidaLer()) {
+    const ausentes = curtos.filter((cu) => !ctx.porCurto[cu].cands.length).length;
     const lin = document.createElement("div");
     lin.className = "lei-faixa-lin";
-    lin.title = t("lei_alvo_faixa_tip");
     const tx = document.createElement("span");
-    tx.textContent = t("lei_alvo_faixa", { lei: cu, n: p.artigos });
-    lin.append(tx);
-    if (p.cands.length) {
-      const sel = document.createElement("select");
-      sel.className = "lei-faixa-sel";
-      sel.title = t("lei_alvo_sel_tip");
-      p.cands.forEach((c) => {
-        const o = document.createElement("option");
-        o.value = c.id;
-        o.textContent = c.nome + (c.confianca === "alta" ? "" : " (" + t("lei_alvo_media") + ")");
-        sel.append(o);
-      });
-      sel.value = p.escolhida.id;
-      sel.onchange = () => leiAlvoEscolher(cu, sel.value);
-      const nota = document.createElement("span");
-      nota.className = "nota";
-      nota.textContent = t(p.decidida ? "lei_alvo_decidida" : "lei_alvo_sugerida", { m: p.escolhida.motivo });
-      nota.title = p.escolhida.motivo;
-      lin.append(sel, nota);
-    } else {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "btn-min";
-      b.textContent = t("lei_alvo_adicionar");
-      b.title = t("lei_alvo_adicionar_tip", { lei: cu });
-      b.onclick = () => { if (typeof leiBibAbrir === "function") leiBibAbrir(); };
-      const nota = document.createElement("span");
-      nota.className = "nota";
-      nota.textContent = t("lei_alvo_ausente", { lei: cu });
-      lin.append(nota, b);
-    }
+    tx.textContent = t("lei_alvo_faixa_resumo", { n: curtos.length, m: ausentes });
+    tx.title = t("lei_alvo_faixa_tip");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-min lei-faixa-alternar";
+    btn.textContent = t("lei_alvo_faixa_expandir");
+    btn.title = t("lei_alvo_faixa_expandir_tip");
+    btn.onclick = leiFaixaAlvoAlternar;
+    lin.append(tx, btn);
     box.append(lin);
-  });
+    return;
+  }
+  if (muitas) {
+    const lin = document.createElement("div");
+    lin.className = "lei-faixa-lin";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-min lei-faixa-alternar";
+    btn.textContent = t("lei_alvo_faixa_recolher");
+    btn.title = t("lei_alvo_faixa_recolher_tip");
+    btn.onclick = leiFaixaAlvoAlternar;
+    lin.append(btn);
+    box.append(lin);
+  }
+  curtos.forEach((cu) => { box.append(leiFaixaAlvoLinha(cu, ctx.porCurto[cu])); });
 }
 /* o "…" de um artigo citado: com o alvo achado, ele diz a que dispositivos corresponde ("= §§ 1º a 3º · art. 43 de Constituição Federal") */
 function leiLacunaChip(id, reg) {
