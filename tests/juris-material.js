@@ -352,6 +352,17 @@ async function testes() {
     ok(/classe/.test(p) && /número/.test(p),
        "J7c o prompt não diz quais campos estão vazios: sem a lista, a "
        + "IA devolve todos e o app tem de recusar a maioria");
+    /* v17.42.0: o caso real foi a IA citar a própria tese oficial (que já
+     * vem entre aspas) dentro de "sugestao" sem escapar as aspas internas —
+     * o JSON quebrava e a resposta inteira era recusada como "não é JSON".
+     * O prompt agora pede a barra invertida antes de aspas internas. */
+    ok(/ASPAS DENTRO DE UM VALOR JSON PRECISAM DE \\ NA FRENTE/.test(p),
+       "J7d o prompt avisa para escapar aspas internas dentro de um valor "
+       + "JSON (a causa real de citar a tese oficial dentro de \"sugestao\" "
+       + "sem escapar): " + p.slice(p.indexOf("10. Nada de markdown")));
+    ok(/\\"trecho assim\\"/.test(p),
+       "J7e o exemplo do aviso mostra a barra invertida antes da aspas "
+       + "(\\\"trecho assim\\\"), não só descreve a regra");
   }
 
   /* ==============================================================
