@@ -359,7 +359,8 @@ function qsSepararOpcoesInline(bloco) {
   return bloco;
 }
 
-function qsNoTexto(txt) {
+function qsNoTexto(txt, opts) {
+  const solto = !!(opts && opts.solto);
   const linhas = String(txt || "").split("\n");
   const blocos = [];
   let aberto = null;
@@ -432,13 +433,42 @@ function qsNoTexto(txt) {
         + cru.replace(/^\s*(?:\*\*)?\s*Fundamenta[çc][ãa]o\s*(?:\*\*)?\s*:?\s*/i, "");
       return;
     }
-    if (!aberto) return;
+    if (!aberto) {
+      /* MODO SOLTO — texto de prova já pronto, sem a palavra "Questão".
+       * Cada questão se fecha sozinha no "Gabarito:" (abaixo), então a
+       * linha que vem logo depois de um bloco fechado — ou o começo do
+       * texto — já é o começo da próxima. Não precisa de rótulo nenhum. */
+      if (solto && cru) {
+        const mp = cru.match(/^\(([^)]*)\)\s*(.*)$/);
+        aberto = { ini: i, num: "", rotulo: mp ? mp[1].trim() : "",
+          enunciado: (mp ? mp[2] : cru).trim(), opcoes: [], gabarito: "", comentario: "" };
+        qsSepararOpcoesInline(aberto);
+      }
+      return;
+    }
 
     /* opção em linha própria */
     const mo = cru.match(/^([A-Ea-e])\s*[).]\s+(.+)$/);
     if (mo && !aberto.gabarito) {
       aberto.opcoes.push({ letra: mo[1].toUpperCase(), txt: mo[2].trim() });
       return;
+    }
+
+    /* MODO SOLTO — "Comentário:" é campo PRÓPRIO, sempre ANTES do gabarito
+     * (o formato "Questão"/QS_RESP só conhece comentário como o resto da
+     * própria linha do gabarito). Acumula até a linha "Gabarito:" fechar o
+     * bloco: o comentário real costuma vir em vários parágrafos, um por
+     * alternativa descartada. */
+    if (solto) {
+      const mcm = cru.match(/^\s*Coment[áa]rio\s*:?\s*(.*)$/i);
+      if (mcm) {
+        aberto.comentario = (aberto.comentario ? aberto.comentario + " " : "") + mcm[1].trim();
+        return;
+      }
+      if (aberto.comentario && !QS_RESP.test(cru) && cru) {
+        aberto.comentario = aberto.comentario + " " + cru;
+        return;
+      }
     }
 
     const mr = cru.match(QS_RESP);
@@ -452,19 +482,21 @@ function qsNoTexto(txt) {
           .test(resto.trim())) {
         return;
       }
-      const porLetra = resto.match(/^([A-E])\b[.)]?\s*(.*)$/);
+      /* "Letra E" tanto quanto "E": alguns cursinhos escrevem por extenso. */
+      const porLetra = resto.match(/^(?:Letra\s+)?([A-Ea-e])\b[.)]?\s*(.*)$/i);
       const porPalavra = resto.match(/^(Sim|N[ãa]o|Certo|Errado|Verdadeiro|Falso)\b[.,]?\s*(.*)$/i);
       if (aberto.opcoes.length && porLetra) {
-        aberto.gabarito = porLetra[1]; aberto.comentario = porLetra[2];
+        aberto.gabarito = porLetra[1].toUpperCase();
+        aberto.comentario = [aberto.comentario, porLetra[2]].filter(Boolean).join(" ").trim();
       } else if (porPalavra) {
         const p0 = qsNormal(porPalavra[1]);
         aberto.gabarito = /^(sim|certo|verdadeiro)/.test(p0) ? "C" : "E";
-        aberto.comentario = porPalavra[2];
+        aberto.comentario = [aberto.comentario, porPalavra[2]].filter(Boolean).join(" ").trim();
       } else {
         /* resposta sem gabarito reconhecível: não dá para responder, então
          * não vira questão — mas o bloco fica registrado como incompleto
          * para poder ser mostrado na importação com o motivo. */
-        aberto.comentario = resto;
+        aberto.comentario = [aberto.comentario, resto].filter(Boolean).join(" ").trim();
       }
       qsSepararOpcoesInline(aberto);
       aberto.fim = i;

@@ -538,6 +538,103 @@ function testes() {
        "Q15b a sem topico entrou na conta de um topico que nao e dela");
   }
 
+  /* =====================================================================
+   * Q16: MODO SOLTO — texto de prova já pronto, sem a palavra "Questão"
+   *
+   * O CASO REAL: um texto copiado de um PDF de questões comentadas, cada
+   * uma no formato "(banca/ano) enunciado" + alternativas a)...e) +
+   * "Comentário: ..." (campo PRÓPRIO, antes do gabarito) + "Gabarito: X"
+   * (às vezes por extenso, "Gabarito: Letra E"). qsNoTexto SEM {solto:true}
+   * nunca reconhecia nada disso — faltava a palavra "Questão".
+   * ===================================================================== */
+  {
+    const TEMA299 = [
+      "(SEFAZ-RJ-Auditor/2025) Segundo o entendimento majoritário do Supremo Tribunal Federal (STF), o sistema",
+      "vigente de classificação de tributos quanto à sua espécie segue a teoria",
+      "a) dicotômica.",
+      "b) tricotômica.",
+      "c) bipartite.",
+      "d) tripartite.",
+      "e) pentapartite.",
+      "Comentário: O Supremo Tribunal Federal adota a teoria pentapartite para classificar os tributos, conforme",
+      "interpretação do art. 145 da Constituição Federal. Assim, reconhece-se cinco espécies tributárias: impostos,",
+      "taxas, contribuições de melhoria, empréstimos compulsórios e contribuições especiais (estas últimas",
+      "previstas nos arts. 149 e 195 da CF).",
+      "Gabarito: Letra E",
+    ].join("\n");
+    /* ---- Q16a: SEM opts.solto, nada disso vira questão (opt-in de propósito) ---- */
+    const semSolto = q.qsNoTexto(TEMA299);
+    ok(!semSolto.some((b) => b.completa),
+       "Q16a sem {solto:true} o texto solto nao pode virar questao sozinho");
+
+    /* ---- Q16b: COM opts.solto, a questao inteira e' reconhecida ---- */
+    const b1 = q.qsNoTexto(TEMA299, { solto: true });
+    ok(b1.length === 1 && b1[0].completa, "Q16b a questao do Tema 299 nao foi reconhecida: " + JSON.stringify(b1));
+    ok(b1[0].rotulo === "SEFAZ-RJ-Auditor/2025",
+       "Q16c o parentese do inicio nao virou rotulo: " + JSON.stringify(b1[0].rotulo));
+    ok(/^Segundo o entendimento/.test(b1[0].enunciado) && /teoria$/.test(b1[0].enunciado),
+       "Q16d o enunciado em duas linhas nao foi juntado: " + JSON.stringify(b1[0].enunciado));
+    ok(b1[0].tipo === "me" && b1[0].opcoes.length === 5 && b1[0].opcoes[4].letra === "E",
+       "Q16e as 5 alternativas em minuscula nao foram lidas: " + JSON.stringify(b1[0].opcoes));
+    ok(b1[0].gabarito === "E", "Q16f 'Gabarito: Letra E' nao virou E: " + b1[0].gabarito);
+    ok(/adota a teoria pentapartite/.test(b1[0].comentario) && !/^Gabarito/.test(b1[0].comentario),
+       "Q16g o comentario (campo proprio, ANTES do gabarito) nao foi lido: " + JSON.stringify(b1[0].comentario));
+
+    /* ---- Q16h: comentario em VARIOS PARAGRAFOS (um por alternativa) ---- */
+    const PGECE = [
+      "A natureza jurídica específica do tributo é determinada",
+      "a) pela denominação estabelecida na Constituição.",
+      "b) pela destinação do produto da sua arrecadação.",
+      "c) pelas características formais fixadas em lei tributária.",
+      "d) pelo fato gerador da respectiva obrigação.",
+      "e) pelos sujeitos ativo e passivo da obrigação.",
+      "Comentário: A questão trata dos critérios para determinação da natureza jurídica dos tributos.",
+      "Letra A: Errada. A denominação não determina a natureza jurídica do tributo, art. 4º, I, do CTN.",
+      "Letra D: Correta. Conforme o art. 4º do CTN, a natureza jurídica específica do tributo é determinada",
+      "pelo fato gerador da respectiva obrigação.",
+      "Gabarito: D",
+    ].join("\n");
+    const b2 = q.qsNoTexto(PGECE, { solto: true });
+    ok(b2.length === 1 && b2[0].completa && b2[0].gabarito === "D",
+       "Q16h a segunda questao (gabarito por extenso curto) nao foi reconhecida: " + JSON.stringify(b2));
+    ok(/Letra A: Errada/.test(b2[0].comentario) && /Letra D: Correta/.test(b2[0].comentario),
+       "Q16i o comentario em varios paragrafos nao foi todo juntado: " + JSON.stringify(b2[0].comentario));
+    ok(!b2[0].rotulo, "Q16j sem parentese no inicio, nao pode inventar rotulo");
+
+    /* ---- Q16k: as DUAS questoes, uma atras da outra, no mesmo texto colado ---- */
+    const juntas = q.qsNoTexto([TEMA299, PGECE].join("\n"), { solto: true });
+    ok(juntas.length === 2 && juntas.every((b) => b.completa),
+       "Q16k as duas questoes coladas juntas deviam virar 2 blocos completos: " + JSON.stringify(juntas.map((b) => b.completa)));
+    const conv = q.qsDeBlocos(juntas, CTX);
+    ok(conv.length === 2 && conv.every((c) => c.origem === "texto" && c.chave === CTX.chave),
+       "Q16l a conversao para o formato do banco perdeu alguma questao ou o topico");
+  }
+
+  /* ---- Q17: MODO SOLTO nao contamina o formato da IA na mesma caixa ----
+   * O DEFEITO REAL (pego pelos testes de tela): sem essa guarda, o modo
+   * solto lia "[QUESTAO]"/"TIPO:"/"BANCA:" como enunciado corrido comum, e
+   * a linha "A) opcao" da IA virava uma opcao de uma questao FANTASMA que
+   * fechava sozinha no "GABARITO: ..." dela — acrescentando um achado
+   * mutilado por cima do que qsLerResposta ja tinha lido certo. */
+  {
+    const RESPOSTA_IA = [
+      "[QUESTAO]",
+      "TIPO: ME",
+      "BANCA: FGV",
+      "ENUNCIADO: Qual o fundamento?",
+      "A) PPA",
+      "B) Transparencia",
+      "GABARITO: B",
+      "COMENTARIO: Postulados republicanos.",
+      "[/QUESTAO]",
+    ].join("\n");
+    const lida = q.qsLerResposta(RESPOSTA_IA, CTX);
+    ok(lida.achados.length === 1, "Q17 premissa: a IA formatada continua lendo 1 questao normalmente");
+    const soltoSobreRespostaIA = q.qsNoTexto(RESPOSTA_IA, { solto: true });
+    ok(soltoSobreRespostaIA.some((b) => b.completa),
+       "Q17b premissa: sem guarda, o modo solto TAMBEM acha algo nesse texto (por isso a guarda mora na tela)");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

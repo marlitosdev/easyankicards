@@ -359,48 +359,84 @@ function qsUiRefazerPrompt() {
   if ($("btnQsCopiarPrompt")) $("btnQsCopiarPrompt").disabled = false;
 }
 
+/* DUAS LEITURAS POSSÍVEIS PARA A MESMA CAIXA, NUNCA AS DUAS AO MESMO TEMPO.
+ * "[QUESTAO]", "? CE ::" e os campos nomeados (TIPO:/BANCA:/ENUNCIADO:) são
+ * marcas inequívocas do formato que a IA devolve. Rodar os dois parsers
+ * sempre, incondicionalmente, tem dois defeitos: (1) o detector solto lia
+ * "[QUESTAO] TIPO: ME BANCA: …" como enunciado corrido comum, e a linha
+ * "A) opção" da IA virava opção de uma QUESTÃO FANTASMA que fechava sozinha
+ * no "GABARITO: …" dela — um achado mutilado por cima do que já tinha sido
+ * lido certo; (2) o inverso também é ruim: qsLerResposta, ao ler um texto
+ * pronto que ele não entende, marca CADA LINHA como "linha solta, fora de
+ * qualquer questão" — nove linhas de ruído para uma questão só. Por isso a
+ * escolha do parser é EXCLUSIVA, pelo formato do texto colado.
+ * "GABARITO:"/"COMENTARIO:" ficam de fora do teste: são também os nomes dos
+ * campos do texto pronto (sem acento "GABARITO" bate com os dois; com
+ * acento "COMENTÁRIO" só existe no formato solto). */
+function qsPareceRespostaDeIA(txt) {
+  return /\[\s*\/?\s*QUEST[ÃA]O\s*\]/i.test(txt)
+    || /^\s*\?\s*[A-Za-z]{2,4}\s*::/m.test(txt)
+    || /^\s*(TIPO|BANCA|ENUNCIADO)\s*:/im.test(txt);
+}
+
 function qsUiConferir() {
-  const r = qsLerResposta($("qsCriarResposta").value, qsUiCtxCriar || {});
+  const bruto = $("qsCriarResposta").value;
+  /* A MESMA CAIXA aceita ou a resposta da IA (os dois formatos que
+   * qsLerResposta entende) OU um texto de prova já pronto — enunciado,
+   * alternativas a)...e), "Comentário:" e "Gabarito:" — copiado direto de
+   * um PDF ou cursinho, sem passar pela IA. qsNoTexto(..., {solto:true}) é
+   * o mesmo detector usado no resumo, só sem exigir a palavra "Questão". */
+  const ehRespostaDeIA = qsPareceRespostaDeIA(bruto);
+  const r = ehRespostaDeIA ? qsLerResposta(bruto, qsUiCtxCriar || {}) : { achados: [], ignoradas: [] };
+  const blocosProntos = ehRespostaDeIA ? [] : qsNoTexto(bruto, { solto: true });
+  const prontas = qsDeBlocos(blocosProntos.filter((b) => b.completa), qsUiCtxCriar || {});
+  const incompletas = blocosProntos.filter((b) => !b.completa).map((b) => ({
+    linha: b.ini + 1, txt: String(b.enunciado || "").slice(0, 70),
+    motivo: b.gabarito ? "sem_enunciado" : "sem_gabarito",
+  }));
+  const ignoradas = r.ignoradas.concat(incompletas);
   /* SOMA às que vieram do texto, em vez de substituir: quem pediu mais à IA
    * não quis abrir mão das que já tinha. Sem duplicar o que a IA devolveu
-   * igual ao que já estava escrito. */
+   * (ou o texto pronto) igual ao que já estava escrito. */
   const juntas = qsUiDoTexto.slice();
   let repetidas = 0;
-  r.achados.forEach((q) => {
+  r.achados.concat(prontas).forEach((q) => {
     if (juntas.some((v) => qsNormal(v.enunciado) === qsNormal(q.enunciado))) {
       repetidas++; return;
     }
     juntas.push(q);
   });
-  qsUiPintarConf(juntas, r.ignoradas);
+  qsUiPintarConf(juntas, ignoradas);
   /* REGISTRO PARA MELHORAR O PROMPT.
    * Só o total não ajuda: para saber o que ajustar é preciso saber POR QUE
    * cada uma foi recusada e quantas de cada motivo. É este detalhe que
    * transforma "2 recusadas" em "a IA não fecha o gabarito em CE". */
   const porMotivo = {};
-  r.ignoradas.forEach((x) => { porMotivo[x.motivo] = (porMotivo[x.motivo] || 0) + 1; });
+  ignoradas.forEach((x) => { porMotivo[x.motivo] = (porMotivo[x.motivo] || 0) + 1; });
   const detalhe = Object.keys(porMotivo).sort()
     .map((k) => k + "×" + porMotivo[k]).join(", ");
+  const lidas = r.achados.length + prontas.length;
   matReg("questao", "conferência de questões",
-         r.achados.length + " da IA · " + repetidas + " repetidas do texto · "
-         + r.ignoradas.length + " recusadas"
+         lidas + " lidas (" + r.achados.length + " da IA, " + prontas.length + " de texto pronto) · "
+         + repetidas + " repetidas do texto · "
+         + ignoradas.length + " recusadas"
          + (detalhe ? " · motivos: " + detalhe : "")
-         + " · formato: " + (/\[QUESTAO\]/i.test($("qsCriarResposta").value)
-             ? "campos nomeados" : "linha compacta"));
+         + " · formato: " + (/\[QUESTAO\]/i.test(bruto)
+             ? "campos nomeados" : (prontas.length ? "texto pronto" : "linha compacta")));
   /* O MESMO no registro da geração — e ali com os motivos linha a linha,
    * não só a contagem por motivo. "gabarito_fora_das_opcoes×2" diz o que
    * ajustar no prompt; a linha e o enunciado dizem QUAL questão. */
   try {
     gerReg("questoes", "leitura", "resposta da IA conferida",
-      r.achados.length + " lida(s) · " + repetidas + " repetida(s) do texto · "
-      + r.ignoradas.length + " recusada(s)"
-      + " · formato: " + (/\[QUESTAO\]/i.test($("qsCriarResposta").value)
-          ? "campos nomeados" : "linha compacta"),
+      lidas + " lida(s) · " + repetidas + " repetida(s) do texto · "
+      + ignoradas.length + " recusada(s)"
+      + " · formato: " + (/\[QUESTAO\]/i.test(bruto)
+          ? "campos nomeados" : (prontas.length ? "texto pronto" : "linha compacta")),
       { topico: (qsUiCtxCriar || {}).topico || "",
         disciplina: (qsUiCtxCriar || {}).disciplina || "",
-        motivos: r.ignoradas,
-        numeros: { lidas: r.achados.length, repetidas,
-                   recusadas: r.ignoradas.length } });
+        motivos: ignoradas,
+        numeros: { lidas, repetidas,
+                   recusadas: ignoradas.length } });
   } catch (e) {}
 }
 

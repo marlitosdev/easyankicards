@@ -2455,6 +2455,72 @@ async function testes() {
     ok(/classList\.add\("tem-modal"\)/.test(app) && /classList\.remove\("tem-modal"\)/.test(app), "K21p abrir uma janela modal trava o fundo e fechar a ultima destrava");
   }
 
+  /* ==========================================================================
+   * V1: A CAIXA "COLE AQUI A RESPOSTA" TAMBÉM ACEITA UM TEXTO DE PROVA JÁ PRONTO
+   *
+   * O CASO REAL: um texto de questões comentadas copiado de um PDF/cursinho,
+   * sem passar por IA nenhuma — enunciado (às vezes com "(banca/ano)" antes),
+   * alternativas a)...e), "Comentário:" e "Gabarito:" (às vezes "Letra X").
+   * Antes só dava para colar isso se já tivesse a palavra "Questão"; agora a
+   * mesma caixa de "colar resposta da IA" reconhece esse formato também.
+   * ========================================================================== */
+  {
+    const { api: aV } = rodar();
+    aV.matIniciar(); aV.qsUiIniciar();
+    aV.matGravar(aV.matChave("Direito Tributário", "Espécies tributárias"),
+      "Texto qualquer do resumo, sem questao nenhuma escrita nele.",
+      { disciplina: "Direito Tributário", topico: "Espécies tributárias" });
+    aV.matAbrirEditor({ disciplina: "Direito Tributário", nome: "Espécies tributárias" }, "ler");
+    aV.qsUiResponderDoTopico();
+    ok(aV.$("dlgQsCriar").open === true, "V1 a janela de criar nao abriu");
+
+    aV.$("qsCriarResposta").value = [
+      "(SEFAZ-RJ-Auditor/2025) Segundo o entendimento majoritário do STF, o sistema",
+      "vigente de classificação de tributos quanto à sua espécie segue a teoria",
+      "a) dicotômica.",
+      "b) tricotômica.",
+      "c) bipartite.",
+      "d) tripartite.",
+      "e) pentapartite.",
+      "Comentário: O STF adota a teoria pentapartite, conforme o art. 145 da CF.",
+      "Gabarito: Letra E",
+    ].join("\n");
+    aV.qsUiConferir();
+    ok(aV.$("qsCriarConf").querySelectorAll(".qs-conf").length === 1,
+       "V2 o texto de prova pronto (sem passar pela IA) nao virou questao na conferencia");
+    ok(aV.$("qsCriarConf").querySelectorAll(".qs-conf-ruim").length === 0,
+       "V2b a questao completa nao devia aparecer como recusada");
+    ok(aV.$("btnQsCriarAplicar").disabled === false, "V2c gravar continua bloqueado depois de conferir");
+    aV.qsUiAplicar();
+    ok(aV.qsTodas().length === 1, `V3 nao gravou a questao do texto pronto (${aV.qsTodas().length})`);
+    const grav = aV.qsTodas()[0];
+    ok(grav.gabarito === "E" && grav.opcoes.length === 5 && grav.tipo === "me",
+       "V3b a questao gravada nao tem o gabarito/alternativas certos: " + JSON.stringify(grav));
+    ok(grav.origem === "texto", "V3c a origem devia ser 'texto', igual ao que ja' vinha escrito no resumo");
+
+    /* V4 — colar a resposta de uma IA continua funcionando do mesmo jeito,
+     * SEM o modo solto contaminar o resultado com uma questao fantasma */
+    aV.matAbrirEditor({ disciplina: "Direito Tributário", nome: "Espécies tributárias" }, "ler");
+    aV.qsUiResponderDoTopico();
+    aV.$("qsCriarResposta").value = [
+      "[QUESTAO]",
+      "TIPO: ME",
+      "BANCA: FGV",
+      "ENUNCIADO: Qual o fundamento do STF?",
+      "A) PPA",
+      "B) Transparencia",
+      "GABARITO: B",
+      "COMENTARIO: Postulados republicanos.",
+      "[/QUESTAO]",
+    ].join("\n");
+    aV.qsUiConferir();
+    ok(aV.$("qsCriarConf").querySelectorAll(".qs-conf").length === 1,
+       "V4 a resposta normal da IA nao pode virar 2 (a IA formatada nao roda o modo solto): "
+       + aV.$("qsCriarConf").querySelectorAll(".qs-conf").length);
+    aV.qsUiAplicar();
+    ok(aV.qsTodas().length === 2, `V4b devia haver 2 questoes gravadas no total, ha ${aV.qsTodas().length}`);
+  }
+
   falhas.quantas = n;
   return falhas;
 }
