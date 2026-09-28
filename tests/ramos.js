@@ -2800,6 +2800,59 @@ async function testes() {
       a.$("dlgGerCartoes").close();
     }
 
+    /* R73: a faixa "esta lei ALTERA..." vira um RESUMO quando a lei muda muitas outras leis —
+     * a LC 214/2025 real altera ~35, e uma linha por lei empurra o Art. 1º para fora da tela
+     * (o mesmo problema que os anexos tinham). Acima do limite, mostra so' "altera N outras
+     * leis · M fora da sua biblioteca" com um botao para expandir a lista inteira; a escolha de
+     * expandir fica lembrada entre leis (localStorage), do mesmo jeito que os anexos. */
+    {
+      const { a } = MT();
+      const NL = String.fromCharCode(10);
+      const pts = ".".repeat(60);
+      const CTN = ["LEI Nº 5.172, DE 25 DE OUTUBRO DE 1966", "", "Dispõe sobre o Sistema Tributário Nacional.", "",
+        "Art. 9º Texto do artigo 9.", "Art. 10. Outro artigo qualquer do Código."].join(NL);
+      const LC = ["LEI COMPLEMENTAR Nº 214, DE 16 DE JANEIRO DE 2025", "Institui outras providências.", "",
+        "Art. 1º A Lei nº 5.172, de 25 de outubro de 1966 (Código Tributário Nacional), passa a vigorar com as seguintes alterações:", "",
+        '"Art. 9º ' + pts, pts + '" (NR)', "",
+        "Art. 2º O Decreto-Lei nº 37, de 18 de novembro de 1966, passa a vigorar com a seguinte redação:", "",
+        '"Art. 44 ' + pts, pts + '" (NR)', "",
+        "Art. 3º A Lei nº 10.931, de 2 de agosto de 2004, passa a vigorar com as seguintes alterações:", "",
+        '"Art. 3º ' + pts, pts + '" (NR)', "",
+        "Art. 4º A Lei nº 7.998, de 11 de janeiro de 1990, passa a vigorar com as seguintes alterações:", "",
+        '"Art. 11. ' + pts, pts + '" (NR)', "",
+        "Art. 5º Esta Lei Complementar entra em vigor na data de sua publicação."].join(NL);
+      const ctn = a.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", texto: CTN, topicos: [] });
+      const lc = a.leiGuardar({ nome: "LC 214/2025", texto: LC, topicos: [] });
+      const faixa = () => a.$("leiFaixaAlvo");
+      const btnAlternar = () => achar(faixa(), (e) => cls(e, "lei-faixa-alternar"))[0];
+      a.leiAbrir("X", "Y", lc.id);
+      const ctx = a.leiAlvoCtxAtual();
+      ok(Object.keys(ctx.porCurto).length === 4, "R73 a LC realmente cita 4 leis diferentes: " + Object.keys(ctx.porCurto).join(" | "));
+      ok(faixa().hidden === false && !/Esta lei ALTERA/.test(faixa().textContent) && /Esta lei altera 4 outras leis · 3 fora da sua biblioteca/.test(faixa().textContent),
+        "R73a acima do limite, a faixa vira resumo (so' o CTN esta' na biblioteca, as outras 3 nao): " + faixa().textContent);
+      ok(!!btnAlternar() && btnAlternar().textContent === a.t("lei_alvo_faixa_expandir"), "R73b o botao do resumo diz 'ver todas'");
+      btnAlternar().onclick();
+      ok(/Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && /Esta lei ALTERA Decreto-Lei nº 37\/1966/.test(faixa().textContent)
+        && /Esta lei ALTERA Lei nº 10\.931\/2004/.test(faixa().textContent) && /Esta lei ALTERA Lei nº 7\.998\/1990/.test(faixa().textContent),
+        "R73c expandido, as 4 linhas completas aparecem (nenhuma lei sumiu): " + faixa().textContent);
+      ok(btnAlternar().textContent === a.t("lei_alvo_faixa_recolher"), "R73d o botao agora diz 'recolher'");
+      ok(a.lojaLer("eac_lei_faixa_alvo_expandida") === "1", "R73e a escolha de expandir fica guardada");
+      /* reabrir outra lei e voltar: a escolha nao e' por lei, e' geral (como os anexos) */
+      const outra = a.leiGuardar({ nome: "Lei qualquer", texto: "Art. 1º Texto.", topicos: [] });
+      a.leiAbrir("", "", outra.id);
+      a.leiAbrir("X", "Y", lc.id);
+      ok(/Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && btnAlternar().textContent === a.t("lei_alvo_faixa_recolher"), "R73f reabrir a lei mantem expandido");
+      btnAlternar().onclick();
+      ok(!/Esta lei ALTERA/.test(faixa().textContent) && /Esta lei altera 4 outras leis/.test(faixa().textContent) && a.lojaLer("eac_lei_faixa_alvo_expandida") === "0", "R73g recolher volta ao resumo e guarda a escolha");
+      /* com poucas leis (<= limite), a faixa nunca resume — mostra tudo direto, sem botao */
+      a.leiApagar(ctn.id);
+      const LC2 = ["LEI COMPLEMENTAR Nº 1, DE 2025", "", "Art. 1º A Lei nº 5.172, de 25 de outubro de 1966 (Código Tributário Nacional), passa a vigorar com as seguintes alterações:", "",
+        '"Art. 9º ' + pts, pts + '" (NR)', "", "Art. 2º Esta Lei Complementar entra em vigor na data de sua publicação."].join(NL);
+      const lc2 = a.leiGuardar({ nome: "LC 1/2025", texto: LC2, topicos: [] });
+      a.leiAbrir("X", "Y", lc2.id);
+      ok(/Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && !btnAlternar(), "R73h com 1 lei so' (abaixo do limite), a faixa mostra a linha direto, sem botao de resumo");
+    }
+
     /* R39: exigir a trilha completa para dar o ramo como estudado */
     {
       const { a, ed, chave } = MT();

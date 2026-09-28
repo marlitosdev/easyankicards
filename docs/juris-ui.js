@@ -1026,7 +1026,7 @@ function jurCompletarLer() {
     ? jurJsonDoTexto(bruto) : null;
   if (!dados) {
     reg("JURIS", "resposta de completar recusada", "não era JSON");
-    jurCplEscrever(t("jur_completar_nada"));
+    jurCplMostrarErroJson(bruto);
     return;
   }
   const r = jurCompletar(jurCplId, dados);
@@ -1109,11 +1109,33 @@ async function jurTeseSubstituir(id, nova) {
   return true;
 }
 
-function jurCplEscrever(txt) {
+function jurCplEscrever(txt, erro) {
   const cx = $("jurCplSaida");
   if (!cx) return;
   cx.hidden = false;
   cx.textContent = txt;
+  cx.className = "jur-cpl-saida" + (erro ? " jur-cpl-saida-erro" : "");
+}
+
+/* A SELEÇÃO NA PRÓPRIA CAIXA É O FEEDBACK VISUAL: jurDiagnosticoJson diz
+ * onde o JSON.parse desistiu de entender, e setSelectionRange faz o
+ * navegador pintar esse trecho sozinho — sem overlay, sem reinventar
+ * destaque de texto. A pessoa vê exatamente qual pedaço colado quebrou
+ * tudo, em vez de reler a resposta inteira à procura do erro. */
+function jurCplMostrarErroJson(bruto) {
+  const d = (typeof jurDiagnosticoJson === "function") ? jurDiagnosticoJson(bruto) : null;
+  let msg = t("jur_completar_nada");
+  if (d && d.motivo === "sem_fechamento") {
+    msg = t("jur_completar_erro_truncado");
+  } else if (d && d.motivo === "sintaxe") {
+    msg = t(d.causa === "aspas" ? "jur_completar_erro_aspas" : "jur_completar_erro_sintaxe",
+      { l: d.linha, trecho: d.trecho });
+  }
+  const ta = $("jurCplResposta");
+  if (ta && d && d.ini != null && d.fim != null && typeof ta.setSelectionRange === "function") {
+    try { ta.focus(); ta.setSelectionRange(d.ini, d.fim); } catch (e) {}
+  }
+  jurCplEscrever(msg, true);
 }
 
 function jurNomeCampo(k) {

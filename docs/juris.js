@@ -1145,6 +1145,55 @@ function jurJsonDoTexto(bruto) {
   return null;
 }
 
+/* =====================================================================
+ * QUANDO NÃO DEU: DIZER ONDE, NÃO SÓ QUE DEU ERRADO
+ *
+ * O CASO REAL: a IA citou a própria tese oficial (que já vem entre aspas
+ * no enunciado do tribunal) dentro de "sugestao", sem escapar as aspas
+ * internas com \". O JSON quebrava, jurJsonDoTexto recusava a resposta
+ * inteira, e a única coisa na tela era a mesma frase fixa — a pessoa não
+ * tinha como saber SE colou a coisa errada, SE a resposta veio cortada,
+ * ou ONDE, no meio de um texto longo, a sintaxe quebrou.
+ *
+ * O JSON.parse do próprio motor já sabe a posição exata onde desistiu de
+ * entender ("... at position N") — só falta perguntar a ele. Chamada só
+ * DEPOIS que jurJsonDoTexto já devolveu null: continua "SÓ APONTA", nunca
+ * tenta consertar nada — só descreve com mais precisão o que já foi
+ * recusado, para a pessoa corrigir com a própria mão.
+ * ===================================================================== */
+function jurDiagnosticoJson(bruto) {
+  const s = String(bruto || "");
+  if (!s.trim()) return { motivo: "vazio" };
+  const a = s.indexOf("{");
+  if (a < 0) return { motivo: "sem_chaves" };
+  const b = s.lastIndexOf("}");
+  if (b <= a) return { motivo: "sem_fechamento", ini: a, fim: s.length };
+  const fatia = s.slice(a, b + 1);
+  let erro = null;
+  try { JSON.parse(fatia); } catch (e) { erro = e; }
+  /* parseou aqui, mas jurJsonDoTexto tinha recusado (array, string solta
+   * etc.) — não há uma posição de erro para apontar */
+  if (!erro) return { motivo: "outro" };
+  const msg = String(erro.message || "");
+  if (/Unexpected end of JSON input/.test(msg)) return { motivo: "sem_fechamento", ini: a, fim: s.length };
+  const m = /position (\d+)/.exec(msg);
+  if (!m) return { motivo: "outro" };
+  const posAbs = a + Number(m[1]);
+  const linha = s.slice(a, posAbs).split("\n").length;
+  const trecho = s.slice(Math.max(a, posAbs - 24), Math.min(b + 1, posAbs + 24))
+    .replace(/\s+/g, " ").trim();
+  /* ASPAS FECHANDO CEDO DEMAIS: o caractere logo onde o parser desistiu
+   * não é vírgula, chave, colchete, aspas nem espaço — é texto solto, o
+   * padrão exato de "uma aspas interna fechou o valor sem querer e o
+   * resto do texto citado sobrou de fora". Vírgula faltando entre dois
+   * campos aponta para uma aspas (o início do próximo campo), não para
+   * uma letra — por isso o teste exclui "\"". */
+  const seguinte = s[posAbs];
+  const aspas = seguinte !== undefined && !/[\s,}\]"]/.test(seguinte);
+  return { motivo: "sintaxe", ini: posAbs, fim: Math.min(s.length, posAbs + 1),
+    linha, trecho, causa: aspas ? "aspas" : "outro" };
+}
+
 function jurCompletar(id, dados) {
   const j = jurDe(id);
   if (!j || !dados || typeof dados !== "object") {
