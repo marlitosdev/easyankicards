@@ -289,6 +289,11 @@ function pacPintarArvore() {
   });
 }
 
+/* o mesmo "sem nome vira EasyAnkiCards" que pacExportar usa de verdade —
+ * a prévia tem de mostrar EXATAMENTE o que vai para o arquivo, nunca uma
+ * aproximação. */
+function pacRaizAtual() { return String(($("pacNome") || {}).value || "").trim() || "EasyAnkiCards"; }
+
 function pacPintarPrevia() {
   const p = pacMontar(pacNotas, pacSel, pacOpcoes());
   $("pacPrevia").textContent = p.itens.length || p.vazios.length
@@ -296,7 +301,14 @@ function pacPintarPrevia() {
     : t("pac_previa_vazia");
   const cx = $("pacDecks");
   cx.innerHTML = "";
-  [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => cx.append(pacEl("div", "cq-onde", d.replace(/::/g, " › ") + " — " + n)));
+  /* A PRÉVIA SÓ AVISA SE MOSTRAR O CAMINHO INTEIRO.
+   * Sem a raiz na frente, "ISS Caruaru Auditor Fiscal › Sistema Tributário
+   * Brasileiro › ..." parecia a pasta final — e a raiz digitada por cima
+   * ("Sistema tríbutário ISS Caruaru", já quase igual ao resto do caminho)
+   * só se revelava depois, dentro do Anki. Agora o que se vê aqui é
+   * exatamente o que pacExportar vai gravar. */
+  const raiz = pacRaizAtual();
+  [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => cx.append(pacEl("div", "cq-onde", raiz + " › " + d.replace(/::/g, " › ") + " — " + n)));
   if (p.decks.size > 12) cx.append(pacEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
   $("btnPacApkg").disabled = !(p.itens.length || p.vazios.length);
   $("btnPacTxt").disabled = !p.itens.length;
@@ -312,7 +324,7 @@ async function pacExportar(formato, deps) {
   const entrega = d.entregar || entregar;
   const p = pacMontar(pacNotas, pacSel, pacOpcoes());
   if (!p.itens.length && !(formato !== "txt" && p.vazios.length)) return { ok: false };
-  const raiz = String($("pacNome").value || "").trim() || "EasyAnkiCards";
+  const raiz = pacRaizAtual();
   const comEdital = $("pacComEdital").checked;
   const cards = pacCartoes(p.itens, comEdital, $("pacRamos").checked);
   try {
@@ -391,11 +403,25 @@ function pacAbrir(opc) {
   pacNotas = cqLerBiblioteca();
   pacSel = new Set(); pacEditalDe = new Map();
   ((opc && opc.chaves) || []).forEach((c) => pacMarcar(c, true, (opc && opc.edital) || ""));
-  $("pacComEdital").checked = pacTemEditais();
+  /* A RAIZ NÃO PODE SER UM PALPITE DE OUTRA TELA.
+   * "Nome do baralho raiz" vinha do campo de nome do gerador de cartão
+   * avulso — sem relação nenhuma com o que está sendo exportado aqui. A
+   * pessoa tinha de digitar o nome à mão toda vez, e digitar à mão é como
+   * "tríbutário" (erro de digitação) e "Sistema tríbutário ISS Caruaru"
+   * (repetindo, torto, o que "Pasta do edital" já ia acrescentar sozinho)
+   * acontecem. Com UM edital só marcado — o caso de "exportar esta pasta"
+   * —, a raiz óbvia é o nome dele, e "Pasta do edital" fica DESLIGADA: ele
+   * já está na raiz, marcá-la de novo duplicaria a pasta. */
+  const editalUnico = (opc && opc.edital) || "";
+  $("pacComEdital").checked = pacTemEditais() && !editalUnico;
   $("pacVazios").checked = false;
   dicasDosBotoes(PAC_DICAS);
   pacLido = null;
-  try { $("pacNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("pacNome").value = "EasyAnkiCards"; }
+  if (editalUnico) {
+    $("pacNome").value = editalUnico;
+  } else {
+    try { $("pacNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("pacNome").value = "EasyAnkiCards"; }
+  }
   $("pacMsg").textContent = "";
   pacPintarDestinos(); pacPintarImport(); pacPintar();
   abrirModal("dlgPacote");
@@ -412,6 +438,7 @@ if (typeof document !== "undefined" && $("btnPacote")) {
     pacPintar();
   };
   $("btnPacLimpar").onclick = () => { pacSel = new Set(); pacEditalDe = new Map(); pacPintar(); };
+  $("pacNome").oninput = pacPintarPrevia;
   $("pacComEdital").onchange = pacPintarPrevia;
   $("pacVazios").onchange = pacPintarPrevia;
   $("pacSemRep").onchange = pacPintarPrevia;
