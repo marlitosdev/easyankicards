@@ -479,6 +479,52 @@ async function testes() {
       const mal = Object.keys(a.PAC_DICAS).filter((id) => { const e = a.$(id); return !(e._dicaLigada === true && e._ouv.mouseenter.length === 1 && e.getAttribute("aria-description") === a.t(a.PAC_DICAS[id])); });
       ok(mal.length === 0, "P10zr cada controle recebeu o balao: " + mal.join(","));
     }
+    /* ---- P11: a raiz digitada por dentro, sem ser um palpite de outra tela ----
+     * O CASO REAL: "Nome do baralho raiz" vinha do campo de nome do gerador de
+     * cartao avulso, sem relacao nenhuma com o que estava sendo exportado —
+     * a pessoa tinha de digitar a raiz a mao toda vez ("Sistema tríbutário ISS
+     * Caruaru", com erro de digitacao e repetindo o que "pasta do edital" ja
+     * ia acrescentar sozinho). E a previa nunca mostrava a raiz, entao a
+     * duplicacao so' aparecia depois, dentro do Anki. */
+    {
+      const { a, k } = ME();
+      /* "exportar esta pasta" de UM edital: a raiz vem pronta com o nome do
+       * concurso, e "pasta do edital" nasce DESLIGADA (o concurso ja' esta'
+       * na raiz — ligar de novo duplicaria a pasta) */
+      a.pacAbrir({ chaves: [k("Sistema Tributário Brasileiro", "ISS")], edital: "ISS Caruaru Auditor" });
+      ok(a.$("pacNome").value === "ISS Caruaru Auditor",
+         "P11 a raiz nao veio pronta com o nome do concurso: " + a.$("pacNome").value);
+      ok(a.$("pacComEdital").checked === false,
+         "P11a com a raiz ja' sendo o concurso, 'pasta do edital' nao pode nascer ligada (duplicaria a pasta)");
+      const cap = {};
+      await a.pacExportar("apkg", deps(cap));
+      ok(cap.cards.every((c) => c.deck === "Sistema Tributário Brasileiro::ISS"),
+         "P11b sem 'pasta do edital' o baralho e' Disciplina::Topico (a raiz so' entra na hora de escrever o arquivo): "
+         + JSON.stringify(cap.cards.map((c) => c.deck)));
+      ok(cap.raiz === "ISS Caruaru Auditor", "P11c o arquivo recebeu a raiz certa");
+
+      /* sem "exportar esta pasta" (o botao geral "montar pacote"), nada muda:
+       * a raiz continua vindo de onde vinha */
+      a.pacAbrir();
+      ok(a.$("pacNome").value !== "ISS Caruaru Auditor",
+         "P11d sem edital unico marcado, a raiz nao pode virar o nome de um edital qualquer");
+
+      /* a previa mostra o CAMINHO INTEIRO, com a raiz na frente, e atualiza a
+       * cada letra digitada — e' o que deixa uma duplicacao visivel ANTES de
+       * exportar, em vez de so' depois, dentro do Anki */
+      a.pacAbrir({ chaves: [k("Sistema Tributário Brasileiro", "ISS")], edital: "ISS Caruaru Auditor" });
+      const caminhos = () => achar(a.$("pacDecks"), (e) => cls(e, "cq-onde")).map((e) => e.textContent);
+      ok(caminhos().some((t) => t.indexOf("ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS") === 0),
+         "P11e a previa comeca sem a duplicacao (raiz = concurso, pasta do edital desligada): " + caminhos().join(" ; "));
+      a.$("pacComEdital").checked = true; a.$("pacComEdital").onchange();
+      ok(caminhos().some((t) => t.indexOf("ISS Caruaru Auditor › ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS") === 0),
+         "P11f religar 'pasta do edital' por cima da raiz que ja' e' o concurso MOSTRA a duplicacao na previa, antes de exportar: "
+         + caminhos().join(" ; "));
+      a.$("pacComEdital").checked = false; a.$("pacComEdital").onchange();
+      a.$("pacNome").value = "Outro Nome"; a.$("pacNome").oninput();
+      ok(caminhos().some((t) => t.indexOf("Outro Nome › Sistema Tributário Brasileiro › ISS") === 0),
+         "P11g digitar na caixa da raiz atualiza a previa na hora, sem precisar de outro clique: " + caminhos().join(" ; "));
+    }
   }
 
   /* ---- P9: no app ---- */
