@@ -1345,6 +1345,89 @@ async function testes() {
   }
 
   /* =================================================================
+   * S8: QUANDO A RESPOSTA NÃO VIRA JSON, A TELA APONTA ONDE — NÃO SÓ QUE FALHOU
+   *
+   * O CASO REAL (v17.42.0/v17.43.0): a IA respondeu "completar e conferir"
+   * do Tema 299/STF citando a própria tese oficial (que já vem entre aspas)
+   * dentro de "sugestao", sem escapar as aspas internas. jurJsonDoTexto
+   * recusava a resposta inteira, e a mensagem era sempre a mesma frase
+   * genérica, qualquer que fosse o defeito. jurDiagnosticoJson usa a
+   * posição que o próprio JSON.parse já sabe para dizer ONDE, e a tela
+   * seleciona esse trecho na caixa de colar — sem tentar consertar nada.
+   * ================================================================= */
+  {
+    /* função pura: os quatro motivos, isolados */
+    const { api } = rodar();
+    ok(api.jurDiagnosticoJson("   ").motivo === "vazio", "S8a caixa em branco (só espaço)");
+    ok(api.jurDiagnosticoJson("Claro! Aqui está.").motivo === "sem_chaves",
+       "S8b sem um '{' sequer (colou outra coisa)");
+    const cortada = '{"tribunal": "STF", "classe": "Tema"';
+    const dCortada = api.jurDiagnosticoJson(cortada);
+    ok(dCortada.motivo === "sem_fechamento" && dCortada.ini === 0 && dCortada.fim === cortada.length,
+       "S8c abre '{' e nunca fecha: aponta do começo ao fim da resposta: " + JSON.stringify(dCortada));
+
+    /* o caso real: a tese oficial (já entre aspas) citada sem escapar dentro de "sugestao" */
+    const TESE = "É inconstitucional a incidência do ISS sobre operações de industrialização por encomenda.";
+    const respostaReal = '{"identificacao": "Tema 299", "conferencia": [{"campo": "tese", '
+      + '"trecho": "x", "problema": "y", "sugestao": "Substituir pelo enunciado oficial: "' + TESE + '""}]}';
+    const d = api.jurDiagnosticoJson(respostaReal);
+    ok(d.motivo === "sintaxe" && d.causa === "aspas",
+       "S8d o caso real (aspas da tese oficial sem escapar) e' diagnosticado como 'aspas': " + JSON.stringify(d));
+    ok(respostaReal[d.ini] === "É",
+       "S8e a posicao apontada cai exatamente onde o texto solto comeca: "
+       + JSON.stringify(respostaReal.slice(Math.max(0, d.ini - 15), d.ini + 15)));
+    ok(api.jurJsonDoTexto(respostaReal) === null,
+       "S8f confirmando a premissa: essa resposta continua SEM virar JSON (o app nao tenta consertar)");
+
+    /* falta de vírgula entre dois campos: mesma mensagem genérica ("Expected...
+     * after property value"), mas o caractere seguinte é aspas — não é o padrão de aspas internas */
+    const semVirgula = '{"a": "hello" "b": "x"}';
+    const dv = api.jurDiagnosticoJson(semVirgula);
+    ok(dv.motivo === "sintaxe" && dv.causa === "outro",
+       "S8g falta de virgula (o proximo token e' aspas, nao texto solto) nao vira 'aspas': " + JSON.stringify(dv));
+
+    /* JSON de verdade: sem motivo nenhum a apontar (a função só é chamada quando já falhou) */
+    ok(api.jurDiagnosticoJson('{"a": 1}').motivo === "outro",
+       "S8h JSON valido: nao ha erro do JSON.parse, entao nao ha o que apontar (motivo 'outro')");
+  }
+
+  /* ---- S9: a tela usa o diagnóstico — seleciona o trecho e troca a cor da caixa de saída ---- */
+  {
+    const { api } = rodar();
+    const j = guardar(api, { tribunal: "STF", classe: "Tema", numero: "299" }, "Direito Tributário", "Tributos");
+    api.jurCompletarAbrir(j.id);
+    const TESE = "É inconstitucional a incidência do ISS sobre operações de industrialização por encomenda.";
+    const respostaReal = '{"identificacao": "Tema 299", "conferencia": [{"campo": "tese", '
+      + '"trecho": "x", "problema": "y", "sugestao": "Substituir pelo enunciado oficial: "' + TESE + '""}]}';
+    api.$("jurCplResposta").value = respostaReal;
+    api.jurCompletarLer();
+    const saida = api.$("jurCplSaida");
+    ok(saida.hidden === false && /jur-cpl-saida-erro/.test(saida.className),
+       "S9 a caixa de saida ganha a cor de erro quando a resposta nao vira JSON: " + saida.className);
+    ok(/aspas/i.test(saida.textContent) && !/^Não entendi essa resposta como JSON\./.test(saida.textContent),
+       "S9a a mensagem agora e' especifica (aspas internas), nao mais a frase generica: " + saida.textContent);
+    const ta = api.$("jurCplResposta");
+    ok(ta.selectionStart > 0 && ta.selectionEnd === ta.selectionStart + 1,
+       "S9b o trecho problematico foi selecionado na propria caixa (o feedback visual): "
+       + JSON.stringify([ta.selectionStart, ta.selectionEnd]));
+    ok(respostaReal.slice(ta.selectionStart, ta.selectionEnd) === "É",
+       "S9c a selecao cai exatamente sobre onde o texto solto comeca, nao num ponto qualquer: "
+       + JSON.stringify(respostaReal.slice(ta.selectionStart, ta.selectionEnd)));
+
+    /* resposta cortada: seleciona do começo ao fim, mensagem de "cortada" */
+    api.$("jurCplResposta").value = '{"tribunal": "STF"';
+    api.jurCompletarLer();
+    ok(/cortada/i.test(saida.textContent), "S9d resposta sem fechar '{' avisa que parece cortada: " + saida.textContent);
+    ok(ta.selectionStart === 0 && ta.selectionEnd === api.$("jurCplResposta").value.length,
+       "S9e a selecao cobre a resposta inteira (nao ha um ponto so' para apontar)");
+
+    /* sucesso: a caixa volta ao estilo normal (sem a classe de erro) */
+    api.$("jurCplResposta").value = JSON.stringify({ do_texto: { classe: "Tema" } });
+    api.jurCompletarLer();
+    ok(!/jur-cpl-saida-erro/.test(saida.className), "S9f uma leitura com sucesso tira a cor de erro: " + saida.className);
+  }
+
+  /* =================================================================
    * P: PRECEDENTES — os processos que originaram a súmula ou o tema
    *
    * POR QUE ISTO EXISTE. No caso da SV 29 a IA, sem ter onde pôr a
