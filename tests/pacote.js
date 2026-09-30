@@ -495,6 +495,122 @@ async function testes() {
       const mal = Object.keys(a.PAC_DICAS).filter((id) => { const e = a.$(id); return !(e._dicaLigada === true && e._ouv.mouseenter.length === 1 && e.getAttribute("aria-description") === a.t(a.PAC_DICAS[id])); });
       ok(mal.length === 0, "P10zr cada controle recebeu o balao: " + mal.join(","));
     }
+    /* ---- P10arr: arrastar um tópico para mudar de disciplina, edital ou juntar
+     * com outro (17.47.0) — SÓ NESTA EXPORTAÇÃO: pacMoverPara nunca grava na
+     * Biblioteca, some ao reabrir o montador (mesmo padrão visual do arrastar
+     * do gerenciador: pilula, destaque verde/vermelho no alvo). ---- */
+    {
+      const ev = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { dados: {}, setData(kk, v) { this.dados[kk] = v; }, setDragImage(el) { this.img = el; }, effectAllowed: "", dropEffect: "" } });
+      const { a, k } = ME();
+      a.pacAbrir();
+      const issCh = k("Sistema Tributário Brasileiro", "ISS");
+      const acharTop = (nome) => linhas(a, "pac-ed-top").find((e) => new RegExp("^" + nome + " \\(").test(e.children[1].textContent.trim()));
+
+      /* toda linha arrastavel, todo alvo aceita soltar */
+      {
+        const tops = linhas(a, "pac-ed-top");
+        ok(tops.length > 0 && tops.every((e) => e.draggable === true && typeof e.ondragstart === "function"), "P10arr1 todo topico da arvore por edital e' arrastavel");
+        ok(linhas(a, "pac-ed-disc").every((e) => typeof e.ondragover === "function" && typeof e.ondrop === "function")
+          && linhas(a, "pac-ed-raiz").every((e) => typeof e.ondragover === "function" && typeof e.ondrop === "function"),
+          "P10arr2 disciplina e raiz (edital) aceitam soltar");
+      }
+      /* sobre a PROPRIA pasta: invalido; sobre outra: valido */
+      {
+        const iss = acharTop("ISS");
+        const e1 = ev(); iss.ondragstart(e1);
+        ok(/ISS/.test(e1.dataTransfer.dados["text/plain"]) && e1.dataTransfer.img && /ISS/.test(e1.dataTransfer.img.textContent), "P10arr3 a pilula 'movendo ISS' acompanha o ponteiro");
+        const ep = ev(); iss.ondragover(ep);
+        ok(ep.prevented === false && cls(iss, "pac-alvo-no") && !cls(iss, "pac-alvo") && ep.dataTransfer.dropEffect === "none", "P10arr4 sobre a PROPRIA pasta nao permite soltar");
+        const iptu = acharTop("IPTU");
+        const eo = ev(); iptu.ondragover(eo);
+        ok(eo.prevented === true && cls(iptu, "pac-alvo") && eo.dataTransfer.dropEffect === "move", "P10arr5 sobre outro topico: permite soltar e destaca");
+        iptu.ondragleave();
+        ok(!cls(iptu, "pac-alvo"), "P10arr6 sair do alvo tira o destaque");
+        iss.ondragend();
+        ok(a.pacArrastoAtual() === null, "P10arr7 soltar fora (dragend) limpa o arrasto");
+      }
+      /* soltar ISS sobre a PROPRIA pasta (nao so' passar por cima): nao cria arrasto nenhum */
+      {
+        const iss = acharTop("ISS"); iss.ondragstart(ev());
+        iss.ondrop(ev());
+        ok(!a.pacMoverParaAtual().has(issCh), "P10arr7b soltar um topico sobre ele mesmo nao vira um arrasto (seria um no-op)");
+      }
+      /* soltar ISS sobre IPTU: mescla (ISS passa a ir para o MESMO baralho de IPTU) */
+      {
+        const iss = acharTop("ISS"); iss.ondragstart(ev());
+        const iptu = acharTop("IPTU");
+        iptu.ondrop(ev());
+        ok(a.pacArrastoAtual() === null, "P10arr8 soltar limpa o arrasto");
+        const mov = a.pacMoverParaAtual().get(issCh);
+        ok(mov && mov.disciplina === "Sistema Tributário Brasileiro" && mov.topico === "IPTU" && mov.edital === "ISS Caruaru Auditor", "P10arr9 ISS passa a ir para o baralho de IPTU (mesma disciplina/edital, topico de IPTU): " + JSON.stringify(mov));
+        const issDepois = acharTop("ISS");
+        ok(cls(issDepois.children[2], "pac-caminho-movido") && / › IPTU$/.test(issDepois.children[2].textContent.trim()), "P10arr10 o caminho ao lado de ISS mostra o destino novo, marcado: " + issDepois.children[2].textContent);
+        ok(achar(issDepois, (e) => cls(e, "pac-desfazer-mov")).length === 1, "P10arr11 aparece 'desfazer' so' na linha que foi movida");
+        const m = a.pacMontar(a.pacNotasAtual(), new Set([issCh]), { semRepetidos: false, semFracos: false, comEdital: true, comRamos: true, editalDe: new Map(), info: new Map(), moverPara: a.pacMoverParaAtual() });
+        ok([...m.decks.keys()].join("|") === "ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU", "P10arr11b o resumo de baralhos (pacMontar) tambem usa o destino do arrasto, nao o baralho original: " + [...m.decks.keys()].join("|"));
+      }
+      /* desfazer so' esta (o botao da propria linha) */
+      {
+        const issAntes = acharTop("ISS");
+        const des = achar(issAntes, (e) => cls(e, "pac-desfazer-mov"))[0];
+        des.onclick({ preventDefault() {}, stopPropagation() {} });
+        ok(!a.pacMoverParaAtual().has(issCh), "P10arr12 'desfazer' tira so' este topico do mapa de arrastos");
+        const issDepois = acharTop("ISS");
+        ok(!cls(issDepois.children[2], "pac-caminho-movido") && / › ISS$/.test(issDepois.children[2].textContent.trim()), "P10arr13 o caminho volta a mostrar o lugar de origem");
+        ok(achar(issDepois, (e) => cls(e, "pac-desfazer-mov")).length === 0, "P10arr14 o botao 'desfazer' some da linha depois de usado");
+      }
+      /* soltar ISS sobre a disciplina 'Direito Financeiro' (mesmo edital A): muda so' a disciplina */
+      {
+        const iss = acharTop("ISS"); iss.ondragstart(ev());
+        const discFinA = linhas(a, "pac-ed-disc")[1]; /* raiz A: [0]=Sistema Tributario, [1]=Direito Financeiro */
+        ok(/Direito Financeiro/.test(discFinA.textContent), "P10arr15 (achou a disciplina certa: " + discFinA.textContent + ")");
+        const eo = ev(); discFinA.ondragover(eo);
+        ok(eo.prevented === true && cls(discFinA, "pac-alvo"), "P10arr16 disciplina diferente e' alvo valido");
+        discFinA.ondrop(ev());
+        const mov = a.pacMoverParaAtual().get(issCh);
+        ok(mov && mov.disciplina === "Direito Financeiro" && mov.topico === "ISS" && mov.edital === "ISS Caruaru Auditor", "P10arr17 ISS muda de disciplina, mantendo o proprio nome: " + JSON.stringify(mov));
+      }
+      /* arrastar de novo (ja' movido) e soltar no edital B: muda so' o dono, preserva a disciplina/topico ATUAIS */
+      {
+        const iss = acharTop("ISS"); iss.ondragstart(ev());
+        const raizB = linhas(a, "pac-ed-raiz")[1];
+        ok(/TCE-PE/.test(raizB.textContent), "P10arr18 (achou a raiz B: " + raizB.textContent + ")");
+        raizB.ondrop(ev());
+        const mov = a.pacMoverParaAtual().get(issCh);
+        ok(mov && mov.edital === "TCE-PE" && mov.disciplina === "Direito Financeiro" && mov.topico === "ISS", "P10arr19 trocar de edital preserva a disciplina/topico ja' movidos (os arrastos se somam): " + JSON.stringify(mov));
+      }
+      /* soltar sobre o lugar onde ja' esta' (no-op): nao muda nada */
+      {
+        const iss = acharTop("ISS"); iss.ondragstart(ev());
+        const raizB = linhas(a, "pac-ed-raiz")[1];
+        const eo = ev(); raizB.ondragover(eo);
+        ok(eo.prevented === false && cls(raizB, "pac-alvo-no"), "P10arr20 soltar no MESMO edital onde ja' esta' e' invalido (nada mudaria)");
+        iss.ondragend();
+      }
+      /* "desfazer movimentos": aparece so' quando ha' arrasto pendente, e desfaz TODOS de uma vez */
+      {
+        ok(a.$("btnPacDesfazerMovs").hidden === false, "P10arr21 com arrastos pendentes o botao 'desfazer movimentos' aparece");
+        a.$("btnPacDesfazerMovs").onclick();
+        ok(a.pacMoverParaAtual().size === 0 && a.$("btnPacDesfazerMovs").hidden === true, "P10arr22 desfaz TODOS os arrastos e volta a esconder o botao");
+        const issDepois = acharTop("ISS");
+        ok(/ › ISS$/.test(issDepois.children[2].textContent.trim()), "P10arr23 ISS volta ao proprio lugar depois de desfazer tudo");
+      }
+      /* o arrasto muda de verdade o .apkg exportado — nao e' so' visual */
+      {
+        const iss = acharTop("ISS"); iss.ondragstart(ev());
+        const iptu = acharTop("IPTU"); iptu.ondrop(ev());
+        a.pacSelTeste([issCh]);
+        a.$("pacSemRep").checked = false; /* os 3 cartoes de ISS sao parecidos o bastante para o radar de repeticao agrupar; aqui o que importa e' o baralho, nao a deduplicacao */
+        const cap = {};
+        await a.pacExportar("apkg", deps(cap));
+        ok(cap.cards.length === 3 && cap.cards.every((c) => c.deck === "ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU"), "P10arr24 o .apkg exportado leva o baralho movido, nao o original: " + JSON.stringify(cap.cards.map((c) => c.deck)));
+      }
+      /* reabrir o montador esquece TODOS os arrastos: e' so' desta exportacao */
+      {
+        a.pacAbrir();
+        ok(a.pacMoverParaAtual().size === 0, "P10arr25 abrir de novo comeca sem nenhum arrasto guardado");
+      }
+    }
     /* ---- P11: a raiz digitada por dentro, sem ser um palpite de outra tela ----
      * O CASO REAL: "Nome do baralho raiz" vinha do campo de nome do gerador de
      * cartao avulso, sem relacao nenhuma com o que estava sendo exportado —

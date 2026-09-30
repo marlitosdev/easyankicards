@@ -62,7 +62,13 @@ function pacResolverRamo(edital, disciplina, topicoJunto) {
  * os repetidos — fica o mais completo de cada grupo — e os abaixo do padrão. */
 function pacMontar(notas, sel, opc) {
   const o = opc || {};
-  const nomeDeck = (n) => pacNomeDeck(n, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
+  /* arrastar um tópico na árvore (pacMoverPara) muda para ONDE ele vai no Anki
+   * nesta exportação — nunca grava nada na Biblioteca. */
+  const moverPara = o.moverPara || new Map();
+  const nomeDeck = (n) => {
+    const mov = moverPara.get(n.chave);
+    return pacNomeDeck(mov ? Object.assign({}, n, mov) : n, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
+  };
   /* o edital de cada tópico marcado (Map chave → nome): sai como a pasta de cima do baralho */
   const editalDe = o.editalDe || new Map();
   const marcadas = (notas || []).filter((n) => sel && sel.has(n.chave)).map((n) => Object.assign({}, n, { edital: editalDe.get(n.chave) || "" }));
@@ -88,16 +94,24 @@ function pacMontar(notas, sel, opc) {
     [...sel].forEach((ch) => {
       const i = o.info.get(ch);
       if (!i || comCartao.has(ch)) return;
-      const nome = pacNomeDeck({ edital: editalDe.get(ch) || i.edital || "", disciplina: i.disciplina, topico: i.topico }, o.comEdital);
+      const mov = moverPara.get(ch);
+      const base = mov || { edital: editalDe.get(ch) || i.edital || "", disciplina: i.disciplina, topico: i.topico };
+      const nome = pacNomeDeck(base, o.comEdital);
       if (!decks.has(nome)) { decks.set(nome, 0); vazios.push(nome); }
     });
   }
   return { itens, ignRep, ignFracos, decks, vazios };
 }
 
-/* Os cartões como o buildApkg / exportTxtString os querem: com o baralho da pasta. */
-function pacCartoes(itens, comEdital, comRamos) {
-  return (itens || []).map((n) => Object.assign({}, n.card, { deck: pacNomeDeck(n, comEdital, comRamos ? pacRamoDoCartao(n) : ""), tags: (n.card.tags || []).slice() }));
+/* Os cartões como o buildApkg / exportTxtString os querem: com o baralho da pasta
+ * (já considerando um eventual arrasto — moverPara — desta exportação). */
+function pacCartoes(itens, comEdital, comRamos, moverPara) {
+  const mp = moverPara || new Map();
+  return (itens || []).map((n) => {
+    const mov = mp.get(n.chave);
+    const base = mov ? Object.assign({}, n, mov) : n;
+    return Object.assign({}, n.card, { deck: pacNomeDeck(base, comEdital, comRamos ? pacRamoDoCartao(n) : ""), tags: (n.card.tags || []).slice() });
+  });
 }
 
 /* Nome de arquivo seguro para o pacote. */
@@ -206,12 +220,15 @@ function pacImportar(cards, modo, destChave, comEdital) {
 let pacNotas = [], pacSel = new Set(), pacLido = null;
 let pacEditalDe = new Map();   /* chave do tópico marcado → edital sob o qual foi marcado (pasta de cima no Anki) */
 let pacInfo = new Map();       /* chave → { edital, disciplina, topico } dos tópicos SEM cartão (os do plano do edital) */
+let pacMoverPara = new Map();  /* chave do tópico ARRASTADO → { disciplina, topico, edital } de destino — só nesta
+                                 * exportação: nunca grava na Biblioteca, some ao reabrir o montador de pacote. */
 
 /* Explicação de cada botão/opção desta janela (o teste confere que nenhum fica de fora). */
 const PAC_DICAS = {
   btnPacTudo: "pac_tip_tudo", btnPacLimpar: "pac_tip_limpar", btnPacApkg: "pac_tip_apkg", btnPacTxt: "pac_tip_txt",
   btnPacImportar: "pac_tip_importar", btnPacFechar: "pac_tip_fechar", pacComEdital: "pac_tip_com_edital",
   pacVazios: "pac_tip_vazios", pacRamos: "pac_tip_ramos", pacImpComEdital: "pac_tip_imp_com_edital", pacSemRep: "pac_tip_sem_rep", pacSemFracos: "pac_tip_sem_fracos",
+  btnPacDesfazerMovs: "pac_tip_desfazer_movs",
 };
 
 function pacEl(tag, cls, txt) {
@@ -225,7 +242,7 @@ function pacTemEditais() { return typeof editais !== "undefined" && Array.isArra
 
 function pacOpcoes() {
   return { semRepetidos: $("pacSemRep").checked, semFracos: $("pacSemFracos").checked,
-    comEdital: $("pacComEdital").checked, comRamos: $("pacRamos").checked, vazios: $("pacVazios").checked && pacTemEditais(), editalDe: pacEditalDe, info: pacInfo };
+    comEdital: $("pacComEdital").checked, comRamos: $("pacRamos").checked, vazios: $("pacVazios").checked && pacTemEditais(), editalDe: pacEditalDe, info: pacInfo, moverPara: pacMoverPara };
 }
 
 /* marcar/desmarcar UM tópico (guardando de qual edital ele foi marcado) */
@@ -234,15 +251,120 @@ function pacMarcar(chave, ligar, edital) {
   else { pacSel.delete(chave); pacEditalDe.delete(chave); }
 }
 
+/* onde um tópico está DE VERDADE (sem nenhum arrasto): disciplina/tópico de
+ * qualquer nota dele, ou — sem cartão ainda — os dados do plano do edital. */
+function pacInfoNatural(chave) {
+  const nota = pacNotas.find((n) => n.chave === chave);
+  if (nota) return { disciplina: nota.disciplina, topico: nota.topico };
+  const info = pacInfo.get(chave);
+  return info ? { disciplina: info.disciplina, topico: info.topico } : { disciplina: "", topico: "" };
+}
+
+/* onde um tópico VAI nesta exportação: o arrasto (pacMoverPara), se houve
+ * algum, senão o lugar natural dele. `edital` é o contexto da árvore (a
+ * raiz sob a qual esta linha está sendo desenhada agora). */
+function pacDestino(chave, edital) {
+  const mov = pacMoverPara.get(chave);
+  if (mov) return mov;
+  const nat = pacInfoNatural(chave);
+  return { disciplina: nat.disciplina, topico: nat.topico, edital: edital || "" };
+}
+
 /* O CAMINHO NO ANKI, ao lado de cada tópico — não só o nome da pasta.
  * "Jurisprudência" não diz onde ela cai lá dentro; "TCE PE 2025 › Direito
- * Administrativo › Jurisprudência" diz. Sem ramo aqui: com "por ramo"
- * ligado um tópico pode se espalhar por vários subbaralhos — essa conta
- * já existe, completa, no resumo (#pacDecks) logo abaixo da árvore. */
-function pacCaminhoDoNo(disciplina, topico, edital) {
+ * Administrativo › Jurisprudência" diz. Já mostra o destino depois de um
+ * arrasto (pacMoverPara): é exatamente o que vai sair no Anki. Sem ramo
+ * aqui: com "por ramo" ligado um tópico pode se espalhar por vários
+ * subbaralhos — essa conta já existe, completa, no resumo (#pacDecks)
+ * logo abaixo da árvore. */
+function pacCaminhoDoNo(chave, disciplina, topico, edital) {
   const comEdital = !!($("pacComEdital") && $("pacComEdital").checked);
-  const nome = pacNomeDeck({ edital, disciplina, topico }, comEdital);
+  const dest = pacDestino(chave, edital);
+  const nome = pacNomeDeck(dest, comEdital);
   return pacRaizAtual() + " › " + nome.replace(/::/g, " › ");
+}
+
+/* ---- arrastar um tópico para mudar de disciplina, edital ou juntar com outro
+ * (só nesta exportação — pacMoverPara — nunca mexe na Biblioteca real; é o
+ * mesmo padrão visual do arrastar do gerenciador: pílula que acompanha o
+ * ponteiro, destaque verde/vermelho no alvo). Só se arrasta um tópico por
+ * vez: não há seleção múltipla nesta árvore. ---- */
+let pacArrasto = null, pacGhost = null;
+
+/* soltar num TÓPICO: o de origem passa a ir para o MESMO baralho do de destino (mescla) */
+function pacSoltarTop(ev, chaveAlvo, discAlvo, topicoAlvo, editalAlvo) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const origem = pacArrasto;
+  pacFimArrasto();
+  if (!origem || chaveAlvo === origem.chave) return;
+  pacMoverPara.set(origem.chave, { disciplina: discAlvo, topico: topicoAlvo, edital: editalAlvo || "" });
+  pacPintar();
+}
+
+/* soltar numa DISCIPLINA: muda só a disciplina (o tópico mantém o próprio nome) */
+function pacSoltarDisc(ev, discAlvo, editalAlvo) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const origem = pacArrasto;
+  pacFimArrasto();
+  if (!origem || (origem.disciplina === discAlvo && origem.edital === (editalAlvo || ""))) return;
+  pacMoverPara.set(origem.chave, { disciplina: discAlvo, topico: origem.topico, edital: editalAlvo || "" });
+  pacPintar();
+}
+
+/* soltar na RAIZ (edital, "sem edital" ou bancada): muda só o dono (edital) do tópico */
+function pacSoltarRaiz(ev, editalAlvo) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const origem = pacArrasto;
+  pacFimArrasto();
+  if (!origem || origem.edital === (editalAlvo || "")) return;
+  pacMoverPara.set(origem.chave, { disciplina: origem.disciplina, topico: origem.topico, edital: editalAlvo || "" });
+  pacPintar();
+}
+
+function pacIniciarArrasto(ev, chave, topico, disciplina, edital) {
+  if (!chave) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
+  const efetivo = pacDestino(chave, edital);
+  pacArrasto = { chave, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
+  const texto = t("pac_arrastando", { t: topico });
+  try {
+    const dt = ev.dataTransfer;
+    dt.effectAllowed = "move";
+    dt.setData("text/plain", texto);
+    const g = document.createElement("div");
+    g.className = "pac-ghost"; g.textContent = texto;
+    document.body.append(g);
+    pacGhost = g;
+    if (dt.setDragImage) dt.setDragImage(g, 14, 14);
+  } catch (e) {}
+}
+
+function pacFimArrasto() {
+  pacArrasto = null;
+  try { if (pacGhost && pacGhost.parentNode) pacGhost.parentNode.removeChild(pacGhost); } catch (e) {}
+  pacGhost = null;
+}
+
+function pacSaiuAlvo(el) { if (el && el.classList) el.classList.remove("pac-alvo", "pac-alvo-no"); }
+
+function pacMarcarAlvo(ev, el, ok) {
+  if (ok && ev && ev.preventDefault) ev.preventDefault();
+  try { if (ev && ev.dataTransfer) ev.dataTransfer.dropEffect = ok ? "move" : "none"; } catch (e) {}
+  if (el && el.classList) { el.classList.toggle("pac-alvo", ok); el.classList.toggle("pac-alvo-no", !ok); }
+}
+
+function pacSobreTop(ev, chaveAlvo, el) {
+  if (!pacArrasto) return;
+  pacMarcarAlvo(ev, el, chaveAlvo !== pacArrasto.chave);
+}
+
+function pacSobreDisc(ev, discAlvo, editalAlvo, el) {
+  if (!pacArrasto) return;
+  pacMarcarAlvo(ev, el, !(pacArrasto.disciplina === discAlvo && pacArrasto.edital === (editalAlvo || "")));
+}
+
+function pacSobreRaiz(ev, editalAlvo, el) {
+  if (!pacArrasto) return;
+  pacMarcarAlvo(ev, el, pacArrasto.edital !== (editalAlvo || ""));
 }
 
 /* a árvore por edital: Edital › Disciplina › Tópico, com caixa de três estados (marcado / parcial / vazio) */
@@ -251,8 +373,23 @@ function pacPintarNo(cx, no, edital, disciplina) {
     const li = pacEl("label", "pac-top pac-ed-top" + (no.vazia ? " ger-vazia" : ""));
     const c2 = pacEl("input"); c2.type = "checkbox"; c2.checked = pacSel.has(no.chave);
     c2.onchange = () => { pacMarcar(no.chave, c2.checked, edital); pacPintar(); };
+    const movida = pacMoverPara.has(no.chave);
     li.append(c2, pacEl("span", "", " " + no.topico + " (" + no.total + ")"),
-      pacEl("span", "pac-caminho", pacCaminhoDoNo(disciplina, no.topico, edital)));
+      pacEl("span", "pac-caminho" + (movida ? " pac-caminho-movido" : ""), pacCaminhoDoNo(no.chave, disciplina, no.topico, edital)));
+    if (movida) {
+      const des = pacEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
+      des.type = "button";
+      des.title = t("pac_tip_desfazer_move");
+      des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); pacMoverPara.delete(no.chave); pacPintar(); };
+      li.append(des);
+    }
+    li.draggable = true;
+    li.title = t("pac_tip_arrastar");
+    li.ondragstart = (ev) => pacIniciarArrasto(ev, no.chave, no.topico, disciplina, edital);
+    li.ondragend = pacFimArrasto;
+    li.ondragover = (ev) => pacSobreTop(ev, no.chave, li);
+    li.ondragleave = () => pacSaiuAlvo(li);
+    li.ondrop = (ev) => pacSoltarTop(ev, no.chave, disciplina, no.topico, edital);
     cx.append(li);
     return;
   }
@@ -264,6 +401,17 @@ function pacPintarNo(cx, no, edital, disciplina) {
   ck.indeterminate = marcadas > 0 && marcadas < chaves.length;
   ck.onchange = () => { chaves.forEach((c) => pacMarcar(c, ck.checked, no.tipo === "bancada" ? "" : edital)); pacPintar(); };
   cab.append(ck, pacEl("span", "", " " + no.nome + " (" + no.total + ")"));
+  if (no.tipo === "disc") {
+    cab.ondragover = (ev) => pacSobreDisc(ev, no.nome, edital, cab);
+    cab.ondragleave = () => pacSaiuAlvo(cab);
+    cab.ondrop = (ev) => pacSoltarDisc(ev, no.nome, edital);
+  } else {
+    /* raiz de edital, "sem edital" ou bancada: soltar aqui muda so' o dono (edital) do topico */
+    const editalDaRaiz = no.tipo === "edital" ? (no.concurso || "") : "";
+    cab.ondragover = (ev) => pacSobreRaiz(ev, editalDaRaiz, cab);
+    cab.ondragleave = () => pacSaiuAlvo(cab);
+    cab.ondrop = (ev) => pacSoltarRaiz(ev, editalDaRaiz);
+  }
   cx.append(cab);
   no.filhos.forEach((f) => pacPintarNo(cx, f, edital, no.tipo === "disc" ? no.nome : disciplina));
 }
@@ -273,6 +421,8 @@ function pacPintarArvore() {
   cx.innerHTML = "";
   $("pacOpcEdital").hidden = !pacTemEditais();
   pacInfo = new Map();
+  const btnDes = $("btnPacDesfazerMovs");
+  if (btnDes) btnDes.hidden = pacMoverPara.size === 0;
   if (pacTemEditais()) {
     const m = gerModeloEditais(pacNotas, gerPastasVazias(pacNotas));
     m.roots.forEach((r) => {
@@ -290,13 +440,31 @@ function pacPintarArvore() {
     ck.checked = chaves.every((c) => pacSel.has(c));
     ck.onchange = () => { chaves.forEach((c) => (ck.checked ? pacSel.add(c) : pacSel.delete(c))); pacPintar(); };
     cab.append(ck, pacEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
+    cab.ondragover = (ev) => pacSobreDisc(ev, d.disciplina, "", cab);
+    cab.ondragleave = () => pacSaiuAlvo(cab);
+    cab.ondrop = (ev) => pacSoltarDisc(ev, d.disciplina, "");
     cx.append(cab);
     d.topicos.forEach((tp) => {
       const li = pacEl("label", "pac-top");
       const c2 = pacEl("input"); c2.type = "checkbox"; c2.checked = pacSel.has(tp.chave);
       c2.onchange = () => { c2.checked ? pacSel.add(tp.chave) : pacSel.delete(tp.chave); pacPintar(); };
+      const movida = pacMoverPara.has(tp.chave);
       li.append(c2, pacEl("span", "", " " + tp.topico + " (" + tp.total + ")"),
-        pacEl("span", "pac-caminho", pacCaminhoDoNo(d.disciplina, tp.topico, "")));
+        pacEl("span", "pac-caminho" + (movida ? " pac-caminho-movido" : ""), pacCaminhoDoNo(tp.chave, d.disciplina, tp.topico, "")));
+      if (movida) {
+        const des = pacEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
+        des.type = "button";
+        des.title = t("pac_tip_desfazer_move");
+        des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); pacMoverPara.delete(tp.chave); pacPintar(); };
+        li.append(des);
+      }
+      li.draggable = true;
+      li.title = t("pac_tip_arrastar");
+      li.ondragstart = (ev) => pacIniciarArrasto(ev, tp.chave, tp.topico, d.disciplina, "");
+      li.ondragend = pacFimArrasto;
+      li.ondragover = (ev) => pacSobreTop(ev, tp.chave, li);
+      li.ondragleave = () => pacSaiuAlvo(li);
+      li.ondrop = (ev) => pacSoltarTop(ev, tp.chave, d.disciplina, tp.topico, "");
       cx.append(li);
     });
   });
@@ -339,7 +507,7 @@ async function pacExportar(formato, deps) {
   if (!p.itens.length && !(formato !== "txt" && p.vazios.length)) return { ok: false };
   const raiz = pacRaizAtual();
   const comEdital = $("pacComEdital").checked;
-  const cards = pacCartoes(p.itens, comEdital, $("pacRamos").checked);
+  const cards = pacCartoes(p.itens, comEdital, $("pacRamos").checked, pacMoverPara);
   try {
     if (formato === "txt") {
       const txt = exportTxtString({ cards }, raiz);
@@ -414,7 +582,7 @@ async function pacAcaoImportar() {
 /* opc.chaves / opc.edital: já abre com essas pastas marcadas (é o que "Exportar esta pasta" da biblioteca faz) */
 function pacAbrir(opc) {
   pacNotas = cqLerBiblioteca();
-  pacSel = new Set(); pacEditalDe = new Map();
+  pacSel = new Set(); pacEditalDe = new Map(); pacMoverPara = new Map();
   ((opc && opc.chaves) || []).forEach((c) => pacMarcar(c, true, (opc && opc.edital) || ""));
   /* A RAIZ NÃO PODE SER UM PALPITE DE OUTRA TELA.
    * "Nome do baralho raiz" vinha do campo de nome do gerador de cartão
@@ -451,6 +619,7 @@ if (typeof document !== "undefined" && $("btnPacote")) {
     pacPintar();
   };
   $("btnPacLimpar").onclick = () => { pacSel = new Set(); pacEditalDe = new Map(); pacPintar(); };
+  $("btnPacDesfazerMovs").onclick = () => { pacMoverPara = new Map(); pacPintar(); };
   /* estas duas mudam o caminho mostrado ao lado de cada tópico na árvore (pacCaminhoDoNo), não só o resumo embaixo */
   $("pacNome").oninput = pacPintar;
   $("pacComEdital").onchange = pacPintar;
