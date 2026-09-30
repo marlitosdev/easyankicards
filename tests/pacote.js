@@ -342,7 +342,8 @@ async function testes() {
       a.pacAbrir();
       a.$("pacSemRep").checked = false;
       ok(a.$("pacOpcEdital").hidden === false && a.$("pacComEdital").checked === true && a.$("pacVazios").checked === false, "P10m com edital cadastrado aparecem as opcoes (pasta do edital ligada, vazios desligado)");
-      const raizes = linhas(a, "pac-ed-raiz").map((e) => e.textContent.trim());
+      /* children[0] = seta recolher/expandir (17.49.0), [1] = caixa, [2] = nome (N) */
+      const raizes = linhas(a, "pac-ed-raiz").map((e) => e.children[2].textContent.trim());
       ok(raizes.join("|") === "ISS Caruaru Auditor (5)|TCE-PE (2)", "P10n a arvore tem uma raiz por edital, na ordem da lista: " + raizes.join("|"));
       /* children[1] = o span "topico (N)"; children[2] (novo, 17.46.0) e' o caminho no Anki, ver P10o2 */
       const tops = linhas(a, "pac-ed-top").map((e) => e.children[1].textContent.trim());
@@ -635,7 +636,7 @@ async function testes() {
       {
         a.$("editor").value = "Pergunta da bancada? :: Resposta";
         a.pacAbrir();
-        ok(linhas(a, "pac-ed-raiz").some((e) => /^Bancada/.test(e.textContent.trim())), "P10mov4b (confirma que a bancada aparece na ARVORE desta vez, para o teste valer)");
+        ok(linhas(a, "pac-ed-raiz").some((e) => /^Bancada/.test(e.children[2].textContent.trim())), "P10mov4b (confirma que a bancada aparece na ARVORE desta vez, para o teste valer)");
         const l = a.pacDestinosLista();
         ok(!l.some((d) => d.tipo === "bancada" || /^Bancada/.test(d.nome)), "P10mov4c mesmo com cartao na bancada, ela nao entra na lista de destinos");
         a.$("editor").value = "";
@@ -691,6 +692,226 @@ async function testes() {
         a2.pacAbrir();
         const l2 = a2.pacDestinosLista();
         ok(l2.length > 0 && l2.every((d) => d.tipo !== "raiz") && l2.some((d) => d.tipo === "top" && d.chave === iss), "P10mov14 sem edital cadastrado a lista nao tem raiz, so' disciplina e topico");
+      }
+    }
+    /* ---- P10fec: recolher/expandir edital e disciplina — so' visual (Fase 4, 17.49.0) ---- */
+    {
+      const { a, k } = ME();
+      a.pacAbrir();
+      /* por edital: recolher a raiz A esconde as disciplinas/topicos dela (a raiz B continua aberta), sem desmarcar nada */
+      {
+        const topsAntes = linhas(a, "pac-ed-top").length, discsAntes = linhas(a, "pac-ed-disc").length;
+        ok(topsAntes > 0 && discsAntes > 0, "P10fec1 (a arvore comeca com topicos e disciplinas, para o teste valer)");
+        const rA = linhas(a, "pac-ed-raiz")[0];
+        ok(rA.children[0].textContent === "▾", "P10fec2 a seta comeca expandida (▾)");
+        rA.children[0].onclick({ preventDefault() {}, stopPropagation() {} });
+        const rA2 = linhas(a, "pac-ed-raiz")[0];
+        ok(rA2.children[0].textContent === "▸", "P10fec3 clicar na seta vira ▸ (recolhida)");
+        /* raiz A tem 2 disciplinas (Sistema Tributario, Direito Financeiro) e 4 topicos (ISS, IPTU, Taxas, Receita Publica) */
+        ok(linhas(a, "pac-ed-disc").length === discsAntes - 2 && linhas(a, "pac-ed-top").length === topsAntes - 4, "P10fec4 recolhida, a raiz A some com as PROPRIAS disciplinas e topicos (a raiz B continua): " + linhas(a, "pac-ed-disc").length + "/" + linhas(a, "pac-ed-top").length);
+        ok(linhas(a, "pac-ed-raiz").length === 2, "P10fec4b as duas raizes continuam na tela (so' os FILHOS da A sumiram)");
+        ok(rA2.children[2].textContent.trim() === "ISS Caruaru Auditor (5)", "P10fec5 mesmo recolhida, a contagem '(N)' continua no cabecalho");
+        ok(a.pacSelAtual().size === 0 && a.pacMoverParaAtual().size === 0, "P10fec6 recolher e' so' visual: nao marca nem desmarca, nao mexe em arrasto");
+      }
+      /* expandir de novo devolve tudo */
+      {
+        const rA = linhas(a, "pac-ed-raiz")[0];
+        rA.children[0].onclick({ preventDefault() {}, stopPropagation() {} });
+        const rA2 = linhas(a, "pac-ed-raiz")[0];
+        ok(rA2.children[0].textContent === "▾" && linhas(a, "pac-ed-top").length > 0, "P10fec7 clicar de novo expande e volta a desenhar os topicos");
+      }
+      /* recolher so' uma disciplina nao mexe nas outras (nem na outra raiz) */
+      {
+        const discFinA = linhas(a, "pac-ed-disc")[1]; /* raiz A: [0]=Sistema Tributario, [1]=Direito Financeiro */
+        ok(/Direito Financeiro/.test(discFinA.children[2].textContent), "P10fec8 (achou 'Direito Financeiro' da raiz A)");
+        const totalAntes = linhas(a, "pac-ed-top").length;
+        discFinA.children[0].onclick({ preventDefault() {}, stopPropagation() {} });
+        const totalDepois = linhas(a, "pac-ed-top").length;
+        ok(totalDepois === totalAntes - 1 && linhas(a, "pac-ed-disc").length === 3, "P10fec9 recolher 'Direito Financeiro' some so' com o topico dela (Receita Publica), as outras disciplinas continuam abertas: " + totalAntes + "->" + totalDepois);
+      }
+      /* reabrir o dialogo esquece os recolhidos (comeca tudo aberto de novo) */
+      {
+        a.pacAbrir();
+        ok(linhas(a, "pac-ed-raiz").every((e) => e.children[0].textContent === "▾") && linhas(a, "pac-ed-disc").every((e) => e.children[0].textContent === "▾"), "P10fec10 reabrir o montador comeca com tudo expandido de novo");
+      }
+      /* sem editais cadastrados: recolher a disciplina esconde os topicos dela (o outro fallback da arvore) */
+      {
+        const { a: a2 } = montar();
+        a2.pacAbrir();
+        const discs = linhas(a2, "pac-disc").filter((e) => !cls(e, "pac-top"));
+        const alvo = discs.find((e) => /Trib/.test(e.children[2].textContent));
+        ok(!!alvo, "P10fec11 (achou a disciplina 'Trib' sem edital cadastrado)");
+        const topsAntes = linhas(a2, "pac-top").length;
+        alvo.children[0].onclick({ preventDefault() {}, stopPropagation() {} });
+        ok(linhas(a2, "pac-top").length < topsAntes, "P10fec12 sem edital cadastrado, recolher a disciplina tambem esconde os topicos dela");
+      }
+    }
+    /* ---- P10lis: lista de cartões da pasta clicada, sempre visível ao lado da árvore (Fase 5, 17.50.0) ---- */
+    {
+      const fakeEv = () => ({ preventDefault() {}, stopPropagation() {} });
+      const { a, iss, iptu } = montar();
+      a.pacAbrir();
+      /* nada selecionado ainda: a lista mostra o convite a clicar */
+      {
+        ok(a.pacPastaAtual() === null, "P10lis1 a lista comeca sem pasta selecionada");
+        ok(/clique numa pasta/i.test(a.$("pacListaCartoes").textContent), "P10lis2 o convite a clicar aparece na lista vazia: " + a.$("pacListaCartoes").textContent);
+      }
+      /* clicar num topico (o texto, nao a caixa) mostra so' os cartoes dele, sem marcar */
+      {
+        const linhaIss = linhas(a, "pac-top").find((e) => /^ISS \(/.test(e.children[1].textContent.trim()));
+        linhaIss.onclick(fakeEv());
+        ok(a.pacPastaAtual() && a.pacPastaAtual().chaves.has(iss), "P10lis3 clicar no topico ISS escolhe a pasta dele");
+        ok(a.pacSelAtual().size === 0, "P10lis4 clicar para VER nao marca a caixa (a marcacao continua so' na caixinha)");
+        const linhasCartao = achar(a.$("pacListaCartoes"), (e) => cls(e, "ger-item"));
+        ok(linhasCartao.length === 2, "P10lis5 duas linhas de cartao na lista (ISS tem 2 cartoes no fixture): " + linhasCartao.length);
+        ok(linhasCartao.some((e) => /fato gerador do ISS/i.test(e.textContent)), "P10lis6 a frente do cartao aparece na linha da lista: " + linhasCartao.map((e) => e.textContent).join(" | "));
+      }
+      /* clicar na CAIXA nao muda a pasta ativa da lista (so' marca/desmarca) */
+      {
+        const linhaIptu = linhas(a, "pac-top").find((e) => /^IPTU \(/.test(e.children[1].textContent.trim()));
+        const ckIptu = achar(linhaIptu, (e) => e.tag === "input")[0];
+        const espiao = { calls: 0, stopPropagation() { this.calls++; } };
+        ckIptu.onclick(espiao);
+        ok(espiao.calls === 1, "P10lis7 clicar na CAIXA impede que o clique suba ate' a linha e troque a pasta ativa (stopPropagation)");
+        ckIptu.checked = true; ckIptu.onchange();
+        ok(a.pacPastaAtual().chaves.has(iss) && !a.pacPastaAtual().chaves.has(iptu), "P10lis8 marcar a caixa do IPTU nao troca a pasta ativa (a lista continua mostrando ISS)");
+        ok(a.pacSelAtual().has(iptu), "P10lis8b (a marcacao em si funcionou normalmente)");
+      }
+      /* clicar numa DISCIPLINA mostra os cartoes de TODOS os topicos dela */
+      {
+        const discTrib = achar(a.$("pacArvore"), (e) => cls(e, "pac-disc") && !cls(e, "pac-top")).find((e) => /Trib/.test(e.children[2].textContent));
+        discTrib.onclick(fakeEv());
+        ok(a.pacPastaAtual().chaves.has(iss) && a.pacPastaAtual().chaves.has(iptu), "P10lis9 clicar na disciplina 'Trib' mostra os cartoes de ISS E IPTU juntos");
+        const linhasCartao = achar(a.$("pacListaCartoes"), (e) => cls(e, "ger-item"));
+        ok(linhasCartao.length === 4, "P10lis10 4 cartoes (2 de ISS + 2 de IPTU) na lista: " + linhasCartao.length);
+      }
+      /* topico sem cartao (vazio): a lista avisa, nao quebra */
+      {
+        a.pacClicarPasta(["disciplina-fantasma›topico-fantasma"]);
+        ok(/ainda n.o tem cart/i.test(a.$("pacListaCartoes").textContent), "P10lis11 pasta sem cartao mostra aviso, nao quebra: " + a.$("pacListaCartoes").textContent);
+      }
+      /* reabrir o dialogo esquece a pasta ativa (a lista volta ao convite) */
+      {
+        a.pacAbrir();
+        ok(a.pacPastaAtual() === null, "P10lis12 reabrir o montador esquece a pasta ativa da lista");
+      }
+      /* pastas grandes: a lista tem um limite (nao desenha centenas de linhas de uma vez) */
+      {
+        const { a: a2 } = montar();
+        const cs = Array.from({ length: 70 }, (_, i) => "Pergunta " + i + "? :: Resposta " + i).join("\n");
+        a2.$("editor").value = cs;
+        a2.pacAbrir();
+        a2.pacClicarPasta([a2.CQ_BANCADA]);
+        const linhasCartao = achar(a2.$("pacListaCartoes"), (e) => cls(e, "ger-item"));
+        ok(linhasCartao.length === 60, "P10lis13 a lista para no limite (60), mesmo com 70 cartoes na pasta: " + linhasCartao.length);
+        ok(/mais 10 cart/i.test(a2.$("pacListaCartoes").textContent), "P10lis14 avisa quantos ficaram de fora: " + a2.$("pacListaCartoes").textContent);
+      }
+    }
+    /* ---- P10cav: arrastar um cartão avulso da lista, separado dos irmãos do tópico (Fase 6, 17.51.0) ---- */
+    {
+      const fakeEv = () => ({ preventDefault() {}, stopPropagation() {}, dataTransfer: { effectAllowed: "", setData() {}, setDragImage() {}, dropEffect: "" } });
+      const acharTop = (a, nome) => linhas(a, "pac-top").find((e) => new RegExp("^" + nome + " \\(").test(e.children[1].textContent.trim()));
+      const acharCartao = (a, re) => achar(a.$("pacListaCartoes"), (e) => cls(e, "ger-item")).find((e) => re.test(e.textContent));
+      const { a, iss, iptu } = montar();
+      a.pacAbrir();
+      a.pacClicarPasta([iss]);
+      /* toda linha da lista e' arrastavel */
+      {
+        const linhasCard = achar(a.$("pacListaCartoes"), (e) => cls(e, "ger-item"));
+        ok(linhasCard.length === 2 && linhasCard.every((e) => e.draggable === true && typeof e.ondragstart === "function"), "P10cav1 toda linha da lista de cartoes e' arrastavel");
+      }
+      /* arrastar UM cartao (o da aliquota) e soltar sobre o topico IPTU: so' ele muda */
+      {
+        const linhaAliquota = acharCartao(a, /al.quota/i);
+        ok(!!linhaAliquota, "P10cav2 (achou a linha do cartao da aliquota)");
+        linhaAliquota.ondragstart(fakeEv());
+        ok(a.pacArrastoAtual() && a.pacArrastoAtual().tipo === "cartao", "P10cav3 o arrasto guarda o tipo 'cartao'");
+        acharTop(a, "IPTU").ondrop(fakeEv());
+        ok(a.pacArrastoAtual() === null, "P10cav4 soltar limpa o arrasto");
+        ok(a.pacCartaoMoverParaAtual().size === 1, "P10cav5 so' UM cartao ganhou arrasto (nao o topico inteiro): " + a.pacCartaoMoverParaAtual().size);
+        ok(a.pacMoverParaAtual().size === 0, "P10cav6 o topico ISS em si NAO foi movido (so' o cartao avulso)");
+      }
+      /* a lista mostra o cartao movido com caminho e desfazer; o outro cartao de ISS continua normal */
+      {
+        const linhaAliquota2 = acharCartao(a, /al.quota/i), linhaFato2 = acharCartao(a, /fato gerador/i);
+        const marcaAliquota = achar(linhaAliquota2, (e) => cls(e, "pac-caminho-movido"));
+        ok(marcaAliquota.length === 1 && /IPTU$/.test(marcaAliquota[0].textContent.trim()), "P10cav7 o cartao movido mostra o caminho novo, terminando em IPTU: " + (marcaAliquota[0] && marcaAliquota[0].textContent));
+        ok(achar(linhaFato2, (e) => cls(e, "pac-caminho-movido")).length === 0, "P10cav8 o OUTRO cartao de ISS (fato gerador) continua sem marca nenhuma");
+      }
+      /* desfazer so' este cartao */
+      {
+        const linhaAliquota3 = acharCartao(a, /al.quota/i);
+        const des = achar(linhaAliquota3, (e) => cls(e, "pac-desfazer-mov"))[0];
+        des.onclick({ preventDefault() {}, stopPropagation() {} });
+        ok(a.pacCartaoMoverParaAtual().size === 0, "P10cav9 'desfazer' tira o arrasto deste cartao");
+      }
+      /* soltar sobre o PROPRIO lugar (sem nenhum arrasto de topico): invalido, nao cria arrasto vazio */
+      {
+        const linhaAliquota4 = acharCartao(a, /al.quota/i);
+        linhaAliquota4.ondragstart(fakeEv());
+        const linhaIss = acharTop(a, "ISS");
+        const eo = fakeEv();
+        linhaIss.ondragover(eo);
+        ok(cls(linhaIss, "pac-alvo-no") && !cls(linhaIss, "pac-alvo"), "P10cav10 soltar o cartao sobre o PROPRIO topico e' invalido");
+        linhaIss.ondrop(fakeEv());
+        ok(a.pacCartaoMoverParaAtual().size === 0, "P10cav11 soltar no proprio lugar nao cria um arrasto vazio");
+      }
+      /* o cartao avulso HERDA a posicao atual do topico, se o topico inteiro ja foi movido */
+      {
+        const { a: a3, iss: iss3 } = montar();
+        a3.pacAbrir();
+        a3.pacClicarPasta([iss3]);
+        acharTop(a3, "ISS").ondragstart(fakeEv());
+        acharTop(a3, "IPTU").ondrop(fakeEv());
+        ok(a3.pacMoverParaAtual().get(iss3).topico === "IPTU", "P10cav12 (confirma: o topico ISS inteiro foi movido para IPTU)");
+        a3.pacClicarPasta([iss3]);
+        const linhaFato3 = acharCartao(a3, /fato gerador/i);
+        linhaFato3.ondragstart(fakeEv());
+        ok(a3.pacArrastoAtual().topico === "IPTU" && a3.pacArrastoAtual().disciplina === "Trib", "P10cav13 o cartao avulso herda a posicao ATUAL do topico (ja movido), nao a original: " + JSON.stringify(a3.pacArrastoAtual()));
+      }
+      /* prioridade cartao > topico: se os dois tem arrasto, o cartao vence na exportacao */
+      {
+        const { a: a4, iss: iss4 } = montar();
+        a4.pacAbrir();
+        a4.pacClicarPasta([iss4]);
+        acharTop(a4, "ISS").ondragstart(fakeEv());
+        acharTop(a4, "IPTU").ondrop(fakeEv());
+        a4.pacClicarPasta([iss4]);
+        const linhaFato4 = acharCartao(a4, /fato gerador/i);
+        linhaFato4.ondragstart(fakeEv());
+        const linhaPri4 = acharTop(a4, "Princípios");
+        ok(!!linhaPri4, "P10cav14 (achou o topico Principios)");
+        linhaPri4.ondrop(fakeEv());
+        ok(a4.pacCartaoMoverParaAtual().size === 1, "P10cav15 o cartao ganhou seu PROPRIO arrasto, diferente do topico");
+        a4.pacSelTeste([iss4]);
+        a4.$("pacSemRep").checked = false;
+        const cap4 = {};
+        await a4.pacExportar("apkg", deps(cap4));
+        const deckDoFato = cap4.cards.find((c) => /fato gerador/i.test(c.front)).deck;
+        const deckDaAliquota = cap4.cards.find((c) => /al.quota/i.test(c.front)).deck;
+        ok(deckDoFato === "Const::Princípios", "P10cav16 o cartao com arrasto proprio vai para o SEU destino: " + deckDoFato);
+        ok(deckDaAliquota === "Trib::IPTU", "P10cav17 o OUTRO cartao do mesmo topico (sem arrasto proprio) continua herdando o destino do TOPICO: " + deckDaAliquota);
+      }
+      /* "desfazer movimentos" (geral) limpa TAMBEM os arrastos de cartao avulso */
+      {
+        const { a: a5, iss: iss5 } = montar();
+        a5.pacAbrir();
+        a5.pacClicarPasta([iss5]);
+        acharCartao(a5, /fato gerador/i).ondragstart(fakeEv());
+        acharTop(a5, "IPTU").ondrop(fakeEv());
+        ok(a5.pacCartaoMoverParaAtual().size === 1, "P10cav18 (o cartao ganhou um arrasto, para o teste valer)");
+        a5.$("btnPacDesfazerMovs").onclick();
+        ok(a5.pacCartaoMoverParaAtual().size === 0, "P10cav19 'desfazer movimentos' geral tambem limpa os arrastos de cartao avulso");
+      }
+      /* reabrir o dialogo esquece os arrastos de cartao avulso */
+      {
+        const { a: a6, iss: iss6 } = montar();
+        a6.pacAbrir();
+        a6.pacClicarPasta([iss6]);
+        acharCartao(a6, /fato gerador/i).ondragstart(fakeEv());
+        acharTop(a6, "IPTU").ondrop(fakeEv());
+        a6.pacAbrir();
+        ok(a6.pacCartaoMoverParaAtual().size === 0, "P10cav20 reabrir o montador esquece os arrastos de cartao avulso tambem");
       }
     }
     /* ---- P11: a raiz digitada por dentro, sem ser um palpite de outra tela ----

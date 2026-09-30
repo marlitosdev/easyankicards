@@ -4214,6 +4214,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .pac-caminho-movido{color:var(--acao);opacity:1}
 .pac-desfazer-mov{font-size:10px;margin:0 0 3px 6px;padding:0 6px;border-radius:999px;border:1px solid var(--borda);background:transparent;color:var(--sutil);cursor:pointer}
 .pac-top[draggable="true"],.pac-disc[draggable="true"]{cursor:grab}
+.pac-seta{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;margin:-3px -6px -3px -2px;cursor:pointer;border-radius:5px}
+.pac-seta:hover{background:rgba(127,127,127,.18)}
+.pac-grade{display:grid;grid-template-columns:1.1fr 1fr;gap:10px;align-items:start}
+.pac-col{min-width:0}
+.pac-lista{max-height:34vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
+@media (max-width:640px){.pac-grade{grid-template-columns:1fr}}
 .pac-arv label.pac-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
 .pac-arv label.pac-alvo-no{opacity:.45;cursor:not-allowed}
 .pac-ghost{position:fixed;top:-300px;left:-300px;padding:6px 14px;border-radius:999px;background:var(--acao);color:#fff;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none}
@@ -8113,7 +8119,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnPacDesfazerMovs" data-i18n="pac_desfazer_movs" hidden></button>
   </div>
   <p class="nota" data-i18n="pac_arrastar_dica" style="margin:4px 0"></p>
-  <div id="pacArvore" class="pac-arv"></div>
+  <div class="pac-grade">
+    <div class="pac-col"><div id="pacArvore" class="pac-arv"></div></div>
+    <div class="pac-col"><div id="pacListaCartoes" class="pac-lista"></div></div>
+  </div>
   <div class="qm-bts" style="margin-top:6px">
     <span class="nota" data-i18n="pac_mover_label"></span>
     <select id="pacMoverSel"></select>
