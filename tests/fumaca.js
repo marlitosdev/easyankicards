@@ -819,6 +819,7 @@ function rodar() {
     pacAbrir, pacExportar, pacLerArquivo, pacAcaoImportar, pacPintar, pacCaminhoDoNo, cmCampo,
     pacNotasAtual: () => pacNotas, pacSelAtual: () => pacSel, pacLidoAtual: () => pacLido, pacSelTeste: (s) => { pacSel = new Set(s); },
     pacMoverParaAtual: () => pacMoverPara, pacArrastoAtual: () => pacArrasto, pacDestino,
+    pacDestinosLista, pacMoverMarcadosPara, pacDestinosCacheAtual: () => pacDestinosCache,
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,
     PAC_DICAS, pacDetectarEdital, pacMarcar, pacTemEditais, pacEditalDeAtual: () => pacEditalDe, pacInfoAtual: () => pacInfo, pacAbrir, gerChavesDaPasta, gerExportarPasta, apkgAgruparDecks,
     gerClassificar, gerMoverGrupos, gerAbrirClassificar, gerConfirmarClassificar, gerPintarClassificar, gerBancadaNotas, gerEditalDoContexto, gerAbrirCaminhoDe, gerPreencherDiscsNp,

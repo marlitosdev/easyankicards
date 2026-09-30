@@ -611,6 +611,88 @@ async function testes() {
         ok(a.pacMoverParaAtual().size === 0, "P10arr25 abrir de novo comeca sem nenhum arrasto guardado");
       }
     }
+    /* ---- P10mov: "mover os marcados para" — o mesmo destino do arrastar (Fase 2), so' que
+     * aplicado a TODOS os topicos marcados de uma vez (Fase 3, 17.48.0). Existe porque
+     * arrastar um a um nao escala para muitos marcados, e em tela de toque nao da' para
+     * arrastar (o gerenciador resolve o mesmo problema do mesmo jeito, com "Mover para…"). ---- */
+    {
+      const { a, k } = ME();
+      a.pacAbrir();
+      const issCh = k("Sistema Tributário Brasileiro", "ISS");
+      const taxasCh = k("Sistema Tributário Brasileiro", "Taxas");
+      const iptuCh = k("Sistema Tributário Brasileiro", "IPTU");
+
+      /* a lista de destinos: raiz (edital), disciplina e topico, com o caminho completo no nome */
+      {
+        const l = a.pacDestinosLista();
+        ok(l.some((d) => d.tipo === "raiz" && d.edital === "ISS Caruaru Auditor" && d.nome === "ISS Caruaru Auditor"), "P10mov1 a lista tem o edital como destino (tipo raiz)");
+        ok(l.some((d) => d.tipo === "disc" && d.disciplina === "Direito Financeiro" && d.edital === "ISS Caruaru Auditor" && d.nome === "ISS Caruaru Auditor › Direito Financeiro"), "P10mov2 a lista tem a disciplina como destino, com o caminho completo");
+        const top = l.find((d) => d.tipo === "top" && d.chave === iptuCh && d.edital === "ISS Caruaru Auditor");
+        ok(top && top.nome === "ISS Caruaru Auditor › Sistema Tributário Brasileiro › IPTU" && top.disciplina === "Sistema Tributário Brasileiro" && top.topico === "IPTU", "P10mov3 a lista tem o topico como destino (mescla), com a chave para o auto-soltar nao contar: " + JSON.stringify(top));
+        ok(!l.some((d) => d.tipo === "bancada" || d.nome === "Bancada"), "P10mov4 a bancada nao entra como destino (nao e' uma pasta do edital)");
+      }
+      /* com cartao na bancada (raiz "Bancada" existe na arvore), ela continua de fora dos destinos */
+      {
+        a.$("editor").value = "Pergunta da bancada? :: Resposta";
+        a.pacAbrir();
+        ok(linhas(a, "pac-ed-raiz").some((e) => /^Bancada/.test(e.textContent.trim())), "P10mov4b (confirma que a bancada aparece na ARVORE desta vez, para o teste valer)");
+        const l = a.pacDestinosLista();
+        ok(!l.some((d) => d.tipo === "bancada" || /^Bancada/.test(d.nome)), "P10mov4c mesmo com cartao na bancada, ela nao entra na lista de destinos");
+        a.$("editor").value = "";
+        a.pacAbrir();
+      }
+      /* a caixa de mover: desligada sem nada marcado, liga ao marcar */
+      {
+        ok(a.$("pacMoverSel").disabled === true && a.$("btnPacMoverMarcados").disabled === true, "P10mov5 sem nada marcado a caixa de mover fica desligada");
+        a.pacMarcar(issCh, true, "ISS Caruaru Auditor"); a.pacMarcar(taxasCh, true, "ISS Caruaru Auditor"); a.pacPintar();
+        ok(a.$("pacMoverSel").disabled === false && a.$("btnPacMoverMarcados").disabled === false, "P10mov6 com algo marcado a caixa liga");
+      }
+      /* mover ISS e Taxas (marcados) para dentro do topico IPTU: os dois passam a ir para o baralho de IPTU */
+      {
+        const idx = a.pacDestinosCacheAtual().findIndex((d) => d.tipo === "top" && d.chave === iptuCh);
+        a.$("pacMoverSel").selectedIndex = idx;
+        a.$("btnPacMoverMarcados").onclick();
+        const movISS = a.pacMoverParaAtual().get(issCh), movTax = a.pacMoverParaAtual().get(taxasCh);
+        ok(movISS && movISS.topico === "IPTU" && movISS.disciplina === "Sistema Tributário Brasileiro" && movISS.edital === "ISS Caruaru Auditor", "P10mov7 ISS vai para o baralho de IPTU: " + JSON.stringify(movISS));
+        ok(movTax && movTax.topico === "IPTU" && movTax.disciplina === "Sistema Tributário Brasileiro", "P10mov8 Taxas TAMBEM vai (o destino se aplica a TODOS os marcados de uma vez): " + JSON.stringify(movTax));
+        ok(/2 tópico\(s\) movido\(s\) para/.test(a.$("pacMsg").textContent) && /IPTU/.test(a.$("pacMsg").textContent), "P10mov9 a mensagem confirma quantos foram movidos e para onde: " + a.$("pacMsg").textContent);
+      }
+      /* soltar sobre o proprio destino (marcar IPTU junto) nao cria um arrasto sem sentido para ele */
+      {
+        a.$("btnPacDesfazerMovs").onclick();
+        a.pacMarcar(iptuCh, true, "ISS Caruaru Auditor"); a.pacPintar();
+        const idx = a.pacDestinosCacheAtual().findIndex((d) => d.tipo === "top" && d.chave === iptuCh);
+        a.$("pacMoverSel").selectedIndex = idx;
+        a.$("btnPacMoverMarcados").onclick();
+        ok(!a.pacMoverParaAtual().has(iptuCh) && a.pacMoverParaAtual().has(issCh) && a.pacMoverParaAtual().has(taxasCh), "P10mov10 IPTU marcado junto e' o proprio destino: fica de fora (so' os outros dois se movem)");
+        ok(/2 tópico\(s\) movido\(s\)/.test(a.$("pacMsg").textContent), "P10mov11 a contagem da mensagem exclui quem ja' estava no destino");
+      }
+      /* mover para uma DISCIPLINA (nao um topico): so' a disciplina muda, cada um mantem o proprio nome */
+      {
+        a.$("btnPacDesfazerMovs").onclick();
+        const idxD = a.pacDestinosCacheAtual().findIndex((d) => d.tipo === "disc" && d.disciplina === "Direito Financeiro" && d.edital === "ISS Caruaru Auditor");
+        a.$("pacMoverSel").selectedIndex = idxD;
+        a.$("btnPacMoverMarcados").onclick();
+        const movISS = a.pacMoverParaAtual().get(issCh), movTax = a.pacMoverParaAtual().get(taxasCh);
+        ok(movISS.disciplina === "Direito Financeiro" && movISS.topico === "ISS" && movTax.disciplina === "Direito Financeiro" && movTax.topico === "Taxas", "P10mov12 disciplina como destino: cada um muda de disciplina mas mantem o proprio nome de topico: " + JSON.stringify([movISS, movTax]));
+      }
+      /* mover para um EDITAL (raiz): so' o dono muda */
+      {
+        a.$("btnPacDesfazerMovs").onclick();
+        const idxR = a.pacDestinosCacheAtual().findIndex((d) => d.tipo === "raiz" && d.edital === "TCE-PE");
+        a.$("pacMoverSel").selectedIndex = idxR;
+        a.$("btnPacMoverMarcados").onclick();
+        const movISS = a.pacMoverParaAtual().get(issCh);
+        ok(movISS.edital === "TCE-PE" && movISS.disciplina === "Sistema Tributário Brasileiro" && movISS.topico === "ISS", "P10mov13 edital como destino: so' o dono muda, disciplina/topico continuam os proprios: " + JSON.stringify(movISS));
+      }
+      /* sem editais cadastrados: a lista tem so' disciplina e topico, nunca raiz */
+      {
+        const { a: a2, iss } = montar();
+        a2.pacAbrir();
+        const l2 = a2.pacDestinosLista();
+        ok(l2.length > 0 && l2.every((d) => d.tipo !== "raiz") && l2.some((d) => d.tipo === "top" && d.chave === iss), "P10mov14 sem edital cadastrado a lista nao tem raiz, so' disciplina e topico");
+      }
+    }
     /* ---- P11: a raiz digitada por dentro, sem ser um palpite de outra tela ----
      * O CASO REAL: "Nome do baralho raiz" vinha do campo de nome do gerador de
      * cartao avulso, sem relacao nenhuma com o que estava sendo exportado —
