@@ -234,13 +234,25 @@ function pacMarcar(chave, ligar, edital) {
   else { pacSel.delete(chave); pacEditalDe.delete(chave); }
 }
 
+/* O CAMINHO NO ANKI, ao lado de cada tópico — não só o nome da pasta.
+ * "Jurisprudência" não diz onde ela cai lá dentro; "TCE PE 2025 › Direito
+ * Administrativo › Jurisprudência" diz. Sem ramo aqui: com "por ramo"
+ * ligado um tópico pode se espalhar por vários subbaralhos — essa conta
+ * já existe, completa, no resumo (#pacDecks) logo abaixo da árvore. */
+function pacCaminhoDoNo(disciplina, topico, edital) {
+  const comEdital = !!($("pacComEdital") && $("pacComEdital").checked);
+  const nome = pacNomeDeck({ edital, disciplina, topico }, comEdital);
+  return pacRaizAtual() + " › " + nome.replace(/::/g, " › ");
+}
+
 /* a árvore por edital: Edital › Disciplina › Tópico, com caixa de três estados (marcado / parcial / vazio) */
-function pacPintarNo(cx, no, edital) {
+function pacPintarNo(cx, no, edital, disciplina) {
   if (no.tipo === "top") {
     const li = pacEl("label", "pac-top pac-ed-top" + (no.vazia ? " ger-vazia" : ""));
     const c2 = pacEl("input"); c2.type = "checkbox"; c2.checked = pacSel.has(no.chave);
     c2.onchange = () => { pacMarcar(no.chave, c2.checked, edital); pacPintar(); };
-    li.append(c2, pacEl("span", "", " " + no.topico + " (" + no.total + ")"));
+    li.append(c2, pacEl("span", "", " " + no.topico + " (" + no.total + ")"),
+      pacEl("span", "pac-caminho", pacCaminhoDoNo(disciplina, no.topico, edital)));
     cx.append(li);
     return;
   }
@@ -253,7 +265,7 @@ function pacPintarNo(cx, no, edital) {
   ck.onchange = () => { chaves.forEach((c) => pacMarcar(c, ck.checked, no.tipo === "bancada" ? "" : edital)); pacPintar(); };
   cab.append(ck, pacEl("span", "", " " + no.nome + " (" + no.total + ")"));
   cx.append(cab);
-  no.filhos.forEach((f) => pacPintarNo(cx, f, edital));
+  no.filhos.forEach((f) => pacPintarNo(cx, f, edital, no.tipo === "disc" ? no.nome : disciplina));
 }
 
 function pacPintarArvore() {
@@ -283,7 +295,8 @@ function pacPintarArvore() {
       const li = pacEl("label", "pac-top");
       const c2 = pacEl("input"); c2.type = "checkbox"; c2.checked = pacSel.has(tp.chave);
       c2.onchange = () => { c2.checked ? pacSel.add(tp.chave) : pacSel.delete(tp.chave); pacPintar(); };
-      li.append(c2, pacEl("span", "", " " + tp.topico + " (" + tp.total + ")"));
+      li.append(c2, pacEl("span", "", " " + tp.topico + " (" + tp.total + ")"),
+        pacEl("span", "pac-caminho", pacCaminhoDoNo(d.disciplina, tp.topico, "")));
       cx.append(li);
     });
   });
@@ -438,8 +451,9 @@ if (typeof document !== "undefined" && $("btnPacote")) {
     pacPintar();
   };
   $("btnPacLimpar").onclick = () => { pacSel = new Set(); pacEditalDe = new Map(); pacPintar(); };
-  $("pacNome").oninput = pacPintarPrevia;
-  $("pacComEdital").onchange = pacPintarPrevia;
+  /* estas duas mudam o caminho mostrado ao lado de cada tópico na árvore (pacCaminhoDoNo), não só o resumo embaixo */
+  $("pacNome").oninput = pacPintar;
+  $("pacComEdital").onchange = pacPintar;
   $("pacVazios").onchange = pacPintarPrevia;
   $("pacSemRep").onchange = pacPintarPrevia;
   $("pacRamos").onchange = pacPintarPrevia;
