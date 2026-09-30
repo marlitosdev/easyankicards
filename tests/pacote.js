@@ -344,8 +344,24 @@ async function testes() {
       ok(a.$("pacOpcEdital").hidden === false && a.$("pacComEdital").checked === true && a.$("pacVazios").checked === false, "P10m com edital cadastrado aparecem as opcoes (pasta do edital ligada, vazios desligado)");
       const raizes = linhas(a, "pac-ed-raiz").map((e) => e.textContent.trim());
       ok(raizes.join("|") === "ISS Caruaru Auditor (5)|TCE-PE (2)", "P10n a arvore tem uma raiz por edital, na ordem da lista: " + raizes.join("|"));
-      const tops = linhas(a, "pac-ed-top").map((e) => e.textContent.trim());
+      /* children[1] = o span "topico (N)"; children[2] (novo, 17.46.0) e' o caminho no Anki, ver P10o2 */
+      const tops = linhas(a, "pac-ed-top").map((e) => e.children[1].textContent.trim());
       ok(tops.indexOf("Taxas (0)") >= 0 && tops.indexOf("Créditos Adicionais (0)") >= 0 && tops.indexOf("ISS (3)") < tops.indexOf("IPTU (0)"), "P10o os topicos do plano aparecem na ordem do edital, tambem os sem cartao: " + tops.join("|"));
+      /* 17.46.0 — ao lado de cada topico, o caminho de verdade que ele ocupa no Anki, nao so' o nome da pasta */
+      const linhaISS = linhas(a, "pac-ed-top").find((e) => /^ISS \(3\)/.test(e.children[1].textContent.trim()));
+      const raizPacote = a.$("pacNome").value;
+      ok(linhaISS.children[2].textContent.trim() === raizPacote + " › ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS",
+        "P10o2 o caminho mostrado bate com o que pacCaminhoDoNo/pacNomeDeck geram de verdade: " + linhaISS.children[2].textContent);
+      /* muda a raiz (digitada) e o "pasta do edital": o caminho ao lado de cada topico acompanha na hora */
+      a.$("pacNome").value = "Outra Raiz"; a.$("pacNome").oninput();
+      const linhaISS2 = linhas(a, "pac-ed-top").find((e) => /^ISS \(3\)/.test(e.children[1].textContent.trim()));
+      ok(linhaISS2.children[2].textContent.trim() === "Outra Raiz › ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS",
+        "P10o3 mudar a raiz digitada atualiza o caminho na hora, sem precisar marcar/desmarcar nada: " + linhaISS2.children[2].textContent);
+      a.$("pacComEdital").checked = false; a.$("pacComEdital").onchange();
+      const linhaISS3 = linhas(a, "pac-ed-top").find((e) => /^ISS \(3\)/.test(e.children[1].textContent.trim()));
+      ok(linhaISS3.children[2].textContent.trim() === "Outra Raiz › Sistema Tributário Brasileiro › ISS",
+        "P10o4 desligar 'pasta do edital' tira o edital do caminho mostrado tambem: " + linhaISS3.children[2].textContent);
+      a.$("pacNome").value = raizPacote; a.$("pacComEdital").checked = true; a.$("pacComEdital").onchange();
       /* marcar o edital A inteiro */
       const rA = linhas(a, "pac-ed-raiz")[0];
       const ckA = achar(rA, (e) => e.tag === "input")[0];
