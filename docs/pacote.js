@@ -228,7 +228,7 @@ const PAC_DICAS = {
   btnPacTudo: "pac_tip_tudo", btnPacLimpar: "pac_tip_limpar", btnPacApkg: "pac_tip_apkg", btnPacTxt: "pac_tip_txt",
   btnPacImportar: "pac_tip_importar", btnPacFechar: "pac_tip_fechar", pacComEdital: "pac_tip_com_edital",
   pacVazios: "pac_tip_vazios", pacRamos: "pac_tip_ramos", pacImpComEdital: "pac_tip_imp_com_edital", pacSemRep: "pac_tip_sem_rep", pacSemFracos: "pac_tip_sem_fracos",
-  btnPacDesfazerMovs: "pac_tip_desfazer_movs",
+  btnPacDesfazerMovs: "pac_tip_desfazer_movs", btnPacMoverMarcados: "pac_tip_mover_marcados",
 };
 
 function pacEl(tag, cls, txt) {
@@ -470,6 +470,70 @@ function pacPintarArvore() {
   });
 }
 
+/* ---- mover TODOS os marcados de uma vez para uma pasta escolhida numa lista
+ * (Fase 3) — o mesmo destino do arrastar (tópico junta, disciplina ou edital
+ * só trocam essa parte), só que aplicado à seleção inteira. Existe porque
+ * arrastar item a item não escala para muitos tópicos marcados, e porque em
+ * tela de toque não dá para arrastar (o gerenciador já resolve isso do mesmo
+ * jeito com "Mover para…"). ---- */
+let pacDestinosCache = [];
+
+function pacDestinosLista() {
+  const out = [];
+  if (pacTemEditais()) {
+    gerModeloEditais(pacNotas, gerPastasVazias(pacNotas)).roots.forEach((r) => {
+      if (r.tipo === "bancada") return;
+      const editalR = r.tipo === "edital" ? (r.concurso || "") : "";
+      out.push({ tipo: "raiz", edital: editalR, nome: r.nome });
+      r.filhos.forEach((d) => {
+        if (d.tipo !== "disc") return;
+        out.push({ tipo: "disc", disciplina: d.nome, edital: editalR, nome: r.nome + " › " + d.nome });
+        d.filhos.forEach((tp) => out.push({ tipo: "top", chave: tp.chave, disciplina: d.nome, topico: tp.topico, edital: editalR, nome: r.nome + " › " + d.nome + " › " + tp.topico }));
+      });
+    });
+    return out;
+  }
+  gerArvore(pacNotas).forEach((d) => {
+    out.push({ tipo: "disc", disciplina: d.disciplina, edital: "", nome: d.disciplina });
+    d.topicos.forEach((tp) => out.push({ tipo: "top", chave: tp.chave, disciplina: d.disciplina, topico: tp.topico, edital: "", nome: d.disciplina + " › " + tp.topico }));
+  });
+  return out;
+}
+
+function pacPintarDestinosMover() {
+  pacDestinosCache = pacDestinosLista();
+  const sel = $("pacMoverSel");
+  const antes = sel.selectedIndex;
+  sel.innerHTML = "";
+  pacDestinosCache.forEach((d) => {
+    const o = document.createElement("option");
+    o.textContent = d.nome;
+    sel.append(o);
+  });
+  if (antes >= 0 && antes < pacDestinosCache.length) sel.selectedIndex = antes;
+  const vazio = !pacSel.size || !pacDestinosCache.length;
+  sel.disabled = vazio;
+  $("btnPacMoverMarcados").disabled = vazio;
+}
+
+/* aplica UM destino a TODOS os tópicos marcados (pacSel); devolve quantos mudaram
+ * (um tópico igual ao próprio destino — soltar "nele mesmo" — não conta). */
+function pacMoverMarcadosPara(dest) {
+  if (!dest) return 0;
+  let n = 0;
+  pacSel.forEach((chave) => {
+    if (dest.tipo === "top" && chave === dest.chave) return;
+    const atual = pacDestino(chave, "");
+    const base = dest.tipo === "top" ? { disciplina: dest.disciplina, topico: dest.topico, edital: dest.edital || "" }
+      : dest.tipo === "disc" ? { disciplina: dest.disciplina, topico: atual.topico, edital: dest.edital || "" }
+      : { disciplina: atual.disciplina, topico: atual.topico, edital: dest.edital || "" };
+    pacMoverPara.set(chave, base);
+    n++;
+  });
+  if (n) pacPintar();
+  return n;
+}
+
 /* o mesmo "sem nome vira EasyAnkiCards" que pacExportar usa de verdade —
  * a prévia tem de mostrar EXATAMENTE o que vai para o arquivo, nunca uma
  * aproximação. */
@@ -496,7 +560,7 @@ function pacPintarPrevia() {
   return p;
 }
 
-function pacPintar() { pacPintarArvore(); pacPintarPrevia(); }
+function pacPintar() { pacPintarArvore(); pacPintarPrevia(); pacPintarDestinosMover(); }
 
 /* deps: só para teste (o padrão usa o buildApkg e a entrega do app). */
 async function pacExportar(formato, deps) {
@@ -620,6 +684,11 @@ if (typeof document !== "undefined" && $("btnPacote")) {
   };
   $("btnPacLimpar").onclick = () => { pacSel = new Set(); pacEditalDe = new Map(); pacPintar(); };
   $("btnPacDesfazerMovs").onclick = () => { pacMoverPara = new Map(); pacPintar(); };
+  $("btnPacMoverMarcados").onclick = () => {
+    const dest = pacDestinosCache[$("pacMoverSel").selectedIndex];
+    const n = pacMoverMarcadosPara(dest);
+    if (n) $("pacMsg").textContent = t("pac_mover_feito", { n, d: dest.nome });
+  };
   /* estas duas mudam o caminho mostrado ao lado de cada tópico na árvore (pacCaminhoDoNo), não só o resumo embaixo */
   $("pacNome").oninput = pacPintar;
   $("pacComEdital").onchange = pacPintar;

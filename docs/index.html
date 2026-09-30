@@ -4217,6 +4217,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .pac-arv label.pac-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
 .pac-arv label.pac-alvo-no{opacity:.45;cursor:not-allowed}
 .pac-ghost{position:fixed;top:-300px;left:-300px;padding:6px 14px;border-radius:999px;background:var(--acao);color:#fff;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none}
+#pacMoverSel{flex:1;min-width:120px;max-width:260px}
 .pac-arv{max-height:34vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
 /* Gerenciador: a janela é uma coluna flexível — título, busca, avisos e rodapé ficam FIXOS e só as
  * três colunas rolam (antes o diálogo inteiro rolava por cima delas). Colunas 22% / 43% / 35%. */
@@ -8113,6 +8114,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <p class="nota" data-i18n="pac_arrastar_dica" style="margin:4px 0"></p>
   <div id="pacArvore" class="pac-arv"></div>
+  <div class="qm-bts" style="margin-top:6px">
+    <span class="nota" data-i18n="pac_mover_label"></span>
+    <select id="pacMoverSel"></select>
+    <button type="button" class="btn-min" id="btnPacMoverMarcados" data-i18n="pac_mover_btn"></button>
+  </div>
   <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
     <input type="text" id="pacNome" style="width:100%;box-sizing:border-box"></label>
   <div id="pacOpcEdital" hidden>
