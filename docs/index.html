@@ -4610,6 +4610,11 @@ dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);he
 .ger-onde-sep{opacity:.55;flex:0 0 auto}
 .ger-onde-n{margin-left:auto;flex:0 0 auto;opacity:.7;padding-left:6px;white-space:nowrap}
 .ger-cab-acoes{display:inline-flex;align-items:center;gap:6px}
+.ger-modos{display:flex;gap:6px;margin:4px 0 6px;border-bottom:1px solid var(--borda)}
+.ger-modo{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 0;text-align:center;padding:8px 6px;font-size:13px;font-weight:700;
+  border-bottom:3px solid transparent;color:var(--sutil)}
+.ger-modo[aria-selected="true"]{color:var(--texto);border-bottom-color:var(--acao)}
+.ger-modo:focus-visible{outline:2px solid var(--acao);outline-offset:-2px}
 .ger-abas{display:none}
 .ger-aba{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 0;text-align:center;padding:9px 6px;font-size:13px;font-weight:700;
   border-bottom:3px solid transparent;color:var(--sutil)}
@@ -7905,6 +7910,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="qs-x" id="btnGerX" aria-label="Fechar">✕</button>
     </span>
   </div>
+  <!-- GERENCIAR (mover/apagar/editar de verdade) × MONTAR PACOTE (marcar pastas para exportar, nada grava na
+       Biblioteca) — sempre visível, tela larga ou estreita; a árvore/lista são as MESMAS nos dois modos. -->
+  <div class="ger-modos" role="tablist">
+    <button type="button" class="ger-modo" id="btnGerModoGerenciar" role="tab" aria-selected="true" data-i18n="ger_modo_gerenciar"></button>
+    <button type="button" class="ger-modo" id="btnGerModoExportar" role="tab" aria-selected="false" data-i18n="ger_modo_exportar"></button>
+  </div>
   <!-- NO TELEFONE, TRÊS ABAS EM VEZ DE TRÊS COLUNAS: pastas → cartões → prévia, uma por vez, na tela inteira. Escolher uma
        pasta leva aos cartões; escolher um cartão leva à prévia. Em tela larga as abas nem aparecem (as três colunas ficam
        lado a lado, como sempre). -->
@@ -7942,6 +7953,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <option value="cadastro" data-i18n="ger_ordem_cadastro"></option>
         </select>
         <label class="ger-ocultar"><input type="checkbox" id="gerOcultarVazias"> <span data-i18n="ger_ocultar_vazias"></span></label>
+        <button type="button" class="btn-min" id="btnGerDesfazerExport" data-i18n="ger_desfazer_export" hidden></button>
       </div>
       <div id="gerArvore"></div>
     </div>
