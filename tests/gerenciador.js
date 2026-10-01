@@ -1649,6 +1649,125 @@ async function testes() {
     }
   }
 
+  /* ---- G26: painel de exportar + exportar de verdade (B3) — o MOTOR e' o mesmo de pacote.js
+   * (pacMontar/pacCartoes/pacNomeArquivo), so' a tela muda de dono; "sem baralho raiz" (F0)
+   * embutida aqui mesmo, como o plano pediu ---- */
+  {
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const marcar = (a, nome) => { const top = linhas(a, "ger-top").find((e) => new RegExp("^" + nome + " \\(").test(e.textContent.trim())); const ck = achar(top, (x) => x.tag === "input")[0]; ck.checked = true; ck.onchange(); return top; };
+    const deps = (cap) => ({ construir: async (cards, raiz, est, tit, al, extras) => { cap.cards = cards; cap.raiz = raiz; cap.extras = extras; return new Uint8Array([9]); }, entregar: async (b, nome, mime) => { cap.nome = nome; cap.mime = mime; cap.n = b.length; } });
+
+    /* a coluna troca de conteudo por modo */
+    {
+      const { a } = montar();
+      a.gerAbrir();
+      ok(a.$("gerExpCx").hidden === true && a.$("gerPrevia").hidden === false, "G26a em modo gerenciar, o painel de exportar fica escondido e a previa normal aparece");
+      a.$("btnGerModoExportar").onclick();
+      ok(a.$("gerExpCx").hidden === false && a.$("gerPrevia").hidden === true, "G26b em modo exportar, o painel de exportar aparece no lugar da previa do cartao");
+      ok(a.$("btnGerExpApkg").disabled === true && a.$("btnGerExpTxt").disabled === true, "G26c sem nada marcado, os dois botoes de exportar comecam desligados");
+    }
+    /* marcar atualiza a previa (resumo + baralhos) e liga os botoes */
+    {
+      const { a, iss } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.$("gerExpNome").value = "EasyAnkiCards"; a.$("gerExpNome").oninput();
+      marcar(a, "ISS");
+      ok(a.$("btnGerExpApkg").disabled === false && a.$("btnGerExpTxt").disabled === false, "G26d marcar uma pasta liga os dois botoes");
+      /* ISS tem 3 cartoes, 2 deles parecidos o bastante pro radar de repeticao agrupar; "sem repetidos" comeca ligada */
+      ok(/2 notas em 1 baralhos/.test(a.$("gerExpResumo").textContent), "G26e o resumo conta notas e baralhos (com 'sem repetidos' ligado): " + a.$("gerExpResumo").textContent);
+      ok(/EasyAnkiCards › Trib › ISS/.test(a.$("gerExpDecks").textContent), "G26f a lista de baralhos mostra a raiz (nome digitado) + o caminho: " + a.$("gerExpDecks").textContent);
+    }
+    /* F0: "sem baralho raiz" tira o prefixo da PREVIA e do ARQUIVO de verdade */
+    {
+      const { a, iss } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.$("gerExpNome").value = "EasyAnkiCards"; a.$("gerExpNome").oninput();
+      marcar(a, "ISS");
+      ok(a.$("gerExpSemRaiz").checked === false, "G26g 'sem baralho raiz' comeca desligada (preserva o comportamento de sempre)");
+      a.$("gerExpSemRaiz").checked = true; a.$("gerExpSemRaiz").onchange();
+      ok(/^Trib › ISS/.test(a.$("gerExpDecks").textContent.trim()), "G26h ligada, a previa NAO mostra mais a raiz na frente: " + a.$("gerExpDecks").textContent);
+      const cap = {};
+      const r = await a.gerAcaoExportar("apkg", deps(cap));
+      ok(r.ok === true && cap.raiz === "" && cap.cards.every((c) => c.deck === "Trib::ISS"), "G26i o .apkg de verdade sai sem a raiz (deckName vazio para o buildApkg): " + JSON.stringify({ raiz: cap.raiz, decks: cap.cards.map((c) => c.deck) }));
+      ok(cap.nome === "EasyAnkiCards.apkg", "G26j o NOME DO ARQUIVO continua vindo do campo digitado, mesmo sem baralho raiz: " + cap.nome);
+    }
+    /* sem a caixa ligada, o .apkg sai com a raiz (comportamento de sempre) */
+    {
+      const { a, iss } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      marcar(a, "ISS");
+      a.$("gerExpNome").value = "Meu Pacote"; a.$("gerExpNome").oninput();
+      const cap = {};
+      await a.gerAcaoExportar("apkg", deps(cap));
+      ok(cap.raiz === "Meu Pacote" && cap.nome === "Meu Pacote.apkg", "G26k sem F0, o .apkg leva a raiz digitada, no baralho e no nome do arquivo: " + JSON.stringify({ raiz: cap.raiz, nome: cap.nome }));
+    }
+    /* .txt tambem funciona, e nada e' exportado sem nenhuma pasta marcada */
+    {
+      const { a } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.$("gerExpNome").value = "EasyAnkiCards"; a.$("gerExpNome").oninput();
+      const cap = {};
+      ok((await a.gerAcaoExportar("txt", deps(cap))).ok === false, "G26l sem pasta marcada, exportar (txt ou apkg) nao faz nada");
+      marcar(a, "IPTU");
+      const r = await a.gerAcaoExportar("txt", deps(cap));
+      ok(r.ok === true && cap.mime === "text/plain" && cap.nome === "EasyAnkiCards.txt", "G26m o .txt tambem funciona, com o mime e o nome certos: " + JSON.stringify({ mime: cap.mime, nome: cap.nome }));
+    }
+    /* arrastar (B2) muda o baralho exportado de verdade — o motor usa gerMoverParaExport */
+    {
+      const fakeEv = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { effectAllowed: "", setData() {}, setDragImage() {}, dropEffect: "" } });
+      const acharTop = (a, nome) => linhas(a, "ger-top").find((e) => new RegExp("^" + nome + " \\(").test(e.textContent.trim()));
+      const { a, iss } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      marcar(a, "ISS");
+      const topoIss = acharTop(a, "ISS");
+      topoIss.ondragstart(fakeEv());
+      acharTop(a, "IPTU").ondrop(fakeEv());
+      const cap = {};
+      await a.gerAcaoExportar("apkg", deps(cap));
+      ok(cap.cards.length > 0 && cap.cards.every((c) => c.deck === "Trib::IPTU"), "G26n o arrasto export-scoped (B2) vale na exportacao de verdade (baralho, sem a raiz): " + JSON.stringify(cap.cards.map((c) => c.deck)));
+    }
+    /* "pasta do edital": o baralho ganha o edital na frente, resolvido pelo DONO do topico
+     * (matResumos[chave].concurso) — gerSelExport nao guarda sob qual raiz foi marcado */
+    {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5");
+      const issK = a.matChave("Sistema Tributário Brasileiro", "ISS");
+      a.matGravarCartoes(issK, "Pergunta? :: Resposta :: x", { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.gerAbrir();
+      a.$("btnGerModoExportar").onclick();
+      ok(a.$("gerExpOpcEdital").hidden === false && a.$("gerExpComEdital").checked === true, "G26p com edital cadastrado, 'pasta do edital' aparece e comeca ligada");
+      /* arvore por edital comeca com as disciplinas FECHADAS (G19h) — abrir "Sistema Tributário..." antes de marcar */
+      const discLinha = linhas(a, "ger-disc").find((e) => /Sistema Tributário/.test(e.textContent));
+      achar(discLinha, (x) => cls(x, "ger-seta"))[0].onclick({ stopPropagation() {} });
+      marcar(a, "ISS");
+      const cap = {};
+      await a.gerAcaoExportar("apkg", deps(cap));
+      ok(cap.cards[0].deck === "ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS", "G26q com 'pasta do edital' ligada, o edital dono entra na frente do baralho: " + cap.cards[0].deck);
+      a.$("gerExpComEdital").checked = false; a.$("gerExpComEdital").onchange();
+      const cap2 = {};
+      await a.gerAcaoExportar("apkg", deps(cap2));
+      ok(cap2.cards[0].deck === "Sistema Tributário Brasileiro::ISS", "G26r desligada, volta a Disciplina::Topico sem o edital: " + cap2.cards[0].deck);
+    }
+    /* reabrir esquece as opcoes do painel (volta ao padrao) */
+    {
+      const { a } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.$("gerExpSemRaiz").checked = true; a.$("gerExpSemRaiz").onchange();
+      a.$("dlgGerCartoes").close();
+      a.gerAbrir();
+      ok(a.$("gerExpSemRaiz").checked === false, "G26s reabrir a Biblioteca esquece 'sem baralho raiz' (volta a desligada)");
+    }
+    /* erro do construtor aparece na mensagem do painel (nao trava nada) */
+    {
+      const { a } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      marcar(a, "ISS");
+      const r = await a.gerAcaoExportar("apkg", { construir: async () => { throw new Error("sql.js caiu"); }, entregar: async () => {} });
+      ok(r.ok === false && /sql\.js caiu/.test(a.$("gerExpMsg").textContent), "G26t erro do construtor aparece na mensagem do painel: " + a.$("gerExpMsg").textContent);
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
