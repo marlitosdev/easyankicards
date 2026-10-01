@@ -5359,6 +5359,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
     <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
     <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
+    <button type="button" class="btn-min" id="btnPacoteImportar" data-i18n="pac_importar_btn" data-i18n-title="pac_importar_btn_aj"></button>
     <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
   </div>
@@ -8144,40 +8145,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <dialog id="dlgPacote" class="ui-modal diag-modal">
-  <h3 data-i18n="pac_titulo"></h3>
-  <p class="nota" data-i18n="pac_ajuda"></p>
-  <div class="qm-bts">
-    <button type="button" class="btn-min" id="btnPacTudo" data-i18n="pac_marcar_tudo"></button>
-    <button type="button" class="btn-min" id="btnPacLimpar" data-i18n="pac_limpar"></button>
-    <button type="button" class="btn-min" id="btnPacDesfazerMovs" data-i18n="pac_desfazer_movs" hidden></button>
-  </div>
-  <p class="nota" data-i18n="pac_arrastar_dica" style="margin:4px 0"></p>
-  <div class="pac-grade">
-    <div class="pac-col"><div id="pacArvore" class="pac-arv"></div></div>
-    <div class="pac-col"><div id="pacListaCartoes" class="pac-lista"></div></div>
-  </div>
-  <div class="qm-bts" style="margin-top:6px">
-    <span class="nota" data-i18n="pac_mover_label"></span>
-    <select id="pacMoverSel"></select>
-    <button type="button" class="btn-min" id="btnPacMoverMarcados" data-i18n="pac_mover_btn"></button>
-  </div>
-  <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
-    <input type="text" id="pacNome" style="width:100%;box-sizing:border-box"></label>
-  <div id="pacOpcEdital" hidden>
-    <label class="nota" style="display:block"><input type="checkbox" id="pacComEdital" checked> <span data-i18n="pac_com_edital"></span></label>
-    <label class="nota" style="display:block"><input type="checkbox" id="pacVazios"> <span data-i18n="pac_vazios"></span></label>
-  </div>
-  <label class="nota" style="display:block"><input type="checkbox" id="pacRamos" checked> <span data-i18n="pac_ramos"></span></label>
-  <label class="nota" style="display:block"><input type="checkbox" id="pacSemRep" checked> <span data-i18n="pac_sem_rep"></span></label>
-  <label class="nota" style="display:block"><input type="checkbox" id="pacSemFracos"> <span data-i18n="pac_sem_fracos"></span></label>
-  <p class="nota" id="pacPrevia"></p>
-  <div id="pacDecks"></div>
-  <div class="qm-bts">
-    <button type="button" class="btn-min btn-min-ok" id="btnPacApkg" data-i18n="pac_apkg" disabled></button>
-    <button type="button" class="btn-min" id="btnPacTxt" data-i18n="pac_txt" disabled></button>
-  </div>
-  <hr>
-  <h4 data-i18n="pac_import_tit"></h4>
+  <h3 data-i18n="pac_import_tit"></h3>
   <p class="nota" data-i18n="pac_import_ajuda"></p>
   <input type="file" id="pacArquivo" accept=".apkg">
   <div id="pacImpCx" hidden>

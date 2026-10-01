@@ -1577,8 +1577,9 @@ function gerChavesDaPasta() {
 function gerExportarPasta() {
   const p = gerChavesDaPasta();
   if (!p.chaves.length) { gerAviso(t("ger_exp_nada"), false); return null; }
-  $("dlgGerCartoes").close();
-  pacAbrir(p);
+  gerAlternarModo("exportar");
+  p.chaves.forEach((c) => gerMarcarExport(c, true));
+  gerPintarArvore(); gerPintarPrevia();
   return p;
 }
 
@@ -1716,6 +1717,7 @@ function gerAbrirNoTopico(disciplina, topico, opt) {
 if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerCartoes").onclick = gerAbrir;
   if ($("btnBancaGer")) $("btnBancaGer").onclick = gerAbrir;
+  if ($("btnPacote")) $("btnPacote").onclick = () => { gerAbrir(); gerAlternarModo("exportar"); };
   dicasDosBotoes({ btnGerCartoes: "ger_btn_aj", btnBancaGer: "ger_btn_aj" });
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
   $("btnGerX").onclick = () => $("dlgGerCartoes").close();

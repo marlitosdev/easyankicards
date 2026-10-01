@@ -1,16 +1,21 @@
 /* ===================================================================
- * MONTAR PACOTE .apkg E IMPORTAR PARA UMA PASTA
+ * PACOTE .apkg — O MOTOR DE MONTAR + IMPORTAR PARA UMA PASTA
  *
- * A exportação só saía do texto da bancada, de uma vez, num baralho só.
- * Quem organiza o material em disciplina › tópico não tinha como escolher
- * QUAIS pastas viram um pacote, nem levar essa organização para o Anki.
+ * Até a B4a (fusão com a Biblioteca de cartões), este arquivo também tinha
+ * a TELA de "Montar pacote" (árvore, lista, arrastar, opções, exportar).
+ * Essa tela virou o modo "Montar pacote" de `docs/gerenciador.js`
+ * (`#dlgGerCartoes`), que reaproveita a árvore/lista/arrastar DELA (mais
+ * madura) — aqui ficou só o MOTOR puro que ela chama: `pacMontar`/
+ * `pacCartoes` (monta a lista de cartões + o baralho de cada um, a partir
+ * de QUALQUER árvore/seleção, não só a própria), `pacNomeDeck`,
+ * `pacChaveCartao`, `pacRamoDoCartao`, `pacResolverRamo`, `pacNomeArquivo`.
  *
- * Aqui: marca-se as pastas, vê-se a previsão ("120 notas em 6 baralhos"),
- * e sai UM .apkg (ou .txt) com um baralho por pasta (Raiz::Disciplina::Tópico).
- * Repetidos e cartões abaixo do padrão podem ficar de fora — o que a F2 e a
- * F3 medem. O caminho inverso também existe: um .apkg do Anki entra numa
- * pasta escolhida, ou vira uma pasta por baralho, sem perder o baralho de
- * cada cartão. A importação vai para a lista de "desfazer" do gerenciador.
+ * A outra metade do arquivo — "Importar .apkg para uma pasta" — é um
+ * recurso À PARTE (não tem nada a ver com a fusão) e continua com tela
+ * própria (`#dlgPacote`, aberto por `#btnPacoteImportar`): um .apkg do
+ * Anki entra numa pasta escolhida, ou vira uma pasta por baralho (sem a
+ * raiz comum), sem perder o baralho de cada cartão; vai para a lista de
+ * "desfazer" do gerenciador.
  * =================================================================== */
 
 /* ---- núcleo (sem tela) ---- */
@@ -224,474 +229,18 @@ function pacImportar(cards, modo, destChave, comEdital) {
   return r;
 }
 
-/* ---- a tela ---- */
-let pacNotas = [], pacSel = new Set(), pacLido = null;
-let pacEditalDe = new Map();   /* chave do tópico marcado → edital sob o qual foi marcado (pasta de cima no Anki) */
-let pacInfo = new Map();       /* chave → { edital, disciplina, topico } dos tópicos SEM cartão (os do plano do edital) */
-let pacMoverPara = new Map();  /* chave do tópico ARRASTADO → { disciplina, topico, edital } de destino — só nesta
-                                 * exportação: nunca grava na Biblioteca, some ao reabrir o montador de pacote. */
-let pacFechados = new Set();   /* ids dos ramos (edital/disciplina) recolhidos — só visual, esvazia ao reabrir */
-let pacPasta = null;           /* { chaves: Set, edital } — a pasta clicada por último: a lista de cartões ao lado
-                                 * mostra SÓ os cartões dela; puramente visual (ver, não marcar). */
-const PAC_LISTA_LIMITE = 60;   /* pastas grandes (a Bancada tem centenas) não desenham tudo de uma vez */
-let pacCartaoMoverPara = new Map(); /* chave-de-cartão ARRASTADO da lista → { disciplina, topico, edital } de
-                                 * destino — separa só ESSE cartão dos irmãos do tópico; mesma filosofia de
-                                 * pacMoverPara (só nesta exportação, some ao reabrir), com prioridade sobre ele. */
+/* ---- a tela (só "Importar .apkg"; "Montar pacote" virou o modo exportação
+ * da Biblioteca, docs/gerenciador.js — Fusão B1-B4a) ---- */
+let pacLido = null;
 
 /* Explicação de cada botão/opção desta janela (o teste confere que nenhum fica de fora). */
 const PAC_DICAS = {
-  btnPacTudo: "pac_tip_tudo", btnPacLimpar: "pac_tip_limpar", btnPacApkg: "pac_tip_apkg", btnPacTxt: "pac_tip_txt",
-  btnPacImportar: "pac_tip_importar", btnPacFechar: "pac_tip_fechar", pacComEdital: "pac_tip_com_edital",
-  pacVazios: "pac_tip_vazios", pacRamos: "pac_tip_ramos", pacImpComEdital: "pac_tip_imp_com_edital", pacSemRep: "pac_tip_sem_rep", pacSemFracos: "pac_tip_sem_fracos",
-  btnPacDesfazerMovs: "pac_tip_desfazer_movs", btnPacMoverMarcados: "pac_tip_mover_marcados",
+  btnPacImportar: "pac_tip_importar", btnPacFechar: "pac_tip_fechar", pacImpComEdital: "pac_tip_imp_com_edital",
 };
-
-function pacEl(tag, cls, txt) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (txt != null) e.textContent = txt;
-  return e;
-}
 
 function pacTemEditais() { return typeof editais !== "undefined" && Array.isArray(editais) && editais.length > 0; }
 
-function pacOpcoes() {
-  return { semRepetidos: $("pacSemRep").checked, semFracos: $("pacSemFracos").checked,
-    comEdital: $("pacComEdital").checked, comRamos: $("pacRamos").checked, vazios: $("pacVazios").checked && pacTemEditais(), editalDe: pacEditalDe, info: pacInfo, moverPara: pacMoverPara, cartaoMoverPara: pacCartaoMoverPara };
-}
-
-/* marcar/desmarcar UM tópico (guardando de qual edital ele foi marcado) */
-function pacMarcar(chave, ligar, edital) {
-  if (ligar) { pacSel.add(chave); if (!pacEditalDe.has(chave)) pacEditalDe.set(chave, edital || ""); }
-  else { pacSel.delete(chave); pacEditalDe.delete(chave); }
-}
-
-/* onde um tópico está DE VERDADE (sem nenhum arrasto): disciplina/tópico de
- * qualquer nota dele, ou — sem cartão ainda — os dados do plano do edital. */
-function pacInfoNatural(chave) {
-  const nota = pacNotas.find((n) => n.chave === chave);
-  if (nota) return { disciplina: nota.disciplina, topico: nota.topico };
-  const info = pacInfo.get(chave);
-  return info ? { disciplina: info.disciplina, topico: info.topico } : { disciplina: "", topico: "" };
-}
-
-/* onde um tópico VAI nesta exportação: o arrasto (pacMoverPara), se houve
- * algum, senão o lugar natural dele. `edital` é o contexto da árvore (a
- * raiz sob a qual esta linha está sendo desenhada agora). */
-function pacDestino(chave, edital) {
-  const mov = pacMoverPara.get(chave);
-  if (mov) return mov;
-  const nat = pacInfoNatural(chave);
-  return { disciplina: nat.disciplina, topico: nat.topico, edital: edital || "" };
-}
-
-/* O CAMINHO NO ANKI, ao lado de cada tópico — não só o nome da pasta.
- * "Jurisprudência" não diz onde ela cai lá dentro; "TCE PE 2025 › Direito
- * Administrativo › Jurisprudência" diz. Já mostra o destino depois de um
- * arrasto (pacMoverPara): é exatamente o que vai sair no Anki. Sem ramo
- * aqui: com "por ramo" ligado um tópico pode se espalhar por vários
- * subbaralhos — essa conta já existe, completa, no resumo (#pacDecks)
- * logo abaixo da árvore. */
-function pacCaminhoDoNo(chave, disciplina, topico, edital) {
-  const comEdital = !!($("pacComEdital") && $("pacComEdital").checked);
-  const dest = pacDestino(chave, edital);
-  const nome = pacNomeDeck(dest, comEdital);
-  return pacRaizAtual() + " › " + nome.replace(/::/g, " › ");
-}
-
-/* ---- arrastar um tópico (ou, da lista, um cartão avulso) para mudar de disciplina, edital ou
- * juntar com outro — só nesta exportação (pacMoverPara / pacCartaoMoverPara), nunca mexe na
- * Biblioteca real; é o mesmo padrão visual do arrastar do gerenciador: pílula que acompanha o
- * ponteiro, destaque verde/vermelho no alvo. `pacArrasto.tipo` diz qual dos dois está em jogo e
- * qual Map recebe o destino; os alvos de soltar são os MESMOS para os dois tipos, comparando o
- * destino (disciplina/tópico/edital), não a chave — um cartão avulso e um tópico inteiro não
- * compartilham o mesmo espaço de chaves. Só se arrasta uma coisa por vez: não há seleção
- * múltipla nem na árvore nem na lista. ---- */
-let pacArrasto = null, pacGhost = null;
-
-/* o Map certo para o tipo de arrasto em andamento */
-function pacMoverParaDoTipo(tipo) { return tipo === "cartao" ? pacCartaoMoverPara : pacMoverPara; }
-
-/* soltar num TÓPICO: o de origem passa a ir para o MESMO baralho do de destino (mescla) */
-function pacSoltarTop(ev, discAlvo, topicoAlvo, editalAlvo) {
-  if (ev && ev.preventDefault) ev.preventDefault();
-  const origem = pacArrasto;
-  pacFimArrasto();
-  if (!origem || (origem.disciplina === discAlvo && origem.topico === topicoAlvo && origem.edital === (editalAlvo || ""))) return;
-  pacMoverParaDoTipo(origem.tipo).set(origem.chave, { disciplina: discAlvo, topico: topicoAlvo, edital: editalAlvo || "" });
-  pacPintar();
-}
-
-/* soltar numa DISCIPLINA: muda só a disciplina (o tópico/cartão mantém o próprio nome) */
-function pacSoltarDisc(ev, discAlvo, editalAlvo) {
-  if (ev && ev.preventDefault) ev.preventDefault();
-  const origem = pacArrasto;
-  pacFimArrasto();
-  if (!origem || (origem.disciplina === discAlvo && origem.edital === (editalAlvo || ""))) return;
-  pacMoverParaDoTipo(origem.tipo).set(origem.chave, { disciplina: discAlvo, topico: origem.topico, edital: editalAlvo || "" });
-  pacPintar();
-}
-
-/* soltar na RAIZ (edital, "sem edital" ou bancada): muda só o dono (edital) */
-function pacSoltarRaiz(ev, editalAlvo) {
-  if (ev && ev.preventDefault) ev.preventDefault();
-  const origem = pacArrasto;
-  pacFimArrasto();
-  if (!origem || origem.edital === (editalAlvo || "")) return;
-  pacMoverParaDoTipo(origem.tipo).set(origem.chave, { disciplina: origem.disciplina, topico: origem.topico, edital: editalAlvo || "" });
-  pacPintar();
-}
-
-function pacComecarGhost(texto, dt) {
-  try {
-    dt.effectAllowed = "move";
-    dt.setData("text/plain", texto);
-    const g = document.createElement("div");
-    g.className = "pac-ghost"; g.textContent = texto;
-    document.body.append(g);
-    pacGhost = g;
-    if (dt.setDragImage) dt.setDragImage(g, 14, 14);
-  } catch (e) {}
-}
-
-function pacIniciarArrasto(ev, chave, topico, disciplina, edital) {
-  if (!chave) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
-  const efetivo = pacDestino(chave, edital);
-  pacArrasto = { tipo: "topico", chave, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
-  pacComecarGhost(t("pac_arrastando", { t: topico }), ev.dataTransfer);
-}
-
-/* arrastar UM CARTÃO da lista (Fase 6): separa só ele dos irmãos do tópico. O destino natural
- * (sem arrasto próprio ainda) é o MESMO do tópico dele — pacDestino já resolve um eventual
- * arrasto do tópico inteiro, para o cartão "herdar" a posição atual do tópico como ponto de
- * partida, e não a original caso o tópico já tenha sido movido. */
-function pacIniciarArrastoCartao(ev, n, edital) {
-  if (!n) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
-  const chaveCartao = pacChaveCartao(n);
-  const efetivo = pacCartaoMoverPara.get(chaveCartao) || pacDestino(n.chave, edital);
-  pacArrasto = { tipo: "cartao", chave: chaveCartao, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
-  pacComecarGhost(t("pac_arrastando_cartao"), ev.dataTransfer);
-}
-
-function pacFimArrasto() {
-  pacArrasto = null;
-  try { if (pacGhost && pacGhost.parentNode) pacGhost.parentNode.removeChild(pacGhost); } catch (e) {}
-  pacGhost = null;
-}
-
-function pacSaiuAlvo(el) { if (el && el.classList) el.classList.remove("pac-alvo", "pac-alvo-no"); }
-
-function pacMarcarAlvo(ev, el, ok) {
-  if (ok && ev && ev.preventDefault) ev.preventDefault();
-  try { if (ev && ev.dataTransfer) ev.dataTransfer.dropEffect = ok ? "move" : "none"; } catch (e) {}
-  if (el && el.classList) { el.classList.toggle("pac-alvo", ok); el.classList.toggle("pac-alvo-no", !ok); }
-}
-
-function pacSobreTop(ev, discAlvo, topicoAlvo, editalAlvo, el) {
-  if (!pacArrasto) return;
-  const mesmo = pacArrasto.disciplina === discAlvo && pacArrasto.topico === topicoAlvo && pacArrasto.edital === (editalAlvo || "");
-  pacMarcarAlvo(ev, el, !mesmo);
-}
-
-function pacSobreDisc(ev, discAlvo, editalAlvo, el) {
-  if (!pacArrasto) return;
-  pacMarcarAlvo(ev, el, !(pacArrasto.disciplina === discAlvo && pacArrasto.edital === (editalAlvo || "")));
-}
-
-function pacSobreRaiz(ev, editalAlvo, el) {
-  if (!pacArrasto) return;
-  pacMarcarAlvo(ev, el, pacArrasto.edital !== (editalAlvo || ""));
-}
-
-/* clicar numa linha da árvore (tópico, disciplina ou edital) escolhe essa pasta para a lista de
- * cartões ao lado — não marca nem desmarca nada (isso continua só na caixinha). `edital` é o
- * contexto da árvore (a raiz sob a qual a linha clicada está), usado para saber o destino
- * NATURAL de um cartão dela, caso ele venha a ser arrastado avulso (Fase 6). */
-function pacClicarPasta(chaves, edital) {
-  pacPasta = { chaves: new Set(chaves), edital: edital || "" };
-  pacPintarLista();
-}
-
-/* a lista de cartões da pasta ativa (pacPasta) — visualização e ponto de arrastar um cartão
- * avulso, separado dos irmãos do tópico (Fase 6); reaproveita o visual do gerenciador
- * (.ger-item/.ger-f/.ger-v/.ger-tp-*). */
-function pacPintarLista() {
-  const cx = $("pacListaCartoes");
-  if (!cx) return;
-  cx.innerHTML = "";
-  if (!pacPasta) { cx.append(pacEl("p", "nota", t("pac_lista_nada"))); return; }
-  const itens = pacNotas.filter((n) => pacPasta.chaves.has(n.chave));
-  if (!itens.length) { cx.append(pacEl("p", "nota", t("pac_lista_vazia"))); return; }
-  cx.append(pacEl("p", "nota", t("pac_lista_resumo", { n: itens.length })));
-  const comEdital = !!($("pacComEdital") && $("pacComEdital").checked);
-  itens.slice(0, PAC_LISTA_LIMITE).forEach((n) => {
-    const tp = n.card.kind === "cloze" ? "cloze" : (n.card.kind === "mc" ? "mc" : "basic");
-    const lin = pacEl("div", "ger-item ger-tp-" + tp);
-    const corpo = pacEl("div", "ger-corpo");
-    corpo.append(pacEl("div", "ger-f", cqTrecho(cqRevelado(n.card), 140)));
-    corpo.append(pacEl("div", "ger-v", cqTrecho(n.card.back, 120)));
-    const chaveCartao = pacChaveCartao(n);
-    const mov = pacCartaoMoverPara.get(chaveCartao);
-    if (mov) {
-      const caminho = pacRaizAtual() + " › " + pacNomeDeck(mov, comEdital).replace(/::/g, " › ");
-      corpo.append(pacEl("div", "pac-caminho pac-caminho-movido", caminho));
-      const des = pacEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
-      des.type = "button";
-      des.title = t("pac_tip_desfazer_move");
-      des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); pacCartaoMoverPara.delete(chaveCartao); pacPintar(); };
-      corpo.append(des);
-    }
-    lin.draggable = true;
-    lin.title = t("pac_tip_arrastar");
-    lin.ondragstart = (ev) => pacIniciarArrastoCartao(ev, n, pacPasta.edital);
-    lin.ondragend = pacFimArrasto;
-    lin.append(corpo);
-    cx.append(lin);
-  });
-  if (itens.length > PAC_LISTA_LIMITE) cx.append(pacEl("p", "nota", t("pac_lista_mais", { n: itens.length - PAC_LISTA_LIMITE })));
-}
-
-/* a árvore por edital: Edital › Disciplina › Tópico, com caixa de três estados (marcado / parcial / vazio) */
-function pacPintarNo(cx, no, edital, disciplina) {
-  if (no.tipo === "top") {
-    const li = pacEl("label", "pac-top pac-ed-top" + (no.vazia ? " ger-vazia" : ""));
-    const c2 = pacEl("input"); c2.type = "checkbox"; c2.checked = pacSel.has(no.chave);
-    c2.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-    c2.onchange = () => { pacMarcar(no.chave, c2.checked, edital); pacPintar(); };
-    const movida = pacMoverPara.has(no.chave);
-    li.append(c2, pacEl("span", "", " " + no.topico + " (" + no.total + ")"),
-      pacEl("span", "pac-caminho" + (movida ? " pac-caminho-movido" : ""), pacCaminhoDoNo(no.chave, disciplina, no.topico, edital)));
-    if (movida) {
-      const des = pacEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
-      des.type = "button";
-      des.title = t("pac_tip_desfazer_move");
-      des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); pacMoverPara.delete(no.chave); pacPintar(); };
-      li.append(des);
-    }
-    li.draggable = true;
-    li.title = t("pac_tip_arrastar");
-    li.onclick = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); pacClicarPasta([no.chave], edital); };
-    li.ondragstart = (ev) => pacIniciarArrasto(ev, no.chave, no.topico, disciplina, edital);
-    li.ondragend = pacFimArrasto;
-    li.ondragover = (ev) => pacSobreTop(ev, disciplina, no.topico, edital, li);
-    li.ondragleave = () => pacSaiuAlvo(li);
-    li.ondrop = (ev) => pacSoltarTop(ev, disciplina, no.topico, edital);
-    cx.append(li);
-    return;
-  }
-  const chaves = [...no.chaves];
-  const marcadas = chaves.filter((c) => pacSel.has(c)).length;
-  const cab = pacEl("label", no.tipo === "disc" ? "pac-disc pac-ed-disc" : "pac-disc pac-ed-raiz");
-  const ck = pacEl("input"); ck.type = "checkbox";
-  ck.checked = chaves.length > 0 && marcadas === chaves.length;
-  ck.indeterminate = marcadas > 0 && marcadas < chaves.length;
-  ck.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-  ck.onchange = () => { chaves.forEach((c) => pacMarcar(c, ck.checked, no.tipo === "bancada" ? "" : edital)); pacPintar(); };
-  /* recolher/expandir: so' visual (nao mexe em marcacao nem em arrasto), esvazia ao reabrir o dialogo */
-  const fechado = pacFechados.has(no.id);
-  const seta = pacEl("span", "pac-seta", fechado ? "▸" : "▾");
-  seta.title = t("pac_tip_seta");
-  seta.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); fechado ? pacFechados.delete(no.id) : pacFechados.add(no.id); pacPintarArvore(); };
-  cab.append(seta, ck, pacEl("span", "", " " + no.nome + " (" + no.total + ")"));
-  cab.onclick = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); pacClicarPasta(chaves, edital); };
-  if (no.tipo === "disc") {
-    cab.ondragover = (ev) => pacSobreDisc(ev, no.nome, edital, cab);
-    cab.ondragleave = () => pacSaiuAlvo(cab);
-    cab.ondrop = (ev) => pacSoltarDisc(ev, no.nome, edital);
-  } else {
-    /* raiz de edital, "sem edital" ou bancada: soltar aqui muda so' o dono (edital) do topico */
-    const editalDaRaiz = no.tipo === "edital" ? (no.concurso || "") : "";
-    cab.ondragover = (ev) => pacSobreRaiz(ev, editalDaRaiz, cab);
-    cab.ondragleave = () => pacSaiuAlvo(cab);
-    cab.ondrop = (ev) => pacSoltarRaiz(ev, editalDaRaiz);
-  }
-  cx.append(cab);
-  if (!fechado) no.filhos.forEach((f) => pacPintarNo(cx, f, edital, no.tipo === "disc" ? no.nome : disciplina));
-}
-
-function pacPintarArvore() {
-  const cx = $("pacArvore");
-  cx.innerHTML = "";
-  $("pacOpcEdital").hidden = !pacTemEditais();
-  pacInfo = new Map();
-  const btnDes = $("btnPacDesfazerMovs");
-  if (btnDes) btnDes.hidden = pacMoverPara.size === 0 && pacCartaoMoverPara.size === 0;
-  if (pacTemEditais()) {
-    const m = gerModeloEditais(pacNotas, gerPastasVazias(pacNotas));
-    m.roots.forEach((r) => {
-      r.filhos.forEach((d) => (d.tipo === "disc" ? d.filhos : [d]).forEach((tp) => {
-        if (tp.vazia && !pacInfo.has(tp.chave)) pacInfo.set(tp.chave, { edital: r.tipo === "edital" ? r.concurso : "", disciplina: d.tipo === "disc" ? d.nome : "", topico: tp.topico });
-      }));
-      pacPintarNo(cx, r, r.tipo === "edital" ? r.concurso : "");
-    });
-    return;
-  }
-  gerArvore(pacNotas).forEach((d) => {
-    const chaves = d.topicos.map((x) => x.chave);
-    const cab = pacEl("label", "pac-disc");
-    const ck = pacEl("input"); ck.type = "checkbox";
-    ck.checked = chaves.every((c) => pacSel.has(c));
-    ck.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-    ck.onchange = () => { chaves.forEach((c) => (ck.checked ? pacSel.add(c) : pacSel.delete(c))); pacPintar(); };
-    const fechado = pacFechados.has(d.disciplina);
-    const seta = pacEl("span", "pac-seta", fechado ? "▸" : "▾");
-    seta.title = t("pac_tip_seta");
-    seta.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); fechado ? pacFechados.delete(d.disciplina) : pacFechados.add(d.disciplina); pacPintarArvore(); };
-    cab.append(seta, ck, pacEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
-    cab.onclick = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); pacClicarPasta(chaves); };
-    cab.ondragover = (ev) => pacSobreDisc(ev, d.disciplina, "", cab);
-    cab.ondragleave = () => pacSaiuAlvo(cab);
-    cab.ondrop = (ev) => pacSoltarDisc(ev, d.disciplina, "");
-    cx.append(cab);
-    if (fechado) return;
-    d.topicos.forEach((tp) => {
-      const li = pacEl("label", "pac-top");
-      const c2 = pacEl("input"); c2.type = "checkbox"; c2.checked = pacSel.has(tp.chave);
-      c2.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-      c2.onchange = () => { c2.checked ? pacSel.add(tp.chave) : pacSel.delete(tp.chave); pacPintar(); };
-      const movida = pacMoverPara.has(tp.chave);
-      li.append(c2, pacEl("span", "", " " + tp.topico + " (" + tp.total + ")"),
-        pacEl("span", "pac-caminho" + (movida ? " pac-caminho-movido" : ""), pacCaminhoDoNo(tp.chave, d.disciplina, tp.topico, "")));
-      if (movida) {
-        const des = pacEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
-        des.type = "button";
-        des.title = t("pac_tip_desfazer_move");
-        des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); pacMoverPara.delete(tp.chave); pacPintar(); };
-        li.append(des);
-      }
-      li.draggable = true;
-      li.title = t("pac_tip_arrastar");
-      li.onclick = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); pacClicarPasta([tp.chave]); };
-      li.ondragstart = (ev) => pacIniciarArrasto(ev, tp.chave, tp.topico, d.disciplina, "");
-      li.ondragend = pacFimArrasto;
-      li.ondragover = (ev) => pacSobreTop(ev, d.disciplina, tp.topico, "", li);
-      li.ondragleave = () => pacSaiuAlvo(li);
-      li.ondrop = (ev) => pacSoltarTop(ev, d.disciplina, tp.topico, "");
-      cx.append(li);
-    });
-  });
-}
-
-/* ---- mover TODOS os marcados de uma vez para uma pasta escolhida numa lista
- * (Fase 3) — o mesmo destino do arrastar (tópico junta, disciplina ou edital
- * só trocam essa parte), só que aplicado à seleção inteira. Existe porque
- * arrastar item a item não escala para muitos tópicos marcados, e porque em
- * tela de toque não dá para arrastar (o gerenciador já resolve isso do mesmo
- * jeito com "Mover para…"). ---- */
-let pacDestinosCache = [];
-
-function pacDestinosLista() {
-  const out = [];
-  if (pacTemEditais()) {
-    gerModeloEditais(pacNotas, gerPastasVazias(pacNotas)).roots.forEach((r) => {
-      if (r.tipo === "bancada") return;
-      const editalR = r.tipo === "edital" ? (r.concurso || "") : "";
-      out.push({ tipo: "raiz", edital: editalR, nome: r.nome });
-      r.filhos.forEach((d) => {
-        if (d.tipo !== "disc") return;
-        out.push({ tipo: "disc", disciplina: d.nome, edital: editalR, nome: r.nome + " › " + d.nome });
-        d.filhos.forEach((tp) => out.push({ tipo: "top", chave: tp.chave, disciplina: d.nome, topico: tp.topico, edital: editalR, nome: r.nome + " › " + d.nome + " › " + tp.topico }));
-      });
-    });
-    return out;
-  }
-  gerArvore(pacNotas).forEach((d) => {
-    out.push({ tipo: "disc", disciplina: d.disciplina, edital: "", nome: d.disciplina });
-    d.topicos.forEach((tp) => out.push({ tipo: "top", chave: tp.chave, disciplina: d.disciplina, topico: tp.topico, edital: "", nome: d.disciplina + " › " + tp.topico }));
-  });
-  return out;
-}
-
-function pacPintarDestinosMover() {
-  pacDestinosCache = pacDestinosLista();
-  const sel = $("pacMoverSel");
-  const antes = sel.selectedIndex;
-  sel.innerHTML = "";
-  pacDestinosCache.forEach((d) => {
-    const o = document.createElement("option");
-    o.textContent = d.nome;
-    sel.append(o);
-  });
-  if (antes >= 0 && antes < pacDestinosCache.length) sel.selectedIndex = antes;
-  const vazio = !pacSel.size || !pacDestinosCache.length;
-  sel.disabled = vazio;
-  $("btnPacMoverMarcados").disabled = vazio;
-}
-
-/* aplica UM destino a TODOS os tópicos marcados (pacSel); devolve quantos mudaram
- * (um tópico igual ao próprio destino — soltar "nele mesmo" — não conta). */
-function pacMoverMarcadosPara(dest) {
-  if (!dest) return 0;
-  let n = 0;
-  pacSel.forEach((chave) => {
-    if (dest.tipo === "top" && chave === dest.chave) return;
-    const atual = pacDestino(chave, "");
-    const base = dest.tipo === "top" ? { disciplina: dest.disciplina, topico: dest.topico, edital: dest.edital || "" }
-      : dest.tipo === "disc" ? { disciplina: dest.disciplina, topico: atual.topico, edital: dest.edital || "" }
-      : { disciplina: atual.disciplina, topico: atual.topico, edital: dest.edital || "" };
-    pacMoverPara.set(chave, base);
-    n++;
-  });
-  if (n) pacPintar();
-  return n;
-}
-
-/* o mesmo "sem nome vira EasyAnkiCards" que pacExportar usa de verdade —
- * a prévia tem de mostrar EXATAMENTE o que vai para o arquivo, nunca uma
- * aproximação. */
-function pacRaizAtual() { return String(($("pacNome") || {}).value || "").trim() || "EasyAnkiCards"; }
-
-function pacPintarPrevia() {
-  const p = pacMontar(pacNotas, pacSel, pacOpcoes());
-  $("pacPrevia").textContent = p.itens.length || p.vazios.length
-    ? t("pac_previa", { n: p.itens.length, k: p.decks.size, r: p.ignRep, f: p.ignFracos }) + (p.vazios.length ? " " + t("pac_previa_vazios", { v: p.vazios.length }) : "")
-    : t("pac_previa_vazia");
-  const cx = $("pacDecks");
-  cx.innerHTML = "";
-  /* A PRÉVIA SÓ AVISA SE MOSTRAR O CAMINHO INTEIRO.
-   * Sem a raiz na frente, "ISS Caruaru Auditor Fiscal › Sistema Tributário
-   * Brasileiro › ..." parecia a pasta final — e a raiz digitada por cima
-   * ("Sistema tríbutário ISS Caruaru", já quase igual ao resto do caminho)
-   * só se revelava depois, dentro do Anki. Agora o que se vê aqui é
-   * exatamente o que pacExportar vai gravar. */
-  const raiz = pacRaizAtual();
-  [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => cx.append(pacEl("div", "cq-onde", raiz + " › " + d.replace(/::/g, " › ") + " — " + n)));
-  if (p.decks.size > 12) cx.append(pacEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
-  $("btnPacApkg").disabled = !(p.itens.length || p.vazios.length);
-  $("btnPacTxt").disabled = !p.itens.length;
-  return p;
-}
-
-function pacPintar() { pacPintarArvore(); pacPintarPrevia(); pacPintarDestinosMover(); pacPintarLista(); }
-
-/* deps: só para teste (o padrão usa o buildApkg e a entrega do app). */
-async function pacExportar(formato, deps) {
-  const d = deps || {};
-  const construir = d.construir || buildApkg;
-  const entrega = d.entregar || entregar;
-  const p = pacMontar(pacNotas, pacSel, pacOpcoes());
-  if (!p.itens.length && !(formato !== "txt" && p.vazios.length)) return { ok: false };
-  const raiz = pacRaizAtual();
-  const comEdital = $("pacComEdital").checked;
-  const cards = pacCartoes(p.itens, comEdital, $("pacRamos").checked, pacMoverPara, pacCartaoMoverPara);
-  try {
-    if (formato === "txt") {
-      const txt = exportTxtString({ cards }, raiz);
-      await entrega(new TextEncoder().encode(txt), pacNomeArquivo(raiz) + ".txt", "text/plain");
-    } else {
-      const bytes = await construir(cards, raiz, $("selEstilo").value, "", $("selAlinha").value, p.vazios);
-      await entrega(bytes, pacNomeArquivo(raiz) + "." + "apkg", "application/octet-stream");
-    }
-    $("pacMsg").textContent = t("pac_feito", { f: pacNomeArquivo(raiz) + "." + (formato === "txt" ? "txt" : "apkg"), n: p.itens.length, k: p.decks.size });
-    try { reg("EXPORTAR", pacNomeArquivo(raiz) + "." + formato, p.itens.length + " cartões em " + p.decks.size + " baralhos (montador de pacote)"); } catch (e) {}
-    return { ok: true, n: p.itens.length, k: p.decks.size };
-  } catch (e) {
-    $("pacMsg").textContent = t("pac_erro", { e: String(e && e.message || e) });
-    return { ok: false, erro: e };
-  }
-}
-
-/* importar */
+/* ---- importar ---- */
 function pacPintarImport() {
   const l = pacLido;
   $("pacImpCx").hidden = !l;
@@ -740,66 +289,23 @@ async function pacAcaoImportar() {
   if (!(await uiConfirm(t(modo === "topico" ? "pac_conf_topico" : "pac_conf_decks", { n: pacLido.cards.length })))) return;
   const r = pacImportar(pacLido.cards, modo, dest, $("pacImpComEdital").checked);
   pacLido = null; pacPintarImport();
-  pacNotas = cqLerBiblioteca(); pacPintarDestinos(); pacPintar();
+  pacPintarDestinos();
   try { matRender(); } catch (e) {}
   $("pacMsg").textContent = t("pac_import_feito", { n: r.novos, m: r.repetidos, k: r.topicos });
 }
 
-/* opc.chaves / opc.edital: já abre com essas pastas marcadas (é o que "Exportar esta pasta" da biblioteca faz) */
-function pacAbrir(opc) {
-  pacNotas = cqLerBiblioteca();
-  pacSel = new Set(); pacEditalDe = new Map(); pacMoverPara = new Map(); pacCartaoMoverPara = new Map(); pacFechados = new Set(); pacPasta = null;
-  ((opc && opc.chaves) || []).forEach((c) => pacMarcar(c, true, (opc && opc.edital) || ""));
-  /* A RAIZ NÃO PODE SER UM PALPITE DE OUTRA TELA.
-   * "Nome do baralho raiz" vinha do campo de nome do gerador de cartão
-   * avulso — sem relação nenhuma com o que está sendo exportado aqui. A
-   * pessoa tinha de digitar o nome à mão toda vez, e digitar à mão é como
-   * "tríbutário" (erro de digitação) e "Sistema tríbutário ISS Caruaru"
-   * (repetindo, torto, o que "Pasta do edital" já ia acrescentar sozinho)
-   * acontecem. Com UM edital só marcado — o caso de "exportar esta pasta"
-   * —, a raiz óbvia é o nome dele, e "Pasta do edital" fica DESLIGADA: ele
-   * já está na raiz, marcá-la de novo duplicaria a pasta. */
-  const editalUnico = (opc && opc.edital) || "";
-  $("pacComEdital").checked = pacTemEditais() && !editalUnico;
-  $("pacVazios").checked = false;
-  dicasDosBotoes(PAC_DICAS);
+function pacAbrir() {
   pacLido = null;
-  if (editalUnico) {
-    $("pacNome").value = editalUnico;
-  } else {
-    try { $("pacNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("pacNome").value = "EasyAnkiCards"; }
-  }
+  dicasDosBotoes(PAC_DICAS);
   $("pacMsg").textContent = "";
-  pacPintarDestinos(); pacPintarImport(); pacPintar();
+  pacPintarDestinos(); pacPintarImport();
   abrirModal("dlgPacote");
-  try { matReg("cartoes", "montador de pacote aberto", pacNotas.length + " cartões"); } catch (e) {}
+  try { matReg("cartoes", "importar .apkg aberto", ""); } catch (e) {}
 }
 
-if (typeof document !== "undefined" && $("btnPacote")) {
-  $("btnPacote").onclick = pacAbrir;
+if (typeof document !== "undefined" && $("btnPacFechar")) {
   $("btnPacFechar").onclick = () => $("dlgPacote").close();
-  $("btnPacTudo").onclick = () => {
-    pacSel = new Set(); pacEditalDe = new Map();
-    if (pacTemEditais()) gerModeloEditais(pacNotas, gerPastasVazias(pacNotas)).roots.forEach((r) => [...r.chaves].forEach((c) => pacMarcar(c, true, r.tipo === "edital" ? r.concurso : "")));
-    else pacNotas.forEach((n) => pacMarcar(n.chave, true, ""));
-    pacPintar();
-  };
-  $("btnPacLimpar").onclick = () => { pacSel = new Set(); pacEditalDe = new Map(); pacPintar(); };
-  $("btnPacDesfazerMovs").onclick = () => { pacMoverPara = new Map(); pacCartaoMoverPara = new Map(); pacPintar(); };
-  $("btnPacMoverMarcados").onclick = () => {
-    const dest = pacDestinosCache[$("pacMoverSel").selectedIndex];
-    const n = pacMoverMarcadosPara(dest);
-    if (n) $("pacMsg").textContent = t("pac_mover_feito", { n, d: dest.nome });
-  };
-  /* estas duas mudam o caminho mostrado ao lado de cada tópico na árvore (pacCaminhoDoNo), não só o resumo embaixo */
-  $("pacNome").oninput = pacPintar;
-  $("pacComEdital").onchange = pacPintar;
-  $("pacVazios").onchange = pacPintarPrevia;
-  $("pacSemRep").onchange = pacPintarPrevia;
-  $("pacRamos").onchange = pacPintarPrevia;
-  $("pacSemFracos").onchange = pacPintarPrevia;
-  $("btnPacApkg").onclick = () => pacExportar("apkg");
-  $("btnPacTxt").onclick = () => pacExportar("txt");
   $("pacArquivo").onchange = () => pacLerArquivo($("pacArquivo").files && $("pacArquivo").files[0]);
   $("btnPacImportar").onclick = pacAcaoImportar;
+  if ($("btnPacoteImportar")) $("btnPacoteImportar").onclick = pacAbrir;
 }
