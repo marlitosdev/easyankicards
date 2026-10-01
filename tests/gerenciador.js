@@ -1446,6 +1446,209 @@ async function testes() {
     ok(!!criar && a.$("dlgGerCartoes").open === false && a.bancAlvoAtual() && a.bancAlvoAtual().disciplina === "Revisão" && a.bancAlvoAtual().topico === "Pegadinhas", "G23j clicar aponta a bancada para ESTA pasta (disciplina e topico certos): " + (criar ? JSON.stringify(a.bancAlvoAtual()) : "sem botao"));
   }
 
+  /* ---- G24: modo "Montar pacote" dentro da Biblioteca (B1) — alternar de modo e marcar pastas
+   * para exportar, sem mexer em marcação real nem em nenhuma ação que grava (pedido do usuario,
+   * 2026-09-30: reaproveitar a arvore/lista da Biblioteca em vez de duplicar em pacote.js) ---- */
+  {
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const { a, iss, iptu, pri } = montar();
+    a.gerAbrir();
+    /* comeca em modo "gerenciar" */
+    {
+      ok(a.gerModoAtual() === "gerenciar", "G24a comeca em modo gerenciar");
+      ok(a.$("btnGerModoGerenciar").getAttribute("aria-selected") === "true" && a.$("btnGerModoExportar").getAttribute("aria-selected") === "false", "G24b as abas de modo refletem o estado inicial");
+      ok(linhas(a, "ger-top").every((e) => !achar(e, (x) => x.tag === "input").length), "G24c em modo gerenciar, os topicos da arvore NAO tem caixa de marcar (marcar e' so' na lista, cartao a cartao)");
+    }
+    /* trocar para modo exportar */
+    {
+      a.$("btnGerModoExportar").onclick();
+      ok(a.gerModoAtual() === "exportar", "G24d trocar de modo funciona pelo botao");
+      ok(a.$("btnGerModoGerenciar").getAttribute("aria-selected") === "false" && a.$("btnGerModoExportar").getAttribute("aria-selected") === "true", "G24e as abas acompanham a troca");
+      ok(a.gerSelExportAtual().size === 0, "G24f comeca sem nada marcado para exportar");
+    }
+    /* em modo exportar, cada topico da arvore ganha uma caixa; marcar NAO mexe em gerSel (marcacao real) */
+    {
+      const topoIss = linhas(a, "ger-top").find((e) => /ISS \(/.test(e.textContent));
+      const ckIss = achar(topoIss, (x) => x.tag === "input")[0];
+      ok(!!ckIss && ckIss.checked === false, "G24g o topico ISS tem uma caixa, comeca desmarcada");
+      ckIss.checked = true; ckIss.onchange();
+      ok(a.gerSelExportAtual().has(iss), "G24h marcar a caixa do topico adiciona a chave dele em gerSelExport");
+      ok(a.gerSelAtual().size === 0, "G24i marcar para exportar NAO mexe na marcacao real (gerSel)");
+      ok(a.$("gerAcoes").hidden === true, "G24j a barra de acoes reais (mover/apagar/melhorar) continua escondida");
+      /* garantia extra: mesmo que gerSel (marcacao REAL) fique preenchido por algum outro caminho
+       * enquanto ja' se esta' em modo exportar, a barra de acoes reais NUNCA pode aparecer */
+      a.gerSelTeste([0, 1]);
+      a.gerPintar();
+      ok(a.$("gerAcoes").hidden === true && a.$("btnGerMover").disabled === true, "G24j2 mesmo com gerSel preenchido 'por fora', em modo exportar a barra de acoes reais fica escondida e desligada");
+      a.gerSelTeste([]);
+      a.gerPintar();
+    }
+    /* marcar a DISCIPLINA inteira marca todos os topicos dela; estado indeterminado quando so' um esta' marcado */
+    {
+      const discTrib = linhas(a, "ger-disc").find((e) => /Trib \(/.test(e.textContent));
+      const ckDisc = achar(discTrib, (x) => x.tag === "input")[0];
+      ok(!!ckDisc && ckDisc.indeterminate === true && ckDisc.checked === false, "G24k com so' ISS marcado, a caixa da disciplina Trib fica indeterminada: " + JSON.stringify({ i: ckDisc.indeterminate, c: ckDisc.checked }));
+      ckDisc.checked = true; ckDisc.onchange();
+      ok(a.gerSelExportAtual().has(iss) && a.gerSelExportAtual().has(iptu), "G24l marcar a disciplina marca TODOS os topicos dela (ISS e IPTU)");
+      const discTrib2 = linhas(a, "ger-disc").find((e) => /Trib \(/.test(e.textContent));
+      const ckDisc2 = achar(discTrib2, (x) => x.tag === "input")[0];
+      ok(ckDisc2.checked === true && ckDisc2.indeterminate === false, "G24m com os dois marcados, a caixa da disciplina fica cheia (nao indeterminada)");
+      ckDisc2.checked = false; ckDisc2.onchange();
+      ok(!a.gerSelExportAtual().has(iss) && !a.gerSelExportAtual().has(iptu), "G24n desmarcar a disciplina desmarca os dois topicos dela");
+    }
+    /* a barra de marcar/limpar/marcar todos etc. (do modo gerenciar) some em modo exportar */
+    {
+      ok(a.$("btnGerMarcar").hidden === true && a.$("btnGerLimpar").hidden === true && a.$("btnGerMarcarTodos").hidden === true && a.$("btnGerFerrMais").hidden === true, "G24o a barra de ferramentas do modo gerenciar fica escondida em modo exportar");
+      ok(a.$("btnGerEstudar").hidden === true, "G24p o botao de estudar tambem some em modo exportar");
+    }
+    /* a lista de cartoes (coluna do meio) vira so' visualizacao: sem caixa, sem arrastar */
+    {
+      const topoIss = linhas(a, "ger-top").find((e) => /ISS \(/.test(e.textContent));
+      topoIss.onclick();
+      const itensLista = achar(a.$("gerLista"), (e) => cls(e, "ger-item"));
+      ok(itensLista.length > 0 && itensLista.every((e) => !achar(e, (x) => x.tag === "input").length && e.draggable !== true), "G24q em modo exportar, a lista de cartoes nao tem caixa nem arrastar (so' ver o conteudo)");
+    }
+    /* editar/apagar (coluna da previa) ficam desligados em modo exportar, mesmo com um cartao em foco */
+    {
+      a.gerFocoTeste(0);
+      a.gerPintar();
+      ok(a.$("btnGerEditar").disabled === true && a.$("btnGerPreApagar").disabled === true, "G24r editar/apagar desligados em modo exportar mesmo com foco num cartao");
+    }
+    /* trocar de volta para "gerenciar" esquece a marcacao de exportar */
+    {
+      a.$("btnGerModoGerenciar").onclick();
+      ok(a.gerModoAtual() === "gerenciar" && a.gerSelExportAtual().size === 0, "G24s voltar para gerenciar esquece o que estava marcado para exportar");
+      ok(linhas(a, "ger-top").every((e) => !achar(e, (x) => x.tag === "input").length), "G24t as caixas de exportar somem da arvore ao voltar para gerenciar");
+    }
+    /* trocar de modo tambem esquece a marcacao REAL (gerSel), nos dois sentidos */
+    {
+      a.gerSelTeste([0, 1]);
+      a.$("btnGerModoExportar").onclick();
+      ok(a.gerSelAtual().size === 0, "G24u trocar pra exportar esquece a marcacao real (gerSel)");
+      const topoPri = linhas(a, "ger-top").find((e) => /Princípios \(/.test(e.textContent));
+      const ckPri = achar(topoPri, (x) => x.tag === "input")[0];
+      ckPri.checked = true; ckPri.onchange();
+      a.$("btnGerModoExportar").onclick(); /* clicar no MESMO modo de novo: no-op, nao reseta */
+      ok(a.gerSelExportAtual().has(pri), "G24v clicar no modo que ja' esta' ativo nao reseta a marcacao (no-op)");
+      a.$("btnGerModoGerenciar").onclick();
+      ok(a.gerSelExportAtual().size === 0, "G24w trocar pra gerenciar esquece a marcacao de exportar");
+    }
+    /* reabrir o gerenciador comeca sempre em modo gerenciar, sem nada marcado para exportar */
+    {
+      a.$("btnGerModoExportar").onclick();
+      const topoIss = linhas(a, "ger-top").find((e) => /ISS \(/.test(e.textContent));
+      achar(topoIss, (x) => x.tag === "input")[0].checked = true;
+      achar(topoIss, (x) => x.tag === "input")[0].onchange();
+      a.$("dlgGerCartoes").close();
+      a.gerAbrir();
+      ok(a.gerModoAtual() === "gerenciar" && a.gerSelExportAtual().size === 0, "G24x reabrir a Biblioteca sempre comeca em modo gerenciar, sem marcacao de exportar sobrando");
+      ok(a.$("btnGerModoGerenciar").getAttribute("aria-selected") === "true" && a.$("btnGerModoExportar").getAttribute("aria-selected") === "false", "G24y as abas tambem voltam ao estado inicial ao reabrir");
+    }
+  }
+
+  /* ---- G25: arrastar em modo exportação é export-scoped (B2) — nunca move de verdade;
+   * compara DESTINO, não chave, nos alvos; badge "movido" + desfazer por pasta e geral ---- */
+  {
+    const fakeEv = () => ({ prevented: false, preventDefault() { this.prevented = true; }, dataTransfer: { effectAllowed: "", setData() {}, setDragImage() {}, dropEffect: "" } });
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const acharTop = (a, nome) => linhas(a, "ger-top").find((e) => new RegExp("^" + nome + " \\(").test(e.textContent.trim()));
+    const { a, iss, iptu, pri } = montar();
+    a.gerAbrir();
+    a.gerAlternarModo("exportar");
+    const origCartoesIss = a.matResumosAtual()[iss].cartoes;
+    /* toda linha de topico e' arrastavel em modo exportar; o topico tem ondragover/ondrop proprios */
+    {
+      const topoIss = acharTop(a, "ISS");
+      ok(topoIss.draggable === true && typeof topoIss.ondragstart === "function" && typeof topoIss.ondrop === "function", "G25a em modo exportar, o topico continua arrastavel");
+    }
+    /* arrastar ISS e soltar sobre IPTU: so' o pacote reorganiza, a Biblioteca NAO muda */
+    {
+      const topoIss = acharTop(a, "ISS");
+      topoIss.ondragstart(fakeEv());
+      ok(a.gerArrastoExportAtual() && a.gerArrastoExportAtual().chave === iss, "G25b o arrasto export-scoped guarda a chave do topico de origem");
+      const topoIptu = acharTop(a, "IPTU");
+      const eo = fakeEv(); topoIptu.ondragover(eo);
+      ok(eo.prevented === true && cls(topoIptu, "ger-alvo"), "G25c sobre outro topico: alvo valido, mesmo destaque verde do arrastar real (.ger-alvo)");
+      topoIptu.ondrop(fakeEv());
+      ok(a.gerArrastoExportAtual() === null, "G25d soltar limpa o arrasto export-scoped");
+      const mov = a.gerMoverParaExportAtual().get(iss);
+      ok(mov && mov.disciplina === "Trib" && mov.topico === "IPTU" && mov.edital === "", "G25e ISS passa a ir para o baralho de IPTU (so' no pacote): " + JSON.stringify(mov));
+      ok(a.matResumosAtual()[iss].cartoes === origCartoesIss, "G25f a Biblioteca NAO mudou (nenhum cartao foi movido de verdade)");
+      ok(!a.gerTemRecibo(), "G25g nenhum recibo de mover real foi criado");
+    }
+    /* a linha de ISS mostra o caminho novo (badge) e um botao de desfazer so' para ela */
+    {
+      const topoIss2 = acharTop(a, "ISS");
+      const caminho = achar(topoIss2, (e) => cls(e, "pac-caminho-movido"))[0];
+      ok(!!caminho && /IPTU$/.test(caminho.textContent.trim()), "G25h o caminho mostrado termina em IPTU: " + (caminho && caminho.textContent));
+      const des = achar(topoIss2, (e) => cls(e, "pac-desfazer-mov"))[0];
+      ok(!!des, "G25i aparece 'desfazer' na linha de ISS");
+      const topoPri = acharTop(a, "Princípios");
+      ok(achar(topoPri, (e) => cls(e, "pac-caminho-movido")).length === 0, "G25j o topico Principios (nao mexido) nao tem badge nenhum");
+    }
+    /* desfazer so' este */
+    {
+      const topoIss = acharTop(a, "ISS");
+      const des = achar(topoIss, (e) => cls(e, "pac-desfazer-mov"))[0];
+      des.onclick({ preventDefault() {}, stopPropagation() {} });
+      ok(!a.gerMoverParaExportAtual().has(iss), "G25k 'desfazer' tira so' o arrasto deste topico");
+    }
+    /* soltar sobre a PROPRIA pasta e' invalido/no-op */
+    {
+      const topoIss = acharTop(a, "ISS");
+      topoIss.ondragstart(fakeEv());
+      const topoIss2 = acharTop(a, "ISS");
+      const eo = fakeEv(); topoIss2.ondragover(eo);
+      ok(eo.prevented === false && cls(topoIss2, "ger-alvo-no"), "G25l sobre a PROPRIA pasta: invalido");
+      topoIss2.ondrop(fakeEv());
+      ok(!a.gerMoverParaExportAtual().has(iss), "G25m soltar na propria pasta nao cria arrasto nenhum");
+    }
+    /* arrastar ISS e soltar na disciplina "Const": muda so' a disciplina, mantem o proprio nome */
+    {
+      const topoIss = acharTop(a, "ISS");
+      topoIss.ondragstart(fakeEv());
+      const discConst = linhas(a, "ger-disc").find((e) => /Const \(/.test(e.textContent));
+      discConst.ondrop(fakeEv());
+      const mov = a.gerMoverParaExportAtual().get(iss);
+      ok(mov && mov.disciplina === "Const" && mov.topico === "ISS", "G25n soltar na disciplina muda so' a disciplina: " + JSON.stringify(mov));
+    }
+    /* "desfazer movimentos" (geral) aparece e limpa tudo */
+    {
+      ok(a.$("btnGerDesfazerExport").hidden === false, "G25o com arrasto pendente, 'desfazer movimentos' aparece");
+      a.$("btnGerDesfazerExport").onclick();
+      ok(a.gerMoverParaExportAtual().size === 0 && a.$("btnGerDesfazerExport").hidden === true, "G25p desfaz TODOS os arrastos e volta a esconder o botao");
+    }
+    /* trocar de modo e reabrir esquecem os arrastos export-scoped */
+    {
+      const topoIss = acharTop(a, "ISS");
+      topoIss.ondragstart(fakeEv());
+      const topoIptu = acharTop(a, "IPTU");
+      topoIptu.ondrop(fakeEv());
+      ok(a.gerMoverParaExportAtual().size === 1, "G25q (confirma: ha' um arrasto, para o teste valer)");
+      a.gerAlternarModo("gerenciar");
+      ok(a.gerMoverParaExportAtual().size === 0, "G25r trocar para gerenciar esquece os arrastos export-scoped");
+      a.gerAlternarModo("exportar");
+      const topoIss2 = acharTop(a, "ISS");
+      topoIss2.ondragstart(fakeEv());
+      const topoIptu2 = acharTop(a, "IPTU");
+      topoIptu2.ondrop(fakeEv());
+      ok(a.gerMoverParaExportAtual().size === 1, "G25s (confirma de novo, apos criar outro arrasto)");
+      a.$("dlgGerCartoes").close();
+      a.gerAbrir();
+      ok(a.gerMoverParaExportAtual().size === 0, "G25t reabrir a Biblioteca esquece os arrastos export-scoped tambem");
+    }
+    /* em modo GERENCIAR (fora do escopo da B2), arrastar continua sendo um mover de VERDADE */
+    {
+      const { a: a2, iss: iss2, iptu: iptu2 } = montar();
+      a2.gerAbrir();
+      const topoIss = acharTop(a2, "ISS");
+      topoIss.ondragstart(fakeEv());
+      const topoIptu = acharTop(a2, "IPTU");
+      ok(a2.gerArrastoExportAtual() === null, "G25u em modo gerenciar nao existe arrasto export-scoped (usa o gerArrasto real, ja' testado em G16-G19)");
+      topoIss.ondragend();
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

@@ -28,6 +28,7 @@ let gerOcultarVazias = false;
 /* A explicação de CADA controle das duas janelas (o gerenciador e a de nova pasta): id → chave do texto.
  * O teste confere que todo botão do HTML está aqui, para botão novo nunca nascer sem explicação. */
 const GER_DICAS = {
+  btnGerModoGerenciar: "ger_tip_modo_gerenciar", btnGerModoExportar: "ger_tip_modo_exportar", btnGerDesfazerExport: "ger_tip_desfazer_export",
   btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
   btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos", btnGerMarcarFracos: "ger_tip_marcar_fracos", btnGerMarcarLacunas: "ger_tip_marcar_lacunas",
@@ -338,6 +339,15 @@ let gerNotas = [], gerVis = [], gerPasta = null, gerSel = new Set(), gerFoco = -
   gerMostrando = GER_LIM.visiveis, gerFechados = new Set(), gerEditando = false;
 /* a visão da árvore: "edital" (Edital › Disciplina › Tópico) ou "disciplina" (a de antes) */
 let gerAgrupar = "disciplina", gerAbertos = new Set(), gerVirtuais = new Map(), gerDestinoConcurso;
+/* MODO EXPORTAÇÃO ("Montar pacote" dentro da Biblioteca) — reaproveita a MESMA árvore/lista do modo
+ * "gerenciar", mas marcar aqui não move nem apaga nada de verdade: só escolhe o que entra no pacote.
+ * gerSelExport é por CHAVE de tópico (ao contrário de gerSel, que é por posição na lista filtrada —
+ * teria que ser refeito toda vez que a pessoa trocasse de pasta). Esvazia ao trocar de modo/reabrir. */
+let gerModo = "gerenciar", gerSelExport = new Set();
+/* arrastar um tópico em modo exportação (B2): reorganiza só o pacote, nunca a Biblioteca —
+ * mesma Map chave→{disciplina,topico,edital} e mesmo "compara destino, não chave" de pacote.js
+ * (pacMoverPara/F2). Esvazia ao trocar de modo/reabrir, junto com gerSelExport. */
+let gerMoverParaExport = new Map();
 const GER_CHAVE_GRANDE = "eac_ger_grande";
 
 function gerEl(tag, cls, txt) {
@@ -345,6 +355,123 @@ function gerEl(tag, cls, txt) {
   if (cls) e.className = cls;
   if (txt != null) e.textContent = txt;
   return e;
+}
+
+/* marcar/desmarcar UM tópico para o pacote (modo exportação) */
+function gerMarcarExport(chave, ligar) { ligar ? gerSelExport.add(chave) : gerSelExport.delete(chave); }
+
+/* troca entre "gerenciar" (move/apaga/edita de verdade) e "exportar" (só marca pastas pro pacote) —
+ * cada modo esquece a marcação do outro, pra nunca vazar um "mover" de verdade a partir de uma
+ * marcação feita pensando em exportar, nem vice-versa. */
+function gerAlternarModo(modo) {
+  if ((modo !== "gerenciar" && modo !== "exportar") || modo === gerModo) return;
+  gerModo = modo;
+  gerSel = new Set();
+  gerSelExport = new Set();
+  gerMoverParaExport = new Map();
+  try {
+    $("btnGerModoGerenciar").setAttribute("aria-selected", String(modo === "gerenciar"));
+    $("btnGerModoExportar").setAttribute("aria-selected", String(modo === "exportar"));
+  } catch (e) {}
+  gerPintar();
+}
+
+/* ---- arrastar um TÓPICO em modo exportação (B2): reorganiza só o pacote (gerMoverParaExport),
+ * nunca a Biblioteca — porta o mesmo padrão de pacote.js (F2): compara DESTINO (disciplina/
+ * tópico/edital), não chave, nos alvos (soltar num tópico já igual ao que se está arrastando é
+ * inválido/no-op); a pílula que acompanha o ponteiro e o destaque verde/vermelho são os MESMOS
+ * do arrastar real (.ger-ghost/.ger-alvo/.ger-alvo-no, CSS global). Só se arrasta uma pasta por
+ * vez aqui — arrastar um CARTÃO avulso da lista fica para uma fase futura, como no pacote.js. ---- */
+let gerArrastoExport = null, gerGhostExport = null;
+
+/* onde um tópico VAI nesta exportação: o arrasto, se houve algum, senão o lugar natural dele. */
+function gerDestinoExport(chave, edital) {
+  const mov = gerMoverParaExport.get(chave);
+  if (mov) return mov;
+  const info = gerPastaInfo(chave);
+  return { disciplina: (info && info.disciplina) || "", topico: (info && info.topico) || "", edital: edital || "" };
+}
+
+/* o caminho (sem raiz — o "Montar pacote" dentro da Biblioteca ainda não tem um nome de baralho
+ * raiz próprio, isso é da B3) de um tópico já considerando um eventual arrasto desta exportação. */
+function gerCaminhoExport(chave, edital) {
+  const d = gerDestinoExport(chave, edital);
+  return [d.edital, d.disciplina, d.topico].filter(Boolean).join(" › ");
+}
+
+function gerIniciarArrastoExport(ev, chave, edital) {
+  if (!chave) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
+  const efetivo = gerDestinoExport(chave, edital);
+  gerArrastoExport = { chave, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
+  const texto = t("ger_arrastando_pasta");
+  try {
+    const dt = ev.dataTransfer;
+    dt.effectAllowed = "move";
+    dt.setData("text/plain", texto);
+    const g = document.createElement("div");
+    g.className = "ger-ghost"; g.textContent = texto;
+    document.body.append(g);
+    gerGhostExport = g;
+    if (dt.setDragImage) dt.setDragImage(g, 14, 14);
+  } catch (e) {}
+}
+
+function gerFimArrastoExport() {
+  gerArrastoExport = null;
+  try { if (gerGhostExport && gerGhostExport.parentNode) gerGhostExport.parentNode.removeChild(gerGhostExport); } catch (e) {}
+  gerGhostExport = null;
+}
+
+function gerMarcarAlvoExport(ev, el, ok) {
+  if (ok && ev && ev.preventDefault) ev.preventDefault();
+  try { if (ev && ev.dataTransfer) ev.dataTransfer.dropEffect = ok ? "move" : "none"; } catch (e) {}
+  if (el && el.classList) { el.classList.toggle("ger-alvo", ok); el.classList.toggle("ger-alvo-no", !ok); }
+}
+
+function gerSobreTopExport(ev, discAlvo, topicoAlvo, editalAlvo, el) {
+  if (!gerArrastoExport) return;
+  const mesmo = gerArrastoExport.disciplina === discAlvo && gerArrastoExport.topico === topicoAlvo && gerArrastoExport.edital === (editalAlvo || "");
+  gerMarcarAlvoExport(ev, el, !mesmo);
+}
+
+/* soltar num TÓPICO: o de origem passa a ir para o MESMO baralho do de destino (mescla) */
+function gerSoltarTopExport(ev, discAlvo, topicoAlvo, editalAlvo) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const origem = gerArrastoExport;
+  gerFimArrastoExport();
+  if (!origem || (origem.disciplina === discAlvo && origem.topico === topicoAlvo && origem.edital === (editalAlvo || ""))) return;
+  gerMoverParaExport.set(origem.chave, { disciplina: discAlvo, topico: topicoAlvo, edital: editalAlvo || "" });
+  gerPintarArvore();
+}
+
+function gerSobreDiscExport(ev, discAlvo, editalAlvo, el) {
+  if (!gerArrastoExport) return;
+  gerMarcarAlvoExport(ev, el, !(gerArrastoExport.disciplina === discAlvo && gerArrastoExport.edital === (editalAlvo || "")));
+}
+
+/* soltar numa DISCIPLINA: muda só a disciplina (o tópico mantém o próprio nome) */
+function gerSoltarDiscExport(ev, discAlvo, editalAlvo) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const origem = gerArrastoExport;
+  gerFimArrastoExport();
+  if (!origem || (origem.disciplina === discAlvo && origem.edital === (editalAlvo || ""))) return;
+  gerMoverParaExport.set(origem.chave, { disciplina: discAlvo, topico: origem.topico, edital: editalAlvo || "" });
+  gerPintarArvore();
+}
+
+function gerSobreRaizExport(ev, editalAlvo, el) {
+  if (!gerArrastoExport) return;
+  gerMarcarAlvoExport(ev, el, gerArrastoExport.edital !== (editalAlvo || ""));
+}
+
+/* soltar na RAIZ (edital, "sem edital" ou bancada): muda só o dono (edital) */
+function gerSoltarRaizExport(ev, editalAlvo) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const origem = gerArrastoExport;
+  gerFimArrastoExport();
+  if (!origem || origem.edital === (editalAlvo || "")) return;
+  gerMoverParaExport.set(origem.chave, { disciplina: origem.disciplina, topico: origem.topico, edital: editalAlvo || "" });
+  gerPintarArvore();
 }
 
 function gerCalcular() {
@@ -523,12 +650,32 @@ function gerLinhaTopico(cx, tp, concurso) {
   /* tópico COM ramos: uma seta abre e fecha os ramos dele */
   const idRamos = "rm|" + tp.chave + "|" + (concurso || "");
   const ramosAbertos = !!tp.ramos && gerAbertos.has(idRamos);
-  if (tp.ramos) {
-    const seta = gerEl("span", "ger-seta", ramosAbertos ? "▾" : "▸");
-    seta.title = t("ger_tip_seta_ramos");
-    seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); ramosAbertos ? gerAbertos.delete(idRamos) : gerAbertos.add(idRamos); gerPintarArvore(); };
+  const exportando = gerModo === "exportar";
+  const movidaExport = exportando && gerMoverParaExport.has(tp.chave);
+  if (tp.ramos || exportando) {
     li.textContent = "";
-    li.append(seta, gerEl("span", "", " " + tp.topico + " (" + tp.total + ")" + marca));
+    if (exportando) {
+      const ckExp = gerEl("input"); ckExp.type = "checkbox"; ckExp.checked = gerSelExport.has(tp.chave);
+      ckExp.title = t("ger_tip_marcar_exportar");
+      ckExp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+      ckExp.onchange = () => { gerMarcarExport(tp.chave, ckExp.checked); gerPintarArvore(); };
+      li.append(ckExp);
+    }
+    if (tp.ramos) {
+      const seta = gerEl("span", "ger-seta", ramosAbertos ? "▾" : "▸");
+      seta.title = t("ger_tip_seta_ramos");
+      seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); ramosAbertos ? gerAbertos.delete(idRamos) : gerAbertos.add(idRamos); gerPintarArvore(); };
+      li.append(seta);
+    }
+    li.append(gerEl("span", "", (tp.ramos ? " " : "") + tp.topico + " (" + tp.total + ")" + marca));
+    if (movidaExport) {
+      li.append(gerEl("span", "pac-caminho pac-caminho-movido", gerCaminhoExport(tp.chave, concurso)));
+      const des = gerEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
+      des.type = "button";
+      des.title = t("ger_tip_desfazer_export_um");
+      des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); gerMoverParaExport.delete(tp.chave); gerPintarArvore(); };
+      li.append(des);
+    }
   }
   li.onclick = () => { gerPasta = { chave: tp.chave, concurso: concurso }; if (tp.ramos && !ramosAbertos) gerAbertos.add(idRamos); gerRefiltrar(); gerPintar(); };
   li.title = tp.compartilhado ? t("ger_tip_compartilhado", { e: tp.compartilhado })
@@ -547,12 +694,24 @@ function gerLinhaTopico(cx, tp, concurso) {
   } else if (!tp.vazia) {
     /* a pasta inteira é arrastável: leva todos os cartões dela */
     li.draggable = true;
-    li.ondragstart = (ev) => gerIniciarArrastoPasta(ev, tp.chave);
-    li.ondragend = gerFimArrasto;
+    if (exportando) {
+      li.ondragstart = (ev) => gerIniciarArrastoExport(ev, tp.chave, concurso);
+      li.ondragend = gerFimArrastoExport;
+    } else {
+      li.ondragstart = (ev) => gerIniciarArrastoPasta(ev, tp.chave);
+      li.ondragend = gerFimArrasto;
+    }
   }
-  li.ondragover = (ev) => gerSobreAlvo(ev, tp.chave, li);
-  li.ondragleave = () => gerSaiuAlvo(li);
-  li.ondrop = (ev) => gerSoltar(ev, tp.chave, concurso);
+  if (exportando) {
+    const efetivo = gerDestinoExport(tp.chave, concurso);
+    li.ondragover = (ev) => gerSobreTopExport(ev, efetivo.disciplina, efetivo.topico, efetivo.edital, li);
+    li.ondragleave = () => gerSaiuAlvo(li);
+    li.ondrop = (ev) => gerSoltarTopExport(ev, efetivo.disciplina, efetivo.topico, efetivo.edital);
+  } else {
+    li.ondragover = (ev) => gerSobreAlvo(ev, tp.chave, li);
+    li.ondragleave = () => gerSaiuAlvo(li);
+    li.ondrop = (ev) => gerSoltar(ev, tp.chave, concurso);
+  }
   cx.append(li);
   if (ramosAbertos) {
     tp.ramos.forEach((rm) => gerLinhaRamo(cx, rm, concurso));
@@ -560,8 +719,10 @@ function gerLinhaTopico(cx, tp, concurso) {
   }
 }
 
-/* um nó da árvore por edital (edital, disciplina ou tópico) */
-function gerPintarNo(cx, no) {
+/* um nó da árvore por edital (edital, disciplina ou tópico). `edital` é o dono (concurso) da
+ * RAIZ atual, herdado pelos filhos disc — só usado em modo exportação, para soltar numa
+ * disciplina saber de qual edital ela é (nós "disc" não guardam isso, só os "top"/raiz). */
+function gerPintarNo(cx, no, edital) {
   if (no.tipo === "top") { gerLinhaTopico(cx, no, no.concurso); return; }
   const aberto = gerAbertos.has(no.id);
   const ativa = !!gerPasta && gerPasta.id === no.id;
@@ -569,7 +730,19 @@ function gerPintarNo(cx, no) {
   const seta = gerEl("span", "ger-seta", aberto ? "▾" : "▸");
   seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerAbertos.delete(no.id) : gerAbertos.add(no.id); gerPintarArvore(); };
   seta.title = t("ger_tip_seta");
-  cab.append(seta, gerEl("span", "", " " + no.nome + " (" + no.total + ")"));
+  cab.append(seta);
+  if (gerModo === "exportar") {
+    const chaves = [...no.chaves];
+    const marcadas = chaves.filter((c) => gerSelExport.has(c)).length;
+    const ckExp = gerEl("input"); ckExp.type = "checkbox";
+    ckExp.checked = chaves.length > 0 && marcadas === chaves.length;
+    ckExp.indeterminate = marcadas > 0 && marcadas < chaves.length;
+    ckExp.title = t("ger_tip_marcar_exportar");
+    ckExp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+    ckExp.onchange = () => { chaves.forEach((c) => gerMarcarExport(c, ckExp.checked)); gerPintarArvore(); };
+    cab.append(ckExp);
+  }
+  cab.append(gerEl("span", "", " " + no.nome + " (" + no.total + ")"));
   if (no.tipo === "edital" && no.sit) {
     const s = no.sit;
     let rot, cls;
@@ -580,23 +753,38 @@ function gerPintarNo(cx, no) {
   }
   cab.title = t(no.tipo === "disc" ? "ger_tip_disciplina" : (no.tipo === "edital" ? "ger_tip_edital" : (no.tipo === "bancada" ? "ger_tip_bancada" : "ger_tip_sem_edital")));
   cab.onclick = () => { gerPasta = { chaves: no.chaves, id: no.id, disciplina: no.tipo === "disc" ? no.disciplina : undefined }; if (!aberto) gerAbertos.add(no.id); gerRefiltrar(); gerPintar(); };
-  cab.ondragover = (ev) => gerSobreNo(ev, no.id);
-  cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
+  if (gerModo === "exportar") {
+    if (no.tipo === "disc") {
+      cab.ondragover = (ev) => gerSobreDiscExport(ev, no.nome, edital, cab);
+      cab.ondragleave = () => gerSaiuAlvo(cab);
+      cab.ondrop = (ev) => gerSoltarDiscExport(ev, no.nome, edital);
+    } else {
+      /* raiz de edital, "sem edital" ou bancada: soltar aqui muda so' o dono (edital) do topico */
+      const editalDaRaiz = no.tipo === "edital" ? (no.concurso || "") : "";
+      cab.ondragover = (ev) => gerSobreRaizExport(ev, editalDaRaiz, cab);
+      cab.ondragleave = () => gerSaiuAlvo(cab);
+      cab.ondrop = (ev) => gerSoltarRaizExport(ev, editalDaRaiz);
+    }
+  } else {
+    cab.ondragover = (ev) => gerSobreNo(ev, no.id);
+    cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
+  }
   cx.append(cab);
-  if (aberto) no.filhos.forEach((f) => gerPintarNo(cx, f));
+  if (aberto) no.filhos.forEach((f) => gerPintarNo(cx, f, edital));
 }
 
 function gerPintarArvore() {
   const cx = $("gerArvore");
   cx.innerHTML = "";
   cx.classList.toggle("ger-modo-edital", gerAgrupar === "edital");
+  try { $("btnGerDesfazerExport").hidden = gerModo !== "exportar" || gerMoverParaExport.size === 0; } catch (e) {}
   const tudo = gerEl("div", "ger-pasta" + (!gerPasta ? " ger-atual" : ""), t("ger_todos", { n: gerNotas.length }));
   tudo.onclick = () => { gerPasta = null; gerRefiltrar(); gerPintar(); if (gerEhCelular()) gerVista("cartoes"); };
   cx.append(tudo);
   if (gerAgrupar === "edital") {
     const m = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas));
     gerVirtuais = m.virtuais;
-    m.roots.forEach((r) => gerPintarNo(cx, r));
+    m.roots.forEach((r) => gerPintarNo(cx, r, r.tipo === "edital" ? (r.concurso || "") : ""));
     return;
   }
   gerVirtuais = new Map();
@@ -611,12 +799,30 @@ function gerPintarArvore() {
     const cab = gerEl("div", "ger-pasta ger-disc" + (ativa ? " ger-atual" : ""));
     const seta = gerEl("span", "ger-seta", aberto ? "▾" : "▸");
     seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerFechados.add(d.disciplina) : gerFechados.delete(d.disciplina); gerPintarArvore(); };
-    cab.append(seta, gerEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
+    cab.append(seta);
+    if (gerModo === "exportar") {
+      const chaves = d.topicos.map((x) => x.chave);
+      const marcadas = chaves.filter((c) => gerSelExport.has(c)).length;
+      const ckExp = gerEl("input"); ckExp.type = "checkbox";
+      ckExp.checked = chaves.length > 0 && marcadas === chaves.length;
+      ckExp.indeterminate = marcadas > 0 && marcadas < chaves.length;
+      ckExp.title = t("ger_tip_marcar_exportar");
+      ckExp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+      ckExp.onchange = () => { chaves.forEach((c) => gerMarcarExport(c, ckExp.checked)); gerPintarArvore(); };
+      cab.append(ckExp);
+    }
+    cab.append(gerEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
     cab.title = t("ger_tip_disciplina");
     seta.title = t("ger_tip_seta");
     cab.onclick = () => { gerPasta = { disciplina: d.disciplina }; if (!aberto) gerFechados.delete(d.disciplina); gerRefiltrar(); gerPintar(); };
-    cab.ondragover = (ev) => { gerSobreDisciplina(ev, d.disciplina); };
-    cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
+    if (gerModo === "exportar") {
+      cab.ondragover = (ev) => gerSobreDiscExport(ev, d.disciplina, "", cab);
+      cab.ondragleave = () => gerSaiuAlvo(cab);
+      cab.ondrop = (ev) => gerSoltarDiscExport(ev, d.disciplina, "");
+    } else {
+      cab.ondragover = (ev) => { gerSobreDisciplina(ev, d.disciplina); };
+      cab.ondragleave = () => { if (gerHoverTimer) { clearTimeout(gerHoverTimer); gerHoverTimer = null; } };
+    }
     cx.append(cab);
     if (aberto) d.topicos.forEach((tp) => gerLinhaTopico(cx, tp, undefined));
   });
@@ -683,17 +889,27 @@ function gerPintarLista() {
   gerPintarOnde();
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
-  $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
-  const nFracos = gerVisFracos().length, nLacunas = gerVisLacunas().length;
-  $("btnGerMarcarFracos").textContent = t("ger_marcar_fracos", { n: nFracos });
-  $("btnGerMarcarFracos").hidden = nFracos === 0;
-  $("btnGerMarcarLacunas").textContent = t("ger_marcar_lacunas", { n: nLacunas });
-  $("btnGerMarcarLacunas").hidden = nLacunas === 0;
-  $("btnGerExportar").hidden = !gerPasta;
-  $("btnGerRamos").hidden = !gerContextoRamos();
-  const naBancada = !!gerPasta && (gerPasta.chave === CQ_BANCADA || gerPasta.id === "bancada");
-  $("btnGerClassificar").hidden = !(naBancada && typeof editais !== "undefined" && editais.length && gerBancadaNotas().length);
-  $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
+  const exportando = gerModo === "exportar";
+  /* modo exportação: marcar é na ÁRVORE (pasta inteira), não cartão a cartão na lista — esta
+   * barra inteira (marcar/limpar/marcar todos/fracos/lacunas/classificar/ramos) é só do modo
+   * "gerenciar"; "exportar esta pasta" (atalho pro Montar pacote separado) também não faz sentido
+   * já estando em modo exportação. */
+  ["btnGerMarcar", "btnGerLimpar", "btnGerMarcarTodos", "btnGerMarcarFracos", "btnGerMarcarLacunas",
+   "btnGerFerrMais", "btnGerClassificar", "btnGerExportar", "btnGerRamos"].forEach((id) => { $(id).hidden = true; });
+  if (!exportando) {
+    $("btnGerMarcarTodos").textContent = t("ger_marcar_todos", { n: gerVis.length });
+    const nFracos = gerVisFracos().length, nLacunas = gerVisLacunas().length;
+    $("btnGerMarcarFracos").textContent = t("ger_marcar_fracos", { n: nFracos });
+    $("btnGerMarcarFracos").hidden = nFracos === 0;
+    $("btnGerMarcarLacunas").textContent = t("ger_marcar_lacunas", { n: nLacunas });
+    $("btnGerMarcarLacunas").hidden = nLacunas === 0;
+    $("btnGerExportar").hidden = !gerPasta;
+    $("btnGerRamos").hidden = !gerContextoRamos();
+    const naBancada = !!gerPasta && (gerPasta.chave === CQ_BANCADA || gerPasta.id === "bancada");
+    $("btnGerClassificar").hidden = !(naBancada && typeof editais !== "undefined" && editais.length && gerBancadaNotas().length);
+    $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
+    $("btnGerMarcar").hidden = false; $("btnGerLimpar").hidden = false; $("btnGerFerrMais").hidden = false;
+  }
   const pastaVazia = !!(gerPasta && gerPasta.chave && !gerNotas.some((n) => n.chave === gerPasta.chave));
   if (pastaVazia) {
     cx.append(gerEl("p", "nota", t("ger_pasta_vazia")));
@@ -708,9 +924,6 @@ function gerPintarLista() {
   gerVis.slice(0, gerMostrando).forEach((idx, pos) => {
     const n = gerNotas[idx];
     const lin = gerEl("div", "ger-item ger-tp-" + (n.card.kind === "cloze" ? "cloze" : (n.card.kind === "mc" ? "mc" : "basic")) + (pos === gerFoco ? " ger-foco" : ""));
-    const ck = gerEl("input"); ck.type = "checkbox"; ck.checked = gerSel.has(pos);
-    ck.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-    ck.onchange = () => { ck.checked ? gerSel.add(pos) : gerSel.delete(pos); gerPintarAcoes(); };
     const corpo = gerEl("div", "ger-corpo");
     corpo.append(gerEl("div", "ger-f", cqTrecho(cqRevelado(n.card), 140)));
     corpo.append(gerEl("div", "ger-v", cqTrecho(n.card.back, 120)));
@@ -720,13 +933,21 @@ function gerPintarLista() {
     /* dentro de UM tópico o "onde" é sempre o mesmo: só aparece quando a lista mistura pastas */
     if (!(gerPasta && gerPasta.chave)) onde.append(gerEl("span", "ger-onde-lin", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
     corpo.append(onde);
-    lin.append(ck, corpo);
+    if (exportando) {
+      /* modo exportação: a lista e' so' pra VER o conteudo — marcar e' na arvore, por pasta inteira */
+      lin.append(corpo);
+    } else {
+      const ck = gerEl("input"); ck.type = "checkbox"; ck.checked = gerSel.has(pos);
+      ck.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+      ck.onchange = () => { ck.checked ? gerSel.add(pos) : gerSel.delete(pos); gerPintarAcoes(); };
+      ck.title = t("ger_tip_caixa");
+      lin.append(ck, corpo);
+      lin.draggable = true;
+      lin.ondragstart = (ev) => gerIniciarArrasto(ev, pos);
+      lin.ondragend = gerFimArrasto;
+    }
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); if (gerEhCelular()) gerVista("previa"); };
-    lin.draggable = true;
     lin.title = t("ger_tip_linha");
-    ck.title = t("ger_tip_caixa");
-    lin.ondragstart = (ev) => gerIniciarArrasto(ev, pos);
-    lin.ondragend = gerFimArrasto;
     cx.append(lin);
   });
   $("btnGerMais").hidden = gerVis.length <= gerMostrando;
@@ -751,15 +972,18 @@ function gerPintarPrevia() {
 /* Duas barras: com NADA marcado, um rodapé fino (total e desfazer); com cartões marcados, a barra
  * de ações sobe (mover, apagar, elevar). Antes o seletor de destino ocupava o rodapé o tempo todo. */
 function gerPintarAcoes() {
-  const k = gerSel.size;
+  /* modo exportação: nenhuma ação REAL (mover/apagar/editar) pode disparar — marcar aqui só escolhe
+   * o que entra no pacote (gerSelExport), não mexe em gerSel. */
+  const k = gerModo === "exportar" ? 0 : gerSel.size;
   $("gerSel").textContent = t("ger_sel", { n: k });
   ["btnGerApagar", "btnGerMover", "btnGerMelhorar"].forEach((id) => { $(id).disabled = !k; });
   $("btnGerMelhorar").textContent = k > CE_LIM.lote ? t("ger_elevar_de", { n: CE_LIM.lote, k }) : t("ger_elevar", { n: k });
   $("gerAcoes").hidden = !k;
   $("gerTotal").textContent = t("ger_total", { n: gerNotas.length });
-  $("btnGerEditar").disabled = gerFoco < 0;
-  $("btnGerPreApagar").disabled = gerFoco < 0;
-  if (typeof estcRotulo === "function") estcRotulo();
+  $("btnGerEditar").disabled = gerModo === "exportar" || gerFoco < 0;
+  $("btnGerPreApagar").disabled = gerModo === "exportar" || gerFoco < 0;
+  if (gerModo === "exportar") { try { $("btnGerEstudar").hidden = true; } catch (e) {} }
+  else if (typeof estcRotulo === "function") estcRotulo();
   const tem = gerTemRecibo();
   $("btnGerDesfazer").hidden = !tem;
   if (!tem) $("btnGerMsgDesfazer").hidden = true;
@@ -1342,6 +1566,8 @@ function gerTrocarAgrupar(v) {
 
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
+  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map();
+  try { $("btnGerModoGerenciar").setAttribute("aria-selected", "true"); $("btnGerModoExportar").setAttribute("aria-selected", "false"); } catch (e) {}
   gerAgrupar = gerAgruparPadrao();
   $("gerAgrupar").value = gerAgrupar;
   try { gerOcultarVazias = localStorage.getItem(GER_CHAVE_VAZIAS) === "1"; } catch (e) { gerOcultarVazias = false; }
@@ -1408,6 +1634,9 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
     f.className = "ger-ferr" + (aberto ? " ger-ferr-aberto" : "");
     $("btnGerFerrMais").setAttribute("aria-expanded", aberto ? "true" : "false");
   };
+  $("btnGerModoGerenciar").onclick = () => gerAlternarModo("gerenciar");
+  $("btnGerModoExportar").onclick = () => gerAlternarModo("exportar");
+  $("btnGerDesfazerExport").onclick = () => { gerMoverParaExport = new Map(); gerPintarArvore(); };
   $("btnGerAbaPastas").onclick = () => gerVista("pastas");
   $("btnGerAbaCartoes").onclick = () => gerVista("cartoes");
   $("btnGerAbaPrevia").onclick = () => gerVista("previa");
