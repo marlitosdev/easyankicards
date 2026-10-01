@@ -7976,6 +7976,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>
     </div>
     <div class="ger-col ger-col-previa">
+      <!-- Painel de exportação (modo "Montar pacote"): opções + os botões que de fato geram o arquivo.
+           O "motor" (pacMontar/pacCartoes/pacNomeArquivo) é o mesmo de docs/pacote.js — só a tela muda de dono. -->
+      <div id="gerExpCx" hidden>
+        <p class="nota" data-i18n="ger_exp_ajuda"></p>
+        <p class="nota" id="gerExpResumo"></p>
+        <div id="gerExpDecks"></div>
+        <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
+          <input type="text" id="gerExpNome" style="width:100%;box-sizing:border-box"></label>
+        <label class="nota" style="display:block"><input type="checkbox" id="gerExpSemRaiz"> <span data-i18n="pac_sem_raiz"></span></label>
+        <div id="gerExpOpcEdital" hidden>
+          <label class="nota" style="display:block"><input type="checkbox" id="gerExpComEdital"> <span data-i18n="pac_com_edital"></span></label>
+        </div>
+        <label class="nota" style="display:block"><input type="checkbox" id="gerExpRamos" checked> <span data-i18n="pac_ramos"></span></label>
+        <label class="nota" style="display:block"><input type="checkbox" id="gerExpSemRep" checked> <span data-i18n="pac_sem_rep"></span></label>
+        <label class="nota" style="display:block"><input type="checkbox" id="gerExpSemFracos"> <span data-i18n="pac_sem_fracos"></span></label>
+        <div class="qm-bts">
+          <button type="button" class="btn-min btn-min-ok" id="btnGerExpApkg" data-i18n="pac_apkg" disabled></button>
+          <button type="button" class="btn-min" id="btnGerExpTxt" data-i18n="pac_txt" disabled></button>
+        </div>
+        <p class="nota" id="gerExpMsg"></p>
+      </div>
       <div class="ger-pre-acoes" id="gerPreAcoes" hidden>
         <button type="button" class="btn-min" id="btnGerEditar" data-i18n="ger_editar" disabled></button>
         <button type="button" class="btn-min btn-min-perigo" id="btnGerPreApagar" data-i18n="ger_lixeira" disabled></button>

@@ -39,6 +39,8 @@ const GER_DICAS = {
   btnGerNpOk: "ger_tip_np_ok", btnGerNpCancelar: "ger_tip_np_cancelar", gerNpEdital: "ger_tip_np_edital",
   btnGerClassificar: "ger_tip_classificar", btnGerExportar: "ger_tip_exportar", btnGerRamos: "ger_tip_ramos", btnGerClMover: "ger_tip_cl_mover", btnGerClFechar: "ger_tip_cl_fechar",
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
+  btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
+  gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -441,7 +443,7 @@ function gerSoltarTopExport(ev, discAlvo, topicoAlvo, editalAlvo) {
   gerFimArrastoExport();
   if (!origem || (origem.disciplina === discAlvo && origem.topico === topicoAlvo && origem.edital === (editalAlvo || ""))) return;
   gerMoverParaExport.set(origem.chave, { disciplina: discAlvo, topico: topicoAlvo, edital: editalAlvo || "" });
-  gerPintarArvore();
+  gerPintarArvore(); gerPintarPrevia();
 }
 
 function gerSobreDiscExport(ev, discAlvo, editalAlvo, el) {
@@ -456,7 +458,7 @@ function gerSoltarDiscExport(ev, discAlvo, editalAlvo) {
   gerFimArrastoExport();
   if (!origem || (origem.disciplina === discAlvo && origem.edital === (editalAlvo || ""))) return;
   gerMoverParaExport.set(origem.chave, { disciplina: discAlvo, topico: origem.topico, edital: editalAlvo || "" });
-  gerPintarArvore();
+  gerPintarArvore(); gerPintarPrevia();
 }
 
 function gerSobreRaizExport(ev, editalAlvo, el) {
@@ -471,7 +473,86 @@ function gerSoltarRaizExport(ev, editalAlvo) {
   gerFimArrastoExport();
   if (!origem || origem.edital === (editalAlvo || "")) return;
   gerMoverParaExport.set(origem.chave, { disciplina: origem.disciplina, topico: origem.topico, edital: editalAlvo || "" });
-  gerPintarArvore();
+  gerPintarArvore(); gerPintarPrevia();
+}
+
+/* ---- B3: painel de opções de exportação + exportar de verdade, dentro do mesmo diálogo.
+ * O MOTOR é o de docs/pacote.js (pacMontar/pacCartoes/pacNomeArquivo) — aqui só se monta `opc`
+ * a partir do estado do gerenciador (gerNotas/gerSelExport/gerMoverParaExport) e se chama as
+ * mesmas funções que pacExportar já usa (buildApkg/exportTxtString/entregar). Sem arrasto de
+ * cartão avulso ainda (gerCartaoMoverParaExport não existe): só pastas inteiras, como a B2 fez. ---- */
+
+/* o edital "dono" de uma pasta (real ou virtual) — usado para "pasta do edital" quando a
+ * marcação (gerSelExport) não guarda, por chave, sob qual raiz da árvore ela foi marcada
+ * (diferente de pacEditalDe, que guarda isso por não ter outra fonte). */
+function gerEditalDeChave(ch) {
+  const r = matResumos[ch];
+  if (r && r.concurso) return r.concurso;
+  const v = gerVirtuais.get(ch);
+  return (v && v.concurso) || "";
+}
+
+function gerExpTemEditais() { return typeof editais !== "undefined" && Array.isArray(editais) && editais.length > 0; }
+
+function gerExpSemRaizAtivo() { return !!($("gerExpSemRaiz") && $("gerExpSemRaiz").checked); }
+
+/* "sem nome vira EasyAnkiCards" — igual a pacRaizAtual, a prévia tem de mostrar exatamente o
+ * que vai para o arquivo. */
+function gerExpRaizAtual() { return String(($("gerExpNome") || {}).value || "").trim() || "EasyAnkiCards"; }
+
+function gerExpOpcoes() {
+  const editalDe = new Map();
+  gerSelExport.forEach((ch) => editalDe.set(ch, gerEditalDeChave(ch)));
+  return {
+    semRepetidos: $("gerExpSemRep").checked, semFracos: $("gerExpSemFracos").checked,
+    comEdital: $("gerExpComEdital").checked, comRamos: $("gerExpRamos").checked,
+    editalDe, moverPara: gerMoverParaExport, cartaoMoverPara: new Map(),
+  };
+}
+
+function gerPintarExport() {
+  const cx = $("gerExpCx");
+  if (!cx) return;
+  $("gerExpOpcEdital").hidden = !gerExpTemEditais();
+  const p = pacMontar(gerNotas, gerSelExport, gerExpOpcoes());
+  $("gerExpResumo").textContent = p.itens.length
+    ? t("pac_previa", { n: p.itens.length, k: p.decks.size, r: p.ignRep, f: p.ignFracos })
+    : t("pac_previa_vazia");
+  const decksCx = $("gerExpDecks");
+  decksCx.innerHTML = "";
+  const raiz = gerExpSemRaizAtivo() ? "" : gerExpRaizAtual() + " › ";
+  [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => decksCx.append(gerEl("div", "cq-onde", raiz + d.replace(/::/g, " › ") + " — " + n)));
+  if (p.decks.size > 12) decksCx.append(gerEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
+  $("btnGerExpApkg").disabled = !p.itens.length;
+  $("btnGerExpTxt").disabled = !p.itens.length;
+  return p;
+}
+
+/* deps: só para teste (o padrão usa o buildApkg e a entrega do app) — mesmo padrão de pacExportar. */
+async function gerAcaoExportar(formato, deps) {
+  const d = deps || {};
+  const construir = d.construir || buildApkg;
+  const entrega = d.entregar || entregar;
+  const p = pacMontar(gerNotas, gerSelExport, gerExpOpcoes());
+  if (!p.itens.length) return { ok: false };
+  const raizNome = gerExpRaizAtual();
+  const raizDeck = gerExpSemRaizAtivo() ? "" : raizNome;
+  const cards = pacCartoes(p.itens, $("gerExpComEdital").checked, $("gerExpRamos").checked, gerMoverParaExport, new Map());
+  try {
+    if (formato === "txt") {
+      const txt = exportTxtString({ cards }, raizDeck);
+      await entrega(new TextEncoder().encode(txt), pacNomeArquivo(raizNome) + ".txt", "text/plain");
+    } else {
+      const bytes = await construir(cards, raizDeck, $("selEstilo").value, "", $("selAlinha").value, []);
+      await entrega(bytes, pacNomeArquivo(raizNome) + ".apkg", "application/octet-stream");
+    }
+    $("gerExpMsg").textContent = t("pac_feito", { f: pacNomeArquivo(raizNome) + "." + (formato === "txt" ? "txt" : "apkg"), n: p.itens.length, k: p.decks.size });
+    try { reg("EXPORTAR", pacNomeArquivo(raizNome) + "." + formato, p.itens.length + " cartões em " + p.decks.size + " baralhos (biblioteca, modo exportar)"); } catch (e) {}
+    return { ok: true, n: p.itens.length, k: p.decks.size };
+  } catch (e) {
+    $("gerExpMsg").textContent = t("pac_erro", { e: String(e && e.message || e) });
+    return { ok: false, erro: e };
+  }
 }
 
 function gerCalcular() {
@@ -658,7 +739,7 @@ function gerLinhaTopico(cx, tp, concurso) {
       const ckExp = gerEl("input"); ckExp.type = "checkbox"; ckExp.checked = gerSelExport.has(tp.chave);
       ckExp.title = t("ger_tip_marcar_exportar");
       ckExp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-      ckExp.onchange = () => { gerMarcarExport(tp.chave, ckExp.checked); gerPintarArvore(); };
+      ckExp.onchange = () => { gerMarcarExport(tp.chave, ckExp.checked); gerPintarArvore(); gerPintarPrevia(); };
       li.append(ckExp);
     }
     if (tp.ramos) {
@@ -673,7 +754,7 @@ function gerLinhaTopico(cx, tp, concurso) {
       const des = gerEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
       des.type = "button";
       des.title = t("ger_tip_desfazer_export_um");
-      des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); gerMoverParaExport.delete(tp.chave); gerPintarArvore(); };
+      des.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); gerMoverParaExport.delete(tp.chave); gerPintarArvore(); gerPintarPrevia(); };
       li.append(des);
     }
   }
@@ -739,7 +820,7 @@ function gerPintarNo(cx, no, edital) {
     ckExp.indeterminate = marcadas > 0 && marcadas < chaves.length;
     ckExp.title = t("ger_tip_marcar_exportar");
     ckExp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-    ckExp.onchange = () => { chaves.forEach((c) => gerMarcarExport(c, ckExp.checked)); gerPintarArvore(); };
+    ckExp.onchange = () => { chaves.forEach((c) => gerMarcarExport(c, ckExp.checked)); gerPintarArvore(); gerPintarPrevia(); };
     cab.append(ckExp);
   }
   cab.append(gerEl("span", "", " " + no.nome + " (" + no.total + ")"));
@@ -808,7 +889,7 @@ function gerPintarArvore() {
       ckExp.indeterminate = marcadas > 0 && marcadas < chaves.length;
       ckExp.title = t("ger_tip_marcar_exportar");
       ckExp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
-      ckExp.onchange = () => { chaves.forEach((c) => gerMarcarExport(c, ckExp.checked)); gerPintarArvore(); };
+      ckExp.onchange = () => { chaves.forEach((c) => gerMarcarExport(c, ckExp.checked)); gerPintarArvore(); gerPintarPrevia(); };
       cab.append(ckExp);
     }
     cab.append(gerEl("span", "", " " + d.disciplina + " (" + d.total + ")"));
@@ -954,7 +1035,17 @@ function gerPintarLista() {
 }
 
 function gerPintarPrevia() {
+  if (gerModo === "exportar") {
+    $("gerExpCx").hidden = false;
+    $("gerPrevia").hidden = true;
+    $("gerPreAcoes").hidden = true;
+    $("gerEditorCx").hidden = true;
+    gerPintarExport();
+    return;
+  }
+  $("gerExpCx").hidden = true;
   const cx = $("gerPrevia");
+  cx.hidden = false;
   cx.innerHTML = "";
   const idx = gerFoco >= 0 ? gerVis[gerFoco] : undefined;
   const n = idx === undefined ? null : gerNotas[idx];
@@ -1568,6 +1659,10 @@ function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
   gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map();
   try { $("btnGerModoGerenciar").setAttribute("aria-selected", "true"); $("btnGerModoExportar").setAttribute("aria-selected", "false"); } catch (e) {}
+  try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
+  $("gerExpSemRaiz").checked = false;
+  $("gerExpComEdital").checked = gerExpTemEditais();
+  $("gerExpMsg").textContent = "";
   gerAgrupar = gerAgruparPadrao();
   $("gerAgrupar").value = gerAgrupar;
   try { gerOcultarVazias = localStorage.getItem(GER_CHAVE_VAZIAS) === "1"; } catch (e) { gerOcultarVazias = false; }
@@ -1636,7 +1731,15 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   };
   $("btnGerModoGerenciar").onclick = () => gerAlternarModo("gerenciar");
   $("btnGerModoExportar").onclick = () => gerAlternarModo("exportar");
-  $("btnGerDesfazerExport").onclick = () => { gerMoverParaExport = new Map(); gerPintarArvore(); };
+  $("btnGerDesfazerExport").onclick = () => { gerMoverParaExport = new Map(); gerPintarArvore(); gerPintarPrevia(); };
+  $("gerExpNome").oninput = gerPintarExport;
+  $("gerExpSemRaiz").onchange = gerPintarExport;
+  $("gerExpComEdital").onchange = gerPintarExport;
+  $("gerExpRamos").onchange = gerPintarExport;
+  $("gerExpSemRep").onchange = gerPintarExport;
+  $("gerExpSemFracos").onchange = gerPintarExport;
+  $("btnGerExpApkg").onclick = () => gerAcaoExportar("apkg");
+  $("btnGerExpTxt").onclick = () => gerAcaoExportar("txt");
   $("btnGerAbaPastas").onclick = () => gerVista("pastas");
   $("btnGerAbaCartoes").onclick = () => gerVista("cartoes");
   $("btnGerAbaPrevia").onclick = () => gerVista("previa");
