@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "17.55.0";
+const VERSAO = "17.56.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3696,28 +3696,37 @@ const PALETAS = {
   paper:   { fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34", caixa: "#fffaf0", destaque: "#b45309", sub: "#e7dcc3" },
 };
 
+/* Os ids de sempre (dentro de #dlgExport) — o alvo-padrão de previewEstilo/atualizarAvisoTopo
+ * quando chamadas sem argumento. Outro dono (ex.: o painel "Montar pacote" da Biblioteca,
+ * docs/gerenciador.js) passa o SEU próprio objeto de ids; nenhum call site antigo muda. */
+const ALVO_EXPORT_PADRAO = { estilo: "selEstilo", box: "stylePreview", hint: "styleHintTxt",
+  aviso: "avisoTopo", avTit: "avisoTopoTitulo", avTxt: "avisoTopoTexto",
+  avDemoLbl: "avisoTopoDemoLbl", avDemo: "avisoTopoDemo", avTags: "avisoTopoTags" };
+
 function rotularEstilos() {
   const nomes = { classic: "style_classic", esquema: "style_esquema",
                   dark: "style_dark", paper: "style_paper" };
   [...$("selEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
   [...$("selEstiloPainel").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
+  if ($("gerExpEstilo")) [...$("gerExpEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
   [...$("selAlinha").options].forEach((o) => { o.textContent = t("align_" + o.value); });
 }
 
 /* Mostra, em tempo real, o cabeçalho que será IMPRESSO em cada cartão:
- * a última parte do nome do baralho vira o título no topo. */
-function atualizarAvisoTopo() {
-  const estilo = $("selEstilo").value;
+ * a última parte do nome do baralho vira o título no topo. `alvo`: ver ALVO_EXPORT_PADRAO. */
+function atualizarAvisoTopo(alvo) {
+  const al = alvo || ALVO_EXPORT_PADRAO;
+  const estilo = $(al.estilo).value;
   const p = PALETAS[estilo] || PALETAS.esquema;
   const titulo = tituloCartao();
-  const box = $("avisoTopo");
+  const box = $(al.aviso);
 
   if (!p.cab) {   // estilo Clássico: não imprime cabeçalho
-    $("avisoTopoTitulo").textContent = "";
-    $("avisoTopoTexto").textContent = t("header_no_style");
-    $("avisoTopoDemoLbl").textContent = "";
-    $("avisoTopoDemo").innerHTML = "";
-    $("avisoTopoTags").textContent = "";
+    $(al.avTit).textContent = "";
+    $(al.avTxt).textContent = t("header_no_style");
+    $(al.avDemoLbl).textContent = "";
+    $(al.avDemo).innerHTML = "";
+    $(al.avTags).textContent = "";
     box.style.borderColor = "var(--borda)";
     box.style.background = "transparent";
     return;
@@ -3725,11 +3734,11 @@ function atualizarAvisoTopo() {
 
   box.style.borderColor = "var(--laranja-borda)";
   box.style.background = "var(--laranja-claro)";
-  $("avisoTopoTitulo").textContent = t("header_warn_title");
-  $("avisoTopoTexto").textContent = t("header_warn_text");
-  $("avisoTopoDemoLbl").textContent = t("header_demo_label");
+  $(al.avTit).textContent = t("header_warn_title");
+  $(al.avTxt).textContent = t("header_warn_text");
+  $(al.avDemoLbl).textContent = t("header_demo_label");
 
-  const demo = $("avisoTopoDemo");
+  const demo = $(al.avDemo);
   demo.innerHTML = "";
   demo.style.cssText = "background:" + p.fundo + ";padding:8px;border-radius:8px";
   const pill = document.createElement("div");
@@ -3747,12 +3756,13 @@ function atualizarAvisoTopo() {
       "border-radius:8px 8px 0 0;margin-top:4px";
     demo.append(sub);
   }
-  $("avisoTopoTags").textContent = t("header_tags_note");
+  $(al.avTags).textContent = t("header_tags_note");
 }
 
-function previewEstilo() {
-  const p = PALETAS[$("selEstilo").value] || PALETAS.esquema;
-  const box = $("stylePreview");
+function previewEstilo(alvo) {
+  const al = alvo || ALVO_EXPORT_PADRAO;
+  const p = PALETAS[$(al.estilo).value] || PALETAS.esquema;
+  const box = $(al.box);
   box.style.background = p.fundo;
   box.innerHTML = "";
   const mk = (txt, css) => {
@@ -3776,8 +3786,11 @@ function previewEstilo() {
   lac.style.color = p.destaque;
   frase.append(lac, document.createTextNode("."));
   box.append(frase);
-  $("styleHintTxt").textContent = t("style_hint");
-  atualizarAvisoTopo();
+  $(al.hint).textContent = t("style_hint");
+  /* o aviso de título (#avisoTopo/etc.) só existe no alvo-padrão até a U2 portar
+   * o campo de título também para o painel novo — sem isso, al.aviso fica undefined
+   * e esta chamada quebraria em vez de simplesmente não ter aviso para mostrar. */
+  if (al.aviso) atualizarAvisoTopo(al);
 }
 
 function abrirExport(tipo) {
@@ -3833,6 +3846,12 @@ function aplicarEstilo(v) {
   $("selEstilo").value = v;
   $("selEstiloPainel").value = v;
   previewEstilo();
+  /* o painel "Montar pacote" da Biblioteca (docs/gerenciador.js) tem o seu próprio select
+   * de estilo (#gerExpEstilo) — só existe quando esse HTML está montado na página. */
+  if ($("gerExpEstilo") && typeof GER_EXP_ALVO_ESTILO !== "undefined") {
+    $("gerExpEstilo").value = v;
+    previewEstilo(GER_EXP_ALVO_ESTILO);
+  }
   preview();
   toast("toast_style");
 }

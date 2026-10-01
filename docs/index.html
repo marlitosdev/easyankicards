@@ -7985,6 +7985,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <div id="gerExpDecks"></div>
         <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
           <input type="text" id="gerExpNome" style="width:100%;box-sizing:border-box"></label>
+        <button type="button" class="btn-min" id="btnGerExpCopiarCaminho" style="margin:4px 0" data-i18n="copy_path_btn"></button>
         <label class="nota" style="display:block"><input type="checkbox" id="gerExpSemRaiz"> <span data-i18n="pac_sem_raiz"></span></label>
         <div id="gerExpOpcEdital" hidden>
           <label class="nota" style="display:block"><input type="checkbox" id="gerExpComEdital"> <span data-i18n="pac_com_edital"></span></label>
@@ -7992,6 +7993,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <label class="nota" style="display:block"><input type="checkbox" id="gerExpRamos" checked> <span data-i18n="pac_ramos"></span></label>
         <label class="nota" style="display:block"><input type="checkbox" id="gerExpSemRep" checked> <span data-i18n="pac_sem_rep"></span></label>
         <label class="nota" style="display:block"><input type="checkbox" id="gerExpSemFracos"> <span data-i18n="pac_sem_fracos"></span></label>
+        <label class="nota" style="display:block;margin-top:8px" for="gerExpEstilo"><span data-i18n="style_label"></span></label>
+        <select id="gerExpEstilo" style="width:100%;padding:8px;border-radius:8px">
+          <option value="esquema"></option>
+          <option value="dark"></option><option value="paper"></option>
+        </select>
+        <div id="gerExpStylePreview" style="margin-top:8px;border-radius:10px;padding:10px"></div>
+        <div id="gerExpStyleHintTxt" style="font-size:11.5px;color:var(--sutil);margin-top:6px"></div>
         <div class="qm-bts">
           <button type="button" class="btn-min btn-min-ok" id="btnGerExpApkg" data-i18n="pac_apkg" disabled></button>
           <button type="button" class="btn-min" id="btnGerExpTxt" data-i18n="pac_txt" disabled></button>

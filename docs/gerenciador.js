@@ -41,6 +41,7 @@ const GER_DICAS = {
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
+  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -510,10 +511,15 @@ function gerExpOpcoes() {
   };
 }
 
+/* o alvo (ver ALVO_EXPORT_PADRAO em app.js) para desenhar a prévia de estilo DENTRO
+ * deste painel, em vez de em #dlgExport — sem aviso de título ainda (isso é a U2). */
+const GER_EXP_ALVO_ESTILO = { estilo: "gerExpEstilo", box: "gerExpStylePreview", hint: "gerExpStyleHintTxt" };
+
 function gerPintarExport() {
   const cx = $("gerExpCx");
   if (!cx) return;
   $("gerExpOpcEdital").hidden = !gerExpTemEditais();
+  previewEstilo(GER_EXP_ALVO_ESTILO);
   const p = pacMontar(gerNotas, gerSelExport, gerExpOpcoes());
   $("gerExpResumo").textContent = p.itens.length
     ? t("pac_previa", { n: p.itens.length, k: p.decks.size, r: p.ignRep, f: p.ignFracos })
@@ -1663,6 +1669,7 @@ function gerAbrir() {
   try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
   $("gerExpSemRaiz").checked = false;
   $("gerExpComEdital").checked = gerExpTemEditais();
+  $("gerExpEstilo").value = $("selEstilo").value;
   $("gerExpMsg").textContent = "";
   gerAgrupar = gerAgruparPadrao();
   $("gerAgrupar").value = gerAgrupar;
@@ -1740,6 +1747,12 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("gerExpRamos").onchange = gerPintarExport;
   $("gerExpSemRep").onchange = gerPintarExport;
   $("gerExpSemFracos").onchange = gerPintarExport;
+  $("gerExpEstilo").onchange = () => aplicarEstilo($("gerExpEstilo").value);
+  $("btnGerExpCopiarCaminho").onclick = async () => {
+    await navigator.clipboard.writeText(gerExpRaizAtual());
+    $("btnGerExpCopiarCaminho").textContent = t("copy_path_done");
+    setTimeout(() => { $("btnGerExpCopiarCaminho").textContent = t("copy_path_btn"); }, 2000);
+  };
   $("btnGerExpApkg").onclick = () => gerAcaoExportar("apkg");
   $("btnGerExpTxt").onclick = () => gerAcaoExportar("txt");
   $("btnGerAbaPastas").onclick = () => gerVista("pastas");
