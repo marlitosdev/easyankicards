@@ -1776,6 +1776,42 @@ async function testes() {
     }
   }
 
+  /* ---- G27: prévia de estilo + copiar caminho no painel de exportar (U1) — reaproveita
+   * previewEstilo/aplicarEstilo/PALETAS de app.js (generalizadas por "alvo" em vez de duplicadas);
+   * o aviso de título (#avisoTopo/etc.) é só da U2, ainda não existe aqui ---- */
+  {
+    const { a } = montar();
+    a.gerAbrir();
+    /* abre com o estilo que ja' estava escolhido (sincronizado com a barra lateral) */
+    a.$("selEstilo").value = "dark"; a.aplicarEstilo("dark");
+    a.$("dlgGerCartoes").close(); a.gerAbrir();
+    ok(a.$("gerExpEstilo").value === "dark", "G27a o seletor de estilo do painel abre com o estilo atual (sincronizado com a barra lateral)");
+    a.$("btnGerModoExportar").onclick();
+    ok(a.$("gerExpStylePreview").children.length > 0 && a.$("gerExpStyleHintTxt").textContent.length > 20, "G27b a previa de estilo desenha algo e tem a dica, assim que entra no modo exportar");
+    /* trocar o estilo NO PAINEL atualiza a previa e sincroniza os outros dois seletores (barra lateral e #dlgExport) */
+    a.$("gerExpEstilo").value = "paper"; a.$("gerExpEstilo").onchange();
+    ok(a.$("selEstilo").value === "paper" && a.$("selEstiloPainel").value === "paper", "G27c trocar o estilo no painel novo sincroniza os outros dois seletores (um so' estilo em todo o app)");
+    ok(a.$("gerExpStylePreview").style.background === a.PALETAS.paper.fundo, "G27d a previa do painel novo mostra a cor do estilo escolhido: " + a.$("gerExpStylePreview").style.background);
+    /* o inverso tambem funciona: trocar na barra lateral atualiza o painel novo */
+    a.$("selEstiloPainel").value = "dark"; a.aplicarEstilo("dark");
+    ok(a.$("gerExpEstilo").value === "dark" && a.$("gerExpStylePreview").style.background === a.PALETAS.dark.fundo, "G27e trocar na barra lateral tambem atualiza o painel novo (sincronia nos dois sentidos)");
+    /* previewEstilo SEM alvo continua servindo o #dlgExport de sempre (nada quebrou la'),
+     * inclusive chamando atualizarAvisoTopo (o estilo atual, "dark", tem cabecalho) */
+    a.$("avisoTopoTitulo").textContent = "";
+    a.previewEstilo();
+    ok(a.$("stylePreview").children.length > 0 && a.$("avisoTopoTitulo").textContent === a.t("header_warn_title"), "G27f previewEstilo() sem argumento continua desenhando o #dlgExport de sempre, aviso de titulo incluido: " + JSON.stringify(a.$("avisoTopoTitulo").textContent));
+    /* o alvo do painel novo NAO tem aviso de titulo ainda (isso e' a U2): previewEstilo nao tenta usa-lo e nao quebra */
+    ok(!a.GER_EXP_ALVO_ESTILO.aviso, "G27g o alvo do painel novo ainda nao declara aviso de titulo (U2 que adiciona)");
+    /* copiar caminho */
+    a.$("gerExpNome").value = "Minha Raiz"; a.$("gerExpNome").oninput();
+    await a.$("btnGerExpCopiarCaminho").onclick();
+    ok((await a.navegador.clipboard.readText()) === "Minha Raiz", "G27h copiar caminho copia o nome do baralho raiz atual: " + (await a.navegador.clipboard.readText()));
+    /* o "Copiado!" e' so' um flash de 2s (setTimeout) — neste ambiente de teste os timers
+     * disparam na hora (ver memoria do projeto), entao o que da' pra conferir aqui e' que o
+     * botao VOLTA ao rotulo normal depois (o mesmo texto do copiar caminho de #dlgExport) */
+    ok(a.$("btnGerExpCopiarCaminho").textContent === a.t("copy_path_btn"), "G27i o botao volta ao rotulo normal depois do flash de 'copiado'");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
