@@ -1362,19 +1362,27 @@ async function testes() {
     achar(a.$("gerArvore"), (e) => cls(e, "ger-disc")).find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
     const pdis = a.gerChavesDaPasta();
     ok(pdis.chaves.length === 1 && pdis.edital === "", "G22g na visao por disciplina: os topicos da disciplina, sem edital");
-    /* clicar */
+    /* clicar (B4a: "Exportar esta pasta" troca pro modo exportar NO MESMO dialogo, com a
+     * pasta ja marcada — nao fecha a Biblioteca nem abre outro dialogo) */
     a.$("gerAgrupar").value = "edital"; a.$("gerAgrupar").onchange();
     linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
     a.$("btnGerExportar").onclick();
-    ok(a.$("dlgGerCartoes").open === false && a.$("dlgPacote").open === true && a.pacSelAtual().size === 3 && [...a.pacEditalDeAtual().values()].every((v) => v === "ISS Caruaru Auditor"), "G22h clicar em exportar fecha a biblioteca e abre o montador ja com a pasta marcada, sob o edital");
-    ok(/notas? em \d+ baralho/.test(a.$("pacPrevia").textContent) && a.$("btnPacApkg").disabled === false, "G22i a previsao ja aparece");
-    a.$("dlgPacote").close();
+    ok(a.$("dlgGerCartoes").open === true && a.gerModoAtual() === "exportar" && a.gerSelExportAtual().size === 3, "G22h clicar em exportar troca para o modo exportar, no mesmo dialogo, com a pasta ja marcada: " + JSON.stringify([...a.gerSelExportAtual()]));
+    ok(/notas? em \d+ baralho/.test(a.$("gerExpResumo").textContent) && a.$("btnGerExpApkg").disabled === false, "G22i a previsao ja aparece no painel de exportar");
+    a.$("btnGerModoGerenciar").onclick();
     /* pasta sem topico */
     const b = rodar().api; b.matIniciar(); b.edIniciar(); b.$("editor").value = "";
     b.gerAbrir();
     ok(b.$("btnGerExportar").hidden === true, "G22j (sem pasta aberta)");
     b.gerExportarPasta();
-    ok(b.$("dlgPacote").open !== true && /nenhum|não tem tópicos/.test(b.$("gerMsg").textContent), "G22k sem nada para exportar: avisa e nao abre o montador: " + b.$("gerMsg").textContent);
+    ok(b.gerModoAtual() === "gerenciar" && /nenhum|não tem tópicos/.test(b.$("gerMsg").textContent), "G22k sem nada para exportar: avisa e nao troca de modo: " + b.$("gerMsg").textContent);
+    /* "Montar pacote" (tela de Material) abre a Biblioteca ja em modo exportar (B4a) */
+    {
+      const { a: c } = montar();
+      ok(c.$("btnPacote").onclick !== null, "G22l o botao 'Montar pacote' esta' ligado");
+      c.$("btnPacote").onclick();
+      ok(c.$("dlgGerCartoes").open === true && c.gerModoAtual() === "exportar", "G22m clicar em 'Montar pacote' abre a Biblioteca ja no modo exportar");
+    }
   }
 
   /* ---- G13: no app ---- */

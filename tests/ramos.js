@@ -849,29 +849,31 @@ async function testes() {
       ok(a.pacNomeDeck({ edital: "E", disciplina: "D", topico: "T" }, true, "R :: x") === "E::D::T::R — x" && a.pacNomeDeck({ disciplina: "D", topico: "T" }, false, "") === "D::T", "R31g o nome do ramo com '::' nao cria nivel a mais");
       ok(a.pacRamoDoCartao({ card: { ownTags: ["ram_modalidades"] }, chave, disciplina: "Licitações", topico: "Lei 14.133", edital: "ISS Caruaru Auditor" }) === "Modalidades" && a.pacRamoDoCartao({ card: { ownTags: ["x"] }, chave, disciplina: "Licitações", topico: "Lei 14.133" }) === "" && a.pacRamoDoCartao({ card: { ownTags: ["ram_zzz"] }, chave, disciplina: "Licitações", topico: "Lei 14.133" }) === "", "R31h o nome do ramo vem da etiqueta + texto do edital; sem etiqueta ou com ramo inexistente: vazio");
       ok(a.pacRamoDoCartao({ card: { ownTags: ["ram_modalidades"] }, chave, disciplina: "Licitações", topico: "Lei 14.133" }) === "Modalidades", "R31i sem o edital informado acha o ramo pelo edital dono do topico");
-      ok(a.$("pacRamos").checked === true, "R31i2 a opcao de subbaralho por ramo existe e vem ligada");
       /* dois editais com o mesmo topico: o ramo vem do edital da pasta */
       const ed2 = a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20" + String.fromCharCode(10) + "@ Licitações :: 5" + String.fromCharCode(10) + "+ Lei 14.133 :: 5" + String.fromCharCode(10) + "++ So do TCE");
       ok(a.pacRamoDoCartao({ card: { ownTags: ["ram_so_do_tce"] }, chave, disciplina: "Licitações", topico: "Lei 14.133", edital: "TCE-PE" }) === "So do TCE" && a.pacRamoDoCartao({ card: { ownTags: ["ram_so_do_tce"] }, chave, disciplina: "Licitações", topico: "Lei 14.133", edital: "ISS Caruaru Auditor" }) === "So do TCE", "R31h2 procura o ramo no edital informado e, se nao esta la, nos outros");
       const ed3 = a.edCriar("Ed3", "# Ed3 | prova: 2027-08-01 | horas: 20" + String.fromCharCode(10) + "@ D :: 5" + String.fromCharCode(10) + "+ Tópico › Sub :: 5" + String.fromCharCode(10) + "++ Ramo Um");
       ok(JSON.stringify(a.pacResolverRamo("Ed3", "D", "Tópico › Sub › Ramo Um")) === JSON.stringify({ topico: "Tópico › Sub", ramoId: "ramo_um" }), "R31p2 topico que ja tem ' › ' no nome: acha o corte certo entre topico e ramo: " + JSON.stringify(a.pacResolverRamo("Ed3", "D", "Tópico › Sub › Ramo Um")));
-      /* a tela de exportar respeita a opcao */
+      /* o painel de exportar da Biblioteca (gerAcaoExportar) respeita a opcao
+       * (desde a B4a: "Montar pacote" virou o modo exportar de gerenciador.js) */
       {
-        a.pacAbrir(); a.$("btnPacTudo").onclick();
+        a.gerAlternarModo("exportar");
+        a.gerMarcarExport(chave, true); a.gerMarcarExport(ch2, true);
+        a.gerPintar();
         const cap = {};
         const deps = { construir: async (cards, raiz, estilo, x, al, extras) => { cap.cards = cards; return new Uint8Array(1); }, entregar: async () => {} };
-        a.$("pacComEdital").checked = true;
-        a.$("pacRamos").checked = true;
-        await a.pacExportar("apkg", deps);
+        a.$("gerExpComEdital").checked = true;
+        a.$("gerExpRamos").checked = true;
+        await a.gerAcaoExportar("apkg", deps);
         ok(cap.cards && cap.cards.some((c) => /::Lei 14\.133::Modalidades$/.test(c.deck)), "R31q exportar com a opcao ligada: o subbaralho do ramo sai no pacote: " + (cap.cards || []).map((c) => c.deck).join(" | "));
-        a.$("pacRamos").checked = false; a.$("pacRamos").onchange();
+        a.$("gerExpRamos").checked = false; a.$("gerExpRamos").onchange();
         cap.cards = null;
-        await a.pacExportar("apkg", deps);
+        await a.gerAcaoExportar("apkg", deps);
         ok(cap.cards && !cap.cards.some((c) => /::Modalidades$/.test(c.deck)), "R31r exportar com a opcao desligada: sem subbaralho de ramo");
-        ok(/Modalidades/.test(a.$("pacDecks").textContent) === false, "R31s a previa acompanha a opcao desligada");
-        a.$("pacRamos").checked = true; a.$("pacRamos").onchange && a.$("pacRamos").onchange();
-        ok(/Modalidades/.test(a.$("pacDecks").textContent), "R31t a previa mostra o subbaralho com a opcao ligada");
-        a.$("btnPacFechar").onclick();
+        ok(/Modalidades/.test(a.$("gerExpDecks").textContent) === false, "R31s a previa acompanha a opcao desligada");
+        a.$("gerExpRamos").checked = true; a.$("gerExpRamos").onchange && a.$("gerExpRamos").onchange();
+        ok(/Modalidades/.test(a.$("gerExpDecks").textContent), "R31t a previa mostra o subbaralho com a opcao ligada");
+        a.gerAlternarModo("gerenciar");
       }
       /* importar de volta */
       const F = (front, tags, deck) => ({ kind: "basic", front, back: "resp", tags, ownTags: tags, deck });
