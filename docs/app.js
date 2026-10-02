@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "17.56.0";
+const VERSAO = "17.57.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -789,6 +789,12 @@ function setTituloGeral(v) {
   localStorage.setItem("eac_titulo", v);
   if ($("tituloGeral").value !== v) $("tituloGeral").value = v;
   if ($("tituloExp") && $("tituloExp").value !== v) $("tituloExp").value = v;
+  /* o painel "Montar pacote" da Biblioteca (docs/gerenciador.js) tem o seu próprio campo de
+   * título e o seu aviso — mesmo valor, mesma fonte única (eac_titulo). */
+  if ($("gerExpTitulo")) {
+    if ($("gerExpTitulo").value !== v) $("gerExpTitulo").value = v;
+    if (typeof GER_EXP_ALVO_ESTILO !== "undefined") previewEstilo(GER_EXP_ALVO_ESTILO);
+  }
 }
 function tituloCartao() { return tituloGeral(); }   // usado na exportação
 
