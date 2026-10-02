@@ -1984,6 +1984,139 @@ async function testes() {
     }
   }
 
+  /* ---- G31: H2 — "Como vai ficar no Anki": a hierarquia dos baralhos como arvore, com o nome de cada pasta editavel.
+   * Os nomes valem SO' neste arquivo (a Biblioteca nunca muda) e "::" cria subniveis no arquivo ---- */
+  {
+    const nomesBtn = (a) => achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-nome")).map((e) => e.textContent);
+    const btn = (a, txt) => achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-nome") && e.textContent === txt)[0];
+    const campo = (a) => achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-edit"))[0];
+    const tecla = (inp, key) => inp.onkeydown({ key, preventDefault() {} });
+    const renomear = (a, de, para) => { btn(a, de).onclick(); const i = campo(a); i.value = para; tecla(i, "Enter"); };
+    const fix = () => {
+      const { a, iss, iptu, pri } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      [iss, iptu, pri].forEach((c) => a.gerMarcarExport(c, true));
+      a.$("gerExpSemRep").checked = false;
+      a.$("gerExpNome").value = "Raiz"; a.$("gerExpNome").oninput();
+      return { a, iss, iptu, pri };
+    };
+    const capturar = async (a, formato) => {
+      const c = { cards: null, bytes: null };
+      await a.gerAcaoExportar(formato || "apkg", { confirmar: async () => true, construir: async (cards, raiz) => { c.cards = cards; c.raiz = raiz; return new Uint8Array(1); }, entregar: async (b) => { c.bytes = b; } });
+      return c;
+    };
+    const decksDe = (c) => [...new Set(c.cards.map((x) => x.deck))].sort().join(" | ");
+
+    /* a arvore mostra a hierarquia inteira, com a contagem de cada pasta */
+    {
+      const { a } = fix();
+      ok(nomesBtn(a).join(",") === "Raiz,Const,Princípios,Trib,IPTU,ISS", "G31a a arvore mostra raiz › disciplinas › topicos, em ordem: " + nomesBtn(a));
+      const cont = achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-cont")).map((e) => e.textContent).join("");
+      ok(cont === "(6)(2)(2)(4)(1)(3)", "G31b cada pasta mostra quantos cartoes tem (a de cima soma as de baixo): " + cont);
+      ok(achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-nome")).every((e) => e.tag === "button" && e.type === "button"), "G31c o nome de cada pasta e' um botao (alcancavel pelo teclado)");
+      ok(a.$("btnGerExpDesfazerNomes").hidden === true, "G31d sem nenhum nome novo o 'desfazer nomes' nao aparece");
+    }
+    /* renomear uma disciplina: arvore, caminhos completos e arquivo; a Biblioteca nao muda */
+    {
+      const { a } = fix();
+      const antes = JSON.stringify(a.matResumosAtual()), nNotas = a.gerNotasAtual().length;
+      btn(a, "Trib").onclick();
+      ok(campo(a) && campo(a).value === "Trib" && a.gerEditandoNomeAtual() === "Trib", "G31e clicar no nome abre o campo ja com o nome atual");
+      campo(a).value = "Tributário"; tecla(campo(a), "Enter");
+      ok(nomesBtn(a).join(",") === "Raiz,Const,Princípios,Tributário,IPTU,ISS" && a.gerEditandoNomeAtual() === null, "G31f Enter confirma: a disciplina e o que esta dentro seguem agrupados sob o nome novo: " + nomesBtn(a));
+      ok(/era: Trib/.test(a.$("gerExpArvoreAnki").textContent) && a.$("btnGerExpDesfazerNomes").hidden === false, "G31g a linha lembra o nome de antes e aparece o 'desfazer nomes'");
+      ok(/Raiz › Tributário › ISS/.test(a.$("gerExpDecks").textContent), "G31h os caminhos completos (a lista do arquivo) ja mostram o nome novo: " + a.$("gerExpDecks").textContent);
+      const c = await capturar(a);
+      ok(decksDe(c) === "Const::Princípios | Tributário::IPTU | Tributário::ISS" && c.raiz === "Raiz", "G31i o arquivo leva os baralhos com o nome novo: " + decksDe(c));
+      ok(JSON.stringify(a.matResumosAtual()) === antes && a.gerNotasAtual().length === nNotas, "G31j a Biblioteca NAO mudou (nenhuma pasta, nenhum cartao)");
+      const g = a.apkgAgruparDecks(c.cards, "Raiz", "");
+      ok(Object.values(g.decks).map((d) => d.name).sort().join("|") === "Raiz::Const::Princípios|Raiz::Tributário::IPTU|Raiz::Tributário::ISS", "G31k o agrupamento real do .apkg usa os nomes novos");
+      const t2 = await capturar(a, "txt");
+      const linhas = new TextDecoder().decode(t2.bytes).split("\n").filter((l) => l && !l.startsWith("#")).map((l) => l.split("\t")[1]);
+      ok(linhas.length === 6 && linhas.filter((d) => d === "Raiz::Tributário::ISS").length === 3, "G31l o .txt de verdade tambem: " + [...new Set(linhas)]);
+    }
+    /* "::" cria subniveis, so' no arquivo */
+    {
+      const { a } = fix();
+      const antes = JSON.stringify(a.matResumosAtual());
+      renomear(a, "Trib", "Direito :: Tributário");
+      ok(/→ 2 níveis/.test(a.$("gerExpArvoreAnki").textContent) && nomesBtn(a).indexOf("Direito › Tributário") >= 0, "G31m '::' no nome mostra '2 niveis' e o caminho: " + nomesBtn(a));
+      const c = await capturar(a);
+      ok(decksDe(c) === "Const::Princípios | Direito::Tributário::IPTU | Direito::Tributário::ISS", "G31n o arquivo ganha os niveis novos: " + decksDe(c));
+      ok(JSON.stringify(a.matResumosAtual()) === antes, "G31o mas a estrutura de pastas da Biblioteca continua igual");
+      btn(a, "Direito › Tributário").onclick();
+      ok(campo(a).value === "Direito::Tributário", "G31p ao editar de novo o campo mostra o nome como foi digitado (com '::')");
+    }
+    /* Esc cancela; vazio, igual ao original ou so' espacos tira o nome; sair do campo confirma */
+    {
+      const { a } = fix();
+      btn(a, "ISS").onclick(); let i = campo(a); i.value = "XX"; tecla(i, "Escape"); i.onblur();
+      ok(nomesBtn(a).indexOf("ISS") >= 0 && a.gerRenomearExportAtual().size === 0 && a.gerEditandoNomeAtual() === null, "G31q Esc cancela (e o campo que some nao confirma depois)");
+      renomear(a, "ISS", "Imposto");
+      ok(nomesBtn(a).indexOf("Imposto") >= 0, "G31r (confirma: renomeou o topico)");
+      renomear(a, "Imposto", "   ");
+      ok(nomesBtn(a).indexOf("ISS") >= 0 && a.gerRenomearExportAtual().size === 0, "G31s nome so' com espacos volta ao original");
+      renomear(a, "ISS", "ISS");
+      ok(a.gerRenomearExportAtual().size === 0, "G31t igual ao original nao guarda nada");
+      btn(a, "IPTU").onclick(); i = campo(a); i.value = "Predial"; i.onblur();
+      ok(nomesBtn(a).indexOf("Predial") >= 0, "G31u sair do campo (clicar fora) tambem confirma");
+    }
+    /* desfazer: uma linha e todas */
+    {
+      const { a } = fix();
+      renomear(a, "Trib", "T"); renomear(a, "ISS", "I"); renomear(a, "Const", "C");
+      ok(a.gerRenomearExportAtual().size === 3 && nomesBtn(a).join(",") === "Raiz,C,Princípios,T,IPTU,I", "G31v tres nomes novos de uma vez: " + nomesBtn(a));
+      const des = achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "pac-desfazer-mov"))[0];
+      des.onclick({ preventDefault() {} });
+      ok(a.gerRenomearExportAtual().size === 2, "G31w o 'desfazer' da linha tira so' aquele nome");
+      a.$("btnGerExpDesfazerNomes").onclick();
+      ok(a.gerRenomearExportAtual().size === 0 && nomesBtn(a).join(",") === "Raiz,Const,Princípios,Trib,IPTU,ISS" && a.$("btnGerExpDesfazerNomes").hidden === true, "G31x 'desfazer nomes' volta tudo ao original e some");
+    }
+    /* duas pastas com o mesmo nome final: aviso de que viram um baralho so' */
+    {
+      const { a } = fix();
+      renomear(a, "IPTU", "ISS");
+      const avisos = achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-aviso"));
+      ok(avisos.length === 2 && avisos[0].textContent === a.t("ger_exp_arv_mescla"), "G31y as duas pastas ficam marcadas 'junta com outra de mesmo nome'");
+      const c = await capturar(a);
+      ok(decksDe(c) === "Const::Princípios | Trib::ISS" && c.cards.filter((x) => x.deck === "Trib::ISS").length === 4, "G31z e no arquivo viram um baralho so', com os cartoes das duas: " + decksDe(c));
+    }
+    /* os nomes valem so' nesta exportacao: trocar de modo ou reabrir esquece */
+    {
+      const { a } = fix();
+      renomear(a, "Trib", "T");
+      a.gerAlternarModo("gerenciar"); a.gerAlternarModo("exportar");
+      ok(a.gerRenomearExportAtual().size === 0, "G31aa trocar de modo esquece os nomes");
+      const { a: b } = fix();
+      renomear(b, "Trib", "T"); b.$("dlgGerCartoes").close(); b.gerAbrir();
+      ok(b.gerRenomearExportAtual().size === 0, "G31ab reabrir a Biblioteca esquece os nomes");
+    }
+    /* a raiz: e' o mesmo campo "Nome do baralho raiz" */
+    {
+      const { a } = fix();
+      renomear(a, "Raiz", "Meu Curso");
+      ok(a.$("gerExpNome").value === "Meu Curso" && a.lojaLer("eac_deck") === "Meu Curso" && nomesBtn(a)[0] === "Meu Curso", "G31ac renomear a raiz na arvore muda o campo 'Nome do baralho raiz' (e fica lembrado)");
+      a.$("gerExpNome").value = "Digitado"; a.$("gerExpNome").oninput();
+      ok(nomesBtn(a)[0] === "Digitado", "G31ad e digitar no campo muda a raiz da arvore");
+      renomear(a, "Digitado", "  ");
+      ok(a.$("gerExpNome").value === "Digitado", "G31ae raiz sem nome nao apaga o campo");
+      a.$("gerExpSemRaiz").checked = true; a.$("gerExpSemRaiz").onchange();
+      ok(nomesBtn(a).indexOf("Digitado") < 0 && a.$("gerExpArvoreAnki").textContent.indexOf(a.t("ger_exp_arv_sem_raiz")) >= 0 && nomesBtn(a).join(",") === "Const,Princípios,Trib,IPTU,ISS", "G31af sem baralho raiz a linha da raiz vira so' o aviso (sem botao) e as pastas continuam editaveis: " + nomesBtn(a));
+    }
+    /* Bancada: cartoes diretos na raiz contam na raiz e nao ganham pasta */
+    {
+      const { a, iss } = montar();
+      a.$("editor").value = "Qual a regra geral do prazo? :: Resposta decente e completa aqui";
+      a.$("btnApkg").onclick();
+      a.gerMarcarExport(iss, true); a.$("gerExpSemRep").checked = false; a.gerPintar();
+      const cont = achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-cont")).map((e) => e.textContent);
+      ok(nomesBtn(a).slice(1).join(",") === "Trib,ISS" && cont[0] === "(4)", "G31ag a Bancada conta na raiz e nao ganha pasta propria: " + nomesBtn(a) + " " + cont);
+      renomear(a, "Trib", "Tributário");
+      const c = await capturar(a);
+      ok(c.cards.some((x) => x.deck === "") && c.cards.some((x) => x.deck === "Tributário::ISS"), "G31ah a Bancada segue direto na raiz e a pasta leva o nome novo: " + JSON.stringify(decksDe(c)));
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
