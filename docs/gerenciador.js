@@ -41,7 +41,7 @@ const GER_DICAS = {
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
-  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck",
+  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -351,6 +351,9 @@ let gerModo = "gerenciar", gerSelExport = new Set();
  * mesma Map chave→{disciplina,topico,edital} e mesmo "compara destino, não chave" de pacote.js
  * (pacMoverPara/F2). Esvazia ao trocar de modo/reabrir, junto com gerSelExport. */
 let gerMoverParaExport = new Map();
+/* os nomes que a pessoa deu às pastas NESTA exportação (ver pacAplicarRenomear em pacote.js) e a pasta cujo nome está
+ * sendo editado agora (chave = caminho original; "" = a raiz). Nada disto grava na Biblioteca. */
+let gerRenomearExport = new Map(), gerEditandoNome = null, gerFocoNomeArv = null;
 const GER_CHAVE_GRANDE = "eac_ger_grande";
 
 function gerEl(tag, cls, txt) {
@@ -372,6 +375,7 @@ function gerAlternarModo(modo) {
   gerSel = new Set();
   gerSelExport = new Set();
   gerMoverParaExport = new Map();
+  gerRenomearExport = new Map(); gerEditandoNome = null;
   try {
     $("btnGerModoGerenciar").setAttribute("aria-selected", String(modo === "gerenciar"));
     $("btnGerModoExportar").setAttribute("aria-selected", String(modo === "exportar"));
@@ -507,7 +511,7 @@ function gerExpOpcoes() {
   return {
     semRepetidos: $("gerExpSemRep").checked, semFracos: $("gerExpSemFracos").checked,
     comEdital: $("gerExpComEdital").checked, comRamos: $("gerExpRamos").checked,
-    editalDe, moverPara: gerMoverParaExport, cartaoMoverPara: new Map(),
+    editalDe, moverPara: gerMoverParaExport, cartaoMoverPara: new Map(), renomear: gerRenomearExport,
   };
 }
 
@@ -534,6 +538,7 @@ function gerPintarExport() {
   if (p.decks.size > 12) decksCx.append(gerEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
   $("btnGerExpApkg").disabled = !p.itens.length;
   $("btnGerExpTxt").disabled = !p.itens.length;
+  gerPintarArvoreAnki(p);
   return p;
 }
 
@@ -550,6 +555,87 @@ async function gerExpConfirmarSuspeitos(itens, confirmar) {
   return (confirmar || uiConfirm)(t("ger_exp_suspeitos", { n: ruins.length, resumo }));
 }
 
+/* ---- H2: "Como vai ficar no Anki" — a hierarquia dos baralhos, com os nomes editáveis (só neste arquivo) ---- */
+
+/* dá (ou tira) o nome novo de uma pasta; igual ao original, vazio ou só "::" = volta ao nome de antes */
+function gerRenomearNo(chave, texto) {
+  const original = String(chave).split("::").pop();
+  const partes = pacLimparNomeRenomeado(texto);
+  const novo = partes.join("::");
+  if (!partes.length || novo === original) gerRenomearExport.delete(chave);
+  else gerRenomearExport.set(chave, novo);
+}
+
+function gerEditarNomeArv(chave) { gerEditandoNome = chave; gerPintarExport(); }
+
+function gerConfirmarNomeArv(chave, texto) {
+  if (gerEditandoNome !== chave) return;
+  gerEditandoNome = null;
+  if (chave === "") {
+    /* a raiz: é o mesmo campo "Nome do baralho raiz" (e fica lembrado, como sempre) */
+    const v = String(texto || "").trim();
+    if (v) { $("gerExpNome").value = v; try { localStorage.setItem("eac_deck", v); } catch (e) {} }
+  } else gerRenomearNo(chave, texto);
+  gerPintarExport();
+}
+
+function gerCancelarNomeArv() { gerEditandoNome = null; gerPintarExport(); }
+
+function gerLinhaArv(cx, no, prof, ehRaiz) {
+  const lin = gerEl("div", "ger-arv-linha");
+  lin.style.paddingLeft = (prof * 14) + "px";
+  lin.append(gerEl("span", "ger-arv-ico", ehRaiz ? "🗂️" : "📁"));
+  const fixa = ehRaiz && gerExpSemRaizAtivo();
+  if (fixa) {
+    lin.append(gerEl("span", "ger-arv-fixo", t("ger_exp_arv_sem_raiz")));
+  } else if (gerEditandoNome === no.chave) {
+    const inp = gerEl("input", "ger-arv-edit");
+    inp.type = "text";
+    inp.value = ehRaiz ? gerExpRaizAtual() : no.novo;
+    inp.setAttribute("aria-label", t(ehRaiz ? "ger_tip_exp_arv_raiz" : "ger_tip_exp_arv_nome"));
+    inp.onkeydown = (ev) => {
+      if (!ev) return;
+      if (ev.key === "Enter") { if (ev.preventDefault) ev.preventDefault(); gerConfirmarNomeArv(no.chave, inp.value); }
+      else if (ev.key === "Escape") { if (ev.preventDefault) ev.preventDefault(); gerCancelarNomeArv(); }
+    };
+    inp.onblur = () => gerConfirmarNomeArv(no.chave, inp.value);
+    lin.append(inp);
+    gerFocoNomeArv = inp;
+  } else {
+    const b = gerEl("button", "ger-arv-nome", ehRaiz ? gerExpRaizAtual() : no.novo.replace(/::/g, " › "));
+    b.type = "button";
+    b.title = t(ehRaiz ? "ger_tip_exp_arv_raiz" : "ger_tip_exp_arv_nome");
+    b.onclick = () => gerEditarNomeArv(no.chave);
+    lin.append(b);
+  }
+  lin.append(gerEl("span", "ger-arv-cont", "(" + no.total + ")"));
+  if (!ehRaiz) {
+    if (no.renomeado) {
+      lin.append(gerEl("span", "ger-arv-era", t("ger_exp_arv_era", { n: no.nome })));
+      const des = gerEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
+      des.type = "button";
+      des.title = t("ger_tip_exp_arv_desfazer_um");
+      des.onclick = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); gerRenomearExport.delete(no.chave); gerPintarExport(); };
+      lin.append(des);
+    }
+    if (no.niveis > 1) lin.append(gerEl("span", "ger-arv-tag", t("ger_exp_arv_niveis", { n: no.niveis })));
+    if (no.mescla) lin.append(gerEl("span", "ger-arv-tag ger-arv-aviso", t("ger_exp_arv_mescla")));
+  }
+  cx.append(lin);
+  no.filhos.forEach((f) => gerLinhaArv(cx, f, prof + 1, false));
+}
+
+function gerPintarArvoreAnki(p) {
+  const cx = $("gerExpArvoreAnki");
+  if (!cx) return;
+  cx.innerHTML = "";
+  $("btnGerExpDesfazerNomes").hidden = gerRenomearExport.size === 0;
+  gerFocoNomeArv = null;
+  if (!p.itens.length) return;
+  gerLinhaArv(cx, pacArvoreDecks(p.origens, gerRenomearExport), 0, true);
+  if (gerFocoNomeArv) { try { gerFocoNomeArv.focus(); if (gerFocoNomeArv.select) gerFocoNomeArv.select(); } catch (e) {} }
+}
+
 /* deps: só para teste (o padrão usa o buildApkg e a entrega do app) — mesmo padrão de pacExportar. */
 async function gerAcaoExportar(formato, deps) {
   const d = deps || {};
@@ -563,7 +649,7 @@ async function gerAcaoExportar(formato, deps) {
   }
   const raizNome = gerExpRaizAtual();
   const raizDeck = gerExpSemRaizAtivo() ? "" : raizNome;
-  const cards = pacCartoes(p.itens, $("gerExpComEdital").checked, $("gerExpRamos").checked, gerMoverParaExport, new Map());
+  const cards = pacCartoes(p.itens, $("gerExpComEdital").checked, $("gerExpRamos").checked, gerMoverParaExport, new Map(), gerRenomearExport);
   try {
     if (formato === "txt") {
       const txt = exportTxtString({ cards }, raizDeck);
@@ -1696,7 +1782,7 @@ function gerTrocarAgrupar(v) {
 
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
-  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map();
+  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map(); gerRenomearExport = new Map(); gerEditandoNome = null;
   try { $("btnGerModoGerenciar").setAttribute("aria-selected", "true"); $("btnGerModoExportar").setAttribute("aria-selected", "false"); } catch (e) {}
   try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
   $("gerExpSemRaiz").checked = false;
@@ -1800,6 +1886,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
     $("btnGerExpCopiarCaminho").textContent = t("copy_path_done");
     setTimeout(() => { $("btnGerExpCopiarCaminho").textContent = t("copy_path_btn"); }, 2000);
   };
+  $("btnGerExpDesfazerNomes").onclick = () => { gerRenomearExport = new Map(); gerEditandoNome = null; gerPintarExport(); };
   $("btnGerExpApkg").onclick = () => gerAcaoExportar("apkg");
   $("btnGerExpTxt").onclick = () => gerAcaoExportar("txt");
   $("btnGerAbaPastas").onclick = () => gerVista("pastas");
