@@ -96,6 +96,19 @@ async function testes() {
     ok(notas[0].card.tags.indexOf("zzz") < 0, "P3b as etiquetas sao copiadas (nao compartilhadas)");
   }
 
+  /* ---- P3b: a Bancada cai DIRETO no baralho raiz (o que o "Exportar" do rodape sempre fez) ---- */
+  {
+    const { a, iss } = montar();
+    a.$("editor").value = "Qual a regra geral do prazo? :: Resposta decente e completa aqui";
+    const notas = a.cqLerBiblioteca();
+    const banc = notas.filter((x) => x.chave === a.CQ_BANCADA);
+    ok(banc.length === 1 && a.pacCartoes(banc)[0].deck === "", "P3b cartao da Bancada sai sem subbaralho (direto na raiz)");
+    const m = a.pacMontar(notas, new Set([a.CQ_BANCADA, iss]), {});
+    ok(m.decks.get("") === 1 && m.decks.get("Trib::ISS") === 2, "P3c a previsao conta a Bancada na raiz (baralho vazio) e as pastas nos seus baralhos: " + [...m.decks.entries()]);
+    const mov = new Map([[a.CQ_BANCADA, { disciplina: "Dir", topico: "Geral", edital: "" }]]);
+    ok(a.pacCartoes(banc, false, false, mov)[0].deck === "Dir::Geral", "P3d se a Bancada foi ARRASTADA para uma pasta, vale o destino dela");
+  }
+
   /* ---- P4: separar baralho / raiz comum ---- */
   {
     const { a } = montar();

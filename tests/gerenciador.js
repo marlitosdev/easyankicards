@@ -1783,23 +1783,22 @@ async function testes() {
     const { a } = montar();
     a.gerAbrir();
     /* abre com o estilo que ja' estava escolhido (sincronizado com a barra lateral) */
-    a.$("selEstilo").value = "dark"; a.aplicarEstilo("dark");
+    a.aplicarEstilo("dark");
     a.$("dlgGerCartoes").close(); a.gerAbrir();
     ok(a.$("gerExpEstilo").value === "dark", "G27a o seletor de estilo do painel abre com o estilo atual (sincronizado com a barra lateral)");
     a.$("btnGerModoExportar").onclick();
     ok(a.$("gerExpStylePreview").children.length > 0 && a.$("gerExpStyleHintTxt").textContent.length > 20, "G27b a previa de estilo desenha algo e tem a dica, assim que entra no modo exportar");
-    /* trocar o estilo NO PAINEL atualiza a previa e sincroniza os outros dois seletores (barra lateral e #dlgExport) */
+    /* trocar o estilo NO PAINEL atualiza a previa e sincroniza o seletor da barra lateral */
     a.$("gerExpEstilo").value = "paper"; a.$("gerExpEstilo").onchange();
-    ok(a.$("selEstilo").value === "paper" && a.$("selEstiloPainel").value === "paper", "G27c trocar o estilo no painel novo sincroniza os outros dois seletores (um so' estilo em todo o app)");
+    ok(a.$("selEstiloPainel").value === "paper" && a.lojaLer("eac_style") === "paper", "G27c trocar o estilo no painel sincroniza o seletor da barra lateral e fica salvo (um so' estilo em todo o app)");
     ok(a.$("gerExpStylePreview").style.background === a.PALETAS.paper.fundo, "G27d a previa do painel novo mostra a cor do estilo escolhido: " + a.$("gerExpStylePreview").style.background);
     /* o inverso tambem funciona: trocar na barra lateral atualiza o painel novo */
     a.$("selEstiloPainel").value = "dark"; a.aplicarEstilo("dark");
     ok(a.$("gerExpEstilo").value === "dark" && a.$("gerExpStylePreview").style.background === a.PALETAS.dark.fundo, "G27e trocar na barra lateral tambem atualiza o painel novo (sincronia nos dois sentidos)");
-    /* previewEstilo SEM alvo continua servindo o #dlgExport de sempre (nada quebrou la'),
-     * inclusive chamando atualizarAvisoTopo (o estilo atual, "dark", tem cabecalho) */
-    a.$("avisoTopoTitulo").textContent = "";
-    a.previewEstilo();
-    ok(a.$("stylePreview").children.length > 0 && a.$("avisoTopoTitulo").textContent === a.t("header_warn_title"), "G27f previewEstilo() sem argumento continua desenhando o #dlgExport de sempre, aviso de titulo incluido: " + JSON.stringify(a.$("avisoTopoTitulo").textContent));
+    /* previewEstilo(alvo) redesenha a previa E o aviso do cabecalho (o estilo atual, "dark", tem cabecalho) */
+    a.$("gerExpAvisoTopoTitulo").textContent = "";
+    a.previewEstilo(a.GER_EXP_ALVO_ESTILO);
+    ok(a.$("gerExpStylePreview").children.length > 0 && a.$("gerExpAvisoTopoTitulo").textContent === a.t("header_warn_title"), "G27f previewEstilo(alvo) redesenha a previa e o aviso de titulo: " + JSON.stringify(a.$("gerExpAvisoTopoTitulo").textContent));
     /* desde a U2 o alvo do painel novo declara tambem o aviso de titulo (G28) */
     ok(a.GER_EXP_ALVO_ESTILO.aviso === "gerExpAvisoTopo", "G27g o alvo do painel novo declara o aviso de titulo");
     /* copiar caminho */
@@ -1827,7 +1826,7 @@ async function testes() {
     ok(demoPill(a) === "Direito Tributário", "G28c a previa do cabecalho mostra o titulo atual: " + demoPill(a));
     /* digitar NO PAINEL sincroniza barra lateral, #dlgExport e a fonte unica, e redesenha aviso e previa */
     a.$("gerExpTitulo").value = "Penal"; a.$("gerExpTitulo").oninput();
-    ok(a.$("tituloGeral").value === "Penal" && a.$("tituloExp").value === "Penal" && a.tituloGeral() === "Penal", "G28d digitar no painel atualiza os outros dois campos e o valor salvo");
+    ok(a.$("tituloGeral").value === "Penal" && a.tituloGeral() === "Penal", "G28d digitar no painel atualiza o campo da barra lateral e o valor salvo");
     ok(demoPill(a) === "Penal" && a.$("gerExpStylePreview").children[0].textContent === "Penal", "G28e a previa do cabecalho E a previa do estilo acompanham o que se digita");
     /* o inverso: digitar na barra lateral atualiza o campo do painel */
     a.$("tituloGeral").value = "Civil"; a.$("tituloGeral").oninput();
@@ -1919,6 +1918,69 @@ async function testes() {
       ok(rNao.ok === false && feito === 0, "G29i dizer NAO no dialogo de verdade nao exporta");
       const rSim = await conduzir(a, a.gerAcaoExportar("apkg", deps));
       ok(rSim.ok === true && feito === 1, "G29j dizer SIM no dialogo de verdade exporta");
+    }
+  }
+
+  /* ---- G30: U4 — "Exportar .txt/.apkg" do rodape da bancada abrem a Biblioteca em modo exportar com a Bancada
+   * marcada; o antigo #dlgExport (e tudo que so' ele usava) deixou de existir ---- */
+  {
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(!/id="(dlgExport|deckExp|tituloExp|selEstilo|stylePreview|avisoTopo|btnCaminhoExp|btnExportConfirm)"/.test(html), "G30a o antigo dialogo de exportar nao existe mais no index.html");
+    ok(/id="btnTxt"/.test(html) && /id="btnApkg"/.test(html), "G30b os botoes do rodape da bancada continuam la'");
+    const BOM = "Qual a regra geral do prazo? :: Resposta decente e completa aqui";
+    const espiao = () => { const c = { args: null, txt: null }; c.deps = { confirmar: async () => true, construir: async (...x) => { c.args = x; return new Uint8Array(1); }, entregar: async (b, nome) => { c.nome = nome; c.bytes = b; } }; return c; };
+    for (const id of ["btnApkg", "btnTxt"]) {
+      const { a } = montar();
+      a.$("editor").value = BOM;
+      a.$(id).onclick();
+      ok(a.$("dlgGerCartoes").open === true && a.gerModoAtual() === "exportar" && a.gerSelExportAtual().size === 1 && a.gerSelExportAtual().has(a.CQ_BANCADA), "G30c " + id + " abre a Biblioteca em modo exportar com a Bancada ja marcada");
+      ok(!/Marque ao menos/.test(a.$("gerExpResumo").textContent) && a.$("btnGerExpApkg").disabled === false, "G30d " + id + ": a previsao ja aparece e dá para exportar");
+    }
+    /* bancada vazia: avisa (como o botao sempre fez) e nao abre painel vazio */
+    {
+      const { a } = montar();
+      a.$("editor").value = "";
+      const r = a.$("btnApkg").onclick();
+      ok(r === null && a.$("dlgGerCartoes").open !== true, "G30e bancada sem cartao: avisa e nao abre a Biblioteca");
+    }
+    /* exportar a Bancada: direto na raiz que a pessoa digitou, com o titulo geral e o estilo do painel */
+    {
+      const { a } = montar();
+      a.$("editor").value = BOM;
+      a.setTituloGeral("Meu Título");
+      a.$("btnApkg").onclick();
+      a.$("gerExpNome").value = "Curso::Tema"; a.$("gerExpNome").oninput();
+      a.$("gerExpEstilo").value = "paper"; a.$("gerExpEstilo").onchange();
+      const e = espiao();
+      const r = await a.gerAcaoExportar("apkg", e.deps);
+      ok(r.ok === true && e.args[0].length === 1 && e.args[0][0].deck === "" && e.args[1] === "Curso::Tema", "G30f a Bancada vai direto no baralho raiz digitado: " + JSON.stringify([e.args[0].map((c) => c.deck), e.args[1]]));
+      ok(e.args[2] === "paper" && e.args[3] === "Meu Título", "G30g o .apkg leva o estilo escolhido no painel e o titulo geral (cartao sem titulo proprio): " + JSON.stringify([e.args[2], e.args[3]]));
+      ok(e.nome === "Curso - Tema.apkg", "G30h o nome do arquivo vem do nome digitado: " + e.nome);
+      const e2 = espiao();
+      await a.gerAcaoExportar("txt", e2.deps);
+      const linhas = new TextDecoder().decode(e2.bytes).split("\n").filter((l) => l && !l.startsWith("#"));
+      ok(linhas.length === 1 && linhas[0].split("\t")[1] === "Curso::Tema", "G30i o .txt tambem poe a Bancada direto no baralho raiz: " + JSON.stringify(linhas));
+      /* sem baralho raiz + Bancada: raiz vazia (o arquivo cai em 'Sem pasta'/'Import'), nunca '::' */
+      a.$("gerExpSemRaiz").checked = true; a.$("gerExpSemRaiz").onchange();
+      const e3 = espiao();
+      await a.gerAcaoExportar("apkg", e3.deps);
+      ok(e3.args[1] === "", "G30j sem baralho raiz o construtor recebe raiz vazia");
+      /* a raiz digitada fica lembrada (era o que o antigo dialogo de exportar fazia ao confirmar) */
+      ok(a.lojaLer("eac_deck") === "Curso::Tema", "G30k a raiz digitada fica salva");
+      a.$("dlgGerCartoes").close(); a.gerAbrir();
+      ok(a.$("gerExpNome").value === "Curso::Tema", "G30l reabrir traz a raiz salva");
+    }
+    /* a Bancada junto de uma pasta: a pasta ganha o baralho dela, a Bancada fica na raiz */
+    {
+      const { a, iss } = montar();
+      a.$("editor").value = BOM;
+      a.$("btnApkg").onclick();
+      a.gerMarcarExport(iss, true); a.gerPintar();
+      a.$("gerExpSemRep").checked = false; a.$("gerExpComEdital").checked = false;
+      const e = espiao();
+      await a.gerAcaoExportar("apkg", e.deps);
+      const decks = e.args[0].map((c) => c.deck).sort();
+      ok(decks.indexOf("") >= 0 && decks.indexOf("Trib::ISS") >= 0 && decks.every((d) => d === "" || d === "Trib::ISS"), "G30m Bancada na raiz e a pasta no baralho dela, no mesmo pacote: " + JSON.stringify(decks));
     }
   }
 

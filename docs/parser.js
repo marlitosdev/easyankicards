@@ -395,10 +395,12 @@ function parseText(rawText, globalTags) {
  * coluna de deck (#deck column) cria a pasta no Anki se não existir. */
 function exportTxtString(result, deckName) {
   const campo = (s) => s.replace(/\t/g, " ").replace(/\n/g, "<br>");
+  /* raiz vazia ("nao usar baralho raiz"): sai so' o subbaralho do cartao, sem "::" sobrando na frente */
+  const junta = (a, b) => [a, b].filter(Boolean).join("::") || "Import";
   const lines = ["#separator:tab", "#html:true", "#notetype column:1",
-                 "#deck column:2", "#deck:" + deckName, "#tags column:6"];
+                 "#deck column:2", "#deck:" + (deckName || "Import"), "#tags column:6"];
   for (const c of cardsParaExportar(result.cards)) {
-    lines.push([c.kind === "cloze" ? "Cloze" : "Basic", c.deck ? deckName + "::" + c.deck : deckName,
+    lines.push([c.kind === "cloze" ? "Cloze" : "Basic", junta(deckName, c.deck),
                 campo(c.front), campo(c.back), campo(c.more || ""),
                 c.tags.join(" ")].join("\t"));
   }

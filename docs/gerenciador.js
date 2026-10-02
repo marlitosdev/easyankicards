@@ -528,8 +528,9 @@ function gerPintarExport() {
     : t("pac_previa_vazia");
   const decksCx = $("gerExpDecks");
   decksCx.innerHTML = "";
-  const raiz = gerExpSemRaizAtivo() ? "" : gerExpRaizAtual() + " › ";
-  [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => decksCx.append(gerEl("div", "cq-onde", raiz + d.replace(/::/g, " › ") + " — " + n)));
+  const raiz = gerExpSemRaizAtivo() ? "" : gerExpRaizAtual();
+  /* d vazio = cartoes que caem direto na raiz (a Bancada) */
+  [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => decksCx.append(gerEl("div", "cq-onde", ([raiz, d.replace(/::/g, " › ")].filter(Boolean).join(" › ") || "—") + " — " + n)));
   if (p.decks.size > 12) decksCx.append(gerEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
   $("btnGerExpApkg").disabled = !p.itens.length;
   $("btnGerExpTxt").disabled = !p.itens.length;
@@ -568,7 +569,7 @@ async function gerAcaoExportar(formato, deps) {
       const txt = exportTxtString({ cards }, raizDeck);
       await entrega(new TextEncoder().encode(txt), pacNomeArquivo(raizNome) + ".txt", "text/plain");
     } else {
-      const bytes = await construir(cards, raizDeck, $("selEstilo").value, "", $("selAlinha").value, []);
+      const bytes = await construir(cards, raizDeck, $("gerExpEstilo").value, tituloCartao(), $("selAlinha").value, []);
       await entrega(bytes, pacNomeArquivo(raizNome) + ".apkg", "application/octet-stream");
     }
     $("gerExpMsg").textContent = t("pac_feito", { f: pacNomeArquivo(raizNome) + "." + (formato === "txt" ? "txt" : "apkg"), n: p.itens.length, k: p.decks.size });
@@ -1608,6 +1609,18 @@ function gerExportarPasta() {
   return p;
 }
 
+/* "Exportar .txt" / "Exportar .apkg" do rodapé da bancada: abrem a Biblioteca em modo exportar com a
+ * Bancada já marcada (o formato — .apkg ou .txt — se escolhe nos botões do painel). Sem nenhum cartão
+ * na bancada, avisa em vez de abrir um painel vazio (o que o botão sempre fez). */
+function gerExportarBancada() {
+  if (!cqLerBiblioteca().some((n) => n.chave === CQ_BANCADA)) { uiAlert(t("none_msg")); return null; }
+  gerAbrir();
+  gerAlternarModo("exportar");
+  gerMarcarExport(CQ_BANCADA, true);
+  gerPintarArvore(); gerPintarPrevia();
+  return true;
+}
+
 /* o tópico do PLANO de um edital que está aberto na lista (é dele que os ramos são lidos e escritos) */
 function gerContextoRamos() {
   if (!gerPasta || !gerPasta.chave) return null;
@@ -1688,7 +1701,7 @@ function gerAbrir() {
   try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
   $("gerExpSemRaiz").checked = false;
   $("gerExpComEdital").checked = gerExpTemEditais();
-  $("gerExpEstilo").value = $("selEstilo").value;
+  $("gerExpEstilo").value = $("selEstiloPainel").value;
   $("gerExpTitulo").value = tituloGeral();
   $("gerExpMsg").textContent = "";
   gerAgrupar = gerAgruparPadrao();
@@ -1745,6 +1758,8 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerCartoes").onclick = gerAbrir;
   if ($("btnBancaGer")) $("btnBancaGer").onclick = gerAbrir;
   if ($("btnPacote")) $("btnPacote").onclick = () => { gerAbrir(); gerAlternarModo("exportar"); };
+  $("btnTxt").onclick = gerExportarBancada;
+  $("btnApkg").onclick = gerExportarBancada;
   dicasDosBotoes({ btnGerCartoes: "ger_btn_aj", btnBancaGer: "ger_btn_aj" });
   $("btnGerFechar").onclick = () => $("dlgGerCartoes").close();
   $("btnGerX").onclick = () => $("dlgGerCartoes").close();
@@ -1761,7 +1776,10 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerModoGerenciar").onclick = () => gerAlternarModo("gerenciar");
   $("btnGerModoExportar").onclick = () => gerAlternarModo("exportar");
   $("btnGerDesfazerExport").onclick = () => { gerMoverParaExport = new Map(); gerPintarArvore(); gerPintarPrevia(); };
-  $("gerExpNome").oninput = gerPintarExport;
+  $("gerExpNome").oninput = () => {
+    try { localStorage.setItem("eac_deck", $("gerExpNome").value); } catch (e) {}
+    gerPintarExport();
+  };
   $("gerExpSemRaiz").onchange = gerPintarExport;
   $("gerExpComEdital").onchange = gerPintarExport;
   $("gerExpRamos").onchange = gerPintarExport;
@@ -1770,13 +1788,11 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("gerExpEstilo").onchange = () => aplicarEstilo($("gerExpEstilo").value);
   $("gerExpTitulo").oninput = () => {
     setTituloGeral($("gerExpTitulo").value);
-    atualizarAvisoTopo();
     if (modoPrevia() === "anki") preview();
   };
   $("btnGerExpTituloDeck").onclick = () => {
     const partes = gerExpRaizAtual().split("::").map((x) => x.trim()).filter(Boolean);
     setTituloGeral(partes.length ? partes[partes.length - 1] : "");
-    atualizarAvisoTopo();
     if (modoPrevia() === "anki") preview();
   };
   $("btnGerExpCopiarCaminho").onclick = async () => {

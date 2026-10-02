@@ -119,6 +119,12 @@ function stableDeckId(name) {
  * ID ESTÁVEL POR NOME (stableDeckId, acima): regenerar o mesmo pacote
  * depois atualiza os mesmos baralhos no Anki em vez de duplicar — a mesma
  * garantia que o baralho único já tinha, agora por subbaralho também. */
+/* "Raiz::Sub", sem nivel vazio: com raiz vazia ("nao usar baralho raiz") sai so' o Sub, e sem nenhum dos dois
+ * sobra "Sem pasta" — nunca "::Sub" nem um baralho sem nome. */
+function juntaDeck(raiz, sub) {
+  return [String(raiz || "").trim(), String(sub || "").trim()].filter(Boolean).join("::") || "Sem pasta";
+}
+
 function apkgAgruparDecks(cards, deckName, tituloGeral, extras) {
   const nowSec = Math.floor(Date.now() / 1000);
   const decks = {};
@@ -137,11 +143,11 @@ function apkgAgruparDecks(cards, deckName, tituloGeral, extras) {
     /* c.deck: o subbaralho escolhido para o cartão (ex.: "Disciplina::Tópico"), que NÃO
      * é a manchete — o título continua sendo só o cabeçalho impresso no cartão. */
     const sub = String((c && (c.deck || c.titulo)) || tituloGeral || "").trim();
-    return garantir(sub ? deckName + "::" + sub : deckName);
+    return garantir(juntaDeck(deckName, sub));
   });
   /* baralhos SEM cartão: a estrutura completa (ex.: os tópicos do edital ainda vazios) sai também;
    * o Anki cria sozinho os níveis de cima ("Edital", "Edital::Disciplina") */
-  (extras || []).forEach((sub) => { const s = String(sub || "").trim(); if (s) garantir(deckName + "::" + s); });
+  (extras || []).forEach((sub) => { const s = String(sub || "").trim(); if (s) garantir(juntaDeck(deckName, s)); });
   return { decks, idPorCartao };
 }
 

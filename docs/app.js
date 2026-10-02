@@ -3,7 +3,7 @@
  * ┌── MAPA DO ARQUIVO (na ordem em que aparece) ─────────────────────┐
  * │ temas/cores          aplicarTema, aplicarCorLetra                │
  * │ avisos               toast(), attachTip() (dica por hover/toque) │
- * │ destino do baralho   nomeDeck, tituloCartao, atualizarDestino    │
+ * │ destino do baralho   nomeDeck, tituloCartao                      │
  * │ destaque do editor   renderDestaque() pinta "::", cloze, [MC] e  │
  * │                      as linhas com erro (vermelho/laranja)       │
  * │ sugestões            renderSugestoes() + irParaLinha() (atalho   │
@@ -14,7 +14,7 @@
  * │                      (conversão entre tipos), painéis por lacuna │
  * │ criação              MODELOS + montarLinhaNovo + preview ao vivo │
  * │ revisão              revRender() (mini-Anki de conferência)      │
- * │ exportação           validar, exportarTxt, exportarApkg          │
+ * │ exportação           validar, entregar (a tela: gerenciador.js)  │
  * │ atualização          faixa "nova versão" (service worker)        │
  * └──────────────────────────────────────────────────────────────────┘
  *
@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "17.58.0";
+const VERSAO = "17.59.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -760,20 +760,16 @@ function aplicarTextos() {
     el.placeholder = t(el.dataset.i18nPh);
   });
   $("versao").textContent = "v" + VERSAO;
-  $("deckExp").placeholder = t("deck_placeholder");
-  $("tituloExp").placeholder = t("title_ph");
-  if ($("tituloExpNota")) $("tituloExpNota").textContent = t("export_title_reword");
   $("editor").placeholder = t("paste_here");
   $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
   rotularPrevia();
   rotularEstilos();
-  atualizarDestino();
 }
 
 /* --------------------------- destino Anki --------------------------- */
 
-function nomeDeck() { return $("deckExp").value.trim() || "Meu Baralho"; }
+function nomeDeck() { try { return (localStorage.getItem("eac_deck") || "").trim() || "Meu Baralho"; } catch (e) { return "Meu Baralho"; } }
 
 /* Título impresso no topo dos cartões. Vazio = sem cabeçalho.
  * Não herda o nome do baralho: quem quiser usá-lo tem o botão
@@ -788,7 +784,6 @@ function setTituloGeral(v) {
   v = (v || "").trim();
   localStorage.setItem("eac_titulo", v);
   if ($("tituloGeral").value !== v) $("tituloGeral").value = v;
-  if ($("tituloExp") && $("tituloExp").value !== v) $("tituloExp").value = v;
   /* o painel "Montar pacote" da Biblioteca (docs/gerenciador.js) tem o seu próprio campo de
    * título e o seu aviso — mesmo valor, mesma fonte única (eac_titulo). */
   if ($("gerExpTitulo")) {
@@ -797,13 +792,6 @@ function setTituloGeral(v) {
   }
 }
 function tituloCartao() { return tituloGeral(); }   // usado na exportação
-
-function atualizarDestino() {
-  const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
-  $("destinoExp").textContent = partes.length > 1
-    ? t("dest_path", { path: partes.join("  >  "), last: partes[partes.length - 1] })
-    : t("dest_root", { name: nomeDeck() });
-}
 
 /* ------------------- lacunas cloze por seleção ---------------------- */
 
@@ -2788,13 +2776,6 @@ async function validar() {
   return rSel;
 }
 
-function nomeArquivo() {
-  const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
-  let n = (partes[partes.length - 1] || "deck").replace(/[\\/:*?"<>|]/g, "-");
-  if (n.toLowerCase() === "collection") n = "deck";
-  return n;
-}
-
 async function entregar(bytes, nome, mime) {
   const file = new File([bytes], nome, { type: mime });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2805,36 +2786,6 @@ async function entregar(bytes, nome, mime) {
   const a = document.createElement("a");
   a.href = url; a.download = nome; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
-
-async function exportarTxt() {
-  const r = await validar(); if (!r) return;
-  const txt = exportTxtString(r, nomeDeck());
-  await entregar(new TextEncoder().encode(txt), nomeArquivo() + ".txt", "text/plain");
-  $("status").textContent = t("status_saved", { f: nomeArquivo() + ".txt" });
-  toast("toast_exported");
-  uiAlert(t("txt_done_msg"));
-}
-
-async function exportarApkg() {
-  const r = await validar(); if (!r) return;
-  $("status").textContent = "…";
-  try {
-    const bytes = await buildApkg(r.cards, nomeDeck(), $("selEstilo").value,
-                                  tituloCartao(), $("selAlinha").value);
-    await entregar(bytes, nomeArquivo() + ".apkg", "application/octet-stream");
-    $("status").textContent = t("status_saved", { f: nomeArquivo() + ".apkg" });
-    /* Sem este evento eu nao conseguia responder a pergunta que mais
-     * importava quando o texto sumiu: existia uma copia fora do app? */
-    reg("EXPORTAR", nomeArquivo() + ".apkg",
-        r.cards.length + " cartões, estilo " + $("selEstilo").value);
-    toast("toast_exported");
-    const partes = nomeDeck().split("::").map((p) => p.trim()).filter(Boolean);
-    uiAlert(t("apkg_done_msg", { dest: partes.join("  >  ") }));
-  } catch (e) {
-    uiAlert(t("apkg_err_title") + "\n\n" + e);
-    $("status").textContent = "";
-  }
 }
 
 
@@ -3449,7 +3400,7 @@ $("apkgFile").onchange = async (ev) => {
   $("editor").value = (base ? base + "\n\n" : "") + novo + "\n";
   linhaNovaColada = base ? base.split("\n").length + 2 : 1;
   $("btnDesfazerColagem").disabled = false;
-  if (deck && !$("deckExp").value.trim()) { $("deckExp").value = deck; atualizarDestino(); }
+  try { if (deck && !(localStorage.getItem("eac_deck") || "").trim()) localStorage.setItem("eac_deck", deck); } catch (e) {}
   autoSalvar();
   preview();
   irParaLinha(linhaNovaColada);
@@ -3691,9 +3642,6 @@ $("btnMCRapido").onclick = () => {
   aplicarModelo();
   abrirModal("dlgNovo");
 };
-/* Baralho e tags são pedidos NA HORA de exportar (diálogo), e lembrados. */
-let exportTipo = "apkg";
-
 /* Paletas dos estilos (apenas para o mini-preview dentro do diálogo). */
 const PALETAS = {
   classic: { fundo: "#fdfdfd", texto: "#1a1a2e", cab: null, caixa: "#fdfdfd", destaque: "#0b6bcb", sub: null },
@@ -3702,26 +3650,21 @@ const PALETAS = {
   paper:   { fundo: "#f4ecd8", texto: "#3b2f1d", cab: "#8b5e34", caixa: "#fffaf0", destaque: "#b45309", sub: "#e7dcc3" },
 };
 
-/* Os ids de sempre (dentro de #dlgExport) — o alvo-padrão de previewEstilo/atualizarAvisoTopo
- * quando chamadas sem argumento. Outro dono (ex.: o painel "Montar pacote" da Biblioteca,
- * docs/gerenciador.js) passa o SEU próprio objeto de ids; nenhum call site antigo muda. */
-const ALVO_EXPORT_PADRAO = { estilo: "selEstilo", box: "stylePreview", hint: "styleHintTxt",
-  aviso: "avisoTopo", avTit: "avisoTopoTitulo", avTxt: "avisoTopoTexto",
-  avDemoLbl: "avisoTopoDemoLbl", avDemo: "avisoTopoDemo", avTags: "avisoTopoTags" };
+/* previewEstilo/atualizarAvisoTopo desenham em QUALQUER conjunto de elementos: quem chama passa o objeto de ids
+ * (estilo, box, hint, aviso, avTit, avTxt, avDemoLbl, avDemo, avTags). Hoje o único dono é o painel
+ * "Montar pacote" da Biblioteca (GER_EXP_ALVO_ESTILO, em docs/gerenciador.js). */
 
 function rotularEstilos() {
   const nomes = { classic: "style_classic", esquema: "style_esquema",
                   dark: "style_dark", paper: "style_paper" };
-  [...$("selEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
   [...$("selEstiloPainel").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
   if ($("gerExpEstilo")) [...$("gerExpEstilo").options].forEach((o) => { o.textContent = t(nomes[o.value]); });
   [...$("selAlinha").options].forEach((o) => { o.textContent = t("align_" + o.value); });
 }
 
 /* Mostra, em tempo real, o cabeçalho que será IMPRESSO em cada cartão:
- * a última parte do nome do baralho vira o título no topo. `alvo`: ver ALVO_EXPORT_PADRAO. */
-function atualizarAvisoTopo(alvo) {
-  const al = alvo || ALVO_EXPORT_PADRAO;
+ * a última parte do nome do baralho vira o título no topo. `al`: o objeto de ids (ver acima). */
+function atualizarAvisoTopo(al) {
   const estilo = $(al.estilo).value;
   const p = PALETAS[estilo] || PALETAS.esquema;
   const titulo = tituloCartao();
@@ -3765,8 +3708,7 @@ function atualizarAvisoTopo(alvo) {
   $(al.avTags).textContent = t("header_tags_note");
 }
 
-function previewEstilo(alvo) {
-  const al = alvo || ALVO_EXPORT_PADRAO;
+function previewEstilo(al) {
   const p = PALETAS[$(al.estilo).value] || PALETAS.esquema;
   const box = $(al.box);
   box.style.background = p.fundo;
@@ -3793,65 +3735,23 @@ function previewEstilo(alvo) {
   frase.append(lac, document.createTextNode("."));
   box.append(frase);
   $(al.hint).textContent = t("style_hint");
-  /* o aviso de título (#avisoTopo/etc.) só existe no alvo-padrão até a U2 portar
-   * o campo de título também para o painel novo — sem isso, al.aviso fica undefined
-   * e esta chamada quebraria em vez de simplesmente não ter aviso para mostrar. */
-  if (al.aviso) atualizarAvisoTopo(al);
+  atualizarAvisoTopo(al);
 }
 
-function abrirExport(tipo) {
-  exportTipo = tipo;
-  atualizarDestino();
-  rotularEstilos();
-  previewEstilo();
-  abrirModal("dlgExport");
-}
+/* O "Exportar .txt/.apkg" do rodapé abre o modo exportar da Biblioteca (docs/gerenciador.js) — o
+ * antigo diálogo de exportar (#dlgExport) deixou de existir. */
 
-$("btnTxt").onclick = () => abrirExport("txt");
-$("btnApkg").onclick = () => abrirExport("apkg");
-$("btnExportFechar").onclick = () => $("dlgExport").close();
-$("btnExportConfirm").onclick = () => {
-  localStorage.setItem("eac_deck", $("deckExp").value);
-  localStorage.setItem("eac_style", $("selEstilo").value);
-  localStorage.setItem("eac_titulo", tituloCartao());
-  $("dlgExport").close();
-  (exportTipo === "txt" ? exportarTxt : exportarApkg)();
-};
-$("deckExp").addEventListener("input", () => { atualizarDestino(); atualizarAvisoTopo(); });
-$("tituloExp").addEventListener("input", () => {
-  setTituloGeral($("tituloExp").value);
-  atualizarAvisoTopo();
-  if (modoPrevia() === "anki") preview();
-});
-$("btnTituloDeck").onclick = () => {
-  const partes = nomeDeck().split("::").map((s) => s.trim()).filter(Boolean);
-  setTituloGeral(partes.length ? partes[partes.length - 1] : "");
-  atualizarAvisoTopo();
-  if (modoPrevia() === "anki") preview();
-};
-$("ajudaTitulo").onclick = () => uiAlert(t("title_hint"));
-attachTip($("tituloExp"), "title_hint");
-$("btnCaminhoExp").onclick = async () => {
-  await navigator.clipboard.writeText(nomeDeck());
-  $("btnCaminhoExp").textContent = t("copy_path_done");
-  setTimeout(() => { $("btnCaminhoExp").textContent = t("copy_path_btn"); }, 2000);
-};
-$("deckExp").value = localStorage.getItem("eac_deck") || "Meu Baralho";
-// título geral aparece nos DOIS campos (esquerdo sempre visível + export)
+// título geral: o campo da barra lateral (sempre visível) e o do painel de exportar da Biblioteca
 $("tituloGeral").value = tituloGeral();
 $("tituloGeral").placeholder = t("gen_title_ph");
 $("tituloGeral").oninput = () => { setTituloGeral($("tituloGeral").value);
-  atualizarAvisoTopo(); if (modoPrevia() === "anki") preview(); };
-$("tituloExp").value = tituloGeral();
+  if (modoPrevia() === "anki") preview(); };
 // "classic" foi removido: migra quem o tinha salvo
 if ((localStorage.getItem("eac_style") || "") === "classic") localStorage.setItem("eac_style", "esquema");
-$("selEstilo").value = localStorage.getItem("eac_style") || "esquema";
-$("selEstiloPainel").value = $("selEstilo").value;
+$("selEstiloPainel").value = localStorage.getItem("eac_style") || "esquema";
 function aplicarEstilo(v) {
   localStorage.setItem("eac_style", v);
-  $("selEstilo").value = v;
   $("selEstiloPainel").value = v;
-  previewEstilo();
   /* o painel "Montar pacote" da Biblioteca (docs/gerenciador.js) tem o seu próprio select
    * de estilo (#gerExpEstilo) — só existe quando esse HTML está montado na página. */
   if ($("gerExpEstilo") && typeof GER_EXP_ALVO_ESTILO !== "undefined") {
@@ -3861,7 +3761,6 @@ function aplicarEstilo(v) {
   preview();
   toast("toast_style");
 }
-$("selEstilo").onchange = () => aplicarEstilo($("selEstilo").value);
 $("selEstiloPainel").onchange = () => aplicarEstilo($("selEstiloPainel").value);
 // alinhamento: vale para a prévia e para o .apkg, e fica guardado
 $("selAlinha").value = localStorage.getItem("eac_alinha") || "justify";
@@ -3870,7 +3769,6 @@ $("selAlinha").onchange = () => {
   reg("ESTILO", "alinhamento: " + $("selAlinha").value);
   preview();
 };
-$("ajudaEstilo").onclick = () => uiAlert(t("style_hint"));
 
 $("btnAjuda").onclick = () => abrirModal("dlgAjuda");
 $("btnFechar").onclick = () => $("dlgAjuda").close();
@@ -3894,7 +3792,6 @@ attachTip($("btnTxt"), "export_txt_tooltip");
 attachTip($("btnApkg"), "export_apkg_tooltip");
 attachTip($("btnAjuda"), "help_tooltip");
 attachTip($("selIdioma"), "tip_lang");
-attachTip($("btnCaminhoExp"), "copy_path_tooltip");
 attachTip($("btnEmbaralhar"), "shuffle_hint");
 attachTip($("btnEmbaralharCloze"), "shuffle_hint");
 attachTip($("btnMarcarNovo"), "hint_mark_blank");
