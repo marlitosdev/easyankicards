@@ -71,9 +71,70 @@ function pacChaveCartao(n) { return n.chave + "|" + n.card.line; }
 /* O baralho de uma nota. A Bancada (o texto do editor) cai DIRETO no baralho raiz — era o que o "Exportar" do
  * rodape da bancada sempre fez, e os cartoes com "@ titulo" seguem virando subbaralho la' dentro (buildApkg).
  * Se a pessoa arrastou a Bancada para outra pasta (mov), vale o destino dela. */
-function pacDeckDaNota(n, mov, comEdital, ramo) {
+function pacDeckOriginal(n, mov, comEdital, ramo) {
   if (!mov && n.chave === CQ_BANCADA) return "";
   return pacNomeDeck(mov ? Object.assign({}, n, mov) : n, comEdital, ramo);
+}
+
+/* Os nomes que a pessoa deu às pastas NESTA exportação (nunca gravados na Biblioteca). `renomear` é um Map:
+ * chave = caminho ORIGINAL do baralho até aquele nível, sem a raiz (ex.: "Edital::Disciplina"); valor = o nome novo,
+ * texto livre — um "::" dentro dele cria subníveis no Anki. A chave é o caminho original (e não o nome exibido) para a
+ * edição ser inequívoca mesmo quando o nome novo tem "::" ou duas pastas passam a ter o mesmo nome (viram um baralho só). */
+function pacLimparNomeRenomeado(s) {
+  return String(s == null ? "" : s).split("::").map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
+/* baralho ORIGINAL -> baralho FINAL (com os nomes novos). Sem renomeação devolve o mesmo, byte a byte. */
+function pacAplicarRenomear(deck, renomear) {
+  if (!deck || !renomear || !renomear.size) return deck;
+  const comps = String(deck).split("::");
+  const saida = [];
+  comps.forEach((c, i) => {
+    const partes = pacLimparNomeRenomeado(renomear.get(comps.slice(0, i + 1).join("::")));
+    if (partes.length) saida.push(...partes); else saida.push(c);
+  });
+  return saida.join("::");
+}
+
+function pacDeckDaNota(n, mov, comEdital, ramo, renomear) {
+  return pacAplicarRenomear(pacDeckOriginal(n, mov, comEdital, ramo), renomear);
+}
+
+/* A hierarquia dos baralhos ORIGINAIS como árvore, para a tela mostrar "como vai ficar no Anki" e deixar renomear.
+ * `origens`: Map baralho original -> nº de cartões (o que pacMontar devolve). Cada nó: chave (caminho original),
+ * nome (original), novo (nome dado, com "::" se houver), niveis (quantos níveis o nome novo cria), renomeado,
+ * total (cartões neste nó e abaixo), direta (cartões que caem exatamente nele), filhos e mescla (um irmão acaba com o
+ * mesmo nome final). A raiz é o nó sem chave: seus cartões diretos são os da Bancada. */
+function pacArvoreDecks(origens, renomear) {
+  const ren = renomear || new Map();
+  const novoNo = (chave, nome) => {
+    const partes = chave ? pacLimparNomeRenomeado(ren.get(chave)) : [];
+    const novo = partes.length ? partes.join("::") : nome;
+    return { chave, nome, novo, niveis: partes.length || 1, renomeado: !!chave && novo !== nome, total: 0, direta: 0, filhos: [], mescla: false, _por: new Map() };
+  };
+  const raiz = novoNo("", "");
+  (origens instanceof Map ? [...origens] : []).forEach(([deck, n]) => {
+    raiz.total += n;
+    if (!deck) { raiz.direta += n; return; }
+    let no = raiz;
+    const comps = String(deck).split("::");
+    comps.forEach((c, i) => {
+      let f = no._por.get(c);
+      if (!f) { f = novoNo(comps.slice(0, i + 1).join("::"), c); no._por.set(c, f); no.filhos.push(f); }
+      f.total += n;
+      if (i === comps.length - 1) f.direta += n;
+      no = f;
+    });
+  });
+  const fecha = (no) => {
+    no.filhos.sort((a, b) => a.nome.localeCompare(b.nome, "pt", { numeric: true }));
+    const vistos = new Map();
+    no.filhos.forEach((f) => { const k = f.novo.toLowerCase(); vistos.set(k, (vistos.get(k) || 0) + 1); });
+    no.filhos.forEach((f) => { f.mescla = vistos.get(f.novo.toLowerCase()) > 1; fecha(f); });
+    delete no._por;
+  };
+  fecha(raiz);
+  return raiz;
 }
 
 /* O que entra no pacote: as notas das pastas marcadas, menos (opcionalmente)
@@ -85,9 +146,10 @@ function pacMontar(notas, sel, opc) {
    * sobre o arrasto do tópico. Nenhum dos dois grava nada na Biblioteca. */
   const moverPara = o.moverPara || new Map();
   const cartaoMoverPara = o.cartaoMoverPara || new Map();
-  const nomeDeck = (n) => {
+  const renomear = o.renomear || new Map();
+  const deckOriginal = (n) => {
     const mov = cartaoMoverPara.get(pacChaveCartao(n)) || moverPara.get(n.chave);
-    return pacDeckDaNota(n, mov, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
+    return pacDeckOriginal(n, mov, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
   };
   /* o edital de cada tópico marcado (Map chave → nome): sai como a pasta de cima do baralho */
   const editalDe = o.editalDe || new Map();
@@ -105,8 +167,13 @@ function pacMontar(notas, sel, opc) {
     marcadas.forEach((n, i) => { if (manter[i] && ceAbaixo(n.card)) { manter[i] = false; ignFracos++; } });
   }
   const itens = marcadas.filter((_, i) => manter[i]);
-  const decks = new Map();
-  itens.forEach((n) => { const d = nomeDeck(n); decks.set(d, (decks.get(d) || 0) + 1); });
+  /* origens: os baralhos ORIGINAIS (a base da árvore que a pessoa edita); decks: os FINAIS, com os nomes novos */
+  const decks = new Map(), origens = new Map();
+  itens.forEach((n) => {
+    const orig = deckOriginal(n), fin = pacAplicarRenomear(orig, renomear);
+    origens.set(orig, (origens.get(orig) || 0) + 1);
+    decks.set(fin, (decks.get(fin) || 0) + 1);
+  });
   /* baralhos vazios: tópico marcado SEM nenhum cartão (ex.: tópico do edital ainda por preencher) */
   const vazios = [];
   if (o.vazios && o.info && sel) {
@@ -116,21 +183,21 @@ function pacMontar(notas, sel, opc) {
       if (!i || comCartao.has(ch)) return;
       const mov = moverPara.get(ch);
       const base = mov || { edital: editalDe.get(ch) || i.edital || "", disciplina: i.disciplina, topico: i.topico };
-      const nome = pacNomeDeck(base, o.comEdital);
+      const nome = pacAplicarRenomear(pacNomeDeck(base, o.comEdital), renomear);
       if (!decks.has(nome)) { decks.set(nome, 0); vazios.push(nome); }
     });
   }
-  return { itens, ignRep, ignFracos, decks, vazios };
+  return { itens, ignRep, ignFracos, decks, origens, vazios };
 }
 
 /* Os cartões como o buildApkg / exportTxtString os querem: com o baralho da pasta (já
  * considerando um eventual arrasto desta exportação — do cartão, com prioridade, ou do tópico). */
-function pacCartoes(itens, comEdital, comRamos, moverPara, cartaoMoverPara) {
+function pacCartoes(itens, comEdital, comRamos, moverPara, cartaoMoverPara, renomear) {
   const mp = moverPara || new Map();
   const cmp = cartaoMoverPara || new Map();
   return (itens || []).map((n) => {
     const mov = cmp.get(pacChaveCartao(n)) || mp.get(n.chave);
-    return Object.assign({}, n.card, { deck: pacDeckDaNota(n, mov, comEdital, comRamos ? pacRamoDoCartao(n) : ""), tags: (n.card.tags || []).slice() });
+    return Object.assign({}, n.card, { deck: pacDeckDaNota(n, mov, comEdital, comRamos ? pacRamoDoCartao(n) : "", renomear), tags: (n.card.tags || []).slice() });
   });
 }
 

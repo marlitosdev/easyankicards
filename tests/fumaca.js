@@ -815,7 +815,7 @@ function rodar() {
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
-    pacNomeDeck, pacRamoDoCartao, pacResolverRamo, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
+    pacNomeDeck, pacAplicarRenomear, pacLimparNomeRenomeado, pacArvoreDecks, pacRamoDoCartao, pacResolverRamo, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
     pacAbrir, pacLerArquivo, pacAcaoImportar, pacChaveCartao, cmCampo,
     pacLidoAtual: () => pacLido,
     gerArvore, gerFiltrar, gerMover, gerApagar, gerEditar, gerRecibo, gerDesfazerUltima, gerAbrir, gerCalcular, gerPintar,

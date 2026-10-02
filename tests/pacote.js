@@ -109,6 +109,56 @@ async function testes() {
     ok(a.pacCartoes(banc, false, false, mov)[0].deck === "Dir::Geral", "P3d se a Bancada foi ARRASTADA para uma pasta, vale o destino dela");
   }
 
+  /* ---- P3h: os nomes que a pessoa da' as pastas NESTA exportacao (H1) — so' dados: nada grava na Biblioteca ---- */
+  {
+    const { a, iss, iptu, pri } = montar();
+    const notas = a.cqLerBiblioteca();
+    const sel = new Set([iss, iptu, pri]);
+    const ren = (o) => new Map(Object.entries(o));
+    const nomes = (m) => [...m.decks.keys()].sort().join(" | ");
+    const base = a.pacMontar(notas, sel, {});
+    ok(nomes(base) === "Const::Princípios | Trib::IPTU | Trib::ISS", "P3h0 (confirma o ponto de partida): " + nomes(base));
+    /* sem renomeacao: igual a hoje */
+    ok(nomes(a.pacMontar(notas, sel, { renomear: new Map() })) === nomes(base) && a.pacAplicarRenomear("A::B", new Map()) === "A::B" && a.pacAplicarRenomear("A::B", null) === "A::B" && a.pacAplicarRenomear("", ren({ "": "x" })) === "", "P3h1 sem renomeacao (ou Map vazio/nulo) o baralho sai igual, byte a byte; a Bancada (baralho vazio) nunca e' renomeada");
+    /* renomear um NIVEL renomeia todos os baralhos de baixo; origens guarda os nomes de antes */
+    const r1 = a.pacMontar(notas, sel, { renomear: ren({ "Trib": "Tributário" }) });
+    ok(nomes(r1) === "Const::Princípios | Tributário::IPTU | Tributário::ISS", "P3h2 renomear a disciplina renomeia os baralhos dos dois topicos: " + nomes(r1));
+    ok([...r1.origens.keys()].sort().join("|") === "Const::Princípios|Trib::IPTU|Trib::ISS", "P3h3 'origens' continua com os nomes ORIGINAIS (base da arvore editavel)");
+    ok(a.pacCartoes(r1.itens, false, false, null, null, ren({ "Trib": "Tributário" })).every((c) => /^(Tributário::(ISS|IPTU)|Const::Princípios)$/.test(c.deck)), "P3h4 o cartao exportado leva o mesmo baralho da previa");
+    /* renomear a folha, e os dois niveis juntos */
+    ok(nomes(a.pacMontar(notas, sel, { renomear: ren({ "Trib::ISS": "Imposto sobre Serviços" }) })).indexOf("Trib::Imposto sobre Serviços") >= 0, "P3h5 renomear so' o topico");
+    ok(nomes(a.pacMontar(notas, sel, { renomear: ren({ "Trib": "T", "Trib::ISS": "I" }) })).indexOf("T::I") >= 0, "P3h6 renomear disciplina E topico: a chave de cada nivel e' o caminho ORIGINAL");
+    /* "::" no nome novo cria subniveis (so' no arquivo) */
+    ok(nomes(a.pacMontar(notas, sel, { renomear: ren({ "Trib": "Direito::Tributário" }) })).indexOf("Direito::Tributário::ISS") >= 0, "P3h7 '::' no nome novo cria niveis a mais na hierarquia");
+    ok(JSON.stringify(a.pacLimparNomeRenomeado("  A :: B  ::  ")) === '["A","B"]' && a.pacLimparNomeRenomeado("  ").length === 0 && a.pacLimparNomeRenomeado("::").length === 0 && a.pacLimparNomeRenomeado(null).length === 0 && a.pacLimparNomeRenomeado("  Direito   Tributário ")[0] === "Direito Tributário", "P3h8 limpar nome: apara, tira espacos duplos e partes vazias");
+    /* nome vazio/so' espacos/so' '::' = ignorado (a pasta fica com o nome de antes) */
+    ok(nomes(a.pacMontar(notas, sel, { renomear: ren({ "Trib": "   ", "Const": "::" }) })) === nomes(base), "P3h9 nome vazio ou so' '::' nao renomeia nada");
+    /* duas pastas com o mesmo nome final viram UM baralho (o Anki mescla) */
+    const mesc = a.pacMontar(notas, sel, { renomear: ren({ "Trib::IPTU": "ISS" }) });
+    ok(mesc.decks.get("Trib::ISS") === 4 && mesc.decks.size === 2, "P3h10 mesmo nome final = um baralho so', somando os cartoes: " + [...mesc.decks.entries()]);
+    /* o topico arrastado e renomeado: a chave e' o caminho original DEPOIS do arrasto */
+    const mov = new Map([[iss, { disciplina: "Const", topico: "Princípios", edital: "" }]]);
+    const mv = a.pacMontar(notas, sel, { moverPara: mov, renomear: ren({ "Const": "Constitucional" }) });
+    ok(mv.decks.get("Constitucional::Princípios") === 3 && mv.decks.get("Trib::IPTU") === 2, "P3h11 movido + renomeado: " + [...mv.decks.entries()]);
+    /* com a pasta do edital o 1o nivel e' o edital; a chave inclui ele (quem nao existe mais fica inerte) */
+    const ed = new Map([[iss, "ED"], [iptu, "ED"], [pri, "ED"]]);
+    const re = a.pacMontar(notas, sel, { comEdital: true, editalDe: ed, renomear: ren({ "ED": "Edital Novo", "Trib": "inerte" }) });
+    ok(nomes(re) === "Edital Novo::Const::Princípios | Edital Novo::Trib::IPTU | Edital Novo::Trib::ISS", "P3h12 renomear o edital; a chave 'Trib' (sem o edital na frente) nao casa e fica inerte: " + nomes(re));
+    /* a Bancada continua direto na raiz; o Map nao e' alterado */
+    a.$("editor").value = "Qual a regra geral do prazo? :: Resposta decente e completa aqui";
+    const nb = a.cqLerBiblioteca();
+    const m0 = ren({ "Trib": "Tributário" });
+    const comB = a.pacMontar(nb, new Set([a.CQ_BANCADA, iss]), { renomear: m0 });
+    ok(comB.decks.get("") === 1 && comB.decks.get("Tributário::ISS") === 2 && m0.size === 1 && m0.get("Trib") === "Tributário", "P3h13 a Bancada fica na raiz e o Map recebido nao e' mexido");
+    /* arvore */
+    const arv = a.pacArvoreDecks(comB.origens, m0);
+    ok(arv.total === 3 && arv.direta === 1 && arv.filhos.length === 1 && arv.filhos[0].nome === "Trib" && arv.filhos[0].novo === "Tributário" && arv.filhos[0].renomeado === true && arv.filhos[0].total === 2 && arv.filhos[0].filhos[0].nome === "ISS" && arv.filhos[0].filhos[0].chave === "Trib::ISS" && arv.filhos[0].filhos[0].renomeado === false, "P3h14 arvore: raiz (Bancada direta), disciplina renomeada e topico com a chave do caminho original: " + JSON.stringify(arv.filhos[0].nome + "/" + arv.filhos[0].novo));
+    const arv2 = a.pacArvoreDecks(a.pacMontar(notas, sel, {}).origens, ren({ "Trib": "Direito::Tributário", "Trib::IPTU": "ISS" }));
+    const trib = arv2.filhos.find((f) => f.nome === "Trib");
+    ok(trib.niveis === 2 && trib.novo === "Direito::Tributário" && trib.filhos.map((f) => f.nome).join() === "IPTU,ISS" && trib.filhos.every((f) => f.mescla === true) && arv2.filhos.map((f) => f.nome).join() === "Const,Trib" && arv2.filhos.find((f) => f.nome === "Const").filhos[0].mescla === false, "P3h15 arvore: '::' conta os niveis, irmaos com o mesmo nome final ficam marcados 'mescla', ordem alfabetica estavel");
+    ok(a.pacArvoreDecks(null).total === 0 && a.pacArvoreDecks(new Map()).filhos.length === 0, "P3h16 sem baralhos a arvore e' vazia (e nao quebra)");
+  }
+
   /* ---- P4: separar baralho / raiz comum ---- */
   {
     const { a } = montar();
