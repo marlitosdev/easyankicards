@@ -536,6 +536,19 @@ function gerPintarExport() {
   return p;
 }
 
+/* Aviso de cartão suspeito (os `.issues` que o parser põe no cartão: lacuna aberta, resposta curta
+ * demais etc.) ANTES de gerar o arquivo — só dos cartões que de fato entram (p.itens, já sem os
+ * repetidos/fracos deixados de fora). Mesmo espírito de validar() (app.js), que é presa ao texto
+ * do editor e por isso não serve aqui. `confirmar`: só para teste (o padrão é uiConfirm). */
+async function gerExpConfirmarSuspeitos(itens, confirmar) {
+  const ruins = (itens || []).filter((n) => n.card.issues && n.card.issues.length);
+  if (!ruins.length) return true;
+  const linhas = [];
+  ruins.forEach((n) => n.card.issues.forEach((i) => linhas.push("• " + [n.disciplina, n.topico].filter(Boolean).join(" › ") + ", " + t("card_line") + " " + n.card.line + ": " + i)));
+  const resumo = linhas.slice(0, 6).join("\n") + (linhas.length > 6 ? "\n" + t("ger_exp_suspeitos_mais", { n: linhas.length - 6 }) : "");
+  return (confirmar || uiConfirm)(t("ger_exp_suspeitos", { n: ruins.length, resumo }));
+}
+
 /* deps: só para teste (o padrão usa o buildApkg e a entrega do app) — mesmo padrão de pacExportar. */
 async function gerAcaoExportar(formato, deps) {
   const d = deps || {};
@@ -543,6 +556,10 @@ async function gerAcaoExportar(formato, deps) {
   const entrega = d.entregar || entregar;
   const p = pacMontar(gerNotas, gerSelExport, gerExpOpcoes());
   if (!p.itens.length) return { ok: false };
+  if (!(await gerExpConfirmarSuspeitos(p.itens, d.confirmar))) {
+    $("gerExpMsg").textContent = t("ger_exp_cancelado");
+    return { ok: false, cancelado: true };
+  }
   const raizNome = gerExpRaizAtual();
   const raizDeck = gerExpSemRaizAtivo() ? "" : raizNome;
   const cards = pacCartoes(p.itens, $("gerExpComEdital").checked, $("gerExpRamos").checked, gerMoverParaExport, new Map());

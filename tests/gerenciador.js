@@ -1850,6 +1850,78 @@ async function testes() {
     ok(a.$("gerExpTitulo").value === "Salvo", "G28k reabrir traz o titulo salvo");
   }
 
+  /* ---- G29: aviso de cartão suspeito antes de exportar (U3) — os `.issues` do parser, só dos
+   * cartões que de fato entram no pacote; cancelar não gera nada ---- */
+  {
+    const bom = "Outra pergunta boa? :: Uma resposta decente aqui";
+    const fix = (ruins, rico) => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar(); a.$("editor").value = "";
+      const linhas = [];
+      for (let i = 0; i < ruins; i++) linhas.push("Pergunta ruim numero " + i + " sobre assunto " + String.fromCharCode(97 + i) + String.fromCharCode(110 + i) + "? :: x", "");
+      linhas.push(bom);
+      if (rico) linhas.push("", "Qual a aliquota maxima do ISS cobrada pelos municipios? :: " + RICO + " :: x", "+ Literalidade — Art. 8º-A");
+      const ch = a.matChave("D", "T");
+      a.matGravarCartoes(ch, linhas.join("\n"), { disciplina: "D", topico: "T" });
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.gerMarcarExport(ch, true);
+      a.$("gerExpSemRep").checked = false; a.$("gerExpComEdital").checked = false;
+      a.gerPintar();
+      return { a, ch };
+    };
+    const espiao = (resposta) => { const c = { chamadas: [], cons: [], ent: 0 }; c.deps = { construir: async (cards) => { c.cons.push(cards.length); return new Uint8Array(1); }, entregar: async () => { c.ent++; }, confirmar: async (msg) => { c.chamadas.push(msg); return resposta; } }; return c; };
+
+    /* sem cartao suspeito: nem pergunta */
+    {
+      const { a } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      const ch = a.matChave("Trib", "IPTU"); a.gerMarcarExport(ch, true); a.gerPintar();
+      const e = espiao(false);
+      const r = await a.gerAcaoExportar("apkg", e.deps);
+      ok(r.ok === true && e.chamadas.length === 0 && e.cons.length === 1, "G29a pacote sem cartao suspeito exporta direto, sem perguntar");
+    }
+    /* com suspeito: pergunta, mostra onde e o que; recusar nao gera nada */
+    {
+      const { a } = fix(2);
+      const e = espiao(false);
+      const r = await a.gerAcaoExportar("apkg", e.deps);
+      ok(e.chamadas.length === 1 && /2 cartão/.test(e.chamadas[0]) && /D › T, linha 1: verso vazio/.test(e.chamadas[0]), "G29b com cartao suspeito pergunta antes, dizendo a pasta, a linha e o aviso: " + e.chamadas[0]);
+      ok(r.ok === false && r.cancelado === true && e.cons.length === 0 && e.ent === 0, "G29c recusar NAO gera arquivo nenhum");
+      ok(a.$("gerExpMsg").textContent === a.t("ger_exp_cancelado"), "G29d e a tela diz que cancelou: " + a.$("gerExpMsg").textContent);
+      const e2 = espiao(true);
+      const r2 = await a.gerAcaoExportar("apkg", e2.deps);
+      ok(r2.ok === true && e2.cons[0] === 3 && e2.ent === 1, "G29e confirmar exporta TODOS os cartoes (inclusive os suspeitos): " + JSON.stringify(e2.cons));
+      const e3 = espiao(false);
+      await a.gerAcaoExportar("txt", e3.deps);
+      ok(e3.chamadas.length === 1 && e3.ent === 0, "G29f o .txt tambem pergunta (e nao entrega se recusar)");
+    }
+    /* muitos avisos: so' os 6 primeiros, e o resto vira um contador */
+    {
+      const { a } = fix(8);
+      const e = espiao(false);
+      await a.gerAcaoExportar("apkg", e.deps);
+      ok((e.chamadas[0].match(/linha \d+:/g) || []).length === 6 && e.chamadas[0].indexOf(a.t("ger_exp_suspeitos_mais", { n: 2 })) >= 0 && /8 cartão/.test(e.chamadas[0]), "G29g com 8 avisos a mensagem lista 6 e diz 'e mais 2': " + e.chamadas[0]);
+    }
+    /* so' conta o que entra: cartao fraco deixado de fora (sem fracos) nao dispara o aviso */
+    {
+      const { a } = fix(2, true);
+      a.$("gerExpSemFracos").checked = true;
+      const e = espiao(false);
+      const r = await a.gerAcaoExportar("apkg", e.deps);
+      ok(e.chamadas.length === 0 && r.ok === true && e.cons[0] === 1, "G29h cartao suspeito que ficou DE FORA do pacote (abaixo do padrao) nao dispara o aviso: " + JSON.stringify([e.chamadas.length, e.cons]));
+    }
+    /* o dialogo de verdade (uiConfirm): NAO nao exporta, SIM exporta */
+    {
+      const { a } = fix(1);
+      let feito = 0;
+      const deps = { construir: async () => new Uint8Array(1), entregar: async () => { feito++; } };
+      const rNao = await negar(a, a.gerAcaoExportar("apkg", deps));
+      ok(rNao.ok === false && feito === 0, "G29i dizer NAO no dialogo de verdade nao exporta");
+      const rSim = await conduzir(a, a.gerAcaoExportar("apkg", deps));
+      ok(rSim.ok === true && feito === 1, "G29j dizer SIM no dialogo de verdade exporta");
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

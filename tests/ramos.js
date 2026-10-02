@@ -861,7 +861,7 @@ async function testes() {
         a.gerMarcarExport(chave, true); a.gerMarcarExport(ch2, true);
         a.gerPintar();
         const cap = {};
-        const deps = { construir: async (cards, raiz, estilo, x, al, extras) => { cap.cards = cards; return new Uint8Array(1); }, entregar: async () => {} };
+        const deps = { construir: async (cards, raiz, estilo, x, al, extras) => { cap.cards = cards; return new Uint8Array(1); }, entregar: async () => {}, confirmar: async () => true };
         a.$("gerExpComEdital").checked = true;
         a.$("gerExpRamos").checked = true;
         await a.gerAcaoExportar("apkg", deps);
