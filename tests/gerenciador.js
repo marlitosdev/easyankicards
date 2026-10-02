@@ -1800,8 +1800,8 @@ async function testes() {
     a.$("avisoTopoTitulo").textContent = "";
     a.previewEstilo();
     ok(a.$("stylePreview").children.length > 0 && a.$("avisoTopoTitulo").textContent === a.t("header_warn_title"), "G27f previewEstilo() sem argumento continua desenhando o #dlgExport de sempre, aviso de titulo incluido: " + JSON.stringify(a.$("avisoTopoTitulo").textContent));
-    /* o alvo do painel novo NAO tem aviso de titulo ainda (isso e' a U2): previewEstilo nao tenta usa-lo e nao quebra */
-    ok(!a.GER_EXP_ALVO_ESTILO.aviso, "G27g o alvo do painel novo ainda nao declara aviso de titulo (U2 que adiciona)");
+    /* desde a U2 o alvo do painel novo declara tambem o aviso de titulo (G28) */
+    ok(a.GER_EXP_ALVO_ESTILO.aviso === "gerExpAvisoTopo", "G27g o alvo do painel novo declara o aviso de titulo");
     /* copiar caminho */
     a.$("gerExpNome").value = "Minha Raiz"; a.$("gerExpNome").oninput();
     await a.$("btnGerExpCopiarCaminho").onclick();
@@ -1810,6 +1810,44 @@ async function testes() {
      * disparam na hora (ver memoria do projeto), entao o que da' pra conferir aqui e' que o
      * botao VOLTA ao rotulo normal depois (o mesmo texto do copiar caminho de #dlgExport) */
     ok(a.$("btnGerExpCopiarCaminho").textContent === a.t("copy_path_btn"), "G27i o botao volta ao rotulo normal depois do flash de 'copiado'");
+  }
+
+  /* ---- G28: aviso de título no painel de exportar (U2) — o mesmo aviso/prévia do cabeçalho do
+   * #dlgExport (atualizarAvisoTopo generalizada por "alvo"), com o campo de título sincronizado
+   * com a barra lateral e com o #dlgExport (uma fonte só: eac_titulo) ---- */
+  {
+    const demoPill = (a) => { const d = a.$("gerExpAvisoTopoDemo").children[0]; return d ? d.textContent : null; };
+    const { a } = montar();
+    a.aplicarEstilo("dark");
+    a.setTituloGeral("Direito Tributário");
+    a.gerAbrir();
+    ok(a.$("gerExpTitulo").value === "Direito Tributário", "G28a o campo de titulo do painel abre com o titulo geral ja' salvo");
+    a.$("btnGerModoExportar").onclick();
+    ok(a.$("gerExpAvisoTopoTitulo").textContent === a.t("header_warn_title") && a.$("gerExpAvisoTopoTexto").textContent === a.t("header_warn_text"), "G28b o aviso do que sera' impresso no topo aparece no painel (estilo com cabecalho)");
+    ok(demoPill(a) === "Direito Tributário", "G28c a previa do cabecalho mostra o titulo atual: " + demoPill(a));
+    /* digitar NO PAINEL sincroniza barra lateral, #dlgExport e a fonte unica, e redesenha aviso e previa */
+    a.$("gerExpTitulo").value = "Penal"; a.$("gerExpTitulo").oninput();
+    ok(a.$("tituloGeral").value === "Penal" && a.$("tituloExp").value === "Penal" && a.tituloGeral() === "Penal", "G28d digitar no painel atualiza os outros dois campos e o valor salvo");
+    ok(demoPill(a) === "Penal" && a.$("gerExpStylePreview").children[0].textContent === "Penal", "G28e a previa do cabecalho E a previa do estilo acompanham o que se digita");
+    /* o inverso: digitar na barra lateral atualiza o campo do painel */
+    a.$("tituloGeral").value = "Civil"; a.$("tituloGeral").oninput();
+    ok(a.$("gerExpTitulo").value === "Civil" && demoPill(a) === "Civil", "G28f digitar na barra lateral tambem atualiza o painel (nos dois sentidos)");
+    /* sem titulo: o aviso diz que esta' sem nome */
+    a.$("gerExpTitulo").value = ""; a.$("gerExpTitulo").oninput();
+    ok(demoPill(a) === a.t("header_empty"), "G28g sem titulo a previa mostra '(sem nome)': " + demoPill(a));
+    /* "Usar o nome do baralho": a ultima parte do nome raiz */
+    a.$("gerExpNome").value = "Curso :: Materia :: Tema"; a.$("gerExpNome").oninput();
+    a.$("btnGerExpTituloDeck").onclick();
+    ok(a.$("gerExpTitulo").value === "Tema" && a.tituloGeral() === "Tema" && demoPill(a) === "Tema", "G28h 'usar o nome do baralho' poe a ultima parte (depois do ultimo '::') como titulo: " + a.$("gerExpTitulo").value);
+    a.$("gerExpNome").value = "Sem Niveis"; a.$("gerExpNome").oninput();
+    a.$("btnGerExpTituloDeck").onclick();
+    ok(a.$("gerExpTitulo").value === "Sem Niveis", "G28i nome de um nivel so': o titulo e' o proprio nome");
+    /* trocar o estilo redesenha o aviso com a cor do cabecalho do novo estilo */
+    a.$("gerExpEstilo").value = "paper"; a.$("gerExpEstilo").onchange();
+    ok(String(a.$("gerExpAvisoTopoDemo").children[0].style.cssText).indexOf(a.PALETAS.paper.cab) >= 0, "G28j trocar o estilo redesenha o aviso com a cor do cabecalho do estilo escolhido");
+    /* reabrir comeca do titulo salvo (nao do que ficou digitado e nao salvo — tudo ja' e' salvo ao digitar) */
+    a.$("dlgGerCartoes").close(); a.setTituloGeral("Salvo"); a.$("gerExpTitulo").value = "campo velho"; a.gerAbrir();
+    ok(a.$("gerExpTitulo").value === "Salvo", "G28k reabrir traz o titulo salvo");
   }
 
   return Object.assign(falhas, { quantas: n });

@@ -41,7 +41,7 @@ const GER_DICAS = {
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
-  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip",
+  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -511,9 +511,11 @@ function gerExpOpcoes() {
   };
 }
 
-/* o alvo (ver ALVO_EXPORT_PADRAO em app.js) para desenhar a prévia de estilo DENTRO
- * deste painel, em vez de em #dlgExport — sem aviso de título ainda (isso é a U2). */
-const GER_EXP_ALVO_ESTILO = { estilo: "gerExpEstilo", box: "gerExpStylePreview", hint: "gerExpStyleHintTxt" };
+/* o alvo (ver ALVO_EXPORT_PADRAO em app.js) para desenhar a prévia de estilo e o aviso do
+ * título impresso no topo DENTRO deste painel, em vez de em #dlgExport. */
+const GER_EXP_ALVO_ESTILO = { estilo: "gerExpEstilo", box: "gerExpStylePreview", hint: "gerExpStyleHintTxt",
+  aviso: "gerExpAvisoTopo", avTit: "gerExpAvisoTopoTitulo", avTxt: "gerExpAvisoTopoTexto",
+  avDemoLbl: "gerExpAvisoTopoDemoLbl", avDemo: "gerExpAvisoTopoDemo", avTags: "gerExpAvisoTopoTags" };
 
 function gerPintarExport() {
   const cx = $("gerExpCx");
@@ -1670,6 +1672,7 @@ function gerAbrir() {
   $("gerExpSemRaiz").checked = false;
   $("gerExpComEdital").checked = gerExpTemEditais();
   $("gerExpEstilo").value = $("selEstilo").value;
+  $("gerExpTitulo").value = tituloGeral();
   $("gerExpMsg").textContent = "";
   gerAgrupar = gerAgruparPadrao();
   $("gerAgrupar").value = gerAgrupar;
@@ -1748,6 +1751,17 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("gerExpSemRep").onchange = gerPintarExport;
   $("gerExpSemFracos").onchange = gerPintarExport;
   $("gerExpEstilo").onchange = () => aplicarEstilo($("gerExpEstilo").value);
+  $("gerExpTitulo").oninput = () => {
+    setTituloGeral($("gerExpTitulo").value);
+    atualizarAvisoTopo();
+    if (modoPrevia() === "anki") preview();
+  };
+  $("btnGerExpTituloDeck").onclick = () => {
+    const partes = gerExpRaizAtual().split("::").map((x) => x.trim()).filter(Boolean);
+    setTituloGeral(partes.length ? partes[partes.length - 1] : "");
+    atualizarAvisoTopo();
+    if (modoPrevia() === "anki") preview();
+  };
   $("btnGerExpCopiarCaminho").onclick = async () => {
     await navigator.clipboard.writeText(gerExpRaizAtual());
     $("btnGerExpCopiarCaminho").textContent = t("copy_path_done");
