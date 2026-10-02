@@ -835,7 +835,7 @@ function rodar() {
     gerDestinoExport, gerCaminhoExport, gerIniciarArrastoExport, gerFimArrastoExport,
     gerSobreTopExport, gerSoltarTopExport, gerSobreDiscExport, gerSoltarDiscExport, gerSobreRaizExport, gerSoltarRaizExport,
     gerEditalDeChave, gerExpTemEditais, gerExpSemRaizAtivo, gerExpRaizAtual, gerExpOpcoes, gerPintarExport, gerAcaoExportar,
-    tituloGeral, setTituloGeral, GER_EXP_ALVO_ESTILO, previewEstilo, atualizarAvisoTopo, aplicarEstilo, rotularEstilos, ALVO_EXPORT_PADRAO, PALETAS,
+    tituloGeral, setTituloGeral, GER_EXP_ALVO_ESTILO, previewEstilo, atualizarAvisoTopo, aplicarEstilo, rotularEstilos, PALETAS,
     gerPastaTeste: (p) => { gerPasta = p; },
     ceAvaliar, ceNivel, ceChecar, ceNormalizarResposta, ceMarcarRevisados, ceMarcarTentativa, ceRevisado, ceRevLer, ceRevGravar, ceRevLimpar, ceProximaRodada, ceDescartar, ceTrocarSelecao, ceColarDaArea, ceClassificar, CE_REQ, CE_ART_RE,
     ceDefeitos, ceNota, ceAbaixo, ceTagsUnicas, ceLerAbaixo, ceFontes, ceMontarPrompt, ceSubstituir, ceConferir,

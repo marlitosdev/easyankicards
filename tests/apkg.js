@@ -183,6 +183,21 @@ async function testes() {
     ok(txt[6].split("\t")[1] === "Meu Pacote::Tributário::ISS" && txt[8].split("\t")[1] === "Meu Pacote::Tributário::ISS" && txt[9].split("\t")[1] === "Meu Pacote", `F5 o .txt tambem leva o baralho de cada cartao: ${txt.slice(6, 10).map((l) => l.split("\t")[1])}`);
   }
 
+  /* F6-F9 — SEM baralho raiz ("nao usar baralho raiz", B3/U4): o arquivo de verdade nao pode ter nivel vazio na frente */
+  {
+    const cs = [
+      { kind: "basic", front: "a", back: "b", tags: [], deck: "Tributário::ISS" },
+      { kind: "basic", front: "c", back: "d", tags: [], deck: "" },
+    ];
+    const g = A.apkgAgruparDecks(cs, "", "", ["Edital::Disc::Top"]);
+    const nomes = Object.values(g.decks).map((d) => d.name).sort();
+    ok(g.decks[String(g.idPorCartao[0])].name === "Tributário::ISS", "F6 raiz vazia: o baralho e' so' Disciplina::Topico, sem '::' sobrando na frente: " + nomes);
+    ok(g.decks[String(g.idPorCartao[1])].name === "Sem pasta", "F7 raiz vazia e cartao sem pasta: 'Sem pasta' (nunca um baralho sem nome)");
+    ok(nomes.indexOf("Edital::Disc::Top") >= 0 && !nomes.some((n) => /^::/.test(n)), "F8 os baralhos vazios (extras) tambem saem sem o nivel vazio: " + nomes);
+    const txt = A.exportTxtString({ cards: cs }, "").split("\n");
+    ok(txt[6].split("\t")[1] === "Tributário::ISS" && txt[7].split("\t")[1] === "Import" && txt.indexOf("#deck:Import") >= 0 && !txt.some((l) => /\t::/.test(l)), "F9 .txt sem raiz: coluna do baralho sem '::' na frente, cartao sem pasta em 'Import': " + JSON.stringify(txt.slice(3, 8)));
+  }
+
   /* G — lerApkg devolve o baralho de cada cartao (o que o import para uma pasta usa) */
   {
     CENARIO = "antigo";

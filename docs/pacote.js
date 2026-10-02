@@ -68,6 +68,14 @@ function pacResolverRamo(edital, disciplina, topicoJunto) {
  * de forma única dentro de uma sessão do diálogo (a mesma linha que `irParaLinha` usa). */
 function pacChaveCartao(n) { return n.chave + "|" + n.card.line; }
 
+/* O baralho de uma nota. A Bancada (o texto do editor) cai DIRETO no baralho raiz — era o que o "Exportar" do
+ * rodape da bancada sempre fez, e os cartoes com "@ titulo" seguem virando subbaralho la' dentro (buildApkg).
+ * Se a pessoa arrastou a Bancada para outra pasta (mov), vale o destino dela. */
+function pacDeckDaNota(n, mov, comEdital, ramo) {
+  if (!mov && n.chave === CQ_BANCADA) return "";
+  return pacNomeDeck(mov ? Object.assign({}, n, mov) : n, comEdital, ramo);
+}
+
 /* O que entra no pacote: as notas das pastas marcadas, menos (opcionalmente)
  * os repetidos — fica o mais completo de cada grupo — e os abaixo do padrão. */
 function pacMontar(notas, sel, opc) {
@@ -79,7 +87,7 @@ function pacMontar(notas, sel, opc) {
   const cartaoMoverPara = o.cartaoMoverPara || new Map();
   const nomeDeck = (n) => {
     const mov = cartaoMoverPara.get(pacChaveCartao(n)) || moverPara.get(n.chave);
-    return pacNomeDeck(mov ? Object.assign({}, n, mov) : n, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
+    return pacDeckDaNota(n, mov, o.comEdital, o.comRamos ? pacRamoDoCartao(n) : "");
   };
   /* o edital de cada tópico marcado (Map chave → nome): sai como a pasta de cima do baralho */
   const editalDe = o.editalDe || new Map();
@@ -122,8 +130,7 @@ function pacCartoes(itens, comEdital, comRamos, moverPara, cartaoMoverPara) {
   const cmp = cartaoMoverPara || new Map();
   return (itens || []).map((n) => {
     const mov = cmp.get(pacChaveCartao(n)) || mp.get(n.chave);
-    const base = mov ? Object.assign({}, n, mov) : n;
-    return Object.assign({}, n.card, { deck: pacNomeDeck(base, comEdital, comRamos ? pacRamoDoCartao(n) : ""), tags: (n.card.tags || []).slice() });
+    return Object.assign({}, n.card, { deck: pacDeckDaNota(n, mov, comEdital, comRamos ? pacRamoDoCartao(n) : ""), tags: (n.card.tags || []).slice() });
   });
 }
 
