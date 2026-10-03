@@ -49,12 +49,16 @@ function evMinimoTexto(m) {
 }
 
 /* o texto à direita da faixa preta: o grupo (e o mínimo dele) e, se pedido, o tamanho da disciplina na prova */
-function evTagDaFaixa(d, op) {
+function evTagDaFaixa(d, op, exata) {
   const partes = [];
   if (d.grupo) partes.push(d.grupo + (d.minimo ? " (" + evMinimoTexto(d.minimo) + ")" : ""));
   if (op.faixa) {
-    partes.push(d.abs ? t(d.unidade === "p" ? "vert_pontos" : "vert_questoes", { n: d.abs }) : t("vert_peso", { n: d.peso }));
-    if (d.fatia != null) partes.push(t("vert_fatia", { n: d.fatia }));
+    /* A FATIA VEM ANTES DO PESO. "peso 3 · 2% da prova" era lido (por quem extrai o texto do PDF) como "32%": o último dígito
+     * do peso colava no primeiro da fatia. Com a fatia primeiro e o peso dito "de 5", os dois números nunca ficam lado a lado.
+     * E a fatia sem número de questões é ESTIMADA (peso × peso do tópico) — a folha diz isso. */
+    if (d.abs) partes.push(t(d.unidade === "p" ? "vert_pontos" : "vert_questoes", { n: d.abs }));
+    if (d.fatia != null) partes.push(t(exata ? "vert_fatia" : "vert_fatia_est", { n: d.fatia }));
+    if (!d.abs) partes.push(t("vert_peso", { n: d.peso }));
   }
   return partes.join(" · ");
 }
@@ -70,13 +74,17 @@ function evFolha(v, op, destino) {
   sub.push(t(v.ordem === "peso" ? "vert_ordem_peso" : "vert_ordem_edital"));
   if (v.soFase2) sub.push(t("vert_so_fase2"));
   sub.push(t("vert_resumo", { d: v.resumo.disciplinas, t: v.resumo.topicos, r: v.resumo.ramos }));
+  /* o edital tem 2ª fase: a data dela e a legenda da marca (só quando a folha mostra todos os tópicos) */
+  const f2 = v.fase2 && v.fase2.prova ? v.fase2 : null;
+  if (f2) sub.push(t("vert_fase2_info", { nome: f2.nome || t("vert_f2_marca"), d: evData(f2.prova) }));
+  if (f2 && !v.soFase2) sub.push(t("vert_f2_legenda"));
   cab.append(gerEl("div", "ev-sub", sub.join(" · ")));
   folha.append(cab);
 
   v.disciplinas.forEach((d) => {
     const sec = gerEl("section", "ev-disc");
     const faixa = gerEl("div", "ev-faixa");
-    faixa.append(gerEl("span", "ev-faixa-nome", d.nome), gerEl("span", "ev-faixa-tag", evTagDaFaixa(d, op)));
+    faixa.append(gerEl("span", "ev-faixa-nome", d.nome), gerEl("span", "ev-faixa-tag", evTagDaFaixa(d, op, v.exata)));
     sec.append(faixa);
     const tab = gerEl("table", "ev-tab");
     const cabTr = gerEl("tr", "");
@@ -89,6 +97,7 @@ function evFolha(v, op, destino) {
       tr.append(gerEl("td", "ev-n", l.num));
       const c = gerEl("td", "ev-c", l.texto);
       if (l.motivo) c.append(gerEl("span", "ev-motivo", l.motivo));
+      if (f2 && !v.soFase2 && l.fase2) c.append(gerEl("span", "ev-f2", t("vert_f2_marca")));
       tr.append(c);
       /* teoria, questões, acertos (em branco), rev. 1, rev. 2 */
       [l.teoria, false, null, l.rev1, l.rev2].forEach((marca) => {

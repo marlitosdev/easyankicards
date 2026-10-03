@@ -70,7 +70,8 @@ function edVerticalizar(r, opc) {
   let ds = ((r && r.disciplinas) || []).map((d, idx) => ({ d, idx }));
   if (ordem === "peso") {
     const valor = (d) => (exata ? d.abs : d.peso);
-    ds.sort((a, b) => (valor(b.d) - valor(a.d)) || (b.d.peso - a.d.peso) || (a.idx - b.idx));
+    /* empate de peso: a que mais vale na prova (a fatia) vem antes; só então a ordem do edital */
+    ds.sort((a, b) => (valor(b.d) - valor(a.d)) || (b.d.peso - a.d.peso) || ((fatia[b.d.nome] || 0) - (fatia[a.d.nome] || 0)) || (a.idx - b.idx));
   }
 
   const disciplinas = [];
