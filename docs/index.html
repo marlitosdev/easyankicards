@@ -4167,6 +4167,19 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-passo-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--acao);color:#fff;font-size:12px}
 .ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
 .ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
+/* DATA E NOME: obrigatórios, com o erro escrito debaixo do campo */
+.ednovo-horas{max-width:260px}
+.ednovo-horas .nota{text-transform:none;letter-spacing:0;font-weight:400}
+.ednovo-obrig{font-size:10.5px;font-weight:700;color:var(--atencao);text-transform:none;letter-spacing:0}
+.ednovo-data{border:1px solid var(--borda);border-radius:10px;padding:8px 10px;margin:8px 0}
+.ednovo-data legend{font-size:11px;font-weight:700;padding:0 6px;text-transform:uppercase;letter-spacing:.4px;color:var(--sutil)}
+.ednovo-opt{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px;cursor:pointer}
+.ednovo-opt-campo{margin:2px 0 8px 26px}
+.ednovo-pre-janela{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0}
+.ednovo-pre-janela select{width:auto;min-width:92px}
+.ednovo-erro{color:var(--erro);font-weight:600;margin:4px 0 0}
+.ednovo-inv{border-color:var(--erro)!important;outline:1px solid var(--erro)}
+.btn-pend{opacity:.65}
 /* SEMÁFORO: uma cor, um significado, em todo o diálogo (cinza vazio · verde entendi · âmbar confira · vermelho não cria) */
 .ednovo-sem{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:6px 0;padding:7px 10px;border-radius:8px;border:1px solid var(--borda);font-size:12.5px;line-height:1.4}
 .ednovo-sem-ico{font-weight:800;flex:0 0 auto}
@@ -6505,26 +6518,48 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgEdNovo" class="ui-modal diag-modal">
   <h3 data-i18n="ed_novo_tit"></h3>
   <p class="nota" data-i18n="ed_novo_ajuda"></p>
+  <!-- NOME: OBRIGATÓRIO. Antes vinha pré-preenchido com "Novo edital" como VALOR — parecia preenchido, e o edital era criado
+       com o nome de rascunho. Agora é um campo vazio com um exemplo, e o "antes de criar" cobra. -->
   <div class="ednovo-linha">
-    <label class="nd-rot" for="edNovoNome" data-i18n="ed_novo_nome"></label>
-    <input type="text" id="edNovoNome" class="mat-busca"
-      placeholder="SEFAZ-AL Auditor Fiscal">
+    <label class="nd-rot" for="edNovoNome"><span data-i18n="ed_novo_nome"></span> <span class="ednovo-obrig" data-i18n="ed_novo_obrig"></span></label>
+    <input type="text" id="edNovoNome" class="mat-busca" data-i18n-ph="ed_novo_nome_ph" autocomplete="off">
+    <p class="nota ednovo-erro" id="edNovoNomeErro" role="alert" hidden></p>
   </div>
-  <div class="ednovo-dupla">
-    <div class="ednovo-linha">
+  <!-- DATA DA PROVA: TRÊS RESPOSTAS, E A PESSOA ESCOLHE UMA. Sem pergunta, "não preenchi" e "ainda não saiu" e "é só um
+       concurso previsto" viravam a mesma coisa calada: um edital sem data, sem aviso e sem a fase de pré-edital que o app já tem. -->
+  <fieldset class="ednovo-data" id="edNovoDataCx">
+    <legend><span data-i18n="ed_novo_data_q"></span> <span class="ednovo-obrig" data-i18n="ed_novo_obrig"></span></legend>
+    <label class="ednovo-opt"><input type="radio" name="edNovoDataModo" id="edNovoModoData" value="data"> <span data-i18n="ed_novo_modo_data"></span></label>
+    <div class="ednovo-opt-campo" id="edNovoDataCampo" hidden>
       <label class="nd-rot" for="edNovoProva" data-i18n="ed_novo_prova"></label>
       <input type="date" id="edNovoProva" class="mat-busca">
     </div>
-    <div class="ednovo-linha">
-      <label class="nd-rot" for="edNovoHoras" data-i18n="ed_novo_horas"></label>
-      <input type="number" id="edNovoHoras" class="mat-busca" min="1" max="80" value="20">
+    <label class="ednovo-opt"><input type="radio" name="edNovoDataModo" id="edNovoModoSem" value="sem"> <span data-i18n="ed_novo_modo_sem"></span></label>
+    <label class="ednovo-opt"><input type="radio" name="edNovoDataModo" id="edNovoModoPre" value="pre"> <span data-i18n="ed_novo_modo_pre"></span></label>
+    <div class="ednovo-opt-campo" id="edNovoPreCampo" hidden>
+      <div class="nota" data-i18n="ed_novo_pre_q"></div>
+      <div class="ednovo-pre-janela">
+        <span class="nota" data-i18n="ed_novo_pre_de"></span>
+        <select id="edNovoPreDeM" class="mat-busca"></select>
+        <select id="edNovoPreDeA" class="mat-busca"></select>
+        <span class="nota" data-i18n="ed_novo_pre_ate"></span>
+        <select id="edNovoPreAteM" class="mat-busca"></select>
+        <select id="edNovoPreAteA" class="mat-busca"></select>
+      </div>
+      <p class="nota" id="edNovoPreLeitura"></p>
     </div>
+    <p class="nota ednovo-erro" id="edNovoDataErro" role="alert" hidden></p>
+  </fieldset>
+  <div class="ednovo-linha ednovo-horas">
+    <label class="nd-rot" for="edNovoHoras"><span data-i18n="ed_novo_horas"></span> <span class="nota" data-i18n="ed_novo_horas_dica"></span></label>
+    <input type="number" id="edNovoHoras" class="mat-busca" min="1" max="80" value="20">
+    <p class="nota ednovo-erro" id="edNovoHorasErro" role="alert" hidden></p>
   </div>
   <!-- A SEGUNDA DATA É EXCEÇÃO, e por isso começa desligada: a maioria dos
        concursos tem uma prova só, e um campo de data sempre à vista
        sugere que falta preencher. É um interruptor (e não uma seta
        escondida) para a pessoa ver que existe e que dá para ligar. -->
-  <label class="ednovo-sw-linha" title="Liga os campos da segunda fase (por exemplo, a discursiva). Desligado, o edital é criado só com a primeira data.">
+  <label class="ednovo-sw-linha" id="edNovoF2Lin" title="Liga os campos da segunda fase (por exemplo, a discursiva). Desligado, o edital é criado só com a primeira data.">
     <input type="checkbox" role="switch" class="ednovo-sw" id="edNovoF2On"> <span data-i18n="ed_novo_f2"></span></label>
   <div id="edNovoF2cx" class="ednovo-f2" hidden>
     <div class="ednovo-dupla">
@@ -6537,6 +6572,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <input type="date" id="edNovoF2Prova" class="mat-busca">
       </div>
     </div>
+    <p class="nota ednovo-erro" id="edNovoF2Erro" role="alert" hidden></p>
   </div>
 
   <!-- DOIS PASSOS, NA ORDEM EM QUE SE FAZEM: primeiro o prompt vai para a IA, depois a resposta volta para cá.

@@ -108,6 +108,13 @@ async function testesInterface() {
   const cls = (e) => String((e || {}).className || "");
   const filhos = (e) => Array.from((e && e.children) || []);
   const digitar = (txt) => { api.$("edNovoPlano").value = txt; api.$("edNovoPlano").oninput(); };
+  /* nome + a resposta da data ("sem" = o edital saiu, mas a data nao): o minimo que o Novo edital exige para criar */
+  const decidir = (nome, modo) => {
+    api.$("edNovoNome").value = nome; api.$("edNovoNome").oninput();
+    const id = { data: "edNovoModoData", sem: "edNovoModoSem", pre: "edNovoModoPre" }[modo || "sem"];
+    api.$(id).checked = true; api.$(id).onchange();
+    if (modo === "data") { api.$("edNovoProva").value = "2030-05-10"; api.$("edNovoProva").oninput(); }
+  };
   const total = () => api.editaisAtuais.length;
   const avisos = [];
   const confirmar = (v) => async (m) => { avisos.push(m); return v; };
@@ -165,7 +172,7 @@ async function testesInterface() {
   /* ---- I4: âmbar pergunta; verde cria ---- */
   {
     api.hubNovo();
-    api.$("edNovoNome").value = "Concurso Z";
+    decidir("Concurso Z");
     digitar(BOM + "\nlinha solta 1\nlinha solta 2");
     ok(cls(api.$("edNovoSem")).includes("sem-atencao") && /2 linha\(s\) ignorada/.test(api.$("edNovoSemTxt").textContent), "I4a amarelo e diz quantas linhas ficaram de fora: " + api.$("edNovoSemTxt").textContent);
     avisos.length = 0;
@@ -173,15 +180,17 @@ async function testesInterface() {
     ok((await api.hubNovoCriarConfirmado(confirmar(false))) === null && total() === antes && avisos.length === 1 && /2 linhas não foram entendidas/.test(avisos[0]), "I4b ambar PERGUNTA, e 'nao' nao cria: " + avisos[0]);
     ok((await api.hubNovoCriarConfirmado(confirmar(true))) && total() === antes + 1, "I4c e 'sim' cria");
     api.hubNovo();
-    api.$("edNovoNome").value = "Concurso Y";
+    decidir("Concurso Y");
     digitar(BOM);
     avisos.length = 0; antes = total();
     ok((await api.hubNovoCriarConfirmado(confirmar(false))) && avisos.length === 0 && total() === antes + 1, "I4d verde cria direto, sem perguntar");
     api.hubNovo();
+    decidir("Concurso W");
     digitar("");
     avisos.length = 0; antes = total();
     ok((await api.hubNovoCriarConfirmado(confirmar(false))) && avisos.length === 0 && total() === antes + 1, "I4e campo vazio (colar depois) tambem cria sem perguntar");
     api.hubNovo();
+    decidir("Concurso V");
     digitar(PROSA);
     avisos.length = 0; antes = total();
     ok((await api.hubNovoCriarConfirmado(confirmar(false))) === null && avisos.length === 1 && /quase nada/.test(avisos[0]) && total() === antes, "I4f texto cru: pergunta ('quase nada foi entendido') e 'nao' nao cria");
@@ -223,12 +232,13 @@ async function testesInterface() {
     ok(api.$("edNovoPasso1").className === "ednovo-passo feito" && api.$("edNovoPasso2").className === "ednovo-passo ativo", "I6b copiar o prompt marca o passo 1 e destaca o 2");
     api.hubNovo();
     ok(api.$("edNovoPasso1").className === "ednovo-passo" && api.$("edNovoPasso2").className === "ednovo-passo", "I6c abrir de novo desmarca");
-    ok(cls(api.$("edNovoProntNome")) === "pront-atencao" && /Novo edital/.test(api.$("edNovoProntNome").textContent), "I6d nome ainda o padrao: aviso ambar");
-    ok(cls(api.$("edNovoProntData")) === "pront-atencao" && /não informada/.test(api.$("edNovoProntData").textContent), "I6e sem data: aviso ambar que diz o que se perde");
+    ok(cls(api.$("edNovoProntNome")) === "pront-vazio" && /obrigatório/.test(api.$("edNovoProntNome").textContent), "I6d nome vazio ao abrir: cinza 'obrigatorio' (o nome nao vem mais pre-preenchido)");
+    ok(cls(api.$("edNovoProntData")) === "pront-vazio" && /três opções/.test(api.$("edNovoProntData").textContent), "I6e sem resposta da data: cinza, pede uma das tres opcoes");
     ok(cls(api.$("edNovoProntPlano")) === "pront-vazio", "I6f sem plano: cinza (pode colar depois)");
     api.$("edNovoNome").value = "CFO PM-PE"; api.$("edNovoNome").oninput();
-    api.$("edNovoProva").value = "2027-02-21"; api.$("edNovoProva").oninput();
-    ok(cls(api.$("edNovoProntNome")) === "pront-ok" && /CFO PM-PE/.test(api.$("edNovoProntNome").textContent) && cls(api.$("edNovoProntData")) === "pront-ok" && /21\/02\/2027/.test(api.$("edNovoProntData").textContent), "I6g com nome e data os dois ficam verdes (data dd/mm/aaaa)");
+    api.$("edNovoModoData").checked = true; api.$("edNovoModoData").onchange();
+    api.$("edNovoProva").value = "2030-02-21"; api.$("edNovoProva").oninput();
+    ok(cls(api.$("edNovoProntNome")) === "pront-ok" && /CFO PM-PE/.test(api.$("edNovoProntNome").textContent) && cls(api.$("edNovoProntData")) === "pront-ok" && /21\/02\/2030/.test(api.$("edNovoProntData").textContent), "I6g com nome e data os dois ficam verdes (data dd/mm/aaaa)");
   }
 
   /* ---- I7: a bancada (edital ja' criado e contaminado) ---- */
