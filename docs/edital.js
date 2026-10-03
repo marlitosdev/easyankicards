@@ -419,7 +419,8 @@ function lerEdital(raw) {
       if (topo.ramos.some((x) => x.id === id)) { achados.push({ linha: n, tipo: "ramo_repetido", txt: p[0] }); return; }
       const pr = edPeso(p[1], achados, n);
       topo.ramos.push({ id, nome: p[0], peso: pr.peso, herdado: !!pr.herdado, abs: pr.abs || null, unidade: pr.unidade || "",
-        nota: p.slice(2).join(" :: "), linha: n });
+        /* "!d" é a marca do TOPICO na segunda fase; a IA também a escreve nos ramos, e ela ia parar no texto da nota (e na folha impressa) */
+        nota: edMarcaFase2(p.slice(2).join(" :: ")).motivo, linha: n });
       return;
     }
 

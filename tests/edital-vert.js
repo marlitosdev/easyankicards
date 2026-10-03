@@ -62,6 +62,12 @@ function testes() {
     /* escala 1-5: peso desc, empate pela ordem do edital */
     const s = api.edVerticalizar(api.lerEdital(ESCALA));
     ok(s.exata === false && nomes(s) === "Beta,Gama,Alfa", "V1f na escala 1-5 manda o peso e o empate (Beta/Gama) segue o edital: " + nomes(s));
+    /* mesmo peso 5: quem tem MAIS tópicos pesados (fatia maior) vem antes, mesmo escrita depois no edital */
+    const empate = api.edVerticalizar(api.lerEdital("# E\n@ Curta :: 5\n+ a :: 5\n@ Longa :: 5\n+ b :: 5\n+ c :: 5\n+ d :: 5"));
+    ok(nomes(empate) === "Longa,Curta" && empate.disciplinas[0].fatia > empate.disciplinas[1].fatia, "V1e3 mesmo peso: a de maior fatia vem primeiro (antes da ordem do edital): " + nomes(empate));
+    ok(nomes(api.edVerticalizar(api.lerEdital("# E\n@ Curta :: 5\n+ a :: 5\n@ Longa :: 5\n+ b :: 5\n+ c :: 5\n+ d :: 5"), { ordem: "edital" })) === "Curta,Longa", "V1e4 'ordem do edital' continua sendo a escrita");
+    const igual = api.edVerticalizar(api.lerEdital("# E\n@ Primeira :: 5\n+ a :: 5\n@ Segunda :: 5\n+ b :: 5"));
+    ok(nomes(igual) === "Primeira,Segunda", "V1e5 peso e fatia iguais: a ordem do edital desempata");
     /* so' ALGUMA com questoes: nao e' exata, ordena pelo peso derivado */
     const mista = api.edVerticalizar(api.lerEdital("# M\n@ Um :: 3\n+ t :: 3\n@ Dois :: 10q\n+ t :: 3"));
     ok(mista.exata === false, "V1g basta uma disciplina sem numero para a conta deixar de ser exata");

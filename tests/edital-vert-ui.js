@@ -86,7 +86,7 @@ function testes() {
     mexer(a, "evFaixa", false);
     ok(tag(0) === "Específicos (mín. 60%)", "VU3c sem 'faixa' fica so' o grupo: " + tag(0));
     const { api: b } = montar("# E\n@ Alfa :: 2\n+ a :: 3\n@ Beta :: 5\n+ b :: 3");
-    ok(tx(achar(secoes(b)[0], (e) => cls(e, "ev-faixa-tag"))[0]) === "peso 5 · " + b.t("vert_fatia", { n: 71 }), "VU3d sem questoes a faixa mostra o peso: " + tx(achar(secoes(b)[0], (e) => cls(e, "ev-faixa-tag"))[0]));
+    ok(tx(achar(secoes(b)[0], (e) => cls(e, "ev-faixa-tag"))[0]) === b.t("vert_fatia_est", { n: 71 }) + " · " + b.t("vert_peso", { n: 5 }), "VU3d sem questoes a faixa mostra a fatia ESTIMADA e depois o peso: " + tx(achar(secoes(b)[0], (e) => cls(e, "ev-faixa-tag"))[0]));
   }
 
   /* ---- VU4: as opcoes mexem na folha ---- */
@@ -196,6 +196,57 @@ function testes() {
     ok(/dialog\.ev-dlg\{[^}]*width:min\(980px,96vw\)[^}]*max-width:min\(980px,96vw\)/.test(html), "VU11g o dialogo e' largo (o .ui-modal limita em 440px e a folha precisa de espaco)");
     const sw = fs.readFileSync(path.join(__dirname, "..", "docs", "sw.js"), "utf8");
     ok(/"edital-vert\.js"/.test(sw) && /"edital-vert-ui\.js"/.test(sw) && /<script src="edital-vert\.js">/.test(html) && /<script src="edital-vert-ui\.js">/.test(html), "VU11f os dois arquivos novos estao no HTML e no cache offline");
+  }
+
+  /* ---- VU12: o caso do PDF real (CFO PM-PE): "!d" nos ramos, faixa ambigua e 2a fase invisivel ---- */
+  {
+    const PM = [
+      "# PMPE | prova: 2030-02-21 | horas: 12",
+      "# fase 2: discursiva | prova: 2030-04-26 | horas: 25",
+      "@ Direito Penal :: 5",
+      "+ Lei penal :: 4 :: aplicacao no tempo !d",
+      "+ Extinção da punibilidade :: 3",
+      "+ Legislação especial :: 5 :: leis penais !d",
+      "++ Lei de Abuso de Autoridade :: 5 :: essencial para atividade policial !d",
+      "++ Lei de Drogas :: 5 :: maior volume !d4",
+      "++ Crimes de Trânsito :: 4",
+      "@ Raciocínio Lógico :: 3",
+      "+ Lógica de argumentação :: 5 :: cai",
+      "@ Língua Estrangeira Inglês :: 2",
+      "+ Vocabulário :: 4",
+    ].join("\n");
+    const { api: a } = montar(PM);
+    /* a) a nota do ramo nao leva o "!d" do topico */
+    const r = a.lerEdital(PM);
+    const ramos = r.disciplinas[0].topicos[2].ramos;
+    ok(ramos[0].nota === "essencial para atividade policial" && ramos[1].nota === "maior volume" && ramos[2].nota === "", "VU12a a nota do ramo nao carrega o '!d' (nem '!d4'): " + JSON.stringify(ramos.map((x) => x.nota)));
+    ok(r.disciplinas[0].topicos[2].fase2 === true && r.disciplinas[0].topicos[0].fase2 === true && r.disciplinas[0].topicos[1].fase2 === false, "VU12b a marca do TOPICO continua valendo");
+    mexer(a, "evMotivo", true);
+    const texto = tx(a.$("evPrevia"));
+    ok(texto.indexOf("!d") < 0 && /essencial para atividade policial/.test(texto), "VU12c a folha (com motivos e ramos) nao tem '!d' escrito");
+    /* b) a faixa: fatia ANTES do peso, estimada dita como estimada */
+    const tags = achar(a.$("evPrevia"), (e) => cls(e, "ev-faixa-tag")).map(tx);
+    ok(tags.every((s) => /^≈ \d+% da prova \(estimada\) · peso \d de 5$/.test(s)), "VU12d sem numero de questoes: '≈ N% da prova (estimada) · peso X de 5': " + JSON.stringify(tags));
+    ok(!/peso \d · \d+%/.test(texto) && !/\d · \d+% da prova/.test(texto), "VU12e o peso nunca fica colado ao percentual (era lido como '32%')");
+    const rl = achar(a.$("evPrevia"), (e) => cls(e, "ev-disc")).find((s) => /RACIOC|Raciocínio/.test(tx(s)));
+    ok(rl && /peso 3 de 5$/.test(tx(achar(rl, (e) => cls(e, "ev-faixa-tag"))[0])), "VU12f o peso 3 e' dito 'peso 3 de 5'");
+    /* c) a 2a fase aparece */
+    const sub = tx(achar(a.$("evPrevia"), (e) => cls(e, "ev-sub"))[0]);
+    ok(/2ª fase: discursiva em 26\/04\/2030/.test(sub) && /“2ª fase” = o tópico também cai nela/.test(sub), "VU12g o subtitulo traz a data da 2a fase e a legenda: " + sub);
+    const marcas = achar(a.$("evPrevia"), (e) => cls(e, "ev-f2"));
+    const linhasComMarca = achar(a.$("evPrevia"), (e) => cls(e, "ev-lin") && achar(e, (x) => cls(x, "ev-f2")).length > 0).map((l) => tx(l.children[1]));
+    ok(marcas.length === 2 && linhasComMarca.length === 2 && /^Lei penal/.test(linhasComMarca[0]) && /^Legislação especial/.test(linhasComMarca[1]) && linhasComMarca.every((s) => /2ª fase$/.test(s)), "VU12h so' os 2 topicos com !d (Lei penal e Legislacao especial) levam a marca '2ª fase'; os ramos e os outros nao: " + JSON.stringify(linhasComMarca));
+    /* so 2a fase: sem marca e sem legenda (todos os topicos ja sao dela), mas a data continua */
+    mexer(a, "evFase2", true);
+    const sub2 = tx(achar(a.$("evPrevia"), (e) => cls(e, "ev-sub"))[0]);
+    ok(achar(a.$("evPrevia"), (e) => cls(e, "ev-f2")).length === 0 && !/o tópico também cai nela/.test(sub2) && /2ª fase: discursiva em 26\/04\/2030/.test(sub2), "VU12i 'so 2a fase': sem marcas nem legenda, com a data: " + sub2);
+    /* sem 2a fase no edital: nada disso */
+    const { api: b } = montar("# X | prova: 2030-02-21\n@ A :: 3\n+ a :: 3 :: m !d");
+    ok(achar(b.$("evPrevia"), (e) => cls(e, "ev-f2")).length === 0 && !/2ª fase/.test(tx(achar(b.$("evPrevia"), (e) => cls(e, "ev-sub"))[0])), "VU12j edital sem 2a fase: sem marca, sem data, sem legenda");
+    /* "# fase 2: discursiva" SEM data: a 2a fase ainda nao existe no plano — nada de "em ." na folha */
+    const { api: c } = montar("# X | prova: 2030-02-21\n# fase 2: discursiva\n@ A :: 3\n+ a :: 3 :: m !d");
+    const subc = tx(achar(c.$("evPrevia"), (e) => cls(e, "ev-sub"))[0]);
+    ok(c.lerEdital("# X | prova: 2030-02-21\n# fase 2: discursiva\n@ A :: 3\n+ a :: 3 :: m !d").cfg.fase2 && !/2ª fase: discursiva/.test(subc) && achar(c.$("evPrevia"), (e) => cls(e, "ev-f2")).length === 0, "VU12k 2a fase declarada mas sem data: nao entra na folha (nem 'em ' vazio): " + subc);
   }
 
   return Object.assign(falhas, { quantas: n });
