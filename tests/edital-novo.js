@@ -266,6 +266,54 @@ async function testes() {
     ok(/\d+q/.test(p), "N6d o prompt nao ensina o peso em questoes");
   }
 
+  /* ---- N7: o prompt do Novo edital pode pedir as RAMIFICAÇÕES ("++ Ramo :: peso :: nota"), só quando a pessoa marca a caixa ---- */
+  {
+    const { api, janela } = rodar();
+    const base = api.t("ed_prompt");
+    ok(api.edPromptEdital(false) === base && api.edPromptEdital() === base, "N7a sem a caixa o prompt e' o de sempre, byte a byte");
+    ok(!/\+\+ /.test(base) && !/\n1b\./.test(base), "N7b o prompt de sempre nao fala de ramo e nao tem mais a regra 1b (contradizia a 1 e a 9)");
+    const com = api.edPromptEdital(true);
+    const corte = com.indexOf("\n\nEXEMPLO DE SAÍDA:");
+    ok(com.length > base.length && /\+\+ Nome do ramo :: peso de 1 a 5 :: nota curta/.test(com) && corte > 0 && com.indexOf("RAMIFICAÇÕES") < corte, "N7c com a caixa o prompt ganha as regras de ramo, antes do exemplo");
+    ok(/\n12\. RAMIFICAÇÕES/.test(com), "N7d o bloco e' a regra seguinte (12), depois da 11 das duas fases: " + (com.match(/\n\d+\. RAMIFICAÇÕES/) || [])[0]);
+    /* o resto do prompt nao mudou: tirando o bloco, sobra o prompt de sempre */
+    const bloco = api.t("ed_prompt_ramos", { n: 12 });
+    ok(com.replace("\n" + bloco, "") === base, "N7e fora o bloco, o prompt com a caixa e' identico ao de sempre");
+    ok(/fase 2:/.test(com) && /!d/.test(com) && /minimo:/.test(com) && /\d+q/.test(com), "N7f o prompt com a caixa continua ensinando fase 2, minimo e questoes");
+    ok(/Perder tópico|todo tópico do edital continua aparecendo/.test(com), "N7g o bloco avisa que ramo nao substitui nem resume topico");
+    /* o que o prompt ENSINA entra no app: as linhas "+"/"++" do exemplo viram topico e ramos */
+    const ex = bloco.split("\n").filter((l) => /^\+/.test(l));
+    const r = api.lerEdital("# x | prova: 2030-01-01 | horas: 10\n@ Direito :: 5\n" + ex.join("\n"));
+    const tp = r.disciplinas[0].topicos[0];
+    ok(ex.length === 3 && r.disciplinas[0].topicos.length === 1 && tp.ramos && tp.ramos.length === 2 && tp.ramos[0].peso === 5 && tp.ramos[0].nota === "pregão e concorrência" && tp.ramos[1].peso === 3, "N7h o exemplo do proprio prompt e' lido pelo app (1 topico, 2 ramos, peso e nota): " + JSON.stringify(tp.ramos));
+    /* ingles: mesmo bloco, antes do SYLLABUS, numerado 9 */
+    api.setLanguage("en");
+    const en = api.edPromptEdital(true), enBase = api.t("ed_prompt");
+    ok(/\n9\. BRANCHES/.test(en) && en.indexOf("BRANCHES") < en.indexOf("\n\nSYLLABUS:") && !/\n1b\./.test(enBase) && en.replace("\n" + api.t("ed_prompt_ramos", { n: 9 }), "") === enBase, "N7i em ingles o bloco entra antes do SYLLABUS, numerado 9");
+    api.setLanguage("pt");
+
+    /* a caixa do dialogo: marcada, o botao copia o prompt com ramos; desmarcada, o de sempre; abrir de novo desmarca */
+    api.hubIniciar();
+    api.hubNovo();
+    const cx = api.$("edNovoPedirRamos");
+    ok(cx && cx.checked === false, "N7j a caixa existe e comeca desmarcada");
+    janela.__area = "";
+    api.$("btnEdNovoPrompt").onclick();
+    ok(janela.__area === base && api.$("edNovoConf").textContent === api.t("ed_novo_prompt_ok"), "N7k desmarcada: copia o prompt de sempre e diz isso");
+    cx.checked = true;
+    api.$("btnEdNovoPrompt").onclick();
+    ok(janela.__area === com && api.$("edNovoConf").textContent === api.t("ed_novo_prompt_ok_ramos") && /ramifica/.test(api.$("edNovoConf").textContent), "N7l marcada: copia o prompt COM ramos e o aviso diz que pediu ramificacoes");
+    api.hubNovo();
+    ok(api.$("edNovoPedirRamos").checked === false, "N7m abrir o dialogo de novo desmarca a caixa");
+    /* colar a resposta com ramos: a conferencia ao vivo conta os ramos */
+    api.$("edNovoPlano").value = "@ Direito :: 5\n+ Licitações :: 5\n++ Modalidades :: 5\n++ Fase interna :: 3\n+ Contratos :: 4";
+    api.$("edNovoPlano").oninput();
+    ok(/1 disciplina\(s\), 2 tópico\(s\), 2 ramo\(s\)/.test(api.$("edNovoConf").textContent), "N7n a conferencia ao vivo conta os ramos: " + api.$("edNovoConf").textContent);
+    api.$("edNovoPlano").value = "@ Direito :: 5\n+ Licitações :: 5";
+    api.$("edNovoPlano").oninput();
+    ok(!/ramo/.test(api.$("edNovoConf").textContent) && /1 disciplina\(s\), 1 tópico\(s\)/.test(api.$("edNovoConf").textContent), "N7o sem ramos a conferencia e' a de sempre");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

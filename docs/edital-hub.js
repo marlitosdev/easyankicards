@@ -1009,11 +1009,26 @@ function hubNovo() {
   v("edNovoF2Nome", ""); v("edNovoF2Prova", ""); v("edNovoPlano", "");
   const f2 = document.getElementById("edNovoF2cx");
   if (f2) f2.open = false;
+  const pr = document.getElementById("edNovoPedirRamos");
+  if (pr) pr.checked = false;
   const conf = document.getElementById("edNovoConf");
   if (conf) conf.textContent = "";
   abrirModal("dlgEdNovo");
   const nome = document.getElementById("edNovoNome");
   if (nome && nome.select) { try { nome.focus(); nome.select(); } catch (e) {} }
+}
+
+/* O prompt do edital para a IA. Com `comRamos`, ganha o bloco de regras de ramificação ("++ Ramo :: peso :: nota"),
+ * numerado a seguir à última regra e colocado ANTES do exemplo/do edital — sem a caixa, é o ed_prompt de sempre. O ponto de
+ * inserção é o primeiro "\n\nEXEMPLO DE SAÍDA:" / "\n\nSYLLABUS:" / "\n\nEDITAL:", que existem nos dois idiomas. */
+function edPromptEdital(comRamos) {
+  const base = t("ed_prompt");
+  if (!comRamos) return base;
+  const corte = base.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
+  if (corte < 0) return base;
+  let n = 0;
+  base.slice(0, corte).replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
+  return base.slice(0, corte) + "\n" + t("ed_prompt_ramos", { n: n + 1 }) + base.slice(corte);
 }
 
 /* Monta o texto do edital a partir da caixa. Separada de quem a mostra
@@ -1137,9 +1152,10 @@ function hubIniciar() {
      * pessoa procurá-lo noutra tela é onde ela desiste e cria o edital
      * vazio */
     np.onclick = () => {
-      try { navigator.clipboard.writeText(t("ed_prompt")); } catch (e) {}
+      const comRamos = !!(document.getElementById("edNovoPedirRamos") || {}).checked;
+      try { navigator.clipboard.writeText(edPromptEdital(comRamos)); } catch (e) {}
       const c = document.getElementById("edNovoConf");
-      if (c) c.textContent = t("ed_novo_prompt_ok");
+      if (c) c.textContent = t(comRamos ? "ed_novo_prompt_ok_ramos" : "ed_novo_prompt_ok");
     };
   }
   /* conferência viva: dizer quantas disciplinas o texto colado tem ANTES
@@ -1156,7 +1172,8 @@ function hubIniciar() {
       const nd = (r2.disciplinas || []).length;
       const nt = (r2.disciplinas || []).reduce((a, d) => a + d.topicos.length, 0);
       const ign = (r2.achados || []).filter((a) => a.tipo === "linha_ignorada").length;
-      c.textContent = t("ed_novo_conf", { d: nd, t: nt, i: ign });
+      const nr = (r2.disciplinas || []).reduce((a, d) => a + d.topicos.reduce((b, tp) => b + (tp.ramos ? tp.ramos.length : 0), 0), 0);
+      c.textContent = nr ? t("ed_novo_conf_r", { d: nd, t: nt, r: nr, i: ign }) : t("ed_novo_conf", { d: nd, t: nt, i: ign });
     };
   }
   const rc = document.getElementById("btnEdBancRecolher");
