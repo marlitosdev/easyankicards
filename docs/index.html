@@ -4334,6 +4334,46 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-onde-lin{font-size:11px;opacity:.7}
 .ger-barra{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .ger-ocultar{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sutil);cursor:pointer;white-space:nowrap}
+/* ---- EDITAL VERTICALIZADO: a folha é "papel" (cores fixas, não as do tema): a prévia e a impressão são a mesma coisa ---- */
+dialog.ev-dlg{width:min(980px,96vw);max-width:min(980px,96vw)}
+.ev-opcs{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin:6px 0}
+.ev-opc{display:flex;align-items:center;gap:6px;font-size:13px}
+.ev-papel{background:#fff;color:#111;border-radius:8px;padding:14px;max-height:52vh;overflow:auto;border:1px solid var(--borda)}
+.ev-folha{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111}
+.ev-folha,.ev-folha *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ev-cab{margin:0 0 12px}
+.ev-tit{margin:0;font-size:20px;letter-spacing:.3px;color:#111}
+.ev-sub{font-size:11px;color:#555;margin-top:2px}
+.ev-disc{margin:0 0 16px}
+.ev-faixa{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#000;color:#fff;border-radius:10px;padding:9px 16px;break-after:avoid}
+.ev-faixa-nome{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+.ev-faixa-tag{font-size:10.5px;font-weight:700;text-align:right}
+.ev-tab{width:100%;border-collapse:collapse;margin-top:6px}
+.ev-tab th{background:#e7e7e7;color:#333;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;padding:6px 4px}
+.ev-tab td{padding:5px 4px;border-bottom:1px solid #ddd;vertical-align:middle}
+.ev-tab tbody tr:nth-child(even){background:#f5f5f5}
+.ev-lin{break-inside:avoid}
+.ev-n{width:38px;text-align:center;color:#555;font-weight:700}
+.ev-c{text-align:left}
+.ev-tab th.ev-c{padding-left:6px}
+.ev-k{width:66px;text-align:center}
+.ev-cx{display:inline-block;width:15px;height:15px;border:1.5px solid #333;border-radius:3px;background:#fff;color:#111;font-size:12px;font-weight:800;line-height:12px;text-align:center}
+.ev-cx-ok{background:#222;color:#fff}
+.ev-pai td.ev-c{font-weight:700}
+.ev-pai td.ev-n{color:#c0152a}
+.ev-ramo td.ev-c{padding-left:16px}
+.ev-motivo{display:block;font-size:10px;font-weight:400;color:#666}
+.ev-pulado td{color:#999}
+.ev-rodape{font-size:9.5px;color:#888;text-align:right;margin-top:6px}
+#edVertImpressao{display:none}
+@page{margin:10mm}
+@media print{
+  body.eac-imprimindo > *:not(#edVertImpressao){display:none!important}
+  body.eac-imprimindo #edVertImpressao{display:block}
+  html.tem-modal{overflow:visible!important}
+  body.eac-imprimindo{background:#fff!important;height:auto!important;overflow:visible!important}
+}
+
 /* ---- DOMÍNIO DOS ASSUNTOS: níveis de confiança (verde · amarelo · azul · vermelho · cinza) ---- */
 dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);height:min(92vh,920px);max-height:94vh;margin:auto;overflow:hidden}
 .dom-n-verde{background:#2e9e5b;color:#fff}
@@ -5257,6 +5297,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <span class="ed-aberto-nome" id="edNomeAberto"></span>
       <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
       <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
+      <button class="btn-min" id="btnEdVert" data-i18n="vert_btn"></button>
       <button class="btn-min" id="btnEdRenomear" data-i18n="hub_renomear"></button>
     </div>
   <div class="duas-colunas">
@@ -8141,6 +8182,31 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="hor-corpo" id="horCorpo"></div>
 </dialog>
 
+<!-- EDITAL VERTICALIZADO: a folha do edital aberto (faixa preta por disciplina + tabela com caixinhas) para imprimir ou salvar em PDF -->
+<dialog id="dlgEdVert" class="ui-modal ev-dlg">
+  <div class="cov-cab">
+    <h3 data-i18n="vert_tit"></h3>
+    <button type="button" class="qs-x" id="btnEdVertX" aria-label="Fechar">✕</button>
+  </div>
+  <p class="nota" data-i18n="vert_ajuda"></p>
+  <div class="ev-opcs">
+    <label class="ev-opc"><span data-i18n="vert_ordem"></span>
+      <select id="evOrdem"><option value="peso" data-i18n="vert_ordem_peso"></option><option value="edital" data-i18n="vert_ordem_edital"></option></select></label>
+    <label class="ev-opc"><input type="checkbox" id="evRamos" checked> <span data-i18n="vert_ramos"></span></label>
+    <label class="ev-opc"><input type="checkbox" id="evMotivo"> <span data-i18n="vert_motivo"></span></label>
+    <label class="ev-opc"><input type="checkbox" id="evProgresso"> <span data-i18n="vert_progresso"></span></label>
+    <label class="ev-opc"><input type="checkbox" id="evFaixa" checked> <span data-i18n="vert_faixa"></span></label>
+    <label class="ev-opc" id="evFase2Cx" hidden><input type="checkbox" id="evFase2"> <span data-i18n="vert_fase2"></span></label>
+  </div>
+  <p class="nota" id="evResumo"></p>
+  <div class="ev-papel" id="evPrevia"></div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn btn-azul" id="btnEdVertImprimir" data-i18n="vert_imprimir"></button>
+    <button type="button" class="btn btn-cinza" id="btnEdVertFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<div id="edVertImpressao" aria-hidden="true"></div>
+
 <!-- DOMÍNIO DOS ASSUNTOS: o quanto EU confio no que estudei (estudo, questões, cartões e autoavaliação), por disciplina, tópico e ramo -->
 <dialog id="dlgDominio" class="ui-modal dom-dlg">
   <div class="cov-cab">
@@ -8681,6 +8747,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cobertura-cartoes.js"></script>
 <script src="dominio-assunto.js"></script>
 <script src="dominio-ui.js"></script>
+<script src="edital-vert-ui.js"></script>
 <script src="dominio-evolucao.js"></script>
 <script src="banca-alvo.js"></script>
 <script src="horas-assunto.js"></script>
