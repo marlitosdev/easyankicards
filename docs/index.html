@@ -244,6 +244,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
            font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.45}
 .dlg-rodape{display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap;justify-content:center;
             border-top:1px solid rgba(128,128,128,.25)}
+/* a caixa "pedir também as ramificações" ocupa a linha toda acima dos botões do Novo edital */
+.ednovo-ramos{flex:1 1 100%;display:flex;align-items:center;justify-content:center;gap:6px;margin:0}
 /* A ALÇA DO RODAPÉ RECOLHIDO: uma linha fina, não outro botão grande
    competindo com "próxima" pelo polegar. */
 .qs-rodape-alca{display:flex;justify-content:center;margin-top:2px}
@@ -6455,6 +6457,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <p class="nota" id="edNovoConf"></p>
   <div class="dlg-rodape">
+    <label class="nota ednovo-ramos"><input type="checkbox" id="edNovoPedirRamos"> <span data-i18n="ed_novo_ramos"></span></label>
     <button class="btn-min" id="btnEdNovoPrompt" data-i18n="ed_prompt_btn"
       title="Copia o prompt para a IA montar a lista de disciplinas e tópicos a partir do edital. Cole a resposta no campo acima."></button>
     <button class="btn btn-verde" id="btnEdNovoCriar" data-i18n="ed_novo_criar"
