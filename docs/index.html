@@ -4168,6 +4168,12 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
 .ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
 /* DATA E NOME: obrigatórios, com o erro escrito debaixo do campo */
+/* PLANO COM PROBLEMAS DE LEITURA: a faixa que avisa que os números abaixo são provisórios */
+.ed-aviso-leitura{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:8px 0;padding:8px 12px;border-radius:10px;border:1px solid var(--atencao);background:color-mix(in srgb,var(--atencao) 14%,transparent)}
+.ed-aviso-leitura.leit-grave{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 14%,transparent)}
+.ed-aviso-leitura-tit{flex:1 1 100%;font-weight:700;font-size:13px}
+.ed-aviso-leitura-sub{flex:1 1 220px;font-size:12px;line-height:1.4}
+.ed-acao-destaque{box-shadow:0 0 0 3px color-mix(in srgb,var(--atencao) 55%,transparent)}
 .ednovo-horas{max-width:260px}
 .ednovo-horas .nota{text-transform:none;letter-spacing:0;font-weight:400}
 .ednovo-obrig{font-size:10.5px;font-weight:700;color:var(--atencao);text-transform:none;letter-spacing:0}

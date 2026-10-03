@@ -1060,14 +1060,15 @@ function hubNovoEstadoPlano(txt) {
   const r = lerEdital("# x\n" + corpo);
   const ach = r.achados || [];
   const cont = (tipo) => ach.filter((a) => a.tipo === tipo).length;
-  const disc = (r.disciplinas || []).map((d) => ({
-    nome: d.nome, topicos: d.topicos.length,
-    modelo: edNomeDeModelo(d.nome) || d.topicos.some((x) => edNomeDeModelo(x.nome)),
+  /* o mesmo nome escrito duas vezes é UMA disciplina (com a soma dos tópicos e quantas vezes apareceu) */
+  const disc = edAgruparDisciplinas(r).map((g) => ({
+    nome: g.nome, topicos: g.topicos, vezes: g.vezes,
+    modelo: edNomeDeModelo(g.nome) || (r.disciplinas || []).some((d) => edNormalizar(d.nome) === edNormalizar(g.nome) && d.topicos.some((x) => edNomeDeModelo(x.nome))),
   }));
   const info = Object.assign(base, {
     d: disc.length, t: disc.reduce((a, d) => a + d.topicos, 0),
     r: (r.disciplinas || []).reduce((a, d) => a + d.topicos.reduce((b, tp) => b + (tp.ramos ? tp.ramos.length : 0), 0), 0),
-    ign: cont("linha_ignorada"), rep: cont("disciplina_repetida"), sem: disc.filter((d) => !d.topicos).length, disc,
+    ign: cont("linha_ignorada"), rep: disc.filter((d) => d.vezes > 1).length, sem: disc.filter((d) => !d.topicos).length, disc,
   });
   const susp = edTextoSuspeito(null, r);
   if (susp) return Object.assign(info, { estado: susp.tipo, nomes: susp.nomes || [] });
@@ -1200,9 +1201,9 @@ function hubNovoPintar() {
   if (mostrar) {
     est.disc.slice(0, 12).forEach((d) => {
       const s = document.createElement("span");
-      s.className = "ednovo-chip" + (d.modelo ? " chip-erro" : (!d.topicos ? " chip-atencao" : ""));
-      s.textContent = d.nome + " · " + d.topicos;
-      s.title = d.modelo ? t("ed_novo_chip_modelo") : (!d.topicos ? t("ed_novo_chip_vazia") : "");
+      s.className = "ednovo-chip" + (d.modelo ? " chip-erro" : (!d.topicos || d.vezes > 1 ? " chip-atencao" : ""));
+      s.textContent = d.nome + " · " + d.topicos + (d.vezes > 1 ? " ×" + d.vezes : "");
+      s.title = d.modelo ? t("ed_novo_chip_modelo") : (!d.topicos ? t("ed_novo_chip_vazia") : (d.vezes > 1 ? t("ed_novo_chip_rep", { n: d.vezes }) : ""));
       ch.append(s);
     });
     if (est.disc.length > 12) {

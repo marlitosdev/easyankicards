@@ -1111,7 +1111,7 @@ function rodar() {
     /* "esta perguntando alguma coisa agora?" — sem isto nao da para
      * exigir que uma acao NAO pergunte, so que ela pergunte. */
     uiPerguntando: () => !!_uiResolve,
-    edFaseAtual, edJanela, edDataPlanejada, hubNovoTexto, hubNovoCriar, edPromptEdital, setLanguage, edTextoSuspeito, edEhPrompt, edNomeDeModelo, edTirarPrompt, hubNovoEstadoPlano, hubNovoPintar, hubNovoModo, hubNovoPrevisto, hubNovoValidar, hubNovoCriarConfirmado, hubNovoMontarPrompt, get editaisAtuais() { return editais; }, edVerticalizar, edVertFatias, evAbrir, evPintar, evImprimir, evFolha, evMontar, evLerOpc,
+    edFaseAtual, edJanela, edDataPlanejada, hubNovoTexto, hubNovoCriar, edPromptEdital, setLanguage, edTextoSuspeito, edEhPrompt, edNomeDeModelo, edTirarPrompt, edAgruparDisciplinas, edNomesUnicos, edQualidadeLeitura, edUnirRepetidas, edAvisoLeitura, hubNovoEstadoPlano, hubNovoPintar, hubNovoModo, hubNovoPrevisto, hubNovoValidar, hubNovoCriarConfirmado, hubNovoMontarPrompt, get editaisAtuais() { return editais; }, edVerticalizar, edVertFatias, evAbrir, evPintar, evImprimir, evFolha, evMontar, evLerOpc,
     difLer, difSalvar, difRecarregar, difChave, difDefinir, difApagar, difDe, difFator,
     difMapaFatores, difResumo, difDoHumor, difDias, DIF_VALIDADE, DIF_NIVEIS,
     regDifAtual, regDifPintar, difSeloDe, priorizar,
