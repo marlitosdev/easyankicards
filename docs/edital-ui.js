@@ -1330,66 +1330,185 @@ const DIARIO_PAGINA = 60;
 let diarioMostrar = DIARIO_PAGINA;
 let diarioBusca = "";
 
+/* ---- O DIÁRIO: filtros (D2), dia a dia e tela ampliada (D1) ---------------------------------------------------- */
+let diarioDisc = "";
+let diarioCc = "";
+let diarioTipo = "";
+let diarioDe = "";
+let diarioAte = "";
+let diarioAmplo = false;
+const DIARIO_SEM_EDITAL = "__sem__";
+
+/* PURA. Filtra o diário (ordem original) e devolve [{x, idx}] do mais recente para o mais antigo.
+ * f = { dias, de, ate, disc, cc, tipo, q }. "de/ate" (AAAA-MM-DD, inclusivos) mandam no período: valendo qualquer um
+ * dos dois, os "últimos N dias" saem de cena — um intervalo escolhido à mão não deve ser cortado por outro. */
+function diarioFiltrar(entradas, f) {
+  const q = String(f.q || "").trim().toLowerCase();
+  const faixa = !!(f.de || f.ate);
+  const lim = !faixa && f.dias ? Date.now() - f.dias * 86400000 : 0;
+  return (entradas || []).map((x, idx) => ({ x, idx })).reverse().filter(({ x }) => {
+    const d = String(x.d);
+    if (faixa) {
+      if (f.de && d < f.de) return false;
+      if (f.ate && d > f.ate) return false;
+    } else if (lim && !(new Date(d + "T00:00:00") >= lim)) return false;
+    if (f.disc && x.disc !== f.disc) return false;
+    if (f.cc && (x.cc || "") !== (f.cc === DIARIO_SEM_EDITAL ? "" : f.cc)) return false;
+    if (f.tipo && x.a !== f.tipo) return false;
+    if (!q) return true;
+    return ((x.n || "") + " " + (x.disc || "") + " " + (x.cc || "") + " " + (x.obs || "")).toLowerCase().includes(q);
+  });
+}
+
+/* PURA. Os números do que está FILTRADO (a marca "desmarcou" não conta como estudo). */
+function diarioTotais(itens) {
+  const v = (itens || []).map((i) => i.x).filter((x) => x.a !== "pendente");
+  const q = v.reduce((a, x) => (x.q && x.q.feitas ? { n: a.n + x.q.feitas, c: a.c + (x.q.certas || 0) } : a), { n: 0, c: 0 });
+  return {
+    minutos: v.reduce((a, x) => a + (x.m || 0), 0),
+    eventos: v.length,
+    topicos: new Set(v.map((x) => x.c)).size,
+    revisoes: v.filter((x) => x.a === "revisado").length,
+    dias: new Set(v.map((x) => x.d)).size,
+    qn: q.n, qc: q.c,
+  };
+}
+
+function diarioFiltrosAtivos() { return !!(diarioBusca.trim() || diarioDisc || diarioCc || diarioTipo || diarioDe || diarioAte); }
+
+function diarioLimparFiltros() {
+  diarioBusca = ""; diarioDisc = ""; diarioCc = ""; diarioTipo = ""; diarioDe = ""; diarioAte = "";
+  if ($("diarioBusca")) $("diarioBusca").value = "";
+  if ($("diarioDe")) $("diarioDe").value = "";
+  if ($("diarioAte")) $("diarioAte").value = "";
+}
+
+/* dia da semana + dia/mês no idioma do aparelho; se algo falhar, a data crua */
+function diarioDiaTexto(d) {
+  try {
+    const dt = new Date(String(d) + "T00:00:00");
+    if (isNaN(dt.getTime())) return String(d);
+    return dt.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "2-digit" });
+  } catch (e) { return String(d); }
+}
+
 function diarioPintarPeriodos() {
   const cx = $("diarioPeriodos");
   if (!cx) return;
   cx.innerHTML = "";
+  const faixa = !!(diarioDe || diarioAte);
   DIARIO_PERIODOS.forEach((d) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "di-per" + (d === diarioPeriodo ? " ativa" : "");
+    /* com um intervalo de datas valendo, nenhum "últimos N dias" está em uso */
+    b.className = "di-per" + (d === diarioPeriodo && !faixa ? " ativa" : "");
     b.textContent = t("ed_diario_per_" + d);
-    b.onclick = () => { diarioPeriodo = d; diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
+    b.onclick = () => { diarioPeriodo = d; diarioDe = ""; diarioAte = ""; diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
     cx.append(b);
   });
+}
+
+/* preenche os três seletores com o que EXISTE no diário (não com todas as disciplinas do edital) */
+function diarioPintarFiltros() {
+  const preencher = (id, vazio, opcoes, atual) => {
+    const s = $(id);
+    if (!s) return "";
+    s.innerHTML = "";
+    const o0 = document.createElement("option");
+    o0.value = ""; o0.textContent = vazio;
+    s.append(o0);
+    opcoes.forEach(([v, rot]) => {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = rot;
+      s.append(o);
+    });
+    const ok = !atual || opcoes.some(([v]) => v === atual);
+    s.value = ok ? atual : "";
+    return ok ? atual : "";
+  };
+  const discs = [...new Set(edDiario.map((x) => x.disc).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const ccs = [...new Set(edDiario.map((x) => x.cc || ""))].sort((a, b) => a.localeCompare(b));
+  diarioDisc = preencher("diarioDisc", t("ed_diario_f_disc"), discs.map((d) => [d, d]), diarioDisc);
+  diarioCc = preencher("diarioCc", t("ed_diario_f_cc"), ccs.map((c) => [c || DIARIO_SEM_EDITAL, c || t("ed_sem_concurso")]), diarioCc);
+  diarioTipo = preencher("diarioTipo", t("ed_diario_f_tipo"), ["feito", "revisado", "pendente"].map((a) => [a, t("ed_acao_" + a)]), diarioTipo);
+  if ($("diarioDe")) $("diarioDe").value = diarioDe;
+  if ($("diarioAte")) $("diarioAte").value = diarioAte;
+  const lim = $("btnDiarioLimpar");
+  if (lim) lim.hidden = !diarioFiltrosAtivos();
+}
+
+/* tela ampliada: o mesmo diálogo, em tela cheia (o padrão do painel do plano) */
+function diarioAplicarAmplo() {
+  const dlg = $("dlgDiario");
+  if (dlg && dlg.classList) dlg.classList.toggle("di-cheia", diarioAmplo);
+  const bt = $("btnDiarioAmpliar");
+  if (bt) {
+    bt.textContent = t(diarioAmplo ? "ed_diario_reduzir" : "ed_diario_ampliar");
+    bt.title = t(diarioAmplo ? "ed_diario_reduzir_aj" : "ed_diario_ampliar_aj");
+  }
 }
 
 function abrirDiario() {
   const lista = $("diarioLista");
   lista.innerHTML = "";
-  const st = estatisticasDiario(diarioPeriodo);
-  /* HORAS NA FRENTE, com rótulo. Antes elas apareciam soltas no meio de
-   * "7 tópicos · 0 revisões · 1h30 · 3 registros": um número sem nome,
-   * espremido entre outros. */
-  const med = st.dias ? Math.round(st.minutos / st.dias) : 0;
-  $("diarioResumo").textContent = t("ed_diario_resumo", {
-    h: horasTexto(st.minutos),
-    p: diarioPeriodo ? t("ed_diario_per_" + diarioPeriodo) : t("ed_diario_per_0"),
-    t: st.topicos, r: st.revisoes, e: st.eventos,
-    d: st.dias, med: horasTexto(med),
-  });
   diarioPintarPeriodos();
+  diarioPintarFiltros();
+  diarioAplicarAmplo();
   if (!edDiario.length) {
     const p = document.createElement("div");
     p.className = "nota"; p.textContent = t("ed_diario_vazio");
     lista.append(p);
   }
   /* mais recente primeiro: o registro errado costuma ser o que acabou de
-   * ser feito, e obrigar a rolar até o fim para achá-lo seria hostil */
-  /* Filtra e LIMITA antes de desenhar. Um diário de meses tem milhares de
-   * registros; montar todos de uma vez trava a abertura da janela. */
-  const q = String(diarioBusca || "").trim().toLowerCase();
-  const todos = edDiario.map((x, idx) => ({ x, idx })).reverse()
-    .filter(({ x }) => {
-      if (diarioPeriodo) {
-        const lim = Date.now() - diarioPeriodo * 86400000;
-        if (!(new Date(String(x.d) + "T00:00:00") >= lim)) return false;
-      }
-      if (!q) return true;
-      return ((x.n || "") + " " + (x.disc || "") + " " + (x.cc || ""))
-        .toLowerCase().includes(q);
-    });
+   * ser feito, e obrigar a rolar até o fim para achá-lo seria hostil.
+   * Filtra e LIMITA antes de desenhar: um diário de meses tem milhares de
+   * registros, e montar todos de uma vez trava a abertura da janela. */
+  const todos = diarioFiltrar(edDiario, { dias: diarioPeriodo, de: diarioDe, ate: diarioAte, disc: diarioDisc, cc: diarioCc, tipo: diarioTipo, q: diarioBusca });
+  const tot = diarioTotais(todos);
+  /* HORAS NA FRENTE, com rótulo. Antes elas apareciam soltas no meio de
+   * "7 tópicos · 0 revisões · 1h30 · 3 registros": um número sem nome,
+   * espremido entre outros. Agora o resumo acompanha o FILTRO. */
+  const med = tot.dias ? Math.round(tot.minutos / tot.dias) : 0;
+  const perTxt = (diarioDe || diarioAte)
+    ? t("ed_diario_per_faixa", { de: diarioDe || "…", ate: diarioAte || "…" })
+    : t("ed_diario_per_" + (diarioPeriodo || 0));
+  $("diarioResumo").textContent = t("ed_diario_resumo", {
+    h: horasTexto(tot.minutos), p: perTxt, t: tot.topicos, r: tot.revisoes, e: tot.eventos, d: tot.dias, med: horasTexto(med),
+  }) + (tot.qn ? " · " + t("ed_diario_resumo_q", { c: tot.qc, n: tot.qn, pct: Math.round((tot.qc / tot.qn) * 100) }) : "");
+  /* o total de cada DIA vem de todos os registros do dia, não só dos que a página já desenhou */
+  const porDia = {};
+  todos.forEach(({ x }) => {
+    if (x.a === "pendente") return;
+    const g = porDia[x.d] || (porDia[x.d] = { m: 0, n: 0 });
+    g.m += x.m || 0; g.n++;
+  });
   const visiveis = todos.slice(0, diarioMostrar);
+  let diaAtual = null;
   visiveis.forEach(({ x, idx }) => {
+    if (x.d !== diaAtual) {
+      diaAtual = x.d;
+      const cab = document.createElement("div");
+      cab.className = "di-dia";
+      const nomeDia = document.createElement("span");
+      nomeDia.className = "di-dia-nome"; nomeDia.textContent = diarioDiaTexto(x.d);
+      nomeDia.title = x.d;
+      const g = porDia[x.d];
+      const totDia = document.createElement("span");
+      totDia.className = "di-dia-tot";
+      totDia.textContent = g ? t("ed_diario_dia_tot", { h: horasTexto(g.m), n: g.n }) : "";
+      cab.append(nomeDia, totDia);
+      lista.append(cab);
+    }
     const li = document.createElement("div");
-    li.className = "diario-item";
-    const q = document.createElement("span");
-    q.className = "di-data"; q.textContent = x.d;
+    /* A COR É UM ACENTO, NÃO UM CRACHÁ: uma barrinha na lateral diz a ação; o texto continua legível */
+    li.className = "diario-item di-b-" + x.a;
     const ac = document.createElement("span");
     ac.className = "di-acao acao-" + x.a;
     ac.textContent = t("ed_acao_" + x.a);
     const nm = document.createElement("span");
     nm.className = "di-nome"; nm.textContent = x.n;
+    const tempo = document.createElement("span");
+    tempo.className = "di-tempo"; tempo.textContent = x.m ? horasTexto(x.m) : "";
     const ds = document.createElement("span");
     ds.className = "di-disc";
     ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
@@ -1419,19 +1538,19 @@ function abrirDiario() {
      * direita da informação. */
     const cima = document.createElement("div");
     cima.className = "di-cima";
-    cima.append(q, ac, nm);
+    cima.append(nm, tempo);
     const meio = document.createElement("div");
     meio.className = "di-meio";
-    meio.append(ds);
+    meio.append(ds, ac);
     /* O QUE O REGISTRO DIZ DE VERDADE.
      * A linha mostrava data, ação, tópico e disciplina — e escondia
-     * justamente o que se quer saber ao reler o diário: quanto tempo foi,
-     * de que jeito se estudou, e como foi nas questões. Sem isso, "estudou
-     * Leis Orçamentárias" não distingue vinte minutos de três horas. */
+     * justamente o que se quer saber ao reler o diário: de que jeito se
+     * estudou e como foi nas questões. Sem isso, "estudou Leis
+     * Orçamentárias" não distingue leitura de uma bateria de questões.
+     * (O tempo já está no alto da linha.) */
     const det = document.createElement("div");
     det.className = "di-det";
     const pedacos = [];
-    if (x.m) pedacos.push(horasTexto(x.m));
     const formas = (x.f && x.f.length ? x.f : []).map((f) => t("ed_forma_" + f))
       .filter(Boolean);
     if (formas.length) pedacos.push(formas.join(" + "));
@@ -3934,9 +4053,23 @@ function edIniciar() {
     const b = $("barraDesfazerReg"); if (b) b.hidden = true;
   };
   if ($("btnDiarioTopo")) $("btnDiarioTopo").onclick = () => {
-    diarioMostrar = DIARIO_PAGINA; diarioBusca = ""; 
-    if ($("diarioBusca")) $("diarioBusca").value = "";
+    diarioMostrar = DIARIO_PAGINA;
+    diarioLimparFiltros();
     abrirDiario();
+  };
+  /* filtros do diário: qualquer mudança volta à primeira página */
+  [["diarioDisc", (v) => { diarioDisc = v; }], ["diarioCc", (v) => { diarioCc = v; }], ["diarioTipo", (v) => { diarioTipo = v; }],
+   ["diarioDe", (v) => { diarioDe = v; }], ["diarioAte", (v) => { diarioAte = v; }]].forEach(([id, set]) => {
+    if (!$(id)) return;
+    $(id).onchange = () => { set($(id).value); diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
+  });
+  dicaLigar("btnDiarioAjuda", "ed_diario_ajuda");
+  if ($("btnDiarioLimpar")) $("btnDiarioLimpar").onclick = () => { diarioLimparFiltros(); diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
+  try { diarioAmplo = localStorage.getItem("eac_diario_amplo") === "1"; } catch (e) { diarioAmplo = false; }
+  if ($("btnDiarioAmpliar")) $("btnDiarioAmpliar").onclick = () => {
+    diarioAmplo = !diarioAmplo;
+    try { localStorage.setItem("eac_diario_amplo", diarioAmplo ? "1" : "0"); } catch (e) {}
+    diarioAplicarAmplo();
   };
   if ($("diarioBusca")) $("diarioBusca").addEventListener("input", () => {
     diarioBusca = $("diarioBusca").value;

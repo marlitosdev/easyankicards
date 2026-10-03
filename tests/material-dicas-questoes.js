@@ -1054,7 +1054,7 @@ function novo() {
     f: ["resumo", "questoes"], hu: "boa", q: { feitas: 20, certas: 17 },
     obs: "Errei as de restos a pagar." }]);
   api.abrirDiario();
-  const li = api.$("diarioLista").children[0];
+  const li = api.$("diarioLista").children.find((c) => /diario-item/.test(c.className || ""));
   const txt = li.textContent || "";
   ok("o diário mostra quanto tempo foi", /1h35/.test(txt));
   ok("mostra de que jeito se estudou", /Resumo/.test(txt) && /Quest/.test(txt));
@@ -1065,7 +1065,7 @@ function novo() {
   /* registro sem esses dados nao pode inventar nada */
   api.diarioPor([{ d: diasAtras(1), c: "d›t", disc: "D", n: "T", a: "feito" }]);
   api.abrirDiario();
-  const li2 = api.$("diarioLista").children[0];
+  const li2 = api.$("diarioLista").children.find((c) => /diario-item/.test(c.className || ""));
   ok("registro antigo, sem tempo nem forma, não inventa nada",
     !/undefined|NaN|null/.test(li2.textContent || ""));
 }
