@@ -2402,6 +2402,143 @@ async function testes() {
     }
   }
 
+  /* ---- G35: R4 — "mover os marcados para…": o mesmo destino do arrastar, aplicado de uma vez a TODAS as pastas marcadas,
+   * so' nesta exportacao (a Biblioteca nunca muda) ---- */
+  {
+    const ME = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5\n+ Taxas :: 3\n@ Direito Financeiro :: 4\n+ Receita Pública :: 4");
+      a.edCriar("TCE-PE", "# TCE-PE | prova: 2027-08-01 | horas: 20\n@ Direito Financeiro :: 5\n+ Receita Pública :: 5\n+ Créditos Adicionais :: 3");
+      a.$("editor").value = "";
+      const k = (d, t) => a.matChave(d, t);
+      const cs = (pref, n) => Array.from({ length: n }, (_, i) => pref + " " + i + "? :: Resposta " + pref + i + " zz" + pref + i).join("\n");
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "ISS"), cs("ISS", 3), { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.matGravarCartoes(k("Direito Financeiro", "Receita Pública"), cs("Receita", 2), { disciplina: "Direito Financeiro", topico: "Receita Pública", concurso: "TCE-PE" });
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.$("gerExpSemRep").checked = false;
+      a.$("gerExpNome").value = "Raiz"; a.$("gerExpNome").oninput();
+      return { a, k, iss: k("Sistema Tributário Brasileiro", "ISS"), iptu: k("Sistema Tributário Brasileiro", "IPTU"), taxas: k("Sistema Tributário Brasileiro", "Taxas"), rec: k("Direito Financeiro", "Receita Pública") };
+    };
+    const marcar = (a, ...chs) => { chs.forEach((c) => a.gerMarcarExport(c, true)); a.gerPintar(); };
+    const escolher = (a, f) => { const i = a.gerDestinosCacheAtual().findIndex(f); a.$("gerExpMoverSel").selectedIndex = i; return i; };
+    const capturar = async (a, formato) => { const c = {}; c.r = await a.gerAcaoExportar(formato || "apkg", { confirmar: async () => true, construir: async (cards, raiz, est, tit, al, extras) => { c.cards = cards; c.extras = extras; return new Uint8Array(1); }, entregar: async (b) => { c.bytes = b; } }); return c; };
+
+    {
+      const { a, iss, iptu, taxas } = ME();
+      /* a lista de destinos: edital (raiz), disciplina e topico, com o caminho completo no nome; a bancada nunca entra */
+      const l = a.gerExpDestinosLista();
+      ok(l.some((d) => d.tipo === "raiz" && d.edital === "ISS Caruaru Auditor" && d.nome === "ISS Caruaru Auditor"), "G35a a lista tem o edital como destino (raiz)");
+      ok(l.some((d) => d.tipo === "disc" && d.disciplina === "Direito Financeiro" && d.edital === "ISS Caruaru Auditor" && d.nome === "ISS Caruaru Auditor › Direito Financeiro"), "G35b a lista tem a disciplina como destino, com o caminho completo");
+      const top = l.find((d) => d.tipo === "top" && d.chave === iptu && d.edital === "ISS Caruaru Auditor");
+      ok(top && top.nome === "ISS Caruaru Auditor › Sistema Tributário Brasileiro › IPTU" && top.disciplina === "Sistema Tributário Brasileiro" && top.topico === "IPTU", "G35c a lista tem o topico como destino, com a chave: " + JSON.stringify(top));
+      a.$("editor").value = "Pergunta da bancada? :: Resposta da bancada completa e boa";
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      ok(achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta")).some((e) => /^Bancada/.test(e.textContent.trim().replace(/^[▾▸]\s*/, ""))), "G35d (a bancada aparece na arvore, para o teste valer)");
+      ok(!a.gerExpDestinosLista().some((d) => d.tipo === "bancada" || /^Bancada/.test(d.nome)), "G35e mesmo com cartao na bancada, ela nao entra nos destinos");
+      a.$("editor").value = ""; a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      /* a caixa: desligada sem nada marcado, liga ao marcar */
+      ok(a.$("gerExpMoverSel").disabled === true && a.$("btnGerExpMover").disabled === true, "G35f sem nada marcado a caixa de mover fica desligada");
+      marcar(a, iss, taxas);
+      ok(a.$("gerExpMoverSel").disabled === false && a.$("btnGerExpMover").disabled === false, "G35g com algo marcado a caixa liga");
+      const antesRes = JSON.stringify(a.matResumosAtual());
+      /* mover ISS e Taxas (marcados) para dentro de IPTU: os dois passam a ir para o baralho de IPTU */
+      escolher(a, (d) => d.tipo === "top" && d.chave === iptu);
+      a.$("btnGerExpMover").onclick();
+      const mI = a.gerMoverParaExportAtual().get(iss), mT = a.gerMoverParaExportAtual().get(taxas);
+      ok(mI && mI.topico === "IPTU" && mI.disciplina === "Sistema Tributário Brasileiro" && mI.edital === "ISS Caruaru Auditor", "G35h ISS vai para o baralho de IPTU: " + JSON.stringify(mI));
+      ok(mT && mT.topico === "IPTU" && mT.disciplina === "Sistema Tributário Brasileiro", "G35i Taxas TAMBEM vai (o destino vale para TODOS os marcados de uma vez): " + JSON.stringify(mT));
+      ok(/2 tópico\(s\) movido\(s\) para/.test(a.$("gerExpMsg").textContent) && /IPTU/.test(a.$("gerExpMsg").textContent), "G35j a mensagem diz quantos foram e para onde: " + a.$("gerExpMsg").textContent);
+      ok(a.$("btnGerDesfazerExport").hidden === false, "G35k o 'desfazer movimentos' aparece");
+      /* o arquivo de verdade leva o destino; a Biblioteca nao muda */
+      const c = await capturar(a);
+      ok(c.cards.length === 3 && c.cards.every((x) => x.deck === "ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU"), "G35l no arquivo os cartoes do ISS vao para o baralho de IPTU: " + JSON.stringify(c.cards.map((x) => x.deck)));
+      const t = await capturar(a, "txt");
+      const lin = new TextDecoder().decode(t.bytes).split("\n").filter((x) => x && !x.startsWith("#"));
+      ok(lin.length === 3 && lin.every((x) => x.split("\t")[1] === "Raiz::ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU"), "G35m o .txt de verdade tambem: " + JSON.stringify(lin.map((x) => x.split("\t")[1])));
+      ok(JSON.stringify(a.matResumosAtual()) === antesRes && !a.gerTemRecibo(), "G35n a Biblioteca NAO mudou (nenhum recibo)");
+      /* o destino escolhido continua escolhido depois de repintar */
+      ok(a.gerDestinosCacheAtual()[a.$("gerExpMoverSel").selectedIndex].chave === iptu, "G35o o destino escolhido continua escolhido depois de repintar");
+      /* outro 'mover' ao mesmo lugar nao conta de novo */
+      a.$("btnGerExpMover").onclick();
+      ok(a.$("gerExpMsg").textContent === "", "G35p mover de novo para onde ja' estao nao conta nem diz nada: " + a.$("gerExpMsg").textContent);
+    }
+    /* o proprio destino marcado junto fica de fora */
+    {
+      const { a, iss, iptu, taxas } = ME();
+      marcar(a, iss, taxas, iptu);
+      escolher(a, (d) => d.tipo === "top" && d.chave === iptu);
+      a.$("btnGerExpMover").onclick();
+      ok(!a.gerMoverParaExportAtual().has(iptu) && a.gerMoverParaExportAtual().has(iss) && a.gerMoverParaExportAtual().has(taxas), "G35q IPTU marcado junto e' o proprio destino: fica de fora");
+      ok(/2 tópico\(s\) movido\(s\)/.test(a.$("gerExpMsg").textContent), "G35r a contagem exclui quem e' o destino: " + a.$("gerExpMsg").textContent);
+    }
+    /* o MESMO topico em outro edital (mesma chave, dono diferente) e' um destino valido: so' o dono muda */
+    {
+      const { a, rec } = ME();
+      marcar(a, rec);
+      const i = escolher(a, (d) => d.tipo === "top" && d.chave === rec && d.edital === "ISS Caruaru Auditor");
+      ok(i >= 0, "G35q2 (o topico Receita Publica aparece como destino sob o ISS Caruaru)");
+      a.$("btnGerExpMover").onclick();
+      const m = a.gerMoverParaExportAtual().get(rec);
+      ok(m && m.edital === "ISS Caruaru Auditor" && m.topico === "Receita Pública" && /1 tópico\(s\) movido\(s\)/.test(a.$("gerExpMsg").textContent), "G35q3 mover o topico do TCE-PE para o mesmo topico sob o ISS troca o dono (nao e' 'nele mesmo'): " + JSON.stringify(m));
+    }
+    /* disciplina como destino: so' a disciplina muda, cada um mantem o proprio nome */
+    {
+      const { a, iss, taxas } = ME();
+      marcar(a, iss, taxas);
+      escolher(a, (d) => d.tipo === "disc" && d.disciplina === "Direito Financeiro" && d.edital === "ISS Caruaru Auditor");
+      a.$("btnGerExpMover").onclick();
+      const mI = a.gerMoverParaExportAtual().get(iss), mT = a.gerMoverParaExportAtual().get(taxas);
+      ok(mI.disciplina === "Direito Financeiro" && mI.topico === "ISS" && mT.disciplina === "Direito Financeiro" && mT.topico === "Taxas", "G35s disciplina como destino: cada um muda de disciplina e mantem o nome do topico: " + JSON.stringify([mI, mT]));
+      const c = await capturar(a);
+      ok(c.cards.every((x) => x.deck === "ISS Caruaru Auditor::Direito Financeiro::ISS"), "G35t o arquivo leva a disciplina nova com o topico proprio: " + JSON.stringify(c.cards.map((x) => x.deck)));
+    }
+    /* edital como destino: so' o dono muda */
+    {
+      const { a, iss } = ME();
+      marcar(a, iss);
+      escolher(a, (d) => d.tipo === "raiz" && d.edital === "TCE-PE");
+      a.$("btnGerExpMover").onclick();
+      const mI = a.gerMoverParaExportAtual().get(iss);
+      ok(mI.edital === "TCE-PE" && mI.disciplina === "Sistema Tributário Brasileiro" && mI.topico === "ISS", "G35u edital como destino: so' o dono muda: " + JSON.stringify(mI));
+      /* o mesmo destino que ele ja' tem (disciplina da propria pasta, no proprio edital) nao e' mudanca */
+      a.$("btnGerDesfazerExport").onclick();
+      escolher(a, (d) => d.tipo === "disc" && d.disciplina === "Sistema Tributário Brasileiro" && d.edital === "ISS Caruaru Auditor");
+      a.$("btnGerExpMover").onclick();
+      ok(a.gerMoverParaExportAtual().size === 0 && a.$("gerExpMsg").textContent === "", "G35v mover para a disciplina onde a pasta ja' esta nao grava nada");
+    }
+    /* a Bancada marcada junto nunca e' movida */
+    {
+      const { a, iss } = ME();
+      a.$("editor").value = "Pergunta da bancada? :: Resposta da bancada completa e boa";
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      marcar(a, a.CQ_BANCADA, iss);
+      escolher(a, (d) => d.tipo === "raiz" && d.edital === "TCE-PE");
+      a.$("btnGerExpMover").onclick();
+      ok(a.gerMoverParaExportAtual().size === 1 && a.gerMoverParaExportAtual().has(iss) && !a.gerMoverParaExportAtual().has(a.CQ_BANCADA), "G35w a Bancada marcada junto nao e' movida");
+      /* trocar de modo esquece */
+      a.gerAlternarModo("gerenciar"); a.gerAlternarModo("exportar");
+      ok(a.gerMoverParaExportAtual().size === 0, "G35x trocar de modo esquece o que foi movido");
+    }
+    /* so' a Bancada marcada: nao ha o que mover */
+    {
+      const { a } = ME();
+      a.$("editor").value = "Pergunta da bancada? :: Resposta da bancada completa e boa";
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      marcar(a, a.CQ_BANCADA);
+      ok(a.$("gerExpMoverSel").disabled === true && a.$("btnGerExpMover").disabled === true, "G35y so' a Bancada marcada: a caixa de mover continua desligada");
+    }
+    /* sem editais cadastrados: so' disciplina e topico, nunca raiz */
+    {
+      const { a, iss } = montar();
+      a.$("editor").value = "Pergunta da bancada? :: Resposta da bancada completa e boa";
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      const l2 = a.gerExpDestinosLista();
+      ok(l2.length > 0 && l2.every((d) => d.tipo !== "raiz") && l2.some((d) => d.tipo === "top" && d.chave === iss) && l2.some((d) => d.tipo === "disc"), "G35z sem edital cadastrado a lista nao tem raiz, so' disciplina e topico");
+      ok(achar(a.$("gerArvore"), (e) => cls(e, "ger-pasta")).some((e) => /Bancada/.test(e.textContent)) && !l2.some((d) => d.chave === a.CQ_BANCADA || /Bancada|Texto do editor/.test(d.nome)), "G35z2 (sem edital) a bancada esta na arvore mas nao e' destino");
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

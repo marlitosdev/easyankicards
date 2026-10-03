@@ -41,7 +41,7 @@ const GER_DICAS = {
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
-  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer", gerExpVazios: "pac_tip_vazios",
+  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer", gerExpVazios: "pac_tip_vazios", btnGerExpMover: "pac_tip_mover_marcados",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -393,8 +393,8 @@ function gerAlternarModo(modo) {
  * nunca a Biblioteca — porta o mesmo padrão de pacote.js (F2): compara DESTINO (disciplina/
  * tópico/edital), não chave, nos alvos (soltar num tópico já igual ao que se está arrastando é
  * inválido/no-op); a pílula que acompanha o ponteiro e o destaque verde/vermelho são os MESMOS
- * do arrastar real (.ger-ghost/.ger-alvo/.ger-alvo-no, CSS global). Só se arrasta uma pasta por
- * vez aqui — arrastar um CARTÃO avulso da lista fica para uma fase futura, como no pacote.js. ---- */
+ * do arrastar real (.ger-ghost/.ger-alvo/.ger-alvo-no, CSS global). Arrasta-se uma pasta inteira (da árvore)
+ * ou UM cartão (da lista). ---- */
 let gerArrastoExport = null, gerGhostExport = null;
 
 /* onde um tópico VAI nesta exportação: o arrasto, se houve algum, senão o lugar natural dele. */
@@ -504,6 +504,73 @@ function gerSoltarRaizExport(ev, editalAlvo) {
   gerPintarArvore(); gerPintarLista(); gerPintarPrevia();
 }
 
+/* ---- R4: "Mover os marcados para…" — o mesmo destino do arrastar, aplicado de uma vez a TODAS as pastas marcadas
+ * para o pacote. Existe porque arrastar uma a uma não escala e em tela de toque não dá para arrastar. Só vale para
+ * este arquivo (grava em gerMoverParaExport); a Biblioteca não muda. ---- */
+let gerDestinosCache = [];
+
+/* os destinos possíveis: edital (raiz), disciplina e tópico, com o caminho completo no nome; a Bancada nunca é destino */
+function gerExpDestinosLista() {
+  const out = [];
+  if (gerExpTemEditais()) {
+    gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.forEach((r) => {
+      if (r.tipo === "bancada") return;
+      const editalR = r.tipo === "edital" ? (r.concurso || "") : "";
+      out.push({ tipo: "raiz", edital: editalR, nome: r.nome });
+      r.filhos.forEach((d) => {
+        if (d.tipo !== "disc") return;
+        out.push({ tipo: "disc", disciplina: d.nome, edital: editalR, nome: r.nome + " › " + d.nome });
+        d.filhos.forEach((tp) => out.push({ tipo: "top", chave: tp.chave, disciplina: d.nome, topico: tp.topico, edital: editalR, nome: r.nome + " › " + d.nome + " › " + tp.topico }));
+      });
+    });
+    return out;
+  }
+  gerArvore(gerNotas).forEach((d) => {
+    const tops = d.topicos.filter((tp) => tp.chave !== CQ_BANCADA);
+    if (!tops.length) return;
+    out.push({ tipo: "disc", disciplina: d.disciplina, edital: "", nome: d.disciplina });
+    tops.forEach((tp) => out.push({ tipo: "top", chave: tp.chave, disciplina: d.disciplina, topico: tp.topico, edital: "", nome: d.disciplina + " › " + tp.topico }));
+  });
+  return out;
+}
+
+function gerPintarDestinosMoverExport() {
+  const sel = $("gerExpMoverSel");
+  if (!sel) return;
+  const antes = gerDestinosCache[sel.selectedIndex] ? gerDestinosCache[sel.selectedIndex].nome : null;
+  gerDestinosCache = gerExpDestinosLista();
+  sel.innerHTML = "";
+  gerDestinosCache.forEach((d) => {
+    const o = document.createElement("option");
+    o.textContent = d.nome;
+    sel.append(o);
+  });
+  const i = antes === null ? -1 : gerDestinosCache.findIndex((d) => d.nome === antes);
+  if (i >= 0) sel.selectedIndex = i;
+  const marcados = [...gerSelExport].filter((c) => c !== CQ_BANCADA).length;
+  const vazio = !marcados || !gerDestinosCache.length;
+  sel.disabled = vazio;
+  $("btnGerExpMover").disabled = vazio;
+}
+
+/* aplica UM destino a TODAS as pastas marcadas; devolve quantas mudaram de lugar (a que já é o destino, ou já está lá, não conta) */
+function gerMoverMarcadosParaExport(dest) {
+  if (!dest) return 0;
+  let n = 0;
+  gerSelExport.forEach((chave) => {
+    if (chave === CQ_BANCADA) return;
+    const atual = gerDestinoExport(chave, gerEditalDeChave(chave));
+    const base = dest.tipo === "top" ? { disciplina: dest.disciplina, topico: dest.topico, edital: dest.edital || "" }
+      : dest.tipo === "disc" ? { disciplina: dest.disciplina, topico: atual.topico, edital: dest.edital || "" }
+      : { disciplina: atual.disciplina, topico: atual.topico, edital: dest.edital || "" };
+    if (base.disciplina === atual.disciplina && base.topico === atual.topico && base.edital === (atual.edital || "")) return;
+    gerMoverParaExport.set(chave, base);
+    n++;
+  });
+  if (n) { gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); }
+  return n;
+}
+
 /* ---- B3: painel de opções de exportação + exportar de verdade, dentro do mesmo diálogo.
  * O MOTOR é o de docs/pacote.js (pacMontar/pacCartoes/pacNomeArquivo) — aqui só se monta `opc`
  * a partir do estado do gerenciador (gerNotas/gerSelExport/gerMoverParaExport) e se chama as
@@ -576,6 +643,7 @@ function gerPintarExport() {
   if (p.decks.size > 12) decksCx.append(gerEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
   $("btnGerExpApkg").disabled = !(p.itens.length || p.vazios.length);
   $("btnGerExpTxt").disabled = !p.itens.length;
+  gerPintarDestinosMoverExport();
   gerPintarArvoreAnki(p);
   return p;
 }
@@ -1956,6 +2024,11 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
     await navigator.clipboard.writeText(gerExpRaizAtual());
     $("btnGerExpCopiarCaminho").textContent = t("copy_path_done");
     setTimeout(() => { $("btnGerExpCopiarCaminho").textContent = t("copy_path_btn"); }, 2000);
+  };
+  $("btnGerExpMover").onclick = () => {
+    const dest = gerDestinosCache[$("gerExpMoverSel").selectedIndex];
+    const n = gerMoverMarcadosParaExport(dest);
+    $("gerExpMsg").textContent = n ? t("pac_mover_feito", { n, d: dest.nome }) : "";
   };
   $("btnGerExpDesfazerNomes").onclick = () => { gerRenomearExport = new Map(); gerEditandoNome = null; gerPintarExport(); };
   $("btnGerExpApkg").onclick = () => gerAcaoExportar("apkg");
