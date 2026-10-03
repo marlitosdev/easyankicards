@@ -4167,6 +4167,42 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-passo-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--acao);color:#fff;font-size:12px}
 .ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
 .ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
+/* SEMÁFORO: uma cor, um significado, em todo o diálogo (cinza vazio · verde entendi · âmbar confira · vermelho não cria) */
+.ednovo-sem{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:6px 0;padding:7px 10px;border-radius:8px;border:1px solid var(--borda);font-size:12.5px;line-height:1.4}
+.ednovo-sem-ico{font-weight:800;flex:0 0 auto}
+.ednovo-sem-txt{flex:1 1 220px}
+.ednovo-sem-acoes{display:flex;gap:6px;flex-wrap:wrap}
+.ednovo-sem.sem-ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.ednovo-sem.sem-ok .ednovo-sem-ico{color:var(--ok)}
+.ednovo-sem.sem-atencao{border-color:var(--atencao);background:color-mix(in srgb,var(--atencao) 14%,transparent)}
+.ednovo-sem.sem-atencao .ednovo-sem-ico{color:var(--atencao)}
+.ednovo-sem.sem-erro{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 14%,transparent);font-weight:600}
+.ednovo-sem.sem-erro .ednovo-sem-ico{color:var(--erro)}
+.ednovo-sem.sem-vazio{color:var(--sutil)}
+.ednovo-ta{border-width:2px}
+.ednovo-ta.ta-ok{border-color:var(--ok)}
+.ednovo-ta.ta-atencao{border-color:var(--atencao)}
+.ednovo-ta.ta-erro{border-color:var(--erro)}
+/* o que o app ENTENDEU: um chip por disciplina */
+.ednovo-entendi{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 6px}
+.ednovo-chip{font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--borda);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.ednovo-chip.chip-atencao{border-color:var(--atencao);background:color-mix(in srgb,var(--atencao) 16%,transparent)}
+.ednovo-chip.chip-erro{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 18%,transparent);font-weight:700}
+/* os dois passos: um vai PARA a IA, o outro volta DA IA */
+.ednovo-tag{font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid currentColor;margin-left:auto}
+.ednovo-tag.tag-vai{color:var(--info)}
+.ednovo-tag.tag-volta{color:var(--ok)}
+.ednovo-passo.feito{border-color:var(--ok)}
+.ednovo-passo.feito .ednovo-passo-n{background:var(--ok)}
+.ednovo-passo.ativo{border-color:var(--info);box-shadow:0 0 0 2px color-mix(in srgb,var(--info) 25%,transparent)}
+/* ANTES DE CRIAR: nome, data e plano, cada um com o seu sinal */
+.ednovo-pront{margin:10px 0 4px;padding:8px 10px;border-radius:10px;border:1px dashed var(--borda)}
+.ednovo-pront-tit{font-size:11.5px;font-weight:700;color:var(--sutil);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.ednovo-pront-lista{list-style:none;margin:0;padding:0;font-size:12.5px;line-height:1.55}
+.ednovo-pront-lista .pront-ok{color:var(--ok)}
+.ednovo-pront-lista .pront-atencao{color:var(--atencao)}
+.ednovo-pront-lista .pront-erro{color:var(--erro);font-weight:700}
+.ednovo-pront-lista .pront-vazio{color:var(--sutil)}
 .ednovo-ex{margin:4px 0}
 .ednovo-ex > summary{cursor:pointer;font-size:11.5px;color:var(--sutil);padding:3px 0}
 .ednovo-ex-txt{margin:4px 0;padding:8px;border-radius:8px;background:rgba(127,127,127,.12);font-size:11.5px;line-height:1.45;white-space:pre-wrap;overflow-x:auto}
@@ -6506,26 +6542,40 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- DOIS PASSOS, NA ORDEM EM QUE SE FAZEM: primeiro o prompt vai para a IA, depois a resposta volta para cá.
        Antes, o botão do prompt ficava no rodapé, embaixo do campo onde a resposta é colada, e o aviso "copiado"
        aparecia no mesmo lugar da contagem — a pessoa não sabia se já tinha copiado nem o que fazer depois. -->
-  <div class="ednovo-passo">
-    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ed_novo_passo1"></span></div>
+  <div class="ednovo-passo" id="edNovoPasso1">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ed_novo_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
     <label class="nota ednovo-ramos"><input type="checkbox" id="edNovoPedirRamos"> <span data-i18n="ed_novo_ramos"></span></label>
     <button class="btn-min" id="btnEdNovoPrompt" data-i18n="ed_prompt_btn"
       title="Copia o prompt para a IA montar a lista de disciplinas e tópicos a partir do edital. Depois, cole a resposta no passo 2."></button>
     <p class="nota ednovo-prompt-msg" id="edNovoPromptMsg" role="status"></p>
   </div>
-  <div class="ednovo-passo">
-    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ed_novo_passo2"></span></div>
+  <div class="ednovo-passo" id="edNovoPasso2">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ed_novo_passo2"></span> <span class="ednovo-tag tag-volta" data-i18n="ed_novo_tag2"></span></div>
     <div class="ednovo-linha">
       <label class="nd-rot" for="edNovoPlano" data-i18n="ed_novo_plano"></label>
       <span class="mat-f-dica" data-i18n="ed_novo_plano_dica"></span>
       <textarea id="edNovoPlano" rows="7" style="width:100%;box-sizing:border-box"
         placeholder="@ Direito Tributário :: 20q&#10;+ Obrigação tributária :: 5 :: cai sempre"></textarea>
     </div>
+    <div class="ednovo-sem sem-vazio" id="edNovoSem" role="status" aria-live="polite">
+      <span class="ednovo-sem-ico" id="edNovoSemIco" aria-hidden="true">○</span>
+      <span class="ednovo-sem-txt" id="edNovoSemTxt"></span>
+      <span class="ednovo-sem-acoes" id="edNovoSemAcoes"></span>
+    </div>
+    <div class="ednovo-entendi" id="edNovoEntendi" hidden></div>
     <details class="ednovo-ex">
       <summary data-i18n="ed_novo_exemplo"></summary>
       <pre class="ednovo-ex-txt" data-i18n="ed_novo_exemplo_txt"></pre>
     </details>
     <p class="nota" id="edNovoConf"></p>
+  </div>
+  <div class="ednovo-pront">
+    <div class="ednovo-pront-tit" data-i18n="ed_novo_pront_tit"></div>
+    <ul class="ednovo-pront-lista">
+      <li id="edNovoProntNome" class="pront-vazio"></li>
+      <li id="edNovoProntData" class="pront-vazio"></li>
+      <li id="edNovoProntPlano" class="pront-vazio"></li>
+    </ul>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnEdNovoCriar" data-i18n="ed_novo_criar"
