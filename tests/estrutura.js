@@ -1119,10 +1119,45 @@ function testeI18nRepetidas() {
   return falhas;
 }
 
+/* E14 — A BIBLIOTECA E O PACOTE SÓ FALAM COM CHAVES QUE EXISTEM (nos dois idiomas).
+ *
+ * A fusão do "Montar pacote" com a Biblioteca deixou dezenas de textos da tela antiga no dicionário sem ninguém usar,
+ * e o contrário é pior: um t("chave") para uma chave que não existe escreve o NOME DA CHAVE na tela. Aqui, todo
+ * t("literal") e todo id do GER_DICAS/PAC_DICAS de gerenciador.js e pacote.js tem de existir em pt E en. */
+function testeI18nGerenciadorPacote() {
+  const falhas = [];
+  const dic = fs.readFileSync(path.join(RAIZ, "docs", "i18n.js"), "utf8");
+  const blocos = [];
+  let atual = null;
+  dic.split("\n").forEach((l) => {
+    const m = l.match(/^\s*"(pt|en)"\s*:\s*\{\s*$/);
+    if (m) { atual = { nome: m[1], chaves: new Set() }; blocos.push(atual); return; }
+    const k = atual && l.match(/^\s{2}"([\w.-]+)"\s*:/);
+    if (k) atual.chaves.add(k[1]);
+  });
+  const pt = blocos.find((b) => b.nome === "pt"), en = blocos.find((b) => b.nome === "en");
+  if (!pt || !en) return ["E14 nao achei os blocos pt/en do dicionario"];
+  ["gerenciador.js", "pacote.js"].forEach((arq) => {
+    const src = fs.readFileSync(path.join(RAIZ, "docs", arq), "utf8");
+    const usadas = new Set([...src.matchAll(/\bt\("([a-z0-9_]+)"\s*[,)]/g)].map((m) => m[1]));
+    const dicas = src.match(/const (?:GER|PAC)_DICAS = \{[\s\S]*?\n\};/);
+    if (dicas) [...dicas[0].matchAll(/:\s*"([a-z0-9_]+)"/g)].forEach((m) => usadas.add(m[1]));
+    const sem = [...usadas].filter((k) => !pt.chaves.has(k) || !en.chaves.has(k));
+    if (sem.length) falhas.push("E14 " + arq + " usa chave que falta no dicionario (pt ou en): " + sem.join(", "));
+    const minimo = arq === "gerenciador.js" ? 50 : 5;
+    if (usadas.size < minimo) falhas.push("E14 " + arq + " so achei " + usadas.size + " chaves (esperava ao menos " + minimo + ") — a varredura quebrou?");
+  });
+  /* e os data-i18n do HTML dos painéis da Biblioteca e do pacote (chaves ger e pac) também em inglês — o E12 só olha o português */
+  const html = fs.readFileSync(path.join(RAIZ, "docs", "index.html"), "utf8");
+  const semEn = [...new Set([...html.matchAll(/data-i18n(?:-title|-ph)?="((?:ger|pac)_[a-z0-9_]+)"/g)].map((m) => m[1]))].filter((k) => !en.chaves.has(k));
+  if (semEn.length) falhas.push("E14 data-i18n da Biblioteca/pacote sem texto em ingles: " + semEn.join(", "));
+  return falhas;
+}
+
 module.exports = { testes: () => [...testes(), ...testeSW(), ...testeDialogos(),
                                   ...testeHidden(), ...testeCliquesOrfaos(),
                                   ...testeContraste(), ...testeI18n(),
-                                  ...testeI18nRepetidas(),
+                                  ...testeI18nRepetidas(), ...testeI18nGerenciadorPacote(),
                                   ...testeColecoes(),
                                   ...testeClassesAmbiguas(),
                                   ...testeVersaoUnica(),
