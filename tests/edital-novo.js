@@ -299,12 +299,12 @@ async function testes() {
     ok(cx && cx.checked === false, "N7j a caixa existe e comeca desmarcada");
     janela.__area = "";
     api.$("btnEdNovoPrompt").onclick();
-    ok(janela.__area === base && api.$("edNovoConf").textContent === api.t("ed_novo_prompt_ok"), "N7k desmarcada: copia o prompt de sempre e diz isso");
+    ok(janela.__area === base && api.$("edNovoPromptMsg").textContent === api.t("ed_novo_prompt_ok") && api.$("edNovoConf").textContent === "", "N7k desmarcada: copia o prompt de sempre e diz isso no passo 1 (a contagem do passo 2 fica livre)");
     cx.checked = true;
     api.$("btnEdNovoPrompt").onclick();
-    ok(janela.__area === com && api.$("edNovoConf").textContent === api.t("ed_novo_prompt_ok_ramos") && /ramifica/.test(api.$("edNovoConf").textContent), "N7l marcada: copia o prompt COM ramos e o aviso diz que pediu ramificacoes");
+    ok(janela.__area === com && api.$("edNovoPromptMsg").textContent === api.t("ed_novo_prompt_ok_ramos") && /ramifica/.test(api.$("edNovoPromptMsg").textContent), "N7l marcada: copia o prompt COM ramos e o aviso diz que pediu ramificacoes");
     api.hubNovo();
-    ok(api.$("edNovoPedirRamos").checked === false, "N7m abrir o dialogo de novo desmarca a caixa");
+    ok(api.$("edNovoPedirRamos").checked === false && api.$("edNovoPromptMsg").textContent === "", "N7m abrir o dialogo de novo desmarca a caixa e apaga o aviso de 'copiado'");
     /* colar a resposta com ramos: a conferencia ao vivo conta os ramos */
     api.$("edNovoPlano").value = "@ Direito :: 5\n+ Licitações :: 5\n++ Modalidades :: 5\n++ Fase interna :: 3\n+ Contratos :: 4";
     api.$("edNovoPlano").oninput();
@@ -312,6 +312,58 @@ async function testes() {
     api.$("edNovoPlano").value = "@ Direito :: 5\n+ Licitações :: 5";
     api.$("edNovoPlano").oninput();
     ok(!/ramo/.test(api.$("edNovoConf").textContent) && /1 disciplina\(s\), 1 tópico\(s\)/.test(api.$("edNovoConf").textContent), "N7o sem ramos a conferencia e' a de sempre");
+  }
+
+  /* ---- N8: acabamento do Novo edital — passo 1/2, exemplo do formato e a 2ª fase como interruptor ---- */
+  {
+    const { api } = rodar();
+    api.hubIniciar();
+    api.hubNovo();
+    /* a ESTRUTURA do dialogo (o simulador nao monta a arvore do HTML estatico): le o bloco do index.html */
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    const dlg = html.slice(html.indexOf('<dialog id="dlgEdNovo"'), html.indexOf("</dialog>", html.indexOf('<dialog id="dlgEdNovo"')));
+    const pos = (s) => dlg.indexOf(s);
+    const p1 = pos('class="ednovo-passo-n">1<'), p2 = pos('class="ednovo-passo-n">2<'), rod = pos('class="dlg-rodape"');
+    ok(p1 > 0 && p2 > p1 && rod > p2, "N8a existem o passo 1 e o passo 2, nessa ordem, antes do rodape");
+    ok(pos('id="btnEdNovoPrompt"') > p1 && pos('id="btnEdNovoPrompt"') < p2 && pos('id="edNovoPedirRamos"') > p1 && pos('id="edNovoPedirRamos"') < p2 && pos('id="edNovoPromptMsg"') > p1 && pos('id="edNovoPromptMsg"') < p2, "N8b o passo 1 tem o botao do prompt, a caixa de ramos e o aviso 'copiado'");
+    ok(pos('id="edNovoPlano"') > p2 && pos('id="edNovoConf"') > p2 && pos('class="ednovo-ex"') > p2 && pos('id="edNovoPlano"') < rod && pos('id="edNovoConf"') < rod, "N8c o passo 2 tem o campo de colar, o exemplo e a contagem ao vivo");
+    ok(/<pre class="ednovo-ex-txt" data-i18n="ed_novo_exemplo_txt"><\/pre>/.test(dlg), "N8c2 o exemplo do formato aparece de fato no dialogo");
+    const rodape = dlg.slice(rod);
+    ok(/id="btnEdNovoCriar"/.test(rodape) && /id="btnEdNovoNao"/.test(rodape) && !/btnEdNovoPrompt|edNovoPedirRamos/.test(rodape), "N8d o rodape ficou so' com criar e cancelar");
+    /* exemplo: ensina os 4 marcadores que o app le */
+    const ex = api.t("ed_novo_exemplo_txt");
+    const linhasEx = ex.split("\n").map((l) => l.replace(/\s+←.*$/, ""));
+    const rEx = api.lerEdital("# x\n" + linhasEx.join("\n"));
+    ok(rEx.blocos.length === 1 && rEx.blocos[0].minimo && rEx.blocos[0].minimo.valor === 50 && rEx.disciplinas.length === 1 && rEx.disciplinas[0].abs === 20 && rEx.disciplinas[0].topicos.length === 1 && rEx.disciplinas[0].topicos[0].ramos.length === 1, "N8e o exemplo do formato e' lido pelo app (bloco, disciplina com questoes, topico e ramo): " + JSON.stringify(linhasEx));
+
+    /* 2a fase: interruptor, comeca desligado e escondido */
+    const sw = api.$("edNovoF2On"), cx = api.$("edNovoF2cx");
+    ok(/<input type="checkbox" role="switch" class="ednovo-sw" id="edNovoF2On">/.test(dlg) && !/<details id="edNovoF2cx"/.test(dlg), "N8f0 a 2a fase e' um interruptor (checkbox role=switch), nao mais uma seta escondida");
+    ok(sw && sw.checked === false && cx.hidden === true, "N8f ao abrir o dialogo a 2a fase esta desligada e os campos escondidos");
+    sw.checked = true; sw.onchange();
+    ok(cx.hidden === false, "N8g ligar mostra os campos da 2a fase");
+    sw.checked = false; sw.onchange();
+    ok(cx.hidden === true, "N8h desligar esconde de novo");
+    /* o que foi digitado com o interruptor ligado NAO entra se ele for desligado */
+    api.$("edNovoNome").value = "Concurso X"; api.$("edNovoProva").value = "2030-05-10"; api.$("edNovoHoras").value = "15";
+    sw.checked = true; sw.onchange();
+    api.$("edNovoF2Nome").value = "discursiva"; api.$("edNovoF2Prova").value = "2030-06-20";
+    sw.checked = false; sw.onchange();
+    const e1 = api.hubNovoCriar();
+    const r1 = api.lerEdital(e1.texto);
+    ok(!r1.cfg.fase2 || !r1.cfg.fase2.prova, "N8i desligado, a 2a fase digitada nao entra no edital: " + JSON.stringify(r1.cfg.fase2));
+    /* reabrir com o interruptor LIGADO e campos preenchidos: tudo volta ao padrao */
+    sw.checked = true; sw.onchange();
+    api.$("edNovoF2Nome").value = "discursiva"; api.$("edNovoF2Prova").value = "2030-06-20";
+    ok(cx.hidden === false, "N8i2 (antes de reabrir o interruptor esta ligado e os campos visiveis)");
+    api.hubNovo();
+    ok(sw.checked === false && cx.hidden === true && api.$("edNovoF2Nome").value === "" && api.$("edNovoF2Prova").value === "", "N8j abrir de novo volta ao padrao (desligado, escondido, campos limpos)");
+    api.$("edNovoNome").value = "Concurso Y"; api.$("edNovoProva").value = "2030-05-10";
+    sw.checked = true; sw.onchange();
+    api.$("edNovoF2Nome").value = "discursiva"; api.$("edNovoF2Prova").value = "2030-06-20";
+    const e2 = api.hubNovoCriar();
+    const r2 = api.lerEdital(e2.texto);
+    ok(r2.cfg.fase2 && r2.cfg.fase2.prova === "2030-06-20" && /discursiva/i.test(r2.cfg.fase2.nome), "N8k ligado, a 2a fase entra com nome e data: " + JSON.stringify(r2.cfg.fase2));
   }
 
   return Object.assign(falhas, { quantas: n });

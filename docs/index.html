@@ -4157,8 +4157,19 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-dupla{display:flex;gap:10px;flex-wrap:wrap}
 .ednovo-dupla > .ednovo-linha{flex:1 1 150px}
 .ednovo-f2{margin:6px 0;border-left:2px solid var(--borda);padding-left:9px}
-.ednovo-f2 > summary{cursor:pointer;font-size:11.5px;color:var(--sutil);
-  padding:3px 0}
+.ednovo-sw-linha{display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:12.5px;color:var(--sutil);cursor:pointer}
+.ednovo-sw{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:34px;height:20px;border-radius:999px;background:var(--borda);cursor:pointer;transition:background .15s;margin:0}
+.ednovo-sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.ednovo-sw:checked{background:var(--acao)}
+.ednovo-sw:checked::after{transform:translateX(14px)}
+.ednovo-passo{border:1px solid var(--borda);border-radius:10px;padding:8px 10px;margin:10px 0}
+.ednovo-passo-tit{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;margin-bottom:4px}
+.ednovo-passo-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--acao);color:#fff;font-size:12px}
+.ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
+.ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
+.ednovo-ex{margin:4px 0}
+.ednovo-ex > summary{cursor:pointer;font-size:11.5px;color:var(--sutil);padding:3px 0}
+.ednovo-ex-txt{margin:4px 0;padding:8px;border-radius:8px;background:rgba(127,127,127,.12);font-size:11.5px;line-height:1.45;white-space:pre-wrap;overflow-x:auto}
 
 /* ---- RASCUNHO EM FOLHA INTEIRA ----
    O diálogo inteiro vira papel: a questão sai da frente, a caixa ocupa
@@ -6473,11 +6484,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <input type="number" id="edNovoHoras" class="mat-busca" min="1" max="80" value="20">
     </div>
   </div>
-  <!-- A SEGUNDA DATA É EXCEÇÃO, e por isso vem recolhida: a maioria dos
+  <!-- A SEGUNDA DATA É EXCEÇÃO, e por isso começa desligada: a maioria dos
        concursos tem uma prova só, e um campo de data sempre à vista
-       sugere que falta preencher. -->
-  <details id="edNovoF2cx" class="ednovo-f2">
-    <summary data-i18n="ed_novo_f2"></summary>
+       sugere que falta preencher. É um interruptor (e não uma seta
+       escondida) para a pessoa ver que existe e que dá para ligar. -->
+  <label class="ednovo-sw-linha" title="Liga os campos da segunda fase (por exemplo, a discursiva). Desligado, o edital é criado só com a primeira data.">
+    <input type="checkbox" role="switch" class="ednovo-sw" id="edNovoF2On"> <span data-i18n="ed_novo_f2"></span></label>
+  <div id="edNovoF2cx" class="ednovo-f2" hidden>
     <div class="ednovo-dupla">
       <div class="ednovo-linha">
         <label class="nd-rot" for="edNovoF2Nome" data-i18n="ed_novo_f2_nome"></label>
@@ -6488,19 +6501,33 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <input type="date" id="edNovoF2Prova" class="mat-busca">
       </div>
     </div>
-  </details>
-
-  <div class="ednovo-linha">
-    <label class="nd-rot" for="edNovoPlano" data-i18n="ed_novo_plano"></label>
-    <span class="mat-f-dica" data-i18n="ed_novo_plano_dica"></span>
-    <textarea id="edNovoPlano" rows="7" style="width:100%;box-sizing:border-box"
-      placeholder="@ Direito Tributário :: 20q&#10;+ Obrigação tributária :: 5 :: cai sempre"></textarea>
   </div>
-  <p class="nota" id="edNovoConf"></p>
-  <div class="dlg-rodape">
+
+  <!-- DOIS PASSOS, NA ORDEM EM QUE SE FAZEM: primeiro o prompt vai para a IA, depois a resposta volta para cá.
+       Antes, o botão do prompt ficava no rodapé, embaixo do campo onde a resposta é colada, e o aviso "copiado"
+       aparecia no mesmo lugar da contagem — a pessoa não sabia se já tinha copiado nem o que fazer depois. -->
+  <div class="ednovo-passo">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ed_novo_passo1"></span></div>
     <label class="nota ednovo-ramos"><input type="checkbox" id="edNovoPedirRamos"> <span data-i18n="ed_novo_ramos"></span></label>
     <button class="btn-min" id="btnEdNovoPrompt" data-i18n="ed_prompt_btn"
-      title="Copia o prompt para a IA montar a lista de disciplinas e tópicos a partir do edital. Cole a resposta no campo acima."></button>
+      title="Copia o prompt para a IA montar a lista de disciplinas e tópicos a partir do edital. Depois, cole a resposta no passo 2."></button>
+    <p class="nota ednovo-prompt-msg" id="edNovoPromptMsg" role="status"></p>
+  </div>
+  <div class="ednovo-passo">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ed_novo_passo2"></span></div>
+    <div class="ednovo-linha">
+      <label class="nd-rot" for="edNovoPlano" data-i18n="ed_novo_plano"></label>
+      <span class="mat-f-dica" data-i18n="ed_novo_plano_dica"></span>
+      <textarea id="edNovoPlano" rows="7" style="width:100%;box-sizing:border-box"
+        placeholder="@ Direito Tributário :: 20q&#10;+ Obrigação tributária :: 5 :: cai sempre"></textarea>
+    </div>
+    <details class="ednovo-ex">
+      <summary data-i18n="ed_novo_exemplo"></summary>
+      <pre class="ednovo-ex-txt" data-i18n="ed_novo_exemplo_txt"></pre>
+    </details>
+    <p class="nota" id="edNovoConf"></p>
+  </div>
+  <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnEdNovoCriar" data-i18n="ed_novo_criar"
       title="Cria o edital com estes dados. Você pode colar as disciplinas depois, se preferir."></button>
     <button class="btn btn-cinza" id="btnEdNovoNao" data-i18n="cancel_btn"

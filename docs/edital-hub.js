@@ -1007,10 +1007,13 @@ function hubNovo() {
   v("edNovoNome", t("hub_novo_padrao"));
   v("edNovoProva", ""); v("edNovoHoras", "20");
   v("edNovoF2Nome", ""); v("edNovoF2Prova", ""); v("edNovoPlano", "");
-  const f2 = document.getElementById("edNovoF2cx");
-  if (f2) f2.open = false;
+  const f2 = document.getElementById("edNovoF2cx"), f2on = document.getElementById("edNovoF2On");
+  if (f2) f2.hidden = true;
+  if (f2on) f2on.checked = false;
   const pr = document.getElementById("edNovoPedirRamos");
   if (pr) pr.checked = false;
+  const pm = document.getElementById("edNovoPromptMsg");
+  if (pm) pm.textContent = "";
   const conf = document.getElementById("edNovoConf");
   if (conf) conf.textContent = "";
   abrirModal("dlgEdNovo");
@@ -1063,10 +1066,12 @@ function hubNovoCriar() {
     const el = document.getElementById(id);
     return el ? String(el.value || "").trim() : "";
   };
+  /* a segunda fase só vale com o interruptor ligado: o que foi digitado antes de desligar não entra */
+  const f2on = !!(document.getElementById("edNovoF2On") || {}).checked;
   const texto = hubNovoTexto({
     nome: val("edNovoNome"), prova: val("edNovoProva"),
-    horas: val("edNovoHoras"), f2Nome: val("edNovoF2Nome"),
-    f2Prova: val("edNovoF2Prova"), plano: val("edNovoPlano"),
+    horas: val("edNovoHoras"), f2Nome: f2on ? val("edNovoF2Nome") : "",
+    f2Prova: f2on ? val("edNovoF2Prova") : "", plano: val("edNovoPlano"),
   });
   const r = lerEdital(texto);
   const nTop = (r.disciplinas || []).reduce((a, d) => a + d.topicos.length, 0);
@@ -1146,6 +1151,8 @@ function hubIniciar() {
   if (nc) nc.onclick = hubNovoCriar;
   const nn = document.getElementById("btnEdNovoNao");
   if (nn) nn.onclick = () => document.getElementById("dlgEdNovo").close();
+  const sw2 = document.getElementById("edNovoF2On");
+  if (sw2) sw2.onchange = () => { const cx = document.getElementById("edNovoF2cx"); if (cx) cx.hidden = !sw2.checked; };
   const np = document.getElementById("btnEdNovoPrompt");
   if (np) {
     /* o prompt fica NA CAIXA onde o plano vai ser colado: mandar a
@@ -1154,7 +1161,7 @@ function hubIniciar() {
     np.onclick = () => {
       const comRamos = !!(document.getElementById("edNovoPedirRamos") || {}).checked;
       try { navigator.clipboard.writeText(edPromptEdital(comRamos)); } catch (e) {}
-      const c = document.getElementById("edNovoConf");
+      const c = document.getElementById("edNovoPromptMsg");
       if (c) c.textContent = t(comRamos ? "ed_novo_prompt_ok_ramos" : "ed_novo_prompt_ok");
     };
   }
