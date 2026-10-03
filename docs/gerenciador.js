@@ -581,7 +581,10 @@ function gerMoverMarcadosParaExport(dest) {
 
 /* o edital "dono" de uma pasta (real ou virtual) — usado para "pasta do edital" quando a
  * marcação (gerSelExport) não guarda, por chave, sob qual raiz da árvore ela foi marcada
- * (diferente de pacEditalDe, que guarda isso por não ter outra fonte). */
+ * (diferente de pacEditalDe, que guarda isso por não ter outra fonte).
+ * LIMITAÇÃO CONHECIDA: a chave do tópico não leva o edital (disciplina›tópico). Se dois editais têm um tópico de mesmo nome,
+ * é UM registro só, e ele sai sempre sob o edital DONO (o que o gravou primeiro) — mesmo que a pessoa o tenha marcado sob
+ * a raiz do outro. Para mandá-lo para o outro edital neste arquivo, arraste-o (ou use "Mover os marcados para…"). */
 function gerEditalDeChave(ch) {
   const r = matResumos[ch];
   if (r && r.concurso) return r.concurso;
