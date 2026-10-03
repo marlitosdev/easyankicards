@@ -4951,6 +4951,8 @@ button.ed-st-item{cursor:pointer}
 .dsc-ramo-fraco .dsc-ramo-peso{color:var(--laranja);font-weight:700}
 .dsc-ramo-pulado .dsc-ramo-nome{color:var(--sutil);text-decoration:line-through}
 .ed-ramo-vez{box-shadow:0 0 0 2px var(--acao);font-weight:800}
+.reg-exigir-aj{margin:2px 0 0 22px;line-height:1.4}
+.reg-exigir-ex{margin:4px 0 0 22px;padding:5px 8px;border-left:3px solid var(--acao);background:color-mix(in srgb,var(--acao) 8%,transparent);border-radius:0 6px 6px 0;line-height:1.4}
 .ed-ramos-mais{padding:1px 8px;font-size:10.5px}
 button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-st-1{font-weight:800;background:rgba(47,107,220,.14)}
@@ -5720,7 +5722,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-f-dica" data-i18n="ed_reg_ramos_dica"></span>
     <div class="reg-ramos" id="regRamos"></div>
     <div id="regTrilha" class="reg-trilha" hidden></div>
-    <label class="nota" style="display:block;margin-top:6px"><input type="checkbox" id="regRamosExigir" data-i18n-title="ed_reg_exigir_tip"> <span data-i18n="ed_reg_exigir"></span></label>
+    <label class="nota" id="regRamosExigirLin" style="display:block;margin-top:6px"><input type="checkbox" id="regRamosExigir" data-i18n-title="ed_reg_exigir_tip"> <span data-i18n="ed_reg_exigir"></span></label>
+    <p class="nota reg-exigir-aj" id="regRamosExigirAj"></p>
+    <p class="nota reg-exigir-ex" id="regRamosExigirEx"></p>
     <div class="reg-ramos-acoes">
       <button type="button" class="btn-min" id="btnRegRamosTodos" data-i18n="ed_reg_ramos_todos" data-i18n-title="ed_reg_ramos_todos_tip"></button>
       <span class="nota" id="regRamosResumo"></span>

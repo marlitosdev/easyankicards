@@ -113,9 +113,13 @@ function edRamosNaLinha(i) {
     rs.slice(0, aberto ? rs.length : ED_RAMOS_LIM).forEach((r) => {
       const c = document.createElement("span");
       const est = estadoDe(r);
-      c.className = "ed-ramo ed-ramo-" + est + ((i.sessao || []).indexOf(r.id) >= 0 && !r.revisado ? " ed-ramo-vez" : "");
-      c.textContent = (r.nome.length > 30 ? r.nome.slice(0, 29) + "…" : r.nome) + " ★" + (r.peso || 3);
-      c.title = r.nome + " — " + t("ed_ramo_" + est) + (r.quando ? " (" + r.quando + ")" : "") + " — " + t("ed_ramo_peso", { p: r.peso || 3 })
+      /* O ANEL AZUL É "DA VEZ" — o que a agenda propõe para ESTA sessão —, e não "marcado": quem o lia como "já estudado" via
+       * dois ramos estudados onde nenhum tinha sido. O sinal agora tem forma (▶) e o estudado tem a sua (✓). */
+      const vez = (i.sessao || []).indexOf(r.id) >= 0 && !r.revisado && !r.feito;
+      c.className = "ed-ramo ed-ramo-" + est + (vez ? " ed-ramo-vez" : "");
+      const marca = vez ? "▶ " : est === "feito" || est === "revisado" ? "✓ " : est === "venceu" ? "↻ " : "";
+      c.textContent = marca + (r.nome.length > 30 ? r.nome.slice(0, 29) + "…" : r.nome) + " ★" + (r.peso || 3);
+      c.title = r.nome + " — " + (vez ? t("ed_ramo_vez") : t("ed_ramo_" + est)) + (r.quando ? " (" + r.quando + ")" : "") + " — " + t("ed_ramo_peso", { p: r.peso || 3 })
         + (r.nota ? " — " + r.nota : "") + (r.marcaHerdada ? " — " + t("ed_ramo_herdado") : "")
         + " — " + t("ed_trilha_tit") + ": " + edTrilhaTexto(edTrilhaDoRamoUI(i, r, matRamos))
         + " — " + t("ram_materiais_ajuda");
@@ -1430,7 +1434,7 @@ function abrirDiario() {
       pedacos.push(t("ed_diario_questoes_pct", { pct: x.q.pct }));
     }
     if (x.hu && x.hu !== "media") pedacos.push(t("ed_humor_" + x.hu));
-    if (x.p) pedacos.push(t("ed_diario_peso", { p: x.p }));
+    if (x.p) pedacos.push(t("ed_diario_peso", { p: (Math.round(Number(x.p) * 10) / 10).toLocaleString() }));
     if (x.onde) pedacos.push(String(x.onde).slice(0, 40));
     det.textContent = pedacos.join(" · ");
     if (pedacos.length) meio.append(det);
@@ -1683,6 +1687,7 @@ function regRamosPintar(i, refazerMinutos) {
   $("regRamosResumo").textContent = n ? t("ed_reg_ramos_resumo", { n, m: horasTexto(min) }) : t("ed_reg_ramos_nenhum");
   if (refazerMinutos && n) { $("regMinutos").value = min; $("regMinSlider").value = Math.min(240, min); }
   regTrilhaPintar(i);
+  regExigirPintar(i);
   const nomes = rs.filter((r) => regRamosSel.has(r.id)).map((r) => r.nome);
   /* até 3 nomes; com mais, só a contagem (o título não vira um parágrafo) */
   $("regTitulo").textContent = i.nome + (nomes.length ? " › " + (nomes.length > 3 ? t("ed_reg_ramos_n", { n: nomes.length }) : nomes.join(", ")) : "");
@@ -1750,6 +1755,27 @@ function regTrilhaPintar(i) {
   });
   if (!bl.children.length) bl.hidden = true;
 }
+/* A explicação da caixa "só marcar como estudado com todas as etapas", com um EXEMPLO tirado do primeiro ramo marcado
+ * (a trilha dele, como está agora) — só vale no ESTUDO; na revisão a caixa nem aparece. */
+function regExigirPintar(i) {
+  const lin = $("regRamosExigirLin"), aj = $("regRamosExigirAj"), ex = $("regRamosExigirEx");
+  if (!lin || !aj || !ex) return;
+  const estudo = regTipo !== "revisado";
+  lin.hidden = !estudo; aj.hidden = !estudo; ex.hidden = !estudo;
+  if (!estudo) return;
+  aj.textContent = t("ed_reg_exigir_aj");
+  ex.textContent = t("ed_reg_exigir_ex_gen"); ex.hidden = false;
+  const mat = edMaterialDosRamos(i);
+  const r = ((i && i.ramos) || []).find((x) => regRamosSel.has(x.id));
+  if (!r) return;
+  const tr = edTrilhaDoRamoUI(i, r, mat);
+  if (!tr.passos.some((p) => p.disponivel || p.feito)) return;
+  /* só as etapas que o ramo TEM (as que não se aplicam, "—", só confundem) */
+  const etapas = tr.passos.filter((p) => p.disponivel || p.feito).map((p) => t("ed_passo_" + p.id) + " " + (p.feito ? "✓" : "○")).join(" · ");
+  ex.textContent = t(tr.completo ? "ed_reg_exigir_ex_ok" : "ed_reg_exigir_ex", { r: r.nome, t: etapas });
+  ex.hidden = false;
+}
+
 function regRamosIniciar(i) {
   regRamosSel = new Set(regRamosPadrao(i));
   const ex = $("regRamosExigir");

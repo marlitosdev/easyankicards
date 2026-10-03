@@ -2867,6 +2867,11 @@ async function testes() {
       const formas = (...fs) => { const f = a.regFormasAtual(); f.length = 0; fs.forEach((x) => f.push(x)); };
       a.abrirRegistro(it());
       ok(a.$("regRamosExigir").checked === false && a.loja.getItem("eac_ramo_exigir") === null, "R39 a opcao vem DESLIGADA (o comportamento de sempre)");
+      /* V6: a caixa se explica, com um exemplo do proprio ramo marcado */
+      const aj = a.$("regRamosExigirAj"), ex = a.$("regRamosExigirEx");
+      ok(aj.hidden === false && /LIGADO/.test(aj.textContent) && /DESLIGADO/.test(aj.textContent) && /em andamento/.test(aj.textContent), "R39v1 a explicacao fica visivel ao lado da caixa (ligado x desligado): " + aj.textContent);
+      ok(/^Só marcar o ramo como ESTUDADO/.test(a.t("ed_reg_exigir")) && /ed_reg_exigir"/.test(require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8")), "R39v2 o rotulo diz em palavras simples o que a caixa faz");
+      ok(ex.hidden === false && /Exemplo com “[^”]+”/.test(ex.textContent) && /Ligado → .*em andamento/.test(ex.textContent) && /Desligado → vira “estudado”/.test(ex.textContent), "R39v3 o exemplo usa o ramo marcado e mostra o que acontece nos dois casos: " + ex.textContent);
       a.$("regRamosExigir").checked = true; a.$("regRamosExigir").onchange();
       ok(a.loja.getItem("eac_ramo_exigir") === "1", "R39a ligar a opcao fica guardado");
       formas("flashcards");
@@ -2914,6 +2919,7 @@ async function testes() {
       const marcas = () => linhas().map((l) => l.children[0].checked);
       const ch = item().chave;
       a.abrirRegistro(item());
+      ok(a.$("regRamosExigirEx").hidden === false && /^Exemplo com “Modalidades” — etapas dele: cartões ○ \(○ falta/.test(a.$("regRamosExigirEx").textContent) && !/—\s*·|·\s*—/.test(a.$("regRamosExigirEx").textContent.split("etapas dele:")[1].split("(")[0]), "R33v o exemplo lista so as etapas que o ramo tem (sem os \"—\" de etapa inexistente): " + a.$("regRamosExigirEx").textContent);
       ok(a.$("regRamosBloco").hidden === false && linhas().length === 3 && a.$("regRamosRot").textContent === "O que você estudou?", "R33 topico com ramos: a janela mostra a lista dos 3 ramos ('O que voce estudou?')");
       ok(marcas().join() === "true,false,false" && /Modalidades ★5/.test(linhas()[0].children[1].textContent) && /Fase preparatória ★3/.test(linhas()[1].children[1].textContent), "R33a vem marcado so' o ramo que a agenda propos, na ordem de relevancia");
       ok(Number(a.$("regMinutos").value) === 70 && /1 ramo\(s\) marcado\(s\) · 1h10 sugeridos/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
@@ -2966,6 +2972,7 @@ async function testes() {
       ok(linhas()[0].children[0].disabled === true && linhas()[1].children[0].disabled === false && /já estudado/.test(linhas()[0].children[2].textContent), "R33l ramo ja estudado fica desabilitado, dizendo 'ja estudado'");
       a.$("btnRegOutro").onclick();
       ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === true && linhas()[0].children[0].disabled === false && /ainda não estudado/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO inverte: so' os estudados podem ser escolhidos");
+      ok(a.$("regRamosExigirLin").hidden === true && a.$("regRamosExigirAj").hidden === true && a.$("regRamosExigirEx").hidden === true, "R33m2 na REVISAO a caixa \"so' marcar estudado com todas as etapas\" e sua explicacao somem (so valem no estudo)");
       ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
       a.$("btnRegRamosTodos").onclick();
       ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === 55, "R33o 'o topico todo' na revisao marca so' os elegiveis (e o tempo so' deles: 55): " + a.$("regMinutos").value);
@@ -3020,22 +3027,25 @@ async function testes() {
       const bloco = todos(li, (f) => /(^|\s)ed-ramos(\s|$)/.test(f.className || ""), []);
       ok(bloco.length === 1, "R24a a linha tem UM bloco de ramos");
       const resumo = todos(li, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0];
-      ok(resumo && /Ramos 0\/3 · agora: Modalidades · sessão de \d/.test(resumo.textContent) && resumo.title.length > 30, "R24b o resumo diz quantos ramos foram, qual vem agora e o tamanho da sessao: " + (resumo && resumo.textContent));
+      ok(resumo && /Ramos estudados: 0 de 3 · ▶ da vez: Modalidades · sessão de \d/.test(resumo.textContent) && resumo.title.length > 30, "R24b o resumo diz quantos ramos foram, qual vem agora e o tamanho da sessao: " + (resumo && resumo.textContent));
       const chips = todos(li, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
       ok(chips.length === 3 && chips[0].textContent === "Modalidades ★5" && chips[1].textContent === "Contratos ★3" === false || chips.length === 3, "R24c um chip por ramo");
       ok(/ed-ramo-vez/.test(chips[0].className) && !/ed-ramo-vez/.test(chips[1].className) && chips.every((c) => /ed-ramo-pend/.test(c.className)), "R24d o ramo da sessao da vez e' destacado; todos a estudar");
-      ok(chips.every((c) => c.title.indexOf("Modalidades") >= 0 ? true : c.title.indexOf(c.textContent.split(" ★")[0]) === 0), "R24e0 o balao de cada chip comeca pelo nome completo do ramo");
-      ok(chips.every((c) => c.title.length > 15) && /a estudar/.test(chips[0].title) && /peso 5/.test(chips[0].title) && /pregão/.test(chips[0].title), "R24e cada chip explica o ramo (estado, peso e nota): " + chips[0].title);
+      ok(chips.every((c) => c.title.indexOf("Modalidades") >= 0 ? true : c.title.indexOf(c.textContent.replace(/^(▶|✓|↻) /, "").split(" ★")[0]) === 0), "R24e0 o balao de cada chip comeca pelo nome completo do ramo");
+      ok(chips.every((c) => c.title.length > 15) && /da vez/.test(chips[0].title) && /peso 5/.test(chips[0].title) && /pregão/.test(chips[0].title), "R24e cada chip explica o ramo (estado, peso e nota): " + chips[0].title);
       const cx = it.chave;
       const li2 = a.edLinhaAgendaTeste(Object.assign({}, plano({ [cx + "›#modalidades"]: { e: "feito", d: "2020-01-01" } }).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
       const ch2 = todos(li2, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []);
       const res2 = todos(li2, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0];
-      const cM = ch2.find((c) => /^Modalidades/.test(c.textContent));
-      ok(cM && /ed-ramo-venceu/.test(cM.className) && /revisão vencida/.test(cM.title) && /Ramos 1\/3/.test(res2.textContent), "R24f ramo estudado ha muito tempo aparece com a revisao vencida, e o resumo conta 1 de 3");
+      const cM = ch2.find((c) => /^(▶ |✓ |↻ )?Modalidades/.test(c.textContent));
+      ok(cM && /ed-ramo-venceu/.test(cM.className) && /revisão vencida/.test(cM.title) && /Ramos estudados: 1 de 3/.test(res2.textContent) && /^↻ /.test(cM.textContent), "R24f ramo estudado ha muito tempo aparece com a revisao vencida, e o resumo conta 1 de 3");
       const li3 = a.edLinhaAgendaTeste(Object.assign({}, plano({ [cx + "›#modalidades"]: { e: "feito", d: new Date().toISOString().slice(0, 10) } }).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
-      ok(todos(li3, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []).find((c) => /^Modalidades/.test(c.textContent)).className.indexOf("ed-ramo-feito") > 0, "R24g ramo estudado hoje: estado 'estudado'");
+      ok(todos(li3, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []).find((c) => /^(▶ |✓ |↻ )?Modalidades/.test(c.textContent)).className.indexOf("ed-ramo-feito") > 0, "R24g ramo estudado hoje: estado 'estudado'");
       const tudo = {}; ["modalidades", "contratos", "fase_preparatoria"].forEach((id) => { tudo[cx + "›#" + id] = { e: "feito", d: "2020-01-01" }; });
       const li4 = a.edLinhaAgendaTeste(Object.assign({}, plano(tudo).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
+      /* V6: o anel azul e' "da vez" (▶), nunca "estudado" (✓) */
+      ok(/^▶ Modalidades/.test(chips[0].textContent) && /da vez/.test(chips[0].title) && !/^[▶✓↻]/.test(chips[1].textContent), "R24v1 so' o ramo da sessao leva o ▶; os demais a estudar ficam sem marca");
+      ok(/^✓ Modalidades/.test(todos(li3, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []).find((c) => /Modalidades/.test(c.textContent)).textContent), "R24v2 estudado leva ✓ e deixa de ser 'da vez' mesmo estando na sessao");
       ok(/Ramos 3\/3 estudados · a revisar: 3/.test(todos(li4, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0].textContent), "R24h todos estudados: o resumo passa a falar da revisao (a revisar: 3)");
       /* muitos ramos: ver todos */
       const rMuitos = a.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 9 }, (x, k) => "++ Ramo " + (k + 1) + " :: " + (k % 5 + 1)).join(NL));
