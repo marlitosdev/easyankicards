@@ -2868,10 +2868,15 @@ async function testes() {
       a.abrirRegistro(it());
       ok(a.$("regRamosExigir").checked === false && a.loja.getItem("eac_ramo_exigir") === null, "R39 a opcao vem DESLIGADA (o comportamento de sempre)");
       /* V6: a caixa se explica, com um exemplo do proprio ramo marcado */
-      const aj = a.$("regRamosExigirAj"), ex = a.$("regRamosExigirEx");
-      ok(aj.hidden === false && /LIGADO/.test(aj.textContent) && /DESLIGADO/.test(aj.textContent) && /em andamento/.test(aj.textContent), "R39v1 a explicacao fica visivel ao lado da caixa (ligado x desligado): " + aj.textContent);
+      /* a explicacao NAO ocupa a janela: mora no balao do (?) ao lado da caixa */
+      const bq = a.$("btnRegExigirAjuda"), exTxt = () => bq.dataset.texto || "";
+      ok(!a.$("regRamosExigirAj") && !a.$("regRamosExigirEx") && a.$("regRamosExigirLin").hidden === false && !!bq, "R39v0 sem paragrafos soltos: so' a caixa e o (?) ocupam espaco");
+      ok(/LIGADO/.test(exTxt()) && /DESLIGADO/.test(exTxt()) && /em andamento/.test(exTxt()), "R39v1 o texto do (?) explica ligado x desligado: " + exTxt());
+      bq.onclick({ stopPropagation() {} });
+      ok(a.dicaAberta() === true && /LIGADO/.test(a.dicaTexto()) && /Exemplo com/.test(a.dicaTexto()), "R39v1b clicar no (?) abre o balao com a explicacao e o exemplo: " + a.dicaTexto().slice(0, 80));
+      a.dicaFechar();
       ok(/^Só marcar o ramo como ESTUDADO/.test(a.t("ed_reg_exigir")) && /ed_reg_exigir"/.test(require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8")), "R39v2 o rotulo diz em palavras simples o que a caixa faz");
-      ok(ex.hidden === false && /Exemplo com “[^”]+”/.test(ex.textContent) && /Ligado → .*em andamento/.test(ex.textContent) && /Desligado → vira “estudado”/.test(ex.textContent), "R39v3 o exemplo usa o ramo marcado e mostra o que acontece nos dois casos: " + ex.textContent);
+      ok(/Exemplo com “[^”]+”/.test(exTxt()) && /Ligado → .*em andamento/.test(exTxt()) && /Desligado → vira “estudado”/.test(exTxt()), "R39v3 o exemplo usa o ramo marcado e mostra o que acontece nos dois casos: " + exTxt());
       a.$("regRamosExigir").checked = true; a.$("regRamosExigir").onchange();
       ok(a.loja.getItem("eac_ramo_exigir") === "1", "R39a ligar a opcao fica guardado");
       formas("flashcards");
@@ -2919,7 +2924,8 @@ async function testes() {
       const marcas = () => linhas().map((l) => l.children[0].checked);
       const ch = item().chave;
       a.abrirRegistro(item());
-      ok(a.$("regRamosExigirEx").hidden === false && /^Exemplo com “Modalidades” — etapas dele: cartões ○ \(○ falta/.test(a.$("regRamosExigirEx").textContent) && !/—\s*·|·\s*—/.test(a.$("regRamosExigirEx").textContent.split("etapas dele:")[1].split("(")[0]), "R33v o exemplo lista so as etapas que o ramo tem (sem os \"—\" de etapa inexistente): " + a.$("regRamosExigirEx").textContent);
+      const exV = (a.$("btnRegExigirAjuda").dataset.texto || "").split("\n\n")[1] || "";
+      ok(/^Exemplo com “Modalidades” — etapas dele: cartões ○ \(○ falta/.test(exV) && !/—\s*·|·\s*—/.test(exV.split("etapas dele:")[1].split("(")[0]), "R33v o exemplo lista so as etapas que o ramo tem (sem os \"—\" de etapa inexistente): " + exV);
       ok(a.$("regRamosBloco").hidden === false && linhas().length === 3 && a.$("regRamosRot").textContent === "O que você estudou?", "R33 topico com ramos: a janela mostra a lista dos 3 ramos ('O que voce estudou?')");
       ok(marcas().join() === "true,false,false" && /Modalidades ★5/.test(linhas()[0].children[1].textContent) && /Fase preparatória ★3/.test(linhas()[1].children[1].textContent), "R33a vem marcado so' o ramo que a agenda propos, na ordem de relevancia");
       ok(Number(a.$("regMinutos").value) === 70 && /1 ramo\(s\) marcado\(s\) · 1h10 sugeridos/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
@@ -2972,7 +2978,7 @@ async function testes() {
       ok(linhas()[0].children[0].disabled === true && linhas()[1].children[0].disabled === false && /já estudado/.test(linhas()[0].children[2].textContent), "R33l ramo ja estudado fica desabilitado, dizendo 'ja estudado'");
       a.$("btnRegOutro").onclick();
       ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === true && linhas()[0].children[0].disabled === false && /ainda não estudado/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO inverte: so' os estudados podem ser escolhidos");
-      ok(a.$("regRamosExigirLin").hidden === true && a.$("regRamosExigirAj").hidden === true && a.$("regRamosExigirEx").hidden === true, "R33m2 na REVISAO a caixa \"so' marcar estudado com todas as etapas\" e sua explicacao somem (so valem no estudo)");
+      ok(a.$("regRamosExigirLin").hidden === true && (a.$("btnRegExigirAjuda").dataset.texto || "") === "", "R33m2 na REVISAO a caixa \"so' marcar estudado com todas as etapas\" e o (?) somem (so valem no estudo)");
       ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
       a.$("btnRegRamosTodos").onclick();
       ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === 55, "R33o 'o topico todo' na revisao marca so' os elegiveis (e o tempo so' deles: 55): " + a.$("regMinutos").value);
@@ -3045,6 +3051,12 @@ async function testes() {
       const li4 = a.edLinhaAgendaTeste(Object.assign({}, plano(tudo).itens.find((x) => x.nome === "Lei 14.133"), { edital: ed.id }));
       /* V6: o anel azul e' "da vez" (▶), nunca "estudado" (✓) */
       ok(/^▶ Modalidades/.test(chips[0].textContent) && /da vez/.test(chips[0].title) && !/^[▶✓↻]/.test(chips[1].textContent), "R24v1 so' o ramo da sessao leva o ▶; os demais a estudar ficam sem marca");
+      /* a legenda das marcas/cores: um (?) ao lado do resumo, com o balao */
+      const leg = todos(li2, (f) => /ed-ramos-leg/.test(f.className || ""), [])[0];
+      ok(leg && leg.textContent === "?" && leg.title.length > 10, "R24v3 o resumo dos ramos tem um (?) com dica ao passar o mouse");
+      leg.onclick({ stopPropagation() {} });
+      ok(a.dicaAberta() === true && a.dicaTexto().indexOf("ESTA sessão") >= 0 && ["▶", "✓", "↻", "★", "tracejado", "pulado"].every((w) => a.t("ed_ramos_legenda").toLowerCase().indexOf(w.toLowerCase()) >= 0), "R24v4 clicar abre o balao e a legenda cobre ▶ ✓ ↻ ★, a estudar e pulado");
+      a.dicaFechar();
       ok(/^✓ Modalidades/.test(todos(li3, (f) => /(^|\s)ed-ramo(\s|$)/.test(f.className || ""), []).find((c) => /Modalidades/.test(c.textContent)).textContent), "R24v2 estudado leva ✓ e deixa de ser 'da vez' mesmo estando na sessao");
       ok(/Ramos 3\/3 estudados · a revisar: 3/.test(todos(li4, (f) => /ed-ramos-resumo/.test(f.className || ""), [])[0].textContent), "R24h todos estudados: o resumo passa a falar da revisao (a revisar: 3)");
       /* muitos ramos: ver todos */

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "17.76.0";
+const VERSAO = "17.77.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -5004,6 +5004,7 @@ function dicaFechar() {
 }
 
 function dicaAberta() { return !!dicaBalao; }
+function dicaTexto() { return dicaBalao ? String(dicaBalao.textContent || "") : ""; }
 
 function dicaMostrar(alvo, texto) {
   /* TOCAR NO MESMO (?) FECHA. Sem isto o único jeito de sair seria
