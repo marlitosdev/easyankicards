@@ -182,6 +182,59 @@ function edPeso(txt, achados, linha) {
   return { peso: n, herdado: false };
 }
 
+/* =====================================================================
+ * TEXTO QUE NÃO É UM EDITAL.
+ *
+ * O campo "disciplinas e tópicos" já recebeu o PRÓPRIO PROMPT (o usuário copiou o pedido para a IA e colou no lugar da
+ * resposta). O leitor tomou os exemplos do prompt por edital — "Nome da disciplina", Português, Direito Financeiro,
+ * Auditoria Governamental, dois blocos "Conhecimentos…" — e tudo o que vem depois (risco de eliminação, buracos, Raio-X)
+ * foi calculado em cima de lixo, com ar de autoridade. Errar calado é pior do que falhar alto: texto com a assinatura do
+ * prompt NÃO gera disciplina nenhuma, e o achado "texto_e_o_prompt" diz por quê.
+ * ===================================================================== */
+function edSemAcento(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/* frases que só existem no prompt (PT e EN); duas bastam — o prompt inteiro tem todas */
+const ED_ASSINATURAS_PROMPT = [
+  /voce vai organizar um edital/, /cole aqui o edital/, /onde colar a resposta/, /formato \(uma linha por item\)/,
+  /you will organise an exam syllabus/, /paste the syllabus here/, /where to paste the answer/, /format \(one line per item\)/,
+];
+function edEhPrompt(raw) {
+  const n = edSemAcento(raw);
+  return ED_ASSINATURAS_PROMPT.filter((re) => re.test(n)).length >= 2;
+}
+
+/* os nomes que o PROMPT usa para mostrar o formato: se aparecem como disciplina ou tópico, ninguém digitou isso */
+const ED_NOMES_DE_MODELO = ["nome da disciplina", "nome do topico", "nome do concurso", "nome do ramo",
+  "subject name", "topic name", "exam name", "branch name"];
+function edNomeDeModelo(nome) {
+  return ED_NOMES_DE_MODELO.indexOf(edSemAcento(nome).trim()) >= 0;
+}
+
+/* Tira o prompt do texto e deixa só o cabeçalho de cima (as linhas "#" e em branco do início): o que o app escreveu. */
+function edTirarPrompt(raw) {
+  const topo = [];
+  for (const l of String(raw || "").split(/\r?\n/)) { if (/^\s*(#|$)/.test(l)) topo.push(l); else break; }
+  return topo.join("\n").replace(/\s+$/, "") + (topo.length ? "\n" : "");
+}
+
+/* O que há de errado com o texto, em uma palavra — ou null.
+ *   "prompt": é o pedido para a IA, não a resposta;
+ *   "modelo": tem nomes de exemplo do prompt como se fossem do edital;
+ *   "cru": quase nada foi entendido (ignoradas >= 5 e mais que as linhas úteis) — parece o edital como saiu do PDF. */
+function edTextoSuspeito(raw, r) {
+  const L = r || lerEdital(raw);
+  const ach = L.achados || [];
+  if (ach.some((a) => a.tipo === "texto_e_o_prompt")) return { tipo: "prompt" };
+  const ign = ach.filter((a) => a.tipo === "linha_ignorada").length;
+  const uteis = (L.disciplinas || []).reduce((s, d) => s + 1 + d.topicos.length, 0);
+  if (ign >= 5 && ign > uteis) return { tipo: "cru", ignoradas: ign, uteis };
+  const modelo = ach.filter((a) => a.tipo === "nome_de_modelo");
+  if (modelo.length) return { tipo: "modelo", nomes: modelo.map((a) => a.txt) };
+  return null;
+}
+
 function lerEdital(raw) {
   const linhas = String(raw || "").split(/\r?\n/);
   /* "previsto" é a data que ainda não existe. Concurso planejado não tem
@@ -271,6 +324,7 @@ function lerEdital(raw) {
                 bloco: blocoAtual ? blocoAtual.nome : "" };
       if (blocoAtual) blocoAtual.disciplinas.push(p[0]);
       if (!p[0]) achados.push({ linha: n, tipo: "disciplina_sem_nome", txt: s });
+      if (edNomeDeModelo(p[0])) achados.push({ linha: n, tipo: "nome_de_modelo", txt: p[0] });
       if (disciplinas.some((d) => d.nome.toLowerCase() === p[0].toLowerCase()))
         achados.push({ linha: n, tipo: "disciplina_repetida", txt: p[0] });
       disciplinas.push(atual);
@@ -306,6 +360,7 @@ function lerEdital(raw) {
         pesoF2: f2.fase2 ? (f2.pesoF2 || peso) : null,
       });
       if (!p[0]) achados.push({ linha: n, tipo: "topico_sem_nome", txt: s });
+      if (edNomeDeModelo(p[0])) achados.push({ linha: n, tipo: "nome_de_modelo", txt: p[0] });
       return;
     }
 
@@ -340,6 +395,18 @@ function lerEdital(raw) {
        * "Nq", não este */
       d.pesoDerivado = true;
     });
+  }
+
+  if (edEhPrompt(raw)) {
+    /* o cabeçalho que vale é o do TOPO (o que o app escreveu); os "#" do meio do prompt são exemplo do formato */
+    const topo = [];
+    for (const l of linhas) { if (/^\s*(#|$)/.test(l)) topo.push(l); else break; }
+    const c0 = lerEdital(topo.join("\n")).cfg;
+    Object.keys(cfg).forEach((k) => { delete cfg[k]; });
+    Object.assign(cfg, c0);
+    disciplinas.length = 0;
+    blocos.length = 0;
+    achados.push({ linha: 1, tipo: "texto_e_o_prompt", txt: "" });
   }
 
   return { cfg, disciplinas, blocos, achados, linhas: linhas.length };
@@ -1803,6 +1870,18 @@ function diagnosticoPlano(r, plano) {
   const itens = (plano && plano.itens) || [];
   const pesoTotal = (plano && plano.peso && plano.peso.total) || 1;
 
+  /* o texto é o prompt (ou tem nomes de exemplo dele): nada do que vem abaixo vale a pena calcular */
+  const susp = edTextoSuspeito(null, r);
+  if (susp && susp.tipo === "prompt") {
+    add("texto_e_o_prompt", true, "O texto do edital é o PROMPT para a IA, não o edital nem a resposta dela. Os exemplos do prompt "
+      + "(\"Nome da disciplina\", Português, Direito Financeiro…) não são do seu concurso. Apague o texto, copie o prompt, "
+      + "cole-o numa IA junto com o edital e traga de volta só a resposta.");
+    return achados;
+  }
+  if (susp && susp.tipo === "modelo")
+    add("nome_de_modelo", true, "O plano tem nomes de EXEMPLO do prompt como se fossem do edital: " + susp.nomes.slice(0, 4).join(", ")
+      + ". Isso não veio do seu concurso — troque ou apague essas linhas.");
+
   if (!discs.length) return achados;
 
   if (temPesosIguais(r))
@@ -2262,6 +2341,7 @@ function edHerdeirosDe(nomeAntigo, candidatos) {
 function edCompararColagem(txtAntes, txtDepois, progresso) {
   const A = lerEdital(txtAntes || "");
   const D = lerEdital(txtDepois || "");
+  const suspeito = edTextoSuspeito(null, D);
   const prog = progresso || {};
 
   const chaves = (r) => {
@@ -2332,6 +2412,8 @@ function edCompararColagem(txtAntes, txtDepois, progresso) {
      * Tópico a menos é uma escolha; marca de estudado sumindo é um dano. */
     grave: orfaos.length > 0,
     vazio: Object.keys(kD).length === 0,
+    /* "prompt" | "modelo" | "cru" | null — o que o texto colado parece ser, quando não é uma resposta da IA */
+    suspeito: suspeito ? suspeito.tipo : null,
   };
 }
 

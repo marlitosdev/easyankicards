@@ -157,6 +157,12 @@ function edSugestoes(r) {
   if (ignoradas.length)
     itens.push({ dot: "dot-red", txt: t("ed_crit_ignorada", { n: ignoradas.length }),
                  linha: ignoradas[0].linha });
+  /* O TEXTO NÃO É UM EDITAL: o prompt colado no lugar da resposta, ou nomes de exemplo dele — vem ANTES de tudo */
+  const susp = edTextoSuspeito($("editalTexto").value, r);
+  if (susp && susp.tipo === "prompt")
+    itens.unshift({ dot: "dot-red", txt: t("ed_crit_prompt"), fixTxt: t("ed_fix_prompt"), fix: edTirarPrompt });
+  else if (susp && susp.tipo === "modelo")
+    itens.unshift({ dot: "dot-red", txt: t("ed_crit_modelo", { n: susp.nomes.slice(0, 3).join(", ") }) });
   if (temNumeracaoEdital($("editalTexto").value))
     itens.push({ dot: "dot-org", txt: t("ed_crit_numeracao"),
                  fixTxt: t("ed_fix_numeracao"), fix: tirarNumeracaoEdital });
@@ -172,8 +178,9 @@ function edSugestoes(r) {
   /* Sempre em primeiro lugar, mesmo quando está tudo certo: é o número que
    * responde "o edital chegou inteiro?" sem precisar contar à mão. */
   const tops = r.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
+  /* "Lido" só é verde quando nada ficou de fora nem veio suspeito: verde ao lado de um vermelho é o que enganava */
   if (tops || r.disciplinas.length)
-    itens.unshift({ dot: "dot-green", conta: true,
+    itens.unshift({ dot: (susp || ignoradas.length) ? "dot-org" : "dot-green", conta: true,
       txt: t("ed_lido", { d: r.disciplinas.length, t: tops }) });
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("ed_crit_ok") });
 
@@ -3288,6 +3295,7 @@ function edConferirColagem() {
   linha(t("ed_colar_conf", { a: c.topicosAntes, d: c.topicosDepois,
                              da: c.discAntes, dd: c.discDepois }));
 
+  if (c.suspeito === "prompt") { linha(t("ed_colar_e_o_prompt"), "perigo"); return Object.assign(c, { novoTxt }); }
   if (c.vazio) { linha(t("ed_colar_vazio"), "perigo"); return Object.assign(c, { novoTxt }); }
 
   /* o dano primeiro: é o único item da lista que não se desfaz */
@@ -3548,6 +3556,10 @@ async function edAplicarColagem() {
   /* Confirmação em degraus: cada pergunta cobre um tipo de mudança, e a
    * mais grave vem por último, com o número dentro dela. Uma pergunta só,
    * genérica, é a que a pessoa aprende a responder no automático. */
+  if (c.suspeito === "prompt") {
+    await uiAlert(t("ed_colar_e_o_prompt"));
+    return;
+  }
   if (c.vazio) {
     await uiAlert(t("ed_colar_vazio_erro"));
     return;

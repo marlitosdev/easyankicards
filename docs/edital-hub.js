@@ -1016,6 +1016,10 @@ function hubNovo() {
   if (pm) pm.textContent = "";
   const conf = document.getElementById("edNovoConf");
   if (conf) conf.textContent = "";
+  const p1 = document.getElementById("edNovoPasso1"), p2 = document.getElementById("edNovoPasso2");
+  if (p1) p1.className = "ednovo-passo";
+  if (p2) p2.className = "ednovo-passo";
+  hubNovoPintar();
   abrirModal("dlgEdNovo");
   const nome = document.getElementById("edNovoNome");
   if (nome && nome.select) { try { nome.focus(); nome.select(); } catch (e) {} }
@@ -1024,14 +1028,154 @@ function hubNovo() {
 /* O prompt do edital para a IA. Com `comRamos`, ganha o bloco de regras de ramificação ("++ Ramo :: peso :: nota"),
  * numerado a seguir à última regra e colocado ANTES do exemplo/do edital — sem a caixa, é o ed_prompt de sempre. O ponto de
  * inserção é o primeiro "\n\nEXEMPLO DE SAÍDA:" / "\n\nSYLLABUS:" / "\n\nEDITAL:", que existem nos dois idiomas. */
-function edPromptEdital(comRamos) {
-  const base = t("ed_prompt");
-  if (!comRamos) return base;
-  const corte = base.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
-  if (corte < 0) return base;
-  let n = 0;
-  base.slice(0, corte).replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
-  return base.slice(0, corte) + "\n" + t("ed_prompt_ramos", { n: n + 1 }) + base.slice(corte);
+function edPromptEdital(comRamos, textoDoEdital) {
+  let out = t("ed_prompt");
+  const corte = out.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
+  if (comRamos && corte >= 0) {
+    let n = 0;
+    out.slice(0, corte).replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
+    out = out.slice(0, corte) + "\n" + t("ed_prompt_ramos", { n: n + 1 }) + out.slice(corte);
+  }
+  /* com o texto do edital na mão, ele já vai DENTRO do prompt, no lugar do "[cole aqui o edital]" */
+  if (textoDoEdital) out = out.replace(/\[cole aqui o edital\]|\[paste the syllabus here\]/, () => textoDoEdital);
+  return out;
+}
+
+/* =====================================================================
+ * O CAMPO "RESPOSTA DA IA" COMO SEMÁFORO — a estratégia visual contra o erro de colar a coisa errada.
+ *
+ *  · a cor tem um significado só, em todo o diálogo: cinza = ainda vazio, VERDE = entendi, ÂMBAR = dá, mas confira,
+ *    VERMELHO = o app não cria com isto;
+ *  · o app mostra o que ENTENDEU (um chip por disciplina) ANTES de criar — nomes de exemplo do prompt saltam aos olhos;
+ *  · "Antes de criar": nome, data e plano, cada um com o seu sinal, no mesmo lugar do botão.
+ * ===================================================================== */
+function hubNovoEstadoPlano(txt) {
+  /* o cabeçalho ("#") é do app, não da resposta da IA: só o resto conta */
+  const corpo = String(txt || "").split(/\r?\n/).filter((l) => !/^\s*#/.test(l)).join("\n");
+  const base = { estado: "vazio", d: 0, t: 0, r: 0, ign: 0, rep: 0, sem: 0, disc: [], nomes: [] };
+  if (!corpo.trim()) return base;
+  const r = lerEdital("# x\n" + corpo);
+  const ach = r.achados || [];
+  const cont = (tipo) => ach.filter((a) => a.tipo === tipo).length;
+  const disc = (r.disciplinas || []).map((d) => ({
+    nome: d.nome, topicos: d.topicos.length,
+    modelo: edNomeDeModelo(d.nome) || d.topicos.some((x) => edNomeDeModelo(x.nome)),
+  }));
+  const info = Object.assign(base, {
+    d: disc.length, t: disc.reduce((a, d) => a + d.topicos, 0),
+    r: (r.disciplinas || []).reduce((a, d) => a + d.topicos.reduce((b, tp) => b + (tp.ramos ? tp.ramos.length : 0), 0), 0),
+    ign: cont("linha_ignorada"), rep: cont("disciplina_repetida"), sem: disc.filter((d) => !d.topicos).length, disc,
+  });
+  const susp = edTextoSuspeito(null, r);
+  if (susp) return Object.assign(info, { estado: susp.tipo, nomes: susp.nomes || [] });
+  if (!info.d) return Object.assign(info, { estado: "cru" });
+  return Object.assign(info, { estado: info.ign || info.rep || info.sem ? "atencao" : "ok" });
+}
+
+const HUB_SEM_CLASSE = { vazio: "sem-vazio", ok: "sem-ok", atencao: "sem-atencao", cru: "sem-atencao", modelo: "sem-atencao", prompt: "sem-erro" };
+const HUB_SEM_ICONE = { "sem-vazio": "○", "sem-ok": "✓", "sem-atencao": "⚠", "sem-erro": "⛔" };
+
+function hubNovoMotivo(est) {
+  if (est.estado === "cru") return t("ed_novo_mot_cru");
+  if (est.estado === "modelo") return t("ed_novo_mot_modelo", { n: est.nomes.slice(0, 2).join(", ") });
+  if (est.estado === "atencao" && est.ign) return t("ed_novo_mot_ign", { i: est.ign });
+  return "";
+}
+
+function hubNovoPintar() {
+  const g = (id) => document.getElementById(id);
+  const sem = g("edNovoSem");
+  if (!sem) return null;
+  const pl = g("edNovoPlano");
+  const est = hubNovoEstadoPlano(pl ? pl.value : "");
+  const cls = HUB_SEM_CLASSE[est.estado];
+  sem.className = "ednovo-sem " + cls;
+  g("edNovoSemIco").textContent = HUB_SEM_ICONE[cls];
+  const partes = [];
+  if (est.ign) partes.push(t("ed_novo_p_ign", { n: est.ign }));
+  if (est.rep) partes.push(t("ed_novo_p_rep", { n: est.rep }));
+  if (est.sem) partes.push(t("ed_novo_p_sem", { n: est.sem }));
+  g("edNovoSemTxt").textContent = est.estado === "atencao" ? t("ed_novo_sem_atencao", { p: partes.join(", ") })
+    : est.estado === "cru" ? t("ed_novo_sem_cru", { i: est.ign })
+    : est.estado === "modelo" ? t("ed_novo_sem_modelo", { n: est.nomes.slice(0, 2).join(", ") })
+    : t("ed_novo_sem_" + est.estado);
+  if (pl) pl.className = "ednovo-ta " + cls.replace("sem-", "ta-");
+  /* ações do semáforo: tirar o que não serve; ou levar o texto cru para a IA */
+  const ac = g("edNovoSemAcoes");
+  ac.innerHTML = "";
+  const botao = (id, chave, fn) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min"; b.id = id; b.textContent = t(chave); b.onclick = fn;
+    ac.append(b);
+  };
+  if (est.estado === "cru") botao("btnEdNovoMontar", "ed_novo_btn_montar", hubNovoMontarPrompt);
+  if (est.estado === "cru" || est.estado === "prompt") botao("btnEdNovoLimpar", "ed_novo_btn_limpar", hubNovoLimparPlano);
+  /* o que o app ENTENDEU: um chip por disciplina */
+  const ch = g("edNovoEntendi");
+  ch.innerHTML = "";
+  const mostrar = est.disc.length && est.estado !== "prompt" && est.estado !== "cru";
+  ch.hidden = !mostrar;
+  if (mostrar) {
+    est.disc.slice(0, 12).forEach((d) => {
+      const s = document.createElement("span");
+      s.className = "ednovo-chip" + (d.modelo ? " chip-erro" : (!d.topicos ? " chip-atencao" : ""));
+      s.textContent = d.nome + " · " + d.topicos;
+      s.title = d.modelo ? t("ed_novo_chip_modelo") : (!d.topicos ? t("ed_novo_chip_vazia") : "");
+      ch.append(s);
+    });
+    if (est.disc.length > 12) {
+      const s = document.createElement("span");
+      s.className = "ednovo-chip"; s.textContent = "+" + (est.disc.length - 12);
+      ch.append(s);
+    }
+  }
+  /* "Antes de criar": nome, data, plano */
+  const nome = String((g("edNovoNome") || {}).value || "").trim(), prova = String((g("edNovoProva") || {}).value || "").trim();
+  const nomeOk = nome && nome !== t("hub_novo_padrao");
+  const linha = (id, c, txt) => { const li = g(id); if (li) { li.className = "pront-" + c; li.textContent = { ok: "✓", atencao: "⚠", erro: "⛔", vazio: "○" }[c] + " " + txt; } };
+  linha("edNovoProntNome", nomeOk ? "ok" : "atencao", nomeOk ? t("ed_novo_pr_nome_ok", { n: nome }) : t("ed_novo_pr_nome_no", { n: nome || t("hub_novo_padrao") }));
+  linha("edNovoProntData", prova ? "ok" : "atencao", prova ? t("ed_novo_pr_data_ok", { d: prova.split("-").reverse().join("/") }) : t("ed_novo_pr_data_no"));
+  linha("edNovoProntPlano", est.estado === "prompt" ? "erro" : est.estado === "vazio" ? "vazio" : est.estado === "ok" ? "ok" : "atencao",
+    est.estado === "prompt" ? t("ed_novo_pr_plano_erro") : est.estado === "vazio" ? t("ed_novo_pr_plano_vazio")
+      : est.estado === "ok" ? t("ed_novo_pr_plano_ok", { d: est.d, t: est.t }) : t("ed_novo_pr_plano_ver"));
+  const criar = g("btnEdNovoCriar");
+  if (criar) { criar.disabled = est.estado === "prompt"; criar.title = est.estado === "prompt" ? t("ed_novo_criar_bloq") : ""; }
+  return est;
+}
+
+function hubNovoLimparPlano() {
+  const pl = document.getElementById("edNovoPlano");
+  if (pl) pl.value = "";
+  const c = document.getElementById("edNovoConf");
+  if (c) c.textContent = "";
+  hubNovoPintar();
+}
+
+/* texto cru (o edital como saiu do PDF) → prompt com o texto dentro, na área de transferência; só limpa o campo se a cópia deu certo */
+async function hubNovoMontarPrompt() {
+  const pl = document.getElementById("edNovoPlano");
+  const txt = String((pl || {}).value || "").trim();
+  if (!txt) return false;
+  const comRamos = !!(document.getElementById("edNovoPedirRamos") || {}).checked;
+  const msg = document.getElementById("edNovoPromptMsg");
+  try { await navigator.clipboard.writeText(edPromptEdital(comRamos, txt)); } catch (e) {
+    if (msg) msg.textContent = t("ed_novo_montar_falha");
+    return false;
+  }
+  pl.value = "";
+  const c = document.getElementById("edNovoConf");
+  if (c) c.textContent = "";
+  if (msg) msg.textContent = t("ed_novo_montar_ok");
+  hubNovoPassoFeito();
+  hubNovoPintar();
+  return true;
+}
+
+/* o passo 1 vira ✓ e o passo 2 ganha o destaque: a ordem das coisas fica visível */
+function hubNovoPassoFeito() {
+  const p1 = document.getElementById("edNovoPasso1"), p2 = document.getElementById("edNovoPasso2");
+  if (p1) p1.className = "ednovo-passo feito";
+  if (p2) p2.className = "ednovo-passo ativo";
 }
 
 /* Monta o texto do edital a partir da caixa. Separada de quem a mostra
@@ -1068,6 +1212,8 @@ function hubNovoCriar() {
   };
   /* a segunda fase só vale com o interruptor ligado: o que foi digitado antes de desligar não entra */
   const f2on = !!(document.getElementById("edNovoF2On") || {}).checked;
+  /* o PROMPT nunca vira edital — nem se chamarem esta função sem passar pelo botão */
+  if (hubNovoEstadoPlano(val("edNovoPlano")).estado === "prompt") { hubNovoPintar(); return null; }
   const texto = hubNovoTexto({
     nome: val("edNovoNome"), prova: val("edNovoProva"),
     horas: val("edNovoHoras"), f2Nome: f2on ? val("edNovoF2Nome") : "",
@@ -1087,6 +1233,16 @@ function hubNovoCriar() {
               + nTop + " tópicos" : " · sem disciplinas ainda"));
   hubAbrirEdital(e.id);
   return e;
+}
+
+/* o botão "Criar edital": o que é vermelho não cria; o que é âmbar pergunta antes. `confirmar`: só para teste. */
+async function hubNovoCriarConfirmado(confirmar) {
+  const pl = document.getElementById("edNovoPlano");
+  const est = hubNovoEstadoPlano(pl ? pl.value : "");
+  if (est.estado === "prompt") { hubNovoPintar(); return null; }
+  const motivo = hubNovoMotivo(est);
+  if (motivo && !(await (confirmar || uiConfirm)(t("ed_novo_conf_suspeito", { m: motivo })))) return null;
+  return hubNovoCriar();
 }
 
 function hubRenomear() {
@@ -1148,7 +1304,8 @@ function hubIniciar() {
   const r = document.getElementById("btnEdRenomear");
   if (r) r.onclick = hubRenomear;
   const nc = document.getElementById("btnEdNovoCriar");
-  if (nc) nc.onclick = hubNovoCriar;
+  if (nc) nc.onclick = () => hubNovoCriarConfirmado();
+  ["edNovoNome", "edNovoProva"].forEach((id) => { const el = document.getElementById(id); if (el) { el.oninput = hubNovoPintar; el.onchange = hubNovoPintar; } });
   const nn = document.getElementById("btnEdNovoNao");
   if (nn) nn.onclick = () => document.getElementById("dlgEdNovo").close();
   const sw2 = document.getElementById("edNovoF2On");
@@ -1163,6 +1320,7 @@ function hubIniciar() {
       try { navigator.clipboard.writeText(edPromptEdital(comRamos)); } catch (e) {}
       const c = document.getElementById("edNovoPromptMsg");
       if (c) c.textContent = t(comRamos ? "ed_novo_prompt_ok_ramos" : "ed_novo_prompt_ok");
+      hubNovoPassoFeito();
     };
   }
   /* conferência viva: dizer quantas disciplinas o texto colado tem ANTES
@@ -1172,8 +1330,10 @@ function hubIniciar() {
     pl.oninput = () => {
       const c = document.getElementById("edNovoConf");
       if (!c) return;
+      const est = hubNovoPintar();
       const txt = String(pl.value || "").trim();
-      if (!txt) { c.textContent = ""; return; }
+      /* "0 disciplinas, 25 linhas que não entraram" ao lado do vermelho só repete o que o semáforo já disse */
+      if (!txt || (est && (est.estado === "prompt" || est.estado === "cru"))) { c.textContent = ""; return; }
       const r2 = lerEdital("# x\n" + txt.split(/\r?\n/)
         .filter((l) => !/^\s*#/.test(l)).join("\n"));
       const nd = (r2.disciplinas || []).length;
