@@ -1514,7 +1514,7 @@ async function testes() {
       const topoIss = linhas(a, "ger-top").find((e) => /ISS \(/.test(e.textContent));
       topoIss.onclick();
       const itensLista = achar(a.$("gerLista"), (e) => cls(e, "ger-item"));
-      ok(itensLista.length > 0 && itensLista.every((e) => !achar(e, (x) => x.tag === "input").length && e.draggable !== true), "G24q em modo exportar, a lista de cartoes nao tem caixa nem arrastar (so' ver o conteudo)");
+      ok(itensLista.length > 0 && itensLista.every((e) => !achar(e, (x) => x.tag === "input").length && e.draggable === true), "G24q em modo exportar, a lista de cartoes nao tem caixa de marcar (marcar e' na arvore); cada cartao se arrasta SOZINHO (R3)");
     }
     /* editar/apagar (coluna da previa) ficam desligados em modo exportar, mesmo com um cartao em foco */
     {
@@ -2282,6 +2282,123 @@ async function testes() {
       const { a } = montar();
       a.gerAbrir(); a.$("btnGerModoExportar").onclick();
       ok(a.$("gerExpOpcEdital").hidden === true && a.gerExpInfoVazios().size === 0, "G33q sem edital cadastrado a opcao fica escondida e nao ha vazios");
+    }
+  }
+
+  /* ---- G34: R3 — arrastar UM cartao da lista para outra pasta, so' nesta exportacao (separa so' ele dos irmaos do topico;
+   * a Biblioteca nunca muda) ---- */
+  {
+    const fakeEv = () => ({ prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {}, dataTransfer: { effectAllowed: "", setData() {}, setDragImage() {}, dropEffect: "" } });
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const acharTop = (a, nome) => linhas(a, "ger-top").find((e) => new RegExp("^" + nome + " \\(").test(e.textContent.trim()));
+    const cartoes = (a) => achar(a.$("gerLista"), (e) => cls(e, "ger-item"));
+    const acharCartao = (a, re) => cartoes(a).find((e) => re.test(e.textContent));
+    const FATO = /fato gerador do ISS\?/, ALIQ = /al.quota/i;
+    const fix = () => {
+      const m = montar();
+      const { a, iss, iptu, pri } = m;
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      [iss, iptu, pri].forEach((c) => a.gerMarcarExport(c, true));
+      a.$("gerExpSemRep").checked = false;
+      a.$("gerExpNome").value = "Raiz"; a.$("gerExpNome").oninput();
+      a.gerPintar();
+      acharTop(a, "ISS").onclick();
+      return m;
+    };
+    const capturar = async (a, formato) => { const c = {}; c.r = await a.gerAcaoExportar(formato || "apkg", { confirmar: async () => true, construir: async (cards, raiz) => { c.cards = cards; c.raiz = raiz; return new Uint8Array(1); }, entregar: async (b) => { c.bytes = b; } }); return c; };
+
+    /* toda linha da lista e' arrastavel; arrastar UM cartao e soltar no topico IPTU: so' ele muda */
+    {
+      const { a, iss } = fix();
+      const antes = JSON.stringify(a.matResumosAtual()), nNotas = a.gerNotasAtual().length;
+      ok(cartoes(a).length === 3 && cartoes(a).every((e) => e.draggable === true && typeof e.ondragstart === "function"), "G34a toda linha da lista de cartoes e' arrastavel em modo exportar");
+      acharCartao(a, ALIQ).ondragstart(fakeEv());
+      ok(a.gerArrastoExportAtual() && a.gerArrastoExportAtual().tipo === "cartao" && a.gerArrastoExportAtual().topico === "ISS", "G34b o arrasto guarda o tipo 'cartao' e de onde o cartao vem: " + JSON.stringify(a.gerArrastoExportAtual()));
+      acharTop(a, "IPTU").ondrop(fakeEv());
+      ok(a.gerArrastoExportAtual() === null && a.gerCartaoMoverParaExportAtual().size === 1 && a.gerMoverParaExportAtual().size === 0, "G34c so' UM cartao ganhou destino; a pasta ISS em si nao foi movida");
+      const mov = [...a.gerCartaoMoverParaExportAtual().values()][0];
+      ok(mov.disciplina === "Trib" && mov.topico === "IPTU", "G34d o destino do cartao e' o topico IPTU: " + JSON.stringify(mov));
+      /* a lista mostra o cartao movido com o caminho novo e um desfazer; o irmao fica sem marca */
+      const marca = achar(acharCartao(a, ALIQ), (e) => cls(e, "pac-caminho-movido"));
+      ok(marca.length === 1 && /IPTU$/.test(marca[0].textContent.trim()) && achar(acharCartao(a, FATO), (e) => cls(e, "pac-caminho-movido")).length === 0, "G34e o cartao movido mostra o caminho novo (IPTU) e o irmao continua sem marca");
+      ok(a.$("btnGerDesfazerExport").hidden === false, "G34f 'desfazer movimentos' aparece so' com um cartao movido");
+      /* a hierarquia ja' reflete: ISS 2 cartoes, IPTU 2 (o dele + o que veio) */
+      ok(/Raiz › Trib › ISS — 2/.test(a.$("gerExpDecks").textContent) && /Raiz › Trib › IPTU — 2/.test(a.$("gerExpDecks").textContent), "G34g os caminhos completos ja' mostram 2 cartoes em ISS e 2 em IPTU: " + a.$("gerExpDecks").textContent);
+      /* o arquivo (apkg e txt de verdade) leva o destino; a Biblioteca nao muda */
+      const c = await capturar(a);
+      ok(c.cards.find((x) => ALIQ.test(x.front)).deck === "Trib::IPTU" && c.cards.find((x) => FATO.test(x.front)).deck === "Trib::ISS", "G34h no arquivo so' o cartao arrastado vai para IPTU: " + JSON.stringify(c.cards.map((x) => x.deck)));
+      const t = await capturar(a, "txt");
+      const lin = new TextDecoder().decode(t.bytes).split("\n").filter((l) => l && !l.startsWith("#"));
+      ok(lin.filter((l) => l.split("\t")[1] === "Raiz::Trib::IPTU").length === 2 && lin.filter((l) => l.split("\t")[1] === "Raiz::Trib::ISS").length === 2, "G34i o .txt de verdade tambem: " + JSON.stringify(lin.map((l) => l.split("\t")[1])));
+      ok(JSON.stringify(a.matResumosAtual()) === antes && a.gerNotasAtual().length === nNotas && !a.gerTemRecibo(), "G34j a Biblioteca NAO mudou (nenhum cartao movido de verdade, nenhum recibo)");
+      /* desfazer so' este cartao */
+      achar(acharCartao(a, ALIQ), (e) => cls(e, "pac-desfazer-mov"))[0].onclick({ preventDefault() {}, stopPropagation() {} });
+      ok(a.gerCartaoMoverParaExportAtual().size === 0 && a.$("btnGerDesfazerExport").hidden === true, "G34k 'desfazer' do cartao tira so' o arrasto dele (e o botao geral some)");
+    }
+    /* soltar no PROPRIO topico: invalido, nao cria arrasto vazio */
+    {
+      const { a } = fix();
+      acharCartao(a, ALIQ).ondragstart(fakeEv());
+      const linhaIss = acharTop(a, "ISS"); const eo = fakeEv(); linhaIss.ondragover(eo);
+      ok(eo.prevented === false && cls(linhaIss, "ger-alvo-no"), "G34l soltar o cartao no PROPRIO topico e' invalido");
+      linhaIss.ondrop(fakeEv());
+      ok(a.gerCartaoMoverParaExportAtual().size === 0, "G34m soltar no proprio lugar nao cria destino nenhum");
+    }
+    /* soltar numa DISCIPLINA: muda so' a disciplina, o cartao mantem o topico */
+    {
+      const { a } = fix();
+      acharCartao(a, ALIQ).ondragstart(fakeEv());
+      linhas(a, "ger-disc").find((e) => /Const \(/.test(e.textContent)).ondrop(fakeEv());
+      const c = await capturar(a);
+      ok(c.cards.find((x) => ALIQ.test(x.front)).deck === "Const::ISS", "G34n soltar numa disciplina troca so' a disciplina do cartao: " + c.cards.find((x) => ALIQ.test(x.front)).deck);
+    }
+    /* o cartao HERDA a posicao atual da pasta (se a pasta inteira ja foi movida); cartao > pasta na exportacao */
+    {
+      const { a } = fix();
+      acharTop(a, "ISS").ondragstart(fakeEv());
+      acharTop(a, "IPTU").ondrop(fakeEv());
+      acharTop(a, "ISS") && acharTop(a, "ISS").onclick();
+      acharCartao(a, FATO).ondragstart(fakeEv());
+      ok(a.gerArrastoExportAtual().topico === "IPTU" && a.gerArrastoExportAtual().disciplina === "Trib", "G34o o cartao herda a posicao ATUAL da pasta (ja' movida), nao a original: " + JSON.stringify(a.gerArrastoExportAtual()));
+      acharTop(a, "Princípios").ondrop(fakeEv());
+      const c = await capturar(a);
+      ok(c.cards.find((x) => FATO.test(x.front)).deck === "Const::Princípios" && c.cards.find((x) => ALIQ.test(x.front)).deck === "Trib::IPTU", "G34p cartao com destino proprio ganha da pasta; o irmao segue a pasta: " + JSON.stringify(c.cards.map((x) => x.deck)));
+      /* "desfazer movimentos" geral limpa os dois tipos */
+      a.$("btnGerDesfazerExport").onclick();
+      ok(a.gerCartaoMoverParaExportAtual().size === 0 && a.gerMoverParaExportAtual().size === 0 && a.$("btnGerDesfazerExport").hidden === true, "G34q 'desfazer movimentos' geral limpa pastas E cartoes");
+    }
+    /* esquece ao trocar de modo e ao reabrir */
+    {
+      const { a } = fix();
+      acharCartao(a, ALIQ).ondragstart(fakeEv()); acharTop(a, "IPTU").ondrop(fakeEv());
+      a.gerAlternarModo("gerenciar"); a.gerAlternarModo("exportar");
+      ok(a.gerCartaoMoverParaExportAtual().size === 0, "G34r trocar de modo esquece os cartoes arrastados");
+      const { a: b } = fix();
+      acharCartao(b, ALIQ).ondragstart(fakeEv()); acharTop(b, "IPTU").ondrop(fakeEv());
+      b.$("dlgGerCartoes").close(); b.gerAbrir();
+      ok(b.gerCartaoMoverParaExportAtual().size === 0, "G34s reabrir a Biblioteca esquece os cartoes arrastados");
+    }
+    /* em modo GERENCIAR a linha continua com o arrastar REAL (nada de export-scoped) */
+    {
+      const { a, iss } = montar();
+      a.gerAbrir();
+      acharTop(a, "ISS").onclick();
+      acharCartao(a, ALIQ).ondragstart(fakeEv());
+      ok(a.gerArrastoExportAtual() === null && a.gerArrastoAtual() !== null, "G34t em modo gerenciar o arrastar de cartao continua sendo o REAL");
+    }
+    /* a Bancada: um cartao dela vai para uma pasta, os outros ficam na raiz */
+    {
+      const { a, iptu } = montar();
+      a.$("editor").value = "Qual a regra geral do prazo? :: Resposta decente e completa aqui\n\nOutra regra geral do prazo? :: Outra resposta decente e completa aqui";
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      a.gerMarcarExport(a.CQ_BANCADA, true); a.gerMarcarExport(iptu, true);
+      a.$("gerExpSemRep").checked = false; a.gerPintar();
+      acharTop(a, "Texto do editor").onclick();
+      acharCartao(a, /Qual a regra geral/).ondragstart(fakeEv());
+      acharTop(a, "IPTU").ondrop(fakeEv());
+      const c = await capturar(a);
+      const decks = c.cards.filter((x) => /regra geral/.test(x.front)).map((x) => x.front.slice(0, 5) + "=" + x.deck).sort();
+      ok(c.cards.filter((x) => /regra geral/.test(x.front) && x.deck === "Trib::IPTU").length === 1 && c.cards.filter((x) => /regra geral/.test(x.front) && x.deck === "").length === 1, "G34u um cartao da Bancada vai para a pasta e o outro continua na raiz: " + JSON.stringify(decks));
     }
   }
 

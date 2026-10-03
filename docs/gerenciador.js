@@ -354,6 +354,9 @@ let gerMoverParaExport = new Map();
 /* os nomes que a pessoa deu às pastas NESTA exportação (ver pacAplicarRenomear em pacote.js) e a pasta cujo nome está
  * sendo editado agora (chave = caminho original; "" = a raiz). Nada disto grava na Biblioteca. */
 let gerRenomearExport = new Map(), gerEditandoNome = null, gerFocoNomeArv = null;
+/* o cartão ARRASTADO da lista para outra pasta, só nesta exportação: chave = pacChaveCartao(n) → { disciplina, topico, edital }.
+ * Separa só ESSE cartão dos irmãos do tópico (tem prioridade sobre o arrasto do tópico). Nunca grava na Biblioteca. */
+let gerCartaoMoverParaExport = new Map();
 const GER_CHAVE_GRANDE = "eac_ger_grande";
 
 function gerEl(tag, cls, txt) {
@@ -374,7 +377,7 @@ function gerAlternarModo(modo) {
   gerModo = modo;
   gerSel = new Set();
   gerSelExport = new Set();
-  gerMoverParaExport = new Map();
+  gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map();
   gerRenomearExport = new Map(); gerEditandoNome = null;
   try {
     $("btnGerModoGerenciar").setAttribute("aria-selected", String(modo === "gerenciar"));
@@ -412,10 +415,13 @@ function gerCaminhoExport(chave, edital) {
 function gerIniciarArrastoExport(ev, chave, edital) {
   if (!chave) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
   const efetivo = gerDestinoExport(chave, edital);
-  gerArrastoExport = { chave, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
-  const texto = t("ger_arrastando_pasta");
+  gerArrastoExport = { tipo: "topico", chave, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
+  gerComecarGhostExport(t("ger_arrastando_pasta"), ev.dataTransfer);
+}
+
+/* a pílula que acompanha o ponteiro (mesma do arrastar real) */
+function gerComecarGhostExport(texto, dt) {
   try {
-    const dt = ev.dataTransfer;
     dt.effectAllowed = "move";
     dt.setData("text/plain", texto);
     const g = document.createElement("div");
@@ -424,6 +430,20 @@ function gerIniciarArrastoExport(ev, chave, edital) {
     gerGhostExport = g;
     if (dt.setDragImage) dt.setDragImage(g, 14, 14);
   } catch (e) {}
+}
+
+/* o Map do tipo de arrasto em andamento: a pasta inteira (gerMoverParaExport) ou UM cartão (gerCartaoMoverParaExport) */
+function gerMoverParaDoTipo(tipo) { return tipo === "cartao" ? gerCartaoMoverParaExport : gerMoverParaExport; }
+
+/* arrastar UM cartão da lista: separa só ele dos irmãos. O destino de partida é o do próprio cartão (se já foi arrastado),
+ * senão o ATUAL da pasta dele (já considerando um arrasto da pasta inteira) — e não o original. */
+function gerIniciarArrastoCartaoExport(ev, n) {
+  if (!n) { if (ev && ev.preventDefault) ev.preventDefault(); return; }
+  const ed = gerEditalDoContexto() || (gerAgrupar === "edital" ? gerEditalDeChave(n.chave) : "");
+  const chaveCartao = pacChaveCartao(n);
+  const efetivo = gerCartaoMoverParaExport.get(chaveCartao) || gerDestinoExport(n.chave, ed);
+  gerArrastoExport = { tipo: "cartao", chave: chaveCartao, disciplina: efetivo.disciplina, topico: efetivo.topico, edital: efetivo.edital || "" };
+  gerComecarGhostExport(t("ger_arrastando_cartao"), ev.dataTransfer);
 }
 
 function gerFimArrastoExport() {
@@ -450,8 +470,8 @@ function gerSoltarTopExport(ev, discAlvo, topicoAlvo, editalAlvo) {
   const origem = gerArrastoExport;
   gerFimArrastoExport();
   if (!origem || (origem.disciplina === discAlvo && origem.topico === topicoAlvo && origem.edital === (editalAlvo || ""))) return;
-  gerMoverParaExport.set(origem.chave, { disciplina: discAlvo, topico: topicoAlvo, edital: editalAlvo || "" });
-  gerPintarArvore(); gerPintarPrevia();
+  gerMoverParaDoTipo(origem.tipo).set(origem.chave, { disciplina: discAlvo, topico: topicoAlvo, edital: editalAlvo || "" });
+  gerPintarArvore(); gerPintarLista(); gerPintarPrevia();
 }
 
 function gerSobreDiscExport(ev, discAlvo, editalAlvo, el) {
@@ -465,8 +485,8 @@ function gerSoltarDiscExport(ev, discAlvo, editalAlvo) {
   const origem = gerArrastoExport;
   gerFimArrastoExport();
   if (!origem || (origem.disciplina === discAlvo && origem.edital === (editalAlvo || ""))) return;
-  gerMoverParaExport.set(origem.chave, { disciplina: discAlvo, topico: origem.topico, edital: editalAlvo || "" });
-  gerPintarArvore(); gerPintarPrevia();
+  gerMoverParaDoTipo(origem.tipo).set(origem.chave, { disciplina: discAlvo, topico: origem.topico, edital: editalAlvo || "" });
+  gerPintarArvore(); gerPintarLista(); gerPintarPrevia();
 }
 
 function gerSobreRaizExport(ev, editalAlvo, el) {
@@ -480,15 +500,14 @@ function gerSoltarRaizExport(ev, editalAlvo) {
   const origem = gerArrastoExport;
   gerFimArrastoExport();
   if (!origem || origem.edital === (editalAlvo || "")) return;
-  gerMoverParaExport.set(origem.chave, { disciplina: origem.disciplina, topico: origem.topico, edital: editalAlvo || "" });
-  gerPintarArvore(); gerPintarPrevia();
+  gerMoverParaDoTipo(origem.tipo).set(origem.chave, { disciplina: origem.disciplina, topico: origem.topico, edital: editalAlvo || "" });
+  gerPintarArvore(); gerPintarLista(); gerPintarPrevia();
 }
 
 /* ---- B3: painel de opções de exportação + exportar de verdade, dentro do mesmo diálogo.
  * O MOTOR é o de docs/pacote.js (pacMontar/pacCartoes/pacNomeArquivo) — aqui só se monta `opc`
  * a partir do estado do gerenciador (gerNotas/gerSelExport/gerMoverParaExport) e se chama as
- * mesmas funções que pacExportar já usa (buildApkg/exportTxtString/entregar). Sem arrasto de
- * cartão avulso ainda (gerCartaoMoverParaExport não existe): só pastas inteiras, como a B2 fez. ---- */
+ * mesmas funções que pacExportar já usa (buildApkg/exportTxtString/entregar). ---- */
 
 /* o edital "dono" de uma pasta (real ou virtual) — usado para "pasta do edital" quando a
  * marcação (gerSelExport) não guarda, por chave, sob qual raiz da árvore ela foi marcada
@@ -530,7 +549,7 @@ function gerExpOpcoes() {
     semRepetidos: $("gerExpSemRep").checked, semFracos: $("gerExpSemFracos").checked,
     comEdital: $("gerExpComEdital").checked, comRamos: $("gerExpRamos").checked,
     vazios: $("gerExpVazios").checked && gerExpTemEditais(), info: $("gerExpVazios").checked ? gerExpInfoVazios() : new Map(),
-    editalDe, moverPara: gerMoverParaExport, cartaoMoverPara: new Map(), renomear: gerRenomearExport,
+    editalDe, moverPara: gerMoverParaExport, cartaoMoverPara: gerCartaoMoverParaExport, renomear: gerRenomearExport,
   };
 }
 
@@ -669,7 +688,7 @@ async function gerAcaoExportar(formato, deps) {
   }
   const raizNome = gerExpRaizAtual();
   const raizDeck = gerExpSemRaizAtivo() ? "" : raizNome;
-  const cards = pacCartoes(p.itens, $("gerExpComEdital").checked, $("gerExpRamos").checked, gerMoverParaExport, new Map(), gerRenomearExport);
+  const cards = pacCartoes(p.itens, $("gerExpComEdital").checked, $("gerExpRamos").checked, gerMoverParaExport, gerCartaoMoverParaExport, gerRenomearExport);
   try {
     if (formato === "txt") {
       const txt = exportTxtString({ cards }, raizDeck);
@@ -990,7 +1009,7 @@ function gerPintarArvore() {
   const cx = $("gerArvore");
   cx.innerHTML = "";
   cx.classList.toggle("ger-modo-edital", gerAgrupar === "edital");
-  try { $("btnGerDesfazerExport").hidden = gerModo !== "exportar" || gerMoverParaExport.size === 0; } catch (e) {}
+  try { $("btnGerDesfazerExport").hidden = gerModo !== "exportar" || (gerMoverParaExport.size === 0 && gerCartaoMoverParaExport.size === 0); } catch (e) {}
   const tudo = gerEl("div", "ger-pasta" + (!gerPasta ? " ger-atual" : ""), t("ger_todos", { n: gerNotas.length }));
   tudo.onclick = () => { gerPasta = null; gerRefiltrar(); gerPintar(); if (gerEhCelular()) gerVista("cartoes"); };
   cx.append(tudo);
@@ -1147,8 +1166,21 @@ function gerPintarLista() {
     if (!(gerPasta && gerPasta.chave)) onde.append(gerEl("span", "ger-onde-lin", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
     corpo.append(onde);
     if (exportando) {
-      /* modo exportação: a lista e' so' pra VER o conteudo — marcar e' na arvore, por pasta inteira */
+      /* modo exportação: marcar é na árvore, por pasta inteira; aqui cada cartão se arrasta SOZINHO para outra pasta */
+      const chaveCartao = pacChaveCartao(n);
+      const mov = gerCartaoMoverParaExport.get(chaveCartao);
+      if (mov) {
+        corpo.append(gerEl("div", "pac-caminho pac-caminho-movido", [mov.edital, mov.disciplina, mov.topico].filter(Boolean).join(" › ")));
+        const des = gerEl("button", "pac-desfazer-mov", t("pac_desfazer_move"));
+        des.type = "button";
+        des.title = t("ger_tip_desfazer_cartao_exp");
+        des.onclick = (ev) => { if (ev) { ev.preventDefault && ev.preventDefault(); ev.stopPropagation && ev.stopPropagation(); } gerCartaoMoverParaExport.delete(chaveCartao); gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); };
+        corpo.append(des);
+      }
       lin.append(corpo);
+      lin.draggable = true;
+      lin.ondragstart = (ev) => gerIniciarArrastoCartaoExport(ev, n);
+      lin.ondragend = gerFimArrastoExport;
     } else {
       const ck = gerEl("input"); ck.type = "checkbox"; ck.checked = gerSel.has(pos);
       ck.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
@@ -1160,7 +1192,7 @@ function gerPintarLista() {
       lin.ondragend = gerFimArrasto;
     }
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); if (gerEhCelular()) gerVista("previa"); };
-    lin.title = t("ger_tip_linha");
+    lin.title = t(exportando ? "ger_tip_arrastar_cartao_exp" : "ger_tip_linha");
     cx.append(lin);
   });
   $("btnGerMais").hidden = gerVis.length <= gerMostrando;
@@ -1819,7 +1851,7 @@ function gerTrocarAgrupar(v) {
 
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
-  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map(); gerRenomearExport = new Map(); gerEditandoNome = null;
+  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map(); gerRenomearExport = new Map(); gerEditandoNome = null;
   try { $("btnGerModoGerenciar").setAttribute("aria-selected", "true"); $("btnGerModoExportar").setAttribute("aria-selected", "false"); } catch (e) {}
   try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
   $("gerExpSemRaiz").checked = false;
@@ -1899,7 +1931,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   };
   $("btnGerModoGerenciar").onclick = () => gerAlternarModo("gerenciar");
   $("btnGerModoExportar").onclick = () => gerAlternarModo("exportar");
-  $("btnGerDesfazerExport").onclick = () => { gerMoverParaExport = new Map(); gerPintarArvore(); gerPintarPrevia(); };
+  $("btnGerDesfazerExport").onclick = () => { gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map(); gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); };
   $("gerExpNome").oninput = () => {
     try { localStorage.setItem("eac_deck", $("gerExpNome").value); } catch (e) {}
     gerPintarExport();
