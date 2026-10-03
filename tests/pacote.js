@@ -159,6 +159,34 @@ async function testes() {
     ok(a.pacArvoreDecks(null).total === 0 && a.pacArvoreDecks(new Map()).filhos.length === 0, "P3h16 sem baralhos a arvore e' vazia (e nao quebra)");
   }
 
+  /* ---- P3i: tópicos do plano SEM cartão como baralhos vazios (opcao "incluir baralhos vazios") ---- */
+  {
+    const { a, iss } = montar();
+    const notas = a.cqLerBiblioteca();
+    const taxas = "trib›taxas";
+    const info = new Map([[taxas, { edital: "ED", disciplina: "Trib", topico: "Taxas" }]]);
+    const sel = new Set([iss, taxas]);
+    const editalDe = new Map([[iss, "ED"], [taxas, "ED"]]);
+    const m1 = a.pacMontar(notas, sel, { comEdital: true, editalDe, info, vazios: true });
+    ok(m1.itens.length === 2 && m1.vazios.join("|") === "ED::Trib::Taxas" && m1.decks.get("ED::Trib::Taxas") === 0 && m1.decks.get("ED::Trib::ISS") === 2, "P3i1 o topico sem cartao vira baralho vazio, com o caminho completo: " + [...m1.decks.entries()]);
+    ok(m1.origens.get("ED::Trib::Taxas") === 0, "P3i2 o vazio tambem esta em 'origens' (aparece na arvore e pode ser renomeado)");
+    ok(a.pacMontar(notas, sel, { comEdital: true, editalDe, info, vazios: false }).vazios.length === 0, "P3i3 sem a opcao os vazios ficam de fora");
+    ok([...a.pacMontar(notas, sel, { comEdital: false, editalDe, info, vazios: true }).decks.keys()].sort().join("|") === "Trib::ISS|Trib::Taxas", "P3i4 sem a pasta do edital: Disciplina::Topico");
+    const info2 = new Map(info); info2.set(iss, { edital: "ED", disciplina: "Trib", topico: "ISS" });
+    const m4 = a.pacMontar(notas, new Set([iss]), { comEdital: true, editalDe, info: info2, vazios: true });
+    ok(m4.vazios.length === 0 && m4.decks.get("ED::Trib::ISS") === 2, "P3i5 topico COM cartao nunca e' 'vazio', mesmo que o mapa o cite, e a contagem dele nao zera");
+    const info3 = new Map(info); info3.set("outra›chave", { edital: "ED", disciplina: "Trib", topico: "ISS" });
+    const m4b = a.pacMontar(notas, new Set([iss, "outra›chave"]), { comEdital: true, editalDe, info: info3, vazios: true });
+    ok(m4b.vazios.length === 0 && m4b.decks.get("ED::Trib::ISS") === 2, "P3i6 baralho vazio com o MESMO nome de um que tem cartao nao apaga a contagem nem entra como vazio");
+    ok(a.pacMontar(notas, sel, { comEdital: true, vazios: true }).vazios.length === 0, "P3i7 sem o mapa 'info' nada quebra");
+    const rn = a.pacMontar(notas, sel, { comEdital: true, editalDe, info, vazios: true, renomear: new Map([["ED::Trib", "Tributário"]]) });
+    /* topico que TEM cartao, mas cujos cartoes foram todos deixados de fora (abaixo do padrao), nao vira baralho vazio */
+    const pri = a.matChave("Const", "Princípios");
+    const so = a.pacMontar(notas, new Set([pri]), { comEdital: true, editalDe: new Map([[pri, "ED"]]), info: new Map([[pri, { edital: "ED", disciplina: "Const", topico: "Princípios" }]]), vazios: true, semFracos: true });
+    ok(so.itens.length === 0 && so.ignFracos > 0 && so.vazios.length === 0, "P3i9 topico cujos cartoes ficaram todos de fora nao e' tratado como 'sem cartao': " + JSON.stringify([so.itens.length, so.ignFracos, so.vazios]));
+    ok(rn.vazios.join("|") === "ED::Tributário::Taxas" && rn.origens.has("ED::Trib::Taxas") && !rn.origens.has("ED::Tributário::Taxas"), "P3i8 renomear um nivel renomeia tambem o baralho vazio (e 'origens' guarda o original): " + rn.vazios);
+  }
+
   /* ---- P4: separar baralho / raiz comum ---- */
   {
     const { a } = montar();

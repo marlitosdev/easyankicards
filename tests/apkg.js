@@ -198,6 +198,17 @@ async function testes() {
     ok(txt[6].split("\t")[1] === "Tributário::ISS" && txt[7].split("\t")[1] === "Import" && txt.indexOf("#deck:Import") >= 0 && !txt.some((l) => /\t::/.test(l)), "F9 .txt sem raiz: coluna do baralho sem '::' na frente, cartao sem pasta em 'Import': " + JSON.stringify(txt.slice(3, 8)));
   }
 
+  /* F10-F13 — baralhos VAZIOS no arquivo (a estrutura do edital pronta para encher no Anki) */
+  {
+    const g = A.apkgAgruparDecks([{ kind: "basic", front: "P", back: "R", tags: [], deck: "A::B" }], "Raiz", "", ["Ed::Disc::Vazio", "  ", "A::B"]);
+    const nomes = Object.values(g.decks).map((d) => d.name).sort();
+    ok(nomes.join("|") === "Raiz::A::B|Raiz::Ed::Disc::Vazio" && g.idPorCartao.length === 1, "F10 baralhos vazios entram no arquivo (raiz + nome), sem repetir e sem nome em branco: " + nomes.join("|"));
+    ok(Object.keys(A.apkgAgruparDecks([{ kind: "basic", front: "P", back: "R", tags: [], deck: "A::B" }], "Raiz", "").decks).length === 1, "F11 sem extras o arquivo e' o mesmo de sempre");
+    const g3 = A.apkgAgruparDecks([], "Raiz", "", ["X::Y"]);
+    ok(Object.keys(g3.decks).length === 1 && Object.values(g3.decks)[0].name === "Raiz::X::Y", "F12 da' para gerar so' baralhos vazios");
+    ok(JSON.stringify(Object.keys(A.apkgAgruparDecks([], "Raiz", "", ["X::Y"]).decks)) === JSON.stringify(Object.keys(g3.decks)), "F13 o id do baralho vazio e' estavel (reimportar atualiza, nao duplica)");
+  }
+
   /* G — lerApkg devolve o baralho de cada cartao (o que o import para uma pasta usa) */
   {
     CENARIO = "antigo";

@@ -2210,6 +2210,81 @@ async function testes() {
     }
   }
 
+  /* ---- G33: R2 — "incluir baralhos vazios": os topicos do plano do edital que ainda nao tem cartao saem como baralhos
+   * vazios no .apkg (a estrutura do edital pronta para encher no Anki); o .txt nao leva baralho sem cartao ---- */
+  {
+    const ME = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5\n+ Taxas :: 3");
+      const k = (d, t) => a.matChave(d, t);
+      const cs = (pref, n) => Array.from({ length: n }, (_, i) => pref + " " + i + "? :: Resposta " + pref + i + " zz" + pref + i).join("\n");
+      a.matGravarCartoes(k("Sistema Tributário Brasileiro", "ISS"), cs("ISS", 3), { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.$("editor").value = "";
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      const iss = k("Sistema Tributário Brasileiro", "ISS"), iptu = k("Sistema Tributário Brasileiro", "IPTU"), taxas = k("Sistema Tributário Brasileiro", "Taxas");
+      a.$("gerExpSemRep").checked = false;
+      a.$("gerExpNome").value = "Raiz"; a.$("gerExpNome").oninput();
+      return { a, iss, iptu, taxas };
+    };
+    const capturar = async (a, formato) => { const c = { cards: null, extras: null, bytes: null }; const r = await a.gerAcaoExportar(formato || "apkg", { confirmar: async () => true, construir: async (cards, raiz, est, tit, al, extras) => { c.cards = cards; c.extras = extras; c.raiz = raiz; return new Uint8Array(1); }, entregar: async (b) => { c.bytes = b; } }); c.r = r; return c; };
+    const nomesBtn = (a) => achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-nome")).map((e) => e.textContent);
+
+    {
+      const { a, iss, iptu, taxas } = ME();
+      ok(a.$("gerExpOpcEdital").hidden === false && a.$("gerExpVazios").checked === false, "G33a com edital cadastrado a opcao aparece, desligada");
+      const inf = a.gerExpInfoVazios();
+      ok(inf.size === 2 && !inf.has(iss) && inf.has(iptu) && inf.has(taxas) && inf.get(taxas).edital === "ISS Caruaru Auditor" && inf.get(taxas).disciplina === "Sistema Tributário Brasileiro" && inf.get(taxas).topico === "Taxas", "G33a2 o mapa dos vazios tem so' os topicos do plano SEM cartao, com edital, disciplina e topico: " + JSON.stringify([...inf]));
+      [iss, iptu, taxas].forEach((c) => a.gerMarcarExport(c, true)); a.gerPintar();
+      ok(!/vazio/.test(a.$("gerExpResumo").textContent) && nomesBtn(a).join(",") === "Raiz,ISS Caruaru Auditor,Sistema Tributário Brasileiro,ISS", "G33b sem a opcao so' o topico com cartao entra: " + nomesBtn(a));
+      a.$("gerExpVazios").checked = true; a.$("gerExpVazios").onchange();
+      ok(/2 baralho\(s\) vazio\(s\) incluído/.test(a.$("gerExpResumo").textContent), "G33c com a opcao a previsao conta os baralhos vazios: " + a.$("gerExpResumo").textContent);
+      ok(nomesBtn(a).join(",") === "Raiz,ISS Caruaru Auditor,Sistema Tributário Brasileiro,IPTU,ISS,Taxas", "G33d a arvore mostra tambem os vazios: " + nomesBtn(a));
+      ok(achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-cont")).map((e) => e.textContent).join("") === "(3)(3)(3)(0)(3)(0)", "G33e com contagem zero");
+      const antes = JSON.stringify(a.matResumosAtual());
+      const c = await capturar(a);
+      ok(c.r.ok && c.cards.length === 3 && c.extras.slice().sort().join("|") === "ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU|ISS Caruaru Auditor::Sistema Tributário Brasileiro::Taxas", "G33f o .apkg leva os baralhos vazios (Edital::Disciplina::Topico): " + JSON.stringify(c.extras));
+      const g = a.apkgAgruparDecks(c.cards, "Raiz", "", c.extras);
+      ok(Object.values(g.decks).map((d) => d.name).sort().join("|") === "Raiz::ISS Caruaru Auditor::Sistema Tributário Brasileiro::IPTU|Raiz::ISS Caruaru Auditor::Sistema Tributário Brasileiro::ISS|Raiz::ISS Caruaru Auditor::Sistema Tributário Brasileiro::Taxas", "G33g o agrupamento real do arquivo cria os 3 baralhos");
+      const t = await capturar(a, "txt");
+      const linhas = new TextDecoder().decode(t.bytes).split("\n").filter((l) => l && !l.startsWith("#"));
+      ok(linhas.length === 3 && !/IPTU|Taxas/.test(linhas.join("")), "G33h o .txt nao leva baralho vazio (so' os 3 cartoes)");
+      ok(JSON.stringify(a.matResumosAtual()) === antes, "G33i a Biblioteca NAO mudou (nenhuma pasta criada)");
+      /* sem a pasta do edital: 2 niveis */
+      a.$("gerExpComEdital").checked = false; a.$("gerExpComEdital").onchange();
+      const c2 = await capturar(a);
+      ok(c2.extras.slice().sort().join("|") === "Sistema Tributário Brasileiro::IPTU|Sistema Tributário Brasileiro::Taxas" && c2.cards.every((x) => x.deck === "Sistema Tributário Brasileiro::ISS"), "G33j desligar 'pasta do edital' volta a Disciplina::Topico (cartoes e vazios)");
+      /* renomear um vazio pela arvore */
+      const btn = achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-nome") && e.textContent === "IPTU")[0];
+      btn.onclick();
+      const inp = achar(a.$("gerExpArvoreAnki"), (e) => cls(e, "ger-arv-edit"))[0]; inp.value = "Predial"; inp.onkeydown({ key: "Enter", preventDefault() {} });
+      const c3 = await capturar(a);
+      ok(c3.extras.indexOf("Sistema Tributário Brasileiro::Predial") >= 0 && c3.extras.indexOf("Sistema Tributário Brasileiro::IPTU") < 0, "G33k o baralho vazio renomeado na arvore sai com o nome novo: " + JSON.stringify(c3.extras));
+      /* reabrir desliga */
+      a.$("dlgGerCartoes").close(); a.gerAbrir();
+      ok(a.$("gerExpVazios").checked === false, "G33l reabrir volta a opcao ao padrao (desligada)");
+    }
+    /* so' vazios marcados: o .apkg sai (estrutura pronta), o .txt nao */
+    {
+      const { a, iptu, taxas } = ME();
+      [iptu, taxas].forEach((c) => a.gerMarcarExport(c, true));
+      a.$("gerExpVazios").checked = true; a.$("gerExpVazios").onchange();
+      ok(nomesBtn(a).join(",") === "Raiz,ISS Caruaru Auditor,Sistema Tributário Brasileiro,IPTU,Taxas", "G33m2 a arvore tambem aparece quando so' ha baralhos vazios: " + nomesBtn(a));
+      ok(a.$("btnGerExpApkg").disabled === false && a.$("btnGerExpTxt").disabled === true && !/Marque ao menos/.test(a.$("gerExpResumo").textContent), "G33m so' topicos vazios marcados: o .apkg pode sair, o .txt nao: " + a.$("gerExpResumo").textContent);
+      const c = await capturar(a);
+      ok(c.r.ok === true && c.cards.length === 0 && c.extras.length === 2, "G33n .apkg so' com a estrutura vazia");
+      ok((await capturar(a, "txt")).r.ok === false, "G33o .txt so' com baralhos vazios nao exporta");
+      a.$("gerExpVazios").checked = false; a.$("gerExpVazios").onchange();
+      ok(a.$("btnGerExpApkg").disabled === true, "G33p sem a opcao nao ha o que exportar: desliga");
+    }
+    /* sem edital cadastrado a opcao nem aparece */
+    {
+      const { a } = montar();
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      ok(a.$("gerExpOpcEdital").hidden === true && a.gerExpInfoVazios().size === 0, "G33q sem edital cadastrado a opcao fica escondida e nao ha vazios");
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

@@ -41,7 +41,7 @@ const GER_DICAS = {
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
-  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer",
+  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer", gerExpVazios: "pac_tip_vazios",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -508,12 +508,28 @@ function gerExpSemRaizAtivo() { return !!($("gerExpSemRaiz") && $("gerExpSemRaiz
  * que vai para o arquivo. */
 function gerExpRaizAtual() { return String(($("gerExpNome") || {}).value || "").trim() || "EasyAnkiCards"; }
 
+/* Os tópicos do PLANO dos editais que ainda não têm cartão (Map chave → { edital, disciplina, topico }): com "incluir baralhos
+ * vazios" saem como baralhos vazios — a estrutura do edital pronta para encher no Anki. */
+function gerExpInfoVazios() {
+  const info = new Map();
+  if (!gerExpTemEditais()) return info;
+  gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.forEach((r) => {
+    r.filhos.forEach((d) => (d.tipo === "disc" ? d.filhos : [d]).forEach((tp) => {
+      if (tp.tipo === "top" && tp.vazia && !info.has(tp.chave)) {
+        info.set(tp.chave, { edital: r.tipo === "edital" ? r.concurso : "", disciplina: d.tipo === "disc" ? d.nome : "", topico: tp.topico });
+      }
+    }));
+  });
+  return info;
+}
+
 function gerExpOpcoes() {
   const editalDe = new Map();
   gerSelExport.forEach((ch) => editalDe.set(ch, gerEditalDeChave(ch)));
   return {
     semRepetidos: $("gerExpSemRep").checked, semFracos: $("gerExpSemFracos").checked,
     comEdital: $("gerExpComEdital").checked, comRamos: $("gerExpRamos").checked,
+    vazios: $("gerExpVazios").checked && gerExpTemEditais(), info: $("gerExpVazios").checked ? gerExpInfoVazios() : new Map(),
     editalDe, moverPara: gerMoverParaExport, cartaoMoverPara: new Map(), renomear: gerRenomearExport,
   };
 }
@@ -530,8 +546,8 @@ function gerPintarExport() {
   $("gerExpOpcEdital").hidden = !gerExpTemEditais();
   previewEstilo(GER_EXP_ALVO_ESTILO);
   const p = pacMontar(gerNotas, gerSelExport, gerExpOpcoes());
-  $("gerExpResumo").textContent = p.itens.length
-    ? t("pac_previa", { n: p.itens.length, k: p.decks.size, r: p.ignRep, f: p.ignFracos })
+  $("gerExpResumo").textContent = p.itens.length || p.vazios.length
+    ? t("pac_previa", { n: p.itens.length, k: p.decks.size, r: p.ignRep, f: p.ignFracos }) + (p.vazios.length ? " " + t("pac_previa_vazios", { v: p.vazios.length }) : "")
     : t("pac_previa_vazia");
   const decksCx = $("gerExpDecks");
   decksCx.innerHTML = "";
@@ -539,7 +555,7 @@ function gerPintarExport() {
   /* d vazio = cartoes que caem direto na raiz (a Bancada) */
   [...p.decks.entries()].slice(0, 12).forEach(([d, n]) => decksCx.append(gerEl("div", "cq-onde", ([raiz, d.replace(/::/g, " › ")].filter(Boolean).join(" › ") || "—") + " — " + n)));
   if (p.decks.size > 12) decksCx.append(gerEl("div", "cq-onde", t("pac_mais_decks", { n: p.decks.size - 12 })));
-  $("btnGerExpApkg").disabled = !p.itens.length;
+  $("btnGerExpApkg").disabled = !(p.itens.length || p.vazios.length);
   $("btnGerExpTxt").disabled = !p.itens.length;
   gerPintarArvoreAnki(p);
   return p;
@@ -634,7 +650,7 @@ function gerPintarArvoreAnki(p) {
   cx.innerHTML = "";
   $("btnGerExpDesfazerNomes").hidden = gerRenomearExport.size === 0;
   gerFocoNomeArv = null;
-  if (!p.itens.length) return;
+  if (!p.itens.length && !p.vazios.length) return;
   gerLinhaArv(cx, pacArvoreDecks(p.origens, gerRenomearExport), 0, true);
   if (gerFocoNomeArv) { try { gerFocoNomeArv.focus(); if (gerFocoNomeArv.select) gerFocoNomeArv.select(); } catch (e) {} }
 }
@@ -645,7 +661,8 @@ async function gerAcaoExportar(formato, deps) {
   const construir = d.construir || buildApkg;
   const entrega = d.entregar || entregar;
   const p = pacMontar(gerNotas, gerSelExport, gerExpOpcoes());
-  if (!p.itens.length) return { ok: false };
+  /* só baralhos vazios (estrutura do edital pronta) é um .apkg válido; o .txt não leva baralho sem cartão */
+  if (!p.itens.length && !(formato !== "txt" && p.vazios.length)) return { ok: false };
   if (!(await gerExpConfirmarSuspeitos(p.itens, d.confirmar))) {
     $("gerExpMsg").textContent = t("ger_exp_cancelado");
     return { ok: false, cancelado: true };
@@ -658,7 +675,7 @@ async function gerAcaoExportar(formato, deps) {
       const txt = exportTxtString({ cards }, raizDeck);
       await entrega(new TextEncoder().encode(txt), pacNomeArquivo(raizNome) + ".txt", "text/plain");
     } else {
-      const bytes = await construir(cards, raizDeck, $("gerExpEstilo").value, tituloCartao(), $("selAlinha").value, []);
+      const bytes = await construir(cards, raizDeck, $("gerExpEstilo").value, tituloCartao(), $("selAlinha").value, p.vazios);
       await entrega(bytes, pacNomeArquivo(raizNome) + ".apkg", "application/octet-stream");
     }
     $("gerExpMsg").textContent = t("pac_feito", { f: pacNomeArquivo(raizNome) + "." + (formato === "txt" ? "txt" : "apkg"), n: p.itens.length, k: p.decks.size });
@@ -1806,6 +1823,7 @@ function gerAbrir() {
   try { $("btnGerModoGerenciar").setAttribute("aria-selected", "true"); $("btnGerModoExportar").setAttribute("aria-selected", "false"); } catch (e) {}
   try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
   $("gerExpSemRaiz").checked = false;
+  $("gerExpVazios").checked = false;
   $("gerExpComEdital").checked = gerExpTemEditais();
   $("gerExpEstilo").value = $("selEstiloPainel").value;
   $("gerExpTitulo").value = tituloGeral();
@@ -1891,6 +1909,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("gerExpRamos").onchange = gerPintarExport;
   $("gerExpSemRep").onchange = gerPintarExport;
   $("gerExpSemFracos").onchange = gerPintarExport;
+  $("gerExpVazios").onchange = gerPintarExport;
   $("gerExpEstilo").onchange = () => aplicarEstilo($("gerExpEstilo").value);
   $("gerExpTitulo").oninput = () => {
     setTituloGeral($("gerExpTitulo").value);
