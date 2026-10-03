@@ -340,8 +340,10 @@ async function testes() {
     const sw = api.$("edNovoF2On"), cx = api.$("edNovoF2cx");
     ok(/<input type="checkbox" role="switch" class="ednovo-sw" id="edNovoF2On">/.test(dlg) && !/<details id="edNovoF2cx"/.test(dlg), "N8f0 a 2a fase e' um interruptor (checkbox role=switch), nao mais uma seta escondida");
     ok(sw && sw.checked === false && cx.hidden === true, "N8f ao abrir o dialogo a 2a fase esta desligada e os campos escondidos");
+    const modoData = api.$("edNovoModoData");
+    modoData.checked = true; modoData.onchange();
     sw.checked = true; sw.onchange();
-    ok(cx.hidden === false, "N8g ligar mostra os campos da 2a fase");
+    ok(cx.hidden === false, "N8g ligar mostra os campos da 2a fase (com a data conhecida)");
     sw.checked = false; sw.onchange();
     ok(cx.hidden === true, "N8h desligar esconde de novo");
     /* o que foi digitado com o interruptor ligado NAO entra se ele for desligado */
@@ -355,6 +357,7 @@ async function testes() {
     /* reabrir com o interruptor LIGADO e campos preenchidos: tudo volta ao padrao */
     sw.checked = true; sw.onchange();
     api.$("edNovoF2Nome").value = "discursiva"; api.$("edNovoF2Prova").value = "2030-06-20";
+    const mdi = api.$("edNovoModoData"); mdi.checked = true; mdi.onchange();
     ok(cx.hidden === false, "N8i2 (antes de reabrir o interruptor esta ligado e os campos visiveis)");
     api.hubNovo();
     ok(sw.checked === false && cx.hidden === true && api.$("edNovoF2Nome").value === "" && api.$("edNovoF2Prova").value === "", "N8j abrir de novo volta ao padrao (desligado, escondido, campos limpos)");

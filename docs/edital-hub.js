@@ -1004,8 +1004,11 @@ function hubNovo() {
     const el = document.getElementById(id);
     if (el) el.value = valor;
   };
-  v("edNovoNome", t("hub_novo_padrao"));
+  v("edNovoNome", "");
   v("edNovoProva", ""); v("edNovoHoras", "20");
+  ["edNovoModoData", "edNovoModoSem", "edNovoModoPre"].forEach((id) => { const r = document.getElementById(id); if (r) r.checked = false; });
+  hubNovoPreencherSeletores();
+  hubNovoTocado = false;
   v("edNovoF2Nome", ""); v("edNovoF2Prova", ""); v("edNovoPlano", "");
   const f2 = document.getElementById("edNovoF2cx"), f2on = document.getElementById("edNovoF2On");
   if (f2) f2.hidden = true;
@@ -1075,6 +1078,85 @@ function hubNovoEstadoPlano(txt) {
 const HUB_SEM_CLASSE = { vazio: "sem-vazio", ok: "sem-ok", atencao: "sem-atencao", cru: "sem-atencao", modelo: "sem-atencao", prompt: "sem-erro" };
 const HUB_SEM_ICONE = { "sem-vazio": "○", "sem-ok": "✓", "sem-atencao": "⚠", "sem-erro": "⛔" };
 
+/* =====================================================================
+ * W2 — NOME, DATA E PRÉ-EDITAL: o que o Novo edital exige antes de criar.
+ *
+ * O relato: o edital foi criado sem crítica ao nome ("Novo edital" vinha como valor), sem data e sem nunca perguntar se
+ * era pré-edital — três coisas que mudam tudo no plano (prazo, semanas, fase). Agora a data tem TRÊS respostas explícitas:
+ *   "data"  — tenho a data (campo obrigatório);
+ *   "sem"   — o edital saiu, mas a data não (decisão consciente, dita em voz alta);
+ *   "pre"   — ainda é pré-edital: a janela esperada (de mês/ano até mês/ano) vira `previsto:` e a fase "pré" do app.
+ * Sem escolher, não cria. Erro = vermelho debaixo do campo; aviso (nome genérico, data que já passou) = pergunta antes.
+ * ===================================================================== */
+let hubNovoTocado = false;   /* a pessoa já tentou criar: os erros passam a aparecer em vermelho */
+const HUB_NOMES_GENERICOS = ["novo edital", "edital", "concurso", "novo concurso", "new exam", "exam", "teste"];
+
+function hubNovoModo() {
+  const marcado = (id) => !!(document.getElementById(id) || {}).checked;
+  return marcado("edNovoModoData") ? "data" : marcado("edNovoModoSem") ? "sem" : marcado("edNovoModoPre") ? "pre" : "";
+}
+
+function hubNovoHoje() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/* a janela de pré-edital dos quatro seletores: "AAAA-MM" ou "AAAA-MM..AAAA-MM" (o formato que edJanela lê) */
+function hubNovoPrevisto() {
+  const v = (id) => String((document.getElementById(id) || {}).value || "");
+  const par = (m, a) => (m && a ? a + "-" + String(m).padStart(2, "0") : "");
+  const de = par(v("edNovoPreDeM"), v("edNovoPreDeA")), ate = par(v("edNovoPreAteM"), v("edNovoPreAteA"));
+  return { de, ate, ordem: !ate || ate >= de, texto: de ? (ate && ate !== de ? de + ".." + ate : de) : "" };
+}
+
+function hubNovoValidar() {
+  const g = (id) => document.getElementById(id);
+  const val = (id) => String((g(id) || {}).value || "").trim();
+  const erros = [], avisos = [];
+  const erro = (campo, onde, msg) => erros.push({ campo, onde, msg });
+  const nome = val("edNovoNome"), modo = hubNovoModo();
+  let generico = false;
+  if (!nome) erro("edNovoNome", "edNovoNomeErro", t("ed_novo_e_nome"));
+  else if (HUB_NOMES_GENERICOS.indexOf(edSemAcento(nome).trim()) >= 0)
+    { generico = true; avisos.push(t("ed_novo_a_nome", { n: nome })); }
+  let prova = "", previsto = "";
+  if (!modo) erro("edNovoModoData", "edNovoDataErro", t("ed_novo_e_modo"));
+  else if (modo === "data") {
+    prova = val("edNovoProva");
+    if (!prova) erro("edNovoProva", "edNovoDataErro", t("ed_novo_e_data"));
+    else if (prova < hubNovoHoje()) avisos.push(t("ed_novo_a_passada", { d: prova.split("-").reverse().join("/") }));
+  } else if (modo === "pre") {
+    const p = hubNovoPrevisto();
+    if (!p.de) erro("edNovoPreDeM", "edNovoDataErro", t("ed_novo_e_pre"));
+    else if (!p.ordem) erro("edNovoPreAteM", "edNovoDataErro", t("ed_novo_e_pre_ordem"));
+    else previsto = p.texto;
+  }
+  const horas = val("edNovoHoras");
+  if (!/^\d+$/.test(horas) || Number(horas) < 1 || Number(horas) > 80) erro("edNovoHoras", "edNovoHorasErro", t("ed_novo_e_horas"));
+  const sw = g("edNovoF2On");
+  if (modo === "data" && sw && sw.checked) {
+    const f2 = val("edNovoF2Prova");
+    if (!f2) erro("edNovoF2Prova", "edNovoF2Erro", t("ed_novo_e_f2"));
+    else if (prova && f2 <= prova) erro("edNovoF2Prova", "edNovoF2Erro", t("ed_novo_e_f2_ordem"));
+  }
+  return { erros, avisos, nome, modo, prova, previsto, horas, generico };
+}
+
+function hubNovoPreencherSeletores() {
+  const meses = String(t("ed_novo_meses")).split(",");
+  const ano = new Date().getFullYear();
+  const enche = (id, itens, ph) => {
+    const s = document.getElementById(id);
+    if (!s) return;
+    s.innerHTML = "";
+    [["", ph]].concat(itens).forEach(([v, rot]) => { const o = document.createElement("option"); o.value = v; o.textContent = rot; s.append(o); });
+    s.value = "";
+  };
+  const ms = meses.map((m, i) => [String(i + 1), m]), as = [0, 1, 2, 3].map((i) => [String(ano + i), String(ano + i)]);
+  enche("edNovoPreDeM", ms, t("ed_novo_mes")); enche("edNovoPreAteM", ms, t("ed_novo_mes"));
+  enche("edNovoPreDeA", as, t("ed_novo_ano")); enche("edNovoPreAteA", as, t("ed_novo_ano"));
+}
+
 function hubNovoMotivo(est) {
   if (est.estado === "cru") return t("ed_novo_mot_cru");
   if (est.estado === "modelo") return t("ed_novo_mot_modelo", { n: est.nomes.slice(0, 2).join(", ") });
@@ -1130,16 +1212,62 @@ function hubNovoPintar() {
     }
   }
   /* "Antes de criar": nome, data, plano */
-  const nome = String((g("edNovoNome") || {}).value || "").trim(), prova = String((g("edNovoProva") || {}).value || "").trim();
-  const nomeOk = nome && nome !== t("hub_novo_padrao");
+  const v = hubNovoValidar();
+  const falta = (campo) => v.erros.some((e) => e.campo === campo);
   const linha = (id, c, txt) => { const li = g(id); if (li) { li.className = "pront-" + c; li.textContent = { ok: "✓", atencao: "⚠", erro: "⛔", vazio: "○" }[c] + " " + txt; } };
-  linha("edNovoProntNome", nomeOk ? "ok" : "atencao", nomeOk ? t("ed_novo_pr_nome_ok", { n: nome }) : t("ed_novo_pr_nome_no", { n: nome || t("hub_novo_padrao") }));
-  linha("edNovoProntData", prova ? "ok" : "atencao", prova ? t("ed_novo_pr_data_ok", { d: prova.split("-").reverse().join("/") }) : t("ed_novo_pr_data_no"));
+  /* o que falta aparece cinza (○) até a pessoa tentar criar; depois, vermelho (⛔) */
+  const faltante = hubNovoTocado ? "erro" : "vazio";
+  const nomeGenerico = v.generico;
+  linha("edNovoProntNome", falta("edNovoNome") ? faltante : nomeGenerico ? "atencao" : "ok",
+    falta("edNovoNome") ? t("ed_novo_pr_nome_pend") : nomeGenerico ? t("ed_novo_pr_nome_no", { n: v.nome }) : t("ed_novo_pr_nome_ok", { n: v.nome }));
+  const dmy = (iso) => String(iso).split("-").reverse().join("/");
+  let dc, dt;
+  if (!v.modo) { dc = faltante; dt = t("ed_novo_pr_data_pend"); }
+  else if (v.modo === "sem") { dc = "atencao"; dt = t("ed_novo_pr_data_sem"); }
+  else if (v.modo === "pre") {
+    const p = hubNovoPrevisto();
+    dc = v.previsto ? "ok" : faltante;
+    dt = v.previsto ? t("ed_novo_pr_data_pre", { j: p.ate && p.ate !== p.de ? p.de.split("-").reverse().join("/") + " – " + p.ate.split("-").reverse().join("/") : p.de.split("-").reverse().join("/") }) : t("ed_novo_pr_data_pre_pend");
+  } else if (!v.prova) { dc = faltante; dt = t("ed_novo_pr_data_falta"); }
+  else if (v.prova < hubNovoHoje()) { dc = "atencao"; dt = t("ed_novo_pr_data_passada", { d: dmy(v.prova) }); }
+  else { dc = "ok"; dt = t("ed_novo_pr_data_ok", { d: dmy(v.prova) }); }
+  linha("edNovoProntData", dc, dt);
+  /* os campos que dependem da resposta da data */
+  const mostra = (id, sim) => { const el = g(id); if (el) el.hidden = !sim; };
+  mostra("edNovoDataCampo", v.modo === "data"); mostra("edNovoPreCampo", v.modo === "pre");
+  mostra("edNovoF2Lin", v.modo === "data");
+  const sw = g("edNovoF2On");
+  mostra("edNovoF2cx", v.modo === "data" && !!(sw && sw.checked));
+  const lei = g("edNovoPreLeitura");
+  if (lei) {
+    const p = hubNovoPrevisto();
+    const f = (x) => String(x).split("-").reverse().join("/");
+    lei.textContent = !p.de ? "" : p.ate && p.ate !== p.de ? t("ed_novo_pre_leitura2", { a: f(p.de), b: f(p.ate) }) : t("ed_novo_pre_leitura1", { a: f(p.de) });
+  }
+  /* o erro escrito debaixo do campo (só depois da primeira tentativa) e a borda vermelha */
+  ["edNovoNomeErro", "edNovoDataErro", "edNovoHorasErro", "edNovoF2Erro"].forEach((id) => {
+    const p = g(id);
+    if (!p) return;
+    const e = hubNovoTocado ? v.erros.find((x) => x.onde === id) : null;
+    p.textContent = e ? e.msg : "";
+    p.hidden = !e;
+  });
+  ["edNovoNome", "edNovoProva", "edNovoHoras", "edNovoF2Prova", "edNovoPreDeM", "edNovoPreDeA", "edNovoPreAteM", "edNovoPreAteA"].forEach((id) => {
+    const el = g(id);
+    if (!el) return;
+    const inv = hubNovoTocado && v.erros.some((x) => x.campo === id || (x.campo === "edNovoPreDeM" && id === "edNovoPreDeA" && !hubNovoPrevisto().de));
+    el.className = String(el.className || "").replace(/\s*ednovo-inv/g, "") + (inv ? " ednovo-inv" : "");
+  });
   linha("edNovoProntPlano", est.estado === "prompt" ? "erro" : est.estado === "vazio" ? "vazio" : est.estado === "ok" ? "ok" : "atencao",
     est.estado === "prompt" ? t("ed_novo_pr_plano_erro") : est.estado === "vazio" ? t("ed_novo_pr_plano_vazio")
       : est.estado === "ok" ? t("ed_novo_pr_plano_ok", { d: est.d, t: est.t }) : t("ed_novo_pr_plano_ver"));
   const criar = g("btnEdNovoCriar");
-  if (criar) { criar.disabled = est.estado === "prompt"; criar.title = est.estado === "prompt" ? t("ed_novo_criar_bloq") : ""; }
+  if (criar) {
+    criar.disabled = est.estado === "prompt";
+    const faltam = est.estado === "prompt" ? [] : v.erros;
+    criar.className = String(criar.className || "").replace(/\s*btn-pend/g, "") + (faltam.length ? " btn-pend" : "");
+    criar.title = est.estado === "prompt" ? t("ed_novo_criar_bloq") : (faltam.length ? t("ed_novo_criar_pend", { f: faltam.map((e) => e.msg).join(" ") }) : "");
+  }
   return est;
 }
 
@@ -1184,6 +1312,7 @@ function hubNovoTexto(d) {
   const L = [];
   const cab = [String(d.nome || "").trim() || t("hub_novo_padrao")];
   if (d.prova) cab.push("prova: " + d.prova);
+  else if (d.previsto) cab.push("previsto: " + String(d.previsto).replace(/[|]/g, "/"));
   if (d.horas) cab.push("horas: " + d.horas);
   L.push("# " + cab.join(" | "));
   if (d.f2Prova) {
@@ -1214,10 +1343,15 @@ function hubNovoCriar() {
   const f2on = !!(document.getElementById("edNovoF2On") || {}).checked;
   /* o PROMPT nunca vira edital — nem se chamarem esta função sem passar pelo botão */
   if (hubNovoEstadoPlano(val("edNovoPlano")).estado === "prompt") { hubNovoPintar(); return null; }
+  /* a data vem da resposta escolhida; sem nenhuma escolhida (chamada direta), vale o campo da data, como sempre valeu */
+  const modo = hubNovoModo();
+  const comData = modo === "data" || !modo;
+  const f2ok = f2on && comData;
   const texto = hubNovoTexto({
-    nome: val("edNovoNome"), prova: val("edNovoProva"),
-    horas: val("edNovoHoras"), f2Nome: f2on ? val("edNovoF2Nome") : "",
-    f2Prova: f2on ? val("edNovoF2Prova") : "", plano: val("edNovoPlano"),
+    nome: val("edNovoNome"), prova: comData ? val("edNovoProva") : "",
+    previsto: modo === "pre" ? hubNovoPrevisto().texto : "",
+    horas: val("edNovoHoras"), f2Nome: f2ok ? val("edNovoF2Nome") : "",
+    f2Prova: f2ok ? val("edNovoF2Prova") : "", plano: val("edNovoPlano"),
   });
   const r = lerEdital(texto);
   const nTop = (r.disciplinas || []).reduce((a, d) => a + d.topicos.length, 0);
@@ -1240,8 +1374,20 @@ async function hubNovoCriarConfirmado(confirmar) {
   const pl = document.getElementById("edNovoPlano");
   const est = hubNovoEstadoPlano(pl ? pl.value : "");
   if (est.estado === "prompt") { hubNovoPintar(); return null; }
+  const v = hubNovoValidar();
+  if (v.erros.length) {
+    /* NÃO cria: mostra, em vermelho, o que falta, e leva o cursor ao primeiro campo */
+    hubNovoTocado = true;
+    hubNovoPintar();
+    const el = document.getElementById(v.erros[0].campo);
+    try { if (el && el.focus) el.focus(); } catch (e) {}
+    return null;
+  }
   const motivo = hubNovoMotivo(est);
-  if (motivo && !(await (confirmar || uiConfirm)(t("ed_novo_conf_suspeito", { m: motivo })))) return null;
+  if (v.avisos.length) {
+    const linhas = v.avisos.concat(motivo ? [t("ed_novo_a_plano", { m: motivo })] : []);
+    if (!(await (confirmar || uiConfirm)(t("ed_novo_conf_avisos", { l: linhas.map((x) => "• " + x).join("\n") })))) return null;
+  } else if (motivo && !(await (confirmar || uiConfirm)(t("ed_novo_conf_suspeito", { m: motivo })))) return null;
   return hubNovoCriar();
 }
 
@@ -1305,11 +1451,19 @@ function hubIniciar() {
   if (r) r.onclick = hubRenomear;
   const nc = document.getElementById("btnEdNovoCriar");
   if (nc) nc.onclick = () => hubNovoCriarConfirmado();
-  ["edNovoNome", "edNovoProva"].forEach((id) => { const el = document.getElementById(id); if (el) { el.oninput = hubNovoPintar; el.onchange = hubNovoPintar; } });
+  ["edNovoNome", "edNovoProva", "edNovoHoras", "edNovoF2Nome", "edNovoF2Prova", "edNovoPreDeM", "edNovoPreDeA", "edNovoPreAteM", "edNovoPreAteA"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) { el.oninput = hubNovoPintar; el.onchange = hubNovoPintar; }
+  });
+  const modos = ["edNovoModoData", "edNovoModoSem", "edNovoModoPre"];
+  modos.forEach((id) => {
+    const r = document.getElementById(id);
+    if (r) r.onchange = () => { modos.forEach((o) => { const x = document.getElementById(o); if (x && o !== id) x.checked = false; }); hubNovoPintar(); };
+  });
   const nn = document.getElementById("btnEdNovoNao");
   if (nn) nn.onclick = () => document.getElementById("dlgEdNovo").close();
   const sw2 = document.getElementById("edNovoF2On");
-  if (sw2) sw2.onchange = () => { const cx = document.getElementById("edNovoF2cx"); if (cx) cx.hidden = !sw2.checked; };
+  if (sw2) sw2.onchange = () => { hubNovoPintar(); };
   const np = document.getElementById("btnEdNovoPrompt");
   if (np) {
     /* o prompt fica NA CAIXA onde o plano vai ser colado: mandar a
