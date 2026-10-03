@@ -41,7 +41,7 @@ const GER_DICAS = {
   gerClEdital: "ger_tip_cl_edital", gerClGerais: "ger_tip_cl_gerais",
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
-  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer", gerExpVazios: "pac_tip_vazios", btnGerExpMover: "pac_tip_mover_marcados",
+  gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer", gerExpVazios: "pac_tip_vazios", btnGerExpMover: "pac_tip_mover_marcados", btnGerLimparCoresExport: "ger_tip_cor_limpar",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -357,6 +357,9 @@ let gerRenomearExport = new Map(), gerEditandoNome = null, gerFocoNomeArv = null
 /* o cartão ARRASTADO da lista para outra pasta, só nesta exportação: chave = pacChaveCartao(n) → { disciplina, topico, edital }.
  * Separa só ESSE cartão dos irmãos do tópico (tem prioridade sobre o arrasto do tópico). Nunca grava na Biblioteca. */
 let gerCartaoMoverParaExport = new Map();
+/* R5: marcadores de cor TEMPORÁRIOS nos cartões da lista, só para lembrar o que já foi mexido: chave = pacChaveCartao(n) → id de
+ * GR_CORES (am/vd/rs/az). Puramente visual — não entra no arquivo, não interage com mover/renomear, nunca grava na Biblioteca. */
+let gerCorExport = new Map();
 const GER_CHAVE_GRANDE = "eac_ger_grande";
 
 function gerEl(tag, cls, txt) {
@@ -377,7 +380,7 @@ function gerAlternarModo(modo) {
   gerModo = modo;
   gerSel = new Set();
   gerSelExport = new Set();
-  gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map();
+  gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map(); gerCorExport = new Map();
   gerRenomearExport = new Map(); gerEditandoNome = null;
   try {
     $("btnGerModoGerenciar").setAttribute("aria-selected", String(modo === "gerenciar"));
@@ -1190,6 +1193,7 @@ function gerPintarLista() {
   $("gerResumo").textContent = gerNotas.length
     ? t("ger_resumo", { v: gerVis.length, n: gerNotas.length }) : t("cq_sem_cartoes");
   const exportando = gerModo === "exportar";
+  $("btnGerLimparCoresExport").hidden = !exportando || gerCorExport.size === 0;
   /* modo exportação: marcar é na ÁRVORE (pasta inteira), não cartão a cartão na lista — esta
    * barra inteira (marcar/limpar/marcar todos/fracos/lacunas/classificar/ramos) é só do modo
    * "gerenciar"; "exportar esta pasta" (atalho pro Montar pacote separado) também não faz sentido
@@ -1245,6 +1249,22 @@ function gerPintarLista() {
         des.onclick = (ev) => { if (ev) { ev.preventDefault && ev.preventDefault(); ev.stopPropagation && ev.stopPropagation(); } gerCartaoMoverParaExport.delete(chaveCartao); gerPintarArvore(); gerPintarLista(); gerPintarPrevia(); };
         corpo.append(des);
       }
+      const cor = gerCorExport.get(chaveCartao);
+      if (cor) lin.className += " ger-cor-" + cor;
+      const cores = gerEl("div", "ger-cores");
+      GR_CORES.forEach((c) => {
+        const bol = gerEl("button", "ger-cor-bol gr-" + c.id + (cor === c.id ? " sel" : ""));
+        bol.type = "button";
+        bol.title = t("ger_tip_cor_marcar", { c: t(c.i18n) });
+        bol.setAttribute("aria-pressed", cor === c.id ? "true" : "false");
+        bol.onclick = (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          gerCorExport.get(chaveCartao) === c.id ? gerCorExport.delete(chaveCartao) : gerCorExport.set(chaveCartao, c.id);
+          gerPintarLista();
+        };
+        cores.append(bol);
+      });
+      corpo.append(cores);
       lin.append(corpo);
       lin.draggable = true;
       lin.ondragstart = (ev) => gerIniciarArrastoCartaoExport(ev, n);
@@ -1919,7 +1939,7 @@ function gerTrocarAgrupar(v) {
 
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
-  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map(); gerRenomearExport = new Map(); gerEditandoNome = null;
+  gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map(); gerCorExport = new Map(); gerRenomearExport = new Map(); gerEditandoNome = null;
   try { $("btnGerModoGerenciar").setAttribute("aria-selected", "true"); $("btnGerModoExportar").setAttribute("aria-selected", "false"); } catch (e) {}
   try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
   $("gerExpSemRaiz").checked = false;
@@ -2025,6 +2045,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
     $("btnGerExpCopiarCaminho").textContent = t("copy_path_done");
     setTimeout(() => { $("btnGerExpCopiarCaminho").textContent = t("copy_path_btn"); }, 2000);
   };
+  $("btnGerLimparCoresExport").onclick = () => { gerCorExport = new Map(); gerPintarLista(); };
   $("btnGerExpMover").onclick = () => {
     const dest = gerDestinosCache[$("gerExpMoverSel").selectedIndex];
     const n = gerMoverMarcadosParaExport(dest);

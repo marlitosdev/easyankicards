@@ -4312,6 +4312,18 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-item.ger-tp-cloze{--ger-tp:#2ec4b6}
 .ger-item.ger-tp-mc{--ger-tp:#f0ad4e}
 .ger-item.ger-foco{background:rgba(46,158,91,.20);outline:1px solid var(--acao);outline-offset:-1px}
+/* R5: marcadores de cor temporários (só modo exportar). A cor do fundo vem DEPOIS de .ger-foco: a marca continua visível no cartão em foco. */
+.ger-cores{display:flex;gap:8px;margin:6px 0 0}
+.ger-cor-bol{all:unset;cursor:pointer;width:20px;height:20px;border-radius:50%;border:2px solid transparent;box-shadow:inset 0 0 0 1px var(--borda)}
+.ger-cor-bol.gr-am{background:rgba(250,204,21,.85)}
+.ger-cor-bol.gr-vd{background:rgba(74,222,128,.8)}
+.ger-cor-bol.gr-rs{background:rgba(244,114,182,.8)}
+.ger-cor-bol.gr-az{background:rgba(96,165,250,.8)}
+.ger-cor-bol.sel{border-color:var(--texto)}
+.ger-item.ger-cor-am{background:rgba(250,204,21,.28)}
+.ger-item.ger-cor-vd{background:rgba(74,222,128,.26)}
+.ger-item.ger-cor-rs{background:rgba(244,114,182,.26)}
+.ger-item.ger-cor-az{background:rgba(96,165,250,.26)}
 .ger-item .cq-onde{display:flex;gap:6px;flex-wrap:wrap;align-items:center;opacity:.9;margin:5px 0 0}
 .ger-tipo{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(127,127,127,.2);white-space:nowrap}
 .ger-tipo-basic{color:#5b8def}
@@ -7929,6 +7941,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         </select>
         <label class="ger-ocultar"><input type="checkbox" id="gerOcultarVazias"> <span data-i18n="ger_ocultar_vazias"></span></label>
         <button type="button" class="btn-min" id="btnGerDesfazerExport" data-i18n="ger_desfazer_export" hidden></button>
+        <button type="button" class="btn-min" id="btnGerLimparCoresExport" data-i18n="ger_cor_limpar" hidden></button>
       </div>
       <div id="gerArvore"></div>
     </div>
