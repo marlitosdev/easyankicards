@@ -183,7 +183,9 @@ function pacMontar(notas, sel, opc) {
       if (!i || comCartao.has(ch)) return;
       const mov = moverPara.get(ch);
       const base = mov || { edital: editalDe.get(ch) || i.edital || "", disciplina: i.disciplina, topico: i.topico };
-      const nome = pacAplicarRenomear(pacNomeDeck(base, o.comEdital), renomear);
+      const orig = pacNomeDeck(base, o.comEdital), nome = pacAplicarRenomear(orig, renomear);
+      /* o vazio também entra em "origens" (contagem 0): aparece na árvore e pode ser renomeado */
+      if (!origens.has(orig)) origens.set(orig, 0);
       if (!decks.has(nome)) { decks.set(nome, 0); vazios.push(nome); }
     });
   }
