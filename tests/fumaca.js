@@ -15,7 +15,7 @@ const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "dominio-evolucao.js", "banca-alvo.js", "horas-assunto.js", "ramos.js", "pacote.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
-                  "fora-da-agenda.js", "edital.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
+                  "fora-da-agenda.js", "edital.js", "edital-vert.js", "editais.js", "vinculos.js", "vizinhos.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
 
 /* Seletor de pobre: entende "tag" e "tag[attr=valor]", que é tudo que o
  * app usa. Sem isso não dá para testar tela em lista (a bandeja de
@@ -1111,7 +1111,7 @@ function rodar() {
     /* "esta perguntando alguma coisa agora?" — sem isto nao da para
      * exigir que uma acao NAO pergunte, so que ela pergunte. */
     uiPerguntando: () => !!_uiResolve,
-    edFaseAtual, edJanela, edDataPlanejada, hubNovoTexto, hubNovoCriar, edPromptEdital, setLanguage,
+    edFaseAtual, edJanela, edDataPlanejada, hubNovoTexto, hubNovoCriar, edPromptEdital, setLanguage, edVerticalizar, edVertFatias,
     difLer, difSalvar, difRecarregar, difChave, difDefinir, difApagar, difDe, difFator,
     difMapaFatores, difResumo, difDoHumor, difDias, DIF_VALIDADE, DIF_NIVEIS,
     regDifAtual, regDifPintar, difSeloDe, priorizar,
