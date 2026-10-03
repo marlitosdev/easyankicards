@@ -1881,6 +1881,11 @@ async function testes() {
            "AF3 a linha do diário não leva de volta ao material: " + linha.slice(0, 90));
         ok(/disciplina|subject/i.test(linha),
            "AF4 a linha do diário não leva ao panorama da disciplina");
+        /* V6: o peso era o numero cru (2.027027027027027) */
+        api.diarioPor([{ d: diasAtras(2), c: "direito financeiro›restos a pagar", disc: "Direito Financeiro", n: "Restos a pagar", a: "feito", cc: "TCE-PE", m: 60, p: 2.027027027027027 }]);
+        api.abrirDiario();
+        const linhaP = txtD(api.$("diarioLista"));
+        ok(/peso 2\b/.test(linhaP) && !/2[.,]0\d/.test(linhaP), "AF4b o peso aparece com uma casa no maximo: " + linhaP.slice(0, 160));
 
         /* AF5 — o registro é EMPILHADO e os botões ficam numa faixa
          * horizontal ABAIXO dele. Com tudo numa linha só (display:flex), os
