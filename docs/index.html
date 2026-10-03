@@ -469,6 +469,7 @@ button:focus-visible{outline:2px solid var(--acao,#3b82f6);outline-offset:2px}
 .ger-arv-aviso{border-color:var(--laranja-borda);color:var(--laranja-txt)}
 .ger-arv-fixo{color:var(--sutil);font-style:italic}
 .ger-exp-caminhos summary{cursor:pointer;font-size:12px;color:var(--sutil);margin:6px 0}
+#gerExpMoverSel{flex:1;min-width:120px;max-width:100%}
 /* Gaveta retrátil "Importar arquivo": alça sempre visível, corpo oculto
    por padrão (principalmente no navegador). */
 .gaveta-importar{margin-bottom:10px;border:1px solid var(--borda);border-radius:9px;
@@ -7964,6 +7965,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <div id="gerExpArvoreAnki"></div>
         </div>
         <details class="ger-exp-caminhos"><summary data-i18n="ger_exp_caminhos"></summary><div id="gerExpDecks"></div></details>
+        <div class="qm-bts" style="margin-top:6px">
+          <span class="nota" data-i18n="pac_mover_label"></span>
+          <select id="gerExpMoverSel" disabled></select>
+          <button type="button" class="btn-min" id="btnGerExpMover" data-i18n="pac_mover_btn" disabled></button>
+        </div>
         <label class="nota" style="display:block;margin-top:8px"><span data-i18n="pac_nome"></span>
           <input type="text" id="gerExpNome" data-i18n-ph="deck_placeholder" style="width:100%;box-sizing:border-box"></label>
         <div id="gerExpAvisoTopo">
