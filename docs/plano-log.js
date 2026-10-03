@@ -941,6 +941,8 @@ function plPintar() {
       f: d.plano.fase ? d.plano.fase.n : 1,
     }) + (d.quantos > 1 ? " · " + t("plog_sub_varios", { n: d.quantos }) : "");
   }
+  const avLeit = d.r && typeof edAvisoLeitura === "function" ? edAvisoLeitura(d.r, { semBotao: true }) : null;
+  if (avLeit) box.append(avLeit);
   box.append(plTiras(d));
   /* O SELO DA FATIA. "Exata" e "estimada" mudam o significado de toda a
    * coluna da prova, e sem dizer qual é a tabela mente por omissão. */

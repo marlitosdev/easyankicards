@@ -163,6 +163,13 @@ function edSugestoes(r) {
     itens.unshift({ dot: "dot-red", txt: t("ed_crit_prompt"), fixTxt: t("ed_fix_prompt"), fix: edTirarPrompt });
   else if (susp && susp.tipo === "modelo")
     itens.unshift({ dot: "dot-red", txt: t("ed_crit_modelo", { n: susp.nomes.slice(0, 3).join(", ") }) });
+  const qual = edQualidadeLeitura(r);
+  if (qual.rep.length)
+    itens.push({ dot: "dot-org", txt: t("ed_crit_rep", { n: qual.rep.length, l: qual.rep.slice(0, 3).map((g) => g.nome + " (" + g.vezes + "×)").join(", ") }),
+                 linha: qual.rep[0].linhas[1], fixTxt: t("ed_fix_rep"), fix: edUnirRepetidas });
+  if (qual.sem.length)
+    itens.push({ dot: "dot-org", txt: t("ed_crit_sem_topico", { n: qual.sem.length, l: qual.sem.slice(0, 3).map((g) => g.nome).join(", ") }),
+                 linha: qual.sem[0].linhas[0] });
   if (temNumeracaoEdital($("editalTexto").value))
     itens.push({ dot: "dot-org", txt: t("ed_crit_numeracao"),
                  fixTxt: t("ed_fix_numeracao"), fix: tirarNumeracaoEdital });
@@ -180,8 +187,11 @@ function edSugestoes(r) {
   const tops = r.disciplinas.reduce((s, d) => s + d.topicos.length, 0);
   /* "Lido" só é verde quando nada ficou de fora nem veio suspeito: verde ao lado de um vermelho é o que enganava */
   if (tops || r.disciplinas.length)
-    itens.unshift({ dot: (susp || ignoradas.length) ? "dot-org" : "dot-green", conta: true,
-      txt: t("ed_lido", { d: r.disciplinas.length, t: tops }) });
+    itens.unshift({ dot: (susp || ignoradas.length || qual.rep.length || qual.sem.length) ? "dot-org" : "dot-green", conta: true,
+      txt: t("ed_lido", { d: qual.unicas, t: tops }) });
+  /* com problema de leitura, a ação que importa é revisar com a IA: o botão ganha destaque */
+  const bRev = $("btnEditalColar");
+  if (bRev) bRev.className = String(bRev.className || "").replace(/\s*ed-acao-destaque/g, "") + (qual.provisorio ? " ed-acao-destaque" : "");
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("ed_crit_ok") });
 
   itens.forEach((it) => {
@@ -1228,7 +1238,7 @@ function abrirDiagPlano() {
   const plano = montarPlano(r, { horas: Number($("edHoras").value),
     prova: $("edProva").value, feitos: edProgresso });
   const achados = diagnosticoPlano(r, plano);
-  $("dpResumo").textContent = t("ed_diag_estado", { d: r.disciplinas.length,
+  $("dpResumo").textContent = t("ed_diag_estado", { d: edNomesUnicos(r),
     t: plano.total, s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas });
   const lista = $("dpLista");
   lista.innerHTML = "";
@@ -2914,6 +2924,36 @@ function edPintarBlocos(plano) {
   return cx;
 }
 
+/* "O plano tem problemas de leitura — os números abaixo são provisórios": a faixa que vai em cima de tudo o que é CALCULADO
+ * (risco de eliminação, buracos, Raio-X). Antes, o app calculava sobre texto errado e mostrava o resultado com a mesma
+ * autoridade de um plano limpo. `opc.semBotao`: o Raio-X não tem como abrir o diagnóstico do edital aberto. */
+function edTextoDoMotivoLeitura(m) {
+  const l = (m.nomes || []).slice(0, 3).join(", ");
+  return t("ed_leit_m_" + m.id, { n: m.n, l });
+}
+function edAvisoLeitura(r, opc) {
+  const q = edQualidadeLeitura(r);
+  if (!q.provisorio) return null;
+  const grave = q.motivos.some((m) => m.id === "prompt" || m.id === "modelo" || m.id === "cru");
+  const cx = document.createElement("div");
+  cx.className = "ed-aviso-leitura " + (grave ? "leit-grave" : "leit-leve");
+  cx.setAttribute("role", "alert");
+  const tit = document.createElement("div");
+  tit.className = "ed-aviso-leitura-tit";
+  tit.textContent = t("ed_leit_tit");
+  const sub = document.createElement("div");
+  sub.className = "ed-aviso-leitura-sub";
+  sub.textContent = q.motivos.map(edTextoDoMotivoLeitura).join(" · ");
+  cx.append(tit, sub);
+  if (!(opc && opc.semBotao)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min"; b.textContent = t("ed_leit_ver");
+    b.onclick = () => abrirDiagPlano();
+    cx.append(b);
+  }
+  return cx;
+}
+
 function edPintarPainel(r, plano) {
   try { vrAtualizarBotao(); } catch (e) {}
   const box = $("edPainel");
@@ -2959,6 +2999,10 @@ function edPintarPainel(r, plano) {
    * da agenda, no topo da tela, já diz — e com o escopo certo (todos os
    * editais), enquanto aqui era só deste. */
   box.append(topo);
+
+  /* -------- plano com problemas de leitura: avisa ANTES de tudo o que é calculado -------- */
+  const avLeit = edAvisoLeitura(r);
+  if (avLeit) box.append(avLeit);
 
   /* -------- os mínimos por bloco, LOGO ABAIXO DA IDENTIDADE --------
    * Vem antes de tudo o que fala de peso, e de propósito: peso é uma
@@ -3691,7 +3735,7 @@ function edRender() {
     }
   }
   $("edResumo").textContent = itens.length
-    ? t("ed_resumo", { d: r.disciplinas.length, t: plano.total, f: plano.feitos,
+    ? t("ed_resumo", { d: edNomesUnicos(r), t: plano.total, f: plano.feitos,
                        p: plano.peso.pctFeito })
     : "";
 

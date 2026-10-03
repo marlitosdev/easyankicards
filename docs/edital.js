@@ -212,6 +212,83 @@ function edNomeDeModelo(nome) {
   return ED_NOMES_DE_MODELO.indexOf(edSemAcento(nome).trim()) >= 0;
 }
 
+/* =====================================================================
+ * CONFIANÇA NO QUE FOI LIDO (W3).
+ *
+ * "7 disciplinas" na leitura e "4 matérias" no painel eram o mesmo edital: o leitor contava cada linha "@" e os painéis
+ * agrupavam por nome. Português escrito duas vezes é UMA disciplina — e as duas contam à parte, inflando a fatia da prova
+ * e dividindo os tópicos entre blocos. Aqui o que o app leu ganha UM jeito de contar e um veredito: "provisório" quando há
+ * algo que torna os números dos painéis (risco de eliminação, buracos, Raio-X) pouco confiáveis.
+ * ===================================================================== */
+function edAgruparDisciplinas(r) {
+  const m = new Map();
+  ((r && r.disciplinas) || []).forEach((d) => {
+    const k = edNormalizar(d.nome);
+    if (!m.has(k)) m.set(k, { nome: d.nome, vezes: 0, topicos: 0, linhas: [] });
+    const g = m.get(k);
+    g.vezes++; g.topicos += d.topicos.length; g.linhas.push(d.linha);
+  });
+  return [...m.values()];
+}
+
+function edNomesUnicos(r) { return edAgruparDisciplinas(r).length; }
+
+/* { provisorio, motivos: [{ id, n, nomes }], unicas, rep: [grupos repetidos], sem: [grupos sem tópico], ign }
+ * motivos: "prompt" | "modelo" | "cru" | "repetida" | "sem_topico" | "ignoradas" (5 ou mais, e pelo menos 1/4 do que foi lido) */
+function edQualidadeLeitura(r) {
+  const grupos = edAgruparDisciplinas(r);
+  const rep = grupos.filter((g) => g.vezes > 1), sem = grupos.filter((g) => !g.topicos);
+  const susp = edTextoSuspeito(null, r);
+  const ign = ((r && r.achados) || []).filter((a) => a.tipo === "linha_ignorada").length;
+  const uteis = ((r && r.disciplinas) || []).reduce((s, d) => s + 1 + d.topicos.length, 0);
+  const motivos = [];
+  if (susp) motivos.push({ id: susp.tipo, n: susp.ignoradas || 0, nomes: susp.nomes || [] });
+  if (rep.length) motivos.push({ id: "repetida", n: rep.length, nomes: rep.map((g) => g.nome) });
+  if (sem.length) motivos.push({ id: "sem_topico", n: sem.length, nomes: sem.map((g) => g.nome) });
+  if (!susp && ign >= 5 && ign >= uteis / 4) motivos.push({ id: "ignoradas", n: ign, nomes: [] });
+  return { provisorio: motivos.length > 0, motivos, unicas: grupos.length, rep, sem, ign };
+}
+
+/* Junta as disciplinas escritas mais de uma vez: os tópicos (e ramos) das repetidas vão para o FIM da primeira, que mantém
+ * o peso e a posição. Nenhum tópico se perde; só muda de bloco. */
+function edUnirRepetidas(raw) {
+  const linhas = String(raw || "").split("\n");
+  const inicios = [];
+  linhas.forEach((l, i) => {
+    const m = l.trim().match(ED_DISC_RE);
+    if (m) inicios.push({ i, k: edNormalizar(edPartes(m[1])[0]) });
+  });
+  const ehFim = (l) => { const s = l.trim(); return /^[&#]/.test(s) || ED_DISC_RE.test(s); };
+  const chunks = inicios.map((c) => {
+    let fim = c.i + 1;
+    while (fim < linhas.length && !ehFim(linhas[fim])) fim++;
+    return { start: c.i, end: fim, k: c.k };
+  });
+  const porNome = new Map();
+  chunks.forEach((c) => { if (!porNome.has(c.k)) porNome.set(c.k, []); porNome.get(c.k).push(c); });
+  const remover = new Set(), depois = new Map();
+  porNome.forEach((lista) => {
+    if (lista.length < 2) return;
+    const [primeiro, ...resto] = lista;
+    let ultimo = primeiro.end - 1;
+    while (ultimo > primeiro.start && !linhas[ultimo].trim()) ultimo--;
+    const extra = depois.get(ultimo) || [];
+    resto.forEach((c) => {
+      for (let j = c.start; j < c.end; j++) remover.add(j);
+      linhas.slice(c.start + 1, c.end).filter((l) => l.trim()).forEach((l) => extra.push(l));
+    });
+    depois.set(ultimo, extra);
+  });
+  if (!remover.size) return String(raw || "");
+  const saida = [];
+  linhas.forEach((l, i) => {
+    if (remover.has(i)) return;
+    saida.push(l);
+    if (depois.has(i)) depois.get(i).forEach((x) => saida.push(x));
+  });
+  return saida.join("\n");
+}
+
 /* Tira o prompt do texto e deixa só o cabeçalho de cima (as linhas "#" e em branco do início): o que o app escreveu. */
 function edTirarPrompt(raw) {
   const topo = [];
@@ -1881,6 +1958,14 @@ function diagnosticoPlano(r, plano) {
   if (susp && susp.tipo === "modelo")
     add("nome_de_modelo", true, "O plano tem nomes de EXEMPLO do prompt como se fossem do edital: " + susp.nomes.slice(0, 4).join(", ")
       + ". Isso não veio do seu concurso — troque ou apague essas linhas.");
+
+  const qual = edQualidadeLeitura(r);
+  if (qual.rep.length)
+    add("disciplina_repetida", true, "Disciplina(s) escrita(s) mais de uma vez: " + qual.rep.map((g) => g.nome + " (" + g.vezes + "×)").join(", ")
+      + ". Cada bloco conta à parte: a fatia da prova sai inflada e os tópicos ficam divididos. Use \"Unir as repetidas\" na bancada.");
+  if (qual.sem.length)
+    add("sem_topico", false, "Disciplina(s) sem nenhum tópico: " + qual.sem.map((g) => g.nome).join(", ")
+      + ". Sem tópicos ela não entra no plano — ou o conteúdo ficou de fora, ou a linha \"@\" sobrou.");
 
   if (!discs.length) return achados;
 
