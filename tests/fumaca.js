@@ -1016,7 +1016,7 @@ function rodar() {
     jurLigar, jurDesligar, jurTexto, jurChaveComparavel,
     jurAbrir, jurColar, jurSalvar, jurEditar, jurTirar,
     jurPintarLista, jurIniciarTela, jurDaSelecao, jurLimparForm,
-    dicaMostrar, dicaFechar, dicaAberta, dicaLigar,
+    dicaMostrar, dicaFechar, dicaAberta, dicaTexto, dicaLigar,
     vinculosAtual: () => vinculos,
     dicaBalaoAtual: () => dicaBalao,
     vkPintarBotoes,

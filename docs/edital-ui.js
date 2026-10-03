@@ -102,6 +102,15 @@ function edRamosNaLinha(i) {
     : t("ed_ramos_revisar", { f: i.ramosFeitos, n: i.ramosTotal, v: i.ramosVencidos });
   resumo.title = t("ed_ramos_tip");
   cx.append(resumo);
+  /* a LEGENDA das marcas e cores fica no balão do (?): ocupa um ícone, não uma linha */
+  const leg = document.createElement("button");
+  leg.type = "button";
+  leg.className = "selo-ajuda ed-ramos-leg";
+  leg.textContent = "?";
+  leg.title = t("ed_ramos_leg_tip");
+  leg.setAttribute("aria-label", leg.title);
+  leg.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); dicaMostrar(leg, t("ed_ramos_legenda")); };
+  cx.append(leg);
   const chips = document.createElement("span");
   chips.className = "ed-ramos-chips";
   cx.append(chips);
@@ -1758,13 +1767,15 @@ function regTrilhaPintar(i) {
 /* A explicação da caixa "só marcar como estudado com todas as etapas", com um EXEMPLO tirado do primeiro ramo marcado
  * (a trilha dele, como está agora) — só vale no ESTUDO; na revisão a caixa nem aparece. */
 function regExigirPintar(i) {
-  const lin = $("regRamosExigirLin"), aj = $("regRamosExigirAj"), ex = $("regRamosExigirEx");
-  if (!lin || !aj || !ex) return;
+  const lin = $("regRamosExigirLin"), bt = $("btnRegExigirAjuda");
+  if (!lin || !bt) return;
   const estudo = regTipo !== "revisado";
-  lin.hidden = !estudo; aj.hidden = !estudo; ex.hidden = !estudo;
-  if (!estudo) return;
-  aj.textContent = t("ed_reg_exigir_aj");
-  ex.textContent = t("ed_reg_exigir_ex_gen"); ex.hidden = false;
+  lin.hidden = !estudo;
+  if (!estudo) { bt.dataset.texto = ""; return; }
+  /* o texto mora no balão do (?) — espaço é caro nesta janela —, e é montado aqui, a cada repintura */
+  const aj = t("ed_reg_exigir_aj");
+  let ex = t("ed_reg_exigir_ex_gen");
+  bt.dataset.texto = aj + "\n\n" + ex;
   const mat = edMaterialDosRamos(i);
   const r = ((i && i.ramos) || []).find((x) => regRamosSel.has(x.id));
   if (!r) return;
@@ -1772,8 +1783,8 @@ function regExigirPintar(i) {
   if (!tr.passos.some((p) => p.disponivel || p.feito)) return;
   /* só as etapas que o ramo TEM (as que não se aplicam, "—", só confundem) */
   const etapas = tr.passos.filter((p) => p.disponivel || p.feito).map((p) => t("ed_passo_" + p.id) + " " + (p.feito ? "✓" : "○")).join(" · ");
-  ex.textContent = t(tr.completo ? "ed_reg_exigir_ex_ok" : "ed_reg_exigir_ex", { r: r.nome, t: etapas });
-  ex.hidden = false;
+  ex = t(tr.completo ? "ed_reg_exigir_ex_ok" : "ed_reg_exigir_ex", { r: r.nome, t: etapas });
+  bt.dataset.texto = aj + "\n\n" + ex;
 }
 
 function regRamosIniciar(i) {
@@ -3858,6 +3869,10 @@ function edIniciar() {
       regRamosIniciar(regAtual);
       if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
     }
+  };
+  if ($("btnRegExigirAjuda")) $("btnRegExigirAjuda").onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    dicaMostrar($("btnRegExigirAjuda"), $("btnRegExigirAjuda").dataset.texto || "");
   };
   if ($("regRamosExigir")) $("regRamosExigir").onchange = () => { try { localStorage.setItem("eac_ramo_exigir", $("regRamosExigir").checked ? "1" : "0"); } catch (e) {} };
   if ($("btnRegRamosTodos")) $("btnRegRamosTodos").onclick = () => {
