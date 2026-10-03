@@ -2539,6 +2539,97 @@ async function testes() {
     }
   }
 
+  /* ---- G36: R5 — marcadores de cor temporarios nos cartoes da lista (so' modo exportar): lembrete visual do que ja' foi mexido;
+   * nao entra no arquivo, nao toca na Biblioteca e some ao trocar de modo/reabrir ---- */
+  {
+    const fakeEv = () => ({ prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.parou = true; }, dataTransfer: { effectAllowed: "", setData() {}, setDragImage() {}, dropEffect: "" } });
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const acharTop = (a, nome) => linhas(a, "ger-top").find((e) => new RegExp("^" + nome + " \\(").test(e.textContent.trim()));
+    const cartoes = (a) => achar(a.$("gerLista"), (e) => cls(e, "ger-item"));
+    const acharCartao = (a, re) => cartoes(a).find((e) => re.test(e.textContent));
+    const bolinhas = (lin) => achar(lin, (e) => cls(e, "ger-cor-bol"));
+    const bol = (lin, id) => bolinhas(lin).find((e) => cls(e, "gr-" + id));
+    const FATO = /fato gerador do ISS\?/, ALIQ = /al.quota/i;
+    const fix = () => {
+      const m = montar();
+      const { a, iss, iptu, pri } = m;
+      a.gerAbrir(); a.$("btnGerModoExportar").onclick();
+      [iss, iptu, pri].forEach((c) => a.gerMarcarExport(c, true));
+      a.$("gerExpSemRep").checked = false;
+      a.$("gerExpNome").value = "Raiz"; a.$("gerExpNome").oninput();
+      a.gerPintar();
+      acharTop(a, "ISS").onclick();
+      return m;
+    };
+    const capturar = async (a) => { const c = {}; c.r = await a.gerAcaoExportar("apkg", { confirmar: async () => true, construir: async (cards, raiz, est, tit, al, extras) => { c.cards = cards; c.extras = extras; return new Uint8Array(1); }, entregar: async () => {} }); return c; };
+    const ev = () => ({ preventDefault() {}, stopPropagation() {} });
+
+    {
+      const { a } = fix();
+      /* as quatro bolinhas, na ordem e nas cores do grifo; nada marcado no comeco */
+      ok(cartoes(a).length === 3 && cartoes(a).every((e) => bolinhas(e).length === 4), "G36a todo cartao da lista tem 4 bolinhas de cor");
+      const l = acharCartao(a, ALIQ);
+      ok(bolinhas(l).map((e) => e.className.match(/gr-(\w\w)/)[1]).join(",") === "am,vd,rs,az", "G36b as bolinhas sao as 4 cores do grifo, na ordem: " + bolinhas(l).map((e) => e.className));
+      ok(a.gerCorExportAtual().size === 0 && a.$("btnGerLimparCoresExport").hidden === true && !cartoes(a).some((e) => /ger-cor-(am|vd|rs|az)/.test(e.className)), "G36c no comeco nada e' colorido e o 'limpar cores' esta escondido");
+      ok(bolinhas(l).every((e) => e.title && !/ger_tip_cor_marcar/.test(e.title)) && /amarelo/.test(bol(l, "am").title) && /azul/.test(bol(l, "az").title), "G36d cada bolinha tem uma dica com o nome da cor: " + bol(l, "am").title);
+      /* marcar */
+      const e1 = { preventDefault() {}, stopPropagation() { this.parou = true; } };
+      bol(l, "am").onclick(e1);
+      const l1 = acharCartao(a, ALIQ);
+      ok(a.gerCorExportAtual().size === 1 && [...a.gerCorExportAtual().values()][0] === "am" && cls(l1, "ger-cor-am"), "G36e clicar numa bolinha colore o cartao");
+      ok(cls(bol(l1, "am"), "sel") && !bolinhas(l1).some((e) => cls(e, "sel") && !cls(e, "gr-am")), "G36f so' a bolinha da cor atual fica 'sel'");
+      ok(!cls(acharCartao(a, FATO), "ger-cor-am") && bolinhas(acharCartao(a, FATO)).every((e) => !cls(e, "sel")), "G36g o irmao do mesmo topico continua sem cor");
+      ok(a.$("btnGerLimparCoresExport").hidden === false, "G36h 'limpar cores' aparece com algum cartao colorido");
+      ok(e1.parou === true, "G36i clicar na bolinha nao 'clica' no cartao (nao muda o foco)");
+      /* uma cor so' por cartao: trocar substitui */
+      bol(acharCartao(a, ALIQ), "vd").onclick(ev());
+      const l2 = acharCartao(a, ALIQ);
+      ok(a.gerCorExportAtual().size === 1 && cls(l2, "ger-cor-vd") && !cls(l2, "ger-cor-am"), "G36j trocar de cor substitui (uma cor por cartao)");
+      /* a mesma cor de novo tira */
+      bol(l2, "vd").onclick(ev());
+      ok(a.gerCorExportAtual().size === 0 && !cls(acharCartao(a, ALIQ), "ger-cor-vd") && a.$("btnGerLimparCoresExport").hidden === true, "G36k clicar na mesma cor tira a marca (e o 'limpar cores' some)");
+      /* limpar cores: tira de todos */
+      bol(acharCartao(a, ALIQ), "rs").onclick(ev());
+      bol(acharCartao(a, FATO), "az").onclick(ev());
+      ok(a.gerCorExportAtual().size === 2 && cls(acharCartao(a, FATO), "ger-cor-az") && cls(acharCartao(a, ALIQ), "ger-cor-rs"), "G36l dois cartoes com cores diferentes");
+      a.$("btnGerLimparCoresExport").onclick();
+      ok(a.gerCorExportAtual().size === 0 && !cartoes(a).some((e) => /ger-cor-(am|vd|rs|az)/.test(e.className)) && a.$("btnGerLimparCoresExport").hidden === true, "G36m 'limpar cores' tira todas as marcas");
+      ok(cartoes(a).every((e) => e.draggable === true), "G36n a linha continua arrastavel");
+    }
+    /* so' visual: o arquivo, a Biblioteca e os arrastos nao mudam */
+    {
+      const { a } = fix();
+      const sem = await capturar(a);
+      const antes = JSON.stringify(a.matResumosAtual());
+      bol(acharCartao(a, ALIQ), "am").onclick(ev()); bol(acharCartao(a, FATO), "az").onclick(ev());
+      const com = await capturar(a);
+      ok(JSON.stringify(com.cards) === JSON.stringify(sem.cards) && JSON.stringify(com.extras) === JSON.stringify(sem.extras), "G36o as cores NAO entram no arquivo (mesmos cartoes, mesmos baralhos)");
+      ok(JSON.stringify(a.matResumosAtual()) === antes && !a.gerTemRecibo(), "G36p a Biblioteca nao mudou e nao houve recibo");
+      ok(a.gerMoverParaExportAtual().size === 0 && a.gerCartaoMoverParaExportAtual().size === 0, "G36q colorir nao cria nenhum destino de mover");
+      /* a cor acompanha o cartao quando ele e' arrastado para outra pasta */
+      acharCartao(a, ALIQ).ondragstart(fakeEv());
+      acharTop(a, "IPTU").ondrop(fakeEv());
+      ok(a.gerCartaoMoverParaExportAtual().size === 1 && cls(acharCartao(a, ALIQ), "ger-cor-am"), "G36r o cartao arrastado continua com a cor");
+      /* desfazer movimentos nao apaga as cores; as cores nao desfazem movimentos */
+      a.$("btnGerDesfazerExport").onclick();
+      ok(a.gerCorExportAtual().size === 2, "G36s 'desfazer movimentos' nao apaga as cores");
+      /* esquece ao trocar de modo e ao reabrir */
+      a.gerAlternarModo("gerenciar"); a.gerAlternarModo("exportar");
+      ok(a.gerCorExportAtual().size === 0, "G36t trocar de modo esquece as cores");
+      const { a: b } = fix();
+      bol(acharCartao(b, ALIQ), "rs").onclick(ev());
+      b.$("dlgGerCartoes").close(); b.gerAbrir();
+      ok(b.gerCorExportAtual().size === 0, "G36u reabrir a Biblioteca esquece as cores");
+    }
+    /* em modo gerenciar nao ha bolinhas nem o botao */
+    {
+      const { a } = montar();
+      a.gerAbrir();
+      acharTop(a, "ISS").onclick();
+      ok(cartoes(a).length > 0 && cartoes(a).every((e) => bolinhas(e).length === 0) && a.$("btnGerLimparCoresExport").hidden === true, "G36v em modo gerenciar nao ha bolinhas de cor nem 'limpar cores'");
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
