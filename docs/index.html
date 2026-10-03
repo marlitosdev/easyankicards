@@ -3922,15 +3922,37 @@ body.split-lj{overflow:hidden}
    atrás de uma barra de rolagem horizontal. Agora: faixa de cima com data,
    ação e tópico; faixa do meio com disciplina e concurso; e os botões
    ABAIXO, em linha, com o espaço inteiro para eles. */
-.diario-item{display:block;padding:9px 2px;font-size:12px;
-  border-bottom:1px solid var(--borda)}
+.diario-item{display:block;padding:8px 4px 8px 10px;font-size:12px;
+  border-bottom:1px solid var(--borda);border-left:3px solid var(--borda)}
 .diario-item:last-child{border-bottom:0}
-.di-data{color:var(--sutil);font-size:10.5px;white-space:nowrap}
-.di-acao{font-size:9.5px;font-weight:800;text-transform:uppercase;padding:1px 6px;
-  border-radius:7px;white-space:nowrap}
-.acao-feito{background:rgba(34,197,94,.18);color:var(--ok)}
-.acao-revisado{background:rgba(21,128,61,.28);color:var(--ok)}
-.acao-pendente{background:var(--campo);color:var(--sutil)}
+/* A COR É UM ACENTO, NÃO UM CRACHÁ. Antes a ação era uma pílula preenchida e em caixa alta que gritava mais que o
+   tópico; agora a ação é uma barra fina na lateral + uma palavra discreta, e o que se lê é o assunto e o tempo. */
+.di-b-feito{border-left-color:var(--ok)}
+.di-b-revisado{border-left-color:var(--info)}
+.di-b-pendente{border-left-color:var(--borda);opacity:.75}
+.di-acao{font-size:10.5px;font-weight:600;color:var(--sutil);white-space:nowrap}
+.di-acao::before{content:" · "}
+.di-tempo{margin-left:auto;font-weight:700;color:var(--texto);white-space:nowrap;font-size:12px}
+/* o cabeçalho do DIA: onde achar "o que fiz na terça" sem ler linha a linha */
+.di-dia{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  padding:5px 4px;margin-top:6px;background:var(--panel);border-bottom:1px solid var(--borda);font-size:11px}
+.di-dia-nome{font-weight:800;color:var(--texto);text-transform:capitalize}
+.di-dia-tot{color:var(--sutil)}
+.di-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.di-cab h3{margin:0 0 2px}
+.di-cab-btns{display:flex;align-items:center;gap:8px}
+.di-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;align-items:center;margin:4px 0}
+.di-filtros select,.di-filtros input[type=date]{width:100%;font-size:11px;padding:4px 6px;border-radius:8px;
+  border:1px solid var(--borda);background:var(--campo);color:var(--texto);min-width:0}
+.di-filtros .mat-busca{grid-column:1 / -1;margin:0}
+.di-data-f{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--sutil)}
+.di-lista{max-height:52vh;overflow-y:auto;overflow-x:hidden;margin:8px 0}
+/* "dialog.X" (e não ".X"): a regra geral "dialog.ui-modal{max-width:440px}" vence classe sozinha (invariante E18) */
+dialog.di-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
+dialog.di-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;border-radius:0;
+  padding:10px 12px;display:flex;flex-direction:column;resize:none}
+dialog.di-cheia .di-lista{max-height:none;flex:1 1 auto;min-height:0}
+dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos{flex:0 0 auto}
 .di-nome{font-weight:700;color:var(--texto);white-space:normal;word-break:break-word}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:normal}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
@@ -8585,16 +8607,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min btn-min-perigo" id="btnDscExcluir" data-i18n="nd_excluir"></button>
   </div>
 </dialog>
-<dialog id="dlgDiario" class="ui-modal">
-  <h3 data-i18n="ed_diario_tit"></h3>
-  <p class="nota" data-i18n="ed_diario_ajuda"></p>
+<dialog id="dlgDiario" class="ui-modal di-modal">
+  <div class="di-cab">
+    <h3 data-i18n="ed_diario_tit"></h3>
+    <span class="di-cab-btns"><button type="button" class="selo-ajuda" id="btnDiarioAjuda" aria-label="?" data-i18n-title="ed_diario_ajuda_tip">?</button>
+    <button type="button" class="btn-min" id="btnDiarioAmpliar"></button></span>
+  </div>
   <div id="diarioPeriodos"></div>
-  <input type="search" id="diarioBusca" class="mat-busca"
-    placeholder="Buscar por tópico, disciplina ou concurso"
-    title="Filtra os registros do diário. Combina com o período escolhido acima.">
+  <div class="di-filtros">
+    <input type="search" id="diarioBusca" class="mat-busca"
+      placeholder="Buscar por tópico, disciplina, concurso ou anotação"
+      title="Filtra os registros do diário. Combina com o período e com os filtros ao lado.">
+    <select id="diarioDisc" data-i18n-title="ed_diario_f_disc_tip"></select>
+    <select id="diarioCc" data-i18n-title="ed_diario_f_cc_tip"></select>
+    <select id="diarioTipo" data-i18n-title="ed_diario_f_tipo_tip"></select>
+    <label class="di-data-f"><span data-i18n="ed_diario_f_de"></span> <input type="date" id="diarioDe" data-i18n-title="ed_diario_f_data_tip"></label>
+    <label class="di-data-f"><span data-i18n="ed_diario_f_ate"></span> <input type="date" id="diarioAte" data-i18n-title="ed_diario_f_data_tip"></label>
+    <button type="button" class="btn-min" id="btnDiarioLimpar" data-i18n="ed_diario_f_limpar" hidden></button>
+  </div>
   <div class="nota" id="diarioConta"></div>
   <div class="ed-diario-res" id="diarioResumo"></div>
-  <div id="diarioLista" style="max-height:52vh;overflow-y:auto;overflow-x:hidden;margin:8px 0"></div>
+  <div id="diarioLista" class="di-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnDiarioFechar" data-i18n="help_close"></button>
   </div>

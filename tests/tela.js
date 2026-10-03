@@ -1893,7 +1893,7 @@ async function testes() {
          * por linha, com o resto atrás de uma barra de rolagem lateral.
          * A v8.79 tentou consertar isto na classe errada (.di-item, que não
          * existe): quem manda é .diario-item. */
-        const li0 = api.$("diarioLista").children[0];
+        const li0 = (api.$("diarioLista").children || []).find((c) => /diario-item/.test(c.className || ""));
         const faixas = (li0.children || []).map((c) => c.className);
         ok(faixas.join(",") === "di-cima,di-meio,di-acoes",
            "AF5 o registro do diário não está em três faixas: " + faixas.join(","));
@@ -1935,9 +1935,10 @@ async function testes() {
         const btnHoje = btns.find((b) => b.textContent === api.t("ed_diario_per_1"));
         ok(!!btnHoje, "AF6 falta o botão \"hoje\" no diário");
         if (btnHoje) btnHoje.onclick();
-        ok(api.$("diarioLista").children.length === 1,
+        const itensHoje = (api.$("diarioLista").children || []).filter((c) => /diario-item/.test(c.className || ""));
+        ok(itensHoje.length === 1,
            `AF6b o filtro "hoje" não isolou só o registro de hoje `
-           + `(${api.$("diarioLista").children.length} linha(s))`);
+           + `(${itensHoje.length} registro(s))`);
         /* a função de estatísticas usada no resumo do topo tem de bater
          * com o que a lista mostra, não só o desenho da tela */
         const stHoje = api.estatisticasDiario(1);
@@ -2407,6 +2408,78 @@ async function testes() {
         ok((api.$("diarioLista").children || []).some((c) => /mostrar mais|show .* more/i.test(c._texto || "")),
            "AN8 não há como ver os registros restantes");
         api.$("dlgDiario").close();
+
+        /* DF — D1/D2: filtros do diário, dia a dia, totais do filtrado e tela ampliada */
+        {
+          const E = [
+            { d: "2026-09-01", c: "a›alfa", disc: "A", n: "Alfa", a: "feito", cc: "X", m: 30, obs: "crase" },
+            { d: "2026-09-02", c: "b›beta", disc: "B", n: "Beta", a: "revisado", cc: "", m: 20, q: { feitas: 10, certas: 7 } },
+            { d: "2026-09-02", c: "a›alfa", disc: "A", n: "Alfa", a: "pendente", cc: "X" },
+          ];
+          const F = (f) => api.diarioFiltrar(E, Object.assign({ dias: 0 }, f));
+          const nomes = (r) => r.map((i) => i.x.n + ":" + i.x.a).join(",");
+          ok(F({}).length === 3 && F({})[0].idx === 2, "DF1 sem filtro: tudo, do mais recente para o mais antigo");
+          ok(F({ disc: "A" }).length === 2 && F({ disc: "B" }).length === 1, "DF2 por disciplina");
+          ok(F({ cc: "X" }).length === 2 && F({ cc: "__sem__" }).length === 1 && F({ cc: "__sem__" })[0].x.n === "Beta", "DF3 por edital, e '(sem edital)' pega só os registros sem concurso");
+          ok(F({ tipo: "revisado" }).length === 1 && F({ tipo: "pendente" }).length === 1, "DF4 por ação");
+          ok(F({ q: "crase" }).length === 1 && F({ q: "BETA" }).length === 1 && F({ q: "nada" }).length === 0, "DF5 a busca olha tópico, disciplina, edital E a anotação, sem diferenciar caixa");
+          ok(F({ de: "2026-09-02" }).length === 2 && F({ ate: "2026-09-01" }).length === 1 && F({ de: "2026-09-01", ate: "2026-09-01" }).length === 1, "DF6 intervalo de datas (inclusivo nas duas pontas)");
+          ok(F({ dias: 7 }).length === 0 && F({ dias: 7, de: "2026-09-01" }).length === 3, "DF7 o intervalo escolhido à mão vale NO LUGAR dos 'últimos N dias'");
+          ok(F({ disc: "A", tipo: "feito", q: "alfa" }).length === 1 && nomes(F({ disc: "A", tipo: "feito" })) === "Alfa:feito", "DF8 os filtros se combinam (E)");
+          const T = api.diarioTotais(F({}));
+          ok(T.minutos === 50 && T.eventos === 2 && T.topicos === 2 && T.revisoes === 1 && T.dias === 2 && T.qn === 10 && T.qc === 7, "DF9 totais do filtrado: 'desmarcou' não conta como estudo; questões somam: " + JSON.stringify(T));
+          ok(api.diarioTotais(F({ disc: "B" })).minutos === 20 && api.diarioTotais([]).eventos === 0, "DF10 totais acompanham o filtro e aguentam lista vazia");
+
+          /* na tela */
+          const sel = (id) => api.$(id);
+          api.diarioPor([
+            { d: diasAtras(2), c: "a›gama", disc: "Direito A", n: "Gama", a: "revisado", cc: "X", m: 15 },
+            { d: hojeN, c: "a›alfa", disc: "Direito A", n: "Alfa", a: "feito", cc: "X", m: 30 },
+            { d: hojeN, c: "b›beta", disc: "Direito B", n: "Beta", a: "feito", cc: "X", m: 45, q: { feitas: 10, certas: 8 } },
+          ]);
+          if (typeof sel("btnDiarioAmpliar").onclick !== "function") api.edIniciar();
+          api.$("btnDiarioTopo").onclick();
+          /* o período vem de testes anteriores (AF6 deixou "hoje"): escolho "tudo" */
+          const bTudo = () => Array.from(api.$("diarioPeriodos").children).find((b) => b.textContent === api.t("ed_diario_per_0"));
+          bTudo().onclick();
+          const itens = () => (api.$("diarioLista").children || []).filter((c) => /diario-item/.test(c.className || ""));
+          const dias = () => (api.$("diarioLista").children || []).filter((c) => /di-dia/.test(c.className || ""));
+          ok(itens().length === 3 && dias().length === 2, "DF11 o diário agrupa por dia: 3 registros, 2 cabeçalhos de dia (" + dias().length + ")");
+          ok(/1h15/.test(String(dias()[0].children.map((c) => c.textContent).join(" "))) && /2/.test(dias()[0].children[1].textContent), "DF12 o cabeçalho do dia soma o tempo e conta os registros: " + dias()[0].children.map((c) => c.textContent).join(" | "));
+          ok(/di-b-feito/.test(itens()[0].className) && /di-b-revisado/.test(itens()[2].className) && !/di-acao/.test(itens()[0].children[0].className), "DF13 a ação vira barra lateral (classe por ação) e sai da primeira linha, que é só o assunto e o tempo");
+          ok(/questões: 8 de 10 \(80%\)|questions: 8 of 10 \(80%\)/.test(api.$("diarioResumo").textContent), "DF14 o resumo traz as questões do período: " + api.$("diarioResumo").textContent);
+          sel("diarioDisc").value = "Direito A"; sel("diarioDisc").onchange();
+          ok(itens().length === 2 && /1h15|45min|0h45/.test(api.$("diarioResumo").textContent) && !/questões|questions/.test(api.$("diarioResumo").textContent) && /2 de 2|2 of 2/.test(api.$("diarioConta").textContent), "DF15 filtrar por disciplina muda a lista, o resumo e a contagem: " + api.$("diarioResumo").textContent);
+          ok(sel("btnDiarioLimpar").hidden === false, "DF16 com filtro ativo aparece 'limpar filtros'");
+          sel("diarioTipo").value = "revisado"; sel("diarioTipo").onchange();
+          ok(itens().length === 1 && itens()[0].children[0].children[0].textContent === "Gama", "DF17 disciplina + ação combinam");
+          sel("btnDiarioLimpar").onclick();
+          ok(itens().length === 3 && sel("btnDiarioLimpar").hidden === true && sel("diarioDisc").value === "", "DF18 limpar filtros volta ao todo e esconde o botão");
+          sel("diarioDe").value = diasAtras(3); sel("diarioDe").onchange();
+          sel("diarioAte").value = diasAtras(1); sel("diarioAte").onchange();
+          ok(itens().length === 1 && itens()[0].children[0].children[0].textContent === "Gama" && /de .* a /.test(api.$("diarioResumo").textContent), "DF19 intervalo escolhido na tela: só o registro de 2 dias atrás, e o resumo cita o intervalo: " + api.$("diarioResumo").textContent);
+          ok(Array.from(api.$("diarioPeriodos").children).every((b) => !/ativa/.test(b.className)), "DF19b com intervalo à mão, nenhum botão de período fica marcado como ativo");
+          sel("btnDiarioLimpar").onclick();
+          /* ao reabrir pelo botão do topo, os filtros da vez anterior não ficam escondidos agindo */
+          sel("diarioDisc").value = "Direito B"; sel("diarioDisc").onchange();
+          api.$("btnDiarioTopo").onclick();
+          ok(itens().length === 3 && sel("btnDiarioLimpar").hidden === true, "DF20 reabrir o diário zera os filtros");
+          /* tela ampliada */
+          const dlgD = api.$("dlgDiario");
+          ok(!/di-cheia/.test(dlgD.className || "") && /di-modal/.test(dlgD.className || ""), "DF21 abre no tamanho normal");
+          sel("btnDiarioAmpliar").onclick();
+          ok(/di-cheia/.test(dlgD.className || "") && sel("btnDiarioAmpliar").textContent === api.t("ed_diario_reduzir") && api.loja.getItem("eac_diario_amplo") === "1", "DF22 'Ampliar' põe o diálogo em tela cheia, troca o rótulo e lembra a escolha");
+          sel("btnDiarioAmpliar").onclick();
+          ok(!/di-cheia/.test(dlgD.className || "") && sel("btnDiarioAmpliar").textContent === api.t("ed_diario_ampliar"), "DF23 'Reduzir' volta ao normal");
+          const cssD = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+          ok(/dialog\.di-modal\{[^}]*max-width/.test(cssD) && /dialog\.di-cheia\[open\]\{[^}]*100vw/.test(cssD) && /\.di-b-feito\{[^}]*border-left-color/.test(cssD), "DF24 o CSS existe com o prefixo 'dialog.' (vence 'dialog.ui-modal') e a barra lateral por ação");
+          /* o texto de ajuda longo saiu do topo (espaço): vive no (?) */
+          sel("btnDiarioAjuda").onclick({ stopPropagation() {} });
+          ok(api.dicaAberta() === true && api.dicaTexto().indexOf(api.t("ed_diario_ajuda")) >= 0, "DF25 o (?) do diário abre o balão com a explicação");
+          api.dicaFechar();
+          api.$("dlgDiario").close();
+          api.diarioPor([]);
+        }
 
         api.edApagar(eN.id);
         api.diarioPor([]);
