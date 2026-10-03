@@ -381,6 +381,9 @@ function gerAlternarModo(modo) {
     $("btnGerModoExportar").setAttribute("aria-selected", String(modo === "exportar"));
   } catch (e) {}
   gerPintar();
+  /* no telefone o painel de exportar mora na aba da "Prévia" (rotulada "Pacote" em modo exportar): ao trocar de modo
+   * a pessoa começa pelas pastas; quem já chega com pastas marcadas vai direto ao painel (gerVistaExportar). */
+  if (gerEhCelular()) gerVista("pastas");
 }
 
 /* ---- arrastar um TÓPICO em modo exportação (B2): reorganiza só o pacote (gerMoverParaExport),
@@ -1148,6 +1151,7 @@ function gerPintarLista() {
 
 function gerPintarPrevia() {
   if (gerModo === "exportar") {
+    $("btnGerAbaPrevia").textContent = t("ger_aba_pacote");
     $("gerExpCx").hidden = false;
     $("gerPrevia").hidden = true;
     $("gerPreAcoes").hidden = true;
@@ -1155,6 +1159,7 @@ function gerPintarPrevia() {
     gerPintarExport();
     return;
   }
+  $("btnGerAbaPrevia").textContent = t("ger_aba_previa");
   $("gerExpCx").hidden = true;
   const cx = $("gerPrevia");
   cx.hidden = false;
@@ -1686,12 +1691,26 @@ function gerChavesDaPasta() {
   return { chaves: [], edital: "" };
 }
 
+/* telefone: com pastas já marcadas o painel de exportar (aba "Pacote") é o que se quer ver; sem nenhuma, as pastas */
+function gerVistaExportar() { if (gerEhCelular()) gerVista(gerSelExport.size ? "previa" : "pastas"); }
+
 function gerExportarPasta() {
   const p = gerChavesDaPasta();
   if (!p.chaves.length) { gerAviso(t("ger_exp_nada"), false); return null; }
   gerAlternarModo("exportar");
   p.chaves.forEach((c) => gerMarcarExport(c, true));
+  /* A RAIZ NÃO PODE DUPLICAR O EDITAL. Com UM edital só (o caso de "exportar esta pasta" de um concurso), a raiz
+   * óbvia é o nome dele e "pasta do edital" fica DESLIGADA — ele já está na raiz, ligar de novo daria
+   * "Edital::Edital::…". Sem edital único, volta ao padrão de sempre (raiz salva, pasta do edital ligada). */
+  if (p.edital) {
+    $("gerExpNome").value = p.edital;
+    $("gerExpComEdital").checked = false;
+  } else {
+    try { $("gerExpNome").value = (typeof nomeDeck === "function" && nomeDeck()) || "EasyAnkiCards"; } catch (e) { $("gerExpNome").value = "EasyAnkiCards"; }
+    $("gerExpComEdital").checked = gerExpTemEditais();
+  }
   gerPintarArvore(); gerPintarPrevia();
+  gerVistaExportar();
   return p;
 }
 
@@ -1704,6 +1723,7 @@ function gerExportarBancada() {
   gerAlternarModo("exportar");
   gerMarcarExport(CQ_BANCADA, true);
   gerPintarArvore(); gerPintarPrevia();
+  gerVistaExportar();
   return true;
 }
 

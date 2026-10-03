@@ -2117,6 +2117,99 @@ async function testes() {
     }
   }
 
+  /* ---- G32: R1 — "Exportar esta pasta" de UM edital: a raiz e' o nome do concurso e "pasta do edital" nasce DESLIGADA
+   * (ligar de novo duplicaria a pasta); no telefone o painel de exportar tem a sua aba ---- */
+  {
+    const ME = () => {
+      const r = rodar(); const a = r.api;
+      a.matIniciar(); a.edIniciar();
+      a.edCriar("ISS Caruaru Auditor", "# ISS Caruaru | prova: 2027-06-01 | horas: 20\n@ Sistema Tributário Brasileiro :: 5\n+ ISS :: 5\n+ IPTU :: 5");
+      const cs = (pref, n) => Array.from({ length: n }, (_, i) => pref + " " + i + "? :: Resposta " + pref + i + " zz" + pref + i).join("\n");
+      a.matGravarCartoes(a.matChave("Sistema Tributário Brasileiro", "ISS"), cs("ISS", 3), { disciplina: "Sistema Tributário Brasileiro", topico: "ISS", concurso: "ISS Caruaru Auditor" });
+      a.$("editor").value = "";
+      return a;
+    };
+    const linhas = (a, c) => achar(a.$("gerArvore"), (e) => cls(e, c));
+    const caminhos = (a) => achar(a.$("gerExpDecks"), (e) => cls(e, "cq-onde")).map((e) => e.textContent);
+    const capturar = async (a) => { const c = {}; await a.gerAcaoExportar("apkg", { confirmar: async () => true, construir: async (cards, raiz) => { c.cards = cards; c.raiz = raiz; return new Uint8Array(1); }, entregar: async () => {} }); return c; };
+
+    /* um edital so': raiz = o concurso, pasta do edital desligada */
+    {
+      const a = ME();
+      a.gerAbrir();
+      linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+      a.$("btnGerExportar").onclick();
+      ok(a.$("gerExpNome").value === "ISS Caruaru Auditor", "G32a a raiz ja' vem com o nome do concurso: " + a.$("gerExpNome").value);
+      ok(a.$("gerExpComEdital").checked === false, "G32b com a raiz ja' sendo o concurso, 'pasta do edital' nao nasce ligada (duplicaria a pasta)");
+      const c = await capturar(a);
+      ok(c.raiz === "ISS Caruaru Auditor" && c.cards.length > 0 && c.cards.every((x) => x.deck === "Sistema Tributário Brasileiro::ISS"), "G32c o arquivo: raiz certa e baralho Disciplina::Topico (a raiz so' entra na hora de escrever): " + JSON.stringify([c.raiz, c.cards.map((x) => x.deck)]));
+      ok(caminhos(a).some((t) => t.indexOf("ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS") === 0), "G32d a previa comeca sem a duplicacao: " + caminhos(a).join(" ; "));
+      a.$("gerExpComEdital").checked = true; a.$("gerExpComEdital").onchange();
+      ok(caminhos(a).some((t) => t.indexOf("ISS Caruaru Auditor › ISS Caruaru Auditor › Sistema Tributário Brasileiro › ISS") === 0), "G32e religar 'pasta do edital' MOSTRA a duplicacao na previa, antes de exportar: " + caminhos(a).join(" ; "));
+      a.$("gerExpComEdital").checked = false; a.$("gerExpComEdital").onchange();
+      a.$("gerExpNome").value = "Outro Nome"; a.$("gerExpNome").oninput();
+      ok(caminhos(a).some((t) => t.indexOf("Outro Nome › Sistema Tributário Brasileiro › ISS") === 0), "G32f digitar na raiz atualiza a previa na hora");
+    }
+    /* sem edital unico (visao por disciplina) e o botao geral "Montar pacote": volta ao padrao */
+    {
+      const a = ME();
+      a.gerAbrir();
+      a.$("gerAgrupar").value = "disciplina"; a.$("gerAgrupar").onchange();
+      achar(a.$("gerArvore"), (e) => cls(e, "ger-disc")).find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
+      a.$("btnGerExportar").onclick();
+      ok(a.$("gerExpNome").value !== "ISS Caruaru Auditor" && a.$("gerExpComEdital").checked === true, "G32g sem edital unico a raiz nao vira o nome de um edital qualquer e 'pasta do edital' fica ligada: " + a.$("gerExpNome").value);
+      a.$("dlgGerCartoes").close();
+      a.$("btnPacote").onclick();
+      ok(a.$("gerExpNome").value !== "ISS Caruaru Auditor" && a.$("gerExpComEdital").checked === true, "G32h o botao geral 'Montar pacote' tambem comeca do padrao");
+      /* exportar esta pasta de um edital e depois de uma disciplina: a 2a vez volta ao padrao (nao herda a raiz da 1a) */
+      a.$("gerAgrupar").value = "edital"; a.$("gerAgrupar").onchange();
+      linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+      a.gerAlternarModo("gerenciar");
+      a.$("btnGerExportar").onclick();
+      ok(a.$("gerExpNome").value === "ISS Caruaru Auditor" && a.$("gerExpComEdital").checked === false, "G32i (confirma o caso do edital, para o proximo passo valer)");
+      a.gerAlternarModo("gerenciar");
+      a.$("gerAgrupar").value = "disciplina"; a.$("gerAgrupar").onchange();
+      achar(a.$("gerArvore"), (e) => cls(e, "ger-disc")).find((e) => /Sistema Tributário Brasileiro/.test(e.textContent)).onclick();
+      a.$("btnGerExportar").onclick();
+      ok(a.$("gerExpNome").value !== "ISS Caruaru Auditor" && a.$("gerExpComEdital").checked === true, "G32j depois de um edital, 'exportar esta pasta' de uma disciplina volta ao padrao: " + a.$("gerExpNome").value);
+    }
+    /* telefone: o painel de exportar e' a aba "Pacote" (a da Previa) */
+    {
+      const a = ME();
+      a.gerCelularForcar(true);
+      a.gerAbrir();
+      a.$("btnGerModoExportar").onclick();
+      ok(a.gerVistaAtualLer() === "pastas" && a.$("btnGerAbaPrevia").textContent === a.t("ger_aba_pacote"), "G32k no telefone, trocar para exportar comeca pelas pastas e a aba da previa vira 'Pacote': " + a.gerVistaAtualLer() + "/" + a.$("btnGerAbaPrevia").textContent);
+      a.gerVista("previa");
+      a.$("btnGerModoGerenciar").onclick();
+      ok(a.gerVistaAtualLer() === "pastas" && a.$("btnGerAbaPrevia").textContent === a.t("ger_aba_previa"), "G32l voltar para gerenciar: pastas, e a aba volta a se chamar 'Previa'");
+      a.gerVista("cartoes");
+      a.$("btnGerModoExportar").onclick();
+      ok(a.gerVistaAtualLer() === "pastas", "G32l2 trocar para exportar, vindo de outra aba, volta as pastas (escolher o que entra no pacote)");
+      linhas(a, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+      a.gerAlternarModo("gerenciar");
+      a.$("btnGerExportar").onclick();
+      ok(a.gerVistaAtualLer() === "previa", "G32m 'exportar esta pasta' (ja' com pastas marcadas) leva direto ao painel de exportar");
+      a.$("dlgGerCartoes").close();
+      a.$("btnPacote").onclick();
+      ok(a.gerVistaAtualLer() === "pastas", "G32n o botao geral 'Montar pacote' (nada marcado) abre nas pastas, para escolher");
+      a.$("dlgGerCartoes").close();
+      a.$("editor").value = "Qual a regra geral do prazo? :: Resposta decente e completa aqui";
+      a.$("btnApkg").onclick();
+      ok(a.gerVistaAtualLer() === "previa", "G32o o rodape da bancada (Bancada ja' marcada) vai direto ao painel");
+      /* no computador as abas nem existem: a vista nao muda ao trocar de modo */
+      const b = ME();
+      b.gerCelularForcar(false);
+      b.gerAbrir(); b.gerVista("cartoes");
+      b.$("btnGerModoExportar").onclick();
+      ok(b.gerVistaAtualLer() === "cartoes", "G32p no computador trocar de modo nao mexe na vista");
+      linhas(b, "ger-ed").find((e) => /ISS Caruaru Auditor/.test(e.textContent)).onclick();
+      b.gerAlternarModo("gerenciar"); b.gerVista("cartoes");
+      b.$("btnGerExportar").onclick();
+      ok(b.gerVistaAtualLer() === "cartoes" && b.gerModoAtual() === "exportar", "G32q no computador 'exportar esta pasta' tambem nao mexe na vista");
+    }
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
