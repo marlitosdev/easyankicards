@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -287,6 +287,72 @@ function testes() {
     ok(api.edMapaDeCalor(HOJE, 5, diario, { metaMin: 0, semanas: 3 }).escala === "relativa", "M6b sem meta a escala é relativa sozinha");
     ok(api.edMapaDeCalor(HOJE, 5, diario, { semanas: 0 }).semanas.length === 8 && api.edMapaDeCalor(HOJE, 5, diario, { semanas: 999 }).semanas.length === 52 && api.edMapaDeCalor(HOJE, 5, null, null).semanas.length === 8, "M7 número de semanas: padrão 8, no máximo 52, e aguenta diário vazio");
     ok(api.edMapaDeCalor("2026-10-04", 5, [], { semanas: 1 }).semanas[0].ini === "2026-09-28" && api.edMapaDeCalor(HOJE, 6, [], { metaMin: 360, semanas: 1 }).metaDiaMin === 60, "M8 domingo ainda é a semana de segunda; com 6 dias a meta do dia divide por 6");
+  }
+
+  /* ---- O: DISCIPLINAS OPTATIVAS — "escolha 1 de N" (X1, 17.86.0) ----
+   * O caso real: CFO PM-PE manda escolher Língua Estrangeira ESPANHOL ou INGLÊS, e o app contava as duas. */
+  {
+    const { api } = carregar();
+    const CFO = [
+      "# CFO PM-PE | prova: 2027-02-21 | horas: 20",
+      "& Conhecimentos | minimo: 50%",
+      "@ Direito Penal :: 10q", "+ Lei penal :: 5",
+      "@ Língua Portuguesa :: 10q", "+ Crase :: 3",
+      "@ Língua Estrangeira Espanhol :: 5q | escolha: Língua Estrangeira", "+ Gramática :: 3",
+      "@ Língua Estrangeira Inglês :: 5q | escolha: Língua Estrangeira", "+ Grammar :: 3",
+    ].join("\n");
+    const plano = (txt) => api.montarPlano(api.lerEdital(txt), { horas: 20, prova: "2027-02-21", hoje: "2026-10-01", feitos: {}, fatores: null, acertos: null });
+    const r0 = api.lerEdital(CFO);
+    ok(r0.optativas.length === 1 && r0.optativas[0].nome === "Língua Estrangeira" && r0.optativas[0].opcoes.join() === "Língua Estrangeira Espanhol,Língua Estrangeira Inglês" && r0.optativas[0].escolhida === "", "O1 duas disciplinas com a mesma chave 'escolha:' formam UM grupo, ainda sem escolha");
+    ok(r0.disciplinas.length === 4 && r0.disciplinas.every((d) => !d.inativa) && r0.disciplinas[2].nome === "Língua Estrangeira Espanhol" && r0.disciplinas[2].abs === 5 && r0.disciplinas[2].optativa === "Língua Estrangeira", "O1b o sufixo '| escolha:' não suja o nome nem o peso (5q), e nenhuma está inativa sem escolha");
+    const p0 = plano(CFO);
+    ok(p0.itens.length === 4 && p0.itens.filter((i) => /Estrangeira/.test(i.disciplina)).length === 2, "O2 SEM escolha, as duas contam no plano (provisório)");
+    ok(api.edEscolhasPendentes(r0).length === 1 && api.diagnosticoPlano(r0, p0).some((a) => a.id === "escolha_pendente" && !a.grave && /Espanhol ou Língua Estrangeira Inglês/.test(a.msg)), "O2b sem escolha há uma pendência e o diagnóstico avisa (sem ser grave)");
+
+    const ESP = api.edDefinirEscolha(CFO, "Língua Estrangeira", "Língua Estrangeira Espanhol");
+    ok(/^# CFO PM-PE \| prova: 2027-02-21 \| horas: 20 \| escolhas: Língua Estrangeira=Língua Estrangeira Espanhol\n/.test(ESP), "O3 a escolha vai para o CABEÇALHO, sem mexer no resto do texto: " + ESP.split("\n")[0]);
+    ok(ESP.split("\n").slice(1).join("\n") === CFO.split("\n").slice(1).join("\n"), "O3b só a linha do cabeçalho muda");
+    const r1 = api.lerEdital(ESP);
+    ok(r1.cfg.escolhas["Língua Estrangeira"] === "Língua Estrangeira Espanhol" && r1.disciplinas[2].inativa === false && r1.disciplinas[3].inativa === true && r1.optativas[0].escolhida === "Língua Estrangeira Espanhol" && api.edEscolhasPendentes(r1).length === 0, "O4 escolhido o Espanhol, o Inglês fica INATIVO (no texto, fora do plano) e a pendência some");
+    const p1 = plano(ESP);
+    ok(p1.itens.length === 3 && !p1.itens.some((i) => /Inglês/.test(i.disciplina)), "O5 o plano NÃO tem a optativa não escolhida: " + p1.itens.map((i) => i.disciplina).join());
+    const fat = {}; p1.itens.forEach((i) => { fat[i.disciplina] = p1.fatia ? p1.fatia[i.disciplina] : i.fatia; });
+    ok(p1.fatia && p1.fatia["Direito Penal"] === 40 && p1.fatia["Língua Portuguesa"] === 40 && p1.fatia["Língua Estrangeira Espanhol"] === 20 && p1.fatia["Língua Estrangeira Inglês"] === undefined, "O6 a fatia da prova sai SEM a não escolhida (10+10+5 = 25 questões: 40% · 40% · 20%): " + JSON.stringify(p1.fatia));
+    const INGLES = api.edDefinirEscolha(ESP, "língua estrangeira", "Língua Estrangeira Inglês");
+    ok(/escolhas: Língua Estrangeira=Língua Estrangeira Inglês/.test(INGLES) && !/Espanhol$/m.test(INGLES.split("\n")[0]) && api.lerEdital(INGLES).disciplinas[2].inativa === true, "O7 trocar a escolha reescreve a mesma chave (sem duplicar) e inverte quem está ativo");
+    ok(!/escolhas/.test(api.edDefinirEscolha(ESP, "Língua Estrangeira", "")) && api.edDefinirEscolha(CFO, "Língua Estrangeira", "").split("\n")[0] === "# CFO PM-PE | prova: 2027-02-21 | horas: 20", "O7b escolha vazia tira a escolha");
+    ok(api.edDefinirEscolha("@ A :: 3\n+ t :: 3", "G", "A").split("\n")[0] === "# escolhas: G=A", "O7c sem cabeçalho o app cria um só com a escolha");
+    const f2 = api.edDefinirEscolha("# fase 2: discursiva | prova: 2027-03-01\n# X | prova: 2027-02-01\n@ A :: 3", "G", "A").split("\n");
+    ok(f2[0] === "# fase 2: discursiva | prova: 2027-03-01" && /escolhas: G=A/.test(f2[1]), "O7d a linha de 'fase 2' não é tomada pelo cabeçalho: " + f2.slice(0, 2).join(" // "));
+
+    /* o bloco com mínimo absoluto não conta as questões da não escolhida */
+    const BL = ["# B | prova: 2027-02-21 | horas: 20", "& Específicos | minimo: 9",
+      "@ Penal :: 10q", "+ a :: 3", "@ Espanhol :: 5q | escolha: Língua", "+ g :: 3", "@ Inglês :: 5q | escolha: Língua", "+ h :: 3"].join("\n");
+    const minDe = (txt) => api.montarPlano(api.lerEdital(txt), { horas: 20, prova: "2027-02-21", hoje: "2026-10-01", feitos: {}, fatores: null, acertos: null }).blocos[0].minPct;
+    ok(minDe(BL) === 45 && minDe(api.edDefinirEscolha(BL, "Língua", "Espanhol")) === 60, "O8 o mínimo absoluto do bloco (9 questões) vira % sobre as questões que VALEM: 45% com as duas optativas (20q) e 60% com só uma (15q): " + minDe(BL) + " / " + minDe(api.edDefinirEscolha(BL, "Língua", "Espanhol")));
+
+    ok(JSON.stringify(api.edLerEscolhas("a=b; solto; c=; =d; e = f ")) === JSON.stringify({ a: "b", e: "f" }), "O11b o cabeçalho ignora pares sem '=' ou com um lado vazio: " + JSON.stringify(api.edLerEscolhas("a=b; solto; c=; =d; e = f ")));
+    /* o peso derivado das questões NÃO usa a não escolhida como régua */
+    const REG = ["# R | escolhas: L=Esp", "@ Penal :: 10q", "+ a :: 3", "@ Port :: 10q", "+ b :: 3", "@ Esp :: 5q | escolha: L", "+ c :: 3", "@ Ing :: 40q | escolha: L", "+ d :: 3"].join("\n");
+    const rr = api.lerEdital(REG);
+    ok(rr.disciplinas[0].peso === 5 && rr.disciplinas[2].peso === 3 && rr.disciplinas[3].inativa === true, "O12 sem a Inglês (40q, inativa) a régua é a maior das ativas (10q): Penal vale 5, Esp 3; com ela valeria 2: " + rr.disciplinas.map((d) => d.nome + ":" + d.peso).join());
+    /* o diagnóstico não aponta defeito na não escolhida */
+    const DG = ["# D | escolhas: L=Esp", "@ Penal :: 3", "+ a :: 3", "+ b :: 3", "+ c :: 3", "@ Esp :: 3 | escolha: L", "+ d :: 3", "+ e :: 3", "@ Ing :: 3 | escolha: L", "+ f :: 3"].join("\n");
+    const rd = api.lerEdital(DG);
+    const dg = api.diagnosticoPlano(rd, api.montarPlano(rd, { horas: 10, prova: "2027-02-21", hoje: "2026-10-01", feitos: {}, fatores: null, acertos: null }));
+    ok(!dg.some((x) => /Ing/.test(x.msg)) && api.diagnosticoPlano(api.lerEdital(DG.replace("escolhas: L=Esp", "x: 1")), api.montarPlano(api.lerEdital(DG.replace("escolhas: L=Esp", "x: 1")), { horas: 10, prova: "2027-02-21", hoje: "2026-10-01", feitos: {}, fatores: null, acertos: null })).some((x) => /Ing/.test(x.msg)), "O13 o diagnóstico não fala da optativa NÃO escolhida (um único tópico dela não é 'granularidade'), mas fala quando ainda não há escolha: " + dg.map((x) => x.id).join());
+    /* ida e volta: o texto reescrito mantém a escolha e as marcas de grupo */
+    const volta = api.edParaTexto(api.lerEdital(ESP));
+    ok(/escolhas: Língua Estrangeira=Língua Estrangeira Espanhol/.test(volta) && (volta.match(/\| escolha: Língua Estrangeira/g) || []).length === 2, "O9 edParaTexto devolve a escolha e as duas marcas '| escolha:' (a reescrita de rotina não apaga)");
+    const r2 = api.lerEdital(volta);
+    ok(r2.optativas[0].escolhida === "Língua Estrangeira Espanhol" && r2.disciplinas.filter((d) => d.inativa).length === 1, "O9b o texto reescrito lê igual");
+
+    /* defeitos do texto */
+    const ruim = api.lerEdital("# X\n@ A :: 3 | escolha: Língua\n+ t :: 3\n@ B :: 3\n+ u :: 3");
+    ok(ruim.achados.some((a) => a.tipo === "escolha_um_so") && ruim.optativas.length === 0 && !ruim.disciplinas[0].inativa, "O10 um grupo de escolha com UMA opção só é apontado e não desativa nada");
+    ok(api.lerEdital(CFO.replace("horas: 20", "horas: 20 | escolhas: Outro=Nada")).achados.some((a) => a.tipo === "escolha_grupo_inexistente") && api.lerEdital(CFO.replace("horas: 20", "horas: 20 | escolhas: Língua Estrangeira=Alemão")).achados.some((a) => a.tipo === "escolha_disciplina_inexistente"), "O10b escolha para grupo ou disciplina que não existe é apontada");
+    ok(api.lerEdital(CFO.replace("horas: 20", "horas: 20 | escolhas: Língua Estrangeira=Alemão")).disciplinas.every((d) => !d.inativa), "O10c escolha inválida não desativa ninguém (o aluno vê as duas até corrigir)");
+    ok(api.lerEdital("@ A :: 3 | outra: coisa\n+ t :: 3").disciplinas[0].escolha === "" && api.lerEdital("# X | escolhas: a=b; c=d\n@ A :: 3\n+ t :: 3").cfg.escolhas.c === "d", "O11 outra barra vertical não vira 'escolha'; várias escolhas no cabeçalho se separam por ponto e vírgula");
   }
 
   /* ---- L10: colar plano corrigido tem de dizer o que se PERDE ----

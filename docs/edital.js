@@ -233,6 +233,84 @@ function edAgruparDisciplinas(r) {
 
 function edNomesUnicos(r) { return edAgruparDisciplinas(r).length; }
 
+/* =====================================================================
+ * DISCIPLINAS OPTATIVAS — "escolha 1 de N"
+ *
+ * O CASO REAL: o edital do CFO PM-PE manda escolher Língua Estrangeira ESPANHOL ou INGLÊS. O app contava as duas: 420 minutos
+ * e 4% da prova onde só uma vale, diluindo a fatia das outras e ocupando a agenda.
+ *
+ * COMO SE ESCREVE: a mesma chave em duas ou mais linhas "@" forma um grupo —
+ *   @ Língua Estrangeira Espanhol :: 2 | escolha: Língua Estrangeira
+ *   @ Língua Estrangeira Inglês :: 2 | escolha: Língua Estrangeira
+ * E a ESCOLHA do aluno mora no cabeçalho, como "previsto:" e "fase 2:" (fonte única, sobrevive a backup e exportação):
+ *   # CFO PM-PE | prova: 2027-02-21 | escolhas: Língua Estrangeira=Língua Estrangeira Espanhol
+ *
+ * O EFEITO: a disciplina NÃO escolhida (d.inativa) continua no texto — nunca se apaga conteúdo — mas sai do plano, da fatia
+ * e dos mínimos por bloco. SEM escolha feita, as duas contam como antes e o plano é dito "provisório" (ver edEscolhasPendentes).
+ * ===================================================================== */
+/* "Grupo=Disciplina; Outro=Disciplina" → { "Grupo": "Disciplina", ... } */
+function edLerEscolhas(v) {
+  const out = {};
+  String(v || "").split(";").forEach((par) => {
+    const i = par.indexOf("=");
+    if (i < 0) return;
+    const g = par.slice(0, i).trim(), d = par.slice(i + 1).trim();
+    if (g && d) out[g] = d;
+  });
+  return out;
+}
+function edEscolhasTexto(esc) {
+  return Object.keys(esc || {}).filter((g) => esc[g]).map((g) => g + "=" + esc[g]).join("; ");
+}
+/* agrupa as disciplinas pelo "escolha:" e aplica a escolha do cabeçalho; devolve [{nome, opcoes:[nomes], escolhida}] */
+function edAplicarEscolhas(disciplinas, cfg, achados) {
+  const grupos = new Map();
+  (disciplinas || []).forEach((d) => {
+    if (!d.escolha) return;
+    const k = edNormalizar(d.escolha);
+    if (!grupos.has(k)) grupos.set(k, { nome: d.escolha, opcoes: [], escolhida: "" });
+    grupos.get(k).opcoes.push(d);
+  });
+  const esc = (cfg && cfg.escolhas) || {};
+  Object.keys(esc).forEach((g) => {
+    const gr = grupos.get(edNormalizar(g));
+    if (!gr) { achados.push({ linha: 1, tipo: "escolha_grupo_inexistente", txt: g }); return; }
+    const op = gr.opcoes.find((d) => edNormalizar(d.nome) === edNormalizar(esc[g]));
+    if (!op) { achados.push({ linha: 1, tipo: "escolha_disciplina_inexistente", txt: esc[g] }); return; }
+    gr.escolhida = op.nome;
+  });
+  const lista = [];
+  grupos.forEach((gr) => {
+    if (gr.opcoes.length < 2) { achados.push({ linha: gr.opcoes[0].linha, tipo: "escolha_um_so", txt: gr.nome }); return; }
+    gr.opcoes.forEach((d) => { d.optativa = gr.nome; d.inativa = !!gr.escolhida && d.nome !== gr.escolhida; });
+    lista.push({ nome: gr.nome, opcoes: gr.opcoes.map((d) => d.nome), escolhida: gr.escolhida });
+  });
+  return lista;
+}
+function edOptativas(r) { return (r && r.optativas) || []; }
+/* os grupos em que o aluno ainda não escolheu: o plano é provisório enquanto houver algum */
+function edEscolhasPendentes(r) { return edOptativas(r).filter((g) => !g.escolhida); }
+/* Reescreve SÓ o cabeçalho: grupo + disciplina escolhida ("" tira a escolha). Devolve o texto novo. */
+function edDefinirEscolha(raw, grupo, disciplina) {
+  const L = String(raw || "").split(/\r?\n/);
+  const i = L.findIndex((l) => /^\s*#/.test(l) && !ED_FASE2_RE.test(l.replace(/^\s*#\s*/, "").split("|")[0].trim()));
+  const partes = i >= 0 ? L[i].replace(/^\s*#\s*/, "").split("|").map((x) => x.trim()).filter(Boolean) : [];
+  let esc = {};
+  const resto = partes.filter((p) => {
+    const m = p.match(/^escolhas?\s*:\s*(.*)$/i);
+    if (m) { esc = edLerEscolhas(m[1]); return false; }
+    return true;
+  });
+  const chave = Object.keys(esc).find((g) => edNormalizar(g) === edNormalizar(grupo)) || grupo;
+  if (disciplina) esc[chave] = disciplina; else delete esc[chave];
+  const txt = edEscolhasTexto(esc);
+  if (txt) resto.push("escolhas: " + txt);
+  const novo = resto.length ? "# " + resto.join(" | ") : "";
+  if (i >= 0) { if (novo) L[i] = novo; else L.splice(i, 1); }
+  else if (novo) L.unshift(novo);
+  return L.join("\n");
+}
+
 /* { provisorio, motivos: [{ id, n, nomes }], unicas, rep: [grupos repetidos], sem: [grupos sem tópico], ign }
  * motivos: "prompt" | "modelo" | "cru" | "repetida" | "sem_topico" | "ignoradas" (5 ou mais, e pelo menos 1/4 do que foi lido) */
 function edQualidadeLeitura(r) {
@@ -363,6 +441,7 @@ function lerEdital(raw) {
         else if (/^previsto|^previsao/i.test(k)) { cfg.previsto = v; cfg.fase = "pre"; }
         else if (/^horas/i.test(k)) cfg.horas = Number(v.replace(",", ".")) || 10;
         else if (/^concurso|^nome/i.test(k)) cfg.concurso = v;
+        else if (/^escolhas?$/i.test(k)) cfg.escolhas = edLerEscolhas(v);
       });
       return;
     }
@@ -390,12 +469,18 @@ function lerEdital(raw) {
 
     const md = s.match(ED_DISC_RE);
     if (md) {
-      const p = edPartes(md[1]);
+      /* "@ Língua Estrangeira Espanhol :: 2 | escolha: Língua Estrangeira" — a MESMA chave em duas ou mais disciplinas é um
+       * grupo de escolha ("escolha 1 de N"). Só se separa o sufixo quando é de fato "escolha:": qualquer outra barra vertical
+       * continua sendo lida como sempre foi. */
+      const mesc = md[1].match(/\s*\|\s*escolha\s*:\s*([^|]*)$/i);
+      const corpoD = mesc ? md[1].slice(0, mesc.index) : md[1];
+      const p = edPartes(corpoD);
       const { peso, abs, unidade } = edPeso(p[1], achados, n);
       /* terceiro campo da disciplina: a confiança, usada só no pré-edital.
        * "@ Auditoria :: 5 :: provavel" */
       const conf = (typeof preConfiancaDe === "function") ? preConfiancaDe(p[2]) : "";
       atual = { nome: p[0], peso, linha: n, topicos: [], confianca: conf,
+                escolha: mesc ? mesc[1].trim() : "",
                 /* o número real do edital, quando ele foi escrito */
                 abs: abs || null, unidade: unidade || "",
                 bloco: blocoAtual ? blocoAtual.nome : "" };
@@ -463,7 +548,9 @@ function lerEdital(raw) {
    *
    * A conta só é possível aqui, depois de ler todas: a escala é relativa
    * à maior disciplina da prova, que é a régua com significado. */
-  const absAll = disciplinas.filter((d) => d.abs > 0);
+  /* AS OPTATIVAS ("escolha 1 de N"): a não escolhida fica no texto, mas FORA do plano e das contas (ver edAplicarEscolhas) */
+  const optativas = edAplicarEscolhas(disciplinas, cfg, achados);
+  const absAll = disciplinas.filter((d) => d.abs > 0 && !d.inativa);
   if (absAll.length) {
     const maxAbs = absAll.reduce((m, d) => Math.max(m, d.abs), 0) || 1;
     absAll.forEach((d) => {
@@ -487,7 +574,7 @@ function lerEdital(raw) {
     achados.push({ linha: 1, tipo: "texto_e_o_prompt", txt: "" });
   }
 
-  return { cfg, disciplinas, blocos, achados, linhas: linhas.length };
+  return { cfg, disciplinas, blocos, achados, optativas, linhas: linhas.length };
 }
 
 /* ------------------------------------------------------------------
@@ -781,6 +868,8 @@ function priorizar(r, fatores, opc) {
   const comRamos = !!(opc && opc.ramos);
   const itens = [];
   r.disciplinas.forEach((d) => {
+    /* a OPTATIVA NÃO ESCOLHIDA fica no texto e fora do plano */
+    if (d.inativa) return;
     d.topicos.forEach((t) => {
       const bruto = d.peso * t.peso;
       const f = Number(fs[(d.nome + "›" + t.nome).toLowerCase()]);
@@ -1025,9 +1114,10 @@ function montarPlano(r, opcoes) {
    * é 2:1 e ponto final — e a estimativa só pode errar. Basta UMA
    * disciplina sem número para a conta exata deixar de valer para todas,
    * porque a soma teria escalas misturadas. */
-  const comAbs = (r.disciplinas || []).filter((d) => d.abs > 0);
+  const discsAtivas = (r.disciplinas || []).filter((d) => !d.inativa);
+  const comAbs = discsAtivas.filter((d) => d.abs > 0);
   const exata = comAbs.length > 0
-    && comAbs.length === (r.disciplinas || []).length;
+    && comAbs.length === discsAtivas.length;
   if (exata) {
     const somaAbs = comAbs.reduce((a, d) => a + d.abs, 0) || 1;
     comAbs.forEach((d) => {
@@ -1364,7 +1454,7 @@ function edCumprimentoBlocos(r, itens, acertos) {
          * conversão seria pior que dizer que não sabe. */
         const q = nomes.reduce((a, x) => {
           const d = porDisc[x];
-          return a + (d && d.abs ? d.abs : 0);
+          return a + (d && d.abs && !d.inativa ? d.abs : 0);
         }, 0);
         minPct = q ? Math.round((b.minimo.valor / q) * 100) : null;
       }
@@ -2063,9 +2153,13 @@ function edCorrecaoDeTudo(raw) {
 function diagnosticoPlano(r, plano) {
   const achados = [];
   const add = (id, grave, msg, dado) => achados.push({ id, grave, msg, dado });
-  const discs = r.disciplinas || [];
+  const discs = (r.disciplinas || []).filter((d) => !d.inativa);
   const itens = (plano && plano.itens) || [];
   const pesoTotal = (plano && plano.peso && plano.peso.total) || 1;
+  /* OPTATIVA SEM ESCOLHA: as duas opções contam e o plano é provisório */
+  edEscolhasPendentes(r).forEach((g) => add("escolha_pendente", false,
+    '"' + g.nome + '" é de escolha (' + g.opcoes.join(" ou ") + ") e você ainda não escolheu: as " + g.opcoes.length
+    + " estão contando juntas na fatia da prova e na agenda. Escolha uma para o plano deixar de ser provisório."));
 
   /* o texto é o prompt (ou tem nomes de exemplo dele): nada do que vem abaixo vale a pena calcular */
   const susp = edTextoSuspeito(null, r);
@@ -2261,6 +2355,8 @@ function edParaTexto(r) {
   if (c.concurso) cab.push(c.concurso);
   if (c.prova) cab.push("prova: " + c.prova);
   if (c.horas) cab.push("horas: " + c.horas);
+  /* a ESCOLHA das optativas também volta para o texto (senão a primeira reescrita de rotina a apagaria) */
+  if (edEscolhasTexto(c.escolhas)) cab.push("escolhas: " + edEscolhasTexto(c.escolhas));
   if (cab.length) { L.push("# " + cab.join(" | ")); }
   /* A SEGUNDA FASE TEM DE VOLTAR PARA O TEXTO.
    * Este arquivo é reescrito em operações de rotina — colar plano
@@ -2311,7 +2407,7 @@ function edParaTexto(r) {
     const peso = (d.abs > 0)
       ? (String(d.abs) + (d.unidade === "p" ? "p" : "q"))
       : d.peso;
-    L.push("@ " + d.nome + " :: " + peso);
+    L.push("@ " + d.nome + " :: " + peso + (d.escolha ? " | escolha: " + d.escolha : ""));
     d.topicos.forEach((t) => {
       /* o marcador vai no FIM do terceiro campo, como foi lido. Um tópico
        * marcado sem motivo ganha o campo só para carregar a marca. */

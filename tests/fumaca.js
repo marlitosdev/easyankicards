@@ -643,7 +643,7 @@ function rodar() {
     temPesosIguais, ritmoDoPlano, agendar, edPintarRitmo,
     panoramaDisciplinas, lacunasCriticas, edMudarPeso, edPintarPainel, diagnosticoPlano,
     edConferirColagem, edAplicarColagem, edSimular, edMudarHoras, edMarcar,
-    abrirDiario, edMapaDeCalor, edNivelDeCalor, diarioIrParaDia, edSemanaDicaTexto, edSemanaCelulas, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edSemanaCalendario, hubSemanaDeEstudo, minutosDaSemana, diarioFiltrar, diarioTotais, diarioResumoPorDisc, diarioTextoPorDisc, diarioTextoCopia, diarioCsv, apagarDoDiario, edDesfazerUltimoRegistro, edMostrarDesfazer, estatisticasDiario, edPorque,
+    abrirDiario, edOptativas, edEscolhasPendentes, edDefinirEscolha, edEscolhasTexto, edMapaDeCalor, edNivelDeCalor, diarioIrParaDia, edSemanaDicaTexto, edSemanaCelulas, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edSemanaCalendario, hubSemanaDeEstudo, minutosDaSemana, diarioFiltrar, diarioTotais, diarioResumoPorDisc, diarioTextoPorDisc, diarioTextoCopia, diarioCsv, apagarDoDiario, edDesfazerUltimoRegistro, edMostrarDesfazer, estatisticasDiario, edPorque,
     abrirRegistro, edDespedir, edMarcarLinhasSaindo,
     lojaLer: (k) => localStorage.getItem(k), lojaGravar: (k, v) => localStorage.setItem(k, v),
     edMarcarTeste: (i, e, d, sr) => edMarcar(i, e, d, sr),

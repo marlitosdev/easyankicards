@@ -3719,6 +3719,9 @@ function edMudarHoras(h) {
   if (r.cfg.concurso) cab.push(r.cfg.concurso);
   if (r.cfg.prova) cab.push("prova: " + r.cfg.prova);
   cab.push("horas: " + horas);
+  /* a data PREVISTA e a ESCOLHA das optativas moram nesta linha e não podem sumir ao mudar as horas */
+  if (r.cfg.previsto) cab.push("previsto: " + r.cfg.previsto);
+  if (typeof edEscolhasTexto === "function" && edEscolhasTexto(r.cfg.escolhas)) cab.push("escolhas: " + edEscolhasTexto(r.cfg.escolhas));
   const i = L.findIndex((l) => /^\s*#/.test(l));
   if (i < 0) L.unshift("# " + cab.join(" | ")); else L[i] = "# " + cab.join(" | ");
   $("editalTexto").value = L.join("\n");
@@ -3733,7 +3736,9 @@ function edMudarPeso(disc, peso) {
   const i = disc.linha - 1;
   if (!L[i]) return;
   const partes = L[i].replace(/^@\s*/, "").split("::").map((s) => s.trim());
-  L[i] = "@ " + partes[0] + " :: " + peso;
+  /* o "| escolha: Grupo" da optativa fica (era apagado ao mudar o peso) */
+  const mesc = L[i].match(/\|\s*escolha\s*:\s*[^|]*$/i);
+  L[i] = "@ " + partes[0] + " :: " + peso + (mesc ? " " + mesc[0].trim() : "");
   $("editalTexto").value = L.join("\n");
   reg("EDITAL-PESO", disc.nome, disc.peso + " → " + peso);
   edRender();
