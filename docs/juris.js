@@ -199,23 +199,32 @@ function jurDeMemoria(o) {
   };
 }
 
-function jurDoJson(bruto) {
-  /* SEM GUARDA DE PRIMEIRO CARACTERE.
-   *
-   * Havia aqui um "só continue se começar com { ou [". A sabotagem
-   * mostrou que ele nunca fazia diferença: uma ementa de tribunal não é
-   * JSON válido, então o JSON.parse abaixo já a recusa, e um número ou
-   * uma string solta reprovam no teste de objeto. Era otimização
-   * disfarçada de proteção — e guarda que não guarda nada engana quem
-   * lê depois. */
+/* A RESPOSTA DA IA como objeto: estrita, ou tolerante à cerca de markdown e à frase em volta (jurJsonDoTexto).
+ * SEM GUARDA DE PRIMEIRO CARACTERE: uma ementa de tribunal não é JSON válido, então o parse já a recusa. */
+function jurObjetoDoJson(bruto) {
   const txt = String(bruto || "").trim();
-  let o = null;
-  try { o = JSON.parse(txt); } catch (e) {
-    /* a resposta quase sempre vem com cerca de markdown ou uma frase em volta (jurJsonDoTexto as tira) */
-    o = jurJsonDoTexto(txt);
-    if (!o) return null;
-  }
-  if (Array.isArray(o)) o = o[0];
+  try { return JSON.parse(txt); } catch (e) { return jurJsonDoTexto(txt); }
+}
+
+/* UM julgado. A resposta pode ser um objeto, uma lista ou {"julgados": [...]} (a IA separou vários): aqui sai o primeiro;
+ * jurDoJsonLote devolve todos. */
+function jurDoJson(bruto) {
+  const o0 = jurObjetoDoJson(bruto);
+  if (!o0) return null;
+  const o = Array.isArray(o0) ? o0[0] : (Array.isArray(o0.julgados) ? o0.julgados[0] : o0);
+  return jurAchadoDeObjeto(o);
+}
+
+/* TODOS os julgados da resposta: [achado, ...] ou null. É o que permite guardar vários de uma vez. */
+function jurDoJsonLote(bruto) {
+  const o0 = jurObjetoDoJson(bruto);
+  if (!o0 || typeof o0 !== "object") return null;
+  const lista = Array.isArray(o0) ? o0 : (Array.isArray(o0.julgados) ? o0.julgados : [o0]);
+  const achados = lista.map(jurAchadoDeObjeto).filter(Boolean);
+  return achados.length ? achados : null;
+}
+
+function jurAchadoDeObjeto(o) {
   if (!o || typeof o !== "object") return null;
   const bruto0 = o;
   o = jurAchatar(o);
@@ -275,7 +284,11 @@ function jurDoJson(bruto) {
     /* o que a IA APONTOU de errado no que já estava guardado (só aviso) */
     conferencia: Array.isArray(bruto0.conferencia) ? bruto0.conferencia : [],
     semConteudo: false,
+    /* QUANDO A IA SEPAROU VÁRIOS: o pedaço do texto que é DESTE julgado, e se o texto não distingue as partes */
+    trecho: pega("trecho_do_texto"),
+    compartilhado: o.texto_compartilhado === true,
   };
+  if (!achado.texto && achado.trecho) achado.texto = achado.trecho;
   /* DATA SÓ SE FOR DATA: a caixa da tela é <input type="date"> e só
    * entende aaaa-mm-dd. Um ano solto vai para o campo do ano. */
   if (!/^\d{4}-\d{2}-\d{2}$/.test(achado.data)) {
@@ -982,6 +995,12 @@ function jurPromptIA(estado, opc) {
   /* UMA PASSADA SÓ: o texto colado pode conter "{tese}" ou "{resumo}", e
    * substituir marcador por marcador, em sequência, reescreveria o que veio
    * de fora dentro do que já foi montado */
+  /* VÁRIOS JULGADOS: quando "separar" está ligado o pedido é outro — um objeto por julgado, na ordem do texto */
+  if (o.separar) {
+    vals.txt = String(e.texto || "").trim().slice(0, 9000) || "(vazio)";
+    return t("jur_prompt_lote").replace(/\{(\w+)\}/g,
+      (m, k) => (Object.prototype.hasOwnProperty.call(vals, k) ? vals[k] : m));
+  }
   return t("jur_prompt_unico").replace(/\{(\w+)\}/g,
     (m, k) => (Object.prototype.hasOwnProperty.call(vals, k) ? vals[k] : m));
 }
@@ -1375,6 +1394,34 @@ function jurIdentificarProcesso(frase) {
   if (tm) out.tema = tm[1];
   if (!out.tribunal && out.classe && JUR_CASA[out.classe]) out.tribunal = JUR_CASA[out.classe];
   return out;
+}
+
+/* O PEDIDO À IA COLADO NO LUGAR DA RESPOSTA. Quem copia o prompt e o cola de volta na caixa de leitura não leu nada: o
+ * texto vira "ementa" e a IA, ao receber o próprio pedido, devolve lixo. Duas frases-assinatura do nosso pedido bastam. */
+const JUR_ASSINATURAS_PEDIDO = [/vou arquivar (um )?julgados?/, /devolva somente um objeto json/, /o que voce recebe e dado para ler/];
+function jurEhPedido(txt) {
+  const n = jurSemAcento(String(txt || "")).toLowerCase();
+  return JUR_ASSINATURAS_PEDIDO.filter((re) => re.test(n)).length >= 2;
+}
+
+/* OS PROCESSOS CITADOS NUM TEXTO, sem repetir ("ADI 2405" e "ADI 2.405" são um só), na ordem em que aparecem. Só dica:
+ * uma ementa também cita precedentes, então 2+ processos NÃO prova 2 julgados — serve para lembrar de separar. */
+function jurProcessosNoTexto(txt) {
+  const f = String(txt || "");
+  const achados = [], vistos = {};
+  JUR_CLASSES.filter((c) => !/^(Súmula Vinculante|Súmula|Tema|Repercussão Geral)$/.test(c)).forEach((c) => {
+    const re = new RegExp("(^|[^A-Za-zÀ-ú])" + c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")
+      + "\\s*(?:n?[º°.]?\\s*)?(\\d[\\d.\\-/]*)", "g");
+    let m;
+    while ((m = re.exec(f))) {
+      const numero = String(m[2]).replace(/[.\-/]+$/, "").replace(/\/[A-Z]{2}$/, "");
+      const dig = jurSoDigitos(numero);
+      if (!dig || vistos[dig]) continue;
+      vistos[dig] = true;
+      achados.push({ classe: c, numero, rotulo: c + " " + numero, idx: m.index + m[1].length });
+    }
+  });
+  return achados.sort((a, b) => a.idx - b.idx);
 }
 
 function jurRepararJson() {

@@ -160,6 +160,7 @@ function jurLimparForm() {
   jurConferirForm = {};
   jurValoresLidos = {};
   jurParafraseColada = false;
+  jurLoteLimpar();
   jurPintarTagsForm();
   jurPilulaLimpar();
   jurMeta(false);
@@ -287,6 +288,7 @@ function jurPintarTagsForm() {
 
 function jurBotaoSalvar() {
   const b = $("btnJurSalvar");
+  if (b && jurLoteAtivo()) { b.textContent = t("jur_lote_salvar", { n: jurLoteMarcados().length }); return; }
   if (b) b.textContent = t(jurEditando ? "jur_salvar_edicao" : "jur_salvar");
 }
 
@@ -349,6 +351,9 @@ function jurPintarPrincipal() {
   b.title = t("jur_principal_" + est + "_aj");
   /* o caminho local só se oferece quando há texto para ele ler */
   if ($("btnJurColar")) $("btnJurColar").disabled = est === "vazia";
+  const sem = jurPintarSemaforo();
+  /* o PEDIDO colado por engano não se lê nem se reenvia */
+  if (sem && sem.pedido) { b.disabled = true; if ($("btnJurColar")) $("btnJurColar").disabled = true; }
   jurPintarPassos();
   jurPintarOrigem();
 }
@@ -365,6 +370,7 @@ function jurPintarPrincipal() {
  *   3 · Guarde    — há campos (lidos, digitados ou vindos da IA)
  * ===================================================================== */
 function jurPassoAtual() {
+  if (jurLoteAtivo()) return 3;
   const tem = (id) => !!String(($(id) || {}).value || "").trim();
   if (["jurTese", "jurTribunal", "jurClasse", "jurNumero", "jurResumo"].some(tem)) return 3;
   return jurEstadoDaCaixa() === "vazia" ? 1 : 2;
@@ -380,7 +386,7 @@ function jurPintarPassos() {
     el.className = "jur-passo" + (n === p ? " atual" : (n < p ? " feito" : ""));
     if (el.setAttribute) el.setAttribute("aria-current", n === p ? "step" : "false");
   });
-  if ($("jurPassoAjuda")) $("jurPassoAjuda").textContent = t("jur_passo_aj_" + p);
+  if ($("jurPassoAjuda")) $("jurPassoAjuda").textContent = jurLoteAtivo() ? t("jur_passo_aj_lote", { n: jurLoteFichas.length }) : t("jur_passo_aj_" + p);
 }
 
 /* =====================================================================
@@ -473,6 +479,11 @@ function jurColar() {
   jurPilulaLimpar();
   const bruto = String(($("jurColar") || {}).value || "");
   if (!bruto.trim()) { jurReagirBtn("btnJurColar", t("jur_colar_vazio")); return; }
+  /* O PEDIDO colado por engano não é lido: o semáforo já avisou, e preencher campos com o prompt seria o erro de sempre */
+  if (typeof jurEhPedido === "function" && jurEhPedido(bruto)) { jurPintarPrincipal(); return; }
+  /* A IA SEPAROU VÁRIOS JULGADOS: painel com uma ficha por julgado, em vez de misturar tudo no formulário */
+  const lote = typeof jurDoJsonLote === "function" ? jurDoJsonLote(bruto) : null;
+  if (lote && lote.length > 1) { jurLoteMostrar(lote); return; }
   const a = jurIdentificar(bruto);
   /* RESPOSTA DA IA QUE VEIO SEM DADO NENHUM: o que ela disse que o julgado é (a frase "identificacao") ainda ajuda a
    * preencher tribunal, classe e número — vazios apenas, e marcados "a conferir" mais abaixo, porque vêm da memória. */
@@ -633,6 +644,7 @@ function jurReagirBtn(id, txt) {
 
 async function jurSalvar() {
   if (!jurTopicoAtual) return;
+  if (jurLoteAtivo()) return jurSalvarLote();
   const v = (id) => String(($(id) || {}).value || "").trim();
   const tese = v("jurTese");
   const texto = v("jurColar");
@@ -912,7 +924,7 @@ async function jurPedirIA() {
     tese: String(($("jurTese") || {}).value || "").trim(),
     resumo: String(($("jurResumo") || {}).value || "").trim(),
     tags: jurTagsColadas.slice(),
-  }, { memoria: ($("chkJurMemoria") && $("chkJurMemoria").checked) ? "tudo" : "identidade" });
+  }, { memoria: ($("chkJurMemoria") && $("chkJurMemoria").checked) ? "tudo" : "identidade", separar: jurSepararAtivo() });
   const ok = await edColarCopiarTexto(txt, "", null);
   reg("JURIS", "prompt de leitura copiado", bruto.length + " caracteres");
   if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
@@ -1631,6 +1643,222 @@ function jurDaSelecao() {
   }
 }
 
+/* =====================================================================
+ * VÁRIOS JULGADOS DE UMA VEZ (J3/J4)
+ *
+ * O CASO REAL: um resumo colado dizia "Resumo do Entendimento do STF (ADPF 499 e ADI 5835)" — dois julgados num texto só.
+ * A tela só sabia guardar UM por vez, e o que a IA devolvesse sobre os dois virava uma ficha misturada.
+ *
+ * AGORA há um marcador "Separar julgados se houver mais de um", ligado por padrão. Ligado, o pedido manda a IA separar
+ * (um objeto por julgado, cada um com o trecho do texto que lhe pertence); a resposta com 2+ julgados abre um PAINEL com
+ * uma ficha por julgado, onde se confere, se edita e se marca o que guardar — e um botão guarda todas de uma vez.
+ *
+ * E O SEMÁFORO diz, em cima da caixa, em que pé está a colagem (vazia, pedido colado por engano, JSON que não abre,
+ * texto com vários julgados, resposta lida) — o mesmo desenho do "Novo edital": o erro é dito ANTES de custar um clique.
+ * ===================================================================== */
+let jurLoteFichas = null;     /* null = nenhum lote aberto */
+
+function jurSepararAtivo() {
+  const c = $("chkJurSeparar");
+  return c ? !!c.checked : true;
+}
+
+function jurLoteAtivo() { return !!(jurLoteFichas && jurLoteFichas.length); }
+
+function jurLoteMarcados() { return (jurLoteFichas || []).filter((f) => f.marcado); }
+
+function jurLoteLimpar() {
+  jurLoteFichas = null;
+  if ($("jurLote")) $("jurLote").hidden = true;
+  if ($("jurLoteCards")) $("jurLoteCards").innerHTML = "";
+  if ($("btnJurMeta")) $("btnJurMeta").hidden = false;
+}
+
+/* o semáforo da colagem: { nivel: vazio | ok | aviso | erro, msg } */
+function jurEstadoColagem() {
+  if (jurLoteAtivo()) return { nivel: "ok", msg: t("jur_sem_lote", { n: jurLoteFichas.length }) };
+  const bruto = String(($("jurColar") || {}).value || "").trim();
+  if (!bruto) return { nivel: "vazio", msg: t("jur_sem_vazia") };
+  if (typeof jurEhPedido === "function" && jurEhPedido(bruto)) return { nivel: "erro", msg: t("jur_sem_pedido"), pedido: true };
+  if (/^\s*(```|\{|\[)/.test(bruto)) {
+    const lote = typeof jurDoJsonLote === "function" ? jurDoJsonLote(bruto) : null;
+    if (lote) return { nivel: "ok", msg: t("jur_sem_resposta", { n: lote.length }) };
+    if (typeof jurJsonDoTexto === "function" && jurJsonDoTexto(bruto)) return { nivel: "erro", msg: t("jur_sem_json_outro") };
+    const d = typeof jurDiagnosticoJson === "function" ? jurDiagnosticoJson(bruto) : null;
+    let msg = t("jur_completar_nada");
+    if (d && d.motivo === "sem_fechamento") msg = t("jur_completar_erro_truncado");
+    else if (d && d.motivo === "sintaxe") {
+      msg = t(d.causa === "aspas" ? "jur_completar_erro_aspas" : "jur_completar_erro_sintaxe", { l: d.linha, trecho: d.trecho });
+    }
+    return { nivel: "erro", msg };
+  }
+  const procs = typeof jurProcessosNoTexto === "function" ? jurProcessosNoTexto(bruto) : [];
+  if (procs.length >= 2) {
+    return { nivel: jurSepararAtivo() ? "ok" : "aviso", msg: t(jurSepararAtivo() ? "jur_sem_varios" : "jur_sem_varios_off", { n: procs.length, q: procs.map((p) => p.rotulo).join(", ") }) };
+  }
+  if (bruto.length < JUR_TEXTO_MINIMO) return { nivel: "aviso", msg: t("jur_sem_curto", { n: bruto.length }) };
+  return { nivel: "ok", msg: t("jur_sem_ementa") };
+}
+
+function jurPintarSemaforo() {
+  const el = $("jurSem");
+  if (!el) return;
+  const e = jurEstadoColagem();
+  el.className = "jur-sem sem-" + e.nivel;
+  el.textContent = ({ vazio: "○ ", ok: "✓ ", aviso: "⚠ ", erro: "⛔ " }[e.nivel] || "") + e.msg;
+  if (el.setAttribute) el.setAttribute("data-nivel", e.nivel);
+  return e;
+}
+
+/* a ficha de um julgado achado: o que a IA trouxe, conferido no texto enviado, e se o app já o tem */
+function jurLoteFicha(a, todos) {
+  const f = { tribunal: a.tribunal || "", classe: a.classe || "", numero: a.numero || "", data: a.data || "", orgao: a.orgao || "",
+    fonte: a.fonte || "", precedentes: a.precedentes || "", tese: a.tese || "", resumo: a.resumo || "", texto: a.texto || "",
+    tags: (a.tags || []).slice(), categoria: a.categoria || "", ident: a.identificacao || "",
+    compartilhado: !!a.compartilhado, semConteudo: !!a.semConteudo, conferir: {}, jaExiste: null, marcado: true };
+  /* o que a IA lembrou entra onde o texto não trouxe, e tudo é conferido no texto que foi enviado (a mesma régua de jurColar) */
+  const mem = a.deMemoria || {};
+  Object.keys(JUR_CAMPOS_FORM).forEach((k) => { if (!f[k] && mem[k]) f[k] = mem[k]; });
+  if (!f.classe && !f.numero && f.ident && typeof jurIdentificarProcesso === "function") {
+    const idp = jurIdentificarProcesso(f.ident);
+    ["tribunal", "classe", "numero"].forEach((k) => { if (!f[k] && idp[k]) f[k] = idp[k]; });
+  }
+  const vals = {};
+  Object.keys(JUR_CAMPOS_FORM).forEach((k) => { if (f[k] && !(k === "tribunal" && a.tribunalDeduzido)) vals[k] = f[k]; });
+  const base = [jurUltimoTextoPedido, a.texto].filter(Boolean).join("\n");
+  jurVerificarNoTexto(vals, base).aConferir.forEach((k) => { f.conferir[k] = f[k]; });
+  const iguais = jurIguaisA(f, todos);
+  f.jaExiste = iguais.length ? iguais[0] : null;
+  f.marcado = !f.jaExiste && !f.semConteudo;
+  return f;
+}
+
+function jurLoteMostrar(achados) {
+  const todos = typeof jurLista === "function" ? jurLista() : [];
+  jurLoteFichas = achados.map((a) => jurLoteFicha(a, todos));
+  /* o JSON sai da caixa (é transporte, não ementa); o texto que foi enviado volta, para quem quiser pedir de novo */
+  if ($("jurColar")) $("jurColar").value = jurUltimoTextoPedido || "";
+  jurPilulaLimpar();
+  jurConteudoVisivel(false);
+  jurMeta(false);
+  if ($("jurConteudo")) $("jurConteudo").hidden = true;
+  if ($("btnJurMeta")) $("btnJurMeta").hidden = true;
+  if ($("btnJurAMao")) $("btnJurAMao").hidden = true;
+  jurLotePintar();
+  reg("JURIS", "lote de julgados separado pela IA", jurLoteFichas.map(jurTitulo).join(" | "));
+  jurPintarPrincipal();
+  jurBotaoSalvar();
+}
+
+function jurLotePintar() {
+  const cx = $("jurLote");
+  if (!cx) return;
+  cx.hidden = !jurLoteAtivo();
+  if (!jurLoteAtivo()) return;
+  if ($("jurLoteTit")) $("jurLoteTit").textContent = t("jur_lote_tit", { n: jurLoteFichas.length });
+  const box = $("jurLoteCards");
+  box.innerHTML = "";
+  jurLoteFichas.forEach((f, idx) => {
+    const card = document.createElement("div");
+    card.className = "jur-lote-card" + (f.marcado ? "" : " desmarcado");
+    const cab = document.createElement("label");
+    cab.className = "jur-lote-cab";
+    const ck = document.createElement("input");
+    ck.type = "checkbox"; ck.checked = f.marcado;
+    ck.onchange = () => { f.marcado = ck.checked; card.className = "jur-lote-card" + (f.marcado ? "" : " desmarcado"); jurBotaoSalvar(); };
+    const nome = document.createElement("strong");
+    nome.className = "jur-lote-nome";
+    nome.textContent = jurTitulo(f) || t("jur_sem_titulo");
+    cab.append(ck, nome);
+    if (f.jaExiste) {
+      const tg = document.createElement("span");
+      tg.className = "jur-lote-tag ja";
+      tg.textContent = t("jur_lote_ja");
+      tg.title = t("jur_lote_ja_aj", { q: jurTitulo(f.jaExiste) });
+      cab.append(tg);
+    }
+    if (Object.keys(f.conferir).length) {
+      const tg = document.createElement("span");
+      tg.className = "jur-lote-tag conferir";
+      tg.textContent = t("jur_lote_conferir");
+      tg.title = t("jur_pilula_memoria", { q: Object.keys(f.conferir).map(jurNomeCampo).join(", ") });
+      cab.append(tg);
+    }
+    card.append(cab);
+    /* identidade: o que mais se corrige */
+    const id = document.createElement("div");
+    id.className = "jur-lote-ident";
+    [["tribunal", "jur_c_tribunal", "text"], ["classe", "jur_c_classe", "text"], ["numero", "jur_c_numero", "text"], ["data", "jur_c_data", "date"]].forEach(([k, rot, tipo]) => {
+      const lab = document.createElement("label");
+      const sp = document.createElement("span"); sp.textContent = t(rot);
+      const inp = document.createElement("input");
+      inp.type = tipo; inp.value = f[k] || "";
+      inp.oninput = () => { f[k] = inp.value.trim(); nome.textContent = jurTitulo(f) || t("jur_sem_titulo"); };
+      lab.append(sp, inp);
+      id.append(lab);
+    });
+    card.append(id);
+    const campo = (rot, k, linhas) => {
+      const l = document.createElement("label"); l.className = "jur-lote-campo";
+      const sp = document.createElement("span"); sp.textContent = t(rot);
+      const ta = document.createElement("textarea"); ta.rows = linhas; ta.value = f[k] || "";
+      /* a caixa cresce com o texto (a regra geral de textarea reserva 260px, que aqui é só espaço vazio) */
+      const cresce = () => { ta.style.height = "auto"; const h = ta.scrollHeight; if (h) ta.style.height = Math.min(h + 2, 240) + "px"; };
+      ta.oninput = () => { f[k] = ta.value; cresce(); };
+      setTimeout(cresce, 0);
+      l.append(sp, ta);
+      card.append(l);
+    };
+    campo("jur_tese_rot", "tese", 3);
+    campo("jur_resumo_rot", "resumo", 2);
+    if (f.compartilhado) {
+      const n = document.createElement("div"); n.className = "jur-lote-nota"; n.textContent = t("jur_lote_compartilhado");
+      card.append(n);
+    }
+    if (f.semConteudo) {
+      const n = document.createElement("div"); n.className = "jur-lote-nota"; n.textContent = t("jur_lote_sem_conteudo");
+      card.append(n);
+    }
+    box.append(card);
+  });
+}
+
+async function jurSalvarLote() {
+  if (!jurTopicoAtual || !jurLoteAtivo()) return;
+  const marcadas = jurLoteMarcados();
+  if (!marcadas.length) { await uiAlert(t("jur_lote_nenhum")); return; }
+  /* UM só aviso, para o conjunto: ficha marcada sem tese e sem texto não tem o que revisar depois */
+  const vazias = marcadas.filter((f) => !String(f.tese || "").trim() && !String(f.texto || "").trim());
+  if (vazias.length && !(await uiConfirm(t("jur_lote_sem_tese", { n: vazias.length })))) return;
+  const concursoJ = typeof matConcursoDoTopico === "function"
+    ? matConcursoDoTopico(jurTopicoAtual.disciplina, jurTopicoAtual.nome,
+        (typeof concursoAtual === "function" ? concursoAtual().nome : "")) : "";
+  const feitos = [];
+  marcadas.forEach((f) => {
+    const j = jurGravar({
+      concurso: concursoJ, tribunal: f.tribunal, classe: f.classe, numero: f.numero, data: f.data, orgao: f.orgao,
+      fonte: f.fonte, precedentes: f.precedentes, tese: String(f.tese || "").trim(), texto: String(f.texto || "").trim(),
+      resumo: String(f.resumo || "").trim(),
+      categoria: f.categoria || (typeof jurCategoria === "function" ? jurCategoria(f.classe) : ""),
+      tags: f.tags.slice(),
+      /* o que a IA trouxe e a pessoa não corrigiu continua "a conferir" */
+      aConferir: Object.keys(f.conferir).filter((k) => String(f[k] || "").trim() === String(f.conferir[k] || "").trim()),
+      topicos: [jurTopicoAtual.chave],
+    });
+    if (!j) return;
+    jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+    feitos.push(j);
+  });
+  if (!feitos.length) { await uiAlert(t("jur_nao_salvou")); return; }
+  reg("JURIS", "lote de julgados guardado", feitos.length + " de " + jurLoteFichas.length + " · " + feitos.map(jurTitulo).join(" | ") + " · " + jurTopicoAtual.nome);
+  jurLimparForm();
+  jurModo = "ler";
+  jurPintarModo();
+  jurPintarLista();
+  jurRepintarTelas();
+  jurReagirBtn("btnJurSalvar", t("jur_lote_feito", { n: feitos.length }));
+}
+
 function jurIniciarTela() {
   /* CONSERTA O QUE FOI GUARDADO ERRADO, uma vez, no arranque.
    * Corrigir a entrada não conserta o que entrou antes dela. */
@@ -1661,6 +1889,16 @@ function jurIniciarTela() {
     jurReagirBtn("btnJurLimpar", t("jur_limpou"));
   });
   liga("btnJurMais", () => jurTrocarModo("incluir"));
+  /* O MARCADOR "separar julgados" VEM LIGADO, e a escolha fica lembrada */
+  if ($("chkJurSeparar")) {
+    let lig = true;
+    try { lig = localStorage.getItem("eac_jur_separar") !== "0"; } catch (e) { lig = true; }
+    $("chkJurSeparar").checked = lig;
+    $("chkJurSeparar").onchange = () => {
+      try { localStorage.setItem("eac_jur_separar", $("chkJurSeparar").checked ? "1" : "0"); } catch (e) {}
+      jurPintarPrincipal();
+    };
+  }
   liga("btnJurOutros", () => { jurOutrosAberto = !jurOutrosAberto; jurPintarLista(); });
   liga("btnJurMeta", () => jurMeta(!jurMetaAberta()));
   dicaLigar("btnJurAjuda", "jur_ajuda");

@@ -1025,7 +1025,7 @@ function rodar() {
     jurDoJson, jurCategoria, JUR_CATEGORIAS,
     jurPassoAtual, jurPintarPassos, jurPintarOrigem, jurPintarOficial,
     jurTeseSubstituir, jurCplPintarAcoes, jurPortalOficial,
-    jurPromptPreencher, jurPedirIA, jurIdentificarProcesso, jurPromptIA, jurAchatar, jurDeMemoria,
+    jurPromptPreencher, jurPedirIA, jurIdentificarProcesso, jurProcessosNoTexto, jurEhPedido, jurDoJsonLote, jurLoteAtivo, jurLoteMarcados, jurSalvarLote, jurEstadoColagem, jurSepararAtivo, jurPromptIA, jurAchatar, jurDeMemoria,
     jurVerificarNoTexto, jurValorNoTexto, jurMarcarConferido,
     jurConferirFormAtual: () => jurConferirForm,
     jurTextoDoPedidoAtual: () => jurUltimoTextoPedido,
