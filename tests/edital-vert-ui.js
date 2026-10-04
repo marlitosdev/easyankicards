@@ -249,6 +249,24 @@ function testes() {
     ok(c.lerEdital("# X | prova: 2030-02-21\n# fase 2: discursiva\n@ A :: 3\n+ a :: 3 :: m !d").cfg.fase2 && !/2ª fase: discursiva/.test(subc) && achar(c.$("evPrevia"), (e) => cls(e, "ev-f2")).length === 0, "VU12k 2a fase declarada mas sem data: nao entra na folha (nem 'em ' vazio): " + subc);
   }
 
+  /* ---- VOU: as optativas na folha (X3) ---- */
+  {
+    const OPT = (esc) => ["# O | prova: 2030-01-31" + (esc ? " | escolhas: Língua=Espanhol" : ""),
+      "@ Penal :: 10q", "+ a :: 3", "@ Português :: 10q", "+ b :: 3",
+      "@ Espanhol :: 5q | escolha: Língua", "+ c :: 3", "@ Inglês :: 5q | escolha: Língua", "+ d :: 3"].join("\n");
+    const faixaTag = (a, i) => tx(achar(secoes(a)[i], (e) => cls(e, "ev-faixa-tag"))[0]);
+    const { api: a0 } = montar(OPT(false));
+    ok(/escolha 1 de 2/.test(faixaTag(a0, 2)) && /escolha 1 de 2/.test(faixaTag(a0, 3)) && !/optativa/.test(faixaTag(a0, 0)) && /Optativas: o candidato escolhe uma por grupo/.test(tx(achar(a0.$("evPrevia"), (e) => cls(e, "ev-sub"))[0])), "VOU1 sem escolha: a faixa de cada opção diz 'escolha 1 de 2' e o subtítulo traz a legenda (a disciplina normal não)");
+    const { api: a1 } = montar(OPT(true));
+    ok(secoes(a1).length === 4 && cls(secoes(a1)[3], "ev-inativa") && !cls(secoes(a1)[2], "ev-inativa") && /NÃO escolhida/.test(faixaTag(a1, 3)) && /a escolhida/.test(faixaTag(a1, 2)), "VOU2 com escolha: a não escolhida fica na folha, esmaecida (ev-inativa) e a faixa diz 'NÃO escolhida'; a escolhida diz 'a escolhida'");
+    ok(/3 disciplina\(s\)/.test(a1.$("evResumo").textContent) && !/%/.test(faixaTag(a1, 3)), "VOU2b o resumo não conta a não escolhida e a faixa dela não traz fatia: " + a1.$("evResumo").textContent + " | " + faixaTag(a1, 3));
+    mexer(a1, "evOptOcultar", true);
+    ok(secoes(a1).length === 3 && !nomes(a1).includes("Inglês"), "VOU3 marcar 'ocultar' tira a não escolhida da folha na hora");
+    ok(JSON.parse(a1.loja.getItem("eac_vert_opc")).ocultarOptativas === true, "VOU3b a opção fica guardada para a próxima vez");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/\.ev-disc\.ev-inativa\{[^}]*opacity/.test(html), "VOU4 a regra de CSS da disciplina esmaecida existe");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

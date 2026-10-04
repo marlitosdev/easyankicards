@@ -178,6 +178,32 @@ function testes() {
     ok(v.titulo === "Teste Verticalizado" && v.prova === "2030-01-01", "V7d titulo e data da prova vem do cabecalho: " + v.titulo + " " + v.prova);
   }
 
+  /* ---- VO: AS OPTATIVAS NA FOLHA (X3, 17.88.0) ---- */
+  {
+    const OPT = (esc) => ["# O | prova: 2030-01-01" + (esc ? " | escolhas: Língua=Espanhol" : ""),
+      "@ Penal :: 10q", "+ a :: 3", "@ Português :: 10q", "+ b :: 3",
+      "@ Espanhol :: 5q | escolha: Língua", "+ c :: 3", "@ Inglês :: 5q | escolha: Língua", "+ d :: 3"].join("\n");
+    const sem = api.edVerticalizar(api.lerEdital(OPT(false)));
+    ok(sem.disciplinas.length === 4 && sem.temOptativa === true && sem.disciplinas.filter((d) => d.optativa === "pendente").length === 2 && sem.disciplinas[0].optativaDe === 0 && sem.disciplinas.find((d) => d.nome === "Espanhol").optativaDe === 2 && sem.disciplinas.every((d) => !d.inativa), "VO1 sem escolha: as duas aparecem como 'pendente (1 de 2)' e nenhuma está inativa");
+    ok(sem.disciplinas.find((d) => d.nome === "Penal").fatia === 33 && sem.resumo.disciplinas === 4, "VO1b sem escolha as quatro contam (10+10+5+5 = 30 questões: Penal 33%)");
+    const com = api.edVerticalizar(api.lerEdital(OPT(true)));
+    const esp = com.disciplinas.find((d) => d.nome === "Espanhol"), ing = com.disciplinas.find((d) => d.nome === "Inglês");
+    ok(com.disciplinas.length === 4 && esp.optativa === "escolhida" && !esp.inativa && ing.optativa === "nao_escolhida" && ing.inativa === true, "VO2 com escolha: a escolhida é 'escolhida' e a outra 'nao_escolhida' (inativa), as duas continuam na folha");
+    ok(com.disciplinas[3].nome === "Inglês" && com.disciplinas[3].inativa, "VO2b a não escolhida vai para o FIM (ordem por peso)");
+    ok(com.disciplinas.find((d) => d.nome === "Penal").fatia === 40 && esp.fatia === 20 && ing.fatia === null, "VO3 a fatia da prova sai SEM a não escolhida (10+10+5 = 25: 40% · 40% · 20%), e a não escolhida não tem fatia");
+    ok(com.resumo.disciplinas === 3 && com.resumo.topicos === 3, "VO3b os totais do resumo não contam a não escolhida: " + JSON.stringify(com.resumo));
+    const oculta = api.edVerticalizar(api.lerEdital(OPT(true)), { ocultarOptativas: true });
+    ok(oculta.disciplinas.length === 3 && !oculta.disciplinas.some((d) => d.nome === "Inglês") && api.edVerticalizar(api.lerEdital(OPT(false)), { ocultarOptativas: true }).disciplinas.length === 4, "VO4 'ocultar' tira só a NÃO escolhida (sem escolha, nada some)");
+    const ed = api.edVerticalizar(api.lerEdital(OPT(true)), { ordem: "edital" });
+    ok(ed.disciplinas.map((d) => d.nome).join() === "Penal,Português,Espanhol,Inglês", "VO5 na ordem do edital cada uma fica onde foi escrita");
+    /* a não escolhida vai para o fim MESMO valendo mais (8 questões contra 5) e seus ramos não entram nos totais */
+    const GRANDE = ["# G | prova: 2030-01-01 | escolhas: Língua=Inglês", "@ Penal :: 10q", "+ a :: 3", "@ Espanhol :: 8q | escolha: Língua", "+ c :: 3", "++ r1 :: 3", "++ r2 :: 3", "@ Inglês :: 5q | escolha: Língua", "+ d :: 3", "++ r3 :: 3"].join("\n");
+    const g = api.edVerticalizar(api.lerEdital(GRANDE), { ramos: true });
+    ok(g.disciplinas.map((d) => d.nome).join() === "Penal,Inglês,Espanhol" && g.disciplinas[2].inativa === true, "VO7 a não escolhida vai para o fim mesmo com mais questões que a escolhida: " + g.disciplinas.map((d) => d.nome).join());
+    ok(g.resumo.ramos === 1 && g.resumo.topicos === 2 && g.resumo.disciplinas === 2, "VO7b os ramos e tópicos da não escolhida não entram nos totais: " + JSON.stringify(g.resumo));
+    ok(api.edVerticalizar(api.lerEdital("# S\n@ A :: 3\n+ t :: 3")).temOptativa === false, "VO6 edital sem optativa: nada muda");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

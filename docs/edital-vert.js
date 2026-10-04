@@ -14,7 +14,8 @@
  * ===================================================================== */
 
 function edVertFatias(r) {
-  const ds = (r && r.disciplinas) || [];
+  /* a optativa NÃO ESCOLHIDA não entra na prova de quem escolheu: fora da fatia, como no plano */
+  const ds = ((r && r.disciplinas) || []).filter((d) => !d.inativa);
   const comAbs = ds.filter((d) => d.abs > 0);
   const exata = comAbs.length > 0 && comAbs.length === ds.length;
   const fatia = {};
@@ -58,7 +59,8 @@ function edVertMarcas(chave, ramos, marcaDe) {
 /* opc.ordem: "peso" (padrão: mais questões/peso primeiro; empate = ordem do edital) | "edital"
  * opc.ramos: mostrar os ramos como sub-linhas (1.1, 1.2…)         opc.motivo: levar o motivo/nota do peso
  * opc.soFase2: só os tópicos que caem na 2ª fase (com o peso dela)
- * opc.marcaDe(chave) → {e, d}|null: reflete o que a pessoa já estudou (sem ela, todas as caixas vazias) */
+ * opc.marcaDe(chave) → {e, d}|null: reflete o que a pessoa já estudou (sem ela, todas as caixas vazias)
+ * opc.ocultarOptativas: tira da folha as disciplinas de escolha NÃO escolhidas (senão elas saem esmaecidas, fora dos totais) */
 function edVerticalizar(r, opc) {
   opc = opc || {};
   const cfg = (r && r.cfg) || {};
@@ -68,10 +70,12 @@ function edVerticalizar(r, opc) {
   const marcaDe = typeof opc.marcaDe === "function" ? opc.marcaDe : null;
 
   let ds = ((r && r.disciplinas) || []).map((d, idx) => ({ d, idx }));
+  if (opc.ocultarOptativas) ds = ds.filter(({ d }) => !d.inativa);
   if (ordem === "peso") {
     const valor = (d) => (exata ? d.abs : d.peso);
-    /* empate de peso: a que mais vale na prova (a fatia) vem antes; só então a ordem do edital */
-    ds.sort((a, b) => (valor(b.d) - valor(a.d)) || (b.d.peso - a.d.peso) || ((fatia[b.d.nome] || 0) - (fatia[a.d.nome] || 0)) || (a.idx - b.idx));
+    /* a NÃO ESCOLHIDA vai para o fim (esmaecida); empate de peso: a que mais vale na prova (a fatia) vem antes; só então a
+     * ordem do edital */
+    ds.sort((a, b) => ((a.d.inativa ? 1 : 0) - (b.d.inativa ? 1 : 0)) || (valor(b.d) - valor(a.d)) || (b.d.peso - a.d.peso) || ((fatia[b.d.nome] || 0) - (fatia[a.d.nome] || 0)) || (a.idx - b.idx));
   }
 
   const disciplinas = [];
@@ -102,20 +106,27 @@ function edVerticalizar(r, opc) {
         });
       }
     });
+    /* AS OPTATIVAS: "escolha 1 de N" (pendente) · a escolhida · a NÃO escolhida (fora das contas) */
+    const gr = d.optativa ? ((r && r.optativas) || []).find((g) => g.nome === d.optativa) : null;
     disciplinas.push({
       pos: disciplinas.length + 1, nome: d.nome, grupo: d.bloco || "", minimo: bloco ? bloco.minimo : null,
       peso: d.peso, abs: d.abs || null, unidade: d.unidade || "", fatia: fatia[d.nome] != null ? fatia[d.nome] : null,
       topicos: tops.length, ramos: nRamos, linhas,
+      inativa: !!d.inativa,
+      optativa: gr ? (d.inativa ? "nao_escolhida" : (gr.escolhida ? "escolhida" : "pendente")) : "",
+      optativaDe: gr ? gr.opcoes.length : 0,
     });
   });
 
   return {
     titulo: cfg.concurso || "", prova: cfg.prova || "", fase2: cfg.fase2 || null,
     ordem, exata, soFase2: !!opc.soFase2, disciplinas,
+    temOptativa: disciplinas.some((d) => d.optativa),
+    /* os totais NÃO contam a optativa não escolhida */
     resumo: {
-      disciplinas: disciplinas.length,
-      topicos: disciplinas.reduce((a, d) => a + d.topicos, 0),
-      ramos: disciplinas.reduce((a, d) => a + d.ramos, 0),
+      disciplinas: disciplinas.filter((d) => !d.inativa).length,
+      topicos: disciplinas.filter((d) => !d.inativa).reduce((a, d) => a + d.topicos, 0),
+      ramos: disciplinas.filter((d) => !d.inativa).reduce((a, d) => a + d.ramos, 0),
     },
   };
 }

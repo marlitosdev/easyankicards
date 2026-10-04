@@ -9,7 +9,7 @@
  * ===================================================================== */
 
 const EV_CH = "eac_vert_opc";
-const EV_PADRAO = { ordem: "peso", ramos: true, motivo: false, progresso: false, faixa: true, soFase2: false };
+const EV_PADRAO = { ordem: "peso", ramos: true, motivo: false, progresso: false, faixa: true, soFase2: false, ocultarOptativas: false };
 
 function evOpcSalvas() {
   try { return Object.assign({}, EV_PADRAO, JSON.parse(localStorage.getItem(EV_CH) || "{}")); } catch (e) { return Object.assign({}, EV_PADRAO); }
@@ -21,8 +21,9 @@ function evLerOpc() {
     ordem: $("evOrdem").value === "edital" ? "edital" : "peso",
     ramos: $("evRamos").checked, motivo: $("evMotivo").checked, progresso: $("evProgresso").checked,
     faixa: $("evFaixa").checked, soFase2: !$("evFase2Cx").hidden && $("evFase2").checked,
+    ocultarOptativas: !!($("evOptOcultar") && $("evOptOcultar").checked),
   };
-  try { localStorage.setItem(EV_CH, JSON.stringify({ ordem: op.ordem, ramos: op.ramos, motivo: op.motivo, progresso: op.progresso, faixa: op.faixa, soFase2: $("evFase2").checked })); } catch (e) {}
+  try { localStorage.setItem(EV_CH, JSON.stringify({ ordem: op.ordem, ramos: op.ramos, motivo: op.motivo, progresso: op.progresso, faixa: op.faixa, soFase2: $("evFase2").checked, ocultarOptativas: op.ocultarOptativas })); } catch (e) {}
   return op;
 }
 
@@ -30,7 +31,7 @@ function evLerOpc() {
 function evMontar(op) {
   const r = lerEdital(($("editalTexto") || {}).value || "");
   const v = edVerticalizar(r, {
-    ordem: op.ordem, ramos: op.ramos, motivo: op.motivo, soFase2: op.soFase2,
+    ordem: op.ordem, ramos: op.ramos, motivo: op.motivo, soFase2: op.soFase2, ocultarOptativas: op.ocultarOptativas,
     marcaDe: op.progresso ? (c) => (typeof edProgresso !== "undefined" && edProgresso[c]) || null : null,
   });
   const ab = typeof edAberto === "function" ? edAberto() : null;
@@ -51,6 +52,8 @@ function evMinimoTexto(m) {
 /* o texto à direita da faixa preta: o grupo (e o mínimo dele) e, se pedido, o tamanho da disciplina na prova */
 function evTagDaFaixa(d, op, exata) {
   const partes = [];
+  /* a OPTATIVA diz o que é na própria faixa: "escolha 1 de 2", a escolhida, ou "não escolhida" */
+  if (d.optativa) partes.push(t("vert_opt_" + d.optativa, { n: d.optativaDe }));
   if (d.grupo) partes.push(d.grupo + (d.minimo ? " (" + evMinimoTexto(d.minimo) + ")" : ""));
   if (op.faixa) {
     /* A FATIA VEM ANTES DO PESO. "peso 3 · 2% da prova" era lido (por quem extrai o texto do PDF) como "32%": o último dígito
@@ -78,11 +81,12 @@ function evFolha(v, op, destino) {
   const f2 = v.fase2 && v.fase2.prova ? v.fase2 : null;
   if (f2) sub.push(t("vert_fase2_info", { nome: f2.nome || t("vert_f2_marca"), d: evData(f2.prova) }));
   if (f2 && !v.soFase2) sub.push(t("vert_f2_legenda"));
+  if (v.temOptativa) sub.push(t("vert_opt_legenda"));
   cab.append(gerEl("div", "ev-sub", sub.join(" · ")));
   folha.append(cab);
 
   v.disciplinas.forEach((d) => {
-    const sec = gerEl("section", "ev-disc");
+    const sec = gerEl("section", "ev-disc" + (d.inativa ? " ev-inativa" : ""));
     const faixa = gerEl("div", "ev-faixa");
     faixa.append(gerEl("span", "ev-faixa-nome", d.nome), gerEl("span", "ev-faixa-tag", evTagDaFaixa(d, op, v.exata)));
     sec.append(faixa);
@@ -133,9 +137,10 @@ function evAbrir() {
   const s = evOpcSalvas();
   $("evOrdem").value = s.ordem; $("evRamos").checked = !!s.ramos; $("evMotivo").checked = !!s.motivo;
   $("evProgresso").checked = !!s.progresso; $("evFaixa").checked = !!s.faixa; $("evFase2").checked = !!s.soFase2;
+  if ($("evOptOcultar")) $("evOptOcultar").checked = !!s.ocultarOptativas;
   evPintar();
   dicasDosBotoes({ btnEdVert: "vert_tip_abrir", btnEdVertImprimir: "vert_tip_imprimir", btnEdVertX: "cov_tip_x", evOrdem: "vert_tip_ordem",
-    evRamos: "vert_tip_ramos", evMotivo: "vert_tip_motivo", evProgresso: "vert_tip_progresso", evFaixa: "vert_tip_faixa", evFase2: "vert_tip_fase2" });
+    evRamos: "vert_tip_ramos", evMotivo: "vert_tip_motivo", evProgresso: "vert_tip_progresso", evFaixa: "vert_tip_faixa", evFase2: "vert_tip_fase2", evOptOcultar: "vert_tip_optocultar" });
   abrirModal("dlgEdVert");
 }
 
@@ -161,6 +166,6 @@ if (typeof document !== "undefined" && $("dlgEdVert")) {
   $("btnEdVert").onclick = evAbrir;
   $("btnEdVertX").onclick = () => $("dlgEdVert").close();
   $("btnEdVertFechar").onclick = () => $("dlgEdVert").close();
-  ["evOrdem", "evRamos", "evMotivo", "evProgresso", "evFaixa", "evFase2"].forEach((id) => { $(id).onchange = evPintar; });
+  ["evOrdem", "evRamos", "evMotivo", "evProgresso", "evFaixa", "evFase2", "evOptOcultar"].forEach((id) => { if ($(id)) $(id).onchange = evPintar; });
   $("btnEdVertImprimir").onclick = evImprimir;
 }

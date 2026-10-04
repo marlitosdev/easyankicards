@@ -275,9 +275,9 @@ async function testes() {
     const com = api.edPromptEdital(true);
     const corte = com.indexOf("\n\nEXEMPLO DE SAÍDA:");
     ok(com.length > base.length && /\+\+ Nome do ramo :: peso de 1 a 5 :: nota curta/.test(com) && corte > 0 && com.indexOf("RAMIFICAÇÕES") < corte, "N7c com a caixa o prompt ganha as regras de ramo, antes do exemplo");
-    ok(/\n12\. RAMIFICAÇÕES/.test(com), "N7d o bloco e' a regra seguinte (12), depois da 11 das duas fases: " + (com.match(/\n\d+\. RAMIFICAÇÕES/) || [])[0]);
+    ok(/\n13\. RAMIFICAÇÕES/.test(com), "N7d o bloco e' a regra seguinte (13), depois da 12 das disciplinas de escolha: " + (com.match(/\n\d+\. RAMIFICAÇÕES/) || [])[0]);
     /* o resto do prompt nao mudou: tirando o bloco, sobra o prompt de sempre */
-    const bloco = api.t("ed_prompt_ramos", { n: 12 });
+    const bloco = api.t("ed_prompt_ramos", { n: 13 });
     ok(com.replace("\n" + bloco, "") === base, "N7e fora o bloco, o prompt com a caixa e' identico ao de sempre");
     ok(/fase 2:/.test(com) && /!d/.test(com) && /minimo:/.test(com) && /\d+q/.test(com), "N7f o prompt com a caixa continua ensinando fase 2, minimo e questoes");
     ok(/Perder tópico|todo tópico do edital continua aparecendo/.test(com), "N7g o bloco avisa que ramo nao substitui nem resume topico");
@@ -286,10 +286,16 @@ async function testes() {
     const r = api.lerEdital("# x | prova: 2030-01-01 | horas: 10\n@ Direito :: 5\n" + ex.join("\n"));
     const tp = r.disciplinas[0].topicos[0];
     ok(ex.length === 3 && r.disciplinas[0].topicos.length === 1 && tp.ramos && tp.ramos.length === 2 && tp.ramos[0].peso === 5 && tp.ramos[0].nota === "pregão e concorrência" && tp.ramos[1].peso === 3, "N7h o exemplo do proprio prompt e' lido pelo app (1 topico, 2 ramos, peso e nota): " + JSON.stringify(tp.ramos));
+    /* X4: a regra das DISCIPLINAS DE ESCOLHA está no prompt (sempre, sem caixa) e o exemplo dela é lido pelo app */
+    ok(/\n12\. DISCIPLINAS DE ESCOLHA/.test(base) && base.indexOf("DISCIPLINAS DE ESCOLHA") < base.indexOf("\n\nEXEMPLO DE SAÍDA:") && /Não escolha por mim e não apague nenhuma opção/.test(base) && /disciplina obrigatória não leva/.test(base), "N8a o prompt ensina as disciplinas de escolha (regra 12, antes do exemplo): a chave '| escolha:', 'não escolha por mim', obrigatória não leva");
+    const exOpt = base.split("\n").filter((l) => /^@ Língua Estrangeira .*\| escolha:/.test(l));
+    const rOpt = api.lerEdital("# x | prova: 2030-01-01 | horas: 10\n" + exOpt.map((l) => l + "\n+ t :: 3").join("\n"));
+    ok(exOpt.length === 2 && rOpt.optativas.length === 1 && rOpt.optativas[0].opcoes.length === 2 && rOpt.disciplinas[0].abs === 5, "N8b o exemplo do proprio prompt e' lido pelo app (um grupo de escolha com 2 opções de 5q)");
+    ok(api.lerEdital(base).optativas.length === 0 && api.lerEdital(base).disciplinas.length === 0, "N8c o prompt colado como se fosse o edital não deixa disciplinas nem optativas (os exemplos dele não são do concurso)");
     /* ingles: mesmo bloco, antes do SYLLABUS, numerado 9 */
     api.setLanguage("en");
     const en = api.edPromptEdital(true), enBase = api.t("ed_prompt");
-    ok(/\n9\. BRANCHES/.test(en) && en.indexOf("BRANCHES") < en.indexOf("\n\nSYLLABUS:") && !/\n1b\./.test(enBase) && en.replace("\n" + api.t("ed_prompt_ramos", { n: 9 }), "") === enBase, "N7i em ingles o bloco entra antes do SYLLABUS, numerado 9");
+    ok(/\n10\. BRANCHES/.test(en) && en.indexOf("BRANCHES") < en.indexOf("\n\nSYLLABUS:") && !/\n1b\./.test(enBase) && en.replace("\n" + api.t("ed_prompt_ramos", { n: 10 }), "") === enBase, "N7i em ingles o bloco entra antes do SYLLABUS, numerado 10 (depois da regra 9 das disciplinas de escolha)");
     api.setLanguage("pt");
 
     /* a caixa do dialogo: marcada, o botao copia o prompt com ramos; desmarcada, o de sempre; abrir de novo desmarca */
