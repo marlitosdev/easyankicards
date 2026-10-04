@@ -3386,6 +3386,28 @@ body.split-lj{overflow:hidden}
   padding:8px 10px;border:1px solid var(--borda);border-radius:8px;
   background:var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .jur-outros-btn{width:100%;text-align:left;margin:8px 0 2px}
+/* O SEMÁFORO DA COLAGEM: cinza (vazia) · verde (ok) · âmbar (confira) · vermelho (não vai funcionar). Ícone + texto: a cor nunca vai sozinha. */
+.jur-sem{font-size:12px;line-height:1.45;margin:6px 0 4px;padding:7px 11px;border-radius:9px;border:1px solid var(--borda);background:var(--campo);color:var(--sutil)}
+.jur-sem.sem-ok{border-color:var(--verde,#16a34a);color:var(--texto)}
+.jur-sem.sem-aviso{border-color:var(--amarelo,#d97706);color:var(--texto)}
+.jur-sem.sem-erro{border-color:var(--erro,#dc2626);color:var(--texto);font-weight:600}
+.jur-separar{display:flex;align-items:flex-start;gap:7px;margin:2px 0 6px;font-size:12px}
+/* O LOTE */
+.jur-lote{margin:8px 0}
+.jur-lote-tit{font-size:12.5px;font-weight:700;margin-bottom:6px}
+.jur-lote-card{border:1px solid var(--borda);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:var(--bg)}
+.jur-lote-card.desmarcado{opacity:.6;border-style:dashed}
+.jur-lote-cab{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;font-size:13px}
+.jur-lote-nome{color:var(--texto)}
+.jur-lote-tag{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--amarelo,#d97706);color:var(--amarelo,#b45309)}
+.jur-lote-tag.ja{border-color:var(--sutil);color:var(--sutil)}
+.jur-lote-ident{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin:8px 0 4px}
+.jur-lote-ident label,.jur-lote-campo{display:flex;flex-direction:column;gap:2px;font-size:10.5px;font-weight:700;color:var(--sutil);text-transform:uppercase;min-width:0}
+.jur-lote-campo textarea{min-height:56px;resize:vertical}
+.jur-lote-ident input,.jur-lote-campo textarea{width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--borda);
+  background:var(--campo);color:var(--texto);font:inherit;font-size:12.5px;text-transform:none;font-weight:400}
+.jur-lote-campo{margin-top:6px}
+.jur-lote-nota{font-size:11px;color:var(--sutil);margin-top:5px}
 /* NO CELULAR A GAVETA É UMA FOLHA INTEIRA, e o menu "mais" não pode sair dela.
    Antes ela era um cartão de 440px com margem: sobrava pouco para a ementa e o popover do "mais" (min-width 250px, preso
    ao botão, que fica à direita) estourava a borda direita da tela. Agora ocupa a tela, e o menu se ancora na LARGURA da
@@ -6123,6 +6145,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        ementa dentro, ele pergunta; resposta da IA dentro, ele preenche.
        Caixa vazia, ele fica desabilitado — em vez de abrir um alerta
        para dizer que está vazia, o que a pessoa já sabe. -->
+  <!-- O SEMÁFORO DA COLAGEM: diz, em cima da caixa, em que pé está (vazia, pedido colado por engano, JSON que não abre,
+       texto com vários julgados, resposta lida) — o erro é dito antes de custar um clique. -->
+  <div class="jur-sem sem-vazio" id="jurSem" role="status"></div>
+  <!-- O MARCADOR VEM LIGADO: o texto pode misturar julgados ("ADPF 499 e ADI 5835") e a IA os separa. -->
+  <label class="diag-op jur-separar" id="jurSepararLin"><input type="checkbox" id="chkJurSeparar" checked>
+    <span data-i18n="jur_separar_chk" data-i18n-title="jur_separar_aj"></span></label>
   <div class="jur-colar-lin">
     <!-- O TÍTULO TAMBÉM VEM DO HTML, e não só do JS que o refina a cada
          estado. Um botão explicado apenas por código é um botão mudo em
@@ -6168,6 +6196,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        tela de espaço vazio antes de haver o que escrever nele. O
        caminho normal é colar e mandar ler; os campos surgem já
        preenchidos, e quem quiser escrever à mão abre pelo botão. -->
+  <!-- O LOTE: uma ficha por julgado que a IA separou. Cada ficha se confere, se edita e se marca para guardar. -->
+  <div class="jur-lote" id="jurLote" hidden>
+    <div class="jur-lote-tit" id="jurLoteTit"></div>
+    <div id="jurLoteCards"></div>
+  </div>
+
   <div id="jurConteudo" hidden>
   <!-- TESE E RESUMO LADO A LADO EM TELA LARGA.
        Empilhadas, as três caixas altas do formulário somavam quase mil

@@ -1928,6 +1928,150 @@ async function testes() {
     ok(/NÃO RECEBEU texto/.test(api.$("jurCplSaida").textContent) && /texto oficial guardado/.test(api.$("jurCplSaida").textContent), "JW6 no completar, uma resposta 'vazio' diz que a IA não recebeu texto e o que fazer: " + api.$("jurCplSaida").textContent.slice(0, 120));
   }
 
+  /* ---- JL: VÁRIOS JULGADOS DE UMA VEZ + O SEMÁFORO DA COLAGEM (J3/J4, 17.85.0) ----
+   * O texto real: "Resumo do Entendimento do STF (ADPF 499 e ADI 5835)" — dois julgados num texto só. */
+  {
+    const TEXTO = "Resumo do Entendimento do STF (ADPF 499 e ADI 5835)\n• O que foi julgado: A constitucionalidade da Lei Complementar nº 157/2016 e da Lei Complementar nº 175/2020, que tentavam deslocar a competência do ISS para o domicílio do tomador nos serviços de cartões, planos de saúde e leasing.\n• A decisão: O STF fixou a tese de que a mudança gerava intensa insegurança jurídica e potencial dupla tributação.";
+    const RESP = (itens) => JSON.stringify({ julgados: itens });
+    const A1 = { identificacao: "ADPF 499 (STF)", trecho_do_texto: "ISS no domicílio do tomador", texto_compartilhado: true, do_texto: { tribunal: "STF", classe: "ADPF", numero: "499", data_julgamento: "2021-02-24", tese_curta: "A mudança gerava insegurança jurídica" }, de_memoria: {}, resumo: "Resumo da ADPF", assuntos: ["iss"] };
+    const A2 = { identificacao: "ADI 5835 (STF)", do_texto: { tribunal: "STF", classe: "ADI", numero: "5835", tese_curta: "Potencial dupla tributação" }, de_memoria: {}, resumo: "Resumo da ADI", assuntos: ["iss", "domicílio"] };
+
+    /* ---- motor ---- */
+    const { api } = rodar();
+    api.jurIniciarTela();
+    const lote = api.jurDoJsonLote(RESP([A1, A2]));
+    ok(lote && lote.length === 2 && lote[0].classe === "ADPF" && lote[1].numero === "5835" && lote[0].trecho === "ISS no domicílio do tomador" && lote[0].compartilhado === true && lote[0].texto === "ISS no domicílio do tomador", "JL1 jurDoJsonLote lê {\"julgados\": [...]}: um achado por julgado, com o trecho (que vira o texto) e a marca de texto compartilhado");
+    ok(api.jurDoJsonLote(JSON.stringify({ do_texto: A1.do_texto })).length === 1 && api.jurDoJsonLote(JSON.stringify([{ do_texto: A1.do_texto }, { do_texto: A2.do_texto }])).length === 2, "JL1b objeto único = 1 julgado; lista de topo também vale");
+    ok(api.jurDoJsonLote("```json\n" + RESP([A1, A2]) + "\n```").length === 2 && api.jurDoJsonLote("não é json") === null && api.jurDoJsonLote('{"qualquer":"coisa"}') === null, "JL1c cerca de markdown ok; lixo e objeto sem a cara da resposta dão null");
+    ok(api.jurDoJson(RESP([A1, A2])).numero === "499", "JL1d jurDoJson (um só) continua devolvendo o primeiro de uma resposta com vários");
+    const sem = api.jurDoJsonLote(RESP([A1, { identificacao: "só o nome", tipo_do_texto: "vazio", do_texto: {}, de_memoria: {} }]));
+    ok(sem.length === 2 && sem[1].semConteudo === true && sem[0].semConteudo === false, "JL1e um julgado da lista sem dado nenhum vem marcado semConteudo");
+    const pr = api.jurProcessosNoTexto(TEXTO);
+    ok(pr.map((p) => p.rotulo).join() === "ADPF 499,ADI 5835", "JL2 os processos citados no texto, na ordem: " + pr.map((p) => p.rotulo).join());
+    ok(api.jurProcessosNoTexto("ADI 2405 e ADI 2.405").length === 1 && api.jurProcessosNoTexto("AgRg no REsp 123456").length === 1 && api.jurProcessosNoTexto("a ementa não cita processo nenhum").length === 0 && api.jurProcessosNoTexto("Súmula Vinculante 29 e Tema 214").length === 0, "JL2b sem repetir (ADI 2405 = 2.405; AgRg no REsp não conta duas vezes); súmula e tema não são 'processo'");
+    const pedido = api.jurPromptIA({ topico: "T", texto: TEXTO, campos: {}, tags: [] }, { separar: true });
+    ok(api.jurEhPedido(pedido) === true && api.jurEhPedido(api.jurPromptIA({ topico: "T", texto: TEXTO, campos: {} }, {})) === true && api.jurEhPedido(TEXTO) === false && api.jurEhPedido("Vou arquivar um julgado") === false, "JL3 o pedido à IA (os dois formatos) é reconhecido pelas frases-assinatura; uma ementa, ou uma frase só, não");
+    ok(/SEPARE os julgados/.test(pedido) && /"julgados": \[/.test(pedido) && /trecho_do_texto/.test(pedido) && /ADPF 499 e ADI 5835/.test(pedido) && !/\{(tem|txt|tp|schema_memoria|regra_memoria)\}/.test(pedido), "JL4 com 'separar' o pedido manda separar, pede uma ficha por julgado com o trecho, leva o texto e não deixa marcador solto");
+    const unico = api.jurPromptIA({ topico: "T", texto: TEXTO, campos: {}, tags: [] }, { separar: false });
+    ok(/tese_guardada/.test(unico) && !/SEPARE os julgados/.test(unico), "JL4b sem 'separar' o pedido é o de sempre (um julgado, com a tese guardada)");
+
+    /* ---- o marcador ---- */
+    api.jurAbrir("Direito Tributário", "Limitações", "incluir");
+    ok(api.$("chkJurSeparar").checked === true && api.jurSepararAtivo() === true, "JL5 o marcador 'separar julgados' VEM LIGADO");
+    let copiado = "";
+    api.navegador.clipboard = { writeText: async (x) => { copiado = x; } };
+    const conduzir = async (p, aceitar) => {
+      let pronto = false; p.then(() => { pronto = true; }, () => { pronto = true; });
+      for (let i = 0; i < 12 && !pronto; i++) { await Promise.resolve(); try { api._uiFechar(aceitar); } catch (e) {} }
+      return p;
+    };
+    api.$("jurColar").value = TEXTO;
+    await conduzir(api.jurPedirIA(), true);
+    ok(/SEPARE os julgados/.test(copiado), "JL5b ligado, 'perguntar à IA' copia o pedido que manda separar");
+    api.$("chkJurSeparar").checked = false; api.$("chkJurSeparar").onchange();
+    ok(api.loja.getItem("eac_jur_separar") === "0" && api.jurSepararAtivo() === false, "JL5c desligar fica lembrado");
+    copiado = "";
+    await conduzir(api.jurPedirIA(), true);
+    ok(/tese_guardada/.test(copiado) && !/SEPARE os julgados/.test(copiado), "JL5d desligado, o pedido é o de um julgado só");
+    api.$("chkJurSeparar").checked = true; api.$("chkJurSeparar").onchange();
+    ok(api.loja.getItem("eac_jur_separar") === "1", "JL5e religar também");
+
+    /* ---- o semáforo ---- */
+    const sem1 = () => api.$("jurSem");
+    api.jurLimparForm();
+    ok(/sem-vazio/.test(sem1().className) && /^○/.test(sem1().textContent), "JL6 caixa vazia: semáforo cinza com ○");
+    api.$("jurColar").value = TEXTO; api.jurPintarPrincipal();
+    ok(/sem-ok/.test(sem1().className) && /ADPF 499, ADI 5835/.test(sem1().textContent) && /marcado/.test(sem1().textContent), "JL6b texto com 2 processos e 'separar' ligado: VERDE, dizendo quais e que a IA vai separar: " + sem1().textContent);
+    api.$("chkJurSeparar").checked = false; api.$("chkJurSeparar").onchange();
+    ok(/sem-aviso/.test(sem1().className) && /DESMARCADO/.test(sem1().textContent) && /^⚠/.test(sem1().textContent), "JL6c o mesmo texto com 'separar' DESLIGADO: ÂMBAR, avisando que vai tudo numa ficha só");
+    api.$("chkJurSeparar").checked = true; api.$("chkJurSeparar").onchange();
+    api.$("jurColar").value = pedido; api.jurPintarPrincipal();
+    ok(/sem-erro/.test(sem1().className) && /PEDIDO/.test(sem1().textContent) && api.$("btnJurPrincipal").disabled === true && api.$("btnJurColar").disabled === true, "JL6d o PEDIDO colado no lugar da resposta: VERMELHO, e os botões de ler/perguntar ficam desligados");
+    api.jurColar();
+    ok(api.$("jurTese").value === "" && api.$("jurClasse").value === "", "JL6e o pedido colado NÃO é lido (nada vira tese nem classe)");
+    api.$("jurColar").value = '{ "julgados": [ { "do_texto": { "classe": "ADI" } ';
+    api.jurPintarPrincipal();
+    ok(/sem-erro/.test(sem1().className) && /⛔/.test(sem1().textContent), "JL6f um JSON cortado: vermelho, com o motivo");
+    api.$("jurColar").value = '{"qualquer": "coisa"}'; api.jurPintarPrincipal();
+    ok(/sem-erro/.test(sem1().className) && /não é uma resposta de julgado/.test(sem1().textContent), "JL6g um JSON que não é resposta de julgado: vermelho");
+    api.$("jurColar").value = "RE 574706"; api.jurPintarPrincipal();
+    ok(/sem-aviso/.test(sem1().className) && /curto/i.test(sem1().textContent), "JL6h texto curto: âmbar");
+    api.$("jurColar").value = "RE 574706 / PR — O ICMS não compõe a base de cálculo do PIS e da COFINS, por não representar faturamento nem receita bruta da empresa, conforme decidiu o Plenário.";
+    api.jurPintarPrincipal();
+    ok(/sem-ok/.test(sem1().className) && /Texto colado/.test(sem1().textContent), "JL6i ementa de tamanho normal: verde");
+    api.$("jurColar").value = RESP([A1, A2]); api.jurPintarPrincipal();
+    ok(/sem-ok/.test(sem1().className) && /2 julgado/.test(sem1().textContent), "JL6j resposta com 2 julgados: verde, dizendo quantos");
+
+    /* ---- o painel do lote ---- */
+    api.jurLimparForm();
+    api.jurAbrir("Direito Tributário", "Limitações", "incluir");
+    api.$("jurColar").value = RESP([A1, A2]);
+    api.jurColar();
+    ok(api.jurLoteAtivo() === true && api.$("jurLote").hidden === false && api.$("jurLoteCards").children.length === 2, "JL7 uma resposta com 2 julgados abre o painel com 2 fichas");
+    ok(api.$("jurConteudo").hidden === true && api.$("btnJurMeta").hidden === true && api.$("jurTese").value === "", "JL7b o formulário de UM julgado se esconde e nada é misturado nele");
+    ok(!/julgados/.test(api.$("jurColar").value), "JL7c o JSON sai da caixa");
+    const cards = () => Array.from(api.$("jurLoteCards").children);
+    const achaIn = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); achaIn(c, pred, acc); }); return acc; };
+    const ck = (i) => achaIn(cards()[i], (e) => e.type === "checkbox", [])[0];
+    const tx = (i) => achaIn(cards()[i], (e) => e.tagName === "TEXTAREA" || String(e.tagName).toLowerCase() === "textarea", []);
+    ok(ck(0).checked === true && ck(1).checked === true && /Guardar 2 julgado/.test(api.$("btnJurSalvar").textContent), "JL7d as duas vêm marcadas e o botão diz 'Guardar 2 julgado(s)'");
+    ok(tx(0)[0].value === "A mudança gerava insegurança jurídica" && tx(1)[1].value === "Resumo da ADI", "JL7e cada ficha traz a tese e o resumo do SEU julgado");
+    ok(/ADPF 499/.test(achaIn(cards()[0], (e) => /jur-lote-nome/.test(e.className || ""), [])[0].textContent) && achaIn(cards()[0], (e) => /jur-lote-nota/.test(e.className || ""), []).length === 1, "JL7f o título da ficha e a nota de 'texto compartilhado' (só na que tem a marca)");
+    ok(/Guardar 2|2 julgados separados/.test(api.$("jurSem").textContent) || /2 julgados/.test(api.$("jurSem").textContent), "JL7g o semáforo diz que há 2 fichas");
+    /* desmarcar muda o botão; editar a tese vale */
+    ck(1).checked = false; ck(1).onchange();
+    ok(/Guardar 1 julgado/.test(api.$("btnJurSalvar").textContent) && /desmarcado/.test(cards()[1].className), "JL8 desmarcar uma ficha atualiza o botão e apaga a ficha");
+    ck(1).checked = true; ck(1).onchange();
+    tx(0)[0].value = "Tese CORRIGIDA à mão"; tx(0)[0].oninput();
+    await api.jurSalvarLote();
+    const guardados = api.jurDoTopico(api.matChave ? api.matChave("Direito Tributário", "Limitações") : "direito tributário›limitações");
+    ok(api.jurLista().filter((j) => j.classe === "ADPF" && j.numero === "499").length === 1 && api.jurLista().filter((j) => j.classe === "ADI" && j.numero === "5835").length === 1, "JL9 'Guardar' cria os DOIS julgados, um por ficha");
+    const adpf = api.jurLista().filter((j) => j.classe === "ADPF")[0];
+    ok(adpf.tese === "Tese CORRIGIDA à mão" && adpf.resumo === "Resumo da ADPF" && adpf.tags.indexOf("iss") >= 0 && adpf.topicos.length === 1, "JL9b a tese corrigida na ficha é a que foi guardada, com o resumo e as etiquetas do SEU julgado, ligado ao tópico");
+    ok(api.jurLoteAtivo() === false && api.$("jurLote").hidden === true && api.$("jurForm").hidden === true, "JL9c depois de guardar o painel fecha e a tela volta para a leitura");
+    ok((api.$("jurLista").children || []).length >= 2, "JL9d a leitura mostra os julgados guardados");
+
+    /* ---- já existe ---- */
+    api.jurAbrir("Direito Tributário", "Outro tópico", "incluir");
+    api.$("jurColar").value = RESP([A1, A2]);
+    api.jurColar();
+    ok(achaIn(cards()[0], (e) => /jur-lote-tag/.test(e.className || "") && /ja/.test(e.className), []).length === 1 && ck(0).checked === false && ck(1).checked === false, "JL10 julgado que o app JÁ tem vem marcado 'já guardado' e DESMARCADO (não cria repetido por descuido)");
+    await conduzir(api.jurSalvarLote(), true);
+    ok(api.jurLista().filter((j) => j.classe === "ADPF").length === 1, "JL10b com tudo desmarcado nada é guardado (e o aviso aparece)");
+    ck(0).checked = true; ck(0).onchange();
+    await api.jurSalvarLote();
+    ok(api.jurLista().filter((j) => j.classe === "ADPF").length === 2, "JL10c marcando de propósito, guarda mesmo repetido");
+
+    /* ---- ficha sem dado ---- */
+    api.jurAbrir("Direito Tributário", "Terceiro", "incluir");
+    api.$("jurColar").value = RESP([A1, { identificacao: "só o nome", tipo_do_texto: "vazio", do_texto: {}, de_memoria: {} }]);
+    api.jurColar();
+    ok(ck(1).checked === false && achaIn(cards()[1], (e) => /jur-lote-nota/.test(e.className || ""), []).length === 1, "JL11 a ficha sem dado nenhum vem desmarcada, com a nota");
+    /* a ficha marcada sem tese e sem texto: UM aviso para o conjunto */
+    ck(1).checked = true; ck(1).onchange();
+    const antes = api.jurLista().length;
+    await conduzir(api.jurSalvarLote(), false);
+    ok(api.jurLista().length === antes && api.jurLoteAtivo() === true, "JL11b marcar uma ficha sem tese nem texto pede confirmação; recusando, NADA é guardado e o lote continua aberto");
+    /* o passo e a ajuda acompanham o lote */
+    ok(/atual/.test(api.$("jurPasso3").className) && /2 fichas/.test(api.$("jurPassoAjuda").textContent), "JL11c com o lote aberto o passo aceso é o 3 (Guarde) e a ajuda fala das fichas: " + api.$("jurPassoAjuda").textContent);
+    /* o botão do rodapé (jurSalvar) também guarda o lote */
+    await conduzir(api.jurSalvar(), true);
+    ok(api.jurLista().length === antes + 1 && api.jurLoteAtivo() === false, "JL11d o botão 'Guardar' do rodapé (jurSalvar) guarda o lote, depois do aviso aceito: " + (api.jurLista().length - antes));
+    api.jurAbrir("Direito Tributário", "Quinto", "incluir");
+    api.$("jurColar").value = RESP([{ do_texto: { tribunal: "STF", classe: "ADI", numero: "9001", tese_curta: "tese nova um" }, resumo: "r1" }, { do_texto: { tribunal: "STF", classe: "ADI", numero: "9002", tese_curta: "tese nova dois" }, resumo: "r2" }]);
+    api.jurColar();
+    const antes2 = api.jurLista().length;
+    await api.jurSalvar();
+    ok(api.jurLista().length === antes2 + 2 && api.jurLista().filter((j) => j.classe === "ADI" && /^900[12]$/.test(j.numero)).length === 2, "JL11e o botão do rodapé (jurSalvar) guarda os DOIS julgados do lote, cada um com a sua identificação: " + (api.jurLista().length - antes2));
+    api.jurAbrir("Direito Tributário", "Quarto", "incluir");
+    api.$("jurColar").value = RESP([A1, A2]);
+    api.jurColar();
+    api.jurLimparForm();
+    ok(api.jurLoteAtivo() === false && api.$("jurLote").hidden === true && api.$("btnJurMeta").hidden === false, "JL12 limpar o formulário desfaz o lote e devolve o formulário normal");
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(["jur-sem", "sem-ok", "sem-aviso", "sem-erro", "jur-separar", "jur-lote-card", "jur-lote-tag", "jur-lote-ident", "jur-lote-campo", "jur-lote-nota", "jur-lote-cab", "jur-lote-tit"].every((c) => new RegExp("\\." + c + "[{.,: \\[]").test(html)), "JL13 todas as classes novas têm regra de CSS");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
