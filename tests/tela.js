@@ -2414,7 +2414,7 @@ async function testes() {
           const E = [
             { d: "2026-09-01", c: "a›alfa", disc: "A", n: "Alfa", a: "feito", cc: "X", m: 30, obs: "crase" },
             { d: "2026-09-02", c: "b›beta", disc: "B", n: "Beta", a: "revisado", cc: "", m: 20, q: { feitas: 10, certas: 7 } },
-            { d: "2026-09-02", c: "a›alfa", disc: "A", n: "Alfa", a: "pendente", cc: "X" },
+            { d: "2026-09-02", c: "a›alfa", disc: "A", n: "Alfa", a: "pendente", cc: "X", m: 99 },
           ];
           const F = (f) => api.diarioFiltrar(E, Object.assign({ dias: 0 }, f));
           const nomes = (r) => r.map((i) => i.x.n + ":" + i.x.a).join(",");
@@ -2473,6 +2473,55 @@ async function testes() {
           ok(!/di-cheia/.test(dlgD.className || "") && sel("btnDiarioAmpliar").textContent === api.t("ed_diario_ampliar"), "DF23 'Reduzir' volta ao normal");
           const cssD = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
           ok(/dialog\.di-modal\{[^}]*max-width/.test(cssD) && /dialog\.di-cheia\[open\]\{[^}]*100vw/.test(cssD) && /\.di-b-feito\{[^}]*border-left-color/.test(cssD), "DF24 o CSS existe com o prefixo 'dialog.' (vence 'dialog.ui-modal') e a barra lateral por ação");
+          /* D3: saídas do diário filtrado */
+          const pd = api.diarioResumoPorDisc(F({}));
+          ok(pd.length === 2 && pd[0].disc === "A" && pd[0].minutos === 30 && pd[0].registros === 1 && pd[1].disc === "B" && pd[1].qn === 10 && pd[1].qc === 7, "DD1 resumo por disciplina: da que mais consumiu tempo para a que menos; 'desmarcou' fora: " + JSON.stringify(pd));
+          const tpd = api.diarioTextoPorDisc(F({}));
+          ok(/^A — 30min · 1 registro\(s\) · 1 tópico\(s\)\nB — 20min · 1 registro\(s\) · 1 tópico\(s\) · questões: 7 de 10 \(70%\)$/.test(tpd), "DD2 o texto do resumo por disciplina: " + JSON.stringify(tpd));
+          const tc = api.diarioTextoCopia(F({}), "TÍTULO");
+          ok(/^TÍTULO\n\n2026-09-02 \(.*\) — 20min\n/.test(tc) && /• Beta \| B \| revisou \| 20min \| 7\/10 questões \(70%\)\n/.test(tc) && /• Alfa \| A · X \| desmarcou\n/.test(tc) && /• Alfa \| A · X \| estudou \| 30min \| crase$/.test(tc) && tc.indexOf("2026-09-02") < tc.indexOf("2026-09-01"), "DD3 texto para colar: título, dias do mais novo ao mais antigo, uma linha por registro com a anotação: " + JSON.stringify(tc));
+          const E2 = [{ d: "2026-09-01", c: "k", disc: "A", n: "Tópico; \"x\"", a: "feito", cc: "X", m: 30, obs: "=SOMA(A1)", f: ["leitura"], q: { feitas: 4, certas: 3 } },
+            { d: "2026-09-02", c: "k2", disc: "B", n: "Beta", a: "feito", m: 10, obs: "linha1\nlinha2" }];
+          const csv = api.diarioCsv(api.diarioFiltrar(E2, { dias: 0 }));
+          ok(csv.charCodeAt(0) === 0xFEFF && csv.indexOf(api.t("ed_diario_csv_cab") + "\r\n") === 1, "DD4 CSV: BOM (acentos no Excel) e cabeçalho na primeira linha");
+          ok(csv.indexOf('"Tópico; ""x"""') >= 0 && csv.indexOf("'=SOMA(A1)") >= 0 && csv.indexOf('"linha1\nlinha2"') >= 0 && /;30;Leitura;4;3;/.test(csv), "DD5 CSV: aspas e ; escapados, quebra de linha entre aspas, e anotação que parece fórmula ganha a aspa simples: " + JSON.stringify(csv));
+          ok(csv.split("\r\n").length === 4 && csv.indexOf("2026-09-02") < csv.indexOf("2026-09-01"), "DD6 CSV: uma linha por registro, mais recente primeiro");
+          /* na tela */
+          api.diarioPor([
+            { d: diasAtras(1), c: "a›alfa", disc: "Direito A", n: "Alfa", a: "feito", cc: "X", m: 30 },
+            { d: diasAtras(1), c: "b›beta", disc: "Direito B", n: "Beta", a: "feito", cc: "X", m: 45, q: { feitas: 10, certas: 8 } },
+          ]);
+          api.$("btnDiarioTopo").onclick();
+          bTudo().onclick();
+          janela.__area = "";
+          sel("btnDiarioCopiar").onclick();
+          await Promise.resolve(); await Promise.resolve();
+          ok(/Alfa/.test(janela.__area) && /Beta/.test(janela.__area) && /^Diário de estudos — /.test(janela.__area), "DD7 'Copiar' leva o diário para a área de transferência, com o título e o resumo: " + janela.__area.slice(0, 80));
+          sel("diarioDisc").value = "Direito B"; sel("diarioDisc").onchange();
+          janela.__area = "";
+          sel("btnDiarioCopiar").onclick();
+          await Promise.resolve(); await Promise.resolve();
+          ok(/Beta/.test(janela.__area) && !/Alfa/.test(janela.__area), "DD8 'Copiar' leva só o que está filtrado");
+          sel("btnDiarioLimpar").onclick();
+          ok(sel("diarioPorDisc").hidden === true, "DD9 o painel 'por disciplina' começa fechado");
+          sel("btnDiarioPorDisc").onclick();
+          const linPd = () => (sel("diarioPorDisc").children || []).filter((c) => /di-pd-lin/.test(c.className || ""));
+          ok(sel("diarioPorDisc").hidden === false && linPd().length === 2 && /Direito B/.test(linPd()[0].textContent), "DD10 o painel mostra uma linha por disciplina, a que mais tomou tempo primeiro: " + linPd().map((c) => c.textContent).join(" || "));
+          linPd()[0].onclick();
+          ok(itens().length === 1 && sel("diarioDisc").value === "Direito B", "DD11 clicar numa disciplina do resumo filtra o diário por ela");
+          sel("btnDiarioLimpar").onclick();
+          janela.__area = "";
+          const bPdC = (sel("diarioPorDisc").children || []).find((c) => c.id === "btnDiarioPdCopiar");
+          bPdC.onclick();
+          await Promise.resolve(); await Promise.resolve();
+          ok(/^Direito B — 45min/.test(janela.__area) && /\nDireito A — 30min/.test(janela.__area), "DD12 'Copiar este resumo' leva o texto do resumo por disciplina: " + JSON.stringify(janela.__area));
+          let semErro = true;
+          try { sel("btnDiarioCsv").onclick(); } catch (e) { semErro = false; }
+          ok(semErro, "DD13 'Planilha (CSV)' roda sem quebrar");
+          api.diarioPor([]);
+          api.abrirDiario();
+          ok(["btnDiarioCopiar", "btnDiarioCsv", "btnDiarioPorDisc"].every((id) => sel(id).disabled === true), "DD14 sem registros nada para copiar: os três botões ficam desligados");
+          ok(sel("diarioPorDisc").hidden === true, "DD15 sem registros o painel por disciplina não aparece vazio, mesmo ligado");
           /* o texto de ajuda longo saiu do topo (espaço): vive no (?) */
           sel("btnDiarioAjuda").onclick({ stopPropagation() {} });
           ok(api.dicaAberta() === true && api.dicaTexto().indexOf(api.t("ed_diario_ajuda")) >= 0, "DF25 o (?) do diário abre o balão com a explicação");

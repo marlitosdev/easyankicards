@@ -3941,6 +3941,14 @@ body.split-lj{overflow:hidden}
 .di-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .di-cab h3{margin:0 0 2px}
 .di-cab-btns{display:flex;align-items:center;gap:8px}
+.di-saidas{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
+.di-pd{margin:6px 0 0;border:1px solid var(--borda);border-radius:8px;overflow:hidden}
+.di-pd-lin{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:10px;width:100%;cursor:pointer;
+  padding:6px 10px;font-size:11.5px;border-bottom:1px solid var(--borda)}
+.di-pd-lin:hover{background:var(--campo)}
+.di-pd-nome{font-weight:700;color:var(--texto)}
+.di-pd-num{color:var(--sutil);text-align:right}
+.di-pd .btn-min{margin:6px 10px}
 .di-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;align-items:center;margin:4px 0}
 .di-filtros select,.di-filtros input[type=date]{width:100%;font-size:11px;padding:4px 6px;border-radius:8px;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto);min-width:0}
@@ -3952,7 +3960,7 @@ dialog.di-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
 dialog.di-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;border-radius:0;
   padding:10px 12px;display:flex;flex-direction:column;resize:none}
 dialog.di-cheia .di-lista{max-height:none;flex:1 1 auto;min-height:0}
-dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos{flex:0 0 auto}
+dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos,dialog.di-cheia .di-saidas,dialog.di-cheia .di-pd,dialog.di-cheia #diarioConta{flex:0 0 auto}
 .di-nome{font-weight:700;color:var(--texto);white-space:normal;word-break:break-word}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:normal}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
@@ -8627,6 +8635,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="nota" id="diarioConta"></div>
   <div class="ed-diario-res" id="diarioResumo"></div>
+  <div class="di-saidas">
+    <button type="button" class="btn-min" id="btnDiarioCopiar" data-i18n="ed_diario_copiar" data-i18n-title="ed_diario_copiar_tip"></button>
+    <button type="button" class="btn-min" id="btnDiarioCsv" data-i18n="ed_diario_csv" data-i18n-title="ed_diario_csv_tip"></button>
+    <button type="button" class="btn-min" id="btnDiarioPorDisc" data-i18n-title="ed_diario_pd_tip"></button>
+  </div>
+  <div class="di-pd" id="diarioPorDisc" hidden></div>
   <div id="diarioLista" class="di-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnDiarioFechar" data-i18n="help_close"></button>
