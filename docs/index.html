@@ -3385,6 +3385,21 @@ body.split-lj{overflow:hidden}
   min-width:250px;width:max-content;max-width:min(86vw,420px);
   padding:8px 10px;border:1px solid var(--borda);border-radius:8px;
   background:var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.jur-outros-btn{width:100%;text-align:left;margin:8px 0 2px}
+/* NO CELULAR A GAVETA É UMA FOLHA INTEIRA, e o menu "mais" não pode sair dela.
+   Antes ela era um cartão de 440px com margem: sobrava pouco para a ementa e o popover do "mais" (min-width 250px, preso
+   ao botão, que fica à direita) estourava a borda direita da tela. Agora ocupa a tela, e o menu se ancora na LARGURA da
+   linha de botões. "[open]" porque esta regra dá layout ao diálogo (invariante E7). */
+@media (max-width:560px){
+  dialog#dlgJuris[open]{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0;
+    padding:12px 12px 0;box-sizing:border-box;resize:none;overflow-x:hidden}
+  #dlgJuris .jur-colar-lin{position:relative}
+  #dlgJuris .jur-mais{position:static}
+  #dlgJuris .jur-mais-corpo{left:0;right:0;width:auto;min-width:0;max-width:none}
+  #dlgJuris .jur-campos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #dlgJuris .btn-min,#dlgJuris summary.btn-min{min-height:38px}
+  #dlgJuris textarea,#dlgJuris input{max-width:100%;box-sizing:border-box}
+}
 .jur-mais-corpo .diag-op{margin:0}
 .jur-mais-corpo .btn-min{text-align:left}
 .jur-prec{font-size:11.5px;color:var(--sutil);margin:2px 0 4px}
@@ -6221,6 +6236,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        voltar para a leitura foram para o menu "mais" (ver acima). -->
   </div><!-- /jurForm -->
 
+  <!-- ENQUANTO SE CRIA OU EDITA, OS JULGADOS JÁ GUARDADOS FICAM RECOLHIDOS: a lista inteira embaixo do formulário
+       era ruído (e empurrava o "guardar" para longe). Este botão os chama de volta quando a pessoa quiser. -->
+  <button type="button" class="btn-min jur-outros-btn" id="btnJurOutros" hidden data-i18n-title="jur_outros_aj"></button>
   <p class="nota" id="jurConta"></p>
   <div id="jurLista" class="jur-lista"></div>
 
