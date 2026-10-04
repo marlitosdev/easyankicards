@@ -375,6 +375,10 @@ function hubPintarAgenda() {
   med.append(barra, rot);
   med.title = t("hub_medidor_ajuda");
   cx.append(med);
+  /* os dias da semana ficam logo abaixo do medidor; são preenchidos depois de agendar(), que é quem diz o que cai em cada dia */
+  const celsSemana = document.createElement("div");
+  celsSemana.className = "ed-ag-semana";
+  cx.append(celsSemana);
 
   /* Agendar é o que transforma uma lista de tópicos em agenda: sem esta
    * chamada cada linha vem sem dia nem horário sugerido — foi o que a
@@ -383,6 +387,16 @@ function hubPintarAgenda() {
    * edital: a semana é uma só, mesmo com três concursos. */
   agendar(linhas, { dias: hubPref("dias", 5), inicio: hubPref("inicio", "19:00") });
   hubUltimaAgenda = { previsto: edPrevistoPorDia(linhas), metaMin: planejadoMin, dias: hubPref("dias", 5) };
+  if (typeof edSemanaCelulas === "function") {
+    const SS = hubSemanaDeEstudo();
+    celsSemana.append(edSemanaCelulas(SS, (d) => diarioIrParaDia(d.iso)));
+    const dica = edSemanaDicaTexto(SS);
+    if (dica) {
+      const dd = document.createElement("div");
+      dd.className = "di-sem-dica"; dd.textContent = dica;
+      celsSemana.append(dd);
+    }
+  }
 
   const mostrar = hubAgendaAberta ? linhas : linhas.slice(0, HUB_AGENDA_CURTA);
   mostrar.forEach((i) => {

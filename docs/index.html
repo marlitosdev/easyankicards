@@ -3941,6 +3941,27 @@ body.split-lj{overflow:hidden}
 .di-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .di-cab h3{margin:0 0 2px}
 .di-cab-btns{display:flex;align-items:center;gap:8px}
+/* A FAIXA DA SEMANA: meta, o que falta e os sete dias da agenda */
+.di-semana{margin:4px 0 6px;padding:7px 9px;border:1px solid var(--borda);border-radius:8px;background:var(--campo)}
+.di-sem-lin{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:11.5px}
+.di-sem-tit{color:var(--texto)}
+.di-sem-res{color:var(--sutil)}
+.di-sem-dica{font-size:11px;color:var(--sutil);margin-top:3px}
+.di-semana .ag-barra{margin:5px 0 2px}
+.di-sem-cels{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:6px}
+.di-sem-dia{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:4px 2px;border:1px solid var(--borda);border-radius:7px;background:var(--panel);text-align:center;min-width:0}
+.di-sem-dia:hover{border-color:var(--sutil)}
+.di-sem-cod{font-size:10px;font-weight:800;text-transform:uppercase;color:var(--sutil)}
+.di-sem-min{font-size:11.5px;font-weight:700;color:var(--texto);white-space:nowrap}
+.di-sem-prev{font-size:9.5px;color:var(--sutil);white-space:nowrap}
+.di-sem-hoje{border-color:var(--acao);box-shadow:0 0 0 1px var(--acao)}
+.di-sem-folga{border-style:dashed;opacity:.6}
+.di-sem-ok .di-sem-min{color:var(--ok)}
+.di-sem-falta .di-sem-min{color:var(--atencao)}
+.di-sem-extra{opacity:1}
+.ed-ag-semana{margin:2px 0 8px}
+.di-sem-extra .di-sem-min{color:var(--ok)}
 .di-saidas{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
 .di-pd{margin:6px 0 0;border:1px solid var(--borda);border-radius:8px;overflow:hidden}
 .di-pd-lin{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:10px;width:100%;cursor:pointer;
@@ -3960,7 +3981,7 @@ dialog.di-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
 dialog.di-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;border-radius:0;
   padding:10px 12px;display:flex;flex-direction:column;resize:none}
 dialog.di-cheia .di-lista{max-height:none;flex:1 1 auto;min-height:0}
-dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos,dialog.di-cheia .di-saidas,dialog.di-cheia .di-pd,dialog.di-cheia #diarioConta{flex:0 0 auto}
+dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos,dialog.di-cheia .di-saidas,dialog.di-cheia .di-pd,dialog.di-cheia #diarioConta,dialog.di-cheia .di-semana{flex:0 0 auto}
 .di-nome{font-weight:700;color:var(--texto);white-space:normal;word-break:break-word}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:normal}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
@@ -8621,6 +8642,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="di-cab-btns"><button type="button" class="selo-ajuda" id="btnDiarioAjuda" aria-label="?" data-i18n-title="ed_diario_ajuda_tip">?</button>
     <button type="button" class="btn-min" id="btnDiarioAmpliar"></button></span>
   </div>
+  <div class="di-semana" id="diarioSemana"></div>
   <div id="diarioPeriodos"></div>
   <div class="di-filtros">
     <input type="search" id="diarioBusca" class="mat-busca"
