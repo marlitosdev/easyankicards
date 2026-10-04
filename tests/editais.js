@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -353,6 +353,42 @@ function testes() {
     ok(api.lerEdital(CFO.replace("horas: 20", "horas: 20 | escolhas: Outro=Nada")).achados.some((a) => a.tipo === "escolha_grupo_inexistente") && api.lerEdital(CFO.replace("horas: 20", "horas: 20 | escolhas: Língua Estrangeira=Alemão")).achados.some((a) => a.tipo === "escolha_disciplina_inexistente"), "O10b escolha para grupo ou disciplina que não existe é apontada");
     ok(api.lerEdital(CFO.replace("horas: 20", "horas: 20 | escolhas: Língua Estrangeira=Alemão")).disciplinas.every((d) => !d.inativa), "O10c escolha inválida não desativa ninguém (o aluno vê as duas até corrigir)");
     ok(api.lerEdital("@ A :: 3 | outra: coisa\n+ t :: 3").disciplinas[0].escolha === "" && api.lerEdital("# X | escolhas: a=b; c=d\n@ A :: 3\n+ t :: 3").cfg.escolhas.c === "d", "O11 outra barra vertical não vira 'escolha'; várias escolhas no cabeçalho se separam por ponto e vírgula");
+  }
+
+  /* ---- OS: GRUPO DE ESCOLHA SUSPEITO (X5, 17.90.0) ----
+   * O caso real: a IA pôs "| escolha: Conhecimentos Básicos" nas CINCO disciplinas obrigatórias de um bloco. */
+  {
+    const { api } = carregar();
+    const CAM = (extra) => ["# Câmara | prova: 2027-01-17 | horas: 8" + (extra || ""),
+      "& Conhecimentos Básicos | minimo: 18p",
+      "@ Língua Portuguesa :: 90p | escolha: Conhecimentos Básicos", "+ a :: 3",
+      "@ Língua Inglesa :: 90p | escolha: Conhecimentos Básicos", "+ b :: 3",
+      "@ Direito Administrativo :: 90p | escolha: Conhecimentos Básicos", "+ c :: 3",
+      "@ Direito Constitucional :: 90p | escolha: Conhecimentos Básicos", "+ d :: 3",
+      "@ Tecnologia da Informação :: 90p | escolha: Conhecimentos Básicos", "+ e :: 3",
+      "& Conhecimentos Específicos | minimo: 27p", "@ Linguística :: 90p", "+ f :: 4"].join("\n");
+    const r = api.lerEdital(CAM());
+    ok(r.optativas.length === 0 && r.disciplinas.every((d) => !d.inativa && !d.optativa) && r.achados.filter((a) => a.tipo === "escolha_suspeita").length === 1 && r.achados.find((a) => a.tipo === "escolha_suspeita").txt === "Conhecimentos Básicos", "OS1 a chave que é o NOME DO BLOCO não vale: nenhum grupo, nenhuma disciplina inativa, e o leitor aponta (1 achado)");
+    const rEsc = api.lerEdital(CAM(" | escolhas: Conhecimentos Básicos=Língua Portuguesa"));
+    ok(rEsc.disciplinas.every((d) => !d.inativa), "OS1b mesmo com 'escolhas:' no cabeçalho nenhuma obrigatória é desativada (o app não deixa quatro matérias fora do plano)");
+    const pl = api.montarPlano(r, { horas: 8, prova: "2027-01-17", hoje: "2026-10-01", feitos: {}, fatores: null, acertos: null });
+    ok(pl.itens.length === 6, "OS1c as seis disciplinas continuam no plano: " + pl.itens.length);
+    const q = api.edQualidadeLeitura(r);
+    ok(q.provisorio === true && q.motivos.some((m) => m.id === "escolha_suspeita" && m.nomes[0] === "Conhecimentos Básicos"), "OS2 o veredito de leitura traz o motivo 'escolha_suspeita' (plano provisório)");
+    ok(api.diagnosticoPlano(r, pl).some((a) => a.id === "escolha_suspeita" && !a.grave && /nome de um bloco/.test(a.msg)), "OS2b o diagnóstico explica: parece nome de bloco, o app manteve todas");
+    /* outros jeitos de suspeitar */
+    const DOIS = ["# X", "& Básicos | minimo: 50%", "@ A :: 3 | escolha: Básicos", "+ a :: 3", "@ B :: 3 | escolha: Básicos", "+ b :: 3"].join("\n");
+    ok(api.lerEdital(DOIS).optativas.length === 0 && api.lerEdital(DOIS).achados.some((a) => a.tipo === "escolha_suspeita"), "OS3 chave igual ao nome do bloco é suspeita mesmo com só 2 opções");
+    const QUATRO = ["# X", "@ A :: 3 | escolha: Idioma", "+ a :: 3", "@ B :: 3 | escolha: Idioma", "+ b :: 3", "@ C :: 3 | escolha: Idioma", "+ c :: 3", "@ D :: 3 | escolha: Idioma", "+ d :: 3"].join("\n");
+    ok(api.lerEdital(QUATRO).optativas.length === 0 && api.lerEdital(QUATRO).achados.some((a) => a.tipo === "escolha_suspeita"), "OS4 um grupo de escolha com 4 opções é suspeito (raramente é escolha de verdade)");
+    const TRES = QUATRO.split("\n").slice(0, 7).join("\n");
+    ok(api.lerEdital(TRES).optativas.length === 1 && api.lerEdital(TRES).optativas[0].opcoes.length === 3, "OS4b com 3 opções ainda vale");
+    const BLOCO = ["# X", "& Básicos | minimo: 50%", "@ A :: 3 | escolha: Grupo", "+ a :: 3", "@ B :: 3 | escolha: Grupo", "+ b :: 3", "@ C :: 3 | escolha: Grupo", "+ c :: 3"].join("\n");
+    ok(api.lerEdital(BLOCO).optativas.length === 0, "OS5 um grupo que é o bloco INTEIRO (3+ disciplinas) é suspeito, mesmo com outra chave");
+    const IDIOMAS = ["# X", "& Idiomas | minimo: 5", "@ A :: 3 | escolha: Língua", "+ a :: 3", "@ B :: 3 | escolha: Língua", "+ b :: 3"].join("\n");
+    ok(api.lerEdital(IDIOMAS).optativas.length === 1 && !api.lerEdital(IDIOMAS).achados.some((a) => a.tipo === "escolha_suspeita"), "OS5b um bloco de só 2 disciplinas que SÃO o par de opções (chave diferente do nome do bloco) continua sendo escolha de verdade");
+    const PAR = ["# X", "& Específicos | minimo: 50%", "@ P :: 3", "+ p :: 3", "@ A :: 3 | escolha: Língua", "+ a :: 3", "@ B :: 3 | escolha: Língua", "+ b :: 3"].join("\n");
+    ok(api.lerEdital(PAR).optativas.length === 1 && !api.lerEdital(PAR).achados.some((a) => a.tipo === "escolha_suspeita"), "OS6 um par de idiomas DENTRO de um bloco com outras disciplinas continua sendo escolha de verdade");
   }
 
   /* ---- L10: colar plano corrigido tem de dizer o que se PERDE ----

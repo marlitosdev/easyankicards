@@ -292,6 +292,19 @@ async function testes() {
     const rOpt = api.lerEdital("# x | prova: 2030-01-01 | horas: 10\n" + exOpt.map((l) => l + "\n+ t :: 3").join("\n"));
     ok(exOpt.length === 2 && rOpt.optativas.length === 1 && rOpt.optativas[0].opcoes.length === 2 && rOpt.disciplinas[0].abs === 5, "N8b o exemplo do proprio prompt e' lido pelo app (um grupo de escolha com 2 opções de 5q)");
     ok(api.lerEdital(base).optativas.length === 0 && api.lerEdital(base).disciplinas.length === 0, "N8c o prompt colado como se fosse o edital não deixa disciplinas nem optativas (os exemplos dele não são do concurso)");
+    /* X5: o prompt avisa contra os três erros do caso da Câmara (chave = nome de bloco, 90 itens por disciplina, básicas sem tópico) */
+    ok(/O NOME DE UM BLOCO \("&"\) NÃO é chave de escolha/.test(base) && /raramente tem mais de 3 opções/.test(base), "N9a a regra 12 diz que o nome de um bloco não é chave de escolha");
+    ok(/Toda disciplina "@" precisa ter pelo menos um tópico/.test(base) && /conhecimentos básicos E os específicos/.test(base), "N9b a regra 6 exige tópicos em toda disciplina (básicos E específicos)");
+    ok(/PROVA INTEIRA/.test(base) && /NÃO é o de cada disciplina/.test(base) && /"90 itens" para todos os conhecimentos básicos/.test(base) && /use a escala de 1 a 5/.test(base), "N9c a regra 9 diz que o total da prova não é o de cada disciplina");
+    const CAMN = ["& Conhecimentos Básicos | minimo: 18p", "@ Língua Portuguesa :: 90p | escolha: Conhecimentos Básicos", "@ Língua Inglesa :: 90p | escolha: Conhecimentos Básicos", "@ Direito :: 90p | escolha: Conhecimentos Básicos", "& Específicos | minimo: 27p", "@ Linguística :: 90p", "+ Signo :: 4 :: x"].join("\n");
+    const eCam = api.hubNovoEstadoPlano(CAMN);
+    const CAMT = ["& Conhecimentos Básicos | minimo: 18p", "@ Língua Portuguesa :: 90p | escolha: Conhecimentos Básicos", "+ a :: 3", "@ Língua Inglesa :: 90p | escolha: Conhecimentos Básicos", "+ b :: 3", "@ Direito :: 90p | escolha: Conhecimentos Básicos", "+ c :: 3"].join("\n");
+    const eT = api.hubNovoEstadoPlano(CAMT);
+    ok(eT.estado === "atencao" && eT.esc === 1 && eT.sem === 0 && eT.ign === 0 && eT.rep === 0, "N9d2 só por causa do grupo suspeito (todas com tópico) o Novo edital já fica em 'confira'");
+    api.hubIniciar(); api.hubNovo();
+    api.$("edNovoPlano").value = CAMT; api.$("edNovoPlano").oninput();
+    ok(/Entendido, mas confira: 1 grupo\(s\) de escolha suspeito\(s\) \(Conhecimentos Básicos\)/.test(api.$("edNovoSemTxt").textContent), "N9d3 o semáforo escreve o aviso do grupo suspeito: " + api.$("edNovoSemTxt").textContent);
+    ok(eCam.estado === "atencao" && eCam.esc === 1 && eCam.escNomes[0] === "Conhecimentos Básicos" && eCam.sem === 3, "N9d o Novo edital fica em 'confira' e conta o grupo suspeito (e as 3 sem tópico)");
     /* ingles: mesmo bloco, antes do SYLLABUS, numerado 9 */
     api.setLanguage("en");
     const en = api.edPromptEdital(true), enBase = api.t("ed_prompt");
