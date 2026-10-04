@@ -35,6 +35,8 @@ const JUR_CAMPOS_FORM = { tribunal: "jurTribunal", classe: "jurClasse",
 let jurFiltroTag = "";          /* etiqueta escolhida na lista */
 /* "ler" ou "incluir" — ver jurPintarModo */
 let jurModo = "ler";
+/* os julgados já guardados, enquanto se cria ou edita: recolhidos até a pessoa pedir */
+let jurOutrosAberto = false;
 
 /* ABRE NO MODO QUE A SITUAÇÃO PEDE.
  *
@@ -51,6 +53,7 @@ function jurAbrir(disciplina, topico, modo) {
   jurTopicoAtual = { disciplina, nome: topico, chave };
   jurEditando = "";
   jurFiltroTag = "";
+  jurOutrosAberto = false;
   const sub = $("jurSub");
   if (sub) sub.textContent = t("jur_sub", { d: disciplina, t: topico });
   jurLimparForm();
@@ -135,6 +138,7 @@ function jurTrocarModo(m) {
    * salvasse assim, sobrescrevia o julgado antigo em vez de criar um
    * novo, porque jurEditando continuava apontando para ele. */
   if (m === "incluir") jurLimparForm();
+  jurOutrosAberto = false;
   jurModo = m;
   jurPintarModo();
   jurPintarLista();
@@ -705,6 +709,9 @@ function jurEditar(id) {
    * formulário ficaria escondido e o clique não faria nada visível */
   jurModo = "incluir";
   jurPintarModo();
+  /* os outros julgados saem de cena enquanto este é editado (e o botão os traz de volta) */
+  jurOutrosAberto = false;
+  jurPintarLista();
   /* editando à mão, os campos são o que se veio mexer */
   jurMeta(true);
   jurConteudoVisivel(true);
@@ -1253,6 +1260,19 @@ function jurPintarLista() {
       ? t("jur_conta", { n: lista.length }) : t("jur_conta_zero");
   }
   jurPintarRepetidos();
+  /* CRIANDO OU EDITANDO, A LISTA FICA RECOLHIDA (e os avisos de repetidos junto): é do que se escreve, não dos outros,
+   * que a tela precisa. Os elementos continuam desenhados e só ficam escondidos — o botão os traz de volta. */
+  const todosDoTopico = jurDoTopico(jurTopicoAtual.chave).length;
+  const recolhida = jurModo !== "ler" && !jurOutrosAberto;
+  const bOutros = $("btnJurOutros");
+  if (bOutros) {
+    bOutros.hidden = jurModo === "ler" || !todosDoTopico;
+    bOutros.textContent = t(jurOutrosAberto ? "jur_outros_ocultar" : "jur_outros_ver", { n: todosDoTopico });
+    bOutros.title = t("jur_outros_aj");
+  }
+  if (conta) conta.hidden = recolhida;
+  box.hidden = recolhida;
+  if ($("jurRepetidos") && recolhida) $("jurRepetidos").hidden = true;
   /* O prompt de comparação só faz sentido com dois ou mais. */
   if ($("btnJurPrompt")) $("btnJurPrompt").hidden = lista.length < 2 || jurModo !== "ler";
   if (!lista.length) return;
@@ -1611,6 +1631,7 @@ function jurIniciarTela() {
     jurReagirBtn("btnJurLimpar", t("jur_limpou"));
   });
   liga("btnJurMais", () => jurTrocarModo("incluir"));
+  liga("btnJurOutros", () => { jurOutrosAberto = !jurOutrosAberto; jurPintarLista(); });
   liga("btnJurMeta", () => jurMeta(!jurMetaAberta()));
   dicaLigar("btnJurAjuda", "jur_ajuda");
   liga("btnJurPrompt", jurCopiarPrompt);

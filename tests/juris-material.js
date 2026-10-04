@@ -1792,6 +1792,41 @@ async function testes() {
     ok(u && u.concurso === "ISS Caruaru Auditor Fiscal", "CC10 unir perdeu o concurso: " + JSON.stringify(u && u.concurso));
   }
 
+  /* ---- JR: criando ou editando, os julgados guardados ficam RECOLHIDOS (J1, 17.83.0) ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    const T = ["Direito Tributário", "Limitações"];
+    [1, 2, 3].forEach((k) => guardar(api, { tribunal: "STF", classe: "ADI", numero: String(100 + k), tese: "Tese " + k }, T[0], T[1]));
+    const lista = () => api.$("jurLista"), conta = () => api.$("jurConta"), bt = () => api.$("btnJurOutros");
+    api.jurAbrir(T[0], T[1], "ler");
+    ok(bt().hidden === true && lista().hidden === false && conta().hidden === false && lista().children.length === 3, "JR1 lendo: a lista aparece inteira e não há botão de 'ver os guardados'");
+    api.jurAbrir(T[0], T[1], "incluir");
+    ok(lista().hidden === true && conta().hidden === true && bt().hidden === false && /3/.test(bt().textContent) && bt().title.length > 15, "JR2 criando: a lista e a contagem somem, e o botão diz quantos há: " + bt().textContent);
+    ok(lista().children.length === 3, "JR2b a lista continua desenhada (só escondida): o botão não precisa recalcular nada");
+    bt().onclick();
+    ok(lista().hidden === false && conta().hidden === false && /Ocultar|Hide/.test(bt().textContent), "JR3 tocar no botão traz a lista de volta e o botão passa a ocultar");
+    bt().onclick();
+    ok(lista().hidden === true && /Ver os|Show the/.test(bt().textContent), "JR3b tocar de novo recolhe");
+    bt().onclick();
+    api.jurTrocarModo("ler");
+    ok(lista().hidden === false && bt().hidden === true, "JR4 voltar à leitura mostra a lista e esconde o botão");
+    api.jurTrocarModo("incluir");
+    ok(lista().hidden === true, "JR4b ao criar de novo a lista volta recolhida (o 'aberto' não vaza entre usos)");
+    const um = api.jurLista()[0];
+    api.jurTrocarModo("ler");
+    api.jurEditar(um.id);
+    ok(lista().hidden === true && bt().hidden === false, "JR5 editando um julgado, a lista também fica recolhida");
+    bt().onclick();
+    api.jurAbrir(T[0], T[1], "incluir");
+    ok(lista().hidden === true && /Ver os|Show the/.test(bt().textContent), "JR5b reabrir a gaveta começa recolhido, mesmo que a vez anterior tenha ficado aberta");
+    api.jurAbrir(T[0], "Tópico sem julgado", "incluir");
+    ok(bt().hidden === true, "JR6 tópico sem julgado: não há o que recolher, e o botão não aparece");
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/@media \(max-width:560px\)\{\s*dialog#dlgJuris\[open\]\{[^}]*width:100vw[^}]*height:100dvh/.test(html), "JR7 no celular a gaveta ocupa a tela toda (regra com [open], invariante E7)");
+    ok(/#dlgJuris \.jur-mais\{position:static\}/.test(html) && /#dlgJuris \.jur-mais-corpo\{left:0;right:0;width:auto/.test(html), "JR8 o menu 'mais' se ancora na largura da linha de botões, e não estoura a borda direita");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
