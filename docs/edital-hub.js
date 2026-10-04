@@ -28,15 +28,26 @@ let hubAgendaAberta = false;
  * diário — que é o que aconteceu — e não do progresso marcado, que só diz
  * "estudei", nunca "quanto tempo". A semana começa no domingo, como a
  * agenda. */
+/* o que a agenda da semana pôs em cada dia e a meta (soma do que ela pede), para quem mais precisar (o diário) */
+let hubUltimaAgenda = null;
+
+/* A SEMANA DE ESTUDO de hoje: dias, previsto e feito de cada um, e quanto falta — pelos mesmos dias e a mesma meta da
+ * agenda. Sem agenda desenhada ainda, tenta desenhá-la; sem meta nenhuma, devolve só o feito. */
+function hubSemanaDeEstudo(hoje) {
+  if (!hubUltimaAgenda && typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
+  const a = hubUltimaAgenda || { previsto: {}, metaMin: 0, dias: hubPref("dias", 5) };
+  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+  return edSemanaDeEstudo(hoje || (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10)),
+    hubPref("dias", a.dias), diario, a.previsto, a.metaMin);
+}
+
 function minutosDaSemana() {
   const diario = (typeof edDiario !== "undefined" && edDiario) || [];
-  const hoje = new Date();
-  const ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - hoje.getDay());
-  const iso = ini.getFullYear() + "-"
-    + String(ini.getMonth() + 1).padStart(2, "0") + "-"
-    + String(ini.getDate()).padStart(2, "0");
+  /* A SEMANA É A DA AGENDA: segunda a domingo. Contar a partir do domingo fazia o estudo de domingo cair na semana
+   * nova só aqui, enquanto a agenda (e o resto do app) o põem na anterior. "Desmarcou" não é estudo. */
+  const sem = edSemanaCalendario(typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10));
   return diario.reduce((a, x) => {
-    if (!x || !x.d || x.d === "?" || x.d < iso) return a;
+    if (!x || !x.d || x.d === "?" || x.a === "pendente" || x.d < sem.ini || x.d > sem.fim) return a;
     return a + (Number(x.m) || 0);
   }, 0);
 }
@@ -371,6 +382,7 @@ function hubPintarAgenda() {
    * do painel antigo. Os dois números vêm da preferência de estudo, não do
    * edital: a semana é uma só, mesmo com três concursos. */
   agendar(linhas, { dias: hubPref("dias", 5), inicio: hubPref("inicio", "19:00") });
+  hubUltimaAgenda = { previsto: edPrevistoPorDia(linhas), metaMin: planejadoMin, dias: hubPref("dias", 5) };
 
   const mostrar = hubAgendaAberta ? linhas : linhas.slice(0, HUB_AGENDA_CURTA);
   mostrar.forEach((i) => {

@@ -2522,6 +2522,28 @@ async function testes() {
           api.abrirDiario();
           ok(["btnDiarioCopiar", "btnDiarioCsv", "btnDiarioPorDisc"].every((id) => sel(id).disabled === true), "DD14 sem registros nada para copiar: os três botões ficam desligados");
           ok(sel("diarioPorDisc").hidden === true, "DD15 sem registros o painel por disciplina não aparece vazio, mesmo ligado");
+          /* D4.1: a semana do medidor é a da agenda (segunda a domingo) e o diário lê os dias/meta da agenda */
+          {
+            const isoL = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+            const hojeL = isoL(new Date());
+            const semL = api.edSemanaCalendario(hojeL);
+            const deslocar = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return isoL(d); };
+            api.diarioPor([
+              { d: deslocar(semL.ini, -1), c: "x", m: 100, a: "feito" },
+              { d: semL.ini, c: "x", m: 40, a: "feito" },
+              { d: hojeL, c: "x", m: 20, a: "feito" },
+              { d: hojeL, c: "x", m: 500, a: "pendente" },
+              { d: deslocar(semL.fim, 1), c: "x", m: 7, a: "feito" },
+            ]);
+            ok(api.minutosDaSemana() === 60, "DS1 o medidor da agenda conta de segunda a domingo: o domingo anterior, a segunda seguinte e o 'desmarcou' ficam de fora (veio " + api.minutosDaSemana() + ")");
+            const SS = api.hubSemanaDeEstudo(hojeL);
+            ok(SS.dias.length === 7 && SS.feitoMin === 60 && SS.dias[0].cod === "seg" && SS.diasDeEstudo.join() === api.edDiasDeEstudo(5).join(), "DS2 a semana do diário usa o diário e os dias de estudo da agenda: " + SS.feitoMin + " " + SS.diasDeEstudo.join());
+            ok(SS.metaMin > 0 && SS.metaMin === SS.dias.reduce((a, d) => a + d.previstoMin, 0) && SS.dias.every((d) => d.estudo || d.previstoMin === 0), "DS3 a meta é a soma do previsto da agenda, e só os dias de estudo têm previsto");
+            api.loja.setItem("eac_estudo_dias", "6");
+            ok(api.hubSemanaDeEstudo(hojeL).diasDeEstudo.join() === api.edDiasDeEstudo(6).join(), "DS4 mudar 'dias/semana' na agenda muda os dias de estudo da semana do diário (6 = com sábado)");
+            api.loja.removeItem("eac_estudo_dias");
+            api.diarioPor([]);
+          }
           /* o texto de ajuda longo saiu do topo (espaço): vive no (?) */
           sel("btnDiarioAjuda").onclick({ stopPropagation() {} });
           ok(api.dicaAberta() === true && api.dicaTexto().indexOf(api.t("ed_diario_ajuda")) >= 0, "DF25 o (?) do diário abre o balão com a explicação");
