@@ -263,7 +263,7 @@ function edEscolhasTexto(esc) {
   return Object.keys(esc || {}).filter((g) => esc[g]).map((g) => g + "=" + esc[g]).join("; ");
 }
 /* agrupa as disciplinas pelo "escolha:" e aplica a escolha do cabeçalho; devolve [{nome, opcoes:[nomes], escolhida}] */
-function edAplicarEscolhas(disciplinas, cfg, achados) {
+function edAplicarEscolhas(disciplinas, cfg, achados, blocos) {
   const grupos = new Map();
   (disciplinas || []).forEach((d) => {
     if (!d.escolha) return;
@@ -282,6 +282,18 @@ function edAplicarEscolhas(disciplinas, cfg, achados) {
   const lista = [];
   grupos.forEach((gr) => {
     if (gr.opcoes.length < 2) { achados.push({ linha: gr.opcoes[0].linha, tipo: "escolha_um_so", txt: gr.nome }); return; }
+    /* UM GRUPO DE ESCOLHA SUSPEITO NÃO VALE. O caso real: a IA pôs "| escolha: Conhecimentos Básicos" nas CINCO disciplinas
+     * obrigatórias de um bloco (usou o nome do bloco como chave). Valendo, o app leria "escolha 1 de 5" e, ao escolher uma,
+     * deixaria quatro matérias obrigatórias FORA do plano. Suspeito = a chave é o nome de um bloco "&", o grupo tem opções
+     * demais (mais de 3) ou ele é TODO um bloco de 3+ disciplinas. Suspeito: nada é desativado, e o app avisa. */
+    const norm = edNormalizar(gr.nome);
+    const nomesGr = gr.opcoes.map((d) => edNormalizar(d.nome));
+    const ehBloco = (blocos || []).some((b) => edNormalizar(b.nome) === norm
+      || ((b.disciplinas || []).length >= 3 && (b.disciplinas || []).every((n) => nomesGr.indexOf(edNormalizar(n)) >= 0)));
+    if (ehBloco || gr.opcoes.length > 3) {
+      achados.push({ linha: gr.opcoes[0].linha, tipo: "escolha_suspeita", txt: gr.nome });
+      return;
+    }
     gr.opcoes.forEach((d) => { d.optativa = gr.nome; d.inativa = !!gr.escolhida && d.nome !== gr.escolhida; });
     lista.push({ nome: gr.nome, opcoes: gr.opcoes.map((d) => d.nome), escolhida: gr.escolhida });
   });
@@ -324,6 +336,8 @@ function edQualidadeLeitura(r) {
   if (rep.length) motivos.push({ id: "repetida", n: rep.length, nomes: rep.map((g) => g.nome) });
   if (sem.length) motivos.push({ id: "sem_topico", n: sem.length, nomes: sem.map((g) => g.nome) });
   if (!susp && ign >= 5 && ign >= uteis / 4) motivos.push({ id: "ignoradas", n: ign, nomes: [] });
+  const esc = ((r && r.achados) || []).filter((a) => a.tipo === "escolha_suspeita");
+  if (esc.length) motivos.push({ id: "escolha_suspeita", n: esc.length, nomes: esc.map((a) => a.txt) });
   return { provisorio: motivos.length > 0, motivos, unicas: grupos.length, rep, sem, ign };
 }
 
@@ -549,7 +563,7 @@ function lerEdital(raw) {
    * A conta só é possível aqui, depois de ler todas: a escala é relativa
    * à maior disciplina da prova, que é a régua com significado. */
   /* AS OPTATIVAS ("escolha 1 de N"): a não escolhida fica no texto, mas FORA do plano e das contas (ver edAplicarEscolhas) */
-  const optativas = edAplicarEscolhas(disciplinas, cfg, achados);
+  const optativas = edAplicarEscolhas(disciplinas, cfg, achados, blocos);
   const absAll = disciplinas.filter((d) => d.abs > 0 && !d.inativa);
   if (absAll.length) {
     const maxAbs = absAll.reduce((m, d) => Math.max(m, d.abs), 0) || 1;
@@ -2175,6 +2189,9 @@ function diagnosticoPlano(r, plano) {
       + ". Isso não veio do seu concurso — troque ou apague essas linhas.");
 
   const qual = edQualidadeLeitura(r);
+  ((r && r.achados) || []).filter((a) => a.tipo === "escolha_suspeita").forEach((a) => add("escolha_suspeita", false,
+    '"| escolha: ' + a.txt + '" parece o nome de um bloco (ou tem opções demais), não uma escolha entre disciplinas: o app NÃO a '
+    + "considerou e manteve todas as disciplinas desse grupo no plano. Se elas são obrigatórias, tire o \"| escolha:\" das linhas."));
   if (qual.rep.length)
     add("disciplina_repetida", true, "Disciplina(s) escrita(s) mais de uma vez: " + qual.rep.map((g) => g.nome + " (" + g.vezes + "×)").join(", ")
       + ". Cada bloco conta à parte: a fatia da prova sai inflada e os tópicos ficam divididos. Use \"Unir as repetidas\" na bancada.");

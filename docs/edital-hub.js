@@ -1095,11 +1095,12 @@ function hubNovoEstadoPlano(txt) {
     d: disc.length, t: disc.reduce((a, d) => a + d.topicos, 0),
     r: (r.disciplinas || []).reduce((a, d) => a + d.topicos.reduce((b, tp) => b + (tp.ramos ? tp.ramos.length : 0), 0), 0),
     ign: cont("linha_ignorada"), rep: disc.filter((d) => d.vezes > 1).length, sem: disc.filter((d) => !d.topicos).length, disc,
+    esc: cont("escolha_suspeita"), escNomes: ach.filter((a) => a.tipo === "escolha_suspeita").map((a) => a.txt),
   });
   const susp = edTextoSuspeito(null, r);
   if (susp) return Object.assign(info, { estado: susp.tipo, nomes: susp.nomes || [] });
   if (!info.d) return Object.assign(info, { estado: "cru" });
-  return Object.assign(info, { estado: info.ign || info.rep || info.sem ? "atencao" : "ok" });
+  return Object.assign(info, { estado: info.ign || info.rep || info.sem || info.esc ? "atencao" : "ok" });
 }
 
 const HUB_SEM_CLASSE = { vazio: "sem-vazio", ok: "sem-ok", atencao: "sem-atencao", cru: "sem-atencao", modelo: "sem-atencao", prompt: "sem-erro" };
@@ -1204,6 +1205,7 @@ function hubNovoPintar() {
   if (est.ign) partes.push(t("ed_novo_p_ign", { n: est.ign }));
   if (est.rep) partes.push(t("ed_novo_p_rep", { n: est.rep }));
   if (est.sem) partes.push(t("ed_novo_p_sem", { n: est.sem }));
+  if (est.esc) partes.push(t("ed_novo_p_escolha", { n: est.esc, l: (est.escNomes || []).slice(0, 2).join(", ") }));
   g("edNovoSemTxt").textContent = est.estado === "atencao" ? t("ed_novo_sem_atencao", { p: partes.join(", ") })
     : est.estado === "cru" ? t("ed_novo_sem_cru", { i: est.ign })
     : est.estado === "modelo" ? t("ed_novo_sem_modelo", { n: est.nomes.slice(0, 2).join(", ") })
