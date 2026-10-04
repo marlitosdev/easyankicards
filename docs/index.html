@@ -4532,6 +4532,8 @@ dialog.ev-dlg{width:min(980px,96vw);max-width:min(980px,96vw)}
 .ev-tit{margin:0;font-size:20px;letter-spacing:.3px;color:#111}
 .ev-sub{font-size:11px;color:#555;margin-top:2px}
 .ev-disc{margin:0 0 16px}
+/* a disciplina de escolha NÃO escolhida: esmaecida (e fora dos totais), mas continua na folha */
+.ev-disc.ev-inativa{opacity:.45}
 .ev-faixa{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#000;color:#fff;border-radius:10px;padding:9px 16px;break-after:avoid}
 .ev-faixa-nome{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
 .ev-faixa-tag{font-size:10.5px;font-weight:700;text-align:right}
@@ -8458,6 +8460,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <label class="ev-opc"><input type="checkbox" id="evProgresso"> <span data-i18n="vert_progresso"></span></label>
     <label class="ev-opc"><input type="checkbox" id="evFaixa" checked> <span data-i18n="vert_faixa"></span></label>
     <label class="ev-opc" id="evFase2Cx" hidden><input type="checkbox" id="evFase2"> <span data-i18n="vert_fase2"></span></label>
+    <label class="ev-opc"><input type="checkbox" id="evOptOcultar"> <span data-i18n="vert_opt_ocultar"></span></label>
   </div>
   <p class="nota" id="evResumo"></p>
   <div class="ev-papel" id="evPrevia"></div>

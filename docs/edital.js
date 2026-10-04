@@ -571,6 +571,7 @@ function lerEdital(raw) {
     Object.assign(cfg, c0);
     disciplinas.length = 0;
     blocos.length = 0;
+    optativas.length = 0;
     achados.push({ linha: 1, tipo: "texto_e_o_prompt", txt: "" });
   }
 
