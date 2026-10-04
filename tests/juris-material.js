@@ -1198,7 +1198,7 @@ async function testes() {
     api.jurIniciarTela();
     api.jurAbrir("Direito Tributário", "Tributos", "incluir");
     api.navegador.clipboard = { writeText: async () => {} };
-    const EMENTA = "RE 574706 / PR\nJulgamento: 15/03/2017 — Tribunal Pleno";
+    const EMENTA = "RE 574706 / PR\nJulgamento: 15/03/2017 — Tribunal Pleno\nTese: O ICMS não compõe a base de cálculo para fins de incidência do PIS e da COFINS, por não representar faturamento.";
     api.$("jurColar").value = EMENTA;
     api.jurPedirIA();
     await espera();
@@ -1257,7 +1257,7 @@ async function testes() {
     let copiado = "";
     api.navegador.clipboard = { writeText: async (x) => { copiado = x; } };
     const bloco = (p) => (/"de_memoria": \{([^}]*)\}/.exec(p) || [])[1] || "";
-    api.$("jurColar").value = "STF SV 29";
+    api.$("jurColar").value = "STF SV 29 — Súmula Vinculante 29: É constitucional a adoção, no cálculo do valor de taxa, de um ou mais elementos da base de cálculo própria de determinado imposto, desde que não haja integral identidade.";
     api.jurPedirIA();
     await espera();
     ok(!/relator|data_julgamento/.test(bloco(copiado)),
@@ -1268,7 +1268,7 @@ async function testes() {
     ok(/relator/.test(bloco(copiado)) && /data_julgamento/.test(bloco(copiado)),
        "S5a marcar 'sugerir de memoria' nao abriu os campos no pedido: " + bloco(copiado));
     /* completar */
-    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29" },
+    const j = guardar(api, { tribunal: "STF", classe: "Súmula Vinculante", numero: "29", texto: "Súmula Vinculante 29: É constitucional a adoção, no cálculo do valor de taxa, de um ou mais elementos da base de cálculo própria de determinado imposto." },
       "Direito Tributário", "Tributos");
     api.jurCompletarAbrir(j.id);
     api.$("chkJurCplMemoria").checked = false;
@@ -1825,6 +1825,107 @@ async function testes() {
     const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
     ok(/@media \(max-width:560px\)\{\s*dialog#dlgJuris\[open\]\{[^}]*width:100vw[^}]*height:100dvh/.test(html), "JR7 no celular a gaveta ocupa a tela toda (regra com [open], invariante E7)");
     ok(/#dlgJuris \.jur-mais\{position:static\}/.test(html) && /#dlgJuris \.jur-mais-corpo\{left:0;right:0;width:auto/.test(html), "JR8 o menu 'mais' se ancora na largura da linha de botões, e não estoura a borda direita");
+  }
+
+  /* ---- JV: A RESPOSTA DA IA SEM DADO NENHUM (J2, 17.84.0) ----
+   * O caso real: o pedido foi sem texto, a IA devolveu um JSON perfeito com "tipo_do_texto": "vazio" e tudo em branco, e a
+   * tela tomou o JSON por EMENTA — o objeto inteiro foi parar na tese e a pílula dizia "Detectado: STF · Tema 214". */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    const VAZIA = JSON.stringify({ tipo_do_texto: "vazio",
+      identificacao: "Recurso Extraordinário 582.461/SP do STF (Tema 214 da Repercussão Geral), sobre multas tributárias.",
+      do_texto: { tribunal: "", classe: "", numero: "", data_julgamento: "", tese_curta: "", tese_e_transcricao_oficial: false },
+      de_memoria: { tribunal: "", classe: "", numero: "", relator: "Min. Gilmar Mendes" },
+      onde_conferir: "portal do STF", resumo: "", assuntos: [],
+      conferencia: [{ campo: "tese", trecho: "multas moratórias", problema: "não é o enunciado oficial", sugestao: "É válida a multa moratória de 20%." }] }, null, 2);
+    const d = api.jurDoJson(VAZIA);
+    ok(d && d.semConteudo === true && /582\.461/.test(d.identificacao) && d.conferencia.length === 1 && d.tipoDoTexto === "vazio", "JV1 jurDoJson reconhece uma resposta da IA sem dado e a marca como 'sem conteúdo' (antes devolvia null)");
+    ok(api.jurDoJson('{"qualquer": "coisa"}') === null && api.jurDoJson("não é json") === null, "JV1b um objeto qualquer que não tem a cara da resposta continua não sendo julgado");
+    ok(api.jurEhJson("```json\n" + VAZIA + "\n```") === true && api.jurEhJson("Aqui está o resultado:\n" + VAZIA + "\nEspero ter ajudado.") === true && api.jurEhJson("RE 574706 / PR — a ementa começa assim") === false, "JV2 a resposta com cerca de markdown ou frase em volta também é reconhecida como JSON; ementa continua não sendo");
+    const cerca = api.jurDoJson("```json\n" + JSON.stringify({ do_texto: { tribunal: "STF", classe: "RE", numero: "1" } }) + "\n```");
+    ok(cerca && cerca.classe === "RE" && cerca.numero === "1", "JV2b jurDoJson lê a resposta com cerca de markdown (antes só entrava como texto)");
+    const p = api.jurIdentificarProcesso("Recurso Extraordinário 582.461/SP do STF (Tema 214 da Repercussão Geral)");
+    ok(p.classe === "RE" && p.numero === "582.461" && p.tribunal === "STF" && p.tema === "214", "JV3 a frase que NOMEIA o julgado dá o processo (RE 582.461), e o tema é só apelido: " + JSON.stringify(p));
+    ok(api.jurIdentificarProcesso("ADPF 499 e ADI 5835").classe === "ADPF" && api.jurIdentificarProcesso("Súmula Vinculante 29").classe === "" && api.jurIdentificarProcesso("").classe === "", "JV3b siglas simples; súmula/tema sozinhos não viram 'processo'; vazio não quebra");
+
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    api.$("jurColar").value = "RE 582461 multas tributárias";      /* o que foi enviado */
+    api.navegador.clipboard = { writeText: async () => {} };
+    api.jurPedirIA();                                                 /* curto: pede confirmação, que o teste recusa */
+    const conduzir = async (p, aceitar) => {
+      let pronto = false; p.then(() => { pronto = true; }, () => { pronto = true; });
+      for (let i = 0; i < 12 && !pronto; i++) { await Promise.resolve(); try { api._uiFechar(aceitar); } catch (e) {} }
+      return p;
+    };
+    api._uiFechar(false);
+    await new Promise((r) => setTimeout(r, 5));
+    api.$("jurColar").value = VAZIA;
+    api.jurColar();
+    const v = (id) => api.$(id).value;
+    ok(v("jurTese") === "" && v("jurResumo") === "", "JV4 o JSON vazio NÃO vira tese nem resumo (era o defeito: o objeto inteiro na tese)");
+    ok(v("jurClasse") === "RE" && v("jurNumero") === "582.461" && v("jurTribunal") === "STF", "JV4b a identificação em frase preenche tribunal, classe e número: " + [v("jurTribunal"), v("jurClasse"), v("jurNumero")].join("|"));
+    ok(!/tipo_do_texto|identificacao/.test(v("jurColar")), "JV4c o JSON sai da caixa: " + v("jurColar").slice(0, 60));
+    const pil = api.$("jurColarAviso");
+    ok(pil.hidden === false && /aviso/.test(pil.className) && !/(^|\s)ok(\s|$)/.test(pil.className), "JV5 a pílula fica de AVISO (âmbar), não verde de sucesso");
+    ok(/NÃO RECEBEU texto/.test(pil.textContent) && /Recurso Extraordinário 582\.461/.test(pil.textContent) && /não é o enunciado oficial/.test(pil.textContent) && /cole a ementa ou o enunciado oficial/i.test(pil.textContent), "JV5b a pílula diz POR QUE veio vazio, o que a IA entendeu, o que ela apontou e o que fazer: " + pil.textContent.slice(0, 200));
+    ok(!/Tema 214/.test((pil.textContent.match(/Detectado:[^\n]*/) || [""])[0]), "JV5c a pílula não 'detecta' o Tema a partir das chaves do JSON");
+    ok(/conferir/.test(api.$("jurOrigem_classe").textContent) && /conferir/.test(api.$("jurOrigem_numero").textContent), "JV6 o que veio da frase da IA fica marcado 'a conferir'");
+    /* o que a IA leu do texto vale mais que a frase dela: o tribunal que veio em "do_texto" não é trocado pela identificação */
+    api.jurLimparForm();
+    api.$("jurColar").value = JSON.stringify({ tipo_do_texto: "so_identificacao", identificacao: "RE 1 do STF", do_texto: { tribunal: "STJ" }, de_memoria: {}, conferencia: [] });
+    api.jurColar();
+    ok(v("jurTribunal") === "STJ" && v("jurClasse") === "RE" && /só recebeu o nome do julgado/.test(api.$("jurColarAviso").textContent), "JV6b a identificação só preenche o que está vazio (o tribunal lido do texto fica) e o motivo 'só o nome' aparece: " + v("jurTribunal"));
+    api.jurLimparForm();
+    api.$("jurColar").value = JSON.stringify({ tipo_do_texto: "ementa_acordao", identificacao: "RE 2", do_texto: {}, de_memoria: {} });
+    api.jurColar();
+    ok(/não tinha dados que ela pudesse extrair/.test(api.$("jurColarAviso").textContent), "JV6c a resposta vazia de um tipo qualquer tem o motivo genérico");
+    api.jurLimparForm();
+    api.$("jurColar").value = "```json\n" + JSON.stringify({ do_texto: { tribunal: "STF", classe: "ADI", numero: "9", tese_curta: "tese cercada" } }) + "\n```";
+    api.jurColar();
+    ok(v("jurClasse") === "ADI" && v("jurTese") === "tese cercada" && !/```/.test(v("jurColar")), "JV6d uma resposta com cerca de markdown é lida como resposta (e a cerca não vira ementa): " + v("jurClasse") + "|" + v("jurTese"));
+    /* o texto que a pessoa tinha enviado volta para a caixa */
+    api.jurLimparForm();
+    api.$("jurColar").value = "RE 582461 multas tributárias e o princípio do não confisco, com a discussão dos percentuais aceitos pelo tribunal para multas moratórias e punitivas.";
+    api.navegador.clipboard = { writeText: async () => {} };
+    await conduzir(api.jurPedirIA(), true);
+    api.$("jurColar").value = VAZIA;
+    api.jurColar();
+    ok(/RE 582461 multas tributárias e o princípio/.test(v("jurColar")), "JV7 numa resposta vazia, o texto que foi enviado VOLTA para a caixa, para completar e pedir de novo");
+  }
+
+  /* ---- JW: PEDIR SEM TEXTO É AVISADO ANTES (J2) ---- */
+  {
+    const { api } = rodar();
+    api.jurIniciarTela();
+    api.jurAbrir("Direito Tributário", "Tributos", "incluir");
+    let copiado = "";
+    api.navegador.clipboard = { writeText: async (x) => { copiado = x; } };
+    const conduzir = async (p, aceitar) => {
+      let pronto = false; p.then(() => { pronto = true; }, () => { pronto = true; });
+      for (let i = 0; i < 12 && !pronto; i++) { await Promise.resolve(); try { api._uiFechar(aceitar); } catch (e) {} }
+      return p;
+    };
+    api.$("jurColar").value = "RE 582461";
+    await conduzir(api.jurPedirIA(), false);
+    ok(copiado === "", "JW1 texto curto demais: a pessoa recusa o aviso e NADA é copiado");
+    await conduzir(api.jurPedirIA(), true);
+    ok(/<texto>[\s\S]*RE 582461[\s\S]*<\/texto>/.test(copiado), "JW2 texto curto demais: aceitando o aviso, o pedido é copiado mesmo assim");
+    copiado = "";
+    api.$("jurColar").value = "RE 582461 / SP — multas tributárias. Tese: A multa moratória de 20% não ofende o princípio do não confisco, e a multa punitiva pode chegar a 100% do tributo devido.";
+    await conduzir(api.jurPedirIA(), true);
+    ok(/RE 582461/.test(copiado), "JW3 texto de tamanho normal: copia direto, sem aviso");
+    const sem = guardar(api, { tribunal: "STF", classe: "RE", numero: "582461", tese: "paráfrase qualquer" }, "Direito Tributário", "Tributos");
+    copiado = "";
+    api.jurCompletarAbrir(sem.id);
+    await conduzir(api.jurCompletarPedir(sem.id), false);
+    ok(copiado === "", "JW4 completar um julgado SEM ementa guardada: o aviso aparece e, recusado, nada é copiado");
+    await conduzir(api.jurCompletarPedir(sem.id), true);
+    ok(copiado.length > 100, "JW5 aceitando o aviso o pedido é copiado");
+    /* a resposta 'vazio' no completar explica o 'nada mudou' */
+    api.$("jurCplResposta").value = JSON.stringify({ tipo_do_texto: "vazio", identificacao: "RE 582.461", do_texto: {}, de_memoria: {}, conferencia: [] });
+    api.jurCompletarLer();
+    ok(/NÃO RECEBEU texto/.test(api.$("jurCplSaida").textContent) && /texto oficial guardado/.test(api.$("jurCplSaida").textContent), "JW6 no completar, uma resposta 'vazio' diz que a IA não recebeu texto e o que fazer: " + api.$("jurCplSaida").textContent.slice(0, 120));
   }
 
   return Object.assign(falhas, { quantas: n });
