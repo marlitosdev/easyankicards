@@ -3961,6 +3961,28 @@ body.split-lj{overflow:hidden}
 .di-sem-falta .di-sem-min{color:var(--atencao)}
 .di-sem-extra{opacity:1}
 .ed-ag-semana{margin:2px 0 8px}
+/* O MAPA DE CALOR: semanas × os dias da agenda. A cor é um reforço — o tempo está escrito em cada célula. */
+.di-mp{margin:6px 0 0;padding:7px 8px;border:1px solid var(--borda);border-radius:8px;background:var(--campo)}
+.di-mp-barra{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
+.di-mp-grade{display:grid;grid-template-columns:44px repeat(7,minmax(0,1fr)) 64px;gap:3px;align-items:center;
+  max-height:34vh;overflow-y:auto}
+.di-mp-cab{font-size:9.5px;font-weight:800;text-transform:uppercase;color:var(--sutil);text-align:center;position:sticky;top:0;background:var(--campo)}
+.di-mp-cab-folga{opacity:.55}
+.di-mp-sem{font-size:10px;color:var(--sutil);white-space:nowrap}
+.di-mp-tot{font-size:10px;color:var(--sutil);text-align:right;white-space:nowrap}
+.di-mp-cel{all:unset;box-sizing:border-box;cursor:pointer;min-height:22px;display:flex;align-items:center;justify-content:center;
+  border-radius:5px;font-size:9.5px;font-weight:700;color:var(--texto);background:var(--panel);border:1px solid var(--borda);min-width:0}
+.di-mp-cel:hover{border-color:var(--sutil)}
+.di-mp-folga{border-style:dashed;opacity:.65}
+.di-mp-hoje{border-color:var(--acao);box-shadow:0 0 0 1px var(--acao)}
+.di-mp-futuro{opacity:.35;cursor:default;border-style:dotted}
+.di-mp-n0{background:var(--panel)}
+.di-mp-n1{background:color-mix(in srgb,var(--ok) 22%,var(--panel))}
+.di-mp-n2{background:color-mix(in srgb,var(--ok) 42%,var(--panel))}
+.di-mp-n3{background:color-mix(in srgb,var(--ok) 68%,var(--panel));color:var(--bg)}
+.di-mp-n4{background:var(--ok);color:var(--bg)}
+.di-mp-leg{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;font-size:10px;color:var(--sutil)}
+.di-mp-sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--borda)}
 .di-sem-extra .di-sem-min{color:var(--ok)}
 .di-saidas{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
 .di-pd{margin:6px 0 0;border:1px solid var(--borda);border-radius:8px;overflow:hidden}
@@ -3981,7 +4003,9 @@ dialog.di-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
 dialog.di-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;border-radius:0;
   padding:10px 12px;display:flex;flex-direction:column;resize:none}
 dialog.di-cheia .di-lista{max-height:none;flex:1 1 auto;min-height:0}
-dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos,dialog.di-cheia .di-saidas,dialog.di-cheia .di-pd,dialog.di-cheia #diarioConta,dialog.di-cheia .di-semana{flex:0 0 auto}
+dialog.di-cheia .di-cab,dialog.di-cheia .di-filtros,dialog.di-cheia .ed-diario-res,dialog.di-cheia #diarioPeriodos,dialog.di-cheia .di-saidas,dialog.di-cheia .di-pd,dialog.di-cheia #diarioConta,dialog.di-cheia .di-semana,dialog.di-cheia .di-mp{flex:0 0 auto}
+dialog.di-cheia .di-mp-grade{max-height:none}
+dialog.di-cheia .di-mp-cel{min-height:30px;font-size:11px}
 .di-nome{font-weight:700;color:var(--texto);white-space:normal;word-break:break-word}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:normal}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
@@ -8661,8 +8685,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnDiarioCopiar" data-i18n="ed_diario_copiar" data-i18n-title="ed_diario_copiar_tip"></button>
     <button type="button" class="btn-min" id="btnDiarioCsv" data-i18n="ed_diario_csv" data-i18n-title="ed_diario_csv_tip"></button>
     <button type="button" class="btn-min" id="btnDiarioPorDisc" data-i18n-title="ed_diario_pd_tip"></button>
+    <button type="button" class="btn-min" id="btnDiarioMapa" data-i18n-title="ed_mp_tip"></button>
   </div>
   <div class="di-pd" id="diarioPorDisc" hidden></div>
+  <div class="di-mp" id="diarioMapa" hidden></div>
   <div id="diarioLista" class="di-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnDiarioFechar" data-i18n="help_close"></button>

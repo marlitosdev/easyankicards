@@ -2585,7 +2585,60 @@ async function testes() {
             api.$("dlgDiario").close();
             ca.find((c) => /di-sem-hoje/.test(c.className)).onclick();
             ok(api.$("dlgDiario").open === true && itensW().length === 1, "DW11 clicar num dia da agenda abre o diário naquele dia");
+            /* D4.3: o mapa de calor */
+            api.diarioPor([
+              { d: deslocar(hojeL, -8), c: "w", disc: "Direito B", n: "Omega", a: "feito", cc: "X", m: 50 },
+              { d: hojeL, c: "x", disc: "Direito A", n: "Alfa", a: "feito", cc: "X", m: 30 },
+            ]);
+            api.$("btnDiarioTopo").onclick();
+            const mp = api.$("diarioMapa");
+            ok(mp.hidden === true && api.$("btnDiarioMapa").disabled === false, "DM1 o mapa começa fechado e o botão está ligado");
+            api.$("btnDiarioMapa").onclick();
+            const celM = procurar(mp, (e) => /(^|\s)di-mp-cel(\s|$)/.test(e.className || ""), []);
+            const semM = procurar(mp, (e) => /(^|\s)di-mp-sem(\s|$)/.test(e.className || ""), []);
+            const cabM = procurar(mp, (e) => /(^|\s)di-mp-cab(\s|$)/.test(e.className || ""), []);
+            ok(mp.hidden === false && semM.length === 8 && celM.length === 56 && cabM.map((c) => c.textContent).slice(1, 8).join() === "seg,ter,qua,qui,sex,sáb,dom", "DM2 o mapa abre com 8 semanas × 7 dias, cabeçalho na ordem da agenda");
+            ok(semM[0].textContent === semL.ini.slice(8) + "/" + semL.ini.slice(5, 7) && celM.filter((c) => /di-mp-hoje/.test(c.className)).length === 1, "DM3 a primeira linha é a semana atual e há um só dia 'hoje'");
+            const cHoje = celM.find((c) => /di-mp-hoje/.test(c.className));
+            ok(cHoje.textContent === "30m" && /di-mp-n[1-4]/.test(cHoje.className) && cHoje.title.length > 15, "DM4 a célula escreve o tempo (a cor não vai sozinha) e tem dica");
+            ok(procurar(mp, (e) => /di-mp-leg/.test(e.className || ""), [])[0].children.length >= 6 && /meta do dia|day goal/.test(procurar(mp, (e) => /di-mp-leg/.test(e.className || ""), [])[0].children[5].textContent), "DM5 a legenda diz que a cor mede a meta do dia");
+            const celOmega = celM.find((c) => c.title && /50min/.test(c.title));
+            ok(!!celOmega, "DM6 uma célula de outra semana mostra os 50min de 8 dias atrás");
+            cHoje.onclick();
+            ok(itensW().length === 1 && itensW()[0].children[0].children[0].textContent === "Alfa", "DM7 clicar num dia do mapa abre o diário naquele dia");
+            ok(api.$("diarioMapa").hidden === false, "DM7b o mapa continua aberto");
+            /* só um assunto: escala relativa, sem % */
+            api.$("btnDiarioTopo").onclick();
+            api.$("diarioDisc").value = "Direito B"; api.$("diarioDisc").onchange();
+            const legF = procurar(api.$("diarioMapa"), (e) => /di-mp-leg/.test(e.className || ""), [])[0];
+            const totF = procurar(api.$("diarioMapa"), (e) => /di-mp-tot/.test(e.className || ""), []);
+            ok(/melhor dia|best day/.test(legF.children[5].textContent) && totF.every((e) => !/%/.test(e.textContent)), "DM8 com um assunto filtrado a escala é a do melhor dia e os totais não mostram % da meta");
+            const celF = procurar(api.$("diarioMapa"), (e) => /(^|\s)di-mp-cel(\s|$)/.test(e.className || ""), []);
+            ok(!celF.some((c) => c.textContent === "30m") && celF.some((c) => c.textContent === "50m"), "DM8b o mapa só conta o assunto filtrado (Direito B: 50min, sem os 30min de Direito A)");
+            /* qualquer filtro de assunto (ação, busca) também muda a régua */
+            api.$("btnDiarioLimpar").onclick();
+            api.$("diarioTipo").value = "feito"; api.$("diarioTipo").onchange();
+            ok(/melhor dia|best day/.test(procurar(api.$("diarioMapa"), (e) => /di-mp-leg/.test(e.className || ""), [])[0].children[5].textContent), "DM8c filtrar por ação também põe o mapa na escala do melhor dia");
+            api.$("btnDiarioLimpar").onclick();
+            ok(/meta do dia|day goal/.test(procurar(api.$("diarioMapa"), (e) => /di-mp-leg/.test(e.className || ""), [])[0].children[5].textContent) && celM.filter((c) => /di-mp-folga/.test(c.className)).length === 16, "DM8d sem filtro a régua volta a ser a meta, e os sábados e domingos (16 células) ficam marcados como folga");
+            /* semanas */
+            const bsem = Array.from(procurar(api.$("diarioMapa"), (e) => /di-mp-barra/.test(e.className || ""), [])[0].children);
+            ok(bsem.length === 4 && bsem.map((b) => b.textContent).join() === ["4", "8", "12", "26"].map((n) => api.t("ed_mp_semanas_n", { n })).join() && /ativa/.test(bsem[1].className), "DM9 escolha de 4, 8, 12 ou 26 semanas, 8 marcada");
+            bsem[0].onclick();
+            ok(procurar(api.$("diarioMapa"), (e) => /(^|\s)di-mp-sem(\s|$)/.test(e.className || ""), []).length === 4 && api.loja.getItem("eac_diario_mapa_n") === "4", "DM10 4 semanas: a grade encolhe e a escolha fica guardada");
+            api.loja.removeItem("eac_diario_mapa_n");
+            procurar(api.$("diarioMapa"), (e) => /di-mp-barra/.test(e.className || ""), [])[0].children[1].onclick();
+            api.$("btnDiarioMapa").onclick();
+            ok(api.$("diarioMapa").hidden === true, "DM11 o botão fecha o mapa");
+            api.diarioPor([]);
+            api.abrirDiario();
+            api.$("btnDiarioMapa").onclick();
+            ok(api.$("btnDiarioMapa").disabled === true && api.$("diarioMapa").hidden === true, "DM12 sem registros o botão fica desligado e o mapa não abre (mesmo com o estado 'aberto')");
+            api.$("btnDiarioMapa").onclick();
             api.$("dlgDiario").close();
+            api.diarioPor([]);
+          }
+          /* o texto de ajuda longo saiu do topo            api.$("dlgDiario").close();
             api.diarioPor([]);
           }
           /* o texto de ajuda longo saiu do topo (espaço): vive no (?) */
