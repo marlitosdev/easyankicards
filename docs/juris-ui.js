@@ -35,6 +35,8 @@ const JUR_CAMPOS_FORM = { tribunal: "jurTribunal", classe: "jurClasse",
 let jurFiltroTag = "";          /* etiqueta escolhida na lista */
 /* "ler" ou "incluir" — ver jurPintarModo */
 let jurModo = "ler";
+/* abaixo disto não há ementa nem enunciado: só um título ou uma frase */
+const JUR_TEXTO_MINIMO = 120;
 /* os julgados já guardados, enquanto se cria ou edita: recolhidos até a pessoa pedir */
 let jurOutrosAberto = false;
 
@@ -472,6 +474,12 @@ function jurColar() {
   const bruto = String(($("jurColar") || {}).value || "");
   if (!bruto.trim()) { jurReagirBtn("btnJurColar", t("jur_colar_vazio")); return; }
   const a = jurIdentificar(bruto);
+  /* RESPOSTA DA IA QUE VEIO SEM DADO NENHUM: o que ela disse que o julgado é (a frase "identificacao") ainda ajuda a
+   * preencher tribunal, classe e número — vazios apenas, e marcados "a conferir" mais abaixo, porque vêm da memória. */
+  if (a.semConteudo && a.identificacao && typeof jurIdentificarProcesso === "function") {
+    const idp = jurIdentificarProcesso(a.identificacao);
+    ["tribunal", "classe", "numero"].forEach((k) => { if (!a[k] && idp[k]) a[k] = idp[k]; });
+  }
   /* COLAR UM JSON É UM PEDIDO EXPLÍCITO DE PREENCHIMENTO.
    *
    * Para texto solto, a regra é não sobrescrever o que já está escrito:
@@ -479,8 +487,7 @@ function jurColar() {
    * adivinha nada — ele traz os campos nomeados, e quem o colou colou
    * para que substituíssem. Foi o que faltou: a tese continuava com um
    * texto anterior enquanto o JSON trazia a tese certa. */
-  const doJson = String(bruto).trim()[0] === "{"
-    && typeof jurDoJson === "function" && !!jurDoJson(bruto);
+  const doJson = typeof jurDoJson === "function" && !!jurDoJson(bruto);
   /* O QUE A IA LEMBROU entra onde o texto não trouxe nada — e, junto com
    * tudo o que veio no JSON, é CONFERIDO no texto que foi enviado. O que
    * não aparece lá fica marcado "a conferir" (jurVerificarNoTexto). */
@@ -549,7 +556,8 @@ function jurColar() {
      * caixa quando ele não traz ementa nenhuma repetiria o defeito por
      * omissão — o campo do texto viraria o JSON de novo na hora de
      * salvar. Sem ementa, não há ementa: melhor vazio do que código. */
-    $("jurColar").value = a.texto || "";
+    /* resposta SEM conteúdo: o que a pessoa tinha enviado volta para a caixa, para ela completar e pedir de novo */
+    $("jurColar").value = a.semConteudo ? (jurUltimoTextoPedido || "") : (a.texto || "");
   }
   if (a.tags && a.tags.length) jurTagsColadas = a.tags;
   jurPintarTagsForm();
@@ -570,7 +578,7 @@ function jurColar() {
   const av = $("jurColarAviso");
   if (av) {
     av.hidden = false;
-    av.className = "jur-pilula" + (achou.length ? " ok" : " aviso");
+    av.className = "jur-pilula" + (achou.length && !a.semConteudo ? " ok" : " aviso");
     const linhas = [achou.length
       ? t("jur_pilula", { c: pedacos.join(" · ") })
       : t("jur_pilula_nada")];
@@ -584,6 +592,18 @@ function jurColar() {
     }
     if (doJson && a.ondeConferir) {
       linhas.push(t("jur_pilula_onde", { q: a.ondeConferir }));
+    }
+    if (a.semConteudo) {
+      /* a leitura não achou DADO — o que a IA disse sobre isso é o que importa, e vem primeiro */
+      const tipo = String(a.tipoDoTexto || "").toLowerCase();
+      const motivo = t(tipo === "vazio" ? "jur_resp_motivo_vazio"
+        : tipo === "so_identificacao" ? "jur_resp_motivo_ident" : "jur_resp_motivo_outro");
+      linhas.unshift("⚠ " + t("jur_resp_vazia", { motivo }));
+      if (a.identificacao) linhas.push(t("jur_ident_curta", { q: a.identificacao }));
+      (a.conferencia || []).slice(0, 3).forEach((c) => {
+        if (c && c.problema) linhas.push("⚠ " + t("jur_resp_apontou", { q: String(c.problema) }));
+      });
+      linhas.push(t("jur_resp_proximo"));
     }
     av.textContent = linhas.join("\n");
     av.style.whiteSpace = "pre-line";
@@ -874,6 +894,9 @@ async function jurUnirPar(idFica, idVai) {
 async function jurPedirIA() {
   const bruto = String(($("jurColar") || {}).value || "").trim();
   if (!bruto) { await uiAlert(t("jur_prompt_ia_vazio")); return; }
+  /* TEXTO CURTO DEMAIS: a IA só consegue identificar o julgado pelo nome e devolve tudo vazio ("tipo_do_texto": "vazio").
+   * Melhor dizer isso ANTES de a pessoa sair do app e voltar com uma resposta sem nada. */
+  if (bruto.length < JUR_TEXTO_MINIMO && !(await uiConfirm(t("jur_prompt_curto", { n: bruto.length })))) return;
   const campos = {};
   Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
     campos[k] = String(($(JUR_CAMPOS_FORM[k]) || {}).value || "").trim();
@@ -987,6 +1010,8 @@ function jurCplPintarLer() {
 async function jurCompletarPedir(id) {
   const j = jurDe(id || jurCplId);
   if (!j) return;
+  /* SEM EMENTA GUARDADA o pedido vai sem texto — e a IA responde, com razão, "tipo_do_texto: vazio" */
+  if (!String(j.texto || "").trim() && !(await uiConfirm(t("jur_cpl_sem_texto")))) return;
   const txt = jurPromptCompletar(j, jurTopicoAtual ? jurTopicoAtual.nome : "",
     { memoria: ($("chkJurCplMemoria") && $("chkJurCplMemoria").checked) ? "tudo" : "identidade" });
   if (!txt) return;
@@ -1038,6 +1063,11 @@ function jurCompletarLer() {
   }
   const r = jurCompletar(jurCplId, dados);
   const partes = [];
+  /* a IA diz, no próprio JSON, que não recebeu o que ler: isso explica o "nada mudou" e vem antes de tudo */
+  if (/^(vazio|so_identificacao)$/i.test(String(dados.tipo_do_texto || ""))) {
+    partes.push("⚠ " + t("jur_resp_vazia", { motivo: t(/^vazio$/i.test(String(dados.tipo_do_texto)) ? "jur_resp_motivo_vazio" : "jur_resp_motivo_ident") })
+      + "\n" + t("jur_resp_proximo_cpl") + "\n\n");
+  }
   partes.push(r.mudou.length
     ? t("jur_completar_fez", { q: r.mudou.map(jurNomeCampo).join(", ") })
     : (faltaAntes.length ? t("jur_completar_recusou") : t("jur_completar_zero")));

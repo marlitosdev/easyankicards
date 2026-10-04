@@ -210,7 +210,11 @@ function jurDoJson(bruto) {
    * lê depois. */
   const txt = String(bruto || "").trim();
   let o = null;
-  try { o = JSON.parse(txt); } catch (e) { return null; }
+  try { o = JSON.parse(txt); } catch (e) {
+    /* a resposta quase sempre vem com cerca de markdown ou uma frase em volta (jurJsonDoTexto as tira) */
+    o = jurJsonDoTexto(txt);
+    if (!o) return null;
+  }
   if (Array.isArray(o)) o = o[0];
   if (!o || typeof o !== "object") return null;
   const bruto0 = o;
@@ -268,6 +272,9 @@ function jurDoJson(bruto) {
     ondeConferir: pega("onde_conferir"),
     identificacao: pega("identificacao"),
     deMemoria: jurDeMemoria(bruto0),
+    /* o que a IA APONTOU de errado no que já estava guardado (só aviso) */
+    conferencia: Array.isArray(bruto0.conferencia) ? bruto0.conferencia : [],
+    semConteudo: false,
   };
   /* DATA SÓ SE FOR DATA: a caixa da tela é <input type="date"> e só
    * entende aaaa-mm-dd. Um ano solto vai para o campo do ano. */
@@ -292,7 +299,18 @@ function jurDoJson(bruto) {
    * cair no extrator de texto. */
   const mem = achado.deMemoria;
   if (!achado.classe && !achado.numero && !achado.tese
-      && !mem.classe && !mem.numero) return null;
+      && !mem.classe && !mem.numero) {
+    /* UMA RESPOSTA DA IA SEM NENHUM DADO CONTINUA SENDO UMA RESPOSTA DA IA.
+     *
+     * O CASO REAL: a IA recebeu o pedido sem texto, respondeu um JSON perfeito com tipo_do_texto "vazio" e tudo em
+     * branco (só a "identificacao" em frase). Devolver null mandava esse JSON para o extrator de TEXTO, que o tomou
+     * por ementa: o objeto inteiro foi parar na caixa da tese, e a pílula dizia "Detectado: STF · Tema 214" lendo as
+     * chaves. Quem tem o formato da resposta é resposta — e a tela precisa dizer que ela veio vazia, e por quê. */
+    const ehResposta = ["tipo_do_texto", "identificacao", "do_texto", "de_memoria", "conferencia", "onde_conferir"]
+      .some((k) => bruto0[k] !== undefined);
+    if (!ehResposta) return null;
+    achado.semConteudo = true;
+  }
   return achado;
 }
 
@@ -1312,11 +1330,51 @@ function jurEhJson(txt) {
   /* SEM GUARDA DE PRIMEIRO CARACTERE, pelo mesmo motivo de jurDoJson: o
    * JSON.parse já recusa uma ementa, e um número ou uma string solta
    * reprovam no teste de objeto. Guarda que não guarda nada engana quem
-   * lê depois. */
+   * lê depois.
+   * Tolerante à cerca de markdown e à frase de cortesia em volta (jurJsonDoTexto): uma resposta assim era tomada por
+   * ementa e entrava inteira na tese. */
   try {
     const o = JSON.parse(String(txt || "").trim());
     return !!o && typeof o === "object";
-  } catch (e) { return false; }
+  } catch (e) { return !!jurJsonDoTexto(txt); }
+}
+
+/* A IDENTIDADE DE UM JULGADO A PARTIR DE UMA FRASE ("Recurso Extraordinário 582.461/SP do STF (Tema 214…)").
+ * O extrator de ementas põe "Tema" na frente de "RE" (numa ementa de tema, o tema é o assunto); numa frase que NOMEIA o
+ * julgado, o que identifica é o PROCESSO, e o tema é só um apelido dele. Por isso aqui o processo vem primeiro, e os
+ * nomes por extenso viram sigla. Só sugere: quem usa marca "a conferir". */
+const JUR_NOMES_CLASSE = [
+  [/recurso extraordin[aá]rio com agravo/i, "ARE"], [/recurso extraordin[aá]rio/i, "RE"],
+  [/a[cç][aã]o direta de inconstitucionalidade por omiss[aã]o/i, "ADO"], [/a[cç][aã]o direta de inconstitucionalidade/i, "ADI"],
+  [/a[cç][aã]o declarat[oó]ria de constitucionalidade/i, "ADC"],
+  [/argui[cç][aã]o de descumprimento de preceito fundamental/i, "ADPF"],
+  [/recurso especial/i, "REsp"],
+];
+function jurIdentificarProcesso(frase) {
+  const f = String(frase || "");
+  const out = { tribunal: "", classe: "", numero: "", tema: "" };
+  const tri = JUR_TRIBUNAIS.filter((s) => new RegExp("(^|[^A-Za-z])" + s + "([^A-Za-z0-9]|$)").test(f))[0];
+  if (tri) out.tribunal = tri;
+  const num = "\\s*(?:n?[º°.]?\\s*)?(\\d[\\d.\\-/]*)";
+  const limpa = (n) => String(n).replace(/[.\-/]+$/, "").replace(/\/[A-Z]{2}$/, "");
+  /* o PRIMEIRO processo citado vence (numa frase com dois — "ADPF 499 e ADI 5835" — a ordem da lista de siglas não pode
+   * decidir quem é o primeiro): junta os candidatos com a posição e escolhe a menor */
+  const cands = [];
+  JUR_NOMES_CLASSE.forEach(([re, sigla]) => {
+    const m = new RegExp(re.source + num, "i").exec(f);
+    if (m) cands.push({ classe: sigla, numero: limpa(m[1]), idx: m.index });
+  });
+  JUR_CLASSES.filter((c) => !/^(Súmula Vinculante|Súmula|Tema|Repercussão Geral)$/.test(c)).forEach((c) => {
+    const re = new RegExp("(^|[^A-Za-zÀ-ú])" + c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+") + num);
+    const m = re.exec(f);
+    if (m) cands.push({ classe: c, numero: limpa(m[2]), idx: m.index + m[1].length });
+  });
+  cands.sort((a, b) => a.idx - b.idx);
+  if (cands[0]) { out.classe = cands[0].classe; out.numero = cands[0].numero; }
+  const tm = f.match(/Tema\s*n?[º°.]?\s*(\d{1,5})/i);
+  if (tm) out.tema = tm[1];
+  if (!out.tribunal && out.classe && JUR_CASA[out.classe]) out.tribunal = JUR_CASA[out.classe];
+  return out;
 }
 
 function jurRepararJson() {
