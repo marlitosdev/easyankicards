@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -261,6 +261,32 @@ function testes() {
     ok(dom.semana.ini === "2026-09-28" && dom.dias[6].estado === "hoje" && dom.dias[6].cod === "dom", "S5c domingo ainda é a semana que começou na segunda anterior");
     const vazio = api.edSemanaDeEstudo(HOJE, 5, null, null);
     ok(vazio.feitoMin === 0 && vazio.metaMin === 0 && vazio.pct === null && vazio.dias.length === 7 && vazio.porDiaNecessario === 0, "S6 sem diário e sem agenda: tudo zerado, sem quebrar");
+  }
+
+  /* ---- M: O MAPA DE CALOR (D4.3) ---- */
+  {
+    const { api } = carregar();
+    ok(api.edNivelDeCalor(0, 60) === 0 && api.edNivelDeCalor(29, 60) === 1 && api.edNivelDeCalor(30, 60) === 2 && api.edNivelDeCalor(59, 60) === 2 && api.edNivelDeCalor(60, 60) === 3 && api.edNivelDeCalor(74, 60) === 3 && api.edNivelDeCalor(75, 60) === 4 && api.edNivelDeCalor(10, 0) === 1, "M1 níveis pela meta do dia: 0 nada · <50% · até 99% · bateu · 125%+ (e sem régua, qualquer estudo é nível 1)");
+    ok(api.edNivelDeCalor(15, 60, true) === 1 && api.edNivelDeCalor(16, 60, true) === 2 && api.edNivelDeCalor(30, 60, true) === 2 && api.edNivelDeCalor(31, 60, true) === 3 && api.edNivelDeCalor(45, 60, true) === 3 && api.edNivelDeCalor(46, 60, true) === 4, "M1b níveis relativos ao melhor dia: 25% · 50% · 75% · acima");
+    const HOJE = "2026-10-01";
+    const diario = [
+      { d: "2026-10-01", m: 30, a: "feito" }, { d: "2026-09-30", m: 60, a: "feito" }, { d: "2026-09-29", m: 20, a: "feito" },
+      { d: "2026-09-28", m: 45, a: "revisado" }, { d: "2026-09-27", m: 80, a: "feito" },
+      { d: "2026-09-29", m: 500, a: "pendente" }, { d: "?", m: 900, a: "feito" },
+    ];
+    const M = api.edMapaDeCalor(HOJE, 5, diario, { metaMin: 300, semanas: 3 });
+    ok(M.semanas.length === 3 && M.semanas.map((s) => s.ini).join() === "2026-09-28,2026-09-21,2026-09-14" && M.semanas[0].fim === "2026-10-04", "M2 as semanas vêm da mais recente para a mais antiga, de segunda a domingo");
+    ok(M.semanas[0].dias.map((d) => d.cod).join() === "seg,ter,qua,qui,sex,sáb,dom" && M.semanas[0].dias.map((d) => d.estudo).join() === "true,true,true,true,true,false,false", "M2b os dias, na ordem e com os dias de estudo da agenda");
+    ok(M.escala === "meta" && M.metaDiaMin === 60 && M.semanas[0].dias.map((d) => d.nivel).join() === "2,1,3,2,0,0,0", "M3 níveis da semana atual contra a meta do dia (60): " + M.semanas[0].dias.map((d) => d.nivel).join());
+    ok(M.semanas[0].dias.map((d) => d.futuro).join() === "false,false,false,false,true,true,true" && M.semanas[0].dias[3].hoje === true, "M3b hoje marcado; dias seguintes são futuro (sem nível)");
+    ok(api.edMapaDeCalor(HOJE, 5, [{ d: "2026-10-02", m: 100, a: "feito" }], { metaMin: 300, semanas: 1 }).semanas[0].dias[4].nivel === 0, "M3c dia futuro nunca tem nível, mesmo com registro datado nele");
+    ok(M.semanas[1].dias[6].feitoMin === 80 && M.semanas[1].dias[6].nivel === 4 && M.semanas[1].dias[6].estudo === false, "M4 estudar numa folga aparece e conta (domingo, 80 min, nível 4)");
+    ok(M.semanas[0].totalMin === 155 && M.semanas[0].pct === 52 && M.semanas[1].totalMin === 80 && M.semanas[1].pct === 27 && M.semanas[2].totalMin === 0 && M.semanas[2].pct === 0, "M5 total e % da semana contra a meta (155/300 = 52%); 'desmarcou' e data '?' não entram");
+    const R = api.edMapaDeCalor(HOJE, 5, diario, { metaMin: 300, semanas: 3, relativa: true });
+    ok(R.escala === "relativa" && R.maxDiaMin === 80 && R.metaDiaMin === 0 && R.semanas[0].pct === null && R.semanas[1].dias[6].nivel === 4 && R.semanas[0].dias[2].nivel === 3 && R.semanas[0].dias[0].nivel === 3 && R.semanas[0].dias[3].nivel === 2 && R.semanas[0].dias[1].nivel === 1, "M6 escala relativa (o melhor dia do período é a régua; sem %): " + R.semanas[0].dias.map((d) => d.nivel).join());
+    ok(api.edMapaDeCalor(HOJE, 5, diario, { metaMin: 0, semanas: 3 }).escala === "relativa", "M6b sem meta a escala é relativa sozinha");
+    ok(api.edMapaDeCalor(HOJE, 5, diario, { semanas: 0 }).semanas.length === 8 && api.edMapaDeCalor(HOJE, 5, diario, { semanas: 999 }).semanas.length === 52 && api.edMapaDeCalor(HOJE, 5, null, null).semanas.length === 8, "M7 número de semanas: padrão 8, no máximo 52, e aguenta diário vazio");
+    ok(api.edMapaDeCalor("2026-10-04", 5, [], { semanas: 1 }).semanas[0].ini === "2026-09-28" && api.edMapaDeCalor(HOJE, 6, [], { metaMin: 360, semanas: 1 }).metaDiaMin === 60, "M8 domingo ainda é a semana de segunda; com 6 dias a meta do dia divide por 6");
   }
 
   /* ---- L10: colar plano corrigido tem de dizer o que se PERDE ----

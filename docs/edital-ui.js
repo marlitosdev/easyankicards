@@ -1600,6 +1600,98 @@ function diarioPintarSemana() {
   cx.append(edSemanaCelulas(S, (d) => diarioIrParaDia(d.iso)));
 }
 
+/* ---- D4.3: O MAPA DE CALOR — semanas × dias da agenda ----------------------------------------------------------- */
+let diarioMapaAberto = false;
+let diarioMapaSemanas = 8;
+const DIARIO_MAPA_SEMANAS = [4, 8, 12, 26];
+
+/* o mapa mostra o que está nos filtros de ASSUNTO (disciplina, edital, ação, busca) — não o período, que é o que o próprio
+ * mapa escolhe. Com algum desses filtros a meta da semana (que é de tudo) não serve de régua: a escala vira a do seu
+ * melhor dia dentro do que foi filtrado, e o mapa diz isso. */
+function diarioMapaFiltrado() {
+  return !!(diarioBusca.trim() || diarioDisc || diarioCc || diarioTipo);
+}
+
+function diarioPintarMapa() {
+  const bt = $("btnDiarioMapa");
+  if (bt) {
+    bt.textContent = t(diarioMapaAberto ? "ed_mp_fechar" : "ed_mp_btn");
+    bt.disabled = !edDiario.length;
+  }
+  const cx = $("diarioMapa");
+  if (!cx) return;
+  cx.hidden = !diarioMapaAberto || !edDiario.length;
+  cx.innerHTML = "";
+  if (cx.hidden) return;
+  const itens = diarioFiltrar(edDiario, { dias: 0, disc: diarioDisc, cc: diarioCc, tipo: diarioTipo, q: diarioBusca }).map((i) => i.x);
+  const hoje = hojeISO();
+  const S = typeof hubSemanaDeEstudo === "function" ? hubSemanaDeEstudo(hoje) : null;
+  const filtrado = diarioMapaFiltrado();
+  const M = edMapaDeCalor(hoje, S ? S.diasDeEstudo.length : 5, itens, { metaMin: S ? S.metaMin : 0, semanas: diarioMapaSemanas, relativa: filtrado });
+
+  /* quantas semanas */
+  const barra = document.createElement("div");
+  barra.className = "di-mp-barra";
+  DIARIO_MAPA_SEMANAS.forEach((n) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "di-per" + (n === diarioMapaSemanas ? " ativa" : "");
+    b.textContent = t("ed_mp_semanas_n", { n });
+    b.onclick = () => {
+      diarioMapaSemanas = n;
+      try { localStorage.setItem("eac_diario_mapa_n", String(n)); } catch (e) {}
+      diarioPintarMapa();
+    };
+    barra.append(b);
+  });
+  cx.append(barra);
+
+  /* a grade: cabeçalho (dias na ordem da agenda) + uma linha por semana, da mais recente para a mais antiga */
+  const grade = document.createElement("div");
+  grade.className = "di-mp-grade";
+  const cab = (txt, cls) => { const e = document.createElement("span"); e.className = "di-mp-cab" + (cls ? " " + cls : ""); e.textContent = txt; grade.append(e); };
+  cab("");
+  M.semanas[0].dias.forEach((d) => cab(d.cod, d.estudo ? "" : "di-mp-cab-folga"));
+  cab(t("ed_mp_total"));
+  M.semanas.forEach((s) => {
+    const lab = document.createElement("span");
+    lab.className = "di-mp-sem"; lab.textContent = s.ini.slice(8) + "/" + s.ini.slice(5, 7);
+    lab.title = s.ini + " → " + s.fim;
+    grade.append(lab);
+    s.dias.forEach((d) => {
+      const c = document.createElement("button");
+      c.type = "button";
+      c.className = "di-mp-cel di-mp-n" + d.nivel
+        + (d.estudo ? "" : " di-mp-folga")
+        + (d.hoje ? " di-mp-hoje" : "")
+        + (d.futuro ? " di-mp-futuro" : "");
+      c.textContent = d.futuro ? "" : (d.feitoMin ? (d.feitoMin < 60 ? d.feitoMin + "m" : horasTexto(d.feitoMin)) : "·");
+      const quando = d.cod + " " + d.iso.slice(8) + "/" + d.iso.slice(5, 7);
+      c.title = d.futuro ? quando
+        : M.escala === "meta" && d.estudo
+          ? t("ed_mp_cel_meta", { q: quando, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada"), m: horasTexto(M.metaDiaMin) })
+          : t("ed_mp_cel", { q: quando, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada") });
+      if (!d.futuro) c.onclick = () => diarioIrParaDia(d.iso);
+      grade.append(c);
+    });
+    const tot = document.createElement("span");
+    tot.className = "di-mp-tot";
+    tot.textContent = horasTexto(s.totalMin) + (s.pct !== null ? " · " + s.pct + "%" : "");
+    grade.append(tot);
+  });
+  cx.append(grade);
+
+  /* a legenda diz o que a cor mede */
+  const leg = document.createElement("div");
+  leg.className = "di-mp-leg";
+  const sw = (n) => { const e = document.createElement("span"); e.className = "di-mp-sw di-mp-n" + n; return e; };
+  leg.append(sw(0), sw(1), sw(2), sw(3), sw(4));
+  const tx = document.createElement("span");
+  tx.textContent = M.escala === "meta" ? t("ed_mp_leg_meta", { m: horasTexto(M.metaDiaMin) }) : t("ed_mp_leg_rel", { max: horasTexto(M.maxDiaMin) });
+  leg.append(tx);
+  cx.append(leg);
+}
+
 function diarioPintarPeriodos() {
   const cx = $("diarioPeriodos");
   if (!cx) return;
@@ -1692,6 +1784,7 @@ function abrirDiario() {
     g.m += x.m || 0; g.n++;
   });
   diarioPintarSaidas(todos);
+  diarioPintarMapa();
   const visiveis = todos.slice(0, diarioMostrar);
   let diaAtual = null;
   visiveis.forEach(({ x, idx }) => {
@@ -4279,6 +4372,8 @@ function edIniciar() {
     try { baixarArquivo(diarioCsv(diarioUltimo), "eac-diario-" + hojeISO() + ".csv", "text/csv;charset=utf-8"); toast(t("ed_diario_csv_ok")); }
     catch (e) { uiAlert(t("toast_copy_fail")); }
   };
+  try { const nm = Number(localStorage.getItem("eac_diario_mapa_n")); if (DIARIO_MAPA_SEMANAS.indexOf(nm) >= 0) diarioMapaSemanas = nm; } catch (e) {}
+  if ($("btnDiarioMapa")) $("btnDiarioMapa").onclick = () => { diarioMapaAberto = !diarioMapaAberto; diarioPintarMapa(); };
   if ($("btnDiarioPorDisc")) $("btnDiarioPorDisc").onclick = () => { diarioPorDiscAberto = !diarioPorDiscAberto; diarioPintarSaidas(diarioUltimo); };
   if ($("btnDiarioLimpar")) $("btnDiarioLimpar").onclick = () => { diarioLimparFiltros(); diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
   try { diarioAmplo = localStorage.getItem("eac_diario_amplo") === "1"; } catch (e) { diarioAmplo = false; }

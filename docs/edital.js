@@ -1790,6 +1790,59 @@ function edSemanaDeEstudo(hoje, diasDeEstudo, diario, previstoPorDia, metaMin) {
 }
 
 /* ------------------------------------------------------------------
+ * O MAPA DE CALOR — as últimas N semanas (da mais recente para a mais antiga), uma linha por semana de segunda a
+ * domingo, nos MESMOS dias de estudo da agenda. Cada dia tem o tempo feito e um nível de 0 a 4:
+ *   · escala "meta": quanto do que a agenda pede POR DIA (meta da semana ÷ dias de estudo): 0 nada · 1 menos da metade ·
+ *     2 até 99% · 3 bateu (100% a 124%) · 4 125% ou mais;
+ *   · escala "relativa" (sem meta, ou quando se olha só um assunto): em relação ao melhor dia do período: até 25%, 50%,
+ *     75% e acima.
+ * Dia futuro não tem nível. Semanas passadas comparam com a meta de HOJE (não há histórico de metas). "pendente" não conta.
+ * ------------------------------------------------------------------ */
+function edNivelDeCalor(min, ref, relativa) {
+  if (!min || min <= 0) return 0;
+  if (!ref) return 1;
+  const r = min / ref;
+  if (relativa) return r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4;
+  return r < 0.5 ? 1 : r < 1 ? 2 : r < 1.25 ? 3 : 4;
+}
+function edMapaDeCalor(hoje, diasDeEstudo, diario, opc) {
+  const o = opc || {};
+  const n = Math.max(1, Math.min(52, Number(o.semanas) || 8));
+  const estudo = edDiasDeEstudo(diasDeEstudo);
+  const porDia = {};
+  (diario || []).forEach((x) => {
+    if (!x || !x.d || x.d === "?" || x.a === "pendente") return;
+    porDia[x.d] = (porDia[x.d] || 0) + (Number(x.m) || 0);
+  });
+  const metaMin = Math.max(0, Number(o.metaMin) || 0);
+  const metaDia = estudo.length ? metaMin / estudo.length : 0;
+  const relativa = !!o.relativa || !metaDia;
+  const ini0 = new Date(edSemanaCalendario(hoje).ini + "T00:00:00");
+  const iso = (x) => x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+  const semanas = [];
+  let maxDia = 0;
+  for (let k = 0; k < n; k++) {
+    const ini = new Date(ini0); ini.setDate(ini0.getDate() - 7 * k);
+    const dias = [];
+    for (let j = 0; j < 7; j++) {
+      const d = new Date(ini); d.setDate(ini.getDate() + j);
+      const dt = iso(d), cod = DIAS_SEMANA[d.getDay()];
+      const feito = porDia[dt] || 0;
+      if (feito > maxDia) maxDia = feito;
+      dias.push({ cod, iso: dt, estudo: estudo.indexOf(cod) >= 0, feitoMin: feito, nivel: 0, hoje: dt === hoje, futuro: dt > hoje });
+    }
+    const fim = new Date(ini); fim.setDate(ini.getDate() + 6);
+    semanas.push({ ini: iso(ini), fim: iso(fim), dias, totalMin: dias.reduce((a, d) => a + d.feitoMin, 0), pct: null });
+  }
+  const ref = relativa ? maxDia : metaDia;
+  semanas.forEach((s) => {
+    s.dias.forEach((d) => { d.nivel = d.futuro ? 0 : edNivelDeCalor(d.feitoMin, ref, relativa); });
+    s.pct = relativa ? null : Math.round((s.totalMin / metaMin) * 100);
+  });
+  return { semanas, escala: relativa ? "relativa" : "meta", metaMin: relativa ? 0 : metaMin, metaDiaMin: relativa ? 0 : Math.round(metaDia), maxDiaMin: maxDia, diasDeEstudo: estudo };
+}
+
+/* ------------------------------------------------------------------
  * PANORAMA POR DISCIPLINA
  * A pergunta que o painel não respondia: "qual matéria pesada eu ainda não
  * toquei?". Progresso médio esconde isso — 40% do plano feito pode ser
