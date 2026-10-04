@@ -1510,6 +1510,96 @@ function diarioTituloCopia() {
   return t("ed_diario_tit") + " — " + ($("diarioResumo") ? $("diarioResumo").textContent : "");
 }
 
+/* ---- D4.2: A SEMANA DE ESTUDO À VISTA — meta, falta, e os dias da agenda -------------------------------------------- */
+
+/* uma frase do que falta: quanto por dia nos dias que restam, ou que já não restam dias, ou que a meta foi batida */
+function edSemanaDicaTexto(S) {
+  if (!S || !S.metaMin) return "";
+  if (S.faltaMin <= 0) return t("ed_sem_batida");
+  if (!S.diasRestantes) return t("ed_sem_sem_dia", { falta: horasTexto(S.faltaMin) });
+  return t("ed_sem_dica", { h: horasTexto(S.porDiaNecessario), n: S.diasRestantes, dias: S.restantes.join(", ") });
+}
+
+/* os 7 dias, na ordem e com os dias de estudo da agenda: o que se fez, o que a agenda pedia, e quem é folga.
+ * Clicar num dia chama aoClicar(dia). A cor nunca vai sozinha: o tempo está escrito em cada célula. */
+function edSemanaCelulas(S, aoClicar) {
+  const cx = document.createElement("div");
+  cx.className = "di-sem-cels";
+  S.dias.forEach((d) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    const meta = d.estudo && d.previstoMin > 0;
+    b.className = "di-sem-dia"
+      + (d.estado === "hoje" ? " di-sem-hoje" : "")
+      + (!d.estudo ? " di-sem-folga" : "")
+      + (meta && d.feitoMin >= d.previstoMin ? " di-sem-ok" : "")
+      + (meta && d.feitoMin < d.previstoMin && d.estado === "passado" ? " di-sem-falta" : "")
+      + (!d.estudo && d.feitoMin > 0 ? " di-sem-extra" : "");
+    const cod = document.createElement("span");
+    cod.className = "di-sem-cod"; cod.textContent = d.cod;
+    const min = document.createElement("span");
+    min.className = "di-sem-min";
+    min.textContent = (meta && d.feitoMin >= d.previstoMin ? "✓ " : "") + (d.feitoMin ? horasTexto(d.feitoMin) : "–");
+    b.append(cod, min);
+    if (meta) {
+      const pv = document.createElement("span");
+      pv.className = "di-sem-prev"; pv.textContent = t("ed_sem_de", { p: horasTexto(d.previstoMin) });
+      b.append(pv);
+    }
+    b.title = t(d.estudo ? "ed_sem_dia_tip" : "ed_sem_folga_tip", { dia: d.cod, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada"), p: horasTexto(d.previstoMin) });
+    if (aoClicar) b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aoClicar(d); };
+    cx.append(b);
+  });
+  return cx;
+}
+
+/* abrir o diário só com os registros de UM dia (vindo da faixa, do mapa ou da agenda) */
+function diarioIrParaDia(iso) {
+  diarioLimparFiltros();
+  diarioDe = iso; diarioAte = iso;
+  diarioPeriodo = 0;
+  diarioMostrar = DIARIO_PAGINA;
+  abrirDiario();
+}
+
+/* a faixa "Meta da semana" no alto do diário: texto, barra, a frase do que falta e os 7 dias */
+function diarioPintarSemana() {
+  const cx = $("diarioSemana");
+  if (!cx) return;
+  cx.innerHTML = "";
+  if (typeof hubSemanaDeEstudo !== "function") { cx.hidden = true; return; }
+  const S = hubSemanaDeEstudo();
+  cx.hidden = false;
+  const lin = document.createElement("div");
+  lin.className = "di-sem-lin";
+  const tit = document.createElement("strong");
+  tit.className = "di-sem-tit"; tit.textContent = t("ed_sem_tit");
+  tit.title = t("ed_sem_tit_aj");
+  const res = document.createElement("span");
+  res.className = "di-sem-res";
+  res.textContent = S.metaMin
+    ? t("ed_sem_resumo", { f: horasTexto(S.feitoMin), m: horasTexto(S.metaMin), pct: S.pct, falta: horasTexto(S.faltaMin) })
+    : t("ed_sem_resumo_f", { f: horasTexto(S.feitoMin) });
+  lin.append(tit, res);
+  cx.append(lin);
+  if (S.metaMin) {
+    const barra = document.createElement("div");
+    barra.className = "ag-barra";
+    const fill = document.createElement("div");
+    fill.className = "ag-fill" + (S.pct >= 100 ? " cheio" : (S.pct >= 50 ? " meio" : ""));
+    fill.style.width = Math.min(100, S.pct) + "%";
+    barra.append(fill);
+    cx.append(barra);
+  }
+  const dica = edSemanaDicaTexto(S);
+  if (dica) {
+    const d = document.createElement("div");
+    d.className = "di-sem-dica"; d.textContent = dica;
+    cx.append(d);
+  }
+  cx.append(edSemanaCelulas(S, (d) => diarioIrParaDia(d.iso)));
+}
+
 function diarioPintarPeriodos() {
   const cx = $("diarioPeriodos");
   if (!cx) return;
@@ -1569,6 +1659,7 @@ function diarioAplicarAmplo() {
 function abrirDiario() {
   const lista = $("diarioLista");
   lista.innerHTML = "";
+  diarioPintarSemana();
   diarioPintarPeriodos();
   diarioPintarFiltros();
   diarioAplicarAmplo();

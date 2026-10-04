@@ -2542,6 +2542,50 @@ async function testes() {
             api.loja.setItem("eac_estudo_dias", "6");
             ok(api.hubSemanaDeEstudo(hojeL).diasDeEstudo.join() === api.edDiasDeEstudo(6).join(), "DS4 mudar 'dias/semana' na agenda muda os dias de estudo da semana do diário (6 = com sábado)");
             api.loja.removeItem("eac_estudo_dias");
+            /* D4.2: a faixa da semana no diário e as células na agenda */
+            const procurar = (el, pred, acc) => { Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); procurar(c, pred, acc); }); return acc; };
+            const cels = (raiz) => procurar(raiz, (e) => /(^|\s)di-sem-dia(\s|$)/.test(e.className || ""), []);
+            api.diarioPor([
+              { d: hojeL, c: "x", disc: "Direito A", n: "Alfa", a: "feito", cc: "X", m: 30 },
+              { d: deslocar(semL.ini, -3), c: "y", disc: "Direito B", n: "Beta", a: "feito", cc: "X", m: 25 },
+              { d: deslocar(hojeL, 1), c: "z", disc: "Direito B", n: "Delta", a: "feito", cc: "X", m: 10 },
+            ]);
+            api.$("btnDiarioTopo").onclick();
+            const fx = api.$("diarioSemana");
+            ok(fx.hidden === false && cels(fx).length === 7 && cels(fx).map((c) => c.children[0].textContent).join() === "seg,ter,qua,qui,sex,sáb,dom", "DW1 a faixa da semana mostra os 7 dias, de segunda a domingo, como a agenda");
+            ok(/Meta da semana|Week goal/.test(procurar(fx, (e) => /di-sem-tit/.test(e.className || ""), [])[0].textContent) && cels(fx).filter((c) => /di-sem-hoje/.test(c.className)).length === 1, "DW2 título da faixa e UM dia marcado como hoje");
+            ok(cels(fx).filter((c) => /di-sem-folga/.test(c.className)).length === 2 && /di-sem-folga/.test(cels(fx)[5].className) && /di-sem-folga/.test(cels(fx)[6].className), "DW3 sábado e domingo são folga com os 5 dias da agenda");
+            const bHoje = cels(fx).find((c) => /di-sem-hoje/.test(c.className));
+            ok(bHoje.title.length > 15 && /30min/.test(bHoje.children[1].textContent), "DW4 a célula de hoje diz o que foi feito (30min) e tem dica");
+            /* um filtro que estava ligado não pode esconder o dia clicado */
+            api.$("diarioDisc").value = "Direito B"; api.$("diarioDisc").onchange();
+            bHoje.onclick();
+            const itensW = () => (api.$("diarioLista").children || []).filter((c) => /diario-item/.test(c.className || ""));
+            ok(itensW().length === 1 && itensW()[0].children[0].children[0].textContent === "Alfa" && Array.from(api.$("diarioPeriodos").children).every((b) => !/ativa/.test(b.className)), "DW5 clicar num dia abre o diário só com os registros dele");
+            /* meta passada de 100%: a barra enche e para */
+            api.diarioPor([{ d: hojeL, c: "x", disc: "Direito A", n: "Alfa", a: "feito", cc: "X", m: 99999 }]);
+            api.$("btnDiarioTopo").onclick();
+            const enche = procurar(api.$("diarioSemana"), (e) => /ag-fill/.test(e.className || ""), [])[0];
+            ok(!enche || enche.style.width === "100%", "DW5b com mais do que a meta, a barra para em 100%: " + (enche && enche.style.width));
+            /* os textos do que falta */
+            const SD = api.edSemanaDeEstudo("2026-10-01", 5, [{ d: "2026-09-28", m: 60, a: "feito" }, { d: "2026-09-30", m: 30, a: "feito" }, { d: "2026-10-03", m: 45, a: "feito" }], { seg: 60, ter: 60, qua: 60, qui: 60, sex: 60 });
+            ok(/83min|1h23/.test(api.edSemanaDicaTexto(SD)) && /qui, sex/.test(api.edSemanaDicaTexto(SD)) && /2/.test(api.edSemanaDicaTexto(SD)), "DW6 a frase do que falta: quanto por dia, quantos dias e quais: " + api.edSemanaDicaTexto(SD));
+            const SB = api.edSemanaDeEstudo("2026-10-01", 5, [{ d: "2026-09-28", m: 400, a: "feito" }], { seg: 60, ter: 60, qua: 60, qui: 60, sex: 60 });
+            const SN = api.edSemanaDeEstudo("2026-10-03", 5, [{ d: "2026-09-28", m: 100, a: "feito" }], { seg: 60, ter: 60, qua: 60, qui: 60, sex: 60 });
+            ok(api.edSemanaDicaTexto(SB) === api.t("ed_sem_batida") && /^Não restam dias de estudo até domingo/.test(api.edSemanaDicaTexto(SN)) && api.edSemanaDicaTexto(api.edSemanaDeEstudo("2026-10-01", 5, [], {})) === "", "DW7 meta batida, sem dia restante e sem meta têm frase própria (a última, vazia)");
+            ok(![SD, SB, SN].some((s) => /esta semana|this week/i.test(api.edSemanaDicaTexto(s))), "DW7b a frase não repete 'esta semana' (a agenda já diz; nenhum bloco repete o mesmo dado)");
+            const CS = cels({ children: [api.edSemanaCelulas(SD, null)] });
+            const clsDe = (i) => CS[i].className;
+            ok(/di-sem-ok/.test(clsDe(0)) && !/di-sem-ok/.test(clsDe(2)) && /di-sem-falta/.test(clsDe(1)) && /di-sem-falta/.test(clsDe(2)) && !/di-sem-falta|di-sem-ok/.test(clsDe(3)) && /di-sem-hoje/.test(clsDe(3)) && /di-sem-extra/.test(clsDe(5)) && /di-sem-folga/.test(clsDe(6)) && !/di-sem-extra/.test(clsDe(6)), "DW8 as células: dias passados que não fecharam o previsto, hoje, extra na folga (sábado com estudo), folga vazia");
+            ok(/✓/.test(CS[0].children[1].textContent) && CS[0].children[2].textContent.indexOf("1h") >= 0 && CS[5].children.length === 2, "DW9 dia que bateu o previsto leva ✓ e o 'de 1h'; folga não mostra previsto");
+            /* agenda */
+            api.hubPintarAgenda();
+            const ca = cels(api.$("edAgendaTopo"));
+            ok(ca.length === 7 && ca.map((c) => c.children[0].textContent).join() === "seg,ter,qua,qui,sex,sáb,dom", "DW10 a agenda também mostra os 7 dias sob o medidor");
+            api.$("dlgDiario").close();
+            ca.find((c) => /di-sem-hoje/.test(c.className)).onclick();
+            ok(api.$("dlgDiario").open === true && itensW().length === 1, "DW11 clicar num dia da agenda abre o diário naquele dia");
+            api.$("dlgDiario").close();
             api.diarioPor([]);
           }
           /* o texto de ajuda longo saiu do topo (espaço): vive no (?) */
