@@ -2649,7 +2649,27 @@ async function testes() {
           api.diarioPor([]);
         }
 
+        /* OPT: as reescritas de rotina do cabeçalho e do peso não apagam a escolha das optativas (X1) */
+        {
+          const OPT = ["# ISS | prova: " + emDias(131) + " | horas: 10 | previsto: 2027-03..2027-06 | escolhas: Língua=Espanhol",
+            "@ Penal :: 5", "+ a :: 3", "@ Espanhol :: 2 | escolha: Língua", "+ b :: 3", "@ Inglês :: 2 | escolha: Língua", "+ c :: 3"].join("\n");
+          api.$("editalTexto").value = OPT;
+          api.$("edProva").value = emDias(131);
+          api.edRender();
+          api.edMudarHoras(25);
+          const t1 = api.$("editalTexto").value;
+          ok(/horas: 25/.test(t1) && /escolhas: Língua=Espanhol/.test(t1) && /previsto: 2027-03..2027-06/.test(t1), "OPT1 mudar as horas mantém a escolha das optativas e a data prevista no cabeçalho: " + t1.split("\n")[0]);
+          const dEsp = api.lerEdital(t1).disciplinas[1];
+          api.edMudarPeso(dEsp, 4);
+          const t2 = api.$("editalTexto").value.split("\n");
+          ok(/^@ Espanhol :: 4 \| escolha: Língua$/.test(t2[t2.findIndex((l) => /^@ Espanhol/.test(l))]) && api.lerEdital(api.$("editalTexto").value).disciplinas[1].escolha === "Língua", "OPT2 mudar o peso de uma optativa mantém o '| escolha:' na linha: " + t2.join(" / "));
+          ok(api.lerEdital(api.$("editalTexto").value).disciplinas[2].inativa === true, "OPT3 depois das duas reescritas o Inglês continua inativo");
+        }
         api.edApagar(eN.id);
+        api.diarioPor([]);
+      }
+
+      /* AO — o modal de registro completo.        api.edApagar(eN.id);
         api.diarioPor([]);
       }
 
