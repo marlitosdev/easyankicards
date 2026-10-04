@@ -1703,6 +1703,17 @@ function edMetaDeRamos(plano, diario, opc) {
  * ------------------------------------------------------------------ */
 const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
+/* OS DIAS DA AGENDA, numa fonte só: segunda a sexta por padrão; sábado e domingo entram só quando a pessoa pede mais de
+ * cinco dias. Devolve os índices de Date.getDay() (0 = domingo) na ordem em que a agenda os preenche. */
+function edOrdemDiasEstudo(n) {
+  const dias = Math.max(1, Math.min(7, Number(n) || 5));
+  return [1, 2, 3, 4, 5, 6, 0].slice(0, dias);
+}
+/* os mesmos dias, pelo nome ("seg", "ter"…), como cada linha da agenda traz em i.dia */
+function edDiasDeEstudo(n) {
+  return edOrdemDiasEstudo(n).map((k) => DIAS_SEMANA[k]);
+}
+
 function agendar(itens, cfg) {
   const dias = Math.max(1, Math.min(7, Number(cfg && cfg.dias) || 5));
   const inicio = (cfg && cfg.inicio) || "19:00";
@@ -1710,7 +1721,7 @@ function agendar(itens, cfg) {
   const porDia = Math.ceil(itens.reduce((a, i) => a + i.minutos, 0) / dias);
   /* estuda-se de segunda a sexta por padrão; sábado e domingo entram só
      quando a pessoa pede mais de cinco dias */
-  const ordemDias = [1, 2, 3, 4, 5, 6, 0].slice(0, dias);
+  const ordemDias = edOrdemDiasEstudo(dias);
   let d = 0, usado = 0;
   itens.forEach((i) => {
     if (usado && usado + i.minutos > porDia && d < dias - 1) { d++; usado = 0; }
@@ -1721,6 +1732,61 @@ function agendar(itens, cfg) {
     usado += i.minutos;
   });
   return itens;
+}
+
+/* ------------------------------------------------------------------
+ * A SEMANA DE ESTUDO — a mesma da agenda: segunda a domingo, e só os dias de estudo da agenda (seg–sex por padrão) são
+ * "dias de meta". Um dia fora da agenda é FOLGA; se a pessoa estudar nele mesmo assim, o tempo aparece e conta (extra),
+ * nunca some.
+ *   previstoPorDia: { seg: minutos, ter: … } — o que a agenda pôs em cada dia (ver edPrevistoPorDia);
+ *   metaMin: a meta da semana (por padrão, a soma do previsto).
+ * Devolve cada dia ({cod, iso, estudo, estado: passado|hoje|futuro, previstoMin, feitoMin, registros}) e os totais
+ * ({metaMin, feitoMin, pct, faltaMin, metaDiaMin, diasRestantes, restantes, porDiaNecessario}).
+ * "pendente" (desmarcou) não é estudo. Pura: não lê a tela nem o relógio (hoje vem de fora).
+ * ------------------------------------------------------------------ */
+function edPrevistoPorDia(linhas) {
+  const out = {};
+  (linhas || []).forEach((i) => { if (i && i.dia) out[i.dia] = (out[i.dia] || 0) + (Number(i.minutos) || 0); });
+  return out;
+}
+function edSemanaDeEstudo(hoje, diasDeEstudo, diario, previstoPorDia, metaMin) {
+  const sem = edSemanaCalendario(hoje);
+  const estudo = edDiasDeEstudo(diasDeEstudo);
+  const prev = previstoPorDia || {};
+  const ini = new Date(sem.ini + "T00:00:00");
+  const iso = (x) => x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+  const porDia = {};
+  (diario || []).forEach((x) => {
+    if (!x || !x.d || x.d === "?" || x.a === "pendente" || x.d < sem.ini || x.d > sem.fim) return;
+    const g = porDia[x.d] || (porDia[x.d] = { m: 0, n: 0 });
+    g.m += Number(x.m) || 0; g.n++;
+  });
+  const dias = [];
+  for (let k = 0; k < 7; k++) {
+    const d = new Date(ini); d.setDate(ini.getDate() + k);
+    const cod = DIAS_SEMANA[d.getDay()], dt = iso(d);
+    const e = estudo.indexOf(cod) >= 0;
+    dias.push({
+      cod, iso: dt, estudo: e,
+      estado: dt === hoje ? "hoje" : dt < hoje ? "passado" : "futuro",
+      previstoMin: e ? (prev[cod] || 0) : 0,
+      feitoMin: (porDia[dt] || { m: 0 }).m, registros: (porDia[dt] || { n: 0 }).n,
+    });
+  }
+  const previstoTotal = dias.reduce((a, d) => a + d.previstoMin, 0);
+  const meta = metaMin === undefined || metaMin === null ? previstoTotal : Math.max(0, Number(metaMin) || 0);
+  const feito = dias.reduce((a, d) => a + d.feitoMin, 0);
+  const falta = Math.max(0, meta - feito);
+  const restantes = dias.filter((d) => d.estudo && d.iso >= hoje).map((d) => d.cod);
+  return {
+    semana: sem, dias, diasDeEstudo: estudo, metaMin: meta, feitoMin: feito,
+    pct: meta ? Math.round((feito / meta) * 100) : null,
+    faltaMin: falta,
+    metaDiaMin: estudo.length ? Math.round(meta / estudo.length) : 0,
+    diasRestantes: restantes.length, restantes,
+    /* quanto por dia, nos dias de estudo que ainda restam (hoje incluso), para fechar a meta */
+    porDiaNecessario: falta > 0 && restantes.length ? Math.ceil(falta / restantes.length) : (falta > 0 ? null : 0),
+  };
 }
 
 /* ------------------------------------------------------------------

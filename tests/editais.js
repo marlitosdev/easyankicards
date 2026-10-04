@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -214,6 +214,53 @@ function testes() {
     const dias2 = new Set(a2.map((i) => i.dia)).size;
     ok(dias2 <= dias5,
        `L9d reduzir dias/semana devia concentrar, nao espalhar (${dias2} vs ${dias5})`);
+  }
+
+  /* ---- S: A SEMANA DE ESTUDO (D4.1) — os mesmos dias da agenda, segunda a domingo ---- */
+  {
+    const { api } = carregar();
+    ok(api.edDiasDeEstudo(5).join() === "seg,ter,qua,qui,sex" && api.edDiasDeEstudo(6).join() === "seg,ter,qua,qui,sex,sáb" && api.edDiasDeEstudo(7).join() === "seg,ter,qua,qui,sex,sáb,dom" && api.edDiasDeEstudo(1).join() === "seg", "S1 os dias de estudo: 5 = segunda a sexta; sábado e domingo só com 6 e 7");
+    ok(api.edDiasDeEstudo().join() === api.edDiasDeEstudo(5).join() && api.edDiasDeEstudo(99).length === 7 && api.edDiasDeEstudo(-3).length === 1, "S1b sem número vale 5; os extremos são presos entre 1 e 7");
+    const it = [{ dia: "seg", minutos: 40 }, { dia: "seg", minutos: 20 }, { dia: "qua", minutos: 30 }, { minutos: 99 }];
+    const pv = api.edPrevistoPorDia(it);
+    ok(pv.seg === 60 && pv.qua === 30 && Object.keys(pv).length === 2 && api.edPrevistoPorDia(null).seg === undefined, "S2 o previsto por dia soma o que a agenda pôs em cada dia (linha sem dia não conta)");
+    /* a agenda de verdade só usa os dias de estudo */
+    api.edCarregarLista();
+    api.edCriar("TCE", CAB("TCE", "2026-09-10") + CORPO);
+    const itens = api.edTopicosAtivos({ hoje: "2026-08-16" }).slice(0, 8);
+    api.agendar(itens, { dias: 3, inicio: "19:00" });
+    ok(itens.every((i) => api.edDiasDeEstudo(3).indexOf(i.dia) >= 0), "S2b agendar() e edDiasDeEstudo() concordam: " + itens.map((i) => i.dia).join());
+
+    /* quinta, 01/10/2026: a semana é 28/09 a 04/10 */
+    const HOJE = "2026-10-01";
+    const diario = [
+      { d: "2026-09-28", m: 40, a: "feito" }, { d: "2026-09-28", m: 20, a: "revisado" },
+      { d: "2026-09-30", m: 30, a: "feito" },
+      { d: "2026-10-03", m: 45, a: "feito" },
+      { d: "2026-09-29", m: 50, a: "pendente" },
+      { d: "2026-09-27", m: 100, a: "feito" },
+      { d: "?", m: 70, a: "feito" },
+      { d: "2026-10-05", m: 80, a: "feito" },
+    ];
+    const prev = { seg: 60, ter: 60, qua: 60, qui: 60, sex: 60 };
+    const S = api.edSemanaDeEstudo(HOJE, 5, diario, prev);
+    ok(S.semana.ini === "2026-09-28" && S.semana.fim === "2026-10-04" && S.dias.map((d) => d.cod).join() === "seg,ter,qua,qui,sex,sáb,dom", "S3 a semana vai de segunda a domingo, nesta ordem: " + S.dias.map((d) => d.cod + d.iso.slice(8)).join());
+    ok(S.dias.map((d) => d.estado).join() === "passado,passado,passado,hoje,futuro,futuro,futuro" && S.dias.map((d) => d.estudo).join() === "true,true,true,true,true,false,false", "S3b passado, hoje e futuro; sábado e domingo são folga com 5 dias");
+    ok(S.dias[0].feitoMin === 60 && S.dias[0].registros === 2 && S.dias[1].feitoMin === 0 && S.dias[2].feitoMin === 30 && S.dias[5].feitoMin === 45 && S.dias[5].estudo === false && S.dias[5].previstoMin === 0, "S3c o feito de cada dia; o estudo na folga aparece (extra); 'desmarcou', domingo passado, data '?' e semana seguinte não entram: " + S.dias.map((d) => d.feitoMin).join());
+    ok(S.metaMin === 300 && S.feitoMin === 135 && S.pct === 45 && S.faltaMin === 165 && S.metaDiaMin === 60, "S3d totais: meta 5h, feito 2h15, 45%, falta 2h45, meta do dia 1h: " + JSON.stringify([S.metaMin, S.feitoMin, S.pct, S.faltaMin, S.metaDiaMin]));
+    ok(S.restantes.join() === "qui,sex" && S.diasRestantes === 2 && S.porDiaNecessario === 83, "S3e restam quinta (hoje) e sexta; para fechar, 83 min por dia: " + S.restantes.join() + " " + S.porDiaNecessario);
+    ok(api.edSemanaDeEstudo(HOJE, 5, diario, prev, 120).faltaMin === 0 && api.edSemanaDeEstudo(HOJE, 5, diario, prev, 120).porDiaNecessario === 0 && api.edSemanaDeEstudo(HOJE, 5, diario, prev, 120).pct === 113, "S4 meta batida: falta 0, nada por dia, pct passa de 100");
+    ok(api.edSemanaDeEstudo(HOJE, 5, diario, prev, 0).pct === null && api.edSemanaDeEstudo(HOJE, 5, diario, prev, 0).metaMin === 0, "S4b meta 0 não divide: pct nulo");
+    const comFolga = api.edSemanaDeEstudo(HOJE, 5, diario, Object.assign({ sáb: 60 }, prev));
+    ok(comFolga.dias[5].previstoMin === 0 && comFolga.metaMin === 300, "S4c o que a agenda pôs num dia FORA dos dias de estudo não vira meta (sábado com 5 dias)");
+    /* fim de semana */
+    const sab = api.edSemanaDeEstudo("2026-10-03", 5, diario, prev);
+    ok(sab.restantes.length === 0 && sab.diasRestantes === 0 && sab.porDiaNecessario === null && sab.faltaMin === 165 && sab.dias[5].estado === "hoje", "S5 sábado com 5 dias: não há dia de estudo restante, e nada por dia (null, não divisão por zero)");
+    ok(api.edSemanaDeEstudo("2026-10-03", 6, diario, Object.assign({ sáb: 60 }, prev)).restantes.join() === "sáb", "S5b com 6 dias o sábado volta a ser dia de estudo");
+    const dom = api.edSemanaDeEstudo("2026-10-04", 5, diario, prev);
+    ok(dom.semana.ini === "2026-09-28" && dom.dias[6].estado === "hoje" && dom.dias[6].cod === "dom", "S5c domingo ainda é a semana que começou na segunda anterior");
+    const vazio = api.edSemanaDeEstudo(HOJE, 5, null, null);
+    ok(vazio.feitoMin === 0 && vazio.metaMin === 0 && vazio.pct === null && vazio.dias.length === 7 && vazio.porDiaNecessario === 0, "S6 sem diário e sem agenda: tudo zerado, sem quebrar");
   }
 
   /* ---- L10: colar plano corrigido tem de dizer o que se PERDE ----
