@@ -341,6 +341,110 @@ function edQualidadeLeitura(r) {
   return { provisorio: motivos.length > 0, motivos, unicas: grupos.length, rep, sem, ign };
 }
 
+/* =====================================================================
+ * ESTRUTURAR O EDITAL CRU, SEM IA (W4)
+ *
+ * O edital que sai do Diário Oficial ou do PDF vem assim, num parágrafo por disciplina e com a numeração no meio do texto:
+ *   LÍNGUA INGLESA: 1 Compreensão de textos variados: … 2 Itens gramaticais relevantes … 3 Conhecimento e uso …
+ *   TECNOLOGIA DA INFORMAÇÃO E DADOS: 1 MSOffice 365 … 2 Redes de computadores. 2.1 Conceitos básicos … 2.2 …
+ * É uma estrutura que o app sabe ler SEM IA: o título em CAIXA ALTA abre a disciplina, "1", "2", "3"… são os tópicos e "2.1",
+ * "2.2"… são os ramos. Isso resolve o caso em que a IA devolveu as disciplinas e esqueceu os tópicos (os 5 conhecimentos
+ * básicos da Câmara) — e dá um ponto de partida quando não se quer gastar uma ida à IA.
+ *
+ * AS GARANTIAS: nenhum texto é jogado fora (o que não é tópico nem ramo fica no nome do item); um número só vira item se for o
+ * PRÓXIMO da sequência e vier antes de maiúscula ("Lei 8.112/1990" e "art. 12" não viram item); e TODOS os pesos saem 3 —
+ * o app não inventa prioridade, e o diagnóstico depois diz que estão iguais.
+ * ===================================================================== */
+const ED_CRU_MAI = "A-ZÁÀÂÃÉÊÍÓÔÕÚÇ";
+
+/* "LÍNGUA PORTUGUESA" → "Língua Portuguesa" (palavras de ligação em minúscula) */
+function edCruCapitalizar(s) {
+  const peq = { de: 1, da: 1, do: 1, das: 1, dos: 1, e: 1, em: 1, na: 1, no: 1, a: 1, o: 1, para: 1, com: 1, ao: 1, "à": 1 };
+  return String(s || "").toLowerCase().replace(/\s+/g, " ").trim().split(" ")
+    .map((p, i) => (i > 0 && peq[p]) ? p : p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
+/* o texto de um item, limpo para virar nome de tópico ("::" é separador do formato e não pode aparecer) */
+function edCruNome(s) {
+  let n = String(s || "").replace(/::/g, " – ").replace(/\s+/g, " ").replace(/^[\s.;:,–—-]+|[\s.;:,–—-]+$/g, "").trim();
+  if (n.length > 240) {
+    const corte = n.lastIndexOf(", ", 240);
+    n = n.slice(0, corte > 120 ? corte : 240).trim() + "…";
+  }
+  return n;
+}
+
+/* onde começam os itens "<prefixo>1", "<prefixo>2"… (a sequência manda: só o PRÓXIMO número, seguido de maiúscula, abre item) */
+function edCruAcha(txt, prefixo) {
+  const pre = prefixo ? prefixo.replace(/\./g, "\\.") : "";
+  const re = new RegExp("(?:^|[\\s(])" + pre + "(\\d{1,2})(?:[.)])?\\s+(?=[" + ED_CRU_MAI + "\"“(‘'])", "g");
+  const marcas = [];
+  let esperado = 1, m;
+  while ((m = re.exec(txt))) {
+    if (Number(m[1]) !== esperado) { re.lastIndex = m.index + 1; continue; }
+    marcas.push({ n: esperado, ini: m.index, ini2: m.index + m[0].length });
+    esperado++;
+  }
+  return marcas.map((k, i) => ({ n: k.n, texto: txt.slice(k.ini2, i + 1 < marcas.length ? marcas[i + 1].ini : txt.length) }));
+}
+
+/* a linha é o título de uma disciplina/bloco? → { nome, resto } */
+function edCruCabecalho(l) {
+  const s = String(l || "").trim();
+  if (!s) return null;
+  const cx = "[" + ED_CRU_MAI + "][" + ED_CRU_MAI + "0-9ªº ,\\-–—/()&]{3,}";
+  let m = s.match(new RegExp("^(?:\\d+(?:\\.\\d+)*\\s+)?(" + cx + "?)\\s*:\\s*(.*)$"));
+  if (m) return { nome: m[1].trim(), resto: m[2] };
+  m = s.match(new RegExp("^(?:\\d+(?:\\.\\d+)*\\s+)?(" + cx + ")$"));
+  if (m) return { nome: m[1].trim(), resto: "" };
+  m = s.match(new RegExp("^([" + ED_CRU_MAI + "][^:\\n]{3,80}):\\s*(1[.)]?\\s+[" + ED_CRU_MAI + "].*)$"));
+  if (m) return { nome: m[1].trim(), resto: m[2] };
+  return null;
+}
+
+/* O texto cru → { texto (no formato do app), disciplinas, topicos, ramos, blocos, semNumeracao: [nomes] }.
+ * opc.ramos (padrão: sim): os itens "2.1", "2.2" viram ramos ("++"); sem ele, ficam dentro do tópico (nada se perde). */
+function edEstruturarCru(raw, opc) {
+  const o = opc || {};
+  const comRamos = o.ramos !== false;
+  const linhas = String(raw || "").replace(/ /g, " ").split(/\r?\n/);
+  const discs = [];
+  let atual = null, blocoPend = "";
+  const fecha = () => { if (atual) { atual.bloco = atual.bloco || ""; discs.push(atual); atual = null; } };
+  linhas.forEach((l) => {
+    const h = edCruCabecalho(l);
+    if (h && /^CONHECIMENTOS\b/.test(h.nome) && !h.resto) { fecha(); blocoPend = edCruCapitalizar(h.nome.replace(/\s*\(.*$/, "")); return; }
+    if (h) { fecha(); atual = { nome: edCruCapitalizar(h.nome), bloco: blocoPend, txt: h.resto || "" }; return; }
+    if (atual && l.trim()) atual.txt += (atual.txt ? " " : "") + l.trim();
+  });
+  fecha();
+  const saida = [];
+  let nTop = 0, nRamo = 0, nDisc = 0;
+  const semNumeracao = [];
+  let blocoEmitido = null;
+  let nBlocos = 0;
+  discs.forEach((d) => {
+    const itens = edCruAcha(d.txt, "");
+    if (!itens.length) { if (d.txt.length > 120) semNumeracao.push(d.nome); return; }
+    if (d.bloco && d.bloco !== blocoEmitido) { saida.push("& " + d.bloco); blocoEmitido = d.bloco; nBlocos++; }
+    saida.push("@ " + edCruNome(d.nome) + " :: 3");
+    nDisc++;
+    itens.forEach((it) => {
+      const subs = edCruAcha(it.texto, it.n + ".");
+      const titulo = edCruNome(subs.length ? it.texto.slice(0, it.texto.search(new RegExp("(?:^|[\\s(])" + it.n + "\\.1(?:[.)])?\\s"))) : it.texto);
+      if (!titulo) return;
+      nTop++;
+      if (subs.length && !comRamos) {
+        saida.push("+ " + edCruNome(it.texto) + " :: 3");
+        return;
+      }
+      saida.push("+ " + titulo + " :: 3");
+      if (comRamos) subs.forEach((sb) => { const nm = edCruNome(sb.texto); if (nm) { saida.push("++ " + nm + " :: 3"); nRamo++; } });
+    });
+  });
+  return { texto: saida.join("\n"), disciplinas: nDisc, topicos: nTop, ramos: nRamo, blocos: nBlocos, semNumeracao };
+}
+
 /* Junta as disciplinas escritas mais de uma vez: os tópicos (e ramos) das repetidas vão para o FIM da primeira, que mantém
  * o peso e a posição. Nenhum tópico se perde; só muda de bloco. */
 function edUnirRepetidas(raw) {

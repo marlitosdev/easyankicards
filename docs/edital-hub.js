@@ -1018,6 +1018,7 @@ function hubGravarAberto() {
  * para chutar (e trocar depois), data é o que não dá.
  * ------------------------------------------------------------------ */
 function hubNovo() {
+  hubNovoCruOriginal = null;
   const dlg = document.getElementById("dlgEdNovo");
   if (!dlg) {   /* sem a caixa, o caminho antigo ainda cria o edital */
     hubGravarAberto();
@@ -1220,6 +1221,11 @@ function hubNovoPintar() {
     ac.append(b);
   };
   if (est.estado === "cru") botao("btnEdNovoMontar", "ed_novo_btn_montar", hubNovoMontarPrompt);
+  /* o edital cru, numerado, o app estrutura sozinho — só se houver o que estruturar */
+  if (est.estado === "cru" && typeof edEstruturarCru === "function" && edEstruturarCru(pl ? pl.value : "").disciplinas > 0) {
+    botao("btnEdNovoEstruturar", "ed_novo_btn_estruturar", hubNovoEstruturar);
+  }
+  if (hubNovoCruOriginal !== null && est.estado !== "cru") botao("btnEdNovoDesestruturar", "ed_novo_btn_desestruturar", hubNovoDesestruturar);
   if (est.estado === "cru" || est.estado === "prompt") botao("btnEdNovoLimpar", "ed_novo_btn_limpar", hubNovoLimparPlano);
   /* o que o app ENTENDEU: um chip por disciplina */
   const ch = g("edNovoEntendi");
@@ -1301,6 +1307,7 @@ function hubNovoPintar() {
 }
 
 function hubNovoLimparPlano() {
+  hubNovoCruOriginal = null;
   const pl = document.getElementById("edNovoPlano");
   if (pl) pl.value = "";
   const c = document.getElementById("edNovoConf");
@@ -1309,6 +1316,34 @@ function hubNovoLimparPlano() {
 }
 
 /* texto cru (o edital como saiu do PDF) → prompt com o texto dentro, na área de transferência; só limpa o campo se a cópia deu certo */
+/* O TEXTO CRU DE ANTES DE ESTRUTURAR: guardado para voltar (nada do que a pessoa colou se perde) */
+let hubNovoCruOriginal = null;
+
+function hubNovoEstruturar() {
+  const pl = document.getElementById("edNovoPlano");
+  const msg = document.getElementById("edNovoPromptMsg");
+  const bruto = String((pl || {}).value || "");
+  const r = edEstruturarCru(bruto, { ramos: true });
+  if (!r.disciplinas) { if (msg) msg.textContent = t("ed_novo_estruturar_nada"); return false; }
+  hubNovoCruOriginal = bruto;
+  pl.value = r.texto;
+  if (msg) msg.textContent = t("ed_novo_estruturado", { d: r.disciplinas, t: r.topicos, r: r.ramos })
+    + (r.semNumeracao.length ? " " + t("ed_novo_estruturado_sem", { l: r.semNumeracao.slice(0, 3).join(", ") }) : "");
+  hubNovoPintar();
+  return true;
+}
+
+function hubNovoDesestruturar() {
+  const pl = document.getElementById("edNovoPlano");
+  if (hubNovoCruOriginal === null || !pl) return false;
+  pl.value = hubNovoCruOriginal;
+  hubNovoCruOriginal = null;
+  const msg = document.getElementById("edNovoPromptMsg");
+  if (msg) msg.textContent = "";
+  hubNovoPintar();
+  return true;
+}
+
 async function hubNovoMontarPrompt() {
   const pl = document.getElementById("edNovoPlano");
   const txt = String((pl || {}).value || "").trim();

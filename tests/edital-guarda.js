@@ -200,7 +200,7 @@ async function testesInterface() {
   {
     api.hubNovo();
     digitar(PROSA);
-    ok(cls(api.$("edNovoSem")).includes("sem-atencao") && filhos(api.$("edNovoSemAcoes")).map((b) => b.id).join(",") === "btnEdNovoMontar,btnEdNovoLimpar", "I5a texto cru: ambar, com 'montar o prompt' e 'limpar'");
+    ok(cls(api.$("edNovoSem")).includes("sem-atencao") && filhos(api.$("edNovoSemAcoes")).map((b) => b.id).join(",") === "btnEdNovoMontar,btnEdNovoEstruturar,btnEdNovoLimpar", "I5a texto cru numerado: ambar, com 'montar o prompt', 'estruturar aqui' e 'limpar'");
     ok(api.$("edNovoEntendi").hidden === true && api.$("edNovoConf").textContent === "", "I5b sem chips e sem contagem");
     janela.__area = "";
     const feito = await api.hubNovoMontarPrompt();
@@ -222,6 +222,65 @@ async function testesInterface() {
     const f2 = await api.hubNovoMontarPrompt();
     janela.navigator.clipboard.writeText = antesW;
     ok(f2 === false && api.$("edNovoPlano").value === PROSA && api.$("edNovoPromptMsg").textContent === api.t("ed_novo_montar_falha"), "I5g copia negada: o texto continua no campo e a pessoa e' avisada");
+  }
+
+  /* ---- W4: estruturar o edital cru, numerado, SEM IA (trechos do edital da Câmara) ---- */
+  {
+    const CAM = [
+      "CONHECIMENTOS BÁSICOS",
+      "LÍNGUA PORTUGUESA: 1 Compreensão e interpretação de textos de gêneros variados. 2 Reconhecimento de tipos e gêneros textuais. 3 Domínio da ortografia oficial. 4 Emprego das classes de palavras. 5 Sintaxe da oração e do período. 6 Pontuação.",
+      "LÍNGUA INGLESA: 1 Compreensão de textos variados: ideias principais. 2 Itens gramaticais relevantes para a compreensão dos conteúdos semânticos.",
+      "NOÇÕES DE DIREITO CONSTITUCIONAL: 1 Constituição da República Federativa do Brasil de 1988. 1.1 Princípios fundamentais. 1.2 Direitos e garantias fundamentais. 2 Administração pública, conforme a Lei 8.112/1990, art. 12 e seguintes. 3 Poder Legislativo.",
+      "CONHECIMENTOS ESPECÍFICOS",
+      "Tecnologia da Informação e Dados: 1 MSOffice 365. 2 Redes de computadores. 2.1 Conceitos básicos. 2.2 Topologias.",
+      "LINGUÍSTICA",
+      "Sem numeração nenhuma aqui mas um texto longo o bastante para ser reportado como disciplina sem itens numerados, passando de cento e vinte caracteres no total para valer."
+    ].join("\n");
+    const r = api.edEstruturarCru(CAM);
+    ok(r.disciplinas === 4 && r.topicos === 13 && r.ramos === 4 && r.blocos === 2, "W4a conta disciplinas, tópicos, ramos e blocos: " + JSON.stringify(r));
+    ok(/^& Conhecimentos Básicos\n@ Língua Portuguesa :: 3\n\+ Compreensão e interpretação de textos de gêneros variados :: 3\n/.test(r.texto), "W4b bloco '&' em caixa de título, disciplina '@' e primeiro tópico '+', todos com peso 3");
+    ok(!/::\s*[^3\s]/.test(r.texto.replace(/ :: 3/g, "")) && r.texto.split("\n").filter((l) => /^[@+]/.test(l) || /^\+\+/.test(l)).every((l) => / :: 3$/.test(l)), "W4c todo peso sai 3 (o app não inventa prioridade)");
+    ok(r.texto.includes("+ Administração pública, conforme a Lei 8.112/1990, art. 12 e seguintes :: 3") && !r.texto.includes("+ 112/1990") , "W4d 'Lei 8.112/1990' e 'art. 12' não viram item (só o PRÓXIMO número da sequência, antes de maiúscula)");
+    ok(r.texto.includes("+ Constituição da República Federativa do Brasil de 1988 :: 3\n++ Princípios fundamentais :: 3\n++ Direitos e garantias fundamentais :: 3\n+ Administração"), "W4e '1.1', '1.2' viram ramos '++' logo abaixo do tópico 1");
+    ok(r.semNumeracao.length === 1 && r.semNumeracao[0] === "Linguística" && !r.texto.includes("Linguística"), "W4f disciplina sem numeração fica fora e é reportada: " + r.semNumeracao);
+    const sr = api.edEstruturarCru(CAM, { ramos: false });
+    ok(sr.ramos === 0 && sr.topicos === 13 && sr.texto.includes("+ Constituição da República Federativa do Brasil de 1988. 1.1 Princípios fundamentais. 1.2 Direitos e garantias fundamentais :: 3") && !/^\+\+/m.test(sr.texto), "W4g sem ramos, '1.1' e '1.2' ficam DENTRO do tópico (nada se perde)");
+    const lido = api.lerEdital(r.texto);
+    ok(lido.disciplinas.length === 4 && lido.disciplinas[2].topicos[0].ramos.length === 2 && lido.blocos.length === 2 && !lido.achados.some((x) => x.tipo === "ignorada" || x.tipo === "sem_topico"), "W4h o que sai é lido de volta pelo app sem linha ignorada nem disciplina sem tópico: " + lido.achados.map((x) => x.tipo));
+    ok(api.edEstruturarCru("").disciplinas === 0 && api.edEstruturarCru("só uma frase qualquer.").disciplinas === 0 && api.edEstruturarCru(null).texto === "", "W4i texto vazio / sem estrutura não estrutura nada");
+    ok(api.edEstruturarCru("DIREITO PENAL\n1 Lei penal. 2 Crime.\n3 Pena.").topicos === 3, "W4j título sozinho em CAIXA ALTA abre a disciplina e as linhas seguintes são juntadas");
+    const longo = "MATÉRIA X: 1 Palavra " + "palavra, ".repeat(60) + "fim. 2 Outro item.";
+    const rl = api.edEstruturarCru(longo).texto.split("\n")[1];
+    ok(rl.length < 300 && rl.includes("…"), "W4k item enorme é cortado no nome do tópico (com reticências): " + rl.length);
+    ok(!api.edEstruturarCru("MATÉRIA Y: 1 Item com :: dois pontos. 2 Outro.").texto.includes("com ::"), "W4l '::' do texto não vaza para o formato");
+
+    const seq = api.edEstruturarCru("DIREITO Q: 1 Lei Geral. 2 Código Civil, art. 12 Das pessoas. 3 Penal.");
+    ok(seq.topicos === 3 && !seq.texto.includes("+ Das pessoas"), "W4m0 um número fora da sequência ('art. 12 Das…') não abre item mesmo antes de maiúscula");
+    ok(api.edEstruturarCru("DIREITO T: 1 Lei Geral. 2 Código, ver 3 itens abaixo. 3 Penal.").texto.includes("+ Código, ver 3 itens abaixo. :: 3".replace(". ::"," ::")),"W4m1b número seguido de minúscula ('3 itens') não abre item");
+    ok(api.edEstruturarCru("DIREITO R: 1 Primeiro. 2 Segundo 3Terceiro").topicos === 2, "W4m1 número colado na palavra ('3Terceiro') não abre item (exige espaço)");
+    ok(api.edEstruturarCru("DIREITO S: 1 Primeiro. 2 Segundo.\nBREVE: texto curto sem numero.").semNumeracao.length === 0, "W4m2 disciplina sem numeração mas curta (até 120 caracteres) não é reportada");
+    const corta = api.edEstruturarCru("MATÉRIA W: 1 Pal " + "palavra, ".repeat(60) + "fim. 2 Outro.").texto.split("\n")[1];
+    ok(/palavra…( :: 3)?$/.test(corta), "W4m3 o corte do item longo acontece numa vírgula (não no meio da palavra): " + corta.slice(-24));
+    const semPonto = api.edEstruturarCru("DIREITO Z: 1 Lei penal 2 Crime").texto.split("\n");
+    ok(semPonto[1] === "+ Lei penal :: 3" && semPonto[2] === "+ Crime :: 3", "W4m4 o último caractere do item sem ponto final não se perde: " + semPonto.slice(1));
+    /* a tela: botão aparece só no cru estruturável; clicar troca o texto e deixa voltar */
+    api.hubNovo();
+    digitar(CAM);
+    ok(cls(api.$("edNovoSem")).includes("sem-atencao") && filhos(api.$("edNovoSemAcoes")).map((b) => b.id).join(",") === "btnEdNovoMontar,btnEdNovoEstruturar,btnEdNovoLimpar", "W4m texto cru numerado: ganha 'estruturar aqui (sem IA)'");
+    ok(api.hubNovoEstruturar() === true && api.$("edNovoPlano").value === r.texto, "W4n clicar troca o campo pelo texto estruturado");
+    const ids = filhos(api.$("edNovoSemAcoes")).map((b) => b.id);
+    ok(ids.includes("btnEdNovoDesestruturar") && !ids.includes("btnEdNovoEstruturar") && /4 disciplina\(s\), 13 tópico\(s\), 4 ramo\(s\)/.test(api.$("edNovoPromptMsg").textContent) && /pesos ficaram em 3/.test(api.$("edNovoPromptMsg").textContent) && /Linguística/.test(api.$("edNovoPromptMsg").textContent), "W4o a mensagem conta o que entrou, avisa dos pesos 3 e do que ficou de fora; aparece 'voltar ao texto original': " + api.$("edNovoPromptMsg").textContent);
+    ok(api.hubNovoDesestruturar() === true && api.$("edNovoPlano").value === CAM && api.$("edNovoPromptMsg").textContent === "", "W4p 'voltar ao texto original' devolve EXATAMENTE o que a pessoa colou");
+    ok(api.hubNovoDesestruturar() === false, "W4q sem original guardado, voltar não faz nada");
+    digitar("texto sem estrutura nenhuma, só prosa solta que não tem como virar edital " + "x".repeat(40));
+    ok(api.hubNovoEstruturar() === false && api.$("edNovoPromptMsg").textContent === api.t("ed_novo_estruturar_nada"), "W4r sem o que estruturar, avisa e não mexe");
+    digitar(Array.from({ length: 12 }, () => "Frase solta sem estrutura nenhuma para virar edital").join("\n"));
+    ok(cls(api.$("edNovoSem")).includes("sem-atencao") && !filhos(api.$("edNovoSemAcoes")).some((b) => b.id === "btnEdNovoEstruturar") && filhos(api.$("edNovoSemAcoes")).some((b) => b.id === "btnEdNovoMontar"), "W4r2 texto cru SEM estrutura numerada: continua 'montar o prompt' e NÃO oferece estruturar");
+    api.hubNovo();
+    digitar(CAM);
+    api.hubNovoEstruturar();
+    api.hubNovo();
+    ok(!filhos(api.$("edNovoSemAcoes")).some((b) => b.id === "btnEdNovoDesestruturar"), "W4s abrir o Novo edital de novo esquece o original guardado");
   }
 
   /* ---- I6: passos e "antes de criar" ---- */
