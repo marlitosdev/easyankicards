@@ -2665,11 +2665,35 @@ async function testes() {
           ok(/^@ Espanhol :: 4 \| escolha: Língua$/.test(t2[t2.findIndex((l) => /^@ Espanhol/.test(l))]) && api.lerEdital(api.$("editalTexto").value).disciplinas[1].escolha === "Língua", "OPT2 mudar o peso de uma optativa mantém o '| escolha:' na linha: " + t2.join(" / "));
           ok(api.lerEdital(api.$("editalTexto").value).disciplinas[2].inativa === true, "OPT3 depois das duas reescritas o Inglês continua inativo");
         }
+        /* OPT-UI (X2, 17.87.0): o seletor das disciplinas de escolha na bancada */
+        {
+          const SEM = ["# ISS | prova: " + emDias(131) + " | horas: 10", "@ Penal :: 5", "+ a :: 3", "@ Espanhol :: 2 | escolha: Língua", "+ b :: 3", "@ Inglês :: 2 | escolha: Língua", "+ c :: 3"].join("\n");
+          api.$("editalTexto").value = SEM;
+          api.$("edProva").value = emDias(131);
+          api.edRender();
+          const cxO = api.$("edOptativas");
+          const achaO = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); achaO(c, pred, acc); }); return acc; };
+          const selO = () => achaO(cxO, (e) => /ed-opt-sel/.test(e.className || ""), [])[0];
+          const stO = () => achaO(cxO, (e) => /ed-opt-st/.test(e.className || ""), [])[0];
+          ok(cxO.hidden === false && !!selO() && selO().children.length === 3 && selO().value === "" && /juntas/.test(stO().textContent) && /pend/.test(stO().className), "OPT4 na bancada aparece o seletor da disciplina de escolha (3 opções: 'ainda não escolhi' + as 2), sem escolha, dizendo que as duas estão contando juntas");
+          const av0 = api.edAvisoLeitura(api.lerEdital(SEM));
+          ok(!!av0 && /escolher a disciplina de escolha/.test(av0.textContent) && /Língua/.test(av0.textContent), "OPT5 sem escolha, o aviso de plano provisório fala disso (e não de 'problemas de leitura')");
+          const DUP = SEM + "\n@ Penal :: 5\n+ z :: 3";
+          const avDup = api.edAvisoLeitura(api.lerEdital(DUP));
+          ok(!!avDup && /problemas de leitura/.test(avDup.textContent) && /escolha/.test(avDup.textContent), "OPT5b com um problema de LEITURA (disciplina repetida) o título continua falando de leitura, e a escolha pendente entra junto");
+          selO().value = "Inglês"; selO().onchange();
+          const t3 = api.$("editalTexto").value;
+          ok(/escolhas: Língua=Inglês/.test(t3.split("\n")[0]) && api.lerEdital(t3).disciplinas[1].inativa === true && api.lerEdital(t3).disciplinas[2].inativa === false, "OPT6 escolher no seletor grava a escolha no cabeçalho do texto e inverte quem está ativo");
+          ok(stO().textContent === "fora do plano: Espanhol" && /ok/.test(stO().className) && selO().value === "Inglês", "OPT6b o seletor passa a dizer quem ficou de fora");
+          ok(/^2 disciplina|^2 subject/.test(api.$("edResumo").textContent) && /^3 disciplina|^3 subject/.test(api.t("ed_resumo", { d: 3, t: 3, f: 0, p: 0 })), "OPT6d o resumo da bancada conta só as disciplinas que valem (a não escolhida sai da conta): " + api.$("edResumo").textContent);
+          ok(api.edAvisoLeitura(api.lerEdital(t3)) === null, "OPT6c com a escolha feita o aviso de provisório some");
+          selO().value = ""; selO().onchange();
+          ok(!/escolhas/.test(api.$("editalTexto").value) && /juntas/.test(stO().textContent), "OPT7 voltar a 'ainda não escolhi' tira a escolha do texto");
+          api.$("editalTexto").value = "# X | prova: " + emDias(131) + "\n@ A :: 3\n+ t :: 3";
+          api.edRender();
+          ok(api.$("edOptativas").hidden === true && api.$("edOptativas").children.length === 0, "OPT8 edital sem disciplina de escolha: o seletor nem aparece");
+        }
         api.edApagar(eN.id);
-        api.diarioPor([]);
-      }
-
-      /* AO — o modal de registro completo.        api.edApagar(eN.id);
         api.diarioPor([]);
       }
 

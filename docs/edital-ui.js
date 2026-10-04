@@ -3392,17 +3392,20 @@ function edTextoDoMotivoLeitura(m) {
 }
 function edAvisoLeitura(r, opc) {
   const q = edQualidadeLeitura(r);
-  if (!q.provisorio) return null;
+  /* a OPTATIVA SEM ESCOLHA também deixa o plano provisório (as duas contam) — mas não é "problema de leitura" */
+  const pend = typeof edEscolhasPendentes === "function" ? edEscolhasPendentes(r) : [];
+  const motivos = q.motivos.concat(pend.length ? [{ id: "escolha", n: pend.length, nomes: pend.map((g) => g.nome) }] : []);
+  if (!motivos.length) return null;
   const grave = q.motivos.some((m) => m.id === "prompt" || m.id === "modelo" || m.id === "cru");
   const cx = document.createElement("div");
   cx.className = "ed-aviso-leitura " + (grave ? "leit-grave" : "leit-leve");
   cx.setAttribute("role", "alert");
   const tit = document.createElement("div");
   tit.className = "ed-aviso-leitura-tit";
-  tit.textContent = t("ed_leit_tit");
+  tit.textContent = t(q.provisorio ? "ed_leit_tit" : "ed_leit_tit_escolha");
   const sub = document.createElement("div");
   sub.className = "ed-aviso-leitura-sub";
-  sub.textContent = q.motivos.map(edTextoDoMotivoLeitura).join(" · ");
+  sub.textContent = motivos.map(edTextoDoMotivoLeitura).join(" · ");
   cx.append(tit, sub);
   if (!(opc && opc.semBotao)) {
     const b = document.createElement("button");
@@ -3411,6 +3414,49 @@ function edAvisoLeitura(r, opc) {
     cx.append(b);
   }
   return cx;
+}
+
+/* AS OPTATIVAS: "escolha uma destas" — a escolha vai para o CABEÇALHO do texto (edDefinirEscolha), que é a fonte única */
+function edEscolherOptativa(grupo, nome) {
+  $("editalTexto").value = edDefinirEscolha($("editalTexto").value, grupo, nome);
+  reg("EDITAL", "optativa escolhida", grupo + " = " + (nome || "(nenhuma)"));
+  edRender();
+}
+
+function edPintarOptativas(r) {
+  const cx = $("edOptativas");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const gs = edOptativas(r);
+  cx.hidden = !gs.length;
+  gs.forEach((g) => {
+    const lin = document.createElement("div");
+    lin.className = "ed-opt-lin";
+    const tit = document.createElement("span");
+    tit.className = "ed-opt-tit";
+    tit.textContent = t("ed_opt_tit", { g: g.nome });
+    tit.title = t("ed_opt_aj");
+    const sel = document.createElement("select");
+    sel.className = "ed-opt-sel";
+    sel.title = t("ed_opt_aj");
+    const o0 = document.createElement("option");
+    o0.value = ""; o0.textContent = t("ed_opt_nenhuma");
+    sel.append(o0);
+    g.opcoes.forEach((nome) => {
+      const o = document.createElement("option");
+      o.value = nome; o.textContent = nome;
+      sel.append(o);
+    });
+    sel.value = g.escolhida;
+    sel.onchange = () => edEscolherOptativa(g.nome, sel.value);
+    const st = document.createElement("span");
+    st.className = "ed-opt-st " + (g.escolhida ? "ok" : "pend");
+    st.textContent = g.escolhida
+      ? t("ed_opt_fora", { q: g.opcoes.filter((n) => n !== g.escolhida).join(", ") })
+      : t("ed_opt_pendente", { n: g.opcoes.length });
+    lin.append(tit, sel, st);
+    cx.append(lin);
+  });
 }
 
 function edPintarPainel(r, plano) {
@@ -4199,7 +4245,7 @@ function edRender() {
     }
   }
   $("edResumo").textContent = itens.length
-    ? t("ed_resumo", { d: edNomesUnicos(r), t: plano.total, f: plano.feitos,
+    ? t("ed_resumo", { d: edNomesUnicos(r) - r.disciplinas.filter((x) => x.inativa).length, t: plano.total, f: plano.feitos,
                        p: plano.peso.pctFeito })
     : "";
 
@@ -4210,6 +4256,7 @@ function edRender() {
 
   edSimular();
   completarDiario(plano.itens);
+  edPintarOptativas(r);
   edPintarPainel(r, plano);
   edSalvar();
 }

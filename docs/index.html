@@ -3978,6 +3978,15 @@ body.split-lj{overflow:hidden}
 .di-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .di-cab h3{margin:0 0 2px}
 .di-cab-btns{display:flex;align-items:center;gap:8px}
+/* DISCIPLINAS DE ESCOLHA: uma linha por grupo — o seletor e o que acontece com a outra */
+.ed-optativas{margin:6px 0;padding:7px 10px;border:1px solid var(--borda);border-radius:8px;background:var(--campo)}
+.ed-opt-lin{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12px}
+.ed-opt-lin + .ed-opt-lin{margin-top:6px}
+.ed-opt-tit{font-weight:700;color:var(--texto)}
+.ed-opt-sel{min-width:0;max-width:100%;font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--borda);background:var(--panel);color:var(--texto)}
+.ed-opt-st{font-size:11px}
+.ed-opt-st.pend{color:var(--atencao)}
+.ed-opt-st.ok{color:var(--sutil)}
 /* A FAIXA DA SEMANA: meta, o que falta e os sete dias da agenda */
 .di-semana{margin:4px 0 6px;padding:7px 9px;border:1px solid var(--borda);border-radius:8px;background:var(--campo)}
 .di-sem-lin{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:11.5px}
@@ -5552,6 +5561,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <div class="ed-sim-txt" id="edSimTxt"></div>
       </div>
       <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
+      <!-- DISCIPLINAS DE ESCOLHA ("escolha 1 de N"): onde se diz qual delas vale para o plano -->
+      <div class="ed-optativas" id="edOptativas" hidden></div>
       <div class="ed-ritmo" id="edRitmo" hidden></div>
       <div id="edPainel"></div>
     </div>
