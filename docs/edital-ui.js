@@ -1392,6 +1392,124 @@ function diarioDiaTexto(d) {
   } catch (e) { return String(d); }
 }
 
+/* ---- D3: levar o diário filtrado para fora (texto, planilha) e ver o total por disciplina ------------------------ */
+
+/* PURA. Uma linha por disciplina, da que mais consumiu tempo para a que menos. A marca "desmarcou" não conta. */
+function diarioResumoPorDisc(itens) {
+  const m = new Map();
+  (itens || []).forEach(({ x }) => {
+    if (x.a === "pendente") return;
+    const k = x.disc || "";
+    const g = m.get(k) || { disc: k, minutos: 0, registros: 0, topicos: new Set(), revisoes: 0, qn: 0, qc: 0 };
+    g.minutos += x.m || 0;
+    g.registros++;
+    g.topicos.add(x.c);
+    if (x.a === "revisado") g.revisoes++;
+    if (x.q && x.q.feitas) { g.qn += x.q.feitas; g.qc += x.q.certas || 0; }
+    m.set(k, g);
+  });
+  return Array.from(m.values())
+    .map((g) => ({ disc: g.disc, minutos: g.minutos, registros: g.registros, topicos: g.topicos.size, revisoes: g.revisoes, qn: g.qn, qc: g.qc }))
+    .sort((a, b) => (b.minutos - a.minutos) || a.disc.localeCompare(b.disc));
+}
+
+function diarioQuestoesTexto(qn, qc) {
+  return qn ? t("ed_diario_resumo_q", { c: qc, n: qn, pct: Math.round((qc / qn) * 100) }) : "";
+}
+
+/* PURA. O resumo por disciplina como texto para colar: "Direito Penal — 2h30 · 3 registros · …" */
+function diarioTextoPorDisc(itens) {
+  return diarioResumoPorDisc(itens).map((g) => (g.disc || t("ed_sem_disciplina")) + " — "
+    + [horasTexto(g.minutos), t("ed_diario_n_reg", { n: g.registros }), t("ed_diario_n_top", { n: g.topicos }), diarioQuestoesTexto(g.qn, g.qc)]
+      .filter(Boolean).join(" · ")).join("\n");
+}
+
+function diarioFormasDe(x) {
+  return (x.f && x.f.length ? x.f : []).map((f) => t("ed_forma_" + f)).filter(Boolean).join(" + ");
+}
+
+/* PURA. O diário filtrado como texto, dia a dia, para colar em um e-mail, nota ou conversa. */
+function diarioTextoCopia(itens, titulo) {
+  const L = [];
+  if (titulo) L.push(titulo, "");
+  const porDia = new Map();
+  (itens || []).forEach(({ x }) => { (porDia.get(x.d) || porDia.set(x.d, []).get(x.d)).push(x); });
+  porDia.forEach((xs, d) => {
+    const min = xs.filter((x) => x.a !== "pendente").reduce((a, x) => a + (x.m || 0), 0);
+    L.push(d + " (" + diarioDiaTexto(d) + ") — " + horasTexto(min));
+    xs.forEach((x) => {
+      const q = x.q && x.q.feitas ? t("ed_diario_questoes", { c: x.q.certas, n: x.q.feitas, pct: Math.round((x.q.certas / x.q.feitas) * 100) }) : "";
+      L.push("• " + [x.n, (x.disc || "") + (x.cc ? " · " + x.cc : ""), t("ed_acao_" + x.a), x.m && x.a !== "pendente" ? horasTexto(x.m) : "", diarioFormasDe(x), q, x.obs ? String(x.obs).slice(0, 220) : ""]
+        .filter(Boolean).join(" | "));
+    });
+    L.push("");
+  });
+  return L.join("\n").replace(/\n+$/, "");
+}
+
+/* um campo de CSV: aspas quando preciso, e uma aspa simples na frente de quem começa como fórmula (=, +, -, @), para
+ * a planilha não executar texto que veio de uma anotação */
+function diarioCsvCampo(v) {
+  let s = v === undefined || v === null ? "" : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+/* PURA. Planilha (separador ";", que o Excel em português abre direto; o BOM faz os acentos chegarem certos). */
+function diarioCsv(itens) {
+  const cab = t("ed_diario_csv_cab");
+  const linhas = (itens || []).map(({ x }) => [x.d, t("ed_acao_" + x.a), x.disc, x.n, x.cc || "", x.m || 0, diarioFormasDe(x),
+    x.q && x.q.feitas ? x.q.feitas : "", x.q && x.q.feitas ? (x.q.certas || 0) : "", x.hu ? t("ed_humor_" + x.hu) : "",
+    x.p ? Math.round(Number(x.p) * 10) / 10 : "", x.onde || "", x.obs || ""].map(diarioCsvCampo).join(";"));
+  return "\uFEFF" + [cab].concat(linhas).join("\r\n") + "\r\n";
+}
+
+let diarioUltimo = [];
+let diarioPorDiscAberto = false;
+
+/* os botões de saída e o painel "por disciplina" acompanham o que está filtrado */
+function diarioPintarSaidas(todos) {
+  diarioUltimo = todos;
+  const vazio = !todos.length;
+  ["btnDiarioCopiar", "btnDiarioCsv", "btnDiarioPorDisc"].forEach((id) => { if ($(id)) $(id).disabled = vazio; });
+  const bt = $("btnDiarioPorDisc");
+  if (bt) bt.textContent = t(diarioPorDiscAberto ? "ed_diario_pd_fechar" : "ed_diario_pd");
+  const px = $("diarioPorDisc");
+  if (!px) return;
+  px.hidden = !diarioPorDiscAberto || vazio;
+  px.innerHTML = "";
+  if (px.hidden) return;
+  diarioResumoPorDisc(todos).forEach((g) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "di-pd-lin";
+    b.title = t("ed_diario_pd_filtrar");
+    const nome = document.createElement("span");
+    nome.className = "di-pd-nome"; nome.textContent = g.disc || t("ed_sem_disciplina");
+    const num = document.createElement("span");
+    num.className = "di-pd-num";
+    num.textContent = [horasTexto(g.minutos), t("ed_diario_n_reg", { n: g.registros }), t("ed_diario_n_top", { n: g.topicos }), diarioQuestoesTexto(g.qn, g.qc)].filter(Boolean).join(" · ");
+    b.append(nome, num);
+    b.onclick = () => { diarioDisc = g.disc; diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
+    px.append(b);
+  });
+  const cp = document.createElement("button");
+  cp.type = "button"; cp.className = "btn-min"; cp.id = "btnDiarioPdCopiar";
+  cp.textContent = t("ed_diario_pd_copiar");
+  cp.onclick = () => diarioCopiar(diarioTextoPorDisc(diarioUltimo));
+  px.append(cp);
+}
+
+function diarioCopiar(txt) {
+  try {
+    navigator.clipboard.writeText(txt).then(() => toast(t("copied"))).catch(() => uiAlert(t("toast_copy_fail")));
+  } catch (e) { uiAlert(t("toast_copy_fail")); }
+}
+
+function diarioTituloCopia() {
+  return t("ed_diario_tit") + " — " + ($("diarioResumo") ? $("diarioResumo").textContent : "");
+}
+
 function diarioPintarPeriodos() {
   const cx = $("diarioPeriodos");
   if (!cx) return;
@@ -1482,6 +1600,7 @@ function abrirDiario() {
     const g = porDia[x.d] || (porDia[x.d] = { m: 0, n: 0 });
     g.m += x.m || 0; g.n++;
   });
+  diarioPintarSaidas(todos);
   const visiveis = todos.slice(0, diarioMostrar);
   let diaAtual = null;
   visiveis.forEach(({ x, idx }) => {
@@ -4064,6 +4183,12 @@ function edIniciar() {
     $(id).onchange = () => { set($(id).value); diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
   });
   dicaLigar("btnDiarioAjuda", "ed_diario_ajuda");
+  if ($("btnDiarioCopiar")) $("btnDiarioCopiar").onclick = () => diarioCopiar(diarioTextoCopia(diarioUltimo, diarioTituloCopia()));
+  if ($("btnDiarioCsv")) $("btnDiarioCsv").onclick = () => {
+    try { baixarArquivo(diarioCsv(diarioUltimo), "eac-diario-" + hojeISO() + ".csv", "text/csv;charset=utf-8"); toast(t("ed_diario_csv_ok")); }
+    catch (e) { uiAlert(t("toast_copy_fail")); }
+  };
+  if ($("btnDiarioPorDisc")) $("btnDiarioPorDisc").onclick = () => { diarioPorDiscAberto = !diarioPorDiscAberto; diarioPintarSaidas(diarioUltimo); };
   if ($("btnDiarioLimpar")) $("btnDiarioLimpar").onclick = () => { diarioLimparFiltros(); diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
   try { diarioAmplo = localStorage.getItem("eac_diario_amplo") === "1"; } catch (e) { diarioAmplo = false; }
   if ($("btnDiarioAmpliar")) $("btnDiarioAmpliar").onclick = () => {
