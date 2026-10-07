@@ -2414,6 +2414,61 @@ function diagnosticoPlano(r, plano) {
   return achados;
 }
 
+/* =====================================================================
+ * OS ACHADOS DA REVISÃO — uma fonte só (Y1)
+ *
+ * "Procurar erros no plano" e a lista abaixo do editor diziam coisas parecidas em dois lugares, com critérios e textos
+ * próprios; a revisão com a IA, por sua vez, não sabia o que o app já tinha achado. Aqui o diagnóstico de PLANEJAMENTO
+ * (diagnosticoPlano) e os problemas de LEITURA (linhas ignoradas, numeração, marcadores) viram uma lista só, e cada item diz
+ * QUEM o resolve:
+ *   "app"  — o app corrige sozinho (fix: numeracao | marcador | unir | tirar_prompt), com a confirmação de sempre;
+ *   "voce" — depende de uma decisão da pessoa (data, horas, qual optativa, que tópico é de que disciplina…);
+ *   "ia"   — é julgamento de peso/motivo: entra no pedido à IA.
+ * Puro: não grava nada, não traduz (itens novos trazem chave+params; os do diagnóstico já vêm com a frase).
+ * ===================================================================== */
+const ED_ACHADO_QUEM = {
+  texto_e_o_prompt: "app", disciplina_repetida: "app", numeracao: "app", marcador: "app",
+  pesos_iguais: "ia", sem_peso: "ia", sem_motivo: "ia", motivo_generico: "ia", colisao: "ia",
+};
+const ED_ACHADO_FIX = { texto_e_o_prompt: "tirar_prompt", disciplina_repetida: "unir", numeracao: "numeracao", marcador: "marcador" };
+const ED_FIXES = {
+  numeracao: tirarNumeracaoEdital, marcador: normalizarMarcadores, unir: edUnirRepetidas, tirar_prompt: edTirarPrompt,
+};
+function edFixDe(id) { return ED_FIXES[id] || null; }
+
+function edAchadosDeRevisao(raw, r, plano) {
+  const texto = raw === undefined || raw === null ? "" : String(raw);
+  const lido = r || lerEdital(texto);
+  const marca = (a, extra) => Object.assign({ chave: null, params: null, linha: null }, a,
+    { quem: ED_ACHADO_QUEM[a.id] || "voce", fix: ED_ACHADO_FIX[a.id] || null }, extra || {});
+  const base = diagnosticoPlano(lido, plano).map((a) => {
+    const qual = a.id === "disciplina_repetida" || a.id === "sem_topico" ? edQualidadeLeitura(lido) : null;
+    const linha = a.id === "disciplina_repetida" ? (qual.rep[0] && qual.rep[0].linhas[1]) || null
+      : a.id === "sem_topico" ? (qual.sem[0] && qual.sem[0].linhas[0]) || null : null;
+    return marca(a, { linha });
+  });
+  /* o texto É o prompt: nada mais vale a pena dizer (o diagnóstico já devolveu só isso) */
+  if (base.some((a) => a.id === "texto_e_o_prompt")) return base;
+  const extra = [];
+  const ign = ((lido && lido.achados) || []).filter((a) => a.tipo === "linha_ignorada");
+  if (ign.length) extra.push(marca({ id: "linha_ignorada", grave: true, msg: null, chave: "ed_crit_ignorada" },
+    { params: { n: ign.length }, linha: ign[0].linha || null }));
+  if (texto && temNumeracaoEdital(texto)) extra.push(marca({ id: "numeracao", grave: false, msg: null, chave: "ed_crit_numeracao" }));
+  if (texto && temMarcadorTorto(texto)) extra.push(marca({ id: "marcador", grave: false, msg: null, chave: "ed_crit_marcador" }));
+  const ordem = { app: 0, voce: 1, ia: 2 };
+  return extra.concat(base).map((a, i) => ({ a, i }))
+    .sort((x, y) => (Number(y.a.grave) - Number(x.a.grave)) || (ordem[x.a.quem] - ordem[y.a.quem]) || (x.i - y.i))
+    .map((x) => x.a);
+}
+
+/* o resumo de uma linha: quantos, quantos graves, e quantos de cada tipo de solução */
+function edResumoAchados(lista) {
+  const l = lista || [];
+  const por = { app: 0, voce: 0, ia: 0 };
+  l.forEach((a) => { por[a.quem] = (por[a.quem] || 0) + 1; });
+  return { total: l.length, graves: l.filter((a) => a.grave).length, por };
+}
+
 /* Os ramos de um tópico, lidos do texto do edital ([] se não houver ou se o tópico não existir). */
 function edRamosDoTopico(texto, disciplina, topico) {
   const r = lerEdital(texto);
