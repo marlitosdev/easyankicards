@@ -1242,6 +1242,97 @@ function apagarDoDiario(idx) {
   abrirDiario();
 }
 
+/* =====================================================================
+ * PASSO 0 DA REVISÃO — O QUE O APP ACHOU (Y2)
+ *
+ * A fonte é edAchadosDeRevisao (edital.js): diagnóstico de planejamento + problemas de leitura numa lista só, cada item dizendo
+ * QUEM resolve. Aqui só se desenha: o que o app corrige ganha o botão de corrigir, o que é decisão da pessoa leva à linha, e o
+ * que é da IA fica anotado como tal. Calculado uma vez por texto (memo) — o selo do botão e o diálogo usam o mesmo resultado.
+ * ===================================================================== */
+let edAchMemo = null;
+function edAchadosAtuais() {
+  const raw = $("editalTexto").value;
+  const r = lerEdital(raw);
+  /* o texto manda: data e horas do cabeçalho vencem os campos (que só acompanham o texto) */
+  const prova = r.cfg.prova || ($("edProva") ? $("edProva").value : "");
+  const horas = Number(r.cfg.horas || ($("edHoras") ? $("edHoras").value : 0));
+  const chave = [raw, prova, horas, Object.keys(edProgresso || {}).length].join("\u0001");
+  if (edAchMemo && edAchMemo.chave === chave) return edAchMemo.lista;
+  const plano = montarPlano(r, { horas, prova, feitos: edProgresso });
+  const lista = edAchadosDeRevisao(raw, r, plano);
+  edAchMemo = { chave, lista };
+  return lista;
+}
+
+/* o selo "· 4" no botão da bancada: quantos pontos a revisão tem a mostrar */
+function edAchadosSelo() {
+  const b = $("btnEditalColar");
+  if (!b || !b.setAttribute) return;
+  const n = $("editalTexto").value.trim() ? edAchadosAtuais().length : 0;
+  if (n) b.setAttribute("data-n", String(n)); else b.removeAttribute("data-n");
+}
+
+const ED_ACH_FIXTXT = { numeracao: "ed_fix_numeracao", marcador: "ed_fix_marcador", unir: "ed_fix_rep", tirar_prompt: "ed_fix_prompt" };
+function edAchadosPintar() {
+  const cx = $("edAchCx"), lista = $("edAchLista");
+  if (!cx || !lista) return;
+  const itens = $("editalTexto").value.trim() ? edAchadosAtuais() : [];
+  const res = edResumoAchados(itens);
+  const resumo = $("edAchRes");
+  resumo.textContent = "";
+  resumo.className = "";
+  if (!itens.length) {
+    resumo.textContent = $("editalTexto").value.trim() ? "· " + t("ed_ach_nenhum") : "";
+    resumo.className = "ed-ach-ok";
+  } else {
+    resumo.textContent = "· " + t("ed_ach_resumo", { n: res.total, g: res.graves });
+    if (res.graves) resumo.className = "ed-ach-grave";
+  }
+  lista.innerHTML = "";
+  if (!itens.length) {
+    const p = document.createElement("div");
+    p.className = "nota";
+    p.textContent = $("editalTexto").value.trim() ? t("ed_ach_limpo") : t("ed_ach_vazio");
+    lista.append(p);
+  }
+  itens.forEach((a) => {
+    const div = document.createElement("div");
+    div.className = "sug";
+    const dot = document.createElement("span");
+    dot.className = "dot " + (a.grave ? "dot-red" : "dot-org");
+    const quem = document.createElement("span");
+    quem.className = "sug-quem quem-" + a.quem;
+    quem.textContent = t(a.quem === "app" ? "quem_app" : a.quem === "ia" ? "quem_ia" : "ed_ach_quem_voce");
+    const tx = document.createElement("span");
+    tx.textContent = a.msg || t(a.chave, a.params || {});
+    div.append(dot, quem, tx);
+    if (a.fix || a.linha) {
+      const acoes = document.createElement("div");
+      acoes.className = "sug-acao";
+      if (a.fix && edFixDe(a.fix)) acoes.append(botaoMini(null, "btn-azul", async () => {
+        await edAplicar(edFixDe(a.fix));
+        edAchadosPintar();
+      }, t(ED_ACH_FIXTXT[a.fix])));
+      if (a.linha) acoes.append(botaoMini("goto_error", "btn-cinza", () => {
+        $("dlgEdColar").close();
+        edIrParaLinha(a.linha);
+      }));
+      div.append(acoes);
+    }
+    lista.append(div);
+  });
+  /* aberto sozinho quando há algo GRAVE; os avisos leves ficam numa linha só */
+  edAchadosAbrir(res.graves > 0);
+}
+
+function edAchadosAbrir(abrir) {
+  const lista = $("edAchLista"), b = $("btnEdAchAbrir"), seta = $("edAchSeta");
+  if (!lista) return;
+  lista.hidden = !abrir;
+  if (b) b.setAttribute("aria-expanded", abrir ? "true" : "false");
+  if (seta) seta.textContent = abrir ? "▾" : "▸";
+}
+
 /* Ver ANTES de decidir. O botão gerava o prompt direto: o usuário recebia um
  * pedido pronto para a IA sem nunca ter lido o que estava errado, e aceitar
  * ou recusar a correção virava um ato de fé. Primeiro o diagnóstico, em
@@ -4194,6 +4285,7 @@ function edRender() {
   edRegistrarConteudo(r);
   edNumeros(raw.split("\n").length);
   edSugestoes(r);
+  edAchadosSelo();
 
   /* config: os campos de data e horas mandam no texto, e vice-versa */
   if (r.cfg.prova && $("edProva").value !== r.cfg.prova) $("edProva").value = r.cfg.prova;
@@ -4357,8 +4449,10 @@ function edIniciar() {
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";
     $("edColarAviso").hidden = true;
+    edAchadosPintar();
     abrirModal("dlgEdColar");
   };
+  if ($("btnEdAchAbrir")) $("btnEdAchAbrir").onclick = () => edAchadosAbrir($("edAchLista").hidden);
   $("edColarTexto").addEventListener("input", edConferirColagem);
   $("btnEdColarAplicar").onclick = edAplicarColagem;
   $("btnEdColarFechar").onclick = () => $("dlgEdColar").close();
