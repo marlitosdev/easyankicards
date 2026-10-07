@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edAchadosDeRevisao, edResumoAchados, edFixDe, edUnirRepetidas, edTirarPrompt, tirarNumeracaoEdital, normalizarMarcadores, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -713,6 +713,74 @@ function testes() {
     /* nada muda quando nada e incluido */
     ok(api.edRedistribuir(antes, antes).length === 0,
        "L17d sugeriu redistribuir sem nenhuma mudanca");
+  }
+
+  /* ---- Y1: os achados da revisão — uma fonte só, cada um com QUEM resolve ---- */
+  {
+    const { api } = carregar();
+    const plan = (r) => api.montarPlano(r, { horas: 10, prova: "2027-02-21", hoje: "2026-10-01", feitos: {}, fatores: null, acertos: null });
+    const rev = (txt) => { const r = api.lerEdital(txt); return api.edAchadosDeRevisao(txt, r, plan(r)); };
+    const por = (l, id) => l.find((x) => x.id === id);
+    /* um plano bom e limpo: nada a dizer */
+    const BOM = ["# C | prova: 2027-02-21 | horas: 10"].concat([4, 4, 4, 3, 3].map((p, i) => ["@ D" + i + " :: " + p, "+ t" + i + "a :: 3 :: cai sempre", "+ t" + i + "b :: 3 :: cai bastante", "+ t" + i + "c :: 3 :: cai pouco"].join("\n"))).join("\n");
+    ok(rev(BOM).length === 0, "Y1a plano limpo: nenhum achado: " + rev(BOM).map((x) => x.id));
+    /* o que o app corrige sozinho */
+    const NUM = ["# C | prova: 2027-02-21 | horas: 10", "@ A :: 5", "- 1.1 Primeiro :: 4 :: m", "- 1.2 Segundo :: 3 :: m", "- 1.3 Terceiro :: 2 :: m", "@ B :: 3", "+ b1 :: 3 :: x", "+ b2 :: 2 :: y", "+ b3 :: 4 :: z"].join("\n");
+    const ln = rev(NUM);
+    const num = por(ln, "numeracao"), mar = por(ln, "marcador");
+    ok(num && num.quem === "app" && num.fix === "numeracao" && num.chave === "ed_crit_numeracao" && num.msg === null && !num.grave, "Y1b numeração: o app corrige (fix 'numeracao', frase vem da chave de tradução)");
+    ok(mar && mar.quem === "app" && mar.fix === "marcador" && mar.chave === "ed_crit_marcador", "Y1c marcador torto: o app corrige (fix 'marcador')");
+    ok(api.edFixDe("numeracao")("@ A :: 3\n+ 1.1 Alfa :: 3").includes("+ Alfa :: 3") && api.edFixDe("marcador")("- x").startsWith("+ ") && typeof api.edFixDe("unir") === "function" && typeof api.edFixDe("tirar_prompt") === "function" && api.edFixDe("nada") === null, "Y1d edFixDe devolve a função de conserto de cada id (e nulo para o que não tem)");
+    /* repetida -> app, com a linha da segunda ocorrência */
+    const REP = ["# C | prova: 2027-02-21", "@ Português :: 5", "+ a :: 3 :: m", "@ Direito :: 3", "+ d :: 3 :: m", "@ Português :: 5", "+ b :: 3 :: m"].join("\n");
+    const rp = por(rev(REP), "disciplina_repetida");
+    ok(rp && rp.quem === "app" && rp.fix === "unir" && rp.grave === true && rp.linha === 6 && /Português/.test(rp.msg), "Y1e disciplina repetida: o app une; aponta a linha da repetição: " + JSON.stringify(rp && { q: rp.quem, f: rp.fix, l: rp.linha }));
+    /* linhas ignoradas -> você, grave, com a linha e a contagem */
+    const IGN = ["# C | prova: 2027-02-21", "@ A :: 5", "+ a :: 3 :: m", "isto aqui não é nada", "outra coisa solta"].join("\n");
+    const ig = por(rev(IGN), "linha_ignorada");
+    ok(ig && ig.quem === "voce" && ig.grave === true && ig.params.n === 2 && ig.linha === 4 && ig.chave === "ed_crit_ignorada", "Y1f linhas ignoradas: grave, da pessoa, com a contagem e a primeira linha");
+    /* sem tópico -> você, com a linha da disciplina */
+    const SEM = ["# C | prova: 2027-02-21", "@ A :: 5", "+ a :: 3 :: m", "@ Vazia :: 3"].join("\n");
+    const st = por(rev(SEM), "sem_topico");
+    ok(st && st.quem === "voce" && st.linha === 4, "Y1g disciplina sem tópico: da pessoa, aponta a linha");
+    /* julgamento de peso e motivo -> IA */
+    const IGUAIS = ["# C | prova: 2027-02-21", "@ A :: 3", "+ a1", "+ a2", "@ B :: 3", "+ b1", "+ b2", "@ C :: 3", "+ c1", "+ c2"].join("\n");
+    const li = rev(IGUAIS);
+    ok(["pesos_iguais", "sem_peso", "sem_motivo"].every((id) => por(li, id) && por(li, id).quem === "ia" && por(li, id).fix === null), "Y1h peso igual, sem peso e sem motivo são da IA (sem conserto mecânico): " + li.map((x) => x.id + ":" + x.quem));
+    /* decisão da pessoa: sem data, não cabe */
+    const SD = rev("@ A :: 5\n+ a :: 3 :: m\n+ b :: 3 :: m\n@ B :: 3\n+ c :: 3 :: m\n+ d :: 3 :: m\n@ C :: 2\n+ e :: 3 :: m\n+ f :: 4 :: m");
+    ok(por(SD, "sem_data") && por(SD, "sem_data").quem === "voce" && por(SD, "sem_data").grave === true, "Y1i sem data de prova: é da pessoa");
+    /* o texto é o prompt: devolve só esse e para */
+    const PR = "# Novo edital | horas: 20\n\n" + "Você vai organizar um EDITAL de concurso. [cole aqui o edital]\nFORMATO (uma linha por item):\n@ Nome da disciplina\n+ Nome do tópico\nEXEMPLO DE SAÍDA:\n@ Português :: 10q\n@ Direito Financeiro :: 20q";
+    const lp = rev(PR);
+    ok(lp.length === 1 && lp[0].id === "texto_e_o_prompt" && lp[0].quem === "app" && lp[0].fix === "tirar_prompt" && lp[0].grave === true, "Y1j texto = prompt: um achado só (o app tira o prompt) e nenhum outro cálculo: " + lp.map((x) => x.id));
+    /* ordem: grave primeiro; dentro do grupo, app → você → IA */
+    const mix = rev(NUM + "\nlinha solta que ninguém entende\nmais uma solta aqui");
+    const ids = mix.map((x) => x.id);
+    ok(ids.indexOf("linha_ignorada") < ids.indexOf("numeracao") && mix.slice(0, mix.findIndex((x) => !x.grave)).every((x) => x.grave) && mix.filter((x) => !x.grave).every((x, i, arr) => !i || { app: 0, voce: 1, ia: 2 }[arr[i - 1].quem] <= { app: 0, voce: 1, ia: 2 }[x.quem]), "Y1k graves primeiro; depois app → você → IA: " + ids);
+    /* sem o texto bruto (só o plano lido) não inventa conserto de numeração */
+    const r0 = api.lerEdital(NUM);
+    ok(!api.edAchadosDeRevisao(undefined, r0, plan(r0)).some((x) => x.id === "numeracao" || x.id === "marcador"), "Y1l sem o texto bruto, numeração e marcador não são afirmados");
+    /* o resumo de uma linha */
+    const rs = api.edResumoAchados(mix);
+    ok(rs.total === mix.length && rs.graves === mix.filter((x) => x.grave).length && rs.por.app + rs.por.voce + rs.por.ia === rs.total && rs.por.app >= 2, "Y1m o resumo conta total, graves e quantos são de cada tipo: " + JSON.stringify(rs));
+    ok(["app", "voce", "ia"].every((q) => rs.por[q] === mix.filter((x) => x.quem === q).length) && rs.por.voce >= 1, "Y1m2 o resumo conta CADA tipo certo (app, você, IA): " + JSON.stringify(rs.por));
+    /* motivo genérico é da IA */
+    const GEN = ["# C | prova: 2027-02-21", "@ A :: 5", "+ a1 :: 4 :: não localizei em provas anteriores", "+ a2 :: 3 :: não localizei em provas anteriores", "@ B :: 4", "+ b1 :: 3 :: não localizei em provas anteriores", "+ b2 :: 2 :: não localizei em provas anteriores", "@ C :: 3", "+ c1 :: 3 :: não localizei em provas anteriores", "+ c2 :: 1 :: não localizei em provas anteriores", "@ D :: 3", "+ d1 :: 3 :: não localizei em provas anteriores", "+ d2 :: 2 :: não localizei em provas anteriores", "@ E :: 3", "+ e1 :: 3 :: não localizei em provas anteriores", "+ e2 :: 2 :: não localizei em provas anteriores"].join("\n");
+    const gg = por(rev(GEN), "motivo_generico");
+    ok(gg && gg.quem === "ia" && gg.fix === null, "Y1m3 motivo genérico repetido em dezenas de tópicos é da IA");
+    /* empate: a ordem em que o diagnóstico achou é mantida */
+    const UL = rev(["# C | prova: 2027-02-21", "@ A :: 5", "+ a1 :: 3 :: m", "@ B :: 4", "+ b1 :: 3 :: m", "@ C :: 3", "+ c1 :: 3 :: m", "+ c2 :: 3 :: m", "+ c3 :: 3 :: m", "+ c4 :: 3 :: m", "@ D :: 2", "+ d1 :: 3 :: m", "+ d2 :: 3 :: m", "+ d3 :: 3 :: m", "+ d4 :: 3 :: m"].join("\n")).filter((x) => x.id === "uma_linha");
+    ok(UL.length === 2 && /"A"/.test(UL[0].msg) && /"B"/.test(UL[1].msg), "Y1m4 achados do mesmo tipo e gravidade mantêm a ordem do edital (A antes de B): " + UL.map((x) => x.msg.slice(0, 12)));
+    /* empate entre a leitura e o planejamento: a leitura vem primeiro */
+    const LD = rev(["@ A :: 5", "+ a :: 3 :: m", "+ b :: 3 :: m", "@ B :: 3", "+ c :: 3 :: m", "+ d :: 3 :: m", "@ C :: 2", "+ e :: 3 :: m", "+ f :: 4 :: m", "linha solta sem sentido", "outra linha solta"].join("\n")).map((x) => x.id);
+    ok(LD.indexOf("linha_ignorada") >= 0 && LD.indexOf("sem_data") >= 0 && LD.indexOf("linha_ignorada") < LD.indexOf("sem_data"), "Y1m5 entre dois graves da pessoa, o de leitura (linhas ignoradas) vem antes do de planejamento (sem data): " + LD);
+    ok(api.edResumoAchados(null).total === 0 && api.edResumoAchados([]).graves === 0, "Y1n resumo de lista vazia");
+    /* não mexe no que já existia: o diagnóstico continua devolvendo os mesmos ids */
+    const dd = api.diagnosticoPlano(api.lerEdital(IGUAIS), plan(api.lerEdital(IGUAIS))).map((x) => x.id).sort().join(",");
+    const dr = rev(IGUAIS).filter((x) => x.msg !== null).map((x) => x.id).sort().join(",");
+    ok(dd === dr, "Y1o todo achado do diagnóstico de planejamento aparece (nenhum some, nenhum duplica): " + dd + " | " + dr);
+    ok(rev(IGUAIS).every((x) => "id" in x && "grave" in x && "quem" in x && "fix" in x && "linha" in x && "chave" in x && "params" in x && "msg" in x), "Y1p todo achado tem os mesmos campos (a tela pode confiar neles)");
   }
 
   return falhas;
