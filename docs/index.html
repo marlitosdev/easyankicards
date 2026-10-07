@@ -671,6 +671,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   white-space:nowrap;font-weight:700;letter-spacing:.2px}
 .quem-app{background:rgba(26,127,55,.16);color:var(--verde-txt)}
 .quem-ia{background:rgba(139,92,246,.18);color:var(--info)}
+.quem-voce{background:rgba(232,148,10,.18);color:var(--atencao)}
+.ed-ach{margin:8px 0;border:1px solid var(--borda);border-radius:8px;padding:6px 10px}
+.ed-ach-cab{all:unset;cursor:pointer;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;width:100%;font-size:13px}
+.ed-ach-cab:focus-visible{outline:2px solid var(--info);outline-offset:2px;border-radius:4px}
+.ed-ach-seta{opacity:.7;width:12px}
+#edAchLista{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px;max-height:34vh;overflow:auto}
+.ed-ach-ok{color:var(--verde-txt)}
+.ed-ach-grave{color:#dc2626;font-weight:700}
+#btnEditalColar[data-n]::after{content:" · " attr(data-n)}
 :root[data-theme="light"] .quem-ia{color:var(--info)}
 /* MESMO TOM ROXO DO "precisa da IA" acima — é a mesma ideia, "algo da IA
    está pendente aqui". */
@@ -8763,6 +8772,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgEdColar" class="ui-modal">
   <h3 data-i18n="ed_colar_tit"></h3>
   <p class="nota" data-i18n="ed_colar_ajuda"></p>
+
+  <!-- PASSO 0 — O QUE O APP ACHOU. Era o botão "Procurar erros no plano", uma janela à parte que só listava e não dizia para
+       onde a resposta voltava. Agora é o começo da própria revisão: o que o app corrige sozinho, o que é decisão sua e o que é
+       da IA, com a ação ao lado de cada item. -->
+  <div id="edAchCx" class="ed-ach">
+    <button type="button" class="ed-ach-cab" id="btnEdAchAbrir" aria-expanded="false">
+      <span class="ed-ach-seta" id="edAchSeta">▸</span> <b data-i18n="ed_ach_tit"></b> <span id="edAchRes"></span>
+    </button>
+    <div id="edAchLista" hidden></div>
+  </div>
 
   <!-- O PASSO 1 MORA AQUI AGORA.
        Pedir a revisão e receber a revisão eram dois botões distantes na

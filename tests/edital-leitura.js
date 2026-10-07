@@ -185,6 +185,88 @@ async function testes() {
     ok(/Entendido, mas confira: 1 disciplina\(s\) repetida\(s\)/.test(api.$("edNovoSemTxt").textContent) && /ambar|atencao/.test(cls(api.$("edNovoSem"))), "L7d o semaforo do Novo edital fica ambar e diz '1 disciplina repetida'");
   }
 
+  /* ---- Y2: Passo 0 da revisão — "O que o app achou", dentro de "Revisar o edital com a IA" ---- */
+  {
+    api.matIniciar(); api.edIniciar();
+    const ed = api.edCriar("Passo0", DUP);
+    api.hubAbrirEdital(ed.id);
+    api.edRender();
+    const btn = api.$("btnEditalColar");
+    const att = (e, k) => (e.getAttribute ? e.getAttribute(k) : null);
+    ok(att(btn, "data-n") && Number(att(btn, "data-n")) >= 2, "Y2a o botão 'Revisar o edital com a IA' ganha o selo com a contagem de pontos: " + att(btn, "data-n"));
+    btn.onclick();
+    const res = api.$("edAchRes").textContent;
+    ok(/ponto\(s\) a revisar · \d+ grave\(s\)/.test(res) && cls(api.$("edAchRes")).includes("ed-ach-grave"), "Y2b o resumo diz quantos pontos e quantos graves (e fica vermelho): " + res);
+    ok(api.$("edAchLista").hidden === false && api.$("btnEdAchAbrir").getAttribute("aria-expanded") === "true" && api.$("edAchSeta").textContent === "▾", "Y2c com problema GRAVE a lista já vem aberta");
+    const itens = Array.from(api.$("edAchLista").children);
+    const rep = itens.find((x) => /mais de uma vez/.test(x.textContent));
+    ok(rep && tem(achar(rep, (e) => tem(e, "sug-quem"))[0], "quem-app") && achar(rep, (b) => b.textContent === api.t("ed_fix_rep")).length === 1, "Y2d 'disciplina repetida': marcada como do app, com o botão 'Unir as repetidas'");
+    ok(achar(rep, (b) => b.textContent === api.t("goto_error")).length === 1, "Y2e e leva à linha ('Ver no texto')");
+    const sem = itens.find((x) => /sem nenhum tópico/.test(x.textContent));
+    ok(sem && tem(achar(sem, (e) => tem(e, "sug-quem"))[0], "quem-voce") && achar(sem, (e) => /btn-azul/.test(cls(e))).length === 0, "Y2f 'sem tópico': decisão da pessoa (você decide), sem botão de conserto");
+    /* corrigir pelo próprio passo 0 repinta a lista */
+    const fix = achar(rep, (b) => b.textContent === api.t("ed_fix_rep"))[0];
+    await conduzir(fix.onclick());
+    ok((api.$("editalTexto").value.match(/@ Português/g) || []).length === 1, "Y2g o botão corrige o texto da bancada");
+    ok(!Array.from(api.$("edAchLista").children).some((x) => /mais de uma vez/.test(x.textContent)), "Y2h e a lista é repintada sem o que foi corrigido");
+    /* texto que o prompt colado — vira só aquele achado, do app */
+    api.$("editalTexto").value = "# x | horas: 20\n" + api.edPromptEdital(true); api.edRender(); api.edAchadosPintar();
+    const unico = Array.from(api.$("edAchLista").children);
+    ok(unico.length === 1 && /PROMPT/.test(unico[0].textContent) && achar(unico[0], (b) => /btn-azul/.test(cls(b)) && b.textContent === api.t("ed_fix_prompt")).length === 1, "Y2i o prompt colado: um item só, com 'Tirar o prompt do texto'");
+
+    /* plano limpo: nada a dizer, sem selo, lista recolhida */
+    const LIMPO5 = ["# C | prova: 2030-05-10 | horas: 20"].concat([4, 4, 4, 3, 3].map((p, i) => ["@ D" + i + " :: " + p, "+ t" + i + "a :: 3 :: cai sempre", "+ t" + i + "b :: 3 :: cai bastante", "+ t" + i + "c :: 3 :: cai pouco"].join("\n"))).join("\n");
+    api.$("editalTexto").value = LIMPO5; api.edRender(); api.edAchadosPintar();
+    ok(api.edAchadosAtuais().length === 0 && att(btn, "data-n") === null, "Y2j plano limpo: nenhum achado e SEM selo no botão: " + api.edAchadosAtuais().map((x) => x.id));
+    ok(/nenhum problema encontrado/.test(api.$("edAchRes").textContent) && cls(api.$("edAchRes")).includes("ed-ach-ok") && api.$("edAchLista").hidden === true, "Y2k e o resumo diz 'nenhum problema' (verde), com a lista recolhida");
+    api.$("editalTexto").value = ""; api.edRender(); api.edAchadosPintar();
+    ok(att(btn, "data-n") === null && api.$("edAchRes").textContent === "" && /vazio/.test(api.$("edAchLista").textContent), "Y2l texto vazio: sem selo, sem resumo, e a lista diz que o plano está vazio");
+
+    /* só aviso leve: lista recolhida, mas o resumo conta */
+    api.$("editalTexto").value = LIMPO5.replace("+ t0a ::", "- t0a ::"); api.edRender(); api.edAchadosPintar();
+    const leve = api.edAchadosAtuais();
+    ok(leve.length === 1 && leve[0].id === "marcador" && !leve[0].grave, "Y2m só marcador torto: um aviso leve do app: " + leve.map((x) => x.id));
+    ok(api.$("edAchLista").hidden === true && /1 ponto\(s\) a revisar · 0 grave\(s\)/.test(api.$("edAchRes").textContent) && !cls(api.$("edAchRes")).includes("ed-ach-grave") && att(btn, "data-n") === "1", "Y2n aviso leve: lista recolhida, resumo sem vermelho e selo '1'");
+    api.$("btnEdAchAbrir").onclick();
+    ok(api.$("edAchLista").hidden === false && api.$("edAchSeta").textContent === "▾", "Y2o o cabeçalho abre a lista; de novo, recolhe");
+    api.$("btnEdAchAbrir").onclick();
+    ok(api.$("edAchLista").hidden === true && api.$("edAchSeta").textContent === "▸" && api.$("btnEdAchAbrir").getAttribute("aria-expanded") === "false", "Y2o2 e recolhe de novo");
+    /* o que é da IA não leva botão */
+    const IA = LIMPO5.replace(/ :: [345](?= |$)/g, " :: 3");
+    api.$("editalTexto").value = ["# C | prova: 2030-05-10 | horas: 20", "@ A :: 3", "+ a1", "+ a2", "+ a3", "@ B :: 3", "+ b1", "+ b2", "+ b3", "@ C :: 3", "+ c1", "+ c2", "+ c3"].join("\n"); api.edRender(); api.edAchadosPintar();
+    const ia = Array.from(api.$("edAchLista").children).filter((x) => tem(achar(x, (e) => tem(e, "sug-quem"))[0], "quem-ia"));
+    ok(ia.length >= 2 && ia.every((x) => achar(x, (e) => tem(e, "sug-acao")).length === 0), "Y2p o que é da IA (pesos iguais, sem peso…) aparece marcado 'precisa da IA' e SEM botão");
+    /* o rótulo de QUEM resolve, a cor da bolinha, o texto manda nas datas e o "ver no texto" fecha o diálogo */
+    api.$("editalTexto").value = DUP; api.edRender(); api.$("btnEditalColar").onclick();
+    const todos = Array.from(api.$("edAchLista").children);
+    const quemTxt = (x) => achar(x, (e) => tem(e, "sug-quem"))[0].textContent;
+    const rep2 = todos.find((x) => /mais de uma vez/.test(x.textContent)), sem2 = todos.find((x) => /sem nenhum tópico/.test(x.textContent));
+    ok(quemTxt(rep2) === api.t("quem_app") && quemTxt(sem2) === api.t("ed_ach_quem_voce"), "Y2r o rótulo diz QUEM resolve: 'o app corrige' / 'você decide': " + quemTxt(rep2) + " | " + quemTxt(sem2));
+    ok(tem(achar(rep2, (e) => tem(e, "dot"))[0], "dot-red") && tem(achar(sem2, (e) => tem(e, "dot"))[0], "dot-org"), "Y2s grave = bolinha vermelha; atenção = laranja");
+    const iaItem = (() => { api.$("editalTexto").value = ["# C | prova: 2030-05-10 | horas: 20", "@ A :: 3", "+ a1", "+ a2", "+ a3", "@ B :: 3", "+ b1", "+ b2", "+ b3", "@ C :: 3", "+ c1", "+ c2", "+ c3"].join("\n"); api.edRender(); api.edAchadosPintar(); return Array.from(api.$("edAchLista").children).find((x) => /precisa da IA/.test(quemTxt(x))); })();
+    ok(!!iaItem && quemTxt(iaItem) === api.t("quem_ia"), "Y2t o rótulo 'precisa da IA' é o dos itens de peso/motivo");
+    api.$("editalTexto").value = DUP; api.edRender(); api.edAchadosPintar();
+    const irL = achar(Array.from(api.$("edAchLista").children).find((x) => /mais de uma vez/.test(x.textContent)), (b) => b.textContent === api.t("goto_error"))[0];
+    api.$("dlgEdColar").open = true; irL.onclick();
+    ok(api.$("dlgEdColar").open === false, "Y2u 'Ver no texto' fecha o diálogo (senão a linha fica escondida atrás dele)");
+    /* o texto manda: data e horas do cabeçalho vencem os campos; sem data no cabeçalho, vale o campo (e o memo percebe a troca) */
+    const iso = (dias) => { const d = new Date(Date.now() + 86400000 * dias); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+    const CORPO = LIMPO5.split("\n").slice(1).join("\n");
+    api.$("editalTexto").value = "# C | prova: " + iso(60) + " | horas: 20\n" + CORPO; api.edRender();
+    api.$("edProva").value = "2020-01-01"; api.$("edHoras").value = 1;
+    ok(!api.edAchadosAtuais().some((x) => x.id === "nao_cabe"), "Y2v cabeçalho do texto (prova em 60 dias, 20h) vence campos desatualizados (2020, 1h): " + api.edAchadosAtuais().map((x) => x.id));
+    api.$("editalTexto").value = "# C | horas: 1\n" + CORPO;
+    api.$("edProva").value = iso(400);
+    const longe = api.edAchadosAtuais().map((x) => x.id);
+    api.$("edProva").value = iso(35);
+    const perto = api.edAchadosAtuais().map((x) => x.id);
+    ok(!longe.includes("nao_cabe") && perto.includes("nao_cabe"), "Y2w sem data no cabeçalho vale o campo — e trocar o campo recalcula (o memo olha a data): " + longe + " | " + perto);
+    /* memo: o mesmo texto não recalcula; texto novo, sim */
+    const m1 = api.edAchadosAtuais(), m2 = api.edAchadosAtuais();
+    api.$("editalTexto").value += "\n+ c4"; const m3 = api.edAchadosAtuais();
+    ok(m1 === m2 && m3 !== m1, "Y2q o resultado é calculado uma vez por texto (e muda quando o texto muda)");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
