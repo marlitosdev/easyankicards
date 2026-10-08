@@ -2324,6 +2324,14 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .duv-onde{font-size:10px;color:var(--sutil);margin-top:3px}
 .duv-acoes{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
 .mat-f-campo{flex:1;min-width:170px}
+.mat-filtros-linha{align-items:center}
+.mat-filtros-linha .mat-f-campo{display:flex;align-items:center;gap:6px}
+.mat-filtros-linha .mat-busca{padding:6px 9px;font-size:12.5px}
+.mat-f-rot{font-size:11px;font-weight:700;color:var(--sutil);white-space:nowrap}
+.mat-busca-topo{font-size:14px;padding:11px 13px;margin:0 0 8px}
+.mat-rodape{margin-top:10px;text-align:right}
+.btn-link{all:unset;cursor:pointer;font-size:11px;color:var(--sutil);text-decoration:underline}
+.btn-link:focus-visible{outline:2px solid var(--info);outline-offset:2px}
 .mat-f-campo .nd-rot{margin:0 0 3px}
 .mat-tipos{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px}
 .mat-tipo{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
@@ -5587,7 +5595,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           title="Junta num lugar só tudo que você marcou em azul como dúvida, em todos os resumos e leis secas. Serve para tirar as dúvidas de uma vez."></button>
         <button class="btn-min" id="btnMatLeis" data-i18n="lei_bib_btn"
           title="Abre a biblioteca das suas leis: cada lei existe uma vez só, e daqui se vê onde ela é usada."></button>
-        <button class="btn-min" id="btnMatLogAba" data-i18n="mat_log_btn"></button>
         <!-- A INSTRUÇÃO VIRA BOTÃO.
              O parágrafo explicava bem — na primeira vez. Da segunda em
              diante ele é uma faixa de texto que se lê por cima todo dia
@@ -5597,26 +5604,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           aria-label="O que é esta aba" title="O que é esta aba">?</button>
       </span>
     </div>
-    <!-- Dois campos com sugestão, e o edital vem PRIMEIRO: com dois
-         concursos as disciplinas se repetem ("Direito Financeiro" existe
-         nos dois), e uma lista única de disciplinas não diz de qual delas
-         se trata. Escolhido o edital, a lista de disciplinas encolhe para
-         as que existem nele. -->
-    <div class="mat-filtros">
-      <div class="mat-f-campo">
-        <label class="nd-rot" data-i18n="mat_f_edital"></label>
-        <span class="mat-f-dica" data-i18n="mat_f_edital_dica"></span>
+    <!-- M1 — A BUSCA EM CIMA DE TUDO: é o jeito mais curto de achar o que se procura, e ela ficava abaixo das ferramentas
+         de cartões. Procura no nome, no resumo, nos cartões e nos julgados. -->
+    <input type="search" id="matBusca" class="mat-busca mat-busca-topo" data-i18n-ph="mat_busca_ph" placeholder="Buscar tópico, resumo, cartão ou julgado…">
+    <!-- Dois campos com sugestão, e o edital vem PRIMEIRO: com dois concursos as disciplinas se repetem ("Direito
+         Financeiro" existe nos dois). Numa linha só, compactos; a explicação ficou no title de cada campo. -->
+    <div class="mat-filtros mat-filtros-linha">
+      <label class="mat-f-campo"><span class="mat-f-rot" data-i18n="mat_f_edital"></span>
         <input type="search" id="matFEdital" class="mat-busca" list="matListaEditais"
-               placeholder="Todos os editais">
-        <datalist id="matListaEditais"></datalist>
-      </div>
-      <div class="mat-f-campo">
-        <label class="nd-rot" data-i18n="mat_f_disc"></label>
-        <span class="mat-f-dica" data-i18n="mat_f_disc_dica"></span>
+               data-i18n-title="mat_f_edital_dica" data-i18n-ph="mat_f_edital_ph" placeholder="Todos os editais">
+      </label>
+      <datalist id="matListaEditais"></datalist>
+      <label class="mat-f-campo"><span class="mat-f-rot" data-i18n="mat_f_disc"></span>
         <input type="search" id="matFDisc" class="mat-busca" list="matListaDiscs"
-               placeholder="Todas as disciplinas">
-        <datalist id="matListaDiscs"></datalist>
-      </div>
+               data-i18n-title="mat_f_disc_dica" data-i18n-ph="mat_f_disc_ph" placeholder="Todas as disciplinas">
+      </label>
+      <datalist id="matListaDiscs"></datalist>
     </div>
     <!-- Marcadores em vez de adivinhar pelo texto: um resumo pode ter
          resumo, cartões e lei seca ao mesmo tempo, e filtrar por palavra
@@ -5628,8 +5631,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
     <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
     <button type="button" class="btn-min" id="btnPacoteImportar" data-i18n="pac_importar_btn" data-i18n-title="pac_importar_btn_aj"></button>
-    <input type="search" id="matBusca" class="mat-busca" placeholder="Buscar no tópico ou no conteúdo">
     <div id="matLista" class="mat-caixa"></div>
+    <!-- o registro técnico dos resumos: serve para relatar problema, não para estudar — fica no rodapé, discreto -->
+    <div class="mat-rodape"><button type="button" class="btn-link" id="btnMatLogAba" data-i18n="mat_log_btn"></button></div>
   </div>
 </section>
 
