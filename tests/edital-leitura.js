@@ -318,11 +318,13 @@ async function testes() {
     ok(e1.parou === false, "Y2b-n colar um trecho curto no editor: normal (não intercepta)");
     const e2 = ev("texto qualquer sem estrutura\nlinha dois\nlinha três\nlinha quatro\nlinha cinco\nlinha seis\nlinha sete"); await api.edColarNoEditor(e2);
     ok(e2.parou === false, "Y2b-o texto longo que NÃO tem disciplinas: colar normal");
+    api.edColarModoDefinir("organizar");
     const e3 = ev(BOA); const p3 = api.edColarNoEditor(e3);
     ok(e3.parou === true, "Y2b-p texto longo com disciplinas (parece a resposta da IA) com plano existente: intercepta");
     const r3 = await conduzir(p3);
     ok(r3 === "revisar" && api.$("edColarTexto").value === BOA && api.$("editalTexto").value === PLANO && api.$("dlgEdColar").open === true, "Y2b-q 'sim': o texto vai para o passo 2 da revisão e o plano da bancada NÃO muda");
     ok(tem(api.$("edColarSem"), "sem-ok") && api.$("edColarPasso1").className === "ednovo-passo feito", "Y2b-r e a revisão abre já com o semáforo verde e o passo 1 dado como feito");
+    ok(api.$("btnEdColarModoCor").getAttribute("aria-pressed") === "true", "Y2b-r2 e já abre no modo 'Corrigir o plano que já tenho' (o texto colado é uma resposta, não um edital novo)");
     api.$("dlgEdColar").open = false;
     api.$("editalTexto").value = PLANO; api.$("editalTexto").selectionStart = 0; api.$("editalTexto").selectionEnd = 0;
     const e4 = ev(BOA); const p4 = api.edColarNoEditor(e4);
@@ -348,6 +350,41 @@ async function testes() {
     api.$("editalTexto").value = PLANO;
     const e6 = ev(PLANO.split("\n").slice(0, 5).join("\n")); await api.edColarNoEditor(e6);
     ok(e6.parou === false, "Y2b-x até 5 linhas de plano coladas no editor: normal (a pergunta é para o plano inteiro)");
+    /* ---- Y3: o pedido tem dois modos — organizar (edital oficial) e corrigir (o plano que já tenho) ---- */
+    const pr = (id) => api.$(id).getAttribute("aria-pressed");
+    api.$("editalTexto").value = ["# C | horas: 20", "@ A :: 3", "+ a1", "+ a2", "@ B :: 3", "+ b1", "+ b2", "@ C :: 3", "+ c1", "+ c2"].join("\n"); api.edRender();
+    api.$("btnEditalColar").onclick();
+    ok(pr("btnEdColarModoCor") === "true" && pr("btnEdColarModoOrg") === "false" && api.$("btnEdColarModoCor").disabled === false && /plano atual e os pontos/.test(api.$("edColarModoExp").textContent), "Y3d com plano lido, o padrão é 'Corrigir o plano que já tenho' (e a explicação diz o que a IA recebe)");
+    ok(/vão no pedido à IA/.test(api.$("edAchLista").textContent), "Y3e o passo 0 diz que os pontos 'precisa da IA' vão no pedido");
+    api.$("btnEdColarModoOrg").onclick();
+    ok(pr("btnEdColarModoOrg") === "true" && pr("btnEdColarModoCor") === "false" && api.edColarPedidoTexto() === api.t("ed_prompt") && /instruções de como organizar/.test(api.$("edColarModoExp").textContent), "Y3f trocar para 'Montar a partir do edital oficial': o pedido é o ed_prompt de sempre");
+    api.$("btnEdColarModoCor").onclick();
+    janela.__area = "";
+    await conduzir(api.$("btnEdColarPedido").onclick());
+    const rev = janela.__area;
+    ok(/^Você vai REVISAR um PLANO DE ESTUDO/.test(rev) && /\nPLANO ATUAL:\n# C \| horas: 20\n@ A :: 3/.test(rev) && rev.indexOf("PLANO ATUAL:") > rev.indexOf("REGRAS:"), "Y3g o pedido de revisão: cabeçalho de REVISÃO, as regras e o PLANO ATUAL no fim");
+    ok(/O QUE O APLICATIVO JÁ ENCONTROU/.test(rev) && /\[GRAVE\] Todas as 3 disciplinas estão com peso 3/.test(rev), "Y3h lista o que o app achou e é da IA (peso igual, [GRAVE]): " + rev.slice(rev.indexOf("O QUE O APLICATIVO"), rev.indexOf("O QUE O APLICATIVO") + 200));
+    ok(!/data de prova|linha\(s\) não foram entendidas/.test(rev), "Y3i e NÃO lista o que é decisão da pessoa (sem data) nem do app");
+    /* contrato: toda regra do ed_prompt está no pedido de revisão (os dois não se separam) */
+    const base = api.t("ed_prompt");
+    const miolo = base.slice(base.search(/\n\nFORMATO/) + 2, base.search(/\n\nEXEMPLO DE SAÍDA:/));
+    const regras = miolo.split("\n").filter((l) => /^\d+\./.test(l));
+    ok(rev.includes(miolo), "Y3j0 o bloco FORMATO + REGRAS do ed_prompt entra INTEIRO e idêntico no pedido de revisão (nem uma linha cortada)");
+    ok(regras.length >= 12 && regras.every((l) => rev.includes(l)) && rev.includes("13. ESTE É UM PLANO PRONTO"), "Y3j toda regra do ed_prompt (" + regras.length + ") está no pedido de revisão, e a nova vem numerada depois (13)");
+    ok(!/Colar plano corrigido/.test(rev + base) && /Passo 2 — traga a resposta da IA para cá/.test(rev) && /Passo 2 — traga a resposta da IA para cá/.test(base), "Y3k os dois pedidos dizem para onde a resposta volta (passo 2), não para o botão antigo");
+    ok(/✓ Copiado/.test(api.$("edColarPedidoMsg").textContent), "Y3l copiar no modo corrigir marca o passo 1");
+    const LIMPO6 = ["# C | prova: 2030-05-10 | horas: 20"].concat([4, 4, 4, 3, 3].map((p, i) => ["@ D" + i + " :: " + p, "+ t" + i + "a :: 3 :: cai sempre", "+ t" + i + "b :: 3 :: cai bastante", "+ t" + i + "c :: 3 :: cai pouco"].join("\n"))).join("\n");
+    api.$("editalTexto").value = LIMPO6; api.edRender();
+    const semAch = api.edPromptRevisao(LIMPO6, api.edAchadosAtuais());
+    ok(!/O QUE O APLICATIVO JÁ ENCONTROU/.test(semAch) && semAch.includes("PLANO ATUAL:\n# C"), "Y3j1 plano sem nada para a IA resolver: o pedido NÃO traz o cabeçalho 'o que o app achou' vazio");
+    /* sem plano: só 'organizar', e 'corrigir' desligado */
+    api.$("editalTexto").value = ""; api.edRender();
+    api.$("btnEditalColar").onclick();
+    ok(pr("btnEdColarModoOrg") === "true" && api.$("btnEdColarModoCor").disabled === true && api.edColarModoDefinir("corrigir") === "organizar", "Y3m sem plano: só 'montar a partir do edital oficial'; 'corrigir' fica desligado e não pega");
+    /* o prompt colado no editor não conta como plano */
+    api.$("editalTexto").value = "# x | horas: 20\n" + api.edPromptEdital(true); api.edRender();
+    ok(api.edColarTemPlano() === false, "Y3n o prompt colado no editor não conta como 'plano que já tenho'");
+    api.$("editalTexto").value = "";
     ok(!/Cole aqui o resultado do prompt/.test(api.t("ed_colar")) && /Revisar o edital com a IA/.test(api.t("ed_colar")), "Y2b-u o rótulo do editor não convida mais a colar a resposta da IA ali: " + api.t("ed_colar"));
   }
 

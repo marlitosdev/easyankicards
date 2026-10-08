@@ -2461,6 +2461,12 @@ function edAchadosDeRevisao(raw, r, plano) {
     .map((x) => x.a);
 }
 
+/* O QUE VAI NO PEDIDO À IA (Y3): o que é julgamento de peso/motivo e o que é divisão de tópicos. Decisão da pessoa (data, horas,
+ * qual optativa, nome de exemplo) e conserto mecânico do app NÃO vão: a IA não decide isso. */
+const ED_ACHADO_IA_EXTRA = { uma_linha: 1, granular: 1, longo: 1, repetido: 1, dominante: 1, sem_topico: 1 };
+function edAchadoParaIA(a) { return !!a && (a.quem === "ia" || !!ED_ACHADO_IA_EXTRA[a.id]); }
+function edAchadosParaIA(lista) { return (lista || []).filter(edAchadoParaIA); }
+
 /* o resumo de uma linha: quantos, quantos graves, e quantos de cada tipo de solução */
 function edResumoAchados(lista) {
   const l = lista || [];

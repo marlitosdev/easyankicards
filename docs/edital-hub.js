@@ -1071,6 +1071,23 @@ function edPromptEdital(comRamos, textoDoEdital) {
   return out;
 }
 
+/* O pedido de REVISÃO (Y3): o plano já existe e a IA corrige pesos, motivos e a divisão dos tópicos. Montado a partir do MESMO
+ * bloco "FORMATO + REGRAS" do ed_prompt — assim as regras novas (ramos, optativas, "90p não é por disciplina") entram nos dois
+ * pedidos sem se separarem. Só os achados que a IA pode resolver entram (edAchadosParaIA); o plano atual vai no fim. */
+function edPromptRevisao(textoPlano, achados) {
+  const base = t("ed_prompt");
+  const ini = base.search(/\n\n(?:FORMATO|FORMAT)\b/);
+  const fim = base.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
+  const miolo = ini >= 0 && fim > ini ? base.slice(ini + 2, fim) : "";
+  let n = 0;
+  miolo.replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
+  const itens = edAchadosParaIA(achados).map((a, k) => (k + 1) + ". " + (a.grave ? "[GRAVE] " : "") + (a.msg || t(a.chave, a.params || {})));
+  const L = [t("ed_prompt_rev_cab"), ""];
+  if (itens.length) L.push(t("ed_prompt_rev_achados"), itens.join("\n"), "");
+  L.push(miolo, t("ed_prompt_rev_regra", { n: n + 1 }), "", t("ed_prompt_rev_plano"), String(textoPlano || ""), "", t("ed_prompt_onde"));
+  return L.join("\n");
+}
+
 /* =====================================================================
  * O CAMPO "RESPOSTA DA IA" COMO SEMÁFORO — a estratégia visual contra o erro de colar a coisa errada.
  *

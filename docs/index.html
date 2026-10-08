@@ -679,6 +679,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #edAchLista{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px;max-height:34vh;overflow:auto}
 .ed-ach-ok{color:var(--verde-txt)}
 .ed-colar-pedido-msg{white-space:pre-line}
+.ed-colar-modo{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+.ed-colar-modo .btn-min[aria-pressed="true"]{background:var(--acao);color:#fff;border-color:var(--acao)}
+.ed-colar-modo .btn-min:disabled{opacity:.45;cursor:not-allowed}
 .ed-ach-grave{color:#dc2626;font-weight:700}
 #btnEditalColar[data-n]::after{content:" · " attr(data-n)}
 :root[data-theme="light"] .quem-ia{color:var(--info)}
@@ -8794,8 +8797,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        editor da bancada convidava a colar a resposta da IA direto ali, sem a conferência. -->
   <div class="ednovo-passo" id="edColarPasso1">
     <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ed_colar_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
+    <div class="ed-colar-modo" role="group" data-i18n-title="ed_colar_modo_rot">
+      <button type="button" class="btn-min" id="btnEdColarModoOrg" aria-pressed="false" data-i18n="ed_colar_modo_org"></button>
+      <button type="button" class="btn-min" id="btnEdColarModoCor" aria-pressed="false" data-i18n="ed_colar_modo_cor"></button>
+    </div>
+    <span class="nota" id="edColarModoExp"></span>
     <button class="btn btn-roxo" id="btnEdColarPedido" data-i18n="ed_rev_pedir"></button>
-    <span class="nota" data-i18n="ed_rev_pedir_exp"></span>
     <p class="nota ednovo-prompt-msg ed-colar-pedido-msg" id="edColarPedidoMsg" role="status"></p>
   </div>
   <div class="ednovo-passo" id="edColarPasso2">
