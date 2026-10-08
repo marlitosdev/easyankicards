@@ -678,6 +678,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .ed-ach-seta{opacity:.7;width:12px}
 #edAchLista{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px;max-height:34vh;overflow:auto}
 .ed-ach-ok{color:var(--verde-txt)}
+.ed-colar-pedido-msg{white-space:pre-line}
 .ed-ach-grave{color:#dc2626;font-weight:700}
 #btnEditalColar[data-n]::after{content:" · " attr(data-n)}
 :root[data-theme="light"] .quem-ia{color:var(--info)}
@@ -8788,18 +8789,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        bancada, e nada dizia que o segundo só faz sentido depois do
        primeiro. Juntos, a caixa conta a história inteira: copie isto,
        cole numa IA, traga a resposta para o campo de baixo. -->
-  <div class="vk-passo">
-    <div class="vk-passo-n" data-i18n="vk_passo1"></div>
+  <!-- DOIS CARTÕES, NA ORDEM EM QUE SE FAZEM — o mesmo desenho do Novo edital: o primeiro vai PARA a IA, o segundo volta DA IA.
+       Antes, "copiar" e "colar" eram dois blocos de texto soltos; o aviso de copiado era um popup que sumia, e o rótulo do
+       editor da bancada convidava a colar a resposta da IA direto ali, sem a conferência. -->
+  <div class="ednovo-passo" id="edColarPasso1">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ed_colar_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
     <button class="btn btn-roxo" id="btnEdColarPedido" data-i18n="ed_rev_pedir"></button>
     <span class="nota" data-i18n="ed_rev_pedir_exp"></span>
+    <p class="nota ednovo-prompt-msg ed-colar-pedido-msg" id="edColarPedidoMsg" role="status"></p>
   </div>
-  <div class="vk-passo">
-    <div class="vk-passo-n" data-i18n="vk_passo2"></div>
+  <div class="ednovo-passo" id="edColarPasso2">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ed_colar_passo2"></span> <span class="ednovo-tag tag-volta" data-i18n="ed_novo_tag2"></span></div>
     <span class="nota" data-i18n="ed_rev_colar_exp"></span>
+    <textarea id="edColarTexto" class="ednovo-ta" rows="12" style="width:100%;box-sizing:border-box"
+              placeholder="# Concurso | prova: 2026-08-30 | horas: 12&#10;@ Disciplina :: 5&#10;+ Tópico :: 4 :: motivo"></textarea>
+    <div class="ednovo-sem sem-vazio" id="edColarSem" role="status" aria-live="polite">
+      <span class="ednovo-sem-ico" id="edColarSemIco" aria-hidden="true">○</span>
+      <span class="ednovo-sem-txt" id="edColarSemTxt"></span>
+      <span class="ednovo-sem-acoes" id="edColarSemAcoes"></span>
+    </div>
   </div>
-
-  <textarea id="edColarTexto" rows="12" style="width:100%;box-sizing:border-box"
-            placeholder="# Concurso | prova: 2026-08-30 | horas: 12&#10;@ Disciplina :: 5&#10;+ Tópico :: 4 :: motivo"></textarea>
   <div id="edColarAviso" class="ed-nao-cabe" hidden></div>
   <div id="edColarListaCx" class="ed-colar-lista" hidden>
     <div class="ed-colar-lista-cab">
