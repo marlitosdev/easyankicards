@@ -867,6 +867,48 @@ async function testes() {
     Object.keys(mat).forEach((k) => delete mat[k]);
   }
 
+  /* ---- M2: abas por tipo (escolha única) e as ferramentas de cada tipo dentro da sua aba ---- */
+  {
+    const mat = api.matResumosAtual();
+    Object.keys(mat).forEach((k) => delete mat[k]);
+    const k1 = api.matChave("Tributário", "Anterioridade");
+    api.matGravar(k1, "Resumo.", { disciplina: "Tributário", topico: "Anterioridade" });
+    mat[k1].cartoes = "Qual o prazo? :: 90 dias :: trib";
+    const k2 = api.matChave("Financeiro", "PPA");
+    api.matGravar(k2, "Plano plurianual.", { disciplina: "Financeiro", topico: "PPA" });
+    api.matFiltroTiposTeste([]);
+    const abas = () => Array.from(api.$("matTipos").children);
+    const ativa = () => abas().filter((b) => /\bativa\b/.test(b.className)).map((b) => b.textContent);
+    const visiveis = () => ["matFerrCartoes", "matFerrLei", "matFerrJuris", "matFerrResumo"].filter((id) => api.$(id).hidden === false);
+    const itens = () => { let n = []; api.matAgrupado("").forEach((ds) => ds.forEach((xs) => xs.forEach((x) => n.push(x.topico)))); return n; };
+    ok(abas().length === 5 && abas()[0].textContent === "Tudo · 2" && abas()[2].textContent === "🃏 Cartões · 1" && abas()[3].textContent === "§ Lei seca · 0" && abas()[4].textContent === "⚖ Julgados · 0" && abas()[1].textContent === "📄 Resumos · 2", "M2a cinco abas, com ícone e número de tópicos: " + abas().map((b) => b.textContent).join(" | "));
+    ok(ativa().join() === "Tudo · 2" && visiveis().length === 0 && abas()[0].getAttribute("aria-selected") === "true", "M2b em 'Tudo' nenhuma faixa de ferramentas aparece");
+    ok(abas()[2].title === "1 tópico(s) com cartões", "M2c o title diz que o número é de TÓPICOS: " + abas()[2].title);
+    abas()[2].onclick();
+    ok(ativa().join() === "🃏 Cartões · 1" && visiveis().join() === "matFerrCartoes" && itens().join() === "Anterioridade", "M2d aba Cartões: só ela ativa, só a faixa de cartões e só os tópicos com cartões: " + visiveis() + " | " + itens());
+    abas()[2].onclick();
+    ok(ativa().join() === "🃏 Cartões · 1", "M2e tocar de novo na aba ativa não desliga (escolha única, não liga/desliga)");
+    abas()[3].onclick();
+    ok(ativa().join() === "§ Lei seca · 0" && visiveis().join() === "matFerrLei" && itens().length === 0, "M2f trocar de aba troca a faixa (lei) e o filtro (escolha única, não soma)");
+    abas()[4].onclick();
+    ok(visiveis().join() === "matFerrJuris", "M2g aba Julgados mostra a explicação dos julgados");
+    abas()[1].onclick();
+    ok(visiveis().join() === "matFerrResumo" && itens().length === 2, "M2h aba Resumos mostra a dica dos resumos e os dois tópicos");
+    abas()[0].onclick();
+    ok(ativa().join() === "Tudo · 2" && visiveis().length === 0 && itens().length === 2, "M2i 'Tudo' volta a mostrar tudo, sem faixa");
+    /* no HTML: as ferramentas de cartões e a biblioteca de leis moraram para dentro das faixas */
+    const fs = require("fs"), path = require("path");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const bloco = (id) => { const i = html.indexOf('id="' + id + '"'); return html.slice(i, html.indexOf("</div>", i)); };
+    ok(["btnGerCartoes", "btnCartRepetidos", "btnCartElevar", "btnPacote", "btnPacoteImportar"].every((id) => bloco("matFerrCartoes").indexOf('id="' + id + '"') > 0), "M2j as cinco ferramentas de cartões estão DENTRO da faixa da aba Cartões");
+    const sec = html.slice(html.indexOf('<section id="secResumos"'));
+    const cab = sec.slice(0, sec.indexOf("</div>"));
+    ok(bloco("matFerrLei").indexOf('id="btnMatLeis"') > 0 && cab.indexOf("btnMatLeis") < 0, "M2k a biblioteca de leis saiu do cabeçalho e foi para a faixa da aba Lei seca");
+    ok(html.indexOf(".mat-ferr{display:flex") >= 0 && html.indexOf(".mat-ferr[hidden]{display:none}") >= 0, "M2l a faixa usa display:flex — sem a regra [hidden]{display:none} ela apareceria em toda aba");
+    Object.keys(mat).forEach((k) => delete mat[k]);
+    api.matFiltroTiposTeste([]);
+  }
+
   /* ---- M45: a lista MOSTRA os cartoes ----
    * matSelosDe existia desde a v8.84 e nunca tinha sido usada: a lista
    * mostrava so o tamanho do resumo, entao um topico com cartoes parecia

@@ -2305,23 +2305,31 @@ function matPintarSugestoes() {
   const cx = $("matTipos");
   if (!cx) return;
   cx.innerHTML = "";
-  MAT_TIPOS.forEach((tp) => {
-    const n = lista.filter((x) => matTiposDe(x).indexOf(tp) >= 0).length;
+  /* ABAS DE ESCOLHA ÚNICA: "Tudo" ou UM tipo. O número é de TÓPICOS que têm aquele tipo ("cartões · 35" não são 35 cartões —
+   * por isso o title diz "35 tópico(s) com cartões"). */
+  const ativo = matAbaAtiva();
+  [""].concat(MAT_TIPOS).forEach((tp) => {
+    const n = tp ? lista.filter((x) => matTiposDe(x).indexOf(tp) >= 0).length : lista.length;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "mat-tipo tp-" + tp + (matFTipos.indexOf(tp) >= 0 ? " ativa" : "");
-    /* "cartões (1)" era lido como "1 cartão". O número conta MATERIAIS que
-     * têm cartões — coisa diferente, e a diferença confunde justamente quem
-     * está procurando os cartões. */
-    b.textContent = t("mat_tipo_" + tp) + " · " + t("mat_tipo_conta", { n });
-    b.onclick = () => {
-      const k = matFTipos.indexOf(tp);
-      if (k >= 0) matFTipos.splice(k, 1); else matFTipos.push(tp);
-      matRender();
-    };
+    b.className = "mat-tipo " + (tp ? "tp-" + tp : "tp-tudo") + (ativo === tp ? " ativa" : "");
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", ativo === tp ? "true" : "false");
+    b.textContent = (tp ? MAT_ICONE[tp] + " " + t("mat_aba_" + tp) : t("mat_aba_tudo")) + " · " + n;
+    b.title = tp ? t("mat_aba_tip", { n, tp: t("mat_tipo_" + tp) }) : t("mat_tipo_conta", { n });
+    b.onclick = () => { matFTipos = tp ? [tp] : []; matRender(); };
     cx.append(b);
   });
+  /* as ferramentas DO TIPO escolhido, logo abaixo das abas — e nenhuma em "Tudo" */
+  const ferr = { cartoes: "matFerrCartoes", lei: "matFerrLei", juris: "matFerrJuris", resumo: "matFerrResumo" };
+  Object.keys(ferr).forEach((tp) => { const el = $(ferr[tp]); if (el) el.hidden = ativo !== tp; });
 }
+
+/* o ícone de cada tipo: o MESMO na aba, nas ferramentas e (M3) no botão da linha */
+const MAT_ICONE = { resumo: "📄", cartoes: "🃏", lei: "§", juris: "⚖" };
+/* a aba ativa: "" (Tudo) ou um tipo. matFTipos continua sendo a lista do filtro (o motor aceita mais de um); a tela só
+ * escolhe um por vez. */
+function matAbaAtiva() { return matFTipos.length === 1 ? matFTipos[0] : ""; }
 
 /* Qual linha está com o menu aberto. UMA SÓ: dois menus abertos ao mesmo
  * tempo em linhas vizinhas se sobrepõem e a pessoa clica no item errado.
