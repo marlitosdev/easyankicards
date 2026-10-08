@@ -2337,6 +2337,11 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
 .mat-tipo{all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;font-size:10px;
   font-weight:700;color:var(--sutil);border:1px solid var(--borda);background:var(--campo)}
 .mat-tipo.ativa{color:var(--texto);border-color:var(--sutil);background:var(--panel)}
+.mat-abas{gap:6px;margin:2px 0 8px}
+.mat-abas .mat-tipo{font-size:12px;padding:5px 12px}
+.mat-ferr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;padding:8px 10px;border:1px solid var(--borda);border-radius:9px}
+.mat-ferr[hidden]{display:none}
+p.mat-ferr{display:block;font-size:12px}
 .mat-tipo.ativa.tp-resumo{color:var(--ok);border-color:var(--ok)}
 .mat-tipo.ativa.tp-cartoes{color:var(--info);border-color:var(--info)}
 .mat-tipo.ativa.tp-lei{color:#10b981;border-color:#10b981}
@@ -5593,8 +5598,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <span class="mat-conta" id="matContagem"></span>
         <button class="btn-min" id="btnDuvidas" data-i18n="duv_btn"
           title="Junta num lugar só tudo que você marcou em azul como dúvida, em todos os resumos e leis secas. Serve para tirar as dúvidas de uma vez."></button>
-        <button class="btn-min" id="btnMatLeis" data-i18n="lei_bib_btn"
-          title="Abre a biblioteca das suas leis: cada lei existe uma vez só, e daqui se vê onde ela é usada."></button>
         <!-- A INSTRUÇÃO VIRA BOTÃO.
              O parágrafo explicava bem — na primeira vez. Da segunda em
              diante ele é uma faixa de texto que se lê por cima todo dia
@@ -5624,13 +5627,25 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- Marcadores em vez de adivinhar pelo texto: um resumo pode ter
          resumo, cartões e lei seca ao mesmo tempo, e filtrar por palavra
          nunca separaria as três coisas. -->
-    <span class="mat-f-dica" data-i18n="mat_tipos_dica"></span>
-    <div class="mat-tipos" id="matTipos"></div>
-    <button type="button" class="btn btn-azul btn-biblioteca" id="btnGerCartoes"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
-    <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
-    <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
-    <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
-    <button type="button" class="btn-min" id="btnPacoteImportar" data-i18n="pac_importar_btn" data-i18n-title="pac_importar_btn_aj"></button>
+    <!-- M2 — ABAS POR TIPO DE MATERIAL, escolha única: Tudo · Resumos · Cartões · Lei seca · Julgados. Eram marcadores com
+         lógica "E" ("escolher dois exige os dois"), difíceis de explicar e parecidos com os selos das linhas. E cada tipo
+         leva as SUAS ferramentas para a sua aba: as de cartões ficavam soltas no meio da estante, com o mesmo peso dos
+         filtros, e não se sabia qual botão era de quê. -->
+    <div class="mat-tipos mat-abas" id="matTipos" role="tablist"></div>
+    <div class="mat-ferr" id="matFerrCartoes" hidden>
+      <button type="button" class="btn btn-azul btn-biblioteca" id="btnGerCartoes"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
+      <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
+      <button type="button" class="btn-min" id="btnCartElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
+      <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
+      <button type="button" class="btn-min" id="btnPacoteImportar" data-i18n="pac_importar_btn" data-i18n-title="pac_importar_btn_aj"></button>
+    </div>
+    <div class="mat-ferr" id="matFerrLei" hidden>
+      <button class="btn-min" id="btnMatLeis" data-i18n="lei_bib_btn"
+        title="Abre a biblioteca das suas leis: cada lei existe uma vez só, e daqui se vê onde ela é usada."></button>
+      <span class="nota" data-i18n="mat_ferr_lei_exp"></span>
+    </div>
+    <p class="nota mat-ferr" id="matFerrJuris" hidden data-i18n="mat_ferr_juris_exp"></p>
+    <p class="nota mat-ferr" id="matFerrResumo" hidden data-i18n="mat_ferr_resumo_exp"></p>
     <div id="matLista" class="mat-caixa"></div>
     <!-- o registro técnico dos resumos: serve para relatar problema, não para estudar — fica no rodapé, discreto -->
     <div class="mat-rodape"><button type="button" class="btn-link" id="btnMatLogAba" data-i18n="mat_log_btn"></button></div>
