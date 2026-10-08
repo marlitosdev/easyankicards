@@ -222,7 +222,7 @@ async function testes() {
     const btns = todos.filter((x) => x.tag === "button");
     ok(!btns.some((b) => /\d+ julgados/i.test(b.textContent || "")),
        "J4d um tópico SEM julgado nenhum ganhou o botão de ver julgados");
-    ok(btns.some((b) => /guardar jurisprud/i.test(b.textContent || "")),
+    ok(btns.some((b) => /guardar (um )?julgado|guardar jurisprud/i.test(b.textContent || "")),
        "J4e o convite para guardar o primeiro julgado sumiu do menu: um "
        + "tópico sem julgado ficou sem nenhum caminho para criar um");
   }
