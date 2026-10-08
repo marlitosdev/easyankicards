@@ -127,8 +127,9 @@ async function testes() {
     const ver = achar(aviso, (b) => b.textContent === api.t("ed_leit_ver"))[0];
     ok(!!ver, "L5i a faixa tem 'ver o que esta errado'");
     ver.onclick();
-    ok(Array.from(api.$("dpLista").children).some((x) => /mais de uma vez/.test(x.textContent)), "L5j e ele abre o diagnostico com a repetida");
-    ok(/Estado: 3 disciplinas, 3 tópicos/.test(api.$("dpResumo").textContent), "L5j2 o resumo do diagnostico tambem diz 3 disciplinas: " + api.$("dpResumo").textContent);
+    ok(api.$("dlgEdColar").open === true && Array.from(api.$("edAchLista").children).some((x) => /mais de uma vez/.test(x.textContent)), "L5j e ele abre a REVISÃO COM A IA (passo 0) com a repetida");
+    ok(/ponto\(s\) a revisar/.test(api.$("edAchRes").textContent), "L5j2 e o passo 0 resume quantos pontos tem: " + api.$("edAchRes").textContent);
+    api.$("dlgEdColar").open = false;
     await conduzir(fix.onclick());
     ok((api.$("editalTexto").value.match(/@ Português/g) || []).length === 1 && api.lerEdital(api.$("editalTexto").value).disciplinas.length === 3, "L5k 'Unir as repetidas' junta no texto da bancada");
     const sug2 = Array.from(api.$("editalSug").children).map((s) => s.textContent);
@@ -385,6 +386,13 @@ async function testes() {
     api.$("editalTexto").value = "# x | horas: 20\n" + api.edPromptEdital(true); api.edRender();
     ok(api.edColarTemPlano() === false, "Y3n o prompt colado no editor não conta como 'plano que já tenho'");
     api.$("editalTexto").value = "";
+    /* Y4: um caminho só — o botão da bancada e o "ver o que está errado" abrem a MESMA revisão, zerada */
+    api.$("editalTexto").value = PLANO; api.edRender();
+    api.$("edColarTexto").value = "sobra de antes"; api.$("dlgEdColar").open = false; api.$("edColarAviso").hidden = false;
+    api.edRevisaoAbrir();
+    ok(api.$("dlgEdColar").open === true && api.$("edColarTexto").value === "" && api.$("edColarAviso").hidden === true && pr("btnEdColarModoCor") === "true", "Y4a abrir a revisão abre o diálogo, zera a caixa e o aviso, e escolhe o modo pelo plano");
+    ok(api.$("btnEditalColar").onclick === api.edRevisaoAbrir, "Y4b o botão da bancada chama a mesma função (não há outro caminho)");
+    api.$("dlgEdColar").open = false;
     ok(!/Cole aqui o resultado do prompt/.test(api.t("ed_colar")) && /Revisar o edital com a IA/.test(api.t("ed_colar")), "Y2b-u o rótulo do editor não convida mais a colar a resposta da IA ali: " + api.t("ed_colar"));
   }
 

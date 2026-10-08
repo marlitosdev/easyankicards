@@ -809,33 +809,6 @@ async function testes() {
     ok((api.$("dscLista").children || []).length > 0,
        "T3c o panorama veio sem a lista de tópicos");
 
-    /* U — o diagnóstico do plano oferece três saídas, não uma. Nem toda
-     * cópia é para a IA: às vezes é para guardar ou mandar para alguém, e
-     * obrigar a passar pelo prompt faz o usuário editar à mão o que o app
-     * já tinha pronto. E ver antes de copiar 250 linhas é o mínimo. */
-    api.trocarModo("edital");
-    const PLN = ["# X | prova: " + emDias(131) + " | horas: 12", "@ A :: 5",
-      "+ a1 :: 5 :: pq", "+ a2 :: 3 :: pq"].join("\n");
-    api.$("editalTexto").value = PLN;
-    api.$("edProva").value = emDias(131);
-    api.edRender();
-    ["btnDpVer", "btnDpCopiar", "btnDpPrompt"].forEach((id) =>
-      ok(!!api.$(id), `U1 falta o botão ${id} no diagnóstico do plano`));
-
-    /* ver o plano abre a janela de texto com o plano DENTRO, não com o
-     * prompt: são coisas diferentes e vinham confundidas */
-    api.verPlano();
-    ok((api.$("dlgTextoCorpo").value || "").includes("@ A :: 5"),
-       "U2 'Ver o plano' não mostrou o plano");
-    ok(!/REGRAS|WHAT TO RETURN/.test(api.$("dlgTextoCorpo").value || ""),
-       "U3 'Ver o plano' trouxe o prompt junto");
-
-    /* já o prompt tem de trazer o plano E o pedido */
-    api.abrirDiagPlano();
-    api.gerarPromptDoDiag();
-    const pr = api.$("dlgTextoCorpo").value || "";
-    ok(pr.includes("@ A :: 5") && /PLANO ATUAL/.test(pr),
-       "U4 o prompt não embrulhou o plano");
 
     /* V — backup: um arquivo, tudo dentro, e ida e volta sem perda. */
     api.matIniciar();

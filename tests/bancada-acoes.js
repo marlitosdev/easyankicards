@@ -57,8 +57,8 @@ async function testes() {
      * A pergunta que ele responde tem dois sujeitos — "onde estes DOIS
      * concursos se encontram?" —, e quem a faz está olhando para a
      * lista de editais, não para um deles aberto. */
-    ok(botoes.length === 2,
-       "B1 a bancada nao tem duas acoes: " + JSON.stringify(botoes));
+    ok(botoes.length === 1,
+       "B1 a bancada nao tem UMA acao so (o diagnostico foi fundido na revisao): " + JSON.stringify(botoes));
     ok(exps === botoes.length,
        "B1b ha acao sem explicacao ao lado: " + exps + " para "
        + botoes.length + " botoes");
@@ -68,8 +68,8 @@ async function testes() {
     ok(!/id="btnEditalPrompt"/.test(html),
        "B1c o botao separado do prompt do edital continua na tela");
     ok(botoes.indexOf("btnEditalColar") >= 0
-       && botoes.indexOf("btnEditalDiag") >= 0,
-       "B1d a faixa perdeu uma das acoes: " + JSON.stringify(botoes));
+       && botoes.indexOf("btnEditalDiag") < 0 && !/dlgDiagPlano/.test(html),
+       "B1d o diagnostico antigo (botao e janela) continua na tela: " + JSON.stringify(botoes));
     /* e a que saiu foi PARAR na lista de editais, não sumiu */
     ok(/id="btnHubVincular"/.test(html),
        "B1e a comparacao de editais sumiu em vez de mudar de lugar");
@@ -84,13 +84,10 @@ async function testes() {
     ok(!/prompt/i.test(nome("ed_rev_btn")),
        "B2 o nome da acao ainda descreve o gesto e nao o resultado: "
        + nome("ed_rev_btn"));
-    ok(!/^Diagnóstico/i.test(nome("ed_diag_btn")),
-       "B2b o diagnostico continua com nome de relatorio: "
-       + nome("ed_diag_btn"));
     /* E as explicações precisam existir de verdade: t() devolve a
      * própria chave quando não acha, e uma tela cheia de "ed_rev_exp"
      * continua funcionando sem avisar ninguém. */
-    ["ed_rev_exp", "ed_diag_exp", "vk_botao_exp"].forEach((k) => {
+    ["ed_rev_exp", "vk_botao_exp"].forEach((k) => {
       ok(nome(k) !== k && nome(k).length > 40,
          "B2c a explicacao de " + k + " esta faltando ou e curta demais: "
          + nome(k));

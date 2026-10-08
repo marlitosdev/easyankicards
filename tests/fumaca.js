@@ -660,8 +660,8 @@ function rodar() {
         prova: $("edProva").value, feitos: edProgresso });
       return semanaAtual(p);
     },
-    abrirDiagPlano, abrirRegistro, confirmarRegistro, completarDiario,
-    abrirDisciplina, edAbrirDisciplinaDaLinha, edPintarRitmo, copiarPlano, verPlano, gerarPromptDoDiag,
+    edRevisaoAbrir, abrirRegistro, confirmarRegistro, completarDiario,
+    abrirDisciplina, edAbrirDisciplinaDaLinha, edPintarRitmo,
     montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual,
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
