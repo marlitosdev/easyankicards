@@ -4068,14 +4068,6 @@ dialog.di-cheia .di-mp-cel{min-height:30px;font-size:11px}
 .di-nome{font-weight:700;color:var(--texto);white-space:normal;word-break:break-word}
 .di-disc{font-size:10.5px;color:var(--sutil);white-space:normal}
 .ed-caixa-sub{font-size:11px;color:var(--sutil);margin:-3px 0 8px;line-height:1.4}
-.dp-rodape{flex-wrap:wrap}
-.dp-item{display:flex;gap:9px;align-items:flex-start;padding:9px 2px;font-size:12.5px;
-  line-height:1.5;border-bottom:1px solid var(--borda)}
-.dp-selo{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
-  padding:2px 7px;border-radius:7px;white-space:nowrap;flex-shrink:0;margin-top:1px;
-  background:rgba(245,158,11,.2);color:var(--atencao)}
-.dp-item.grave .dp-selo{background:rgba(220,38,38,.2);color:var(--erro)}
-:root[data-theme="light"] .dp-item.grave .dp-selo{color:var(--erro)}
 .dsc-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
 .dsc-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
 .dsc-ramos{margin:10px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:10px}
@@ -5540,10 +5532,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <button class="btn btn-roxo" id="btnEditalColar" data-i18n="ed_rev_btn"></button>
           <span class="ed-acao-exp" data-i18n="ed_rev_exp"></span>
         </div>
-        <div class="ed-acao">
-          <button class="btn btn-cinza" id="btnEditalDiag" data-i18n="ed_diag_btn"></button>
-          <span class="ed-acao-exp" data-i18n="ed_diag_exp"></span>
-        </div>
       </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
       <div class="editor-wrap ed-wrap">
@@ -5838,18 +5826,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-cinza" id="btnSwForcar" data-i18n="sw_forcar"
       data-i18n-title="sw_forcar_aj"></button>
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
-  </div>
-</dialog>
-<dialog id="dlgDiagPlano" class="ui-modal">
-  <h3 data-i18n="ed_diag_btn"></h3>
-  <p class="nota" data-i18n="ed_dp_ajuda"></p>
-  <div class="ed-diario-res" id="dpResumo"></div>
-  <div id="dpLista" style="max-height:46vh;overflow:auto;margin:8px 0"></div>
-  <div class="dlg-rodape dp-rodape">
-    <button class="btn btn-cinza" id="btnDpVer" data-i18n="ed_dp_ver"></button>
-    <button class="btn btn-verde" id="btnDpCopiar" data-i18n="ed_dp_copiar"></button>
-    <button class="btn btn-roxo" id="btnDpPrompt" data-i18n="ed_dp_prompt"></button>
-    <button class="btn btn-cinza" id="btnDpFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <dialog id="dlgRegistro" class="ui-modal">

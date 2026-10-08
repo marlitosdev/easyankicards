@@ -1462,85 +1462,20 @@ async function edColarNoEditor(ev) {
   return "colou";
 }
 
-/* Ver ANTES de decidir. O botão gerava o prompt direto: o usuário recebia um
- * pedido pronto para a IA sem nunca ter lido o que estava errado, e aceitar
- * ou recusar a correção virava um ato de fé. Primeiro o diagnóstico, em
- * português; o prompt fica a um clique, para quem quiser. */
-function abrirDiagPlano() {
-  const r = lerEdital($("editalTexto").value);
-  const plano = montarPlano(r, { horas: Number($("edHoras").value),
-    prova: $("edProva").value, feitos: edProgresso });
-  const achados = diagnosticoPlano(r, plano);
-  $("dpResumo").textContent = t("ed_diag_estado", { d: edNomesUnicos(r),
-    t: plano.total, s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas });
-  const lista = $("dpLista");
-  lista.innerHTML = "";
-  if (!achados.length) {
-    const p = document.createElement("div");
-    p.className = "nota"; p.textContent = t("ed_diag_limpo");
-    lista.append(p);
-  }
-  achados.forEach((a) => {
-    const li = document.createElement("div");
-    li.className = "dp-item" + (a.grave ? " grave" : "");
-    const selo = document.createElement("span");
-    selo.className = "dp-selo";
-    selo.textContent = t(a.grave ? "ed_dp_grave" : "ed_dp_atencao");
-    const tx = document.createElement("span");
-    tx.textContent = a.msg;
-    li.append(selo, tx);
-    lista.append(li);
-  });
-  diagAchados = achados;
-  diagPlanoAtual = { r, plano };
-  reg("EDITAL-DIAG", achados.length + " impropriedade(s)",
-      achados.filter((a) => a.grave).length + " grave(s)");
-  abrirModal("dlgDiagPlano");
-}
-
-let diagAchados = [];
-let diagPlanoAtual = null;
-
-/* Copiar o PLANO, não o pedido. Nem toda cópia é para a IA: às vezes é para
- * guardar, mandar para alguém ou colar numa planilha — e obrigar a passar
- * pelo prompt faz o usuário editar à mão o que o app já tinha pronto. */
-function copiarPlano() {
-  const txt = $("editalTexto").value;
-  navigator.clipboard.writeText(txt).then(() => {
-    const b = $("btnDpCopiar");
-    const antes = b.textContent;
-    b.textContent = "✓ " + t("diag_copiado");
-    b.disabled = true;
-    setTimeout(() => { b.textContent = antes; b.disabled = false; }, 1800);
-    const r = lerEdital(txt);
-    reg("EDITAL", "plano copiado",
-        r.disciplinas.length + " disciplinas, "
-        + r.disciplinas.reduce((a, d) => a + d.topicos.length, 0) + " tópicos");
-  }).catch(() => uiAlert(t("toast_copy_fail")));
-}
-
-/* Ver antes de copiar: são 250 linhas, e ninguém devia mandar para fora um
- * texto que não leu. A janela de texto já traz o seu próprio botão de copiar. */
-function verPlano() {
-  const r = lerEdital($("editalTexto").value);
-  const n = r.disciplinas.reduce((a, d) => a + d.topicos.length, 0);
-  abrirTextoSimples(t("ed_dp_ver_tit", { d: r.disciplinas.length, t: n }),
-    $("editalTexto").value);
-}
-
-function gerarPromptDoDiag() {
-  if (!diagPlanoAtual) return;
-  const { r, plano } = diagPlanoAtual;
-  const L = [t("ed_diag_cab"), ""];
-  L.push(t("ed_diag_estado", { d: r.disciplinas.length, t: plano.total,
-    s: plano.semanas === null ? "?" : plano.semanas, h: r.cfg.horas }));
-  L.push("");
-  if (!diagAchados.length) L.push(t("ed_diag_limpo"));
-  else diagAchados.forEach((a, k) =>
-    L.push((k + 1) + ". " + (a.grave ? "[GRAVE] " : "") + a.msg));
-  L.push("", t("ed_diag_pedido"), "", "PLANO ATUAL:", $("editalTexto").value);
-  $("dlgDiagPlano").close();
-  abrirTextoSimples(t("ed_diag_btn"), L.join("\n"));
+/* Abrir a revisão com a IA: passo 0 (o que o app achou), passo 1 (copiar o pedido) e passo 2 (trazer a resposta). Tudo no zero.
+ * É o ÚNICO caminho do antigo "Procurar erros no plano", que era meia jornada: listava e não dizia para onde a resposta voltava. */
+function edRevisaoAbrir() {
+  $("edColarTexto").value = "";
+  $("edColarAviso").hidden = true;
+  edColarCruOriginal = null;
+  if ($("edColarPedidoMsg")) $("edColarPedidoMsg").textContent = "";
+  edColarPassos(false);
+  edColarModoDefinir(edColarTemPlano() ? "corrigir" : "organizar");
+  edColarSemaforo();
+  edAchadosPintar();
+  const graves = edAchadosAtuais().filter((a) => a.grave).length;
+  reg("EDITAL-DIAG", edAchadosAtuais().length + " achado(s)", graves + " grave(s)");
+  abrirModal("dlgEdColar");
 }
 
 /* Quantos registros a lista mostra de uma vez. Sem limite, um diário de
@@ -3630,7 +3565,7 @@ function edAvisoLeitura(r, opc) {
   if (!(opc && opc.semBotao)) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "btn-min"; b.textContent = t("ed_leit_ver");
-    b.onclick = () => abrirDiagPlano();
+    b.onclick = () => edRevisaoAbrir();
     cx.append(b);
   }
   return cx;
@@ -4504,10 +4439,6 @@ function edIniciar() {
   $("edHorasSlider").addEventListener("change", () => edMudarHoras($("edHorasSlider").value));
   $("btnDiarioFechar").onclick = () => $("dlgDiario").close();
   $("btnDscFechar").onclick = () => $("dlgDisciplina").close();
-  $("btnDpFechar").onclick = () => $("dlgDiagPlano").close();
-  $("btnDpPrompt").onclick = gerarPromptDoDiag;
-  $("btnDpCopiar").onclick = copiarPlano;
-  $("btnDpVer").onclick = verPlano;
   /* os dois campos de tempo são o MESMO valor: arrastar move o número e
    * digitar move a barra. Dois controles que discordam são um bug esperando. */
   $("regMinSlider").addEventListener("input", () => {
@@ -4577,17 +4508,7 @@ function edIniciar() {
     regRamosSel = new Set(regAtual.ramos.filter(regRamosElegivel).map((r) => r.id));
     regRamosPintar(regAtual, true);
   };
-  $("btnEditalColar").onclick = () => {
-    $("edColarTexto").value = "";
-    $("edColarAviso").hidden = true;
-    edColarCruOriginal = null;
-    if ($("edColarPedidoMsg")) $("edColarPedidoMsg").textContent = "";
-    edColarPassos(false);
-    edColarModoDefinir(edColarTemPlano() ? "corrigir" : "organizar");
-    edColarSemaforo();
-    edAchadosPintar();
-    abrirModal("dlgEdColar");
-  };
+  $("btnEditalColar").onclick = edRevisaoAbrir;
   if ($("btnEdColarModoOrg")) $("btnEdColarModoOrg").onclick = () => edColarModoDefinir("organizar");
   if ($("btnEdColarModoCor")) $("btnEdColarModoCor").onclick = () => edColarModoDefinir("corrigir");
   if ($("btnEdAchAbrir")) $("btnEdAchAbrir").onclick = () => edAchadosAbrir($("edAchLista").hidden);
@@ -4636,7 +4557,6 @@ function edIniciar() {
     $("editalTexto").value = ""; edProgresso = {};
     edRender();
   };
-  $("btnEditalDiag").onclick = abrirDiagPlano;
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —
    * eu embarquei um botão morto */
   if ($("btnDesfazerReg")) $("btnDesfazerReg").onclick = edDesfazerUltimoRegistro;
