@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edAchadosDeRevisao, edResumoAchados, edFixDe, edUnirRepetidas, edTirarPrompt, tirarNumeracaoEdital, normalizarMarcadores, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edAchadosDeRevisao, edAchadosParaIA, edResumoAchados, edFixDe, edUnirRepetidas, edTirarPrompt, tirarNumeracaoEdital, normalizarMarcadores, edMapaDeCalor, edNivelDeCalor, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -775,6 +775,11 @@ function testes() {
     /* empate entre a leitura e o planejamento: a leitura vem primeiro */
     const LD = rev(["@ A :: 5", "+ a :: 3 :: m", "+ b :: 3 :: m", "@ B :: 3", "+ c :: 3 :: m", "+ d :: 3 :: m", "@ C :: 2", "+ e :: 3 :: m", "+ f :: 4 :: m", "linha solta sem sentido", "outra linha solta"].join("\n")).map((x) => x.id);
     ok(LD.indexOf("linha_ignorada") >= 0 && LD.indexOf("sem_data") >= 0 && LD.indexOf("linha_ignorada") < LD.indexOf("sem_data"), "Y1m5 entre dois graves da pessoa, o de leitura (linhas ignoradas) vem antes do de planejamento (sem data): " + LD);
+    /* o que vai no pedido à IA: peso/motivo e divisão de tópicos — não as decisões da pessoa nem os consertos do app */
+    const paraIA = api.edAchadosParaIA(mix.concat(rev(IGUAIS)).concat(rev(SEM)).concat(rev(SD))).map((x) => x.id);
+    ok(paraIA.includes("pesos_iguais") && paraIA.includes("sem_peso") && paraIA.includes("sem_motivo") && paraIA.includes("sem_topico"), "Y3a vão para a IA: peso igual, sem peso, sem motivo e disciplina sem tópico: " + paraIA);
+    ok(!paraIA.some((id) => ["sem_data", "linha_ignorada", "numeracao", "marcador", "disciplina_repetida", "texto_e_o_prompt", "nao_cabe", "escolha_pendente", "nome_de_modelo"].includes(id)), "Y3b NÃO vão: data, linhas ignoradas e os consertos mecânicos do app: " + paraIA);
+    ok(api.edAchadosParaIA(null).length === 0 && api.edAchadosParaIA([{ id: "uma_linha", quem: "voce" }, { id: "granular", quem: "voce" }, { id: "longo", quem: "voce" }, { id: "repetido", quem: "voce" }, { id: "dominante", quem: "voce" }, { id: "x", quem: "voce" }]).length === 5, "Y3c a divisão de tópicos (uma_linha, granular, longo, repetido, dominante) também é da IA; o resto da pessoa não");
     ok(api.edResumoAchados(null).total === 0 && api.edResumoAchados([]).graves === 0, "Y1n resumo de lista vazia");
     /* não mexe no que já existia: o diagnóstico continua devolvendo os mesmos ids */
     const dd = api.diagnosticoPlano(api.lerEdital(IGUAIS), plan(api.lerEdital(IGUAIS))).map((x) => x.id).sort().join(",");

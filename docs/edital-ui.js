@@ -1321,6 +1321,12 @@ function edAchadosPintar() {
     }
     lista.append(div);
   });
+  if (edAchadosParaIA(itens).length) {
+    const nota = document.createElement("div");
+    nota.className = "nota";
+    nota.textContent = t("ed_ach_ia_nota", { n: edAchadosParaIA(itens).length });
+    lista.append(nota);
+  }
   /* aberto sozinho quando há algo GRAVE; os avisos leves ficam numa linha só */
   edAchadosAbrir(res.graves > 0);
 }
@@ -1342,6 +1348,27 @@ function edAchadosAbrir(abrir) {
  * (que mistura/substitui sem conferência) pergunta antes e leva o texto para a caixa do passo 2.
  * ===================================================================== */
 let edColarCruOriginal = null;
+let edColarModo = "organizar";
+
+/* "organizar" = monta o plano a partir do edital oficial (o ed_prompt de sempre); "corrigir" = a IA recebe o plano atual e
+ * os pontos que são dela. O padrão é o que a pessoa provavelmente quer: com plano lido, corrigir; sem plano, organizar. */
+function edColarTemPlano() {
+  const raw = $("editalTexto").value;
+  return !!raw.trim() && lerEdital(raw).disciplinas.length > 0 && !(edTextoSuspeito(raw) && edTextoSuspeito(raw).tipo === "prompt");
+}
+function edColarModoDefinir(modo) {
+  const tem = edColarTemPlano();
+  edColarModo = modo === "corrigir" && tem ? "corrigir" : "organizar";
+  const o = $("btnEdColarModoOrg"), c = $("btnEdColarModoCor"), ex = $("edColarModoExp");
+  if (o) o.setAttribute("aria-pressed", edColarModo === "organizar" ? "true" : "false");
+  if (c) { c.setAttribute("aria-pressed", edColarModo === "corrigir" ? "true" : "false"); c.disabled = !tem; }
+  if (ex) ex.textContent = t(edColarModo === "corrigir" ? "ed_colar_modo_exp_cor" : "ed_rev_pedir_exp");
+  return edColarModo;
+}
+/* o texto que o botão do passo 1 copia, conforme o modo */
+function edColarPedidoTexto() {
+  return edColarModo === "corrigir" ? edPromptRevisao($("editalTexto").value, edAchadosAtuais()) : t("ed_prompt");
+}
 const ED_COLAR_BLOQUEIA = { vazio: 1, prompt: 1, igual: 1, cru: 1 };
 
 function edColarPassos(copiado) {
@@ -1423,6 +1450,7 @@ async function edColarNoEditor(ev) {
     $("edColarTexto").value = txt;
     edAchadosPintar();
     edColarPassos(true);
+    edColarModoDefinir("corrigir");
     edConferirColagem();
     abrirModal("dlgEdColar");
     return "revisar";
@@ -4555,10 +4583,13 @@ function edIniciar() {
     edColarCruOriginal = null;
     if ($("edColarPedidoMsg")) $("edColarPedidoMsg").textContent = "";
     edColarPassos(false);
+    edColarModoDefinir(edColarTemPlano() ? "corrigir" : "organizar");
     edColarSemaforo();
     edAchadosPintar();
     abrirModal("dlgEdColar");
   };
+  if ($("btnEdColarModoOrg")) $("btnEdColarModoOrg").onclick = () => edColarModoDefinir("organizar");
+  if ($("btnEdColarModoCor")) $("btnEdColarModoCor").onclick = () => edColarModoDefinir("corrigir");
   if ($("btnEdAchAbrir")) $("btnEdAchAbrir").onclick = () => edAchadosAbrir($("edAchLista").hidden);
   $("edColarTexto").addEventListener("input", edConferirColagem);
   $("btnEdColarAplicar").onclick = edAplicarColagem;
@@ -4582,7 +4613,7 @@ function edIniciar() {
    * janela com texto" não é o mesmo que "está na área de transferência",
    * e essa diferença era descoberta depois, na hora de colar. */
   if ($("btnEdColarPedido")) $("btnEdColarPedido").onclick = async () => {
-    const txt = t("ed_prompt");
+    const txt = edColarPedidoTexto();
     const copiou = await edColarCopiarTexto(txt, "", $("btnEdColarPedido"));
     const msg = $("edColarPedidoMsg");
     if (copiou) {
