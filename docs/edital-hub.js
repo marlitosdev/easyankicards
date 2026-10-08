@@ -1104,7 +1104,16 @@ function hubNovoEstadoPlano(txt) {
   return Object.assign(info, { estado: info.ign || info.rep || info.sem || info.esc ? "atencao" : "ok" });
 }
 
-const HUB_SEM_CLASSE = { vazio: "sem-vazio", ok: "sem-ok", atencao: "sem-atencao", cru: "sem-atencao", modelo: "sem-atencao", prompt: "sem-erro" };
+const HUB_SEM_CLASSE = { vazio: "sem-vazio", ok: "sem-ok", atencao: "sem-atencao", cru: "sem-atencao", modelo: "sem-atencao", igual: "sem-atencao", prompt: "sem-erro" };
+
+/* O que se colou na caixa da REVISÃO: o mesmo veredito do Novo edital, mais um — "igual": o texto é idêntico ao plano que
+ * a pessoa já tem (colou o plano de volta em vez da resposta da IA). */
+function hubColarEstado(novo, atual) {
+  const info = hubNovoEstadoPlano(novo);
+  const norm = (x) => String(x || "").replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
+  if (info.estado !== "vazio" && info.estado !== "prompt" && norm(novo) === norm(atual)) return Object.assign(info, { estado: "igual" });
+  return info;
+}
 const HUB_SEM_ICONE = { "sem-vazio": "○", "sem-ok": "✓", "sem-atencao": "⚠", "sem-erro": "⛔" };
 
 /* =====================================================================

@@ -119,9 +119,9 @@ async function testes() {
     /* E A PESSOA FICA SABENDO. O aviso diz o tamanho — que é como se
      * confere que copiou tudo — e qual é o próximo passo, que é a
      * informação que faltava quando os dois botões eram separados. */
-    const msg = (api.$("uiModalMsg") || {}).textContent || "";
+    const msg = (api.$("edColarPedidoMsg") || {}).textContent || "";
     ok(/copiado/i.test(msg),
-       "B3c copiar nao avisou nada: " + msg.slice(0, 60));
+       "B3c copiar nao avisou nada (na tela, no cartao do passo 1): " + msg.slice(0, 60));
     ok(/\d+ caracteres/.test(msg),
        "B3d o aviso nao diz o tamanho do que foi copiado: " + msg);
     ok(/passo 2/i.test(msg),

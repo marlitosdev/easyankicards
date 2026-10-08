@@ -1333,6 +1333,107 @@ function edAchadosAbrir(abrir) {
   if (seta) seta.textContent = abrir ? "▾" : "▸";
 }
 
+/* =====================================================================
+ * ONDE COPIAR, ONDE COLAR (Y2b)
+ *
+ * O desenho do Novo edital, na revisão: dois cartões (1 vai PARA a IA, 2 volta DA IA), o campo de colar como SEMÁFORO
+ * (cinza = vazio, verde = entendi, âmbar = confira, vermelho = isto não é a resposta) e "Substituir" desligado enquanto o que
+ * está na caixa não puder ser uma resposta. E a guarda do outro lado: colar a resposta da IA direto no editor da bancada
+ * (que mistura/substitui sem conferência) pergunta antes e leva o texto para a caixa do passo 2.
+ * ===================================================================== */
+let edColarCruOriginal = null;
+const ED_COLAR_BLOQUEIA = { vazio: 1, prompt: 1, igual: 1, cru: 1 };
+
+function edColarPassos(copiado) {
+  const p1 = $("edColarPasso1"), p2 = $("edColarPasso2");
+  if (p1) p1.className = "ednovo-passo" + (copiado ? " feito" : "");
+  if (p2) p2.className = "ednovo-passo" + (copiado ? " ativo" : "");
+}
+
+function edColarSemaforo() {
+  const sem = $("edColarSem");
+  if (!sem) return null;
+  const novo = $("edColarTexto").value;
+  const est = hubColarEstado(novo, $("editalTexto").value);
+  const cls = HUB_SEM_CLASSE[est.estado] || "sem-vazio";
+  sem.className = "ednovo-sem " + cls;
+  $("edColarSemIco").textContent = HUB_SEM_ICONE[cls];
+  const partes = [];
+  if (est.ign) partes.push(t("ed_novo_p_ign", { n: est.ign }));
+  if (est.rep) partes.push(t("ed_novo_p_rep", { n: est.rep }));
+  if (est.sem) partes.push(t("ed_novo_p_sem", { n: est.sem }));
+  if (est.esc) partes.push(t("ed_novo_p_escolha", { n: est.esc, l: (est.escNomes || []).slice(0, 2).join(", ") }));
+  $("edColarSemTxt").textContent = est.estado === "vazio" ? t("ed_colar_sem_vazio")
+    : est.estado === "igual" ? t("ed_colar_sem_igual")
+    : est.estado === "ok" ? t("ed_colar_sem_ok", { d: est.d, t: est.t })
+    : est.estado === "atencao" ? t("ed_novo_sem_atencao", { p: partes.join(", ") })
+    : est.estado === "cru" ? t("ed_novo_sem_cru", { i: est.ign })
+    : est.estado === "modelo" ? t("ed_novo_sem_modelo", { n: est.nomes.slice(0, 2).join(", ") })
+    : t("ed_novo_sem_prompt");
+  $("edColarTexto").className = "ednovo-ta " + cls.replace("sem-", "ta-");
+  /* ações do semáforo: o que dá para fazer com ESTE texto */
+  const ac = $("edColarSemAcoes");
+  ac.innerHTML = "";
+  const botao = (id, chave, fn) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min"; b.id = id; b.textContent = t(chave); b.onclick = fn;
+    ac.append(b);
+  };
+  if (est.estado === "cru" && typeof edEstruturarCru === "function" && edEstruturarCru(novo).disciplinas > 0)
+    botao("btnEdColarEstruturar", "ed_novo_btn_estruturar", edColarEstruturar);
+  if (edColarCruOriginal !== null && est.estado !== "cru") botao("btnEdColarDesestruturar", "ed_novo_btn_desestruturar", edColarDesestruturar);
+  if (est.estado === "cru" || est.estado === "prompt" || est.estado === "igual") botao("btnEdColarLimparSem", "ed_novo_btn_limpar", edColarLimpar);
+  /* "Substituir o plano" só liga quando o que está na caixa PODE ser uma resposta */
+  const ap = $("btnEdColarAplicar");
+  if (ap) ap.disabled = !!ED_COLAR_BLOQUEIA[est.estado];
+  const p2 = $("edColarPasso2");
+  if (p2 && est.estado === "ok") p2.className = "ednovo-passo feito";
+  return est;
+}
+
+function edColarEstruturar() {
+  const bruto = $("edColarTexto").value;
+  const r = edEstruturarCru(bruto, { ramos: true });
+  if (!r.disciplinas) return false;
+  edColarCruOriginal = bruto;
+  $("edColarTexto").value = r.texto;
+  edConferirColagem();
+  return true;
+}
+
+function edColarDesestruturar() {
+  if (edColarCruOriginal === null) return false;
+  $("edColarTexto").value = edColarCruOriginal;
+  edColarCruOriginal = null;
+  edConferirColagem();
+  return true;
+}
+
+/* colar no EDITOR da bancada: se já há plano e o texto colado parece a resposta da IA, pergunta antes */
+async function edColarNoEditor(ev) {
+  const txt = ev && ev.clipboardData && ev.clipboardData.getData ? ev.clipboardData.getData("text") : "";
+  const ed = $("editalTexto");
+  if (!txt || !ed.value.trim()) return false;
+  const linhas = txt.split(/\r?\n/).filter((l) => l.trim()).length;
+  if (linhas < 6) return false;
+  const lido = lerEdital(txt);
+  if (!lido.disciplinas.length) return false;
+  ev.preventDefault();
+  if (await uiConfirm(t("ed_colar_desvio", { d: lido.disciplinas.length, l: linhas }))) {
+    $("edColarTexto").value = txt;
+    edAchadosPintar();
+    edColarPassos(true);
+    edConferirColagem();
+    abrirModal("dlgEdColar");
+    return "revisar";
+  }
+  /* "não": cola do jeito de sempre, no ponto do cursor */
+  const ini = ed.selectionStart || 0, fim = ed.selectionEnd === undefined ? ini : ed.selectionEnd;
+  ed.value = ed.value.slice(0, ini) + txt + ed.value.slice(fim);
+  edRender();
+  return "colou";
+}
+
 /* Ver ANTES de decidir. O botão gerava o prompt direto: o usuário recebia um
  * pedido pronto para a IA sem nunca ter lido o que estava errado, e aceitar
  * ou recusar a correção virava um ato de fé. Primeiro o diagnóstico, em
@@ -3907,6 +4008,7 @@ async function edLoteAplicar(marcar) {
  * linhas é exatamente o que ela faz quando o pedido é longo.
  * ------------------------------------------------------------------ */
 function edConferirColagem() {
+  edColarSemaforo();
   const novoTxt = $("edColarTexto").value;
   const av = $("edColarAviso");
   if (!novoTxt.trim()) {
@@ -4362,6 +4464,7 @@ function edIniciar() {
   catch (e) { edProgresso = {}; }
 
   $("editalTexto").addEventListener("input", edRender);
+  $("editalTexto").addEventListener("paste", edColarNoEditor);
   $("editalTexto").addEventListener("scroll", () => {
     $("editalNums").scrollTop = $("editalTexto").scrollTop;
   });
@@ -4449,6 +4552,10 @@ function edIniciar() {
   $("btnEditalColar").onclick = () => {
     $("edColarTexto").value = "";
     $("edColarAviso").hidden = true;
+    edColarCruOriginal = null;
+    if ($("edColarPedidoMsg")) $("edColarPedidoMsg").textContent = "";
+    edColarPassos(false);
+    edColarSemaforo();
     edAchadosPintar();
     abrirModal("dlgEdColar");
   };
@@ -4476,9 +4583,13 @@ function edIniciar() {
    * e essa diferença era descoberta depois, na hora de colar. */
   if ($("btnEdColarPedido")) $("btnEdColarPedido").onclick = async () => {
     const txt = t("ed_prompt");
-    await edColarCopiarTexto(txt, t("ed_rev_pedir_ok",
-      { l: txt.split("\n").length, c: txt.length }), $("btnEdColarPedido"));
-    reg("EDITAL", "pedido de revisão copiado", txt.length + " caracteres");
+    const copiou = await edColarCopiarTexto(txt, "", $("btnEdColarPedido"));
+    const msg = $("edColarPedidoMsg");
+    if (copiou) {
+      if (msg) msg.textContent = t("ed_rev_pedir_ok", { l: txt.split("\n").length, c: txt.length });
+      edColarPassos(true);
+      reg("EDITAL", "pedido de revisão copiado", txt.length + " caracteres");
+    } else if (msg) msg.textContent = "";
   };
   $("btnEditalCopiar").onclick = async () => {
     try { await navigator.clipboard.writeText($("editalTexto").value); toast("toast_copied"); }

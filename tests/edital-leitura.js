@@ -31,7 +31,7 @@ const LIMPO = "# Limpo | prova: 2030-05-10 | horas: 20\n@ Português :: 10q\n+ C
 async function testes() {
   const falhas = []; let n = 0;
   const ok = (c, m) => { n++; if (!c) falhas.push(m); };
-  const { api } = rodar();
+  const { api, janela } = rodar();
   const achar = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((c) => { if (pred(c)) acc.push(c); achar(c, pred, acc); }); return acc; };
   const cls = (e) => String((e || {}).className || "");
   const tem = (e, k) => new RegExp("(^|\\s)" + k + "(\\s|$)").test(cls(e));
@@ -265,6 +265,90 @@ async function testes() {
     const m1 = api.edAchadosAtuais(), m2 = api.edAchadosAtuais();
     api.$("editalTexto").value += "\n+ c4"; const m3 = api.edAchadosAtuais();
     ok(m1 === m2 && m3 !== m1, "Y2q o resultado é calculado uma vez por texto (e muda quando o texto muda)");
+  }
+
+  /* ---- Y2b: onde copiar, onde colar — dois cartões, semáforo na caixa de colar e guarda no editor ---- */
+  {
+    api.matIniciar(); api.edIniciar();
+    const PLANO = ["# C | prova: 2030-05-10 | horas: 20", "@ Português :: 5", "+ Crase :: 3 :: m", "+ Verbos :: 4 :: m", "@ Direito :: 3", "+ Atos :: 3 :: m", "+ Poderes :: 2 :: m", "@ Auditoria :: 4", "+ Achado :: 5 :: m", "+ Risco :: 3 :: m"].join("\n");
+    const ed = api.edCriar("Colar", PLANO);
+    api.hubAbrirEdital(ed.id);
+    api.edRender();
+    const sem = () => ({ c: cls(api.$("edColarSem")), t: api.$("edColarSemTxt").textContent, ico: api.$("edColarSemIco").textContent, ta: cls(api.$("edColarTexto")), bt: Array.from(api.$("edColarSemAcoes").children).map((b) => b.id), ap: api.$("btnEdColarAplicar").disabled });
+    const colar = (txt) => { api.$("edColarTexto").value = txt; api.edConferirColagem(); return sem(); };
+    api.$("btnEditalColar").onclick();
+    /* abrir: tudo no zero */
+    let x = sem();
+    ok(tem(api.$("edColarSem"), "sem-vazio") && x.ico === "○" && /RESPOSTA da IA/.test(x.t) && x.ap === true && tem(api.$("edColarTexto"), "ta-vazio"), "Y2b-a ao abrir: semáforo cinza ('cole só a RESPOSTA') e 'Substituir o plano' desligado: " + JSON.stringify(x));
+    ok(api.$("edColarPasso1").className === "ednovo-passo" && api.$("edColarPasso2").className === "ednovo-passo" && api.$("edColarPedidoMsg").textContent === "", "Y2b-b ao abrir nenhum passo está marcado");
+    /* passo 1: copiar marca o passo e diz isso NA TELA */
+    await conduzir(api.$("btnEdColarPedido").onclick());
+    ok(api.$("edColarPasso1").className === "ednovo-passo feito" && api.$("edColarPasso2").className === "ednovo-passo ativo" && /✓ Copiado — \d+ linhas, \d+ caracteres/.test(api.$("edColarPedidoMsg").textContent), "Y2b-c copiar marca o passo 1 (✓) e destaca o 2, com a mensagem no próprio cartão: " + api.$("edColarPedidoMsg").textContent);
+    /* o que se cola: cada tipo de erro tem a sua cor e a sua frase */
+    x = colar(PLANO);
+    ok(tem(api.$("edColarSem"), "sem-atencao") && /IGUAL ao plano que você já tem/.test(x.t) && x.ap === true && x.bt.includes("btnEdColarLimparSem"), "Y2b-d colou o PRÓPRIO plano de volta: âmbar, diz que é igual, desliga 'Substituir' e oferece limpar: " + JSON.stringify(x));
+    ok(colar(PLANO + "\n\n\r\n").t === x.t && colar(PLANO.replace(/\n/g, "\r\n")).c.includes("sem-atencao"), "Y2b-e 'igual' ignora linhas em branco e quebras de linha do Windows");
+    x = colar("# x | horas: 20\n" + api.edPromptEdital(true));
+    ok(tem(api.$("edColarSem"), "sem-erro") && x.ico === "⛔" && x.ta.includes("ta-erro") && x.ap === true && /PROMPT/.test(x.t), "Y2b-f colou o PEDIDO por engano: vermelho, ⛔, campo vermelho, 'Substituir' desligado");
+    const CRU = ["CONHECIMENTOS BÁSICOS", "LÍNGUA PORTUGUESA: 1 Compreensão e interpretação de textos. 2 Reconhecimento de tipos e gêneros textuais. 3 Pontuação.", "TECNOLOGIA DA INFORMAÇÃO: 1 MSOffice 365. 2 Redes de computadores. 2.1 Conceitos básicos. 2.2 Topologias."].join("\n");
+    x = colar(CRU);
+    ok(tem(api.$("edColarSem"), "sem-atencao") && /Parece o edital como saiu/.test(x.t) && x.ap === true && x.bt.includes("btnEdColarEstruturar") && x.bt.includes("btnEdColarLimparSem"), "Y2b-g colou o edital CRU: âmbar, oferece 'Estruturar aqui (sem IA)' e limpar, 'Substituir' desligado: " + JSON.stringify(x));
+    api.$("btnEdColarEstruturar").onclick();
+    x = sem();
+    ok(/^& Conhecimentos Básicos/.test(api.$("edColarTexto").value) && tem(api.$("edColarSem"), "sem-ok") && x.ap === false && x.bt.includes("btnEdColarDesestruturar") && /Entendi: 2 disciplina\(s\) e 5 tópico\(s\)/.test(x.t), "Y2b-h estruturou: verde, 'Substituir' liga e aparece 'voltar ao texto original': " + JSON.stringify(x));
+    api.$("btnEdColarDesestruturar").onclick();
+    ok(api.$("edColarTexto").value === CRU && tem(api.$("edColarSem"), "sem-atencao"), "Y2b-i voltar devolve EXATAMENTE o texto colado");
+    /* a resposta boa */
+    const BOA = PLANO.replace("+ Crase :: 3 :: m", "+ Crase :: 4 :: m");
+    x = colar(BOA);
+    ok(tem(api.$("edColarSem"), "sem-ok") && x.ico === "✓" && /Entendi: 3 disciplina\(s\) e 6 tópico\(s\)\. Confira a comparação/.test(x.t) && x.ap === false && x.ta.includes("ta-ok") && api.$("edColarPasso2").className === "ednovo-passo feito", "Y2b-j resposta boa: verde, ✓, diz o que entendeu, liga 'Substituir' e fecha o passo 2: " + JSON.stringify(x));
+    x = colar(BOA + "\nlinha solta sem sentido\noutra linha solta");
+    ok(tem(api.$("edColarSem"), "sem-atencao") && /confira: 2 linha\(s\) ignorada\(s\)/.test(x.t) && x.ap === false, "Y2b-k entendeu mas há linhas ignoradas: âmbar com o motivo, e dá para aplicar (a conferência decide): " + x.t);
+    x = colar("");
+    ok(tem(api.$("edColarSem"), "sem-vazio") && x.ap === true && x.bt.length === 0, "Y2b-l limpar a caixa volta ao cinza e desliga o botão");
+    /* abrir de novo esquece o original guardado e o estado dos passos */
+    colar(CRU); api.$("btnEdColarEstruturar").onclick();
+    api.$("btnEditalColar").onclick();
+    ok(api.$("edColarTexto").value === "" && !Array.from(api.$("edColarSemAcoes").children).some((b) => b.id === "btnEdColarDesestruturar") && api.$("edColarPasso1").className === "ednovo-passo", "Y2b-m abrir de novo zera a caixa, o 'voltar' e os passos");
+
+    /* o EDITOR da bancada: colar a resposta da IA ali pergunta antes */
+    const ev = (txt) => ({ clipboardData: { getData: () => txt }, preventDefault() { this.parou = true; }, parou: false });
+    api.$("editalTexto").value = PLANO; api.edRender();
+    const e1 = ev("só uma linha"); await api.edColarNoEditor(e1);
+    ok(e1.parou === false, "Y2b-n colar um trecho curto no editor: normal (não intercepta)");
+    const e2 = ev("texto qualquer sem estrutura\nlinha dois\nlinha três\nlinha quatro\nlinha cinco\nlinha seis\nlinha sete"); await api.edColarNoEditor(e2);
+    ok(e2.parou === false, "Y2b-o texto longo que NÃO tem disciplinas: colar normal");
+    const e3 = ev(BOA); const p3 = api.edColarNoEditor(e3);
+    ok(e3.parou === true, "Y2b-p texto longo com disciplinas (parece a resposta da IA) com plano existente: intercepta");
+    const r3 = await conduzir(p3);
+    ok(r3 === "revisar" && api.$("edColarTexto").value === BOA && api.$("editalTexto").value === PLANO && api.$("dlgEdColar").open === true, "Y2b-q 'sim': o texto vai para o passo 2 da revisão e o plano da bancada NÃO muda");
+    ok(tem(api.$("edColarSem"), "sem-ok") && api.$("edColarPasso1").className === "ednovo-passo feito", "Y2b-r e a revisão abre já com o semáforo verde e o passo 1 dado como feito");
+    api.$("dlgEdColar").open = false;
+    api.$("editalTexto").value = PLANO; api.$("editalTexto").selectionStart = 0; api.$("editalTexto").selectionEnd = 0;
+    const e4 = ev(BOA); const p4 = api.edColarNoEditor(e4);
+    let pronto = false; p4.then(() => { pronto = true; });
+    for (let i = 0; i < 12 && !pronto; i++) { await Promise.resolve(); try { api._uiFechar(false); } catch (e) {} }
+    ok((await p4) === "colou" && api.$("editalTexto").value === BOA + PLANO, "Y2b-s 'não': cola no editor do jeito de sempre, no ponto do cursor");
+    /* plano vazio: colar à vontade (é como se começa) */
+    api.$("editalTexto").value = "";
+    const e5 = ev(BOA); await api.edColarNoEditor(e5);
+    ok(e5.parou === false, "Y2b-t editor vazio: colar à vontade, sem pergunta");
+    /* copiar FALHOU: a tela não diz que copiou, e o passo 1 não é marcado */
+    api.$("btnEditalColar").onclick();
+    const wAntes = janela.navigator.clipboard.writeText;
+    janela.navigator.clipboard.writeText = async () => { throw new Error("negado"); };
+    await conduzir(api.$("btnEdColarPedido").onclick());
+    janela.navigator.clipboard.writeText = wAntes;
+    ok(api.$("edColarPedidoMsg").textContent === "" && api.$("edColarPasso1").className === "ednovo-passo" && api.$("edColarPasso2").className === "ednovo-passo", "Y2b-v copiar falhou: nada de '✓ Copiado' e nenhum passo marcado");
+    /* texto cru SEM numeração aproveitável: continua cru e NÃO oferece estruturar */
+    const SEMNUM = Array.from({ length: 12 }, () => "Frase solta sem estrutura nenhuma para virar edital").join("\n");
+    x = colar(SEMNUM);
+    ok(tem(api.$("edColarSem"), "sem-atencao") && x.ap === true && !x.bt.includes("btnEdColarEstruturar") && x.bt.includes("btnEdColarLimparSem"), "Y2b-w cru sem numeração: só 'limpar' (estruturar não tem o que fazer): " + JSON.stringify(x.bt));
+    /* colar um trecho PEQUENO de plano (5 linhas) no editor: normal; só os longos perguntam */
+    api.$("editalTexto").value = PLANO;
+    const e6 = ev(PLANO.split("\n").slice(0, 5).join("\n")); await api.edColarNoEditor(e6);
+    ok(e6.parou === false, "Y2b-x até 5 linhas de plano coladas no editor: normal (a pergunta é para o plano inteiro)");
+    ok(!/Cole aqui o resultado do prompt/.test(api.t("ed_colar")) && /Revisar o edital com a IA/.test(api.t("ed_colar")), "Y2b-u o rótulo do editor não convida mais a colar a resposta da IA ali: " + api.t("ed_colar"));
   }
 
   return Object.assign(falhas, { quantas: n });
