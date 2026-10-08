@@ -183,15 +183,37 @@ function matContarCartoes(chave) {
   return (r.cartoes.match(/^[^\n#@+].*::/gm) || []).length;
 }
 
-/* Quanto do que está guardado NÃO é cartão. Enquanto a gravação vinha com o
- * prompt junto, um tópico tinha 155 linhas e 17 cartões — e nada na tela
- * dizia isso. */
+/* QUAIS LINHAS DO CAMPO DE CARTÕES SÃO DE VERDADE (M0).
+ *
+ * O Cartão Rico guarda, junto de cada cartão, o título ("@ Lei > Tópico") e o "saiba mais" ("+ Literalidade — …"). A conta
+ * antiga ("linhas menos cartões") chamava essas linhas de lixo — o aviso aparecia em quase todo tópico — e o "limpar" as
+ * APAGAVA, levando os títulos e o "saiba mais" embora.
+ * A regra agora é a do próprio leitor de cartões (agruparLinhas, parser.js): havendo ao menos um cartão, TODA linha "@",
+ * "+" ou "* " é ligada a algum cartão — "@" ao próximo, "+" ao anterior, mesmo com linha em branco no meio. Então ela é
+ * conteúdo, nunca lixo. Lixo é o resto: prosa do prompt, regras numeradas, "Espero ter ajudado!", "#".
+ * Devolve um booleano por linha (linhas em branco: false). */
+function matLinhasLegitimas(texto) {
+  const L = String(texto || "").split("\n");
+  const ehMeta = (l) => /^[@+]/.test(l) || /^\*\s+\S/.test(l);
+  const ehCartao = (l) => /^[^\n#@+].*::/.test(l) && !ehMeta(l);
+  const temCartao = L.some((l) => ehCartao(l.trim()));
+  return L.map((l) => {
+    const s = l.trim();
+    if (!s) return false;
+    return ehCartao(s) || (temCartao && ehMeta(s));
+  });
+}
+
+/* Quanto do que está guardado NÃO é cartão (nem título nem "saiba mais" de um cartão). Enquanto a gravação vinha com o
+ * prompt junto, um tópico tinha 155 linhas e 17 cartões — e nada na tela dizia isso. */
 function matLixoNosCartoes(chave) {
   const r = matResumos[chave];
   if (!r || !r.cartoes) return { total: 0, cartoes: 0, lixo: 0 };
-  const linhas = String(r.cartoes).split("\n").filter((l) => l.trim());
-  const cartoes = matContarCartoes(chave);
-  return { total: linhas.length, cartoes, lixo: linhas.length - cartoes };
+  const L = String(r.cartoes).split("\n");
+  const ok = matLinhasLegitimas(r.cartoes);
+  const total = L.filter((l) => l.trim()).length;
+  const lixo = L.filter((l, i) => l.trim() && !ok[i]).length;
+  return { total, cartoes: matContarCartoes(chave), lixo };
 }
 
 /* Tira do campo de cartões tudo que não for cartão. Não apaga em silêncio:
@@ -199,11 +221,14 @@ function matLixoNosCartoes(chave) {
 function matLimparLixoCartoes(chave) {
   const r = matResumos[chave];
   if (!r || !r.cartoes) return 0;
-  const antes = String(r.cartoes).split("\n").filter((l) => l.trim());
-  const so = antes.filter((l) => /^[^\n#@+].*::/.test(l));
-  const tirados = antes.length - so.length;
+  const L = String(r.cartoes).split("\n");
+  const ok = matLinhasLegitimas(r.cartoes);
+  const tirados = L.filter((l, i) => l.trim() && !ok[i]).length;
   if (!tirados) return 0;
-  r.cartoes = so.join("\n");
+  /* AS LINHAS EM BRANCO FICAM (só se juntam as repetidas): elas dizem a que cartão um "@" pertence — tirá-las mudaria o
+   * dono dos títulos. */
+  const fica = L.filter((l, i) => ok[i] || !l.trim());
+  r.cartoes = fica.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   matSalvar();
   matReg("cartoes", "limpeza do campo de cartões",
          tirados + " linha(s) que não eram cartão foram retiradas de " + (r.topico || chave));
@@ -2406,6 +2431,60 @@ function leiJurLadoALado(disciplina, topico) {
   reg("MATERIAL", "lei e jurisprudencia lado a lado", disciplina + " · " + topico);
 }
 
+/* A FAIXA DO LIXO: quantos tópicos têm, no campo de cartões, texto que não é cartão — com a lista, "limpar" por tópico e
+ * "limpar todos". Uma faixa só, no topo da lista, em vez de um aviso em cada linha. */
+let matLixoAberto = false;
+function matTopicosComLixo() {
+  return Object.keys(matResumos).map((k) => ({ chave: k, x: matResumos[k], lx: matLixoNosCartoes(k) }))
+    .filter((o) => o.lx.lixo > 0);
+}
+function matPintarAvisoLixo(box) {
+  const com = matTopicosComLixo();
+  if (!com.length) return null;
+  const linhas = com.reduce((a, o) => a + o.lx.lixo, 0);
+  const cx = document.createElement("div");
+  cx.className = "mat-lixo-faixa";
+  cx.setAttribute("role", "status");
+  const tx = document.createElement("span");
+  tx.textContent = t("mat_lixo_faixa", { n: com.length, l: linhas });
+  const ver = document.createElement("button");
+  ver.type = "button"; ver.className = "btn-min";
+  ver.textContent = t(matLixoAberto ? "mat_lixo_esconder" : "mat_lixo_ver");
+  ver.onclick = () => { matLixoAberto = !matLixoAberto; matRender(); };
+  const todos = document.createElement("button");
+  todos.type = "button"; todos.className = "btn-min";
+  todos.textContent = t("mat_lixo_limpar_todos");
+  todos.onclick = async () => {
+    if (!(await uiConfirm(t("mat_lixo_conf_todos", { n: com.length, l: linhas })))) return;
+    com.forEach((o) => matLimparLixoCartoes(o.chave));
+    matRender();
+  };
+  cx.append(tx, document.createTextNode(" "), ver, todos);
+  if (matLixoAberto) {
+    const lista = document.createElement("div");
+    lista.className = "mat-lixo-lista";
+    com.forEach((o) => {
+      const li = document.createElement("div");
+      li.className = "mat-lixo-item";
+      const nome = document.createElement("span");
+      nome.textContent = (o.x.topico || o.chave) + " — " + t("mat_lixo_item", { n: o.lx.lixo, c: o.lx.cartoes });
+      const bl = document.createElement("button");
+      bl.type = "button"; bl.className = "btn-min";
+      bl.textContent = t("mat_lixo_limpar");
+      bl.onclick = async () => {
+        if (!(await uiConfirm(t("mat_lixo_conf", { n: o.lx.lixo, c: o.lx.cartoes })))) return;
+        matLimparLixoCartoes(o.chave);
+        matRender();
+      };
+      li.append(nome, document.createTextNode(" "), bl);
+      lista.append(li);
+    });
+    cx.append(lista);
+  }
+  box.append(cx);
+  return cx;
+}
+
 function matRender() {
   const box = $("matLista");
   if (!box) return;
@@ -2424,6 +2503,7 @@ function matRender() {
   }
 
   matPintarSugestoes();
+  matPintarAvisoLixo(box);
   const arv = matAgrupado(matFiltro);
   let achou = 0;
   arv.forEach((discs, cc) => {
@@ -2468,22 +2548,15 @@ function matRender() {
             + (nCart ? " · " + t("mat_n_cartoes", { n: nCart }) : "")
             + " · " + new Date(x.tocado).toLocaleDateString();
           esq.append(nm, sub);
-          /* e um aviso quando o campo de cartões tem lixo dentro */
+          /* o lixo no campo de cartões é avisado UMA vez, na faixa do topo (matPintarAvisoLixo) — repetido em cada linha
+           * ele virava parede; aqui só um sinal discreto de onde está */
           const lx = matLixoNosCartoes(x.chave);
           if (lx.lixo > 0) {
-            const av = document.createElement("div");
-            av.className = "mat-lixo";
-            av.textContent = t("mat_lixo_aviso", { n: lx.lixo, c: lx.cartoes });
-            const bl = document.createElement("button");
-            bl.type = "button"; bl.className = "btn-min";
-            bl.textContent = t("mat_lixo_limpar");
-            bl.onclick = async () => {
-              if (!(await uiConfirm(t("mat_lixo_conf", { n: lx.lixo, c: lx.cartoes })))) return;
-              matLimparLixoCartoes(x.chave);
-              matRender();
-            };
-            av.append(document.createTextNode(" "), bl);
-            esq.append(av);
+            const av = document.createElement("span");
+            av.className = "mat-lixo-sinal";
+            av.textContent = "⚠";
+            av.title = t("mat_lixo_aviso", { n: lx.lixo, c: lx.cartoes });
+            nm.append(av);
           }
           /* UMA AÇÃO PRINCIPAL POR LINHA, o resto no menu.
            * Quatro botões repetidos em cada uma das dezenas de linhas
