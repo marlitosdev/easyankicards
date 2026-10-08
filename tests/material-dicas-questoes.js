@@ -540,7 +540,7 @@ function novo() {
   /* e o material tem porta para ela */
   api.matRender();
   const bLei = api.$("matLista").querySelectorAll("button")
-    .filter((b) => (b.textContent || "").indexOf("lei seca") >= 0)[0];
+    .filter((b) => /lei seca/i.test(b.textContent || ""))[0];
   ok("a lista do material mostra o caminho para a lei seca", !!bLei);
   bLei.onclick();
   ok("e ele abre a lei do tópico certo",

@@ -2375,7 +2375,7 @@ function matMenuLinha(chave, outras) {
   outras.forEach((o) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "mat-menu-item";
+    b.className = "mat-menu-item" + (o.cls ? " " + o.cls : "");
     b.textContent = o.rot;
     if (o.dica) b.title = o.dica;
     b.onclick = () => {
@@ -2554,18 +2554,14 @@ function matRender() {
           const nm = document.createElement("div");
           nm.className = "mat-nome";
           nm.textContent = x.topico || x.chave;
-          /* OS SELOS APARECEM AQUI.
-           * matSelosDe existia desde a v8.84 e nunca foi usada: a lista
-           * mostrava só o tamanho do resumo, então um tópico com 155
-           * cartões parecia ter apenas texto. Quem salvou cartões não os
-           * encontrava em lugar nenhum. */
-          nm.append(matSelosDe(x));
+          /* M3 — OS SELOS VIRARAM OS BOTÕES. Antes, o selo "cartões" dizia que havia cartões e não levava a eles; "Abrir"
+           * abria só o resumo; a lei seca morava no ⋮ (e com o mesmo ⚖ dos julgados). Agora cada material que o tópico TEM
+           * é um botão com o ícone e a cor da sua aba — 📄 Resumo · 🃏 21 cartões · § Lei seca · ⚖ 6 julgados —, e o ⋮
+           * fica só com o que é OUTRA tarefa: acrescentar o que falta, mexer nos cartões, lei e julgados lado a lado. */
           const sub = document.createElement("div");
           sub.className = "mat-sub";
           const nCart = matContarCartoes(x.chave);
-          sub.textContent = t("mat_tamanho", { c: String(x.texto || "").length })
-            + (nCart ? " · " + t("mat_n_cartoes", { n: nCart }) : "")
-            + " · " + new Date(x.tocado).toLocaleDateString();
+          sub.textContent = t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() });
           esq.append(nm, sub);
           /* o lixo no campo de cartões é avisado UMA vez, na faixa do topo (matPintarAvisoLixo) — repetido em cada linha
            * ele virava parede; aqui só um sinal discreto de onde está */
@@ -2577,65 +2573,38 @@ function matRender() {
             av.title = t("mat_lixo_aviso", { n: lx.lixo, c: lx.cartoes });
             nm.append(av);
           }
-          /* UMA AÇÃO PRINCIPAL POR LINHA, o resto no menu.
-           * Quatro botões repetidos em cada uma das dezenas de linhas
-           * produziam uma parede de botões onde nada se destaca — e o
-           * que se faz noventa por cento das vezes é abrir o material.
-           * Os outros caminhos continuam existindo, a um toque de
-           * distância, em vez de disputarem o olho a cada linha. */
           const acoes = document.createElement("div");
           acoes.className = "mat-acoes";
-          const ler = botaoMini("mat_abrir", "btn-cinza",
+          const tps = matTiposDe(x);
+          const nJul = typeof jurContarDoTopico === "function" ? jurContarDoTopico(x.chave) : 0;
+          const temL = tps.indexOf("lei") >= 0 || (typeof leiTem === "function" && !!leiTem(x.chave));
+          const temR = tps.indexOf("resumo") >= 0;
+          const slot = (tp, principal, rotulo, dica, faz) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "mat-slot slot-" + tp;
+            b.append(document.createTextNode(MAT_ICONE[tp] + (principal ? " " + principal : "")));
+            const r = document.createElement("span");
+            r.className = "slot-rot";
+            r.textContent = " " + rotulo;
+            b.append(r);
+            b.title = dica;
+            b.setAttribute("aria-label", (principal ? principal + " " : "") + rotulo);
+            b.onclick = faz;
+            acoes.append(b);
+            return b;
+          };
+          if (temR) slot("resumo", "", t("mat_slot_resumo"), t("mat_slot_resumo_tip", { tp: x.topico }),
             () => matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "ler"));
-          /* NUM TÓPICO QUE SÓ TEM JULGADO, "abrir" abriria um resumo em
-           * branco: a ação principal ali é ver os julgados, e oferecer a
-           * folha vazia como caminho principal é mandar a pessoa para o
-           * lugar onde o material dela NÃO está. */
-          if (x.soJuris) ler.hidden = true;
-          acoes.append(ler);
-
-          /* O BOTÃO PRÓPRIO DA JURISPRUDÊNCIA.
-           *
-           * Ele existia só dentro do ⋮, junto de "mexer nos cartões" e
-           * "ver a lei seca" — três coisas diferentes atrás do mesmo
-           * clique-e-procure. Enquanto o julgado não contava como
-           * material isso se defendia; agora que conta, esconder o
-           * acesso ao quarto tipo enquanto os outros três têm porta na
-           * própria linha seria dizer uma coisa no selo e outra no
-           * caminho. Só aparece onde HÁ julgado — em tópico sem nenhum,
-           * o convite continua no menu, que é onde moram as ações que
-           * criam coisa nova. */
-          const nJul = typeof jurContarDoTopico === "function"
-            ? jurContarDoTopico(x.chave) : 0;
-          if (nJul) {
-            const bj = botaoMini(null, "btn-cinza",
-              () => jurAbrir(x.disciplina, x.topico, "ler"),
-              t("mat_juris_btn", { n: nJul }));
-            bj.title = t("mat_juris_ver_ajuda", { n: nJul, tp: x.topico });
-            acoes.append(bj);
-          }
-          /* LADO A LADO só quando há os DOIS materiais pra combinar — sem
-           * lei ou sem julgado não tem o que separar em duas metades.
-           * Escondido em tela estreita por CSS (.btn-lj-split); a função
-           * também se protege sozinha se for chamada de outro jeito. */
-          if (nJul && typeof leiTem === "function" && leiTem(x.chave)) {
-            const bs = botaoMini(null, "btn-cinza",
-              () => leiJurLadoALado(x.disciplina, x.topico), t("mat_split_btn"));
-            bs.title = t("mat_split_ajuda", { tp: x.topico });
-            bs.classList.add("btn-lj-split");
-            acoes.append(bs);
-          }
+          if (nCart) slot("cartoes", String(nCart), t("mat_slot_cartoes", { n: nCart }), t("mat_ver_cartoes_ajuda", { n: nCart, tp: x.topico }),
+            () => estcEstudarTopico(x.disciplina, x.topico));
+          if (temL) slot("lei", "", t("mat_slot_lei"), t("mat_lei_ver_ajuda", { tp: x.topico }),
+            () => leiAbrir(x.disciplina, x.topico));
+          if (nJul) slot("juris", String(nJul), t("mat_slot_juris", { n: nJul }), t("mat_juris_ver_ajuda", { n: nJul, tp: x.topico }),
+            () => jurAbrir(x.disciplina, x.topico, "ler"));
 
           const outras = [];
-          /* CAMINHO ATÉ OS CARTÕES. Sem ele, os cartões existiam guardados e
-           * não havia como chegar até eles a não ser abrindo o resumo e
-           * entrando no painel. */
           if (nCart) {
-            /* vai DIRETO aos cartões: sem abrir o resumo no caminho */
-            outras.push({ rot: t("mat_ver_cartoes_n", { n: nCart }),
-              dica: t("mat_ver_cartoes_ajuda", { n: nCart, tp: x.topico }),
-              faz: () => estcEstudarTopico(x.disciplina, x.topico) });
-            /* e um caminho para MEXER neles, que aí sim é outra tarefa */
             outras.push({ rot: t("mat_mexer_cartoes"),
               dica: t("mat_mexer_cartoes_ajuda"),
               faz: () => {
@@ -2643,27 +2612,18 @@ function matRender() {
                 try { matCartoesAbrir(); matCartoesVer(); } catch (e) {}
               } });
           }
-          /* CAMINHO ATÉ A LEI SECA.
-           * Ela já era guardada por disciplina e tópico, mas só dava para
-           * chegar nela pela agenda da semana — o material, que é a
-           * estante, não tinha porta para ela. */
-          const temL = typeof leiTem === "function" && leiTem(x.chave);
-          outras.push({ rot: t(temL ? "mat_lei_ver" : "mat_lei_criar"),
-            dica: t(temL ? "mat_lei_ver_ajuda" : "mat_lei_criar_ajuda",
-              { tp: x.topico }),
-            faz: () => leiAbrir(x.disciplina, x.topico) });
-          /* CAMINHO ATÉ A JURISPRUDÊNCIA, pelo mesmo motivo da lei seca:
-           * ela é guardada por tópico e, sem esta porta, só se chegaria
-           * nela pela agenda da semana. */
-          /* COM JULGADO, O CAMINHO JÁ ESTÁ NA LINHA — e repeti-lo no ⋮
-           * seria duas portas para a mesma sala, na mesma linha. O que
-           * fica aqui é o convite para CRIAR o primeiro, que é ação de
-           * menu: se propõe, não se destaca. */
-          if (!nJul) {
-            outras.push({ rot: t("mat_juris_criar"),
-              dica: t("mat_juris_criar_ajuda", { tp: x.topico }),
-              faz: () => jurAbrir(x.disciplina, x.topico, "incluir") });
+          /* LADO A LADO só quando há os DOIS materiais pra combinar; a classe btn-lj-split o esconde em tela estreita */
+          if (nJul && temL) {
+            outras.push({ rot: t("mat_split_btn"), dica: t("mat_split_ajuda", { tp: x.topico }), cls: "btn-lj-split",
+              faz: () => leiJurLadoALado(x.disciplina, x.topico) });
           }
+          /* acrescentar o que FALTA — ação de menu: se propõe, não se destaca */
+          if (!temR) outras.push({ rot: t("mat_add_resumo"), dica: t("mat_add_resumo_ajuda", { tp: x.topico }),
+            faz: () => matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "editar") });
+          if (!temL) outras.push({ rot: t("mat_lei_criar"), dica: t("mat_lei_criar_ajuda", { tp: x.topico }),
+            faz: () => leiAbrir(x.disciplina, x.topico) });
+          if (!nJul) outras.push({ rot: t("mat_juris_criar"), dica: t("mat_juris_criar_ajuda", { tp: x.topico }),
+            faz: () => jurAbrir(x.disciplina, x.topico, "incluir") });
 
           acoes.append(matMenuLinha(x.chave, outras));
           li.append(esq, acoes);

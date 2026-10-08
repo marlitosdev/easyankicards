@@ -2350,6 +2350,16 @@ p.mat-ferr{display:block;font-size:12px}
 .mat-tipo.ativa.tp-juris{color:#f59e0b;border-color:#f59e0b}
 /* selo de tipo em cada linha da lista */
 .mat-selos{display:inline-flex;gap:4px;margin-left:6px}
+/* M3 — um botão por material, com o ícone e a cor da sua aba */
+.mat-slot{all:unset;cursor:pointer;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);white-space:nowrap}
+.mat-slot:hover{background:var(--panel)}
+.mat-slot:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.mat-slot.slot-resumo{color:var(--ok);border-color:var(--ok)}
+.mat-slot.slot-cartoes{color:var(--info);border-color:var(--info)}
+.mat-slot.slot-lei{color:#10b981;border-color:#10b981}
+.mat-slot.slot-juris{color:#f59e0b;border-color:#f59e0b}
+.mat-slot .slot-rot{font-weight:600}
+@media (max-width:560px){.mat-slot .slot-rot{display:none}.mat-slot{padding:4px 8px}}
 .mat-acoes{display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:0 0 auto}
 .mat-lixo{font-size:10px;color:var(--atencao);margin-top:3px;line-height:1.5}
 .mat-lixo-sinal{color:var(--atencao);margin-left:6px;font-size:12px;cursor:help}

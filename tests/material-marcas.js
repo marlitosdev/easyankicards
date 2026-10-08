@@ -909,6 +909,47 @@ async function testes() {
     api.matFiltroTiposTeste([]);
   }
 
+  /* ---- M3: um botão por material na linha (📄 Resumo · 🃏 N cartões · § Lei seca · ⚖ N julgados); o ⋮ só com o resto ---- */
+  {
+    const mat = api.matResumosAtual();
+    Object.keys(mat).forEach((k) => delete mat[k]);
+    const k1 = api.matChave("Tributário", "Completo");
+    api.matGravar(k1, "Resumo do tópico.", { disciplina: "Tributário", topico: "Completo" });
+    mat[k1].cartoes = ["P1? :: R1 :: t", "P2? :: R2 :: t"].join(String.fromCharCode(10));
+    mat[k1].leiSeca = true;
+    const k2 = api.matChave("Tributário", "So cartoes");
+    api.matGravarCartoes(k2, "P? :: R :: t", { disciplina: "Tributário", topico: "So cartoes" });
+    api.matFiltroTiposTeste([]);
+    api.matRender();
+    const achar = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); achar(x, pred, acc); }); return acc; };
+    const cls = (e) => String((e || {}).className || "");
+    const linha = (nome) => achar(api.$("matLista"), (e) => cls(e) === "mat-item").find((it) => achar(it, (e) => cls(e) === "mat-nome")[0].textContent.indexOf(nome) === 0);
+    const slots = (it) => achar(it, (e) => /\bmat-slot\b/.test(cls(e)));
+    const menu = (it) => achar(it, (e) => /\bmat-menu-item\b/.test(cls(e))).map((b) => b.textContent);
+    const a = linha("Completo"), b = linha("So cartoes");
+    ok(slots(a).map((s) => s.textContent).join(" | ") === "📄 Resumo | 🃏 2 cartão(ões) | § Lei seca", "M3a tópico com resumo, cartões e lei: três botões, na ordem das abas, com ícone e número: " + slots(a).map((s) => s.textContent).join(" | "));
+    ok(!achar(a, (e) => e.textContent === api.t("mat_abrir")).length && !achar(api.$("matLista"), (e) => cls(e) === "mat-selos").length, "M3b sem o 'Abrir' genérico e sem os selos que não levavam a nada");
+    ok(slots(a).every((s) => typeof s.onclick === "function" && s.title && s.getAttribute("aria-label")), "M3c todo botão de material abre algo e tem explicação (title) e rótulo acessível");
+    ok(menu(a).includes(api.t("mat_mexer_cartoes")) && menu(a).includes(api.t("mat_juris_criar")) && !menu(a).includes(api.t("mat_add_resumo")) && !menu(a).includes(api.t("mat_lei_criar")), "M3d o ⋮ do tópico completo: mexer nos cartões e guardar o primeiro julgado (o que já existe não se oferece de novo): " + menu(a).join(" | "));
+    ok(slots(b).map((s) => s.textContent).join() === "🃏 1 cartão(ões)" && menu(b).includes(api.t("mat_add_resumo")) && menu(b).includes(api.t("mat_lei_criar")), "M3e tópico só com cartões: um botão (cartões), e o ⋮ oferece escrever o resumo e carregar a lei: " + menu(b).join(" | "));
+    ok(/^§/.test(api.t("mat_lei_criar")) && /^⚖/.test(api.t("mat_juris_criar")) && /^§/.test(slots(a)[2].textContent), "M3f lei seca é §, julgado é ⚖ — o mesmo ⚖ servia para os dois e confundia");
+    ok(achar(a, (e) => cls(e) === "mat-sub")[0].textContent.indexOf("atualizado em ") === 0, "M3g a linha de baixo diz só quando foi atualizado (os números estão nos botões)");
+    const fs = require("fs"), path = require("path");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(html.indexOf("@media (max-width:560px){.mat-slot .slot-rot{display:none}") >= 0, "M3h no celular o botão fica só com ícone e número");
+    /* o botão dos cartões leva aos cartões de verdade (a biblioteca no tópico, para estudar) */
+    ["dlgGerCartoes", "dlgGerEstudo"].forEach((id) => { if (api.$(id)) api.$(id).open = false; });
+    slots(linha("Completo"))[1].onclick();
+    ok((api.$("dlgGerCartoes") && api.$("dlgGerCartoes").open === true) || (api.$("dlgGerEstudo") && api.$("dlgGerEstudo").open === true), "M3i tocar em '🃏 2' abre os cartões do tópico");
+    ["dlgGerCartoes", "dlgGerEstudo"].forEach((id) => { if (api.$(id) && api.$(id).close) api.$(id).close(); });
+    /* sem cartões, o ⋮ não oferece 'mexer nos cartões' */
+    const k3 = api.matChave("Tributário", "So resumo");
+    api.matGravar(k3, "Só texto.", { disciplina: "Tributário", topico: "So resumo" });
+    api.matRender();
+    ok(!menu(linha("So resumo")).includes(api.t("mat_mexer_cartoes")) && slots(linha("So resumo")).map((x) => x.textContent).join() === "📄 Resumo", "M3j tópico sem cartões: nada de 'mexer nos cartões' no ⋮, e só o botão do resumo");
+    Object.keys(mat).forEach((k) => delete mat[k]);
+  }
+
   /* ---- M45: a lista MOSTRA os cartoes ----
    * matSelosDe existia desde a v8.84 e nunca tinha sido usada: a lista
    * mostrava so o tamanho do resumo, entao um topico com cartoes parecia
@@ -939,31 +980,24 @@ async function testes() {
       });
       anda(el); return n;
     };
-    ok(contaCls(api.$("matLista"), "selo-cartoes") === 1,
-       `M45 o selo de cartoes devia aparecer 1 vez, apareceu `
-       + contaCls(api.$("matLista"), "selo-cartoes"));
-    ok(contaCls(api.$("matLista"), "selo-resumo") === 2,
-       "M45a o selo de resumo devia aparecer nos dois itens");
+    /* M3: os selos viraram BOTÕES (um por material, com a classe do tipo) */
+    ok(contaCls(api.$("matLista"), "slot-cartoes") === 1,
+       `M45 o botão de cartoes devia aparecer 1 vez, apareceu `
+       + contaCls(api.$("matLista"), "slot-cartoes"));
+    ok(contaCls(api.$("matLista"), "slot-resumo") === 2,
+       "M45a o botão de resumo devia aparecer nos dois itens");
 
-    /* a CONTAGEM fica na linha de baixo, e e outra coisa: sem ela o item
-     * diz que tem cartoes mas nao quantos */
-    const subs = [];
-    const andaSub = (x) => Array.from(x.children || []).forEach((f) => {
-      if ((f.className || "").split(/\s+/).includes("mat-sub")) subs.push(f._texto || "");
-      andaSub(f);
-    });
-    andaSub(api.$("matLista"));
-    ok(subs.some((s) => /1 cart/i.test(s)),
-       "M45b a linha nao diz QUANTOS cartoes o topico tem: " + JSON.stringify(subs));
-
-    /* e existe um caminho ate eles */
+    /* a CONTAGEM está no próprio botão dos cartões: ele diz QUANTOS */
     let botao = null;
     const anda = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ver os 1 cart|see the 1 card/i.test(f._texto || "")) botao = f;
+      if ((f.className || "").split(/\s+/).includes("slot-cartoes")) botao = f;
       anda(f);
     });
     anda(api.$("matLista"));
-    ok(!!botao, "M45c nao ha botao para ver os cartoes a partir da lista");
+    ok(!!botao && /^🃏 1 cartão\(ões\)$/.test(botao.textContent || ""),
+       "M45b o botão dos cartões diz QUANTOS: " + (botao && botao.textContent));
+    ok(!!botao && typeof botao.onclick === "function" && /1 cartões de “Com cartoes”/.test(botao.title),
+       "M45c o botão leva aos cartões do tópico: " + (botao && botao.title));
     Object.keys(mat).forEach((k) => delete mat[k]);
   }
 
