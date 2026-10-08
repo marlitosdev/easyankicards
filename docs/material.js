@@ -2235,8 +2235,9 @@ function matAgrupado(filtro) {
      * são o que a pessoa escreveu para ler; a ementa inteira encheria a
      * busca de casamentos que ela não pediu. */
     if (!f) return true;
+    /* e nos CARTÕES: "procurei 'nonagesimal' e não achei" quando a palavra está num cartão do tópico */
     const meu = (x.topico + " " + x.disciplina + " "
-      + (x.concurso || "") + " " + x.texto).toLowerCase();
+      + (x.concurso || "") + " " + x.texto + " " + ((matResumos[x.chave] || {}).cartoes || "")).toLowerCase();
     if (meu.includes(f)) return true;
     return matJurisTexto(x.chave).toLowerCase().includes(f);
   };
@@ -2485,15 +2486,25 @@ function matPintarAvisoLixo(box) {
   return cx;
 }
 
+/* "Dúvidas · 7": o botão diz quantas há — e some quando não há nenhuma (um atalho para uma lista vazia é ruído) */
+function matPintarDuvidasBotao() {
+  const b = $("btnDuvidas");
+  if (!b) return;
+  let n = 0;
+  try { n = matDuvidas().length; } catch (e) { n = 0; }
+  b.textContent = t("duv_btn_n", { n });
+  b.hidden = !n;
+}
+
 function matRender() {
   const box = $("matLista");
   if (!box) return;
   box.innerHTML = "";
   const r = matResumo();
   $("matContagem").textContent = r.total
-    ? t("mat_contagem", { n: r.total, d: r.disciplinas,
-        c: Math.round(r.caracteres / 1000) })
+    ? t("mat_contagem", { n: r.total, d: r.disciplinas })
     : t("mat_vazio_curto");
+  matPintarDuvidasBotao();
 
   if (!r.total) {
     const p = document.createElement("div");

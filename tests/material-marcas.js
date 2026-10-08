@@ -834,6 +834,39 @@ async function testes() {
     ok(api.matLixoNosCartoes(c).lixo === 0 && faixas().length === 0 && mat[a].cartoes === RICO, "M0n 'limpar todos' confirmado: o lixo sai, a faixa some e o campo rico continua intacto");
   }
 
+  /* ---- M1: o topo da estante — contagem por tópico, busca também nos cartões, "Dúvidas · N" ---- */
+  {
+    const mat = api.matResumosAtual();
+    Object.keys(mat).forEach((k) => delete mat[k]);
+    const NL = String.fromCharCode(10);
+    const k1 = api.matChave("Tributário", "Anterioridade");
+    api.matGravar(k1, "Texto do resumo sobre prazos.", { disciplina: "Tributário", topico: "Anterioridade" });
+    mat[k1].cartoes = ["Qual o prazo nonagesimal? :: 90 dias :: trib"].join(NL);
+    const k2 = api.matChave("Financeiro", "PPA");
+    api.matGravar(k2, "Plano plurianual.", { disciplina: "Financeiro", topico: "PPA" });
+    api.matRender();
+    ok(api.$("matContagem").textContent === "2 tópico(s) · 2 disciplina(s)", "M1a a contagem diz TÓPICOS (não 'resumos') e não fala em caracteres: " + api.$("matContagem").textContent);
+    const achados = (f) => { const arv = api.matAgrupado(f); let n = []; arv.forEach((ds) => ds.forEach((xs) => xs.forEach((x) => n.push(x.topico)))); return n; };
+    ok(achados("nonagesimal").join() === "Anterioridade", "M1b a busca acha a palavra que só está num CARTÃO do tópico: " + achados("nonagesimal"));
+    ok(achados("plurianual").join() === "PPA" && achados("inexistente-xyz").length === 0, "M1c e continua achando no resumo (e nada quando não há)");
+    /* "Dúvidas · N": some sem dúvida, aparece com o número */
+    api.matPintarDuvidasBotao();
+    ok(api.$("btnDuvidas").hidden === true, "M1d sem nenhuma dúvida marcada, o atalho 'Dúvidas' some");
+    api.matGravar(k2, "Plano ==?plurianual== de quatro anos.", { disciplina: "Financeiro", topico: "PPA" });
+    const nDuv = api.matDuvidas().length;
+    api.matRender();
+    ok(nDuv === 1 && api.$("btnDuvidas").hidden === false && api.$("btnDuvidas").textContent === "Dúvidas · 1", "M1e com dúvida, o botão aparece com o número: " + nDuv + " | " + api.$("btnDuvidas").textContent);
+    /* a ordem do topo, no HTML: busca antes dos filtros; registro do resumo fora do cabeçalho; sem as dicas longas */
+    const fs = require("fs"), path = require("path");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const sec = html.slice(html.indexOf('<section id="secResumos"'), html.indexOf("</section>", html.indexOf('<section id="secResumos"')));
+    const cab = sec.slice(0, sec.indexOf("</div>"));
+    ok(sec.indexOf('id="matBusca"') > 0 && sec.indexOf('id="matBusca"') < sec.indexOf('id="matFEdital"') && sec.indexOf('id="matBusca"') < sec.indexOf('id="btnGerCartoes"'), "M1f a busca vem ANTES dos filtros e das ferramentas");
+    ok(!/btnMatLogAba/.test(cab) && /class="mat-rodape"[^>]*>\s*<button[^>]*id="btnMatLogAba"/.test(sec), "M1g 'registro do resumo' saiu do cabeçalho e foi para o rodapé");
+    ok(!/mat_f_edital_dica"><\/span>|mat_f_disc_dica"><\/span>/.test(sec) && /data-i18n-title="mat_f_edital_dica"/.test(sec), "M1h as dicas longas dos filtros viraram title (não ocupam mais linhas)");
+    Object.keys(mat).forEach((k) => delete mat[k]);
+  }
+
   /* ---- M45: a lista MOSTRA os cartoes ----
    * matSelosDe existia desde a v8.84 e nunca tinha sido usada: a lista
    * mostrava so o tamanho do resumo, entao um topico com cartoes parecia

@@ -670,7 +670,7 @@ function rodar() {
     matLimparColagem, matGravarCartoes, matContarCartoes, matAplicarColagem,
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
-    matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
+    matPintarDuvidasBotao, matAgrupado, matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
     matMarcasDe, matContarMarcas, matTirarMarcaDe, matTrocarCorDaMarca,
     matCartoesConsertar, matCartoesPromptCorrecao, matConsertoPerdas, matJuntarTags,
     mcPareiGuardar, mcPareiDe, mcPareiLer, mcEstMenuFechar, mcEstAndar,
