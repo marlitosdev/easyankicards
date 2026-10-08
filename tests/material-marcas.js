@@ -774,6 +774,66 @@ async function testes() {
        "M44g limpar de novo mexeu em material ja limpo");
   }
 
+  /* ---- M0: o Cartão Rico NÃO é lixo — e "limpar" nunca leva título nem "saiba mais" ----
+   * A conta antiga ("linhas menos cartões") chamava de lixo o "@ título" e o "+ saiba mais" de cada cartão; o aviso
+   * aparecia em quase todo tópico e o "limpar" APAGAVA essas linhas. */
+  {
+    const mat = api.matResumosAtual();
+    Object.keys(mat).forEach((k) => delete mat[k]);
+    const novo = (tp, cartoes) => { const ch = api.matChave("Tributário", tp); api.matGravar(ch, "resumo de " + tp, { disciplina: "Tributário", topico: tp }); mat[ch].cartoes = cartoes; return ch; };
+    const RICO = ["@ CF > Limitações > Legalidade", "Certo ou errado: tributo só por lei? :: CERTO — art. 150, I :: disc_trib",
+      "+ Literalidade — Art. 150, I: exigir ou aumentar tributo sem lei", "",
+      "@ CF > Limitações > Anterioridade", "", "Qual o prazo nonagesimal? :: 90 dias :: disc_trib", "", "+ Saiba mais — art. 150, III, c",
+      "* Exemplo — majoração em dezembro só vale em março", "{{c1::Imunidade::isenção ou imunidade?}} recíproca protege entes :: :: disc_trib"].join("\n");
+    const a = novo("Limitações", RICO);
+    const la = api.matLixoNosCartoes(a);
+    ok(la.lixo === 0 && la.cartoes === 3, "M0a cartão rico (com @, + e * — inclusive depois de linha em branco): ZERO lixo: " + JSON.stringify(la));
+    ok(api.matLimparLixoCartoes(a) === 0 && mat[a].cartoes === RICO, "M0b 'limpar' num campo só de cartões ricos não mexe em NADA (byte a byte)");
+    /* prompt colado junto dos cartões ricos: só a prosa sai */
+    const SUJO = ["Gere flashcards para Anki a partir do texto abaixo.", "REGRAS DE FORMATO (siga exatamente):", "1. Uma ideia por cartão.", "", RICO, "", "", "", "Espero ter ajudado!", "# comentário solto"].join("\n");
+    const b = novo("Anterioridade", SUJO);
+    const lb = api.matLixoNosCartoes(b);
+    ok(lb.lixo === 5 && lb.cartoes === 3, "M0c com o prompt junto: só a prosa conta como lixo (3 linhas do prompt + 'Espero ter ajudado!' + '#'): " + JSON.stringify(lb));
+    ok(api.matLimparLixoCartoes(b) === 5, "M0d 'limpar' tira as 5 linhas de prosa");
+    const depois = mat[b].cartoes;
+    ok(depois === RICO, "M0e e o que sobra é EXATAMENTE o campo rico (títulos, saiba mais, exemplo, lacuna e as linhas em branco que dizem de quem é cada título):\n" + depois);
+    ok(!/\n\n\n/.test(depois) && !/Gere flashcards|Espero ter ajudado|# comentário/.test(depois), "M0f nenhuma prosa sobra e as linhas em branco repetidas viram uma só");
+    /* '#' com '::' é comentário, não cartão; e a prosa NO MEIO dos cartões sai sem deixar um buraco de linhas em branco */
+    const NL = String.fromCharCode(10);
+    const P1 = ["@ T1", "Pergunta um? :: resposta um"].join(NL);
+    const P2 = ["Pergunta dois? :: resposta dois", "+ mais dois"].join(NL);
+    const d = novo("Meio", [P1, "", "Aqui vai uma frase do prompt no meio", "", "# nota :: comentário com separador", "", P2].join(NL));
+    ok(api.matLixoNosCartoes(d).lixo === 2 && api.matLixoNosCartoes(d).cartoes === 2, "M0f1 '# … :: …' é comentário (lixo), não cartão: " + JSON.stringify(api.matLixoNosCartoes(d)));
+    api.matLimparLixoCartoes(d);
+    ok(mat[d].cartoes === [P1, "", P2].join(NL), "M0f2 a prosa do meio sai e os brancos que sobram viram UMA linha em branco: " + JSON.stringify(mat[d].cartoes));
+    delete mat[d];
+    /* sem nenhum cartão, "@" e "+" não têm dono: são lixo */
+    const c = novo("Sem cartão", ["@ Lei > Tópico > Subtópico", "+ Literalidade — exemplo do prompt", "texto solto"].join("\n"));
+    ok(api.matLixoNosCartoes(c).lixo === 3 && api.matLinhasLegitimas("@ x\n+ y").every((v) => v === false), "M0g sem cartão nenhum, '@' e '+' não pertencem a nada: contam como lixo");
+    ok(api.matLinhasLegitimas("a :: b\n\n+ c\n\n@ d").join() === "true,false,true,false,true", "M0h uma marca por linha (branco = false)");
+    /* a tela: UMA faixa no topo, com a lista; nas linhas, só um sinal */
+    api.matRender();
+    const achar = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); achar(x, pred, acc); }); return acc; };
+    const cls = (e) => String((e || {}).className || "");
+    const faixas = () => achar(api.$("matLista"), (e) => cls(e) === "mat-lixo-faixa");
+    const conduzir = async (p, sim) => { let pronto = false; p.then(() => { pronto = true; }, () => { pronto = true; }); for (let k = 0; k < 12 && !pronto; k++) { await Promise.resolve(); try { api._uiFechar(sim); } catch (e) {} } return p; };
+    ok(faixas().length === 1 && /1 tópico\(s\) têm, no campo de cartões, 3 linha\(s\) que não são cartão/.test(faixas()[0].textContent), "M0i UMA faixa no topo, com quantos tópicos e quantas linhas: " + (faixas()[0] || {}).textContent);
+    const itens = achar(api.$("matLista"), (e) => cls(e) === "mat-item");
+    const sinais = (it) => achar(it, (e) => cls(e) === "mat-lixo-sinal").length;
+    const comSinal = itens.filter((it) => sinais(it) > 0).map((it) => it.textContent.slice(0, 12));
+    ok(comSinal.length === 1 && /Sem cartão/.test(comSinal[0]) && !achar(api.$("matLista"), (e) => cls(e) === "mat-lixo").length, "M0j nas linhas, só um ⚠ discreto no tópico com lixo — sem o aviso longo repetido: " + comSinal);
+    const btn = (rot) => achar(faixas()[0], (e) => e.textContent === api.t(rot))[0];
+    btn("mat_lixo_ver").onclick();
+    const lista = achar(faixas()[0], (e) => cls(e) === "mat-lixo-item");
+    ok(lista.length === 1 && /Sem cartão — 3 linha\(s\)/.test(lista[0].textContent) && !!btn("mat_lixo_esconder"), "M0k 'ver quais' abre a lista, um tópico por linha, com o seu 'limpar'");
+    btn("mat_lixo_esconder").onclick();
+    ok(achar(faixas()[0], (e) => cls(e) === "mat-lixo-item").length === 0, "M0l e 'esconder' fecha");
+    await conduzir(btn("mat_lixo_limpar_todos").onclick(), false);
+    ok(api.matLixoNosCartoes(c).lixo === 3 && faixas().length === 1, "M0m 'limpar todos' recusado na confirmação: nada muda");
+    await conduzir(btn("mat_lixo_limpar_todos").onclick(), true);
+    ok(api.matLixoNosCartoes(c).lixo === 0 && faixas().length === 0 && mat[a].cartoes === RICO, "M0n 'limpar todos' confirmado: o lixo sai, a faixa some e o campo rico continua intacto");
+  }
+
   /* ---- M45: a lista MOSTRA os cartoes ----
    * matSelosDe existia desde a v8.84 e nunca tinha sido usada: a lista
    * mostrava so o tamanho do resumo, entao um topico com cartoes parecia
