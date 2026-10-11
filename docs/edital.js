@@ -992,6 +992,24 @@ const ED_PASSOS = [
   { id: "cartoes", forma: "flashcards", peso: 20 },
   { id: "juris", forma: "juris", peso: 10 },
 ];
+/* DA ÚLTIMA VEZ: o registro mais recente do tópico (ou do ramo, quando ramoId vem) — data, há quantos dias, as formas
+ * usadas (leitura, questões, flashcards…) e se foi estudo ou revisão. null = nunca registrado. */
+function edUltimaVez(diario, topicoChave, ramoId, hoje) {
+  let ult = null;
+  (diario || []).forEach((x) => {
+    if (!x || x.c !== topicoChave || x.a === "pendente" || !x.d || x.d === "?") return;
+    if (ramoId && !((x.rm || []).some((m) => m && m.id === ramoId) || (x.rp || []).some((m) => m && m.id === ramoId))) return;
+    if (!ult || String(x.d) >= String(ult.d)) ult = x;
+  });
+  if (!ult) return null;
+  let dias = null;
+  if (hoje) {
+    const d0 = new Date(String(ult.d).slice(0, 10) + "T00:00:00"), d1 = new Date(String(hoje).slice(0, 10) + "T00:00:00");
+    if (!isNaN(d0) && !isNaN(d1)) dias = Math.max(0, Math.round((d1 - d0) / 86400000));
+  }
+  return { d: ult.d, dias, formas: (ult.f || []).slice(), acao: ult.a };
+}
+
 /* forma -> data do registro mais recente que a usou naquele ramo (rm = ramos marcados; rp = ramos só com progresso parcial) */
 function edCoberturaDoRamo(diario, topicoChave, ramoId) {
   const cob = {};

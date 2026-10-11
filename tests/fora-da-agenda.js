@@ -606,6 +606,61 @@ async function testes() {
     ok(!/0 /.test(rot0), "F12f com zero pendentes o rotulo escreve um zero: " + rot0);
   }
 
+  /* ---- U: "da última vez" — como (formas) e quando o tópico/ramo foi estudado ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const ch = api.matChave("Direito Tributário", "Tributos");
+    const outro = api.matChave("Direito Tributário", "Outro");
+    const diario = [
+      { d: "2026-10-01", c: ch, a: "feito", m: 30, f: ["leitura"], rm: [{ id: "taxas" }] },
+      { d: "2026-10-05", c: ch, a: "revisado", m: 20, f: ["questoes", "flashcards"], rm: [{ id: "impostos" }] },
+      { d: "2026-10-09", c: ch, a: "pendente", m: 0, f: ["resumo"] },
+      { d: "2026-10-10", c: outro, a: "feito", m: 40, f: ["videoaula"] },
+      { d: "2026-09-20", c: ch, a: "feito", m: 15, f: [], rp: [{ id: "taxas" }] },
+    ];
+    const u = api.edUltimaVez(diario, ch, null, "2026-10-11");
+    ok(u && u.d === "2026-10-05" && u.dias === 6 && u.acao === "revisado" && u.formas.join() === "questoes,flashcards",
+       "U1 a última vez do TÓPICO é o registro mais recente dele (pendente e outro tópico fora): " + JSON.stringify(u));
+    const ur = api.edUltimaVez(diario, ch, "taxas", "2026-10-11");
+    ok(ur && ur.d === "2026-10-01" && ur.dias === 10 && ur.formas.join() === "leitura",
+       "U2 a última vez do RAMO só olha registros que marcaram o ramo: " + JSON.stringify(ur));
+    ok(api.edUltimaVez(diario, ch, "contribuicoes", "2026-10-11") === null && api.edUltimaVez([], ch, null, "2026-10-11") === null,
+       "U3 ramo/tópico nunca registrado = null");
+    const up = api.edUltimaVez([{ d: "2026-10-08", c: ch, a: "feito", m: 25, f: ["questoes"], rp: [{ id: "parcial" }] }], ch, "parcial", "2026-10-11");
+    ok(up && up.d === "2026-10-08" && up.dias === 3, "U3b ramo só com progresso PARCIAL (rp) também conta: " + JSON.stringify(up));
+    ok(api.edUltimaVez(diario, ch, null, "2026-10-05").dias === 0,
+       "U4 mesmo dia = 0 dias");
+    ok(api.edUltimaVezTexto(u) === "Da última vez: revisado com questões + flashcards · 05/10 (há 6 dias)",
+       "U5 texto do tópico: " + api.edUltimaVezTexto(u));
+    ok(api.edUltimaVezTexto({ d: "2026-10-10", dias: 1, formas: [], acao: "feito" }) === "Da última vez: estudado com forma não anotada · 10/10 (ontem)"
+       && /\(hoje\)$/.test(api.edUltimaVezTexto({ d: "2026-10-11", dias: 0, formas: ["leitura"], acao: "feito" })),
+       "U6 ontem/hoje e sem forma anotada");
+
+    /* na linha da agenda e no balão do chip do ramo */
+    api.diarioPor(diario.map((x) => Object.assign({}, x, { d: x.d === "2026-10-05" ? api.hojeISO() : x.d })));
+    const item = { disciplina: "Direito Tributário", nome: "Tributos", chave: ch, minutos: 30,
+      ramos: [{ id: "taxas", nome: "Taxas", peso: 3 }, { id: "contribuicoes", nome: "Contribuições", peso: 3 }] };
+    const li = api.edLinhaAgendaTeste(item);
+    let linha = null;
+    const anda = (x) => Array.from(x.children || []).forEach((f) => { if (/ed-item-ultima/.test(f.className || "")) linha = f; anda(f); });
+    anda(li);
+    ok(linha && /^Da última vez: revisado com questões \+ flashcards · \d\d\/\d\d \(hoje\)$/.test(linha.textContent),
+       "U7 a linha da agenda diz como e quando foi a última vez: " + (linha && linha.textContent));
+    const semReg = api.edLinhaAgendaTeste({ disciplina: "D", nome: "Nada", chave: api.matChave("D", "Nada"), minutos: 30 });
+    let linha2 = null;
+    const anda2 = (x) => Array.from(x.children || []).forEach((f) => { if (/ed-item-ultima/.test(f.className || "")) linha2 = f; anda2(f); });
+    anda2(semReg);
+    ok(!linha2, "U8 tópico nunca estudado não ganha a linha");
+    const chips = [];
+    const anda3 = (x) => Array.from(x.children || []).forEach((f) => { if (/(^| )ed-ramo( |$)/.test(f.className || "")) chips.push(f); anda3(f); });
+    anda3(li);
+    const cT = chips.find((c) => /Taxas/.test(c.textContent)), cC = chips.find((c) => /Contribuições/.test(c.textContent));
+    ok(cT && /Da última vez: estudado com leitura · 01\/10 \(há \d+ dias\)/.test(cT.title),
+       "U9 o balão do chip do ramo diz a última vez DO RAMO: " + (cT && cT.title));
+    ok(cC && !/Da última vez/.test(cC.title), "U10 ramo nunca estudado: balão sem 'última vez'");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
