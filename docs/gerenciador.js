@@ -149,6 +149,7 @@ function gerDesfazerUltima() {
         edDesfazerMigracaoRamos(ed.progresso || (ed.progresso = {}), dia, rr.mig);
         if (rr.migAberto && typeof edProgresso !== "undefined" && edProgresso !== ed.progresso) edDesfazerMigracaoRamos(edProgresso, [], rr.migAberto);
         if (ed.ramosHist) ed.ramosHist = ed.ramosHist.slice(0, rr.histAntes || 0);
+        if (rr.qs && rr.qs.length && typeof qsDesfazerRamo === "function") qsDesfazerRamo(rr.qs);
         try { if (rr.mig && rr.mig.diario && rr.mig.diario.length && typeof salvarDiario === "function") salvarDiario(); } catch (e) {}
         try { if (typeof editalAtual !== "undefined" && editalAtual === ed.id && typeof edProgresso !== "undefined") localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso)); } catch (e) {}
       }

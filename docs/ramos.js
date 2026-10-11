@@ -107,6 +107,10 @@ function ramAplicar(ctx, linhas) {
   if (novasHist.length) ed.ramosHist = (ed.ramosHist || []).concat(novasHist);
   if (mig.diario.length && typeof salvarDiario === "function") { try { salvarDiario(); } catch (e) {} }
   if (aberto && typeof edProgresso !== "undefined") { try { localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso)); } catch (e) {} }
+  /* Q1 — as questões ligadas a um ramo renomeado/apagado acompanham */
+  const nomesNovos = {};
+  res.ramos.forEach((x) => { nomesNovos[x.id] = x.nome; });
+  const recQs = typeof qsMigrarRamos === "function" ? qsMigrarRamos(ctx.chave, mapa, nomesNovos) : [];
   /* os cartões do tópico (só quem tem etiqueta que mudou) */
   const antes = {};
   antes[ctx.chave] = gerTexto(ctx.chave);
@@ -118,10 +122,10 @@ function ramAplicar(ctx, linhas) {
     if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = res.texto; edRender(); }
   } catch (e) {}
   gerRegistrar(antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto,
-    ramos: { mig, migAberto, histAntes } } });
+    ramos: { mig, migAberto, histAntes, qs: recQs } } });
   try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + retag + " cartão(ões) e "
     + mig.prog.length + " marca(s) de estudo acompanharam"); } catch (e) {}
-  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length };
+  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length, questoes: recQs.length };
 }
 
 /* PROPOR RAMOS PELO ÍNDICE DA LEI (local, sem IA): as divisões da lei carregada no tópico (títulos, capítulos…)
@@ -315,10 +319,10 @@ function ramDivergencias(linhas, res) {
 }
 
 /* os textos que a pessoa já registrou deste tópico, POR FONTE: { questoes: [...], juris: [...] } */
-function ramTextosPorFonte(chave) {
+function ramTextosPorFonte(chave, soSemRamo) {
   const questoes = [], juris = [];
   try {
-    (typeof qsBanco !== "undefined" ? qsBanco : []).filter((q) => q.chave === chave || (typeof qsChaveNormal === "function" && qsChaveNormal(q.chave) === qsChaveNormal(chave)))
+    (typeof qsBanco !== "undefined" ? qsBanco : []).filter((q) => !(soSemRamo && q.ramo)).filter((q) => q.chave === chave || (typeof qsChaveNormal === "function" && qsChaveNormal(q.chave) === qsChaveNormal(chave)))
       .forEach((q) => questoes.push([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" ")));
   } catch (e) {}
   try {
@@ -357,6 +361,11 @@ function ramAcertosDoTopico(chave, ramos, banco) {
   bq.filter(mesma).forEach((q) => {
     const tent = q.tentativas || [];
     if (!tent.length) return;
+    /* Q1 — ligada a um ramo: conta só para ele (sem palpite) */
+    if (q.ramo) {
+      if (out[q.ramo]) tent.forEach((tt) => { out[q.ramo].feitas++; if (tt && tt.acertou) out[q.ramo].certas++; });
+      return;
+    }
     const d = ramRadicais([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" "));
     if (!d.size) return;
     rs.forEach((r, k) => {
@@ -380,13 +389,15 @@ function ramMaterialDoTopico(chave, ramos) {
   const out = {};
   let cards = [];
   try { cards = parseText(String((typeof matResumos !== "undefined" && (matResumos[chave] || {}).cartoes) || ""), []).cards; } catch (e) { cards = []; }
-  const fontes = ramTextosPorFonte(chave);
+  /* Q1 — questão LIGADA ao ramo conta por ele de verdade; o palpite pelas palavras fica só para as que ainda não têm ramo */
+  const fontes = ramTextosPorFonte(chave, true);
+  const ligadas = typeof qsContarPorRamo === "function" ? qsContarPorRamo(chave) : {};
   const temLei = (typeof leiTem === "function") ? !!leiTem(chave) : false;
   rs.forEach((r) => {
     out[r.id] = {
       lei: temLei ? 1 : 0,
       cartoes: cards.filter((c) => ramIdDoCartao(c) === r.id).length,
-      questoes: ramContaCitacoes(r.nome, fontes.questoes),
+      questoes: (ligadas[r.id] || 0) + ramContaCitacoes(r.nome, fontes.questoes),
       juris: ramContaCitacoes(r.nome, fontes.juris),
     };
   });

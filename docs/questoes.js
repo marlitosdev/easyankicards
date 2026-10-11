@@ -526,7 +526,7 @@ function qsNoTexto(txt, opts) {
  * geradas pela IA, para poderem entrar no banco pelo mesmo caminho */
 function qsDeBlocos(blocos, ctx) {
   const c = ctx || {};
-  return (blocos || []).filter((b) => b.completa).map((b) => ({
+  return (blocos || []).filter((b) => b.completa).map((b) => Object.assign({
     id: qsNovoId(),
     tipo: b.tipo, enunciado: b.enunciado,
     opcoes: b.opcoes.slice(), gabarito: b.gabarito, comentario: b.comentario,
@@ -534,7 +534,7 @@ function qsDeBlocos(blocos, ctx) {
     disciplina: c.disciplina || "", topico: c.topico || "",
     chave: c.chave || "", concurso: c.concurso || "",
     origem: "texto",
-  }));
+  }, c.ramo ? { ramo: c.ramo, ramoNome: c.ramoNome || "" } : {}));
 }
 
 /* ---------------------------------------------------------------------
@@ -622,6 +622,8 @@ function qsAplicar(lista, gravar) {
       criado: new Date().toISOString(),
       tentativas: [],
     };
+    /* Q1 — a questão pode nascer já ligada a um RAMO do tópico */
+    if (q.ramo) { limpa.ramo = String(q.ramo); limpa.ramoNome = String(q.ramoNome || ""); }
     qsBanco.push(limpa);
     novas.push(limpa);
   });
@@ -699,6 +701,9 @@ function qsFiltrar(f) {
     if (o.concurso && qsNormal(q.concurso) !== qsNormal(o.concurso)) return false;
     if (o.banca && qsNormal(q.banca) !== qsNormal(o.banca)) return false;
     if (o.tipo && q.tipo !== o.tipo) return false;
+    /* Q1 — só as de um ramo ("_sem" = as do tópico que ainda não têm ramo) */
+    if (o.ramo === "_sem" && q.ramo) return false;
+    if (o.ramo && o.ramo !== "_sem" && q.ramo !== o.ramo) return false;
     if (o.soIneditas && (q.tentativas || []).length) return false;
     if (o.soErradas) {
       const ts = q.tentativas || [];
@@ -809,6 +814,70 @@ function qsDefeitos(q) {
     achados.push({ id: "gab_me", g: gab });
   }
   return achados;
+}
+
+/* =====================================================================
+ * Q1 — A QUESTÃO E O RAMO
+ *
+ * A questão guardava só a chave do tópico: "as questões do ramo" era um PALPITE pelas palavras do nome do ramo no
+ * enunciado. Agora ela pode guardar o ramo (q.ramo = o id do ramo, o mesmo de edRamoId) e o nome dele no momento da
+ * ligação (q.ramoNome — é o que permite dizer "era do ramo X" se o ramo for apagado, e religar se ele voltar).
+ * Opcionais: sem eles, a questão é "do tópico inteiro", como sempre foi.
+ * ===================================================================== */
+const qsMesmoTopico = (q, chave) => !!chave && (q.chave === chave || qsChaveNormal(q.chave || "") === qsChaveNormal(chave));
+
+/* liga (ou, com ramo "", desliga) várias questões a um ramo. Devolve o recibo para o desfazer. */
+function qsLigarRamo(ids, ramo, ramoNome, gravar) {
+  const quer = new Set(ids || []);
+  const recibo = [];
+  qsBanco.forEach((q) => {
+    if (!quer.has(q.id)) return;
+    recibo.push({ id: q.id, ramo: q.ramo, ramoNome: q.ramoNome });
+    if (ramo) { q.ramo = String(ramo); q.ramoNome = String(ramoNome || ""); }
+    else { delete q.ramo; delete q.ramoNome; }
+  });
+  if (recibo.length) qsSalvar(gravar);
+  return recibo;
+}
+/* volta o que qsLigarRamo / qsMigrarRamos fizeram */
+function qsDesfazerRamo(recibo, gravar) {
+  const por = new Map((recibo || []).map((r) => [r.id, r]));
+  let n = 0;
+  qsBanco.forEach((q) => {
+    const r = por.get(q.id);
+    if (!r) return;
+    if (r.ramo === undefined) delete q.ramo; else q.ramo = r.ramo;
+    if (r.ramoNome === undefined) delete q.ramoNome; else q.ramoNome = r.ramoNome;
+    n++;
+  });
+  if (n) qsSalvar(gravar);
+  return n;
+}
+/* quantas questões do tópico estão em cada ramo: { idDoRamo: n, _sem: n } */
+function qsContarPorRamo(chave) {
+  const m = { _sem: 0 };
+  qsBanco.forEach((q) => {
+    if (!qsMesmoTopico(q, chave)) return;
+    const k = q.ramo || "_sem";
+    m[k] = (m[k] || 0) + 1;
+  });
+  return m;
+}
+/* o ramo foi renomeado (mapa id antigo → id novo) ou apagado (→ ""): as questões do tópico acompanham. Apagado: a
+ * questão volta a ser do tópico inteiro, mas GUARDA o nome do ramo (ramoNome). nomes: { idNovo: "Nome novo" }. */
+function qsMigrarRamos(chave, mapa, nomes, gravar) {
+  const pares = new Map(Array.from(mapa instanceof Map ? mapa.entries() : Object.entries(mapa || {})).filter(([de, para]) => de && de !== para));
+  const recibo = [];
+  if (!pares.size) return recibo;
+  qsBanco.forEach((q) => {
+    if (!q.ramo || !pares.has(q.ramo) || !qsMesmoTopico(q, chave)) return;
+    recibo.push({ id: q.id, ramo: q.ramo, ramoNome: q.ramoNome });
+    const para = pares.get(q.ramo);
+    if (para) { q.ramo = para; if (nomes && nomes[para]) q.ramoNome = nomes[para]; }
+    else delete q.ramo;
+  });
+  if (recibo.length) qsSalvar(gravar);
+  return recibo;
 }
 
 function qsContarDoTopico(chave) {
