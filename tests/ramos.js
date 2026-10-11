@@ -1111,7 +1111,7 @@ async function testes() {
       abrirBt[0].onclick();
       ok(a.$("dlgRegistro").open === false, "R38g4 abrir o material fecha a janela de registro (aberta, ela deixaria o resto inerte)");
       a.abrirRegistro(it());
-      a.$("btnRegOutro").onclick();
+      a.regTipoTrocar();
       ok(a.$("regTrilha").hidden === true, "R38h na REVISAO nao ha trilha");
       a.$("dlgRegistro").close();
       a.edDiario.push({ d: hoje, c: it().chave, n: "Lei", a: "feito", f: ["flashcards"], rm: [{ id: "modalidades", ant: null }] });
@@ -1124,7 +1124,7 @@ async function testes() {
       /* na REVISAO nao ha trilha, mesmo com ramo marcado */
       a.edProgressoPor({ [it().chave + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
       a.abrirRegistro(it());
-      a.$("btnRegOutro").onclick();
+      a.regTipoTrocar();
       ok(a.$("regRamos").children[0].children[0].checked === true && a.$("regTrilha").hidden === true, "R38i3 na revisao com ramo marcado a trilha continua escondida");
       a.$("dlgRegistro").close();
     }
@@ -2895,7 +2895,7 @@ async function testes() {
       /* na REVISAO a opcao nao interfere: revisar marca os ramos estudados */
       a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
       a.abrirRegistro(it());
-      a.$("btnRegOutro").onclick();
+      a.regTipoTrocar();
       a.confirmarRegistroTeste("revisado");
       ok(a.edProgressoAtual()[ch + "›#modalidades"].e === "revisado", "R39f2 com a opcao ligada, REVISAR marca como revisado normalmente (a opcao so' vale para estudar)");
       /* ramo sem material nenhum: nao ha o que exigir */
@@ -2976,7 +2976,7 @@ async function testes() {
       a.abrirRegistro(item());
       ok(a.$("regRamosRot").textContent === "O que você estudou?" && marcas().join() === "false,true,false", "R33k topico ainda com pendencia abre em ESTUDO: so' o ramo pendente marcado, os estudados desabilitados");
       ok(linhas()[0].children[0].disabled === true && linhas()[1].children[0].disabled === false && /já estudado/.test(linhas()[0].children[2].textContent), "R33l ramo ja estudado fica desabilitado, dizendo 'ja estudado'");
-      a.$("btnRegOutro").onclick();
+      a.regTipoTrocar();
       ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === true && linhas()[0].children[0].disabled === false && /ainda não estudado/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO inverte: so' os estudados podem ser escolhidos");
       ok(a.$("regRamosExigirLin").hidden === true && (a.$("btnRegExigirAjuda").dataset.texto || "") === "", "R33m2 na REVISAO a caixa \"so' marcar estudado com todas as etapas\" e o (?) somem (so valem no estudo)");
       ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
@@ -2989,7 +2989,7 @@ async function testes() {
       /* revisao: o padrao e' o que esta VENCIDO (nao todos os estudados) */
       a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" }, [ch + "›#contratos"]: { e: "feito", d: new Date().toISOString().slice(0, 10) } });
       a.abrirRegistro(item());
-      a.$("btnRegOutro").onclick();
+      a.regTipoTrocar();
       ok(marcas().join() === "true,false,false", "R33p2 na revisao ja vem marcado so' o ramo VENCIDO (o estudado hoje fica de fora, mas pode ser marcado): " + marcas());
       a.$("dlgRegistro").close && a.$("dlgRegistro").close();
       /* a escolha respeita o que faz sentido, mesmo vinda de fora */
@@ -3335,6 +3335,21 @@ async function testes() {
     ok(itensQ.includes(a.t("ram_qst_criar")) && !itensQ.some((x) => /^1 quest/.test(x)), "Q2f o menu do ramo conta só as questões LIGADAS (o palpite não abre lista vazia): " + itensQ.join(" | "));
     a.qsSessaoApagar && a.qsSessaoApagar();
     todas.splice(0, todas.length);
+  }
+
+  /* ---- REG: "nunca estudado?" olha os RAMOS marcados, não só o tópico ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.hubAbrirEdital(ed.id);
+    const tk = "licitações›lei 14.133";
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    a.edProgressoPor({ [tk + "›#modalidades"]: { e: "feito", d: iso } });
+    a.abrirRegistro({ nome: "Lei 14.133", disciplina: "Licitações", chave }, { ramo: "modalidades" });
+    ok(a.regTipoAtual() === "revisado" && a.regAlvoNuncaEstudado() === false, "REG1 revisão de um RAMO já estudado (tópico ainda incompleto) não pergunta 'nunca estudado'");
+    a.abrirRegistro({ nome: "Lei 14.133", disciplina: "Licitações", chave }, { ramo: "contratos" });
+    ok(a.regTipoAtual() === "feito" && a.regAlvoNuncaEstudado() === true, "REG2 ramo nunca estudado: estudo por padrão, e revisar perguntaria");
+    a.$("btnRegFechar").onclick();
   }
 
   falhas.quantas = n;

@@ -48,10 +48,10 @@ async function testes() {
     ok(/estudo/i.test(api.$("btnRegEstudo").textContent || ""),
        "G1c o botao nao diz que vai lancar estudo: "
        + api.$("btnRegEstudo").textContent);
-    /* e o segundo botao oferece o OUTRO tipo, nao repete o mesmo */
-    ok(/revis/i.test(api.$("btnRegOutro").textContent || ""),
-       "G1d o botao de excecao nao oferece a revisao: "
-       + api.$("btnRegOutro").textContent);
+    /* o seletor mostra o tipo escolhido e o porquê da sugestão */
+    ok(api.$("btnRegTipoEstudo").getAttribute("aria-pressed") === "true" && api.$("btnRegTipoRevisao").getAttribute("aria-pressed") === "false"
+       && /ainda não foi estudado/.test(api.$("regTipoPorque").textContent),
+       "G1d o seletor marca 'Estudo' e diz por que: " + api.$("regTipoPorque").textContent);
   }
 
   /* ---- G2: tópico já estudado abre como REVISÃO ---- */
@@ -82,8 +82,8 @@ async function testes() {
       require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
     ok(html.indexOf('id="btnRegRevisao"') < 0,
        "G2d o segundo botao de registrar voltou ao rodape");
-    ok(html.indexOf('id="btnRegOutro"') >= 0,
-       "G2e sumiu a saida para quem discorda do app");
+    ok(html.indexOf('id="btnRegTipoEstudo"') >= 0 && html.indexOf('id="btnRegTipoRevisao"') >= 0 && html.indexOf('id="btnRegOutro"') < 0,
+       "G2e a saida para quem discorda e o seletor Estudo | Revisao (o botao 'lancar como o outro' saiu)");
   }
 
   /* ---- G3: discordar do app continua possível ---- */
@@ -97,7 +97,7 @@ async function testes() {
     ok(api.regTipoAtual() === "revisado", "G3 premissa: devia abrir em revisao");
     /* reler um topico que voce mal viu e estudo novo, nao revisao — e a
      * pessoa e quem sabe disso */
-    api.$("btnRegOutro").onclick();
+    api.$("btnRegTipoEstudo").onclick();
     ok(api.regTipoAtual() === "feito",
        "G3b o botao de excecao nao trocou o tipo: " + api.regTipoAtual());
     ok(/estudo/i.test(api.$("btnRegEstudo").textContent || ""),
@@ -111,11 +111,86 @@ async function testes() {
        "G3c2 virou estudo e a forma continuou 'revisao': "
        + JSON.stringify(api.regFormasAtual()));
 
-    api.$("btnRegOutro").onclick();
+    api.$("btnRegTipoEstudo").onclick();
+    ok(api.regTipoAtual() === "feito", "G3c3 tocar no tipo ja escolhido nao troca");
+    api.$("btnRegTipoRevisao").onclick();
     ok(api.regTipoAtual() === "revisado", "G3d nao voltou ao tipo original");
     ok((api.regFormasAtual() || []).indexOf("revisao") >= 0,
        "G3e voltou para revisao e a forma continuou 'leitura': "
        + JSON.stringify(api.regFormasAtual()));
+  }
+
+  /* ---- G5: a sugestão segue a SITUAÇÃO real, não só "já foi estudado?" ---- */
+  {
+    const { api } = rodar();
+    const ch = preparar(api);
+    const hoje = (() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
+    const menos = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+    const abrir = (marca) => { api.edProgressoPor(marca ? { [ch]: marca } : {}); api.abrirRegistro({ nome: "Lei 4.320", disciplina: "Direito Financeiro", chave: ch, minutos: 30 }); };
+    abrir({ e: "feito", d: hoje });
+    ok(/continuação: estudado hoje/.test(api.$("regSub").textContent) && !/revisão/.test(api.$("regSub").textContent), "G5-0 o subtítulo diz 'continuação', não 'revisão': " + api.$("regSub").textContent);
+    ok(api.regTipoAtual() === "feito" && (api.regFormasAtual() || []).indexOf("leitura") >= 0 && /estudou este tópico hoje/.test(api.$("regTipoPorque").textContent),
+       "G5 estudado HOJE: a nova sessão é continuação (estudo), não revisão: " + api.regTipoAtual() + " | " + api.$("regTipoPorque").textContent);
+    abrir({ e: "feito", d: menos(3) });
+    ok(api.regTipoAtual() === "feito" && /há 3 dia\(s\); a revisão vence em 4 dia\(s\)/.test(api.$("regTipoPorque").textContent), "G5b estudado há 3 dias (revisão vence em 7): estudo: " + api.$("regTipoPorque").textContent);
+    abrir({ e: "feito", d: menos(7) });
+    ok(api.regTipoAtual() === "revisado" && /há 7 dia\(s\); a revisão venceu/.test(api.$("regTipoPorque").textContent), "G5c no 7º dia a revisão venceu: revisão");
+    abrir({ e: "revisado", d: hoje });
+    ok(api.regTipoAtual() === "revisado" && /já foi revisado/.test(api.$("regTipoPorque").textContent), "G5d já revisado: outra sessão é nova revisão");
+    abrir({ e: "feito", d: null });
+    ok(api.regTipoAtual() === "revisado" && /sem data/.test(api.$("regTipoPorque").textContent), "G5e estudado sem data (base antiga): revisão");
+    /* trocar avisa que foi escolha da pessoa */
+    abrir({ e: "feito", d: hoje });
+    api.$("btnRegTipoRevisao").onclick();
+    ok(api.regTipoAtual() === "revisado" && /^Você escolheu o outro tipo\. \(Sugestão do app: estudo/.test(api.$("regTipoPorque").textContent), "G5f trocando, o texto diz que a escolha foi sua e lembra a sugestão: " + api.$("regTipoPorque").textContent);
+    ok(api.regTipoPadrao({ feito: true, quando: menos(10) }).tipo === "revisado" && api.regTipoPadrao({ feito: true, quando: menos(2) }).motivo === "recente" && api.regTipoPadrao(null).tipo === "feito", "G5g regTipoPadrao calcula pelos dias quando o item só traz a data");
+  }
+
+  /* ---- G6: revisar o que NUNCA foi estudado pergunta antes ---- */
+  {
+    const { api } = rodar();
+    const ch = preparar(api);
+    api.edProgressoPor({});
+    api.abrirRegistro({ nome: "Lei 4.320", disciplina: "Direito Financeiro", chave: ch, minutos: 30 });
+    api.$("btnRegTipoRevisao").onclick();
+    ok(api.regAlvoNuncaEstudado() === true, "G6 premissa: o tópico nunca foi estudado");
+    const antes = api.edDiarioAtual().length;
+    const p = api.$("btnRegEstudo").onclick();
+    let pronto = false; p.then(() => { pronto = true; });
+    for (let k = 0; k < 12 && !pronto; k++) { await Promise.resolve(); try { api._uiFechar(false); } catch (e) {} }
+    await p;
+    ok(api.edDiarioAtual().length === antes && api.$("dlgRegistro").open === true && !api.edProgressoAtual()[ch], "G6b cancelar a pergunta não lança nada (volta ao registro)");
+    const p2 = api.$("btnRegEstudo").onclick();
+    pronto = false; p2.then(() => { pronto = true; });
+    for (let k = 0; k < 12 && !pronto; k++) { await Promise.resolve(); try { api._uiFechar(true); } catch (e) {} }
+    await p2;
+    ok(api.edDiarioAtual().length === antes + 1 && api.edProgressoAtual()[ch] && api.edProgressoAtual()[ch].e === "revisado", "G6c confirmando (estudou fora do app), lança a revisão");
+    /* estudo comum não pergunta nada e continua síncrono */
+    api.edProgressoPor({});
+    api.abrirRegistro({ nome: "Lei 4.320", disciplina: "Direito Financeiro", chave: ch, minutos: 30 });
+    const n0 = api.edDiarioAtual().length;
+    api.$("btnRegEstudo").onclick();
+    ok(api.edDiarioAtual().length === n0 + 1, "G6d registrar ESTUDO de tópico novo não pergunta nada (e grava na hora)");
+  }
+
+  /* ---- G7: o tempo também em horas e minutos, e quanto a agenda reservou ---- */
+  {
+    const { api } = rodar();
+    const ch = preparar(api);
+    api.edProgressoPor({});
+    api.abrirRegistro({ nome: "Lei 4.320", disciplina: "Direito Financeiro", chave: ch, minutos: 90 });
+    ok(api.$("regMinFmt").textContent === "= 1h30 — o tempo que a agenda reservou para esta sessão", "G7 ao abrir: o tempo em h/min e que é o reservado pela agenda: " + api.$("regMinFmt").textContent);
+    api.$("regMinutos").value = 55;
+    ((api.$("regMinutos")._ouv || {}).input || []).forEach((fn) => fn());
+    ok(api.$("regMinFmt").textContent === "= 55min · a agenda reservou 1h30 para esta sessão", "G7b mudou o tempo: diz o novo em h/min e lembra o reservado: " + api.$("regMinFmt").textContent);
+    const atalhos = Array.from(api.$("regAtalhos").children);
+    atalhos.find((b) => b.textContent === "+15m").onclick();
+    ok(api.$("regMinutos").value == 70 && api.$("regMinFmt").textContent === "= 1h10 · a agenda reservou 1h30 para esta sessão", "G7c o atalho +15m soma e o texto acompanha: " + api.$("regMinFmt").textContent);
+    atalhos.find((b) => b.textContent === api.t("ed_reg_zerar")).onclick();
+    ok(/^= 5min/.test(api.$("regMinFmt").textContent), "G7d zerar também atualiza o texto");
+    api.$("regMinSlider").value = 120;
+    ((api.$("regMinSlider")._ouv || {}).input || []).forEach((fn) => fn());
+    ok(api.$("regMinutos").value == 120 && /^= 2h ·/.test(api.$("regMinFmt").textContent), "G7e arrastar a barra atualiza o número e o texto: " + api.$("regMinFmt").textContent);
   }
 
   /* ---- G4: o defeito relatado — questões de um tópico em revisão ---- */
