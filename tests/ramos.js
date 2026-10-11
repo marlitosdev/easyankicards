@@ -2363,11 +2363,11 @@ async function testes() {
       const linhaModalidades2 = achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).find((e) => /Modalidades/.test(e.textContent));
       achar(linhaModalidades2, (e) => cls(e, "ed-mais"))[0].onclick({ stopPropagation() {} });
       const itemQst = achar(linhaModalidades2, (e) => cls(e, "ed-menu-item")).find((b) => /criar quest/i.test(b.textContent));
-      ok(!!itemQst, "R63f2g o ramo sem vínculo de questões oferece 'criar questões' (a do tópico inteiro)");
-      const negando = itemQst.onclick({ stopPropagation() {} });
-      await new Promise((r) => setImmediate(r)); a.uiModalResponder(false);
-      await negando;
-      ok(a.$("dlgHoras").open === true, "R63f2h recusar a pergunta 'tópico inteiro?' não fecha nem navega");
+      ok(!!itemQst && itemQst.textContent === a.t("ram_qst_criar"), "R63f2g o ramo sem questões ligadas oferece 'criar questões DESTE ramo'");
+      /* Q2 — sem a pergunta "tópico inteiro?": abre a criação já ligada ao ramo */
+      itemQst.onclick({ stopPropagation() {} });
+      ok(a.$("dlgHoras").open === false && a.$("dlgQsCriar").open === true && /ramo «Modalidades»/.test(a.$("qsCriarDe").textContent), "R63f2h criar questões do ramo abre a criação JÁ ligada ao ramo, sem perguntar: " + a.$("qsCriarDe").textContent);
+      a.$("dlgQsCriar").close();
 
       a.$("btnHorX").onclick();
       a.$("btnEdHoras").onclick(); achar(a.$("horCorpo"), (e) => cls(e, "hor-col"))[0].onclick();
@@ -3281,6 +3281,59 @@ async function testes() {
     ok(r.ok && r.questoes === 2 && q("As modalidades").ramo === "modalidades_de_licitacao" && !("ramo" in q("Contratos")) && q("Contratos").ramoNome === "Contratos", "Q1p pelo editor: renomear leva a questão; apagar 'Contratos' a devolve ao tópico com o nome guardado");
     a.gerDesfazerUltima();
     ok(q("As modalidades").ramo === "modalidades" && q("Contratos").ramo === "contratos", "Q1q o desfazer do editor volta as questões também");
+    todas.splice(0, todas.length);
+  }
+
+  /* ---- Q2: questões DO RAMO na tela — responder só as dele, criar já ligadas a ele, o prompt cita o ramo ---- */
+  {
+    const { a, ed, chave } = MT();
+    const todas = a.qsTodas();
+    todas.splice(0, todas.length);
+    const ctx = { disciplina: "Licitações", topico: "Lei 14.133", chave, concurso: "ISS Caruaru Auditor" };
+    /* o prompt */
+    const semRamo = a.qsPrompt("texto do resumo", ctx);
+    const comRamo = a.qsPrompt("texto do resumo", Object.assign({}, ctx, { ramo: "modalidades", ramoNome: "Modalidades" }));
+    const linhasCom = comRamo.split(String.fromCharCode(10));
+    const iTop = linhasCom.findIndex((l) => /^Tópico: Lei 14\.133/.test(l));
+    ok(semRamo.indexOf("Ramo do tópico") < 0 && iTop >= 0 && linhasCom[iTop + 1] === "Ramo do tópico: Modalidades — crie as questões SÓ sobre este ramo.", "Q2a o prompt de um ramo diz qual é, logo abaixo do tópico; sem ramo, igual ao de sempre");
+    ok(comRamo.replace(linhasCom[iTop + 1] + String.fromCharCode(10), "") === semRamo, "Q2a2 e nada mais muda no prompt");
+    /* a resposta da IA vira questões já ligadas */
+    const resp = ["[QUESTAO]", "TIPO: CE", "ENUNCIADO: O pregão é modalidade de licitação.", "GABARITO: C", "COMENTARIO: Art. 28.", "[/QUESTAO]"].join(String.fromCharCode(10));
+    const lidas = a.qsLerResposta(resp, Object.assign({}, ctx, { ramo: "modalidades", ramoNome: "Modalidades" })).achados;
+    ok(lidas.length === 1 && lidas[0].ramo === "modalidades" && lidas[0].ramoNome === "Modalidades", "Q2b a resposta da IA, pedida a partir do ramo, vira questão já ligada a ele");
+    ok(!("ramo" in a.qsLerResposta(resp, ctx).achados[0]), "Q2b2 sem ramo no pedido, a questão é do tópico inteiro");
+    /* responder: só as do ramo */
+    a.qsAplicar([
+      { tipo: "ce", enunciado: "Do ramo modalidades", gabarito: "C", comentario: "", disciplina: ctx.disciplina, topico: ctx.topico, chave, ramo: "modalidades", ramoNome: "Modalidades" },
+      { tipo: "ce", enunciado: "Do tópico inteiro", gabarito: "C", comentario: "", disciplina: ctx.disciplina, topico: ctx.topico, chave }]);
+    a.$("dlgQsResponder").open = false;
+    a.qsUiResponderDireto("Licitações", "Lei 14.133", { id: "modalidades", nome: "Modalidades" });
+    const ses = a.qsSessaoLer();
+    ok(a.$("dlgQsResponder").open === true && ses && ses.ids && ses.ids.length === 1 && /#modalidades$/.test(ses.escopo || ""), "Q2c responder o ramo abre SÓ as questões dele (e a rodada tem escopo próprio): " + JSON.stringify(ses && { n: ses.ids && ses.ids.length, e: ses.escopo }));
+    a.$("dlgQsResponder").close();
+    /* o ramo não vaza para o "responder do tópico" do resumo (outra porta, que não passa pelo direto) */
+    a.qsUiResponderDoTopico();
+    const ses1b = a.qsSessaoLer();
+    ok(ses1b && ses1b.ids && ses1b.ids.length === 2, "Q2c2 depois de responder o ramo, o 'responder' do resumo traz o tópico inteiro (o ramo não vaza)");
+    a.$("dlgQsResponder").close();
+    a.qsUiResponderDireto("Licitações", "Lei 14.133");
+    const ses2 = a.qsSessaoLer();
+    ok(ses2 && ses2.ids && ses2.ids.length === 2, "Q2d o ramo vale para UMA ida: responder o tópico depois traz todas de novo");
+    a.$("dlgQsResponder").close();
+    /* ramo sem questão ligada: criar já ligada */
+    a.$("dlgQsCriar").open = false;
+    a.qsUiResponderDireto("Licitações", "Lei 14.133", { id: "contratos", nome: "Contratos" });
+    ok(a.$("dlgQsCriar").open === true && /ramo «Contratos»/.test(a.$("qsCriarDe").textContent), "Q2e ramo sem questão ligada: abre a criação já ligada a ele: " + a.$("qsCriarDe").textContent);
+    a.$("dlgQsCriar").close();
+    /* o menu do ramo conta as LIGADAS — não o palpite pelas palavras: uma questão sem ramo que cita "contratos" não vira
+     * "1 questão" do ramo Contratos (abriria uma lista vazia) */
+    a.qsAplicar([{ tipo: "ce", enunciado: "Contratos administrativos têm cláusulas exorbitantes.", gabarito: "C", comentario: "", disciplina: ctx.disciplina, topico: ctx.topico, chave }]);
+    const trig = a.document.createElement("button"), cont = a.document.createElement("div");
+    a.edLigarMenuDoRamo(trig, cont, "Licitações", "Lei 14.133", { id: "contratos", nome: "Contratos", peso: 3 }, chave);
+    trig.onclick({ stopPropagation() {} });
+    const itensQ = Array.from((cont.querySelector(".ed-menu") || { children: [] }).children).map((b) => b.textContent);
+    ok(itensQ.includes(a.t("ram_qst_criar")) && !itensQ.some((x) => /^1 quest/.test(x)), "Q2f o menu do ramo conta só as questões LIGADAS (o palpite não abre lista vazia): " + itensQ.join(" | "));
+    a.qsSessaoApagar && a.qsSessaoApagar();
     todas.splice(0, todas.length);
   }
 
