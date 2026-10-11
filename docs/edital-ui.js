@@ -2147,6 +2147,7 @@ function regSugerir(formas, minutos) {
   if (minutos && $("regMinutos")) {
     $("regMinutos").value = String(minutos);
     if ($("regMinSlider")) $("regMinSlider").value = String(Math.min(240, minutos));
+    regPintarTempo();
   }
   const cx = $("regFormas");
   if (cx && cx.querySelectorAll) {
@@ -2168,6 +2169,7 @@ function regDeQuestoes(feitas, certas, minutos) {
   if (minutos && $("regMinutos")) {
     $("regMinutos").value = String(minutos);
     if ($("regMinSlider")) $("regMinSlider").value = String(Math.min(240, minutos));
+    regPintarTempo();
   }
   /* Repinta A PARTIR de regFormas, não de um rótulo escolhido à mão.
    * Comparar com o texto do botão deixava a tela dizer "Questões" enquanto
@@ -2284,6 +2286,7 @@ function regRamosPintar(i, refazerMinutos) {
   const n = regRamosSel.size, min = regRamosMinutos(i);
   $("regRamosResumo").textContent = n ? t("ed_reg_ramos_resumo", { n, m: horasTexto(min) }) : t("ed_reg_ramos_nenhum");
   if (refazerMinutos && n) { $("regMinutos").value = min; $("regMinSlider").value = Math.min(240, min); }
+  regPintarTempo();
   regTrilhaPintar(i);
   regExigirPintar(i);
   const nomes = rs.filter((r) => regRamosSel.has(r.id)).map((r) => r.nome);
@@ -2390,11 +2393,65 @@ function regPintarBotoes() {
     b.title = t(regTipo === "revisado" ? "ed_reg_revisao_ajuda"
                                        : "ed_reg_estudo_ajuda");
   }
-  const o = $("btnRegOutro");
-  if (o) {
-    o.textContent = t(regTipo === "revisado" ? "ed_reg_como_estudo"
-                                             : "ed_reg_como_revisao");
+  /* o seletor "Esta sessão foi: Estudo | Revisão" e o PORQUÊ da sugestão do app */
+  const be = $("btnRegTipoEstudo"), br = $("btnRegTipoRevisao");
+  if (be) be.setAttribute("aria-pressed", regTipo !== "revisado" ? "true" : "false");
+  if (br) br.setAttribute("aria-pressed", regTipo === "revisado" ? "true" : "false");
+  const pq = $("regTipoPorque");
+  if (pq) pq.textContent = regTipoPorqueTexto(regTipoSugerido, regTipo);
+}
+
+/* =====================================================================
+ * ESTUDO OU REVISÃO? — a sugestão do app, pela situação real
+ *
+ *  · nunca estudado → estudo;
+ *  · já revisado → revisão (outra sessão é nova revisão);
+ *  · estudado e a revisão VENCEU (REV_DIAS dias, ou sem data) → revisão;
+ *  · estudado há MENOS de REV_DIAS dias (hoje, inclusive) → estudo: é continuação, não revisão.
+ * A pessoa troca no seletor quando discordar; o texto do porquê diz de onde veio a sugestão.
+ * ===================================================================== */
+let regTipoSugerido = null;
+function regTipoPadrao(x) {
+  if (!x || !x.feito) return { tipo: "feito", motivo: "novo", dias: null };
+  if (x.revisado) return { tipo: "revisado", motivo: "revisado", dias: null };
+  let dias = typeof x.dias === "number" ? x.dias : null;
+  if (dias === null && x.quando) {
+    const d0 = new Date(String(x.quando).slice(0, 10) + "T00:00:00"), d1 = new Date(hojeISO() + "T00:00:00");
+    if (!isNaN(d0) && !isNaN(d1)) dias = Math.max(0, Math.round((d1 - d0) / 86400000));
   }
+  if (dias === null || dias >= REV_DIAS) return { tipo: "revisado", motivo: "vencida", dias };
+  return { tipo: "feito", motivo: "recente", dias };
+}
+function regTipoPorqueTexto(s, tipoAtual) {
+  if (!s) return "";
+  const txt = s.motivo === "novo" ? t("ed_reg_porque_novo")
+    : s.motivo === "revisado" ? t("ed_reg_porque_revisado")
+    : s.motivo === "vencida" ? (s.dias === null ? t("ed_reg_porque_vencida_sem") : t("ed_reg_porque_vencida", { n: s.dias }))
+    : t("ed_reg_porque_recente", { q: s.dias === 0 ? t("ed_reg_hoje") : t("ed_reg_ha_dias", { n: s.dias }), r: Math.max(1, REV_DIAS - s.dias) });
+  return tipoAtual && tipoAtual !== s.tipo ? t("ed_reg_porque_trocou", { s: txt }) : txt;
+}
+/* trocar estudo ↔ revisão (o seletor chama; tocar no que já está escolhido não faz nada) */
+function regTipoTrocar() {
+  regTipo = regTipo === "revisado" ? "feito" : "revisado";
+  /* TROCAR O TIPO TROCA A FORMA PADRÃO.
+   * Quem troca está declarando "esta sessão foi da outra natureza". Manter "leitura" marcada num lançamento de
+   * revisão — ou o contrário — mandaria o tempo para a conta errada. */
+  regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
+  regPintarFormas();
+  regPintarQuestoes();
+  regPintarBotoes();
+  if (regAtual && regAtual.ramos) {
+    regRamosIniciar(regAtual);
+    if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
+  }
+  regPintarTempo();
+}
+/* o que está sendo lançado nunca foi estudado? (os ramos marcados, quando há; senão o tópico) */
+function regAlvoNuncaEstudado() {
+  if (!regAtual) return false;
+  const rs = (regAtual.ramos || []).filter((r) => regRamosSel && regRamosSel.has(r.id));
+  if (rs.length) return rs.some((r) => !r.feito);
+  return !regAtual.feito;
 }
 
 function abrirRegistro(i, opc) {
@@ -2418,13 +2475,22 @@ function abrirRegistro(i, opc) {
     });
   }
   regAtual = i;
-  regFormas = i.feito ? ["revisao"] : ["leitura"];
+  /* O TIPO (estudo × revisão) E A FORMA PADRÃO SEGUEM A SITUAÇÃO REAL — do ramo, quando aberto por um ramo. Era só
+   * "já foi estudado?": a 2ª sessão no MESMO dia virava revisão, e o diário contava uma revisão que não houve. */
+  const rEsc0 = opc && opc.ramo ? (i.ramos || []).find((x) => x.id === opc.ramo) : null;
+  regTipoSugerido = regTipoPadrao(rEsc0 || i);
+  regTipo = regTipoSugerido.tipo;
+  regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
   regHumor = "media";
   regDif = "";
   const minReg = i.minutosSessao || i.minutos;
   $("regTitulo").textContent = i.nome;
-  $("regSub").textContent = i.disciplina + " · " + edPorque(i, true);
+  /* o subtítulo não pode dizer "revisão" quando a sugestão é continuar o estudo (estudado há menos de REV_DIAS dias) */
+  $("regSub").textContent = i.disciplina + " · " + (regTipoSugerido && regTipoSugerido.motivo === "recente"
+    ? t("ed_reg_sub_recente", { q: regTipoSugerido.dias === 0 ? t("ed_reg_hoje") : t("ed_reg_ha_dias", { n: regTipoSugerido.dias }) })
+    : edPorque(i, true));
   $("regMinutos").value = minReg;
+  regTempoPlanejado = Math.max(0, Math.round(Number(minReg) || 0));
   $("regMinSlider").value = Math.min(240, minReg);
   ["regQFeitas", "regQCertas", "regQPctCampo", "regOnde", "regObs"].forEach((id) => {
     if ($(id)) $(id).value = "";
@@ -2460,17 +2526,15 @@ function abrirRegistro(i, opc) {
    * exceção, não a escolha de todo dia. */
   regDifPintar(i);
 
-  regTipo = i.feito ? "revisado" : "feito";
-  /* aberto por um ramo especifico (painel da disciplina): o tipo e a marca seguem o estado DELE */
-  const rEsc = opc && opc.ramo ? (i.ramos || []).find((x) => x.id === opc.ramo) : null;
+  /* aberto por um ramo especifico (painel da disciplina): o tipo e a marca seguem o estado DELE (já decidido acima) */
+  const rEsc = rEsc0;
   if (rEsc) {
-    regTipo = rEsc.feito ? "revisado" : "feito";
-    regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
     regPintarFormas();
     regPintarQuestoes();
   }
   regPintarBotoes();
   regRamosIniciar(i);
+  regPintarTempo();
   /* o espelho (vínculos) é pintado UMA vez ao abrir: repintar a cada ramo marcado apagaria a escolha dele */
   try { regEspelhoPintar(i); } catch (e) {}
   if (rEsc && regRamosElegivel(rEsc)) {
@@ -2547,6 +2611,21 @@ function regPintarPct() {
 
 /* Atalhos que SOMAM ao valor atual: quem estudou 45min costuma clicar
  * +30 e +15, não arrastar o cursor até o número exato. */
+/* "= 1h10 · a agenda reservou 1h30 para esta sessão": o tempo do registro em horas e minutos, e o reservado na agenda */
+let regTempoPlanejado = 0;
+function regPintarTempo() {
+  const el = $("regMinFmt");
+  if (!el) return "";
+  const m = Math.max(0, Math.round(Number(($("regMinutos") || {}).value) || 0));
+  let txt = t("ed_reg_min_fmt", { h: horasTexto(m) });
+  if (regTempoPlanejado > 0) {
+    txt += regTempoPlanejado === m ? t("ed_reg_min_plan_igual")
+      : t("ed_reg_min_plan", { p: horasTexto(regTempoPlanejado) });
+  }
+  el.textContent = txt;
+  return txt;
+}
+
 function regPintarAtalhos() {
   const cx = $("regAtalhos");
   if (!cx) return;
@@ -2562,6 +2641,7 @@ function regPintarAtalhos() {
       const novo = Math.min(600, atual + n);
       $("regMinutos").value = novo;
       $("regMinSlider").value = Math.min(240, novo);
+      regPintarTempo();
     };
     cx.append(b);
   });
@@ -2570,7 +2650,7 @@ function regPintarAtalhos() {
   zerar.className = "reg-atalho";
   zerar.textContent = t("ed_reg_zerar");
   zerar.title = t("ed_reg_zerar_ajuda");
-  zerar.onclick = () => { $("regMinutos").value = 5; $("regMinSlider").value = 5; };
+  zerar.onclick = () => { $("regMinutos").value = 5; $("regMinSlider").value = 5; regPintarTempo(); };
   cx.append(zerar);
 }
 
@@ -4455,10 +4535,12 @@ function edIniciar() {
    * digitar move a barra. Dois controles que discordam são um bug esperando. */
   $("regMinSlider").addEventListener("input", () => {
     $("regMinutos").value = $("regMinSlider").value;
+    regPintarTempo();
   });
   $("regMinutos").addEventListener("input", () => {
     const v = Math.max(5, Math.min(240, Number($("regMinutos").value) || 5));
     $("regMinSlider").value = v;
+    regPintarTempo();
   });
   $("edDias").onchange = edRender;
   $("btnRegFechar").onclick = () => {
@@ -4493,23 +4575,14 @@ function edIniciar() {
     t2.hidden = !t2.hidden;
     $("btnRegObs").textContent = t(t2.hidden ? "ed_reg_obs_abrir" : "ed_reg_obs_fechar");
   };
-  $("btnRegEstudo").onclick = () => confirmarRegistro(regTipo);
-  $("btnRegOutro").onclick = () => {
-    regTipo = regTipo === "revisado" ? "feito" : "revisado";
-    /* TROCAR O TIPO TROCA A FORMA PADRÃO.
-     * Quem clica aqui está declarando "esta sessão foi da outra
-     * natureza". Manter "leitura" marcada num lançamento de revisão —
-     * ou o contrário — mandaria o tempo para a conta errada, e é
-     * exatamente o tipo de divergência que ninguém percebe depois. */
-    regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
-    regPintarFormas();
-    regPintarQuestoes();
-    regPintarBotoes();
-    if (regAtual && regAtual.ramos) {
-      regRamosIniciar(regAtual);
-      if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
-    }
+  /* REVISAR O QUE NUNCA FOI ESTUDADO pergunta antes: marcaria o tópico direto como revisado (✓✓). Só faz sentido
+   * para quem estudou fora do app. Sem a pergunta, o caminho comum segue síncrono. */
+  $("btnRegEstudo").onclick = async () => {
+    if (regTipo === "revisado" && regAlvoNuncaEstudado() && !(await uiConfirm(t("ed_reg_rev_sem_estudo")))) return null;
+    return confirmarRegistro(regTipo);
   };
+  if ($("btnRegTipoEstudo")) $("btnRegTipoEstudo").onclick = () => { if (regTipo === "revisado") regTipoTrocar(); };
+  if ($("btnRegTipoRevisao")) $("btnRegTipoRevisao").onclick = () => { if (regTipo !== "revisado") regTipoTrocar(); };
   if ($("btnRegExigirAjuda")) $("btnRegExigirAjuda").onclick = (ev) => {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     dicaMostrar($("btnRegExigirAjuda"), $("btnRegExigirAjuda").dataset.texto || "");

@@ -2362,6 +2362,12 @@ p.mat-ferr{display:block;font-size:12px}
 /* M4 — o nome do tópico abre a ficha */
 .mat-nome-link{cursor:pointer}
 .ram-aviso-apagar{color:var(--atencao);margin:4px 0}
+.reg-tempo-fmt{margin:2px 0 0;font-variant-numeric:tabular-nums}
+.reg-tipo{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:10px 0 2px;padding-top:8px;border-top:1px solid var(--borda)}
+.reg-tipo-rot{font-weight:700;font-size:13px}
+.reg-tipo-sel{display:inline-flex;gap:6px}
+.reg-tipo-sel .btn-min[aria-pressed="true"]{background:var(--acao);color:#fff;border-color:var(--acao)}
+.reg-tipo-porque{flex-basis:100%;font-size:12px;color:var(--sutil)}
 .mat-nome-link:hover{text-decoration:underline}
 .mat-nome-link:focus-visible{outline:2px solid var(--info);outline-offset:2px;border-radius:4px}
 .mat-ficha-lista{display:flex;flex-direction:column;gap:8px;margin:8px 0}
@@ -5911,6 +5917,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <input type="range" id="regMinSlider" min="5" max="240" step="5" value="60">
       <input type="number" id="regMinutos" min="1" max="600" step="5">
     </div>
+    <!-- o mesmo tempo em horas e minutos, e quanto a agenda tinha reservado para esta sessão -->
+    <p class="nota reg-tempo-fmt" id="regMinFmt" role="status" aria-live="polite"></p>
     <!-- Arrastar o cursor para acertar 45 minutos exige pontaria que
          ninguém tem pressa de ter. Os atalhos SOMAM ao valor atual. -->
     <div class="reg-atalhos" id="regAtalhos"></div></div>
@@ -5963,10 +5971,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        nenhum: o tempo entra e a revisão continua pendente.
        O rótulo diz o que vai ser lançado; o "⋮" existe para as vezes em
        que a pessoa discorda do app. -->
+  <!-- ESTUDO OU REVISÃO: um seletor com a sugestão do app e o porquê, no lugar do botão "lançar como o outro" (que
+       parecia gravar, mas só trocava o tipo). -->
+  <div class="reg-tipo" id="regTipoBox">
+    <span class="reg-tipo-rot" data-i18n="ed_reg_tipo_rot"></span>
+    <span class="reg-tipo-sel" role="group" data-i18n-title="ed_reg_tipo_rot">
+      <button type="button" class="btn-min" id="btnRegTipoEstudo" aria-pressed="false" data-i18n="ed_reg_tipo_estudo"></button>
+      <button type="button" class="btn-min" id="btnRegTipoRevisao" aria-pressed="false" data-i18n="ed_reg_tipo_revisao"></button>
+    </span>
+    <span class="nota reg-tipo-porque" id="regTipoPorque"></span>
+  </div>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
-    <button class="btn btn-cinza" id="btnRegOutro" data-i18n="ed_reg_outro"
-      title="Lança como o outro tipo. Use quando você discordar: reler um tópico que você mal viu é estudo novo, não revisão."></button>
     <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
