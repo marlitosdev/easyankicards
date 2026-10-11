@@ -142,6 +142,16 @@ function gerDesfazerUltima() {
     const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === rec.edital.id);
     if (ed && ed.texto === rec.edital.depois) {
       ed.texto = rec.edital.antes;
+      /* Q0 — a marca de estudado, o diário e o histórico de renomeações voltam junto com os ramos */
+      const rr = rec.edital.ramos;
+      if (rr) {
+        const dia = typeof edDiario !== "undefined" ? edDiario : [];
+        edDesfazerMigracaoRamos(ed.progresso || (ed.progresso = {}), dia, rr.mig);
+        if (rr.migAberto && typeof edProgresso !== "undefined" && edProgresso !== ed.progresso) edDesfazerMigracaoRamos(edProgresso, [], rr.migAberto);
+        if (ed.ramosHist) ed.ramosHist = ed.ramosHist.slice(0, rr.histAntes || 0);
+        try { if (rr.mig && rr.mig.diario && rr.mig.diario.length && typeof salvarDiario === "function") salvarDiario(); } catch (e) {}
+        try { if (typeof editalAtual !== "undefined" && editalAtual === ed.id && typeof edProgresso !== "undefined") localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso)); } catch (e) {}
+      }
       try { edSalvarLista(); } catch (e) {}
       try { if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = ed.texto; edRender(); } } catch (e) {}
       desfeitos++;
@@ -1887,7 +1897,7 @@ function gerAbrirRamos() {
   ctx.depois = (r) => {
     gerCalcular(); gerAbertos.add("rm|" + ctx.chave + "|" + ctx.concurso); gerAbrirCaminhoDe(ctx.chave); gerPintar();
     try { matRender(); } catch (e) {}
-    gerAviso(t("ram_salvo", { n: r.ramos.length, c: r.retag }), true);
+    gerAviso(t("ram_salvo", { n: r.ramos.length, c: r.retag }) + (r.marcas ? " " + t("ram_salvo_marcas", { n: r.marcas }) : ""), true);
   };
   return ramAbrirEditor(ctx);
 }

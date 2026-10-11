@@ -889,6 +889,74 @@ function edRamosDesfazer(prog, item, mud) {
   });
 }
 
+/* =====================================================================
+ * Q0 — RAMO RENOMEADO OU APAGADO: o que estava ligado a ele acompanha
+ *
+ * O id do ramo é o nome normalizado (edRamoId): renomear muda o id. O editor de ramos já levava as etiquetas dos
+ * cartões para o nome novo, mas a MARCA DE ESTUDADO ("tópico›#id") e os registros do DIÁRIO (rm/rp) ficavam presos ao
+ * id antigo — renomear um ramo estudado o fazia voltar a "não estudado". Aqui:
+ *  · edMigrarRamos leva a marca para o id novo (havendo marca nos dois, fica a mais avançada) e troca o id nos
+ *    registros do diário daquele tópico (só os do mesmo concurso, quando o registro diz qual é); devolve o que mudou,
+ *    para o desfazer;
+ *  · apagar NÃO apaga nada: a marca fica guardada com o id antigo (volta se o ramo voltar com o mesmo nome);
+ *  · o histórico de renomeações (edital.ramosHist: { c, de, para }) e edRamoIdAtual seguem a corrente A→B→C, para
+ *    quem guardou um id antigo (questões e julgados, nas próximas fases) achar o ramo de hoje ("" = apagado).
+ * ===================================================================== */
+const ED_RANK_MARCA = { revisado: 3, feito: 2, pulado: 1 };
+function edMigrarRamos(prog, diario, topicoChave, mapa, concurso) {
+  const out = { prog: [], diario: [] };
+  const pares = Array.from(mapa instanceof Map ? mapa.entries() : Object.entries(mapa || {}))
+    .filter(([de, para]) => de && para && de !== para);
+  const rank = (m) => ED_RANK_MARCA[(m && m.e) || ""] || 0;
+  pares.forEach(([de, para]) => {
+    const k = topicoChave + "›#" + de, k2 = topicoChave + "›#" + para;
+    if (!prog || !prog[k]) return;
+    const a = prog[k], b = prog[k2];
+    out.prog.push({ k, k2, a, b: b || null });
+    if (!b || rank(a) > rank(b) || (rank(a) === rank(b) && String(a.d || "") > String(b.d || ""))) prog[k2] = a;
+    delete prog[k];
+  });
+  const novo = new Map(pares);
+  (diario || []).forEach((x, i) => {
+    if (!x || x.c !== topicoChave || !novo.size) return;
+    if (concurso && x.cc && x.cc !== concurso) return;
+    let mud = false;
+    const troca = (lst) => (lst || []).map((m) => {
+      if (m && novo.has(m.id)) { mud = true; return Object.assign({}, m, { id: novo.get(m.id) }); }
+      return m;
+    });
+    const rm = x.rm ? troca(x.rm) : x.rm, rp = x.rp ? troca(x.rp) : x.rp;
+    if (!mud) return;
+    out.diario.push({ i, c: x.c, d: x.d, rm: x.rm, rp: x.rp });
+    x.rm = rm; x.rp = rp;
+  });
+  return out;
+}
+/* volta o que edMigrarRamos fez (na ordem contrária); registro do diário só volta se ainda é o mesmo (tópico e data) */
+function edDesfazerMigracaoRamos(prog, diario, mig) {
+  ((mig && mig.prog) || []).slice().reverse().forEach((m) => {
+    if (!prog) return;
+    if (m.b) prog[m.k2] = m.b; else delete prog[m.k2];
+    prog[m.k] = m.a;
+  });
+  ((mig && mig.diario) || []).forEach((d) => {
+    const x = (diario || [])[d.i];
+    if (!x || x.c !== d.c || x.d !== d.d) return;
+    x.rm = d.rm; x.rp = d.rp;
+  });
+}
+/* o id de HOJE de um ramo guardado com um id antigo: segue o histórico de renomeações; "" = o ramo foi apagado */
+function edRamoIdAtual(hist, topicoChave, id) {
+  let atual = id;
+  for (let n = 0; n < 50; n++) {
+    const h = (hist || []).filter((x) => x && x.c === topicoChave && x.de === atual).pop();
+    if (!h) return atual;
+    atual = h.para;
+    if (!atual) return "";
+  }
+  return atual;
+}
+
 /* CRÉDITO DE PROGRESSO (0 a 1): quanto do valor do tópico já foi cumprido. Sem ramos é tudo ou nada; com ramos, a soma
  * das partes (share) dos ramos estudados (ou revisados). Por isso estudar o ramo que mais vale conta mais, e um tópico
  * pela metade conta como metade — em vez de valer zero até o último ramo. */
