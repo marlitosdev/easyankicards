@@ -128,7 +128,9 @@ function edRamosNaLinha(i) {
       c.className = "ed-ramo ed-ramo-" + est + (vez ? " ed-ramo-vez" : "");
       const marca = vez ? "▶ " : est === "feito" || est === "revisado" ? "✓ " : est === "venceu" ? "↻ " : "";
       c.textContent = marca + (r.nome.length > 30 ? r.nome.slice(0, 29) + "…" : r.nome) + " ★" + (r.peso || 3);
+      const ultR = typeof edUltimaVez === "function" ? edUltimaVez(typeof edDiario !== "undefined" ? edDiario : [], i.chave, r.id, hojeISO()) : null;
       c.title = r.nome + " — " + (vez ? t("ed_ramo_vez") : t("ed_ramo_" + est)) + (r.quando ? " (" + r.quando + ")" : "") + " — " + t("ed_ramo_peso", { p: r.peso || 3 })
+        + (ultR ? " — " + edUltimaVezTexto(ultR) : "")
         + (r.nota ? " — " + r.nota : "") + (r.marcaHerdada ? " — " + t("ed_ramo_herdado") : "")
         + " — " + t("ed_trilha_tit") + ": " + edTrilhaTexto(edTrilhaDoRamoUI(i, r, matRamos))
         + " — " + t("ram_materiais_ajuda");
@@ -149,6 +151,15 @@ function edRamosNaLinha(i) {
   };
   pintar();
   return cx;
+}
+
+/* "Da última vez: questões + flashcards · 05/10 (há 6 dias)" */
+function edUltimaVezTexto(ult) {
+  if (!ult) return "";
+  const formas = (ult.formas || []).map((f) => String(t("ed_forma_" + f) || "").toLowerCase()).filter(Boolean).join(" + ");
+  const data = String(ult.d).slice(8, 10) + "/" + String(ult.d).slice(5, 7);
+  const quando = ult.dias === 0 ? t("ed_ult_hoje") : ult.dias === 1 ? t("ed_ult_ontem") : ult.dias !== null ? t("ed_ult_ha", { n: ult.dias }) : "";
+  return t(ult.acao === "revisado" ? "ed_ult_rev" : "ed_ult_est", { f: formas || t("ed_ult_sem_forma"), d: data, q: quando });
 }
 
 function edNumeros(n) {
@@ -923,6 +934,15 @@ function edLinhaTopico(i, semDisciplina) {
     });
     tot.title = t("ed_it_total_ajuda");
     meio.append(tot);
+  }
+
+  /* DA ÚLTIMA VEZ: como (formas) e quando (data, há N dias) este tópico foi estudado — o que ajuda a variar o método */
+  const ult = typeof edUltimaVez === "function" ? edUltimaVez(typeof edDiario !== "undefined" ? edDiario : [], i.chave, null, hojeISO()) : null;
+  if (ult) {
+    const ul = document.createElement("div");
+    ul.className = "it-num ed-item-ultima";
+    ul.textContent = edUltimaVezTexto(ult);
+    meio.append(ul);
   }
 
   /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela

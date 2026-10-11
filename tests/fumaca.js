@@ -893,7 +893,7 @@ function rodar() {
     matSalvarDicasPendentes,
     matLogAlternarHoje, matLogDoDia, matLogFiltrado,
     matLerColagemFormatada, matHtmlParaMarcas, qsUiCaixaDica,
-    edLinhaAgendaTeste: (i) => edLinhaTopico(i, false),
+    edLinhaAgendaTeste: (i) => edLinhaTopico(i, false), edUltimaVez, edUltimaVezTexto, edRamosNaLinhaTeste: (i) => edRamosNaLinha(i),
     edFatorReal, minutosDoTopico, minutosDeRevisao, ultimaConclusao,
     matAlternarProva, matProvaBlocos, matProvaEstaLigada, matProvaResponder,
     matPintarProvaBotao, qsNoTexto, qsDeBlocos,
