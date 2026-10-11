@@ -92,6 +92,21 @@ function ramAplicar(ctx, linhas) {
     if (novo && idsNovos.has(novo)) { if (novo !== a.id) mapa.set(a.id, novo); }
     else mapa.set(a.id, "");
   });
+  /* Q0 — a MARCA DE ESTUDADO e o DIÁRIO acompanham o ramo renomeado (antes ficavam presos ao nome antigo) */
+  const tKey = (ctx.disciplina + "›" + ctx.topico).toLowerCase();
+  const concursoDoEd = (lerEdital(antesTexto).cfg || {}).concurso || "";
+  const prog = ed.progresso || (ed.progresso = {});
+  const diario = typeof edDiario !== "undefined" ? edDiario : [];
+  const mig = edMigrarRamos(prog, diario, tKey, mapa, concursoDoEd);
+  /* o edital ABERTO trabalha numa cópia do progresso; quando ela não é o mesmo objeto, acompanha também */
+  const aberto = typeof editalAtual !== "undefined" && editalAtual === ed.id;
+  const migAberto = (aberto && typeof edProgresso !== "undefined" && edProgresso !== prog)
+    ? edMigrarRamos(edProgresso, [], tKey, mapa) : null;
+  const histAntes = (ed.ramosHist || []).length;
+  const novasHist = Array.from(mapa.entries()).map(([de, para]) => ({ c: tKey, de, para, quando: new Date().toISOString() }));
+  if (novasHist.length) ed.ramosHist = (ed.ramosHist || []).concat(novasHist);
+  if (mig.diario.length && typeof salvarDiario === "function") { try { salvarDiario(); } catch (e) {} }
+  if (aberto && typeof edProgresso !== "undefined") { try { localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso)); } catch (e) {} }
   /* os cartões do tópico (só quem tem etiqueta que mudou) */
   const antes = {};
   antes[ctx.chave] = gerTexto(ctx.chave);
@@ -102,9 +117,11 @@ function ramAplicar(ctx, linhas) {
   try {
     if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = res.texto; edRender(); }
   } catch (e) {}
-  gerRegistrar(antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto } });
-  try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + retag + " cartão(ões) acompanharam"); } catch (e) {}
-  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa };
+  gerRegistrar(antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto,
+    ramos: { mig, migAberto, histAntes } } });
+  try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + retag + " cartão(ões) e "
+    + mig.prog.length + " marca(s) de estudo acompanharam"); } catch (e) {}
+  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length };
 }
 
 /* PROPOR RAMOS PELO ÍNDICE DA LEI (local, sem IA): as divisões da lei carregada no tópico (títulos, capítulos…)
@@ -417,6 +434,32 @@ function ramPintar() {
     lin.append(nome, peso, nota, sobe, desce, fora);
     cx.append(lin);
   });
+  ramAvisoApagar();
+}
+
+/* Q0 — "Ao salvar, sai: «X» (2 cartões vão para o geral do tópico; a marca de estudado fica guardada)". Sem travar o
+ * salvar (o desfazer existe): é para a pessoa ver o que está ligado ao ramo antes de tirá-lo. */
+function ramAvisoApagar() {
+  const el = $("ramAvisoApagar");
+  if (!el || !ramCtx) return "";
+  const ficam = new Set(ramLinhas.map((l) => l.idOrig).filter(Boolean));
+  const saem = (ramCtx.originais || []).filter((r) => !ficam.has(r.id));
+  if (!saem.length) { el.hidden = true; el.textContent = ""; return ""; }
+  const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ramCtx.editalId) || {};
+  const tKey = (ramCtx.disciplina + "›" + ramCtx.topico).toLowerCase();
+  let mat = {};
+  try { mat = ramMaterialDoTopico(ramCtx.chave, saem); } catch (e) { mat = {}; }
+  const partes = saem.map((r) => {
+    const nC = (mat[r.id] || {}).cartoes || 0;
+    const marca = !!((ed.progresso || {})[tKey + "›#" + r.id]);
+    const o = [];
+    if (nC) o.push(t("ram_apagar_cartoes", { n: nC }));
+    if (marca) o.push(t("ram_apagar_marca"));
+    return "«" + r.nome + "»" + (o.length ? " (" + o.join("; ") + ")" : "");
+  });
+  el.textContent = t("ram_apagar_aviso", { l: partes.join(", ") });
+  el.hidden = false;
+  return el.textContent;
 }
 
 function ramMover(i, d) {
@@ -438,6 +481,7 @@ function ramAbrirEditor(ctx) {
   } catch (e) { ctx.leiCands = []; ctx.leiId = ""; ctx.leiTrocada = false; }
   if ($("ramLeiMesmo")) $("ramLeiMesmo").checked = false;
   if ($("ramLeiPrev")) $("ramLeiPrev").hidden = true;
+  ctx.originais = edRamosDoTopico(ed.texto || "", ctx.disciplina, ctx.topico).map((r) => ({ id: r.id, nome: r.nome }));
   ramLinhas = edRamosDoTopico(ed.texto || "", ctx.disciplina, ctx.topico).map((r) => ({
     idOrig: r.id, nome: r.nome, peso: r.herdado ? "" : (r.abs > 0 ? r.abs + (r.unidade === "p" ? "p" : "q") : String(r.peso)), nota: r.nota || "" }));
   $("ramTit").textContent = t("ram_titulo", { t: ctx.topico });

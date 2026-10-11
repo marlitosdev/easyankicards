@@ -3152,6 +3152,81 @@ async function testes() {
     ok(/\.ram-linha\{display:grid/.test(html) && /\n\.ger-ramo\{padding-left:52px/.test(html), "R20e CSS do editor e da linha do ramo");
   }
 
+  /* ---- Q0: ramo RENOMEADO leva a marca de estudado e o diário junto; ramo APAGADO não apaga nada ---- */
+  {
+    const { a, ed, chave } = MT();
+    const tk = "licitações›lei 14.133";
+    /* motor puro */
+    const p1 = { [tk + "›#modalidades"]: { e: "feito", d: "2026-10-05" }, [tk + "›#contratos"]: { e: "revisado", d: "2026-10-01" } };
+    const d1 = [
+      { d: "2026-10-05", c: tk, a: "feito", m: 30, cc: "ISS Caruaru", rm: [{ id: "modalidades" }], rp: [{ id: "contratos" }] },
+      { d: "2026-10-06", c: tk, a: "feito", m: 20, cc: "Outro concurso", rm: [{ id: "modalidades" }] },
+      { d: "2026-10-07", c: "outra›coisa", a: "feito", m: 10, rm: [{ id: "modalidades" }] },
+      { d: "2026-10-08", c: tk, a: "estudado", m: 15, rm: [{ id: "fase_preparatoria" }] },
+      { d: "2026-10-09", c: tk, a: "feito", m: 25, rm: [{ id: "modalidades" }] }];
+    const copiaP = JSON.stringify(p1), copiaD = JSON.stringify(d1);
+    const mapa = new Map([["modalidades", "modalidades_de_licitacao"], ["fase_preparatoria", ""]]);
+    const mig = a.edMigrarRamos(p1, d1, tk, mapa, "ISS Caruaru");
+    ok(!p1[tk + "›#modalidades"] && p1[tk + "›#modalidades_de_licitacao"] && p1[tk + "›#modalidades_de_licitacao"].e === "feito" && mig.prog.length === 1, "Q0a renomear leva a marca de estudado para o nome novo (e tira do antigo)");
+    ok(d1[0].rm[0].id === "modalidades_de_licitacao" && d1[0].rp[0].id === "contratos" && d1[4].rm[0].id === "modalidades_de_licitacao" && mig.diario.length === 2, "Q0b o diário do tópico passa a citar o nome novo (registro sem concurso também)");
+    ok(d1[1].rm[0].id === "modalidades" && d1[2].rm[0].id === "modalidades", "Q0c registro de OUTRO concurso, ou de outro tópico, não é tocado");
+    ok(d1[3].rm[0].id === "fase_preparatoria" && Object.keys(p1).length === 2, "Q0d APAGAR (para '') não mexe em nada: a marca e o diário ficam com o id antigo");
+    a.edDesfazerMigracaoRamos(p1, d1, mig);
+    const can = (o) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
+    ok(can(p1) === can(JSON.parse(copiaP)) && JSON.stringify(d1) === copiaD, "Q0e desfazer volta o progresso e o diário EXATAMENTE como eram");
+    /* os dois têm marca: fica a mais avançada */
+    const p2 = { [tk + "›#a"]: { e: "revisado", d: "2026-09-01" }, [tk + "›#b"]: { e: "feito", d: "2026-10-01" } };
+    a.edMigrarRamos(p2, [], tk, new Map([["a", "b"]]));
+    ok(p2[tk + "›#b"].e === "revisado" && !p2[tk + "›#a"], "Q0f se o nome novo já tinha marca, fica a mais avançada (revisado vence feito)");
+    const p3 = { [tk + "›#a"]: { e: "feito", d: "2026-09-01" }, [tk + "›#b"]: { e: "feito", d: "2026-10-01" } };
+    a.edMigrarRamos(p3, [], tk, new Map([["a", "b"]]));
+    ok(p3[tk + "›#b"].d === "2026-10-01", "Q0g empate de estado: fica a marca mais recente");
+    const p4 = { [tk + "›#a"]: { e: "feito", d: "2026-10-09" }, [tk + "›#b"]: { e: "feito", d: "2026-10-01" } };
+    a.edMigrarRamos(p4, [], tk, new Map([["a", "b"]]));
+    ok(p4[tk + "›#b"].d === "2026-10-09", "Q0g2 e quando a mais recente é a do nome ANTIGO, é ela que fica");
+    /* o resolvedor do histórico */
+    const h = [{ c: tk, de: "a", para: "b" }, { c: tk, de: "b", para: "c" }, { c: tk, de: "x", para: "" }, { c: "outro", de: "c", para: "z" }];
+    ok(a.edRamoIdAtual(h, tk, "a") === "c" && a.edRamoIdAtual(h, tk, "x") === "" && a.edRamoIdAtual(h, tk, "q") === "q" && a.edRamoIdAtual(h, tk, "c") === "c", "Q0h edRamoIdAtual segue a corrente A→B→C, diz '' para apagado e não confunde tópicos");
+    ok(a.edRamoIdAtual([{ c: tk, de: "a", para: "b" }, { c: tk, de: "b", para: "a" }], tk, "a") !== undefined, "Q0i corrente em círculo não trava");
+    /* pelo editor de ramos de verdade */
+    a.hubAbrirEdital(ed.id);
+    const prog = a.edProgressoAtual();
+    prog[tk + "›#modalidades"] = { e: "feito", d: "2026-10-05" };
+    const dia = a.edDiarioAtual();
+    dia.push({ d: "2026-10-05", c: tk, a: "feito", m: 30, cc: "ISS Caruaru", rm: [{ id: "modalidades" }] });
+    /* como depois de recarregar a página: a cópia de trabalho é OUTRO objeto, lido do armazenamento */
+    const copia = JSON.parse(JSON.stringify(prog));
+    a.edProgressoDefinir(copia);
+    const r = a.ramAplicar({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave }, [
+      { nome: "Modalidades de licitação", peso: "5", nota: "pregão", idOrig: "modalidades" },
+      { nome: "Contratos", peso: "3", nota: "", idOrig: "contratos" }]);
+    ok(copia[tk + "›#modalidades_de_licitacao"] && !copia[tk + "›#modalidades"], "Q0j2 a cópia de trabalho do edital aberto (objeto separado) também acompanha");
+    a.edProgressoDefinir(ed.progresso);
+    const pr = ed.progresso;
+    ok(r.ok && r.marcas === 1 && pr[tk + "›#modalidades_de_licitacao"] && !pr[tk + "›#modalidades"] && a.edProgressoAtual()[tk + "›#modalidades_de_licitacao"], "Q0j pelo editor: renomear 'Modalidades' leva a marca de estudado (no edital E na cópia aberta)");
+    ok(dia[dia.length - 1].rm[0].id === "modalidades_de_licitacao", "Q0k e o diário do tópico passa a dizer o nome novo");
+    ok((ed.ramosHist || []).some((x) => x.c === tk && x.de === "modalidades" && x.para === "modalidades_de_licitacao") && (ed.ramosHist || []).some((x) => x.de === "fase_preparatoria" && x.para === ""), "Q0l o histórico registra a renomeação e o ramo apagado");
+    ok(/estudado de 1 ramo/.test(a.t("ram_salvo_marcas", { n: 1 })), "Q0m a mensagem de salvar tem como dizer que a marca acompanhou");
+    /* desfazer volta tudo */
+    a.hubAbrirEdital(ed.id);
+    a.gerDesfazerUltima();
+    ok(ed.progresso[tk + "›#modalidades"] && !ed.progresso[tk + "›#modalidades_de_licitacao"] && dia[dia.length - 1].rm[0].id === "modalidades" && !(ed.ramosHist || []).length, "Q0n desfazer volta a marca, o diário e o histórico");
+    /* o aviso do que um ramo apagado leva, no próprio editor */
+    a.ramAbrirEditor({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave });
+    ok(a.$("ramAvisoApagar").hidden === true, "Q0o sem apagar nada, nenhum aviso");
+    const linhasRam = a.ramLinhasAtual();
+    const iMod = linhasRam.findIndex((l) => l.idOrig === "modalidades");
+    const rowsRam = achar(a.$("ramLista"), (e) => cls(e, "ram-linha"));
+    const xBtn = achar(rowsRam[iMod], (e) => e.tag === "button").pop();
+    xBtn.onclick();
+    const av = a.$("ramAvisoApagar").textContent;
+    ok(a.$("ramAvisoApagar").hidden === false && /«Modalidades» \(1 cartão\(ões\) vão para o geral do tópico; estava marcado como estudado\)/.test(av) && /Nada é apagado/.test(av), "Q0p apagar um ramo mostra o que vai junto (cartões, marca) e que nada se perde: " + av);
+    a.$("btnRamFechar").onclick();
+    a.ramAbrirEditor({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave });
+    ok(a.$("ramAvisoApagar").hidden === true && a.$("ramAvisoApagar").textContent === "", "Q0q reabrir o editor (nada apagado ainda) esconde o aviso da vez anterior");
+    a.$("btnRamFechar").onclick();
+  }
+
   falhas.quantas = n;
   return falhas;
 }
