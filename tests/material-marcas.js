@@ -923,7 +923,7 @@ async function testes() {
     api.matRender();
     const achar = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); achar(x, pred, acc); }); return acc; };
     const cls = (e) => String((e || {}).className || "");
-    const linha = (nome) => achar(api.$("matLista"), (e) => cls(e) === "mat-item").find((it) => achar(it, (e) => cls(e) === "mat-nome")[0].textContent.indexOf(nome) === 0);
+    const linha = (nome) => achar(api.$("matLista"), (e) => cls(e) === "mat-item").find((it) => achar(it, (e) => /(^| )mat-nome( |$)/.test(cls(e)))[0].textContent.indexOf(nome) === 0);
     const slots = (it) => achar(it, (e) => /\bmat-slot\b/.test(cls(e)));
     const menu = (it) => achar(it, (e) => /\bmat-menu-item\b/.test(cls(e))).map((b) => b.textContent);
     const a = linha("Completo"), b = linha("So cartoes");
@@ -947,6 +947,54 @@ async function testes() {
     api.matGravar(k3, "Só texto.", { disciplina: "Tributário", topico: "So resumo" });
     api.matRender();
     ok(!menu(linha("So resumo")).includes(api.t("mat_mexer_cartoes")) && slots(linha("So resumo")).map((x) => x.textContent).join() === "📄 Resumo", "M3j tópico sem cartões: nada de 'mexer nos cartões' no ⋮, e só o botão do resumo");
+    Object.keys(mat).forEach((k) => delete mat[k]);
+  }
+
+  /* ---- M4: a ficha do tópico — os quatro materiais juntos, abre pelo nome ---- */
+  {
+    const mat = api.matResumosAtual();
+    Object.keys(mat).forEach((k) => delete mat[k]);
+    const k1 = api.matChave("Tributário", "Completo");
+    api.matGravar(k1, "Resumo do tópico.", { disciplina: "Tributário", topico: "Completo", concurso: "ISS" });
+    mat[k1].cartoes = ["P1? :: R1 :: t", "P2? :: R2 :: t"].join(String.fromCharCode(10));
+    mat[k1].leiSeca = true;
+    const k2 = api.matChave("Tributário", "So cartoes");
+    api.matGravarCartoes(k2, "P? :: R :: t", { disciplina: "Tributário", topico: "So cartoes" });
+    api.matFiltroTiposTeste([]);
+    api.matRender();
+    const achar = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); achar(x, pred, acc); }); return acc; };
+    const cls = (e) => String((e || {}).className || "");
+    const nomeDe = (tp) => achar(api.$("matLista"), (e) => /(^| )mat-nome( |$)/.test(cls(e))).find((n) => n.textContent.indexOf(tp) === 0);
+    const itens = () => achar(api.$("matFichaLista"), (e) => /(^| )mat-ficha-item( |$)/.test(cls(e)));
+    const botoes = (it) => achar(it, (e) => e.tag === "button" || e.tagName === "BUTTON" || /btn-min/.test(cls(e))).map((b) => b.textContent);
+    const n1 = nomeDe("Completo");
+    ok(n1 && n1.getAttribute("role") === "button" && n1.getAttribute("tabindex") === "0" && typeof n1.onclick === "function" && n1.title === api.t("mat_ficha_abrir_tip"), "M4a o nome do tópico é um botão (acessível, com explicação) que abre a ficha");
+    api.$("dlgMatFicha").open = false;
+    n1.onclick();
+    ok(api.$("dlgMatFicha").open === true && api.$("matFichaTit").textContent === "Completo" && /^ISS › Tributário · atualizado em /.test(api.$("matFichaSub").textContent), "M4b a ficha abre com o tópico e onde ele mora: " + api.$("matFichaSub").textContent);
+    const it = itens();
+    ok(it.length === 4 && ["slot-resumo", "slot-cartoes", "slot-lei", "slot-juris"].every((c, i) => cls(it[i]).indexOf(c) >= 0), "M4c quatro materiais, sempre na mesma ordem (resumo, cartões, lei, julgados): " + it.map(cls).join(" | "));
+    ok(!/falta/.test(cls(it[0])) && /17 caracteres/.test(it[0].textContent) && botoes(it[0]).join() === api.t("mat_ficha_ler"), "M4d resumo existente: diz o tamanho e oferece 'Ler'");
+    ok(/2 cartão\(ões\)/.test(it[1].textContent) && botoes(it[1]).join() === [api.t("mat_ficha_estudar"), api.t("mat_mexer_cartoes")].join(), "M4e cartões: quantos, 'Estudar' e 'Mexer nos cartões'");
+    ok(/carregada/.test(it[2].textContent) && botoes(it[2]).join() === api.t("mat_ficha_abrir"), "M4f lei seca carregada: 'Abrir'");
+    ok(/falta/.test(cls(it[3])) && /ainda não tem/.test(it[3].textContent) && botoes(it[3]).join() === api.t("mat_ficha_guardar"), "M4g julgados que faltam: tracejado, 'ainda não tem' e 'Guardar o primeiro'");
+    /* cada ação fecha a ficha antes de abrir a sua janela */
+    const bLei = achar(it[2], (e) => e.textContent === api.t("mat_ficha_abrir") && typeof e.onclick === "function")[0];
+    bLei.onclick();
+    ok(api.$("dlgMatFicha").open === false && api.$("dlgLeiSeca").open === true, "M4h 'Abrir' a lei fecha a ficha e abre a lei do tópico");
+    api.$("dlgLeiSeca").close();
+    /* tópico só com cartões: resumo e lei faltam, com as ações de criar */
+    nomeDe("So cartoes").onkeydown({ key: "Enter", preventDefault() {} });
+    const i2 = itens();
+    ok(api.$("dlgMatFicha").open === true && /falta/.test(cls(i2[0])) && botoes(i2[0]).join() === api.t("mat_ficha_escrever") && botoes(i2[2]).join() === api.t("mat_ficha_carregar") && /falta/.test(cls(i2[2])) && /ainda não tem/.test(i2[2].textContent), "M4i pelo teclado (Enter) também abre; o que falta oferece 'Escrever' e 'Carregar'");
+    const bEsc = achar(i2[0], (e) => e.textContent === api.t("mat_ficha_escrever") && typeof e.onclick === "function")[0];
+    api.$("dlgMaterial").open = false;
+    bEsc.onclick();
+    ok(api.$("dlgMatFicha").open === false && api.$("dlgMaterial").open === true, "M4j 'Escrever' fecha a ficha e abre o editor do resumo");
+    api.$("dlgMaterial").close();
+    api.$("btnMatFichaFechar").onclick();
+    const inf = api.matInfoTopico({ chave: k1, texto: "abc", leiSeca: true, cartoes: mat[k1].cartoes });
+    ok(inf.temR === true && inf.nCart === 2 && inf.temL === true && inf.nJul === 0 && inf.chars === 3, "M4k matInfoTopico: a mesma conta da linha e da ficha: " + JSON.stringify(inf));
     Object.keys(mat).forEach((k) => delete mat[k]);
   }
 
