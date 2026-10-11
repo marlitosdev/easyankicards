@@ -3227,6 +3227,63 @@ async function testes() {
     a.$("btnRamFechar").onclick();
   }
 
+  /* ---- Q1: a questão guarda o RAMO (motor) — e as contas por ramo passam a usar o vínculo de verdade ---- */
+  {
+    const { a, ed, chave } = MT();
+    const todas = a.qsTodas();
+    todas.splice(0, todas.length);
+    const ctx = { disciplina: "Licitações", topico: "Lei 14.133", chave, concurso: "ISS Caruaru Auditor" };
+    const base = (en, extra) => Object.assign({ tipo: "ce", enunciado: en, gabarito: "C", comentario: "", disciplina: ctx.disciplina, topico: ctx.topico, chave }, extra || {});
+    a.qsAplicar([
+      base("As modalidades de licitação incluem o pregão.", { ramo: "modalidades", ramoNome: "Modalidades" }),
+      base("A fase preparatória exige estudo técnico preliminar."),
+      base("Contratos administrativos admitem alteração unilateral.", { ramo: "contratos", ramoNome: "Contratos" }),
+      base("Questão de outro tópico", { chave: a.matChave("Direito Financeiro", "Receita Pública"), ramo: "modalidades", ramoNome: "Modalidades" })]);
+    const q = (en) => todas.find((x) => x.enunciado.indexOf(en) === 0);
+    ok(q("As modalidades").ramo === "modalidades" && q("As modalidades").ramoNome === "Modalidades" && !("ramo" in q("A fase preparatória")), "Q1a a questão grava o ramo (e o nome dele) quando vem com ele; sem ramo, nem cria o campo");
+    const blocos = a.qsDeBlocos([{ completa: true, tipo: "ce", enunciado: "Do bloco", opcoes: [], gabarito: "C", comentario: "", rotulo: "" }], Object.assign({}, ctx, { ramo: "contratos", ramoNome: "Contratos" }));
+    ok(blocos[0].ramo === "contratos" && blocos[0].ramoNome === "Contratos" && !("ramo" in a.qsDeBlocos([{ completa: true, tipo: "ce", enunciado: "x", opcoes: [], gabarito: "C", comentario: "", rotulo: "" }], ctx)[0]), "Q1b criar a partir do texto já com o ramo no contexto leva o ramo");
+    const ids = (l) => l.map((x) => x.enunciado.slice(0, 12)).sort().join("|");
+    ok(ids(a.qsFiltrar({ chave, ramo: "modalidades" })) === "As modalidad" && ids(a.qsFiltrar({ chave, ramo: "_sem" })) === "A fase prepa" && a.qsFiltrar({ chave }).length === 3, "Q1c filtrar por ramo; '_sem' dá as do tópico ainda sem ramo; sem filtro de ramo, todas do tópico");
+    ok(JSON.stringify(a.qsContarPorRamo(chave)) === JSON.stringify({ _sem: 1, modalidades: 1, contratos: 1 }), "Q1d contar por ramo (só do tópico): " + JSON.stringify(a.qsContarPorRamo(chave)));
+    ok(a.qsContarPorRamo("licitacoes›lei 14.133").modalidades === 1, "Q1d2 a chave do tópico não depende de acento");
+    /* ligar e desfazer */
+    const rec = a.qsLigarRamo([q("A fase preparatória").id], "fase_preparatoria", "Fase preparatória");
+    ok(q("A fase preparatória").ramo === "fase_preparatoria" && a.qsContarPorRamo(chave)._sem === 0, "Q1e ligar uma questão a um ramo");
+    a.qsDesfazerRamo(rec);
+    ok(!("ramo" in q("A fase preparatória")) && !("ramoNome" in q("A fase preparatória")), "Q1f desfazer volta a questão a 'sem ramo' (sem deixar campo vazio)");
+    const rec2 = a.qsLigarRamo([q("As modalidades").id], "", "");
+    ok(!("ramo" in q("As modalidades")), "Q1g ligar a '' desliga");
+    a.qsDesfazerRamo(rec2);
+    ok(q("As modalidades").ramo === "modalidades" && q("As modalidades").ramoNome === "Modalidades", "Q1h e o desfazer devolve o ramo e o nome");
+    /* renomear e apagar */
+    const rec3 = a.qsMigrarRamos(chave, new Map([["modalidades", "modalidades_de_licitacao"], ["contratos", ""]]), { modalidades_de_licitacao: "Modalidades de licitação" });
+    ok(q("As modalidades").ramo === "modalidades_de_licitacao" && q("As modalidades").ramoNome === "Modalidades de licitação", "Q1i renomear: a questão acompanha o ramo (id e nome novos)");
+    ok(!("ramo" in q("Contratos")) && q("Contratos").ramoNome === "Contratos", "Q1j apagar: a questão volta a ser do tópico, mas GUARDA o nome do ramo (para religar)");
+    ok(q("Questão de outro").ramo === "modalidades", "Q1k questão de OUTRO tópico com o mesmo id de ramo não é tocada");
+    a.qsDesfazerRamo(rec3);
+    ok(q("As modalidades").ramo === "modalidades" && q("Contratos").ramo === "contratos", "Q1l desfazer a migração volta tudo");
+    /* as contas por ramo usam o vínculo; o palpite fica para as sem ramo */
+    const ramosT = a.edRamosDoTopico(ed.texto, "Licitações", "Lei 14.133");
+    const mat = a.ramMaterialDoTopico(chave, ramosT);
+    ok(mat.modalidades.questoes === 1 && mat.contratos.questoes === 1 && mat.fase_preparatoria.questoes === 1, "Q1m material por ramo: ligada conta pelo ramo; a sem ramo ainda conta pelo palpite (fase preparatória): " + JSON.stringify(mat));
+    q("Contratos").enunciado = "Contratos administrativos admitem alteração unilateral nas modalidades de licitação.";
+    ok(a.ramMaterialDoTopico(chave, ramosT).modalidades.questoes === 1, "Q1n uma questão LIGADA a 'contratos' que cita 'modalidades' não conta como de modalidades (o vínculo vence o palpite)");
+    q("As modalidades").tentativas = [{ acertou: true }, { acertou: false }];
+    q("Contratos").tentativas = [{ acertou: false }];
+    const ac = a.ramAcertosDoTopico(chave, ramosT);
+    ok(ac.modalidades.feitas === 2 && ac.modalidades.certas === 1 && ac.contratos.feitas === 1 && ac.contratos.certas === 0, "Q1o acertos por ramo pelo vínculo (a de contratos que cita modalidades não entra em modalidades): " + JSON.stringify(ac));
+    /* pelo editor de ramos: as questões acompanham a renomeação e o desfazer volta */
+    a.hubAbrirEdital(ed.id);
+    const r = a.ramAplicar({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave }, [
+      { nome: "Modalidades de licitação", peso: "5", nota: "pregão", idOrig: "modalidades" },
+      { nome: "Fase preparatória", peso: "", nota: "", idOrig: "fase_preparatoria" }]);
+    ok(r.ok && r.questoes === 2 && q("As modalidades").ramo === "modalidades_de_licitacao" && !("ramo" in q("Contratos")) && q("Contratos").ramoNome === "Contratos", "Q1p pelo editor: renomear leva a questão; apagar 'Contratos' a devolve ao tópico com o nome guardado");
+    a.gerDesfazerUltima();
+    ok(q("As modalidades").ramo === "modalidades" && q("Contratos").ramo === "contratos", "Q1q o desfazer do editor volta as questões também");
+    todas.splice(0, todas.length);
+  }
+
   falhas.quantas = n;
   return falhas;
 }
