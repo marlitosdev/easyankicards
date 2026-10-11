@@ -2359,6 +2359,21 @@ p.mat-ferr{display:block;font-size:12px}
 .mat-slot.slot-lei{color:#10b981;border-color:#10b981}
 .mat-slot.slot-juris{color:#f59e0b;border-color:#f59e0b}
 .mat-slot .slot-rot{font-weight:600}
+/* M4 — o nome do tópico abre a ficha */
+.mat-nome-link{cursor:pointer}
+.mat-nome-link:hover{text-decoration:underline}
+.mat-nome-link:focus-visible{outline:2px solid var(--info);outline-offset:2px;border-radius:4px}
+.mat-ficha-lista{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+.mat-ficha-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--borda);border-left-width:4px;border-radius:9px}
+.mat-ficha-item.slot-resumo{border-left-color:var(--ok)}
+.mat-ficha-item.slot-cartoes{border-left-color:var(--info)}
+.mat-ficha-item.slot-lei{border-left-color:#10b981}
+.mat-ficha-item.slot-juris{border-left-color:#f59e0b}
+.mat-ficha-item.falta{border-style:dashed;opacity:.85}
+.mat-ficha-ico{font-size:20px;width:26px;text-align:center;flex:none}
+.mat-ficha-txt{flex:1;min-width:0}
+.mat-ficha-acoes{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:560px){.mat-ficha-item{flex-wrap:wrap}.mat-ficha-acoes{flex-basis:100%;justify-content:flex-start}}
 @media (max-width:560px){.mat-slot .slot-rot{display:none}.mat-slot{padding:4px 8px}}
 .mat-acoes{display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:0 0 auto}
 .mat-lixo{font-size:10px;color:var(--atencao);margin-top:3px;line-height:1.5}
@@ -5859,6 +5874,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-cinza" id="btnSwForcar" data-i18n="sw_forcar"
       data-i18n-title="sw_forcar_aj"></button>
     <button class="btn btn-cinza" id="btnDiagFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<!-- M4 — a ficha do tópico: os quatro materiais juntos (abre pelo nome do tópico, no Material de estudo) -->
+<dialog id="dlgMatFicha" class="ui-modal">
+  <h3 id="matFichaTit"></h3>
+  <p class="nota" id="matFichaSub"></p>
+  <div id="matFichaLista" class="mat-ficha-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMatFichaFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <dialog id="dlgRegistro" class="ui-modal">

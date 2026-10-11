@@ -2504,6 +2504,91 @@ function matPintarDuvidasBotao() {
   b.hidden = !n;
 }
 
+/* O QUE O TÓPICO TEM — a mesma conta para a linha (M3) e para a ficha (M4) */
+function matInfoTopico(x) {
+  const tps = matTiposDe(x);
+  return {
+    temR: tps.indexOf("resumo") >= 0,
+    nCart: matContarCartoes(x.chave),
+    temL: tps.indexOf("lei") >= 0 || (typeof leiTem === "function" && !!leiTem(x.chave)),
+    nJul: typeof jurContarDoTopico === "function" ? jurContarDoTopico(x.chave) : 0,
+    chars: String(x.texto || "").length,
+  };
+}
+
+/* =====================================================================
+ * M4 — A FICHA DO TÓPICO
+ *
+ * Os quatro materiais de um tópico, um embaixo do outro, sempre na mesma ordem e com o ícone e a cor da sua aba:
+ * 📄 Resumo · 🃏 Cartões · § Lei seca · ⚖ Julgados. O que existe diz quanto tem e abre; o que falta aparece tracejado,
+ * com a ação de criar. Cada ação FECHA a ficha antes de abrir a sua janela — senão a ficha ficaria por baixo e
+ * reapareceria ao fechar a outra, sem contexto.
+ * ===================================================================== */
+let matFichaAtual = null;
+function matAbrirFicha(x) {
+  const dlg = $("dlgMatFicha");
+  if (!dlg || !x) return null;
+  matFichaAtual = x;
+  const inf = matInfoTopico(x);
+  $("matFichaTit").textContent = x.topico || x.chave;
+  $("matFichaSub").textContent = [x.concurso, x.disciplina].filter(Boolean).join(" › ")
+    + (x.tocado ? " · " + t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() }) : "");
+  const box = $("matFichaLista");
+  box.innerHTML = "";
+  const fechaE = (fn) => () => { try { dlg.close(); } catch (e) {} fn(); };
+  const botao = (rot, cls, fn, dica) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = cls; b.textContent = rot;
+    if (dica) b.title = dica;
+    b.onclick = fechaE(fn);
+    return b;
+  };
+  const item = (tp, nome, tem, estado, acoes) => {
+    const it = document.createElement("div");
+    it.className = "mat-ficha-item slot-" + tp + (tem ? "" : " falta");
+    const ico = document.createElement("span");
+    ico.className = "mat-ficha-ico"; ico.setAttribute("aria-hidden", "true");
+    ico.textContent = MAT_ICONE[tp];
+    const tx = document.createElement("div");
+    tx.className = "mat-ficha-txt";
+    const nm = document.createElement("b"); nm.textContent = nome;
+    const es = document.createElement("div"); es.className = "nota"; es.textContent = estado;
+    tx.append(nm, es);
+    const ac = document.createElement("div");
+    ac.className = "mat-ficha-acoes";
+    acoes.forEach((b) => ac.append(b));
+    it.append(ico, tx, ac);
+    box.append(it);
+    return it;
+  };
+  const ed = { disciplina: x.disciplina, nome: x.topico };
+  item("resumo", t("mat_slot_resumo"), inf.temR,
+    inf.temR ? t("mat_tamanho", { c: inf.chars }) : t("mat_ficha_falta"),
+    [inf.temR ? botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler"), t("mat_slot_resumo_tip", { tp: x.topico }))
+      : botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar"), t("mat_add_resumo_ajuda", { tp: x.topico }))]);
+  const mexer = () => { mcApontarTopico(x.disciplina, x.topico); try { matCartoesAbrir(); matCartoesVer(); } catch (e) {} };
+  item("cartoes", t("mat_aba_cartoes"), inf.nCart > 0,
+    inf.nCart ? t("mat_n_cartoes", { n: inf.nCart }) : t("mat_ficha_falta"),
+    inf.nCart ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: inf.nCart, tp: x.topico })),
+      botao(t("mat_mexer_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))]
+      : [botao(t("mat_ficha_criar_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))]);
+  item("lei", t("mat_slot_lei"), inf.temL,
+    inf.temL ? t("mat_ficha_lei_tem") : t("mat_ficha_falta"),
+    [inf.temL ? botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-lei", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_ver_ajuda", { tp: x.topico }))
+      : botao(t("mat_ficha_carregar"), "btn-min", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_criar_ajuda", { tp: x.topico }))]);
+  const jur = inf.nJul
+    ? [botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-juris", () => jurAbrir(x.disciplina, x.topico, "ler"), t("mat_juris_ver_ajuda", { n: inf.nJul, tp: x.topico }))]
+    : [botao(t("mat_ficha_guardar"), "btn-min", () => jurAbrir(x.disciplina, x.topico, "incluir"), t("mat_juris_criar_ajuda", { tp: x.topico }))];
+  if (inf.nJul && inf.temL) {
+    const bs = botao(t("mat_split_btn"), "btn-min btn-lj-split", () => leiJurLadoALado(x.disciplina, x.topico), t("mat_split_ajuda", { tp: x.topico }));
+    jur.push(bs);
+  }
+  item("juris", t("mat_aba_juris"), inf.nJul > 0,
+    inf.nJul ? t("mat_slot_juris_n", { n: inf.nJul }) : t("mat_ficha_falta"), jur);
+  abrirModal("dlgMatFicha");
+  return dlg;
+}
+
 function matRender() {
   const box = $("matLista");
   if (!box) return;
@@ -2552,8 +2637,17 @@ function matRender() {
           const esq = document.createElement("div");
           esq.className = "mat-item-txt";
           const nm = document.createElement("div");
-          nm.className = "mat-nome";
+          nm.className = "mat-nome mat-nome-link";
           nm.textContent = x.topico || x.chave;
+          /* M4 — O NOME ABRE A FICHA DO TÓPICO: os quatro materiais juntos, o que existe para abrir e o que falta para
+           * criar. É o caminho mais claro no celular, onde os botões da linha viram só ícones. */
+          nm.setAttribute("role", "button");
+          nm.setAttribute("tabindex", "0");
+          nm.title = t("mat_ficha_abrir_tip");
+          nm.onclick = () => matAbrirFicha(x);
+          nm.onkeydown = (ev) => {
+            if (ev && (ev.key === "Enter" || ev.key === " ")) { if (ev.preventDefault) ev.preventDefault(); matAbrirFicha(x); }
+          };
           /* M3 — OS SELOS VIRARAM OS BOTÕES. Antes, o selo "cartões" dizia que havia cartões e não levava a eles; "Abrir"
            * abria só o resumo; a lei seca morava no ⋮ (e com o mesmo ⚖ dos julgados). Agora cada material que o tópico TEM
            * é um botão com o ícone e a cor da sua aba — 📄 Resumo · 🃏 21 cartões · § Lei seca · ⚖ 6 julgados —, e o ⋮
@@ -2575,10 +2669,7 @@ function matRender() {
           }
           const acoes = document.createElement("div");
           acoes.className = "mat-acoes";
-          const tps = matTiposDe(x);
-          const nJul = typeof jurContarDoTopico === "function" ? jurContarDoTopico(x.chave) : 0;
-          const temL = tps.indexOf("lei") >= 0 || (typeof leiTem === "function" && !!leiTem(x.chave));
-          const temR = tps.indexOf("resumo") >= 0;
+          const { nJul, temL, temR } = matInfoTopico(x);
           const slot = (tp, principal, rotulo, dica, faz) => {
             const b = document.createElement("button");
             b.type = "button";
@@ -2678,6 +2769,7 @@ function matIniciar() {
   matBotao("btnMatProva", "modo prova", matAlternarProva);
   matBotao("btnMatDicasLista", "minhas dicas", matDicasListaAbrir);
   if ($("btnDicFechar")) $("btnDicFechar").onclick = () => $("dlgDicas").close();
+  if ($("btnMatFichaFechar")) $("btnMatFichaFechar").onclick = () => $("dlgMatFicha").close();
   /* um clique só, delegado: o painel é montado por innerHTML, então não há
    * onde pendurar manipulador em cada botão */
   if ($("matLeitura")) {
