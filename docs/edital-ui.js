@@ -669,8 +669,20 @@ function edLigarMenuDoRamo(trigger, container, disciplina, topico, ramo, ch) {
       };
       menu.append(item);
     };
-    pergunta("questoes", "ed_st_questao", "ed_st_questoes", "ed_qst_ver", "ed_qst_novo", "ed_menu_questoes", "ram_confirma_qst",
-      (d, n) => qsUiResponderDireto(d, n));
+    /* Q2 — QUESTÕES DO RAMO, de verdade: a contagem é das ligadas a ele (não o palpite pelas palavras), responder abre
+     * SÓ as dele e criar já as liga a ele. A pergunta "ainda não são separadas por ramo" deixou de existir. */
+    const nQ = typeof qsContarPorRamo === "function" ? (qsContarPorRamo(chave)[ramo.id] || 0) : 0;
+    const qst = document.createElement("button");
+    qst.type = "button";
+    qst.className = "btn-min ed-menu-item" + (nQ ? " tem" : "");
+    qst.textContent = nQ === 1 ? t("ed_st_questao") : nQ ? t("ed_st_questoes", { n: nQ }) : t("ram_qst_criar");
+    qst.title = t(nQ ? "ram_qst_ver_tip" : "ram_qst_criar_tip", { n: nQ, r: ramo.nome, tp: topico });
+    qst.onclick = (e2) => {
+      e2.stopPropagation(); menu.hidden = true;
+      fecharHoras();
+      try { qsUiResponderDireto(disciplina, topico, { id: ramo.id, nome: ramo.nome }); } catch (e) {}
+    };
+    menu.append(qst);
     pergunta("juris", "ed_st_juris_1", "ed_st_juris", "ed_jur_ver", "ed_jur_novo", "ed_menu_juris_nova", "ram_confirma_jur",
       (d, n) => jurAbrir(d, n));
 

@@ -112,7 +112,7 @@ function qsUiCriarAbrir(texto, ctx, origem) {
    * fonte muda, o arquivamento não. */
   $("qsCriarDe").textContent = ctx
     ? t("qs_vinculadas_a", { onde: [ctx.concurso, ctx.disciplina, ctx.topico]
-        .filter(Boolean).join(" · ") })
+        .filter(Boolean).join(" · ") + (ctx.ramoNome ? " › " + t("qs_ramo_rot", { r: ctx.ramoNome }) : "") })
     : "";
   /* =================================================================
    * E DE QUAL TEXTO ELAS SAEM — que é outra pergunta.
@@ -2800,19 +2800,25 @@ function qsUiSelecaoViva() {
  * agenda quer responder, não ler o texto. Sem questão nenhuma no tópico,
  * o botão não vira beco: leva à criação de sempre, já apontada para
  * este tópico e com o texto do resumo como matéria-prima. */
-function qsUiResponderDireto(disciplina, topico) {
+/* Q2 — o ramo da vez ({ id, nome }): responder abre SÓ as questões dele; criar já as liga a ele. Vale para UMA ida
+ * (é zerado depois de usado), para um "responder do tópico" seguinte não herdar o ramo. */
+let qsUiRamoAlvo = null;
+function qsUiResponderDireto(disciplina, topico, ramo) {
   if (typeof mcApontarTopico !== "function") return;
   mcApontarTopico(disciplina, topico);
+  qsUiRamoAlvo = ramo && ramo.id ? { id: ramo.id, nome: ramo.nome || "" } : null;
   qsUiResponderDoTopico();
 }
 
 function qsUiResponderDoTopico() {
   if (!matAtual) return;
-  const lista = qsFiltrar({ chave: matAtual.chave });
+  const ramo = qsUiRamoAlvo;
+  const lista = qsFiltrar(ramo ? { chave: matAtual.chave, ramo: ramo.id } : { chave: matAtual.chave });
   /* sem questão neste tópico, o botão não pode ser um beco: leva a criar,
    * que é o que a pessoa faria em seguida de qualquer jeito */
   if (!lista.length) { qsUiVirarSelecao(); return; }
-  qsUiResponderAbrir(lista, "resumo", "topico:" + matAtual.chave);
+  qsUiRamoAlvo = null;
+  qsUiResponderAbrir(lista, "resumo", "topico:" + matAtual.chave + (ramo ? "#" + ramo.id : ""));
 }
 
 /* "virar em questão": pega o que está selecionado no resumo — ou o resumo
@@ -2827,10 +2833,12 @@ function qsUiVirarSelecao(origem) {
     return;
   }
   const texto = sel || matTextoVivo(matAtual.chave, "texto");
-  qsUiCriarAbrir(texto, {
+  const ramo = qsUiRamoAlvo;
+  qsUiRamoAlvo = null;
+  qsUiCriarAbrir(texto, Object.assign({
     disciplina: matAtual.disciplina, topico: matAtual.topico,
     chave: matAtual.chave, concurso: qsUiConcursoAtual(),
-  }, sel ? "trecho" : "resumo");
+  }, ramo ? { ramo: ramo.id, ramoNome: ramo.nome } : {}), sel ? "trecho" : "resumo");
 }
 
 function qsUiIniciar() {

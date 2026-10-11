@@ -98,12 +98,22 @@ function qsPromptCaderno(ctx) {
 
 function qsPrompt(texto, ctx) {
   const c = ctx || {};
-  return t("qs_prompt", {
+  const out = t("qs_prompt", {
     disciplina: c.disciplina || "?",
     topico: c.topico || "?",
     concurso: c.concurso || "?",
     texto: String(texto || "").slice(0, 12000),
   });
+  /* Q2 — pedido a partir de um RAMO: a IA fica sabendo que as questões são SÓ dele */
+  return c.ramoNome ? qsPromptComRamo(out, c.ramoNome) : out;
+}
+/* acrescenta a linha do ramo logo depois da linha do tópico do CONTEXTO (PT "Tópico:", EN "Topic:") */
+function qsPromptComRamo(prompt, ramoNome) {
+  const linha = t("qs_prompt_ramo_linha", { r: ramoNome });
+  const m = String(prompt).match(/\n(?:Tópico|Topic): [^\n]*/);
+  if (!m) return prompt + "\n\n" + linha;
+  const fim = m.index + m[0].length;
+  return prompt.slice(0, fim) + "\n" + linha + prompt.slice(fim);
 }
 
 /* ---------------------------------------------------------------------
@@ -315,6 +325,8 @@ function qsLerResposta(txt, ctx) {
   });
   fechar();
 
+  /* Q2 — criadas a partir de um RAMO: já nascem ligadas a ele */
+  if (c.ramo) achados.forEach((q) => { q.ramo = c.ramo; q.ramoNome = c.ramoNome || ""; });
   return { achados, ignoradas };
 }
 
