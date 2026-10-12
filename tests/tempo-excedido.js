@@ -167,18 +167,19 @@ async function testes() {
     /* o tempo total NÃO some — ele é informação boa, desde que nomeada */
     ok(/1h15/.test(txt),
        "T5b o tempo ja investido no topico sumiu da linha: " + txt.slice(0, 140));
-    ok(/ao todo|total/i.test(txt),
+    ok(/1h15 no tópico/.test(txt),
        "T5c o tempo total aparece sem dizer que e o total: " + txt.slice(0, 140));
     ok(/18/.test(txt),
        "T5d nao diz de quando e o estudo anterior: " + txt.slice(0, 140));
     /* E A RESPOSTA PARA "QUANTO DE REVISÃO EU JÁ CUMPRI?" É ZERO — dita
      * em voz alta. Esconder o zero deixaria a pergunta sem resposta
      * justamente quando ela mais importa. */
-    ok(/0min de 30min|0 de 30min/.test(txt),
-       "T5d2 a revisao pendente nao diz que ainda esta em zero: "
+    /* "0 de 30min de revisão" repetia o "30min" da direita: a revisão que não começou não tem barra nem número */
+    ok(!/de 30min/.test(txt) && acharClasse(li, "it-barra", []).every((b) => b.hidden === true),
+       "T5d2 a revisao que nao comecou nao mostra barra nem '0 de 30min': "
        + txt.slice(0, 160));
-    ok(/de revis/i.test(txt),
-       "T5d3 a linha nao diz que aquele tempo e de REVISAO: "
+    ok(/1ª revisão/.test(txt),
+       "T5d3 o selo diz QUAL revisao e' esta: "
        + txt.slice(0, 160));
 
     const fills = acharClasse(li, "it-fill", []);
@@ -213,8 +214,66 @@ async function testes() {
     ok(/45min de 1h/.test(textoDe(li3)),
        "T5j topico novo mudou de conta sem motivo: "
        + textoDe(li3).slice(0, 120));
-    ok(!/ao todo/.test(textoDe(li3)),
+    ok(!/no tópico/.test(textoDe(li3)),
        "T5k topico que nao e revisao ganhou a linha do total");
+  }
+
+  /* ---- T6: o caso relatado — a 2ª revisão nascia "35min de 30min · 5min além" com o tempo da 1ª ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const disc = "Sistema Tributário Brasileiro", top = "Limitações ao poder de tributar";
+    const ch = api.matChave(disc, top);
+    const hoje = api.hojeISO();
+    const diasAtras = (n) => { const d = new Date(hoje + "T00:00:00"); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+    const dEst = diasAtras(29), dRev = diasAtras(21);
+    api.diarioPor([
+      { c: ch, disc, n: top, a: "feito", m: 65, d: dEst, f: ["leitura"] },
+      { c: ch, disc, n: top, a: "revisado", m: 35, d: dRev, f: ["questoes"] },
+    ]);
+    const dm = (d) => d.slice(8, 10) + "/" + d.slice(5, 7);
+    /* a 2ª revisão venceu: a marca é a da 1ª (n = 1), de 21 dias atrás */
+    const item = { disciplina: disc, nome: top, chave: ch, minutos: 30, ehRevisao: true, feito: true, revisado: true, nRev: 1, quando: dRev,
+      porque: { tipo: "rev_vencida", dias: 21, nRev: 1, fatia: 42 } };
+    const li = linha(api, item);
+    const txt = textoDe(li);
+    ok(api.minutosDeRevisao(ch, dRev) === 0 && api.minutosDeRevisao(ch) === 35, "T6 a revisao DA VEZ conta so' o que veio depois da ultima conclusao (0); somar tudo dava 35");
+    ok(!/35min de 30min|além/.test(txt) && acharClasse(li, "it-barra", []).every((b) => b.hidden === true), "T6a a 2ª revisao nao nasce cumprida com o tempo da 1ª: " + txt.slice(0, 200));
+    ok(/2ª revisão/.test(txt), "T6b o selo diz '2ª revisão': " + txt.slice(0, 120));
+    ok(!/última sessão há/.test(txt) && /vale 42% da prova/.test(txt), "T6c a linha do porque nao repete a revisao (o selo e o historico ja' dizem): " + txt.slice(0, 200));
+    const txtP = textoDe(api.edLinhaPainelTeste(item));
+    ok(/2ª revisão/.test(txtP) && !/última sessão há/.test(txtP), "T6c2 no painel da disciplina (linha sem o link da disciplina) tambem: " + txtP.slice(0, 200));
+    const hist = acharClasse(li, "ed-item-ultima", [])[0];
+    ok(hist && hist.textContent === "Estudado em " + dm(dEst) + " · 1ª revisão em " + dm(dRev) + " com questões (há 21 dias) · 1h40 no tópico",
+       "T6d UMA linha de historico, datas no mesmo formato: " + (hist && hist.textContent));
+    ok(!/ao todo|Da última vez|revisado com revisão/.test(txt), "T6e as tres linhas antigas sairam");
+    /* a forma "revisão" (padrão do registro de revisão) não aparece: "com revisão" não diz nada */
+    api.diarioPor([
+      { c: ch, disc, n: top, a: "feito", m: 65, d: dEst, f: ["leitura"] },
+      { c: ch, disc, n: top, a: "revisado", m: 35, d: dRev, f: ["revisao"] },
+    ]);
+    const h2 = acharClasse(linha(api, item), "ed-item-ultima", [])[0];
+    ok(h2 && h2.textContent === "Estudado em " + dm(dEst) + " · 1ª revisão em " + dm(dRev) + " (há 21 dias) · 1h40 no tópico", "T6f sem 'com revisão': " + (h2 && h2.textContent));
+    /* revisão começada aos poucos (por ramos): o tempo DEPOIS da conclusão conta, e a barra aparece */
+    api.diarioPor([
+      { c: ch, disc, n: top, a: "feito", m: 65, d: dEst, f: ["leitura"] },
+      { c: ch, disc, n: top, a: "revisado", m: 35, d: dRev, f: ["questoes"] },
+      { c: ch, disc, n: top, a: "revisado", m: 10, d: hoje, f: ["questoes"], rp: [{ id: "imunidades" }] },
+    ]);
+    const li3 = linha(api, item);
+    ok(/10min de 30min/.test(textoDe(li3)) && acharClasse(li3, "it-barra", []).some((b) => b.hidden !== true), "T6g revisao em andamento: so' os 10min dela, com barra: " + textoDe(li3).slice(0, 200));
+    /* o puro */
+    const h = api.edHistoricoDoTopico([
+      { c: ch, a: "feito", d: "2026-09-02", m: 30, f: ["leitura"] }, { c: ch, a: "feito", d: "2026-09-13", m: 60, f: ["leitura"] }, { c: ch, a: "pendente", d: "2026-10-05" },
+      { c: "outro", a: "revisado", d: "2026-10-01" }, { c: ch, a: "revisado", d: "2026-09-21", m: 35, f: ["questoes", "revisao"] }], ch, "2026-10-12");
+    ok(h && h.estudoD === "2026-09-13" && h.revD === "2026-09-21" && h.ultD === "2026-09-21" && h.dias === 21 && h.formas.join() === "questoes,revisao", "T6h historico: o estudo MAIS RECENTE, a revisao e a ultima sessao (desmarcar depois e outro topico ficam fora): " + JSON.stringify(h));
+    ok(api.edHistoricoDoTopico([], ch, "2026-10-12") === null, "T6i sem registro: nada");
+    ok(api.edHistoricoTexto({ estudoD: "2026-10-01", revD: "", ultD: "2026-10-05", dias: 7, formas: ["questoes"] }, 0, 0) === "Estudado em 01/10 · última sessão em 05/10 com questões (há 7 dias)", "T6i2 sessao depois do estudo, sem concluir: a data e a forma vao para 'ultima sessao', nao para o estudo: " + api.edHistoricoTexto({ estudoD: "2026-10-01", revD: "", ultD: "2026-10-05", dias: 7, formas: ["questoes"] }, 0, 0));
+    ok(api.edHistoricoTexto({ estudoD: "2026-10-01", revD: "", ultD: "2026-10-01", dias: 11, formas: ["leitura"] }, 0, 0) === "Estudado em 01/10 com leitura (há 11 dias)", "T6j so' estudo: " + api.edHistoricoTexto({ estudoD: "2026-10-01", revD: "", ultD: "2026-10-01", dias: 11, formas: ["leitura"] }, 0, 0));
+    ok(api.edHistoricoTexto({ estudoD: "", revD: "", ultD: "2026-10-05", dias: 7, formas: [] }, 0, 0) === "última sessão em 05/10 (há 7 dias)", "T6k sessao sem conclusao (parcial)");
+    ok(api.edHistoricoTexto({ estudoD: "2026-10-01", revD: "2026-09-01", ultD: "2026-10-01", dias: 2, formas: [] }, 1, 0) === "Estudado em 01/10 (há 2 dias)", "T6l revisao ANTERIOR ao estudo mais recente nao aparece como a ultima revisao");
+    /* o porquê longo continua no registro (e no Raio-X) */
+    ok(/2ª revisão: última sessão há 21 dias/.test(api.edPorque(item)) && !/revisão/.test(api.edPorque(item, true, { curto: true })), "T6m o porque longo continua (registro); o curto e' o da agenda");
   }
 
   falhas.quantas = n;

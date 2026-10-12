@@ -623,8 +623,8 @@ async function testes() {
     let linha = null;
     const anda = (x) => Array.from(x.children || []).forEach((f) => { if (/ed-item-ultima/.test(f.className || "")) linha = f; anda(f); });
     anda(li);
-    ok(linha && /^Da última vez: revisado com questões \+ flashcards · \d\d\/\d\d \(hoje\)$/.test(linha.textContent),
-       "U7 a linha da agenda diz como e quando foi a última vez: " + (linha && linha.textContent));
+    ok(linha && /^Estudado em 01\/10 · revisado em \d\d\/\d\d com questões \+ flashcards \(hoje\)$/.test(linha.textContent),
+       "U7 a linha da agenda diz, numa linha so', quando foi estudado, a revisao e como foi a ultima vez: " + (linha && linha.textContent));
     const semReg = api.edLinhaAgendaTeste({ disciplina: "D", nome: "Nada", chave: api.matChave("D", "Nada"), minutos: 30 });
     let linha2 = null;
     const anda2 = (x) => Array.from(x.children || []).forEach((f) => { if (/ed-item-ultima/.test(f.className || "")) linha2 = f; anda2(f); });

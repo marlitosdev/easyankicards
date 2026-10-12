@@ -1017,6 +1017,29 @@ function edUltimaVez(diario, topicoChave, ramoId, hoje) {
   return { d: ult.d, dias, formas: (ult.f || []).slice(), acao: ult.a };
 }
 
+/* O HISTÓRICO DO TÓPICO, para UMA linha na agenda: quando foi estudado (o "feito" mais recente), a revisão mais recente,
+ * e a última sessão (data, há quantos dias, formas). Substitui três linhas que repetiam a mesma data em formatos
+ * diferentes ("última sessão há 21 dias", "estudado em 2026-09-13", "Da última vez: … 21/09 (há 21 dias)").
+ * null = nenhum registro. */
+function edHistoricoDoTopico(diario, chave, hoje) {
+  let estudoD = "", revD = "", ult = null;
+  (diario || []).forEach((x) => {
+    if (!x || x.c !== chave || x.a === "pendente" || !x.d || x.d === "?") return;
+    const d = String(x.d).slice(0, 10);
+    if (x.a === "feito" && d > estudoD) estudoD = d;
+    if (x.a === "revisado" && d > revD) revD = d;
+    if (!ult || d >= String(ult.d).slice(0, 10)) ult = x;
+  });
+  if (!ult) return null;
+  const ultD = String(ult.d).slice(0, 10);
+  let dias = null;
+  if (hoje) {
+    const d0 = new Date(ultD + "T00:00:00"), d1 = new Date(String(hoje).slice(0, 10) + "T00:00:00");
+    if (!isNaN(d0) && !isNaN(d1)) dias = Math.max(0, Math.round((d1 - d0) / 86400000));
+  }
+  return { estudoD, revD, ultD, dias, formas: (ult.f || []).slice(), acao: ult.a };
+}
+
 /* forma -> data do registro mais recente que a usou naquele ramo (rm = ramos marcados; rp = ramos só com progresso parcial) */
 function edCoberturaDoRamo(diario, topicoChave, ramoId) {
   const cob = {};

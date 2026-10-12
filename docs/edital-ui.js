@@ -154,6 +154,27 @@ function edRamosNaLinha(i) {
 }
 
 /* "Da última vez: questões + flashcards · 05/10 (há 6 dias)" */
+/* o texto da linha do histórico (ver edHistoricoDoTopico). A forma "revisão" não entra ("revisado com revisão"
+ * não diz nada); as outras dizem como foi a última sessão — o que ajuda a variar o método. */
+function edHistoricoTexto(h, nRev, totalMin) {
+  if (!h) return "";
+  const dm = (d) => String(d).slice(8, 10) + "/" + String(d).slice(5, 7);
+  const partes = [];
+  if (h.estudoD) partes.push({ d: h.estudoD, txt: t("ed_hist_estudo", { d: dm(h.estudoD) }) });
+  if (h.revD && (!h.estudoD || h.revD >= h.estudoD)) {
+    partes.push({ d: h.revD, txt: Number(nRev) > 0 ? t("ed_hist_rev_n", { n: Number(nRev), d: dm(h.revD) }) : t("ed_hist_rev", { d: dm(h.revD) }) });
+  }
+  const formas = (h.formas || []).filter((f) => f !== "revisao").map((f) => String(t("ed_forma_" + f) || "").toLowerCase()).filter(Boolean).join(" + ");
+  const quando = h.dias === 0 ? t("ed_ult_hoje") : h.dias === 1 ? t("ed_ult_ontem") : h.dias !== null && h.dias !== undefined ? t("ed_ult_ha", { n: h.dias }) : "";
+  const cauda = (formas ? t("ed_hist_com", { f: formas }) : "") + (quando ? " (" + quando + ")" : "");
+  const ultima = partes[partes.length - 1];
+  if (ultima && ultima.d === h.ultD) ultima.txt += cauda;
+  else partes.push({ d: h.ultD, txt: t("ed_hist_sessao", { d: dm(h.ultD) }) + cauda });
+  const txt = partes.map((p) => p.txt);
+  if (totalMin > 0) txt.push(t("ed_hist_total", { t: horasTexto(totalMin) }));
+  return txt.join(" · ");
+}
+
 function edUltimaVezTexto(ult) {
   if (!ult) return "";
   const formas = (ult.formas || []).map((f) => String(t("ed_forma_" + f) || "").toLowerCase()).filter(Boolean).join(" + ");
@@ -414,25 +435,18 @@ function minutosDoTopico(chave) {
  * O app já distingue os dois gestos no momento do registro: estudar um
  * tópico novo entra como "feito", reestudar um já concluído entra como
  * "revisado". A informação sempre esteve lá; bastava somá-la. */
-function minutosDeRevisao(chave) {
+/* DESDE: a data da última conclusão (estudo ou revisão anterior). Com a revisão espaçada (S3, 18.9.0) um tópico volta
+ * várias vezes — e somar TODAS as revisões fazia a 2ª nascer "35min de 30min", com o tempo da 1ª (já concluída). Cada
+ * registro de revisão conclui aquela revisão; o que conta para a da vez é só o registrado depois (sessões parciais,
+ * por ramos). Sem "desde", soma tudo (o comportamento antigo, para quem chama sem saber a data). */
+function minutosDeRevisao(chave, desde) {
+  const d0 = desde ? String(desde).slice(0, 10) : "";
   return (edDiario || []).reduce((a, x) => {
     if (!x || x.a !== "revisado") return a;
+    if (d0 && !(String(x.d || "").slice(0, 10) > d0)) return a;
     const k = x.c || (typeof matChave === "function" ? matChave(x.disc, x.n) : "");
     return k === chave ? a + (Number(x.m) || 0) : a;
   }, 0);
-}
-
-/* A data do primeiro "feito" — quando o tópico foi aprendido. É o que dá
- * sentido ao total ("1h15 ao todo, desde 18/08"). */
-function ultimaConclusao(chave) {
-  let ult = "";
-  (edDiario || []).forEach((x) => {
-    if (!x || x.a !== "feito" || !x.d || x.d === "?") return;
-    const k = x.c || (typeof matChave === "function" ? matChave(x.disc, x.n) : "");
-    if (k !== chave) return;
-    if (!ult || x.d > ult) ult = x.d;
-  });
-  return ult;
 }
 
 /* FATOR DE REALIDADE — quanto o plano erra, medido pelo que já aconteceu.
@@ -671,7 +685,7 @@ function edLinhaTopico(i, semDisciplina) {
   if (i.ehRevisao) {
     const selo = document.createElement("span");
     selo.className = "ed-selo-rev";
-    selo.textContent = t("ed_selo_revisao");
+    selo.textContent = t("ed_selo_revisao_n", { k: (Number(i.nRev) || 0) + 1 });
     selo.title = t("ed_selo_revisao_ajuda");
     nome.append(selo);
   }
@@ -761,8 +775,8 @@ function edLinhaTopico(i, semDisciplina) {
     bd.textContent = i.disciplina;
     bd.title = t("ed_abrir_disc", { d: i.disciplina });
     bd.onclick = (ev) => { ev.stopPropagation(); edAbrirDisciplinaDaLinha(i); };
-    porq.append(bd, document.createTextNode(" · " + edPorque(i, true)));
-  } else porq.textContent = edPorque(i, true);
+    porq.append(bd, document.createTextNode(" · " + edPorque(i, true, { curto: true })));
+  } else porq.textContent = edPorque(i, true, { curto: true });
   meio.append(nome, porq);
 
   const rev = document.createElement("button");
@@ -802,8 +816,7 @@ function edLinhaTopico(i, semDisciplina) {
   /* tópico com ramos em estudo: o orçamento da barra é o do tópico INTEIRO (o plano reserva só o que falta) */
   const orcMin = (!i.ehRevisao && i.minutosTotal) ? i.minutosTotal : i.minutos;
   const totalMin = minutosDoTopico(i.chave);
-  const desdeQuando = i.ehRevisao ? ultimaConclusao(i.chave) : "";
-  const feitoMin = i.ehRevisao ? minutosDeRevisao(i.chave) : totalMin;
+  const feitoMin = i.ehRevisao ? minutosDeRevisao(i.chave, i.quando) : totalMin;
   const pctReal = orcMin ? Math.round((feitoMin / orcMin) * 100) : 0;
   const pctT = Math.min(100, pctReal);
   const excedeu = pctReal > 115;      /* folga: 34min de 30min não é notícia */
@@ -814,6 +827,8 @@ function edLinhaTopico(i, semDisciplina) {
     : (pctT >= 100 ? " cheio" : (pctT > 0 ? " parcial" : "")));
   fillT.style.width = pctT + "%";
   barraT.append(fillT);
+  /* revisão que ainda não começou: sem barra e sem "0 de 30min" — o "seg · 30min" à direita já diz quanto ela pede */
+  if (i.ehRevisao && !feitoMin) barraT.hidden = true;
   barraT.title = excedeu
     ? t("ed_it_barra_mais", { f: horasTexto(feitoMin), p: horasTexto(orcMin),
         pct: pctReal, extra: horasTexto(feitoMin - orcMin) })
@@ -823,11 +838,9 @@ function edLinhaTopico(i, semDisciplina) {
    * metade" — e "25min de 1h" é uma decisão diferente de "50min de 1h".
    * Só aparece quando há tempo registrado: escrever "0min de 1h · 0%" em
    * 230 linhas seria ruído em cima do que ainda não começou. */
-  /* NUMA REVISÃO A LINHA APARECE MESMO EM ZERO.
-   * "0 de 30min de revisão" é exatamente a resposta para "quanto de
-   * revisão eu já cumpri?" — e esconder o zero deixaria a pergunta sem
-   * resposta justamente quando ela mais importa. */
-  if (feitoMin > 0 || i.ehRevisao) {
+  /* NUMA REVISÃO, SÓ COM TEMPO DESTA REVISÃO. O "0 de 30min de revisão" repetia o "seg · 30min" da direita, e a
+   * soma de TODAS as revisões fazia a 2ª nascer cumprida ("35min de 30min") — ver minutosDeRevisao. */
+  if (feitoMin > 0) {
     const num = document.createElement("div");
     num.className = "it-num" + (excedeu ? " excedeu" : (pctT >= 100 ? " cheio" : ""));
     num.textContent = (excedeu
@@ -841,23 +854,14 @@ function edLinhaTopico(i, semDisciplina) {
    * Ele é informação boa ("já pus 1h15 neste tópico ao todo"); o erro
    * era usá-lo como se fosse o tempo da revisão. Numa revisão que ainda
    * não começou, esta é a única linha que aparece. */
-  if (i.ehRevisao && totalMin > 0) {
-    const tot = document.createElement("div");
-    tot.className = "it-num it-num-total";
-    tot.textContent = t("ed_it_total_antes", {
-      f: horasTexto(totalMin),
-      d: desdeQuando ? t("ed_it_desde", { d: desdeQuando }) : "",
-    });
-    tot.title = t("ed_it_total_ajuda");
-    meio.append(tot);
-  }
-
-  /* DA ÚLTIMA VEZ: como (formas) e quando (data, há N dias) este tópico foi estudado — o que ajuda a variar o método */
-  const ult = typeof edUltimaVez === "function" ? edUltimaVez(typeof edDiario !== "undefined" ? edDiario : [], i.chave, null, hojeISO()) : null;
-  if (ult) {
+  /* O HISTÓRICO EM UMA LINHA: "Estudado em 13/09 · 1ª revisão em 21/09 com questões (há 21 dias) · 1h40 no tópico".
+   * Eram três linhas com a mesma data em formatos diferentes. O total só numa revisão (no estudo, a barra já é ele). */
+  const hist = typeof edHistoricoDoTopico === "function" ? edHistoricoDoTopico(typeof edDiario !== "undefined" ? edDiario : [], i.chave, hojeISO()) : null;
+  if (hist) {
     const ul = document.createElement("div");
     ul.className = "it-num ed-item-ultima";
-    ul.textContent = edUltimaVezTexto(ult);
+    ul.textContent = edHistoricoTexto(hist, i.nRev, i.ehRevisao ? totalMin : 0);
+    ul.title = t("ed_hist_ajuda");
     meio.append(ul);
   }
 
@@ -1014,8 +1018,11 @@ function faListaAbrir() {
 /* A frase que explica a recomendação. Sem ela, "Esta semana" é uma ordem sem
  * argumento — e ordem sem argumento a pessoa ignora, ou pior, segue sem
  * perceber que está errada. */
-function edPorque(i, semDisciplina) {
+/* opc.curto (a linha da agenda): sem "2ª revisão: última sessão há N dias" — o selo diz qual revisão e a linha do
+ * histórico diz quando; repetir era o que deixava a linha difícil de ler. O registro e o Raio-X usam a versão longa. */
+function edPorque(i, semDisciplina, opc) {
   const p = i.porque || {};
+  const curto = !!(opc && opc.curto);
   const disc = semDisciplina ? "" : i.disciplina + " · ";
   /* "disciplina vale X% da prova" era a informação mais fraca da linha: é da
    * disciplina, não do tópico, e já aparece no painel e no mapa. Quando há
@@ -1023,6 +1030,7 @@ function edPorque(i, semDisciplina) {
    * dias" muda o que você faz agora, e a fatia da disciplina não. */
   const h = edMarcaHistorico(i);
   const fatia = h || t("ed_pq_fatia", { p: p.fatia });
+  if (curto && (p.tipo === "rev_vencida" || p.tipo === "rev_pendente")) return disc + fatia;
   if (p.tipo === "rev_vencida")
     return disc + (p.nRev ? t("ed_pq_rev_n", { k: p.nRev + 1, n: p.dias }) : t("ed_pq_rev_vencida", { n: p.dias })) + " · " + fatia;
   if (p.tipo === "rev_pendente") return disc + t("ed_pq_rev_pendente") + " · " + fatia;
