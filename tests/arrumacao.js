@@ -216,11 +216,11 @@ async function testes() {
        "A3j ajuda, registro e fechar estao no cabecalho, ao lado do titulo");
     ok(/<div class="lei-info" id="leiInfo">\s*<div class="lei-proc" id="leiProc" hidden><\/div>\s*<div class="lei-onde" id="leiOnde" hidden><\/div>\s*<\/div>/.test(bloco),
        "A3k a procedencia e o 'onde parei' estao na MESMA faixa (.lei-info)");
-    const linha = bloco.slice(posDe('<div class="lei-barra-linha">'), posDe('id="leiGavExibir"'));
+    const linha = bloco.slice(posDe('<div class="lei-barra-linha"'), posDe('id="leiGavExibir"'));
     ok(/id="btnLeiModoLer"/.test(linha) && /id="leiMarcas"/.test(linha) && /id="btnLeiMarcaNota"/.test(linha),
        "A3l os modos e as seis marcas dividem uma linha so");
     ok(!/id="btnLeiSalvar"/.test(linha), "A3m o gravar saiu da barra");
-    const rodape = bloco.slice(posDe('<div class="dlg-rodape">'), posDe('</dialog>'));
+    const rodape = bloco.slice(posDe('<div class="dlg-rodape" id="leiRodape"'), posDe('</dialog>'));
     ok(/id="btnLeiSalvar"/.test(rodape) && /id="btnLeiLido"/.test(rodape) && /id="btnLeiFechar2"/.test(rodape),
        "A3n o gravar, o registrar estudo e o fechar estao juntos no rodape");
     ok(posDe('id="btnLeiSalvar"') < posDe('id="btnLeiLido"'), "A3o o gravar vem antes de 'registrar estudo'");

@@ -1077,41 +1077,10 @@ function matCheiaAplicar() {
   matPintarMarcador();
 }
 
-/* TELA CHEIA DE VERDADE: a página inteira pede a tela ao navegador (o <dialog> não pode: "Dialog elements are
- * invalid"), e a janela do resumo, que está por cima, passa a ocupá-la toda. Sem a API (iPhone, navegador que
- * recusa), a janela ocupa a área da página — o melhor que dá. matFsNosso: só desfazemos a tela cheia que NÓS
- * pedimos (se a pessoa já estava em F11, sair da leitura não pode tirar o navegador da tela cheia dela). */
-let matFsNosso = false;
-function matFsDoc() { return typeof document !== "undefined" ? document : null; }
-function matFsPedir() {
-  const d = matFsDoc();
-  const raiz = d && d.documentElement;
-  if (!raiz || typeof raiz.requestFullscreen !== "function" || d.fullscreenElement) return false;
-  try {
-    const p = raiz.requestFullscreen();
-    matFsNosso = true;
-    if (p && typeof p.catch === "function") p.catch(() => { matFsNosso = false; });
-    return true;
-  } catch (e) { matFsNosso = false; return false; }
-}
-function matFsSair() {
-  const d = matFsDoc();
-  if (!matFsNosso) return false;
-  matFsNosso = false;
-  if (d && d.fullscreenElement && typeof d.exitFullscreen === "function") {
-    try { const p = d.exitFullscreen(); if (p && typeof p.catch === "function") p.catch(() => {}); } catch (e) {}
-    return true;
-  }
-  return false;
-}
-/* o navegador saiu da tela cheia (Esc, F11, gesto do sistema): a leitura sai junto — Esc tem de ser UM gesto só */
-function matFsMudou() {
-  const d = matFsDoc();
-  if (d && !d.fullscreenElement && matFsNosso) {
-    matFsNosso = false;
-    if (matCheia) matCheiaTrocar(false);
-  }
-}
+/* TELA CHEIA DE VERDADE (telaCheiaPedir/telaCheiaSair, em app.js, a mesma da lei seca). Quando o navegador sai
+ * sozinho (Esc, F11), a leitura sai junto — Esc tem de ser UM gesto só. */
+function matFsPedir() { return typeof telaCheiaPedir === "function" ? telaCheiaPedir("resumo", () => { if (matCheia) matCheiaTrocar(false); }) : false; }
+function matFsSair() { return typeof telaCheiaSair === "function" ? telaCheiaSair("resumo") : false; }
 
 function matCheiaTrocar(sim) {
   matCheia = sim === undefined ? !matCheia : !!sim;
@@ -3257,7 +3226,6 @@ function matIniciar() {
   if ($("matCheiaFonte")) $("matCheiaFonte").onclick = matFonteZerar;
   [["btnMatColEstreita", "estreita"], ["btnMatColMedia", "media"], ["btnMatColLarga", "larga"]]
     .forEach(([id, c]) => { if ($(id)) $(id).onclick = () => matColunaDefinir(c); });
-  if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("fullscreenchange", matFsMudou);
   matBotao("btnMatCheia", "ler em tela cheia", () => matCheiaTrocar(true));
   matBotao("btnMatCheiaSair", "voltar do tela cheia", () => matCheiaTrocar(false));
   matBotao("btnMatCheiaMaior", "letra maior (tela cheia)", () => matFonteMudar(1));

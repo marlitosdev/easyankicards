@@ -1167,8 +1167,39 @@ function leiFonteCarregar() {
  * cliques de cabeça. O valor ao lado do botão é o que permite notar
  * "isso já está em 56px" antes de abrir um chamado achando que é bug de
  * layout. */
+/* Em % do padrão (como no resumo: "15px" não diz nada a quem lê), o MESMO número nas duas barras (a do pop-over
+ * "exibição" e a da tela cheia), e o botão que não tem para onde ir fica desligado. */
+function leiFonteRotulo(px) { return Math.round(100 * px / 15) + "%"; }
 function leiFontePintar() {
-  if ($("leiFonteAtual")) $("leiFonteAtual").textContent = leiFonte + "px";
+  ["leiFonteAtual", "leiCheiaFonte"].forEach((id) => { const el = $(id); if (el) el.textContent = leiFonteRotulo(leiFonte); });
+  ["btnLeiMenor", "btnLeiCheiaMenor"].forEach((id) => { const el = $(id); if (el) el.disabled = leiFonte <= LEI_FONTE_MIN; });
+  ["btnLeiMaior", "btnLeiCheiaMaior"].forEach((id) => { const el = $(id); if (el) el.disabled = leiFonte >= LEI_FONTE_MAX; });
+}
+
+/* A COLUNA DA TELA CHEIA (estreita · média · larga), em "em" para crescer junto com a letra. "média" é o mesmo
+ * teto da leitura normal (62em). */
+const LEI_COLUNA_CHAVE = "eac_lei_coluna";
+const LEI_COLUNAS = { estreita: "46em", media: "62em", larga: "none" };
+let leiColuna = "media";
+function leiColunaCarregar() {
+  try { const c = localStorage.getItem(LEI_COLUNA_CHAVE); if (c && LEI_COLUNAS[c]) leiColuna = c; } catch (e) {}
+  leiColunaPintar();
+}
+function leiColunaPintar() {
+  const dlg = $("dlgLeiSeca");
+  if (dlg && dlg.style && dlg.style.setProperty) dlg.style.setProperty("--lei-coluna", LEI_COLUNAS[leiColuna]);
+  [["btnLeiColEstreita", "estreita"], ["btnLeiColMedia", "media"], ["btnLeiColLarga", "larga"]].forEach(([id, c]) => {
+    const b = $(id);
+    if (b && b.setAttribute) b.setAttribute("aria-pressed", leiColuna === c ? "true" : "false");
+  });
+}
+function leiColunaDefinir(c) {
+  if (!LEI_COLUNAS[c]) return leiColuna;
+  leiColuna = c;
+  try { localStorage.setItem(LEI_COLUNA_CHAVE, c); } catch (e) {}
+  leiColunaPintar();
+  leiReg("leitura", "coluna da tela cheia", c);
+  return leiColuna;
 }
 
 function leiFonteDefinir(px) {
@@ -1276,8 +1307,15 @@ function leiCheiaAplicar() {
   const dlg = $("dlgLeiSeca");
   if (dlg && dlg.classList) dlg.classList.toggle("lei-cheia", leiCheia);
 
-  const ref = ["leiSub"];
+  /* NA TELA CHEIA SÓ FICA A LEI e a barra dela (sair, ir para…, letra, coluna). Cabeçalho, barra de trabalho e
+   * rodapé saíam só em parte: a "tela cheia" era uma janela de 1100 px com tudo à volta, e a saída morava dentro
+   * do pop-over "exibição", que ela mesma deixava de difícil acesso. */
+  const ref = ["leiSub", "leiApoio", "leiBarraLinha", "leiRodape"];
   ref.forEach((id) => { const el = $(id); if (el) el.hidden = leiCheia; });
+  const barra = $("leiCheiaBarra");
+  if (barra) barra.hidden = !leiCheia;
+  leiFontePintar();
+  leiColunaPintar();
   leiFilaAplicar();
   /* procedência e marcador já se escondem sozinhos quando não há o que
    * mostrar; na tela cheia somem de qualquer forma */
@@ -1299,8 +1337,15 @@ function leiCheiaAplicar() {
 function leiCheiaTrocar(sim) {
   leiCheia = sim === undefined ? !leiCheia : !!sim;
   leiGavetaFechar();          /* a janela muda de tamanho: o pop-over ficaria no lugar antigo */
-  if (leiCheia) { leiCheiaAplicar(); leiTrocarModo(leiModo); }
-  else leiPintar();          /* leiPintar já chama leiCheiaAplicar */
+  if (leiCheia) {
+    /* TELA CHEIA DE VERDADE (app.js, a mesma do resumo); o navegador saindo sozinho (Esc, F11) tira a lei junto */
+    if (typeof telaCheiaPedir === "function") telaCheiaPedir("lei", () => { if (leiCheia) leiCheiaTrocar(false); });
+    /* na tela cheia se lê (ou se testa): editar fica para a janela com a barra de gravar */
+    leiCheiaAplicar(); leiTrocarModo(leiModo === "editar" ? "ler" : leiModo);
+  } else {
+    if (typeof telaCheiaSair === "function") telaCheiaSair("lei");
+    leiPintar();             /* leiPintar já chama leiCheiaAplicar */
+  }
   leiReg("leitura", leiCheia ? "leitura ampliada" : "leitura normal", "");
 }
 
@@ -7180,6 +7225,7 @@ function leiIniciar() {
   leiEnvolverFluxo();
   leiLogCarregar();
   leiFonteCarregar();
+  leiColunaCarregar();
   leiJanelaCarregar();
   /* leiBotao no lugar de um onclick nu: qualquer falha vira linha de
    * registro com o nome do botão, em vez de morrer no console */
@@ -7217,6 +7263,34 @@ function leiIniciar() {
   liga("btnLeiMaior", "letra maior", () => leiFonteMudar(2));
   liga("btnLeiMenor", "letra menor", () => leiFonteMudar(-2));
   liga("btnLeiFonteReset", "letra padrão", () => leiFonteDefinir(15));
+  /* clicar no número também volta ao padrão (como no resumo) */
+  liga("leiFonteAtual", "letra padrão (número)", () => leiFonteDefinir(15));
+  /* a barra da tela cheia */
+  liga("btnLeiCheiaSair", "sair da tela cheia", () => leiCheiaTrocar(false));
+  liga("btnLeiCheiaIr", "ir para (tela cheia)", () => leiIrAbrir());
+  liga("btnLeiCheiaMenor", "letra menor (tela cheia)", () => leiFonteMudar(-2));
+  liga("btnLeiCheiaMaior", "letra maior (tela cheia)", () => leiFonteMudar(2));
+  liga("leiCheiaFonte", "letra padrão (tela cheia)", () => leiFonteDefinir(15));
+  [["btnLeiColEstreita", "estreita"], ["btnLeiColMedia", "media"], ["btnLeiColLarga", "larga"]]
+    .forEach(([id, c]) => liga(id, "coluna " + c, () => leiColunaDefinir(c)));
+  /* uma vez só: leiIniciar pode rodar de novo, e ouvinte repetido contaria a tecla duas vezes */
+  if ($("dlgLeiSeca") && $("dlgLeiSeca").addEventListener && !$("dlgLeiSeca")._eacCheiaOuvinte) {
+    $("dlgLeiSeca")._eacCheiaOuvinte = true;
+    /* ESC SAI DA TELA CHEIA ANTES de fechar a lei (sem a API de tela cheia, é o Esc que chega aqui) */
+    $("dlgLeiSeca").addEventListener("cancel", (e) => {
+      if (!leiCheia) return;
+      if (e && e.preventDefault) e.preventDefault();
+      leiCheiaTrocar(false);
+    });
+    /* na tela cheia, + e − mudam a letra; nunca enquanto se digita (o "testar" tem campo de resposta) */
+    $("dlgLeiSeca").addEventListener("keydown", (e) => {
+      if (!leiCheia || !e || e.ctrlKey || e.metaKey || e.altKey) return;
+      const alvo = e.target || {};
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || "") || alvo.isContentEditable) return;
+      if (e.key === "+" || e.key === "=") { leiFonteMudar(2); if (e.preventDefault) e.preventDefault(); }
+      else if (e.key === "-" || e.key === "_") { leiFonteMudar(-2); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
   liga("btnLeiJanelaMais", "janela maior", () => leiJanelaMudar(1));
   liga("btnLeiJanelaMenos", "janela menor", () => leiJanelaMudar(-1));
 
@@ -7415,6 +7489,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo, leiEmCamada,
     leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,
+    leiColunaDefinir, LEI_COLUNAS, leiColunaAtual: () => leiColuna, leiFonteAtualPx: () => leiFonte, leiCheiaAtual: () => leiCheia,
     leiJanelaAtual: () => leiJanela,
     leiDisciplinasDe,
     leiAtualizarAbrir, leiAtualizarComparar, leiUpdMostrar, leiUpdMover,

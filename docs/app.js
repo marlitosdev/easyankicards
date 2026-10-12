@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "18.19.0";
+const VERSAO = "18.20.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -2775,6 +2775,44 @@ async function validar() {
   }
   return rSel;
 }
+
+/* TELA CHEIA DE VERDADE, a mesma para os leitores (resumo, lei seca).
+ * A página inteira pede a tela ao navegador — o <dialog> não pode ("Dialog elements are invalid") — e a janela
+ * modal, que está por cima, passa a ocupá-la. Sem a API (iPhone, navegador que recusa) o leitor ainda ocupa a
+ * página: o CSS de cada um faz isso. DONO: só desfazemos a tela cheia que NÓS pedimos (quem já estava em F11 não
+ * perde a dela) e, quando o navegador sai sozinho (Esc, F11), quem pediu é avisado para sair junto. */
+let fsDono = null;            /* { nome, aoSair } */
+function telaCheiaPedir(nome, aoSair) {
+  const d = typeof document !== "undefined" ? document : null;
+  const raiz = d && d.documentElement;
+  if (!raiz || typeof raiz.requestFullscreen !== "function" || d.fullscreenElement) return false;
+  try {
+    const p = raiz.requestFullscreen();
+    fsDono = { nome, aoSair };
+    if (p && typeof p.catch === "function") p.catch(() => { if (fsDono && fsDono.nome === nome) fsDono = null; });
+    return true;
+  } catch (e) { fsDono = null; return false; }
+}
+function telaCheiaSair(nome) {
+  if (!fsDono || fsDono.nome !== nome) return false;
+  fsDono = null;
+  const d = typeof document !== "undefined" ? document : null;
+  if (d && d.fullscreenElement && typeof d.exitFullscreen === "function") {
+    try { const p = d.exitFullscreen(); if (p && typeof p.catch === "function") p.catch(() => {}); } catch (e) {}
+    return true;
+  }
+  return false;
+}
+function telaCheiaDe(nome) { return !!(fsDono && fsDono.nome === nome); }
+function telaCheiaMudou() {
+  const d = typeof document !== "undefined" ? document : null;
+  if (d && !d.fullscreenElement && fsDono) {
+    const x = fsDono;
+    fsDono = null;
+    if (typeof x.aoSair === "function") x.aoSair();
+  }
+}
+if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("fullscreenchange", telaCheiaMudou);
 
 async function entregar(bytes, nome, mime) {
   const file = new File([bytes], nome, { type: mime });
