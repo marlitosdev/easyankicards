@@ -123,9 +123,31 @@ function ramAplicar(ctx, linhas) {
     if (novo && idsNovos.has(novo)) { if (novo !== a.id) mapa.set(a.id, novo); }
     else mapa.set(a.id, "");
   });
+  const nomesNovos = {};
+  res.ramos.forEach((x) => { nomesNovos[x.id] = x.nome; });
+  const m = ramMigrarDados(ed, ctx, atuais, mapa, nomesNovos, antesTexto);
+  ed.texto = res.texto;
+  /* Q4 — o retrato dos ramos passa a ser o do texto novo (a edição pelo editor não é "renomeação à mão") */
+  ed.ramosBase = ramBaseDe(res.texto);
+  try { edSalvarLista(); } catch (e) {}
+  try {
+    if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = res.texto; edRender(); }
+  } catch (e) {}
+  gerRegistrar(m.antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto,
+    ramos: { mig: m.mig, migAberto: m.migAberto, histAntes: m.histAntes, qs: m.recQs, resumo: m.recRes, jur: m.recJur } } });
+  try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + m.retag + " cartão(ões) e "
+    + m.mig.prog.length + " marca(s) de estudo acompanharam"); } catch (e) {}
+  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag: m.retag, mapa, marcas: m.mig.prog.length, diario: m.mig.diario.length, questoes: m.recQs.length, resumo: !!m.recRes };
+}
+
+/* O QUE ACOMPANHA UM RAMO RENOMEADO/APAGADO (mapa id antigo → novo; "" = apagado): a marca de estudado e o diário (Q0), as
+ * questões (Q1), a seção do resumo (T5), os julgados (Q3), as etiquetas dos cartões e o histórico de renomeações. Uma
+ * função só, usada pelo editor de ramos (ramAplicar) e pela renomeação feita à mão no texto (Q4) — dois caminhos, a
+ * mesma migração. Devolve os recibos (para o desfazer) e "antes" (o texto dos cartões, para gerRegistrar). */
+function ramMigrarDados(ed, ctx, atuais, mapa, nomesNovos, textoDoEdital) {
   /* Q0 — a MARCA DE ESTUDADO e o DIÁRIO acompanham o ramo renomeado (antes ficavam presos ao nome antigo) */
   const tKey = (ctx.disciplina + "›" + ctx.topico).toLowerCase();
-  const concursoDoEd = (lerEdital(antesTexto).cfg || {}).concurso || "";
+  const concursoDoEd = (lerEdital(textoDoEdital || ed.texto || "").cfg || {}).concurso || "";
   const prog = ed.progresso || (ed.progresso = {});
   const diario = typeof edDiario !== "undefined" ? edDiario : [];
   const mig = edMigrarRamos(prog, diario, tKey, mapa, concursoDoEd);
@@ -139,8 +161,6 @@ function ramAplicar(ctx, linhas) {
   if (mig.diario.length && typeof salvarDiario === "function") { try { salvarDiario(); } catch (e) {} }
   if (aberto && typeof edProgresso !== "undefined") { try { localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso)); } catch (e) {} }
   /* Q1 — as questões ligadas a um ramo renomeado/apagado acompanham */
-  const nomesNovos = {};
-  res.ramos.forEach((x) => { nomesNovos[x.id] = x.nome; });
   const recQs = typeof qsMigrarRamos === "function" ? qsMigrarRamos(ctx.chave, mapa, nomesNovos) : [];
   /* T5 — e a seção do resumo de cada ramo renomeado */
   const recRes = ramRenomearSecoesDoResumo(ctx, atuais, mapa, nomesNovos);
@@ -151,16 +171,109 @@ function ramAplicar(ctx, linhas) {
   antes[ctx.chave] = gerTexto(ctx.chave);
   const cards = cqLerBiblioteca().filter((n) => n.chave === ctx.chave).map((n) => n.card);
   const retag = ramRetagar(ctx.chave, cards, (id) => (mapa.has(id) ? mapa.get(id) : id));
-  ed.texto = res.texto;
-  try { edSalvarLista(); } catch (e) {}
+  return { mig, migAberto, histAntes, recQs, recRes, recJur, retag, antes };
+}
+
+/* =====================================================================
+ * Q4 — RENOMEAR UM RAMO À MÃO, NO TEXTO DO EDITAL
+ *
+ * Trocar a linha "++ Modalidades" por "++ Modalidades de licitação" direto no texto deixava tudo preso ao nome antigo
+ * (o id do ramo É o nome): a marca de estudado, as questões e os julgados ligados, os cartões, a seção do resumo. Cada
+ * edital guarda um RETRATO dos ramos (ramosBase, por tópico). Enquanto se edita, o app compara o texto com o retrato:
+ * num tópico, se ramos COM MATERIAL sumiram e o mesmo número de ramos novos apareceu, ele pergunta se foi renomeação
+ * (pareando na ordem do texto). Sim → a mesma migração do editor de ramos (ramMigrarDados), com desfazer. Não → o retrato
+ * passa a ser o texto atual (o material fica com o nome antigo, como antes). Ramo sem material: nada a perguntar.
+ * ===================================================================== */
+function ramBaseDe(texto) {
+  const b = {};
+  let r = null;
+  try { r = lerEdital(String(texto || "")); } catch (e) { return b; }
+  (r.disciplinas || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+    if (tp.ramos && tp.ramos.length) b[(d.nome + "›" + tp.nome).toLowerCase()] = { d: d.nome, t: tp.nome, ramos: tp.ramos.map((x) => ({ id: x.id, nome: x.nome })) };
+  }));
+  return b;
+}
+function ramGarantirBase(ed) {
+  if (ed && !ed.ramosBase) ed.ramosBase = ramBaseDe(ed.texto || "");
+  return ed ? ed.ramosBase : null;
+}
+/* o que está ligado a um ramo (para só perguntar quando há o que levar, e para dizer o que vai junto) */
+function ramDadosDoRamo(ed, chave, tKey, id, nome) {
+  const k = tKey + "›#" + id;
+  const aberto = typeof editalAtual !== "undefined" && ed && editalAtual === ed.id;
+  const marcas = (ed && ed.progresso && ed.progresso[k]) || (aberto && typeof edProgresso !== "undefined" && edProgresso && edProgresso[k]) ? 1 : 0;
+  const questoes = typeof qsContarPorRamo === "function" ? (qsContarPorRamo(chave)[id] || 0) : 0;
+  const julgados = typeof jurContarPorRamo === "function" ? (jurContarPorRamo(chave)[id] || 0) : 0;
+  let cartoes = 0;
+  try { cartoes = cqLerBiblioteca().filter((n) => n.chave === chave && ramIdDoCartao(n.card) === id).length; } catch (e) { cartoes = 0; }
+  let resumo = 0;
   try {
-    if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = res.texto; edRender(); }
-  } catch (e) {}
-  gerRegistrar(antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto,
-    ramos: { mig, migAberto, histAntes, qs: recQs, resumo: recRes, jur: recJur } } });
-  try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + retag + " cartão(ões) e "
-    + mig.prog.length + " marca(s) de estudo acompanharam"); } catch (e) {}
-  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length, questoes: recQs.length, resumo: !!recRes };
+    const r = typeof matObter === "function" ? matObter(chave) : null;
+    resumo = r && typeof matTextoDaSecao === "function" && matTextoDaSecao(r.texto || "", id, [{ id, nome }]) !== null ? 1 : 0;
+  } catch (e) { resumo = 0; }
+  return { marcas, questoes, julgados, cartoes, resumo, total: marcas + questoes + julgados + cartoes + resumo };
+}
+function ramDetectarRenomeacoes(ed, texto) {
+  if (!ed || !ed.ramosBase) return [];
+  const agora = ramBaseDe(texto);
+  const out = [];
+  Object.keys(ed.ramosBase).forEach((k) => {
+    const b = ed.ramosBase[k], a = agora[k];
+    if (!b || !a) return;
+    const idsA = new Set(a.ramos.map((x) => x.id)), idsB = new Set(b.ramos.map((x) => x.id));
+    const sumiram = b.ramos.filter((x) => !idsA.has(x.id)), novos = a.ramos.filter((x) => !idsB.has(x.id));
+    if (!sumiram.length || sumiram.length !== novos.length) return;
+    const chave = typeof matChaveViva === "function" ? matChaveViva(a.d, a.t) : k;
+    sumiram.forEach((de, i) => {
+      const dados = ramDadosDoRamo(ed, chave, k, de.id, de.nome);
+      if (dados.total) out.push({ tKey: k, chave, disciplina: a.d, topico: a.t, de, para: novos[i], dados, atuais: b.ramos, depois: a.ramos });
+    });
+  });
+  return out;
+}
+/* "sim, renomeei": a mesma migração do editor de ramos, um tópico de cada vez; o retrato passa a ser o texto atual */
+function ramConfirmarRenomeacoes(ed, itens, texto) {
+  if (!ed || !itens || !itens.length) return 0;
+  const porTopico = {};
+  itens.forEach((x) => { (porTopico[x.tKey] = porTopico[x.tKey] || []).push(x); });
+  let n = 0;
+  Object.keys(porTopico).forEach((k) => {
+    const its = porTopico[k];
+    const ctx = { editalId: ed.id, disciplina: its[0].disciplina, topico: its[0].topico, chave: its[0].chave };
+    const mapa = new Map(its.map((x) => [x.de.id, x.para.id]));
+    const nomesNovos = {};
+    its[0].depois.forEach((x) => { nomesNovos[x.id] = x.nome; });
+    const m = ramMigrarDados(ed, ctx, its[0].atuais, mapa, nomesNovos, texto);
+    gerRegistrar(m.antes, { edital: { id: ed.id, antes: texto, depois: texto,
+      ramos: { mig: m.mig, migAberto: m.migAberto, histAntes: m.histAntes, qs: m.recQs, resumo: m.recRes, jur: m.recJur, base: ed.ramosBase } } });
+    n += its.length;
+  });
+  ed.ramosBase = ramBaseDe(texto);
+  try { edSalvarLista(); } catch (e) {}
+  try { matReg("ramos", "renomeação feita no texto do edital", itens.map((x) => x.de.nome + " → " + x.para.nome).join("; ")); } catch (e) {}
+  return n;
+}
+function ramIgnorarRenomeacoes(ed, texto) {
+  if (!ed) return;
+  ed.ramosBase = ramBaseDe(texto);
+  try { edSalvarLista(); } catch (e) {}
+}
+/* a faixa na bancada do edital: aparece só quando há renomeação provável com material a levar */
+let ramRenItens = [];
+function ramPintarRenomeacao() {
+  const cx = $("edRamoRenCx");
+  if (!cx) return;
+  const ed = typeof edAberto === "function" ? edAberto() : null;
+  if (!ed) { cx.hidden = true; return; }
+  ramGarantirBase(ed);
+  const texto = ($("editalTexto") || {}).value || "";
+  ramRenItens = ramDetectarRenomeacoes(ed, texto);
+  cx.hidden = !ramRenItens.length;
+  if (!ramRenItens.length) return;
+  const partes = (d) => [d.marcas ? t("ram_ren_marcas") : "", d.questoes ? t("ram_ren_questoes", { n: d.questoes }) : "",
+    d.julgados ? t("ram_ren_julgados", { n: d.julgados }) : "", d.cartoes ? t("ram_ren_cartoes", { n: d.cartoes }) : "",
+    d.resumo ? t("ram_ren_resumo") : ""].filter(Boolean).join(", ");
+  $("edRamoRenTxt").textContent = t("ram_ren_tit") + " " + ramRenItens.map((x) => t("ram_ren_item", { a: x.de.nome, b: x.para.nome, tp: x.topico, o: partes(x.dados) })).join(" · ");
 }
 
 /* PROPOR RAMOS PELO ÍNDICE DA LEI (local, sem IA): as divisões da lei carregada no tópico (títulos, capítulos…)
