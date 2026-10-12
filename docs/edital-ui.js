@@ -1128,7 +1128,10 @@ function completarDiario(itens) {
   const tem = new Set(edDiario.map((x) => x.c));
   let n = 0;
   (itens || []).forEach((i) => {
-    if (!i.estado || tem.has(i.chave)) return;
+    /* MARCA DE RAMO NÃO VIRA REGISTRO. Uma versão antiga passou os ramos por aqui como se fossem tópicos: cada ramo
+     * marcado ganhou um registro com o tempo PREVISTO dele — 4h09 de estudo inventado num dia de 1h05. O estudo de
+     * verdade já está no registro do tópico (com os ramos em "rm"). */
+    if (!i.estado || tem.has(i.chave) || String(i.chave || "").indexOf("›#") >= 0) return;
     edDiario.push({ d: i.quando || "?", c: i.chave, n: i.nome, disc: i.disciplina,
                     p: i.bruto, m: i.minutos, f: null, a: i.estado, retro: true,
                     cc: concursoAtual().nome });
@@ -1486,6 +1489,68 @@ function diarioTotais(itens) {
   };
 }
 
+/* PURA. Os registros automáticos de RAMO (ver completarDiario): "retro" e chave de ramo (tópico›#ramo). [{x, idx}] */
+function diarioRetroDeRamo(diario) {
+  return (diario || []).map((x, idx) => ({ x, idx })).filter(({ x }) => !!(x && x.retro && String(x.c || "").indexOf("›#") >= 0));
+}
+
+/* PURA. Quantos dias o período tem — para "19 de 90 dias com estudo". f = { dias, de, ate }; sem período ("tudo"),
+ * do primeiro registro até hoje. */
+function diarioDiasDoPeriodo(f, entradas, hoje) {
+  const dia = (d) => new Date(String(d).slice(0, 10) + "T00:00:00");
+  const datas = (entradas || []).map((x) => x && x.d).filter((d) => d && d !== "?").sort();
+  const h = String(hoje || "").slice(0, 10);
+  const conta = (de, ate) => { const a = dia(de), b = dia(ate); return isNaN(a) || isNaN(b) || b < a ? 0 : Math.round((b - a) / 86400000) + 1; };
+  if (f && (f.de || f.ate)) return conta(f.de || datas[0] || h, f.ate || h);
+  if (f && f.dias) return f.dias;
+  return datas.length ? conta(datas[0], h) : 0;
+}
+
+/* PURA. Sessões do MESMO tópico, MESMA ação e MESMO dia viram um bloco (10 linhas iguais num dia ocupavam a
+ * tela sem dizer nada a mais). itens = [{x, idx}] na ordem da lista; devolve [{d, c, a, itens}] na mesma ordem. */
+function diarioAgrupar(itens) {
+  const out = [];
+  /* dentro do MESMO dia (a lista já vem por data), mesmo tópico + mesma ação juntam mesmo que não estejam lado a lado */
+  let dia = null, doDia = {};
+  (itens || []).forEach((it) => {
+    const x = it.x;
+    if (x.d !== dia) { dia = x.d; doDia = {}; }
+    const k = x.c + "|" + x.a;
+    if (x.a !== "pendente" && doDia[k]) { doDia[k].itens.push(it); return; }
+    const g = { d: x.d, c: x.c, a: x.a, itens: [it] };
+    if (x.a !== "pendente") doDia[k] = g;
+    out.push(g);
+  });
+  return out;
+}
+/* as formas de um ou mais registros, sem repetir; a forma "revisão" não aparece num registro de revisão (diria duas vezes) */
+function diarioFormasDosRegs(xs) {
+  const vistos = [];
+  (xs || []).forEach((x) => (x.f || []).forEach((f) => { if (!(f === "revisao" && x.a === "revisado") && vistos.indexOf(f) < 0) vistos.push(f); }));
+  return vistos.map((f) => t("ed_forma_" + f)).filter(Boolean).join(" + ");
+}
+function diarioQDosRegs(xs) {
+  return (xs || []).reduce((a, x) => (x.q && x.q.feitas ? { n: a.n + x.q.feitas, c: a.c + (x.q.certas || 0) } : a), { n: 0, c: 0 });
+}
+/* a cor do acerto: verde a partir de 80%, amarelo de 60% a 79%, vermelho abaixo — para achar o tópico fraco de relance */
+function diarioQClasse(pct) { return pct >= 80 ? "di-q-bom" : pct >= 60 ? "di-q-medio" : "di-q-fraco"; }
+
+/* PURA. Uma linha do "Copiar": tempo, a ação com o tópico, o contexto entre parênteses e os detalhes — um separador só */
+function diarioLinhaCopia(xs) {
+  const x = xs[0];
+  const min = xs.filter((y) => y.a !== "pendente").reduce((a, y) => a + (y.m || 0), 0);
+  const ctx = (x.disc || "") + (x.cc ? " · " + x.cc : "");
+  const q = diarioQDosRegs(xs);
+  const partes = [
+    (min ? horasTexto(min) + " · " : "") + t("ed_acao_" + x.a) + " " + x.n + (ctx ? " (" + ctx + ")" : ""),
+    xs.length > 1 ? t("ed_diario_n_sessoes", { n: xs.length }) : "",
+    diarioFormasDosRegs(xs),
+    q.n ? t("ed_diario_questoes", { c: q.c, n: q.n, pct: Math.round((q.c / q.n) * 100) }) : "",
+    xs.length === 1 && x.obs ? String(x.obs).slice(0, 220) : "",
+  ];
+  return "• " + partes.filter(Boolean).join(" · ");
+}
+
 function diarioFiltrosAtivos() { return !!(diarioBusca.trim() || diarioDisc || diarioCc || diarioTipo || diarioDe || diarioAte); }
 
 function diarioLimparFiltros() {
@@ -1549,11 +1614,8 @@ function diarioTextoCopia(itens, titulo) {
   porDia.forEach((xs, d) => {
     const min = xs.filter((x) => x.a !== "pendente").reduce((a, x) => a + (x.m || 0), 0);
     L.push(d + " (" + diarioDiaTexto(d) + ") — " + horasTexto(min));
-    xs.forEach((x) => {
-      const q = x.q && x.q.feitas ? t("ed_diario_questoes", { c: x.q.certas, n: x.q.feitas, pct: Math.round((x.q.certas / x.q.feitas) * 100) }) : "";
-      L.push("• " + [x.n, (x.disc || "") + (x.cc ? " · " + x.cc : ""), t("ed_acao_" + x.a), x.m && x.a !== "pendente" ? horasTexto(x.m) : "", diarioFormasDe(x), q, x.obs ? String(x.obs).slice(0, 220) : ""]
-        .filter(Boolean).join(" | "));
-    });
+    /* as mesmas sessões agrupadas da tela */
+    diarioAgrupar(xs.map((x) => ({ x }))).forEach((g) => L.push(diarioLinhaCopia(g.itens.map((i) => i.x))));
     L.push("");
   });
   return L.join("\n").replace(/\n+$/, "");
@@ -1618,8 +1680,59 @@ function diarioCopiar(txt) {
   } catch (e) { uiAlert(t("toast_copy_fail")); }
 }
 
+let diarioResumoTxt = "";
 function diarioTituloCopia() {
-  return t("ed_diario_tit") + " — " + ($("diarioResumo") ? $("diarioResumo").textContent : "");
+  return t("ed_diario_tit") + " — " + diarioResumoTxt;
+}
+
+/* ---- o conserto dos registros automáticos de ramo (uma faixa no alto do diário; nada sai sem o clique; dá para desfazer) ---- */
+const DIARIO_RETRO_RECIBO = "eac_diario_retro_recibo";
+function diarioRetroRecibo() {
+  try { const r = JSON.parse(localStorage.getItem(DIARIO_RETRO_RECIBO) || "null"); return Array.isArray(r) && r.length ? r : null; }
+  catch (e) { return null; }
+}
+function diarioPintarConserto() {
+  const cx = $("diarioConserto");
+  if (!cx) return;
+  const lst = diarioRetroDeRamo(edDiario);
+  const rec = lst.length ? null : diarioRetroRecibo();
+  const min = (l) => l.reduce((a, i) => a + ((i.x && i.x.m) || 0), 0);
+  cx.hidden = !lst.length && !rec;
+  if (cx.hidden) return;
+  if (lst.length) {
+    const dias = Array.from(new Set(lst.map((i) => String(i.x.d)))).sort().map((d) => d.slice(8, 10) + "/" + d.slice(5, 7)).join(", ");
+    $("diarioConsertoTxt").textContent = t("ed_diario_retro_aviso", { n: lst.length, h: horasTexto(min(lst)), d: dias });
+  } else {
+    $("diarioConsertoTxt").textContent = t("ed_diario_retro_feito", { n: rec.length, h: horasTexto(min(rec)) });
+  }
+  $("btnDiarioRetroTirar").hidden = !lst.length;
+  $("btnDiarioRetroDesfazer").hidden = !rec;
+}
+function diarioRetirarRetro() {
+  const lst = diarioRetroDeRamo(edDiario);
+  if (!lst.length) return 0;
+  /* no lugar (de trás para a frente): o mesmo array que o resto do app enxerga */
+  lst.slice().sort((a, b) => b.idx - a.idx).forEach((i) => edDiario.splice(i.idx, 1));
+  try { localStorage.setItem(DIARIO_RETRO_RECIBO, JSON.stringify(lst)); } catch (e) {}
+  salvarDiario();
+  const min = lst.reduce((a, i) => a + (i.x.m || 0), 0);
+  reg("EDITAL-DIARIO", "registros automáticos de ramo retirados", lst.length + " · " + min + "min");
+  try { edRender(); } catch (e) {}
+  if (typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
+  abrirDiario();
+  return lst.length;
+}
+function diarioDesfazerRetro() {
+  const rec = diarioRetroRecibo();
+  if (!rec) return 0;
+  rec.slice().sort((a, b) => a.idx - b.idx).forEach((i) => edDiario.splice(Math.min(i.idx, edDiario.length), 0, i.x));
+  try { localStorage.removeItem(DIARIO_RETRO_RECIBO); } catch (e) {}
+  salvarDiario();
+  reg("EDITAL-DIARIO", "registros automáticos de ramo devolvidos", String(rec.length));
+  try { edRender(); } catch (e) {}
+  if (typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
+  abrirDiario();
+  return rec.length;
 }
 
 /* ---- D4.2: A SEMANA DE ESTUDO À VISTA — meta, falta, e os dias da agenda -------------------------------------------- */
@@ -1765,6 +1878,9 @@ function diarioPintarMapa() {
   cab("");
   M.semanas[0].dias.forEach((d) => cab(d.cod, d.estudo ? "" : "di-mp-cab-folga"));
   cab(t("ed_mp_total"));
+  /* os tópicos de cada dia (do que está filtrado, como o mapa), para o balão da célula */
+  const topicosDoDia = {};
+  (itens || []).forEach((x) => { if (x && x.d && x.a !== "pendente") (topicosDoDia[x.d] || (topicosDoDia[x.d] = new Set())).add(x.n); });
   M.semanas.forEach((s) => {
     const lab = document.createElement("span");
     lab.className = "di-mp-sem"; lab.textContent = s.ini.slice(8) + "/" + s.ini.slice(5, 7);
@@ -1783,6 +1899,11 @@ function diarioPintarMapa() {
         : M.escala === "meta" && d.estudo
           ? t("ed_mp_cel_meta", { q: quando, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada"), m: horasTexto(M.metaDiaMin) })
           : t("ed_mp_cel", { q: quando, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada") });
+      const doD = topicosDoDia[d.iso];
+      if (!d.futuro && doD && doD.size) {
+        const nomes = Array.from(doD);
+        c.title += " " + t("ed_mp_cel_top", { n: nomes.length, l: nomes.slice(0, 3).join(", ") + (nomes.length > 3 ? "…" : "") });
+      }
       if (!d.futuro) c.onclick = () => diarioIrParaDia(d.iso);
       grade.append(c);
     });
@@ -1860,9 +1981,160 @@ function diarioAplicarAmplo() {
   }
 }
 
+/* UM REGISTRO do diário (sub = dentro de um bloco aberto, recuado) */
+function diarioLinha(it, sub) {
+  const x = it.x, idx = it.idx;
+  const li = document.createElement("div");
+  /* A COR É UM ACENTO, NÃO UM CRACHÁ: uma barrinha na lateral diz a ação; o texto continua legível */
+  li.className = "diario-item di-b-" + x.a + (sub ? " di-sub" : "");
+  const ac = document.createElement("span");
+  ac.className = "di-acao acao-" + x.a;
+  ac.textContent = t("ed_acao_" + x.a);
+  const nm = document.createElement("span");
+  nm.className = "di-nome"; nm.textContent = x.n;
+  const tempo = document.createElement("span");
+  tempo.className = "di-tempo"; tempo.textContent = x.m ? horasTexto(x.m) : "";
+  const ds = document.createElement("span");
+  ds.className = "di-disc";
+  ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
+  ds.title = x.cc ? t("ed_para_concurso", { c: x.cc }) : t("ed_sem_concurso_ajuda");
+  /* O DIÁRIO PRECISA LEVAR DE VOLTA AO MATERIAL.
+   * Ele registrava o que você fez e não dava caminho nenhum para rever —
+   * a única ação da linha era APAGAR o registro. Quem marca "estudei
+   * Restos a pagar" e três dias depois quer reler o resumo tinha de sair
+   * do diário, achar a disciplina, achar o tópico. */
+  const acoes = document.createElement("div");
+  acoes.className = "di-acoes";
+  const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
+  diarioAcoesComuns(x).forEach((b) => acoes.append(b));
+  acoes.append(bt);
+  /* Os botões ficam ABAIXO da linha, não ao lado. Em coluna estreita o
+   * grid os espremia a ponto de cada rótulo virar uma letra por linha
+   * ("r-e-v-e-r"), e a barra de rolagem horizontal escondia a metade
+   * direita da informação. */
+  const cima = document.createElement("div");
+  cima.className = "di-cima";
+  cima.append(nm, tempo);
+  const meio = document.createElement("div");
+  meio.className = "di-meio";
+  meio.append(ds, ac);
+  /* O QUE O REGISTRO DIZ DE VERDADE.
+   * A linha mostrava data, ação, tópico e disciplina — e escondia
+   * justamente o que se quer saber ao reler o diário: de que jeito se
+   * estudou e como foi nas questões. Sem isso, "estudou Leis
+   * Orçamentárias" não distingue leitura de uma bateria de questões.
+   * (O tempo já está no alto da linha.) */
+  const det = document.createElement("div");
+  det.className = "di-det";
+  const pedacos = [];
+  const formas = diarioFormasDosRegs([x]);
+  if (formas) pedacos.push(formas);
+  if (x.q && x.q.feitas) {
+    const pct = x.q.feitas ? Math.round((x.q.certas / x.q.feitas) * 100) : 0;
+    pedacos.push({ txt: t("ed_diario_questoes", { c: x.q.certas, n: x.q.feitas, pct }), cls: diarioQClasse(pct) });
+  } else if (x.q && x.q.pct != null) {
+    /* sem contagem: o diário diz isso em vez de fingir um "0 de 0" */
+    pedacos.push(t("ed_diario_questoes_pct", { pct: x.q.pct }));
+  }
+  if (x.hu && x.hu !== "media") pedacos.push(t("ed_humor_" + x.hu));
+  if (x.p) pedacos.push(t("ed_diario_peso", { p: (Math.round(Number(x.p) * 10) / 10).toLocaleString() }));
+  if (x.onde) pedacos.push(String(x.onde).slice(0, 40));
+  diarioPintarDet(det, pedacos);
+  if (pedacos.length) meio.append(det);
+  if (x.obs) {
+    const ob = document.createElement("div");
+    ob.className = "di-obs";
+    ob.textContent = String(x.obs).slice(0, 220);
+    meio.append(ob);
+  }
+  li.append(cima, meio, acoes);
+  return li;
+}
+
+/* os pedaços do detalhe: texto, e o acerto num span com a cor dele */
+function diarioPintarDet(det, pedacos) {
+  pedacos.forEach((p, k) => {
+    if (k) det.append(document.createTextNode(" · "));
+    if (p && typeof p === "object") {
+      const e = document.createElement("span");
+      e.className = "di-q " + p.cls;
+      e.textContent = p.txt;
+      det.append(e);
+    } else det.append(document.createTextNode(String(p)));
+  });
+}
+
+/* rever o material (ou escrever / pedir à IA quando não há) e ir à disciplina */
+function diarioAcoesComuns(x) {
+  const temMat = typeof matTem === "function" && matTem(x.c);
+  const rever = botaoMini(temMat ? "ed_diario_rever" : "ed_diario_escrever",
+    temMat ? "btn-verde" : "btn-cinza", () => {
+      $("dlgDiario").close();
+      matAbrirEditor({ disciplina: x.disc, nome: x.n, chave: x.c }, false);
+    });
+  const irDisc = botaoMini("ed_diario_disciplina", "btn-cinza", () => {
+    $("dlgDiario").close();
+    abrirDisciplina(x.disc);
+  });
+  const out = [rever];
+  /* sem material: além de escrever, pedir o resumo a uma IA */
+  if (!temMat && typeof riaAbrirDoTopico === "function") {
+    out.push(botaoMini("ed_diario_ia", "btn-cinza", () => { $("dlgDiario").close(); riaAbrirDoTopico(x.disc, x.n, x.c); }));
+  }
+  out.push(irDisc);
+  return out;
+}
+
+/* UM BLOCO: as sessões iguais do mesmo dia numa linha — tempo somado, quantas foram, as formas e o acerto somado.
+ * "ver as N sessões" abre cada uma (é nelas que fica o "apagar" — é assim que se desfaz um registro errado). */
+let diarioGruposAbertos = new Set();
+function diarioLinhaGrupo(g, chave, aberto) {
+  const xs = g.itens.map((i) => i.x), x = xs[0];
+  const li = document.createElement("div");
+  li.className = "diario-item di-grupo di-b-" + x.a;
+  const cima = document.createElement("div");
+  cima.className = "di-cima";
+  const nm = document.createElement("span");
+  nm.className = "di-nome"; nm.textContent = x.n;
+  const tempo = document.createElement("span");
+  tempo.className = "di-tempo"; tempo.textContent = horasTexto(xs.reduce((a, y) => a + (y.m || 0), 0));
+  cima.append(nm, tempo);
+  const meio = document.createElement("div");
+  meio.className = "di-meio";
+  const ds = document.createElement("span");
+  ds.className = "di-disc";
+  ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
+  const ac = document.createElement("span");
+  ac.className = "di-acao acao-" + x.a;
+  ac.textContent = t("ed_acao_" + x.a);
+  meio.append(ds, ac);
+  const pedacos = [t("ed_diario_n_sessoes", { n: xs.length })];
+  const formas = diarioFormasDosRegs(xs);
+  if (formas) pedacos.push(formas);
+  const q = diarioQDosRegs(xs);
+  if (q.n) { const pct = Math.round((q.c / q.n) * 100); pedacos.push({ txt: t("ed_diario_questoes", { c: q.c, n: q.n, pct }), cls: diarioQClasse(pct) }); }
+  const det = document.createElement("div");
+  det.className = "di-det";
+  diarioPintarDet(det, pedacos);
+  meio.append(det);
+  const acoes = document.createElement("div");
+  acoes.className = "di-acoes";
+  const tg = botaoMini("", "btn-cinza", () => {
+    if (diarioGruposAbertos.has(chave)) diarioGruposAbertos.delete(chave); else diarioGruposAbertos.add(chave);
+    abrirDiario();
+  }, t(aberto ? "ed_diario_grupo_fechar" : "ed_diario_grupo_abrir", { n: xs.length }));
+  tg.className += " di-grupo-tg";
+  tg.setAttribute("aria-expanded", aberto ? "true" : "false");
+  acoes.append(tg);
+  diarioAcoesComuns(x).forEach((b) => acoes.append(b));
+  li.append(cima, meio, acoes);
+  return li;
+}
+
 function abrirDiario() {
   const lista = $("diarioLista");
   lista.innerHTML = "";
+  diarioPintarConserto();
   diarioPintarSemana();
   diarioPintarPeriodos();
   diarioPintarFiltros();
@@ -1885,9 +2157,17 @@ function abrirDiario() {
   const perTxt = (diarioDe || diarioAte)
     ? t("ed_diario_per_faixa", { de: diarioDe || "…", ate: diarioAte || "…" })
     : t("ed_diario_per_" + (diarioPeriodo || 0));
-  $("diarioResumo").textContent = t("ed_diario_resumo", {
-    h: horasTexto(tot.minutos), p: perTxt, t: tot.topicos, r: tot.revisoes, e: tot.eventos, d: tot.dias, med: horasTexto(med),
-  }) + (tot.qn ? " · " + t("ed_diario_resumo_q", { c: tot.qc, n: tot.qn, pct: Math.round((tot.qc / tot.qn) * 100) }) : "");
+  /* OS NÚMEROS LADO A LADO, cada um com nome — e a constância ("19 de 90 dias com estudo"), que faltava */
+  const res = $("diarioResumo");
+  res.innerHTML = "";
+  const partesR = [];
+  const chipR = (txt, cls) => { const e = document.createElement("span"); e.className = "di-res-n" + (cls ? " " + cls : ""); e.textContent = txt; res.append(e); partesR.push(txt); };
+  chipR(t("ed_diario_res_h", { h: horasTexto(tot.minutos), p: perTxt }), "di-res-h");
+  chipR(t("ed_diario_res_dias", { d: tot.dias, y: diarioDiasDoPeriodo({ dias: diarioPeriodo, de: diarioDe, ate: diarioAte }, edDiario, hojeISO()) }));
+  chipR(t("ed_diario_res_media", { med: horasTexto(med) }));
+  chipR(t("ed_diario_res_top", { t: tot.topicos, r: tot.revisoes, e: tot.eventos }));
+  if (tot.qn) { const pq = Math.round((tot.qc / tot.qn) * 100); chipR(t("ed_diario_resumo_q", { c: tot.qc, n: tot.qn, pct: pq }), "di-q " + diarioQClasse(pq)); }
+  diarioResumoTxt = partesR.join(" · ");
   /* o total de cada DIA vem de todos os registros do dia, não só dos que a página já desenhou */
   const porDia = {};
   todos.forEach(({ x }) => {
@@ -1899,101 +2179,26 @@ function abrirDiario() {
   diarioPintarMapa();
   const visiveis = todos.slice(0, diarioMostrar);
   let diaAtual = null;
-  visiveis.forEach(({ x, idx }) => {
-    if (x.d !== diaAtual) {
-      diaAtual = x.d;
+  diarioAgrupar(visiveis).forEach((g) => {
+    if (g.d !== diaAtual) {
+      diaAtual = g.d;
       const cab = document.createElement("div");
       cab.className = "di-dia";
       const nomeDia = document.createElement("span");
-      nomeDia.className = "di-dia-nome"; nomeDia.textContent = diarioDiaTexto(x.d);
-      nomeDia.title = x.d;
-      const g = porDia[x.d];
+      nomeDia.className = "di-dia-nome"; nomeDia.textContent = diarioDiaTexto(g.d);
+      nomeDia.title = g.d;
+      const gd = porDia[g.d];
       const totDia = document.createElement("span");
       totDia.className = "di-dia-tot";
-      totDia.textContent = g ? t("ed_diario_dia_tot", { h: horasTexto(g.m), n: g.n }) : "";
+      totDia.textContent = gd ? t("ed_diario_dia_tot", { h: horasTexto(gd.m), n: gd.n }) : "";
       cab.append(nomeDia, totDia);
       lista.append(cab);
     }
-    const li = document.createElement("div");
-    /* A COR É UM ACENTO, NÃO UM CRACHÁ: uma barrinha na lateral diz a ação; o texto continua legível */
-    li.className = "diario-item di-b-" + x.a;
-    const ac = document.createElement("span");
-    ac.className = "di-acao acao-" + x.a;
-    ac.textContent = t("ed_acao_" + x.a);
-    const nm = document.createElement("span");
-    nm.className = "di-nome"; nm.textContent = x.n;
-    const tempo = document.createElement("span");
-    tempo.className = "di-tempo"; tempo.textContent = x.m ? horasTexto(x.m) : "";
-    const ds = document.createElement("span");
-    ds.className = "di-disc";
-    ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
-    ds.title = x.cc ? t("ed_para_concurso", { c: x.cc }) : t("ed_sem_concurso_ajuda");
-    /* O DIÁRIO PRECISA LEVAR DE VOLTA AO MATERIAL.
-     * Ele registrava o que você fez e não dava caminho nenhum para rever —
-     * a única ação da linha era APAGAR o registro. Quem marca "estudei
-     * Restos a pagar" e três dias depois quer reler o resumo tinha de sair
-     * do diário, achar a disciplina, achar o tópico. */
-    const acoes = document.createElement("div");
-    acoes.className = "di-acoes";
-    const temMat = typeof matTem === "function" && matTem(x.c);
-    const rever = botaoMini(temMat ? "ed_diario_rever" : "ed_diario_escrever",
-      temMat ? "btn-verde" : "btn-cinza", () => {
-        $("dlgDiario").close();
-        matAbrirEditor({ disciplina: x.disc, nome: x.n, chave: x.c }, false);
-      });
-    const irDisc = botaoMini("ed_diario_disciplina", "btn-cinza", () => {
-      $("dlgDiario").close();
-      abrirDisciplina(x.disc);
-    });
-    const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
-    acoes.append(rever);
-    /* sem material: além de escrever, pedir o resumo a uma IA */
-    if (!temMat && typeof riaAbrirDoTopico === "function") {
-      acoes.append(botaoMini("ed_diario_ia", "btn-cinza", () => { $("dlgDiario").close(); riaAbrirDoTopico(x.disc, x.n, x.c); }));
-    }
-    acoes.append(irDisc, bt);
-    /* Os botões ficam ABAIXO da linha, não ao lado. Em coluna estreita o
-     * grid os espremia a ponto de cada rótulo virar uma letra por linha
-     * ("r-e-v-e-r"), e a barra de rolagem horizontal escondia a metade
-     * direita da informação. */
-    const cima = document.createElement("div");
-    cima.className = "di-cima";
-    cima.append(nm, tempo);
-    const meio = document.createElement("div");
-    meio.className = "di-meio";
-    meio.append(ds, ac);
-    /* O QUE O REGISTRO DIZ DE VERDADE.
-     * A linha mostrava data, ação, tópico e disciplina — e escondia
-     * justamente o que se quer saber ao reler o diário: de que jeito se
-     * estudou e como foi nas questões. Sem isso, "estudou Leis
-     * Orçamentárias" não distingue leitura de uma bateria de questões.
-     * (O tempo já está no alto da linha.) */
-    const det = document.createElement("div");
-    det.className = "di-det";
-    const pedacos = [];
-    const formas = (x.f && x.f.length ? x.f : []).map((f) => t("ed_forma_" + f))
-      .filter(Boolean);
-    if (formas.length) pedacos.push(formas.join(" + "));
-    if (x.q && x.q.feitas) {
-      const pct = x.q.feitas ? Math.round((x.q.certas / x.q.feitas) * 100) : 0;
-      pedacos.push(t("ed_diario_questoes", { c: x.q.certas, n: x.q.feitas, pct }));
-    } else if (x.q && x.q.pct != null) {
-      /* sem contagem: o diário diz isso em vez de fingir um "0 de 0" */
-      pedacos.push(t("ed_diario_questoes_pct", { pct: x.q.pct }));
-    }
-    if (x.hu && x.hu !== "media") pedacos.push(t("ed_humor_" + x.hu));
-    if (x.p) pedacos.push(t("ed_diario_peso", { p: (Math.round(Number(x.p) * 10) / 10).toLocaleString() }));
-    if (x.onde) pedacos.push(String(x.onde).slice(0, 40));
-    det.textContent = pedacos.join(" · ");
-    if (pedacos.length) meio.append(det);
-    if (x.obs) {
-      const ob = document.createElement("div");
-      ob.className = "di-obs";
-      ob.textContent = String(x.obs).slice(0, 220);
-      meio.append(ob);
-    }
-    li.append(cima, meio, acoes);
-    lista.append(li);
+    if (g.itens.length === 1) { lista.append(diarioLinha(g.itens[0])); return; }
+    const chave = g.d + "|" + g.c + "|" + g.a;
+    const aberto = diarioGruposAbertos.has(chave);
+    lista.append(diarioLinhaGrupo(g, chave, aberto));
+    if (aberto) g.itens.forEach((it) => lista.append(diarioLinha(it, true)));
   });
 
   if (todos.length > visiveis.length) {
@@ -4678,6 +4883,8 @@ function edIniciar() {
     $(id).onchange = () => { set($(id).value); diarioMostrar = DIARIO_PAGINA; abrirDiario(); };
   });
   dicaLigar("btnDiarioAjuda", "ed_diario_ajuda");
+  if ($("btnDiarioRetroTirar")) $("btnDiarioRetroTirar").onclick = () => diarioRetirarRetro();
+  if ($("btnDiarioRetroDesfazer")) $("btnDiarioRetroDesfazer").onclick = () => diarioDesfazerRetro();
   if ($("btnDiarioCopiar")) $("btnDiarioCopiar").onclick = () => diarioCopiar(diarioTextoCopia(diarioUltimo, diarioTituloCopia()));
   if ($("btnDiarioCsv")) $("btnDiarioCsv").onclick = () => {
     try { baixarArquivo(diarioCsv(diarioUltimo), "eac-diario-" + hojeISO() + ".csv", "text/csv;charset=utf-8"); toast(t("ed_diario_csv_ok")); }
