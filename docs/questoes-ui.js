@@ -2483,6 +2483,45 @@ function qsUiFiltroDoEscopo(esc, deOnde) {
   return null;
 }
 
+/* Q2b — OS RAMOS DO TÓPICO de uma chave de questão, procurados nos editais (o primeiro que tem o tópico com ramos).
+ * memo: um objeto da mesma pintura, para não reler os editais a cada linha da lista. */
+function qsUiRamosDoTopico(chave, memo) {
+  if (!chave || typeof editais === "undefined" || typeof lerEdital !== "function") return [];
+  const alvo = qsChaveNormal(chave);
+  if (memo && memo[alvo]) return memo[alvo];
+  let achou = [];
+  (editais || []).some((e) => {
+    let r = null;
+    try { r = lerEdital(e.texto || ""); } catch (x) { return false; }
+    return (r.disciplinas || []).some((d) => (d.topicos || []).some((tp) => {
+      if (qsChaveNormal((d.nome + "›" + tp.nome).toLowerCase()) !== alvo || !(tp.ramos && tp.ramos.length)) return false;
+      achou = tp.ramos;
+      return true;
+    }));
+  });
+  if (memo) memo[alvo] = achou;
+  return achou;
+}
+/* o filtro "Ramo": só aparece com um tópico escolhido que tem ramos */
+function qsUiPintarRamos() {
+  const sel = $("qsFRamo");
+  if (!sel) return [];
+  const ramos = qsUiFiltro.chave ? qsUiRamosDoTopico(qsUiFiltro.chave) : [];
+  sel.hidden = !ramos.length;
+  if (!ramos.length) { sel.innerHTML = ""; if (qsUiFiltro.ramo) qsUiFiltro.ramo = ""; return ramos; }
+  const atual = qsUiFiltro.ramo || "";
+  const val = atual === "_sem" || ramos.some((r) => r.id === atual) ? atual : "";
+  sel.innerHTML = "";
+  [["", t("qs_f_ramo_todos")], ["_sem", t("qs_f_ramo_sem")]].concat(ramos.map((r) => [r.id, r.nome])).forEach(([v, rot]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = rot;
+    sel.append(o);
+  });
+  sel.value = val;
+  qsUiFiltro.ramo = val;
+  return ramos;
+}
+
 function qsUiListaFiltrada() {
   const filtro = Object.assign({}, qsUiFiltro);
   if (filtro.edital && !filtro.chave) {
@@ -2561,6 +2600,8 @@ function qsUiRender() {
   if (!box) return;
   qsUiPintarEditais();
   qsUiPintarTopicos();
+  const ramosDoFiltro = qsUiPintarRamos();
+  const memoRamos = {};
   qsUiOpcoesDe("qsFDisc", qsDisciplinas(), t("qs_todas_disc"), qsUiFiltro.disciplina);
   qsUiOpcoesDe("qsFBanca", qsBancas(), t("qs_todas_bancas"), qsUiFiltro.banca);
 
@@ -2575,6 +2616,13 @@ function qsUiRender() {
     : t("qs_vazio_curto");
   $("btnQsResponderTudo").disabled = !lista.length;
   $("btnQsResponderTudo").textContent = t("qs_responder_n", { n: lista.length });
+  /* o assistente "ligar aos ramos": com um tópico de ramos escolhido e questões dele ainda sem ramo */
+  const bLig = $("btnQsLigarRamos");
+  if (bLig) {
+    const semRamo = ramosDoFiltro.length ? qsFiltrar({ chave: qsUiFiltro.chave, ramo: "_sem" }).length : 0;
+    bLig.hidden = !semRamo;
+    bLig.textContent = t("qs_ligar_btn", { n: semRamo });
+  }
 
   box.innerHTML = "";
   if (!lista.length) {
@@ -2599,6 +2647,7 @@ function qsUiRender() {
       { txt: t("qs_tipo_" + q.tipo), cls: "qs-tag qs-tag-tipo" },
       q.banca ? { txt: q.banca, cls: "qs-tag qs-tag-banca" } : null,
       { txt: q.disciplina || "—", cls: "qs-tag" },
+      q.ramo ? { txt: t("qs_ramo_tag", { r: q.ramoNome || q.ramo }), cls: "qs-tag qs-tag-ramo" } : null,
     ].filter(Boolean);
     etiquetas.forEach((e) => {
       const sp = document.createElement("span");
@@ -2663,6 +2712,26 @@ function qsUiRender() {
         qsUiPintarBotaoResumo();
         qsUiRender();
       };
+      /* Q2b — o RAMO desta questão (quando o tópico tem ramos): trocar liga na hora; "tópico inteiro" desliga */
+      const ramosQ = qsUiRamosDoTopico(q.chave, memoRamos);
+      if (ramosQ.length) {
+        const lb = document.createElement("label");
+        lb.className = "qs-item-ramo";
+        const sp = document.createElement("span");
+        sp.textContent = t("qs_ramo_desta") + " ";
+        const sel = document.createElement("select");
+        [["", t("qs_ramo_nenhum")]].concat(ramosQ.map((r) => [r.id, r.nome])).forEach(([v, rot]) => {
+          const o = document.createElement("option"); o.value = v; o.textContent = rot; sel.append(o);
+        });
+        sel.value = q.ramo && ramosQ.some((r) => r.id === q.ramo) ? q.ramo : "";
+        sel.onchange = () => {
+          const r = ramosQ.find((x) => x.id === sel.value);
+          qsLigarRamo([q.id], sel.value, r ? r.nome : "");
+          qsUiRender();
+        };
+        lb.append(sp, sel);
+        cx2.append(lb);
+      }
       cx2.append(bDel);
       li.append(cx2);
     };
@@ -2673,8 +2742,100 @@ function qsUiRender() {
   });
 }
 
+/* =====================================================================
+ * Q2b — LIGAR AS QUESTÕES QUE JÁ EXISTEM AOS RAMOS
+ *
+ * As questões criadas antes dos ramos (ou sem escolher ramo) ficam "do tópico inteiro". Aqui o app lista as que ainda não
+ * têm ramo, sugere um pelas palavras (ramSugerirRamoDaQuestao) e a pessoa confere, troca ou deixa sem — e só então liga.
+ * Tudo de uma vez, com Desfazer (os recibos de qsLigarRamo).
+ * ===================================================================== */
+let qsRamosCtx = null;
+function qsUiLigarRamosAbrir(chave) {
+  const dlg = $("dlgQsRamos");
+  if (!dlg || !chave) return null;
+  const ramos = qsUiRamosDoTopico(chave);
+  const qs = qsFiltrar({ chave, ramo: "_sem" });
+  qsRamosCtx = { chave, ramos, recibo: null, linhas: qs.map((q) => {
+    const s = typeof ramSugerirRamoDaQuestao === "function" ? ramSugerirRamoDaQuestao(q, ramos) : null;
+    return { q, escolha: s ? s.id : "", sugerido: s ? s.id : "" };
+  }) };
+  $("qsRamosTit").textContent = t("qs_ramos_tit", { tp: (qs[0] && qs[0].topico) || chave });
+  $("qsRamosMsg").textContent = "";
+  $("btnQsRamosDesfazer").hidden = true;
+  qsUiLigarRamosPintar();
+  abrirModal("dlgQsRamos");
+  return dlg;
+}
+function qsUiLigarRamosPintar() {
+  const bx = $("qsRamosLista");
+  bx.innerHTML = "";
+  const c = qsRamosCtx;
+  if (!c.linhas.length) {
+    const p = document.createElement("p"); p.className = "nota"; p.textContent = t("qs_ramos_vazio"); bx.append(p);
+  }
+  c.linhas.forEach((ln) => {
+    const lin = document.createElement("div");
+    lin.className = "qs-ramos-lin";
+    const en = document.createElement("div");
+    en.className = "qs-ramos-en";
+    en.textContent = String(ln.q.enunciado || "").slice(0, 180);
+    en.title = String(ln.q.enunciado || "");
+    const sel = document.createElement("select");
+    [["", t("qs_ramo_nenhum")]].concat(c.ramos.map((r) => [r.id, r.nome])).forEach(([v, rot]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = rot; sel.append(o);
+    });
+    sel.value = ln.escolha;
+    const tag = document.createElement("span");
+    tag.className = "qs-ramos-sug";
+    const pinta = () => { tag.textContent = ln.sugerido && ln.escolha === ln.sugerido ? t("qs_ramos_sugerido") : ""; };
+    sel.onchange = () => { ln.escolha = sel.value; pinta(); qsUiLigarRamosBotao(); };
+    pinta();
+    lin.append(en, sel, tag);
+    bx.append(lin);
+  });
+  qsUiLigarRamosBotao();
+}
+function qsUiLigarRamosBotao() {
+  const n = qsRamosCtx.linhas.filter((l) => l.escolha).length;
+  $("btnQsRamosAplicar").textContent = t("qs_ramos_aplicar", { n });
+  $("btnQsRamosAplicar").disabled = !n;
+}
+function qsUiLigarRamosAplicar() {
+  const c = qsRamosCtx;
+  if (!c) return 0;
+  const porRamo = {};
+  c.linhas.filter((l) => l.escolha).forEach((l) => { (porRamo[l.escolha] = porRamo[l.escolha] || []).push(l.q.id); });
+  let recibo = [];
+  Object.keys(porRamo).forEach((id) => {
+    const r = c.ramos.find((x) => x.id === id);
+    recibo = recibo.concat(qsLigarRamo(porRamo[id], id, r ? r.nome : ""));
+  });
+  c.recibo = recibo;
+  c.linhas = c.linhas.filter((l) => !l.escolha);
+  $("qsRamosMsg").textContent = t("qs_ramos_feito", { n: recibo.length });
+  $("btnQsRamosDesfazer").hidden = !recibo.length;
+  try { reg("QUESTOES", "questões ligadas aos ramos", recibo.length + " · " + c.chave); } catch (e) {}
+  qsUiLigarRamosPintar();
+  qsUiRender();
+  return recibo.length;
+}
+function qsUiLigarRamosDesfazer() {
+  const c = qsRamosCtx;
+  if (!c || !c.recibo) return 0;
+  const n = qsDesfazerRamo(c.recibo);
+  c.recibo = null;
+  $("qsRamosMsg").textContent = t("qs_ramos_desfeito");
+  $("btnQsRamosDesfazer").hidden = true;
+  qsUiLigarRamosAbrir(c.chave);
+  $("qsRamosMsg").textContent = t("qs_ramos_desfeito");
+  qsUiRender();
+  return n;
+}
+
 function qsUiLerFiltros() {
+  const ramoSel = $("qsFRamo") && !$("qsFRamo").hidden ? $("qsFRamo").value || "" : "";
   qsUiFiltro = {
+    ramo: ramoSel,
     edital: ($("qsFEdital") || {}).value || "",
     chave: ($("qsFTopico") || {}).value || "",
     disciplina: ($("qsFDisc") || {}).value || "",
@@ -3021,7 +3182,11 @@ function qsUiIniciar() {
       qsUiHistRender();
     };
   }
-  ["qsFEdital", "qsFTopico", "qsFDisc", "qsFBanca", "qsFTipo",
+  if ($("btnQsLigarRamos")) $("btnQsLigarRamos").onclick = () => qsUiLigarRamosAbrir(qsUiFiltro.chave);
+  if ($("btnQsRamosAplicar")) $("btnQsRamosAplicar").onclick = () => qsUiLigarRamosAplicar();
+  if ($("btnQsRamosDesfazer")) $("btnQsRamosDesfazer").onclick = () => qsUiLigarRamosDesfazer();
+  if ($("btnQsRamosFechar")) $("btnQsRamosFechar").onclick = () => $("dlgQsRamos").close();
+  ["qsFEdital", "qsFTopico", "qsFRamo", "qsFDisc", "qsFBanca", "qsFTipo",
    "qsFIneditas", "qsFErradas"].forEach((id) => {
     if ($(id)) $(id).onchange = () => qsUiLerFiltros();
   });
