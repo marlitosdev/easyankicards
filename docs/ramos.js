@@ -323,6 +323,8 @@ function ramTextoDaLei(ctx) {
     const l = leiDe(ctx.leiId);
     if (l) return String(l.texto || "");
   }
+  /* no editor (há lista de candidatas), "nenhuma" é nenhuma mesmo: nada de cair, calado, na lei do tópico */
+  if (Array.isArray(ctx.leiCands) && !ctx.leiId) return "";
   return typeof leiTextoDoTopico === "function" ? String(leiTextoDoTopico(ctx.chave) || "") : "";
 }
 
@@ -390,10 +392,11 @@ function ramLeiResumo(texto) {
 }
 
 const RAM_MAX_IA = 30;
-function ramPedidoIA(ctx, atuais) {
+/* opc.semIndice: o pedido sai sem o índice da lei (a lei é opcional para a IA; nunca a impede de responder) */
+function ramPedidoIA(ctx, atuais, opc) {
   const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ctx.editalId) || {};
   let indice = "";
-  try {
+  if (!(opc && opc.semIndice)) try {
     const s = ramSugerirDaLei(ramTextoDaLei(ctx));
     if (s.ramos.length) indice = t("ram_prompt_indice") + "\n" + s.ramos.map((r) => "- " + r.nome + (r.nota ? " (" + r.nota + ")" : "")).join("\n") + "\n";
   } catch (e) {}
@@ -408,7 +411,15 @@ function ramPedidoIA(ctx, atuais) {
 
 /* lê a resposta da IA: só entram linhas com marcador ("++", "-", "*", "•" ou "1."); o resto (conversa) é ignorado.
  * Devolve { ramos:[{nome, peso, nota}], ignoradas, avisos:[tipo…] } — o "lerEdital" faz a leitura de nome/peso/nota. */
+/* frases que só existem no PEDIDO (PT e EN): colado no lugar da resposta, as regras viravam ramos ("Responda SOMENTE…") */
+const RAM_PEDIDO_ASSINATURAS = ["Responda SOMENTE com linhas no formato", "em RAMOS de estudo", "Índice da lei do tópico (use como guia",
+  "Answer ONLY with lines in the format", "into study BRANCHES", "Law index for the topic (use it as a guide"];
+function ramEhPedido(texto) {
+  const s = String(texto || "");
+  return RAM_PEDIDO_ASSINATURAS.some((a) => s.indexOf(a) >= 0);
+}
 function ramLerRespostaIA(texto) {
+  if (ramEhPedido(texto)) return { ramos: [], ignoradas: 0, avisos: [], cortou: 0, ehPedido: true };
   const brutas = String(texto || "").split(/\r?\n/);
   const linhas = [];
   let ignoradas = 0;
@@ -669,6 +680,7 @@ function ramAbrirEditor(ctx) {
   $("ramTit").textContent = t("ram_titulo", { t: ctx.topico });
   $("ramMsg").textContent = "";
   $("ramIaBox").hidden = true; $("ramColar").value = "";
+  if ($("ramPedidoTxt")) { $("ramPedidoTxt").hidden = true; $("ramPedidoTxt").value = ""; }
   ramPintar();
   ramLeiPintar();
   abrirModal("dlgRamos");
@@ -693,7 +705,8 @@ function ramLeiPintar() {
   const sel = $("ramLeiSel");
   if (sel) {
     sel.innerHTML = "";
-    if (!ramCtx.leiId) { const o0 = document.createElement("option"); o0.value = ""; o0.textContent = t("ram_lei_nenhuma"); sel.append(o0); }
+    /* "nenhuma" está sempre na lista: a lei é opcional, dá para desistir dela */
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = t("ram_lei_nenhuma"); sel.append(o0);
     cands.forEach((c) => {
       const o = document.createElement("option");
       o.value = c.id;
@@ -801,11 +814,21 @@ function ramPesosDosRegistros() {
 /* copia o pedido para a IA e abre a caixa onde se cola a resposta */
 async function ramPedirIA() {
   if (!ramCtx) return null;
-  if (ramLeiBloqueada()) { $("ramMsg").textContent = t("ram_lei_bloqueada"); return null; }
-  const pedido = ramPedidoIA(ramCtx, ramLinhas.map((l) => String(l.nome || "").trim()).filter(Boolean));
+  /* a lei que não bate com o tópico não trava a IA: o pedido sai sem o índice dela */
+  const semIndice = ramLeiBloqueada();
+  const pedido = ramPedidoIA(ramCtx, ramLinhas.map((l) => String(l.nome || "").trim()).filter(Boolean), { semIndice });
   $("ramIaBox").hidden = false;
-  try { await navigator.clipboard.writeText(pedido); $("ramMsg").textContent = t("ram_ia_copiado"); }
-  catch (e) { $("ramMsg").textContent = t("ram_ia_copie_manual"); $("ramColar").value = pedido; }
+  /* o pedido fica à vista numa caixa SÓ DE LEITURA — nunca na caixa da resposta (lá ele virava ramos falsos) */
+  const ver = $("ramPedidoTxt");
+  if (ver) { ver.value = pedido; }
+  try {
+    await navigator.clipboard.writeText(pedido);
+    $("ramMsg").textContent = t(semIndice ? "ram_ia_copiado_sem_indice" : "ram_ia_copiado");
+    if (ver) ver.hidden = true;
+  } catch (e) {
+    $("ramMsg").textContent = t("ram_ia_copie_manual");
+    if (ver) ver.hidden = false;
+  }
   return pedido;
 }
 
@@ -813,6 +836,7 @@ async function ramPedirIA() {
 function ramConferirIA() {
   if (!ramCtx) return null;
   const r = ramLerRespostaIA($("ramColar").value);
+  if (r.ehPedido) { $("ramMsg").textContent = t("ram_ia_eh_pedido"); return r; }
   if (!r.ramos.length) { $("ramMsg").textContent = t("ram_ia_nada"); return r; }
   const tem = new Set(ramLinhas.map((l) => edRamoId(l.nome)));
   let novos = 0, ja = 0;
