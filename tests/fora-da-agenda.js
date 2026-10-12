@@ -399,7 +399,7 @@ async function testes() {
     andaV(liVazio);
     ok(btsVazio.some((b) => /come\u00e7ar|estudar/i.test(b)),
        "F8b topico vazio ficou sem convite para comecar: " + JSON.stringify(btsVazio));
-    ok(botoes.indexOf("\u22ee") >= 0, "F8c falta o menu ⋮");
+    ok(botoes.some((b) => /materiais/.test(b)) && botoes.indexOf("\u22ee") < 0, "F8c a linha tem '📚 materiais' (no lugar do ⋮): " + JSON.stringify(botoes));
     ok(!botoes.some((b) => b === "\ud83d\udcc4" || b === "\ud83c\udccf" || b === "\u2696"),
        "F8d os icones enigmaticos voltaram para a linha: " + JSON.stringify(botoes));
 
@@ -430,40 +430,30 @@ async function testes() {
     ok(chipCart && typeof chipCart.onclick === "function",
        "F8e2 a etiqueta de cartoes nao leva a lugar nenhum");
 
-    /* e o menu leva aos mesmos lugares, por extenso */
-    let mais = null;
+    /* T1: "📚 materiais" abre a FICHA do tópico — tudo num lugar só: o que existe abre, o que falta oferece criar */
+    let mat = null;
     const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-mais/.test(f.className || "") && !mais) mais = f;
+      if (/ed-materiais/.test(f.className || "") && !mat) mat = f;
       anda3(f);
     });
     anda3(li);
-    if (mais) mais.onclick({ stopPropagation() {} });
-    const itens = [];
-    const anda4 = (x) => Array.from(x.children || []).forEach((f) => {
-      /* o "dividir em ramos" e' sempre oferecido: nao e' um material que falte */
-      if (/ed-menu-item/.test(f.className || "") && !/ed-menu-ramos/.test(f.className)) itens.push(f.textContent);
-      anda4(f);
-    });
-    anda4(li);
-    /* SO O QUE FALTA. O topico tem resumo e cartoes, entao o menu
-     * oferece questoes, lei seca e jurisprudencia — e nada mais.
-     *
-     * O NUMERO NAO E' FIXO: ele e' "os materiais que existem menos os
-     * que este topico ja tem". Cravar 2 fez este teste falhar quando a
-     * jurisprudencia entrou como quinto material, cobrando um numero
-     * em vez da regra. */
-    ok(itens.length === 3,
-       `F8h o menu devia oferecer so o que falta (3), oferece ${itens.length}: `
-       + JSON.stringify(itens));
-    ok(!itens.some((x) => /resumo|cart/i.test(x)),
-       "F8h2 o menu repete o que ja esta na linha: " + JSON.stringify(itens));
-    ok(itens.every((x) => /criar|escrever|guardar/i.test(x)),
-       "F8h3 o menu devia so oferecer criar o que falta: " + JSON.stringify(itens));
-    ok(itens.every((x) => /[a-z]{4}/i.test(x)),
-       "F8i ha item de menu sem palavra: " + JSON.stringify(itens));
+    ok(mat && /materiais/.test(mat.textContent) && !Array.from(li.children).some((f) => /(^| )ed-mais( |$)/.test(f.className || "")),
+       "F8h a linha tem '📚 materiais' (e nao mais o '⋮' que escondia o que falta)");
+    api.$("dlgMatFicha").open = false;
+    if (mat) mat.onclick({ stopPropagation() {} });
+    const itensF = [];
+    const anda4 = (x) => Array.from(x.children || []).forEach((f) => { if (/(^| )mat-ficha-item( |$)/.test(f.className || "")) itensF.push(f); anda4(f); });
+    anda4(api.$("matFichaLista"));
+    const faltam = itensF.filter((x) => /(^| )falta( |$)/.test(x.className));
+    ok(api.$("dlgMatFicha").open === true && itensF.length === 5, "F8h2 a ficha abre com os cinco materiais: " + itensF.length);
+    /* O topico tem resumo e cartoes: faltam questoes, lei seca e jurisprudencia — e cada um oferece criar */
+    ok(faltam.length === 3 && faltam.every((x) => /questoes|lei|juris/.test(x.className)),
+       "F8h3 o que falta aparece marcado (questoes, lei, julgados): " + faltam.map((x) => x.className).join(" | "));
+    ok(faltam.every((x) => /criar|carregar|guardar|escrever/i.test(x.textContent)), "F8i o que falta oferece a acao de criar, por extenso");
+    api.$("dlgMatFicha").close();
   }
 
-  /* ---- F9: o card da disciplina responde "e agora?" ---- */
+    /* ---- F9: o card da disciplina responde "e agora?" ---- */
   {
     const { api } = rodar();
     api.matIniciar(); api.edIniciar();
@@ -519,43 +509,31 @@ async function testes() {
     ok(/min-width\s*:\s*[1-9]/.test(meio),
        "F10b .ed-item-meio nao tem largura minima — o bloco do nome "
        + "encolhe ate uma palavra por linha: " + meio);
-    const menu = regra(".ed-menu");
-    ok(/flex-basis\s*:\s*100%|width\s*:\s*100%/.test(menu),
-       "F10c o menu nao ocupa a linha inteira");
   }
 
-  /* ---- F11: um menu aberto por vez ---- */
+  /* ---- F11: cada linha abre a ficha do SEU tópico (uma janela, não uma pilha de menus) ---- */
   {
     const { api } = rodar();
     api.matIniciar(); api.edIniciar();
     const linhas = ["Um", "Dois"].map((nome) => api.edLinhaAgendaTeste({
       disciplina: "D", nome, chave: api.matChave("D", nome), minutos: 60 }));
-    const raiz = api.$("edAgendaTopo");
-    raiz.innerHTML = "";
-    linhas.forEach((li) => raiz.append(li));
-
-    const maisDe = (li) => {
+    const matDe = (li) => {
       let r = null;
       const anda = (x) => Array.from(x.children || []).forEach((f) => {
-        if (/ed-mais/.test(f.className || "") && !r) r = f;
+        if (/ed-materiais/.test(f.className || "") && !r) r = f;
         anda(f);
       });
       anda(li); return r;
     };
-    const abertos = () => linhas.filter((li) => {
-      const m = li.querySelector(".ed-menu");
-      return m && m.hidden !== true;
-    }).length;
-
-    maisDe(linhas[0]).onclick({ stopPropagation() {} });
-    ok(abertos() === 1, "F11 o primeiro menu nao abriu");
-    maisDe(linhas[1]).onclick({ stopPropagation() {} });
-    ok(abertos() === 1,
-       `F11b abrir o segundo deixou ${abertos()} menus abertos — com dez `
-       + "linhas na semana a agenda vira uma pilha de menus");
+    matDe(linhas[0]).onclick({ stopPropagation() {} });
+    ok(api.$("dlgMatFicha").open === true && api.$("matFichaTit").textContent === "Um", "F11 a primeira linha abre a ficha de 'Um'");
+    matDe(linhas[1]).onclick({ stopPropagation() {} });
+    ok(api.$("matFichaTit").textContent === "Dois" && !linhas.some((li) => li.querySelector(".ed-menu")),
+       "F11b a segunda abre a de 'Dois' na mesma janela, e nenhum menu fica pendurado na linha");
+    api.$("dlgMatFicha").close();
   }
 
-  /* ---- F12: o painel dos buracos nao confunde os dois numeros ----
+    /* ---- F12: o painel dos buracos nao confunde os dois numeros ----
    * Saia so "{l}% da prova", e {l} e a LACUNA. Ao lado do nome da
    * disciplina isso se le como "esta disciplina vale 13%", e a pessoa
    * conclui que o app esta dizendo que ela e a materia mais importante

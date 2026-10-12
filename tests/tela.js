@@ -883,12 +883,14 @@ async function testes() {
      * segunda verificação mudou de "existe um apagado" para "a linha sem
      * material não tem etiqueta nenhuma". */
     ok(docs.length >= 1, "W2 nenhum tópico mostra que tem resumo");
-    ok(docs.every((d) => /tem/.test(d.className || "")),
-       "W3 há etiqueta de resumo apagada — etiqueta só existe quando há material");
+    /* T1: o RESUMO aparece em TODA linha — "resumo" quando existe, "+ resumo" (tracejado) quando falta: criar não pode
+     * morar escondido no fim da linha */
+    ok(docs.every((d) => /(^| )tem( |$)/.test(d.className || "") ? !/ed-st-falta/.test(d.className) : (/ed-st-falta/.test(d.className) && /\+ resumo/.test(d.textContent))),
+       "W3 a etiqueta do resumo diz se tem (resumo) ou se falta (+ resumo)");
     const linhasW = achaW(api.$("edAgendaTopo"), "ed-item")
       .concat(achaW(api.$("edPainel"), "ed-item"));
-    ok(linhasW.length > docs.length,
-       "W3b toda linha ganhou etiqueta de resumo, inclusive quem não tem");
+    ok(linhasW.length === docs.length && docs.some((d) => /ed-st-falta/.test(d.className)),
+       "W3b toda linha tem a etiqueta do resumo, inclusive quem ainda não tem (como '+ resumo')");
     /* W5 — PARA QUAL CONCURSO. Sem esta marca, o dia em que existirem dois
      * planos os históricos se misturam, e informação que não foi gravada na
      * hora não se recupera depois. */
@@ -1084,8 +1086,8 @@ async function testes() {
       .concat(achaAA(api.$("edPainel"), cls));
     const docsAA = achaAg("ed-st-doc");
     ok(docsAA.length >= 1, "AA1 o indicador de material não apareceu na agenda");
-    ok(docsAA.every((d) => /\btem\b/.test(d.className || "")),
-       "AA1b apareceu etiqueta de material para quem não tem material");
+    ok(docsAA.every((d) => /\btem\b/.test(d.className || "") || (/ed-st-falta/.test(d.className) && /\+ resumo/.test(d.textContent))),
+       "AA1b a etiqueta do resumo de quem não tem material diz '+ resumo' (e não finge que tem)");
 
     /* AA2 — e distingue "tem resumo" de "tem cartões guardados" */
     api.matGravarCartoes(api.matChave("Orcamentario", "Vedacao AA"),

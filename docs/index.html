@@ -2377,6 +2377,12 @@ p.mat-ferr{display:block;font-size:12px}
 .mat-ficha-item.slot-cartoes{border-left-color:var(--info)}
 .mat-ficha-item.slot-lei{border-left-color:#10b981}
 .mat-ficha-item.slot-juris{border-left-color:#f59e0b}
+.mat-ficha-item.slot-questoes{border-left-color:#a78bfa}
+.mat-slot.slot-questoes{color:#a78bfa;border-color:#a78bfa}
+.mat-ficha-escopo{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.btn-min.mat-ficha-esc[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+.mat-ficha-rodape{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;padding-top:8px;border-top:1px solid var(--borda)}
+.ed-st-item.ed-st-falta{border-style:dashed;opacity:.8}
 .mat-ficha-item.falta{border-style:dashed;opacity:.85}
 .mat-ficha-ico{font-size:20px;width:26px;text-align:center;flex:none}
 .mat-ficha-txt{flex:1;min-width:0}
@@ -5064,11 +5070,7 @@ dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);he
   padding-top:7px;border-top:1px solid var(--borda)}
 .ed-estudar{font-weight:700}
 .ed-estudar.tem{border-color:var(--acao);color:var(--info)}
-.ed-mais{padding:4px 9px;font-weight:800;line-height:1}
-.ed-menu{display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%;width:100%;
-  margin-top:6px;padding-top:6px;border-top:1px dashed var(--borda);
-  order:99}
-.ed-menu-item.tem{border-color:var(--acao);color:var(--info)}
+.ed-materiais{padding:4px 9px;white-space:nowrap}
 .ed-card-prox{display:block;width:100%;text-align:left;margin-top:7px;
   font-size:12px;font-weight:600;color:var(--info);background:transparent;
   border:1px solid var(--borda);border-radius:8px;padding:7px 9px;cursor:pointer}
@@ -5151,7 +5153,6 @@ button.ed-st-item{cursor:pointer}
 .ed-ramos-mais{padding:1px 8px;font-size:10.5px}
 button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-st-1{font-weight:800;background:rgba(47,107,220,.14)}
-.ed-menu-vazio{font-size:11px;color:var(--sutil);padding:2px 0}
 .qm-julgue{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
   color:var(--sutil);margin-bottom:4px}
 .qm-gab{font-size:11.5px;font-weight:700;margin-top:7px;color:var(--info)}
@@ -5904,7 +5905,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgMatFicha" class="ui-modal">
   <h3 id="matFichaTit"></h3>
   <p class="nota" id="matFichaSub"></p>
+  <!-- T1: o mesmo caminho para o tópico inteiro e para cada ramo -->
+  <div id="matFichaEscopo" class="mat-ficha-escopo" role="group" data-i18n-title="mat_ficha_esc_rot" hidden></div>
   <div id="matFichaLista" class="mat-ficha-lista"></div>
+  <div id="matFichaRodape" class="mat-ficha-rodape" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMatFichaFechar" data-i18n="help_close"></button>
   </div>

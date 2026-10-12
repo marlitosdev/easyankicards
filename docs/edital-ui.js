@@ -136,7 +136,7 @@ function edRamosNaLinha(i) {
         + " — " + t("ram_materiais_ajuda");
       /* clicar no chip abre cartões/questões/jurisprudência DESTE ramo — a mesma sistemática de "Horas por
        * assunto" (edLigarMenuDoRamo), sem precisar de outro botão espremido na linha. */
-      if (typeof edLigarMenuDoRamo === "function") edLigarMenuDoRamo(c, cx, i.disciplina, i.nome, r);
+      if (typeof edLigarMenuDoRamo === "function") edLigarMenuDoRamo(c, cx, i.disciplina, i.nome, r, null, { ramos: i.ramos, item: i, editalId: i.edital || (typeof editalAtual !== "undefined" ? editalAtual : "") });
       chips.append(c);
     });
     if (rs.length > ED_RAMOS_LIM) {
@@ -530,15 +530,25 @@ function edRecursosDoTopico(disciplina, nome) {
   return { ch, doc, crt, lei, jur, qst, temTxt, nCards, nQ, temLei, nJur };
 }
 
+/* T1 — a ficha do tópico (material.js) aberta da Agenda ou de "Horas por assunto"; opc = { ramo, ramos, item, editalId } */
+function edAbrirFicha(disciplina, nome, opc) {
+  if (typeof matAbrirFicha !== "function") return null;
+  if ($("dlgHoras") && $("dlgHoras").open) $("dlgHoras").close();
+  const ch = (typeof matChaveViva === "function") ? matChaveViva(disciplina, nome) : matChave(disciplina, nome);
+  const reg = (typeof matObter === "function" && matObter(ch)) || {};
+  return matAbrirFicha(Object.assign({}, reg, { chave: ch, disciplina, topico: nome }), opc || {});
+}
+
 /* Monta, a partir do que `edRecursosDoTopico` achou, a etiqueta de status (o que EXISTE, clicável), o "⋮" com o
  * que FALTA (e o editor de ramos, quando a tela o tiver) e o botão único "Estudar" para quando não há nada ainda.
  * `container` é a linha/cartão onde o menu "⋮" será anexado (e que fecha os outros menus da mesma lista). */
-function edMontarStatusEMenu(container, disciplina, nome, ramos, editalId, r) {
+function edMontarStatusEMenu(container, disciplina, nome, ramos, editalId, r, item) {
   const status = document.createElement("div");
   status.className = "ed-status";
+  /* o RESUMO aparece sempre: "resumo" quando existe, "+ resumo" quando falta (criar não pode morar escondido no fim da linha) */
   const atalhos = [
-    { tem: r.temTxt, cls: "ed-st-doc", rot: t("ed_st_resumo"),
-      dica: t("ed_menu_resumo"), alvo: r.doc },
+    { tem: true, cls: "ed-st-doc" + (r.temTxt ? "" : " ed-st-falta"), rot: t(r.temTxt ? "ed_st_resumo" : "ed_st_resumo_novo"),
+      dica: t(r.temTxt ? "ed_menu_resumo" : "ed_menu_resumo_novo"), alvo: r.doc },
     { tem: r.nCards, cls: "ed-st-crt",
       rot: r.nCards === 1 ? t("ed_st_cartao") : t("ed_st_cartoes", { n: r.nCards }),
       dica: r.nCards === 1 ? t("ed_menu_cartoes_1") : t("ed_menu_cartoes_n", { n: r.nCards }),
@@ -556,7 +566,7 @@ function edMontarStatusEMenu(container, disciplina, nome, ramos, editalId, r) {
   atalhos.filter((x) => x.tem).forEach((x, k) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "ed-st-item tem " + x.cls + (k === 0 ? " ed-st-1" : "");
+    b.className = "ed-st-item" + (/ed-st-falta/.test(x.cls) ? " " : " tem ") + x.cls + (k === 0 ? " ed-st-1" : "");
     b.textContent = x.rot;
     b.title = x.dica;
     b.onclick = (ev) => { if (ev) ev.stopPropagation(); x.alvo.onclick(ev); };
@@ -579,125 +589,27 @@ function edMontarStatusEMenu(container, disciplina, nome, ramos, editalId, r) {
 
   const mais = document.createElement("button");
   mais.type = "button";
-  mais.className = "btn-min ed-mais";
-  mais.textContent = "⋮";
-  mais.title = t("ed_mais_ajuda");
+  mais.className = "btn-min ed-materiais";
+  mais.textContent = t("ed_materiais_btn");
+  mais.title = t("ed_materiais_tip");
   mais.onclick = (ev) => {
     if (ev) ev.stopPropagation();
-    edFecharMenus(container);
-    const antigo = container.querySelector(".ed-menu");
-    if (antigo) { antigo.hidden = !antigo.hidden; return; }
-    const menu = document.createElement("div");
-    menu.className = "ed-menu";
-    const faltando = [
-      r.temTxt ? null : [r.doc, t("ed_menu_resumo_novo")],
-      r.nCards ? null : [r.crt, t("ed_menu_cartoes")],
-      r.nQ ? null : [r.qst, t("ed_menu_questoes")],
-      r.temLei ? null : [r.lei, t("ed_menu_lei_nova")],
-      r.nJur ? null : [r.jur, t("ed_menu_juris_nova")],
-    ].filter(Boolean);
-    if (!faltando.length) {
-      const vz = document.createElement("span");
-      vz.className = "ed-menu-vazio";
-      vz.textContent = t("ed_menu_completo");
-      menu.append(vz);
-    }
-    faltando.forEach(([b, rot]) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "btn-min ed-menu-item" + (/ tem/.test(" " + (b.className || "")) ? " tem" : "");
-      item.textContent = rot;
-      item.title = b.title;
-      item.onclick = (e2) => { e2.stopPropagation(); menu.hidden = true; b.onclick(e2); };
-      menu.append(item);
-    });
-    if (typeof ramAbrirEditor === "function") {
-      const rb = document.createElement("button");
-      rb.type = "button";
-      rb.className = "btn-min ed-menu-item ed-menu-ramos" + (ramos && ramos.length ? " tem" : "");
-      rb.textContent = t(ramos && ramos.length ? "ram_menu_ajustar" : "ram_menu_criar");
-      rb.title = t("ram_tip_menu");
-      rb.onclick = (e2) => {
-        e2.stopPropagation(); menu.hidden = true;
-        ramAbrirEditor({ editalId: editalId || "", disciplina, topico: nome, chave: r.ch });
-      };
-      menu.append(rb);
-    }
-    container.append(menu);
+    edAbrirFicha(disciplina, nome, { ramos: ramos || [], item, editalId: editalId || "" });
   };
 
   return { status, estudar, mais };
 }
 
-/* FASE 3 — os materiais de um RAMO específico, a partir do chip de ramo (Agenda da semana) ou da linha do ramo
- * (Horas por assunto). Cartões já têm vínculo real por ramo (etiqueta ram_, ramMaterialDoTopico); questões e
- * jurisprudência ainda não — por isso perguntam antes de abrir/criar as do tópico inteiro, em vez de fingir que
- * sabem separar. Liga o clique em `trigger` (o próprio chip, ou um botão) e ancora o popover em `container`
- * (o pai onde o menu deve nascer, para o "⋮ do tópico" e o "⋮ do ramo" não brigarem pelo mesmo `.ed-menu`). */
-function edLigarMenuDoRamo(trigger, container, disciplina, topico, ramo, ch) {
+/* T1 — A FICHA DE UM RAMO abre a FICHA DO TÓPICO já nesse ramo (Agenda da semana e "Horas por assunto"). Antes abria um
+ * menu escondido, sem título e com a cara da fileira do tópico logo abaixo — ninguém sabia de quem eram aqueles botões, e o
+ * resumo nem estava lá. extra = { ramos, item, editalId }. */
+function edLigarMenuDoRamo(trigger, container, disciplina, topico, ramo, ch, extra) {
+  const ex = extra || {};
   trigger.classList.add("ed-ramo-clic");
-  if (!trigger.title) trigger.title = t("ram_materiais_ajuda");
+  if (!trigger.title) trigger.title = t("ram_materiais_ajuda", { r: ramo.nome });
   trigger.onclick = (ev) => {
     if (ev) ev.stopPropagation();
-    edFecharMenus(container);
-    const antigo = container.querySelector(".ed-menu");
-    if (antigo) { antigo.hidden = !antigo.hidden; return; }
-    const chave = ch || ((typeof matChaveViva === "function") ? matChaveViva(disciplina, topico) : matChave(disciplina, topico));
-    const mat = (typeof ramMaterialDoTopico === "function") ? (ramMaterialDoTopico(chave, [ramo])[ramo.id] || {}) : {};
-    const nCards = mat.cartoes || 0;
-    const menu = document.createElement("div");
-    menu.className = "ed-menu";
-
-    const fecharHoras = () => { if ($("dlgHoras") && $("dlgHoras").open) $("dlgHoras").close(); };
-
-    const crt = document.createElement("button");
-    crt.type = "button";
-    crt.className = "btn-min ed-menu-item" + (nCards ? " tem" : "");
-    crt.textContent = nCards === 1 ? t("ed_st_cartao") : nCards ? t("ed_st_cartoes", { n: nCards }) : t("ed_menu_cartoes");
-    crt.title = t(nCards ? "ed_crt_ver" : "ed_crt_novo", { n: topico, c: nCards });
-    crt.onclick = (e2) => {
-      e2.stopPropagation(); menu.hidden = true;
-      fecharHoras();
-      try {
-        if (nCards) { estcEstudarTopico(disciplina, topico); return; }
-        bancAlvoDefinir(disciplina, topico);
-      } catch (e) {}
-    };
-    menu.append(crt);
-
-    const pergunta = (tipo, n1Key, nKey, verKey, novoKey, novoLabelKey, confirmaKey, abrirFn) => {
-      const nn = mat[tipo] || 0;
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "btn-min ed-menu-item" + (nn ? " tem" : "");
-      item.textContent = nn === 1 ? t(n1Key) : nn ? t(nKey, { n: nn }) : t(novoLabelKey);
-      item.title = t(nn ? verKey : novoKey, { n: nn, tp: topico });
-      item.onclick = async (e2) => {
-        e2.stopPropagation(); menu.hidden = true;
-        if (!(await uiConfirm(t(confirmaKey, { t: topico })))) return;
-        fecharHoras();
-        try { abrirFn(disciplina, topico); } catch (e) {}
-      };
-      menu.append(item);
-    };
-    /* Q2 — QUESTÕES DO RAMO, de verdade: a contagem é das ligadas a ele (não o palpite pelas palavras), responder abre
-     * SÓ as dele e criar já as liga a ele. A pergunta "ainda não são separadas por ramo" deixou de existir. */
-    const nQ = typeof qsContarPorRamo === "function" ? (qsContarPorRamo(chave)[ramo.id] || 0) : 0;
-    const qst = document.createElement("button");
-    qst.type = "button";
-    qst.className = "btn-min ed-menu-item" + (nQ ? " tem" : "");
-    qst.textContent = nQ === 1 ? t("ed_st_questao") : nQ ? t("ed_st_questoes", { n: nQ }) : t("ram_qst_criar");
-    qst.title = t(nQ ? "ram_qst_ver_tip" : "ram_qst_criar_tip", { n: nQ, r: ramo.nome, tp: topico });
-    qst.onclick = (e2) => {
-      e2.stopPropagation(); menu.hidden = true;
-      fecharHoras();
-      try { qsUiResponderDireto(disciplina, topico, { id: ramo.id, nome: ramo.nome }); } catch (e) {}
-    };
-    menu.append(qst);
-    pergunta("juris", "ed_st_juris_1", "ed_st_juris", "ed_jur_ver", "ed_jur_novo", "ed_menu_juris_nova", "ram_confirma_jur",
-      (d, n) => jurAbrir(d, n));
-
-    container.append(menu);
+    edAbrirFicha(disciplina, topico, { ramo: ramo.id, ramos: ex.ramos || [ramo], item: ex.item, editalId: ex.editalId });
   };
 }
 
@@ -988,7 +900,7 @@ function edLinhaTopico(i, semDisciplina) {
    * de fato não há chip nenhum e é preciso um convite. */
   const { status, estudar, mais } = edMontarStatusEMenu(
     li, i.disciplina, i.nome, i.ramos,
-    i.edital || (typeof editalAtual !== "undefined" ? editalAtual : ""), r);
+    i.edital || (typeof editalAtual !== "undefined" ? editalAtual : ""), r, i);
   if (i.ramos && i.ramos.length) meio.append(edRamosNaLinha(i));
   if (status.children.length) meio.append(status);
 
@@ -4061,18 +3973,6 @@ function edPintarPainel(r, plano) {
  * O mesmo critério da agenda — maior peso da disciplina × peso do
  * tópico — restrito ao que ainda não foi feito e não está fora da
  * agenda. Se estiver tudo feito, devolve nulo e o card diz isso. */
-/* fecha os menus abertos das OUTRAS linhas */
-function edFecharMenus(menos) {
-  ["edAgendaTopo", "edPainel", "horLista"].forEach((id) => {
-    const raiz = $(id);
-    if (!raiz || !raiz.querySelectorAll) return;
-    (raiz.querySelectorAll(".ed-menu") || []).forEach((m) => {
-      if (menos && menos.querySelector && menos.querySelector(".ed-menu") === m) return;
-      m.hidden = true;
-    });
-  });
-}
-
 function edProximoDa(itens) {
   const livres = (itens || []).filter((i) => !i.feito && !edEstaFora(i.chave));
   if (!livres.length) return null;

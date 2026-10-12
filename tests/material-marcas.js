@@ -973,24 +973,26 @@ async function testes() {
     n1.onclick();
     ok(api.$("dlgMatFicha").open === true && api.$("matFichaTit").textContent === "Completo" && /^ISS › Tributário · atualizado em /.test(api.$("matFichaSub").textContent), "M4b a ficha abre com o tópico e onde ele mora: " + api.$("matFichaSub").textContent);
     const it = itens();
-    ok(it.length === 4 && ["slot-resumo", "slot-cartoes", "slot-lei", "slot-juris"].every((c, i) => cls(it[i]).indexOf(c) >= 0), "M4c quatro materiais, sempre na mesma ordem (resumo, cartões, lei, julgados): " + it.map(cls).join(" | "));
-    ok(!/falta/.test(cls(it[0])) && /17 caracteres/.test(it[0].textContent) && botoes(it[0]).join() === api.t("mat_ficha_ler"), "M4d resumo existente: diz o tamanho e oferece 'Ler'");
+    ok(it.length === 5 && ["slot-resumo", "slot-cartoes", "slot-questoes", "slot-lei", "slot-juris"].every((c, i) => cls(it[i]).indexOf(c) >= 0), "M4c cinco materiais, sempre na mesma ordem (resumo, cartões, questões, lei, julgados): " + it.map(cls).join(" | "));
+    ok(!/falta/.test(cls(it[0])) && /17 caracteres/.test(it[0].textContent) && botoes(it[0]).join() === [api.t("mat_ficha_ler"), api.t("mat_ficha_editar")].join(), "M4d resumo existente: diz o tamanho e oferece 'Ler' e 'Editar'");
+    ok(/falta/.test(cls(it[2])) && botoes(it[2]).join() === api.t("mat_ficha_criar_questoes"), "M4d2 questões que faltam: 'Criar questões'");
     ok(/2 cartão\(ões\)/.test(it[1].textContent) && botoes(it[1]).join() === [api.t("mat_ficha_estudar"), api.t("mat_mexer_cartoes")].join(), "M4e cartões: quantos, 'Estudar' e 'Mexer nos cartões'");
-    ok(/carregada/.test(it[2].textContent) && botoes(it[2]).join() === api.t("mat_ficha_abrir"), "M4f lei seca carregada: 'Abrir'");
-    ok(/falta/.test(cls(it[3])) && /ainda não tem/.test(it[3].textContent) && botoes(it[3]).join() === api.t("mat_ficha_guardar"), "M4g julgados que faltam: tracejado, 'ainda não tem' e 'Guardar o primeiro'");
+    ok(/carregada/.test(it[3].textContent) && botoes(it[3]).join() === api.t("mat_ficha_abrir"), "M4f lei seca carregada: 'Abrir'");
+    ok(/falta/.test(cls(it[4])) && /ainda não tem/.test(it[4].textContent) && botoes(it[4]).join() === api.t("mat_ficha_guardar"), "M4g julgados que faltam: tracejado, 'ainda não tem' e 'Guardar o primeiro'");
+    ok(api.$("matFichaEscopo").hidden === true, "M4g2 tópico sem ramos: sem a escolha de escopo");
     /* cada ação fecha a ficha antes de abrir a sua janela */
-    const bLei = achar(it[2], (e) => e.textContent === api.t("mat_ficha_abrir") && typeof e.onclick === "function")[0];
+    const bLei = achar(it[3], (e) => e.textContent === api.t("mat_ficha_abrir") && typeof e.onclick === "function")[0];
     bLei.onclick();
     ok(api.$("dlgMatFicha").open === false && api.$("dlgLeiSeca").open === true, "M4h 'Abrir' a lei fecha a ficha e abre a lei do tópico");
     api.$("dlgLeiSeca").close();
     /* tópico só com cartões: resumo e lei faltam, com as ações de criar */
     nomeDe("So cartoes").onkeydown({ key: "Enter", preventDefault() {} });
     const i2 = itens();
-    ok(api.$("dlgMatFicha").open === true && /falta/.test(cls(i2[0])) && botoes(i2[0]).join() === api.t("mat_ficha_escrever") && botoes(i2[2]).join() === api.t("mat_ficha_carregar") && /falta/.test(cls(i2[2])) && /ainda não tem/.test(i2[2].textContent), "M4i pelo teclado (Enter) também abre; o que falta oferece 'Escrever' e 'Carregar'");
+    ok(api.$("dlgMatFicha").open === true && /falta/.test(cls(i2[0])) && botoes(i2[0]).join() === api.t("mat_ficha_escrever") && botoes(i2[3]).join() === api.t("mat_ficha_carregar") && /falta/.test(cls(i2[3])) && /ainda não tem/.test(i2[3].textContent), "M4i pelo teclado (Enter) também abre; o que falta oferece 'Escrever' e 'Carregar'");
     const bEsc = achar(i2[0], (e) => e.textContent === api.t("mat_ficha_escrever") && typeof e.onclick === "function")[0];
     api.$("dlgMaterial").open = false;
     bEsc.onclick();
-    ok(api.$("dlgMatFicha").open === false && api.$("dlgMaterial").open === true, "M4j 'Escrever' fecha a ficha e abre o editor do resumo");
+    ok(api.$("dlgMatFicha").open === false && api.$("dlgMaterial").open === true && api.matModoAtual() === "editar", "M4j 'Escrever' fecha a ficha e abre o editor do resumo PARA ESCREVER (antes abria em leitura): " + api.matModoAtual());
     api.$("dlgMaterial").close();
     api.$("btnMatFichaFechar").onclick();
     const inf = api.matInfoTopico({ chave: k1, texto: "abc", leiSeca: true, cartoes: mat[k1].cartoes });

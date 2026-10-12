@@ -697,7 +697,8 @@ function matAbrirEditor(item, comoLer) {
    * Recarregar do registro descartaria, em silêncio, as marcas que ainda
    * não foram salvas — e era o que "abrir onde está" fazia quando o resumo
    * já estava na tela. Aqui basta trazer a janela para a frente. */
-  const alvoChave = matChave(item.disciplina, item.nome);
+  /* a chave que a tela achou (matChaveViva tolera acento e caixa): recalcular com matChave abria vazio um resumo que existe */
+  const alvoChave = item.chave || (typeof matChaveViva === "function" ? matChaveViva(item.disciplina, item.nome) : matChave(item.disciplina, item.nome));
   if (matEditorAberto(alvoChave)) {
     matTrocarModo(comoLer || matModo);
     abrirModal("dlgMaterial");
@@ -706,7 +707,7 @@ function matAbrirEditor(item, comoLer) {
   /* abre limpo: rascunho pendente é do material anterior */
   matSujo = false;
   matSelGuardada = "";
-  matAtual = { chave: matChave(item.disciplina, item.nome),
+  matAtual = { chave: alvoChave,
                disciplina: item.disciplina, topico: item.nome };
   $("matTitulo").textContent = item.nome;
   matPintarSub();
@@ -727,7 +728,9 @@ function matAbrirEditor(item, comoLer) {
   } catch (e) {}
   /* material que já existe abre para LER; material novo abre para escrever.
    * Quem clica num tópico que já tem resumo quer relê-lo, não editá-lo. */
-  matTrocarModo(comoLer ? "ler" : (r ? "ler" : "editar"));
+  /* "existe" = tem TEXTO de resumo: um registro só com cartões abria em leitura, numa página vazia */
+  const temTexto = !!(r && String(r.texto || "").trim());
+  matTrocarModo(comoLer === "editar" ? "editar" : (comoLer ? "ler" : (temTexto ? "ler" : "editar")));
   abrirModal("dlgMaterial");
   if (matModo === "editar") $("matTexto").focus();
 }
@@ -2326,7 +2329,7 @@ function matPintarSugestoes() {
 }
 
 /* o ícone de cada tipo: o MESMO na aba, nas ferramentas e (M3) no botão da linha */
-const MAT_ICONE = { resumo: "📄", cartoes: "🃏", lei: "§", juris: "⚖" };
+const MAT_ICONE = { resumo: "📄", cartoes: "🃏", lei: "§", juris: "⚖", questoes: "❓" };
 /* a aba ativa: "" (Tudo) ou um tipo. matFTipos continua sendo a lista do filtro (o motor aceita mais de um); a tela só
  * escolhe um por vez. */
 function matAbaAtiva() { return matFTipos.length === 1 ? matFTipos[0] : ""; }
@@ -2525,14 +2528,56 @@ function matInfoTopico(x) {
  * reapareceria ao fechar a outra, sem contexto.
  * ===================================================================== */
 let matFichaAtual = null;
-function matAbrirFicha(x) {
+/* T1 — A FICHA É O CAMINHO ÚNICO: a mesma janela para o tópico inteiro e para cada ramo. Quem chega pela Agenda (o botão
+ * "📚 materiais" ou a ficha de um ramo) ou por "Horas por assunto" cai aqui; o escopo (tópico ou um ramo) é escolhido no
+ * topo e as linhas mudam com ele. opc = { ramos, ramo (id), item (do plano, para registrar), editalId }. */
+let matFichaOpc = {};
+let matFichaEscopo = "";
+function matAbrirFicha(x, opc) {
   const dlg = $("dlgMatFicha");
   if (!dlg || !x) return null;
   matFichaAtual = x;
+  matFichaOpc = Object.assign({}, opc || {});
+  if (!matFichaOpc.ramos) {
+    /* aberta pelo Material de estudo: os ramos vêm do edital aberto, quando o tópico está nele */
+    let it = null;
+    try { it = typeof edItemDoPlano === "function" ? edItemDoPlano(x.disciplina, x.topico) : null; } catch (e) { it = null; }
+    matFichaOpc.ramos = (it && it.ramos) || [];
+    if (it && !matFichaOpc.item) matFichaOpc.item = it;
+  }
+  matFichaEscopo = matFichaOpc.ramo && matFichaOpc.ramos.some((r) => r.id === matFichaOpc.ramo) ? matFichaOpc.ramo : "";
+  matPintarFicha();
+  abrirModal("dlgMatFicha");
+  return dlg;
+}
+function matFichaEscolher(id) { matFichaEscopo = id || ""; matPintarFicha(); }
+function matFichaEscopoAtual() { return matFichaEscopo; }
+function matPintarFicha() {
+  const dlg = $("dlgMatFicha");
+  const x = matFichaAtual, o = matFichaOpc || {};
+  if (!dlg || !x) return;
+  const ramos = o.ramos || [];
+  const ramo = matFichaEscopo ? ramos.find((r) => r.id === matFichaEscopo) : null;
   const inf = matInfoTopico(x);
-  $("matFichaTit").textContent = x.topico || x.chave;
+  $("matFichaTit").textContent = (x.topico || x.chave) + (ramo ? " › " + ramo.nome : "");
   $("matFichaSub").textContent = [x.concurso, x.disciplina].filter(Boolean).join(" › ")
     + (x.tocado ? " · " + t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() }) : "");
+  /* o escopo: "Tópico inteiro" e um botão por ramo — o mesmo lugar para os dois */
+  const esc = $("matFichaEscopo");
+  if (esc) {
+    esc.innerHTML = "";
+    esc.hidden = !ramos.length;
+    [{ id: "", nome: t("mat_ficha_topico_todo") }].concat(ramos).forEach((r) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min mat-ficha-esc";
+      b.textContent = r.nome;
+      b.setAttribute("aria-pressed", r.id === matFichaEscopo ? "true" : "false");
+      b.title = r.id ? t("mat_ficha_esc_ramo_tip", { r: r.nome }) : t("mat_ficha_esc_topico_tip");
+      b.onclick = () => matFichaEscolher(r.id);
+      esc.append(b);
+    });
+  }
   const box = $("matFichaLista");
   box.innerHTML = "";
   const fechaE = (fn) => () => { try { dlg.close(); } catch (e) {} fn(); };
@@ -2561,19 +2606,45 @@ function matAbrirFicha(x) {
     box.append(it);
     return it;
   };
-  const ed = { disciplina: x.disciplina, nome: x.topico };
+  const doTopico = (s) => (ramo ? s + " · " + t("mat_ficha_do_topico") : s);
+  const ed = { disciplina: x.disciplina, nome: x.topico, chave: x.chave };
+  /* 📄 resumo — por enquanto um só, o do tópico (o resumo por ramo é a próxima fase) */
   item("resumo", t("mat_slot_resumo"), inf.temR,
-    inf.temR ? t("mat_tamanho", { c: inf.chars }) : t("mat_ficha_falta"),
-    [inf.temR ? botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler"), t("mat_slot_resumo_tip", { tp: x.topico }))
-      : botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar"), t("mat_add_resumo_ajuda", { tp: x.topico }))]);
+    ramo ? t("mat_ficha_resumo_ramo") : (inf.temR ? t("mat_tamanho", { c: inf.chars }) : t("mat_ficha_falta")),
+    inf.temR
+      ? [botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler"), t("mat_slot_resumo_tip", { tp: x.topico })),
+        botao(t("mat_ficha_editar"), "btn-min", () => matAbrirEditor(ed, "editar"), t("mat_ficha_editar_tip", { tp: x.topico }))]
+      : [botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar"), t("mat_add_resumo_ajuda", { tp: x.topico }))]);
+  /* 🃏 cartões — do ramo, pela etiqueta ram_ */
   const mexer = () => { mcApontarTopico(x.disciplina, x.topico); try { matCartoesAbrir(); matCartoesVer(); } catch (e) {} };
-  item("cartoes", t("mat_aba_cartoes"), inf.nCart > 0,
-    inf.nCart ? t("mat_n_cartoes", { n: inf.nCart }) : t("mat_ficha_falta"),
-    inf.nCart ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: inf.nCart, tp: x.topico })),
-      botao(t("mat_mexer_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))]
-      : [botao(t("mat_ficha_criar_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))]);
+  if (ramo) {
+    let nR = 0;
+    try { nR = ((typeof ramMaterialDoTopico === "function" ? ramMaterialDoTopico(x.chave, [ramo]) : {})[ramo.id] || {}).cartoes || 0; } catch (e) { nR = 0; }
+    item("cartoes", t("mat_aba_cartoes"), nR > 0,
+      nR ? t("mat_ficha_cartoes_ramo", { n: nR, t: inf.nCart }) : t("mat_ficha_falta_ramo", { t: inf.nCart }),
+      nR ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: nR, tp: x.topico }))]
+        : [botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico), t("ed_crt_novo", { n: x.topico }))]);
+  } else {
+    item("cartoes", t("mat_aba_cartoes"), inf.nCart > 0,
+      inf.nCart ? t("mat_n_cartoes", { n: inf.nCart }) : t("mat_ficha_falta"),
+      inf.nCart ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: inf.nCart, tp: x.topico })),
+        botao(t("mat_mexer_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))]
+        : [botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico), t("ed_crt_novo", { n: x.topico }))]);
+  }
+  /* ❓ questões — do ramo (ligadas a ele, Q1) ou do tópico inteiro; responder abre só as do escopo, criar já liga ao ramo */
+  let nQ = 0;
+  try {
+    nQ = ramo ? ((typeof qsContarPorRamo === "function" ? qsContarPorRamo(x.chave) : {})[ramo.id] || 0)
+      : (typeof qsContarDoTopico === "function" ? qsContarDoTopico(x.chave) : 0);
+  } catch (e) { nQ = 0; }
+  const abrirQ = () => qsUiResponderDireto(x.disciplina, x.topico, ramo ? { id: ramo.id, nome: ramo.nome } : undefined);
+  item("questoes", t("mat_slot_questoes"), nQ > 0,
+    nQ ? t(ramo ? "mat_ficha_questoes_ramo" : "mat_ficha_questoes", { n: nQ }) : t("mat_ficha_falta"),
+    [nQ ? botao(t("mat_ficha_responder"), "btn-min mat-slot slot-questoes", abrirQ, t("ed_qst_ver", { n: nQ, tp: ramo ? ramo.nome : x.topico }))
+      : botao(t("mat_ficha_criar_questoes"), "btn-min", abrirQ, t(ramo ? "ram_qst_criar_tip" : "ed_qst_novo", { n: 0, r: ramo ? ramo.nome : "", tp: x.topico }))]);
+  /* § lei seca e ⚖ julgados — do tópico (no ramo, a linha diz isso) */
   item("lei", t("mat_slot_lei"), inf.temL,
-    inf.temL ? t("mat_ficha_lei_tem") : t("mat_ficha_falta"),
+    doTopico(inf.temL ? t("mat_ficha_lei_tem") : t("mat_ficha_falta")),
     [inf.temL ? botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-lei", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_ver_ajuda", { tp: x.topico }))
       : botao(t("mat_ficha_carregar"), "btn-min", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_criar_ajuda", { tp: x.topico }))]);
   const jur = inf.nJul
@@ -2584,9 +2655,21 @@ function matAbrirFicha(x) {
     jur.push(bs);
   }
   item("juris", t("mat_aba_juris"), inf.nJul > 0,
-    inf.nJul ? t("mat_slot_juris_n", { n: inf.nJul }) : t("mat_ficha_falta"), jur);
-  abrirModal("dlgMatFicha");
-  return dlg;
+    doTopico(inf.nJul ? t("mat_slot_juris_n", { n: inf.nJul }) : t("mat_ficha_falta")), jur);
+  /* rodapé: registrar o estudo (deste ramo ou do tópico) e ajustar os ramos — o que antes morava no "⋮" */
+  const rod = $("matFichaRodape");
+  if (rod) {
+    rod.innerHTML = "";
+    if (o.item && typeof abrirRegistro === "function") {
+      rod.append(botao(ramo ? t("mat_ficha_registrar_ramo", { r: ramo.nome }) : t("mat_ficha_registrar"), "btn-min mat-ficha-reg",
+        () => abrirRegistro(o.item, ramo ? { ramo: ramo.id } : undefined), t("ed_reg_novo")));
+    }
+    if (o.editalId !== undefined && typeof ramAbrirEditor === "function") {
+      rod.append(botao(t(ramos.length ? "ram_menu_ajustar" : "ram_menu_criar"), "btn-min ed-menu-ramos",
+        () => ramAbrirEditor({ editalId: o.editalId || "", disciplina: x.disciplina, topico: x.topico, chave: x.chave }), t("ram_tip_menu")));
+    }
+    rod.hidden = !rod.children.length;
+  }
 }
 
 function matRender() {
