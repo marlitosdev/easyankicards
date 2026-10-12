@@ -1235,15 +1235,30 @@ function montarPlano(r, opcoes) {
    * com o comportamento de sempre; a tela passa o mapa do módulo de
    * dificuldade, e o teste passa um mapa na mão — o motor não sabe de
    * onde veio nem precisa saber. */
-  const fatores = o.fatores
-    || (o.fatores === null ? {} :
-        (typeof difMapaFatores === "function" ? difMapaFatores(o.hoje) : {}));
+  /* sem fatores passados: a sua avaliação ("Como foi?") e, onde você não disse nada, o seu ACERTO no tópico (S2) */
+  let fatorOrigem = {}, acertoTop = {};
+  let fatores;
+  if (o.fatores) fatores = o.fatores;
+  else if (o.fatores === null) fatores = {};
+  else {
+    acertoTop = o.acertosTopico || (o.acertosTopico === null ? {} : edAcertosPorTopico(
+      (typeof edDiario !== "undefined" && edDiario) || [],
+      (typeof qsBanco !== "undefined" && qsBanco) || []));
+    const comb = edCombinarFatores(typeof difMapaDetalhado === "function" ? difMapaDetalhado(o.hoje) : {}, acertoTop);
+    fatores = comb.fatores;
+    fatorOrigem = comb.origem;
+  }
   /* o mesmo padrão para os acertos: a tela não precisa lembrar de passar,
    * e o teste consegue passar um mapa na mão */
   const acertos = o.acertos || (o.acertos === null ? {} : edAcertos(
     (typeof edDiario !== "undefined" && edDiario) || [],
     (typeof qsBanco !== "undefined" && qsBanco) || []));
   let todos = priorizar(r, fatores, { ramos: true });
+  todos.forEach((i) => {
+    const k = (i.disciplina + "›" + i.nome).toLowerCase();
+    if (fatorOrigem[k]) i.fatorOrigem = fatorOrigem[k];
+    if (acertoTop[k] && acertoTop[k].valido) i.acertoTopico = acertoTop[k];
+  });
   /* NA SEGUNDA FASE, SÓ O QUE CAI NELA — e com o peso DELA.
    *
    * A discursiva não cobra o edital inteiro: cobra um recorte, e um
@@ -1600,7 +1615,8 @@ function edAcertos(diario, banco) {
     return por[d];
   };
   (diario || []).forEach((x) => {
-    if (!x || !x.disc || x.a === "pendente" || !x.q) return;
+    /* q.app: a contagem veio de uma sessão de questões FEITA NO APP — as mesmas questões já estão nas tentativas do banco */
+    if (!x || !x.disc || x.a === "pendente" || !x.q || x.q.app) return;
     const L = pega(x.disc);
     if (x.q.feitas) { L.feitas += x.q.feitas; L.certas += x.q.certas || 0; }
     else if (x.q.pct != null) L.anotados.push(x.q.pct);
@@ -1623,6 +1639,59 @@ function edAcertos(diario, banco) {
     delete L.anotados;
   });
   return por;
+}
+
+/* ------------------------------------------------------------------
+ * QUANTO VOCÊ ACERTA, POR TÓPICO — e o que isso diz ao plano (S2)
+ *
+ * O acerto RECENTE do tópico (as últimas ~40 questões: tentativas no app e registros com contagem; o mais novo primeiro)
+ * vira um sinal com o mesmo efeito do "Como foi?": com 10 questões ou mais, abaixo de 60% = difícil (sobe na fila), de
+ * 85% para cima = fácil (desce). Menos de 10 questões não decide nada — uma tarde ruim não reorganiza a semana. O
+ * registro feito no fim de uma sessão do app (q.app) não conta de novo: as questões já estão nas tentativas.
+ * ------------------------------------------------------------------ */
+const ED_AC_TOP = { min: 10, janela: 40, dificil: 60, facil: 85 };
+function edAcertosPorTopico(diario, banco, opc) {
+  const o = Object.assign({}, ED_AC_TOP, opc || {});
+  const ev = {};
+  const add = (ch, d, f, c) => { if (!ch || !(f > 0)) return; (ev[ch] = ev[ch] || []).push({ d: String(d || ""), f, c: Math.max(0, Math.min(c, f)) }); };
+  (diario || []).forEach((x) => {
+    if (!x || !x.c || x.a === "pendente" || !x.q || x.q.app || !x.q.feitas) return;
+    add(String(x.c).toLowerCase(), x.d, Number(x.q.feitas) || 0, Number(x.q.certas) || 0);
+  });
+  (banco || []).forEach((q) => {
+    if (!q || !q.chave) return;
+    (q.tentativas || []).forEach((tt) => { if (tt && typeof tt.acertou === "boolean") add(String(q.chave).toLowerCase(), tt.q, 1, tt.acertou ? 1 : 0); });
+  });
+  const out = {};
+  Object.keys(ev).forEach((ch) => {
+    const lista = ev[ch].sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+    let feitas = 0, certas = 0;
+    for (const e of lista) { if (feitas >= o.janela) break; feitas += e.f; certas += e.c; }
+    const pct = feitas ? Math.round((certas / feitas) * 100) : null;
+    const valido = feitas >= o.min;
+    out[ch] = { feitas, certas, pct, valido, nivel: !valido ? "" : pct < o.dificil ? "alta" : pct >= o.facil ? "baixa" : "media" };
+  });
+  return out;
+}
+/* QUEM DECIDE O FATOR DE CADA TÓPICO: a sua declaração ("Como foi?", valendo) > o acerto medido (10+ questões) > o palpite
+ * antigo "deduzido da sessão". Devolve o mapa de fatores que o plano usa e, ao lado, de onde veio cada um. */
+function edCombinarFatores(detalhado, acertos, niveis) {
+  const nv = niveis || (typeof DIF_NIVEIS !== "undefined" ? DIF_NIVEIS : []);
+  const fatorDe = (n) => (nv.find((x) => x.id === n) || { fator: 1 }).fator;
+  const fatores = {}, origem = {};
+  Object.keys(detalhado || {}).forEach((k) => {
+    const d = detalhado[k];
+    if (d && d.origem !== "sessao") { fatores[k] = d.fator; origem[k] = "declarada"; }
+  });
+  Object.keys(acertos || {}).forEach((k) => {
+    const a = acertos[k];
+    if (k in origem || !a || !a.valido) return;
+    fatores[k] = fatorDe(a.nivel); origem[k] = "acerto";
+  });
+  Object.keys(detalhado || {}).forEach((k) => {
+    if (!(k in origem)) { fatores[k] = detalhado[k].fator; origem[k] = "sessao"; }
+  });
+  return { fatores, origem };
 }
 
 /* AMOSTRA MÍNIMA PARA CHAMAR ALGUÉM DE RISCO.

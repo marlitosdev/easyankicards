@@ -289,6 +289,114 @@ async function testes() {
        "G8b a ajuda da coluna nao diz o que o fator faz");
   }
 
+  /* ================================================================
+   * S2: O ACERTO NO TÓPICO ENTRA COMO SINAL — com a origem dita na tela
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const RC = "direito financeiro›receita", DP = "direito financeiro›despesa";
+    const tent = (n, certas, dia) => Array.from({ length: n }, (x, k) => ({ q: dia + "T10:" + String(k).padStart(2, "0") + ":00Z", resp: 0, acertou: k < certas }));
+    /* motor puro */
+    const m = api.edAcertosPorTopico(
+      [{ d: "2026-10-01", c: RC, a: "feito", q: { feitas: 6, certas: 2 } },
+       { d: "2026-10-02", c: RC, a: "feito", q: { feitas: 10, certas: 10, app: true } },
+       { d: "2026-10-03", c: RC, a: "pendente", q: { feitas: 10, certas: 10 } },
+       { d: "2026-10-04", c: DP, a: "feito", q: { pct: 90 } }],
+      [{ chave: RC, tentativas: tent(5, 1, "2026-10-05") }, { chave: DP, tentativas: tent(9, 9, "2026-10-05") }]);
+    ok(m[RC].feitas === 11 && m[RC].certas === 3 && m[RC].pct === 27 && m[RC].valido && m[RC].nivel === "alta",
+       "S2a o acerto do topico soma tentativas do app e registros com contagem (sem o 'pendente' e sem o que veio do app, q.app): " + JSON.stringify(m[RC]));
+    ok(m[DP].feitas === 9 && !m[DP].valido && m[DP].nivel === "",
+       "S2b menos de 10 questoes nao decide nada (e o percentual 'de cabeca' nao entra): " + JSON.stringify(m[DP]));
+    const lim = (certas) => api.edAcertosPorTopico([], [{ chave: RC, tentativas: tent(20, certas, "2026-10-05") }])[RC].nivel;
+    ok(lim(11) === "alta" && lim(12) === "media" && lim(16) === "media" && lim(17) === "baixa",
+       "S2c os cortes: abaixo de 60% dificil, de 85% para cima facil (55% / 60% / 80% / 85%): " + [lim(11), lim(12), lim(16), lim(17)]);
+    const jan = api.edAcertosPorTopico([], [{ chave: RC, tentativas: tent(40, 0, "2026-01-01").concat(tent(40, 40, "2026-10-01")) }])[RC];
+    ok(jan.feitas === 40 && jan.pct === 100 && jan.nivel === "baixa", "S2d so' as ~40 questoes mais RECENTES contam (quem melhorou nao fica preso ao comeco): " + JSON.stringify(jan));
+
+    /* quem decide: a sua declaracao > o acerto > o palpite da sessao */
+    const c = api.edCombinarFatores(
+      { [RC]: { nivel: "baixa", fator: 0.7, origem: "declarada" }, [DP]: { nivel: "alta", fator: 1.5, origem: "sessao" }, "x›y": { nivel: "alta", fator: 1.5, origem: "sessao" } },
+      { [RC]: { valido: true, nivel: "alta", pct: 30 }, [DP]: { valido: true, nivel: "media", pct: 70 }, "a›b": { valido: true, nivel: "baixa" }, "c›d": { valido: false, nivel: "" } });
+    ok(c.fatores[RC] === 0.7 && c.origem[RC] === "declarada", "S2e a sua declaracao vence o acerto");
+    ok(c.fatores[DP] === 1 && c.origem[DP] === "acerto", "S2f o acerto (mesmo 'normal') vence o palpite antigo da sessao");
+    ok(c.fatores["a›b"] === 0.7 && c.origem["a›b"] === "acerto" && c.fatores["x›y"] === 1.5 && c.origem["x›y"] === "sessao" && !("c›d" in c.fatores),
+       "S2g sem declaracao: o acerto valido decide; sem acerto valido fica o palpite; amostra pequena nao entra: " + JSON.stringify(c));
+
+    /* o plano usa (sem fatores passados) e diz de onde veio */
+    api.qsBancoPor([{ chave: RC, disciplina: "Direito Financeiro", tentativas: tent(12, 3, "2026-10-05") }]);
+    api.diarioPor([]);
+    const p = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300) });
+    const rc = p.itens.filter((i) => i.nome === "Receita")[0], dp = p.itens.filter((i) => i.nome === "Despesa")[0];
+    ok(rc.fator === 1.5 && rc.fatorOrigem === "acerto" && rc.acertoTopico.pct === 25 && rc.bruto === dp.bruto && rc.brutoOrdem > dp.brutoOrdem,
+       "S2h o plano sobe o topico com acerto baixo (e so' a ORDEM muda, o peso da prova nao): " + JSON.stringify({ f: rc.fator, o: rc.fatorOrigem, b: rc.bruto }));
+    ok(dp.fator === 1 && !dp.fatorOrigem && !dp.acertoTopico, "S2i topico sem questoes: nada muda");
+    api.difDefinir("Direito Financeiro", "Receita", "baixa", "declarada");
+    const p2 = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300) });
+    const rc2 = p2.itens.filter((i) => i.nome === "Receita")[0];
+    ok(rc2.fator === 0.7 && rc2.fatorOrigem === "declarada", "S2j declarar 'facil' vence o acerto baixo");
+    api.difApagar("Direito Financeiro", "Receita");
+    ok(api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300), fatores: {} }).itens.filter((i) => i.nome === "Receita")[0].fator === 1,
+       "S2k fatores passados na mao continuam mandando (o motor sem dependencia)");
+
+    /* raio-X: o fator e a origem */
+    const conta = api.plItemConta(rc);
+    ok(conta.fatorOrigem === "acerto" && conta.acertoPct === 25, "S2l o raio-X leva a origem do fator: " + JSON.stringify(conta));
+    ok(/acerto/.test(api.t("dif_col_aj")) && /já entra/.test(api.t("plog_sinais_txt")), "S2m a ajuda da coluna e a aba de sinais dizem que o acerto por topico entra");
+  }
+
+  /* ---- S2: a tela — selo da agenda e "Como foi?" ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const ed = api.edCriar("T", texto());
+    api.hubAbrirEdital(ed.id);
+    api.$("edProva").value = daqui(300);
+    const RA = "direito financeiro›restos a pagar";
+    const tent = (n, certas) => Array.from({ length: n }, (x, k) => ({ q: "2026-10-05T10:" + String(k).padStart(2, "0") + ":00Z", resp: 0, acertou: k < certas }));
+    api.qsBancoPor([{ chave: RA, disciplina: "Direito Financeiro", tentativas: tent(14, 7) }]);
+    api.edRender(); api.hubRender();
+    const achar = (el, out, re) => { Array.from(el.children || []).forEach((f) => { if (re.test(f.className || "")) out.push(f); achar(f, out, re); }); return out; };
+    const linha = achar(api.$("edAgendaTopo"), [], /(^| )ed-item( |$)/).filter((li) => /Restos/.test(li.textContent || ""))[0];
+    const selo = linha && achar(linha, [], /(^| )dif-selo( |$)/)[0];
+    ok(selo && selo.textContent === "difícil · 50%" && /medido/.test(selo.className) && /50% nas últimas 14/.test(selo.title),
+       "S2n o selo da agenda diz que veio do acerto, com o numero: " + (selo && selo.textContent) + " | " + (selo && selo.title));
+    const item = { nome: "Restos a pagar", disciplina: "Direito Financeiro", chave: RA, minutos: 30 };
+    api.abrirRegistro(item);
+    const eco = () => api.$("regDifEco").textContent;
+    ok(eco() === "Sem resposta: vale o seu acerto nas questões deste tópico — 50% em 14 → «Difícil».", "S2o 'Como foi?' sem resposta diz que vale o acerto: " + eco());
+    api.$("regDificuldade").children[2].onclick();
+    ok(/^Fácil: .* \(Seu acerto, 50% em 14 questões, diria «Difícil» — vale a sua resposta\.\)$/.test(eco()), "S2p responder diferente: vale a resposta, e a tela lembra o acerto: " + eco());
+    api.$("regDificuldade").children[0].onclick();
+    ok(!/Seu acerto/.test(eco()), "S2q responder o mesmo que o acerto diz: sem lembrete");
+    api.$("dlgRegistro").close();
+    api.difDefinir("Direito Financeiro", "Restos a pagar", "baixa", "declarada");
+    api.abrirRegistro(item);
+    ok(/^Sem resposta: continua valendo «Fácil»/.test(eco()), "S2r com declaracao valendo, e' ela que a tela diz (nao o acerto): " + eco());
+    api.$("dlgRegistro").close();
+    api.edRender(); api.hubRender();
+    const linha2 = achar(api.$("edAgendaTopo"), [], /(^| )ed-item( |$)/).filter((li) => /Restos/.test(li.textContent || ""))[0];
+    const selo2 = linha2 && achar(linha2, [], /(^| )dif-selo( |$)/)[0];
+    ok(selo2 && selo2.textContent === "fácil" && !/medido/.test(selo2.className), "S2s com declaracao, o selo e' o da declaracao: " + (selo2 && selo2.textContent));
+  }
+
+  /* ---- S2: o registro que vem de uma sessao do app nao conta duas vezes ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    api.abrirRegistro({ nome: "Receita", disciplina: "Direito Financeiro", chave: "direito financeiro›receita", minutos: 30 });
+    api.regDeQuestoes(12, 9, 30);
+    ok(JSON.stringify(api.regQuestoesDoFormulario()) === JSON.stringify({ feitas: 12, certas: 9, app: true }), "S2t a contagem trazida do app vai marcada (app)");
+    api.$("regQCertas").value = "8";
+    ok(!api.regQuestoesDoFormulario().app, "S2u mudou os numeros a mao: deixa de ser a mesma sessao, conta");
+    api.$("dlgRegistro").close();
+    api.abrirRegistro({ nome: "Receita", disciplina: "Direito Financeiro", chave: "direito financeiro›receita", minutos: 30 });
+    api.$("regQFeitas").value = "12"; api.$("regQCertas").value = "9";
+    ok(!api.regQuestoesDoFormulario().app, "S2v reabrir o registro esquece a sessao anterior");
+    const porDisc = api.edAcertos([{ disc: "D", a: "feito", q: { feitas: 10, certas: 5, app: true } }, { disc: "D", a: "feito", q: { feitas: 4, certas: 4 } }],
+      [{ disciplina: "D", tentativas: [{ acertou: true }, { acertou: false }] }]);
+    ok(porDisc.D.feitas === 6 && porDisc.D.certas === 5, "S2w o acerto por disciplina tambem nao conta duas vezes: " + JSON.stringify(porDisc.D));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

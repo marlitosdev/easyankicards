@@ -42,6 +42,8 @@ function plItemConta(i) {
     pesoTop: i.peso,
     bruto: i.bruto,
     fator: i.fator == null ? 1 : i.fator,
+    fatorOrigem: i.fatorOrigem || "",
+    acertoPct: i.acertoTopico ? i.acertoTopico.pct : null,
     brutoOrdem: i.brutoOrdem == null ? i.bruto : i.brutoOrdem,
     prioridade: i.prioridade,
     faixa: i.faixa,
@@ -696,7 +698,8 @@ function plPintarFila(box, d) {
       c.disciplina,
       cel,
       c.pesoDisc + " × " + c.pesoTop + " = " + c.bruto,
-      c.fator === 1 ? "—" : "×" + String(c.fator).replace(".", ","),
+      (c.fator === 1 ? "—" : "×" + String(c.fator).replace(".", ","))
+        + (c.fatorOrigem === "acerto" && c.acertoPct != null ? " · " + t("plog_fator_acerto", { p: c.acertoPct }) : ""),
       c.prioridade,
       t("plog_faixa_" + c.faixa),
       c.minutos,

@@ -170,6 +170,22 @@ function difMapaFatores(hoje) {
   return out;
 }
 
+/* O MESMO MAPA COM A ORIGEM: chave → { nivel, fator, origem }. Só o que vale hoje (vencida fica fora). O plano precisa da
+ * origem para decidir quem vence quando o acerto medido também tem algo a dizer: a SUA declaração vence o acerto; o acerto
+ * vence o palpite antigo "deduzido da sessão". */
+function difMapaDetalhado(hoje) {
+  const m = difLer();
+  const out = {};
+  Object.keys(m).forEach((k) => {
+    const r = m[k];
+    if (!r || !difNivelValido(r.n)) return;
+    const dias = difDias(r.d, hoje);
+    if (isFinite(dias) && dias > DIF_VALIDADE) return;
+    out[k] = { nivel: r.n, fator: DIF_NIVEIS.filter((x) => x.id === r.n)[0].fator, origem: r.o || "declarada" };
+  });
+  return out;
+}
+
 /* Quantas avaliações existem, e quantas já venceram — o número que
  * justifica um aviso de "reavalie" na tela. */
 function difResumo(hoje) {
@@ -202,6 +218,17 @@ function difDoHumor(disc, top, humor) {
  * em toda linha da lista. */
 function difSeloDe(item) {
   if (!item || typeof document === "undefined") return null;
+  /* o plano escolheu o ACERTO como sinal deste tópico (você não declarou nada que valha): o selo diz isso, com o número */
+  if (item.fatorOrigem === "acerto" && item.acertoTopico) {
+    const a = item.acertoTopico;
+    if (a.nivel !== "alta" && a.nivel !== "baixa") return null;
+    const el = document.createElement("span");
+    el.className = "dif-selo " + a.nivel + " medido";
+    el.textContent = t("dif_selo_acerto", { n: t("dif_selo_" + a.nivel), p: a.pct });
+    el.title = t("dif_selo_acerto_tip", { p: a.pct, n: a.feitas,
+      a: typeof ED_AC_TOP !== "undefined" ? ED_AC_TOP.dificil : 60, b: typeof ED_AC_TOP !== "undefined" ? ED_AC_TOP.facil : 85 });
+    return el;
+  }
   const d = difDe(item.disciplina, item.nome);
   if (!d.nivel) return null;
   if (d.nivel === "media" && !d.vencida) return null;
@@ -219,7 +246,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DIF_CHAVE, DIF_VALIDADE, DIF_NIVEIS,
     difLer, difSalvar, difRecarregar, difChave, difDefinir, difApagar, difDe, difFator,
-    difMapaFatores, difResumo, difDoHumor, difDias, difNivelValido,
+    difMapaFatores, difMapaDetalhado, difResumo, difDoHumor, difDias, difNivelValido,
     difSeloDe,
   };
 }
