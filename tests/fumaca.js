@@ -671,7 +671,7 @@ function rodar() {
     matLimparColagem, matGravarCartoes, matContarCartoes, matAplicarColagem,
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
-    matAbrirFicha, matInfoTopico, matPintarDuvidasBotao, matAgrupado, matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
+    matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico, matPintarDuvidasBotao, matAgrupado, matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
     matMarcasDe, matContarMarcas, matTirarMarcaDe, matTrocarCorDaMarca,
     matCartoesConsertar, matCartoesPromptCorrecao, matConsertoPerdas, matJuntarTags,
     mcPareiGuardar, mcPareiDe, mcPareiLer, mcEstMenuFechar, mcEstAndar,
@@ -868,7 +868,7 @@ function rodar() {
     ndAbrir, ndAplicarIA, ndLerRespostaIA, ndMontarPrompt, edExplicarCor,
     hubViradaDePagina, edSituacao, edCarregarLista, edCriar,
     edPintarBlocos, edCumprimentoBlocos, hubEdAlternar, hubEdVisivel,
-    edProximoDa, edFecharMenus, faTirar, faVoltar, faDe, faEstaFora, faDispensados, faAdiados,
+    edProximoDa, faTirar, faVoltar, faDe, faEstaFora, faDispensados, faAdiados,
     faMinutosDispensados, faAbrir, faConfirmar, faListaAbrir, faMotivo,
     FA_MOTIVOS, FA_CHAVE, edEstaFora,
     /* a gaveta crua: alguns testes precisam simular o TEMPO passando

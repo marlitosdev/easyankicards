@@ -48,7 +48,7 @@ async function testes() {
    * O que o topico TEM vira etiqueta clicavel na propria linha; o que
    * FALTA fica no "⋮" como "criar...". Antes as duas listas traziam o
    * mesmo conteudo, e a pessoa lia tudo duas vezes. */
-  const atalhoDa = (linha, re) => {
+  const atalhoDa = (linha, re, apiF) => {
     let achado = null;
     const varrer = () => {
       const anda = (x) => Array.from(x.children || []).forEach((f) => {
@@ -61,13 +61,21 @@ async function testes() {
     };
     varrer();
     if (achado) return achado;
-    let mais = null;
+    /* T1: o que FALTA não mora mais num "⋮" — "📚 materiais" abre a ficha, e lá está a ação de criar */
+    let mat = null;
     const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-mais/.test(f.className || "") && !mais) mais = f;
+      if (/ed-materiais/.test(f.className || "") && !mat) mat = f;
       anda2(f);
     });
     anda2(linha);
-    if (mais) { mais.onclick({ stopPropagation() {} }); varrer(); }
+    if (mat && apiF) {
+      mat.onclick({ stopPropagation() {} });
+      const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
+        if (!achado && typeof f.onclick === "function" && /criar|responder|estudar/i.test(f.textContent || "") && re.test(f.textContent || "")) achado = f;
+        anda3(f);
+      });
+      anda3(apiF.$("matFichaLista"));
+    }
     return achado;
   };
 
@@ -1350,7 +1358,7 @@ async function testes() {
     aL.matGravar(cVazio, "y", { disciplina: "Direito Financeiro", topico: "Sem cartoes" });
     const li2 = aL.edLinhaAgendaTeste({ disciplina: "Direito Financeiro",
       nome: "Sem cartoes", chave: cVazio });
-    const bc2 = atalhoDa(li2, /cart/i);
+    const bc2 = atalhoDa(li2, /cart/i, aL);
     ok(!!bc2, "K1k2 sem cartoes o menu tem de oferecer criar");
     if (bc2) bc2.onclick({ stopPropagation() {} });
     ok(aL.bancAlvoAtual() && aL.bancAlvoAtual().topico === "Sem cartoes" && aL.$("dlgMatCartoes").open === false,
@@ -1453,7 +1461,7 @@ async function testes() {
     const cO = aO.matChave("D", "Vazio");
     aO.matGravar(cO, "Materia-prima para as questoes.", { disciplina: "D", topico: "Vazio" });
     const li = aO.edLinhaAgendaTeste({ disciplina: "D", nome: "Vazio", chave: cO });
-    const bq0 = atalhoDa(li, /quest/i);
+    const bq0 = atalhoDa(li, /quest/i, aO);
     ok(!!bq0, "K4-pre nao ha como criar questoes a partir da linha");
     if (!bq0) { falhas.quantas = n; return falhas; }
     bq0.onclick({ stopPropagation() {} });

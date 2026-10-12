@@ -1231,8 +1231,14 @@ async function testes() {
        * jurisprudencia), sem precisar de outro botao na linha ja cheia. */
       const chipModAgenda = achaCls(linhaP, "ed-ramo").find((c) => /Modalidades/.test(c.textContent));
       ok(!!chipModAgenda && typeof chipModAgenda.onclick === "function" && /ed-ramo-clic/.test(chipModAgenda.className), "R40w0b o chip do ramo na agenda esta clicavel");
+      const fichaItens = () => { const acc = []; const an = (x) => Array.from(x.children || []).forEach((f) => { if (/(^| )mat-ficha-item( |$)/.test(f.className || "")) acc.push(f); an(f); }); an(a.$("matFichaLista")); return acc; };
+      const fichaItem = (slot) => fichaItens().find((x) => new RegExp("slot-" + slot).test(x.className));
+      const fichaBts = (el) => { const acc = []; const an = (x) => Array.from(x.children || []).forEach((f) => { if (typeof f.onclick === "function") acc.push(f); an(f); }); an(el); return acc; };
+      a.$("dlgMatFicha").open = false;
       chipModAgenda.onclick({ stopPropagation() {} });
-      ok(achaCls(linhaP, "ed-menu-item").length > 0 && achaCls(linhaP, "ed-menu-item").some((b) => /cart(ã|a)o/i.test(b.textContent)), "R40w0c clicar no chip abre o menu de materiais do ramo, com o item de cartoes: " + achaCls(linhaP, "ed-menu-item").map((b) => b.textContent).join(" | "));
+      ok(a.$("dlgMatFicha").open === true && a.matFichaEscopoAtual() === "modalidades" && /Lei 14.133 › Modalidades$/.test(a.$("matFichaTit").textContent) && !!fichaItem("cartoes") && !!fichaItem("resumo") && !achaCls(linhaP, "ed-menu-item").length,
+         "R40w0c clicar no chip abre a FICHA do topico ja no ramo (com resumo e cartoes), sem menu escondido na linha: " + a.$("matFichaTit").textContent);
+      a.$("dlgMatFicha").close();
       a.abrirRegistro(itP);
       const linReg = Array.from(a.$("regRamos").children).find((l) => /Fase preparat/.test(l.textContent));
       ok(linReg.children[0].disabled === true && /pulado/.test(linReg.textContent), "R40w1 na janela de registro o ramo pulado aparece como 'pulado' e nao pode ser marcado: " + linReg.textContent);
@@ -2334,41 +2340,43 @@ async function testes() {
       btsDet.find((b) => /5 cart(õ|o)es/.test(b.textContent)).onclick();
       ok(a.$("dlgGerEstudo").open === true && a.$("dlgHoras").open === false, "R63f3 a etiqueta '5 cartões' abre o player dos cartoes dele e fecha as horas por assunto");
       a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
-      /* R63f2b — o "⋮" do tópico sem nada ainda oferece criar cartões (o mesmo menu "só o que falta" da agenda).
-       * O "⋮" tem de vir de DENTRO da linha do tópico ("Convênios"), não de uma das linhas de ramo (Fase 3 deu
-       * ramo o seu próprio "⋮" também, com a mesma classe ed-mais). */
+      /* R63f2b — T1: "📚 materiais" do tópico abre a FICHA (o que falta oferece criar) e fecha as horas */
+      const fichaItens = () => { const acc = []; const an = (x) => Array.from(x.children || []).forEach((f) => { if (/(^| )mat-ficha-item( |$)/.test(f.className || "")) acc.push(f); an(f); }); an(a.$("matFichaLista")); return acc; };
+      const fichaItem = (slot) => fichaItens().find((x) => new RegExp("slot-" + slot).test(x.className));
+      const fichaBts = (el) => { const acc = []; const an = (x) => Array.from(x.children || []).forEach((f) => { if (typeof f.onclick === "function") acc.push(f); an(f); }); an(el); return acc; };
       a.$("btnEdHoras").onclick(); cols[0].onclick();
       const linhaConvenios = achar(a.$("horCorpo"), (e) => cls(e, "hor-top")).find((e) => /Convênios/.test(e.textContent));
       ok(!!linhaConvenios, "R63f2b achou a linha do tópico Convênios");
-      const maisConvenios = achar(linhaConvenios, (e) => cls(e, "ed-mais"))[0];
-      ok(!!maisConvenios, "R63f2b2 achou o '⋮' do tópico Convênios");
-      maisConvenios.onclick({ stopPropagation() {} });
-      const itensMenu = achar(linhaConvenios, (e) => cls(e, "ed-menu-item"));
-      ok(itensMenu.some((b) => /criar cart(õ|o)es/i.test(b.textContent)), "R63f2c o menu do tópico sem cartão oferece 'criar cartões': " + itensMenu.map((b) => b.textContent).join(" | "));
+      const matConvenios = achar(linhaConvenios, (e) => cls(e, "ed-materiais"))[0];
+      ok(!!matConvenios && !achar(linhaConvenios, (e) => cls(e, "ed-mais")).length, "R63f2b2 achou o '📚 materiais' do tópico Convênios (e nao ha mais '⋮')");
+      matConvenios.onclick({ stopPropagation() {} });
+      ok(a.$("dlgHoras").open === false && a.$("dlgMatFicha").open === true && a.$("matFichaTit").textContent === "Convênios"
+         && /falta/.test(fichaItem("cartoes").className) && fichaBts(fichaItem("cartoes")).some((b) => /criar cart(õ|o)es/i.test(b.textContent)),
+         "R63f2c a ficha do tópico sem cartão oferece 'Criar cartões' (e as horas fecham)");
+      a.$("dlgMatFicha").close();
 
-      /* R63f2d-g — Fase 3: o "⋮" da linha do RAMO (não do tópico) abre cartões/questões/jurisprudência DESTE
-       * ramo. Cartões usa a contagem REAL do ramo (etiqueta ram_modalidades: 1, não os 5 do tópico inteiro).
-       * Questões/jurisprudência ainda não têm vínculo por ramo, então perguntam antes de abrir os do tópico. */
+      /* R63f2d-h — o botão da linha do RAMO abre a mesma ficha JÁ no ramo: cartões com a contagem REAL do ramo
+       * (etiqueta ram_modalidades: 1, não os 5 do tópico) e questões ligadas a ele */
       a.$("btnEdHoras").onclick(); cols[0].onclick();
       const linhaModalidades = achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).find((e) => /Modalidades/.test(e.textContent));
       ok(!!linhaModalidades, "R63f2d achou a linha do ramo Modalidades");
-      const maisModalidades = achar(linhaModalidades, (e) => cls(e, "ed-mais"))[0];
-      ok(!!maisModalidades, "R63f2d2 achou o '⋮' do ramo Modalidades");
-      maisModalidades.onclick({ stopPropagation() {} });
-      const itensRamo = achar(linhaModalidades, (e) => cls(e, "ed-menu-item"));
-      ok(itensRamo.some((b) => /^1 cart(ã|a)o$/.test(b.textContent)), "R63f2e o cartão do ramo usa a contagem REAL do ramo (1), não a do tópico inteiro (5): " + itensRamo.map((b) => b.textContent).join(" | "));
-      itensRamo.find((b) => /^1 cart(ã|a)o$/.test(b.textContent)).onclick({ stopPropagation() {} });
-      ok(a.$("dlgGerEstudo").open === true && a.$("dlgHoras").open === false, "R63f2f o cartão do ramo abre o player e fecha as horas por assunto");
+      const matModalidades = achar(linhaModalidades, (e) => cls(e, "ed-materiais"))[0];
+      ok(!!matModalidades, "R63f2d2 achou o botao de materiais do ramo Modalidades");
+      matModalidades.onclick({ stopPropagation() {} });
+      ok(a.$("dlgHoras").open === false && a.matFichaEscopoAtual() === "modalidades" && /1 deste ramo \(o tópico tem 5\)/.test(fichaItem("cartoes").textContent) && a.$("matFichaEscopo").children.length >= 4,
+         "R63f2e a ficha do ramo usa a contagem REAL do ramo (1), não a do tópico inteiro (5): " + fichaItem("cartoes").textContent);
+      fichaBts(fichaItem("cartoes")).find((b) => b.textContent === a.t("mat_ficha_estudar")).onclick();
+      ok(a.$("dlgGerEstudo").open === true && a.$("dlgMatFicha").open === false, "R63f2f 'Estudar' os cartões do ramo abre o player e fecha a ficha");
       a.$("dlgGerEstudo").close(); a.$("dlgGerCartoes").close();
 
       a.$("btnEdHoras").onclick(); cols[0].onclick();
       const linhaModalidades2 = achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).find((e) => /Modalidades/.test(e.textContent));
-      achar(linhaModalidades2, (e) => cls(e, "ed-mais"))[0].onclick({ stopPropagation() {} });
-      const itemQst = achar(linhaModalidades2, (e) => cls(e, "ed-menu-item")).find((b) => /criar quest/i.test(b.textContent));
-      ok(!!itemQst && itemQst.textContent === a.t("ram_qst_criar"), "R63f2g o ramo sem questões ligadas oferece 'criar questões DESTE ramo'");
+      achar(linhaModalidades2, (e) => cls(e, "ed-materiais"))[0].onclick({ stopPropagation() {} });
+      const itemQst = fichaBts(fichaItem("questoes")).find((b) => /criar quest/i.test(b.textContent));
+      ok(!!itemQst && /falta/.test(fichaItem("questoes").className), "R63f2g o ramo sem questões ligadas oferece 'Criar questões'");
       /* Q2 — sem a pergunta "tópico inteiro?": abre a criação já ligada ao ramo */
       itemQst.onclick({ stopPropagation() {} });
-      ok(a.$("dlgHoras").open === false && a.$("dlgQsCriar").open === true && /ramo «Modalidades»/.test(a.$("qsCriarDe").textContent), "R63f2h criar questões do ramo abre a criação JÁ ligada ao ramo, sem perguntar: " + a.$("qsCriarDe").textContent);
+      ok(a.$("dlgMatFicha").open === false && a.$("dlgQsCriar").open === true && /ramo «Modalidades»/.test(a.$("qsCriarDe").textContent), "R63f2h criar questões na ficha do ramo abre a criação JÁ ligada ao ramo, sem perguntar: " + a.$("qsCriarDe").textContent);
       a.$("dlgQsCriar").close();
 
       a.$("btnHorX").onclick();
@@ -3077,17 +3085,18 @@ async function testes() {
       /* topico sem ramos: nada muda */
       const li5 = a.edLinhaAgendaTeste(Object.assign({}, plano().itens.find((x) => x.nome === "Convênios"), { edital: ed.id }));
       ok(todos(li5, (f) => /(^|\s)ed-ramos(\s|$)/.test(f.className || ""), []).length === 0, "R24l topico SEM ramos: a linha e' a de sempre, sem bloco de ramos");
-      /* menu */
-      todos(li, (f) => /ed-mais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
-      const rb = todos(li, (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
-      ok(rb && /ajustar ramos/.test(rb.textContent) && rb.title.length > 20, "R24m o menu da linha oferece 'ajustar ramos e pesos' e explica");
+      /* "📚 materiais" → a ficha; "ajustar ramos" fica no rodapé dela */
+      todos(li, (f) => /ed-materiais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
+      const rb = todos(a.$("matFichaRodape"), (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
+      ok(rb && /ajustar ramos/.test(rb.textContent) && rb.title.length > 20, "R24m a ficha do topico oferece 'ajustar ramos e pesos' e explica");
       rb.onclick({ stopPropagation() {} });
       const cxr = a.ramCtxAtual();
       ok(a.$("dlgRamos").open === true && cxr.editalId === ed.id && cxr.topico === "Lei 14.133" && cxr.disciplina === "Licitações", "R24n abre o editor de ramos do topico no edital da linha: " + JSON.stringify(cxr));
       a.$("btnRamFechar").onclick();
-      todos(li5, (f) => /ed-mais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
-      const rb2 = todos(li5, (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
-      ok(rb2 && /dividir em ramos/.test(rb2.textContent), "R24o topico sem ramos: o menu convida a dividir");
+      todos(li5, (f) => /ed-materiais/.test(f.className || ""), [])[0].onclick({ stopPropagation() {} });
+      const rb2 = todos(a.$("matFichaRodape"), (f) => /ed-menu-ramos/.test(f.className || ""), [])[0];
+      ok(rb2 && /dividir em ramos/.test(rb2.textContent) && a.$("matFichaEscopo").hidden === true, "R24o topico sem ramos: a ficha convida a dividir (e nao mostra escopo)");
+      a.$("dlgMatFicha").close();
       ok(a.edChave(it) === "licitações›lei 14.133", "R24p a chave da tabela de progresso e' a do topico");
       a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
       const ip = a.edItemDoPlano("Licitações", "Lei 14.133");
@@ -3335,8 +3344,9 @@ async function testes() {
     const trig = a.document.createElement("button"), cont = a.document.createElement("div");
     a.edLigarMenuDoRamo(trig, cont, "Licitações", "Lei 14.133", { id: "contratos", nome: "Contratos", peso: 3 }, chave);
     trig.onclick({ stopPropagation() {} });
-    const itensQ = Array.from((cont.querySelector(".ed-menu") || { children: [] }).children).map((b) => b.textContent);
-    ok(itensQ.includes(a.t("ram_qst_criar")) && !itensQ.some((x) => /^1 quest/.test(x)), "Q2f o menu do ramo conta só as questões LIGADAS (o palpite não abre lista vazia): " + itensQ.join(" | "));
+    const qIt = (() => { const acc = []; const an = (x) => Array.from(x.children || []).forEach((f) => { if (/slot-questoes/.test(f.className || "") && /mat-ficha-item/.test(f.className || "")) acc.push(f); an(f); }); an(a.$("matFichaLista")); return acc[0]; })();
+    ok(a.matFichaEscopoAtual() === "contratos" && qIt && /falta/.test(qIt.className) && /Criar questões/.test(qIt.textContent) && !/1 questão/.test(qIt.textContent), "Q2f a ficha do ramo conta só as questões LIGADAS (o palpite não abre lista vazia): " + (qIt && qIt.textContent));
+    a.$("dlgMatFicha").close();
     a.qsSessaoApagar && a.qsSessaoApagar();
     todas.splice(0, todas.length);
   }
@@ -3508,6 +3518,71 @@ async function testes() {
     const est = a.domEntradas({}, pl, [], [], []).estudo;
     const chD = Object.keys(est).find((k) => !/›#/.test(k));
     ok(est[chD].venceu === true, "S3r6 o dominio usa o 'venceu' do plano: revisado com a revisao seguinte vencida aparece como vencido");
+  }
+
+  /* ---- T1: a ficha do tópico é o caminho único (tópico inteiro e cada ramo), e o resumo está sempre à vista ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    a.edProgressoPor({});
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    const todosF = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); todosF(x, pred, acc); }); return acc; };
+    const cl = (e) => String((e && e.className) || "");
+    const itens = () => todosF(a.$("matFichaLista"), (e) => /(^| )mat-ficha-item( |$)/.test(cl(e)));
+    const doSlot = (sl) => itens().find((x) => new RegExp("slot-" + sl).test(cl(x)));
+    const bts = (el) => todosF(el, (e) => typeof e.onclick === "function");
+
+    /* a ficha com escopo */
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramos: it().ramos, item: it(), editalId: ed.id });
+    const esc = () => Array.from(a.$("matFichaEscopo").children);
+    ok(a.$("matFichaEscopo").hidden === false && esc().map((b) => b.textContent).join("|") === ["Tópico inteiro"].concat(it().ramos.map((r) => r.nome)).join("|")
+       && esc()[0].getAttribute("aria-pressed") === "true", "T1a a ficha mostra o escopo: 'Tópico inteiro' (escolhido) e um botao por ramo: " + esc().map((b) => b.textContent));
+    ok(itens().length === 5 && !/ › /.test(a.$("matFichaTit").textContent), "T1a2 no topico inteiro: os cinco materiais, titulo so' do topico");
+    esc().find((b) => b.textContent === "Modalidades").onclick();
+    ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133 › Modalidades" && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true",
+       "T1b escolher um ramo: o titulo e o botao acompanham");
+    ok(/o resumo ainda é um só, do tópico inteiro/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /do tópico inteiro/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
+       "T1b2 no ramo, a ficha diz o que e' do ramo (cartoes) e o que e' do topico inteiro (resumo, lei, julgados)");
+    const rod = () => todosF(a.$("matFichaRodape"), (e) => typeof e.onclick === "function");
+    ok(a.$("matFichaRodape").hidden === false && rod().some((b) => b.textContent === "Registrar estudo de «Modalidades»") && rod().some((b) => /ed-menu-ramos/.test(cl(b))),
+       "T1c o rodape oferece registrar o estudo DESTE ramo e ajustar os ramos: " + rod().map((b) => b.textContent).join(" | "));
+    esc().find((b) => b.textContent === "Contratos").onclick();
+    rod().find((b) => /Registrar estudo de «Contratos»/.test(b.textContent)).onclick();
+    ok(a.$("dlgMatFicha").open === false && a.$("dlgRegistro").open === true && /Lei 14\.133 › Contratos$/.test(a.$("regTitulo").textContent),
+       "T1c2 registrar pela ficha abre o registro JA com o ramo escolhido (Contratos, que nao e' o da vez): " + a.$("regTitulo").textContent);
+    a.$("dlgRegistro").close();
+    esc && a.edAbrirFicha("Licitações", "Lei 14.133", { ramos: it().ramos, item: it(), editalId: ed.id });
+    ok(rod().some((b) => b.textContent === "Registrar estudo"), "T1c3 no topico inteiro, 'Registrar estudo' (sem ramo)");
+    a.$("dlgMatFicha").close();
+    /* a ficha aberta pelo Material de estudo (sem contexto) acha os ramos no edital aberto */
+    a.matAbrirFicha({ chave, disciplina: "Licitações", topico: "Lei 14.133" });
+    ok(a.$("matFichaEscopo").hidden === false && esc().length === 4, "T1d aberta pelo Material de estudo, a ficha tambem mostra os ramos (do edital aberto)");
+    a.$("dlgMatFicha").close();
+
+    /* o resumo sempre à vista na linha: "+ resumo" abre o editor PARA ESCREVER */
+    const li = a.edLinhaAgendaTeste(Object.assign({}, it(), { edital: ed.id }));
+    const doc = todosF(li, (e) => /ed-st-doc/.test(cl(e)))[0];
+    ok(doc && /ed-st-falta/.test(cl(doc)) && doc.textContent === "+ resumo", "T1e sem resumo, a linha mostra '+ resumo' (tracejado): " + (doc && doc.textContent));
+    todosF(li, (e) => /ed-materiais/.test(cl(e)))[0].onclick({ stopPropagation() {} });
+    ok(a.$("dlgMatFicha").open === true && rod().some((b) => b.textContent === "Registrar estudo") && rod().some((b) => /ed-menu-ramos/.test(cl(b))) && esc().length === 4,
+       "T1e0 '📚 materiais' da agenda abre a ficha com os ramos, 'Registrar estudo' e 'ajustar ramos'");
+    a.$("dlgMatFicha").close();
+    a.$("dlgMaterial").open = false;
+    doc.onclick({ stopPropagation() {} });
+    ok(a.$("dlgMaterial").open === true && a.matModoAtual() === "editar", "T1e2 '+ resumo' abre o editor para escrever");
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+
+    /* a chave tolerante: resumo gravado com outra grafia (acento/caixa) aparece e abre CHEIO */
+    const kVar = "licitacoes›lei 14.133";
+    const mats = a.matResumosAtual();
+    Object.keys(mats).forEach((k) => { if (/lei 14\.133/.test(k)) delete mats[k]; });
+    a.matGravar(kVar, "Resumo gravado com outra grafia.", { disciplina: "Licitacoes", topico: "Lei 14.133" });
+    const li2 = a.edLinhaAgendaTeste(Object.assign({}, it(), { edital: ed.id }));
+    const doc2 = todosF(li2, (e) => /ed-st-doc/.test(cl(e)))[0];
+    ok(doc2 && /(^| )tem( |$)/.test(cl(doc2)) && doc2.textContent === "resumo", "T1f o resumo gravado com outra grafia aparece na linha");
+    doc2.onclick({ stopPropagation() {} });
+    ok(a.$("matTexto").value === "Resumo gravado com outra grafia.", "T1f2 e abre CHEIO (antes o editor recalculava a chave e abria vazio): " + JSON.stringify(a.$("matTexto").value));
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
   }
 
   falhas.quantas = n;
