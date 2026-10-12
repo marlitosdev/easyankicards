@@ -49,10 +49,14 @@ let jurOutrosAberto = false;
  *
  * É a mesma divisão do "responder / criar mais" das questões: a tela
  * abre no verbo que a pessoa veio exercer, e o outro fica a um toque. */
-function jurAbrir(disciplina, topico, modo) {
+/* Q3 — aberta pelo ramo (a ficha do ramo): a lista mostra só os julgados dele e o que se guarda agora já fica ligado a ele */
+let jurRamoAlvo = null;
+function jurRamoVerTodos() { jurRamoAlvo = null; jurPintarLista(); }
+function jurAbrir(disciplina, topico, modo, opc) {
   const chave = (typeof matChave === "function")
     ? matChave(disciplina, topico) : (disciplina + "›" + topico);
   jurTopicoAtual = { disciplina, nome: topico, chave };
+  jurRamoAlvo = opc && opc.ramo && opc.ramo.id ? { id: opc.ramo.id, nome: opc.ramo.nome || opc.ramo.id } : null;
   jurEditando = "";
   jurFiltroTag = "";
   jurOutrosAberto = false;
@@ -60,7 +64,7 @@ function jurAbrir(disciplina, topico, modo) {
   if (sub) sub.textContent = t("jur_sub", { d: disciplina, t: topico });
   jurLimparForm();
   if ($("jurMais")) $("jurMais").open = false;       /* o menu abre sempre fechado */
-  const quantos = jurDoTopico(chave).length;
+  const quantos = jurRamoAlvo ? (jurContarPorRamo(chave)[jurRamoAlvo.id] || 0) : jurDoTopico(chave).length;
   jurModo = modo || (quantos ? "ler" : "incluir");
   /* pedir "ler" sem ter o que ler abriria uma tela vazia */
   if (jurModo === "ler" && !quantos) jurModo = "incluir";
@@ -95,6 +99,7 @@ function jurAbrir(disciplina, topico, modo) {
  * aumentado enquanto a gaveta esteve aberta.
  * ===================================================================== */
 let jurVoltaPara = null;   /* função a chamar quando a gaveta fechar */
+if (typeof document !== "undefined" && $("btnJurRamoTodos")) $("btnJurRamoTodos").onclick = () => jurRamoVerTodos();
 
 function jurFechar() {
   const d = $("dlgJuris");
@@ -686,6 +691,8 @@ async function jurSalvar() {
    * o julgado aparecer na estante com o nome certo da disciplina. */
   jurLigar(j.id, jurTopicoAtual.chave,
            jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+  /* Q3 — guardado pela ficha de um ramo: já fica ligado a ele (só o novo; editar não troca o ramo) */
+  if (jurRamoAlvo && !jurEditando) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
 
   reg("JURIS", jurEditando ? "julgado editado" : "julgado guardado",
       jurTitulo(j) + " · " + jurTopicoAtual.nome);
@@ -1287,8 +1294,16 @@ async function jurCopiarPrompt() {
 function jurPintarLista() {
   const box = $("jurLista");
   if (!box || !jurTopicoAtual) return;
+  jurPintarLista._memo = {};
   box.innerHTML = "";
   let lista = jurDoTopico(jurTopicoAtual.chave);
+  /* Q3 — aberta por um ramo: só os julgados LIGADOS a ele, com a faixa que diz isso e leva de volta ao tópico inteiro */
+  const faixa = $("jurRamoFaixa");
+  if (faixa) {
+    faixa.hidden = !jurRamoAlvo;
+    if (jurRamoAlvo) $("jurRamoFaixaTxt").textContent = t(jurModo === "ler" ? "jur_ramo_faixa" : "jur_ramo_faixa_incluir", { r: jurRamoAlvo.nome });
+  }
+  if (jurRamoAlvo) lista = lista.filter((x) => { const r = jurRamoDe(x, jurTopicoAtual.chave); return r && r.id === jurRamoAlvo.id; });
   /* O FILTRO POR ETIQUETA vale só enquanto a gaveta está aberta: é uma
    * lente de leitura, não uma preferência que se guarda. */
   if (jurFiltroTag) {
@@ -1340,6 +1355,9 @@ function jurPintarLista() {
       return b;
     };
     if (j.tribunal) sel(j.tribunal, "trib");
+    /* Q3 — o ramo deste julgado neste tópico */
+    const rJ = jurRamoDe(j, jurTopicoAtual.chave);
+    if (rJ) sel(t("qs_ramo_tag", { r: rJ.nome || rJ.id }), "ramo");
     const proc = [j.classe, j.numero].filter(Boolean).join(" ");
     if (proc) sel(proc, "proc");
     /* DOIS PROCESSOS NUMA FICHA SÓ. Só aponta — dividir é decisão de
@@ -1398,6 +1416,26 @@ function jurPintarLista() {
      * estava vazio. Cada um leva title e aria-label: ícone sozinho é
      * ilegível para quem não adivinha o desenho, e mudo para o leitor
      * de tela. */
+    /* Q3 — escolher o ramo deste julgado (quando o tópico tem ramos) */
+    const ramosT = typeof qsUiRamosDoTopico === "function" ? qsUiRamosDoTopico(jurTopicoAtual.chave, jurPintarLista._memo || (jurPintarLista._memo = {})) : [];
+    if (ramosT.length) {
+      const lb = document.createElement("label");
+      lb.className = "jur-ramo-sel";
+      const sp = document.createElement("span");
+      sp.textContent = t("jur_ramo_rot") + " ";
+      const sl = document.createElement("select");
+      [["", t("qs_ramo_nenhum")]].concat(ramosT.map((r) => [r.id, r.nome])).forEach(([v, rot]) => {
+        const o = document.createElement("option"); o.value = v; o.textContent = rot; sl.append(o);
+      });
+      sl.value = rJ && ramosT.some((r) => r.id === rJ.id) ? rJ.id : "";
+      sl.onchange = () => {
+        const r = ramosT.find((x) => x.id === sl.value);
+        jurLigarRamo(j.id, jurTopicoAtual.chave, sl.value, r ? r.nome : "");
+        jurPintarLista();
+      };
+      lb.append(sp, sl);
+      li._ramoSel = lb;
+    }
     const acoes = document.createElement("div");
     acoes.className = "jur-acoes";
     const bt = (icone, rot, cls, fn) => {
@@ -1546,6 +1584,7 @@ function jurPintarLista() {
       };
       li.append(bVer, cheia);
     }
+    if (li._ramoSel) li.append(li._ramoSel);
 
     box.append(li);
   });
@@ -1847,6 +1886,7 @@ async function jurSalvarLote() {
     });
     if (!j) return;
     jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+    if (jurRamoAlvo) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
     feitos.push(j);
   });
   if (!feitos.length) { await uiAlert(t("jur_nao_salvou")); return; }

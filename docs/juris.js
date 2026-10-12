@@ -130,6 +130,73 @@ function jurDoTopico(chave) {
 }
 
 function jurContarDoTopico(chave) { return jurDoTopico(chave).length; }
+
+/* =====================================================================
+ * Q3 — O RAMO DE UM JULGADO, POR TÓPICO
+ *
+ * Um julgado pode estar em vários tópicos (j.topicos), então o ramo é guardado por tópico: j.ramos = { chave comparável:
+ * { id, nome } }. id "" = o ramo foi apagado (o nome fica, para dizer de onde veio). Ligar/desligar não mexe na data do
+ * julgado ("tocado"): a lista não muda de ordem só porque se escolheu um ramo.
+ * ===================================================================== */
+function jurRamoDe(j, chave) {
+  const r = j && j.ramos ? j.ramos[jurChaveComparavel(chave)] : null;
+  return r && r.id ? r : null;
+}
+function jurGravarRamos(id, fn) {
+  const tudo = jurLerTudo();
+  const j = tudo[String(id)];
+  if (!j) return false;
+  j.ramos = Object.assign({}, j.ramos || {});
+  fn(j);
+  if (!Object.keys(j.ramos).length) delete j.ramos;
+  return jurGravarTudo(tudo);
+}
+/* liga (ramoId) ou desliga ("") o julgado de um ramo NESTE tópico; devolve o recibo { id, alvo, antes } */
+function jurLigarRamo(id, chave, ramoId, ramoNome) {
+  const alvo = jurChaveComparavel(chave);
+  let recibo = null;
+  const ok = jurGravarRamos(id, (j) => {
+    recibo = { id: String(id), alvo, antes: j.ramos[alvo] ? Object.assign({}, j.ramos[alvo]) : null };
+    if (ramoId) j.ramos[alvo] = { id: String(ramoId), nome: String(ramoNome || "") };
+    else delete j.ramos[alvo];
+  });
+  return ok ? recibo : null;
+}
+/* volta o que jurLigarRamo / jurMigrarRamos fizeram */
+function jurDesfazerRamo(recibos) {
+  let n = 0;
+  (recibos || []).filter(Boolean).forEach((r) => {
+    if (jurGravarRamos(r.id, (j) => { if (r.antes) j.ramos[r.alvo] = Object.assign({}, r.antes); else delete j.ramos[r.alvo]; })) n++;
+  });
+  return n;
+}
+/* quantos julgados do tópico estão em cada ramo: { idDoRamo: n, _sem: n } */
+function jurContarPorRamo(chave) {
+  const m = { _sem: 0 };
+  jurDoTopico(chave).forEach((j) => {
+    const r = jurRamoDe(j, chave);
+    const k = r ? r.id : "_sem";
+    m[k] = (m[k] || 0) + 1;
+  });
+  return m;
+}
+/* o ramo foi renomeado (mapa antigo → novo) ou apagado (→ ""): os julgados do tópico acompanham. Apagado: o vínculo
+ * fica sem id, mas guarda o nome. nomes: { idNovo: "Nome novo" }. Devolve os recibos (para o desfazer). */
+function jurMigrarRamos(chave, mapa, nomes) {
+  const rec = [];
+  if (!mapa || !mapa.size) return rec;
+  const alvo = jurChaveComparavel(chave);
+  jurDoTopico(chave).forEach((j) => {
+    const r = j.ramos && j.ramos[alvo];
+    if (!r || !r.id || !mapa.has(r.id)) return;
+    const novo = mapa.get(r.id);
+    jurGravarRamos(j.id, (jj) => {
+      rec.push({ id: jj.id, alvo, antes: Object.assign({}, jj.ramos[alvo]) });
+      jj.ramos[alvo] = novo ? { id: novo, nome: (nomes && nomes[novo]) || novo } : { id: "", nome: r.nome || r.id };
+    });
+  });
+  return rec;
+}
 function jurTem(chave) { return jurDoTopico(chave).length > 0; }
 
 /* ------------------------------------------------------------------

@@ -150,6 +150,7 @@ function gerDesfazerUltima() {
         if (rr.migAberto && typeof edProgresso !== "undefined" && edProgresso !== ed.progresso) edDesfazerMigracaoRamos(edProgresso, [], rr.migAberto);
         if (ed.ramosHist) ed.ramosHist = ed.ramosHist.slice(0, rr.histAntes || 0);
         if (rr.qs && rr.qs.length && typeof qsDesfazerRamo === "function") qsDesfazerRamo(rr.qs);
+        if (rr.jur && rr.jur.length && typeof jurDesfazerRamo === "function") jurDesfazerRamo(rr.jur);
         /* T5 — o título da seção do resumo volta ao nome antigo (só se o resumo continua como a ação o deixou) */
         if (rr.resumo && typeof matObter === "function") {
           const rm = matObter(rr.resumo.chave);
