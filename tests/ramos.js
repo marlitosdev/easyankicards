@@ -338,6 +338,18 @@ async function testes() {
     ok(muitos.ramos.length === 30 && muitos.cortou === 10, "R27e mais de 30 ramos: entram 30 e conta o corte");
     const cp = api.ramLerRespostaIA("++ Nome :: 4 :: uma nota :: com dois pontos");
     ok(cp.ramos.length === 1 && cp.ramos[0].nome === "Nome", "R27f linha com '::' a mais nao quebra");
+    {
+      const pPt = api.t("ram_prompt_ia", { t: "X", d: "Y", c: "Z", atuais: "-", indice: api.t("ram_prompt_indice") + NL + "- A" + NL, dados: "" });
+      api.setLanguage("en");
+      const pEn = api.t("ram_prompt_ia", { t: "X", d: "Y", c: "Z", atuais: "-", indice: api.t("ram_prompt_indice") + NL + "- A" + NL, dados: "" });
+      api.setLanguage("pt");
+      ok(api.ramLerRespostaIA(pPt).ehPedido === true && api.ramLerRespostaIA(pPt).ramos.length === 0 && api.ramLerRespostaIA(pEn).ehPedido === true && api.ramLerRespostaIA(pEn).ramos.length === 0, "R27h o PEDIDO colado (PT ou EN) nao vira ramo");
+      ok(api.RAM_PEDIDO_ASSINATURAS.every((x) => pPt.indexOf(x) >= 0 || pEn.indexOf(x) >= 0) && api.RAM_PEDIDO_ASSINATURAS.filter((x) => pPt.indexOf(x) >= 0).length >= 2 && api.RAM_PEDIDO_ASSINATURAS.filter((x) => pEn.indexOf(x) >= 0).length >= 2, "R27i contrato: as frases-assinatura existem no texto do pedido (mudar o pedido sem atualizar as assinaturas quebra aqui)");
+      /* colado pela metade: so' as regras (o trecho que virava ramos falsos) */
+      const soRegras = (p) => { const q = p.split("Law index")[0].split("Índice da lei")[0]; return q.slice(q.indexOf("- ")); };
+      ok(api.ramLerRespostaIA(soRegras(pPt)).ehPedido === true && api.ramLerRespostaIA(soRegras(pPt)).ramos.length === 0 && api.ramLerRespostaIA(soRegras(pEn)).ehPedido === true, "R27h2 so' as regras do pedido (colado pela metade) tambem nao vira ramo");
+      ok(api.ramLerRespostaIA("++ Responda o que cair :: 3").ehPedido !== true && api.ramLerRespostaIA("++ Responda o que cair :: 3").ramos.length === 1, "R27j resposta normal nao e' confundida com o pedido");
+    }
     const sub = api.ramLerRespostaIA("+++ X :: 2" + NL + "-- Y :: 3");
     ok(sub.ramos.map((x) => x.nome).join() === "X,Y", "R27g marcadores repetidos (+++, --) sao limpos: " + sub.ramos.map((x) => x.nome));
   }
@@ -746,13 +758,20 @@ async function testes() {
       const p2 = await a.ramPedirIA();
       ok(/2 questão/.test(p2), "R28e2 com questoes guardadas do topico o pedido diz quantas sao: " + p2.slice(-160));
       a.qsBancoPor([]);
-      /* clipboard indisponivel: o pedido vai para a caixa, para copiar de la */
+      /* clipboard indisponivel: o pedido aparece numa caixa SO' DE LEITURA, nunca na caixa da resposta */
       const orig = a.navegador.clipboard.writeText;
       a.navegador.clipboard.writeText = async () => { throw new Error("negado"); };
       a.$("ramColar").value = "";
       const p3 = await a.ramPedirIA();
       a.navegador.clipboard.writeText = orig;
-      ok(a.$("ramColar").value === p3 && p3.length > 100 && a.$("ramMsg").textContent === a.t("ram_ia_copie_manual"), "R28e3 sem permissao de copiar, o pedido aparece na caixa e a mensagem manda copiar de la");
+      ok(a.$("ramColar").value === "" && a.$("ramPedidoTxt").value === p3 && a.$("ramPedidoTxt").hidden === false && a.$("ramPedidoTxt").readOnly === true && p3.length > 100 && a.$("ramMsg").textContent === a.t("ram_ia_copie_manual"), "R28e3 sem permissao de copiar, o pedido aparece na caixa SO' DE LEITURA (a da resposta continua vazia)");
+      /* colar o PEDIDO no lugar da resposta: as regras viravam 4 ramos falsos */
+      a.$("ramColar").value = p3;
+      const nAntes = a.ramLinhasAtual().length;
+      const rp = a.ramConferirIA();
+      ok(rp.ehPedido === true && rp.ramos.length === 0 && a.ramLinhasAtual().length === nAntes && a.$("ramMsg").textContent === a.t("ram_ia_eh_pedido"), "R28e4 colar o proprio pedido como resposta: o app reconhece e nao cria ramo nenhum");
+      await a.ramPedirIA();
+      ok(a.$("ramPedidoTxt").hidden === true && a.$("ramMsg").textContent === a.t("ram_ia_copiado"), "R28e5 copiou de novo: a caixa do pedido some");
       ok(/Índice da lei/.test(p2) && /TÍTULO I — PARTES \(arts\. 1 a 2\)/.test(p2), "R28e com lei carregada o pedido leva o indice dela (com os artigos): " + p2.slice(-200));
       /* conferir */
       const NL = String.fromCharCode(10);
@@ -777,7 +796,7 @@ async function testes() {
       ok(/primeiros/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 6 + 30, "R28l2 resposta com mais de 30 ramos: entram 30 e a mensagem avisa do corte: " + a.$("ramMsg").textContent);
       a.$("btnRamFechar").onclick();
       a.ramAbrirEditor(ctx);
-      ok(a.$("ramIaBox").hidden === true && a.$("ramColar").value === "", "R28n ao reabrir o editor a caixa volta escondida e vazia");
+      ok(a.$("ramIaBox").hidden === true && a.$("ramColar").value === "" && a.$("ramPedidoTxt").hidden === true && a.$("ramPedidoTxt").value === "", "R28n ao reabrir o editor a caixa volta escondida e vazia (e a do pedido tambem)");
       a.$("btnRamFechar").onclick();
     }
 
@@ -1335,7 +1354,7 @@ async function testes() {
       ok(a.ramLeiPadrao([]).id === "" && a.ramLeiPadrao([{ id: "x", atual: true, combina: null }]).id === "x" && a.ramLeiPadrao([{ id: "x", atual: true, combina: false }]).id === "x" && a.ramLeiPadrao([{ id: "y", atual: false, combina: false }]).id === "", "R42g sem candidata melhor, fica a atual; sem atual e sem uma que bata, nada vem marcado (nao se escolhe lei ao acaso)");
       const ctx = { editalId: ed.id, disciplina: disc, topico: top, chave, depois() {} };
       a.ramAbrirEditor(ctx);
-      ok(a.ramLeiEscolhida().id === ec.id && a.$("ramLeiBox").hidden === false && a.$("ramLeiSel").children.length === 2 && a.$("ramLeiSel").value === ec.id, "R42h a janela abre com a caixa da lei e a emenda marcada");
+      ok(a.ramLeiEscolhida().id === ec.id && a.$("ramLeiBox").hidden === false && a.$("ramLeiSel").children.length === 3 && a.$("ramLeiSel").children[0].value === "" && a.$("ramLeiSel").value === ec.id, "R42h a janela abre com a caixa da lei e a emenda marcada (e 'nenhuma' sempre na lista: a lei e' opcional)");
       ok(/deixei marcada/.test(a.$("ramLeiAviso").textContent) && a.ramLeiBloqueada() === false && a.$("ramLeiMesmoLinha").hidden === true && a.$("btnRamLeiFixar").hidden === false, "R42i avisa da troca; nada bloqueado; oferece 'usar como a lei do topico': " + a.$("ramLeiAviso").textContent);
       const p0 = a.ramProporDaLei();
       ok(p0.ramos.length === 0 && /Não achei divisões/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 0, "R42j a emenda nao tem titulos: nao inventa ramos (antes vinham os Titulos da Constituicao)");
@@ -1346,7 +1365,12 @@ async function testes() {
       ok(a.ramLeiBloqueada() === true && /ATENÇÃO/.test(a.$("ramLeiAviso").textContent) && a.$("ramLeiMesmoLinha").hidden === false, "R42l escolher lei que nao bate: alerta e trava");
       const p1 = a.ramProporDaLei();
       ok(p1.bloqueada === true && a.ramLinhasAtual().length === 0 && /não bate/.test(a.$("ramMsg").textContent), "R42m com a trava, 'propor pela lei' nao acrescenta nada");
-      ok((await a.ramPedirIA()) === null && /não bate/.test(a.$("ramMsg").textContent), "R42n com a trava, o pedido a IA tambem nao sai");
+      const pTrava = await a.ramPedirIA();
+      ok(typeof pTrava === "string" && pTrava.indexOf("Dos Princípios Fundamentais") < 0 && pTrava.indexOf(a.t("ram_prompt_indice")) < 0 && a.$("ramMsg").textContent === a.t("ram_ia_copiado_sem_indice"), "R42n a lei que nao bate NAO trava a IA: o pedido sai sem o indice dela, e a mensagem diz isso");
+      /* "nenhuma" e' nenhuma: nada de cair, calado, na lei do topico (a Constituicao) */
+      a.ramLeiTrocar("");
+      ok(a.ramLeiEscolhida() === null && a.ramTextoDaLei(a.ramCtxAtual ? a.ramCtxAtual() : ctx) === "" && a.$("btnRamLei").disabled === true && a.ramPedidoIA(ctx, []).indexOf(a.t("ram_prompt_indice")) < 0 && a.ramLeiBloqueada() === false, "R42n2 escolher '(nenhuma)': sem indice, 'propor pela lei' desliga e o pedido a IA sai sem lei");
+      a.ramLeiTrocar(cf.id);
       a.ramLeiVer();
       ok(a.$("ramLeiPrev").hidden === false && /Constituição Federal": 7 artigo\(s\)/.test(a.$("ramLeiPrevCab").textContent) && /TÍTULO I — Dos Princípios Fundamentais/.test(a.$("ramLeiPrevCab").textContent) && /REPÚBLICA FEDERATIVA/.test(a.$("ramLeiPrevTexto").textContent), "R42o a previa mostra o que a lei e' (artigos, divisoes, o que o indice proporia) e o comeco do texto: " + a.$("ramLeiPrevCab").textContent);
       a.$("ramLeiMesmo").checked = true; a.$("ramLeiMesmo").onchange();
