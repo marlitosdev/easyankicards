@@ -3541,7 +3541,7 @@ async function testes() {
     esc().find((b) => b.textContent === "Modalidades").onclick();
     ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133 › Modalidades" && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true",
        "T1b escolher um ramo: o titulo e o botao acompanham");
-    ok(/o resumo ainda é um só, do tópico inteiro/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /do tópico inteiro/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
+    ok(/Resumo do ramo/.test(doSlot("resumo").textContent) && /ainda não tem seção no resumo do tópico/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /do tópico inteiro/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
        "T1b2 no ramo, a ficha diz o que e' do ramo (cartoes) e o que e' do topico inteiro (resumo, lei, julgados)");
     const rod = () => todosF(a.$("matFichaRodape"), (e) => typeof e.onclick === "function");
     ok(a.$("matFichaRodape").hidden === false && rod().some((b) => b.textContent === "Registrar estudo de «Modalidades»") && rod().some((b) => /ed-menu-ramos/.test(cl(b))),
@@ -3582,6 +3582,113 @@ async function testes() {
     ok(doc2 && /(^| )tem( |$)/.test(cl(doc2)) && doc2.textContent === "resumo", "T1f o resumo gravado com outra grafia aparece na linha");
     doc2.onclick({ stopPropagation() {} });
     ok(a.$("matTexto").value === "Resumo gravado com outra grafia.", "T1f2 e abre CHEIO (antes o editor recalculava a chave e abria vazio): " + JSON.stringify(a.$("matTexto").value));
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+  }
+
+  /* ---- T2: o motor das seções do resumo (geral + "## Ramo — X") ---- */
+  {
+    const { a } = MT();
+    const NL = String.fromCharCode(10);
+    const RS = [{ id: "conceito_de_tributo", nome: "Conceito de Tributo" }, { id: "impostos", nome: "Impostos" }];
+    const T = ["Intro ==geral==", "", "## Ramo — Conceito de Tributo", "A", "### sub", "B", "", "# RAMO: impostos", "C", "#### Ramo - Taxa extra", "D"].join(NL);
+    const sc = a.matSecoesDeRamo(T, RS);
+    ok(sc.geral.corpo === "Intro ==geral==" && sc.secoes.length === 3, "T2a o geral e' o que vem antes; tres secoes: " + sc.secoes.length);
+    ok(sc.secoes[0].id === "conceito_de_tributo" && sc.secoes[0].corpo === ["A", "### sub", "B"].join(NL) && !sc.secoes[0].semRamo,
+       "T2b a secao vai ate' o PROXIMO titulo de ramo (os subtitulos sao dela): " + JSON.stringify(sc.secoes[0].corpo));
+    ok(sc.secoes[1].id === "impostos" && sc.secoes[1].nome === "Impostos" && sc.secoes[1].corpo === "C", "T2c titulos tolerados: '# RAMO: impostos' casa com o ramo Impostos");
+    ok(sc.secoes[2].semRamo === true && sc.secoes[2].nome === "Taxa extra" && sc.secoes[2].corpo === "D", "T2d secao sem ramo continua existindo (nunca se perde texto)");
+    ok(a.matTextoDaSecao(T, "", RS) === "Intro ==geral==" && a.matTextoDaSecao(T, "impostos", RS) === "C" && a.matTextoDaSecao(T, "taxas", RS) === null, "T2e ler um escopo: geral, ramo, e null para ramo sem secao");
+    const t2 = a.matTrocarSecao(T, "impostos", "C2", "Impostos", RS);
+    ok(t2 === T.replace(NL + "C" + NL + "####", NL + "C2" + NL + NL + "####") && a.matTextoDaSecao(t2, "conceito_de_tributo", RS) === a.matTextoDaSecao(T, "conceito_de_tributo", RS) && /==geral==/.test(t2),
+       "T2f trocar UMA secao nao toca no resto (o geral, as marcas e as outras secoes): " + JSON.stringify(t2));
+    const t3 = a.matTrocarSecao(T, "", "Novo geral", "", RS);
+    ok(t3.indexOf("Novo geral" + NL + NL + "## Ramo — Conceito de Tributo") === 0 && a.matSecoesDeRamo(t3, RS).secoes.length === 3, "T2g trocar o geral mantem as secoes");
+    const t4 = a.matTrocarSecao(T, "taxas", "T", "Taxas", RS);
+    ok(t4 === T + NL + NL + "## Ramo — Taxas" + NL + "T", "T2h ramo sem secao: a secao e' acrescentada no fim com o titulo canonico");
+    ok(a.matTrocarSecao("", "taxas", "T", "Taxas", RS) === "## Ramo — Taxas" + NL + "T" && a.matTrocarSecao(T, "taxas", "  ", "Taxas", RS) === T, "T2i resumo vazio vira so' a secao; secao vazia nao cria titulo");
+    const can = ["G", "", "## Ramo — Conceito de Tributo", "x", "", "## Ramo — Impostos", "y"].join(NL);
+    ok(a.matTrocarSecao(can, "conceito_de_tributo", a.matTextoDaSecao(can, "conceito_de_tributo", RS), "Conceito de Tributo", RS) === can, "T2j ler e devolver a mesma secao nao muda o texto");
+    ok(a.matSecoesDeRamo("## ramo – conceito de tributo" + NL + "z", RS).secoes[0].id === "conceito_de_tributo", "T2k travessao curto, minusculas: casa pelo id do ramo");
+  }
+
+  /* ---- T3: ler e editar só o ramo (na ficha e no editor), sem perder o resto ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    a.edProgressoPor({});
+    const NL = String.fromCharCode(10);
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    const todosF = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); todosF(x, pred, acc); }); return acc; };
+    const cl = (e) => String((e && e.className) || "");
+    const doSlot = (sl) => todosF(a.$("matFichaLista"), (e) => /(^| )mat-ficha-item( |$)/.test(cl(e)) && new RegExp("slot-" + sl).test(cl(e)))[0];
+    const btn = (el, txt) => todosF(el, (e) => typeof e.onclick === "function" && e.textContent === txt)[0];
+    const escB = (nome) => Array.from(a.$("matEscopo").children).find((b) => b.textContent === nome);
+    const digita = (v) => { a.$("matTextoSecao").value = v; ((a.$("matTextoSecao")._ouv || {}).input || []).forEach((fn) => fn()); };
+    const ch = a.matChaveViva("Licitações", "Lei 14.133");
+    a.matGravar(ch, "Geral do tópico.", { disciplina: "Licitações", topico: "Lei 14.133" });
+    /* ficha no ramo sem secao: "Escrever" abre o editor SO' na secao */
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramo: "modalidades", ramos: it().ramos, item: it(), editalId: ed.id });
+    ok(/falta/.test(cl(doSlot("resumo"))) && /Resumo do ramo/.test(doSlot("resumo").textContent), "T3a a ficha do ramo mostra o 'Resumo do ramo' (ainda sem secao)");
+    btn(doSlot("resumo"), a.t("mat_ficha_escrever")).onclick();
+    ok(a.$("dlgMaterial").open === true && a.matModoAtual() === "editar" && a.matEscopoAtual() === "modalidades" && a.$("matTexto").hidden === true && a.$("matTextoSecao").hidden === false
+       && a.$("matTextoSecao").value === "" && /Modalidades/.test(a.$("matTextoSecao").placeholder),
+       "T3b 'Escrever' abre o editor SO' na secao do ramo (o texto inteiro fica guardado por tras)");
+    ok(a.$("matEscopo").hidden === false && escB("Modalidades").getAttribute("aria-pressed") === "true" && !!escB("Tudo") && !!escB("Geral") && /mat-esc-vazio/.test(cl(escB("Contratos"))),
+       "T3c a barra do escopo no editor: Tudo, Geral e os ramos (o sem secao, tracejado)");
+    digita("Concorrência e pregão.");
+    ok(a.$("matTexto").value === "Geral do tópico." + NL + NL + "## Ramo — Modalidades" + NL + "Concorrência e pregão.", "T3d escrever na secao devolve o texto inteiro (o geral fica): " + JSON.stringify(a.$("matTexto").value));
+    a.matSalvarEstado();
+    ok(/## Ramo — Modalidades\nConcorrência e pregão\.$/.test(a.matResumosAtual()[ch].texto) && /^Geral do tópico\./.test(a.matResumosAtual()[ch].texto), "T3e salvar grava o resumo INTEIRO com a secao");
+    /* trocar de ramo nao mistura as secoes */
+    escB("Contratos").onclick();
+    ok(a.matEscopoAtual() === "contratos" && a.$("matTextoSecao").value === "", "T3f outro ramo: a caixa mostra a secao DELE (vazia)");
+    digita("Cláusulas exorbitantes.");
+    escB("Modalidades").onclick();
+    ok(a.$("matTextoSecao").value === "Concorrência e pregão." && a.matTextoDaSecao(a.$("matTexto").value, "contratos", it().ramos) === "Cláusulas exorbitantes.",
+       "T3g voltar a Modalidades: cada secao com o seu texto (o de Contratos nao foi parar em Modalidades)");
+    /* a barra de formatacao age na secao */
+    const ta = a.$("matTextoSecao"); ta.selectionStart = 0; ta.selectionEnd = 12;
+    a.matEnvolver("**");
+    ok(/^\*\*Concorrência\*\*/.test(ta.value) && /## Ramo — Modalidades\n\*\*Concorrência\*\*/.test(a.$("matTexto").value), "T3h o negrito age na secao e volta ao texto inteiro");
+    /* colar (texto de fora) no escopo de um ramo vai para a secao dele */
+    a.matAplicarColagem("Diálogo competitivo.");
+    ok(/Diálogo competitivo\.$/.test(a.$("matTextoSecao").value) && a.matTextoDaSecao(a.$("matTexto").value, "modalidades", it().ramos).indexOf("Diálogo competitivo.") >= 0 && a.matTextoDaSecao(a.$("matTexto").value, "", it().ramos) === "Geral do tópico.",
+       "T3h2 colar no ramo entra na secao dele (e nao no fim do texto inteiro)");
+    a.uiFechar && a.uiFechar(); a._uiFechar && a._uiFechar(true);
+    /* salvar sem o evento de digitar (texto posto na caixa por outro caminho): a gravacao sincroniza antes */
+    a.$("matTextoSecao").value = a.$("matTextoSecao").value + " Leilão.";
+    a.matSalvarEstado();
+    ok(/Leilão\.$/.test(a.matTextoDaSecao(a.matResumosAtual()[ch].texto, "modalidades", it().ramos)), "T3h3 salvar leva o que esta na caixa da secao, mesmo sem o evento de digitar");
+    escB("Geral").onclick();
+    ok(a.$("matTextoSecao").value === "Geral do tópico.", "T3i 'Geral' mostra so' o resumo geral");
+    escB("Tudo").onclick();
+    ok(a.$("matTexto").hidden === false && a.$("matTextoSecao").hidden === true && /Cláusulas/.test(a.$("matTexto").value) && /\*\*Concorrência\*\*/.test(a.$("matTexto").value), "T3j 'Tudo' volta ao texto inteiro, com as duas secoes");
+    /* leitura do ramo: so' a secao dele */
+    escB("Modalidades").onclick();
+    a.matTrocarModo("ler");
+    const html = a.$("matLeitura").innerHTML;
+    ok(/Concorr/.test(html) && !/Geral do tópico/.test(html) && !/Cláusulas/.test(html), "T3k ler no ramo mostra SO' a secao dele");
+    escB("Fase preparatória").onclick();
+    ok(/ainda não tem seção/.test(a.$("matLeitura").innerHTML), "T3l ler um ramo sem secao diz isso (e como escrever)");
+    a.matSalvarEstado();
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+    /* a ficha depois: o ramo tem a secao; o topico conta as secoes */
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramo: "modalidades", ramos: it().ramos, item: it(), editalId: ed.id });
+    ok(!/falta/.test(cl(doSlot("resumo"))) && /caracteres nesta seção/.test(doSlot("resumo").textContent) && !!btn(doSlot("resumo"), a.t("mat_ficha_ler")) && !!btn(doSlot("resumo"), a.t("mat_ficha_editar")),
+       "T3m a ficha do ramo com secao: tamanho, Ler e Editar");
+    a.matFichaEscolher("");
+    ok(/geral \+ 2 seção/.test(doSlot("resumo").textContent), "T3n no topico inteiro, a ficha diz quantas secoes de ramo o resumo tem: " + doSlot("resumo").textContent);
+    btn(doSlot("resumo"), a.t("mat_ficha_ler")).onclick();
+    ok(a.matEscopoAtual() === "*" && /Geral do tópico/.test(a.$("matLeitura").innerHTML) && /Cláusulas/.test(a.$("matLeitura").innerHTML), "T3o 'Ler' do topico inteiro mostra tudo");
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+    /* abrir OUTRO topico nao leva a secao do anterior junto */
+    a.matAbrirEditor({ disciplina: "Licitações", nome: "Lei 14.133", chave: ch }, "editar", { ramo: "contratos", ramos: it().ramos });
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+    const ch2 = a.matChave("Outra", "Avulso");
+    a.matGravar(ch2, "Texto do avulso.", { disciplina: "Outra", topico: "Avulso" });
+    a.matAbrirEditor({ disciplina: "Outra", nome: "Avulso" }, "editar");
+    a.matTrocarModo("ler"); a.matTrocarModo("editar");
+    ok(a.$("matTexto").value === "Texto do avulso." && a.$("matEscopo").hidden === true && a.$("matTextoSecao").hidden === true, "T3p abrir outro topico (sem ramos): nada da secao anterior entra no texto dele");
     a.$("dlgMaterial").close && a.$("dlgMaterial").close();
   }
 

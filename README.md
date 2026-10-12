@@ -1,4 +1,4 @@
-# EasyAnkiCards (v18.10.0) · by MarlitosDev
+# EasyAnkiCards (v18.11.0) · by MarlitosDev
 
 **Use agora, sem instalar nada:** https://marlitosdev.github.io/easyankicards/
 

@@ -660,11 +660,81 @@ function matParaHtml(txt, prova, opc) {
   return saida.join("\n");
 }
 
+/* =====================================================================
+ * T2 — O RESUMO DE CADA RAMO É UMA SEÇÃO DO MESMO TEXTO
+ *
+ * Título canônico "## Ramo — <nome>" (aceita # a ######, "Ramo:", "Ramo -", "Ramo –", maiúsculas e acentos). O que vem
+ * antes do primeiro título de ramo é o "resumo geral". A seção vai do seu título até o PRÓXIMO título de ramo — os
+ * subtítulos dentro dela são dela. Uma seção cujo nome não casa com nenhum ramo do tópico continua existindo (semRamo):
+ * nunca se perde texto. Tudo o que lê o resumo (marcas, dúvidas, busca, cartões, NotebookLM) continua lendo o texto
+ * inteiro; ler/editar "só o ramo" é recortar e devolver a seção.
+ * ===================================================================== */
+const MAT_RAMO_TIT_RE = /^(#{1,6})[ \t]*ramo[ \t]*[—–:-][ \t]*(.+?)[ \t]*#*[ \t]*$/i;
+function matIdDeNome(nome) {
+  if (typeof edRamoId === "function") return edRamoId(nome);
+  return String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+function matSecoesDeRamo(texto, ramos) {
+  const s = String(texto || "");
+  const rs = ramos || [];
+  const secoes = [];
+  let pos = 0;
+  const linhas = s.split("\n");
+  linhas.forEach((ln, k) => {
+    const m = ln.match(MAT_RAMO_TIT_RE);
+    if (m) {
+      const nomeTit = m[2].trim();
+      const idTit = matIdDeNome(nomeTit);
+      const r = rs.find((x) => x.id === idTit || matIdDeNome(x.nome) === idTit);
+      secoes.push({ id: r ? r.id : idTit, nome: r ? r.nome : nomeTit, semRamo: !r, ini: pos,
+        corpoIni: pos + ln.length + (k < linhas.length - 1 ? 1 : 0) });
+    }
+    pos += ln.length + 1;
+  });
+  secoes.forEach((x, k) => {
+    x.fim = k + 1 < secoes.length ? secoes[k + 1].ini : s.length;
+    x.corpo = s.slice(x.corpoIni, x.fim).replace(/\s+$/, "");
+  });
+  const fimGeral = secoes.length ? secoes[0].ini : s.length;
+  return { geral: { ini: 0, fim: fimGeral, corpo: s.slice(0, fimGeral).replace(/\s+$/, "") }, secoes };
+}
+/* o texto de um escopo: "" = geral; um id = o corpo da seção (null se o ramo ainda não tem seção) */
+function matTextoDaSecao(texto, id, ramos) {
+  const sc = matSecoesDeRamo(texto, ramos);
+  if (!id) return sc.geral.corpo;
+  const x = sc.secoes.find((y) => y.id === id);
+  return x ? x.corpo : null;
+}
+/* troca SÓ um pedaço e devolve o texto inteiro: o geral (id ""), a seção existente do ramo, ou acrescenta a seção no fim */
+function matTrocarSecao(texto, id, corpo, nome, ramos) {
+  const s = String(texto || "");
+  const novo = String(corpo || "").replace(/\s+$/, "");
+  const sc = matSecoesDeRamo(s, ramos);
+  if (!id) {
+    const resto = s.slice(sc.geral.fim);
+    return novo + (resto ? (novo ? "\n\n" : "") + resto : "");
+  }
+  const x = sc.secoes.find((y) => y.id === id);
+  if (x) {
+    const depois = s.slice(x.fim);
+    return s.slice(0, x.corpoIni) + novo + (depois ? "\n\n" + depois : "");
+  }
+  if (!novo) return s;
+  const base = s.replace(/\s+$/, "");
+  return base + (base ? "\n\n" : "") + "## Ramo — " + (nome || id) + "\n" + novo;
+}
+
 /* Aplica a marca em volta da seleção. Se nada estiver selecionado, insere as
  * marcas e deixa o cursor no meio — quem clicou em "negrito" quer digitar em
  * negrito, não receber "****" e ter de se virar. */
+/* a caixa em que se escreve AGORA: o texto inteiro ou, no escopo de um ramo, só a seção (que devolve o texto inteiro a
+ * cada mudança — matTexto continua sendo a verdade que se grava) */
+function matTA() {
+  const sec = $("matTextoSecao");
+  return sec && !sec.hidden ? sec : $("matTexto");
+}
 function matEnvolver(ini, fim) {
-  const ta = $("matTexto");
+  const ta = matTA();
   const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
   const sel = ta.value.slice(a, b);
   ta.value = ta.value.slice(0, a) + ini + sel + (fim === undefined ? ini : fim)
@@ -673,15 +743,75 @@ function matEnvolver(ini, fim) {
   ta.focus();
   ta.setSelectionRange(sel ? pos + (fim === undefined ? ini : fim).length : pos, 
                        sel ? pos + (fim === undefined ? ini : fim).length : pos);
+  matSecaoSincronizar();
 }
 
 function matPrefixo(marca) {
-  const ta = $("matTexto");
+  const ta = matTA();
   const a = ta.selectionStart || 0;
   const ini = ta.value.lastIndexOf("\n", a - 1) + 1;
   ta.value = ta.value.slice(0, ini) + marca + ta.value.slice(ini);
   ta.focus();
   ta.setSelectionRange(a + marca.length, a + marca.length);
+  matSecaoSincronizar();
+}
+
+/* T3 — O ESCOPO DO EDITOR: "*" = tudo (o texto inteiro, como sempre), "" = só o resumo geral, ou o id de um ramo */
+let matEscopo = "*";
+function matEscopoAtual() { return matEscopo; }
+function matRamosDoAtual() { return (matAtual && matAtual.ramos) || []; }
+/* DE QUAL ESCOPO é o texto que está na caixa da seção (null = caixa vazia/escondida). A sincronização usa ESTE, e não o
+ * escopo atual: ao trocar de ramo o escopo muda antes de a caixa ser recarregada, e devolver a caixa no escopo novo
+ * gravaria o texto do ramo anterior no lugar do outro. */
+let matSecaoDe = null;
+/* a seção editada devolve o texto inteiro para matTexto (o que se grava) */
+function matSecaoSincronizar() {
+  const sec = $("matTextoSecao");
+  if (!sec || sec.hidden || matSecaoDe === null || matSecaoDe === "*" || !matAtual) return;
+  const id = matSecaoDe;
+  const r = matRamosDoAtual().find((x) => x.id === id);
+  const nome = r ? r.nome : ((matSecoesDeRamo($("matTexto").value, matRamosDoAtual()).secoes.find((x) => x.id === id) || {}).nome || id);
+  $("matTexto").value = matTrocarSecao($("matTexto").value, id, sec.value, nome, matRamosDoAtual());
+}
+function matEscopoEscolher(id) {
+  matSecaoSincronizar();
+  matEscopo = id === undefined || id === null ? "*" : id;
+  matTrocarModo(matModo);
+}
+function matPintarEscopo() {
+  const bx = $("matEscopo");
+  if (!bx) return;
+  bx.innerHTML = "";
+  const ramos = matRamosDoAtual();
+  const sc = matSecoesDeRamo(($("matTexto") || {}).value || "", ramos);
+  /* os ramos do tópico e, depois, as seções que não casam com nenhum ramo (nada fica escondido) */
+  const opcs = [{ id: "*", nome: t("mat_esc_tudo"), tip: t("mat_esc_tudo_tip") }, { id: "", nome: t("mat_esc_geral"), tip: t("mat_esc_geral_tip") }]
+    .concat(ramos.map((r) => ({ id: r.id, nome: r.nome, tip: t("mat_esc_ramo_tip", { r: r.nome }), tem: sc.secoes.some((x) => x.id === r.id) })))
+    .concat(sc.secoes.filter((x) => x.semRamo).map((x) => ({ id: x.id, nome: x.nome, tip: t("mat_esc_semramo_tip", { r: x.nome }), tem: true })));
+  bx.hidden = !ramos.length && !sc.secoes.length;
+  if (bx.hidden) { matEscopo = "*"; return; }
+  if (!opcs.some((o) => o.id === matEscopo)) matEscopo = "*";
+  opcs.forEach((o) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min mat-ficha-esc mat-esc" + (o.tem === false ? " mat-esc-vazio" : "");
+    b.textContent = o.nome;
+    b.title = o.tip + (o.tem === false ? " — " + t("mat_esc_sem_secao") : "");
+    b.setAttribute("aria-pressed", o.id === matEscopo ? "true" : "false");
+    b.onclick = () => matEscopoEscolher(o.id);
+    bx.append(b);
+  });
+}
+/* o que a leitura mostra no escopo: tudo, o geral, ou a seção do ramo com o seu título */
+function matTextoDoEscopo() {
+  const tudo = ($("matTexto") || {}).value || "";
+  if (matEscopo === "*") return tudo;
+  const ramos = matRamosDoAtual();
+  if (matEscopo === "") return matTextoDaSecao(tudo, "", ramos);
+  const corpo = matTextoDaSecao(tudo, matEscopo, ramos);
+  if (corpo === null) return null;
+  const sc = matSecoesDeRamo(tudo, ramos).secoes.find((x) => x.id === matEscopo);
+  return "## Ramo — " + (sc ? sc.nome : matEscopo) + "\n" + corpo;
 }
 
 /* =====================================================================
@@ -692,7 +822,8 @@ let matModo = "editar";       /* editar | ler */
 let matFonte = 15;            /* px do modo leitura */
 let matAmpliado = false;
 
-function matAbrirEditor(item, comoLer) {
+function matAbrirEditor(item, comoLer, opc) {
+  const o = opc || {};
   /* JÁ ABERTO NESTE MESMO TÓPICO: não recarrega.
    * Recarregar do registro descartaria, em silêncio, as marcas que ainda
    * não foram salvas — e era o que "abrir onde está" fazia quando o resumo
@@ -700,15 +831,25 @@ function matAbrirEditor(item, comoLer) {
   /* a chave que a tela achou (matChaveViva tolera acento e caixa): recalcular com matChave abria vazio um resumo que existe */
   const alvoChave = item.chave || (typeof matChaveViva === "function" ? matChaveViva(item.disciplina, item.nome) : matChave(item.disciplina, item.nome));
   if (matEditorAberto(alvoChave)) {
+    if (o.ramos) matAtual.ramos = o.ramos;
+    if (o.ramo !== undefined) matEscopo = o.ramo;
     matTrocarModo(comoLer || matModo);
     abrirModal("dlgMaterial");
     return;
   }
-  /* abre limpo: rascunho pendente é do material anterior */
+  /* abre limpo: rascunho pendente é do material anterior — e a caixa da seção também (senão a seção do tópico anterior
+   * seria devolvida ao texto deste na primeira troca de modo) */
+  if ($("matTextoSecao")) { $("matTextoSecao").hidden = true; $("matTextoSecao").value = ""; }
+  matSecaoDe = null;
   matSujo = false;
   matSelGuardada = "";
   matAtual = { chave: alvoChave,
                disciplina: item.disciplina, topico: item.nome };
+  /* os ramos do tópico: de quem abriu (a ficha) ou do edital aberto */
+  let ramosAb = o.ramos;
+  if (!ramosAb) { try { const it = typeof edItemDoPlano === "function" ? edItemDoPlano(item.disciplina, item.nome) : null; ramosAb = (it && it.ramos) || []; } catch (e) { ramosAb = []; } }
+  matAtual.ramos = ramosAb || [];
+  matEscopo = o.ramo !== undefined && o.ramo !== null ? o.ramo : "*";
   $("matTitulo").textContent = item.nome;
   matPintarSub();
   /* "r" VOLTOU A SER LIDO AQUI, e não herdado do trecho de cima.
@@ -765,9 +906,25 @@ function matTrocarModo(modo) {
   /* só existem dois modos. Qualquer outra coisa (um true vindo de quem
    * confundiu "comoLer" com booleano) virava um modo inexistente: nem lia
    * nem editava, e o painel de leitura ficava escondido e vazio sem erro. */
+  /* o que se escreveu na seção volta ao texto inteiro ANTES de trocar de modo ou de escopo */
+  matSecaoSincronizar();
   matModo = modo === "ler" || modo === true ? "ler" : "editar";
   const lendo = matModo === "ler";
-  $("matTexto").hidden = lendo;
+  matPintarEscopo();
+  const escopado = matEscopo !== "*";
+  $("matTexto").hidden = lendo || escopado;
+  const sec = $("matTextoSecao");
+  if (sec) {
+    sec.hidden = lendo || !escopado;
+    if (sec.hidden) matSecaoDe = null;
+    if (!sec.hidden) {
+      const r = matRamosDoAtual().find((x) => x.id === matEscopo);
+      const nomeR = r ? r.nome : (matSecoesDeRamo($("matTexto").value, matRamosDoAtual()).secoes.find((x) => x.id === matEscopo) || {}).nome || matEscopo;
+      sec.value = matTextoDaSecao($("matTexto").value, matEscopo, matRamosDoAtual()) || "";
+      matSecaoDe = matEscopo;
+      sec.placeholder = matEscopo === "" ? t("mat_secao_ph_geral") : t("mat_secao_ph", { r: nomeR });
+    }
+  }
   $("matBarra").hidden = lendo;
   $("matLeitura").hidden = !lendo;
   $("matCtrlLeitura").hidden = !lendo;
@@ -801,8 +958,10 @@ function matTrocarModo(modo) {
       ? { blocos: matProvaBlocos(matAtual.chave),
           respostas: matProvaResp[matAtual.chave] || {} }
       : null;
-    $("matLeitura").innerHTML = matParaHtml($("matTexto").value, prova)
-      || "<p class='nota'>" + t("mat_vazio_leitura") + "</p>";
+    /* no escopo de um ramo, a leitura mostra SÓ a seção dele (o modo prova vale no texto inteiro) */
+    const txtEsc = matTextoDoEscopo();
+    $("matLeitura").innerHTML = (txtEsc === null ? "" : matParaHtml(txtEsc, matEscopo === "*" ? prova : null))
+      || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
     $("matLeitura").style.fontSize = matFonte + "px";
   }
 }
@@ -1800,6 +1959,7 @@ function matPiscarSalvo() {
 
 function matSalvarEstado() {
   if (!matAtual) return false;
+  matSecaoSincronizar();
   /* a dica em edição entra junto: é o mesmo gesto de "guardar o que fiz" */
   try { matSalvarDicasPendentes(); } catch (e) {}
   matGravar(matAtual.chave, $("matTexto").value,
@@ -2037,9 +2197,10 @@ async function matColarDeFora() {
 function matAplicarColagem(txt) {
   const limpo = matLimparColagem(txt);
   if (!limpo) { uiAlert(t("mat_colar_vazio")); return; }
-  const ta = $("matTexto");
+  const ta = matTA();
   const antes = ta.value.trim();
   ta.value = antes ? antes + "\n\n" + limpo : limpo;
+  matSecaoSincronizar();
   $("dlgMatColar").close();
   reg("MATERIAL", "colagem limpa", txt.length + " → " + limpo.length + " caracteres");
   uiAlert(t("mat_colado", { n: limpo.split(/\n/).length }));
@@ -2047,6 +2208,7 @@ function matAplicarColagem(txt) {
 
 function matGravarEditor() {
   if (!matAtual) return;
+  matSecaoSincronizar();
   matGravar(matAtual.chave, $("matTexto").value,
     { disciplina: matAtual.disciplina, topico: matAtual.topico });
   reg("MATERIAL", "resumo salvo: " + matAtual.topico,
@@ -2608,13 +2770,19 @@ function matPintarFicha() {
   };
   const doTopico = (s) => (ramo ? s + " · " + t("mat_ficha_do_topico") : s);
   const ed = { disciplina: x.disciplina, nome: x.topico, chave: x.chave };
-  /* 📄 resumo — por enquanto um só, o do tópico (o resumo por ramo é a próxima fase) */
-  item("resumo", t("mat_slot_resumo"), inf.temR,
-    ramo ? t("mat_ficha_resumo_ramo") : (inf.temR ? t("mat_tamanho", { c: inf.chars }) : t("mat_ficha_falta")),
-    inf.temR
-      ? [botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler"), t("mat_slot_resumo_tip", { tp: x.topico })),
-        botao(t("mat_ficha_editar"), "btn-min", () => matAbrirEditor(ed, "editar"), t("mat_ficha_editar_tip", { tp: x.topico }))]
-      : [botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar"), t("mat_add_resumo_ajuda", { tp: x.topico }))]);
+  /* 📄 resumo — do tópico (com as seções que tiver) ou SÓ a seção do ramo; ler e editar abrem o editor já no escopo */
+  const textoR = String(x.texto || "");
+  const secs = matSecoesDeRamo(textoR, ramos).secoes;
+  const opcEd = { ramos, ramo: ramo ? ramo.id : "*" };
+  const corpoR = ramo ? matTextoDaSecao(textoR, ramo.id, ramos) : null;
+  const temEsc = ramo ? !!(corpoR && corpoR.trim()) : inf.temR;
+  item("resumo", ramo ? t("mat_slot_resumo_ramo") : t("mat_slot_resumo"), temEsc,
+    ramo ? (temEsc ? t("mat_ficha_resumo_ramo_tem", { c: corpoR.length }) : t("mat_ficha_resumo_ramo_falta"))
+      : (inf.temR ? t("mat_tamanho", { c: inf.chars }) + (secs.length ? " · " + t("mat_ficha_resumo_secoes", { n: secs.length }) : "") : t("mat_ficha_falta")),
+    temEsc
+      ? [botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler", opcEd), t("mat_slot_resumo_tip", { tp: ramo ? ramo.nome : x.topico })),
+        botao(t("mat_ficha_editar"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t("mat_ficha_editar_tip", { tp: ramo ? ramo.nome : x.topico }))]
+      : [botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t(ramo ? "mat_ficha_escrever_ramo_tip" : "mat_add_resumo_ajuda", { tp: x.topico, r: ramo ? ramo.nome : "" }))]);
   /* 🃏 cartões — do ramo, pela etiqueta ram_ */
   const mexer = () => { mcApontarTopico(x.disciplina, x.topico); try { matCartoesAbrir(); matCartoesVer(); } catch (e) {} };
   if (ramo) {
@@ -2989,6 +3157,8 @@ function matIniciar() {
   $("btnMatMaior").onclick = () => matFonteMudar(1);
   $("btnMatMenor").onclick = () => matFonteMudar(-1);
   $("btnMatLerReg").onclick = matRegistrarLeitura;
+  /* T3: escrever na seção de um ramo devolve, a cada tecla, o texto inteiro para matTexto (o que se grava) */
+  if ($("matTextoSecao") && $("matTextoSecao").addEventListener) $("matTextoSecao").addEventListener("input", matSecaoSincronizar);
   [["btnFmtB", () => matEnvolver("**")], ["btnFmtI", () => matEnvolver("_")],
    ["btnFmtM", () => matEnvolver("==")], ["btnFmtH", () => matPrefixo("## ")],
    ["btnFmtL", () => matPrefixo("- ")], ["btnFmtHr", () => matPrefixo("---\n")]]
