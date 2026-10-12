@@ -3793,6 +3793,54 @@ async function testes() {
     if (reg0) mats[ch] = reg0; else delete mats[ch];
   }
 
+  /* ---- T5: renomear/apagar um ramo leva a seção do resumo junto ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.hubAbrirEdital(ed.id);
+    const NL = String.fromCharCode(10);
+    const atuais = [{ id: "modalidades", nome: "Modalidades" }, { id: "contratos", nome: "Contratos" }];
+    const mapaP = new Map([["modalidades", "modalidades_de_licitacao"], ["contratos", ""]]);
+    const puro = a.ramSecoesRenomeadas(["G", "", "### Ramo: Modalidades", "M", "", "## Ramo — Contratos", "C"].join(NL), atuais, mapaP, { modalidades_de_licitacao: "Modalidades de licitação" });
+    ok(puro === ["G", "", "### Ramo — Modalidades de licitação", "M", "", "## Ramo — Contratos", "C"].join(NL), "T5a renomear troca so' o titulo (o nivel ### fica); o ramo apagado nao mexe na secao: " + JSON.stringify(puro));
+    ok(a.ramSecoesRenomeadas("Sem secao nenhuma.", atuais, mapaP, { modalidades_de_licitacao: "X" }) === "Sem secao nenhuma." && a.ramSecoesRenomeadas("", atuais, mapaP, {}) === "", "T5b resumo sem secao (ou vazio): nada muda");
+    const ch = a.matChaveViva("Licitações", "Lei 14.133");
+    const T0 = ["Geral.", "", "## Ramo — Modalidades", "Pregão e ==?concorrência==.", "", "## Ramo — Fase preparatória", "Planejamento.", "", "## Ramo — Contratos", "C ==!marca==."].join(NL);
+    a.matGravar(ch, T0, { disciplina: "Licitações", topico: "Lei 14.133" });
+    const r = a.ramAplicar({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave }, [
+      { nome: "Modalidades de licitação", peso: "5", nota: "", idOrig: "modalidades" },
+      { nome: "Contratos", peso: "3", nota: "", idOrig: "contratos" }]);
+    const T1 = a.matResumosAtual()[ch].texto;
+    const novosR = a.edItemDoPlano("Licitações", "Lei 14.133").ramos;
+    const sc = a.matSecoesDeRamo(T1, novosR);
+    ok(r.ok && r.resumo === true && /## Ramo — Modalidades de licitação\nPregão e ==\?concorrência==\./.test(T1), "T5c renomear o ramo pelo editor renomeia a secao do resumo (com as marcas dela): " + JSON.stringify(T1));
+    ok(sc.secoes.find((x) => x.id === "modalidades_de_licitacao" && !x.semRamo) && sc.secoes.find((x) => x.nome === "Fase preparatória" && x.semRamo && x.corpo === "Planejamento.") && /## Ramo — Contratos\nC ==!marca==\./.test(T1) && /^Geral\./.test(T1),
+       "T5d a secao renomeada casa com o ramo novo; a do ramo APAGADO fica (sem ramo, nada se perde); o resto nao muda");
+    a.gerDesfazerUltima();
+    ok(a.matResumosAtual()[ch].texto === T0, "T5e desfazer a edicao dos ramos volta o titulo da secao");
+    /* editado depois da renomeacao: o desfazer nao pisa no que a pessoa escreveu (instancia propria, estado limpo) */
+    {
+      const { a: b, ed: ed2, chave: chave2 } = MT();
+      b.hubAbrirEdital(ed2.id);
+      const chB = b.matChaveViva("Licitações", "Lei 14.133");
+      b.matGravar(chB, T0, { disciplina: "Licitações", topico: "Lei 14.133" });
+      const rB = b.ramAplicar({ editalId: ed2.id, disciplina: "Licitações", topico: "Lei 14.133", chave: chave2 }, [
+        { nome: "Modalidades de licitação", peso: "5", nota: "", idOrig: "modalidades" },
+        { nome: "Fase preparatória", peso: "3", nota: "", idOrig: "fase_preparatoria" },
+        { nome: "Contratos", peso: "3", nota: "", idOrig: "contratos" }]);
+      const editado = b.matResumosAtual()[chB].texto + NL + "Nota escrita depois.";
+      b.matGravar(chB, editado, { disciplina: "Licitações", topico: "Lei 14.133" });
+      b.gerDesfazerUltima();
+      ok(rB.resumo === true && /Modalidades de licitação/.test(editado) && b.matResumosAtual()[chB].texto === editado, "T5f resumo editado depois da renomeacao: o desfazer nao sobrescreve o que foi escrito");
+    }
+    /* topico sem resumo: renomear funciona como antes */
+    delete a.matResumosAtual()[ch].texto;
+    const r2 = a.ramAplicar({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave }, [
+      { nome: "Modalidades", peso: "5", nota: "", idOrig: "modalidades_de_licitacao" },
+      { nome: "Fase preparatória", peso: "3", nota: "", idOrig: "fase_preparatoria" },
+      { nome: "Contratos", peso: "3", nota: "", idOrig: "contratos" }]);
+    ok(r2.ok && r2.resumo === false, "T5g topico sem resumo: renomear funciona e nao cria resumo");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
