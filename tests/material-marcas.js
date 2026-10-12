@@ -1701,6 +1701,105 @@ async function testes() {
   }
 
   falhas.quantas = quantas;
+
+  /* ---- LEITURA: janela (Normal · Larga · Tela cheia), letra em degraus e coluna da tela cheia ---- */
+  {
+    const a = api, d = a.document;
+    const raiz = d.documentElement;
+    let pedidos = 0, saidas = 0;
+    raiz.requestFullscreen = () => { pedidos++; d.fullscreenElement = raiz; return Promise.resolve(); };
+    d.exitFullscreen = () => { saidas++; d.fullscreenElement = null; return Promise.resolve(); };
+    d.fullscreenElement = null;
+    try { a.loja.removeItem("eac_mat_amplo"); a.loja.removeItem("eac_mat_fonte"); a.loja.removeItem("eac_mat_coluna"); } catch (e) {}
+    const chL = a.matChave("Leitura", "Janela");
+    a.matGravar(chL, "## Ramo — A\nTexto do ramo A.\n\n## Ramo — B\nTexto do ramo B.", { disciplina: "Leitura", topico: "Janela" });
+    a.matAbrirEditor({ disciplina: "Leitura", nome: "Janela", chave: chL, ramos: [{ id: "a", nome: "A" }, { id: "b", nome: "B" }] }, "ler", { ramos: [{ id: "a", nome: "A" }, { id: "b", nome: "B" }] });
+    const dlg = a.$("dlgMaterial");
+    const prem = (id) => a.$(id).getAttribute("aria-pressed");
+    const css = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/#dlgMaterial\.mat-amplo\[open\]\{max-width:96vw;width:96vw/.test(css), "L1 a janela larga vale pelo id (\"dialog.mat-amplo\" perdia para \"dialog.diag-modal\", max-width 860px, e o botao nao fazia nada)");
+    ok(css.indexOf("#dlgMaterial.mat-amplo[open]") < css.indexOf("#dlgMaterial.mat-cheia[open]{width:100vw"), "L1b a tela cheia vem DEPOIS da larga no CSS (com as duas classes, ganha a tela cheia)");
+    ok(prem("btnMatJanNormal") === "true" && prem("btnMatAmpliar") === "false" && prem("btnMatCheia") === "false", "L2 ao abrir: Janela 'Normal' acesa");
+    a.$("btnMatAmpliar").onclick();
+    ok(/mat-amplo/.test(dlg.className) && prem("btnMatAmpliar") === "true" && prem("btnMatJanNormal") === "false" && a.loja.getItem("eac_mat_amplo") === "1", "L2b 'Larga' liga a classe, acende o botao e fica lembrada");
+    a.$("btnMatAmpliar").onclick();
+    ok(/mat-amplo/.test(dlg.className), "L2c clicar 'Larga' de novo nao desliga (escolha, nao alavanca: o botao aceso diz onde se esta)");
+    a.$("btnMatJanNormal").onclick();
+    ok(!/mat-amplo/.test(dlg.className) && prem("btnMatJanNormal") === "true" && a.loja.getItem("eac_mat_amplo") === "0", "L2d 'Normal' volta");
+    /* letra */
+    ok(a.$("matFonteVal").textContent === "100%" && a.$("matCheiaFonte").textContent === "100%", "L3 a letra aparece em % do padrao (nao em px): " + a.$("matFonteVal").textContent);
+    a.$("btnMatMaior").onclick();
+    ok(a.matFonteAtual() === 17 && a.$("matFonteVal").textContent === "113%" && a.$("matCheiaFonte").textContent === "113%" && a.$("matLeitura").style.fontSize === "17px", "L3b A+ sobe UM degrau visivel (15 → 17) e as duas barras mostram o mesmo numero");
+    for (let i = 0; i < 12; i++) a.$("btnMatMaior").onclick();
+    ok(a.matFonteAtual() === 28 && a.$("btnMatMaior").disabled === true && a.$("btnMatCheiaMaior").disabled === true && a.$("btnMatMenor").disabled === false, "L3c no maximo, os dois A+ desligam");
+    a.$("matFonteVal").onclick();
+    ok(a.matFonteAtual() === 15 && a.$("matFonteVal").textContent === "100%" && a.$("btnMatMaior").disabled === false, "L3d clicar no numero volta a 100%");
+    for (let i = 0; i < 12; i++) a.$("btnMatMenor").onclick();
+    ok(a.matFonteAtual() === 12 && a.$("btnMatMenor").disabled === true && a.$("btnMatCheiaMenor").disabled === true, "L3e no minimo, os dois A− desligam");
+    a.loja.setItem("eac_mat_fonte", "16");
+    a.$("dlgMaterial").close();
+    a.matAbrirEditor({ disciplina: "Leitura", nome: "Janela", chave: chL }, "ler");
+    ok(a.matFonteAtual() === 15 && a.$("matFonteVal").textContent === "100%", "L3g ao abrir, a letra de uma versao antiga (16 px) entra no degrau (15 = 100%), e o A+ seguinte e' um degrau inteiro: " + a.matFonteAtual());
+    a.matFonteZerar();
+    ok(a.matFonteDegrau(16) === 15 && a.matFonteDegrau(27) === 28 && a.matFonteDegrau(99) === 28, "L3f letra guardada numa versao antiga (16 px) cai no degrau mais proximo");
+    /* tela cheia de verdade */
+    const props = {};
+    dlg.style.setProperty = (k, v) => { props[k] = v; };
+    a.$("btnMatCheia").onclick();
+    ok(a.matCheiaAtual() === true && pedidos === 1 && a.matFsNossoAtual() === true && /mat-cheia/.test(dlg.className), "L4 'Tela cheia' pede a tela cheia DE VERDADE ao navegador (a pagina inteira; o <dialog> nao pode)");
+    ok(a.$("matCtrlLeitura").hidden === true && a.$("matCheiaBarra").hidden === false && prem("btnMatCheia") === "true", "L4b na tela cheia: so' a barra dela (a normal some)");
+    ok(props["--mat-coluna"] === a.MAT_COLUNAS.media && prem("btnMatColMedia") === "true", "L4c coluna 'media' por padrao: " + props["--mat-coluna"]);
+    /* o defeito da imagem: trocar de ramo trazia a barra normal de volta por cima */
+    a.matEscopoEscolher("b");
+    ok(a.matCheiaAtual() === true && a.$("matCtrlLeitura").hidden === true && a.$("matCheiaBarra").hidden === false && a.$("matBarra").hidden === true && /Texto do ramo B/.test(a.$("matLeitura").innerHTML), "L5 trocar de ramo na tela cheia NAO traz a barra normal de volta (e mostra o ramo)");
+    a.matTrocarModo("ler");
+    ok(a.$("matCtrlLeitura").hidden === true && a.$("matRodape").hidden === true, "L5b nem repintar a leitura");
+    a.matEscopoEscolher("*");
+    /* coluna */
+    a.$("btnMatColEstreita").onclick();
+    ok(props["--mat-coluna"] === "62ch" && prem("btnMatColEstreita") === "true" && prem("btnMatColMedia") === "false" && a.loja.getItem("eac_mat_coluna") === "estreita", "L6 coluna 'estreita' estreita a linha, acende o botao e fica lembrada");
+    a.$("btnMatColLarga").onclick();
+    ok(props["--mat-coluna"] === "100%", "L6b 'larga' usa a largura toda");
+    /* teclas + e − */
+    const tecla = (key, alvo) => { let parou = false; (dlg._ouv.keydown || []).forEach((f) => f({ key, target: alvo || { tagName: "DIV" }, preventDefault() { parou = true; } })); return parou; };
+    const f0 = a.matFonteAtual();
+    ok(tecla("+") === true && a.matFonteAtual() > f0, "L7 na tela cheia, a tecla + aumenta a letra");
+    ok(tecla("-") === true && a.matFonteAtual() === f0, "L7b e a tecla − diminui");
+    ok(tecla("+", { tagName: "INPUT" }) === false && a.matFonteAtual() === f0, "L7c digitando num campo, a tecla nao mexe na letra");
+    /* Esc do navegador: ele sai da tela cheia sozinho; a leitura tem de sair junto */
+    d.fullscreenElement = null;
+    a.docDisparar("fullscreenchange");
+    ok(a.matCheiaAtual() === false && a.$("matCheiaBarra").hidden === true && a.$("matCtrlLeitura").hidden === false && prem("btnMatJanNormal") === "true", "L8 Esc (o navegador sai da tela cheia): a leitura volta a janela de antes num gesto so'");
+    ok(tecla("+") === false, "L8b fora da tela cheia, + nao e' sequestrado");
+    /* sair pelo botao devolve a tela ao navegador; e volta a janela que estava (larga) */
+    a.$("btnMatAmpliar").onclick();
+    a.$("btnMatCheia").onclick();
+    a.$("btnMatCheiaSair").onclick();
+    ok(saidas === 1 && d.fullscreenElement === null && a.matCheiaAtual() === false && /mat-amplo/.test(dlg.className) && prem("btnMatAmpliar") === "true", "L9 'Sair da tela cheia' devolve a tela ao navegador e volta a janela de antes (larga)");
+    /* quem JA estava em tela cheia (F11) nao perde a tela cheia ao sair da leitura */
+    d.fullscreenElement = raiz; const p0 = pedidos, s0 = saidas;
+    a.$("btnMatCheia").onclick();
+    a.$("btnMatCheiaSair").onclick();
+    ok(pedidos === p0 && saidas === s0 && d.fullscreenElement === raiz, "L10 se o navegador ja' estava em tela cheia, o app nao pede nem tira (a tela cheia e' da pessoa)");
+    d.fullscreenElement = null;
+    /* escolher Normal/Larga estando na tela cheia sai dela */
+    a.$("btnMatCheia").onclick();
+    a.matAmpliar(false);
+    ok(a.matCheiaAtual() === false && d.fullscreenElement === null && prem("btnMatJanNormal") === "true", "L11 escolher outra janela estando na tela cheia sai dela");
+    /* fechar o resumo na tela cheia devolve a tela */
+    a.$("btnMatCheia").onclick();
+    await a.matFechar();
+    ok(a.matCheiaAtual() === false && d.fullscreenElement === null && a.$("dlgMaterial").open !== true, "L12 fechar o resumo na tela cheia devolve a tela ao navegador");
+    /* sem a API (iPhone): a tela cheia continua funcionando como 'janela do tamanho da pagina' */
+    delete raiz.requestFullscreen;
+    a.matAbrirEditor({ disciplina: "Leitura", nome: "Janela", chave: chL }, "ler");
+    a.$("btnMatCheia").onclick();
+    ok(a.matCheiaAtual() === true && a.matFsNossoAtual() === false && a.$("matCheiaBarra").hidden === false, "L13 sem a API de tela cheia, entra mesmo assim (a janela ocupa a pagina)");
+    a.matCheiaTrocar(false);
+    a.$("dlgMaterial").close();
+    try { a.loja.removeItem("eac_mat_amplo"); a.loja.removeItem("eac_mat_fonte"); a.loja.removeItem("eac_mat_coluna"); } catch (e) {}
+  }
+
   return falhas;
 }
 

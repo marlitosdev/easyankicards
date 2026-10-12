@@ -1566,7 +1566,30 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgMaterial.mat-cheia #matLeitura{min-height:60vh}
 .mat-cheia-barra{display:flex;gap:6px;align-items:center;flex-wrap:wrap;
   margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
-.mat-cheia-dir{margin-left:auto;display:inline-flex;gap:6px;align-items:center}
+.mat-cheia-dir{margin-left:auto;display:inline-flex;gap:6px 14px;align-items:center;flex-wrap:wrap}
+/* LARGA: "dialog.mat-amplo" perdia para "dialog.diag-modal" (mesma força, escrita DEPOIS no arquivo, max-width
+ * 860px) — a classe entrava e nada mudava. Pelo id a regra vence em qualquer posição. */
+#dlgMaterial.mat-amplo[open]{max-width:96vw;width:96vw;max-height:96vh}
+/* TELA CHEIA: a janela ocupa a tela toda (a página pede a tela cheia ao navegador); vem depois de mat-amplo */
+#dlgMaterial.mat-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
+  margin:0;border:0;border-radius:0;padding:10px 18px 0;box-sizing:border-box}
+#dlgMaterial.mat-cheia #matLeitura{flex:1 1 auto;min-height:0;
+  padding-left:max(8px, calc((100% - var(--mat-coluna, 78ch)) / 2));
+  padding-right:max(8px, calc((100% - var(--mat-coluna, 78ch)) / 2))}
+#dlgMaterial.mat-cheia .mat-escopo{margin:0 0 6px}
+#dlgMaterial.mat-cheia .mat-escopo .btn-min{font-size:11px;padding:2px 8px}
+/* grupos de botões colados: um controle só, com o estado atual aceso */
+.mat-grupo{display:inline-flex;align-items:center;gap:6px}
+.mat-grupo-rot{font-size:12px;color:var(--sutil)}
+.mat-seg{display:inline-flex;align-items:stretch}
+.mat-seg > .btn-min{margin:0;border-radius:0}
+.mat-seg > .btn-min:first-child{border-radius:8px 0 0 8px}
+.mat-seg > .btn-min:last-child{border-radius:0 8px 8px 0}
+.mat-seg > .btn-min + .btn-min{border-left-width:0}
+.mat-seg > .btn-min[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
+.mat-seg > .btn-min:disabled{opacity:.4;cursor:default}
+.mat-seg > .mat-fonte{min-width:54px;font-weight:700;font-variant-numeric:tabular-nums}
+.mat-cheia-sair{font-weight:700;border-color:var(--acao)}
 
 /* AJUDA E REGISTRO — fora da fila de trabalho, e com forma própria.
  * Redondos e de contorno, contra os retângulos dos botões de ação: a
@@ -6775,13 +6798,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          "Limpar marcas" tambem saiu: apagar tudo de uma vez era a operacao
          mais destrutiva da tela, ao lado das que so pintam. -->
     <span class="mat-sep"></span>
-    <span data-i18n="mat_letra"></span>
-    <button class="btn-min" id="btnMatMenor" title="Diminui a letra da leitura. Não altera o texto guardado.">A&#8722;</button>
-    <span class="mat-fonte" id="matFonteVal">15px</span>
-    <button class="btn-min" id="btnMatMaior" title="Aumenta a letra da leitura. Não altera o texto guardado.">A+</button>
-    <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar" title="Alarga a janela do resumo para ocupar mais da tela. Útil em texto longo."></button>
-    <button class="btn-min" id="btnMatCheia" data-i18n="mat_cheia"
-      title="Só o texto do resumo, ocupando a tela. Sai com Esc ou pelo botão de voltar."></button>
+    <!-- LETRA e JANELA: cada um é UM controle (botões colados), e o estado atual fica aceso -->
+    <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
+      <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
+      <span class="mat-seg">
+        <button class="btn-min" id="btnMatMenor" data-i18n-title="mat_tip_menor" aria-label="A−">A&#8722;</button>
+        <button class="btn-min mat-fonte" id="matFonteVal" data-i18n-title="mat_tip_fonte_val">100%</button>
+        <button class="btn-min" id="btnMatMaior" data-i18n-title="mat_tip_maior" aria-label="A+">A+</button>
+      </span>
+    </span>
+    <span class="mat-grupo" role="group" data-i18n-title="mat_janela">
+      <span class="mat-grupo-rot" data-i18n="mat_janela"></span>
+      <span class="mat-seg">
+        <button class="btn-min" id="btnMatJanNormal" data-i18n="mat_jan_normal" data-i18n-title="mat_tip_jan_normal" aria-pressed="true"></button>
+        <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar" data-i18n-title="mat_tip_ampliar" aria-pressed="false"></button>
+        <button class="btn-min" id="btnMatCheia" data-i18n="mat_cheia" data-i18n-title="mat_tip_cheia" aria-pressed="false"></button>
+      </span>
+    </span>
     <span class="mat-estado" id="matEstado"></span>
   </div>
   <!-- A BARRA DA TELA CHEIA — existe só nela.
@@ -6790,12 +6823,24 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        aparecer amanhã sem ninguém lembrar de escondê-lo. Aqui o que
        sobrevive à tela cheia está escrito em um lugar só, e é isto. -->
   <div class="mat-cheia-barra" id="matCheiaBarra" hidden>
-    <button class="btn-min" id="btnMatCheiaSair" data-i18n="mat_cheia_sair"
-      title="Volta ao tamanho padrão, com todos os controles. O Esc faz o mesmo."></button>
+    <button class="btn-min mat-cheia-sair" id="btnMatCheiaSair" data-i18n="mat_cheia_sair" data-i18n-title="mat_tip_cheia_sair"></button>
     <span class="mat-cheia-dir">
-      <button class="btn-min" id="btnMatCheiaMenor" title="Diminui a letra.">A&#8722;</button>
-      <span class="mat-fonte" id="matCheiaFonte">15px</span>
-      <button class="btn-min" id="btnMatCheiaMaior" title="Aumenta a letra.">A+</button>
+      <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
+        <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
+        <span class="mat-seg">
+          <button class="btn-min" id="btnMatCheiaMenor" data-i18n-title="mat_tip_menor_tecla" aria-label="A−">A&#8722;</button>
+          <button class="btn-min mat-fonte" id="matCheiaFonte" data-i18n-title="mat_tip_fonte_val">100%</button>
+          <button class="btn-min" id="btnMatCheiaMaior" data-i18n-title="mat_tip_maior_tecla" aria-label="A+">A+</button>
+        </span>
+      </span>
+      <span class="mat-grupo" role="group" data-i18n-title="mat_tip_coluna">
+        <span class="mat-grupo-rot" data-i18n="mat_coluna"></span>
+        <span class="mat-seg">
+          <button class="btn-min" id="btnMatColEstreita" data-i18n="mat_col_estreita" data-i18n-title="mat_tip_coluna" aria-pressed="false"></button>
+          <button class="btn-min" id="btnMatColMedia" data-i18n="mat_col_media" data-i18n-title="mat_tip_coluna" aria-pressed="true"></button>
+          <button class="btn-min" id="btnMatColLarga" data-i18n="mat_col_larga" data-i18n-title="mat_tip_coluna" aria-pressed="false"></button>
+        </span>
+      </span>
       <button class="btn-min" id="btnMatCheiaMarcar" data-i18n="mat_marcador_por"
         title="Guarda onde você parou, no ponto em que a leitura está agora. Pode marcar de novo em outro lugar quantas vezes quiser."></button>
       <button class="btn-min" id="btnMatCheiaIr" data-i18n="mat_marcador_ir" hidden
