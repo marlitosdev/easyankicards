@@ -2144,18 +2144,30 @@ function regDifPintar(item) {
     cx.append(b);
   });
   const eco = $("regDifEco");
-  if (eco) eco.textContent = regComoFoiEfeito(atual, regDif);
+  /* o acerto medido no tópico (S2): vale quando você não responde, e é lembrado quando você responde outra coisa */
+  let med = null;
+  try {
+    if (item && typeof edAcertosPorTopico === "function")
+      med = edAcertosPorTopico(typeof edDiario !== "undefined" ? edDiario : [], typeof qsBanco !== "undefined" ? qsBanco : [])[(item.disciplina + "›" + item.nome).toLowerCase()] || null;
+  } catch (e) { med = null; }
+  if (eco) eco.textContent = regComoFoiEfeito(atual, regDif, med);
 }
 
 /* O EFEITO DE CADA RESPOSTA DO "COMO FOI?", escrito: sem ele a pessoa escolhe sem saber o que muda. "atual" é a avaliação
  * que vale hoje (difDe); "escolha" é o que foi tocado agora ("" = não respondeu, e então a anterior continua de pé). */
-function regComoFoiEfeito(atual, escolha) {
+function regComoFoiEfeito(atual, escolha, med) {
   const nv = (typeof DIF_NIVEIS !== "undefined" ? DIF_NIVEIS : []).find((x) => x.id === escolha);
   const dias = typeof DIF_VALIDADE !== "undefined" ? DIF_VALIDADE : 45;
   const fx = (n) => String(n).replace(".", t("ed_cf_dec"));
-  if (nv && escolha === "alta") return t("ed_cf_ef_alta", { f: fx(nv.fator), d: dias });
-  if (nv && escolha === "baixa") return t("ed_cf_ef_baixa", { f: fx(nv.fator), d: dias });
-  if (nv) return t("ed_cf_ef_media") + (atual && atual.nivel && atual.nivel !== "media" && !atual.vencida ? t("ed_cf_ef_tira", { n: t("ed_cf_" + atual.nivel) }) : "");
+  const medNv = med && med.valido ? med.nivel : "";
+  /* respondeu diferente do que o acerto diz: vale a resposta, mas a tela lembra o número */
+  const diverge = (e) => (medNv && medNv !== e ? t("ed_cf_ef_diverge", { p: med.pct, n: med.feitas, nv: t("ed_cf_" + medNv) }) : "");
+  if (nv && escolha === "alta") return t("ed_cf_ef_alta", { f: fx(nv.fator), d: dias }) + diverge("alta");
+  if (nv && escolha === "baixa") return t("ed_cf_ef_baixa", { f: fx(nv.fator), d: dias }) + diverge("baixa");
+  if (nv) return t("ed_cf_ef_media") + (atual && atual.nivel && atual.nivel !== "media" && !atual.vencida ? t("ed_cf_ef_tira", { n: t("ed_cf_" + atual.nivel) }) : "") + diverge("media");
+  /* sem resposta e sem declaração sua valendo: quem fala é o acerto (10+ questões) */
+  const declarada = atual && atual.nivel && !atual.vencida && atual.origem !== "sessao";
+  if (!declarada && medNv) return t("ed_cf_eco_acerto", { p: med.pct, n: med.feitas, nv: t("ed_cf_" + medNv) });
   if (!atual || !atual.nivel || atual.nivel === "media") return t("ed_cf_eco_nada");
   if (atual.vencida) return t("ed_cf_eco_venceu", { n: t("ed_cf_" + atual.nivel), d: atual.dias });
   return t("ed_cf_eco_vale", { n: t("ed_cf_" + atual.nivel), o: t("dif_origem_" + atual.origem), d: atual.dias });
@@ -2190,6 +2202,7 @@ function regDeLeitura(minutos) { regSugerir(["resumo"], minutos); }
 
 function regDeQuestoes(feitas, certas, minutos) {
   regFormas = ["questoes"];
+  regQDoApp = { feitas: Number(feitas) || 0, certas: Number(certas) || 0 };
   if ($("regQFeitas")) $("regQFeitas").value = String(feitas || 0);
   if ($("regQCertas")) $("regQCertas").value = String(certas || 0);
   if (minutos && $("regMinutos")) {
@@ -2563,6 +2576,7 @@ function abrirRegistro(i, opc) {
     if ($(id)) $(id).value = "";
   });
   regQSoPct = false;
+  regQDoApp = null;
   if ($("regObs")) $("regObs").hidden = true;
   regPintarAtalhos();
   regPintarQuestoes();
@@ -2608,6 +2622,8 @@ function abrirRegistro(i, opc) {
  * como se tivessem sido contados. O diário guarda o percentual e diz
  * que não houve contagem. */
 let regQSoPct = false;
+/* a contagem que regDeQuestoes trouxe do app (null = digitada à mão) */
+let regQDoApp = null;
 
 function regPintarQuestoes() {
   const bl = $("regQuestoesBloco");
@@ -2637,7 +2653,9 @@ function regQuestoesDoFormulario() {
   }
   const qf = Number(($("regQFeitas") || {}).value) || 0;
   const qc = Math.min(qf, Number(($("regQCertas") || {}).value) || 0);
-  return qf ? { feitas: qf, certas: qc } : null;
+  if (!qf) return null;
+  /* os mesmos números que a sessão do app trouxe: são as questões que já estão nas tentativas do banco */
+  return regQDoApp && regQDoApp.feitas === qf && regQDoApp.certas === qc ? { feitas: qf, certas: qc, app: true } : { feitas: qf, certas: qc };
 }
 
 function regPintarPct() {

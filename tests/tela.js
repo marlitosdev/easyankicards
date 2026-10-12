@@ -2296,7 +2296,8 @@ async function testes() {
         const eM = api.edCriar("X", ["# X | prova: " + emDias(131) + " | horas: 20",
           "@ D :: 5", "+ t1 :: 5 :: pq", "+ t2 :: 5 :: pq", "+ t3 :: 4 :: pq"].join("\n"));
         api.hubAbrirEdital(eM.id);
-        const hojeM = new Date().toISOString().slice(0, 10);
+        /* data LOCAL, como a do app: em UTC, um domingo à noite no Brasil já é segunda (outra semana) */
+        const hojeM = (() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
         api.diarioPor([{ d: hojeM, disc: "D", n: "t1", a: "feito", m: 90, cc: "X" },
                        { d: hojeM, disc: "D", n: "t2", a: "feito", m: 45, cc: "X" }]);
         api.edRender(); api.hubRender();
