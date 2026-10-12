@@ -821,6 +821,14 @@ function matTextoDoEscopo() {
 let matModo = "editar";       /* editar | ler */
 let matFonte = 15;            /* px do modo leitura */
 let matAmpliado = false;
+/* A LETRA ANDA EM DEGRAUS QUE SE VEEM. De 1 em 1 px (15 → 16) o clique quase não mudava nada e parecia
+ * defeito; e "15px" não diz nada a quem lê. Agora cada clique é ~10% e o número é relativo ao padrão (100%). */
+const MAT_FONTES = [12, 13, 14, 15, 17, 19, 21, 24, 28];
+const MAT_FONTE_PADRAO = 15;
+/* A COLUNA DA TELA CHEIA: numa tela de 1920 px a linha corrida de ponta a ponta tem 200 caracteres e o olho se
+ * perde ao voltar para a esquerda (o mesmo motivo da coluna da lei seca). O excedente vira margem. */
+const MAT_COLUNAS = { estreita: "62ch", media: "78ch", larga: "100%" };
+let matColuna = "media";
 
 function matAbrirEditor(item, comoLer, opc) {
   const o = opc || {};
@@ -864,8 +872,10 @@ function matAbrirEditor(item, comoLer, opc) {
   const r = matObter(matAtual.chave);
   $("matTexto").value = (r && r.texto) || "";
   try {
-    matFonte = Number(localStorage.getItem("eac_mat_fonte")) || 15;
+    matFonte = matFonteDegrau(Number(localStorage.getItem("eac_mat_fonte")) || MAT_FONTE_PADRAO);
     matAmpliado = localStorage.getItem("eac_mat_amplo") === "1";
+    const col = localStorage.getItem("eac_mat_coluna");
+    if (col && MAT_COLUNAS[col]) matColuna = col;
   } catch (e) {}
   /* material que já existe abre para LER; material novo abre para escrever.
    * Quem clica num tópico que já tem resumo quer relê-lo, não editá-lo. */
@@ -929,6 +939,9 @@ function matTrocarModo(modo) {
   $("matLeitura").hidden = !lendo;
   $("matCtrlLeitura").hidden = !lendo;
   if ($("btnMatSalvar")) $("btnMatSalvar").hidden = false;   /* serve nos dois modos */
+  /* NA TELA CHEIA, quem manda no que aparece é matCheiaAplicar. Trocar de ramo (escopo) passava por aqui e
+   * devolvia a barra normal — "Marcar trecho… Ampliar · tela cheia" — por cima da barra da tela cheia. */
+  if (matCheia) matCheiaAplicar();
   $("btnMatLerReg").hidden = !lendo;
   $("btnMatModo").textContent = t(lendo ? "mat_modo_editar" : "mat_modo_ler");
   /* o mesmo comando no topo: com resumo grande, ir até o rodapé para
@@ -952,6 +965,7 @@ function matTrocarModo(modo) {
     matPintarDicasBotao();
   }
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
+  matPintarJanela();
   if (lendo) {
     const provaOn = matAtual && matProvaEstaLigada(matAtual.chave);
     const prova = provaOn
@@ -962,18 +976,64 @@ function matTrocarModo(modo) {
     const txtEsc = matTextoDoEscopo();
     $("matLeitura").innerHTML = (txtEsc === null ? "" : matParaHtml(txtEsc, matEscopo === "*" ? prova : null))
       || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
-    $("matLeitura").style.fontSize = matFonte + "px";
   }
+  matPintarFonte();
 }
 
+/* o degrau mais próximo (quem guardou 16 px numa versão antiga cai no 15 ou no 17) */
+function matFonteDegrau(px) {
+  let melhor = MAT_FONTES[0];
+  MAT_FONTES.forEach((f) => { if (Math.abs(f - px) < Math.abs(melhor - px)) melhor = f; });
+  return melhor;
+}
+function matFonteRotulo(px) { return Math.round(100 * px / MAT_FONTE_PADRAO) + "%"; }
+/* UM lugar pinta a letra nas duas barras: o número de uma ficava para trás da outra (15px numa, 28px na outra) */
+function matPintarFonte() {
+  const i = MAT_FONTES.indexOf(matFonte);
+  if ($("matLeitura")) $("matLeitura").style.fontSize = matFonte + "px";
+  ["matFonteVal", "matCheiaFonte"].forEach((id) => { const el = $(id); if (el) el.textContent = matFonteRotulo(matFonte); });
+  /* o botão que não tem para onde ir fica desligado: clique sem efeito parece defeito */
+  ["btnMatMenor", "btnMatCheiaMenor"].forEach((id) => { const el = $(id); if (el) el.disabled = i <= 0; });
+  ["btnMatMaior", "btnMatCheiaMaior"].forEach((id) => { const el = $(id); if (el) el.disabled = i >= MAT_FONTES.length - 1; });
+}
 function matFonteMudar(d) {
-  matFonte = Math.max(12, Math.min(28, matFonte + d));
-  $("matLeitura").style.fontSize = matFonte + "px";
-  $("matFonteVal").textContent = matFonte + "px";
-  /* o mesmo número em dois lugares: a barra normal e a da tela cheia.
-   * Um deles ficando para trás faria a pessoa duvidar de qual vale. */
-  if ($("matCheiaFonte")) $("matCheiaFonte").textContent = matFonte + "px";
+  const i = Math.max(0, MAT_FONTES.indexOf(matFonteDegrau(matFonte)));
+  matFonte = MAT_FONTES[Math.max(0, Math.min(MAT_FONTES.length - 1, i + (d > 0 ? 1 : -1)))];
   try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
+  matPintarFonte();
+}
+/* clicar no número volta ao padrão (100%) */
+function matFonteZerar() {
+  matFonte = MAT_FONTE_PADRAO;
+  try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
+  matPintarFonte();
+}
+
+/* A COLUNA (só vale na tela cheia, onde há largura sobrando) */
+function matColunaDefinir(c) {
+  if (!MAT_COLUNAS[c]) return matColuna;
+  matColuna = c;
+  try { localStorage.setItem("eac_mat_coluna", c); } catch (e) {}
+  matPintarJanela();
+  return matColuna;
+}
+
+/* JANELA: Normal · Larga · Tela cheia — três estados que se excluem, num grupo só, com o atual aceso.
+ * Antes eram dois botões soltos (um que trocava o próprio nome para "Reduzir" e outro verde fixo), e não se
+ * sabia em qual tamanho se estava. */
+function matPintarJanela() {
+  const dlg = $("dlgMaterial");
+  if (dlg && dlg.style && dlg.style.setProperty) dlg.style.setProperty("--mat-coluna", MAT_COLUNAS[matColuna]);
+  const est = matCheia ? "cheia" : (matAmpliado ? "larga" : "normal");
+  [["btnMatJanNormal", "normal"], ["btnMatAmpliar", "larga"], ["btnMatCheia", "cheia"]].forEach(([id, e]) => {
+    const b = $(id);
+    if (b && b.setAttribute) b.setAttribute("aria-pressed", est === e ? "true" : "false");
+  });
+  [["btnMatColEstreita", "estreita"], ["btnMatColMedia", "media"], ["btnMatColLarga", "larga"]].forEach(([id, c]) => {
+    const b = $(id);
+    if (b && b.setAttribute) b.setAttribute("aria-pressed", matColuna === c ? "true" : "false");
+  });
+  return est;
 }
 
 /* ------------------------------------------------------------------
@@ -1012,19 +1072,56 @@ function matCheiaAplicar() {
     const lt = $("matLeitura");
     if (lt) lt.hidden = false;
   }
-  const b = $("btnMatCheia");
-  if (b && b.classList) b.classList.toggle("btn-min-ok", matCheia);
-  if ($("matCheiaFonte")) $("matCheiaFonte").textContent = matFonte + "px";
+  matPintarFonte();
+  matPintarJanela();
   matPintarMarcador();
+}
+
+/* TELA CHEIA DE VERDADE: a página inteira pede a tela ao navegador (o <dialog> não pode: "Dialog elements are
+ * invalid"), e a janela do resumo, que está por cima, passa a ocupá-la toda. Sem a API (iPhone, navegador que
+ * recusa), a janela ocupa a área da página — o melhor que dá. matFsNosso: só desfazemos a tela cheia que NÓS
+ * pedimos (se a pessoa já estava em F11, sair da leitura não pode tirar o navegador da tela cheia dela). */
+let matFsNosso = false;
+function matFsDoc() { return typeof document !== "undefined" ? document : null; }
+function matFsPedir() {
+  const d = matFsDoc();
+  const raiz = d && d.documentElement;
+  if (!raiz || typeof raiz.requestFullscreen !== "function" || d.fullscreenElement) return false;
+  try {
+    const p = raiz.requestFullscreen();
+    matFsNosso = true;
+    if (p && typeof p.catch === "function") p.catch(() => { matFsNosso = false; });
+    return true;
+  } catch (e) { matFsNosso = false; return false; }
+}
+function matFsSair() {
+  const d = matFsDoc();
+  if (!matFsNosso) return false;
+  matFsNosso = false;
+  if (d && d.fullscreenElement && typeof d.exitFullscreen === "function") {
+    try { const p = d.exitFullscreen(); if (p && typeof p.catch === "function") p.catch(() => {}); } catch (e) {}
+    return true;
+  }
+  return false;
+}
+/* o navegador saiu da tela cheia (Esc, F11, gesto do sistema): a leitura sai junto — Esc tem de ser UM gesto só */
+function matFsMudou() {
+  const d = matFsDoc();
+  if (d && !d.fullscreenElement && matFsNosso) {
+    matFsNosso = false;
+    if (matCheia) matCheiaTrocar(false);
+  }
 }
 
 function matCheiaTrocar(sim) {
   matCheia = sim === undefined ? !matCheia : !!sim;
   if (matCheia) {
+    matFsPedir();
     /* entra sempre LENDO: é o que a tela cheia é */
     if (matModo !== "ler") matTrocarModo("ler");
     matCheiaAplicar();
   } else {
+    matFsSair();
     matCheiaAplicar();
     matTrocarModo(matModo);
   }
@@ -1033,11 +1130,14 @@ function matCheiaTrocar(sim) {
   return matCheia;
 }
 
-function matAmpliar() {
-  matAmpliado = !matAmpliado;
+/* sim: true = janela larga, false = normal, undefined = alterna. Escolher Normal/Larga na tela cheia sai dela. */
+function matAmpliar(sim) {
+  matAmpliado = sim === undefined ? !matAmpliado : !!sim;
+  if (matCheia) matCheiaTrocar(false);
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
-  $("btnMatAmpliar").textContent = t(matAmpliado ? "mat_reduzir" : "mat_ampliar");
   try { localStorage.setItem("eac_mat_amplo", matAmpliado ? "1" : "0"); } catch (e) {}
+  matPintarJanela();
+  return matAmpliado;
 }
 
 /* Ler é estudar. Registrar a leitura fecha o buraco entre "tenho o material"
@@ -1999,6 +2099,7 @@ async function matFechar() {
   }
   matSujo = false;
   matSelGuardada = "";
+  if (matCheia) matCheiaTrocar(false);
   $("dlgMaterial").close();
   matAtual = null;
 }
@@ -3150,7 +3251,13 @@ function matIniciar() {
   };
   $("btnMatModo").onclick = trocarModo;
   if ($("btnMatModoTopo")) $("btnMatModoTopo").onclick = trocarModo;
-  $("btnMatAmpliar").onclick = matAmpliar;
+  $("btnMatAmpliar").onclick = () => matAmpliar(true);
+  if ($("btnMatJanNormal")) $("btnMatJanNormal").onclick = () => matAmpliar(false);
+  if ($("matFonteVal")) $("matFonteVal").onclick = matFonteZerar;
+  if ($("matCheiaFonte")) $("matCheiaFonte").onclick = matFonteZerar;
+  [["btnMatColEstreita", "estreita"], ["btnMatColMedia", "media"], ["btnMatColLarga", "larga"]]
+    .forEach(([id, c]) => { if ($(id)) $(id).onclick = () => matColunaDefinir(c); });
+  if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("fullscreenchange", matFsMudou);
   matBotao("btnMatCheia", "ler em tela cheia", () => matCheiaTrocar(true));
   matBotao("btnMatCheiaSair", "voltar do tela cheia", () => matCheiaTrocar(false));
   matBotao("btnMatCheiaMaior", "letra maior (tela cheia)", () => matFonteMudar(1));
@@ -3167,6 +3274,14 @@ function matIniciar() {
       if (!matCheia) return;
       if (e && e.preventDefault) e.preventDefault();
       matCheiaTrocar(false);
+    });
+    /* na tela cheia, as teclas + e − mudam a letra (como num leitor de livros); nunca enquanto se digita */
+    $("dlgMaterial").addEventListener("keydown", (e) => {
+      if (!matCheia || !e || e.ctrlKey || e.metaKey || e.altKey) return;
+      const alvo = e.target || {};
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || "") || alvo.isContentEditable) return;
+      if (e.key === "+" || e.key === "=") { matFonteMudar(1); if (e.preventDefault) e.preventDefault(); }
+      else if (e.key === "-" || e.key === "_") { matFonteMudar(-1); if (e.preventDefault) e.preventDefault(); }
     });
   }
   $("btnMatMaior").onclick = () => matFonteMudar(1);

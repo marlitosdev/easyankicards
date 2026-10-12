@@ -683,6 +683,8 @@ function rodar() {
     mcEstudarDireto, mcCartoesSalvos,
     mcEstIdxAtual: () => mcEstIdx, renderCartaoEstilizado,
     matCheiaTrocar, matCheiaAplicar, matCheiaAtual: () => matCheia,
+    matAmpliar, matFonteMudar, matFonteZerar, matFonteDegrau, matColunaDefinir, matPintarJanela, matFsMudou, MAT_FONTES, MAT_COLUNAS,
+    matFonteAtual: () => matFonte, matColunaAtual: () => matColuna, matFsNossoAtual: () => matFsNosso,
     rsPartirTraco, rsTracosAtual: () => rsTracos,
     RS_ESPESSURAS, rsEspessuraDefinir, rsLarguraAtual, rsEspessuraCarregar,
     RS_FOLHA_NORMAL, RS_FOLHA_CHEIA, rsRedimensionar, rsCheiaTrocar,
