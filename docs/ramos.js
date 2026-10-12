@@ -412,6 +412,26 @@ function ramAcertosDoTopico(chave, ramos, banco) {
   rs.forEach((r) => { const x = out[r.id]; x.pct = x.feitas ? Math.round((x.certas / x.feitas) * 100) : null; });
   return out;
 }
+/* Q2b — O RAMO PROVÁVEL DE UMA QUESTÃO, pelas palavras (a mesma regra dos pesos: a maioria dos radicais do nome do ramo
+ * aparece no enunciado/comentário/opções). Ganha o ramo com a maior proporção citada; EMPATE = sem sugestão (melhor
+ * perguntar do que chutar). É só sugestão: nada é ligado sem a pessoa confirmar. */
+function ramSugerirRamoDaQuestao(q, ramos) {
+  if (!q) return null;
+  const d = ramRadicais([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" "));
+  if (!d.size) return null;
+  let melhor = null, empate = false;
+  (ramos || []).forEach((r) => {
+    const rad = ramRadicais(r.nome);
+    if (!rad.size) return;
+    let c = 0; rad.forEach((w) => { if (d.has(w)) c++; });
+    if (c < Math.max(1, Math.ceil(rad.size * 0.6))) return;
+    const nota = c / rad.size + c * 0.001;
+    if (!melhor || nota > melhor.nota) { melhor = { id: r.id, nome: r.nome, nota }; empate = false; }
+    else if (nota === melhor.nota) empate = true;
+  });
+  return melhor && !empate ? { id: melhor.id, nome: melhor.nome } : null;
+}
+
 /* o ramo está FRACO quando há amostra suficiente e o acerto está abaixo do corte */
 function ramAcertoFraco(x) { return !!x && x.feitas >= RAM_ACERTO_AMOSTRA && x.pct !== null && x.pct < RAM_ACERTO_CORTE; }
 

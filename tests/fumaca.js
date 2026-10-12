@@ -673,7 +673,7 @@ function rodar() {
     matAgrupado, matTiposDe, matAlternarLei, matRender,
     matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico,
     matSecoesDeRamo, matTextoDaSecao, matTrocarSecao, matEscopoAtual, matEscopoEscolher, matSecaoSincronizar,
-    ramSecoesRenomeadas,
+    ramSecoesRenomeadas, ramSugerirRamoDaQuestao, qsUiRamosDoTopico, qsUiLigarRamosAbrir, qsUiLigarRamosAplicar, qsUiLigarRamosDesfazer,
     riaPrompt, riaLerResposta, riaAplicarTexto, riaConferir, riaContarMarcas, riaAbrir, riaConferirTela, riaAplicar, riaDesfazer, riaMontarPedido, riaAcrescentarNovo, riaModoDefinir, RIA_LEI_MAX, matPintarDuvidasBotao, matAgrupado, matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
     matMarcasDe, matContarMarcas, matTirarMarcaDe, matTrocarCorDaMarca,
     matCartoesConsertar, matCartoesPromptCorrecao, matConsertoPerdas, matJuntarTags,

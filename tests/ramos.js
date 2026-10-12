@@ -3841,6 +3841,61 @@ async function testes() {
     ok(r2.ok && r2.resumo === false, "T5g topico sem resumo: renomear funciona e nao cria resumo");
   }
 
+  /* ---- Q2b: ligar as questões que já existem aos ramos (filtro, seletor na questão, assistente) ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.hubAbrirEdital(ed.id);
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    const ramos = a.edItemDoPlano("Licitações", "Lei 14.133").ramos;
+    const base = { disciplina: "Licitações", topico: "Lei 14.133", chave, tipo: "ce", gabarito: "C", comentario: "", opcoes: [], tentativas: [] };
+    const q1 = Object.assign({}, base, { id: "q1", enunciado: "A modalidade pregão serve para bens e serviços comuns." });
+    const q2 = Object.assign({}, base, { id: "q2", enunciado: "Os contratos administrativos têm cláusulas exorbitantes." });
+    const q3 = Object.assign({}, base, { id: "q3", enunciado: "Questão genérica sobre a lei." });
+    const q4 = Object.assign({}, base, { id: "q4", enunciado: "Outra sobre contratos.", ramo: "contratos", ramoNome: "Contratos" });
+    a.qsBancoPor([q1, q2, q3, q4]);
+    /* a sugestão (pura) */
+    ok(a.ramSugerirRamoDaQuestao(q1, ramos).id === "modalidades" && a.ramSugerirRamoDaQuestao(q2, ramos).id === "contratos" && a.ramSugerirRamoDaQuestao(q3, ramos) === null,
+       "Q2b-a a sugestao pelas palavras: pregao/modalidade → Modalidades; contratos → Contratos; generica → nenhuma");
+    ok(a.ramSugerirRamoDaQuestao(Object.assign({}, base, { enunciado: "A fase recursal tem prazo próprio." }), ramos) === null, "Q2b-a2 citar so' metade do nome do ramo (fase, sem preparatoria) nao basta para sugerir");
+    ok(a.ramSugerirRamoDaQuestao(q2, [{ id: "x", nome: "Contratos" }, { id: "y", nome: "Contratos" }]) === null, "Q2b-b empate entre ramos: sem sugestao (melhor perguntar do que chutar)");
+    ok(a.qsUiRamosDoTopico(chave).length === ramos.length && a.qsUiRamosDoTopico("x›nada").length === 0, "Q2b-c os ramos do topico de uma questao vem dos editais");
+    /* o banco com o tópico escolhido */
+    a.$("qsFEdital").value = ed.id; a.qsUiLerFiltros();
+    a.$("qsFTopico").value = chave; a.qsUiLerFiltros();
+    const opts = () => Array.from(a.$("qsFRamo").children).map((o) => o.value);
+    ok(a.$("qsFRamo").hidden === false && opts().join() === ["", "_sem"].concat(ramos.map((r) => r.id)).join() && a.$("btnQsLigarRamos").hidden === false && /Ligar 3 questão/.test(a.$("btnQsLigarRamos").textContent),
+       "Q2b-d com um topico de ramos: aparece o filtro 'Ramo' e o botao 'Ligar 3 questoes aos ramos': " + a.$("btnQsLigarRamos").textContent);
+    a.$("qsFRamo").value = "contratos"; a.qsUiLerFiltros();
+    const itens = () => Array.from(a.$("qsLista").children).filter((x) => /qs-item/.test(x.className || ""));
+    ok(itens().length === 1 && /Outra sobre contratos/.test(itens()[0].textContent) && /↳ Contratos/.test(itens()[0].textContent), "Q2b-e filtrar pelo ramo mostra so' as ligadas (com a etiqueta do ramo)");
+    a.$("qsFRamo").value = "_sem"; a.qsUiLerFiltros();
+    ok(itens().length === 3, "Q2b-f 'sem ramo' mostra as do topico inteiro");
+    /* o seletor no ⋮ da questão */
+    const li1 = itens().find((x) => /pregão/.test(x.textContent));
+    Array.from(li1.children).find((x) => /qs-item-acoes/.test(x.className || "")).children[1].onclick();
+    const menu = Array.from(li1.children).find((x) => /qs-item-menu/.test(x.className || ""));
+    const sel = Array.from(menu.children).find((x) => /qs-item-ramo/.test(x.className || "")).children[1];
+    sel.value = "fase_preparatoria"; sel.onchange();
+    const qq1 = () => (a.qsTodas ? a.qsTodas() : []).find((x) => x.id === "q1");
+    ok(qq1() && qq1().ramo === "fase_preparatoria" && /Fase/.test(qq1().ramoNome), "Q2b-g o ⋮ da questao liga ao ramo escolhido: " + JSON.stringify(qq1() && [qq1().ramo, qq1().ramoNome]));
+    /* o assistente */
+    a.qsUiLigarRamosAbrir(chave);
+    const lins = () => Array.from(a.$("qsRamosLista").children).filter((x) => /qs-ramos-lin/.test(x.className || ""));
+    const selDe = (txt) => lins().find((l) => new RegExp(txt).test(l.textContent)).children[1];
+    ok(a.$("dlgQsRamos").open === true && lins().length === 2 && selDe("contratos").value === "contratos" && /sugerido/.test(lins().find((l) => /contratos/.test(l.textContent)).textContent) && selDe("genérica").value === "",
+       "Q2b-h o assistente lista as sem ramo, com a sugestao ja' escolhida (e a generica sem): " + lins().length);
+    ok(a.$("btnQsRamosAplicar").textContent === "Ligar 1" && a.$("btnQsRamosAplicar").disabled === false, "Q2b-i o botao diz quantas vai ligar");
+    a.qsUiLigarRamosAplicar();
+    const qq2 = () => a.qsTodas().find((x) => x.id === "q2");
+    ok(qq2().ramo === "contratos" && /1 questão/.test(a.$("qsRamosMsg").textContent) && a.$("btnQsRamosDesfazer").hidden === false && lins().length === 1, "Q2b-j aplicar liga e oferece desfazer; a lista fica so' com a que nao foi ligada");
+    a.qsUiLigarRamosDesfazer();
+    ok(!qq2().ramo && /desfeitas/.test(a.$("qsRamosMsg").textContent) && lins().length === 2, "Q2b-k desfazer volta a questao para o topico inteiro");
+    a.$("dlgQsRamos").close();
+    /* tópico sem ramos: nada disso aparece */
+    a.$("qsFTopico").value = a.matChave("Licitações", "Convênios"); a.qsUiLerFiltros();
+    ok(a.$("qsFRamo").hidden === true && a.$("btnQsLigarRamos").hidden === true, "Q2b-l topico sem ramos: sem filtro de ramo e sem assistente");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

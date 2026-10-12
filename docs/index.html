@@ -2386,6 +2386,12 @@ p.mat-ferr{display:block;font-size:12px}
 .mat-esc.mat-esc-vazio{border-style:dashed;opacity:.75}
 .mat-escopo{margin:6px 0 8px}
 .res-ia-ramos{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.qs-tag-ramo{border-color:var(--info);color:var(--info)}
+.qs-item-ramo{display:flex;align-items:center;gap:6px;font-size:12.5px;margin:4px 0}
+.qs-ramos-lista{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;margin:8px 0}
+.qs-ramos-lin{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid var(--borda);border-radius:8px}
+.qs-ramos-en{flex:1 1 100%;font-size:12.5px}
+.qs-ramos-sug{font-size:11px;color:var(--ok);font-weight:700}
 .res-ia-ramo{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
 .res-ia-ramo .res-ia-foco{flex:1 1 200px}
 .res-ia-novo-tag{font-size:10.5px;font-weight:700;margin-left:6px;padding:0 6px;border-radius:999px;border:1px solid var(--info);color:var(--info)}
@@ -5418,6 +5424,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          232 tópicos vira navegável. -->
     <select id="qsFEdital" title="Filtra pelas questões dos tópicos deste edital."></select>
     <select id="qsFTopico" title="Um tópico do edital escolhido. Os blocos do edital aparecem como cabeçalho."></select>
+    <select id="qsFRamo" hidden data-i18n-title="qs_f_ramo_tip"></select>
     <select id="qsFDisc" title="Filtra por disciplina."></select>
     <select id="qsFBanca" title="Filtra por banca examinadora."></select>
     <select id="qsFTipo" title="Certo/errado ou múltipla escolha.">
@@ -5449,6 +5456,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="qs-barra">
     <button class="btn btn-verde" id="btnQsResponderTudo"
       title="Responde, em sequência, todas as questões que passaram no filtro acima."></button>
+    <button class="btn btn-roxo" id="btnQsLigarRamos" hidden data-i18n-title="qs_ligar_btn_tip"></button>
     <button class="btn btn-cinza" id="btnQsCriarDaAba" data-i18n="qs_como_criar"
       title="Explica onde se criam questões."></button>
     <span class="nota" id="qsResumo"></span>
@@ -5924,6 +5932,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="matFichaRodape" class="mat-ficha-rodape" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMatFichaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+<!-- Q2b: ligar as questões que já existem aos ramos do tópico (sugestão pelas palavras, confirmação da pessoa, desfazer) -->
+<dialog id="dlgQsRamos" class="ui-modal">
+  <h3 id="qsRamosTit"></h3>
+  <p class="nota" data-i18n="qs_ramos_ajuda"></p>
+  <div id="qsRamosLista" class="qs-ramos-lista"></div>
+  <p class="nota" id="qsRamosMsg" role="status" aria-live="polite"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnQsRamosAplicar"></button>
+    <button class="btn-min" id="btnQsRamosDesfazer" hidden data-i18n="ria_desfazer"></button>
+    <button class="btn btn-cinza" id="btnQsRamosFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <!-- T4: pedir o resumo à IA (tópico inteiro com os ramos, ou um ramo só) — o mesmo desenho de dois passos dos outros pedidos -->
