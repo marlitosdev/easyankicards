@@ -2364,7 +2364,7 @@ p.mat-ferr{display:block;font-size:12px}
 .ram-aviso-apagar{color:var(--atencao);margin:4px 0}
 .reg-tempo-fmt{margin:2px 0 0;font-variant-numeric:tabular-nums}
 .it-num.ed-item-ultima{color:var(--sutil);font-weight:400;font-size:11px}
-.reg-tipo{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:10px 0 2px;padding-top:8px;border-top:1px solid var(--borda)}
+.reg-tipo{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:6px 0 10px}
 .reg-tipo-rot{font-weight:700;font-size:13px}
 .reg-tipo-sel{display:inline-flex;gap:6px}
 .reg-tipo-sel .btn-min[aria-pressed="true"]{background:var(--acao);color:#fff;border-color:var(--acao)}
@@ -4231,13 +4231,29 @@ dialog.di-cheia .di-mp-cel{min-height:30px;font-size:11px}
   background:var(--campo);color:var(--texto);font-size:13px}
 .reg-lin-col{font-size:12.5px}
 .reg-formas{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.reg-ramos{display:flex;flex-direction:column;gap:3px;margin-top:6px;max-height:34vh;overflow:auto}
-.reg-ramo-lin{display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid var(--borda);border-radius:8px;cursor:pointer}
-.reg-ramo-nome{flex:1 1 auto;font-size:12.5px;font-weight:600}
+.reg-ramos{display:contents}
+.reg-ramos-fila{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-height:34vh;overflow:auto}
+.reg-ramos-cab{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.reg-sec{font-weight:700}
+#regDifEco{font-size:12px}
+.reg-ramo-todos{all:unset;cursor:pointer;padding:4px 11px;border-radius:999px;font-size:12px;border:1px solid var(--borda)}
+.reg-ramo-todos[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
+.reg-ramo-todos:focus-visible{outline:2px solid var(--acao);outline-offset:2px}
+.reg-ramo-lin{position:relative;display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border:1px solid var(--borda);border-radius:999px;cursor:pointer}
+.reg-ramo-lin input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.reg-ramo-lin.marcado{background:var(--acao);border-color:var(--acao);color:#fff}
+.reg-ramo-lin.marcado .reg-ramo-est{color:inherit;opacity:.9}
+.reg-ramo-lin:has(input:focus-visible){outline:2px solid var(--acao);outline-offset:2px}
+.reg-ramo-nome{font-size:12px;font-weight:600}
 .reg-ramo-est{font-size:11px;color:var(--sutil);white-space:nowrap}
 .reg-ramo-indisp{opacity:.55;cursor:default}
-.reg-trilha{margin-top:6px;padding:6px 8px;border:1px dashed var(--borda);border-radius:8px;font-size:12px}
-.reg-trilha-lin{margin:2px 0}
+.reg-trilha{margin-top:6px;font-size:12px}
+.reg-trilha-lin{margin:3px 0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.reg-exigir-efeito{margin:4px 0 0}
+.reg-mais{margin-top:10px}
+.reg-mais>summary{cursor:pointer;font-size:12.5px;color:var(--sutil)}
+.reg-mais[open]>summary{margin-bottom:4px}
+.reg-lin-col{margin-top:10px}
 .dsc-ramo-falta{font-size:10.5px;color:var(--sutil);white-space:nowrap}
 .reg-ramos-acoes{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
 .reg-forma{all:unset;cursor:pointer;padding:6px 11px;border-radius:8px;font-size:11.5px;
@@ -5115,9 +5131,9 @@ button.ed-st-item{cursor:pointer}
 .cm-seta{color:var(--sutil);font-weight:700}
 .cm-proximo{box-shadow:0 0 0 2px var(--acao)}
 @media (max-width:640px){.cm-rodape{flex-direction:column-reverse;align-items:stretch}.cm-passos{justify-content:center}.cm-rodape-esq{justify-content:center}}
-.reg-espelho{border:1px dashed var(--borda);border-radius:8px;padding:6px 8px;margin:6px 0}
-.reg-espelho-lin{display:block;font-size:13px;margin:2px 0}
-.reg-trilha-abrir{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.reg-espelho{margin:10px 0 0}
+.reg-espelho-lin{display:block;font-size:inherit;margin:2px 0}
+.reg-trilha-abrir{display:inline-flex;flex-wrap:wrap;gap:4px}
 .reg-trilha-abrir-btn{font-size:11px;padding:2px 8px}
 .ac-meta-quero{display:block;margin-top:4px}
 .ac-meta-n{width:52px}
@@ -5896,24 +5912,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgRegistro" class="ui-modal">
   <h3 data-i18n="ed_reg_tit"></h3>
   <div class="reg-topico"><b id="regTitulo"></b><div class="nota" id="regSub"></div></div>
-  <!-- Tópico COM ramos: o que foi estudado/revisado, ramo a ramo -->
-  <div class="reg-lin-col" id="regRamosBloco" hidden>
-    <span id="regRamosRot"></span>
-    <span class="mat-f-dica" data-i18n="ed_reg_ramos_dica"></span>
-    <div class="reg-ramos" id="regRamos"></div>
-    <div id="regTrilha" class="reg-trilha" hidden></div>
-    <div class="nota reg-exigir-lin" id="regRamosExigirLin"><label><input type="checkbox" id="regRamosExigir" data-i18n-title="ed_reg_exigir_tip"> <span data-i18n="ed_reg_exigir"></span></label> <button type="button" class="selo-ajuda" id="btnRegExigirAjuda" data-i18n-title="ed_reg_exigir_ajuda_tip" aria-label="?">?</button></div>
-    <div class="reg-ramos-acoes">
-      <button type="button" class="btn-min" id="btnRegRamosTodos" data-i18n="ed_reg_ramos_todos" data-i18n-title="ed_reg_ramos_todos_tip"></button>
-      <span class="nota" id="regRamosResumo"></span>
-    </div>
+  <!-- S1: DOIS NÍVEIS. À vista só o que muda o plano ou o diário: tipo, tempo, "Como foi?", ramos, formas e
+       questões. O resto (onde parou, anotação, outros editais, a preferência dos ramos) fica em "Mais detalhes". -->
+  <!-- ESTUDO OU REVISÃO: um seletor com a sugestão do app e o porquê. -->
+  <div class="reg-tipo" id="regTipoBox">
+    <span class="reg-tipo-rot" data-i18n="ed_reg_tipo_rot"></span>
+    <span class="reg-tipo-sel" role="group" data-i18n-title="ed_reg_tipo_rot">
+      <button type="button" class="btn-min" id="btnRegTipoEstudo" aria-pressed="false" data-i18n="ed_reg_tipo_estudo"></button>
+      <button type="button" class="btn-min" id="btnRegTipoRevisao" aria-pressed="false" data-i18n="ed_reg_tipo_revisao"></button>
+    </span>
+    <span class="nota reg-tipo-porque" id="regTipoPorque"></span>
   </div>
-  <!-- FORA do bloco de ramos: o espelho vale também para tópico SEM ramos, e aquele bloco fica escondido nele -->
-  <div id="regEspelho" class="reg-espelho" hidden>
-    <p class="nota" data-i18n="ed_esp_tit"></p>
-    <div id="regEspelhoLista"></div>
-  </div>
-  <div class="reg-lin-col"><span data-i18n="ed_reg_min"></span>
+  <div class="reg-lin-col"><span class="reg-sec" data-i18n="ed_reg_min"></span>
     <div class="reg-tempo">
       <input type="range" id="regMinSlider" min="5" max="240" step="5" value="60">
       <input type="number" id="regMinutos" min="1" max="600" step="5">
@@ -5923,20 +5933,28 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- Arrastar o cursor para acertar 45 minutos exige pontaria que
          ninguém tem pressa de ter. Os atalhos SOMAM ao valor atual. -->
     <div class="reg-atalhos" id="regAtalhos"></div></div>
-  <div class="reg-lin-col"><span data-i18n="ed_reg_humor"></span>
-    <div class="reg-formas" id="regHumor"></div></div>
-  <div class="reg-lin-col"><span data-i18n="dif_pergunta"></span>
-    <span class="mat-f-dica" data-i18n="dif_pergunta_dica"></span>
+  <!-- "COMO FOI?": UMA pergunta no lugar de "como rendeu" + "quanto domina" (as duas mexiam na MESMA alavanca, o fator
+       de prioridade). Opcional; o efeito de cada resposta aparece escrito logo abaixo. -->
+  <div class="reg-lin-col"><span class="reg-sec" data-i18n="ed_cf_pergunta"></span>
+    <span class="mat-f-dica" data-i18n="ed_cf_dica"></span>
     <div class="reg-formas" id="regDificuldade"></div>
-    <div class="nota dif-eco" id="regDifEco"></div></div>
-  <div class="reg-lin-col"><span data-i18n="ed_reg_forma"></span>
+    <div class="nota dif-eco" id="regDifEco" role="status" aria-live="polite"></div></div>
+  <!-- Tópico COM ramos: fichas compactas (a primeira é "Todos"), e uma linha por ramo marcado dizendo o que falta -->
+  <div class="reg-lin-col" id="regRamosBloco" hidden>
+    <div class="reg-ramos-cab"><span class="reg-sec" id="regRamosRot" data-i18n-title="ed_reg_ramos_dica"></span> <span class="nota" id="regRamosResumo"></span></div>
+    <div class="reg-ramos-fila">
+      <button type="button" class="reg-ramo-todos" id="btnRegRamosTodos" aria-pressed="false" data-i18n="ed_reg_ramos_todos" data-i18n-title="ed_reg_ramos_todos_tip"></button>
+      <div class="reg-ramos" id="regRamos"></div>
+    </div>
+    <div id="regTrilha" class="reg-trilha" hidden></div>
+    <p class="nota reg-exigir-efeito" id="regExigirEfeito" hidden></p>
+  </div>
+  <div class="reg-lin-col"><span class="reg-sec" data-i18n="ed_reg_forma"></span>
     <span class="mat-f-dica" data-i18n="ed_reg_forma_dica"></span>
     <div class="reg-formas" id="regFormas"></div></div>
 
-  <!-- Só aparece quando "questões" está marcado: perguntar quantas questões
-       você fez numa sessão de videoaula é atrito puro. -->
   <div class="reg-lin-col" id="regQuestoesBloco" hidden>
-    <span data-i18n="ed_reg_questoes"></span>
+    <span class="reg-sec" data-i18n="ed_reg_questoes"></span>
     <div class="reg-q" id="regQContagem">
       <label><span data-i18n="ed_reg_q_feitas"></span>
         <input type="number" id="regQFeitas" min="0" max="999" step="1" placeholder="0"></label>
@@ -5954,34 +5972,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnRegQSoPct"></button>
   </div>
 
-  <div class="reg-lin-col">
-    <span data-i18n="ed_reg_onde"></span>
-    <span class="mat-f-dica" data-i18n="ed_reg_onde_dica"></span>
-    <input type="text" id="regOnde" class="mat-busca" placeholder="PDF pág. 15-40 · Videoaula 03 e 04">
-  </div>
-
-  <div class="reg-lin-col">
-    <button type="button" class="btn-min" id="btnRegObs" data-i18n="ed_reg_obs_abrir"
-      title="Espaço para anotar a pegadinha que te pegou ou a dúvida a esclarecer depois. Fica junto do registro no diário."></button>
-    <textarea id="regObs" rows="3" hidden style="width:100%;box-sizing:border-box"
-      placeholder="O que te pegou nesta sessão? Pegadinha, dúvida, ponto a revisar."></textarea>
-  </div>
-  <!-- UM BOTÃO, NÃO DOIS. O app já sabe se o tópico é novo ou está para
-       revisar — perguntar isso à pessoa é transferir para ela uma
-       classificação que o plano faz melhor, e errar aqui não dá aviso
-       nenhum: o tempo entra e a revisão continua pendente.
-       O rótulo diz o que vai ser lançado; o "⋮" existe para as vezes em
-       que a pessoa discorda do app. -->
-  <!-- ESTUDO OU REVISÃO: um seletor com a sugestão do app e o porquê, no lugar do botão "lançar como o outro" (que
-       parecia gravar, mas só trocava o tipo). -->
-  <div class="reg-tipo" id="regTipoBox">
-    <span class="reg-tipo-rot" data-i18n="ed_reg_tipo_rot"></span>
-    <span class="reg-tipo-sel" role="group" data-i18n-title="ed_reg_tipo_rot">
-      <button type="button" class="btn-min" id="btnRegTipoEstudo" aria-pressed="false" data-i18n="ed_reg_tipo_estudo"></button>
-      <button type="button" class="btn-min" id="btnRegTipoRevisao" aria-pressed="false" data-i18n="ed_reg_tipo_revisao"></button>
-    </span>
-    <span class="nota reg-tipo-porque" id="regTipoPorque"></span>
-  </div>
+  <!-- o que é útil mas raro: recolhido, lembrando se a pessoa o deixou aberto -->
+  <details class="reg-mais" id="regMais">
+    <summary id="regMaisResumo" data-i18n="ed_reg_mais_tit"></summary>
+    <div class="reg-lin-col">
+      <span data-i18n="ed_reg_onde"></span>
+      <span class="mat-f-dica" data-i18n="ed_reg_onde_dica"></span>
+      <input type="text" id="regOnde" class="mat-busca" placeholder="PDF pág. 15-40 · Videoaula 03 e 04">
+    </div>
+    <div class="reg-lin-col">
+      <button type="button" class="btn-min" id="btnRegObs" data-i18n="ed_reg_obs_abrir"
+        title="Espaço para anotar a pegadinha que te pegou ou a dúvida a esclarecer depois. Fica junto do registro no diário."></button>
+      <textarea id="regObs" rows="3" hidden style="width:100%;box-sizing:border-box"
+        placeholder="O que te pegou nesta sessão? Pegadinha, dúvida, ponto a revisar."></textarea>
+    </div>
+    <!-- o espelho vale também para tópico SEM ramos: fica fora do bloco de ramos -->
+    <div id="regEspelho" class="reg-espelho" hidden>
+      <p class="nota" data-i18n="ed_esp_tit" data-i18n-title="ed_esp_tit_tip"></p>
+      <div id="regEspelhoLista"></div>
+    </div>
+    <div class="nota reg-exigir-lin" id="regRamosExigirLin"><label><input type="checkbox" id="regRamosExigir" data-i18n-title="ed_reg_exigir_tip"> <span data-i18n="ed_reg_exigir"></span></label> <button type="button" class="selo-ajuda" id="btnRegExigirAjuda" data-i18n-title="ed_reg_exigir_ajuda_tip" aria-label="?">?</button></div>
+  </details>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnRegEstudo" data-i18n="ed_reg_estudo"></button>
     <button class="btn btn-cinza" id="btnRegFechar" data-i18n="help_close"></button>

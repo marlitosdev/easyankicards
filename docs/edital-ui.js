@@ -2094,9 +2094,6 @@ function abrirDiario() {
  * 3h de estudo" continua caindo. */
 const ED_FORMAS = ["leitura", "videoaula", "questoes", "leiseca",
                    "flashcards", "resumo", "mapa", "revisao", "juris"];
-/* Produtividade percebida. Três níveis: cinco viram uma decisão demorada
- * sobre algo que é sensação, não medida. */
-const ED_HUMOR = ["ruim", "media", "boa"];
 let regAtual = null;
 /* QUEM ABRIU O FORMULÁRIO PODE QUERER SABER QUE ELE FOI CONFIRMADO.
  *
@@ -2135,8 +2132,9 @@ function regDifPintar(item) {
     const aceso = regDif ? regDif === nv.id
       : !!(atual && atual.nivel === nv.id && !atual.vencida);
     b.className = "reg-humor dif-" + nv.id + (aceso ? " ativa" : "");
-    b.textContent = t("dif_n_" + nv.id);
-    b.title = t("dif_n_" + nv.id + "_aj");
+    b.setAttribute("aria-pressed", aceso ? "true" : "false");
+    b.textContent = t("ed_cf_" + nv.id);
+    b.title = t("ed_cf_" + nv.id + "_tip");
     b.onclick = () => {
       /* tocar de novo no que já está aceso desmarca: é como se tira uma
        * opinião sem ter de escolher outra */
@@ -2146,13 +2144,21 @@ function regDifPintar(item) {
     cx.append(b);
   });
   const eco = $("regDifEco");
-  if (eco) {
-    eco.textContent = !atual || !atual.nivel ? t("dif_eco_sem")
-      : (atual.vencida
-          ? t("dif_eco_vencida", { n: t("dif_n_" + atual.nivel), d: atual.dias })
-          : t("dif_eco_atual", { n: t("dif_n_" + atual.nivel),
-              o: t("dif_origem_" + atual.origem), d: atual.dias }));
-  }
+  if (eco) eco.textContent = regComoFoiEfeito(atual, regDif);
+}
+
+/* O EFEITO DE CADA RESPOSTA DO "COMO FOI?", escrito: sem ele a pessoa escolhe sem saber o que muda. "atual" é a avaliação
+ * que vale hoje (difDe); "escolha" é o que foi tocado agora ("" = não respondeu, e então a anterior continua de pé). */
+function regComoFoiEfeito(atual, escolha) {
+  const nv = (typeof DIF_NIVEIS !== "undefined" ? DIF_NIVEIS : []).find((x) => x.id === escolha);
+  const dias = typeof DIF_VALIDADE !== "undefined" ? DIF_VALIDADE : 45;
+  const fx = (n) => String(n).replace(".", t("ed_cf_dec"));
+  if (nv && escolha === "alta") return t("ed_cf_ef_alta", { f: fx(nv.fator), d: dias });
+  if (nv && escolha === "baixa") return t("ed_cf_ef_baixa", { f: fx(nv.fator), d: dias });
+  if (nv) return t("ed_cf_ef_media") + (atual && atual.nivel && atual.nivel !== "media" && !atual.vencida ? t("ed_cf_ef_tira", { n: t("ed_cf_" + atual.nivel) }) : "");
+  if (!atual || !atual.nivel || atual.nivel === "media") return t("ed_cf_eco_nada");
+  if (atual.vencida) return t("ed_cf_eco_venceu", { n: t("ed_cf_" + atual.nivel), d: atual.dias });
+  return t("ed_cf_eco_vale", { n: t("ed_cf_" + atual.nivel), o: t("dif_origem_" + atual.origem), d: atual.dias });
 }
 
 /* Preenche o registro com o resultado de uma sessão de questões.
@@ -2251,6 +2257,7 @@ function regPintarFormas() {
       else regFormas.push(f);
       b.classList.toggle("ativa", regFormas.includes(f));
       regPintarQuestoes();
+      if (regAtual) regExigirEfeitoPintar(regAtual);
     };
     cx.append(b);
   });
@@ -2279,14 +2286,16 @@ function regRamosPintar(i, refazerMinutos) {
   if (!bl) return;
   const rs = (i && i.ramos) || [];
   bl.hidden = !rs.length;
-  if (!rs.length) return;
+  /* a preferência "só marcar com todas as etapas" mora em "Mais detalhes" (fora deste bloco): some junto em tópico sem ramos */
+  if (!rs.length) { if ($("regRamosExigirLin")) $("regRamosExigirLin").hidden = true; regMaisPintar(); return; }
   $("regRamosRot").textContent = t(regTipo === "revisado" ? "ed_reg_ramos_revisao" : "ed_reg_ramos_estudo");
   const cx = $("regRamos");
   cx.innerHTML = "";
   rs.forEach((r) => {
     const el = regRamosElegivel(r);
     const lin = document.createElement("label");
-    lin.className = "reg-ramo-lin" + (el ? "" : " reg-ramo-indisp");
+    const marcado = el && regRamosSel.has(r.id);
+    lin.className = "reg-ramo-lin" + (el ? "" : " reg-ramo-indisp") + (marcado ? " marcado" : "");
     const ck = document.createElement("input");
     ck.type = "checkbox"; ck.checked = el && regRamosSel.has(r.id); ck.disabled = !el;
     ck.onchange = () => {
@@ -2295,20 +2304,27 @@ function regRamosPintar(i, refazerMinutos) {
     };
     const nm = document.createElement("span");
     nm.className = "reg-ramo-nome";
-    nm.textContent = r.nome + " ★" + (r.peso || 3);
+    /* a ficha é curta: o nome e, só quando marcada, o tempo; o peso e a situação ficam no balão */
+    nm.textContent = r.nome;
     const st = document.createElement("span");
     st.className = "reg-ramo-est";
-    st.textContent = r.pulado ? t("ed_ramo_pulado") : el ? "≈ " + horasTexto(r.minutos) : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
-    lin.title = r.nome + " — " + t("ed_ramo_" + (r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend")) + (r.nota ? " — " + r.nota : "");
+    st.textContent = r.pulado ? t("ed_ramo_pulado") : el ? (marcado ? "≈ " + horasTexto(r.minutos) : "") : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
+    lin.title = r.nome + " — " + t("ed_ramo_" + (r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend"))
+      + " — " + t("ed_ramo_peso", { p: r.peso || 3 }) + (el ? " — ≈ " + horasTexto(r.minutos) : "") + (r.nota ? " — " + r.nota : "");
     lin.append(ck, nm, st);
     cx.append(lin);
   });
   const n = regRamosSel.size, min = regRamosMinutos(i);
   $("regRamosResumo").textContent = n ? t("ed_reg_ramos_resumo", { n, m: horasTexto(min) }) : t("ed_reg_ramos_nenhum");
+  /* a ficha "Todos" fica acesa quando todos os ramos que cabem neste registro estão marcados */
+  const eleg = rs.filter(regRamosElegivel);
+  if ($("btnRegRamosTodos")) $("btnRegRamosTodos").setAttribute("aria-pressed", eleg.length && eleg.every((r) => regRamosSel.has(r.id)) ? "true" : "false");
   if (refazerMinutos && n) { $("regMinutos").value = min; $("regMinSlider").value = Math.min(240, min); }
   regPintarTempo();
   regTrilhaPintar(i);
   regExigirPintar(i);
+  regExigirEfeitoPintar(i);
+  regMaisPintar();
   const nomes = rs.filter((r) => regRamosSel.has(r.id)).map((r) => r.nome);
   /* até 3 nomes; com mais, só a contagem (o título não vira um parágrafo) */
   $("regTitulo").textContent = i.nome + (nomes.length ? " › " + (nomes.length > 3 ? t("ed_reg_ramos_n", { n: nomes.length }) : nomes.join(", ")) : "");
@@ -2341,23 +2357,18 @@ function regTrilhaPintar(i) {
   const mat = edMaterialDosRamos(i);
   rs.forEach((r) => {
     const tr = edTrilhaDoRamoUI(i, r, mat);
-    if (!tr.passos.some((p) => p.disponivel || p.feito)) return;
+    if (!tr.passos.some((p) => p.disponivel)) return;
     const lin = document.createElement("div");
     lin.className = "reg-trilha-lin";
-    const nm = document.createElement("b"); nm.textContent = r.nome + ": ";
-    const st = document.createElement("span"); st.textContent = edTrilhaTexto(tr);
+    /* o balão guarda a trilha inteira (lei ✓ · questões ○ …); a linha diz só o que falta — ou que não falta nada */
+    lin.title = t("ed_trilha_tit") + ": " + edTrilhaTexto(tr);
+    const nm = document.createElement("b"); nm.textContent = r.nome;
+    const st = document.createElement("span");
+    st.textContent = " — " + (tr.faltam.length
+      ? t("ed_dsc_ramo_falta", { x: tr.passos.filter((p) => tr.faltam.indexOf(p.id) >= 0).map((p) => t("ed_passo_" + p.id)).join(", ") })
+      : t("ed_dsc_ramo_trilha_ok"));
     lin.append(nm, st);
-    const comb = edSessaoCombinada(tr, r.minutos);
-    if (comb.length) {
-      const sg = document.createElement("div");
-      sg.className = "nota";
-      sg.textContent = t("ed_sessao_comb", { x: comb.map((c) => c.minutos + "min " + t("ed_passo_" + c.id)).join(" + ") });
-      sg.title = t("ed_sessao_comb_tip");
-      lin.append(sg);
-    } else if (tr.completo && tr.passos.some((p) => p.disponivel)) {
-      const ok = document.createElement("div"); ok.className = "nota"; ok.textContent = t("ed_trilha_completa"); lin.append(ok);
-    }
-    const usaveis = tr.passos.filter((p) => p.disponivel);
+    const usaveis = tr.passos.filter((p) => p.disponivel && !p.feito);
     if (usaveis.length) {
       const ab = document.createElement("div");
       ab.className = "reg-trilha-abrir";
@@ -2397,6 +2408,42 @@ function regExigirPintar(i) {
   const etapas = tr.passos.filter((p) => p.disponivel || p.feito).map((p) => t("ed_passo_" + p.id) + " " + (p.feito ? "✓" : "○")).join(" · ");
   ex = t(tr.completo ? "ed_reg_exigir_ex_ok" : "ed_reg_exigir_ex", { r: r.nome, t: etapas });
   bt.dataset.texto = aj + "\n\n" + ex;
+}
+
+/* OS RAMOS QUE FICARIAM SÓ "EM ANDAMENTO" com a preferência "só marcar estudado com todas as etapas" ligada: os marcados
+ * cuja trilha, contando as formas DESTA sessão, ainda tem etapa com material por fazer. Uma conta só, usada pela tela (o
+ * aviso) e pela gravação (confirmarRegistro), para as duas nunca discordarem. */
+function regRamosParciais(i, escolha) {
+  if (!i || !i.ramos || !i.ramos.length) return [];
+  const mat = edMaterialDosRamos(i), hoje2 = hojeISO();
+  const agora = {}; regFormas.forEach((f) => { agora[f] = hoje2; });
+  const out = [];
+  escolha.forEach((id) => {
+    const r = i.ramos.find((x) => x.id === id);
+    const cob = Object.assign({}, edCoberturaDoRamo(typeof edDiario !== "undefined" ? edDiario : [], i.chave, id), agora);
+    const tr = edTrilhaDoRamo(cob, (mat || {})[id]);
+    if (!tr.completo) out.push({ id, nome: r ? r.nome : id, faltam: tr.passos.filter((p) => tr.faltam.indexOf(p.id) >= 0).map((p) => p.id) });
+  });
+  return out;
+}
+function regExigirLigado() { return !!($("regRamosExigir") && $("regRamosExigir").checked); }
+function regExigirEfeitoPintar(i) {
+  const el = $("regExigirEfeito");
+  if (!el) return;
+  const escolha = ((i && i.ramos) || []).filter((r) => regRamosElegivel(r) && regRamosSel.has(r.id)).map((r) => r.id);
+  const pars = regTipo !== "revisado" && regExigirLigado() ? regRamosParciais(i, escolha) : [];
+  el.hidden = !pars.length;
+  el.textContent = pars.length ? t("ed_reg_exigir_efeito", { r: pars.map((p) => p.nome + " (" + t("ed_dsc_ramo_falta", { x: p.faltam.map((f) => t("ed_passo_" + f)).join(", ") }) + ")").join("; ") }) : "";
+}
+
+/* "MAIS DETALHES": o resumo diz o que há lá dentro, para ninguém precisar abrir para descobrir */
+function regMaisPintar() {
+  const sm = $("regMaisResumo");
+  if (!sm) return;
+  const partes = [t("ed_reg_mais_onde"), t("ed_reg_mais_obs")];
+  if (regEspelhoDests && regEspelhoDests.length) partes.push(t("ed_reg_mais_esp", { n: regEspelhoDests.length }));
+  if ($("regRamosExigirLin") && !$("regRamosExigirLin").hidden) partes.push(t("ed_reg_mais_pref"));
+  sm.textContent = t("ed_reg_detalhes", { x: partes.join(", ") });
 }
 
 function regRamosIniciar(i) {
@@ -2522,20 +2569,8 @@ function abrirRegistro(i, opc) {
 
   regPintarFormas();
 
-  const hx = $("regHumor");
-  hx.innerHTML = "";
-  ED_HUMOR.forEach((hm) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "reg-humor humor-" + hm + (hm === regHumor ? " ativa" : "");
-    b.textContent = t("ed_humor_" + hm);
-    b.onclick = () => {
-      regHumor = hm;
-      Array.from(hx.children).forEach((x) => x.classList.remove("ativa"));
-      b.classList.add("ativa");
-    };
-    hx.append(b);
-  });
+  /* "Como rendeu" deixou de ser pergunta: o "Como foi?" (regDif) responde pelos dois e o diário deriva o humor dele */
+  if ($("regMais")) { try { $("regMais").open = localStorage.getItem("eac_reg_mais") === "1"; } catch (e) { $("regMais").open = false; } }
 
   /* O BOTÃO DIZ O QUE VAI FAZER.
    * Um tópico já estudado que volta é revisão; um tópico novo é estudo.
@@ -2557,6 +2592,7 @@ function abrirRegistro(i, opc) {
   regPintarTempo();
   /* o espelho (vínculos) é pintado UMA vez ao abrir: repintar a cada ramo marcado apagaria a escolha dele */
   try { regEspelhoPintar(i); } catch (e) {}
+  regMaisPintar();
   if (rEsc && regRamosElegivel(rEsc)) {
     regRamosSel = new Set([rEsc.id]);
     regRamosPintar(i, true);
@@ -2773,17 +2809,10 @@ function confirmarRegistro(estado) {
     /* "só dar o ramo como estudado com a trilha completa" (opcional): o ramo cujos passos ainda faltam fica só com o
      * progresso parcial no diário (rp) e NÃO ganha a marca de estudado */
     item.ramosParciais = [];
-    const exigir = !!($("regRamosExigir") && $("regRamosExigir").checked);
-    if (exigir && estado === "feito") {
-      const mat = edMaterialDosRamos(item), hoje2 = hojeISO();
-      const agora = {}; regFormas.forEach((f) => { agora[f] = hoje2; });
-      item.ramosEscolhidos = escolha.filter((id) => {
-        const r = item.ramos.find((x) => x.id === id);
-        const cob = Object.assign({}, edCoberturaDoRamo(typeof edDiario !== "undefined" ? edDiario : [], item.chave, id), agora);
-        const ok = edTrilhaDoRamo(cob, (mat || {})[id]).completo;
-        if (!ok && r) item.ramosParciais.push(id);
-        return ok;
-      });
+    if (regExigirLigado() && estado === "feito") {
+      const pars = regRamosParciais(item, escolha).map((p) => p.id);
+      item.ramosParciais = pars;
+      item.ramosEscolhidos = escolha.filter((id) => pars.indexOf(id) < 0);
     } else item.ramosEscolhidos = escolha;
   }
   const depois = regDepois;
@@ -2800,14 +2829,10 @@ function confirmarRegistro(estado) {
   /* A DIFICULDADE ANTES DE MARCAR: edMarcar redesenha a agenda, e a
    * agenda mostra o selo do nível. Gravar depois pintaria a tela com o
    * valor velho até a próxima repintura. */
-  if (typeof difDefinir === "function") {
-    if (regDif) difDefinir(item.disciplina, item.nome, regDif, "declarada");
-    else if (typeof difDoHumor === "function") {
-      /* você não opinou: o "rendeu pouco/bem" da sessão vira palpite —
-       * e o palpite não pisa numa declaração sua que ainda vale */
-      difDoHumor(item.disciplina, item.nome, regHumor);
-    }
-  }
+  /* "Como foi?" respondido = declaração (vale 45 dias); sem resposta, a avaliação anterior fica de pé. O humor do diário
+   * vem da mesma resposta: difícil = rendeu pouco, fácil = rendeu bem. */
+  if (typeof difDefinir === "function" && regDif) difDefinir(item.disciplina, item.nome, regDif, "declarada");
+  regHumor = regDif === "alta" ? "ruim" : regDif === "baixa" ? "boa" : "media";
   const minCerto = Math.max(1, Number($("regMinutos").value) || item.minutos);
   edMarcar(item, estado, {
     minutos: minCerto,
@@ -4607,7 +4632,13 @@ function edIniciar() {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     dicaMostrar($("btnRegExigirAjuda"), $("btnRegExigirAjuda").dataset.texto || "");
   };
-  if ($("regRamosExigir")) $("regRamosExigir").onchange = () => { try { localStorage.setItem("eac_ramo_exigir", $("regRamosExigir").checked ? "1" : "0"); } catch (e) {} };
+  if ($("regRamosExigir")) $("regRamosExigir").onchange = () => {
+    try { localStorage.setItem("eac_ramo_exigir", $("regRamosExigir").checked ? "1" : "0"); } catch (e) {}
+    if (regAtual) regExigirEfeitoPintar(regAtual);
+  };
+  if ($("regMais") && $("regMais").addEventListener) $("regMais").addEventListener("toggle", () => {
+    try { localStorage.setItem("eac_reg_mais", $("regMais").open ? "1" : "0"); } catch (e) {}
+  });
   if ($("btnRegRamosTodos")) $("btnRegRamosTodos").onclick = () => {
     if (!regAtual || !regAtual.ramos) return;
     regRamosSel = new Set(regAtual.ramos.filter(regRamosElegivel).map((r) => r.id));
