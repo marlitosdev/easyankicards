@@ -1651,13 +1651,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * quem vem depois no arquivo vence; com ".lei-cheia" antes do bloco de
  * janela, "tela cheia" nunca ganhava de verdade — no melhor caso batia
  * a largura de ".lei-j-media" (880px), não a de ".lei-cheia" (1100px). */
-#dlgLeiSeca.lei-cheia[open]{max-height:98vh;width:min(1100px,98vw);
-  padding-top:10px}
+#dlgLeiSeca.lei-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
+  margin:0;border:0;border-radius:0;padding:10px 18px 0;box-sizing:border-box}
 #dlgLeiSeca.lei-cheia h3{font-size:1em;margin:0 0 4px;color:var(--sutil)}
 #dlgLeiSeca.lei-cheia .mat-leitura{max-height:none;border:none;
   padding:6px 4px;background:transparent}
 #dlgLeiSeca.lei-cheia #leiLeitura, #dlgLeiSeca.lei-cheia #leiRecitar,
-#dlgLeiSeca.lei-cheia #leiTexto{min-height:60vh}
+#dlgLeiSeca.lei-cheia #leiTexto{min-height:0;flex:1 1 auto}
 /* E O DIÁLOGO LARGO NÃO BASTA — a coluna de leitura tinha teto próprio
  * (62em, ver mais abaixo) sem exceção nenhuma para tela cheia: o
  * diálogo abria largo e o texto continuava na mesma largura de sempre,
@@ -1670,8 +1670,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
  * (min(1100px,98vw), ali em cima), então a coluna simplesmente usa o
  * que sobrar dele — nunca vira linha de 200 caracteres porque o
  * diálogo em si já não deixa. */
+/* Com a TELA CHEIA DE VERDADE (18.20) o diálogo passou a ter a largura da tela, e "sem teto" voltou a dar linha
+ * de 200 caracteres. A coluna volta, centralizada e escolhível (estreita · média · larga), em "em" para crescer
+ * com a letra; "média" é o mesmo teto da leitura normal. */
 #dlgLeiSeca.lei-cheia .lei-art, #dlgLeiSeca.lei-cheia .lei-div,
-#dlgLeiSeca.lei-cheia .lei-rec{max-width:none}
+#dlgLeiSeca.lei-cheia .lei-rec{max-width:var(--lei-coluna, 62em);margin-left:auto;margin-right:auto}
 #dlgLeiSeca.lei-cheia .lei-art-txt, #dlgLeiSeca.lei-cheia .lei-rec-cab,
 #dlgLeiSeca.lei-cheia .lei-rec-txt{max-width:none}
 /* A COLUNA DE TEXTO TEM LIMITE PRÓPRIO, em "em" e não em pixels: assim
@@ -7434,7 +7437,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <p class="nota" id="leiSub"></p>
       <p class="nota ger-np-erro" id="leiAvisoNome" role="status" hidden></p>
     </div>
-    <span class="lei-apoio">
+    <span class="lei-apoio" id="leiApoio">
       <button class="lei-redondo" id="btnLeiAjuda"
         title="Ajuda: explica, um a um, para que serve cada recurso desta janela.">?</button>
       <button class="lei-redondo" id="btnLeiLog"
@@ -7447,6 +7450,30 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- UMA FAIXA SÓ para as duas primeiras perguntas de quem reabre uma lei: de onde ela veio e de
        quando é (lei muda; sem carimbo de data não há como saber que o texto envelheceu) e onde
        eu parei, em artigo. -->
+  <!-- A BARRA DA TELA CHEIA da lei (a mesma do resumo): sair, ir para…, letra e coluna. Só existe nela. -->
+  <div class="mat-cheia-barra" id="leiCheiaBarra" hidden>
+    <button class="btn-min mat-cheia-sair" id="btnLeiCheiaSair" data-i18n="mat_cheia_sair" data-i18n-title="lei_tip_cheia_sair"></button>
+    <button class="btn-min" id="btnLeiCheiaIr" data-i18n="lei_gav_navegar" data-i18n-title="lei_tip_cheia_ir"></button>
+    <span class="mat-cheia-dir">
+      <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
+        <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
+        <span class="mat-seg">
+          <button class="btn-min" id="btnLeiCheiaMenor" data-i18n-title="mat_tip_menor_tecla" aria-label="A−">A&#8722;</button>
+          <button class="btn-min mat-fonte" id="leiCheiaFonte" data-i18n-title="mat_tip_fonte_val">100%</button>
+          <button class="btn-min" id="btnLeiCheiaMaior" data-i18n-title="mat_tip_maior_tecla" aria-label="A+">A+</button>
+        </span>
+      </span>
+      <span class="mat-grupo" role="group" data-i18n-title="mat_tip_coluna">
+        <span class="mat-grupo-rot" data-i18n="mat_coluna"></span>
+        <span class="mat-seg">
+          <button class="btn-min" id="btnLeiColEstreita" data-i18n="mat_col_estreita" data-i18n-title="mat_tip_coluna" aria-pressed="false"></button>
+          <button class="btn-min" id="btnLeiColMedia" data-i18n="mat_col_media" data-i18n-title="mat_tip_coluna" aria-pressed="true"></button>
+          <button class="btn-min" id="btnLeiColLarga" data-i18n="mat_col_larga" data-i18n-title="mat_tip_coluna" aria-pressed="false"></button>
+        </span>
+      </span>
+    </span>
+  </div>
+
   <div class="lei-info" id="leiInfo">
     <div class="lei-proc" id="leiProc" hidden></div>
     <div class="lei-onde" id="leiOnde" hidden></div>
@@ -7465,7 +7492,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <!-- A BARRA DE TRABALHO É UMA LINHA: os modos, "ir para…", "exibição", "leis" e, ao lado,
        as seis marcas. Antes eram três faixas (a barra, a gaveta de navegação e as marcas). -->
-  <div class="lei-barra-linha">
+  <div class="lei-barra-linha" id="leiBarraLinha">
   <div class="mat-topo">
     <!-- OS TRÊS MODOS SÃO UMA ESCOLHA, e se desenham como uma: encostados
          e dentro de uma borda só. Soltos, tinham a mesma forma de
@@ -7511,8 +7538,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        pergunta que se faz uma vez por sessão, não a cada artigo. "ir para…" abre o mapa. -->
   <div class="lei-pop" id="leiGavExibir" role="group" hidden>
     <div class="lei-pop-linha">
-    <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia"
-      title="Amplia a leitura: o texto ocupa a janela inteira e some tudo o que não é a lei."></button>
+    <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia" data-i18n-title="mat_tip_cheia"></button>
     </div>
     <div class="lei-pop-linha">
     <span class="nota" data-i18n="lei_letra_rot"></span>
@@ -7520,7 +7546,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- SEM ISTO, "A+" clicado demais (ou sem querer) não tem como ser
          percebido nem desfeito: o tamanho vai até 56px e some qualquer
          pista de qual é o valor atual ou de como voltar ao normal. -->
-    <span class="lei-fonte-atual" id="leiFonteAtual" title="Tamanho atual da letra."></span>
+    <button class="btn-min lei-fonte-atual" id="leiFonteAtual" data-i18n-title="mat_tip_fonte_val"></button>
     <button class="btn-min" id="btnLeiMaior" title="Letra maior.">A+</button>
     <button class="btn-min" id="btnLeiFonteReset" title="Volta a letra ao tamanho padrão.">↺</button>
     </div>
@@ -7573,7 +7599,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
   </div>
   <div class="lei-anexos" id="leiAnexos" hidden></div>
-  <div class="dlg-rodape">
+  <div class="dlg-rodape" id="leiRodape">
     <span class="nota lei-estado" id="leiEstado"></span>
     <button class="btn btn-azul" id="btnLeiSalvar" data-i18n="lei_salvar"
       title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>

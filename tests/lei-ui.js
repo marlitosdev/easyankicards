@@ -675,6 +675,92 @@ async function testes() {
        "U9j a alteracao nao valeu para o outro topico da mesma lei");
   }
 
+  /* ---- U10T: a TELA CHEIA DE VERDADE da lei (a mesma do resumo): barra propria, saida a vista, coluna, letra ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    api.leiTrocarModo("editar");
+    const d = api.document, raiz = d.documentElement, dlg = api.$("dlgLeiSeca");
+    let pedidos = 0, saidas = 0;
+    raiz.requestFullscreen = () => { pedidos++; d.fullscreenElement = raiz; return Promise.resolve(); };
+    d.exitFullscreen = () => { saidas++; d.fullscreenElement = null; return Promise.resolve(); };
+    d.fullscreenElement = null;
+    const props = {};
+    dlg.style.setProperty = (k, v) => { props[k] = v; };
+    ok(api.$("leiCheiaBarra").hidden === true, "U10T a barra da tela cheia nao aparece fora dela");
+    api.$("btnLeiCheia").onclick();
+    ok(api.leiCheiaAtual() === true && pedidos === 1 && api.telaCheiaDe("lei") === true, "U10Ta 'Tela cheia' pede a tela cheia DE VERDADE ao navegador");
+    ok(api.leiModoAtual() === "ler", "U10Tb entrando a editar, a tela cheia passa a ler (editar fica com a barra de gravar)");
+    ok(api.$("leiCheiaBarra").hidden === false && api.$("leiBarraLinha").hidden === true && api.$("leiRodape").hidden === true && api.$("leiApoio").hidden === true,
+       "U10Tc na tela cheia: so' a barra dela (cabecalho, barra de trabalho e rodape saem)");
+    ok(api.t("mat_cheia_sair") && /Sair/.test(api.t("mat_cheia_sair")), "U10Td a saida esta' a vista, na barra: " + api.t("mat_cheia_sair"));
+    /* repintar a lei (trocar de modo) nao traz nada de volta */
+    api.leiTrocarModo("ler");
+    ok(api.$("leiBarraLinha").hidden === true && api.$("leiRodape").hidden === true && api.$("leiCheiaBarra").hidden === false, "U10Te repintar a lei na tela cheia nao traz a barra normal de volta");
+    /* coluna */
+    ok(props["--lei-coluna"] === "62em" && api.$("btnLeiColMedia").getAttribute("aria-pressed") === "true", "U10Tf coluna 'media' (o mesmo teto da leitura normal): " + props["--lei-coluna"]);
+    api.$("btnLeiColEstreita").onclick();
+    ok(props["--lei-coluna"] === "46em" && api.leiColunaAtual() === "estreita" && api.loja.getItem("eac_lei_coluna") === "estreita" && api.$("btnLeiColEstreita").getAttribute("aria-pressed") === "true" && api.$("btnLeiColMedia").getAttribute("aria-pressed") === "false",
+       "U10Tg coluna 'estreita' estreita, acende e fica lembrada");
+    api.$("btnLeiColLarga").onclick();
+    ok(props["--lei-coluna"] === "none", "U10Th 'larga' tira o teto");
+    const css = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/#dlgLeiSeca\.lei-cheia \.lei-rec\{max-width:var\(--lei-coluna, 62em\);margin-left:auto;margin-right:auto\}/.test(css) && /#dlgLeiSeca\.lei-cheia\[open\]\{width:100vw;max-width:100vw/.test(css),
+       "U10Ti o CSS: a janela ocupa a tela e a coluna usa a escolha, centralizada");
+    /* letra: as duas barras dizem o mesmo, em % */
+    api.$("btnLeiCheiaMaior").onclick();
+    ok(api.leiFonteAtualPx() === 17 && api.$("leiCheiaFonte").textContent === "113%" && api.$("leiFonteAtual").textContent === "113%", "U10Tj A+ da barra da tela cheia: as duas barras mostram o mesmo numero, em %");
+    api.$("leiCheiaFonte").onclick();
+    ok(api.leiFonteAtualPx() === 15 && api.$("leiCheiaFonte").textContent === "100%", "U10Tk clicar no numero volta a 100%");
+    api.$("leiFonteAtual").onclick && api.leiFonteMudar(2);
+    api.$("leiFonteAtual").onclick();
+    ok(api.leiFonteAtualPx() === 15, "U10Tk2 o numero do pop-over 'exibicao' tambem volta a 100%");
+    for (let i = 0; i < 30; i++) api.leiFonteMudar(-2);
+    ok(api.$("btnLeiCheiaMenor").disabled === true && api.$("btnLeiMenor").disabled === true && api.$("btnLeiCheiaMaior").disabled === false, "U10Tl no minimo, os dois A− desligam");
+    api.leiFonteDefinir(15);
+    /* teclas */
+    const tecla = (key, alvo) => { let parou = false; (dlg._ouv.keydown || []).forEach((fn) => fn({ key, target: alvo || { tagName: "DIV" }, preventDefault() { parou = true; } })); return parou; };
+    ok(tecla("+") === true && api.leiFonteAtualPx() === 17, "U10Tm a tecla + aumenta a letra na tela cheia");
+    ok(tecla("-") === true && api.leiFonteAtualPx() === 15, "U10Tn a tecla − diminui");
+    ok(tecla("+", { tagName: "INPUT" }) === false && api.leiFonteAtualPx() === 15, "U10To digitando (o 'testar' tem campo), a tecla nao mexe na letra");
+    /* "ir para…" dentro da tela cheia */
+    if (api.$("dlgLeiIr").open) api.$("dlgLeiIr").close();
+    api.$("btnLeiCheiaIr").onclick();
+    ok(api.$("dlgLeiIr").open === true, "U10Tp 'ir para…' abre o mapa sem sair da tela cheia");
+    api.$("dlgLeiIr").close();
+    ok(api.leiCheiaAtual() === true, "U10Tp2 ...e continua na tela cheia");
+    /* Esc do navegador */
+    d.fullscreenElement = null;
+    api.docDisparar("fullscreenchange");
+    ok(api.leiCheiaAtual() === false && api.$("leiCheiaBarra").hidden === true && api.$("leiBarraLinha").hidden === false && api.$("leiRodape").hidden === false && api.$("leiApoio").hidden === false,
+       "U10Tq Esc (o navegador sai da tela cheia): a lei sai junto, com tudo de volta");
+    ok(tecla("+") === false, "U10Tr fora da tela cheia, + nao e' sequestrado");
+    /* Esc sem a API (chega como 'cancel' no dialogo): sai da tela cheia, nao fecha a lei */
+    api.$("btnLeiCheia").onclick();
+    let barrou = 0;
+    (dlg._ouv.cancel || []).forEach((fn) => fn({ preventDefault() { barrou++; } }));
+    ok(api.leiCheiaAtual() === false && barrou === 1 && saidas === 1, "U10Ts Esc sai da tela cheia ANTES de fechar a lei (e devolve a tela ao navegador)");
+    (dlg._ouv.cancel || []).forEach((fn) => fn({ preventDefault() { barrou++; } }));
+    ok(barrou === 1, "U10Tt fora da tela cheia, o Esc segue o caminho de sempre");
+    /* o botao 'Sair' da barra */
+    api.$("btnLeiCheia").onclick();
+    api.$("btnLeiCheiaSair").onclick();
+    ok(api.leiCheiaAtual() === false && saidas === 2 && d.fullscreenElement === null, "U10Tu 'Sair da tela cheia' devolve a tela ao navegador");
+    /* quem ja' estava em F11 */
+    d.fullscreenElement = raiz; const p0 = pedidos, s0 = saidas;
+    api.$("btnLeiCheia").onclick(); api.$("btnLeiCheiaSair").onclick();
+    ok(pedidos === p0 && saidas === s0 && d.fullscreenElement === raiz, "U10Tv se o navegador ja' estava em tela cheia, a lei nao pede nem tira");
+    d.fullscreenElement = null;
+    /* lei e resumo nao se atrapalham: o dono da tela cheia e' um so' */
+    api.$("btnLeiCheia").onclick();
+    ok(api.telaCheiaDe("lei") === true && api.telaCheiaDe("resumo") === false && api.telaCheiaSair("resumo") === false && d.fullscreenElement === raiz, "U10Tw o resumo nao desfaz a tela cheia que a lei pediu");
+    await api.$("btnLeiFechar").onclick();
+    ok(api.leiCheiaAtual() === false && d.fullscreenElement === null, "U10Tx fechar a lei na tela cheia devolve a tela");
+  }
+
   /* ---- U10: ler maior ---- */
   {
     const { api } = rodar();
@@ -705,7 +791,7 @@ async function testes() {
        "U10c a leitura sumiu junto com o resto — sobrou nada");
     ok(/lei-cheia/.test(api.$("dlgLeiSeca").className || ""),
        "U10d a janela nao entrou em modo ampliado");
-    ok(/normal|voltar/i.test(api.$("btnLeiCheia").textContent || ""),
+    ok(/sair|voltar/i.test(api.$("btnLeiCheia").textContent || ""),
        "U10e o botao nao oferece a saida: " + api.$("btnLeiCheia").textContent);
 
     api.$("btnLeiCheia").onclick();
@@ -952,24 +1038,24 @@ async function testes() {
     api.leiGravar();
 
     /* o valor aparece ao lado dos botões, não só o efeito no texto */
-    ok(api.$("leiFonteAtual").textContent === "15px",
+    ok(api.$("leiFonteAtual").textContent === "100%",
        "U20 a letra não nasce mostrando o tamanho padrão: "
        + api.$("leiFonteAtual").textContent);
 
     api.leiFonteMudar(2);
-    ok(api.$("leiFonteAtual").textContent === "17px",
+    ok(api.$("leiFonteAtual").textContent === "113%",
        "U20a o valor ao lado do botão não acompanhou o \"A+\": "
        + api.$("leiFonteAtual").textContent);
 
     /* sobe até o teto — é o cenário relatado, 56px */
     for (let i = 0; i < 30; i++) api.leiFonteMudar(2);
-    ok(api.$("leiFonteAtual").textContent === "56px",
+    ok(api.$("leiFonteAtual").textContent === "373%" && api.$("btnLeiMaior").disabled === true,
        "U20b a letra não travou no teto (56px) depois de muitos cliques: "
        + api.$("leiFonteAtual").textContent);
 
     /* o botão de reset devolve ao padrão num só toque */
     api.$("btnLeiFonteReset").onclick();
-    ok(api.$("leiFonteAtual").textContent === "15px",
+    ok(api.$("leiFonteAtual").textContent === "100%",
        "U20c o reset não devolveu a letra ao tamanho padrão: "
        + api.$("leiFonteAtual").textContent);
 
@@ -979,7 +1065,7 @@ async function testes() {
      * app reabrindo com uma preferência já salva de antes. */
     api.loja.setItem("eac_lei_fonte", "23");
     api.leiFonteCarregar();
-    ok(api.$("leiFonteAtual").textContent === "23px",
+    ok(api.$("leiFonteAtual").textContent === "153%",
        "U20d carregar um tamanho salvo não repintou o número ao lado "
        + "do botão: " + api.$("leiFonteAtual").textContent);
   }
