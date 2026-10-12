@@ -151,6 +151,8 @@ function gerDesfazerUltima() {
         if (ed.ramosHist) ed.ramosHist = ed.ramosHist.slice(0, rr.histAntes || 0);
         if (rr.qs && rr.qs.length && typeof qsDesfazerRamo === "function") qsDesfazerRamo(rr.qs);
         if (rr.jur && rr.jur.length && typeof jurDesfazerRamo === "function") jurDesfazerRamo(rr.jur);
+        /* Q4 — renomeação feita no texto: o retrato dos ramos volta ao de antes (a pergunta reaparece) */
+        if (rr.base) ed.ramosBase = rr.base;
         /* T5 — o título da seção do resumo volta ao nome antigo (só se o resumo continua como a ação o deixou) */
         if (rr.resumo && typeof matObter === "function") {
           const rm = matObter(rr.resumo.chave);

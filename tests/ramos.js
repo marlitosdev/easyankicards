@@ -3972,6 +3972,89 @@ async function testes() {
     a.$("dlgJuris").close && a.$("dlgJuris").close();
   }
 
+  /* ---- Q4: renomear um ramo À MÃO no texto do edital leva o material junto (se a pessoa confirmar) ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.hubAbrirEdital(ed.id);
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    const NL = String.fromCharCode(10);
+    const tk = "licitações›lei 14.133";
+    ok(a.ramBaseDe(ed.texto)[tk] && a.ramBaseDe(ed.texto)[tk].ramos.map((x) => x.id).join() === "modalidades,fase_preparatoria,contratos", "Q4a o retrato dos ramos por topico");
+    delete ed.ramosBase;
+    a.ramGarantirBase(ed);
+    /* o material ligado a Modalidades: marca de estudado, uma questão, um julgado e a seção do resumo */
+    a.edProgressoAtual()[tk + "›#modalidades"] = { e: "feito", d: "2026-10-05" };
+    a.qsBancoPor([{ id: "qm", chave, disciplina: "Licitações", topico: "Lei 14.133", tipo: "ce", gabarito: "C", enunciado: "Pregão.", comentario: "", opcoes: [], tentativas: [], ramo: "modalidades", ramoNome: "Modalidades" }]);
+    a.jurGravar({ id: "jm", tribunal: "STF", classe: "ADI", numero: "9", tese: "Pregão.", topicos: [chave] });
+    a.jurLigarRamo("jm", chave, "modalidades", "Modalidades");
+    const chM = a.matChaveViva("Licitações", "Lei 14.133");
+    a.matGravar(chM, ["Geral.", "", "## Ramo — Modalidades", "Pregão e concorrência."].join(NL), { disciplina: "Licitações", topico: "Lei 14.133" });
+    /* editar o texto à mão: Modalidades vira "Modalidades de licitação"; Contratos (sem material) vira "Contratos administrativos" */
+    const t0 = a.$("editalTexto").value;
+    const t1 = t0.replace(/^\+\+ Modalidades\b(.*)$/m, "++ Modalidades de licitação$1").replace(/^\+\+ Contratos\b(.*)$/m, "++ Contratos administrativos$1");
+    ok(t1 !== t0 && /\+\+ Modalidades de licitação/.test(t1), "Q4-pre o texto foi editado a mao");
+    a.$("editalTexto").value = t1;
+    a.edRender();
+    const det = a.ramDetectarRenomeacoes(a.edAberto(), t1);
+    ok(det.length === 2 && det[1].de.id === "contratos" && det[1].dados.cartoes === 1 && det[0].de.id === "modalidades" && det[0].para.nome === "Modalidades de licitação" && det[0].dados.marcas && det[0].dados.questoes === 1 && det[0].dados.julgados === 1 && det[0].dados.resumo === 1,
+       "Q4b os ramos renomeados COM material entram na pergunta (Modalidades: marca, questao, julgado, secao; Contratos: o cartao): " + JSON.stringify(det.map((x) => [x.de.id, x.para.id, x.dados])));
+    ok(a.$("edRamoRenCx").hidden === false && /«Modalidades» → «Modalidades de licitação»/.test(a.$("edRamoRenTxt").textContent) && /marca de estudado/.test(a.$("edRamoRenTxt").textContent) && /1 questão/.test(a.$("edRamoRenTxt").textContent) && /1 julgado/.test(a.$("edRamoRenTxt").textContent) && /seção do resumo/.test(a.$("edRamoRenTxt").textContent),
+       "Q4c a faixa na bancada diz o que esta' ligado ao nome antigo: " + a.$("edRamoRenTxt").textContent);
+    /* levar */
+    a.$("btnRamRenLevar").onclick();
+    const novoId = "modalidades_de_licitacao";
+    const pr = a.edProgressoAtual();
+    ok(pr[tk + "›#" + novoId] && !pr[tk + "›#modalidades"], "Q4d a marca de estudado foi para o nome novo");
+    ok(a.qsTodas().find((q) => q.id === "qm").ramo === novoId && a.jurRamoDe(a.jurDe("jm"), chave).id === novoId, "Q4e a questao e o julgado foram para o nome novo");
+    ok(/## Ramo — Modalidades de licitação\nPregão/.test(a.matResumosAtual()[chM].texto), "Q4f a secao do resumo ganhou o nome novo");
+    ok(a.$("edRamoRenCx").hidden === true && a.$("edRamoRenFeito").hidden === false && /2 ramo/.test(a.$("edRamoRenFeitoTxt").textContent), "Q4g a faixa some e diz o que fez");
+    ok(/ram_contratos_administrativos/.test(a.matResumosAtual()[chave].cartoes), "Q4g2 a etiqueta do cartao de Contratos tambem acompanhou");
+    a.edRender();
+    ok(a.$("edRamoRenCx").hidden === true, "Q4h depois de levar, a pergunta nao volta (o retrato ja' e' o texto novo)");
+    ok(a.edAberto().ramosBase[tk].ramos.map((x) => x.id).join() === "modalidades_de_licitacao,fase_preparatoria,contratos_administrativos", "Q4h2 o retrato passou a ser o do texto novo: " + a.edAberto().ramosBase[tk].ramos.map((x) => x.id));
+    /* desfazer: o material volta ao nome antigo e a pergunta reaparece */
+    a.$("btnRamRenDesfazer").onclick();
+    ok(a.qsTodas().find((q) => q.id === "qm").ramo === "modalidades" && a.jurRamoDe(a.jurDe("jm"), chave).id === "modalidades" && /## Ramo — Modalidades\n/.test(a.matResumosAtual()[chM].texto)
+       && a.$("edRamoRenCx").hidden === false, "Q4i desfazer devolve o material ao nome antigo e a pergunta reaparece");
+    /* "são ramos diferentes": nada muda no material, e a pergunta não volta */
+    a.$("btnRamRenNao").onclick();
+    ok(a.$("edRamoRenCx").hidden === true && a.qsTodas().find((q) => q.id === "qm").ramo === "modalidades", "Q4j 'sao ramos diferentes': o material fica com o nome antigo e a pergunta some");
+    a.edRender();
+    ok(a.$("edRamoRenCx").hidden === true, "Q4k ...e nao volta na proxima edicao");
+    /* carregar a lista tira o retrato de quem não tem */
+    const eds = a.editaisLista ? a.editaisLista() : [];
+    ok(eds.length && eds.every((e) => e.ramosBase), "Q4l todo edital tem o retrato dos ramos");
+    /* ramo SEM material renomeado: nada a levar, nada a perguntar; e renomear dois sem trocar o número de ramos pareia na ordem */
+    const T0 = ["@ Outra :: 5", "+ Sem material :: 5", "++ Alfa", "++ Beta"].join(String.fromCharCode(10));
+    const edX = { id: "edx", texto: T0, ramosBase: a.ramBaseDe(T0) };
+    ok(a.ramDetectarRenomeacoes(edX, T0.replace("++ Alfa", "++ Alfa 2")).length === 0, "Q4m ramo renomeado sem nada ligado: nenhuma pergunta");
+    const semRetrato = { id: "y", texto: T0 };
+    ok(a.ramDetectarRenomeacoes(edX, T0.replace("++ Alfa", "")).length === 0 && a.ramDetectarRenomeacoes(semRetrato, T0).length === 0 && !("ramosBase" in semRetrato), "Q4n so' tirar um ramo (sem outro no lugar) nao e' renomeacao; sem retrato, nada a comparar (e nenhum retrato vazio e' criado)");
+    {
+      const { a: b, ed: edB } = MT();
+      b.hubAbrirEdital(edB.id);
+      b.edProgressoAtual()[tk + "›#modalidades"] = { e: "feito", d: "2026-10-05" };
+      delete edB.ramosBase; b.ramGarantirBase(edB);
+      const tAmb = edB.texto.replace(/^\+\+ Modalidades\b(.*)$/m, "++ Uma coisa$1" + NL + "++ Outra coisa");
+      ok(b.ramDetectarRenomeacoes(edB, tAmb).length === 0, "Q4o um ramo com material sai e DOIS entram: ambiguo, o app nao chuta");
+      /* o editor de ramos (ajustar ramos) tambem atualiza o retrato: nao e' "renomeacao a mao" */
+      const chB = b.matChaveViva("Licitações", "Lei 14.133");
+      b.ramAplicar({ editalId: edB.id, disciplina: "Licitações", topico: "Lei 14.133", chave: chB }, [
+        { nome: "Modalidades de licitação", peso: "5", nota: "", idOrig: "modalidades" },
+        { nome: "Fase preparatória", peso: "3", nota: "", idOrig: "fase_preparatoria" },
+        { nome: "Contratos", peso: "3", nota: "", idOrig: "contratos" }]);
+      ok(edB.ramosBase[tk].ramos[0].id === "modalidades_de_licitacao", "Q4p renomear pelo editor de ramos atualiza o retrato");
+    }
+    /* carregar a lista: quem não tem retrato ganha um (do texto gravado) */
+    const listaSalva = JSON.parse(a.lojaLer("eac_editais") || "[]");
+    listaSalva.forEach((e) => { delete e.ramosBase; });
+    a.loja.setItem("eac_editais", JSON.stringify(listaSalva));
+    a.edCarregarLista();
+    ok(listaSalva.length && a.editaisLista().every((e) => e.ramosBase && Object.keys(e.ramosBase).length), "Q4q carregar a lista tira o retrato dos editais que nao tem");
+    const htmlQ4 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(htmlQ4.indexOf('id="edRamoRenCx"') > 0 && htmlQ4.indexOf('id="edRamoRenCx"') < htmlQ4.indexOf('id="edBancCorpo"'), "Q4r a faixa fica FORA do corpo recolhivel da bancada (aparece mesmo recolhida)");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

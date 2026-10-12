@@ -21,6 +21,8 @@ function edCarregarLista() {
   try { editais = JSON.parse(localStorage.getItem("eac_editais") || "[]"); }
   catch (e) { editais = []; }
   if (!Array.isArray(editais)) editais = [];
+  /* Q4 — o retrato dos ramos de cada edital, tirado do texto GRAVADO, antes de qualquer edição desta sessão */
+  if (typeof ramGarantirBase === "function") editais.forEach((e) => { try { ramGarantirBase(e); } catch (x) {} });
 
   /* Migração do edital único. Só acontece uma vez, e só quando há o que
    * migrar: sem isto, quem já usava o app perderia texto e progresso na

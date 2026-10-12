@@ -2388,6 +2388,9 @@ p.mat-ferr{display:block;font-size:12px}
 .res-ia-ramos{display:flex;flex-direction:column;gap:6px;margin:6px 0}
 .qs-tag-ramo{border-color:var(--info);color:var(--info)}
 .jur-sel.ramo{border-color:var(--info);color:var(--info)}
+.ed-ramo-ren{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0;padding:8px 10px;border:1px solid var(--atencao);border-radius:8px;font-size:12.5px}
+.ed-ramo-ren-feito{border-color:var(--ok)}
+.ed-ramo-ren-acoes{display:flex;flex-wrap:wrap;gap:6px}
 .jur-ramo-sel{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-top:6px}
 .jur-ramo-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0;padding:6px 10px;border:1px solid var(--info);border-radius:8px;font-size:12.5px}
 .qs-item-ramo{display:flex;align-items:center;gap:6px;font-size:12.5px;margin:4px 0}
@@ -5610,6 +5613,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         </span>
       </div>
       <div class="ed-banc-resumo" id="edBancResumo" hidden></div>
+      <!-- Q4 (FORA do corpo recolhível: a pergunta aparece mesmo com a bancada recolhida): renomeou um ramo à mão no texto? o material dele (estudo, questões, julgados, cartões, resumo) vai junto se você confirmar -->
+      <div class="ed-ramo-ren" id="edRamoRenCx" role="status" aria-live="polite" hidden>
+        <span id="edRamoRenTxt"></span>
+        <span class="ed-ramo-ren-acoes">
+          <button type="button" class="btn-min btn-min-ok" id="btnRamRenLevar" data-i18n="ram_ren_levar" data-i18n-title="ram_ren_levar_tip"></button>
+          <button type="button" class="btn-min" id="btnRamRenNao" data-i18n="ram_ren_nao" data-i18n-title="ram_ren_nao_tip"></button>
+        </span>
+      </div>
+      <div class="ed-ramo-ren ed-ramo-ren-feito" id="edRamoRenFeito" hidden>
+        <span id="edRamoRenFeitoTxt"></span>
+        <button type="button" class="btn-min" id="btnRamRenDesfazer" data-i18n="ria_desfazer" data-i18n-title="ram_ren_desfazer_tip"></button>
+      </div>
       <div id="edBancCorpo">
       <!-- TRÊS AÇÕES, CADA UMA COM O QUE ELA FAZ ESCRITO EMBAIXO.
            Eram quatro botões cujos nomes descreviam o gesto ("criar

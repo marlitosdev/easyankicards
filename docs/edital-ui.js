@@ -4422,6 +4422,8 @@ function edRender() {
   const raw = $("editalTexto").value;
   const r = lerEdital(raw);
   edRegistrarConteudo(r);
+  /* Q4 — renomeou um ramo à mão? a faixa pergunta se o material vai junto */
+  if (typeof ramPintarRenomeacao === "function") { try { ramPintarRenomeacao(); } catch (e) {} }
   edNumeros(raw.split("\n").length);
   edSugestoes(r);
   edAchadosSelo();
@@ -4501,6 +4503,18 @@ function edIniciar() {
   catch (e) { edProgresso = {}; }
 
   $("editalTexto").addEventListener("input", edRender);
+  if ($("btnRamRenLevar")) $("btnRamRenLevar").onclick = () => {
+    const ed = edAberto();
+    const n = ramConfirmarRenomeacoes(ed, ramRenItens, $("editalTexto").value);
+    ramPintarRenomeacao();
+    if (n && $("edRamoRenFeito")) { $("edRamoRenFeito").hidden = false; $("edRamoRenFeitoTxt").textContent = t("ram_ren_feito", { n }); }
+  };
+  if ($("btnRamRenNao")) $("btnRamRenNao").onclick = () => { ramIgnorarRenomeacoes(edAberto(), $("editalTexto").value); ramPintarRenomeacao(); };
+  if ($("btnRamRenDesfazer")) $("btnRamRenDesfazer").onclick = () => {
+    if (typeof gerDesfazerUltima === "function") gerDesfazerUltima();
+    if ($("edRamoRenFeito")) $("edRamoRenFeito").hidden = true;
+    ramPintarRenomeacao();
+  };
   $("editalTexto").addEventListener("paste", edColarNoEditor);
   $("editalTexto").addEventListener("scroll", () => {
     $("editalNums").scrollTop = $("editalTexto").scrollTop;
