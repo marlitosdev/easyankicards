@@ -1093,9 +1093,9 @@ async function testes() {
       /* registro: sessao combinada */
       a.abrirRegistro(it());
       const bl = a.$("regTrilha");
-      ok(bl.hidden === false && /Modalidades: lei ✓ · questões ✓ · cartões ○ · julgados —/.test(bl.textContent) && /Sessão combinada sugerida: 70min cartões\./.test(bl.textContent), "R38g o registro mostra a trilha do ramo marcado e a sessao combinada (so' o que falta, com o tempo do ramo): " + bl.textContent);
+      ok(bl.hidden === false && /^Modalidades — falta: cartões/.test(bl.textContent) && /lei ✓ · questões ✓ · cartões ○ · julgados —/.test(bl.children[0].title) && !/Sessão combinada/.test(bl.textContent), "R38g o registro diz, numa linha, o que FALTA no ramo marcado (a trilha inteira fica no balão): " + bl.textContent + " | " + bl.children[0].title);
       const abrirBt = achar2(bl, (f) => /reg-trilha-abrir-btn/.test(f.className || ""), []);
-      ok(abrirBt.map((b) => b.textContent).join("|") === ["lei", "questoes", "cartoes"].map((x) => a.t("ed_passo_abrir", { x: a.t("ed_passo_" + x) })).join("|"), "R38g2 um botao 'Abrir' por passo COM material (lei, questoes, cartoes; julgados nao): " + abrirBt.map((b) => b.textContent));
+      ok(abrirBt.map((b) => b.textContent).join("|") === a.t("ed_passo_abrir", { x: a.t("ed_passo_cartoes") }), "R38g2 um botao 'Abrir' so' para o que FALTA e tem material (cartoes; lei e questoes ja feitas, julgados sem material): " + abrirBt.map((b) => b.textContent));
       ok(a.edAbrirPasso(it(), "nao_existe") === "" && a.edAbrirPasso(null, "lei") === "", "R38g3 passo desconhecido ou item vazio: nao abre nada");
       ok(a.edAbrirPasso(it(), "lei") === "lei", "R38g3b o passo existente abre e devolve o id dele");
       a.abrirRegistro(it());
@@ -1105,7 +1105,7 @@ async function testes() {
         bs[k].onclick();
         return bs[k].abriu;
       };
-      ok(abriuDe(0) === "lei" && abriuDe(1) === "questoes" && abriuDe(2) === "cartoes", "R38g3c cada botao abre O SEU material (lei, questoes, cartoes)");
+      ok(abriuDe(0) === "cartoes", "R38g3c o botao abre O SEU material (cartoes)");
       a.abrirRegistro(it());
       a.$("dlgRegistro").open = true;
       abrirBt[0].onclick();
@@ -1116,7 +1116,7 @@ async function testes() {
       a.$("dlgRegistro").close();
       a.edDiario.push({ d: hoje, c: it().chave, n: "Lei", a: "feito", f: ["flashcards"], rm: [{ id: "modalidades", ant: null }] });
       a.abrirRegistro(it());
-      ok(/Trilha completa/.test(a.$("regTrilha").textContent), "R38i com tudo feito o registro diz 'trilha completa': " + a.$("regTrilha").textContent);
+      ok(/Modalidades — trilha ✓/.test(a.$("regTrilha").textContent) && !/Abrir/.test(a.$("regTrilha").textContent), "R38i com tudo feito o registro diz 'trilha ✓' e nao oferece abrir nada: " + a.$("regTrilha").textContent);
       a.$("dlgRegistro").close();
       a.abrirDisciplina("Licitações");
       ok(falta(Array.from(a.$("dscRamosLista").children).filter((l) => /dsc-ramo-lin/.test(l.className))[0]).textContent === "trilha ✓", "R38i2 ramo com a trilha completa: o painel da disciplina diz 'trilha ✓'");
@@ -2686,16 +2686,16 @@ async function testes() {
       const disc = achar(cx(), (e) => cls(e, "cov-disc"))[0];
       achar(disc, (e) => cls(e, "cov-disc-cab"))[0].onclick();
       const rl = achar(cx(), (e) => cls(e, "dom-ramo")).find((e) => /Contratos/.test(e.textContent));
-      const bMed = achar(rl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "inseguro");
+      const bMed = achar(rl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "difícil");
       bMed.onclick();
       ok(a.difDe("Licitações", a.domChaveAuto("Lei 14.133", "contratos")).nivel === "alta", "R70m o botao 'inseguro' do ramo grava a avaliacao dele");
       const rl2 = achar(cx(), (e) => cls(e, "dom-ramo")).find((e) => /Contratos/.test(e.textContent));
-      ok(achar(rl2, (e) => cls(e, "dom-auto-b")).some((e) => e.textContent === "inseguro" && e.className.indexOf("ativa") >= 0) && /dom-b-vermelho/.test(rl2.className), "R70n a tela repinta: o botao fica ativo e o ramo vermelho");
+      ok(achar(rl2, (e) => cls(e, "dom-auto-b")).some((e) => e.textContent === "difícil" && e.className.indexOf("ativa") >= 0) && /dom-b-vermelho/.test(rl2.className), "R70n a tela repinta: o botao fica ativo e o ramo vermelho");
       achar(rl2, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "limpar").onclick();
       ok(a.difDe("Licitações", a.domChaveAuto("Lei 14.133", "contratos")).nivel === "", "R70o 'limpar' apaga a avaliacao do ramo");
       /* o botao do topico grava no modulo de dificuldade do PLANO */
       const tl = achar(cx(), (e) => cls(e, "dom-top")).find((e) => /Lei 14.133/.test(e.textContent));
-      achar(tl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "médio").onclick();
+      achar(tl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "normal").onclick();
       ok(a.difDe("Licitações", "Lei 14.133").nivel === "media", "R70p no TOPICO a avaliacao e' a mesma do plano (a fila muda)");
       /* as acoes: questoes sempre; registrar so' no edital aberto */
       const botoes = (el) => achar(el, (e) => e.tag === "button").map((b) => b.textContent);
@@ -2927,8 +2927,10 @@ async function testes() {
       const exV = (a.$("btnRegExigirAjuda").dataset.texto || "").split("\n\n")[1] || "";
       ok(/^Exemplo com “Modalidades” — etapas dele: cartões ○ \(○ falta/.test(exV) && !/—\s*·|·\s*—/.test(exV.split("etapas dele:")[1].split("(")[0]), "R33v o exemplo lista so as etapas que o ramo tem (sem os \"—\" de etapa inexistente): " + exV);
       ok(a.$("regRamosBloco").hidden === false && linhas().length === 3 && a.$("regRamosRot").textContent === "O que você estudou?", "R33 topico com ramos: a janela mostra a lista dos 3 ramos ('O que voce estudou?')");
-      ok(marcas().join() === "true,false,false" && /Modalidades ★5/.test(linhas()[0].children[1].textContent) && /Fase preparatória ★3/.test(linhas()[1].children[1].textContent), "R33a vem marcado so' o ramo que a agenda propos, na ordem de relevancia");
-      ok(Number(a.$("regMinutos").value) === 70 && /1 ramo\(s\) marcado\(s\) · 1h10 sugeridos/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
+      ok(marcas().join() === "true,false,false" && linhas()[0].children[1].textContent === "Modalidades" && linhas()[1].children[1].textContent === "Fase preparatória" && /peso 5/.test(linhas()[0].title) && /peso 3/.test(linhas()[1].title), "R33a vem marcado so' o ramo que a agenda propos, na ordem de relevancia (a ficha so' com o nome; o peso no balao)");
+      ok(/(^| )marcado( |$)/.test(linhas()[0].className) && !/(^| )marcado( |$)/.test(linhas()[1].className) && /1h10/.test(linhas()[0].children[2].textContent) && linhas()[1].children[2].textContent === "" && /≈ 40min/.test(linhas()[1].title), "R33a2 a ficha marcada fica preenchida e mostra o tempo; a desmarcada, so' o nome (o tempo no balao)");
+      ok(a.$("btnRegRamosTodos").getAttribute("aria-pressed") === "false", "R33a3 com um ramo so' marcado a ficha 'Todos' fica apagada");
+      ok(Number(a.$("regMinutos").value) === 70 && /^1 ramo\(s\) · 1h10$/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
       const ck1 = linhas()[1].children[0]; ck1.checked = true; ck1.onchange();
       ok(marcas().join() === "true,true,false" && Number(a.$("regMinutos").value) === 110 && /2 ramo/.test(a.$("regRamosResumo").textContent) && /Modalidades, Fase preparatória$/.test(a.$("regTitulo").textContent), "R33c marcar outro ramo soma o tempo (70+40) e entra no titulo: " + a.$("regMinutos").value);
       linhas()[0].children[0].checked = false; linhas()[0].children[0].onchange();
@@ -2942,7 +2944,7 @@ async function testes() {
       a.$("dlgRegistro").close && a.$("dlgRegistro").close();
       a.abrirRegistro(item());
       a.$("btnRegRamosTodos").onclick();
-      ok(marcas().join() === "true,true,true" && Number(a.$("regMinutos").value) === 150, "R33e 'o topico todo' marca todos (150 min)");
+      ok(marcas().join() === "true,true,true" && Number(a.$("regMinutos").value) === 150 && a.$("btnRegRamosTodos").getAttribute("aria-pressed") === "true", "R33e 'Todos' marca todos (150 min) e fica aceso");
       /* nenhum marcado: nao registra */
       ok(/1h10/.test(linhas()[0].children[2].textContent) && /40|min/.test(linhas()[1].children[2].textContent) && Number(a.$("regMinSlider").value) === 150, "R33e2 cada ramo mostra o tempo estimado (Modalidades 1h10) e o controle deslizante acompanha (150)");
       linhas().forEach((l) => { l.children[0].checked = false; l.children[0].onchange(); });
@@ -3350,6 +3352,130 @@ async function testes() {
     a.abrirRegistro({ nome: "Lei 14.133", disciplina: "Licitações", chave }, { ramo: "contratos" });
     ok(a.regTipoAtual() === "feito" && a.regAlvoNuncaEstudado() === true, "REG2 ramo nunca estudado: estudo por padrão, e revisar perguntaria");
     a.$("btnRegFechar").onclick();
+  }
+
+  /* ---- S1: registro em dois níveis — "Como foi?" único com o efeito escrito, ramos em fichas, "Mais detalhes" ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    a.edProgressoPor({});
+    a.matResumosAtual()[chave].leiTexto = "Art. 1 Texto da lei.";
+    a.qsBancoPor([{ chave, enunciado: "Sobre a modalidade pregão...", comentario: "", opcoes: [] }]);
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const i0 = html.indexOf('<dialog id="dlgRegistro"'), dlg = html.slice(i0, html.indexOf("</dialog>", i0));
+    const pos = ['id="regTipoBox"', 'id="regMinSlider"', 'id="regDificuldade"', 'id="regRamosBloco"', 'id="regFormas"', 'id="regQuestoesBloco"', 'id="regMais"'].map((x) => dlg.indexOf(x));
+    ok(pos.every((p, k) => p > 0 && (k === 0 || p > pos[k - 1])), "S1a a ordem da janela: tipo, tempo, Como foi?, ramos, formas, questoes, Mais detalhes: " + pos);
+    ok(!/id="regHumor"/.test(dlg) && /data-i18n="ed_cf_pergunta"/.test(dlg), "S1a2 'Como rendeu' saiu: so' 'Como foi?' pergunta pela sessao");
+    const mais = dlg.slice(dlg.indexOf('id="regMais"'), dlg.indexOf("</details>"));
+    ok(['id="regOnde"', 'id="regObs"', 'id="regEspelho"', 'id="regRamosExigirLin"'].every((x) => mais.indexOf(x) >= 0), "S1a3 onde parou, anotacao, outros editais e a preferencia dos ramos moram em 'Mais detalhes'");
+    const regra = (sel) => (html.match(new RegExp("\\" + sel + "\\{[^}]*\\}")) || [""])[0];
+    ok(!/border/.test(regra(".reg-trilha")) && !/border/.test(regra(".reg-espelho")) && /font-size:inherit/.test(regra(".reg-espelho-lin")) && /border-radius:999px/.test(regra(".reg-ramo-lin")), "S1a4 sem caixa dentro de caixa: trilha e espelho sem borda, espelho na letra normal, ramos em ficha: " + regra(".reg-trilha") + " " + regra(".reg-espelho"));
+
+    /* "Como foi?": tres respostas, e o efeito de cada uma escrito */
+    a.abrirRegistro(it());
+    const bts = () => Array.from(a.$("regDificuldade").children);
+    const eco = () => a.$("regDifEco").textContent;
+    ok(bts().map((b) => b.textContent).join("|") === "Difícil|Normal|Fácil" && bts().every((b) => b.getAttribute("aria-pressed") === "false"), "S1b tres respostas (Dificil, Normal, Facil), nenhuma escolhida: " + bts().map((b) => b.textContent));
+    ok(eco() === "Sem resposta: nada muda na agenda.", "S1b2 sem resposta, diz que nada muda: " + eco());
+    bts()[0].onclick();
+    ok(eco() === "Difícil: este tópico sobe na agenda (prioridade ×1,5) pelos próximos 45 dias." && bts()[0].getAttribute("aria-pressed") === "true", "S1b3 Dificil diz o efeito: " + eco());
+    bts()[2].onclick();
+    ok(eco() === "Fácil: este tópico desce na agenda (prioridade ×0,7) pelos próximos 45 dias, sem sumir.", "S1b4 Facil diz o efeito: " + eco());
+    bts()[1].onclick();
+    ok(/^Normal: prioridade padrão/.test(eco()) && !/Tira/.test(eco()), "S1b5 Normal sem avaliacao anterior nao fala em tirar nada: " + eco());
+    bts()[1].onclick();
+    ok(eco() === "Sem resposta: nada muda na agenda." && a.regDifAtual() === "", "S1b6 tocar de novo desfaz a resposta");
+
+    /* gravar: Dificil vira declaracao (45 dias) e o diario guarda o humor "ruim" */
+    a.abrirRegistro(it());
+    bts()[0].onclick();
+    a.confirmarRegistroTeste("feito");
+    const d1 = a.edDiario[a.edDiario.length - 1];
+    const dv = a.difDe("Licitações", "Lei 14.133");
+    ok(d1.hu === "ruim" && dv.nivel === "alta" && dv.origem === "declarada", "S1c Dificil grava a declaracao e o humor 'ruim' no diario: " + d1.hu + " " + JSON.stringify(dv));
+    a.edProgressoPor({});
+    a.abrirRegistro(it());
+    ok(eco() === "Sem resposta: continua valendo «Difícil» (você marcou há 0 dia(s))." && bts()[0].getAttribute("aria-pressed") === "true", "S1c2 sem resposta, diz o que continua valendo (e a resposta anterior fica acesa): " + eco());
+    bts()[1].onclick();
+    ok(/^Normal: .* Tira o «Difícil» que valia\.$/.test(eco()), "S1c3 Normal avisa que tira o Dificil que valia: " + eco());
+    bts()[1].onclick();
+    a.confirmarRegistroTeste("feito");
+    ok(a.edDiario[a.edDiario.length - 1].hu === "media" && a.difDe("Licitações", "Lei 14.133").nivel === "alta", "S1c4 sem resposta a declaracao anterior fica de pe' e o humor e' 'media'");
+    a.edProgressoPor({});
+    a.abrirRegistro(it());
+    bts()[2].onclick();
+    a.confirmarRegistroTeste("feito");
+    ok(a.edDiario[a.edDiario.length - 1].hu === "boa" && a.difDe("Licitações", "Lei 14.133").nivel === "baixa", "S1c5 Facil grava 'baixa' e humor 'boa'");
+    ok(a.regComoFoiEfeito({ nivel: "alta", vencida: true, dias: 50, origem: "declarada" }, "") === "Sem resposta: nada muda — o «Difícil» de 50 dias atrás já venceu.", "S1c6 avaliacao vencida: diz que ja venceu");
+
+    /* "Mais detalhes": recolhido, o resumo diz o que ha' dentro, e lembra se ficou aberto */
+    a.edProgressoPor({});
+    a.loja.setItem("eac_reg_mais", "0");
+    a.abrirRegistro(it());
+    ok(a.$("regMais").open === false && a.$("regMaisResumo").textContent === "Mais detalhes: onde parou, anotação, preferência dos ramos", "S1d recolhido, e o resumo lista o que ha' dentro: " + a.$("regMaisResumo").textContent);
+    a.$("regMais").open = true;
+    ((a.$("regMais")._ouv || {}).toggle || []).forEach((fn) => fn());
+    ok(a.loja.getItem("eac_reg_mais") === "1", "S1d2 abrir fica guardado");
+    a.$("dlgRegistro").close();
+    a.abrirRegistro(it());
+    ok(a.$("regMais").open === true, "S1d3 reabrir o registro mantem 'Mais detalhes' aberto");
+    a.$("dlgRegistro").close();
+    a.$("regMais").open = false;
+    a.abrirRegistro(it());
+    ok(a.$("regMais").open === true, "S1d3b o estado vem do que foi GUARDADO, nao do que sobrou na tela");
+    a.loja.setItem("eac_reg_mais", "0");
+    a.$("dlgRegistro").close();
+    a.abrirRegistro(it());
+    ok(a.$("regMais").open === false, "S1d3c guardado fechado: abre fechado");
+    a.regTipoTrocar();
+    ok(a.$("regMaisResumo").textContent === "Mais detalhes: onde parou, anotação", "S1d4 na revisao a preferencia dos ramos nao vale, e sai do resumo: " + a.$("regMaisResumo").textContent);
+    a.$("dlgRegistro").close();
+    a.abrirRegistro(it());
+    ok(a.$("regRamosExigirLin").hidden === false, "S1d5-pre no estudo de topico com ramos a preferencia aparece");
+    a.$("dlgRegistro").close();
+    a.abrirRegistro({ nome: "Avulso", disciplina: "Outra", chave: a.matChave("Outra", "Avulso"), minutos: 30 });
+    ok(a.$("regRamosExigirLin").hidden === true && a.$("regMaisResumo").textContent === "Mais detalhes: onde parou, anotação", "S1d5 topico sem ramos: a preferencia dos ramos some (e sai do resumo)");
+    a.$("dlgRegistro").close();
+
+    /* a preferencia "so' marcar estudado com todas as etapas" so' aparece na tela quando muda alguma coisa */
+    a.loja.setItem("eac_ramo_exigir", "0");
+    a.abrirRegistro(it());
+    const ef = () => a.$("regExigirEfeito");
+    ok(ef().hidden === true, "S1e preferencia desligada: nenhuma linha de efeito");
+    a.$("regRamosExigir").checked = true; a.$("regRamosExigir").onchange();
+    ok(ef().hidden === false && ef().textContent === "Fica em andamento, não estudado: Modalidades (falta: lei, questões, cartões) — você pediu para só marcar estudado com todas as etapas.", "S1e2 ligada, diz qual ramo fica em andamento e o que falta: " + ef().textContent);
+    const forma = (txt) => Array.from(a.$("regFormas").children).find((b) => b.textContent.toLowerCase() === txt.toLowerCase()).onclick();
+    forma("lei seca");
+    ok(/falta: questões, cartões\)/.test(ef().textContent), "S1e3 marcar 'lei seca' tira a lei do que falta: " + ef().textContent);
+    forma("Questões"); forma("flashcards");
+    ok(ef().hidden === true, "S1e4 com todas as etapas feitas nesta sessao, a linha some");
+    forma("flashcards");
+    const dizia = ef().textContent;
+    a.confirmarRegistroTeste("feito");
+    const d2 = a.edDiario[a.edDiario.length - 1];
+    ok(/Modalidades \(falta: cartões\)/.test(dizia) && (d2.rp || []).map((x) => x.id || x).join() === "modalidades" && !(a.edProgressoAtual()[it().chave + "›#modalidades"]), "S1e5 o que a linha disse e' o que foi gravado (Modalidades so' com progresso parcial): " + dizia + " | " + JSON.stringify(d2.rp));
+    a.abrirRegistro(it());
+    a.regTipoTrocar();
+    ok(ef().hidden === true, "S1e6 na revisao a preferencia nao vale: sem linha");
+    a.$("dlgRegistro").close();
+    a.edProgressoPor({ [it().chave + "›#modalidades"]: { e: "feito", d: "2020-01-01" } });
+    a.loja.setItem("eac_ramo_exigir", "1");
+    a.abrirRegistro(it());
+    if (a.regTipoAtual() !== "revisado") a.regTipoTrocar();
+    ok(a.regTipoAtual() === "revisado" && a.$("regRamos").children[0].children[0].checked === true && ef().hidden === true, "S1e7 revisao de ramo com etapas faltando e a preferencia ligada: nenhuma linha de 'em andamento'");
+    a.$("dlgRegistro").close();
+    a.loja.setItem("eac_ramo_exigir", "0");
+
+    /* o mesmo vocabulario em toda tela, e o registro inteiro em ingles */
+    const src = fs.readFileSync(path.join(__dirname, "..", "docs", "i18n.js"), "utf8");
+    const UI = new Function("localStorage", "navigator", src + ";return UI;")({ getItem: () => null, setItem() {} }, { language: "pt" });
+    const velhas = Object.keys(UI.pt).filter((k) => /^(dif_n_(alta|media|baixa)$|dif_selo_|dif_col_aj|dom_auto|dom_m_|dom_tip_auto|dom_ajuda_vermelho)/.test(k) && /insegur|domino|em evolução/i.test(UI.pt[k]));
+    ok(!velhas.length, "S1f 'inseguro/em evolucao/domino' sairam: o mesmo nome (dificil/normal/facil) em toda tela: " + velhas);
+    const chavesDlg = (dlg.match(/data-i18n(?:-title)?="([^"]+)"/g) || []).map((x) => x.replace(/.*="|"$/g, ""));
+    const doRegistro = chavesDlg.concat(Object.keys(UI.pt).filter((k) => /^(ed_cf_|ed_reg_mais_|ed_reg_detalhes|ed_reg_exigir_efeito|ed_ult_|ed_reg_porque_|ed_reg_tipo_|ed_reg_min_|dif_)/.test(k)));
+    const semEn = doRegistro.filter((k) => UI.pt[k] && !UI.en[k]);
+    ok(!semEn.length, "S1g toda chave do registro tem ingles (t() nao tem reserva: sem ela aparece o nome da chave): " + semEn);
   }
 
   falhas.quantas = n;

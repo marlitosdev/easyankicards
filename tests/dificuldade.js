@@ -202,7 +202,7 @@ async function testes() {
     ok(!!linha, "G6-pre a linha nao esta na agenda");
     /* O SELO. Sem ele a ordem mudaria sozinha e nada na tela diria por
      * quê — e ordem que muda sozinha é ordem em que ninguem confia. */
-    ok(/inseguro/i.test((linha || {}).textContent || ""),
+    ok(/difícil/i.test((linha || {}).textContent || ""),
        "G6 a linha nao mostra o nivel declarado: "
        + ((linha || {}).textContent || "").slice(0, 60));
 
