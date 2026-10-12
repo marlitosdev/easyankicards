@@ -3916,6 +3916,18 @@ body.split-lj{overflow:hidden}
 .diag-tempo{margin:10px 0 2px}
 .diag-tempo > summary{cursor:pointer;font-size:12px;color:var(--sutil);padding:4px 0}
 .di-det{font-size:11px;color:var(--sutil);margin-top:3px}
+.di-conserto{border:1px solid var(--atencao);border-radius:8px;padding:6px 10px;margin:6px 0;font-size:12px;background:color-mix(in srgb,var(--atencao) 10%,transparent)}
+.di-res-n{display:inline-block;padding:3px 9px;margin:2px 6px 2px 0;border:1px solid var(--borda);border-radius:999px;white-space:nowrap}
+.di-res-n.di-res-h{font-weight:700;color:var(--texto)}
+.di-q{font-weight:700}
+.di-q.di-q-bom{color:var(--ok)}
+.di-q.di-q-medio{color:var(--atencao)}
+.di-q.di-q-fraco{color:var(--erro)}
+.di-res-n.di-q.di-q-bom{border-color:var(--ok)}
+.di-res-n.di-q.di-q-medio{border-color:var(--atencao)}
+.di-res-n.di-q.di-q-fraco{border-color:var(--erro)}
+.diario-item.di-sub{margin-left:18px;opacity:.9}
+.diario-item.di-grupo .di-nome{font-weight:700}
 .di-obs{font-size:11px;color:var(--sutil);font-style:italic;margin-top:3px;
   border-left:2px solid var(--borda);padding-left:7px}
 .di-acoes{display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;margin-top:7px}
@@ -9030,6 +9042,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="di-cab-btns"><button type="button" class="selo-ajuda" id="btnDiarioAjuda" aria-label="?" data-i18n-title="ed_diario_ajuda_tip">?</button>
     <button type="button" class="btn-min" id="btnDiarioAmpliar"></button></span>
   </div>
+  <!-- registros automáticos de ramo (defeito de uma versão antiga): avisa e oferece retirar, com desfazer -->
+  <div class="di-conserto" id="diarioConserto" role="status" hidden><span id="diarioConsertoTxt"></span> <button type="button" class="btn-min" id="btnDiarioRetroTirar" data-i18n="ed_diario_retro_tirar" data-i18n-title="ed_diario_retro_tirar_tip"></button> <button type="button" class="btn-min" id="btnDiarioRetroDesfazer" data-i18n="ed_diario_retro_desfazer" hidden></button></div>
   <div class="di-semana" id="diarioSemana"></div>
   <div id="diarioPeriodos"></div>
   <div class="di-filtros">

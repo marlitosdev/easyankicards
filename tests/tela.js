@@ -2463,7 +2463,7 @@ async function testes() {
           const tpd = api.diarioTextoPorDisc(F({}));
           ok(/^A — 30min · 1 registro\(s\) · 1 tópico\(s\)\nB — 20min · 1 registro\(s\) · 1 tópico\(s\) · questões: 7 de 10 \(70%\)$/.test(tpd), "DD2 o texto do resumo por disciplina: " + JSON.stringify(tpd));
           const tc = api.diarioTextoCopia(F({}), "TÍTULO");
-          ok(/^TÍTULO\n\n2026-09-02 \(.*\) — 20min\n/.test(tc) && /• Beta \| B \| revisou \| 20min \| 7\/10 questões \(70%\)\n/.test(tc) && /• Alfa \| A · X \| desmarcou\n/.test(tc) && /• Alfa \| A · X \| estudou \| 30min \| crase$/.test(tc) && tc.indexOf("2026-09-02") < tc.indexOf("2026-09-01"), "DD3 texto para colar: título, dias do mais novo ao mais antigo, uma linha por registro com a anotação: " + JSON.stringify(tc));
+          ok(/^TÍTULO\n\n2026-09-02 \(.*\) — 20min\n/.test(tc) && /• 20min · revisou Beta \(B\) · 7\/10 questões \(70%\)\n/.test(tc) && /• desmarcou Alfa \(A · X\)\n/.test(tc) && /• 30min · estudou Alfa \(A · X\) · crase$/.test(tc) && !/\|/.test(tc) && tc.indexOf("2026-09-02") < tc.indexOf("2026-09-01"), "DD3 texto para colar: título, dias do mais novo ao mais antigo, uma linha por registro (tempo · ação e tópico (contexto) · detalhes), um separador só: " + JSON.stringify(tc));
           const E2 = [{ d: "2026-09-01", c: "k", disc: "A", n: "Tópico; \"x\"", a: "feito", cc: "X", m: 30, obs: "=SOMA(A1)", f: ["leitura"], q: { feitas: 4, certas: 3 } },
             { d: "2026-09-02", c: "k2", disc: "B", n: "Beta", a: "feito", m: 10, obs: "linha1\nlinha2" }];
           const csv = api.diarioCsv(api.diarioFiltrar(E2, { dias: 0 }));
