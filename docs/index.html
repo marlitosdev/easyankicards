@@ -2387,6 +2387,9 @@ p.mat-ferr{display:block;font-size:12px}
 .mat-escopo{margin:6px 0 8px}
 .res-ia-ramos{display:flex;flex-direction:column;gap:6px;margin:6px 0}
 .qs-tag-ramo{border-color:var(--info);color:var(--info)}
+.jur-sel.ramo{border-color:var(--info);color:var(--info)}
+.jur-ramo-sel{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-top:6px}
+.jur-ramo-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0;padding:6px 10px;border:1px solid var(--info);border-radius:8px;font-size:12.5px}
 .qs-item-ramo{display:flex;align-items:center;gap:6px;font-size:12.5px;margin:4px 0}
 .qs-ramos-lista{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;margin:8px 0}
 .qs-ramos-lin{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid var(--borda);border-radius:8px}
@@ -6444,6 +6447,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- ENQUANTO SE CRIA OU EDITA, OS JULGADOS JÁ GUARDADOS FICAM RECOLHIDOS: a lista inteira embaixo do formulário
        era ruído (e empurrava o "guardar" para longe). Este botão os chama de volta quando a pessoa quiser. -->
   <button type="button" class="btn-min jur-outros-btn" id="btnJurOutros" hidden data-i18n-title="jur_outros_aj"></button>
+  <!-- Q3: aberta pelo ramo, a gaveta mostra só os julgados dele (e o que se guarda já fica ligado a ele) -->
+  <div class="jur-ramo-faixa" id="jurRamoFaixa" hidden>
+    <span id="jurRamoFaixaTxt"></span>
+    <button type="button" class="btn-min" id="btnJurRamoTodos" data-i18n="jur_ramo_ver_todos" data-i18n-title="jur_ramo_ver_todos_tip"></button>
+  </div>
   <p class="nota" id="jurConta"></p>
   <div id="jurLista" class="jur-lista"></div>
 

@@ -2823,15 +2823,20 @@ function matPintarFicha() {
     doTopico(inf.temL ? t("mat_ficha_lei_tem") : t("mat_ficha_falta")),
     [inf.temL ? botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-lei", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_ver_ajuda", { tp: x.topico }))
       : botao(t("mat_ficha_carregar"), "btn-min", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_criar_ajuda", { tp: x.topico }))]);
-  const jur = inf.nJul
-    ? [botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-juris", () => jurAbrir(x.disciplina, x.topico, "ler"), t("mat_juris_ver_ajuda", { n: inf.nJul, tp: x.topico }))]
-    : [botao(t("mat_ficha_guardar"), "btn-min", () => jurAbrir(x.disciplina, x.topico, "incluir"), t("mat_juris_criar_ajuda", { tp: x.topico }))];
-  if (inf.nJul && inf.temL) {
+  /* Q3 — no ramo: os julgados LIGADOS a ele; abrir mostra só eles e guardar já liga ao ramo */
+  const nJR = ramo && typeof jurContarPorRamo === "function" ? (jurContarPorRamo(x.chave)[ramo.id] || 0) : 0;
+  const nJ = ramo ? nJR : inf.nJul;
+  const opcJ = ramo ? { ramo: { id: ramo.id, nome: ramo.nome } } : undefined;
+  const jur = nJ
+    ? [botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-juris", () => jurAbrir(x.disciplina, x.topico, "ler", opcJ), t("mat_juris_ver_ajuda", { n: nJ, tp: ramo ? ramo.nome : x.topico }))]
+    : [botao(t("mat_ficha_guardar"), "btn-min", () => jurAbrir(x.disciplina, x.topico, "incluir", opcJ), t("mat_juris_criar_ajuda", { tp: ramo ? ramo.nome : x.topico }))];
+  if (!ramo && inf.nJul && inf.temL) {
     const bs = botao(t("mat_split_btn"), "btn-min btn-lj-split", () => leiJurLadoALado(x.disciplina, x.topico), t("mat_split_ajuda", { tp: x.topico }));
     jur.push(bs);
   }
-  item("juris", t("mat_aba_juris"), inf.nJul > 0,
-    doTopico(inf.nJul ? t("mat_slot_juris_n", { n: inf.nJul }) : t("mat_ficha_falta")), jur);
+  item("juris", t("mat_aba_juris"), nJ > 0,
+    ramo ? (nJR ? t("mat_ficha_juris_ramo", { n: nJR, t: inf.nJul }) : t("mat_ficha_juris_ramo_falta", { t: inf.nJul }))
+      : (inf.nJul ? t("mat_slot_juris_n", { n: inf.nJul }) : t("mat_ficha_falta")), jur);
   /* rodapé: registrar o estudo (deste ramo ou do tópico) e ajustar os ramos — o que antes morava no "⋮" */
   const rod = $("matFichaRodape");
   if (rod) {

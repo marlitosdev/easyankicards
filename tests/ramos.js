@@ -3541,8 +3541,8 @@ async function testes() {
     esc().find((b) => b.textContent === "Modalidades").onclick();
     ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133 › Modalidades" && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true",
        "T1b escolher um ramo: o titulo e o botao acompanham");
-    ok(/Resumo do ramo/.test(doSlot("resumo").textContent) && /ainda não tem seção no resumo do tópico/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /do tópico inteiro/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
-       "T1b2 no ramo, a ficha diz o que e' do ramo (cartoes) e o que e' do topico inteiro (resumo, lei, julgados)");
+    ok(/Resumo do ramo/.test(doSlot("resumo").textContent) && /ainda não tem seção no resumo do tópico/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /nenhum ligado a este ramo \(o tópico tem \d+\)/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
+       "T1b2 no ramo, a ficha diz o que e' do ramo (cartoes, julgados) e o que e' do topico inteiro (resumo, lei)");
     const rod = () => todosF(a.$("matFichaRodape"), (e) => typeof e.onclick === "function");
     ok(a.$("matFichaRodape").hidden === false && rod().some((b) => b.textContent === "Registrar estudo de «Modalidades»") && rod().some((b) => /ed-menu-ramos/.test(cl(b))),
        "T1c o rodape oferece registrar o estudo DESTE ramo e ajustar os ramos: " + rod().map((b) => b.textContent).join(" | "));
@@ -3894,6 +3894,82 @@ async function testes() {
     /* tópico sem ramos: nada disso aparece */
     a.$("qsFTopico").value = a.matChave("Licitações", "Convênios"); a.qsUiLerFiltros();
     ok(a.$("qsFRamo").hidden === true && a.$("btnQsLigarRamos").hidden === true, "Q2b-l topico sem ramos: sem filtro de ramo e sem assistente");
+  }
+
+  /* ---- Q3: julgados por ramo (o ramo é guardado por tópico) ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.hubAbrirEdital(ed.id);
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    const outro = a.matChave("Direito Financeiro", "Receita Pública");
+    const j1 = a.jurGravar({ id: "j1", tribunal: "STF", classe: "ADI", numero: "1", tese: "Pregão é modalidade para bens comuns.", topicos: [chave, outro] });
+    const j2 = a.jurGravar({ id: "j2", tribunal: "STJ", classe: "REsp", numero: "2", tese: "Contratos administrativos admitem alteração unilateral.", topicos: [chave] });
+    const toc1 = a.jurDe("j1").tocado;
+    /* motor */
+    const rec1 = a.jurLigarRamo("j1", chave, "modalidades", "Modalidades");
+    ok(a.jurRamoDe(a.jurDe("j1"), chave).id === "modalidades" && a.jurRamoDe(a.jurDe("j1"), outro) === null && a.jurDe("j1").tocado === toc1,
+       "Q3a o ramo vale SO' neste topico (o mesmo julgado em outro topico continua sem ramo) e nao muda a data do julgado");
+    ok(JSON.stringify(a.jurContarPorRamo(chave)) === JSON.stringify({ _sem: 1, modalidades: 1 }), "Q3b a contagem por ramo: " + JSON.stringify(a.jurContarPorRamo(chave)));
+    a.jurDesfazerRamo([rec1]);
+    ok(a.jurRamoDe(a.jurDe("j1"), chave) === null && !a.jurDe("j1").ramos, "Q3c desfazer volta ao topico inteiro (sem sobra de campo)");
+    a.jurLigarRamo("j1", chave, "modalidades", "Modalidades");
+    a.jurLigarRamo("j2", chave, "contratos", "Contratos");
+    const mig = a.jurMigrarRamos(chave, new Map([["modalidades", "modalidades_de_licitacao"], ["contratos", ""]]), { modalidades_de_licitacao: "Modalidades de licitação" });
+    ok(a.jurRamoDe(a.jurDe("j1"), chave).nome === "Modalidades de licitação" && a.jurRamoDe(a.jurDe("j2"), chave) === null && /Contratos/.test(JSON.stringify(a.jurDe("j2").ramos)) && mig.length === 2,
+       "Q3d renomear leva o vinculo para o nome novo; apagar desliga mas guarda o nome");
+    a.jurDesfazerRamo(mig);
+    ok(a.jurRamoDe(a.jurDe("j1"), chave).id === "modalidades" && a.jurRamoDe(a.jurDe("j2"), chave).id === "contratos", "Q3e desfazer a migracao volta os dois");
+    /* o material do ramo conta os ligados (e o palpite so' para os sem ramo) */
+    const mat = a.ramMaterialDoTopico(chave, it().ramos);
+    ok(mat.modalidades.juris === 1 && mat.contratos.juris === 1 && mat.fase_preparatoria.juris === 0, "Q3f o material do ramo conta os julgados ligados: " + JSON.stringify({ m: mat.modalidades.juris, c: mat.contratos.juris }));
+    /* renomear pelo editor de ramos leva os julgados; desfazer volta */
+    a.ramAplicar({ editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave }, [
+      { nome: "Modalidades de licitação", peso: "5", nota: "", idOrig: "modalidades" },
+      { nome: "Fase preparatória", peso: "3", nota: "", idOrig: "fase_preparatoria" },
+      { nome: "Contratos", peso: "3", nota: "", idOrig: "contratos" }]);
+    ok(a.jurRamoDe(a.jurDe("j1"), chave).id === "modalidades_de_licitacao", "Q3g renomear o ramo no editor leva o julgado junto");
+    a.gerDesfazerUltima();
+    ok(a.jurRamoDe(a.jurDe("j1"), chave).id === "modalidades", "Q3h desfazer a edicao dos ramos volta o vinculo do julgado");
+  }
+  /* ---- Q3: a ficha do ramo e a gaveta dos julgados ---- */
+  {
+    const { a, ed, chave } = MT();
+    a.hubAbrirEdital(ed.id);
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    a.jurGravar({ id: "k1", tribunal: "STF", classe: "ADI", numero: "11", tese: "Pregão para bens comuns.", topicos: [chave] });
+    a.jurGravar({ id: "k2", tribunal: "STJ", classe: "REsp", numero: "22", tese: "Alteração unilateral do contrato.", topicos: [chave] });
+    a.jurLigarRamo("k1", chave, "modalidades", "Modalidades");
+    const todosF = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); todosF(x, pred, acc); }); return acc; };
+    const cl = (e) => String((e && e.className) || "");
+    const doSlot = (sl) => todosF(a.$("matFichaLista"), (e) => /(^| )mat-ficha-item( |$)/.test(cl(e)) && new RegExp("slot-" + sl).test(cl(e)))[0];
+    const btn = (el, txt) => todosF(el, (e) => typeof e.onclick === "function" && e.textContent === txt)[0];
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramo: "modalidades", ramos: it().ramos, item: it(), editalId: ed.id });
+    ok(/1 deste ramo \(o tópico tem 2\)/.test(doSlot("juris").textContent) && !/falta/.test(cl(doSlot("juris"))), "Q3i a ficha do ramo conta os julgados LIGADOS a ele: " + doSlot("juris").textContent);
+    btn(doSlot("juris"), a.t("mat_ficha_abrir")).onclick();
+    const itens = () => todosF(a.$("jurLista"), (e) => /(^| )jur-item( |$)/.test(cl(e)));
+    ok(a.$("dlgJuris").open === true && a.$("jurRamoFaixa").hidden === false && /ramo «Modalidades»/.test(a.$("jurRamoFaixaTxt").textContent) && itens().length === 1 && /ADI 11/.test(itens()[0].textContent) && /↳ Modalidades/.test(itens()[0].textContent),
+       "Q3j abrir pela ficha do ramo mostra SO' os julgados dele, com a faixa que diz isso");
+    a.$("btnJurRamoTodos").onclick();
+    ok(a.$("jurRamoFaixa").hidden === true && itens().length === 2, "Q3k 'ver todos do topico' tira o filtro");
+    /* escolher o ramo de um julgado na lista */
+    const lk2 = itens().find((x) => /REsp 22/.test(x.textContent));
+    const sel = todosF(lk2, (e) => /jur-ramo-sel/.test(cl(e)))[0].children[1];
+    sel.value = "contratos"; sel.onchange();
+    ok(a.jurRamoDe(a.jurDe("k2"), chave).id === "contratos" && /↳ Contratos/.test(itens().find((x) => /REsp 22/.test(x.textContent)).textContent), "Q3l o seletor na lista liga o julgado ao ramo");
+    a.$("dlgJuris").close && a.$("dlgJuris").close();
+    /* guardar pela ficha do ramo (sem julgado nele): ja' fica ligado */
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramo: "fase_preparatoria", ramos: it().ramos, item: it(), editalId: ed.id });
+    ok(/nenhum ligado a este ramo/.test(doSlot("juris").textContent), "Q3m ramo sem julgado: a ficha diz que nenhum esta' ligado");
+    btn(doSlot("juris"), a.t("mat_ficha_guardar")).onclick();
+    ok(/fica ligado ao ramo «Fase preparatória»/.test(a.$("jurRamoFaixaTxt").textContent), "Q3n incluindo pela ficha do ramo, a faixa avisa que o novo julgado fica ligado a ele");
+    a.$("jurTribunal").value = "TCU"; a.$("jurClasse").value = "Acórdão"; a.$("jurNumero").value = "333";
+    a.$("jurTese").value = "O estudo técnico preliminar é obrigatório na fase preparatória da licitação, salvo exceções legais expressas.";
+    await a.jurSalvar();
+    const novo = a.jurDoTopico(chave).find((x) => x.numero === "333");
+    ok(novo && a.jurRamoDe(novo, chave) && a.jurRamoDe(novo, chave).id === "fase_preparatoria", "Q3o o julgado guardado pela ficha do ramo ja' nasce ligado a ele: " + JSON.stringify(novo && novo.ramos));
+    a.$("dlgJuris").close && a.$("dlgJuris").close();
   }
 
   falhas.quantas = n;

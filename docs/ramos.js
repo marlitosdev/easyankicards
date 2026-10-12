@@ -144,6 +144,8 @@ function ramAplicar(ctx, linhas) {
   const recQs = typeof qsMigrarRamos === "function" ? qsMigrarRamos(ctx.chave, mapa, nomesNovos) : [];
   /* T5 — e a seção do resumo de cada ramo renomeado */
   const recRes = ramRenomearSecoesDoResumo(ctx, atuais, mapa, nomesNovos);
+  /* Q3 — e os julgados ligados ao ramo */
+  const recJur = typeof jurMigrarRamos === "function" ? jurMigrarRamos(ctx.chave, mapa, nomesNovos) : [];
   /* os cartões do tópico (só quem tem etiqueta que mudou) */
   const antes = {};
   antes[ctx.chave] = gerTexto(ctx.chave);
@@ -155,7 +157,7 @@ function ramAplicar(ctx, linhas) {
     if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = res.texto; edRender(); }
   } catch (e) {}
   gerRegistrar(antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto,
-    ramos: { mig, migAberto, histAntes, qs: recQs, resumo: recRes } } });
+    ramos: { mig, migAberto, histAntes, qs: recQs, resumo: recRes, jur: recJur } } });
   try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + retag + " cartão(ões) e "
     + mig.prog.length + " marca(s) de estudo acompanharam"); } catch (e) {}
   return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length, questoes: recQs.length, resumo: !!recRes };
@@ -359,7 +361,8 @@ function ramTextosPorFonte(chave, soSemRamo) {
       .forEach((q) => questoes.push([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" ")));
   } catch (e) {}
   try {
-    (typeof jurDoTopico === "function" ? jurDoTopico(chave) : []).forEach((j) => juris.push([j.tese, j.tese_curta, j.ementa, j.resumo, j.tema].join(" ")));
+    (typeof jurDoTopico === "function" ? jurDoTopico(chave) : []).filter((j) => !(soSemRamo && typeof jurRamoDe === "function" && jurRamoDe(j, chave)))
+      .forEach((j) => juris.push([j.tese, j.tese_curta, j.ementa, j.resumo, j.tema].join(" ")));
   } catch (e) {}
   return { questoes, juris };
 }
@@ -445,13 +448,15 @@ function ramMaterialDoTopico(chave, ramos) {
   /* Q1 — questão LIGADA ao ramo conta por ele de verdade; o palpite pelas palavras fica só para as que ainda não têm ramo */
   const fontes = ramTextosPorFonte(chave, true);
   const ligadas = typeof qsContarPorRamo === "function" ? qsContarPorRamo(chave) : {};
+  /* Q3 — julgado LIGADO ao ramo conta por ele; o palpite pelas palavras só para os que ainda não têm ramo */
+  const jurLig = typeof jurContarPorRamo === "function" ? jurContarPorRamo(chave) : {};
   const temLei = (typeof leiTem === "function") ? !!leiTem(chave) : false;
   rs.forEach((r) => {
     out[r.id] = {
       lei: temLei ? 1 : 0,
       cartoes: cards.filter((c) => ramIdDoCartao(c) === r.id).length,
       questoes: (ligadas[r.id] || 0) + ramContaCitacoes(r.nome, fontes.questoes),
-      juris: ramContaCitacoes(r.nome, fontes.juris),
+      juris: (jurLig[r.id] || 0) + ramContaCitacoes(r.nome, fontes.juris),
     };
   });
   return out;
