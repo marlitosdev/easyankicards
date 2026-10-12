@@ -150,6 +150,11 @@ function gerDesfazerUltima() {
         if (rr.migAberto && typeof edProgresso !== "undefined" && edProgresso !== ed.progresso) edDesfazerMigracaoRamos(edProgresso, [], rr.migAberto);
         if (ed.ramosHist) ed.ramosHist = ed.ramosHist.slice(0, rr.histAntes || 0);
         if (rr.qs && rr.qs.length && typeof qsDesfazerRamo === "function") qsDesfazerRamo(rr.qs);
+        /* T5 — o título da seção do resumo volta ao nome antigo (só se o resumo continua como a ação o deixou) */
+        if (rr.resumo && typeof matObter === "function") {
+          const rm = matObter(rr.resumo.chave);
+          if (rm && rm.texto === rr.resumo.depois) matGravar(rr.resumo.chave, rr.resumo.antes, { disciplina: rm.disciplina, topico: rm.topico });
+        }
         try { if (rr.mig && rr.mig.diario && rr.mig.diario.length && typeof salvarDiario === "function") salvarDiario(); } catch (e) {}
         try { if (typeof editalAtual !== "undefined" && editalAtual === ed.id && typeof edProgresso !== "undefined") localStorage.setItem("eac_edital_progresso", JSON.stringify(edProgresso)); } catch (e) {}
       }

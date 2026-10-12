@@ -72,6 +72,37 @@ function ramAtribuir(notas, chave, id, concurso) {
  *  · o que foi RENOMEADO leva as etiquetas dos cartões junto; o que foi APAGADO devolve os cartões ao geral do tópico;
  *  · UM recibo (texto do edital + cartões): desfazer volta os dois.
  * ctx: { editalId, disciplina, topico, chave }; linhas: [{ idOrig?, nome, peso?, nota? }] na ordem desejada. */
+/* T5 — O RESUMO ACOMPANHA O RAMO: a seção "## Ramo — <nome antigo>" ganha o nome novo (o nível do título fica); a seção
+ * de um ramo APAGADO fica como está — vira "seção sem ramo", que a ficha e o editor continuam mostrando: nada se perde.
+ * Puro: devolve o texto novo (igual ao de entrada quando nada muda). */
+function ramSecoesRenomeadas(texto, atuais, mapa, nomesNovos) {
+  const s = String(texto || "");
+  if (typeof matSecoesDeRamo !== "function" || !s) return s;
+  const sc = matSecoesDeRamo(s, atuais || []);
+  let out = s;
+  sc.secoes.slice().reverse().forEach((x) => {
+    const novo = mapa && mapa.has(x.id) ? mapa.get(x.id) : null;
+    if (!novo || !nomesNovos[novo]) return;
+    const linha = out.slice(x.ini, x.corpoIni).replace(/\n$/, "");
+    const nivel = (linha.match(/^#{1,6}/) || ["##"])[0];
+    out = out.slice(0, x.ini) + nivel + " Ramo — " + nomesNovos[novo] + (x.corpoIni > x.ini + linha.length ? "\n" : "") + out.slice(x.corpoIni);
+  });
+  return out;
+}
+/* aplica no resumo do tópico e devolve o recibo { chave, antes, depois } (null quando nada mudou) */
+function ramRenomearSecoesDoResumo(ctx, atuais, mapa, nomesNovos) {
+  if (typeof matObter !== "function" || !mapa || !mapa.size) return null;
+  const chave = (typeof matChaveViva === "function" ? matChaveViva(ctx.disciplina, ctx.topico) : ctx.chave) || ctx.chave;
+  const r = matObter(chave) || (ctx.chave ? matObter(ctx.chave) : null);
+  if (!r || !String(r.texto || "").trim()) return null;
+  const ch = matObter(chave) ? chave : ctx.chave;
+  const antes = String(r.texto);
+  const depois = ramSecoesRenomeadas(antes, atuais, mapa, nomesNovos);
+  if (depois === antes) return null;
+  matGravar(ch, depois, { disciplina: ctx.disciplina, topico: ctx.topico });
+  return { chave: ch, antes, depois };
+}
+
 function ramAplicar(ctx, linhas) {
   const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ctx.editalId);
   if (!ed) return { ok: false, motivo: "sem_edital" };
@@ -111,6 +142,8 @@ function ramAplicar(ctx, linhas) {
   const nomesNovos = {};
   res.ramos.forEach((x) => { nomesNovos[x.id] = x.nome; });
   const recQs = typeof qsMigrarRamos === "function" ? qsMigrarRamos(ctx.chave, mapa, nomesNovos) : [];
+  /* T5 — e a seção do resumo de cada ramo renomeado */
+  const recRes = ramRenomearSecoesDoResumo(ctx, atuais, mapa, nomesNovos);
   /* os cartões do tópico (só quem tem etiqueta que mudou) */
   const antes = {};
   antes[ctx.chave] = gerTexto(ctx.chave);
@@ -122,10 +155,10 @@ function ramAplicar(ctx, linhas) {
     if (typeof editalAtual !== "undefined" && editalAtual === ed.id && $("editalTexto")) { $("editalTexto").value = res.texto; edRender(); }
   } catch (e) {}
   gerRegistrar(antes, { edital: { id: ed.id, antes: antesTexto, depois: res.texto,
-    ramos: { mig, migAberto, histAntes, qs: recQs } } });
+    ramos: { mig, migAberto, histAntes, qs: recQs, resumo: recRes } } });
   try { matReg("ramos", "ramos editados: " + ctx.topico, res.ramos.length + " ramo(s), " + retag + " cartão(ões) e "
     + mig.prog.length + " marca(s) de estudo acompanharam"); } catch (e) {}
-  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length, questoes: recQs.length };
+  return { ok: true, ramos: res.ramos, avisos: res.avisos, retag, mapa, marcas: mig.prog.length, diario: mig.diario.length, questoes: recQs.length, resumo: !!recRes };
 }
 
 /* PROPOR RAMOS PELO ÍNDICE DA LEI (local, sem IA): as divisões da lei carregada no tópico (títulos, capítulos…)
