@@ -1248,8 +1248,10 @@ async function testes() {
       ok(linF.children[5].hidden === true, "R40w3 ramo ja estudado nao tem o botao 'Pular'");
       a.$("dlgDisciplina").close();
       /* a data do topico revisado ignora a do ramo pulado */
-      const iRv = itDe({ [K("modalidades")]: { e: "revisado", d: "2026-03-01" }, [K("contratos")]: { e: "revisado", d: "2026-03-02" }, [K("fase_preparatoria")]: { e: "pulado", d: "2099-12-31" } });
-      ok(iRv.revisado === true && iRv.quando === "2026-03-02", "R40w4 a data do topico revisado nao vem do ramo pulado: " + iRv.quando);
+      /* datas recentes: revisado ha' 1-2 dias ainda nao chegou ao degrau da proxima revisao (S3) */
+      const diaL = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+      const iRv = itDe({ [K("modalidades")]: { e: "revisado", d: diaL(2) }, [K("contratos")]: { e: "revisado", d: diaL(1) }, [K("fase_preparatoria")]: { e: "pulado", d: "2099-12-31" } });
+      ok(iRv.revisado === true && iRv.venceu === false && iRv.quando === diaL(1), "R40w4 a data do topico revisado nao vem do ramo pulado: " + iRv.quando);
       const html = fs.readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
       ok(/\.ed-ramo-pulado\{/.test(html) && /\.dsc-ramo-pulado /.test(html), "R40w o estilo do ramo pulado existe no CSS");
     }
@@ -3377,15 +3379,15 @@ async function testes() {
     const bts = () => Array.from(a.$("regDificuldade").children);
     const eco = () => a.$("regDifEco").textContent;
     ok(bts().map((b) => b.textContent).join("|") === "Difícil|Normal|Fácil" && bts().every((b) => b.getAttribute("aria-pressed") === "false"), "S1b tres respostas (Dificil, Normal, Facil), nenhuma escolhida: " + bts().map((b) => b.textContent));
-    ok(eco() === "Sem resposta: nada muda na agenda.", "S1b2 sem resposta, diz que nada muda: " + eco());
+    ok(eco() === "Sem resposta: nada muda na agenda. Próxima revisão em 7 dias.", "S1b2 sem resposta, diz que nada muda: " + eco());
     bts()[0].onclick();
-    ok(eco() === "Difícil: este tópico sobe na agenda (prioridade ×1,5) pelos próximos 45 dias." && bts()[0].getAttribute("aria-pressed") === "true", "S1b3 Dificil diz o efeito: " + eco());
+    ok(eco() === "Difícil: este tópico sobe na agenda (prioridade ×1,5) pelos próximos 45 dias. Próxima revisão em 3 dias." && bts()[0].getAttribute("aria-pressed") === "true", "S1b3 Dificil diz o efeito: " + eco());
     bts()[2].onclick();
-    ok(eco() === "Fácil: este tópico desce na agenda (prioridade ×0,7) pelos próximos 45 dias, sem sumir.", "S1b4 Facil diz o efeito: " + eco());
+    ok(eco() === "Fácil: este tópico desce na agenda (prioridade ×0,7) pelos próximos 45 dias, sem sumir. Próxima revisão em 15 dias.", "S1b4 Facil diz o efeito: " + eco());
     bts()[1].onclick();
     ok(/^Normal: prioridade padrão/.test(eco()) && !/Tira/.test(eco()), "S1b5 Normal sem avaliacao anterior nao fala em tirar nada: " + eco());
     bts()[1].onclick();
-    ok(eco() === "Sem resposta: nada muda na agenda." && a.regDifAtual() === "", "S1b6 tocar de novo desfaz a resposta");
+    ok(eco() === "Sem resposta: nada muda na agenda. Próxima revisão em 7 dias." && a.regDifAtual() === "", "S1b6 tocar de novo desfaz a resposta");
 
     /* gravar: Dificil vira declaracao (45 dias) e o diario guarda o humor "ruim" */
     a.abrirRegistro(it());
@@ -3396,9 +3398,9 @@ async function testes() {
     ok(d1.hu === "ruim" && dv.nivel === "alta" && dv.origem === "declarada", "S1c Dificil grava a declaracao e o humor 'ruim' no diario: " + d1.hu + " " + JSON.stringify(dv));
     a.edProgressoPor({});
     a.abrirRegistro(it());
-    ok(eco() === "Sem resposta: continua valendo «Difícil» (você marcou há 0 dia(s))." && bts()[0].getAttribute("aria-pressed") === "true", "S1c2 sem resposta, diz o que continua valendo (e a resposta anterior fica acesa): " + eco());
+    ok(eco() === "Sem resposta: continua valendo «Difícil» (você marcou há 0 dia(s)). Próxima revisão em 3 dias." && bts()[0].getAttribute("aria-pressed") === "true", "S1c2 sem resposta, diz o que continua valendo (e a resposta anterior fica acesa): " + eco());
     bts()[1].onclick();
-    ok(/^Normal: .* Tira o «Difícil» que valia\.$/.test(eco()), "S1c3 Normal avisa que tira o Dificil que valia: " + eco());
+    ok(/^Normal: .* Tira o «Difícil» que valia\. Próxima revisão em 7 dias\.$/.test(eco()), "S1c3 Normal avisa que tira o Dificil que valia: " + eco());
     bts()[1].onclick();
     a.confirmarRegistroTeste("feito");
     ok(a.edDiario[a.edDiario.length - 1].hu === "media" && a.difDe("Licitações", "Lei 14.133").nivel === "alta", "S1c4 sem resposta a declaracao anterior fica de pe' e o humor e' 'media'");
@@ -3476,6 +3478,36 @@ async function testes() {
     const doRegistro = chavesDlg.concat(Object.keys(UI.pt).filter((k) => /^(ed_cf_|ed_reg_mais_|ed_reg_detalhes|ed_reg_exigir_efeito|ed_ult_|ed_reg_porque_|ed_reg_tipo_|ed_reg_min_|dif_)/.test(k)));
     const semEn = doRegistro.filter((k) => UI.pt[k] && !UI.en[k]);
     ok(!semEn.length, "S1g toda chave do registro tem ingles (t() nao tem reserva: sem ela aparece o nome da chave): " + semEn);
+  }
+
+  /* ---- S3: revisão espaçada nos RAMOS ---- */
+  {
+    const { a, ed } = MT();
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    const ch = it().chave;
+    const diaL = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+    const K = (id) => ch + "›#" + id;
+    a.edProgressoPor({ [K("modalidades")]: { e: "revisado", d: diaL(20) }, [K("fase_preparatoria")]: { e: "revisado", d: diaL(2) }, [K("contratos")]: { e: "revisado", d: diaL(3) } });
+    const i0 = it();
+    const r0 = (id) => i0.ramos.find((r) => r.id === id);
+    ok(i0.revisado === true && i0.venceu === true && r0("modalidades").venceu === true && r0("modalidades").nRev === 1 && r0("contratos").venceu === false,
+       "S3r1 topico com todos os ramos revisados volta quando UM ramo chega ao degrau (Modalidades: 20 dias > 15)");
+    ok(i0.quando === diaL(20) && /2ª revisão: última sessão há 20 dias/.test(a.edPorque(i0)), "S3r2 a data e o porque sao do ramo que venceu: " + a.edPorque(i0));
+    a.abrirRegistro(i0);
+    const lin = Array.from(a.$("regRamos").children);
+    const ckDe = (nome) => lin.find((l) => new RegExp(nome).test(l.textContent)).children[0];
+    ok(a.regTipoAtual() === "revisado" && ckDe("Modalidades").disabled === false && ckDe("Modalidades").checked === true && ckDe("Contratos").disabled === true,
+       "S3r3 o ramo vencido pode ser revisado de novo (e vem marcado); o revisado em dia nao");
+    a.confirmarRegistroTeste("revisado");
+    const pr = a.edProgressoAtual();
+    ok(pr[K("modalidades")].n === 2 && pr[K("modalidades")].d === a.hojeISO() && !pr[K("contratos")].n, "S3r4 registrar grava a 2a revisao (n=2) so' no ramo escolhido: " + JSON.stringify(pr[K("modalidades")]));
+    ok(it().venceu === false, "S3r5 revisado de novo: o topico sai da fila");
+    /* o mapa de dominio le o vencimento do plano (revisao espacada), nao a regra antiga */
+    const pl = { itens: [Object.assign({}, it(), { venceu: true, revisado: true, feito: true, dias: 2 })] };
+    const est = a.domEntradas({}, pl, [], [], []).estudo;
+    const chD = Object.keys(est).find((k) => !/›#/.test(k));
+    ok(est[chD].venceu === true, "S3r6 o dominio usa o 'venceu' do plano: revisado com a revisao seguinte vencida aparece como vencido");
   }
 
   falhas.quantas = n;

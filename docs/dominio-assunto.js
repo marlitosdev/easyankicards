@@ -182,7 +182,8 @@ function domEntradas(ed, plano, notas, banco, regs) {
   const estudo = {}, tentativas = {}, cartoes = {}, auto = {};
   (plano.itens || []).forEach((i) => {
     const chave = matChaveViva(i.disciplina, i.nome);
-    const venceu = (x) => x.feito && !x.revisado && (x.dias === null || x.dias === undefined || x.dias >= REV_DIAS);
+    /* o plano já diz se a revisão (espaçada) venceu; o cálculo antigo fica só como reserva */
+    const venceu = (x) => (typeof x.venceu === "boolean" ? x.venceu : x.feito && !x.revisado && (x.dias === null || x.dias === undefined || x.dias >= REV_DIAS));
     estudo[chave] = { estado: i.revisado ? "revisado" : (i.feito ? "estudado" : "nunca"), quando: i.quando || null, dias: i.dias === undefined ? null : i.dias, venceu: venceu(i) };
     (i.ramos || []).forEach((r) => {
       estudo[chave + "›#" + r.id] = { estado: r.revisado ? "revisado" : (r.feito ? "estudado" : "nunca"), quando: r.quando || null, dias: r.dias === undefined ? null : r.dias, venceu: venceu(r), pulado: !!r.pulado, herdado: !!r.marcaHerdada };
