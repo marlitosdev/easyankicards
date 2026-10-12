@@ -2383,6 +2383,8 @@ p.mat-ferr{display:block;font-size:12px}
 .btn-min.mat-ficha-esc[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
 .mat-ficha-rodape{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;padding-top:8px;border-top:1px solid var(--borda)}
 .ed-st-item.ed-st-falta{border-style:dashed;opacity:.8}
+.mat-esc.mat-esc-vazio{border-style:dashed;opacity:.75}
+.mat-escopo{margin:6px 0 8px}
 .mat-ficha-item.falta{border-style:dashed;opacity:.85}
 .mat-ficha-ico{font-size:20px;width:26px;text-align:center;flex:none}
 .mat-ficha-txt{flex:1;min-width:0}
@@ -6631,6 +6633,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </span>
   </div>
   <p class="nota" id="matAjudaNota" data-i18n="mat_ajuda"></p>
+  <!-- T3: o mesmo resumo, inteiro ou por partes — o geral e a seção de cada ramo -->
+  <div id="matEscopo" class="mat-ficha-escopo mat-escopo" role="group" data-i18n-title="mat_esc_rot" hidden></div>
   <div class="mat-barra" id="matBarra">
     <button class="fmt" id="btnFmtB" title="Deixa o trecho selecionado em negrito. Sem seleção, insere as marcas e deixa o cursor no meio."><b>N</b></button>
     <button class="fmt" id="btnFmtI" title="Deixa o trecho selecionado em itálico. Sem seleção, insere as marcas e deixa o cursor no meio."><i>I</i></button>
@@ -6644,6 +6648,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
             placeholder="Escreva aqui o que precisa lembrar deste tópico."></textarea>
+  <!-- só a seção do escopo escolhido; cada mudança volta para o texto inteiro (matTexto), que é o que se grava -->
+  <textarea id="matTextoSecao" rows="16" hidden style="width:100%;box-sizing:border-box"></textarea>
   <div class="mat-ctrl" id="matCtrlLeitura" hidden>
     <span data-i18n="mat_marcar"></span>
     <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d" title="Marca o trecho selecionado em amarelo: o que você quer reler. Se a palavra aparecer mais de uma vez, marca a que você selecionou."></button>
