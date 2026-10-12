@@ -750,7 +750,8 @@ function edEstadoDosRamos(i, marcaDe, hoje) {
     /* PULADO: a pessoa decidiu não estudar este ramo (não cai, já domina). Não é estudo — não gera crédito — mas sai da
      * lista do que falta, do tempo reservado e da conta de conclusão do tópico. */
     r.pulado = r.estado === "pulado";
-    r.venceu = r.feito && !r.revisado && (r.dias === null || r.dias >= REV_DIAS);
+    r.nRev = edNRevDaMarca(m);
+    r.venceu = r.feito && edRevisaoVenceu(r.estado, r.dias, r.nRev, edNivelDoFator(i.fator));
   });
   const N = i.ramos.length;
   i.ramosTotal = N;
@@ -764,7 +765,13 @@ function edEstadoDosRamos(i, marcaDe, hoje) {
   i.estado = i.revisado ? "revisado" : (i.feito ? "feito" : null);
   /* a data que conta para a revisão: a do ramo estudado há MAIS tempo e ainda não revisado; sem data = vencido */
   const naoRev = i.ramos.filter((r) => r.feito && !r.revisado);
-  if (i.feito && !i.revisado) {
+  i.venceu = i.feito && ativos.some((r) => r.venceu);
+  const venc = ativos.filter((r) => r.venceu);
+  i.nRev = venc.length ? Math.min(...venc.map((r) => r.nRev || 0)) : (i.revisado ? Math.min(...ativos.map((r) => r.nRev || 1)) : 0);
+  if (i.revisado && i.venceu) {
+    /* tudo revisado, mas a próxima revisão de algum ramo chegou: conta a data do que venceu há mais tempo */
+    i.quando = venc.some((r) => !r.quando) ? null : venc.map((r) => r.quando).sort()[0];
+  } else if (i.feito && !i.revisado) {
     i.quando = naoRev.some((r) => !r.quando) ? null : naoRev.map((r) => r.quando).sort()[0];
   } else if (i.revisado) {
     i.quando = ativos.map((r) => r.quando).sort().pop() || null;
@@ -815,16 +822,16 @@ function edRamosRegistrar(prog, item, estado, hoje) {
   else if (escolhidos) {
     /* a pessoa escolheu os ramos na janela de registro: vale a escolha, dentro do que faz sentido — estudo só de
      * ramo pendente; revisão só de ramo já estudado e ainda não revisado */
-    alvo = rs.filter((r) => escolhidos.indexOf(r.id) >= 0 && (estado === "revisado" ? (r.feito && !r.revisado) : (!r.feito && !r.pulado)));
+    alvo = rs.filter((r) => escolhidos.indexOf(r.id) >= 0 && (estado === "revisado" ? (r.feito && (!r.revisado || r.venceu)) : (!r.feito && !r.pulado)));
   } else if (estado === "revisado") {
-    alvo = rs.filter((r) => r.feito && !r.revisado);
+    alvo = rs.filter((r) => r.feito && (!r.revisado || r.venceu));
     if (!alvo.length) alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0);
   } else alvo = rs.filter((r) => (item.sessao || []).indexOf(r.id) >= 0 && !r.feito && !r.pulado);
   const mud = [];
   alvo.forEach((r) => {
     const k = ch(r);
     mud.push({ id: r.id, ant: prog[k] === undefined ? null : prog[k] });
-    if (estado) prog[k] = { e: estado, d: hoje }; else delete prog[k];
+    if (estado) prog[k] = edMarcaNova(prog[k], estado, hoje); else delete prog[k];
   });
   if (!estado) {
     mud.push({ id: "_topo", ant: prog[item.chave] === undefined ? null : prog[item.chave] });
@@ -1299,6 +1306,8 @@ function montarPlano(r, opcoes) {
     i.dias = m && m.d ? Math.floor((Date.now() - new Date(m.d + "T00:00:00")) / 86400000) : null;
     i.feito = i.estado === "feito" || i.estado === "revisado";
     i.revisado = i.estado === "revisado";
+    i.nRev = edNRevDaMarca(m);
+    i.venceu = i.feito && edRevisaoVenceu(i.estado, i.dias, i.nRev, edNivelDoFator(i.fator));
   });
   /* A POSIÇÃO PELO QUE AINDA FALTA. Tópico com ramos e pendência vale, na fila de ESTUDO, o que falta dele
    * (bruto × parte pendente × dificuldade): um assunto de peso alto com um ramo pendente já não passa à frente de um
@@ -1355,8 +1364,8 @@ function montarPlano(r, opcoes) {
    * prazo de revisão. Revisão vencida entra ANTES de assunto novo de peso
    * igual — reaprender custa mais caro do que manter. */
   const pendentes = todos.filter((i) => !i.feito);
-  const revVencidas = todos.filter((i) => i.feito && !i.revisado
-    && (i.dias === null || i.dias >= REV_DIAS));
+  /* revisão espaçada: volta à fila o que chegou ao degrau de revisão dele (feito OU já revisado) */
+  const revVencidas = todos.filter((i) => i.feito && i.venceu);
   revVencidas.forEach((i) => { i.ehRevisao = true; i.minutos = Math.round(i.minutos / 2); if (i.ramos) i.minutosSessao = i.minutos; });
   /* ---- INTERCALAR DISCIPLINAS ----
    * Ordenar só por peso agrupa a semana por disciplina: sete horas seguidas
@@ -1933,12 +1942,48 @@ function edDiscEmRisco(blocos) {
  * ou pior, segue sem perceber que está errada. Cada item passa a carregar o
  * motivo, na mesma lógica que decidiu a fila.
  * ------------------------------------------------------------------ */
-const REV_DIAS = 7;    /* a partir daqui a revisão é considerada vencida */
+const REV_DIAS = 7;    /* a 1ª revisão de um tópico "normal": 7 dias depois do estudo */
+
+/* REVISÃO ESPAÇADA (S3). Antes havia UMA revisão só (estudado → revisado aos 7 dias) e o tópico saía para sempre. Agora
+ * cada revisão empurra a próxima um degrau: 7, 15, 30, 60, 90 dias. O "Como foi?" (ou o acerto medido, S2) muda o degrau:
+ * difícil volta um degrau (3, 7, 15…), fácil avança um (15, 30, 60…). nRev = quantas revisões já foram feitas (0 = só
+ * estudado). Uma revisão sem data (dado antigo) não volta sozinha: ninguém sabe quando foi. */
+const REV_PASSOS = [3, 7, 15, 30, 60, 90];
+function edNivelDoFator(f) { const n = Number(f); return n > 1 ? "alta" : n > 0 && n < 1 ? "baixa" : "media"; }
+function edIntervaloRevisao(nRev, nivel) {
+  const k = (Number(nRev) || 0) + 1 + (nivel === "alta" ? -1 : nivel === "baixa" ? 1 : 0);
+  return REV_PASSOS[Math.max(0, Math.min(REV_PASSOS.length - 1, k))];
+}
+function edRevisaoVenceu(estado, dias, nRev, nivel) {
+  if (estado === "feito") return dias === null || dias === undefined || dias >= edIntervaloRevisao(0, nivel);
+  if (estado === "revisado") return dias !== null && dias !== undefined && dias >= edIntervaloRevisao(nRev || 1, nivel);
+  return false;
+}
+/* quantas revisões uma marca já tem: "revisado" sem n = 1 (o formato de antes desta versão) */
+function edNRevDaMarca(m) { return m && m.e === "revisado" ? Math.max(1, Number(m.n) || 1) : 0; }
+/* a marca nova de um registro: cada revisão soma 1 ao n (o 1 fica implícito, como nas marcas antigas) */
+function edMarcaNova(ant, estado, hoje) {
+  if (estado !== "revisado") return { e: estado, d: hoje };
+  const n = edNRevDaMarca(ant) + 1;
+  return n > 1 ? { e: "revisado", d: hoje, n } : { e: "revisado", d: hoje };
+}
+/* desfazer o último registro de um tópico SEM ramos: a marca volta a ser a do registro anterior, com o n contado no diário */
+function edMarcaDoDiario(diario, chave) {
+  const doTop = (diario || []).filter((y) => y && y.c === chave);
+  const ant = doTop[doTop.length - 1];
+  /* o último registro é "pendente" (desmarcou): não há marca */
+  if (!ant || ant.a === "pendente") return null;
+  if (ant.a !== "revisado") return { e: ant.a, d: ant.d };
+  /* as revisões SEGUIDAS no fim do diário do tópico: as que vieram depois do último estudo */
+  let n = 0;
+  for (let k = doTop.length - 1; k >= 0 && doTop[k].a === "revisado"; k--) n++;
+  return n > 1 ? { e: "revisado", d: ant.d, n } : { e: "revisado", d: ant.d };
+}
 
 function motivarItem(i, fatiaDisc) {
-  if (i.feito && !i.revisado)
+  if (i.feito && (!i.revisado || i.venceu))
     return { tipo: i.dias === null ? "rev_pendente" : "rev_vencida",
-             dias: i.dias, fatia: fatiaDisc };
+             dias: i.dias, nRev: i.nRev || 0, fatia: fatiaDisc };
   if (i.revisado) return { tipo: "concluido", fatia: fatiaDisc };
   return { tipo: i.faixa === "alta" ? "peso_alto"
     : (i.faixa === "media" ? "peso_medio" : "peso_baixo"),

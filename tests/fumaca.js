@@ -1117,6 +1117,7 @@ function rodar() {
     difMapaFatores, difResumo, difDoHumor, difDias, DIF_VALIDADE, DIF_NIVEIS,
     regDifAtual, regDifPintar, difSeloDe, priorizar,
     edAcertosPorTopico, edCombinarFatores, difMapaDetalhado, ED_AC_TOP, edAcertos,
+    REV_PASSOS, edIntervaloRevisao, edRevisaoVenceu, edNRevDaMarca, edMarcaNova, edMarcaDoDiario, edNivelDoFator, regNRevDepois, regTipoPorqueTexto,
     plItemConta, plPorDisciplina, plSinais, plSnapDe, plSnapGravar, plSnapsLer,
     plSnapsDoEdital, plSnapDiferenca, plRelatorio, plArmazenamento,
     plPodasDisponiveis, plPodaLogs, plPodaRascunhos, plPodaSnaps, plTamanho,

@@ -704,7 +704,7 @@ function edLigarMenuDoRamo(trigger, container, disciplina, topico, ramo, ch) {
 function edLinhaTopico(i, semDisciplina) {
   const li = document.createElement("div");
   li.className = "ed-item" + (i.feito ? " feito" : "")
-    + (i.revisado ? " revisado" : "") + (i.ehRevisao ? " ehrev" : "");
+    + (i.revisado && !i.ehRevisao ? " revisado" : "") + (i.ehRevisao ? " ehrev" : "");
   /* a chave na própria linha: é o que permite reencontrá-la depois de
    * uma repintura, para piscar exatamente a que mudou */
   if (i.chave) li.dataset.chave = i.chave;
@@ -718,9 +718,10 @@ function edLinhaTopico(i, semDisciplina) {
    * Um "✓" verde numa revisão vencida é a mesma mentira do texto
    * riscado: o tópico foi estudado, sim, e é exatamente por isso que ele
    * está de volta na semana. O "↻" diz o que o botão vai fazer. */
-  chk.className = "ed-reg" + (i.revisado ? " rev"
-    : (i.ehRevisao ? " arev" : (i.feito ? " ok" : "")));
-  chk.textContent = i.revisado ? "✓✓" : (i.ehRevisao ? "↻" : (i.feito ? "✓" : "+"));
+  /* revisão espaçada: um tópico já revisado que voltou à semana mostra "↻" (o que falta), não "✓✓" */
+  chk.className = "ed-reg" + (i.ehRevisao ? " arev"
+    : (i.revisado ? " rev" : (i.feito ? " ok" : "")));
+  chk.textContent = i.ehRevisao ? "↻" : (i.revisado ? "✓✓" : (i.feito ? "✓" : "+"));
   chk.title = t(i.feito ? "ed_reg_mais" : "ed_reg_novo");
   chk.onclick = (ev) => { ev.stopPropagation(); abrirRegistro(i); };
 
@@ -1108,7 +1109,7 @@ function edPorque(i, semDisciplina) {
   const h = edMarcaHistorico(i);
   const fatia = h || t("ed_pq_fatia", { p: p.fatia });
   if (p.tipo === "rev_vencida")
-    return disc + t("ed_pq_rev_vencida", { n: p.dias }) + " · " + fatia;
+    return disc + (p.nRev ? t("ed_pq_rev_n", { k: p.nRev + 1, n: p.dias }) : t("ed_pq_rev_vencida", { n: p.dias })) + " · " + fatia;
   if (p.tipo === "rev_pendente") return disc + t("ed_pq_rev_pendente") + " · " + fatia;
   if (p.tipo === "concluido") return disc + t("ed_pq_concluido");
   /* SEM DADO, DIZER QUE NAO HA — nao imprimir a moldura vazia.
@@ -1254,8 +1255,9 @@ function apagarDoDiario(idx) {
     /* registro de um tópico COM ramos: devolve a marca de antes de cada ramo que ele tocou */
     edRamosDesfazer(edProgresso, { chave: x.c }, x.rm);
   } else if (ultimoDoTopico) {
-    const ant = edDiario.filter((y) => y.c === x.c).pop();
-    if (ant && ant.a !== "pendente") edProgresso[x.c] = { e: ant.a, d: ant.d };
+    /* a marca do registro anterior, com o número de revisões contado no diário (revisão espaçada) */
+    const antM = edMarcaDoDiario(edDiario, x.c);
+    if (antM) edProgresso[x.c] = antM;
     else delete edProgresso[x.c];
   }
   salvarDiario();
@@ -2150,27 +2152,40 @@ function regDifPintar(item) {
     if (item && typeof edAcertosPorTopico === "function")
       med = edAcertosPorTopico(typeof edDiario !== "undefined" ? edDiario : [], typeof qsBanco !== "undefined" ? qsBanco : [])[(item.disciplina + "›" + item.nome).toLowerCase()] || null;
   } catch (e) { med = null; }
-  if (eco) eco.textContent = regComoFoiEfeito(atual, regDif, med);
+  /* a próxima revisão: o degrau depois DESTA sessão (estudo = 1ª; revisão = a seguinte), no nível respondido — ou, sem
+   * resposta, no que vale hoje para o plano (declaração, acerto ou normal) */
+  let prox = null;
+  try { prox = edIntervaloRevisao(regNRevDepois(), regDif || edNivelDoFator(item && item.fator)); } catch (e) { prox = null; }
+  if (eco) eco.textContent = regComoFoiEfeito(atual, regDif, med, prox);
 }
 
 /* O EFEITO DE CADA RESPOSTA DO "COMO FOI?", escrito: sem ele a pessoa escolhe sem saber o que muda. "atual" é a avaliação
  * que vale hoje (difDe); "escolha" é o que foi tocado agora ("" = não respondeu, e então a anterior continua de pé). */
-function regComoFoiEfeito(atual, escolha, med) {
+/* quantas revisões o que está sendo lançado terá DEPOIS desta sessão: estudo = 0; revisão = as de antes + 1 (do ramo
+ * marcado, quando há ramos) */
+function regNRevDepois() {
+  if (regTipo !== "revisado" || !regAtual) return 0;
+  const r = (regAtual.ramos || []).find((x) => regRamosSel && regRamosSel.has(x.id));
+  const antes = r ? (r.nRev || (r.revisado ? 1 : 0)) : (regAtual.nRev || (regAtual.revisado ? 1 : 0));
+  return antes + 1;
+}
+function regComoFoiEfeito(atual, escolha, med, prox) {
+  const px = prox ? t("ed_cf_prox", { r: prox }) : "";
   const nv = (typeof DIF_NIVEIS !== "undefined" ? DIF_NIVEIS : []).find((x) => x.id === escolha);
   const dias = typeof DIF_VALIDADE !== "undefined" ? DIF_VALIDADE : 45;
   const fx = (n) => String(n).replace(".", t("ed_cf_dec"));
   const medNv = med && med.valido ? med.nivel : "";
   /* respondeu diferente do que o acerto diz: vale a resposta, mas a tela lembra o número */
   const diverge = (e) => (medNv && medNv !== e ? t("ed_cf_ef_diverge", { p: med.pct, n: med.feitas, nv: t("ed_cf_" + medNv) }) : "");
-  if (nv && escolha === "alta") return t("ed_cf_ef_alta", { f: fx(nv.fator), d: dias }) + diverge("alta");
-  if (nv && escolha === "baixa") return t("ed_cf_ef_baixa", { f: fx(nv.fator), d: dias }) + diverge("baixa");
-  if (nv) return t("ed_cf_ef_media") + (atual && atual.nivel && atual.nivel !== "media" && !atual.vencida ? t("ed_cf_ef_tira", { n: t("ed_cf_" + atual.nivel) }) : "") + diverge("media");
+  if (nv && escolha === "alta") return t("ed_cf_ef_alta", { f: fx(nv.fator), d: dias }) + px + diverge("alta");
+  if (nv && escolha === "baixa") return t("ed_cf_ef_baixa", { f: fx(nv.fator), d: dias }) + px + diverge("baixa");
+  if (nv) return t("ed_cf_ef_media") + (atual && atual.nivel && atual.nivel !== "media" && !atual.vencida ? t("ed_cf_ef_tira", { n: t("ed_cf_" + atual.nivel) }) : "") + px + diverge("media");
   /* sem resposta e sem declaração sua valendo: quem fala é o acerto (10+ questões) */
   const declarada = atual && atual.nivel && !atual.vencida && atual.origem !== "sessao";
-  if (!declarada && medNv) return t("ed_cf_eco_acerto", { p: med.pct, n: med.feitas, nv: t("ed_cf_" + medNv) });
-  if (!atual || !atual.nivel || atual.nivel === "media") return t("ed_cf_eco_nada");
-  if (atual.vencida) return t("ed_cf_eco_venceu", { n: t("ed_cf_" + atual.nivel), d: atual.dias });
-  return t("ed_cf_eco_vale", { n: t("ed_cf_" + atual.nivel), o: t("dif_origem_" + atual.origem), d: atual.dias });
+  if (!declarada && medNv) return t("ed_cf_eco_acerto", { p: med.pct, n: med.feitas, nv: t("ed_cf_" + medNv) }) + px;
+  if (!atual || !atual.nivel || atual.nivel === "media") return t("ed_cf_eco_nada") + px;
+  if (atual.vencida) return t("ed_cf_eco_venceu", { n: t("ed_cf_" + atual.nivel), d: atual.dias }) + px;
+  return t("ed_cf_eco_vale", { n: t("ed_cf_" + atual.nivel), o: t("dif_origem_" + atual.origem), d: atual.dias }) + px;
 }
 
 /* Preenche o registro com o resultado de uma sessão de questões.
@@ -2281,7 +2296,7 @@ function regPintarFormas() {
  * ainda pendente; revisão só ramo já estudado e não revisado. Os minutos sugeridos acompanham a escolha (soma do
  * tempo dos ramos; metade na revisão) e o tempo gravado é repartido entre os ramos pelo peso. */
 let regRamosSel = new Set();
-function regRamosElegivel(r) { return regTipo === "revisado" ? (r.feito && !r.revisado) : (!r.feito && !r.pulado); }
+function regRamosElegivel(r) { return regTipo === "revisado" ? (r.feito && (!r.revisado || r.venceu)) : (!r.feito && !r.pulado); }
 function regRamosPadrao(i) {
   const rs = i.ramos || [];
   if (regTipo === "revisado") {
@@ -2491,7 +2506,8 @@ function regPintarBotoes() {
  * A pessoa troca no seletor quando discordar; o texto do porquê diz de onde veio a sugestão.
  * ===================================================================== */
 let regTipoSugerido = null;
-function regTipoPadrao(x) {
+function regTipoPadrao(x, intervalo) {
+  const lim = intervalo || REV_DIAS;
   if (!x || !x.feito) return { tipo: "feito", motivo: "novo", dias: null };
   if (x.revisado) return { tipo: "revisado", motivo: "revisado", dias: null };
   let dias = typeof x.dias === "number" ? x.dias : null;
@@ -2499,15 +2515,15 @@ function regTipoPadrao(x) {
     const d0 = new Date(String(x.quando).slice(0, 10) + "T00:00:00"), d1 = new Date(hojeISO() + "T00:00:00");
     if (!isNaN(d0) && !isNaN(d1)) dias = Math.max(0, Math.round((d1 - d0) / 86400000));
   }
-  if (dias === null || dias >= REV_DIAS) return { tipo: "revisado", motivo: "vencida", dias };
-  return { tipo: "feito", motivo: "recente", dias };
+  if (dias === null || dias >= lim) return { tipo: "revisado", motivo: "vencida", dias };
+  return { tipo: "feito", motivo: "recente", dias, intervalo: lim };
 }
 function regTipoPorqueTexto(s, tipoAtual) {
   if (!s) return "";
   const txt = s.motivo === "novo" ? t("ed_reg_porque_novo")
     : s.motivo === "revisado" ? t("ed_reg_porque_revisado")
     : s.motivo === "vencida" ? (s.dias === null ? t("ed_reg_porque_vencida_sem") : t("ed_reg_porque_vencida", { n: s.dias }))
-    : t("ed_reg_porque_recente", { q: s.dias === 0 ? t("ed_reg_hoje") : t("ed_reg_ha_dias", { n: s.dias }), r: Math.max(1, REV_DIAS - s.dias) });
+    : t("ed_reg_porque_recente", { q: s.dias === 0 ? t("ed_reg_hoje") : t("ed_reg_ha_dias", { n: s.dias }), r: Math.max(1, (s.intervalo || REV_DIAS) - s.dias) });
   return tipoAtual && tipoAtual !== s.tipo ? t("ed_reg_porque_trocou", { s: txt }) : txt;
 }
 /* trocar estudo ↔ revisão (o seletor chama; tocar no que já está escolhido não faz nada) */
@@ -2525,6 +2541,8 @@ function regTipoTrocar() {
     if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
   }
   regPintarTempo();
+  /* estudo ↔ revisão muda o degrau da próxima revisão que o "Como foi?" anuncia */
+  if (regAtual) regDifPintar(regAtual);
 }
 /* o que está sendo lançado nunca foi estudado? (os ramos marcados, quando há; senão o tópico) */
 function regAlvoNuncaEstudado() {
@@ -2558,7 +2576,7 @@ function abrirRegistro(i, opc) {
   /* O TIPO (estudo × revisão) E A FORMA PADRÃO SEGUEM A SITUAÇÃO REAL — do ramo, quando aberto por um ramo. Era só
    * "já foi estudado?": a 2ª sessão no MESMO dia virava revisão, e o diário contava uma revisão que não houve. */
   const rEsc0 = opc && opc.ramo ? (i.ramos || []).find((x) => x.id === opc.ramo) : null;
-  regTipoSugerido = regTipoPadrao(rEsc0 || i);
+  regTipoSugerido = regTipoPadrao(rEsc0 || i, edIntervaloRevisao(0, edNivelDoFator(i.fator)));
   regTipo = regTipoSugerido.tipo;
   regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
   regHumor = "media";
@@ -2939,8 +2957,9 @@ function edDesfazerUltimoRegistro() {
     /* registro de um tópico COM ramos: devolve a marca de antes de cada ramo que ele tocou */
     edRamosDesfazer(edProgresso, { chave: x.c }, x.rm);
   } else if (ultimoDoTopico) {
-    const ant = edDiario.filter((y) => y.c === x.c).pop();
-    if (ant && ant.a !== "pendente") edProgresso[x.c] = { e: ant.a, d: ant.d };
+    /* a marca do registro anterior, com o número de revisões contado no diário (revisão espaçada) */
+    const antM = edMarcaDoDiario(edDiario, x.c);
+    if (antM) edProgresso[x.c] = antM;
     else delete edProgresso[x.c];
   }
   salvarDiario();
@@ -3002,7 +3021,7 @@ function edMarcarProgresso(i, estado) {
   const comRamos = !!(i.ramos && i.ramos.length);
   if (!deOutro) {
     if (comRamos) edUltimasMudancasRamos = edRamosRegistrar(edProgresso, i, estado, hojeISO());
-    else if (estado) edProgresso[i.chave] = { e: estado, d: hojeISO() };
+    else if (estado) edProgresso[i.chave] = edMarcaNova(edProgresso[i.chave], estado, hojeISO());
     else delete edProgresso[i.chave];
     edSalvar();
     return true;
@@ -3022,7 +3041,7 @@ function edMarcarProgresso(i, estado) {
   if (!dono) return false;
   dono.progresso = dono.progresso || {};
   if (comRamos) edUltimasMudancasRamos = edRamosRegistrar(dono.progresso, i, estado, hojeISO());
-  else if (estado) dono.progresso[i.chave] = { e: estado, d: hojeISO() };
+  else if (estado) dono.progresso[i.chave] = edMarcaNova(dono.progresso[i.chave], estado, hojeISO());
   else delete dono.progresso[i.chave];
   dono.tocado = new Date().toISOString();
   if (typeof edSalvarLista === "function") edSalvarLista();

@@ -363,7 +363,7 @@ async function testes() {
     const item = { nome: "Restos a pagar", disciplina: "Direito Financeiro", chave: RA, minutos: 30 };
     api.abrirRegistro(item);
     const eco = () => api.$("regDifEco").textContent;
-    ok(eco() === "Sem resposta: vale o seu acerto nas questões deste tópico — 50% em 14 → «Difícil».", "S2o 'Como foi?' sem resposta diz que vale o acerto: " + eco());
+    ok(eco() === "Sem resposta: vale o seu acerto nas questões deste tópico — 50% em 14 → «Difícil». Próxima revisão em 3 dias.", "S2o 'Como foi?' sem resposta diz que vale o acerto: " + eco());
     api.$("regDificuldade").children[2].onclick();
     ok(/^Fácil: .* \(Seu acerto, 50% em 14 questões, diria «Difícil» — vale a sua resposta\.\)$/.test(eco()), "S2p responder diferente: vale a resposta, e a tela lembra o acerto: " + eco());
     api.$("regDificuldade").children[0].onclick();
@@ -395,6 +395,92 @@ async function testes() {
     const porDisc = api.edAcertos([{ disc: "D", a: "feito", q: { feitas: 10, certas: 5, app: true } }, { disc: "D", a: "feito", q: { feitas: 4, certas: 4 } }],
       [{ disciplina: "D", tentativas: [{ acertou: true }, { acertou: false }] }]);
     ok(porDisc.D.feitas === 6 && porDisc.D.certas === 5, "S2w o acerto por disciplina tambem nao conta duas vezes: " + JSON.stringify(porDisc.D));
+  }
+
+  /* ================================================================
+   * S3: REVISÃO ESPAÇADA — 7, 15, 30, 60, 90 dias; difícil volta um degrau, fácil avança um
+   * ============================================================== */
+  {
+    const { api } = rodar();
+    const iv = (n, nv) => api.edIntervaloRevisao(n, nv);
+    ok([iv(0), iv(1), iv(2), iv(3), iv(4), iv(9)].join() === "7,15,30,60,90,90", "S3a os degraus normais: 7, 15, 30, 60, 90 (e para): " + [iv(0), iv(1), iv(2), iv(3), iv(4), iv(9)]);
+    ok([iv(0, "alta"), iv(1, "alta"), iv(0, "baixa"), iv(1, "baixa"), iv(4, "baixa")].join() === "3,7,15,30,90", "S3b dificil volta um degrau, facil avanca um: " + [iv(0, "alta"), iv(1, "alta"), iv(0, "baixa"), iv(1, "baixa"), iv(4, "baixa")]);
+    ok(api.edNivelDoFator(1.5) === "alta" && api.edNivelDoFator(0.7) === "baixa" && api.edNivelDoFator(1) === "media" && api.edNivelDoFator(undefined) === "media", "S3c o nivel sai do fator do plano");
+    const V = api.edRevisaoVenceu;
+    ok(!V("feito", 6, 0, "media") && V("feito", 7, 0, "media") && V("feito", null, 0, "media") && V("feito", 3, 0, "alta") && !V("feito", 14, 0, "baixa"),
+       "S3d a 1a revisao: 7 dias (3 se dificil, 15 se facil); estudado sem data vence");
+    ok(!V("revisado", 14, 1, "media") && V("revisado", 15, 1, "media") && !V("revisado", 29, 2, "media") && V("revisado", 30, 2, "media") && !V("revisado", null, 1, "media") && !V("pulado", 99, 0, "media"),
+       "S3e revisado volta no degrau seguinte (15, 30…); revisado sem data nao volta sozinho; pulado nunca");
+    ok(api.edNRevDaMarca(null) === 0 && api.edNRevDaMarca({ e: "feito" }) === 0 && api.edNRevDaMarca({ e: "revisado" }) === 1 && api.edNRevDaMarca({ e: "revisado", n: 3 }) === 3, "S3f marca antiga 'revisado' sem n = 1 revisao");
+    const M = api.edMarcaNova;
+    ok(JSON.stringify(M(null, "feito", "2026-10-01")) === '{"e":"feito","d":"2026-10-01"}' && JSON.stringify(M({ e: "feito" }, "revisado", "D")) === '{"e":"revisado","d":"D"}'
+       && JSON.stringify(M({ e: "revisado" }, "revisado", "D")) === '{"e":"revisado","d":"D","n":2}' && M({ e: "revisado", n: 2 }, "revisado", "D").n === 3 && JSON.stringify(M({ e: "revisado", n: 2 }, "feito", "D")) === '{"e":"feito","d":"D"}',
+       "S3g cada revisao soma 1 ao n (o 1 fica implicito); estudar de novo zera");
+    const MD = (lst) => JSON.stringify(api.edMarcaDoDiario(lst.map(([a, d]) => ({ c: "k", a, d })), "k"));
+    ok(MD([["feito", "1"], ["revisado", "2"], ["revisado", "3"]]) === '{"e":"revisado","d":"3","n":2}' && MD([["revisado", "1"], ["feito", "2"], ["revisado", "3"]]) === '{"e":"revisado","d":"3"}'
+       && MD([["feito", "1"], ["pendente", "2"]]) === "null" && MD([]) === "null",
+       "S3h desfazer reconstroi o n pelas revisoes SEGUIDAS no fim do diario; 'pendente' no fim = sem marca");
+
+    /* o plano: o revisado volta a' fila no degrau dele, e o porque diz qual revisao e' */
+    const pl = (feitos, fatores) => api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300), feitos, fatores: fatores || {} });
+    const RC = "direito financeiro›receita";
+    const de = (p) => p.itens.filter((i) => i.nome === "Receita")[0];
+    const naFila = (p) => (p.semana || p.itens.filter((i) => i.ehRevisao)).some((i) => i.nome === "Receita" && i.ehRevisao);
+    const p16 = pl({ [RC]: { e: "revisado", d: daqui(-16) } });
+    ok(de(p16).venceu === true && de(p16).nRev === 1 && naFila(p16), "S3i revisado ha' 16 dias (1 revisao): a 2a revisao (15 dias) venceu e volta a' fila");
+    {
+      const li = api.edLinhaAgendaTeste(de(p16));
+      const chk = Array.from(li.children).find((f) => /(^| )ed-reg( |$)/.test(f.className || ""));
+      ok(chk && chk.textContent === "↻" && /arev/.test(chk.className) && !/(^| )revisado( |$)/.test(li.className) && /ehrev/.test(li.className),
+         "S3i2 revisado que voltou a semana: o botao mostra o simbolo de revisao, nao o de concluido, e a linha nao fica apagada: " + (chk && chk.textContent) + " | " + li.className);
+    }
+    ok(/2ª revisão: última sessão há 16 dias/.test(api.edPorque(de(p16))), "S3j o porque diz qual revisao e': " + api.edPorque(de(p16)));
+    const p14 = pl({ [RC]: { e: "revisado", d: daqui(-14) } });
+    ok(de(p14).venceu === false && !naFila(p14), "S3k revisado ha' 14 dias ainda nao chegou ao degrau: fora da fila");
+    ok(de(pl({ [RC]: { e: "revisado", d: daqui(-8) } }, { [RC]: 1.5 })).venceu === true && de(pl({ [RC]: { e: "revisado", d: daqui(-20) } }, { [RC]: 0.7 })).venceu === false,
+       "S3l dificil (×1,5) traz a 2a revisao em 7 dias; facil (×0,7) a empurra para 30");
+    ok(de(pl({ [RC]: { e: "revisado", d: daqui(-29), n: 2 } })).venceu === false && de(pl({ [RC]: { e: "revisado", d: daqui(-30), n: 2 } })).venceu === true, "S3m com 2 revisoes, a 3a vem em 30 dias");
+    ok(de(pl({ [RC]: { e: "revisado", d: null } })).venceu === false && de(pl({ [RC]: "revisado" })).venceu === false, "S3n revisado sem data (formato antigo) nao inunda a agenda");
+    ok(de(pl({ [RC]: { e: "feito", d: daqui(-7) } })).venceu === true && de(pl({ [RC]: { e: "feito", d: daqui(-6) } })).venceu === false, "S3o a 1a revisao continua aos 7 dias");
+  }
+
+  /* ---- S3: o registro grava a revisao seguinte, o desfazer volta, e o "Como foi?" anuncia a proxima ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const ed = api.edCriar("T", texto());
+    api.hubAbrirEdital(ed.id);
+    api.$("editalTexto").value = texto();
+    api.$("edProva").value = daqui(300);
+    const RC = "direito financeiro›receita";
+    api.edProgressoPor({ [RC]: { e: "revisado", d: daqui(-16) } });
+    api.diarioPor([]);
+    const it = api.edItemDoPlano("Direito Financeiro", "Receita");
+    ok(it && it.venceu === true && it.nRev === 1, "S3p-pre o item vem da fila como 2a revisao");
+    api.abrirRegistro(it);
+    ok(api.regTipoAtual() === "revisado" && api.regNRevDepois() === 2, "S3p o registro abre em revisao, e depois dela serao 2 revisoes");
+    ok(/Próxima revisão em 30 dias\.$/.test(api.$("regDifEco").textContent), "S3q o 'Como foi?' anuncia a proxima (3a) revisao em 30 dias: " + api.$("regDifEco").textContent);
+    api.$("regDificuldade").children[0].onclick();
+    ok(/Próxima revisão em 15 dias\./.test(api.$("regDifEco").textContent), "S3r Dificil traz a proxima para 15 dias: " + api.$("regDifEco").textContent);
+    api.$("regDificuldade").children[2].onclick();
+    ok(/Próxima revisão em 60 dias\./.test(api.$("regDifEco").textContent), "S3s Facil empurra para 60 dias: " + api.$("regDifEco").textContent);
+    api.$("regDificuldade").children[2].onclick();
+    api.regTipoTrocar();
+    ok(/Próxima revisão em 7 dias\.$/.test(api.$("regDifEco").textContent), "S3t trocar para ESTUDO: a proxima e' a 1a revisao (7 dias): " + api.$("regDifEco").textContent);
+    api.regTipoTrocar();
+    api.confirmarRegistroTeste("revisado");
+    ok(JSON.stringify(api.edProgressoAtual()[RC]) === JSON.stringify({ e: "revisado", d: api.hojeISO(), n: 2 }), "S3u registrar a revisao grava n=2: " + JSON.stringify(api.edProgressoAtual()[RC]));
+    const it2 = api.edItemDoPlano("Direito Financeiro", "Receita");
+    ok(it2.venceu === false && it2.nRev === 2, "S3v revisado hoje: sai da fila ate' o proximo degrau");
+    api.apagarDoDiario(api.edDiario.length - 1);
+    ok(!api.edProgressoAtual()[RC], "S3w apagar o registro (sem outro no diario) tira a marca, como antes");
+    api.diarioPor([{ c: RC, a: "feito", d: daqui(-40), m: 30 }, { c: RC, a: "revisado", d: daqui(-30), m: 20 }, { c: RC, a: "revisado", d: daqui(-10), m: 20 }, { c: RC, a: "revisado", d: api.hojeISO(), m: 20 }]);
+    api.edProgressoPor({ [RC]: { e: "revisado", d: api.hojeISO(), n: 3 } });
+    api.apagarDoDiario(3);
+    ok(JSON.stringify(api.edProgressoAtual()[RC]) === JSON.stringify({ e: "revisado", d: daqui(-10), n: 2 }), "S3x desfazer a 3a revisao volta a' 2a (com a data dela): " + JSON.stringify(api.edProgressoAtual()[RC]));
+    ok(api.regTipoPadrao({ feito: true, dias: 4 }, 3).motivo === "vencida" && api.regTipoPadrao({ feito: true, dias: 4 }, 7).motivo === "recente"
+       && /a revisão vence em 11 dia/.test(api.regTipoPorqueTexto(api.regTipoPadrao({ feito: true, dias: 4 }, 15), "feito")),
+       "S3y estudo x revisao segue o degrau do topico (dificil: 3 dias), nao um 7 fixo");
   }
 
   return Object.assign(falhas, { quantas: n });
