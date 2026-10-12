@@ -730,9 +730,15 @@ function edLinhaTopico(i, semDisciplina) {
     b.textContent = jaEst.temAlgo ? t("vka_selo")
       : (jaEst.temEstudo ? t("vka_selo_sem_material")
                          : t("vka_selo_coincide",
-                             { c: (doOutro && doOutro.ondeConsta)
-                                  || (doEstudo && doEstudo.concurso) || "?" }));
+                             { c: edNomeCurtoConcurso((doOutro && doOutro.ondeConsta)
+                                  || (doEstudo && doEstudo.concurso) || "?") }));
     b.title = jaEst.temAlgo ? t("vka_selo_aj") : t("vka_selo_coincide_aj");
+    /* o nome inteiro do outro concurso continua dito: no balão e para quem usa leitor de tela */
+    if (!jaEst.temAlgo && !jaEst.temEstudo) {
+      const inteiro = t("vka_selo_coincide", { c: (doOutro && doOutro.ondeConsta) || (doEstudo && doEstudo.concurso) || "?" });
+      b.title = inteiro + " — " + b.title;
+      if (b.setAttribute) b.setAttribute("aria-label", inteiro);
+    }
     b.onclick = (ev) => { ev.stopPropagation(); vkaAbrir(i.disciplina, i.nome, i.edital || ""); };
     nome.append(b);
   }
@@ -1020,6 +1026,14 @@ function faListaAbrir() {
  * perceber que está errada. */
 /* opc.curto (a linha da agenda): sem "2ª revisão: última sessão há N dias" — o selo diz qual revisão e a linha do
  * histórico diz quando; repetir era o que deixava a linha difícil de ler. O registro e o Raio-X usam a versão longa. */
+/* "SEFAZ Alagoas - Auditor Fiscal 2026" → "SEFAZ Alagoas"; "TCE-PE Auditor de Controle Externo - Contas Públicas" →
+ * "TCE-PE Auditor": o que vem antes do " - ", até duas palavras. O selo de "também cai em" disputava atenção com o título. */
+function edNomeCurtoConcurso(c) {
+  const s = String(c || "").split(/\s[-–—]\s/)[0].trim();
+  const p = s.split(/\s+/).filter(Boolean);
+  return p.length ? p.slice(0, 2).join(" ") : String(c || "");
+}
+
 function edPorque(i, semDisciplina, opc) {
   const p = i.porque || {};
   const curto = !!(opc && opc.curto);
@@ -1737,6 +1751,14 @@ function diarioDesfazerRetro() {
 
 /* ---- D4.2: A SEMANA DE ESTUDO À VISTA — meta, falta, e os dias da agenda -------------------------------------------- */
 
+/* a versão CURTA, que cabe na linha do medidor da agenda: "2h52/dia nos 7 dias que restam". Meta batida ou sem dias
+ * restantes: a frase longa (já é curta). */
+function edSemanaDicaCurta(S) {
+  if (!S || !S.metaMin) return "";
+  if (S.faltaMin <= 0 || !S.diasRestantes) return edSemanaDicaTexto(S);
+  return t("ed_sem_dica_curta", { h: horasTexto(S.porDiaNecessario), n: S.diasRestantes });
+}
+
 /* uma frase do que falta: quanto por dia nos dias que restam, ou que já não restam dias, ou que a meta foi batida */
 function edSemanaDicaTexto(S) {
   if (!S || !S.metaMin) return "";
@@ -1770,6 +1792,14 @@ function edSemanaCelulas(S, aoClicar) {
       const pv = document.createElement("span");
       pv.className = "di-sem-prev"; pv.textContent = t("ed_sem_de", { p: horasTexto(d.previstoMin) });
       b.append(pv);
+      /* a barrinha do dia: o quanto do previsto já foi feito (para em 100%) */
+      const br = document.createElement("span");
+      br.className = "di-sem-barra";
+      const fl = document.createElement("span");
+      fl.className = "di-sem-barra-fill";
+      fl.style.width = Math.min(100, Math.round(100 * d.feitoMin / d.previstoMin)) + "%";
+      br.append(fl);
+      b.append(br);
     }
     b.title = t(d.estudo ? "ed_sem_dia_tip" : "ed_sem_folga_tip", { dia: d.cod, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada"), p: horasTexto(d.previstoMin) });
     if (aoClicar) b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aoClicar(d); };

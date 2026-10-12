@@ -390,11 +390,12 @@ function hubPintarAgenda() {
   if (typeof edSemanaCelulas === "function") {
     const SS = hubSemanaDeEstudo();
     celsSemana.append(edSemanaCelulas(SS, (d) => diarioIrParaDia(d.iso)));
-    const dica = edSemanaDicaTexto(SS);
+    /* A FRASE DO QUE FALTA ENTRA NA LINHA DO MEDIDOR (curta: "2h52/dia nos 7 dias que restam"); a longa, com os dias,
+     * fica no balão. Era mais uma linha inteira entre os dias e a lista. */
+    const dica = typeof edSemanaDicaCurta === "function" ? edSemanaDicaCurta(SS) : edSemanaDicaTexto(SS);
     if (dica) {
-      const dd = document.createElement("div");
-      dd.className = "di-sem-dica"; dd.textContent = dica;
-      celsSemana.append(dd);
+      rot.textContent = rot.textContent.replace(/\.\s*$/, "") + " · " + dica;
+      rot.title = edSemanaDicaTexto(SS);
     }
   }
 

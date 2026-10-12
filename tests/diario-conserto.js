@@ -168,6 +168,31 @@ async function testes() {
     api.$("dlgDiario").close();
   }
 
+  /* ---- A1-A4: a agenda — faixa da semana compacta, a frase do que falta na linha do medidor, "também cai em" curto ---- */
+  {
+    /* o nome curto do outro concurso */
+    ok(api.edNomeCurtoConcurso("SEFAZ Alagoas - Auditor Fiscal 2026") === "SEFAZ Alagoas" && api.edNomeCurtoConcurso("TCE-PE Auditor de Controle Externo - Contas Públicas") === "TCE-PE Auditor"
+       && api.edNomeCurtoConcurso("ISS Caruaru Auditor Fiscal") === "ISS Caruaru" && api.edNomeCurtoConcurso("SEFAZ") === "SEFAZ" && api.edNomeCurtoConcurso("") === "" && api.edNomeCurtoConcurso("PGE – Procurador do Estado") === "PGE",
+       "A1 nome curto do concurso: antes do ' - ', ate' duas palavras");
+    /* a célula do dia: a barrinha do previsto */
+    const S = { dias: [
+      { cod: "seg", iso: "2026-10-12", estudo: true, previstoMin: 60, feitoMin: 30, estado: "hoje" },
+      { cod: "ter", iso: "2026-10-13", estudo: true, previstoMin: 60, feitoMin: 90, estado: "futuro" },
+      { cod: "sáb", iso: "2026-10-17", estudo: false, previstoMin: 0, feitoMin: 0, estado: "futuro" } ] };
+    const cx = api.edSemanaCelulas(S, null);
+    const cel = filhos(cx);
+    const fill = (c) => achar(c, (e) => cls(e, "di-sem-barra-fill"))[0];
+    ok(cel[0].children[0].textContent === "seg" && /30min/.test(cel[0].children[1].textContent) && fill(cel[0]) && fill(cel[0]).style.width === "50%", "A2 a celula guarda dia/feito/previsto e ganha a barrinha do previsto (50%)");
+    ok(fill(cel[1]).style.width === "100%" && !fill(cel[2]), "A2b passou do previsto: a barrinha para em 100%; dia de folga sem previsto: sem barrinha");
+    const css = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/@media \(min-width:700px\)\{\s*\.di-sem-cels\{[^}]*\}\s*\.di-sem-dia\{flex-direction:row/.test(css), "A2c em tela larga cada dia fica numa linha so' (no celular continua em coluna)");
+    /* a frase curta do que falta */
+    const SC = { metaMin: 1200, faltaMin: 1200, diasRestantes: 7, porDiaNecessario: 172, restantes: [] };
+    ok(api.edSemanaDicaCurta(SC) === api.t("ed_sem_dica_curta", { h: api.horasTexto(172), n: 7 }) && api.edSemanaDicaCurta(SC).length < api.edSemanaDicaTexto(Object.assign({}, SC, { restantes: [{ cod: "seg" }, { cod: "ter" }] })).length + 40,
+       "A3 a frase curta: '2h52/dia nos 7 dia(s) que restam': " + api.edSemanaDicaCurta(SC));
+    ok(api.edSemanaDicaCurta({ metaMin: 600, faltaMin: 0, diasRestantes: 3 }) === api.t("ed_sem_batida") && api.edSemanaDicaCurta({ metaMin: 0 }) === "", "A3b meta batida usa a frase dela; sem meta, nada");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

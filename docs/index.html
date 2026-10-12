@@ -3786,8 +3786,10 @@ body.split-lj{overflow:hidden}
    por isso não usam a cor de coisa pronta. */
 .ed-item-jaestudei.sem-material{background:var(--campo);color:var(--sutil);
   border:1px solid var(--borda)}
-.ed-item-jaestudei.so-coincide{background:transparent;color:var(--atencao);
-  border:1px dashed var(--atencao)}
+/* "também cai em": um aviso discreto (a pílula laranja pontilhada chamava mais atenção que o título do tópico);
+   o nome inteiro do outro concurso fica no balão */
+.ed-item-jaestudei.so-coincide{background:transparent;color:var(--sutil);
+  border:1px solid var(--borda);font-weight:600}
 /* ---- lista do que some ao colar ---- */
 .ed-colar-lista{border:1px solid var(--borda);border-radius:10px;margin:9px 0 0;
   padding:9px 11px;background:var(--bg);max-height:230px;overflow:auto}
@@ -4138,6 +4140,17 @@ body.split-lj{overflow:hidden}
 .di-sem-ok .di-sem-min{color:var(--ok)}
 .di-sem-falta .di-sem-min{color:var(--atencao)}
 .di-sem-extra{opacity:1}
+/* a barrinha do dia: o quanto do previsto já foi feito */
+.di-sem-barra{display:block;width:100%;height:3px;border-radius:2px;background:var(--borda);overflow:hidden;margin-top:2px}
+.di-sem-barra-fill{display:block;height:100%;background:var(--acao)}
+.di-sem-ok .di-sem-barra-fill{background:var(--ok)}
+/* EM TELA LARGA, CADA DIA NUMA LINHA SÓ ("SEG · 1h · de 2h30" + barrinha): os 7 quadros altos empurravam a lista para
+ * baixo. No celular continua em coluna — sete dias em linha não cabem em 375 px. */
+@media (min-width:700px){
+  .di-sem-cels{gap:4px}
+  .di-sem-dia{flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:0 5px;padding:3px 6px}
+  .di-sem-barra{flex:0 0 100%}
+}
 .ed-ag-semana{margin:2px 0 8px}
 /* O MAPA DE CALOR: semanas × os dias da agenda. A cor é um reforço — o tempo está escrito em cada célula. */
 .di-mp{margin:6px 0 0;padding:7px 8px;border:1px solid var(--borda);border-radius:8px;background:var(--campo)}

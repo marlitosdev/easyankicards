@@ -353,6 +353,19 @@ async function testes() {
     ok(selos.every((s) => /so-coincide/.test(s.className || "")),
        "D7b algum selo de coincidencia veio com a cara do selo de "
        + "material: " + JSON.stringify(selos.map((s) => s.className)));
+    /* nome curto no selo; o inteiro no balão e no leitor de tela */
+    const s0 = selos[0], inteiro = s0.getAttribute("aria-label") || "";
+    const outroC = inteiro.replace(api.t("vka_selo_coincide", { c: "" }), "");
+    ok(inteiro && s0.textContent === api.t("vka_selo_coincide", { c: api.edNomeCurtoConcurso(outroC) }) && s0.title.indexOf(inteiro) === 0,
+       "D7b2 o selo usa o nome curto do concurso; o nome inteiro vai no balao e no rotulo acessivel: " + s0.textContent + " / " + inteiro);
+    /* a linha do medidor da agenda leva a frase curta do que falta; a longa, com os dias, vai no balão */
+    const rotM = (function acha(el) { for (const f of Array.from(el.children || [])) { if (/(^| )ag-med-rot( |$)/.test(f.className || "")) return f; const r = acha(f); if (r) return r; } return null; })(api.$("edAgendaTopo"));
+    const SSm = api.hubSemanaDeEstudo();
+    const curta = api.edSemanaDicaCurta(SSm);
+    ok(rotM && (!curta || (rotM.textContent.indexOf(" · " + curta) > 0 && rotM.title === api.edSemanaDicaTexto(SSm))),
+       "D7c a frase do que falta entra na linha do medidor (curta), com a longa no balao: " + (rotM && rotM.textContent));
+    ok(!(function acha(el) { for (const f of Array.from(el.children || [])) { if (/(^| )di-sem-dica( |$)/.test(f.className || "")) return f; const r = acha(f); if (r) return r; } return null; })(api.$("edAgendaTopo")),
+       "D7d a agenda nao tem mais a linha solta 'Para fechar a meta…' (ela foi para o medidor)");
 
     /* O SELO NOMEIA O OUTRO CONCURSO, E O VÍNCULO É SIMÉTRICO.
      *
