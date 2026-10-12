@@ -628,6 +628,21 @@ function ramPintar() {
     cx.append(lin);
   });
   ramAvisoApagar();
+  ramPesosPintar();
+  ramIaSemaforo();
+}
+
+/* "Pesos pelas minhas questões" não cria ramos: só aparece com ramos na lista e diz do que precisa */
+function ramPesosPintar() {
+  const lin = $("ramPesosLin");
+  if (!lin || !ramCtx) return;
+  lin.hidden = !ramLinhas.length;
+  let n = 0;
+  try { n = ramTextosDoTopico(ramCtx.chave).length; } catch (e) { n = 0; }
+  const pr = $("ramPesosPrecisa");
+  pr.textContent = n ? t("ram_pesos_precisa_ok", { n }) : t("ram_pesos_precisa_sem");
+  pr.className = "ram-precisa " + (n ? "ok" : "falta");
+  $("btnRamPesos").disabled = !n;
 }
 
 /* Q0 — "Ao salvar, sai: «X» (2 cartões vão para o geral do tópico; a marca de estudado fica guardada)". Sem travar o
@@ -679,10 +694,17 @@ function ramAbrirEditor(ctx) {
     idOrig: r.id, nome: r.nome, peso: r.herdado ? "" : (r.abs > 0 ? r.abs + (r.unidade === "p" ? "p" : "q") : String(r.peso)), nota: r.nota || "" }));
   $("ramTit").textContent = t("ram_titulo", { t: ctx.topico });
   $("ramMsg").textContent = "";
-  $("ramIaBox").hidden = true; $("ramColar").value = "";
+  $("ramColar").value = "";
   if ($("ramPedidoTxt")) { $("ramPedidoTxt").hidden = true; $("ramPedidoTxt").value = ""; }
+  if ($("ramIaMsg")) $("ramIaMsg").textContent = "";
+  if ($("ramIaPasso1")) { $("ramIaPasso1").className = "ednovo-passo"; $("ramIaBox").className = "ednovo-passo"; }
+  /* a lei é opcional para a IA: o índice só vai junto, de saída, quando a lei bate com o nome do tópico */
+  if ($("ramIaComLei")) { const c0 = (ctx.leiCands || []).find((x) => x.id === ctx.leiId); $("ramIaComLei").checked = !!(c0 && c0.combina === true); }
+  const cam = $("ramCaminhos");
+  if (cam) { cam.open = !ramLinhas.length; $("ramCaminhosSum").textContent = t(ramLinhas.length ? "ram_cam_sum_mais" : "ram_cam_sum_vazio"); }
   ramPintar();
   ramLeiPintar();
+  ramIaSemaforo();
   abrirModal("dlgRamos");
   return true;
 }
@@ -727,9 +749,27 @@ function ramLeiPintar() {
   if (fixar) fixar.hidden = !c || c.atual || c.id === "__topico";
   const tem = String(ramTextoDaLei(ramCtx) || "").trim().length > 0;
   $("btnRamLei").disabled = !tem;
+  if ($("ramLeiSemNada")) $("ramLeiSemNada").hidden = !!cands.length;
+  const pr = $("ramLeiPrecisa");
+  if (pr) {
+    pr.textContent = !cands.length ? t("ram_lei_precisa_sem") : tem && c ? t("ram_lei_precisa_ok", { l: c.nome }) : t("ram_lei_precisa_escolher");
+    pr.className = "ram-precisa " + (tem ? "ok" : "falta");
+  }
+  ramIaComLeiPintar();
   dicasDosBotoes(Object.assign({}, RAM_DICAS, { btnRamLei: tem ? "ram_tip_lei" : "ram_tip_lei_sem" }));
   const prev = $("ramLeiPrev");
   if (prev && !prev.hidden) ramLeiPintarPrevia();
+}
+/* "mandar junto o índice" (opcional): some sem leis; desligada com "(nenhuma)"; avisa quando a lei não bate */
+function ramIaComLeiPintar() {
+  const lin = $("ramIaComLeiLin");
+  if (!lin || !ramCtx) return;
+  lin.hidden = !(ramCtx.leiCands || []).length;
+  const c = ramLeiEscolhida();
+  const cx = $("ramIaComLei");
+  cx.disabled = !c;
+  if (!c) cx.checked = false;
+  $("ramIaComLeiRot").textContent = c ? t("ram_ia_comlei", { l: c.nome }) + (ramLeiBloqueada() ? " " + t("ram_ia_comlei_trava") : "") : t("ram_ia_comlei_sem");
 }
 function ramLeiPintarPrevia() {
   const prev = $("ramLeiPrev");
@@ -815,18 +855,21 @@ function ramPesosDosRegistros() {
 async function ramPedirIA() {
   if (!ramCtx) return null;
   /* a lei que não bate com o tópico não trava a IA: o pedido sai sem o índice dela */
-  const semIndice = ramLeiBloqueada();
+  const comLei = !!($("ramIaComLei") && $("ramIaComLei").checked);
+  const trava = comLei && ramLeiBloqueada();
+  const semIndice = !comLei || trava;
   const pedido = ramPedidoIA(ramCtx, ramLinhas.map((l) => String(l.nome || "").trim()).filter(Boolean), { semIndice });
-  $("ramIaBox").hidden = false;
+  const msg = $("ramIaMsg") || $("ramMsg");
+  if ($("ramIaPasso1")) { $("ramIaPasso1").className = "ednovo-passo feito"; $("ramIaBox").className = "ednovo-passo ativo"; }
   /* o pedido fica à vista numa caixa SÓ DE LEITURA — nunca na caixa da resposta (lá ele virava ramos falsos) */
   const ver = $("ramPedidoTxt");
   if (ver) { ver.value = pedido; }
   try {
     await navigator.clipboard.writeText(pedido);
-    $("ramMsg").textContent = t(semIndice ? "ram_ia_copiado_sem_indice" : "ram_ia_copiado");
+    msg.textContent = t(trava ? "ram_ia_copiado_sem_indice" : "ram_ia_copiado");
     if (ver) ver.hidden = true;
   } catch (e) {
-    $("ramMsg").textContent = t("ram_ia_copie_manual");
+    msg.textContent = t("ram_ia_copie_manual");
     if (ver) ver.hidden = false;
   }
   return pedido;
@@ -849,6 +892,32 @@ function ramConferirIA() {
   $("ramMsg").textContent = t("ram_ia_ok", { n: novos, j: ja, i: r.ignoradas, a: avisos }) + (r.cortou ? " " + t("ram_lei_cortou", { c: r.cortou }) : "");
   r.novos = novos; r.jaExistiam = ja;
   return r;
+}
+
+/* O SEMÁFORO do passo 2, a cada tecla: vazio · é o pedido · sem linhas de ramo · nada novo · N novos para acrescentar */
+function ramIaEstado(texto, linhas) {
+  if (!String(texto || "").trim()) return { est: "vazio", msg: t("ram_ia_sem_vazio"), novos: 0 };
+  const r = ramLerRespostaIA(texto);
+  if (r.ehPedido) return { est: "erro", msg: t("ram_ia_eh_pedido"), novos: 0 };
+  if (!r.ramos.length) return { est: "atencao", msg: t("ram_ia_nada"), novos: 0 };
+  const tem = new Set((linhas || []).map((l) => edRamoId(l.nome)));
+  let novos = 0;
+  r.ramos.forEach((x) => { const id = edRamoId(x.nome); if (!tem.has(id)) { novos++; tem.add(id); } });
+  if (!novos) return { est: "atencao", msg: t("ram_ia_sem_nada_novo", { r: r.ramos.length }), novos: 0 };
+  return { est: "ok", novos,
+    msg: t("ram_ia_sem_ok", { r: r.ramos.length, n: novos, j: r.ramos.length - novos }) + (r.ignoradas ? " " + t("ram_ia_sem_ignoradas", { i: r.ignoradas }) : "") };
+}
+function ramIaSemaforo() {
+  const sem = $("ramIaSem");
+  if (!sem) return null;
+  const e = ramIaEstado($("ramColar").value, ramLinhas);
+  sem.className = "ednovo-sem sem-" + e.est;
+  $("ramIaSemIco").textContent = e.est === "ok" ? "✓" : e.est === "erro" ? "✕" : e.est === "atencao" ? "!" : "○";
+  $("ramIaSemTxt").textContent = e.msg;
+  const b = $("btnRamConferir");
+  b.disabled = e.est !== "ok";
+  b.textContent = e.est === "ok" ? t("ram_ia_acrescentar_n", { n: e.novos }) : t("ram_ia_conferir");
+  return e;
 }
 
 function ramAdicionar() {
@@ -884,6 +953,7 @@ if (typeof document !== "undefined" && $("btnRamSalvar")) {
   $("btnRamIa").onclick = ramPedirIA;
   $("btnRamPesos").onclick = ramPesosDosRegistros;
   $("btnRamConferir").onclick = ramConferirIA;
+  $("ramColar").oninput = ramIaSemaforo;
   $("btnRamSalvar").onclick = ramSalvar;
   $("btnRamFechar").onclick = () => $("dlgRamos").close();
 }

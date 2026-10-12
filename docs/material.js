@@ -2975,6 +2975,8 @@ function matRender() {
           /* acrescentar o que FALTA — ação de menu: se propõe, não se destaca */
           if (!temR) outras.push({ rot: t("mat_add_resumo"), dica: t("mat_add_resumo_ajuda", { tp: x.topico }),
             faz: () => matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "editar") });
+          if (!temR && typeof riaAbrirDoTopico === "function") outras.push({ rot: t("mat_add_resumo_ia"), dica: t("ria_btn_ficha_tip"),
+            faz: () => riaAbrirDoTopico(x.disciplina, x.topico, x.chave) });
           if (!temL) outras.push({ rot: t("mat_lei_criar"), dica: t("mat_lei_criar_ajuda", { tp: x.topico }),
             faz: () => leiAbrir(x.disciplina, x.topico) });
           if (!nJul) outras.push({ rot: t("mat_juris_criar"), dica: t("mat_juris_criar_ajuda", { tp: x.topico }),

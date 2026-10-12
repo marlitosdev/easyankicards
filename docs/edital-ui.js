@@ -549,6 +549,9 @@ function edMontarStatusEMenu(container, disciplina, nome, ramos, editalId, r, it
   const atalhos = [
     { tem: true, cls: "ed-st-doc" + (r.temTxt ? "" : " ed-st-falta"), rot: t(r.temTxt ? "ed_st_resumo" : "ed_st_resumo_novo"),
       dica: t(r.temTxt ? "ed_menu_resumo" : "ed_menu_resumo_novo"), alvo: r.doc },
+    /* sem resumo: ao lado do "+ resumo" (escrever), o caminho de pedir o resumo a uma IA */
+    { tem: !r.temTxt && typeof riaAbrirDoTopico === "function", cls: "ed-st-ia ed-st-falta", rot: t("ed_st_resumo_ia"),
+      dica: t("ria_btn_ficha_tip"), alvo: { onclick: () => riaAbrirDoTopico(disciplina, nome, r.ch, { ramos: ramos || [], editalId: editalId || "" }) } },
     { tem: r.nCards, cls: "ed-st-crt",
       rot: r.nCards === 1 ? t("ed_st_cartao") : t("ed_st_cartoes", { n: r.nCards }),
       dica: r.nCards === 1 ? t("ed_menu_cartoes_1") : t("ed_menu_cartoes_n", { n: r.nCards }),
@@ -1935,7 +1938,12 @@ function abrirDiario() {
       abrirDisciplina(x.disc);
     });
     const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
-    acoes.append(rever, irDisc, bt);
+    acoes.append(rever);
+    /* sem material: além de escrever, pedir o resumo a uma IA */
+    if (!temMat && typeof riaAbrirDoTopico === "function") {
+      acoes.append(botaoMini("ed_diario_ia", "btn-cinza", () => { $("dlgDiario").close(); riaAbrirDoTopico(x.disc, x.n, x.c); }));
+    }
+    acoes.append(irDisc, bt);
     /* Os botões ficam ABAIXO da linha, não ao lado. Em coluna estreita o
      * grid os espremia a ponto de cada rótulo virar uma letra por linha
      * ("r-e-v-e-r"), e a barra de rolagem horizontal escondia a metade

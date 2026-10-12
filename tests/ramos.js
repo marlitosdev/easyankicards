@@ -743,9 +743,10 @@ async function testes() {
       const { a, ed, chave } = MT();
       const ctx = { editalId: ed.id, disciplina: "Licitações", topico: "Lei 14.133", chave };
       a.ramAbrirEditor(ctx);
-      ok(a.$("ramIaBox").hidden === true, "R28 a caixa de colar fica escondida ate pedir a IA");
+      ok(a.$("ramIaBox").hidden !== true && a.$("ramIaPasso1").hidden !== true && a.$("ramIaSem").className === "ednovo-sem sem-vazio" && a.$("btnRamConferir").disabled === true, "R28 os dois passos ficam a vista desde o inicio (passo 2 vazio: semaforo cinza e acrescentar desligado)");
+      ok(a.$("ramCaminhos").open === false && a.$("ramCaminhosSum").textContent === a.t("ram_cam_sum_mais"), "R28-0 topico que ja' tem ramos: as sugestoes vem recolhidas em 'acrescentar mais ramos'");
       const pedido = await a.$("btnRamIa").onclick();
-      ok(a.$("ramMsg").textContent === a.t("ram_ia_copiado"), "R28a0 o botao 'Pedir a IA' funciona e avisa que copiou");
+      ok(a.$("ramIaMsg").textContent === a.t("ram_ia_copiado") && a.$("ramIaPasso1").className === "ednovo-passo feito" && a.$("ramIaBox").className === "ednovo-passo ativo", "R28a0 o botao copia e avisa AO LADO dele (passo 1 feito, passo 2 em destaque)");
       const copiado = await a.navegador.clipboard.readText();
       ok(a.$("ramIaBox").hidden === false && copiado === pedido && /Lei 14\.133/.test(pedido) && /Licitações/.test(pedido) && /ISS Caruaru Auditor/.test(pedido), "R28a o pedido e' copiado e traz topico, disciplina e concurso");
       ok(/Modalidades/.test(pedido) && /Contratos/.test(pedido) && /não repita|sem repetir|without repeating/i.test(pedido), "R28b o pedido lista os ramos que a pessoa ja tem, para a IA nao repetir");
@@ -755,6 +756,10 @@ async function testes() {
       a.matResumosAtual()[chave].leiTexto = ["LEI Nº 1", "TÍTULO I", "PARTES", "Art. 1 T.", "Art. 2 T.", "TÍTULO II", "ATOS", "Art. 3 T.", "TÍTULO III", "FIM", "Art. 4 T."].join(String.fromCharCode(10));
       a.ramAbrirEditor(ctx);
       a.qsBancoPor([{ chave, banca: "X", enunciado: "?" }, { chave, banca: "X", enunciado: "??" }]);
+      ok(a.$("ramIaComLeiLin").hidden === false && a.$("ramIaComLei").checked === false && a.$("ramIaComLei").disabled === false, "R28e0 com lei colada no topico, a caixa 'mandar junto o indice' aparece DESMARCADA (a lei e' opcional)");
+      const p2sem = await a.ramPedirIA();
+      ok(p2sem.indexOf(a.t("ram_prompt_indice")) < 0, "R28e1 caixa desmarcada: o pedido sai sem o indice");
+      a.$("ramIaComLei").checked = true;
       const p2 = await a.ramPedirIA();
       ok(/2 questão/.test(p2), "R28e2 com questoes guardadas do topico o pedido diz quantas sao: " + p2.slice(-160));
       a.qsBancoPor([]);
@@ -764,14 +769,14 @@ async function testes() {
       a.$("ramColar").value = "";
       const p3 = await a.ramPedirIA();
       a.navegador.clipboard.writeText = orig;
-      ok(a.$("ramColar").value === "" && a.$("ramPedidoTxt").value === p3 && a.$("ramPedidoTxt").hidden === false && a.$("ramPedidoTxt").readOnly === true && p3.length > 100 && a.$("ramMsg").textContent === a.t("ram_ia_copie_manual"), "R28e3 sem permissao de copiar, o pedido aparece na caixa SO' DE LEITURA (a da resposta continua vazia)");
+      ok(a.$("ramColar").value === "" && a.$("ramPedidoTxt").value === p3 && a.$("ramPedidoTxt").hidden === false && a.$("ramPedidoTxt").readOnly === true && p3.length > 100 && a.$("ramIaMsg").textContent === a.t("ram_ia_copie_manual"), "R28e3 sem permissao de copiar, o pedido aparece na caixa SO' DE LEITURA (a da resposta continua vazia)");
       /* colar o PEDIDO no lugar da resposta: as regras viravam 4 ramos falsos */
       a.$("ramColar").value = p3;
       const nAntes = a.ramLinhasAtual().length;
       const rp = a.ramConferirIA();
       ok(rp.ehPedido === true && rp.ramos.length === 0 && a.ramLinhasAtual().length === nAntes && a.$("ramMsg").textContent === a.t("ram_ia_eh_pedido"), "R28e4 colar o proprio pedido como resposta: o app reconhece e nao cria ramo nenhum");
       await a.ramPedirIA();
-      ok(a.$("ramPedidoTxt").hidden === true && a.$("ramMsg").textContent === a.t("ram_ia_copiado"), "R28e5 copiou de novo: a caixa do pedido some");
+      ok(a.$("ramPedidoTxt").hidden === true && a.$("ramIaMsg").textContent === a.t("ram_ia_copiado"), "R28e5 copiou de novo: a caixa do pedido some");
       ok(/Índice da lei/.test(p2) && /TÍTULO I — PARTES \(arts\. 1 a 2\)/.test(p2), "R28e com lei carregada o pedido leva o indice dela (com os artigos): " + p2.slice(-200));
       /* conferir */
       const NL = String.fromCharCode(10);
@@ -796,7 +801,57 @@ async function testes() {
       ok(/primeiros/.test(a.$("ramMsg").textContent) && a.ramLinhasAtual().length === 6 + 30, "R28l2 resposta com mais de 30 ramos: entram 30 e a mensagem avisa do corte: " + a.$("ramMsg").textContent);
       a.$("btnRamFechar").onclick();
       a.ramAbrirEditor(ctx);
-      ok(a.$("ramIaBox").hidden === true && a.$("ramColar").value === "" && a.$("ramPedidoTxt").hidden === true && a.$("ramPedidoTxt").value === "", "R28n ao reabrir o editor a caixa volta escondida e vazia (e a do pedido tambem)");
+      ok(a.$("ramColar").value === "" && a.$("ramIaMsg").textContent === "" && a.$("ramIaPasso1").className === "ednovo-passo" && a.$("ramPedidoTxt").hidden === true && a.$("ramPedidoTxt").value === "", "R28n ao reabrir o editor os passos voltam ao comeco, vazios (e a caixa do pedido some)");
+      a.$("btnRamFechar").onclick();
+    }
+
+    /* R44: a tela nova — a lei so' e' exigida pelo indice; cada jeito de criar diz o que precisa */
+    {
+      const { a, ed, k } = MT();
+      const NL = String.fromCharCode(10);
+      const chR = k("Direito Financeiro", "Receita Pública");
+      const ctx = { editalId: ed.id, disciplina: "Direito Financeiro", topico: "Receita Pública", chave: chR };
+      a.ramAbrirEditor(ctx);
+      ok(a.$("ramCaminhos").open === true && a.$("ramCaminhosSum").textContent === a.t("ram_cam_sum_vazio"), "R44a topico sem ramos: as sugestoes vem abertas, como opcionais");
+      ok(a.$("ramLeiSemNada").hidden === false && a.$("ramLeiBox").hidden === true && a.$("btnRamLei").disabled === true && a.$("ramLeiPrecisa").textContent === a.t("ram_lei_precisa_sem") && /falta/.test(a.$("ramLeiPrecisa").className), "R44b sem lei nenhuma: so' o cartao do indice diz que falta a lei (e explica onde carregar)");
+      ok(a.$("ramIaComLeiLin").hidden === true && a.$("btnRamIa").disabled !== true && a.$("btnRamMais").disabled !== true, "R44c sem lei: a IA e o '+ Ramo' continuam livres (nem aparece a caixa do indice)");
+      ok(a.$("ramPesosLin").hidden === true, "R44d sem ramos na lista, 'pesos pelas minhas questoes' nem aparece (ele nao cria ramos)");
+      const ped = await a.ramPedirIA();
+      ok(typeof ped === "string" && /Receita Pública/.test(ped) && ped.indexOf(a.t("ram_prompt_indice")) < 0 && a.$("ramIaMsg").textContent === a.t("ram_ia_copiado"), "R44e pedir a IA sem lei nenhuma funciona");
+      /* semaforo do passo 2 */
+      const sem = () => a.$("ramIaSem").className.replace("ednovo-sem sem-", "");
+      a.$("ramColar").value = ped; a.$("ramColar").oninput();
+      ok(sem() === "erro" && a.$("ramIaSemTxt").textContent === a.t("ram_ia_eh_pedido") && a.$("btnRamConferir").disabled === true, "R44f colou o PEDIDO: semaforo vermelho e acrescentar desligado");
+      a.$("ramColar").value = "so conversa"; a.$("ramColar").oninput();
+      ok(sem() === "atencao" && a.$("btnRamConferir").disabled === true, "R44g sem linhas de ramo: amarelo, desligado");
+      a.$("ramColar").value = ["Claro:", "++ Receitas originárias :: 4", "++ Receitas derivadas :: 5", "++ receitas derivadas :: 2"].join(NL); a.$("ramColar").oninput();
+      ok(sem() === "ok" && a.$("btnRamConferir").disabled === false && a.$("btnRamConferir").textContent === a.t("ram_ia_acrescentar_n", { n: 2 }) && /2 novo/.test(a.$("ramIaSemTxt").textContent) && /1 linha/.test(a.$("ramIaSemTxt").textContent), "R44h resposta boa: verde, diz quantos sao novos e o botao diz quantos vai acrescentar: " + a.$("ramIaSemTxt").textContent);
+      a.$("btnRamConferir").onclick();
+      ok(a.ramLinhasAtual().length === 2 && sem() === "atencao" && a.$("ramIaSemTxt").textContent === a.t("ram_ia_sem_nada_novo", { r: 2 }) && a.$("btnRamConferir").disabled === true, "R44i depois de acrescentar, o semaforo diz que ja' esta' tudo na lista");
+      ok(a.$("ramPesosLin").hidden === false && a.$("btnRamPesos").disabled === true && a.$("ramPesosPrecisa").textContent === a.t("ram_pesos_precisa_sem"), "R44j com ramos na lista, os pesos aparecem e dizem que faltam questoes");
+      a.$("ramLista").children[0].children[5].onclick();
+      ok(a.$("btnRamConferir").disabled === false && a.$("btnRamConferir").textContent === a.t("ram_ia_acrescentar_n", { n: 1 }), "R44i2 apagar um ramo da lista recalcula o semaforo (aquele volta a ser novo)");
+      a.qsBancoPor([{ chave: chR, enunciado: "receitas derivadas?" }]);
+      a.ramPintar();
+      ok(a.$("btnRamPesos").disabled === false && a.$("ramPesosPrecisa").textContent === a.t("ram_pesos_precisa_ok", { n: 1 }) && /ok/.test(a.$("ramPesosPrecisa").className), "R44k com questoes guardadas, os pesos ligam e dizem quantas sao");
+      a.$("btnRamFechar").onclick();
+      a.qsBancoPor([]);
+      a.ramAbrirEditor(ctx);
+      a.ramAdicionar();
+      ok(a.$("ramPesosLin").hidden === false, "R44k2 '+ Ramo' tambem mostra a linha dos pesos");
+      a.$("btnRamFechar").onclick();
+      /* com uma lei ligada ao topico: a caixa da IA cita o nome; so' vem marcada se a lei bate com o nome do topico */
+      const L = ["LEI Nº 4.320, DE 17 DE MARÇO DE 1964", "TÍTULO I", "Da Lei de Orçamento", "Art. 1º Esta lei.", "Art. 2º A Lei.", "TÍTULO II", "Da Receita", "Art. 9º Tributo.", "TÍTULO III", "Da Despesa", "Art. 12. A despesa."].join(NL);
+      const lei = a.leiGuardar({ nome: "Lei 4.320/1964", texto: L, topicos: [chR] });
+      a.ramAbrirEditor(ctx);
+      const c = a.ramLeiEscolhida();
+      ok(c && c.id === lei.id && a.$("ramIaComLei").checked === (c.combina === true) && a.$("ramIaComLeiRot").textContent === a.t("ram_ia_comlei", { l: c.nome }), "R44l a caixa da IA cita a lei escolhida e so' vem marcada se a lei bate com o topico (combina=" + (c && c.combina) + ")");
+      ok(a.$("ramLeiPrecisa").textContent === a.t("ram_lei_precisa_ok", { l: c.nome }) && /ok/.test(a.$("ramLeiPrecisa").className) && a.$("ramLeiSemNada").hidden === true && a.$("btnRamLei").disabled === false, "R44m com lei: o cartao do indice diz que tem o que precisa");
+      a.$("ramIaComLei").checked = true;
+      ok((await a.ramPedirIA()).indexOf(a.t("ram_prompt_indice")) >= 0, "R44n marcada: o indice vai junto");
+      a.ramLeiTrocar("");
+      ok(a.$("ramIaComLei").checked === false && a.$("ramIaComLei").disabled === true && a.$("ramIaComLeiRot").textContent === a.t("ram_ia_comlei_sem") && a.$("ramLeiPrecisa").textContent === a.t("ram_lei_precisa_escolher"), "R44o '(nenhuma)': a caixa da IA desmarca e desliga; o cartao do indice pede para escolher");
+      ok((await a.ramPedirIA()).indexOf(a.t("ram_prompt_indice")) < 0, "R44p ...e o pedido sai sem indice");
       a.$("btnRamFechar").onclick();
     }
 
@@ -1366,7 +1421,7 @@ async function testes() {
       const p1 = a.ramProporDaLei();
       ok(p1.bloqueada === true && a.ramLinhasAtual().length === 0 && /não bate/.test(a.$("ramMsg").textContent), "R42m com a trava, 'propor pela lei' nao acrescenta nada");
       const pTrava = await a.ramPedirIA();
-      ok(typeof pTrava === "string" && pTrava.indexOf("Dos Princípios Fundamentais") < 0 && pTrava.indexOf(a.t("ram_prompt_indice")) < 0 && a.$("ramMsg").textContent === a.t("ram_ia_copiado_sem_indice"), "R42n a lei que nao bate NAO trava a IA: o pedido sai sem o indice dela, e a mensagem diz isso");
+      ok(typeof pTrava === "string" && pTrava.indexOf("Dos Princípios Fundamentais") < 0 && pTrava.indexOf(a.t("ram_prompt_indice")) < 0 && a.$("ramIaMsg").textContent === a.t("ram_ia_copiado_sem_indice"), "R42n a lei que nao bate NAO trava a IA: o pedido sai sem o indice dela, e a mensagem diz isso");
       /* "nenhuma" e' nenhuma: nada de cair, calado, na lei do topico (a Constituicao) */
       a.ramLeiTrocar("");
       ok(a.ramLeiEscolhida() === null && a.ramTextoDaLei(a.ramCtxAtual ? a.ramCtxAtual() : ctx) === "" && a.$("btnRamLei").disabled === true && a.ramPedidoIA(ctx, []).indexOf(a.t("ram_prompt_indice")) < 0 && a.ramLeiBloqueada() === false, "R42n2 escolher '(nenhuma)': sem indice, 'propor pela lei' desliga e o pedido a IA sai sem lei");
@@ -2378,6 +2433,30 @@ async function testes() {
          && /falta/.test(fichaItem("cartoes").className) && fichaBts(fichaItem("cartoes")).some((b) => /criar cart(õ|o)es/i.test(b.textContent)),
          "R63f2c a ficha do tópico sem cartão oferece 'Criar cartões' (e as horas fecham)");
       a.$("dlgMatFicha").close();
+      /* R63f2c2 — ao lado do "+ resumo", o "🤖 resumo pela IA" (o mesmo pedido da ficha), com os ramos do plano */
+      a.$("btnEdHoras").onclick(); cols[0].onclick();
+      const linhaLei = achar(a.$("horCorpo"), (e) => cls(e, "hor-top")).find((e) => /Lei 14\.133/.test(e.textContent));
+      const chipsDoc = achar(linhaLei, (e) => cls(e, "ed-st-doc") || cls(e, "ed-st-ia"));
+      ok(chipsDoc.length === 2 && /ed-st-falta/.test(chipsDoc[0].className) && /ed-st-ia/.test(chipsDoc[1].className) && chipsDoc[1].textContent === a.t("ed_st_resumo_ia") && chipsDoc[1].title === a.t("ria_btn_ficha_tip"),
+         "R63f2c2 sem resumo: '+ resumo' e, ao lado, '🤖 resumo pela IA': " + chipsDoc.map((b) => b.textContent).join(" | "));
+      chipsDoc[1].onclick({ stopPropagation() {} });
+      ok(a.$("dlgResIA").open === true && /Lei 14\.133/.test(a.$("resIATit").textContent) && /Modalidades/.test(a.$("resIARamos").textContent) && /Contratos/.test(a.$("resIARamos").textContent),
+         "R63f2c3 o chip abre o pedido do resumo À IA com os ramos do tópico: " + a.$("resIARamos").textContent.slice(0, 80));
+      a.$("dlgResIA").close();
+      /* com resumo, o chip da IA some (a ficha continua tendo o 'Pedir à IA') */
+      a.matGravar(a.matChaveViva("Licitações", "Lei 14.133"), "Resumo.", { disciplina: "Licitações", topico: "Lei 14.133" });
+      a.$("btnEdHoras").onclick(); cols[0].onclick();
+      const linhaLei2 = achar(a.$("horCorpo"), (e) => cls(e, "hor-top")).find((e) => /Lei 14\.133/.test(e.textContent));
+      ok(achar(linhaLei2, (e) => cls(e, "ed-st-ia")).length === 0 && achar(linhaLei2, (e) => cls(e, "ed-st-doc")).length === 1 && !/ed-st-falta/.test(achar(linhaLei2, (e) => cls(e, "ed-st-doc"))[0].className), "R63f2c4 com resumo, so' o chip 'resumo' (sem o da IA)");
+      a.matApagar ? a.matApagar(a.matChaveViva("Licitações", "Lei 14.133")) : null;
+      /* fora da ficha (Material de estudo, diário): os ramos vêm do plano do edital aberto */
+      a.$("dlgHoras").open && a.$("dlgHoras").close();
+      a.riaAbrirDoTopico("Licitações", "Lei 14.133");
+      ok(a.$("dlgResIA").open === true && /Fase preparatória/.test(a.$("resIARamos").textContent), "R63f2c5 aberto de fora da ficha, o pedido acha os ramos do topico no plano");
+      a.$("dlgResIA").close();
+      a.riaAbrirDoTopico("Licitações", "Convênios");
+      ok(a.$("dlgResIA").open === true && /Convênios/.test(a.$("resIATit").textContent), "R63f2c6 topico sem ramos tambem abre (pedido so' do geral)");
+      a.$("dlgResIA").close();
 
       /* R63f2d-h — o botão da linha do RAMO abre a mesma ficha JÁ no ramo: cartões com a contagem REAL do ramo
        * (etiqueta ram_modalidades: 1, não os 5 do tópico) e questões ligadas a ele */
@@ -3144,7 +3223,7 @@ async function testes() {
     abrirTopicoLei(a, ed);
     linhas(a, "ger-top").find((e) => /Convênios/.test(e.textContent)).onclick();
     a.$("btnGerRamos").onclick();
-    ok(a.$("dlgRamos").open === true && a.ramLinhasAtual().length === 0 && /ainda não tem ramos/.test(a.$("ramLista").textContent), "R19 topico sem ramos: o editor explica e deixa criar");
+    ok(a.$("dlgRamos").open === true && a.ramLinhasAtual().length === 0 && /Ainda não há ramos/.test(a.$("ramLista").textContent), "R19 topico sem ramos: o editor explica e deixa criar");
     a.$("btnRamMais").onclick();
     a.ramLinhasAtual()[0].nome = "Primeiro"; a.ramLinhasAtual()[0].peso = "3";
     const antes = ed.texto;
