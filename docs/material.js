@@ -2783,6 +2783,14 @@ function matPintarFicha() {
       ? [botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler", opcEd), t("mat_slot_resumo_tip", { tp: ramo ? ramo.nome : x.topico })),
         botao(t("mat_ficha_editar"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t("mat_ficha_editar_tip", { tp: ramo ? ramo.nome : x.topico }))]
       : [botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t(ramo ? "mat_ficha_escrever_ramo_tip" : "mat_add_resumo_ajuda", { tp: x.topico, r: ramo ? ramo.nome : "" }))]);
+  /* T4: pedir este resumo (do tópico com os ramos, ou só do ramo) a uma IA, pelo mesmo caminho */
+  if (typeof riaAbrir === "function") {
+    const linhaR = box.children[box.children.length - 1];
+    const acoesR = linhaR && Array.from(linhaR.children).find((c) => /mat-ficha-acoes/.test(c.className || ""));
+    if (acoesR) acoesR.append(botao(t("ria_btn_ficha"), "btn-min res-ia-btn",
+      () => riaAbrir({ disciplina: x.disciplina, topico: x.topico, chave: x.chave, ramos, ramo: ramo ? ramo.id : "", editalId: o.editalId }),
+      t(ramo ? "ria_btn_ficha_ramo_tip" : "ria_btn_ficha_tip", { r: ramo ? ramo.nome : "" })));
+  }
   /* 🃏 cartões — do ramo, pela etiqueta ram_ */
   const mexer = () => { mcApontarTopico(x.disciplina, x.topico); try { matCartoesAbrir(); matCartoesVer(); } catch (e) {} };
   if (ramo) {

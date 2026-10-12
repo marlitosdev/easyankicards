@@ -974,7 +974,7 @@ async function testes() {
     ok(api.$("dlgMatFicha").open === true && api.$("matFichaTit").textContent === "Completo" && /^ISS › Tributário · atualizado em /.test(api.$("matFichaSub").textContent), "M4b a ficha abre com o tópico e onde ele mora: " + api.$("matFichaSub").textContent);
     const it = itens();
     ok(it.length === 5 && ["slot-resumo", "slot-cartoes", "slot-questoes", "slot-lei", "slot-juris"].every((c, i) => cls(it[i]).indexOf(c) >= 0), "M4c cinco materiais, sempre na mesma ordem (resumo, cartões, questões, lei, julgados): " + it.map(cls).join(" | "));
-    ok(!/falta/.test(cls(it[0])) && /17 caracteres/.test(it[0].textContent) && botoes(it[0]).join() === [api.t("mat_ficha_ler"), api.t("mat_ficha_editar")].join(), "M4d resumo existente: diz o tamanho e oferece 'Ler' e 'Editar'");
+    ok(!/falta/.test(cls(it[0])) && /17 caracteres/.test(it[0].textContent) && botoes(it[0]).join() === [api.t("mat_ficha_ler"), api.t("mat_ficha_editar"), api.t("ria_btn_ficha")].join(), "M4d resumo existente: diz o tamanho e oferece 'Ler', 'Editar' e 'Pedir à IA'");
     ok(/falta/.test(cls(it[2])) && botoes(it[2]).join() === api.t("mat_ficha_criar_questoes"), "M4d2 questões que faltam: 'Criar questões'");
     ok(/2 cartão\(ões\)/.test(it[1].textContent) && botoes(it[1]).join() === [api.t("mat_ficha_estudar"), api.t("mat_mexer_cartoes")].join(), "M4e cartões: quantos, 'Estudar' e 'Mexer nos cartões'");
     ok(/carregada/.test(it[3].textContent) && botoes(it[3]).join() === api.t("mat_ficha_abrir"), "M4f lei seca carregada: 'Abrir'");
@@ -988,7 +988,7 @@ async function testes() {
     /* tópico só com cartões: resumo e lei faltam, com as ações de criar */
     nomeDe("So cartoes").onkeydown({ key: "Enter", preventDefault() {} });
     const i2 = itens();
-    ok(api.$("dlgMatFicha").open === true && /falta/.test(cls(i2[0])) && botoes(i2[0]).join() === api.t("mat_ficha_escrever") && botoes(i2[3]).join() === api.t("mat_ficha_carregar") && /falta/.test(cls(i2[3])) && /ainda não tem/.test(i2[3].textContent), "M4i pelo teclado (Enter) também abre; o que falta oferece 'Escrever' e 'Carregar'");
+    ok(api.$("dlgMatFicha").open === true && /falta/.test(cls(i2[0])) && botoes(i2[0]).join() === [api.t("mat_ficha_escrever"), api.t("ria_btn_ficha")].join() && botoes(i2[3]).join() === api.t("mat_ficha_carregar") && /falta/.test(cls(i2[3])) && /ainda não tem/.test(i2[3].textContent), "M4i pelo teclado (Enter) também abre; o que falta oferece 'Escrever' e 'Carregar'");
     const bEsc = achar(i2[0], (e) => e.textContent === api.t("mat_ficha_escrever") && typeof e.onclick === "function")[0];
     api.$("dlgMaterial").open = false;
     bEsc.onclick();

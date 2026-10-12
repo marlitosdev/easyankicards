@@ -3692,6 +3692,107 @@ async function testes() {
     a.$("dlgMaterial").close && a.$("dlgMaterial").close();
   }
 
+  /* ---- T4: pedir o resumo à IA com os ramos (motor) ---- */
+  {
+    const { a } = MT();
+    const NL = String.fromCharCode(10);
+    const RS = [{ id: "modalidades", nome: "Modalidades" }, { id: "contratos", nome: "Contratos" }];
+    const CERCA = String.fromCharCode(96).repeat(3);
+    const p = a.riaPrompt({ disciplina: "Licitações", topico: "Lei 14.133", prof: "detalhado", sugerir: true, lei: "x".repeat(a.RIA_LEI_MAX + 50), atual: "Resumo antigo.",
+      ramos: [{ nome: "Modalidades", foco: "pregão e concorrência" }, { nome: "Contratos" }, { nome: "Sanções", novo: true }] });
+    ok(/FORMATO \(obrigatório/.test(p) && /# Resumo geral/.test(p) && /## Ramo — <nome do ramo/.test(p), "T4a o pedido do topico explica o formato (geral + uma secao por ramo)");
+    ok(p.indexOf("- Modalidades — cubra: pregão e concorrência") >= 0 && p.indexOf("- Contratos" + NL) >= 0 && p.indexOf("- Sanções (ramo novo)") >= 0, "T4b a lista de ramos, com o que cobrir e os novos marcados");
+    ok(/PROFUNDIDADE: detalhado/.test(p) && /## Ramo sugerido/.test(p) && /não invente artigo/.test(p), "T4c profundidade, sugestao de ramos e a regra de nao inventar");
+    ok(p.indexOf("x".repeat(a.RIA_LEI_MAX)) >= 0 && p.indexOf("x".repeat(a.RIA_LEI_MAX + 1)) < 0 && /RESUMO ATUAL[^\n]*\nResumo antigo\./.test(p), "T4d a lei vai cortada no limite; o resumo atual vai junto");
+    const pS = a.riaPrompt({ disciplina: "Licitações", topico: "Lei 14.133", prof: "padrao", sugerir: false, ramos: [{ nome: "Modalidades" }] });
+    ok(!/Ramo sugerido/.test(pS) && !/TEXTO DA LEI/.test(pS) && !/RESUMO ATUAL/.test(pS), "T4e sem sugerir, sem lei e sem resumo: o pedido nao fala deles");
+    const pR = a.riaPrompt({ disciplina: "Licitações", topico: "Lei 14.133", prof: "enxuto", ramo: { nome: "Contratos", foco: "cláusulas exorbitantes" }, atual: "Seção velha.", sugerir: true });
+    ok(/a primeira linha é exatamente «## Ramo — Contratos»/.test(pR) && /FOCO: cláusulas exorbitantes/.test(pR) && !/RAMOS:/.test(pR) && /SEÇÃO ATUAL DESTE RAMO/.test(pR) && !/Ramo sugerido/.test(pR), "T4f o pedido de UM ramo: so' a secao dele, com o foco (e nunca pede sugestao de ramos)");
+    /* a resposta */
+    ok(a.riaLerResposta("   ", RS).vazio && a.riaLerResposta(p, RS).ehPedido, "T4g vazio e 'e' o pedido' sao reconhecidos");
+    const resp = a.riaLerResposta([CERCA + "markdown", "# Resumo geral", "Geral novo.", "", "## Ramo — Modalidades", "M novo.", "", "## Ramo sugerido — Sanções", "S.", CERCA].join(NL), RS);
+    ok(!resp.vazio && resp.geral === "Geral novo." && resp.secoes.length === 2 && resp.secoes[0].id === "modalidades" && resp.secoes[1].semRamo && resp.secoes[1].sugerido && resp.secoes[1].nome === "Sanções",
+       "T4h a resposta: sem a cerca de codigo e sem o rotulo 'Resumo geral'; o sugerido vira secao marcada: " + JSON.stringify(resp));
+    ok(a.riaLerResposta("Texto corrido sem titulos.", RS).semSecao === true, "T4i resposta sem os titulos: semSecao (vai como resumo geral)");
+    const rR = a.riaLerResposta("So o texto do ramo.", RS, "contratos");
+    const rR2 = a.riaLerResposta(["## Ramo — Contratos", "Com titulo.", "## Ramo — Modalidades", "outro"].join(NL), RS, "contratos");
+    ok(rR.secoes.length === 1 && rR.secoes[0].corpo === "So o texto do ramo." && rR2.secoes[0].corpo === "Com titulo.", "T4j no ramo: sem titulo o texto todo e' a secao; com titulos, so' a dele");
+    /* aplicar */
+    const atual = ["Geral ==velho==.", "", "## Ramo — Modalidades", "M ==?antigo==.", "> dica antiga", "", "## Ramo — Contratos", "C intacto ==!marca==."].join(NL);
+    const sec = a.riaAplicarTexto(atual, resp, "secoes", RS);
+    ok(/^Geral novo\./.test(sec) && /## Ramo — Modalidades\nM novo\./.test(sec) && /## Ramo — Contratos\nC intacto ==!marca==\./.test(sec) && /## Ramo — Sanções\nS\.$/.test(sec),
+       "T4k 'so' as partes que vieram': troca geral e Modalidades, acrescenta Sancoes e NAO toca em Contratos: " + JSON.stringify(sec));
+    const tudo = a.riaAplicarTexto(atual, resp, "tudo", RS);
+    ok(tudo === ["Geral novo.", "## Ramo — Modalidades" + NL + "M novo.", "## Ramo — Sanções" + NL + "S."].join(NL + NL), "T4l 'resumo inteiro': so' a resposta");
+    const cS = a.riaConferir(atual, resp, "secoes", RS), cT = a.riaConferir(atual, resp, "tudo", RS);
+    ok(cS.perdidas.marcas === 2 && cS.perdidas.dicas === 1 && cT.perdidas.marcas === 3 && cS.itens.some((x) => x.parte === "Sanções" && x.tipo === "nova") && cT.itens.some((x) => x.parte === "Contratos" && x.tipo === "some"),
+       "T4m a conferencia conta as marcas/dicas so' das partes trocadas (2+1 em secoes; 3 no inteiro) e diz o que entra e o que sai: " + JSON.stringify(cS.perdidas) + " " + JSON.stringify(cT.perdidas));
+  }
+
+  /* ---- T4: o diálogo, pela ficha (tópico e ramo), com desfazer ---- */
+  {
+    const { a, ed } = MT();
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    a.edProgressoPor({});
+    const NL = String.fromCharCode(10);
+    const it = () => a.edItemDoPlano("Licitações", "Lei 14.133");
+    const todosF = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); todosF(x, pred, acc); }); return acc; };
+    const cl = (e) => String((e && e.className) || "");
+    const ch = a.matChaveViva("Licitações", "Lei 14.133");
+    const mats = a.matResumosAtual();
+    const reg0 = mats[ch] ? Object.assign({}, mats[ch]) : null;
+    a.matGravar(ch, ["Geral antigo.", "", "## Ramo — Contratos", "Contratos ==!importante==."].join(NL), { disciplina: "Licitações", topico: "Lei 14.133" });
+    const iaDe = () => todosF(a.$("matFichaLista"), (e) => typeof e.onclick === "function" && e.textContent === a.t("ria_btn_ficha"))[0];
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramos: it().ramos, item: it(), editalId: ed.id });
+    ok(!!iaDe(), "T4n a ficha do topico tem 'Pedir à IA' na linha do resumo");
+    iaDe().onclick();
+    const linhas = () => todosF(a.$("resIARamos"), (e) => /(^| )res-ia-ramo( |$)/.test(cl(e)));
+    ok(a.$("dlgResIA").open === true && /Lei 14\.133/.test(a.$("resIATit").textContent) && linhas().length === 3 && a.$("resIAAtualLin").hidden === false && a.$("resIANovoLin").hidden === false,
+       "T4o o pedido do topico lista os ramos (3), oferece mandar o resumo atual e acrescentar ramo");
+    /* tirar um ramo, cobrir outro, acrescentar um novo */
+    const ck = todosF(linhas()[1], (e) => e.type === "checkbox")[0]; ck.checked = false; ck.onchange();
+    const foco = todosF(linhas()[0], (e) => /res-ia-foco/.test(cl(e)))[0]; foco.value = "pregão"; foco.oninput();
+    a.$("resIANovo").value = "Sanções"; a.riaAcrescentarNovo();
+    const ped = a.riaMontarPedido();
+    const nomeTirado = it().ramos[1].nome;
+    ok(linhas().length === 4 && /\(ramo novo\)/.test(ped) && ped.indexOf("- " + nomeTirado) < 0 && /cubra: pregão/.test(ped) && /Geral antigo\./.test(ped),
+       "T4p o pedido reflete a escolha: ramo tirado sai, foco entra, novo marcado, resumo atual junto");
+    /* colar o pedido por engano */
+    const digita = (v) => { a.$("resIATexto").value = v; ((a.$("resIATexto")._ouv || {}).input || []).forEach((fn) => fn()); };
+    digita(ped);
+    ok(/sem-erro/.test(cl(a.$("resIASem"))) && a.$("btnResIAAplicar").disabled === true, "T4q colar o PEDIDO acende vermelho e nao deixa aplicar");
+    digita(["# Resumo geral", "Geral novo.", "", "## Ramo — Modalidades", "Modalidades novo.", "", "## Ramo sugerido — Recursos", "R."].join(NL));
+    ok(/sem-(ok|atencao)/.test(cl(a.$("resIASem"))) && a.$("btnResIAAplicar").disabled === false && /Recursos/.test(a.$("resIASemTxt").textContent) && a.$("resIAModoLin").hidden === false,
+       "T4r resposta boa: o semaforo diz as partes, o ramo sugerido, e oferece trocar so' as partes ou tudo: " + a.$("resIASemTxt").textContent);
+    ok(a.$("resIAConf").hidden === false && /resumo geral: \d+ → \d+ caracteres/.test(a.$("resIAConf").textContent) && /Modalidades: nova/.test(a.$("resIAConf").textContent) && !/marca\(s\)/.test(a.$("resIAConf").textContent),
+       "T4s a conferencia mostra o que muda (e nao avisa perda: Contratos, com a marca, nao e' tocado): " + a.$("resIAConf").textContent);
+    a.$("btnResIAModoTudo").onclick();
+    ok(/1 marca\(s\)/.test(a.$("resIAConf").textContent) && /Contratos: sai/.test(a.$("resIAConf").textContent), "T4t 'trocar o resumo inteiro' avisa que a marca de Contratos se perde e que Contratos sai");
+    a.$("btnResIAModoSec").onclick();
+    a.$("btnResIAAplicar").onclick();
+    const novo = a.matResumosAtual()[ch].texto;
+    ok(/^Geral novo\./.test(novo) && /## Ramo — Contratos\nContratos ==!importante==\./.test(novo) && /## Ramo — Modalidades\nModalidades novo\./.test(novo) && /## Ramo — Recursos\nR\.$/.test(novo) && a.$("resIAFeito").hidden === false,
+       "T4u aplicar grava o resumo com as partes novas e Contratos intacto (com a marca): " + JSON.stringify(novo));
+    a.$("btnResIADesfazer").onclick();
+    ok(a.matResumosAtual()[ch].texto === ["Geral antigo.", "", "## Ramo — Contratos", "Contratos ==!importante==."].join(NL) && a.$("btnResIADesfazer").hidden === true, "T4v desfazer devolve o resumo de antes");
+    a.$("btnResIAFechar").onclick();
+    /* pelo ramo: so' a secao dele */
+    a.edAbrirFicha("Licitações", "Lei 14.133", { ramo: "modalidades", ramos: it().ramos, item: it(), editalId: ed.id });
+    iaDe().onclick();
+    ok(/ramo «Modalidades»/.test(a.$("resIATit").textContent) && linhas().length === 1 && a.$("resIANovoLin").hidden === true && a.$("resIASugerirLin").hidden === true && /a primeira linha é exatamente «## Ramo — Modalidades»/.test(a.riaMontarPedido()),
+       "T4w pelo ramo: o pedido e' so' do ramo (sem lista, sem acrescentar, sem sugerir)");
+    digita("Concorrência, pregão, concurso, leilão e diálogo competitivo.");
+    ok(/seção do ramo «Modalidades»/.test(a.$("resIASemTxt").textContent) && a.$("resIAModoLin").hidden === true, "T4x no ramo, texto sem titulo vira a secao dele; nao ha 'trocar tudo'");
+    a.riaModoDefinir("tudo");   /* mesmo com o modo do topico esquecido em "tudo": no ramo, so' a secao dele */
+    a.$("btnResIAAplicar").onclick();
+    const n2 = a.matResumosAtual()[ch].texto;
+    ok(/^Geral antigo\./.test(n2) && /## Ramo — Contratos\nContratos ==!importante==\./.test(n2) && /## Ramo — Modalidades\nConcorrência, pregão/.test(n2), "T4y aplicar pelo ramo mexe so' na secao dele: " + JSON.stringify(n2));
+    a.$("btnResIAAbrir").onclick();
+    ok(a.$("dlgResIA").open === false && a.$("dlgMaterial").open === true && a.matEscopoAtual() === "modalidades" && /Concorrência/.test(a.$("matLeitura").innerHTML), "T4z 'Abrir o resumo' leva a leitura ja' no ramo");
+    a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+    if (reg0) mats[ch] = reg0; else delete mats[ch];
+  }
+
   falhas.quantas = n;
   return falhas;
 }

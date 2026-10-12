@@ -2385,6 +2385,17 @@ p.mat-ferr{display:block;font-size:12px}
 .ed-st-item.ed-st-falta{border-style:dashed;opacity:.8}
 .mat-esc.mat-esc-vazio{border-style:dashed;opacity:.75}
 .mat-escopo{margin:6px 0 8px}
+.res-ia-ramos{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.res-ia-ramo{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.res-ia-ramo .res-ia-foco{flex:1 1 200px}
+.res-ia-novo-tag{font-size:10.5px;font-weight:700;margin-left:6px;padding:0 6px;border-radius:999px;border:1px solid var(--info);color:var(--info)}
+.res-ia-lin{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0;font-size:12.5px}
+.res-ia-lin .mat-busca{flex:1 1 200px;width:auto}
+.res-ia-modo{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.res-ia-conf{margin:6px 0;font-size:12.5px}
+.res-ia-conf-lin{margin:2px 0}
+.res-ia-conf-perda{margin-top:4px;color:var(--atencao);font-weight:600}
+.res-ia-feito{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;padding:8px 10px;border:1px solid var(--ok);border-radius:8px}
 .mat-ficha-item.falta{border-style:dashed;opacity:.85}
 .mat-ficha-ico{font-size:20px;width:26px;text-align:center;flex:none}
 .mat-ficha-txt{flex:1;min-width:0}
@@ -5915,6 +5926,52 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-cinza" id="btnMatFichaFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
+<!-- T4: pedir o resumo à IA (tópico inteiro com os ramos, ou um ramo só) — o mesmo desenho de dois passos dos outros pedidos -->
+<dialog id="dlgResIA" class="ui-modal">
+  <h3 id="resIATit"></h3>
+  <p class="nota" id="resIASub"></p>
+  <div class="ednovo-passo" id="resIAPasso1">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ria_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
+    <div id="resIARamos" class="res-ia-ramos"></div>
+    <div class="res-ia-lin" id="resIANovoLin">
+      <input type="text" id="resIANovo" class="mat-busca" data-i18n-ph="ria_novo_ph">
+      <button type="button" class="btn-min" id="btnResIANovo" data-i18n="ria_novo_btn"></button>
+    </div>
+    <label class="res-ia-lin" id="resIASugerirLin"><input type="checkbox" id="resIASugerir" checked> <span data-i18n="ria_sugerir"></span></label>
+    <label class="res-ia-lin"><span data-i18n="ria_prof"></span>
+      <select id="resIAProf">
+        <option value="enxuto" data-i18n="ria_prof_enxuto"></option>
+        <option value="padrao" data-i18n="ria_prof_padrao" selected></option>
+        <option value="detalhado" data-i18n="ria_prof_detalhado"></option>
+      </select></label>
+    <label class="res-ia-lin" id="resIALeiLin" hidden><input type="checkbox" id="resIALei"> <span id="resIALeiRot"></span></label>
+    <label class="res-ia-lin" id="resIAAtualLin" hidden><input type="checkbox" id="resIAAtual"> <span data-i18n="ria_atual"></span></label>
+    <button type="button" class="btn btn-roxo" id="btnResIACopiar" data-i18n="ria_copiar"></button>
+    <p class="nota ednovo-prompt-msg" id="resIACopiadoMsg" role="status"></p>
+  </div>
+  <div class="ednovo-passo" id="resIAPasso2">
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ria_passo2"></span> <span class="ednovo-tag tag-volta" data-i18n="ed_novo_tag2"></span></div>
+    <textarea id="resIATexto" class="ednovo-ta" rows="10" style="width:100%;box-sizing:border-box" data-i18n-ph="ria_ta_ph"></textarea>
+    <div class="ednovo-sem sem-vazio" id="resIASem" role="status" aria-live="polite">
+      <span class="ednovo-sem-ico" id="resIASemIco" aria-hidden="true">○</span>
+      <span class="ednovo-sem-txt" id="resIASemTxt"></span>
+    </div>
+    <div class="res-ia-modo" id="resIAModoLin" role="group" hidden>
+      <button type="button" class="btn-min" id="btnResIAModoSec" aria-pressed="true" data-i18n="ria_modo_secoes"></button>
+      <button type="button" class="btn-min" id="btnResIAModoTudo" aria-pressed="false" data-i18n="ria_modo_tudo"></button>
+    </div>
+    <div class="res-ia-conf" id="resIAConf" hidden></div>
+  </div>
+  <div class="res-ia-feito" id="resIAFeito" hidden>
+    <span id="resIAFeitoTxt"></span>
+    <button type="button" class="btn-min" id="btnResIADesfazer" data-i18n="ria_desfazer"></button>
+    <button type="button" class="btn-min" id="btnResIAAbrir" data-i18n="ria_abrir"></button>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnResIAAplicar" data-i18n="ria_aplicar" disabled></button>
+    <button class="btn btn-cinza" id="btnResIAFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgRegistro" class="ui-modal">
   <h3 data-i18n="ed_reg_tit"></h3>
   <div class="reg-topico"><b id="regTitulo"></b><div class="nota" id="regSub"></div></div>
@@ -9144,6 +9201,7 @@ window.__sqlPromise = initSqlJs({
 <script src="banca-alvo.js"></script>
 <script src="horas-assunto.js"></script>
 <script src="ramos.js"></script>
+<script src="resumo-ia.js"></script>
 <script src="pacote.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
