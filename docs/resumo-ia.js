@@ -157,6 +157,19 @@ function riaAbrir(ctx) {
   abrirModal("dlgResIA");
   return dlg;
 }
+/* aberto de fora da ficha (Agenda, Material de estudo, diário): os ramos vêm do plano do edital aberto, quando o tópico
+ * está nele — o mesmo critério da ficha */
+function riaAbrirDoTopico(disciplina, topico, chave, opc) {
+  const o = opc || {};
+  let ramos = o.ramos;
+  if (!ramos) {
+    let it = null;
+    try { it = typeof edItemDoPlano === "function" ? edItemDoPlano(disciplina, topico) : null; } catch (e) { it = null; }
+    ramos = (it && it.ramos) || [];
+  }
+  const ch = chave || (typeof matChaveViva === "function" ? matChaveViva(disciplina, topico) : matChave(disciplina, topico));
+  return riaAbrir({ disciplina, topico, chave: ch, ramos, ramo: o.ramo || "", editalId: o.editalId || "" });
+}
 function riaRamoAlvo() { return riaCtx && riaCtx.ramo ? (riaCtx.ramos || []).find((r) => r.id === riaCtx.ramo) || { id: riaCtx.ramo, nome: riaCtx.ramo } : null; }
 function riaTextoAtual() { const r = matObter(riaCtx.chave); return (r && r.texto) || ""; }
 function riaTextoAtualDoEscopo() {

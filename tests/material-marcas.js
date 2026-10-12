@@ -932,6 +932,14 @@ async function testes() {
     ok(slots(a).every((s) => typeof s.onclick === "function" && s.title && s.getAttribute("aria-label")), "M3c todo botão de material abre algo e tem explicação (title) e rótulo acessível");
     ok(menu(a).includes(api.t("mat_mexer_cartoes")) && menu(a).includes(api.t("mat_juris_criar")) && !menu(a).includes(api.t("mat_add_resumo")) && !menu(a).includes(api.t("mat_lei_criar")), "M3d o ⋮ do tópico completo: mexer nos cartões e guardar o primeiro julgado (o que já existe não se oferece de novo): " + menu(a).join(" | "));
     ok(slots(b).map((s) => s.textContent).join() === "🃏 1 cartão(ões)" && menu(b).includes(api.t("mat_add_resumo")) && menu(b).includes(api.t("mat_lei_criar")), "M3e tópico só com cartões: um botão (cartões), e o ⋮ oferece escrever o resumo e carregar a lei: " + menu(b).join(" | "));
+    {
+      const itIa = () => achar(b, (e) => /\bmat-menu-item\b/.test(cls(e)) && e.textContent === api.t("mat_add_resumo_ia"))[0];
+      const mIa = menu(b), iE = mIa.indexOf(api.t("mat_add_resumo"));
+      ok(iE >= 0 && mIa[iE + 1] === api.t("mat_add_resumo_ia") && !menu(a).includes(api.t("mat_add_resumo_ia")), "M3e2 sem resumo, logo depois de 'escrever o resumo' vem 'pedir o resumo à IA' (com resumo, nenhum dos dois): " + mIa.join(" | "));
+      itIa().onclick && itIa().onclick({ stopPropagation() {} });
+      ok(api.$("dlgResIA").open === true && /So cartoes/.test(api.$("resIATit").textContent), "M3e3 'pedir o resumo à IA' abre o pedido do resumo deste tópico");
+      api.$("dlgResIA").close();
+    }
     ok(/^§/.test(api.t("mat_lei_criar")) && /^⚖/.test(api.t("mat_juris_criar")) && /^§/.test(slots(a)[2].textContent), "M3f lei seca é §, julgado é ⚖ — o mesmo ⚖ servia para os dois e confundia");
     ok(achar(a, (e) => cls(e) === "mat-sub")[0].textContent.indexOf("atualizado em ") === 0, "M3g a linha de baixo diz só quando foi atualizado (os números estão nos botões)");
     const fs = require("fs"), path = require("path");

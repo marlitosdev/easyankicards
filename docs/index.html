@@ -5144,6 +5144,17 @@ button.ed-st-item{cursor:pointer}
 .ram-lei-sel{max-width:100%;flex:1;min-width:200px}
 .ram-lei-prev{margin-top:6px}
 .ram-lei-texto{max-height:180px;overflow:auto;white-space:pre-wrap;font-size:12px;background:var(--fundo-2,transparent);border:1px solid var(--borda);border-radius:6px;padding:6px;margin:4px 0 0}
+.ram-acoes-lista{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:4px 0}
+.ram-precisa{font-size:11.5px;font-weight:600;color:var(--sutil);border:1px solid var(--borda);border-radius:999px;padding:1px 8px}
+.ram-precisa.ok{color:var(--ok);border-color:var(--ok)}
+.ram-precisa.falta{color:var(--atencao);border-color:var(--atencao)}
+.ram-caminhos{margin:10px 0 4px;border-top:1px solid var(--borda);padding-top:8px}
+.ram-caminhos>summary{cursor:pointer;font-weight:700}
+.ram-cam{border:1px solid var(--borda);border-radius:10px;padding:8px 10px;margin:8px 0}
+.ram-cam-tit{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-weight:700;margin-bottom:4px}
+.ram-cam-lin{display:block;margin:4px 0 6px;font-size:13px}
+.ram-cam .ednovo-passo{margin:6px 0}
+.ram-cam .ram-lei-box{border:0;padding:0;margin:4px 0}
 .vka-inverso{margin-top:6px}
 .cm-dica{margin:6px 0 0;min-height:1.3em}
 .cm-rodape{justify-content:space-between;align-items:center;gap:10px}
@@ -8356,23 +8367,52 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgRamos" class="ui-modal diag-modal" style="max-width:720px">
   <h3 id="ramTit"></h3>
   <p class="nota" data-i18n="ram_ajuda"></p>
-  <div id="ramLeiBox" class="ram-lei-box" hidden>
-    <label class="nota" for="ramLeiSel" data-i18n="ram_lei_sel"></label>
-    <div class="qm-bts"><select id="ramLeiSel" class="ram-lei-sel"></select> <button type="button" class="btn-min" id="btnRamLeiVer" data-i18n="ram_lei_ver"></button> <button type="button" class="btn-min" id="btnRamLeiFixar" data-i18n="ram_lei_fixar" hidden></button></div>
-    <p class="nota" id="ramLeiAviso" role="status"></p>
-    <label class="nota" id="ramLeiMesmoLinha" hidden><input type="checkbox" id="ramLeiMesmo"> <span data-i18n="ram_lei_mesmo"></span></label>
-    <div id="ramLeiPrev" class="ram-lei-prev" hidden><p class="nota" id="ramLeiPrevCab"></p><pre id="ramLeiPrevTexto" class="ram-lei-texto"></pre></div>
-  </div>
   <div id="ramLista" class="ram-lista"></div>
   <p class="nota ram-aviso-apagar" id="ramAvisoApagar" role="status" hidden></p>
-  <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnRamMais" data-i18n="ram_mais"></button> <button type="button" class="btn-min" id="btnRamLei" data-i18n="ram_lei"></button> <button type="button" class="btn-min" id="btnRamPesos" data-i18n="ram_pesos"></button> <button type="button" class="btn-min" id="btnRamIa" data-i18n="ram_ia"></button></div>
-  <div id="ramIaBox" hidden>
-    <textarea id="ramPedidoTxt" rows="5" class="ram-colar" readonly hidden aria-label="Pedido para a IA"></textarea>
-    <p class="nota" data-i18n="ram_ia_ajuda"></p>
-    <textarea id="ramColar" rows="5" class="ram-colar" data-i18n-ph="ram_ia_ph"></textarea>
-    <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnRamConferir" data-i18n="ram_ia_conferir"></button></div>
+  <!-- cada jeito de criar diz o que PRECISA: escrever e pedir à IA não precisam de nada; a lei só é exigida pelo índice -->
+  <div class="ram-acoes-lista">
+    <button type="button" class="btn-min btn-min-ok" id="btnRamMais" data-i18n="ram_mais"></button>
+    <span class="ram-precisa ok" data-i18n="ram_precisa_nada"></span>
+  </div>
+  <div class="ram-acoes-lista" id="ramPesosLin" hidden>
+    <button type="button" class="btn-min" id="btnRamPesos" data-i18n="ram_pesos"></button>
+    <span class="ram-precisa" id="ramPesosPrecisa"></span>
   </div>
   <p class="nota ger-np-erro" id="ramMsg" role="status" aria-live="polite"></p>
+  <details id="ramCaminhos" class="ram-caminhos">
+    <summary id="ramCaminhosSum"></summary>
+    <div class="ram-cam" id="ramCamIa">
+      <div class="ram-cam-tit"><span data-i18n="ram_cam_ia"></span> <span class="ram-precisa ok" data-i18n="ram_precisa_nada"></span></div>
+      <div class="ednovo-passo" id="ramIaPasso1">
+        <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ram_ia_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
+        <label class="ram-cam-lin" id="ramIaComLeiLin" hidden><input type="checkbox" id="ramIaComLei"> <span id="ramIaComLeiRot"></span></label>
+        <button type="button" class="btn-min btn-min-ok" id="btnRamIa" data-i18n="ram_ia"></button>
+        <p class="nota ednovo-prompt-msg" id="ramIaMsg" role="status" aria-live="polite"></p>
+        <textarea id="ramPedidoTxt" rows="5" class="ram-colar" readonly hidden aria-label="Pedido para a IA"></textarea>
+      </div>
+      <div class="ednovo-passo" id="ramIaBox">
+        <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ram_ia_passo2"></span> <span class="ednovo-tag tag-volta" data-i18n="ed_novo_tag2"></span></div>
+        <textarea id="ramColar" rows="5" class="ram-colar" data-i18n-ph="ram_ia_ph"></textarea>
+        <div class="ednovo-sem sem-vazio" id="ramIaSem" role="status" aria-live="polite">
+          <span class="ednovo-sem-ico" id="ramIaSemIco" aria-hidden="true">○</span>
+          <span class="ednovo-sem-txt" id="ramIaSemTxt"></span>
+        </div>
+        <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnRamConferir" data-i18n="ram_ia_conferir"></button></div>
+      </div>
+    </div>
+    <div class="ram-cam" id="ramCamLei">
+      <div class="ram-cam-tit"><span data-i18n="ram_cam_lei"></span> <span class="ram-precisa" id="ramLeiPrecisa"></span></div>
+      <p class="nota" id="ramLeiSemNada" data-i18n="ram_lei_sem_nenhuma" hidden></p>
+      <div id="ramLeiBox" class="ram-lei-box" hidden>
+        <label class="nota" for="ramLeiSel" data-i18n="ram_lei_sel"></label>
+        <div class="qm-bts"><select id="ramLeiSel" class="ram-lei-sel"></select> <button type="button" class="btn-min" id="btnRamLeiVer" data-i18n="ram_lei_ver"></button> <button type="button" class="btn-min" id="btnRamLeiFixar" data-i18n="ram_lei_fixar" hidden></button></div>
+        <p class="nota" id="ramLeiAviso" role="status"></p>
+        <label class="nota" id="ramLeiMesmoLinha" hidden><input type="checkbox" id="ramLeiMesmo"> <span data-i18n="ram_lei_mesmo"></span></label>
+        <div id="ramLeiPrev" class="ram-lei-prev" hidden><p class="nota" id="ramLeiPrevCab"></p><pre id="ramLeiPrevTexto" class="ram-lei-texto"></pre></div>
+      </div>
+      <div class="qm-bts"><button type="button" class="btn-min" id="btnRamLei" data-i18n="ram_lei"></button></div>
+    </div>
+  </details>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnRamSalvar" data-i18n="ram_salvar"></button>
     <button class="btn btn-cinza" id="btnRamFechar" data-i18n="cancel_btn"></button>
