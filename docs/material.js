@@ -1023,12 +1023,14 @@ function matCitacoesLigar(painel) {
   let temVinc = false;
   try { temVinc = typeof citVinculosLer === "function" && citVinculosLer().length > 0; } catch (e) {}
   let ctx = null, n = 0;
+  /* o vínculo "só neste tópico" vale aqui; o de outro tópico, não */
+  const chV = matAtual.disciplina && matAtual.topico ? matChave(matAtual.disciplina, matAtual.topico) : "";
   const citar = (no) => {
     const txt = String(no.textContent || "");
     if (!temVinc && !/\bart/i.test(txt)) return;
     let cits = [];
     try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
-    try { if (temVinc) cits = citVinculosAplicar(txt, cits); } catch (e) {}
+    try { if (temVinc) cits = citVinculosAplicar(txt, cits, chV); } catch (e) {}
     if (!cits.length) return;
     const pai = no.parentNode;
     if (!pai || !pai.insertBefore) return;
@@ -1100,6 +1102,9 @@ function matVinculosAbrir(selecao) {
   const txt = matTextoDoEscopo();
   qsVincAbrir({ disciplina: ctx.disciplina, topico: ctx.topico, comentario: txt === null ? "" : txt,
     _aoVoltar: ctx.aoVoltar, _onde: "resumo" }, $("matLeitura"), selecao || "");
+  /* com um trecho selecionado, o que se quer é ligá-lo: vai direto para a escolha
+   * (a lista fica embaixo, para quem fechar a escolha) */
+  if (selecao && typeof qsVincEscolher === "function") qsVincEscolher({ trecho: selecao, cit: null });
 }
 
 /* o degrau mais próximo (quem guardou 16 px numa versão antiga cai no 15 ou no 17) */

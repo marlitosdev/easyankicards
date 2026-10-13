@@ -199,6 +199,153 @@ async function testes() {
     ok(!falhou, "R17a a volta padrão (questões) quebrou");
   }
 
+  /* =================================================================
+   * C2 (v18.25.0): VINCULAR UM TRECHO ESCOLHIDO, VENDO PARA ONDE VAI
+   * ================================================================= */
+  /* V1-V2: o destino digitado e a parte do artigo */
+  {
+    const { api } = rodar();
+    const d = api.qsVincLerDestinos("113, § 1º, II");
+    ok(d.length === 1 && d[0].num === "113" && d[0].numCru === "113, § 1º, II"
+      && d[0].sub.paragrafos[0] === "1º" && d[0].sub.incisos[0] === "II",
+      "V1 '113, § 1º, II' não foi lido como artigo + parte: " + JSON.stringify(d));
+    ok(api.qsVincLerDestinos("77, 78 e 79").map((x) => x.num).join(",") === "77,78,79", "V1a a lista de artigos não foi lida");
+    ok(api.qsVincLerDestinos("acessória").length === 0, "V1b uma palavra virou destino (devia buscar)");
+    ok((api.qsVincLerDestinos("art. 3º")[0] || {}).num === "3", "V1c 'art. 3º' no campo não foi lido");
+    ok(api.qsVincLerDestinos("prazo de 30 dias").length === 0, "V1d uma frase com número virou o art. 30 (devia ser busca)");
+    const s1 = api.qsVincSubDaUnidade("P1>II>a");
+    ok(s1.paragrafos[0] === "1º" && s1.incisos[0] === "II" && s1.alineas[0] === "a", "V2 a parte P1>II>a virou " + JSON.stringify(s1));
+    ok(api.qsVincSubDaUnidade("PU").paragrafos[0] === "único" && api.qsVincSubDaUnidade("P12").paragrafos[0] === "12",
+      "V2a parágrafo único / § 12 lidos errado");
+    ok(api.qsVincRotuloDestino("113", s1) === "113, § 1º, II, a)", "V2b o rótulo do destino saiu " + api.qsVincRotuloDestino("113", s1));
+  }
+
+  /* V3-V8: o fluxo inteiro no resumo, com a prévia antes de gravar */
+  {
+    const { api } = rodar();
+    const ch = preparar(api);
+    api.matVinculosAbrir("regra de acessoriedade");
+    ok(api.$("dlgQsVincEsc").open === true, "V3 com um trecho selecionado, o botão não foi direto para a escolha da lei");
+    ok(api.$("qsVincLei").value === "lei_ctn", "V3a a lei única do tópico devia vir escolhida: " + api.$("qsVincLei").value);
+    const fichas = api.$("qsVincLeisTopico").querySelectorAll("button.qs-vinc-ficha");
+    ok(fichas.length === 1 && /sel/.test(fichas[0].className) && !api.$("qsVincLeisTopico").hidden, "V3b a lei do tópico não aparece em ficha marcada");
+    ok(/Digite o número/.test(api.$("qsVincPrev").textContent || ""), "V3c sem destino, a prévia devia dizer o que fazer: " + api.$("qsVincPrev").textContent);
+    /* uma PALAVRA lista os artigos que a contêm */
+    api.$("qsVincArts").value = "acessória";
+    api.$("qsVincArts").oninput();
+    const achados = api.$("qsVincAchados").querySelectorAll("button.qs-vinc-achado");
+    ok(achados.length === 1 && /^Art\. 113 — A obrigação/.test(achados[0].textContent || ""),
+      "V4 a busca por palavra devia achar só o art. 113: " + achados.map((b) => b.textContent).join(" | "));
+    ok(/Toque num dos artigos acima/.test(api.$("qsVincPrev").textContent || ""), "V4d durante a busca a prévia devia dizer para escolher um artigo");
+    achados[0].onclick();
+    ok(api.$("qsVincArts").value === "113", "V4a escolher o achado não pôs o artigo no campo: " + api.$("qsVincArts").value);
+    const partes = api.$("qsVincDisp").querySelectorAll("button.qs-vinc-ficha");
+    ok(partes.length === 4 && partes[0].textContent === "artigo inteiro" && /sel/.test(partes[0].className),
+      "V4b as partes do art. 113 deviam ser 'artigo inteiro' (marcada) + 3 parágrafos: " + partes.map((b) => b.textContent).join(" | "));
+    ok(/principal ou acessória/.test(api.$("qsVincPrev").textContent || "")
+      && api.$("qsVincPrev").querySelectorAll(".qs-vinc-prev-alvo").length === 0,
+      "V4c a prévia do artigo inteiro devia mostrar o texto sem destaque");
+    /* tocar no § 2º: o campo e o destaque acompanham */
+    partes.filter((b) => /2º/.test(b.textContent || ""))[0].onclick();
+    ok(api.$("qsVincArts").value === "113, § 2º", "V5 tocar no § 2º não mudou o destino: " + api.$("qsVincArts").value);
+    const alvo = api.$("qsVincPrev").querySelectorAll(".qs-vinc-prev-alvo");
+    ok(alvo.length === 1 && /§ 2º A obrigação acessória decorre/.test(alvo[0].textContent || ""),
+      "V5a a prévia não destaca o § 2º: " + alvo.map((x) => x.textContent).join(" | "));
+    /* parte que não existe e artigo que não existe avisam */
+    api.$("qsVincArts").value = "113, § 9º"; api.$("qsVincArts").oninput();
+    ok(/Não achei "113, § 9º" no art\. 113/.test(api.$("qsVincPrev").textContent || ""), "V6 parte inexistente não avisou: " + api.$("qsVincPrev").textContent);
+    api.$("qsVincArts").value = "999"; api.$("qsVincArts").oninput();
+    ok(/Não achei o art\. 999/.test(api.$("qsVincPrev").textContent || ""), "V7 artigo inexistente não avisou");
+    /* palavra no campo não grava */
+    api.$("qsVincArts").value = "acessória"; api.$("qsVincArts").oninput();
+    api.$("btnQsVincEscOk").onclick();
+    ok(api.citVinculosLer().length === 0 && /Escolha um artigo da lista/.test(api.$("qsVincEscAviso").textContent || ""),
+      "V7a uma palavra no campo foi gravada como destino");
+    ok(!api.$("qsVincAlcanceBox").hidden && api.$("qsVincAlcTopico").checked, "V7b 'só neste tópico' devia vir marcado");
+    /* grava: só neste tópico, com a parte */
+    api.$("qsVincArts").value = "113, § 2º"; api.$("qsVincArts").oninput();
+    api.$("btnQsVincEscOk").onclick();
+    const vs = api.citVinculosLer();
+    ok(vs.length === 1 && vs[0].chave === ch && vs[0].leiId === "lei_ctn" && vs[0].artigos[0].numCru === "113, § 2º"
+      && (vs[0].artigos[0].sub.paragrafos || [])[0] === "2º",
+      "V8 o vínculo não foi gravado com o tópico e a parte: " + JSON.stringify(vs));
+    const perm = links(api).filter((b) => b.textContent === "regra de acessoriedade")[0];
+    ok(!!perm && /qs-lei-link-perm/.test(cls(perm)), "V8a depois de gravar, o trecho não virou link no resumo");
+    perm.onclick({ stopPropagation() {} });
+    ok(/Trecho citado/.test(api.$("leiCitaPreviewTexto").textContent || "")
+      && /§ 2º[^\n]*acessória decorre/.test(api.$("leiCitaPreviewTexto").textContent || ""),
+      "V8b o vínculo não leva à parte escolhida (§ 2º): " + (api.$("leiCitaPreviewTexto").textContent || "").slice(-160));
+    api.$("dlgLeiCitaPreview").close();
+    /* o "só neste tópico" não vale em outro tópico */
+    const el = api.document.createElement("div");
+    api.qsUiComentario(el, { disciplina: DISC, topico: "Outro tópico", comentario: "Sobre a regra de acessoriedade civil." });
+    ok(el.querySelectorAll("button.qs-lei-link").length === 0, "V9 o vínculo 'só neste tópico' apareceu em outro tópico");
+    const el2 = api.document.createElement("div");
+    api.qsUiComentario(el2, { disciplina: DISC, topico: TOP, comentario: "Sobre a regra de acessoriedade civil." });
+    ok(el2.querySelectorAll("button.qs-lei-link-perm").length === 1, "V9a o vínculo do tópico não vale numa questão do MESMO tópico");
+    /* "este vínculo está errado" → em todo o app: o do tópico sai, fica um só */
+    api.matVinculosAbrir("");
+    const card = api.$("qsVincLista").querySelectorAll(".lei-bib-card").filter((c) => /regra de acessoriedade/.test(c.textContent || ""))[0];
+    ok(!!card && /só neste tópico/.test(card.textContent || ""), "V10 a lista não diz que o vínculo vale só neste tópico");
+    card.querySelectorAll("button").filter((b) => /^btnQsVincErrado_/.test(b.id || ""))[0].onclick();
+    ok(api.$("qsVincArts").value === "113, § 2º", "V10a corrigir não trouxe o destino gravado: " + api.$("qsVincArts").value);
+    api.$("qsVincAlcTopico").checked = false; api.$("qsVincAlcTudo").checked = true;
+    api.$("btnQsVincEscOk").onclick();
+    const vs2 = api.citVinculosLer();
+    ok(vs2.length === 1 && !vs2[0].chave, "V11 trocar para 'em todo o app' devia deixar UM vínculo, sem tópico: " + JSON.stringify(vs2));
+    const el3 = api.document.createElement("div");
+    api.qsUiComentario(el3, { disciplina: DISC, topico: "Outro tópico", comentario: "Sobre a regra de acessoriedade civil." });
+    ok(el3.querySelectorAll("button.qs-lei-link-perm").length === 1, "V11a o vínculo de todo o app não vale em outro tópico");
+  }
+
+  /* V12: o vínculo antigo (sem parte, sem tópico) continua valendo como antes */
+  {
+    const { api } = rodar();
+    api.citVinculosGravar([{ k: api.citChave("regra de acessoriedade"), trecho: "regra de acessoriedade", leiId: "lei_ctn",
+      artigos: [{ num: "113", numCru: "113" }], criado: "2026-09-19T00:00:00.000Z" }]);
+    preparar(api);
+    const b = links(api).filter((x) => x.textContent === "regra de acessoriedade")[0];
+    ok(!!b && /qs-lei-link-perm/.test(cls(b)), "V12 o vínculo gravado antes da v18.25.0 parou de valer");
+    b.onclick({ stopPropagation() {} });
+    ok(/principal ou acessória/.test(api.$("leiCitaPreviewTexto").textContent || ""), "V12a o vínculo antigo não abre o artigo");
+  }
+
+  /* V13: o tópico vence o app inteiro no mesmo trecho */
+  {
+    const { api } = rodar();
+    const ch = api.matChave(DISC, TOP);
+    api.citVinculoSalvar({ trecho: "regra de acessoriedade", leiId: "lei_cf", artigos: [{ num: "113", numCru: "113" }] });
+    api.citVinculoSalvar({ trecho: "regra de acessoriedade", leiId: "lei_ctn", artigos: [{ num: "113", numCru: "113" }], chave: ch });
+    const cs = api.citVinculosAplicar("a regra de acessoriedade aqui", [], ch);
+    ok(cs.length === 1 && cs[0].leiId === "lei_ctn", "V13 no mesmo trecho, o vínculo do tópico devia vencer o de todo o app: " + JSON.stringify(cs.map((c) => c.leiId)));
+    const fora = api.citVinculosAplicar("a regra de acessoriedade aqui", [], "outra›coisa");
+    ok(fora.length === 1 && fora[0].leiId === "lei_cf", "V13a fora do tópico vale o de todo o app");
+    ok(api.citVinculosAplicar("a regra de acessoriedade aqui", []).length === 1, "V13b sem tópico, só o de todo o app");
+  }
+
+  /* V15: com duas leis no tópico, o trecho que nomeia a lei ("do CTN") já vem com ela */
+  {
+    const { api } = rodar();
+    preparar(api, { duasLeis: true });
+    api.matVinculosAbrir("ocorrência do fato gerador (art. 113, § 1º, do CTN)");
+    ok(api.$("qsVincLei").value === "lei_ctn", "V15 o trecho diz 'do CTN' e a lei não veio marcada: " + api.$("qsVincLei").value);
+    ok(api.$("qsVincArts").value === "113, § 1º", "V15a o destino do trecho não veio preenchido: " + api.$("qsVincArts").value);
+    ok(api.$("qsVincPrev").querySelectorAll(".qs-vinc-prev-alvo").length === 1, "V15b a prévia já devia destacar o § 1º");
+  }
+
+  /* V14: nas questões, o vínculo novo também nasce só no tópico da questão */
+  {
+    const { api } = rodar();
+    preparar(api);
+    const q = { disciplina: DISC, topico: TOP, comentario: "A regra de acessoriedade não vale aqui." };
+    api.qsVincAbrir(q, null, "regra de acessoriedade");
+    api.qsVincEscolher({ trecho: "regra de acessoriedade", cit: null });
+    api.$("qsVincArts").value = "113"; api.$("qsVincArts").oninput();
+    api.$("btnQsVincEscOk").onclick();
+    const v = api.citVinculosLer();
+    ok(v.length === 1 && v[0].chave === api.matChave(DISC, TOP), "V14 o vínculo da questão não ficou só no tópico dela: " + JSON.stringify(v));
+  }
+
   return falhas;
 }
 

@@ -1254,6 +1254,21 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-lei-link-perm{border-bottom:2px solid var(--ok)}
 .qs-vinc-btn{margin:6px 0}
 .mat-vinc-btn{margin-left:4px;white-space:nowrap}
+/* VINCULAR TRECHO (v18.25.0): fichas da lei e da parte do artigo, achados e a prévia */
+.qs-vinc-trecho{font-style:italic}
+.qs-vinc-rot{display:block;margin:10px 0 4px;font-size:13px}
+.qs-vinc-fichas{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0;max-height:120px;overflow:auto}
+.qs-vinc-ficha.sel{background:var(--acao);color:#fff;border-color:var(--acao)}
+.qs-vinc-achados{display:flex;flex-direction:column;gap:2px;margin:4px 0;max-height:180px;overflow:auto}
+.qs-vinc-achado{text-align:left;background:none;border:1px solid var(--borda);border-radius:6px;padding:4px 6px;font:inherit;font-size:12px;color:inherit;cursor:pointer}
+.qs-vinc-achado:hover,.qs-vinc-achado:focus-visible{border-color:var(--info)}
+.qs-vinc-prev{border:1px solid var(--borda);border-radius:8px;padding:6px 8px;max-height:220px;overflow:auto;font-size:13px}
+.qs-vinc-prev-cab{font-weight:600;margin-bottom:4px}
+.qs-vinc-fichas .nota,.qs-vinc-achados .nota{font-size:12px;margin:0 4px 0 0}
+.qs-vinc-prev-l{padding:1px 4px;border-radius:4px;white-space:pre-wrap}
+.qs-vinc-prev-alvo{background:rgba(250,204,21,.28);outline:1px solid rgba(250,204,21,.6)}
+.qs-vinc-aviso{color:var(--atencao)}
+.qs-vinc-alcance{display:flex;flex-wrap:wrap;gap:12px;margin:2px 0 4px 22px;font-size:13px}
 .lei-anexos{margin-top:12px}
 .lei-anexos-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .lei-anexo{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--panel)}
@@ -7705,16 +7720,29 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <h3 id="qsVincEscTitulo"></h3>
     <button type="button" class="dlg-x" id="btnQsVincEscX" data-i18n-title="help_close">✖</button>
   </div>
-  <p class="nota" id="qsVincEscTrecho"></p>
-  <label class="nota" data-i18n="qs_vinc_lei_rot"></label>
+  <p class="nota qs-vinc-trecho" id="qsVincEscTrecho"></p>
+  <!-- 1. a lei: as do tópico em fichas; o select tem todas -->
+  <label class="qs-vinc-rot" for="qsVincLei"><b>1.</b> <span data-i18n="qs_vinc_lei_rot"></span></label>
+  <div id="qsVincLeisTopico" class="qs-vinc-fichas" hidden></div>
   <select id="qsVincLei" style="width:100%"></select>
-  <label class="nota" data-i18n="qs_vinc_arts_rot"></label>
-  <input type="text" id="qsVincArts" placeholder="77, 78, 79">
+  <!-- 2. o destino: número ("113, § 1º") ou palavra (lista os artigos que a contêm) -->
+  <label class="qs-vinc-rot" for="qsVincArts"><b>2.</b> <span data-i18n="qs_vinc_arts_rot"></span></label>
+  <input type="text" id="qsVincArts" style="width:100%;box-sizing:border-box" data-i18n-ph="qs_vinc_arts_ph" placeholder="113, § 1º">
+  <div id="qsVincAchados" class="qs-vinc-achados" hidden></div>
+  <!-- 3. a parte do artigo -->
+  <div id="qsVincDisp" class="qs-vinc-fichas" hidden></div>
+  <!-- 4. a prévia: para onde o trecho vai levar -->
+  <div class="qs-vinc-rot"><b>3.</b> <span data-i18n="qs_vinc_prev_rot"></span></div>
+  <div id="qsVincPrev" class="qs-vinc-prev"></div>
   <label class="lei-dup-original">
     <input type="checkbox" id="qsVincPerm" checked>
     <span data-i18n="qs_vinc_perm"></span>
   </label>
-  <p class="nota" id="qsVincEscAviso"></p>
+  <div id="qsVincAlcanceBox" class="qs-vinc-alcance" role="radiogroup">
+    <label><input type="radio" name="qsVincAlc" id="qsVincAlcTopico" checked> <span data-i18n="qs_vinc_alc_topico"></span></label>
+    <label><input type="radio" name="qsVincAlc" id="qsVincAlcTudo"> <span data-i18n="qs_vinc_alc_tudo"></span></label>
+  </div>
+  <p class="nota qs-vinc-aviso" id="qsVincEscAviso"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnQsVincEscOk" data-i18n="qs_vinc_ok"></button>
     <button class="btn btn-cinza" id="btnQsVincEscCancelar" data-i18n="cancel_btn"></button>

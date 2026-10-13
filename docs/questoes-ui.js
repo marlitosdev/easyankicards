@@ -1370,7 +1370,12 @@ function qsUiComentario(el, q) {
     if (typeof leiCitacoesNoTexto === "function") cits = leiCitacoesNoTexto(txt);
   } catch (e) { cits = []; }
   /* os vínculos PERMANENTES que a pessoa fixou valem por cima da leitura automática */
-  try { if (typeof citVinculosAplicar === "function") cits = citVinculosAplicar(txt, cits); } catch (e) {}
+  try {
+    if (typeof citVinculosAplicar === "function") {
+      const chV = (typeof matChave === "function" && q && q.disciplina && q.topico) ? matChave(q.disciplina, q.topico) : "";
+      cits = citVinculosAplicar(txt, cits, chV);
+    }
+  } catch (e) {}
   /* sem citação — e este é o caso comum em Português e Informática — o
    * comentário continua sendo exatamente o texto, sem nada em volta */
   if (!cits.length) { el.textContent = txt; return el; }
@@ -1631,7 +1636,7 @@ function qsVincPintar() {
   if (!c) return;
   const q = c.q;
   const txt = String((q && q.comentario) || "");
-  const { lista, doTopico } = qsVincContexto(q);
+  const { ch, lista, doTopico } = qsVincContexto(q);
 
   const sel = $("qsVincSel");
   sel.innerHTML = "";
@@ -1657,7 +1662,7 @@ function qsVincPintar() {
   }
 
   let cits = [];
-  try { cits = citVinculosAplicar(txt, leiCitacoesNoTexto(txt)); } catch (e) { cits = []; }
+  try { cits = citVinculosAplicar(txt, leiCitacoesNoTexto(txt), ch); } catch (e) { cits = []; }
   const cx = $("qsVincLista");
   cx.innerHTML = "";
   if (!cits.length) {
@@ -1678,7 +1683,7 @@ function qsVincPintar() {
     meta.className = "lei-bib-meta" + (alvo.lei ? "" : " lei-bib-sem");
     meta.textContent = (alvo.lei ? t("qs_vinc_abre", { l: alvo.lei.nome, a: ct.numCru || "—" })
       : t("qs_vinc_sem_lei", { l: ct.rotulo || "?" }))
-      + (ct.permanente ? " · " + t("qs_vinc_permanente") : "");
+      + (ct.permanente ? " · " + t("qs_vinc_permanente") + " · " + t(ct.soTopico ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") : "");
     const ac = document.createElement("div");
     ac.className = "lei-bib-acoes";
     const errado = document.createElement("button");
@@ -1707,11 +1712,94 @@ function qsVincPintar() {
   });
 }
 
-/* a lei e os artigos certos, para um trecho */
+/* =====================================================================
+ * VINCULAR UM TRECHO À LEI — VENDO PARA ONDE ELE VAI LEVAR (v18.25.0)
+ *
+ * Antes: escolhia-se a lei num select e DIGITAVA-SE o número do artigo às
+ * cegas — sem ver o texto, sem poder dizer "é o § 1º", e o vínculo valia
+ * para o app inteiro. Agora a mesma janela (mesmos campos) mostra:
+ *  · as leis do tópico em fichas, primeiro;
+ *  · um campo só para o destino: número ("113", "113, § 1º, II", "77, 78,
+ *    79") ou uma PALAVRA, que lista os artigos que a contêm;
+ *  · a estrutura do artigo em fichas (caput, § 1º, inciso II…) para apontar
+ *    a parte exata;
+ *  · a PRÉVIA do texto vigente, com a parte escolhida em destaque, antes de
+ *    gravar;
+ *  · onde o vínculo vale: só neste tópico (padrão) ou em todo o app.
+ * ===================================================================== */
+
+/* "§ 1º", "II", "a)" — o endereço de um destino, para mostrar e para gravar */
+function qsVincRotuloDestino(base, sub) {
+  const S = sub || {};
+  const p = [String(base || "")];
+  (S.paragrafos || []).slice(0, 1).forEach((x) => p.push(/^[úu]nico$/i.test(x) ? "parágrafo único" : "§ " + x));
+  (S.incisos || []).forEach((x) => p.push(x));
+  (S.alineas || []).slice(0, 1).forEach((x) => p.push(x + ")"));
+  return p.join(", ");
+}
+
+function qsVincSubVazio() { return { incisos: [], paragrafos: [], alineas: [] }; }
+
+/* o que se digitou no campo — "113, § 1º, II; 78" — lido pelo MESMO leitor de citações */
+function qsVincLerDestinos(txt) {
+  const s = String(txt || "").trim().replace(/^\s*(?:arts?|artigos?)\.?\s*/i, "");
+  if (!s || !/^\d/.test(s)) return [];
+  let cits = [];
+  try { cits = leiCitacoesNoTexto("arts. " + s); } catch (e) { cits = []; }
+  const out = [];
+  cits.forEach((c) => {
+    const sub = { incisos: (c.incisos || []).slice(), paragrafos: (c.paragrafos || []).slice(), alineas: (c.alineas || []).slice() };
+    const base = String(c.numCru || c.num);
+    const numCru = qsVincRotuloDestino(base, sub);
+    if (!out.some((o) => o.numCru === numCru)) out.push({ num: c.num, numCru, base, sub });
+  });
+  if (!out.length) {
+    try { citLerArtigos(s).forEach((a) => out.push({ num: a.num, numCru: a.numCru, base: a.numCru, sub: qsVincSubVazio() })); } catch (e) {}
+  }
+  return out.slice(0, 30);
+}
+
+function qsVincDestinosTexto(ds) {
+  const temSub = ds.some((d) => (d.sub.paragrafos || []).length || (d.sub.incisos || []).length || (d.sub.alineas || []).length);
+  return ds.map((d) => d.numCru).join(temSub ? "; " : ", ");
+}
+
+/* chave da estrutura ("P1>II>a") → endereço que o leitor de citações entende */
+function qsVincSubDaUnidade(chave) {
+  const sub = qsVincSubVazio();
+  String(chave || "").split(">").forEach((p) => {
+    let m;
+    if (p === "PU") sub.paragrafos.push("único");
+    else if ((m = p.match(/^P(\d+)([A-Z]?)$/))) {
+      const n = Number(m[1]);
+      sub.paragrafos.push((n <= 9 ? n + "º" : String(n)) + (m[2] ? "-" + m[2] : ""));
+    } else if (/^[IVXLC]+$/.test(p)) sub.incisos.push(p);
+    else if (/^[a-z]$/.test(p)) sub.alineas.push(p);
+  });
+  return sub;
+}
+
+function qsVincMesmoSub(a, b) {
+  const j = (x) => JSON.stringify([(x.paragrafos || []).map((y) => String(y).replace(/[ºo°]/g, "")), x.incisos || [], x.alineas || []]);
+  return j(a || {}) === j(b || {});
+}
+
+/* os artigos VIGENTES da lei escolhida, lidos uma vez por lei enquanto a janela está aberta */
+function qsVincArtigos(lei) {
+  const c = qsVincCtx;
+  if (!lei) return [];
+  if (c && c.cacheArts && c.cacheArts.id === lei.id) return c.cacheArts.arts;
+  let arts = [];
+  try { arts = leiArtigosEfetivos(lei) || []; } catch (e) { arts = []; }
+  if (c) c.cacheArts = { id: lei.id, arts };
+  return arts;
+}
+
 function qsVincEscolher(alvo) {
   const c = qsVincCtx;
   if (!c) return;
   c.esc = alvo;
+  c.cacheArts = null;
   const { lista, doTopico } = qsVincContexto(c.q);
   $("qsVincEscTitulo").textContent = t(alvo.cit ? "qs_vinc_esc_errado" : "qs_vinc_esc_novo");
   $("qsVincEscTrecho").textContent = "“" + alvo.trecho + "”";
@@ -1730,19 +1818,180 @@ function qsVincEscolher(alvo) {
     s.append(o);
   });
   /* a lei que o app achou é justamente a que a pessoa disse estar errada: não
-   * vem marcada. Sem lei nenhuma achada e uma só no tópico, essa é a sugestão. */
-  s.value = (!alvo.atual && doTopico.length === 1) ? doTopico[0].id : "";
-  let arts = "";
+   * vem marcada. Trecho novo que já nomeia a lei ("do CTN") vem com ela; sem
+   * nome e uma lei só no tópico, essa é a sugestão. Corrigir um vínculo que a
+   * PRÓPRIA pessoa fixou é outra coisa: a lei dela vem marcada (o que se muda
+   * ali costuma ser o artigo, a parte ou onde vale). */
+  let sug = "";
+  if (alvo.cit && alvo.cit.permanente && alvo.cit.leiId && leiDe(alvo.cit.leiId)) sug = alvo.cit.leiId;
+  else if (!alvo.atual) {
+    try {
+      const c0 = leiCitacoesNoTexto(alvo.trecho)[0];
+      const l0 = c0 && c0.rotulo ? leiCasarRotulo(c0.rotulo, lista) : null;
+      if (l0 && !alvo.cit) sug = l0.id;
+    } catch (e) {}
+    if (!sug && doTopico.length === 1) sug = doTopico[0].id;
+  }
+  s.value = sug;
+  let ds = [];
   try {
-    arts = alvo.cit
-      ? ((alvo.cit.artigos && alvo.cit.artigos.length)
-        ? alvo.cit.artigos.map((a) => a.numCru).join(", ") : (alvo.cit.numCru || ""))
-      : leiCitacoesNoTexto(alvo.trecho).map((x) => x.numCru).join(", ");
-  } catch (e) { arts = ""; }
-  $("qsVincArts").value = arts;
+    if (alvo.cit && alvo.cit.artigos && alvo.cit.artigos.length) {
+      ds = alvo.cit.artigos.map((a) => ({ num: a.num, numCru: a.numCru, base: a.base || a.numCru, sub: a.sub || qsVincSubVazio() }));
+    } else {
+      const fonte = alvo.cit ? [alvo.cit] : leiCitacoesNoTexto(alvo.trecho);
+      ds = fonte.filter((x) => x && x.num).map((x) => {
+        const sub = { incisos: x.incisos || [], paragrafos: x.paragrafos || [], alineas: x.alineas || [] };
+        return { num: x.num, base: x.numCru, numCru: qsVincRotuloDestino(x.numCru, sub), sub };
+      });
+    }
+  } catch (e) { ds = []; }
+  $("qsVincArts").value = qsVincDestinosTexto(ds);
   $("qsVincPerm").checked = true;
+  if ($("qsVincAlcTopico")) $("qsVincAlcTopico").checked = true;
+  if ($("qsVincAlcTudo")) $("qsVincAlcTudo").checked = false;
   $("qsVincEscAviso").textContent = "";
+  qsVincPintarEsc();
   abrirModal("dlgQsVincEsc");
+}
+
+/* repinta tudo o que depende da lei e do destino: fichas, achados, partes e prévia */
+function qsVincPintarEsc() {
+  const c = qsVincCtx;
+  if (!c || !c.esc) return;
+  const { doTopico } = qsVincContexto(c.q);
+  const leiId = String($("qsVincLei").value || "");
+  const lei = leiId ? leiDe(leiId) : null;
+
+  /* 1. as leis do tópico, em fichas */
+  const fx = $("qsVincLeisTopico");
+  if (fx) {
+    fx.innerHTML = "";
+    fx.hidden = !doTopico.length;
+    if (doTopico.length) {
+      const r = document.createElement("span");
+      r.className = "nota";
+      r.textContent = t("qs_vinc_leis_topico");
+      fx.append(r);
+    }
+    doTopico.forEach((l) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min qs-vinc-ficha" + (l.id === leiId ? " sel" : "");
+      b.textContent = l.nome;
+      b.setAttribute("aria-pressed", l.id === leiId ? "true" : "false");
+      b.onclick = () => { $("qsVincLei").value = l.id; c.cacheArts = null; qsVincPintarEsc(); };
+      fx.append(b);
+    });
+  }
+
+  const campo = String($("qsVincArts").value || "").trim();
+  const ds = qsVincLerDestinos(campo);
+  const arts = lei ? qsVincArtigos(lei) : [];
+
+  /* 2. palavra no campo: os artigos que a contêm */
+  const ach = $("qsVincAchados");
+  if (ach) {
+    ach.innerHTML = "";
+    const busca = campo && !ds.length && !/^\d/.test(campo) ? campo : "";
+    ach.hidden = !(busca && lei);
+    if (busca && lei) {
+      const k = leiTxtChave(busca);
+      const achados = arts.filter((a) => leiTxtChave(a.texto).indexOf(k) >= 0).slice(0, 8);
+      const cab = document.createElement("div");
+      cab.className = "nota";
+      cab.textContent = achados.length ? t("qs_vinc_achados", { q: busca }) : t("qs_vinc_achados_nada", { q: busca });
+      ach.append(cab);
+      achados.forEach((a, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "qs-vinc-achado";
+        b.id = "qsVincAchado_" + i;
+        /* sem repetir o número: "Art. 113 — A obrigação…", e não "Art. 113 — Art. 113. A obrigação…" */
+        const ini = String(a.texto || "").replace(/\s+/g, " ").trim()
+          .replace(/^art(?:igo)?\.?\s*[\dº°o]+(?:\s*-\s*[A-Z])?\s*[.\-–—]?\s*/i, "");
+        b.textContent = a.rotulo + " — " + (ini.length > 110 ? ini.slice(0, 110) + "…" : ini);
+        b.onclick = () => { $("qsVincArts").value = a.numCru || a.num; qsVincPintarEsc(); };
+        ach.append(b);
+      });
+    }
+  }
+
+  /* 3. as partes do 1º artigo, em fichas */
+  const d0 = ds[0];
+  const art = d0 && lei ? arts.filter((a) => a.num === d0.num)[0] : null;
+  const dp = $("qsVincDisp");
+  if (dp) {
+    dp.innerHTML = "";
+    let unidades = [];
+    try { unidades = art ? (leiEstruturaArtigo(art.texto).unidades || []) : []; } catch (e) { unidades = []; }
+    dp.hidden = !art;
+    if (art) {
+      const r = document.createElement("span");
+      r.className = "nota";
+      r.textContent = t("qs_vinc_disp_rot");
+      dp.append(r);
+      const ficha = (rot, sub, id) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        const sel = qsVincMesmoSub(d0.sub, sub);
+        b.className = "btn-min qs-vinc-ficha" + (sel ? " sel" : "");
+        b.id = id;
+        b.textContent = rot;
+        b.setAttribute("aria-pressed", sel ? "true" : "false");
+        b.onclick = () => {
+          const todos = qsVincLerDestinos($("qsVincArts").value);
+          if (!todos.length) return;
+          todos[0].sub = sub;
+          todos[0].numCru = qsVincRotuloDestino(todos[0].base, sub);
+          $("qsVincArts").value = qsVincDestinosTexto(todos);
+          qsVincPintarEsc();
+        };
+        dp.append(b);
+      };
+      ficha(t("qs_vinc_disp_inteiro"), qsVincSubVazio(), "qsVincDisp_0");
+      unidades.slice(0, 120).forEach((u, i) => ficha(leiRotuloDaUnidade(u), qsVincSubDaUnidade(u.chave), "qsVincDisp_" + (i + 1)));
+    }
+  }
+
+  /* 4. a prévia: o texto vigente, com a parte escolhida em destaque */
+  const pv = $("qsVincPrev");
+  if (pv) {
+    pv.innerHTML = "";
+    const nota = (txt, cls) => { const p = document.createElement("p"); p.className = cls || "nota"; p.textContent = txt; pv.append(p); };
+    if (!lei) nota(t("qs_vinc_prev_sem_lei"));
+    else if (!d0) nota(t(campo ? "qs_vinc_prev_escolha" : "qs_vinc_prev_sem_art"));
+    else if (!art) nota(t("qs_vinc_prev_nao_achou", { a: d0.base, l: lei.nome }), "nota qs-vinc-aviso");
+    else {
+      const cab = document.createElement("div");
+      cab.className = "qs-vinc-prev-cab";
+      cab.textContent = lei.nome + " · " + art.rotulo
+        + (art.alterado ? " " + t("lei_selo_alterado_curto", { f: art.fonteAlteracao || "?" }) : "")
+        + (art.revogado ? " " + t("lei_selo_revogado", { f: art.fonteAlteracao || "?" }) : "");
+      pv.append(cab);
+      let un = [];
+      const temSub = !qsVincMesmoSub(d0.sub, qsVincSubVazio());
+      try { un = temSub ? leiAcharUnidades(art.texto, d0.sub) : []; } catch (e) { un = []; }
+      if (temSub && !un.length) nota(t("qs_vinc_disp_nao_achou", { d: d0.numCru, a: d0.base }), "nota qs-vinc-aviso");
+      const linhas = String(art.texto || "").split("\n");
+      const corpo = document.createElement("div");
+      corpo.className = "qs-vinc-prev-txt";
+      let primeira = null;
+      linhas.forEach((ln, i) => {
+        const dv = document.createElement("div");
+        const alvo = un.some((u) => i >= u.linha && i <= u.linhaFim);
+        dv.className = "qs-vinc-prev-l" + (alvo ? " qs-vinc-prev-alvo" : "");
+        dv.textContent = ln;
+        if (alvo && !primeira) primeira = dv;
+        corpo.append(dv);
+      });
+      pv.append(corpo);
+      if (ds.length > 1) nota(t("qs_vinc_tambem", { l: ds.slice(1).map((d) => "art. " + d.numCru).join(" · ") }));
+      try { if (primeira && primeira.scrollIntoView) primeira.scrollIntoView({ block: "nearest" }); } catch (e) {}
+    }
+  }
+
+  /* 5. onde vale — só faz sentido se o vínculo for guardado */
+  if ($("qsVincAlcanceBox")) $("qsVincAlcanceBox").hidden = !$("qsVincPerm").checked;
 }
 
 function qsVincSalvar() {
@@ -1752,27 +2001,38 @@ function qsVincSalvar() {
   if (!leiId) { $("qsVincEscAviso").textContent = t("qs_vinc_sem_escolha"); return false; }
   const l = leiDe(leiId);
   if (!l) { $("qsVincEscAviso").textContent = t("qs_vinc_sem_escolha"); return false; }
-  const artigos = citLerArtigos($("qsVincArts").value);
+  const campo = String($("qsVincArts").value || "").trim();
+  const destinos = qsVincLerDestinos(campo);
+  /* uma palavra no campo ainda não é um destino: escolher na lista primeiro */
+  if (campo && !destinos.length) { $("qsVincEscAviso").textContent = t("qs_vinc_sem_artigo"); return false; }
+  const artigos = destinos.map((d) => ({ num: d.num, numCru: d.numCru, base: d.base, sub: d.sub }));
   const perm = !!$("qsVincPerm").checked;
   const trecho = c.esc.trecho;
+  const q = c.q;
+  const soTopico = !$("qsVincAlcTudo") || !$("qsVincAlcTudo").checked;
+  const chave = soTopico && q && q.disciplina && q.topico && typeof matChave === "function"
+    ? matChave(q.disciplina, q.topico) : "";
   $("dlgQsVincEsc").close();
   if (perm) {
-    const r = citVinculoSalvar({ trecho, leiId, artigos });
+    const r = citVinculoSalvar({ trecho, leiId, artigos, chave });
     try { reg("QUESTOES", (c.esc.cit ? "vínculo corrigido (permanente)" : "vínculo criado (permanente)"),
-      trecho + " → " + l.nome + " · " + artigos.map((a) => a.numCru).join(", ")); } catch (e) {}
+      trecho + " → " + l.nome + " · " + artigos.map((a) => a.numCru).join("; ")
+      + (chave ? " · só no tópico " + (q.topico || "") : " · em todo o app")); } catch (e) {}
     if (!r) { try { uiAlert(t("qs_vinc_erro_gravar")); } catch (e) {} return false; }
+    /* o vínculo velho do MESMO trecho, no outro alcance, sairia vencido em silêncio */
+    if (c.esc.cit && c.esc.cit.vinculoK && c.esc.cit.vinculoK !== r.k) citVinculoRemover(c.esc.cit.vinculoK);
     qsVincPintar();
-    qsUiVoltaDe(c.q)();
+    qsUiVoltaDe(q)();
     return true;
   }
   /* só desta vez: abre agora, sem guardar */
   try { reg("QUESTOES", "vínculo usado só agora", trecho + " → " + l.nome); } catch (e) {}
-  const q = c.q;
   if ($("dlgQsVinc").open) $("dlgQsVinc").close();
   leiVoltaPara = qsUiVoltaDe(q);
-  const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, artigos[0] ? artigos[0].num : "");
-  if (artigos[0] && !achou) {
-    try { uiAlert(t("qs_lei_link_nao_achou", { a: artigos[0].numCru, l: l.nome })); } catch (e) {}
+  const a0 = artigos[0];
+  const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, a0 ? a0.num : "", a0 ? a0.sub : undefined);
+  if (a0 && !achou) {
+    try { uiAlert(t("qs_lei_link_nao_achou", { a: a0.numCru, l: l.nome })); } catch (e) {}
   }
   return true;
 }

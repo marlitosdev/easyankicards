@@ -7409,6 +7409,10 @@ function leiIniciar() {
   liga("btnQsVincEscX", "fechar escolha de lei", () => $("dlgQsVincEsc").close());
   liga("btnQsVincEscCancelar", "cancelar escolha de lei", () => $("dlgQsVincEsc").close());
   liga("btnQsVincEscOk", "gravar vínculo de lei", () => qsVincSalvar());
+  /* a janela de vincular repinta a prévia a cada mudança de lei, destino ou "guardar" */
+  if ($("qsVincLei")) $("qsVincLei").onchange = () => { try { qsVincPintarEsc(); } catch (e) {} };
+  if ($("qsVincArts")) $("qsVincArts").oninput = () => { try { qsVincPintarEsc(); } catch (e) {} };
+  if ($("qsVincPerm")) $("qsVincPerm").onchange = () => { try { qsVincPintarEsc(); } catch (e) {} };
   liga("btnLeiRelDup", "relatório: artigos repetidos", () => leiRelatorioCopiar("artigos repetidos"));
   liga("btnLeiRelMapa", "relatório: mapa e conferência", () => leiRelatorioCopiar("mapa e conferência"));
   liga("btnLeiRelPre", "relatório: revisar a colagem", () => leiRelatorioCopiar("revisar a colagem"));
