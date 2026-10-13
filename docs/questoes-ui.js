@@ -1469,6 +1469,17 @@ function qsUiLeiMotivoFalha(c, lista) {
     + cand.map((l) => l.nome).join(" | ");
 }
 
+/* QUEM REPINTA NA VOLTA DA LEI. A questão repinta a sessão; o resumo (e quem
+ * mais usar estes links fora das questões) manda o próprio _aoVoltar no "q",
+ * que aqui é só {disciplina, topico, comentario} — o texto onde a citação está. */
+function qsUiVoltaDe(q) {
+  if (q && typeof q._aoVoltar === "function") {
+    const f = q._aoVoltar;
+    return () => { try { f(); } catch (e) {} };
+  }
+  return () => { try { qsUiPintarSessao(); } catch (e) {} };
+}
+
 function qsUiLeiIr(c, q, botao) {
   if (!q || !q.disciplina || !q.topico) return;
   if (typeof leiAbrir !== "function") return;
@@ -1483,7 +1494,7 @@ function qsUiLeiIr(c, q, botao) {
   /* a volta é a mesma dos outros dois botões: a gaveta sobe por cima e,
    * ao fechar, descobre a mesma questão — mas o botão ⚖ precisa ser
    * repintado, porque a lei pode ter sido vinculada agora */
-  leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+  leiVoltaPara = qsUiVoltaDe(q);
 
   if (alvo.lei) {
     /* CONSULTAR NÃO É VINCULAR. Se a lei existe mas não está ligada a
@@ -1600,8 +1611,16 @@ function qsVincContexto(q) {
   return { ch, lista, doTopico };
 }
 
+/* o texto da janela fala do lugar de onde se veio: comentário (questão) ou resumo */
+function qsVincT(chave, v) {
+  const res = qsVincCtx && qsVincCtx.q && qsVincCtx.q._onde === "resumo";
+  return t(res ? chave + "_res" : chave, v);
+}
+
 function qsVincAbrir(q, el, selecao) {
   qsVincCtx = { q, el, selecao: selecao || "" };
+  if ($("qsVincTit")) $("qsVincTit").textContent = qsVincT("qs_vinc_titulo");
+  if ($("qsVincAjuda")) $("qsVincAjuda").textContent = qsVincT("qs_vinc_ajuda");
   qsVincPintar();
   abrirModal("dlgQsVinc");
   try { reg("QUESTOES", "vínculos de lei do comentário abertos", (q && q.topico) || ""); } catch (e) {}
@@ -1633,7 +1652,7 @@ function qsVincPintar() {
   } else {
     const p = document.createElement("p");
     p.className = "nota";
-    p.textContent = t("qs_vinc_sem_sel");
+    p.textContent = qsVincT("qs_vinc_sem_sel");
     sel.append(p);
   }
 
@@ -1644,7 +1663,7 @@ function qsVincPintar() {
   if (!cits.length) {
     const p = document.createElement("p");
     p.className = "nota";
-    p.textContent = t("qs_vinc_nenhuma");
+    p.textContent = qsVincT("qs_vinc_nenhuma");
     cx.append(p);
   }
   cits.forEach((ct, i) => {
@@ -1679,7 +1698,7 @@ function qsVincPintar() {
         citVinculoRemover(ct.vinculoK);
         try { reg("QUESTOES", "vínculo permanente removido", ct.texto); } catch (e) {}
         qsVincPintar();
-        try { qsUiPintarSessao(); } catch (e) {}
+        qsUiVoltaDe(q)();
       };
       ac.append(rm);
     }
@@ -1743,14 +1762,14 @@ function qsVincSalvar() {
       trecho + " → " + l.nome + " · " + artigos.map((a) => a.numCru).join(", ")); } catch (e) {}
     if (!r) { try { uiAlert(t("qs_vinc_erro_gravar")); } catch (e) {} return false; }
     qsVincPintar();
-    try { qsUiPintarSessao(); } catch (e) {}
+    qsUiVoltaDe(c.q)();
     return true;
   }
   /* só desta vez: abre agora, sem guardar */
   try { reg("QUESTOES", "vínculo usado só agora", trecho + " → " + l.nome); } catch (e) {}
   const q = c.q;
   if ($("dlgQsVinc").open) $("dlgQsVinc").close();
-  leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+  leiVoltaPara = qsUiVoltaDe(q);
   const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, artigos[0] ? artigos[0].num : "");
   if (artigos[0] && !achou) {
     try { uiAlert(t("qs_lei_link_nao_achou", { a: artigos[0].numCru, l: l.nome })); } catch (e) {}
@@ -1870,7 +1889,7 @@ function qsUiLeiEscolher(botao, q, cit) {
           }
         } catch (e) {}
       }
-      leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+      leiVoltaPara = qsUiVoltaDe(q);
       const num = cit ? cit.num : "";
       const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, num, cit);
       if (num && !achou) {
@@ -1896,7 +1915,7 @@ function qsUiLeiEscolher(botao, q, cit) {
     bv.title = t("lei_vincular_ajuda");
     bv.onclick = () => {
       qsFerFechar();
-      leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+      leiVoltaPara = qsUiVoltaDe(q);
       leiAbrir(q.disciplina, q.topico, undefined, { semRetomar: true });
       try {
         leiVincularAbrir(lembrar && lembrar.checked ? cit.rotulo : "");
@@ -1912,7 +1931,7 @@ function qsUiLeiEscolher(botao, q, cit) {
   bn.title = t("lei_colar_nova_ajuda");
   bn.onclick = () => {
     qsFerFechar();
-    leiVoltaPara = () => { try { qsUiPintarSessao(); } catch (e) {} };
+    leiVoltaPara = qsUiVoltaDe(q);
     leiAbrir(q.disciplina, q.topico, undefined, { semRetomar: true });
     try { leiNovaAbrir(); } catch (e) {}
   };

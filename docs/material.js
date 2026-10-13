@@ -976,8 +976,130 @@ function matTrocarModo(modo) {
     const txtEsc = matTextoDoEscopo();
     $("matLeitura").innerHTML = (txtEsc === null ? "" : matParaHtml(txtEsc, matEscopo === "*" ? prova : null))
       || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
+    /* as citações de lei viram links DEPOIS do desenho: as marcas já estão no lugar */
+    try { matCitacoesLigar($("matLeitura")); } catch (e) {}
   }
   matPintarFonte();
+}
+
+/* =====================================================================
+ * AS CITAÇÕES DE LEI DO RESUMO VIRAM LINKS
+ *
+ * "(art. 113, § 1º, do CTN)" no resumo era texto morto: o mesmo motor que
+ * liga o comentário da questão à lei (leiCitacoesNoTexto + os vínculos
+ * fixados pela pessoa, citVinculosAplicar) nunca tinha sido chamado aqui.
+ *
+ * SÓ NOS NÓS DE TEXTO, depois do matParaHtml: as marcas (destaque, dúvida…)
+ * e o modo prova continuam como estavam; uma citação partida por uma marca
+ * fica sem link. O TEXTO DO RESUMO NÃO MUDA — o link é só desenho.
+ *
+ * TOCAR ABRE UMA PRÉVIA do artigo por cima do resumo (ler o artigo não pode
+ * custar o lugar na leitura); "abrir a lei inteira" leva à lei no dispositivo
+ * citado e, ao fechar, o resumo volta. Citação que não sabe a lei pergunta,
+ * pelo mesmo menu das questões (as leis do tópico primeiro).
+ * ===================================================================== */
+function matCitCtx() {
+  const a = matAtual || {};
+  let lista = [], doTopico = [];
+  try {
+    lista = typeof leisLista === "function" ? leisLista() : [];
+    if (typeof leisDoTopico === "function" && a.disciplina && a.topico) {
+      doTopico = leisDoTopico(matChave(a.disciplina, a.topico));
+      if (!doTopico.length && a.chave) doTopico = leisDoTopico(a.chave);
+    }
+  } catch (e) {}
+  return {
+    disciplina: a.disciplina || "", topico: a.topico || "", lista, doTopico,
+    /* na volta da lei: repinta a leitura (uma lei pode ter sido vinculada agora) */
+    aoVoltar: () => {
+      try { if ($("dlgMaterial") && $("dlgMaterial").open && matModo === "ler") matTrocarModo("ler"); } catch (e) {}
+    },
+  };
+}
+
+function matCitacoesLigar(painel) {
+  if (!painel || !painel.childNodes || !matAtual) return 0;
+  if (typeof leiCitacoesNoTexto !== "function" || typeof qsUiLeiAlvo !== "function") return 0;
+  let temVinc = false;
+  try { temVinc = typeof citVinculosLer === "function" && citVinculosLer().length > 0; } catch (e) {}
+  let ctx = null, n = 0;
+  const citar = (no) => {
+    const txt = String(no.textContent || "");
+    if (!temVinc && !/\bart/i.test(txt)) return;
+    let cits = [];
+    try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
+    try { if (temVinc) cits = citVinculosAplicar(txt, cits); } catch (e) {}
+    if (!cits.length) return;
+    const pai = no.parentNode;
+    if (!pai || !pai.insertBefore) return;
+    if (!ctx) ctx = matCitCtx();
+    let pos = 0;
+    cits.forEach((c) => {
+      if (c.ini > pos) pai.insertBefore(document.createTextNode(txt.slice(pos, c.ini)), no);
+      pai.insertBefore(matCitLink(c, ctx), no);
+      pos = c.fim;
+      n++;
+    });
+    if (pos < txt.length) pai.insertBefore(document.createTextNode(txt.slice(pos)), no);
+    pai.removeChild(no);
+  };
+  const andar = (el) => {
+    Array.from(el.childNodes || []).forEach((no) => {
+      if (no.nodeType === 3) citar(no);
+      else if (no.nodeType === 1) {
+        /* botão (modo prova, link já feito) e campo de texto não se mexem */
+        const tag = String(no.tagName || "").toUpperCase();
+        if (tag === "BUTTON" || tag === "TEXTAREA" || tag === "INPUT" || tag === "A") return;
+        andar(no);
+      }
+    });
+  };
+  andar(painel);
+  return n;
+}
+
+function matCitLink(c, ctx) {
+  const b = document.createElement("button");
+  b.type = "button";
+  const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
+  /* o estado aparece antes do toque: com lei (sublinhado) ou sem (tracejado, cinza) */
+  b.className = "qs-lei-link mat-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem")
+    + (c.permanente ? " qs-lei-link-perm" : "");
+  b.textContent = c.texto;
+  const nota = alvo.lei && typeof leiNotaDe === "function" ? leiNotaDe(alvo.lei.id, c.num) : "";
+  b.title = alvo.lei
+    ? t("mat_lei_link_ir", { l: alvo.lei.nome, a: c.numCru || "—" }) + (nota ? " · " + nota : "")
+    : (c.rotulo ? t("mat_lei_link_sem", { l: c.rotulo }) : t("mat_lei_link_qual", { a: c.numCru || "—" }));
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    matCitIr(c, b);
+  };
+  return b;
+}
+
+function matCitIr(c, botao) {
+  if (!matAtual) return;
+  const ctx = matCitCtx();
+  const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
+  if (alvo.lei && typeof leiCitacaoPreviewAbrir === "function") {
+    leiCitacaoPreviewAbrir(c, "", { lei: alvo.lei,
+      ctx: { disciplina: ctx.disciplina, topico: ctx.topico, aoVoltar: ctx.aoVoltar } });
+    try { reg("MATERIAL", "citação do resumo aberta na prévia", alvo.lei.nome + " · art. " + (c.numCru || c.num || "—")); } catch (e) {}
+    return;
+  }
+  /* sem lei certa: a mesma conversa das questões (escolher, vincular, colar) */
+  if (typeof qsUiLeiIr === "function") {
+    qsUiLeiIr(c, { disciplina: ctx.disciplina, topico: ctx.topico, _aoVoltar: ctx.aoVoltar }, botao);
+  }
+}
+
+/* "🔗 Vínculos de lei" da leitura: a mesma lista das questões, sobre o texto do escopo */
+function matVinculosAbrir(selecao) {
+  if (!matAtual || typeof qsVincAbrir !== "function") return;
+  const ctx = matCitCtx();
+  const txt = matTextoDoEscopo();
+  qsVincAbrir({ disciplina: ctx.disciplina, topico: ctx.topico, comentario: txt === null ? "" : txt,
+    _aoVoltar: ctx.aoVoltar, _onde: "resumo" }, $("matLeitura"), selecao || "");
 }
 
 /* o degrau mais próximo (quem guardou 16 px numa versão antiga cai no 15 ou no 17) */
@@ -3082,6 +3204,20 @@ function matIniciar() {
   matBotao("btnMarcaQ", "marcar dúvida", () => matMarcarSelecao("duvida"));
   matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
   matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
+  /* a seleção é guardada ao APERTAR: em alguns aparelhos o toque tira a seleção antes do clique */
+  if ($("btnMatVinc")) {
+    let selV = "";
+    const guardarV = () => { try { selV = qsVincSelecao($("matLeitura")); } catch (e) { selV = ""; } };
+    $("btnMatVinc").onmousedown = guardarV;
+    $("btnMatVinc").ontouchstart = guardarV;
+    $("btnMatVinc").onpointerdown = guardarV;
+    $("btnMatVinc").onclick = () => {
+      let s = selV;
+      if (!s) { try { s = qsVincSelecao($("matLeitura")); } catch (e) { s = ""; } }
+      selV = "";
+      matVinculosAbrir(s);
+    };
+  }
   matBotao("btnMatSalvarEstadoTopo", "salvar resumo (topo)", () => matSalvarEstado());
   matBotao("btnMatMarcador", "pôr marcador", matPorMarcador);
   matBotao("btnMatProvaLista", "lista de caiu na prova", () => matPainelMarcas("prova"));

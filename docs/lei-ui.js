@@ -2470,11 +2470,17 @@ let leiCitaPreviewOrigemArt = "";
  * mostra a redação alterada, se houver, com o mesmo selo da leitura
  * normal) e abre um diálogo pequeno por cima, sem tocar em leiAtual/
  * leiIdAtual da lei que está sendo lida agora. */
-function leiCitacaoPreviewAbrir(c, origemNum) {
+/* opc (vindo de FORA do leitor, ex.: o resumo): {lei, ctx: {disciplina, topico, aoVoltar}}.
+ * A lei já vem resolvida por quem chamou (vínculo fixo, lei única do tópico…);
+ * o ctx diz para qual tópico "abrir a lei inteira" vai e o que repintar na volta. */
+function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   if (!$("dlgLeiCitaPreview")) return;
   leiCitaPreviewOrigemArt = origemNum || "";
-  let lei = null;
-  try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; }
+  const o = opc || {};
+  let lei = o.lei || null;
+  if (!lei) {
+    try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; }
+  }
 
   if (!lei) {
     $("leiCitaPreviewTitulo").textContent = c.rotulo
@@ -2510,7 +2516,7 @@ function leiCitacaoPreviewAbrir(c, origemNum) {
     } catch (e) {}
     $("leiCitaPreviewTexto").textContent = texto;
   }
-  leiCitaPreviewAlvo = { lei, num: c.num, sub: c };
+  leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null };
   $("btnLeiCitaPreviewAbrir").hidden = false;
   abrirModal("dlgLeiCitaPreview");
   try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru); }
@@ -2526,6 +2532,17 @@ let leiCitaPreviewAlvo = null;
 function leiCitacaoPreviewAbrirLeiInteira() {
   if (!leiCitaPreviewAlvo || !leiCitaPreviewAlvo.lei) return;
   const alvo = leiCitaPreviewAlvo;
+  /* DE FORA DO LEITOR (o resumo): a lei sobe por cima de quem chamou e, ao
+   * fechar, quem chamou repinta — nada de "voltar para a lei de origem" */
+  if (alvo.ctx) {
+    $("dlgLeiCitaPreview").close();
+    leiVoltaPara = alvo.ctx.aoVoltar || null;
+    const achou = leiAbrirNoArtigo(alvo.ctx.disciplina, alvo.ctx.topico, alvo.lei.id, alvo.num, alvo.sub);
+    if (alvo.num && !achou) {
+      try { uiAlert(t("qs_lei_link_nao_achou", { a: alvo.sub.numCru || alvo.num, l: alvo.lei.nome })); } catch (e) {}
+    }
+    return;
+  }
   const disciplina = leiAtual && leiAtual.disciplina;
   const topico = leiAtual && leiAtual.topico;
   const idOrigem = leiIdAtual;

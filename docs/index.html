@@ -1253,6 +1253,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-unidade-alvo{background:rgba(250,204,21,.28);border-radius:4px;outline:2px solid rgba(250,204,21,.6)}
 .qs-lei-link-perm{border-bottom:2px solid var(--ok)}
 .qs-vinc-btn{margin:6px 0}
+.mat-vinc-btn{margin-left:4px;white-space:nowrap}
 .lei-anexos{margin-top:12px}
 .lei-anexos-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .lei-anexo{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--panel)}
@@ -6819,6 +6820,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q" title="Marca em azul: o que você não entendeu e precisa voltar."></button>
     <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova" title="Marca em roxo: isto já caiu em prova. Serve para achar depois o que a banca cobra."></button>
     <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg" title="Marca em rosa: pegadinha, exceção ou detalhe que costuma derrubar."></button>
+    <!-- as citações de lei viram links sozinhas; aqui se vê o que o app entendeu e se liga um trecho à mão -->
+    <button class="btn-min mat-vinc-btn" id="btnMatVinc" data-i18n="mat_vinc_btn" data-i18n-title="mat_vinc_btn_aj"></button>
     <!-- TIRAR MARCA SAIU DAQUI.
          Ele adivinhava qual marca voce queria tirar a partir da selecao e
          apagava sem mostrar nada. Agora se clica na propria marca colorida
@@ -7685,10 +7688,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      (qsVincAbrir, questoes-ui.js) -->
 <dialog id="dlgQsVinc" class="ui-modal diag-modal">
   <div class="vka-cab">
-    <h3 data-i18n="qs_vinc_titulo"></h3>
+    <h3 id="qsVincTit" data-i18n="qs_vinc_titulo"></h3>
     <button type="button" class="dlg-x" id="btnQsVincX" data-i18n-title="help_close">✖</button>
   </div>
-  <p class="nota" data-i18n="qs_vinc_ajuda"></p>
+  <p class="nota" id="qsVincAjuda" data-i18n="qs_vinc_ajuda"></p>
   <div id="qsVincSel"></div>
   <h4 data-i18n="qs_vinc_lista"></h4>
   <div id="qsVincLista" class="lei-dup-lista"></div>
