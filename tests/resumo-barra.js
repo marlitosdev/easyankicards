@@ -31,7 +31,8 @@ async function testes() {
       .forEach((id) => ok(bolha.indexOf('id="' + id + '"') >= 0, "B1 o botão " + id + " devia estar na bolha da seleção"));
     const linha = bloco("matCtrlLeitura");
     ok(linha.indexOf("btnMarcaD") < 0 && linha.indexOf('id="btnMatVinc"') < 0, "B1a a linha da leitura ainda tem as marcas");
-    ok(linha.indexOf('id="btnMatVincLista"') >= 0, "B1b a linha da leitura perdeu a lista de vínculos");
+    /* (v18.29.0) a lista de vínculos foi da linha da leitura para o "⋯" do topo */
+    ok(bloco("matPopMaisCorpo").indexOf('id="btnMatVincLista"') >= 0, "B1b a lista de vínculos sumiu (devia estar no '⋯')");
     ok(bloco("matTopo").indexOf("btnMatQstTrecho") < 0, "B1c 'questões do trecho' ficou duplicado no topo");
     ok(HTML.indexOf('id="btnMatCheiaVinc"') > HTML.indexOf('id="matCheiaBarra"'), "B1d a tela cheia não tem os vínculos de lei");
     ["btnMarcaD", "btnMatVinc", "btnMatQstTrecho", "btnBolhaJuris"].forEach((id) =>
@@ -102,6 +103,60 @@ async function testes() {
     api.$("btnMatCheiaVinc").onclick();
     ok(api.$("dlgQsVinc").open === true, "B8a '🔗 vínculos de lei' da tela cheia não abriu a lista");
     api.$("dlgQsVinc").close();
+  }
+
+  /* =================================================================
+   * T (18.29.0): O TOPO EM UMA LINHA — "Aa" e "⋯"
+   * ================================================================= */
+  {
+    const entre = (de, ate) => { const i = HTML.indexOf(de); const j = HTML.indexOf(ate, i); return i >= 0 && j > i ? HTML.slice(i, j) : ""; };
+    const topo = entre('id="matTopo"', 'id="matAjudaNota"');
+    const ordem = ["btnMatConsertar", "btnMatDuvidas", "btnMatQuestoes", "btnMatModoTopo", "btnMatSalvarEstadoTopo", "matPopAa", "matPopMais", "btnMatFecharTopo"];
+    const pos = ordem.map((id) => topo.indexOf('id="' + id + '"'));
+    ok(pos.every((p) => p >= 0) && pos.every((p, i) => i === 0 || p > pos[i - 1]), "T1 o topo não tem tudo na ordem (avisos, Editar, Salvar, Aa, ⋯, fechar): " + pos.join(","));
+    const aa = entre('id="matPopAa"', 'id="matPopMais"');
+    ["btnMatMenor", "matFonteVal", "btnMatMaior", "btnMatJanNormal", "btnMatAmpliar", "btnMatCheia"].forEach((id) =>
+      ok(aa.indexOf('id="' + id + '"') >= 0, "T1a '" + id + "' devia estar no 'Aa'"));
+    const mais = entre('id="matPopMaisCorpo"', 'id="btnMatFecharTopo"');
+    ["btnMatMarcador", "btnMatIrMarcador", "matMarcadorInfo", "btnMatQstResumo", "btnMatProva", "btnMatJuris", "btnMatVincLista",
+     "btnMatProvaLista", "btnMatPegLista", "btnMatDicasLista", "btnMatDicas", "btnMatLog", "btnMatAjuda"].forEach((id) =>
+      ok(mais.indexOf('id="' + id + '"') >= 0, "T1b '" + id + "' devia estar no '⋯'"));
+    ok(bloco("matCtrlLeitura").indexOf("btnMatMenor") < 0 && entre('id="matCtrlLeitura"', 'id="matCheiaBarra"').indexOf("btnMatCheia\"") < 0,
+      "T1c letra e janela ficaram também na linha da leitura");
+    ["matTitulo", "matSub", "btnMatMenor", "btnMatCheia", "btnMatMarcador", "matAjudaNota", "btnMatFecharTopo"].forEach((id) =>
+      ok(HTML.split('id="' + id + '"').length === 2, "T1d o id " + id + " não aparece exatamente uma vez"));
+    ok(/#matRodape #btnMatModo,#matRodape #btnMatSalvar,#matRodape #btnMatFechar\{display:none\}/.test(HTML), "T1e o rodapé continua repetindo Editar/Salvar/Fechar");
+    ok(/#dlgMaterial \.mat-cab \.mat-topo\{max-height:none;overflow:visible/.test(HTML), "T1f o topo continua com rolagem própria (cortaria os menus)");
+  }
+  {
+    const { api } = rodar();
+    preparar(api);
+    /* T2: a ajuda só aparece quando pedida, e nunca na tela cheia */
+    ok(api.$("matAjudaNota").hidden === true, "T2 a frase de ajuda aparece sem ser pedida");
+    api.$("btnMatAjuda").onclick();
+    ok(api.$("matAjudaNota").hidden === false, "T2a '? como funciona' não mostrou a ajuda");
+    api.matCheiaTrocar(true);
+    ok(api.$("matAjudaNota").hidden === true, "T2b a ajuda aparece na tela cheia");
+    api.matCheiaTrocar(false);
+    ok(api.$("matAjudaNota").hidden === false, "T2c ao sair da tela cheia a ajuda pedida sumiu");
+    api.$("btnMatAjuda").onclick();
+    ok(api.$("matAjudaNota").hidden === true, "T2d o segundo toque não escondeu a ajuda");
+    api.matCheiaTrocar(true);
+    api.matCheiaTrocar(false);
+    ok(api.$("matAjudaNota").hidden === true, "T2e com a ajuda fechada, sair da tela cheia fez a frase reaparecer");
+    /* T3: escolher uma ação no "⋯" fecha o menu */
+    api.$("matPopMais").open = true;
+    (api.$("matPopMaisCorpo")._ouv.click || []).forEach((f) => f({ target: api.$("btnMatLog") }));
+    ok(api.$("matPopMais").open === false, "T3 escolher uma ação no '⋯' não fechou o menu");
+    /* T4: clicar fora fecha */
+    api.$("matPopAa").open = true;
+    (api.$("dlgMaterial")._ouv.click || []).forEach((f) => f({ target: api.$("matLeitura") }));
+    ok(api.$("matPopAa").open === false, "T4 clicar fora não fechou o 'Aa'");
+    /* T5: entrar na tela cheia fecha os menus (o topo some) */
+    api.$("matPopAa").open = true;
+    api.matCheiaTrocar(true);
+    ok(api.$("matPopAa").open === false, "T5 a tela cheia deixou o 'Aa' aberto");
+    api.matCheiaTrocar(false);
   }
 
   return falhas;
