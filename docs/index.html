@@ -1282,6 +1282,11 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgMaterial .mat-escopo>*{flex:0 0 auto}
 /* o rodapé repetia Editar, Salvar e Fechar do topo: ficam só os que não existem lá */
 #matRodape #btnMatModo,#matRodape #btnMatSalvar,#matRodape #btnMatFechar{display:none}
+/* A EDIÇÃO (v18.30.0): a barra não pode cortar o menu das marcas; o campo ocupa a janela */
+#dlgMaterial #matBarra{max-height:none;overflow:visible}
+.mat-pop-esq .mat-pop-corpo{left:0;right:auto}
+#dlgMaterial .mat-pop-marcas{flex-direction:row;flex-wrap:wrap;min-width:0;width:max-content;max-width:min(360px,90vw)}
+#dlgMaterial #matTexto,#dlgMaterial #matTextoSecao{min-height:max(290px,55vh);resize:vertical;line-height:1.5}
 /* VINCULAR TRECHO (v18.25.0): fichas da lei e da parte do artigo, achados e a prévia */
 .qs-vinc-trecho{font-style:italic}
 .qs-vinc-rot{display:block;margin:10px 0 4px;font-size:13px}
@@ -6847,14 +6852,25 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="matAjudaNota" hidden data-i18n="mat_ajuda"></p>
   <div id="matEscopo" class="mat-ficha-escopo mat-escopo" role="group" data-i18n-title="mat_esc_rot" hidden></div>
   <div class="mat-barra" id="matBarra">
-    <button class="fmt" id="btnFmtB" title="Deixa o trecho selecionado em negrito. Sem seleção, insere as marcas e deixa o cursor no meio."><b>N</b></button>
-    <button class="fmt" id="btnFmtI" title="Deixa o trecho selecionado em itálico. Sem seleção, insere as marcas e deixa o cursor no meio."><i>I</i></button>
-    <button class="fmt" id="btnFmtM" title="Destaca o trecho com fundo colorido, como um marca-texto. É a mesma marca do botão “destaque” da leitura.">&#9646;</button>
+    <button class="fmt" id="btnFmtB" title="Deixa o trecho selecionado em negrito (Ctrl+B). Sem seleção, insere as marcas e deixa o cursor no meio. Apertar de novo tira."><b>N</b></button>
+    <button class="fmt" id="btnFmtI" title="Deixa o trecho selecionado em itálico (Ctrl+I). Sem seleção, insere as marcas e deixa o cursor no meio. Apertar de novo tira."><i>I</i></button>
+    <button class="fmt" id="btnFmtM" title="Destaca o trecho com fundo colorido, como um marca-texto. É a mesma marca do botão “destaque” da leitura. Apertar de novo tira.">&#9646;</button>
+    <!-- AS CINCO MARCAS TAMBÉM NA EDIÇÃO (v18.30.0): antes só o destaque existia aqui -->
+    <details class="mat-pop mat-pop-esq" id="matPopMarcas">
+      <summary class="fmt mat-pop-bt" data-i18n-title="mat_fmt_marcas_tit">&#9662;</summary>
+      <div class="mat-pop-corpo mat-pop-marcas">
+        <button class="marca marca-d" id="btnFmtMkD" data-i18n="mat_marca_d" title="Marca em amarelo: o que você quer reler. Apertar de novo tira; com outra cor, troca."></button>
+        <button class="marca marca-i" id="btnFmtMkI" data-i18n="mat_marca_i" title="Marca em vermelho: o que não pode faltar na hora da prova. Apertar de novo tira; com outra cor, troca."></button>
+        <button class="marca marca-q" id="btnFmtMkQ" data-i18n="mat_marca_q" title="Marca em azul: o que você não entendeu e precisa voltar. Apertar de novo tira; com outra cor, troca."></button>
+        <button class="marca marca-prova" id="btnFmtMkP" data-i18n="mat_marca_prova" title="Marca em roxo: isto já caiu em prova. Apertar de novo tira; com outra cor, troca."></button>
+        <button class="marca marca-peg" id="btnFmtMkG" data-i18n="mat_marca_peg" title="Marca em rosa: pegadinha, exceção ou detalhe que costuma derrubar. Apertar de novo tira; com outra cor, troca."></button>
+      </div>
+    </details>
     <span class="fmt-sep"></span>
-    <button class="fmt" id="btnFmtH" title="Transforma a linha em título. Um # é título grande, dois ## é subtítulo — até seis níveis.">H</button>
-    <button class="fmt" id="btnFmtL" title="Transforma a linha em item de lista, com marcador.">&#9776;</button>
+    <button class="fmt" id="btnFmtH" title="Transforma a linha em título. Apertar de novo desce um nível (## → ###); na terceira vez, deixa de ser título.">H</button>
+    <button class="fmt" id="btnFmtL" title="Transforma a linha — ou todas as linhas selecionadas — em itens de lista. Se já são itens, deixam de ser.">&#9776;</button>
     <button class="fmt" id="btnFmtHr" title="Insere uma linha divisória, para separar assuntos dentro do resumo.">&#8212;</button>
-    <button class="fmt fmt-colar" id="btnMatColar" data-i18n="mat_colar_btn" title="Cola texto de fora convertendo a formatação: negrito, itálico, títulos e listas viram a marcação do app em vez de virar texto solto."></button>
+    <button class="fmt fmt-colar" id="btnMatColar" data-i18n="mat_colar_btn" title="Cola, ONDE ESTÁ O CURSOR, texto de fora (NotebookLM, ChatGPT, Gemini, Word…) convertendo a formatação: negrito, itálico, títulos e listas viram a marcação do app em vez de virar texto solto."></button>
     <span class="fmt-dica" data-i18n="mat_fmt_dica"></span>
   </div>
   <textarea id="matTexto" rows="16" style="width:100%;box-sizing:border-box"
