@@ -3535,6 +3535,11 @@ function leiAcharUnidades(textoArtigo, sub) {
  * mudar) não perde nada — só deixa de casar o trecho que mudou.
  *
  * Cada vínculo: { k: chave do trecho, trecho, leiId, artigos:[{num,numCru}] }.
+ *
+ * DESDE A v18.25.0: cada artigo pode levar a PARTE ({num, numCru: "113, § 1º",
+ * base: "113", sub: {paragrafos, incisos, alineas}}), e o vínculo pode valer só
+ * num tópico (chave = "disciplina›tópico"; a k passa a ser "chave|trecho").
+ * Vínculo antigo, sem sub e sem chave, continua valendo em todo o app.
  * ===================================================================== */
 const CIT_VINC_CHAVE = "eac_cit_vinculos";
 
@@ -3567,11 +3572,14 @@ function citLerArtigos(texto) {
 }
 
 function citVinculoSalvar(v) {
-  const k = citChave(v && v.trecho);
-  if (!k || !v.leiId) return null;
+  const kt = citChave(v && v.trecho);
+  if (!kt || !v.leiId) return null;
+  const chave = String((v && v.chave) || "");
+  const k = chave ? chave + "|" + kt : kt;
   const lista = citVinculosLer().filter((x) => x.k !== k);
   const r = { k, trecho: String(v.trecho).replace(/\s+/g, " ").trim(), leiId: v.leiId,
     artigos: (v.artigos || []).slice(0, 30), criado: new Date().toISOString() };
+  if (chave) r.chave = chave;
   lista.push(r);
   return citVinculosGravar(lista) ? r : null;
 }
@@ -3586,10 +3594,14 @@ function citVinculoRemover(k) {
 /* Sobrepõe os vínculos permanentes às citações lidas do texto: cada trecho
  * guardado que aparece no texto vira UM pedaço clicável com a lei FIXA (leiId),
  * no lugar do que a leitura automática tinha achado ali. */
-function citVinculosAplicar(texto, cits) {
+function citVinculosAplicar(texto, cits, chave) {
   const s = String(texto || "");
   let saida = (cits || []).slice();
-  citVinculosLer().forEach((v) => {
+  /* os de todo o app primeiro e os do tópico depois: no mesmo trecho, o do tópico vence */
+  const ch = String(chave || "");
+  const vs = citVinculosLer().filter((v) => !v.chave || (ch && v.chave === ch));
+  vs.sort((a, b) => (a.chave ? 1 : 0) - (b.chave ? 1 : 0));
+  vs.forEach((v) => {
     const molde = String(v.trecho || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
     if (!molde) return;
     let re;
@@ -3599,9 +3611,10 @@ function citVinculosAplicar(texto, cits) {
       const ini = m.index, fim = m.index + m[0].length;
       saida = saida.filter((c) => !(c.ini < fim && ini < c.fim));
       const a0 = (v.artigos || [])[0] || {};
+      const sb = a0.sub || {};
       saida.push({ ini, fim, num: a0.num || "", numCru: a0.numCru || "", rotulo: "", texto: m[0],
-        incisos: [], paragrafos: [], alineas: [], leiId: v.leiId, permanente: true,
-        vinculoK: v.k, artigos: v.artigos || [] });
+        incisos: (sb.incisos || []).slice(), paragrafos: (sb.paragrafos || []).slice(), alineas: (sb.alineas || []).slice(),
+        leiId: v.leiId, permanente: true, vinculoK: v.k, artigos: v.artigos || [], soTopico: !!v.chave });
       if (m[0].length === 0) re.lastIndex++;
     }
   });

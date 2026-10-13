@@ -226,7 +226,7 @@ async function testes() {
     ok(cards.length === 2 && /lei não identificada|abre/.test(cards[0].textContent), "U4a o dialogo devia listar as duas citacoes e o que o app entendeu: " + cards.map((c) => c.textContent).join(" || "));
     ok(achar(api.$("qsVincSel"), (c) => c.id === "btnQsVincSel").length === 0 && /Nenhum trecho selecionado/.test(api.$("qsVincSel").textContent || ""), "U4b sem selecao devia dizer como selecionar");
     achar(cards[1], (c) => /^btnQsVincErrado_/.test(c.id || ""))[0].onclick();
-    ok(api.$("dlgQsVincEsc").open === true && api.$("qsVincArts").value === "153", "U4c a tela de correcao devia abrir com o artigo do trecho: " + api.$("qsVincArts").value);
+    ok(api.$("dlgQsVincEsc").open === true && api.$("qsVincArts").value === "153, II", "U4c a tela de correcao devia abrir com o artigo E o inciso do trecho (v18.25.0): " + api.$("qsVincArts").value);
     api.$("btnQsVincEscOk").onclick();
     ok(/Escolha a lei/.test(api.$("qsVincEscAviso").textContent || "") && api.citVinculosLer().length === 0, "U4d sem escolher a lei nao pode gravar");
     api.$("qsVincLei").value = "lei_cf";
