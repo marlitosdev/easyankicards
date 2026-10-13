@@ -127,11 +127,18 @@ async function testes() {
   /* R9-R11: sem lei certa — pergunta, não chuta */
   {
     const { api } = rodar();
-    preparar(api, { duasLeis: true });
+    preparar(api, { duasLeis: true, texto: TXT + "\n* Sem lei nenhuma antes: art. 113, § 2º." });
     const ls = links(api);
-    const semNome = ls.filter((b) => b.textContent === "art. 113, § 1º")[0];
+    /* sem lei NENHUMA citada antes no parágrafo: pergunta */
+    const semNome = ls.filter((b) => b.textContent === "art. 113, § 2º")[0];
     ok(!!semNome && /qs-lei-link-sem/.test(cls(semNome)),
       "R9 com duas leis no tópico, a citação sem lei devia aparecer como 'sem lei'");
+    /* D1 (v18.26.0): com a lei citada antes NO MESMO item, a citação sem lei a herda */
+    const herda = ls.filter((b) => b.textContent === "art. 113, § 1º")[0];
+    ok(!!herda && !/qs-lei-link-sem/.test(cls(herda)) && /qs-lei-link-ded/.test(cls(herda))
+      && /usei CTN, a última citada/.test(herda.title || ""),
+      "D1 '(art. 113, § 1º)' depois de '(art. 3º do CTN)' no mesmo item devia herdar o CTN e dizer isso: " + (herda && cls(herda) + " | " + herda.title));
+    ok(ls.filter((b) => /qs-lei-link-ded/.test(cls(b))).length === 1, "D1a só a citação sem lei devia ser deduzida");
     ok(/não diz de qual lei/.test((semNome && semNome.title) || ""), "R9a o balão não explica: " + (semNome && semNome.title));
     ok(ls.filter((b) => /CTN/.test(b.textContent || "")).every((b) => !/sem/.test(cls(b))),
       "R9b as citações com 'do CTN' deviam continuar sabendo a lei");
@@ -147,6 +154,76 @@ async function testes() {
       ok(api.$("dlgLeiSeca").open === true, "R11 escolher a lei no menu não abriu a lei");
       ok(api.$("dlgMaterial").open === true, "R11a escolher a lei fechou o resumo");
     }
+    /* D2: a citação que herdou a lei abre a prévia nela, sem perguntar */
+    api.$("dlgLeiSeca").close();
+    links(api).filter((b) => b.textContent === "art. 113, § 1º")[0].onclick({ stopPropagation() {} });
+    ok(api.$("dlgLeiCitaPreview").open === true && /Código Tributário/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
+      "D2 a citação com lei herdada não abriu a prévia no CTN");
+  }
+
+  /* D3-D7 (v18.26.0): a lei herdada do parágrafo — regras e onde vale */
+  {
+    const { api } = rodar();
+    const d = (txt, antes) => { const cs = api.leiCitacoesNoTexto(txt); const r = api.leiDeduzirRotulos(txt, cs, antes); return { cs, r }; };
+    let x = d("Ver o art. 3º do CTN e depois o art. 113.");
+    ok(x.cs[1].rotuloDeduzido === "CTN" && x.r === "CTN", "D3 no mesmo parágrafo a lei devia passar adiante");
+    x = d("Ver o art. 3º do CTN.\nDepois o art. 113.");
+    ok(!x.cs[1].rotuloDeduzido && x.r === "", "D3a parágrafo novo devia esquecer a lei");
+    x = d("Ver o art. 3º do CTN e o art. 99 desta lei.");
+    ok(!x.cs[1].rotuloDeduzido, "D3b 'desta lei' não pode herdar a lei citada antes");
+    x = d("e o art. 113.", "CTN");
+    ok(x.cs[0].rotuloDeduzido === "CTN", "D3c a lei vista no pedaço anterior (mesmo parágrafo) devia valer");
+    x = d("o art. 5º da CF e o art. 113 do CTN, e o art. 9º.");
+    ok(x.cs[2].rotuloDeduzido === "CTN", "D3d vale a ÚLTIMA lei citada, não a primeira");
+    const perm = [{ ini: 0, fim: 4, leiId: "lei_x", rotulo: "" }];
+    api.leiDeduzirRotulos("abcd", perm, "CTN");
+    ok(!perm[0].rotuloDeduzido, "D3e o vínculo fixado pela pessoa não pode receber lei deduzida");
+    x = d("Ver o art. 3º do CTN.\nOutro parágrafo sem citação.");
+    ok(x.r === "", "D3f o parágrafo acabou depois da citação: a lei não pode passar para o próximo pedaço");
+  }
+  {
+    /* D4: com UMA lei no tópico nada muda — vale a do tópico, sem marca de deduzida */
+    const { api } = rodar();
+    preparar(api);
+    ok(links(api).every((b) => !/qs-lei-link-ded/.test(cls(b))), "D4 com uma lei só no tópico, nenhum link devia ser 'deduzido'");
+  }
+  {
+    /* D5: no comentário da questão vale o mesmo, e a lista de vínculos diz que deduziu */
+    const { api } = rodar();
+    preparar(api, { duasLeis: true });
+    const q = { disciplina: DISC, topico: TOP, comentario: "Segundo o art. 3º do CTN, e conforme o art. 113, § 3º, a multa é principal." };
+    const el = api.document.createElement("div");
+    api.qsUiComentario(el, q);
+    const bs = el.querySelectorAll("button.qs-lei-link");
+    ok(bs.length === 2 && /qs-lei-link-ded/.test(cls(bs[1])) && !/qs-lei-link-sem/.test(cls(bs[1])),
+      "D5 no comentário, a citação sem lei devia herdar o CTN: " + bs.map(cls).join(" | "));
+    api.qsVincAbrir(q, el, "");
+    ok(/lei deduzida de “CTN”/.test(api.$("qsVincLista").textContent || ""), "D5a a lista de vínculos não diz que a lei foi deduzida");
+  }
+  {
+    /* D6-D7: o pedido à IA exige a citação completa e dá os nomes que o app reconhece */
+    const { api } = rodar();
+    const ch = preparar(api, { duasLeis: true });
+    const leis = api.riaLeisDoTopico(ch);
+    const ctn = leis.filter((l) => l.nome.indexOf("Código Tributário") >= 0)[0];
+    const cf = leis.filter((l) => l.nome.indexOf("Constituição") >= 0)[0];
+    ok(ctn && ctn.sigla === "CTN" && cf && cf.sigla === "CF/88", "D6 as siglas das leis do tópico saíram erradas: " + JSON.stringify(leis));
+    const p = api.riaPrompt({ disciplina: DISC, topico: TOP, prof: "padrao", ramos: [], leis });
+    ok(/CITAÇÕES: escreva sempre a citação completa/.test(p), "D7 o pedido não exige a citação completa");
+    ok(/chame as leis deste tópico assim: /.test(p) && /Código Tributário Nacional \(CTN\)/.test(p) && /Constituição Federal de 1988 \(CF\/88\)/.test(p), "D7a o pedido não dá os nomes das leis: " + p.slice(-300));
+    const p0 = api.riaPrompt({ disciplina: DISC, topico: TOP, prof: "padrao", ramos: [] });
+    ok(!/chame as leis deste tópico/.test(p0), "D7b sem leis no tópico, a linha dos nomes não devia aparecer");
+    /* o pedido montado pela TELA (resumo pela IA) leva os nomes das leis do tópico */
+    api.riaAbrirDoTopico(DISC, TOP);
+    ok(/Código Tributário Nacional \(CTN\)/.test(api.riaMontarPedido()), "D7c o pedido da tela não leva os nomes das leis do tópico");
+    /* duas leis com as mesmas iniciais: "CTN" não leva a uma só — não pode ir no pedido */
+    api.leiGuardar({ id: "lei_ctn2", nome: "Lei 1/2000 - Código Tributário Nacional", especie: "Lei", numero: "1", texto: "Art. 1º Um." });
+    api.leiLigar("lei_ctn2", ch);
+    const leis2 = api.riaLeisDoTopico(ch);
+    /* a lei_ctn tem o APELIDO "CTN" (escolhido pela pessoa) e fica com ele; a outra não pode recebê-lo */
+    const outra = leis2.filter((l) => /^Lei 1\/2000/.test(l.nome))[0];
+    ok(outra && outra.sigla !== "CTN" && leis2.filter((l) => l.sigla === "CTN").length === 1,
+      "D6a com duas leis 'CTN', a sigla ambígua foi para o pedido: " + JSON.stringify(leis2));
   }
   {
     const { api } = rodar();

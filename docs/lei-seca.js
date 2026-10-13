@@ -3621,6 +3621,32 @@ function citVinculosAplicar(texto, cits, chave) {
   return saida.sort((x, y) => x.ini - y.ini);
 }
 
+/* A LEI QUE A FRASE JÁ DISSE (v18.26.0).
+ * "… sanção de ato ilícito (art. 3º do CTN), a multa é obrigação principal
+ * (art. 113, § 1º)." — a segunda citação não repete a lei, mas quem lê sabe
+ * que é o CTN: é a última lei nomeada NO MESMO PARÁGRAFO. Aqui isso vira
+ * c.rotuloDeduzido; quem resolve (qsUiLeiAlvo) só usa quando o tópico não
+ * decide sozinho (duas leis, ou nenhuma), e o link diz que a lei foi deduzida.
+ * Parágrafo novo ("\n") esquece a lei. Devolve a última lei vista, para quem
+ * percorre o texto em pedaços (a leitura do resumo, nó a nó). */
+function leiDeduzirRotulos(texto, cits, antes) {
+  const s = String(texto || "");
+  let rot = String(antes || "");
+  let pos = 0;
+  (cits || []).forEach((c) => {
+    if (s.slice(pos, c.ini).indexOf("\n") >= 0) rot = "";
+    if (c.rotulo) rot = c.rotulo;
+    /* "o art. 99 DESTA lei" aponta para a lei de quem escreve (a da questão),
+     * não para a última citada: esse continua perguntando */
+    else if (!c.leiId && rot && !/^\s*,?\s*(?:d|n)?(?:est[ae]s?|a\s+presente|o\s+presente)\b/i.test(s.slice(c.fim, c.fim + 30))) {
+      c.rotuloDeduzido = rot;
+    }
+    pos = Math.max(pos, c.fim);
+  });
+  if (s.slice(pos).indexOf("\n") >= 0) rot = "";
+  return rot;
+}
+
 function leiRotuloChave(rotulo) {
   const s = leiTxtChave(rotulo);
   /* O ADCT NÃO É UMA LEI À PARTE — é o Ato das Disposições Constitucionais
@@ -5022,7 +5048,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiSoltarPonteiros, leiMesclar,
     leiEstruturaArtigo, leiLerRotulo, leiRomanoValor, leiValorRomano, leiRotuloDaUnidade,
     leiContextoDeLinhas, leiLerFaixaRevogada, leiAcharUnidades, leiConsumirEndereco,
-    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar,
+    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar, leiDeduzirRotulos,
     leiDataDaLei, leiCabecalhosAlteradora, leiMarcaDoTrecho, leiLerBlocoAlterado, leiMesclarFragmento,
     leiMontarArtigo, leiLerAlteradora, leiAlteradoraCitaLei, leiDataUltimaAlteracao, leiItensDaAlteradora,
     leiRomanoDoAnexo, leiAnexosDaAlteradora, leiOrdemDeAnexo, leiAnexoDaLei, leiItensDeAnexos, leiAplicarAnexo,

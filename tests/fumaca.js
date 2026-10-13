@@ -793,7 +793,7 @@ function rodar() {
     leiEstruturaArtigo, leiLerRotulo, leiRomanoValor, leiValorRomano, leiRotuloDaUnidade, leiContextoDeLinhas, leiLerFaixaRevogada,
     leiDupContextoEl, leiRelatorioFluxo, leiRelatorioCopiar, leiSeguro,
     leiAcharUnidades, leiConsumirEndereco,
-    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar,
+    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar, leiDeduzirRotulos, riaLeisDoTopico,
     leiIrUnidade, leiLinhasDesenhadas, leiBlocoDoArtigo, qsVincAbrir, qsVincPintar, qsVincEscolher, qsVincSalvar, qsVincBotao, qsVincSelecao,
     qsVincCtxAtual: () => qsVincCtx,
     leiDataDaLei, leiCabecalhosAlteradora, leiMarcaDoTrecho, leiLerBlocoAlterado, leiMesclarFragmento,

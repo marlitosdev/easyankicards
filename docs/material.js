@@ -1023,6 +1023,18 @@ function matCitacoesLigar(painel) {
   let temVinc = false;
   try { temVinc = typeof citVinculosLer === "function" && citVinculosLer().length > 0; } catch (e) {}
   let ctx = null, n = 0;
+  /* a lei nomeada antes vale para a citação seguinte SEM lei, no mesmo bloco
+   * (parágrafo, item de lista): os nós de texto vêm em ordem, um por um */
+  let rotAntes = "", blocoAtual = null;
+  const BLOCOS = /^(P|LI|H[1-6]|DIV|BLOCKQUOTE|TD|TH|DD|DT|SECTION|UL|OL)$/;
+  const blocoDe = (no) => {
+    let e = no.parentNode;
+    while (e && e !== painel) {
+      if (BLOCOS.test(String(e.tagName || "").toUpperCase())) return e;
+      e = e.parentNode;
+    }
+    return painel;
+  };
   /* o vínculo "só neste tópico" vale aqui; o de outro tópico, não */
   const chV = matAtual.disciplina && matAtual.topico ? matChave(matAtual.disciplina, matAtual.topico) : "";
   const citar = (no) => {
@@ -1032,6 +1044,9 @@ function matCitacoesLigar(painel) {
     try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
     try { if (temVinc) cits = citVinculosAplicar(txt, cits, chV); } catch (e) {}
     if (!cits.length) return;
+    const bl = blocoDe(no);
+    if (bl !== blocoAtual) { blocoAtual = bl; rotAntes = ""; }
+    try { if (typeof leiDeduzirRotulos === "function") rotAntes = leiDeduzirRotulos(txt, cits, rotAntes); } catch (e) {}
     const pai = no.parentNode;
     if (!pai || !pai.insertBefore) return;
     if (!ctx) ctx = matCitCtx();
@@ -1066,12 +1081,13 @@ function matCitLink(c, ctx) {
   const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
   /* o estado aparece antes do toque: com lei (sublinhado) ou sem (tracejado, cinza) */
   b.className = "qs-lei-link mat-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem")
-    + (c.permanente ? " qs-lei-link-perm" : "");
+    + (alvo.deduzida ? " qs-lei-link-ded" : "") + (c.permanente ? " qs-lei-link-perm" : "");
   b.textContent = c.texto;
   const nota = alvo.lei && typeof leiNotaDe === "function" ? leiNotaDe(alvo.lei.id, c.num) : "";
   b.title = alvo.lei
     ? t("mat_lei_link_ir", { l: alvo.lei.nome, a: c.numCru || "—" }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t("mat_lei_link_sem", { l: c.rotulo }) : t("mat_lei_link_qual", { a: c.numCru || "—" }));
+  if (alvo.deduzida) b.title += " · " + t("qs_lei_link_ded", { l: c.rotuloDeduzido });
   b.onclick = (ev) => {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     matCitIr(c, b);

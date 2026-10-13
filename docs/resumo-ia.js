@@ -48,6 +48,11 @@ function riaPrompt(o) {
   L.push(t("ria_p_prof_" + (RIA_PROFS.indexOf(o.prof) >= 0 ? o.prof : "padrao")));
   if (!o.ramo && o.sugerir) L.push(t("ria_p_sugerir"));
   L.push(t("ria_p_regras"));
+  /* citação completa: é o que faz cada "art. X" virar link no resumo */
+  L.push(t("ria_p_citar"));
+  if ((o.leis || []).length) {
+    L.push(t("ria_p_leis_nomes", { l: o.leis.map((x) => x.sigla ? x.nome + " (" + x.sigla + ")" : x.nome).join("; ") }));
+  }
   if (String(o.lei || "").trim()) {
     L.push("");
     L.push(t("ria_p_lei"));
@@ -218,13 +223,34 @@ function riaAcrescentarNovo() {
   $("resIANovo").value = "";
   riaPintarRamos();
 }
+/* as leis do tópico, com a sigla que o app RECONHECE de volta (o apelido ou as
+ * iniciais do nome — só se ela levar a esta lei e a nenhuma outra) */
+function riaLeisDoTopico(chave) {
+  let doTopico = [], lista = [];
+  try {
+    doTopico = typeof leisDoTopico === "function" && chave ? leisDoTopico(chave) : [];
+    lista = typeof leisLista === "function" ? leisLista() : [];
+  } catch (e) { return []; }
+  return doTopico.map((l) => {
+    const cands = String(l.apelido || "").split(/\s+/).filter(Boolean)
+      .concat(typeof leiSiglasDoNome === "function" ? leiSiglasDoNome(l.nome) : []);
+    let sigla = "";
+    for (let i = 0; i < cands.length && !sigla; i++) {
+      const s = cands[i];
+      if (s.length < 2 || s.length > 10 || leiTxtChave(s) === leiTxtChave(l.nome)) continue;
+      try { const x = leiCasarRotulo(s, lista); if (x && x.id === l.id) sigla = s; } catch (e) {}
+    }
+    return { nome: l.nome, sigla };
+  });
+}
+
 function riaMontarPedido() {
   const ramo = riaRamoAlvo();
   const prof = ($("resIAProf") || {}).value || "padrao";
   const lei = $("resIALei").checked && !$("resIALeiLin").hidden && typeof leiTextoDoTopico === "function" ? leiTextoDoTopico(riaCtx.chave) : "";
   const atual = $("resIAAtual").checked && !$("resIAAtualLin").hidden ? riaTextoAtualDoEscopo() : "";
   return riaPrompt({
-    disciplina: riaCtx.disciplina, topico: riaCtx.topico, prof, lei, atual,
+    disciplina: riaCtx.disciplina, topico: riaCtx.topico, prof, lei, atual, leis: riaLeisDoTopico(riaCtx.chave),
     sugerir: !ramo && $("resIASugerir").checked,
     ramo: ramo ? { nome: ramo.nome, foco: (riaCtx.alvoFoco || {}).foco || "" } : null,
     ramos: ramo ? [] : (riaCtx.lista || []).filter((r) => r.incluir !== false).map((r) => ({ nome: r.nome, foco: r.foco }))
