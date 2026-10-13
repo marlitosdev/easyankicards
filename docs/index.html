@@ -1261,6 +1261,27 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-bolha.mat-bolha-doca{left:8px!important;right:8px;bottom:8px;top:auto!important;max-width:none;justify-content:center}
 .mat-bolha-dica{font-size:12px;color:var(--sutil)}
 #dlgMaterial .mat-bolha:not(.mat-bolha-doca){max-width:min(560px,94vw);width:max-content}
+/* O TOPO EM UMA LINHA (v18.29.0): título à esquerda, ações à direita; "Aa" e "⋯" são menus suspensos */
+#dlgMaterial .mat-cab{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
+.mat-cab-tit{flex:1 1 220px;min-width:0}
+.mat-cab-tit h3{margin:0;font-size:17px;line-height:1.25}
+.mat-sub{margin:2px 0 0;font-size:12px}
+#dlgMaterial .mat-cab .mat-topo{max-height:none;overflow:visible;margin:0;padding:0;border:0;gap:4px}
+.mat-pop{position:relative;display:inline-block}
+.mat-pop>summary{list-style:none;cursor:pointer;user-select:none}
+.mat-pop>summary::-webkit-details-marker{display:none}
+.mat-pop-bt{min-width:30px;text-align:center;font-weight:700}
+.mat-pop[open]>.mat-pop-bt{background:var(--acao);border-color:var(--acao);color:#fff}
+.mat-pop-corpo{position:absolute;right:0;top:calc(100% + 4px);z-index:40;display:flex;flex-direction:column;gap:4px;
+  padding:8px;min-width:230px;max-width:min(340px,92vw);background:var(--panel);border:1px solid var(--borda);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.mat-pop-mais .btn-min{width:100%;text-align:left;margin:0}
+.mat-pop-aa{align-items:flex-start;min-width:280px}
+/* os ramos numa linha só, que rola de lado, em vez de três linhas de fichas */
+#dlgMaterial .mat-escopo{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--borda) transparent;padding-bottom:2px}
+#dlgMaterial .mat-escopo>*{flex:0 0 auto}
+/* o rodapé repetia Editar, Salvar e Fechar do topo: ficam só os que não existem lá */
+#matRodape #btnMatModo,#matRodape #btnMatSalvar,#matRodape #btnMatFechar{display:none}
 /* VINCULAR TRECHO (v18.25.0): fichas da lei e da parte do artigo, achados e a prévia */
 .qs-vinc-trecho{font-style:italic}
 .qs-vinc-rot{display:block;margin:10px 0 4px;font-size:13px}
@@ -6754,73 +6775,76 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <dialog id="dlgMaterial" class="ui-modal diag-modal">
-  <h3 id="matTitulo"></h3>
-  <p class="nota" id="matSub"></p>
-  <!-- Com resumo grande, "editar" e "salvar estado" só no rodapé obrigam a
-       percorrer a página inteira para um gesto que se faz o tempo todo.
-       Os mesmos comandos ficam aqui em cima. -->
-  <div class="mat-topo" id="matTopo">
-    <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
-    <!-- MESMO comando do botão do rodapé, com o MESMO rótulo. Antes eram
-         "Salvar" e "Salvar estado", nomes diferentes para a mesma gravação —
-         o que fazia parecer que salvavam coisas diferentes. Aqui em cima ele
-         existe só porque, com resumo longo, o rodapé fica longe. -->
-    <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar"
-      title="Grava o resumo com as marcas que você fez, e continua aqui. É o mesmo botão do rodapé."></button>
-    <span class="mat-sep"></span>
-    <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por" title="Guarda onde você parou. Lendo, usa o ponto da rolagem; editando, usa o cursor."></button>
-    <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden title="Leva a leitura de volta ao ponto que você marcou."></button>
-    <span class="mat-marcador-info" id="matMarcadorInfo"></span>
-    <!-- quantas dúvidas ESTE resumo tem em aberto: sem o número aqui, a
-         pessoa só descobre indo à lista geral -->
-    <button class="btn-min btn-min-perigo" id="btnMatConsertar" hidden
+  <!-- O TOPO EM UMA LINHA (v18.29.0). Antes: seis faixas de botões, quase
+       metade da tela, acima do texto. Agora: título, os avisos que só aparecem
+       quando há o que avisar (consertar, dúvidas, responder questões), Editar,
+       Salvar, "Aa" (letra e janela) e "⋯" (todo o resto). Os botões são os
+       MESMOS de antes (mesmos ids e balões); só mudaram de lugar. -->
+  <div class="mat-cab">
+    <div class="mat-cab-tit">
+      <h3 id="matTitulo"></h3>
+      <p class="nota mat-sub" id="matSub"></p>
+    </div>
+    <div class="mat-topo" id="matTopo">
+      <button class="btn-min btn-min-perigo" id="btnMatConsertar" hidden
       title="Este resumo tem marcação quebrada: asterisco de negrito sem par, ou marca colorida aberta e nunca fechada. Mostro as linhas antes de mexer."></button>
-    <button class="btn-min mat-duv-conta" id="btnMatDuvidas" hidden
+      <button class="btn-min mat-duv-conta" id="btnMatDuvidas" hidden
       title="Este resumo tem dúvidas em aberto. Clique para ver todas as suas dúvidas, de todos os tópicos."></button>
-    <span class="mat-topo-dir">
-      <!-- o registro só dos resumos: o geral mistura edital, cartões e
-           backup, e achar por que uma marcação falhou virava garimpo -->
-      <!-- "lei seca" é marca da pessoa: só ela sabe se aquilo é a letra da
-           lei ou um comentário sobre ela -->
-    <button class="btn-min" id="btnMatProva" hidden
-      title="Esconde o gabarito das questões que já estão escritas neste resumo, para você responder antes de ver. O texto não é alterado."></button>
-    <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
+      <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
       title="Responde, em sequência, as questões deste tópico."></button>
-    <!-- MARCAR ONDE ESTAO AS QUESTOES.
-         Este botao existia no codigo e nao existia aqui: o "if ($(id))"
-         que liga o clique engoliu a falta em silencio, e o unico caminho
-         que sobrou foi gerar do resumo INTEIRO. Selecionar o trecho e
-         mandar so ele para o prompt e a diferenca entre 1.400 e 7.600
-         caracteres de contexto. -->
-    <button class="btn-min" id="btnMatQstResumo" hidden
-      title="Monta o prompt com o resumo inteiro deste tópico."></button>
-    <!-- JURISPRUDÊNCIA A PARTIR DO QUE ESTÁ SELECIONADO.
-         O gesto que a ferramenta existe para servir: lendo o resumo,
-         você encontra a frase que o tribunal decidiu, seleciona e
-         guarda como tese. Sem isto, guardar um julgado exigiria sair da
-         leitura e redigitar — e ninguém faz isso no meio de um estudo. -->
-    <button class="btn-min" id="btnMatJuris" data-i18n="jur_do_trecho"
-      title="Guarda o trecho selecionado como a tese de um julgado deste tópico. Sem seleção, abre a gaveta vazia para você colar a ementa."></button>
-    <button class="btn-min mat-conta-prova" id="btnMatProvaLista" hidden
-      title="Tudo que você marcou como 'caiu na prova' neste resumo: ver no texto, editar ou tirar a marca."></button>
-    <button class="btn-min mat-conta-peg" id="btnMatPegLista" hidden
-      title="Tudo que você marcou como 'pegadinha' neste resumo: ver no texto, editar ou tirar a marca."></button>
-    <button class="btn-min mat-duv-conta" id="btnMatDicasLista" hidden
-      title="Todas as dicas deste resumo, para ler, corrigir e formatar."></button>
-    <button class="btn-min" id="btnMatDicas" hidden
-      title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
-    <!-- LEI SECA SAIU DAQUI: ela tem porta propria na agenda da semana
-         (o "⚖" da linha do topico), que e de onde se decide o que estudar.
-         Dentro do resumo era mais um botao competindo com os que mexem no
-         texto que esta na tela. -->
-      <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn" title="Mostra só o que aconteceu dentro dos resumos: marcações feitas, recusadas e o motivo. Serve para relatar um problema."></button>
-      <!-- fechar também aqui: com resumo grande, o rodapé fica longe.
-           Mesma pergunta de saída do botão de baixo. -->
-      <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo" title="Fecha o resumo. Se houver marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
+      <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
+      <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar"
+      title="Grava o resumo com as marcas que você fez, e continua aqui. É o mesmo botão do rodapé."></button>
+      <details class="mat-pop" id="matPopAa">
+        <summary class="btn-min mat-pop-bt" data-i18n="mat_aa" data-i18n-title="mat_aa_tit"></summary>
+        <div class="mat-pop-corpo mat-pop-aa">
+          <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
+      <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
+      <span class="mat-seg">
+        <button class="btn-min" id="btnMatMenor" data-i18n-title="mat_tip_menor" aria-label="A−">A&#8722;</button>
+        <button class="btn-min mat-fonte" id="matFonteVal" data-i18n-title="mat_tip_fonte_val">100%</button>
+        <button class="btn-min" id="btnMatMaior" data-i18n-title="mat_tip_maior" aria-label="A+">A+</button>
+      </span>
     </span>
+    <span class="mat-grupo" role="group" data-i18n-title="mat_janela">
+      <span class="mat-grupo-rot" data-i18n="mat_janela"></span>
+      <span class="mat-seg">
+        <button class="btn-min" id="btnMatJanNormal" data-i18n="mat_jan_normal" data-i18n-title="mat_tip_jan_normal" aria-pressed="true"></button>
+        <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar" data-i18n-title="mat_tip_ampliar" aria-pressed="false"></button>
+        <button class="btn-min" id="btnMatCheia" data-i18n="mat_cheia" data-i18n-title="mat_tip_cheia" aria-pressed="false"></button>
+      </span>
+    </span>
+        </div>
+      </details>
+      <details class="mat-pop" id="matPopMais">
+        <summary class="btn-min mat-pop-bt" data-i18n="mat_mais" data-i18n-title="mat_mais_tit"></summary>
+        <div class="mat-pop-corpo mat-pop-mais" id="matPopMaisCorpo">
+          <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por" title="Guarda onde você parou. Lendo, usa o ponto da rolagem; editando, usa o cursor."></button>
+          <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden title="Leva a leitura de volta ao ponto que você marcou."></button>
+          <span class="mat-marcador-info" id="matMarcadorInfo"></span>
+          <button class="btn-min" id="btnMatQstResumo" hidden
+      title="Monta o prompt com o resumo inteiro deste tópico."></button>
+          <button class="btn-min" id="btnMatProva" hidden
+      title="Esconde o gabarito das questões que já estão escritas neste resumo, para você responder antes de ver. O texto não é alterado."></button>
+          <button class="btn-min" id="btnMatJuris" data-i18n="jur_do_trecho"
+      title="Guarda o trecho selecionado como a tese de um julgado deste tópico. Sem seleção, abre a gaveta vazia para você colar a ementa."></button>
+          <button class="btn-min mat-vinc-btn" id="btnMatVincLista" data-i18n="mat_vinc_lista_btn" data-i18n-title="mat_vinc_lista_aj"></button>
+          <button class="btn-min mat-conta-prova" id="btnMatProvaLista" hidden
+      title="Tudo que você marcou como 'caiu na prova' neste resumo: ver no texto, editar ou tirar a marca."></button>
+          <button class="btn-min mat-conta-peg" id="btnMatPegLista" hidden
+      title="Tudo que você marcou como 'pegadinha' neste resumo: ver no texto, editar ou tirar a marca."></button>
+          <button class="btn-min mat-duv-conta" id="btnMatDicasLista" hidden
+      title="Todas as dicas deste resumo, para ler, corrigir e formatar."></button>
+          <button class="btn-min" id="btnMatDicas" hidden
+      title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
+          <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn" title="Mostra só o que aconteceu dentro dos resumos: marcações feitas, recusadas e o motivo. Serve para relatar um problema."></button>
+          <button class="btn-min" id="btnMatAjuda" data-i18n="mat_ajuda_btn" title="Mostra ou esconde a explicação de onde o resumo fica guardado e como ele vira cartões."></button>
+        </div>
+      </details>
+      <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo" title="Fecha o resumo. Se houver marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
+    </div>
   </div>
-  <p class="nota" id="matAjudaNota" data-i18n="mat_ajuda"></p>
-  <!-- T3: o mesmo resumo, inteiro ou por partes — o geral e a seção de cada ramo -->
+  <p class="nota" id="matAjudaNota" hidden data-i18n="mat_ajuda"></p>
   <div id="matEscopo" class="mat-ficha-escopo mat-escopo" role="group" data-i18n-title="mat_esc_rot" hidden></div>
   <div class="mat-barra" id="matBarra">
     <button class="fmt" id="btnFmtB" title="Deixa o trecho selecionado em negrito. Sem seleção, insere as marcas e deixa o cursor no meio."><b>N</b></button>
@@ -6838,33 +6862,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- só a seção do escopo escolhido; cada mudança volta para o texto inteiro (matTexto), que é o que se grava -->
   <textarea id="matTextoSecao" rows="16" hidden style="width:100%;box-sizing:border-box"></textarea>
   <div class="mat-ctrl" id="matCtrlLeitura" hidden>
-    <!-- AS MARCAS MORAM NA BOLHA (v18.28.0): aparecem ao selecionar um trecho, junto dele -->
+    <!-- AS MARCAS MORAM NA BOLHA (v18.28.0); letra e janela no "Aa" e a lista de vínculos no "⋯" (v18.29.0) -->
     <span class="mat-bolha-dica" data-i18n="mat_bolha_dica"></span>
-    <button class="btn-min mat-vinc-btn" id="btnMatVincLista" data-i18n="mat_vinc_lista_btn" data-i18n-title="mat_vinc_lista_aj"></button>
-    <!-- TIRAR MARCA SAIU DAQUI.
-         Ele adivinhava qual marca voce queria tirar a partir da selecao e
-         apagava sem mostrar nada. Agora se clica na propria marca colorida
-         no texto: aponta-se para o que se quer mexer, em vez de descrever.
-         "Limpar marcas" tambem saiu: apagar tudo de uma vez era a operacao
-         mais destrutiva da tela, ao lado das que so pintam. -->
-    <span class="mat-sep"></span>
-    <!-- LETRA e JANELA: cada um é UM controle (botões colados), e o estado atual fica aceso -->
-    <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
-      <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
-      <span class="mat-seg">
-        <button class="btn-min" id="btnMatMenor" data-i18n-title="mat_tip_menor" aria-label="A−">A&#8722;</button>
-        <button class="btn-min mat-fonte" id="matFonteVal" data-i18n-title="mat_tip_fonte_val">100%</button>
-        <button class="btn-min" id="btnMatMaior" data-i18n-title="mat_tip_maior" aria-label="A+">A+</button>
-      </span>
-    </span>
-    <span class="mat-grupo" role="group" data-i18n-title="mat_janela">
-      <span class="mat-grupo-rot" data-i18n="mat_janela"></span>
-      <span class="mat-seg">
-        <button class="btn-min" id="btnMatJanNormal" data-i18n="mat_jan_normal" data-i18n-title="mat_tip_jan_normal" aria-pressed="true"></button>
-        <button class="btn-min" id="btnMatAmpliar" data-i18n="mat_ampliar" data-i18n-title="mat_tip_ampliar" aria-pressed="false"></button>
-        <button class="btn-min" id="btnMatCheia" data-i18n="mat_cheia" data-i18n-title="mat_tip_cheia" aria-pressed="false"></button>
-      </span>
-    </span>
     <span class="mat-estado" id="matEstado"></span>
   </div>
   <!-- A BARRA DA TELA CHEIA — existe só nela.

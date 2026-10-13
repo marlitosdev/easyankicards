@@ -1229,14 +1229,28 @@ function matPintarJanela() {
  * ------------------------------------------------------------------ */
 let matCheia = false;
 
+/* OS MENUS DO TOPO ("Aa" e "⋯", v18.29.0): <details> nativos — abrem e fecham
+ * sem script, funcionam no teclado. Aqui só o que o <details> não faz: fechar
+ * ao clicar fora, e o "⋯" fechar depois de escolher uma ação. */
+let matAjudaAberta = false;
+function matPopFechar(exceto) {
+  ["matPopAa", "matPopMais"].forEach((id) => {
+    const d = $(id);
+    if (d && d !== exceto && d.open) d.open = false;
+  });
+}
+
 function matCheiaAplicar() {
   const dlg = $("dlgMaterial");
   if (dlg && dlg.classList) dlg.classList.toggle("mat-cheia", matCheia);
 
   /* [hidden] ganha do CSS (invariante E8): esconder aqui é o que vale */
-  ["matSub", "matTopo", "matAjudaNota", "matBarra", "matCtrlLeitura",
+  ["matSub", "matTopo", "matBarra", "matCtrlLeitura",
    "matRodape"]
     .forEach((id) => { const el = $(id); if (el) el.hidden = matCheia; });
+  /* a ajuda só aparece quando pedida (no "⋯"), e nunca na tela cheia */
+  if ($("matAjudaNota")) $("matAjudaNota").hidden = matCheia || !matAjudaAberta;
+  matPopFechar();
   const bar = $("matCheiaBarra");
   if (bar) bar.hidden = !matCheia;
 
@@ -3310,6 +3324,27 @@ function matIniciar() {
   matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
   matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
   /* a seleção é guardada ao APERTAR: em alguns aparelhos o toque tira a seleção antes do clique */
+  if ($("btnMatAjuda")) $("btnMatAjuda").onclick = () => {
+    matAjudaAberta = !matAjudaAberta;
+    if ($("matAjudaNota")) $("matAjudaNota").hidden = !matAjudaAberta;
+  };
+  /* escolher uma ação no "⋯" fecha o menu (depois de a ação rodar: o clique sobe do botão até aqui) */
+  if ($("matPopMaisCorpo") && $("matPopMaisCorpo").addEventListener) {
+    $("matPopMaisCorpo").addEventListener("click", (ev) => {
+      const tg = ev && ev.target;
+      if (tg && String(tg.tagName || "").toUpperCase() === "BUTTON") matPopFechar();
+    });
+  }
+  /* clicar fora de um menu aberto fecha o menu */
+  if ($("dlgMaterial") && $("dlgMaterial").addEventListener) {
+    $("dlgMaterial").addEventListener("click", (ev) => {
+      const tg = ev && ev.target;
+      ["matPopAa", "matPopMais"].forEach((id) => {
+        const d = $(id);
+        if (d && d.open && d.contains && !d.contains(tg)) d.open = false;
+      });
+    });
+  }
   if ($("btnBolhaJuris")) $("btnBolhaJuris").onclick = () => { if ($("btnMatJuris") && $("btnMatJuris").onclick) $("btnMatJuris").onclick(); };
   /* a lista de vínculos (sem seleção), na linha da leitura e na tela cheia */
   ["btnMatVincLista", "btnMatCheiaVinc"].forEach((id) => { if ($(id)) $(id).onclick = () => matVinculosAbrir(""); });
