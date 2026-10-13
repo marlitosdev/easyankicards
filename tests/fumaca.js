@@ -824,6 +824,7 @@ function rodar() {
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
+    matCitacoesLigar, matCitCtx, matCitLink, matCitIr, matVinculosAbrir, qsUiVoltaDe, qsVincT,
     pacNomeDeck, pacAplicarRenomear, pacLimparNomeRenomeado, pacArvoreDecks, pacRamoDoCartao, pacResolverRamo, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
     pacAbrir, pacLerArquivo, pacAcaoImportar, pacChaveCartao, cmCampo,
     pacLidoAtual: () => pacLido,
