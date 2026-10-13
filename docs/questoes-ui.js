@@ -1376,6 +1376,7 @@ function qsUiComentario(el, q) {
       cits = citVinculosAplicar(txt, cits, chV);
     }
   } catch (e) {}
+  try { if (typeof leiDeduzirRotulos === "function") leiDeduzirRotulos(txt, cits); } catch (e) {}
   /* sem citação — e este é o caso comum em Português e Informática — o
    * comentário continua sendo exatamente o texto, sem nada em volta */
   if (!cits.length) { el.textContent = txt; return el; }
@@ -1426,6 +1427,13 @@ function qsUiLeiAlvo(c, lista, doTopico) {
     return { lei: null, motivo: "desconhecida" };
   }
   if (dt.length === 1) return { lei: dt[0], ligada: true };
+  /* a lei nomeada antes, no mesmo parágrafo (leiDeduzirRotulos): só aqui,
+   * quando o tópico não decide — com uma lei só, vale a do tópico, como antes */
+  if (c && c.rotuloDeduzido && typeof leiCasarRotulo === "function") {
+    let l = null;
+    try { l = leiCasarRotulo(c.rotuloDeduzido, lista); } catch (e) { l = null; }
+    if (l) return { lei: l, ligada: dt.some((x) => x.id === l.id), deduzida: true };
+  }
   return { lei: null, motivo: dt.length ? "ambigua" : "vazia" };
 }
 
@@ -1436,7 +1444,7 @@ function qsUiLeiLink(c, q, lista, doTopico) {
   /* O ESTADO É VISÍVEL ANTES DO TOQUE. Um link que abre a lei e um link
    * que vai pedir para vincular são coisas diferentes, e descobrir isso
    * só depois de tocar é o que faz alguém parar de tocar. */
-  b.className = "qs-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem");
+  b.className = "qs-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem") + (alvo.deduzida ? " qs-lei-link-ded" : "");
   b.textContent = c.texto;
   /* A NOTA, SE HOUVER, ENTRA NA DICA — não no texto do link. O link já
    * mostra a citação como o comentário a escreveu ("art. 156, § 3º,
@@ -1448,6 +1456,7 @@ function qsUiLeiLink(c, q, lista, doTopico) {
     ? t("qs_lei_link_ir", { l: alvo.lei.nome, a: c.numCru }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t("qs_lei_link_sem", { l: c.rotulo })
                 : t("qs_lei_link_qual", { a: c.numCru }));
+  if (alvo.deduzida) b.title += " · " + t("qs_lei_link_ded", { l: c.rotuloDeduzido });
   if (c.permanente) {
     b.classList.add("qs-lei-link-perm");
     if (alvo.lei) b.title = t("qs_vinc_link_perm", { l: alvo.lei.nome, a: (c.artigos || []).map((a) => a.numCru).join(", ") || c.numCru || "" });
@@ -1663,6 +1672,7 @@ function qsVincPintar() {
 
   let cits = [];
   try { cits = citVinculosAplicar(txt, leiCitacoesNoTexto(txt), ch); } catch (e) { cits = []; }
+  try { leiDeduzirRotulos(txt, cits); } catch (e) {}
   const cx = $("qsVincLista");
   cx.innerHTML = "";
   if (!cits.length) {
@@ -1683,6 +1693,7 @@ function qsVincPintar() {
     meta.className = "lei-bib-meta" + (alvo.lei ? "" : " lei-bib-sem");
     meta.textContent = (alvo.lei ? t("qs_vinc_abre", { l: alvo.lei.nome, a: ct.numCru || "—" })
       : t("qs_vinc_sem_lei", { l: ct.rotulo || "?" }))
+      + (alvo.deduzida ? " · " + t("qs_vinc_deduzida", { l: ct.rotuloDeduzido }) : "")
       + (ct.permanente ? " · " + t("qs_vinc_permanente") + " · " + t(ct.soTopico ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") : "");
     const ac = document.createElement("div");
     ac.className = "lei-bib-acoes";
