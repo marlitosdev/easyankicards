@@ -1481,6 +1481,56 @@ function matSelGuardadaAtual() { return matSelGuardada; }
  * "copiar a questão na dica", e exigir um leitor aqui apagaria isso. O
  * que fica sem offset, nesse caso, é só a escolha de ocorrência, que
  * fora de um leitor não significa nada. */
+/* =====================================================================
+ * A BOLHA DA SELEÇÃO (v18.28.0)
+ *
+ * As marcas, o "🔗 ligar à lei", "julgado" e "questões do trecho" ocupavam uma
+ * faixa inteira acima do texto o tempo todo — e só servem COM um trecho
+ * selecionado. Agora aparecem junto da seleção (acima dela; abaixo, se não
+ * couber), e somem quando ela some. No celular (dedo, tela estreita) a bolha
+ * encosta no rodapé: o menu nativo de copiar já ocupa o espaço acima do
+ * trecho. Vale também na tela cheia, onde antes não havia como marcar.
+ * sel (opcional): a seleção a usar — os testes passam uma de mentira.
+ * ===================================================================== */
+function matBolhaDoca() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+    return (window.innerWidth || 1000) < 700;
+  } catch (e) { return false; }
+}
+
+function matBolhaAtualizar(selFake) {
+  const b = $("matBolha");
+  if (!b) return false;
+  let rect = null;
+  try {
+    const dlg = $("dlgMaterial");
+    const p = $("matLeitura");
+    const sel = selFake || (typeof window !== "undefined" && window.getSelection ? window.getSelection() : null);
+    if (dlg && dlg.open && matModo === "ler" && p && !p.hidden && sel && !sel.isCollapsed
+        && String(sel).trim() && sel.anchorNode && p.contains && p.contains(sel.anchorNode)) {
+      rect = sel.rangeCount && sel.getRangeAt ? sel.getRangeAt(0).getBoundingClientRect() : { top: 0, bottom: 0, left: 0, width: 0 };
+    }
+  } catch (e) { rect = null; }
+  if (!rect) { b.hidden = true; return false; }
+  b.hidden = false;
+  /* "questões do trecho" diz o tamanho do trecho: repinta ao aparecer */
+  if (typeof qsUiPintarCriadores === "function") { try { qsUiPintarCriadores(); } catch (e) {} }
+  const doca = matBolhaDoca();
+  if (b.classList) b.classList.toggle("mat-bolha-doca", doca);
+  if (!doca && b.style) {
+    const alto = (b.offsetHeight || 40), larg = (b.offsetWidth || 320);
+    const jan = (typeof window !== "undefined" && window.innerWidth) || 1000;
+    let topo = rect.top - alto - 8;
+    if (topo < 8) topo = rect.bottom + 8;                 /* sem espaço em cima: vai para baixo */
+    const esq = Math.max(8, Math.min(rect.left + (rect.width || 0) / 2 - larg / 2, jan - larg - 8));
+    b.style.top = Math.round(topo) + "px";
+    b.style.left = Math.round(esq) + "px";
+  }
+  return true;
+}
+
 function matLembrarSelecao(painelId) {
   const sel = window.getSelection && window.getSelection();
   if (!sel || sel.isCollapsed) return;
@@ -3260,6 +3310,9 @@ function matIniciar() {
   matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
   matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
   /* a seleção é guardada ao APERTAR: em alguns aparelhos o toque tira a seleção antes do clique */
+  if ($("btnBolhaJuris")) $("btnBolhaJuris").onclick = () => { if ($("btnMatJuris") && $("btnMatJuris").onclick) $("btnMatJuris").onclick(); };
+  /* a lista de vínculos (sem seleção), na linha da leitura e na tela cheia */
+  ["btnMatVincLista", "btnMatCheiaVinc"].forEach((id) => { if ($(id)) $(id).onclick = () => matVinculosAbrir(""); });
   if ($("btnMatVinc")) {
     let selV = "";
     const guardarV = () => { try { selV = qsVincSelecao($("matLeitura")); } catch (e) { selV = ""; } };
@@ -3385,8 +3438,24 @@ function matIniciar() {
     });
     p.addEventListener("click", cliqueNaMarca);
   });
-  if (document.addEventListener)
+  if (document.addEventListener) {
     document.addEventListener("selectionchange", matLembrarSelecao);
+    document.addEventListener("selectionchange", () => { try { matBolhaAtualizar(); } catch (e) {} });
+  }
+  if ($("matLeitura") && $("matLeitura").addEventListener) {
+    $("matLeitura").addEventListener("scroll", () => { try { matBolhaAtualizar(); } catch (e) {} });
+  }
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("resize", () => { try { matBolhaAtualizar(); } catch (e) {} });
+  }
+  if ($("dlgMaterial") && $("dlgMaterial").addEventListener) {
+    $("dlgMaterial").addEventListener("scroll", () => { try { matBolhaAtualizar(); } catch (e) {} });
+    $("dlgMaterial").addEventListener("close", () => { if ($("matBolha")) $("matBolha").hidden = true; });
+  }
+  /* apertar um botão da bolha não pode desfazer a seleção que ele vai usar */
+  ["btnMatVinc", "btnBolhaJuris", "btnMatQstTrecho"].forEach((id) => {
+    if ($(id) && $(id).addEventListener) $(id).addEventListener("mousedown", (ev) => ev.preventDefault());
+  });
   /* e impede o próprio clique de destruí-la */
   ["btnMarcaD", "btnMarcaI", "btnMarcaQ", "btnMarcaProva",
    "btnMarcaPeg"].forEach((id) => {

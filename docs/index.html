@@ -1254,6 +1254,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .qs-lei-link-perm{border-bottom:2px solid var(--ok)}
 .qs-vinc-btn{margin:6px 0}
 .mat-vinc-btn{margin-left:4px;white-space:nowrap}
+/* A BOLHA DA SELEÇÃO (v18.28.0): flutua junto do trecho; no celular encosta no rodapé */
+.mat-bolha{position:fixed;z-index:30;display:flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:min(560px,94vw);
+  padding:6px 8px;border:1px solid var(--borda);border-radius:12px;background:var(--panel);box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.mat-bolha .marca{margin:0}
+.mat-bolha.mat-bolha-doca{left:8px!important;right:8px;bottom:8px;top:auto!important;max-width:none;justify-content:center}
+.mat-bolha-dica{font-size:12px;color:var(--sutil)}
+#dlgMaterial .mat-bolha:not(.mat-bolha-doca){max-width:min(560px,94vw);width:max-content}
 /* VINCULAR TRECHO (v18.25.0): fichas da lei e da parte do artigo, achados e a prévia */
 .qs-vinc-trecho{font-style:italic}
 .qs-vinc-rot{display:block;margin:10px 0 4px;font-size:13px}
@@ -6785,8 +6792,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          que sobrou foi gerar do resumo INTEIRO. Selecionar o trecho e
          mandar so ele para o prompt e a diferenca entre 1.400 e 7.600
          caracteres de contexto. -->
-    <button class="btn-min" id="btnMatQstTrecho" hidden
-      title="Monta o prompt SÓ com o trecho que você selecionou. Fica apagado enquanto não houver seleção."></button>
     <button class="btn-min" id="btnMatQstResumo" hidden
       title="Monta o prompt com o resumo inteiro deste tópico."></button>
     <!-- JURISPRUDÊNCIA A PARTIR DO QUE ESTÁ SELECIONADO.
@@ -6833,14 +6838,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- só a seção do escopo escolhido; cada mudança volta para o texto inteiro (matTexto), que é o que se grava -->
   <textarea id="matTextoSecao" rows="16" hidden style="width:100%;box-sizing:border-box"></textarea>
   <div class="mat-ctrl" id="matCtrlLeitura" hidden>
-    <span data-i18n="mat_marcar"></span>
-    <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d" title="Marca o trecho selecionado em amarelo: o que você quer reler. Se a palavra aparecer mais de uma vez, marca a que você selecionou."></button>
-    <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i" title="Marca em vermelho: o que não pode faltar na hora da prova."></button>
-    <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q" title="Marca em azul: o que você não entendeu e precisa voltar."></button>
-    <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova" title="Marca em roxo: isto já caiu em prova. Serve para achar depois o que a banca cobra."></button>
-    <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg" title="Marca em rosa: pegadinha, exceção ou detalhe que costuma derrubar."></button>
-    <!-- as citações de lei viram links sozinhas; aqui se vê o que o app entendeu e se liga um trecho à mão -->
-    <button class="btn-min mat-vinc-btn" id="btnMatVinc" data-i18n="mat_vinc_btn" data-i18n-title="mat_vinc_btn_aj"></button>
+    <!-- AS MARCAS MORAM NA BOLHA (v18.28.0): aparecem ao selecionar um trecho, junto dele -->
+    <span class="mat-bolha-dica" data-i18n="mat_bolha_dica"></span>
+    <button class="btn-min mat-vinc-btn" id="btnMatVincLista" data-i18n="mat_vinc_lista_btn" data-i18n-title="mat_vinc_lista_aj"></button>
     <!-- TIRAR MARCA SAIU DAQUI.
          Ele adivinhava qual marca voce queria tirar a partir da selecao e
          apagava sem mostrar nada. Agora se clica na propria marca colorida
@@ -6895,9 +6895,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         title="Guarda onde você parou, no ponto em que a leitura está agora. Pode marcar de novo em outro lugar quantas vezes quiser."></button>
       <button class="btn-min" id="btnMatCheiaIr" data-i18n="mat_marcador_ir" hidden
         title="Leva a leitura de volta ao ponto que você marcou."></button>
+      <button class="btn-min mat-vinc-btn" id="btnMatCheiaVinc" data-i18n="mat_vinc_lista_btn" data-i18n-title="mat_vinc_lista_aj"></button>
     </span>
   </div>
   <div class="mat-leitura" id="matLeitura" hidden></div>
+  <!-- A BOLHA DA SELEÇÃO (v18.28.0): o que se faz COM um trecho aparece junto
+       dele, só quando há seleção, como no Kindle e no Google Docs. Os botões
+       são os mesmos de antes (mesmos ids); só mudaram de lugar. Vale também
+       na tela cheia. No celular ela se encosta no rodapé. -->
+  <div class="mat-bolha" id="matBolha" role="toolbar" data-i18n-title="mat_bolha_tit" hidden>
+    <button class="marca marca-d" id="btnMarcaD" data-i18n="mat_marca_d" title="Marca o trecho selecionado em amarelo: o que você quer reler. Se a palavra aparecer mais de uma vez, marca a que você selecionou."></button>
+    <button class="marca marca-i" id="btnMarcaI" data-i18n="mat_marca_i" title="Marca em vermelho: o que não pode faltar na hora da prova."></button>
+    <button class="marca marca-q" id="btnMarcaQ" data-i18n="mat_marca_q" title="Marca em azul: o que você não entendeu e precisa voltar."></button>
+    <button class="marca marca-prova" id="btnMarcaProva" data-i18n="mat_marca_prova" title="Marca em roxo: isto já caiu em prova. Serve para achar depois o que a banca cobra."></button>
+    <button class="marca marca-peg" id="btnMarcaPeg" data-i18n="mat_marca_peg" title="Marca em rosa: pegadinha, exceção ou detalhe que costuma derrubar."></button>
+    <span class="mat-sep"></span>
+    <button class="btn-min mat-vinc-btn" id="btnMatVinc" data-i18n="mat_vinc_btn" data-i18n-title="mat_vinc_btn_aj"></button>
+    <button class="btn-min" id="btnBolhaJuris" data-i18n="mat_bolha_juris" data-i18n-title="mat_bolha_juris_aj"></button>
+    <button class="btn-min" id="btnMatQstTrecho" hidden
+      title="Monta o prompt SÓ com o trecho que você selecionou. Fica apagado enquanto não houver seleção."></button>
+  </div>
   <div class="dlg-rodape" id="matRodape">
     <button class="btn btn-cinza" id="btnMatModo" title="Alterna entre ler (marcas coloridas) e editar (texto cru). O mesmo comando existe no topo."></button>
     <!-- UM botão só. Havia dois — "Salvar" e "Salvar estado" — que faziam a
