@@ -1329,6 +1329,12 @@ function gerPintarPrevia() {
   $("gerPreAcoes").hidden = !n;
   if (!n) { cx.append(gerEl("p", "nota", t("ger_previa_vazia"))); return; }
   try { renderCartaoEstilizado(cx, n.card, true, { estudo: false }); } catch (e) { cx.append(gerEl("pre", "", cardToLine(n.card))); }
+  /* as citações de lei do cartão viram links, como no resumo (v18.27.0) */
+  if (typeof citLigarEm === "function" && typeof estcCitBase === "function") {
+    const base = estcCitBase(n);
+    base.aoVoltar = () => { try { if ($("dlgGerCartoes") && $("dlgGerCartoes").open) gerPintarPrevia(); } catch (e) {} };
+    try { citLigarEm(cx, base); } catch (e) {}
+  }
   const def = ceDefeitos(n.card);
   const nivel = gerEl("div", "cq-onde");
   nivel.append(ceSelo(ceNivel(n.card)));

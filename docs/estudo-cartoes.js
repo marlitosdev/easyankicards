@@ -119,6 +119,15 @@ function estcSaibaMais(cx, more) {
   });
 }
 
+/* de onde vem o cartão, para a citação saber o tópico (e quais leis ele tem) */
+function estcCitBase(nota) {
+  const n = nota || {};
+  const bancada = typeof CQ_BANCADA !== "undefined" && n.chave === CQ_BANCADA;
+  return { disciplina: bancada ? "" : (n.disciplina || ""), topico: bancada ? "" : (n.topico || ""),
+    chave: bancada ? "" : (n.chave || ""), onde: "cartao",
+    aoVoltar: () => { try { const d = $("dlgGerEstudo"); if (d && d.open) estcPintar(); } catch (e) {} } };
+}
+
 function estcPintar() {
   const cx = $("estCartao");
   cx.innerHTML = "";
@@ -171,6 +180,13 @@ function estcPintar() {
       corpo.hidden = !estcSaiba;
       sb.onclick = () => { estcSaiba = !estcSaiba; corpo.hidden = !estcSaiba; };
       cx.append(sb, corpo);
+    }
+    /* as citações de lei da resposta e do "saiba mais" viram links (só depois de
+     * virar: na frente, abrir a lei entregaria a resposta) */
+    if (typeof citLigarEm === "function") {
+      const base = estcCitBase(u.nota);
+      try { citLigarEm(verso, base); } catch (e) {}
+      cx.querySelectorAll && cx.querySelectorAll(".est-saiba").forEach((el) => { try { citLigarEm(el, base); } catch (e) {} });
     }
   }
   estcPintarBase(u);

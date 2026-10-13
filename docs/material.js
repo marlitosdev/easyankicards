@@ -998,18 +998,28 @@ function matTrocarModo(modo) {
  * citado e, ao fechar, o resumo volta. Citação que não sabe a lei pergunta,
  * pelo mesmo menu das questões (as leis do tópico primeiro).
  * ===================================================================== */
-function matCitCtx() {
-  const a = matAtual || {};
+/* DE ONDE VEIO A CITAÇÃO (v18.27.0): o resumo aberto, ou um cartão (estudo e
+ * Biblioteca de cartões). base = {disciplina, topico, chave?, aoVoltar, onde:
+ * "resumo"|"cartao"}. Sem tópico (cartão da bancada) a citação ainda abre pela
+ * lei que nomeia. */
+function citCtxDe(base) {
+  const b = base || {};
   let lista = [], doTopico = [];
   try {
     lista = typeof leisLista === "function" ? leisLista() : [];
-    if (typeof leisDoTopico === "function" && a.disciplina && a.topico) {
-      doTopico = leisDoTopico(matChave(a.disciplina, a.topico));
-      if (!doTopico.length && a.chave) doTopico = leisDoTopico(a.chave);
+    if (typeof leisDoTopico === "function") {
+      if (b.disciplina && b.topico) doTopico = leisDoTopico(matChave(b.disciplina, b.topico));
+      if (!doTopico.length && b.chave) doTopico = leisDoTopico(b.chave);
     }
   } catch (e) {}
+  return Object.assign({}, b, { disciplina: b.disciplina || "", topico: b.topico || "", lista, doTopico,
+    onde: b.onde || "resumo", aoVoltar: b.aoVoltar || (() => {}) });
+}
+
+function matCitBase() {
+  const a = matAtual || {};
   return {
-    disciplina: a.disciplina || "", topico: a.topico || "", lista, doTopico,
+    disciplina: a.disciplina || "", topico: a.topico || "", chave: a.chave || "", onde: "resumo",
     /* na volta da lei: repinta a leitura (uma lei pode ter sido vinculada agora) */
     aoVoltar: () => {
       try { if ($("dlgMaterial") && $("dlgMaterial").open && matModo === "ler") matTrocarModo("ler"); } catch (e) {}
@@ -1017,8 +1027,15 @@ function matCitCtx() {
   };
 }
 
+function matCitCtx() { return citCtxDe(matCitBase()); }
+
 function matCitacoesLigar(painel) {
-  if (!painel || !painel.childNodes || !matAtual) return 0;
+  if (!matAtual) return 0;
+  return citLigarEm(painel, matCitBase());
+}
+
+function citLigarEm(painel, base) {
+  if (!painel || !painel.childNodes || !base) return 0;
   if (typeof leiCitacoesNoTexto !== "function" || typeof qsUiLeiAlvo !== "function") return 0;
   let temVinc = false;
   try { temVinc = typeof citVinculosLer === "function" && citVinculosLer().length > 0; } catch (e) {}
@@ -1036,7 +1053,7 @@ function matCitacoesLigar(painel) {
     return painel;
   };
   /* o vínculo "só neste tópico" vale aqui; o de outro tópico, não */
-  const chV = matAtual.disciplina && matAtual.topico ? matChave(matAtual.disciplina, matAtual.topico) : "";
+  const chV = base.disciplina && base.topico ? matChave(base.disciplina, base.topico) : "";
   const citar = (no) => {
     const txt = String(no.textContent || "");
     if (!temVinc && !/\bart/i.test(txt)) return;
@@ -1049,7 +1066,7 @@ function matCitacoesLigar(painel) {
     try { if (typeof leiDeduzirRotulos === "function") rotAntes = leiDeduzirRotulos(txt, cits, rotAntes); } catch (e) {}
     const pai = no.parentNode;
     if (!pai || !pai.insertBefore) return;
-    if (!ctx) ctx = matCitCtx();
+    if (!ctx) ctx = citCtxDe(base);
     let pos = 0;
     cits.forEach((c) => {
       if (c.ini > pos) pai.insertBefore(document.createTextNode(txt.slice(pos, c.ini)), no);
@@ -1061,6 +1078,13 @@ function matCitacoesLigar(painel) {
     pai.removeChild(no);
   };
   const andar = (el) => {
+    /* elemento-folha cujo texto não veio como nó filho (o simulador dos testes
+     * guarda o textContent sem criar o nó; o navegador sempre cria): vira nó */
+    if (el !== painel && !(el.childNodes || []).length && el.textContent && el.append) {
+      const txt = String(el.textContent);
+      el.textContent = "";
+      el.append(document.createTextNode(txt));
+    }
     Array.from(el.childNodes || []).forEach((no) => {
       if (no.nodeType === 3) citar(no);
       else if (no.nodeType === 1) {
@@ -1079,36 +1103,46 @@ function matCitLink(c, ctx) {
   const b = document.createElement("button");
   b.type = "button";
   const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
+  const noCartao = ctx.onde === "cartao";
+  const k = noCartao ? "car_lei_link_" : "mat_lei_link_";
   /* o estado aparece antes do toque: com lei (sublinhado) ou sem (tracejado, cinza) */
-  b.className = "qs-lei-link mat-lei-link" + (alvo.lei ? "" : " qs-lei-link-sem")
+  b.className = "qs-lei-link " + (noCartao ? "car-lei-link" : "mat-lei-link") + (alvo.lei ? "" : " qs-lei-link-sem")
     + (alvo.deduzida ? " qs-lei-link-ded" : "") + (c.permanente ? " qs-lei-link-perm" : "");
   b.textContent = c.texto;
   const nota = alvo.lei && typeof leiNotaDe === "function" ? leiNotaDe(alvo.lei.id, c.num) : "";
   b.title = alvo.lei
-    ? t("mat_lei_link_ir", { l: alvo.lei.nome, a: c.numCru || "—" }) + (nota ? " · " + nota : "")
-    : (c.rotulo ? t("mat_lei_link_sem", { l: c.rotulo }) : t("mat_lei_link_qual", { a: c.numCru || "—" }));
+    ? t(k + "ir", { l: alvo.lei.nome, a: c.numCru || "—" }) + (nota ? " · " + nota : "")
+    : (c.rotulo ? t(k + "sem", { l: c.rotulo }) : t(k + "qual", { a: c.numCru || "—" }));
   if (alvo.deduzida) b.title += " · " + t("qs_lei_link_ded", { l: c.rotuloDeduzido });
   b.onclick = (ev) => {
     if (ev && ev.stopPropagation) ev.stopPropagation();
-    matCitIr(c, b);
+    citIr(c, b, ctx);
   };
   return b;
 }
 
 function matCitIr(c, botao) {
   if (!matAtual) return;
-  const ctx = matCitCtx();
+  citIr(c, botao, matCitBase());
+}
+
+function citIr(c, botao, base) {
+  const ctx = citCtxDe(base);          /* de novo: uma lei pode ter sido vinculada desde o desenho */
   const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
   if (alvo.lei && typeof leiCitacaoPreviewAbrir === "function") {
     leiCitacaoPreviewAbrir(c, "", { lei: alvo.lei,
       ctx: { disciplina: ctx.disciplina, topico: ctx.topico, aoVoltar: ctx.aoVoltar } });
-    try { reg("MATERIAL", "citação do resumo aberta na prévia", alvo.lei.nome + " · art. " + (c.numCru || c.num || "—")); } catch (e) {}
+    try { reg("MATERIAL", "citação " + (ctx.onde === "cartao" ? "do cartão" : "do resumo") + " aberta na prévia",
+      alvo.lei.nome + " · art. " + (c.numCru || c.num || "—")); } catch (e) {}
     return;
   }
   /* sem lei certa: a mesma conversa das questões (escolher, vincular, colar) */
-  if (typeof qsUiLeiIr === "function") {
+  if (ctx.disciplina && ctx.topico && typeof qsUiLeiIr === "function") {
     qsUiLeiIr(c, { disciplina: ctx.disciplina, topico: ctx.topico, _aoVoltar: ctx.aoVoltar }, botao);
+    return;
   }
+  /* sem tópico (cartão da bancada): a prévia diz que não achou a lei, em vez de não fazer nada */
+  if (typeof leiCitacaoPreviewAbrir === "function") leiCitacaoPreviewAbrir(c, "", {});
 }
 
 /* "🔗 Vínculos de lei" da leitura: a mesma lista das questões, sobre o texto do escopo */

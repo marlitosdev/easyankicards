@@ -410,6 +410,64 @@ async function testes() {
     ok(api.$("qsVincPrev").querySelectorAll(".qs-vinc-prev-alvo").length === 1, "V15b a prévia já devia destacar o § 1º");
   }
 
+  /* =================================================================
+   * K (v18.27.0): AS CITAÇÕES DOS CARTÕES VIRAM LINKS
+   * ================================================================= */
+  {
+    const { api } = rodar();
+    const ch = preparar(api);
+    api.matGravarCartoes(ch, [
+      "Segundo o art. 113 do CTN, a multa por infração é? :: Obrigação principal (art. 113, § 1º, do CTN)",
+      "+ Literalidade — art. 3º do CTN: tributo não é sanção de ato ilícito",
+    ].join("\n"), { disciplina: DISC, topico: TOP });
+    api.estcModoForcar("sequencia");
+    api.gerAbrirNoTopico(DISC, TOP, { estudar: true });
+    const noEstudo = () => api.$("estCartao").querySelectorAll("button.car-lei-link");
+    ok(api.$("dlgGerEstudo").open === true, "K0 o estudo do tópico não abriu");
+    ok(noEstudo().length === 0, "K1 a citação da FRENTE virou link antes de virar (abrir a lei entregaria a resposta)");
+    api.estcVirar();
+    const ls = noEstudo();
+    ok(ls.some((b) => b.textContent === "art. 113, § 1º, do CTN"), "K2 a citação da resposta não virou link: " + ls.map((b) => b.textContent).join(" | "));
+    ok(ls.some((b) => b.textContent === "art. 3º do CTN"), "K2a a citação do 'saiba mais' não virou link");
+    ok(ls.every((b) => b.textContent !== "art. 113 do CTN"), "K2b a frente não pode virar link nem depois de virar");
+    ok(ls.every((b) => !/qs-lei-link-sem/.test(cls(b))), "K2c as citações do cartão deviam saber a lei (CTN)");
+    ok(/sem sair do cartão/.test(ls[0].title || ""), "K2d o balão fala de resumo, não de cartão: " + ls[0].title);
+    ls.filter((b) => b.textContent === "art. 113, § 1º, do CTN")[0].onclick({ stopPropagation() {} });
+    ok(api.$("dlgLeiCitaPreview").open === true && /Código Tributário/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
+      "K3 tocar na citação do cartão não abriu a prévia no CTN");
+    ok(/§ 1º[^\n]*surge com a ocorrência/.test(api.$("leiCitaPreviewTexto").textContent || ""), "K3a a prévia não separa o § 1º");
+    ok(api.$("dlgGerEstudo").open === true, "K3b a prévia fechou o estudo");
+    api.$("dlgLeiCitaPreview").close();
+    /* a prévia da Biblioteca de cartões também liga */
+    api.estcFechar();
+    api.gerFocoTeste(0);
+    api.gerPintarPrevia();
+    const naBib = api.$("gerPrevia").querySelectorAll("button.car-lei-link");
+    ok(naBib.some((b) => b.textContent === "art. 113, § 1º, do CTN"), "K4 a prévia da Biblioteca de cartões não liga as citações: " + naBib.map((b) => b.textContent).join(" | "));
+  }
+  {
+    /* K6: a lei ligada pela chave GRAVADA do tópico (grafia diferente da do nome) ainda conta */
+    const { api } = rodar();
+    preparar(api);
+    api.leiLigar("lei_cf", "direito tributario›obrigacao tributaria (grafia antiga)");
+    const ctx = api.citCtxDe({ disciplina: "Outra grafia", topico: "Sem lei", chave: "direito tributario›obrigacao tributaria (grafia antiga)" });
+    ok(ctx.doTopico.length === 1 && ctx.doTopico[0].id === "lei_cf", "K6 a lei ligada pela chave gravada do tópico não foi achada");
+  }
+  {
+    /* K5: cartão da bancada (sem tópico): a lei nomeada abre; a desconhecida diz que não achou */
+    const { api } = rodar();
+    preparar(api);
+    const base = api.estcCitBase({ chave: api.CQ_BANCADA, disciplina: "Bancada", topico: "Bancada" });
+    ok(base.disciplina === "" && base.topico === "" && base.onde === "cartao", "K5 o cartão da bancada não pode fingir um tópico");
+    api.citIr(api.leiCitacoesNoTexto("art. 113 do CTN")[0], null, base);
+    ok(api.$("dlgLeiCitaPreview").open === true && /Código Tributário/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
+      "K5a sem tópico, a citação com lei nomeada devia abrir a prévia");
+    api.$("dlgLeiCitaPreview").close();
+    api.citIr(api.leiCitacoesNoTexto("art. 5º da XPTO")[0], null, base);
+    ok(api.$("dlgLeiCitaPreview").open === true && /XPTO/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
+      "K5b sem tópico e sem lei conhecida, devia dizer que não achou (em vez de não fazer nada)");
+  }
+
   /* V14: nas questões, o vínculo novo também nasce só no tópico da questão */
   {
     const { api } = rodar();
