@@ -733,27 +733,129 @@ function matTA() {
   const sec = $("matTextoSecao");
   return sec && !sec.hidden ? sec : $("matTexto");
 }
-function matEnvolver(ini, fim) {
-  const ta = matTA();
-  const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
-  const sel = ta.value.slice(a, b);
-  ta.value = ta.value.slice(0, a) + ini + sel + (fim === undefined ? ini : fim)
-    + ta.value.slice(b);
-  const pos = a + ini.length + sel.length;
-  ta.focus();
-  ta.setSelectionRange(sel ? pos + (fim === undefined ? ini : fim).length : pos, 
-                       sel ? pos + (fim === undefined ? ini : fim).length : pos);
+/* =====================================================================
+ * A BARRA DE EDIÇÃO (v18.30.0)
+ *
+ * Os botões mexiam em ta.value inteiro: o Ctrl+Z não desfazia nada, e apertar
+ * de novo acumulava marcas ("****texto****", "## ## título", "- - item"). Agora:
+ *  · toda troca passa por matTrocarTrecho, que usa a inserção do próprio
+ *    navegador (entra no desfazer) e só cai no ta.value se ela não existir;
+ *  · N, I e as marcas LIGAM E DESLIGAM; a marca de outra cor é TROCADA;
+ *  · H anda os níveis (## → ### → sem título); a lista vale para todas as
+ *    linhas selecionadas e também desliga.
+ * ===================================================================== */
+function matTrocarTrecho(ta, a, b, novo, s0, s1) {
+  if (ta.focus) ta.focus();
+  let feito = false;
+  try {
+    if (typeof document !== "undefined" && typeof document.execCommand === "function" && ta.setSelectionRange) {
+      ta.setSelectionRange(a, b);
+      feito = document.execCommand("insertText", false, novo) && ta.value.slice(a, a + novo.length) === novo;
+    }
+  } catch (e) { feito = false; }
+  if (!feito) ta.value = ta.value.slice(0, a) + novo + ta.value.slice(b);
+  try {
+    if (ta.setSelectionRange) ta.setSelectionRange(s0, s1);
+    else { ta.selectionStart = s0; ta.selectionEnd = s1; }
+  } catch (e) {}
+  matSujo = true;
   matSecaoSincronizar();
 }
 
+/* Aplica a marca em volta da seleção. Se nada estiver selecionado, insere as
+ * marcas e deixa o cursor no meio — quem clicou em "negrito" quer digitar em
+ * negrito, não receber "****" e ter de se virar. Já marcado: tira. */
+function matEnvolver(ini, fim) {
+  const ta = matTA();
+  const f = fim === undefined ? ini : fim;
+  const v = ta.value;
+  const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
+  const sel = v.slice(a, b);
+  /* as marcas DENTRO da seleção ("**texto**" selecionado inteiro) */
+  if (sel.length >= ini.length + f.length && sel.startsWith(ini) && sel.endsWith(f)) {
+    const miolo = sel.slice(ini.length, sel.length - f.length);
+    matTrocarTrecho(ta, a, b, miolo, a, a + miolo.length);
+    return;
+  }
+  /* as marcas EM VOLTA da seleção (selecionou só o texto de dentro) */
+  if (a >= ini.length && v.slice(a - ini.length, a) === ini && v.slice(b, b + f.length) === f) {
+    matTrocarTrecho(ta, a - ini.length, b + f.length, sel, a - ini.length, a - ini.length + sel.length);
+    return;
+  }
+  const novo = ini + sel + f;
+  const pos = sel ? a + novo.length : a + ini.length;
+  matTrocarTrecho(ta, a, b, novo, sel ? a : pos, pos);
+}
+
+/* AS CINCO MARCAS NA EDIÇÃO (destaque, importante, dúvida, caiu na prova,
+ * pegadinha). Trecho sem marca: marca. Com a MESMA marca: tira. Com OUTRA:
+ * troca a cor, sem empilhar "==!==?…". */
+const MAT_RE_MARCA_INTEIRA = /^==([!?§*~@]?)([\s\S]*)==$/;
+function matMarcaEdicao(tipo) {
+  const pre = MAT_MARCAS[tipo] || "==";
+  const ta = matTA();
+  const v = ta.value;
+  const a = ta.selectionStart || 0, b = ta.selectionEnd || 0;
+  const sel = v.slice(a, b);
+  let m = sel.match(MAT_RE_MARCA_INTEIRA);
+  let de = a, ate = b, miolo = m ? m[2] : null, atual = m ? "==" + m[1] : null;
+  if (!m && sel) {
+    /* selecionou só o texto de dentro: procura "==X" logo antes e "==" logo depois */
+    const antes = v.slice(Math.max(0, a - 3), a).match(/==[!?§*~@]?$/);
+    if (antes && v.slice(b, b + 2) === "==") { de = a - antes[0].length; ate = b + 2; miolo = sel; atual = antes[0]; }
+  }
+  if (miolo !== null) {
+    const novo = atual === pre ? miolo : pre + miolo + "==";
+    matTrocarTrecho(ta, de, ate, novo, de, de + novo.length);
+    return;
+  }
+  matEnvolver(pre, "==");
+}
+
+/* a linha (ou as linhas) em que está a seleção: [início, fim) */
+function matLinhasDaSelecao(ta) {
+  const v = ta.value;
+  const a = ta.selectionStart || 0, b = Math.max(a, ta.selectionEnd || 0);
+  const ini = v.lastIndexOf("\n", a - 1) + 1;
+  let fim = v.indexOf("\n", b > a && v[b - 1] === "\n" ? b - 1 : b);
+  if (fim < 0) fim = v.length;
+  return { ini, fim, a, b };
+}
+
+/* H: sem título → "## "; "## " → "### "; "### " ou mais → tira; "# " → "## " */
+function matTituloAlternar() {
+  const ta = matTA();
+  const L = matLinhasDaSelecao(ta);
+  const linha = ta.value.slice(L.ini, ta.value.indexOf("\n", L.ini) < 0 ? ta.value.length : ta.value.indexOf("\n", L.ini));
+  const m = linha.match(/^(#{1,6})\s+/);
+  const n = m ? m[1].length : 0;
+  const novoPre = n === 0 ? "## " : n === 1 ? "## " : n === 2 ? "### " : "";
+  const tira = m ? m[0].length : 0;
+  const delta = novoPre.length - tira;
+  matTrocarTrecho(ta, L.ini, L.ini + tira, novoPre, Math.max(L.ini, L.a + delta), Math.max(L.ini, L.b + delta));
+}
+
+/* lista: todas as linhas da seleção viram itens; se já são todas itens, deixam de ser */
+function matListaAlternar() {
+  const ta = matTA();
+  const L = matLinhasDaSelecao(ta);
+  const bloco = ta.value.slice(L.ini, L.fim);
+  const linhas = bloco.split("\n");
+  const cheias = linhas.filter((l) => l.trim());
+  const todas = cheias.length > 0 && cheias.every((l) => /^\s*[-*]\s+/.test(l));
+  const novo = linhas.map((l) => {
+    if (!l.trim()) return l;
+    return todas ? l.replace(/^(\s*)[-*]\s+/, "$1") : (/^\s*[-*]\s+/.test(l) ? l : "- " + l);
+  }).join("\n");
+  matTrocarTrecho(ta, L.ini, L.fim, novo, L.ini, L.ini + novo.length);
+}
+
+/* divisória: numa linha própria, ANTES da linha do cursor (separa o assunto que começa ali) */
 function matPrefixo(marca) {
   const ta = matTA();
   const a = ta.selectionStart || 0;
   const ini = ta.value.lastIndexOf("\n", a - 1) + 1;
-  ta.value = ta.value.slice(0, ini) + marca + ta.value.slice(ini);
-  ta.focus();
-  ta.setSelectionRange(a + marca.length, a + marca.length);
-  matSecaoSincronizar();
+  matTrocarTrecho(ta, ini, ini, marca, a + marca.length, a + marca.length);
 }
 
 /* T3 — O ESCOPO DO EDITOR: "*" = tudo (o texto inteiro, como sempre), "" = só o resumo geral, ou o id de um ramo */
@@ -1168,6 +1270,8 @@ function matFonteRotulo(px) { return Math.round(100 * px / MAT_FONTE_PADRAO) + "
 function matPintarFonte() {
   const i = MAT_FONTES.indexOf(matFonte);
   if ($("matLeitura")) $("matLeitura").style.fontSize = matFonte + "px";
+  /* e no campo de edição (v18.30.0): antes A+/A− não mudavam nada ali */
+  ["matTexto", "matTextoSecao"].forEach((id) => { const ta = $(id); if (ta && ta.style) ta.style.fontSize = matFonte + "px"; });
   ["matFonteVal", "matCheiaFonte"].forEach((id) => { const el = $(id); if (el) el.textContent = matFonteRotulo(matFonte); });
   /* o botão que não tem para onde ir fica desligado: clique sem efeito parece defeito */
   ["btnMatMenor", "btnMatCheiaMenor"].forEach((id) => { const el = $(id); if (el) el.disabled = i <= 0; });
@@ -2509,9 +2613,16 @@ function matAplicarColagem(txt) {
   const limpo = matLimparColagem(txt);
   if (!limpo) { uiAlert(t("mat_colar_vazio")); return; }
   const ta = matTA();
-  const antes = ta.value.trim();
-  ta.value = antes ? antes + "\n\n" + limpo : limpo;
-  matSecaoSincronizar();
+  /* NO CURSOR, e não no fim: antes a colagem ia sempre para o fim do resumo */
+  const v = ta.value;
+  const a = Math.min(ta.selectionStart == null ? v.length : ta.selectionStart, v.length);
+  const b = Math.min(Math.max(a, ta.selectionEnd == null ? a : ta.selectionEnd), v.length);
+  const antes = v.slice(0, a), depois = v.slice(b);
+  const pre = !antes.trim() ? "" : (/\n\n$/.test(antes) ? "" : (/\n$/.test(antes) ? "\n" : "\n\n"));
+  const pos = !depois.trim() ? "" : (/^\n\n/.test(depois) ? "" : (/^\n/.test(depois) ? "\n" : "\n\n"));
+  const ini = !antes.trim() ? 0 : a;
+  const novo = pre + limpo + pos;
+  matTrocarTrecho(ta, ini, !depois.trim() ? v.length : b, novo, ini + novo.length, ini + novo.length);
   $("dlgMatColar").close();
   reg("MATERIAL", "colagem limpa", txt.length + " → " + limpo.length + " caracteres");
   uiAlert(t("mat_colado", { n: limpo.split(/\n/).length }));
@@ -3553,9 +3664,36 @@ function matIniciar() {
   /* T3: escrever na seção de um ramo devolve, a cada tecla, o texto inteiro para matTexto (o que se grava) */
   if ($("matTextoSecao") && $("matTextoSecao").addEventListener) $("matTextoSecao").addEventListener("input", matSecaoSincronizar);
   [["btnFmtB", () => matEnvolver("**")], ["btnFmtI", () => matEnvolver("_")],
-   ["btnFmtM", () => matEnvolver("==")], ["btnFmtH", () => matPrefixo("## ")],
-   ["btnFmtL", () => matPrefixo("- ")], ["btnFmtHr", () => matPrefixo("---\n")]]
-    .forEach(([id, fn]) => { if ($(id)) $(id).onclick = fn; });
+   ["btnFmtM", () => matMarcaEdicao("destaque")], ["btnFmtH", () => matTituloAlternar()],
+   ["btnFmtL", () => matListaAlternar()], ["btnFmtHr", () => matPrefixo("---\n")],
+   ["btnFmtMkI", () => matMarcaEdicao("importante")], ["btnFmtMkQ", () => matMarcaEdicao("duvida")],
+   ["btnFmtMkP", () => matMarcaEdicao("prova")], ["btnFmtMkG", () => matMarcaEdicao("pegadinha")],
+   ["btnFmtMkD", () => matMarcaEdicao("destaque")]]
+    .forEach(([id, fn]) => { if ($(id)) $(id).onclick = () => { fn(); if ($("matPopMarcas")) $("matPopMarcas").open = false; }; });
+  /* apertar um botão da barra não pode tirar o foco (e a seleção) do campo */
+  ["btnFmtB", "btnFmtI", "btnFmtM", "btnFmtH", "btnFmtL", "btnFmtHr", "btnFmtMkD", "btnFmtMkI", "btnFmtMkQ", "btnFmtMkP", "btnFmtMkG"]
+    .forEach((id) => { if ($(id) && $(id).addEventListener) $(id).addEventListener("mousedown", (ev) => ev.preventDefault()); });
+  /* DIGITAR É ALTERAÇÃO: antes só as marcas contavam, e fechar depois de escrever
+   * no modo edição saía sem perguntar — o texto digitado se perdia */
+  ["matTexto", "matTextoSecao"].forEach((id) => {
+    const ta = $(id);
+    if (!ta || !ta.addEventListener) return;
+    ta.addEventListener("input", () => { matSujo = true; });
+    /* atalhos: Ctrl+B negrito, Ctrl+I itálico (Ctrl+S salva, no diálogo todo) */
+    ta.addEventListener("keydown", (ev) => {
+      if (!ev || !(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+      const k = String(ev.key || "").toLowerCase();
+      if (k === "b") { if (ev.preventDefault) ev.preventDefault(); matEnvolver("**"); }
+      else if (k === "i") { if (ev.preventDefault) ev.preventDefault(); matEnvolver("_"); }
+    });
+  });
+  if ($("dlgMaterial") && $("dlgMaterial").addEventListener) {
+    $("dlgMaterial").addEventListener("keydown", (ev) => {
+      if (!ev || !(ev.ctrlKey || ev.metaKey) || ev.altKey || String(ev.key || "").toLowerCase() !== "s") return;
+      if (ev.preventDefault) ev.preventDefault();
+      if ($("btnMatSalvarEstadoTopo") && $("btnMatSalvarEstadoTopo").onclick) $("btnMatSalvarEstadoTopo").onclick();
+    });
+  }
   /* matVirarCartoes fechava o resumo e trocava o app de modo; agora o
    * painel abre por cima. A função antiga fica como caminho para quem quer
    * mesmo levar o resumo inteiro para a bancada de cartões. */

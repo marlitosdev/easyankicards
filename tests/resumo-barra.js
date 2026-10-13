@@ -159,6 +159,132 @@ async function testes() {
     api.matCheiaTrocar(false);
   }
 
+  /* =================================================================
+   * E (18.30.0): A BARRA DE EDIÇÃO
+   * ================================================================= */
+  {
+    const { api } = rodar();
+    preparar(api);
+    api.matTrocarModo("editar");
+    const ta = api.$("matTexto");
+    const BASE = "A relação jurídica é principal.\n\nSegunda linha aqui.\nTerceira linha.";
+    const por = (txt, alvo, n) => { ta.value = txt; const i = txt.indexOf(alvo); ta.selectionStart = i; ta.selectionEnd = i + (n === undefined ? alvo.length : n); };
+    /* E1: negrito liga e desliga (selecionado inteiro OU só o miolo) */
+    por(BASE, "relação");
+    api.matEnvolver("**");
+    ok(ta.value.indexOf("A **relação** jurídica") === 0, "E1 o negrito não envolveu o trecho: " + ta.value.slice(0, 30));
+    api.matEnvolver("**");
+    ok(ta.value === BASE, "E1a apertar de novo devia tirar o negrito (não '****'): " + ta.value.slice(0, 30));
+    por("A **relação** jurídica", "relação");
+    api.matEnvolver("**");
+    ok(ta.value === "A relação jurídica", "E1b selecionar só o miolo e apertar devia tirar o negrito: " + ta.value);
+    por(BASE, "relação");
+    api.matEnvolver("_"); api.matEnvolver("_");
+    ok(ta.value === BASE, "E1c o itálico não desliga");
+    por("A  fim", "  fim", 0); ta.selectionStart = ta.selectionEnd = 2;
+    api.matEnvolver("**");
+    ok(ta.value === "A **** fim" && ta.selectionStart === 4 && ta.selectionEnd === 4, "E1d sem seleção: as marcas e o cursor no meio");
+    /* E2: as cinco marcas — marca, troca a cor, tira */
+    por(BASE, "relação");
+    api.matMarcaEdicao("importante");
+    ok(ta.value.indexOf("A ==!relação== jurídica") === 0, "E2 a marca 'importante' não entrou: " + ta.value.slice(0, 30));
+    api.matMarcaEdicao("duvida");
+    ok(ta.value.indexOf("A ==?relação== jurídica") === 0, "E2a outra marca devia TROCAR a cor, não empilhar: " + ta.value.slice(0, 30));
+    api.matMarcaEdicao("duvida");
+    ok(ta.value === BASE, "E2b a mesma marca de novo devia tirar: " + ta.value.slice(0, 30));
+    por("A ==!relação== jurídica", "relação");
+    api.matMarcaEdicao("prova");
+    ok(ta.value === "A ==*relação== jurídica", "E2c com só o miolo selecionado, a troca de cor falhou: " + ta.value);
+    por("A ==relação== jurídica", "relação");
+    api.matMarcaEdicao("destaque");
+    ok(ta.value === "A relação jurídica", "E2d destaque sobre destaque devia tirar: " + ta.value);
+    /* E3: título anda os níveis */
+    por(BASE, "relação", 0);
+    api.matTituloAlternar();
+    ok(ta.value.split("\n")[0] === "## A relação jurídica é principal.", "E3 o título não entrou: " + ta.value.split("\n")[0]);
+    api.matTituloAlternar();
+    ok(ta.value.split("\n")[0] === "### A relação jurídica é principal.", "E3a o segundo toque devia descer para ### (não '## ##'): " + ta.value.split("\n")[0]);
+    api.matTituloAlternar();
+    ok(ta.value === BASE, "E3b o terceiro toque devia tirar o título: " + ta.value.split("\n")[0]);
+    por("# Grande\nx", "Grande", 0);
+    api.matTituloAlternar();
+    ok(ta.value.split("\n")[0] === "## Grande", "E3c '# ' devia virar '## ': " + ta.value.split("\n")[0]);
+    /* E4: lista em várias linhas, liga e desliga, linha vazia intacta */
+    ta.value = BASE; ta.selectionStart = 0; ta.selectionEnd = BASE.length;
+    api.matListaAlternar();
+    ok(ta.value === "- A relação jurídica é principal.\n\n- Segunda linha aqui.\n- Terceira linha.", "E4 a lista não pegou todas as linhas selecionadas: " + JSON.stringify(ta.value));
+    ta.selectionStart = 0; ta.selectionEnd = ta.value.length;
+    api.matListaAlternar();
+    ok(ta.value === BASE, "E4a o segundo toque devia tirar a lista (não '- - '): " + JSON.stringify(ta.value));
+    /* E5: divisória numa linha própria antes da linha do cursor */
+    por(BASE, "Segunda", 0);
+    api.matPrefixo("---\n");
+    ok(ta.value === "A relação jurídica é principal.\n\n---\nSegunda linha aqui.\nTerceira linha.", "E5 a divisória não entrou no lugar: " + JSON.stringify(ta.value));
+    /* E6: colar formatado ONDE ESTÁ O CURSOR */
+    por(BASE, "Segunda", 0);
+    api.matAplicarColagem("Texto colado.");
+    ok(ta.value === "A relação jurídica é principal.\n\nTexto colado.\n\nSegunda linha aqui.\nTerceira linha.", "E6 a colagem não entrou onde estava o cursor: " + JSON.stringify(ta.value));
+    ta.value = BASE; ta.selectionStart = ta.selectionEnd = BASE.length;
+    api.matAplicarColagem("No fim.");
+    ok(ta.value === BASE + "\n\nNo fim.", "E6a com o cursor no fim, a colagem devia ir para o fim: " + JSON.stringify(ta.value.slice(-30)));
+    por(BASE, "Segunda linha aqui.");
+    api.matAplicarColagem("Trocado.");
+    ok(ta.value.indexOf("Trocado.") > 0 && ta.value.indexOf("Segunda linha aqui.") < 0, "E6b a colagem devia trocar o trecho selecionado");
+    ta.value = ""; ta.selectionStart = ta.selectionEnd = 0;
+    api.matAplicarColagem("Primeiro texto.");
+    ok(ta.value === "Primeiro texto.", "E6c com o campo vazio, a colagem é o texto todo: " + JSON.stringify(ta.value));
+    /* E7: digitar conta como alteração não salva (fechar pergunta) */
+    api.matSalvarEstado();
+    ok(api.matEstaSujo() === false, "E7pre depois de salvar não devia haver alteração pendente");
+    (ta._ouv.input || []).forEach((f) => f({}));
+    ok(api.matEstaSujo() === true, "E7 digitar no modo edição não conta como alteração: fechar perderia o texto sem perguntar");
+    api.matSalvarEstado();
+    por(ta.value, "relação");
+    api.matEnvolver("**");
+    ok(api.matEstaSujo() === true, "E7a formatar por botão não conta como alteração");
+    /* E8: atalhos Ctrl+B / Ctrl+I no campo e Ctrl+S na janela */
+    por(BASE, "relação");
+    let prev = 0;
+    (ta._ouv.keydown || []).forEach((f) => f({ ctrlKey: true, key: "b", preventDefault() { prev++; } }));
+    ok(ta.value.indexOf("A **relação**") === 0 && prev === 1, "E8 Ctrl+B não pôs negrito");
+    por(BASE, "relação");
+    (ta._ouv.keydown || []).forEach((f) => f({ ctrlKey: true, key: "i", preventDefault() {} }));
+    ok(ta.value.indexOf("A _relação_") === 0, "E8a Ctrl+I não pôs itálico");
+    let salvou = 0;
+    api.$("btnMatSalvarEstadoTopo").onclick = () => { salvou++; };
+    (api.$("dlgMaterial")._ouv.keydown || []).forEach((f) => f({ ctrlKey: true, key: "s", preventDefault() {} }));
+    ok(salvou === 1, "E8b Ctrl+S não salvou o resumo");
+    (api.$("dlgMaterial")._ouv.keydown || []).forEach((f) => f({ ctrlKey: false, key: "s", preventDefault() {} }));
+    ok(salvou === 1, "E8c a tecla s sozinha salvou");
+    /* E9: a letra do "Aa" vale no campo de edição */
+    api.matFonteMudar(1);
+    ok(ta.style.fontSize && ta.style.fontSize === api.$("matLeitura").style.fontSize, "E9 A+ não mudou a letra do campo de edição: " + ta.style.fontSize);
+  }
+  {
+    /* E10: as cinco marcas também na barra de edição; os botões da barra ligados às funções novas */
+    const barra = HTML.slice(HTML.indexOf('id="matBarra"'), HTML.indexOf('id="matTexto"'));
+    ["btnFmtMkD", "btnFmtMkI", "btnFmtMkQ", "btnFmtMkP", "btnFmtMkG", "matPopMarcas"].forEach((id) =>
+      ok(barra.indexOf('id="' + id + '"') >= 0, "E10 '" + id + "' devia estar na barra de edição"));
+    /* com #matBarra (id): a regra antiga "#dlgMaterial .mat-barra{max-height:24vh;overflow-y:auto}" vem depois no arquivo e venceria uma de mesma força */
+    ok(/#dlgMaterial #matBarra\{max-height:none;overflow:visible\}/.test(HTML), "E10a a barra de edição corta o menu das marcas");
+    const { api } = rodar();
+    preparar(api);
+    api.matTrocarModo("editar");
+    const ta = api.$("matTexto");
+    ta.value = "A x b"; ta.selectionStart = 2; ta.selectionEnd = 3;
+    api.$("btnFmtMkQ").onclick();
+    ok(ta.value === "A ==?x== b", "E10b o botão 'dúvida' da barra de edição não marcou: " + ta.value);
+    ta.value = "## x\ny"; ta.selectionStart = ta.selectionEnd = 3;
+    api.$("btnFmtH").onclick();
+    ok(ta.value === "### x\ny", "E10c o botão H não anda o nível: " + ta.value);
+    ta.value = "a\nb"; ta.selectionStart = 0; ta.selectionEnd = 3;
+    api.$("btnFmtL").onclick();
+    ok(ta.value === "- a\n- b", "E10d o botão de lista não usa a lista nova: " + ta.value);
+    ta.value = "a b"; ta.selectionStart = 2; ta.selectionEnd = 3;
+    api.$("btnFmtM").onclick(); api.$("btnFmtM").onclick();
+    ok(ta.value === "a b", "E10e o ▮ não desliga: " + ta.value);
+  }
+
   return falhas;
 }
 

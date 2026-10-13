@@ -3753,7 +3753,9 @@ async function testes() {
     const ta = a.$("matTextoSecao"); ta.selectionStart = 0; ta.selectionEnd = 12;
     a.matEnvolver("**");
     ok(/^\*\*Concorrência\*\*/.test(ta.value) && /## Ramo — Modalidades\n\*\*Concorrência\*\*/.test(a.$("matTexto").value), "T3h o negrito age na secao e volta ao texto inteiro");
-    /* colar (texto de fora) no escopo de um ramo vai para a secao dele */
+    /* colar (texto de fora) no escopo de um ramo vai para a secao dele — e, desde a v18.30.0, ONDE ESTA
+     * O CURSOR: aqui, no fim da secao */
+    ta.selectionStart = ta.selectionEnd = ta.value.length;
     a.matAplicarColagem("Diálogo competitivo.");
     ok(/Diálogo competitivo\.$/.test(a.$("matTextoSecao").value) && a.matTextoDaSecao(a.$("matTexto").value, "modalidades", it().ramos).indexOf("Diálogo competitivo.") >= 0 && a.matTextoDaSecao(a.$("matTexto").value, "", it().ramos) === "Geral do tópico.",
        "T3h2 colar no ramo entra na secao dele (e nao no fim do texto inteiro)");
