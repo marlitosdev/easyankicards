@@ -56,6 +56,9 @@ function jurAbrir(disciplina, topico, modo, opc) {
   const chave = (typeof matChave === "function")
     ? matChave(disciplina, topico) : (disciplina + "›" + topico);
   jurTopicoAtual = { disciplina, nome: topico, chave };
+  /* abrir a gaveta zera o "lote dos citados" (quem o começa liga de novo logo depois) */
+  if (typeof jurLoteDeCitacoes !== "undefined") jurLoteDeCitacoes = false;
+  if ($("jurClPedidoTxt")) { $("jurClPedidoTxt").hidden = true; $("jurClPedidoTxt").value = ""; }
   jurRamoAlvo = opc && opc.ramo && opc.ramo.id ? { id: opc.ramo.id, nome: opc.ramo.nome || opc.ramo.id } : null;
   jurEditando = "";
   jurFiltroTag = "";
@@ -755,6 +758,12 @@ function jurEditar(id) {
   jurMeta(true);
   jurConteudoVisivel(true);
   jurBotaoSalvar();
+  /* (v18.36.0) a tese deste julgado veio da memória da IA: dito na hora de editar */
+  if (j.deMemoria && $("jurColarAviso")) {
+    $("jurColarAviso").hidden = false;
+    $("jurColarAviso").className = "ed-mud";
+    $("jurColarAviso").textContent = t("jur_mem_editar_aviso", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
+  }
   if ($("jurTese") && $("jurTese").focus) $("jurTese").focus();
 }
 
@@ -1391,6 +1400,26 @@ function jurPintarLista() {
     /* O QUE A IA TROUXE E NINGUÉM CONFERIU. Sem o selo, um dado lembrado
      * e um dado lido do tribunal têm a mesma cara — e o primeiro é o que
      * se decora errado. */
+    /* (v18.36.0) A TESE VEIO DA MEMÓRIA DA IA (criada pela citação, sem ementa):
+     * o selo fica aqui também, e não só na prévia, até alguém conferir */
+    if (j.deMemoria) {
+      const m = sel(t("jur_mem_selo"), "conferir jur-mem");
+      m.title = t("jur_mem_selo_aj", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
+      const ok = document.createElement("button");
+      ok.type = "button";
+      ok.className = "btn-min jur-mem-ok";
+      ok.id = "btnJurMemOk_" + j.id;
+      ok.textContent = t("jur_cn_conferi");
+      ok.title = t("jur_mem_ok_aj");
+      ok.onclick = (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        jurGravar({ id: j.id, deMemoria: false });
+        try { reg("JURIS", "tese de memória conferida (gaveta)", jurTitulo(j)); } catch (e) {}
+        jurPintarLista();
+        try { jurRepintarTelas(); } catch (e) {}
+      };
+      cab.append(ok);
+    }
     const conferir = Array.isArray(j.aConferir) ? j.aConferir : [];
     if (conferir.length) {
       const c = sel(t("jur_a_conferir_n", { n: conferir.length }), "conferir");
@@ -1762,6 +1791,14 @@ function jurCitPreviewAbrir(c, ach, base) {
   const temTopico = !!(base && base.disciplina && base.topico);
   $("btnJurCitaCriar").hidden = !!j || !temTopico || !!(ach && ach.ambiguos && ach.ambiguos.length);
   $("btnJurCitaAbrir").hidden = !j || !temTopico;
+  /* (v18.36.0) outros julgados citados e não guardados no mesmo texto: todos de uma vez */
+  if ($("btnJurCitaLote")) {
+    let pend = [];
+    try { if (!j && temTopico && base && typeof base.textoTodo === "function") pend = jurCitPendentes(base.textoTodo(), jurCitChave(base)); } catch (e) { pend = []; }
+    jurCitaAlvo.pend = pend;
+    $("btnJurCitaLote").hidden = pend.length < 2;
+    $("btnJurCitaLote").textContent = t("jur_cl_btn", { n: pend.length });
+  }
   /* (v18.34.0) a citação errada se desliga, ou se liga a outro julgado */
   $("btnJurCitaDesligar").hidden = false;
   $("btnJurCitaOutro").hidden = false;
@@ -1938,6 +1975,72 @@ function jurCitaConferi() {
   return true;
 }
 
+/* =====================================================================
+ * TODOS OS JULGADOS CITADOS DE UMA VEZ (v18.36.0)
+ *
+ * Três súmulas citadas e não guardadas eram três voltas inteiras. Agora um
+ * pedido só, com a lista e o trecho de cada uma; a resposta {"julgados":[…]}
+ * cai no painel de várias fichas da gaveta (conferir e guardar todas). O que
+ * vier sem ementa fica "de memória", como no criar um por um.
+ * ===================================================================== */
+let jurLoteDeCitacoes = false;
+let jurCitLoteUltimo = "";
+
+/* as citações de julgado deste texto que AINDA não têm julgado guardado (sem repetir; sem os desligados) */
+function jurCitPendentes(txt, chave) {
+  let cs = [];
+  try { cs = citJuntarJulgados(String(txt || ""), [], chave); } catch (e) { cs = []; }
+  const vistos = {};
+  return cs.filter((c) => {
+    if (!c._jur || c.jurId) return false;
+    let ach = { julgado: null };
+    try { ach = jurAcharCitado(c, null, chave); } catch (e) {}
+    if (ach.julgado || (ach.ambiguos && ach.ambiguos.length)) return false;
+    const k = [c.tribunal, jurClasseChave(c.classe), jurNumChave(c.numero)].join("|");
+    if (vistos[k]) return false;
+    vistos[k] = true;
+    return true;
+  });
+}
+
+function jurCitLotePedido(pend, base) {
+  const lista = pend.map((c, i) => (i + 1) + ". " + jurCitTitulo(c) + (c.tribunal && jurCitTitulo(c).indexOf(c.tribunal) < 0 ? " (" + c.tribunal + ")" : "")
+    + " — " + t("jur_cl_trecho") + ": \"" + String(c._frase || c.texto || "").replace(/\s+/g, " ").trim().slice(0, 500) + "\"").join("\n");
+  return t("jur_prompt_citados_lote").replace(/\{(\w+)\}/g, (m, k) => ({ tp: (base && base.topico) || "", lista, n: String(pend.length) }[k] !== undefined
+    ? { tp: (base && base.topico) || "", lista, n: String(pend.length) }[k] : m));
+}
+
+/* começa: copia o pedido e abre a gaveta pronta para receber a resposta (o painel de fichas) */
+function jurCitLoteIniciar(pend, base) {
+  const b = base || {};
+  if (!pend || !pend.length || !b.disciplina || !b.topico) return false;
+  if (pend.length === 1) {
+    /* um só: o caminho da prévia (L2) é mais curto */
+    jurCitPreviewAbrir(pend[0], { julgado: null }, b);
+    jurCitCriar();
+    return true;
+  }
+  const p = jurCitLotePedido(pend, b);
+  jurCitLoteUltimo = p;
+  if ($("dlgJurCitaPreview") && $("dlgJurCitaPreview").open) $("dlgJurCitaPreview").close();
+  jurAbrir(b.disciplina, b.topico, "incluir");
+  /* a régua da conferência: as citações (a identidade vem delas); é o que volta à caixa depois de ler a resposta */
+  jurUltimoTextoPedido = pend.map((c) => jurCitTitulo(c)).join("\n");
+  jurLoteDeCitacoes = true;
+  const av = $("jurColarAviso");
+  if (av) { av.hidden = false; av.className = "ed-mud"; av.textContent = t("jur_cl_aviso", { n: pend.length, l: pend.map(jurCitTitulo).join(", ") }); }
+  jurVoltaPara = b.aoVoltar || null;
+  /* o pedido fica À VISTA (copiar à mão), e o aviso muda se a cópia automática não der */
+  if ($("jurClPedidoTxt")) { $("jurClPedidoTxt").value = p; $("jurClPedidoTxt").hidden = false; }
+  const falhou = () => { if (av) av.textContent = t("jur_cl_aviso_manual", { n: pend.length }); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p).catch(falhou);
+    else falhou();
+  } catch (e) { falhou(); }
+  try { reg("JURIS", "pedido dos julgados citados copiado", pend.length + " · " + pend.map(jurCitTitulo).join(" | ")); } catch (e) {}
+  return true;
+}
+
 /* ---------- (v18.34.0) DESLIGAR E LIGAR A OUTRO ---------- */
 function jurCitDesligar() {
   const a = jurCitaAlvo;
@@ -2039,6 +2142,7 @@ function citJuntarJulgados(txt, cits, chave) {
 if (typeof document !== "undefined" && $("dlgJurCitaPreview")) {
   $("btnJurCitaCriar").onclick = () => jurCitCriar();
   if ($("btnJurCitaGaveta")) $("btnJurCitaGaveta").onclick = () => jurCitCriarNaGaveta();
+  if ($("btnJurCitaLote")) $("btnJurCitaLote").onclick = () => { const a = jurCitaAlvo; if (a && a.pend) jurCitLoteIniciar(a.pend, a.base); };
   if ($("btnJurCitaGuardar")) $("btnJurCitaGuardar").onclick = () => jurCitaGuardar();
   if ($("btnJurCitaConferi")) $("btnJurCitaConferi").onclick = () => jurCitaConferi();
   if ($("btnJurCitaPedido")) $("btnJurCitaPedido").onclick = () => jurCitaCopiarPedido();
@@ -2149,7 +2253,7 @@ function jurPintarSemaforo() {
 function jurLoteFicha(a, todos) {
   const f = { tribunal: a.tribunal || "", classe: a.classe || "", numero: a.numero || "", data: a.data || "", orgao: a.orgao || "",
     fonte: a.fonte || "", precedentes: a.precedentes || "", tese: a.tese || "", resumo: a.resumo || "", texto: a.texto || "",
-    tags: (a.tags || []).slice(), categoria: a.categoria || "", ident: a.identificacao || "",
+    tags: (a.tags || []).slice(), categoria: a.categoria || "", ident: a.identificacao || "", certeza: a.certeza || "",
     compartilhado: !!a.compartilhado, semConteudo: !!a.semConteudo, conferir: {}, jaExiste: null, marcado: true };
   /* o que a IA lembrou entra onde o texto não trouxe, e tudo é conferido no texto que foi enviado (a mesma régua de jurColar) */
   const mem = a.deMemoria || {};
@@ -2205,6 +2309,14 @@ function jurLotePintar() {
     nome.className = "jur-lote-nome";
     nome.textContent = jurTitulo(f) || t("jur_sem_titulo");
     cab.append(ck, nome);
+    /* (v18.36.0) lote dos julgados CITADOS: quão certa está a tese que veio de memória */
+    if (jurLoteDeCitacoes && !String(f.texto || "").trim()) {
+      const tm = document.createElement("span");
+      tm.className = "jur-lote-tag mem" + (f.certeza === "baixa" || !String(f.tese || "").trim() ? " baixa" : "");
+      tm.textContent = t("jur_lote_mem", { c: f.certeza ? t("jur_cn_certeza_" + f.certeza) : "?" });
+      tm.title = t("jur_mem_selo_aj", { c: f.certeza ? t("jur_cn_certeza_" + f.certeza) : "?" });
+      cab.append(tm);
+    }
     if (f.jaExiste) {
       const tg = document.createElement("span");
       tg.className = "jur-lote-tag ja";
@@ -2279,6 +2391,8 @@ async function jurSalvarLote() {
       /* o que a IA trouxe e a pessoa não corrigiu continua "a conferir" */
       aConferir: Object.keys(f.conferir).filter((k) => String(f[k] || "").trim() === String(f.conferir[k] || "").trim()),
       topicos: [jurTopicoAtual.chave],
+      /* (v18.36.0) veio dos julgados CITADOS, sem ementa: a tese é da memória da IA */
+      ...(jurLoteDeCitacoes && !String(f.texto || "").trim() ? { deMemoria: true, certeza: f.certeza || "" } : {}),
     });
     if (!j) return;
     jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
@@ -2286,6 +2400,7 @@ async function jurSalvarLote() {
     feitos.push(j);
   });
   if (!feitos.length) { await uiAlert(t("jur_nao_salvou")); return; }
+  jurLoteDeCitacoes = false;
   reg("JURIS", "lote de julgados guardado", feitos.length + " de " + jurLoteFichas.length + " · " + feitos.map(jurTitulo).join(" | ") + " · " + jurTopicoAtual.nome);
   jurLimparForm();
   jurModo = "ler";

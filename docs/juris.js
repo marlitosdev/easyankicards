@@ -339,6 +339,8 @@ function jurAchadoDeObjeto(o) {
       return [];
     })(),
     categoria: pega("categoria", "classificacao").toUpperCase(),
+    /* (v18.36.0) o pedido pela citação pergunta quão certa está a tese que veio de memória */
+    certeza: pega("certeza_da_tese").toLowerCase().replace(/é/g, "e"),
     ano: "", tribunalDeduzido: false,
     /* O QUE A IA DIZ SOBRE O PRÓPRIO TEXTO que recebeu — e o que lembra.
      * O app não confia em nenhum dos dois: ver jurVerificarNoTexto. */
