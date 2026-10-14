@@ -195,7 +195,11 @@ async function testes() {
     ok(ls.every((b) => !/qs-lei-link-sem/.test(b.className)), "U1a os links devem apontar para a lei (CTN pela sigla): " + ls.map((b) => b.className).join("|"));
     ok(ls.map((b) => b.textContent).join("|") === "arts. 77|78|79 do CTN" && el.textContent === q.comentario, "U1b o texto do comentario mudou: " + el.textContent);
     ls[1].onclick();
-    ok(api.leiIdAtualValor() === "lei_ctn" && api.$("dlgLeiSeca").open === true, "U2 clicar em '78' devia abrir o CTN");
+    /* (v18.32.0) a citação da questão abre a PRÉVIA do artigo; a lei inteira fica a um toque */
+    ok(api.$("dlgLeiCitaPreview").open === true && /CTN|Tribut/.test(api.$("leiCitaPreviewTitulo").textContent || "") && /78/.test(api.$("leiCitaPreviewArtigo").textContent || ""),
+       "U2 clicar em '78' devia abrir a prévia do art. 78 do CTN: " + api.$("leiCitaPreviewTitulo").textContent + " / " + api.$("leiCitaPreviewArtigo").textContent);
+    api.leiCitacaoPreviewAbrirLeiInteira();
+    ok(api.leiIdAtualValor() === "lei_ctn" && api.$("dlgLeiSeca").open === true, "U2b 'abrir a lei inteira' devia abrir o CTN");
   }
   {
     /* a citação leva ao inciso: rola e destaca */
@@ -240,7 +244,8 @@ async function testes() {
     ok(l2.some((b) => /qs-lei-link-perm/.test(b.className)) && el2.textContent === q.comentario, "U4f o comentario devia mostrar o vinculo permanente sem mudar o texto");
     const perm = l2.filter((b) => /qs-lei-link-perm/.test(b.className))[0];
     perm.onclick();
-    ok(api.leiIdAtualValor() === "lei_cf", "U4g o vinculo permanente devia abrir a lei fixada (CF): " + api.leiIdAtualValor());
+    api.leiCitacaoPreviewAbrirLeiInteira();
+    ok(api.leiIdAtualValor() === "lei_cf", "U4g o vinculo permanente devia abrir a lei fixada (CF) (pela prévia): " + api.leiIdAtualValor());
     /* remover */
     api.qsVincAbrir(q, el2, "");
     const rm = achar(api.$("qsVincLista"), (c) => /^btnQsVincRemover_/.test(c.id || ""))[0];
