@@ -139,6 +139,129 @@ async function testes() {
     ok(api.$("btnJurCitaCriar").hidden && /não é de um tópico/.test(api.$("jurCitaCorpo").textContent || ""), "J7d sem tópico, 'criar' não devia aparecer");
   }
 
+  /* =================================================================
+   * L1 (v18.34.0): DESLIGAR, RELIGAR E LIGAR A OUTRO
+   * ================================================================= */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const ch = api.matChave(DISC, TOP);
+    api.leiGuardar({ id: "lei_ctn", nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", especie: "Lei", numero: "5.172",
+      texto: "Art. 134. Respondem solidariamente.\nArt. 135. São pessoalmente responsáveis os diretores." });
+    api.leiLigar("lei_ctn", ch);
+    const s430 = guardar(api, { tribunal: "STJ", classe: "Súmula", numero: "430", tese: "inadimplemento não basta" }, DISC, TOP);
+    const s435 = guardar(api, { tribunal: "STJ", classe: "Súmula", numero: "435", tese: "dissolução irregular presume" }, DISC, TOP);
+    const TXT = "* Os diretores (art. 135 do CTN) e as pessoas do art. 134 do CTN.\n* Não basta o inadimplemento (Súmula 430 do STJ).";
+    api.matGravar(ch, TXT, { disciplina: DISC, topico: TOP });
+    api.matAbrirEditor({ disciplina: DISC, nome: TOP }, true);
+    const leis = () => api.$("matLeitura").querySelectorAll("button.mat-lei-link");
+    const juls = () => api.$("matLeitura").querySelectorAll("button.jur-cit-link");
+    /* L1: desligar um link de lei */
+    leis().filter((b) => b.textContent === "art. 134 do CTN")[0].onclick({ stopPropagation() {} });
+    ok(!api.$("btnLeiCitaDesligar").hidden && !api.$("btnLeiCitaOutro").hidden, "L1 a prévia da lei (vinda do resumo) devia oferecer desligar e ligar a outro");
+    api.$("btnLeiCitaDesligar").onclick();
+    ok(!api.$("dlgLeiCitaPreview").open, "L1a desligar devia fechar a prévia");
+    ok(leis().length === 1 && leis()[0].textContent === "art. 135 do CTN", "L1b o link desligado continua no resumo: " + leis().map((b) => b.textContent).join(" | "));
+    ok(/as pessoas do art\. 134 do CTN\./.test(api.$("matLeitura").textContent || ""), "L1c desligar mudou o texto");
+    const neg = api.citVinculosLer().filter((v) => v.nenhum)[0];
+    ok(neg && neg.chave === ch && neg.trecho === "art. 134 do CTN", "L1d o desligado devia ficar guardado só neste tópico: " + JSON.stringify(neg));
+    /* em outro tópico o mesmo trecho continua link */
+    const el = api.document.createElement("div");
+    api.qsUiComentario(el, { disciplina: DISC, topico: "Outro", comentario: "Ver o art. 134 do CTN." });
+    ok(el.querySelectorAll("button.qs-lei-link").length === 1, "L1e o desligado vazou para outro tópico");
+    /* L2: religar pela lista de vínculos */
+    api.matVinculosAbrir("");
+    const rel = api.$("qsVincLista").querySelectorAll("button").filter((b) => /^btnQsVincReligar_/.test(b.id || ""))[0];
+    ok(!!rel && /desligado/.test(api.$("qsVincLista").textContent || ""), "L2 a lista de vínculos devia mostrar o desligado com 'religar'");
+    rel.onclick();
+    ok(leis().length === 2 && api.citVinculosLer().filter((v) => v.nenhum).length === 0, "L2a religar não trouxe o link de volta");
+    api.$("dlgQsVinc").close();
+    /* L3: ligar a outro (lei) — abre a escolha já com o trecho, e o novo vínculo troca o automático */
+    leis().filter((b) => b.textContent === "art. 134 do CTN")[0].onclick({ stopPropagation() {} });
+    api.$("btnLeiCitaOutro").onclick();
+    ok(api.$("dlgQsVincEsc").open === true && /art\. 134 do CTN/.test(api.$("qsVincEscTrecho").textContent || "") && api.$("qsVincArts").value === "134",
+      "L3 'ligar a outro…' não abriu a escolha com o trecho: " + api.$("qsVincArts").value);
+    api.$("qsVincLei").value = "lei_ctn"; api.$("qsVincArts").value = "135"; api.$("qsVincArts").oninput();
+    api.$("btnQsVincEscOk").onclick();
+    const l134 = leis().filter((b) => b.textContent === "art. 134 do CTN")[0];
+    ok(!!l134 && /qs-lei-link-perm/.test(cls(l134)), "L3a o trecho devia passar a levar ao novo destino (vínculo fixo)");
+    /* L4: desligar um link de julgado */
+    juls()[0].onclick({ stopPropagation() {} });
+    ok(!api.$("btnJurCitaDesligar").hidden && !api.$("btnJurCitaOutro").hidden, "L4 a prévia do julgado devia oferecer desligar e ligar a outro");
+    api.$("btnJurCitaDesligar").onclick();
+    ok(juls().length === 0 && /Súmula 430 do STJ/.test(api.$("matLeitura").textContent || ""), "L4a o link de julgado desligado continua (ou o texto sumiu)");
+    api.matVinculosAbrir("");
+    const relJ = api.$("qsVincLista").querySelectorAll("button").filter((b) => /^btnQsVincReligar_/.test(b.id || ""))[0];
+    ok(!!relJ && /julgado desligado/.test(api.$("qsVincLista").textContent || ""), "L4b a lista devia mostrar o julgado desligado");
+    relJ.onclick();
+    ok(juls().length === 1, "L4c religar o julgado não trouxe o link");
+    api.$("dlgQsVinc").close();
+    /* L5: ligar a outro julgado — a citação passa a abrir o escolhido */
+    juls()[0].onclick({ stopPropagation() {} });
+    api.$("btnJurCitaOutro").onclick();
+    ok(api.$("dlgJurEscolher").open === true && /Súmula 430 do STJ/.test(api.$("jurEscTrecho").textContent || ""), "L5 'ligar a outro julgado' não abriu a escolha com o trecho");
+    const ops = api.$("jurEscLista").querySelectorAll("button.jur-cita-opcao");
+    ok(ops.length === 2 && ops.every((b) => /★/.test(b.textContent || "")), "L5a a lista devia trazer os julgados do tópico (★): " + ops.map((b) => b.textContent).join(" | "));
+    api.$("btnJurEscOk").onclick();
+    ok(api.$("dlgJurEscolher").open === true && /Escolha um julgado/.test(api.$("jurEscAviso").textContent || ""), "L5b ligar sem escolher não pode gravar");
+    ops.filter((b) => /435/.test(b.textContent || ""))[0].onclick();
+    ok(/dissolução irregular/.test(api.$("jurEscPrev").textContent || ""), "L5c escolher devia mostrar a prévia do julgado");
+    api.$("btnJurEscOk").onclick();
+    ok(!api.$("dlgJurEscolher").open, "L5d ligar não fechou a escolha");
+    const j0 = juls()[0];
+    ok(!!j0 && /jur-cit-perm/.test(cls(j0)), "L5e a citação devia virar vínculo fixo");
+    j0.onclick({ stopPropagation() {} });
+    ok(/dissolução irregular/.test(api.$("jurCitaCorpo").textContent || ""), "L5f a citação devia abrir o julgado escolhido (435), não o 430");
+    api.$("dlgJurCitaPreview").close();
+    /* L6: busca */
+    api.jurEscAbrir("qualquer trecho", { disciplina: DISC, topico: TOP });
+    api.$("jurEscBusca").value = "inadimplemento"; api.$("jurEscBusca").oninput();
+    const so = api.$("jurEscLista").querySelectorAll("button.jur-cita-opcao");
+    ok(so.length === 1 && /430/.test(so[0].textContent || ""), "L6 a busca não filtrou pela tese");
+    api.$("dlgJurEscolher").close();
+    /* L7: ligar um trecho QUALQUER (sem citação) a um julgado, pela bolha */
+    api.jurEscAbrir("Não basta o inadimplemento", { disciplina: DISC, topico: TOP, aoVoltar: () => api.matTrocarModo("ler") });
+    api.$("jurEscLista").querySelectorAll("button.jur-cita-opcao").filter((b) => /430/.test(b.textContent || ""))[0].onclick();
+    api.$("btnJurEscOk").onclick();
+    const livre = juls().filter((b) => b.textContent === "Não basta o inadimplemento")[0];
+    ok(!!livre && /jur-cit-perm/.test(cls(livre)), "L7 o trecho livre ligado a um julgado não virou link");
+    ok(!!api.$("btnBolhaJurLigar"), "L7a a bolha não tem '⚖ ligar a julgado'");
+    void s430; void s435;
+  }
+  {
+    /* L9: o trecho livre numa linha SEM citação nenhuma; a lei automática cede ao julgado fixado; os do tópico primeiro */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const ch = api.matChave(DISC, TOP);
+    api.leiGuardar({ id: "lei_ctn", nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", texto: "Art. 134. Respondem." });
+    api.leiLigar("lei_ctn", ch);
+    const fora = guardar(api, { tribunal: "STF", classe: "RE", numero: "999999", tese: "de outro tópico" }, DISC, "Outro");
+    const dele = guardar(api, { tribunal: "STJ", classe: "Súmula", numero: "430", tese: "do tópico" }, DISC, TOP);
+    api.citVinculoSalvar({ trecho: "Regra sem citação", tipo: "jur", jurId: dele.id, chave: ch });
+    api.citVinculoSalvar({ trecho: "art. 134 do CTN", tipo: "jur", jurId: dele.id, chave: ch });
+    api.matGravar(ch, "* Regra sem citação nenhuma.\n* Conforme o art. 134 do CTN.", { disciplina: DISC, topico: TOP });
+    api.matAbrirEditor({ disciplina: DISC, nome: TOP }, true);
+    const jt = api.$("matLeitura").querySelectorAll("button.jur-cit-link").map((b) => b.textContent);
+    ok(jt.indexOf("Regra sem citação") >= 0, "L9 o trecho livre (linha sem citação) ligado a julgado não virou link: " + jt.join(" | "));
+    ok(jt.indexOf("art. 134 do CTN") >= 0 && api.$("matLeitura").querySelectorAll("button.mat-lei-link").length === 0,
+      "L9a o trecho com citação de lei ligado à mão a um julgado devia levar ao julgado (a lei automática cede)");
+    api.jurEscAbrir("x", { disciplina: DISC, topico: TOP });
+    const ord = api.$("jurEscLista").querySelectorAll("button.jur-cita-opcao").map((b) => b.textContent || "");
+    ok(ord.length === 2 && /★/.test(ord[0]) && !/★/.test(ord[1]) && /999999/.test(ord[1]), "L9b os julgados do tópico deviam vir primeiro: " + ord.join(" | "));
+    void fora;
+  }
+  {
+    /* L8: modelo — vínculo antigo intacto; o de julgado não vira link de lei */
+    const { api } = rodar();
+    api.citVinculoSalvar({ trecho: "regra x", leiId: "lei_a", artigos: [{ num: "1", numCru: "1" }] });
+    api.citVinculoSalvar({ trecho: "regra x", tipo: "jur", jurId: "j1" });
+    const vs = api.citVinculosLer();
+    ok(vs.length === 2 && vs.some((v) => v.k === "regra x" && v.leiId === "lei_a") && vs.some((v) => v.k === "jur:regra x" && v.jurId === "j1"),
+      "L8 lei e julgado do mesmo trecho deviam conviver (chaves distintas): " + JSON.stringify(vs.map((v) => v.k)));
+    ok(api.citVinculosAplicar("a regra x aqui", []).length === 1 && api.citVinculosAplicar("a regra x aqui", [])[0].leiId === "lei_a", "L8a o vínculo de julgado entrou como link de lei");
+    ok(api.citVinculoSalvar({ trecho: "y" }) === null, "L8b vínculo sem destino e sem 'desligado' não pode ser gravado");
+  }
+
   return falhas;
 }
 

@@ -2489,6 +2489,8 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     $("leiCitaPreviewTexto").textContent = "";
     $("btnLeiCitaPreviewAbrir").hidden = true;
     if ($("leiCitaNotaBox")) $("leiCitaNotaBox").hidden = true;
+    leiCitaPreviewAlvo = { lei: null, num: c.num, sub: c, ctx: o.ctx || null, art: null };
+    leiCitaBotoesDoLink();
     abrirModal("dlgLeiCitaPreview");
     return;
   }
@@ -2520,6 +2522,7 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   }
   leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null, art: art || null };
   if (art) leiCitaNotaPintar();
+  leiCitaBotoesDoLink();
   $("btnLeiCitaPreviewAbrir").hidden = false;
   abrirModal("dlgLeiCitaPreview");
   try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru); }
@@ -2584,6 +2587,35 @@ function leiCitaNotaSugerir() {
   $("leiCitaNotaPrompt").hidden = false;
   $("leiCitaNotaMsg").textContent = t("lei_cita_nota_copiado");
   try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p).catch(() => {}); } catch (e) {}
+}
+
+/* (v18.34.0) DESLIGAR O LINK OU LIGAR A OUTRO — só para a citação vinda de fora do
+ * leitor (resumo, cartão, questão): é onde o trecho tem dono e tópico */
+function leiCitaBotoesDoLink() {
+  const al = leiCitaPreviewAlvo;
+  const ok = !!(al && al.ctx && al.sub && al.sub.texto);
+  if ($("btnLeiCitaDesligar")) $("btnLeiCitaDesligar").hidden = !ok;
+  if ($("btnLeiCitaOutro")) $("btnLeiCitaOutro").hidden = !ok;
+}
+function leiCitaChaveDoCtx(ctx) {
+  return ctx && ctx.disciplina && ctx.topico && typeof matChave === "function" ? matChave(ctx.disciplina, ctx.topico) : "";
+}
+function leiCitaDesligar() {
+  const al = leiCitaPreviewAlvo;
+  if (!al || !al.ctx || !al.sub) return false;
+  const r = citVinculoSalvar({ trecho: al.sub.texto, nenhum: true, chave: leiCitaChaveDoCtx(al.ctx) });
+  $("dlgLeiCitaPreview").close();
+  try { leiReg("citacao", "link de lei desligado", al.sub.texto); } catch (e) {}
+  try { if (typeof al.ctx.aoVoltar === "function") al.ctx.aoVoltar(); } catch (e) {}
+  return !!r;
+}
+function leiCitaOutro() {
+  const al = leiCitaPreviewAlvo;
+  if (!al || !al.ctx || !al.sub || typeof qsVincEscolherPara !== "function") return false;
+  $("dlgLeiCitaPreview").close();
+  qsVincEscolherPara({ disciplina: al.ctx.disciplina, topico: al.ctx.topico, comentario: al.sub.texto,
+    _aoVoltar: al.ctx.aoVoltar, _onde: "resumo" }, { trecho: al.sub.texto, cit: al.sub, atual: al.lei });
+  return true;
 }
 
 let leiCitaPreviewAlvo = null;
@@ -7534,6 +7566,8 @@ function leiIniciar() {
   liga("btnLeiCitaPreviewFechar", "fechar o preview da citação",
     () => $("dlgLeiCitaPreview").close());
   liga("btnLeiCitaNotaEditar", "escrever a nota do artigo pela citação", () => leiCitaNotaEditar());
+  liga("btnLeiCitaDesligar", "desligar o link de lei", () => leiCitaDesligar());
+  liga("btnLeiCitaOutro", "ligar a citação a outra lei/artigo", () => leiCitaOutro());
   liga("btnLeiCitaNotaGuardar", "guardar a nota do artigo pela citação", () => leiCitaNotaGuardar());
   liga("btnLeiCitaNotaSugerir", "sugerir a nota do artigo com IA", () => leiCitaNotaSugerir());
   liga("btnLeiCitaNotaCancelar", "cancelar a nota do artigo", () => leiCitaNotaPintar());

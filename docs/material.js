@@ -1163,19 +1163,12 @@ function citLigarEm(painel, base) {
     let cits = [];
     try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
     try { if (temVinc) cits = citVinculosAplicar(txt, cits, chV); } catch (e) {}
-    /* os julgados citados (v18.33.0), fora do que já é citação de lei */
-    let jcs = [];
-    try {
-      if (temJur && typeof jurCitLink === "function") {
-        jcs = jurCitacoesNoTexto(txt).filter((j) => !cits.some((c) => j.ini < c.fim && c.ini < j.fim))
-          .map((j) => Object.assign(j, { _jur: true }));
-      }
-    } catch (e) { jcs = []; }
-    if (!cits.length && !jcs.length) return;
     const bl = blocoDe(no);
     if (bl !== blocoAtual) { blocoAtual = bl; rotAntes = ""; }
-    try { if (typeof leiDeduzirRotulos === "function") rotAntes = leiDeduzirRotulos(txt, cits, rotAntes); } catch (e) {}
-    if (jcs.length) cits = cits.concat(jcs).sort((a, b) => a.ini - b.ini);
+    try { if (cits.length && typeof leiDeduzirRotulos === "function") rotAntes = leiDeduzirRotulos(txt, cits, rotAntes); } catch (e) {}
+    /* os julgados citados (v18.33.0) e os ligados/desligados à mão (v18.34.0) */
+    try { if ((temJur || temVinc) && typeof citJuntarJulgados === "function" && typeof jurCitLink === "function") cits = citJuntarJulgados(txt, cits, chV); } catch (e) {}
+    if (!cits.length) return;
     const pai = no.parentNode;
     if (!pai || !pai.insertBefore) return;
     if (!ctx) ctx = citCtxDe(base);
@@ -3496,6 +3489,20 @@ function matIniciar() {
     });
   }
   if ($("btnBolhaJuris")) $("btnBolhaJuris").onclick = () => { if ($("btnMatJuris") && $("btnMatJuris").onclick) $("btnMatJuris").onclick(); };
+  /* (v18.34.0) ligar o trecho selecionado a um julgado JÁ guardado */
+  if ($("btnBolhaJurLigar")) {
+    let selJ = "";
+    const guardarJ = () => { try { selJ = qsVincSelecao($("matLeitura")); } catch (e) { selJ = ""; } };
+    $("btnBolhaJurLigar").onmousedown = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); guardarJ(); };
+    $("btnBolhaJurLigar").ontouchstart = guardarJ;
+    $("btnBolhaJurLigar").onclick = () => {
+      let s = selJ;
+      if (!s) { try { s = qsVincSelecao($("matLeitura")); } catch (e) { s = ""; } }
+      if (!s) s = typeof matSelGuardada === "string" ? matSelGuardada : "";
+      selJ = "";
+      if (s && typeof jurEscAbrir === "function") jurEscAbrir(s, matCitBase());
+    };
+  }
   /* a lista de vínculos (sem seleção), na linha da leitura e na tela cheia */
   ["btnMatVincLista", "btnMatCheiaVinc"].forEach((id) => { if ($(id)) $(id).onclick = () => matVinculosAbrir(""); });
   if ($("btnMatVinc")) {

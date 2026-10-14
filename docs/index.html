@@ -1304,6 +1304,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .car-jur-link{color:inherit}
 .jur-cita-corpo{max-height:55vh;overflow:auto}
 #dlgJurCitaPreview[open]{width:min(620px,94vw)}
+.jur-cit-perm{border-bottom:2px solid var(--ok)}
+.jur-esc-lista{max-height:40vh;overflow:auto;margin:6px 0}
+.jur-cita-opcao.sel{border-color:var(--acao);background:rgba(37,99,235,.12)}
 .jur-cita-bloco{margin:0 0 10px}
 .jur-cita-rot{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin-bottom:2px}
 .jur-cita-txt{white-space:pre-wrap;font-size:14px;line-height:1.45}
@@ -6951,6 +6954,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="mat-sep"></span>
     <button class="btn-min mat-vinc-btn" id="btnMatVinc" data-i18n="mat_vinc_btn" data-i18n-title="mat_vinc_btn_aj"></button>
     <button class="btn-min" id="btnBolhaJuris" data-i18n="mat_bolha_juris" data-i18n-title="mat_bolha_juris_aj"></button>
+    <button class="btn-min" id="btnBolhaJurLigar" data-i18n="mat_bolha_jur_ligar" data-i18n-title="mat_bolha_jur_ligar_aj"></button>
     <button class="btn-min" id="btnMatQstTrecho" hidden
       title="Monta o prompt SÓ com o trecho que você selecionou. Fica apagado enquanto não houver seleção."></button>
   </div>
@@ -7817,7 +7821,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnJurCitaCriar" data-i18n="jur_cit_criar" hidden title="Abre a gaveta de julgados deste tópico já com tribunal, classe e número. Ao guardar, a citação passa a mostrar o julgado."></button>
     <button class="btn btn-cinza" id="btnJurCitaAbrir" data-i18n="jur_cit_abrir" hidden title="Abre este julgado na gaveta de julgados do tópico, para ler tudo ou editar."></button>
+    <button class="btn btn-cinza" id="btnJurCitaOutro" data-i18n="jur_cit_outro" hidden title="Liga este trecho a outro julgado já guardado, escolhendo numa lista com busca e prévia. Vale neste tópico."></button>
+    <button class="btn btn-cinza" id="btnJurCitaDesligar" data-i18n="cit_desligar" hidden title="Este link está errado: o trecho volta a ser texto, neste tópico. Dá para religar em “🔗 vínculos de lei” ou ligar de novo pela seleção."></button>
     <button class="btn btn-cinza" id="btnJurCitaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- LIGAR UM TRECHO A UM JULGADO GUARDADO, À MÃO (v18.34.0; jurEscAbrir, juris-ui.js) -->
+<dialog id="dlgJurEscolher" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="jur_esc_tit"></h3>
+    <button type="button" class="dlg-x" id="btnJurEscX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota qs-vinc-trecho" id="jurEscTrecho"></p>
+  <input type="search" id="jurEscBusca" style="width:100%;box-sizing:border-box" data-i18n-ph="jur_esc_busca_ph" placeholder="procurar">
+  <div id="jurEscLista" class="jur-esc-lista"></div>
+  <div id="jurEscPrev" class="qs-vinc-prev" hidden></div>
+  <p class="nota qs-vinc-aviso" id="jurEscAviso"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnJurEscOk" data-i18n="jur_esc_ok" title="Liga o trecho ao julgado escolhido, neste tópico."></button>
+    <button class="btn btn-cinza" id="btnJurEscCancelar" data-i18n="cancel_btn" title="Fecha sem ligar."></button>
   </div>
 </dialog>
 
@@ -7845,6 +7868,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiCitaPreviewAbrir"
       data-i18n="lei_cita_abrir_lei"></button>
+    <button class="btn btn-cinza" id="btnLeiCitaOutro" data-i18n="cit_ligar_outro" hidden
+      title="Liga este trecho a outra lei, artigo ou parte, vendo o texto antes de gravar."></button>
+    <button class="btn btn-cinza" id="btnLeiCitaDesligar" data-i18n="cit_desligar" hidden
+      title="Este link está errado: o trecho volta a ser texto, neste tópico. Dá para religar em “🔗 vínculos de lei” ou ligar de novo pela seleção."></button>
     <button class="btn btn-cinza" id="btnLeiCitaPreviewFechar"
       data-i18n="help_close"></button>
   </div>

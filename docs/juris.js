@@ -1563,6 +1563,8 @@ function jurCitacoesNoTexto(texto) {
  * com o julgado que DIZ "Tema 69" (o RE que fixou a tese). Dois candidatos: os do tópico vencem; ainda dois, dúvida. */
 function jurAcharCitado(c, lista, chave) {
   if (!c) return { julgado: null };
+  /* ligado à mão a um julgado (citVinculosAplicarJur): é ele, sem procurar */
+  if (c.jurId) return { julgado: jurDe(c.jurId) || null, fixo: true };
   const L = lista || jurLista();
   const cc = jurClasseChave(c.classe), n = jurNumChave(c.numero);
   if (!n) return { julgado: null };

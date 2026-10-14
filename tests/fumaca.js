@@ -825,7 +825,7 @@ function rodar() {
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
     matCitacoesLigar, matCitCtx, matCitLink, matCitIr, matVinculosAbrir, qsUiVoltaDe, qsVincT,
-    citCtxDe, citLigarEm, citIr, matCitBase, estcCitBase, estcFechar, gerPintarPrevia, matBolhaAtualizar, matBolhaDoca, jurCitacoesNoTexto, jurAcharCitado, jurTribunalDepois, jurCitLink, jurCitIr, jurCitPreviewAbrir, jurCitCriar, jurCitAbrirGaveta, jurTemCitacao, citNotaEl, citNotasVisiveis, leiCitaNotaPintar, matMarcaEdicao, matTituloAlternar, matListaAlternar, matPrefixo, matTrocarTrecho,
+    citCtxDe, citLigarEm, citIr, matCitBase, estcCitBase, estcFechar, gerPintarPrevia, matBolhaAtualizar, matBolhaDoca, jurCitacoesNoTexto, jurAcharCitado, jurTribunalDepois, jurCitLink, jurCitIr, jurCitPreviewAbrir, jurCitCriar, jurCitAbrirGaveta, jurTemCitacao, jurCitDesligar, jurCitOutro, jurEscAbrir, jurEscLigar, citJuntarJulgados, citVinculosAplicarJur, leiCitaDesligar, leiCitaOutro, citNotaEl, citNotasVisiveis, leiCitaNotaPintar, matMarcaEdicao, matTituloAlternar, matListaAlternar, matPrefixo, matTrocarTrecho,
     qsVincLerDestinos, qsVincRotuloDestino, qsVincSubDaUnidade, qsVincDestinosTexto, qsVincPintarEsc,
     pacNomeDeck, pacAplicarRenomear, pacLimparNomeRenomeado, pacArvoreDecks, pacRamoDoCartao, pacResolverRamo, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
     pacAbrir, pacLerArquivo, pacAcaoImportar, pacChaveCartao, cmCampo,

@@ -1377,18 +1377,16 @@ function qsUiComentario(el, q) {
     }
   } catch (e) {}
   try { if (typeof leiDeduzirRotulos === "function") leiDeduzirRotulos(txt, cits); } catch (e) {}
-  /* os julgados citados (v18.33.0): "Súmula 430 do STJ" também vira link */
-  let jcs = [];
+  /* os julgados citados (v18.33.0) e os ligados/desligados à mão (v18.34.0) */
   try {
-    if (typeof jurTemCitacao === "function" && jurTemCitacao(txt) && typeof jurCitLink === "function") {
-      jcs = jurCitacoesNoTexto(txt).filter((j) => !cits.some((c) => j.ini < c.fim && c.ini < j.fim))
-        .map((j) => Object.assign(j, { _jur: true }));
+    if (typeof citJuntarJulgados === "function" && typeof jurCitLink === "function") {
+      const chJ = (typeof matChave === "function" && q && q.disciplina && q.topico) ? matChave(q.disciplina, q.topico) : "";
+      cits = citJuntarJulgados(txt, cits, chJ);
     }
-  } catch (e) { jcs = []; }
+  } catch (e) {}
   /* sem citação — e este é o caso comum em Português e Informática — o
    * comentário continua sendo exatamente o texto, sem nada em volta */
-  if (!cits.length && !jcs.length) { el.textContent = txt; return el; }
-  if (jcs.length) cits = cits.concat(jcs).sort((a, b) => a.ini - b.ini);
+  if (!cits.length) { el.textContent = txt; return el; }
 
   /* a biblioteca é lida UMA vez por comentário, e não uma por citação:
    * leisLista() lê o armazenamento e ordena, e um comentário longo cita
@@ -1711,6 +1709,40 @@ function qsVincPintar() {
     p.textContent = qsVincT("qs_vinc_nenhuma");
     cx.append(p);
   }
+  /* (v18.34.0) os links DESLIGADOS e os ligados à mão a um JULGADO, neste texto */
+  try {
+    const nt = leiTxtChave(txt);
+    citVinculosLer().filter((v) => (v.nenhum || v.tipo === "jur") && (!v.chave || v.chave === ch)
+      && v.trecho && nt.indexOf(leiTxtChave(v.trecho)) >= 0).forEach((v, i) => {
+      const card = document.createElement("div");
+      card.className = "lei-bib-card";
+      card.id = "qsVincExtra_" + i;
+      const tit = document.createElement("div");
+      tit.className = "lei-bib-tit";
+      tit.textContent = v.trecho;
+      const meta = document.createElement("div");
+      meta.className = "lei-bib-meta lei-bib-sem";
+      const jj = v.jurId && typeof jurDe === "function" ? jurDe(v.jurId) : null;
+      meta.textContent = v.nenhum ? t(v.tipo === "jur" ? "qs_vinc_desligado_jur" : "qs_vinc_desligado")
+        : t("qs_vinc_jur", { j: jj ? [jj.tribunal, jj.classe, jj.numero].filter(Boolean).join(" ") : "?" });
+      const ac = document.createElement("div");
+      ac.className = "lei-bib-acoes";
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min";
+      b.id = "btnQsVincReligar_" + i;
+      b.textContent = t(v.nenhum ? "qs_vinc_religar" : "qs_vinc_remover");
+      b.onclick = () => {
+        citVinculoRemover(v.k);
+        try { reg("QUESTOES", v.nenhum ? "link religado" : "vínculo de julgado removido", v.trecho); } catch (e) {}
+        qsVincPintar();
+        qsUiVoltaDe(q)();
+      };
+      ac.append(b);
+      card.append(tit, meta, ac);
+      cx.append(card);
+    });
+  } catch (e) {}
   cits.forEach((ct, i) => {
     const alvo = qsUiLeiAlvo(ct, lista, doTopico);
     const card = document.createElement("div");
@@ -1834,6 +1866,12 @@ function qsVincArtigos(lei) {
   try { arts = leiArtigosEfetivos(lei) || []; } catch (e) { arts = []; }
   if (c) c.cacheArts = { id: lei.id, arts };
   return arts;
+}
+
+/* (v18.34.0) a escolha da lei SEM passar pela lista — vinda do "ligar a outro…" da prévia */
+function qsVincEscolherPara(q, alvo) {
+  qsVincCtx = { q, el: null, selecao: "" };
+  qsVincEscolher(alvo);
 }
 
 function qsVincEscolher(alvo) {
