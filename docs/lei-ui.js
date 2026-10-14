@@ -2488,6 +2488,7 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     $("leiCitaPreviewArtigo").textContent = "";
     $("leiCitaPreviewTexto").textContent = "";
     $("btnLeiCitaPreviewAbrir").hidden = true;
+    if ($("leiCitaNotaBox")) $("leiCitaNotaBox").hidden = true;
     abrirModal("dlgLeiCitaPreview");
     return;
   }
@@ -2498,6 +2499,7 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   if (!art) {
     $("leiCitaPreviewArtigo").textContent = "";
     $("leiCitaPreviewTexto").textContent = t("lei_cita_artigo_nao_achou", { a: c.numCru });
+    if ($("leiCitaNotaBox")) $("leiCitaNotaBox").hidden = true;
   } else {
     $("leiCitaPreviewArtigo").textContent = art.rotulo
       + (art.alterado ? " " + t("lei_selo_alterado_curto", { f: art.fonteAlteracao || "?" }) : "")
@@ -2516,11 +2518,72 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     } catch (e) {}
     $("leiCitaPreviewTexto").textContent = texto;
   }
-  leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null };
+  leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null, art: art || null };
+  if (art) leiCitaNotaPintar();
   $("btnLeiCitaPreviewAbrir").hidden = false;
   abrirModal("dlgLeiCitaPreview");
   try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru); }
   catch (e) {}
+}
+
+/* =====================================================================
+ * A NOTA DO ARTIGO, ESCRITA DA PRÓPRIA CITAÇÃO (v18.31.0)
+ *
+ * "I - As pessoas referidas no art. 134" não diz nada a quem não decorou o
+ * art. 134. A nota de artigo (leiNotaDe/leiNotaGuardar) já existia, mas só
+ * se escrevia no leitor da lei. Agora a prévia da citação mostra a nota e
+ * deixa escrever ali mesmo; ela aparece AO LADO de cada citação do artigo —
+ * no resumo, nos cartões, no comentário das questões — e no leitor da lei.
+ * ===================================================================== */
+function leiCitaNotaPintar() {
+  const al = leiCitaPreviewAlvo;
+  const box = $("leiCitaNotaBox");
+  if (!box) return;
+  if (!al || !al.lei || !al.art) { box.hidden = true; return; }
+  box.hidden = false;
+  const nota = leiNotaDe(al.lei.id, al.art.num);
+  const tx = $("leiCitaNotaTxt");
+  tx.textContent = nota ? "📝 " + nota : t("lei_cita_nota_vazia");
+  tx.className = "lei-cita-nota-txt" + (nota ? "" : " vazia");
+  $("btnLeiCitaNotaEditar").textContent = t(nota ? "lei_cita_nota_editar" : "lei_cita_nota_escrever");
+  $("leiCitaNotaVer").hidden = false;
+  $("leiCitaNotaEd").hidden = true;
+  $("leiCitaNotaPrompt").hidden = true;
+  $("leiCitaNotaMsg").textContent = "";
+}
+
+function leiCitaNotaEditar() {
+  const al = leiCitaPreviewAlvo;
+  if (!al || !al.lei || !al.art) return;
+  $("leiCitaNotaCampo").value = leiNotaDe(al.lei.id, al.art.num);
+  $("leiCitaNotaCampo").placeholder = t("lei_nota_placeholder");
+  $("leiCitaNotaVer").hidden = true;
+  $("leiCitaNotaEd").hidden = false;
+  try { $("leiCitaNotaCampo").focus(); } catch (e) {}
+}
+
+function leiCitaNotaGuardar() {
+  const al = leiCitaPreviewAlvo;
+  if (!al || !al.lei || !al.art) return false;
+  const texto = String($("leiCitaNotaCampo").value || "").trim();
+  const ok = leiNotaGuardar(al.lei.id, al.art.num, texto);
+  if (!ok) { $("leiCitaNotaMsg").textContent = t("qs_vinc_erro_gravar"); return false; }
+  try { leiReg("nota", texto ? "nota guardada pela citação" : "nota apagada pela citação", al.lei.nome + " · " + al.art.rotulo); } catch (e) {}
+  leiCitaNotaPintar();
+  /* quem está atrás (resumo, cartão, questão) repinta: a nota passa a aparecer ao lado do link */
+  try { if (al.ctx && typeof al.ctx.aoVoltar === "function") al.ctx.aoVoltar(); } catch (e) {}
+  try { if ($("dlgLeiSeca") && $("dlgLeiSeca").open && leiIdAtual === al.lei.id) leiPintarLeitura(); } catch (e) {}
+  return true;
+}
+
+function leiCitaNotaSugerir() {
+  const al = leiCitaPreviewAlvo;
+  if (!al || !al.art) return;
+  const p = t("lei_nota_prompt", { artigo: al.art.rotulo, texto: al.art.texto });
+  $("leiCitaNotaPrompt").value = p;
+  $("leiCitaNotaPrompt").hidden = false;
+  $("leiCitaNotaMsg").textContent = t("lei_cita_nota_copiado");
+  try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p).catch(() => {}); } catch (e) {}
 }
 
 let leiCitaPreviewAlvo = null;
@@ -7470,6 +7533,10 @@ function leiIniciar() {
     () => leiCitacaoPreviewAbrirLeiInteira());
   liga("btnLeiCitaPreviewFechar", "fechar o preview da citação",
     () => $("dlgLeiCitaPreview").close());
+  liga("btnLeiCitaNotaEditar", "escrever a nota do artigo pela citação", () => leiCitaNotaEditar());
+  liga("btnLeiCitaNotaGuardar", "guardar a nota do artigo pela citação", () => leiCitaNotaGuardar());
+  liga("btnLeiCitaNotaSugerir", "sugerir a nota do artigo com IA", () => leiCitaNotaSugerir());
+  liga("btnLeiCitaNotaCancelar", "cancelar a nota do artigo", () => leiCitaNotaPintar());
   liga("btnLeiVincFechar", "fechar o vínculo", () => $("dlgLeiVincular").close());
   liga("btnLeiClozeFechar", "fechar a lacuna", () => $("dlgLeiCloze").close());
   liga("btnLeiClozeConferir", "conferir a lacuna", () => leiClozeConferir());

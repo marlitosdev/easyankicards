@@ -1287,6 +1287,15 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-pop-esq .mat-pop-corpo{left:0;right:auto}
 #dlgMaterial .mat-pop-marcas{flex-direction:row;flex-wrap:wrap;min-width:0;width:max-content;max-width:min(360px,90vw)}
 #dlgMaterial #matTexto,#dlgMaterial #matTextoSecao{min-height:max(290px,55vh);resize:vertical;line-height:1.5}
+/* A NOTA DA CITAÇÃO (v18.31.0): discreta, ao lado do link; inteira no balão */
+.cit-nota{font-size:.8em;color:var(--sutil);margin-left:4px;padding:0 6px;border:1px dashed var(--borda);border-radius:6px;cursor:pointer;white-space:normal}
+.cit-nota:hover{border-style:solid}
+.car-lei-link + .cit-nota{color:inherit;opacity:.75}
+.lei-cita-nota{border:1px solid var(--borda);border-radius:8px;padding:6px 8px;margin:0 0 8px}
+.lei-cita-nota-ver{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.lei-cita-nota-txt{flex:1;font-size:13px}
+.lei-cita-nota-txt.vazia{color:var(--sutil)}
+.mat-aa-notas{font-size:12px;display:flex;gap:6px;align-items:center}
 /* VINCULAR TRECHO (v18.25.0): fichas da lei e da parte do artigo, achados e a prévia */
 .qs-vinc-trecho{font-style:italic}
 .qs-vinc-rot{display:block;margin:10px 0 4px;font-size:13px}
@@ -6803,6 +6812,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <details class="mat-pop" id="matPopAa">
         <summary class="btn-min mat-pop-bt" data-i18n="mat_aa" data-i18n-title="mat_aa_tit"></summary>
         <div class="mat-pop-corpo mat-pop-aa">
+          <label class="mat-aa-notas"><input type="checkbox" id="matCitNotasVer" checked> <span data-i18n="mat_cit_notas_ver"></span></label>
           <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
       <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
       <span class="mat-seg">
@@ -7788,6 +7798,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgLeiCitaPreview" class="ui-modal">
   <h3 id="leiCitaPreviewTitulo"></h3>
   <p class="nota" id="leiCitaPreviewArtigo"></p>
+  <!-- A NOTA DO ARTIGO (v18.31.0): a mesma do leitor da lei; escrita aqui, aparece ao lado de cada citação dele -->
+  <div class="lei-cita-nota" id="leiCitaNotaBox" hidden>
+    <div class="lei-cita-nota-ver" id="leiCitaNotaVer">
+      <span class="lei-cita-nota-txt" id="leiCitaNotaTxt"></span>
+      <button type="button" class="btn-min" id="btnLeiCitaNotaEditar" title="Escreve ou corrige a nota deste artigo: uma frase curta sobre do que ele trata. Ela aparece ao lado de cada citação do artigo."></button>
+    </div>
+    <div id="leiCitaNotaEd" hidden>
+      <textarea id="leiCitaNotaCampo" rows="2" maxlength="300" style="width:100%;box-sizing:border-box"></textarea>
+      <div class="qm-bts">
+        <button type="button" class="btn-min btn-min-ok" id="btnLeiCitaNotaGuardar" data-i18n="lei_cita_nota_guardar" title="Guarda a nota deste artigo. Vazia, apaga a nota (vai para a lixeira)."></button>
+        <button type="button" class="btn-min" id="btnLeiCitaNotaSugerir" data-i18n="lei_cita_nota_sugerir" title="Copia um pedido para uma IA resumir do que trata o artigo. Cole a frase que ela devolver na caixa acima."></button>
+        <button type="button" class="btn-min" id="btnLeiCitaNotaCancelar" data-i18n="cancel_btn" title="Fecha a edição sem guardar."></button>
+      </div>
+      <p class="nota" id="leiCitaNotaMsg"></p>
+      <textarea id="leiCitaNotaPrompt" rows="3" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
+    </div>
+  </div>
   <p id="leiCitaPreviewTexto" class="lei-cita-preview-txt"></p>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiCitaPreviewAbrir"
