@@ -1660,6 +1660,140 @@ async function jurGerarCartao(id) {
  * jurisprudência exigiria sair da leitura, abrir outra tela e redigitar
  * — e ninguém faz isso no meio de um estudo.
  * ------------------------------------------------------------------ */
+/* =====================================================================
+ * O JULGADO CITADO VIRA LINK (v18.33.0)
+ *
+ * "(Súmula 430 do STJ)" no resumo, no cartão ou no comentário da questão:
+ * tocar abre a PRÉVIA do julgado guardado (tese, resumo, ementa) por cima de
+ * onde se está. Sem julgado guardado, "Criar agora" abre a gaveta já com
+ * tribunal, classe e número; ao guardar, o link passa a achar o julgado
+ * sozinho (a identidade é a mesma), sem vínculo manual.
+ * base = {disciplina, topico, chave?, aoVoltar} — de onde veio a citação.
+ * ===================================================================== */
+function jurCitChave(base) {
+  const b = base || {};
+  if (b.disciplina && b.topico && typeof matChave === "function") return matChave(b.disciplina, b.topico);
+  return b.chave || "";
+}
+function jurCitNome(j) {
+  return [String(j.tribunal || "").trim(), [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+}
+function jurCitTrecho(s, n) {
+  const x = String(s || "").replace(/\s+/g, " ").trim();
+  return x.length > n ? x.slice(0, n - 1) + "…" : x;
+}
+
+function jurCitLink(c, base) {
+  const b = document.createElement("button");
+  b.type = "button";
+  let ach = { julgado: null };
+  try { ach = jurAcharCitado(c, null, jurCitChave(base)); } catch (e) {}
+  const j = ach.julgado;
+  b.className = "jur-cit-link" + (j ? "" : " jur-cit-sem") + (base && base.onde === "cartao" ? " car-jur-link" : "");
+  b.textContent = c.texto;
+  b.title = j ? t("jur_cit_ir", { j: jurCitNome(j), t: jurCitTrecho(j.tese || j.resumo, 140) })
+    : ach.ambiguos ? t("jur_cit_amb", { n: ach.ambiguos.length, j: c.texto })
+    : t("jur_cit_sem", { j: c.texto });
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    jurCitIr(c, base);
+  };
+  return b;
+}
+
+let jurCitaAlvo = null;
+function jurCitIr(c, base) {
+  let ach = { julgado: null };
+  try { ach = jurAcharCitado(c, null, jurCitChave(base)); } catch (e) {}
+  jurCitPreviewAbrir(c, ach, base);
+}
+
+function jurCitPreviewAbrir(c, ach, base) {
+  if (!$("dlgJurCitaPreview")) return;
+  const j = ach && ach.julgado;
+  jurCitaAlvo = { c, base: base || {}, j: j || null };
+  $("jurCitaTit").textContent = String(c.texto || "").replace(/[\s.;,]+$/g, "");
+  const corpo = $("jurCitaCorpo");
+  corpo.innerHTML = "";
+  const bloco = (rot, txt, cls) => {
+    if (!String(txt || "").trim()) return;
+    const d = document.createElement("div");
+    d.className = "jur-cita-bloco" + (cls ? " " + cls : "");
+    const r = document.createElement("div");
+    r.className = "jur-cita-rot";
+    r.textContent = rot;
+    const x = document.createElement("div");
+    x.className = "jur-cita-txt";
+    x.textContent = txt;
+    d.append(r, x);
+    corpo.append(d);
+  };
+  if (j) {
+    $("jurCitaMeta").textContent = [jurCitNome(j), j.orgao, j.relator, j.data].filter((x) => String(x || "").trim()).join(" · ");
+    bloco(t("jur_cit_tese"), j.tese, "jur-cita-tese");
+    bloco(t("jur_cit_resumo"), j.resumo);
+    bloco(t("jur_cit_ementa"), jurCitTrecho(j.texto, 900));
+    if ((j.tags || []).length) bloco(t("jur_cit_tags"), j.tags.join(" · "));
+    if (!String(j.tese || j.resumo || j.texto || "").trim()) bloco("", t("jur_cit_vazio"));
+  } else if (ach && ach.ambiguos && ach.ambiguos.length) {
+    $("jurCitaMeta").textContent = t("jur_cit_amb_meta", { n: ach.ambiguos.length });
+    ach.ambiguos.forEach((x, i) => {
+      const bt = document.createElement("button");
+      bt.type = "button";
+      bt.className = "jur-cita-opcao";
+      bt.id = "jurCitaOpcao_" + i;
+      bt.textContent = jurCitNome(x) + " — " + jurCitTrecho(x.tese || x.resumo, 110);
+      bt.onclick = () => jurCitPreviewAbrir(c, { julgado: x }, base);
+      corpo.append(bt);
+    });
+  } else {
+    $("jurCitaMeta").textContent = "";
+    bloco("", t("jur_cit_nao_guardado", { j: $("jurCitaTit").textContent }));
+    const temTopico = !!(base && base.disciplina && base.topico);
+    bloco("", t(temTopico ? "jur_cit_criar_dica" : "jur_cit_sem_topico"), "jur-cita-dica");
+  }
+  const temTopico = !!(base && base.disciplina && base.topico);
+  $("btnJurCitaCriar").hidden = !!j || !temTopico || !!(ach && ach.ambiguos && ach.ambiguos.length);
+  $("btnJurCitaAbrir").hidden = !j || !temTopico;
+  abrirModal("dlgJurCitaPreview");
+  try { reg("JURIS", "prévia de julgado citado", c.texto + (j ? " · achado" : ach && ach.ambiguos ? " · dúvida" : " · não guardado")); } catch (e) {}
+}
+
+/* "Criar agora": a gaveta de sempre, já com a identidade do citado */
+function jurCitCriar() {
+  const a = jurCitaAlvo;
+  if (!a || !a.base || !a.base.disciplina || !a.base.topico) return false;
+  $("dlgJurCitaPreview").close();
+  jurAbrir(a.base.disciplina, a.base.topico, "incluir");
+  const c = a.c;
+  if ($("jurTribunal")) $("jurTribunal").value = c.tribunal || JUR_CASA[c.classe] || "";
+  if ($("jurClasse")) $("jurClasse").value = c.classe || "";
+  if ($("jurNumero")) $("jurNumero").value = jurSoDigitos(c.numero);
+  /* a identidade preenchida fica À VISTA (os campos moram numa parte recolhida), e o aviso diz de onde veio */
+  if (typeof jurMeta === "function") jurMeta(true);
+  const av = $("jurColarAviso");
+  if (av) { av.hidden = false; av.className = "ed-mud"; av.textContent = t("jur_cit_criado_aviso", { j: String(c.texto || "").replace(/[\s.;,]+$/g, "") }); }
+  jurVoltaPara = a.base.aoVoltar || null;
+  try { reg("JURIS", "julgado citado: criar agora", c.texto); } catch (e) {}
+  return true;
+}
+
+function jurCitAbrirGaveta() {
+  const a = jurCitaAlvo;
+  if (!a || !a.j || !a.base || !a.base.disciplina || !a.base.topico) return false;
+  $("dlgJurCitaPreview").close();
+  jurAbrir(a.base.disciplina, a.base.topico, "ler");
+  jurEditar(a.j.id);
+  jurVoltaPara = a.base.aoVoltar || null;
+  return true;
+}
+
+if (typeof document !== "undefined" && $("dlgJurCitaPreview")) {
+  $("btnJurCitaCriar").onclick = () => jurCitCriar();
+  $("btnJurCitaAbrir").onclick = () => jurCitAbrirGaveta();
+  $("btnJurCitaFechar").onclick = () => $("dlgJurCitaPreview").close();
+}
+
 function jurDaSelecao() {
   if (typeof matLembrarSelecao === "function") matLembrarSelecao("matLeitura");
   /* O TÓPICO É O QUE ESTÁ ABERTO NO EDITOR, e a seleção é a que o
