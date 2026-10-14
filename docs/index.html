@@ -1318,6 +1318,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .jur-lote-tag.mem{border-color:var(--atencao);color:var(--atencao)}
 .jur-lote-tag.mem.baixa{border-color:var(--erro);color:var(--erro)}
 .jur-sel.jur-mem{border-color:var(--atencao);color:var(--atencao)}
+/* CRIAR NA BIBLIOTECA (v18.37.0) */
+.ger-criar{border:1px solid var(--borda);border-radius:10px;padding:8px;margin:6px 0;display:flex;flex-direction:column;gap:6px;background:var(--panel)}
+.ger-criar-cab{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ger-criar-opc select{max-width:100%}
+.ger-criar textarea{min-height:44px;max-height:140px;resize:vertical}
+.ger-criar-previa{display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow:auto}
+.ger-criar-item{display:flex;gap:6px;align-items:flex-start;border:1px solid var(--borda);border-radius:8px;padding:4px 6px;font-size:12px}
+.ger-criar-item.rep{opacity:.6}
+.ger-criar-item .ger-criar-txt{flex:1;min-width:0}
+.ger-criar-tag{font-size:11px;color:var(--atencao);white-space:nowrap}
+.ger-criar .nota{font-size:12px;margin:2px 0}
 #dlgJurCitaPreview.criando .jur-cita-dica{display:none}
 .jur-cita-bloco{margin:0 0 10px}
 .jur-cita-rot{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin-bottom:2px}
@@ -5462,6 +5473,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         </details>
         <div class="banc-alvo-fim">
           <button type="button" class="btn-min" id="btnBancAlvoDesfazer" data-i18n="banc_alvo_desfazer" data-i18n-title="banc_alvo_tip_desfazer" hidden></button>
+          <button type="button" class="btn-min btn-min-ok" id="btnBancAlvoVoltar" data-i18n="banc_alvo_voltar" data-i18n-title="banc_alvo_tip_voltar" hidden></button>
           <button type="button" class="btn-min" id="btnBancAlvoSair" data-i18n="banc_alvo_sair" data-i18n-title="banc_alvo_tip_sair"></button>
         </div>
       </div>
@@ -8771,6 +8783,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <!-- ONDE ESTOU: edital › disciplina › tópico › ramo da pasta que a lista mostra agora, cada nível na cor da árvore -->
       <div class="ger-onde" id="gerOnde" role="status"></div>
       <div class="ger-ferr">
+        <button type="button" class="btn-min btn-min-ok" id="btnGerCriar" data-i18n="ger_criar_btn" hidden></button>
         <button type="button" class="btn-min btn-min-ok" id="btnGerEstudar" hidden></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
         <button type="button" class="btn-min" id="btnGerMarcarFracos" hidden></button>
@@ -8781,6 +8794,35 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min btn-min-ok ger-sec" id="btnGerClassificar" data-i18n="ger_classificar" hidden></button>
         <button type="button" class="btn-min ger-sec" id="btnGerExportar" data-i18n="ger_exportar" hidden></button>
         <button type="button" class="btn-min btn-min-ok ger-sec" id="btnGerRamos" data-i18n="ger_ramos" hidden></button>
+      </div>
+      <!-- CRIAR CARTÕES SEM SAIR DA BIBLIOTECA (v18.37.0): o pedido do tópico, colar a resposta, conferir e guardar -->
+      <div class="ger-criar" id="gerCriarBox" hidden>
+        <div class="ger-criar-cab">
+          <b id="gerCriarTit"></b>
+          <button type="button" class="dlg-x" id="btnGerCriarX" data-i18n-title="help_close">✖</button>
+        </div>
+        <div class="ednovo-passo">
+          <div class="qs-vinc-rot"><b>1.</b> <span data-i18n="ger_criar_p1"></span></div>
+          <div class="qm-bts ger-criar-opc">
+            <label class="nota"><span data-i18n="pc_tipo_rot"></span> <select id="gerCriarTipo"></select></label>
+            <label class="nota"><span data-i18n="pc_qtd_rot"></span> <select id="gerCriarQtd"></select></label>
+          </div>
+          <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnGerCriarPedido" data-i18n="ger_criar_copiar"></button></div>
+          <p class="nota" id="gerCriarPedidoMsg"></p>
+          <textarea id="gerCriarPedidoTxt" rows="3" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
+        </div>
+        <div class="ednovo-passo">
+          <div class="qs-vinc-rot"><b>2.</b> <span data-i18n="ger_criar_p2"></span></div>
+          <textarea id="gerCriarResp" rows="4" style="width:100%;box-sizing:border-box" data-i18n-ph="ger_criar_resp_ph" placeholder="resposta"></textarea>
+          <p class="nota jur-cita-sem" id="gerCriarSem"></p>
+          <div id="gerCriarPrevia" class="ger-criar-previa"></div>
+        </div>
+        <div class="qm-bts">
+          <button type="button" class="btn-min btn-min-ok" id="btnGerCriarGuardar" hidden></button>
+          <button type="button" class="btn-min" id="btnGerCriarBancada" data-i18n="ger_criar_bancada"></button>
+        </div>
+        <p class="nota" id="gerCriarFeito"></p>
+        <div class="qm-bts"><button type="button" class="btn-min" id="btnGerCriarDesfazer" data-i18n="ger_criar_desfazer" hidden></button></div>
       </div>
       <div id="gerLista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnGerMais" data-i18n="ger_mais" hidden></button></div>

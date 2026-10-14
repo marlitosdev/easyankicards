@@ -42,6 +42,8 @@ const GER_DICAS = {
   btnGerExpApkg: "pac_tip_apkg", btnGerExpTxt: "pac_tip_txt", gerExpSemRaiz: "pac_tip_sem_raiz",
   gerExpComEdital: "pac_tip_com_edital", gerExpRamos: "pac_tip_ramos", gerExpSemRep: "pac_tip_sem_rep", gerExpSemFracos: "pac_tip_sem_fracos",
   gerExpEstilo: "style_hint", btnGerExpCopiarCaminho: "copy_path_tooltip", gerExpTitulo: "title_hint", btnGerExpTituloDeck: "ger_tip_exp_titulo_deck", btnGerExpDesfazerNomes: "ger_tip_exp_arv_desfazer", gerExpVazios: "pac_tip_vazios", btnGerExpMover: "pac_tip_mover_marcados", btnGerLimparCoresExport: "ger_tip_cor_limpar",
+  btnGerCriar: "ger_tip_criar", btnGerCriarX: "ger_tip_criar_x", btnGerCriarPedido: "ger_tip_criar_copiar", btnGerCriarGuardar: "ger_tip_criar_guardar",
+  btnGerCriarBancada: "ger_tip_criar_bancada", btnGerCriarDesfazer: "ger_tip_criar_desfazer",
 };
 
 /* Árvore disciplina › tópico, com contagem. */
@@ -1236,13 +1238,17 @@ function gerPintarLista() {
     $("btnGerMarcarTodos").hidden = gerVis.length <= 1;
     $("btnGerMarcar").hidden = false; $("btnGerLimpar").hidden = false; $("btnGerFerrMais").hidden = false;
   }
+  if ($("btnGerCriar")) $("btnGerCriar").hidden = !gerCriarInfo();
+  /* trocou de pasta (ou de modo): o painel de criar era de outro tópico */
+  if (gerCriar && (!gerCriarInfo() || gerCriarInfo().chave !== gerCriar.chave)) gerCriarFechar();
   const pastaVazia = !!(gerPasta && gerPasta.chave && !gerNotas.some((n) => n.chave === gerPasta.chave));
   if (pastaVazia) {
     cx.append(gerEl("p", "nota", t("ger_pasta_vazia")));
     const info = gerPastaInfo(gerPasta.chave);
     if (info && info.disciplina && info.topico) {
       const bc = gerEl("button", "btn-min btn-min-ok", t("hor_criar")); bc.type = "button";
-      bc.onclick = () => bancAlvoDefinir(info.disciplina, info.topico);
+      /* (v18.37.0) criar AQUI, sem sair da Biblioteca */
+      bc.onclick = () => gerCriarAbrir();
       cx.append(bc);
     }
   }
@@ -1965,6 +1971,176 @@ function gerTrocarAgrupar(v) {
   gerCalcular(); gerAbrirRaizes(); gerPintarDestinos(); gerPintar();
 }
 
+/* =====================================================================
+ * CRIAR CARTÕES SEM SAIR DA BIBLIOTECA (v18.37.0)
+ *
+ * "Criar" levava à bancada: a Biblioteca fechava e, depois de salvar, não
+ * havia caminho de volta — a pessoa perdia a pasta e o fio. Agora, na pasta
+ * do tópico: (1) copiar o pedido (o MESMO da bancada: com o resumo e os
+ * cartões que o tópico já tem, para não repetir); (2) colar a resposta,
+ * conferir na prévia (marcar/desmarcar; os que o tópico já tem vêm avisados)
+ * e guardar — com o mesmo recibo e desfazer do "Salvar no material". Os
+ * novos aparecem na lista já MARCADOS, prontos para Melhorar ou Estudar.
+ * A bancada continua a um toque ("ferramentas completas na bancada").
+ * ===================================================================== */
+let gerCriar = null;
+
+function gerCriarInfo() {
+  if (gerModo !== "gerenciar" || !gerPasta || !gerPasta.chave || cqEhBancada(gerPasta.chave)) return null;
+  const info = gerPastaInfo(gerPasta.chave);
+  return info && info.disciplina && info.topico ? { disciplina: info.disciplina, topico: info.topico, chave: gerPasta.chave } : null;
+}
+
+function gerCriarConcurso(c) {
+  const r = (typeof matResumos === "object" && matResumos[c.chave]) || {};
+  return r.concurso || (gerPasta && gerPasta.concurso) || (typeof concursoAtual === "function" ? concursoAtual().nome : "");
+}
+
+function gerCriarAbrir() {
+  const info = gerCriarInfo();
+  if (!info || !$("gerCriarBox")) return false;
+  gerCriar = Object.assign({}, info, { lidos: [] });
+  const esc = typeof pcEscolhaLer === "function" ? pcEscolhaLer() : { tipo: "rico", qtd: "auto" };
+  const st = $("gerCriarTipo"), sq = $("gerCriarQtd");
+  st.innerHTML = ""; sq.innerHTML = "";
+  (typeof PC_TIPOS !== "undefined" ? PC_TIPOS : ["rico"]).forEach((k) => { const o = document.createElement("option"); o.value = k; o.textContent = t("pc_tipo_op_" + k); st.append(o); });
+  (typeof PC_QTDS !== "undefined" ? PC_QTDS : ["auto"]).forEach((k) => { const o = document.createElement("option"); o.value = k; o.textContent = k === "auto" ? t("pc_qtd_op_auto") : k; sq.append(o); });
+  st.value = esc.tipo; sq.value = esc.qtd;
+  $("gerCriarTit").textContent = t("ger_criar_tit", { t: info.topico });
+  $("gerCriarPedidoMsg").textContent = "";
+  $("gerCriarPedidoTxt").hidden = true;
+  $("gerCriarResp").value = "";
+  $("gerCriarFeito").textContent = "";
+  $("btnGerCriarDesfazer").hidden = true;
+  gerCriarPintar();
+  $("gerCriarBox").hidden = false;
+  if (typeof gerEhCelular === "function" && gerEhCelular()) gerVista("cartoes");
+  try { matReg("cartoes", "criar cartões na Biblioteca", info.disciplina + " › " + info.topico); } catch (e) {}
+  return true;
+}
+
+function gerCriarFechar() {
+  gerCriar = null;
+  if ($("gerCriarBox")) $("gerCriarBox").hidden = true;
+}
+
+function gerCriarPedido() {
+  const c = gerCriar;
+  if (!c) return "";
+  if (typeof pcEscolhaGuardar === "function") pcEscolhaGuardar($("gerCriarTipo").value, $("gerCriarQtd").value);
+  const p = bancAlvoTextoPrompt({ disciplina: c.disciplina, topico: c.topico, chave: c.chave, concurso: gerCriarConcurso(c) });
+  c.pedido = p;
+  $("gerCriarPedidoTxt").value = p;
+  $("gerCriarPedidoTxt").hidden = false;
+  $("gerCriarPedidoMsg").textContent = t("ger_criar_copiado");
+  try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p).catch(() => { $("gerCriarPedidoMsg").textContent = t("ger_criar_copiar_mao"); }); else $("gerCriarPedidoMsg").textContent = t("ger_criar_copiar_mao"); } catch (e) { $("gerCriarPedidoMsg").textContent = t("ger_criar_copiar_mao"); }
+  try { matReg("cartoes", "pedido do tópico copiado (Biblioteca)", c.topico + " · " + p.length + " caracteres"); } catch (e) {}
+  return p;
+}
+
+/* lê a resposta: os cartões, e quais o tópico já tem (o mesmo critério do salvar: a frente) */
+function gerCriarLer() {
+  const c = gerCriar;
+  if (!c) return { est: "vazio" };
+  const raw = String($("gerCriarResp").value || "").trim();
+  if (!raw) { c.lidos = []; return { est: "vazio", msg: t("ger_criar_sem_vazio") }; }
+  if (c.pedido && raw.slice(0, 120) === String(c.pedido).trim().slice(0, 120)) { c.lidos = []; return { est: "erro", msg: t("ger_criar_sem_pedido") }; }
+  let cards = [];
+  try { cards = (parseText(raw).cards || []).filter((x) => x && String(x.front || "").trim()); } catch (e) { cards = []; }
+  if (!cards.length) { c.lidos = []; return { est: "erro", msg: t("ger_criar_sem_nada") }; }
+  const conc = gerCriarConcurso(c);
+  const antes = String(((typeof matResumos === "object" && matResumos[c.chave]) || {}).cartoes || "");
+  const jaTem = new Set(antes.split("\n").filter((l) => !/^\s*[@+]/.test(l)).map((l) => cmNormal(l.split("::")[0])).filter(Boolean));
+  c.lidos = cards.map((card) => {
+    const f = cmNormal(cmLinhaCartao(card, conc).split("::")[0]);
+    const rep = jaTem.has(f);
+    jaTem.add(f);
+    return { card, rep, marcado: !rep };
+  });
+  const r = c.lidos.filter((x) => x.rep).length;
+  return { est: "ok", msg: t("ger_criar_sem_ok", { n: c.lidos.length, r }) };
+}
+
+function gerCriarPintar() {
+  const c = gerCriar;
+  if (!c) return;
+  const e = gerCriarLer();
+  const sem = $("gerCriarSem");
+  sem.textContent = e.msg || "";
+  sem.className = "nota jur-cita-sem " + (e.est === "ok" ? "ok" : e.est === "erro" ? "erro" : "");
+  const cx = $("gerCriarPrevia");
+  cx.innerHTML = "";
+  (c.lidos || []).forEach((x, i) => {
+    const it = gerEl("label", "ger-criar-item" + (x.rep ? " rep" : ""));
+    const ck = document.createElement("input");
+    ck.type = "checkbox";
+    ck.checked = x.marcado;
+    ck.id = "gerCriarCk_" + i;
+    ck.onchange = () => { x.marcado = ck.checked; gerCriarPintarGuardar(); };
+    const tx = gerEl("div", "ger-criar-txt");
+    tx.append(gerEl("div", "ger-f", cqTrecho(cqRevelado(x.card), 160)), gerEl("div", "ger-v", cqTrecho(x.card.back, 120)));
+    it.append(ck, tx);
+    if (x.rep) it.append(gerEl("span", "ger-criar-tag", t("ger_criar_ja")));
+    cx.append(it);
+  });
+  gerCriarPintarGuardar();
+}
+function gerCriarPintarGuardar() {
+  const c = gerCriar;
+  const n = c ? (c.lidos || []).filter((x) => x.marcado).length : 0;
+  const b = $("btnGerCriarGuardar");
+  b.hidden = !(c && (c.lidos || []).length);
+  b.disabled = !n;
+  b.textContent = t("ger_criar_guardar", { n });
+}
+
+function gerCriarGuardar() {
+  const c = gerCriar;
+  if (!c) return null;
+  const marcados = (c.lidos || []).filter((x) => x.marcado);
+  if (!marcados.length) return null;
+  const destino = { disciplina: c.disciplina, topico: c.topico };
+  const rec = cmAplicar(marcados.map((x) => ({ card: x.card, destino })), gerCriarConcurso(c), matGravarCartoes);
+  try { cmUltimoRecibo = rec; } catch (e) {}
+  try { guardar("eac_cm_recibo", JSON.stringify(rec)); } catch (e) {}
+  try { matReg("cartoes", "cartões criados na Biblioteca", c.topico + " · " + rec.novos + " novos, " + rec.repetidos + " já existiam"); } catch (e) {}
+  const frentes = new Set(marcados.map((x) => cqNormal(cqRevelado(x.card))));
+  gerCalcular();
+  /* os novos, já MARCADOS na lista: prontos para Melhorar ou Estudar */
+  gerVis.forEach((idx, pos) => { const n = gerNotas[idx]; if (n && frentes.has(cqNormal(cqRevelado(n.card)))) gerSel.add(pos); });
+  gerPintarDestinos(); gerPintar();
+  try { if (typeof matRenderLista === "function") matRenderLista(); } catch (e) {}
+  $("gerCriarResp").value = "";
+  c.lidos = [];
+  gerCriarPintar();
+  $("gerCriarFeito").textContent = t(rec.novos ? "ger_criar_feito" : "ger_criar_nada_novo", { n: rec.novos, r: rec.repetidos });
+  $("btnGerCriarDesfazer").hidden = !rec.novos;
+  return rec;
+}
+
+async function gerCriarDesfazer() {
+  await cmDesfazerUltimo();
+  gerCalcular(); gerPintarDestinos(); gerPintar();
+  if ($("btnGerCriarDesfazer")) $("btnGerCriarDesfazer").hidden = true;
+  if ($("gerCriarFeito")) $("gerCriarFeito").textContent = "";
+}
+
+/* "ferramentas completas na bancada": leva a resposta já colada, e a bancada sabe voltar para cá (B2) */
+function gerCriarNaBancada() {
+  const c = gerCriar;
+  if (!c) return false;
+  const raw = String($("gerCriarResp").value || "").trim();
+  bancAlvoDefinir(c.disciplina, c.topico);
+  if (raw && $("editor")) {
+    /* o texto de EXEMPLO da bancada não é da pessoa: é trocado, senão "Salvar neste tópico" levaria os cartões de exemplo junto */
+    const atual = String($("editor").value || "");
+    const v = atual.trim() === String(t("example")).trim() ? "" : atual.replace(/\s+$/, "");
+    $("editor").value = (v ? v + "\n\n" : "") + raw + "\n";
+    try { $("editor").dispatchEvent(new Event("input", { bubbles: true })); } catch (e) {}
+  }
+  return true;
+}
+
 function gerAbrir() {
   gerPasta = null; gerFechados = new Set(); gerDestinoConcurso = undefined;
   gerModo = "gerenciar"; gerSelExport = new Set(); gerMoverParaExport = new Map(); gerCartaoMoverParaExport = new Map(); gerCorExport = new Map(); gerRenomearExport = new Map(); gerEditandoNome = null;
@@ -2125,6 +2301,13 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerAmpliar").onclick = gerAmpliar;
   $("btnGerPreApagar").onclick = gerAcaoApagarAberto;
   $("btnGerMsgDesfazer").onclick = gerAcaoDesfazer;
+  if ($("btnGerCriar")) $("btnGerCriar").onclick = () => gerCriarAbrir();
+  if ($("btnGerCriarX")) $("btnGerCriarX").onclick = () => gerCriarFechar();
+  if ($("btnGerCriarPedido")) $("btnGerCriarPedido").onclick = () => gerCriarPedido();
+  if ($("gerCriarResp")) $("gerCriarResp").oninput = () => gerCriarPintar();
+  if ($("btnGerCriarGuardar")) $("btnGerCriarGuardar").onclick = () => gerCriarGuardar();
+  if ($("btnGerCriarDesfazer")) $("btnGerCriarDesfazer").onclick = () => gerCriarDesfazer();
+  if ($("btnGerCriarBancada")) $("btnGerCriarBancada").onclick = () => gerCriarNaBancada();
   if (typeof document.addEventListener === "function") {
     document.addEventListener("mousedown", (ev) => {
       const p = $("gerPop");
