@@ -1307,6 +1307,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .jur-cit-perm{border-bottom:2px solid var(--ok)}
 .jur-esc-lista{max-height:40vh;overflow:auto;margin:6px 0}
 .jur-cita-opcao.sel{border-color:var(--acao);background:rgba(37,99,235,.12)}
+.jur-cita-novo{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.jur-cita-sem.ok{color:var(--ok)}
+.jur-cita-sem.atencao{color:var(--atencao)}
+.jur-cita-sem.erro{color:var(--erro)}
+.jur-cita-mem{border:1px solid var(--atencao);border-radius:8px;padding:6px 8px}
+#jurCitaNovo textarea{min-height:44px;max-height:110px;resize:vertical}
+#jurCitaNovo #jurCitaPedidoTxt{max-height:72px;font-size:11px}
+#dlgJurCitaPreview.criando .jur-cita-dica{display:none}
 .jur-cita-bloco{margin:0 0 10px}
 .jur-cita-rot{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin-bottom:2px}
 .jur-cita-txt{white-space:pre-wrap;font-size:14px;line-height:1.45}
@@ -7818,8 +7826,37 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <h3 id="jurCitaTit"></h3>
   <p class="nota" id="jurCitaMeta"></p>
   <div id="jurCitaCorpo" class="jur-cita-corpo"></div>
+  <!-- CRIAR AQUI MESMO (v18.35.0): dois passos dentro da prévia, sem a gaveta -->
+  <div id="jurCitaNovo" class="jur-cita-novo" hidden>
+    <div class="ednovo-passo" id="jurCitaPasso1">
+      <div class="qs-vinc-rot"><b>1.</b> <span data-i18n="jur_cn_p1"></span></div>
+      <label class="nota" for="jurCitaEmenta" data-i18n="jur_cn_ementa_rot"></label>
+      <textarea id="jurCitaEmenta" rows="2" style="width:100%;box-sizing:border-box" data-i18n-ph="jur_cn_ementa_ph" placeholder="ementa"></textarea>
+      <div class="qm-bts">
+        <button type="button" class="btn-min btn-min-ok" id="btnJurCitaPedido" data-i18n="jur_cn_copiar" title="Copia o pedido para uma IA, já com a citação, o tribunal e o trecho do seu material onde ela aparece."></button>
+        <a class="btn-min" id="jurCitaBuscar" target="_blank" rel="noopener noreferrer" data-i18n="jur_cn_buscar" title="Abre uma busca na web pela citação, para achar a ementa ou o enunciado oficial e colar acima."></a>
+      </div>
+      <p class="nota" id="jurCitaPedidoMsg"></p>
+      <textarea id="jurCitaPedidoTxt" rows="3" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
+    </div>
+    <div class="ednovo-passo" id="jurCitaPasso2">
+      <div class="qs-vinc-rot"><b>2.</b> <span data-i18n="jur_cn_p2"></span></div>
+      <textarea id="jurCitaResp" rows="3" style="width:100%;box-sizing:border-box" data-i18n-ph="jur_cn_resp_ph" placeholder="resposta"></textarea>
+      <p class="nota jur-cita-sem" id="jurCitaSem"></p>
+      <div id="jurCitaLido" hidden>
+        <label class="nota" for="jurCitaTese" data-i18n="jur_cit_tese"></label>
+        <textarea id="jurCitaTese" rows="3" style="width:100%;box-sizing:border-box"></textarea>
+        <label class="nota" for="jurCitaResumo" data-i18n="jur_cit_resumo"></label>
+        <textarea id="jurCitaResumo" rows="3" style="width:100%;box-sizing:border-box"></textarea>
+        <p class="nota qs-vinc-aviso" id="jurCitaMemAviso"></p>
+      </div>
+    </div>
+  </div>
   <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnJurCitaCriar" data-i18n="jur_cit_criar" hidden title="Abre a gaveta de julgados deste tópico já com tribunal, classe e número. Ao guardar, a citação passa a mostrar o julgado."></button>
+    <button class="btn btn-verde" id="btnJurCitaGuardar" data-i18n="jur_cn_guardar" hidden title="Guarda o julgado neste tópico. A citação passa a mostrar este julgado."></button>
+    <button class="btn btn-verde" id="btnJurCitaCriar" data-i18n="jur_cit_criar" hidden title="Cria o julgado aqui mesmo: copie o pedido para uma IA, cole a resposta, confira e guarde."></button>
+    <button class="btn btn-cinza" id="btnJurCitaGaveta" data-i18n="jur_cn_gaveta" hidden title="Abre a gaveta de julgados completa, já com tribunal, classe e número, para criar o julgado por lá."></button>
+    <button class="btn btn-cinza" id="btnJurCitaConferi" data-i18n="jur_cn_conferi" hidden title="Você conferiu a tese na fonte oficial: o aviso de 'trazido de memória' sai."></button>
     <button class="btn btn-cinza" id="btnJurCitaAbrir" data-i18n="jur_cit_abrir" hidden title="Abre este julgado na gaveta de julgados do tópico, para ler tudo ou editar."></button>
     <button class="btn btn-cinza" id="btnJurCitaOutro" data-i18n="jur_cit_outro" hidden title="Liga este trecho a outro julgado já guardado, escolhendo numa lista com busca e prévia. Vale neste tópico."></button>
     <button class="btn btn-cinza" id="btnJurCitaDesligar" data-i18n="cit_desligar" hidden title="Este link está errado: o trecho volta a ser texto, neste tópico. Dá para religar em “🔗 vínculos de lei” ou ligar de novo pela seleção."></button>

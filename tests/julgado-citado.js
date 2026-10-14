@@ -93,7 +93,10 @@ async function testes() {
     ok(/ainda não está entre os seus julgados/.test(api.$("jurCitaCorpo").textContent || "") && !api.$("btnJurCitaCriar").hidden,
       "J5 a súmula não guardada devia oferecer 'Criar agora'");
     api.$("btnJurCitaCriar").onclick();
-    ok(!api.$("dlgJurCitaPreview").open && api.$("dlgJuris").open === true, "J5a 'Criar agora' não abriu a gaveta");
+    /* (v18.35.0) "Criar agora" cria NA PRÉVIA; a gaveta completa fica como opção */
+    ok(!api.$("jurCitaNovo").hidden && !api.$("btnJurCitaGaveta").hidden, "J5x 'Criar agora' devia abrir os passos dentro da prévia");
+    api.$("btnJurCitaGaveta").onclick();
+    ok(!api.$("dlgJurCitaPreview").open && api.$("dlgJuris").open === true, "J5a 'usar a gaveta completa' não abriu a gaveta");
     ok(api.$("jurTribunal").value === "STJ" && api.$("jurClasse").value === "Súmula" && api.$("jurNumero").value === "435",
       "J5b a gaveta não veio com a identidade: " + [api.$("jurTribunal").value, api.$("jurClasse").value, api.$("jurNumero").value].join("|"));
     ok(api.$("jurMetaCampos").hidden === false && /vieram da citação “Súmula 435 do STJ”/.test(api.$("jurColarAviso").textContent || ""),
@@ -249,6 +252,72 @@ async function testes() {
     const ord = api.$("jurEscLista").querySelectorAll("button.jur-cita-opcao").map((b) => b.textContent || "");
     ok(ord.length === 2 && /★/.test(ord[0]) && !/★/.test(ord[1]) && /999999/.test(ord[1]), "L9b os julgados do tópico deviam vir primeiro: " + ord.join(" | "));
     void fora;
+  }
+  /* =================================================================
+   * C (v18.35.0): CRIAR O JULGADO DENTRO DA PRÉVIA
+   * ================================================================= */
+  {
+    const { api } = rodar();
+    api.matIniciar();
+    const ch = api.matChave(DISC, TOP);
+    api.matGravar(ch, "* Presume-se dissolvida irregularmente a empresa que deixar de funcionar (Súmula 435 do STJ).", { disciplina: DISC, topico: TOP });
+    api.matAbrirEditor({ disciplina: DISC, nome: TOP }, true);
+    const jl = () => api.$("matLeitura").querySelectorAll("button.jur-cit-link");
+    jl()[0].onclick({ stopPropagation() {} });
+    api.$("btnJurCitaCriar").onclick();
+    ok(!api.$("jurCitaNovo").hidden && api.$("btnJurCitaCriar").hidden, "C1 'Criar agora' não abriu os passos na prévia");
+    ok(/S%C3%BAmula%20435/.test(api.$("jurCitaBuscar").href || ""), "C1a o link de busca não leva a citação: " + api.$("jurCitaBuscar").href);
+    api.$("btnJurCitaPedido").onclick();
+    const p = api.$("jurCitaPedidoTxt").value || "";
+    ok(/"Súmula 435 do STJ"/.test(p) && /dissolvida irregularmente/.test(p) && new RegExp(TOP).test(p), "C1b o pedido não leva a citação, o trecho e o tópico");
+    ok(/traga o enunciado\/tese de memória SÓ se souber/.test(p) && !/<ementa>/.test(p), "C1c sem ementa, o pedido devia avisar que é de memória (e não ter o bloco da ementa)");
+    api.$("jurCitaEmenta").value = "Súmula 435: Presume-se dissolvida irregularmente a empresa que deixar de funcionar no seu domicílio fiscal…";
+    api.$("btnJurCitaPedido").onclick();
+    const p2 = api.$("jurCitaPedidoTxt").value || "";
+    ok(/<ementa>[\s\S]*domicílio fiscal[\s\S]*<\/ementa>/.test(p2) && /COPIE a tese dele/.test(p2), "C1d com ementa, o pedido devia levá-la e mandar copiar a tese");
+    api.$("jurCitaEmenta").value = "";
+    /* o semáforo */
+    const sem = (v) => { api.$("jurCitaResp").value = v; api.$("jurCitaResp").oninput(); return api.$("jurCitaSem").textContent || ""; };
+    ok(/Cole aqui a resposta/.test(sem("")) && api.$("btnJurCitaGuardar").hidden, "C2 vazio: devia pedir a resposta e esconder o Guardar");
+    ok(/Isto é o PEDIDO/.test(sem(p)), "C2a colar o próprio pedido devia ser avisado");
+    ok(/Não consegui ler/.test(sem("blá blá")), "C2b texto qualquer devia dar 'não consegui ler'");
+    ok(/a IA trouxe STJ Súmula 436/.test(sem('{"tribunal":"STJ","classe":"Súmula","numero":"436","tese_curta":"x"}')), "C2c número diferente da citação devia ser avisado");
+    ok(/Veio sem a tese/.test(sem('{"tribunal":"STJ","classe":"Súmula","numero":"435","tese_curta":"","resumo":"r"}')), "C2d sem tese devia ser avisado");
+    const RESP = '{"tribunal":"STJ","classe":"Súmula","numero":"435","tese_curta":"Presume-se dissolvida irregularmente a empresa que deixar de funcionar no seu domicílio fiscal, sem comunicação aos órgãos competentes, legitimando o redirecionamento da execução fiscal para o sócio-gerente.","certeza_da_tese":"media","resumo":"Dissolução irregular permite redirecionar.","assuntos":["dissolução irregular","redirecionamento"]}';
+    ok(/^Lido: STJ Súmula 435/.test(sem(RESP)), "C2e resposta boa devia ficar verde: " + api.$("jurCitaSem").textContent);
+    ok(/domicílio fiscal/.test(api.$("jurCitaTese").value) && /redirecionar/.test(api.$("jurCitaResumo").value), "C2f a tese e o resumo não foram para os campos de conferir");
+    ok(/certeza: média/.test(api.$("jurCitaMemAviso").textContent || ""), "C2g sem ementa devia avisar que é de memória (certeza média)");
+    ok(!api.$("btnJurCitaGuardar").hidden && !api.$("btnJurCitaGuardar").disabled, "C2h o Guardar devia aparecer ligado");
+    api.$("jurCitaTese").value = ""; api.$("jurCitaResumo").value = ""; api.$("jurCitaTese").oninput();
+    ok(api.$("btnJurCitaGuardar").disabled === true, "C2i sem tese nem resumo, o Guardar devia desligar");
+    sem(""); sem(RESP);
+    /* guardar */
+    api.$("btnJurCitaGuardar").onclick();
+    const g = api.jurLista().filter((j) => j.numero === "435")[0];
+    ok(g && g.tribunal === "STJ" && g.classe === "Súmula" && g.deMemoria === true && g.certeza === "media" && (g.tags || []).indexOf("redirecionamento") >= 0,
+      "C3 o julgado não foi guardado com identidade, 'de memória' e assuntos: " + JSON.stringify(g));
+    ok(g && (g.topicos || []).some((x) => api.jurChaveComparavel(x) === api.jurChaveComparavel(ch)), "C3a o julgado não foi ligado ao tópico");
+    ok(api.$("dlgJurCitaPreview").open && api.$("jurCitaNovo").hidden && /domicílio fiscal/.test(api.$("jurCitaCorpo").textContent || ""), "C3b depois de guardar, a prévia devia mostrar o julgado");
+    ok(/memória da IA/.test(api.$("jurCitaCorpo").textContent || "") && !api.$("btnJurCitaConferi").hidden, "C3c a prévia devia mostrar o aviso 'de memória' e o '✓ conferi'");
+    ok(jl().length === 1 && !/jur-cit-sem/.test(cls(jl()[0])), "C3d o resumo atrás não foi repintado (o link devia achar o julgado)");
+    api.$("btnJurCitaConferi").onclick();
+    ok(api.jurDe(g.id).deMemoria === false && !/memória da IA/.test(api.$("jurCitaCorpo").textContent || "") && api.$("btnJurCitaConferi").hidden, "C4 '✓ conferi' não tirou o aviso");
+  }
+  {
+    /* C5: com ementa colada, não fica 'de memória' */
+    const { api } = rodar();
+    api.matIniciar();
+    const base = { disciplina: DISC, topico: TOP };
+    const c = api.jurCitacoesNoTexto("Súmula 7 do STJ")[0];
+    api.jurCitPreviewAbrir(c, { julgado: null }, base);
+    api.$("btnJurCitaCriar").onclick();
+    api.$("jurCitaEmenta").value = "A pretensão de simples reexame de prova não enseja recurso especial.";
+    api.$("jurCitaResp").value = '{"tribunal":"STJ","classe":"Súmula","numero":"7","tese_curta":"A pretensão de simples reexame de prova não enseja recurso especial.","certeza_da_tese":"alta"}';
+    api.$("jurCitaResp").oninput();
+    ok(api.$("jurCitaMemAviso").textContent === "", "C5 com ementa colada não devia avisar 'de memória'");
+    api.$("btnJurCitaGuardar").onclick();
+    const g = api.jurLista().filter((j) => j.numero === "7")[0];
+    ok(g && !g.deMemoria && /reexame de prova/.test(g.texto || ""), "C5a com ementa, o julgado não devia ficar 'de memória' e a ementa devia ir para o texto: " + JSON.stringify(g));
   }
   {
     /* L8: modelo — vínculo antigo intacto; o de julgado não vira link de lei */
