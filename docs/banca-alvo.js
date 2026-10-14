@@ -40,18 +40,30 @@ function bancAlvoPintar() {
   $("bancAlvoNome").textContent = bancAlvo.disciplina + " › " + bancAlvo.topico;
   $("bancAlvoSub").textContent = t("banc_alvo_sub", { n });
   $("btnBancAlvoDesfazer").hidden = !(typeof cmUltimoRecibo !== "undefined" && cmUltimoRecibo && cmUltimoRecibo.recibo && cmUltimoRecibo.recibo.length);
+  if ($("btnBancAlvoVoltar")) $("btnBancAlvoVoltar").hidden = bancAlvo.volta !== "biblioteca";
 }
 
 function bancAlvoDefinir(disciplina, topico) {
   const chave = matChaveViva(disciplina, topico);
   const r = matResumos[chave] || {};
-  bancAlvo = { disciplina, topico, chave, concurso: r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : "") };
+  /* (v18.37.0) veio da Biblioteca (ou de algo aberto por cima dela)? a bancada sabe voltar para lá */
+  const daBiblioteca = !!($("dlgGerCartoes") && $("dlgGerCartoes").open);
+  bancAlvo = { disciplina, topico, chave, concurso: r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
+    volta: daBiblioteca ? "biblioteca" : "" };
   try { localStorage.setItem(BANC_ALVO_CHAVE, JSON.stringify(bancAlvo)); } catch (e) {}
   ["dlgGerEstudo", "dlgCobertura", "dlgGerCartoes", "dlgMatCartoes"].forEach((id) => { const d = $(id); if (d && d.open) d.close(); });
   trocarModo("cartoes");
   bancAlvoPintar();
   try { const b = $("bancAlvoBox"); if (b && b.scrollIntoView) b.scrollIntoView({ block: "center" }); } catch (e) {}
   try { matReg("cartoes", "bancada apontada para um tópico", disciplina + " › " + topico); } catch (e) {}
+}
+
+/* volta à Biblioteca, na pasta do tópico-alvo */
+function bancAlvoVoltar() {
+  if (!bancAlvo || typeof gerAbrirNoTopico !== "function") return false;
+  gerAbrirNoTopico(bancAlvo.disciplina, bancAlvo.topico);
+  try { matReg("cartoes", "voltou da bancada para a Biblioteca", bancAlvo.topico); } catch (e) {}
+  return true;
 }
 
 function bancAlvoSair() {
@@ -89,10 +101,11 @@ async function bancAlvoSalvar() {
   if (typeof matRenderLista === "function") { try { matRenderLista(); } catch (e) {} }
   bancAlvoPintar();
   if (!rec.novos) { await uiAlert(t("banc_alvo_nada_novo", { r: rec.repetidos })); return; }
-  const ir = await uiEscolha(t("cm_gravados_estudar", { n: rec.novos, t: bancAlvo.topico, r: rec.repetidos }), [
-    { valor: "estudar", rot: t("cm_estudar_agora"), classe: "btn-verde" },
-    { valor: "ok", rot: t("help_close") },
-  ]);
+  /* (v18.37.0) quem veio da Biblioteca volta para a mesma pasta, onde os novos cartões já estão */
+  const opcoes = (bancAlvo.volta === "biblioteca" ? [{ valor: "biblioteca", rot: t("banc_alvo_voltar"), classe: "btn-verde" }] : [])
+    .concat([{ valor: "estudar", rot: t("cm_estudar_agora"), classe: bancAlvo.volta === "biblioteca" ? "" : "btn-verde" }, { valor: "ok", rot: t("help_close") }]);
+  const ir = await uiEscolha(t("cm_gravados_estudar", { n: rec.novos, t: bancAlvo.topico, r: rec.repetidos }), opcoes);
+  if (ir === "biblioteca") bancAlvoVoltar();
   if (ir === "estudar") estcEstudarTopico(bancAlvo.disciplina, bancAlvo.topico);
 }
 
@@ -100,6 +113,7 @@ if (typeof document !== "undefined" && $("bancAlvoBox")) {
   $("btnBancAlvoPrompt").onclick = bancAlvoPrompt;
   $("btnBancAlvoSalvar").onclick = bancAlvoSalvar;
   $("btnBancAlvoSair").onclick = bancAlvoSair;
+  if ($("btnBancAlvoVoltar")) $("btnBancAlvoVoltar").onclick = bancAlvoVoltar;
   $("btnBancAlvoDesfazer").onclick = async () => { await cmDesfazerUltimo(); bancAlvoPintar(); };
   bancAlvo = bancAlvoLer();
   bancAlvoPintar();

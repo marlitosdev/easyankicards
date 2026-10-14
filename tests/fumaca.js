@@ -843,6 +843,7 @@ function rodar() {
     gerNotasAtual: () => gerNotas, gerVisAtual: () => gerVis, gerSelAtual: () => gerSel, gerFocoAtual: () => gerFoco,
     gerPastaAtual: () => gerPasta, gerSelTeste: (s) => { gerSel = new Set(s); }, gerFocoTeste: (i) => { gerFoco = i; },
     gerModoAtual: () => gerModo, gerSelExportAtual: () => gerSelExport, gerAlternarModo, gerMarcarExport,
+    gerCriarInfo, gerCriarAbrir, gerCriarFechar, gerCriarPedido, gerCriarLer, gerCriarPintar, gerCriarGuardar, gerCriarDesfazer, gerCriarNaBancada, gerCriarAtual: () => gerCriar, bancAlvoVoltar,
     gerMoverParaExportAtual: () => gerMoverParaExport, gerArrastoExportAtual: () => gerArrastoExport,
     gerDestinoExport, gerCaminhoExport, gerIniciarArrastoExport, gerFimArrastoExport,
     gerSobreTopExport, gerSoltarTopExport, gerSobreDiscExport, gerSoltarDiscExport, gerSobreRaizExport, gerSoltarRaizExport,

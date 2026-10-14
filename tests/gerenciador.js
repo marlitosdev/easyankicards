@@ -1443,7 +1443,7 @@ async function testes() {
     discTrib2.onclick();
     ok(a.gerFechadosAtual().has("Trib") === false, "G23h clicar no nome de novo NAO fecha (so' a seta fecha, de proposito)");
 
-    /* pasta vazia ganha o botao "Criar cartões", que aponta a bancada para ela */
+    /* pasta vazia ganha o botao "Criar cartões" — desde a v18.37.0 ele abre o painel de criar AQUI, sem sair da Biblioteca */
     a.gerCriarPasta("Revisão", "Pegadinhas");
     a.$("dlgGerCartoes").close(); a.gerAbrir();
     const vazia = achar(a.$("gerArvore"), (e) => cls(e, "ger-top")).find((e) => /Pegadinhas/.test(e.textContent));
@@ -1451,7 +1451,7 @@ async function testes() {
     const criar = achar(a.$("gerLista"), (e) => e.tag === "button").find((e) => /Criar cartões/.test(e.textContent));
     ok(!!criar, "G23i a pasta vazia mostra um botao para criar cartões nela");
     if (criar) criar.onclick();
-    ok(!!criar && a.$("dlgGerCartoes").open === false && a.bancAlvoAtual() && a.bancAlvoAtual().disciplina === "Revisão" && a.bancAlvoAtual().topico === "Pegadinhas", "G23j clicar aponta a bancada para ESTA pasta (disciplina e topico certos): " + (criar ? JSON.stringify(a.bancAlvoAtual()) : "sem botao"));
+    ok(!!criar && a.$("dlgGerCartoes").open === true && a.$("gerCriarBox").hidden === false && !a.bancAlvoAtual() && a.gerCriarAtual() && a.gerCriarAtual().disciplina === "Revisão" && a.gerCriarAtual().topico === "Pegadinhas", "G23j clicar abre o painel de criar para ESTA pasta, sem sair da Biblioteca: " + (criar ? JSON.stringify(a.gerCriarAtual()) : "sem botao"));
   }
 
   /* ---- G24: modo "Montar pacote" dentro da Biblioteca (B1) — alternar de modo e marcar pastas
