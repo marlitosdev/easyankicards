@@ -468,6 +468,72 @@ async function testes() {
       "K5b sem tópico e sem lei conhecida, devia dizer que não achou (em vez de não fazer nada)");
   }
 
+  /* =================================================================
+   * N1 (v18.31.0): A NOTA DO ARTIGO AO LADO DA CITAÇÃO
+   * ================================================================= */
+  {
+    const { api } = rodar();
+    preparar(api);
+    api.leiNotaGuardar("lei_ctn", "113", "obrigação principal × acessória");
+    api.matTrocarModo("ler");
+    const notas = () => api.$("matLeitura").querySelectorAll("span.cit-nota");
+    const ns = notas();
+    ok(ns.length === 4 && ns.every((s) => /obrigação principal × acessória/.test(s.textContent || "")),
+      "N1 cada citação do art. 113 devia ter a nota ao lado (4), e a do art. 3º não: " + ns.length);
+    ok(/Nota do artigo: obrigação principal × acessória/.test(ns[0].title || ""), "N1a o balão da nota não traz o texto inteiro");
+    const lk = links(api)[0];
+    ok(lk.parentNode && lk.parentNode.children && lk.parentNode.children.indexOf(ns[0]) === lk.parentNode.children.indexOf(lk) + 1,
+      "N1b a nota devia vir logo depois do link");
+    ok(((api.matObter(api.matChave(DISC, TOP)) || {}).texto || "") === TXT, "N1c a nota mudou o texto gravado do resumo");
+    /* tocar na nota abre a prévia do artigo */
+    ns[0].onclick({ stopPropagation() {} });
+    ok(api.$("dlgLeiCitaPreview").open === true, "N2 tocar na nota não abriu a prévia");
+    ok(!api.$("leiCitaNotaBox").hidden && /📝 obrigação principal × acessória/.test(api.$("leiCitaNotaTxt").textContent || ""),
+      "N2a a prévia não mostra a nota do artigo");
+    api.$("dlgLeiCitaPreview").close();
+    /* escrever a nota de um artigo que não tinha (art. 3º) pela prévia */
+    links(api).filter((b) => b.textContent === "art. 3º do CTN")[0].onclick({ stopPropagation() {} });
+    ok(/Ainda sem nota/.test(api.$("leiCitaNotaTxt").textContent || "") && /escrever nota/.test(api.$("btnLeiCitaNotaEditar").textContent || ""),
+      "N3 sem nota, a prévia devia convidar a escrever: " + api.$("leiCitaNotaTxt").textContent);
+    api.$("btnLeiCitaNotaEditar").onclick();
+    ok(!api.$("leiCitaNotaEd").hidden && api.$("leiCitaNotaCampo").value === "", "N3a a caixa de escrever não abriu (vazia)");
+    api.$("btnLeiCitaNotaSugerir").onclick();
+    ok(!api.$("leiCitaNotaPrompt").hidden && /Tributo é toda prestação/.test(api.$("leiCitaNotaPrompt").value || ""), "N3b 'sugerir com IA' não montou o pedido com o texto do artigo");
+    api.$("leiCitaNotaCampo").value = "tributo não é sanção";
+    api.$("btnLeiCitaNotaGuardar").onclick();
+    ok(api.leiNotaDe("lei_ctn", "3") === "tributo não é sanção", "N3c a nota escrita pela citação não foi guardada no artigo");
+    ok(/📝 tributo não é sanção/.test(api.$("leiCitaNotaTxt").textContent || "") && api.$("leiCitaNotaEd").hidden, "N3d depois de guardar, a prévia devia mostrar a nota");
+    ok(notas().some((s) => /tributo não é sanção/.test(s.textContent || "")), "N3e o resumo atrás não foi repintado com a nota nova");
+    /* apagar: guardar vazio */
+    api.$("btnLeiCitaNotaEditar").onclick();
+    ok(api.$("leiCitaNotaCampo").value === "tributo não é sanção", "N3f editar devia trazer a nota atual");
+    api.$("leiCitaNotaCampo").value = "";
+    api.$("btnLeiCitaNotaGuardar").onclick();
+    ok(api.leiNotaDe("lei_ctn", "3") === "" && !notas().some((s) => /sanção/.test(s.textContent || "")), "N3g guardar vazio devia apagar a nota");
+    api.$("dlgLeiCitaPreview").close();
+    /* esconder as notas (Aa) */
+    api.$("matCitNotasVer").checked = false;
+    api.$("matCitNotasVer").onchange();
+    ok(notas().length === 0, "N4 desmarcar 'mostrar notas' não escondeu as notas");
+    api.$("matCitNotasVer").checked = true;
+    api.$("matCitNotasVer").onchange();
+    ok(notas().length === 4, "N4a marcar de novo não trouxe as notas de volta");
+    /* nota longa: cortada ao lado do link, inteira no balão */
+    const longa = "x".repeat(90);
+    api.leiNotaGuardar("lei_ctn", "113", longa);
+    api.matTrocarModo("ler");
+    const n0 = notas()[0];
+    ok(n0 && (n0.textContent || "").length <= 74 && /…$/.test(n0.textContent || "") && (n0.title || "").indexOf(longa) >= 0, "N5 a nota longa devia ser cortada ao lado e inteira no balão");
+    /* nas questões também */
+    api.leiNotaGuardar("lei_ctn", "113", "obrigação principal × acessória");
+    const el = api.document.createElement("div");
+    api.qsUiComentario(el, { disciplina: DISC, topico: TOP, comentario: "Conforme o art. 113, § 3º, do CTN, converte-se." });
+    const kids = el.children || [];
+    const iLk = kids.findIndex((x) => /qs-lei-link/.test(cls(x)));
+    ok(iLk >= 0 && kids[iLk + 1] && /cit-nota/.test(cls(kids[iLk + 1])) && /principal × acessória/.test(kids[iLk + 1].textContent || ""),
+      "N6 no comentário da questão a nota não aparece ao lado do link");
+  }
+
   /* V14: nas questões, o vínculo novo também nasce só no tópico da questão */
   {
     const { api } = rodar();

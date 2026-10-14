@@ -1395,7 +1395,11 @@ function qsUiComentario(el, q) {
   let pos = 0;
   cits.forEach((c) => {
     if (c.ini > pos) el.append(document.createTextNode(txt.slice(pos, c.ini)));
-    el.append(qsUiLeiLink(c, q, lista, doTopico));
+    const lk = qsUiLeiLink(c, q, lista, doTopico);
+    el.append(lk);
+    /* a nota do artigo, ao lado do link (v18.31.0) */
+    const nt = typeof citNotaEl === "function" ? citNotaEl(lk) : null;
+    if (nt) el.append(nt);
     pos = c.fim;
   });
   if (pos < txt.length) el.append(document.createTextNode(txt.slice(pos)));
@@ -1452,6 +1456,7 @@ function qsUiLeiLink(c, q, lista, doTopico) {
    * útil para quem passa o mouse/dedo antes de decidir abrir. */
   const nota = alvo.lei && typeof leiNotaDe === "function"
     ? leiNotaDe(alvo.lei.id, c.num) : "";
+  b._citNota = nota;
   b.title = alvo.lei
     ? t("qs_lei_link_ir", { l: alvo.lei.nome, a: c.numCru }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t("qs_lei_link_sem", { l: c.rotulo })

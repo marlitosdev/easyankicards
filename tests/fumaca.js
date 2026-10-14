@@ -825,7 +825,7 @@ function rodar() {
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
     matCitacoesLigar, matCitCtx, matCitLink, matCitIr, matVinculosAbrir, qsUiVoltaDe, qsVincT,
-    citCtxDe, citLigarEm, citIr, matCitBase, estcCitBase, estcFechar, gerPintarPrevia, matBolhaAtualizar, matBolhaDoca, matMarcaEdicao, matTituloAlternar, matListaAlternar, matPrefixo, matTrocarTrecho,
+    citCtxDe, citLigarEm, citIr, matCitBase, estcCitBase, estcFechar, gerPintarPrevia, matBolhaAtualizar, matBolhaDoca, citNotaEl, citNotasVisiveis, leiCitaNotaPintar, matMarcaEdicao, matTituloAlternar, matListaAlternar, matPrefixo, matTrocarTrecho,
     qsVincLerDestinos, qsVincRotuloDestino, qsVincSubDaUnidade, qsVincDestinosTexto, qsVincPintarEsc,
     pacNomeDeck, pacAplicarRenomear, pacLimparNomeRenomeado, pacArvoreDecks, pacRamoDoCartao, pacResolverRamo, pacMontar, pacCartoes, pacNomeArquivo, pacSepararDeck, pacRaizComum, pacBlocoImportado, pacImportar,
     pacAbrir, pacLerArquivo, pacAcaoImportar, pacChaveCartao, cmCampo,

@@ -1172,7 +1172,10 @@ function citLigarEm(painel, base) {
     let pos = 0;
     cits.forEach((c) => {
       if (c.ini > pos) pai.insertBefore(document.createTextNode(txt.slice(pos, c.ini)), no);
-      pai.insertBefore(matCitLink(c, ctx), no);
+      const lk = matCitLink(c, ctx);
+      pai.insertBefore(lk, no);
+      const nt = citNotaEl(lk);
+      if (nt) pai.insertBefore(nt, no);
       pos = c.fim;
       n++;
     });
@@ -1216,11 +1219,29 @@ function matCitLink(c, ctx) {
     ? t(k + "ir", { l: alvo.lei.nome, a: c.numCru || "—" }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t(k + "sem", { l: c.rotulo }) : t(k + "qual", { a: c.numCru || "—" }));
   if (alvo.deduzida) b.title += " · " + t("qs_lei_link_ded", { l: c.rotuloDeduzido });
+  b._citNota = nota;
   b.onclick = (ev) => {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     citIr(c, b, ctx);
   };
   return b;
+}
+
+/* A NOTA DO ARTIGO AO LADO DO LINK (v18.31.0): só quando existe e quando a pessoa
+ * não a escondeu (no "Aa"). Tocar nela é o mesmo que tocar no link. */
+const CIT_NOTAS_CHAVE = "eac_cit_notas";
+function citNotasVisiveis() {
+  try { return localStorage.getItem(CIT_NOTAS_CHAVE) !== "0"; } catch (e) { return true; }
+}
+function citNotaEl(link) {
+  const nota = link && link._citNota;
+  if (!nota || !citNotasVisiveis()) return null;
+  const s = document.createElement("span");
+  s.className = "cit-nota";
+  s.textContent = "📝 " + (nota.length > 70 ? nota.slice(0, 69) + "…" : nota);
+  s.title = t("cit_nota_tit", { n: nota });
+  s.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (link.onclick) link.onclick(ev || {}); };
+  return s;
 }
 
 function matCitIr(c, botao) {
@@ -3435,6 +3456,14 @@ function matIniciar() {
   matBotao("btnMarcaProva", "marcar prova", () => matMarcarSelecao("prova"));
   matBotao("btnMarcaPeg", "marcar pegadinha", () => matMarcarSelecao("pegadinha"));
   /* a seleção é guardada ao APERTAR: em alguns aparelhos o toque tira a seleção antes do clique */
+  /* mostrar/esconder as notas ao lado das citações (vale no app todo) */
+  if ($("matCitNotasVer")) {
+    $("matCitNotasVer").checked = citNotasVisiveis();
+    $("matCitNotasVer").onchange = () => {
+      try { localStorage.setItem(CIT_NOTAS_CHAVE, $("matCitNotasVer").checked ? "1" : "0"); } catch (e) {}
+      try { if (matModo === "ler") matTrocarModo("ler"); } catch (e) {}
+    };
+  }
   if ($("btnMatAjuda")) $("btnMatAjuda").onclick = () => {
     matAjudaAberta = !matAjudaAberta;
     if ($("matAjudaNota")) $("matAjudaNota").hidden = !matAjudaAberta;
