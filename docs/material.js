@@ -1080,6 +1080,7 @@ function matTrocarModo(modo) {
       || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
     /* as citações de lei viram links DEPOIS do desenho: as marcas já estão no lugar */
     try { matCitacoesLigar($("matLeitura")); } catch (e) {}
+    try { matPintarJurLote(); } catch (e) {}
   }
   matPintarFonte();
 }
@@ -1122,6 +1123,8 @@ function matCitBase() {
   const a = matAtual || {};
   return {
     disciplina: a.disciplina || "", topico: a.topico || "", chave: a.chave || "", onde: "resumo",
+    /* o texto inteiro do que se lê (o escopo), para achar os OUTROS julgados citados (v18.36.0) */
+    textoTodo: () => { try { const x = matTextoDoEscopo(); return x === null ? "" : x; } catch (e) { return ""; } },
     /* na volta da lei: repinta a leitura (uma lei pode ter sido vinculada agora) */
     aoVoltar: () => {
       try { if ($("dlgMaterial") && $("dlgMaterial").open && matModo === "ler") matTrocarModo("ler"); } catch (e) {}
@@ -1130,6 +1133,23 @@ function matCitBase() {
 }
 
 function matCitCtx() { return citCtxDe(matCitBase()); }
+
+/* "⚖ criar os julgados citados (N)" no "⋯": só quando há citado sem julgado guardado (v18.36.0) */
+function matPintarJurLote() {
+  const b = $("btnMatJurLote");
+  if (!b) return 0;
+  let pend = [];
+  try {
+    if (matAtual && typeof jurCitPendentes === "function") {
+      const base = matCitBase();
+      pend = jurCitPendentes(base.textoTodo(), matChave(base.disciplina, base.topico));
+    }
+  } catch (e) { pend = []; }
+  b.hidden = !pend.length;
+  b.textContent = t("mat_jur_lote_btn", { n: pend.length });
+  b._pend = pend;
+  return pend.length;
+}
 
 function matCitacoesLigar(painel) {
   if (!matAtual) return 0;
@@ -3489,6 +3509,10 @@ function matIniciar() {
     });
   }
   if ($("btnBolhaJuris")) $("btnBolhaJuris").onclick = () => { if ($("btnMatJuris") && $("btnMatJuris").onclick) $("btnMatJuris").onclick(); };
+  if ($("btnMatJurLote")) $("btnMatJurLote").onclick = () => {
+    const pend = $("btnMatJurLote")._pend || [];
+    if (pend.length && typeof jurCitLoteIniciar === "function") jurCitLoteIniciar(pend, matCitBase());
+  };
   /* (v18.34.0) ligar o trecho selecionado a um julgado JÁ guardado */
   if ($("btnBolhaJurLigar")) {
     let selJ = "";

@@ -319,6 +319,89 @@ async function testes() {
     const g = api.jurLista().filter((j) => j.numero === "7")[0];
     ok(g && !g.deMemoria && /reexame de prova/.test(g.texto || ""), "C5a com ementa, o julgado não devia ficar 'de memória' e a ementa devia ir para o texto: " + JSON.stringify(g));
   }
+  /* =================================================================
+   * T (v18.36.0): TODOS OS CITADOS DE UMA VEZ
+   * ================================================================= */
+  {
+    const { api } = rodar();
+    api.matIniciar();
+    const ch = api.matChave(DISC, TOP);
+    guardar(api, { tribunal: "STJ", classe: "Súmula", numero: "430", tese: "inadimplemento não basta" }, DISC, TOP);
+    const TXT = "* Não basta o inadimplemento (Súmula 430 do STJ).\n* Presume-se dissolvida irregularmente a empresa (Súmula 435 do STJ).\n* Responde o sócio ao tempo da dissolução (Tema 981 do STJ).\n* De novo a Súmula 435 do STJ, repetida.";
+    api.matGravar(ch, TXT, { disciplina: DISC, topico: TOP });
+    api.matAbrirEditor({ disciplina: DISC, nome: TOP }, true);
+    const pend = api.jurCitPendentes(TXT, ch);
+    ok(pend.map((c) => c.texto).join(" | ") === "Súmula 435 do STJ | Tema 981 do STJ", "T1 os pendentes deviam ser 435 e 981, sem repetir e sem o 430 guardado: " + pend.map((c) => c.texto).join(" | "));
+    /* trecho ligado à mão a um julgado que depois foi apagado: não é "citado a criar" (nem tem classe e número) */
+    api.citVinculoSalvar({ trecho: "Não basta o inadimplemento", tipo: "jur", jurId: "jur_apagado", chave: ch });
+    ok(api.jurCitPendentes(TXT, ch).length === 2, "T1b o trecho ligado a um julgado apagado entrou nos pendentes");
+    api.citVinculosGravar([]);
+    const bt = api.$("btnMatJurLote");
+    ok(!bt.hidden && /\(2\)/.test(bt.textContent || ""), "T2 o '⋯' devia oferecer 'criar os julgados citados (2)': " + bt.textContent);
+    /* a prévia de um pendente oferece os dois de uma vez */
+    api.$("matLeitura").querySelectorAll("button.jur-cit-link").filter((b) => /435/.test(b.textContent || ""))[0].onclick({ stopPropagation() {} });
+    ok(!api.$("btnJurCitaLote").hidden && /criar os 2 citados/.test(api.$("btnJurCitaLote").textContent || ""), "T3 a prévia de um pendente devia oferecer 'criar os 2 citados de uma vez'");
+    api.$("btnJurCitaLote").onclick();
+    ok(!api.$("dlgJurCitaPreview").open && api.$("dlgJuris").open === true, "T4 'criar os 2' devia abrir a gaveta pronta para a resposta");
+    ok(/Pedido dos 2 julgados citados/.test(api.$("jurColarAviso").textContent || ""), "T4a a gaveta devia dizer o que fazer com o pedido");
+    ok(!api.$("jurClPedidoTxt").hidden && /"julgados"/.test(api.$("jurClPedidoTxt").value || ""), "T4c o pedido devia ficar à vista na gaveta (para copiar à mão)");
+    const p = api.jurCitLoteUltimoAtual();
+    ok(/1\. Súmula 435 do STJ — trecho: "[^"]*dissolvida irregularmente/.test(p) && /2\. Tema 981 do STJ/.test(p) && /"julgados"/.test(p), "T4b o pedido em lote não lista as citações com o trecho: " + p.slice(0, 300));
+    /* a resposta com os dois vira o painel de fichas; guardar grava os dois "de memória" e liga ao tópico */
+    api.$("jurColar").value = JSON.stringify({ julgados: [
+      { tribunal: "STJ", classe: "Súmula", numero: "435", tese_curta: "Presume-se dissolvida irregularmente a empresa…", certeza_da_tese: "alta", resumo: "r1" },
+      { tribunal: "STJ", classe: "Tema", numero: "981", tese_curta: "O redirecionamento pode ser autorizado contra o sócio…", certeza_da_tese: "media", resumo: "r2" },
+    ] });
+    api.jurColar();
+    ok(api.$("jurColar").value === "Súmula 435 do STJ\nTema 981 do STJ", "T4d depois de ler, a caixa devia voltar só com a lista das citações: " + JSON.stringify(api.$("jurColar").value));
+    const tagsMem = api.$("jurLoteCards").querySelectorAll(".jur-lote-tag").filter((x) => /mem/.test(cls(x))).map((x) => x.textContent);
+    ok(tagsMem.join(" | ") === "de memória · certeza alta | de memória · certeza média", "T4e as fichas dos citados deviam dizer a certeza de cada tese: " + tagsMem.join(" | "));
+    await api.jurSalvarLote();
+    const g435 =api.jurLista().filter((j) => j.numero === "435")[0], g981 = api.jurLista().filter((j) => j.numero === "981")[0];
+    ok(g435 && g981 && g435.deMemoria === true && g981.certeza === "media", "T5 o lote não gravou os dois 'de memória' com a certeza: " + JSON.stringify([g435 && g435.deMemoria, g981 && g981.certeza]));
+    ok([g435, g981].every((g) => g && (g.topicos || []).some((x) => api.jurChaveComparavel(x) === api.jurChaveComparavel(ch))), "T5a o lote não ligou os julgados ao tópico");
+    api.$("dlgJuris").close(); api.jurVoltarPara();
+    ok(api.$("matLeitura").querySelectorAll("button.jur-cit-link").every((b) => !/jur-cit-sem/.test(cls(b))), "T6 depois do lote, todas as citações deviam achar o julgado");
+    ok(api.$("btnMatJurLote").hidden, "T6a sem pendentes, o '⋯' não devia oferecer o lote");
+  }
+  {
+    /* T7: um só pendente vai pelo caminho da prévia (L2); lote normal da gaveta não fica 'de memória' */
+    const { api } = rodar();
+    api.matIniciar();
+    const ch = api.matChave(DISC, TOP);
+    api.matGravar(ch, "* Só a Súmula 435 do STJ aqui.", { disciplina: DISC, topico: TOP });
+    api.matAbrirEditor({ disciplina: DISC, nome: TOP }, true);
+    ok(/\(1\)/.test(api.$("btnMatJurLote").textContent || ""), "T7 com um pendente o '⋯' devia mostrar (1)");
+    api.$("btnMatJurLote").onclick();
+    ok(api.$("dlgJurCitaPreview").open && !api.$("jurCitaNovo").hidden, "T7a com um só, devia abrir a criação na prévia");
+    api.$("dlgJurCitaPreview").close();
+    /* começou um lote dos citados e desistiu: o próximo lote comum não pode herdar o "de memória" */
+    api.jurCitLoteIniciar(api.jurCitPendentes("Súmula 435 do STJ e Tema 981 do STJ", ch), { disciplina: DISC, topico: TOP });
+    api.$("dlgJuris").close();
+    api.jurAbrir(DISC, TOP, "incluir");
+    ok(api.$("jurClPedidoTxt").hidden === true, "T7c a caixa do pedido dos citados ficou na gaveta aberta de novo");
+    api.$("jurColar").value = JSON.stringify({ julgados: [{ tribunal: "STF", classe: "RE", numero: "111111", tese_curta: "a" }, { tribunal: "STF", classe: "RE", numero: "222222", tese_curta: "b" }] });
+    api.jurColar();
+    ok(api.$("jurLoteCards").querySelectorAll(".jur-lote-tag").filter((x) => /mem/.test(cls(x))).length === 0, "T7d o lote comum não pode mostrar a marca 'de memória'");
+    await api.jurSalvarLote();
+    ok(api.jurLista().filter((j) => /111111|222222/.test(j.numero)).every((j) => !j.deMemoria), "T7b o lote comum da gaveta não pode ficar 'de memória'");
+  }
+  {
+    /* G (v18.36.0): a gaveta mostra a tese de memória e deixa conferir */
+    const { api } = rodar();
+    api.matIniciar();
+    const j = guardar(api, { tribunal: "STJ", classe: "Súmula", numero: "435", tese: "tese lembrada", deMemoria: true, certeza: "baixa" }, DISC, TOP);
+    api.jurAbrir(DISC, TOP, "ler");
+    const selo = api.$("jurLista").querySelectorAll(".jur-sel").filter((x) => /jur-mem/.test(cls(x)))[0];
+    ok(!!selo && /certeza: baixa/.test(selo.title || ""), "G1 a lista da gaveta devia mostrar o selo 'tese de memória' com a certeza");
+    api.jurEditar(j.id);
+    ok(/veio da memória da IA \(certeza: baixa\)/.test(api.$("jurColarAviso").textContent || "") && !api.$("jurColarAviso").hidden, "G2 editar um julgado de memória devia avisar no formulário");
+    api.jurAbrir(DISC, TOP, "ler");
+    const ok1 = api.$("jurLista").querySelectorAll("button").filter((b) => b.id === "btnJurMemOk_" + j.id)[0];
+    ok(!!ok1, "G3 a lista devia ter o '✓ conferi a tese'");
+    ok1.onclick({ stopPropagation() {} });
+    ok(api.jurDe(j.id).deMemoria === false && api.$("jurLista").querySelectorAll(".jur-sel").filter((x) => /jur-mem/.test(cls(x))).length === 0, "G3a '✓ conferi' na gaveta não tirou o selo");
+  }
   {
     /* L8: modelo — vínculo antigo intacto; o de julgado não vira link de lei */
     const { api } = rodar();

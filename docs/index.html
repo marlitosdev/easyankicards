@@ -1314,6 +1314,10 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .jur-cita-mem{border:1px solid var(--atencao);border-radius:8px;padding:6px 8px}
 #jurCitaNovo textarea{min-height:44px;max-height:110px;resize:vertical}
 #jurCitaNovo #jurCitaPedidoTxt{max-height:72px;font-size:11px}
+.jur-mem-ok{font-size:11px;padding:1px 6px;margin-left:4px}
+.jur-lote-tag.mem{border-color:var(--atencao);color:var(--atencao)}
+.jur-lote-tag.mem.baixa{border-color:var(--erro);color:var(--erro)}
+.jur-sel.jur-mem{border-color:var(--atencao);color:var(--atencao)}
 #dlgJurCitaPreview.criando .jur-cita-dica{display:none}
 .jur-cita-bloco{margin:0 0 10px}
 .jur-cita-rot{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin-bottom:2px}
@@ -6471,6 +6475,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        colou; seis campos preenchidos a meia tela de distância fazem a
        pessoa confiar num palpite sem ver que houve palpite. -->
   <div id="jurColarAviso" class="jur-pilula" hidden></div>
+  <!-- o pedido dos julgados citados, à vista para copiar à mão se a cópia automática falhar (v18.36.0) -->
+  <textarea id="jurClPedidoTxt" rows="3" readonly hidden style="width:100%;box-sizing:border-box;max-height:90px;font-size:11px"></textarea>
   <!-- ONDE CONFERIR: o site oficial do tribunal, quando o app o conhece -->
   <div id="jurOficial" class="jur-oficial" hidden></div>
   <!-- UM BOTÃO PRINCIPAL QUE SABE EM QUE PASSO VOCÊ ESTÁ.
@@ -6878,6 +6884,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <button class="btn-min" id="btnMatDicas" hidden
       title="Recolhe ou expande as dicas que você incorporou ao resumo. Recolhidas, elas viram uma linha fina e não competem com o texto original."></button>
           <button class="btn-min" id="btnMatLog" data-i18n="mat_log_btn" title="Mostra só o que aconteceu dentro dos resumos: marcações feitas, recusadas e o motivo. Serve para relatar um problema."></button>
+          <button class="btn-min" id="btnMatJurLote" hidden title="Cria de uma vez os julgados citados neste resumo que ainda não estão guardados: um pedido só à IA, e a resposta vira uma ficha por julgado para conferir e guardar."></button>
           <button class="btn-min" id="btnMatAjuda" data-i18n="mat_ajuda_btn" title="Mostra ou esconde a explicação de onde o resumo fica guardado e como ele vira cartões."></button>
         </div>
       </details>
@@ -7855,6 +7862,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnJurCitaGuardar" data-i18n="jur_cn_guardar" hidden title="Guarda o julgado neste tópico. A citação passa a mostrar este julgado."></button>
     <button class="btn btn-verde" id="btnJurCitaCriar" data-i18n="jur_cit_criar" hidden title="Cria o julgado aqui mesmo: copie o pedido para uma IA, cole a resposta, confira e guarde."></button>
+    <button class="btn btn-cinza" id="btnJurCitaLote" hidden title="Cria de uma vez todos os julgados citados neste texto que ainda não estão guardados: um pedido só à IA, e a resposta vira uma ficha por julgado para conferir e guardar."></button>
     <button class="btn btn-cinza" id="btnJurCitaGaveta" data-i18n="jur_cn_gaveta" hidden title="Abre a gaveta de julgados completa, já com tribunal, classe e número, para criar o julgado por lá."></button>
     <button class="btn btn-cinza" id="btnJurCitaConferi" data-i18n="jur_cn_conferi" hidden title="Você conferiu a tese na fonte oficial: o aviso de 'trazido de memória' sai."></button>
     <button class="btn btn-cinza" id="btnJurCitaAbrir" data-i18n="jur_cit_abrir" hidden title="Abre este julgado na gaveta de julgados do tópico, para ler tudo ou editar."></button>
