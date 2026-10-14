@@ -151,11 +151,16 @@ async function testes() {
     ok(!!doCtn, "R10b o menu não oferece o CTN do tópico");
     if (doCtn) {
       doCtn.onclick({});
-      ok(api.$("dlgLeiSeca").open === true, "R11 escolher a lei no menu não abriu a lei");
+      /* (v18.32.0) escolher a lei para uma citação abre a PRÉVIA do artigo nela */
+      ok(api.$("dlgLeiCitaPreview").open === true && /Código Tributário/.test(api.$("leiCitaPreviewTitulo").textContent || "")
+        && /113/.test(api.$("leiCitaPreviewArtigo").textContent || ""), "R11 escolher a lei no menu não abriu a prévia do artigo nela");
       ok(api.$("dlgMaterial").open === true, "R11a escolher a lei fechou o resumo");
+      api.leiCitacaoPreviewAbrirLeiInteira();
+      ok(api.$("dlgLeiSeca").open === true && api.leiIdAtualValor() === "lei_ctn", "R11b 'abrir a lei inteira' não abriu o CTN");
     }
     /* D2: a citação que herdou a lei abre a prévia nela, sem perguntar */
     api.$("dlgLeiSeca").close();
+    if (api.$("dlgLeiCitaPreview").open) api.$("dlgLeiCitaPreview").close();
     links(api).filter((b) => b.textContent === "art. 113, § 1º")[0].onclick({ stopPropagation() {} });
     ok(api.$("dlgLeiCitaPreview").open === true && /Código Tributário/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
       "D2 a citação com lei herdada não abriu a prévia no CTN");
@@ -532,6 +537,17 @@ async function testes() {
     const iLk = kids.findIndex((x) => /qs-lei-link/.test(cls(x)));
     ok(iLk >= 0 && kids[iLk + 1] && /cit-nota/.test(cls(kids[iLk + 1])) && /principal × acessória/.test(kids[iLk + 1].textContent || ""),
       "N6 no comentário da questão a nota não aparece ao lado do link");
+    /* Q1 (v18.32.0): na questão, a citação abre a PRÉVIA, não a lei inteira */
+    if (api.$("dlgMaterial").open) api.$("dlgMaterial").close();
+    if (api.$("dlgLeiSeca").open) api.$("dlgLeiSeca").close();
+    kids[iLk].onclick({ stopPropagation() {} });
+    ok(api.$("dlgLeiCitaPreview").open === true && !api.$("dlgLeiSeca").open, "Q1 a citação da questão devia abrir a prévia (e não a lei inteira)");
+    ok(/§ 3º[^\n]*converte-se/.test(api.$("leiCitaPreviewTexto").textContent || ""), "Q1a a prévia da questão não separa o trecho citado (§ 3º)");
+    ok(/principal × acessória/.test(api.$("leiCitaNotaTxt").textContent || ""), "Q1b a prévia da questão não mostra a nota do artigo");
+    const al = api.leiCitaPreviewAlvoAtual();
+    ok(al && al.ctx && al.ctx.topico === TOP && typeof al.ctx.aoVoltar === "function", "Q1c a prévia não sabe de qual questão veio");
+    api.leiCitacaoPreviewAbrirLeiInteira();
+    ok(api.$("dlgLeiSeca").open === true && api.leiIdAtualValor() === "lei_ctn", "Q1d 'abrir a lei inteira' (da questão) não abriu o CTN");
   }
 
   /* V14: nas questões, o vínculo novo também nasce só no tópico da questão */

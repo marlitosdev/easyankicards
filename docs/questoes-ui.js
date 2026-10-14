@@ -1519,7 +1519,18 @@ function qsUiLeiIr(c, q, botao) {
     /* CONSULTAR NÃO É VINCULAR. Se a lei existe mas não está ligada a
      * este tópico, ela abre do mesmo jeito — ler o artigo não pode
      * exigir uma decisão de arrumação primeiro. Vincular continua a um
-     * toque, na fila de chips do próprio leitor. */
+     * toque, na fila de chips do próprio leitor.
+     *
+     * A PRÉVIA, NÃO A LEI INTEIRA (v18.32.0): abrir a lei cobria a questão
+     * e parecia fechá-la. Agora sobe a mesma prévia do resumo — o artigo, o
+     * trecho citado e a nota —, e "abrir a lei inteira" continua a um toque. */
+    if (c.num && typeof leiCitacaoPreviewAbrir === "function") {
+      leiCitacaoPreviewAbrir(c, "", { lei: alvo.lei,
+        ctx: { disciplina: q.disciplina, topico: q.topico, aoVoltar: qsUiVoltaDe(q) } });
+      reg("QUESTOES", "citação do comentário aberta na prévia",
+          alvo.lei.nome + " · art. " + c.numCru + (alvo.ligada ? "" : " · lei não ligada ao tópico"));
+      return;
+    }
     const achou = leiAbrirNoArtigo(q.disciplina, q.topico, alvo.lei.id, c.num, c);
     if (!achou && c.num) {
       try { uiAlert(t("qs_lei_link_nao_achou", { a: c.numCru, l: alvo.lei.nome })); }
@@ -2167,6 +2178,13 @@ function qsUiLeiEscolher(botao, q, cit) {
       }
       leiVoltaPara = qsUiVoltaDe(q);
       const num = cit ? cit.num : "";
+      /* escolhida a lei para uma CITAÇÃO, sobe a prévia do artigo (v18.32.0); o ⚖ geral abre a lei */
+      if (num && typeof leiCitacaoPreviewAbrir === "function") {
+        leiVoltaPara = null;
+        leiCitacaoPreviewAbrir(cit, "", { lei: l, ctx: { disciplina: q.disciplina, topico: q.topico, aoVoltar: qsUiVoltaDe(q) } });
+        reg("QUESTOES", "lei escolhida na questão (prévia)", l.nome + " · art. " + num);
+        return;
+      }
       const achou = leiAbrirNoArtigo(q.disciplina, q.topico, l.id, num, cit);
       if (num && !achou) {
         try { uiAlert(t("qs_lei_link_nao_achou", { a: cit.numCru, l: l.nome })); }
