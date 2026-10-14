@@ -1377,9 +1377,18 @@ function qsUiComentario(el, q) {
     }
   } catch (e) {}
   try { if (typeof leiDeduzirRotulos === "function") leiDeduzirRotulos(txt, cits); } catch (e) {}
+  /* os julgados citados (v18.33.0): "Súmula 430 do STJ" também vira link */
+  let jcs = [];
+  try {
+    if (typeof jurTemCitacao === "function" && jurTemCitacao(txt) && typeof jurCitLink === "function") {
+      jcs = jurCitacoesNoTexto(txt).filter((j) => !cits.some((c) => j.ini < c.fim && c.ini < j.fim))
+        .map((j) => Object.assign(j, { _jur: true }));
+    }
+  } catch (e) { jcs = []; }
   /* sem citação — e este é o caso comum em Português e Informática — o
    * comentário continua sendo exatamente o texto, sem nada em volta */
-  if (!cits.length) { el.textContent = txt; return el; }
+  if (!cits.length && !jcs.length) { el.textContent = txt; return el; }
+  if (jcs.length) cits = cits.concat(jcs).sort((a, b) => a.ini - b.ini);
 
   /* a biblioteca é lida UMA vez por comentário, e não uma por citação:
    * leisLista() lê o armazenamento e ordena, e um comentário longo cita
@@ -1395,6 +1404,11 @@ function qsUiComentario(el, q) {
   let pos = 0;
   cits.forEach((c) => {
     if (c.ini > pos) el.append(document.createTextNode(txt.slice(pos, c.ini)));
+    if (c._jur) {
+      el.append(jurCitLink(c, { disciplina: q.disciplina, topico: q.topico, aoVoltar: qsUiVoltaDe(q), onde: "questao" }));
+      pos = c.fim;
+      return;
+    }
     const lk = qsUiLeiLink(c, q, lista, doTopico);
     el.append(lk);
     /* a nota do artigo, ao lado do link (v18.31.0) */

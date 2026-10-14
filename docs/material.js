@@ -1158,23 +1158,33 @@ function citLigarEm(painel, base) {
   const chV = base.disciplina && base.topico ? matChave(base.disciplina, base.topico) : "";
   const citar = (no) => {
     const txt = String(no.textContent || "");
-    if (!temVinc && !/\bart/i.test(txt)) return;
+    const temJur = typeof jurTemCitacao === "function" && jurTemCitacao(txt);
+    if (!temVinc && !temJur && !/\bart/i.test(txt)) return;
     let cits = [];
     try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
     try { if (temVinc) cits = citVinculosAplicar(txt, cits, chV); } catch (e) {}
-    if (!cits.length) return;
+    /* os julgados citados (v18.33.0), fora do que já é citação de lei */
+    let jcs = [];
+    try {
+      if (temJur && typeof jurCitLink === "function") {
+        jcs = jurCitacoesNoTexto(txt).filter((j) => !cits.some((c) => j.ini < c.fim && c.ini < j.fim))
+          .map((j) => Object.assign(j, { _jur: true }));
+      }
+    } catch (e) { jcs = []; }
+    if (!cits.length && !jcs.length) return;
     const bl = blocoDe(no);
     if (bl !== blocoAtual) { blocoAtual = bl; rotAntes = ""; }
     try { if (typeof leiDeduzirRotulos === "function") rotAntes = leiDeduzirRotulos(txt, cits, rotAntes); } catch (e) {}
+    if (jcs.length) cits = cits.concat(jcs).sort((a, b) => a.ini - b.ini);
     const pai = no.parentNode;
     if (!pai || !pai.insertBefore) return;
     if (!ctx) ctx = citCtxDe(base);
     let pos = 0;
     cits.forEach((c) => {
       if (c.ini > pos) pai.insertBefore(document.createTextNode(txt.slice(pos, c.ini)), no);
-      const lk = matCitLink(c, ctx);
+      const lk = c._jur ? jurCitLink(c, ctx) : matCitLink(c, ctx);
       pai.insertBefore(lk, no);
-      const nt = citNotaEl(lk);
+      const nt = c._jur ? null : citNotaEl(lk);
       if (nt) pai.insertBefore(nt, no);
       pos = c.fim;
       n++;

@@ -1296,6 +1296,20 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-cita-nota-txt{flex:1;font-size:13px}
 .lei-cita-nota-txt.vazia{color:var(--sutil)}
 .mat-aa-notas{font-size:12px;display:flex;gap:6px;align-items:center}
+/* O JULGADO CITADO (v18.33.0): link roxo (lei é azul), tracejado e cinza quando não está guardado */
+.jur-cit-link{display:inline;padding:0;margin:0;border:0;background:none;font:inherit;color:var(--roxo-txt);cursor:pointer;
+  text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+.jur-cit-link:hover,.jur-cit-link:focus-visible{text-decoration-style:solid}
+.jur-cit-sem{color:var(--sutil);text-decoration-style:dashed}
+.car-jur-link{color:inherit}
+.jur-cita-corpo{max-height:55vh;overflow:auto}
+#dlgJurCitaPreview[open]{width:min(620px,94vw)}
+.jur-cita-bloco{margin:0 0 10px}
+.jur-cita-rot{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin-bottom:2px}
+.jur-cita-txt{white-space:pre-wrap;font-size:14px;line-height:1.45}
+.jur-cita-tese .jur-cita-txt{font-weight:600}
+.jur-cita-dica .jur-cita-txt{font-size:12px;color:var(--sutil)}
+.jur-cita-opcao{display:block;width:100%;text-align:left;margin:0 0 4px;padding:6px 8px;border:1px solid var(--borda);border-radius:8px;background:none;color:inherit;font:inherit;font-size:13px;cursor:pointer}
 /* VINCULAR TRECHO (v18.25.0): fichas da lei e da parte do artigo, achados e a prévia */
 .qs-vinc-trecho{font-style:italic}
 .qs-vinc-rot{display:block;margin:10px 0 4px;font-size:13px}
@@ -7792,6 +7806,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnQsVincEscOk" data-i18n="qs_vinc_ok"></button>
     <button class="btn btn-cinza" id="btnQsVincEscCancelar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
+<!-- O JULGADO CITADO (v18.33.0): prévia por cima de onde está a citação (jurCitPreviewAbrir, juris-ui.js) -->
+<dialog id="dlgJurCitaPreview" class="ui-modal">
+  <h3 id="jurCitaTit"></h3>
+  <p class="nota" id="jurCitaMeta"></p>
+  <div id="jurCitaCorpo" class="jur-cita-corpo"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnJurCitaCriar" data-i18n="jur_cit_criar" hidden title="Abre a gaveta de julgados deste tópico já com tribunal, classe e número. Ao guardar, a citação passa a mostrar o julgado."></button>
+    <button class="btn btn-cinza" id="btnJurCitaAbrir" data-i18n="jur_cit_abrir" hidden title="Abre este julgado na gaveta de julgados do tópico, para ler tudo ou editar."></button>
+    <button class="btn btn-cinza" id="btnJurCitaFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

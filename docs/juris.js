@@ -1491,6 +1491,101 @@ function jurProcessosNoTexto(txt) {
   return achados.sort((a, b) => a.idx - b.idx);
 }
 
+/* =====================================================================
+ * O JULGADO CITADO NUM TEXTO (v18.33.0)
+ *
+ * "(Súmula 430 do STJ)", "Tema 981 do STJ", "Tema 69 da Repercussão Geral",
+ * "REsp 1.101.728/SP", "RE 574.706", "ADI 5835", "Súmula Vinculante 8": no
+ * resumo, nos cartões e no comentário da questão isso era texto morto. Aqui
+ * vira POSIÇÃO + identidade (classe, número, tribunal), e jurAcharCitado
+ * procura o julgado GUARDADO que é aquele. Quem desenha faz o link.
+ * ===================================================================== */
+/* o ")" só entra quando a própria citação abriu o "(" — "(Súmula 430 do STJ)" não pode levar o parêntese de fora */
+const JUR_TRIB_ALT = "(STF|STJ|TST|TSE|STM|TCU|TNU|CARF|TRF[1-6]|Supremo\\s+Tribunal\\s+Federal|Superior\\s+Tribunal\\s+de\\s+Justi[çc]a|Tribunal\\s+Superior\\s+do\\s+Trabalho|Repercuss[ãa]o\\s+Geral|RG|repetitivo)(?![A-Za-zÀ-ú])";
+const JUR_RE_TRIB_DEPOIS = new RegExp("^\\s*(?:\\(\\s*" + JUR_TRIB_ALT + "\\s*\\)|(?:[,\\/–-]\\s*)?(?:d[oa]s?\\s+|pel[oa]\\s+)?" + JUR_TRIB_ALT + ")", "i");
+function jurTribunalDepois(resto) {
+  const m = String(resto || "").match(JUR_RE_TRIB_DEPOIS);
+  if (!m) return { tribunal: "", len: 0 };
+  const s = m[1] || m[2];
+  let tr = s.toUpperCase();
+  if (/supremo|repercuss|^rg$/i.test(s)) tr = "STF";
+  else if (/superior\s+tribunal\s+de\s+justi|repetitivo/i.test(s)) tr = "STJ";
+  else if (/superior\s+do\s+trabalho/i.test(s)) tr = "TST";
+  return { tribunal: tr, len: m[0].length };
+}
+
+/* filtro barato antes do leitor completo: só textos com cara de citação de julgado passam */
+const JUR_RE_RAPIDO = /S[úu]mula|\bTema\b|\bSV\b|\b(?:RE|ARE|REsp|AREsp|EREsp|ADI|ADC|ADPF|ADO|HC|RHC|MS|RMS|MI|Rcl|AgRg|AgInt|EDcl|IRDR|IAC|RR|AIRR|E-RR)\s*n?[º°.]?\s*\d/;
+function jurTemCitacao(txt) { return JUR_RE_RAPIDO.test(String(txt || "")); }
+
+function jurClasseChave(c) {
+  return jurSemAcento(String(c || "")).toLowerCase().replace(/\s+/g, " ").trim();
+}
+function jurNumChave(n) { return jurSoDigitos(n).replace(/^0+/, ""); }
+
+function jurCitacoesNoTexto(texto) {
+  const s = String(texto || "");
+  const achados = [];
+  const ok = (ini, fim, classe, numero, triPadrao) => {
+    const td = jurTribunalDepois(s.slice(fim));
+    achados.push({ ini, fim: fim + td.len, classe, numero, tribunal: td.tribunal || triPadrao || "",
+      texto: s.slice(ini, fim + td.len) });
+  };
+  const ANTES = "(^|[^A-Za-zÀ-ú0-9])";
+  const NUM = "\\s*(?:n[º°o.]?\\s*)?";
+  let re, m;
+  /* súmula vinculante (do STF) */
+  re = new RegExp(ANTES + "(S[úu]mula\\s+Vinculante|SV)" + NUM + "(\\d{1,4})(?!\\d)", "gi");
+  while ((m = re.exec(s))) ok(m.index + m[1].length, m.index + m[0].length, "Súmula Vinculante", m[3], "STF");
+  /* súmula (o tribunal vem depois: "do STJ", "/STF") */
+  re = new RegExp(ANTES + "(S[úu]mula)" + NUM + "(\\d{1,4})(?!\\d)", "gi");
+  while ((m = re.exec(s))) ok(m.index + m[1].length, m.index + m[0].length, "Súmula", m[3], "");
+  /* tema (repetitivo do STJ ou de repercussão geral do STF) */
+  re = new RegExp(ANTES + "(Tema(?:\\s+(?:Repetitivo|de\\s+Repercuss[ãa]o\\s+Geral))?)" + NUM + "(\\d{1,5})(?!\\d)", "gi");
+  while ((m = re.exec(s))) {
+    ok(m.index + m[1].length, m.index + m[0].length, "Tema", m[3], /repetitivo/i.test(m[2]) ? "STJ" : /repercuss/i.test(m[2]) ? "STF" : "");
+  }
+  /* processos: a classe em maiúsculas, como se escreve ("RE", não "re"), e um número de verdade (2+ dígitos) */
+  JUR_CLASSES.filter((c) => !/^(Súmula Vinculante|Súmula|Tema|Repercussão Geral)$/.test(c)).forEach((c) => {
+    const cl = c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const r2 = new RegExp(ANTES + "(" + cl + ")" + NUM + "(\\d{1,3}(?:\\.\\d{3})+|\\d{2,})(?:\\s*\\/\\s*[A-Z]{2}(?![A-Za-z]))?(?!\\d)", "g");
+    let mm;
+    while ((mm = r2.exec(s))) ok(mm.index + mm[1].length, mm.index + mm[0].length, c, mm[3], JUR_CASA[c] || "");
+  });
+  /* "AgRg no REsp 123" também casou "REsp 123": fica a citação mais longa que começa antes */
+  achados.sort((a, b) => a.ini - b.ini || (b.fim - b.ini) - (a.fim - a.ini));
+  const out = [];
+  achados.forEach((a) => { if (!out.some((o) => a.ini < o.fim && o.ini < a.fim)) out.push(a); });
+  return out;
+}
+
+/* qual julgado GUARDADO é o citado: mesma classe e número (só os dígitos), tribunal compatível. Tema também casa
+ * com o julgado que DIZ "Tema 69" (o RE que fixou a tese). Dois candidatos: os do tópico vencem; ainda dois, dúvida. */
+function jurAcharCitado(c, lista, chave) {
+  if (!c) return { julgado: null };
+  const L = lista || jurLista();
+  const cc = jurClasseChave(c.classe), n = jurNumChave(c.numero);
+  if (!n) return { julgado: null };
+  const triOk = (j) => !c.tribunal || !j.tribunal || String(j.tribunal).toUpperCase() === c.tribunal;
+  let cand = L.filter((j) => jurClasseChave(j.classe) === cc && jurNumChave(j.numero) === n && triOk(j));
+  if (cc === "tema") {
+    const re = new RegExp("\\bTema\\s*(?:n[º°o.]?\\s*)?0*" + n + "(?!\\d)", "i");
+    L.forEach((j) => {
+      if (cand.indexOf(j) >= 0 || !triOk(j)) return;
+      const onde = [j.tese, j.resumo, j.texto, j.precedentes, (j.tags || []).join(" ")].join(" ");
+      if (re.test(onde)) cand.push(j);
+    });
+  }
+  if (cand.length > 1 && chave) {
+    const k = jurChaveComparavel(chave);
+    const doT = cand.filter((j) => (j.topicos || []).some((x) => jurChaveComparavel(x) === k));
+    if (doT.length) cand = doT;
+  }
+  if (cand.length === 1) return { julgado: cand[0] };
+  if (cand.length > 1) return { julgado: null, ambiguos: cand };
+  return { julgado: null };
+}
+
 function jurRepararJson() {
   const tudo = jurLerTudo();
   const ids = Object.keys(tudo);
