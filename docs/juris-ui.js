@@ -1689,7 +1689,7 @@ function jurCitLink(c, base) {
   let ach = { julgado: null };
   try { ach = jurAcharCitado(c, null, jurCitChave(base)); } catch (e) {}
   const j = ach.julgado;
-  b.className = "jur-cit-link" + (j ? "" : " jur-cit-sem") + (base && base.onde === "cartao" ? " car-jur-link" : "");
+  b.className = "jur-cit-link" + (j ? "" : " jur-cit-sem") + (c.permanente ? " jur-cit-perm" : "") + (base && base.onde === "cartao" ? " car-jur-link" : "");
   b.textContent = c.texto;
   b.title = j ? t("jur_cit_ir", { j: jurCitNome(j), t: jurCitTrecho(j.tese || j.resumo, 140) })
     : ach.ambiguos ? t("jur_cit_amb", { n: ach.ambiguos.length, j: c.texto })
@@ -1755,6 +1755,9 @@ function jurCitPreviewAbrir(c, ach, base) {
   const temTopico = !!(base && base.disciplina && base.topico);
   $("btnJurCitaCriar").hidden = !!j || !temTopico || !!(ach && ach.ambiguos && ach.ambiguos.length);
   $("btnJurCitaAbrir").hidden = !j || !temTopico;
+  /* (v18.34.0) a citação errada se desliga, ou se liga a outro julgado */
+  $("btnJurCitaDesligar").hidden = false;
+  $("btnJurCitaOutro").hidden = false;
   abrirModal("dlgJurCitaPreview");
   try { reg("JURIS", "prévia de julgado citado", c.texto + (j ? " · achado" : ach && ach.ambiguos ? " · dúvida" : " · não guardado")); } catch (e) {}
 }
@@ -1788,10 +1791,113 @@ function jurCitAbrirGaveta() {
   return true;
 }
 
+/* ---------- (v18.34.0) DESLIGAR E LIGAR A OUTRO ---------- */
+function jurCitDesligar() {
+  const a = jurCitaAlvo;
+  if (!a || !a.c) return false;
+  const r = citVinculoSalvar({ trecho: a.c.texto, tipo: "jur", nenhum: true, chave: jurCitChave(a.base) });
+  if ($("dlgJurCitaPreview").open) $("dlgJurCitaPreview").close();
+  try { reg("JURIS", "link de julgado desligado", a.c.texto); } catch (e) {}
+  try { if (a.base && typeof a.base.aoVoltar === "function") a.base.aoVoltar(); } catch (e) {}
+  return !!r;
+}
+function jurCitOutro() {
+  const a = jurCitaAlvo;
+  if (!a || !a.c) return false;
+  if ($("dlgJurCitaPreview").open) $("dlgJurCitaPreview").close();
+  jurEscAbrir(a.c.texto, a.base);
+  return true;
+}
+
+/* LIGAR UM TRECHO A UM JULGADO GUARDADO, À MÃO: a lista (os do tópico primeiro),
+ * a busca e a prévia do escolhido, antes de ligar. O vínculo vale neste tópico. */
+let jurEscCtx = null;
+function jurEscAbrir(trecho, base) {
+  if (!$("dlgJurEscolher")) return;
+  jurEscCtx = { trecho: String(trecho || "").trim(), base: base || {}, sel: "" };
+  $("jurEscTrecho").textContent = t("jur_esc_trecho", { t: jurEscCtx.trecho });
+  $("jurEscBusca").value = "";
+  $("jurEscAviso").textContent = "";
+  jurEscPintar();
+  abrirModal("dlgJurEscolher");
+}
+function jurEscPintar() {
+  const c = jurEscCtx;
+  if (!c) return;
+  const ch = jurCitChave(c.base);
+  const k = ch ? jurChaveComparavel(ch) : "";
+  const doT = (j) => !!k && (j.topicos || []).some((x) => jurChaveComparavel(x) === k);
+  const q = jurSemAcento(String($("jurEscBusca").value || "")).toLowerCase().trim();
+  let L = jurLista();
+  if (q) L = L.filter((j) => jurSemAcento([j.tribunal, j.classe, j.numero, j.tese, j.resumo, (j.tags || []).join(" ")].join(" ")).toLowerCase().indexOf(q) >= 0);
+  L = L.filter(doT).concat(L.filter((j) => !doT(j))).slice(0, 40);
+  const cx = $("jurEscLista");
+  cx.innerHTML = "";
+  if (!L.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = q ? t("jur_esc_nada", { q: $("jurEscBusca").value }) : t("jur_esc_vazio");
+    cx.append(p);
+  }
+  L.forEach((j, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "jur-cita-opcao" + (c.sel === j.id ? " sel" : "");
+    b.id = "jurEscOpcao_" + i;
+    b.setAttribute("aria-pressed", c.sel === j.id ? "true" : "false");
+    b.textContent = jurCitNome(j) + (doT(j) ? " ★" : "") + " — " + jurCitTrecho(j.tese || j.resumo, 100);
+    b.onclick = () => { c.sel = j.id; jurEscPintar(); };
+    cx.append(b);
+  });
+  const pv = $("jurEscPrev");
+  pv.innerHTML = "";
+  const j = c.sel ? jurDe(c.sel) : null;
+  pv.hidden = !j;
+  if (j) {
+    const h = document.createElement("div");
+    h.className = "jur-cita-rot";
+    h.textContent = jurCitNome(j);
+    const x = document.createElement("div");
+    x.className = "jur-cita-txt";
+    x.textContent = String(j.tese || j.resumo || "").trim() || t("jur_cit_vazio");
+    pv.append(h, x);
+  }
+}
+function jurEscLigar() {
+  const c = jurEscCtx;
+  if (!c) return false;
+  if (!c.sel || !jurDe(c.sel)) { $("jurEscAviso").textContent = t("jur_esc_sem"); return false; }
+  const r = citVinculoSalvar({ trecho: c.trecho, tipo: "jur", jurId: c.sel, chave: jurCitChave(c.base) });
+  if (!r) { $("jurEscAviso").textContent = t("qs_vinc_erro_gravar"); return false; }
+  $("dlgJurEscolher").close();
+  try { reg("JURIS", "trecho ligado a um julgado à mão", c.trecho + " → " + jurCitNome(jurDe(c.sel))); } catch (e) {}
+  try { if (c.base && typeof c.base.aoVoltar === "function") c.base.aoVoltar(); } catch (e) {}
+  return true;
+}
+
+/* os julgados citados (e os ligados/desligados à mão), juntados às citações de lei:
+ * o que a pessoa FIXOU vence o automático do outro tipo; no resto, vence a lei */
+function citJuntarJulgados(txt, cits, chave) {
+  let jcs = [];
+  try { if (typeof jurTemCitacao === "function" && jurTemCitacao(txt)) jcs = jurCitacoesNoTexto(txt); } catch (e) { jcs = []; }
+  try { if (typeof citVinculosAplicarJur === "function") jcs = citVinculosAplicarJur(txt, jcs, chave); } catch (e) {}
+  jcs = jcs.map((j) => Object.assign(j, { _jur: true }));
+  const sobre = (a, b) => a.ini < b.fim && b.ini < a.fim;
+  const leis = (cits || []).filter((c) => c.permanente || !jcs.some((j) => j.permanente && sobre(c, j)));
+  const juls = jcs.filter((j) => !leis.some((c) => sobre(c, j)));
+  return leis.concat(juls).sort((a, b) => a.ini - b.ini);
+}
+
 if (typeof document !== "undefined" && $("dlgJurCitaPreview")) {
   $("btnJurCitaCriar").onclick = () => jurCitCriar();
   $("btnJurCitaAbrir").onclick = () => jurCitAbrirGaveta();
   $("btnJurCitaFechar").onclick = () => $("dlgJurCitaPreview").close();
+  if ($("btnJurCitaDesligar")) $("btnJurCitaDesligar").onclick = () => jurCitDesligar();
+  if ($("btnJurCitaOutro")) $("btnJurCitaOutro").onclick = () => jurCitOutro();
+  if ($("btnJurEscOk")) $("btnJurEscOk").onclick = () => jurEscLigar();
+  if ($("btnJurEscCancelar")) $("btnJurEscCancelar").onclick = () => $("dlgJurEscolher").close();
+  if ($("btnJurEscX")) $("btnJurEscX").onclick = () => $("dlgJurEscolher").close();
+  if ($("jurEscBusca")) $("jurEscBusca").oninput = () => jurEscPintar();
 }
 
 function jurDaSelecao() {

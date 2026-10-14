@@ -3571,14 +3571,22 @@ function citLerArtigos(texto) {
   return out;
 }
 
+/* DESDE A v18.34.0 o mesmo cadastro guarda também:
+ *  · o vínculo DESLIGADO (nenhum: true) — "este link está errado, quero o
+ *    trecho como texto"; ligar de novo o mesmo trecho troca um pelo outro;
+ *  · o vínculo de JULGADO (tipo: "jur", jurId) — o trecho leva a um julgado
+ *    guardado, escolhido à mão. A k ganha "jur:" para não colidir com a da lei. */
 function citVinculoSalvar(v) {
   const kt = citChave(v && v.trecho);
-  if (!kt || !v.leiId) return null;
+  const tipo = v && v.tipo === "jur" ? "jur" : "lei";
+  if (!kt || !(v.nenhum || (tipo === "jur" ? v.jurId : v.leiId))) return null;
   const chave = String((v && v.chave) || "");
-  const k = chave ? chave + "|" + kt : kt;
+  const k = (chave ? chave + "|" : "") + (tipo === "jur" ? "jur:" : "") + kt;
   const lista = citVinculosLer().filter((x) => x.k !== k);
-  const r = { k, trecho: String(v.trecho).replace(/\s+/g, " ").trim(), leiId: v.leiId,
-    artigos: (v.artigos || []).slice(0, 30), criado: new Date().toISOString() };
+  const r = { k, trecho: String(v.trecho).replace(/\s+/g, " ").trim(), leiId: v.nenhum || tipo === "jur" ? "" : v.leiId,
+    artigos: v.nenhum || tipo === "jur" ? [] : (v.artigos || []).slice(0, 30), criado: new Date().toISOString() };
+  if (tipo === "jur") { r.tipo = "jur"; r.jurId = v.nenhum ? "" : String(v.jurId); }
+  if (v.nenhum) r.nenhum = true;
   if (chave) r.chave = chave;
   lista.push(r);
   return citVinculosGravar(lista) ? r : null;
@@ -3599,7 +3607,7 @@ function citVinculosAplicar(texto, cits, chave) {
   let saida = (cits || []).slice();
   /* os de todo o app primeiro e os do tópico depois: no mesmo trecho, o do tópico vence */
   const ch = String(chave || "");
-  const vs = citVinculosLer().filter((v) => !v.chave || (ch && v.chave === ch));
+  const vs = citVinculosLer().filter((v) => v.tipo !== "jur" && (!v.chave || (ch && v.chave === ch)));
   vs.sort((a, b) => (a.chave ? 1 : 0) - (b.chave ? 1 : 0));
   vs.forEach((v) => {
     const molde = String(v.trecho || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
@@ -3610,6 +3618,8 @@ function citVinculosAplicar(texto, cits, chave) {
     while ((m = re.exec(s)) !== null) {
       const ini = m.index, fim = m.index + m[0].length;
       saida = saida.filter((c) => !(c.ini < fim && ini < c.fim));
+      /* DESLIGADO: o trecho fica como texto (o que a leitura automática achou ali sai) */
+      if (v.nenhum) { if (m[0].length === 0) re.lastIndex++; continue; }
       const a0 = (v.artigos || [])[0] || {};
       const sb = a0.sub || {};
       saida.push({ ini, fim, num: a0.num || "", numCru: a0.numCru || "", rotulo: "", texto: m[0],
@@ -3645,6 +3655,33 @@ function leiDeduzirRotulos(texto, cits, antes) {
   });
   if (s.slice(pos).indexOf("\n") >= 0) rot = "";
   return rot;
+}
+
+/* os vínculos de JULGADO sobre as citações de julgado achadas no texto: o
+ * ligado à mão vira link fixo para aquele julgado; o desligado tira o link */
+function citVinculosAplicarJur(texto, jcs, chave) {
+  const s = String(texto || "");
+  let saida = (jcs || []).slice();
+  const ch = String(chave || "");
+  const vs = citVinculosLer().filter((v) => v.tipo === "jur" && (!v.chave || (ch && v.chave === ch)));
+  vs.sort((a, b) => (a.chave ? 1 : 0) - (b.chave ? 1 : 0));
+  vs.forEach((v) => {
+    const molde = String(v.trecho || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    if (!molde) return;
+    let re;
+    try { re = new RegExp(molde, "gi"); } catch (e) { return; }
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const ini = m.index, fim = m.index + m[0].length;
+      saida = saida.filter((c) => !(c.ini < fim && ini < c.fim));
+      if (!v.nenhum) {
+        saida.push({ ini, fim, texto: m[0], classe: "", numero: "", tribunal: "", jurId: v.jurId,
+          permanente: true, vinculoK: v.k, soTopico: !!v.chave });
+      }
+      if (m[0].length === 0) re.lastIndex++;
+    }
+  });
+  return saida.sort((x, y) => x.ini - y.ini);
 }
 
 function leiRotuloChave(rotulo) {
@@ -5048,7 +5085,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiSoltarPonteiros, leiMesclar,
     leiEstruturaArtigo, leiLerRotulo, leiRomanoValor, leiValorRomano, leiRotuloDaUnidade,
     leiContextoDeLinhas, leiLerFaixaRevogada, leiAcharUnidades, leiConsumirEndereco,
-    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar, leiDeduzirRotulos,
+    citVinculosLer, citVinculosGravar, citChave, citLerArtigos, citVinculoSalvar, citVinculoRemover, citVinculosAplicar, leiDeduzirRotulos, citVinculosAplicarJur,
     leiDataDaLei, leiCabecalhosAlteradora, leiMarcaDoTrecho, leiLerBlocoAlterado, leiMesclarFragmento,
     leiMontarArtigo, leiLerAlteradora, leiAlteradoraCitaLei, leiDataUltimaAlteracao, leiItensDaAlteradora,
     leiRomanoDoAnexo, leiAnexosDaAlteradora, leiOrdemDeAnexo, leiAnexoDaLei, leiItensDeAnexos, leiAplicarAnexo,
