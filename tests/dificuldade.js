@@ -342,6 +342,30 @@ async function testes() {
     const conta = api.plItemConta(rc);
     ok(conta.fatorOrigem === "acerto" && conta.acertoPct === 25, "S2l o raio-X leva a origem do fator: " + JSON.stringify(conta));
     ok(/acerto/.test(api.t("dif_col_aj")) && /já entra/.test(api.t("plog_sinais_txt")), "S2m a ajuda da coluna e a aba de sinais dizem que o acerto por topico entra");
+
+    /* (v18.38.0) O RELATO: "Obrigação tributária" era o próximo da agenda; no meio das questões do tópico (sem estudo
+     * registrado), 10 de 10 certas o jogaram para a semana 4. Acerto alto NÃO rebaixa tópico ainda não estudado. */
+    api.qsBancoPor([{ chave: DP, disciplina: "Direito Financeiro", tentativas: tent(10, 10, "2026-10-14") }]);
+    const ordem = (p) => p.fila.filter((i) => i.disciplina === "Direito Financeiro").map((i) => i.nome).join(",");
+    const semQs = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300), acertosTopico: null });
+    const pN = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300) });
+    const dN = pN.itens.filter((i) => i.nome === "Despesa")[0];
+    ok(dN.fator === 1 && dN.fatorOrigem === "acerto_retido" && dN.acertoTopico && dN.acertoTopico.pct === 100,
+       "S2t acerto 100% num topico NUNCA estudado nao rebaixa (fica no lugar, com a origem 'retido'): " + JSON.stringify({ f: dN.fator, o: dN.fatorOrigem }));
+    ok(ordem(pN) === ordem(semQs), "S2u a fila fica igual a de sem questoes: " + ordem(pN) + " x " + ordem(semQs));
+    const pF = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300), feitos: { [DP]: { e: "feito", d: "2026-10-01" } } });
+    const dF = pF.itens.filter((i) => i.nome === "Despesa")[0];
+    ok(dF.fator === 0.7 && dF.fatorOrigem === "acerto", "S2v depois de ESTUDADO, o acerto alto volta a rebaixar: " + JSON.stringify({ f: dF.fator, o: dF.fatorOrigem }));
+    const pR = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300), feitos: { [DP + "›#algum_ramo"]: { e: "revisado", d: "2026-10-01" } } });
+    ok(pR.itens.filter((i) => i.nome === "Despesa")[0].fatorOrigem === "acerto", "S2w um ramo estudado conta como topico estudado");
+    const pP = api.montarPlano(api.lerEdital(texto()), { horas: 12, prova: daqui(300), feitos: { [DP]: { e: "pendente", d: "2026-10-01" } } });
+    ok(pP.itens.filter((i) => i.nome === "Despesa")[0].fatorOrigem === "acerto_retido", "S2x marca 'pendente' nao e' estudado");
+    const cR = api.edCombinarFatores({}, { [DP]: { valido: true, nivel: "baixa" }, [RC]: { valido: true, nivel: "alta" } }, undefined, () => false);
+    ok(!(DP in cR.fatores) && cR.retidos[DP] && cR.origem[DP] === "acerto_retido" && cR.fatores[RC] === 1.5,
+       "S2y retido: so' o acerto ALTO e' segurado; o baixo continua subindo o topico nao estudado: " + JSON.stringify(cR));
+    const cS = api.edCombinarFatores({ [DP]: { nivel: "alta", fator: 1.5, origem: "sessao" } }, { [DP]: { valido: true, nivel: "baixa" } }, undefined, () => false);
+    ok(cS.fatores[DP] === 1.5 && cS.origem[DP] === "sessao", "S2z retido com palpite antigo da sessao: fica o palpite");
+    ok(api.edCombinarFatores({}, { [DP]: { valido: true, nivel: "baixa" } }).fatores[DP] === 0.7, "S2za sem o predicado (chamador antigo): comportamento de antes");
   }
 
   /* ---- S2: a tela — selo da agenda e "Como foi?" ---- */
@@ -377,6 +401,9 @@ async function testes() {
     const linha2 = achar(api.$("edAgendaTopo"), [], /(^| )ed-item( |$)/).filter((li) => /Restos/.test(li.textContent || ""))[0];
     const selo2 = linha2 && achar(linha2, [], /(^| )dif-selo( |$)/)[0];
     ok(selo2 && selo2.textContent === "fácil" && !/medido/.test(selo2.className), "S2s com declaracao, o selo e' o da declaracao: " + (selo2 && selo2.textContent));
+    /* (v18.38.0) retido: o selo diz por que nao desceu */
+    const sR = api.difSeloDe({ nome: "X", disciplina: "Y", fatorOrigem: "acerto_retido", acertoTopico: { pct: 100, feitas: 10, nivel: "baixa" } });
+    ok(sR && sR.textContent === "acerto 100% · fica na fila" && /ainda não o registrou como estudado/.test(sR.title), "S2zb o selo do retido explica: " + (sR && sR.textContent));
   }
 
   /* ---- S2: o registro que vem de uma sessao do app nao conta duas vezes ---- */
