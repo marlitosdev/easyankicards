@@ -825,6 +825,7 @@ function rodar() {
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
     leiCitaPreviewAlvoAtual: () => leiCitaPreviewAlvo,
     matCitacoesLigar, matCitCtx, matCitLink, matCitIr, matVinculosAbrir, qsUiVoltaDe, qsVincT,
+    jurBibAtualIniciar, jurBibAtualPedido, jurBibAtualLerResp, jurBibAtualAplicar, jurBibAtualDesfazer, jurBibAtualSair, jurAtualCtxAtual: () => jurAtualCtx, jurAtualLer, jurAtualAplicar, jurAtualDesfazer, jurAtualPedido, jurPrecisaRever, jurForaDeVigor, jurSeloSituacao, JUR_REVER_DIAS,
     jurBibAbrir, jurBibPintar, jurBibFiltrados, jurBibCartoes, jurBibDesfazer, jurBibEstudarIniciar, jurBibEstudoIr, jurBibEstudoSair, jurBibAtual: () => jurBib,
     citCtxDe, citLigarEm, citIr, matCitBase, estcCitBase, estcFechar, gerPintarPrevia, matBolhaAtualizar, matBolhaDoca, jurCitacoesNoTexto, jurAcharCitado, jurTribunalDepois, jurCitLink, jurCitIr, jurCitPreviewAbrir, jurCitCriar, jurCitAbrirGaveta, jurTemCitacao, jurCitDesligar, jurCitOutro, jurEscAbrir, jurEscLigar, citJuntarJulgados, citVinculosAplicarJur, leiCitaDesligar, leiCitaOutro, jurCitPendentes, jurCitLoteIniciar, jurCitLoteUltimoAtual: () => jurCitLoteUltimo, matPintarJurLote, citNotaEl, citNotasVisiveis, leiCitaNotaPintar, matMarcaEdicao, matTituloAlternar, matListaAlternar, matPrefixo, matTrocarTrecho,
     qsVincLerDestinos, qsVincRotuloDestino, qsVincSubDaUnidade, qsVincDestinosTexto, qsVincPintarEsc,

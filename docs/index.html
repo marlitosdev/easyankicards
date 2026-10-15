@@ -3707,6 +3707,25 @@ body.split-lj{overflow:hidden}
 .jur-bib-estudo[hidden]{display:none}
 .jur-bib-est-frente{font-size:16px;font-weight:700}
 .jur-bib-est-tese{white-space:pre-wrap;margin:0}
+/* JM4 — situação da jurisprudência */
+.jur-bib-atual{display:flex;flex-direction:column;gap:6px}
+.jur-bib-atual[hidden]{display:none}
+#dlgJurBib .nota{font-size:12px;margin:2px 0}
+#jurBibAtualPedidoTxt{max-height:90px;font-size:11px}
+#jurBibAtualResp{min-height:60px;max-height:140px;font-size:12px}
+.jur-atual-prev{display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow:auto}
+.jur-atual-item{border:1px solid var(--borda);border-radius:9px;padding:6px 8px;font-size:12.5px}
+.jur-atual-item .nota{margin:3px 0}
+.jur-atual-antes{opacity:.7;text-decoration:line-through;margin-top:3px}
+.jur-atual-depois{color:var(--ok);margin-top:3px}
+.jur-sel.jur-sit{background:transparent;border:1px solid var(--borda)}
+.jur-sel.jur-sit.sit-vigente{color:var(--ok);border-color:var(--ok)}
+.jur-sel.jur-sit.sit-alterada{color:#f59e0b;border-color:#f59e0b}
+.jur-sel.jur-sit.sit-superada,.jur-sel.jur-sit.sit-cancelada{color:var(--erro,#dc2626);border-color:var(--erro,#dc2626)}
+.jur-sel.jur-sit.sit-nao_sei{color:var(--sutil)}
+.jur-verif{font-size:11px;color:var(--sutil)}
+.jur-verif.rever{color:#f59e0b}
+.jur-cita-fora{color:var(--erro,#dc2626);font-weight:700}
 /* (JM2) a situação (abre o painel do porquê) e o ⋯ com as ações escritas */
 .jur-sel.conferir[role="button"]{cursor:pointer}
 .jur-situacao,.jur-mais-painel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;padding:7px 9px;border:1px dashed var(--borda);border-radius:9px}
@@ -7952,6 +7971,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <option value="memoria" data-i18n="jur_bib_sit_memoria"></option>
       <option value="sem_ementa" data-i18n="jur_bib_sit_sem_ementa"></option>
       <option value="sem_topico" data-i18n="jur_bib_sit_sem_topico"></option>
+      <option value="rever" data-i18n="jur_bib_sit_rever"></option>
+      <option value="fora" data-i18n="jur_bib_sit_fora"></option>
     </select>
     <select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
       <option value="topico" data-i18n="jur_bib_grupo_topico"></option>
@@ -7962,10 +7983,33 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibEstudar" data-i18n-title="jur_bib_estudar_aj"></button>
       <button type="button" class="btn-min" id="btnJurBibCartoes" data-i18n-title="jur_bib_cartoes_aj"></button>
       <button type="button" class="btn-min" id="btnJurBibDesfazer" data-i18n="jur_bib_desfazer" hidden></button>
+      <button type="button" class="btn-min" id="btnJurBibAtual"></button>
     </div>
     <p class="nota" id="jurBibMsg" role="status"></p>
   </div>
   <div id="jurBibLista" class="jur-bib-lista"></div>
+  <!-- JM4: a jurisprudência continua valendo? -->
+  <div id="jurBibAtual" class="jur-bib-atual" hidden>
+    <p class="nota" id="jurBibAtualIntro"></p>
+    <div class="ednovo-passo">
+      <div class="qs-vinc-rot"><b>1.</b> <span data-i18n="jur_atual_p1"></span></div>
+      <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnJurBibAtualPedido" data-i18n="jur_atual_copiar"></button></div>
+      <p class="nota" id="jurBibAtualPedidoMsg"></p>
+      <textarea id="jurBibAtualPedidoTxt" rows="3" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
+    </div>
+    <div class="ednovo-passo">
+      <div class="qs-vinc-rot"><b>2.</b> <span data-i18n="jur_atual_p2"></span></div>
+      <textarea id="jurBibAtualResp" rows="4" style="width:100%;box-sizing:border-box" data-i18n-ph="jur_atual_resp_ph" placeholder="resposta"></textarea>
+      <p class="nota jur-cita-sem" id="jurBibAtualSem"></p>
+      <div id="jurBibAtualPrev" class="jur-atual-prev"></div>
+    </div>
+    <div class="qm-bts">
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibAtualAplicar" hidden></button>
+      <button type="button" class="btn-min" id="btnJurBibAtualDesfazer" data-i18n="jur_atual_desfazer" hidden></button>
+      <button type="button" class="btn-min" id="btnJurBibAtualSair" data-i18n="jur_bib_est_sair"></button>
+    </div>
+    <p class="nota" id="jurBibAtualFeito" role="status"></p>
+  </div>
   <div id="jurBibEstudo" class="jur-bib-estudo" hidden>
     <p class="nota" id="jurBibEstPos"></p>
     <div class="jur-bib-est-frente" id="jurBibEstFrente"></div>
