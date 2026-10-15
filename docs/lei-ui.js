@@ -407,7 +407,7 @@ function leiAbrir(disciplina, topico, id, opc) {
   try { leisMigrarDe(typeof matResumos !== "undefined" ? matResumos : {}); }
   catch (e) {}
 
-  let l = id ? leiDe(id) : leiDoTopicoAtual(leiAtual.chave);
+  let l = id ? leiDe(id) : (opc && opc.nova ? null : leiDoTopicoAtual(leiAtual.chave));
   /* "capítulo lido" agora se guarda pelo id do bloco: traduz o que já estava gravado por nome */
   try { if (l && leisMigrarBlocosDe(l.id)) l = leiDe(l.id) || l; } catch (e) {}
   leiIdAtual = l ? l.id : "";
@@ -1173,6 +1173,8 @@ function leiFonteCarregar() {
 function leiFonteRotulo(px) { return Math.round(100 * px / 15) + "%"; }
 function leiFontePintar() {
   ["leiFonteAtual", "leiCheiaFonte"].forEach((id) => { const el = $(id); if (el) el.textContent = leiFonteRotulo(leiFonte); });
+  /* (v18.47.0) o texto do modo EDITAR também cresce (antes ficava nos 13,5px do CSS: a monoespaçada é 0,9 da leitura) */
+  if ($("leiTexto") && $("leiTexto").style) $("leiTexto").style.fontSize = (Math.round(leiFonte * 9) / 10) + "px";
   ["btnLeiMenor", "btnLeiCheiaMenor"].forEach((id) => { const el = $(id); if (el) el.disabled = leiFonte <= LEI_FONTE_MIN; });
   ["btnLeiMaior", "btnLeiCheiaMaior"].forEach((id) => { const el = $(id); if (el) el.disabled = leiFonte >= LEI_FONTE_MAX; });
 }
@@ -2438,6 +2440,13 @@ function leiCitarNoTexto(noTexto, origemNum) {
    * leiArtigoAlterar) batia como citação de rótulo vazio e virava um
    * link morto em cima do próprio título de cada artigo, em toda lei. */
   cits = cits.filter((c) => c && c.rotulo);
+  /* (v18.47.0) OS VÍNCULOS MANUAIS valem aqui também (eac_cit_vinculos): o trecho ligado à mão vira link, o desligado
+   * deixa de ser. Do tópico aberto; aberta pela Biblioteca (sem tópico), só os de todo o app. */
+  try {
+    if (typeof citVinculosAplicar === "function" && typeof citVinculosLer === "function" && citVinculosLer().length) {
+      cits = citVinculosAplicar(txt, cits, (leiAtual && leiAtual.chave) || "");
+    }
+  } catch (e) {}
   if (!cits.length) return;
   const pai = noTexto.parentNode;
   if (!pai || !pai.insertBefore) return;
@@ -2458,11 +2467,18 @@ function leiCitacaoBotao(c, origemNum) {
   b.className = "lei-cita-link";
   b.textContent = c.texto;
   b.title = t("lei_cita_link_ajuda");
+  if (c.permanente) b.className += " lei-cita-perm";
   b.onclick = (ev) => {
     if (ev && ev.stopPropagation) ev.stopPropagation();
-    leiCitacaoPreviewAbrir(c, origemNum);
+    /* (v18.47.0) com o contexto DE DENTRO do leitor: a prévia oferece "desligar" e "ligar a outro", e a volta repinta a
+     * leitura (o "abrir a lei inteira" continua o de dentro: volta para esta lei) */
+    leiCitacaoPreviewAbrir(c, origemNum, { ctx: leiCtxDoLeitor() });
   };
   return b;
+}
+function leiCtxDoLeitor() {
+  return { dentro: true, disciplina: (leiAtual && leiAtual.disciplina) || "", topico: (leiAtual && leiAtual.topico) || "",
+    aoVoltar: () => { try { leiPintar(); } catch (e) {} } };
 }
 
 let leiCitaPreviewOrigemArt = "";
@@ -2478,7 +2494,7 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   if (!$("dlgLeiCitaPreview")) return;
   leiCitaPreviewOrigemArt = origemNum || "";
   const o = opc || {};
-  let lei = o.lei || null;
+  let lei = o.lei || (c.leiId ? leiDe(c.leiId) : null);   /* (v18.47.0) vínculo manual: a lei é a que a pessoa escolheu */
   if (!lei) {
     try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; }
   }
@@ -2598,6 +2614,51 @@ function leiCitaBotoesDoLink() {
   if ($("btnLeiCitaDesligar")) $("btnLeiCitaDesligar").hidden = !ok;
   if ($("btnLeiCitaOutro")) $("btnLeiCitaOutro").hidden = !ok;
 }
+/* ligar À MÃO um trecho selecionado no leitor: a mesma janela do resumo e das questões (com prévia do artigo) */
+function leiBolhaAtualizar(selFake) {
+  const b = $("leiBolha");
+  if (!b) return false;
+  let rect = null, txt = "";
+  try {
+    const dlg = $("dlgLeiSeca"), p = $("leiLeitura");
+    const sel = selFake || (typeof window !== "undefined" && window.getSelection ? window.getSelection() : null);
+    if (dlg && dlg.open && leiModo === "ler" && p && !p.hidden && sel && !sel.isCollapsed && String(sel).trim()
+        && sel.anchorNode && p.contains && p.contains(sel.anchorNode)) {
+      txt = String(sel).replace(/\s+/g, " ").trim();
+      rect = sel.rangeCount && sel.getRangeAt ? sel.getRangeAt(0).getBoundingClientRect() : { top: 0, bottom: 0, left: 0, width: 0 };
+    }
+  } catch (e) { rect = null; }
+  if (!rect || !txt) { b.hidden = true; return false; }
+  leiBolhaTrecho = txt.slice(0, 300);
+  b.hidden = false;
+  if (b.style) {
+    const alto = b.offsetHeight || 36, larg = b.offsetWidth || 200;
+    const jan = (typeof window !== "undefined" && window.innerWidth) || 1000;
+    let topo = rect.top - alto - 8;
+    if (topo < 8) topo = rect.bottom + 8;
+    b.style.top = Math.round(topo) + "px";
+    b.style.left = Math.round(Math.max(8, Math.min(rect.left + (rect.width || 0) / 2 - larg / 2, jan - larg - 8))) + "px";
+  }
+  return true;
+}
+let leiBolhaTrecho = "";
+function leiBolhaVincular() {
+  const trecho = String(leiBolhaTrecho || "").trim();
+  if (!trecho || typeof qsVincEscolherPara !== "function") return false;
+  if ($("leiBolha")) $("leiBolha").hidden = true;
+  const ctx = leiCtxDoLeitor();
+  qsVincEscolherPara({ disciplina: ctx.disciplina, topico: ctx.topico, comentario: trecho, _aoVoltar: ctx.aoVoltar, _onde: "resumo" },
+    { trecho, cit: null });
+  /* aberta pela Biblioteca, não há tópico: o vínculo vale em todo o app */
+  if (!(leiAtual && leiAtual.chave) && $("qsVincAlcTudo")) {
+    $("qsVincAlcTudo").checked = true;
+    if ($("qsVincAlcTopico")) $("qsVincAlcTopico").checked = false;
+    try { qsVincPintarEsc(); } catch (e) {}
+  }
+  try { leiReg("citacao", "ligar trecho à lei (leitor)", trecho); } catch (e) {}
+  return true;
+}
+
 function leiCitaChaveDoCtx(ctx) {
   return ctx && ctx.disciplina && ctx.topico && typeof matChave === "function" ? matChave(ctx.disciplina, ctx.topico) : "";
 }
@@ -2630,7 +2691,7 @@ function leiCitacaoPreviewAbrirLeiInteira() {
   const alvo = leiCitaPreviewAlvo;
   /* DE FORA DO LEITOR (o resumo): a lei sobe por cima de quem chamou e, ao
    * fechar, quem chamou repinta — nada de "voltar para a lei de origem" */
-  if (alvo.ctx) {
+  if (alvo.ctx && !alvo.ctx.dentro) {
     $("dlgLeiCitaPreview").close();
     leiVoltaPara = alvo.ctx.aoVoltar || null;
     const achou = leiAbrirNoArtigo(alvo.ctx.disciplina, alvo.ctx.topico, alvo.lei.id, alvo.num, alvo.sub);
@@ -4857,6 +4918,16 @@ function leiBibLista() {
       l.ente, l.especie].join(" "));
     return palheiro.indexOf(q) >= 0;
   });
+}
+
+/* (v18.47.0) "＋ Nova lei": colar uma lei na biblioteca sem ligá-la a tópico nenhum (liga-se depois, por "ligar a um
+ * tópico…"). O leitor abre vazio, no modo editar; gravar cria a lei com topicos = []. */
+function leiBibNova() {
+  if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
+  leiIdAtual = "";
+  leiAbrir("", "", null, { nova: true, semRetomar: true });
+  try { leiReg("lei", "nova lei pela biblioteca", "sem tópico"); } catch (e) {}
+  return true;
 }
 
 function leiBibAbrir() {
@@ -7573,6 +7644,12 @@ function leiIniciar() {
   liga("btnLeiCitaNotaSugerir", "sugerir a nota do artigo com IA", () => leiCitaNotaSugerir());
   liga("btnLeiCitaNotaCancelar", "cancelar a nota do artigo", () => leiCitaNotaPintar());
   liga("btnLeiVincFechar", "fechar o vínculo", () => $("dlgLeiVincular").close());
+  /* (v18.47.0) a bolha da seleção do leitor e a lei nova pela biblioteca */
+  liga("btnLeiBolhaVinc", "ligar trecho à lei (leitor)", () => leiBolhaVincular());
+  liga("btnLeiBibNova", "nova lei pela biblioteca", () => leiBibNova());
+  /* o toque no botão não pode desfazer a seleção antes do clique (o mesmo cuidado da bolha do resumo) */
+  if ($("btnLeiBolhaVinc") && $("btnLeiBolhaVinc").addEventListener) $("btnLeiBolhaVinc").addEventListener("mousedown", (ev) => ev.preventDefault());
+  try { document.addEventListener("selectionchange", () => { try { leiBolhaAtualizar(); } catch (e) {} }); } catch (e) {}
   liga("btnLeiClozeFechar", "fechar a lacuna", () => $("dlgLeiCloze").close());
   liga("btnLeiClozeConferir", "conferir a lacuna", () => leiClozeConferir());
   liga("btnLeiClozeAplicar", "aplicar a lacuna", () => leiClozeAplicar());
