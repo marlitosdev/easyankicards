@@ -219,6 +219,15 @@ function difDoHumor(disc, top, humor) {
 function difSeloDe(item) {
   if (!item || typeof document === "undefined") return null;
   /* o plano escolheu o ACERTO como sinal deste tópico (você não declarou nada que valha): o selo diz isso, com o número */
+  /* (v18.38.0) acerto alto num tópico ainda não estudado: não desceu na fila — o selo diz por quê */
+  if (item.fatorOrigem === "acerto_retido" && item.acertoTopico) {
+    const a = item.acertoTopico;
+    const el = document.createElement("span");
+    el.className = "dif-selo media medido";
+    el.textContent = t("dif_selo_retido", { p: a.pct });
+    el.title = t("dif_selo_retido_tip", { p: a.pct, n: a.feitas });
+    return el;
+  }
   if (item.fatorOrigem === "acerto" && item.acertoTopico) {
     const a = item.acertoTopico;
     if (a.nivel !== "alta" && a.nivel !== "baixa") return null;

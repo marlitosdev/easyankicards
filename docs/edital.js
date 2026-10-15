@@ -1274,7 +1274,10 @@ function montarPlano(r, opcoes) {
     acertoTop = o.acertosTopico || (o.acertosTopico === null ? {} : edAcertosPorTopico(
       (typeof edDiario !== "undefined" && edDiario) || [],
       (typeof qsBanco !== "undefined" && qsBanco) || []));
-    const comb = edCombinarFatores(typeof difMapaDetalhado === "function" ? difMapaDetalhado(o.hoje) : {}, acertoTop);
+    /* estudado = o tópico (ou algum ramo dele) tem marca de feito/revisado neste edital */
+    const ok = (m) => !!m && (m.e === "feito" || m.e === "revisado");
+    const estudado = (k) => ok(marcaDe(k)) || Object.keys(o.feitos || {}).some((x) => x.indexOf(k + "›#") === 0 && ok(marcaDe(x)));
+    const comb = edCombinarFatores(typeof difMapaDetalhado === "function" ? difMapaDetalhado(o.hoje) : {}, acertoTop, undefined, estudado);
     fatores = comb.fatores;
     fatorOrigem = comb.origem;
   }
@@ -1706,8 +1709,14 @@ function edAcertosPorTopico(diario, banco, opc) {
   return out;
 }
 /* QUEM DECIDE O FATOR DE CADA TÓPICO: a sua declaração ("Como foi?", valendo) > o acerto medido (10+ questões) > o palpite
- * antigo "deduzido da sessão". Devolve o mapa de fatores que o plano usa e, ao lado, de onde veio cada um. */
-function edCombinarFatores(detalhado, acertos, niveis) {
+ * antigo "deduzido da sessão". Devolve o mapa de fatores que o plano usa e, ao lado, de onde veio cada um.
+ *
+ * (v18.38.0) ACERTO ALTO NÃO TIRA DA FILA O QUE AINDA NÃO FOI ESTUDADO. O relato: "Obrigação tributária" era o próximo da
+ * agenda, a pessoa estava no meio das questões do tópico (sem registrar estudo nenhum) e, ao passar de 10 respostas com
+ * 100%, o tópico caiu da 1ª posição para a semana 4 — sem aviso. Acertar as primeiras questões não é "já domino": só
+ * desce quem já foi estudado (`estudado(chave)`). O acerto BAIXO continua subindo qualquer tópico, e o retido fica
+ * registrado em `retidos` para a tela dizer por que ele não desceu. */
+function edCombinarFatores(detalhado, acertos, niveis, estudado) {
   const nv = niveis || (typeof DIF_NIVEIS !== "undefined" ? DIF_NIVEIS : []);
   const fatorDe = (n) => (nv.find((x) => x.id === n) || { fator: 1 }).fator;
   const fatores = {}, origem = {};
@@ -1715,15 +1724,19 @@ function edCombinarFatores(detalhado, acertos, niveis) {
     const d = detalhado[k];
     if (d && d.origem !== "sessao") { fatores[k] = d.fator; origem[k] = "declarada"; }
   });
+  const retidos = {};
   Object.keys(acertos || {}).forEach((k) => {
     const a = acertos[k];
     if (k in origem || !a || !a.valido) return;
+    if (a.nivel === "baixa" && typeof estudado === "function" && !estudado(k)) { retidos[k] = true; return; }
     fatores[k] = fatorDe(a.nivel); origem[k] = "acerto";
   });
   Object.keys(detalhado || {}).forEach((k) => {
     if (!(k in origem)) { fatores[k] = detalhado[k].fator; origem[k] = "sessao"; }
   });
-  return { fatores, origem };
+  /* retido e sem outro sinal: a origem diz por que o acerto não mexeu (o selo da agenda explica) */
+  Object.keys(retidos).forEach((k) => { if (!(k in origem)) origem[k] = "acerto_retido"; });
+  return { fatores, origem, retidos };
 }
 
 /* AMOSTRA MÍNIMA PARA CHAMAR ALGUÉM DE RISCO.
