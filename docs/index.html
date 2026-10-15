@@ -3690,6 +3690,23 @@ body.split-lj{overflow:hidden}
 /* AS AÇÕES NO CANTO: "margin-left:auto" empurra o grupo para a direita
    da mesma linha do cabeçalho, em vez de gastar uma linha própria. */
 .jur-acoes{display:flex;gap:2px;margin-left:auto}
+/* JM3 — biblioteca de julgados */
+#dlgJurBib{width:min(900px,96vw)}
+.jur-bib-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 6px}
+.jur-bib-barra input[type=search]{flex:1 1 220px;min-width:0;box-sizing:border-box}
+.jur-bib-barra select{max-width:100%}
+.jur-bib-barra .qm-bts{flex:1 1 100%}
+.jur-bib-lista{max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.jur-bib-grupo{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--info);padding:6px 0 2px;border-bottom:1px solid var(--borda)}
+.jur-bib-item{border:1px solid var(--borda);border-radius:9px;padding:7px 9px}
+.jur-bib-tese{font-size:13px;margin:4px 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.jur-bib-tops{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.jur-bib-top{color:#f59e0b;border-color:#f59e0b}
+.jur-bib-ligar-sel{max-width:100%}
+.jur-bib-estudo{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:6px 2px}
+.jur-bib-estudo[hidden]{display:none}
+.jur-bib-est-frente{font-size:16px;font-weight:700}
+.jur-bib-est-tese{white-space:pre-wrap;margin:0}
 /* (JM2) a situação (abre o painel do porquê) e o ⋯ com as ações escritas */
 .jur-sel.conferir[role="button"]{cursor:pointer}
 .jur-situacao,.jur-mais-painel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;padding:7px 9px;border:1px dashed var(--borda);border-radius:9px}
@@ -5918,7 +5935,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         title="Abre a biblioteca das suas leis: cada lei existe uma vez só, e daqui se vê onde ela é usada."></button>
       <span class="nota" data-i18n="mat_ferr_lei_exp"></span>
     </div>
-    <p class="nota mat-ferr" id="matFerrJuris" hidden data-i18n="mat_ferr_juris_exp"></p>
+    <div class="mat-ferr" id="matFerrJuris" hidden>
+      <button type="button" class="btn-min btn-min-ok" id="btnMatJurBib" data-i18n="jur_bib_btn" data-i18n-title="jur_bib_btn_aj"></button>
+      <span class="nota" data-i18n="mat_ferr_juris_exp"></span>
+    </div>
     <p class="nota mat-ferr" id="matFerrResumo" hidden data-i18n="mat_ferr_resumo_exp"></p>
     <p class="nota mat-ferr" id="matFerrQuestoes" hidden data-i18n="mat_ferr_questoes_exp"></p>
     <div id="matLista" class="mat-caixa"></div>
@@ -6480,6 +6500,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-azul" id="btnJurMais" data-i18n="jur_mais" data-i18n-title="jur_b_mais"></button>
     <button class="btn-min" id="btnJurPrompt" data-i18n="jur_prompt_btn"
       hidden data-i18n-title="jur_b_prompt"></button>
+    <button type="button" class="btn-min" id="btnJurBib" data-i18n="jur_bib_btn_gaveta" data-i18n-title="jur_bib_btn_aj"></button>
   </div>
 
   <!-- OS REPETIDOS. Só aparece quando há: um aviso permanente sobre
@@ -7915,6 +7936,51 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <!-- LIGAR UM TRECHO A UM JULGADO GUARDADO, À MÃO (v18.34.0; jurEscAbrir, juris-ui.js) -->
+<!-- JM3 (v18.41.0): A BIBLIOTECA DE JULGADOS — todos, com busca, filtros, cartões em lote e estudo das teses -->
+<dialog id="dlgJurBib" class="ui-modal diag-modal jur-bib">
+  <div class="vka-cab">
+    <h3 data-i18n="jur_bib_tit"></h3>
+    <button type="button" class="dlg-x" id="btnJurBibX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota"><span id="jurBibConta"></span> <b id="jurBibFiltro"></b></p>
+  <div id="jurBibBarra" class="jur-bib-barra">
+    <input type="search" id="jurBibBusca" data-i18n-ph="jur_bib_busca_ph" placeholder="procurar">
+    <select id="jurBibTrib" data-i18n-title="jur_bib_trib_aj"></select>
+    <select id="jurBibSit" data-i18n-title="jur_bib_sit_aj">
+      <option value="" data-i18n="jur_bib_sit_todos"></option>
+      <option value="conferir" data-i18n="jur_bib_sit_conferir"></option>
+      <option value="memoria" data-i18n="jur_bib_sit_memoria"></option>
+      <option value="sem_ementa" data-i18n="jur_bib_sit_sem_ementa"></option>
+      <option value="sem_topico" data-i18n="jur_bib_sit_sem_topico"></option>
+    </select>
+    <select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
+      <option value="topico" data-i18n="jur_bib_grupo_topico"></option>
+      <option value="tribunal" data-i18n="jur_bib_grupo_tribunal"></option>
+      <option value="" data-i18n="jur_bib_grupo_nenhum"></option>
+    </select>
+    <div class="qm-bts">
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibEstudar" data-i18n-title="jur_bib_estudar_aj"></button>
+      <button type="button" class="btn-min" id="btnJurBibCartoes" data-i18n-title="jur_bib_cartoes_aj"></button>
+      <button type="button" class="btn-min" id="btnJurBibDesfazer" data-i18n="jur_bib_desfazer" hidden></button>
+    </div>
+    <p class="nota" id="jurBibMsg" role="status"></p>
+  </div>
+  <div id="jurBibLista" class="jur-bib-lista"></div>
+  <div id="jurBibEstudo" class="jur-bib-estudo" hidden>
+    <p class="nota" id="jurBibEstPos"></p>
+    <div class="jur-bib-est-frente" id="jurBibEstFrente"></div>
+    <p class="nota" id="jurBibEstPistas"></p>
+    <button type="button" class="btn btn-azul" id="btnJurBibEstVer" data-i18n="jur_bib_est_ver"></button>
+    <blockquote class="jur-tese jur-bib-est-tese" id="jurBibEstTese" hidden></blockquote>
+    <div class="qm-bts">
+      <button type="button" class="btn-min" id="btnJurBibEstAnt" data-i18n="jur_bib_est_ant"></button>
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibEstProx" data-i18n="jur_bib_est_prox"></button>
+      <button type="button" class="btn-min" id="btnJurBibEstSair" data-i18n="jur_bib_est_sair"></button>
+    </div>
+  </div>
+  <div class="dlg-rodape"><button class="btn btn-cinza" id="btnJurBibFechar" data-i18n="help_close"></button></div>
+</dialog>
+
 <dialog id="dlgJurEscolher" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="jur_esc_tit"></h3>

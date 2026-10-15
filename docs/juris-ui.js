@@ -2542,3 +2542,280 @@ function jurIniciarTela() {
   }
   liga("btnMatJuris", jurDaSelecao);
 }
+
+/* =====================================================================
+ * JM3 — A BIBLIOTECA DE JULGADOS (v18.41.0)
+ *
+ * Cartões e leis tinham a sua biblioteca; julgados, não: cada um só era
+ * visto de dentro do SEU tópico, e "quais súmulas do STF eu já guardei?"
+ * não tinha resposta. Aqui estão todos, com busca (tribunal, número, tese,
+ * etiqueta, tópico), filtros (tribunal e situação), agrupados por tópico ou
+ * por tribunal. Daqui: abrir o julgado no tópico, ligá-lo a mais um tópico,
+ * criar os cartões das teses filtradas de uma vez (com desfazer) e estudar
+ * as teses (vê o tribunal e o número, lembra a tese, confere).
+ * ===================================================================== */
+let jurBib = { busca: "", trib: "", sit: "", grupo: "topico", estudo: null, ligando: "" };
+
+function jurBibTopicosDe(j) {
+  return (j.topicos || []).map((c) => {
+    /* o nome com as maiúsculas certas vem do material, quando o tópico está lá; senão, do rótulo do julgado (que pode ser
+     * só a chave, em minúsculas) — e o GRUPO é pela chave comparável, para o mesmo tópico não virar dois */
+    const k = jurChaveComparavel(c);
+    let m = null;
+    if (typeof matResumos === "object") m = matResumos[c] || Object.keys(matResumos).map((x) => matResumos[x]).find((x) => x && x.disciplina && x.topico && jurChaveComparavel(x.disciplina + "›" + x.topico) === k) || null;
+    const r = typeof jurRotuloDe === "function" ? jurRotuloDe(j, c) : {};
+    return { chave: c, k, disciplina: (m && m.disciplina) || r.disciplina || "", topico: (m && m.topico) || r.topico || c };
+  }).filter((x) => x.topico);
+}
+
+function jurBibSituacao(j) {
+  if (j.deMemoria) return "memoria";
+  if (Array.isArray(j.aConferir) && j.aConferir.length) return "conferir";
+  return "";
+}
+
+function jurBibFiltrados() {
+  const q = jurSemAcento(String(jurBib.busca || "")).toLowerCase().trim();
+  return jurLista().filter((j) => {
+    if (jurBib.trib && String(j.tribunal || "") !== jurBib.trib) return false;
+    if (jurBib.sit === "conferir" && !jurBibSituacao(j)) return false;
+    if (jurBib.sit === "memoria" && !j.deMemoria) return false;
+    if (jurBib.sit === "sem_ementa" && String(j.texto || "").trim()) return false;
+    if (jurBib.sit === "sem_topico" && (j.topicos || []).length) return false;
+    if (!q) return true;
+    const alvo = [j.tribunal, j.classe, j.numero, j.tese, j.resumo, (j.tags || []).join(" "),
+      jurBibTopicosDe(j).map((x) => x.disciplina + " " + x.topico).join(" ")].join(" ");
+    return jurSemAcento(alvo).toLowerCase().indexOf(q) >= 0;
+  });
+}
+
+function jurBibAbrir(opc) {
+  if (!$("dlgJurBib")) return false;
+  const o = opc || {};
+  jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", grupo: "topico", estudo: null, ligando: "" };
+  $("jurBibBusca").value = jurBib.busca;
+  $("jurBibSit").value = jurBib.sit;
+  $("jurBibGrupo").value = jurBib.grupo;
+  $("jurBibMsg").textContent = "";
+  $("btnJurBibDesfazer").hidden = true;
+  jurBibPintar();
+  abrirModal("dlgJurBib");
+  try { reg("JURIS", "biblioteca de julgados aberta", jurLista().length + " julgados"); } catch (e) {}
+  return true;
+}
+
+function jurBibPintar() {
+  if (!$("dlgJurBib")) return;
+  const todos = jurLista();
+  /* tribunais: só os que existem */
+  const st = $("jurBibTrib");
+  const tribs = [...new Set(todos.map((j) => String(j.tribunal || "").trim()).filter(Boolean))].sort();
+  st.innerHTML = "";
+  [["", t("jur_bib_trib_todos")]].concat(tribs.map((x) => [x, x])).forEach(([v, r]) => {
+    const op = document.createElement("option"); op.value = v; op.textContent = r; st.append(op);
+  });
+  if (jurBib.trib && tribs.indexOf(jurBib.trib) < 0) jurBib.trib = "";
+  st.value = jurBib.trib;
+  const L = jurBibFiltrados();
+  const nTop = new Set(todos.flatMap((j) => (j.topicos || []).map(jurChaveComparavel))).size;
+  $("jurBibConta").textContent = t("jur_bib_conta", { n: todos.length, k: nTop });
+  $("jurBibFiltro").textContent = L.length === todos.length ? "" : t("jur_bib_filtrados", { n: L.length });
+  const comTese = L.filter((j) => String(j.tese || "").trim());
+  $("btnJurBibCartoes").textContent = t("jur_bib_cartoes", { n: comTese.filter((j) => (j.topicos || []).length).length });
+  $("btnJurBibCartoes").disabled = !comTese.some((j) => (j.topicos || []).length);
+  $("btnJurBibEstudar").textContent = t("jur_bib_estudar", { n: comTese.length });
+  $("btnJurBibEstudar").disabled = !comTese.length;
+  const est = !!jurBib.estudo;
+  $("jurBibEstudo").hidden = !est;
+  $("jurBibLista").hidden = est;
+  $("jurBibBarra").hidden = est;
+  if (est) { jurBibPintarEstudo(); return; }
+
+  const cx = $("jurBibLista");
+  cx.innerHTML = "";
+  if (!L.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = todos.length ? t("jur_bib_nada") : t("jur_bib_vazio");
+    cx.append(p);
+    return;
+  }
+  /* grupos: por tópico (um julgado em dois tópicos aparece nos dois), por tribunal, ou lista única */
+  const grupos = new Map();
+  /* chave do grupo = a comparável (sem acento/caixa); o rótulo é o primeiro nome visto, preferindo um com maiúscula */
+  const rotulos = new Map();
+  const porNo = (rot, j, kc) => {
+    const k = kc || rot;
+    if (!grupos.has(k)) grupos.set(k, []);
+    if (!rotulos.has(k) || (rotulos.get(k) === rotulos.get(k).toLowerCase() && rot !== rot.toLowerCase())) rotulos.set(k, rot);
+    grupos.get(k).push(j);
+  };
+  L.forEach((j) => {
+    if (jurBib.grupo === "tribunal") porNo(j.tribunal || t("jur_bib_sem_trib"), j);
+    else if (jurBib.grupo === "topico") {
+      const tps = jurBibTopicosDe(j);
+      if (!tps.length) porNo(t("jur_bib_sem_topico"), j);
+      tps.forEach((x) => porNo((x.disciplina ? x.disciplina + " › " : "") + x.topico, j, x.k));
+    } else porNo("", j);
+  });
+  [...grupos.keys()].sort((a, b) => String(rotulos.get(a)).localeCompare(String(rotulos.get(b)))).forEach((k) => {
+    if (rotulos.get(k)) {
+      const h = document.createElement("div");
+      h.className = "jur-bib-grupo";
+      h.textContent = rotulos.get(k) + " (" + grupos.get(k).length + ")";
+      cx.append(h);
+    }
+    grupos.get(k).forEach((j) => cx.append(jurBibLinha(j)));
+  });
+}
+
+function jurBibLinha(j) {
+  const li = document.createElement("div");
+  li.className = "jur-bib-item";
+  const cab = document.createElement("div");
+  cab.className = "jur-cab";
+  const sel = (txt, cls) => { const s = document.createElement("span"); s.className = "jur-sel " + cls; s.textContent = txt; cab.append(s); return s; };
+  if (j.tribunal) sel(j.tribunal, "trib");
+  const proc = [j.classe, j.numero].filter(Boolean).join(" ");
+  if (proc) sel(proc, "proc");
+  const cat = j.categoria || (typeof jurCategoria === "function" ? jurCategoria(j.classe) : "");
+  if (cat) sel(cat, "cat");
+  const s = jurBibSituacao(j);
+  if (s === "memoria") sel(t("jur_mem_selo"), "conferir jur-mem");
+  if (s === "conferir") sel(t("jur_a_conferir_n", { n: j.aConferir.length }), "conferir");
+  li.append(cab);
+  const tese = document.createElement("div");
+  tese.className = "jur-bib-tese";
+  tese.textContent = String(j.tese || j.resumo || t("jur_bib_sem_tese")).trim();
+  li.append(tese);
+  /* os tópicos: tocar abre o julgado lá (a gaveta do tópico) */
+  const tps = document.createElement("div");
+  tps.className = "jur-bib-tops";
+  jurBibTopicosDe(j).forEach((x) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min jur-bib-top";
+    b.textContent = "⚖ " + x.topico;
+    b.title = t("jur_bib_abrir_aj", { tp: (x.disciplina ? x.disciplina + " › " : "") + x.topico });
+    b.onclick = () => { $("dlgJurBib").close(); jurAbrir(x.disciplina, x.topico, "ler"); };
+    tps.append(b);
+  });
+  /* + outro tópico: um seletor com os tópicos da estante que ainda não têm este julgado */
+  const bL = document.createElement("button");
+  bL.type = "button";
+  bL.className = "btn-min jur-bib-ligar";
+  bL.id = "btnJurBibLigar_" + j.id;
+  bL.textContent = t("jur_bib_ligar");
+  bL.title = t("jur_bib_ligar_aj");
+  bL.onclick = () => { jurBib.ligando = jurBib.ligando === j.id ? "" : j.id; jurBibPintar(); };
+  tps.append(bL);
+  if (jurBib.ligando === j.id) {
+    const ja = new Set((j.topicos || []).map(jurChaveComparavel));
+    const op = (typeof matListaCheia === "function" ? matListaCheia() : [])
+      .filter((x) => x.disciplina && x.topico && !ja.has(jurChaveComparavel(x.chave)));
+    const sl = document.createElement("select");
+    sl.className = "jur-bib-ligar-sel";
+    sl.id = "jurBibLigarSel_" + j.id;
+    [["", t("jur_bib_ligar_escolha")]].concat(op.map((x) => [x.chave, x.disciplina + " › " + x.topico])).forEach(([v, r]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = r; sl.append(o);
+    });
+    sl.onchange = () => {
+      const x = op.find((y) => y.chave === sl.value);
+      if (!x) return;
+      jurLigar(j.id, x.chave, x.disciplina, x.topico);
+      try { reg("JURIS", "julgado ligado a mais um tópico (biblioteca)", jurTitulo(j) + " › " + x.topico); } catch (e) {}
+      jurBib.ligando = "";
+      jurBibPintar();
+      try { jurRepintarTelas(); } catch (e) {}
+    };
+    tps.append(sl);
+  }
+  li.append(tps);
+  return li;
+}
+
+/* os cartões das teses filtradas, de uma vez: um cartão por julgado e por tópico, com o mesmo formato do 🃏 da gaveta;
+ * os que o tópico já tem ficam de fora (cmAplicar) e o recibo permite desfazer */
+async function jurBibCartoes() {
+  const L = jurBibFiltrados().filter((j) => String(j.tese || "").trim());
+  const destinos = [];
+  L.forEach((j) => jurBibTopicosDe(j).forEach((x) => {
+    const c = jurCartaoDe(j, x.topico);
+    if (!c) return;
+    const tags = [x.disciplina, x.topico, "jurisprudencia"].concat(j.tribunal ? [j.tribunal] : [])
+      .map((v) => String(v).replace(/::/g, "_").replace(/\s+/g, "_")).filter(Boolean);
+    const linha = c.frente.replace(/\s*::\s*/g, " — ") + " :: " + c.verso.replace(/\s*::\s*/g, " — ").replace(/\r?\n+/g, " ") + " :: " + tags.join(" ");
+    let card = null;
+    try { card = (parseText(linha).cards || [])[0]; } catch (e) { card = null; }
+    if (card) destinos.push({ card, destino: { disciplina: x.disciplina, topico: x.topico } });
+  }));
+  if (!destinos.length) return null;
+  if (!(await uiConfirm(t("jur_bib_cartoes_conf", { n: destinos.length })))) return null;
+  const rec = cmAplicar(destinos, "", matGravarCartoes);
+  try { cmUltimoRecibo = rec; } catch (e) {}
+  try { guardar("eac_cm_recibo", JSON.stringify(rec)); } catch (e) {}
+  try { reg("JURIS", "cartões das teses (biblioteca de julgados)", rec.novos + " novos, " + rec.repetidos + " já existiam"); } catch (e) {}
+  $("jurBibMsg").textContent = t("jur_bib_cartoes_feito", { n: rec.novos, r: rec.repetidos });
+  $("btnJurBibDesfazer").hidden = !rec.novos;
+  try { jurRepintarTelas(); } catch (e) {}
+  return rec;
+}
+
+async function jurBibDesfazer() {
+  await cmDesfazerUltimo();
+  $("btnJurBibDesfazer").hidden = true;
+  $("jurBibMsg").textContent = "";
+  try { jurRepintarTelas(); } catch (e) {}
+}
+
+/* ESTUDAR AS TESES: vê o tribunal, o número e as etiquetas; lembra a tese; toca para conferir */
+function jurBibEstudarIniciar() {
+  const L = jurBibFiltrados().filter((j) => String(j.tese || "").trim());
+  if (!L.length) return false;
+  jurBib.estudo = { ids: L.map((j) => j.id), i: 0, ver: false };
+  try { reg("JURIS", "estudo das teses (biblioteca de julgados)", L.length + " teses"); } catch (e) {}
+  jurBibPintar();
+  return true;
+}
+function jurBibEstudoIr(d) {
+  const e = jurBib.estudo;
+  if (!e) return;
+  e.i = Math.max(0, Math.min(e.ids.length - 1, e.i + d));
+  e.ver = false;
+  jurBibPintar();
+}
+function jurBibEstudoSair() { jurBib.estudo = null; jurBibPintar(); }
+function jurBibPintarEstudo() {
+  const e = jurBib.estudo;
+  const j = jurDe(e.ids[e.i]);
+  if (!j) { jurBibEstudoSair(); return; }
+  $("jurBibEstPos").textContent = t("jur_bib_est_pos", { i: e.i + 1, n: e.ids.length });
+  const quem = [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  $("jurBibEstFrente").textContent = t("jur_bib_est_frente", { q: quem || "?" });
+  /* só o tópico como pista: as etiquetas ("#cartão de crédito #planos de saúde") quase entregam a tese */
+  const pistas = jurBibTopicosDe(j).map((x) => x.topico).join(", ");
+  $("jurBibEstPistas").textContent = pistas;
+  $("jurBibEstTese").hidden = !e.ver;
+  $("jurBibEstTese").textContent = String(j.tese || "").trim() + (j.resumo ? "\n\n" + String(j.resumo).trim() : "");
+  $("btnJurBibEstVer").hidden = e.ver;
+  $("btnJurBibEstAnt").disabled = e.i === 0;
+  $("btnJurBibEstProx").disabled = e.i >= e.ids.length - 1;
+}
+
+if (typeof document !== "undefined" && $("dlgJurBib")) {
+  $("jurBibBusca").oninput = () => { jurBib.busca = $("jurBibBusca").value; jurBibPintar(); };
+  $("jurBibTrib").onchange = () => { jurBib.trib = $("jurBibTrib").value; jurBibPintar(); };
+  $("jurBibSit").onchange = () => { jurBib.sit = $("jurBibSit").value; jurBibPintar(); };
+  $("jurBibGrupo").onchange = () => { jurBib.grupo = $("jurBibGrupo").value; jurBibPintar(); };
+  $("btnJurBibCartoes").onclick = () => jurBibCartoes();
+  $("btnJurBibDesfazer").onclick = () => jurBibDesfazer();
+  $("btnJurBibEstudar").onclick = () => jurBibEstudarIniciar();
+  $("btnJurBibEstVer").onclick = () => { if (jurBib.estudo) { jurBib.estudo.ver = true; jurBibPintar(); } };
+  $("btnJurBibEstAnt").onclick = () => jurBibEstudoIr(-1);
+  $("btnJurBibEstProx").onclick = () => jurBibEstudoIr(1);
+  $("btnJurBibEstSair").onclick = () => jurBibEstudoSair();
+  $("btnJurBibX").onclick = () => $("dlgJurBib").close();
+  $("btnJurBibFechar").onclick = () => $("dlgJurBib").close();
+  if ($("btnMatJurBib")) $("btnMatJurBib").onclick = () => jurBibAbrir();
+  if ($("btnJurBib")) $("btnJurBib").onclick = () => { $("dlgJuris").close(); jurBibAbrir(); };
+}
