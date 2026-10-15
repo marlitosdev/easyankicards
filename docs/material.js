@@ -3514,9 +3514,49 @@ function matRender() {
   try { matPintarSemMaterial(box); } catch (e) {}
 }
 
+/* (v18.46.0) LACUNAS QUEBRADAS PELA VERSÃO ANTIGA DO "SALVAR NO MATERIAL".
+ *
+ * Antes da 16.73.0 o "::" de dentro da lacuna era trocado por " — " ao gravar (cmCampo, cartoes-material.js, conta o
+ * defeito): "{{c1::Lista de Serviços}}" virava "{{c1 — Lista de Serviços}}", que não é lacuna nenhuma — o leitor não
+ * reconhece o cartão. No backup de 14/10 havia 14 assim (13 em "Normas gerais e características dos tributos
+ * municipais" e 1 em "Código Tributário Municipal"), e por isso o Material contava 808 cartões e a Biblioteca 794.
+ * "{{cN — " nunca é escrita de propósito: volta a ser "{{cN::". Uma vez, no arranque, sem mexer na data do tópico. */
+const MAT_LACUNA_QUEBRADA = /\{\{c(\d+)\s+[—–]\s+/g;
+function matRepararLacunas(texto) {
+  let n = 0;
+  const linhas = String(texto || "").split("\n").map((l) => {
+    MAT_LACUNA_QUEBRADA.lastIndex = 0;
+    if (!MAT_LACUNA_QUEBRADA.test(l)) return l;
+    n++;
+    MAT_LACUNA_QUEBRADA.lastIndex = 0;
+    return l.replace(MAT_LACUNA_QUEBRADA, "{{c$1::");
+  });
+  return { texto: linhas.join("\n"), n };
+}
+function matRepararLacunasTudo() {
+  let linhas = 0;
+  const topicos = [];
+  Object.keys(matResumos).forEach((k) => {
+    const r = matResumos[k];
+    if (!r || !r.cartoes) return;
+    const x = matRepararLacunas(r.cartoes);
+    if (!x.n) return;
+    r.cartoes = x.texto;          /* direto no registro: consertar não é "atualizar" o tópico (a data fica) */
+    linhas += x.n;
+    topicos.push((r.topico || k) + " (" + x.n + ")");
+  });
+  if (linhas) {
+    matSalvar();
+    try { reg("MATERIAL", "lacunas quebradas consertadas", linhas + " cartão(ões) · " + topicos.join(", ")); } catch (e) {}
+    try { if (typeof toastMsg === "function" && typeof t === "function") toastMsg(t("mat_lacunas_consertadas", { n: linhas, t: topicos.join(", ") }), 6000); } catch (e) {}
+  }
+  return { linhas, topicos };
+}
+
 function matIniciar() {
   try { matRepararChaves(); } catch (e) {}
   matCarregar();
+  try { matRepararLacunasTudo(); } catch (e) {}
   if (!$("matTexto")) return;
   /* o botão único: grava e CONTINUA aqui */
   matBotao("btnMatSalvar", "salvar resumo", () => matSalvarEstado());

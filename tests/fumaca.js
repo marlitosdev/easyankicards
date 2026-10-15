@@ -736,6 +736,7 @@ function rodar() {
     lixLimites: (max, chars) => { lixMax = max; lixMaxChars = chars; },
     decLer, decRegistrar, decRegistrarLote, decMarcar, decPorRegra, decExportar, decLimpar, decRecarregar,
     decDefinirTudo, decCacheForcarTeste, decCacheAtual, decIdbSuportado,
+    matRepararLacunas, matRepararLacunasTudo,
     matRecentesLer, matLembrarRecente, matReabrirRecente, matPintarRecentes, matEstadoEstudo, matEstadoTexto, matTopicosSemMaterial, MAT_RECENTES_CHAVE,
     bkAguardarGravacoes,
     jurCacheForcarTeste, jurCacheAtual, jurIdbSuportado, bkLerJuris, plBytesJuris,
