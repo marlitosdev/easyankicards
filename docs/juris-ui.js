@@ -296,7 +296,13 @@ function jurPintarTagsForm() {
 
 function jurBotaoSalvar() {
   const b = $("btnJurSalvar");
-  if (b && jurLoteAtivo()) { b.textContent = t("jur_lote_salvar", { n: jurLoteMarcados().length }); return; }
+  if (b && jurLoteAtivo()) {
+    /* JM5: com destinos diferentes, "neste tópico" seria falso — o botão diz quantos vão para outros */
+    const m = jurLoteMarcados();
+    const fora = jurTopicoAtual ? m.filter((f) => f.destino && jurChaveComparavel(f.destino.chave) !== jurChaveComparavel(jurTopicoAtual.chave)).length : 0;
+    b.textContent = fora ? t("jur_lote_salvar_varios", { n: m.length, a: m.length - fora, o: fora }) : t("jur_lote_salvar", { n: m.length });
+    return;
+  }
   if (b) b.textContent = t(jurEditando ? "jur_salvar_edicao" : "jur_salvar");
 }
 
@@ -2234,6 +2240,7 @@ function jurDaSelecao() {
  * texto com vários julgados, resposta lida) — o mesmo desenho do "Novo edital": o erro é dito ANTES de custar um clique.
  * ===================================================================== */
 let jurLoteFichas = null;     /* null = nenhum lote aberto */
+let jurLoteCandidatos = [];   /* JM5: os tópicos para onde cada julgado do lote pode ir */
 
 function jurSepararAtivo() {
   const c = $("chkJurSeparar");
@@ -2246,6 +2253,7 @@ function jurLoteMarcados() { return (jurLoteFichas || []).filter((f) => f.marcad
 
 function jurLoteLimpar() {
   jurLoteFichas = null;
+  jurLoteCandidatos = [];
   if ($("jurLote")) $("jurLote").hidden = true;
   if ($("jurLoteCards")) $("jurLoteCards").innerHTML = "";
   if ($("btnJurMeta")) $("btnJurMeta").hidden = false;
@@ -2313,6 +2321,15 @@ function jurLoteFicha(a, todos) {
 function jurLoteMostrar(achados) {
   const todos = typeof jurLista === "function" ? jurLista() : [];
   jurLoteFichas = achados.map((a) => jurLoteFicha(a, todos));
+  /* JM5: o destino de cada um. Os CITADOS num resumo ficam no tópico do resumo; os de um informativo vão para o tópico
+   * do edital que mais combina com o assunto deles (sugestão — a pessoa confere e troca na ficha) */
+  const atual = jurTopicoAtual ? { chave: jurTopicoAtual.chave, disciplina: jurTopicoAtual.disciplina, topico: jurTopicoAtual.nome } : null;
+  jurLoteCandidatos = atual && !jurLoteDeCitacoes ? jurCandidatosDestino(jurTopicoAtual) : (atual ? [atual] : []);
+  jurLoteFichas.forEach((f) => {
+    const s = atual && !jurLoteDeCitacoes ? jurSugerirTopico(f, jurLoteCandidatos, atual.chave) : null;
+    f.destino = s ? { chave: s.chave, disciplina: s.disciplina, topico: s.topico } : atual;
+    f.sugerido = !!s;
+  });
   /* o JSON sai da caixa (é transporte, não ementa); o texto que foi enviado volta, para quem quiser pedir de novo */
   if ($("jurColar")) $("jurColar").value = jurUltimoTextoPedido || "";
   jurPilulaLimpar();
@@ -2355,6 +2372,13 @@ function jurLotePintar() {
       tm.title = t("jur_mem_selo_aj", { c: f.certeza ? t("jur_cn_certeza_" + f.certeza) : "?" });
       cab.append(tm);
     }
+    if (f.sugerido) {
+      const tg = document.createElement("span");
+      tg.className = "jur-lote-tag sugerido";
+      tg.textContent = t("jur_lote_sugerido", { tp: f.destino.topico });
+      tg.title = t("jur_lote_sugerido_aj");
+      cab.append(tg);
+    }
     if (f.jaExiste) {
       const tg = document.createElement("span");
       tg.className = "jur-lote-tag ja";
@@ -2383,6 +2407,28 @@ function jurLotePintar() {
       id.append(lab);
     });
     card.append(id);
+    /* JM5: para onde vai — o tópico aberto, ou o que o app sugeriu pelo assunto; dá para trocar */
+    if (jurLoteCandidatos.length > 1 && f.destino) {
+      const lb = document.createElement("label");
+      lb.className = "jur-lote-destino";
+      const sp = document.createElement("span");
+      sp.textContent = t("jur_lote_destino") + " ";
+      const sl = document.createElement("select");
+      sl.id = "jurLoteDestino_" + idx;
+      jurLoteCandidatos.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c.chave;
+        o.textContent = c.disciplina + " › " + c.topico + (jurTopicoAtual && jurChaveComparavel(c.chave) === jurChaveComparavel(jurTopicoAtual.chave) ? " " + t("jur_lote_destino_aberto") : "");
+        sl.append(o);
+      });
+      sl.value = f.destino.chave;
+      sl.onchange = () => {
+        const c = jurLoteCandidatos.find((x) => x.chave === sl.value);
+        if (c) { f.destino = { chave: c.chave, disciplina: c.disciplina, topico: c.topico }; f.sugerido = false; jurLotePintar(); jurBotaoSalvar(); }
+      };
+      lb.append(sp, sl);
+      card.append(lb);
+    }
     const campo = (rot, k, linhas) => {
       const l = document.createElement("label"); l.className = "jur-lote-campo";
       const sp = document.createElement("span"); sp.textContent = t(rot);
@@ -2415,11 +2461,14 @@ async function jurSalvarLote() {
   /* UM só aviso, para o conjunto: ficha marcada sem tese e sem texto não tem o que revisar depois */
   const vazias = marcadas.filter((f) => !String(f.tese || "").trim() && !String(f.texto || "").trim());
   if (vazias.length && !(await uiConfirm(t("jur_lote_sem_tese", { n: vazias.length })))) return;
-  const concursoJ = typeof matConcursoDoTopico === "function"
-    ? matConcursoDoTopico(jurTopicoAtual.disciplina, jurTopicoAtual.nome,
-        (typeof concursoAtual === "function" ? concursoAtual().nome : "")) : "";
   const feitos = [];
+  const porTopico = {};
   marcadas.forEach((f) => {
+    /* JM5: cada um no SEU destino (o aberto, se não houver outro) */
+    const dest = f.destino || { chave: jurTopicoAtual.chave, disciplina: jurTopicoAtual.disciplina, topico: jurTopicoAtual.nome };
+    const noAberto = jurChaveComparavel(dest.chave) === jurChaveComparavel(jurTopicoAtual.chave);
+    const concursoJ = typeof matConcursoDoTopico === "function"
+      ? matConcursoDoTopico(dest.disciplina, dest.topico, (typeof concursoAtual === "function" ? concursoAtual().nome : "")) : "";
     const j = jurGravar({
       concurso: concursoJ, tribunal: f.tribunal, classe: f.classe, numero: f.numero, data: f.data, orgao: f.orgao,
       fonte: f.fonte, precedentes: f.precedentes, tese: String(f.tese || "").trim(), texto: String(f.texto || "").trim(),
@@ -2428,24 +2477,28 @@ async function jurSalvarLote() {
       tags: f.tags.slice(),
       /* o que a IA trouxe e a pessoa não corrigiu continua "a conferir" */
       aConferir: Object.keys(f.conferir).filter((k) => String(f[k] || "").trim() === String(f.conferir[k] || "").trim()),
-      topicos: [jurTopicoAtual.chave],
+      topicos: [dest.chave],
       /* (v18.36.0) veio dos julgados CITADOS, sem ementa: a tese é da memória da IA */
       ...(jurLoteDeCitacoes && !String(f.texto || "").trim() ? { deMemoria: true, certeza: f.certeza || "" } : {}),
     });
     if (!j) return;
-    jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
-    if (jurRamoAlvo) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
+    jurLigar(j.id, dest.chave, dest.disciplina, dest.topico);
+    if (jurRamoAlvo && noAberto) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
+    porTopico[dest.topico] = (porTopico[dest.topico] || 0) + 1;
     feitos.push(j);
   });
   if (!feitos.length) { await uiAlert(t("jur_nao_salvou")); return; }
   jurLoteDeCitacoes = false;
-  reg("JURIS", "lote de julgados guardado", feitos.length + " de " + jurLoteFichas.length + " · " + feitos.map(jurTitulo).join(" | ") + " · " + jurTopicoAtual.nome);
+  reg("JURIS", "lote de julgados guardado", feitos.length + " de " + jurLoteFichas.length + " · " + feitos.map(jurTitulo).join(" | ") + " · " + Object.keys(porTopico).map((k) => k + " (" + porTopico[k] + ")").join(", "));
+  const outros = Object.keys(porTopico).filter((k) => k !== jurTopicoAtual.nome);
   jurLimparForm();
   jurModo = "ler";
   jurPintarModo();
   jurPintarLista();
   jurRepintarTelas();
   jurReagirBtn("btnJurSalvar", t("jur_lote_feito", { n: feitos.length }));
+  /* JM5: os que foram para OUTROS tópicos não aparecem nesta lista — fica dito onde estão */
+  if (outros.length) { try { toastMsg(t("jur_lote_outros", { q: outros.map((k) => k + " (" + porTopico[k] + ")").join(", ") }), 4000); } catch (e) {} }
 }
 
 function jurIniciarTela() {
@@ -3000,4 +3053,32 @@ if (typeof document !== "undefined" && $("jurBibAtual")) {
   $("btnJurBibAtualAplicar").onclick = () => jurBibAtualAplicar();
   $("btnJurBibAtualDesfazer").onclick = () => jurBibAtualDesfazer();
   $("btnJurBibAtualSair").onclick = () => jurBibAtualSair();
+}
+
+/* JM5 — os destinos possíveis de um julgado do lote: os tópicos do(s) edital(is) que têm o tópico aberto (sem edital,
+ * os tópicos da estante). O aberto vem primeiro. Cada um: {chave, disciplina, topico}. */
+function jurCandidatosDestino(atual) {
+  const vistos = new Set(), out = [];
+  const porDest = (disciplina, topico) => {
+    if (!disciplina || !topico) return;
+    const chave = typeof matChave === "function" ? matChave(disciplina, topico) : (disciplina + "›" + topico).toLowerCase();
+    const k = jurChaveComparavel(chave);
+    if (vistos.has(k)) return;
+    vistos.add(k);
+    out.push({ chave, disciplina, topico });
+  };
+  if (atual) porDest(atual.disciplina, atual.nome);
+  const kAtual = atual ? jurChaveComparavel(atual.chave) : "";
+  let achouEdital = false;
+  (typeof editais !== "undefined" && Array.isArray(editais) ? editais : []).forEach((e) => {
+    let r = null;
+    try { r = lerEdital(e.texto || ""); } catch (x) { return; }
+    const ds = (r && r.disciplinas) || [];
+    const tem = ds.some((d) => (d.topicos || []).some((tp) => jurChaveComparavel(matChave(d.nome, tp.nome)) === kAtual));
+    if (!tem) return;
+    achouEdital = true;
+    ds.forEach((d) => (d.topicos || []).forEach((tp) => porDest(d.nome, tp.nome)));
+  });
+  if (!achouEdital && typeof matListaCheia === "function") matListaCheia().forEach((x) => porDest(x.disciplina, x.topico));
+  return out;
 }
