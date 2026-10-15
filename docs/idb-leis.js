@@ -27,7 +27,8 @@ const LEIS_IDB_LOJA = "leis";
 
 let _leisIdbDb = null;      /* IDBDatabase, uma vez aberto */
 let _leisCache = null;      /* {id: registro, ...} depois de migrar; null = ainda lendo/escrevendo o localStorage */
-let _leisMigrando = null;   /* a promessa da migração em curso, para não disparar duas */
+let _leisMigrando = null;
+let _leisGravando = null;  /* a última gravação em segundo plano (backup-ui espera por ela antes de recarregar) */   /* a promessa da migração em curso, para não disparar duas */
 
 function leisIdbSuportado() {
   try { return typeof indexedDB !== "undefined" && indexedDB !== null; }

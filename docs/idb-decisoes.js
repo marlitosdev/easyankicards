@@ -23,6 +23,7 @@ const DEC_IDB_LOJA = "decisoes";
 let _decIdbDb = null;
 let _decCache = null;      /* array, depois de migrar; null = ainda lendo/escrevendo o localStorage */
 let _decMigrando = null;
+let _decGravando = null;   /* a última gravação em segundo plano (backup-ui espera por ela antes de recarregar) */
 
 function decIdbSuportado() {
   try { return typeof indexedDB !== "undefined" && indexedDB !== null; }

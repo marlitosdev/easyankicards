@@ -53,6 +53,7 @@ let jurOutrosAberto = false;
 let jurRamoAlvo = null;
 function jurRamoVerTodos() { jurRamoAlvo = null; jurPintarLista(); }
 function jurAbrir(disciplina, topico, modo, opc) {
+  try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("juris", disciplina, topico); } catch (e) {}
   const chave = (typeof matChave === "function")
     ? matChave(disciplina, topico) : (disciplina + "›" + topico);
   jurTopicoAtual = { disciplina, nome: topico, chave };

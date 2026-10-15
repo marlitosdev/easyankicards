@@ -278,6 +278,9 @@ async function bkConfirmarRestauro() {
     reg("BACKUP", "restaurado", n + " chaves, de " + (gerado || "?"));
     bkPendente = null;
     $("dlgBkConf").close();
+    /* leis, decisões e julgados vão para o IndexedDB em segundo plano: recarregar antes de terminar perderia o que veio do
+     * arquivo — espera (é rápido) */
+    try { await bkAguardarGravacoes(); } catch (x) {}
     await uiAlert(t("bk_restaurado"));
     location.reload();     /* recarregar é o jeito honesto: tudo relê do zero */
   } catch (e) {

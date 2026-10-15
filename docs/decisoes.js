@@ -114,7 +114,7 @@ function decGravar() {
   if (_decCache) {
     _decCache = decLista;
     try { localStorage.setItem(DEC_RESUMO_CHAVE, JSON.stringify(decResumo)); } catch (e) {}
-    decIdbGravarTudo(_decCache).catch(() => {
+    _decGravando = decIdbGravarTudo(_decCache).catch(() => {
       try { uiAlert(t("dec_sem_espaco")); } catch (e2) {}
     });
     return true;

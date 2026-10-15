@@ -396,6 +396,7 @@ function leiAvisoNomePintar() {
 }
 
 function leiAbrir(disciplina, topico, id, opc) {
+  try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("lei", disciplina, topico); } catch (e) {}
   /* abrir outra lei descarta o desenho em andamento da anterior */
   leiPinturaCancelar();
   /* SEM TÓPICO (aberta pela Biblioteca), a chave é vazia — e tudo o que

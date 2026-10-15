@@ -934,6 +934,7 @@ let matColuna = "media";
 
 function matAbrirEditor(item, comoLer, opc) {
   const o = opc || {};
+  try { if (item && item.disciplina && item.nome) matLembrarRecente("resumo", item.disciplina, item.nome); } catch (e) {}
   /* JÁ ABERTO NESTE MESMO TÓPICO: não recarrega.
    * Recarregar do registro descartaria, em silêncio, as marcas que ainda
    * não foram salvas — e era o que "abrir onde está" fazia quando o resumo
@@ -3375,6 +3376,7 @@ function matRender() {
 
   matPintarSugestoes();
   matPintarAvisoLixo(box);
+  try { matPintarRecentes(); } catch (e) {}
   const arv = matAgrupado(matFiltro);
   let achou = 0;
   arv.forEach((discs, cc) => {
@@ -3423,7 +3425,10 @@ function matRender() {
           const sub = document.createElement("div");
           sub.className = "mat-sub";
           const nCart = matContarCartoes(x.chave);
-          sub.textContent = t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() });
+          /* (JM7) o estado do estudo vem antes da data do material: é o que se procura ao decidir o que estudar */
+          const estTxt = matEstadoTexto(matEstadoEstudo(x));
+          sub.textContent = (estTxt ? estTxt + " · " : "") + t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() });
+          if (estTxt) sub.className = "mat-sub mat-sub-est";
           esq.append(nm, sub);
           /* o lixo no campo de cartões é avisado UMA vez, na faixa do topo (matPintarAvisoLixo) — repetido em cada linha
            * ele virava parede; aqui só um sinal discreto de onde está */
@@ -3506,6 +3511,7 @@ function matRender() {
     p.textContent = t("mat_sem_resultado", { f: matFiltro });
     box.append(p);
   }
+  try { matPintarSemMaterial(box); } catch (e) {}
 }
 
 function matIniciar() {
@@ -6182,4 +6188,183 @@ function matDuvidasAbrir() {
   });
   abrirModal("dlgDuvidas");
   matReg("duvida", "lista de dúvidas aberta", lista.length + " dúvidas");
+}
+
+/* =====================================================================
+ * JM7 — O MATERIAL DE ESTUDO MAIS PRÁTICO (v18.45.0)
+ *
+ * (1) CONTINUAR DE ONDE PAREI: os últimos materiais abertos (resumo, cartões, lei, julgados, questões), de qualquer
+ *     lugar do app, a um toque — guardados só neste aparelho (é conveniência, não dado de estudo).
+ * (2) O QUE AINDA FALTA: os tópicos do edital sem material nenhum ficavam invisíveis (a estante só lista quem já tem
+ *     algo). Um grupo recolhível no fim da lista; tocar abre a ficha, que já sabe criar o que falta.
+ * (3) O ESTADO DO ESTUDO na linha: "✓ estudado em 03/10" / "↻ revisado em 12/10" / "em andamento (2 de 9 ramos)",
+ *     lido do progresso do edital — a estante dizia só quando o material foi mexido.
+ * ===================================================================== */
+const MAT_RECENTES_CHAVE = "eac_mat_recentes";
+const MAT_RECENTES_MAX = 6;
+
+function matRecentesLer() {
+  try { const v = JSON.parse(localStorage.getItem(MAT_RECENTES_CHAVE) || "[]"); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+
+/* um registro por tipo+tópico: abrir de novo sobe para o topo (sem repetir) */
+function matLembrarRecente(tipo, disciplina, topico) {
+  if (!tipo || !disciplina || !topico) return;
+  const k = matChaveNormal(matChave(disciplina, topico));
+  const lista = matRecentesLer().filter((r) => !(r.tipo === tipo && matChaveNormal(matChave(r.disciplina, r.topico)) === k));
+  lista.unshift({ tipo, disciplina, topico, q: new Date().toISOString() });
+  try { localStorage.setItem(MAT_RECENTES_CHAVE, JSON.stringify(lista.slice(0, MAT_RECENTES_MAX))); } catch (e) {}
+}
+
+function matReabrirRecente(r) {
+  if (!r) return;
+  if (r.tipo === "resumo") matAbrirEditor({ disciplina: r.disciplina, nome: r.topico }, "ler");
+  else if (r.tipo === "cartoes" && typeof estcEstudarTopico === "function") estcEstudarTopico(r.disciplina, r.topico);
+  else if (r.tipo === "lei" && typeof leiAbrir === "function") leiAbrir(r.disciplina, r.topico);
+  else if (r.tipo === "juris" && typeof jurAbrir === "function") jurAbrir(r.disciplina, r.topico, "ler");
+  else if (r.tipo === "questoes" && typeof qsUiResponderDireto === "function") qsUiResponderDireto(r.disciplina, r.topico);
+}
+
+function matPintarRecentes() {
+  const cx = $("matRecentes");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const lista = matRecentesLer();
+  cx.hidden = !lista.length;
+  if (!lista.length) return;
+  const rot = document.createElement("span");
+  rot.className = "mat-rec-rot";
+  rot.textContent = t("mat_rec_rot");
+  cx.append(rot);
+  lista.forEach((r, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mat-slot mat-rec slot-" + r.tipo;
+    b.id = "btnMatRecente_" + i;
+    b.textContent = (MAT_ICONE[r.tipo] || "•") + " " + r.topico;
+    b.title = t("mat_rec_tip", { tp: t("mat_tipo_" + r.tipo), d: r.disciplina, t: r.topico, q: r.q ? new Date(r.q).toLocaleString() : "" });
+    b.onclick = () => matReabrirRecente(r);
+    cx.append(b);
+  });
+}
+
+/* (3) o estado do estudo do tópico, nos editais que o têm: a marca mais recente do tópico; sem ela, quantos ramos */
+function matEstadoEstudo(x) {
+  if (!x || typeof editais === "undefined" || !Array.isArray(editais)) return null;
+  const alvo = matChaveNormal(matChave(x.disciplina, x.topico));
+  let melhor = null, ramosFeitos = 0, melhorRamo = null;
+  editais.forEach((e) => {
+    const prog = e.progresso || {};
+    Object.keys(prog).forEach((k) => {
+      const v = prog[k];
+      const m = v && typeof v === "object" ? v : (v === true ? { e: "feito" } : (typeof v === "string" ? { e: v } : null));
+      if (!m || (m.e !== "feito" && m.e !== "revisado")) return;
+      const partes = String(k).split("›#");
+      if (matChaveNormal(partes[0]) !== alvo) return;
+      if (partes.length > 1) {
+        ramosFeitos++;
+        if (!melhorRamo || String(m.d || "") > String(melhorRamo.d || "")) melhorRamo = m;
+        return;
+      }
+      if (!melhor || String(m.d || "") > String(melhor.d || "")) melhor = m;
+    });
+  });
+  /* com marca do tópico: vale a mais recente entre ela e a dos ramos (revisar todos os ramos em 03/10 é mais novo que
+   * "estudado em 07/09" no tópico) */
+  if (melhor) {
+    if (melhorRamo && String(melhorRamo.d || "") > String(melhor.d || "")) return { e: melhorRamo.e, d: melhorRamo.d || "" };
+    return { e: melhor.e, d: melhor.d || "" };
+  }
+  if (ramosFeitos) return { e: "andamento", n: ramosFeitos };
+  return null;
+}
+function matEstadoTexto(est) {
+  if (!est) return "";
+  const dia = (d) => d ? String(d).split("-").reverse().slice(0, 2).join("/") : "";
+  if (est.e === "revisado") return t("mat_est_revisado", { d: dia(est.d) });
+  if (est.e === "feito") return t("mat_est_feito", { d: dia(est.d) });
+  if (est.e === "andamento") return t("mat_est_andamento", { n: est.n });
+  return "";
+}
+
+/* (2) os tópicos dos editais (do edital filtrado, se houver) que não estão na estante */
+function matTopicosSemMaterial() {
+  if (typeof editais === "undefined" || !Array.isArray(editais) || typeof lerEdital !== "function") return [];
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const fe = norm(matFEdital), fd = norm(matFDisc);
+  const tem = new Set(matListaCheia().map((x) => matChaveNormal(x.chave)));
+  const vistos = new Set(), out = [];
+  editais.forEach((e) => {
+    let r = null;
+    try { r = lerEdital(e.texto || ""); } catch (x) { return; }
+    const cc = String(((r && r.cfg) || {}).concurso || e.nome || "").trim();
+    if (fe && norm(cc).indexOf(fe) < 0) return;
+    ((r && r.disciplinas) || []).forEach((d) => {
+      if (fd && norm(d.nome).indexOf(fd) < 0) return;
+      if (d.inativa) return;
+      (d.topicos || []).forEach((tp) => {
+        const chave = matChave(d.nome, tp.nome);
+        const k = matChaveNormal(chave);
+        if (tem.has(k) || vistos.has(k)) return;
+        vistos.add(k);
+        out.push({ chave, disciplina: d.nome, topico: tp.nome, concurso: cc, texto: "", cartoes: "", semMaterial: true });
+      });
+    });
+  });
+  return out;
+}
+
+let matVerSemMaterial = false;
+
+function matPintarSemMaterial(box) {
+  /* só na visão "Tudo" e sem busca: numa aba de tipo, ou procurando, "o que falta" não é o que se está olhando */
+  if (matFTipos.length || String(matFiltro || "").trim()) return;
+  const lista = matTopicosSemMaterial();
+  if (!lista.length) return;
+  const cx = document.createElement("div");
+  cx.className = "mat-sem-cx";
+  const bt = document.createElement("button");
+  bt.type = "button";
+  bt.className = "mat-disc-cab mat-sem-cab";
+  bt.id = "btnMatSemMaterial";
+  bt.textContent = (matVerSemMaterial ? "▾ " : "▸ ") + t("mat_sem_mat_tit", { n: lista.length });
+  bt.title = t("mat_sem_mat_tip");
+  bt.onclick = () => { matVerSemMaterial = !matVerSemMaterial; matRender(); };
+  cx.append(bt);
+  if (matVerSemMaterial) {
+    let discAtual = null;
+    lista.forEach((x) => {
+      if (x.disciplina !== discAtual) {
+        discAtual = x.disciplina;
+        const h = document.createElement("div");
+        h.className = "mat-sub mat-sem-disc";
+        h.textContent = x.disciplina;
+        cx.append(h);
+      }
+      const li = document.createElement("div");
+      li.className = "mat-item mat-sem-item";
+      const nm = document.createElement("div");
+      nm.className = "mat-nome mat-nome-link";
+      nm.textContent = x.topico;
+      nm.setAttribute("role", "button");
+      nm.setAttribute("tabindex", "0");
+      nm.title = t("mat_sem_mat_abrir");
+      nm.onclick = () => matAbrirFicha(x);
+      const esq = document.createElement("div");
+      esq.className = "mat-item-txt";
+      esq.append(nm);
+      const est = matEstadoTexto(matEstadoEstudo(x));
+      if (est) { const s = document.createElement("div"); s.className = "mat-sub"; s.textContent = est; esq.append(s); }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mat-slot mat-sem-criar";
+      b.textContent = t("mat_sem_mat_criar");
+      b.title = t("mat_sem_mat_abrir");
+      b.onclick = () => matAbrirFicha(x);
+      li.append(esq, b);
+      cx.append(li);
+    });
+  }
+  box.append(cx);
 }

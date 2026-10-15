@@ -3330,6 +3330,7 @@ function qsUiSelecaoViva() {
  * (é zerado depois de usado), para um "responder do tópico" seguinte não herdar o ramo. */
 let qsUiRamoAlvo = null;
 function qsUiResponderDireto(disciplina, topico, ramo) {
+  try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("questoes", disciplina, topico); } catch (e) {}
   if (typeof mcApontarTopico !== "function") return;
   mcApontarTopico(disciplina, topico);
   qsUiRamoAlvo = ramo && ramo.id ? { id: ramo.id, nome: ramo.nome || "" } : null;
