@@ -2216,6 +2216,22 @@ function qsUiLeiEscolher(botao, q, cit) {
     && leiTxtChave(cit.rotulo).replace(/[^a-z0-9-]/g, "").length >= 2
     && leiTxtChave(cit.rotulo).indexOf(" ") < 0);
   let lembrar = null;
+  /* (v18.50.0) CITAÇÃO SEM LEI ("art. 148", sem dizer de qual): escolher aqui valia SÓ DESTA VEZ — a prévia abria na
+   * lei escolhida, mas o link continuava "sem lei" no próximo desenho, e a pessoa achava que tinha ligado (o relato:
+   * "mesmo depois de carregar a nova versão, o vínculo ainda não efetiva"). Agora, marcado (padrão), a escolha vira o
+   * vínculo guardado do trecho neste tópico — com o aviso, o 🔗 e o destaque de qualquer vínculo. */
+  let lembrarVinc = null;
+  if (cit && !cit.rotulo && cit.texto && cit.num && typeof citVinculoSalvar === "function") {
+    const lv = document.createElement("label");
+    lv.className = "qs-lei-lembrar qs-lei-lembrar-vinc";
+    lembrarVinc = document.createElement("input");
+    lembrarVinc.type = "checkbox";
+    lembrarVinc.checked = true;
+    lembrarVinc.id = "qsLeiLembrarVinc";
+    lv.append(lembrarVinc, document.createTextNode(" " + t("qs_lei_lembrar_vinc", { tr: qsVincCurto(cit.texto) })));
+    lv.title = t("qs_lei_lembrar_vinc_aj");
+    menu.append(lv);
+  }
   if (podeLembrar) {
     const lb = document.createElement("label");
     lb.className = "qs-lei-lembrar";
@@ -2271,10 +2287,24 @@ function qsUiLeiEscolher(botao, q, cit) {
       }
       leiVoltaPara = qsUiVoltaDe(q);
       const num = cit ? cit.num : "";
+      /* (v18.50.0) lembrar a escolha: o vínculo do trecho, neste tópico */
+      let citP = cit;
+      if (lembrarVinc && lembrarVinc.checked && cit) {
+        const sub = { incisos: (cit.incisos || []).slice(), paragrafos: (cit.paragrafos || []).slice(), alineas: (cit.alineas || []).slice() };
+        const numCru = typeof qsVincRotuloDestino === "function" ? qsVincRotuloDestino(cit.numCru, sub) : cit.numCru;
+        const r = citVinculoSalvar({ trecho: cit.texto, leiId: l.id, artigos: [{ num: cit.num, numCru, base: cit.numCru, sub }], chave: ch });
+        if (r) {
+          try { reg("QUESTOES", "vínculo criado pelo menu de escolha (permanente)", cit.texto + " → " + l.nome + " · art. " + numCru + (ch ? " · só no tópico " + (q.topico || "") : "")); } catch (e) {}
+          try { qsUiVoltaDe(q)(); } catch (e) {}
+          try { toastMsg(t("qs_vinc_feito", { tr: qsVincCurto(cit.texto), l: l.apelido || l.nome, a: numCru, alc: t(ch ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") }), 4500); } catch (e) {}
+          citDestacarRecem(cit.texto);
+          citP = Object.assign({}, cit, { leiId: l.id, permanente: true, vinculoK: r.k, soTopico: !!ch });
+        }
+      }
       /* escolhida a lei para uma CITAÇÃO, sobe a prévia do artigo (v18.32.0); o ⚖ geral abre a lei */
       if (num && typeof leiCitacaoPreviewAbrir === "function") {
         leiVoltaPara = null;
-        leiCitacaoPreviewAbrir(cit, "", { lei: l, ctx: { disciplina: q.disciplina, topico: q.topico, aoVoltar: qsUiVoltaDe(q) } });
+        leiCitacaoPreviewAbrir(citP, "", { lei: l, ctx: { disciplina: q.disciplina, topico: q.topico, aoVoltar: qsUiVoltaDe(q) } });
         reg("QUESTOES", "lei escolhida na questão (prévia)", l.nome + " · art. " + num);
         return;
       }

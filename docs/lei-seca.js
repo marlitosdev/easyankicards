@@ -3242,7 +3242,8 @@ function leiInserirArtigo(texto, novo) {
  * junto. Guardamos o inciso, mas a contagem é por ARTIGO — a banca
  * troca o inciso e mantém o artigo o tempo todo. */
 const LEI_RE_CITACAO =
-  /\bart(?:\.|igos?|s\.)?\s*(\d{1,4}(?:\s*[ºo°ª])?(?:\s*[-–]\s*[A-Z])?)/gi;
+  /* (v18.50.0) o ordinal "o" não pode ser começo de palavra: "art. 10 ou no art. 11" virava "art. 10o" + "u" */
+  /\bart(?:\.|igos?|s\.)?\s*(\d{1,4}(?:\s*[ºo°ª](?![a-zà-ü]))?(?:\s*[-–]\s*[A-Z])?)/gi;
 
 function leiCitacoes(texto) {
   const achados = [];
@@ -3489,6 +3490,18 @@ function leiCitacoesNoTexto(texto) {
     /* retomar DEPOIS do trecho inteiro: senão a lei que acabou de ser
      * consumida seria lida de novo como início de outra citação */
     re.lastIndex = fim > m.index ? fim : m.index + 1;
+  }
+  /* (v18.50.0) "art. 148 E art. 149 da Constituição": cada "art." abre uma citação nova, e só a ÚLTIMA alcançava a lei —
+   * a primeira ficava "sem lei" (cinza) e caía no menu de escolha. Duas citações separadas só por "e", "ou", vírgula ou
+   * ponto e vírgula são a mesma frase: a lei nomeada na de trás vale para a da frente (de trás para frente, para valer
+   * numa fileira inteira: "art. 3º, art. 4º e art. 5º do CTN"). */
+  for (let i = out.length - 2; i >= 0; i--) {
+    const a = out[i], b = out[i + 1];
+    if (a.rotulo || !b.rotulo) continue;
+    if (/^\s*(?:[,;]\s*)?(?:(?:e|ou)\s+)?(?:(?:n?[oa]s?)\s+)?$/i.test(s.slice(a.fim, b.ini))) {
+      a.rotulo = b.rotulo;
+      a.rotuloCompartilhado = true;
+    }
   }
   return out;
 }

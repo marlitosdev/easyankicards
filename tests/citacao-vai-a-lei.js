@@ -592,7 +592,8 @@ async function testes() {
     /* citação SEM sigla nomeada: não há o que lembrar, não há marcador */
     api.qsFerFechar();
     const menu3 = api.qsUiLeiEscolher(bt, q, api.leiCitacoesNoTexto("o art. 12 e claro")[0]);
-    ok(menu3.querySelectorAll("input").length === 0,
+    /* (v18.50.0) a caixa "lembrar: este trecho é desta lei" (qsLeiLembrarVinc) é outra coisa e aparece aqui */
+    ok(Array.from(menu3.querySelectorAll("input")).filter((i) => i.id !== "qsLeiLembrarVinc").length === 0,
        "L56a o marcador apareceu numa citacao que nao nomeou sigla nenhuma");
   }
   {
