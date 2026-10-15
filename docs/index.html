@@ -3690,6 +3690,17 @@ body.split-lj{overflow:hidden}
 /* AS AÇÕES NO CANTO: "margin-left:auto" empurra o grupo para a direita
    da mesma linha do cabeçalho, em vez de gastar uma linha própria. */
 .jur-acoes{display:flex;gap:2px;margin-left:auto}
+/* (JM2) a situação (abre o painel do porquê) e o ⋯ com as ações escritas */
+.jur-sel.conferir[role="button"]{cursor:pointer}
+.jur-situacao,.jur-mais-painel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;padding:7px 9px;border:1px dashed var(--borda);border-radius:9px}
+.jur-situacao[hidden],.jur-mais-painel[hidden]{display:none}
+.jur-situacao .nota{flex:1 1 100%;margin:0;font-size:12px}
+.jur-mais-item{font-size:12px}
+.jur-mais-perigo{color:var(--vermelho,#dc2626)}
+.jur-mais-painel .jur-ramo-sel{margin-top:0}
+.jur-comecar{border:1px solid var(--borda);border-radius:9px;padding:8px 12px;margin:4px 0 8px;font-size:12.5px}
+.jur-comecar ul{margin:4px 0 0;padding-left:18px}
+.jur-comecar[hidden]{display:none}
 .jur-ic{background:none;border:1px solid transparent;border-radius:7px;
   cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;
   color:var(--texto);opacity:.72}
@@ -6483,6 +6494,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        papel conforme o conteúdo) e quem chegava não sabia o que vinha
        depois de colar. Agora o passo em que se está fica aceso, e a linha
        abaixo diz o que fazer nele. -->
+  <!-- (JM2) tópico sem julgado: os três jeitos de guardar o primeiro, ditos antes do formulário -->
+  <div class="jur-comecar nota" id="jurComecar" hidden>
+    <b data-i18n="jur_comecar_tit"></b>
+    <ul>
+      <li data-i18n="jur_comecar_1"></li>
+      <li data-i18n="jur_comecar_2"></li>
+      <li data-i18n="jur_comecar_3"></li>
+    </ul>
+  </div>
   <div class="jur-passos" id="jurPassos">
     <span class="jur-passo" id="jurPasso1" data-i18n="jur_passo_1"></span>
     <span class="jur-passo" id="jurPasso2" data-i18n="jur_passo_2"></span>

@@ -1119,8 +1119,9 @@ async function testes() {
     ok(selos.some((x) => /a conferir/.test(x.textContent || "")),
        "Q13 a lista nao marca o julgado com dado a conferir: "
        + selos.map((x) => x.textContent).join("|"));
-    const ic = api.$("jurLista").querySelectorAll(".jur-ic")
-      .filter((b) => /conferidos|confer/i.test(b.title || ""))[0];
+    /* (JM2, v18.40.0) o "conferi" mora no painel que o selo de situação abre */
+    const ic = api.$("jurLista").querySelectorAll("button")
+      .filter((b) => b.id === "btnJurConferi_" + j.id && /confer/i.test(b.title || ""))[0];
     ok(!!ic, "Q13a nao ha o botao de marcar como conferido");
     if (ic) {
       ic.onclick();

@@ -1329,6 +1329,8 @@ function jurPintarLista() {
   /* CRIANDO OU EDITANDO, A LISTA FICA RECOLHIDA (e os avisos de repetidos junto): é do que se escreve, não dos outros,
    * que a tela precisa. Os elementos continuam desenhados e só ficam escondidos — o botão os traz de volta. */
   const todosDoTopico = jurDoTopico(jurTopicoAtual.chave).length;
+  /* (JM2) quem chega pela primeira vez a um tópico sem julgado: os três jeitos de guardar o primeiro */
+  if ($("jurComecar")) $("jurComecar").hidden = !(jurModo !== "ler" && !todosDoTopico);
   const recolhida = jurModo !== "ler" && !jurOutrosAberto;
   const bOutros = $("btnJurOutros");
   if (bOutros) {
@@ -1397,17 +1399,36 @@ function jurPintarLista() {
       o.textContent = j.orgao;
       cab.append(o);
     }
-    /* O QUE A IA TROUXE E NINGUÉM CONFERIU. Sem o selo, um dado lembrado
-     * e um dado lido do tribunal têm a mesma cara — e o primeiro é o que
-     * se decora errado. */
-    /* (v18.36.0) A TESE VEIO DA MEMÓRIA DA IA (criada pela citação, sem ementa):
-     * o selo fica aqui também, e não só na prévia, até alguém conferir */
+    /* (v18.39.0→JM2, v18.40.0) UMA SITUAÇÃO POR JULGADO, E O RESTO NUM ⋯.
+     *
+     * Eram até oito controles mudos no cabeçalho de cada julgado — 🩹N, ✅, "⚠ N a conferir", "conferir ↗", 🃏, ✏️, 📋,
+     * 🗑️ — e mais uma linha inteira de "Ramo deste julgado" em todo cartão. Três falavam da mesma coisa (conferir), e o
+     * 🩹 com número aparecia em quase todo julgado só porque a ementa é opcional: parecia erro onde não havia.
+     * Agora: UM selo de situação (só quando há algo a fazer: tese de memória ou campos a conferir), que abre um painel
+     * com o porquê e as ações (conferi · site oficial · completar com a IA); à vista só o 🃏 (o que se faz com um julgado
+     * bom) e o ⋯, que abre editar, completar/conferir com a IA, copiar, ramo e excluir — com nome escrito. */
+    const conferir = Array.isArray(j.aConferir) ? j.aConferir : [];
+    const falta = (typeof jurFaltando === "function") ? jurFaltando(j) : [];
+    const sit = document.createElement("div");
+    sit.className = "jur-situacao";
+    sit.hidden = true;
+    const abreSit = (el) => {
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); sit.hidden = !sit.hidden; };
+      el.onkeydown = (ev) => { if (ev && (ev.key === "Enter" || ev.key === " ")) { if (ev.preventDefault) ev.preventDefault(); sit.hidden = !sit.hidden; } };
+    };
+    /* (v18.36.0) A TESE VEIO DA MEMÓRIA DA IA (criada pela citação, sem ementa): o selo fica até alguém conferir */
     if (j.deMemoria) {
-      const m = sel(t("jur_mem_selo"), "conferir jur-mem");
+      const m = sel(t("jur_mem_selo") + " ▾", "conferir jur-mem");
       m.title = t("jur_mem_selo_aj", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
+      abreSit(m);
+      const p = document.createElement("p");
+      p.className = "nota";
+      p.textContent = t("jur_sit_mem", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
       const ok = document.createElement("button");
       ok.type = "button";
-      ok.className = "btn-min jur-mem-ok";
+      ok.className = "btn-min btn-min-ok jur-mem-ok";
       ok.id = "btnJurMemOk_" + j.id;
       ok.textContent = t("jur_cn_conferi");
       ok.title = t("jur_mem_ok_aj");
@@ -1418,12 +1439,30 @@ function jurPintarLista() {
         jurPintarLista();
         try { jurRepintarTelas(); } catch (e) {}
       };
-      cab.append(ok);
+      sit.append(p, ok);
     }
-    const conferir = Array.isArray(j.aConferir) ? j.aConferir : [];
+    /* O QUE A IA TROUXE E NINGUÉM CONFERIU: sem o selo, um dado lembrado e um dado lido do tribunal têm a mesma cara */
     if (conferir.length) {
-      const c = sel(t("jur_a_conferir_n", { n: conferir.length }), "conferir");
+      const c = sel(t("jur_a_conferir_n", { n: conferir.length }) + " ▾", "conferir");
       c.title = t("jur_a_conferir_aj", { q: conferir.map(jurNomeCampo).join(", ") });
+      abreSit(c);
+      const p = document.createElement("p");
+      p.className = "nota";
+      p.textContent = t("jur_sit_conferir", { q: conferir.map(jurNomeCampo).join(", ") });
+      const bOk = document.createElement("button");
+      bOk.type = "button";
+      bOk.className = "btn-min btn-min-ok jur-ic-conferi";
+      bOk.id = "btnJurConferi_" + j.id;
+      bOk.textContent = t("jur_sit_conferi_btn");
+      bOk.title = t("jur_conferi_aj");
+      bOk.onclick = (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        jurMarcarConferido(j.id);
+        reg("JURIS", "campos conferidos na fonte", jurTitulo(j) + " · " + conferir.join(", "));
+        jurPintarLista();
+        toast("jur_conferi_feito");
+      };
+      sit.append(p, bOk);
       const portal = typeof jurPortalOficial === "function" ? jurPortalOficial(j.tribunal) : null;
       if (portal) {
         const a = document.createElement("a");
@@ -1433,19 +1472,64 @@ function jurPintarLista() {
         a.rel = "noopener noreferrer";
         a.textContent = t("jur_oficial_lnk");
         a.title = t("jur_oficial_rot") + " " + portal.nome;
-        cab.append(a);
+        sit.append(a);
       }
     }
+    if (j.deMemoria || conferir.length) {
+      const bIA = document.createElement("button");
+      bIA.type = "button";
+      bIA.className = "btn-min";
+      bIA.textContent = t("jur_sit_ia_btn");
+      bIA.title = t("jur_completar_ok");
+      bIA.onclick = () => jurCompletarAbrir(j.id);
+      sit.append(bIA);
+    }
 
-    /* AS AÇÕES NO CANTO, EM ÍCONES.
-     *
-     * Três botões escritos por extenho no rodapé de cada cartão custam
-     * uma linha inteira por julgado — com cinco guardados, cinco linhas
-     * de botão contra cinco de tese. Em ícone ocupam o canto que já
-     * estava vazio. Cada um leva title e aria-label: ícone sozinho é
-     * ilegível para quem não adivinha o desenho, e mudo para o leitor
-     * de tela. */
-    /* Q3 — escolher o ramo deste julgado (quando o tópico tem ramos) */
+    const acoes = document.createElement("div");
+    acoes.className = "jur-acoes";
+    const bt = (icone, rot, cls, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "jur-ic" + (cls ? " " + cls : "");
+      b.textContent = icone;
+      b.title = rot;
+      b.setAttribute("aria-label", rot);
+      b.onclick = fn;
+      acoes.append(b);
+      return b;
+    };
+    bt("🃏", t("jur_card_dica"), "", () => jurGerarCartao(j.id));
+    /* O ⋯: as ações com NOME (um ícone mudo só se lê para quem já sabe o que ele faz) */
+    const mais = document.createElement("div");
+    mais.className = "jur-mais-painel";
+    mais.hidden = true;
+    const bMais = bt("⋯", t("jur_mais_aj"), "jur-ic-mais", (ev) => {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      mais.hidden = !mais.hidden;
+      bMais.setAttribute("aria-expanded", mais.hidden ? "false" : "true");
+    });
+    bMais.setAttribute("aria-expanded", "false");
+    const item = (rot, dica, cls, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min jur-mais-item" + (cls ? " " + cls : "");
+      b.textContent = rot;
+      b.title = dica;
+      b.onclick = fn;
+      mais.append(b);
+      return b;
+    };
+    item("✏️ " + t("jur_mais_editar"), t("jur_ed"), "", () => jurEditar(j.id));
+    /* completar com a IA: o que falta, escrito (era o 🩹 com número, que parecia erro) */
+    item("🩹 " + (falta.length ? t("jur_mais_completar_n", { q: falta.map(jurNomeCampo).join(", ") }) : t("jur_mais_conferir_ia")),
+      falta.length === 1 ? t("jur_completar_falta_um", { q: jurNomeCampo(falta[0]) })
+        : falta.length ? t("jur_completar_falta", { n: falta.length, q: falta.map(jurNomeCampo).join(", ") }) : t("jur_completar_ok"),
+      "", () => jurCompletarAbrir(j.id));
+    item("📋 " + t("jur_mais_copiar"), t("jur_cp"), "", async () => {
+      const ok = await edColarCopiarTexto(jurTexto([j]), "", null);
+      if (ok) toast("toast_copied");
+    });
+    /* Q3 — escolher o ramo deste julgado (quando o tópico tem ramos): dentro do ⋯, e não uma linha em todo julgado */
     const ramosT = typeof qsUiRamosDoTopico === "function" ? qsUiRamosDoTopico(jurTopicoAtual.chave, jurPintarLista._memo || (jurPintarLista._memo = {})) : [];
     if (ramosT.length) {
       const lb = document.createElement("label");
@@ -1463,61 +1547,11 @@ function jurPintarLista() {
         jurPintarLista();
       };
       lb.append(sp, sl);
-      li._ramoSel = lb;
+      mais.append(lb);
     }
-    const acoes = document.createElement("div");
-    acoes.className = "jur-acoes";
-    const bt = (icone, rot, cls, fn) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "jur-ic" + (cls ? " " + cls : "");
-      b.textContent = icone;
-      b.title = rot;
-      b.setAttribute("aria-label", rot);
-      b.onclick = fn;
-      acoes.append(b);
-      return b;
-    };
-    /* COMPLETAR E CONFERIR, com o número do que falta no próprio ícone.
-     *
-     * O ícone mudo dizia "há uma ação aqui"; o número diz QUAL é o
-     * estado — "faltam 6 campos" é a informação que faz alguém tocar.
-     * Sem ele, um julgado pela metade e um completo têm exatamente a
-     * mesma aparência, e o pela metade só é descoberto no dia em que se
-     * procura por ele e não se acha. */
-    const falta = (typeof jurFaltando === "function") ? jurFaltando(j) : [];
-    /* UM ÍCONE SÓ, e ele abre a tela onde os dois passos estão em ordem.
-     *
-     * Eram dois — 🩹 para copiar a pergunta e 📥 para colar a resposta —
-     * e nada na tela dizia que um vinha depois do outro. Dois ícones
-     * mudos lado a lado se leem como duas ações alternativas, e não como
-     * o começo e o fim do mesmo caminho. */
-    bt(falta.length ? "🩹" + falta.length : "🩹",
-      falta.length === 1
-        ? t("jur_completar_falta_um", { q: jurNomeCampo(falta[0]) })
-        : falta.length
-        ? t("jur_completar_falta", { n: falta.length,
-            q: falta.map(jurNomeCampo).join(", ") })
-        : t("jur_completar_ok"),
-      falta.length ? "jur-ic-falta" : "", () => jurCompletarAbrir(j.id));
-    if (conferir.length) {
-      bt("✅", t("jur_conferi_aj"), "", () => {
-        jurMarcarConferido(j.id);
-        reg("JURIS", "campos conferidos na fonte",
-            jurTitulo(j) + " · " + conferir.join(", "));
-        jurPintarLista();
-        toast("jur_conferi_feito");
-      });
-    }
-    bt("🃏", t("jur_card_dica"), "", () => jurGerarCartao(j.id));
-    bt("✏️", t("jur_ed"), "", () => jurEditar(j.id));
-    bt("📋", t("jur_cp"), "", async () => {
-      const ok = await edColarCopiarTexto(jurTexto([j]), "", null);
-      if (ok) toast("toast_copied");
-    });
-    bt("🗑️", t("jur_tr"), "jur-ic-perigo", () => jurTirar(j.id));
+    item("🗑️ " + t("jur_mais_excluir"), t("jur_tr"), "jur-mais-perigo", () => jurTirar(j.id));
     cab.append(acoes);
-    li.append(cab);
+    li.append(cab, sit, mais);
 
     /* A TESE COMO CITAÇÃO. É o que se revisa; a ementa é onde se
      * confere. Com a mesma tipografia, os dois viravam um bloco só de
@@ -1613,7 +1647,6 @@ function jurPintarLista() {
       };
       li.append(bVer, cheia);
     }
-    if (li._ramoSel) li.append(li._ramoSel);
 
     box.append(li);
   });
