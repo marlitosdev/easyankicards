@@ -2490,8 +2490,21 @@ let leiCitaPreviewOrigemArt = "";
 /* opc (vindo de FORA do leitor, ex.: o resumo): {lei, ctx: {disciplina, topico, aoVoltar}}.
  * A lei já vem resolvida por quem chamou (vínculo fixo, lei única do tópico…);
  * o ctx diz para qual tópico "abrir a lei inteira" vai e o que repintar na volta. */
+/* (v18.49.0) "este vínculo é seu": quando a citação vem de um vínculo guardado, a prévia diz desde quando e onde vale */
+function leiCitaVincInfoPintar(c) {
+  const el = $("leiCitaVincInfo");
+  if (!el) return;
+  if (!c || !c.permanente) { el.hidden = true; el.textContent = ""; return; }
+  let v = null;
+  try { v = citVinculosLer().find((x) => x.k === c.vinculoK) || null; } catch (e) { v = null; }
+  const d = v && v.criado ? new Date(v.criado).toLocaleDateString() : "";
+  el.textContent = t(d ? "lei_cita_vinc_info" : "lei_cita_vinc_info_sem_data", { d, alc: t(c.soTopico ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") });
+  el.hidden = false;
+}
+
 function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   if (!$("dlgLeiCitaPreview")) return;
+  leiCitaVincInfoPintar(c);
   leiCitaPreviewOrigemArt = origemNum || "";
   const o = opc || {};
   let lei = o.lei || (c.leiId ? leiDe(c.leiId) : null);   /* (v18.47.0) vínculo manual: a lei é a que a pessoa escolheu */
@@ -2669,6 +2682,8 @@ function leiCitaDesligar() {
   $("dlgLeiCitaPreview").close();
   try { leiReg("citacao", "link de lei desligado", al.sub.texto); } catch (e) {}
   try { if (typeof al.ctx.aoVoltar === "function") al.ctx.aoVoltar(); } catch (e) {}
+  /* (v18.49.0) a confirmação do que foi feito, como ao ligar */
+  try { if (r) toastMsg(t("lei_cita_desligado_feito", { tr: String(al.sub.texto || "").slice(0, 60) }), 3500); } catch (e) {}
   return !!r;
 }
 function leiCitaOutro() {

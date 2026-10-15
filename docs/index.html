@@ -1252,6 +1252,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-ctx-n{display:inline-block;min-width:38px;opacity:.55;font-weight:400}
 .lei-unidade-alvo{background:rgba(250,204,21,.28);border-radius:4px;outline:2px solid rgba(250,204,21,.6)}
 .qs-lei-link-perm{border-bottom:2px solid var(--ok)}
+/* (v18.49.0) o vínculo fixo (feito por você) tem um 🔗 pequeno ao lado — visível sem tocar */
+.qs-lei-link-perm::after,.lei-cita-link.lei-cita-perm::after{content:"🔗";font-size:.6em;vertical-align:super;margin-left:2px;display:inline-block;text-decoration:none}
+.lei-cita-link.lei-cita-perm{border-bottom:2px solid var(--ok)}
+.lei-cita-vinc-info{color:var(--ok);font-weight:600;margin:2px 0 6px}
+.lei-cita-vinc-info[hidden]{display:none}
+.cit-recem{outline:2px solid var(--ok);outline-offset:2px;border-radius:4px;animation:citRecem 1s ease-in-out 3}
+@keyframes citRecem{0%,100%{background:transparent}50%{background:rgba(52,211,153,.28)}}
 .qs-vinc-btn{margin:6px 0}
 .mat-vinc-btn{margin-left:4px;white-space:nowrap}
 /* A BOLHA DA SELEÇÃO (v18.28.0): flutua junto do trecho; no celular encosta no rodapé */
@@ -8080,6 +8087,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgLeiCitaPreview" class="ui-modal">
   <h3 id="leiCitaPreviewTitulo"></h3>
   <p class="nota" id="leiCitaPreviewArtigo"></p>
+  <!-- (v18.49.0) o vínculo é seu: desde quando e onde vale -->
+  <p class="nota lei-cita-vinc-info" id="leiCitaVincInfo" hidden></p>
   <!-- A NOTA DO ARTIGO (v18.31.0): a mesma do leitor da lei; escrita aqui, aparece ao lado de cada citação dele -->
   <div class="lei-cita-nota" id="leiCitaNotaBox" hidden>
     <div class="lei-cita-nota-ver" id="leiCitaNotaVer">
