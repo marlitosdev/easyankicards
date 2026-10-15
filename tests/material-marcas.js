@@ -881,9 +881,9 @@ async function testes() {
     const ativa = () => abas().filter((b) => /\bativa\b/.test(b.className)).map((b) => b.textContent);
     const visiveis = () => ["matFerrCartoes", "matFerrLei", "matFerrJuris", "matFerrResumo"].filter((id) => api.$(id).hidden === false);
     const itens = () => { let n = []; api.matAgrupado("").forEach((ds) => ds.forEach((xs) => xs.forEach((x) => n.push(x.topico)))); return n; };
-    ok(abas().length === 5 && abas()[0].textContent === "Tudo · 2" && abas()[2].textContent === "🃏 Cartões · 1" && abas()[3].textContent === "§ Lei seca · 0" && abas()[4].textContent === "⚖ Julgados · 0" && abas()[1].textContent === "📄 Resumos · 2", "M2a cinco abas, com ícone e número de tópicos: " + abas().map((b) => b.textContent).join(" | "));
+    ok(abas().length === 6 && abas()[0].textContent === "Tudo · 2" && abas()[2].textContent === "🃏 Cartões · 1" && abas()[3].textContent === "§ Lei seca · 0" && abas()[4].textContent === "⚖ Julgados · 0" && abas()[1].textContent === "📄 Resumos · 2" && abas()[5].textContent === "❓ Questões · 0", "M2a seis abas (v18.39.0: + Questões), com ícone e número de ITENS: " + abas().map((b) => b.textContent).join(" | "));
     ok(ativa().join() === "Tudo · 2" && visiveis().length === 0 && abas()[0].getAttribute("aria-selected") === "true", "M2b em 'Tudo' nenhuma faixa de ferramentas aparece");
-    ok(abas()[2].title === "1 tópico(s) com cartões", "M2c o title diz que o número é de TÓPICOS: " + abas()[2].title);
+    ok(abas()[2].title === "1 cartão(ões) em 1 tópico(s)", "M2c (v18.39.0) o title diz quantos itens e em quantos tópicos: " + abas()[2].title);
     abas()[2].onclick();
     ok(ativa().join() === "🃏 Cartões · 1" && visiveis().join() === "matFerrCartoes" && itens().join() === "Anterioridade", "M2d aba Cartões: só ela ativa, só a faixa de cartões e só os tópicos com cartões: " + visiveis() + " | " + itens());
     abas()[2].onclick();

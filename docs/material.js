@@ -2721,7 +2721,7 @@ function matVirarCartoes() {
  * não contava como material estudado, não aparecia no filtro, e não era
  * achável pela busca — ou seja, estava guardado e fora do alcance de
  * quem o guardou. */
-const MAT_TIPOS = ["resumo", "cartoes", "lei", "juris"];
+const MAT_TIPOS = ["resumo", "cartoes", "lei", "juris", "questoes"];
 
 function matTemJuris(chave) {
   if (typeof jurChavesComJulgado !== "function") return false;
@@ -2736,9 +2736,39 @@ function matTiposDe(x) {
   if (String(x.cartoes || "").trim()) tipos.push("cartoes");
   /* "leiId" é o ponteiro para a biblioteca; "leiTexto" é o campo antigo,
    * que continua contando enquanto houver base não migrada. */
-  if (String(x.leiTexto || "").trim() || x.leiSeca || x.leiId) tipos.push("lei");
+  if (String(x.leiTexto || "").trim() || x.leiSeca || x.leiId
+      /* (v18.39.0) a lei ligada pela biblioteca de leis também: a linha já a mostrava (leiTem), a aba não a contava */
+      || (typeof leiTem === "function" && x.chave && leiTem(x.chave))) tipos.push("lei");
   if (matTemJuris(x.chave)) tipos.push("juris");
+  /* (v18.39.0) as questões do tópico também são material da estante (aba própria e botão na linha) */
+  if (typeof qsContarDoTopico === "function" && qsContarDoTopico(x.chave) > 0) tipos.push("questoes");
   return tipos;
+}
+
+/* (v18.39.0) QUANTOS ITENS, E EM QUANTOS TÓPICOS. As abas diziam "⚖ Julgados · 4" (4 TÓPICOS) ao lado de linhas com
+ * "13 julgado(s)": dois números de natureza diferente com a mesma cara. Agora a aba conta o que o nome dela diz — julgados,
+ * cartões, leis, questões — e diz em quantos tópicos estão. Julgado e lei ligados a dois tópicos contam UMA vez. */
+function matContarDoTipo(lista, tp) {
+  const comTipo = (lista || []).filter((x) => matTiposDe(x).indexOf(tp) >= 0);
+  const topicos = comTipo.length;
+  let itens = topicos;
+  if (tp === "cartoes") itens = comTipo.reduce((a, x) => a + matContarCartoes(x.chave), 0);
+  else if (tp === "questoes") itens = comTipo.reduce((a, x) => a + (typeof qsContarDoTopico === "function" ? qsContarDoTopico(x.chave) : 0), 0);
+  else if (tp === "juris") {
+    const ids = new Set();
+    comTipo.forEach((x) => { if (typeof jurDoTopico === "function") jurDoTopico(x.chave).forEach((j) => ids.add(j.id)); });
+    itens = ids.size;
+  } else if (tp === "lei") {
+    const ids = new Set();
+    comTipo.forEach((x) => {
+      const ls = typeof leisDoTopico === "function" ? leisDoTopico(x.chave) : [];
+      ls.forEach((l) => ids.add(l.id));
+      if (x.leiId) ids.add(x.leiId);
+      if (!ls.length && !x.leiId) ids.add("topico:" + x.chave);   /* lei colada à moda antiga: uma por tópico */
+    });
+    itens = ids.size;
+  }
+  return { itens, topicos };
 }
 
 /* ------------------------------------------------------------------
@@ -2936,23 +2966,30 @@ function matPintarSugestoes() {
   const cx = $("matTipos");
   if (!cx) return;
   cx.innerHTML = "";
-  /* ABAS DE ESCOLHA ÚNICA: "Tudo" ou UM tipo. O número é de TÓPICOS que têm aquele tipo ("cartões · 35" não são 35 cartões —
-   * por isso o title diz "35 tópico(s) com cartões"). */
+  /* ABAS DE ESCOLHA ÚNICA: "Tudo" ou UM tipo. (v18.39.0) O número de cada tipo é de ITENS ("⚖ Julgados · 21"), e logo
+   * abaixo da aba ativa uma linha diz em quantos tópicos ("21 julgados em 4 tópicos"); "Tudo" conta tópicos. */
   const ativo = matAbaAtiva();
+  const contas = {};
+  MAT_TIPOS.forEach((tp) => { contas[tp] = matContarDoTipo(lista, tp); });
+  const frase = (tp) => t("mat_aba_itens", { n: contas[tp].itens, it: t("mat_un_" + tp), k: contas[tp].topicos });
+  if ($("matAbaConta")) {
+    $("matAbaConta").hidden = !ativo;
+    $("matAbaConta").textContent = ativo ? MAT_ICONE[ativo] + " " + frase(ativo) : "";
+  }
   [""].concat(MAT_TIPOS).forEach((tp) => {
-    const n = tp ? lista.filter((x) => matTiposDe(x).indexOf(tp) >= 0).length : lista.length;
+    const n = tp ? contas[tp].itens : lista.length;
     const b = document.createElement("button");
     b.type = "button";
     b.className = "mat-tipo " + (tp ? "tp-" + tp : "tp-tudo") + (ativo === tp ? " ativa" : "");
     b.setAttribute("role", "tab");
     b.setAttribute("aria-selected", ativo === tp ? "true" : "false");
     b.textContent = (tp ? MAT_ICONE[tp] + " " + t("mat_aba_" + tp) : t("mat_aba_tudo")) + " · " + n;
-    b.title = tp ? t("mat_aba_tip", { n, tp: t("mat_tipo_" + tp) }) : t("mat_tipo_conta", { n });
+    b.title = tp ? frase(tp) : t("mat_tipo_conta", { n });
     b.onclick = () => { matFTipos = tp ? [tp] : []; matRender(); };
     cx.append(b);
   });
   /* as ferramentas DO TIPO escolhido, logo abaixo das abas — e nenhuma em "Tudo" */
-  const ferr = { cartoes: "matFerrCartoes", lei: "matFerrLei", juris: "matFerrJuris", resumo: "matFerrResumo" };
+  const ferr = { cartoes: "matFerrCartoes", lei: "matFerrLei", juris: "matFerrJuris", resumo: "matFerrResumo", questoes: "matFerrQuestoes" };
   Object.keys(ferr).forEach((tp) => { const el = $(ferr[tp]); if (el) el.hidden = ativo !== tp; });
 }
 
@@ -3342,7 +3379,8 @@ function matRender() {
   let achou = 0;
   arv.forEach((discs, cc) => {
     const grupo = document.createElement("div");
-    grupo.className = "mat-grupo";
+    /* (v18.39.0) classe própria: ".mat-grupo" é dos grupos de botões da leitura (inline-flex) e punha o edital numa coluna */
+    grupo.className = "mat-grupo-ed";
     const cab = document.createElement("div");
     cab.className = "mat-cc";
     cab.textContent = cc || t("mat_sem_concurso");
@@ -3423,6 +3461,10 @@ function matRender() {
             () => leiAbrir(x.disciplina, x.topico));
           if (nJul) slot("juris", String(nJul), t("mat_slot_juris", { n: nJul }), t("mat_juris_ver_ajuda", { n: nJul, tp: x.topico }),
             () => jurAbrir(x.disciplina, x.topico, "ler"));
+          /* (v18.39.0) as questões do tópico, como os outros materiais */
+          const nQst = typeof qsContarDoTopico === "function" ? qsContarDoTopico(x.chave) : 0;
+          if (nQst && typeof qsUiResponderDireto === "function") slot("questoes", String(nQst), t("mat_slot_questoes_n"), t("ed_qst_ver", { n: nQst, tp: x.topico }),
+            () => qsUiResponderDireto(x.disciplina, x.topico));
 
           const outras = [];
           if (nCart) {
