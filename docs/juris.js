@@ -1720,3 +1720,69 @@ function jurAtualDesfazer(recibo) {
   (recibo || []).forEach((r) => { if (jurDe(r.id)) { jurGravar(Object.assign({ id: r.id }, r.antes)); n++; } });
   return n;
 }
+
+/* =====================================================================
+ * JM5 — INFORMATIVO → JULGADOS NO TÓPICO CERTO (v18.43.0)
+ *
+ * Um informativo do STF/STJ traz dez julgados de assuntos diferentes; o
+ * lote já os separa, mas guardava todos no tópico aberto. Aqui cada ficha
+ * ganha um destino: o app SUGERE o tópico do edital cujo nome mais combina
+ * com as etiquetas, a tese e o resumo do julgado; a pessoa confere e troca.
+ * Só sugere quando a combinação é clara (metade ou mais das palavras do
+ * nome do tópico) e MELHOR que a do tópico aberto — na dúvida, fica onde
+ * está.
+ * ===================================================================== */
+const JUR_PALAVRAS_VAZIAS = new Set(["para", "pelo", "pela", "pelos", "pelas", "como", "sobre", "entre", "com", "sem", "dos", "das", "nos", "nas",
+  "que", "uma", "uns", "umas", "seu", "sua", "seus", "suas", "este", "esta", "esse", "essa", "geral", "gerais", "normas", "noções", "nocoes",
+  "aspectos", "disposições", "disposicoes", "lei", "leis", "direito", "regime", "tema", "temas"]);
+
+function jurPalavras(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !JUR_PALAVRAS_VAZIAS.has(w))
+    /* plural e gênero, grosseiros: "tributos" ~ "tributo", "tributária" ~ "tributário" */
+    .map((w) => w.replace(/(oes|aes|ais|eis|is|es|s)$/, "").replace(/[ao]$/, ""));
+}
+
+/* o quanto o julgado combina com o nome do tópico: fração das palavras do tópico que aparecem no julgado */
+function jurCombina(f, topico) {
+  const tp = [...new Set(jurPalavras(topico))];
+  if (!tp.length) return 0;
+  const doc = new Set(jurPalavras([(f.tags || []).join(" "), f.tese, f.resumo, f.ident, f.categoria].join(" ")));
+  const achou = tp.filter((w) => doc.has(w)).length;
+  return achou / tp.length;
+}
+
+/* candidatos = [{chave, disciplina, topico}]; devolve o melhor {chave, disciplina, topico, nota, peso} ou null.
+ *
+ * DUAS RÉGUAS. (1) cobertura: metade ou mais das palavras do NOME do tópico estão no julgado; (2) peso: cada palavra
+ * achada vale pela sua RARIDADE entre os nomes dos tópicos (log N/df). No edital real, "Normas gerais de Direito
+ * Tributário" vira só "tributário" — a cobertura dava 100% para qualquer julgado tributário; com o peso, uma palavra que
+ * está em vinte tópicos não decide nada. Exige-se ao menos o peso de UMA palavra que aparece em até dois tópicos
+ * (log N/2), e o vencedor tem de pesar MAIS que o tópico aberto. */
+function jurSugerirTopico(f, candidatos, atualChave) {
+  const cand = candidatos || [];
+  const N = cand.length;
+  if (!N) return null;
+  const df = new Map();
+  const palavrasDe = cand.map((c) => [...new Set(jurPalavras(c.topico))]);
+  palavrasDe.forEach((ws) => ws.forEach((w) => df.set(w, (df.get(w) || 0) + 1)));
+  const doc = new Set(jurPalavras([(f.tags || []).join(" "), f.tese, f.resumo, f.ident, f.categoria].join(" ")));
+  /* as ETIQUETAS são o assunto declarado do julgado; a tese cita outros institutos de passagem ("o inadimplemento da
+   * obrigação tributária... não gera responsabilidade") — palavra achada nas etiquetas vale o dobro */
+  const nasTags = new Set(jurPalavras((f.tags || []).join(" ")));
+  const minimo = Math.log(Math.max(1, N / 2));
+  let melhor = null, pesoAtual = 0;
+  cand.forEach((c, i) => {
+    const ws = palavrasDe[i];
+    if (!ws.length) return;
+    const achou = ws.filter((w) => doc.has(w));
+    const nota = achou.length / ws.length;
+    const peso = achou.reduce((a, w) => a + Math.log(N / df.get(w)) * (nasTags.has(w) ? 2 : 1), 0);
+    const ehAtual = atualChave && jurChaveComparavel(c.chave) === jurChaveComparavel(atualChave);
+    if (ehAtual) { pesoAtual = nota >= 0.5 ? peso : 0; return; }
+    if (nota < 0.5 || peso < minimo) return;
+    if (!melhor || peso > melhor.peso) melhor = Object.assign({}, c, { nota, peso });
+  });
+  if (!melhor || melhor.peso <= pesoAtual) return null;
+  return melhor;
+}
