@@ -2073,6 +2073,40 @@ function qsVincPintarEsc() {
   if ($("qsVincAlcanceBox")) $("qsVincAlcanceBox").hidden = !$("qsVincPerm").checked;
 }
 
+function qsVincCurto(s) {
+  const x = String(s || "").replace(/\s+/g, " ").trim();
+  return x.length > 60 ? x.slice(0, 59) + "…" : x;
+}
+/* o link (ou os links) com este trecho, onde estiverem desenhados agora, ganha um destaque por alguns segundos */
+let citUltimoDestaque = null;   /* {trecho, n}: o último destaque pedido (para conferir) */
+function citDestacarRecem(trecho, ms) {
+  const alvo = String(trecho || "").replace(/\s+/g, " ").trim().toLowerCase();
+  citUltimoDestaque = { trecho: alvo, n: 0 };
+  if (!alvo || typeof document === "undefined") return 0;
+  let n = 0;
+  const marcar = () => {
+    /* nos painéis onde há links (leitura do resumo, leitor de lei, questão) e no resto do documento */
+    const vistos = new Set();
+    ["matLeitura", "leiLeitura", "qsSessCorpo"].map((id) => $(id)).filter(Boolean).concat([document]).forEach((raiz) => {
+      ["button.qs-lei-link", "button.lei-cita-link"].forEach((sel) => {
+        try { Array.from(raiz.querySelectorAll(sel) || []).forEach((b) => vistos.add(b)); } catch (e) {}
+      });
+    });
+    const bs = Array.from(vistos);
+    bs.filter((b) => String(b.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === alvo).forEach((b, i) => {
+      if (b.classList) b.classList.add("cit-recem"); else b.className = (b.className || "") + " cit-recem";
+      if (i === 0) { try { if (b.scrollIntoView) b.scrollIntoView({ block: "nearest" }); } catch (e) {} }
+      n++;
+      citUltimoDestaque.n = n;
+      setTimeout(() => { try { if (b.classList) b.classList.remove("cit-recem"); } catch (e) {} }, ms || 4000);
+    });
+  };
+  marcar();
+  /* repintura que ainda não terminou (leitor de lei grande): tenta de novo logo depois */
+  if (!n) setTimeout(marcar, 120);
+  return n;
+}
+
 function qsVincSalvar() {
   const c = qsVincCtx;
   if (!c || !c.esc) return false;
@@ -2102,6 +2136,13 @@ function qsVincSalvar() {
     if (c.esc.cit && c.esc.cit.vinculoK && c.esc.cit.vinculoK !== r.k) citVinculoRemover(c.esc.cit.vinculoK);
     qsVincPintar();
     qsUiVoltaDe(q)();
+    /* (v18.49.0) A CONFIRMAÇÃO: o relato foi "visualmente não tenho garantia de que o vínculo foi efetivado". Um aviso
+     * diz o que foi ligado e onde vale, e o link recém-ligado pisca na tela (de onde se veio já repintada). */
+    try {
+      toastMsg(t("qs_vinc_feito", { tr: qsVincCurto(trecho), l: l.apelido || l.nome, a: artigos.map((x) => x.numCru).filter(Boolean).join("; ") || "—",
+        alc: t(chave ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") }), 4500);
+    } catch (e) {}
+    citDestacarRecem(trecho);
     return true;
   }
   /* só desta vez: abre agora, sem guardar */
