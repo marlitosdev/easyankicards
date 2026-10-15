@@ -104,12 +104,19 @@ function bkLerDecisoes() {
   catch (e) { return bkLer("eac_decisoes"); }
 }
 
+/* "eac_juris" (18.44.0, JM6) — a mesma história: depois de migrar, o localStorage não tem mais a chave e o backup
+ * sairia SEM os julgados; jurLerTudo() sabe ler de onde estiverem. */
+function bkLerJuris() {
+  try { return typeof jurLerTudo === "function" ? JSON.stringify(jurLerTudo()) : bkLer("eac_juris"); }
+  catch (e) { return bkLer("eac_juris"); }
+}
+
 function montarBackup() {
   const dados = {};
   Object.keys(BK_CHAVES).forEach((grupo) => {
     dados[grupo] = {};
     BK_CHAVES[grupo].forEach((k) => {
-      const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : bkLer(k);
+      const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : k === "eac_juris" ? bkLerJuris() : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
   });
@@ -247,6 +254,11 @@ function restaurarBackup(bk) {
   aplicar.forEach(([k, v]) => {
     if (k === "eac_leis" && typeof leisGravarTudo === "function") {
       try { leisGravarTudo(JSON.parse(v) || {}); } catch (e) {}
+      return;
+    }
+    /* (JM6) os julgados também passam pela função (que sabe gravar no IndexedDB, se já migrou) */
+    if (k === "eac_juris" && typeof jurGravarTudo === "function") {
+      try { const o = JSON.parse(v) || {}; if (o && typeof o === "object" && !Array.isArray(o)) jurGravarTudo(o); } catch (e) {}
       return;
     }
     if (k === "eac_decisoes" && typeof decDefinirTudo === "function") {

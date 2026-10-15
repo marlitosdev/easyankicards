@@ -64,9 +64,12 @@ const JUR_CLASSES = [
   "IRDR", "IAC", "RR", "AIRR", "E-RR",
 ];
 
+/* (v18.44.0, JM6) depois de migrar para o IndexedDB (idb-juris.js) a leitura vem do cache — que é o TEXTO JSON, então
+ * cada leitura continua devolvendo um objeto novo, como quando vinha do localStorage */
 function jurLerTudo() {
   try {
-    const o = JSON.parse(localStorage.getItem(JUR_CHAVE) || "{}");
+    const bruto = (typeof _jurCache === "string" && _jurCache) ? _jurCache : localStorage.getItem(JUR_CHAVE);
+    const o = JSON.parse(bruto || "{}");
     return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
   } catch (e) { return {}; }
 }
@@ -75,11 +78,21 @@ function jurGravarTudo(tudo) {
   jurEsquecerChaves();
   try {
     const s = JSON.stringify(tudo || {});
+    /* já migrou: a memória muda na hora (quem ler em seguida vê) e o IndexedDB grava em segundo plano */
+    if (typeof _jurCache === "string" && _jurCache) {
+      _jurCache = s;
+      jurIdbGravarTudo(JSON.parse(s)).catch(() => {
+        try { uiAlert(t("jur_sem_espaco")); } catch (e2) {}
+      });
+      return true;
+    }
     if (typeof guardar === "function") return guardar(JUR_CHAVE, s) !== false;
     localStorage.setItem(JUR_CHAVE, s);
     return true;
   } catch (e) { return false; }
 }
+/* começa a migração em segundo plano assim que JUR_CHAVE existe — não trava nada (no Node não há indexedDB: não faz nada) */
+if (typeof jurIdbMigrar === "function") jurIdbMigrar();
 
 /* ------------------------------------------------------------------
  * QUAIS TÓPICOS TÊM JULGADO — UMA VEZ, NÃO UMA VEZ POR LINHA

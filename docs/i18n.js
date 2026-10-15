@@ -1647,6 +1647,8 @@ const UI = {
      (não tem gabarito). O que se decora dela é a TESE — a frase que a
      banca transcreve na assertiva. */
   "jur_mais": "＋ Novo julgado",
+  "jur_sem_espaco": "Não há espaço no navegador para guardar os julgados. Faça um backup e libere espaço (Diagnóstico › Armazenamento).",
+  "plog_g_juris": "Julgados (jurisprudência guardada)",
   "jur_bib_tit": "Biblioteca de julgados",
   "jur_bib_sit_rever": "a rever (nunca verificado ou há mais de 180 dias)",
   "jur_bib_sit_fora": "superados, cancelados ou alterados",
@@ -7035,6 +7037,8 @@ const UI = {
   "ed_reg_tit": "Log a study session",
   "jur_prompt_btn": "look for duplicates (with AI)",
   "jur_mais": "＋ New ruling",
+  "jur_sem_espaco": "There is no room in the browser to save the rulings. Make a backup and free up space (Diagnostics › Storage).",
+  "plog_g_juris": "Rulings (saved case law)",
   "jur_bib_tit": "Case law library",
   "jur_bib_sit_rever": "to review (never checked or over 180 days ago)",
   "jur_bib_sit_fora": "overruled, cancelled or changed",
