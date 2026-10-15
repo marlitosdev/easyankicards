@@ -2634,6 +2634,10 @@ dialog.mat-amplo{max-height:96vh}
 .mat-item{flex-wrap:wrap;row-gap:6px}
 .mat-item > .mat-item-txt{flex:1 1 240px}
 .mat-item > .mat-acoes{margin-left:auto;justify-content:flex-end}
+/* v18.47.0 — a bolha de seleção do leitor de lei */
+.lei-bolha{position:fixed;z-index:60;display:flex;gap:4px;padding:4px;border:1px solid var(--borda);border-radius:10px;background:var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.lei-bolha[hidden]{display:none}
+.lei-cita-link.lei-cita-perm{text-decoration-style:double}
 /* JM7 */
 .mat-recentes{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0}
 .mat-recentes[hidden]{display:none}
@@ -7808,6 +7812,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="lei-faixa-alvo" id="leiFaixaAlvo" role="status" hidden></div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
+  <!-- (v18.47.0) a bolha da seleção no leitor: ligar o trecho a uma lei, à mão -->
+  <div class="lei-bolha" id="leiBolha" hidden><button type="button" class="btn-min" id="btnLeiBolhaVinc" data-i18n="lei_bolha_vinc" data-i18n-title="lei_bolha_vinc_aj"></button></div>
   <div class="mat-leitura" id="leiRecitar" hidden></div>
   <!-- O BOTÃO FLUTUANTE DO MARCADOR. A linha tem altura ZERO e fica logo abaixo da leitura: o botão
        se ancora na borda de baixo dela (bottom) e sobe para dentro do painel — sem calcular posição
@@ -8375,6 +8381,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min mat-ligado" id="btnLeiBibTodas" data-i18n="lei_bib_f_todas"></button>
     <button class="btn-min" id="btnLeiBibConcurso" data-i18n="lei_bib_f_concurso"></button>
     <button class="btn-min" id="btnLeiBibSem" data-i18n="lei_bib_f_sem"></button>
+    <button class="btn-min btn-min-ok" id="btnLeiBibNova" data-i18n="lei_bib_nova" data-i18n-title="lei_bib_nova_aj"></button>
     <span class="mat-topo-dir">
       <button class="btn-min" id="btnLeiBibDecisoes" data-i18n="dec_botao" data-i18n-title="dec_botao_aj"></button>
     </span>

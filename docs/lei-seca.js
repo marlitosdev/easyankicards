@@ -3323,6 +3323,9 @@ const LEI_SUB = [
    * CF" nunca era alcançado — a citação virava "ambígua" apesar de a lei
    * estar escrita ali do lado. */
   /^\s*,?\s*par[áa]grafo\s+\d{1,3}\s*[ºo°]?(?:\s*-\s*[A-Z])?/i,
+  /* (v18.47.0) "alínea b" por extenso, sem parênteses — "art. 5º, inciso XV, alínea b, da Constituição Federal"
+   * parava em "inciso XV" e a lei nunca era alcançada */
+  /^\s*,?\s*al[íi]nea\s+[a-z](?![\wº])/i,
   /^\s*,?\s*(?:al[íi]nea\s*)?[a-z]\)/i,
   /^\s*,?\s*["'“”][a-z]["'“”]/i,
   /^\s*,\s*[a-k](?=\s*[,;.)]|\s*$)/,         /* alínea sem parêntese */
@@ -3376,6 +3379,7 @@ function leiLerSubEndereco(pedaco, sub) {
   else if ((m = p.match(/§+\s*(\d{1,3}[ºo°]?)(?:\s*-\s*([A-Z]))?/))) sub.paragrafos.push(m[1] + (m[2] ? "-" + m[2] : ""));
   else if (/par[áa]grafo\s+[úu]nico/i.test(p)) sub.paragrafos.push("único");
   else if ((m = p.match(/par[áa]grafo\s+(\d{1,3}[ºo°]?)(?:\s*-\s*([A-Z]))?/i))) sub.paragrafos.push(m[1] + (m[2] ? "-" + m[2] : ""));
+  else if ((m = p.match(/al[íi]nea\s+([a-z])(?![\wº])/i))) sub.alineas.push(m[1].toLowerCase());
   else if ((m = p.match(/(?:al[íi]nea\s*)?([a-z])\)|["'“”]([a-z])["'“”]|^\s*,\s*([a-k])/i))) {
     sub.alineas.push((m[1] || m[2] || m[3]).toLowerCase());
   }
