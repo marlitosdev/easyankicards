@@ -3379,6 +3379,7 @@ function matRender() {
   try { matPintarRecentes(); } catch (e) {}
   const arv = matAgrupado(matFiltro);
   let achou = 0;
+  const idxRamos = matIndiceRamos();
   arv.forEach((discs, cc) => {
     const grupo = document.createElement("div");
     /* (v18.39.0) classe própria: ".mat-grupo" é dos grupos de botões da leitura (inline-flex) e punha o edital numa coluna */
@@ -3395,11 +3396,16 @@ function matRender() {
       const chave = cc + "›" + disc;
       const bt = document.createElement("button");
       bt.type = "button";
+      /* (v18.48.0) A DISCIPLINA É UMA FAIXA, não mais uma linha igual às dos tópicos: maiúsculas, barra colorida à
+       * esquerda e "· N tópicos"; os tópicos vêm recuados, presos a ela por uma linha-guia (.mat-disc-corpo) */
       bt.className = "mat-disc-cab";
       bt.textContent = (matFechados[chave] ? "▸ " : "▾ ") + (disc || "—")
-        + "  (" + itens.length + ")";
+        + " · " + t("mat_disc_n_topicos", { n: itens.length });
+      bt.setAttribute("aria-expanded", matFechados[chave] ? "false" : "true");
       bt.onclick = () => { matFechados[chave] = !matFechados[chave]; matRender(); };
       bl.append(bt);
+      const corpoDisc = document.createElement("div");
+      corpoDisc.className = "mat-disc-corpo";
       if (!matFechados[chave]) {
         itens.forEach((x) => {
           const li = document.createElement("div");
@@ -3496,10 +3502,39 @@ function matRender() {
             faz: () => jurAbrir(x.disciplina, x.topico, "incluir") });
 
           acoes.append(matMenuLinha(x.chave, outras));
+          /* (v18.48.0) OS RAMOS DO TÓPICO, recolhidos: "▸ N ramos"; abertos, um embaixo do outro, mais recuados e com
+           * linha tracejada; cada um abre a ficha JÁ no ramo. ✓ = ramo estudado (em qualquer edital). */
+          const ramos = matRamosDoTopico(x, idxRamos);
+          if (ramos.length) {
+            const aberto = !!matRamosAbertos[x.chave];
+            const tg = document.createElement("button");
+            tg.type = "button";
+            tg.className = "mat-ramos-tog";
+            tg.textContent = (aberto ? "▾ " : "▸ ") + t("mat_ramos_n", { n: ramos.length });
+            tg.setAttribute("aria-expanded", aberto ? "true" : "false");
+            tg.title = t("mat_ramos_tog_tip");
+            tg.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); matRamosAbertos[x.chave] = !aberto; matRender(); };
+            esq.append(tg);
+            if (aberto) {
+              const lr = document.createElement("div");
+              lr.className = "mat-ramos";
+              ramos.forEach((r) => {
+                const b = document.createElement("button");
+                b.type = "button";
+                b.className = "mat-ramo" + (r.estudado ? " feito" : "");
+                b.textContent = "↳ " + r.nome + (r.estudado ? " ✓" : "");
+                b.title = t("mat_ramo_tip", { r: r.nome, tp: x.topico });
+                b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); matAbrirFicha(x, { ramo: r.id, ramos }); };
+                lr.append(b);
+              });
+              esq.append(lr);
+            }
+          }
           li.append(esq, acoes);
-          bl.append(li);
+          corpoDisc.append(li);
         });
       }
+      bl.append(corpoDisc);
       grupo.append(bl);
     });
     box.append(grupo);
@@ -6356,6 +6391,41 @@ function matTopicosSemMaterial() {
 }
 
 let matVerSemMaterial = false;
+
+/* (v18.48.0) os ramos de cada tópico, lidos dos editais (uma vez por desenho): chave comparável → ramos do primeiro
+ * edital que tem o tópico com ramos */
+let matRamosAbertos = {};
+function matIndiceRamos() {
+  const idx = new Map();
+  if (typeof editais === "undefined" || !Array.isArray(editais) || typeof lerEdital !== "function") return idx;
+  editais.forEach((e) => {
+    let r = null;
+    try { r = lerEdital(e.texto || ""); } catch (x) { return; }
+    ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+      if (!tp.ramos || !tp.ramos.length) return;
+      const k = matChaveNormal(matChave(d.nome, tp.nome));
+      if (!idx.has(k)) idx.set(k, tp.ramos.map((rm) => ({ id: rm.id, nome: rm.nome, peso: rm.peso })));
+    }));
+  });
+  return idx;
+}
+function matRamosDoTopico(x, idx) {
+  const base = (idx || matIndiceRamos()).get(matChaveNormal(matChave(x.disciplina, x.topico))) || [];
+  if (!base.length) return [];
+  /* estudado: alguma marca feito/revisado do ramo, em qualquer edital */
+  const ch = matChaveNormal(matChave(x.disciplina, x.topico));
+  const feitos = new Set();
+  (typeof editais !== "undefined" && Array.isArray(editais) ? editais : []).forEach((e) => {
+    Object.keys(e.progresso || {}).forEach((k) => {
+      const v = e.progresso[k];
+      const m = v && typeof v === "object" ? v.e : v;
+      if (m !== "feito" && m !== "revisado" && m !== true) return;
+      const p = String(k).split("›#");
+      if (p.length > 1 && matChaveNormal(p[0]) === ch) feitos.add(p[1]);
+    });
+  });
+  return base.map((r) => Object.assign({}, r, { estudado: feitos.has(r.id) }));
+}
 
 function matPintarSemMaterial(box) {
   /* só na visão "Tudo" e sem busca: numa aba de tipo, ou procurando, "o que falta" não é o que se está olhando */

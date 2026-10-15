@@ -2634,6 +2634,19 @@ dialog.mat-amplo{max-height:96vh}
 .mat-item{flex-wrap:wrap;row-gap:6px}
 .mat-item > .mat-item-txt{flex:1 1 240px}
 .mat-item > .mat-acoes{margin-left:auto;justify-content:flex-end}
+/* v18.48.0 — hierarquia: disciplina (faixa) › tópico (recuado, linha-guia) › ramo (mais recuado, tracejado) */
+.mat-disc > .mat-disc-cab{text-transform:uppercase;letter-spacing:.3px;font-size:12.5px;font-weight:800;color:var(--texto);
+  border-left:4px solid var(--info);padding:7px 0 6px 9px;margin-top:6px;box-sizing:border-box;width:100%;background:linear-gradient(90deg,rgba(96,165,250,.10),transparent 70%);border-radius:4px}
+.mat-disc-corpo{margin-left:8px;border-left:2px solid var(--borda)}
+.mat-disc .mat-disc-corpo > .mat-item{position:relative;padding-left:18px}
+.mat-disc-corpo > .mat-item::before{content:"";position:absolute;left:0;top:19px;width:11px;border-top:2px solid var(--borda)}
+.mat-ramos-tog{all:unset;cursor:pointer;font-size:11.5px;color:var(--info);margin-top:3px;display:inline-block}
+.mat-ramos-tog:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.mat-ramos{display:flex;flex-direction:column;gap:3px;margin:4px 0 2px 4px;padding-left:10px;border-left:2px dashed var(--borda)}
+.mat-ramo{all:unset;cursor:pointer;font-size:12px;color:var(--sutil);line-height:1.35}
+.mat-ramo:hover{color:var(--texto)}
+.mat-ramo:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.mat-ramo.feito{color:var(--ok)}
 /* v18.47.0 — a bolha de seleção do leitor de lei */
 .lei-bolha{position:fixed;z-index:60;display:flex;gap:4px;padding:4px;border:1px solid var(--borda);border-radius:10px;background:var(--panel);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .lei-bolha[hidden]{display:none}
