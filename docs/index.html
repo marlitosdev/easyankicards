@@ -2476,6 +2476,8 @@ p.mat-ferr{display:block;font-size:12px}
 /* a jurisprudência tem cor própria pelo mesmo motivo dos outros três:
    o filtro precisa dizer QUAL tipo está ligado sem que se leia o texto */
 .mat-tipo.ativa.tp-juris{color:#f59e0b;border-color:#f59e0b}
+.mat-tipo.ativa.tp-questoes{color:#a78bfa;border-color:#a78bfa}
+.mat-aba-conta{margin:0 0 6px;font-size:12px;font-weight:700}
 /* selo de tipo em cada linha da lista */
 .mat-selos{display:inline-flex;gap:4px;margin-left:6px}
 /* M3 — um botão por material, com o ícone e a cor da sua aba */
@@ -2613,7 +2615,7 @@ dialog.mat-amplo{max-height:96vh}
 .mat-busca{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto);
   font-size:13px;margin-top:8px}
-.mat-grupo{margin:0 0 6px}
+.mat-grupo-ed{margin:0 0 6px}
 .mat-cc{font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;
   color:var(--info);padding:10px 0 4px;border-bottom:1px solid var(--borda)}
 :root[data-theme="light"] .mat-cc{color:var(--info)}
@@ -2627,6 +2629,11 @@ dialog.mat-amplo{max-height:96vh}
   border-bottom:1px solid var(--borda)}
 .mat-item:last-child{border-bottom:0}
 .mat-item-txt{flex:1;min-width:0}
+/* (v18.39.0) com 5 materiais na linha, o nome do tópico era cortado em "Limitações ao poder de t…": o nome fica com ao menos
+   240px e os botões descem para a linha de baixo quando não cabem */
+.mat-item{flex-wrap:wrap;row-gap:6px}
+.mat-item > .mat-item-txt{flex:1 1 240px}
+.mat-item > .mat-acoes{margin-left:auto;justify-content:flex-end}
 .mat-nome{font-size:13px;font-weight:600;color:var(--texto);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-sub{font-size:11px;color:var(--sutil);margin-top:2px}
@@ -5886,6 +5893,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          leva as SUAS ferramentas para a sua aba: as de cartões ficavam soltas no meio da estante, com o mesmo peso dos
          filtros, e não se sabia qual botão era de quê. -->
     <div class="mat-tipos mat-abas" id="matTipos" role="tablist"></div>
+    <!-- (v18.39.0) a aba ativa diz o que conta: N itens em K tópicos -->
+    <p class="nota mat-aba-conta" id="matAbaConta" role="status" hidden></p>
     <div class="mat-ferr" id="matFerrCartoes" hidden>
       <button type="button" class="btn btn-azul btn-biblioteca" id="btnGerCartoes"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
       <button type="button" class="btn-min" id="btnCartRepetidos" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
@@ -5900,6 +5909,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <p class="nota mat-ferr" id="matFerrJuris" hidden data-i18n="mat_ferr_juris_exp"></p>
     <p class="nota mat-ferr" id="matFerrResumo" hidden data-i18n="mat_ferr_resumo_exp"></p>
+    <p class="nota mat-ferr" id="matFerrQuestoes" hidden data-i18n="mat_ferr_questoes_exp"></p>
     <div id="matLista" class="mat-caixa"></div>
     <!-- o registro técnico dos resumos: serve para relatar problema, não para estudar — fica no rodapé, discreto -->
     <div class="mat-rodape"><button type="button" class="btn-link" id="btnMatLogAba" data-i18n="mat_log_btn"></button></div>
