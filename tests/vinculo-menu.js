@@ -42,7 +42,7 @@ async function testes() {
 
   /* ---- o menu de escolha guarda o vínculo ---- */
   const DISC = "Sistema Tributário Brasileiro", TOP = "Tributos e suas espécies";
-  const montar = () => {
+  const montar = (textoResumo) => {
     const r = rodar();
     const api = r.api;
     api.matIniciar(); api.leiIniciar();
@@ -51,7 +51,7 @@ async function testes() {
       texto: "Art. 148. A União, mediante lei complementar, poderá instituir empréstimos compulsórios.\nArt. 149. Compete exclusivamente à União instituir contribuições sociais." });
     api.leiGuardar({ id: "ctn", nome: "CÓDIGO TRIBUTÁRIO NACIONAL", apelido: "CTN", especie: "Lei", topicos: [ch],
       texto: "Art. 3º Tributo é toda prestação pecuniária compulsória.\nArt. 148. Quando o cálculo do tributo tenha por base o valor de bens." });
-    api.matGravar(ch, "2. A destinação legal do produto da arrecadação é irrelevante (art. 148 e outros).", { disciplina: DISC, topico: TOP });
+    api.matGravar(ch, textoResumo || "2. A destinação legal do produto da arrecadação é irrelevante (art. 148 e outros).", { disciplina: DISC, topico: TOP });
     api.matAbrirEditor({ disciplina: DISC, nome: TOP }, true);
     return { api, ch };
   };
@@ -125,6 +125,62 @@ async function testes() {
     api.qsUiLeiEscolher(bt, { disciplina: DISC, topico: TOP }, api.leiCitacoesNoTexto("art. 12 do ZZZ")[0]);
     ok(!api.$("qsLeiLembrarVinc"),
        "M10 citação com sigla não mostra a caixa de vínculo");
+  }
+  {
+    /* (v18.51.0) O ATALHO: as outras citações sem lei do mesmo resumo, de uma vez (desmarcado por padrão) */
+    const montarVarias = () => montar([
+      "O empréstimo compulsório (art. 148) exige lei complementar.",
+      "As contribuições sociais estão no art. 149.",
+      "Tributo é conceito do art. 3º do CTN e o art. 4º trata da natureza jurídica.",
+      "Uma remissão errada ao art. 999 fica sem lei.",
+      "Repetido: art. 149 de novo.",
+    ].join("\n"));
+    {
+      const { api, ch } = montarVarias();
+      do148(api).onclick({ stopPropagation() {} });
+      const cx = api.$("qsLeiTodasSemLei");
+      ok(cx && cx.checked === false, "T1 a caixa 'todas' aparece e vem DESMARCADA");
+      const rot = String((cx && cx.parentNode && cx.parentNode.textContent) || "");
+      ok(/outras 2 citações sem lei deste resumo/.test(rot), "T1a conta só as que ainda perguntam (art. 149 uma vez, art. 999; o art. 4º herda o CTN da linha): " + rot);
+      ok(/art\. 149/.test(cx.parentNode.title) && /art\. 999/.test(cx.parentNode.title) && !/art\. 4º/.test(cx.parentNode.title), "T1b o balão lista quais: " + cx.parentNode.title);
+      /* desmarcada: só a escolhida */
+      opcaoDe(api, "CONSTITUIÇÃO").onclick();
+      ok(api.citVinculosLer().length === 1, "T2 sem marcar 'todas', só a citação tocada é ligada: " + api.citVinculosLer().length);
+    }
+    {
+      const { api, ch } = montarVarias();
+      do148(api).onclick({ stopPropagation() {} });
+      api.$("qsLeiTodasSemLei").checked = true;
+      opcaoDe(api, "CONSTITUIÇÃO").onclick();
+      const vs = api.citVinculosLer();
+      const tr = vs.map((v) => v.trecho).sort();
+      ok(vs.length === 2 && tr.join("|") === "art. 148|art. 149" && vs.every((v) => v.leiId === "cf88" && v.chave === ch),
+         "T3 marcada: liga a tocada e as outras que a lei tem (148, 149), nunca o art. 4º do CTN nem o 999: " + JSON.stringify(tr));
+      const aviso = api.$("toast").textContent;
+      ok(/^✓ 2 vínculos guardados → CF88 · só neste tópico\./.test(aviso) && /porque o artigo não existe nesta lei: art\. 999\./.test(aviso),
+         "T4 o aviso diz quantos e quais ficaram de fora: " + aviso);
+      ok(api.$("dlgLeiCitaPreview").open !== true, "T4b várias de uma vez: a prévia não sobe por cima do aviso");
+      ok((api.citUltimoDestaqueLer() || {}).trecho === "art. 149", "T4a todas as recém-ligadas são destacadas, não só a tocada: " + JSON.stringify(api.citUltimoDestaqueLer()));
+      const l149 = api.$("matLeitura").querySelectorAll("button.mat-lei-link").filter((b) => b.textContent === "art. 149");
+      ok(l149.length === 2 && l149.every((b) => /qs-lei-link-perm/.test(b.className)), "T5 as duas ocorrências do art. 149 ganham o 🔗");
+      const l999 = api.$("matLeitura").querySelectorAll("button.mat-lei-link").find((b) => b.textContent === "art. 999");
+      ok(l999 && !/qs-lei-link-perm/.test(l999.className), "T5a o art. 999 continua sem vínculo");
+      /* depois de ligadas, o menu de outra citação não as oferece mais */
+      api.qsFerFechar();
+      l999.onclick({ stopPropagation() {} });
+      const temCaixa = (id) => Array.from(api.$("qsLeiMenu").children || []).some((lb) => Array.from(lb.children || []).some((i) => i.id === id));
+      ok(temCaixa("qsLeiLembrarVinc") && !temCaixa("qsLeiTodasSemLei"), "T6 sem outras pendentes, a caixa 'todas' não aparece (a 'lembrar' sim)");
+    }
+    {
+      /* nas questões: o texto é o comentário */
+      const { api, ch } = montar();
+      const q = { id: "q2", disciplina: DISC, topico: TOP, enunciado: "x", comentario: "Ver art. 148 e, adiante, o art. 149." };
+      const bt = api.document.createElement("button");
+      api.document.body.append(bt);
+      api.qsUiLeiEscolher(bt, q, api.leiCitacoesNoTexto(q.comentario)[0]);
+      const cx = api.$("qsLeiTodasSemLei");
+      ok(cx && /outras 1 citações sem lei deste comentário/.test(cx.parentNode.textContent), "T7 nas questões a caixa fala do comentário: " + (cx && cx.parentNode.textContent));
+    }
   }
   return falhas;
 }

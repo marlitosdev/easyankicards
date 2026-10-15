@@ -1287,7 +1287,10 @@ function citIr(c, botao, base) {
   }
   /* sem lei certa: a mesma conversa das questões (escolher, vincular, colar) */
   if (ctx.disciplina && ctx.topico && typeof qsUiLeiIr === "function") {
-    qsUiLeiIr(c, { disciplina: ctx.disciplina, topico: ctx.topico, _aoVoltar: ctx.aoVoltar }, botao);
+    /* o texto inteiro (v18.51.0): o menu de escolha oferece ligar as OUTRAS citações sem lei dele */
+    let txt = "";
+    try { txt = typeof ctx.textoTodo === "function" ? String(ctx.textoTodo() || "") : ""; } catch (e) { txt = ""; }
+    qsUiLeiIr(c, { disciplina: ctx.disciplina, topico: ctx.topico, _aoVoltar: ctx.aoVoltar, _texto: txt, _onde: ctx.onde }, botao);
     return;
   }
   /* sem tópico (cartão da bancada): a prévia diz que não achou a lei, em vez de não fazer nada */

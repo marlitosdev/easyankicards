@@ -2169,6 +2169,35 @@ function qsVincSalvar() {
  * na frente, não quem existe fora da moldura. Por isso reaproveita
  * qsFerMenu inteiro, com o mesmo fechar-no-clique-fora e no Esc.
  * ===================================================================== */
+/* (v18.51.0) As citações SEM LEI de um texto que ainda perguntam (sem vínculo, sem lei herdada na mesma linha, sem
+ * resolução sozinha), uma por trecho, fora a "exceto". A herança da linha segue a da leitura (citLigarEm): "art. 3º do
+ * CTN ... art. 4º" na mesma linha é do CTN — ligar esse "art. 4º" a outra lei seria errado. */
+function citSemLeiDoTexto(texto, ch, lista, doTopico, exceto) {
+  const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const vistos = new Set([norm(exceto)]);
+  const out = [];
+  String(texto || "").split(/\n/).forEach((linha) => {
+    let cs = [];
+    try {
+      cs = leiCitacoesNoTexto(linha);
+      if (typeof citVinculosAplicar === "function") cs = citVinculosAplicar(linha, cs, ch);
+    } catch (e) { cs = []; }
+    let rot = "";
+    cs.forEach((c) => {
+      if (c.rotulo) { rot = c.rotulo; return; }
+      if (rot || !c.num || !c.texto) return;
+      let a = null;
+      try { a = qsUiLeiAlvo(c, lista, doTopico); } catch (e) { a = null; }
+      if (a && a.lei) return;
+      const k = norm(c.texto);
+      if (vistos.has(k)) return;
+      vistos.add(k);
+      out.push(c);
+    });
+  });
+  return out;
+}
+
 function qsUiLeiEscolher(botao, q, cit) {
   if (!botao || !q) return null;
   const ch = (typeof matChave === "function") ? matChave(q.disciplina, q.topico) : "";
@@ -2232,6 +2261,25 @@ function qsUiLeiEscolher(botao, q, cit) {
     lv.title = t("qs_lei_lembrar_vinc_aj");
     menu.append(lv);
   }
+  /* (v18.51.0) AS OUTRAS CITAÇÕES SEM LEI DO MESMO TEXTO: num resumo com dez "art. N" sem lei, eram dez perguntas.
+   * Uma caixa a mais (DESMARCADA: CF e CTN têm artigos de mesmo número) liga de uma vez as que ainda perguntam;
+   * a que cita artigo que esta lei não tem fica como está, e o aviso diz quais. */
+  let todas = null, outrasSemLei = [];
+  if (lembrarVinc) {
+    try { outrasSemLei = citSemLeiDoTexto(q._texto || q.comentario || "", ch, lista, doTopico, cit.texto); } catch (e) { outrasSemLei = []; }
+  }
+  if (outrasSemLei.length) {
+    const lt = document.createElement("label");
+    lt.className = "qs-lei-lembrar qs-lei-lembrar-vinc";
+    todas = document.createElement("input");
+    todas.type = "checkbox";
+    todas.checked = false;
+    todas.id = "qsLeiTodasSemLei";
+    const chaveTxt = q._onde === "resumo" ? "qs_lei_todas_resumo" : q._texto ? "qs_lei_todas" : "qs_lei_todas_coment";
+    lt.append(todas, document.createTextNode(" " + t(chaveTxt, { n: outrasSemLei.length })));
+    lt.title = t("qs_lei_todas_aj") + "\n" + outrasSemLei.map((c) => c.texto).join(" · ");
+    menu.append(lt);
+  }
   if (podeLembrar) {
     const lb = document.createElement("label");
     lb.className = "qs-lei-lembrar";
@@ -2289,16 +2337,38 @@ function qsUiLeiEscolher(botao, q, cit) {
       const num = cit ? cit.num : "";
       /* (v18.50.0) lembrar a escolha: o vínculo do trecho, neste tópico */
       let citP = cit;
-      if (lembrarVinc && lembrarVinc.checked && cit) {
-        const sub = { incisos: (cit.incisos || []).slice(), paragrafos: (cit.paragrafos || []).slice(), alineas: (cit.alineas || []).slice() };
-        const numCru = typeof qsVincRotuloDestino === "function" ? qsVincRotuloDestino(cit.numCru, sub) : cit.numCru;
-        const r = citVinculoSalvar({ trecho: cit.texto, leiId: l.id, artigos: [{ num: cit.num, numCru, base: cit.numCru, sub }], chave: ch });
-        if (r) {
-          try { reg("QUESTOES", "vínculo criado pelo menu de escolha (permanente)", cit.texto + " → " + l.nome + " · art. " + numCru + (ch ? " · só no tópico " + (q.topico || "") : "")); } catch (e) {}
+      const todasEsta = !!(todas && todas.checked);
+      const gravarVinc = (c0) => {
+        const sub = { incisos: (c0.incisos || []).slice(), paragrafos: (c0.paragrafos || []).slice(), alineas: (c0.alineas || []).slice() };
+        const numCru = typeof qsVincRotuloDestino === "function" ? qsVincRotuloDestino(c0.numCru, sub) : c0.numCru;
+        const r = citVinculoSalvar({ trecho: c0.texto, leiId: l.id, artigos: [{ num: c0.num, numCru, base: c0.numCru, sub }], chave: ch });
+        if (r) try { reg("QUESTOES", "vínculo criado pelo menu de escolha (permanente)", c0.texto + " → " + l.nome + " · art. " + numCru + (ch ? " · só no tópico " + (q.topico || "") : "")); } catch (e) {}
+        return r ? { r, numCru } : null;
+      };
+      if (cit && ((lembrarVinc && lembrarVinc.checked) || todasEsta)) {
+        const g = gravarVinc(cit);
+        if (g) {
+          const feitos = [cit.texto], pulou = [];
+          if (todasEsta) {
+            let nums = null;
+            try { nums = new Set(leiArtigosEfetivos(l).map((x) => x.num)); } catch (e) { nums = null; }
+            outrasSemLei.forEach((c0) => {
+              if (nums && !nums.has(c0.num)) { pulou.push(c0.texto); return; }
+              if (gravarVinc(c0)) feitos.push(c0.texto);
+            });
+          }
           try { qsUiVoltaDe(q)(); } catch (e) {}
-          try { toastMsg(t("qs_vinc_feito", { tr: qsVincCurto(cit.texto), l: l.apelido || l.nome, a: numCru, alc: t(ch ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") }), 4500); } catch (e) {}
-          citDestacarRecem(cit.texto);
-          citP = Object.assign({}, cit, { leiId: l.id, permanente: true, vinculoK: r.k, soTopico: !!ch });
+          const alc = t(ch ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto");
+          try {
+            toastMsg(todasEsta
+              ? t("qs_vinc_feito_lote", { n: feitos.length, l: l.apelido || l.nome, alc }) + (pulou.length ? t("qs_vinc_lote_pulou", { lista: pulou.join(", ") }) : "")
+              : t("qs_vinc_feito", { tr: qsVincCurto(cit.texto), l: l.apelido || l.nome, a: g.numCru, alc }), todasEsta ? 7000 : 4500);
+          } catch (e) {}
+          feitos.forEach((tr) => citDestacarRecem(tr));
+          citP = Object.assign({}, cit, { leiId: l.id, permanente: true, vinculoK: g.r.k, soTopico: !!ch });
+          /* VÁRIAS DE UMA VEZ: o que importa é o resultado (quantas, quais ficaram de fora) — a prévia de UM artigo
+           * cobriria o aviso. Fica o texto à vista, com os links piscando; tocar num deles abre a prévia. */
+          if (todasEsta) { leiVoltaPara = null; return; }
         }
       }
       /* escolhida a lei para uma CITAÇÃO, sobe a prévia do artigo (v18.32.0); o ⚖ geral abre a lei */

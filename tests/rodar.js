@@ -401,7 +401,7 @@ async function main() {
                     ["leitor de lei: 'alínea b' na citação, vínculos manuais e bolha de seleção, letra do modo editar e '＋ Nova lei' sem tópico", llvT],
                     ["material: disciplina como faixa, tópicos com linha-guia e ramos recolhidos (cada um abre a ficha no ramo)", mhiT],
                     ["vínculo feito à mão se mostra: aviso ao guardar, link destacado, 🔗 e balão, linha na prévia, desligar confirma", vfbT],
-                    ["escolher a lei no menu guarda o vínculo (resumo e questões); a lei do fim da enumeração vale para todos", vmnT],
+                    ["escolher a lei no menu guarda o vínculo (resumo e questões), atalho para as outras sem lei; a lei do fim da enumeração vale para todos", vmnT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];
