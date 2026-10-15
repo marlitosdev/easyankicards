@@ -2634,6 +2634,17 @@ dialog.mat-amplo{max-height:96vh}
 .mat-item{flex-wrap:wrap;row-gap:6px}
 .mat-item > .mat-item-txt{flex:1 1 240px}
 .mat-item > .mat-acoes{margin-left:auto;justify-content:flex-end}
+/* JM7 */
+.mat-recentes{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0}
+.mat-recentes[hidden]{display:none}
+.mat-rec-rot{font-size:12px;font-weight:700;color:var(--sutil)}
+.mat-rec{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.mat-sub-est{color:var(--texto)}
+.mat-sem-cx{border-top:1px dashed var(--borda);margin-top:6px;padding-top:2px}
+.mat-sem-cab{color:var(--sutil)}
+.mat-sem-disc{font-weight:700;margin-top:6px}
+.mat-sem-item .mat-nome{font-weight:500;color:var(--sutil)}
+.mat-sem-criar{color:var(--info);border-color:var(--info)}
 .mat-nome{font-size:13px;font-weight:600;color:var(--texto);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-sub{font-size:11px;color:var(--sutil);margin-top:2px}
@@ -5943,6 +5954,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          lógica "E" ("escolher dois exige os dois"), difíceis de explicar e parecidos com os selos das linhas. E cada tipo
          leva as SUAS ferramentas para a sua aba: as de cartões ficavam soltas no meio da estante, com o mesmo peso dos
          filtros, e não se sabia qual botão era de quê. -->
+    <!-- (JM7) continuar de onde parei: os últimos materiais abertos -->
+    <div class="mat-recentes" id="matRecentes" hidden></div>
     <div class="mat-tipos mat-abas" id="matTipos" role="tablist"></div>
     <!-- (v18.39.0) a aba ativa diz o que conta: N itens em K tópicos -->
     <p class="nota mat-aba-conta" id="matAbaConta" role="status" hidden></p>

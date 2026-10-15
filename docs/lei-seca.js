@@ -4017,7 +4017,7 @@ function leisLerTudo() {
 function leisGravarTudo(o) {
   if (_leisCache) {
     _leisCache = o || {};
-    leisIdbGravarTudo(_leisCache).catch(() => {
+    _leisGravando = leisIdbGravarTudo(_leisCache).catch(() => {
       try { uiAlert(t("leis_sem_espaco")); } catch (e2) {}
     });
     return true;

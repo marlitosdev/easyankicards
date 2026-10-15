@@ -111,6 +111,17 @@ function bkLerJuris() {
   catch (e) { return bkLer("eac_juris"); }
 }
 
+/* (v18.45.0) AS GRAVAÇÕES DO INDEXEDDB TERMINARAM? Leis, decisões e julgados são gravados em segundo plano; restaurar um
+ * backup e recarregar a página logo depois pode cortar a gravação no meio — e o recarregamento acharia o IndexedDB vazio
+ * (visto no navegador: restaurar + recarregar na hora deixou 0 leis e 0 julgados). Quem vai recarregar espera por isto. */
+function bkAguardarGravacoes() {
+  const p = [];
+  try { if (typeof _leisGravando !== "undefined" && _leisGravando) p.push(_leisGravando); } catch (e) {}
+  try { if (typeof _decGravando !== "undefined" && _decGravando) p.push(_decGravando); } catch (e) {}
+  try { if (typeof _jurGravando !== "undefined" && _jurGravando) p.push(_jurGravando); } catch (e) {}
+  return Promise.all(p).then(() => p.length, () => p.length);
+}
+
 function montarBackup() {
   const dados = {};
   Object.keys(BK_CHAVES).forEach((grupo) => {

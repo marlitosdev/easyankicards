@@ -81,7 +81,7 @@ function jurGravarTudo(tudo) {
     /* já migrou: a memória muda na hora (quem ler em seguida vê) e o IndexedDB grava em segundo plano */
     if (typeof _jurCache === "string" && _jurCache) {
       _jurCache = s;
-      jurIdbGravarTudo(JSON.parse(s)).catch(() => {
+      _jurGravando = jurIdbGravarTudo(JSON.parse(s)).catch(() => {
         try { uiAlert(t("jur_sem_espaco")); } catch (e2) {}
       });
       return true;

@@ -17,6 +17,7 @@ const JUR_IDB_LOJA = "juris";
 let _jurIdbDb = null;
 let _jurCache = null;      /* texto JSON do mapa {id: julgado}, depois de migrar; null = ainda no localStorage */
 let _jurMigrando = null;
+let _jurGravando = null;   /* a última gravação em segundo plano (backup-ui espera por ela antes de recarregar) */
 
 function jurIdbSuportado() {
   try { return typeof indexedDB !== "undefined" && indexedDB !== null; }

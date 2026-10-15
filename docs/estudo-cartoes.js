@@ -394,6 +394,7 @@ async function estcApagar() {
 
 /* ---- entrada pela agenda: a biblioteca abre na pasta do tópico e já começa a estudar ---- */
 function estcEstudarTopico(disciplina, topico) {
+  try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("cartoes", disciplina, topico); } catch (e) {}
   if (typeof gerAbrirNoTopico === "function") return gerAbrirNoTopico(disciplina, topico, { estudar: true });
   return mcEstudarDireto(disciplina, topico);
 }

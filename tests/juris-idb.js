@@ -73,6 +73,20 @@ async function testes() {
     api.jurCacheForcarTeste(null);
   }
 
+  /* D6: restaurar um backup ESPERA as gravações do IndexedDB antes de recarregar (visto no navegador: recarregar na hora
+   * deixou 0 leis e 0 julgados) */
+  {
+    const { api } = rodar();
+    api.jurCacheForcarTeste("{}");
+    api.jurGravar({ id: "e", tribunal: "STF", classe: "RE", numero: "5", tese: "t" });
+    const n = await api.bkAguardarGravacoes();
+    ok(n >= 1, "D6 bkAguardarGravacoes acompanha a gravação dos julgados: " + n);
+    api.jurCacheForcarTeste(null);
+    const ui = fs.readFileSync(path.join(__dirname, "..", "docs", "backup-ui.js"), "utf8");
+    const corpo = ui.slice(ui.indexOf("async function bkConfirmarRestauro"), ui.indexOf("function bkPintarPainel"));
+    ok(corpo.indexOf("await bkAguardarGravacoes()") > 0 && corpo.indexOf("await bkAguardarGravacoes()") < corpo.indexOf("location.reload()"), "D6a a restauração espera as gravações ANTES de recarregar");
+  }
+
   /* D5: carregamento: o módulo vem antes de juris.js (no HTML, no service worker e nos testes) */
   {
     const raiz = path.join(__dirname, "..", "docs");
