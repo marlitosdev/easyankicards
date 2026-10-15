@@ -1626,3 +1626,97 @@ function jurRepararJson() {
   }
   return consertados;
 }
+
+/* =====================================================================
+ * JM4 — A JURISPRUDÊNCIA CONTINUA VALENDO? (v18.42.0)
+ *
+ * Súmula cancelada, tema revisto, entendimento superado: a tese guardada
+ * há um ano pode estar errada hoje, e nada no app dizia isso. Aqui: um
+ * pedido à IA com a lista (tribunal, número, tese), a resposta em JSON
+ * por julgado (vigente/alterada/superada/cancelada/nao_sei, tese atual,
+ * fonte), a conferência antes de gravar e o desfazer. Campos novos, todos
+ * opcionais (registro antigo continua igual): situacao, situacaoFonte,
+ * situacaoNota, conferidoEm (AAAA-MM-DD) e teseAnterior.
+ * "nao_sei" não grava nada — nem a data: não verificou, não conta.
+ * ===================================================================== */
+const JUR_SITUACOES = ["vigente", "alterada", "superada", "cancelada", "nao_sei"];
+const JUR_REVER_DIAS = 180;
+
+function jurHojeISO(hoje) {
+  /* "AAAA-MM-DD" vale como está: new Date("2026-10-14") é meia-noite UTC, que no Brasil ainda é o dia 13 */
+  if (typeof hoje === "string" && /^\d{4}-\d{2}-\d{2}$/.test(hoje)) return hoje;
+  const d = hoje ? new Date(hoje) : new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/* nunca verificado, ou verificado há mais de 180 dias */
+function jurPrecisaRever(j, hoje) {
+  if (!j) return false;
+  if (!j.conferidoEm) return true;
+  const a = new Date(String(j.conferidoEm) + "T00:00:00"), b = new Date(jurHojeISO(hoje) + "T00:00:00");
+  if (isNaN(a)) return true;
+  return Math.round((b - a) / 86400000) > JUR_REVER_DIAS;
+}
+
+/* superada, cancelada ou alterada: a tese guardada não é (só) o que vale hoje */
+function jurForaDeVigor(j) {
+  return !!j && (j.situacao === "superada" || j.situacao === "cancelada" || j.situacao === "alterada");
+}
+
+function jurAtualPedido(lista, hoje) {
+  const linhas = (lista || []).map((j) => "- id: " + j.id + " | " + [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ")
+    + (j.data ? " (" + j.data + ")" : "") + " | tese: " + String(j.tese || j.resumo || "").replace(/\s+/g, " ").trim());
+  return t("jur_atual_prompt", { hoje: jurHojeISO(hoje), lista: linhas.join("\n") });
+}
+
+/* lê a resposta: {"julgados":[…]} ou uma lista; só ids que estão no pedido; situação fora da lista = nao_sei */
+function jurAtualLer(bruto, lista) {
+  const txt = String(bruto || "").trim();
+  if (!txt) return { est: "vazio", itens: [] };
+  let v = null;
+  const sem = txt.replace(/^```[a-zA-Z]*\s*/, "").replace(/\s*```$/, "").trim();
+  try { v = JSON.parse(sem); } catch (e) {
+    const a = sem.indexOf("{"), b = sem.lastIndexOf("}");
+    if (a >= 0 && b > a) { try { v = JSON.parse(sem.slice(a, b + 1)); } catch (e2) { v = null; } }
+  }
+  if (!v) return { est: "erro", itens: [], erro: typeof jurDiagnosticoJson === "function" ? jurDiagnosticoJson(txt) : "" };
+  const arr = Array.isArray(v) ? v : (Array.isArray(v.julgados) ? v.julgados : []);
+  const porId = new Map((lista || []).map((j) => [String(j.id), j]));
+  const itens = [];
+  let fora = 0;
+  arr.forEach((x) => {
+    if (!x || typeof x !== "object") return;
+    const j = porId.get(String(x.id || ""));
+    if (!j) { fora++; return; }
+    const sit = JUR_SITUACOES.indexOf(String(x.situacao || "").toLowerCase()) >= 0 ? String(x.situacao).toLowerCase() : "nao_sei";
+    const teseAtual = String(x.tese_atual || x.teseAtual || "").trim();
+    const muda = (sit === "alterada" || sit === "superada") && !!teseAtual && teseAtual !== String(j.tese || "").trim();
+    itens.push({ id: j.id, j, situacao: sit, teseAtual, fonte: String(x.fonte || "").trim(), data: String(x.data || "").trim(),
+      explicacao: String(x.explicacao || "").trim(), muda, marcado: sit !== "nao_sei" });
+  });
+  if (!itens.length) return { est: "erro", itens: [], fora, erro: "" };
+  return { est: "ok", itens, fora, faltam: (lista || []).length - itens.length };
+}
+
+/* grava os marcados e devolve o recibo (o estado de antes de cada um) */
+function jurAtualAplicar(itens, hoje) {
+  const dia = jurHojeISO(hoje);
+  const recibo = [];
+  (itens || []).filter((x) => x && x.marcado && x.situacao !== "nao_sei").forEach((x) => {
+    const j = jurDe(x.id);
+    if (!j) return;
+    recibo.push({ id: j.id, antes: { situacao: j.situacao || "", situacaoFonte: j.situacaoFonte || "", situacaoNota: j.situacaoNota || "",
+      conferidoEm: j.conferidoEm || "", tese: j.tese || "", teseAnterior: j.teseAnterior || "" } });
+    const dados = { id: j.id, situacao: x.situacao, situacaoFonte: [x.fonte, x.data].filter(Boolean).join(" · "),
+      situacaoNota: x.explicacao, conferidoEm: dia };
+    if (x.muda) { dados.teseAnterior = j.tese || ""; dados.tese = x.teseAtual; }
+    jurGravar(dados);
+  });
+  return recibo;
+}
+
+function jurAtualDesfazer(recibo) {
+  let n = 0;
+  (recibo || []).forEach((r) => { if (jurDe(r.id)) { jurGravar(Object.assign({ id: r.id }, r.antes)); n++; } });
+  return n;
+}
