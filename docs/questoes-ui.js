@@ -206,6 +206,7 @@ function qsUiCartoesDaQuestao(q) {
   matCartoesAbrir({
     semGravarResumo: true,
     voltarPara: "questoes",
+    origemQuestao: q.id,
     prompt: qsPromptCartao(q),
     sub: t("qs_cartao_sub", { tp: q.topico,
       n: (typeof matContarCartoes === "function"
@@ -213,6 +214,80 @@ function qsUiCartoesDaQuestao(q) {
   });
   matReg("questao", "cartões a partir de uma questão",
          q.topico + " · " + String(q.enunciado).slice(0, 60));
+}
+
+/* =====================================================================
+ * (v18.57.0) OS CARTÕES QUE NASCERAM DE UMA QUESTÃO
+ *
+ * "Criar forma de saber se uma questão já teve cartões criados a partir
+ * dela e visualizar os cartões gerados dela." Os cartões gravados pelo
+ * "virar em cartões" levam a etiqueta da questão (qs_<id>); aqui eles são
+ * achados em qualquer tópico (a questão pode ter sido movida depois). Os
+ * criados antes desta versão não têm a etiqueta e não aparecem.
+ * ===================================================================== */
+function qsCartoesIndice() {
+  const ind = {};
+  const rs = typeof matResumos !== "undefined" ? matResumos : {};
+  Object.keys(rs).forEach((ch) => {
+    const txt = String((rs[ch] && rs[ch].cartoes) || "");
+    if (txt.indexOf("qs_") < 0) return;
+    txt.split(/\r?\n/).forEach((linha) => {
+      const re = /(^|\s)(qs_[A-Za-z0-9]+)(?=\s|$)/g;
+      let m;
+      const vistos = new Set();
+      while ((m = re.exec(linha))) {
+        if (vistos.has(m[2])) continue;
+        vistos.add(m[2]);
+        const p = linha.split(" :: ");
+        (ind[m[2]] = ind[m[2]] || []).push({ chave: ch, frente: String(p[0] || "").trim(), verso: String(p[1] || "").trim(), topico: (rs[ch] && rs[ch].topico) || "" });
+      }
+    });
+  });
+  return ind;
+}
+function qsCartoesDaQuestao(q, indice) {
+  if (!q || !q.id || typeof qsEtiquetaDaQuestao !== "function") return [];
+  const ind = indice || qsCartoesIndice();
+  return ind[qsEtiquetaDaQuestao(q.id)] || [];
+}
+function qsUiCartoesVer(q) {
+  const dlg = $("dlgQsCartoes");
+  if (!dlg || !q) return null;
+  const cs = qsCartoesDaQuestao(q);
+  $("qsCartoesTit").textContent = t("qs_cartoes_tit", { n: cs.length });
+  $("qsCartoesSub").textContent = String(q.enunciado || "").slice(0, 140) + (String(q.enunciado || "").length > 140 ? "…" : "");
+  const cx = $("qsCartoesLista");
+  cx.innerHTML = "";
+  if (!cs.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("qs_cartoes_nenhum");
+    cx.append(p);
+  }
+  cs.forEach((c) => {
+    const d = document.createElement("div");
+    d.className = "jur-par-item qs-cartao-item";
+    const f = document.createElement("div");
+    f.className = "qs-cartao-frente";
+    f.textContent = c.frente;
+    const v = document.createElement("div");
+    v.className = "jur-cita-txt";
+    v.textContent = c.verso;
+    const o = document.createElement("div");
+    o.className = "nota";
+    o.textContent = t("qs_cartoes_onde", { tp: c.topico || c.chave });
+    d.append(f, v, o);
+    cx.append(d);
+  });
+  $("btnQsCartoesBib").hidden = !cs.length;
+  $("btnQsCartoesBib").onclick = () => {
+    dlg.close();
+    if (typeof gerAbrir !== "function") return;
+    gerAbrir();
+    try { $("gerBusca").value = qsEtiquetaDaQuestao(q.id); if (typeof $("gerBusca").oninput === "function") $("gerBusca").oninput(); } catch (e) {}
+  };
+  abrirModal(dlg);
+  return cs.length;
 }
 
 /* volta para a rodada de questões de onde a pessoa saiu, no ponto em que
@@ -1100,6 +1175,18 @@ function qsUiPintarSessao() {
     bc.title = t("qs_cartao_ajuda");
     bc.onclick = () => qsUiCartoesDaQuestao(q);
     acoes.append(bc);
+    /* (v18.57.0) os cartões que já nasceram desta questão: quantos, e ver quais */
+    const nCart = qsCartoesDaQuestao(q).length;
+    if (nCart) {
+      const bv = document.createElement("button");
+      bv.type = "button";
+      bv.className = "btn-min qs-bt-dica qs-bt-mini";
+      bv.id = "btnQsCartoesVer";
+      bv.textContent = t("qs_cartoes_ver", { n: nCart });
+      bv.title = t("qs_cartoes_ver_aj");
+      bv.onclick = () => qsUiCartoesVer(q);
+      acoes.append(bv);
+    }
 
     const bd = document.createElement("button");
     bd.type = "button";
@@ -3139,6 +3226,8 @@ function qsUiRender() {
   qsUiPintarTopicos();
   const ramosDoFiltro = qsUiPintarRamos();
   const memoRamos = {};
+  /* (v18.57.0) um índice só dos cartões nascidos de questões, para os selos da lista */
+  const indCartoes = qsCartoesIndice();
   qsUiOpcoesDe("qsFDisc", qsDisciplinas(), t("qs_todas_disc"), qsUiFiltro.disciplina);
   qsUiOpcoesDe("qsFBanca", qsBancas(), t("qs_todas_bancas"), qsUiFiltro.banca);
 
@@ -3281,7 +3370,16 @@ function qsUiRender() {
       cx2.append(bDel);
       li.append(cx2);
     };
-    ac.append(bResp, bMais);
+    /* (v18.57.0) a questão que já virou cartões ganha o selo com a contagem (tocar mostra quais) */
+    const nCartL = qsCartoesDaQuestao(q, indCartoes).length;
+    if (nCartL) {
+      const bc = document.createElement("button");
+      bc.type = "button"; bc.className = "btn-min qs-item-cartoes";
+      bc.textContent = "🃏 " + nCartL;
+      bc.title = t("qs_cartoes_selo", { n: nCartL });
+      bc.onclick = () => qsUiCartoesVer(q);
+      ac.append(bResp, bc, bMais);
+    } else ac.append(bResp, bMais);
     li.append(ac);
     if (li._hist) li.append(li._hist);
     box.append(li);
@@ -3418,6 +3516,10 @@ function qsUiMoverDesfazerBotao(q, aoFim) {
     if (typeof aoFim === "function") aoFim();
   };
   return b;
+}
+if (typeof document !== "undefined" && $("dlgQsCartoes")) {
+  $("btnQsCartoesFechar").onclick = () => $("dlgQsCartoes").close();
+  if ($("btnQsCartoesX")) $("btnQsCartoesX").onclick = () => $("dlgQsCartoes").close();
 }
 if (typeof document !== "undefined" && $("dlgQsMover")) {
   $("btnQsMoverOk").onclick = () => qsUiMoverConfirmar();

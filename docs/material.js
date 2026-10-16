@@ -3995,12 +3995,17 @@ function matEtiquetasTopico(disciplina, topico, concurso, origem) {
  * gravar o que estiver na caixa, que pode ser de outro tópico ou vazio. */
 let mcPromptDeFora = null;
 let mcVoltarPara = null;    /* "questoes" quando o painel veio de uma questão */
+/* (v18.57.0) a questão de onde os cartões nascem: cada cartão gravado leva a etiqueta dela (qsEtiquetaDaQuestao), e é por ela
+ * que a questão sabe "já virou N cartões" e mostra quais */
+let mcOrigemQuestao = null;
+function qsEtiquetaDaQuestao(id) { return "qs_" + String(id || "").replace(/[^A-Za-z0-9]/g, ""); }
 
 function matCartoesAbrir(opts) {
   if (!matAtual) return;
   const o = opts || {};
   mcPromptDeFora = o.prompt ? String(o.prompt) : null;
   mcVoltarPara = o.voltarPara || null;
+  mcOrigemQuestao = o.origemQuestao ? String(o.origemQuestao) : null;
   if ($("btnMcFechar")) {
     $("btnMcFechar").textContent = t(o.voltarPara === "questoes"
       ? "mc_voltar_questoes"
@@ -4419,7 +4424,8 @@ async function matCartoesSalvar() {
      * de estudo as mostrava duas vezes seguidas. O Anki junta iguais na
      * importação, então o estrago era invisível lá e permanente aqui. */
     + matJuntarTags(tags,
-        (c.tags || []).map((x) => String(x).replace(/::/g, "_"))).join(" ")
+        (c.tags || []).map((x) => String(x).replace(/::/g, "_"))
+          .concat(mcOrigemQuestao ? [qsEtiquetaDaQuestao(mcOrigemQuestao)] : [])).join(" ")
     ], ex.depois);
   }).reduce((a, b) => a.concat(b), []);
 
@@ -4432,7 +4438,8 @@ async function matCartoesSalvar() {
   const alvo = matResumos[matAtual.chave];
   alvo.cartoesInfo = (alvo.cartoesInfo || []).concat([{
     quando: new Date().toISOString(), n: novos.length,
-    origem: "resumo", concurso,
+    origem: mcOrigemQuestao ? "questao" : "resumo", concurso,
+    qid: mcOrigemQuestao || undefined,
     resumoChars: String(alvo.texto || "").length,
     app: (typeof VERSAO === "string" ? VERSAO : ""),
   }]);
