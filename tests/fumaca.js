@@ -1057,7 +1057,7 @@ function rodar() {
     jurPilulaLimpar, jurPintarTagsForm,
     jurTagsColadasAtual: () => jurTagsColadas,
     jurFiltroTagAtual: () => jurFiltroTag,
-    jurIdentidade, jurIguaisA, jurRepetidosDoTopico, jurUnir,
+    jurIdentidade, jurIguaisA, jurParecidos, jurEscCriar, jurRepetidosDoTopico, jurUnir,
     jurPromptComparar, jurPintarRepetidos, jurUnirPar, jurCopiarPrompt,
     jurEscreverTese,
     /* jurisprudencia como material: chaves em cache, rotulo do topico,

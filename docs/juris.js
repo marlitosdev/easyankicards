@@ -919,6 +919,58 @@ function jurIguaisA(j, lista) {
     x && x.id !== (j && j.id) && jurIdentidade(x) === id);
 }
 
+/* =====================================================================
+ * JÁ EXISTE ALGO IGUAL OU PARECIDO? (v18.52.0)
+ *
+ * O pedido: "quando um usuário tentar criar um julgado, deve haver checagem
+ * se já existe julgado ou jurisprudência igual ou bastante similar; o
+ * usuário deve poder ver este julgado e decidir se quer mesmo criar".
+ * Três graus, do mais certo ao menos:
+ *  - "mesmo": mesma classe e número (e o mesmo tribunal, ou um dos dois
+ *    sem tribunal) — é o mesmo processo/súmula/tema;
+ *  - "numero": o mesmo número, e um dos dois sem classe — provável;
+ *  - "tese": as palavras da tese e do resumo em boa parte iguais — outro
+ *    julgado com o MESMO entendimento (jurisprudência repetida).
+ * Só aponta: quem decide é a pessoa (usar o que existe, ou criar).
+ * ===================================================================== */
+const JUR_PAL_VAZIAS = new Set(("para pela pelo pelos pelas como sobre entre quando desde sendo cada esta este essa esse "
+  + "isto isso aquele aquela deve devem pode podem nao contra mesmo mesma apenas ainda tambem qualquer outro outra outros "
+  + "outras seus suas dele dela deles delas forma caso casos onde qual quais quem cujo cuja sera seria foram fora seja "
+  + "sejam tese julgado julgados entendimento tribunal").split(" "));
+function jurPalavrasTese(j) {
+  const s = jurSemAcento(String([j && j.tese, j && j.resumo].filter(Boolean).join(" "))).toLowerCase();
+  return new Set(s.replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 3 && !JUR_PAL_VAZIAS.has(w)));
+}
+function jurParecidos(novo, lista, opc) {
+  if (!novo) return [];
+  const L = (lista || jurLista()).filter((j) => j && j.id && j.id !== novo.id);
+  const cls = (x) => String((x && x.classe) || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const tri = (x) => String((x && x.tribunal) || "").toUpperCase().trim();
+  const numN = jurSoDigitos(novo.numero), clsN = cls(novo), triN = tri(novo);
+  const pN = jurPalavrasTese(novo);
+  const out = [];
+  L.forEach((j) => {
+    const numJ = jurSoDigitos(j.numero), clsJ = cls(j), triJ = tri(j);
+    const triOk = !triN || !triJ || triN === triJ;
+    let motivo = "", pct = 0;
+    if (numN && numN === numJ && clsN && clsN === clsJ && triOk) { motivo = "mesmo"; pct = 100; }
+    else if (numN.length >= 3 && numN === numJ && (!clsN || !clsJ) && triOk) { motivo = "numero"; pct = 95; }
+    else {
+      const pJ = jurPalavrasTese(j);
+      const menor = Math.min(pN.size, pJ.size);
+      if (menor >= 5) {
+        let comuns = 0;
+        pN.forEach((w) => { if (pJ.has(w)) comuns++; });
+        const jac = comuns / (pN.size + pJ.size - comuns);
+        const cont = comuns / menor;
+        if (jac >= 0.45 || (cont >= 0.75 && menor >= 8)) { motivo = "tese"; pct = Math.round((jac + cont) / 2 * 100); }
+      }
+    }
+    if (motivo) out.push({ j, motivo, pct });
+  });
+  return out.sort((a, b) => b.pct - a.pct).slice(0, (opc && opc.max) || 5);
+}
+
 /* Os pares repetidos de um tópico, para a tela oferecer a união. */
 function jurRepetidosDoTopico(chave) {
   const lista = jurDoTopico(chave);
@@ -1550,13 +1602,15 @@ function jurCitacoesNoTexto(texto) {
   const NUM = "\\s*(?:n[º°o.]?\\s*)?";
   let re, m;
   /* súmula vinculante (do STF) */
-  re = new RegExp(ANTES + "(S[úu]mula\\s+Vinculante|SV)" + NUM + "(\\d{1,4})(?!\\d)", "gi");
+  /* (v18.52.0) o número pode vir com ponto de milhar ("Tema 1.093"): sem isto, virava "Tema 1" */
+  const MIL = "(\\d{1,3}(?:\\.\\d{3})+|";
+  re = new RegExp(ANTES + "(S[úu]mula\\s+Vinculante|SV)" + NUM + MIL + "\\d{1,4})(?!\\d)", "gi");
   while ((m = re.exec(s))) ok(m.index + m[1].length, m.index + m[0].length, "Súmula Vinculante", m[3], "STF");
   /* súmula (o tribunal vem depois: "do STJ", "/STF") */
-  re = new RegExp(ANTES + "(S[úu]mula)" + NUM + "(\\d{1,4})(?!\\d)", "gi");
+  re = new RegExp(ANTES + "(S[úu]mula)" + NUM + MIL + "\\d{1,4})(?!\\d)", "gi");
   while ((m = re.exec(s))) ok(m.index + m[1].length, m.index + m[0].length, "Súmula", m[3], "");
   /* tema (repetitivo do STJ ou de repercussão geral do STF) */
-  re = new RegExp(ANTES + "(Tema(?:\\s+(?:Repetitivo|de\\s+Repercuss[ãa]o\\s+Geral))?)" + NUM + "(\\d{1,5})(?!\\d)", "gi");
+  re = new RegExp(ANTES + "(Tema(?:\\s+(?:Repetitivo|de\\s+Repercuss[ãa]o\\s+Geral))?)" + NUM + MIL + "\\d{1,5})(?!\\d)", "gi");
   while ((m = re.exec(s))) {
     ok(m.index + m[1].length, m.index + m[0].length, "Tema", m[3], /repetitivo/i.test(m[2]) ? "STJ" : /repercuss/i.test(m[2]) ? "STF" : "");
   }
@@ -1586,7 +1640,8 @@ function jurAcharCitado(c, lista, chave) {
   const triOk = (j) => !c.tribunal || !j.tribunal || String(j.tribunal).toUpperCase() === c.tribunal;
   let cand = L.filter((j) => jurClasseChave(j.classe) === cc && jurNumChave(j.numero) === n && triOk(j));
   if (cc === "tema") {
-    const re = new RegExp("\\bTema\\s*(?:n[º°o.]?\\s*)?0*" + n + "(?!\\d)", "i");
+    /* "Tema 1.093" escrito com ponto de milhar também conta (v18.52.0) */
+    const re = new RegExp("\\bTema\\s*(?:n[º°o.]?\\s*)?0*" + n.split("").join("\\.?") + "(?!\\d)", "i");
     L.forEach((j) => {
       if (cand.indexOf(j) >= 0 || !triOk(j)) return;
       const onde = [j.tese, j.resumo, j.texto, j.precedentes, (j.tags || []).join(" ")].join(" ");
