@@ -965,8 +965,8 @@ async function testes() {
        "X5c o registro abriu no tópico errado");
     ok(api.regFormasAtual().length === 1 && api.regFormasAtual()[0] === "resumo",
        "X5d a forma não veio marcada como leitura de resumo");
-    ok(Number(api.$("regMinutos").value) >= 5,
-       "X5e o tempo sugerido devia ter piso de 5 minutos");
+    ok(api.$("regMinutos").value === "" && api.regTempoPlanejadoAtual() >= 5,
+       "X5e o tempo ESTIMADO pela leitura é sugestão (a um toque), com piso de 5 minutos — não entra sozinho no campo (v18.58.0)");
     /* e confirmando, aí sim entra no diário */
     api.confirmarRegistroTeste({ preventDefault() {} });
     ok(api.edDiario.length === nAntes + 1,

@@ -155,6 +155,12 @@ async function testes() {
     api.$("btnRegTipoRevisao").onclick();
     ok(api.regAlvoNuncaEstudado() === true, "G6 premissa: o tópico nunca foi estudado");
     const antes = api.edDiarioAtual().length;
+    /* (v18.58.0) sem tempo informado, o botão não grava (e avisa) */
+    ok(api.$("btnRegEstudo").onclick() instanceof Promise, "G6-0 premissa: o botão é assíncrono");
+    await Promise.resolve();
+    ok(api.edDiarioAtual().length === antes && /Informe quanto tempo você estudou/.test(api.$("toast").textContent) && api.$("dlgRegistro").open === true,
+       "G6-1 sem tempo informado não grava: avisa e fica no registro (o sugerido não vira estudo sozinho)");
+    api.regTempoDefinir(30, "voce");
     const p = api.$("btnRegEstudo").onclick();
     let pronto = false; p.then(() => { pronto = true; });
     for (let k = 0; k < 12 && !pronto; k++) { await Promise.resolve(); try { api._uiFechar(false); } catch (e) {} }
@@ -169,8 +175,12 @@ async function testes() {
     api.edProgressoPor({});
     api.abrirRegistro({ nome: "Lei 4.320", disciplina: "Direito Financeiro", chave: ch, minutos: 30 });
     const n0 = api.edDiarioAtual().length;
-    api.$("btnRegEstudo").onclick();
+    api.$("regMinutos").value = 25;
+    ((api.$("regMinutos")._ouv || {}).input || []).forEach((fn) => fn());
+    await api.$("btnRegEstudo").onclick();
     ok(api.edDiarioAtual().length === n0 + 1, "G6d registrar ESTUDO de tópico novo não pergunta nada (e grava na hora)");
+    const ult = api.edDiarioAtual()[api.edDiarioAtual().length - 1];
+    ok(ult.m === 25 && ult.mo === "voce", "G6e grava o tempo digitado, com a origem 'voce': " + JSON.stringify([ult.m, ult.mo]));
   }
 
   /* ---- G7: o tempo também em horas e minutos, e quanto a agenda reservou ---- */
@@ -179,7 +189,13 @@ async function testes() {
     const ch = preparar(api);
     api.edProgressoPor({});
     api.abrirRegistro({ nome: "Lei 4.320", disciplina: "Direito Financeiro", chave: ch, minutos: 90 });
-    ok(api.$("regMinFmt").textContent === "= 1h30 — o tempo que a agenda reservou para esta sessão", "G7 ao abrir: o tempo em h/min e que é o reservado pela agenda: " + api.$("regMinFmt").textContent);
+    /* (v18.58.0) o campo nasce VAZIO; o reservado pela agenda é sugestão, a um toque */
+    ok(api.$("regMinutos").value === "" && /^Quanto tempo você estudou de verdade\?.* · a agenda reservou 1h30 para esta sessão$/.test(api.$("regMinFmt").textContent),
+       "G7 ao abrir: o campo vazio, a pergunta e o reservado pela agenda: " + api.$("regMinFmt").textContent);
+    ok(api.$("btnRegUsarPlano").hidden === false && /usar o sugerido \(1h30\)/.test(api.$("btnRegUsarPlano").textContent), "G7-1 o sugerido fica a um toque: " + api.$("btnRegUsarPlano").textContent);
+    api.$("btnRegUsarPlano").onclick();
+    ok(api.$("regMinutos").value == 90 && /^= 1h30 · tempo sugerido — confira/.test(api.$("regMinFmt").textContent) && api.regTempoOrigemAtual() === "plano" && api.$("btnRegUsarPlano").hidden === true,
+       "G7-2 'usar o sugerido' põe 1h30 no campo, dizendo que é o sugerido: " + api.$("regMinFmt").textContent);
     api.$("regMinutos").value = 55;
     ((api.$("regMinutos")._ouv || {}).input || []).forEach((fn) => fn());
     ok(api.$("regMinFmt").textContent === "= 55min · a agenda reservou 1h30 para esta sessão", "G7b mudou o tempo: diz o novo em h/min e lembra o reservado: " + api.$("regMinFmt").textContent);
@@ -187,7 +203,7 @@ async function testes() {
     atalhos.find((b) => b.textContent === "+15m").onclick();
     ok(api.$("regMinutos").value == 70 && api.$("regMinFmt").textContent === "= 1h10 · a agenda reservou 1h30 para esta sessão", "G7c o atalho +15m soma e o texto acompanha: " + api.$("regMinFmt").textContent);
     atalhos.find((b) => b.textContent === api.t("ed_reg_zerar")).onclick();
-    ok(/^= 5min/.test(api.$("regMinFmt").textContent), "G7d zerar também atualiza o texto");
+    ok(api.$("regMinutos").value === "" && /^Quanto tempo você estudou/.test(api.$("regMinFmt").textContent), "G7d zerar esvazia o campo e o texto volta a perguntar");
     api.$("regMinSlider").value = 120;
     ((api.$("regMinSlider")._ouv || {}).input || []).forEach((fn) => fn());
     ok(api.$("regMinutos").value == 120 && /^= 2h ·/.test(api.$("regMinFmt").textContent), "G7e arrastar a barra atualiza o número e o texto: " + api.$("regMinFmt").textContent);

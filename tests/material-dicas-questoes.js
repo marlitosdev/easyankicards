@@ -1036,8 +1036,8 @@ function novo() {
   ok("o resumo continua aberto atras do registro", api.$("dlgMaterial").open === true);
   ok("e o registro de estudo abre", api.$("dlgRegistro").open === true);
   ok("no tópico certo", api.$("regTitulo").textContent === "Leis Orcamentarias");
-  ok("com o tempo estimado apenas SUGERIDO",
-    Number(api.$("regMinutos").value) > 0);
+  ok("com o tempo estimado apenas SUGERIDO (a um toque, fora do campo — v18.58.0)",
+    api.$("regMinutos").value === "" && api.regTempoPlanejadoAtual() > 0);
   ok("e com a forma marcada como resumo",
     api.regFormasAtual().length === 1 && api.regFormasAtual()[0] === "resumo");
   ok("NADA foi dado por estudado sem confirmação",
@@ -1128,7 +1128,7 @@ function novo() {
   ok("registrar leitura nao abriu o registro", api.$("dlgRegistro").open === true);
   ok("registrar a leitura FECHOU o resumo que eu estava lendo",
     api.$("dlgMaterial").open === true);
-  ok("o registro abriu sem tempo sugerido", Number(api.$("regMinutos").value) > 0);
+  ok("o registro abriu sem tempo sugerido", api.regTempoPlanejadoAtual() > 0 && api.$("btnRegUsarPlano").hidden === false);
 
   api.$("btnRegFechar").onclick();
   ok("o registro nao fechou", api.$("dlgRegistro").open === false);

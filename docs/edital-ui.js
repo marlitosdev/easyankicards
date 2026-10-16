@@ -1131,6 +1131,8 @@ function anotarDiario(i, acao, detalhe) {
                   /* ramos afetados por este registro (e a marca de ANTES de cada um, para o desfazer) */
                   rm: (detalhe && detalhe.rm && detalhe.rm.length) ? detalhe.rm : undefined,
                   rp: (detalhe && detalhe.rp && detalhe.rp.length) ? detalhe.rp.map((id) => ({ id })) : undefined,
+                  /* (v18.58.0) de onde veio o tempo: "voce" (digitado), "medido" (sessão de questões/leitura), "plano" */
+                  mo: (detalhe && detalhe.mo) || undefined,
                   cc: concursoAtual().nome });
   salvarDiario();
 }
@@ -2360,11 +2362,8 @@ function regComoFoiEfeito(atual, escolha, med, prox) {
  * decide — quem confirma é quem estudou. */
 function regSugerir(formas, minutos) {
   regFormas = (formas && formas.length ? formas : ["leitura"]).slice();
-  if (minutos && $("regMinutos")) {
-    $("regMinutos").value = String(minutos);
-    if ($("regMinSlider")) $("regMinSlider").value = String(Math.min(240, minutos));
-    regPintarTempo();
-  }
+  /* (v18.58.0) a leitura do material ESTIMA pelo tamanho do texto: é sugestão (a um toque), não o tempo estudado */
+  if (minutos) { regTempoPlanejado = Math.max(0, Math.round(Number(minutos) || 0)); regPintarTempo(); }
   const cx = $("regFormas");
   if (cx && cx.querySelectorAll) {
     const botoes = cx.querySelectorAll("button");
@@ -2378,15 +2377,15 @@ function regSugerir(formas, minutos) {
 
 function regDeLeitura(minutos) { regSugerir(["resumo"], minutos); }
 
-function regDeQuestoes(feitas, certas, minutos) {
+function regDeQuestoes(feitas, certas, minutos, medido) {
   regFormas = ["questoes"];
   regQDoApp = { feitas: Number(feitas) || 0, certas: Number(certas) || 0 };
   if ($("regQFeitas")) $("regQFeitas").value = String(feitas || 0);
   if ($("regQCertas")) $("regQCertas").value = String(certas || 0);
+  /* medido (o tempo ativo da rodada) entra no campo; estimado (rodada antiga) fica como sugestão */
   if (minutos && $("regMinutos")) {
-    $("regMinutos").value = String(minutos);
-    if ($("regMinSlider")) $("regMinSlider").value = String(Math.min(240, minutos));
-    regPintarTempo();
+    if (medido === false) { regTempoPlanejado = Math.max(0, Math.round(Number(minutos) || 0)); regPintarTempo(); }
+    else regTempoDefinir(minutos, "medido");
   }
   /* Repinta A PARTIR de regFormas, não de um rótulo escolhido à mão.
    * Comparar com o texto do botão deixava a tela dizer "Questões" enquanto
@@ -2561,7 +2560,8 @@ function regRamosPintar(i, refazerMinutos) {
   /* a ficha "Todos" fica acesa quando todos os ramos que cabem neste registro estão marcados */
   const eleg = rs.filter(regRamosElegivel);
   if ($("btnRegRamosTodos")) $("btnRegRamosTodos").setAttribute("aria-pressed", eleg.length && eleg.every((r) => regRamosSel.has(r.id)) ? "true" : "false");
-  if (refazerMinutos && n) { $("regMinutos").value = min; $("regMinSlider").value = Math.min(240, min); }
+  /* (v18.58.0) a escolha dos ramos muda o PLANEJADO (referência), nunca o tempo que está no campo */
+  if (refazerMinutos && n) regTempoPlanejado = min;
   regPintarTempo();
   regTrilhaPintar(i);
   regExigirPintar(i);
@@ -2754,7 +2754,7 @@ function regTipoTrocar() {
   regPintarBotoes();
   if (regAtual && regAtual.ramos) {
     regRamosIniciar(regAtual);
-    if (regRamosSel.size) { const m = regRamosMinutos(regAtual); $("regMinutos").value = m; $("regMinSlider").value = Math.min(240, m); }
+    if (regRamosSel.size) regTempoPlanejado = regRamosMinutos(regAtual);
   }
   regPintarTempo();
   /* estudo ↔ revisão muda o degrau da próxima revisão que o "Como foi?" anuncia */
@@ -2805,9 +2805,8 @@ function abrirRegistro(i, opc) {
   $("regSub").textContent = i.disciplina + " · " + (regTipoSugerido && regTipoSugerido.motivo === "recente"
     ? t("ed_reg_sub_recente", { q: regTipoSugerido.dias === 0 ? t("ed_reg_hoje") : t("ed_reg_ha_dias", { n: regTipoSugerido.dias }) })
     : edPorque(i, true));
-  $("regMinutos").value = minReg;
   regTempoPlanejado = Math.max(0, Math.round(Number(minReg) || 0));
-  $("regMinSlider").value = Math.min(240, minReg);
+  regTempoDefinir(0, "");
   ["regQFeitas", "regQCertas", "regQPctCampo", "regOnde", "regObs"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
@@ -2923,16 +2922,39 @@ function regPintarPct() {
  * +30 e +15, não arrastar o cursor até o número exato. */
 /* "= 1h10 · a agenda reservou 1h30 para esta sessão": o tempo do registro em horas e minutos, e o reservado na agenda */
 let regTempoPlanejado = 0;
+/* (v18.58.0) DE ONDE VEIO O TEMPO. O relato: "registrei 1 hora de estudo mas contou como 3h40". Marcar ramos (ou "Todos",
+ * ou trocar estudo/revisão) REESCREVIA o campo com a soma do tempo PLANEJADO dos ramos — por cima do que a pessoa tinha
+ * digitado. Agora o campo nasce VAZIO (a pessoa diz quanto estudou); o planejado fica ao lado, a um toque ("usar o
+ * planejado"); o que vem MEDIDO (sessão de questões, leitura) já vem preenchido; e nada reescreve o que a pessoa pôs.
+ * A origem vai para o diário (x.mo): "voce" | "medido" | "plano". */
+let regTempoOrigem = "";
+function regTempoDefinir(m, origem) {
+  const v = Math.max(0, Math.min(600, Math.round(Number(m) || 0)));
+  if ($("regMinutos")) $("regMinutos").value = v ? String(v) : "";
+  if ($("regMinSlider")) $("regMinSlider").value = String(Math.max(5, Math.min(240, v || 5)));
+  regTempoOrigem = v ? (origem || "voce") : "";
+  regPintarTempo();
+  return v;
+}
+function regTempoAtual() { return Math.max(0, Math.round(Number(($("regMinutos") || {}).value) || 0)); }
 function regPintarTempo() {
   const el = $("regMinFmt");
   if (!el) return "";
-  const m = Math.max(0, Math.round(Number(($("regMinutos") || {}).value) || 0));
-  let txt = t("ed_reg_min_fmt", { h: horasTexto(m) });
-  if (regTempoPlanejado > 0) {
+  const m = regTempoAtual();
+  let txt = m ? t("ed_reg_min_fmt", { h: horasTexto(m) }) + (regTempoOrigem === "medido" ? t("ed_reg_min_medido")
+    : regTempoOrigem === "plano" ? t("ed_reg_min_do_plano") : "") : t("ed_reg_min_vazio");
+  if (regTempoPlanejado > 0 && regTempoOrigem !== "plano") {
     txt += regTempoPlanejado === m ? t("ed_reg_min_plan_igual")
       : t("ed_reg_min_plan", { p: horasTexto(regTempoPlanejado) });
   }
   el.textContent = txt;
+  el.classList && el.classList.toggle("reg-tempo-falta", !m);
+  /* o planejado num toque (quando difere do que está no campo) */
+  const bu = $("btnRegUsarPlano");
+  if (bu) {
+    bu.hidden = !(regTempoPlanejado > 0) || regTempoPlanejado === m;
+    bu.textContent = t("ed_reg_usar_plano", { p: horasTexto(regTempoPlanejado || 0) });
+  }
   return txt;
 }
 
@@ -2947,11 +2969,7 @@ function regPintarAtalhos() {
     b.textContent = "+" + n + "m";
     b.title = t("ed_reg_atalho_ajuda", { n });
     b.onclick = () => {
-      const atual = Math.max(0, Number($("regMinutos").value) || 0);
-      const novo = Math.min(600, atual + n);
-      $("regMinutos").value = novo;
-      $("regMinSlider").value = Math.min(240, novo);
-      regPintarTempo();
+      regTempoDefinir(Math.min(600, regTempoAtual() + n), "voce");
     };
     cx.append(b);
   });
@@ -2960,7 +2978,7 @@ function regPintarAtalhos() {
   zerar.className = "reg-atalho";
   zerar.textContent = t("ed_reg_zerar");
   zerar.title = t("ed_reg_zerar_ajuda");
-  zerar.onclick = () => { $("regMinutos").value = 5; $("regMinSlider").value = 5; regPintarTempo(); };
+  zerar.onclick = () => regTempoDefinir(0, "");
   cx.append(zerar);
 }
 
@@ -3098,6 +3116,7 @@ function confirmarRegistro(estado) {
   if (typeof difDefinir === "function" && regDif) difDefinir(item.disciplina, item.nome, regDif, "declarada");
   regHumor = regDif === "alta" ? "ruim" : regDif === "baixa" ? "boa" : "media";
   const minCerto = Math.max(1, Number($("regMinutos").value) || item.minutos);
+  const origemTempo = Number($("regMinutos").value) ? (regTempoOrigem || "voce") : "plano";
   edMarcar(item, estado, {
     minutos: minCerto,
     formas: regFormas.slice(),
@@ -3107,6 +3126,7 @@ function confirmarRegistro(estado) {
      * de acerto depois */
     questoes: qDados,
     rp: item.ramosParciais || [],
+    mo: origemTempo,
     onde: String(($("regOnde") || {}).value || "").trim() || null,
     obs: String(($("regObs") || {}).value || "").trim() || null,
   }, linhas.length > 0);
@@ -4847,13 +4867,16 @@ function edIniciar() {
    * digitar move a barra. Dois controles que discordam são um bug esperando. */
   $("regMinSlider").addEventListener("input", () => {
     $("regMinutos").value = $("regMinSlider").value;
+    regTempoOrigem = "voce";
     regPintarTempo();
   });
   $("regMinutos").addEventListener("input", () => {
     const v = Math.max(5, Math.min(240, Number($("regMinutos").value) || 5));
     $("regMinSlider").value = v;
+    regTempoOrigem = regTempoAtual() ? "voce" : "";
     regPintarTempo();
   });
+  if ($("btnRegUsarPlano")) $("btnRegUsarPlano").onclick = () => regTempoDefinir(regTempoPlanejado, "plano");
   $("edDias").onchange = edRender;
   $("btnRegFechar").onclick = () => {
     $("dlgRegistro").close();
@@ -4890,6 +4913,13 @@ function edIniciar() {
   /* REVISAR O QUE NUNCA FOI ESTUDADO pergunta antes: marcaria o tópico direto como revisado (✓✓). Só faz sentido
    * para quem estudou fora do app. Sem a pergunta, o caminho comum segue síncrono. */
   $("btnRegEstudo").onclick = async () => {
+    /* (v18.58.0) sem tempo informado não grava: o planejado não é o estudado */
+    if (!regTempoAtual()) {
+      regPintarTempo();
+      try { toastMsg(t("ed_reg_min_falta"), 4000); } catch (e) {}
+      try { $("regMinutos").focus(); } catch (e) {}
+      return null;
+    }
     if (regTipo === "revisado" && regAlvoNuncaEstudado() && !(await uiConfirm(t("ed_reg_rev_sem_estudo")))) return null;
     return confirmarRegistro(regTipo);
   };

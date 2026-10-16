@@ -1024,7 +1024,7 @@ async function testes() {
       const it = a.edItemDoPlano("Licitações", "Lei 14.133");
       a.abrirRegistro(it);
       ok(/Lei 14\.133 › Modalidades/.test(a.$("regTitulo").textContent), "R32j o titulo do registro diz quais ramos serao marcados: " + a.$("regTitulo").textContent);
-      ok(Number(a.$("regMinutos").value) === it.minutosSessao && it.minutosSessao < it.minutos, "R32k os minutos sugeridos sao os da SESSAO (nao os do topico inteiro): " + a.$("regMinutos").value + " x " + it.minutos);
+      ok(a.regTempoPlanejadoAtual() === it.minutosSessao && it.minutosSessao < it.minutos && a.$("regMinutos").value === "", "R32k os minutos SUGERIDOS sao os da SESSAO (nao os do topico inteiro), e ficam como sugestao (o campo nasce vazio): " + a.regTempoPlanejadoAtual() + " x " + it.minutos);
     }
 
     /* R34: o painel "Ramos da disciplina" (Fase 3) */
@@ -3043,11 +3043,11 @@ async function testes() {
       ok(marcas().join() === "true,false,false" && linhas()[0].children[1].textContent === "Modalidades" && linhas()[1].children[1].textContent === "Fase preparatória" && /peso 5/.test(linhas()[0].title) && /peso 3/.test(linhas()[1].title), "R33a vem marcado so' o ramo que a agenda propos, na ordem de relevancia (a ficha so' com o nome; o peso no balao)");
       ok(/(^| )marcado( |$)/.test(linhas()[0].className) && !/(^| )marcado( |$)/.test(linhas()[1].className) && /1h10/.test(linhas()[0].children[2].textContent) && linhas()[1].children[2].textContent === "" && /≈ 40min/.test(linhas()[1].title), "R33a2 a ficha marcada fica preenchida e mostra o tempo; a desmarcada, so' o nome (o tempo no balao)");
       ok(a.$("btnRegRamosTodos").getAttribute("aria-pressed") === "false", "R33a3 com um ramo so' marcado a ficha 'Todos' fica apagada");
-      ok(Number(a.$("regMinutos").value) === 70 && /^1 ramo\(s\) · 1h10$/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
+      ok(a.regTempoPlanejadoAtual() === 70 && /^1 ramo\(s\) · 1h10$/.test(a.$("regRamosResumo").textContent) && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent), "R33b minutos e titulo acompanham a escolha: " + a.$("regMinutos").value + " | " + a.$("regRamosResumo").textContent + " | " + a.$("regTitulo").textContent);
       const ck1 = linhas()[1].children[0]; ck1.checked = true; ck1.onchange();
-      ok(marcas().join() === "true,true,false" && Number(a.$("regMinutos").value) === 110 && /2 ramo/.test(a.$("regRamosResumo").textContent) && /Modalidades, Fase preparatória$/.test(a.$("regTitulo").textContent), "R33c marcar outro ramo soma o tempo (70+40) e entra no titulo: " + a.$("regMinutos").value);
+      ok(marcas().join() === "true,true,false" && a.regTempoPlanejadoAtual() === 110 && /2 ramo/.test(a.$("regRamosResumo").textContent) && /Modalidades, Fase preparatória$/.test(a.$("regTitulo").textContent), "R33c marcar outro ramo soma o tempo (70+40) e entra no titulo: " + a.$("regMinutos").value);
       linhas()[0].children[0].checked = false; linhas()[0].children[0].onchange();
-      ok(marcas().join() === "false,true,false" && Number(a.$("regMinutos").value) === 40, "R33d desmarcar tira o tempo dele");
+      ok(marcas().join() === "false,true,false" && a.regTempoPlanejadoAtual() === 40, "R33d desmarcar tira o tempo dele");
       a.$("btnRegRamosTodos").onclick();
       const rM = a.lerEdital("@ D :: 5" + NL + "+ T :: 5" + NL + Array.from({ length: 5 }, (x, k) => "++ R" + (k + 1)).join(NL));
       const itM = a.montarPlano(rM, { horas: 20, prova: "2027-06-01", feitos: {}, fatores: null, acertos: null }).itens[0];
@@ -3057,11 +3057,11 @@ async function testes() {
       a.$("dlgRegistro").close && a.$("dlgRegistro").close();
       a.abrirRegistro(item());
       a.$("btnRegRamosTodos").onclick();
-      ok(marcas().join() === "true,true,true" && Number(a.$("regMinutos").value) === 150 && a.$("btnRegRamosTodos").getAttribute("aria-pressed") === "true", "R33e 'Todos' marca todos (150 min) e fica aceso");
+      ok(marcas().join() === "true,true,true" && a.regTempoPlanejadoAtual() === 150 && a.$("btnRegRamosTodos").getAttribute("aria-pressed") === "true", "R33e 'Todos' marca todos (150 min) e fica aceso");
       /* nenhum marcado: nao registra */
-      ok(/1h10/.test(linhas()[0].children[2].textContent) && /40|min/.test(linhas()[1].children[2].textContent) && Number(a.$("regMinSlider").value) === 150, "R33e2 cada ramo mostra o tempo estimado (Modalidades 1h10) e o controle deslizante acompanha (150)");
+      ok(/1h10/.test(linhas()[0].children[2].textContent) && /40|min/.test(linhas()[1].children[2].textContent) && a.regTempoPlanejadoAtual() === 150, "R33e2 cada ramo mostra o tempo estimado (Modalidades 1h10) e o controle deslizante acompanha (150)");
       linhas().forEach((l) => { l.children[0].checked = false; l.children[0].onchange(); });
-      ok(/Marque pelo menos um ramo/.test(a.$("regRamosResumo").textContent) && Number(a.$("regMinutos").value) !== 0, "R33f sem ramo marcado o resumo pede para marcar (e o tempo nao vira zero)");
+      ok(/Marque pelo menos um ramo/.test(a.$("regRamosResumo").textContent) && a.regTempoPlanejadoAtual() !== 0, "R33f sem ramo marcado o resumo pede para marcar (e o tempo nao vira zero)");
       const antes = a.edDiario.length;
       a.confirmarRegistroTeste("feito");
       ok(/Marque pelo menos um ramo para registrar/.test(a.$("uiModalMsg").textContent), "R33g0 tentar registrar sem ramo mostra o aviso");
@@ -3096,9 +3096,9 @@ async function testes() {
       ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === false && linhas()[1].children[0].checked === false && linhas()[0].children[0].disabled === false && /não estudado — marque se já estudou/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO: os estudados entram; o pendente fica desmarcado, marcavel como 'estudado antes'");
       ok(a.$("regRamosAviso").hidden === false && /ainda não constam como estudados/.test(a.$("regRamosAviso").textContent), "R33m1 o aviso explica por que o pendente aparece como 'não estudado' e o que fazer: " + a.$("regRamosAviso").textContent);
       ok(a.$("regRamosExigirLin").hidden === true && (a.$("btnRegExigirAjuda").dataset.texto || "") === "", "R33m2 na REVISAO a caixa \"so' marcar estudado com todas as etapas\" e o (?) somem (so valem no estudo)");
-      ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
+      ok(marcas().join() === "true,false,true" && a.regTempoPlanejadoAtual() === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
       a.$("btnRegRamosTodos").onclick();
-      ok(marcas().join() === "true,true,true" && Number(a.$("regMinutos").value) > 55 && /estudado antes/.test(linhas()[1].children[2].textContent), "R33o 'Todos' na revisao marca tambem o pendente, como 'estudado antes' (e o tempo cresce): " + a.$("regMinutos").value);
+      ok(marcas().join() === "true,true,true" && a.regTempoPlanejadoAtual() > 55 && /estudado antes/.test(linhas()[1].children[2].textContent), "R33o 'Todos' na revisao marca tambem o pendente, como 'estudado antes' (e o tempo cresce): " + a.$("regMinutos").value);
       ok(/Marcado\(s\) como estudado\(s\) antes, sem registro: 1\./.test(a.$("regRamosAviso").textContent), "R33o1 o aviso conta os marcados como 'estudado antes'");
       linhas()[1].children[0].checked = false; linhas()[1].children[0].onchange();
       linhas()[2].children[0].checked = false; linhas()[2].children[0].onchange();
