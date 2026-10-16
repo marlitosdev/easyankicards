@@ -52,7 +52,10 @@ let jurOutrosAberto = false;
 /* Q3 — aberta pelo ramo (a ficha do ramo): a lista mostra só os julgados dele e o que se guarda agora já fica ligado a ele */
 let jurRamoAlvo = null;
 function jurRamoVerTodos() { jurRamoAlvo = null; jurPintarLista(); }
+/* (v18.52.0) criando pela gaveta a partir de "ligar a outro…": ao guardar, o trecho fica ligado ao julgado novo */
+let jurLigarAoSalvar = null;
 function jurAbrir(disciplina, topico, modo, opc) {
+  jurLigarAoSalvar = null;
   try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("juris", disciplina, topico); } catch (e) {}
   const chave = (typeof matChave === "function")
     ? matChave(disciplina, topico) : (disciplina + "›" + topico);
@@ -667,6 +670,22 @@ async function jurSalvar() {
    * número é uma etiqueta que não se revisa. */
   if (!tese && !texto) { await uiAlert(t("jur_falta")); return; }
 
+  /* (v18.52.0) ANTES DE CRIAR: já existe igual ou parecido? A pessoa vê e decide (usar o que existe, criar, voltar) */
+  const eraNovo = !jurEditando;
+  if (eraNovo && typeof jurParecidos === "function") {
+    const novo = { tribunal: v("jurTribunal"), classe: v("jurClasse"), numero: v("jurNumero"), tese, resumo: v("jurResumo") };
+    const par = jurParecidos(novo);
+    if (par.length) {
+      const r = await jurConfirmarParecidos(novo, par, jurTopicoAtual.chave);
+      if (r.acao === "usar") { jurUsarExistente(r.id); return; }
+      if (r.acao !== "criar") {
+        try { reg("JURIS", "criação desistida: já havia julgado parecido", (jurCitNome(novo) || "—") + " ~ " + jurCitNome(par[0].j)); } catch (e) {}
+        return;
+      }
+      try { reg("JURIS", "criado mesmo havendo parecido", (jurCitNome(novo) || "—") + " ~ " + jurCitNome(par[0].j) + " (" + par[0].motivo + ")"); } catch (e) {}
+    }
+  }
+
   /* O CONCURSO DO JULGADO: o dono do tópico nos editais cadastrados (ver
    * matConcursoDoTopico). Quem já tem concurso o mantém; só se preenche o
    * vazio — e vazio continua vazio quando o tópico não é de edital nenhum. */
@@ -703,6 +722,8 @@ async function jurSalvar() {
            jurTopicoAtual.disciplina, jurTopicoAtual.nome);
   /* Q3 — guardado pela ficha de um ramo: já fica ligado a ele (só o novo; editar não troca o ramo) */
   if (jurRamoAlvo && !jurEditando) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
+  if (eraNovo && jurLigarAoSalvar) jurLigarTrechoA(jurLigarAoSalvar, j);
+  jurLigarAoSalvar = null;
 
   reg("JURIS", jurEditando ? "julgado editado" : "julgado guardado",
       jurTitulo(j) + " · " + jurTopicoAtual.nome);
@@ -714,6 +735,91 @@ async function jurSalvar() {
   jurPintarLista();
   jurRepintarTelas();
   jurReagirBtn("btnJurSalvar", t("jur_salvou"));
+}
+
+/* (v18.52.0) "Já existe julgado igual ou parecido": a lista, cada um com a tese à vista e "usar este"; no rodapé,
+ * "criar mesmo assim" e "voltar". Responde pelo mesmo canal dos avisos (_uiResolve): Esc, o X e os testes também
+ * respondem — true = criar, false = voltar, {acao:"usar", id}. */
+function jurConfirmarParecidos(novo, par, chave) {
+  return new Promise((resolve) => {
+    const dlg = $("dlgJurParecido");
+    if (!dlg || !par || !par.length) { resolve({ acao: "criar" }); return; }
+    if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(false); }
+    _uiResolve = (v) => {
+      try { if (dlg.open) dlg.close(); } catch (e) {}
+      resolve(v === true ? { acao: "criar" } : (v && v.acao === "usar" && v.id) ? v : { acao: "cancelar" });
+    };
+    $("jurParIntro").textContent = t("jur_par_intro", { n: jurCitNome(novo) || t("jur_par_este") });
+    const cx = $("jurParLista");
+    cx.innerHTML = "";
+    const k = chave ? jurChaveComparavel(chave) : "";
+    par.forEach((p, i) => {
+      const j = p.j;
+      const card = document.createElement("div");
+      card.className = "jur-par-item";
+      const cab = document.createElement("div");
+      cab.className = "jur-par-cab";
+      const nome = document.createElement("strong");
+      nome.textContent = jurCitNome(j) || jurTitulo(j);
+      const tag = document.createElement("span");
+      tag.className = "jur-lote-tag " + (p.motivo === "tese" ? "sugerido" : "ja");
+      tag.textContent = t("jur_par_" + p.motivo, { p: p.pct });
+      cab.append(nome, document.createTextNode(" "), tag);
+      const tx = document.createElement("div");
+      tx.className = "jur-cita-txt";
+      tx.textContent = String(j.tese || j.resumo || "").trim() || t("jur_cit_vazio");
+      card.append(cab, tx);
+      const tops = j.topicos || [];
+      if (tops.length) {
+        const tp = document.createElement("div");
+        tp.className = "nota";
+        tp.textContent = t("jur_par_onde", { t: tops.map((c) => { const r = jurRotuloDe(j, c); return r.topico || c; }).join(" · ") });
+        card.append(tp);
+      }
+      const jaAqui = !!k && tops.some((x) => jurChaveComparavel(x) === k);
+      const bt = document.createElement("button");
+      bt.type = "button";
+      bt.className = "btn btn-verde";
+      bt.id = "btnJurParUsar_" + i;
+      bt.textContent = t(jaAqui ? "jur_par_usar_ja" : "jur_par_usar");
+      bt.onclick = () => _uiFechar({ acao: "usar", id: j.id });
+      card.append(bt);
+      cx.append(card);
+    });
+    abrirModal(dlg);
+    try { reg("JURIS", "julgado igual ou parecido já guardado", (jurCitNome(novo) || "—") + " ~ " + par.map((p) => jurCitNome(p.j) + " (" + p.motivo + ")").join(" | ")); } catch (e) {}
+  });
+}
+
+/* usar o julgado que já existe: liga ao tópico (e ao ramo, e ao trecho, se for o caso) — nada é criado */
+function jurUsarExistente(id) {
+  const j = jurDe(id);
+  if (!j || !jurTopicoAtual) return false;
+  jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+  if (jurRamoAlvo) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
+  const trecho = jurLigarAoSalvar;
+  jurLigarAoSalvar = null;
+  try { reg("JURIS", "julgado já guardado reaproveitado (nenhuma cópia criada)", jurTitulo(j) + " · " + jurTopicoAtual.nome); } catch (e) {}
+  jurLimparForm();
+  jurModo = "ler";
+  jurPintarModo();
+  jurPintarLista();
+  jurRepintarTelas();
+  if (trecho) jurLigarTrechoA(trecho, j);
+  else try { toastMsg(t("jur_par_usado", { n: jurCitNome(j) || jurTitulo(j) }), 4500); } catch (e) {}
+  return true;
+}
+
+/* o trecho do material passa a abrir este julgado (vínculo do tópico), com o aviso */
+function jurLigarTrechoA(p, j) {
+  if (!p || !p.trecho || !j) return null;
+  const r = citVinculoSalvar({ trecho: p.trecho, tipo: "jur", jurId: j.id, chave: p.chave || "" });
+  if (r) {
+    try { reg("JURIS", "trecho ligado ao julgado (ao criar/usar)", p.trecho + " → " + jurCitNome(j)); } catch (e) {}
+    try { toastMsg(t("jur_esc_criado_feito", { tr: jurCitTrecho(p.trecho, 60), j: jurCitNome(j) || jurTitulo(j) }), 4500); } catch (e) {}
+    try { if (typeof citDestacarRecem === "function") citDestacarRecem(p.trecho); } catch (e) {}
+  }
+  return r;
 }
 
 function jurConferirAoGuardar() {
@@ -1857,6 +1963,7 @@ function jurCitCriarNaGaveta() {
   if (!a || !a.base || !a.base.disciplina || !a.base.topico) return false;
   $("dlgJurCitaPreview").close();
   jurAbrir(a.base.disciplina, a.base.topico, "incluir");
+  if (a.base.ligarTrecho) jurLigarAoSalvar = { trecho: a.base.ligarTrecho, chave: jurCitChave(a.base) };
   const c = a.c;
   if ($("jurTribunal")) $("jurTribunal").value = c.tribunal || JUR_CASA[c.classe] || "";
   if ($("jurClasse")) $("jurClasse").value = c.classe || "";
@@ -2000,9 +2107,39 @@ function jurCitaGuardar() {
     dados.certeza = jurCitaLido.certeza || "";
     dados.aConferir = ["data", "orgao", "relator", "fonte", "precedentes"].filter((k) => String(dados[k] || "").trim());
   }
+  /* (v18.52.0) já existe igual ou parecido? */
+  const par = typeof jurParecidos === "function" ? jurParecidos(dados) : [];
+  if (par.length) {
+    return jurConfirmarParecidos(dados, par, jurCitChave(a.base)).then((r) => {
+      if (r.acao === "usar") return jurCitaUsarExistente(r.id);
+      if (r.acao === "criar") return jurCitaGuardarFim(dados);
+      return null;
+    });
+  }
+  return jurCitaGuardarFim(dados);
+}
+
+function jurCitaUsarExistente(id) {
+  const a = jurCitaAlvo;
+  const j = jurDe(id);
+  if (!a || !a.base || !j) return null;
+  jurLigar(j.id, jurCitChave(a.base), a.base.disciplina, a.base.topico);
+  jurLigarTrechoA({ trecho: a.base.ligarTrecho || a.c.texto, chave: jurCitChave(a.base) }, j);
+  try { reg("JURIS", "julgado já guardado reaproveitado pela citação", jurCitNome(j)); } catch (e) {}
+  jurCitaLido = null;
+  jurCitPreviewAbrir(a.c, { julgado: jurDe(j.id) }, a.base);
+  try { if (typeof a.base.aoVoltar === "function") a.base.aoVoltar(); } catch (e) {}
+  return j;
+}
+
+function jurCitaGuardarFim(dados) {
+  const a = jurCitaAlvo;
+  if (!a || !a.base) return null;
+  const c = a.c;
   const j = jurGravar(dados);
   if (!j) { $("jurCitaSem").textContent = t("qs_vinc_erro_gravar"); return null; }
   jurLigar(j.id, jurCitChave(a.base), a.base.disciplina, a.base.topico);
+  if (a.base.ligarTrecho) jurLigarTrechoA({ trecho: a.base.ligarTrecho, chave: jurCitChave(a.base) }, j);
   try { reg("JURIS", "julgado criado pela citação", jurCitNome(j) + (dados.deMemoria ? " · de memória (" + (dados.certeza || "?") + ")" : " · com ementa")); } catch (e) {}
   jurCitaLido = null;
   /* a prévia passa a mostrar o julgado; quem está atrás repinta (o link acha o julgado) */
@@ -2158,6 +2295,27 @@ function jurEscPintar() {
     pv.append(h, x);
   }
 }
+/* (v18.52.0) NÃO ACHOU NA LISTA? Cria aqui: a mesma criação da prévia (pedido à IA, colar, guardar), e o trecho
+ * já fica ligado ao julgado novo. A identidade vem da citação no trecho, quando há uma. */
+function jurEscCriar() {
+  const c0 = jurEscCtx;
+  if (!c0) return false;
+  const base = Object.assign({}, c0.base, { ligarTrecho: c0.trecho });
+  if (!base.disciplina || !base.topico) { $("jurEscAviso").textContent = t("jur_cit_sem_topico"); return false; }
+  let cit = null;
+  try { cit = (typeof jurCitacoesNoTexto === "function" && jurCitacoesNoTexto(c0.trecho)[0]) || null; } catch (e) { cit = null; }
+  if (cit) cit = Object.assign({}, cit, { texto: cit.texto, _jur: true, _frase: c0.trecho });
+  else {
+    let idp = {};
+    try { idp = (typeof jurIdentificarProcesso === "function" && jurIdentificarProcesso(c0.trecho)) || {}; } catch (e) { idp = {}; }
+    cit = { texto: c0.trecho, tribunal: idp.tribunal || "", classe: idp.classe || "", numero: idp.numero || "", _jur: true, _frase: c0.trecho };
+  }
+  $("dlgJurEscolher").close();
+  jurCitPreviewAbrir(cit, { julgado: null }, base);
+  jurCitCriar();
+  try { reg("JURIS", "ligar a outro: criar um julgado novo para o trecho", c0.trecho); } catch (e) {}
+  return true;
+}
 function jurEscLigar() {
   const c = jurEscCtx;
   if (!c) return false;
@@ -2200,6 +2358,11 @@ if (typeof document !== "undefined" && $("dlgJurCitaPreview")) {
   if ($("btnJurCitaDesligar")) $("btnJurCitaDesligar").onclick = () => jurCitDesligar();
   if ($("btnJurCitaOutro")) $("btnJurCitaOutro").onclick = () => jurCitOutro();
   if ($("btnJurEscOk")) $("btnJurEscOk").onclick = () => jurEscLigar();
+  if ($("btnJurEscCriar")) $("btnJurEscCriar").onclick = () => jurEscCriar();
+  if ($("btnJurParCriar")) $("btnJurParCriar").onclick = () => _uiFechar(true);
+  if ($("btnJurParVoltar")) $("btnJurParVoltar").onclick = () => _uiFechar(false);
+  if ($("btnJurParX")) $("btnJurParX").onclick = () => _uiFechar(false);
+  if ($("dlgJurParecido") && $("dlgJurParecido").addEventListener) $("dlgJurParecido").addEventListener("cancel", () => _uiFechar(false));
   if ($("btnJurEscCancelar")) $("btnJurEscCancelar").onclick = () => $("dlgJurEscolher").close();
   if ($("btnJurEscX")) $("btnJurEscX").onclick = () => $("dlgJurEscolher").close();
   if ($("jurEscBusca")) $("jurEscBusca").oninput = () => jurEscPintar();
@@ -2315,7 +2478,10 @@ function jurLoteFicha(a, todos) {
   jurVerificarNoTexto(vals, base).aConferir.forEach((k) => { f.conferir[k] = f[k]; });
   const iguais = jurIguaisA(f, todos);
   f.jaExiste = iguais.length ? iguais[0] : null;
-  f.marcado = !f.jaExiste && !f.semConteudo;
+  /* (v18.52.0) não é o mesmo processo, mas parece: a ficha mostra qual, com a tese, para a pessoa decidir */
+  f.parecido = null;
+  if (!f.jaExiste && typeof jurParecidos === "function") f.parecido = jurParecidos(f, todos, { max: 1 })[0] || null;
+  f.marcado = !f.jaExiste && !f.semConteudo && !(f.parecido && f.parecido.motivo !== "tese");
   return f;
 }
 
@@ -2387,6 +2553,12 @@ function jurLotePintar() {
       tg.title = t("jur_lote_ja_aj", { q: jurTitulo(f.jaExiste) });
       cab.append(tg);
     }
+    if (f.parecido) {
+      const tg = document.createElement("span");
+      tg.className = "jur-lote-tag ja";
+      tg.textContent = t("jur_lote_parecido", { m: t("jur_par_" + f.parecido.motivo, { p: f.parecido.pct }) });
+      cab.append(tg);
+    }
     if (Object.keys(f.conferir).length) {
       const tg = document.createElement("span");
       tg.className = "jur-lote-tag conferir";
@@ -2395,6 +2567,13 @@ function jurLotePintar() {
       cab.append(tg);
     }
     card.append(cab);
+    if (f.parecido) {
+      const pv = document.createElement("div");
+      pv.className = "nota jur-lote-parecido";
+      pv.id = "jurLoteParecido_" + idx;
+      pv.textContent = t("jur_lote_parecido_txt", { n: jurCitNome(f.parecido.j) || jurTitulo(f.parecido.j), t: jurCitTrecho(f.parecido.j.tese || f.parecido.j.resumo, 220) });
+      card.append(pv);
+    }
     /* identidade: o que mais se corrige */
     const id = document.createElement("div");
     id.className = "jur-lote-ident";

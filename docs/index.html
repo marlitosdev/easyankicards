@@ -1313,6 +1313,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgJurCitaPreview[open]{width:min(620px,94vw)}
 .jur-cit-perm{border-bottom:2px solid var(--ok)}
 .jur-esc-lista{max-height:40vh;overflow:auto;margin:6px 0}
+.jur-par-item{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:0 0 8px}
+.jur-par-item .jur-cita-txt{margin:6px 0;font-size:13px;max-height:9em;overflow:auto;white-space:pre-line}
+.jur-lote-parecido{margin:4px 0 0;font-size:12px}
 .jur-cita-opcao.sel{border-color:var(--acao);background:rgba(37,99,235,.12)}
 .jur-cita-novo{display:flex;flex-direction:column;gap:8px;margin-top:6px}
 .jur-cita-sem.ok{color:var(--ok)}
@@ -8080,7 +8083,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota qs-vinc-aviso" id="jurEscAviso"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnJurEscOk" data-i18n="jur_esc_ok" title="Liga o trecho ao julgado escolhido, neste tópico."></button>
+    <button class="btn btn-cinza" id="btnJurEscCriar" data-i18n="jur_esc_criar" data-i18n-title="jur_esc_criar_aj" title="Cria um julgado novo e liga o trecho a ele."></button>
     <button class="btn btn-cinza" id="btnJurEscCancelar" data-i18n="cancel_btn" title="Fecha sem ligar."></button>
+  </div>
+</dialog>
+
+<!-- (v18.52.0) antes de criar um julgado: os já guardados iguais ou parecidos, para decidir -->
+<dialog id="dlgJurParecido" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="jur_par_tit"></h3>
+    <button type="button" class="dlg-x" id="btnJurParX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" id="jurParIntro"></p>
+  <div id="jurParLista" class="jur-esc-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnJurParCriar" data-i18n="jur_par_criar" title="Guarda o julgado novo mesmo assim (fica uma cópia, se for o mesmo)."></button>
+    <button class="btn btn-cinza" id="btnJurParVoltar" data-i18n="jur_par_voltar" title="Volta sem guardar, com o que foi escrito intacto."></button>
   </div>
 </dialog>
 
