@@ -2416,13 +2416,23 @@ function leiPinturaProgressiva(arts, desenhar, preparar, nome, aoTerminar) {
  * escrito à mão (não document.createTreeWalker) porque childNodes/
  * nodeType já são o que o simulador dos testes sabe navegar; a API mais
  * nova não tinha por que existir ali. */
-function leiLigarCitacoesEm(el, origemNum) {
+function leiLigarCitacoesEm(el, origemNum, dentro) {
   if (!el || !el.childNodes) return;
+  /* (v18.53.0) na chamada de fora: o vínculo manual que atravessa um grifo ou uma formatação (citLigarAtravessando) */
+  if (!dentro) {
+    try {
+      if (typeof citLigarAtravessando === "function" && typeof citVinculosLer === "function" && citVinculosLer().length) {
+        citLigarAtravessando(el, (leiAtual && leiAtual.chave) || "", (c) => (c._jur ? null : leiCitacaoBotao(c, origemNum)));
+      }
+    } catch (e) {}
+  }
   Array.from(el.childNodes).forEach((no) => {
     if (no.nodeType === 3) {                       // nó de texto
       leiCitarNoTexto(no, origemNum);
     } else if (no.nodeType === 1) {                 // elemento — desce
-      leiLigarCitacoesEm(no, origemNum);
+      /* botão já feito (o link de um vínculo atravessado) não se mexe */
+      if (String(no.tagName || "").toUpperCase() === "BUTTON") return;
+      leiLigarCitacoesEm(no, origemNum, true);
     }
   });
 }
