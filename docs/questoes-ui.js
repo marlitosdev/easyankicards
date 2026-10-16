@@ -2878,9 +2878,10 @@ function qsUiRegistrarEstudo() {
   }
   const modelo = chaves[nomes[0]];
 
-  /* tempo da sessão, arredondado para cima: meia questão não é meio minuto */
-  const min = Math.max(1, Math.min(240,
-    Math.round((Date.now() - new Date(s.comecou).getTime()) / 60000)));
+  /* (v18.58.0) o tempo ATIVO da rodada (intervalos entre respostas, pausa longa conta só o teto) — não o relógio desde
+   * o começo, que contava intervalos e até o dia seguinte como estudo */
+  const ta = qsTempoAtivo(s);
+  const min = Math.max(1, Math.min(240, ta.min));
 
   $("dlgQsResponder").close();
   if (typeof abrirRegistro !== "function") { uiAlert(t("qs_registrar_sem_edital")); return; }
@@ -2916,7 +2917,7 @@ function qsUiRegistrarEstudo() {
     chave: modelo.chave, minutos: min,
   });
   if (typeof regDeQuestoes === "function") {
-    regDeQuestoes(p.feitas, p.certas, min);
+    regDeQuestoes(p.feitas, p.certas, min, ta.medido);
   }
   matReg("questao", "registro de estudo por questões aberto",
          modelo.topico + " · " + p.certas + "/" + p.feitas

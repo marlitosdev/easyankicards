@@ -68,11 +68,13 @@ async function testes() {
     ok(/princ/i.test(api.$("regTitulo").textContent || ""),
        "L1a o formulário abriu apontando para outro tópico: "
        + api.$("regTitulo").textContent);
-    const min = Number(api.$("regMinutos").value);
-    ok(min >= 5,
-       "L1b o campo de minutos abriu vazio: o palpite é ruim como "
-       + "afirmação e bom como ponto de partida — em branco, ele obriga "
-       + "a inventar um número do zero: " + api.$("regMinutos").value);
+    /* (v18.58.0) O PALPITE CONTINUA À MÃO, MAS FORA DO CAMPO. Dentro do campo
+     * ele era gravado como estudo quando a pessoa não mexia — o relato foi
+     * "registrei 1 hora e contou 3h40". Agora fica a um toque ("usar o
+     * sugerido"), e o campo pede o tempo de verdade. */
+    const min = api.regTempoPlanejadoAtual();
+    ok(min >= 5 && api.$("regMinutos").value === "" && api.$("btnRegUsarPlano").hidden === false,
+       "L1b o palpite de minutos fica a um toque (usar o sugerido), sem entrar sozinho no campo: " + min + " | " + api.$("regMinutos").value);
   }
 
   /* ==============================================================
@@ -86,7 +88,7 @@ async function testes() {
     const { api } = rodar();
     abrirLei(api);
     api.leiRegistrarLeitura();
-    const sugerido = Number(api.$("regMinutos").value);
+    const sugerido = api.regTempoPlanejadoAtual();
     api.$("regMinutos").value = "40";
     api.confirmarRegistro("feito");
 

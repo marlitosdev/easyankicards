@@ -1057,7 +1057,7 @@ function rodar() {
     jurPilulaLimpar, jurPintarTagsForm,
     jurTagsColadasAtual: () => jurTagsColadas,
     jurFiltroTagAtual: () => jurFiltroTag,
-    jurIdentidade, jurIguaisA, jurParecidos, qsCartoesIndice, qsCartoesDaQuestao, qsUiCartoesVer, qsEtiquetaDaQuestao, qsMover, qsDesfazerMover, qsUiMoverAbrir, qsUiMoverConfirmar, qsUiMoverDestinos, qsGrBolhaMontar, qsGrBolhaAtualizar, qsGrBolhaEsconder, qsNavFlutPintar, qsNavFlutAtualizar, qsTeclaResponder, citRepintarAposLeis, citLigarAtravessando, citConfirmarNaTela, jurEscCriar, jurRepetidosDoTopico, jurUnir,
+    jurIdentidade, jurIguaisA, jurParecidos, regTempoPlanejadoAtual: () => regTempoPlanejado, regTempoOrigemAtual: () => regTempoOrigem, regTempoDefinir, regPintarTempo, qsTempoAtivo, qsCartoesIndice, qsCartoesDaQuestao, qsUiCartoesVer, qsEtiquetaDaQuestao, qsMover, qsDesfazerMover, qsUiMoverAbrir, qsUiMoverConfirmar, qsUiMoverDestinos, qsGrBolhaMontar, qsGrBolhaAtualizar, qsGrBolhaEsconder, qsNavFlutPintar, qsNavFlutAtualizar, qsTeclaResponder, citRepintarAposLeis, citLigarAtravessando, citConfirmarNaTela, jurEscCriar, jurRepetidosDoTopico, jurUnir,
     jurPromptComparar, jurPintarRepetidos, jurUnirPar, jurCopiarPrompt,
     jurEscreverTese,
     /* jurisprudencia como material: chaves em cache, rotulo do topico,

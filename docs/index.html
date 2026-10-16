@@ -1124,6 +1124,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
   background:var(--panel);border:1px solid var(--borda);box-shadow:0 6px 20px rgba(0,0,0,.45)}
 .qs-gr-bolha[hidden]{display:none}
 /* (v18.55.0) registro: o ramo "estudado antes, sem registro" (revisão) e o aviso de por que eles aparecem */
+.reg-tempo-falta{color:#f59e0b;font-weight:600}
+.reg-usar-plano{margin:2px 0 4px}
 .reg-ramos-aviso{margin:6px 0 2px;padding:6px 9px;border-radius:8px;border:1px solid var(--borda);background:rgba(234,179,8,.08);font-size:12.5px;line-height:1.45}
 .reg-ramo-lin.reg-ramo-antes:not(.marcado){border-style:dashed;opacity:.85}
 .qs-gr-bolha .qs-cor{width:26px;height:26px}
@@ -6377,6 +6379,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <!-- o mesmo tempo em horas e minutos, e quanto a agenda tinha reservado para esta sessão -->
     <p class="nota reg-tempo-fmt" id="regMinFmt" role="status" aria-live="polite"></p>
+    <!-- (v18.58.0) o planejado não entra sozinho no campo: fica a um toque -->
+    <button type="button" class="reg-atalho reg-usar-plano" id="btnRegUsarPlano" hidden title="Põe no campo o tempo que a agenda planejou para o que você marcou. Use só se foi isso mesmo que você estudou."></button>
     <!-- Arrastar o cursor para acertar 45 minutos exige pontaria que
          ninguém tem pressa de ter. Os atalhos SOMAM ao valor atual. -->
     <div class="reg-atalhos" id="regAtalhos"></div></div>

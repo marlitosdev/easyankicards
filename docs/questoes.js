@@ -849,6 +849,35 @@ const qsMesmoTopico = (q, chave) => !!chave && (q.chave === chave || qsChaveNorm
  * dica, grifos e rascunho são da QUESTÃO (pelo id) e vão junto. Devolve o
  * recibo (o que havia antes), para desfazer.
  * ===================================================================== */
+/* =====================================================================
+ * (v18.58.0) O TEMPO ATIVO DA RODADA
+ *
+ * Era o relógio desde o começo da rodada (até 4 h) — e a rodada fica
+ * guardada com a janela fechada: um intervalo, uma ida ao material, o dia
+ * seguinte, tudo virava "estudo". Agora: a soma dos intervalos entre as
+ * respostas (e da última até agora), cada um limitado a QS_TEMPO_TETO_MIN
+ * — pausa longa conta só o teto. Rodada antiga, sem a hora de cada
+ * resposta, devolve uma estimativa (medido:false), que o registro mostra
+ * como sugestão em vez de afirmar.
+ * ===================================================================== */
+const QS_TEMPO_TETO_MIN = 8;
+function qsTempoAtivo(s, agora) {
+  const sess = s || qsSessao;
+  if (!sess || !(sess.respondidas || []).length) return { min: 0, medido: false };
+  const fim = typeof agora === "number" ? agora : Date.now();
+  const teto = QS_TEMPO_TETO_MIN * 60000;
+  const ems = sess.respondidas.map((r) => r.em).filter((x) => typeof x === "number").sort((a, b) => a - b);
+  if (ems.length !== sess.respondidas.length) {
+    /* rodada de antes desta versão: estimativa por questão, sem passar do relógio */
+    const relogio = Math.max(1, Math.round((fim - new Date(sess.comecou).getTime()) / 60000));
+    return { min: Math.max(1, Math.min(relogio, Math.round(sess.respondidas.length * 2.5))), medido: false };
+  }
+  let ms = 0, ant = new Date(sess.comecou).getTime();
+  if (!(ant > 0)) ant = ems[0];
+  ems.concat([fim]).forEach((x) => { ms += Math.max(0, Math.min(teto, x - ant)); ant = x; });
+  return { min: Math.max(1, Math.round(ms / 60000)), medido: true };
+}
+
 function qsMover(ids, dest, gravar) {
   if (!dest || !dest.disciplina || !dest.topico) return [];
   const quer = new Set(ids || []);
@@ -1186,7 +1215,7 @@ function qsResponder(escolha, gravar) {
   const acertou = resp === String(q.gabarito || "").toUpperCase();
   q.tentativas = q.tentativas || [];
   q.tentativas.push({ q: new Date().toISOString(), resp, acertou });
-  qsSessao.respondidas.push({ id: q.id, resp, acertou });
+  qsSessao.respondidas.push({ id: q.id, resp, acertou, em: Date.now() });
   qsSalvar(gravar);
   qsSessaoGravar(gravar);
   /* o bloco em andamento acompanha a cada resposta: assim uma rodada
