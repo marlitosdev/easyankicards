@@ -1069,6 +1069,74 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 #dlgQsResponder .qs-enunciado.qs-enun-colapsado::after{content:"";
   position:absolute;left:0;right:0;bottom:0;height:1.6em;pointer-events:none;
   background:linear-gradient(to bottom,transparent,var(--panel))}
+/* =====================================================================
+ * (v18.54.0) A QUESTÃO OCUPA A TELA INTEIRA, EM QUALQUER APARELHO
+ *
+ * O relato: "colocar a resolução de questões maximizado na tela", "o
+ * espaço para leitura do gabarito está muito pequeno e a dica minúscula",
+ * "o recolher enunciado não funciona em telas maiores", "o próxima fica
+ * fixo embaixo e toma grande parte do espaço". O arranjo do telefone (uma
+ * coluna só que rola: enunciado, alternativas, gabarito, comentário, e no
+ * fim os botões de andar) passa a valer em toda largura. Em tela larga a
+ * coluna de leitura fica centrada e com largura de leitura (Aa aumenta);
+ * nada fica preso embaixo — quando a faixa de andar sai da tela, sobe o
+ * balão flutuante (#qsNavFlut).
+ * ===================================================================== */
+#dlgQsResponder[open]{width:100vw!important;max-width:none!important;height:100vh;height:100dvh;
+  max-height:100dvh!important;margin:0!important;border-radius:0!important;border:0!important;
+  padding:calc(6px + env(safe-area-inset-top,0px)) 14px calc(6px + env(safe-area-inset-bottom,0px))!important}
+#dlgQsResponder .qs-corpo-lado{flex:1 1 auto;min-height:0;display:block;overflow-y:auto;
+  overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;padding-bottom:70px}
+#dlgQsResponder .qs-corpo-lado > :not(.rs-caixa),#dlgQsResponder > .qs-cab,#dlgQsResponder > #qsSessPlacar{
+  max-width:var(--qs-coluna,900px);margin-left:auto;margin-right:auto;width:100%;box-sizing:border-box}
+#dlgQsResponder.qs-t1{--qs-coluna:1080px}
+#dlgQsResponder.qs-t2{--qs-coluna:1280px}
+#dlgQsResponder #qsSessCorpo{display:block;overflow:visible;min-height:0}
+#dlgQsResponder .qs-enunciado,#dlgQsResponder .qs-fez .qs-enunciado{max-height:none;min-height:0;overflow:visible;
+  font-size:16.5px;line-height:1.62}
+#dlgQsResponder .qs-opcoes,#dlgQsResponder .qs-fez .qs-opcoes{position:static;box-shadow:none}
+#dlgQsResponder .qs-depois{overflow:visible;font-size:15.5px}
+#dlgQsResponder .qs-coment,#dlgQsResponder .qs-minha-dica{font-size:15.5px;line-height:1.62;color:var(--texto)}
+#dlgQsResponder .qs-gab{font-size:15px}
+/* RECOLHER VENCE O PISO: depois de responder havia "min-height:18dvh", e altura mínima vence altura máxima — o
+   "recolher" não recolhia em tela grande. Três classes, e min-height zerado aqui. */
+#dlgQsResponder .qs-sess .qs-enunciado.qs-enun-colapsado{max-height:2.8em;min-height:0;overflow:hidden;position:relative}
+/* AS FERRAMENTAS NO CABEÇALHO (rascunho, julgados, lei): pequenas, numa linha com Aa, ⇕ e ✕ */
+#dlgQsResponder .qs-cab-acoes{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+#dlgQsResponder .qs-cab-ferr{display:inline-flex;gap:6px;flex-wrap:wrap}
+#dlgQsResponder .qs-cab-ferr .btn-min{font-size:12.5px;padding:4px 9px}
+/* a faixa de andar no fim do conteúdo, e o atalho de teclado ao lado (só onde há teclado) */
+#dlgQsResponder .qs-barra-principal{margin:14px auto 6px;border-top:0;padding-top:0}
+#dlgQsResponder .qs-barra-ferramentas:empty{display:none}
+.qs-teclas{font-size:11px;color:var(--sutil);align-self:center;white-space:nowrap}
+@media (hover:none),(max-width:760px){.qs-teclas{display:none}}
+/* O BALÃO DE ANDAR: quando a faixa de andar sai da tela. Absoluto NA JANELA (que tem a altura visível, 100dvh), e não
+   fixo na tela: no celular a "tela" do fixed inclui a área atrás da barra do navegador, e o balão nascia cortado. */
+.qs-nav-flut{position:absolute;right:16px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;
+  gap:6px;align-items:center;padding:6px;border-radius:999px;background:var(--panel);border:1px solid var(--borda);
+  box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.qs-nav-flut[hidden]{display:none}
+.qs-nav-flut .qs-flut-bt{width:40px;height:40px;border-radius:50%;padding:0;font-size:15px}
+.qs-nav-flut .qs-flut-bt[hidden]{display:none}
+.qs-nav-flut .qs-flut-principal{border-radius:999px;padding:9px 18px;min-width:110px}
+/* O BALÃO DO GRIFO: sobe junto do trecho selecionado */
+.qs-gr-bolha{position:fixed;z-index:35;display:flex;gap:6px;align-items:center;padding:6px 8px;border-radius:12px;
+  background:var(--panel);border:1px solid var(--borda);box-shadow:0 6px 20px rgba(0,0,0,.45)}
+.qs-gr-bolha[hidden]{display:none}
+.qs-gr-bolha .qs-cor{width:26px;height:26px}
+.qs-gr-bolha .btn-min{font-size:12px;padding:3px 8px}
+/* a linha de cima da questão: de onde ela é, e o ⋮ das ferramentas no canto */
+.qs-de-linha{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.qs-de-linha .qs-de{flex:1 1 auto;min-width:0}
+.qs-de-linha .qs-fer{margin:0;flex:0 0 auto}
+@media (max-width:760px){
+  #dlgQsResponder[open]{padding-left:12px!important;padding-right:12px!important}
+  #dlgQsResponder .qs-cab h3{display:none}
+  #dlgQsResponder .qs-cab-ferr .btn-min{font-size:12px;padding:4px 7px}
+  #dlgQsResponder .qs-enunciado,#dlgQsResponder .qs-fez .qs-enunciado{font-size:17px}
+  .qs-nav-flut{left:12px;right:12px;justify-content:space-between}
+  .qs-nav-flut .qs-flut-principal{flex:1 1 auto}
+}
 /* o texto é a única parte elástica — e portanto a única que rola */
 /* "flex:1 1 auto" SÓ REPARTE ESPAÇO LIVRE — e o diálogo, com "max-height"
    mas sem "height", se dimensiona pela SOMA dos filhos, não por um alvo
@@ -2198,14 +2266,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
    largura, o enunciado, as alternativas e o comentário. Mexer só na
    fonte deixaria o texto grande dentro de uma caixa estreita — mais
    linhas curtas, que é justamente o que cansa. */
-#dlgQsResponder.qs-t1{max-width:820px}
-#dlgQsResponder.qs-t1 .qs-enunciado{font-size:17px;line-height:1.62}
+/* (v18.54.0) a janela já é a tela inteira: Aa alarga a COLUNA de leitura (--qs-coluna, acima) e aumenta a letra */
+#dlgQsResponder.qs-t1 .qs-enunciado{font-size:18.5px;line-height:1.65}
 #dlgQsResponder.qs-t1 .qs-op,
-#dlgQsResponder.qs-t1 .qs-coment{font-size:14.5px;line-height:1.6}
-#dlgQsResponder.qs-t2{max-width:1040px}
-#dlgQsResponder.qs-t2 .qs-enunciado{font-size:19.5px;line-height:1.7}
+#dlgQsResponder.qs-t1 .qs-coment,#dlgQsResponder.qs-t1 .qs-minha-dica{font-size:16.5px;line-height:1.62}
+#dlgQsResponder.qs-t2 .qs-enunciado{font-size:21px;line-height:1.7}
 #dlgQsResponder.qs-t2 .qs-op,
-#dlgQsResponder.qs-t2 .qs-coment{font-size:16.5px;line-height:1.68}
+#dlgQsResponder.qs-t2 .qs-coment,#dlgQsResponder.qs-t2 .qs-minha-dica{font-size:18px;line-height:1.68}
 .qs-tam{flex:0 0 auto;white-space:nowrap}
 /* ---- O CABEÇALHO DA QUESTÃO: título à esquerda, ferramentas e o X à direita, tudo numa linha ---- */
 .qs-cab{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
@@ -7403,6 +7470,43 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          se espreme. Três tamanhos, um toque para trocar, guardado entre
          as sessões — quem precisa de letra maior precisa dela SEMPRE,
          não uma vez. -->
+    <!-- (v18.54.0) RASCUNHO, JULGADOS E LEI NO CABEÇALHO: eram uma fileira inteira entre a questão e o "próxima" (o
+         relato: "a linha de 3 botões deve ser movida para ganhar espaço"). Aqui ficam à mão, sem custar linha. -->
+    <span class="qs-cab-ferr">
+      <!-- OS DOIS GATILHOS DO RASCUNHO, JUNTOS E AQUI.
+           Antes a caixa do rascunho ficava sempre na tela, recolhida, com
+           o "folha inteira" solto na barra dela — um botão para expandir
+           um painel que estava fechado. Agora os dois são um grupo só, no
+           fim da questão, que é de onde se decide fazer conta. -->
+      <span class="rs-gatilhos">
+        <!-- O RÓTULO VEM DO HTML, e não de um JS que talvez rode.
+             Enquanto o texto era escrito só por rsPintarGatilhos(), um
+             botão sem rótulo era um botão invisível — e foi assim que o
+             rascunho sumiu da tela inteira depois de um tropeço numa
+             função que roda dentro de um try/catch. -->
+        <!-- "FOLHA INTEIRA" MOROU AQUI FORA, como um segundo botão ao lado
+             deste — duplicava btnRsCheia, que já mora DENTRO do rascunho
+             aberto e alcança a tela cheia num toque a mais. -->
+        <button class="btn-min" id="btnRsAbrir" data-i18n="rs_abrir"
+          title="Abre o rascunho por cima da questão. O texto continua legível ao fundo."></button>
+      </span>
+        <!-- O JULGADO QUE A QUESTÃO CITA.
+           Metade das questões de Direito sai de um julgado, e o momento em
+           que se descobre isso é o momento em que se erra a questão — não
+           depois, na estante. Sem este botão o caminho era encerrar a
+           rodada, achar o tópico no material, abrir a gaveta e voltar:
+           quatro telas, e o rascunho e os grifos da questão perdidos no
+           meio. A gaveta sobe POR CIMA da sessão e fechá-la devolve a
+           mesma questão, no mesmo ponto. -->
+      <button class="btn-min" id="btnQsJuris" data-i18n-title="qs_juris_ajuda" hidden></button>
+        <!-- CONSULTAR A LEI SEM SAIR DA QUESTÃO.
+           Metade das questões de Direito se resolve lendo o artigo, e até
+           aqui isso exigia ENCERRAR a rodada, achar o tópico no material,
+           abrir a lei e voltar — quatro telas, com o rascunho e os grifos
+           perdidos no meio. A gaveta sobe por cima da sessão e fechá-la
+           devolve a mesma questão, no mesmo ponto. -->
+      <button class="btn-min" id="btnQsLei" data-i18n-title="qs_lei_ver_ajuda" hidden></button>
+      </span>
     <button type="button" class="btn-min qs-tam" id="btnQsTamanho"></button>
     <!-- RECOLHER O ENUNCIADO PARA GANHAR ESPAÇO.
          Sem depender de medir a altura renderizada do texto (que muda de
@@ -7424,7 +7528,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        existe para que essa decisão seja só de CSS: nenhum JS move
        elemento de lugar, e mover elemento durante uma sessão é como se
        perde o traço do rascunho e a rolagem do enunciado. -->
-  <div class="qs-corpo-lado">
+  <div class="qs-corpo-lado" id="qsCorpoLado">
   <div id="qsSessCorpo" class="qs-sess"></div>
 
   <!-- RASCUNHO: o papel de lado. Recolhido por padrao. -->
@@ -7474,8 +7578,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       </div>
     </div>
   </div>
-  </div>
 
+  <!-- (v18.54.0) AS FAIXAS DE ANDAR E AS SAÍDAS MORAM NO FIM DO QUE ROLA: presas embaixo, tomavam "grande parte do
+       espaço" da leitura. Quando elas saem da tela, o balão flutuante (#qsNavFlut) faz as vezes delas. -->
   <!-- TRÊS FAIXAS, TRÊS INTENÇÕES.
        Numa fila só, "encerrar agora" (verde, grande) ficava do lado de
        "próxima" (verde, grande) e disputava o olho com ela — sendo que
@@ -7483,39 +7588,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        que se faz COM ESTA questão, no meio o passo principal, embaixo
        as saídas. -->
   <div class="qs-barra qs-barra-ferramentas">
-    <!-- OS DOIS GATILHOS DO RASCUNHO, JUNTOS E AQUI.
-         Antes a caixa do rascunho ficava sempre na tela, recolhida, com
-         o "folha inteira" solto na barra dela — um botão para expandir
-         um painel que estava fechado. Agora os dois são um grupo só, no
-         fim da questão, que é de onde se decide fazer conta. -->
-    <span class="rs-gatilhos">
-      <!-- O RÓTULO VEM DO HTML, e não de um JS que talvez rode.
-           Enquanto o texto era escrito só por rsPintarGatilhos(), um
-           botão sem rótulo era um botão invisível — e foi assim que o
-           rascunho sumiu da tela inteira depois de um tropeço numa
-           função que roda dentro de um try/catch. -->
-      <!-- "FOLHA INTEIRA" MOROU AQUI FORA, como um segundo botão ao lado
-           deste — duplicava btnRsCheia, que já mora DENTRO do rascunho
-           aberto e alcança a tela cheia num toque a mais. -->
-      <button class="btn-min" id="btnRsAbrir" data-i18n="rs_abrir"
-        title="Abre o rascunho por cima da questão. O texto continua legível ao fundo."></button>
-    </span>
-    <!-- O JULGADO QUE A QUESTÃO CITA.
-         Metade das questões de Direito sai de um julgado, e o momento em
-         que se descobre isso é o momento em que se erra a questão — não
-         depois, na estante. Sem este botão o caminho era encerrar a
-         rodada, achar o tópico no material, abrir a gaveta e voltar:
-         quatro telas, e o rascunho e os grifos da questão perdidos no
-         meio. A gaveta sobe POR CIMA da sessão e fechá-la devolve a
-         mesma questão, no mesmo ponto. -->
-    <button class="btn-min" id="btnQsJuris" data-i18n-title="qs_juris_ajuda" hidden></button>
-    <!-- CONSULTAR A LEI SEM SAIR DA QUESTÃO.
-         Metade das questões de Direito se resolve lendo o artigo, e até
-         aqui isso exigia ENCERRAR a rodada, achar o tópico no material,
-         abrir a lei e voltar — quatro telas, com o rascunho e os grifos
-         perdidos no meio. A gaveta sobe por cima da sessão e fechá-la
-         devolve a mesma questão, no mesmo ponto. -->
-    <button class="btn-min" id="btnQsLei" data-i18n-title="qs_lei_ver_ajuda" hidden></button>
     <!-- SÓ AS QUE ERREI — o único dos três que também precisa existir
          FORA de uma questão (a tela de "rodada terminada" volta para
          cá). Enquanto há questão na tela, este fica escondido e quem
@@ -7537,12 +7609,13 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        escondia que os três fazem a mesma coisa — mudar de questão.
        Só o do meio é grande: ele é o gesto de noventa por cento das
        vezes, e os outros dois não podem competir com ele pelo polegar. -->
-  <div class="qs-barra qs-barra-principal">
+  <div class="qs-barra qs-barra-principal" id="qsBarraAndar">
     <button class="btn-min qs-bt-andar" id="btnQsVoltar" hidden></button>
     <button class="btn-min qs-bt-andar qs-bt-ir" id="btnQsIr" data-i18n="qs_ir" data-i18n-title="qs_ir_tip" hidden></button>
     <button class="btn btn-verde qs-bt-grande" id="btnQsProxima"
       title="Vai para a próxima questão da sequência."></button>
     <button class="btn-min qs-bt-andar" id="btnQsPular" data-i18n="qs_pular" hidden></button>
+    <span class="qs-teclas" id="qsTeclas"></span>
   </div>
   <!-- "ENCERRAR/CRIAR MAIS/FECHAR" SÃO SAÍDAS, NÃO O GESTO DE TODA
        QUESTÃO — noventa por cento das vezes o próximo toque é "próxima",
@@ -7561,6 +7634,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-cinza" id="btnQsSessFechar" data-i18n="help_close"
       title="Encerra a sessão. O que você já respondeu fica registrado."></button>
   </div>
+  </div>
+  <!-- (v18.54.0) O BALÃO DE ANDAR: aparece só quando a faixa de andar (no fim do conteúdo) não está à vista. -->
+  <div class="qs-nav-flut" id="qsNavFlut" hidden>
+    <button type="button" class="btn-min qs-flut-bt" id="btnQsFlutVoltar" data-i18n-title="qs_flut_voltar_tip">◀</button>
+    <button type="button" class="btn btn-verde qs-flut-principal" id="btnQsFlutPrincipal" data-i18n-title="qs_flut_principal_tip"></button>
+    <button type="button" class="btn-min qs-flut-bt" id="btnQsFlutPular" data-i18n-title="qs_flut_pular_tip">▶</button>
+  </div>
+  <!-- (v18.54.0) O BALÃO DO GRIFO: as cores aparecem quando um trecho do enunciado é selecionado (preenchido por qsGrBolhaMontar). -->
+  <div class="qs-gr-bolha" id="qsGrBolha" hidden></div>
 </dialog>
 
 <dialog id="dlgDicas" class="ui-modal diag-modal">

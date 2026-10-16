@@ -246,9 +246,14 @@ async function testes() {
     const barra = api.qsUiFerramentas(q);
 
     const filhos = (barra.children || []);
-    const cores = filhos.filter((x) => /qs-cor/.test(x.className || ""));
+    /* (v18.54.0) AS CORES SAÍRAM DA BARRA: "a sistemática de grifos está tomando muito espaço" — moram no balão que
+     * sobe ao selecionar um trecho (#qsGrBolha). Na barra fica só o ⋮. */
+    ok(!filhos.some((x) => /qs-cor/.test(x.className || "")), "G7-0 as cores ainda ocupam a barra");
+    const bolha = api.qsGrBolhaMontar();
+    const cores = (bolha.children || []).filter((x) => /qs-cor/.test(x.className || ""));
     ok(cores.length === api.GR_CORES.length,
-       "G7 as cores nao estao todas na barra: " + cores.length);
+       "G7 as cores nao estao todas no balao: " + cores.length);
+    ok((bolha.children || []).some((x) => /qs-fer-limpar/.test(x.className || "")), "G7-1 o balao nao tem o limpar");
     ok(cores.length === 4,
        "G7a-pre o cenario nao tem quatro cores e o numero acima nao diz nada");
 
@@ -272,6 +277,7 @@ async function testes() {
     ok(/copiar/i.test(menu.textContent || ""),
        "G7f o copiar a questao nao foi para dentro do ⋮: "
        + (menu.textContent || "").slice(0, 60));
+    ok((menu.children || []).some((x) => /qs-fer-limpar/.test(x.className || "")), "G7f2 'limpar grifos' nao esta no ⋮");
 
     /* TOCAR NUMA COR SEM SELEÇÃO só troca a cor — e o botão reage, para
      * não parecer quebrado. */
@@ -507,7 +513,7 @@ async function testes() {
        "G10 a bolinha da cor nao tem regra propria, e o 'all: unset' "
        + "apaga o fundo dela");
     api.grEsquecerTudo();
-    const barra = api.qsUiFerramentas({ id: "q1", enunciado: T, opcoes: [] });
+    const barra = api.qsGrBolhaMontar();
     const bolinha = (barra.children || [])
       .filter((x) => /qs-cor/.test(x.className || ""))[0];
     ok(/gr-am/.test(bolinha.className || ""),

@@ -950,6 +950,8 @@ function qsUiPintarSessao() {
     }
     /* acabou a rodada: o papel de lado nao tem mais a que se referir */
     try { rsPrepararPara(null); } catch (e) {}
+    qsNavFlutPintar();
+    qsGrBolhaEsconder();
     return;
   }
   /* O rascunho pertence A QUESTAO: trocar de questao troca o papel.
@@ -964,16 +966,21 @@ function qsUiPintarSessao() {
   const en = document.createElement("div");
   en.className = "qs-enunciado" + (qsEnunColapsado ? " qs-enun-colapsado" : "");
   en.textContent = q.enunciado;
-  corpo.append(de);
+  /* (v18.54.0) A LINHA DE CIMA: de onde é a questão e, no canto, o ⋮ das ferramentas. As cores do grifo eram uma
+   * fileira inteira entre o enunciado e as alternativas ("a sistemática de grifos está tomando muito espaço"): agora
+   * aparecem num balão quando um trecho do enunciado é selecionado (qsGrBolha*). */
+  const deLinha = document.createElement("div");
+  deLinha.className = "qs-de-linha";
+  deLinha.append(de);
+  try { deLinha.append(qsUiFerramentas(q)); } catch (e) {}
+  corpo.append(deLinha);
   /* O GRIFO É O PRÓPRIO TEXTO, e não uma camada por cima dele.
    * Nada intercepta clique, nada precisa ser ligado: selecionar texto
    * sempre foi possível, e as cores só agem sobre o que está
    * selecionado. */
-  try {
-    grEnvolver(en, q.id, q.enunciado);
-    corpo.append(en);
-    corpo.append(qsUiFerramentas(q));
-  } catch (e) { corpo.append(en); }
+  try { grEnvolver(en, q.id, q.enunciado); } catch (e) {}
+  corpo.append(en);
+  qsGrBolhaEsconder();
 
   /* HISTÓRICO DESTA QUESTÃO, ANTES DE RESPONDER — SEM ENTREGAR O GABARITO.
    * Saber que já se errou isto duas vezes muda a atenção com que se lê.
@@ -1297,6 +1304,7 @@ function qsUiPintarSessao() {
   /* "EMBARALHAR" TAMBÉM SÓ EXISTE DENTRO DE qsUiFerramentas agora — o
    * mesmo caso de "melhorar esta questão", acima. */
   qsRodapePintar();
+  qsNavFlutPintar();
   if ($("btnQsEnunAlternar")) {
     const be = $("btnQsEnunAlternar");
     be.hidden = !q;
@@ -3687,6 +3695,11 @@ function qsUiIniciar() {
   if ($("btnQsLerMenos")) $("btnQsLerMenos").onclick = () => qsLerFsMudar(-1);
   if ($("btnQsLerMais")) $("btnQsLerMais").onclick = () => qsLerFsMudar(1);
   if ($("btnQsIr")) $("btnQsIr").onclick = () => qsUiIrPara();
+  /* (v18.54.0) balão de andar, balão do grifo e teclado */
+  qsNavFlutLigar();
+  qsGrBolhaLigar();
+  try { if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", (ev) => { try { qsTeclaResponder(ev); } catch (e) {} }); } catch (e) {}
+  if ($("qsTeclas")) $("qsTeclas").textContent = t("qs_teclas");
   if ($("btnQsRodapeAlternar")) {
     $("btnQsRodapeAlternar").onclick = () => {
       qsRodapeAberto = !qsRodapeAberto;
@@ -3845,35 +3858,7 @@ function qsUiFerramentas(q) {
   const barra = document.createElement("div");
   barra.className = "qs-fer";
 
-  GR_CORES.forEach((c) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "qs-cor gr-" + c.id + (grCorAtual() === c.id ? " sel" : "");
-    b.title = t("gr_cor_ajuda", { c: t(c.i18n) });
-    b.setAttribute("aria-label", b.title);
-    b.onclick = () => {
-      /* GRIFA O QUE ESTIVER SELECIONADO; sem seleção, só troca a cor
-       * para o próximo grifo. Um botão que não faz nada quando não há
-       * seleção pareceria quebrado — então ele sempre faz alguma coisa
-       * visível. */
-      /* A COR PRIMEIRO, o grifo depois. Assim tocar numa cor sem nada
-       * selecionado faz o que o botão promete: escolhe a cor do
-       * próximo grifo. */
-      grEscolherCor(c.id);
-      const feito = grDaSelecao();
-      qsUiPintarCores(barra);
-      if (!feito) vkReagir(b, t("gr_sem_selecao"));
-    };
-    barra.append(b);
-  });
-
-  const limpar = document.createElement("button");
-  limpar.type = "button";
-  limpar.className = "btn-min qs-fer-limpar";
-  limpar.textContent = t("gr_limpar");
-  limpar.title = t("gr_limpar_ajuda");
-  limpar.onclick = () => { grLimparTela(); vkReagir(limpar, t("gr_limpou")); };
-  barra.append(limpar);
+  /* (v18.54.0) AS CORES SAÍRAM DAQUI: moram no balão que sobe ao selecionar um trecho (qsGrBolhaMontar). */
 
   /* o ⋮ com o que não é gesto de leitura */
   const mais = document.createElement("span");
@@ -3891,6 +3876,14 @@ function qsUiFerramentas(q) {
     qsFerMenu(menu.hidden ? bm : null, menu);
   };
   try { menu.append(plBarraCopiar(q)); } catch (e) {}
+  /* limpar os grifos da questão: saiu da fileira (que não existe mais) para cá — e também está no balão do grifo */
+  const limpar = document.createElement("button");
+  limpar.type = "button";
+  limpar.className = "btn-min qs-fer-limpar";
+  limpar.textContent = t("gr_limpar");
+  limpar.title = t("gr_limpar_ajuda");
+  limpar.onclick = () => { qsFerFechar(); grLimparTela(); try { toastMsg(t("gr_limpou"), 2500); } catch (e) {} };
+  menu.append(limpar);
 
   /* O REGISTRO, A PARTIR DAQUI.
    *
@@ -4070,6 +4063,178 @@ function qsFerFechar() {
     document.removeEventListener("click", a.fora);
     document.removeEventListener("keydown", a.tecla);
   } catch (e) {}
+}
+
+/* =====================================================================
+ * (v18.54.0) O BALÃO DO GRIFO
+ *
+ * Selecionar um trecho do enunciado faz subir, junto dele, as quatro cores
+ * e "limpar". Sem seleção, nada ocupa a tela. Os botões seguram a seleção
+ * no mousedown (senão ela some antes do clique) — e mesmo que suma, o
+ * grifo usa a que ficou anotada (grLembrarSelecao).
+ * ===================================================================== */
+function qsGrBolhaMontar() {
+  const bo = $("qsGrBolha");
+  if (!bo || bo._montado) return bo;
+  bo._montado = true;
+  bo.innerHTML = "";
+  const segurar = (b) => { b.onmousedown = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); }; };
+  GR_CORES.forEach((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "qs-cor gr-" + c.id + (grCorAtual() === c.id ? " sel" : "");
+    b.title = t("gr_cor_ajuda", { c: t(c.i18n) });
+    b.setAttribute("aria-label", b.title);
+    segurar(b);
+    b.onclick = () => {
+      /* A COR PRIMEIRO, o grifo depois (a cor também vale para o próximo grifo) */
+      grEscolherCor(c.id);
+      const feito = grDaSelecao();
+      qsUiPintarCores(bo);
+      if (!feito) vkReagir(b, t("gr_sem_selecao"));
+      qsGrBolhaEsconder();
+    };
+    bo.append(b);
+  });
+  const limpar = document.createElement("button");
+  limpar.type = "button";
+  limpar.className = "btn-min qs-fer-limpar";
+  limpar.textContent = t("gr_limpar");
+  limpar.title = t("gr_limpar_ajuda");
+  segurar(limpar);
+  limpar.onclick = () => { grLimparTela(); qsGrBolhaEsconder(); try { toastMsg(t("gr_limpou"), 2500); } catch (e) {} };
+  bo.append(limpar);
+  return bo;
+}
+function qsGrBolhaEsconder() { const bo = $("qsGrBolha"); if (bo) bo.hidden = true; }
+/* mostra o balão se houver um trecho do ENUNCIADO selecionado; devolve se mostrou */
+function qsGrBolhaAtualizar() {
+  const bo = $("qsGrBolha");
+  const dlg = $("dlgQsResponder");
+  if (!bo || !dlg || !dlg.open) { qsGrBolhaEsconder(); return false; }
+  let sel = null;
+  try { sel = window.getSelection ? window.getSelection() : null; } catch (e) { sel = null; }
+  if (!sel || !sel.rangeCount || sel.isCollapsed || !grLembrarSelecao()) { qsGrBolhaEsconder(); return false; }
+  qsGrBolhaMontar();
+  qsUiPintarCores(bo);
+  bo.hidden = false;
+  try {
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const larg = bo.offsetWidth || 200, alto = bo.offsetHeight || 40;
+    const jan = window.innerWidth || 360;
+    let topo = r.top - alto - 8;
+    if (topo < 8) topo = r.bottom + 8;
+    bo.style.top = Math.round(topo) + "px";
+    bo.style.left = Math.round(Math.max(8, Math.min(jan - larg - 8, r.left + r.width / 2 - larg / 2))) + "px";
+  } catch (e) {}
+  return true;
+}
+let qsGrBolhaOuvindo = false;
+function qsGrBolhaLigar() {
+  if (qsGrBolhaOuvindo || typeof document === "undefined" || !document.addEventListener) return;
+  qsGrBolhaOuvindo = true;
+  let pend = null;
+  document.addEventListener("selectionchange", () => {
+    if (pend) clearTimeout(pend);
+    pend = setTimeout(() => { pend = null; try { qsGrBolhaAtualizar(); } catch (e) {} }, 120);
+  });
+}
+
+/* =====================================================================
+ * (v18.54.0) O BALÃO DE ANDAR
+ *
+ * A faixa de andar (◀ anterior · responder/próxima · pular) mora no FIM
+ * do conteúdo — não fica mais presa embaixo, comendo a leitura. Quando
+ * ela sai da tela (enunciado longo, comentário comprido), sobe um balão
+ * pequeno no canto com os mesmos três gestos; quando ela volta à vista,
+ * o balão some. Os botões do balão chamam os de verdade (nada duplicado).
+ * ===================================================================== */
+let qsNavFlutForcado = null;   /* só para testes: true = a faixa está à vista, false = não está */
+function qsNavFlutPintar() {
+  const p = $("btnQsProxima"), fp = $("btnQsFlutPrincipal");
+  if (fp && p) { fp.textContent = p.textContent; fp.disabled = !!p.disabled; fp.title = p.title || ""; }
+  if ($("btnQsFlutVoltar")) $("btnQsFlutVoltar").hidden = !$("btnQsVoltar") || !!$("btnQsVoltar").hidden;
+  if ($("btnQsFlutPular")) $("btnQsFlutPular").hidden = !$("btnQsPular") || !!$("btnQsPular").hidden;
+  qsNavFlutAtualizar();
+  /* a medida de verdade só existe depois do desenho */
+  try { if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => qsNavFlutAtualizar()); } catch (e) {}
+}
+function qsNavFlutAtualizar(forcado) {
+  if (forcado !== undefined) qsNavFlutForcado = forcado;
+  const f = $("qsNavFlut");
+  if (!f) return false;
+  const dlg = $("dlgQsResponder");
+  let faixaVisivel = true;
+  if (qsNavFlutForcado !== null) faixaVisivel = qsNavFlutForcado;
+  else {
+    try {
+      const b = $("qsBarraAndar"), c = $("qsCorpoLado");
+      const rb = b && b.getBoundingClientRect ? b.getBoundingClientRect() : null;
+      const rc = c && c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+      if (rb && rc && (rb.height || rb.width)) faixaVisivel = rb.top < rc.bottom - 4 && rb.bottom > rc.top + 4;
+    } catch (e) { faixaVisivel = true; }
+  }
+  const semPasso = !qsAtual() || !$("btnQsProxima") || !!$("btnQsProxima").hidden;
+  f.hidden = !dlg || !dlg.open || faixaVisivel || semPasso;
+  return !f.hidden;
+}
+function qsNavFlutLigar() {
+  const chama = (id) => () => { const b = $(id); if (b && !b.hidden && !b.disabled && typeof b.onclick === "function") b.onclick(); };
+  if ($("btnQsFlutVoltar")) $("btnQsFlutVoltar").onclick = chama("btnQsVoltar");
+  if ($("btnQsFlutPrincipal")) $("btnQsFlutPrincipal").onclick = chama("btnQsProxima");
+  if ($("btnQsFlutPular")) $("btnQsFlutPular").onclick = chama("btnQsPular");
+  const c = $("qsCorpoLado");
+  if (c && c.addEventListener) c.addEventListener("scroll", () => qsNavFlutAtualizar(), { passive: true });
+  try { if (typeof window !== "undefined" && window.addEventListener) window.addEventListener("resize", () => qsNavFlutAtualizar()); } catch (e) {}
+}
+
+/* =====================================================================
+ * (v18.54.0) O TECLADO
+ *
+ * ← volta à anterior · → próxima (respondida) ou pula (não respondida) ·
+ * Enter responde/avança · A–E ou 1–5 escolhem a alternativa (C/E no
+ * certo-errado). Só quando a questão é a janela de cima e o foco não está
+ * num campo de texto (o rascunho digitado, a busca, a dica).
+ * ===================================================================== */
+function qsTeclaResponder(ev) {
+  if (!ev || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+  const dlg = $("dlgQsResponder");
+  if (!dlg || !dlg.open) return false;
+  if ($("uiModal") && $("uiModal").open) return false;
+  try {
+    if (typeof _modaisAbertos !== "undefined") {
+      const abertos = Array.from(_modaisAbertos).filter((d) => d && d.open);
+      if (abertos.length && abertos[abertos.length - 1] !== dlg) return false;
+    }
+  } catch (e) {}
+  if (dlg.classList && dlg.classList.contains("rs-cheia")) return false;
+  if (qsFerAberto) return false;
+  const alvo = ev.target;
+  const tag = String((alvo && alvo.tagName) || "").toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (alvo && alvo.isContentEditable)) return false;
+  const q = qsAtual();
+  if (!q) return false;
+  const pode = (id) => { const b = $(id); return !!(b && !b.hidden && !b.disabled && typeof b.onclick === "function"); };
+  const clicar = (id) => { $(id).onclick(); return true; };
+  const jaFoi = !!qsJaRespondida();
+  let feito = false;
+  if (ev.key === "ArrowRight") {
+    if (jaFoi && pode("btnQsProxima")) feito = clicar("btnQsProxima");
+    else if (!jaFoi && pode("btnQsPular")) feito = clicar("btnQsPular");
+  } else if (ev.key === "ArrowLeft") {
+    if (pode("btnQsVoltar")) feito = clicar("btnQsVoltar");
+  } else if (ev.key === "Enter") {
+    /* Enter num botão em foco já o aperta: não apertar dois */
+    if (tag === "BUTTON" || tag === "A") return false;
+    if (pode("btnQsProxima")) feito = clicar("btnQsProxima");
+  } else if (!jaFoi && /^[a-z1-9]$/i.test(String(ev.key || ""))) {
+    const letras = q.tipo === "ce" ? ["C", "E"] : (q.opcoes || []).map((o) => String(o.letra || "").toUpperCase());
+    let l = String(ev.key).toUpperCase();
+    if (/^[1-9]$/.test(l)) l = letras[parseInt(l, 10) - 1] || "";
+    if (l && letras.indexOf(l) >= 0) { qsSelecionada = l; qsUiPintarSessao(); feito = true; }
+  }
+  if (feito && ev.preventDefault) ev.preventDefault();
+  return feito;
 }
 
 function qsUiPintarCores(barra) {
