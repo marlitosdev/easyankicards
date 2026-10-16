@@ -2440,6 +2440,22 @@ function regPintarFormas() {
     b.type = "button";
     b.className = "reg-forma" + (regFormas.includes(f) ? " ativa" : "");
     b.textContent = t("ed_forma_" + f);
+    /* (v18.55.0) "REVISÃO" AQUI É O MESMO QUE "ESTA SESSÃO FOI: REVISÃO". Era só um rótulo para o diário — a pergunta foi
+     * "marcar revisão no 'como estudou' conta como revisão?" e a resposta era não. Agora tocar nela troca o tipo do registro
+     * (e tocar de novo volta para estudo): uma escolha só, nos dois lugares. */
+    if (f === "revisao") {
+      b.title = t("ed_forma_revisao_aj");
+      b.onclick = () => {
+        /* troca o tipo, e as OUTRAS formas marcadas (questões, lei seca…) continuam marcadas */
+        const outras = regFormas.filter((x) => x !== "revisao" && x !== "leitura");
+        regTipoTrocar();
+        outras.forEach((x) => { if (!regFormas.includes(x)) regFormas.push(x); });
+        regPintarFormas();
+        regPintarQuestoes();
+      };
+      cx.append(b);
+      return;
+    }
     /* várias formas por sessão: quase ninguém só lê — lê, assiste e resolve
      * questão na mesma hora, e obrigar a escolher uma falsifica o registro */
     b.onclick = () => {
@@ -2459,7 +2475,22 @@ function regPintarFormas() {
  * ainda pendente; revisão só ramo já estudado e não revisado. Os minutos sugeridos acompanham a escolha (soma do
  * tempo dos ramos; metade na revisão) e o tempo gravado é repartido entre os ramos pelo peso. */
 let regRamosSel = new Set();
-function regRamosElegivel(r) { return regTipo === "revisado" ? (r.feito && (!r.revisado || r.venceu)) : (!r.feito && !r.pulado); }
+/* (v18.55.0) "JÁ ESTUDEI ANTES, SEM REGISTRAR". O relato: "estava como revisão e ficou escura a opção… eu já havia estudado
+ * antes mas não tinha feito o registro. O aplicativo não me avisou que os tópicos ainda não haviam sido estudados e esse
+ * era o motivo." Na revisão, o ramo que ainda não consta como estudado pode ser marcado: entra aqui, e ao confirmar ganha a
+ * marca de estudado (sem tempo inventado) e esta sessão conta como a revisão dele. */
+let regJaEstudei = new Set();
+function regRamoAntesSemRegistro(r) { return regTipo === "revisado" && !!r && !r.feito && !r.pulado; }
+/* (v18.55.0) REVISÃO ANTECIPADA. O caso real do relato: ramos já estudados E revisados, com a próxima revisão ainda em dia —
+ * a ficha dizia "ainda não estudado" (texto errado: valia para qualquer ramo trancado) e não deixava marcar. Quem revisou de
+ * novo antes do prazo pode marcar: conta como mais uma revisão (o ciclo avança). */
+let regAdiantar = new Set();
+function regRamoAdiantado(r) { return regTipo === "revisado" && !!r && !!r.feito && !!r.revisado && !r.venceu && !r.pulado; }
+function regRamosElegivel(r) {
+  return regTipo === "revisado" ? ((r.feito && (!r.revisado || r.venceu)) || (regRamoAntesSemRegistro(r) && regJaEstudei.has(r.id))
+      || (regRamoAdiantado(r) && regAdiantar.has(r.id)))
+    : (!r.feito && !r.pulado);
+}
 function regRamosPadrao(i) {
   const rs = i.ramos || [];
   if (regTipo === "revisado") {
@@ -2468,6 +2499,7 @@ function regRamosPadrao(i) {
   }
   return (i.sessao || []).filter((id) => { const r = rs.find((x) => x.id === id); return r && regRamosElegivel(r); });
 }
+function regRamosMinutosDe(r) { return regTipo === "revisado" ? Math.max(5, Math.round((r.minutos || 0) / 2 / 5) * 5) : (r.minutos || 0); }
 function regRamosMinutos(i) {
   const soma = (i.ramos || []).filter((r) => regRamosSel.has(r.id)).reduce((a, r) => a + (r.minutos || 0), 0);
   return regTipo === "revisado" ? Math.max(5, Math.round(soma / 2 / 5) * 5) : soma;
@@ -2484,13 +2516,16 @@ function regRamosPintar(i, refazerMinutos) {
   cx.innerHTML = "";
   rs.forEach((r) => {
     const el = regRamosElegivel(r);
+    const antes = regRamoAntesSemRegistro(r);
+    const adiant = regRamoAdiantado(r);
     const lin = document.createElement("label");
     const marcado = el && regRamosSel.has(r.id);
-    lin.className = "reg-ramo-lin" + (el ? "" : " reg-ramo-indisp") + (marcado ? " marcado" : "");
+    lin.className = "reg-ramo-lin" + (el || antes || adiant ? "" : " reg-ramo-indisp") + (antes || adiant ? " reg-ramo-antes" : "") + (marcado ? " marcado" : "");
     const ck = document.createElement("input");
-    ck.type = "checkbox"; ck.checked = el && regRamosSel.has(r.id); ck.disabled = !el;
+    ck.type = "checkbox"; ck.checked = el && regRamosSel.has(r.id); ck.disabled = !el && !antes && !adiant;
     ck.onchange = () => {
-      if (ck.checked) regRamosSel.add(r.id); else regRamosSel.delete(r.id);
+      if (ck.checked) { regRamosSel.add(r.id); if (antes) regJaEstudei.add(r.id); if (adiant) regAdiantar.add(r.id); }
+      else { regRamosSel.delete(r.id); regJaEstudei.delete(r.id); regAdiantar.delete(r.id); }
       regRamosPintar(i, true);
     };
     const nm = document.createElement("span");
@@ -2499,7 +2534,10 @@ function regRamosPintar(i, refazerMinutos) {
     nm.textContent = r.nome;
     const st = document.createElement("span");
     st.className = "reg-ramo-est";
-    st.textContent = r.pulado ? t("ed_ramo_pulado") : el ? (marcado ? "≈ " + horasTexto(r.minutos) : "") : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
+    st.textContent = r.pulado ? t("ed_ramo_pulado")
+      : antes ? (marcado ? t("ed_reg_ramo_antes_marcado") + " · ≈ " + horasTexto(regRamosMinutosDe(r)) : t("ed_reg_ramo_indisp_rev"))
+      : adiant ? (marcado ? t("ed_reg_ramo_adiant_marcado") + " · ≈ " + horasTexto(regRamosMinutosDe(r)) : t("ed_reg_ramo_ja_revisado"))
+      : el ? (marcado ? "≈ " + horasTexto(r.minutos) : "") : t(regTipo === "revisado" ? "ed_reg_ramo_indisp_rev" : "ed_reg_ramo_indisp_est");
     lin.title = r.nome + " — " + t("ed_ramo_" + (r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend"))
       + " — " + t("ed_ramo_peso", { p: r.peso || 3 }) + (el ? " — ≈ " + horasTexto(r.minutos) : "") + (r.nota ? " — " + r.nota : "");
     lin.append(ck, nm, st);
@@ -2507,6 +2545,19 @@ function regRamosPintar(i, refazerMinutos) {
   });
   const n = regRamosSel.size, min = regRamosMinutos(i);
   $("regRamosResumo").textContent = n ? t("ed_reg_ramos_resumo", { n, m: horasTexto(min) }) : t("ed_reg_ramos_nenhum");
+  /* o AVISO de por que há ramos "ainda não estudados" numa revisão, e o que fazer (antes era só a ficha cinza) */
+  const av = $("regRamosAviso");
+  if (av) {
+    const nAntes = rs.filter(regRamoAntesSemRegistro).length;
+    const nMarc = rs.filter((r) => regRamoAntesSemRegistro(r) && regJaEstudei.has(r.id) && regRamosSel.has(r.id)).length;
+    const nAdiant = rs.filter(regRamoAdiantado).length;
+    const partes = [];
+    if (nAntes) partes.push(t("ed_reg_rev_antes_aviso", { n: nAntes }) + (nMarc ? " " + t("ed_reg_rev_antes_marcados", { n: nMarc }) : ""));
+    const nAdMarc = rs.filter((r) => regRamoAdiantado(r) && regAdiantar.has(r.id) && regRamosSel.has(r.id)).length;
+    if (nAdiant) partes.push(nAdMarc ? t("ed_reg_rev_adiant_marcados", { n: nAdMarc }) : t("ed_reg_rev_adiant_aviso", { n: nAdiant }));
+    av.hidden = !partes.length;
+    av.textContent = partes.join(" ");
+  }
   /* a ficha "Todos" fica acesa quando todos os ramos que cabem neste registro estão marcados */
   const eleg = rs.filter(regRamosElegivel);
   if ($("btnRegRamosTodos")) $("btnRegRamosTodos").setAttribute("aria-pressed", eleg.length && eleg.every((r) => regRamosSel.has(r.id)) ? "true" : "false");
@@ -2692,6 +2743,8 @@ function regTipoPorqueTexto(s, tipoAtual) {
 /* trocar estudo ↔ revisão (o seletor chama; tocar no que já está escolhido não faz nada) */
 function regTipoTrocar() {
   regTipo = regTipo === "revisado" ? "feito" : "revisado";
+  regJaEstudei = new Set();
+  regAdiantar = new Set();
   /* TROCAR O TIPO TROCA A FORMA PADRÃO.
    * Quem troca está declarando "esta sessão foi da outra natureza". Manter "leitura" marcada num lançamento de
    * revisão — ou o contrário — mandaria o tempo para a conta errada. */
@@ -2711,7 +2764,7 @@ function regTipoTrocar() {
 function regAlvoNuncaEstudado() {
   if (!regAtual) return false;
   const rs = (regAtual.ramos || []).filter((r) => regRamosSel && regRamosSel.has(r.id));
-  if (rs.length) return rs.some((r) => !r.feito);
+  if (rs.length) return rs.some((r) => !r.feito && !regJaEstudei.has(r.id));
   return !regAtual.feito;
 }
 
@@ -2741,6 +2794,8 @@ function abrirRegistro(i, opc) {
   const rEsc0 = opc && opc.ramo ? (i.ramos || []).find((x) => x.id === opc.ramo) : null;
   regTipoSugerido = regTipoPadrao(rEsc0 || i, edIntervaloRevisao(0, edNivelDoFator(i.fator)));
   regTipo = regTipoSugerido.tipo;
+  regJaEstudei = new Set();
+  regAdiantar = new Set();
   regFormas = regTipo === "revisado" ? ["revisao"] : ["leitura"];
   regHumor = "media";
   regDif = "";
@@ -3005,6 +3060,16 @@ function confirmarRegistro(estado) {
     const eleg = item.ramos.filter(regRamosElegivel);
     const escolha = eleg.filter((r) => regRamosSel.has(r.id)).map((r) => r.id);
     if (eleg.length && !escolha.length) { try { uiAlert(t("ed_reg_ramos_nenhum")); } catch (e) {} return; }
+    /* (v18.55.0) os marcados como "estudados antes, sem registro": passam a constar como estudados (sem tempo), e a revisão
+     * desta sessão vale para eles também — o registro grava a marca de revisão por cima. O desfazer devolve a marca de antes
+     * (nenhuma), como em qualquer registro. */
+    if (estado === "revisado") {
+      const antes = item.ramos.filter((r) => escolha.indexOf(r.id) >= 0 && !r.feito && regJaEstudei.has(r.id));
+      antes.forEach((r) => { r.feito = true; r.estudadoAntes = true; });
+      /* revisão antecipada: o filtro do registro só aceita revisado vencido — a escolha da pessoa vale */
+      item.ramos.filter((r) => escolha.indexOf(r.id) >= 0 && regAdiantar.has(r.id) && r.revisado && !r.venceu).forEach((r) => { r.venceu = true; r.revisaoAntecipada = true; });
+      if (antes.length) { try { reg("EDITAL-PROGRESSO", "ramos dados como estudados antes (sem registro) na revisão", item.nome + " › " + antes.map((r) => r.nome).join(", ")); } catch (e) {} }
+    }
     /* "só dar o ramo como estudado com a trilha completa" (opcional): o ramo cujos passos ainda faltam fica só com o
      * progresso parcial no diário (rp) e NÃO ganha a marca de estudado */
     item.ramosParciais = [];
@@ -4843,6 +4908,10 @@ function edIniciar() {
   });
   if ($("btnRegRamosTodos")) $("btnRegRamosTodos").onclick = () => {
     if (!regAtual || !regAtual.ramos) return;
+    if (regTipo === "revisado") {
+      regAtual.ramos.filter(regRamoAntesSemRegistro).forEach((r) => regJaEstudei.add(r.id));
+      regAtual.ramos.filter(regRamoAdiantado).forEach((r) => regAdiantar.add(r.id));
+    }
     regRamosSel = new Set(regAtual.ramos.filter(regRamosElegivel).map((r) => r.id));
     regRamosPintar(regAtual, true);
   };
