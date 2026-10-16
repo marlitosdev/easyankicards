@@ -1085,14 +1085,14 @@ async function testes() {
       ok(tx(linhas()[0])[0] === "revisão vencida" && tx(linhas()[0])[4] === "revisar" && /1 com revisão vencida/.test(a.$("dscRamosResumo").textContent), "R34t ramo estudado ha muito tempo: 'revisao vencida' e botao 'revisar'");
       ok(/1 de 3 ramos estudados · 45%/.test(a.$("dscRamosResumo").textContent) && Array.from(a.$("dscRamosFiltro").children).map((o) => o.textContent).join("|") === "todos (3)|a estudar (2)|a revisar (1)", "R34t2 o resumo usa o progresso de ESTUDO (45%) e o filtro conta os pendentes (2) e os a revisar (1): " + a.$("dscRamosResumo").textContent);
       linhas()[0].children[4].onclick();
-      ok(a.$("regRamosRot").textContent === "O que você revisou?" && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent) && a.$("regRamos").children[0].children[0].checked === true && a.$("regRamos").children[1].children[0].disabled === true, "R34u o botao 'revisar' abre o registro em REVISAO com o ramo marcado (e os pendentes desabilitados)");
+      ok(a.$("regRamosRot").textContent === "O que você revisou?" && /Lei 14\.133 › Modalidades$/.test(a.$("regTitulo").textContent) && a.$("regRamos").children[0].children[0].checked === true && a.$("regRamos").children[1].children[0].disabled === false && a.$("regRamos").children[1].children[0].checked === false && /reg-ramo-antes/.test(a.$("regRamos").children[1].className), "R34u o botao 'revisar' abre o registro em REVISAO com o ramo marcado (os pendentes desmarcados, mas marcaveis como 'estudado antes' — v18.55.0)");
       ok(a.regFormasAtual().join() === "revisao", "R34u2 abrir por um ramo ja estudado troca a forma padrao para 'revisao' (o tempo vai para a conta certa)");
       a.$("dlgRegistro").close();
       /* ramo JA REVISADO: nao e' elegivel, entao abre sem ele marcado */
       a.edProgressoPor({ [ch + "›#modalidades"]: { e: "revisado", d: hoje } });
       a.abrirDisciplina("Licitações");
       linhas()[0].children[4].onclick();
-      ok(a.$("regRamos").children[0].children[0].checked === false && a.$("regRamos").children[0].children[0].disabled === true, "R34u3 ramo ja revisado nao pode ser marcado: o registro abre sem ele");
+      ok(a.$("regRamos").children[0].children[0].checked === false && a.$("regRamos").children[0].children[0].disabled === false && /já revisado \(em dia\)/.test(a.$("regRamos").children[0].children[2].textContent), "R34u3 ramo ja revisado (em dia): o registro abre sem ele, dizendo 'já revisado' — e pode ser marcado como revisão antecipada (v18.55.0)");
       a.$("dlgRegistro").close();
       /* disciplina sem ramos: o bloco some */
       a.abrirDisciplina("Direito Financeiro");
@@ -3092,15 +3092,59 @@ async function testes() {
       ok(a.$("regRamosRot").textContent === "O que você estudou?" && marcas().join() === "false,true,false", "R33k topico ainda com pendencia abre em ESTUDO: so' o ramo pendente marcado, os estudados desabilitados");
       ok(linhas()[0].children[0].disabled === true && linhas()[1].children[0].disabled === false && /já estudado/.test(linhas()[0].children[2].textContent), "R33l ramo ja estudado fica desabilitado, dizendo 'ja estudado'");
       a.regTipoTrocar();
-      ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === true && linhas()[0].children[0].disabled === false && /ainda não estudado/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO inverte: so' os estudados podem ser escolhidos");
+      /* (v18.55.0) o pendente NÃO fica mais trancado na revisão: dá para marcar "estudei antes, sem registrar" — e o aviso diz por quê */
+      ok(a.$("regRamosRot").textContent === "O que você revisou?" && linhas()[1].children[0].disabled === false && linhas()[1].children[0].checked === false && linhas()[0].children[0].disabled === false && /não estudado — marque se já estudou/.test(linhas()[1].children[2].textContent), "R33m trocar para REVISAO: os estudados entram; o pendente fica desmarcado, marcavel como 'estudado antes'");
+      ok(a.$("regRamosAviso").hidden === false && /ainda não constam como estudados/.test(a.$("regRamosAviso").textContent), "R33m1 o aviso explica por que o pendente aparece como 'não estudado' e o que fazer: " + a.$("regRamosAviso").textContent);
       ok(a.$("regRamosExigirLin").hidden === true && (a.$("btnRegExigirAjuda").dataset.texto || "") === "", "R33m2 na REVISAO a caixa \"so' marcar estudado com todas as etapas\" e o (?) somem (so valem no estudo)");
       ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === Math.round((70 + 40) / 2 / 5) * 5, "R33n na revisao vem marcado o que esta vencido/estudado e o tempo e' metade: " + a.$("regMinutos").value);
       a.$("btnRegRamosTodos").onclick();
-      ok(marcas().join() === "true,false,true" && Number(a.$("regMinutos").value) === 55, "R33o 'o topico todo' na revisao marca so' os elegiveis (e o tempo so' deles: 55): " + a.$("regMinutos").value);
+      ok(marcas().join() === "true,true,true" && Number(a.$("regMinutos").value) > 55 && /estudado antes/.test(linhas()[1].children[2].textContent), "R33o 'Todos' na revisao marca tambem o pendente, como 'estudado antes' (e o tempo cresce): " + a.$("regMinutos").value);
+      ok(/Marcado\(s\) como estudado\(s\) antes, sem registro: 1\./.test(a.$("regRamosAviso").textContent), "R33o1 o aviso conta os marcados como 'estudado antes'");
+      linhas()[1].children[0].checked = false; linhas()[1].children[0].onchange();
       linhas()[2].children[0].checked = false; linhas()[2].children[0].onchange();
       a.confirmarRegistroTeste("revisado");
       const pr2 = a.edProgressoAtual();
-      ok(pr2[ch + "›#modalidades"].e === "revisado" && pr2[ch + "›#contratos"].e === "feito", "R33p a revisao marca so' o ramo escolhido");
+      ok(pr2[ch + "›#modalidades"].e === "revisado" && pr2[ch + "›#contratos"].e === "feito" && pr2[ch + "›#fase_preparatoria"] === undefined, "R33p a revisao marca so' o ramo escolhido (desmarcar o 'estudado antes' o deixa como estava)");
+      /* (v18.55.0) "estudei antes, sem registrar": o pendente marcado na revisao passa a constar como estudado e ganha a revisao */
+      a.abrirRegistro(item());
+      if (a.$("regRamosRot").textContent !== "O que você revisou?") a.regTipoTrocar();
+      linhas().forEach((l) => { if (l.children[0].checked) { l.children[0].checked = false; l.children[0].onchange(); } });
+      linhas()[1].children[0].checked = true; linhas()[1].children[0].onchange();
+      ok(/estudado antes/.test(linhas()[1].children[2].textContent), "R33p5 marcado na revisao, o pendente diz 'estudado antes'");
+      a.confirmarRegistroTeste("revisado");
+      const pr3 = a.edProgressoAtual();
+      ok(pr3[ch + "›#fase_preparatoria"] && pr3[ch + "›#fase_preparatoria"].e === "revisado", "R33p6 o ramo 'estudado antes' ganha a marca da revisao: " + JSON.stringify(pr3[ch + "›#fase_preparatoria"]));
+      const dRev = a.edDiario[a.edDiario.length - 1];
+      ok(dRev.a === "revisado" && (dRev.rm || []).some((x) => x.id === "fase_preparatoria"), "R33p7 o diario registra a revisao desse ramo");
+      /* (v18.55.0) A FORMA "REVISÃO" E O TIPO ANDAM JUNTOS: "marcar revisão no 'como estudou' conta como revisão?" — agora sim */
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: new Date().toISOString().slice(0, 10) } });
+      a.abrirRegistro(item());
+      const forma = (nome) => Array.from(a.$("regFormas").children || []).find((b) => b.textContent === nome);
+      ok(a.$("regRamosRot").textContent === "O que você estudou?" && a.$("regRamosAviso").hidden === true, "R33f1 no estudo, sem o aviso de 'estudado antes'");
+      forma("Questões").onclick();
+      forma("Revisão").onclick();
+      ok(a.$("regRamosRot").textContent === "O que você revisou?" && a.regFormasAtual().join() === "revisao,questoes", "R33f2 tocar na forma 'Revisão' troca o registro para REVISÃO (e mantém 'Questões'): " + a.regFormasAtual().join());
+      ok(/Esta sessão foi: Revisão|mesmo que/.test(forma("Revisão").title), "R33f3 o balão da forma diz que é o mesmo que 'Esta sessão foi: Revisão'");
+      forma("Revisão").onclick();
+      ok(a.$("regRamosRot").textContent === "O que você estudou?" && a.regFormasAtual().join() === "leitura,questoes", "R33f4 tocar de novo volta para ESTUDO (mantendo 'Questões'): " + a.regFormasAtual().join());
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+      /* o "estudado antes" não confirmado não sobrevive a reabrir nem a trocar o tipo */
+      const emRevisao = () => { if (a.$("regRamosRot").textContent !== "O que você revisou?") a.regTipoTrocar(); };
+      a.abrirRegistro(item()); emRevisao();
+      linhas()[1].children[0].checked = true; linhas()[1].children[0].onchange();
+      ok(marcas()[1] === true, "R33f5-pre marcado como 'estudado antes'");
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+      a.abrirRegistro(item()); emRevisao();
+      ok(marcas()[1] === false, "R33f5 reabrir o registro esquece o 'estudado antes' que não foi confirmado: " + marcas());
+      linhas()[1].children[0].checked = true; linhas()[1].children[0].onchange();
+      a.regTipoTrocar(); a.regTipoTrocar();
+      ok(marcas()[1] === false, "R33f6 trocar o tipo (e voltar) também esquece: " + marcas());
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
+      /* ramo PULADO não é 'estudado antes': continua fora da revisão */
+      a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: new Date().toISOString().slice(0, 10) }, [ch + "›#fase_preparatoria"]: { e: "pulado", d: "2026-09-25" } });
+      a.abrirRegistro(item()); emRevisao();
+      ok(linhas()[1].children[0].disabled === true && !/reg-ramo-antes/.test(linhas()[1].className), "R33f7 ramo pulado continua trancado na revisão (não vira 'estudado antes')");
+      a.$("dlgRegistro").close && a.$("dlgRegistro").close();
       /* revisao: o padrao e' o que esta VENCIDO (nao todos os estudados) */
       a.edProgressoPor({ [ch + "›#modalidades"]: { e: "feito", d: "2020-01-01" }, [ch + "›#contratos"]: { e: "feito", d: new Date().toISOString().slice(0, 10) } });
       a.abrirRegistro(item());
@@ -3610,11 +3654,31 @@ async function testes() {
     a.abrirRegistro(i0);
     const lin = Array.from(a.$("regRamos").children);
     const ckDe = (nome) => lin.find((l) => new RegExp(nome).test(l.textContent)).children[0];
-    ok(a.regTipoAtual() === "revisado" && ckDe("Modalidades").disabled === false && ckDe("Modalidades").checked === true && ckDe("Contratos").disabled === true,
-       "S3r3 o ramo vencido pode ser revisado de novo (e vem marcado); o revisado em dia nao");
+    ok(a.regTipoAtual() === "revisado" && ckDe("Modalidades").disabled === false && ckDe("Modalidades").checked === true && ckDe("Contratos").checked === false && ckDe("Contratos").disabled === false,
+       "S3r3 o ramo vencido pode ser revisado de novo (e vem marcado); o revisado em dia vem DESMARCADO (marcável como revisão antecipada, v18.55.0)");
+    ok(/já revisado \(em dia\)/.test(lin.find((l) => /Contratos/.test(l.textContent)).textContent) && /já foram estudados e revisados/.test(a.$("regRamosAviso").textContent),
+       "S3r3b a ficha diz 'já revisado (em dia)' (e não 'ainda não estudado'), e o aviso explica");
     a.confirmarRegistroTeste("revisado");
     const pr = a.edProgressoAtual();
     ok(pr[K("modalidades")].n === 2 && pr[K("modalidades")].d === a.hojeISO() && !pr[K("contratos")].n, "S3r4 registrar grava a 2a revisao (n=2) so' no ramo escolhido: " + JSON.stringify(pr[K("modalidades")]));
+    /* (v18.55.0) revisão antecipada: marcado, o ramo em dia ganha mais uma revisão */
+    a.abrirRegistro(it());
+    if (a.regTipoAtual() !== "revisado") a.regTipoTrocar();
+    const lin2 = Array.from(a.$("regRamos").children);
+    const ckC = lin2.find((l) => /Contratos/.test(l.textContent)).children[0];
+    lin2.forEach((l) => { if (l.children[0].checked) { l.children[0].checked = false; l.children[0].onchange(); } });
+    ckC.checked = true; ckC.onchange();
+    ok(/revisão antecipada/.test(Array.from(a.$("regRamos").children).find((l) => /Contratos/.test(l.textContent)).textContent), "S3r4b marcado, o ramo em dia diz 'revisão antecipada'");
+    ok(/Marcado\(s\) para revisão antecipada: 1/.test(a.$("regRamosAviso").textContent), "S3r4b2 o aviso acompanha: diz quantos foram marcados para revisão antecipada: " + a.$("regRamosAviso").textContent);
+    a.confirmarRegistroTeste("revisado");
+    const pr5 = a.edProgressoAtual();
+    ok(pr5[K("contratos")].n === 2 && pr5[K("contratos")].d === a.hojeISO(), "S3r4c a revisão antecipada conta como mais uma revisão (n=2): " + JSON.stringify(pr5[K("contratos")]));
+    /* "Todos" na revisão inclui os em dia (revisão antecipada) */
+    a.abrirRegistro(it());
+    if (a.regTipoAtual() !== "revisado") a.regTipoTrocar();
+    a.$("btnRegRamosTodos").onclick();
+    ok(Array.from(a.$("regRamos").children).every((l) => l.children[0].checked), "S3r4d 'Todos' na revisão marca também os ramos em dia (como revisão antecipada)");
+    a.$("dlgRegistro").close && a.$("dlgRegistro").close();
     ok(it().venceu === false, "S3r5 revisado de novo: o topico sai da fila");
     /* o mapa de dominio le o vencimento do plano (revisao espacada), nao a regra antiga */
     const pl = { itens: [Object.assign({}, it(), { venceu: true, revisado: true, feito: true, dias: 2 })] };
