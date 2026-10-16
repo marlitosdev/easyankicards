@@ -1253,6 +1253,8 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-unidade-alvo{background:rgba(250,204,21,.28);border-radius:4px;outline:2px solid rgba(250,204,21,.6)}
 .qs-lei-link-perm{border-bottom:2px solid var(--ok)}
 /* (v18.49.0) o vínculo fixo (feito por você) tem um 🔗 pequeno ao lado — visível sem tocar */
+/* (v18.53.0) o link em pedaços (atravessa um negrito ou um grifo): um 🔗 só, no último */
+.qs-lei-link-perm.cit-parte:not(.cit-parte-fim)::after,.lei-cita-link.lei-cita-perm.cit-parte:not(.cit-parte-fim)::after{content:none}
 .qs-lei-link-perm::after,.lei-cita-link.lei-cita-perm::after{content:"🔗";font-size:.6em;vertical-align:super;margin-left:2px;display:inline-block;text-decoration:none}
 .lei-cita-link.lei-cita-perm{border-bottom:2px solid var(--ok)}
 .lei-cita-vinc-info{color:var(--ok);font-weight:600;margin:2px 0 6px}

@@ -816,8 +816,8 @@ function jurLigarTrechoA(p, j) {
   const r = citVinculoSalvar({ trecho: p.trecho, tipo: "jur", jurId: j.id, chave: p.chave || "" });
   if (r) {
     try { reg("JURIS", "trecho ligado ao julgado (ao criar/usar)", p.trecho + " → " + jurCitNome(j)); } catch (e) {}
-    try { toastMsg(t("jur_esc_criado_feito", { tr: jurCitTrecho(p.trecho, 60), j: jurCitNome(j) || jurTitulo(j) }), 4500); } catch (e) {}
-    try { if (typeof citDestacarRecem === "function") citDestacarRecem(p.trecho); } catch (e) {}
+    const msg = t("jur_esc_criado_feito", { tr: jurCitTrecho(p.trecho, 60), j: jurCitNome(j) || jurTitulo(j) });
+    try { if (typeof citConfirmarNaTela === "function") citConfirmarNaTela(p.trecho, msg); else toastMsg(msg, 4500); } catch (e) {}
   }
   return r;
 }
@@ -2325,6 +2325,9 @@ function jurEscLigar() {
   $("dlgJurEscolher").close();
   try { reg("JURIS", "trecho ligado a um julgado à mão", c.trecho + " → " + jurCitNome(jurDe(c.sel))); } catch (e) {}
   try { if (c.base && typeof c.base.aoVoltar === "function") c.base.aoVoltar(); } catch (e) {}
+  /* (v18.53.0) a confirmação que confere a tela, como a do vínculo de lei */
+  const jj = jurDe(c.sel);
+  try { if (typeof citConfirmarNaTela === "function") citConfirmarNaTela(c.trecho, t("jur_esc_criado_feito", { tr: jurCitTrecho(c.trecho, 60), j: jurCitNome(jj) || jurTitulo(jj) })); } catch (e) {}
   return true;
 }
 

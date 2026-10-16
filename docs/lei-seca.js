@@ -3701,6 +3701,94 @@ function citVinculosAplicarJur(texto, jcs, chave) {
   return saida.sort((x, y) => x.ini - y.ini);
 }
 
+/* =====================================================================
+ * O VÍNCULO QUE ATRAVESSA UMA FORMATAÇÃO (v18.53.0)
+ *
+ * O relato: "mesmo após salvar e voltar, o link criado não fica visível
+ * nem clicável caso não esteja com a marcação pontilhada embaixo" — só nos
+ * links NOVOS, em trecho que antes não era link. A causa: o vínculo é
+ * procurado nó de texto a nó de texto, e um trecho que passa por um
+ * negrito, um itálico ou um grifo ("As **limitações ao poder de tributar**
+ * constituem") fica partido em três nós — nenhum contém o trecho inteiro,
+ * e o link nunca aparecia (enquanto o aviso dizia "o link agora tem 🔗").
+ *
+ * Aqui, ANTES da passada nó a nó: em cada bloco (parágrafo, item de lista),
+ * os nós de texto são lidos juntos; o vínculo que casa ATRAVESSANDO nós
+ * vira um link em cada pedaço (a formatação continua onde estava), com as
+ * classes cit-parte/-ini/-fim (o 🔗 só no último) e o trecho inteiro em
+ * _citTrecho (o destaque de "recém-ligado" acha os pedaços). O que cabe
+ * num nó só fica para a passada de sempre.
+ * criar(c) devolve o botão do link (null = não liga aquele tipo).
+ * ===================================================================== */
+const CIT_BLOCOS = /^(P|LI|H[1-6]|DIV|BLOCKQUOTE|TD|TH|DD|DT|SECTION|UL|OL|ARTICLE)$/;
+function citLigarAtravessando(painel, chave, criar) {
+  if (!painel || !painel.childNodes || typeof criar !== "function" || typeof document === "undefined") return 0;
+  const vs = citVinculosLer().filter((v) => !v.nenhum && (!v.chave || (chave && v.chave === chave)));
+  if (!vs.length) return 0;
+  const grupos = new Map();
+  const andar = (el, bloco) => {
+    /* folha cujo texto não veio como nó (o simulador dos testes): vira nó, como em citLigarEm */
+    if (el !== painel && !(el.childNodes || []).length && el.textContent && el.append) {
+      const t0 = String(el.textContent);
+      el.textContent = "";
+      el.append(document.createTextNode(t0));
+    }
+    Array.from(el.childNodes || []).forEach((no) => {
+      if (no.nodeType === 3) {
+        if (!grupos.has(bloco)) grupos.set(bloco, []);
+        grupos.get(bloco).push(no);
+      } else if (no.nodeType === 1) {
+        const tag = String(no.tagName || "").toUpperCase();
+        if (tag === "BUTTON" || tag === "TEXTAREA" || tag === "INPUT" || tag === "A") return;
+        andar(no, CIT_BLOCOS.test(tag) ? no : bloco);
+      }
+    });
+  };
+  andar(painel, painel);
+  let n = 0;
+  grupos.forEach((nos) => {
+    if (nos.length < 2) return;
+    const offs = [];
+    let s = "";
+    nos.forEach((no) => { offs.push(s.length); s += String(no.textContent || ""); });
+    let cits = [];
+    try { cits = citVinculosAplicar(s, [], chave).filter((c) => c.permanente); } catch (e) { cits = []; }
+    try {
+      cits = cits.concat(citVinculosAplicarJur(s, [], chave).filter((c) => c.permanente)
+        .map((c) => Object.assign(c, { _jur: true, _frase: s.slice(Math.max(0, c.ini - 240), Math.min(s.length, c.fim + 240)).trim() })));
+    } catch (e) {}
+    const noDe = (p) => { let i = 0; while (i + 1 < offs.length && offs[i + 1] <= p) i++; return i; };
+    const usados = [];
+    cits.filter((c) => c.fim > c.ini && noDe(c.ini) !== noDe(c.fim - 1)).sort((a, b) => a.ini - b.ini).forEach((c) => {
+      if (!usados.some((u) => u.ini < c.fim && c.ini < u.fim)) usados.push(c);
+    });
+    if (!usados.length) return;
+    nos.forEach((no, i) => {
+      const a = offs[i], txt = String(no.textContent || ""), b = a + txt.length;
+      const cortes = usados.filter((c) => c.ini < b && a < c.fim);
+      const pai = no.parentNode;
+      if (!cortes.length || !pai || !pai.insertBefore) return;
+      let pos = 0;
+      cortes.forEach((c) => {
+        const ini = Math.max(c.ini, a) - a, fim = Math.min(c.fim, b) - a;
+        const lk = criar(c);
+        if (!lk) return;
+        if (ini > pos) pai.insertBefore(document.createTextNode(txt.slice(pos, ini)), no);
+        lk.textContent = txt.slice(ini, fim);
+        lk.className = (lk.className || "") + " cit-parte" + (c.ini >= a ? " cit-parte-ini" : "") + (c.fim <= b ? " cit-parte-fim" : "");
+        lk._citTrecho = c.texto;
+        pai.insertBefore(lk, no);
+        pos = fim;
+      });
+      if (pos === 0) return;
+      if (pos < txt.length) pai.insertBefore(document.createTextNode(txt.slice(pos)), no);
+      pai.removeChild(no);
+    });
+    n += usados.length;
+  });
+  return n;
+}
+
 function leiRotuloChave(rotulo) {
   const s = leiTxtChave(rotulo);
   /* O ADCT NÃO É UMA LEI À PARTE — é o Ato das Disposições Constitucionais
@@ -4046,7 +4134,10 @@ function leisGravarTudo(o) {
   }
 }
 /* começa a migração em segundo plano assim que LEIS_CHAVE existe — não trava nada */
-if (typeof leisIdbMigrar === "function") leisIdbMigrar();
+if (typeof leisIdbMigrar === "function") {
+  /* (v18.53.0) a leitura aberta ANTES de as leis chegarem desenhou os links como "sem lei": redesenha uma vez */
+  Promise.resolve(leisIdbMigrar()).then(() => { try { if (typeof citRepintarAposLeis === "function") citRepintarAposLeis(); } catch (e) {} });
+}
 
 function leisHojeISO() {
   const d = new Date();

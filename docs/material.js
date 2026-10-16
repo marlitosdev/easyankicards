@@ -1206,6 +1206,15 @@ function citLigarEm(painel, base) {
     if (pos < txt.length) pai.insertBefore(document.createTextNode(txt.slice(pos)), no);
     pai.removeChild(no);
   };
+  /* (v18.53.0) primeiro, os vínculos que atravessam uma formatação (negrito, grifo): ver citLigarAtravessando */
+  try {
+    if (temVinc && typeof citLigarAtravessando === "function") {
+      n += citLigarAtravessando(painel, chV, (c) => {
+        if (!ctx) ctx = citCtxDe(base);
+        return c._jur ? (typeof jurCitLink === "function" ? jurCitLink(c, ctx) : null) : matCitLink(c, ctx);
+      });
+    }
+  } catch (e) {}
   const andar = (el) => {
     /* elemento-folha cujo texto não veio como nó filho (o simulador dos testes
      * guarda o textContent sem criar o nó; o navegador sempre cria): vira nó */
@@ -1226,6 +1235,21 @@ function citLigarEm(painel, base) {
   };
   andar(painel);
   return n;
+}
+
+/* (v18.53.0) AS LEIS CHEGARAM DEPOIS DA LEITURA. A biblioteca de leis carrega em segundo plano (IndexedDB); o resumo
+ * aberto antes disso desenhou os links sem lei nenhuma ("sem lei", cinza) — e o vínculo feito à mão parecia não ter
+ * pegado. Quando as leis chegam, a leitura aberta é redesenhada uma vez, no mesmo ponto da rolagem. */
+function citRepintarAposLeis() {
+  if (!matAtual || matModo !== "ler" || !$("dlgMaterial") || !$("dlgMaterial").open) return false;
+  const lt = $("matLeitura");
+  if (!lt || !lt.querySelector || !lt.querySelector("button.qs-lei-link-sem")) return false;
+  const rolagens = [];
+  for (let e = lt; e; e = e.parentNode) if (typeof e.scrollTop === "number" && e.scrollTop) rolagens.push([e, e.scrollTop]);
+  matTrocarModo("ler");
+  rolagens.forEach(([e, y]) => { try { e.scrollTop = y; } catch (x) {} });
+  try { reg("MATERIAL", "leitura redesenhada: as leis terminaram de carregar", matAtual); } catch (e) {}
+  return true;
 }
 
 function matCitLink(c, ctx) {

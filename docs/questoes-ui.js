@@ -2088,12 +2088,13 @@ function citDestacarRecem(trecho, ms) {
     /* nos painéis onde há links (leitura do resumo, leitor de lei, questão) e no resto do documento */
     const vistos = new Set();
     ["matLeitura", "leiLeitura", "qsSessCorpo"].map((id) => $(id)).filter(Boolean).concat([document]).forEach((raiz) => {
-      ["button.qs-lei-link", "button.lei-cita-link"].forEach((sel) => {
+      ["button.qs-lei-link", "button.lei-cita-link", "button.jur-cit-link"].forEach((sel) => {
         try { Array.from(raiz.querySelectorAll(sel) || []).forEach((b) => vistos.add(b)); } catch (e) {}
       });
     });
     const bs = Array.from(vistos);
-    bs.filter((b) => String(b.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === alvo).forEach((b, i) => {
+    const norm = (x) => String(x || "").replace(/\s+/g, " ").trim().toLowerCase();
+    bs.filter((b) => norm(b.textContent) === alvo || (b._citTrecho && norm(b._citTrecho) === alvo)).forEach((b, i) => {
       if (b.classList) b.classList.add("cit-recem"); else b.className = (b.className || "") + " cit-recem";
       if (i === 0) { try { if (b.scrollIntoView) b.scrollIntoView({ block: "nearest" }); } catch (e) {} }
       n++;
@@ -2105,6 +2106,27 @@ function citDestacarRecem(trecho, ms) {
   /* repintura que ainda não terminou (leitor de lei grande): tenta de novo logo depois */
   if (!n) setTimeout(marcar, 120);
   return n;
+}
+
+/* (v18.53.0) O AVISO CONFERE A TELA. Dizer "o link agora tem 🔗" sem o link ter aparecido foi o que fez parecer que o
+ * vínculo não funcionava. Depois de guardar: destaca o link na tela; se o trecho ESTÁ na tela (resumo, leitor da lei,
+ * questão) e nenhum link apareceu, o aviso diz isso e o porquê provável — o trecho pega mais de um parágrafo. */
+function citConfirmarNaTela(trecho, msgOk) {
+  try { toastMsg(msgOk, 4500); } catch (e) {}
+  const n = citDestacarRecem(trecho);
+  if (n) return n;
+  const norm = (x) => String(x || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const alvo = norm(trecho);
+  setTimeout(() => {
+    if (citUltimoDestaque && citUltimoDestaque.n) return;
+    const naTela = ["matLeitura", "leiLeitura", "qsSessCorpo"].some((id) => $(id) && norm($(id).textContent).indexOf(alvo) >= 0);
+    const partido = /\n/.test(String(trecho || "").trim());
+    if (naTela || partido) {
+      try { toastMsg(t("cit_vinc_invisivel", { tr: qsVincCurto(trecho) }), 9000); } catch (e) {}
+      try { reg("QUESTOES", "vínculo guardado mas o link não apareceu na tela", trecho); } catch (e) {}
+    }
+  }, 250);
+  return 0;
 }
 
 function qsVincSalvar() {
@@ -2138,11 +2160,12 @@ function qsVincSalvar() {
     qsUiVoltaDe(q)();
     /* (v18.49.0) A CONFIRMAÇÃO: o relato foi "visualmente não tenho garantia de que o vínculo foi efetivado". Um aviso
      * diz o que foi ligado e onde vale, e o link recém-ligado pisca na tela (de onde se veio já repintada). */
+    let msg = "";
     try {
-      toastMsg(t("qs_vinc_feito", { tr: qsVincCurto(trecho), l: l.apelido || l.nome, a: artigos.map((x) => x.numCru).filter(Boolean).join("; ") || "—",
-        alc: t(chave ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") }), 4500);
+      msg = t("qs_vinc_feito", { tr: qsVincCurto(trecho), l: l.apelido || l.nome, a: artigos.map((x) => x.numCru).filter(Boolean).join("; ") || "—",
+        alc: t(chave ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") });
     } catch (e) {}
-    citDestacarRecem(trecho);
+    citConfirmarNaTela(trecho, msg);
     return true;
   }
   /* só desta vez: abre agora, sem guardar */
