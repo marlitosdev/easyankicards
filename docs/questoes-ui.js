@@ -3269,6 +3269,15 @@ function qsUiRender() {
         lb.append(sp, sel);
         cx2.append(lb);
       }
+      /* (v18.56.0) mover para outro tópico, e desfazer */
+      const bMov = document.createElement("button");
+      bMov.type = "button"; bMov.className = "btn-min";
+      bMov.textContent = t("qs_mover_btn");
+      bMov.title = t("qs_mover_btn_aj");
+      bMov.onclick = () => qsUiMoverAbrir(q, () => { qsUiPintarBotaoResumo(); qsUiRender(); });
+      cx2.append(bMov);
+      const bDes = qsUiMoverDesfazerBotao(q, () => { qsUiPintarBotaoResumo(); qsUiRender(); });
+      if (bDes) cx2.append(bDes);
       cx2.append(bDel);
       li.append(cx2);
     };
@@ -3277,6 +3286,144 @@ function qsUiRender() {
     if (li._hist) li.append(li._hist);
     box.append(li);
   });
+}
+
+/* =====================================================================
+ * (v18.56.0) A JANELA DE MOVER: os tópicos dos editais (com busca), o ramo
+ * do destino (opcional, quando o tópico tem ramos) e "Mover". Depois de
+ * mover, o ⋮ da questão oferece desfazer.
+ * ===================================================================== */
+let qsMoverCtx = null;
+let qsMoverUltimo = null;      /* { qid, recibo } — o último mover, para o "desfazer" do ⋮ */
+function qsUiMoverDestinos() {
+  const out = [], vistos = new Set();
+  (typeof editais !== "undefined" ? editais : []).forEach((e) => {
+    let grupos = [];
+    try { grupos = qsUiTopicosDoEdital(e.id); } catch (x) { grupos = []; }
+    grupos.forEach((g) => (g.itens || []).forEach((it) => {
+      const k = qsChaveNormal(it.chave);
+      if (vistos.has(k)) return;
+      vistos.add(k);
+      out.push({ chave: it.chave, disciplina: it.disciplina, topico: it.nome, edital: e.nome || "" });
+    }));
+  });
+  return out;
+}
+function qsUiMoverAbrir(q, aoFim) {
+  const dlg = $("dlgQsMover");
+  if (!dlg || !q) return null;
+  qsMoverCtx = { q, aoFim: aoFim || null, sel: null, ramo: "", destinos: qsUiMoverDestinos() };
+  $("qsMoverAtual").textContent = t("qs_mover_atual", { d: q.disciplina || "—", tp: q.topico || "—", r: q.ramoNome ? " › " + q.ramoNome : "" });
+  $("qsMoverBusca").value = "";
+  $("qsMoverAviso").textContent = "";
+  qsUiMoverPintar();
+  abrirModal(dlg);
+  return dlg;
+}
+function qsUiMoverPintar() {
+  const c = qsMoverCtx;
+  if (!c) return;
+  const busca = qsNormal(String($("qsMoverBusca").value || "")).trim();
+  const atual = qsChaveNormal(c.q.chave || "");
+  let L = c.destinos.filter((d) => !busca || qsNormal(d.disciplina + " " + d.topico + " " + d.edital).indexOf(busca) >= 0);
+  const total = L.length;
+  L = L.slice(0, 80);
+  const cx = $("qsMoverLista");
+  cx.innerHTML = "";
+  if (!L.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t(c.destinos.length ? "qs_mover_nada" : "qs_mover_vazio");
+    cx.append(p);
+  }
+  let discAnt = "";
+  L.forEach((d, i) => {
+    if (d.disciplina !== discAnt) {
+      discAnt = d.disciplina;
+      const h = document.createElement("div");
+      h.className = "qs-mover-disc";
+      h.textContent = d.disciplina + (d.edital ? " · " + d.edital : "");
+      cx.append(h);
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    const eAtual = qsChaveNormal(d.chave) === atual;
+    const eSel = !!c.sel && qsChaveNormal(c.sel.chave) === qsChaveNormal(d.chave);
+    b.className = "jur-cita-opcao qs-mover-op" + (eSel ? " sel" : "") + (eAtual ? " atual" : "");
+    b.id = "qsMoverOp_" + i;
+    b.setAttribute("aria-pressed", eSel ? "true" : "false");
+    b.textContent = d.topico + (eAtual ? " " + t("qs_mover_aqui") : "");
+    b.onclick = () => { c.sel = d; c.ramo = ""; $("qsMoverAviso").textContent = ""; qsUiMoverPintar(); };
+    cx.append(b);
+  });
+  if (total > L.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("qs_mover_mais", { n: total - L.length });
+    cx.append(p);
+  }
+  /* o ramo do destino, quando o tópico escolhido tem ramos */
+  const rb = $("qsMoverRamos");
+  rb.innerHTML = "";
+  const ramos = c.sel ? qsUiRamosDoTopico(c.sel.chave) : [];
+  rb.hidden = !ramos.length;
+  if (ramos.length) {
+    const rot = document.createElement("span");
+    rot.className = "nota";
+    rot.textContent = t("qs_mover_ramo_rot") + " ";
+    rb.append(rot);
+    [{ id: "", nome: t("qs_mover_ramo_todo") }].concat(ramos).forEach((r, k) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min" + (c.ramo === r.id ? " qs-filtro-on" : "");
+      b.id = "qsMoverRamo_" + k;
+      b.textContent = r.nome;
+      b.onclick = () => { c.ramo = r.id; c.ramoNome = r.id ? r.nome : ""; qsUiMoverPintar(); };
+      rb.append(b);
+    });
+  }
+  $("btnQsMoverOk").disabled = !c.sel;
+}
+function qsUiMoverConfirmar() {
+  const c = qsMoverCtx;
+  if (!c) return null;
+  if (!c.sel) { $("qsMoverAviso").textContent = t("qs_mover_sem"); return null; }
+  const de = { d: c.q.disciplina, tp: c.q.topico };
+  const recibo = qsMover([c.q.id], { disciplina: c.sel.disciplina, topico: c.sel.topico, concurso: c.sel.edital, ramo: c.ramo, ramoNome: c.ramoNome });
+  if (!recibo.length) { $("qsMoverAviso").textContent = t("qs_mover_mesmo"); return null; }
+  qsMoverUltimo = { qid: c.q.id, recibo };
+  $("dlgQsMover").close();
+  try { matReg("questao", "questão movida para outro tópico", (de.d || "") + " › " + (de.tp || "") + " → " + c.sel.disciplina + " › " + c.sel.topico + (c.ramoNome ? " › " + c.ramoNome : "") + " · " + String(c.q.enunciado || "").slice(0, 60)); } catch (e) {}
+  try { toastMsg(t("qs_mover_feito", { d: c.sel.disciplina, tp: c.sel.topico }), 5000); } catch (e) {}
+  const fim = c.aoFim;
+  qsMoverCtx = null;
+  if (typeof fim === "function") { try { fim(); } catch (e) {} }
+  return recibo;
+}
+/* o "desfazer" no ⋮ da questão que acabou de ser movida */
+function qsUiMoverDesfazerBotao(q, aoFim) {
+  const u = qsMoverUltimo;
+  if (!u || !q || u.qid !== q.id || !u.recibo || !u.recibo.length) return null;
+  const ant = u.recibo[0];
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn-min";
+  b.id = "btnQsMoverDesfazer";
+  b.textContent = t("qs_mover_desfazer", { tp: ant.topico || "—" });
+  b.onclick = () => {
+    qsDesfazerMover(u.recibo);
+    qsMoverUltimo = null;
+    try { matReg("questao", "mover questão desfeito", (ant.disciplina || "") + " › " + (ant.topico || "")); } catch (e) {}
+    try { toastMsg(t("qs_mover_desfeito", { d: ant.disciplina || "—", tp: ant.topico || "—" }), 4000); } catch (e) {}
+    if (typeof aoFim === "function") aoFim();
+  };
+  return b;
+}
+if (typeof document !== "undefined" && $("dlgQsMover")) {
+  $("btnQsMoverOk").onclick = () => qsUiMoverConfirmar();
+  $("btnQsMoverCancelar").onclick = () => $("dlgQsMover").close();
+  if ($("btnQsMoverX")) $("btnQsMoverX").onclick = () => $("dlgQsMover").close();
+  $("qsMoverBusca").oninput = () => qsUiMoverPintar();
 }
 
 /* =====================================================================
@@ -3955,6 +4102,19 @@ function qsUiFerramentas(q) {
       if (alvo && alvo.onclick) alvo.onclick();
     };
     menu.append(bf);
+  }
+  /* (v18.56.0) mover a questão para outro tópico (e desfazer o último mover desta questão) */
+  if (q && q.id) {
+    const bMov = document.createElement("button");
+    bMov.type = "button";
+    bMov.className = "btn-min";
+    bMov.id = "btnQsMoverSess";
+    bMov.textContent = t("qs_mover_btn");
+    bMov.title = t("qs_mover_btn_aj");
+    bMov.onclick = () => { qsFerFechar(); qsUiMoverAbrir(q, () => qsUiPintarSessao()); };
+    menu.append(bMov);
+    const bDes = qsUiMoverDesfazerBotao(q, () => { qsFerFechar(); qsUiPintarSessao(); });
+    if (bDes) menu.append(bDes);
   }
   const dQ = qsDefeitos(q);
   const bMelhorar = document.createElement("button");

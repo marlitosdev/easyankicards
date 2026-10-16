@@ -839,6 +839,53 @@ function qsDefeitos(q) {
 const qsMesmoTopico = (q, chave) => !!chave && (q.chave === chave || qsChaveNormal(q.chave || "") === qsChaveNormal(chave));
 
 /* liga (ou, com ramo "", desliga) várias questões a um ramo. Devolve o recibo para o desfazer. */
+/* =====================================================================
+ * (v18.56.0) MOVER A QUESTÃO PARA OUTRO TÓPICO
+ *
+ * "Criar forma de mover a questão para outro tópico, caso o usuário ache
+ * que está no tópico errado." Troca disciplina, tópico e a chave do tópico
+ * (e o concurso, quando o destino diz); o ramo antigo não vale no tópico
+ * novo e sai — a não ser que o destino traga um. Histórico de respostas,
+ * dica, grifos e rascunho são da QUESTÃO (pelo id) e vão junto. Devolve o
+ * recibo (o que havia antes), para desfazer.
+ * ===================================================================== */
+function qsMover(ids, dest, gravar) {
+  if (!dest || !dest.disciplina || !dest.topico) return [];
+  const quer = new Set(ids || []);
+  const chave = typeof matChave === "function" ? matChave(dest.disciplina, dest.topico) : (dest.disciplina + "›" + dest.topico).toLowerCase();
+  const recibo = [];
+  qsBanco.forEach((q) => {
+    if (!quer.has(q.id)) return;
+    if (qsChaveNormal(q.chave || "") === qsChaveNormal(chave) && (q.ramo || "") === (dest.ramo || "")) return;
+    const ant = { id: q.id, disciplina: q.disciplina, topico: q.topico, chave: q.chave, concurso: q.concurso, ramo: q.ramo, ramoNome: q.ramoNome, movida: q.movida };
+    recibo.push(ant);
+    q.disciplina = dest.disciplina;
+    q.topico = dest.topico;
+    q.chave = chave;
+    if (dest.concurso) q.concurso = dest.concurso;
+    if (dest.ramo) { q.ramo = String(dest.ramo); q.ramoNome = String(dest.ramoNome || ""); }
+    else { delete q.ramo; delete q.ramoNome; }
+    q.movida = { q: new Date().toISOString(), de: [ant.disciplina, ant.topico].filter(Boolean).join(" › ") };
+  });
+  if (recibo.length) qsSalvar(gravar);
+  return recibo;
+}
+/* volta o que qsMover fez (campo que não existia antes volta a não existir) */
+function qsDesfazerMover(recibo, gravar) {
+  const por = new Map((recibo || []).map((r) => [r.id, r]));
+  let n = 0;
+  qsBanco.forEach((q) => {
+    const r = por.get(q.id);
+    if (!r) return;
+    ["disciplina", "topico", "chave", "concurso", "ramo", "ramoNome", "movida"].forEach((k) => {
+      if (r[k] === undefined) delete q[k]; else q[k] = r[k];
+    });
+    n++;
+  });
+  if (n) qsSalvar(gravar);
+  return n;
+}
+
 function qsLigarRamo(ids, ramo, ramoNome, gravar) {
   const quer = new Set(ids || []);
   const recibo = [];

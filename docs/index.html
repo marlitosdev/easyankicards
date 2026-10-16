@@ -1387,6 +1387,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .jur-cit-perm{border-bottom:2px solid var(--ok)}
 .jur-esc-lista{max-height:40vh;overflow:auto;margin:6px 0}
 .jur-par-item{border:1px solid var(--borda);border-radius:8px;padding:8px;margin:0 0 8px}
+.qs-mover-disc{font-size:11.5px;font-weight:700;color:var(--sutil);margin:8px 0 3px;text-transform:uppercase;letter-spacing:.02em}
+.qs-mover-op.atual{opacity:.6}
+.qs-mover-ramos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
 .jur-par-item .jur-cita-txt{margin:6px 0;font-size:13px;max-height:9em;overflow:auto;white-space:pre-line}
 .jur-lote-parecido{margin:4px 0 0;font-size:12px}
 .jur-cita-opcao.sel{border-color:var(--acao);background:rgba(37,99,235,.12)}
@@ -8174,6 +8177,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-verde" id="btnJurEscOk" data-i18n="jur_esc_ok" title="Liga o trecho ao julgado escolhido, neste tópico."></button>
     <button class="btn btn-cinza" id="btnJurEscCriar" data-i18n="jur_esc_criar" data-i18n-title="jur_esc_criar_aj" title="Cria um julgado novo e liga o trecho a ele."></button>
     <button class="btn btn-cinza" id="btnJurEscCancelar" data-i18n="cancel_btn" title="Fecha sem ligar."></button>
+  </div>
+</dialog>
+
+<!-- (v18.56.0) mover a questão para outro tópico -->
+<dialog id="dlgQsMover" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="qs_mover_tit"></h3>
+    <button type="button" class="dlg-x" id="btnQsMoverX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" id="qsMoverAtual"></p>
+  <input type="search" id="qsMoverBusca" style="width:100%;box-sizing:border-box" data-i18n-ph="qs_mover_busca_ph" placeholder="procurar tópico">
+  <div id="qsMoverLista" class="jur-esc-lista"></div>
+  <div id="qsMoverRamos" class="qs-mover-ramos" hidden></div>
+  <p class="nota qs-vinc-aviso" id="qsMoverAviso"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnQsMoverOk" data-i18n="qs_mover_ok" title="Move a questão para o tópico escolhido. O histórico de respostas, a dica e os grifos vão junto."></button>
+    <button class="btn btn-cinza" id="btnQsMoverCancelar" data-i18n="cancel_btn" title="Fecha sem mover."></button>
   </div>
 </dialog>
 
