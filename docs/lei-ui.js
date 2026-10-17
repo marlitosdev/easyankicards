@@ -5884,16 +5884,26 @@ function leiInserirNoCampo(ta, texto) {
 async function leiArquivoHtmlLido(file, alvoId) {
   const ta = $(alvoId);
   if (!ta || !file) return false;
-  let r = null;
-  try { r = leiTextoDeArquivoHtml(await file.arrayBuffer()); } catch (e) { r = null; }
+  let r = null, tipo = "htm";
+  try {
+    const bytes = await file.arrayBuffer();
+    tipo = leiTipoDeArquivo(file.name, bytes);
+    /* (v18.63.0) PDF, .doc antigo e companhia: não se lê — diz o caminho em vez de "não foi possível" */
+    if (tipo !== "htm" && tipo !== "docx") {
+      toastMsg(t(tipo === "pdf" ? "lei_arq_pdf" : "lei_arq_tipo", { x: "." + tipo }), 12000);
+      try { leiReg("gravar", "arquivo ." + tipo + ": tipo que o app não lê", String(file.name || "")); } catch (e) {}
+      return false;
+    }
+    r = tipo === "docx" ? await leiTextoDeDocx(bytes) : leiTextoDeArquivoHtml(bytes);
+  } catch (e) { r = null; }
   if (!r || !String(r.texto || "").trim()) {
-    toastMsg(t(r ? "lei_arq_vazio" : "lei_arq_erro"), 7000);
-    try { leiReg("gravar", "arquivo .htm: não foi possível ler", String(file.name || "")); } catch (e) {}
+    toastMsg(t(!r || r.motivo === "nao_docx" || r.motivo === "sem_zip" ? (tipo === "docx" ? "lei_arq_erro_docx" : "lei_arq_erro") : "lei_arq_vazio"), 8000);
+    try { leiReg("gravar", "arquivo ." + tipo + ": não foi possível ler", String(file.name || "")); } catch (e) {}
     return false;
   }
   leiInserirNoCampo(ta, r.texto);
-  toastMsg(r.n ? t("lei_arq_ok", { n: r.n }) : t("lei_arq_ok0", { c: r.texto.length }), 8000);
-  try { leiReg("gravar", "arquivo .htm lido: " + r.texto.length + " caractere(s), " + r.n + " trecho(s) riscado(s)", String(file.name || "")); } catch (e) {}
+  toastMsg(r.n ? t("lei_arq_ok", { n: r.n }) : t(tipo === "docx" ? "lei_arq_ok0_docx" : "lei_arq_ok0", { c: r.texto.length }), 9000);
+  try { leiReg("gravar", "arquivo ." + tipo + " lido: " + r.texto.length + " caractere(s), " + r.n + " trecho(s) riscado(s)", String(file.name || "")); } catch (e) {}
   return true;
 }
 
@@ -7568,8 +7578,12 @@ function leiIniciar() {
   liga("btnLeiDupSugestoes", "voltar às sugestões", () => { leiDupSugestoes(); leiDupPintar(); });
   liga("btnLeiPreConfirmar", "confirmar a revisão da colagem", () => leiPreConfirmar());
   /* uma vez só por campo: dois ouvintes colariam o texto duas vezes */
-  liga("btnLeiArquivo", "abrir arquivo .htm salvo", () => { if ($("leiArquivoHtml")) $("leiArquivoHtml").click(); });
-  liga("btnLeiUpdArquivo", "abrir arquivo .htm salvo (atualização)", () => { if ($("leiUpdArquivoHtml")) $("leiUpdArquivoHtml").click(); });
+  liga("btnLeiArquivo", "abrir arquivo (.docx ou .htm)", () => { if ($("leiArquivoHtml")) $("leiArquivoHtml").click(); });
+  /* (v18.63.0) a dica curta: a lei está em PDF? */
+  ["btnLeiArqDica", "btnLeiUpdArqDica"].forEach((id) => {
+    if ($(id)) $(id).onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); dicaMostrar($(id), t(id === "btnLeiUpdArqDica" ? "lei_arq_dica_txt_upd" : "lei_arq_dica_txt")); };
+  });
+  liga("btnLeiUpdArquivo", "abrir arquivo (.docx ou .htm) (atualização)", () => { if ($("leiUpdArquivoHtml")) $("leiUpdArquivoHtml").click(); });
   [["leiArquivoHtml", "leiTexto"], ["leiUpdArquivoHtml", "leiUpdTexto"]].forEach(([inp, alvo]) => {
     const el = $(inp);
     if (el && el.addEventListener && !el._arquivoLigado) {

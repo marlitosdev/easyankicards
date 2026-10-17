@@ -1077,6 +1077,82 @@ function leiTextoDeArquivoHtml(bytes) {
   return { texto: r.texto, n: r.n, motivo: r.motivo };
 }
 
+/* =====================================================================
+ * ABRIR UM ARQUIVO DO WORD (.docx) — v18.63.0
+ *
+ * A lei que só existe em PDF (o Código Tributário de Caruaru) colada do
+ * leitor de PDF chega numa linha só, ou com quebra no meio de cada frase,
+ * e sem o risco do texto revogado. Abrir o PDF no Word (ou no Google
+ * Documentos), salvar como .docx e abrir o arquivo aqui entrega um
+ * PARÁGRAFO POR LINHA e, quando o conversor o manteve, o riscado.
+ *
+ * COMO: o .docx é um pacote com word/document.xml. Cada parágrafo (w:p)
+ * vira <p>, cada trecho (w:r) com <w:strike/> ou <w:dstrike/> vira <s>, a
+ * tabela vira <table>/<tr>/<td>, e o resultado segue o MESMO caminho do .htm
+ * salvo (leiTextoDeArquivoHtml) — o texto e o riscado saem do mesmo lugar.
+ * Fica de fora: o texto apagado em "controlar alterações" (w:del), a cópia
+ * de reserva das caixas de texto (mc:Fallback, que repetiria o texto) e o
+ * risco do SINAL de parágrafo (w:pPr/w:rPr), que não risca texto nenhum.
+ * ===================================================================== */
+function leiDocxXmlParaHtml(xml) {
+  const src = String(xml == null ? "" : xml)
+    .replace(/<mc:Fallback\b[\s\S]*?<\/mc:Fallback>/g, "")
+    .replace(/<w:del\b[^>]*\/>/g, "")
+    .replace(/<w:del\b[\s\S]*?<\/w:del>/g, "");
+  const esc = (s) => s.replace(/&(?![A-Za-z]{2,8};|#\d{1,7};|#[xX][0-9a-fA-F]{1,6};)/g, "&amp;").replace(/</g, "&lt;");
+  /* na célula, os parágrafos se separam por espaço ANTES do 2º (um espaço no fim colaria no tab da célula) */
+  let out = "", noPPr = 0, noRPr = false, risco = false, noTexto = false, celula = 0, parNaCelula = 0;
+  const re = /<(\/?)([A-Za-z][\w.]*:[\w.]+|[A-Za-z][\w.]*)\b([^>]*?)(\/?)>|([^<]+)/g;
+  let m;
+  while ((m = re.exec(src))) {
+    if (m[5] !== undefined) { if (noTexto) out += risco ? "<s>" + esc(m[5]) + "</s>" : esc(m[5]); continue; }
+    const fecha = !!m[1], tag = m[2], vazia = !!m[4], at = m[3] || "";
+    switch (tag) {
+      case "w:p":
+        if (celula) { if (!fecha && parNaCelula++) out += " "; }
+        else if (fecha) out += "</p>\n";
+        else out += vazia ? "<p></p>\n" : "<p>";
+        break;
+      case "w:pPr": if (!vazia) noPPr += fecha ? -1 : 1; break;
+      case "w:r": if (!fecha) risco = false; break;
+      case "w:rPr": if (!noPPr && !vazia) noRPr = !fecha; break;
+      case "w:strike": case "w:dstrike":
+        if (noRPr && !fecha) risco = !/w:val\s*=\s*["'](?:0|false|off)["']/i.test(at);
+        break;
+      case "w:t": case "w:delText": if (!vazia) noTexto = !fecha && tag === "w:t"; break;
+      case "w:tab": if (!fecha) out += " "; break;
+      case "w:br": case "w:cr": if (!fecha) out += "<br>"; break;
+      case "w:tbl": out += fecha ? "</table>\n" : "<table>"; break;
+      case "w:tr": out += fecha ? "</tr>" : "<tr>"; break;
+      case "w:tc": if (fecha) { celula--; out += "</td>"; } else { celula++; parNaCelula = 0; out += "<td>"; } break;
+      default: break;
+    }
+  }
+  return out;
+}
+/* os bytes de um .docx → { texto, n, motivo } (como leiTextoDeArquivoHtml). Zip: o JSZip do app (ou o dos testes) */
+async function leiTextoDeDocx(bytes, Zip) {
+  const Z = Zip || (typeof JSZip !== "undefined" ? JSZip : null);
+  if (!Z) return { texto: "", n: 0, motivo: "sem_zip" };
+  let pac;
+  try { pac = await Z.loadAsync(bytes); } catch (e) { return { texto: "", n: 0, motivo: "nao_docx" }; }
+  const doc = pac && pac.file && pac.file("word/document.xml");
+  if (!doc) return { texto: "", n: 0, motivo: "nao_docx" };
+  const xml = await doc.async("string");
+  const r = leiTextoDeArquivoHtml(leiDocxXmlParaHtml(xml));
+  return { texto: r.texto, n: r.n, motivo: r.texto ? r.motivo : "vazio" };
+}
+/* que tipo de arquivo é: pelo nome e, sem extensão conhecida, pela assinatura (o .docx é um zip: "PK") */
+function leiTipoDeArquivo(nome, bytes) {
+  const n = String(nome || "").toLowerCase();
+  if (/\.docx$/.test(n)) return "docx";
+  if (/\.html?$/.test(n)) return "htm";
+  if (/\.(doc|pdf|odt|rtf|txt)$/.test(n)) return n.split(".").pop();
+  const u8 = bytes ? new Uint8Array(bytes.slice ? bytes.slice(0, 4) : bytes) : null;
+  if (u8 && u8[0] === 0x50 && u8[1] === 0x4b) return "docx";
+  return "htm";
+}
+
 /* tira os trechos marcados (remover) ou só as marcas, deixando o texto (não remover) */
 function leiTirarTachado(linha, remover) {
   const s = String(linha == null ? "" : linha);

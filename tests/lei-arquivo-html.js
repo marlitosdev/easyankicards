@@ -131,7 +131,8 @@ async function testes() {
     seletor._ouv.change[0]();
     await new Promise((r) => setImmediate(r)); await new Promise((r) => setImmediate(r));
     ok(nova.$("leiTexto").value === "Art. 1º Um." , "B6 escolher o arquivo no seletor coloca o texto no campo: " + JSON.stringify(nova.$("leiTexto").value));
-    ok(/<input type="file" id="leiArquivoHtml" accept="\.htm,\.html,text\/html" hidden>/.test(html) && /<input type="file" id="leiUpdArquivoHtml" accept="\.htm,\.html,text\/html" hidden>/.test(html), "B7 os dois seletores aceitam .htm/.html e ficam escondidos atras do botao");
+    /* (v18.63.0) aceitam também o .docx do Word (tests/lei-docx.js) */
+    ok(/<input type="file" id="leiArquivoHtml" accept="\.docx,\.htm,\.html,text\/html,[^"]*" hidden>/.test(html) && /<input type="file" id="leiUpdArquivoHtml" accept="\.docx,\.htm,\.html,text\/html,[^"]*" hidden>/.test(html), "B7 os dois seletores aceitam .htm/.html (e .docx) e ficam escondidos atras do botao");
     ok(/\.lei-arq\{display:flex/.test(html), "B8 a caixa tem estilo");
   }
 
