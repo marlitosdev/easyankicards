@@ -120,7 +120,7 @@ async function testes() {
   /* ---- C5: o "Copiar" ---- */
   {
     const tc = api.diarioTextoCopia(api.diarioFiltrar(diario4, { dias: 0 }), "T");
-    ok(/• 1h30 · revisou Leis Orçamentárias \(Direito Financeiro · TCE\) · 3 sessões · Questões · 19\/21 questões \(90%\)/.test(tc), "C5 copiar: as sessoes iguais numa linha, um separador so', sem 'Revisao' repetida: " + JSON.stringify(tc));
+    ok(/• 1h30 · revisou Leis Orçamentárias \(Direito Financeiro · TCE\) · 3 sessões: 30min \+ 30min \+ 30min · Questões · 19\/21 questões \(90%\)/.test(tc), "C5 copiar: as sessoes iguais numa linha (com as partes da soma — v18.60.0), um separador so', sem 'Revisao' repetida: " + JSON.stringify(tc));
     ok(!/\|/.test(tc) && /• 15min · estudou Leis Orçamentárias \(Direito Financeiro · TCE\) · Leitura/.test(tc), "C5b sem '|' e a sessao sozinha continua a linha dela");
   }
 
