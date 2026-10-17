@@ -1456,6 +1456,14 @@ function jurPintarLista() {
   if ($("jurRepetidos") && recolhida) $("jurRepetidos").hidden = true;
   /* O prompt de comparação só faz sentido com dois ou mais. */
   if ($("btnJurPrompt")) $("btnJurPrompt").hidden = lista.length < 2 || jurModo !== "ler";
+  /* (v18.62.0) corrigir com a IA os julgados DESTE tópico que têm pendência */
+  if ($("btnJurCorrigirIA")) {
+    const pend = jurComPendencia(jurLista()).filter((j) => lista.some((x) => x.id === j.id));
+    $("btnJurCorrigirIA").hidden = !pend.length || jurModo !== "ler";
+    $("btnJurCorrigirIA").textContent = t("jur_corrigir_btn", { n: pend.length });
+    $("btnJurCorrigirIA").title = t("jur_corrigir_btn_aj");
+    $("btnJurCorrigirIA").onclick = () => { $("dlgJuris").close(); jurBibAbrir(); jurBibAtualIniciar("corrigir", pend.map((j) => j.id)); };
+  }
   if (!lista.length) return;
 
   lista.forEach((j) => {
@@ -1590,6 +1598,14 @@ function jurPintarLista() {
         a.title = t("jur_oficial_rot") + " " + portal.nome;
         sit.append(a);
       }
+    }
+    /* (v18.62.0) a IA já corrigiu: diz quando e com que fonte — o selo continua até a pessoa conferir */
+    if (j.corrigidoIA && (j.deMemoria || conferir.length)) {
+      const pc = document.createElement("p");
+      pc.className = "nota jur-corrigido-ia";
+      pc.textContent = t("jur_corrigido_ia", { d: String(j.corrigidoIA).split("-").reverse().join("/"), f: j.corrigidoNota || "—" })
+        + (j.teseAnterior ? " " + t("jur_sit_tese_antiga", { t: j.teseAnterior }) : "");
+      sit.append(pc);
     }
     if (j.deMemoria || conferir.length) {
       const bIA = document.createElement("button");
@@ -2890,6 +2906,13 @@ function jurBibPintar() {
     $("btnJurBibAtual").disabled = !L.length;
     $("btnJurBibAtual").title = t("jur_atual_btn_aj", { r: todos.filter((j) => jurPrecisaRever(j)).length });
   }
+  /* (v18.62.0) corrigir com a IA os que têm pendência */
+  if ($("btnJurBibCorrigir")) {
+    const np = jurComPendencia(todos).length;
+    $("btnJurBibCorrigir").textContent = t("jur_corrigir_btn", { n: np });
+    $("btnJurBibCorrigir").disabled = !np;
+    $("btnJurBibCorrigir").title = t("jur_corrigir_btn_aj");
+  }
   const est = !!jurBib.estudo, atu = !!jurBib.atual;
   $("jurBibEstudo").hidden = !est;
   if ($("jurBibAtual")) $("jurBibAtual").hidden = !atu;
@@ -3102,10 +3125,12 @@ if (typeof document !== "undefined" && $("dlgJurBib")) {
  * ===================================================================== */
 let jurAtualCtx = null;
 
-function jurBibAtualIniciar() {
-  const L = jurBibFiltrados();
+function jurBibAtualIniciar(modo, ids) {
+  const corrigir = modo === "corrigir";
+  /* (v18.62.0) "corrigir": os julgados COM PENDÊNCIA (os de um tópico, quando vem da gaveta; senão todos) */
+  const L = corrigir ? jurComPendencia(jurLista()).filter((j) => !ids || ids.indexOf(j.id) >= 0) : jurBibFiltrados();
   if (!L.length) return false;
-  jurAtualCtx = { ids: L.map((j) => j.id), pedido: "", lidos: null, recibo: null };
+  jurAtualCtx = { ids: L.map((j) => j.id), pedido: "", lidos: null, recibo: null, modo: corrigir ? "corrigir" : "atual" };
   jurBib.estudo = null;
   jurBib.atual = true;
   $("jurBibAtualResp").value = "";
@@ -3113,8 +3138,10 @@ function jurBibAtualIniciar() {
   $("jurBibAtualPedidoMsg").textContent = "";
   $("jurBibAtualFeito").textContent = "";
   $("btnJurBibAtualDesfazer").hidden = true;
-  $("jurBibAtualIntro").textContent = t("jur_atual_intro", { n: L.length });
-  try { reg("JURIS", "verificar atualidade: aberto", L.length + " julgados"); } catch (e) {}
+  $("jurBibAtualIntro").textContent = corrigir
+    ? t("jur_corrigir_intro", { n: L.length, l: L.map((j) => [j.tribunal, j.classe, j.numero].filter(Boolean).join(" ") + " (" + jurPendencias(j).map((p) => t("jur_pend_" + p)).join(", ") + ")").join("; ") })
+    : t("jur_atual_intro", { n: L.length });
+  try { reg("JURIS", corrigir ? "corrigir com IA: aberto" : "verificar atualidade: aberto", L.length + " julgados"); } catch (e) {}
   jurBibPintar();
   return true;
 }
@@ -3124,7 +3151,7 @@ function jurBibAtualPedido() {
   const c = jurAtualCtx;
   if (!c) return "";
   const lista = c.ids.map(jurDe).filter(Boolean);
-  c.pedido = jurAtualPedido(lista);
+  c.pedido = c.modo === "corrigir" ? jurCorrecaoPedido(lista) : jurAtualPedido(lista);
   $("jurBibAtualPedidoTxt").value = c.pedido;
   $("jurBibAtualPedidoTxt").hidden = false;
   $("jurBibAtualPedidoMsg").textContent = t("jur_atual_copiado");
@@ -3139,7 +3166,7 @@ function jurBibAtualLerResp() {
   if (c.pedido && String(bruto).trim().slice(0, 100) === String(c.pedido).trim().slice(0, 100)) {
     c.lidos = { est: "pedido", itens: [] };
   } else {
-    c.lidos = jurAtualLer(bruto, c.ids.map(jurDe).filter(Boolean));
+    c.lidos = c.modo === "corrigir" ? jurCorrecaoLer(bruto, c.ids.map(jurDe).filter(Boolean)) : jurAtualLer(bruto, c.ids.map(jurDe).filter(Boolean));
   }
   jurBibAtualPintar();
   return c.lidos;
@@ -3148,6 +3175,7 @@ function jurBibAtualLerResp() {
 function jurBibAtualPintar() {
   const c = jurAtualCtx;
   if (!c) return;
+  if (c.modo === "corrigir") { jurBibCorrigirPintar(); return; }
   const r = c.lidos || { est: "vazio", itens: [] };
   const sem = $("jurBibAtualSem");
   sem.className = "nota jur-cita-sem " + (r.est === "ok" ? "ok" : r.est === "vazio" ? "" : "erro");
@@ -3199,21 +3227,112 @@ function jurBibAtualPintar() {
 function jurBibAtualPintarAplicar() {
   const c = jurAtualCtx;
   const itens = (c && c.lidos && c.lidos.itens) || [];
-  const n = itens.filter((x) => x.marcado && x.situacao !== "nao_sei").length;
+  const corr = c && c.modo === "corrigir";
+  const n = itens.filter((x) => x.marcado && (corr ? x.mudancas.length : x.situacao !== "nao_sei")).length;
   const b = $("btnJurBibAtualAplicar");
   b.hidden = !itens.length;
   b.disabled = !n;
-  b.textContent = t("jur_atual_aplicar", { n });
+  b.textContent = t(corr ? "jur_corrigir_aplicar" : "jur_atual_aplicar", { n });
+}
+/* (v18.62.0) o antes × depois da correção, campo a campo; o repetido oferece "unir" */
+function jurBibCorrigirPintar() {
+  const c = jurAtualCtx;
+  const r = c.lidos || { est: "vazio", itens: [] };
+  const sem = $("jurBibAtualSem");
+  sem.className = "nota jur-cita-sem " + (r.est === "ok" ? "ok" : r.est === "vazio" ? "" : "erro");
+  sem.textContent = r.est === "vazio" ? t("jur_atual_sem_vazio")
+    : r.est === "pedido" ? t("jur_atual_sem_pedido")
+    : r.est === "erro" ? t("jur_atual_sem_erro") + (r.erro ? " " + r.erro : "")
+    : t("jur_corrigir_sem_ok", { n: r.itens.length, m: r.itens.filter((x) => x.mudancas.length).length, k: r.itens.filter((x) => x.confere === "sim" && !x.mudancas.length).length })
+      + (r.faltam > 0 ? " " + t("jur_atual_sem_faltam", { n: r.faltam }) : "");
+  const cx = $("jurBibAtualPrev");
+  cx.innerHTML = "";
+  /* sem resposta ainda: os repetidos já podem ser unidos (a IA não resolve repetição) */
+  const lista = c.ids.map(jurDe).filter(Boolean);
+  const repetidos = lista.filter((j) => jurPendencias(j, jurLista()).indexOf("repetido") >= 0);
+  const vistos = new Set();
+  repetidos.forEach((j) => {
+    const outro = jurIguaisA(j, jurLista())[0];
+    if (!outro || vistos.has(outro.id) || vistos.has(j.id)) return;
+    vistos.add(j.id); vistos.add(outro.id);
+    const it = document.createElement("div");
+    it.className = "jur-atual-item jur-corr-rep";
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("jur_corrigir_repetido", { n: [j.tribunal, j.classe, j.numero].filter(Boolean).join(" ") });
+    const bu = document.createElement("button");
+    bu.type = "button";
+    bu.className = "btn-min";
+    bu.id = "btnJurCorrUnir_" + j.id;
+    bu.textContent = t("jur_corrigir_unir");
+    bu.onclick = () => {
+      /* fica o de tese mais longa (a regra de jurUnir); o outro some, sem perder texto nem tópicos */
+      const [fica, vai] = String(j.tese || "").length >= String(outro.tese || "").length ? [j, outro] : [outro, j];
+      jurUnir(fica.id, vai.id);
+      c.ids = c.ids.filter((id) => id !== vai.id);
+      try { reg("JURIS", "corrigir com IA: repetidos unidos", jurTitulo(fica)); } catch (e) {}
+      $("jurBibAtualFeito").textContent = t("jur_corrigir_unido", { n: [fica.tribunal, fica.classe, fica.numero].filter(Boolean).join(" ") });
+      try { jurRepintarTelas(); } catch (e) {}
+      jurBibCorrigirPintar();
+    };
+    p.append(document.createTextNode(" "), bu);
+    it.append(p);
+    cx.append(it);
+  });
+  r.itens.forEach((x, i) => {
+    const it = document.createElement("div");
+    it.className = "jur-atual-item jur-corr-item";
+    const cab = document.createElement("label");
+    cab.className = "jur-cab";
+    const ck = document.createElement("input");
+    ck.type = "checkbox";
+    ck.id = "jurCorrCk_" + i;
+    ck.checked = x.marcado;
+    ck.disabled = !x.mudancas.length;
+    ck.onchange = () => { x.marcado = ck.checked; jurBibAtualPintarAplicar(); };
+    const nome = document.createElement("b");
+    nome.textContent = [x.j.tribunal, [x.j.classe, x.j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ");
+    const s = document.createElement("span");
+    s.className = "jur-sel jur-corr-conf conf-" + x.confere;
+    s.textContent = t("jur_corrigir_conf_" + x.confere) + (x.certeza ? " · " + t("jur_cn_certeza_" + x.certeza) : "");
+    cab.append(ck, nome, s);
+    it.append(cab);
+    if (x.explicacao || x.fonte) {
+      const p = document.createElement("p");
+      p.className = "nota";
+      p.textContent = [x.explicacao, x.fonte ? t("jur_atual_fonte", { f: x.fonte }) : ""].filter(Boolean).join(" ");
+      it.append(p);
+    }
+    x.mudancas.forEach((m) => {
+      const ant = document.createElement("div");
+      ant.className = "jur-atual-antes";
+      ant.textContent = t("jur_corrigir_campo_" + m.campo) + " — " + t("jur_corrigir_antes") + " " + (m.antes || "—");
+      const dep = document.createElement("div");
+      dep.className = "jur-atual-depois";
+      dep.textContent = t("jur_corrigir_campo_" + m.campo) + " — " + t("jur_corrigir_depois") + " " + m.depois;
+      it.append(ant, dep);
+    });
+    if (!x.mudancas.length) {
+      const p = document.createElement("p");
+      p.className = "nota";
+      p.textContent = t(x.confere === "sim" ? "jur_corrigir_nada_ok" : "jur_corrigir_nada");
+      it.append(p);
+    }
+    cx.append(it);
+  });
+  jurBibAtualPintarAplicar();
 }
 
 function jurBibAtualAplicar() {
   const c = jurAtualCtx;
   if (!c || !c.lidos || !c.lidos.itens) return null;
-  const rec = jurAtualAplicar(c.lidos.itens);
+  const corr = c.modo === "corrigir";
+  const rec = corr ? jurCorrecaoAplicar(c.lidos.itens) : jurAtualAplicar(c.lidos.itens);
   c.recibo = rec;
-  const mud = c.lidos.itens.filter((x) => x.marcado && x.muda).length;
-  try { reg("JURIS", "verificar atualidade: aplicado", rec.length + " julgados · " + mud + " tese(s) trocada(s)"); } catch (e) {}
-  $("jurBibAtualFeito").textContent = t("jur_atual_feito", { n: rec.length, m: mud });
+  const mud = corr ? c.lidos.itens.filter((x) => x.marcado && x.mudancas.some((m) => m.campo === "tese")).length
+    : c.lidos.itens.filter((x) => x.marcado && x.muda).length;
+  try { reg("JURIS", corr ? "corrigir com IA: aplicado" : "verificar atualidade: aplicado", rec.length + " julgados · " + mud + " tese(s) trocada(s)"); } catch (e) {}
+  $("jurBibAtualFeito").textContent = t(corr ? "jur_corrigir_feito" : "jur_atual_feito", { n: rec.length, m: mud });
   $("btnJurBibAtualDesfazer").hidden = !rec.length;
   c.lidos = null;
   $("jurBibAtualResp").value = "";
@@ -3246,6 +3365,7 @@ function jurSeloSituacao(j) {
 
 if (typeof document !== "undefined" && $("jurBibAtual")) {
   $("btnJurBibAtual").onclick = () => jurBibAtualIniciar();
+  if ($("btnJurBibCorrigir")) $("btnJurBibCorrigir").onclick = () => jurBibAtualIniciar("corrigir");
   $("btnJurBibAtualPedido").onclick = () => jurBibAtualPedido();
   $("jurBibAtualResp").oninput = () => jurBibAtualLerResp();
   $("btnJurBibAtualAplicar").onclick = () => jurBibAtualAplicar();
