@@ -4943,6 +4943,7 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ger-como summary{cursor:pointer;font-size:12px;opacity:.8}
 .ger-grade{display:grid;grid-template-columns:22fr 43fr 35fr;grid-template-rows:minmax(0,1fr);gap:10px;min-height:0}
 .ger-col{min-width:0;min-height:0;overflow:auto}
+.ger-col-pastas{overflow-x:hidden}
 .ger-ferr{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;background:var(--panel);padding:2px 0 6px;z-index:1}
 .ger-pre-acoes{display:flex;gap:6px;position:sticky;top:0;background:var(--panel);padding:2px 0 6px;z-index:1}
 .ger-toast{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:6px 0;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:600;background:rgba(46,158,91,.18);border:1px solid #2e9e5b}
@@ -5351,7 +5352,13 @@ dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);he
 #gerArvore .ger-modo-edital .ger-disc,#gerArvore.ger-modo-edital .ger-disc{padding-left:6px}
 #gerArvore.ger-modo-edital .ger-top{padding-left:10px}
 #gerArvore.ger-modo-edital .ger-ramo{padding-left:10px}
-#gerArvore .ger-pasta.ger-atual{background:rgba(46,158,91,.30);outline:1px solid var(--acao);outline-offset:-1px;font-weight:800}
+/* (v18.69.0) A PASTA ABERTA: fundo cheio na cor de ação, texto claro, e uma seta ▶ que aponta para os cartões — a
+ * "aba conectada": a mesma cor faz a faixa do título do painel de cartões. As pastas acima dela (a trilha) acendem de leve. */
+#gerArvore .ger-pasta.ger-atual{background:var(--acao);color:#fff;font-weight:800;outline:none;position:relative;padding-right:22px;
+  box-shadow:0 1px 4px rgba(0,0,0,.25)}
+#gerArvore .ger-pasta.ger-atual::after{content:"▶";position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.95}
+#gerArvore .ger-pasta.ger-atual .ger-prova{color:#fff}
+#gerArvore .ger-pasta.ger-trilha{font-weight:800;box-shadow:inset 3px 0 0 var(--acao)}
 #gerArvore .ger-pasta:not(.ger-ed):not(.ger-disc):not(.ger-top):not(.ger-ramo){font-weight:700}
 /* selo da prova na linha do edital, e o indicador "onde estou" no alto da lista de cartões */
 .ger-prova{margin-left:6px;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;vertical-align:1px}
@@ -5359,8 +5366,19 @@ dialog.est-dlg[open]{display:flex;flex-direction:column;width:min(760px,96vw);he
 .ger-prova-longe{background:rgba(127,127,127,.22);color:var(--sutil)}
 .ger-prova-enc{background:rgba(127,127,127,.15);color:var(--sutil);font-style:italic}
 #gerArvore .ger-ed.ger-enc{opacity:.55}
-.ger-onde{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow:hidden;background:var(--panel);padding:4px 0 6px;font-size:12px}
-.ger-col-cartoes .ger-ferr{top:34px}
+/* (v18.69.0) o título do painel de cartões: faixa na cor da pasta aberta (a mesma da árvore), caminho pequeno em cima,
+ * a pasta grande embaixo — texto, não pílulas com cara de botão */
+.ger-onde{position:sticky;top:0;z-index:2;display:block;background:color-mix(in srgb,var(--acao) 16%,var(--panel));
+  border-left:5px solid var(--acao);border-radius:0 8px 8px 0;padding:5px 10px 6px;margin:0 0 6px;font-size:12px}
+.ger-onde-trilha{display:flex;align-items:center;gap:3px;flex-wrap:wrap;color:var(--sutil);line-height:1.3}
+.ger-onde-linha{display:flex;align-items:baseline;gap:6px;min-width:0}
+.ger-onde-ico{flex:0 0 auto}
+.ger-onde .ger-onde-chip{all:unset;box-sizing:border-box;min-width:0;max-width:100%;border:0;background:none;padding:0}
+.ger-onde .ger-onde-link{cursor:pointer;color:var(--sutil);text-decoration:underline dotted;text-underline-offset:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46%}
+.ger-onde .ger-onde-link:hover,.ger-onde .ger-onde-link:focus-visible{color:var(--texto);text-decoration-style:solid}
+.ger-onde .ger-onde-fim{font-size:16px;font-weight:800;color:var(--texto);line-height:1.25;white-space:normal;overflow-wrap:anywhere;flex:1 1 auto}
+.ger-col-cartoes .ger-ferr{top:0;position:static}
 .ger-onde-chip{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 9px;border-radius:999px;font-weight:700;border:1px solid transparent}
 .ger-onde-ed{background:rgba(91,141,239,.2);border-color:#5b8def}
 .ger-onde-disc{background:rgba(46,196,182,.16);border-color:#2ec4b6}
