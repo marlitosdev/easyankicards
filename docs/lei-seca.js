@@ -2103,8 +2103,11 @@ function leiCabecalhosAlteradora(s) {
   /* Os sufixos aparecem de três jeitos: "Art. 273-A", "Art. 343A" e — nos PDFs consolidados —
    * "Art. 356. B São responsáveis…" (número, ponto, LETRA, texto). O terceiro é ambíguo com o
    * artigo definido ("Art. 10. O prazo…"): só vale sem ordinal, e as letras A, E e O só valem
-   * se a vizinha (B; D ou F; N ou P) aparece no mesmo número. */
-  const re = /(^|\n|[.:;)\]”"]\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})(?:([A-Z])(?![A-Za-zÀ-ú])|\s*([ºo°ª]?)(?:-([A-Z])(?![A-Za-zÀ-ú]))?(\.\s+([A-Z])(?=\s+[A-ZÀ-Ú(\["“]))?)(?!\d)/g;
+   * se a vizinha (B; D ou F; N ou P) aparece no mesmo número.
+   * (v18.65.0) Com os PDFs da LC 145/2024 de Caruaru: o sufixo também vem com HÍFEN depois da letra
+   * ("Art. 356. A - São responsáveis…"), e o cabeçalho pode vir depois de uma palavra em MAIÚSCULAS sem
+   * pontuação ("§ 2º REVOGADO Art. 4º A Lei Complementar…", na LC 95/2022). */
+  const re = /(^|\n|[.:;)\]”"]\s+|[A-ZÀ-Ú]{3,}\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})(?:([A-Z])(?![A-Za-zÀ-ú])|\s*([ºo°ª]?)(?:-([A-Z])(?![A-Za-zÀ-ú]))?(\.\s+([A-Z])(?=\s+[A-ZÀ-Ú(\["“]|\s*[-–—]\s))?)(?!\d)/g;
   const hs = [];
   let m;
   while ((m = re.exec(s)) !== null) {
@@ -2142,7 +2145,9 @@ function leiMarcaDoTrecho(txt) {
 
 /* O corpo de UM artigo-alvo: caput + unidades com marca; inteiro ou parcial. */
 function leiLerBlocoAlterado(corpo) {
-  const s0 = String(corpo || "").replace(/[”"]/g, " ");
+  /* (v18.65.0) nos PDFs da LC 112/2023 a aspa que FECHA o texto citado vem como “ (a de abrir); e em "Art. 356. A -
+   * São responsáveis" (LC 145/2024) sobra o hífen que separava a letra do texto */
+  const s0 = String(corpo || "").replace(/[“”"]/g, " ").replace(/^\s*[-–—]\s+/, "");
   const temOmissao = new RegExp(LEI_RE_OMISSAO.source).test(s0);
   const s = s0.replace(new RegExp(LEI_RE_OMISSAO.source, "g"), " " + LEI_OMITIDO + " ");
   const est = leiEstruturaArtigo(s, { fragmento: true });
@@ -2238,6 +2243,10 @@ function leiMontarArtigo(prefixo, L) {
 /* Lê a lei alteradora inteira. Devolve:
  *   { ident, curto, dataLei, blocos:[{num,numCru,corpo,bloco}], revogacoes:[{num,unidade}],
  *     avisos:[{k:"anexo",texto}], proprios:n } */
+/* o começo de um artigo da PRÓPRIA lei que altera: uma ordem sobre a outra lei ("O art. 279 … passa a vigorar",
+ * "A Lei Complementar nº 15 … passa a vigorar acrescida", "Fica revogado…", "Esta Lei entra em vigor…") */
+const LEI_RE_ORDEM_PROPRIA = /^\s*[ºo°.]?\s*(?:(?:O|Os|A|As)\s+(?:arts?\.|artigos?|caput|§|par[áa]grafo|incisos?|al[íi]neas?|Lei|Anexos?|Tabelas?)|Fica(?:m)?\s|Revoga(?:m)?-se|Esta\s+Lei|Este\s+(?:C[óo]digo|artigo))[\s\S]{0,350}?(?:passa(?:m)?\s+a\s+vigorar|revogad|entra(?:r[áa])?\s+em\s+vigor|acrescid|vig[êe]ncia|produz(?:ir[áa])?\s+efeitos)/i;
+
 function leiLerAlteradora(texto, alvo) {
   const bruto = String(texto == null ? "" : texto).replace(/\r\n?/g, "\n");
   const ident = leiIdentificar(bruto);
@@ -2251,8 +2260,12 @@ function leiLerAlteradora(texto, alvo) {
   hs.forEach((h, i) => {
     const seg = s.slice(h.fim, i + 1 < hs.length ? hs[i + 1].ini : s.length);
     const omissaoLogo = /^\s*\.?\s*(?:\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\))/.test(seg);
-    h.proprio = h.inteiro === proximo && !h.sufixo && !omissaoLogo;
-    if (h.proprio) proximo++;
+    /* (v18.65.0) um artigo PRÓPRIO perdido (o 4º da LC 95/2022) fazia os seguintes (5º a 28º, cada um uma ordem
+     * "O art. 279 … passa a vigorar…") virarem alterações dos arts. 5 a 28 da lei alvo. Uma ORDEM no começo do
+     * artigo — e o número logo adiante na sequência — também o faz próprio. */
+    const ordem = h.inteiro > proximo && h.inteiro <= proximo + 3 && !h.sufixo && !omissaoLogo && LEI_RE_ORDEM_PROPRIA.test(seg.slice(0, 400));
+    h.proprio = (h.inteiro === proximo && !h.sufixo && !omissaoLogo) || ordem;
+    if (h.proprio) proximo = h.inteiro + 1;
     h.seg = seg;
   });
   hs.forEach((h) => {
