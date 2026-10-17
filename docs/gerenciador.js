@@ -30,7 +30,7 @@ let gerOcultarVazias = false;
 const GER_DICAS = {
   btnGerModoGerenciar: "ger_tip_modo_gerenciar", btnGerModoExportar: "ger_tip_modo_exportar", btnGerDesfazerExport: "ger_tip_desfazer_export",
   btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
-  btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", btnGerArvOpc: "ger_tip_arv_opc", gerFiltro: "ger_tip_filtro",
+  btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", btnGerPrevMover: "ger_tip_prev_mover", btnGerArvOpc: "ger_tip_arv_opc", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos", btnGerMarcarFracos: "ger_tip_marcar_fracos", btnGerMarcarLacunas: "ger_tip_marcar_lacunas",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
@@ -1330,6 +1330,9 @@ function gerPintarLista() {
       lin.draggable = true;
       lin.ondragstart = (ev) => gerIniciarArrasto(ev, pos);
       lin.ondragend = gerFimArrasto;
+      /* (v18.70.0) com o dedo: segurar um instante pega o cartão; deslizar até a pasta; soltar */
+      lin.onpointerdown = (ev) => gerToqueInicio(ev, pos, lin);
+      lin.oncontextmenu = (ev) => { if (gerToque && ev && ev.preventDefault) ev.preventDefault(); };
     }
     lin.onclick = () => { gerFoco = pos; gerEditando = false; gerPintar(); if (gerEhCelular()) gerVista("previa"); };
     lin.title = t(exportando ? "ger_tip_arrastar_cartao_exp" : "ger_tip_linha");
@@ -1385,6 +1388,7 @@ function gerPintarAcoes() {
   $("gerTotal").textContent = t("ger_total", { n: gerNotas.length });
   $("btnGerEditar").disabled = gerModo === "exportar" || gerFoco < 0;
   $("btnGerPreApagar").disabled = gerModo === "exportar" || gerFoco < 0;
+  if ($("btnGerPrevMover")) $("btnGerPrevMover").disabled = gerModo === "exportar" || gerFoco < 0;
   if (gerModo === "exportar") { try { $("btnGerEstudar").hidden = true; } catch (e) {} }
   else if (typeof estcRotulo === "function") estcRotulo();
   const tem = gerTemRecibo();
@@ -1665,6 +1669,203 @@ function gerSoltar(ev, chave, concurso) {
   gerFimArrasto();
   if (!ms || !chave) return Promise.resolve();
   return gerConfirmarMover(ms, chave, concurso);
+}
+
+/* =====================================================================
+ * ARRASTAR COM O DEDO (v18.70.0)
+ *
+ * O pedido: "colocar o dedo sobre o cartão e deslizar até o local
+ * desejado, tal qual as pastas do Windows" — no celular, no tablet e no
+ * notebook com tela de toque. O arrastar do navegador (HTML5) só existe
+ * com mouse. Aqui, com Pointer Events:
+ *  · SEGURAR um instante (≈0,4 s) pega o cartão (o celular vibra) — mexer
+ *    o dedo antes disso é rolar a lista, como sempre;
+ *  · uma pílula acompanha o dedo; a pasta debaixo dele acende; segurar
+ *    sobre uma disciplina fechada a abre; perto da borda, a árvore rola;
+ *  · no celular (pastas e cartões em abas), passar sobre a aba "Pastas"
+ *    abre a árvore no meio do arrasto;
+ *  · SOLTAR numa pasta pergunta e move — o MESMO caminho do arrastar com
+ *    mouse (os tratadores da própria linha da árvore), com o mesmo
+ *    desfazer. Soltar fora de uma pasta não faz nada.
+ * ===================================================================== */
+const GER_TOQUE_SEGURAR = 380, GER_TOQUE_FOLGA = 10, GER_TOQUE_BORDA = 48;
+let gerToque = null, gerToqueFimEm = 0;
+const gerSobe = (el, f) => { for (let e = el; e; e = e.parentNode) { try { if (f(e)) return e; } catch (x) {} } return null; };
+function gerToqueInicio(ev, pos, el) {
+  if (!ev || ev.pointerType === "mouse" || gerModo === "exportar") return false;
+  gerToqueCancelar();
+  const t0 = { pos, el, x: ev.clientX, y: ev.clientY, ativo: false, alvo: null, timer: null, abaTimer: null, rolar: null, ghost: null };
+  gerToque = t0;
+  /* rolar a página enquanto o cartão está "na mão" estragaria o arrasto: só nesse caso o toque não rola */
+  t0.bloqueia = (e) => { if (gerToque === t0 && t0.ativo && e && e.cancelable && e.preventDefault) e.preventDefault(); };
+  try { el.addEventListener("touchmove", t0.bloqueia, { passive: false }); } catch (e) {}
+  t0.timer = setTimeout(() => gerToquePegar(t0), GER_TOQUE_SEGURAR);
+  return true;
+}
+function gerToquePegar(t0) {
+  if (!t0 || gerToque !== t0 || t0.ativo) return false;
+  const ms = gerNotasDoArrasto(t0.pos);
+  if (!ms.length) { gerToqueCancelar(); return false; }
+  t0.ativo = true;
+  gerComecarArrasto({ dataTransfer: null, preventDefault() {} }, ms, t0.pos);
+  const g = document.createElement("div");
+  g.className = "ger-ghost ger-ghost-toque";
+  g.textContent = (ms.length === 1 ? t("ger_arrastando_1") : t("ger_arrastando", { n: ms.length }))
+    + " · " + t(gerEhCelular() && gerVistaAtual !== "pastas" ? "ger_toque_dica_cel" : "ger_toque_dica");
+  try { ($("dlgGerCartoes") || document.body).append(g); } catch (e) {}
+  t0.ghost = g;
+  gerToquePosGhost(t0);
+  try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+  try { if (typeof setInterval === "function") t0.rolar = setInterval(() => gerToqueRolar(t0), 60); } catch (e) {}
+  return true;
+}
+function gerToquePosGhost(t0) {
+  if (!t0 || !t0.ghost || !t0.ghost.style) return;
+  t0.ghost.style.left = Math.round(t0.x + 14) + "px";
+  t0.ghost.style.top = Math.round(t0.y - 64) + "px";   /* acima do dedo: o nome da pasta sob ele fica à vista */
+}
+function gerToqueMover(ev) {
+  const t0 = gerToque;
+  if (!t0 || !ev) return;
+  const x = ev.clientX, y = ev.clientY;
+  if (!t0.ativo) {
+    /* mexeu antes de pegar: é rolagem, não arrasto */
+    if (Math.abs(x - t0.x) > GER_TOQUE_FOLGA || Math.abs(y - t0.y) > GER_TOQUE_FOLGA) gerToqueCancelar();
+    return;
+  }
+  if (ev.cancelable && ev.preventDefault) ev.preventDefault();
+  t0.x = x; t0.y = y;
+  gerToquePosGhost(t0);
+  const hit = ev._alvo || (typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null);
+  /* celular: a aba "Pastas" abre a árvore no meio do arrasto */
+  const aba = gerSobe(hit, (e) => e.id === "btnGerAbaPastas");
+  if (aba && gerVistaAtual !== "pastas") {
+    if (!t0.abaTimer) t0.abaTimer = setTimeout(() => { t0.abaTimer = null; if (gerToque === t0) gerVista("pastas"); }, 450);
+  } else if (!aba && t0.abaTimer) { clearTimeout(t0.abaTimer); t0.abaTimer = null; }
+  const row = gerSobe(hit, (e) => /(^|\s)ger-pasta(\s|$)/.test(String(e.className || "")));
+  if (row !== t0.alvo) {
+    try { if (t0.alvo && t0.alvo.ondragleave) t0.alvo.ondragleave({}); } catch (e) {}
+    t0.alvo = row;
+  }
+  try { if (row && row.ondragover) row.ondragover({ preventDefault() {}, dataTransfer: null }); } catch (e) {}
+}
+/* perto da borda de cima ou de baixo da árvore, ela rola sozinha */
+function gerToqueRolar(t0) {
+  if (!t0 || !t0.ativo || gerToque !== t0) return;
+  const col = $("gerArvore") && $("gerArvore").parentNode;
+  if (!col || !col.getBoundingClientRect) return;
+  const r = col.getBoundingClientRect();
+  if (!r || !r.height || t0.x < r.left || t0.x > r.right) return;
+  if (t0.y < r.top + GER_TOQUE_BORDA) col.scrollTop -= 14;
+  else if (t0.y > r.bottom - GER_TOQUE_BORDA) col.scrollTop += 14;
+}
+function gerToqueLimpar(t0) {
+  if (!t0) return;
+  if (t0.timer) clearTimeout(t0.timer);
+  if (t0.abaTimer) clearTimeout(t0.abaTimer);
+  try { if (t0.rolar) clearInterval(t0.rolar); } catch (e) {}
+  try { t0.el.removeEventListener("touchmove", t0.bloqueia); } catch (e) {}
+  try { if (t0.ghost && t0.ghost.parentNode) t0.ghost.parentNode.removeChild(t0.ghost); } catch (e) {}
+}
+function gerToqueFim(ev) {
+  const t0 = gerToque;
+  if (!t0) return null;
+  gerToque = null;
+  gerToqueLimpar(t0);
+  if (!t0.ativo) return null;
+  gerToqueFimEm = Date.now();
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const alvo = t0.alvo;
+  try { if (alvo && alvo.ondragleave) alvo.ondragleave({}); } catch (e) {}
+  if (alvo && alvo.ondrop) return alvo.ondrop({ preventDefault() {}, dataTransfer: null });
+  gerFimArrasto();
+  return null;
+}
+function gerToqueCancelar() {
+  const t0 = gerToque;
+  if (!t0) return;
+  gerToque = null;
+  gerToqueLimpar(t0);
+  if (t0.ativo) gerFimArrasto();
+}
+
+/* =====================================================================
+ * MOVER PELA PRÉVIA, E A JANELA DE DESTINO (v18.70.0)
+ *
+ * Vendo um cartão, "📁 mover para…" abre uma janela com as pastas (os
+ * últimos destinos em cima, busca, itens grandes para o dedo); escolher a
+ * pasta PERGUNTA antes ("Mover 1 cartão para …?") e move — o mesmo mover
+ * de sempre, com desfazer.
+ * ===================================================================== */
+const GER_CHAVE_DEST_RECENTES = "eac_ger_dest_recentes";
+let gerDestNotas = null;
+function gerDestRecentes() {
+  try { const v = JSON.parse(localStorage.getItem(GER_CHAVE_DEST_RECENTES) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function gerDestLembrar(ch, concurso) {
+  const l = gerDestRecentes().filter((x) => !(x.ch === ch && (x.concurso || "") === (concurso || "")));
+  l.unshift({ ch, concurso: concurso || "" });
+  try { localStorage.setItem(GER_CHAVE_DEST_RECENTES, JSON.stringify(l.slice(0, 5))); } catch (e) {}
+}
+function gerDestAbrir(notas) {
+  const ms = (notas || []).filter(Boolean);
+  if (!ms.length || !$("dlgGerDestino")) return false;
+  gerDestNotas = ms;
+  $("gerDestTit").textContent = ms.length === 1 ? t("ger_dest_tit_1") : t("ger_dest_tit", { n: ms.length });
+  const de = [...new Set(ms.map((n) => n.chave))];
+  $("gerDestDe").textContent = t("ger_dest_de", { d: de.length === 1 ? gerNomeDestino(de[0]) : t("ger_dest_varias", { n: de.length }) });
+  $("gerDestBusca").value = "";
+  gerDestPintar();
+  abrirModal("dlgGerDestino");
+  try { $("gerDestBusca").focus(); } catch (e) {}
+  return true;
+}
+function gerDestPintar() {
+  const cx = $("gerDestLista");
+  if (!cx) return [];
+  cx.innerHTML = "";
+  const q = cqNormal($("gerDestBusca").value || "");
+  const todos = gerDestinosLista();
+  const aqui = new Set((gerDestNotas || []).map((n) => n.chave));
+  const todosAqui = (d) => aqui.size === 1 && aqui.has(d.ch);
+  const item = (d, i, pre) => {
+    const partes = String(d.nome).split(" › ");
+    const b = gerEl("button", "ger-dest-item" + (todosAqui(d) ? " ger-dest-aqui" : ""));
+    b.type = "button";
+    b.id = pre + i;
+    if (partes.length > 1) b.append(gerEl("span", "ger-dest-cam", partes.slice(0, -1).join(" › ")));
+    b.append(gerEl("span", "ger-dest-nome", partes[partes.length - 1] + (todosAqui(d) ? " — " + t("ger_dest_aqui") : "")));
+    b.disabled = todosAqui(d);
+    b.onclick = () => gerDestEscolher(d.ch, d.concurso);
+    return b;
+  };
+  const filtrados = todos.filter((d) => !q || cqNormal(d.nome).indexOf(q) >= 0);
+  if (!q) {
+    const rec = gerDestRecentes().map((r) => todos.find((d) => d.ch === r.ch && (d.concurso || "") === (r.concurso || "")) || todos.find((d) => d.ch === r.ch)).filter(Boolean);
+    if (rec.length) {
+      cx.append(gerEl("p", "ger-dest-sec", t("ger_dest_recentes")));
+      rec.forEach((d, i) => cx.append(item(d, i, "gerDestRec_")));
+      cx.append(gerEl("p", "ger-dest-sec", t("ger_dest_todas")));
+    }
+  }
+  if (!filtrados.length) cx.append(gerEl("p", "nota", t("ger_pop_vazio")));
+  filtrados.slice(0, 200).forEach((d, i) => cx.append(item(d, i, "gerDestItem_")));
+  if (filtrados.length > 200) cx.append(gerEl("p", "nota", t("ger_pop_mais", { n: filtrados.length - 200 })));
+  return filtrados;
+}
+function gerDestEscolher(ch, concurso) {
+  const ms = gerDestNotas;
+  gerDestNotas = null;
+  try { if ($("dlgGerDestino").open) $("dlgGerDestino").close(); } catch (e) {}
+  if (!ms || !ms.length) return Promise.resolve();
+  gerDestLembrar(ch, concurso);
+  return gerConfirmarMover(ms, ch, concurso);
+}
+/* o cartão da prévia */
+function gerPrevMover() {
+  if (gerFoco < 0 || gerModo === "exportar") return false;
+  const n = gerNotas[gerVis[gerFoco]];
+  return n ? gerDestAbrir([n]) : false;
 }
 
 function gerAcaoEditar() {
@@ -2241,6 +2442,18 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerAjuda").onclick = () => abrirModal("dlgGerAjuda");
   $("btnGerAjudaX").onclick = () => $("dlgGerAjuda").close();
   $("btnGerAjudaOk").onclick = () => $("dlgGerAjuda").close();
+  /* (v18.70.0) o dedo: mover e soltar valem em qualquer ponto da janela; o clique que sobra do soltar não abre o cartão */
+  const dlgG = $("dlgGerCartoes");
+  if (dlgG && dlgG.addEventListener && !dlgG._toqueLigado) {
+    dlgG._toqueLigado = true;
+    dlgG.addEventListener("pointermove", (ev) => gerToqueMover(ev), { passive: false });
+    dlgG.addEventListener("pointerup", (ev) => gerToqueFim(ev));
+    dlgG.addEventListener("pointercancel", () => gerToqueCancelar());
+    dlgG.addEventListener("click", (ev) => { if (Date.now() - gerToqueFimEm < 450) { ev.stopPropagation(); ev.preventDefault(); } }, true);
+  }
+  if ($("btnGerPrevMover")) $("btnGerPrevMover").onclick = () => gerPrevMover();
+  if ($("gerDestBusca")) $("gerDestBusca").oninput = () => gerDestPintar();
+  ["btnGerDestFechar", "btnGerDestX"].forEach((id) => { if ($(id)) $(id).onclick = () => { gerDestNotas = null; $("dlgGerDestino").close(); }; });
   /* (v18.68.0) agrupar, ordenar e ocultar vazias moram num painel "⚙ exibir": três linhas a menos acima da árvore */
   if ($("btnGerArvOpc")) $("btnGerArvOpc").onclick = () => {
     const p = $("gerArvOpc");
