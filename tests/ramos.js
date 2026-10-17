@@ -554,6 +554,19 @@ async function testes() {
     ok(lista().length === 2 && lista().some((x) => /Geral\?/.test(x)) && lista().some((x) => /Fantasma\?/.test(x)), "R11a o 'geral' lista os sem ramo E os de etiqueta que nao existe mais");
     lei().onclick();
     ok(lista().length === 5, "R11b clicar no topico volta a listar todos os cartoes dele");
+    /* (v18.72.0) a janela "mover para…" lista os ramos debaixo do tópico; escolher um liga o cartão a ele */
+    const iGeral = achar(a.$("gerLista"), (e) => cls(e, "ger-item")).findIndex((e) => /Geral\?/.test(e.textContent));
+    achar(a.$("gerLista"), (e) => cls(e, "ger-item"))[iGeral].onclick();
+    a.$("btnGerPrevMover").onclick();
+    const itensDest = achar(a.$("gerDestLista"), (e) => cls(e, "ger-dest-item"));
+    const ramoBt = itensDest.find((e) => cls(e, "ger-dest-ramo") && /↳ Modalidades/.test(e.textContent));
+    ok(!!ramoBt && ramoBt.disabled !== true, "R11c a janela de destino mostra o ramo 'Modalidades' debaixo do tópico: " + itensDest.map((e) => e.textContent).slice(0, 6).join(" | "));
+    await conduzir(a, ramoBt.onclick());
+    linhas(a, "ger-ramo").find((e) => /Modalidades/.test(e.textContent)).onclick();
+    ok(lista().some((x) => /Geral\?/.test(x)) && lista().some((x) => /Modalidades\?/.test(x)), "R11d escolher o ramo liga o cartão a ele (agora aparece em Modalidades)");
+    a.$("btnGerPrevMover").onclick();
+    ok(/Últimos destinos/.test(a.$("gerDestLista").textContent) && /Modalidades/.test(a.$("gerDestRec_0").textContent), "R11e o ramo entra em 'Últimos destinos'");
+    a.$("btnGerDestFechar").onclick();
   }
   /* soltar cartoes num ramo */
   {

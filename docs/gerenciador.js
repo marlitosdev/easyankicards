@@ -1838,9 +1838,9 @@ let gerDestNotas = null;
 function gerDestRecentes() {
   try { const v = JSON.parse(localStorage.getItem(GER_CHAVE_DEST_RECENTES) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
-function gerDestLembrar(ch, concurso) {
-  const l = gerDestRecentes().filter((x) => !(x.ch === ch && (x.concurso || "") === (concurso || "")));
-  l.unshift({ ch, concurso: concurso || "" });
+function gerDestLembrar(ch, concurso, ramo) {
+  const l = gerDestRecentes().filter((x) => !(x.ch === ch && (x.concurso || "") === (concurso || "") && (x.ramo || "") === (ramo || "")));
+  l.unshift({ ch, concurso: concurso || "", ramo: ramo || "" });
   try { localStorage.setItem(GER_CHAVE_DEST_RECENTES, JSON.stringify(l.slice(0, 5))); } catch (e) {}
 }
 function gerDestAbrir(notas) {
@@ -1856,28 +1856,49 @@ function gerDestAbrir(notas) {
   try { $("gerDestBusca").focus(); } catch (e) {}
   return true;
 }
+/* (v18.72.0) os destinos da janela: os tópicos de sempre e, debaixo de cada um, os RAMOS dele (do plano do edital) —
+ * mover direto para um ramo, sem arrastar até a linha dele */
+function gerDestinosComRamos() {
+  const base = gerDestinosLista();
+  const ramosDe = new Map();
+  try {
+    gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots.forEach((r) => (r.filhos || []).forEach((d) => (d.filhos || []).forEach((tp) => {
+      if (tp.ramos && tp.ramos.length) ramosDe.set(tp.chave + "|" + (r.tipo === "edital" ? r.concurso || "" : ""), tp.ramos);
+    })));
+  } catch (e) {}
+  const out = [];
+  base.forEach((d) => {
+    out.push(d);
+    const rs = ramosDe.get(d.ch + "|" + (d.concurso || "")) || ramosDe.get(d.ch + "|");
+    (rs || []).forEach((rm) => out.push({ ch: d.ch, concurso: d.concurso, nome: d.nome + " › ↳ " + rm.nome, ramo: rm }));
+  });
+  return out;
+}
 function gerDestPintar() {
   const cx = $("gerDestLista");
   if (!cx) return [];
   cx.innerHTML = "";
   const q = cqNormal($("gerDestBusca").value || "");
-  const todos = gerDestinosLista();
+  const todos = gerDestinosComRamos();
   const aqui = new Set((gerDestNotas || []).map((n) => n.chave));
   const todosAqui = (d) => aqui.size === 1 && aqui.has(d.ch);
   const item = (d, i, pre) => {
     const partes = String(d.nome).split(" › ");
-    const b = gerEl("button", "ger-dest-item" + (todosAqui(d) ? " ger-dest-aqui" : ""));
+    const aquiMesmo = !d.ramo && todosAqui(d);
+    const b = gerEl("button", "ger-dest-item" + (d.ramo ? " ger-dest-ramo" : "") + (aquiMesmo ? " ger-dest-aqui" : ""));
     b.type = "button";
     b.id = pre + i;
-    if (partes.length > 1) b.append(gerEl("span", "ger-dest-cam", partes.slice(0, -1).join(" › ")));
-    b.append(gerEl("span", "ger-dest-nome", partes[partes.length - 1] + (todosAqui(d) ? " — " + t("ger_dest_aqui") : "")));
-    b.disabled = todosAqui(d);
-    b.onclick = () => gerDestEscolher(d.ch, d.concurso);
+    if (partes.length > 1 && !d.ramo) b.append(gerEl("span", "ger-dest-cam", partes.slice(0, -1).join(" › ")));
+    b.append(gerEl("span", "ger-dest-nome", partes[partes.length - 1] + (aquiMesmo ? " — " + t("ger_dest_aqui") : "")));
+    if (d.ramo) b.title = t("ger_dest_ramo_tip", { r: d.ramo.nome });
+    b.disabled = aquiMesmo;
+    b.onclick = () => (d.ramo ? gerDestEscolherRamo(d.ramo) : gerDestEscolher(d.ch, d.concurso));
     return b;
   };
   const filtrados = todos.filter((d) => !q || cqNormal(d.nome).indexOf(q) >= 0);
   if (!q) {
-    const rec = gerDestRecentes().map((r) => todos.find((d) => d.ch === r.ch && (d.concurso || "") === (r.concurso || "")) || todos.find((d) => d.ch === r.ch)).filter(Boolean);
+    const rec = gerDestRecentes().map((r) => todos.find((d) => d.ch === r.ch && (d.concurso || "") === (r.concurso || "") && ((d.ramo && d.ramo.ramoId) || "") === (r.ramo || ""))
+      || (r.ramo ? null : todos.find((d) => d.ch === r.ch && !d.ramo))).filter(Boolean);
     if (rec.length) {
       cx.append(gerEl("p", "ger-dest-sec", t("ger_dest_recentes")));
       rec.forEach((d, i) => cx.append(item(d, i, "gerDestRec_")));
@@ -1896,6 +1917,15 @@ function gerDestEscolher(ch, concurso) {
   if (!ms || !ms.length) return Promise.resolve();
   gerDestLembrar(ch, concurso);
   return gerConfirmarMover(ms, ch, concurso);
+}
+/* escolheu um RAMO: liga os cartões a ele (os de outro tópico vão para o tópico do ramo) — pergunta antes */
+function gerDestEscolherRamo(rm) {
+  const ms = gerDestNotas;
+  gerDestNotas = null;
+  try { if ($("dlgGerDestino").open) $("dlgGerDestino").close(); } catch (e) {}
+  if (!ms || !ms.length || !rm) return Promise.resolve();
+  gerDestLembrar(rm.chave, rm.concurso, rm.ramoId);
+  return gerConfirmarRamo(ms, rm);
 }
 /* o cartão da prévia */
 function gerPrevMover() {
@@ -2572,7 +2602,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
     $(id).onkeydown = (ev) => { if (ev && ev.key === "Enter") { if (ev.preventDefault) ev.preventDefault(); gerConfirmarNovaPasta(); } };
   });
   $("btnGerApagar").onclick = gerAcaoApagar;
-  $("btnGerMover").onclick = gerAbrirDestinos;
+  $("btnGerMover").onclick = () => (gerEhCelular() ? gerDestAbrir(gerMarcados()) : gerAbrirDestinos());
   $("gerPopBusca").oninput = gerPintarDestinosLista;
   $("gerPopBusca").onkeydown = (ev) => {
     if (!ev) return;
