@@ -947,6 +947,18 @@ async function testes() {
         const classes = achar(b.$("gerOnde"), (e) => cls(e, "ger-onde-chip")).map((e) => e.className.split(" ").filter((x) => /^ger-onde-(ed|disc|top|ramo)$/.test(x))[0]);
         ok(classes.join("|") === "ger-onde-ed|ger-onde-disc|ger-onde-top", "G19g3 cada nivel tem a sua cor: " + classes.join("|"));
         ok(/2 cartões/.test(b.$("gerOnde").textContent), "G19g4 o indicador diz quantos cartoes a pasta tem");
+        /* (v18.69.0) o caminho é TÍTULO: a pasta aberta grande (ger-onde-fim); os níveis de cima são links para subir */
+        const fim = achar(b.$("gerOnde"), (e) => cls(e, "ger-onde-fim"));
+        ok(fim.length === 1 && fim[0].textContent === "Top B" && fim[0].tagName !== "BUTTON", "G19g5 a pasta aberta e' o titulo (texto, nao botao)");
+        const links = achar(b.$("gerOnde"), (e) => cls(e, "ger-onde-link"));
+        ok(links.length === 2 && links.every((e) => e.tagName === "BUTTON") && /Disc B/.test(links[1].title), "G19g6 edital e disciplina sao links: " + links.map((e) => e.textContent).join("|"));
+        /* a trilha acende na árvore: o edital e a disciplina acima do tópico aberto */
+        const trilha = achar(b.$("gerArvore"), (e) => cls(e, "ger-trilha")).map((e) => e.textContent);
+        ok(trilha.length === 2 && trilha.some((x) => /TCE-PE/.test(x)) && trilha.some((x) => /Disc B/.test(x)), "G19g7 o edital e a disciplina da pasta aberta acendem como trilha: " + trilha.join("|"));
+        links[1].onclick();
+        ok(chips().join("|") === "TCE-PE|Disc B" && achar(b.$("gerOnde"), (e) => cls(e, "ger-onde-fim"))[0].textContent === "Disc B", "G19g8 clicar no nivel do caminho abre aquela pasta: " + chips().join("|"));
+        const atual = achar(b.$("gerArvore"), (e) => cls(e, "ger-atual"));
+        ok(atual.length === 1 && /Disc B/.test(atual[0].textContent), "G19g9 e a arvore acende a pasta nova");
       }
       ok(a.$("gerArvore").classList.contains("ger-modo-edital"), "G19g a arvore ganha o modo edital (recuo dos niveis)");
       ok(linhas(a, "ger-top").length === 1 && /Texto do editor/.test(linhas(a, "ger-top")[0].textContent) && linhas(a, "ger-disc").length > 0 && linhas(a, "ger-disc").every((e) => /▸/.test(e.textContent)), "G19h no comeco as raizes estao abertas e as disciplinas FECHADAS (so' a Bancada mostra o topico dela)");

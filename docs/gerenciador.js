@@ -973,7 +973,7 @@ function gerLinhaTopico(cx, tp, concurso) {
   /* "ocultar pastas vazias": some só o que não tem cartão e não é a pasta aberta agora */
   if (gerOcultarVazias && !tp.total && !(gerPasta && gerPasta.chave === tp.chave)) return;
   const marca = tp.compartilhado ? " ↔" : "";
-  const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave && !gerPasta.ramo ? " ger-atual" : ""), tp.topico + " (" + tp.total + ")" + marca);
+  const li = gerEl("div", "ger-pasta ger-top" + (tp.vazia ? " ger-vazia" : "") + (gerPasta && gerPasta.chave === tp.chave ? (gerPasta.ramo ? " ger-trilha" : " ger-atual") : ""), tp.topico + " (" + tp.total + ")" + marca);
   /* tópico COM ramos: uma seta abre e fecha os ramos dele */
   const idRamos = "rm|" + tp.chave + "|" + (concurso || "");
   const ramosAbertos = !!tp.ramos && gerAbertos.has(idRamos);
@@ -1053,7 +1053,7 @@ function gerPintarNo(cx, no, edital) {
   if (no.tipo === "top") { gerLinhaTopico(cx, no, no.concurso); return; }
   const aberto = gerAbertos.has(no.id);
   const ativa = !!gerPasta && gerPasta.id === no.id;
-  const cab = gerEl("div", "ger-pasta " + (no.tipo === "disc" ? "ger-disc" : "ger-ed") + (ativa ? " ger-atual" : ""));
+  const cab = gerEl("div", "ger-pasta " + (no.tipo === "disc" ? "ger-disc" : "ger-ed") + (ativa ? " ger-atual" : (gerTrilhaIds.has(no.id) ? " ger-trilha" : "")));
   const seta = gerEl("span", "ger-seta", aberto ? "▾" : "▸");
   seta.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); aberto ? gerAbertos.delete(no.id) : gerAbertos.add(no.id); gerPintarArvore(); };
   seta.title = t("ger_tip_seta");
@@ -1100,9 +1100,12 @@ function gerPintarNo(cx, no, edital) {
   if (aberto) no.filhos.forEach((f) => gerPintarNo(cx, f, edital));
 }
 
+let gerTrilhaIds = new Set();
 function gerPintarArvore() {
   const cx = $("gerArvore");
   cx.innerHTML = "";
+  /* (v18.69.0) as pastas ACIMA da aberta (edital, disciplina; o tópico, quando o aberto é um ramo) */
+  try { gerTrilhaIds = new Set(gerCaminhoDaPasta().slice(0, -1).map((p) => p.id).filter(Boolean)); } catch (e) { gerTrilhaIds = new Set(); }
   cx.classList.toggle("ger-modo-edital", gerAgrupar === "edital");
   try { $("btnGerDesfazerExport").hidden = gerModo !== "exportar" || (gerMoverParaExport.size === 0 && gerCartaoMoverParaExport.size === 0); } catch (e) {}
   const tudo = gerEl("div", "ger-pasta" + (!gerPasta ? " ger-atual" : ""), t("ger_todos", { n: gerNotas.length }));
@@ -1181,7 +1184,10 @@ function gerCaminhoDaPasta() {
   }
   for (let i = 0; !achado && i < roots.length; i++) achado = acha(roots[i], []);
   if (achado) {
-    const out = achado.map((no) => ({ tipo: tipoDe(no), nome: no.nome || no.topico || "" }));
+    /* (v18.69.0) cada nível leva à SUA pasta (o caminho é clicável); a trilha acende na árvore */
+    const pastaDe = (no) => (no.tipo === "top" ? { chave: no.chave, concurso: no.concurso }
+      : { chaves: no.chaves, id: no.id, disciplina: no.tipo === "disc" ? no.disciplina : undefined });
+    const out = achado.map((no) => ({ tipo: tipoDe(no), nome: no.nome || no.topico || "", pasta: pastaDe(no), id: no.id }));
     const fim = achado[achado.length - 1];
     const rn = fim.tipo === "top" ? nomeRamo(fim) : null;
     if (rn) out.push({ tipo: "ramo", nome: rn });
@@ -1193,20 +1199,38 @@ function gerCaminhoDaPasta() {
   return [];
 }
 
+/* (v18.69.0) ONDE ESTOU, como TÍTULO do painel de cartões — não como fileira de pílulas parecidas com botões:
+ * em cima, pequeno, o caminho até a pasta (cada nível clicável, para subir); embaixo, grande, a pasta aberta e
+ * quantos cartões ela mostra. A faixa tem a cor da pasta acesa na árvore (a "aba conectada"). */
 function gerPintarOnde() {
   const cx = $("gerOnde");
   if (!cx) return;
   cx.innerHTML = "";
   const cam = gerCaminhoDaPasta();
   const rot = { ed: "ger_onde_ed", disc: "ger_onde_disc", top: "ger_onde_top", ramo: "ger_onde_ramo" };
-  if (!cam.length) cx.append(gerEl("span", "ger-onde-chip ger-onde-todos", t("ger_onde_todos")));
+  const trilha = gerEl("div", "ger-onde-trilha");
+  trilha.append(gerEl("span", "ger-onde-ico", "📂"));
+  const linha = gerEl("div", "ger-onde-linha");
+  if (!cam.length) linha.append(gerEl("span", "ger-onde-chip ger-onde-todos ger-onde-fim", t("ger_onde_todos")));
   cam.forEach((p, i) => {
-    if (i) cx.append(gerEl("span", "ger-onde-sep", "›"));
-    const c = gerEl("span", "ger-onde-chip ger-onde-" + p.tipo, p.nome);
-    c.title = t(rot[p.tipo]) + ": " + p.nome;
-    cx.append(c);
+    const ultimo = i === cam.length - 1;
+    if (ultimo) {
+      const c = gerEl("span", "ger-onde-chip ger-onde-" + p.tipo + " ger-onde-fim", p.nome);
+      c.title = t(rot[p.tipo]) + ": " + p.nome;
+      linha.append(c);
+      return;
+    }
+    const b = gerEl("button", "ger-onde-chip ger-onde-" + p.tipo + " ger-onde-link", p.nome);
+    b.type = "button";
+    b.id = "gerOndeNivel_" + i;
+    b.title = t("ger_onde_ir", { n: p.nome });
+    if (p.pasta) b.onclick = () => { gerPasta = p.pasta; if (p.id) gerAbertos.add(p.id); gerRefiltrar(); gerPintar(); };
+    trilha.append(b, gerEl("span", "ger-onde-sep", "›"));
   });
-  cx.append(gerEl("span", "ger-onde-n", t("ger_onde_n", { n: gerVis.length })));
+  linha.append(gerEl("span", "ger-onde-n", t("ger_onde_n", { n: gerVis.length })));
+  if (cam.length > 1) cx.append(trilha);
+  else { const ic = gerEl("span", "ger-onde-ico", "📂"); linha.insertBefore(ic, linha.firstChild); }
+  cx.append(linha);
   cx.title = cam.map((p) => p.nome).join(" › ") || t("ger_onde_todos");
 }
 

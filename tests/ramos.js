@@ -549,6 +549,7 @@ async function testes() {
     const lista = () => achar(a.$("gerLista"), (e) => cls(e, "ger-item")).map((e) => e.textContent);
     linhas(a, "ger-ramo").find((e) => /Modalidades/.test(e.textContent)).onclick();
     ok(lista().length === 1 && /Modalidades\?/.test(lista()[0]) && cls(linhas(a, "ger-ramo").find((e) => /Modalidades/.test(e.textContent)), "ger-atual") && !cls(lei(), "ger-atual"), "R11 clicar no ramo lista SO' os cartoes dele; a linha do ramo acende e a do topico nao");
+    ok(cls(lei(), "ger-trilha"), "R11-trilha (v18.69.0) com um ramo aberto, o topico dele acende como trilha");
     linhas(a, "ger-ramo").find((e) => /geral do tópico/.test(e.textContent)).onclick();
     ok(lista().length === 2 && lista().some((x) => /Geral\?/.test(x)) && lista().some((x) => /Fantasma\?/.test(x)), "R11a o 'geral' lista os sem ramo E os de etiqueta que nao existe mais");
     lei().onclick();
