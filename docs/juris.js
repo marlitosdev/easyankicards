@@ -1734,6 +1734,96 @@ function jurForaDeVigor(j) {
   return !!j && (j.situacao === "superada" || j.situacao === "cancelada" || j.situacao === "alterada");
 }
 
+/* =====================================================================
+ * (v18.62.0) CORRIGIR COM A IA OS JULGADOS COM PENDÊNCIA
+ *
+ * A varredura do backup de 17/10 achou: teses "de memória" (sem ementa,
+ * vindas da IA) que são paráfrase e não o texto oficial — o Tema 962 dizia
+ * "não pode atingir o sócio-gerente que não exercia a administração…", a
+ * tese firmada fala do sócio que "dele regularmente se retirou"; a Súmula
+ * 160 trocou "Município" por "Poder Executivo" —, campos "a conferir"
+ * (data, órgão) e um repetido. Aqui: as pendências de cada julgado, um
+ * pedido à IA pela tese OFICIAL copiada da fonte (não reescrita), a
+ * leitura da resposta com o antes × depois de cada campo, e a aplicação
+ * com recibo. O selo "de memória" FICA (a IA também erra): a ficha passa a
+ * dizer "corrigido pela IA em DD/MM", com a fonte, até a pessoa conferir.
+ * ===================================================================== */
+function jurPendencias(j, lista) {
+  const p = [];
+  if (!j) return p;
+  if (j.deMemoria) p.push("memoria");
+  if ((Array.isArray(j.aConferir) ? j.aConferir : []).length) p.push("conferir");
+  if (jurIguaisA(j, lista || jurLista()).length) p.push("repetido");
+  return p;
+}
+function jurComPendencia(lista) {
+  const L = lista || jurLista();
+  return L.filter((j) => jurPendencias(j, L).length);
+}
+function jurCorrecaoPedido(lista) {
+  const linhas = (lista || []).map((j) => {
+    const conf = (Array.isArray(j.aConferir) ? j.aConferir : []);
+    return "- id: " + j.id + " | " + [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ")
+      + " | tese guardada: " + String(j.tese || j.resumo || "—").replace(/\s+/g, " ").trim()
+      + (j.data ? " | data: " + j.data : "") + (j.orgao ? " | órgão: " + j.orgao : "")
+      + (conf.length ? " | a conferir: " + conf.join(", ") : "") + (j.deMemoria ? " | (veio da memória de uma IA, sem ementa)" : "");
+  });
+  return t("jur_corrigir_prompt", { lista: linhas.join("\n") });
+}
+function jurCorrecaoLer(bruto, lista) {
+  const txt = String(bruto || "").trim();
+  if (!txt) return { est: "vazio", itens: [] };
+  let v = null;
+  const sem = txt.replace(/^```[a-zA-Z]*\s*/, "").replace(/\s*```$/, "").trim();
+  try { v = JSON.parse(sem); } catch (e) {
+    const a = sem.indexOf("{"), b = sem.lastIndexOf("}");
+    if (a >= 0 && b > a) { try { v = JSON.parse(sem.slice(a, b + 1)); } catch (e2) { v = null; } }
+  }
+  if (!v) return { est: "erro", itens: [], erro: typeof jurDiagnosticoJson === "function" ? jurDiagnosticoJson(txt) : "" };
+  const arr = Array.isArray(v) ? v : (Array.isArray(v.julgados) ? v.julgados : []);
+  const porId = new Map((lista || []).map((j) => [String(j.id), j]));
+  const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+  const itens = [];
+  let fora = 0;
+  arr.forEach((x) => {
+    if (!x || typeof x !== "object") return;
+    const j = porId.get(String(x.id || ""));
+    if (!j) { fora++; return; }
+    const tese = norm(x.tese_oficial || x.teseOficial);
+    const confere = ["sim", "nao", "nao_sei"].indexOf(String(x.tese_confere || "").toLowerCase()) >= 0 ? String(x.tese_confere).toLowerCase() : "nao_sei";
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(String(x.data || "").trim()) ? String(x.data).trim() : "";
+    const orgao = norm(x.orgao), fonte = norm(x.fonte);
+    const certeza = ["alta", "media", "baixa"].indexOf(String(x.certeza || "").toLowerCase().replace(/é/g, "e")) >= 0 ? String(x.certeza).toLowerCase().replace(/é/g, "e") : "";
+    const mudancas = [];
+    if (tese && tese !== norm(j.tese)) mudancas.push({ campo: "tese", antes: norm(j.tese), depois: tese });
+    if (data && data !== String(j.data || "")) mudancas.push({ campo: "data", antes: String(j.data || ""), depois: data });
+    if (orgao && orgao !== norm(j.orgao)) mudancas.push({ campo: "orgao", antes: norm(j.orgao), depois: orgao });
+    if (fonte && fonte !== norm(j.fonte)) mudancas.push({ campo: "fonte", antes: norm(j.fonte), depois: fonte });
+    itens.push({ id: j.id, j, tese, confere, data, orgao, fonte, certeza, explicacao: norm(x.explicacao), mudancas,
+      marcado: mudancas.length > 0 && certeza !== "baixa" });
+  });
+  if (!itens.length) return { est: "erro", itens: [], fora, erro: "" };
+  return { est: "ok", itens, fora, faltam: (lista || []).length - itens.length };
+}
+function jurCorrecaoAplicar(itens, hoje) {
+  const dia = jurHojeISO(hoje);
+  const recibo = [];
+  (itens || []).filter((x) => x && x.marcado && x.mudancas && x.mudancas.length).forEach((x) => {
+    const j = jurDe(x.id);
+    if (!j) return;
+    const antes = {};
+    ["tese", "teseAnterior", "data", "orgao", "fonte", "corrigidoIA", "corrigidoNota"].forEach((k) => { antes[k] = j[k] === undefined ? "" : j[k]; });
+    recibo.push({ id: j.id, antes });
+    const dados = { id: j.id, corrigidoIA: dia, corrigidoNota: [x.explicacao, x.fonte, x.certeza ? "certeza " + x.certeza : ""].filter(Boolean).join(" · ") };
+    x.mudancas.forEach((m) => {
+      if (m.campo === "tese") { dados.teseAnterior = j.tese || ""; dados.tese = m.depois; }
+      else dados[m.campo] = m.depois;
+    });
+    jurGravar(dados);
+  });
+  return recibo;
+}
+
 function jurAtualPedido(lista, hoje) {
   const linhas = (lista || []).map((j) => "- id: " + j.id + " | " + [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ")
     + (j.data ? " (" + j.data + ")" : "") + " | tese: " + String(j.tese || j.resumo || "").replace(/\s+/g, " ").trim());
