@@ -1961,7 +1961,19 @@ function jurCitPreviewAbrir(c, ach, base) {
       const corte = difDe > 30 ? "…" + tx.slice(Math.max(0, difDe - 20)) : tx;
       const eh = jurClasseChave(x.classe) === jurClasseChave(c.classe) && jurNumChave(x.numero) === jurNumChave(c.numero);
       bt.textContent = jurCitNome(x) + " — " + jurCitTrecho(corte, 170) + " (" + t(eh ? "jur_cit_amb_eh" : "jur_cit_amb_cita") + ")";
-      bt.onclick = () => jurCitPreviewAbrir(c, { julgado: x }, base);
+      /* (v18.67.0) ESCOLHER LIGA: antes a escolha só abria a prévia, e o link continuava "casam 2 julgados" — perguntando de
+       * novo a cada toque. Agora a escolha vira o vínculo do trecho (o mesmo do "ligar a outro julgado…"); quem errou
+       * desfaz por "ligar a outro…" ou "desligar este link". */
+      bt.onclick = () => {
+        let ok = false;
+        try { ok = !!citVinculoSalvar({ trecho: c.texto, tipo: "jur", jurId: x.id, chave: jurCitChave(base) }); } catch (e) { ok = false; }
+        try { reg("JURIS", ok ? "citação ambígua: escolha guardada" : "citação ambígua: escolha (sem guardar)", (c.texto || "") + " → " + jurCitNome(x)); } catch (e) {}
+        jurCitPreviewAbrir(c, { julgado: x }, base);
+        if (ok) {
+          try { if (base && typeof base.aoVoltar === "function") base.aoVoltar(); } catch (e) {}
+          try { toastMsg(t("jur_cit_amb_guardado", { c: c.texto || "", j: jurCitNome(x) }), 6000); } catch (e) {}
+        }
+      };
       corpo.append(bt);
     });
   } else {
