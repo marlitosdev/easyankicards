@@ -1257,6 +1257,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 /* (v18.66.0) o registro da inclusão */
 dialog.lei-fx-dlg{width:min(900px,96vw);max-width:900px}
 .lei-fx-btn{white-space:nowrap}
+/* (v18.67.0) a fila das leis que alteram */
+.lei-altfila{margin:8px 0;padding:8px 12px;border:1px dashed var(--borda);border-radius:10px}
+.lei-altfila-tit{margin:0 0 6px;line-height:1.4}
+.lei-altfila-acoes{display:flex;flex-wrap:wrap;gap:6px}
+.lei-altfila-colar{margin-top:6px}
+.lei-altfila-colar textarea{width:100%;box-sizing:border-box}
+.lei-altfila-lista{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.lei-altfila-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 8px;border-radius:8px;background:var(--campo);font-size:14px}
+.lei-altfila-item.suspeita{border-left:4px solid var(--atencao)}
+.lei-upd-fila{margin:4px 0 8px;padding:8px 12px;border-radius:10px;border-left:4px solid var(--info);background:color-mix(in srgb,var(--info) 10%,transparent);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lei-upd-fila p{margin:0;flex:1 1 100%}
 .lei-fx-barra{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:4px 0 8px}
 .lei-fx-barra select{max-width:100%}
 .lei-fx-texto{width:100%;box-sizing:border-box;min-height:50vh;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto}
@@ -7967,6 +7978,23 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
+  <!-- (v18.67.0) AS LEIS QUE ALTERAM ESTA, NUMA FILA: na criação (opcional) ou depois. Criada a lei, a fila
+       começa sozinha — uma por uma, na ordem de data, cada uma pela conferência artigo a artigo. -->
+  <div class="lei-altfila" id="leiAltFilaBox" hidden>
+    <p class="lei-altfila-tit" id="leiAltFilaTit"></p>
+    <div class="lei-altfila-acoes">
+      <button type="button" class="btn-min" id="btnLeiAltFilaArq" data-i18n="lei_altfila_arq" data-i18n-title="lei_altfila_arq_tip"></button>
+      <input type="file" id="leiAltFilaArquivo" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+      <button type="button" class="btn-min" id="btnLeiAltFilaColar" data-i18n="lei_altfila_colar" data-i18n-title="lei_altfila_colar_tip"></button>
+      <button type="button" class="btn-min btn-min-ok" id="btnLeiAltFilaComecar" data-i18n-title="lei_altfila_comecar_tip" hidden></button>
+    </div>
+    <div class="lei-altfila-colar" id="leiAltFilaColarCx" hidden>
+      <textarea id="leiAltFilaColarTexto" rows="5"></textarea>
+      <button type="button" class="btn-min btn-min-ok" id="btnLeiAltFilaColarOk" data-i18n="lei_altfila_colar_ok"></button>
+      <button type="button" class="btn-min" id="btnLeiAltFilaColarCancelar" data-i18n="lei_altfila_colar_cancelar"></button>
+    </div>
+    <div class="lei-altfila-lista" id="leiAltFilaLista"></div>
+  </div>
   <!-- O ANDAMENTO DE UMA LEI GRANDE: aparece enquanto os artigos entram
        na tela (leiPinturaProgressiva). role=status + aria-live: quem usa
        leitor de tela ouve "Desenhando artigos 120 de 231". -->
@@ -8376,6 +8404,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      por este fluxo. -->
 <dialog id="dlgLeiAtualizar" class="ui-modal diag-modal">
   <h3 data-i18n="lei_upd_titulo"></h3>
+  <!-- (v18.67.0) a fila das leis que alteram: qual é esta, quais vêm depois -->
+  <div class="lei-upd-fila" id="leiUpdFilaFaixa" role="status" hidden>
+    <p id="leiUpdFilaTxt"></p>
+    <button type="button" class="btn-min" id="btnLeiUpdFilaPular" data-i18n="lei_altfila_pular" data-i18n-title="lei_altfila_pular_tip"></button>
+    <button type="button" class="btn-min" id="btnLeiUpdFilaParar" data-i18n="lei_altfila_parar" data-i18n-title="lei_altfila_parar_tip"></button>
+  </div>
   <p class="nota" data-i18n="lei_upd_intro"></p>
   <div id="leiUpdModoCx" class="lei-dup-lista">
     <label class="lei-dup-op"><input type="radio" name="leiUpdModo" id="leiUpdModoCompleta" checked>

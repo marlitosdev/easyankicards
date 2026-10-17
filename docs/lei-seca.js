@@ -2115,7 +2115,7 @@ function leiCabecalhosAlteradora(s) {
     const fimTotal = m.index + m[0].length;
     const letraPonto = m[9] || "";
     hs.push({ ini, fim: fimTotal, fimBase: fimTotal - (m[8] ? m[8].length : 0), inteiro: Number(m[4]),
-      sufixo: m[5] || m[7] || "", letraPonto, ord: m[6] || "", cru: m[4] });
+      sufixo: m[5] || m[7] || "", letraPonto, ord: m[6] || "", cru: m[4], aspas: /["“]/.test(m[2] || "") });
   }
   const tem = (int, L) => hs.some((x) => x.inteiro === int && x.letraPonto === L);
   hs.forEach((h) => {
@@ -2243,6 +2243,42 @@ function leiMontarArtigo(prefixo, L) {
 /* Lê a lei alteradora inteira. Devolve:
  *   { ident, curto, dataLei, blocos:[{num,numCru,corpo,bloco}], revogacoes:[{num,unidade}],
  *     avisos:[{k:"anexo",texto}], proprios:n } */
+/* =====================================================================
+ * A FILA DAS LEIS QUE ALTERAM (v18.67.0)
+ *
+ * O CTM de Caruaru (LC 15/2009) e as leis que o alteram (LC 95/2022, LC
+ * 112/2023, LC 145/2024) são PDFs separados. A pessoa junta todos no mesmo
+ * fluxo — na criação da lei ou depois — e o app aplica um por um, na ORDEM
+ * DE DATA (aplicar a de 2024 antes da de 2022 deixaria a redação velha por
+ * cima da nova), cada um pela conferência artigo a artigo que já existe.
+ * Um item: nome (do próprio texto: "LC 95/2022"), data da lei, o texto e de
+ * onde veio. A mesma lei duas vezes fica uma só (a última).
+ * ===================================================================== */
+function leiFilaItem(texto, origem) {
+  const tx = String(texto || "");
+  let ident = leiIdentificar(tx);
+  /* o PDF do Leis.org começa com "NORMA EM VIGOR LEI COMPLEMENTAR Nº 95…": procura o título nas primeiras linhas */
+  if (!ident) {
+    const i = tx.slice(0, 800).search(/\b(?:LEI|Lei|DECRETO|Decreto|EMENDA|Emenda|MEDIDA|Medida)\b/);
+    if (i > 0) ident = leiIdentificar(tx.slice(i));
+  }
+  return { id: "fa" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    nome: (ident && ident.curto) || String(origem || "").replace(/\.(docx|html?)$/i, "") || "?",
+    dataLei: leiDataDaLei(tx), texto: tx, origem: String(origem || ""), chars: tx.length,
+    alteradora: leiPareceAlteradora(tx).sim };
+}
+/* por data da lei (sem data, no fim, na ordem em que entraram) */
+function leiFilaOrdenar(lista) {
+  return (lista || []).map((x, i) => [x, i]).sort((a, b) => {
+    const da = a[0].dataLei || "9999", db = b[0].dataLei || "9999";
+    return da < db ? -1 : da > db ? 1 : a[1] - b[1];
+  }).map((p) => p[0]);
+}
+function leiFilaJuntar(lista, item) {
+  const fora = (lista || []).filter((x) => leiTxtChave(x.nome) !== leiTxtChave(item.nome));
+  return leiFilaOrdenar(fora.concat([item]));
+}
+
 /* o começo de um artigo da PRÓPRIA lei que altera: uma ordem sobre a outra lei ("O art. 279 … passa a vigorar",
  * "A Lei Complementar nº 15 … passa a vigorar acrescida", "Fica revogado…", "Esta Lei entra em vigor…") */
 const LEI_RE_ORDEM_PROPRIA = /^\s*[ºo°.]?\s*(?:(?:O|Os|A|As)\s+(?:arts?\.|artigos?|caput|§|par[áa]grafo|incisos?|al[íi]neas?|Lei|Anexos?|Tabelas?)|Fica(?:m)?\s|Revoga(?:m)?-se|Esta\s+Lei|Este\s+(?:C[óo]digo|artigo))[\s\S]{0,350}?(?:passa(?:m)?\s+a\s+vigorar|revogad|entra(?:r[áa])?\s+em\s+vigor|acrescid|vig[êe]ncia|produz(?:ir[áa])?\s+efeitos)/i;
@@ -2264,7 +2300,10 @@ function leiLerAlteradora(texto, alvo) {
      * "O art. 279 … passa a vigorar…") virarem alterações dos arts. 5 a 28 da lei alvo. Uma ORDEM no começo do
      * artigo — e o número logo adiante na sequência — também o faz próprio. */
     const ordem = h.inteiro > proximo && h.inteiro <= proximo + 3 && !h.sufixo && !omissaoLogo && LEI_RE_ORDEM_PROPRIA.test(seg.slice(0, 400));
-    h.proprio = (h.inteiro === proximo && !h.sufixo && !omissaoLogo) || ordem;
+    /* (v18.67.0) depois de ASPAS DE ABRIR é texto citado, nunca artigo da própria lei: "…alterações: “Art. 2º O imposto…”
+     * Art. 2º Esta Lei entra em vigor" fazia o 2º CITADO passar por próprio (era o número seguinte) e o "Esta Lei entra em
+     * vigor" virar a nova redação do art. 2 da lei alvo */
+    h.proprio = !h.aspas && ((h.inteiro === proximo && !h.sufixo && !omissaoLogo) || ordem);
     if (h.proprio) proximo = h.inteiro + 1;
     h.seg = seg;
   });

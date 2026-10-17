@@ -92,7 +92,8 @@ async function testes() {
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
     ok(/id="btnLeiArqDica"[^>]*data-i18n="lei_arq_dica_btn"/.test(html) && /id="btnLeiUpdArqDica"[^>]*data-i18n="lei_arq_dica_btn"/.test(html), "B1 o botão '💡 Está em PDF?' está na criação e na atualização");
-    ok((html.match(/accept="\.docx,\.htm/g) || []).length === 2, "B2 os dois seletores de arquivo aceitam .docx");
+    /* (v18.67.0) três: criar a lei, atualizar a lei e a fila das leis que alteram */
+    ok(["leiArquivoHtml", "leiUpdArquivoHtml", "leiAltFilaArquivo"].every((id) => new RegExp('id="' + id + '" accept="\\.docx,\\.htm').test(html)), "B2 os seletores de arquivo (criar, atualizar, fila) aceitam .docx");
     const api = iniciar();
     let visto = null;
     const orig = api.dicaMostrar;

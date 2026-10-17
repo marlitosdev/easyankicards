@@ -94,6 +94,14 @@ async function testes() {
     const par = api.leiLerAlteradora(t, { nome: "Lei 1/2000", texto: "Art. 3º O prazo é de cinco dias." });
     ok(par.blocos.map((b) => b.num).join(",") === "3", "D1 o art. 3º citado (o número não é o próximo da própria lei) continua sendo alteração: " + par.blocos.map((b) => b.num).join(","));
   }
+  /* ---- 5: o artigo CITADO com o mesmo número do próximo artigo da própria lei (v18.67.0) ---- */
+  {
+    const { api } = rodar();
+    const t = "Art. 1º A Lei Complementar nº 15 passa a vigorar com as seguintes alterações: “Art. 2º O imposto incide sobre serviços e obras. (NR)” Art. 2º Esta Lei Complementar entra em vigor na data de sua publicação.";
+    const par = api.leiLerAlteradora(t, ALVO);
+    ok(par.blocos.length === 1 && par.blocos[0].num === "2" && /serviços e obras/.test(par.blocos[0].corpo) && !/entra em vigor/.test(par.blocos[0].corpo),
+       "E1 o 2º entre aspas é o citado; o 2º 'Esta Lei entra em vigor' é da própria lei: " + JSON.stringify(par.blocos.map((b) => b.num + ":" + String(b.corpo).slice(0, 60))));
+  }
   return falhas;
 }
 

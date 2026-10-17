@@ -46,6 +46,14 @@ async function testes() {
        "B1 cada opção mostra o trecho a partir de onde as teses se separam ('pode ser autorizado' × 'não pode atingir'): " + ops.map((o) => o.textContent).join(" || "));
     ok(ops.every((o) => /\(é o julgado citado\)$/.test(o.textContent)), "B2 e diz por que casou: 'é o julgado citado'");
     ok(api.jurCitPontoDeDiferenca([T981, T962]) > 100 && api.jurCitPontoDeDiferenca(["abc", "xyz"]) === 0 && api.jurCitPontoDeDiferenca(["só um"]) === 0, "B3 o ponto onde as teses se separam");
+    /* (v18.67.0) ESCOLHER LIGA: a escolha vira o vínculo do trecho — a pergunta não volta */
+    const alvo = r.ambiguos[0];
+    ops[0].onclick();
+    const vs = api.citVinculosLer().filter((v) => v.tipo === "jur" && v.jurId === alvo.id);
+    ok(vs.length === 1 && /Tema 981 do STJ/.test(vs[0].trecho), "B4 escolher uma opção guarda o vínculo do trecho com aquele julgado: " + JSON.stringify(vs));
+    const ap = api.citVinculosAplicarJur("como diz o Tema 981 do STJ, nada mais", [], api.matChave("D", "T"));
+    ok(ap.length === 1 && ap[0].jurId === alvo.id && ap[0].permanente === true, "B4a e o link passa a ir direto a ele");
+    ok(/Escolha guardada/.test(api.t("jur_cit_amb_guardado", { c: "x", j: "y" })), "B4b o aviso existe");
   }
   {
     /* só menções (nenhum É o tema): o porquê diz 'só menciona' */
