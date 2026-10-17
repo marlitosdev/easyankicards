@@ -1874,14 +1874,14 @@ async function testes() {
            "AF5 o registro do diário não está em três faixas: " + faixas.join(","));
         const acoes = (li0.children || []).find((c) => c.className === "di-acoes");
         /* "Restos a pagar" não tem material: entre 'escrever material' e a disciplina entra 'resumo pela IA' (4 botões) */
-        ok(acoes && (acoes.children || []).length === 4 && acoes.children[0].textContent === api.t("ed_diario_escrever") && acoes.children[1].textContent === api.t("ed_diario_ia"),
-           `AF5b a faixa de botões devia ter 4 botões (escrever, resumo pela IA, disciplina, apagar), tem ${acoes && (acoes.children || []).length}`);
+        ok(acoes && (acoes.children || []).length === 5 && acoes.children[0].textContent === api.t("ed_diario_escrever") && acoes.children[1].textContent === api.t("ed_diario_ia") && acoes.children[3].textContent === api.t("ed_diario_corrigir_tempo"),
+           `AF5b a faixa de botões devia ter 5 botões (escrever, resumo pela IA, disciplina, ✎ tempo — v18.59.0 —, apagar), tem ${acoes && (acoes.children || []).length}`);
         /* com material, a IA não é oferecida: 3 botões */
         api.matResumosAtual()["direito financeiro›restos a pagar"] = { disciplina: "Direito Financeiro", topico: "Restos a pagar", texto: "Resumo." };
         api.abrirDiario();
         const li1 = (api.$("diarioLista").children || []).find((c) => /diario-item/.test(c.className || ""));
         const acoes1 = (li1.children || []).find((c) => c.className === "di-acoes");
-        ok(acoes1 && (acoes1.children || []).length === 3 && acoes1.children[0].textContent === api.t("ed_diario_rever"), `AF5b2 com material, 3 botões (rever, disciplina, apagar): ${acoes1 && (acoes1.children || []).map((x) => x.textContent)}`);
+        ok(acoes1 && (acoes1.children || []).length === 4 && acoes1.children[0].textContent === api.t("ed_diario_rever"), `AF5b2 com material, 4 botões (rever, disciplina, ✎ tempo, apagar): ${acoes1 && (acoes1.children || []).map((x) => x.textContent)}`);
         delete api.matResumosAtual()["direito financeiro›restos a pagar"]; api.abrirDiario();
         /* e a regra de estilo tem de existir para a classe CERTA */
         const css = require("fs").readFileSync(
