@@ -133,6 +133,15 @@ async function testes() {
     ok(/Movendo 3 cartões|3 cart/.test(a.gerToqueAtual().ghost.textContent), "M1 segurar um cartão marcado leva TODOS os marcados: " + a.gerToqueAtual().ghost.textContent);
     a.gerToqueCancelar();
     ok(!a.gerToqueAtual() && !a.$("dlgGerCartoes").classList.contains("ger-arrastando"), "M2 cancelar (o sistema tirou o toque) desfaz o arrasto");
+    /* (v18.72.0) no celular, "Mover para…" dos marcados abre a janela grande; na tela larga, o seletor de sempre */
+    a.$("btnGerMover").onclick();
+    ok(a.$("gerPop").hidden === false && a.$("dlgGerDestino").open !== true, "M3 tela larga: 'Mover para…' abre o seletor de sempre");
+    a.$("btnGerMover").onclick();
+    a.gerCelularForcar(true);
+    a.$("btnGerMover").onclick();
+    ok(a.$("dlgGerDestino").open === true && /Mover 3 cartões para/.test(a.$("gerDestTit").textContent), "M4 celular: abre a janela grande com os marcados: " + a.$("gerDestTit").textContent);
+    a.$("btnGerDestFechar").onclick();
+    a.gerCelularForcar(null);
     void iss; void iptu;
   }
 
