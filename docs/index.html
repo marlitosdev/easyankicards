@@ -1254,6 +1254,12 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-rec-rev{font-style:italic}
 .lei-arq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px}
 .lei-arq .lei-arq-dica{font-size:.85em;padding:2px 8px}
+/* (v18.66.0) o registro da inclusão */
+dialog.lei-fx-dlg{width:min(900px,96vw);max-width:900px}
+.lei-fx-btn{white-space:nowrap}
+.lei-fx-barra{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:4px 0 8px}
+.lei-fx-barra select{max-width:100%}
+.lei-fx-texto{width:100%;box-sizing:border-box;min-height:50vh;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto}
 /* (v18.64.0) conferir a separação de um texto que veio numa linha só */
 dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-sep-aviso{margin:4px 0 8px;padding:10px 12px;border-radius:10px;border-left:4px solid var(--info);background:color-mix(in srgb,var(--info) 10%,transparent);line-height:1.45}
@@ -7957,6 +7963,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <input type="file" id="leiArquivoHtml" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
     <span class="nota" data-i18n="lei_arq_ajuda"></span>
     <button type="button" class="btn-min lei-arq-dica" id="btnLeiArqDica" data-i18n="lei_arq_dica_btn" data-i18n-title="lei_arq_dica_tip"></button>
+    <button type="button" class="btn-min lei-fx-btn" id="btnLeiFxReg" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
   </div>
   <textarea id="leiTexto" rows="14" style="width:100%;box-sizing:border-box"
     placeholder="Cole aqui a letra da lei: artigos, incisos, parágrafos."></textarea>
@@ -8398,6 +8405,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="dlg-rodape">
       <button class="btn btn-azul" id="btnLeiUpdComparar" data-i18n="lei_upd_comparar"></button>
       <button class="btn btn-cinza" id="btnLeiUpdFechar1" data-i18n="help_close"></button>
+      <button type="button" class="btn-min lei-fx-btn" id="btnLeiUpdFx1" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
       <button class="btn-min" id="btnLeiRelUpd1" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — a lei aberta, a norma informada, o texto colado — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
   </div>
@@ -8418,6 +8426,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="mat-topo">
       <button class="btn-min" id="btnLeiUpdIA" data-i18n="lei_upd_ia"></button>
       <button class="btn-min" id="btnLeiUpdLado2" data-i18n="lei_lado_btn"></button>
+    <button type="button" class="btn-min lei-fx-btn" id="btnLeiUpdFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
     <button class="btn-min" id="btnLeiRelUpd" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
     <textarea id="leiUpdPrompt" rows="6" readonly hidden
@@ -8451,6 +8460,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="lei-dup-topo">
     <span class="nota" id="leiDupResumo"></span>
     <button class="btn-min" id="btnLeiDupSugestoes" data-i18n="lei_dup_usar"></button>
+    <button type="button" class="btn-min lei-fx-btn" id="btnLeiDupFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
     <button class="btn-min" id="btnLeiRelDup" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
   </div>
   <div id="leiDupLista" class="lei-dup-lista"></div>
@@ -8488,6 +8498,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <input type="text" id="leiSepIr" inputmode="numeric" size="5" placeholder="12">
         <button type="button" class="btn-min" id="btnLeiSepIr" data-i18n="lei_sep_ir"></button>
       </span>
+      <button type="button" class="btn-min lei-fx-btn" id="btnLeiSepFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
       <span class="lei-sep-fonte">
         <button type="button" class="btn-min" id="btnLeiSepMenor" data-i18n-title="lei_sep_menor">A&#8722;</button>
         <button type="button" class="btn-min" id="btnLeiSepMaior" data-i18n-title="lei_sep_maior">A+</button>
@@ -8507,6 +8518,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- (v18.66.0) O REGISTRO DA INCLUSÃO DE UMA LEI: resumo por etapa + linha do tempo do fluxo, para ler e copiar
+     a qualquer momento (botão "📋 registro" em cada tela do fluxo). Os últimos 5 fluxos ficam guardados. -->
+<dialog id="dlgLeiFluxoReg" class="ui-modal diag-modal lei-fx-dlg">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_fx_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiFxX" data-i18n-title="lei_fx_fechar">✖</button>
+  </div>
+  <p class="nota" data-i18n="lei_fx_ajuda"></p>
+  <div class="lei-fx-barra">
+    <label class="nota" for="leiFxSel" data-i18n="lei_fx_qual"></label>
+    <select id="leiFxSel"></select>
+    <span class="nota" id="leiFxInfo"></span>
+  </div>
+  <textarea id="leiFxTexto" class="lei-fx-texto" readonly rows="18" spellcheck="false"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnLeiFxCopiar" data-i18n="lei_fx_copiar"></button>
+    <button class="btn btn-cinza" id="btnLeiFxCopiarResumo" data-i18n="lei_fx_copiar_resumo"></button>
+    <button class="btn btn-cinza" id="btnLeiFxFechar" data-i18n="lei_fx_fechar"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiPre" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 id="leiPreTitulo"></h3>
@@ -8518,6 +8550,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="lei-dup-topo">
       <span class="nota" id="leiPreResumo"></span>
       <button class="btn-min" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
+      <button type="button" class="btn-min lei-fx-btn" id="btnLeiPreFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
       <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
     <p class="lei-pre-aviso" id="leiPreAviso" role="status" aria-live="polite" hidden></p>

@@ -67,6 +67,8 @@ function leiReg(tipo, oque, detalhe) {
   });
   while (leiLog.length > LEI_LOG_MAX) leiLog.shift();
   try { localStorage.setItem(LEI_LOG_CHAVE, JSON.stringify(leiLog)); } catch (e) {}
+  /* (v18.66.0) e no registro do fluxo de inclusão em andamento, sem o corte de 240 caracteres */
+  try { leiFluxoLinha(tipo, oque, detalhe); } catch (e) {}
   /* continua indo para o registro do material também: quem procura por
    * lá não pode deixar de encontrar */
   try { matReg("lei", oque, detalhe); } catch (e) {}
@@ -4140,8 +4142,17 @@ function leiGravar(opc) {
   if (!leiAtual) return;
   const txt = String($("leiTexto").value || "");
   let l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  const leiNova = !l;
 
   if (!l) {
+    /* (v18.66.0) a 1ª gravação de uma lei nova abre (ou continua) o registro da inclusão */
+    if (!opc) {
+      const fx = leiFluxoGarantir("criar", null);
+      if (!fx.etapas.some((e) => e.etapa === "entrada")) {
+        leiFluxoEtapa("entrada", t("lei_fx_r_colado", { c: txt.length, l: txt.split("\n").length, a: leiArtigos(txt).length }),
+          [t("lei_fx_d_comeco") + " " + txt.replace(/\s+/g, " ").slice(0, 200)]);
+      }
+    }
     /* ARTIGOS REPETIDOS: ANTES de a lei nascer, a pessoa vê a lista e
      * escolhe qual fica (leiDuplicadosAbrir). A lei só é criada no
      * "confirmar", que volta aqui já com o texto resolvido e a marca
@@ -4276,6 +4287,13 @@ function leiGravar(opc) {
   try { leiReg("gravar", "lei gravada",
            leiDe(leiIdAtual).nome + " · " + leiArtigos(txt).length + " artigos");
   } catch (e) {}
+  /* (v18.66.0) a lei nasceu: o registro da inclusão passa a ser dela */
+  if (leiNova && leiFluxo && leiFluxo.tipo === "criar" && leiFluxo.situacao === "em andamento") {
+    const lc = leiDe(leiIdAtual);
+    leiFluxo.leiId = lc.id;
+    leiFluxo.lei = lc.nome;
+    leiFluxoEtapa("lei", t("lei_fx_r_lei", { n: lc.nome, a: leiArtigos(lc.texto).length, r: Object.keys(lc.alteracoes || {}).length }), []);
+  }
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
   leiPintar();
   toast("lei_salva");
@@ -4371,10 +4389,31 @@ function leiSepConferir(src, sep, modo) {
       try { if (dlg && dlg.open) dlg.close(); } catch (e) {}
       const c = leiSepCtx;
       leiSepCtx = null;
-      if (!c || v !== true) { resolve(null); return; }
+      if (!c || v !== true) {
+        try { leiFluxoEtapa("separacao_fim", t("lei_fx_r_sep_voltou"), []); } catch (e) {}
+        resolve(null); return;
+      }
       const fin = (c.pular.size || c.forcar.size) ? leiSepararColagem(c.src, { pular: c.pular, forcar: c.forcar }) : c.sep;
+      /* (v18.66.0) no registro: o que a pessoa juntou, separou e deu por conferido, artigo por artigo */
+      try {
+        const rot = (set) => c.sep.partes.filter((p) => set.has(p.ini)).map((p) => p.rotulo);
+        const j = rot(c.pular), s = rot(c.forcar), k = rot(c.ok);
+        leiFluxoEtapa("separacao_fim", t("lei_fx_r_sep_fim", { n: (fin.partes || []).length, j: j.length, s: s.length, k: k.length }),
+          [j.length ? t("lei_fx_d_juntados") + " " + j.join(", ") : "", s.length ? t("lei_fx_d_separados") + " " + s.join(", ") : "", k.length ? t("lei_fx_d_conferidos") + " " + k.join(", ") : ""].filter(Boolean));
+      } catch (e) {}
       resolve({ texto: fin.aplicavel ? fin.texto : c.sep.texto, juntados: c.pular.size, separados: c.forcar.size, conferidos: c.ok.size });
     };
+    /* (v18.66.0) no registro: o que o app achou ao separar e os pontos que pediu para conferir */
+    try {
+      const pend = leiSepPendentes();
+      const motivos = {};
+      susp.forEach((m) => m.forEach((x) => { motivos[x.k] = (motivos[x.k] || 0) + 1; }));
+      leiFluxoEtapa("separacao", t("lei_fx_r_sep", { n: (sep.partes || []).length, k: pend.length,
+        r: sep.rodape ? t("lei_fx_r_sep_rodape", { n: sep.rodape.n }) : "" }),
+        [t("lei_fx_d_motivos") + " " + Object.keys(motivos).map((k2) => k2 + " " + motivos[k2]).join(", ")]
+          .concat(sep.rodape ? [t("lei_fx_d_rodape") + " " + sep.rodape.frase] : [])
+          .concat(pend.slice(0, 60).map((i) => sep.partes[i].rotulo + ": " + susp[i].filter((x) => !LEI_SEP_INFO[x.k]).map((x) => t("lei_sep_c_" + x.k, { n: x.n, de: x.de, f: x.faltam, c: x.c, l: x.lista }) + (x.lista ? " (" + x.lista + ")" : "")).join(", "))));
+    } catch (e) {}
     if (!dlg) { _uiFechar(true); return; }
     $("leiSepAviso").textContent = t(leiSepCtx.modo === "atualizar" ? "lei_sep_aviso_upd" : "lei_sep_aviso", { n: (sep.partes || []).length })
       + (sep.rodape ? " " + t("lei_sep_rodape", { n: sep.rodape.n, f: sep.rodape.frase.length > 70 ? sep.rodape.frase.slice(0, 70) + "…" : sep.rodape.frase }) : "");
@@ -4846,6 +4885,13 @@ function leiDupConfirmar() {
     leiReg("gravar", "artigos repetidos: escolhas confirmadas",
       res.resumo.map((r) => "art. " + r.num + " → " + r.acao).join(" · "));
   } catch (e) {}
+  /* (v18.66.0) no registro: cada artigo repetido e o que ficou dele */
+  try {
+    const porAcao = {};
+    res.resumo.forEach((r) => { porAcao[r.acao] = (porAcao[r.acao] || 0) + 1; });
+    leiFluxoEtapa("repetidos", t("lei_fx_r_repetidos", { n: c.grupos.length, a: Object.keys(porAcao).map((k) => k + " " + porAcao[k]).join(", ") }),
+      res.resumo.map((r) => "art. " + r.num + " → " + r.acao + (r.auto ? " (" + t("lei_fx_d_auto") + ")" : "")));
+  } catch (e) {}
   c.aoConfirmar(res);
   return true;
 }
@@ -4908,7 +4954,7 @@ function leiDupContextoEl(texto, cand) {
  * do app e as últimas linhas do registro, num texto só para colar numa
  * conversa. Nada é enviado sozinho.
  * ===================================================================== */
-function leiRelatorioFluxo(tela) {
+function leiRelatorioFluxo(tela, opc) {
   const p = [];
   const cortar = (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n || 200);
   p.push("EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "?")
@@ -5010,6 +5056,14 @@ function leiRelatorioFluxo(tela) {
       if (feitas >= 140) p.push("    …(árvore cortada em 140 linhas)");
     }
   }
+  /* (v18.66.0) com um fluxo em andamento, vai o registro DELE inteiro (resumo por etapa + linha do tempo);
+   * as 60 últimas linhas do registro geral cortavam o começo do fluxo */
+  if (opc && opc.semRegistro) return p.join("\n");
+  if (leiFluxo && leiFluxo.situacao === "em andamento") {
+    p.push("— " + t("lei_fx_rel_titulo"));
+    leiFluxoTexto(leiFluxo).split("\n").forEach((x) => p.push("  " + x));
+    return p.join("\n");
+  }
   p.push("— Registro (últimas 60 linhas)");
   leiLog.slice(-60).forEach((x) => p.push("  " + String(x.q).slice(11, 19) + " [" + x.t + "] " + x.o + (x.d ? " — " + x.d : "")));
   return p.join("\n");
@@ -5033,6 +5087,173 @@ function leiRelatorioCopiar(tela) {
 function leiRelatorioMostrar(txt) {
   if ($("leiLogTexto")) $("leiLogTexto").value = txt;
   abrirModal("dlgLeiLog");
+}
+
+/* =====================================================================
+ * O REGISTRO DA INCLUSÃO DE UMA LEI (v18.66.0)
+ *
+ * Incluir o CTM de Caruaru é um fluxo longo: abrir o arquivo, separar 654
+ * artigos, limpar o rodapé de 296 páginas, escolher entre 160 redações
+ * repetidas, criar a lei e depois aplicar três leis que a alteram, cada
+ * uma com dezenas de artigos. O registro geral guarda 300 linhas de tudo
+ * e cortava cada detalhe em 240 caracteres; o relatório da tela levava só
+ * as 60 últimas — o começo do fluxo já tinha sumido quando algo dava
+ * errado no fim. Aqui, cada fluxo (criar uma lei / atualizar uma lei) tem
+ * o SEU registro:
+ *  · um RESUMO por etapa (entrada, separação, limpeza, repetidos, lei
+ *    criada, cada lei que altera: o que o app entendeu, o que sugeriu, o
+ *    que a pessoa escolheu), em ordem;
+ *  · a LINHA DO TEMPO inteira do fluxo (toda linha do registro da lei
+ *    enquanto ele durar, com o detalhe sem corte curto);
+ *  · consultável e copiável a qualquer momento, pelo "📋 registro" de cada
+ *    tela do fluxo; os últimos 5 fluxos ficam guardados.
+ * ===================================================================== */
+const LEI_FLUXO_CHAVE = "eac_lei_fluxos";
+const LEI_FLUXO_MAX = 5;
+const LEI_FLUXO_LINHAS = 2000;
+let leiFluxo = null;
+
+function leiFluxosLer() {
+  try { const v = JSON.parse(localStorage.getItem(LEI_FLUXO_CHAVE) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function leiFluxoSalvar() {
+  if (!leiFluxo) return;
+  const todos = leiFluxosLer().filter((f) => f.id !== leiFluxo.id);
+  todos.push(leiFluxo);
+  while (todos.length > LEI_FLUXO_MAX) todos.shift();
+  /* o localStorage é pouco: se não couber, os fluxos ANTIGOS perdem a linha do tempo primeiro (o resumo fica) */
+  for (let k = 0; k < todos.length; k++) {
+    try { localStorage.setItem(LEI_FLUXO_CHAVE, JSON.stringify(todos)); return; } catch (e) {
+      if (todos[k] === leiFluxo) leiFluxo.linhas = leiFluxo.linhas.slice(-300); else todos[k].linhas = [];
+    }
+  }
+}
+/* começa (ou continua) o fluxo: mesma lei e mesmo tipo nas últimas 6 horas = o mesmo fluxo; a criação de uma lei
+ * continua no fluxo de atualização dela (o fluxo único: criar e aplicar as leis que a alteram) */
+function leiFluxoGarantir(tipo, l, novo) {
+  const agora = Date.now();
+  const recente = (f) => f && agora - Date.parse(f.tocado || f.inicio) < 6 * 3600 * 1000;
+  const mesmaLei = l ? (!leiFluxo || !leiFluxo.leiId || leiFluxo.leiId === l.id) : !(leiFluxo && leiFluxo.leiId);
+  if (!novo && leiFluxo && recente(leiFluxo) && leiFluxo.situacao === "em andamento"
+      && (leiFluxo.tipo === tipo ? mesmaLei : (tipo === "atualizar" && l && leiFluxo.leiId === l.id))) {
+    if (l && !leiFluxo.leiId) { leiFluxo.leiId = l.id; leiFluxo.lei = l.nome; }
+    return leiFluxo;
+  }
+  /* o fluxo anterior que já tinha criado ou atualizado a lei terminou; o que parou antes disso, foi interrompido */
+  if (leiFluxo && leiFluxo.situacao === "em andamento") {
+    leiFluxo.situacao = leiFluxo.etapas.some((e) => e.etapa === "lei" || e.etapa === "aplicada") ? "concluído" : "interrompido";
+    leiFluxoSalvar();
+  }
+  const ini = new Date().toISOString();
+  leiFluxo = { id: "fx" + agora.toString(36) + Math.random().toString(36).slice(2, 6), tipo, inicio: ini, tocado: ini, situacao: "em andamento",
+    leiId: (l && l.id) || "", lei: (l && l.nome) || "", etapas: [], linhas: [] };
+  leiFluxoSalvar();
+  return leiFluxo;
+}
+/* uma etapa do resumo: o que se resolveu nela, numa linha, e o detalhe */
+function leiFluxoEtapa(etapa, resumo, detalhe) {
+  if (!leiFluxo) return null;
+  const e = { q: new Date().toISOString(), etapa, resumo: String(resumo || ""), detalhe: (detalhe || []).map(String).slice(0, 400) };
+  leiFluxo.etapas.push(e);
+  leiFluxo.tocado = e.q;
+  leiFluxoSalvar();
+  return e;
+}
+/* cada linha do registro da lei entra também no fluxo ativo (leiReg chama) */
+function leiFluxoLinha(tipo, oque, detalhe) {
+  if (!leiFluxo || leiFluxo.situacao !== "em andamento") return;
+  leiFluxo.linhas.push({ q: new Date().toISOString(), t: String(tipo || ""), o: String(oque || ""), d: String(detalhe == null ? "" : detalhe).slice(0, 2000) });
+  while (leiFluxo.linhas.length > LEI_FLUXO_LINHAS) leiFluxo.linhas.shift();
+  leiFluxo.tocado = new Date().toISOString();
+  if (tipo === "erro") leiFluxo.etapas.push({ q: leiFluxo.tocado, etapa: "erro", resumo: oque + (detalhe ? " — " + String(detalhe).slice(0, 300) : ""), detalhe: [] });
+  leiFluxoSalvar();
+}
+function leiFluxoFim(situacao) {
+  if (!leiFluxo) return;
+  leiFluxo.situacao = situacao || "concluído";
+  leiFluxo.tocado = new Date().toISOString();
+  leiFluxoSalvar();
+}
+
+/* o texto do registro: cabeçalho, resumo por etapa, (detalhes), linha do tempo, (a tela agora) */
+/* a situação guardada em português ("em andamento"…) é o código; na tela, traduzida */
+function leiFluxoSit(s) { return t({ "em andamento": "lei_fx_sit_and", "concluído": "lei_fx_sit_ok", "interrompido": "lei_fx_sit_int" }[s] || "lei_fx_sit_and"); }
+/* "17/10 11:32:15", na hora local */
+function leiFluxoHora(iso) { const d = new Date(iso); return isNaN(d) ? "?" : String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + " " + d.toTimeString().slice(0, 8); }
+function leiFluxoTexto(f, opc) {
+  const o = opc || {};
+  if (!f) return t("lei_fx_nenhum");
+  const h = leiFluxoHora;
+  const p = [];
+  p.push(t("lei_fx_cab", { v: typeof VERSAO !== "undefined" ? VERSAO : "?" }));
+  p.push(t("lei_fx_tipo_" + (f.tipo === "atualizar" ? "atualizar" : "criar")) + " · " + t("lei_fx_inicio") + " " + h(f.inicio) + " · " + t("lei_fx_situacao") + " " + leiFluxoSit(f.situacao));
+  p.push(t("lei_fx_lei") + " " + (f.lei || t("lei_fx_lei_ainda")) + (f.leiId ? " (" + f.leiId + ")" : ""));
+  p.push("");
+  p.push(t("lei_fx_resumo"));
+  if (!f.etapas.length) p.push("  " + t("lei_fx_sem_etapa"));
+  f.etapas.forEach((e, i) => p.push("  " + (i + 1) + ". [" + h(e.q).slice(6) + "] " + t("lei_fx_e_" + e.etapa) + " — " + e.resumo));
+  if (o.soResumo) return p.join("\n");
+  const comDet = f.etapas.filter((e) => e.detalhe && e.detalhe.length);
+  if (comDet.length) {
+    p.push("");
+    p.push(t("lei_fx_detalhes"));
+    f.etapas.forEach((e, i) => {
+      if (!e.detalhe || !e.detalhe.length) return;
+      p.push("  " + (i + 1) + ". " + t("lei_fx_e_" + e.etapa) + ":");
+      e.detalhe.forEach((d) => p.push("      " + d));
+    });
+  }
+  p.push("");
+  p.push(t("lei_fx_tempo", { n: f.linhas.length }));
+  f.linhas.forEach((x) => p.push("  " + h(x.q).slice(6) + " [" + x.t + "] " + x.o + (x.d ? " — " + x.d : "")));
+  if (o.tela) {
+    p.push("");
+    p.push(t("lei_fx_tela", { s: o.tela }));
+    try { leiRelatorioFluxo(o.tela, { semRegistro: true }).split("\n").slice(1).forEach((x) => p.push("  " + x)); } catch (e) {}
+  }
+  return p.join("\n");
+}
+
+/* a janela do registro: o fluxo atual (ou um dos anteriores), para ler e copiar */
+let leiFluxoTela = "";
+let leiFluxoVer = "";
+function leiFluxoAbrir(tela) {
+  leiFluxoTela = tela || "";
+  const todos = leiFluxosLer();
+  leiFluxoVer = leiFluxo ? leiFluxo.id : (todos.length ? todos[todos.length - 1].id : "");
+  const sel = $("leiFxSel");
+  if (sel) {
+    sel.innerHTML = "";
+    todos.slice().reverse().forEach((f) => {
+      const op = document.createElement("option");
+      op.value = f.id;
+      op.textContent = (f.lei || t("lei_fx_lei_ainda")) + " · " + t("lei_fx_tipo_" + (f.tipo === "atualizar" ? "atualizar" : "criar")) + " · " + leiFluxoHora(f.inicio).slice(0, 11) + " · " + leiFluxoSit(f.situacao);
+      sel.append(op);
+    });
+    sel.value = leiFluxoVer;
+  }
+  leiFluxoPintar();
+  abrirModal("dlgLeiFluxoReg");
+  try { leiReg("relatorio", "registro do fluxo aberto", tela || ""); } catch (e) {}
+  return true;
+}
+function leiFluxoEscolhido() {
+  const id = leiFluxoVer;
+  if (leiFluxo && leiFluxo.id === id) return leiFluxo;
+  return leiFluxosLer().find((f) => f.id === id) || null;
+}
+function leiFluxoPintar() {
+  const f = leiFluxoEscolhido();
+  const atual = !!(f && leiFluxo && f.id === leiFluxo.id);
+  if ($("leiFxTexto")) $("leiFxTexto").value = leiFluxoTexto(f, { tela: atual ? leiFluxoTela : "" });
+  if ($("leiFxInfo")) $("leiFxInfo").textContent = f ? t("lei_fx_info", { e: f.etapas.length, n: f.linhas.length }) : "";
+}
+function leiFluxoCopiar(soResumo) {
+  const txt = leiFluxoTexto(leiFluxoEscolhido(), { soResumo, tela: soResumo ? "" : leiFluxoTela });
+  const ok = () => { try { toast("lei_rel_copiado"); } catch (e) {} };
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(txt).then(ok, () => {}); } } catch (e) {}
+  try { leiReg("relatorio", soResumo ? "registro do fluxo copiado (resumo)" : "registro do fluxo copiado", String(txt.length) + " caracteres"); } catch (e) {}
+  return txt;
 }
 
 /* UMA FALHA NO FLUXO NÃO PODE SER SILENCIOSA. Cada etapa do fluxo de colar e
@@ -5213,6 +5434,7 @@ function leiBibNova() {
   if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
   leiIdAtual = "";
   leiAbrir("", "", null, { nova: true, semRetomar: true });
+  try { leiFluxoGarantir("criar", null, true); } catch (e) {}
   try { leiReg("lei", "nova lei pela biblioteca", "sem tópico"); } catch (e) {}
   return true;
 }
@@ -6106,6 +6328,17 @@ function leiPreConfirmar() {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: escolhas confirmadas",
       JSON.stringify(res.resumo));
   } catch (e) {}
+  /* (v18.66.0) no registro: grupo a grupo, quantas sugestões e quantas a pessoa aceitou */
+  try {
+    const det = [];
+    LEI_PRE_GRUPOS.forEach((g) => {
+      const it = c.pre.mudancas.filter((m) => m.grupo === g);
+      if (!it.length) return;
+      det.push(g + ": " + it.length + " · " + t("lei_fx_d_aceitas") + " " + it.filter((m) => leiPreAceita(c, m)).length
+        + " — " + it.slice(0, 3).map((m) => String(m.antes || "").replace(/\s+/g, " ").slice(0, 90)).join(" | "));
+    });
+    leiFluxoEtapa("limpeza", t("lei_fx_r_limpeza", { n: c.pre.mudancas.length, a: aceitas, x: (res.resumo && res.resumo.anexosSeparados) || 0 }), det);
+  } catch (e) {}
   toastMsg(t("lei_pre_t_confirmado", { n: aceitas, a: (res.resumo && res.resumo.anexosSeparados) || 0 }), 3200);
   c.aoConfirmar(res);
   return true;
@@ -6122,6 +6355,7 @@ function leiPreOriginal() {
   try {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: seguiu com o texto original", "");
   } catch (e) {}
+  try { leiFluxoEtapa("limpeza", t("lei_fx_r_limpeza_original", { n: c.pre.mudancas.length }), []); } catch (e) {}
   toastMsg(t("lei_pre_t_original"), 3200);
   /* "o texto original" mantém tudo, mas as marcas do tachado (só da colagem) nunca ficam */
   c.aoConfirmar({ texto: leiTirarMarcasTachado(c.texto), anexos: [], resumo: {} });
@@ -6164,6 +6398,13 @@ async function leiArquivoHtmlLido(file, alvoId) {
     return false;
   }
   leiInserirNoCampo(ta, r.texto);
+  /* (v18.66.0) o arquivo é a ENTRADA do registro da inclusão (criar a lei, ou a versão nova / lei que altera) */
+  try {
+    if (alvoId === "leiUpdTexto") leiFluxoGarantir("atualizar", leiIdAtual ? leiDe(leiIdAtual) : null);
+    else if (!leiIdAtual) leiFluxoGarantir("criar", null);
+    leiFluxoEtapa("entrada", t("lei_fx_r_arquivo", { a: String(file.name || "?"), x: "." + tipo, c: r.texto.length, l: r.texto.split("\n").length, n: r.n }),
+      [t("lei_fx_d_comeco") + " " + r.texto.replace(/\s+/g, " ").slice(0, 200)]);
+  } catch (e) {}
   toastMsg(r.n ? t("lei_arq_ok", { n: r.n }) : t(tipo === "docx" ? "lei_arq_ok0_docx" : "lei_arq_ok0", { c: r.texto.length }), 9000);
   try { leiReg("gravar", "arquivo ." + tipo + " lido: " + r.texto.length + " caractere(s), " + r.n + " trecho(s) riscado(s)", String(file.name || "")); } catch (e) {}
   return true;
@@ -6871,7 +7112,20 @@ function leiAtualizarAbrir() {
   if ($("leiUpdModoCompleta")) { $("leiUpdModoCompleta").checked = true; $("leiUpdModoAlt").checked = false; }
   if ($("leiUpdGuardarAltCx")) $("leiUpdGuardarAltCx").hidden = true;
   abrirModal("dlgLeiAtualizar");
+  /* (v18.66.0) atualizar uma lei é um fluxo com registro próprio — ou continua o da criação dela */
+  try { leiFluxoGarantir("atualizar", leiDe(leiIdAtual)); } catch (e) {}
   leiReg("atualizacao", "janela de atualização aberta", "");
+}
+
+/* (v18.66.0) no registro: a comparação aberta — de qual norma, de que jeito, e o que ela traz artigo a artigo */
+function leiFluxoComparacao(fonte, modoAlt, itens) {
+  try {
+    const porTipo = {};
+    (itens || []).forEach((x) => { porTipo[x.tipo] = (porTipo[x.tipo] || 0) + 1; });
+    leiFluxoEtapa("comparacao", t(modoAlt ? "lei_fx_r_comp_alt" : "lei_fx_r_comp", { f: fonte || "?", n: (itens || []).length,
+      d: Object.keys(porTipo).map((k) => k + " " + porTipo[k]).join(", ") }),
+      (itens || []).slice(0, 300).map((x) => "art. " + (x.numCru || x.num) + " — " + x.tipo + ((x.alertas || []).length ? " [" + x.alertas.map((a) => a.k).join(",") + "]" : "")));
+  } catch (e) {}
 }
 
 function leiAtualizarComparar(opc) {
@@ -7012,6 +7266,7 @@ function leiAtualizarComparar(opc) {
   $("leiUpdPasso1").hidden = true;
   $("leiUpdPasso2").hidden = false;
   leiUpdMostrar();
+  leiFluxoComparacao(fonte, false, cmp.itens);
   leiReg("atualizacao", "comparação aberta", fonte + " · " + cmp.itens.length + " diferenças"
     + (cmp.soFormatacao.length ? " · " + cmp.soFormatacao.length + " só de formatação" : "")
     + (leiUpdModoAusentes === "presentes" ? " · só os artigos presentes" : ""));
@@ -7070,6 +7325,7 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
   $("leiUpdPasso1").hidden = true;
   $("leiUpdPasso2").hidden = false;
   leiUpdMostrar();
+  leiFluxoComparacao(fonte, true, itens);
   leiReg("atualizacao", "comparação de lei que altera aberta", fonte + " · " + itens.length + " artigos-alvo · "
     + par.proprios + " artigos próprios da lei alteradora · " + leiUpdInfo.avisos.length + " aviso(s)"
     + ((par.anexos || []).length ? " · " + par.anexos.length + " anexo(s) na lei alteradora" : ""));
@@ -7325,6 +7581,13 @@ function leiAtualizarAplicar() {
 
   leiReg("atualizacao", "versão atualizada",
          leiUpdFonteGlobal + " · " + aceitos.length + " artigos");
+  /* (v18.66.0) no registro: o que entrou, o que a pessoa recusou e o que ficou sem decisão */
+  try {
+    const rec = leiUpdComparo.filter((x) => x.recusado), sem = leiUpdComparo.filter((x) => !x.aceito && !x.recusado);
+    const nums = (L) => L.map((x) => (x.numCru || x.num) + " (" + x.tipo + ")").join(", ");
+    leiFluxoEtapa("aplicada", t("lei_fx_r_aplicada", { f: leiUpdFonteGlobal, a: aceitos.length, r: rec.length, s: sem.length }),
+      [t("lei_fx_d_aceitos") + " " + nums(aceitos)].concat(rec.length ? [t("lei_fx_d_recusados") + " " + nums(rec)] : []).concat(sem.length ? [t("lei_fx_d_sem") + " " + nums(sem)] : []));
+  } catch (e) {}
   leiDecVersao(leiUpdComparo, leiUpdFonteGlobal);
   if (leiUpdAlteradora && $("leiUpdGuardarAlt") && $("leiUpdGuardarAlt").checked) leiGuardarAlteradora();
   leiUpdAlteradora = null;
@@ -7842,6 +8105,15 @@ function leiIniciar() {
   /* uma vez só por campo: dois ouvintes colariam o texto duas vezes */
   liga("btnLeiArquivo", "abrir arquivo (.docx ou .htm)", () => { if ($("leiArquivoHtml")) $("leiArquivoHtml").click(); });
   leiSepLigar();
+  /* (v18.66.0) o registro da inclusão: um botão em cada tela do fluxo */
+  [["btnLeiFxReg", "a lei (colar o texto)"], ["btnLeiSepFx", "separar artigos"], ["btnLeiPreFx", "revisar a colagem"], ["btnLeiDupFx", "artigos repetidos"],
+    ["btnLeiUpdFx1", "atualizar a lei"], ["btnLeiUpdFx", "atualizar a lei — comparação"]].forEach(([id, tela]) => {
+    if ($(id)) $(id).onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); leiFluxoAbrir(tela); };
+  });
+  if ($("leiFxSel")) $("leiFxSel").onchange = () => { leiFluxoVer = $("leiFxSel").value; leiFluxoPintar(); };
+  if ($("btnLeiFxCopiar")) $("btnLeiFxCopiar").onclick = () => leiFluxoCopiar(false);
+  if ($("btnLeiFxCopiarResumo")) $("btnLeiFxCopiarResumo").onclick = () => leiFluxoCopiar(true);
+  ["btnLeiFxFechar", "btnLeiFxX"].forEach((id) => { if ($(id)) $(id).onclick = () => { if ($("dlgLeiFluxoReg")) $("dlgLeiFluxoReg").close(); }; });
   /* (v18.63.0) a dica curta: a lei está em PDF? */
   ["btnLeiArqDica", "btnLeiUpdArqDica"].forEach((id) => {
     if ($(id)) $(id).onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); dicaMostrar($(id), t(id === "btnLeiUpdArqDica" ? "lei_arq_dica_txt_upd" : "lei_arq_dica_txt")); };
