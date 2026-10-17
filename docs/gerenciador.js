@@ -30,7 +30,7 @@ let gerOcultarVazias = false;
 const GER_DICAS = {
   btnGerModoGerenciar: "ger_tip_modo_gerenciar", btnGerModoExportar: "ger_tip_modo_exportar", btnGerDesfazerExport: "ger_tip_desfazer_export",
   btnGerX: "ger_tip_x", btnGerAbaPastas: "ger_tip_aba_pastas", btnGerAbaCartoes: "ger_tip_aba_cartoes", btnGerAbaPrevia: "ger_tip_aba_previa",
-  btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", gerFiltro: "ger_tip_filtro",
+  btnGerEstudar: "est_tip_estudar", btnGerCobertura: "cov_tip_abrir", btnGerAjuda: "ger_tip_ajuda", btnGerFerrMais: "ger_tip_ferr_mais", btnGerDominio: "dom_tip_abrir", gerOrdenar: "ger_tip_ordenar", btnGerAmpliar: "ger_tip_ampliar", gerAgrupar: "ger_tip_agrupar", btnGerNovaPasta: "ger_tip_nova_pasta", btnGerArvOpc: "ger_tip_arv_opc", gerFiltro: "ger_tip_filtro",
   btnGerMarcar: "ger_tip_marcar", btnGerLimpar: "ger_tip_limpar", btnGerMarcarTodos: "ger_tip_marcar_todos", btnGerMarcarFracos: "ger_tip_marcar_fracos", btnGerMarcarLacunas: "ger_tip_marcar_lacunas",
   btnGerMais: "ger_tip_mais", btnGerEditar: "ger_tip_editar", btnGerPreApagar: "ger_tip_lixeira",
   btnGerEditSalvar: "ger_tip_edit_salvar", btnGerEditCancelar: "ger_tip_edit_cancelar",
@@ -2162,6 +2162,8 @@ function gerAbrir() {
   gerFecharDestinos();
   gerVistaPasta = "null";
   try { const f = $("btnGerFerrMais").parentNode; f.className = "ger-ferr"; $("btnGerFerrMais").setAttribute("aria-expanded", "false"); } catch (e) {}
+  /* (v18.68.0) o "⚙ exibir" também abre fechado */
+  try { $("gerArvOpc").hidden = true; $("btnGerArvOpc").setAttribute("aria-expanded", "false"); } catch (e) {}
   gerVista("pastas");
   gerCalcular(); gerAbrirRaizes(); gerPintarDestinos(); gerPintar();
   gerAplicarTamanho(gerGrandeLer());
@@ -2215,6 +2217,12 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   $("btnGerAjuda").onclick = () => abrirModal("dlgGerAjuda");
   $("btnGerAjudaX").onclick = () => $("dlgGerAjuda").close();
   $("btnGerAjudaOk").onclick = () => $("dlgGerAjuda").close();
+  /* (v18.68.0) agrupar, ordenar e ocultar vazias moram num painel "⚙ exibir": três linhas a menos acima da árvore */
+  if ($("btnGerArvOpc")) $("btnGerArvOpc").onclick = () => {
+    const p = $("gerArvOpc");
+    p.hidden = !p.hidden;
+    $("btnGerArvOpc").setAttribute("aria-expanded", p.hidden ? "false" : "true");
+  };
   $("btnGerFerrMais").onclick = () => {
     const f = $("btnGerFerrMais").parentNode;
     const aberto = String(f.className).indexOf("ger-ferr-aberto") < 0;
