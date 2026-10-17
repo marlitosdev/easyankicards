@@ -4910,9 +4910,31 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .pac-arv{max-height:34vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
 /* Gerenciador: a janela é uma coluna flexível — título, busca, avisos e rodapé ficam FIXOS e só as
  * três colunas rolam (antes o diálogo inteiro rolava por cima delas). Colunas 22% / 43% / 35%. */
-#dlgGerCartoes{width:min(1100px,96vw);max-width:98vw;min-width:min(680px,96vw);resize:both}
-#dlgGerCartoes.ger-grande{width:98vw;height:94vh}
-#dlgGerCartoes[open]{display:flex;flex-direction:column;max-height:94vh;margin:auto;overflow:hidden}
+/* (v18.68.0) A BIBLIOTECA É A TELA INTEIRA, em qualquer tamanho: margens, cantos e o "ampliar" só tiravam espaço */
+#dlgGerCartoes{width:100vw;max-width:none;min-width:0}
+#dlgGerCartoes[open]{display:flex;flex-direction:column;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;margin:0;
+  border-radius:0;border:0;overflow:hidden;padding:calc(6px + env(safe-area-inset-top,0px)) 12px calc(6px + env(safe-area-inset-bottom,0px))}
+#dlgGerCartoes #btnGerAmpliar{display:none}
+#dlgGerCartoes .ger-como{display:none}
+#dlgGerCartoes .ger-ajuda-b{display:inline-flex}
+#dlgGerCartoes .ger-ferr-mais{display:inline-flex;align-items:center}
+#dlgGerCartoes .ger-ferr:not(.ger-ferr-aberto) .ger-sec{display:none}
+#dlgGerCartoes .ger-ferr .ger-sec[hidden]{display:none}
+/* o rodapé ("N cartões no total" + Fechar) repetia o ✕ e o resumo da busca: só aparece quando há o que desfazer */
+#dlgGerCartoes .ger-rodape:not(:has(#btnGerDesfazer:not([hidden]))){display:none}
+#dlgGerCartoes .ger-rodape #btnGerFechar{display:none}
+.ger-cab .ger-modos{flex:1 1 auto;justify-content:center;margin:0;border-bottom:0}
+.ger-cab .ger-modo{padding:6px 14px;flex:0 1 auto}
+@media (max-width:760px){
+  #dlgGerCartoes .ger-cab{flex-wrap:wrap;row-gap:2px}
+  #dlgGerCartoes .ger-cab{flex-wrap:wrap}
+  #dlgGerCartoes .ger-cab h3{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 0}
+  #dlgGerCartoes .ger-cab-acoes{flex:0 0 auto;gap:4px}
+  #dlgGerCartoes .ger-cab .ger-modos{order:3;flex:1 1 100%;justify-content:stretch;border-bottom:1px solid var(--borda)}
+  #dlgGerCartoes .ger-cab .ger-modo{flex:1 1 0}
+}
+.ger-arv-opc{display:flex;flex-direction:column;gap:6px;flex:1 1 100%;padding:6px;border:1px solid var(--borda);border-radius:8px}
+.ger-arv-opc[hidden]{display:none}
 #dlgGerCartoes[open] > *{flex:0 0 auto}
 #dlgGerCartoes[open] > .ger-grade{flex:1 1 auto;min-height:min(260px,40vh)}
 .ger-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -9201,6 +9223,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgGerCartoes" class="ui-modal diag-modal ger-v-pastas">
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
+    <!-- (v18.68.0) GERENCIAR × MONTAR PACOTE na linha do título: uma faixa a menos -->
+    <div class="ger-modos" role="tablist">
+      <button type="button" class="ger-modo" id="btnGerModoGerenciar" role="tab" aria-selected="true" data-i18n="ger_modo_gerenciar"></button>
+      <button type="button" class="ger-modo" id="btnGerModoExportar" role="tab" aria-selected="false" data-i18n="ger_modo_exportar"></button>
+    </div>
     <span class="ger-cab-acoes">
       <button type="button" class="btn-min ger-ajuda-b" id="btnGerAjuda" aria-label="Ajuda">?</button>
       <button type="button" class="btn-min" id="btnGerCobertura" data-i18n="cov_btn"></button>
@@ -9211,11 +9238,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </span>
   </div>
   <!-- GERENCIAR (mover/apagar/editar de verdade) × MONTAR PACOTE (marcar pastas para exportar, nada grava na
-       Biblioteca) — sempre visível, tela larga ou estreita; a árvore/lista são as MESMAS nos dois modos. -->
-  <div class="ger-modos" role="tablist">
-    <button type="button" class="ger-modo" id="btnGerModoGerenciar" role="tab" aria-selected="true" data-i18n="ger_modo_gerenciar"></button>
-    <button type="button" class="ger-modo" id="btnGerModoExportar" role="tab" aria-selected="false" data-i18n="ger_modo_exportar"></button>
-  </div>
+       Biblioteca): os dois botões moram na linha do título (v18.68.0); a árvore/lista são as MESMAS nos dois modos. -->
   <!-- NO TELEFONE, TRÊS ABAS EM VEZ DE TRÊS COLUNAS: pastas → cartões → prévia, uma por vez, na tela inteira. Escolher uma
        pasta leva aos cartões; escolher um cartão leva à prévia. Em tela larga as abas nem aparecem (as três colunas ficam
        lado a lado, como sempre). -->
@@ -9242,6 +9265,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="ger-col ger-col-pastas">
       <div class="ger-ferr">
         <button type="button" class="btn-min btn-min-ok" id="btnGerNovaPasta" data-i18n="ger_nova_pasta"></button>
+        <button type="button" class="btn-min" id="btnGerArvOpc" aria-expanded="false" data-i18n="ger_arv_opc" data-i18n-title="ger_tip_arv_opc"></button>
+        <div class="ger-arv-opc" id="gerArvOpc" hidden>
         <select id="gerAgrupar" class="ger-agrupar">
           <option value="edital" data-i18n="ger_agrupar_edital"></option>
           <option value="disciplina" data-i18n="ger_agrupar_disc"></option>
@@ -9253,6 +9278,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <option value="cadastro" data-i18n="ger_ordem_cadastro"></option>
         </select>
         <label class="ger-ocultar"><input type="checkbox" id="gerOcultarVazias"> <span data-i18n="ger_ocultar_vazias"></span></label>
+        </div>
         <button type="button" class="btn-min" id="btnGerDesfazerExport" data-i18n="ger_desfazer_export" hidden></button>
         <button type="button" class="btn-min" id="btnGerLimparCoresExport" data-i18n="ger_cor_limpar" hidden></button>
       </div>
@@ -9265,8 +9291,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min btn-min-ok" id="btnGerCriar" data-i18n="ger_criar_btn" hidden></button>
         <button type="button" class="btn-min btn-min-ok" id="btnGerEstudar" hidden></button>
         <button type="button" class="btn-min" id="btnGerMarcarTodos" hidden></button>
-        <button type="button" class="btn-min" id="btnGerMarcarFracos" hidden></button>
-        <button type="button" class="btn-min" id="btnGerMarcarLacunas" hidden></button>
+        <button type="button" class="btn-min ger-sec" id="btnGerMarcarFracos" hidden></button>
+        <button type="button" class="btn-min ger-sec" id="btnGerMarcarLacunas" hidden></button>
         <button type="button" class="btn-min ger-ferr-mais" id="btnGerFerrMais" aria-expanded="false">⋯</button>
         <button type="button" class="btn-min ger-sec" id="btnGerMarcar" data-i18n="ger_marcar"></button>
         <button type="button" class="btn-min ger-sec" id="btnGerLimpar" data-i18n="ger_limpar"></button>

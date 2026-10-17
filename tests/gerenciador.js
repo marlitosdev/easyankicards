@@ -440,6 +440,12 @@ async function testes() {
     a.$("dlgGerCartoes").style.width = "700px";
     a.$("btnGerAmpliar").onclick();
     ok(!a.$("dlgGerCartoes").classList.contains("ger-grande") && a.$("dlgGerCartoes").style.width === "" && a.lojaLer("eac_ger_grande") === "0", "G15c reduzir volta ao normal (e limpa o tamanho arrastado)");
+    /* (v18.68.0) "⚙ exibir" abre e fecha o painel com agrupar, ordenar e ocultar vazias */
+    ok(a.$("gerArvOpc").hidden === true && a.$("btnGerArvOpc").getAttribute("aria-expanded") === "false", "G15d o painel '⚙ exibir' nasce fechado");
+    a.$("btnGerArvOpc").onclick();
+    ok(a.$("gerArvOpc").hidden === false && a.$("btnGerArvOpc").getAttribute("aria-expanded") === "true", "G15e '⚙ exibir' abre o painel");
+    a.$("btnGerArvOpc").onclick();
+    ok(a.$("gerArvOpc").hidden === true, "G15f e fecha de novo");
   }
 
   /* ---- G16: arrastar e soltar cartoes nas pastas ---- */
@@ -1391,11 +1397,18 @@ async function testes() {
     const sw = fs.readFileSync(path.join(__dirname, "..", "docs", "sw.js"), "utf8");
     ok(/<script src="gerenciador\.js"><\/script>/.test(html) && /id="btnGerCartoes"/.test(html) && /id="dlgGerCartoes"/.test(html), "G13 falta o script, o botao ou a janela no index.html");
     ok(/"gerenciador\.js"/.test(sw), "G13a o modulo nao esta no cache offline");
-    ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column/.test(html) && /\.ger-grande\{width:98vw/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e modo ampliado no CSS");
+    /* (v18.68.0) a Biblioteca é sempre a tela inteira: o "ampliar" e o canto de arrastar saíram */
+    ok(/grid-template-columns:22fr 43fr 35fr/.test(html) && /#dlgGerCartoes\[open\]\{display:flex;flex-direction:column;width:100vw;height:100vh;height:100dvh/.test(html) && /#dlgGerCartoes #btnGerAmpliar\{display:none\}/.test(html), "G13b colunas 22/43/35, janela em coluna flexivel e sempre na tela inteira");
     ok(/\.ger-pasta\.ger-alvo\{/.test(html) && /\.ger-ghost\{/.test(html) && /\.ger-item\.ger-indo\{/.test(html), "G13d CSS do destaque da pasta, da pilula e da linha esmaecida");
     ok(/id="gerAgrupar"/.test(html) && /\.ger-modo-edital \.ger-top\{/.test(html) && /\.ger-ed\{/.test(html), "G13f seletor da visao por edital e o recuo dos niveis");
     ok(/id="gerClResumo" role="status" aria-live="polite"/.test(html) && /id="gerNpErro" role="alert"/.test(html) && /id="btnGerNovaPasta"/.test(html) && /id="btnGerMarcarTodos"/.test(html) && /\.ger-vazia\{/.test(html) && /\.ger-x\{/.test(html), "G13e botoes de nova pasta e marcar todos, e o estilo da pasta vazia");
-    ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && /id="btnGerAmpliar"/.test(html) && /resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; ha botao ampliar e o canto arrasta");
+    ok(/id="gerMsgCx" role="status" aria-live="polite" hidden/.test(html) && /id="gerAcoes"[^>]*hidden/.test(html) && /id="gerPop"[^>]*hidden/.test(html) && !/resize:both/.test(html.slice(html.indexOf("#dlgGerCartoes{"), html.indexOf("#dlgGerCartoes{") + 200)), "G13c a barra de acoes e o seletor nascem escondidos; a janela nao tem canto de arrastar (e' a tela)");
+    /* (v18.68.0) espaço: modos na linha do título, "?" em vez do "como usar", opções da árvore no "⚙ exibir", rodapé só com o que desfazer */
+    const cab = html.slice(html.indexOf('<div class="ger-cab">', html.indexOf('id="dlgGerCartoes"')), html.indexOf('<div class="ger-abas"', html.indexOf('id="dlgGerCartoes"')));
+    ok(/id="btnGerModoGerenciar"/.test(cab.slice(0, cab.indexOf('class="ger-cab-acoes"'))), "G13g os modos Gerenciar / Montar pacote ficam na linha do titulo");
+    ok(/#dlgGerCartoes \.ger-como\{display:none\}\n#dlgGerCartoes \.ger-ajuda-b\{display:inline-flex\}/.test(html), "G13h o 'como usar' corrido sai em qualquer tela; o '?' fica");
+    ok(/#dlgGerCartoes \.ger-rodape:not\(:has\(#btnGerDesfazer:not\(\[hidden\]\)\)\)\{display:none\}/.test(html), "G13i o rodape so aparece com o que desfazer");
+    ok(/id="gerArvOpc" hidden>\s*<select id="gerAgrupar"/.test(html) && /class="btn-min ger-sec" id="btnGerMarcarFracos"/.test(html) && /class="btn-min ger-sec" id="btnGerMarcarLacunas"/.test(html), "G13j agrupar/ordenar/ocultar no '⚙ exibir'; marcar fracos/lacunas no '⋯'");
   }
 
 
