@@ -809,7 +809,7 @@ function rodar() {
     leiMesAbrir, leiMesPintar, leiMesConfirmar, leiMesDistintas, leiMesCtxAtual: () => leiMesCtx,
     leiDuplicadosAbrir, leiDupPintar, leiDupConfirmar, leiDupCancelar, leiDupSugestoes,
     leiDupCtxAtual: () => leiDupCtx,
-    leiSepararPerguntar,
+    leiSepConferir, leiSepSuspeitas, leiSepRodape, leiSepSeparar, leiSepPendentes, leiSepIrNumero, leiSepProximo, leiSepMarcar, leiSepCtxAtual: () => leiSepCtx,
     leiRepetidosDaLei, leiRevisarRepetidos,
     leiSujoDefinir: (v) => { leiSujo = v; },
     leiIdAtualValor: () => leiIdAtual,

@@ -1254,6 +1254,37 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-rec-rev{font-style:italic}
 .lei-arq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px}
 .lei-arq .lei-arq-dica{font-size:.85em;padding:2px 8px}
+/* (v18.64.0) conferir a separação de um texto que veio numa linha só */
+dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
+.lei-sep-aviso{margin:4px 0 8px;padding:10px 12px;border-radius:10px;border-left:4px solid var(--info);background:color-mix(in srgb,var(--info) 10%,transparent);line-height:1.45}
+.lei-sep-sticky{position:sticky;top:0;z-index:4;background:var(--panel);padding:4px 0 6px;margin:0 0 6px;border-bottom:1px solid var(--borda)}
+.lei-sep-sticky .nota{margin:2px 0}
+.lei-sep-barra{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.lei-sep-filtros{display:inline-flex;gap:4px}
+.lei-sep-filtros .btn-min[aria-pressed="true"]{background:var(--acao);color:#fff;border-color:var(--acao)}
+.lei-sep-ir{display:inline-flex;align-items:center;gap:4px}
+.lei-sep-ir input{width:5em}
+.lei-sep-fonte{display:inline-flex;gap:2px;margin-left:auto}
+.lei-sep-msg:empty{display:none}
+.lei-sep-lista{display:flex;flex-direction:column;gap:10px;font-size:var(--lei-sep-fonte,17px)}
+.lei-sep-item{border:1px solid var(--borda);border-radius:10px;padding:8px 12px;background:var(--campo)}
+.lei-sep-item.conf{border-left:4px solid var(--atencao)}
+.lei-sep-item.feito{border-left:4px solid var(--ok)}
+.lei-sep-item.junto{opacity:.65;border-style:dashed}
+.lei-sep-item.alvo{outline:3px solid var(--info);outline-offset:2px}
+.lei-sep-cab{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;font-size:15px}
+.lei-sep-cab strong{font-size:16px}
+.lei-sep-chip{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--borda);color:var(--sutil)}
+.lei-sep-chip.k-salto,.lei-sep-chip.k-citacao,.lei-sep-chip.k-longo{border-color:var(--atencao);color:var(--atencao)}
+.lei-sep-chip.k-ok{border-color:var(--ok);color:var(--ok)}
+.lei-sep-por{font-size:14px;margin:4px 0 2px;color:var(--atencao)}
+.lei-sep-por.nota{color:var(--sutil)}
+.lei-sep-txt{white-space:pre-wrap;line-height:1.55;margin:6px 0 4px;overflow-wrap:anywhere}
+.lei-sep-txt.curto{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.lei-sep-acoes{display:flex;flex-wrap:wrap;gap:6px;font-size:14px}
+.lei-sep-pag{display:flex;gap:10px;align-items:center;justify-content:center;margin:10px 0}
+.lei-sep-pag[hidden]{display:none}
+@media (max-width:600px){ .lei-sep-fonte{margin-left:0} .lei-sep-txt.curto{-webkit-line-clamp:8} }
 .lei-upd-seguros{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 8px;border:1px solid var(--verde-borda);border-radius:8px;background:var(--verde-claro)}
 .lei-upd-lei-atual{margin:0 0 10px}
 .lei-upd-lei-lista{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
@@ -8435,6 +8466,47 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      grupo (e item a item), com o que sairia riscado e o que ficaria em verde;
      nada é criado nem comparado antes do "finalizar". Serve à CRIAÇÃO e à
      ATUALIZAÇÃO (leiRevisarColagemAbrir, lei-ui.js). -->
+<!-- (v18.64.0) O TEXTO VEIO NUMA LINHA SÓ: o app avisa, separa e mostra para conferir.
+     Com centenas de artigos ninguém lê tudo: a lista começa nos poucos pontos que
+     pedem um olhar (leiSepSuspeitas), com "ir ao art." e páginas para o resto. -->
+<dialog id="dlgLeiSep" class="ui-modal diag-modal lei-sep-dlg">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_sep_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiSepX" data-i18n-title="lei_sep_voltar">✖</button>
+  </div>
+  <p class="lei-sep-aviso" id="leiSepAviso" role="status"></p>
+  <div class="lei-sep-sticky">
+    <p class="nota" id="leiSepResumo"></p>
+    <div class="lei-sep-barra">
+      <span class="lei-sep-filtros" role="group">
+        <button type="button" class="btn-min" id="btnLeiSepFConf"></button>
+        <button type="button" class="btn-min" id="btnLeiSepFTodos"></button>
+      </span>
+      <button type="button" class="btn-min btn-min-ok" id="btnLeiSepProx" data-i18n="lei_sep_prox"></button>
+      <span class="lei-sep-ir">
+        <label class="nota" for="leiSepIr" data-i18n="lei_sep_ir_rot"></label>
+        <input type="text" id="leiSepIr" inputmode="numeric" size="5" placeholder="12">
+        <button type="button" class="btn-min" id="btnLeiSepIr" data-i18n="lei_sep_ir"></button>
+      </span>
+      <span class="lei-sep-fonte">
+        <button type="button" class="btn-min" id="btnLeiSepMenor" data-i18n-title="lei_sep_menor">A&#8722;</button>
+        <button type="button" class="btn-min" id="btnLeiSepMaior" data-i18n-title="lei_sep_maior">A+</button>
+      </span>
+    </div>
+    <p class="nota lei-sep-msg" id="leiSepMsg" role="status" aria-live="polite"></p>
+  </div>
+  <div id="leiSepLista" class="lei-sep-lista"></div>
+  <div class="lei-sep-pag" id="leiSepPag">
+    <button type="button" class="btn-min" id="btnLeiSepPagAnt" data-i18n="lei_sep_pag_ant"></button>
+    <span class="nota" id="leiSepPagTxt"></span>
+    <button type="button" class="btn-min" id="btnLeiSepPagProx" data-i18n="lei_sep_pag_prox"></button>
+  </div>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnLeiSepContinuar"></button>
+    <button class="btn btn-cinza" id="btnLeiSepVoltar" data-i18n="lei_sep_voltar"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgLeiPre" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 id="leiPreTitulo"></h3>

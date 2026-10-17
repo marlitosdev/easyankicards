@@ -808,17 +808,97 @@ function leiAplicarDuplicados(texto, grupos, decisoes) {
  * LIVRO/TÍTULO/CAPÍTULO: numa lista ("LIVRO I - Estabelece…") isso
  * viraria uma divisão da lei.
  * ===================================================================== */
+/* (v18.64.0) O SUFIXO DO NÚMERO: "Art. 433-A" (colado) ou "Art. 366 – A." (letra seguida de ponto/travessão) é
+ * o art. 433-A; em "Art. 356 - A licença…" o "A" é a primeira palavra do artigo. Antes, o número perdia o sufixo
+ * (433-A, 433-B… viravam todos "433", "repetido 19×" no CTM) e o rótulo ganhava um "- A" que não existia. */
 const LEI_RE_ART_EMBUTIDO =
-  /(^|\n|[.:;)!?]["”')]*[ \t]+|[A-ZÀ-Ú]{3,}[ \t]+)(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?)(?=[\s.\-–—)])/g;
+  /(^|\n|[.:;)!?]["”')]*[ \t]+|[A-ZÀ-Ú]{3,}[ \t]+)(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[-–]([A-Z])|[ \t]*[-–][ \t]*([A-Z])(?=[ \t]*[.\-–—]))?)(?=[\s.\-–—)])/g;
+/* cabeçalho "Art. N" em QUALQUER lugar (depois de espaço, aspas ou parêntese), com os mesmos grupos: usado só onde
+ * a sequência dá o contexto — o artigo grudado (2ª passada), o "Art. N" dentro de um artigo e o "separar aqui" */
+const LEI_RE_CAB_LIVRE = /(^|[\s(“"'])(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[-–]([A-Z])|[ \t]*[-–][ \t]*([A-Z])(?=[ \t]*[.\-–—]))?)(?=[\s.\-–—)])/g;
+/* o número com o sufixo, a partir dos grupos 3 (algarismos), 4 e 5 (letra colada ou separada) */
+function leiSepNumDe(m) { const suf = m[4] || m[5]; return leiNumNormal(m[3] + (suf ? "-" + suf : "")); }
 
-function leiSepararColagem(texto) {
+/* (v18.64.0) opc.pular: as posições ("ini" de cada artigo achado) em que a pessoa disse "não é artigo novo —
+ * junta ao anterior" na conferência. A quebra ali não entra; o resto fica igual. Cada artigo volta também como
+ * PEÇA (partes: num, rótulo, ini e o texto já arrumado), para a conferência mostrar um por um. */
+/* =====================================================================
+ * O RODAPÉ DE PÁGINA NO TEXTO ACHATADO (v18.64.0)
+ *
+ * O PDF do CTM de Caruaru repete em cada uma das 296 páginas "Prefeitura de
+ * Caruaru - Praça Sen. Teotônio Vilela, S/N°, Centro, Caruaru/Pernambuco -
+ * CEP 55.004-901" seguido do número da página. Colado numa linha só, ele
+ * ficava grudado no meio dos artigos, e a limpeza do PDF (que reconhece
+ * cabeçalho por LINHA repetida) não o via. Aqui: o trecho de 40+ caracteres
+ * que se repete muitas vezes E vem seguido de números de página em sequência
+ * (1, 2, 3…) — a frase "(Redação dada pela…)" também se repete, mas sem
+ * número de página atrás. Cada ocorrência ganha linha própria, e o número da
+ * página outra; a limpeza seguinte oferece tirar os dois. Só quebras de linha.
+ * ===================================================================== */
+const LEI_SEP_RODAPE_MIN = 8;
+function leiSepRodape(texto) {
   const src = String(texto || "");
+  if (src.length < 20000 || (src.match(/\n/g) || []).length > src.length / 300) return null;
+  const conta = new Map();
+  const reIni = /(?:^|\s)(?=\S)/g;
+  let m;
+  while ((m = reIni.exec(src)) !== null) {
+    const p = m.index + m[0].length;
+    const k = src.substr(p, 40);
+    if (k.length === 40) conta.set(k, (conta.get(k) || 0) + 1);
+    if (reIni.lastIndex === m.index) reIni.lastIndex++;
+  }
+  /* frase repetida da própria lei ("Redação dada pela…") também aparece muito: examina várias, sem repetir trecho
+   * que já cabia numa frase testada */
+  const cands = [...conta.entries()].filter(([k, n]) => n >= LEI_SEP_RODAPE_MIN && !/\bArt(?:\.|igo)\s*\d/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, 300);
+  const testadas = [];
+  for (const [k] of cands) {
+    if (testadas.some((f) => f.indexOf(k) >= 0)) continue;
+    const occ = [];
+    for (let i = src.indexOf(k); i >= 0; i = src.indexOf(k, i + k.length)) occ.push(i);
+    if (occ.length < LEI_SEP_RODAPE_MIN) continue;
+    /* estende para a direita enquanto todas as ocorrências seguem iguais — para sozinho no número da página, que
+     * muda de uma para outra (o rodapé pode ter algarismos: "CEP 55.004-901") */
+    let len = k.length;
+    while (len < 300 && occ.every((o) => src.charAt(o + len) === src.charAt(occ[0] + len))) len++;
+    const frase = src.substr(occ[0], len).replace(/\s+$/, "");
+    testadas.push(frase);
+    if (frase.length < 30) continue;
+    /* o número da página logo depois, em sequência na maioria das ocorrências */
+    const nums = occ.map((o) => { const g = src.slice(o + frase.length, o + frase.length + 8).match(/^\s*(\d{1,4})(?=\s|$)/); return g ? Number(g[1]) : null; });
+    let seq = 0;
+    for (let i = 1; i < nums.length; i++) if (nums[i] != null && nums[i - 1] != null && nums[i] === nums[i - 1] + 1) seq++;
+    if (seq < (occ.length - 1) * 0.6) continue;
+    /* uma linha para o rodapé, outra para o número da página */
+    let saida = "", ult = 0;
+    occ.forEach((o, i) => {
+      saida += src.slice(ult, o).replace(/[ \t]+$/, "");
+      if (saida && !/\n$/.test(saida)) saida += "\n";
+      saida += frase;
+      let fim = o + frase.length;
+      const g = src.slice(fim, fim + 8).match(/^[ \t]*(\d{1,4})(?=\s|$)/);
+      if (nums[i] != null && g) { saida += "\n" + g[1]; fim += g[0].length; }
+      saida += "\n";
+      ult = fim;
+      while (ult < src.length && /[ \t]/.test(src.charAt(ult))) ult++;
+    });
+    saida += src.slice(ult);
+    return { texto: saida, frase, n: occ.length };
+  }
+  return null;
+}
+
+function leiSepararColagem(texto, opc) {
+  /* (v18.64.0) o rodapé de página repetido vai para linha própria antes de tudo (leiSepRodape) */
+  const rod = leiSepRodape(texto);
+  const src = rod ? rod.texto : String(texto || "");
+  const pular = (opc && opc.pular) || null;
   const cands = [];
   let m;
   const re = new RegExp(LEI_RE_ART_EMBUTIDO.source, "g");
   let anterior = null;
   while ((m = re.exec(src)) !== null) {
-    const ord = leiNumOrdem(m[3]);
+    const ord = leiNumOrdem(leiSepNumDe(m));
     const dentroDaSequencia = anterior === null
       || (ord >= anterior && ord - anterior <= 5000);
     if (!dentroDaSequencia) continue;            /* remissão, não cabeçalho */
@@ -827,37 +907,163 @@ function leiSepararColagem(texto) {
     cands.push({
       ini, ws: m.index + m[1].replace(/[ \t]+$/, "").length,
       rotulo: m[2].replace(/\s+/g, " ").replace(/^Artigo/, "Art."),
-      num: leiNumNormal(m[3]),
+      num: leiSepNumDe(m),
     });
   }
-  const linhaArtigos = leiArtigos(src).length;
-  const vazio = { aplicavel: false, texto: src, artigos: [], quebras: 0 };
-  if (cands.length < 2 || cands.length <= linhaArtigos) return vazio;
+  /* (v18.64.0) 2ª PASSADA — O ARTIGO GRUDADO DEPOIS DE UM TÍTULO. O CTN achatado numa linha só dava 170 de
+   * ~220 artigos: "…supletiva ou regulamentar. LIVRO PRIMEIRO … TÍTULO I Disposição Geral Art. 2º O sistema…" —
+   * antes do "Art. 2º" há uma palavra comum ("Geral"), e a 1ª passada (que exige ponto final ou MAIÚSCULAS antes)
+   * o tomava por remissão. No PDF do CTM de Caruaru, o mesmo com o rodapé da página: "…CEP 55.004-901 39 Art.
+   * 144-A. Salvo…". Entre dois artigos vizinhos, procura no meio do primeiro um número que caiba ENTRE os dois
+   * (o 2º que falta entre o 1º e o 3º; o 144-A entre o 144 e o 145), com "Art" maiúsculo e na ordem: quem cita
+   * usa "art." minúsculo, e o número tem de ser o próximo da sequência. O achado vem marcado ("resgatado"). */
+  const RE_GRUDADO = LEI_RE_CAB_LIVRE;
+  const extras = [];
+  for (let k = 0; k + 1 < cands.length; k++) {
+    const a = cands[k], b = cands[k + 1];
+    const ordB = leiNumOrdem(b.num);
+    let ult = leiNumOrdem(a.num);
+    if (ordB - ult <= 1) continue;
+    const re2 = new RegExp(RE_GRUDADO.source, "g");
+    re2.lastIndex = a.ini + 3;
+    let g;
+    while ((g = re2.exec(src)) !== null && g.index < b.ws) {
+      const num = leiSepNumDe(g);
+      const ord = leiNumOrdem(num);
+      if (!(ord > ult && ord < ordB && Math.floor(ord / 100) - Math.floor(ult / 100) <= 1)) continue;
+      ult = ord;
+      extras.push({ ini: g.index + g[1].length, ws: g.index, rotulo: g[2].replace(/\s+/g, " ").replace(/^Artigo/, "Art."),
+        num, resgatado: true });
+    }
+  }
+  if (extras.length) { cands.push(...extras); cands.sort((x, y) => x.ini - y.ini); }
 
-  /* 1) uma linha por artigo */
-  let saida = "";
+  /* (v18.64.0) "SEPARAR AQUI": cabeçalho "Art. N" no meio de um artigo que a pessoa mandou separar na conferência
+   * (opc.forcar = posições). A quebra entra antes dele, como em qualquer outro artigo. */
+  const forcar = (opc && opc.forcar) || null;
+  if (forcar && forcar.size) {
+    const jaTem = new Set(cands.map((c) => c.ini));
+    forcar.forEach((pos) => {
+      if (jaTem.has(pos)) return;
+      const re3 = new RegExp(LEI_RE_CAB_LIVRE.source, "g");
+      re3.lastIndex = Math.max(0, pos - 2);
+      const g = re3.exec(src);
+      if (!g || g.index + g[1].length !== pos) return;
+      let ws = pos;
+      while (ws > 0 && /[ \t]/.test(src.charAt(ws - 1))) ws--;
+      cands.push({ ini: pos, ws, rotulo: g[2].replace(/\s+/g, " ").replace(/^Artigo/, "Art."), num: leiSepNumDe(g), forcado: true });
+    });
+    cands.sort((x, y) => x.ini - y.ini);
+  }
+
+  const linhaArtigos = leiArtigos(src).length;
+  const vazio = { aplicavel: false, texto: src, artigos: [], quebras: 0, partes: [] };
+  const todos = cands.length;
+  const usados = pular ? cands.filter((c) => !pular.has(c.ini)) : cands;
+  if (todos < 2 || todos <= linhaArtigos) return vazio;
+
+  /* 2) legibilidade dentro do artigo (peça a peça: a quebra entre peças nunca casa com estas trocas) */
+  const arrumar = (s) => s
+    .replace(/([.:;)])[ \t]+(§[ \t]*\d{1,3}[ \t]*[ºo°]?|Par[áa]grafo[ \t]+[úu]nico)/g, "$1\n$2")
+    .replace(/([:;.])[ \t]+([IVXL]{1,6}[ \t]*[-–—][ \t])/g, "$1\n$2")
+    /* (v18.64.0) o CTM de Caruaru escreve "I. exigir…", "a) em relação…": depois de ":" ou ";" também ganham linha */
+    .replace(/([:;])[ \t]+([IVXL]{1,6}[.)][ \t])/g, "$1\n$2")
+    .replace(/([:;])[ \t]+([a-z]\)[ \t])/g, "$1\n$2");
+
+  /* 1) uma linha por artigo: o preâmbulo e uma peça por artigo */
+  const pecas = [];
   let ultimo = 0;
-  cands.forEach((c) => {
-    saida += src.slice(ultimo, c.ws);
+  let saida = "";
+  usados.forEach((c, i) => {
+    const antes = arrumar(src.slice(ultimo, c.ws));
+    saida += antes;
+    if (i > 0) pecas[i - 1].texto = antes;
+    else if (antes.trim()) pecas.preambulo = antes;
     if (c.ws > 0 && src.charAt(c.ws - 1) !== "\n") saida += "\n";
     ultimo = c.ini;
+    pecas.push({ num: c.num, rotulo: c.rotulo, ini: c.ini, texto: "", resgatado: !!c.resgatado, forcado: !!c.forcado });
   });
-  saida += src.slice(ultimo);
-
-  /* 2) legibilidade dentro do artigo */
-  saida = saida
-    .replace(/([.:;)])[ \t]+(§[ \t]*\d{1,3}[ \t]*[ºo°]?|Par[áa]grafo[ \t]+[úu]nico)/g, "$1\n$2")
-    .replace(/([:;.])[ \t]+([IVXL]{1,6}[ \t]*[-–—][ \t])/g, "$1\n$2");
+  const fim = arrumar(src.slice(ultimo));
+  saida += fim;
+  if (pecas.length) pecas[pecas.length - 1].texto = fim;
+  /* os cabeçalhos "Art. N" que ficaram NO MEIO de cada peça, com a posição no texto original (para "separar aqui");
+   * o que a pessoa juntou de volta não conta — foi ela que disse que não é artigo */
+  usados.forEach((c, i) => {
+    const ate = i + 1 < usados.length ? usados[i + 1].ws : src.length;
+    const re4 = new RegExp(LEI_RE_CAB_LIVRE.source, "g");
+    re4.lastIndex = c.ini + 3;
+    const dentro = [];
+    let g;
+    while ((g = re4.exec(src)) !== null && g.index < ate) {
+      const pos = g.index + g[1].length;
+      if (pos >= ate || (pular && pular.has(pos))) continue;
+      dentro.push({ ini: pos, rotulo: g[2].replace(/\s+/g, " ").replace(/^Artigo/, "Art."), num: leiSepNumDe(g) });
+    }
+    pecas[i].dentro = dentro;
+  });
 
   const achados = leiArtigos(saida);
   /* a prova dos nove: se depois de tudo o leitor não enxerga ao menos os
    * cabeçalhos que se encontrou, a proposta não vale */
-  if (achados.length < cands.length) return vazio;
+  if (achados.length < usados.length) return vazio;
   return {
     aplicavel: true, texto: saida,
-    artigos: cands.map((c) => ({ num: c.num, rotulo: c.rotulo })),
+    artigos: usados.map((c) => ({ num: c.num, rotulo: c.rotulo })),
     quebras: (saida.match(/\n/g) || []).length - (src.match(/\n/g) || []).length,
+    partes: pecas.map((p) => ({ num: p.num, rotulo: p.rotulo, ini: p.ini, texto: p.texto.replace(/\s+$/, ""), resgatado: p.resgatado,
+      forcado: p.forcado, dentro: p.dentro })),
+    preambulo: (pecas.preambulo || "").replace(/\s+$/, ""),
+    juntados: todos - usados.length,
+    rodape: rod ? { frase: rod.frase, n: rod.n } : null,
   };
+}
+
+/* =====================================================================
+ * O QUE CONFERIR NA SEPARAÇÃO (v18.64.0)
+ *
+ * Com 652 artigos ninguém lê um por um. O app aponta os poucos lugares
+ * onde a separação pode ter errado, e só eles:
+ *  · "repetido"  — o mesmo número aparece mais de uma vez (no CTM de
+ *    Caruaru: a redação antiga e a nova, as duas no PDF). Não é erro da
+ *    separação: o passo seguinte pergunta qual redação fica.
+ *  · "salto"     — depois do art. 12 vem o 15: os arts. 13 e 14 podem ter
+ *    ficado grudados no 12 (cabeçalho que o app não reconheceu).
+ *  · "citacao"   — o artigo anterior termina com dois-pontos ou aspas:
+ *    este "artigo" pode ser a citação de outra lei (junte ao anterior).
+ *  · "longo"     — bem maior que os outros: pode haver artigo dentro.
+ * Devolve, para cada peça, a lista de motivos (vazia = nada a conferir).
+ * ===================================================================== */
+/* "longo" só para o extremo: no CTM, 18 artigos de 3 a 10 mil caracteres eram artigos grandes de verdade (com o
+ * título seguinte ou o rodapé da página no fim, que a limpeza do PDF já trata); o que importa é o último artigo
+ * com todos os Anexos (257 mil). Artigo engolido aparece como "dentro" (cabeçalho "Art. N" no meio do texto). */
+const LEI_SEP_LONGO_MIN = 20000;
+const LEI_RE_ART_DENTRO = /(?:^|[\s"“(])(Art(?:\.|igo)[ \t]*\d{1,4}(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?)(?=[\s.\-–—)])/g;
+function leiSepSuspeitas(partes) {
+  const ps = partes || [];
+  const conta = {};
+  ps.forEach((p) => { conta[p.num] = (conta[p.num] || 0) + 1; });
+  const tams = ps.map((p) => p.texto.length).sort((a, b) => a - b);
+  const mediana = tams.length ? tams[Math.floor(tams.length / 2)] : 0;
+  const limiteLongo = Math.max(LEI_SEP_LONGO_MIN, mediana * 6);
+  return ps.map((p, i) => {
+    const mot = [];
+    if (p.resgatado) mot.push({ k: "resgatado" });
+    if (conta[p.num] > 1) mot.push({ k: "repetido", n: conta[p.num] });
+    if (i > 0) {
+      const a = Math.floor(leiNumOrdem(ps[i - 1].num) / 100), b = Math.floor(leiNumOrdem(p.num) / 100);
+      if (b - a > 1 && b - a < 1000) mot.push({ k: "salto", de: ps[i - 1].num, faltam: b - a - 1 });
+      /* o mesmo número logo depois ("Art. 50. Respondem…:" / "Art. 50. Respondem…") é a redação antiga e a nova
+       * do PDF do CTM de Caruaru — o "repetido" já cuida; dois-pontos antes de OUTRO número é que pede olhar */
+      if (ps[i - 1].num !== p.num && /[:“"]\s*$/.test(ps[i - 1].texto)) mot.push({ k: "citacao", de: ps[i - 1].num });
+    }
+    /* da separação vem com as posições (para "separar aqui"); peça montada à mão, só os rótulos */
+    const itens = Array.isArray(p.dentro) ? p.dentro
+      : [...p.texto.replace(/^\s*Art(?:\.|igo)[ \t]*\d{1,4}(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?/, "").matchAll(new RegExp(LEI_RE_ART_DENTRO.source, "g"))]
+        .map((x) => ({ rotulo: x[1].replace(/\s+/g, " ") }));
+    if (itens.length) mot.push({ k: "dentro", lista: itens.slice(0, 4).map((x) => x.rotulo).join(", ") + (itens.length > 4 ? "…" : ""), n: itens.length, itens });
+    if (p.texto.length > limiteLongo) mot.push({ k: "longo", c: p.texto.length });
+    return mot;
+  });
 }
 
 /* =====================================================================

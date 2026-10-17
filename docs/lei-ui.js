@@ -4154,12 +4154,13 @@ function leiGravar(opc) {
     if (!(opc && opc.separado)) {
       const sep = leiSepararColagem(txt);
       if (sep.aplicavel) {
-        leiSepararPerguntar(sep).then((ok) => {
-          try { leiReg("gravar", ok ? "texto numa linha só: separado em artigos"
-                                   : "texto numa linha só: a pessoa voltou para revisar",
-                       sep.artigos.length + " artigos"); } catch (e) {}
-          if (!ok) return;
-          $("leiTexto").value = sep.texto;
+        /* (v18.64.0) avisa, separa e mostra para conferir (leiSepConferir) */
+        leiSepConferir(txt, sep, "criar").then((res) => {
+          try { leiReg("gravar", res ? "texto numa linha só: separado e conferido"
+                                    : "texto numa linha só: a pessoa voltou para revisar",
+                       sep.artigos.length + " artigos" + (res ? " · " + res.juntados + " juntado(s) ao anterior · " + res.conferidos + " conferido(s)" : "")); } catch (e) {}
+          if (!res) return;
+          $("leiTexto").value = res.texto;
           leiGravar({ separado: true });
         });
         return "pendente";
@@ -4341,15 +4342,276 @@ function leiTrocarPara(id) {
  * ===================================================================== */
 let leiDupCtx = null;
 
-/* O TEXTO VEIO NUMA LINHA SÓ? Mostra os artigos que se encontrou e pergunta
- * se deve separar (nenhuma palavra muda; só entram quebras de linha). Devolve
- * uma promessa de true/false — e só se aplica quando leiSepararColagem acha
- * cabeçalhos que o leitor, por estarem no meio da linha, não enxergava. */
-function leiSepararPerguntar(sep, chave) {
-  const nomes = sep.artigos.map((a) => a.rotulo);
-  const lista = nomes.slice(0, 10).join(", ")
-    + (nomes.length > 10 ? " … " + t("lei_sep_mais", { n: nomes.length - 10 }) : "");
-  return uiConfirm(t(chave || "lei_sep_conf", { n: sep.artigos.length, lista }));
+/* =====================================================================
+ * CONFERIR A SEPARAÇÃO (v18.64.0)
+ *
+ * Antes: "Separar em uma linha por artigo?" — sim/não, sem dizer que o app
+ * já tinha entendido o problema nem deixar ver o resultado. Agora o app
+ * AVISA ("o texto veio numa linha só; separei para você conferir"), separa
+ * e mostra artigo por artigo. Com 652 artigos ninguém lê tudo: a lista abre
+ * nos poucos pontos que pedem um olhar (leiSepSuspeitas) e tem "ir ao
+ * art.", páginas, "próximo a conferir" e letra maior. Em cada ponto: "está
+ * certo" ou "não é artigo novo — juntar ao anterior" (desfaz só aquela
+ * quebra). Continuar entrega o texto separado; voltar não mexe em nada.
+ * Resolve como os outros avisos (_uiResolve): true = continuar.
+ * ===================================================================== */
+let leiSepCtx = null;
+const LEI_SEP_PAGINA = 40;
+/* motivos só informativos: não pedem ação (o repetido é resolvido no passo seguinte; o resgatado já foi separado) */
+const LEI_SEP_INFO = { repetido: 1, resgatado: 1 };
+
+function leiSepConferir(src, sep, modo) {
+  return new Promise((resolve) => {
+    const dlg = $("dlgLeiSep");
+    if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(false); }
+    const susp = leiSepSuspeitas(sep.partes || []);
+    leiSepCtx = { src, sep, modo: modo || "criar", susp, pular: new Set(), forcar: new Set(), ok: new Set(), filtro: "", pagina: 0, alvo: -1, fonte: 17 };
+    leiSepCtx.filtro = leiSepPendentes().length ? "conf" : "todos";
+    _uiResolve = (v) => {
+      try { if (dlg && dlg.open) dlg.close(); } catch (e) {}
+      const c = leiSepCtx;
+      leiSepCtx = null;
+      if (!c || v !== true) { resolve(null); return; }
+      const fin = (c.pular.size || c.forcar.size) ? leiSepararColagem(c.src, { pular: c.pular, forcar: c.forcar }) : c.sep;
+      resolve({ texto: fin.aplicavel ? fin.texto : c.sep.texto, juntados: c.pular.size, separados: c.forcar.size, conferidos: c.ok.size });
+    };
+    if (!dlg) { _uiFechar(true); return; }
+    $("leiSepAviso").textContent = t(leiSepCtx.modo === "atualizar" ? "lei_sep_aviso_upd" : "lei_sep_aviso", { n: (sep.partes || []).length })
+      + (sep.rodape ? " " + t("lei_sep_rodape", { n: sep.rodape.n, f: sep.rodape.frase.length > 70 ? sep.rodape.frase.slice(0, 70) + "…" : sep.rodape.frase }) : "");
+    $("leiSepIr").value = "";
+    $("leiSepMsg").textContent = "";
+    leiSepPintar();
+    abrirModal(dlg);
+  });
+}
+
+/* os pontos que ainda pedem um olhar: salto, citação ou texto longo (repetido é do passo seguinte), não resolvidos */
+function leiSepPendentes() {
+  const c = leiSepCtx;
+  if (!c) return [];
+  return c.susp.map((m, i) => i).filter((i) => c.susp[i].some((x) => !LEI_SEP_INFO[x.k]) && !c.ok.has(c.sep.partes[i].ini) && !c.pular.has(c.sep.partes[i].ini));
+}
+function leiSepTemConferir(i) { const c = leiSepCtx; return !!c && c.susp[i].some((x) => !LEI_SEP_INFO[x.k]); }
+function leiSepIndices() {
+  const c = leiSepCtx;
+  const n = (c.sep.partes || []).length;
+  const todos = Array.from({ length: n }, (x, i) => i);
+  return c.filtro === "conf" ? todos.filter(leiSepTemConferir) : todos;
+}
+
+function leiSepPintar() {
+  const c = leiSepCtx;
+  if (!c) return;
+  const ps = c.sep.partes || [];
+  const pend = leiSepPendentes();
+  const nConf = ps.filter((p, i) => leiSepTemConferir(i)).length;
+  $("leiSepResumo").textContent = t("lei_sep_resumo", { n: ps.length - c.pular.size, k: pend.length, j: c.pular.size, s: c.forcar.size });
+  $("btnLeiSepFConf").textContent = t("lei_sep_f_conf", { n: nConf });
+  $("btnLeiSepFTodos").textContent = t("lei_sep_f_todos", { n: ps.length });
+  $("btnLeiSepFConf").setAttribute("aria-pressed", String(c.filtro === "conf"));
+  $("btnLeiSepFTodos").setAttribute("aria-pressed", String(c.filtro === "todos"));
+  $("btnLeiSepFConf").disabled = !nConf;
+  $("btnLeiSepProx").disabled = !pend.length;
+  $("btnLeiSepContinuar").textContent = t("lei_sep_continuar", { n: ps.length - c.pular.size });
+  const lista = $("leiSepLista");
+  lista.style.setProperty("--lei-sep-fonte", c.fonte + "px");
+  lista.innerHTML = "";
+  const idx = leiSepIndices();
+  const paginas = Math.max(1, Math.ceil(idx.length / LEI_SEP_PAGINA));
+  if (c.pagina >= paginas) c.pagina = paginas - 1;
+  const fatia = idx.slice(c.pagina * LEI_SEP_PAGINA, (c.pagina + 1) * LEI_SEP_PAGINA);
+  if (!fatia.length) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("lei_sep_nada");
+    lista.append(p);
+  }
+  if (c.pagina === 0 && c.filtro === "todos" && c.sep.preambulo) {
+    const pre = document.createElement("div");
+    pre.className = "lei-sep-item";
+    const cab = document.createElement("div");
+    cab.className = "lei-sep-cab";
+    const s = document.createElement("strong");
+    s.textContent = t("lei_sep_preambulo");
+    cab.append(s);
+    const tx = document.createElement("div");
+    tx.className = "lei-sep-txt curto";
+    tx.textContent = c.sep.preambulo;
+    pre.append(cab, tx);
+    lista.append(pre);
+  }
+  fatia.forEach((i) => lista.append(leiSepItem(i)));
+  const pag = $("leiSepPag");
+  pag.hidden = paginas < 2;
+  $("leiSepPagTxt").textContent = t("lei_sep_pag", { a: c.pagina + 1, b: paginas,
+    de: fatia.length ? ps[fatia[0]].rotulo : "", ate: fatia.length ? ps[fatia[fatia.length - 1]].rotulo : "" });
+  $("btnLeiSepPagAnt").disabled = c.pagina === 0;
+  $("btnLeiSepPagProx").disabled = c.pagina >= paginas - 1;
+}
+
+function leiSepItem(i) {
+  const c = leiSepCtx;
+  const ps = c.sep.partes;
+  const p = ps[i];
+  const mot = c.susp[i];
+  const junto = c.pular.has(p.ini), certo = c.ok.has(p.ini);
+  const conf = mot.some((x) => !LEI_SEP_INFO[x.k]);
+  const el = document.createElement("div");
+  el.className = "lei-sep-item" + (junto ? " junto" : certo ? " feito" : conf ? " conf" : "") + (c.alvo === i ? " alvo" : "");
+  el.id = "leiSepItem_" + i;
+  const cab = document.createElement("div");
+  cab.className = "lei-sep-cab";
+  const nome = document.createElement("strong");
+  nome.textContent = p.rotulo;
+  cab.append(nome);
+  mot.forEach((m) => {
+    const ch = document.createElement("span");
+    ch.className = "lei-sep-chip k-" + m.k;
+    ch.textContent = t("lei_sep_c_" + m.k, { n: m.n, de: m.de, f: m.faltam, c: m.c, l: m.lista });
+    ch.title = t("lei_sep_m_" + m.k, { n: m.n, de: m.de, f: m.faltam, c: m.c, l: m.lista });
+    cab.append(ch);
+  });
+  if (p.forcado) {
+    const ch = document.createElement("span");
+    ch.className = "lei-sep-chip k-ok";
+    ch.textContent = t("lei_sep_separado");
+    cab.append(ch);
+  }
+  if (certo || junto) {
+    const ch = document.createElement("span");
+    ch.className = "lei-sep-chip k-ok";
+    ch.textContent = junto ? t("lei_sep_juntado", { a: i > 0 ? ps[i - 1].rotulo : "" }) : t("lei_sep_conferido");
+    cab.append(ch);
+  }
+  el.append(cab);
+  /* o porquê, por extenso, só onde há o que conferir e ainda não se resolveu */
+  if (!junto && !certo) {
+    mot.forEach((m) => {
+      const pp = document.createElement("p");
+      pp.className = "lei-sep-por" + (LEI_SEP_INFO[m.k] ? " nota" : "");
+      pp.textContent = t("lei_sep_m_" + m.k, { n: m.n, de: m.de, f: m.faltam, c: m.c, l: m.lista });
+      el.append(pp);
+    });
+  }
+  const tx = document.createElement("div");
+  tx.className = "lei-sep-txt" + (p.texto.length > 600 ? " curto" : "");
+  tx.textContent = p.texto;
+  el.append(tx);
+  const ac = document.createElement("div");
+  ac.className = "lei-sep-acoes";
+  const bt = (id, rot, fn, cls) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min" + (cls ? " " + cls : "");
+    b.id = id;
+    b.textContent = rot;
+    b.onclick = fn;
+    ac.append(b);
+    return b;
+  };
+  if (p.texto.length > 600) {
+    bt("btnLeiSepVer_" + i, t("lei_sep_ver_tudo"), (ev) => {
+      const curto = tx.classList.toggle("curto");
+      ev.target.textContent = t(curto ? "lei_sep_ver_tudo" : "lei_sep_ver_menos");
+    });
+  }
+  if (conf && !junto) bt("btnLeiSepOk_" + i, t(certo ? "lei_sep_desfazer" : "lei_sep_certo"), () => leiSepMarcar(i, "ok"), certo ? "" : "btn-min-ok");
+  /* (v18.64.0) "Art. N" no meio do texto: um botão por cabeçalho, para separar ali */
+  const dentro = mot.find((m) => m.k === "dentro");
+  if (dentro && !junto) (dentro.itens || []).filter((x) => x.ini != null).slice(0, 6).forEach((x, k) => {
+    bt("btnLeiSepSeparar_" + i + "_" + k, t("lei_sep_separar", { a: x.rotulo }), () => leiSepSeparar(x.ini), "btn-min-ok");
+  });
+  if (i > 0) bt("btnLeiSepJuntar_" + i, t(junto || p.forcado ? "lei_sep_desfazer" : "lei_sep_juntar", { a: ps[i - 1].rotulo }), () => leiSepMarcar(i, "juntar"));
+  if (i > 0 && mot.some((m) => m.k === "salto" || m.k === "citacao")) bt("btnLeiSepVerAnt_" + i, t("lei_sep_ver_ant", { a: ps[i - 1].rotulo }), () => leiSepIrPara(i - 1));
+  el.append(ac);
+  return el;
+}
+
+/* "está certo" ou "juntar ao anterior" (de novo = desfazer) */
+function leiSepMarcar(i, acao) {
+  const c = leiSepCtx;
+  if (!c) return;
+  const ini = c.sep.partes[i].ini, rot = c.sep.partes[i].rotulo;
+  /* o que a pessoa separou ("separar aqui"), "juntar" desfaz: a peça some e o texto volta ao artigo de cima */
+  if (acao === "juntar" && c.forcar.has(ini)) { c.forcar.delete(ini); leiSepRecalcular(ini); try { leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "separação: 'separar aqui' desfeito", rot); } catch (e) {} return; }
+  if (acao === "juntar") { if (c.pular.has(ini)) c.pular.delete(ini); else { c.pular.add(ini); c.ok.delete(ini); } }
+  else if (c.ok.has(ini)) c.ok.delete(ini); else c.ok.add(ini);
+  c.alvo = i;
+  leiSepPintar();
+  try { leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "separação: " + (acao === "juntar" ? (c.pular.has(ini) ? "juntado ao anterior" : "junção desfeita") : (c.ok.has(ini) ? "conferido" : "conferência desfeita")), rot); } catch (e) {}
+}
+
+/* "separar aqui": um "Art. N" do meio do texto vira artigo próprio (de novo pelo botão do novo artigo = desfazer) */
+function leiSepSeparar(pos) {
+  const c = leiSepCtx;
+  if (!c || pos == null) return false;
+  c.forcar.add(pos);
+  const ok = leiSepRecalcular(pos);
+  try { leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "separação: 'separar aqui'", ok ? "ok" : "não aplicado"); } catch (e) {}
+  return ok;
+}
+/* refaz a separação com o que se mandou separar (os "juntar" ficam como marcas, por posição) e vai até "foco" */
+function leiSepRecalcular(foco) {
+  const c = leiSepCtx;
+  const nova = leiSepararColagem(c.src, { forcar: c.forcar });
+  if (!nova.aplicavel) { c.forcar.delete(foco); return false; }
+  c.sep = nova;
+  c.susp = leiSepSuspeitas(nova.partes);
+  let i = nova.partes.findIndex((p) => p.ini === foco);
+  if (i < 0) i = Math.max(0, nova.partes.findIndex((p) => p.ini > foco) - 1);
+  return leiSepIrPara(i);
+}
+
+/* mostra o item i (troca de página/filtro se preciso) e o destaca */
+function leiSepIrPara(i) {
+  const c = leiSepCtx;
+  if (!c || i < 0 || i >= c.sep.partes.length) return false;
+  if (leiSepIndices().indexOf(i) < 0) c.filtro = "todos";
+  c.pagina = Math.floor(leiSepIndices().indexOf(i) / LEI_SEP_PAGINA);
+  c.alvo = i;
+  leiSepPintar();
+  const el = $("leiSepItem_" + i);
+  try { if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+  return true;
+}
+function leiSepIrNumero(bruto) {
+  const c = leiSepCtx;
+  if (!c) return false;
+  const num = leiNumNormal(String(bruto || "").replace(/^\s*art(?:igo)?\.?\s*/i, ""));
+  const i = c.sep.partes.findIndex((p) => p.num === num);
+  if (i < 0) { $("leiSepMsg").textContent = t("lei_sep_nao_achou", { n: String(bruto || "").trim() }); return false; }
+  $("leiSepMsg").textContent = "";
+  /* pediu um número: mostra a lista completa, para ler o artigo no meio dos vizinhos */
+  c.filtro = "todos";
+  return leiSepIrPara(i);
+}
+function leiSepProximo() {
+  const c = leiSepCtx;
+  const pend = leiSepPendentes();
+  if (!c || !pend.length) return false;
+  const prox = pend.find((i) => i > c.alvo);
+  return leiSepIrPara(prox === undefined ? pend[0] : prox);
+}
+
+function leiSepLigar() {
+  const lig = (id, fn) => { if ($(id)) $(id).onclick = fn; };
+  lig("btnLeiSepContinuar", () => _uiFechar(true));
+  lig("btnLeiSepVoltar", () => _uiFechar(false));
+  lig("btnLeiSepX", () => _uiFechar(false));
+  lig("btnLeiSepFConf", () => { if (leiSepCtx) { leiSepCtx.filtro = "conf"; leiSepCtx.pagina = 0; leiSepPintar(); } });
+  lig("btnLeiSepFTodos", () => { if (leiSepCtx) { leiSepCtx.filtro = "todos"; leiSepCtx.pagina = 0; leiSepPintar(); } });
+  lig("btnLeiSepProx", () => leiSepProximo());
+  lig("btnLeiSepIr", () => leiSepIrNumero($("leiSepIr").value));
+  lig("btnLeiSepPagAnt", () => { if (leiSepCtx && leiSepCtx.pagina > 0) { leiSepCtx.pagina--; leiSepPintar(); } });
+  lig("btnLeiSepPagProx", () => { if (leiSepCtx) { leiSepCtx.pagina++; leiSepPintar(); } });
+  lig("btnLeiSepMenor", () => { if (leiSepCtx) { leiSepCtx.fonte = Math.max(13, leiSepCtx.fonte - 2); leiSepPintar(); } });
+  lig("btnLeiSepMaior", () => { if (leiSepCtx) { leiSepCtx.fonte = Math.min(28, leiSepCtx.fonte + 2); leiSepPintar(); } });
+  if ($("leiSepIr")) $("leiSepIr").onkeydown = (ev) => { if (ev && ev.key === "Enter") { if (ev.preventDefault) ev.preventDefault(); leiSepIrNumero($("leiSepIr").value); } };
+  /* Esc fecha o <dialog> sem passar pelo botão: resolve como "voltar" */
+  if ($("dlgLeiSep") && $("dlgLeiSep").addEventListener && !$("dlgLeiSep")._sepLigado) {
+    $("dlgLeiSep")._sepLigado = true;
+    $("dlgLeiSep").addEventListener("cancel", (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); _uiFechar(false); });
+  }
 }
 
 /* guardar a substituída como texto original só faz sentido na CRIAÇÃO, em
@@ -6640,12 +6902,12 @@ function leiAtualizarComparar(opc) {
   if (!o.separado) {
     const sep = leiSepararColagem(novoTexto);
     if (sep.aplicavel) {
-      leiSepararPerguntar(sep, "lei_sep_conf_upd").then((ok) => {
-        try { leiReg("atualizacao", ok ? "texto novo numa linha só: separado em artigos"
-                                       : "texto novo numa linha só: a pessoa voltou para revisar",
-                     sep.artigos.length + " artigos"); } catch (e) {}
-        if (!ok) return;
-        $("leiUpdTexto").value = sep.texto;
+      leiSepConferir(novoTexto, sep, "atualizar").then((res) => {
+        try { leiReg("atualizacao", res ? "texto novo numa linha só: separado e conferido"
+                                        : "texto novo numa linha só: a pessoa voltou para revisar",
+                     sep.artigos.length + " artigos" + (res ? " · " + res.juntados + " juntado(s) ao anterior" : "")); } catch (e) {}
+        if (!res) return;
+        $("leiUpdTexto").value = res.texto;
         seguinte({ separado: true });
       });
       return false;
@@ -7579,6 +7841,7 @@ function leiIniciar() {
   liga("btnLeiPreConfirmar", "confirmar a revisão da colagem", () => leiPreConfirmar());
   /* uma vez só por campo: dois ouvintes colariam o texto duas vezes */
   liga("btnLeiArquivo", "abrir arquivo (.docx ou .htm)", () => { if ($("leiArquivoHtml")) $("leiArquivoHtml").click(); });
+  leiSepLigar();
   /* (v18.63.0) a dica curta: a lei está em PDF? */
   ["btnLeiArqDica", "btnLeiUpdArqDica"].forEach((id) => {
     if ($(id)) $(id).onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); dicaMostrar($(id), t(id === "btnLeiUpdArqDica" ? "lei_arq_dica_txt_upd" : "lei_arq_dica_txt")); };
