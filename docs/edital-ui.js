@@ -1497,6 +1497,8 @@ function diarioTotais(itens) {
   const q = v.reduce((a, x) => (x.q && x.q.feitas ? { n: a.n + x.q.feitas, c: a.c + (x.q.certas || 0) } : a), { n: 0, c: 0 });
   return {
     minutos: v.reduce((a, x) => a + (x.m || 0), 0),
+    /* (v18.60.0) quanto desse tempo veio do SUGERIDO (plano/estimativa) sem a pessoa conferir */
+    minPlano: v.filter((x) => x.mo === "plano").reduce((a, x) => a + (x.m || 0), 0),
     eventos: v.length,
     topicos: new Set(v.map((x) => x.c)).size,
     revisoes: v.filter((x) => x.a === "revisado").length,
@@ -1539,6 +1541,11 @@ function diarioAgrupar(itens) {
   });
   return out;
 }
+/* "3 sessões: 1h + 2h + 40min" (≈ na parte que veio do sugerido) */
+function diarioSessoesTexto(xs) {
+  const partes = (xs || []).filter((y) => y.a !== "pendente").map((y) => (y.mo === "plano" ? "≈" : "") + horasTexto(y.m || 0));
+  return t("ed_diario_n_sessoes_partes", { n: (xs || []).length, p: partes.join(" + ") });
+}
 /* as formas de um ou mais registros, sem repetir; a forma "revisão" não aparece num registro de revisão (diria duas vezes) */
 function diarioFormasDosRegs(xs) {
   const vistos = [];
@@ -1559,7 +1566,7 @@ function diarioLinhaCopia(xs) {
   const q = diarioQDosRegs(xs);
   const partes = [
     (min ? horasTexto(min) + " · " : "") + t("ed_acao_" + x.a) + " " + x.n + (ctx ? " (" + ctx + ")" : ""),
-    xs.length > 1 ? t("ed_diario_n_sessoes", { n: xs.length }) : "",
+    xs.length > 1 ? diarioSessoesTexto(xs) : (x.mo === "plano" ? t("ed_diario_copia_plano") : ""),
     diarioFormasDosRegs(xs),
     q.n ? t("ed_diario_questoes", { c: q.c, n: q.n, pct: Math.round((q.c / q.n) * 100) }) : "",
     xs.length === 1 && x.obs ? String(x.obs).slice(0, 220) : "",
@@ -2105,6 +2112,8 @@ function diarioLinha(it, sub) {
   const tempo = document.createElement("span");
   tempo.className = "di-tempo"; tempo.textContent = x.m ? horasTexto(x.m) : "";
   if (x.mc && x.mc.de != null) { tempo.textContent += " ✎"; tempo.title = t("ed_diario_tempo_corrigido_tip", { de: horasTexto(x.mc.de || 0) }); }
+  else if (x.mo === "plano") { tempo.textContent = "≈ " + tempo.textContent; tempo.className += " di-tempo-plano"; tempo.title = t("ed_diario_tempo_plano_tip"); }
+  else if (x.mo === "medido") tempo.title = t("ed_diario_tempo_medido_tip");
   const ds = document.createElement("span");
   ds.className = "di-disc";
   ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
@@ -2226,7 +2235,9 @@ function diarioLinhaGrupo(g, chave, aberto) {
   ac.className = "di-acao acao-" + x.a;
   ac.textContent = t("ed_acao_" + x.a);
   meio.append(ds, ac);
-  const pedacos = [t("ed_diario_n_sessoes", { n: xs.length })];
+  /* (v18.60.0) AS PARTES DA SOMA: "3 sessões: 1h + 2h + 40min" — a soma sozinha parecia um registro só */
+  const pedacos = [diarioSessoesTexto(xs)];
+  if (xs.some((y) => y.mo === "plano")) { tempo.textContent = "≈ " + tempo.textContent; tempo.title = t("ed_diario_tempo_plano_tip"); }
   const formas = diarioFormasDosRegs(xs);
   if (formas) pedacos.push(formas);
   const q = diarioQDosRegs(xs);
@@ -2282,6 +2293,8 @@ function abrirDiario() {
   const partesR = [];
   const chipR = (txt, cls) => { const e = document.createElement("span"); e.className = "di-res-n" + (cls ? " " + cls : ""); e.textContent = txt; res.append(e); partesR.push(txt); };
   chipR(t("ed_diario_res_h", { h: horasTexto(tot.minutos), p: perTxt }), "di-res-h");
+  /* (v18.60.0) quanto do total é o sugerido que entrou sem conferir: dito ao lado, para o número não enganar */
+  if (tot.minPlano) chipR(t("ed_diario_res_plano", { h: horasTexto(tot.minPlano) }), "di-res-plano");
   chipR(t("ed_diario_res_dias", { d: tot.dias, y: diarioDiasDoPeriodo({ dias: diarioPeriodo, de: diarioDe, ate: diarioAte }, edDiario, hojeISO()) }));
   chipR(t("ed_diario_res_media", { med: horasTexto(med) }));
   chipR(t("ed_diario_res_top", { t: tot.topicos, r: tot.revisoes, e: tot.eventos }));

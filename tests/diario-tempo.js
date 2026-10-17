@@ -97,9 +97,39 @@ async function testes() {
     ok(api.edDiarioAtual()[idx].mc.de === antes, "C10 corrigir de novo mantém 'era' = o valor original");
     ok(api.diarioTempoCorrigir({ esp: "x", m: 0 }, 30) === null, "C11 linha de espelho (outro edital, tempo zero) não se corrige");
   }
+  /* ---- (v18.60.0) o diário mostra de onde veio cada tempo ---- */
   {
     const { api } = rodar();
-    ["ed_diario_corrigir_tempo", "ed_diario_tempo_pergunta", "ed_diario_tempo_invalido", "ed_diario_tempo_feito", "ed_diario_tempo_desfazer", "ed_diario_tempo_corrigido_tip"].forEach((k) => {
+    api.matIniciar(); api.edIniciar();
+    const hoje = api.hojeISO();
+    const D = api.edDiarioAtual();
+    D.push({ d: hoje, c: "stb›tributos", n: "Tributos", disc: "STB", m: 220, a: "feito", mo: "plano", cc: "ISS" });
+    D.push({ d: hoje, c: "stb›limitacoes", n: "Limitações", disc: "STB", m: 12, a: "feito", mo: "medido", cc: "ISS" });
+    D.push({ d: hoje, c: "stb›outro", n: "Outro", disc: "STB", m: 60, a: "revisado", mo: "voce", cc: "ISS" });
+    D.push({ d: hoje, c: "stb›outro", n: "Outro", disc: "STB", m: 40, a: "revisado", mo: "plano", cc: "ISS" });
+    api.abrirDiario();
+    const linhas = () => api.$("diarioLista").children.filter((c) => /diario-item/.test(c.className || ""));
+    const tempoDe = (nome) => { const li = linhas().find((l) => l.children[0].children[0].textContent === nome); return li && li.children[0].children.find((c) => /di-tempo/.test(c.className || "")); };
+    const tp = tempoDe("Tributos");
+    ok(tp && tp.textContent === "≈ 3h40" && /di-tempo-plano/.test(tp.className) && /sem você conferir/.test(tp.title), "O1 tempo que veio do sugerido aparece com ≈ e o balão diz: " + (tp && tp.textContent + " | " + tp.title));
+    ok(/medido/.test(tempoDe("Limitações").title) && tempoDe("Limitações").textContent === "12min", "O2 tempo medido: sem ≈, e o balão diz que foi medido");
+    const grupo = linhas().find((l) => /di-grupo/.test(l.className || ""));
+    ok(grupo && /2 sessões: (?:1h \+ ≈40min|≈40min \+ 1h)/.test(grupo.textContent) && /^≈ 1h40$/.test(grupo.children[0].children[1].textContent), "O3 sessões juntas mostram as partes da soma (≈ na que veio do sugerido): " + (grupo && grupo.textContent));
+    const chip = api.$("diarioResumo").children.find((c) => /di-res-plano/.test(c.className || ""));
+    ok(chip && /≈ 4h20 disso veio do tempo sugerido, sem conferir/.test(chip.textContent), "O4 o resumo do topo diz quanto do total veio do sugerido sem conferir: " + (chip && chip.textContent));
+    const tc = api.diarioTextoCopia(api.diarioFiltrar(D, { dias: 7 }), "T");
+    ok(/3h40 · estudou Tributos .*tempo sugerido, não conferido/.test(tc) && /2 sessões: (?:1h \+ ≈40min|≈40min \+ 1h)/.test(tc), "O5 o Copiar leva a mesma informação: " + tc);
+    /* corrigido, deixa de ser sugerido: some o ≈ e o aviso do topo diminui */
+    api.diarioTempoCorrigir(D[0], 60);
+    api.abrirDiario();
+    const chip2 = api.$("diarioResumo").children.find((c) => /di-res-plano/.test(c.className || ""));
+    ok(tempoDe("Tributos").textContent === "1h ✎" && chip2 && /≈ 40min disso/.test(chip2.textContent), "O6 corrigido, o tempo vira seu (✎) e o aviso do topo só conta o que resta: " + (chip2 && chip2.textContent));
+    D[3].mo = "voce"; api.abrirDiario();
+    ok(!api.$("diarioResumo").children.some((c) => /di-res-plano/.test(c.className || "")), "O7 sem tempo sugerido no período, sem aviso no topo");
+  }
+  {
+    const { api } = rodar();
+    ["ed_diario_corrigir_tempo", "ed_diario_tempo_pergunta", "ed_diario_tempo_invalido", "ed_diario_tempo_feito", "ed_diario_tempo_desfazer", "ed_diario_tempo_corrigido_tip", "ed_diario_res_plano", "ed_diario_tempo_plano_tip", "ed_diario_tempo_medido_tip", "ed_diario_n_sessoes_partes", "ed_diario_copia_plano"].forEach((k) => {
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "C12 falta " + k + " em " + lg); });
     });
     api.setLanguage("pt");
