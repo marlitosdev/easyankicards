@@ -1853,6 +1853,14 @@ function jurCitChave(base) {
   if (b.disciplina && b.topico && typeof matChave === "function") return matChave(b.disciplina, b.topico);
   return b.chave || "";
 }
+/* onde (em caracteres, no texto normalizado) as teses deixam de ser iguais — 0 quando já diferem no começo */
+function jurCitPontoDeDiferenca(textos) {
+  const ts = (textos || []).map((s) => String(s || "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (ts.length < 2) return 0;
+  let i = 0;
+  while (i < ts[0].length && ts.every((s) => s[i] === ts[0][i])) i++;
+  return i;
+}
 function jurCitNome(j) {
   return [String(j.tribunal || "").trim(), [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
 }
@@ -1924,12 +1932,19 @@ function jurCitPreviewAbrir(c, ach, base) {
     if (!String(j.tese || j.resumo || j.texto || "").trim()) bloco("", t("jur_cit_vazio"));
   } else if (ach && ach.ambiguos && ach.ambiguos.length) {
     $("jurCitaMeta").textContent = t("jur_cit_amb_meta", { n: ach.ambiguos.length });
+    /* (v18.61.0) teses que começam igual (Temas 981 e 962 do STJ: "O redirecionamento da execução fiscal, quando fundado
+     * na dissolução irregular…") pareciam a MESMA nos 110 primeiros caracteres. Cada opção mostra agora o trecho a partir de
+     * onde as teses se separam, e o porquê de casar (é o julgado citado, ou só o menciona no texto). */
+    const difDe = jurCitPontoDeDiferenca(ach.ambiguos.map((x) => String(x.tese || x.resumo || "")));
     ach.ambiguos.forEach((x, i) => {
       const bt = document.createElement("button");
       bt.type = "button";
       bt.className = "jur-cita-opcao";
       bt.id = "jurCitaOpcao_" + i;
-      bt.textContent = jurCitNome(x) + " — " + jurCitTrecho(x.tese || x.resumo, 110);
+      const tx = String(x.tese || x.resumo || "").replace(/\s+/g, " ").trim();
+      const corte = difDe > 30 ? "…" + tx.slice(Math.max(0, difDe - 20)) : tx;
+      const eh = jurClasseChave(x.classe) === jurClasseChave(c.classe) && jurNumChave(x.numero) === jurNumChave(c.numero);
+      bt.textContent = jurCitNome(x) + " — " + jurCitTrecho(corte, 170) + " (" + t(eh ? "jur_cit_amb_eh" : "jur_cit_amb_cita") + ")";
       bt.onclick = () => jurCitPreviewAbrir(c, { julgado: x }, base);
       corpo.append(bt);
     });

@@ -1639,7 +1639,10 @@ function jurAcharCitado(c, lista, chave) {
   if (!n) return { julgado: null };
   const triOk = (j) => !c.tribunal || !j.tribunal || String(j.tribunal).toUpperCase() === c.tribunal;
   let cand = L.filter((j) => jurClasseChave(j.classe) === cc && jurNumChave(j.numero) === n && triOk(j));
-  if (cc === "tema") {
+  /* (v18.61.0) QUEM É VENCE QUEM SÓ CITA. O caso real: "Tema 981 do STJ" casava com o julgado do Tema 981 E com o do Tema
+   * 962, porque o 962 MENCIONA o 981 no texto — e a pessoa via "2 julgados casam", como se um deles estivesse errado. A busca
+   * pelo texto ("o RE que diz Tema 69") só vale quando nenhum guardado É aquele tema. */
+  if (cc === "tema" && !cand.length) {
     /* "Tema 1.093" escrito com ponto de milhar também conta (v18.52.0) */
     const re = new RegExp("\\bTema\\s*(?:n[º°o.]?\\s*)?0*" + n.split("").join("\\.?") + "(?!\\d)", "i");
     L.forEach((j) => {
