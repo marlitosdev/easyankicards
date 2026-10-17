@@ -4935,6 +4935,20 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 }
 .ger-arv-opc{display:flex;flex-direction:column;gap:6px;flex:1 1 100%;padding:6px;border:1px solid var(--borda);border-radius:8px}
 .ger-arv-opc[hidden]{display:none}
+/* (v18.70.0) o dedo: segurar o cartão não pode abrir o menu do sistema nem selecionar o texto da linha */
+#gerLista .ger-item{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.ger-ghost-toque{position:fixed;z-index:50;pointer-events:none;max-width:70vw;white-space:normal}
+/* a janela de destino */
+dialog.ger-dest-dlg[open]{display:flex;flex-direction:column;width:min(620px,96vw);max-height:90vh;margin:auto}
+.ger-dest-lista{display:flex;flex-direction:column;gap:4px;overflow:auto;min-height:0;flex:1 1 auto;margin-top:6px}
+.ger-dest-item{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:1px;min-height:44px;padding:7px 10px;
+  border:1px solid var(--borda);border-radius:8px;background:var(--campo)}
+.ger-dest-item:hover,.ger-dest-item:focus-visible{border-color:var(--acao);outline:none}
+.ger-dest-item[disabled]{opacity:.5;cursor:default}
+.ger-dest-cam{font-size:12px;color:var(--sutil)}
+.ger-dest-nome{font-weight:700}
+.ger-dest-sec{margin:8px 0 2px;font-size:12px;font-weight:800;color:var(--sutil);text-transform:uppercase;letter-spacing:.04em}
+@media (max-width:760px){ dialog.ger-dest-dlg[open]{width:100vw;max-width:none;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0} }
 #dlgGerCartoes[open] > *{flex:0 0 auto}
 #dlgGerCartoes[open] > .ger-grade{flex:1 1 auto;min-height:min(260px,40vh)}
 .ger-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -9238,6 +9252,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- (v18.70.0) PARA QUAL PASTA? Mover pela prévia (e, no futuro, por outros caminhos): últimos destinos, busca,
+     itens grandes para o dedo. Escolher pergunta antes de mover. -->
+<dialog id="dlgGerDestino" class="ui-modal diag-modal ger-dest-dlg">
+  <div class="vka-cab">
+    <h3 id="gerDestTit"></h3>
+    <button type="button" class="dlg-x" id="btnGerDestX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" id="gerDestDe"></p>
+  <input type="search" id="gerDestBusca" class="mat-busca" data-i18n-ph="ger_pop_busca_ph" autocomplete="off">
+  <div id="gerDestLista" class="ger-dest-lista" role="listbox"></div>
+  <div class="dlg-rodape"><button class="btn btn-cinza" id="btnGerDestFechar" data-i18n="ger_edit_cancelar"></button></div>
+</dialog>
+
 <dialog id="dlgGerCartoes" class="ui-modal diag-modal ger-v-pastas">
   <div class="ger-cab">
     <h3 data-i18n="ger_titulo"></h3>
@@ -9406,6 +9433,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       </div>
       <div class="ger-pre-acoes" id="gerPreAcoes" hidden>
         <button type="button" class="btn-min" id="btnGerEditar" data-i18n="ger_editar" disabled></button>
+        <button type="button" class="btn-min" id="btnGerPrevMover" data-i18n="ger_prev_mover" disabled></button>
         <button type="button" class="btn-min btn-min-perigo" id="btnGerPreApagar" data-i18n="ger_lixeira" disabled></button>
       </div>
       <div id="gerPrevia"></div>
