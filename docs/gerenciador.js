@@ -1328,8 +1328,11 @@ function gerPintarLista() {
       ck.title = t("ger_tip_caixa");
       lin.append(ck, corpo);
       lin.draggable = true;
-      lin.ondragstart = (ev) => gerIniciarArrasto(ev, pos);
-      lin.ondragend = gerFimArrasto;
+      /* (v18.71.0) com o dedo segurando o cartão, o arrastar NATIVO do navegador (que o celular e o Windows com tela de
+       * toque também iniciam ao segurar) não pode começar: ele mandava "cancelar" ao arrasto do dedo, o cartão "na mão"
+       * se perdia, e soltar na pasta não fazia nada — sem aviso */
+      lin.ondragstart = (ev) => { if (gerToque) { if (ev && ev.preventDefault) ev.preventDefault(); return; } gerIniciarArrasto(ev, pos); };
+      lin.ondragend = () => { if (!gerToque) gerFimArrasto(); };
       /* (v18.70.0) com o dedo: segurar um instante pega o cartão; deslizar até a pasta; soltar */
       lin.onpointerdown = (ev) => gerToqueInicio(ev, pos, lin);
       lin.oncontextmenu = (ev) => { if (gerToque && ev && ev.preventDefault) ev.preventDefault(); };
@@ -1587,6 +1590,7 @@ function gerComecarArrasto(ev, ms, pos) {
   } catch (e) {}
   try { $("dlgGerCartoes").classList.add("ger-arrastando"); } catch (e) {}
   gerPintarMarcaArrasto(true);
+  gerArrastoInfo(t("ger_soltar_fora_info"), "");
 }
 
 /* as linhas que estão sendo arrastadas ficam esmaecidas */
@@ -1604,6 +1608,7 @@ function gerFimArrasto() {
   gerGhost = null;
   try { $("dlgGerCartoes").classList.remove("ger-arrastando"); } catch (e) {}
   gerPintarMarcaArrasto(false);
+  gerArrastoInfo("", "");
   const filhos = Array.from($("gerArvore").children || []);
   filhos.forEach((el) => { if (el.classList) el.classList.remove("ger-alvo", "ger-alvo-no"); });
 }
@@ -1619,14 +1624,34 @@ function gerSobreAlvo(ev, chave, el, aceitaMesma) {
   if (ok && ev && ev.preventDefault) ev.preventDefault();    /* é o preventDefault que permite soltar */
   try { if (ev && ev.dataTransfer) ev.dataTransfer.dropEffect = ok ? "move" : "none"; } catch (e) {}
   if (el && el.classList) { el.classList.toggle("ger-alvo", ok); el.classList.toggle("ger-alvo-no", !ok); }
+  /* (v18.71.0) diz, ANTES de soltar, para onde o cartão vai */
+  gerArrastoInfo(ok ? t("ger_soltar_em", { d: gerNomeDaLinha(el) || gerNomeDestino(chave) }) : t("ger_ja_aqui"), ok ? "ok" : "no");
 }
 
 function gerSaiuAlvo(el) {
   if (el && el.classList) el.classList.remove("ger-alvo", "ger-alvo-no");
+  if (gerArrasto) gerArrastoInfo(t("ger_soltar_fora_info"), "");
+}
+
+/* (v18.71.0) A FAIXA "SOLTAR EM: …": fixa no pé da janela durante o arrasto (dedo ou mouse), na cor do que vai
+ * acontecer — verde: solta e move para ali; cinza: já está nesta pasta; âmbar: disciplina (abra e solte num tópico) */
+function gerArrastoInfo(texto, tipo) {
+  const el = $("gerArrastoInfo");
+  if (!el) return;
+  el.hidden = !texto;
+  el.textContent = texto || "";
+  el.className = "ger-arrasto-info" + (tipo ? " " + tipo : "");
+  if (gerToque && gerToque.ghost) gerToque.ghost.textContent = (gerToque.ghostBase || gerToque.ghost.textContent) + (texto ? " → " + texto : "");
+}
+/* o nome de uma linha da árvore, sem a contagem e as marcas ("↳ Ramo (3) ★5" → "Ramo") */
+function gerNomeDaLinha(el) {
+  if (!el) return "";
+  return String(el.textContent || "").replace(/^[\s▸▾↳]+/, "").replace(/\s*\(\d+\).*$/, "").trim();
 }
 
 /* Disciplina fechada não mostra os tópicos: segurando o cartão em cima dela por um instante, ela abre. */
 function gerSobreDisciplina(ev, disc) {
+  if (gerArrasto) gerArrastoInfo(t("ger_soltar_disc_info"), "disc");
   if (!gerArrasto || !gerFechados.has(disc)) return;
   if (ev && ev.preventDefault) ev.preventDefault();
   if (gerHoverTimer) clearTimeout(gerHoverTimer);
@@ -1635,6 +1660,7 @@ function gerSobreDisciplina(ev, disc) {
 
 /* o mesmo, na visão por edital: nó fechado abre ao segurar o cartão em cima */
 function gerSobreNo(ev, id) {
+  if (gerArrasto) gerArrastoInfo(t("ger_soltar_disc_info"), "disc");
   if (!gerArrasto || gerAbertos.has(id)) return;
   if (ev && ev.preventDefault) ev.preventDefault();
   if (gerHoverTimer) clearTimeout(gerHoverTimer);
@@ -1646,7 +1672,7 @@ function gerSoltarRamo(ev, rm) {
   if (ev && ev.preventDefault) ev.preventDefault();
   const ms = gerArrasto && gerArrasto.notas;
   gerFimArrasto();
-  if (!ms) return Promise.resolve();
+  if (!ms) { gerAviso(t("ger_arrasto_perdido"), false); return Promise.resolve(); }
   return gerConfirmarRamo(ms, rm);
 }
 
@@ -1667,7 +1693,9 @@ function gerSoltar(ev, chave, concurso) {
   if (ev && ev.preventDefault) ev.preventDefault();
   const ms = gerArrasto && gerArrasto.notas;
   gerFimArrasto();
-  if (!ms || !chave) return Promise.resolve();
+  /* (v18.71.0) o arrasto se perdeu no caminho (o sistema o cancelou): avisa em vez de não fazer nada */
+  if (!ms) { gerAviso(t("ger_arrasto_perdido"), false); return Promise.resolve(); }
+  if (!chave) return Promise.resolve();
   return gerConfirmarMover(ms, chave, concurso);
 }
 
@@ -1699,6 +1727,8 @@ function gerToqueInicio(ev, pos, el) {
   /* rolar a página enquanto o cartão está "na mão" estragaria o arrasto: só nesse caso o toque não rola */
   t0.bloqueia = (e) => { if (gerToque === t0 && t0.ativo && e && e.cancelable && e.preventDefault) e.preventDefault(); };
   try { el.addEventListener("touchmove", t0.bloqueia, { passive: false }); } catch (e) {}
+  /* (v18.71.0) enquanto o dedo está no cartão, ele não é "arrastável" para o navegador (volta ao soltar) */
+  if (el && el.draggable) { t0.voltaDraggable = true; try { el.draggable = false; } catch (e) {} }
   t0.timer = setTimeout(() => gerToquePegar(t0), GER_TOQUE_SEGURAR);
   return true;
 }
@@ -1714,6 +1744,8 @@ function gerToquePegar(t0) {
     + " · " + t(gerEhCelular() && gerVistaAtual !== "pastas" ? "ger_toque_dica_cel" : "ger_toque_dica");
   try { ($("dlgGerCartoes") || document.body).append(g); } catch (e) {}
   t0.ghost = g;
+  t0.ghostBase = g.textContent;
+  gerArrastoInfo(t("ger_soltar_fora_info"), "");
   gerToquePosGhost(t0);
   try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
   try { if (typeof setInterval === "function") t0.rolar = setInterval(() => gerToqueRolar(t0), 60); } catch (e) {}
@@ -1746,6 +1778,7 @@ function gerToqueMover(ev) {
   if (row !== t0.alvo) {
     try { if (t0.alvo && t0.alvo.ondragleave) t0.alvo.ondragleave({}); } catch (e) {}
     t0.alvo = row;
+    if (!row) gerArrastoInfo(t("ger_soltar_fora_info"), "");
   }
   try { if (row && row.ondragover) row.ondragover({ preventDefault() {}, dataTransfer: null }); } catch (e) {}
 }
@@ -1765,6 +1798,7 @@ function gerToqueLimpar(t0) {
   if (t0.abaTimer) clearTimeout(t0.abaTimer);
   try { if (t0.rolar) clearInterval(t0.rolar); } catch (e) {}
   try { t0.el.removeEventListener("touchmove", t0.bloqueia); } catch (e) {}
+  if (t0.voltaDraggable) { try { t0.el.draggable = true; } catch (e) {} }
   try { if (t0.ghost && t0.ghost.parentNode) t0.ghost.parentNode.removeChild(t0.ghost); } catch (e) {}
 }
 function gerToqueFim(ev) {
@@ -1779,6 +1813,8 @@ function gerToqueFim(ev) {
   try { if (alvo && alvo.ondragleave) alvo.ondragleave({}); } catch (e) {}
   if (alvo && alvo.ondrop) return alvo.ondrop({ preventDefault() {}, dataTransfer: null });
   gerFimArrasto();
+  /* (v18.71.0) soltou numa disciplina/edital (que não recebe cartão) ou fora das pastas: diz o que fazer */
+  gerAviso(t(alvo ? "ger_soltar_disc" : "ger_soltar_fora"), false);
   return null;
 }
 function gerToqueCancelar() {

@@ -4977,6 +4977,19 @@ dialog.ger-dest-dlg[open]{display:flex;flex-direction:column;width:min(620px,96v
 .ger-ghost{position:fixed;top:-300px;left:-300px;padding:6px 14px;border-radius:999px;background:var(--acao);color:#fff;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none}
 #dlgGerCartoes.ger-arrastando .ger-top{outline:1px dashed rgba(127,127,127,.55);outline-offset:-1px}
 .ger-pasta.ger-alvo{background:rgba(46,158,91,.28);outline:2px solid var(--acao);outline-offset:-2px}
+/* (v18.71.0) A PASTA SOB O CARTÃO: verde cheio, texto claro, contorno grosso — vence a cor de cada nível da árvore
+ * (antes a regra acima perdia para "#gerArvore .ger-top" e só sobrava um contorno fino) */
+#gerArvore .ger-pasta.ger-alvo{background:#1f8f4e;color:#fff;outline:3px solid #7ee2a8;outline-offset:-3px;font-weight:800;
+  transform:scale(1.02);transition:transform .08s,background .08s}
+#gerArvore .ger-pasta.ger-alvo .ger-prova{color:#fff}
+#gerArvore .ger-pasta.ger-alvo-no{opacity:.45;cursor:not-allowed}
+.ger-arrasto-info{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;
+  max-width:min(92vw,640px);padding:9px 16px;border-radius:12px;font-weight:800;font-size:14px;line-height:1.3;text-align:center;
+  background:var(--panel);color:var(--texto);border:2px solid var(--borda);box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none}
+.ger-arrasto-info[hidden]{display:none}
+.ger-arrasto-info.ok{background:#1f8f4e;color:#fff;border-color:#7ee2a8}
+.ger-arrasto-info.no{background:#4b5563;color:#fff;border-color:#9ca3af}
+.ger-arrasto-info.disc{background:#b45309;color:#fff;border-color:#fbbf24}
 .ger-pasta.ger-alvo-no{opacity:.45;cursor:not-allowed}
 .ger-vazia{font-style:italic;opacity:.8}
 .ger-ramo{padding-left:52px;font-size:12px}
@@ -9451,6 +9464,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span id="gerMsg"></span>
     <button type="button" class="btn-min" id="btnGerMsgDesfazer" data-i18n="ger_desfazer_curto" hidden></button>
   </div>
+  <!-- (v18.71.0) durante o arrasto: para onde o cartão vai, antes de soltar -->
+  <div class="ger-arrasto-info" id="gerArrastoInfo" role="status" aria-live="polite" hidden></div>
   <div class="ger-acoes" id="gerAcoes" hidden>
     <span class="ger-sel" id="gerSel"></span>
     <button type="button" class="btn-min btn-min-ok" id="btnGerMover" data-i18n="ger_mover_btn" disabled></button>

@@ -75,6 +75,54 @@ async function testes() {
     ok(r === null && JSON.stringify(a.matResumosAtual()) === antes2 && !a.gerToqueAtual(), "T6 soltar fora de uma pasta não faz nada");
   }
 
+  /* ---- 1b (v18.71.0): o defeito do aparelho real — o arrastar NATIVO roubava o arrasto do dedo ---- */
+  {
+    const { a, iss, iptu } = montar();
+    const i = linhas(a).findIndex((l) => /alíquota/.test(l.textContent));
+    const lin = linhas(a)[i];
+    ok(lin.draggable === true, "D0 premissa: com mouse o cartão é arrastável (arrastar do navegador)");
+    lin.onpointerdown(toque(10, 10));
+    ok(lin.draggable === false, "D1 com o dedo no cartão, o navegador não pode iniciar o arrastar nativo dele");
+    let recusado = false;
+    lin.ondragstart({ preventDefault() { recusado = true; }, dataTransfer: null });
+    ok(recusado && a.gerToqueAtual() && a.gerToqueAtual().ativo, "D2 se o arrastar nativo começar mesmo assim, é recusado — o do dedo continua");
+    /* a faixa diz para onde vai, antes de soltar */
+    ok(a.$("gerArrastoInfo").hidden === false && /Leve até uma pasta/.test(a.$("gerArrastoInfo").textContent), "D3 ao pegar, a faixa pede para levar até uma pasta");
+    a.gerToqueMover(toque(40, 40, pasta(a, /IPTU/)));
+    ok(/Soltar em: IPTU/.test(a.$("gerArrastoInfo").textContent) && cls(a.$("gerArrastoInfo"), "ok") && /→ Soltar em: IPTU/.test(a.gerToqueAtual().ghost.textContent), "D4 sobre a pasta: 'Soltar em: IPTU' (verde), também na pílula: " + a.$("gerArrastoInfo").textContent);
+    a.gerToqueMover(toque(40, 60, pasta(a, /ISS/)));
+    ok(/Já está nesta pasta/.test(a.$("gerArrastoInfo").textContent) && cls(a.$("gerArrastoInfo"), "no"), "D5 sobre a própria pasta: 'Já está nesta pasta'");
+    a.gerToqueMover(toque(300, 300, a.$("gerLista")));
+    a.gerToqueFim(toque(300, 300));
+    ok(/Nada foi movido: solte o cartão sobre uma pasta/.test(a.$("gerMsg").textContent) && a.$("gerArrastoInfo").hidden === true && lin.draggable === true,
+       "D6 soltar fora avisa (não fica em silêncio), a faixa some e o cartão volta a ser arrastável pelo mouse");
+    /* soltar numa disciplina (que não recebe cartão) */
+    const disc = achar(a.$("gerArvore"), (e) => cls(e, "ger-disc") && /Trib/.test(e.textContent))[0];
+    linhas(a)[0].onpointerdown(toque(10, 10));
+    a.gerToqueMover(toque(5, 5, disc));
+    ok(/Disciplina: segure para abrir/.test(a.$("gerArrastoInfo").textContent) && cls(a.$("gerArrastoInfo"), "disc"), "D7 sobre a disciplina a faixa explica (abra e solte num tópico)");
+    a.gerToqueFim(toque(5, 5));
+    ok(/disciplina não recebe cartões/.test(a.$("gerMsg").textContent), "D8 soltar na disciplina avisa: " + a.$("gerMsg").textContent);
+    /* o arrasto que o sistema cancelou: soltar depois avisa em vez de não fazer nada */
+    linhas(a)[0].onpointerdown(toque(10, 10));
+    a.gerToqueCancelar();
+    const antes = JSON.stringify(a.matResumosAtual());
+    await a.gerSoltarEm(pasta(a, /IPTU/));
+    ok(/o arrasto foi interrompido/.test(a.$("gerMsg").textContent) && JSON.stringify(a.matResumosAtual()) === antes, "D9 soltar depois de o arrasto se perder avisa ('interrompido'), sem mexer em nada");
+    /* o mouse também mostra a faixa */
+    linhas(a)[i].ondragstart({ dataTransfer: null, preventDefault() {} });
+    pasta(a, /IPTU/).ondragover({ preventDefault() {}, dataTransfer: null });
+    ok(/Soltar em: IPTU/.test(a.$("gerArrastoInfo").textContent), "D10 com mouse, a faixa também diz para onde vai");
+    await conduzir(a, pasta(a, /IPTU/).ondrop({ preventDefault() {}, dataTransfer: null }));
+    ok(/alíquota/.test(a.matResumosAtual()[iptu].cartoes) && !/alíquota/.test(a.matResumosAtual()[iss].cartoes), "D11 e soltar move (mouse)");
+  }
+
+  /* a cor da pasta-alvo: a regra precisa vencer "#gerArvore .ger-top" (antes só sobrava um contorno fino) */
+  {
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(/#gerArvore .ger-pasta.ger-alvo{background:#1f8f4e;color:#fff/.test(html) && /.ger-arrasto-info.ok{background:#1f8f4e/.test(html), "D12 pasta-alvo verde cheio (com o #gerArvore para vencer a cor do nível) e a faixa verde");
+  }
+
   /* ---- 2: o marcado leva os marcados ---- */
   {
     const { a, iss, iptu } = montar();
