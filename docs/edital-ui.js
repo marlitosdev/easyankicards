@@ -1701,6 +1701,84 @@ function diarioTituloCopia() {
   return t("ed_diario_tit") + " — " + diarioResumoTxt;
 }
 
+/* =====================================================================
+ * (v18.59.0) CORRIGIR O TEMPO DE UM REGISTRO
+ *
+ * O registro de 3h40 que foi 1h (o planejado dos ramos tinha entrado no
+ * campo) não tinha conserto: só apagar e registrar de novo. Agora cada
+ * registro tem "✎ tempo": aceita "1h", "1h30", "90", "1:30", "35min"; o
+ * tempo dos ramos (rm) é repartido de novo na mesma proporção (o último
+ * leva o resto — a soma fecha); a origem vira "voce" e o registro guarda
+ * de quanto era (mc.de). Uma faixa no alto do diário confirma, com desfazer.
+ * ===================================================================== */
+function diarioLerTempo(s) {
+  const x = String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+  if (!x) return null;
+  let m = /^(\d{1,2}):(\d{2})$/.exec(x);
+  if (m) return Number(m[1]) * 60 + Number(m[2]);
+  m = /^(\d{1,2})h(\d{1,2})?(?:min|m)?$/.exec(x);
+  if (m) return Number(m[1]) * 60 + (Number(m[2]) || 0);
+  m = /^(\d{1,3})(?:min|m)?$/.exec(x);
+  if (m) return Number(m[1]);
+  return null;
+}
+let diarioUltimaCorrecao = null;
+function diarioTempoCorrigir(x, novo) {
+  const n = Math.round(Number(novo) || 0);
+  if (!x || !(n > 0) || n > 900 || x.esp) return null;
+  const rec = { x, m: x.m, rm: x.rm ? x.rm.map((r) => Object.assign({}, r)) : undefined, mo: x.mo, mc: x.mc };
+  const ant = Number(x.m) || 0;
+  x.m = n;
+  const tocados = (x.rm || []).filter((r) => r.id !== "_topo");
+  if (tocados.length) {
+    const soma = tocados.reduce((a, r) => a + (Number(r.m) || 0), 0);
+    let acum = 0;
+    tocados.forEach((r, k) => {
+      const v = k === tocados.length - 1 ? n - acum : Math.round(n * (soma ? (Number(r.m) || 0) / soma : 1 / tocados.length));
+      r.m = v;
+      acum += v;
+    });
+  }
+  x.mo = "voce";
+  x.mc = { de: rec.mc && rec.mc.de != null ? rec.mc.de : ant, q: hojeISO() };
+  salvarDiario();
+  diarioUltimaCorrecao = rec;
+  try { reg("EDITAL-DIARIO", "tempo de um registro corrigido", x.n + " · " + x.d + " · " + horasTexto(ant) + " → " + horasTexto(n)); } catch (e) {}
+  return rec;
+}
+function diarioTempoDesfazer() {
+  const r = diarioUltimaCorrecao;
+  diarioUltimaCorrecao = null;
+  if (!r || edDiario.indexOf(r.x) < 0) return false;
+  r.x.m = r.m;
+  ["rm", "mo", "mc"].forEach((k) => { if (r[k] === undefined) delete r.x[k]; else r.x[k] = r[k]; });
+  salvarDiario();
+  try { reg("EDITAL-DIARIO", "correção de tempo desfeita", r.x.n + " · " + r.x.d + " · " + horasTexto(r.m || 0)); } catch (e) {}
+  return true;
+}
+async function diarioCorrigirTempoPerguntar(idx) {
+  const x = edDiario[idx];
+  if (!x) return null;
+  const v = await uiPrompt(t("ed_diario_tempo_pergunta", { n: x.n, d: diarioDiaTexto(x.d), h: horasTexto(x.m || 0) }), horasTexto(x.m || 0));
+  if (v === null || v === false) return null;
+  const novo = diarioLerTempo(v);
+  if (!novo || novo > 900) { await uiAlert(t("ed_diario_tempo_invalido", { v })); return null; }
+  if (novo === x.m) return null;
+  const rec = diarioTempoCorrigir(x, novo);
+  try { edRender(); } catch (e) {}
+  if (typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
+  abrirDiario();
+  return rec;
+}
+function diarioPintarCorrecao() {
+  const cx = $("diarioCorrecao");
+  if (!cx) return;
+  const r = diarioUltimaCorrecao;
+  cx.hidden = !r || edDiario.indexOf(r.x) < 0;
+  if (cx.hidden) return;
+  $("diarioCorrecaoTxt").textContent = t("ed_diario_tempo_feito", { n: r.x.n, de: horasTexto(r.m || 0), para: horasTexto(r.x.m || 0) });
+}
+
 /* ---- o conserto dos registros automáticos de ramo (uma faixa no alto do diário; nada sai sem o clique; dá para desfazer) ---- */
 const DIARIO_RETRO_RECIBO = "eac_diario_retro_recibo";
 function diarioRetroRecibo() {
@@ -2026,6 +2104,7 @@ function diarioLinha(it, sub) {
   nm.className = "di-nome"; nm.textContent = x.n;
   const tempo = document.createElement("span");
   tempo.className = "di-tempo"; tempo.textContent = x.m ? horasTexto(x.m) : "";
+  if (x.mc && x.mc.de != null) { tempo.textContent += " ✎"; tempo.title = t("ed_diario_tempo_corrigido_tip", { de: horasTexto(x.mc.de || 0) }); }
   const ds = document.createElement("span");
   ds.className = "di-disc";
   ds.textContent = x.disc + (x.cc ? " · " + x.cc : " · " + t("ed_sem_concurso"));
@@ -2039,6 +2118,13 @@ function diarioLinha(it, sub) {
   acoes.className = "di-acoes";
   const bt = botaoMini("ed_diario_apagar", "btn-cinza", () => apagarDoDiario(idx));
   diarioAcoesComuns(x).forEach((b) => acoes.append(b));
+  /* (v18.59.0) corrigir o tempo deste registro */
+  if (!x.esp && x.a !== "pendente") {
+    const bTempo = botaoMini("ed_diario_corrigir_tempo", "btn-cinza", () => diarioCorrigirTempoPerguntar(idx));
+    bTempo.className += " di-bt-tempo";
+    bTempo.title = t("ed_diario_corrigir_tempo_tip");
+    acoes.append(bTempo);
+  }
   acoes.append(bt);
   /* Os botões ficam ABAIXO da linha, não ao lado. Em coluna estreita o
    * grid os espremia a ponto de cada rótulo virar uma letra por linha
@@ -2167,6 +2253,7 @@ function abrirDiario() {
   const lista = $("diarioLista");
   lista.innerHTML = "";
   diarioPintarConserto();
+  diarioPintarCorrecao();
   diarioPintarSemana();
   diarioPintarPeriodos();
   diarioPintarFiltros();
@@ -4862,6 +4949,13 @@ function edIniciar() {
   $("edHorasSlider").addEventListener("input", edSimular);
   $("edHorasSlider").addEventListener("change", () => edMudarHoras($("edHorasSlider").value));
   $("btnDiarioFechar").onclick = () => $("dlgDiario").close();
+  if ($("btnDiarioTempoDesfazer")) $("btnDiarioTempoDesfazer").onclick = () => {
+    if (diarioTempoDesfazer()) {
+      try { edRender(); } catch (e) {}
+      if (typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
+    }
+    abrirDiario();
+  };
   $("btnDscFechar").onclick = () => $("dlgDisciplina").close();
   /* os dois campos de tempo são o MESMO valor: arrastar move o número e
    * digitar move a barra. Dois controles que discordam são um bug esperando. */
