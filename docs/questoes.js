@@ -719,7 +719,7 @@ function qsFiltrar(f) {
     if (o.soIneditas && (q.tentativas || []).length) return false;
     if (o.soErradas) {
       const ts = q.tentativas || [];
-      if (!ts.length || ts[ts.length - 1].acertou) return false;
+      if (!ts.length || !qsPedeRevisao(ts[ts.length - 1])) return false;
     }
     if (o.busca && qsNormal(q.enunciado).indexOf(qsNormal(o.busca)) < 0) return false;
     return true;
@@ -996,6 +996,25 @@ function qsDisciplinas() {
  * teste em leitura — que é exatamente o que a pessoa já fez no resumo.
  * ------------------------------------------------------------------- */
 let qsSessao = null;
+
+/* =====================================================================
+ * O CHUTE (v18.80.0)
+ *
+ * Acertar no chute não é saber. Marcado ANTES de ver o gabarito (depois
+ * de ver que acertou, a cabeça racionaliza que "sabia"), o acerto fica
+ * gravado com chute:true na tentativa. Na rodada ele é acerto (o placar
+ * diz quantos foram no chute); em tudo que mede DOMÍNIO — o domínio dos
+ * assuntos, o acerto do tópico que mexe no plano, o acerto dos ramos e da
+ * disciplina, o mapa da lei — vale só 1/4 de acerto. E a questão volta
+ * no "só as que errei ou chutei". Um lugar só diz quanto vale.
+ * ===================================================================== */
+const QS_PESO_CHUTE = 0.25;
+function qsValorAcerto(tt) {
+  if (!tt || !tt.acertou) return 0;
+  return tt.chute ? QS_PESO_CHUTE : 1;
+}
+/* errou ou chutou: a que pede revisão */
+function qsPedeRevisao(tt) { return !!tt && (!tt.acertou || !!tt.chute); }
 const QS_SESSAO_LOJA = "eac_qs_sessao";
 
 /* =====================================================================
@@ -1190,7 +1209,7 @@ function qsSessaoIniciar(lista, opcoes) {
 function qsErradasDaSessao() {
   if (!qsSessao) return [];
   const ids = {};
-  qsSessao.respondidas.forEach((x) => { if (!x.acertou) ids[x.id] = 1; });
+  qsSessao.respondidas.forEach((x) => { if (qsPedeRevisao(x)) ids[x.id] = 1; });
   return qsSessao.fila.filter((q) => ids[q.id]);
 }
 
@@ -1207,15 +1226,20 @@ function qsJaRespondida() {
   return qsSessao.respondidas.filter((x) => x.id === q.id)[0] || null;
 }
 
-function qsResponder(escolha, gravar) {
+function qsResponder(escolha, gravar, opc) {
   const q = qsAtual();
   if (!q) return null;
   if (qsJaRespondida()) return null;   /* uma resposta por passagem */
   const resp = String(escolha || "").toUpperCase().slice(0, 1);
   const acertou = resp === String(q.gabarito || "").toUpperCase();
+  const chute = !!(opc && opc.chute);
   q.tentativas = q.tentativas || [];
-  q.tentativas.push({ q: new Date().toISOString(), resp, acertou });
-  qsSessao.respondidas.push({ id: q.id, resp, acertou, em: Date.now() });
+  const tent = { q: new Date().toISOString(), resp, acertou };
+  if (chute) tent.chute = true;
+  q.tentativas.push(tent);
+  const rr = { id: q.id, resp, acertou, em: Date.now() };
+  if (chute) rr.chute = true;
+  qsSessao.respondidas.push(rr);
   qsSalvar(gravar);
   qsSessaoGravar(gravar);
   /* o bloco em andamento acompanha a cada resposta: assim uma rodada
@@ -1223,7 +1247,21 @@ function qsResponder(escolha, gravar) {
   try {
     if (typeof qhAtualizar === "function") qhAtualizar(qsPlacar(), { gravar });
   } catch (e) {}
-  return { acertou, gabarito: q.gabarito, comentario: q.comentario, resp };
+  return { acertou, gabarito: q.gabarito, comentario: q.comentario, resp, chute };
+}
+
+/* "foi chute" DEPOIS do gabarito (ou "não foi"): corrige a tentativa desta passagem — a última da questão — e a rodada */
+function qsMarcarChute(sim, gravar) {
+  const q = qsAtual();
+  const r = qsJaRespondida();
+  if (!q || !r) return null;
+  const ts = q.tentativas || [];
+  const ult = ts[ts.length - 1];
+  [ult, r].forEach((x) => { if (!x) return; if (sim) x.chute = true; else delete x.chute; });
+  qsSalvar(gravar);
+  qsSessaoGravar(gravar);
+  try { if (typeof qhAtualizar === "function") qhAtualizar(qsPlacar(), { gravar }); } catch (e) {}
+  return !!sim;
 }
 
 /* ============ SÓ AS QUE ERREI (ou ainda não respondi) ============
@@ -1240,7 +1278,7 @@ function qsResponder(escolha, gravar) {
 function qsInteressaNoFiltro(q) {
   if (!qsSessao || !q) return true;
   const r = qsSessao.respondidas.filter((x) => x.id === q.id)[0];
-  return !r || !r.acertou;
+  return !r || qsPedeRevisao(r);
 }
 
 function qsFiltroFalhas(ligado, gravar) {
@@ -1329,7 +1367,8 @@ function qsPlacar() {
   if (!qsSessao) return { total: 0, feitas: 0, certas: 0, pct: 0 };
   const feitas = qsSessao.respondidas.length;
   const certas = qsSessao.respondidas.filter((x) => x.acertou).length;
-  return { total: qsSessao.fila.length, feitas, certas,
+  const chutes = qsSessao.respondidas.filter((x) => x.acertou && x.chute).length;
+  return { total: qsSessao.fila.length, feitas, certas, chutes,
            pct: feitas ? Math.round((certas / feitas) * 100) : 0 };
 }
 
