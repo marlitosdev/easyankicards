@@ -523,7 +523,7 @@ function ramAcertosDoTopico(chave, ramos, banco) {
     if (!tent.length) return;
     /* Q1 — ligada a um ramo: conta só para ele (sem palpite) */
     if (q.ramo) {
-      if (out[q.ramo]) tent.forEach((tt) => { out[q.ramo].feitas++; if (tt && tt.acertou) out[q.ramo].certas++; });
+      if (out[q.ramo]) tent.forEach((tt) => { out[q.ramo].feitas++; out[q.ramo].certas += (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0)); });
       return;
     }
     const d = ramRadicais([q.enunciado, q.comentario, (q.opcoes || []).join(" ")].join(" "));
@@ -533,7 +533,7 @@ function ramAcertosDoTopico(chave, ramos, banco) {
       if (!rad.size) return;
       let c = 0; rad.forEach((w) => { if (d.has(w)) c++; });
       if (c < Math.max(1, Math.ceil(rad.size * 0.6))) return;
-      tent.forEach((tt) => { out[r.id].feitas++; if (tt && tt.acertou) out[r.id].certas++; });
+      tent.forEach((tt) => { out[r.id].feitas++; out[r.id].certas += (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0)); });
     });
   });
   rs.forEach((r) => { const x = out[r.id]; x.pct = x.feitas ? Math.round((x.certas / x.feitas) * 100) : null; });

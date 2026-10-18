@@ -58,8 +58,10 @@ function domAcerto(tentativas, opc) {
   const todas = (tentativas || []).filter((t) => t && typeof t.acertou === "boolean");
   const ord = todas.map((t, i) => ({ t, i })).sort((a, b) => (String(a.t.q || "") < String(b.t.q || "") ? -1 : (String(a.t.q || "") > String(b.t.q || "") ? 1 : a.i - b.i))).map((x) => x.t);
   const rec = ord.slice(-o.janela);
-  const certas = rec.filter((t) => t.acertou).length;
-  const totalCertas = todas.filter((t) => t.acertou).length;
+  /* (v18.80.0) o acerto no chute vale 1/4 (qsValorAcerto) */
+  const vale = (tt) => (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0));
+  const certas = rec.reduce((s, tt) => s + vale(tt), 0);
+  const totalCertas = todas.reduce((s, tt) => s + vale(tt), 0);
   return {
     n: rec.length, certas, pct: rec.length ? (certas / rec.length) * 100 : null,
     valido: rec.length >= o.minQuestoes,
@@ -197,7 +199,7 @@ function domEntradas(ed, plano, notas, banco, regs) {
   (banco || []).forEach((q) => {
     if (!q || !q.disciplina || !q.topico) return;
     const chave = matChaveViva(q.disciplina, q.topico);
-    (tentativas[chave] = tentativas[chave] || []).push(...(q.tentativas || []).map((t) => ({ q: t.q, acertou: !!t.acertou })));
+    (tentativas[chave] = tentativas[chave] || []).push(...(q.tentativas || []).map((t) => ({ q: t.q, acertou: !!t.acertou, chute: !!t.chute })));
   });
   (notas || []).forEach((n) => {
     const ramo = typeof ramIdDoCartao === "function" ? ramIdDoCartao(n.card) : "";

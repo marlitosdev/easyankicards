@@ -150,7 +150,7 @@ function plSinais(plano, diario, banco) {
     if (!porDisc[d]) return;
     (q.tentativas || []).forEach((tt) => {
       porDisc[d].qFeitas++;
-      if (tt.acertou) porDisc[d].qCertas++;
+      porDisc[d].qCertas += (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0));
     });
   });
 

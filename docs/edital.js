@@ -1661,7 +1661,7 @@ function edAcertos(diario, banco) {
     const L = pega(q.disciplina);
     (q.tentativas || []).forEach((tt) => {
       L.feitas++;
-      if (tt.acertou) L.certas++;
+      L.certas += (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0));       /* (v18.80.0) chute = 1/4 */
     });
   });
   Object.keys(por).forEach((k) => {
@@ -1695,7 +1695,7 @@ function edAcertosPorTopico(diario, banco, opc) {
   });
   (banco || []).forEach((q) => {
     if (!q || !q.chave) return;
-    (q.tentativas || []).forEach((tt) => { if (tt && typeof tt.acertou === "boolean") add(String(q.chave).toLowerCase(), tt.q, 1, tt.acertou ? 1 : 0); });
+    (q.tentativas || []).forEach((tt) => { if (tt && typeof tt.acertou === "boolean") add(String(q.chave).toLowerCase(), tt.q, 1, (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0))); });
   });
   const out = {};
   Object.keys(ev).forEach((ch) => {

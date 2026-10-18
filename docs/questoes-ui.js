@@ -42,6 +42,8 @@ let qsRiscadas = new Set();
  * nova), e também limpa sozinha assim que qsResponder grava de
  * verdade (ver o onclick das alternativas e o de btnQsProxima). */
 let qsSelecionada = "";
+/* (v18.80.0) "é chute" marcado para a questão da vez (antes de responder) */
+let qsChute = false;
 
 function qsUiConcursoAtual() {
   try {
@@ -862,7 +864,7 @@ function qsUiPintarSessao() {
    * mexe aqui — senão um clique em "embaralhar" fecharia o enunciado
    * que a pessoa acabou de abrir. */
   if (q && q.id !== qsEnunQid) {
-    qsEnunQid = q.id; qsEnunColapsado = false; qsRiscadas.clear(); qsSelecionada = "";
+    qsEnunQid = q.id; qsEnunColapsado = false; qsRiscadas.clear(); qsSelecionada = ""; qsChute = false;
   }
   /* DUAS INFORMAÇÕES, E NÃO UMA ESPREMIDA EM DUAS.
    *
@@ -874,7 +876,7 @@ function qsUiPintarSessao() {
   $("qsSessPlacar").textContent = t("qs_placar",
     { i: pos.pos || Math.min(p.feitas + (q ? 1 : 0), p.total),
       n: pos.total || p.total,
-      f: p.feitas, c: p.certas, pct: p.pct });
+      f: p.feitas, c: p.certas, pct: p.pct }) + (p.chutes ? t("qs_placar_chutes", { n: p.chutes }) : "");
 
   const corpo = $("qsSessCorpo");
   corpo.innerHTML = "";
@@ -1153,8 +1155,9 @@ function qsUiPintarSessao() {
     depois.className = "qs-depois";
     const gb = document.createElement("div");
     gb.className = "qs-gab " + (jaFoi.acertou ? "qs-gab-ok" : "qs-gab-nao");
-    gb.textContent = (jaFoi.acertou ? t("qs_acertou") : t("qs_errou"))
+    gb.textContent = (jaFoi.acertou ? t(jaFoi.chute ? "qs_acertou_chute" : "qs_acertou") : t("qs_errou"))
       + " · " + t("qs_gab_e", { g: q.gabarito });
+    if (jaFoi.acertou && jaFoi.chute && gb.classList) gb.classList.add("qs-gab-chute");
 
     /* "VIRAR EM CARTÕES" E "INCLUIR/EDITAR MINHA DICA", AO LADO DO
      * GABARITO — moravam soltos no fim de tudo, do tamanho de qualquer
@@ -1243,6 +1246,7 @@ function qsUiPintarSessao() {
    * uma) em vez de sempre pronto, porque não há o que responder sem
    * ter escolhido nada ainda. */
   $("btnQsProxima").hidden = false;
+  qsUiPintarChute(jaFoi);
   if (jaFoi) {
     $("btnQsProxima").disabled = false;
     $("btnQsProxima").textContent = t("qs_proxima");
@@ -3860,8 +3864,9 @@ function qsUiIniciar() {
        * PRÓXIMA vez que o botão for tocado, já como "próxima". */
       if (!qsJaRespondida()) {
         if (!qsSelecionada) return;
-        const r = qsResponder(qsSelecionada);
+        const r = qsResponder(qsSelecionada, undefined, { chute: qsChute });
         if (!r) return;
+        if (r.chute) { try { matReg("questao", "respondida no chute", r.acertou ? "acertou" : "errou"); } catch (e) {} }
         qsRiscadas.clear();
         qsUiPintarSessao();
         return;
@@ -3869,6 +3874,7 @@ function qsUiIniciar() {
       sairDaQuestao(() => { qsAndar(1); qsUiPintarSessao(); });
     };
   }
+  if ($("btnQsChute")) $("btnQsChute").onclick = () => qsUiChuteAlternar();
   if ($("btnQsPular")) {
     $("btnQsPular").onclick = () => sairDaQuestao(() => {
       const q = qsAtual();
@@ -4440,6 +4446,32 @@ function qsNavFlutLigar() {
  * certo-errado). Só quando a questão é a janela de cima e o foco não está
  * num campo de texto (o rascunho digitado, a busca, a dica).
  * ===================================================================== */
+/* O BOTÃO DO CHUTE: antes do gabarito, liga/desliga "é chute"; depois, só num acerto, corrige ("foi chute" / "não foi") */
+function qsUiPintarChute(jaFoi) {
+  const b = $("btnQsChute");
+  if (!b) return;
+  if (!jaFoi) {
+    b.hidden = false;
+    b.textContent = t("qs_chute");
+    b.title = t("qs_chute_tip");
+    b.setAttribute("aria-pressed", qsChute ? "true" : "false");
+    return;
+  }
+  b.hidden = !jaFoi.acertou;
+  b.textContent = t("qs_chute_depois");
+  b.title = t("qs_chute_depois_tip");
+  b.setAttribute("aria-pressed", jaFoi.chute ? "true" : "false");
+}
+function qsUiChuteAlternar() {
+  const r = qsJaRespondida();
+  if (!r) { qsChute = !qsChute; qsUiPintarChute(null); return qsChute; }
+  if (!r.acertou) return false;
+  const sim = qsMarcarChute(!r.chute);
+  try { matReg("questao", sim ? "acerto marcado como chute" : "chute desmarcado", ""); } catch (e) {}
+  qsUiPintarSessao();
+  return sim;
+}
+
 function qsTeclaResponder(ev) {
   if (!ev || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
   const dlg = $("dlgQsResponder");
@@ -4467,6 +4499,9 @@ function qsTeclaResponder(ev) {
     else if (!jaFoi && pode("btnQsPular")) feito = clicar("btnQsPular");
   } else if (ev.key === "ArrowLeft") {
     if (pode("btnQsVoltar")) feito = clicar("btnQsVoltar");
+  } else if (ev.key === "?") {
+    /* (v18.80.0) "?" = dúvida/chute (o C é alternativa e é o Certo do certo/errado) */
+    if (pode("btnQsChute")) feito = clicar("btnQsChute");
   } else if (ev.key === "Enter") {
     /* Enter num botão em foco já o aperta: não apertar dois */
     if (tag === "BUTTON" || tag === "A") return false;

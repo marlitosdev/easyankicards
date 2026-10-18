@@ -2133,7 +2133,7 @@ function leiPintarLeitura() {
       if (est.questoes) partes.push(t("lei_cai_questoes", { n: est.questoes }));
       if (est.prova) partes.push(t("lei_cai_prova", { n: est.prova }));
       if (est.erros || est.acertos) {
-        partes.push(t("lei_cai_placar", { e: est.erros, a: est.acertos }));
+        partes.push(t("lei_cai_placar", { e: est.erros, a: (est.acertosN || 0) + (est.chutes || 0) }));
       }
       if (est.incisos.length) {
         partes.push(t("lei_cai_incisos", { i: est.incisos.join(", ") }));
@@ -3566,7 +3566,8 @@ function leiIrLinhaEl(d, a, r, u, textoArt) {
     /* "17 questões · 14 acertos · 3 erros": no plural certo e sem contar o que é zero */
     const pl = (n, k) => t(k + (n === 1 ? "_1" : ""), { n });
     if (r && r.questoes) partes.push(pl(r.questoes, "lei_rank_questoes"));
-    if (r && r.acertos) partes.push(pl(r.acertos, "lei_rank_acertos"));
+    if (r && r.acertosN) partes.push(pl(r.acertosN, "lei_rank_acertos"));
+    if (r && r.chutes) partes.push(t("lei_rank_chutes", { n: r.chutes }));
     if (r && r.erros) partes.push(pl(r.erros, "lei_rank_erros"));
     if (r && r.prova) partes.push(pl(r.prova, "lei_rank_prova"));
     if (r && r.incisos.length) partes.push(t("lei_rank_incisos", { i: r.incisos.join(", ") }));
@@ -7945,7 +7946,7 @@ function leiRanking(id) {
   const porNum = {};
   arts.forEach((a) => {
     porNum[a.num] = { num: a.num, rotulo: a.rotulo, ementa: a.ementa,
-                      questoes: 0, erros: 0, acertos: 0, prova: 0, incisos: [] };
+                      questoes: 0, erros: 0, acertos: 0, acertosN: 0, chutes: 0, prova: 0, incisos: [] };
   });
 
   /* 1. as questões salvas — cada uma conta para a lei que ela CITA (v18.79.0). Antes, qualquer "art. 43" contava para a lei
@@ -7980,7 +7981,10 @@ function leiRanking(id) {
         contou[r.num] = true;
         r.questoes++;
         (q.tentativas || []).forEach((tt) => {
-          if (tt && tt.acertou) r.acertos++; else if (tt) r.erros++;
+          if (!tt) return;
+          /* (v18.80.0) o acerto no chute vale 1/4 na conta; para mostrar, acertos firmes e chutes à parte */
+          if (tt.acertou) { r.acertos += (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0)); if (tt.chute) r.chutes++; else r.acertosN++; }
+          else r.erros++;
         });
       });
     });
