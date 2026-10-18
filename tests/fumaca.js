@@ -21,11 +21,11 @@ const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
  * app usa. Sem isso não dá para testar tela em lista (a bandeja de
  * recortes marca as caixas por querySelectorAll). */
 function casa(el, sel) {
-  /* aceita "tag", ".classe", "tag.classe" e "[attr=valor]".
+  /* aceita "tag", ".classe", "tag.classe", "[attr=valor]" e "[attr]" (só a presença).
    * ".classe" faltava, e sem ela nenhum teste conseguia perguntar se a
    * leitura do resumo desenhou o bloco certo — só dava para contar <mark>. */
   const m = String(sel).trim()
-    .match(/^([a-zA-Z]*)((?:\.[\w-]+)*)(?:\[([\w-]+)=([^\]]+)\])?$/);
+    .match(/^([a-zA-Z]*)((?:\.[\w-]+)*)(?:\[([\w-]+)(?:=([^\]]+))?\])?$/);
   if (!m) return false;
   const [, tag, classes, attr, valor] = m;
   if (tag && (el.tag || "").toLowerCase() !== tag.toLowerCase()) return false;
@@ -35,7 +35,8 @@ function casa(el, sel) {
       if (!tem.includes(c)) return false;
     }
   }
-  if (attr && String(el[attr] || "") !== valor.replace(/^["']|["']$/g, "")) return false;
+  if (attr && valor === undefined && (el[attr] === undefined || el[attr] === null) && !(el._attrs && attr in el._attrs)) return false;
+  if (attr && valor !== undefined && String(el[attr] || "") !== valor.replace(/^["']|["']$/g, "")) return false;
   return true;
 }
 
@@ -672,6 +673,7 @@ function rodar() {
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
     matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico,
+    matRolLer, matRolDe, matRolGuardar, matRolMedir, matRolAplicar, matRolEscopoChave, matRolManter, MAT_ROL_CHAVE,
     matSecoesDeRamo, matTextoDaSecao, matTrocarSecao, matEscopoAtual, matEscopoEscolher, matSecaoSincronizar,
     ramBaseDe, ramGarantirBase, ramDadosDoRamo, ramDetectarRenomeacoes, ramConfirmarRenomeacoes, ramIgnorarRenomeacoes, ramPintarRenomeacao,
     jurRamoDe, jurLigarRamo, jurDesfazerRamo, jurContarPorRamo, jurMigrarRamos, jurRamoVerTodos,
