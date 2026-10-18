@@ -673,7 +673,7 @@ function rodar() {
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
     matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico,
-    leiIrDominio, leiIrCalor, leiIrDados,
+    leiIrDominio, leiIrCalor, leiIrDados, leiNuncaVistos, leiNuncaVistosPrioritarios, leiFilaNVIniciar, leiFilaNVProximo, leiFilaNVSair, leiFilaNVAtual: () => leiFilaNV, leiArtigoVistoMarcar, leiQuestoesDoArtigo,
     qsArtigosDaQuestao, qsIrmasDe, qsIrmasDaAtual, qsAgendarIrma, qsIrmaAgendadaDe, qsIrmaDesfazer, qsUiIrmaLinha, QS_IRMA_PASSO, qsSessaoRetomar, qsSessaoLer,
     qsValorAcerto, qsPedeRevisao, qsMarcarChute, QS_PESO_CHUTE, qsUiChuteAlternar, qsUiPintarChute, qsChuteAtual: () => qsChute,
     leiResolverCitacao, leiAlteradorasDe, leiTemArtigo, leiAlteradaPor, leiChaveDeEspecieNumero,

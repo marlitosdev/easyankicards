@@ -4630,6 +4630,16 @@ function leiNotaDeEm(l, num) {
   return l.notasArtigos[leiNumNormal(num)] || "";
 }
 
+/* (v18.83.0) "JÁ VI ESTE ARTIGO" — marcado à mão (ou pela fila dos nunca vistos), no próprio registro da lei, como as notas */
+function leiArtigoVistoMarcar(idLei, num, sim) {
+  const l = leiDe(idLei);
+  if (!l) return false;
+  const v = Object.assign({}, l.artVistos || {});
+  const n = leiNumNormal(num);
+  if (sim === false) delete v[n]; else v[n] = leisHojeISO();
+  return !!leiGuardar({ id: idLei, artVistos: v });
+}
+
 function leiNotaGuardar(idLei, num, texto) {
   const l = leiDe(idLei);
   if (!l) return false;
