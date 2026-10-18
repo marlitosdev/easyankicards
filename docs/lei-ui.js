@@ -3309,7 +3309,9 @@ function leiIrDados() {
   const blocosPorNo = {};
   (l ? leiBlocos(texto, opc) : []).forEach((b) => { (blocosPorNo[b.divisaoId] = blocosPorNo[b.divisaoId] || []).push(b); });
   const efetivos = l ? leiArtigosEfetivos(l) : est.artigos;
-  return { texto, l, est, arts: est.artigos, ranking, lista, blocosPorNo, lidos: (l && l.blocos) || {},
+  /* (v18.82.0) a régua da barrinha "o quanto cai": o artigo que mais cai nesta lei */
+  const calorMax = lista.reduce((m, r) => Math.max(m, (r.questoes || 0) + 2 * (r.prova || 0)), 0);
+  return { texto, l, est, arts: est.artigos, ranking, lista, calorMax, blocosPorNo, lidos: (l && l.blocos) || {},
     parei: l ? l.parei : "", pareiIdx: l ? leiIndiceDoMarcador(l, efetivos) : -1, efetivos, alertas: leiIrAlertas(texto, opc) };
 }
 
@@ -3392,8 +3394,25 @@ function leiIrTemUnidades(texto) {
   return /§\s*\d|[Pp]ar[áa]grafo\s+[úu]nico|(?:^|\n|[:;]\s*)(?:[IVXLCDM]{1,6}\s*[-–—)]|[a-z]\))\s/.test(String(texto || ""));
 }
 
+/* (v18.82.0) O DOMÍNIO REAL DO ARTIGO, pelas questões que o citam: o acerto no chute vale 1/4 (qsValorAcerto, já somado
+ * em r.acertos). Sem tentativa, nada (null). verde ≥ 80% · amarelo ≥ 55% · vermelho abaixo. */
+function leiIrDominio(r) {
+  const tot = r ? (r.acertosN || 0) + (r.chutes || 0) + (r.erros || 0) : 0;
+  if (!tot) return null;
+  const pct = (r.acertos || 0) / tot;
+  return { pct, faixa: pct >= 0.8 ? "verde" : pct >= 0.55 ? "amarelo" : "vermelho", tot };
+}
+/* O QUANTO CAI, relativo ao artigo que mais cai nesta lei (questões + 2 × "caiu na prova"), de 0 a 100 */
+function leiIrCalor(r, max) {
+  const p = r ? (r.questoes || 0) + 2 * (r.prova || 0) : 0;
+  return p && max ? Math.max(8, Math.round((p / max) * 100)) : 0;
+}
+
 /* UM COMPONENTE POR ARTIGO: o número (leva ao artigo), o selo de questões e a seta (abre a
- * estrutura) numa pílula só, com a cor do estado. Cada parte continua com o seu toque. */
+ * estrutura) numa pílula só, com a cor do estado. Cada parte continua com o seu toque.
+ * (v18.82.0) TRÊS SINAIS ao mesmo tempo, em vez de uma borda que vencia as outras: o FUNDO diz o
+ * domínio real (verde/amarelo/vermelho), a BARRINHA de baixo diz o quanto o artigo cai, e 🎲 diz
+ * que houve acerto no chute. A borda continua dizendo onde parou, caiu em prova, erra mais. */
 function leiIrChipEl(d, a) {
   const cel = document.createElement("span");
   const est = d.ranking[a.num];
@@ -3401,7 +3420,9 @@ function leiIrChipEl(d, a) {
   const sel = ehErro ? "erro" : ehProva ? "prova" : ehParei ? "parei" : "";
   const alerta = !!(d.alertas && d.alertas[a.indice]);
   const revogado = leiArtigoRevogado(a);
-  cel.className = "lei-ir-cel" + (sel ? " lei-ir-cel-" + sel : "") + (alerta ? " lei-ir-cel-alerta" : "") + (revogado ? " lei-ir-cel-rev" : "");
+  const dom = leiIrDominio(est);
+  cel.className = "lei-ir-cel" + (sel ? " lei-ir-cel-" + sel : "") + (alerta ? " lei-ir-cel-alerta" : "") + (revogado ? " lei-ir-cel-rev" : "")
+    + (dom ? " lei-ir-dom-" + dom.faixa : "");
   const b = document.createElement("button");
   b.type = "button";
   b.className = "lei-ir-n" + (ehParei ? " lei-ir-parei" : "") + (ehProva ? " lei-ir-prova" : "") + (ehErro ? " lei-ir-erro" : "");
@@ -3410,6 +3431,9 @@ function leiIrChipEl(d, a) {
   if (ehParei) dicas.push(t("lei_ir_dica_parei"));
   if (ehProva) dicas.push(t("lei_ir_dica_prova", { n: est.prova }));
   if (est && est.questoes) dicas.push(t("lei_ir_dica_q", { n: est.questoes }));
+  if (dom) dicas.push(t("lei_ir_dica_dom", { p: Math.round(dom.pct * 100), n: dom.tot }) + (est.chutes ? " " + t("lei_ir_dica_chutes", { n: est.chutes }) : ""));
+  const bcs = est && est.bancas ? Object.keys(est.bancas).sort((x, y) => est.bancas[y] - est.bancas[x]) : [];
+  if (bcs.length) dicas.push(t("lei_ir_dica_bancas", { b: bcs.map((k) => k + " " + est.bancas[k]).join(", ") }));
   if (alerta) dicas.push(t("lei_ir_dica_alerta"));
   if (revogado) dicas.push(t("lei_ir_dica_rev"));
   b.title = dicas.length ? dicas.join(" · ") : t("lei_ir_dica_simples", { a: a.rotulo });
@@ -3418,9 +3442,16 @@ function leiIrChipEl(d, a) {
   if (est && est.questoes) {
     const q = document.createElement("span");
     q.className = "lei-ir-q";
-    q.textContent = String(est.questoes);
-    q.title = t("lei_ir_dica_q", { n: est.questoes });
+    q.textContent = String(est.questoes) + (est.chutes ? " 🎲" : "");
+    q.title = t("lei_ir_dica_q", { n: est.questoes }) + (est.chutes ? " " + t("lei_ir_dica_chutes", { n: est.chutes }) : "");
     cel.append(q);
+  }
+  const calor = leiIrCalor(est, d.calorMax);
+  if (calor) {
+    const bar = document.createElement("i");
+    bar.className = "lei-ir-calor";
+    bar.style.width = calor + "%";
+    cel.append(bar);
   }
   const ef = (d.efetivos && d.efetivos[a.indice]) || a;
   if (leiIrTemUnidades(ef.texto)) {
@@ -7946,7 +7977,7 @@ function leiRanking(id) {
   const porNum = {};
   arts.forEach((a) => {
     porNum[a.num] = { num: a.num, rotulo: a.rotulo, ementa: a.ementa,
-                      questoes: 0, erros: 0, acertos: 0, acertosN: 0, chutes: 0, prova: 0, incisos: [] };
+                      questoes: 0, erros: 0, acertos: 0, acertosN: 0, chutes: 0, prova: 0, incisos: [], bancas: {} };
   });
 
   /* 1. as questões salvas — cada uma conta para a lei que ela CITA (v18.79.0). Antes, qualquer "art. 43" contava para a lei
@@ -7980,6 +8011,9 @@ function leiRanking(id) {
         if (contou[r.num]) return;       /* a mesma questão conta uma vez por artigo */
         contou[r.num] = true;
         r.questoes++;
+        /* (v18.82.0) de que banca é a questão — o balão do mapa conta por banca */
+        const bc = String(q.banca || "").trim();
+        if (bc && bc !== "—" && bc !== "-") r.bancas[bc] = (r.bancas[bc] || 0) + 1;
         (q.tentativas || []).forEach((tt) => {
           if (!tt) return;
           /* (v18.80.0) o acerto no chute vale 1/4 na conta; para mostrar, acertos firmes e chutes à parte */

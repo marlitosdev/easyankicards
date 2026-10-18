@@ -1634,6 +1634,8 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-leg-erro{border-color:#ef4444;color:#ef4444}
 .lei-leg-alerta{border-style:dashed}
 .lei-leg-q{border:none;background:none;padding:0}
+.lei-leg-dom{border:none;padding:0 4px;background:linear-gradient(90deg,rgba(217,83,79,.3),rgba(240,173,78,.3),rgba(46,158,91,.3))}
+.lei-leg-calor{border:none;padding:0 2px 2px;background:linear-gradient(var(--acao),var(--acao)) left bottom / 60% 3px no-repeat}
 .lei-ir-busca{width:100%;box-sizing:border-box;margin:4px 0 2px;padding:8px 10px;border-radius:8px;
   border:1px solid var(--borda);background:var(--campo);color:var(--texto);font:inherit}
 .lei-ir-filtros{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
@@ -1645,6 +1647,12 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-ir-cel-erro{border-color:#ef4444}
 .lei-ir-cel-alerta{border-style:dashed}
 .lei-ir-cel-aberta{flex:0 0 100%}
+/* (v18.82.0) três sinais: o fundo = domínio real; a barrinha embaixo = o quanto cai; 🎲 no selo = acerto no chute */
+.lei-ir-cel{position:relative}
+.lei-ir-cel.lei-ir-dom-verde{background:rgba(46,158,91,.20)}
+.lei-ir-cel.lei-ir-dom-amarelo{background:rgba(240,173,78,.22)}
+.lei-ir-cel.lei-ir-dom-vermelho{background:rgba(217,83,79,.24)}
+.lei-ir-calor{position:absolute;left:0;bottom:0;height:3px;background:var(--acao);border-radius:0 2px 2px 0;pointer-events:none}
 .lei-ir-cel .lei-ir-n{border:none;background:none;border-radius:0;padding:5px 9px}
 .lei-ir-q{align-self:center;padding:0 6px;font-size:10.5px;font-weight:700;color:var(--sutil);border-left:1px solid var(--borda)}
 .lei-ir-mais{font-family:inherit;font-size:11px;padding:0 7px;cursor:pointer;border:none;
@@ -9155,6 +9163,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="lei-leg lei-leg-erro" data-i18n="lei_ir_leg_erro"></span>
     <span class="lei-leg lei-leg-alerta" id="leiIrLegAlerta" data-i18n="lei_ir_leg_alerta" hidden></span>
     <span class="lei-leg lei-leg-q" data-i18n="lei_ir_leg_q"></span>
+    <span class="lei-leg lei-leg-dom" data-i18n="lei_ir_leg_dom"></span>
+    <span class="lei-leg lei-leg-calor" data-i18n="lei_ir_leg_calor"></span>
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiIrFechar" data-i18n="help_close"></button>
