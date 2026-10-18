@@ -1079,6 +1079,16 @@ function qsUiPintarSessao() {
     corpo.append(hs);
   }
 
+  /* (v18.81.0) A IRMÃ: de onde veio, antes de responder */
+  const irmaDe = qsSessao && qsSessao.irmas && qsSessao.irmas[q.id];
+  if (irmaDe) {
+    const se = document.createElement("div");
+    se.className = "qs-irma-selo";
+    se.textContent = t("qs_irma_selo", { a: irmaDe.artigo });
+    se.title = t("qs_irma_selo_tip");
+    corpo.append(se);
+  }
+
   const jaFoi = qsJaRespondida();
   /* JÁ RESPONDIDA NÃO TEM "SELECIONADA" — é conceito de decisão em
    * aberto; travar isso aqui evita que uma seleção velha (de antes de
@@ -1209,6 +1219,8 @@ function qsUiPintarSessao() {
 
     gbLinha.append(gb, acoes);
     depois.append(gbLinha);
+    /* (v18.81.0) errou ou chutou: a irmã (outra questão do mesmo artigo) para conferir se o ponto ficou */
+    if (qsPedeRevisao(jaFoi)) { const ir = qsUiIrmaLinha(q); if (ir) depois.append(ir); }
 
     if (q.comentario) {
       let elCom = null;
@@ -4446,6 +4458,41 @@ function qsNavFlutLigar() {
  * certo-errado). Só quando a questão é a janela de cima e o foco não está
  * num campo de texto (o rascunho digitado, a busca, a dica).
  * ===================================================================== */
+/* a linha da irmã, debaixo do gabarito: agendar (5 adiante) ou fazer agora; agendada, diz onde e deixa desfazer */
+function qsUiIrmaLinha(q) {
+  const ag = qsIrmaAgendadaDe(q.id);
+  const irmas = ag ? [] : qsIrmasDaAtual();
+  if (!ag && !irmas.length) return null;
+  const lin = document.createElement("div");
+  lin.className = "qs-irma";
+  const tx = document.createElement("span");
+  const bt = (rot, tip, fn, cls) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min qs-bt-mini" + (cls ? " " + cls : ""); b.textContent = rot; b.title = tip || ""; b.onclick = fn;
+    return b;
+  };
+  if (ag) {
+    tx.textContent = ag.adiante > 0 ? t("qs_irma_agendada", { a: ag.artigo, n: ag.adiante }) : t("qs_irma_agendada_feita", { a: ag.artigo });
+    lin.append(tx);
+    if (ag.adiante > 0) lin.append(bt(t("qs_irma_desfazer"), "", () => { qsIrmaDesfazer(q.id); qsUiPintarSessao(); }));
+    return lin;
+  }
+  tx.textContent = t("qs_irma_ha", { n: irmas.length, a: irmas[0].artigo });
+  lin.append(tx,
+    bt(t("qs_irma_depois", { n: QS_IRMA_PASSO }), t("qs_irma_depois_tip"), () => {
+      const r = qsAgendarIrma(QS_IRMA_PASSO);
+      try { matReg("questao", "questão irmã agendada", r ? r.artigo + " · " + r.adiante + " adiante" : ""); } catch (e) {}
+      qsUiPintarSessao();
+    }, "btn-min-ok"),
+    bt(t("qs_irma_agora"), t("qs_irma_agora_tip"), () => {
+      const r = qsAgendarIrma(1);
+      try { matReg("questao", "questão irmã agora", r ? r.artigo : ""); } catch (e) {}
+      qsAndar(1);
+      qsUiPintarSessao();
+    }));
+  return lin;
+}
+
 /* O BOTÃO DO CHUTE: antes do gabarito, liga/desliga "é chute"; depois, só num acerto, corrige ("foi chute" / "não foi") */
 function qsUiPintarChute(jaFoi) {
   const b = $("btnQsChute");
