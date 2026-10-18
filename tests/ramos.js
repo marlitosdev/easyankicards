@@ -3940,6 +3940,10 @@ async function testes() {
     const nomeTirado = it().ramos[1].nome;
     ok(linhas().length === 4 && /\(ramo novo\)/.test(ped) && ped.indexOf("- " + nomeTirado) < 0 && /cubra: pregão/.test(ped) && /Geral antigo\./.test(ped),
        "T4p o pedido reflete a escolha: ramo tirado sai, foco entra, novo marcado, resumo atual junto");
+    /* (v18.77.0) com resumo já escrito o padrão é COMPLEMENTAR (só acrescenta); daqui em diante o teste é o de TROCAR
+     * partes — o objetivo "avaliar e melhorar". O complementar tem os testes dele em resumo-leitor.js (R11) */
+    ok(a.riaObjetivoAtual() === "complementar", "T4p2 com resumo já escrito, o padrão é complementar");
+    a.$("btnResIAObjMelhor").onclick();
     /* colar o pedido por engano */
     const digita = (v) => { a.$("resIATexto").value = v; ((a.$("resIATexto")._ouv || {}).input || []).forEach((fn) => fn()); };
     digita(ped);

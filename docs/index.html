@@ -2713,6 +2713,12 @@ p.mat-ferr{display:block;font-size:12px}
 .res-ia-conf{margin:6px 0;font-size:12.5px}
 .res-ia-conf-lin{margin:2px 0}
 .res-ia-conf-perda{margin-top:4px;color:var(--atencao);font-weight:600}
+.res-ia-obj{margin:8px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:9px}
+.res-ia-obj-rot{font-size:12.5px;font-weight:700;margin:0 0 5px}
+.res-ia-obj-bts{display:flex;flex-wrap:wrap;gap:5px}
+.res-ia-obj-bts .btn-min[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
+.res-ia-obj-exp{margin:5px 0 0;font-size:12px;line-height:1.4}
+.res-ia-aval{margin:6px 0;padding:8px 10px;border-left:3px solid var(--info);background:rgba(59,130,246,.08);border-radius:0 8px 8px 0;white-space:pre-wrap;font-size:12.5px;max-height:30vh;overflow:auto}
 .res-ia-feito{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;padding:8px 10px;border:1px solid var(--ok);border-radius:8px}
 .mat-ficha-item.falta{border-style:dashed;opacity:.85}
 .mat-ficha-ico{font-size:20px;width:26px;text-align:center;flex:none}
@@ -6483,6 +6489,18 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="resIASub"></p>
   <div class="ednovo-passo" id="resIAPasso1">
     <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ria_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
+    <!-- JÁ HÁ RESUMO (v18.77.0): o que fazer com ele — antes, só uma caixa "mandar o que existe", e a resposta sempre
+         TROCAVA as partes (marcas e dicas iam junto). Complementar só acrescenta; avaliar devolve a avaliação e a versão
+         melhorada para conferir; escrever de novo é o pedido sem o texto atual. -->
+    <div class="res-ia-obj" id="resIAAtualLin" hidden>
+      <div class="res-ia-obj-rot" data-i18n="ria_obj_rot"></div>
+      <div class="res-ia-obj-bts" role="group" data-i18n-title="ria_obj_rot">
+        <button type="button" class="btn-min" id="btnResIAObjCompl" aria-pressed="true" data-i18n="ria_obj_compl" data-i18n-title="ria_obj_compl_tip"></button>
+        <button type="button" class="btn-min" id="btnResIAObjMelhor" aria-pressed="false" data-i18n="ria_obj_melhor" data-i18n-title="ria_obj_melhor_tip"></button>
+        <button type="button" class="btn-min" id="btnResIAObjNovo" aria-pressed="false" data-i18n="ria_obj_novo" data-i18n-title="ria_obj_novo_tip"></button>
+      </div>
+      <div class="nota res-ia-obj-exp" id="resIAObjExp"></div>
+    </div>
     <div id="resIARamos" class="res-ia-ramos"></div>
     <div class="res-ia-lin" id="resIANovoLin">
       <input type="text" id="resIANovo" class="mat-busca" data-i18n-ph="ria_novo_ph">
@@ -6496,7 +6514,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <option value="detalhado" data-i18n="ria_prof_detalhado"></option>
       </select></label>
     <label class="res-ia-lin" id="resIALeiLin" hidden><input type="checkbox" id="resIALei"> <span id="resIALeiRot"></span></label>
-    <label class="res-ia-lin" id="resIAAtualLin" hidden><input type="checkbox" id="resIAAtual"> <span data-i18n="ria_atual"></span></label>
     <button type="button" class="btn btn-roxo" id="btnResIACopiar" data-i18n="ria_copiar"></button>
     <p class="nota ednovo-prompt-msg" id="resIACopiadoMsg" role="status"></p>
   </div>

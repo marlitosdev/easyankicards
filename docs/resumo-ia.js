@@ -15,6 +15,9 @@ let riaCtx = null;
 let riaNovos = [];
 let riaModo = "secoes";
 let riaAnterior = null;
+/* com resumo já escrito: "complementar" (só acrescenta), "melhorar" (avalia e devolve a versão melhorada) ou "novo" */
+let riaObjetivo = "novo";
+const RIA_OBJS = ["complementar", "melhorar", "novo"];
 
 /* a marca e a dica incorporada, no formato do resumo (== … == e linhas "> ") */
 const RIA_MARCA_RE = /==[!?§*~@]?(?:[^=\n]|=(?!=))+==/g;
@@ -58,9 +61,11 @@ function riaPrompt(o) {
     L.push(t("ria_p_lei"));
     L.push(String(o.lei).slice(0, RIA_LEI_MAX));
   }
-  if (String(o.atual || "").trim()) {
+  if (String(o.atual || "").trim() && o.objetivo !== "novo") {
     L.push("");
-    L.push(t(o.ramo ? "ria_p_atual_ramo" : "ria_p_atual"));
+    /* o QUE fazer com o que já existe; sem objetivo, o pedido de antes (aproveitar e aprofundar) */
+    const k = o.objetivo === "complementar" ? "ria_p_obj_compl" : o.objetivo === "melhorar" ? "ria_p_obj_melhor" : "ria_p_atual";
+    L.push(t(k + (o.ramo ? "_ramo" : ""), { r: o.ramo ? o.ramo.nome : "" }));
     L.push(String(o.atual).trim());
   }
   return L.join(nl);
@@ -75,6 +80,9 @@ function riaLerResposta(texto, ramos, ramoAlvo) {
   if (/FORMATO \(obrigatório|FORMAT \(required|^Você vai escrever o (RESUMO|resumo)|^You will write the/m.test(s)) {
     return { vazio: false, ehPedido: true, geral: "", secoes: [], semSecao: false };
   }
+  /* "# Avaliação" (do avaliar e melhorar): vai à parte, para a pessoa ler — não é texto do resumo */
+  let avaliacao = "";
+  s = s.replace(/^#{1,6}[ \t]*(avalia[çc][ãa]o|evaluation)[ \t]*#*[ \t]*\n([\s\S]*?)(?=^#{1,6}[ \t]|(?![\s\S]))/im, (m0, r0, corpo) => { avaliacao = corpo.trim(); return ""; }).trim();
   const sugeridos = [];
   s = s.replace(/^(#{1,6})[ \t]*ramo[ \t]+sugerido[ \t]*[—–:-][ \t]*(.+)$/gim, (m0, h, nome) => { sugeridos.push(matIdDeNome(nome.trim())); return "## Ramo — " + nome.trim(); });
   s = s.replace(/^#{1,6}[ \t]*(resumo geral|general summary)[ \t]*#*[ \t]*\n?/im, "");
@@ -84,19 +92,31 @@ function riaLerResposta(texto, ramos, ramoAlvo) {
     const x = sc.secoes.find((y) => y.id === ramoAlvo);
     /* sem o título: o texto inteiro é o ramo */
     const corpo = x ? x.corpo : (sc.secoes.length ? "" : s.trim());
-    return { vazio: !corpo.trim(), ehPedido: false, geral: "", secoes: corpo.trim() ? [{ id: alvo.id, nome: alvo.nome, corpo, semRamo: false, sugerido: false }] : [], semSecao: false };
+    return { vazio: !corpo.trim(), ehPedido: false, geral: "", secoes: corpo.trim() ? [{ id: alvo.id, nome: alvo.nome, corpo, semRamo: false, sugerido: false }] : [], semSecao: false, avaliacao };
   }
   return {
     vazio: false, ehPedido: false,
     geral: sc.geral.corpo.trim(),
     secoes: sc.secoes.map((x) => ({ id: x.id, nome: x.nome, corpo: x.corpo, semRamo: x.semRamo, sugerido: sugeridos.indexOf(x.id) >= 0 })),
     semSecao: !sc.secoes.length,
+    avaliacao,
   };
 }
 
 /* APLICAR: "secoes" troca só o geral (se veio) e as seções que vieram; "tudo" refaz o resumo só com a resposta */
 function riaAplicarTexto(atual, resp, modo, ramos) {
   if (!resp || resp.vazio || resp.ehPedido) return String(atual || "");
+  /* COMPLEMENTAR: o que veio entra no FIM da parte correspondente (geral ou o ramo); nada do que existe muda */
+  if (modo === "acrescentar") {
+    let s = String(atual || "");
+    const junta = (velho, novo) => (String(velho || "").trim() ? String(velho).replace(/\s+$/, "") + "\n\n" : "") + String(novo || "").trim();
+    if (resp.geral) s = matTrocarSecao(s, "", junta(matSecoesDeRamo(s, ramos).geral.corpo, resp.geral), "", ramos);
+    resp.secoes.forEach((x) => {
+      const ja = matSecoesDeRamo(s, ramos).secoes.find((y) => y.id === x.id);
+      s = matTrocarSecao(s, x.id, junta(ja ? ja.corpo : "", x.corpo), x.nome, ramos);
+    });
+    return s;
+  }
   if (modo === "tudo") {
     const partes = [];
     if (resp.geral) partes.push(resp.geral);
@@ -116,6 +136,14 @@ function riaConferir(atual, resp, modo, ramos) {
   let perdidas = { marcas: 0, dicas: 0 };
   const soma = (s) => { const c = riaContarMarcas(s); perdidas.marcas += c.marcas; perdidas.dicas += c.dicas; };
   const rotGeral = t("ria_parte_geral");
+  if (modo === "acrescentar") {
+    if (resp.geral) itens.push({ parte: rotGeral, antes: sc.geral.corpo.length, depois: resp.geral.length, tipo: "acrescenta" });
+    resp.secoes.forEach((y) => {
+      const x = sc.secoes.find((z) => z.id === y.id);
+      itens.push({ parte: y.nome, antes: x ? x.corpo.length : 0, depois: y.corpo.length, tipo: x ? "acrescenta" : "nova" });
+    });
+    return { itens, perdidas };
+  }
   if (modo === "tudo") {
     soma(atual);
     const antesG = sc.geral.corpo;
@@ -154,7 +182,8 @@ function riaAbrir(ctx) {
   $("resIALeiRot").textContent = t("ria_lei", { n: RIA_LEI_MAX.toLocaleString() });
   const atual = riaTextoAtualDoEscopo();
   $("resIAAtualLin").hidden = !String(atual || "").trim();
-  $("resIAAtual").checked = !!String(atual || "").trim();
+  /* já há texto: o padrão é COMPLEMENTAR (não perde nada); sem texto, escrever */
+  riaObjetivoDefinir(String(atual || "").trim() ? "complementar" : "novo", true);
   $("resIANovoLin").hidden = !!ramo;
   $("resIASugerirLin").hidden = !!ramo;
   riaPintarRamos();
@@ -248,9 +277,10 @@ function riaMontarPedido() {
   const ramo = riaRamoAlvo();
   const prof = ($("resIAProf") || {}).value || "padrao";
   const lei = $("resIALei").checked && !$("resIALeiLin").hidden && typeof leiTextoDoTopico === "function" ? leiTextoDoTopico(riaCtx.chave) : "";
-  const atual = $("resIAAtual").checked && !$("resIAAtualLin").hidden ? riaTextoAtualDoEscopo() : "";
+  /* o texto vai sempre que houver; "escrever de novo" o deixa de fora no próprio pedido (riaPrompt) */
+  const atual = !$("resIAAtualLin").hidden ? riaTextoAtualDoEscopo() : "";
   return riaPrompt({
-    disciplina: riaCtx.disciplina, topico: riaCtx.topico, prof, lei, atual, leis: riaLeisDoTopico(riaCtx.chave),
+    disciplina: riaCtx.disciplina, topico: riaCtx.topico, prof, lei, atual, objetivo: riaObjetivo, leis: riaLeisDoTopico(riaCtx.chave),
     sugerir: !ramo && $("resIASugerir").checked,
     ramo: ramo ? { nome: ramo.nome, foco: (riaCtx.alvoFoco || {}).foco || "" } : null,
     ramos: ramo ? [] : (riaCtx.lista || []).filter((r) => r.incluir !== false).map((r) => ({ nome: r.nome, foco: r.foco }))
@@ -275,17 +305,18 @@ function riaConferirTela() {
   let est = "vazio", msg = t("ria_sem_vazio");
   if (resp.ehPedido) { est = "erro"; msg = t("ria_sem_pedido"); }
   else if (resp.vazio) { est = "vazio"; msg = t("ria_sem_vazio"); }
-  else if (ramo) { est = "ok"; msg = t("ria_sem_ramo_ok", { r: ramo.nome, c: resp.secoes[0].corpo.length }); }
+  else if (ramo) { est = "ok"; msg = t(riaModoDeAplicar() === "acrescentar" ? "ria_sem_ramo_compl" : "ria_sem_ramo_ok", { r: ramo.nome, c: resp.secoes[0].corpo.length }); }
   else if (resp.semSecao) { est = "atencao"; msg = t("ria_sem_semsecao"); }
   else {
     est = "ok";
     const partes = [];
     if (resp.geral) partes.push(t("ria_parte_geral"));
     if (resp.secoes.length) partes.push(t("ria_parte_n", { n: resp.secoes.length, l: resp.secoes.map((x) => x.nome).join(", ") }));
-    msg = t("ria_sem_ok", { p: partes.join(" + ") });
+    msg = t(riaModoDeAplicar() === "acrescentar" ? "ria_sem_compl" : "ria_sem_ok", { p: partes.join(" + ") });
     const pedidos = (riaCtx.lista || []).filter((r) => r.incluir !== false);
     const faltam = pedidos.filter((r) => !resp.secoes.some((x) => x.id === r.id)).map((r) => r.nome);
-    if (faltam.length) { msg += " " + t("ria_sem_falta", { l: faltam.join(", ") }); est = "atencao"; }
+    /* complementar: parte que não veio é parte sem nada a acrescentar (não é falta) */
+    if (faltam.length && riaModoDeAplicar() !== "acrescentar") { msg += " " + t("ria_sem_falta", { l: faltam.join(", ") }); est = "atencao"; }
     const novos = resp.secoes.filter((x) => x.semRamo).map((x) => x.nome + (x.sugerido ? " (" + t("ria_sugerido") + ")" : ""));
     if (novos.length) msg += " " + t("ria_sem_novos", { l: novos.join(", ") });
   }
@@ -297,19 +328,25 @@ function riaConferirTela() {
   $("btnResIAAplicar").disabled = !pode;
   /* trocar tudo só existe no tópico inteiro e quando já há resumo */
   const temAtual = !!riaTextoAtual().trim();
-  $("resIAModoLin").hidden = !pode || !!ramo || !temAtual;
+  $("resIAModoLin").hidden = !pode || !!ramo || !temAtual || riaModoDeAplicar() === "acrescentar";
   $("btnResIAModoSec").setAttribute("aria-pressed", riaModo === "secoes" ? "true" : "false");
   $("btnResIAModoTudo").setAttribute("aria-pressed", riaModo === "tudo" ? "true" : "false");
   const conf = $("resIAConf");
   conf.innerHTML = "";
   conf.hidden = !pode || !temAtual;
   if (!conf.hidden) {
-    const c = riaConferir(riaTextoAtual(), resp, ramo ? "secoes" : riaModo, riaCtx.ramos);
+    const c = riaConferir(riaTextoAtual(), resp, riaModoDeAplicar(), riaCtx.ramos);
+    /* a avaliação da IA (avaliar e melhorar) vem antes do que muda: é o porquê da mudança */
+    if (resp.avaliacao) {
+      const at = document.createElement("b"); at.textContent = t("ria_conf_aval"); conf.append(at);
+      const av = document.createElement("div"); av.className = "res-ia-aval"; av.textContent = resp.avaliacao; conf.append(av);
+    }
     const tit = document.createElement("b"); tit.textContent = t("ria_conf_tit"); conf.append(tit);
     c.itens.forEach((it) => {
       const p = document.createElement("div");
       p.className = "res-ia-conf-lin";
-      p.textContent = it.tipo === "nova" ? t("ria_conf_nova", { p: it.parte, b: it.depois })
+      p.textContent = it.tipo === "acrescenta" ? t("ria_conf_acresc", { p: it.parte, b: it.depois })
+        : it.tipo === "nova" ? t("ria_conf_nova", { p: it.parte, b: it.depois })
         : it.tipo === "some" ? t("ria_conf_some", { p: it.parte }) : t("ria_conf_troca", { p: it.parte, a: it.antes, b: it.depois });
       conf.append(p);
     });
@@ -322,15 +359,31 @@ function riaConferirTela() {
   return resp;
 }
 function riaModoDefinir(m) { riaModo = m === "tudo" ? "tudo" : "secoes"; riaConferirTela(); }
+/* O OBJETIVO (com resumo já escrito). O modo de aplicar vem dele: complementar = acrescentar; os outros trocam */
+function riaObjetivoDefinir(o, calado) {
+  riaObjetivo = RIA_OBJS.indexOf(o) >= 0 ? o : "novo";
+  [["btnResIAObjCompl", "complementar"], ["btnResIAObjMelhor", "melhorar"], ["btnResIAObjNovo", "novo"]].forEach(([id, v]) => {
+    if ($(id)) $(id).setAttribute("aria-pressed", riaObjetivo === v ? "true" : "false");
+  });
+  if ($("resIAObjExp")) $("resIAObjExp").textContent = t("ria_obj_" + (riaObjetivo === "complementar" ? "compl" : riaObjetivo) + "_exp");
+  if (!calado) riaConferirTela();
+  return riaObjetivo;
+}
+/* o modo de aplicar desta vez: complementar acrescenta; no ramo troca só a seção; no tópico, o escolhido */
+function riaModoDeAplicar() {
+  if (riaObjetivo === "complementar" && !$("resIAAtualLin").hidden) return "acrescentar";
+  return riaRamoAlvo() ? "secoes" : riaModo;
+}
 function riaAplicar() {
   const ramo = riaRamoAlvo();
   const resp = riaLerResposta($("resIATexto").value, riaCtx.ramos, ramo ? ramo.id : "");
   if (resp.vazio || resp.ehPedido) return false;
   const antes = riaTextoAtual();
-  const novo = riaAplicarTexto(antes, resp, ramo ? "secoes" : riaModo, riaCtx.ramos);
+  const modoAp = riaModoDeAplicar();
+  const novo = riaAplicarTexto(antes, resp, modoAp, riaCtx.ramos);
   riaAnterior = { chave: riaCtx.chave, texto: antes, tinha: !!matObter(riaCtx.chave) };
   matGravar(riaCtx.chave, novo, { disciplina: riaCtx.disciplina, topico: riaCtx.topico });
-  try { reg("MATERIAL", "resumo pela IA" + (ramo ? " (ramo " + ramo.nome + ")" : ""), riaCtx.topico + " · " + antes.length + " → " + novo.length + " caracteres"); } catch (e) {}
+  try { reg("MATERIAL", "resumo pela IA" + (ramo ? " (ramo " + ramo.nome + ")" : "") + " · " + (modoAp === "acrescentar" ? "complementar" : riaObjetivo), riaCtx.topico + " · " + antes.length + " → " + novo.length + " caracteres"); } catch (e) {}
   $("resIAFeitoTxt").textContent = t("ria_aplicado", { t: ramo ? riaCtx.topico + " › " + ramo.nome : riaCtx.topico });
   $("resIAFeito").hidden = false;
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
@@ -358,6 +411,11 @@ function riaIniciar() {
   $("resIATexto").addEventListener("input", riaConferirTela);
   $("btnResIAModoSec").onclick = () => riaModoDefinir("secoes");
   $("btnResIAModoTudo").onclick = () => riaModoDefinir("tudo");
+  if ($("btnResIAObjCompl")) {
+    $("btnResIAObjCompl").onclick = () => riaObjetivoDefinir("complementar");
+    $("btnResIAObjMelhor").onclick = () => riaObjetivoDefinir("melhorar");
+    $("btnResIAObjNovo").onclick = () => riaObjetivoDefinir("novo");
+  }
   $("btnResIAAplicar").onclick = () => { if (riaAplicar()) $("btnResIADesfazer").hidden = false; };
   $("btnResIADesfazer").onclick = riaDesfazer;
   $("btnResIAAbrir").onclick = riaAbrirResumo;
