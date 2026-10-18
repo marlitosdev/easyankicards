@@ -33,6 +33,16 @@
  *     de volta é recusado; ela só entra no parágrafo com «usar»;
  * 10. o lápis aparece no parágrafo sob o mouse (não no título do ramo) e
  *     a bolha da seleção tem "✎ parágrafo".
+ *
+ * R4 (18.77.0) — PEDIR À IA QUANDO JÁ HÁ RESUMO: O OBJETIVO.
+ * 11. com texto já escrito no escopo, aparece o objetivo — complementar
+ *     (padrão), avaliar e melhorar, escrever de novo; sem texto, não;
+ * 12. complementar: o pedido manda o texto e pede SÓ o que falta; a
+ *     resposta é ACRESCENTADA no fim de cada parte (geral e ramos), nada do
+ *     que existe muda (marcas inclusive); parte que não veio não é "falta";
+ * 13. avaliar e melhorar: a "# Avaliação" sai à parte (aparece na
+ *     conferência, não entra no texto) e o texto melhorado troca as partes;
+ * 14. escrever de novo: o pedido vai sem o texto atual.
  * ===================================================================== */
 const fs = require("fs");
 const path = require("path");
@@ -362,6 +372,67 @@ async function testes() {
     /* redesenhar a leitura leva a caixa junto (não fica um parágrafo 'aberto' que não está na tela) */
     a.matTrocarModo("ler");
     ok(a.rpaEdAtual() === null, "R10e redesenhar a leitura fecha o parágrafo aberto");
+  }
+  /* ---- 11–14: o objetivo do pedido à IA ---- */
+  {
+    a.matFechar();
+    const chI = a.matChave("Leitura", "IA");
+    const NL = "\n";
+    const T0 = ["Geral ==velho==.", "", "## Ramo — A", "A um ==!marca==.", "> dica de A", "", "## Ramo — B", "B um."].join(NL);
+    a.matGravar(chI, T0, { disciplina: "Leitura", topico: "IA" });
+    const digita = (v) => { a.$("resIATexto").value = v; ((a.$("resIATexto")._ouv || {}).input || []).forEach((fn) => fn()); };
+    a.riaAbrirDoTopico("Leitura", "IA", chI, { ramos });
+    ok(a.$("resIAAtualLin").hidden === false && a.riaObjetivoAtual() === "complementar" && a.$("btnResIAObjCompl").getAttribute("aria-pressed") === "true"
+       && a.$("resIAObjExp").textContent === a.t("ria_obj_compl_exp"), "R11 com resumo escrito: o objetivo aparece, e o padrão é COMPLEMENTAR (não perde nada)");
+    let ped = a.riaMontarPedido();
+    ok(ped.includes(a.t("ria_p_obj_compl")) && ped.includes("A um ==!marca==.") && !ped.includes(a.t("ria_p_atual")), "R12 o pedido manda o texto e pede só o que falta");
+    digita(["# Resumo geral", "Mais geral.", "", "## Ramo — A", "Mais A."].join(NL));
+    ok(a.$("resIASemTxt").textContent.indexOf("ACRESCENTAR") >= 0 && !/Sem seção/.test(a.$("resIASemTxt").textContent) && /sem-ok/.test(a.$("resIASem").className)
+       && a.$("resIAModoLin").hidden === true, "R12a o semáforo diz que vai acrescentar; o ramo B que não veio não é 'falta'; não há 'trocar tudo': " + a.$("resIASemTxt").textContent);
+    ok(/resumo geral: \+ 11 caracteres no fim/.test(a.$("resIAConf").textContent) && /A: \+ 7 caracteres no fim/.test(a.$("resIAConf").textContent) && !/marca\(s\)/.test(a.$("resIAConf").textContent),
+       "R12b a conferência mostra o que entra no fim de cada parte e não fala em perder marca: " + a.$("resIAConf").textContent);
+    a.$("btnResIAAplicar").onclick();
+    const T1 = a.matObter(chI).texto;
+    ok(T1 === ["Geral ==velho==.", "", "Mais geral.", "", "## Ramo — A", "A um ==!marca==.", "> dica de A", "", "Mais A.", "", "## Ramo — B", "B um."].join(NL),
+       "R12c aplicar ACRESCENTA no fim do geral e do ramo A; B, as marcas e a dica ficam: " + JSON.stringify(T1));
+    a.$("btnResIADesfazer").onclick();
+    ok(a.matObter(chI).texto === T0, "R12d desfazer volta");
+    /* parte nova (ramo sem seção ainda) entra como seção nova */
+    ok(a.riaAplicarTexto("Geral.", { geral: "", secoes: [{ id: "b", nome: "B", corpo: "B novo." }] }, "acrescentar", ramos) === "Geral.\n\n## Ramo — B\nB novo.", "R12e no complementar, ramo sem seção ganha a seção");
+    /* avaliar e melhorar */
+    a.$("btnResIAObjMelhor").onclick();
+    ped = a.riaMontarPedido();
+    ok(a.riaObjetivoAtual() === "melhorar" && ped.includes(a.t("ria_p_obj_melhor")) && ped.includes("A um ==!marca==."), "R13 avaliar e melhorar: o pedido pede a avaliação e manda o texto");
+    digita(["# Avaliação", "- O geral está vago.", "- Falta a exceção do ramo A.", "", "# Resumo geral", "Geral melhor.", "", "## Ramo — A", "A melhor ==!marca==."].join(NL));
+    const conf = a.$("resIAConf").textContent;
+    ok(conf.indexOf(a.t("ria_conf_aval")) >= 0 && conf.indexOf("Falta a exceção do ramo A.") >= 0 && /resumo geral: \d+ → \d+ caracteres/.test(conf) && a.$("resIAModoLin").hidden === false,
+       "R13a a avaliação aparece na conferência, antes do que muda; volta a escolha 'só as partes / tudo': " + conf);
+    a.$("btnResIAAplicar").onclick();
+    const T2 = a.matObter(chI).texto;
+    ok(T2 === ["Geral melhor.", "", "## Ramo — A", "A melhor ==!marca==.", "", "## Ramo — B", "B um."].join(NL) && T2.indexOf("Avaliação") < 0,
+       "R13b o texto melhorado troca as partes que vieram; a avaliação NÃO entra no resumo: " + JSON.stringify(T2));
+    a.$("btnResIADesfazer").onclick();
+    ok(a.riaLerResposta("## Avaliação\n- x\n## Ramo — A\nA.", ramos).avaliacao === "- x" && a.riaLerResposta("Só texto.", ramos).avaliacao === "", "R13c a avaliação é lida em qualquer nível de título; sem ela, vazia");
+    /* escrever de novo */
+    a.$("btnResIAObjNovo").onclick();
+    ped = a.riaMontarPedido();
+    ok(a.riaObjetivoAtual() === "novo" && ped.indexOf("A um ==!marca==.") < 0 && ped.indexOf(a.t("ria_p_obj_compl")) < 0, "R14 escrever de novo: o pedido vai sem o texto atual");
+    ok(a.riaPrompt({ topico: "T", disciplina: "D", atual: "Texto velho.", objetivo: "novo" }).indexOf("Texto velho.") < 0
+       && a.riaPrompt({ topico: "T", disciplina: "D", atual: "Texto velho." }).indexOf("Texto velho.") >= 0, "R14a o pedido 'de novo' deixa o texto de fora (sem objetivo, vai como antes)");
+    a.$("btnResIAFechar").onclick();
+    /* pelo ramo: complementar acrescenta no fim da seção dele */
+    a.riaAbrirDoTopico("Leitura", "IA", chI, { ramos, ramo: "a" });
+    ok(a.riaObjetivoAtual() === "complementar" && a.riaMontarPedido().includes(a.t("ria_p_obj_compl_ramo", { r: "A" })), "R12f pelo ramo, com seção escrita: complementar, com o pedido do ramo");
+    digita("Mais do A.");
+    ok(a.$("resIASemTxt").textContent === a.t("ria_sem_ramo_compl", { r: "A", c: 10 }), "R12g o semáforo do ramo diz que acrescenta: " + a.$("resIASemTxt").textContent);
+    a.$("btnResIAAplicar").onclick();
+    ok(a.matObter(chI).texto === T0.replace("> dica de A", "> dica de A\n\nMais do A."), "R12h acrescenta no fim da seção do ramo A, e só nela: " + JSON.stringify(a.matObter(chI).texto));
+    a.$("btnResIADesfazer").onclick();
+    a.$("btnResIAFechar").onclick();
+    /* sem texto no escopo: não há objetivo */
+    a.riaAbrirDoTopico("Leitura", "IA", chI, { ramos: ramos.concat([{ id: "c", nome: "C" }]), ramo: "c" });
+    ok(a.$("resIAAtualLin").hidden === true && a.riaObjetivoAtual() === "novo" && a.riaModoDeAplicar() === "secoes", "R11a ramo sem seção: não há o que complementar (escreve)");
+    a.$("btnResIAFechar").onclick();
   }
   a.matFechar();
   return falhas;
