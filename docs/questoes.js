@@ -1015,6 +1015,135 @@ function qsValorAcerto(tt) {
 }
 /* errou ou chutou: a que pede revisão */
 function qsPedeRevisao(tt) { return !!tt && (!tt.acertou || !!tt.chute); }
+
+/* =====================================================================
+ * A QUESTÃO IRMÃ (v18.81.0)
+ *
+ * Errou (ou acertou no chute) uma questão do art. 150 da CF: a revisão
+ * que mostra se o ponto ficou é OUTRA questão do mesmo artigo — não a
+ * mesma (essa você lembra a resposta), e não já em seguida (acabou de ler
+ * o comentário: acertaria pela memória de dez segundos). Por isso a irmã
+ * entra 5 questões adiante na rodada, com um selo dizendo de onde veio.
+ *
+ * O ARTIGO DE CADA QUESTÃO sai da mesma decisão dos links (citação no
+ * enunciado, no comentário ou no gabarito, com o vínculo fixado e a lei do
+ * tópico — leiResolverCitacao). Sem artigo em comum, vale o mesmo RAMO.
+ * Mais perto: o mesmo inciso/parágrafo; depois, as nunca respondidas; as
+ * que você também errou por último.
+ * ===================================================================== */
+const QS_IRMA_PASSO = 5;
+const qsMemoArtigos = new Map();
+function qsArtigosDaQuestao(q) {
+  if (!q || typeof leiCitacoesNoTexto !== "function" || typeof leiResolverCitacao !== "function") return [];
+  const txt = [q.enunciado, q.comentario, q.gabarito].filter(Boolean).join(" \n ");
+  const marca = q.chave + "|" + txt.length;
+  const ja = qsMemoArtigos.get(q.id);
+  if (ja && ja.marca === marca) return ja.arts;
+  let cits = [];
+  try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
+  try { if (typeof citVinculosAplicar === "function") cits = citVinculosAplicar(txt, cits, q.chave); } catch (e) {}
+  let lista = [], dt = [];
+  try { lista = leisLista(); dt = q.chave ? leisDoTopico(q.chave) : []; } catch (e) {}
+  const arts = [];
+  const vistos = {};
+  cits.forEach((c) => {
+    const res = c.leiId ? { lei: lista.find((x) => x.id === c.leiId) } : leiResolverCitacao(c, lista, dt);
+    if (!res || !res.lei) return;
+    const nums = (c.artigos && c.artigos.length) ? c.artigos.map((a) => ({ num: a.num, numCru: a.numCru || a.num })) : [{ num: c.num, numCru: c.numCru || c.num }];
+    nums.forEach((n) => {
+      const k = res.lei.id + ":" + leiNumNormal(n.num);
+      if (!vistos[k]) { vistos[k] = { chave: k, leiId: res.lei.id, num: leiNumNormal(n.num), numCru: n.numCru, sub: [] }; arts.push(vistos[k]); }
+      (c.incisos || []).concat(c.paragrafos || []).forEach((s) => { if (vistos[k].sub.indexOf(s) < 0) vistos[k].sub.push(s); });
+    });
+  });
+  qsMemoArtigos.set(q.id, { marca, arts });
+  return arts;
+}
+/* o nome curto da lei para o selo ("CTN", "CF"…) */
+function qsLeiCurta(leiId) {
+  let l = null;
+  try { l = leiDe(leiId); } catch (e) { l = null; }
+  if (!l) return "";
+  const ap = String(l.apelido || "").split(/\s+/).filter(Boolean)[0];
+  if (ap) return ap;
+  try { const s = leiSiglasDoNome(l.nome) || []; if (s[0]) return s[0]; } catch (e) {}
+  return String(l.nome || "").slice(0, 40);
+}
+function qsRotuloArtigo(a) { return "art. " + a.numCru + (qsLeiCurta(a.leiId) ? " " + t("qs_irma_da") + " " + qsLeiCurta(a.leiId) : ""); }
+/* as irmãs de q no banco, da mais próxima à mais distante: [{ q, artigo (o rótulo), pontos }] */
+function qsIrmasDe(q, banco, opc) {
+  const o = opc || {};
+  const fora = o.excluir || new Set();
+  const bs = (banco || qsBanco || []).filter((x) => x && x.id !== q.id && !fora.has(x.id));
+  const meus = qsArtigosDaQuestao(q);
+  const out = [];
+  if (meus.length) {
+    bs.forEach((x) => {
+      const deles = qsArtigosDaQuestao(x);
+      let pontos = 0, comum = null;
+      meus.forEach((a) => {
+        const b = deles.find((y) => y.chave === a.chave);
+        if (!b) return;
+        let p = 10;
+        if (a.sub.length && a.sub.some((s) => b.sub.indexOf(s) >= 0)) p += 25;
+        if (p > pontos) { pontos = p; comum = a; }
+      });
+      if (!comum) return;
+      const ts = x.tentativas || [];
+      if (!ts.length) pontos += 10;
+      else if (qsPedeRevisao(ts[ts.length - 1])) pontos += 5;
+      out.push({ q: x, artigo: qsRotuloArtigo(comum), pontos });
+    });
+  }
+  if (!out.length && q.ramo) {
+    bs.filter((x) => x.ramo === q.ramo && (x.chave === q.chave || (typeof qsChaveNormal === "function" && qsChaveNormal(x.chave) === qsChaveNormal(q.chave))))
+      .forEach((x) => {
+        const ts = x.tentativas || [];
+        out.push({ q: x, artigo: t("qs_irma_ramo"), pontos: 3 + (!ts.length ? 10 : qsPedeRevisao(ts[ts.length - 1]) ? 5 : 0) });
+      });
+  }
+  return out.sort((a, b) => b.pontos - a.pontos);
+}
+/* as irmãs possíveis para a questão da vez (fora as já respondidas nesta rodada) */
+function qsIrmasDaAtual() {
+  const q = qsAtual();
+  if (!q || !qsSessao) return [];
+  const fora = new Set(qsSessao.respondidas.map((r) => r.id));
+  return qsIrmasDe(q, qsBanco, { excluir: fora });
+}
+/* AGENDAR: a melhor irmã vira a "passo"-ésima questão a partir da atual (1 = a próxima); se já estava mais adiante, muda de lugar */
+function qsAgendarIrma(passo, gravar) {
+  const q = qsAtual();
+  if (!q || !qsSessao) return null;
+  const irmas = qsIrmasDaAtual();
+  if (!irmas.length) return null;
+  const esc = irmas[0];
+  const fila = qsSessao.fila;
+  const ja = fila.findIndex((x, k) => k > qsSessao.i && x.id === esc.q.id);
+  if (ja >= 0) fila.splice(ja, 1);
+  const pos = Math.min(fila.length, qsSessao.i + Math.max(1, passo === undefined ? QS_IRMA_PASSO : passo));
+  fila.splice(pos, 0, esc.q);
+  qsSessao.irmas = qsSessao.irmas || {};
+  qsSessao.irmas[esc.q.id] = { origem: q.id, artigo: esc.artigo };
+  qsSessaoGravar(gravar);
+  return { id: esc.q.id, pos, artigo: esc.artigo, adiante: pos - qsSessao.i };
+}
+/* a irmã já agendada a partir de q (para não agendar duas e para desfazer) */
+function qsIrmaAgendadaDe(origemId) {
+  if (!qsSessao || !qsSessao.irmas) return null;
+  const id = Object.keys(qsSessao.irmas).find((k) => qsSessao.irmas[k].origem === origemId);
+  if (!id) return null;
+  const pos = qsSessao.fila.findIndex((x) => x.id === id);
+  return { id, pos, artigo: qsSessao.irmas[id].artigo, adiante: pos - qsSessao.i };
+}
+function qsIrmaDesfazer(origemId, gravar) {
+  const ag = qsIrmaAgendadaDe(origemId);
+  if (!ag) return false;
+  if (ag.pos > qsSessao.i && !qsSessao.respondidas.some((r) => r.id === ag.id)) qsSessao.fila.splice(ag.pos, 1);
+  delete qsSessao.irmas[ag.id];
+  qsSessaoGravar(gravar);
+  return true;
+}
 const QS_SESSAO_LOJA = "eac_qs_sessao";
 
 /* =====================================================================
@@ -1043,6 +1172,8 @@ function qsSessaoGravar(gravar) {
      * marca e a rodada voltaria a ser oferecida — pedindo um segundo
      * lançamento das mesmas horas. */
     registrada: !!qsSessao.registrada,
+    /* (v18.81.0) as irmãs agendadas: o selo e o desfazer sobrevivem a fechar a janela */
+    irmas: qsSessao.irmas || {},
     tocado: new Date().toISOString(),
   };
   const txt = JSON.stringify(dado);
@@ -1137,6 +1268,7 @@ function qsSessaoRetomar(escopo, lerLoja, gravar) {
   qsSessao = { fila, i: Math.max(0, Math.min(fila.length, s.i || 0)),
                respondidas, comecou: s.comecou || new Date().toISOString(),
                registrada: !!s.registrada,
+               irmas: s.irmas || {},
                escopo: s.escopo || escopo || "" };
   /* cai na primeira ainda não respondida: retomar é continuar de onde
    * parou, não voltar para uma que já foi feita */
