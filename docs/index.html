@@ -5299,6 +5299,15 @@ dialog.cov-dlg[open]{display:flex;flex-direction:column;width:min(900px,96vw);he
 .cov-base{margin:4px 0 8px}
 .cov-f2{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:rgba(179,136,255,.22);color:#c9a8ff;white-space:nowrap}
 .cov-acoes{display:inline-flex;gap:6px}
+/* (v18.73.0) cobertura por lei */
+.cov-modos{margin:4px 0 6px}
+dialog.cov-dlg[open]{width:min(980px,96vw);max-width:96vw}
+.cov-lei-sub{margin-top:6px;background:rgba(127,127,127,.04)}
+.cov-art .cov-top-nome{flex:1 1 220px}
+.cov-art-cartoes{margin:2px 0 6px 18px;display:flex;flex-direction:column;gap:3px}
+.cov-art-cartoes[hidden]{display:none}
+.cov-art-cartao{font-size:12px;color:var(--sutil);padding:3px 8px;border-left:2px solid var(--borda)}
+.cov-lei-prior{padding:8px 10px;border-radius:10px;border:1px solid #f0ad4e;background:rgba(240,173,78,.08)}
 .cov-bloco{margin-top:14px}
 .cov-bloco h4{margin:0 0 6px}
 .cov-bloco .cov-item{margin-bottom:4px}
@@ -9061,6 +9070,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnLeiIrF_erros" data-i18n="lei_ir_f_erros"></button>
     <button class="btn-min" id="btnLeiIrF_prova" data-i18n="lei_ir_f_prova"></button>
     <button class="btn-min" id="btnLeiIrF_parei" data-i18n="lei_ir_f_parei"></button>
+    <!-- (v18.73.0) quais artigos DESTA lei têm cartão, quais não, quais caem em questão (a barra do leitor fica nos 6 botões) -->
+    <button class="btn-min btn-min-ok" id="btnLeiCobertura" data-i18n="lei_cov_btn" data-i18n-title="lei_cov_tip"></button>
   </div>
   <div id="leiIrGrade" class="lei-ir-corpo"></div>
   <div class="lei-ir-legenda" id="leiIrLegenda" hidden>
@@ -9538,8 +9549,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <h3 data-i18n="cov_titulo"></h3>
     <button type="button" class="qs-x" id="btnCovX" aria-label="Fechar">✕</button>
   </div>
-  <p class="nota" data-i18n="cov_sub"></p>
+  <!-- (v18.73.0) POR EDITAL (tópicos × peso da prova) ou POR LEI (artigo a artigo) -->
+  <div class="ger-modos cov-modos" role="tablist">
+    <button type="button" class="ger-modo" id="btnCovModoEdital" role="tab" aria-selected="true" data-i18n="cov_modo_edital"></button>
+    <button type="button" class="ger-modo" id="btnCovModoLei" role="tab" aria-selected="false" data-i18n="cov_modo_lei"></button>
+  </div>
+  <p class="nota" id="covSub" data-i18n="cov_sub"></p>
   <div class="cov-barra">
+    <select id="covLei" hidden></select>
     <select id="covEdital"></select>
     <select id="covFase" hidden>
       <option value="1" data-i18n="cov_fase1"></option>

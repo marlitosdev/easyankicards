@@ -8326,6 +8326,12 @@ function leiIniciar() {
   liga("btnLeiArquivo", "abrir arquivo (.docx ou .htm)", () => { if ($("leiArquivoHtml")) $("leiArquivoHtml").click(); });
   leiSepLigar();
   leiAltFilaLigar();
+  /* (v18.73.0) a cobertura desta lei por cartões, artigo a artigo */
+  if ($("btnLeiCobertura")) $("btnLeiCobertura").onclick = () => {
+    if (!leiIdAtual || typeof covAbrirLei !== "function") { toastMsg(t("cov_lei_nenhuma"), 4000); return; }
+    try { if ($("dlgLeiIr") && $("dlgLeiIr").open) $("dlgLeiIr").close(); } catch (e) {}
+    covAbrirLei(leiIdAtual);
+  };
   /* (v18.66.0) o registro da inclusão: um botão em cada tela do fluxo */
   [["btnLeiFxReg", "a lei (colar o texto)"], ["btnLeiSepFx", "separar artigos"], ["btnLeiPreFx", "revisar a colagem"], ["btnLeiDupFx", "artigos repetidos"],
     ["btnLeiUpdFx1", "atualizar a lei"], ["btnLeiUpdFx", "atualizar a lei — comparação"]].forEach(([id, tela]) => {
