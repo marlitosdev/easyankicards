@@ -20,6 +20,19 @@
  *     nem editando; fechar virou ✕ (com nome para leitor de tela);
  *  6. lendo, a janela ganha "mat-lendo": o texto sem caixa, ocupando a
  *     janela, na coluna da tela cheia; editando, volta a ser como era.
+ *
+ * R3 (18.76.0) — EDITAR UM PARÁGRAFO SÓ.
+ *  7. a linha do bloco no escopo vira a do texto inteiro (Tudo, Geral, a
+ *     seção do ramo); a dica de várias linhas é um bloco; título de ramo,
+ *     divisória e questão não se editam por aqui;
+ *  8. gravar troca SÓ aquelas linhas, grava o resumo, e dá para desfazer;
+ *     se o texto mudou por baixo, não grava; caixa vazia apaga (com
+ *     pergunta); Esc desiste só do parágrafo;
+ *  9. o pedido à IA leva a ação, as regras, o contexto e o parágrafo entre
+ *     <<< >>>; a resposta é limpa (cerca, <<< >>>, rótulo) e o pedido colado
+ *     de volta é recusado; ela só entra no parágrafo com «usar»;
+ * 10. o lápis aparece no parágrafo sob o mouse (não no título do ramo) e
+ *     a bolha da seleção tem "✎ parágrafo".
  * ===================================================================== */
 const fs = require("fs");
 const path = require("path");
@@ -210,6 +223,145 @@ async function testes() {
     a.$("btnMatCheiaTopo").onclick();
     ok(a.matCheiaAtual() === true, "R5g o botão do topo entra na tela cheia");
     a.matCheiaTrocar(false);
+  }
+  /* ---- 7: que linhas são ---- */
+  {
+    const T = "Geral um.\n\n## Ramo — A\nA um.\n\n> dica 1\n> dica 2\n>~ outra\n---";
+    ok(a.rpaLinhaBase(T, "*", ramos) === 0 && a.rpaLinhaBase(T, "", ramos) === 0 && a.rpaLinhaBase(T, "a", ramos) === 2 && a.rpaLinhaBase(T, "b", ramos) === null,
+       "R7 a linha 0 do escopo no texto inteiro: Tudo e Geral = 0; o ramo A = a linha do título dele (2); ramo sem seção = null");
+    const L = T.split("\n");
+    ok(JSON.stringify(a.rpaExtensao(L, 5)) === "[5,6]" && JSON.stringify(a.rpaExtensao(L, 7)) === "[7,7]" && JSON.stringify(a.rpaExtensao(L, 3)) === "[3,3]",
+       "R7a a dica de várias linhas é um bloco (e a de outro tipo, não)");
+    ok(a.rpaPodeEditar("Texto.") && a.rpaPodeEditar("- item") && a.rpaPodeEditar("### Sub") && !a.rpaPodeEditar("## Ramo — A") && !a.rpaPodeEditar("---") && !a.rpaPodeEditar("?> enunciado") && !a.rpaPodeEditar(">> gabarito") && !a.rpaPodeEditar("  "),
+       "R7b título de ramo, divisória, questão e linha vazia não se editam por aqui");
+    ok(a.rpaTrocar("a\nb\nc", 1, 1, "B1\n\nB2  ") === "a\nB1\n\nB2\nc" && a.rpaTrocar("a\nb\nc", 1, 1, "") === "a\nc" && a.rpaTrocar("a\nb\nc\nd", 1, 2, "x") === "a\nx\nd",
+       "R7c troca só as linhas (uma por várias, nenhuma, várias por uma)");
+  }
+
+  /* ---- 9: o pedido e a resposta ---- */
+  {
+    const p = a.rpaPrompt({ disciplina: "D", topico: "T", ramo: "A", antes: "Antes.", alvo: "O ==!parágrafo== alvo.", depois: "Depois.", acao: "encurtar" });
+    ok(p.includes(a.t("rpa_p_encurtar")) && p.includes("Ramo: A") && p.includes("<<<\nO ==!parágrafo== alvo.\n>>>") && p.includes("«Antes.»") && p.includes("«Depois.»") && p.includes("==!…==") && !p.includes(a.t("rpa_p_varios")),
+       "R9 o pedido leva a ação, o ramo, o contexto, as regras (marcas) e o parágrafo entre <<< >>>: " + p);
+    const p2 = a.rpaPrompt({ topico: "T", alvo: "x", acao: "livre", instrucao: "inclua a exceção do § 2º" });
+    ok(p2.includes("inclua a exceção do § 2º") && p2.includes(a.t("rpa_p_varios")) && !p2.includes(a.t("rpa_p_contexto")), "R9a instrução livre (pode virar vários parágrafos); sem vizinhos, sem contexto");
+    ok(a.rpaPrompt({ alvo: "x", acao: "ampliar" }).includes(a.t("rpa_p_varios")), "R9b ampliar pode virar vários parágrafos");
+    const r = a.rpaLerResposta("```markdown\n<<<\nParágrafo: Novo texto.\n>>>\n```");
+    ok(r.texto === "Novo texto." && !r.ehPedido, "R9c a resposta sai limpa (cerca, <<< >>>, rótulo): " + JSON.stringify(r));
+    ok(a.rpaLerResposta(p).ehPedido && a.rpaLerResposta("  ").vazio, "R9d o pedido colado de volta é recusado; vazio é vazio");
+  }
+
+  /* ---- 8: abrir, gravar, desfazer ---- */
+  {
+    const chP = a.matChave("Leitura", "Paragrafo");
+    const T0 = "Geral um.\n\n## Ramo — A\nA um.\n\n- A dois.\n\n> dica 1\n> dica 2\n\n## Ramo — B\nB um.";
+    a.matGravar(chP, T0, { disciplina: "Leitura", topico: "Paragrafo" });
+    a.matAbrirEditor({ disciplina: "Leitura", nome: "Paragrafo", chave: chP }, "ler", { ramos, ramo: "a" });
+    const pn = a.$("matLeitura");
+    const blocoP = (l) => pn.querySelector('[data-l="' + l + '"]');
+    /* na seção do ramo A: linha 0 = o título, 3 = "- A dois.", 5 = a dica */
+    ok(a.rpaAbrir(blocoP(0)) === false && a.rpaEdAtual() === null && a.$("matEstado").textContent === a.t("rpa_tit_ramo"), "R8 o título do ramo não se edita aqui (e diz onde se muda)");
+    ok(a.rpaAbrir(blocoP(3)) === true, "R8a abre o item da lista");
+    const ed = a.rpaEdAtual();
+    ok(ed.ta.value === "- A dois." && ed.el === blocoP(3) && ed.el.style.display === "none" && ed.caixa.parentNode === blocoP(3).parentNode && ed.salvar.disabled === true,
+       "R8b a caixa entra no lugar do bloco, só com ele (o item com o '- '); sem mudança, gravar fica desligado");
+    ed.ta.value = "- A dois, ==!editado==.";
+    (ed.ta._ouv.input || []).forEach((f) => f({}));
+    ok(ed.salvar.disabled === false && /9 → 23/.test(ed.conta.textContent), "R8c a conta acompanha (antes → agora): " + ed.conta.textContent);
+    await a.rpaSalvar();
+    const T1 = a.matObter(chP).texto;
+    ok(T1 === T0.replace("- A dois.", "- A dois, ==!editado==."), "R8d grava SÓ aquela linha, no texto inteiro: " + JSON.stringify(T1));
+    ok(a.rpaEdAtual() === null && /editado/.test(pn.innerHTML) && a.$("matEstado").textContent.indexOf(a.t("rpa_salvo")) === 0, "R8e a leitura volta desenhada, com 'gravado' e o desfazer");
+    a.rpaDesfazer();
+    ok(a.matObter(chP).texto === T0, "R8f desfazer volta o texto de antes");
+    /* a dica de duas linhas: um bloco, editado inteiro */
+    a.rpaAbrir(blocoP(5));
+    ok(a.rpaEdAtual().ta.value === "> dica 1\n> dica 2", "R8g a dica de duas linhas abre inteira: " + JSON.stringify(a.rpaEdAtual().ta.value));
+    a.rpaEdAtual().ta.value = "> dica nova";
+    await a.rpaSalvar();
+    ok(a.matObter(chP).texto === T0.replace("> dica 1\n> dica 2", "> dica nova"), "R8h as duas linhas viram uma");
+    a.rpaDesfazer();
+    /* o texto mudou por baixo: não grava em cima */
+    a.rpaAbrir(blocoP(1));
+    const ed2 = a.rpaEdAtual();
+    ok(ed2.ta.value === "A um.", "R8i (abre 'A um.')");
+    a.$("matTexto").value = a.$("matTexto").value.replace("A um.", "A um mudado por outro lugar.");
+    ed2.ta.value = "A um, meu.";
+    const gr = await a.rpaSalvar();
+    ok(gr === false && ed2.aviso.hidden === false && ed2.aviso.textContent === a.t("rpa_mudou") && a.matObter(chP).texto === T0, "R8j o texto mudou por baixo: nada é gravado, e diz por quê");
+    a.rpaCancelar();
+    ok(a.rpaEdAtual() === null && ed2.el.style.display === "" && !ed2.caixa.parentNode, "R8k cancelar devolve o bloco e tira a caixa");
+    a.$("matTexto").value = T0;
+    a.matTrocarModo("ler");
+    /* Esc desiste só do parágrafo */
+    a.rpaAbrir(blocoP(1));
+    const ed3 = a.rpaEdAtual();
+    let parou = false;
+    (ed3.ta._ouv.keydown || []).forEach((f) => f({ key: "Escape", preventDefault() { parou = true; }, stopPropagation() {} }));
+    ok(a.rpaEdAtual() === null && parou && a.$("dlgMaterial").open === true, "R8l Esc desiste do parágrafo e não fecha o resumo");
+    /* Ctrl+Enter grava */
+    a.rpaAbrir(blocoP(1));
+    a.rpaEdAtual().ta.value = "A um, com Ctrl+Enter.";
+    (a.rpaEdAtual().ta._ouv.keydown || []).forEach((f) => f({ key: "Enter", ctrlKey: true, preventDefault() {} }));
+    await Promise.resolve();
+    ok(a.matObter(chP).texto === T0.replace("A um.", "A um, com Ctrl+Enter."), "R8m Ctrl+Enter grava");
+    a.rpaDesfazer();
+    /* caixa vazia + "não": nada muda */
+    a.rpaAbrir(blocoP(1));
+    a.rpaEdAtual().ta.value = "";
+    const prN = a.rpaSalvar();
+    for (let i = 0; i < 8; i++) { await Promise.resolve(); try { a.uiModalResponder(false); } catch (e) {} }
+    await prN;
+    ok(a.matObter(chP).texto === T0 && a.rpaEdAtual() !== null, "R8n0 caixa vazia + 'não': nada é apagado e o parágrafo continua aberto");
+    a.rpaCancelar();
+    /* caixa vazia: pergunta e apaga */
+    a.rpaAbrir(blocoP(1));
+    a.rpaEdAtual().ta.value = "   ";
+    const pr = a.rpaSalvar();
+    for (let i = 0; i < 8; i++) { await Promise.resolve(); try { a._uiFechar(true); } catch (e) {} }
+    await pr;
+    ok(a.matObter(chP).texto === T0.replace("A um.\n", ""), "R8n caixa vazia + 'sim' apaga a linha: " + JSON.stringify(a.matObter(chP).texto));
+    a.rpaDesfazer();
+    ok(a.matObter(chP).texto === T0, "R8o e o desfazer devolve");
+
+    /* ---- 9e: a resposta da IA ---- */
+    a.rpaAbrir(blocoP(1));
+    const ed4 = a.rpaEdAtual();
+    const pedido = a.rpaPedir("encurtar");
+    ok(pedido.includes("<<<\nA um.\n>>>") && pedido.includes("Ramo: A") && ed4.resp.hidden === false && ed4.usarBt.disabled === true,
+       "R9e o botão copia o pedido (com o parágrafo e o ramo) e abre a caixa da resposta, com 'usar' desligado");
+    ed4.respTa.value = pedido;
+    a.rpaConferirResposta();
+    ok(ed4.usarBt.disabled === true && ed4.respMsg.textContent === a.t("rpa_resp_pedido"), "R9f o pedido colado de volta: recusado");
+    ed4.respTa.value = "<<<\nA um, curto.\n>>>";
+    a.rpaConferirResposta();
+    ok(ed4.usarBt.disabled === false && ed4.ta.value === "A um.", "R9g a resposta lida liga 'usar' — e ainda não mexe no parágrafo");
+    a.rpaUsarResposta();
+    ok(ed4.ta.value === "A um, curto." && ed4.resp.hidden === true && a.matObter(chP).texto === T0, "R9h 'usar' põe a resposta na caixa do parágrafo (sem gravar ainda)");
+    ok(a.rpaPedir("livre") === false && ed4.respMsg.textContent === a.t("rpa_livre_vazio"), "R9i instrução livre vazia: pede para escrever");
+    a.rpaCancelar();
+
+    /* ---- 10: o lápis e a bolha ---- */
+    a.rpaAoPassar({ target: blocoP(3) });
+    const lap = pn.querySelector(".mat-par-lapis");
+    ok(lap && lap.hidden === false && lap._alvo === blocoP(3), "R10 o lápis aparece no parágrafo sob o mouse");
+    a.rpaAoPassar({ target: blocoP(0) });
+    ok(lap.hidden === true, "R10a no título do ramo, não");
+    a.rpaAoPassar({ target: blocoP(3) });
+    lap.onclick();
+    ok(a.rpaEdAtual() && a.rpaEdAtual().ta.value === "- A dois." && lap.hidden === true, "R10b clicar no lápis abre o parágrafo (e o lápis sai de cena)");
+    a.rpaCancelar();
+    const HTML = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const iB = HTML.indexOf('id="matBolha"'), iF = HTML.indexOf("</div>", HTML.indexOf('id="btnMatQstTrecho"'));
+    ok(HTML.indexOf('id="btnBolhaPar"') > iB && HTML.indexOf('id="btnBolhaPar"') < iF && typeof a.$("btnBolhaPar").onclick === "function", "R10c a bolha da seleção tem '✎ parágrafo' (no celular não há mouse)");
+    /* a seleção dentro do item: a bolha abre aquele parágrafo */
+    const txtNo = blocoP(3).children[0] || blocoP(3);
+    a.porSelecao(() => ({ anchorNode: txtNo, removeAllRanges() {} }));
+    a.$("btnBolhaPar").onclick();
+    ok(a.rpaEdAtual() && a.rpaEdAtual().el === blocoP(3), "R10d '✎ parágrafo' abre o parágrafo onde está a seleção");
+    /* redesenhar a leitura leva a caixa junto (não fica um parágrafo 'aberto' que não está na tela) */
+    a.matTrocarModo("ler");
+    ok(a.rpaEdAtual() === null, "R10e redesenhar a leitura fecha o parágrafo aberto");
   }
   a.matFechar();
   return falhas;

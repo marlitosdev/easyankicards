@@ -1207,6 +1207,8 @@ function matTrocarModo(modo) {
       : null;
     /* no escopo de um ramo, a leitura mostra SÓ a seção dele (o modo prova vale no texto inteiro) */
     const txtEsc = matTextoDoEscopo();
+    /* o parágrafo em edição (resumo-paragrafo.js) mora dentro da leitura: redesenhar a leva junto */
+    if (typeof rpaEd !== "undefined" && rpaEd) rpaEd = null;
     $("matLeitura").innerHTML = (txtEsc === null ? "" : matParaHtml(txtEsc, matEscopo === "*" ? prova : null, { comLinhas: true }))
       || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
     /* as citações de lei viram links DEPOIS do desenho: as marcas já estão no lugar */
