@@ -7948,19 +7948,40 @@ function leiRanking(id) {
                       questoes: 0, erros: 0, acertos: 0, prova: 0, incisos: [] };
   });
 
-  /* 1. as questões salvas */
+  /* 1. as questões salvas — cada uma conta para a lei que ela CITA (v18.79.0). Antes, qualquer "art. 43" contava para a lei
+   * aberta: o art. 43 do CTN e o da EC 132 viravam "11 questões" do art. 43 da CF no mapa. A decisão é a dos links. */
   let banco = [];
   try { banco = (typeof qsTodas === "function" ? qsTodas() : []) || []; }
   catch (e) { banco = []; }
+  const lista = leisLista();
+  const doTopicoDe = {};
   banco.forEach((q) => {
     const alvo = [q.enunciado, q.comentario, q.gabarito].filter(Boolean).join(" ");
-    leiCitacoes(alvo).forEach((c) => {
-      const r = porNum[c.num];
-      if (!r) return;                    /* artigo de outra lei */
-      r.questoes++;
-      c.incisos.forEach((i) => { if (r.incisos.indexOf(i) < 0) r.incisos.push(i); });
-      (q.tentativas || []).forEach((tt) => {
-        if (tt && tt.acertou) r.acertos++; else if (tt) r.erros++;
+    let cits = [];
+    try { cits = leiCitacoesNoTexto(alvo); } catch (e) { cits = []; }
+    try { if (typeof citVinculosAplicar === "function") cits = citVinculosAplicar(alvo, cits, q.chave); } catch (e) {}
+    if (!cits.length) return;
+    const ch = q.chave || "";
+    if (!doTopicoDe[ch]) {
+      try { doTopicoDe[ch] = ch ? leisDoTopico(ch) : []; } catch (e) { doTopicoDe[ch] = []; }
+      /* a lei aberta A PARTIR deste tópico, sem estar ligada a ele, é a lei dele para as questões dele */
+      if (!doTopicoDe[ch].length && ch && leiAtual && leiAtual.chave === ch) doTopicoDe[ch] = [l];
+    }
+    const contou = {};
+    cits.forEach((c) => {
+      const res = c.leiId ? { lei: { id: c.leiId } } : leiResolverCitacao(c, lista, doTopicoDe[ch]);
+      if (!res.lei || res.lei.id !== l.id) return;
+      const nums = (c.artigos && c.artigos.length) ? c.artigos.map((a) => a.num) : [c.num];
+      nums.forEach((n0) => {
+        const r = porNum[n0] || porNum[leiNumNormal(n0)];
+        if (!r) return;                  /* a lei não tem este artigo */
+        (c.incisos || []).forEach((i) => { if (r.incisos.indexOf(i) < 0) r.incisos.push(i); });
+        if (contou[r.num]) return;       /* a mesma questão conta uma vez por artigo */
+        contou[r.num] = true;
+        r.questoes++;
+        (q.tentativas || []).forEach((tt) => {
+          if (tt && tt.acertou) r.acertos++; else if (tt) r.erros++;
+        });
       });
     });
   });

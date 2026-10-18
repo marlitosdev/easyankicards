@@ -194,15 +194,10 @@ function covLeiArtigosDoTexto(txt, chave, l, leis, out) {
   try { cits = leiCitacoesNoTexto(txt); } catch (e) { cits = []; }
   try { if (typeof citVinculosAplicar === "function") cits = citVinculosAplicar(txt, cits, chave); } catch (e) {}
   let doTopico = null;
-  const leiDoTopico = () => {
-    if (doTopico === null) { try { const ls = leisDoTopico(chave); doTopico = ls.length === 1 ? ls[0] : false; } catch (e) { doTopico = false; } }
-    return doTopico;
-  };
   cits.forEach((c) => {
-    let alvo = null;
-    if (c.leiId) alvo = { id: c.leiId };
-    else if (c.rotulo) alvo = leiCasarRotulo(c.rotulo, leis);
-    else alvo = leiDoTopico() || null;
+    if (doTopico === null) { try { doTopico = leisDoTopico(chave) || []; } catch (e) { doTopico = []; } }
+    /* a decisão é a dos links (leiResolverCitacao): vínculo fixado, lei nomeada (ou a que a alteradora alterou), a do tópico */
+    const alvo = c.leiId ? { id: c.leiId } : leiResolverCitacao(c, leis, doTopico).lei;
     if (!alvo || alvo.id !== l.id) return;
     const nums = (c.artigos && c.artigos.length) ? c.artigos.map((a) => a.num) : [c.num];
     nums.filter(Boolean).forEach((x) => saida.add(leiNumNormal(x)));

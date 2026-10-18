@@ -1523,29 +1523,9 @@ function qsUiComentario(el, q) {
  *
  * O último caso é o antigo defeito escrito ao contrário: onde o app
  * chutava a primeira, agora ele pergunta. */
+/* (v18.79.0) a decisão mora em leiResolverCitacao (lei-seca.js): a mesma para os links, a Cobertura e o mapa da lei */
 function qsUiLeiAlvo(c, lista, doTopico) {
-  const dt = doTopico || [];
-  /* VÍNCULO FIXADO PELA PESSOA: a lei já vem escolhida, sem casar rótulo */
-  if (c && c.leiId) {
-    const fixa = (lista || []).filter((x) => x.id === c.leiId)[0];
-    if (fixa) return { lei: fixa, ligada: dt.some((x) => x.id === fixa.id) };
-    return { lei: null, motivo: "desconhecida" };
-  }
-  if (c && c.rotulo && typeof leiCasarRotulo === "function") {
-    let l = null;
-    try { l = leiCasarRotulo(c.rotulo, lista); } catch (e) { l = null; }
-    if (l) return { lei: l, ligada: dt.some((x) => x.id === l.id) };
-    return { lei: null, motivo: "desconhecida" };
-  }
-  if (dt.length === 1) return { lei: dt[0], ligada: true };
-  /* a lei nomeada antes, no mesmo parágrafo (leiDeduzirRotulos): só aqui,
-   * quando o tópico não decide — com uma lei só, vale a do tópico, como antes */
-  if (c && c.rotuloDeduzido && typeof leiCasarRotulo === "function") {
-    let l = null;
-    try { l = leiCasarRotulo(c.rotuloDeduzido, lista); } catch (e) { l = null; }
-    if (l) return { lei: l, ligada: dt.some((x) => x.id === l.id), deduzida: true };
-  }
-  return { lei: null, motivo: dt.length ? "ambigua" : "vazia" };
+  return leiResolverCitacao(c, lista || [], doTopico);
 }
 
 function qsUiLeiLink(c, q, lista, doTopico) {
@@ -1569,6 +1549,7 @@ function qsUiLeiLink(c, q, lista, doTopico) {
     : (c.rotulo ? t("qs_lei_link_sem", { l: c.rotulo })
                 : t("qs_lei_link_qual", { a: c.numCru }));
   if (alvo.deduzida) b.title += " · " + t("qs_lei_link_ded", { l: c.rotuloDeduzido });
+  if (alvo.via === "alteradora") b.title += " · " + t("cit_via_alteradora", { a: alvo.alteradora, l: alvo.lei.nome });
   if (c.permanente) {
     b.classList.add("qs-lei-link-perm");
     if (alvo.lei) b.title = t("qs_vinc_link_perm", { l: alvo.lei.nome, a: (c.artigos || []).map((a) => a.numCru).join(", ") || c.numCru || "" });
