@@ -49,7 +49,8 @@ function riaPrompt(o) {
   L.push("");
   L.push(t("ria_p_cada"));
   L.push(t("ria_p_prof_" + (RIA_PROFS.indexOf(o.prof) >= 0 ? o.prof : "padrao")));
-  if (!o.ramo && o.sugerir) L.push(t("ria_p_sugerir"));
+  /* sem ramo nenhum, "sugerir" é DIVIDIR o tópico; com ramos, é apontar o que falta */
+  if (!o.ramo && o.sugerir) L.push(t((o.ramos || []).some((r) => r && String(r.nome || "").trim()) ? "ria_p_sugerir" : "ria_p_sugerir_sem"));
   L.push(t("ria_p_regras"));
   /* citação completa: é o que faz cada "art. X" virar link no resumo */
   L.push(t("ria_p_citar"));
@@ -187,9 +188,54 @@ function riaAbrir(ctx) {
   $("resIANovoLin").hidden = !!ramo;
   $("resIASugerirLin").hidden = !!ramo;
   riaPintarRamos();
+  riaPintarSugRamos();
+  if ($("resIARamosMsg")) $("resIARamosMsg").textContent = "";
   riaConferirTela();
   abrirModal("dlgResIA");
   return dlg;
+}
+
+/* ---------------- os ramos: sugerir criar (v18.78.0) ---------------- */
+/* o edital em que o tópico mora (é nele que os ramos são escritos): o que veio de quem abriu; senão o aberto, se tiver o
+ * tópico; senão o primeiro que tiver */
+function riaEditalId() {
+  if (!riaCtx) return "";
+  if (riaCtx.editalId) return riaCtx.editalId;
+  const lista = typeof editais !== "undefined" && Array.isArray(editais) ? editais : [];
+  const tem = (ed) => {
+    try {
+      return (lerEdital(ed.texto || "").disciplinas || []).some((d) => (d.topicos || []).some((tp) =>
+        matChave(d.nome, tp.nome) === riaCtx.chave || (typeof matChaveViva === "function" && matChaveViva(d.nome, tp.nome) === riaCtx.chave)));
+    } catch (e) { return false; }
+  };
+  const atual = typeof editalAtual !== "undefined" ? lista.find((e) => e.id === editalAtual) : null;
+  if (atual && tem(atual)) return atual.id;
+  const outro = lista.find(tem);
+  return outro ? outro.id : "";
+}
+/* o aviso do tópico sem ramos (só no pedido do tópico inteiro, e só se ele está num edital — os ramos moram lá) */
+function riaPintarSugRamos() {
+  const bx = $("resIASugRamos");
+  if (!bx) return;
+  bx.hidden = !!riaRamoAlvo() || (riaCtx.ramos || []).length > 0 || !riaEditalId();
+}
+/* abre o editor de ramos (com os nomes acrescentados, se vierem); ao salvar, o pedido e a conferência passam a usá-los */
+function riaCriarRamos(nomes) {
+  const editalId = riaEditalId();
+  if (!editalId || typeof ramAbrirEditor !== "function") return false;
+  return ramAbrirEditor({ editalId, disciplina: riaCtx.disciplina, topico: riaCtx.topico, chave: riaCtx.chave, acrescentar: nomes || [],
+    depois: (r) => {
+      riaCtx.ramos = (r.ramos || []).map((x) => ({ id: x.id, nome: x.nome }));
+      riaCtx.lista = null;
+      riaPintarRamos();
+      riaPintarSugRamos();
+      riaConferirTela();
+      if ($("resIARamosMsg")) $("resIARamosMsg").textContent = t("ria_ramos_criados", { n: riaCtx.ramos.length });
+    } });
+}
+/* as seções da resposta que não são ramos do tópico (sugeridas ou escritas pela pessoa) */
+function riaRamosNovosDaResposta(resp) {
+  return ((resp && resp.secoes) || []).filter((x) => x.semRamo).map((x) => x.nome);
 }
 /* aberto de fora da ficha (Agenda, Material de estudo, diário): os ramos vêm do plano do edital aberto, quando o tópico
  * está nele — o mesmo critério da ficha */
@@ -239,7 +285,8 @@ function riaPintarRamos() {
   if (!riaCtx.lista) riaCtx.lista = (riaCtx.ramos || []).map((r) => ({ id: r.id, nome: r.nome, foco: "", incluir: true }));
   riaCtx.lista.forEach((r) => linha(r, false));
   riaNovos.forEach((r) => linha(r, true));
-  if (!riaCtx.lista.length && !riaNovos.length) {
+  /* no edital, o aviso "ainda não tem ramos" (riaPintarSugRamos) já diz isso, com o caminho para criá-los */
+  if (!riaCtx.lista.length && !riaNovos.length && !riaEditalId()) {
     const p = document.createElement("p"); p.className = "nota"; p.textContent = t("ria_sem_ramos"); bx.append(p);
   }
 }
@@ -329,6 +376,12 @@ function riaConferirTela() {
   /* trocar tudo só existe no tópico inteiro e quando já há resumo */
   const temAtual = !!riaTextoAtual().trim();
   $("resIAModoLin").hidden = !pode || !!ramo || !temAtual || riaModoDeAplicar() === "acrescentar";
+  /* ramos que a resposta traz e o edital não tem: um clique para criá-los (no editor de ramos, para conferir) */
+  const novosR = pode && !ramo ? riaRamosNovosDaResposta(resp) : [];
+  if ($("resIACriarLin")) {
+    $("resIACriarLin").hidden = !novosR.length || !riaEditalId();
+    $("btnResIACriarRamos").textContent = t("ria_criar_ramos", { n: novosR.length });
+  }
   $("btnResIAModoSec").setAttribute("aria-pressed", riaModo === "secoes" ? "true" : "false");
   $("btnResIAModoTudo").setAttribute("aria-pressed", riaModo === "tudo" ? "true" : "false");
   const conf = $("resIAConf");
@@ -411,6 +464,8 @@ function riaIniciar() {
   $("resIATexto").addEventListener("input", riaConferirTela);
   $("btnResIAModoSec").onclick = () => riaModoDefinir("secoes");
   $("btnResIAModoTudo").onclick = () => riaModoDefinir("tudo");
+  if ($("btnResIASugCriar")) $("btnResIASugCriar").onclick = () => riaCriarRamos([]);
+  if ($("btnResIACriarRamos")) $("btnResIACriarRamos").onclick = () => riaCriarRamos(riaRamosNovosDaResposta(riaLerResposta($("resIATexto").value, riaCtx.ramos, "")));
   if ($("btnResIAObjCompl")) {
     $("btnResIAObjCompl").onclick = () => riaObjetivoDefinir("complementar");
     $("btnResIAObjMelhor").onclick = () => riaObjetivoDefinir("melhorar");

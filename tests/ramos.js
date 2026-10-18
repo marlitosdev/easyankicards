@@ -3980,6 +3980,47 @@ async function testes() {
     if (reg0) mats[ch] = reg0; else delete mats[ch];
   }
 
+  /* ---- T4b (v18.78.0): pedir o resumo de um tópico SEM ramos sugere criá-los ---- */
+  {
+    const { a, ed } = MT();
+    const NL = String.fromCharCode(10);
+    const chC = a.matChaveViva("Licitações", "Convênios");
+    const digita = (v) => { a.$("resIATexto").value = v; ((a.$("resIATexto")._ouv || {}).input || []).forEach((fn) => fn()); };
+    /* sem editalId de quem abriu: o app acha o edital que tem o tópico */
+    a.riaAbrirDoTopico("Licitações", "Convênios", chC, { ramos: [] });
+    ok(a.$("resIARamos").textContent.indexOf(a.t("ria_sem_ramos")) < 0, "T4b1a no edital, a frase 'não tem ramos' da lista não repete o aviso");
+    ok(a.riaEditalId() === ed.id && a.$("resIASugRamos").hidden === false, "T4b1 tópico sem ramos, num edital: o pedido avisa e oferece criar os ramos (o edital é achado pelo tópico)");
+    ok(a.$("resIASugerir").checked === true && a.riaMontarPedido().includes(a.t("ria_p_sugerir_sem")) && !a.riaMontarPedido().includes(a.t("ria_p_sugerir")),
+       "T4b2 sem ramos, 'sugerir' pede à IA para DIVIDIR o tópico em ramos (não 'o que falta')");
+    a.$("resIASugerir").checked = false;
+    ok(!a.riaMontarPedido().includes(a.t("ria_p_sugerir_sem")), "T4b3 desmarcado, o pedido não fala em dividir");
+    a.$("resIASugerir").checked = true;
+    /* a resposta dividida: os ramos sugeridos viram um botão de criar */
+    digita(["# Resumo geral", "Convênio é acordo.", "", "## Ramo sugerido — Conceito e partes", "C.", "", "## Ramo sugerido — Prestação de contas", "P."].join(NL));
+    ok(a.$("resIACriarLin").hidden === false && a.$("btnResIACriarRamos").textContent === a.t("ria_criar_ramos", { n: 2 }), "T4b4 a resposta traz 2 ramos que o edital não tem: botão 'criar estes 2 ramos'");
+    a.$("btnResIACriarRamos").onclick();
+    ok(a.$("dlgRamos").open === true && a.ramLinhasAtual().map((l) => l.nome).join("|") === "Conceito e partes|Prestação de contas", "T4b5 abre o editor de ramos com eles já acrescentados, para conferir");
+    a.$("btnRamSalvar").onclick();
+    ok(a.$("dlgRamos").open === false && /\+ Convênios :: 2\n\+\+ Conceito e partes\n\+\+ Prestação de contas/.test(ed.texto),
+       "T4b6 salvar escreve os ramos no edital, debaixo do tópico: " + JSON.stringify(ed.texto));
+    ok(a.$("resIACriarLin").hidden === true && a.$("resIASugRamos").hidden === true && a.$("resIARamosMsg").textContent === a.t("ria_ramos_criados", { n: 2 })
+       && /sem-ok/.test(a.$("resIASem").className), "T4b7 de volta ao pedido: os ramos existem, o aviso e o botão somem, e a resposta já casa com eles");
+    a.$("btnResIAAplicar").onclick();
+    ok(/## Ramo — Conceito e partes\nC\./.test(a.matObter(chC).texto), "T4b8 aplicar grava as seções com os ramos já criados");
+    a.$("btnResIAFechar").onclick();
+    /* com ramos, nada de aviso; e o 'sugerir' volta a ser 'o que falta' */
+    a.riaAbrirDoTopico("Licitações", "Lei 14.133", a.matChaveViva("Licitações", "Lei 14.133"), { ramos: [{ id: "modalidades", nome: "Modalidades" }], editalId: ed.id });
+    ok(a.$("resIASugRamos").hidden === true && a.riaMontarPedido().includes(a.t("ria_p_sugerir")), "T4b9 tópico com ramos: sem o aviso, e 'sugerir' é apontar o que falta");
+    a.$("btnResIAFechar").onclick();
+    /* fora de qualquer edital: não há onde criar ramos */
+    a.riaAbrirDoTopico("Avulsa", "Sem edital", a.matChave("Avulsa", "Sem edital"), { ramos: [] });
+    ok(a.$("resIARamos").textContent.indexOf(a.t("ria_sem_ramos")) >= 0, "T4b10a fora dos editais, a lista diz que não há ramos");
+    ok(a.riaEditalId() === "" && a.$("resIASugRamos").hidden === true, "T4b10 tópico fora dos editais: sem o aviso (os ramos moram no edital)");
+    digita("## Ramo sugerido — X\nx.");
+    ok(a.$("resIACriarLin").hidden === true, "T4b11 nem o botão de criar");
+    a.$("btnResIAFechar").onclick();
+  }
+
   /* ---- T5: renomear/apagar um ramo leva a seção do resumo junto ---- */
   {
     const { a, ed, chave } = MT();

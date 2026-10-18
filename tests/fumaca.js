@@ -679,7 +679,7 @@ function rodar() {
     jurRamoDe, jurLigarRamo, jurDesfazerRamo, jurContarPorRamo, jurMigrarRamos, jurRamoVerTodos,
     ramSecoesRenomeadas, ramSugerirRamoDaQuestao, qsUiRamosDoTopico, qsUiLigarRamosAbrir, qsUiLigarRamosAplicar, qsUiLigarRamosDesfazer,
     rpaLinhaBase, rpaExtensao, rpaPodeEditar, rpaTrocar, rpaPrompt, rpaLerResposta, rpaAbrir, rpaSalvar, rpaCancelar, rpaDesfazer, rpaPedir, rpaUsarResposta, rpaConferirResposta, rpaAoPassar, rpaDaSelecao, rpaBlocoDe, rpaEdAtual: () => rpaEd,
-    riaPrompt, riaLerResposta, riaAplicarTexto, riaConferir, riaContarMarcas, riaAbrir, riaAbrirDoTopico, riaConferirTela, riaAplicar, riaDesfazer, riaMontarPedido, riaAcrescentarNovo, riaModoDefinir, riaObjetivoDefinir, riaModoDeAplicar, riaObjetivoAtual: () => riaObjetivo, RIA_LEI_MAX, matPintarDuvidasBotao, matAgrupado, matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
+    riaPrompt, riaLerResposta, riaAplicarTexto, riaConferir, riaContarMarcas, riaAbrir, riaAbrirDoTopico, riaConferirTela, riaAplicar, riaDesfazer, riaMontarPedido, riaAcrescentarNovo, riaModoDefinir, riaObjetivoDefinir, riaModoDeAplicar, riaEditalId, riaPintarSugRamos, riaCriarRamos, riaRamosNovosDaResposta, riaObjetivoAtual: () => riaObjetivo, RIA_LEI_MAX, matPintarDuvidasBotao, matAgrupado, matLinhasLegitimas, matTopicosComLixo, matLixoNosCartoes, matLimparLixoCartoes, matSelosDe,
     matMarcasDe, matContarMarcas, matTirarMarcaDe, matTrocarCorDaMarca,
     matCartoesConsertar, matCartoesPromptCorrecao, matConsertoPerdas, matJuntarTags,
     mcPareiGuardar, mcPareiDe, mcPareiLer, mcEstMenuFechar, mcEstAndar,
