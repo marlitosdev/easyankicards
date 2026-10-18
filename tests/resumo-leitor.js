@@ -13,7 +13,16 @@
  *     lugar volta; com a leitura escondida ou fechada nada é gravado (ela
  *     lê 0 e apagaria o lugar);
  *  4. mudar a letra mantém o mesmo parágrafo no alto.
+ *
+ * R2 (18.75.0) — A TELA CHEIA À VISTA E A LEITURA COM A CARA DELA.
+ *  5. o topo tem "⛶ Tela cheia" (antes só dentro do "Aa"), que entra na
+ *     tela cheia; a tecla F entra e sai — lendo, nunca enquanto se digita
+ *     nem editando; fechar virou ✕ (com nome para leitor de tela);
+ *  6. lendo, a janela ganha "mat-lendo": o texto sem caixa, ocupando a
+ *     janela, na coluna da tela cheia; editando, volta a ser como era.
  * ===================================================================== */
+const fs = require("fs");
+const path = require("path");
 const { rodar } = require("./fumaca.js");
 
 async function testes() {
@@ -166,6 +175,41 @@ async function testes() {
     ok(a.matFonteAtual() === 17 && painel.scrollTop === Math.round(400 * 17 / 15 + 100) || Math.abs(painel.scrollTop - (400 * 17 / 15 + 100)) < 1,
        "R4a o A+ mantém o parágrafo (desceu para 453 px; ficam os 100 px dentro dele): " + painel.scrollTop);
     a.matFonteZerar();
+  }
+  /* ---- 5 e 6: a tela cheia à vista; a leitura com a cara dela ---- */
+  {
+    const HTML = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const iTopo = HTML.indexOf('id="matTopo"'), iFim = HTML.indexOf('id="matAjudaNota"');
+    const pos = (id) => HTML.indexOf('id="' + id + '"');
+    ok(pos("btnMatCheiaTopo") > iTopo && pos("btnMatCheiaTopo") < pos("btnMatModoTopo") && pos("btnMatCheiaTopo") < iFim,
+       "R5 '⛶ Tela cheia' está no topo, antes de Editar (antes ficava escondida no 'Aa')");
+    ok(HTML.includes('class="btn-min mat-cheia-bt" id="btnMatCheiaTopo"') && HTML.includes(".mat-cheia-bt{background:var(--acao)"), "R5a com destaque (a cor da ação)");
+    ok(/id="btnMatFecharTopo"[^>]*aria-label="Fechar o resumo"/.test(HTML) && a.t("mat_fechar_topo") === "✕", "R5b fechar é ✕, com nome para leitor de tela");
+    const dlg = a.$("dlgMaterial");
+    a.matEscopoEscolher("*");
+    a.matTrocarModo("ler");
+    ok(/mat-lendo/.test(dlg.className), "R6 lendo, a janela tem a cara da tela cheia (mat-lendo)");
+    ok(HTML.includes("#dlgMaterial.mat-lendo #matLeitura{flex:1 1 auto;min-height:0;max-height:none;resize:none;border:none")
+       && HTML.includes("#dlgMaterial.mat-lendo[open]{height:92vh"),"R6a sem caixa, ocupando a janela de altura fixa");
+    ok(HTML.indexOf("#dlgMaterial.mat-lendo #matLeitura{") < HTML.indexOf("#dlgMaterial.mat-cheia #matLeitura{flex:1 1 auto"), "R6b a tela cheia vem depois no CSS (com as duas classes, ganha a dela)");
+    a.matTrocarModo("editar");
+    ok(!/mat-lendo/.test(dlg.className), "R6c editando, volta a ser como era");
+    const raiz = a.document.documentElement;
+    raiz.requestFullscreen = () => { a.document.fullscreenElement = raiz; return Promise.resolve(); };
+    a.document.exitFullscreen = () => { a.document.fullscreenElement = null; return Promise.resolve(); };
+    const tecla = (key, alvo) => { let parou = false; (dlg._ouv.keydown || []).forEach((f) => f({ key, target: alvo || { tagName: "DIV" }, preventDefault() { parou = true; } })); return parou; };
+    tecla("f");
+    ok(a.matCheiaAtual() === false, "R5c editando, F não faz nada (é uma letra)");
+    a.matTrocarModo("ler");
+    tecla("f", { tagName: "INPUT" });
+    ok(a.matCheiaAtual() === false, "R5d digitando num campo, F é só uma letra");
+    const parou = tecla("F");
+    ok(a.matCheiaAtual() === true && parou, "R5e lendo, F entra na tela cheia");
+    tecla("f");
+    ok(a.matCheiaAtual() === false, "R5f e sai");
+    a.$("btnMatCheiaTopo").onclick();
+    ok(a.matCheiaAtual() === true, "R5g o botão do topo entra na tela cheia");
+    a.matCheiaTrocar(false);
   }
   a.matFechar();
   return falhas;

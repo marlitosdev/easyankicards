@@ -1169,6 +1169,7 @@ function matTrocarModo(modo) {
   }
   $("matBarra").hidden = lendo;
   $("matLeitura").hidden = !lendo;
+  if ($("dlgMaterial").classList) $("dlgMaterial").classList.toggle("mat-lendo", lendo);
   $("matCtrlLeitura").hidden = !lendo;
   if ($("btnMatSalvar")) $("btnMatSalvar").hidden = false;   /* serve nos dois modos */
   /* NA TELA CHEIA, quem manda no que aparece é matCheiaAplicar. Trocar de ramo (escopo) passava por aqui e
@@ -3994,6 +3995,7 @@ function matIniciar() {
   [["btnMatColEstreita", "estreita"], ["btnMatColMedia", "media"], ["btnMatColLarga", "larga"]]
     .forEach(([id, c]) => { if ($(id)) $(id).onclick = () => matColunaDefinir(c); });
   matBotao("btnMatCheia", "ler em tela cheia", () => matCheiaTrocar(true));
+  matBotao("btnMatCheiaTopo", "ler em tela cheia (topo)", () => matCheiaTrocar(true));
   matBotao("btnMatCheiaSair", "voltar do tela cheia", () => matCheiaTrocar(false));
   matBotao("btnMatCheiaMaior", "letra maior (tela cheia)", () => matFonteMudar(1));
   matBotao("btnMatCheiaMenor", "letra menor (tela cheia)", () => matFonteMudar(-1));
@@ -4010,11 +4012,14 @@ function matIniciar() {
       if (e && e.preventDefault) e.preventDefault();
       matCheiaTrocar(false);
     });
-    /* na tela cheia, as teclas + e − mudam a letra (como num leitor de livros); nunca enquanto se digita */
+    /* na tela cheia, as teclas + e − mudam a letra (como num leitor de livros); nunca enquanto se digita.
+     * F entra e sai da tela cheia (lendo; v18.75.0) */
     $("dlgMaterial").addEventListener("keydown", (e) => {
-      if (!matCheia || !e || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!e || e.ctrlKey || e.metaKey || e.altKey) return;
       const alvo = e.target || {};
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || "") || alvo.isContentEditable) return;
+      if ((e.key === "f" || e.key === "F") && matModo === "ler") { matCheiaTrocar(!matCheia); if (e.preventDefault) e.preventDefault(); return; }
+      if (!matCheia) return;
       if (e.key === "+" || e.key === "=") { matFonteMudar(1); if (e.preventDefault) e.preventDefault(); }
       else if (e.key === "-" || e.key === "_") { matFonteMudar(-1); if (e.preventDefault) e.preventDefault(); }
     });

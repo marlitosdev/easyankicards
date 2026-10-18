@@ -1797,6 +1797,25 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
  * marcador de onde parei — que é justamente o gesto que se faz DURANTE
  * uma leitura longa, e mandar sair da tela cheia para marcar seria
  * perder o lugar para poder guardar o lugar. */
+/* A LEITURA NORMAL COM A CARA DA TELA CHEIA (v18.75.0). Antes: o texto numa caixa com borda e fundo de campo, de
+ * altura limitada (52vh) dentro da janela — uma janela dentro da janela, com duas barras de rolagem. Agora, lendo, a
+ * janela tem altura fixa, o texto ocupa todo o espaço que sobra, sem caixa, na mesma coluna (--mat-coluna) da tela
+ * cheia. Editar continua como era. */
+#dlgMaterial.mat-lendo[open]{height:92vh;height:92dvh}
+#dlgMaterial.mat-lendo #matLeitura{flex:1 1 auto;min-height:0;max-height:none;resize:none;border:none;border-radius:0;
+  background:transparent;padding:8px max(6px, calc((100% - var(--mat-coluna, 78ch)) / 2))}
+#dlgMaterial.mat-lendo .mat-ctrl{margin:0 0 2px}
+/* no celular, lendo, a janela é a tela (sem a moldura que roubava as bordas) e a dica da seleção sai: a bolha já
+ * aparece ao selecionar */
+@media (max-width:600px){
+  #dlgMaterial.mat-lendo[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
+    margin:0;border:0;border-radius:0;padding:8px 10px 0;box-sizing:border-box}
+  #dlgMaterial.mat-lendo .mat-bolha-dica{display:none}
+  #dlgMaterial.mat-lendo #matLeitura{padding:6px 2px}
+}
+.mat-cheia-bt{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+.mat-cheia-bt:hover{filter:brightness(1.1)}
+.mat-fechar-x{min-width:30px;font-weight:700}
 #dlgMaterial.mat-cheia[open]{max-height:98vh;width:min(1100px,98vw);
   padding-top:10px}
 #dlgMaterial.mat-cheia h3{font-size:1em;margin:0 0 4px;color:var(--sutil)}
@@ -7176,6 +7195,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       title="Este resumo tem dúvidas em aberto. Clique para ver todas as suas dúvidas, de todos os tópicos."></button>
       <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
       title="Responde, em sequência, as questões deste tópico."></button>
+      <!-- A TELA CHEIA À VISTA (v18.75.0): antes ficava escondida dentro do "Aa"; é o jeito de ler sem nada em volta -->
+      <button class="btn-min mat-cheia-bt" id="btnMatCheiaTopo" data-i18n="mat_cheia" data-i18n-title="mat_cheia_topo_tip"></button>
       <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
       <button class="btn-min btn-min-ok" id="btnMatSalvarEstadoTopo" data-i18n="mat_salvar"
       title="Grava o resumo com as marcas que você fez, e continua aqui. É o mesmo botão do rodapé."></button>
@@ -7227,7 +7248,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <button class="btn-min" id="btnMatAjuda" data-i18n="mat_ajuda_btn" title="Mostra ou esconde a explicação de onde o resumo fica guardado e como ele vira cartões."></button>
         </div>
       </details>
-      <button class="btn-min btn-min-perigo" id="btnMatFecharTopo" data-i18n="mat_fechar_topo" title="Fecha o resumo. Se houver marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
+      <button class="btn-min mat-fechar-x" id="btnMatFecharTopo" data-i18n="mat_fechar_topo" aria-label="Fechar o resumo" title="Fecha o resumo. Se houver marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
     </div>
   </div>
   <p class="nota" id="matAjudaNota" hidden data-i18n="mat_ajuda"></p>
