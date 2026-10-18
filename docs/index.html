@@ -2714,6 +2714,8 @@ p.mat-ferr{display:block;font-size:12px}
 .res-ia-conf-lin{margin:2px 0}
 .res-ia-conf-perda{margin-top:4px;color:var(--atencao);font-weight:600}
 .res-ia-obj{margin:8px 0;padding:8px 10px;border:1px solid var(--borda);border-radius:9px}
+.res-ia-sugr{margin:8px 0;padding:8px 10px;border:1px dashed var(--ok);border-radius:9px;font-size:12.5px;background:rgba(47,158,110,.07)}
+.res-ia-sugr-bts{margin:6px 0 4px}
 .res-ia-obj-rot{font-size:12.5px;font-weight:700;margin:0 0 5px}
 .res-ia-obj-bts{display:flex;flex-wrap:wrap;gap:5px}
 .res-ia-obj-bts .btn-min[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
@@ -6501,6 +6503,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       </div>
       <div class="nota res-ia-obj-exp" id="resIAObjExp"></div>
     </div>
+    <!-- SEM RAMOS (v18.78.0): dividir o tópico é o que separa o resumo por partes e põe cada parte no plano -->
+    <div class="res-ia-sugr" id="resIASugRamos" hidden>
+      <b data-i18n="ria_sugr_tit"></b> <span data-i18n="ria_sugr_txt"></span>
+      <div class="res-ia-sugr-bts"><button type="button" class="btn-min btn-min-ok" id="btnResIASugCriar" data-i18n="ria_sugr_criar" data-i18n-title="ria_sugr_criar_tip"></button></div>
+      <div class="nota" data-i18n="ria_sugr_ou"></div>
+    </div>
     <div id="resIARamos" class="res-ia-ramos"></div>
     <div class="res-ia-lin" id="resIANovoLin">
       <input type="text" id="resIANovo" class="mat-busca" data-i18n-ph="ria_novo_ph">
@@ -6524,6 +6532,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <span class="ednovo-sem-ico" id="resIASemIco" aria-hidden="true">○</span>
       <span class="ednovo-sem-txt" id="resIASemTxt"></span>
     </div>
+    <div class="res-ia-lin" id="resIACriarLin" hidden>
+      <button type="button" class="btn-min btn-min-ok" id="btnResIACriarRamos" data-i18n-title="ria_criar_ramos_tip"></button>
+    </div>
+    <p class="nota" id="resIARamosMsg" role="status"></p>
     <div class="res-ia-modo" id="resIAModoLin" role="group" hidden>
       <button type="button" class="btn-min" id="btnResIAModoSec" aria-pressed="true" data-i18n="ria_modo_secoes"></button>
       <button type="button" class="btn-min" id="btnResIAModoTudo" aria-pressed="false" data-i18n="ria_modo_tudo"></button>

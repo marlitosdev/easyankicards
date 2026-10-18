@@ -692,6 +692,12 @@ function ramAbrirEditor(ctx) {
   ctx.originais = edRamosDoTopico(ed.texto || "", ctx.disciplina, ctx.topico).map((r) => ({ id: r.id, nome: r.nome }));
   ramLinhas = edRamosDoTopico(ed.texto || "", ctx.disciplina, ctx.topico).map((r) => ({
     idOrig: r.id, nome: r.nome, peso: r.herdado ? "" : (r.abs > 0 ? r.abs + (r.unidade === "p" ? "p" : "q") : String(r.peso)), nota: r.nota || "" }));
+  /* (v18.78.0) quem abriu pode trazer nomes para acrescentar (os ramos que a IA sugeriu no resumo): entram no fim, para
+   * conferir nome e peso antes de salvar; o que já existe não se repete */
+  (ctx.acrescentar || []).forEach((nome) => {
+    const n = String(nome || "").trim();
+    if (n && !ramLinhas.some((l) => edRamoId(l.nome) === edRamoId(n))) ramLinhas.push({ nome: n, peso: "", nota: "" });
+  });
   $("ramTit").textContent = t("ram_titulo", { t: ctx.topico });
   $("ramMsg").textContent = "";
   $("ramColar").value = "";
