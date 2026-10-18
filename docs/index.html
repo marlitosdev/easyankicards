@@ -1652,6 +1652,10 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-ir-cel.lei-ir-dom-verde{background:rgba(46,158,91,.20)}
 .lei-ir-cel.lei-ir-dom-amarelo{background:rgba(240,173,78,.22)}
 .lei-ir-cel.lei-ir-dom-vermelho{background:rgba(217,83,79,.24)}
+.lei-fila-nv{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0;padding:6px 10px;border:1px solid var(--acao);border-radius:9px;background:rgba(124,108,245,.10);font-size:13px}
+.lei-nv-ir{margin:4px 0 8px}
+.lei-nv-camada{margin:6px 0}
+.lei-nv-camada>summary{cursor:pointer;font-weight:700;margin:4px 0}
 .lei-ir-calor{position:absolute;left:0;bottom:0;height:3px;background:var(--acao);border-radius:0 2px 2px 0;pointer-events:none}
 .lei-ir-cel .lei-ir-n{border:none;background:none;border-radius:0;padding:5px 9px}
 .lei-ir-q{align-self:center;padding:0 6px;font-size:10.5px;font-weight:700;color:var(--sutil);border-left:1px solid var(--borda)}
@@ -8164,6 +8168,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="lei-carga-trilho" aria-hidden="true"><span id="leiCargaBarra"></span></div>
   </div>
   <div class="lei-faixa-alvo" id="leiFaixaAlvo" role="status" hidden></div>
+  <!-- (v18.83.0) a fila dos artigos nunca vistos: o da vez, "li — próximo", as questões dele -->
+  <div class="lei-fila-nv" id="leiFilaNV" role="status" hidden></div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
   <!-- (v18.47.0) a bolha da seleção no leitor: ligar o trecho a uma lei, à mão -->
   <div class="lei-bolha" id="leiBolha" hidden><button type="button" class="btn-min" id="btnLeiBolhaVinc" data-i18n="lei_bolha_vinc" data-i18n-title="lei_bolha_vinc_aj"></button></div>
@@ -9153,6 +9159,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnLeiIrF_erros" data-i18n="lei_ir_f_erros"></button>
     <button class="btn-min" id="btnLeiIrF_prova" data-i18n="lei_ir_f_prova"></button>
     <button class="btn-min" id="btnLeiIrF_parei" data-i18n="lei_ir_f_parei"></button>
+    <button class="btn-min" id="btnLeiIrF_ineditos" data-i18n="lei_ir_f_ineditos" data-i18n-title="lei_ir_f_ineditos_tip"></button>
     <!-- (v18.73.0) quais artigos DESTA lei têm cartão, quais não, quais caem em questão (a barra do leitor fica nos 6 botões) -->
     <button class="btn-min btn-min-ok" id="btnLeiCobertura" data-i18n="lei_cov_btn" data-i18n-title="lei_cov_tip"></button>
   </div>

@@ -1424,6 +1424,7 @@ function leiGaveta(qual) {
 }
 
 function leiTrocarModo(modo) {
+  try { leiFilaNVPintar(); } catch (e) {}
   /* já se estava lendo, com a lei grande ainda entrando na tela: pedir
    * "ler" de novo (o caminho da questão faz isso logo após leiAbrir) não
    * pode jogar fora o desenho em andamento e refazê-lo todo de uma vez */
@@ -3274,7 +3275,7 @@ function leiRolarParaUnidades(bloco, textoArt, unidades, num) {
  * Nada aqui é desenhado até ser aberto: lei de 424 artigos abre com os títulos, e os artigos
  * de um capítulo só entram na tela quando ele se abre.
  * ===================================================================== */
-const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei"];
+const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei", "ineditos"];
 let leiIrFiltro = "todos";
 let leiIrAbertos = null;          /* ids dos nós abertos: sobrevivem a repintar */
 let leiIrPrimeiro = null;         /* o que o Enter da busca faz */
@@ -3615,6 +3616,176 @@ function leiIrLinhaEl(d, a, r, u, textoArt) {
   return item;
 }
 
+/* =====================================================================
+ * OS ARTIGOS QUE VOCÊ NUNCA VIU (v18.83.0)
+ *
+ * "Visto" é o que o app já sabe, sem tabela nova: está antes do "parei"
+ * (leitura em ordem), num capítulo marcado como lido, tem cartão, tem
+ * questão respondida, tem nota, ou foi marcado "já vi". O resto é inédito.
+ *
+ * Trezentos inéditos em ordem numérica paralisam — e o estudante cansa no
+ * art. 20 e perde o que cai. Três camadas, nesta ordem:
+ *  🔥 os que CAEM (questões suas ou "caiu na prova") e você nunca viu;
+ *  🎯 os vizinhos deles (o mesmo capítulo/seção de um artigo que cai);
+ *  📚 o resto da lei, para fechar a leitura.
+ * Revogados ficam de fora.
+ * ===================================================================== */
+function leiNuncaVistos(d) {
+  const l = d.l;
+  if (!l) return { cobrados: [], vizinhos: [], resto: [], vistos: 0, total: 0 };
+  const opc = leiOpcDaLei(l);
+  const lidosIdx = new Set();
+  try {
+    leiBlocos(d.texto, opc).forEach((b) => { if (d.lidos && d.lidos[b.nome]) b.artigos.forEach((a) => lidosIdx.add(a.indice)); });
+  } catch (e) {}
+  const comCartao = new Set();
+  try {
+    const leis = leisLista();
+    cqLerBiblioteca().forEach((n) => covLeiArtigosDoCartao(n, l, leis).forEach((num) => comCartao.add(num)));
+  } catch (e) {}
+  const vistosMao = l.artVistos || {}, notas = l.notasArtigos || {};
+  const respondido = (r) => !!r && ((r.acertosN || 0) + (r.chutes || 0) + (r.erros || 0)) > 0;
+  const cai = (r) => !!r && ((r.questoes || 0) + (r.prova || 0)) > 0;
+  const divQueCai = new Set();
+  const jaDiv = new Set();
+  d.arts.forEach((a) => { if (!jaDiv.has(a.num) && cai(d.ranking[a.num])) divQueCai.add(a.divisaoId || ""); jaDiv.add(a.num); });
+  const out = { cobrados: [], vizinhos: [], resto: [], vistos: 0, total: 0 };
+  /* NÚMERO REPETIDO (corpo × ADCT da CF): as questões contam por número, e a citação aponta a PRIMEIRA ocorrência — a
+   * mesma regra da nota do artigo. A repetição não herda "cai"/"respondido" (senão o art. 5º do ADCT entraria nos 🔥) */
+  const jaNum = new Set();
+  d.arts.forEach((a) => {
+    const ef = (d.efetivos && d.efetivos[a.indice]) || a;
+    const primeira = !jaNum.has(a.num);
+    jaNum.add(a.num);
+    if (leiArtigoRevogado(ef)) return;
+    out.total++;
+    const r = primeira ? (d.ranking[a.num] || null) : null;
+    const visto = (d.pareiIdx >= 0 && a.indice <= d.pareiIdx) || lidosIdx.has(a.indice) || comCartao.has(leiNumNormal(a.num))
+      || respondido(r) || !!notas[leiNumNormal(a.num)] || !!vistosMao[leiNumNormal(a.num)];
+    if (visto) { out.vistos++; return; }
+    const it = { a, r, ef };
+    if (cai(r)) out.cobrados.push(it);
+    else if (divQueCai.has(a.divisaoId || "")) out.vizinhos.push(it);
+    else out.resto.push(it);
+  });
+  out.cobrados.sort((x, y) => ((y.r.questoes || 0) + 2 * (y.r.prova || 0)) - ((x.r.questoes || 0) + 2 * (x.r.prova || 0)));
+  return out;
+}
+/* os 5 primeiros da fila de prioridade e o tempo de leitura (≈150 palavras por minuto, pelo menos 1 por artigo) */
+function leiNuncaVistosPrioritarios(nv, n) {
+  const lista = nv.cobrados.concat(nv.vizinhos, nv.resto).slice(0, n || 5);
+  const min = lista.reduce((s, it) => s + Math.max(1, Math.round(String(it.ef.texto || "").split(/\s+/).length / 150)), 0);
+  return { lista, min };
+}
+let leiFilaNV = null;   /* { lei, itens:[{num, indice, rotulo}], i } */
+function leiFilaNVIniciar(itens) {
+  if (!itens || !itens.length || !leiIdAtual) return false;
+  leiFilaNV = { lei: leiIdAtual, itens: itens.map((it) => ({ num: it.a.num, indice: it.a.indice, rotulo: it.a.rotulo })), i: 0 };
+  try { leiReg("navegar", "nunca vistos: fila de " + itens.length, itens.map((x) => x.a.rotulo).join(", ")); } catch (e) {}
+  leiFilaNVIr();
+  return true;
+}
+function leiFilaNVIr() {
+  if (!leiFilaNV) return leiFilaNVPintar();
+  const it = leiFilaNV.itens[leiFilaNV.i];
+  if (it) leiIrIr(it.num, it.indice);
+  leiFilaNVPintar();
+  return !!it;
+}
+/* "✓ li — próximo": marca o da vez como visto e vai ao seguinte; no fim, a faixa diz que acabou */
+function leiFilaNVProximo() {
+  if (!leiFilaNV) return false;
+  const it = leiFilaNV.itens[leiFilaNV.i];
+  if (it) leiArtigoVistoMarcar(leiFilaNV.lei, it.num, true);
+  leiFilaNV.i++;
+  if (leiFilaNV.i >= leiFilaNV.itens.length) { leiFilaNV.fim = true; leiFilaNVPintar(); return false; }
+  return leiFilaNVIr();
+}
+function leiFilaNVSair() { leiFilaNV = null; leiFilaNVPintar(); }
+/* as questões que citam o artigo da vez (a mesma decisão de lei das irmãs) */
+function leiQuestoesDoArtigo(idLei, num) {
+  const k = idLei + ":" + leiNumNormal(num);
+  let banco = [];
+  try { banco = qsTodas() || []; } catch (e) { banco = []; }
+  return banco.filter((q) => { try { return qsArtigosDaQuestao(q).some((a) => a.chave === k); } catch (e) { return false; } });
+}
+function leiFilaNVPintar() {
+  const bar = $("leiFilaNV");
+  if (!bar) return;
+  bar.innerHTML = "";
+  bar.hidden = !leiFilaNV || leiFilaNV.lei !== leiIdAtual;
+  if (bar.hidden) return;
+  const tx = document.createElement("span");
+  const bt = (rot, fn, cls, tip) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn-min" + (cls ? " " + cls : ""); b.textContent = rot; if (tip) b.title = tip; b.onclick = fn; return b; };
+  if (leiFilaNV.fim) {
+    tx.textContent = t("lei_nv_fila_fim", { n: leiFilaNV.itens.length });
+    bar.append(tx, bt(t("lei_nv_fila_mais"), () => { leiFilaNV = null; leiFilaNVPintar(); leiIrAbrir({ filtro: "ineditos" }); }), bt(t("lei_nv_fila_sair"), leiFilaNVSair));
+    return;
+  }
+  const it = leiFilaNV.itens[leiFilaNV.i];
+  tx.textContent = t("lei_nv_fila", { a: it.rotulo, i: leiFilaNV.i + 1, n: leiFilaNV.itens.length });
+  bar.append(tx, bt(t("lei_nv_fila_li"), leiFilaNVProximo, "btn-min-ok"));
+  const qs = leiQuestoesDoArtigo(leiFilaNV.lei, it.num);
+  if (qs.length && typeof qsUiResponderAbrir === "function") {
+    bar.append(bt(t("lei_nv_fila_qs", { n: qs.length }), () => qsUiResponderAbrir(qs, "aba", "art:" + leiFilaNV.lei + ":" + it.num), "", t("lei_nv_fila_qs_tip")));
+  }
+  bar.append(bt(t("lei_nv_fila_sair"), leiFilaNVSair));
+}
+/* o filtro "nunca vistos" no mapa: as três camadas, "já vi" por artigo e a fila dos 5 prioritários */
+function leiIrPintarIneditos(cx, d) {
+  cx.className = "lei-ir-corpo";
+  const nv = leiNuncaVistos(d);
+  const cab = document.createElement("p");
+  cab.className = "nota";
+  cab.textContent = t("lei_nv_cab", { n: nv.total - nv.vistos, t: nv.total });
+  cx.append(cab);
+  if (nv.total - nv.vistos === 0) return;
+  const pr = leiNuncaVistosPrioritarios(nv, 5);
+  const go = document.createElement("button");
+  go.type = "button";
+  go.className = "btn btn-azul lei-nv-ir";
+  go.id = "btnLeiNvEstudar";
+  go.textContent = t("lei_nv_estudar", { n: pr.lista.length, m: pr.min });
+  go.title = t("lei_nv_estudar_tip");
+  go.onclick = () => leiFilaNVIniciar(pr.lista);
+  cx.append(go);
+  const camada = (k, itens, limite, fechada) => {
+    if (!itens.length) return;
+    const box = document.createElement("details");
+    box.className = "lei-nv-camada lei-nv-" + k;
+    box.open = !fechada;
+    const sm = document.createElement("summary");
+    sm.textContent = t("lei_nv_" + k, { n: itens.length });
+    box.append(sm);
+    const pinta = (lim) => {
+      Array.from(box.children).slice(1).forEach((x) => box.removeChild(x));
+      itens.slice(0, lim).forEach((it) => {
+        const el = leiIrLinhaEl(d, it.a, it.r);
+        const ja = document.createElement("button");
+        ja.type = "button";
+        ja.className = "btn-min";
+        ja.textContent = t("lei_nv_ja_vi");
+        ja.title = t("lei_nv_ja_vi_tip");
+        ja.onclick = () => { leiArtigoVistoMarcar(leiIdAtual, it.a.num, true); leiIrPintar(); };
+        el.append(ja);
+        box.append(el);
+      });
+      if (itens.length > lim) {
+        const mais = document.createElement("button");
+        mais.type = "button"; mais.className = "btn-min"; mais.textContent = t("lei_nv_mais", { n: itens.length - lim });
+        mais.onclick = () => pinta(itens.length);
+        box.append(mais);
+      }
+    };
+    pinta(limite);
+    cx.append(box);
+  };
+  camada("cobrados", nv.cobrados, 50, false);
+  camada("vizinhos", nv.vizinhos, 30, false);
+  camada("resto", nv.resto, 50, true);
+  leiIrPrimeiro = pr.lista[0] ? () => leiIrIr(pr.lista[0].a.num, pr.lista[0].a.indice) : null;
+}
+
 function leiIrPrimeiroArtigo(d, num) {
   return d.arts.filter((a) => a.num === num)[0] || null;
 }
@@ -3734,6 +3905,7 @@ function leiIrPintar() {
       : p0.u ? leiIrIrUnidade(p0.a, p0.u, p0.textoArt) : leiIrIr(p0.a.num, p0.a.indice));
   };
   if (q) return lista(leiIrBuscarItens(d, q), t("lei_ir_busca_vazia", { q }));
+  if (leiIrFiltro === "ineditos") return leiIrPintarIneditos(cx, d);
   if (leiIrFiltro !== "todos") {
     return lista(leiIrItensDoFiltro(d, leiIrFiltro),
       leiIrFiltro === "parei" ? t("lei_ir_sem_parei") : t("lei_rank_vazio"));
