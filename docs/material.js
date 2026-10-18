@@ -1400,6 +1400,7 @@ function matCitLink(c, ctx) {
     ? t(k + "ir", { l: alvo.lei.nome, a: c.numCru || "—" }) + (nota ? " · " + nota : "")
     : (c.rotulo ? t(k + "sem", { l: c.rotulo }) : t(k + "qual", { a: c.numCru || "—" }));
   if (alvo.deduzida) b.title += " · " + t("qs_lei_link_ded", { l: c.rotuloDeduzido });
+  if (alvo.via === "alteradora") b.title += " · " + t("cit_via_alteradora", { a: alvo.alteradora, l: alvo.lei.nome });
   /* (v18.49.0) o vínculo é SEU: dito no balão, além do 🔗 do CSS */
   if (c.permanente) b.title += " · " + t(c.soTopico ? "cit_perm_tip_topico" : "cit_perm_tip_tudo");
   b._citNota = nota;

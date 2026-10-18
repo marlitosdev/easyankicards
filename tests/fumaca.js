@@ -673,6 +673,7 @@ function rodar() {
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
     matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico,
+    leiResolverCitacao, leiAlteradorasDe, leiTemArtigo, leiAlteradaPor, leiChaveDeEspecieNumero,
     matRolLer, matRolDe, matRolGuardar, matRolMedir, matRolAplicar, matRolEscopoChave, matRolManter, MAT_ROL_CHAVE,
     matSecoesDeRamo, matTextoDaSecao, matTrocarSecao, matEscopoAtual, matEscopoEscolher, matSecaoSincronizar,
     ramBaseDe, ramGarantirBase, ramDadosDoRamo, ramDetectarRenomeacoes, ramConfirmarRenomeacoes, ramIgnorarRenomeacoes, ramPintarRenomeacao,

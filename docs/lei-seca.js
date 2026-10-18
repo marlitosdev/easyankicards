@@ -3671,16 +3671,18 @@ const LEI_SUB = [
  * A ordem é a regra: "Lei Complementar 101" tem de ser testado antes de
  * "Lei", e a sigla solta por último — ela é a mais faminta das dez e só
  * vira link se casar com um apelido guardado. */
+/* (v18.79.0) "LC N° 145/2024" (N maiúsculo + o sinal de grau) e "LC N.º 145" não eram lidos: a citação ficava sem lei — 56
+ * linhas assim no material do CTM. O "nº" aceita N/n, ponto e espaço antes do sinal. */
 const LEI_ROTULOS = [
   /^constitui[çc][ãa]o(?:\s+federal)?(?:\s+de\s+\d{4})?/i,
   /^(?:CF|CRFB)\s*\/?\s*(?:88|1988)?(?![\wº])/,
-  /^lei\s+complementar\s*n?[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
-  /^LC\s*n?[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/,
-  /^decreto[\s-]?lei\s*n?[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
-  /^emenda\s+constitucional\s*n?[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?/i,
-  /^EC\s*n?[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?/,
-  /^lei\s*n?[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
-  /^decreto\s*n?[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
+  /^lei\s+complementar\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
+  /^LC\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/,
+  /^decreto[\s-]?lei\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
+  /^emenda\s+constitucional\s*[nN]?\.?\s*[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?/i,
+  /^EC\s*[nN]?\.?\s*[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?/,
+  /^lei\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
+  /^decreto\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?/i,
   /^[A-Z]{3,6}(?![\wº])/,                    /* CTN, CLT, CDC, CPC */
 ];
 
@@ -4320,6 +4322,119 @@ function leiCandidatosDoRotulo(rotulo, lista) {
 function leiCasarRotulo(rotulo, lista) {
   const cand = leiCandidatosDoRotulo(rotulo, lista);
   return cand.length === 1 ? cand[0] : null;
+}
+
+/* =====================================================================
+ * A CITAÇÃO QUE NOMEIA A LEI ALTERADORA (v18.79.0)
+ *
+ * "Art. 162, § 5º da LC N° 145/2024" — no material do CTM de Caruaru são
+ * 56 linhas assim (LC 95/2022, 112/2023, 145/2024). A LC 145 é uma lei
+ * curta que ALTEROU o CTM: o art. 162 é do CTM, com a redação que ela deu.
+ * O app procurava "LC 145/2024" na biblioteca, não achava (ou achava a lei
+ * curta, sem art. 162) e a citação ficava sem destino.
+ *
+ * QUEM FOI ALTERADO POR QUEM o app já sabe, sem texto novo: a fila de
+ * alterações (v18.67.0) guarda em cada artigo a lei que o mudou
+ * (alteracoes[n].historico[].fonte), e o texto compilado do Planalto traz
+ * "(Redação dada pela Lei Complementar nº 145, de 2024)". A citação vai
+ * para a lei alterada SÓ quando ela tem aquele artigo e a lei nomeada não
+ * tem (ou não está na biblioteca) — e só se for UMA: duas, é dúvida.
+ * ===================================================================== */
+const LEI_RE_NOTA_ALTERACAO = /\(([^()]{0,160}?)(?:reda[çc][ãa]o\s+dada|inclu[íi]d[oa]s?|acrescentad[oa]s?|acrescid[oa]s?|alterad[oa]s?|renumerad[oa]s?)\s+pel[ao]s?\s+([^()]{3,120}?)\)/gi;
+const leiMemoAlteradoras = new Map();
+const leiMemoArtigos = new Map();
+/* a chave comparável de uma lei citada: espécie + número ("complementar|145"); vazio se não der para saber */
+function leiChaveDeEspecieNumero(rotulo) {
+  const k = leiRotuloChave(rotulo);
+  return k && k.especie && k.numero ? k.especie + "|" + k.numero : "";
+}
+/* as leis que alteraram l (chaves espécie|número): pelo histórico da fila de alterações e pelas notas do texto */
+function leiAlteradorasDe(l) {
+  if (!l) return new Set();
+  const marca = l.id + "|" + String(l.texto || "").length + "|" + Object.keys(l.alteracoes || {}).length + "|" + String(l.atualizadaEm || l.atualizada || "");
+  const ja = leiMemoAlteradoras.get(l.id);
+  if (ja && ja.marca === marca) return ja.chaves;
+  const chaves = new Set();
+  const por = (fonte) => {
+    String(fonte || "").split(/;\s*/).forEach((f) => { const k = leiChaveDeEspecieNumero(f); if (k) chaves.add(k); });
+  };
+  Object.keys(l.alteracoes || {}).forEach((n) => {
+    const a = l.alteracoes[n] || {};
+    por(a.fonteAlteracao); por(a.fonte);
+    (a.historico || []).forEach((h) => por(h && h.fonte));
+  });
+  (l.anexos || []).forEach((x) => { por(x && x.fonteAlteracao); ((x && x.historico) || []).forEach((h) => por(h && h.fonte)); });
+  const re = new RegExp(LEI_RE_NOTA_ALTERACAO.source, "gi");
+  const s = String(l.texto || "");
+  let m;
+  while ((m = re.exec(s)) !== null) por(m[2]);
+  leiMemoAlteradoras.set(l.id, { marca, chaves });
+  return chaves;
+}
+/* a lei tem este artigo? (os efetivos: os acrescentados pela fila de alterações também) */
+function leiTemArtigo(l, num) {
+  if (!l || !num) return false;
+  const marca = l.id + "|" + String(l.texto || "").length + "|" + Object.keys(l.alteracoes || {}).length;
+  let ja = leiMemoArtigos.get(l.id);
+  if (!ja || ja.marca !== marca) {
+    const nums = new Set();
+    try { leiArtigosEfetivos(l).forEach((a) => nums.add(leiNumNormal(a.num))); } catch (e) {}
+    ja = { marca, nums };
+    leiMemoArtigos.set(l.id, ja);
+  }
+  return ja.nums.has(leiNumNormal(num));
+}
+/* a lei que a alteradora citada alterou e que tem o artigo — uma só, senão null */
+function leiAlteradaPor(rotulo, num, lista) {
+  const k = leiChaveDeEspecieNumero(rotulo);
+  if (!k || !num) return null;
+  const cand = (lista || leisLista()).filter((l) => leiTemArtigo(l, num) && leiAlteradorasDe(l).has(k));
+  return cand.length === 1 ? cand[0] : null;
+}
+
+/* =====================================================================
+ * DE QUAL LEI É ESTA CITAÇÃO — UM LUGAR SÓ (v18.79.0)
+ *
+ * Os links (resumo, cartões, questões), a Cobertura e o mapa da lei
+ * decidiam cada um do seu jeito — e o mapa nem decidia: contava qualquer
+ * "art. 43" para a lei aberta. Agora a ordem é uma só:
+ *  1. o vínculo fixado pela pessoa;
+ *  2. a lei nomeada — salvo se ela não tem o artigo e é ALTERADORA de uma
+ *     lei que tem (acima); nomeada e fora da biblioteca, idem;
+ *  3. sem nome: a lei do tópico, se for uma;
+ *  4. a lei nomeada antes no mesmo parágrafo (deduzida);
+ *  5. senão, PERGUNTA. "Das leis do tópico, só uma tem este artigo" NÃO
+ *     decide: a citação sem nome pode ser de uma terceira lei, fora do
+ *     tópico — a regra "pergunta, não chuta" (teste L25) continua valendo.
+ * Devolve { lei, ligada, motivo?, deduzida?, via? } (via: "alteradora").
+ * ===================================================================== */
+function leiResolverCitacao(c, lista, doTopico) {
+  const dt = doTopico || [];
+  const ls = lista || leisLista();
+  const ligada = (l) => dt.some((x) => x.id === l.id);
+  if (c && c.leiId) {
+    const fixa = ls.filter((x) => x.id === c.leiId)[0];
+    if (fixa) return { lei: fixa, ligada: ligada(fixa) };
+    return { lei: null, motivo: "desconhecida" };
+  }
+  if (c && c.rotulo) {
+    let l = null;
+    try { l = leiCasarRotulo(c.rotulo, ls); } catch (e) { l = null; }
+    if (!l || (c.num && !leiTemArtigo(l, c.num))) {
+      let alt = null;
+      try { alt = leiAlteradaPor(c.rotulo, c.num, ls); } catch (e) { alt = null; }
+      if (alt && (!l || alt.id !== l.id)) return { lei: alt, ligada: ligada(alt), via: "alteradora", alteradora: c.rotulo };
+    }
+    if (l) return { lei: l, ligada: ligada(l) };
+    return { lei: null, motivo: "desconhecida" };
+  }
+  if (dt.length === 1) return { lei: dt[0], ligada: true };
+  if (c && c.rotuloDeduzido) {
+    let l = null;
+    try { l = leiCasarRotulo(c.rotuloDeduzido, ls); } catch (e) { l = null; }
+    if (l) return { lei: l, ligada: ligada(l), deduzida: true };
+  }
+  return { lei: null, motivo: dt.length ? "ambigua" : "vazia" };
 }
 
 /* =====================================================================
