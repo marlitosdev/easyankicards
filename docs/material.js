@@ -542,6 +542,10 @@ function matProvaCartao(b, idx, resp) {
 function matParaHtml(txt, prova, opc) {
   const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
+  /* opc.comLinhas: cada bloco leva data-l = a linha do texto de origem (as duas que o marcador
+   * acrescenta — a dele e uma vazia — não contam) — é por ela que a leitura sabe ONDE parou e que parágrafo se quer editar */
+  const kMarc = linhas.indexOf("\u0001MARCADOR\u0001");
+  const dl = (k) => (opc && opc.comLinhas ? ' data-l="' + (kMarc >= 0 && k > kMarc ? k - 2 : k) + '"' : "");
   let emLista = false;
   /* mapa linha → bloco de questão, para pular as linhas que o cartão
    * já desenhou (enunciado, opções, resposta e comentário) */
@@ -577,7 +581,7 @@ function matParaHtml(txt, prova, opc) {
       if (alvoQ.pula) return;
       fecharLista();
       saida.push(matProvaCartao(alvoQ.b, alvoQ.i,
-        (prova && prova.respostas && prova.respostas[alvoQ.i]) || ""));
+        (prova && prova.respostas && prova.respostas[alvoQ.i]) || "").replace(/^<(\w+)/, (m0) => m0 + dl(kLinha)));
       return;
     }
     const s = l.trim();
@@ -591,19 +595,19 @@ function matParaHtml(txt, prova, opc) {
     if (tit) {
       fecharLista();
       const nivel = tit[1].length === 1 ? "h3" : "h4";
-      saida.push("<" + nivel + ">" + inline(s.slice(tit[0].length)) + "</" + nivel + ">");
+      saida.push("<" + nivel + dl(kLinha) + ">" + inline(s.slice(tit[0].length)) + "</" + nivel + ">");
       return;
     }
     if (/^[-*]\s+/.test(s)) {
       if (!emLista) { saida.push("<ul>"); emLista = true; }
-      saida.push("<li>" + inline(s.replace(/^[-*]\s+/, "")) + "</li>");
+      saida.push("<li" + dl(kLinha) + ">" + inline(s.replace(/^[-*]\s+/, "")) + "</li>");
       return;
     }
     /* lista numerada: chega em toda colagem de fora e virava parágrafo solto,
      * perdendo a ordem — que num resumo de etapas é a informação principal */
     if (/^\d+[.)]\s+/.test(s)) {
       fecharLista();
-      saida.push("<div class='mat-num'><b>" + s.match(/^\d+/)[0] + ".</b> "
+      saida.push("<div class='mat-num'" + dl(kLinha) + "><b>" + s.match(/^\d+/)[0] + ".</b> "
         + inline(s.replace(/^\d+[.)]\s+/, "")) + "</div>");
       return;
     }
@@ -619,14 +623,14 @@ function matParaHtml(txt, prova, opc) {
      * testados ANTES da dica, senão "&gt;&gt;" cai na regra do "&gt;". */
     if (/^\?&gt;\s?/.test(s)) {
       fecharLista();
-      saida.push('<div class="mat-quest">' + inline(s.replace(/^\?&gt;\s?/, "")) + "</div>");
+      saida.push('<div class="mat-quest"' + dl(kLinha) + '>' + inline(s.replace(/^\?&gt;\s?/, "")) + "</div>");
       return;
     }
     if (/^&gt;&gt;\s?/.test(s)) {
       fecharLista();
       /* gabarito FECHADO por padrão: resposta à vista ao lado da pergunta
        * não deixa você testar a si mesmo, que é o motivo de ter questão. */
-      saida.push('<details class="mat-gab"><summary>' + t("mat_gabarito")
+      saida.push('<details class="mat-gab"' + dl(kLinha) + '><summary>' + t("mat_gabarito")
         + '</summary><div>' + inline(s.replace(/^&gt;&gt;\s?/, "")) + "</div></details>");
       return;
     }
@@ -643,18 +647,18 @@ function matParaHtml(txt, prova, opc) {
       }
       fecharLista();
       emDica = true; emDicaJust = just;
-      saida.push('<details class="mat-dica' + (just ? " mat-dica-just" : "") + '"'
+      saida.push('<details class="mat-dica' + (just ? " mat-dica-just" : "") + '"' + dl(kLinha)
         + (matDicasAbertas ? " open" : "")
         + '><summary>' + t("mat_dica_rot") + '</summary><div>'
         + corpo + "</div></details>");
       return;
     }
-    if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr>"); return; }
+    if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr" + dl(kLinha) + ">"); return; }
     if (!s) { fecharLista(); return; }
     fecharLista();
     /* opc.classeDaLinha: uma classe para o parágrafo (a lei esmaece o dispositivo que consta como revogado) */
     const cl = opc && opc.classeDaLinha ? opc.classeDaLinha(s) : "";
-    saida.push("<p" + (cl ? ' class="' + cl + '"' : "") + ">" + inline(s) + "</p>");
+    saida.push("<p" + (cl ? ' class="' + cl + '"' : "") + dl(kLinha) + ">" + inline(s) + "</p>");
   });
   if (emLista) saida.push("</ul>");
   return saida.join("\n");
@@ -917,6 +921,126 @@ function matTextoDoEscopo() {
 }
 
 /* =====================================================================
+ * ONDE PAREI, EM CADA RAMO (v18.74.0)
+ *
+ * A leitura é UM painel só: trocar de ramo trocava o texto e deixava a
+ * rolagem onde estava — o ramo novo abria no meio, no ponto em que o outro
+ * tinha parado. Agora cada escopo (Tudo, Geral, cada ramo) de cada tópico
+ * guarda o seu lugar; o que nunca foi aberto começa do início.
+ *
+ * O LUGAR É O PARÁGRAFO, não o pixel: a linha de origem (data-l) do
+ * primeiro bloco visível e quanto dele já passou. Mudar a letra, a coluna
+ * ou entrar na tela cheia muda a altura de tudo — o pixel guardado cairia
+ * em outro parágrafo; a linha continua sendo a mesma.
+ * ===================================================================== */
+const MAT_ROL_CHAVE = "eac_mat_rolagem";
+/* o que a leitura está mostrando agora ("chave|escopo"), para saber quando o escopo MUDOU */
+let matRolMostrado = null;
+let matRolUltimaGravacao = 0;
+function matRolLer() {
+  try { const o = JSON.parse(localStorage.getItem(MAT_ROL_CHAVE) || "{}"); return o && typeof o === "object" ? o : {}; } catch (e) { return {}; }
+}
+function matRolEscopoChave(esc) { return esc === "*" || esc === undefined || esc === null ? "*" : esc === "" ? "_geral" : String(esc); }
+function matRolDe(chave, esc) {
+  const t0 = matRolLer()[chave];
+  return (t0 && t0[matRolEscopoChave(esc)]) || null;
+}
+function matRolGuardar(chave, esc, pos) {
+  if (!chave) return;
+  const tudo = matRolLer();
+  const k = matRolEscopoChave(esc);
+  tudo[chave] = tudo[chave] || {};
+  if (!pos) delete tudo[chave][k];
+  else tudo[chave][k] = { l: pos.l === undefined ? null : pos.l, d: Math.max(0, Math.round(pos.d || 0)),
+    f: Math.round(Math.min(1, Math.max(0, pos.f || 0)) * 1000) / 1000, em: new Date().toISOString() };
+  try { localStorage.setItem(MAT_ROL_CHAVE, JSON.stringify(tudo)); } catch (e) {}
+}
+/* A MEDIDA DA TELA PODE ESTAR EM ESCALA (a janela com transform, o zoom da página): a distância lida em
+ * getBoundingClientRect não é a da rolagem. Verificado no navegador: rolar 300 px movia o parágrafo 291 px na tela,
+ * e voltar ao lugar errava 27 px. A razão entre a altura do layout e a da tela desfaz a escala. */
+function matRolEscala(painel) {
+  const h = painel.getBoundingClientRect ? painel.getBoundingClientRect().height : 0;
+  return painel.offsetHeight && h ? painel.offsetHeight / h : 1;
+}
+/* MEDIR: o primeiro bloco com data-l que ainda aparece no alto do painel; sem blocos, só a fração */
+function matRolMedir(painel) {
+  if (!painel) return null;
+  const alto = Math.max(0, (painel.scrollHeight || 0) - (painel.clientHeight || 0));
+  const f = alto ? Math.min(1, (painel.scrollTop || 0) / alto) : 0;
+  let l = null, d = 0;
+  if ((painel.scrollTop || 0) > 0 && painel.querySelectorAll && painel.getBoundingClientRect) {
+    const topo = painel.getBoundingClientRect().top;
+    const blocos = painel.querySelectorAll("[data-l]");
+    for (let i = 0; i < blocos.length; i++) {
+      const r = blocos[i].getBoundingClientRect();
+      if (r.bottom > topo + 1) { l = Number(blocos[i].getAttribute("data-l")); d = Math.max(0, (topo - r.top) * matRolEscala(painel)); break; }
+    }
+  }
+  return { l, d, f };
+}
+/* VOLTAR: ao bloco guardado (e ao ponto dentro dele); sem bloco, pela fração; sem nada guardado, ao início */
+function matRolAplicar(painel, pos) {
+  if (!painel) return;
+  if (!pos || (!pos.f && (pos.l === null || pos.l === undefined))) { painel.scrollTop = 0; return; }
+  let el = null;
+  if (pos.l !== null && pos.l !== undefined && painel.querySelector) {
+    el = painel.querySelector('[data-l="' + pos.l + '"]');
+    /* a linha sumiu (o texto foi editado): o primeiro bloco depois dela */
+    if (!el && painel.querySelectorAll) {
+      const bl = painel.querySelectorAll("[data-l]");
+      for (let i = 0; i < bl.length && !el; i++) if (Number(bl[i].getAttribute("data-l")) > pos.l) el = bl[i];
+    }
+  }
+  if (el && el.getBoundingClientRect && painel.getBoundingClientRect) {
+    painel.scrollTop = 0;
+    painel.scrollTop = Math.max(0, (el.getBoundingClientRect().top - painel.getBoundingClientRect().top) * matRolEscala(painel) + (pos.d || 0));
+    return;
+  }
+  const alto = Math.max(0, (painel.scrollHeight || 0) - (painel.clientHeight || 0));
+  painel.scrollTop = Math.round((pos.f || 0) * alto);
+}
+/* a leitura está mesmo à vista? (escondida ou com a janela fechada a rolagem lê 0 — guardar isso apagaria o lugar) */
+function matRolVisivel() {
+  const p = $("matLeitura"), d = $("dlgMaterial");
+  return !!(p && d && d.open && !p.hidden && matModo === "ler");
+}
+/* guarda o lugar do que ESTÁ na tela (matRolMostrado), antes de trocar o texto */
+function matRolSalvarAtual() {
+  if (!matRolMostrado || !matRolVisivel()) return false;
+  const i = matRolMostrado.lastIndexOf("|");
+  matRolGuardar(matRolMostrado.slice(0, i), matRolMostrado.slice(i + 1), matRolMedir($("matLeitura")));
+  return true;
+}
+/* depois de desenhar: se o escopo mudou, vai ao lugar dele (ou ao início) */
+function matRolDepoisDeDesenhar() {
+  if (!matAtual) return;
+  const k = matAtual.chave + "|" + matRolEscopoChave(matEscopo);
+  if (k === matRolMostrado) return;
+  matRolMostrado = k;
+  matRolAplicar($("matLeitura"), matRolDe(matAtual.chave, matEscopo));
+}
+/* MUDAR A LETRA, A COLUNA OU A JANELA mexe na altura de tudo: o mesmo parágrafo continua no alto (a tela cheia
+ * cresce depois de pedida — por isso volta-se ao lugar de novo um instante depois) */
+function matRolManter(fn) {
+  const p = $("matLeitura");
+  const pos = matRolVisivel() ? matRolMedir(p) : null;
+  const r = fn();
+  if (pos && (pos.l !== null || pos.f)) {
+    const voltar = () => { try { if (matRolVisivel()) matRolAplicar($("matLeitura"), pos); } catch (e) {} };
+    voltar();
+    setTimeout(voltar, 250);
+  }
+  return r;
+}
+/* ao rolar: grava de vez em quando (fechar pelo Esc ou pela aba não passa por matFechar) */
+function matRolAoRolar() {
+  const agora = Date.now();
+  if (agora - matRolUltimaGravacao < 400) return;
+  matRolUltimaGravacao = agora;
+  matRolSalvarAtual();
+}
+
+/* =====================================================================
  * A TELA
  * ===================================================================== */
 
@@ -954,6 +1078,9 @@ function matAbrirEditor(item, comoLer, opc) {
   matSecaoDe = null;
   matSujo = false;
   matSelGuardada = "";
+  /* (a leitura guarda o seu lugar ao ser trocada — mas aqui a janela vinha fechada: o que está nela não é o que se vê) */
+  try { matRolSalvarAtual(); } catch (e) {}
+  matRolMostrado = null;
   matAtual = { chave: alvoChave,
                disciplina: item.disciplina, topico: item.nome };
   /* os ramos do tópico: de quem abriu (a ficha) ou do edital aberto */
@@ -1016,6 +1143,8 @@ function matPintarSub() {
 }
 
 function matTrocarModo(modo) {
+  /* o lugar do que está na tela, ANTES de esconder o painel ou trocar o texto (escondido, ele lê 0) */
+  try { matRolSalvarAtual(); } catch (e) {}
   /* só existem dois modos. Qualquer outra coisa (um true vindo de quem
    * confundiu "comoLer" com booleano) virava um modo inexistente: nem lia
    * nem editava, e o painel de leitura ficava escondido e vazio sem erro. */
@@ -1077,12 +1206,13 @@ function matTrocarModo(modo) {
       : null;
     /* no escopo de um ramo, a leitura mostra SÓ a seção dele (o modo prova vale no texto inteiro) */
     const txtEsc = matTextoDoEscopo();
-    $("matLeitura").innerHTML = (txtEsc === null ? "" : matParaHtml(txtEsc, matEscopo === "*" ? prova : null))
+    $("matLeitura").innerHTML = (txtEsc === null ? "" : matParaHtml(txtEsc, matEscopo === "*" ? prova : null, { comLinhas: true }))
       || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
     /* as citações de lei viram links DEPOIS do desenho: as marcas já estão no lugar */
     try { matCitacoesLigar($("matLeitura")); } catch (e) {}
     try { matPintarJurLote(); } catch (e) {}
-  }
+    try { matRolDepoisDeDesenhar(); } catch (e) {}
+  } else matRolMostrado = null;
   matPintarFonte();
 }
 
@@ -1352,16 +1482,20 @@ function matPintarFonte() {
   ["btnMatMaior", "btnMatCheiaMaior"].forEach((id) => { const el = $(id); if (el) el.disabled = i >= MAT_FONTES.length - 1; });
 }
 function matFonteMudar(d) {
-  const i = Math.max(0, MAT_FONTES.indexOf(matFonteDegrau(matFonte)));
-  matFonte = MAT_FONTES[Math.max(0, Math.min(MAT_FONTES.length - 1, i + (d > 0 ? 1 : -1)))];
-  try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
-  matPintarFonte();
+  matRolManter(() => {
+    const i = Math.max(0, MAT_FONTES.indexOf(matFonteDegrau(matFonte)));
+    matFonte = MAT_FONTES[Math.max(0, Math.min(MAT_FONTES.length - 1, i + (d > 0 ? 1 : -1)))];
+    try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
+    matPintarFonte();
+  });
 }
 /* clicar no número volta ao padrão (100%) */
 function matFonteZerar() {
-  matFonte = MAT_FONTE_PADRAO;
-  try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
-  matPintarFonte();
+  matRolManter(() => {
+    matFonte = MAT_FONTE_PADRAO;
+    try { localStorage.setItem("eac_mat_fonte", String(matFonte)); } catch (e) {}
+    matPintarFonte();
+  });
 }
 
 /* A COLUNA (só vale na tela cheia, onde há largura sobrando) */
@@ -1369,7 +1503,7 @@ function matColunaDefinir(c) {
   if (!MAT_COLUNAS[c]) return matColuna;
   matColuna = c;
   try { localStorage.setItem("eac_mat_coluna", c); } catch (e) {}
-  matPintarJanela();
+  matRolManter(matPintarJanela);
   return matColuna;
 }
 
@@ -1451,7 +1585,8 @@ function matCheiaAplicar() {
 function matFsPedir() { return typeof telaCheiaPedir === "function" ? telaCheiaPedir("resumo", () => { if (matCheia) matCheiaTrocar(false); }) : false; }
 function matFsSair() { return typeof telaCheiaSair === "function" ? telaCheiaSair("resumo") : false; }
 
-function matCheiaTrocar(sim) {
+function matCheiaTrocar(sim) { return matRolManter(() => matCheiaTrocarJa(sim)); }
+function matCheiaTrocarJa(sim) {
   matCheia = sim === undefined ? !matCheia : !!sim;
   if (matCheia) {
     matFsPedir();
@@ -1469,7 +1604,8 @@ function matCheiaTrocar(sim) {
 }
 
 /* sim: true = janela larga, false = normal, undefined = alterna. Escolher Normal/Larga na tela cheia sai dela. */
-function matAmpliar(sim) {
+function matAmpliar(sim) { return matRolManter(() => matAmpliarJa(sim)); }
+function matAmpliarJa(sim) {
   matAmpliado = sim === undefined ? !matAmpliado : !!sim;
   if (matCheia) matCheiaTrocar(false);
   $("dlgMaterial").classList.toggle("mat-amplo", matAmpliado);
@@ -2487,8 +2623,10 @@ async function matFechar() {
   }
   matSujo = false;
   matSelGuardada = "";
+  try { matRolSalvarAtual(); } catch (e) {}
   if (matCheia) matCheiaTrocar(false);
   $("dlgMaterial").close();
+  matRolMostrado = null;
   matAtual = null;
 }
 
@@ -3818,7 +3956,8 @@ function matIniciar() {
   }
   if ($("dlgMaterial") && $("dlgMaterial").addEventListener) {
     $("dlgMaterial").addEventListener("scroll", () => { try { matBolhaAtualizar(); } catch (e) {} });
-    $("dlgMaterial").addEventListener("close", () => { if ($("matBolha")) $("matBolha").hidden = true; });
+    if ($("matLeitura") && $("matLeitura").addEventListener) $("matLeitura").addEventListener("scroll", () => { try { matRolAoRolar(); } catch (e) {} });
+    $("dlgMaterial").addEventListener("close", () => { if ($("matBolha")) $("matBolha").hidden = true; matRolMostrado = null; });
   }
   /* apertar um botão da bolha não pode desfazer a seleção que ele vai usar */
   ["btnMatVinc", "btnBolhaJuris", "btnMatQstTrecho"].forEach((id) => {
