@@ -3406,7 +3406,7 @@ function qsUiHistRender() {
     meta.className = "qs-hist-meta";
     const stats = h.feitas
       ? t("qs_hist_linha", { f: h.feitas, tot: h.total,
-          pct: h.pct === null ? "—" : h.pct + "%" })
+          pct: h.pct === null ? "—" : h.pct + "%" }) + (h.chutes ? t("qs_placar_chutes", { n: h.chutes }) : "")
       : t("qs_hist_linha_zero", { tot: h.total });
     meta.textContent = stats + " · " + t("qs_hist_quando", {
         d: String(h.q || "").slice(0, 10), min: h.minutos || 0 })

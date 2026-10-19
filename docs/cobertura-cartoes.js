@@ -54,7 +54,9 @@ function covContar(notas) {
 function covMapa(disciplinas, cont, chaveDe, opc) {
   const o = Object.assign({}, COV, opc || {});
   const ct = (cont && cont.top) || new Map(), cr = (cont && cont.ramo) || new Map();
-  const ds = disciplinas || [];
+  /* (v18.91.0) a optativa NÃO escolhida (d.inativa: "escolha 1 de N" com a escolha feita) sai da conta, como no plano —
+   * antes ela dividia o peso e aparecia na Cobertura e no Domínio como se caísse na prova */
+  const ds = (disciplinas || []).filter((d) => !d.inativa);
   const fase = o.fase === 2 ? 2 : 1;
   /* o peso de UM tópico nesta fase (na 2ª, o que não é da discursiva pesa zero e fica de fora) */
   const wDe = (t) => (fase === 2 ? (t.fase2 ? (t.pesoF2 || t.peso) : 0) : t.peso);

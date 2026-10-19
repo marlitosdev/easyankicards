@@ -537,7 +537,11 @@ function domNiveisDoEdital(edId, forcar) {
   let m = null;
   try { m = domDoEdital(ed); } catch (e) { return null; }
   const porTopico = {};
-  m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { porTopico[domChaveNome(d.nome, tp.nome)] = { nivel: tp.nivel, disciplina: d.nome, topico: tp.nome, chave: tp.chave }; }));
+  m.disciplinas.forEach((d) => d.topicos.forEach((tp) => {
+    const pior = tp.ramos.length ? tp.ramos.filter((r) => r.nivel === tp.nivel)[0] : null;
+    porTopico[domChaveNome(d.nome, tp.nome)] = { nivel: tp.nivel, disciplina: d.nome, topico: tp.nome, chave: tp.chave,
+      motivos: tp.motivos || (pior && pior.motivos) || [], pior: pior ? pior.ramoNome : "" };
+  }));
   const tot = m.resumo.total || 1, dist = m.resumo.distribuicao;
   const pct = {};
   DOM_NIVEIS.forEach((k) => { pct[k] = (dist[k] / tot) * 100; });
@@ -561,6 +565,42 @@ function domSeloDaLinha(i) {
   b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domAbrir(edId, n.disciplina); domIrAoTopico(n.disciplina, n.chave); };
   return b;
 }
+/* (v18.91.0) O PRÓXIMO PASSO, na ficha do tópico: a cor do domínio, o porquê e — quando há — a ação que mais ajuda nela
+ * (a mesma da fila do Domínio). Na ficha, "começar/rever o material" é a própria ficha: aí só a cor e o motivo. */
+function domProximoPasso(disciplina, topico, chave, edId) {
+  const ed = edId || (typeof ramEditalDoTopico === "function" ? ramEditalDoTopico(chave, "") : "") || (typeof editalAtual !== "undefined" ? editalAtual : "");
+  const n = ed ? domNivelDoTopico(ed, disciplina, topico) : null;
+  if (!n || n.nivel === "pulado") return null;
+  const f = { nivel: n.nivel, tipo: "topico", chave: n.chave || chave, disciplina, topico, motivos: n.motivos };
+  const mat = domMaterialDe(disciplina, topico, f.chave);
+  const ac = domAcaoPrincipal(f, mat, []);
+  const comAcao = ["erradas", "medir", "criar_qs"].indexOf(ac.cod) >= 0;
+  return { nivel: n.nivel, edital: ed, pior: n.pior, porque: domPorque(n.motivos), acao: comAcao ? ac : null };
+}
+function domPassoPintar(box, disciplina, topico, chave, edId, aoAgir) {
+  if (!box) return null;
+  box.innerHTML = "";
+  let p = null;
+  try { p = domProximoPasso(disciplina, topico, chave, edId); } catch (e) { p = null; }
+  box.hidden = !p;
+  if (!p) return null;
+  box.className = "dom-passo dom-b-" + p.nivel;
+  const nv = gerEl("button", "dom-nivel dom-n-" + p.nivel, t("dom_n_" + p.nivel));
+  nv.type = "button";
+  nv.title = t("dom_passo_ver_tip");
+  nv.onclick = () => { if (typeof aoAgir === "function") aoAgir(); domAbrir(p.edital, disciplina); const k = domNivelDoTopico(p.edital, disciplina, topico); if (k) domIrAoTopico(disciplina, k.chave); };
+  box.append(gerEl("span", "dom-item-rot", t("dom_passo_rot")), nv);
+  const txt = (p.pior ? t("dom_grupo_pior", { r: p.pior }) + (p.porque ? " · " : "") : "") + (p.porque || "");
+  if (txt) box.append(gerEl("span", "dom-passo-pq", txt));
+  if (p.acao) {
+    const b = gerEl("button", "btn-min dom-acao-1 dom-acao-" + p.acao.cod, p.acao.txt);
+    b.type = "button"; b.title = p.acao.tip;
+    b.onclick = () => { if (typeof aoAgir === "function") aoAgir(); p.acao.fazer(); };
+    box.append(b);
+  }
+  return p;
+}
+
 /* o termômetro do edital aberto, ao lado do botão do Domínio: uma barrinha do peso por nível + o verde em número */
 function domTermoPintar(edId) {
   const box = $("edDomTermo");
