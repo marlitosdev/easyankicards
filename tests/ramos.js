@@ -2760,7 +2760,7 @@ async function testes() {
       const chips = achar(ramoLin, (e) => cls(e, "dom-chip")).map((e) => e.textContent);
       ok(chips.length >= 3 && chips.some((c) => /nunca estudado/.test(c)) && chips.some((c) => /cartões: 33% lembrados/.test(c)), "R69j cada folha mostra os sinais em chips (estudo, acerto, cartoes): " + chips.join(" | "));
       const reforcar = achar(cx(), (e) => cls(e, "cov-bloco")).pop();
-      ok(reforcar && /O que reforçar primeiro/.test(reforcar.textContent) && /peso [\d.]+% × 3/.test(reforcar.textContent), "R69k a lista 'o que reforcar primeiro' mostra a conta (peso x fator do nivel)");
+      ok(reforcar && /O que reforçar primeiro/.test(reforcar.textContent) && /peso [\d.]+% × [\d.]+/.test(reforcar.textContent), "R69k (v18.89: ramos agrupados, o fator e' a media deles) a lista 'o que reforcar primeiro' mostra a conta (peso x fator do nivel)");
       const botoes = achar(reforcar, (e) => e.tag === "button").map((b) => b.textContent);
       ok(botoes.some((b) => /Abrir/.test(b)) && botoes.some((b) => /Estudar|Criar/.test(b)), "R69l cada item de 'reforcar' leva a biblioteca e ao estudo/criacao");
       a.$("btnDomX").onclick();
