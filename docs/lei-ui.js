@@ -1860,6 +1860,28 @@ function leiCorpoHtml(a, cit) {
   return html;
 }
 
+/* (v18.90.0) OS CARTÕES DE CADA ARTIGO (etiqueta <lei>-art<n> ou citação no texto do cartão — a mesma conta da
+ * Cobertura "por lei"). Guardado enquanto a lei e a biblioteca de cartões não mudam: a leitura repinta muito. */
+let leiCartMemo = null;
+function leiCartoesPorArtigo(l) {
+  if (!l || typeof cqLerBiblioteca !== "function" || typeof covLeiArtigosDoCartao !== "function") return new Map();
+  let notas = [];
+  try { notas = cqLerBiblioteca(); } catch (e) { notas = []; }
+  let tam = 0;
+  notas.forEach((n) => { const c = n.card || {}; tam = (tam * 31 + String(c.front || "").length * 7 + String(c.back || "").length + (c.tags || []).length) | 0; });
+  const sig = l.id + "|" + String(l.texto || "").length + "|" + JSON.stringify(l.alteracoes || {}).length + "|" + notas.length + "|" + tam;
+  if (leiCartMemo && leiCartMemo.sig === sig) return leiCartMemo.mapa;
+  const leis = typeof leisLista === "function" ? leisLista() : [];
+  const mapa = new Map();
+  notas.forEach((n) => {
+    let nums = [];
+    try { nums = covLeiArtigosDoCartao(n, l, leis); } catch (e) { nums = []; }
+    nums.forEach((num) => { if (!mapa.has(num)) mapa.set(num, []); mapa.get(num).push(n); });
+  });
+  leiCartMemo = { sig, mapa };
+  return mapa;
+}
+
 function leiPintarLeitura() {
   const cx = $("leiLeitura");
   if (!cx) return;
@@ -1922,6 +1944,7 @@ function leiPintarLeitura() {
   /* quais números já foram desenhados: a Constituição repete quase todos
    * entre o corpo e o ADCT, e é isso que decide o id de cada bloco */
   const vistos = {};
+  let cartMapa = null;
   const desenhar = (a) => {
     /* o marcador VIVO, e não o do começo da pintura: numa lei grande que ainda está entrando na
      * tela a pessoa pode marcar, e os artigos que faltam nascem já sabendo */
@@ -1977,6 +2000,8 @@ function leiPintarLeitura() {
      * aqui porque o simulador dos testes devolve um nó genérico para
      * qualquer seletor — a asserção passaria sem provar nada.
      * ================================================================= */
+    /* os cartões vão para a PRIMEIRA ocorrência do número (o corpo; o ADCT da CF repete números) */
+    const primeiraOc = !vistos[a.num];
     bloco.id = vistos[a.num]
       ? "leiArtI_" + a.indice
       : "leiArt_" + a.num.replace(/[^A-Z0-9-]/gi, "");
@@ -2023,6 +2048,20 @@ function leiPintarLeitura() {
     flag.hidden = ehMarcado;
     flag.onclick = () => leiMarcadorMudar(a);
     cab.append(flag);
+    /* (v18.90.0) quantos cartões este artigo tem — e estudá-los dali mesmo */
+    if (l && primeiraOc) {
+      if (!cartMapa) cartMapa = leiCartoesPorArtigo(l);
+      const ns = cartMapa.get(a.num) || [];
+      if (ns.length) {
+        const cb = document.createElement("button");
+        cb.type = "button";
+        cb.className = "lei-art-cart";
+        cb.textContent = "🃏 " + ns.length;
+        cb.title = t("lei_art_cart_tip", { n: ns.length, a: a.rotulo });
+        cb.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); estcAbrirLista(ns, { rotulo: l.nome + " · " + a.rotulo }); };
+        cab.append(cb);
+      }
+    }
     bloco._lei = { num: a.num, numCru: a.numCru, indice: a.indice, rotulo: a.rotulo, rot, flag, cab, marcado: ehMarcado };
     if (ehCont) leiArtContAplicar(bloco, true);
 
@@ -3275,7 +3314,7 @@ function leiRolarParaUnidades(bloco, textoArt, unidades, num) {
  * Nada aqui é desenhado até ser aberto: lei de 424 artigos abre com os títulos, e os artigos
  * de um capítulo só entram na tela quando ele se abre.
  * ===================================================================== */
-const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei", "ineditos"];
+const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei", "ineditos", "semcartao"];
 let leiIrFiltro = "todos";
 let leiIrAbertos = null;          /* ids dos nós abertos: sobrevivem a repintar */
 let leiIrPrimeiro = null;         /* o que o Enter da busca faz */
@@ -3791,6 +3830,28 @@ function leiIrPrimeiroArtigo(d, num) {
 }
 
 /* o filtro: os artigos do ranking (mais caem, erros, caiu em prova) ou o do "parei" */
+/* (v18.90.0) OS ARTIGOS EM VIGOR SEM NENHUM CARTÃO: primeiro os que caem em questão (do que mais cai ao que menos), depois
+ * o resto na ordem da lei. Cada número uma vez (o ADCT da CF repete números: vale o primeiro). */
+const LEI_IR_SC_MAX = 200;
+function leiIrSemCartao(d) {
+  const mapa = leiCartoesPorArtigo(d.l);
+  const vistos = new Set();
+  const caem = [], resto = [];
+  let total = 0;
+  (d.arts || []).forEach((a) => {
+    if (vistos.has(a.num)) return;
+    vistos.add(a.num);
+    const ef = (d.efetivos && d.efetivos[a.indice]) || a;
+    try { if (leiArtigoRevogado(ef)) return; } catch (e) {}
+    total++;
+    if ((mapa.get(a.num) || []).length) return;
+    const r = d.ranking[a.num] || null;
+    (r && (r.questoes || r.prova) ? caem : resto).push({ a, r });
+  });
+  caem.sort((x, y) => ((y.r.questoes || 0) + 2 * (y.r.prova || 0)) - ((x.r.questoes || 0) + 2 * (x.r.prova || 0)));
+  return { itens: caem.concat(resto), caem: caem.length, total };
+}
+
 function leiIrItensDoFiltro(d, filtro) {
   if (filtro === "parei") {
     const a = d.pareiIdx >= 0 ? d.arts[d.pareiIdx] : null;
@@ -3906,6 +3967,19 @@ function leiIrPintar() {
   };
   if (q) return lista(leiIrBuscarItens(d, q), t("lei_ir_busca_vazia", { q }));
   if (leiIrFiltro === "ineditos") return leiIrPintarIneditos(cx, d);
+  if (leiIrFiltro === "semcartao") {
+    const sc = leiIrSemCartao(d);
+    cx.className = "lei-ir-corpo";
+    const cab = document.createElement("p");
+    cab.className = "nota lei-ir-sc-cab";
+    cab.textContent = sc.itens.length ? t("lei_ir_sc_cab", { n: sc.itens.length, t: sc.total, q: sc.caem }) : t("lei_ir_sc_vazio");
+    cx.append(cab);
+    sc.itens.slice(0, LEI_IR_SC_MAX).forEach((it) => cx.append(leiIrLinhaEl(d, it.a, it.r)));
+    if (sc.itens.length > LEI_IR_SC_MAX) { const p = document.createElement("p"); p.className = "nota"; p.textContent = t("lei_ir_sc_mais", { n: sc.itens.length - LEI_IR_SC_MAX }); cx.append(p); }
+    const p0 = sc.itens[0];
+    if (p0) leiIrPrimeiro = () => leiIrIr(p0.a.num, p0.a.indice);
+    return;
+  }
   if (leiIrFiltro !== "todos") {
     return lista(leiIrItensDoFiltro(d, leiIrFiltro),
       leiIrFiltro === "parei" ? t("lei_ir_sem_parei") : t("lei_rank_vazio"));

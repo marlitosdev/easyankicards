@@ -5267,6 +5267,12 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-item-acoes .cov-acoes{flex-wrap:wrap}
 .dom-acao-1{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
 .dom-chip-chute{border-color:#f0ad4e;color:#f0ad4e}
+/* (v18.90.0) cartões por artigo: o selo no leitor da lei e o "estudar" da Cobertura */
+.lei-art-cart{all:unset;box-sizing:border-box;cursor:pointer;font-size:11.5px;font-weight:700;padding:0 8px;border-radius:999px;
+  border:1px solid var(--borda);background:rgba(127,127,127,.12);margin-left:6px;white-space:nowrap}
+.lei-art-cart:hover{background:rgba(127,127,127,.24)}
+.lei-art-cart:focus-visible{outline:2px solid var(--acao)}
+.cov-div-estudar{margin-left:auto;font-size:11.5px}
 .dom-ordem{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
 #dlgDominio .cov-tira .cov-seg{cursor:pointer}
 #dlgDominio .cov-tira .cov-seg:hover{filter:brightness(1.25)}
@@ -9298,6 +9304,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnLeiIrF_prova" data-i18n="lei_ir_f_prova"></button>
     <button class="btn-min" id="btnLeiIrF_parei" data-i18n="lei_ir_f_parei"></button>
     <button class="btn-min" id="btnLeiIrF_ineditos" data-i18n="lei_ir_f_ineditos" data-i18n-title="lei_ir_f_ineditos_tip"></button>
+    <button class="btn-min" id="btnLeiIrF_semcartao" data-i18n="lei_ir_f_semcartao" data-i18n-title="lei_ir_f_semcartao_tip"></button>
     <!-- (v18.73.0) quais artigos DESTA lei têm cartão, quais não, quais caem em questão (a barra do leitor fica nos 6 botões) -->
     <button class="btn-min btn-min-ok" id="btnLeiCobertura" data-i18n="lei_cov_btn" data-i18n-title="lei_cov_tip"></button>
   </div>

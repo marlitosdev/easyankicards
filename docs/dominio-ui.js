@@ -248,10 +248,10 @@ function domItemFila(f, tp, semRamos) {
     ramosDoTop.forEach((r) => {
       const nv = r.nivel === "pulado" ? "cinza" : r.nivel;
       const naFila = f.tipo === "grupo" && f.ramosFila.some((x) => x.ramoId === r.ramoId);
-      const b = gerEl("button", "dom-ramo-chip dom-b-" + nv + ((f.tipo === "ramo" && r.ramoId === f.ramoId) || (f.tipo === "grupo" && f.pior && r.ramoId === f.pior.ramoId) ? " atual" : "") + (naFila ? " na-fila" : "") + (r.pulado ? " hor-ramo-pulado" : ""), r.ramoNome);
+      const b = gerEl("button", "dom-ramo-chip dom-b-" + nv + ((f.tipo === "ramo" && r.ramoId === f.ramoId) || (f.tipo === "grupo" && f.pior && r.ramoId === f.pior.ramoId) ? " atual" : "") + (naFila ? " na-fila" : "") + (r.pulado ? " hor-ramo-pulado" : ""));
+      b.append(gerEl("i", "dom-leg-i dom-n-" + nv), document.createTextNode(r.ramoNome));
       b.type = "button";
       b.title = t("dom_ramo_chip_tip", { r: r.ramoNome, n: r.nivel === "pulado" ? "—" : t("dom_n_" + r.nivel) }) + (domPorque(r.motivos) ? " · " + domPorque(r.motivos) : "");
-      b.prepend(gerEl("i", "dom-leg-i dom-n-" + nv));
       b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); $("dlgDominio").close(); edAbrirFicha(f.disciplina, f.topico, { ramos: ramosFicha, ramo: r.ramoId, editalId: domEditalId }); };
       rl.append(b);
     });
