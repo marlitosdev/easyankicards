@@ -479,6 +479,14 @@ function covLeiLinhaArtigo(pai, m, a) {
   ab.type = "button";
   ab.onclick = () => covLeiAbrirArtigo(m.lei.id, a.num);
   const ac = gerEl("span", "cov-acoes");
+  /* (v18.90.0) estudar os cartões DESTE artigo, ali mesmo (a Cobertura continua por baixo) — primeiro na fila de botões */
+  if (a.cartoes) {
+    const es = gerEl("button", "btn-min btn-min-ok cov-art-estudar", t("cov_lei_estudar", { n: a.cartoes }));
+    es.type = "button";
+    es.id = "btnCovLeiEstudar_" + a.num;
+    es.onclick = () => estcAbrirLista(a.notas, { rotulo: m.lei.nome + " · " + a.rotulo });
+    ac.append(es);
+  }
   ac.append(nb, ab, cr);
   linha.append(ac);
   pai.append(linha, ver);
@@ -515,6 +523,14 @@ function covPintarLei() {
     const cab = gerEl("div", "cov-disc-cab");
     cab.append(gerEl("b", "cov-nome", d.rotulo || "—"),
       gerEl("span", "cov-n" + (d.semCartao ? " cov-n-alerta" : ""), t("cov_lei_div_n", { n: d.total, s: d.semCartao, c: d.cartoes })));
+    /* (v18.90.0) estudar os cartões do capítulo inteiro (cada cartão uma vez, mesmo citando dois artigos dele) */
+    const notasDiv = Array.from(new Set(d.todos.flatMap((a) => a.notas)));
+    if (notasDiv.length) {
+      const es = gerEl("button", "btn-min btn-min-ok cov-div-estudar", t("cov_lei_estudar_div", { n: notasDiv.length }));
+      es.type = "button";
+      es.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); estcAbrirLista(notasDiv, { rotulo: m.lei.nome + " · " + (d.rotulo || "") }); };
+      cab.append(es);
+    }
     caixa.append(cab);
     covSegmentos(caixa, d.todos.map((a) => ({ faixa: a.faixa, pesoPct: 1, cartoes: a.cartoes, alvo: Math.ceil(a.peso / 2), nome: a.rotulo })), d.todos.length);
     const det = gerEl("div", "cov-det");

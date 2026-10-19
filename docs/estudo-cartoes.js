@@ -308,6 +308,7 @@ function estcFechar() { const d = $("dlgGerEstudo"); if (d && d.open) d.close();
 /* ao fechar o player, a biblioteca abre no cartão em que a pessoa parou */
 function estcAoFechar() {
   estcMenuFechar();
+  if (estcDeFora) { estcDeFora = null; return; }
   const u = estcUn[estcI];
   if (u && gerVis[u.pos] !== undefined && gerVis[u.pos] === gerNotas.indexOf(u.nota)) {
     gerFoco = u.pos; gerEditando = false;
@@ -322,6 +323,7 @@ function estcAbrir(opt) {
   const marcados = gerSel.size ? Array.from(gerSel).sort((a, b) => a - b) : null;
   const posicoes = marcados || gerVis.map((_, p) => p);
   const lista = posicoes.map((pos) => ({ nota: gerNotas[gerVis[pos]], pos })).filter((x) => x.nota);
+  estcDeFora = null;
   estcUn = estcUnidades(lista);
   if (!estcUn.length) { uiAlert(t("est_vazio")); return false; }
   const puro = !marcados && gerPasta && gerPasta.chave && !gerPasta.ramo && !$("gerBusca").value && $("gerFiltro").value === "todos";
@@ -335,6 +337,28 @@ function estcAbrir(opt) {
   estcPintar();
   abrirModal("dlgGerEstudo");
   try { matReg("estudo", "player da biblioteca aberto", estcUn.length + " cartões" + (estcI ? " · retomado no " + (estcI + 1) : "")); } catch (e) {}
+  return true;
+}
+
+/* (v18.90.0) ESTUDAR UMA LISTA QUALQUER (os cartões de um artigo, de um capítulo da lei): o mesmo player, sem depender
+ * da Biblioteca aberta. A agenda é a mesma (o id do cartão vem do conteúdo). Editar e apagar ficam fora do menu — eles
+ * trabalham sobre a lista da Biblioteca. A janela de onde se veio continua por baixo. */
+let estcDeFora = null;
+function estcAbrirLista(notas, opc) {
+  const o = opc || {};
+  const lista = (notas || []).filter((n) => n && n.card).map((nota, pos) => ({ nota, pos }));
+  estcUn = estcUnidades(lista);
+  if (!estcUn.length) { uiAlert(t("est_vazio")); return false; }
+  estcDeFora = { rotulo: o.rotulo || "" };
+  estcChave = "";
+  estcI = 0;
+  estcRev = false; estcEsc = -1; estcSaiba = false;
+  estcModo = estcModoLer();
+  if (estcModo === "agendado") { estcCarregarAgenda(); estcProxima(); }
+  dicasDosBotoes(ESTC_DICAS);
+  estcPintar();
+  abrirModal("dlgGerEstudo");
+  try { matReg("estudo", "player aberto numa lista", (o.rotulo ? o.rotulo + " · " : "") + estcUn.length + " cartões"); } catch (e) {}
   return true;
 }
 
@@ -358,8 +382,10 @@ function estcMenuMontar() {
   const item = (rot, fn) => { const b = gerEl("button", "est-menu-i", rot); b.type = "button"; b.onclick = () => { estcMenuFechar(); fn(); }; m.append(b); };
   item(t(estcModo === "agendado" ? "est_m_modo_seq" : "est_m_modo_agd"), () => estcTrocarModo(estcModo === "agendado" ? "sequencia" : "agendado"));
   if (estcModo === "agendado") item(t("est_m_novos", { n: AGD.novosDia }), estcMudarNovos);
-  item(t("est_m_editar"), () => { estcFechar(); gerFoco = u.pos; if (gerEhCelular()) gerVista("previa"); gerAcaoEditar(); });
-  item(t("est_m_apagar"), estcApagar);
+  if (!estcDeFora) {
+    item(t("est_m_editar"), () => { estcFechar(); gerFoco = u.pos; if (gerEhCelular()) gerVista("previa"); gerAcaoEditar(); });
+    item(t("est_m_apagar"), estcApagar);
+  }
   item(t("est_m_melhorar"), () => { estcFechar(); $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota] }); });
   if (u.nota.chave !== CQ_BANCADA) {
     /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
