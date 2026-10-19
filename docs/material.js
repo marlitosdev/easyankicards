@@ -3400,6 +3400,11 @@ function matPintarFicha() {
   $("matFichaSub").textContent = [x.concurso, x.disciplina].filter(Boolean).join(" › ")
     + (x.tocado ? " · " + t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() }) : "");
   /* o escopo: "Tópico inteiro" e um botão por ramo — o mesmo lugar para os dois */
+  /* (v18.91.0) o próximo passo pelo Domínio: a cor, o porquê e a ação que mais ajuda (fecha a ficha antes de agir) */
+  if (typeof domPassoPintar === "function") {
+    try { domPassoPintar($("matFichaPasso"), x.disciplina, x.topico, x.chave, o.editalId || "", () => { if ($("dlgMatFicha").open) $("dlgMatFicha").close(); }); }
+    catch (e) { if ($("matFichaPasso")) $("matFichaPasso").hidden = true; }
+  }
   const esc = $("matFichaEscopo");
   if (esc) {
     esc.innerHTML = "";

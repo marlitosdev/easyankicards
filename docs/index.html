@@ -5273,6 +5273,10 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .lei-art-cart:hover{background:rgba(127,127,127,.24)}
 .lei-art-cart:focus-visible{outline:2px solid var(--acao)}
 .cov-div-estudar{margin-left:auto;font-size:11.5px}
+.dom-passo{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:6px 0 8px;padding:7px 10px;border-radius:8px;
+  border:1px solid var(--borda);border-left-width:4px;background:rgba(127,127,127,.06);font-size:12.5px}
+.dom-passo .dom-nivel{all:unset;box-sizing:border-box;cursor:pointer;font-size:10.5px;font-weight:800;padding:1px 8px;border-radius:999px}
+.dom-passo-pq{flex:1 1 220px;color:var(--sutil)}
 .dom-ordem{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
 #dlgDominio .cov-tira .cov-seg{cursor:pointer}
 #dlgDominio .cov-tira .cov-seg:hover{filter:brightness(1.25)}
@@ -6586,6 +6590,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <h3 id="matFichaTit"></h3>
   <p class="nota" id="matFichaSub"></p>
   <!-- T1: o mesmo caminho para o tópico inteiro e para cada ramo -->
+  <!-- (v18.91.0) o próximo passo pelo Domínio dos assuntos -->
+  <div id="matFichaPasso" class="dom-passo" role="status" hidden></div>
   <div id="matFichaEscopo" class="mat-ficha-escopo" role="group" data-i18n-title="mat_ficha_esc_rot" hidden></div>
   <div id="matFichaLista" class="mat-ficha-lista"></div>
   <div id="matFichaRodape" class="mat-ficha-rodape" hidden></div>

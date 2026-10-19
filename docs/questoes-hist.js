@@ -91,7 +91,7 @@ function qhIniciar(lista, ctx) {
     rotulo: qhRotulo(lista, c.filtro || {}),
     total: (lista || []).length,
     ids: (lista || []).map((q) => q.id).slice(0, 400),
-    feitas: 0, certas: 0, pct: null, minutos: 0,
+    feitas: 0, certas: 0, chutes: 0, pct: null, minutos: 0,
   };
   qhLista.unshift(item);
   while (qhLista.length > QH_MAX) qhLista.pop();
@@ -111,6 +111,8 @@ function qhAtualizar(placar, opc) {
   const p = placar || {};
   item.feitas = Number(p.feitas) || 0;
   item.certas = Number(p.certas) || 0;
+  /* (v18.91.0) quantas das certas foram no chute: a linha do histórico diz, como o placar da rodada */
+  item.chutes = Number(p.chutes) || 0;
   item.pct = item.feitas ? Math.round((item.certas / item.feitas) * 100) : null;
   item.minutos = Math.max(0, Math.round(
     (Date.now() - new Date(item.q).getTime()) / 60000));
@@ -131,9 +133,10 @@ function qhResumo(dias) {
   const meus = qhLista.filter((x) => new Date(x.q).getTime() >= corte);
   const feitas = meus.reduce((a, x) => a + (x.feitas || 0), 0);
   const certas = meus.reduce((a, x) => a + (x.certas || 0), 0);
+  const chutes = meus.reduce((a, x) => a + (x.chutes || 0), 0);
   return {
     blocos: meus.length,
-    feitas, certas,
+    feitas, certas, chutes,
     pct: feitas ? Math.round((certas / feitas) * 100) : null,
     minutos: meus.reduce((a, x) => a + (x.minutos || 0), 0),
     /* ABANDONADOS TAMBÉM CONTAM, e aparecem separados: é onde o estudo
