@@ -170,6 +170,67 @@ async function testes() {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
     ok(/#dlgDominio\.dom-cheia\[open\]\{width:100vw/.test(html), "F7 a regra da tela cheia ocupa a tela toda (pelo id, vence a largura da janela)");
   }
+  /* ---- 10 (v18.87.0): o item da fila — sinais com chute, ramos coloridos, material e a ação principal pela cor ---- */
+  {
+    const { a, ed } = montar();
+    const chLei = a.matChave("Licitações", "Lei 14.133");
+    const Q = (id, ts) => ({ id, tipo: "ce", enunciado: "Questão " + id, gabarito: "C", comentario: "", disciplina: "Licitações", topico: "Lei 14.133", chave: chLei, tentativas: ts });
+    const t0 = (ok2, chute, d) => [{ acertou: ok2, chute: !!chute, q: "2026-10-1" + d }];
+    [Q("a", t0(false, 0, 1)), Q("b", t0(false, 0, 2)), Q("c", t0(false, 0, 3)), Q("d", t0(true, 0, 4)), Q("e", t0(true, 0, 5)), Q("f", t0(true, 1, 6))].forEach((q) => a.qsTodas().push(q));
+    a.matGravar(chLei, "Resumo da lei.", { disciplina: "Licitações", topico: "Lei 14.133" });
+    a.domAbrir(ed.id);
+    const p = pain(a, "prior");
+    const itens = achar(p, (e) => cls(e, "dom-item"));
+    const doRamo = (nome) => itens.find((l) => achar(l, (e) => cls(e, "cov-item-nome"))[0].textContent.indexOf("› " + nome) >= 0);
+    const it = doRamo("Modalidades");
+    ok(it && cls(it, "dom-b-vermelho"), "Q0 o ramo herda o acerto baixo do tópico (2,25 de 6): vermelho");
+    const chips = achar(it, (e) => cls(e, "dom-chip")).map((e) => e.textContent);
+    ok(chips.some((c) => c === a.t("dom_ac_chutes", { n: 1, p: 33 })), "Q1 os sinais dizem o chute e o acerto sem ele (2 de 6 = 33%): " + chips.join(" | "));
+    const rchips = achar(it, (e) => cls(e, "dom-ramo-chip"));
+    ok(rchips.length === 2 && rchips.some((b) => cls(b, "atual") && /Modalidades/.test(b.textContent)) && rchips.every((b) => /dom-b-/.test(b.className)),
+      "Q2 os ramos do tópico aparecem coloridos, o do item marcado");
+    const mat = achar(it, (e) => cls(e, "dom-mat")).map((e) => e.textContent);
+    ok(mat.indexOf("📄 " + a.t("dom_mat_resumo")) >= 0 && mat.indexOf("❓ 6") >= 0, "Q3 o material do tópico: resumo e 6 questões: " + mat.join(" | "));
+    const ac1 = achar(it, (e) => cls(e, "dom-acao-1"))[0];
+    ok(ac1 && ac1.textContent === a.t("dom_ac1_erradas", { n: 4 }), "Q4 vermelho com erradas: a ação principal é refazer as 4 (3 erradas + 1 no chute): " + (ac1 && ac1.textContent));
+    ac1.onclick();
+    ok(a.$("dlgDominio").open === false && a.$("dlgQsResponder").open === true && a.qsSessaoAtual().fila.length === 4, "Q4a refazer abre uma rodada só com as 4");
+    a.$("dlgQsResponder").close();
+    /* o ramo pela cor do chip: abre a ficha no ramo */
+    a.domAbrir(ed.id);
+    const itensB = achar(pain(a, "prior"), (e) => cls(e, "dom-item"));
+    const itFase = itensB.find((l) => /› Fase preparatória/.test(l.textContent));
+    const itMod = itensB.find((l) => /› Modalidades/.test(l.textContent));
+    ok(itFase && !achar(itFase, (e) => cls(e, "dom-ramo-chip")).length && achar(itMod, (e) => cls(e, "dom-ramo-chip")).length === 2,
+      "Q2a outro ramo do MESMO tópico na fila: a lista de ramos aparece só no primeiro (sem repetir)");
+    achar(itMod, (e) => cls(e, "dom-ramo-chip")).find((b) => /Fase preparatória/.test(b.textContent)).onclick();
+    ok(a.$("dlgDominio").open === false && a.$("dlgMatFicha").open === true && a.matFichaEscopoAtual() === "fase_preparatoria", "Q5 tocar num ramo abre a ficha já nesse ramo");
+    a.$("dlgMatFicha").close();
+    /* não estudado e sem nada: preparar o material */
+    a.domAbrir(ed.id);
+    const conv = achar(pain(a, "prior"), (e) => cls(e, "dom-item")).find((l) => /› Convênios/.test(l.textContent));
+    ok(conv && achar(conv, (e) => cls(e, "dom-mat-falta")).some((e) => e.textContent === a.t("dom_mat_nada")) && achar(conv, (e) => cls(e, "dom-acao-1"))[0].textContent === a.t("dom_ac1_preparar")
+      && !achar(conv, (e) => cls(e, "dom-ramo-chip")).length,
+      "Q6 não estudado e sem material: 'nada preparado' e a ação 'Preparar o material' (sem ramos, sem linha de ramos)");
+    achar(conv, (e) => cls(e, "dom-acao-1"))[0].onclick();
+    ok(a.$("dlgMatFicha").open === true, "Q6a preparar abre a ficha do tópico");
+    a.$("dlgMatFicha").close();
+  }
+  /* ---- 11: verde frágil (puro) e azul sem questões ---- */
+  {
+    const { a } = montar();
+    const V = (ac, rt) => ({ nivel: "verde", sinais: { acerto: ac, retencao: rt } });
+    ok(a.domFragil(V({ valido: true, n: 10, chutes: 1 }, null)) === "chute", "Q7 verde com chute na janela: frágil (chute)");
+    ok(a.domFragil(V({ valido: true, n: 6, chutes: 0 }, null)) === "amostra" && a.domFragil(V({ valido: true, n: 6, chutes: 0 }, { valido: true, respostas: 20 })) === "", "Q7a 6 questões sem cartões: amostra pequena; com cartões que contam, firme");
+    ok(a.domFragil(V({ valido: false, n: 2 }, { valido: true, respostas: 12 })) === "amostra" && a.domFragil(V({ valido: true, n: 10, chutes: 0 }, null)) === "" && a.domFragil({ nivel: "amarelo", sinais: { acerto: { valido: true, n: 10, chutes: 2 } } }) === "",
+      "Q7b só cartões, poucas respostas: frágil; 10 questões sem chute: firme; só vale para o verde");
+    const f = { nivel: "azul", tipo: "topico", chave: "x›y", disciplina: "X", topico: "Y" };
+    const r0 = a.domAcaoPrincipal(f, { questoes: 0, vazio: true }, []);
+    const r1 = a.domAcaoPrincipal(f, { questoes: 7, vazio: false }, []);
+    ok(r0.cod === "criar_qs" && r1.cod === "medir" && r1.txt === a.t("dom_ac1_medir", { n: 7 }), "Q8 azul: medir com as questões que há — ou criá-las");
+    ok(a.domAcaoPrincipal(Object.assign({}, f, { nivel: "cinza" }), { vazio: true }, []).cod === "preparar" && a.domAcaoPrincipal(Object.assign({}, f, { nivel: "cinza" }), { vazio: false }, []).cod === "comecar" && a.domAcaoPrincipal(Object.assign({}, f, { nivel: "amarelo" }), { vazio: false }, []).cod === "rever",
+      "Q8a não estudado com material: começar por ele; amarelo sem erradas: rever o material");
+  }
   return falhas;
 }
 

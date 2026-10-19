@@ -62,8 +62,13 @@ function domAcerto(tentativas, opc) {
   const vale = (tt) => (typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt && tt.acertou ? 1 : 0));
   const certas = rec.reduce((s, tt) => s + vale(tt), 0);
   const totalCertas = todas.reduce((s, tt) => s + vale(tt), 0);
+  /* (v18.87.0) os acertos no CHUTE da janela, e o acerto se eles contassem como erro — para a tela dizer quanto da cor
+   * depende de chute */
+  const chutes = rec.filter((tt) => tt.acertou && tt.chute).length;
+  const certasFirmes = rec.filter((tt) => tt.acertou && !tt.chute).length;
   return {
     n: rec.length, certas, pct: rec.length ? (certas / rec.length) * 100 : null,
+    chutes, pctSemChute: rec.length ? (certasFirmes / rec.length) * 100 : null,
     valido: rec.length >= o.minQuestoes,
     historicoN: todas.length, historicoPct: todas.length ? (totalCertas / todas.length) * 100 : null,
   };

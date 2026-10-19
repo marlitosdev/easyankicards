@@ -5251,6 +5251,22 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-ganho{font-size:13px;margin:0 0 8px;padding:6px 10px;border-radius:8px;border:1px dashed var(--ok,#2e9e5b);background:rgba(46,158,91,.08)}
 .dom-item{flex-wrap:wrap}
 .dom-item-porque{flex:1 1 100%;margin:0}
+/* (v18.87.0) o item da fila: sinais, ramos coloridos, material e a ação principal conforme a cor */
+.dom-item-linha{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:2px 0 0}
+.dom-item-rot{font-size:11px;color:var(--sutil);margin-right:2px}
+.dom-ramo-chip{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 9px;
+  border-radius:999px;border:1px solid var(--borda);border-left-width:4px;background:rgba(127,127,127,.08);max-width:100%;overflow-wrap:anywhere}
+.dom-ramo-chip.atual{font-weight:800;box-shadow:0 0 0 2px var(--acao)}
+.dom-ramo-chip:hover{background:rgba(127,127,127,.18)}
+.dom-ramo-chip:focus-visible{outline:2px solid var(--acao)}
+.dom-ramo-chip .dom-leg-i{width:9px;height:9px}
+.dom-mat{font-size:11.5px;padding:1px 8px;border-radius:999px;background:rgba(127,127,127,.12)}
+.dom-mat-falta{font-size:11.5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--atencao);color:var(--atencao)}
+.dom-item-acoes{margin-top:6px}
+.dom-item-acoes .cov-acoes{flex-wrap:wrap}
+.dom-acao-1{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+.dom-chip-chute{border-color:#f0ad4e;color:#f0ad4e}
+.dom-chip-fragil{border-style:dashed;border-color:#2e9e5b;color:#39b56b;font-weight:700}
 .dom-sem-estudo{margin:10px 0}
 .dom-sem-estudo > summary{cursor:pointer;font-size:13px;color:var(--sutil);padding:6px 0}
 #dlgDominio .cov-disc-cab{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:10px;row-gap:2px}

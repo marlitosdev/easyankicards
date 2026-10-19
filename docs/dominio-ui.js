@@ -123,13 +123,116 @@ function domChips(pai, f) {
     chip(a.valido ? t("dom_ac", { p: Math.round(a.pct), n: a.n }) : t("dom_ac_sem", { n: a.n }), (f.herdadoAcerto ? "dom-herdado " : "") + (a.valido ? "" : "dom-chip-fraco"),
       (f.herdadoAcerto ? t("dom_herdado") + " · " : "") + t("dom_ac_hist", { p: Math.round(a.historicoPct), n: a.historicoN }));
   } else chip(t("dom_ac_nenhuma"), "dom-chip-fraco");
+  if (a && a.chutes) chip(t("dom_ac_chutes", { n: a.chutes, p: Math.round(a.pctSemChute) }), "dom-chip-chute", t("dom_ac_chutes_tip"));
+  const fr = domFragil(f);
+  if (fr) chip(t("dom_fragil_" + fr), "dom-chip-fragil", t("dom_fragil_tip"));
   const r = s.retencao;
   chip(r && r.valido ? t("dom_rt", { p: Math.round(r.pct), n: r.respostas }) : t("dom_rt_sem"), r && r.valido ? "" : "dom-chip-fraco");
   const au = s.auto;
   if (au && au.nivel && au.nivel !== "media") chip(t(au.nivel === "alta" ? "dom_auto_alta" : "dom_auto_baixa") + (au.vencida ? " · " + t("dom_auto_venc") : ""), au.vencida ? "dom-chip-fraco" : "");
 }
 
-function domLinhaAcoes(pai, disciplina, topico, cartoes) {
+/* (v18.87.0) VERDE FRÁGIL: verde, mas com pouca prova — o acerto da janela dependeu de chute, ou a única medida é a
+ * amostra mínima (menos de 8 questões, sem cartões que contem; ou menos de 15 respostas de cartões, sem questões). */
+const DOM_FRAGIL = { questoes: 8, respostas: 15 };
+function domFragil(f) {
+  if (!f || f.nivel !== "verde" || !f.sinais) return "";
+  const a = f.sinais.acerto, r = f.sinais.retencao;
+  const ac = a && a.valido, rt = r && r.valido;
+  if (ac && a.chutes) return "chute";
+  if (ac && !rt && a.n < DOM_FRAGIL.questoes) return "amostra";
+  if (rt && !ac && r.respostas < DOM_FRAGIL.respostas) return "amostra";
+  return "";
+}
+/* o material que o tópico já tem, em selos (para saber se dá para começar agora ou se é preciso preparar antes) */
+function domMaterialDe(disciplina, topico, chave) {
+  let x = null;
+  try { x = (typeof matObter === "function" && matObter(chave)) || null; } catch (e) { x = null; }
+  const base = Object.assign({ chave, disciplina, topico, texto: "", cartoes: "" }, x || {});
+  let inf = { temR: false, nCart: 0, temL: false, nJul: 0 };
+  try { if (typeof matInfoTopico === "function") inf = matInfoTopico(base); } catch (e) {}
+  let nQs = 0;
+  try { nQs = typeof qsFiltrar === "function" ? qsFiltrar({ chave }).length : 0; } catch (e) { nQs = 0; }
+  return { resumo: !!inf.temR, cartoes: inf.nCart || 0, lei: !!inf.temL, julgados: inf.nJul || 0, questoes: nQs,
+    vazio: !inf.temR && !inf.nCart && !inf.temL && !inf.nJul && !nQs };
+}
+/* a ação que mais ajuda na cor: errou → refazer as erradas; estudou e não mediu → medir com questões (ou criá-las);
+ * não estudou → o material do tópico (começar por ele, ou preparar o que falta). Devolve { txt, tip, fazer }. */
+function domAcaoPrincipal(f, mat, ramos) {
+  const ramo = f.tipo === "ramo" ? { id: f.ramoId, nome: f.ramoNome } : null;
+  let erradas = [];
+  try { erradas = typeof qsFiltrar === "function" ? qsFiltrar(Object.assign({ chave: f.chave, soErradas: true }, ramo ? { ramo: ramo.id } : {})) : []; } catch (e) { erradas = []; }
+  /* o ramo HERDA o acerto do tópico: sem erradas ligadas ao ramo, valem as do tópico (são elas que dão a cor) */
+  if (ramo && !erradas.length) { try { erradas = qsFiltrar({ chave: f.chave, soErradas: true }); } catch (e) { erradas = []; } }
+  const ficha = () => { $("dlgDominio").close(); edAbrirFicha(f.disciplina, f.topico, { ramos, ramo: ramo ? ramo.id : "", editalId: domEditalId }); };
+  if ((f.nivel === "vermelho" || f.nivel === "amarelo") && erradas.length) {
+    return { cod: "erradas", txt: t("dom_ac1_erradas", { n: erradas.length }), tip: t("dom_ac1_erradas_tip"),
+      fazer: () => { $("dlgDominio").close(); qsUiResponderAbrir(erradas, null, "dominio-erradas:" + f.chave + (ramo ? "#" + ramo.id : "")); } };
+  }
+  if (f.nivel === "azul") {
+    return { cod: mat.questoes ? "medir" : "criar_qs", txt: mat.questoes ? t("dom_ac1_medir", { n: mat.questoes }) : t("dom_ac1_criar_qs"), tip: t("dom_ac1_medir_tip"),
+      fazer: () => { $("dlgDominio").close(); qsUiResponderDireto(f.disciplina, f.topico, ramo); } };
+  }
+  if (f.nivel === "cinza") {
+    return { cod: mat.vazio ? "preparar" : "comecar", txt: t(mat.vazio ? "dom_ac1_preparar" : "dom_ac1_comecar"), tip: t("dom_ac1_ficha_tip"), fazer: ficha };
+  }
+  return { cod: "rever", txt: t("dom_ac1_rever"), tip: t("dom_ac1_ficha_tip"), fazer: ficha };
+}
+/* UM ITEM DA FILA: o que é, o porquê, os sinais (com os chutes), os ramos do tópico coloridos, o material e as ações
+ * (a principal, conforme a cor, primeiro) */
+function domItemFila(f, tp, semRamos) {
+  const l = gerEl("div", "cov-item dom-item dom-b-" + f.nivel);
+  l.append(gerEl("span", "dom-nivel dom-n-" + f.nivel, t("dom_n_" + f.nivel)),
+    gerEl("span", "cov-item-nome", f.disciplina + " › " + f.topico + (f.ramoNome ? " › " + f.ramoNome : "")),
+    gerEl("span", "cov-item-n", t("dom_urg", { p: f.pesoPct.toFixed(1), f: DOM.fatores[f.nivel] })));
+  /* o PORQUÊ à vista (antes, só no balão do mouse), antes dos botões: primeiro o motivo, depois o que fazer */
+  const pq = domPorque(f.motivos);
+  if (pq) { l.title = pq; l.append(gerEl("div", "dom-porque dom-item-porque", pq)); }
+  if (f.sinais) { const ch = gerEl("div", "dom-chips dom-item-linha"); domChips(ch, f); l.append(ch); }
+  /* os ramos do tópico, cada um com a sua cor: qual parte puxa o tópico para baixo, e um toque leva ao ramo */
+  const ramosDoTop = (tp && tp.ramos) || [];
+  const ramosFicha = ramosDoTop.map((r) => ({ id: r.ramoId, nome: r.ramoNome }));
+  /* vários ramos do MESMO tópico na fila: a lista de ramos só no primeiro deles (repetida, vira ruído) */
+  if (ramosDoTop.length && !semRamos) {
+    const rl = gerEl("div", "dom-item-ramos dom-item-linha");
+    rl.append(gerEl("span", "dom-item-rot", t("dom_item_ramos")));
+    ramosDoTop.forEach((r) => {
+      const nv = r.nivel === "pulado" ? "cinza" : r.nivel;
+      const b = gerEl("button", "dom-ramo-chip dom-b-" + nv + (f.tipo === "ramo" && r.ramoId === f.ramoId ? " atual" : "") + (r.pulado ? " hor-ramo-pulado" : ""), r.ramoNome);
+      b.type = "button";
+      b.title = t("dom_ramo_chip_tip", { r: r.ramoNome, n: r.nivel === "pulado" ? "—" : t("dom_n_" + r.nivel) }) + (domPorque(r.motivos) ? " · " + domPorque(r.motivos) : "");
+      b.prepend(gerEl("i", "dom-leg-i dom-n-" + nv));
+      b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); $("dlgDominio").close(); edAbrirFicha(f.disciplina, f.topico, { ramos: ramosFicha, ramo: r.ramoId, editalId: domEditalId }); };
+      rl.append(b);
+    });
+    l.append(rl);
+  }
+  /* o material que já existe (ou o aviso de que não há nada) */
+  const mat = domMaterialDe(f.disciplina, f.topico, f.chave);
+  const ml = gerEl("div", "dom-item-mat dom-item-linha");
+  ml.append(gerEl("span", "dom-item-rot", t("dom_item_mat")));
+  if (mat.vazio) ml.append(gerEl("span", "dom-mat-falta", t("dom_mat_nada")));
+  else {
+    if (mat.resumo) ml.append(gerEl("span", "dom-mat", "📄 " + t("dom_mat_resumo")));
+    if (mat.cartoes) ml.append(gerEl("span", "dom-mat", "🃏 " + mat.cartoes));
+    if (mat.lei) ml.append(gerEl("span", "dom-mat", "§ " + t("dom_mat_lei")));
+    if (mat.julgados) ml.append(gerEl("span", "dom-mat", "⚖ " + mat.julgados));
+    if (mat.questoes) ml.append(gerEl("span", "dom-mat", "❓ " + mat.questoes));
+    if (!mat.resumo) ml.append(gerEl("span", "dom-mat-falta", t("dom_mat_sem_resumo")));
+  }
+  l.append(ml);
+  /* as ações: a principal (conforme a cor) primeiro, depois as de sempre */
+  const ac1 = domAcaoPrincipal(f, mat, ramosFicha);
+  const linhaAc = gerEl("div", "dom-item-acoes dom-item-linha");
+  const p = gerEl("button", "btn-min dom-acao-1 dom-acao-" + ac1.cod, ac1.txt); p.type = "button"; p.title = ac1.tip;
+  p.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); ac1.fazer(); };
+  linhaAc.append(p);
+  domLinhaAcoes(linhaAc, f.disciplina, f.topico, f.cartoes, f.tipo === "ramo" ? { id: f.ramoId, nome: f.ramoNome } : null);
+  l.append(linhaAc);
+  return l;
+}
+
+function domLinhaAcoes(pai, disciplina, topico, cartoes, ramo) {
   const ac = gerEl("span", "cov-acoes");
   const ab = gerEl("button", "btn-min", t("cov_abrir")); ab.type = "button";
   ab.onclick = () => { $("dlgDominio").close(); gerAbrirNoTopico(disciplina, topico); };
@@ -138,9 +241,9 @@ function domLinhaAcoes(pai, disciplina, topico, cartoes) {
   go.onclick = () => { $("dlgDominio").close(); if (cartoes) estcEstudarTopico(disciplina, topico); else bancAlvoDefinir(disciplina, topico); };
   ac.append(go);
   const qu = gerEl("button", "btn-min", t("dom_questoes")); qu.type = "button";
-  qu.onclick = () => { $("dlgDominio").close(); qsUiResponderDireto(disciplina, topico); };
+  qu.onclick = () => { $("dlgDominio").close(); qsUiResponderDireto(disciplina, topico, ramo || undefined); };
   ac.append(qu);
-  domBotaoRegistrar(ac, disciplina, topico, "");
+  domBotaoRegistrar(ac, disciplina, topico, ramo ? ramo.id : "");
   pai.append(ac);
 }
 
@@ -208,17 +311,10 @@ function domPintar() {
     s.append(gerEl("p", "dom-ganho", t("dom_ganho", { n: topo.length, g: fmt(ganho), a: fmt(pct("verde")), b: fmt(Math.min(100, pct("verde") + ganho)) })));
   }
   if (!fila.length) s.append(gerEl("p", "nota", t("dom_reforcar_vazio")));
-  fila.slice(0, 15).forEach((f) => {
-    const l = gerEl("div", "cov-item dom-item dom-b-" + f.nivel);
-    l.append(gerEl("span", "dom-nivel dom-n-" + f.nivel, t("dom_n_" + f.nivel)),
-      gerEl("span", "cov-item-nome", f.disciplina + " › " + f.topico + (f.ramoNome ? " › " + f.ramoNome : "")),
-      gerEl("span", "cov-item-n", t("dom_urg", { p: f.pesoPct.toFixed(1), f: DOM.fatores[f.nivel] })));
-    /* o PORQUÊ à vista (antes, só no balão do mouse), antes dos botões: primeiro o motivo, depois o que fazer */
-    const pq = domPorque(f.motivos);
-    if (pq) { l.title = pq; l.append(gerEl("div", "dom-porque dom-item-porque", pq)); }
-    domLinhaAcoes(l, f.disciplina, f.topico, f.cartoes);
-    s.append(l);
-  });
+  const topPorChave = {};
+  m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { topPorChave[tp.chave] = tp; }));
+  const jaComRamos = {};
+  fila.slice(0, 15).forEach((f) => { s.append(domItemFila(f, topPorChave[f.chave], !!jaComRamos[f.chave])); jaComRamos[f.chave] = 1; });
   s.append(gerEl("p", "nota", t("dom_reforcar_sub")));
   pPrior.append(s);
   /* ---- disciplinas: as que já têm estudo primeiro; as ainda sem nada estudado recolhidas no fim ---- */
