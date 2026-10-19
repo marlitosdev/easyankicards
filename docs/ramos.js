@@ -539,6 +539,56 @@ function ramAcertosDoTopico(chave, ramos, banco) {
   rs.forEach((r) => { const x = out[r.id]; x.pct = x.feitas ? Math.round((x.certas / x.feitas) * 100) : null; });
   return out;
 }
+/* (v18.84.0) OS RAMOS NO PEDIDO À IA — um formato só, para o resumo e para as questões.
+ * O edital em que o tópico mora (é nele que os ramos são escritos): o preferido, se veio; senão o aberto, se tiver o
+ * tópico; senão o primeiro que tiver. */
+function ramEditalDoTopico(chave, preferido) {
+  if (preferido) return preferido;
+  if (!chave || typeof lerEdital !== "function") return "";
+  const lista = typeof editais !== "undefined" && Array.isArray(editais) ? editais : [];
+  const tem = (ed) => {
+    try {
+      return (lerEdital(ed.texto || "").disciplinas || []).some((d) => (d.topicos || []).some((tp) =>
+        matChave(d.nome, tp.nome) === chave || (typeof matChaveViva === "function" && matChaveViva(d.nome, tp.nome) === chave)));
+    } catch (e) { return false; }
+  };
+  const atual = typeof editalAtual !== "undefined" ? lista.find((e) => e.id === editalAtual) : null;
+  if (atual && tem(atual)) return atual.id;
+  const outro = lista.find(tem);
+  return outro ? outro.id : "";
+}
+/* uma linha por ramo: caixa (vai no pedido) + nome + "o que cobrar". lista = [{ nome, foco, incluir, novo }] — os
+ * objetos são os do chamador e mudam no lugar. opc.semCaixa: um ramo só, sem escolher. */
+function ramPedidoPintar(box, lista, opc) {
+  if (!box) return;
+  const o = opc || {};
+  box.innerHTML = "";
+  (lista || []).forEach((r) => {
+    const lin = document.createElement("div");
+    lin.className = "res-ia-ramo";
+    const lb = document.createElement("label");
+    if (!o.semCaixa) {
+      const ck = document.createElement("input");
+      ck.type = "checkbox"; ck.checked = r.incluir !== false;
+      ck.onchange = () => { r.incluir = ck.checked; if (typeof o.aoMudar === "function") o.aoMudar(); };
+      lb.append(ck);
+    }
+    const nm = document.createElement("b");
+    nm.textContent = " " + r.nome;
+    lb.append(nm);
+    if (r.novo) { const tg = document.createElement("span"); tg.className = "res-ia-novo-tag"; tg.textContent = t("ria_novo_tag"); lb.append(tg); }
+    const fc = document.createElement("input");
+    fc.type = "text"; fc.className = "mat-busca res-ia-foco"; fc.placeholder = t(o.ph || "ria_foco_ph"); fc.value = r.foco || "";
+    fc.oninput = () => { r.foco = fc.value; if (typeof o.aoMudar === "function") o.aoMudar(); };
+    lin.append(lb, fc);
+    box.append(lin);
+  });
+}
+/* os marcados, no formato do pedido */
+function ramPedidoEscolhidos(lista) {
+  return (lista || []).filter((r) => r && r.nome && r.incluir !== false).map((r) => ({ nome: r.nome, foco: r.foco || "", novo: !!r.novo }));
+}
+
 /* Q2b — O RAMO PROVÁVEL DE UMA QUESTÃO, pelas palavras (a mesma regra dos pesos: a maioria dos radicais do nome do ramo
  * aparece no enunciado/comentário/opções). Ganha o ramo com a maior proporção citada; EMPATE = sem sugestão (melhor
  * perguntar do que chutar). É só sugestão: nada é ligado sem a pessoa confirmar. */

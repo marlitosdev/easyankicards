@@ -199,19 +199,7 @@ function riaAbrir(ctx) {
 /* o edital em que o tópico mora (é nele que os ramos são escritos): o que veio de quem abriu; senão o aberto, se tiver o
  * tópico; senão o primeiro que tiver */
 function riaEditalId() {
-  if (!riaCtx) return "";
-  if (riaCtx.editalId) return riaCtx.editalId;
-  const lista = typeof editais !== "undefined" && Array.isArray(editais) ? editais : [];
-  const tem = (ed) => {
-    try {
-      return (lerEdital(ed.texto || "").disciplinas || []).some((d) => (d.topicos || []).some((tp) =>
-        matChave(d.nome, tp.nome) === riaCtx.chave || (typeof matChaveViva === "function" && matChaveViva(d.nome, tp.nome) === riaCtx.chave)));
-    } catch (e) { return false; }
-  };
-  const atual = typeof editalAtual !== "undefined" ? lista.find((e) => e.id === editalAtual) : null;
-  if (atual && tem(atual)) return atual.id;
-  const outro = lista.find(tem);
-  return outro ? outro.id : "";
+  return riaCtx ? ramEditalDoTopico(riaCtx.chave, riaCtx.editalId) : "";
 }
 /* o aviso do tópico sem ramos (só no pedido do tópico inteiro, e só se ele está num edital — os ramos moram lá) */
 function riaPintarSugRamos() {
@@ -259,32 +247,10 @@ function riaTextoAtualDoEscopo() {
 /* os ramos do pedido: caixa (incluir) + "o que cobrir"; os novos escritos pela pessoa entram marcados como novos */
 function riaPintarRamos() {
   const bx = $("resIARamos");
-  bx.innerHTML = "";
   const ramo = riaRamoAlvo();
-  const linha = (r, novo) => {
-    const lin = document.createElement("div");
-    lin.className = "res-ia-ramo";
-    const lb = document.createElement("label");
-    if (!ramo) {
-      const ck = document.createElement("input");
-      ck.type = "checkbox"; ck.checked = r.incluir !== false;
-      ck.onchange = () => { r.incluir = ck.checked; };
-      lb.append(ck);
-    }
-    const nm = document.createElement("b");
-    nm.textContent = " " + r.nome;
-    lb.append(nm);
-    if (novo) { const tg = document.createElement("span"); tg.className = "res-ia-novo-tag"; tg.textContent = t("ria_novo_tag"); lb.append(tg); }
-    const fc = document.createElement("input");
-    fc.type = "text"; fc.className = "mat-busca res-ia-foco"; fc.placeholder = t("ria_foco_ph"); fc.value = r.foco || "";
-    fc.oninput = () => { r.foco = fc.value; };
-    lin.append(lb, fc);
-    bx.append(lin);
-  };
-  if (ramo) { riaCtx.alvoFoco = riaCtx.alvoFoco || { nome: ramo.nome, foco: "" }; linha(riaCtx.alvoFoco, false); return; }
+  if (ramo) { riaCtx.alvoFoco = riaCtx.alvoFoco || { nome: ramo.nome, foco: "" }; ramPedidoPintar(bx, [riaCtx.alvoFoco], { semCaixa: true }); return; }
   if (!riaCtx.lista) riaCtx.lista = (riaCtx.ramos || []).map((r) => ({ id: r.id, nome: r.nome, foco: "", incluir: true }));
-  riaCtx.lista.forEach((r) => linha(r, false));
-  riaNovos.forEach((r) => linha(r, true));
+  ramPedidoPintar(bx, riaCtx.lista.concat(riaNovos));
   /* no edital, o aviso "ainda não tem ramos" (riaPintarSugRamos) já diz isso, com o caminho para criá-los */
   if (!riaCtx.lista.length && !riaNovos.length && !riaEditalId()) {
     const p = document.createElement("p"); p.className = "nota"; p.textContent = t("ria_sem_ramos"); bx.append(p);
@@ -295,7 +261,7 @@ function riaAcrescentarNovo() {
   if (!nome) return;
   const id = matIdDeNome(nome);
   if ((riaCtx.ramos || []).some((r) => r.id === id) || riaNovos.some((r) => matIdDeNome(r.nome) === id)) { $("resIANovo").value = ""; return; }
-  riaNovos.push({ nome, foco: "", incluir: true });
+  riaNovos.push({ nome, foco: "", incluir: true, novo: true });
   $("resIANovo").value = "";
   riaPintarRamos();
 }

@@ -925,7 +925,7 @@ function rodar() {
     edFatorReal, minutosDoTopico, minutosDeRevisao, edHistoricoDoTopico, edHistoricoTexto,
     matAlternarProva, matProvaBlocos, matProvaEstaLigada, matProvaResponder,
     matPintarProvaBotao, qsNoTexto, qsDeBlocos,
-    qsUiIniciar, qsUiCriarAbrir, qsUiConferir, qsUiAplicar, qsUiRender,
+    qsUiIniciar, qsUiCriarAbrir, qsUiConferir, qsUiAplicar, qsUiRender, qsPromptComRamos, qsPromptComPlano, qsLerPlano, qsTirarPlano, qsPlanoCobertura, qsAssuntoChave, qsPromptContinuar, qsUiPlanoContinuar, qsRamoPorNome, qsAplicarRamosLidos, qsUiCriarRamos, qsUiRamosSugeridos, qsUiCriarCheiaTrocar, qsUiEhPedido, qsUiCriarListaAtual: () => qsUiCriarLista, qsUiCriarCtx: () => qsUiCtxCriar, qsUiAchadosAtual: () => qsUiAchados, qsUiEscolhasAtual: () => qsUiEscolhas, ramEditalDoTopico, ramPedidoPintar, ramPedidoEscolhidos,
     qsUiResponderAbrir, qsUiResponderDireto, qsUiPintarSessao, qsUiPintarBotaoResumo, qsUiVirarSelecao,
     qsUiSelecaoViva,
     rsIniciar, rsPrepararPara, rsRecolher, rsAberto, rsMesmaQuestao,

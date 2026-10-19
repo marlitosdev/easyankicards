@@ -107,6 +107,98 @@ function qsPrompt(texto, ctx) {
   /* Q2 — pedido a partir de um RAMO: a IA fica sabendo que as questões são SÓ dele */
   return c.ramoNome ? qsPromptComRamo(out, c.ramoNome) : out;
 }
+/* (v18.84.0) OS RAMOS ORIENTAM O PEDIDO.
+ * Com ramos marcados, a IA distribui as questões entre eles e diz a qual cada uma pertence (linha RAMO:), e a questão
+ * já nasce ligada ao ramo. Sem ramos, ela pode SUGERIR a divisão — os nomes voltam como ramos a criar. O bloco entra
+ * antes do FORMATO, no prompt comum e no do caderno. */
+function qsPromptComRamos(prompt, ramos, sugerir) {
+  const lista = (ramos || []).filter((r) => r && r.nome);
+  if (!lista.length && !sugerir) return prompt;
+  const bloco = lista.length
+    ? t("qs_prompt_ramos", { lista: lista.map((r) => "- " + r.nome + (r.foco ? " — " + t("qs_prompt_ramos_foco", { f: r.foco }) : "")).join("\n") })
+    : t("qs_prompt_ramos_sugerir");
+  const s = String(prompt);
+  const m = s.match(/\n\n(?:FORMATO|FORMAT)\b/);
+  if (!m) return s + "\n\n" + bloco;
+  return s.slice(0, m.index) + "\n\n" + bloco + s.slice(m.index);
+}
+/* (v18.84.0) O PLANO DE EXTRAÇÃO.
+ * Material de fora (aula, PDF, caderno) é grande e a IA tende a tirar questão do começo e parar. Com o plano, ela
+ * primeiro percorre o material e escreve o CAMINHO — ramo a ramo, os assuntos que viram questão — e depois segue esse
+ * caminho, marcando RAMO: e ASSUNTO: em cada questão. O app lê o plano, mostra o que já tem questão e monta o pedido
+ * da continuação com o que falta. */
+function qsPromptComPlano(prompt) {
+  const bloco = t("qs_prompt_plano");
+  const s = String(prompt);
+  const m = s.match(/\n\n(?:FORMATO|FORMAT)\b/);
+  if (!m) return s + "\n\n" + bloco;
+  return s.slice(0, m.index) + "\n\n" + bloco + s.slice(m.index);
+}
+/* o assunto sem o "onde está" (parênteses ou travessão no fim), para comparar */
+function qsAssuntoChave(a) {
+  return qsNormal(String(a || "").replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+[—–-]\s+.*$/, "")).replace(/\s+/g, " ").trim();
+}
+/* o bloco [PLANO] da resposta: [{ ramo, assunto }] e os ramos "sem conteúdo no material" */
+function qsLerPlano(txt) {
+  const s = String(txt || "");
+  const out = { itens: [], semConteudo: [], tem: false };
+  const re = /\[\s*PLANO\s*\]([\s\S]*?)(?:\[\s*\/\s*PLANO\s*\]|(?=\[\s*QUEST[ÃA]O\s*\])|$)/gi;
+  let m;
+  while ((m = re.exec(s))) {
+    out.tem = true;
+    let ramo = "";
+    m[1].split(/\r?\n/).forEach((l0) => {
+      const l = l0.trim();
+      if (!l) return;
+      const mr = l.match(/^RAMO\s*:\s*(.*)$/i);
+      if (mr) {
+        const partes = mr[1].split(/\s+[—–-]\s+/);
+        ramo = partes[0].trim();
+        if (partes.length > 1 && /sem conte[úu]do|no content|not covered/i.test(partes.slice(1).join(" "))) out.semConteudo.push(ramo);
+        return;
+      }
+      const mi = l.match(/^(?:[-*•]|\d+[.)])\s*(.+)$/);
+      if (mi && mi[1].trim()) out.itens.push({ ramo, assunto: mi[1].trim(), chave: qsAssuntoChave(mi[1]) });
+    });
+  }
+  return out;
+}
+/* a resposta sem o plano e sem as linhas FALTA: (que não são questão) */
+function qsTirarPlano(txt) {
+  return String(txt || "")
+    .replace(/\[\s*PLANO\s*\][\s\S]*?(?:\[\s*\/\s*PLANO\s*\]|(?=\[\s*QUEST[ÃA]O\s*\])|$)/gi, "\n")
+    .replace(/^\s*FALTA\s*:.*$/gim, "");
+}
+/* quais assuntos do plano já têm questão (pelo ASSUNTO: escrito; um contém o outro também vale) */
+function qsPlanoCobertura(plano, questoes) {
+  const chaves = (questoes || []).map((q) => qsAssuntoChave(q.assunto)).filter(Boolean);
+  const casa = (k) => !!k && chaves.some((c) => c === k || (Math.min(c.length, k.length) >= 6 && (c.indexOf(k) >= 0 || k.indexOf(c) >= 0)));
+  const itens = ((plano && plano.itens) || []).map((it) => Object.assign({}, it, { feito: casa(it.chave) }));
+  return { itens, feitos: itens.filter((x) => x.feito).length, faltam: itens.filter((x) => !x.feito) };
+}
+function qsPromptContinuar(faltam) {
+  return t("qs_prompt_continuar", { lista: (faltam || []).map((x) => "- " + (x.ramo ? x.ramo + " › " : "") + x.assunto).join("\n") });
+}
+/* o nome escrito pela IA → o ramo do tópico (mesmo id do nome; tolera numeração, aspas e "Ramo —" na frente) */
+function qsRamoPorNome(nome, ramos) {
+  const limpo = String(nome || "").replace(/^\s*(?:ramo\s*[:—–-]\s*)?/i, "").replace(/^\s*\d+[.)]\s*/, "")
+    .replace(/^["“'«]+|["”'»]+$/g, "").trim();
+  if (!limpo || /^[(\[]?\s*(vazio|nenhum|none|empty|—|-)\s*[)\]]?$/i.test(limpo)) return { nome: "" };
+  const id = typeof edRamoId === "function" ? edRamoId(limpo) : limpo.toLowerCase();
+  const r = (ramos || []).find((x) => x && (x.id === id || (typeof edRamoId === "function" && edRamoId(x.nome) === id)));
+  return r ? { id: r.id, nome: r.nome } : { nome: limpo };
+}
+/* liga as questões lidas aos ramos pelo RAMO: escrito; nome que não é ramo fica como SUGESTÃO (ramoSugerido) */
+function qsAplicarRamosLidos(achados, ramos) {
+  (achados || []).forEach((q) => {
+    if (q.ramoTxt === undefined) return;
+    const r = qsRamoPorNome(q.ramoTxt, ramos);
+    delete q.ramoTxt;
+    if (r.id) { q.ramo = r.id; q.ramoNome = r.nome; delete q.ramoSugerido; }
+    else if (r.nome) q.ramoSugerido = r.nome;
+  });
+  return achados;
+}
 /* acrescenta a linha do ramo logo depois da linha do tópico do CONTEXTO (PT "Tópico:", EN "Topic:") */
 function qsPromptComRamo(prompt, ramoNome) {
   const linha = t("qs_prompt_ramo_linha", { r: ramoNome });
@@ -145,7 +237,7 @@ function qsAbrirCampos(txt) {
      * Com "\\s*" ali, um campo vazio ("BANCA:" sozinho na linha) engolia a
      * quebra seguinte e grudava o campo de baixo dentro dele — a banca
      * vazia virava "BANCA: ENUNCIADO: …" e o enunciado sumia. */
-    .replace(/(^|[^\S\n])(TIPO|BANCA|ENUNCIADO|GABARITO|COMENT[ÁA]RIO)[ \t]*:[ \t]*/gim,
+    .replace(/(^|[^\S\n])(TIPO|RAMO|ASSUNTO|BANCA|ENUNCIADO|GABARITO|COMENT[ÁA]RIO)[ \t]*:[ \t]*/gim,
              (mm, antes, nome) => "\n" + nome.toUpperCase() + ": ")
     .replace(/\n{3,}/g, "\n\n");
 }
@@ -202,6 +294,8 @@ function qsLerResposta(txt, ctx) {
    * não podem parar de funcionar. */
   const CAMPOS = {
     tipo: /^TIPO\s*:\s*(.*)$/i,
+    ramo: /^RAMO\s*:\s*(.*)$/i,
+    assunto: /^ASSUNTO\s*:\s*(.*)$/i,
     banca: /^BANCA\s*:\s*(.*)$/i,
     enunciado: /^ENUNCIADO\s*:\s*(.*)$/i,
     gabarito: /^GABARITO\s*:\s*(.*)$/i,
@@ -255,6 +349,8 @@ function qsLerResposta(txt, ctx) {
        * não sobrar como linha solta dentro do enunciado. */
       if (k === "tipo") atual.tipo = qsNormal(v).indexOf("ce") === 0 ? "ce" : "me";
       else if (k === "gabarito") atual.gabarito = v.toUpperCase().slice(0, 1);
+      /* o ramo escrito é um NOME: vira ligação depois, quando se sabe os ramos do tópico */
+      else if (k === "ramo") atual.ramoTxt = v;
       else atual[k] = v;
       campoAberto = k;
     });
@@ -326,7 +422,8 @@ function qsLerResposta(txt, ctx) {
   fechar();
 
   /* Q2 — criadas a partir de um RAMO: já nascem ligadas a ele */
-  if (c.ramo) achados.forEach((q) => { q.ramo = c.ramo; q.ramoNome = c.ramoNome || ""; });
+  if (c.ramo) achados.forEach((q) => { q.ramo = c.ramo; q.ramoNome = c.ramoNome || ""; delete q.ramoTxt; });
+  else qsAplicarRamosLidos(achados, c.ramos || []);
   return { achados, ignoradas };
 }
 
