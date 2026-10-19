@@ -69,6 +69,8 @@ function qsUiCriarAbrir(texto, ctx, origem) {
   qsUiCtxCriar = ctx || null;
   qsUiAchados = null;
   qsUiDoTexto = [];
+  /* (v18.84.0) os ramos do tópico orientam o pedido e a conferência */
+  qsUiCriarRamosPreparar();
   const t0 = String(texto || "").trim();
   /* SEM RESUMO NÃO É SEM QUESTÃO.
    *
@@ -84,7 +86,7 @@ function qsUiCriarAbrir(texto, ctx, origem) {
 
   /* 1. o que JÁ está escrito, sem IA nenhuma */
   const blocos = qsNoTexto(t0);
-  qsUiDoTexto = qsDeBlocos(blocos.filter((b) => b.completa), ctx || {});
+  qsUiDoTexto = qsUiPalpitarRamos(qsDeBlocos(blocos.filter((b) => b.completa), ctx || {}));
   const incompletos = blocos.filter((b) => !b.completa).map((b) => ({
     linha: b.ini + 1, txt: String(b.enunciado || "").slice(0, 70),
     motivo: b.gabarito ? "sem_enunciado" : "sem_gabarito",
@@ -102,6 +104,9 @@ function qsUiCriarAbrir(texto, ctx, origem) {
   }
   if ($("qsFonteOutro")) $("qsFonteOutro").checked = !t0;
   if ($("qsFonteCaderno")) $("qsFonteCaderno").checked = false;
+  if ($("qsCriarPlanejar")) $("qsCriarPlanejar").checked = !t0;
+  qsUiPlano = null;
+  qsUiPintarPlano();
   /* o prompt volta recolhido a cada abertura: ele é para copiar, não
    * para ler, e aberto empurra para baixo o campo que a pessoa usa */
   if ($("qsCriarPrompt")) $("qsCriarPrompt").hidden = true;
@@ -109,6 +114,10 @@ function qsUiCriarAbrir(texto, ctx, origem) {
   if ($("qsCriarFonte")) { $("qsCriarFonte").value = ""; $("qsCriarFonte").hidden = true; }
   qsUiRefazerPrompt();
   $("qsCriarResposta").value = "";
+  qsUiCriarPassos(1);
+  qsUiCriarSem("vazio", t("qs_sem_vazio"));
+  if ($("qsCriarCopiadoMsg")) $("qsCriarCopiadoMsg").textContent = "";
+  qsUiCriarPintarNovosRamos();
   /* deixa explícito ONDE elas vão parar: é isto que faz os filtros da aba
    * funcionarem depois, e vale igual quando o material vem de fora — a
    * fonte muda, o arquivamento não. */
@@ -428,11 +437,18 @@ function qsUiRefazerPrompt() {
    * a única vantagem real do caderno, e ainda abre a porta para ela
    * inventar de memória. O prompt do caderno exige o contrário: só o que
    * está nas fontes, com a citação de onde saiu. */
-  $("qsCriarPrompt").value = f.caderno
+  let pr = f.caderno
     ? qsPromptCaderno(qsUiCtxCriar || {})
     : (f.externo
         ? qsPrompt(t("qs_marca_material"), qsUiCtxCriar || {})
         : qsPrompt(qsUiTextoBase, qsUiCtxCriar || {}));
+  const c = qsUiCtxCriar || {};
+  if (!c.ramo && typeof ramPedidoEscolhidos === "function") {
+    const sug = !!($("qsCriarSugerir") && $("qsCriarSugerir").checked && $("qsCriarSugerirLin") && !$("qsCriarSugerirLin").hidden);
+    pr = qsPromptComRamos(pr, ramPedidoEscolhidos(qsUiCriarLista), sug);
+  }
+  if ($("qsCriarPlanejar") && $("qsCriarPlanejar").checked) pr = qsPromptComPlano(pr);
+  $("qsCriarPrompt").value = pr;
   if ($("btnQsCopiarPrompt")) $("btnQsCopiarPrompt").disabled = false;
 }
 
@@ -456,16 +472,294 @@ function qsPareceRespostaDeIA(txt) {
     || /^\s*(TIPO|BANCA|ENUNCIADO)\s*:/im.test(txt);
 }
 
+/* =====================================================================
+ * (v18.84.0) OS RAMOS NA CRIAÇÃO DE QUESTÕES
+ *
+ * "Permitir utilizar as ramificações como referência para orientar a criação de questões; permitir criá-las neste
+ * momento, por sugestão da IA ou à mão." O formato é o do resumo pela IA (ramos.js: ramPedidoPintar): os ramos
+ * marcados vão no pedido, cada um com "o que cobrar", e a IA diz o RAMO de cada questão — que nasce ligada a ele.
+ * Sem ramos: criar agora pelo editor de sempre (à mão, pela lei, pela IA) ou deixar a IA sugerir a divisão; os nomes
+ * sugeridos voltam na resposta e viram ramos com um clique, sempre conferidos no editor antes de salvar.
+ * ===================================================================== */
+let qsUiCriarLista = [];   /* os ramos no pedido: [{ id, nome, foco, incluir }] */
+let qsUiConfIgn = [];      /* as recusadas da última conferência (para repintar sem perdê-las) */
+function qsUiCriarRamosPreparar() {
+  const c = qsUiCtxCriar;
+  qsUiCriarLista = [];
+  if (c) {
+    const ramos = Array.isArray(c.ramos) ? c.ramos : (c.chave ? qsUiRamosDoTopico(c.chave) : []);
+    c.ramos = (ramos || []).filter((r) => r && r.nome).map((r) => ({ id: r.id || (typeof edRamoId === "function" ? edRamoId(r.nome) : r.nome), nome: r.nome }));
+    c.editalId = c.chave && typeof ramEditalDoTopico === "function" ? ramEditalDoTopico(c.chave, c.editalId) : (c.editalId || "");
+    qsUiCriarLista = c.ramos.map((r) => ({ id: r.id, nome: r.nome, foco: "", incluir: true }));
+  }
+  if ($("qsCriarSugerir")) $("qsCriarSugerir").checked = false;
+  if ($("qsCriarRamosMsg")) $("qsCriarRamosMsg").textContent = "";
+  qsUiCriarPintarRamos();
+}
+function qsUiCriarPodeCriarRamos() {
+  const c = qsUiCtxCriar;
+  return !!(c && c.editalId && c.disciplina && c.topico && typeof ramAbrirEditor === "function");
+}
+function qsUiCriarPintarRamos() {
+  const box = $("qsCriarRamosBox");
+  if (!box) return;
+  const c = qsUiCtxCriar;
+  const tem = !!(c && c.ramos && c.ramos.length);
+  const pode = qsUiCriarPodeCriarRamos();
+  /* criação de UM ramo (veio do menu do ramo): o pedido já é só dele — nada a escolher aqui */
+  box.hidden = !c || !!c.ramo || (!tem && !pode);
+  if (box.hidden) return;
+  if (typeof ramPedidoPintar === "function") ramPedidoPintar($("qsCriarRamos"), tem ? qsUiCriarLista : [], { ph: "qs_ramos_foco_ph", aoMudar: qsUiRefazerPrompt });
+  $("qsCriarRamosRot").hidden = !tem;
+  $("qsCriarSugRamos").hidden = tem;
+  $("qsCriarSugerirLin").hidden = tem;
+  $("qsCriarAjustarLin").hidden = !tem || !pode;
+}
+/* abre o editor de ramos (com os nomes acrescentados, se vierem); ao salvar, o pedido e a conferência passam a usá-los */
+function qsUiCriarRamos(nomes) {
+  const c = qsUiCtxCriar;
+  if (!qsUiCriarPodeCriarRamos()) return false;
+  return ramAbrirEditor({ editalId: c.editalId, disciplina: c.disciplina, topico: c.topico, chave: c.chave, acrescentar: nomes || [],
+    depois: (r) => {
+      c.ramos = ((r && r.ramos) || []).map((x) => ({ id: x.id, nome: x.nome }));
+      const antes = {};
+      qsUiCriarLista.forEach((x) => { antes[x.id] = x; });
+      qsUiCriarLista = c.ramos.map((x) => antes[x.id] ? Object.assign(antes[x.id], { nome: x.nome }) : { id: x.id, nome: x.nome, foco: "", incluir: true });
+      /* as conferidas com o nome de um ramo que agora existe passam a ser dele; as ligadas a ramo apagado voltam ao tópico */
+      (qsUiAchados || []).forEach((q) => {
+        if (q.ramoSugerido) {
+          const m = qsRamoPorNome(q.ramoSugerido, c.ramos);
+          if (m.id) { q.ramo = m.id; q.ramoNome = m.nome; delete q.ramoSugerido; delete q._ramoPalpite; }
+        } else if (q.ramo && !c.ramo && !c.ramos.some((x) => x.id === q.ramo)) { delete q.ramo; delete q.ramoNome; }
+      });
+      if ($("qsCriarSugerir")) $("qsCriarSugerir").checked = false;
+      qsUiCriarPintarRamos();
+      qsUiRefazerPrompt();
+      if (qsUiAchados) qsUiRepintarConf();
+      qsUiCriarPintarNovosRamos();
+      if ($("qsCriarRamosMsg")) $("qsCriarRamosMsg").textContent = t("qs_ramos_criados", { n: c.ramos.length });
+    } });
+}
+/* os nomes que a IA usou e ainda não são ramos */
+function qsUiRamosSugeridos() {
+  const vistos = {};
+  const out = [];
+  const por = (n0) => {
+    const n = String(n0 || "").trim();
+    const id = typeof edRamoId === "function" ? edRamoId(n) : n.toLowerCase();
+    if (n && !vistos[id]) { vistos[id] = 1; out.push(n); }
+  };
+  (qsUiAchados || []).forEach((q) => por(q.ramoSugerido));
+  const ramos = (qsUiCtxCriar && qsUiCtxCriar.ramos) || [];
+  if (qsUiPlano && !(qsUiCtxCriar && qsUiCtxCriar.ramo)) qsUiPlano.itens.forEach((it) => { if (it.ramo && !qsRamoPorNome(it.ramo, ramos).id) por(qsRamoPorNome(it.ramo, ramos).nome); });
+  return out;
+}
+function qsUiCriarPintarNovosRamos() {
+  const b = $("btnQsCriarNovosRamos");
+  if (!b) return;
+  const nomes = qsUiRamosSugeridos();
+  b.hidden = !nomes.length || !qsUiCriarPodeCriarRamos();
+  b.textContent = t("qs_criar_novos_ramos", { n: nomes.length });
+}
+/* sem RAMO escrito (texto pronto, questão já no resumo, IA que esqueceu), um palpite pelas palavras — visível e
+ * trocável na conferência, nunca escondido */
+function qsUiPalpitarRamos(lista) {
+  const c = qsUiCtxCriar || {};
+  if (c.ramo || !(c.ramos || []).length || typeof ramSugerirRamoDaQuestao !== "function") return lista;
+  (lista || []).forEach((q) => {
+    if (!q || q.ramo || q.ramoSugerido) return;
+    const r = ramSugerirRamoDaQuestao(q, c.ramos);
+    if (r && r.id) { q.ramo = r.id; q.ramoNome = r.nome; q._ramoPalpite = true; }
+  });
+  return lista;
+}
+function qsUiConfRamoLinha(q) {
+  const c = qsUiCtxCriar || {};
+  const ramos = c.ramos || [];
+  if (!ramos.length && !q.ramoSugerido && !q.assunto) return null;
+  const d = document.createElement("div");
+  d.className = "qs-conf-ramo";
+  let pal = null;
+  if (q.assunto) {
+    const as = document.createElement("span");
+    as.className = "qs-conf-assunto";
+    as.textContent = t("qs_conf_assunto", { a: q.assunto });
+    d.append(as);
+  }
+  if (ramos.length) {
+    const lb = document.createElement("label");
+    lb.append(document.createTextNode(t("qs_conf_ramo_rot") + " "));
+    const sel = document.createElement("select");
+    const op0 = document.createElement("option");
+    op0.value = ""; op0.textContent = t("qs_conf_ramo_todo");
+    sel.append(op0);
+    ramos.forEach((r) => { const o = document.createElement("option"); o.value = r.id; o.textContent = r.nome; sel.append(o); });
+    sel.value = q.ramo && ramos.some((r) => r.id === q.ramo) ? q.ramo : "";
+    sel.onchange = () => {
+      const r = ramos.find((x) => x.id === sel.value);
+      if (r) { q.ramo = r.id; q.ramoNome = r.nome; } else { delete q.ramo; delete q.ramoNome; }
+      delete q._ramoPalpite;
+      if (pal) pal.hidden = true;
+    };
+    lb.append(sel);
+    d.append(lb);
+    if (q._ramoPalpite) {
+      pal = document.createElement("span");
+      pal.className = "qs-conf-ramo-palpite";
+      pal.textContent = t("qs_conf_ramo_palpite");
+      d.append(pal);
+    }
+  }
+  if (q.ramoSugerido) {
+    const s = document.createElement("span");
+    s.className = "qs-conf-ramo-sug";
+    s.textContent = t("qs_conf_ramo_sug", { r: q.ramoSugerido });
+    d.append(s);
+  }
+  return d;
+}
+/* repinta a conferência mantendo o que a pessoa marcou e desmarcou */
+function qsUiRepintarConf() {
+  const marc = new Map();
+  (qsUiEscolhas || []).forEach((e) => marc.set(e.q, e.cb.checked));
+  qsUiPintarConf(qsUiAchados || [], qsUiConfIgn || []);
+  qsUiEscolhas.forEach((e) => { if (marc.has(e.q)) e.cb.checked = marc.get(e.q); });
+  if (qsUiEscolhas[0] && typeof qsUiEscolhas[0].cb.onchange === "function") qsUiEscolhas[0].cb.onchange();
+}
+/* O PLANO NA TELA: ramo a ramo, os assuntos com ✓ (já têm questão) ou ○ (faltam), os ramos sem conteúdo no material,
+ * e o pedido da continuação com SÓ o que falta — para cumprir a extração em várias rodadas na mesma conversa. */
+let qsUiPlano = null;
+function qsUiPlanoCobertura() {
+  if (!qsUiPlano) return null;
+  return qsPlanoCobertura(qsUiPlano, qsUiAchados || []);
+}
+function qsUiPintarPlano() {
+  const box = $("qsCriarPlano");
+  if (!box) return;
+  box.innerHTML = "";
+  const cob = qsUiPlanoCobertura();
+  box.hidden = !cob || !cob.itens.length;
+  if (box.hidden) return;
+  const cab = document.createElement("div");
+  cab.className = "qs-plano-tit";
+  cab.textContent = t("qs_plano_tit", { f: cob.feitos, n: cob.itens.length });
+  box.append(cab);
+  const grupos = [];
+  cob.itens.forEach((it) => {
+    let g = grupos.find((x) => x.ramo === it.ramo);
+    if (!g) { g = { ramo: it.ramo, itens: [] }; grupos.push(g); }
+    g.itens.push(it);
+  });
+  grupos.forEach((g) => {
+    const gr = document.createElement("div");
+    gr.className = "qs-plano-ramo";
+    const nm = document.createElement("b");
+    nm.textContent = g.ramo || t("qs_plano_geral");
+    gr.append(nm);
+    g.itens.forEach((it) => {
+      const li = document.createElement("div");
+      li.className = "qs-plano-item" + (it.feito ? " feito" : "");
+      li.textContent = (it.feito ? "✓ " : "○ ") + it.assunto;
+      gr.append(li);
+    });
+    box.append(gr);
+  });
+  (qsUiPlano.semConteudo || []).forEach((rn) => {
+    const s = document.createElement("div");
+    s.className = "qs-plano-item qs-plano-sem";
+    s.textContent = "— " + rn + ": " + t("qs_plano_sem");
+    box.append(s);
+  });
+  const acoes = document.createElement("div");
+  acoes.className = "qs-criar-acoes";
+  if (cob.faltam.length) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min btn-min-ok";
+    b.id = "btnQsPlanoContinuar";
+    b.textContent = t("qs_plano_continuar", { n: cob.faltam.length });
+    b.title = t("qs_plano_continuar_tip");
+    b.onclick = () => qsUiPlanoContinuar();
+    acoes.append(b);
+  } else {
+    const p = document.createElement("span");
+    p.className = "qs-plano-ok";
+    p.textContent = t("qs_plano_completo");
+    acoes.append(p);
+  }
+  const msg = document.createElement("span");
+  msg.className = "nota";
+  msg.id = "qsPlanoMsg";
+  msg.setAttribute("role", "status");
+  acoes.append(msg);
+  box.append(acoes);
+}
+function qsUiPlanoContinuar() {
+  const cob = qsUiPlanoCobertura();
+  if (!cob || !cob.faltam.length) return "";
+  const txt = qsPromptContinuar(cob.faltam);
+  const msg = $("qsPlanoMsg");
+  try {
+    const p = navigator.clipboard.writeText(txt);
+    if (p && typeof p.catch === "function") p.catch(() => { if (msg) msg.textContent = t("qs_copiado_falhou"); });
+    if (msg) msg.textContent = t("qs_plano_copiado");
+  } catch (e) { if (msg) msg.textContent = t("qs_copiado_falhou"); }
+  try { gerReg("questoes", "prompt", "continuação do plano copiada", cob.faltam.length + " assunto(s) sem questão", { topico: (qsUiCtxCriar || {}).topico || "", disciplina: (qsUiCtxCriar || {}).disciplina || "" }); } catch (e) {}
+  return txt;
+}
+/* o pedido (este ou o do caderno) colado na caixa da RESPOSTA */
+function qsUiEhPedido(txt) {
+  return /Crie questões de concurso a partir do TEXTO|Create exam questions from the TEXT|Você está num caderno com FONTES|FORMATO — repita este bloco|FORMAT — repeat this block|\(CE = certo\/errado/i.test(String(txt || ""));
+}
+/* passos: 1 = montar e copiar (ativo) · 2 = trazer a resposta (ativo, 1 feito) · 3 = resposta lida (os dois feitos) */
+function qsUiCriarPassos(n) {
+  const p1 = $("qsCriarPasso1"), p2 = $("qsCriarPasso2");
+  if (!p1 || !p2) return;
+  p1.className = "ednovo-passo " + (n === 1 ? "ativo" : "feito");
+  p2.className = "ednovo-passo" + (n === 2 ? " ativo" : n === 3 ? " feito" : "");
+}
+function qsUiCriarSem(tipo, txt) {
+  const box = $("qsCriarSem");
+  if (!box) return;
+  box.className = "ednovo-sem sem-" + tipo;
+  $("qsCriarSemIco").textContent = { vazio: "○", ok: "✓", atencao: "!", erro: "✕" }[tipo] || "○";
+  $("qsCriarSemTxt").textContent = txt || "";
+}
+/* TELA CHEIA: a mesma dos leitores (telaCheiaPedir, app.js); fechar a janela sai junto */
+let qsCriarCheia = false;
+function qsUiCriarCheiaTrocar(sim) {
+  const dlg = $("dlgQsCriar");
+  if (!dlg) return false;
+  qsCriarCheia = sim === undefined ? !qsCriarCheia : !!sim;
+  dlg.classList.toggle("qs-criar-cheia", qsCriarCheia);
+  const b = $("btnQsCriarCheia");
+  if (b) { b.textContent = t(qsCriarCheia ? "qs_criar_cheia_sair" : "qs_criar_cheia"); b.setAttribute("aria-pressed", String(qsCriarCheia)); }
+  if (qsCriarCheia) { if (typeof telaCheiaPedir === "function") telaCheiaPedir("questoes", () => { if (qsCriarCheia) qsUiCriarCheiaTrocar(false); }); }
+  else if (typeof telaCheiaSair === "function") telaCheiaSair("questoes");
+  try { matReg("questao", qsCriarCheia ? "criação de questões em tela cheia" : "criação de questões no tamanho padrão", ""); } catch (e) {}
+  return qsCriarCheia;
+}
+
 function qsUiConferir() {
   const bruto = $("qsCriarResposta").value;
+  /* O PEDIDO COLADO NA CAIXA DA RESPOSTA traz o bloco-modelo do formato ([QUESTAO] … "o texto da questão") — lido,
+   * ele virava uma questão fantasma. Não lê: diz o que aconteceu. */
+  if (qsUiEhPedido(bruto)) {
+    qsUiPintarConf(qsUiDoTexto.slice(), []);
+    qsUiCriarSem("erro", t("qs_sem_pedido"));
+    qsUiCriarPintarNovosRamos();
+    return;
+  }
   /* A MESMA CAIXA aceita ou a resposta da IA (os dois formatos que
    * qsLerResposta entende) OU um texto de prova já pronto — enunciado,
    * alternativas a)...e), "Comentário:" e "Gabarito:" — copiado direto de
    * um PDF ou cursinho, sem passar pela IA. qsNoTexto(..., {solto:true}) é
    * o mesmo detector usado no resumo, só sem exigir a palavra "Questão". */
-  const ehRespostaDeIA = qsPareceRespostaDeIA(bruto);
-  const r = ehRespostaDeIA ? qsLerResposta(bruto, qsUiCtxCriar || {}) : { achados: [], ignoradas: [] };
-  const blocosProntos = ehRespostaDeIA ? [] : qsNoTexto(bruto, { solto: true });
+  const plano = qsLerPlano(bruto);
+  const semPlano = plano.tem || /^\s*FALTA\s*:/im.test(bruto) ? qsTirarPlano(bruto) : bruto;
+  const ehRespostaDeIA = qsPareceRespostaDeIA(semPlano);
+  const r = ehRespostaDeIA ? qsLerResposta(semPlano, qsUiCtxCriar || {}) : { achados: [], ignoradas: [] };
+  const blocosProntos = ehRespostaDeIA ? [] : qsNoTexto(semPlano, { solto: true });
   const prontas = qsDeBlocos(blocosProntos.filter((b) => b.completa), qsUiCtxCriar || {});
   const incompletas = blocosProntos.filter((b) => !b.completa).map((b) => ({
     linha: b.ini + 1, txt: String(b.enunciado || "").slice(0, 70),
@@ -483,7 +777,18 @@ function qsUiConferir() {
     }
     juntas.push(q);
   });
-  qsUiPintarConf(juntas, ignoradas);
+  qsUiPintarConf(qsUiPalpitarRamos(juntas), ignoradas);
+  {
+    const lidas0 = r.achados.length + prontas.length;
+    if (!String(bruto).trim()) qsUiCriarSem("vazio", t("qs_sem_vazio"));
+    else if (!lidas0) qsUiCriarSem("erro", t("qs_sem_nada"));
+    else if (ignoradas.length) qsUiCriarSem("atencao", t("qs_sem_avisos", { n: lidas0, r: ignoradas.length }));
+    else qsUiCriarSem("ok", t("qs_sem_ok", { n: lidas0 }));
+    if (lidas0) qsUiCriarPassos(3);
+    qsUiPlano = plano.tem ? plano : null;
+    qsUiPintarPlano();
+    qsUiCriarPintarNovosRamos();
+  }
   /* REGISTRO PARA MELHORAR O PROMPT.
    * Só o total não ajuda: para saber o que ajustar é preciso saber POR QUE
    * cada uma foi recusada e quantas de cada motivo. É este detalhe que
@@ -522,6 +827,7 @@ function qsUiConferir() {
 function qsUiPintarConf(achados, ignoradas) {
   const r = { achados: achados || [], ignoradas: ignoradas || [] };
   qsUiAchados = r.achados;
+  qsUiConfIgn = r.ignoradas;
   qsUiEscolhas = [];
   const box = $("qsCriarConf");
   box.innerHTML = "";
@@ -561,6 +867,8 @@ function qsUiPintarConf(achados, ignoradas) {
       cm.textContent = q.comentario;
       li.append(cm);
     }
+    const rmLin = qsUiConfRamoLinha(q);
+    if (rmLin) li.append(rmLin);
 
     if (par) {
       /* MOSTRA A OUTRA. Dizer "repetida" sem mostrar contra o quê obriga a
@@ -3799,6 +4107,19 @@ function qsUiIniciar() {
    * esta tela, no arranque, e não a montagem preguiçosa do rascunho */
   try { rsGatilhosIniciar(); } catch (e) {}
   if ($("btnQsConferir")) $("btnQsConferir").onclick = () => qsUiConferir();
+  /* (v18.84.0) a resposta é lida sozinha, logo depois de colar ou de parar de digitar */
+  if ($("qsCriarResposta")) {
+    let tmResp = null;
+    $("qsCriarResposta").oninput = () => { clearTimeout(tmResp); tmResp = setTimeout(() => qsUiConferir(), 700); };
+  }
+  if ($("btnQsCriarCheia")) $("btnQsCriarCheia").onclick = () => qsUiCriarCheiaTrocar();
+  if ($("dlgQsCriar") && $("dlgQsCriar").addEventListener) {
+    $("dlgQsCriar").addEventListener("close", () => { if (qsCriarCheia) qsUiCriarCheiaTrocar(false); });
+  }
+  if ($("btnQsCriarRamosAgora")) $("btnQsCriarRamosAgora").onclick = () => qsUiCriarRamos([]);
+  if ($("btnQsCriarAjustarRamos")) $("btnQsCriarAjustarRamos").onclick = () => qsUiCriarRamos([]);
+  if ($("btnQsCriarNovosRamos")) $("btnQsCriarNovosRamos").onclick = () => qsUiCriarRamos(qsUiRamosSugeridos());
+  if ($("qsCriarSugerir")) $("qsCriarSugerir").onchange = () => qsUiRefazerPrompt();
   /* colar direto o que a IA devolveu, sem trocar de janela */
   if ($("btnQsColar")) {
     $("btnQsColar").onclick = async () => {
@@ -3823,8 +4144,13 @@ function qsUiIniciar() {
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
   ["qsFonteResumo", "qsFonteOutro", "qsFonteCaderno"].forEach((id) => {
-    if ($(id)) $(id).onchange = () => qsUiRefazerPrompt();
+    if ($(id)) $(id).onchange = () => {
+      /* material de fora é grande: o plano de extração vem ligado; o resumo do próprio tópico não precisa */
+      if ($("qsCriarPlanejar")) $("qsCriarPlanejar").checked = id !== "qsFonteResumo";
+      qsUiRefazerPrompt();
+    };
   });
+  if ($("qsCriarPlanejar")) $("qsCriarPlanejar").onchange = () => qsUiRefazerPrompt();
   if ($("qsCriarFonte")) $("qsCriarFonte").oninput = () => qsUiRefazerPrompt();
   if ($("btnQsVerPrompt")) {
     $("btnQsVerPrompt").onclick = () => {
@@ -3838,8 +4164,16 @@ function qsUiIniciar() {
   if ($("btnQsCopiarPrompt")) {
     $("btnQsCopiarPrompt").onclick = () => {
       let copiou = true;
-      try { navigator.clipboard.writeText($("qsCriarPrompt").value); }
-      catch (e) { copiou = false; }
+      const msgC = $("qsCriarCopiadoMsg");
+      const falhou = () => { if (msgC) msgC.textContent = t("qs_copiado_falhou"); qsUiCriarPassos(1); };
+      try {
+        const pC = navigator.clipboard.writeText($("qsCriarPrompt").value);
+        if (pC && typeof pC.catch === "function") pC.catch(falhou);
+      } catch (e) { copiou = false; }
+      if (copiou) {
+        if (msgC) msgC.textContent = t("qs_copiado_msg", { n: $("qsCriarPrompt").value.length });
+        qsUiCriarPassos(2);
+      } else falhou();
       const b = $("btnQsCopiarPrompt");
       const r = b.textContent;
       b.textContent = t("copied");

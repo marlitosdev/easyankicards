@@ -2347,6 +2347,39 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
   color:var(--sutil)}
 .qs-num{display:inline-flex;width:17px;height:17px;border-radius:50%;background:var(--borda);
   color:var(--texto);align-items:center;justify-content:center;font-size:10px;font-weight:700}
+/* (v18.84.0) virar texto em questões: dois passos, ramos no pedido, tela cheia */
+.qs-criar-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.qs-criar-cab h3{margin-right:auto}
+#dlgQsCriar > p.nota{margin:2px 0 5px}
+.qs-criar-rot{font-size:12px;font-weight:700;color:var(--sutil);margin:6px 0 2px}
+#dlgQsCriar .qs-fonte label{border:1px solid var(--borda);border-radius:999px;padding:3px 10px}
+#dlgQsCriar .qs-fonte label:has(input:checked){border-color:var(--acao);background:color-mix(in srgb,var(--acao) 14%,transparent);font-weight:700}
+.qs-criar-ramos{margin:8px 0 4px;padding-top:6px;border-top:1px dashed var(--borda)}
+.qs-criar-acoes{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin:8px 0 2px}
+.qs-conf-ramo{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:4px 0 0;font-size:12px}
+.qs-conf-ramo select{font-size:12px;max-width:100%}
+.qs-conf-ramo-sug{font-size:11.5px;color:var(--ok)}
+.qs-conf-ramo-palpite{font-size:11px;color:var(--atencao)}
+.qs-conf-assunto{font-size:11.5px;color:var(--sutil)}
+#dlgQsCriar .qs-criar-planejar,#dlgQsCriar #qsCriarSugerirLin{flex-wrap:nowrap;align-items:flex-start;margin:8px 0 2px}
+#dlgQsCriar .qs-criar-planejar input,#dlgQsCriar #qsCriarSugerirLin input{flex:0 0 auto;margin-top:2px}
+#dlgQsCriar .qs-criar-planejar span,#dlgQsCriar #qsCriarSugerirLin span{flex:1 1 auto}
+.qs-criar-plano{margin:8px 0;padding:8px 10px;border:1px solid var(--info);border-radius:9px;font-size:12.5px;background:color-mix(in srgb,var(--info) 7%,transparent)}
+.qs-plano-tit{font-weight:700;margin-bottom:4px}
+.qs-plano-ramo{margin:4px 0}
+.qs-plano-item{padding-left:12px;color:var(--sutil)}
+.qs-plano-item.feito{color:var(--ok)}
+.qs-plano-sem{font-style:italic}
+.qs-plano-ok{color:var(--ok);font-weight:700}
+#dlgQsCriar.qs-criar-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
+  margin:0;border:0;border-radius:0;padding:10px 18px 0;box-sizing:border-box;display:flex;flex-direction:column}
+#dlgQsCriar.qs-criar-cheia .qs-criar-corpo{flex:1 1 auto;min-height:0;overflow:auto}
+#dlgQsCriar.qs-criar-cheia #qsCriarResposta{min-height:28vh}
+#dlgQsCriar.qs-criar-cheia .qs-conf-lista{max-height:none}
+@media (min-width:1000px){
+  #dlgQsCriar.qs-criar-cheia .qs-criar-corpo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;overflow:hidden}
+  #dlgQsCriar.qs-criar-cheia .qs-criar-esq,#dlgQsCriar.qs-criar-cheia .qs-criar-dir{overflow:auto;min-height:0;padding-right:4px}
+}
 .qs-conf-lista{max-height:32vh;overflow:auto}
 .qs-conf{border-left:3px solid #2f9e6e;background:rgba(47,158,110,.07);padding:6px 9px;
   margin-bottom:6px;border-radius:0 6px 6px 0}
@@ -7586,57 +7619,92 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- (v18.84.0) VIRAR TEXTO EM QUESTÕES, EM DOIS PASSOS COMO OS OUTROS PEDIDOS À IA.
+     Antes: dois "passos" de uma linha cada, com quatro botões do mesmo peso e um campo enorme. Agora o mesmo desenho
+     do Novo edital e do resumo pela IA: 1 monta o pedido (de onde a IA parte, os RAMOS do tópico) e copia — vai PARA
+     a IA; 2 traz a resposta — volta DA IA —, com um semáforo que diz o que foi lido. Tela cheia: pedido à esquerda,
+     conferência à direita. Os ids antigos ficam (testes e atalhos). -->
 <dialog id="dlgQsCriar" class="ui-modal diag-modal">
-  <h3 data-i18n="qs_criar_titulo"></h3>
+  <div class="qs-criar-cab">
+    <h3 data-i18n="qs_criar_titulo"></h3>
+    <button type="button" class="btn-min mat-cheia-bt" id="btnQsCriarCheia" data-i18n="qs_criar_cheia" data-i18n-title="qs_criar_cheia_tip"></button>
+  </div>
   <p class="nota" id="qsCriarDe"></p>
-  <!-- DE QUAL TEXTO ELAS SAEM.
-       "Ficam guardadas em ..." responde ONDE serão arquivadas; esta
-       linha responde DE ONDE saem. Sem ela, quem tocava em "criar
-       questões do trecho" chegava a uma tela cujo rádio dizia "a partir
-       deste resumo" — contradizendo o botão que acabara de apertar. -->
+  <!-- DE QUAL TEXTO ELAS SAEM ("Ficam guardadas em" responde ONDE; esta linha, DE ONDE). -->
   <p class="nota" id="qsCriarOrigem" hidden></p>
   <p class="nota" id="qsDoTextoAviso"></p>
-
+  <div class="qs-criar-corpo">
+  <div class="qs-criar-esq">
   <details id="qsIA" class="qs-ia">
     <summary data-i18n="qs_ia_titulo"
       title="Pede à IA que escreva questões NOVAS sobre este texto, além das que já estiverem escritas nele."></summary>
-    <div class="qs-fonte">
-      <label title="A IA parte do texto indicado acima — o trecho selecionado ou o resumo inteiro, conforme o botão que você usou."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
-      <label title="A IA parte de um texto que você colar: PDF de aula, lei, artigo, apostila."><input type="radio" name="qsFonte" id="qsFonteOutro"><span data-i18n="qs_fonte_outro"></span></label>
-      <!-- O CADERNO É OUTRA COISA. No NotebookLM a IA já tem as fontes
-           carregadas e responde ANCORADA nelas — o prompt não precisa (nem
-           deve) levar o texto junto, e precisa exigir que ela não invente
-           fora das fontes. Mandar o prompt genérico ali desperdiça a única
-           vantagem real do caderno. -->
-      <label title="A IA já tem as fontes carregadas no caderno (NotebookLM). O prompt manda gerar SÓ a partir delas, com a citação da fonte no comentário."><input type="radio" name="qsFonte" id="qsFonteCaderno"><span data-i18n="qs_fonte_caderno"></span></label>
+    <div class="ednovo-passo" id="qsCriarPasso1">
+      <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="qs_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
+      <div class="qs-criar-rot" data-i18n="qs_fonte_rot"></div>
+      <div class="qs-fonte">
+        <label title="A IA parte do texto indicado acima — o trecho selecionado ou o resumo inteiro, conforme o botão que você usou."><input type="radio" name="qsFonte" id="qsFonteResumo" checked><span data-i18n="qs_fonte_resumo"></span></label>
+        <label title="A IA parte de um texto que você colar: PDF de aula, lei, artigo, apostila."><input type="radio" name="qsFonte" id="qsFonteOutro"><span data-i18n="qs_fonte_outro"></span></label>
+        <!-- O CADERNO É OUTRA COISA: no NotebookLM a IA já tem as fontes; o prompt exige não sair delas. -->
+        <label title="A IA já tem as fontes carregadas no caderno (NotebookLM). O prompt manda gerar SÓ a partir delas, com a citação da fonte no comentário."><input type="radio" name="qsFonte" id="qsFonteCaderno"><span data-i18n="qs_fonte_caderno"></span></label>
+      </div>
+      <p class="nota" id="qsFonteNota" hidden></p>
+      <!-- (v18.84.0) PLANO DE EXTRAÇÃO: a IA lista o caminho (ramo a ramo, os assuntos) e segue-o; o passo 2 mostra o que falta -->
+      <label class="res-ia-lin qs-criar-planejar" id="qsCriarPlanejarLin"><input type="checkbox" id="qsCriarPlanejar"> <span data-i18n="qs_planejar"></span></label>
+      <textarea id="qsCriarFonte" rows="4" hidden
+        style="width:100%;box-sizing:border-box;font-size:12px"></textarea>
+      <!-- OS RAMOS ORIENTAM AS QUESTÕES: marcados vão no pedido (com "o que cobrar"); sem ramos, criar agora (o editor
+           de sempre: à mão, pela lei ou pela IA) ou deixar a IA sugerir a divisão na própria resposta. -->
+      <div class="qs-criar-ramos" id="qsCriarRamosBox" hidden>
+        <div class="qs-criar-rot" id="qsCriarRamosRot" data-i18n="qs_ramos_pedido_rot"></div>
+        <div id="qsCriarRamos" class="res-ia-ramos"></div>
+        <div class="res-ia-sugr" id="qsCriarSugRamos" hidden>
+          <b data-i18n="ria_sugr_tit"></b> <span data-i18n="qs_sugr_txt"></span>
+          <div class="res-ia-sugr-bts"><button type="button" class="btn-min btn-min-ok" id="btnQsCriarRamosAgora" data-i18n="ria_sugr_criar" data-i18n-title="ria_sugr_criar_tip"></button></div>
+          <div class="nota" data-i18n="qs_sugr_ou"></div>
+        </div>
+        <label class="res-ia-lin" id="qsCriarSugerirLin" hidden><input type="checkbox" id="qsCriarSugerir"> <span data-i18n="qs_sugerir_ramos"></span></label>
+        <div class="res-ia-lin" id="qsCriarAjustarLin" hidden>
+          <button type="button" class="btn-min" id="btnQsCriarAjustarRamos" data-i18n="qs_ramos_ajustar" data-i18n-title="qs_ramos_ajustar_tip"></button>
+        </div>
+        <p class="nota" id="qsCriarRamosMsg" role="status"></p>
+      </div>
+      <div class="qs-criar-acoes">
+        <button type="button" class="btn btn-roxo" id="btnQsCopiarPrompt" data-i18n="qs_copiar_pedido"
+          title="Copia o pedido inteiro para colar na IA."></button>
+        <!-- O PROMPT É PARA COPIAR, NÃO PARA LER: fica recolhido; quem quiser conferir abre. -->
+        <button type="button" class="btn-min" id="btnQsVerPrompt" data-i18n="qs_ver_prompt"
+          title="Mostra o texto do prompt. Ele serve para ser copiado; ler não é necessário."></button>
+      </div>
+      <p class="nota ednovo-prompt-msg" id="qsCriarCopiadoMsg" role="status"></p>
+      <textarea id="qsCriarPrompt" rows="6" readonly hidden
+        style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
     </div>
-    <p class="nota" id="qsFonteNota" hidden></p>
-    <textarea id="qsCriarFonte" rows="4" hidden
-      style="width:100%;box-sizing:border-box;font-size:12px"></textarea>
-    <div class="qs-passo"><span class="qs-num">1</span><span data-i18n="qs_passo1"></span>
-      <button class="btn-min" id="btnQsCopiarPrompt" data-i18n="copy_btn"
-        title="Copia o prompt inteiro para colar na IA."></button>
-      <!-- O PROMPT É PARA COPIAR, NÃO PARA LER. São quarenta linhas de
-           instrução que empurram para baixo o campo onde a resposta é
-           colada — que é o campo que a pessoa realmente usa. Fica
-           recolhido; quem quiser conferir abre. -->
-      <button class="btn-min" id="btnQsVerPrompt" data-i18n="qs_ver_prompt"
-        title="Mostra o texto do prompt. Ele serve para ser copiado; ler não é necessário."></button></div>
-    <textarea id="qsCriarPrompt" rows="4" readonly hidden
-      style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
-    <div class="qs-passo"><span class="qs-num">2</span><span data-i18n="qs_passo2"></span>
-      <button class="btn-min" id="btnQsColar" data-i18n="qs_colar_btn"
-        title="Traz o que você copiou da IA direto para a caixa abaixo e já confere."></button>
-      <button class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
-        title="Lê o que você colou — resposta da IA ou um texto de questões já pronto — e junta às questões já achadas no texto."></button></div>
-    <textarea id="qsCriarResposta" rows="5"
-      style="width:100%;box-sizing:border-box;font-size:12px"
-      placeholder="Cole aqui a resposta da IA — ou um texto de questões já pronto (enunciado, alternativas e Gabarito)."></textarea>
+    <div class="ednovo-passo" id="qsCriarPasso2">
+      <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="qs_passo2"></span> <span class="ednovo-tag tag-volta" data-i18n="ed_novo_tag2"></span></div>
+      <textarea id="qsCriarResposta" class="ednovo-ta" rows="6"
+        style="width:100%;box-sizing:border-box;font-size:12px"
+        placeholder="Cole aqui a resposta da IA — ou um texto de questões já pronto (enunciado, alternativas e Gabarito)."></textarea>
+      <div class="ednovo-sem sem-vazio" id="qsCriarSem" role="status" aria-live="polite">
+        <span class="ednovo-sem-ico" id="qsCriarSemIco" aria-hidden="true">○</span>
+        <span class="ednovo-sem-txt" id="qsCriarSemTxt"></span>
+      </div>
+      <div class="qs-criar-plano" id="qsCriarPlano" hidden></div>
+      <div class="qs-criar-acoes">
+        <button type="button" class="btn-min" id="btnQsColar" data-i18n="qs_colar_btn"
+          title="Traz o que você copiou da IA direto para a caixa acima e já confere."></button>
+        <button type="button" class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
+          title="Lê o que você colou — resposta da IA ou um texto de questões já pronto — e junta às questões já achadas no texto."></button>
+        <button type="button" class="btn-min btn-min-ok" id="btnQsCriarNovosRamos" hidden data-i18n-title="qs_criar_novos_ramos_tip"></button>
+      </div>
+    </div>
   </details>
-
+  </div>
+  <div class="qs-criar-dir">
   <p class="nota" data-i18n="qs_confira_ajuda"></p>
   <div id="qsCriarConf" class="qs-conf-lista"></div>
   <p class="nota" id="qsCriarResumo"></p>
+  </div>
+  </div>
   <div class="dlg-rodape">
     <button class="btn-min" id="btnQsLog" data-i18n="ger_log_btn"
       title="Abre o registro da geração: o que foi lido e recusado desta vez e das anteriores, com o motivo de cada uma."></button>
