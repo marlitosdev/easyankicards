@@ -695,6 +695,9 @@ function edLinhaTopico(i, semDisciplina) {
    * vista para você reavaliar, e já não pesa. */
   const dSelo = (typeof difSeloDe === "function") ? difSeloDe(i) : null;
   if (dSelo) nome.append(dSelo);
+  /* (v18.88.0) A COR DO DOMÍNIO na linha: se a semana vai revisar o que já é verde ou atacar o que está em vermelho */
+  const domS = (typeof domSeloDaLinha === "function") ? domSeloDaLinha(i) : null;
+  if (domS) nome.append(domS);
 
   /* "JÁ ESTUDEI ISTO" — o selo que abre a porta para o outro concurso.
    *

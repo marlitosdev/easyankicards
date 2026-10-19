@@ -231,6 +231,70 @@ async function testes() {
     ok(a.domAcaoPrincipal(Object.assign({}, f, { nivel: "cinza" }), { vazio: true }, []).cod === "preparar" && a.domAcaoPrincipal(Object.assign({}, f, { nivel: "cinza" }), { vazio: false }, []).cod === "comecar" && a.domAcaoPrincipal(Object.assign({}, f, { nivel: "amarelo" }), { vazio: false }, []).cod === "rever",
       "Q8a não estudado com material: começar por ele; amarelo sem erradas: rever o material");
   }
+  /* ---- 12 (v18.88.0): barra interativa, ordem por cor, selo na agenda, termômetro do edital ---- */
+  {
+    const { a, ed } = montar();
+    a.difDefinir("Licitações", "Convênios", "alta", "declarada");   /* Convênios vermelho; Lei 14.133 segue não estudado */
+    a.domAbrir(ed.id);
+    const discLic = () => achar(pain(a, "disc"), (e) => cls(e, "cov-disc")).find((e) => /Licitações/.test(e.textContent));
+    const segsLic = () => achar(achar(discLic(), (e) => cls(e, "cov-tira"))[0], (e) => cls(e, "cov-seg"));
+    ok(segsLic().length === 2 && /dom-n-cinza/.test(segsLic()[0].className) && /dom-n-vermelho/.test(segsLic()[1].className), "B1 na ordem do edital: Lei 14.133 (não estudado), depois Convênios (vermelho)");
+    ok(segsLic()[1].title.indexOf(a.t("dom_seg_tip", { t: "Convênios", p: "2.0", n: a.t("dom_n_vermelho") }).replace("2.0", "").split("%")[1]) >= 0 && /^Convênios · peso/.test(segsLic()[1].title) && /Porque:/.test(segsLic()[1].title),
+      "B2 o pedaço diz o tópico, o peso, o nível e o motivo: " + segsLic()[1].title);
+    const bCor = achar(pain(a, "disc"), (e) => cls(e, "dom-ordem-b")).find((b) => b.textContent === a.t("dom_ordem_cor"));
+    bCor.onclick();
+    ok(/dom-n-vermelho/.test(segsLic()[0].className) && /dom-n-cinza/.test(segsLic()[1].className) && a.$("btnDomAbaDisc").getAttribute("aria-selected") !== null,
+      "B3 por cor: o vermelho vem primeiro (e a escolha fica)");
+    a.$("dlgDominio").close();
+    a.domAbrir(ed.id);
+    ok(/dom-n-vermelho/.test(segsLic()[0].className), "B3a a ordem por cor é lembrada");
+    achar(pain(a, "disc"), (e) => cls(e, "dom-ordem-b")).find((b) => b.textContent === a.t("dom_ordem_edital")).onclick();
+    /* tocar no pedaço: abre a disciplina e marca o tópico */
+    a.$("btnDomAbaPrior").onclick();
+    const segConv = segsLic().find((s) => /dom-n-vermelho/.test(s.className));
+    a.segurarAdiados();
+    segConv.onclick({ stopPropagation() {} });
+    const det = achar(discLic(), (e) => cls(e, "cov-det"))[0];
+    const alvo = achar(det, (e) => cls(e, "dom-top")).find((e) => /Convênios/.test(e.textContent));
+    ok(pain(a, "disc").hidden === false && det.hidden === false && alvo && cls(alvo, "dom-piscando"), "B4 tocar no pedaço abre o mapa, a disciplina e faz o tópico piscar");
+    /* fora da janela: o selo da linha da agenda */
+    a.soltarAdiados();
+    a.$("dlgDominio").close();
+    const selo = a.domSeloDaLinha({ disciplina: "Licitações", nome: "Convênios", edital: ed.id });
+    ok(selo && selo.textContent === a.t("dom_curto_vermelho") && /dom-n-vermelho/.test(selo.className), "B5 o selo da linha da agenda diz a cor do domínio");
+    ok(a.domSeloDaLinha({ disciplina: "Licitações", nome: "Lei 14.133", edital: ed.id }) === null, "B5a tópico não estudado: sem selo (é o normal, a linha já diz)");
+    a.segurarAdiados();
+    selo.onclick({ stopPropagation() {} });
+    const alvo2 = achar(pain(a, "disc"), (e) => cls(e, "dom-top")).find((e) => /Convênios/.test(e.textContent));
+    ok(a.$("dlgDominio").open === true && alvo2 && cls(alvo2, "dom-piscando"), "B5b tocar no selo abre o Domínio já no tópico");
+    a.soltarAdiados();
+    a.$("dlgDominio").close();
+    /* o termômetro do edital */
+    const n = a.domTermoPintar(ed.id);
+    const termo = a.$("edDomTermo");
+    ok(termo.hidden === false && achar(termo, (e) => cls(e, "dom-termo-seg")).length >= 2 && termo.textContent === a.t("dom_termo_txt", { v: 0, r: Math.round(n.pct.vermelho) }),
+      "B6 o termômetro mostra a barrinha do peso por nível e o verde/vermelho: " + termo.textContent);
+    termo.onclick();
+    ok(a.$("dlgDominio").open === true, "B6a tocar no termômetro abre o Domínio");
+    a.$("dlgDominio").close();
+    ok(a.domTermoPintar("") === null && termo.hidden === true, "B6b sem edital aberto, o termômetro some");
+    /* a memória curta: o mesmo objeto dentro de 2 s; forçar recalcula */
+    const c1 = a.domNiveisDoEdital(ed.id), c2 = a.domNiveisDoEdital(ed.id), c3 = a.domNiveisDoEdital(ed.id, true);
+    ok(c1 === c2 && c3 !== c1, "B7 a agenda reaproveita o cálculo enquanto nada muda (não refaz o mapa a cada linha)");
+    a.difDefinir("Direito Financeiro", "Receita Pública", "alta", "declarada");
+    const c4 = a.domNiveisDoEdital(ed.id);
+    ok(c4 !== c3 && Object.values(c4.porTopico).some((x) => x.topico === "Receita Pública" && x.nivel === "vermelho"), "B7a mudou uma entrada (autoavaliação): recalcula na hora");
+    a.qsTodas().push({ id: "qq", tipo: "ce", enunciado: "x", gabarito: "C", comentario: "", disciplina: "Licitações", topico: "Lei 14.133", chave: a.matChave("Licitações", "Lei 14.133"), tentativas: [{ acertou: true }] });
+    ok(a.domNiveisDoEdital(ed.id) !== c4, "B7b uma resposta nova a uma questão também recalcula");
+    /* a linha de verdade da agenda (edLinhaTopico) traz o selo */
+    a.hubAbrirEdital(ed.id);
+    a.$("editalTexto").value = ed.texto; a.$("edProva").value = "2027-06-01"; a.$("edHoras").value = "20";
+    const item = a.edItemDoPlano("Licitações", "Convênios");
+    const li = item ? a.edLinhaTopico(item) : null;
+    ok(li && achar(li, (e) => cls(e, "dom-selo-linha")).length === 1 && termo.hidden === false, "B8 a linha da agenda mostra o selo do domínio, e abrir o edital pinta o termômetro");
+    const itLei = a.edItemDoPlano("Licitações", "Lei 14.133");
+    ok(itLei && !achar(a.edLinhaTopico(itLei), (e) => cls(e, "dom-selo-linha")).length, "B8a a linha do não estudado fica sem selo");
+  }
   return falhas;
 }
 

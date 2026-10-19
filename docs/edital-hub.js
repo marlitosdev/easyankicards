@@ -1522,6 +1522,7 @@ function hubRender() {
   }
   const nm = document.getElementById("edNomeAberto");
   if (nm) nm.textContent = aberto ? aberto.nome : "";
+  try { if (typeof domTermoPintar === "function") domTermoPintar(aberto ? aberto.id : ""); } catch (e) {}
   if (!aberto) hubPintarLista();
   hubPintarAgenda();
 }

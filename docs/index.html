@@ -5266,6 +5266,17 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-item-acoes .cov-acoes{flex-wrap:wrap}
 .dom-acao-1{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
 .dom-chip-chute{border-color:#f0ad4e;color:#f0ad4e}
+.dom-ordem{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
+#dlgDominio .cov-tira .cov-seg{cursor:pointer}
+#dlgDominio .cov-tira .cov-seg:hover{filter:brightness(1.25)}
+.dom-piscando{outline:3px solid #f5a524;outline-offset:2px;animation:matPisca .55s ease-in-out 4}
+.dom-selo-linha{all:unset;box-sizing:border-box;cursor:pointer;font-size:10.5px;font-weight:800;padding:0 7px;border-radius:999px;white-space:nowrap;margin-left:4px}
+.dom-selo-linha:focus-visible{outline:2px solid var(--acao)}
+.ed-dom-termo{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11.5px;color:var(--sutil);padding:2px 4px;border-radius:6px}
+.ed-dom-termo:hover{background:rgba(127,127,127,.12)}
+.dom-termo-barra{display:inline-flex;width:72px;height:9px;border-radius:5px;overflow:hidden;background:rgba(127,127,127,.2)}
+.dom-termo-seg{display:block;height:100%}
+.dom-termo-txt{white-space:nowrap}
 .dom-chip-fragil{border-style:dashed;border-color:#2e9e5b;color:#39b56b;font-weight:700}
 .dom-sem-estudo{margin:10px 0}
 .dom-sem-estudo > summary{cursor:pointer;font-size:13px;color:var(--sutil);padding:6px 0}
@@ -6202,6 +6213,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <span class="ed-aberto-nome" id="edNomeAberto"></span>
       <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
       <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
+      <!-- (v18.88.0) o termômetro do domínio deste edital: o peso por nível, num relance; toque abre o Domínio -->
+      <span class="ed-dom-termo" id="edDomTermo" role="button" tabindex="0" hidden></span>
       <button class="btn-min" id="btnEdVert" data-i18n="vert_btn"></button>
       <button class="btn-min" id="btnEdRenomear" data-i18n="hub_renomear"></button>
     </div>
