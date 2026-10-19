@@ -61,10 +61,11 @@ async function testes() {
     const m = a.domDoEdital(ed);
     const p = pain(a, "prior");
     const itens = achar(p, (e) => cls(e, "dom-item"));
-    ok(itens.length === Math.min(15, m.reforcar.length) && itens.every((l) => achar(l, (e) => cls(e, "dom-item-porque")).length === 1),
+    const filaG = a.domFilaAgrupada(m.reforcar);
+    ok(itens.length === Math.min(15, filaG.length) && filaG.length < m.reforcar.length && itens.every((l) => achar(l, (e) => cls(e, "dom-item-porque")).length === 1),
       "D4 a fila inteira, cada item com o PORQUÊ à vista");
     const tot = m.resumo.total;
-    const g = m.reforcar.slice(0, 5).reduce((x, f) => x + f.pesoPct, 0) / tot * 100;
+    const g = filaG.slice(0, 5).reduce((x, f) => x + f.pesoPct, 0) / tot * 100;
     const ganho = achar(p, (e) => cls(e, "dom-ganho"))[0];
     const fmt = (v) => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
     ok(ganho && ganho.textContent.indexOf("+" + fmt(g) + "%") >= 0, "D4a o ganho dos 5 primeiros: +" + fmt(g) + "% — " + (ganho && ganho.textContent));
@@ -87,7 +88,7 @@ async function testes() {
     ed.progresso[chLei + "›#fase_preparatoria"] = { e: "pulado", d: "2026-10-01" };
     a.domAbrir(ed.id);
     const m = a.domDoEdital(ed);
-    const g = m.reforcar.slice(0, 5).reduce((x, f) => x + f.pesoPct, 0) / m.resumo.total * 100;
+    const g = a.domFilaAgrupada(m.reforcar).slice(0, 5).reduce((x, f) => x + f.pesoPct, 0) / m.resumo.total * 100;
     const ganho = achar(pain(a, "prior"), (e) => cls(e, "dom-ganho"))[0];
     const fmt = (v) => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
     ok(m.resumo.total < 99.9 && ganho && ganho.textContent.indexOf("+" + fmt(g) + "%") >= 0, "D4d com um ramo pulado (total " + m.resumo.total.toFixed(1) + "), o ganho é relativo ao que conta: " + (ganho && ganho.textContent));
@@ -178,6 +179,7 @@ async function testes() {
     const t0 = (ok2, chute, d) => [{ acertou: ok2, chute: !!chute, q: "2026-10-1" + d }];
     [Q("a", t0(false, 0, 1)), Q("b", t0(false, 0, 2)), Q("c", t0(false, 0, 3)), Q("d", t0(true, 0, 4)), Q("e", t0(true, 0, 5)), Q("f", t0(true, 1, 6))].forEach((q) => a.qsTodas().push(q));
     a.matGravar(chLei, "Resumo da lei.", { disciplina: "Licitações", topico: "Lei 14.133" });
+    a.domAgruparDefinir(false);   /* estes casos olham um ramo por item (o modo "um por um") */
     a.domAbrir(ed.id);
     const p = pain(a, "prior");
     const itens = achar(p, (e) => cls(e, "dom-item"));
@@ -294,6 +296,39 @@ async function testes() {
     ok(li && achar(li, (e) => cls(e, "dom-selo-linha")).length === 1 && termo.hidden === false, "B8 a linha da agenda mostra o selo do domínio, e abrir o edital pinta o termômetro");
     const itLei = a.edItemDoPlano("Licitações", "Lei 14.133");
     ok(itLei && !achar(a.edLinhaTopico(itLei), (e) => cls(e, "dom-selo-linha")).length, "B8a a linha do não estudado fica sem selo");
+  }
+  /* ---- 13 (v18.89.0): a fila agrupada por tópico ---- */
+  {
+    const { a, ed } = montar();
+    /* Fase preparatória vermelha (marcada difícil); Modalidades sem marca: não estudado */
+    const chLei = a.matChave("Licitações", "Lei 14.133");
+    a.difDefinir("Licitações", "Lei 14.133›#fase_preparatoria", "alta", "declarada");
+    const m = a.domDoEdital(ed);
+    const ramosNaFila = m.reforcar.filter((f) => f.chave === chLei);
+    const g = a.domFilaAgrupada(m.reforcar);
+    const gl = g.find((x) => x.chave === chLei);
+    ok(ramosNaFila.length === 2 && gl && gl.tipo === "grupo" && gl.ramosFila.length === 2 && g.filter((x) => x.chave === chLei).length === 1,
+      "G1 os 2 ramos de Lei 14.133 viram UM item: " + ramosNaFila.map((f) => f.ramoNome + ":" + f.nivel).join(", "));
+    ok(Math.abs(gl.pesoPct - ramosNaFila.reduce((x, f) => x + f.pesoPct, 0)) < 1e-9 && Math.abs(gl.urgencia - ramosNaFila.reduce((x, f) => x + f.urgencia, 0)) < 1e-9,
+      "G2 peso e urgência do grupo = a soma dos ramos (o tópico inteiro)");
+    ok(gl.nivel === "vermelho" && gl.pior.ramoNome === "Fase preparatória", "G3 a cor e o motivo vêm do ramo mais fraco");
+    ok(g.every((x, i) => i === 0 || g[i - 1].urgencia >= x.urgencia) && g[0] === gl, "G4 a fila reordena pela urgência do grupo: o tópico inteiro passa à frente");
+    a.domAbrir(ed.id);
+    const itens = () => achar(pain(a, "prior"), (e) => cls(e, "dom-item"));
+    const it = itens().find((l) => /Lei 14\.133/.test(l.textContent));
+    ok(it && achar(it, (e) => cls(e, "cov-item-nome"))[0].textContent === "Licitações › Lei 14.133" && achar(it, (e) => cls(e, "cov-item-n"))[0].textContent === a.t("dom_urg_grupo", { p: gl.pesoPct.toFixed(1), f: Math.round((gl.urgencia / gl.pesoPct) * 10) / 10, n: 2 })
+      && achar(it, (e) => cls(e, "dom-item-porque"))[0].textContent.indexOf(a.t("dom_grupo_pior", { r: "Fase preparatória" })) === 0,
+      "G5 o item do grupo: o tópico, o peso com os ramos na fila e o ramo mais fraco no porquê");
+    const chips = achar(it, (e) => cls(e, "dom-ramo-chip"));
+    ok(chips.length === 2 && chips.every((b) => cls(b, "na-fila")) && chips.some((b) => cls(b, "atual") && /Fase/.test(b.textContent)), "G6 os ramos da fila marcados, o mais fraco em destaque");
+    const bts = achar(pain(a, "prior"), (e) => cls(e, "dom-agrupar-b"));
+    ok(bts.length === 2 && cls(bts[0], "ativa"), "G7 a escolha 'agrupar por tópico | um por um', agrupado por padrão");
+    bts[1].onclick();
+    ok(itens().filter((l) => /Lei 14\.133/.test(l.textContent)).length === 2, "G8 'um por um': cada ramo volta a ser um item (e fica lembrado)");
+    a.$("dlgDominio").close(); a.domAbrir(ed.id);
+    ok(itens().filter((l) => /Lei 14\.133/.test(l.textContent)).length === 2, "G8a lembrado ao reabrir");
+    achar(pain(a, "prior"), (e) => cls(e, "dom-agrupar-b"))[0].onclick();
+    ok(itens().filter((l) => /Lei 14\.133/.test(l.textContent)).length === 1, "G8b de volta ao agrupado");
   }
   return falhas;
 }

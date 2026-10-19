@@ -201,16 +201,42 @@ function domAcaoPrincipal(f, mat, ramos) {
   }
   return { cod: "rever", txt: t("dom_ac1_rever"), tip: t("dom_ac1_ficha_tip"), fazer: ficha };
 }
+/* (v18.89.0) A FILA AGRUPADA POR TÓPICO. Cada ramo entrava sozinho, com só uma FATIA do peso do tópico — e por isso
+ * quase nunca chegava entre os primeiros, mesmo quando o tópico inteiro precisava de reforço. Agrupados, os ramos do
+ * mesmo tópico viram UM item: o peso e a urgência são a soma dos deles (o tópico inteiro, como os sem ramos), a cor e
+ * o motivo são os do ramo mais fraco, e o item diz quais ramos estão na fila. "Um por um" volta ao jeito antigo. */
+const DOM_CH_AGRUPAR = "eac_dom_agrupar";
+function domAgruparLer() { try { return localStorage.getItem(DOM_CH_AGRUPAR) !== "0"; } catch (e) { return true; } }
+function domAgruparDefinir(sim) { try { localStorage.setItem(DOM_CH_AGRUPAR, sim ? "1" : "0"); } catch (e) {} if ($("dlgDominio") && $("dlgDominio").open) domPintar(); }
+function domFilaAgrupada(fila) {
+  const grupos = {};
+  const out = [];
+  (fila || []).forEach((f) => {
+    if (f.tipo !== "ramo") { out.push(f); return; }
+    let g = grupos[f.chave];
+    if (!g) {
+      g = grupos[f.chave] = { tipo: "grupo", disciplina: f.disciplina, topico: f.topico, chave: f.chave, cartoes: f.cartoes,
+        pesoPct: 0, urgencia: 0, ramosFila: [], nivel: f.nivel, motivos: f.motivos, sinais: f.sinais, pior: f };
+      out.push(g);
+    }
+    g.pesoPct += f.pesoPct || 0;
+    g.urgencia += f.urgencia || 0;
+    g.ramosFila.push(f);
+    if (DOM_NIVEIS.indexOf(f.nivel) < DOM_NIVEIS.indexOf(g.nivel)) { g.nivel = f.nivel; g.motivos = f.motivos; g.sinais = f.sinais; g.pior = f; }
+  });
+  return out.sort((a, b) => (b.urgencia - a.urgencia) || (b.pesoPct - a.pesoPct));
+}
 /* UM ITEM DA FILA: o que é, o porquê, os sinais (com os chutes), os ramos do tópico coloridos, o material e as ações
  * (a principal, conforme a cor, primeiro) */
 function domItemFila(f, tp, semRamos) {
   const l = gerEl("div", "cov-item dom-item dom-b-" + f.nivel);
   l.append(gerEl("span", "dom-nivel dom-n-" + f.nivel, t("dom_n_" + f.nivel)),
     gerEl("span", "cov-item-nome", f.disciplina + " › " + f.topico + (f.ramoNome ? " › " + f.ramoNome : "")),
-    gerEl("span", "cov-item-n", t("dom_urg", { p: f.pesoPct.toFixed(1), f: DOM.fatores[f.nivel] })));
+    gerEl("span", "cov-item-n", f.tipo === "grupo" ? t("dom_urg_grupo", { p: f.pesoPct.toFixed(1), f: f.pesoPct ? Math.round((f.urgencia / f.pesoPct) * 10) / 10 : 0, n: f.ramosFila.length }) : t("dom_urg", { p: f.pesoPct.toFixed(1), f: DOM.fatores[f.nivel] })));
   /* o PORQUÊ à vista (antes, só no balão do mouse), antes dos botões: primeiro o motivo, depois o que fazer */
   const pq = domPorque(f.motivos);
-  if (pq) { l.title = pq; l.append(gerEl("div", "dom-porque dom-item-porque", pq)); }
+  const pqTxt = f.tipo === "grupo" && f.ramosFila.length > 1 ? t("dom_grupo_pior", { r: f.pior.ramoNome }) + (pq ? " · " + pq : "") : pq;
+  if (pqTxt) { l.title = pqTxt; l.append(gerEl("div", "dom-porque dom-item-porque", pqTxt)); }
   if (f.sinais) { const ch = gerEl("div", "dom-chips dom-item-linha"); domChips(ch, f); l.append(ch); }
   /* os ramos do tópico, cada um com a sua cor: qual parte puxa o tópico para baixo, e um toque leva ao ramo */
   const ramosDoTop = (tp && tp.ramos) || [];
@@ -221,7 +247,8 @@ function domItemFila(f, tp, semRamos) {
     rl.append(gerEl("span", "dom-item-rot", t("dom_item_ramos")));
     ramosDoTop.forEach((r) => {
       const nv = r.nivel === "pulado" ? "cinza" : r.nivel;
-      const b = gerEl("button", "dom-ramo-chip dom-b-" + nv + (f.tipo === "ramo" && r.ramoId === f.ramoId ? " atual" : "") + (r.pulado ? " hor-ramo-pulado" : ""), r.ramoNome);
+      const naFila = f.tipo === "grupo" && f.ramosFila.some((x) => x.ramoId === r.ramoId);
+      const b = gerEl("button", "dom-ramo-chip dom-b-" + nv + ((f.tipo === "ramo" && r.ramoId === f.ramoId) || (f.tipo === "grupo" && f.pior && r.ramoId === f.pior.ramoId) ? " atual" : "") + (naFila ? " na-fila" : "") + (r.pulado ? " hor-ramo-pulado" : ""), r.ramoNome);
       b.type = "button";
       b.title = t("dom_ramo_chip_tip", { r: r.ramoNome, n: r.nivel === "pulado" ? "—" : t("dom_n_" + r.nivel) }) + (domPorque(r.motivos) ? " · " + domPorque(r.motivos) : "");
       b.prepend(gerEl("i", "dom-leg-i dom-n-" + nv));
@@ -324,9 +351,22 @@ function domPintar() {
   const dlt = domEvolucaoPintar(pEvo, m, ed.id, fase);
   pEvo.append(gerEl("p", "nota cov-base", t(m.base === "questoes" ? "dom_base_questoes" : (m.base === "fase2" ? "cov_base_fase2" : "dom_base_estimado"))));
   /* ---- prioridades: o que reforçar primeiro (com o filtro escolhido), o porquê à vista e o ganho dos primeiros ---- */
-  const fila = m.reforcar.filter(domCasa);
+  const agrupar = domAgruparLer();
+  const filaFolhas = m.reforcar.filter(domCasa);
+  const fila = agrupar ? domFilaAgrupada(filaFolhas) : filaFolhas;
   const s = gerEl("div", "cov-bloco");
   s.append(gerEl("h4", "", t("dom_reforcar")));
+  if (filaFolhas.some((f) => f.tipo === "ramo")) {
+    const lg = gerEl("div", "dom-ordem dom-agrupar");
+    lg.append(gerEl("span", "dom-item-rot", t("dom_agrupar_rot")));
+    [[true, "dom_agrupar_sim"], [false, "dom_agrupar_nao"]].forEach(([v, k]) => {
+      const b = gerEl("button", "dom-filtro dom-agrupar-b" + (agrupar === v ? " ativa" : ""), t(k)); b.type = "button";
+      b.setAttribute("aria-pressed", agrupar === v ? "true" : "false");
+      b.onclick = () => domAgruparDefinir(v);
+      lg.append(b);
+    });
+    s.append(lg);
+  }
   if (fila.length && domFiltro === "todos") {
     const topo = fila.slice(0, 5);
     const ganho = (topo.reduce((x, f) => x + (f.pesoPct || 0), 0) / tot) * 100;
