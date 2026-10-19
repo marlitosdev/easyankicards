@@ -223,6 +223,108 @@ async function testes() {
     ok(p0.tem && p0.itens.length === 2 && a.qsTirarPlano("[PLANO]\n- a\n[QUESTAO]\nTIPO: CE").indexOf("[QUESTAO]") >= 0 && p0.itens[0].ramo === "" && p0.itens[1].ramo === "X" && a.qsAssuntoChave("Prazo (art. 5)") === a.qsAssuntoChave("prazo"),
       "P6 plano sem fechar termina na primeira questão; numeração aceita; o 'onde está' não conta na comparação");
   }
+  /* ---- 9 (v18.85.0): a LISTA DE RAMOS colada na caixa do resumo ou das questões (o caso real do relato) ---- */
+  {
+    const LISTA = [
+      "++ Conceito e natureza jurídica do lançamento :: 5 :: Art. 142 do CTN; procedimento administrativo que verifica fato gerador, calcula tributo, identifica sujeito passivo e constitui o crédito.",
+      "++ Competência para lançar e delegação :: 4 :: Art. 142 do CTN; atividade privativa da autoridade administrativa, admitida delegação.",
+      "++ Lançamento de ofício :: 5 :: Art. 149 do CTN; hipóteses como omissão de declaração, erro, fraude e fiscalização.",
+      "++ Lançamento por declaração :: 4 :: Art. 147 do CTN; sujeito passivo presta informações; Fisco pode revisar.",
+      "++ Decadência no lançamento :: 5 :: Arts. 150, § 4º, e 173, I, do CTN; distinção entre tributos sujeitos a homologação e demais hipóteses.",
+      "++ Lançamento e fato gerador :: 4 :: O fato gerador cria a obrigação; o lançamento constitui o crédito."].join("\n");
+    const { a, ctx } = montar();
+    ok(a.ramPareceListaDeRamos(LISTA) && a.ramPareceListaDeRamos(LISTA).ramos.length === 6 && !a.ramPareceListaDeRamos("Resumo.\n++ um só\n- item\n- outro\nTexto corrido."),
+      "L1 a lista '++ Nome :: peso :: nota' é reconhecida (6 ramos); um '++' solto num texto, não");
+    /* no resumo pela IA */
+    const ch = a.matChave("Licitações", "Convênios");
+    a.riaAbrirDoTopico("Licitações", "Convênios", ch);
+    a.$("resIATexto").value = LISTA;
+    a.riaConferirTela();
+    ok(cls(a.$("resIASem"), "sem-atencao") && a.$("resIASemTxt").textContent === a.t("ria_sem_eh_ramos", { n: 6 }) && a.$("btnResIAAplicar").disabled === true,
+      "L2 resumo: a lista de ramos não é resumo — aviso e 'aplicar' desligado: " + a.$("resIASemTxt").textContent.slice(0, 60));
+    ok(a.riaAplicar() === false && !((a.matResumosAtual()[ch] || {}).texto || "").includes("++"), "L2a aplicar mesmo assim recusa: nada vai para o resumo");
+    ok(a.$("resIACriarLin").hidden === false && a.$("btnResIACriarRamos").textContent === a.t("ria_usar_ramos", { n: 6 }), "L3 o botão 'Usar como ramos do tópico (6)'");
+    a.$("btnResIACriarRamos").onclick();
+    const lin = a.ramLinhasAtual();
+    ok(a.$("dlgRamos").open === true && lin.length === 6 && lin[0].nome === "Conceito e natureza jurídica do lançamento" && String(lin[0].peso) === "5" && /Art\. 142/.test(lin[0].nota),
+      "L3a o editor abre com os 6 ramos lidos — nome, peso e nota: " + JSON.stringify(lin[0]));
+    a.ramSalvar();
+    ok(a.$("resIATexto").value === "" && a.$("resIARamosMsg").textContent === a.t("ria_ramos_criados", { n: 6 }) && a.riaMontarPedido().indexOf("Lançamento de ofício") > 0,
+      "L3b ao salvar: a caixa do resumo é limpa e o pedido do resumo já sai com os ramos");
+    /* nas questões */
+    const { a: b, ctx: ctxB } = montar();
+    b.qsUiCriarAbrir("Texto.", ctxB("Convênios"), "resumo");
+    b.$("qsCriarResposta").value = LISTA;
+    b.qsUiConferir();
+    ok(cls(b.$("qsCriarSem"), "sem-atencao") && b.$("qsCriarSemTxt").textContent === b.t("qs_sem_eh_ramos", { n: 6 }) && b.qsUiAchadosAtual().length === 0
+      && b.$("btnQsCriarNovosRamos").hidden === false && b.$("btnQsCriarNovosRamos").textContent === b.t("ria_usar_ramos", { n: 6 }),
+      "L4 questões: a lista de ramos não vira questão nem recusa; oferece usá-la como ramos");
+    b.$("btnQsCriarNovosRamos").onclick();
+    ok(b.$("dlgRamos").open === true && b.ramLinhasAtual().length === 6, "L4a o editor abre com os 6");
+    b.ramSalvar();
+    ok(b.$("qsCriarResposta").value === "" && cls(b.$("qsCriarSem"), "sem-vazio") && b.$("qsCriarPrompt").value.indexOf("- Decadência no lançamento") > 0 && b.$("btnQsCriarNovosRamos").hidden === true,
+      "L4b ao salvar: a caixa é limpa e o pedido das questões já sai com os ramos");
+    void ctx;
+  }
+
+  /* ---- 10 (v18.85.0): o atalho — pedir os ramos sem sair da tela, colar a resposta na caixa da própria tela ---- */
+  {
+    const LISTA = "++ Lançamento de ofício :: 5 :: Art. 149\n++ Lançamento por declaração :: 4 :: Art. 147\n++ Decadência :: 5";
+    const r0 = montar();
+    const a = r0.a, j = r0.j;
+    const ch = a.matChave("Licitações", "Convênios");
+    a.riaAbrirDoTopico("Licitações", "Convênios", ch);
+    ok(a.$("resIASugRamos").hidden === false && !!a.$("btnResIASugPedir"), "L5 resumo sem ramos: o aviso tem 'Copiar o pedido de ramos' ali mesmo");
+    await Promise.resolve(a.$("btnResIASugPedir").onclick());
+    await Promise.resolve();
+    ok(a.ramEhPedido(j.__area) && j.__area.indexOf("Convênios") >= 0 && a.$("resIASugMsg").textContent === a.t("ria_sugr_pedir_ok") && cls(a.$("resIAPasso2"), "ativo"),
+      "L5a copiou o pedido de RAMOS do tópico, disse onde colar a resposta e destacou o passo 2");
+    a.$("resIATexto").value = j.__area;
+    a.riaConferirTela();
+    ok(cls(a.$("resIASem"), "sem-erro") && a.$("btnResIAAplicar").disabled === true, "L5b o pedido de ramos colado na caixa do resumo é reconhecido como pedido (não vira resumo)");
+    a.$("resIATexto").value = LISTA;
+    a.riaConferirTela();
+    a.$("btnResIACriarRamos").onclick();
+    ok(a.$("dlgRamos").open === true && a.ramLinhasAtual().length === 3 && a.$("ramCaminhos").open === false && /acrescentado/.test(a.$("ramMsg").textContent),
+      "L6 a resposta colada no passo 2 abre o editor só para conferir: lista lida, caminhos recolhidos, 'confira e salve'");
+    a.ramSalvar();
+    ok(a.$("resIACopiadoMsg").textContent === a.t("ria_ramos_recopiar", { n: 3 }) && cls(a.$("resIAPasso1"), "ativo") && a.riaMontarPedido().indexOf("Decadência") > 0,
+      "L6a salvo: a tela diz para copiar o pedido de novo (já com os ramos) e destaca o passo 1");
+    /* nas questões, o mesmo atalho */
+    const r1 = montar();
+    const b = r1.a;
+    b.qsUiCriarAbrir("Texto.", r1.ctx("Convênios"), "resumo");
+    await Promise.resolve(b.$("btnQsCriarSugPedir").onclick());
+    await Promise.resolve();
+    ok(b.ramEhPedido(r1.j.__area) && b.$("qsCriarSugMsg").textContent === b.t("qs_sugr_pedir_ok") && cls(b.$("qsCriarPasso2"), "ativo"),
+      "L7 questões: 'Copiar o pedido de ramos' no aviso, e o passo 2 em destaque");
+    b.$("qsCriarResposta").value = r1.j.__area;
+    b.qsUiConferir();
+    ok(cls(b.$("qsCriarSem"), "sem-erro") && b.$("qsCriarSemTxt").textContent === b.t("qs_sem_pedido") && b.qsUiAchadosAtual().length === 0, "L7a o pedido de ramos colado na caixa das questões é reconhecido como pedido");
+    b.$("qsCriarResposta").value = LISTA;
+    b.qsUiConferir();
+    b.$("btnQsCriarNovosRamos").onclick();
+    b.ramSalvar();
+    ok(b.$("qsCriarCopiadoMsg").textContent === b.t("ria_ramos_recopiar", { n: 3 }) && cls(b.$("qsCriarPasso1"), "ativo") && b.$("qsCriarPrompt").value.indexOf("- Decadência") > 0,
+      "L7b salvo: copiar o pedido de novo, já com os ramos");
+    /* área de transferência recusada: o pedido aparece numa caixa só de leitura logo abaixo do aviso */
+    const r2 = montar();
+    const nav = r2.j.navigator || (r2.a.navigator);
+    if (nav && nav.clipboard) {
+      const orig = nav.clipboard.writeText;
+      nav.clipboard.writeText = () => Promise.reject(new Error("negado"));
+      r2.a.riaAbrirDoTopico("Licitações", "Convênios", r2.a.matChave("Licitações", "Convênios"));
+      await Promise.resolve(r2.a.$("btnResIASugPedir").onclick());
+      await new Promise((res) => setImmediate(res));
+      ok(r2.a.$("resIASugPedidoTxt").hidden === false && r2.a.ramEhPedido(r2.a.$("resIASugPedidoTxt").value) && r2.a.$("resIASugMsg").textContent === r2.a.t("ram_ia_copie_manual"),
+        "L8 sem área de transferência: o pedido de ramos aparece na caixa logo abaixo, para copiar à mão");
+      r2.a.qsUiCriarAbrir("Texto.", r2.ctx("Convênios"), "resumo");
+      await Promise.resolve(r2.a.$("btnQsCriarSugPedir").onclick());
+      await new Promise((res) => setImmediate(res));
+      ok(r2.a.$("qsCriarSugPedidoTxt").hidden === false && r2.a.ramEhPedido(r2.a.$("qsCriarSugPedidoTxt").value), "L8a o mesmo nas questões");
+      nav.clipboard.writeText = orig;
+    } else ok(false, "L8 o teste não achou a área de transferência de mentira");
+  }
   return falhas;
 }
 

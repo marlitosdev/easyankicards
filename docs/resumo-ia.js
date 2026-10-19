@@ -78,9 +78,12 @@ function riaPrompt(o) {
 function riaLerResposta(texto, ramos, ramoAlvo) {
   let s = String(texto || "").replace(/\r\n?/g, "\n").replace(/^\s*```[a-z]*\s*\n?/i, "").replace(/\n?```\s*$/, "").trim();
   if (!s) return { vazio: true, ehPedido: false, geral: "", secoes: [], semSecao: false };
-  if (/FORMATO \(obrigatório|FORMAT \(required|^Você vai escrever o (RESUMO|resumo)|^You will write the/m.test(s)) {
+  if (/FORMATO \(obrigatório|FORMAT \(required|^Você vai escrever o (RESUMO|resumo)|^You will write the/m.test(s) || (typeof ramEhPedido === "function" && ramEhPedido(s))) {
     return { vazio: false, ehPedido: true, geral: "", secoes: [], semSecao: false };
   }
+  /* a lista de RAMOS colada aqui não é resumo: vai para o editor de ramos (v18.85.0) */
+  const lista = typeof ramPareceListaDeRamos === "function" ? ramPareceListaDeRamos(s) : null;
+  if (lista) return { vazio: false, ehPedido: false, ehRamos: true, ramosLista: lista.ramos, geral: "", secoes: [], semSecao: false };
   /* "# Avaliação" (do avaliar e melhorar): vai à parte, para a pessoa ler — não é texto do resumo */
   let avaliacao = "";
   s = s.replace(/^#{1,6}[ \t]*(avalia[çc][ãa]o|evaluation)[ \t]*#*[ \t]*\n([\s\S]*?)(?=^#{1,6}[ \t]|(?![\s\S]))/im, (m0, r0, corpo) => { avaliacao = corpo.trim(); return ""; }).trim();
@@ -190,6 +193,9 @@ function riaAbrir(ctx) {
   riaPintarRamos();
   riaPintarSugRamos();
   if ($("resIARamosMsg")) $("resIARamosMsg").textContent = "";
+  if ($("resIASugMsg")) $("resIASugMsg").textContent = "";
+  if ($("resIASugPedidoTxt")) { $("resIASugPedidoTxt").value = ""; $("resIASugPedidoTxt").hidden = true; }
+  riaPassos(1);
   riaConferirTela();
   abrirModal("dlgResIA");
   return dlg;
@@ -212,14 +218,52 @@ function riaCriarRamos(nomes) {
   const editalId = riaEditalId();
   if (!editalId || typeof ramAbrirEditor !== "function") return false;
   return ramAbrirEditor({ editalId, disciplina: riaCtx.disciplina, topico: riaCtx.topico, chave: riaCtx.chave, acrescentar: nomes || [],
-    depois: (r) => {
-      riaCtx.ramos = (r.ramos || []).map((x) => ({ id: x.id, nome: x.nome }));
-      riaCtx.lista = null;
-      riaPintarRamos();
-      riaPintarSugRamos();
-      riaConferirTela();
-      if ($("resIARamosMsg")) $("resIARamosMsg").textContent = t("ria_ramos_criados", { n: riaCtx.ramos.length });
-    } });
+    depois: (r) => riaDepoisDosRamos(r) });
+}
+function riaDepoisDosRamos(r) {
+  riaCtx.ramos = ((r && r.ramos) || []).map((x) => ({ id: x.id, nome: x.nome }));
+  riaCtx.lista = null;
+  riaPintarRamos();
+  riaPintarSugRamos();
+  riaConferirTela();
+  if ($("resIARamosMsg")) $("resIARamosMsg").textContent = t("ria_ramos_criados", { n: riaCtx.ramos.length });
+  /* o próximo passo é copiar o pedido do resumo de novo — agora com os ramos: dito na tela, ao lado do botão */
+  if ($("resIACopiadoMsg")) $("resIACopiadoMsg").textContent = t("ria_ramos_recopiar", { n: riaCtx.ramos.length });
+  riaPassos(1);
+  /* o botão de copiar fica depois da lista de ramos (que pode ser longa): leva até ele */
+  try { if ($("btnResIACopiar").scrollIntoView) $("btnResIACopiar").scrollIntoView({ block: "center" }); } catch (e) {}
+}
+/* passos: 1 = copiar o pedido (ativo) · 2 = trazer a resposta (ativo) */
+function riaPassos(n) {
+  if ($("resIAPasso1")) $("resIAPasso1").className = "ednovo-passo" + (n === 1 ? " ativo" : " feito");
+  if ($("resIAPasso2")) $("resIAPasso2").className = "ednovo-passo" + (n === 2 ? " ativo" : "");
+}
+/* (v18.85.0) o pedido de RAMOS copiado daqui mesmo: a resposta volta no passo 2 desta tela */
+function riaCopiarPedidoRamos() {
+  const editalId = riaEditalId();
+  if (!editalId || typeof ramPedidoForaDoEditor !== "function") return "";
+  const txt = ramPedidoForaDoEditor({ editalId, disciplina: riaCtx.disciplina, topico: riaCtx.topico, chave: riaCtx.chave });
+  const msg = $("resIASugMsg");
+  /* sem área de transferência (navegador recusou), o pedido fica numa caixa SÓ DE LEITURA logo abaixo, para copiar à mão */
+  const ver = $("resIASugPedidoTxt");
+  if (ver) { ver.value = txt; ver.hidden = true; }
+  const ok = () => { if (msg) msg.textContent = t("ria_sugr_pedir_ok"); riaPassos(2); };
+  const manual = () => { if (msg) msg.textContent = t("ram_ia_copie_manual"); if (ver) ver.hidden = false; riaPassos(2); };
+  try {
+    const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : null;
+    if (p && typeof p.then === "function") p.then(ok, manual);
+    else if (p === null) manual(); else ok();
+  } catch (e) { manual(); }
+  try { reg("MATERIAL", "pedido de ramos copiado do resumo pela IA", riaCtx.topico); } catch (e) {}
+  return txt;
+}
+/* (v18.85.0) a lista de ramos colada na caixa do resumo: abre o editor com ela lida; ao salvar, a caixa é limpa (não
+ * era resumo) e o pedido do resumo passa a sair com os ramos */
+function riaUsarListaDeRamos() {
+  const editalId = riaEditalId();
+  if (!editalId || typeof ramAbrirComLista !== "function") return null;
+  return ramAbrirComLista({ editalId, disciplina: riaCtx.disciplina, topico: riaCtx.topico, chave: riaCtx.chave,
+    depois: (r) => { $("resIATexto").value = ""; riaDepoisDosRamos(r); } }, $("resIATexto").value);
 }
 /* as seções da resposta que não são ramos do tópico (sugeridas ou escritas pela pessoa) */
 function riaRamosNovosDaResposta(resp) {
@@ -303,7 +347,7 @@ function riaMontarPedido() {
 function riaCopiar() {
   const txt = riaMontarPedido();
   const msg = $("resIACopiadoMsg");
-  const ok = () => { msg.textContent = t("ria_copiado"); };
+  const ok = () => { msg.textContent = t("ria_copiado"); riaPassos(2); };
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(txt).then(ok, ok);
   } catch (e) {}
@@ -317,6 +361,7 @@ function riaConferirTela() {
   const sem = $("resIASem"), ico = $("resIASemIco"), txt = $("resIASemTxt");
   let est = "vazio", msg = t("ria_sem_vazio");
   if (resp.ehPedido) { est = "erro"; msg = t("ria_sem_pedido"); }
+  else if (resp.ehRamos) { est = "atencao"; msg = t("ria_sem_eh_ramos", { n: resp.ramosLista.length }); }
   else if (resp.vazio) { est = "vazio"; msg = t("ria_sem_vazio"); }
   else if (ramo) { est = "ok"; msg = t(riaModoDeAplicar() === "acrescentar" ? "ria_sem_ramo_compl" : "ria_sem_ramo_ok", { r: ramo.nome, c: resp.secoes[0].corpo.length }); }
   else if (resp.semSecao) { est = "atencao"; msg = t("ria_sem_semsecao"); }
@@ -337,7 +382,7 @@ function riaConferirTela() {
   ico.textContent = est === "ok" ? "✓" : est === "erro" ? "✕" : est === "atencao" ? "!" : "○";
   txt.textContent = msg;
   $("resIATexto").className = "ednovo-ta" + (est === "ok" ? " ta-ok" : est === "erro" ? " ta-erro" : est === "atencao" ? " ta-atencao" : "");
-  const pode = !resp.vazio && !resp.ehPedido;
+  const pode = !resp.vazio && !resp.ehPedido && !resp.ehRamos;
   $("btnResIAAplicar").disabled = !pode;
   /* trocar tudo só existe no tópico inteiro e quando já há resumo */
   const temAtual = !!riaTextoAtual().trim();
@@ -345,8 +390,8 @@ function riaConferirTela() {
   /* ramos que a resposta traz e o edital não tem: um clique para criá-los (no editor de ramos, para conferir) */
   const novosR = pode && !ramo ? riaRamosNovosDaResposta(resp) : [];
   if ($("resIACriarLin")) {
-    $("resIACriarLin").hidden = !novosR.length || !riaEditalId();
-    $("btnResIACriarRamos").textContent = t("ria_criar_ramos", { n: novosR.length });
+    $("resIACriarLin").hidden = !(novosR.length || resp.ehRamos) || !riaEditalId();
+    $("btnResIACriarRamos").textContent = resp.ehRamos ? t("ria_usar_ramos", { n: resp.ramosLista.length }) : t("ria_criar_ramos", { n: novosR.length });
   }
   $("btnResIAModoSec").setAttribute("aria-pressed", riaModo === "secoes" ? "true" : "false");
   $("btnResIAModoTudo").setAttribute("aria-pressed", riaModo === "tudo" ? "true" : "false");
@@ -396,7 +441,7 @@ function riaModoDeAplicar() {
 function riaAplicar() {
   const ramo = riaRamoAlvo();
   const resp = riaLerResposta($("resIATexto").value, riaCtx.ramos, ramo ? ramo.id : "");
-  if (resp.vazio || resp.ehPedido) return false;
+  if (resp.vazio || resp.ehPedido || resp.ehRamos) return false;
   const antes = riaTextoAtual();
   const modoAp = riaModoDeAplicar();
   const novo = riaAplicarTexto(antes, resp, modoAp, riaCtx.ramos);
@@ -431,7 +476,11 @@ function riaIniciar() {
   $("btnResIAModoSec").onclick = () => riaModoDefinir("secoes");
   $("btnResIAModoTudo").onclick = () => riaModoDefinir("tudo");
   if ($("btnResIASugCriar")) $("btnResIASugCriar").onclick = () => riaCriarRamos([]);
-  if ($("btnResIACriarRamos")) $("btnResIACriarRamos").onclick = () => riaCriarRamos(riaRamosNovosDaResposta(riaLerResposta($("resIATexto").value, riaCtx.ramos, "")));
+  if ($("btnResIASugPedir")) $("btnResIASugPedir").onclick = () => riaCopiarPedidoRamos();
+  if ($("btnResIACriarRamos")) $("btnResIACriarRamos").onclick = () => {
+    const resp = riaLerResposta($("resIATexto").value, riaCtx.ramos, "");
+    return resp.ehRamos ? riaUsarListaDeRamos() : riaCriarRamos(riaRamosNovosDaResposta(resp));
+  };
   if ($("btnResIAObjCompl")) {
     $("btnResIAObjCompl").onclick = () => riaObjetivoDefinir("complementar");
     $("btnResIAObjMelhor").onclick = () => riaObjetivoDefinir("melhorar");

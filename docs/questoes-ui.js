@@ -106,6 +106,7 @@ function qsUiCriarAbrir(texto, ctx, origem) {
   if ($("qsFonteCaderno")) $("qsFonteCaderno").checked = false;
   if ($("qsCriarPlanejar")) $("qsCriarPlanejar").checked = !t0;
   qsUiPlano = null;
+  qsUiListaRamos = "";
   qsUiPintarPlano();
   /* o prompt volta recolhido a cada abertura: ele é para copiar, não
    * para ler, e aberto empurra para baixo o campo que a pessoa usa */
@@ -483,6 +484,7 @@ function qsPareceRespostaDeIA(txt) {
  * ===================================================================== */
 let qsUiCriarLista = [];   /* os ramos no pedido: [{ id, nome, foco, incluir }] */
 let qsUiConfIgn = [];      /* as recusadas da última conferência (para repintar sem perdê-las) */
+let qsUiListaRamos = "";   /* a lista de ramos colada na caixa da resposta (v18.85.0) */
 function qsUiCriarRamosPreparar() {
   const c = qsUiCtxCriar;
   qsUiCriarLista = [];
@@ -494,6 +496,8 @@ function qsUiCriarRamosPreparar() {
   }
   if ($("qsCriarSugerir")) $("qsCriarSugerir").checked = false;
   if ($("qsCriarRamosMsg")) $("qsCriarRamosMsg").textContent = "";
+  if ($("qsCriarSugMsg")) $("qsCriarSugMsg").textContent = "";
+  if ($("qsCriarSugPedidoTxt")) { $("qsCriarSugPedidoTxt").value = ""; $("qsCriarSugPedidoTxt").hidden = true; }
   qsUiCriarPintarRamos();
 }
 function qsUiCriarPodeCriarRamos() {
@@ -516,11 +520,13 @@ function qsUiCriarPintarRamos() {
   $("qsCriarAjustarLin").hidden = !tem || !pode;
 }
 /* abre o editor de ramos (com os nomes acrescentados, se vierem); ao salvar, o pedido e a conferência passam a usá-los */
-function qsUiCriarRamos(nomes) {
+function qsUiCriarRamos(nomes, lista) {
   const c = qsUiCtxCriar;
   if (!qsUiCriarPodeCriarRamos()) return false;
-  return ramAbrirEditor({ editalId: c.editalId, disciplina: c.disciplina, topico: c.topico, chave: c.chave, acrescentar: nomes || [],
+  const ctxR = { editalId: c.editalId, disciplina: c.disciplina, topico: c.topico, chave: c.chave, acrescentar: nomes || [],
     depois: (r) => {
+      /* a lista colada na caixa não era resposta de questões: sai dela */
+      if (lista) { $("qsCriarResposta").value = ""; qsUiListaRamos = ""; qsUiCriarSem("vazio", t("qs_sem_vazio")); }
       c.ramos = ((r && r.ramos) || []).map((x) => ({ id: x.id, nome: x.nome }));
       const antes = {};
       qsUiCriarLista.forEach((x) => { antes[x.id] = x; });
@@ -538,7 +544,29 @@ function qsUiCriarRamos(nomes) {
       if (qsUiAchados) qsUiRepintarConf();
       qsUiCriarPintarNovosRamos();
       if ($("qsCriarRamosMsg")) $("qsCriarRamosMsg").textContent = t("qs_ramos_criados", { n: c.ramos.length });
-    } });
+      /* próximo passo: copiar o pedido das questões de novo, agora com os ramos */
+      if ($("qsCriarCopiadoMsg")) $("qsCriarCopiadoMsg").textContent = t("ria_ramos_recopiar", { n: c.ramos.length });
+      qsUiCriarPassos(1);
+      try { if ($("btnQsCopiarPrompt").scrollIntoView) $("btnQsCopiarPrompt").scrollIntoView({ block: "center" }); } catch (e) {}
+    } };
+  return lista && typeof ramAbrirComLista === "function" ? !!ramAbrirComLista(ctxR, lista) : ramAbrirEditor(ctxR);
+}
+/* (v18.85.0) o pedido de RAMOS copiado daqui mesmo: a resposta volta na caixa do passo 2, que a reconhece */
+function qsUiCopiarPedidoRamos() {
+  const c = qsUiCtxCriar;
+  if (!qsUiCriarPodeCriarRamos() || typeof ramPedidoForaDoEditor !== "function") return "";
+  const txt = ramPedidoForaDoEditor({ editalId: c.editalId, disciplina: c.disciplina, topico: c.topico, chave: c.chave });
+  const msg = $("qsCriarSugMsg");
+  const ver = $("qsCriarSugPedidoTxt");
+  if (ver) { ver.value = txt; ver.hidden = true; }
+  const ok = () => { if (msg) msg.textContent = t("qs_sugr_pedir_ok"); qsUiCriarPassos(2); };
+  const manual = () => { if (msg) msg.textContent = t("ram_ia_copie_manual"); if (ver) ver.hidden = false; qsUiCriarPassos(2); };
+  try {
+    const p = navigator.clipboard.writeText(txt);
+    if (p && typeof p.then === "function") p.then(ok, manual);
+    else ok();
+  } catch (e) { manual(); }
+  return txt;
 }
 /* os nomes que a IA usou e ainda não são ramos */
 function qsUiRamosSugeridos() {
@@ -557,9 +585,10 @@ function qsUiRamosSugeridos() {
 function qsUiCriarPintarNovosRamos() {
   const b = $("btnQsCriarNovosRamos");
   if (!b) return;
+  const lr = qsUiListaRamos && typeof ramPareceListaDeRamos === "function" ? ramPareceListaDeRamos(qsUiListaRamos) : null;
   const nomes = qsUiRamosSugeridos();
-  b.hidden = !nomes.length || !qsUiCriarPodeCriarRamos();
-  b.textContent = t("qs_criar_novos_ramos", { n: nomes.length });
+  b.hidden = !(nomes.length || lr) || !qsUiCriarPodeCriarRamos();
+  b.textContent = lr ? t("ria_usar_ramos", { n: lr.ramos.length }) : t("qs_criar_novos_ramos", { n: nomes.length });
 }
 /* sem RAMO escrito (texto pronto, questão já no resumo, IA que esqueceu), um palpite pelas palavras — visível e
  * trocável na conferência, nunca escondido */
@@ -709,7 +738,7 @@ function qsUiPlanoContinuar() {
 }
 /* o pedido (este ou o do caderno) colado na caixa da RESPOSTA */
 function qsUiEhPedido(txt) {
-  return /Crie questões de concurso a partir do TEXTO|Create exam questions from the TEXT|Você está num caderno com FONTES|FORMATO — repita este bloco|FORMAT — repeat this block|\(CE = certo\/errado/i.test(String(txt || ""));
+  return /Crie questões de concurso a partir do TEXTO|Create exam questions from the TEXT|Você está num caderno com FONTES|FORMATO — repita este bloco|FORMAT — repeat this block|\(CE = certo\/errado/i.test(String(txt || "")) || (typeof ramEhPedido === "function" && ramEhPedido(txt));
 }
 /* passos: 1 = montar e copiar (ativo) · 2 = trazer a resposta (ativo, 1 feito) · 3 = resposta lida (os dois feitos) */
 function qsUiCriarPassos(n) {
@@ -747,6 +776,15 @@ function qsUiConferir() {
   if (qsUiEhPedido(bruto)) {
     qsUiPintarConf(qsUiDoTexto.slice(), []);
     qsUiCriarSem("erro", t("qs_sem_pedido"));
+    qsUiCriarPintarNovosRamos();
+    return;
+  }
+  /* (v18.85.0) a lista de RAMOS colada aqui: não é questão — oferece usá-la como ramos do tópico */
+  const listaR = typeof ramPareceListaDeRamos === "function" ? ramPareceListaDeRamos(bruto) : null;
+  qsUiListaRamos = listaR ? bruto : "";
+  if (listaR) {
+    qsUiPintarConf(qsUiDoTexto.slice(), []);
+    qsUiCriarSem("atencao", t("qs_sem_eh_ramos", { n: listaR.ramos.length }));
     qsUiCriarPintarNovosRamos();
     return;
   }
@@ -4117,8 +4155,9 @@ function qsUiIniciar() {
     $("dlgQsCriar").addEventListener("close", () => { if (qsCriarCheia) qsUiCriarCheiaTrocar(false); });
   }
   if ($("btnQsCriarRamosAgora")) $("btnQsCriarRamosAgora").onclick = () => qsUiCriarRamos([]);
+  if ($("btnQsCriarSugPedir")) $("btnQsCriarSugPedir").onclick = () => qsUiCopiarPedidoRamos();
   if ($("btnQsCriarAjustarRamos")) $("btnQsCriarAjustarRamos").onclick = () => qsUiCriarRamos([]);
-  if ($("btnQsCriarNovosRamos")) $("btnQsCriarNovosRamos").onclick = () => qsUiCriarRamos(qsUiRamosSugeridos());
+  if ($("btnQsCriarNovosRamos")) $("btnQsCriarNovosRamos").onclick = () => (qsUiListaRamos ? qsUiCriarRamos([], qsUiListaRamos) : qsUiCriarRamos(qsUiRamosSugeridos()));
   if ($("qsCriarSugerir")) $("qsCriarSugerir").onchange = () => qsUiRefazerPrompt();
   /* colar direto o que a IA devolveu, sem trocar de janela */
   if ($("btnQsColar")) {
