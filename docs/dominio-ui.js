@@ -12,6 +12,29 @@ let domEditalId = "", domDiscAberta = "", domFiltro = "todos";
 const DOM_ABAS = ["prior", "disc", "evo"];
 const DOM_CH_ABA = "eac_dom_aba";
 let domAba = "prior";
+/* (v18.88.0) a barra de cada disciplina: na ordem do edital ou POR COR (vermelho → amarelo → azul → verde → não estudado);
+ * tocar num pedaço abre aquele tópico no mapa */
+const DOM_CH_ORDEM = "eac_dom_ordem";
+const DOM_ORDEM_COR = ["vermelho", "amarelo", "azul", "verde", "cinza", "pulado"];
+function domOrdemLer() { try { return localStorage.getItem(DOM_CH_ORDEM) === "cor" ? "cor" : "edital"; } catch (e) { return "edital"; } }
+function domOrdemDefinir(o) { try { localStorage.setItem(DOM_CH_ORDEM, o === "cor" ? "cor" : "edital"); } catch (e) {} domPintar(); }
+let domAlvo = "", domAlvoEl = null;
+/* abre a disciplina no mapa, rola até o tópico e o faz piscar */
+function domIrAoTopico(disciplina, chave) {
+  domDiscAberta = disciplina || "";
+  domAlvo = chave || "";
+  if (!domDuas()) domAbaDefinir("disc", true);
+  domPintar();
+  const el = domAlvoEl;
+  domAlvo = ""; domAlvoEl = null;
+  if (el) {
+    /* o TÍTULO do tópico no alto: com muitos ramos, centralizar deixava só o meio da lista à vista */
+    try { if (el.scrollIntoView) el.scrollIntoView({ block: "start" }); } catch (e) {}
+    el.classList.add("dom-piscando");
+    setTimeout(() => { try { el.classList.remove("dom-piscando"); } catch (e) {} }, 2600);
+  }
+  return el;
+}
 function domAbaLer() { try { const v = localStorage.getItem(DOM_CH_ABA); return DOM_ABAS.indexOf(v) >= 0 ? v : "prior"; } catch (e) { return "prior"; } }
 function domAbaDefinir(a, calado) {
   domAba = DOM_ABAS.indexOf(a) >= 0 ? a : "prior";
@@ -319,6 +342,16 @@ function domPintar() {
   pPrior.append(s);
   /* ---- disciplinas: as que já têm estudo primeiro; as ainda sem nada estudado recolhidas no fim ---- */
   const ordem = m.disciplinas.slice().sort((a, b) => (b.pesoPct - a.pesoPct) || (a.nome < b.nome ? -1 : 1));
+  const ordemCor = domOrdemLer() === "cor";
+  const linOrd = gerEl("div", "dom-ordem");
+  linOrd.append(gerEl("span", "dom-item-rot", t("dom_ordem_rot")));
+  [["edital", "dom_ordem_edital"], ["cor", "dom_ordem_cor"]].forEach(([v, k]) => {
+    const b = gerEl("button", "dom-filtro dom-ordem-b" + ((ordemCor ? "cor" : "edital") === v ? " ativa" : ""), t(k)); b.type = "button";
+    b.setAttribute("aria-pressed", (ordemCor ? "cor" : "edital") === v ? "true" : "false");
+    b.onclick = () => domOrdemDefinir(v);
+    linOrd.append(b);
+  });
+  pDisc2.append(linOrd);
   const lista = gerEl("div", "cov-lista");
   const semEstudo = gerEl("details", "dom-sem-estudo");
   const semLista = gerEl("div", "cov-lista");
@@ -338,10 +371,15 @@ function domPintar() {
     linha.append(cab);
     const tira = gerEl("div", "cov-tira");
     const somaTop = d.topicos.reduce((x, tp) => x + tp.pesoPct, 0) || 1;
-    d.topicos.forEach((tp) => {
+    const segs = ordemCor ? d.topicos.slice().sort((x, y) => (DOM_ORDEM_COR.indexOf(x.nivel) - DOM_ORDEM_COR.indexOf(y.nivel)) || (y.pesoPct - x.pesoPct)) : d.topicos;
+    segs.forEach((tp) => {
       const seg = gerEl("div", "cov-seg dom-n-" + (tp.nivel === "pulado" ? "cinza" : tp.nivel));
       seg.style.width = ((tp.pesoPct / somaTop) * 100).toFixed(2) + "%";
-      seg.title = tp.nome + (tp.nivel === "pulado" ? "" : " — " + t("dom_n_" + tp.nivel));
+      /* o pior ramo explica a cor do tópico com ramos */
+      const pior = tp.ramos.length ? tp.ramos.filter((r) => r.nivel === tp.nivel)[0] : null;
+      const pq = domPorque(tp.motivos || (pior && pior.motivos) || []);
+      seg.title = t("dom_seg_tip", { t: tp.nome, p: (tp.pesoPct || 0).toFixed(1), n: tp.nivel === "pulado" ? "—" : t("dom_n_" + tp.nivel) }) + (pq ? " · " + pq : "");
+      seg.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domIrAoTopico(d.nome, tp.chave); };
       tira.append(seg);
     });
     linha.append(tira);
@@ -349,6 +387,8 @@ function domPintar() {
     d.topicos.forEach((tp) => {
       if (domFiltro !== "todos" && !casaTopo(tp)) return;
       const tl = gerEl("div", "dom-top dom-b-" + tp.nivel);
+      if (tp.chave && tl.dataset) tl.dataset.chave = tp.chave;
+      if (domAlvo && tp.chave === domAlvo) domAlvoEl = tl;
       const topo = gerEl("div", "dom-top-cab");
       topo.append(gerEl("span", "dom-nivel dom-n-" + tp.nivel, tp.nivel === "pulado" ? "—" : t("dom_n_" + tp.nivel)), gerEl("span", "cov-top-nome", tp.nome));
       if (tp.fase2 && m.fase === 1) topo.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
@@ -426,6 +466,83 @@ function domSalvarCortes() {
   domPintar();
 }
 
+/* =====================================================================
+ * (v18.88.0) O DOMÍNIO FORA DA JANELA
+ * O nível de cada tópico, calculado uma vez e guardado enquanto as entradas não mudam (a agenda pinta dezenas de linhas
+ * de uma vez; refazer o mapa custa ~40 ms por edital). A ASSINATURA resume tudo o que o Domínio lê: o texto e o
+ * progresso do edital, as respostas às questões, os cartões da biblioteca e as revisões deles, as autoavaliações, os
+ * cortes e o dia (revisão vence com o tempo). Usado pelo selo da linha da agenda e pelo termômetro do edital.
+ * ===================================================================== */
+let domCacheNiveis = {};
+function domHash(str) { let h = 5381; const s0 = String(str || ""); for (let i = 0; i < s0.length; i++) h = ((h << 5) + h + s0.charCodeAt(i)) | 0; return h; }
+function domAssinatura(ed) {
+  const ls = (k) => { try { return domHash(localStorage.getItem(k) || ""); } catch (e) { return 0; } };
+  let q = 0;
+  try { (typeof qsTodas === "function" ? qsTodas() : []).forEach((x) => { const ts = x.tentativas || []; const u = ts[ts.length - 1]; q = (q * 31 + ts.length * 7 + (u && u.acertou ? 3 : 1) + (u && u.chute ? 11 : 0) + String(x.chave || "").length) | 0; }); } catch (e) {}
+  let c = 0;
+  try { Object.keys(typeof matResumos !== "undefined" ? matResumos : {}).forEach((k) => { c = (c * 31 + domHash((matResumos[k] || {}).cartoes || "")) | 0; }); } catch (e) {}
+  return [domHash(ed.texto), domHash(JSON.stringify(ed.progresso || {})), q, c,
+    ls(typeof ESTC_CH_REGS !== "undefined" ? ESTC_CH_REGS : ""), ls(typeof DIF_CHAVE !== "undefined" ? DIF_CHAVE : ""), ls(DOM_CH_LIM),
+    typeof hojeISO === "function" ? hojeISO() : ""].join("|");
+}
+function domChaveNome(d, tp) {
+  return String((d || "") + "›" + (tp || "")).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function domNiveisDoEdital(edId, forcar) {
+  const ed = (typeof editais !== "undefined" ? editais : []).find((e) => String(e.id) === String(edId));
+  if (!ed) return null;
+  const c = domCacheNiveis[ed.id];
+  const sig = domAssinatura(ed);
+  if (!forcar && c && c.sig === sig) return c;
+  let m = null;
+  try { m = domDoEdital(ed); } catch (e) { return null; }
+  const porTopico = {};
+  m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { porTopico[domChaveNome(d.nome, tp.nome)] = { nivel: tp.nivel, disciplina: d.nome, topico: tp.nome, chave: tp.chave }; }));
+  const tot = m.resumo.total || 1, dist = m.resumo.distribuicao;
+  const pct = {};
+  DOM_NIVEIS.forEach((k) => { pct[k] = (dist[k] / tot) * 100; });
+  const out = { sig, porTopico, pct, folhas: m.resumo.folhas };
+  domCacheNiveis[ed.id] = out;
+  return out;
+}
+function domNivelDoTopico(edId, disciplina, topico) {
+  const n = domNiveisDoEdital(edId);
+  return n ? (n.porTopico[domChaveNome(disciplina, topico)] || null) : null;
+}
+/* o selo da linha da agenda: só para o que já foi estudado (não estudado é o normal e já se vê na própria linha) */
+function domSeloDaLinha(i) {
+  if (!i || !i.disciplina) return null;
+  const edId = i.edital || (typeof editalAtual !== "undefined" ? editalAtual : "");
+  const n = domNivelDoTopico(edId, i.disciplina, i.nome || i.titulo);
+  if (!n || n.nivel === "cinza" || n.nivel === "pulado") return null;
+  const b = gerEl("button", "dom-selo-linha dom-n-" + n.nivel, t("dom_curto_" + n.nivel));
+  b.type = "button";
+  b.title = t("dom_selo_linha_tip", { n: t("dom_n_" + n.nivel) });
+  b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domAbrir(edId, n.disciplina); domIrAoTopico(n.disciplina, n.chave); };
+  return b;
+}
+/* o termômetro do edital aberto, ao lado do botão do Domínio: uma barrinha do peso por nível + o verde em número */
+function domTermoPintar(edId) {
+  const box = $("edDomTermo");
+  if (!box) return null;
+  box.innerHTML = "";
+  const n = edId ? domNiveisDoEdital(edId, true) : null;
+  box.hidden = !n || !n.folhas;
+  if (box.hidden) return null;
+  const barra = gerEl("span", "dom-termo-barra");
+  ["verde", "amarelo", "azul", "vermelho", "cinza"].forEach((k) => {
+    if (n.pct[k] <= 0) return;
+    const s = gerEl("span", "dom-termo-seg dom-n-" + k);
+    s.style.width = n.pct[k].toFixed(2) + "%";
+    barra.append(s);
+  });
+  const r = (k) => Math.round(n.pct[k]);
+  box.append(barra, gerEl("span", "dom-termo-txt", t("dom_termo_txt", { v: r("verde"), r: r("vermelho") })));
+  box.title = t("dom_termo_tip", { v: r("verde"), a: r("amarelo"), z: r("azul"), r: r("vermelho"), c: r("cinza") });
+  box.onclick = () => domAbrir(edId);
+  return n;
+}
+
 function domAbrir(editalId, disciplina) {
   domDiscAberta = disciplina || "";
   domFiltro = "todos";
@@ -458,6 +575,7 @@ if (typeof document !== "undefined" && $("dlgDominio")) {
   $("btnDomPadrao").onclick = () => { try { localStorage.removeItem(DOM_CH_LIM); } catch (e) {} domPintar(); };
   if ($("btnDomAjuda")) $("btnDomAjuda").onclick = () => domAjudaTrocar();
   if ($("btnDomCheia")) $("btnDomCheia").onclick = () => domCheiaTrocar(undefined, true);
+  if ($("dlgDominio").addEventListener) $("dlgDominio").addEventListener("close", () => { try { if (typeof editalAtual !== "undefined" && editalAtual) domTermoPintar(editalAtual); } catch (e) {} });
   if ($("dlgDominio").addEventListener) $("dlgDominio").addEventListener("close", () => { if (domCheia) { domCheia = false; $("dlgDominio").classList.remove("dom-cheia"); if (typeof telaCheiaSair === "function") telaCheiaSair("dominio"); } });
   try {
     const mq = window.matchMedia && window.matchMedia("(min-width: " + DOM_LARGO_MIN + "px)");
