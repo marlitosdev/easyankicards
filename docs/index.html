@@ -5235,6 +5235,40 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-ajustes summary{cursor:pointer;color:var(--sutil)}
 .dom-aj-l{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
 .dom-aj-l input{width:58px}
+/* (v18.86.0) Domínio: visões, topo preso, cortes que não se partem, peso sempre à direita do nome */
+.dom-abas{margin:2px 0 4px}
+.dom-aj-par{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dom-ajuda{all:unset;box-sizing:border-box;cursor:pointer;width:26px;height:26px;border-radius:50%;border:1px solid var(--borda);
+  display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;margin-right:auto;margin-left:6px;color:var(--texto)}
+.dom-ajuda[aria-expanded="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
+.dom-ajuda:focus-visible{outline:2px solid var(--acao)}
+#dlgDominio .cov-cab{justify-content:flex-start}
+.dom-fixo{position:sticky;top:0;z-index:2;background:var(--panel);padding:2px 0 4px;margin-bottom:6px;border-bottom:1px solid var(--borda)}
+.dom-fixo .cov-manchete{padding:6px 10px;margin-bottom:6px;font-size:13px}
+.dom-fixo .dom-dist{height:22px;margin:4px 0}
+.dom-fixo .cov-legenda{margin:2px 0 2px}
+.dom-manchete-info{background:rgba(79,179,232,.12);border-color:#4fb3e8}
+.dom-ganho{font-size:13px;margin:0 0 8px;padding:6px 10px;border-radius:8px;border:1px dashed var(--ok,#2e9e5b);background:rgba(46,158,91,.08)}
+.dom-item{flex-wrap:wrap}
+.dom-item-porque{flex:1 1 100%;margin:0}
+.dom-sem-estudo{margin:10px 0}
+.dom-sem-estudo > summary{cursor:pointer;font-size:13px;color:var(--sutil);padding:6px 0}
+#dlgDominio .cov-disc-cab{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:10px;row-gap:2px}
+#dlgDominio .cov-disc-cab .cov-peso{grid-column:2;grid-row:1;justify-self:end}
+#dlgDominio .cov-disc-cab .cov-n,#dlgDominio .cov-disc-cab .dom-evo-disc{grid-column:1 / -1}
+/* tela larga: janela maior; mapa (esquerda) e fila (direita) rolam cada um por si, o topo fica por cima dos dois */
+/* a regra geral de dialog limita a 640px: sem isto a janela do Domínio nunca passava disso (a "fresta" das capturas) */
+dialog.dom-dlg[open]{max-width:96vw}
+dialog.dom-dlg.dom-largo[open]{width:min(1440px,97vw);max-width:97vw}
+/* TELA CHEIA (o padrão): a janela ocupa a tela toda; pelo id, vence as regras de largura acima */
+#dlgDominio.dom-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
+  margin:0;border:0;border-radius:0;box-sizing:border-box}
+.dom-cheia-bt{margin-right:6px;white-space:nowrap}
+#domCorpo.dom-duas{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:18px;overflow:hidden}
+#domCorpo.dom-duas .dom-fixo{grid-column:1 / -1;grid-row:1;position:static}
+#domCorpo.dom-duas .dom-painel-disc{grid-column:1;grid-row:2;overflow-y:auto;min-height:0;padding-right:6px}
+#domCorpo.dom-duas .dom-painel-prior{grid-column:2;grid-row:2;overflow-y:auto;min-height:0;padding:0 6px 0 14px;border-left:1px solid var(--borda)}
+#domCorpo.dom-duas .dom-painel-prior .cov-bloco{margin-top:0}
 .dom-auto{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
 .dom-minha{font-size:11px;color:var(--sutil)}
 .dom-auto-b{all:unset;box-sizing:border-box;cursor:pointer;font-size:11px;padding:2px 9px;border-radius:999px;border:1px solid var(--borda)}
@@ -9783,9 +9817,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgDominio" class="ui-modal dom-dlg">
   <div class="cov-cab">
     <h3 data-i18n="dom_titulo"></h3>
+    <!-- (v18.86.0) a explicação mora no "?": aberta na primeira vez, depois recolhida (ganha a altura da tela) -->
+    <button type="button" class="dom-ajuda" id="btnDomAjuda" aria-expanded="false" aria-controls="domSub" data-i18n-title="dom_ajuda_tip">?</button>
+    <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnDomCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
     <button type="button" class="qs-x" id="btnDomX" aria-label="Fechar">✕</button>
   </div>
-  <p class="nota" data-i18n="dom_sub"></p>
+  <p class="nota" id="domSub" data-i18n="dom_sub" hidden></p>
   <div class="cov-barra">
     <select id="domEdital"></select>
     <select id="domFase" hidden>
@@ -9793,11 +9830,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <option value="2" data-i18n="cov_fase2"></option>
     </select>
   </div>
+  <!-- (v18.86.0) TRÊS VISÕES: o que fazer agora · o mapa das disciplinas · a evolução -->
+  <div class="ger-modos dom-abas" role="tablist" id="domAbas">
+    <button type="button" class="ger-modo" role="tab" id="btnDomAbaPrior" aria-selected="true" data-i18n="dom_aba_prior" data-i18n-title="dom_aba_prior_tip"></button>
+    <button type="button" class="ger-modo" role="tab" id="btnDomAbaDisc" aria-selected="false" data-i18n="dom_aba_disc" data-i18n-title="dom_aba_disc_tip"></button>
+    <button type="button" class="ger-modo" role="tab" id="btnDomAbaEvo" aria-selected="false" data-i18n="dom_aba_evo" data-i18n-title="dom_aba_evo_tip"></button>
+  </div>
   <div class="dom-filtros" id="domFiltros"></div>
   <details class="dom-ajustes">
-    <summary data-i18n="dom_ajustes"></summary>
-    <div class="dom-aj-l"><span data-i18n="dom_aj_acerto"></span> <input type="number" id="domAcRisco" min="1" max="99"> / <input type="number" id="domAcSeguro" min="1" max="99"></div>
-    <div class="dom-aj-l"><span data-i18n="dom_aj_ret"></span> <input type="number" id="domRtRisco" min="1" max="99"> / <input type="number" id="domRtSeguro" min="1" max="99"></div>
+    <summary id="domAjustesSum" data-i18n="dom_ajustes"></summary>
+    <div class="dom-aj-l"><span data-i18n="dom_aj_acerto"></span> <span class="dom-aj-par"><input type="number" id="domAcRisco" min="1" max="99"> / <input type="number" id="domAcSeguro" min="1" max="99"></span></div>
+    <div class="dom-aj-l"><span data-i18n="dom_aj_ret"></span> <span class="dom-aj-par"><input type="number" id="domRtRisco" min="1" max="99"> / <input type="number" id="domRtSeguro" min="1" max="99"></span></div>
     <button type="button" class="btn-min" id="btnDomPadrao" data-i18n="dom_aj_padrao"></button>
     <p class="nota" data-i18n="dom_aj_nota"></p>
   </details>
