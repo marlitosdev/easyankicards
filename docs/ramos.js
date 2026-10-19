@@ -589,6 +589,42 @@ function ramPedidoEscolhidos(lista) {
   return (lista || []).filter((r) => r && r.nome && r.incluir !== false).map((r) => ({ nome: r.nome, foco: r.foco || "", novo: !!r.novo }));
 }
 
+/* (v18.85.0) A LISTA DE RAMOS COLADA NO LUGAR ERRADO.
+ * A resposta do pedido de ramos ("++ Nome :: peso :: nota") colada na caixa do RESUMO (ou das questões) era lida como
+ * texto do resumo — e "aplicar" a gravava no resumo. "++" no começo da linha não aparece em resumo nem em questão: com
+ * 2 ou mais linhas assim, e elas sendo a maioria, é a lista de ramos. Quem a recebe oferece usá-la como ramos. */
+function ramPareceListaDeRamos(texto) {
+  const ls = String(texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const mais = ls.filter((l) => /^\+\+\s*\S/.test(l)).length;
+  if (mais < 2 || mais < ls.length * 0.6) return null;
+  const r = ramLerRespostaIA(texto);
+  return r.ramos.length ? r : null;
+}
+/* O PEDIDO DE RAMOS SEM PASSAR PELO EDITOR (resumo, questões): o mesmo texto do editor; o índice da lei só vai quando a
+ * lei do tópico combina com o nome dele — a mesma regra do editor. A resposta volta na caixa da própria tela, que a
+ * reconhece (ramPareceListaDeRamos) e abre o editor já com ela, só para conferir e salvar. */
+function ramPedidoForaDoEditor(ctx) {
+  const c = Object.assign({}, ctx || {});
+  let comLei = false;
+  try {
+    c.leiCands = ramLeisCandidatas(c.chave, c.topico);
+    c.leiId = ramLeiPadrao(c.leiCands).id;
+    const c0 = c.leiCands.find((x) => x.id === c.leiId);
+    comLei = !!(c0 && c0.combina === true);
+  } catch (e) { comLei = false; }
+  return ramPedidoIA(c, [], { semIndice: !comLei });
+}
+/* abre o editor de ramos do tópico com a lista já colada e lida no passo 2 dele: a pessoa confere nome, peso e nota
+ * e salva (ctx.depois é chamado ao salvar, como sempre) */
+function ramAbrirComLista(ctx, texto) {
+  if (!ramAbrirEditor(ctx)) return null;
+  $("ramColar").value = String(texto || "");
+  const r = ramConferirIA();
+  try { ramIaSemaforo(); } catch (e) {}
+  if ($("ramCaminhos")) $("ramCaminhos").open = false;
+  return r;
+}
+
 /* Q2b — O RAMO PROVÁVEL DE UMA QUESTÃO, pelas palavras (a mesma regra dos pesos: a maioria dos radicais do nome do ramo
  * aparece no enunciado/comentário/opções). Ganha o ramo com a maior proporção citada; EMPATE = sem sugestão (melhor
  * perguntar do que chutar). É só sugestão: nada é ligado sem a pessoa confirmar. */

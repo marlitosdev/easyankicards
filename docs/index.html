@@ -6556,7 +6556,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- SEM RAMOS (v18.78.0): dividir o tópico é o que separa o resumo por partes e põe cada parte no plano -->
     <div class="res-ia-sugr" id="resIASugRamos" hidden>
       <b data-i18n="ria_sugr_tit"></b> <span data-i18n="ria_sugr_txt"></span>
-      <div class="res-ia-sugr-bts"><button type="button" class="btn-min btn-min-ok" id="btnResIASugCriar" data-i18n="ria_sugr_criar" data-i18n-title="ria_sugr_criar_tip"></button></div>
+      <div class="res-ia-sugr-bts"><button type="button" class="btn-min btn-min-ok" id="btnResIASugPedir" data-i18n="ria_sugr_pedir" data-i18n-title="ria_sugr_pedir_tip"></button>
+        <button type="button" class="btn-min" id="btnResIASugCriar" data-i18n="ria_sugr_criar" data-i18n-title="ria_sugr_criar_tip"></button></div>
+      <p class="nota ednovo-prompt-msg" id="resIASugMsg" role="status"></p>
+      <textarea id="resIASugPedidoTxt" rows="5" class="ram-colar" readonly hidden aria-label="Pedido de ramos para a IA"></textarea>
       <div class="nota" data-i18n="ria_sugr_ou"></div>
     </div>
     <div id="resIARamos" class="res-ia-ramos"></div>
@@ -7659,7 +7662,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <div id="qsCriarRamos" class="res-ia-ramos"></div>
         <div class="res-ia-sugr" id="qsCriarSugRamos" hidden>
           <b data-i18n="ria_sugr_tit"></b> <span data-i18n="qs_sugr_txt"></span>
-          <div class="res-ia-sugr-bts"><button type="button" class="btn-min btn-min-ok" id="btnQsCriarRamosAgora" data-i18n="ria_sugr_criar" data-i18n-title="ria_sugr_criar_tip"></button></div>
+          <div class="res-ia-sugr-bts"><button type="button" class="btn-min btn-min-ok" id="btnQsCriarSugPedir" data-i18n="ria_sugr_pedir" data-i18n-title="qs_sugr_pedir_tip"></button>
+            <button type="button" class="btn-min" id="btnQsCriarRamosAgora" data-i18n="ria_sugr_criar" data-i18n-title="ria_sugr_criar_tip"></button></div>
+          <p class="nota ednovo-prompt-msg" id="qsCriarSugMsg" role="status"></p>
+          <textarea id="qsCriarSugPedidoTxt" rows="5" class="ram-colar" readonly hidden aria-label="Pedido de ramos para a IA"></textarea>
           <div class="nota" data-i18n="qs_sugr_ou"></div>
         </div>
         <label class="res-ia-lin" id="qsCriarSugerirLin" hidden><input type="checkbox" id="qsCriarSugerir"> <span data-i18n="qs_sugerir_ramos"></span></label>
