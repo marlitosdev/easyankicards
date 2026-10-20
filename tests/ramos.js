@@ -344,7 +344,15 @@ async function testes() {
       const pEn = api.t("ram_prompt_ia", { t: "X", d: "Y", c: "Z", atuais: "-", indice: api.t("ram_prompt_indice") + NL + "- A" + NL, dados: "" });
       api.setLanguage("pt");
       ok(api.ramLerRespostaIA(pPt).ehPedido === true && api.ramLerRespostaIA(pPt).ramos.length === 0 && api.ramLerRespostaIA(pEn).ehPedido === true && api.ramLerRespostaIA(pEn).ramos.length === 0, "R27h o PEDIDO colado (PT ou EN) nao vira ramo");
-      ok(api.RAM_PEDIDO_ASSINATURAS.every((x) => pPt.indexOf(x) >= 0 || pEn.indexOf(x) >= 0) && api.RAM_PEDIDO_ASSINATURAS.filter((x) => pPt.indexOf(x) >= 0).length >= 2 && api.RAM_PEDIDO_ASSINATURAS.filter((x) => pEn.indexOf(x) >= 0).length >= 2, "R27i contrato: as frases-assinatura existem no texto do pedido (mudar o pedido sem atualizar as assinaturas quebra aqui)");
+      /* (v18.93.0) as assinaturas valem também para o pedido de CORREÇÃO dos ramos */
+      const cv = { t: "X", d: "Y", c: "Z", atuais: "-", irmaos: "-", problemas: "-" };
+      const cPt = api.t("ram_prompt_corrigir", cv);
+      api.setLanguage("en");
+      const cEn = api.t("ram_prompt_corrigir", cv);
+      api.setLanguage("pt");
+      ok(api.ramLerRespostaIA(cPt).ehPedido === true && api.ramLerRespostaIA(cEn).ehPedido === true && api.ramLerRespostaIA(cPt).ramos.length === 0, "R27h1 o pedido de CORREÇÃO colado (PT ou EN) também não vira ramo");
+      ok([cPt, cEn].every((p) => api.RAM_PEDIDO_ASSINATURAS.filter((x) => p.indexOf(x) >= 0).length >= 2), "R27h2 o pedido de correção tem 2+ assinaturas em cada idioma (uma só seria frágil)");
+      ok(api.RAM_PEDIDO_ASSINATURAS.every((x) => [pPt, pEn, cPt, cEn].some((p) => p.indexOf(x) >= 0)) && api.RAM_PEDIDO_ASSINATURAS.filter((x) => pPt.indexOf(x) >= 0).length >= 2 && api.RAM_PEDIDO_ASSINATURAS.filter((x) => pEn.indexOf(x) >= 0).length >= 2, "R27i contrato: as frases-assinatura existem no texto do pedido (mudar o pedido sem atualizar as assinaturas quebra aqui)");
       /* colado pela metade: so' as regras (o trecho que virava ramos falsos) */
       const soRegras = (p) => { const q = p.split("Law index")[0].split("Índice da lei")[0]; return q.slice(q.indexOf("- ")); };
       ok(api.ramLerRespostaIA(soRegras(pPt)).ehPedido === true && api.ramLerRespostaIA(soRegras(pPt)).ramos.length === 0 && api.ramLerRespostaIA(soRegras(pEn)).ehPedido === true, "R27h2 so' as regras do pedido (colado pela metade) tambem nao vira ramo");
@@ -3307,7 +3315,7 @@ async function testes() {
     const dlg = html.slice(ini, html.indexOf("</dialog>", ini));
     const ids = [...dlg.matchAll(/<button[^>]*\bid="(\w+)"/g)].map((m) => m[1]);
     const { a, ed } = MT();
-    ok(ids.length === 9 && ids.every((id) => a.RAM_DICAS[id]) && Object.keys(a.RAM_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "R20 todo botao do editor de ramos tem explicacao");
+    ok(ids.length === 10 && ids.every((id) => a.RAM_DICAS[id]) && Object.keys(a.RAM_DICAS).every((id) => dlg.indexOf('id="' + id + '"') >= 0), "R20 todo botao do editor de ramos tem explicacao");
     const chaves = Object.values(a.RAM_DICAS).concat(["ram_tip_nome", "ram_tip_peso", "ram_tip_nota", "ram_tip_sobe", "ram_tip_desce", "ram_tip_apagar", "ger_tip_ramos", "ger_tip_ramo", "ger_tip_ramo_geral", "ger_tip_seta_ramos"]);
     ok(chaves.every((kk) => i18n.split('"' + kk + '": ').length - 1 >= 2 && a.t(kk, { r: "X" }).length > 15), "R20a as explicacoes existem em portugues e ingles");
     a.gerAbrir(); abrirTopicoLei(a, ed);

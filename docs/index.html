@@ -5277,6 +5277,10 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
   border:1px solid var(--borda);border-left-width:4px;background:rgba(127,127,127,.06);font-size:12.5px}
 .dom-passo .dom-nivel{all:unset;box-sizing:border-box;cursor:pointer;font-size:10.5px;font-weight:800;padding:1px 8px;border-radius:999px}
 .dom-passo-pq{flex:1 1 220px;color:var(--sutil)}
+.ram-problemas{margin:8px 0;padding:8px 10px;border:1px solid var(--atencao);border-left-width:4px;border-radius:8px;
+  background:color-mix(in srgb,var(--atencao) 9%,transparent);font-size:12.5px}
+.ram-problemas ul{margin:4px 0 6px 18px;padding:0}
+.ram-problemas li{margin:2px 0}
 .dom-ordem{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
 #dlgDominio .cov-tira .cov-seg{cursor:pointer}
 #dlgDominio .cov-tira .cov-seg:hover{filter:brightness(1.25)}
@@ -9471,6 +9475,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" data-i18n="ram_ajuda"></p>
   <div id="ramLista" class="ram-lista"></div>
   <p class="nota ram-aviso-apagar" id="ramAvisoApagar" role="status" hidden></p>
+  <!-- (v18.93.0) problemas nos ramos (repetidos, parecidos, em outro tópico) e o pedido de correção à IA -->
+  <div class="ram-problemas" id="ramProblemas" role="status" hidden>
+    <b id="ramProblemasTit"></b>
+    <ul id="ramProblemasLista"></ul>
+    <div class="ram-acoes-lista">
+      <button type="button" class="btn-min btn-min-ok" id="btnRamCorrigirIA" data-i18n="ram_corr_btn"></button>
+    </div>
+    <p class="nota ednovo-prompt-msg" id="ramProblemasMsg" role="status"></p>
+  </div>
   <!-- cada jeito de criar diz o que PRECISA: escrever e pedir à IA não precisam de nada; a lei só é exigida pelo índice -->
   <div class="ram-acoes-lista">
     <button type="button" class="btn-min btn-min-ok" id="btnRamMais" data-i18n="ram_mais"></button>

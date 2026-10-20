@@ -413,7 +413,8 @@ function ramPedidoIA(ctx, atuais, opc) {
  * Devolve { ramos:[{nome, peso, nota}], ignoradas, avisos:[tipo…] } — o "lerEdital" faz a leitura de nome/peso/nota. */
 /* frases que só existem no PEDIDO (PT e EN): colado no lugar da resposta, as regras viravam ramos ("Responda SOMENTE…") */
 const RAM_PEDIDO_ASSINATURAS = ["Responda SOMENTE com linhas no formato", "em RAMOS de estudo", "Índice da lei do tópico (use como guia",
-  "Answer ONLY with lines in the format", "into study BRANCHES", "Law index for the topic (use it as a guide"];
+  "Answer ONLY with lines in the format", "into study BRANCHES", "Law index for the topic (use it as a guide",
+  "Devolva a lista CORRIGIDA", "Return the CORRECTED list"];
 function ramEhPedido(texto) {
   const s = String(texto || "");
   return RAM_PEDIDO_ASSINATURAS.some((a) => s.indexOf(a) >= 0);
@@ -683,6 +684,7 @@ let ramCtx = null, ramLinhas = [];
 
 const RAM_DICAS = {
   btnRamLei: "ram_tip_lei", btnRamLeiVer: "ram_tip_lei_ver", btnRamLeiFixar: "ram_tip_lei_fixar", btnRamPesos: "ram_tip_pesos", btnRamIa: "ram_tip_ia", btnRamConferir: "ram_tip_conferir", btnRamMais: "ram_tip_mais", btnRamSalvar: "ram_tip_salvar", btnRamFechar: "ram_tip_fechar",
+  btnRamCorrigirIA: "ram_corr_btn_tip",
 };
 
 function ramEl(tag, cls, txt) {
@@ -722,6 +724,129 @@ function ramPintar() {
   ramAvisoApagar();
   ramPesosPintar();
   ramIaSemaforo();
+  try { ramProblemasPintar(); } catch (e) {}
+}
+
+/* =====================================================================
+ * (v18.93.0) PROBLEMAS NOS RAMOS — e a correção pela IA
+ *
+ * O caso real (19/10): ramos criados mais de uma vez, e ramos iguais em tópicos vizinhos ("Extinção do crédito
+ * tributário" em "Crédito tributário" E em "Suspensão, extinção e exclusão…"). O editor aponta, para o tópico aberto:
+ *  · repetido / parecido — dois ramos do tópico com o mesmo nome, ou quase (os mesmos radicais);
+ *  · em outro tópico — o ramo também é ramo de um tópico vizinho da mesma disciplina;
+ *  · nome de tópico — o ramo tem o nome de outro tópico da disciplina.
+ * E monta o pedido de correção: os ramos de agora, os dos tópicos vizinhos e os problemas; a IA devolve a lista
+ * CORRIGIDA deste tópico, que passa pela mesma conferência (substituir / acrescentar) e só vale ao salvar.
+ * ===================================================================== */
+const RAM_PARECIDO = 0.75;
+/* 1 = o mesmo nome. Senão, o maior entre a sobreposição dos radicais (Jaccard) e a CONTENÇÃO — um nome de 2+ radicais
+ * todo dentro do outro ("Extinção do crédito" ⊂ "Extinção do crédito tributário"). soJaccard: só a sobreposição
+ * (para comparar com nomes de TÓPICO, que estão contidos em quase todo ramo do próprio assunto). ignorar: radicais que
+ * não distinguem nada ali (os do nome da disciplina: "tribut" em "Sistema Tributário" está em todo ramo). */
+function ramSemelhanca(a, b, soJaccard, ignorar) {
+  if (edRamoId(a) === edRamoId(b)) return 1;
+  const tira = (S) => { if (ignorar) ignorar.forEach((w) => S.delete(w)); return S; };
+  const A = tira(ramRadicais(a)), B = tira(ramRadicais(b));
+  if (!A.size || !B.size) return 0;
+  let c = 0;
+  A.forEach((w) => { if (B.has(w)) c++; });
+  const jac = c / (A.size + B.size - c);
+  const menor = Math.min(A.size, B.size);
+  return soJaccard || menor < 2 ? jac : Math.max(jac, c / menor);
+}
+function ramProblemas(texto, disciplina, topico, nomesAtuais) {
+  let r = null;
+  try { r = lerEdital(texto || ""); } catch (e) { return []; }
+  const d = (r.disciplinas || []).find((x) => edRamoId(x.nome) === edRamoId(disciplina));
+  const atuais = (nomesAtuais || edRamosDoTopico(texto || "", disciplina, topico).map((x) => x.nome)).map((s) => String(s || "").trim()).filter(Boolean);
+  const out = [];
+  const visto = new Set();
+  /* um aviso por ramo e tópico vizinho (o 1º ramo parecido de lá basta para explicar) */
+  const por = (p) => { const k = p.tipo + "|" + edRamoId(p.ramo) + "|" + (p.tipo === "outro_topico" ? "" : edRamoId(p.outro || "")) + "|" + edRamoId(p.topico || ""); if (!visto.has(k)) { visto.add(k); out.push(p); } };
+  const ign = ramRadicais(disciplina);
+  /* linhas "++" repetidas no TEXTO do edital (o leitor guarda uma só e avisa "ramo_repetido"): as do tópico são as que
+   * ficam entre a linha dele e a próxima linha de tópico ou de disciplina. Ao salvar pelo editor, fica uma só. */
+  const tp0 = d && d.topicos.find((x) => edRamoId(x.nome) === edRamoId(topico));
+  if (tp0) {
+    const marcos = [];
+    (r.disciplinas || []).forEach((x) => { marcos.push(x.linha); x.topicos.forEach((y) => marcos.push(y.linha)); });
+    const fim = Math.min(Infinity, ...marcos.filter((n) => n > tp0.linha));
+    const vezes = new Map();
+    (r.achados || []).filter((ac) => ac.tipo === "ramo_repetido" && ac.linha > tp0.linha && ac.linha < fim)
+      .forEach((ac) => vezes.set(edRamoId(ac.txt), { nome: ac.txt, n: ((vezes.get(edRamoId(ac.txt)) || {}).n || 1) + 1 }));
+    /* só enquanto o ramo continua na lista (tirado no editor, o aviso não tem mais objeto) */
+    const ids = new Set(atuais.map(edRamoId));
+    vezes.forEach((v, id) => { if (ids.has(id)) por({ tipo: "repetido_texto", ramo: v.nome, n: v.n }); });
+  }
+  for (let i = 0; i < atuais.length; i++) for (let j = i + 1; j < atuais.length; j++) {
+    const s = ramSemelhanca(atuais[i], atuais[j], false, ign);
+    if (edRamoId(atuais[i]) === edRamoId(atuais[j])) por({ tipo: "repetido", ramo: atuais[i], outro: atuais[j] });
+    else if (s >= RAM_PARECIDO) por({ tipo: "parecido", ramo: atuais[i], outro: atuais[j] });
+  }
+  if (d) d.topicos.forEach((tp) => {
+    if (edRamoId(tp.nome) === edRamoId(topico)) return;
+    atuais.forEach((a) => {
+      if (ramSemelhanca(a, tp.nome, true, ign) >= 0.8) por({ tipo: "nome_de_topico", ramo: a, topico: tp.nome });
+      (tp.ramos || []).forEach((rm) => { if (ramSemelhanca(a, rm.nome, false, ign) >= RAM_PARECIDO) por({ tipo: "outro_topico", ramo: a, topico: tp.nome, outro: rm.nome }); });
+    });
+  });
+  return out;
+}
+function ramProblemaTexto(p) {
+  return t("ram_prob_" + p.tipo, { r: p.ramo, o: p.outro || "", t: p.topico || "", n: p.n || 2 });
+}
+/* o quadro dos problemas no editor (repintado a cada mudança da lista) */
+function ramProblemasPintar() {
+  const box = $("ramProblemas");
+  if (!box || !ramCtx) return [];
+  const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ramCtx.editalId);
+  const ps = ed ? ramProblemas(ed.texto || "", ramCtx.disciplina, ramCtx.topico, ramLinhas.map((l) => l.nome)) : [];
+  box.hidden = !ps.length;
+  const lista = $("ramProblemasLista");
+  if (lista) {
+    lista.innerHTML = "";
+    ps.slice(0, 12).forEach((p) => lista.append(ramEl("li", "", ramProblemaTexto(p))));
+    if (ps.length > 12) lista.append(ramEl("li", "nota", t("ram_prob_mais", { n: ps.length - 12 })));
+  }
+  if ($("ramProblemasTit")) $("ramProblemasTit").textContent = t("ram_prob_tit", { n: ps.length });
+  return ps;
+}
+/* o pedido de correção: os ramos de agora (com peso e nota), os dos tópicos vizinhos e os problemas */
+function ramPedidoCorrecao(ctx, linhas) {
+  const ed = (typeof editais !== "undefined" ? editais : []).find((e) => e.id === ctx.editalId) || {};
+  let r = null;
+  try { r = lerEdital(ed.texto || ""); } catch (e) { r = { disciplinas: [] }; }
+  const d = (r.disciplinas || []).find((x) => edRamoId(x.nome) === edRamoId(ctx.disciplina));
+  const atuais = (linhas || []).filter((l) => String(l.nome || "").trim())
+    .map((l) => "++ " + l.nome + (l.peso ? " :: " + l.peso : " :: 3") + (l.nota ? " :: " + l.nota : "")).join("\n");
+  const irmaos = d ? d.topicos.filter((tp) => edRamoId(tp.nome) !== edRamoId(ctx.topico))
+    .map((tp) => "- " + tp.nome + ((tp.ramos || []).length ? ": " + tp.ramos.map((x) => x.nome).join("; ") : "")).join("\n") : "";
+  const ps = ramProblemas(ed.texto || "", ctx.disciplina, ctx.topico, (linhas || []).map((l) => l.nome));
+  return t("ram_prompt_corrigir", {
+    t: ctx.topico, d: ctx.disciplina, c: ed.nome || "—",
+    atuais: atuais || t("ram_prompt_nenhum"),
+    irmaos: irmaos || "—",
+    problemas: ps.length ? ps.map((p) => "- " + ramProblemaTexto(p)).join("\n") : t("ram_corr_sem_prob"),
+  });
+}
+async function ramPedirCorrecaoIA() {
+  if (!ramCtx) return null;
+  const pedido = ramPedidoCorrecao(ramCtx, ramLinhas);
+  if ($("ramCaminhos")) $("ramCaminhos").open = true;
+  if ($("ramIaPasso1")) { $("ramIaPasso1").className = "ednovo-passo feito"; $("ramIaBox").className = "ednovo-passo ativo"; }
+  const ver = $("ramPedidoTxt");
+  if (ver) ver.value = pedido;
+  const msg = $("ramProblemasMsg");
+  try {
+    await navigator.clipboard.writeText(pedido);
+    if (msg) msg.textContent = t("ram_corr_copiado");
+    if (ver) ver.hidden = true;
+  } catch (e) {
+    if (msg) msg.textContent = t("ram_ia_copie_manual");
+    if (ver) ver.hidden = false;
+  }
+  try { reg("RAMOS", "pedido de correção dos ramos copiado", ramCtx.topico); } catch (e) {}
+  return pedido;
 }
 
 /* "Pesos pelas minhas questões" não cria ramos: só aparece com ramos na lista e diz do que precisa */
@@ -1099,6 +1224,7 @@ if (typeof document !== "undefined" && $("btnRamSalvar")) {
   $("btnRamIa").onclick = ramPedirIA;
   $("btnRamPesos").onclick = ramPesosDosRegistros;
   $("btnRamConferir").onclick = () => ramConferirComPergunta();
+  if ($("btnRamCorrigirIA")) $("btnRamCorrigirIA").onclick = () => ramPedirCorrecaoIA();
   $("ramColar").oninput = ramIaSemaforo;
   $("btnRamSalvar").onclick = ramSalvar;
   $("btnRamFechar").onclick = () => $("dlgRamos").close();
