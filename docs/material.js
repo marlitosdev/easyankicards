@@ -1066,7 +1066,9 @@ function matAbrirEditor(item, comoLer, opc) {
   /* a chave que a tela achou (matChaveViva tolera acento e caixa): recalcular com matChave abria vazio um resumo que existe */
   const alvoChave = item.chave || (typeof matChaveViva === "function" ? matChaveViva(item.disciplina, item.nome) : matChave(item.disciplina, item.nome));
   if (matEditorAberto(alvoChave)) {
-    if (o.ramos) matAtual.ramos = o.ramos;
+    /* (v18.92.0) os ramos são lidos de novo mesmo com a janela já aberta: guardar a lista de antes fazia o resumo seguir
+     * sem os ramos criados depois que ele foi aberto */
+    matAtual.ramos = o.ramos || matRamosDaFonte(item.disciplina, item.nome);
     if (o.ramo !== undefined) matEscopo = o.ramo;
     matTrocarModo(comoLer || matModo);
     abrirModal("dlgMaterial");
@@ -1085,7 +1087,7 @@ function matAbrirEditor(item, comoLer, opc) {
                disciplina: item.disciplina, topico: item.nome };
   /* os ramos do tópico: de quem abriu (a ficha) ou do edital aberto */
   let ramosAb = o.ramos;
-  if (!ramosAb) { try { const it = typeof edItemDoPlano === "function" ? edItemDoPlano(item.disciplina, item.nome) : null; ramosAb = (it && it.ramos) || []; } catch (e) { ramosAb = []; } }
+  if (!ramosAb) ramosAb = matRamosDaFonte(item.disciplina, item.nome);
   matAtual.ramos = ramosAb || [];
   matEscopo = o.ramo !== undefined && o.ramo !== null ? o.ramo : "*";
   $("matTitulo").textContent = item.nome;
@@ -3379,7 +3381,7 @@ function matAbrirFicha(x, opc) {
     /* aberta pelo Material de estudo: os ramos vêm do edital aberto, quando o tópico está nele */
     let it = null;
     try { it = typeof edItemDoPlano === "function" ? edItemDoPlano(x.disciplina, x.topico) : null; } catch (e) { it = null; }
-    matFichaOpc.ramos = (it && it.ramos) || [];
+    matFichaOpc.ramos = (it && it.ramos && it.ramos.length) ? it.ramos : matRamosDaFonte(x.disciplina, x.topico);
     if (it && !matFichaOpc.item) matFichaOpc.item = it;
   }
   matFichaEscopo = matFichaOpc.ramo && matFichaOpc.ramos.some((r) => r.id === matFichaOpc.ramo) ? matFichaOpc.ramo : "";
@@ -6596,6 +6598,32 @@ function matIndiceRamos() {
     }));
   });
   return idx;
+}
+/* (v18.92.0) OS RAMOS DE UM TÓPICO, PARA O RESUMO: do plano do edital aberto (com a situação de cada ramo); se o edital
+ * aberto não tem o tópico, de QUALQUER edital que o tenha — a mesma fonte da lista do Material e da Biblioteca. Antes o
+ * resumo só olhava o edital aberto, e a Biblioteca mostrava ramos que o resumo não mostrava. */
+function matRamosDaFonte(disciplina, topico) {
+  let it = null;
+  try { it = typeof edItemDoPlano === "function" ? edItemDoPlano(disciplina, topico) : null; } catch (e) { it = null; }
+  if (it && it.ramos && it.ramos.length) return it.ramos;
+  try { return matRamosDoTopico({ disciplina, topico }); } catch (e) { return []; }
+}
+/* depois de salvar os ramos de um tópico, o resumo aberto nele (e a ficha) passam a usá-los na hora */
+function matRamosRecarregar(disciplina, topico) {
+  const mesmo = (x) => x && matChaveNormal(matChave(x.disciplina || "", x.topico || "")) === matChaveNormal(matChave(disciplina || "", topico || ""));
+  let feito = false;
+  if (matAtual && mesmo(matAtual) && $("dlgMaterial") && $("dlgMaterial").open) {
+    try { matSecaoSincronizar(); } catch (e) {}
+    matAtual.ramos = matRamosDaFonte(disciplina, topico);
+    try { matTrocarModo(matModo); } catch (e) {}
+    feito = true;
+  }
+  if (typeof matFichaAtual !== "undefined" && matFichaAtual && mesmo(matFichaAtual) && $("dlgMatFicha") && $("dlgMatFicha").open) {
+    matFichaOpc.ramos = matRamosDaFonte(disciplina, topico);
+    try { matPintarFicha(); } catch (e) {}
+    feito = true;
+  }
+  return feito;
 }
 function matRamosDoTopico(x, idx) {
   const base = (idx || matIndiceRamos()).get(matChaveNormal(matChave(x.disciplina, x.topico))) || [];

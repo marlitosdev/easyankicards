@@ -326,7 +326,7 @@ function hubPintarAgenda() {
   sub.textContent = t(ativos.length === 1 ? "hub_agenda_sub1" : "hub_agenda_sub", {
     n: linhas.length,
     c: ativos.length,
-    h: horasTexto(linhas.reduce((a, i) => a + (i.minutos || 0), 0)),
+    h: horasTexto(linhas.reduce((a, i) => a + edMinSemana(i), 0)),
   });
   cx.append(sub);
 
@@ -335,7 +335,7 @@ function hubPintarAgenda() {
    * para saber se você está em dia ou atrás. O feito vem do DIÁRIO (o que
    * aconteceu de verdade), não do que está marcado: marcar um tópico não
    * diz quanto tempo levou. */
-  const planejadoMin = linhas.reduce((a2, i) => a2 + (i.minutos || 0), 0);
+  const planejadoMin = linhas.reduce((a2, i) => a2 + edMinSemana(i), 0);
   const feitoMin = minutosDaSemana();
 
   /* HORA DISPENSADA NÃO É HORA ESTUDADA NEM HORA PERDIDA.
