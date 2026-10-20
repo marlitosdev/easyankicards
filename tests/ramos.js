@@ -796,7 +796,8 @@ async function testes() {
       const NL = String.fromCharCode(10);
       a.$("ramColar").value = ["Aqui vai:", "++ Modalidades :: 2 :: outra nota", "++ Sanções :: 4 :: arts. 155 a 163", "- Nulidades :: 3", "++ Erro :: muito"].join(NL);
       const antes = a.ramLinhasAtual().map((l) => l.nome + "/" + l.peso);
-      const r = a.$("btnRamConferir").onclick();
+      /* (v18.92.0) a lista deixa de fora 2 dos 3 atuais: o botão pergunta antes (testes/ramos-lista.js); aqui, "acrescentar" */
+      const r = a.ramConferirIA("acrescentar");
       const dep = a.ramLinhasAtual();
       ok(r.novos === 3 && r.jaExistiam === 1 && dep.length === 6, "R28f acrescenta so os 3 ramos novos; o que ja existia (Modalidades) nao duplica: " + dep.map((l) => l.nome));
       ok(dep.slice(0, 3).map((l) => l.nome + "/" + l.peso).join() === antes.join() && dep[0].peso === "5" && dep[0].nota === "pregão", "R28g o que a pessoa ja tinha fica INTACTO (peso e nota nao sao trocados pela IA)");

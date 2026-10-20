@@ -277,7 +277,7 @@ function riaAbrirDoTopico(disciplina, topico, chave, opc) {
   if (!ramos) {
     let it = null;
     try { it = typeof edItemDoPlano === "function" ? edItemDoPlano(disciplina, topico) : null; } catch (e) { it = null; }
-    ramos = (it && it.ramos) || [];
+    ramos = (it && it.ramos && it.ramos.length) ? it.ramos : (typeof matRamosDaFonte === "function" ? matRamosDaFonte(disciplina, topico) : []);
   }
   const ch = chave || (typeof matChaveViva === "function" ? matChaveViva(disciplina, topico) : matChave(disciplina, topico));
   return riaAbrir({ disciplina, topico, chave: ch, ramos, ramo: o.ramo || "", editalId: o.editalId || "" });

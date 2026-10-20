@@ -986,7 +986,15 @@ function edCreditoRev(i) {
 /* Quanto do valor do tópico AINDA FALTA estudar (1 = nada estudado; 0 = tudo). É o que decide a posição na agenda: um
  * tópico de peso alto com quase todos os ramos feitos já não é o mais urgente. */
 function edRestante(i) {
-  if (i && i.ramos && i.ramos.length) return i.ramos.reduce((a, r) => a + (r.feito || r.pulado ? 0 : r.share), 0);
+  /* (v18.92.0) ARREDONDADO: a soma das partes de 12 ramos dava 0,9999999999999998 em vez de 1 — e o tópico com ramos
+   * (24,999… em vez de 25) caía para o FIM do empate com os irmãos de mesmo peso: "Lançamento" ia do 1º ao 49º da fila e
+   * sumia da agenda da semana assim que ganhava ramos. */
+  if (i && i.ramos && i.ramos.length) {
+    const soma = i.ramos.reduce((a, r) => a + (r.feito || r.pulado ? 0 : r.share), 0);
+    /* só o resíduo de arredondamento perto de um inteiro (0 ou 1) é corrigido; 1/3 continua 1/3 */
+    const inteiro = Math.round(soma);
+    return Math.min(1, Math.abs(soma - inteiro) < 1e-9 ? inteiro : soma);
+  }
   return i && i.feito ? 0 : 1;
 }
 
@@ -1529,13 +1537,33 @@ function montarPlano(r, opcoes) {
    * nomeada, nunca escondida. */
   const vencida = semanas === 0 && (s ? s.dias < 0 : false);
 
+  /* (v18.92.0) TÓPICO COM RAMOS NÃO PULA A SEMANA INTEIRO. Antes, um tópico que não coubesse no que sobrava da semana ia
+   * todo para a seguinte — e incluir 12 ramos (260 min) num tópico o tirava da agenda desta semana, como se tivesse
+   * sumido. Ramo é a unidade de estudo: o tópico entra na semana com os ramos que cabem (na ordem da sessão) e o resto
+   * do tempo dele ocupa a(s) semana(s) seguinte(s). Tópico sem ramos continua como sempre. */
+  const parteDaSemana = edParteDaSemana;
   fila.forEach((i) => {
+    delete i.minutosSemana; delete i.ramosSemana;
     if (!porSemana || semanas === null) {          /* sem data ou sem horas:
       não dá para montar cronograma, mas a ordem continua valendo */
       i.semana = null; dentro.push(i); usado += i.minutos; return;
     }
     if (vencida) { i.semana = null; fora.push(i); return; }
-    if (usoSemana + i.minutos > porSemana) { semana++; usoSemana = 0; }
+    if (usoSemana + i.minutos > porSemana) {
+      const parte = (semanas > 0 && semana > semanas) ? null : parteDaSemana(i, porSemana - usoSemana);
+      if (parte) {
+        i.semana = semana; i.minutosSemana = parte.minutos; i.ramosSemana = parte.ids;
+        usado += i.minutos;
+        dentro.push(i);
+        /* o resto do tópico ocupa as semanas seguintes */
+        let resta = i.minutos - parte.minutos;
+        semana++; usoSemana = 0;
+        while (resta > porSemana) { semana++; resta -= porSemana; }
+        usoSemana = resta;
+        return;
+      }
+      semana++; usoSemana = 0;
+    }
     if (semanas > 0 && semana > semanas) { i.semana = null; fora.push(i); return; }
     i.semana = semana; usoSemana += i.minutos; usado += i.minutos;
     dentro.push(i);
@@ -2159,22 +2187,35 @@ function edDiasDeEstudo(n) {
   return edOrdemDiasEstudo(n).map((k) => DIAS_SEMANA[k]);
 }
 
+/* (v18.92.0) A PARTE DE UM TÓPICO COM RAMOS QUE CABE NO QUE SOBRA DA SEMANA: os ramos pendentes, na ordem, enquanto
+ * couberem. null = não há parte (sem ramos pendentes, nada sobra, nem o primeiro ramo cabe, ou cabe o tópico inteiro). */
+function edParteDaSemana(i, livre) {
+  const pend = ((i && i.ramos) || []).filter((r) => !r.feito && !r.pulado);
+  if (!pend.length || livre <= 0) return null;
+  let soma = 0;
+  const ids = [];
+  for (const r of pend) { if (soma + (r.minutos || 0) > livre) break; soma += r.minutos || 0; ids.push(r.id); }
+  if (!ids.length || soma >= i.minutos) return null;
+  return { minutos: soma, ids };
+}
+/* (v18.92.0) o tempo do item NESTA semana: a parte dos ramos que coube, ou o item inteiro */
+function edMinSemana(i) { return i && i.minutosSemana ? i.minutosSemana : ((i && i.minutos) || 0); }
 function agendar(itens, cfg) {
   const dias = Math.max(1, Math.min(7, Number(cfg && cfg.dias) || 5));
   const inicio = (cfg && cfg.inicio) || "19:00";
   const [h0, m0] = inicio.split(":").map(Number);
-  const porDia = Math.ceil(itens.reduce((a, i) => a + i.minutos, 0) / dias);
+  const porDia = Math.ceil(itens.reduce((a, i) => a + edMinSemana(i), 0) / dias);
   /* estuda-se de segunda a sexta por padrão; sábado e domingo entram só
      quando a pessoa pede mais de cinco dias */
   const ordemDias = edOrdemDiasEstudo(dias);
   let d = 0, usado = 0;
   itens.forEach((i) => {
-    if (usado && usado + i.minutos > porDia && d < dias - 1) { d++; usado = 0; }
+    if (usado && usado + edMinSemana(i) > porDia && d < dias - 1) { d++; usado = 0; }
     const min = h0 * 60 + m0 + usado;
     i.dia = DIAS_SEMANA[ordemDias[d]];
     i.hora = String(Math.floor(min / 60) % 24).padStart(2, "0") + ":"
       + String(min % 60).padStart(2, "0");
-    usado += i.minutos;
+    usado += edMinSemana(i);
   });
   return itens;
 }
@@ -2191,7 +2232,7 @@ function agendar(itens, cfg) {
  * ------------------------------------------------------------------ */
 function edPrevistoPorDia(linhas) {
   const out = {};
-  (linhas || []).forEach((i) => { if (i && i.dia) out[i.dia] = (out[i.dia] || 0) + (Number(i.minutos) || 0); });
+  (linhas || []).forEach((i) => { if (i && i.dia) out[i.dia] = (out[i.dia] || 0) + (Number(edMinSemana(i)) || 0); });
   return out;
 }
 function edSemanaDeEstudo(hoje, diasDeEstudo, diario, previstoPorDia, metaMin) {

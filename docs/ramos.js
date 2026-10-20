@@ -619,10 +619,16 @@ function ramPedidoForaDoEditor(ctx) {
 function ramAbrirComLista(ctx, texto) {
   if (!ramAbrirEditor(ctx)) return null;
   $("ramColar").value = String(texto || "");
-  const r = ramConferirIA();
-  try { ramIaSemaforo(); } catch (e) {}
-  if ($("ramCaminhos")) $("ramCaminhos").open = false;
-  return r;
+  const fazer = (modo) => {
+    if (modo === "cancelar") { $("ramMsg").textContent = t("ram_lista_cancelado"); try { ramIaSemaforo(); } catch (e) {} return null; }
+    const r = ramConferirIA(modo);
+    try { ramIaSemaforo(); } catch (e) {}
+    if ($("ramCaminhos")) $("ramCaminhos").open = false;
+    return r;
+  };
+  /* o tópico já tem ramos que ficariam de fora: pergunta antes (manter e acrescentar, ou substituir) */
+  if (ramCompararLista(texto).perguntar) return ramPerguntarModoLista(texto).then(fazer);
+  return fazer("acrescentar");
 }
 
 /* Q2b — O RAMO PROVÁVEL DE UMA QUESTÃO, pelas palavras (a mesma regra dos pesos: a maioria dos radicais do nome do ramo
@@ -968,11 +974,56 @@ async function ramPedirIA() {
 }
 
 /* confere a resposta colada e ACRESCENTA ao editor só o que é novo; o que a pessoa já tem não é tocado */
-function ramConferirIA() {
+/* (v18.92.0) A LISTA CHEGA E O TÓPICO JÁ TEM RAMOS: o que fazer com os atuais. Só se pergunta quando a escolha muda algo
+ * — quando ramos ATUAIS ficariam de fora da lista nova. Lista igual (nada novo) ou só com acréscimos: segue sem pergunta. */
+function ramCompararLista(texto) {
+  const r = ramLerRespostaIA(texto);
+  const atuais = ramLinhas.filter((l) => String(l.nome || "").trim());
+  if (r.ehPedido || !r.ramos.length || !atuais.length) return { perguntar: false, r, atuais: atuais.length, novos: r.ramos.length, saem: 0 };
+  const idsNovos = new Set(r.ramos.map((x) => edRamoId(x.nome)));
+  const idsAt = new Set(atuais.map((l) => edRamoId(l.nome)));
+  const novos = r.ramos.filter((x) => !idsAt.has(edRamoId(x.nome))).length;
+  const saem = atuais.filter((l) => !idsNovos.has(edRamoId(l.nome))).length;
+  return { perguntar: saem > 0, r, atuais: atuais.length, novos, saem };
+}
+async function ramPerguntarModoLista(texto) {
+  const c = ramCompararLista(texto);
+  if (!c.perguntar) return "acrescentar";
+  const v = await uiEscolha(t("ram_lista_pergunta", { n: c.atuais, m: c.r.ramos.length, s: c.saem, k: c.novos }), [
+    { rot: t("ram_lista_acrescentar", { k: c.novos }), valor: "acrescentar", classe: "btn-verde" },
+    { rot: t("ram_lista_substituir", { s: c.saem }), valor: "substituir", classe: "btn-cinza" },
+    { rot: t("cancel_btn"), valor: "cancelar", classe: "btn-cinza" }]);
+  return v || "cancelar";
+}
+/* sem pergunta a fazer, conferir é imediato (como sempre foi); só a pergunta espera a resposta */
+function ramConferirComPergunta() {
+  if (!ramCompararLista($("ramColar").value).perguntar) return ramConferirIA("acrescentar");
+  return ramPerguntarModoLista($("ramColar").value).then((modo) => {
+    if (modo === "cancelar") { $("ramMsg").textContent = t("ram_lista_cancelado"); return null; }
+    return ramConferirIA(modo);
+  });
+}
+function ramConferirIA(modo) {
   if (!ramCtx) return null;
   const r = ramLerRespostaIA($("ramColar").value);
   if (r.ehPedido) { $("ramMsg").textContent = t("ram_ia_eh_pedido"); return r; }
   if (!r.ramos.length) { $("ramMsg").textContent = t("ram_ia_nada"); return r; }
+  /* SUBSTITUIR: fica só a lista nova; o ramo de mesmo nome leva o que era dele (id de origem, peso e nota se a lista não
+   * trouxer); os que saem são apagados ao salvar — o editor avisa, e o salvar tem desfazer */
+  if (modo === "substituir") {
+    const antes = ramLinhas.filter((l) => String(l.nome || "").trim());
+    const saem = antes.filter((l) => !r.ramos.some((x) => edRamoId(x.nome) === edRamoId(l.nome))).length;
+    ramLinhas = r.ramos.map((x) => {
+      const at = antes.find((l) => edRamoId(l.nome) === edRamoId(x.nome));
+      const lin = { nome: x.nome, peso: x.peso || (at ? at.peso : ""), nota: x.nota || (at ? at.nota : "") };
+      if (at && at.idOrig) lin.idOrig = at.idOrig;
+      return lin;
+    });
+    ramPintar();
+    $("ramMsg").textContent = t("ram_lista_substituida", { n: ramLinhas.length, s: saem });
+    r.novos = r.ramos.length; r.jaExistiam = 0; r.substituiu = saem;
+    return r;
+  }
   const tem = new Set(ramLinhas.map((l) => edRamoId(l.nome)));
   let novos = 0, ja = 0;
   r.ramos.forEach((x) => {
@@ -1028,7 +1079,10 @@ function ramSalvar() {
   const r = ramAplicar(ramCtx, ramLinhas);
   if (!r.ok) { $("ramMsg").textContent = t("ram_erro"); return r; }
   $("dlgRamos").close();
+  const ctxS = ramCtx;
   const depois = ramCtx.depois; ramCtx = null;
+  /* (v18.92.0) o resumo (e a ficha) abertos neste tópico passam a mostrar os ramos na hora */
+  try { if (typeof matRamosRecarregar === "function") matRamosRecarregar(ctxS.disciplina, ctxS.topico); } catch (e) {}
   if (typeof depois === "function") depois(r);
   return r;
 }
@@ -1044,7 +1098,7 @@ if (typeof document !== "undefined" && $("btnRamSalvar")) {
   }
   $("btnRamIa").onclick = ramPedirIA;
   $("btnRamPesos").onclick = ramPesosDosRegistros;
-  $("btnRamConferir").onclick = ramConferirIA;
+  $("btnRamConferir").onclick = () => ramConferirComPergunta();
   $("ramColar").oninput = ramIaSemaforo;
   $("btnRamSalvar").onclick = ramSalvar;
   $("btnRamFechar").onclick = () => $("dlgRamos").close();
