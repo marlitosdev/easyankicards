@@ -266,7 +266,11 @@ function jurQualidade(j, opc) {
   if (j.deMemoria) mot.push({ k: "memoria", txt: t("jur_q_m_memoria") });
   const ac = Array.isArray(j.aConferir) ? j.aConferir : [];
   if (ac.length) mot.push({ k: "conferir", txt: t("jur_q_m_conferir", { q: ac.map((x) => (typeof jurNomeCampo === "function" ? jurNomeCampo(x) : x)).join(", ") }) });
-  if (!mot.length && j.conferidoEm) {
+  /* (v18.96.0) A VIGÊNCIA DITA PELA IA NÃO É "CONFERIDO": a IA respondeu que continua valendo, mas ninguém conferiu o
+   * texto na fonte. Fica amarelo, com o porquê. (conferidoEm sem a marca vigenciaIA = conferido por gente: o "conferi"
+   * antigo ou a limpeza feita à mão no backup) */
+  if (j.conferidoEm && j.vigenciaIA && j.vigenciaIA === j.conferidoEm) mot.push({ k: "vigencia_ia", txt: t("jur_q_m_vigencia_ia", { d: jurDataBr(j.conferidoEm) }) });
+  else if (!mot.length && j.conferidoEm) {
     if (dias > JUR_REVER_DIAS) return { nivel: "vencido", motivos: [{ k: "vencido", txt: t("jur_q_m_vencido", { d: jurDataBr(j.conferidoEm) }) }], oficial: of };
     return { nivel: "conferido", motivos: [{ k: "verificado", txt: t("jur_q_m_verificado", { d: jurDataBr(j.conferidoEm) }) }], oficial: of };
   }
@@ -460,6 +464,88 @@ function jurCatDesfazer() {
   });
   try { localStorage.removeItem(JUR_CAT_RECIBO); } catch (e) {}
   try { reg("JURIS", "auditoria pelo catálogo desfeita", n + " julgados"); } catch (e) {}
+  return n;
+}
+
+
+
+/* =====================================================================
+ * (v18.96.0) CONFERIR JULGADOS — UM FLUXO SÓ, NA ORDEM DA CONFIANÇA
+ *
+ * Eram três botões que respondiam à mesma pergunta ("este julgado está certo?") com fontes diferentes: a auditoria pelo
+ * catálogo (sem IA), "verificar se continuam valendo" (IA, a vigência) e "corrigir com IA" (IA, o texto). Na base real
+ * (19/10), 19 dos 20 julgados que iam à IA estavam no catálogo oficial — a IA era perguntada, de memória, sobre o que o
+ * tribunal publica literalmente. Agora:
+ *   1. o CATÁLOGO OFICIAL resolve súmulas e temas (texto literal e situação) — sem IA;
+ *   2. os REPETIDOS que o catálogo revela (tema × processo, tribunal trocado, "863" × "863 / 827") são unidos;
+ *   3. a IA só recebe O RESTO: o que está fora do catálogo (acórdãos) e ainda não tem selo — num pedido só, que
+ *      traz texto, campos e vigência juntos.
+ * ===================================================================== */
+function jurConferirPlano(lista) {
+  const L = lista || jurLista();
+  const todos = jurLista();
+  const catalogo = [], ia = [], selados = [];
+  L.forEach((j) => {
+    const of = jurCatPronto() ? jurCatDoJulgado(j) : null;
+    if (of && of.item) catalogo.push(j.id);
+    else if (jurSeloValido(j)) selados.push(j.id);
+    else ia.push(j.id);
+  });
+  /* os pares repetidos (cada par uma vez), contando o elo tema ↔ processo */
+  const pares = [], vistos = new Set();
+  L.forEach((j) => {
+    jurRepetidosDe(j, todos).forEach((x) => {
+      const k = [j.id, x.id].sort().join("|");
+      if (vistos.has(k)) return;
+      vistos.add(k);
+      pares.push([j.id, x.id]);
+    });
+  });
+  return { catalogo, ia, selados, pares };
+}
+
+/* o pedido único à IA: texto oficial + campos + vigência, de uma vez */
+function jurUnicoPedido(lista, hoje) {
+  const linhas = (lista || []).map((j) => {
+    const conf = Array.isArray(j.aConferir) ? j.aConferir : [];
+    return "- id: " + j.id + " | " + [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ")
+      + " | tese guardada: " + String(j.tese || j.resumo || "—").replace(/\s+/g, " ").trim()
+      + (j.data ? " | data: " + j.data : "") + (j.orgao ? " | órgão: " + j.orgao : "")
+      + (conf.length ? " | a conferir: " + conf.join(", ") : "") + (j.deMemoria ? " | (veio da memória de uma IA, sem ementa)" : "");
+  });
+  return t("jur_unico_prompt", { hoje: jurHojeISO(hoje), lista: linhas.join("\n") });
+}
+/* lê a resposta com os DOIS leitores que já existiam (o mesmo JSON traz os campos dos dois) e junta por julgado */
+function jurUnicoLer(bruto, lista) {
+  const corr = jurCorrecaoLer(bruto, lista), atual = jurAtualLer(bruto, lista);
+  if (corr.est !== "ok" && atual.est !== "ok") return { est: corr.est === "vazio" ? "vazio" : "erro", itens: [], erro: corr.erro || atual.erro || "" };
+  const porId = new Map();
+  (corr.itens || []).forEach((x) => porId.set(x.id, { id: x.id, j: x.j, corr: x, atual: null }));
+  (atual.itens || []).forEach((x) => { const o = porId.get(x.id) || { id: x.id, j: x.j, corr: null, atual: null }; o.atual = x; porId.set(x.id, o); });
+  const itens = [...porId.values()].map((o) => {
+    /* a vigência que muda a tese (superada/alterada com a tese atual) vence a correção de redação */
+    if (o.atual && o.atual.muda && o.corr) o.corr.mudancas = o.corr.mudancas.filter((m) => m.campo !== "tese");
+    o.marcado = !!((o.corr && o.corr.marcado) || (o.atual && o.atual.marcado));
+    return o;
+  });
+  return { est: "ok", itens, fora: Math.max(corr.fora || 0, atual.fora || 0), faltam: (lista || []).length - itens.length };
+}
+/* grava: a correção (sem selo — veio da IA; "de memória" fica até alguém conferir) e a vigência (marcada como da IA) */
+function jurUnicoAplicar(itens, hoje) {
+  const dia = jurHojeISO(hoje);
+  const marc = (itens || []).filter((o) => o && o.marcado);
+  const vigAntes = new Map(marc.map((o) => [o.id, ((jurDe(o.id) || {}).vigenciaIA) || ""]));
+  const recCorr = jurCorrecaoAplicar(marc.map((o) => o.corr).filter((x) => x && x.marcado !== false && x.mudancas && x.mudancas.length).map((x) => Object.assign({}, x, { marcado: true })), dia);
+  const recAtual = jurAtualAplicar(marc.map((o) => o.atual).filter((x) => x && x.situacao !== "nao_sei").map((x) => Object.assign({}, x, { marcado: true })), dia);
+  /* a vigência que veio da IA fica marcada: o selo não a conta como "conferido" */
+  recAtual.forEach((r) => { r.antes.vigenciaIA = vigAntes.get(r.id) || ""; jurGravar({ id: r.id, vigenciaIA: dia }); });
+  return { corr: recCorr, atual: recAtual };
+}
+function jurUnicoDesfazer(rec) {
+  let n = 0;
+  if (!rec) return 0;
+  (rec.atual || []).forEach((r) => { if (jurDe(r.id)) { jurGravar(Object.assign({ id: r.id }, r.antes)); n++; } });
+  (rec.corr || []).forEach((r) => { if (jurDe(r.id)) { jurGravar(Object.assign({ id: r.id }, r.antes)); n++; } });
   return n;
 }
 

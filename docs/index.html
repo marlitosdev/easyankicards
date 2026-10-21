@@ -3873,6 +3873,8 @@ body.split-lj{overflow:hidden}
 .jur-aud-escolha{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .jur-aud-escolha .btn-min.ativo{outline:2px solid var(--info);font-weight:700}
 .jur-aud-aviso{color:var(--atencao)}
+.jur-aud-seguir{margin:10px 0;padding:8px 10px;border:1px dashed var(--borda);border-radius:8px}
+.jur-aud-rep b{display:block;margin-bottom:4px}
 .jur-cita-oficial{border-left:4px solid var(--ok)}
 .jur-sel.cat{background:transparent;border:1px solid var(--borda);
   color:var(--sutil);font-weight:600;font-size:9.5px;cursor:help}
@@ -3999,7 +4001,28 @@ body.split-lj{overflow:hidden}
 .jur-bib-tops{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .jur-bib-top{color:#f59e0b;border-color:#f59e0b}
 .jur-bib-ligar-sel{max-width:100%}
-.jur-bib-estudo{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:6px 2px}
+.jur-bib-estudo{display:flex;flex-direction:column;gap:10px;align-items:stretch;padding:6px 2px;max-width:900px;margin:0 auto;width:100%}
+/* (v18.96.0) o estudo como um cartão: frente e verso */
+.jur-est-topo{display:flex;align-items:center;gap:10px}
+.jur-est-topo progress{flex:1;height:6px}
+.jur-est-cartao{border:1px solid var(--borda);border-radius:12px;padding:14px 16px;background:var(--panel);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.jur-est-cab{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.jur-est-pistas{margin:0;color:var(--sutil)}
+.jur-est-meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px}
+.jur-est-campo{display:flex;gap:6px}
+.jur-est-rot{color:var(--sutil);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+.jur-est-verso{display:flex;flex-direction:column;gap:8px;width:100%}
+.jur-est-verso[hidden]{display:none}
+.jur-est-bloco .jur-est-txt{white-space:pre-wrap;font-size:13.5px;line-height:1.55}
+.jur-est-ementa summary{cursor:pointer;color:var(--sutil)}
+.jur-est-acoes{justify-content:center}
+.jur-est-teclas{text-align:center;font-size:11.5px;color:var(--sutil)}
+.jur-bib-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.jur-tag-chip{font-size:11.5px;padding:2px 8px;border-radius:999px}
+.jur-tag-chip.ativo{outline:2px solid var(--info);font-weight:700}
+/* (v18.96.0) a biblioteca em tela cheia (o padrão), como o Domínio */
+#dlgJurBib.jur-bib-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box}
+#dlgJurBib.jur-bib-cheia[open] .jur-bib-lista{max-height:none}
 .jur-bib-estudo[hidden]{display:none}
 .jur-bib-est-frente{font-size:16px;font-weight:700}
 .jur-bib-est-tese{white-space:pre-wrap;margin:0}
@@ -8539,6 +8562,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <li data-i18n="jur_aud_p3"></li>
     <li data-i18n="jur_aud_p4"></li>
     <li data-i18n="jur_aud_p5"></li>
+    <li data-i18n="jur_aud_p6"></li>
   </ol>
   <div class="jur-aud-prog">
     <progress id="jurAudProg" max="100" value="0"></progress>
@@ -8548,6 +8572,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="jurAudLista" class="jur-aud-lista"></div>
   <div class="qm-bts jur-aud-rodape">
     <button type="button" class="btn-min btn-min-ok" id="btnJurAudAplicar" hidden></button>
+    <button type="button" class="btn-min" id="btnJurAudSeguir" data-i18n-title="jur_aud_seguir_aj" hidden></button>
     <button type="button" class="btn-min" id="btnJurAudDesfazer" hidden></button>
     <button type="button" class="btn-min" id="btnJurAudFechar" data-i18n="help_close"></button>
   </div>
@@ -8555,6 +8580,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgJurBib" class="ui-modal diag-modal jur-bib">
   <div class="vka-cab">
     <h3 data-i18n="jur_bib_tit"></h3>
+    <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnJurBibCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
     <button type="button" class="dlg-x" id="btnJurBibX" data-i18n-title="help_close">✖</button>
   </div>
   <p class="nota"><span id="jurBibConta"></span> <b id="jurBibFiltro"></b></p>
@@ -8575,6 +8601,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <option value="q_conferido" data-i18n="jur_bib_sit_q_conferido"></option>
       <option value="q_oficial" data-i18n="jur_bib_sit_q_oficial"></option>
     </select>
+    <select id="jurBibAssunto" data-i18n-title="jur_bib_assunto_aj"></select>
+    <select id="jurBibTag" data-i18n-title="jur_bib_tag_aj"></select>
     <select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
       <option value="topico" data-i18n="jur_bib_grupo_topico"></option>
       <option value="tribunal" data-i18n="jur_bib_grupo_tribunal"></option>
@@ -8586,7 +8614,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min" id="btnJurBibDesfazer" data-i18n="jur_bib_desfazer" hidden></button>
       <button type="button" class="btn-min" id="btnJurBibAtual"></button>
       <button type="button" class="btn-min" id="btnJurBibCorrigir" data-i18n-title="jur_corrigir_btn_aj"></button>
-      <button type="button" class="btn-min btn-min-ok" id="btnJurBibAuditar" data-i18n-title="jur_aud_btn_aj"></button>
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibConferir" data-i18n-title="jur_conf_btn_aj"></button>
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibAuditar" data-i18n-title="jur_aud_btn_aj" hidden></button>
     </div>
     <!-- (v18.95.0) a qualidade da coleção: um botão por selo, com a contagem (tocar filtra) -->
     <div id="jurBibQualidade" class="jur-bib-qualidade"></div>
@@ -8615,17 +8644,29 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <p class="nota" id="jurBibAtualFeito" role="status"></p>
   </div>
+  <!-- (v18.96.0) o estudo das teses: frente (o que não entrega a resposta) e verso (tese, resumo, etiquetas, fonte…) -->
   <div id="jurBibEstudo" class="jur-bib-estudo" hidden>
-    <p class="nota" id="jurBibEstPos"></p>
-    <div class="jur-bib-est-frente" id="jurBibEstFrente"></div>
-    <p class="nota" id="jurBibEstPistas"></p>
-    <button type="button" class="btn btn-azul" id="btnJurBibEstVer" data-i18n="jur_bib_est_ver"></button>
-    <blockquote class="jur-tese jur-bib-est-tese" id="jurBibEstTese" hidden></blockquote>
-    <div class="qm-bts">
+    <div class="jur-est-topo">
+      <p class="nota" id="jurBibEstPos"></p>
+      <progress id="jurBibEstProg" max="100" value="0"></progress>
+    </div>
+    <div class="jur-est-cartao">
+      <div class="jur-cab jur-est-cab" id="jurBibEstCab"></div>
+      <div class="jur-bib-est-frente" id="jurBibEstFrente"></div>
+      <p class="nota jur-est-pistas" id="jurBibEstPistas"></p>
+      <div class="jur-est-meta" id="jurBibEstMeta"></div>
+      <button type="button" class="btn btn-azul" id="btnJurBibEstVer" data-i18n="jur_bib_est_ver"></button>
+      <blockquote class="jur-tese jur-bib-est-tese" id="jurBibEstTese" hidden></blockquote>
+      <div class="jur-est-verso" id="jurBibEstVerso" hidden></div>
+    </div>
+    <div class="qm-bts jur-est-acoes">
       <button type="button" class="btn-min" id="btnJurBibEstAnt" data-i18n="jur_bib_est_ant"></button>
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibEstProx" data-i18n="jur_bib_est_prox"></button>
+      <button type="button" class="btn-min" id="btnJurBibEstEditar" data-i18n="jur_est_editar" data-i18n-title="jur_est_editar_aj"></button>
+      <button type="button" class="btn-min" id="btnJurBibEstConferi" data-i18n="jur_q_conferi" data-i18n-title="jur_q_conferi_aj" hidden></button>
       <button type="button" class="btn-min" id="btnJurBibEstSair" data-i18n="jur_bib_est_sair"></button>
     </div>
+    <p class="nota jur-est-teclas" data-i18n="jur_est_teclas"></p>
   </div>
   <div class="dlg-rodape"><button class="btn btn-cinza" id="btnJurBibFechar" data-i18n="help_close"></button></div>
 </dialog>
