@@ -765,8 +765,13 @@ function jurId(j) {
 }
 
 /* Grava um julgado. Sem id, cria; com id, atualiza. */
-function jurGravar(dados) {
-  if (!dados) return null;
+function jurGravar(dados0) {
+  if (!dados0) return null;
+  /* (v18.94.0) CAMPO "undefined" É CAMPO NÃO INFORMADO. Object.assign copia o undefined por cima do antigo: o "Salvar"
+   * da edição manda topicos: undefined (não mexe nos tópicos) e isso APAGAVA os tópicos do julgado — sobrava só o
+   * aberto, religado logo depois. Quem quer limpar um campo manda "" ou [], nunca undefined. */
+  const dados = {};
+  Object.keys(dados0).forEach((k) => { if (dados0[k] !== undefined) dados[k] = dados0[k]; });
   const tudo = jurLerTudo();
   const id = dados.id || jurId(dados);
   const antigo = tudo[id] || {};
@@ -1186,10 +1191,18 @@ function jurTemPrecedentes(j) {
   return /S[U\u00da]MULA|REPETITIVO|REPERCUSS/i.test(cat || "");
 }
 
+/* (v18.94.0) SÚMULA (vinculante ou não) NÃO TEM RELATOR: o pedido à IA já diz isso, e cobrar o campo deixava o
+ * "🩹 completar" aceso para sempre em toda súmula. */
+function jurEhSumula(j) {
+  if (!j) return false;
+  return /S[UÚ]MULA/i.test(String(j.categoria || "")) || /^s[uú]mula/i.test(String(j.classe || "").trim());
+}
+
 function jurFaltando(j) {
   if (!j) return [];
+  const ehSum = jurEhSumula(j);
   const falta = JUR_CAMPOS_META
-    .filter((c) => !String(j[c.k] || "").trim())
+    .filter((c) => !(ehSum && c.k === "relator") && !String(j[c.k] || "").trim())
     .map((c) => c.k);
   /* PRECEDENTES SÓ SE COBRAM DE SÚMULA E TEMA: um acórdão isolado não
    * tem "processos que o originaram", e contar o campo como vazio em todo
@@ -1586,7 +1599,55 @@ const JUR_RE_RAPIDO = /S[úu]mula|\bTema\b|\bSV\b|\b(?:RE|ARE|REsp|AREsp|EREsp|A
 function jurTemCitacao(txt) { return JUR_RE_RAPIDO.test(String(txt || "")); }
 
 function jurClasseChave(c) {
-  return jurSemAcento(String(c || "")).toLowerCase().replace(/\s+/g, " ").trim();
+  const k = jurSemAcento(String(c || "")).toLowerCase().replace(/\s+/g, " ").trim();
+  /* (v18.94.0) "Tema Repetitivo", "Tema de Repercussão Geral", "Repercussão Geral" e "Tema" são a mesma classe; "SV" é a
+   * súmula vinculante. Sem isto, o julgado guardado como "Tema Repetitivo 1134" não era achado por "Tema 1134". */
+  if (/^(tema( repetitivo| de repercussao geral| rg)?|repercussao geral|tema\/rg)$/.test(k)) return "tema";
+  if (k === "sv") return "sumula vinculante";
+  return k;
+}
+
+/* =====================================================================
+ * AS IDENTIDADES DE UM JULGADO GUARDADO (v18.94.0)
+ *
+ * A pessoa guarda como dá: "Tema 1134 (REsp 1.914.902/SP)" num campo só, "863 / 827" (dois temas numa ficha),
+ * "259.976 / 250.844" com classe "RE-AgR / RE", "2405/RS" (a UF colada). Cada julgado tem UMA OU MAIS identidades
+ * {classe, numero}; a citação casa com qualquer uma delas. O que vem entre parênteses depois de um tema ou súmula é o
+ * PROCESSO que o fixou — identidade também, marcada "paradigma": quem cita o REsp está citando aquele tema.
+ * ===================================================================== */
+function jurIdentidadesDe(j) {
+  if (!j) return [];
+  const out = [];
+  const vistos = {};
+  const poe = (classe, numero, paradigma) => {
+    const cc = jurClasseChave(classe), n = jurNumChave(numero);
+    if (!cc || !n || vistos[cc + "|" + n]) return;
+    vistos[cc + "|" + n] = true;
+    out.push({ classe, numero: n, cc, paradigma: !!paradigma });
+  };
+  const classe = String(j.classe || "").trim();
+  const numero = String(j.numero || "").trim();
+  const cc = jurClasseChave(classe);
+  /* os processos entre parênteses (e "Tema 1134" escrito dentro do próprio número) */
+  const dentro = (numero.match(/\(([^)]*)\)/g) || []).join(" ");
+  const fora = numero.replace(/\([^)]*\)/g, " ");
+  if (cc === "tema" || cc === "sumula" || cc === "sumula vinculante") {
+    const nums = fora.replace(/^\s*(tema|s[uú]mula( vinculante)?)\s*(n[º°o.]?)?/i, "")
+      .split(/\s*(?:\/|;|,|\be\b)\s*/).map((x) => x.trim()).filter((x) => /^\d[\d.]*$/.test(x));
+    nums.forEach((x) => poe(classe, x));
+    if (dentro) jurProcessosNoTexto(dentro).forEach((p) => poe(p.classe, p.numero, true));
+  } else if (classe) {
+    /* "RE-AgR / RE" com "259.976 / 250.844": as partes andam juntas; "/RS" colado ao número é a UF, não separa */
+    const classes = classe.split(/\s+\/\s+/);
+    const numeros = fora.split(/\s+(?:\/|e)\s+/).map((x) => x.trim()).filter(Boolean);
+    if (classes.length > 1 && classes.length === numeros.length) {
+      classes.forEach((c, i) => poe(c.replace(/-AgR$/i, ""), numeros[i]));
+    } else {
+      numeros.forEach((x) => poe(classes[0], x));
+    }
+    if (dentro) jurProcessosNoTexto(dentro).forEach((p) => poe(p.classe, p.numero, true));
+  }
+  return out;
 }
 function jurNumChave(n) { return jurSoDigitos(n).replace(/^0+/, ""); }
 
@@ -1638,7 +1699,13 @@ function jurAcharCitado(c, lista, chave) {
   const cc = jurClasseChave(c.classe), n = jurNumChave(c.numero);
   if (!n) return { julgado: null };
   const triOk = (j) => !c.tribunal || !j.tribunal || String(j.tribunal).toUpperCase() === c.tribunal;
-  let cand = L.filter((j) => jurClasseChave(j.classe) === cc && jurNumChave(j.numero) === n && triOk(j));
+  let cand = [];
+  const via = {};
+  L.forEach((j) => {
+    if (!triOk(j)) return;
+    const hit = jurIdentidadesDe(j).find((x) => x.cc === cc && x.numero === n);
+    if (hit) { cand.push(j); via[j.id] = hit.paradigma ? "paradigma" : "eh"; }
+  });
   /* (v18.61.0) QUEM É VENCE QUEM SÓ CITA. O caso real: "Tema 981 do STJ" casava com o julgado do Tema 981 E com o do Tema
    * 962, porque o 962 MENCIONA o 981 no texto — e a pessoa via "2 julgados casam", como se um deles estivesse errado. A busca
    * pelo texto ("o RE que diz Tema 69") só vale quando nenhum guardado É aquele tema. */
@@ -1648,7 +1715,7 @@ function jurAcharCitado(c, lista, chave) {
     L.forEach((j) => {
       if (cand.indexOf(j) >= 0 || !triOk(j)) return;
       const onde = [j.tese, j.resumo, j.texto, j.precedentes, (j.tags || []).join(" ")].join(" ");
-      if (re.test(onde)) cand.push(j);
+      if (re.test(onde)) { cand.push(j); via[j.id] = "cita"; }
     });
   }
   if (cand.length > 1 && chave) {
@@ -1656,9 +1723,19 @@ function jurAcharCitado(c, lista, chave) {
     const doT = cand.filter((j) => (j.topicos || []).some((x) => jurChaveComparavel(x) === k));
     if (doT.length) cand = doT;
   }
-  if (cand.length === 1) return { julgado: cand[0] };
+  /* quem É vence quem é só o paradigma entre parênteses, que vence quem só menciona */
+  if (cand.length > 1) {
+    const peso = { eh: 3, paradigma: 2, cita: 1 };
+    const melhor = Math.max(...cand.map((j) => peso[via[j.id]] || 0));
+    cand = cand.filter((j) => (peso[via[j.id]] || 0) === melhor);
+  }
+  if (cand.length === 1) return { julgado: cand[0], via: via[cand[0].id] || "eh" };
   if (cand.length > 1) return { julgado: null, ambiguos: cand };
-  return { julgado: null };
+  /* (v18.94.0) O MESMO PROCESSO, OUTRA DECISÃO: "AgRg no REsp 123" e o "REsp 123" guardado são o mesmo processo, mas não o
+   * mesmo julgamento — não casa (seria dar a tese de um pelo outro), mas a prévia avisa que ele existe */
+  const base = (k) => k.replace(/^(agrg|agint|edcl)( no| nos| na)? /, "");
+  const parentes = L.filter((j) => triOk(j) && jurIdentidadesDe(j).some((x) => x.numero === n && base(x.cc) === base(cc)));
+  return parentes.length ? { julgado: null, parentes } : { julgado: null };
 }
 
 function jurRepararJson() {
