@@ -266,7 +266,9 @@ async function testes() {
     jl()[0].onclick({ stopPropagation() {} });
     api.$("btnJurCitaCriar").onclick();
     ok(!api.$("jurCitaNovo").hidden && api.$("btnJurCitaCriar").hidden, "C1 'Criar agora' não abriu os passos na prévia");
-    ok(/S%C3%BAmula%20435/.test(api.$("jurCitaBuscar").href || ""), "C1a o link de busca não leva a citação: " + api.$("jurCitaBuscar").href);
+    /* (v18.97.0) a página OFICIAL da súmula citada (a busca aberta do Google só quando o app não conhece a página) */
+    ok(/scon\.stj\.jus\.br/.test(api.$("jurCitaBuscar").href || "") && (api.$("jurCitaBuscar").href || "").indexOf(encodeURIComponent("@num='435'")) > 0,
+      "C1a o link leva à página oficial da Súmula 435 no STJ: " + api.$("jurCitaBuscar").href);
     api.$("btnJurCitaPedido").onclick();
     const p = api.$("jurCitaPedidoTxt").value || "";
     ok(/"Súmula 435 do STJ"/.test(p) && /dissolvida irregularmente/.test(p) && new RegExp(TOP).test(p), "C1b o pedido não leva a citação, o trecho e o tópico");

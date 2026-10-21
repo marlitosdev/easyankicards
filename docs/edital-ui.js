@@ -5934,6 +5934,8 @@ function vzAbrirChave() {
     agora.textContent = c ? t("vz_chave_tem", { c: vzChaveResumida(c) })
                           : t("vz_chave_falta");
   }
+  /* (v18.97.0) usar a chave também na jurisprudência: escolha da pessoa, desligada por padrão */
+  if ($("chkVzJurIa")) $("chkVzJurIa").checked = typeof jurIaLigada === "function" && jurIaLigada();
   abrirModal("dlgVzChave");
 }
 
@@ -7241,6 +7243,11 @@ function vkIniciarTela() {
      * problema, e uma chave de API dentro dele vira cobrança de outra
      * pessoa. */
     reg("VINCULO", "chave da IA guardada", v ? "sim" : "campo vazio");
+    if ($("chkVzJurIa") && typeof jurIaLigar === "function") {
+      const antes = jurIaLigada();
+      const depois = jurIaLigar(!!$("chkVzJurIa").checked);
+      if (antes !== depois) reg("JURIS", depois ? "Gemini direto na jurisprudência: LIGADO pela pessoa" : "Gemini direto na jurisprudência: desligado");
+    }
     $("dlgVzChave").close();
     vzPintarChave();
     vkChavePintar();
