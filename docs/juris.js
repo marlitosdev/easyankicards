@@ -1709,6 +1709,18 @@ function jurAcharCitado(c, lista, chave) {
   /* (v18.61.0) QUEM É VENCE QUEM SÓ CITA. O caso real: "Tema 981 do STJ" casava com o julgado do Tema 981 E com o do Tema
    * 962, porque o 962 MENCIONA o 981 no texto — e a pessoa via "2 julgados casam", como se um deles estivesse errado. A busca
    * pelo texto ("o RE que diz Tema 69") só vale quando nenhum guardado É aquele tema. */
+  /* (v18.95.0) PELO CATÁLOGO OFICIAL: o texto cita "RE 593.849" e o guardado é o "Tema 201" (ou o contrário) — o
+   * catálogo sabe que o RE é o processo que fixou o tema. Só quando nada guardado É a citação. */
+  if (!cand.length && typeof jurCatEquivalentes === "function" && typeof jurCatPronto === "function" && jurCatPronto()) {
+    const eq = jurCatEquivalentes({ cc, numero: n, tribunal: c.tribunal });
+    L.forEach((j) => {
+      if (cand.indexOf(j) >= 0) return;
+      const tj = String(j.tribunal || "").toUpperCase();
+      if (jurIdentidadesDe(j).some((x) => !x.paradigma && eq.some((e) => e.cc === x.cc && e.numero === x.numero && (!tj || e.tribunal === tj)))) {
+        cand.push(j); via[j.id] = "catalogo";
+      }
+    });
+  }
   if (cc === "tema" && !cand.length) {
     /* "Tema 1.093" escrito com ponto de milhar também conta (v18.52.0) */
     const re = new RegExp("\\bTema\\s*(?:n[º°o.]?\\s*)?0*" + n.split("").join("\\.?") + "(?!\\d)", "i");
@@ -1725,7 +1737,7 @@ function jurAcharCitado(c, lista, chave) {
   }
   /* quem É vence quem é só o paradigma entre parênteses, que vence quem só menciona */
   if (cand.length > 1) {
-    const peso = { eh: 3, paradigma: 2, cita: 1 };
+    const peso = { eh: 3, paradigma: 2, catalogo: 2, cita: 1 };
     const melhor = Math.max(...cand.map((j) => peso[via[j.id]] || 0));
     cand = cand.filter((j) => (peso[via[j.id]] || 0) === melhor);
   }

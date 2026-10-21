@@ -3840,6 +3840,40 @@ body.split-lj{overflow:hidden}
 .jur-sel{font-size:10.5px;font-weight:700;letter-spacing:.02em;
   padding:2px 7px;border-radius:999px;line-height:1.5}
 .jur-sel.trib{background:var(--azul,#2563eb);color:#fff}
+/* (v18.95.0) o selo de qualidade: a cor diz o veredito, o texto diz qual (nunca só a cor) */
+.jur-q{cursor:pointer;border:1px solid var(--borda);background:transparent}
+.jur-q.jur-q-oficial{border-color:var(--ok);color:var(--ok)}
+.jur-q.jur-q-conferido{border-color:var(--info);color:var(--info)}
+.jur-q.jur-q-aconferir{border-color:var(--atencao);color:var(--atencao)}
+.jur-q.jur-q-problema{border-color:var(--erro);color:var(--erro)}
+.jur-q.jur-q-vencido{border-color:var(--borda);color:var(--sutil)}
+.btn-min.jur-q.ativo{background:color-mix(in srgb,currentColor 14%,transparent)}
+.jur-qpainel{margin:6px 0;padding:8px 10px;border:1px solid var(--borda);border-left-width:4px;border-radius:8px;font-size:12.5px}
+.jur-qpainel.jur-q-oficial{border-left-color:var(--ok)} .jur-qpainel.jur-q-conferido{border-left-color:var(--info)}
+.jur-qpainel.jur-q-aconferir{border-left-color:var(--atencao)} .jur-qpainel.jur-q-problema{border-left-color:var(--erro)}
+.jur-qpainel-tit{font-weight:700;margin-bottom:4px}
+.jur-qpainel ul{margin:2px 0 6px 18px;padding:0}
+.jur-diff{font-size:12.5px;line-height:1.5;padding:6px 8px;border-radius:6px;background:color-mix(in srgb,var(--borda) 25%,transparent)}
+.jur-diff del{color:var(--erro);text-decoration:line-through}
+.jur-diff ins{color:var(--ok);text-decoration:underline;font-weight:600}
+.jur-bib-qualidade{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.jur-aud-passos{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0;padding-left:18px;font-size:12.5px}
+.jur-aud-passos li{color:var(--sutil)}
+.jur-aud-passos li.feito{color:var(--ok)}
+.jur-aud-passos li.feito::marker{content:"✓ "}
+.jur-aud-passos li.atual{color:inherit;font-weight:700}
+.jur-aud-prog progress{width:100%;height:10px}
+.jur-aud-lista{max-height:55vh;overflow:auto}
+.jur-aud-rodape{position:sticky;bottom:0;background:var(--panel);padding-top:6px}
+.jur-aud-grupo{margin:8px 0;border:1px solid var(--borda);border-radius:8px;padding:4px 8px}
+.jur-aud-grupo summary{cursor:pointer;font-weight:700;padding:4px 0}
+.jur-aud-item{padding:8px 0;border-top:1px solid var(--borda)}
+.jur-aud-item:first-of-type{border-top:0}
+.jur-aud-cab{margin-bottom:4px}
+.jur-aud-escolha{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.jur-aud-escolha .btn-min.ativo{outline:2px solid var(--info);font-weight:700}
+.jur-aud-aviso{color:var(--atencao)}
+.jur-cita-oficial{border-left:4px solid var(--ok)}
 .jur-sel.cat{background:transparent;border:1px solid var(--borda);
   color:var(--sutil);font-weight:600;font-size:9.5px;cursor:help}
 .jur-sel.cat.cat-sumula{border-color:var(--amarelo,#d97706);
@@ -8492,6 +8526,32 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <!-- LIGAR UM TRECHO A UM JULGADO GUARDADO, À MÃO (v18.34.0; jurEscAbrir, juris-ui.js) -->
 <!-- JM3 (v18.41.0): A BIBLIOTECA DE JULGADOS — todos, com busca, filtros, cartões em lote e estudo das teses -->
+<!-- (v18.95.0) AUDITORIA PELO CATÁLOGO OFICIAL: cada passo dito na tela, com a barra de progresso; nada é gravado sem decidir -->
+<dialog id="dlgJurAud" class="ui-modal diag-modal jur-aud" aria-labelledby="jurAudTit">
+  <div class="vka-cab">
+    <h3 id="jurAudTit" data-i18n="jur_aud_tit"></h3>
+    <button type="button" class="dlg-x" id="btnJurAudX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="jur_aud_intro"></p>
+  <ol class="jur-aud-passos" id="jurAudPassos">
+    <li data-i18n="jur_aud_p1"></li>
+    <li data-i18n="jur_aud_p2"></li>
+    <li data-i18n="jur_aud_p3"></li>
+    <li data-i18n="jur_aud_p4"></li>
+    <li data-i18n="jur_aud_p5"></li>
+  </ol>
+  <div class="jur-aud-prog">
+    <progress id="jurAudProg" max="100" value="0"></progress>
+    <p class="nota" id="jurAudEtapa" role="status" aria-live="polite"></p>
+  </div>
+  <p class="nota" id="jurAudResumo"></p>
+  <div id="jurAudLista" class="jur-aud-lista"></div>
+  <div class="qm-bts jur-aud-rodape">
+    <button type="button" class="btn-min btn-min-ok" id="btnJurAudAplicar" hidden></button>
+    <button type="button" class="btn-min" id="btnJurAudDesfazer" hidden></button>
+    <button type="button" class="btn-min" id="btnJurAudFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgJurBib" class="ui-modal diag-modal jur-bib">
   <div class="vka-cab">
     <h3 data-i18n="jur_bib_tit"></h3>
@@ -8509,6 +8569,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <option value="sem_topico" data-i18n="jur_bib_sit_sem_topico"></option>
       <option value="rever" data-i18n="jur_bib_sit_rever"></option>
       <option value="fora" data-i18n="jur_bib_sit_fora"></option>
+      <option value="q_problema" data-i18n="jur_bib_sit_q_problema"></option>
+      <option value="q_aconferir" data-i18n="jur_bib_sit_q_aconferir"></option>
+      <option value="q_vencido" data-i18n="jur_bib_sit_q_vencido"></option>
+      <option value="q_conferido" data-i18n="jur_bib_sit_q_conferido"></option>
+      <option value="q_oficial" data-i18n="jur_bib_sit_q_oficial"></option>
     </select>
     <select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
       <option value="topico" data-i18n="jur_bib_grupo_topico"></option>
@@ -8521,7 +8586,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min" id="btnJurBibDesfazer" data-i18n="jur_bib_desfazer" hidden></button>
       <button type="button" class="btn-min" id="btnJurBibAtual"></button>
       <button type="button" class="btn-min" id="btnJurBibCorrigir" data-i18n-title="jur_corrigir_btn_aj"></button>
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibAuditar" data-i18n-title="jur_aud_btn_aj"></button>
     </div>
+    <!-- (v18.95.0) a qualidade da coleção: um botão por selo, com a contagem (tocar filtra) -->
+    <div id="jurBibQualidade" class="jur-bib-qualidade"></div>
     <p class="nota" id="jurBibMsg" role="status"></p>
   </div>
   <div id="jurBibLista" class="jur-bib-lista"></div>
@@ -10483,6 +10551,7 @@ window.__sqlPromise = initSqlJs({
 <script src="vizinhos.js"></script>
 <script src="idb-juris.js"></script>
 <script src="juris.js"></script>
+<script src="juris-catalogo.js"></script>
 <script src="juris-ui.js"></script>
 <script src="pre-edital.js"></script>
 <script src="prompts-cartao.js"></script>

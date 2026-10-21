@@ -25,15 +25,16 @@
  *
  * Agora os três andam juntos, e o invariante E16 (tests/estrutura.js)
  * derruba a suíte se um deles ficar para trás. */
-const CACHE = "easyankicards-v18.94.0";
-const SW_VERSION = "18.94.0";
+const CACHE = "easyankicards-v18.95.0";
+const SW_VERSION = "18.95.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
-  "edital.js", "edital-vert.js", "edital-vert-ui.js", "editais.js", "vinculos.js", "vizinhos.js", "idb-juris.js", "juris.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",
+  "edital.js", "edital-vert.js", "edital-vert-ui.js", "editais.js", "vinculos.js", "vizinhos.js", "idb-juris.js", "juris.js", "juris-catalogo.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",
   "backup.js", "backup-ui.js", "material.js", "resumo-ia.js", "resumo-paragrafo.js",
   "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "dominio-evolucao.js", "banca-alvo.js", "horas-assunto.js", "ramos.js", "pacote.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js", "fora-da-agenda.js",
+  "dados/juris-catalogo.json",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js",
