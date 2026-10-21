@@ -208,7 +208,7 @@ async function testes() {
     ok(a.jurDe(s160.id).tese.indexOf("Poder Executivo") >= 0 && a.$("jurAudEtapa").textContent === a.t("jur_aud_e_cancelado"), "C8e 'cancelar' na confirmação: nada gravado, e a tela diz");
     await conduzir(a, a.jurAudAplicar(), true);
     ok(/município/.test(a.jurDe(s160.id).tese) && a.jurSeloValido(a.jurDe(s436.id)) && a.jurAudAtual().passo === 5, "C8f confirmado: grava e chega ao passo 5");
-    ok(a.$("jurAudEtapa").textContent === a.t("jur_aud_e_pronto", { o: 1, s: 1, m: 0, t: 0 }) && a.$("btnJurAudDesfazer").hidden === false, "C8g diz o que fez e oferece desfazer");
+    ok(a.$("jurAudEtapa").textContent.indexOf(a.t("jur_aud_e_pronto", { o: 1, s: 1, m: 0, t: 0 })) === 0 && a.$("btnJurAudDesfazer").hidden === false, "C8g diz o que gravou e oferece desfazer: " + a.$("jurAudEtapa").textContent);
     await conduzir(a, a.jurAudDesfazer(), true);
     ok(/Poder Executivo/.test(a.jurDe(s160.id).tese) && !a.jurSeloValido(a.jurDe(s436.id)), "C8h desfazer pela tela");
   }
@@ -237,7 +237,9 @@ async function testes() {
     ok(a.$("btnJurBibQ_oficial") && /· 1$/.test(a.$("btnJurBibQ_oficial").textContent) && a.$("btnJurBibQ_problema") && /· 1$/.test(a.$("btnJurBibQ_problema").textContent), "C10 a biblioteca conta por selo");
     a.$("btnJurBibQ_problema").onclick();
     ok(a.jurBibFiltrados().length === 1 && a.jurBibFiltrados()[0].numero === "160" && a.$("jurBibSit").value === "q_problema", "C10a tocar no selo filtra (e o seletor acompanha)");
-    ok(/🛡/.test(a.$("btnJurBibAuditar").textContent), "C10b o botão da auditoria está na biblioteca");
+    ok(/🛡/.test(a.$("btnJurBibConferir").textContent) && a.$("btnJurBibConferir").hidden !== true
+      && a.$("btnJurBibAtual").hidden === true && a.$("btnJurBibCorrigir").hidden === true && a.$("btnJurBibAuditar").hidden === true,
+      "C10b UM botão na biblioteca (🛡 Conferir julgados); os três antigos escondidos");
     a.$("dlgJurBib").close();
     /* gaveta */
     a.jurAbrir("Direito Tributário", "Crédito tributário");
@@ -258,6 +260,76 @@ async function testes() {
     ok(a.jurSeloValido(a.jurDe(nunca.id)) && a.jurDe(nunca.id).selo.tipo === "pessoa", "C11d conferi: selo da pessoa");
     a.$("btnJurQEditar_" + nunca.id).onclick({ stopPropagation() {} });
     ok(a.$("jurTese").value === "y", "C11e o painel tem '✏️ Editar', que abre o julgado no formulário");
+  }
+  /* ---- 9: o fluxo único (v18.96.0) ---- */
+  {
+    const { api: a } = rodar();
+    a.jurCatDefinir(CAT);
+    const g = (o) => a.jurGravar(o);
+    const s160 = g({ tribunal: "STJ", classe: "Súmula", numero: "160", tese: "É defeso ao Poder Executivo atualizar o IPTU, mediante decreto.", deMemoria: true });
+    const t201 = g({ tribunal: "STF", classe: "Tema", numero: "201", tese: CAT.itens["STF|tema|201"].tese });
+    const re = g({ tribunal: "STF", classe: "RE", numero: "593849", tese: "É devida a restituição da diferença do ICMS pago a mais." });
+    const adi = g({ tribunal: "STF", classe: "ADI", numero: "1945", tese: "É constitucional o ISS no software.", deMemoria: true });
+    const adiOk = g({ tribunal: "STF", classe: "ADI", numero: "5659", tese: "Outra." });
+    a.jurSeloConceder(adiOk.id, "pessoa", "conferi", "2026-10-21");
+    const p = a.jurConferirPlano();
+    ok(p.catalogo.length === 3 && p.catalogo.indexOf(s160.id) >= 0 && p.catalogo.indexOf(re.id) >= 0, "U1 o catálogo resolve súmula, tema e o RE que fixou o tema: " + p.catalogo.length);
+    ok(p.ia.length === 1 && p.ia[0] === adi.id && p.selados[0] === adiOk.id, "U1a a IA só recebe o acórdão fora do catálogo e SEM selo (o conferido fica de fora)");
+    ok(p.pares.length === 1 && p.pares[0].slice().sort().join() === [t201.id, re.id].sort().join(), "U1b os repetidos que o catálogo revela: Tema 201 × RE 593.849");
+    /* o pedido único traz os dois pedidos num só */
+    const ped = a.jurUnicoPedido([a.jurDe(adi.id)], "2026-10-21");
+    ok(/tese_oficial/.test(ped) && /situacao/.test(ped) && /tese_atual/.test(ped) && ped.indexOf(adi.id) >= 0 && ped.indexOf(s160.id) < 0, "U2 um pedido só: texto oficial + vigência, só com o resto");
+    /* a resposta, lida pelos dois leitores e juntada */
+    const resp = JSON.stringify({ julgados: [{ id: adi.id, tese_oficial: "É constitucional a incidência do ISS no licenciamento de software.", tese_confere: "nao", situacao: "vigente", data: "2021-02-24", orgao: "Plenário", fonte: "STF", certeza: "alta", explicacao: "paráfrase" }] });
+    const r = a.jurUnicoLer(resp, [a.jurDe(adi.id)]);
+    ok(r.est === "ok" && r.itens.length === 1 && r.itens[0].corr && r.itens[0].atual && r.itens[0].marcado, "U3 os dois leitores juntam o mesmo julgado");
+    const rec = a.jurUnicoAplicar(r.itens, "2026-10-21");
+    const A = a.jurDe(adi.id);
+    ok(/licenciamento de software/.test(A.tese) && A.teseAnterior === adi.tese && A.orgao === "Plenário" && A.situacao === "vigente" && A.corrigidoIA === "2026-10-21",
+      "U3a aplicar grava texto, campos e vigência");
+    const q = a.jurQualidade(A, { hoje: "2026-10-21" });
+    ok(!a.jurSeloValido(A) && q.nivel === "aconferir" && q.motivos.some((m) => m.k === "vigencia_ia") && A.deMemoria === true, "U3b veio da IA: SEM selo, 'de memória' fica, e o porquê diz 'vigência verificada pela IA': " + q.nivel);
+    ok(a.jurUnicoDesfazer(rec) >= 1 && a.jurDe(adi.id).tese === adi.tese && !a.jurDe(adi.id).vigenciaIA && !a.jurDe(adi.id).orgao, "U3c desfazer volta tudo (tese, campos, a marca da IA)");
+    /* superada com tese atual vence a correção de redação */
+    const resp2 = JSON.stringify({ julgados: [{ id: adi.id, tese_oficial: "Texto oficial antigo.", tese_confere: "nao", situacao: "superada", tese_atual: "Entendimento novo.", fonte: "RE 1", certeza: "alta" }] });
+    const antesU = a.jurDe(adi.id).tese;
+    const r2 = a.jurUnicoLer(resp2, [a.jurDe(adi.id)]);
+    a.jurUnicoAplicar(r2.itens, "2026-10-21");
+    ok(a.jurDe(adi.id).tese === "Entendimento novo." && a.jurDe(adi.id).situacao === "superada", "U3d superada com tese atual: fica o entendimento de hoje (não a redação antiga)");
+    ok(a.jurDe(adi.id).teseAnterior === antesU, "U3e e a 'tese anterior' é a que a pessoa tinha (não a redação intermediária da IA): " + a.jurDe(adi.id).teseAnterior);
+    /* vigência antiga (JM4, sem a marca) continua contando como conferido; a da IA nova, não */
+    const leg = g({ tribunal: "STF", classe: "ADI", numero: "800", tese: "x", conferidoEm: "2026-10-01" });
+    ok(a.jurQualidade(leg, { hoje: "2026-10-21" }).nivel === "conferido", "U4 conferidoEm sem a marca da IA (conferido por gente / limpeza à mão): conferido");
+  }
+
+  /* ---- 10: a tela do fluxo único ---- */
+  {
+    const { api: a } = rodar();
+    a.jurCatDefinir(CAT);
+    const t201 = a.jurGravar({ tribunal: "STF", classe: "Tema", numero: "201", tese: CAT.itens["STF|tema|201"].tese, topicos: ["d›t"] });
+    const re = a.jurGravar({ tribunal: "STF", classe: "RE", numero: "593849", tese: "Curta.", topicos: ["d›u"] });
+    const adi = a.jurGravar({ tribunal: "STF", classe: "ADI", numero: "1945", tese: "ISS no software.", deMemoria: true });
+    a.jurBibAbrir();
+    await a.$("btnJurBibConferir").onclick();
+    ok(a.jurAudAtual().passo === 3 && a.$("btnJurAudSeguir").hidden === false, "U5 o botão único abre o fluxo; no passo 3 dá para seguir sem gravar");
+    a.$("btnJurAudSeguir").onclick();
+    ok(a.jurAudAtual().passo === 5 && a.$("btnJurAudUnir_" + t201.id) || a.$("btnJurAudUnir_" + re.id), "U5a passo 5: o par Tema 201 × RE 593.849 com 'Unir'");
+    const bU = a.$("btnJurAudUnir_" + t201.id) || a.$("btnJurAudUnir_" + re.id);
+    await conduzir(a, bU.onclick(), true);
+    const fica = a.jurDe(t201.id);
+    ok(fica && !a.jurDe(re.id) && fica.topicos.length === 2, "U5b unir: fica o de tese mais completa, com os tópicos dos dois");
+    ok(a.$("btnJurAudIA") && /1/.test(a.$("btnJurAudIA").textContent), "U5c o passo 6 oferece a IA só para o 1 que sobra");
+    a.$("btnJurAudIA").onclick();
+    ok(a.$("dlgJurAud").open === false && a.$("dlgJurBib").open && a.jurAtualCtxAtual().modo === "unico" && a.jurAtualCtxAtual().ids.join() === adi.id,
+      "U5d passo 6: abre o pedido único na biblioteca, só com o resto");
+    const ped = a.$("btnJurBibAtualPedido").onclick();
+    a.$("jurBibAtualResp").value = JSON.stringify({ julgados: [{ id: adi.id, tese_oficial: "Texto oficial do ISS no software.", tese_confere: "nao", situacao: "vigente", certeza: "alta", explicacao: "e" }] });
+    a.jurBibAtualLerResp();
+    ok(a.$("jurBibAtualPrev").querySelectorAll("ins").length >= 1 && a.$("jurBibAtualPrev").textContent.indexOf(a.t("jur_unico_sem_selo")) >= 0, "U5e mostra o antes × depois e diz que a IA não dá selo");
+    a.$("btnJurBibAtualAplicar").onclick();
+    ok(/Texto oficial/.test(a.jurDe(adi.id).tese) && a.$("btnJurBibAtualDesfazer").hidden === false, "U5f aplica e oferece desfazer");
+    a.$("btnJurBibAtualDesfazer").onclick();
+    ok(a.jurDe(adi.id).tese === "ISS no software.", "U5g desfaz");
   }
   return falhas;
 }

@@ -136,9 +136,15 @@ async function testes() {
     api.jurAbrir(D, T, "ler");
     const b = api.$("btnJurCorrigirIA");
     ok(b.hidden === false && /· 3/.test(b.textContent), "C5 a gaveta oferece corrigir os 3 pendentes do tópico (a outra SV 50 está em outro tópico): " + b.textContent);
-    b.onclick();
+    await b.onclick();
+    /* (v18.96.0) abre o fluxo único "Conferir julgados" só com os 3 pendentes do tópico (sem catálogo no teste: passo 1
+     * avisa e oferece seguir sem ele) */
+    ok(api.$("dlgJurAud").open !== false && api.jurAudAtual().ids.length === 3 && api.$("btnJurAudSeguir").hidden === false,
+      "C5a abre o fluxo único só com os 3 do tópico: " + JSON.stringify(api.jurAudAtual().ids.length));
+    api.jurAudPassoRepetidos();
+    api.$("btnJurAudIA").onclick();
     const intro = api.$("jurBibAtualIntro").textContent;
-    ok(api.$("dlgJurBib").open !== false && /3 julgado/.test(intro) && !/435/.test(intro), "C5a abre a biblioteca já no modo corrigir, só com os do tópico: " + intro);
+    ok(/3 julgado/.test(intro) && !/435/.test(intro) && api.jurAtualCtxAtual().modo === "unico", "C5a1 sem catálogo, os 3 seguem para a IA num pedido só: " + intro);
     api.jurCorrecaoAplicar(api.jurCorrecaoLer(resposta(o), [o.t962]).itens, "2026-10-17");
     api.jurAbrir(D, T, "ler");
     const notas = api.$("jurLista").querySelectorAll(".jur-corrigido-ia");

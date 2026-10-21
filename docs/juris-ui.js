@@ -1471,7 +1471,8 @@ function jurPintarLista() {
     $("btnJurCorrigirIA").hidden = !pend.length || jurModo !== "ler";
     $("btnJurCorrigirIA").textContent = t("jur_corrigir_btn", { n: pend.length });
     $("btnJurCorrigirIA").title = t("jur_corrigir_btn_aj");
-    $("btnJurCorrigirIA").onclick = () => { $("dlgJuris").close(); jurBibAbrir(); jurBibAtualIniciar("corrigir", pend.map((j) => j.id)); };
+    /* (v18.96.0) o mesmo fluxo único da biblioteca, só com os pendentes deste tópico: catálogo → repetidos → IA */
+    $("btnJurCorrigirIA").onclick = () => { $("dlgJuris").close(); jurBibAbrir(); return jurAudAbrir(pend.map((j) => j.id)); };
   }
   if (!lista.length) return;
 
@@ -2924,6 +2925,15 @@ function jurBibFiltrados() {
     /* (v18.95.0) pelo selo de qualidade */
     if (/^q_/.test(jurBib.sit || "") && jurQualidade(j, { lista: todos }).nivel !== jurBib.sit.slice(2)) return false;
     if (jurBib.trib && String(j.tribunal || "") !== jurBib.trib) return false;
+    /* (v18.96.0) pelo assunto: "d:<disciplina>" (todos os tópicos dela) ou "t:<chave do tópico>" */
+    if (jurBib.assunto) {
+      const tops = jurBibTopicosDe(j);
+      const [tipo, val] = [jurBib.assunto.slice(0, 2), jurBib.assunto.slice(2)];
+      if (tipo === "d:" && !tops.some((x) => jurChaveComparavel(x.disciplina) === val)) return false;
+      if (tipo === "t:" && !tops.some((x) => x.k === val)) return false;
+    }
+    /* (v18.96.0) pela etiqueta (#) */
+    if (jurBib.tag && !jurTagsDe(j).some((x) => jurTagNormal(x) === jurBib.tag)) return false;
     if (jurBib.sit === "conferir" && !jurBibSituacao(j)) return false;
     if (jurBib.sit === "memoria" && !j.deMemoria) return false;
     if (jurBib.sit === "sem_ementa" && String(j.texto || "").trim()) return false;
@@ -2941,7 +2951,9 @@ function jurBibFiltrados() {
 function jurBibAbrir(opc) {
   if (!$("dlgJurBib")) return false;
   const o = opc || {};
-  jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", grupo: "topico", estudo: null, ligando: "", atual: false };
+  jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", assunto: o.assunto || "", tag: o.tag || "", grupo: "topico", estudo: null, ligando: "", atual: false };
+  /* (v18.96.0) tela cheia por padrão (a escolha é lembrada) */
+  jurBibCheiaTrocar(jurBibCheiaPreferida(), false);
   $("jurBibBusca").value = jurBib.busca;
   $("jurBibSit").value = jurBib.sit;
   $("jurBibGrupo").value = jurBib.grupo;
@@ -2965,6 +2977,7 @@ function jurBibPintar() {
   });
   if (jurBib.trib && tribs.indexOf(jurBib.trib) < 0) jurBib.trib = "";
   st.value = jurBib.trib;
+  jurBibPintarFiltros(todos);
   const L = jurBibFiltrados();
   const nTop = new Set(todos.flatMap((j) => (j.topicos || []).map(jurChaveComparavel))).size;
   $("jurBibConta").textContent = t("jur_bib_conta", { n: todos.length, k: nTop });
@@ -2989,10 +3002,13 @@ function jurBibPintar() {
   }
   /* (v18.95.0) a qualidade da coleção, um botão por selo (tocar filtra) */
   jurBibPintarQualidade(todos);
-  if ($("btnJurBibAuditar")) {
-    $("btnJurBibAuditar").textContent = t("jur_aud_btn", { n: L.length });
-    $("btnJurBibAuditar").disabled = !L.length;
+  /* (v18.96.0) UM BOTÃO SÓ: "Conferir julgados" (catálogo → repetidos → IA para o resto). Os três antigos ficam
+   * escondidos (o código deles é o mesmo, usado pelos passos do fluxo único) */
+  if ($("btnJurBibConferir")) {
+    $("btnJurBibConferir").textContent = t("jur_conf_btn", { n: L.length });
+    $("btnJurBibConferir").disabled = !L.length;
   }
+  ["btnJurBibAuditar", "btnJurBibAtual", "btnJurBibCorrigir"].forEach((id) => { if ($(id)) $(id).hidden = true; });
   const est = !!jurBib.estudo, atu = !!jurBib.atual;
   $("jurBibEstudo").hidden = !est;
   if ($("jurBibAtual")) $("jurBibAtual").hidden = !atu;
@@ -3066,6 +3082,22 @@ function jurBibLinha(j) {
   tese.className = "jur-bib-tese";
   tese.textContent = String(j.tese || j.resumo || t("jur_bib_sem_tese")).trim();
   li.append(tese);
+  /* (v18.96.0) AS ETIQUETAS À VISTA: tocar numa filtra a biblioteca por ela */
+  const tg = jurTagsDe(j);
+  if (tg.length) {
+    const box = document.createElement("div");
+    box.className = "jur-bib-tags";
+    tg.forEach((x) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-min jur-tag-chip" + (jurBib.tag === jurTagNormal(x) ? " ativo" : "");
+      b.textContent = "#" + x;
+      b.title = t("jur_bib_tag_filtrar_aj", { t: x });
+      b.onclick = () => { jurBib.tag = jurBib.tag === jurTagNormal(x) ? "" : jurTagNormal(x); jurBibPintar(); };
+      box.append(b);
+    });
+    li.append(box);
+  }
   /* os tópicos: tocar abre o julgado lá (a gaveta do tópico) */
   const tps = document.createElement("div");
   tps.className = "jur-bib-tops";
@@ -3163,21 +3195,164 @@ function jurBibEstudoIr(d) {
   jurBibPintar();
 }
 function jurBibEstudoSair() { jurBib.estudo = null; jurBibPintar(); }
+/* (v18.96.0) O ESTUDO DAS TESES, REFEITO: a frente diz tudo o que NÃO entrega a resposta (selo, tribunal, classe, número,
+ * categoria, data, órgão, relator, tópico); o verso, depois de "mostrar", traz a tese, o resumo, as etiquetas (que quase
+ * entregam a tese — por isso só no verso), os precedentes, a fonte, a ementa recolhida e a página oficial. ✏️ Editar
+ * abre o julgado no formulário e, ao fechar a gaveta, volta a este mesmo ponto do estudo. */
 function jurBibPintarEstudo() {
   const e = jurBib.estudo;
   const j = jurDe(e.ids[e.i]);
   if (!j) { jurBibEstudoSair(); return; }
   $("jurBibEstPos").textContent = t("jur_bib_est_pos", { i: e.i + 1, n: e.ids.length });
+  if ($("jurBibEstProg")) $("jurBibEstProg").value = Math.round((e.i + 1) / e.ids.length * 100);
   const quem = [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
   $("jurBibEstFrente").textContent = t("jur_bib_est_frente", { q: quem || "?" });
+  /* a frente: selo, categoria e os dados que não entregam a tese */
+  const cab = $("jurBibEstCab");
+  if (cab) {
+    cab.innerHTML = "";
+    cab.append(jurQualidadeChip(jurQualidade(j)));
+    const sel = (txt, cls) => { const s = document.createElement("span"); s.className = "jur-sel " + cls; s.textContent = txt; cab.append(s); };
+    if (j.tribunal) sel(j.tribunal, "trib");
+    const cat = j.categoria || (typeof jurCategoria === "function" ? jurCategoria(j.classe) : "");
+    if (cat) sel(cat, "cat");
+    const sv = jurSeloSituacao(j);
+    if (sv) cab.append(sv);
+  }
+  const meta = $("jurBibEstMeta");
+  if (meta) {
+    meta.innerHTML = "";
+    [["data", j.data ? jurDataBr(j.data) : ""], ["orgao", j.orgao], ["relator", j.relator]].forEach(([k, v]) => {
+      if (!String(v || "").trim()) return;
+      const d = document.createElement("div");
+      d.className = "jur-est-campo";
+      const r = document.createElement("span"); r.className = "jur-est-rot"; r.textContent = jurNomeCampo(k);
+      const x = document.createElement("span"); x.textContent = v;
+      d.append(r, x);
+      meta.append(d);
+    });
+  }
   /* só o tópico como pista: as etiquetas ("#cartão de crédito #planos de saúde") quase entregam a tese */
   const pistas = jurBibTopicosDe(j).map((x) => x.topico).join(", ");
   $("jurBibEstPistas").textContent = pistas;
   $("jurBibEstTese").hidden = !e.ver;
-  $("jurBibEstTese").textContent = String(j.tese || "").trim() + (j.resumo ? "\n\n" + String(j.resumo).trim() : "");
+  $("jurBibEstTese").textContent = "";
+  if (typeof jurEscreverTese === "function") jurEscreverTese($("jurBibEstTese"), String(j.tese || "").trim());
+  else $("jurBibEstTese").textContent = String(j.tese || "").trim();
+  /* o verso */
+  const vs = $("jurBibEstVerso");
+  if (vs) {
+    vs.hidden = !e.ver;
+    vs.innerHTML = "";
+    const bloco = (rot, txt, cls) => {
+      if (!String(txt || "").trim()) return null;
+      const d = document.createElement("div");
+      d.className = "jur-est-bloco" + (cls ? " " + cls : "");
+      const r = document.createElement("div"); r.className = "jur-est-rot"; r.textContent = rot;
+      const x = document.createElement("div"); x.className = "jur-est-txt"; x.textContent = txt;
+      d.append(r, x);
+      vs.append(d);
+      return d;
+    };
+    bloco(t("jur_cit_resumo"), j.resumo, "jur-est-resumo");
+    const tg = jurTagsDe(j);
+    if (tg.length) {
+      const d = document.createElement("div");
+      d.className = "jur-est-bloco jur-bib-tags";
+      tg.forEach((x) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-min jur-tag-chip"; b.textContent = "#" + x;
+        b.title = t("jur_bib_tag_filtrar_aj", { t: x });
+        b.onclick = () => { jurBib.estudo = null; jurBib.tag = jurTagNormal(x); jurBibPintar(); };
+        d.append(b);
+      });
+      vs.append(d);
+    }
+    bloco(t("jur_prec_rot"), j.precedentes);
+    bloco(jurNomeCampo("fonte"), j.fonte);
+    if (String(j.texto || "").trim()) {
+      const det = document.createElement("details");
+      det.className = "jur-est-bloco jur-est-ementa";
+      const s = document.createElement("summary"); s.textContent = t("jur_cit_ementa");
+      const x = document.createElement("div"); x.className = "jur-est-txt"; x.textContent = String(j.texto).trim();
+      det.append(s, x);
+      vs.append(det);
+    }
+    const lk = jurLinkOficial(j);
+    if (lk) { const a = document.createElement("a"); a.href = lk.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "jur-oficial-lnk"; a.textContent = "↗ " + lk.nome; vs.append(a); }
+  }
   $("btnJurBibEstVer").hidden = e.ver;
   $("btnJurBibEstAnt").disabled = e.i === 0;
   $("btnJurBibEstProx").disabled = e.i >= e.ids.length - 1;
+  if ($("btnJurBibEstConferi")) $("btnJurBibEstConferi").hidden = !e.ver || jurSeloValido(j);
+}
+
+/* ✏️ editar a partir do estudo: abre o julgado no formulário (gaveta do tópico dele) e, ao fechar, volta a este ponto */
+function jurBibEstudoEditar() {
+  const e = jurBib.estudo;
+  const j = e && jurDe(e.ids[e.i]);
+  if (!j) return false;
+  const tp = jurBibTopicosDe(j)[0];
+  if (!tp) { try { uiAlert(t("jur_aud_editar_sem_topico")); } catch (x) {} return false; }
+  const guardado = Object.assign({}, jurBib, { estudo: Object.assign({}, e, { ver: true }) });
+  $("dlgJurBib").close();
+  jurAbrir(tp.disciplina, tp.topico, "ler");
+  jurEditar(j.id);
+  jurVoltaPara = () => { jurBibAbrir(); Object.assign(jurBib, guardado); jurBibPintar(); };
+  try { reg("JURIS", "estudo das teses: editar", jurTitulo(j)); } catch (x) {}
+  return true;
+}
+
+/* ---- tela cheia (como o Domínio) ---- */
+const JUR_BIB_CH_CHEIA = "eac_jur_bib_cheia";
+let jurBibCheia = false;
+function jurBibCheiaPreferida() { try { return localStorage.getItem(JUR_BIB_CH_CHEIA) !== "0"; } catch (e) { return true; } }
+function jurBibCheiaTrocar(sim, lembrar) {
+  jurBibCheia = sim === undefined ? !jurBibCheia : !!sim;
+  const dlg = $("dlgJurBib");
+  if (dlg && dlg.classList) dlg.classList.toggle("jur-bib-cheia", jurBibCheia);
+  const b = $("btnJurBibCheia");
+  if (b) { b.textContent = t(jurBibCheia ? "dom_cheia_sair" : "dom_cheia"); b.setAttribute("aria-pressed", String(jurBibCheia)); }
+  if (jurBibCheia) { if (typeof telaCheiaPedir === "function") telaCheiaPedir("jurbib", () => { if (jurBibCheia) jurBibCheiaTrocar(false, false); }); }
+  else if (typeof telaCheiaSair === "function") telaCheiaSair("jurbib");
+  if (lembrar) { try { localStorage.setItem(JUR_BIB_CH_CHEIA, jurBibCheia ? "1" : "0"); } catch (e) {} }
+  return jurBibCheia;
+}
+
+/* ---- os filtros de assunto e de etiqueta (só o que existe, com quantos) ---- */
+function jurBibPintarFiltros(todos) {
+  const sa = $("jurBibAssunto");
+  if (sa) {
+    sa.innerHTML = "";
+    const op = (v, r, pai) => { const o = document.createElement("option"); o.value = v; o.textContent = r; (pai || sa).append(o); return o; };
+    op("", t("jur_bib_assunto_todos"));
+    const discs = new Map();
+    (todos || []).forEach((j) => jurBibTopicosDe(j).forEach((x) => {
+      const dk = jurChaveComparavel(x.disciplina || "—");
+      if (!discs.has(dk)) discs.set(dk, { nome: x.disciplina || "—", n: 0, tops: new Map() });
+      const D = discs.get(dk);
+      D.n++;
+      if (!D.tops.has(x.k)) D.tops.set(x.k, { nome: x.topico, n: 0 });
+      D.tops.get(x.k).n++;
+    }));
+    [...discs.entries()].sort((a, b) => a[1].nome.localeCompare(b[1].nome)).forEach(([dk, D]) => {
+      const g = document.createElement("optgroup");
+      g.label = D.nome;
+      op("d:" + dk, t("jur_bib_assunto_disc", { d: D.nome, n: D.n }), g);
+      [...D.tops.entries()].sort((a, b) => a[1].nome.localeCompare(b[1].nome)).forEach(([k, T]) => op("t:" + k, T.nome + " (" + T.n + ")", g));
+      sa.append(g);
+    });
+    sa.value = jurBib.assunto || "";
+    if (sa.value !== (jurBib.assunto || "")) { jurBib.assunto = ""; sa.value = ""; }
+  }
+  const sg = $("jurBibTag");
+  if (sg) {
+    sg.innerHTML = "";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = t("jur_bib_tag_todas"); sg.append(o0);
+    jurTagsTodas().forEach((x) => { const o = document.createElement("option"); o.value = x.chave; o.textContent = "#" + x.nome + " (" + x.n + ")"; sg.append(o); });
+    sg.value = jurBib.tag || "";
+    if (sg.value !== (jurBib.tag || "")) { jurBib.tag = ""; sg.value = ""; }
+  }
 }
 
 if (typeof document !== "undefined" && $("dlgJurBib")) {
@@ -3192,6 +3367,22 @@ if (typeof document !== "undefined" && $("dlgJurBib")) {
   $("btnJurBibEstAnt").onclick = () => jurBibEstudoIr(-1);
   $("btnJurBibEstProx").onclick = () => jurBibEstudoIr(1);
   $("btnJurBibEstSair").onclick = () => jurBibEstudoSair();
+  if ($("btnJurBibEstEditar")) $("btnJurBibEstEditar").onclick = () => jurBibEstudoEditar();
+  if ($("btnJurBibEstConferi")) $("btnJurBibEstConferi").onclick = async () => { const e = jurBib.estudo; const j = e && jurDe(e.ids[e.i]); if (!j) return false; const r = await jurConferiNaFonte(j.id); jurBibPintar(); return r; };
+  if ($("btnJurBibCheia")) $("btnJurBibCheia").onclick = () => jurBibCheiaTrocar(undefined, true);
+  if ($("jurBibAssunto")) $("jurBibAssunto").onchange = () => { jurBib.assunto = $("jurBibAssunto").value; jurBibPintar(); };
+  if ($("jurBibTag")) $("jurBibTag").onchange = () => { jurBib.tag = $("jurBibTag").value; jurBibPintar(); };
+  /* sair da biblioteca devolve a tela cheia do navegador */
+  if ($("dlgJurBib").addEventListener) $("dlgJurBib").addEventListener("close", () => { if (typeof telaCheiaSair === "function") telaCheiaSair("jurbib"); });
+  /* teclado no estudo: ← anterior · → próxima · espaço/Enter mostra a tese */
+  if ($("dlgJurBib").addEventListener) $("dlgJurBib").addEventListener("keydown", (ev) => {
+    if (!jurBib || !jurBib.estudo || !ev) return;
+    const alvo = ev.target && ev.target.tagName;
+    if (/INPUT|TEXTAREA|SELECT/.test(alvo || "")) return;
+    if (ev.key === "ArrowRight") { ev.preventDefault && ev.preventDefault(); jurBibEstudoIr(1); }
+    else if (ev.key === "ArrowLeft") { ev.preventDefault && ev.preventDefault(); jurBibEstudoIr(-1); }
+    else if ((ev.key === " " || ev.key === "Enter") && !jurBib.estudo.ver && alvo !== "BUTTON") { ev.preventDefault && ev.preventDefault(); jurBib.estudo.ver = true; jurBibPintar(); }
+  });
   $("btnJurBibX").onclick = () => $("dlgJurBib").close();
   $("btnJurBibFechar").onclick = () => $("dlgJurBib").close();
   if ($("btnMatJurBib")) $("btnMatJurBib").onclick = () => jurBibAbrir();
@@ -3208,10 +3399,13 @@ let jurAtualCtx = null;
 
 function jurBibAtualIniciar(modo, ids) {
   const corrigir = modo === "corrigir";
-  /* (v18.62.0) "corrigir": os julgados COM PENDÊNCIA (os de um tópico, quando vem da gaveta; senão todos) */
-  const L = corrigir ? jurComPendencia(jurLista()).filter((j) => !ids || ids.indexOf(j.id) >= 0) : jurBibFiltrados();
+  const unico = modo === "unico";
+  /* (v18.62.0) "corrigir": os julgados COM PENDÊNCIA (os de um tópico, quando vem da gaveta; senão todos)
+   * (v18.96.0) "unico": o passo 6 do Conferir julgados — só os que o catálogo não resolve, num pedido só */
+  const L = unico ? (ids || []).map(jurDe).filter(Boolean)
+    : corrigir ? jurComPendencia(jurLista()).filter((j) => !ids || ids.indexOf(j.id) >= 0) : jurBibFiltrados();
   if (!L.length) return false;
-  jurAtualCtx = { ids: L.map((j) => j.id), pedido: "", lidos: null, recibo: null, modo: corrigir ? "corrigir" : "atual" };
+  jurAtualCtx = { ids: L.map((j) => j.id), pedido: "", lidos: null, recibo: null, modo: unico ? "unico" : corrigir ? "corrigir" : "atual" };
   jurBib.estudo = null;
   jurBib.atual = true;
   $("jurBibAtualResp").value = "";
@@ -3219,7 +3413,9 @@ function jurBibAtualIniciar(modo, ids) {
   $("jurBibAtualPedidoMsg").textContent = "";
   $("jurBibAtualFeito").textContent = "";
   $("btnJurBibAtualDesfazer").hidden = true;
-  $("jurBibAtualIntro").textContent = corrigir
+  $("jurBibAtualIntro").textContent = unico
+    ? t("jur_unico_intro", { n: L.length, l: L.map((j) => jurCitNome(j)).join("; ") })
+    : corrigir
     ? t("jur_corrigir_intro", { n: L.length, l: L.map((j) => [j.tribunal, j.classe, j.numero].filter(Boolean).join(" ") + " (" + jurPendencias(j).map((p) => t("jur_pend_" + p)).join(", ") + ")").join("; ") })
     : t("jur_atual_intro", { n: L.length });
   try { reg("JURIS", corrigir ? "corrigir com IA: aberto" : "verificar atualidade: aberto", L.length + " julgados"); } catch (e) {}
@@ -3232,7 +3428,7 @@ function jurBibAtualPedido() {
   const c = jurAtualCtx;
   if (!c) return "";
   const lista = c.ids.map(jurDe).filter(Boolean);
-  c.pedido = c.modo === "corrigir" ? jurCorrecaoPedido(lista) : jurAtualPedido(lista);
+  c.pedido = c.modo === "unico" ? jurUnicoPedido(lista) : c.modo === "corrigir" ? jurCorrecaoPedido(lista) : jurAtualPedido(lista);
   $("jurBibAtualPedidoTxt").value = c.pedido;
   $("jurBibAtualPedidoTxt").hidden = false;
   $("jurBibAtualPedidoMsg").textContent = t("jur_atual_copiado");
@@ -3247,7 +3443,8 @@ function jurBibAtualLerResp() {
   if (c.pedido && String(bruto).trim().slice(0, 100) === String(c.pedido).trim().slice(0, 100)) {
     c.lidos = { est: "pedido", itens: [] };
   } else {
-    c.lidos = c.modo === "corrigir" ? jurCorrecaoLer(bruto, c.ids.map(jurDe).filter(Boolean)) : jurAtualLer(bruto, c.ids.map(jurDe).filter(Boolean));
+    const L2 = c.ids.map(jurDe).filter(Boolean);
+    c.lidos = c.modo === "unico" ? jurUnicoLer(bruto, L2) : c.modo === "corrigir" ? jurCorrecaoLer(bruto, L2) : jurAtualLer(bruto, L2);
   }
   jurBibAtualPintar();
   return c.lidos;
@@ -3257,6 +3454,7 @@ function jurBibAtualPintar() {
   const c = jurAtualCtx;
   if (!c) return;
   if (c.modo === "corrigir") { jurBibCorrigirPintar(); return; }
+  if (c.modo === "unico") { jurBibUnicoPintar(); return; }
   const r = c.lidos || { est: "vazio", itens: [] };
   const sem = $("jurBibAtualSem");
   sem.className = "nota jur-cita-sem " + (r.est === "ok" ? "ok" : r.est === "vazio" ? "" : "erro");
@@ -3309,11 +3507,12 @@ function jurBibAtualPintarAplicar() {
   const c = jurAtualCtx;
   const itens = (c && c.lidos && c.lidos.itens) || [];
   const corr = c && c.modo === "corrigir";
-  const n = itens.filter((x) => x.marcado && (corr ? x.mudancas.length : x.situacao !== "nao_sei")).length;
+  const un = c && c.modo === "unico";
+  const n = itens.filter((x) => x.marcado && (un ? true : corr ? x.mudancas.length : x.situacao !== "nao_sei")).length;
   const b = $("btnJurBibAtualAplicar");
   b.hidden = !itens.length;
   b.disabled = !n;
-  b.textContent = t(corr ? "jur_corrigir_aplicar" : "jur_atual_aplicar", { n });
+  b.textContent = t(un ? "jur_unico_aplicar" : corr ? "jur_corrigir_aplicar" : "jur_atual_aplicar", { n });
 }
 /* (v18.62.0) o antes × depois da correção, campo a campo; o repetido oferece "unir" */
 function jurBibCorrigirPintar() {
@@ -3408,6 +3607,19 @@ function jurBibAtualAplicar() {
   const c = jurAtualCtx;
   if (!c || !c.lidos || !c.lidos.itens) return null;
   const corr = c.modo === "corrigir";
+  if (c.modo === "unico") {
+    const ru = jurUnicoAplicar(c.lidos.itens);
+    c.recibo = ru;
+    const nT = (ru.corr || []).length + (ru.atual || []).length;
+    try { reg("JURIS", "conferir julgados · IA: aplicado", (ru.corr || []).length + " correções · " + (ru.atual || []).length + " vigências"); } catch (e) {}
+    $("jurBibAtualFeito").textContent = t("jur_unico_feito", { c: (ru.corr || []).length, v: (ru.atual || []).length });
+    $("btnJurBibAtualDesfazer").hidden = !nT;
+    c.lidos = null;
+    $("jurBibAtualResp").value = "";
+    jurBibAtualPintar();
+    try { jurRepintarTelas(); } catch (e) {}
+    return ru;
+  }
   const rec = corr ? jurCorrecaoAplicar(c.lidos.itens) : jurAtualAplicar(c.lidos.itens);
   c.recibo = rec;
   const mud = corr ? c.lidos.itens.filter((x) => x.marcado && x.mudancas.some((m) => m.campo === "tese")).length
@@ -3424,7 +3636,7 @@ function jurBibAtualAplicar() {
 function jurBibAtualDesfazer() {
   const c = jurAtualCtx;
   if (!c || !c.recibo) return 0;
-  const n = jurAtualDesfazer(c.recibo);
+  const n = c.modo === "unico" ? jurUnicoDesfazer(c.recibo) : jurAtualDesfazer(c.recibo);
   c.recibo = null;
   $("btnJurBibAtualDesfazer").hidden = true;
   $("jurBibAtualFeito").textContent = t("jur_atual_desfeito", { n });
@@ -3449,6 +3661,8 @@ if (typeof document !== "undefined" && $("jurBibAtual")) {
   if ($("btnJurBibCorrigir")) $("btnJurBibCorrigir").onclick = () => jurBibAtualIniciar("corrigir");
   /* (v18.95.0) auditoria pelo catálogo oficial, passo a passo */
   if ($("btnJurBibAuditar")) $("btnJurBibAuditar").onclick = () => jurAudAbrir(jurBibFiltrados().map((j) => j.id));
+  if ($("btnJurBibConferir")) $("btnJurBibConferir").onclick = () => jurAudAbrir(jurBibFiltrados().map((j) => j.id));
+  if ($("btnJurAudSeguir")) $("btnJurAudSeguir").onclick = () => jurAudPassoRepetidos();
   if ($("btnJurAudX")) $("btnJurAudX").onclick = () => $("dlgJurAud").close();
   if ($("btnJurAudFechar")) $("btnJurAudFechar").onclick = () => $("dlgJurAud").close();
   if ($("btnJurAudDesfazer")) $("btnJurAudDesfazer").onclick = () => jurAudDesfazer();
@@ -3664,10 +3878,13 @@ async function jurAudAbrir(ids) {
       } else if (o.fase === "lendo") jurAudPasso(1, t("jur_aud_e_lendo"), 100);
     });
   } catch (e) {
+    /* sem o catálogo (sem internet e ainda não guardado): dá para tentar de novo ou seguir sem ele (repetidos e IA) */
     jurAudPasso(1, t("jur_aud_e_erro", { e: String(e && e.message || e) }), 0);
     $("btnJurAudAplicar").hidden = false;
+    $("btnJurAudAplicar").disabled = false;
     $("btnJurAudAplicar").textContent = t("jur_aud_tentar");
     $("btnJurAudAplicar").onclick = () => jurAudAbrir(jurAud.ids);
+    if ($("btnJurAudSeguir")) { $("btnJurAudSeguir").hidden = false; $("btnJurAudSeguir").textContent = t("jur_aud_sem_catalogo"); }
     return false;
   }
   /* 2 · comparar */
@@ -3676,6 +3893,7 @@ async function jurAudAbrir(ids) {
   await jurAudTique();
   jurAud.aud = jurCatAuditar(lista, (o) => jurAudPasso(2, t("jur_aud_e_comparando", { a: o.feito, n: o.total }), Math.round(o.feito / o.total * 100)));
   jurAud.aud.linhas.forEach((l) => { if (l.sugestao) jurAud.decisoes[l.id] = l.sugestao; });
+  jurAud.plano = jurConferirPlano(lista);
   /* 3 · revisar */
   jurAudPintarRevisao();
   return true;
@@ -3714,6 +3932,7 @@ function jurAudPintarRevisao() {
   bA.disabled = !n;
   bA.textContent = t("jur_aud_aplicar", { n });
   bA.onclick = () => jurAudAplicar();
+  if ($("btnJurAudSeguir")) { $("btnJurAudSeguir").hidden = false; $("btnJurAudSeguir").textContent = t("jur_aud_seguir"); }
 }
 
 function jurAudItem(l) {
@@ -3813,10 +4032,10 @@ async function jurAudAplicar() {
   jurAudPasso(4, t("jur_aud_e_gravando", { a: 0, n: ids.length }), 0);
   await jurAudTique();
   const r = jurCatAplicar(a, dec, {}, (o) => jurAudPasso(4, t("jur_aud_e_gravando", { a: o.feito, n: o.total }), Math.round(o.feito / o.total * 100)));
-  jurAudPasso(5, t("jur_aud_e_pronto", { o: r.feitos.oficial || 0, s: r.feitos.selo || 0, m: r.feitos.manter || 0, t: r.feitos.tribunal || 0 }), 100);
   $("btnJurAudAplicar").hidden = true;
   $("btnJurAudDesfazer").hidden = false;
   $("jurAudLista").innerHTML = "";
+  jurAudPassoRepetidos(t("jur_aud_e_pronto", { o: r.feitos.oficial || 0, s: r.feitos.selo || 0, m: r.feitos.manter || 0, t: r.feitos.tribunal || 0 }));
   try { jurRepintarTelas(); } catch (e) {}
   try { if ($("dlgJurBib") && $("dlgJurBib").open) jurBibPintar(); } catch (e) {}
   return r;
@@ -3833,4 +4052,130 @@ async function jurAudDesfazer() {
   try { jurRepintarTelas(); } catch (e) {}
   try { if ($("dlgJurBib") && $("dlgJurBib").open) jurBibPintar(); } catch (e) {}
   return n;
+}
+
+
+/* ---------- (v18.96.0) O FLUXO ÚNICO: PASSO 5 (repetidos) E PASSO 6 (a IA para o resto) ---------- */
+function jurAudPassoRepetidos(antes) {
+  if (!jurAud) return false;
+  const lista = jurAud.ids.map(jurDe).filter(Boolean);
+  jurAud.plano = jurConferirPlano(lista);
+  const pares = jurAud.plano.pares.filter(([a, b]) => jurDe(a) && jurDe(b));
+  jurAudPasso(5, (antes ? antes + " " : "") + (pares.length ? t("jur_aud_e_repetidos", { n: pares.length }) : t("jur_aud_e_sem_repetidos")), 100);
+  $("btnJurAudAplicar").hidden = true;
+  if ($("btnJurAudSeguir")) $("btnJurAudSeguir").hidden = true;
+  const box = $("jurAudLista");
+  box.innerHTML = "";
+  pares.forEach(([a, b]) => {
+    const A = jurDe(a), B = jurDe(b);
+    const d = document.createElement("div");
+    d.className = "jur-aud-item jur-aud-rep";
+    d.id = "jurAudRep_" + A.id;
+    const p = document.createElement("div");
+    p.innerHTML = "";
+    const nome = document.createElement("b");
+    nome.textContent = jurCitNome(A) + "  ≡  " + jurCitNome(B);
+    p.append(nome);
+    d.append(p);
+    [A, B].forEach((x) => { const q = document.createElement("div"); q.className = "nota"; q.textContent = "• " + jurCitNome(x) + ": " + String(x.tese || x.resumo || "—").slice(0, 220); d.append(q); });
+    const bt = document.createElement("button");
+    bt.type = "button";
+    bt.className = "btn-min";
+    bt.id = "btnJurAudUnir_" + A.id;
+    bt.textContent = t("jur_aud_unir");
+    bt.title = t("jur_aud_unir_aj");
+    bt.onclick = async () => {
+      const [fica, vai] = String(A.tese || "").length >= String(B.tese || "").length ? [A, B] : [B, A];
+      const ok = await uiConfirm(t("jur_aud_unir_conf", { a: jurCitNome(fica), b: jurCitNome(vai) }));
+      if (!ok) return false;
+      jurUnir(fica.id, vai.id);
+      jurAud.ids = jurAud.ids.filter((x) => x !== vai.id);
+      try { reg("JURIS", "conferir julgados: repetidos unidos", jurCitNome(fica) + " ← " + jurCitNome(vai)); } catch (e) {}
+      try { jurRepintarTelas(); } catch (e) {}
+      jurAudPassoRepetidos();
+      return true;
+    };
+    d.append(bt);
+    box.append(d);
+  });
+  /* o passo 6: só o que o catálogo não resolve e ainda não tem selo */
+  const ia = jurConferirPlano(jurAud.ids.map(jurDe).filter(Boolean)).ia;
+  const seguir = document.createElement("div");
+  seguir.className = "jur-aud-seguir";
+  const txt = document.createElement("p");
+  txt.className = "nota";
+  txt.textContent = ia.length ? t("jur_aud_ia_resto", { n: ia.length, l: ia.map((id) => jurCitNome(jurDe(id))).join("; ") }) : t("jur_aud_ia_nada");
+  seguir.append(txt);
+  if (ia.length) {
+    const b6 = document.createElement("button");
+    b6.type = "button";
+    b6.className = "btn-min btn-min-ok";
+    b6.id = "btnJurAudIA";
+    b6.textContent = t("jur_aud_ia_btn", { n: ia.length });
+    b6.onclick = () => jurAudPassoIA(ia);
+    seguir.append(b6);
+  }
+  box.append(seguir);
+  return pares.length;
+}
+
+/* passo 6: fecha a janela do fluxo e abre, na biblioteca, o pedido único à IA só com o resto */
+function jurAudPassoIA(ids) {
+  jurAudPasso(6, t("jur_aud_e_ia", { n: ids.length }), 100);
+  try { $("dlgJurAud").close(); } catch (e) {}
+  if (!($("dlgJurBib") && $("dlgJurBib").open)) jurBibAbrir();
+  return jurBibAtualIniciar("unico", ids);
+}
+
+/* o que a IA respondeu, julgado a julgado: vigência + texto + campos, com o antes × depois por palavra */
+function jurBibUnicoPintar() {
+  const c = jurAtualCtx;
+  const r = c.lidos || { est: "vazio", itens: [] };
+  const sem = $("jurBibAtualSem");
+  sem.className = "nota jur-cita-sem " + (r.est === "ok" ? "ok" : r.est === "vazio" ? "" : "erro");
+  sem.textContent = r.est === "vazio" ? t("jur_atual_sem_vazio")
+    : r.est === "pedido" ? t("jur_atual_sem_pedido")
+    : r.est === "erro" ? t("jur_atual_sem_erro") + (r.erro ? " " + r.erro : "")
+    : t("jur_unico_sem_ok", { n: r.itens.length }) + (r.faltam > 0 ? " " + t("jur_atual_sem_faltam", { n: r.faltam }) : "");
+  const cx = $("jurBibAtualPrev");
+  cx.innerHTML = "";
+  r.itens.forEach((o, i) => {
+    const it = document.createElement("div");
+    it.className = "jur-atual-item";
+    const cab = document.createElement("label");
+    cab.className = "jur-cab";
+    const ck = document.createElement("input");
+    ck.type = "checkbox";
+    ck.id = "jurUnicoCk_" + i;
+    ck.checked = o.marcado;
+    ck.onchange = () => { o.marcado = ck.checked; jurBibAtualPintarAplicar(); };
+    const nome = document.createElement("b");
+    nome.textContent = jurCitNome(o.j);
+    cab.append(ck, nome);
+    if (o.atual) { const s = document.createElement("span"); s.className = "jur-sel jur-sit sit-" + o.atual.situacao; s.textContent = t("jur_sit_" + o.atual.situacao); cab.append(" ", s); }
+    if (o.corr && o.corr.certeza) { const s = document.createElement("span"); s.className = "jur-sel"; s.textContent = t("jur_cn_certeza_" + o.corr.certeza); cab.append(" ", s); }
+    it.append(cab);
+    const expl = [o.corr && o.corr.explicacao, o.atual && o.atual.explicacao].filter(Boolean).filter((x, k, a) => a.indexOf(x) === k).join(" ");
+    const fonte = [o.corr && o.corr.fonte, o.atual && o.atual.fonte].filter(Boolean).filter((x, k, a) => a.indexOf(x) === k).join(" · ");
+    if (expl || fonte) { const p = document.createElement("p"); p.className = "nota"; p.textContent = [expl, fonte ? t("jur_atual_fonte", { f: fonte }) : ""].filter(Boolean).join(" "); it.append(p); }
+    const novaTese = o.atual && o.atual.muda ? o.atual.teseAtual : ((o.corr && o.corr.mudancas.find((m) => m.campo === "tese")) || {}).depois;
+    if (novaTese) {
+      const rot = document.createElement("div");
+      rot.className = "jur-cita-rot";
+      rot.textContent = t(o.atual && o.atual.muda ? "jur_unico_tese_atual" : "jur_unico_tese_oficial");
+      it.append(rot, jurDiffEl(o.j.tese || "", novaTese));
+    }
+    ((o.corr && o.corr.mudancas) || []).filter((m) => m.campo !== "tese").forEach((m) => {
+      const p = document.createElement("div");
+      p.className = "nota";
+      p.textContent = t("jur_corrigir_campo_" + m.campo) + ": " + (m.antes || "—") + " → " + m.depois;
+      it.append(p);
+    });
+    const aviso = document.createElement("p");
+    aviso.className = "nota jur-aud-aviso";
+    aviso.textContent = t("jur_unico_sem_selo");
+    it.append(aviso);
+    cx.append(it);
+  });
+  jurBibAtualPintarAplicar();
 }
