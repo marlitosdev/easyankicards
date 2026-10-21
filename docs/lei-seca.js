@@ -45,8 +45,11 @@ const LEIS_CHAVE = "eac_leis";
  * vezes como "°" (grau, não ordinal — colagem de Word). Aceitar os três
  * não é frescura: recusar um deles faz a lei inteira virar um bloco só,
  * e aí nada nesta pasta funciona. */
+/* (v18.98.0) DOIS SUFIXOS: o Código Penal tem "Art. 359-M-A" e "359-M-B" (Lei 15.402/2026) — artigos novos
+ * ENTRE o 359-M e o 359-N. Lido só até "359-M", os três viravam "o 359-M repetido 3 vezes", e escolher um apagava os
+ * outros dois. O 2º sufixo só vale COLADO e sem letra depois: "Art. 359-M - A pena…" continua sendo texto. */
 const LEI_RE_ARTIGO =
-  /^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°ª])?(?:\s*[-–]\s*[A-Z])?)\s*[.\-–—)]?\s*/i;
+  /^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°ª])?(?:\s*[-–]\s*[A-Z])?(?:[-–][A-Z](?![A-Za-zÀ-ú]))?)\s*[.\-–—)]?\s*/i;
 
 /* CABEÇALHO DE DIVISÃO (título, capítulo, seção…).
  * Serve para dois fins: partir a lei em blocos de leitura e dizer, ao
@@ -92,9 +95,9 @@ function leiNumNormal(bruto) {
  * texto ("10" antes de "5") embaralharia a lei inteira. */
 function leiNumOrdem(num) {
   const n = leiNumNormal(num);
-  const m = n.match(/^(\d+)(?:-([A-Z]))?$/);
+  const m = n.match(/^(\d+)(?:-([A-Z]))?(?:-([A-Z]))?$/);
   if (!m) return 999999;
-  return Number(m[1]) * 100 + (m[2] ? (m[2].charCodeAt(0) - 64) : 0);
+  return Number(m[1]) * 100 + (m[2] ? (m[2].charCodeAt(0) - 64) : 0) + (m[3] ? (m[3].charCodeAt(0) - 64) / 100 : 0);
 }
 
 /* EMENTA — a primeira frase do artigo, que é o que ele promete.
@@ -550,7 +553,7 @@ const LEI_RE_SINAL_INCLUIDO = /\(\s*inclu[íi]d[oa]\s+pel[ao]\b[^)]*\)/i;
  * "(Revogado) e depois texto que voltou a valer" e um § com texto e uma nota de redação NÃO são revogados.
  * Nada é apagado nem movido: é só identificação.
  * ===================================================================== */
-const LEI_ENUM_REVOG = "(?:Art(?:igos?|s?\\.?)\\s*\\d{1,4}\\s*[ºo°ª]?(?:\\s*-\\s*[A-Z])?(?:\\s*(?:a|ao|e)\\s*(?:Art\\.?\\s*)?\\d{1,4}\\s*[ºo°ª]?(?:-[A-Z])?)?"
+const LEI_ENUM_REVOG = "(?:Art(?:igos?|s?\\.?)\\s*\\d{1,4}\\s*[ºo°ª]?(?:\\s*-\\s*[A-Z])?(?:-[A-Z])?(?:\\s*(?:a|ao|e)\\s*(?:Art\\.?\\s*)?\\d{1,4}\\s*[ºo°ª]?(?:-[A-Z]){0,2})?"
   + "|§+\\s*\\d{1,3}\\s*[ºo°ª]?(?:\\s*-\\s*[A-Z])?(?:\\s*(?:a|ao|e)\\s*§?\\s*\\d{1,3}\\s*[ºo°ª]?)?"
   + "|Par[áa]grafo\\s+[úu]nico|[IVXLCDM]{1,8}(?:\\s*-\\s*[A-Z])?(?=\\s*[-–—])(?:\\s*(?:a|ao)\\s*[IVXLCDM]{1,8})?"
   + "|[a-z]\\)|\\d{1,3}\\s*[.)]|ANEXO\\s+[IVXLCDM]+)";
@@ -693,7 +696,7 @@ function leiDuplicados(texto, ignorar, opc) {
     grupos.push({
       num, numCru: L[0].numCru, rotulo: L[0].rotulo, candidatos: cands,
       sugerido: sug.melhor.indice, confianca: sug.confianca, motivo: sug.motivo, fonte: sug.fonte,
-      ordem: leiNumOrdem(num) * 1000,
+      ordem: leiNumOrdem(num) * 100000,
     });
   });
   /* + o mesmo rótulo de parágrafo duas vezes no MESMO artigo */
@@ -812,10 +815,10 @@ function leiAplicarDuplicados(texto, grupos, decisoes) {
  * o art. 433-A; em "Art. 356 - A licença…" o "A" é a primeira palavra do artigo. Antes, o número perdia o sufixo
  * (433-A, 433-B… viravam todos "433", "repetido 19×" no CTM) e o rótulo ganhava um "- A" que não existia. */
 const LEI_RE_ART_EMBUTIDO =
-  /(^|\n|[.:;)!?]["”')]*[ \t]+|[A-ZÀ-Ú]{3,}[ \t]+)(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[-–]([A-Z])|[ \t]*[-–][ \t]*([A-Z])(?=[ \t]*[.\-–—]))?)(?=[\s.\-–—)])/g;
+  /(^|\n|[.:;)!?]["”')]*[ \t]+|[A-ZÀ-Ú]{3,}[ \t]+)(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[-–]([A-Z](?:[-–][A-Z])?)|[ \t]*[-–][ \t]*([A-Z])(?=[ \t]*[.\-–—]))?)(?=[\s.\-–—)])/g;
 /* cabeçalho "Art. N" em QUALQUER lugar (depois de espaço, aspas ou parêntese), com os mesmos grupos: usado só onde
  * a sequência dá o contexto — o artigo grudado (2ª passada), o "Art. N" dentro de um artigo e o "separar aqui" */
-const LEI_RE_CAB_LIVRE = /(^|[\s(“"'])(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[-–]([A-Z])|[ \t]*[-–][ \t]*([A-Z])(?=[ \t]*[.\-–—]))?)(?=[\s.\-–—)])/g;
+const LEI_RE_CAB_LIVRE = /(^|[\s(“"'])(Art(?:\.|igo)[ \t]*(\d{1,4})(?:[ \t]*[ºo°ª])?(?:[-–]([A-Z](?:[-–][A-Z])?)|[ \t]*[-–][ \t]*([A-Z])(?=[ \t]*[.\-–—]))?)(?=[\s.\-–—)])/g;
 /* o número com o sufixo, a partir dos grupos 3 (algarismos), 4 e 5 (letra colada ou separada) */
 function leiSepNumDe(m) { const suf = m[4] || m[5]; return leiNumNormal(m[3] + (suf ? "-" + suf : "")); }
 
@@ -1037,7 +1040,7 @@ function leiSepararColagem(texto, opc) {
  * título seguinte ou o rodapé da página no fim, que a limpeza do PDF já trata); o que importa é o último artigo
  * com todos os Anexos (257 mil). Artigo engolido aparece como "dentro" (cabeçalho "Art. N" no meio do texto). */
 const LEI_SEP_LONGO_MIN = 20000;
-const LEI_RE_ART_DENTRO = /(?:^|[\s"“(])(Art(?:\.|igo)[ \t]*\d{1,4}(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?)(?=[\s.\-–—)])/g;
+const LEI_RE_ART_DENTRO = /(?:^|[\s"“(])(Art(?:\.|igo)[ \t]*\d{1,4}(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?(?:[-–][A-Z](?![A-Za-zÀ-ú]))?)(?=[\s.\-–—)])/g;
 function leiSepSuspeitas(partes) {
   const ps = partes || [];
   const conta = {};
@@ -1058,7 +1061,7 @@ function leiSepSuspeitas(partes) {
     }
     /* da separação vem com as posições (para "separar aqui"); peça montada à mão, só os rótulos */
     const itens = Array.isArray(p.dentro) ? p.dentro
-      : [...p.texto.replace(/^\s*Art(?:\.|igo)[ \t]*\d{1,4}(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?/, "").matchAll(new RegExp(LEI_RE_ART_DENTRO.source, "g"))]
+      : [...p.texto.replace(/^\s*Art(?:\.|igo)[ \t]*\d{1,4}(?:[ \t]*[ºo°ª])?(?:[ \t]*[-–][ \t]*[A-Z])?(?:[-–][A-Z](?![A-Za-zÀ-ú]))?/, "").matchAll(new RegExp(LEI_RE_ART_DENTRO.source, "g"))]
         .map((x) => ({ rotulo: x[1].replace(/\s+/g, " ") }));
     if (itens.length) mot.push({ k: "dentro", lista: itens.slice(0, 4).map((x) => x.rotulo).join(", ") + (itens.length > 4 ? "…" : ""), n: itens.length, itens });
     if (p.texto.length > limiteLongo) mot.push({ k: "longo", c: p.texto.length });
@@ -1372,7 +1375,7 @@ function leiTirarMarcasTachado(texto) { return String(texto == null ? "" : texto
  * "(Revogado pela …)" fica ao lado, sem risco: é assim que o Planalto mostra um dispositivo revogado. Tirar o
  * número apagaria QUAL dispositivo foi revogado e deixaria a nota solta (o título do anexo XIV sumiria e a nota
  * iria parar no fim do anexo anterior). Por isso esse trecho vem com padrão "manter" (como texto comum). */
-const LEI_RE_IDENT_RISCADO = /^(?:ANEXO\s+[IVXLCDM]+|Art(?:igos?|s?\.?)\s*\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|§+\s*\d{1,3}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|Par[áa]grafo\s+[úu]nico\s*\.?|[IVXLCDM]{1,8}(?:\s*-\s*[A-Z])?\s*[-–—]?|[a-z]\)|\d{1,3}\s*[.)])$/;
+const LEI_RE_IDENT_RISCADO = /^(?:ANEXO\s+[IVXLCDM]+|Art(?:igos?|s?\.?)\s*\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?(?:-[A-Z])?\s*\.?|§+\s*\d{1,3}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|Par[áa]grafo\s+[úu]nico\s*\.?|[IVXLCDM]{1,8}(?:\s*-\s*[A-Z])?\s*[-–—]?|[a-z]\)|\d{1,3}\s*[.)])$/;
 const LEI_RE_NOTA_REV_INI = /^\s*\(\s*(?:Revogad|REVOGAD|Vetad|VETAD|Suprimid)/;
 function leiLinhaSoIdentificadorRiscado(linhas, i) {
   const x = String(linhas[i]);
@@ -2045,7 +2048,7 @@ function leiRepetidosNoArtigo(texto, ignorar, opc) {
         num, numCru: a.numCru + " — " + rot, rotulo: a.rotulo + " — " + rot,
         candidatos: cands, sugerido: s.melhor.indice, confianca: s.confianca,
         motivo: s.motivo, fonte: s.fonte, intra: true,
-        ordem: leiNumOrdem(a.num) * 1000 + 1 + Math.min(u0.linha, 900),
+        ordem: leiNumOrdem(a.num) * 100000 + 1 + Math.min(u0.linha, 900),
       });
     });
   });
@@ -2335,7 +2338,7 @@ function leiDiretivasDoArtigoProprio(seg, alvo, par) {
     }
     if (!/^(?:fica(?:m)?\s+revogad|revog(?:a-se|am-se)|s[ãa]o\s+revogad)/i.test(f) || /passa(?:m)?\s+a\s+vigorar/i.test(f)) return;
     /* "§ 2º do art. 296", "parágrafo único do art. 5º", "inciso II do art. 10" */
-    const re = /(§\s*\d{1,3}[ºo°]?(?:-[A-Z])?|par[áa]grafo\s+[úu]nico|inciso\s+[IVXLC]{1,6})\s+do\s+art(?:igo)?\.?\s*(\d{1,4}(?:[ºo°])?(?:-[A-Z])?)/gi;
+    const re = /(§\s*\d{1,3}[ºo°]?(?:-[A-Z])?|par[áa]grafo\s+[úu]nico|inciso\s+[IVXLC]{1,6})\s+do\s+art(?:igo)?\.?\s*(\d{1,4}(?:[ºo°])?(?:-[A-Z]){0,2})/gi;
     let m, achouSub = false;
     while ((m = re.exec(f)) !== null) {
       achouSub = true;
@@ -3577,7 +3580,7 @@ function leiInserirArtigo(texto, novo) {
  * troca o inciso e mantém o artigo o tempo todo. */
 const LEI_RE_CITACAO =
   /* (v18.50.0) o ordinal "o" não pode ser começo de palavra: "art. 10 ou no art. 11" virava "art. 10o" + "u" */
-  /\bart(?:\.|igos?|s\.)?\s*(\d{1,4}(?:\s*[ºo°ª](?![a-zà-ü]))?(?:\s*[-–]\s*[A-Z])?)/gi;
+  /\bart(?:\.|igos?|s\.)?\s*(\d{1,4}(?:\s*[ºo°ª](?![a-zà-ü]))?(?:\s*[-–]\s*[A-Z])?(?:[-–][A-Z](?![a-zà-ü]))?)/gi;
 
 function leiCitacoes(texto) {
   const achados = [];
@@ -3791,7 +3794,7 @@ function leiCitacoesNoTexto(texto) {
 
     /* a lista: ", 78", " e 79", "; e 154", " a 79" */
     for (let k = 0; k < 14; k++) {
-      const c = s.slice(fim).match(/^(?:\s*[,;]\s*(?:(?:e|ou)\s+)?|\s+(?:e|ou|a|ao)\s+)(?:os?\s+)?(\d{1,4}(?:\s*[ºo°ª])?(?:\s*-\s*[A-Z])?)(?!\d)/);
+      const c = s.slice(fim).match(/^(?:\s*[,;]\s*(?:(?:e|ou)\s+)?|\s+(?:e|ou|a|ao)\s+)(?:os?\s+)?(\d{1,4}(?:\s*[ºo°ª])?(?:\s*-\s*[A-Z])?(?:-[A-Z](?![a-zà-ü]))?)(?!\d)/);
       if (!c) break;
       if (LEI_RE_NAO_ARTIGO.test(s.slice(fim + c[0].length))) break;
       const n2 = leiNumNormal(c[1]);
@@ -3915,7 +3918,7 @@ function citChave(trecho) {
 /* "77, 78 e 79" → [{num:"77",numCru:"77"}, …] — o que a pessoa digitou no campo de artigos */
 function citLerArtigos(texto) {
   const out = [];
-  (String(texto || "").match(/\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?/g) || []).forEach((x) => {
+  (String(texto || "").match(/\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?(?:-[A-Z])?/g) || []).forEach((x) => {
     const num = leiNumNormal(x);
     if (num && num !== "0" && !out.some((o) => o.num === num)) {
       out.push({ num, numCru: x.replace(/\s+/g, "") });
