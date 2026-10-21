@@ -365,6 +365,20 @@ function jurPintarPrincipal() {
   if (!b) return;
   const est = jurEstadoDaCaixa();
   b.disabled = est === "vazia";
+  if ($("jurIaLeitura") && typeof jurIaMontar === "function" && !(typeof jurIaEmCurso !== "undefined" && jurIaEmCurso)) {
+    $("jurIaLeitura").hidden = est !== "ementa";
+    if (est === "ementa") jurIaMontar("jurIaLeitura", {
+      id: "jurIaLer", rotulo: "ler a ementa", destino: "jurColar",
+      busca: () => String(($("jurColar") || {}).value || "").trim().length < JUR_TEXTO_MINIMO,
+      pedido: async () => {
+        const bruto = String(($("jurColar") || {}).value || "").trim();
+        if (!bruto) return "";
+        if (bruto.length < JUR_TEXTO_MINIMO && !(await uiConfirm(t("jur_prompt_curto", { n: bruto.length })))) return "";
+        return jurMontarPedidoLeitura(bruto);
+      },
+      depois: () => { jurColar(); },
+    });
+  }
   b.textContent = t("jur_principal_" + est);
   b.title = t("jur_principal_" + est + "_aj");
   /* o caminho local só se oferece quando há texto para ele ler */
@@ -1045,6 +1059,14 @@ async function jurPedirIA() {
   /* TEXTO CURTO DEMAIS: a IA só consegue identificar o julgado pelo nome e devolve tudo vazio ("tipo_do_texto": "vazio").
    * Melhor dizer isso ANTES de a pessoa sair do app e voltar com uma resposta sem nada. */
   if (bruto.length < JUR_TEXTO_MINIMO && !(await uiConfirm(t("jur_prompt_curto", { n: bruto.length })))) return;
+  const txt = jurMontarPedidoLeitura(bruto);
+  const ok = await edColarCopiarTexto(txt, "", null);
+  reg("JURIS", "prompt de leitura copiado", bruto.length + " caracteres");
+  if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
+}
+
+/* (v18.97.0) o pedido de leitura, montado num lugar só: o "copiar" e o "Perguntar ao Gemini" mandam o MESMO texto */
+function jurMontarPedidoLeitura(bruto) {
   const campos = {};
   Object.keys(JUR_CAMPOS_FORM).forEach((k) => {
     campos[k] = String(($(JUR_CAMPOS_FORM[k]) || {}).value || "").trim();
@@ -1061,9 +1083,7 @@ async function jurPedirIA() {
     resumo: String(($("jurResumo") || {}).value || "").trim(),
     tags: jurTagsColadas.slice(),
   }, { memoria: ($("chkJurMemoria") && $("chkJurMemoria").checked) ? "tudo" : "identidade", separar: jurSepararAtivo() });
-  const ok = await edColarCopiarTexto(txt, "", null);
-  reg("JURIS", "prompt de leitura copiado", bruto.length + " caracteres");
-  if (ok) await uiAlert(t("jur_prompt_ia_copiado"));
+  return txt;
 }
 
 /* =====================================================================
@@ -1118,6 +1138,17 @@ function jurCompletarAbrir(id) {
   if ($("jurCplSaida")) { $("jurCplSaida").hidden = true; $("jurCplSaida").textContent = ""; }
   jurCplPintarFalta();
   jurCplPintarLer();
+  if (typeof jurIaMontar === "function") jurIaMontar("jurCplIa", {
+    id: "jurIaCpl", rotulo: "completar julgado", destino: "jurCplResposta",
+    busca: () => !String((jurDe(jurCplId) || {}).texto || "").trim(),
+    pedido: async () => {
+      const j2 = jurDe(jurCplId);
+      if (!j2) return "";
+      if (!String(j2.texto || "").trim() && !(await uiConfirm(t("jur_cpl_sem_texto")))) return "";
+      return jurPromptCompletar(j2, jurTopicoAtual ? jurTopicoAtual.nome : "", { memoria: ($("chkJurCplMemoria") && $("chkJurCplMemoria").checked) ? "tudo" : "identidade" });
+    },
+    depois: () => { jurCplPintarLer(); if ($("btnJurCplLer") && $("btnJurCplLer").onclick) $("btnJurCplLer").onclick(); },
+  });
   abrirModal("dlgJurCompletar");
   reg("JURIS", "tela de completar aberta",
       jurTitulo(j) + " · faltam " + jurFaltando(j).length);
@@ -1362,6 +1393,11 @@ function jurMelAbrir() {
   $("jurMelColar").value = "";
   $("jurMelComparar").hidden = true;
   $("btnJurMelAplicar").hidden = true;
+  if (typeof jurIaMontar === "function") jurIaMontar("jurMelIa", {
+    id: "jurIaMel", rotulo: "melhorar o resumo", destino: "jurMelColar", busca: false,
+    pedido: () => String(($("jurMelPrompt") || {}).value || ""),
+    depois: () => jurMelConferir(),
+  });
   abrirModal("dlgJurMelhorar");
   reg("JURIS", "melhorar o resumo aberto", jurTopicoAtual ? jurTopicoAtual.nome : "");
 }
@@ -2115,7 +2151,16 @@ function jurCitCriar() {
   $("jurCitaResp").value = "";
   $("jurCitaPedidoMsg").textContent = "";
   $("jurCitaPedidoTxt").hidden = true;
-  $("jurCitaBuscar").href = "https://www.google.com/search?q=" + encodeURIComponent(jurCitTitulo(a.c) + " " + (a.c.tribunal || "") + " enunciado tese");
+  /* (v18.97.0) a página OFICIAL quando o app a conhece (catálogo ou tribunal); a busca aberta só em último caso */
+  const lkOf = typeof jurLinkOficial === "function" ? jurLinkOficial({ tribunal: a.c.tribunal, classe: a.c.classe, numero: a.c.numero }) : null;
+  $("jurCitaBuscar").href = lkOf && lkOf.url ? lkOf.url : "https://www.google.com/search?q=" + encodeURIComponent(jurCitTitulo(a.c) + " " + (a.c.tribunal || "") + " enunciado tese");
+  $("jurCitaBuscar").textContent = lkOf && lkOf.url ? "↗ " + lkOf.nome : t("jur_cn_buscar");
+  if (typeof jurIaMontar === "function") jurIaMontar("jurCitaIa", {
+    id: "jurIaCita", rotulo: "julgado citado", destino: "jurCitaResp",
+    busca: () => !String(($("jurCitaEmenta") || {}).value || "").trim(),
+    pedido: () => jurCitaPedido(jurCitaAlvo, String(($("jurCitaEmenta") || {}).value || "").trim()),
+    depois: () => jurCitaPintarResp(),
+  });
   jurCitaPintarResp();
   try { reg("JURIS", "julgado citado: criar na prévia", a.c.texto); } catch (e) {}
   return true;
@@ -3419,6 +3464,17 @@ function jurBibAtualIniciar(modo, ids) {
     ? t("jur_corrigir_intro", { n: L.length, l: L.map((j) => [j.tribunal, j.classe, j.numero].filter(Boolean).join(" ") + " (" + jurPendencias(j).map((p) => t("jur_pend_" + p)).join(", ") + ")").join("; ") })
     : t("jur_atual_intro", { n: L.length });
   try { reg("JURIS", corrigir ? "corrigir com IA: aberto" : "verificar atualidade: aberto", L.length + " julgados"); } catch (e) {}
+  if (typeof jurIaMontar === "function") jurIaMontar("jurBibAtualIa", {
+    id: "jurIaBib", rotulo: "conferir julgados (" + jurAtualCtx.modo + ")", destino: "jurBibAtualResp", busca: true,
+    pedido: () => {
+      const c = jurAtualCtx;
+      if (!c) return "";
+      const lista = c.ids.map(jurDe).filter(Boolean);
+      c.pedido = c.modo === "unico" ? jurUnicoPedido(lista) : c.modo === "corrigir" ? jurCorrecaoPedido(lista) : jurAtualPedido(lista);
+      return c.pedido;
+    },
+    depois: () => jurBibAtualLerResp(),
+  });
   jurBibPintar();
   return true;
 }

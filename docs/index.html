@@ -3876,6 +3876,16 @@ body.split-lj{overflow:hidden}
 .jur-aud-seguir{margin:10px 0;padding:8px 10px;border:1px dashed var(--borda);border-radius:8px}
 .jur-aud-rep b{display:block;margin-bottom:4px}
 .jur-cita-oficial{border-left:4px solid var(--ok)}
+/* (v18.97.0) o Gemini direto: botão ao lado do copiar, e o que está acontecendo dito ao lado */
+.jur-ia-lugar{display:inline-flex}
+.jur-ia-lugar[hidden]{display:none}
+.jur-ia-box{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+.jur-ia-status.esperando{color:var(--info)}
+.jur-ia-status.ok{color:var(--ok)}
+.jur-ia-status.erro{color:var(--erro)}
+.jur-ia-fontes{font-size:11.5px}
+.jur-ia-config{opacity:.8}
+.jur-ia-optin{margin-top:8px;font-weight:600}
 .jur-sel.cat{background:transparent;border:1px solid var(--borda);
   color:var(--sutil);font-weight:600;font-size:9.5px;cursor:help}
 .jur-sel.cat.cat-sumula{border-color:var(--amarelo,#d97706);
@@ -7098,6 +7108,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
          cá. -->
     <button class="btn btn-azul" id="btnJurPrincipal" disabled
       data-i18n-title="jur_b_principal"></button>
+    <span id="jurIaLeitura" class="jur-ia-lugar" hidden></span>
     <!-- O CAMINHO SEM IA continua inteiro e ao lado: quem colou um bloco
          curto do tribunal só quer o número e a data, e não precisa
          gastar uma ida à IA por isso. -->
@@ -7310,6 +7321,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <input type="password" id="vzChaveCampo" class="mat-busca"
     autocomplete="off" spellcheck="false" placeholder="AIza...">
   <p class="nota" id="vzChaveAgora"></p>
+  <!-- (v18.97.0) a chave na jurisprudência: só se a pessoa ligar, dito o que vai ao Google -->
+  <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzJurIa"> <span data-i18n="jur_ia_optin"></span></label>
+  <p class="nota" data-i18n="jur_ia_optin_aj"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnVzChaveOk" data-i18n="vz_chave_salvar"></button>
     <button class="btn btn-cinza" id="btnVzChaveFechar" data-i18n="cancel_btn"></button>
@@ -8516,6 +8530,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <textarea id="jurCitaEmenta" rows="2" style="width:100%;box-sizing:border-box" data-i18n-ph="jur_cn_ementa_ph" placeholder="ementa"></textarea>
       <div class="qm-bts">
         <button type="button" class="btn-min btn-min-ok" id="btnJurCitaPedido" data-i18n="jur_cn_copiar" title="Copia o pedido para uma IA, já com a citação, o tribunal e o trecho do seu material onde ela aparece."></button>
+        <span id="jurCitaIa" class="jur-ia-lugar"></span>
         <a class="btn-min" id="jurCitaBuscar" target="_blank" rel="noopener noreferrer" data-i18n="jur_cn_buscar" title="Abre uma busca na web pela citação, para achar a ementa ou o enunciado oficial e colar acima."></a>
       </div>
       <p class="nota" id="jurCitaPedidoMsg"></p>
@@ -8628,6 +8643,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="ednovo-passo">
       <div class="qs-vinc-rot"><b>1.</b> <span data-i18n="jur_atual_p1"></span></div>
       <div class="qm-bts"><button type="button" class="btn-min btn-min-ok" id="btnJurBibAtualPedido" data-i18n="jur_atual_copiar"></button></div>
+      <div id="jurBibAtualIa" class="jur-ia-lugar"></div>
       <p class="nota" id="jurBibAtualPedidoMsg"></p>
       <textarea id="jurBibAtualPedidoTxt" rows="3" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
     </div>
@@ -9334,6 +9350,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn btn-azul" id="btnJurCplCopiar" data-i18n="jur_cpl_copiar"
       data-i18n-title="jur_cpl_copiar_aj"></button>
   </div>
+  <div id="jurCplIa" class="jur-ia-lugar"></div>
   <label class="diag-op jur-memoria"><input type="checkbox" id="chkJurCplMemoria">
     <span data-i18n="jur_memoria_chk" data-i18n-title="jur_memoria_aj"></span></label>
 
@@ -9367,6 +9384,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="qm-bts">
     <button type="button" class="btn-min btn-min-ok" id="btnJurMelCopiar"
       data-i18n="lei_cloze_copiar"></button>
+    <span id="jurMelIa" class="jur-ia-lugar"></span>
   </div>
   <p class="nota" data-i18n="jur_mel_colar_rot"></p>
   <textarea id="jurMelColar" rows="4" style="width:100%;box-sizing:border-box"
@@ -10593,6 +10611,7 @@ window.__sqlPromise = initSqlJs({
 <script src="idb-juris.js"></script>
 <script src="juris.js"></script>
 <script src="juris-catalogo.js"></script>
+<script src="juris-ia.js"></script>
 <script src="juris-ui.js"></script>
 <script src="pre-edital.js"></script>
 <script src="prompts-cartao.js"></script>
