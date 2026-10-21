@@ -718,8 +718,15 @@ async function jurSalvar() {
   /* SEMPRE, e não só ao editar: o vínculo já existe quando se cria (ele
    * foi para "topicos" ali em cima), mas o RÓTULO não — e é ele que faz
    * o julgado aparecer na estante com o nome certo da disciplina. */
-  jurLigar(j.id, jurTopicoAtual.chave,
-           jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+  /* (v18.94.0) EDITAR NÃO É LIGAR. Pela prévia de uma citação, a gaveta abre no tópico do texto e edita um julgado que
+   * pode ser de OUTRO tópico: salvar ligava o julgado ali, calado. Agora só o novo é ligado; o editado só tem o rótulo
+   * atualizado quando já era deste tópico. */
+  const jaEraDaqui = !!(antigoJ && (antigoJ.topicos || []).some((x) => jurChaveComparavel(x) === jurChaveComparavel(jurTopicoAtual.chave)));
+  if (eraNovo || jaEraDaqui || !(antigoJ && (antigoJ.topicos || []).length)) {
+    jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+  } else {
+    try { reg("JURIS", "julgado de outro tópico editado sem ligar a este", jurTitulo(j) + " · " + jurTopicoAtual.nome); } catch (e) {}
+  }
   /* Q3 — guardado pela ficha de um ramo: já fica ligado a ele (só o novo; editar não troca o ramo) */
   if (jurRamoAlvo && !jurEditando) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
   if (eraNovo && jurLigarAoSalvar) jurLigarTrechoA(jurLigarAoSalvar, j);
@@ -1937,6 +1944,10 @@ function jurCitPreviewAbrir(c, ach, base) {
   if ($("btnJurCitaConferi")) $("btnJurCitaConferi").hidden = !(j && j.deMemoria);
   if (j) {
     $("jurCitaMeta").textContent = [jurCitNome(j), j.orgao, j.relator, j.data].filter((x) => String(x || "").trim()).join(" · ");
+    /* (v18.94.0) COMO FOI ACHADO: o texto cita o processo e o julgado está guardado como o tema (ou o contrário) —
+     * dito na tela, para ninguém achar que o link abriu o julgado errado */
+    if (ach && ach.via === "paradigma") bloco("", t("jur_cit_via_paradigma", { c: $("jurCitaTit").textContent, j: jurCitNome(j) }), "jur-cita-dica");
+    else if (ach && ach.via === "cita") bloco("", t("jur_cit_via_cita", { c: $("jurCitaTit").textContent, j: jurCitNome(j) }), "jur-cita-dica");
     /* (v18.35.0) a tese que a IA trouxe de memória, sem ementa: fica dito, até a pessoa conferir */
     if (j.deMemoria) bloco("", t("jur_cn_mem_aviso", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" }), "jur-cita-mem");
     /* (JM4) a tese guardada não é (só) o que vale hoje */
@@ -1979,6 +1990,8 @@ function jurCitPreviewAbrir(c, ach, base) {
   } else {
     $("jurCitaMeta").textContent = "";
     bloco("", t("jur_cit_nao_guardado", { j: $("jurCitaTit").textContent }));
+    /* (v18.94.0) o mesmo processo guardado em outra decisão ("REsp 123" × "AgRg no REsp 123"): não é ele, mas existe */
+    if (ach && ach.parentes && ach.parentes.length) bloco("", t("jur_cit_parentes", { c: $("jurCitaTit").textContent, j: ach.parentes.map(jurCitNome).join("; ") }), "jur-cita-dica");
     const temTopico = !!(base && base.disciplina && base.topico);
     bloco("", t(temTopico ? "jur_cit_criar_dica" : "jur_cit_sem_topico"), "jur-cita-dica");
   }
