@@ -36,6 +36,8 @@ async function jurIaPerguntar(pedido, opc) {
   if (jurIaEmCurso) throw jurIaErro("ocupado");
   const ctrl = typeof AbortController === "function" ? new AbortController() : null;
   const em = { ctrl, inicio: Date.now(), cancelado: false };
+  /* (v18.99.0) o consumo: anotado no aparelho, sem o texto do pedido */
+  const anota = (ev) => { try { if (typeof iacRegistrar === "function") iacRegistrar(Object.assign({ modulo: o.modulo || "JURIS", busca: !!o.busca, ms: Date.now() - em.inicio }, ev)); } catch (e) {} };
   jurIaEmCurso = em;
   let tempoEsgotado = false;
   const timer = setTimeout(() => { tempoEsgotado = true; try { if (ctrl) ctrl.abort(); } catch (e) {} }, o.tempo || JUR_IA_TEMPO);
@@ -52,6 +54,7 @@ async function jurIaPerguntar(pedido, opc) {
         });
       } catch (e) {
         if (em.cancelado) throw jurIaErro("cancelado");
+        anota({ modelo: m, ok: false, status: 0, erro: tempoEsgotado ? "tempo" : "rede" });
         if (tempoEsgotado) throw jurIaErro("tempo");
         throw jurIaErro("rede", String(e && e.message || e));
       }
@@ -63,11 +66,17 @@ async function jurIaPerguntar(pedido, opc) {
       let msg = "";
       try { const d = await r.json(); msg = (d && d.error && d.error.message) || ""; } catch (e) {}
       const st = r.status || 0;
+      anota({ modelo, ok: false, status: st, erro: st === 429 ? "cota" : st >= 500 ? "servidor" : "rede" });
       throw jurIaErro(st === 404 ? "modelo" : st === 400 && /api key/i.test(msg) ? "chave_recusada" : st === 401 || st === 403 ? (/api key/i.test(msg) ? "chave_recusada" : "permissao")
         : st === 429 ? "cota" : st >= 500 ? "servidor" : "rede", st + (msg ? " · " + msg : ""));
     }
     const d = await r.json();
     const cand = (d && d.candidates && d.candidates[0]) || null;
+    /* os tokens que o Google cobra: entrada, saída e o "pensamento" (cobrado como saída) */
+    const um = (d && d.usageMetadata) || {};
+    anota({ modelo: (d && d.modelVersion) || modelo, ok: true, status: r.status || 200,
+      tkIn: +um.promptTokenCount || 0, tkOut: (+um.candidatesTokenCount || 0) + (+um.thoughtsTokenCount || 0),
+      busca: !!(o.busca && cand && cand.groundingMetadata) });
     const texto = cand && cand.content && (cand.content.parts || []).map((p) => p.text || "").join("\n").trim();
     if (!texto) throw jurIaErro("sem_resposta", cand && cand.finishReason ? String(cand.finishReason) : "");
     const fontes = ((cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [])
@@ -172,7 +181,22 @@ function jurIaBotao(opc) {
       cancelar.hidden = true;
     }
   };
-  box.append(b, cancelar, st, fontes);
+  /* (v18.99.0) quantas consultas hoje, com o caminho para o painel */
+  const cons = document.createElement("span");
+  cons.className = "nota jur-ia-consumo";
+  cons.id = (opc.id || "jurIa") + "_consumo";
+  const pintarCons = () => {
+    if (typeof iacResumo !== "function") return;
+    cons.textContent = t("iac_linha", { n: iacResumo().hoje.n }) + " ";
+    const a = document.createElement("button");
+    a.type = "button"; a.className = "btn-link"; a.id = (opc.id || "jurIa") + "_verConsumo"; a.textContent = t("iac_ver");
+    a.onclick = () => { if (typeof vzAbrirChave === "function") vzAbrirChave("consumo"); };
+    cons.append(a);
+  };
+  pintarCons();
+  const clique = b.onclick;
+  b.onclick = async () => { const r = await clique(); pintarCons(); return r; };
+  box.append(b, cancelar, st, fontes, cons);
   return box;
 }
 
