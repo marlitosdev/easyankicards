@@ -293,11 +293,19 @@ async function vzVetores(textos, opc) {
         outputDimensionality: VZ_DIMS,
       })),
     };
-    const r = await buscar(vzUrlLote(chave), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpo),
-    });
+    const t0 = Date.now();
+    /* (v18.99.0) o consumo: as incorporações não devolvem a contagem de tokens — fica uma estimativa (4 caracteres ≈ 1
+     * token), marcada como estimativa */
+    const anota = (ev) => { try { if (typeof iacRegistrar === "function") iacRegistrar(Object.assign({ modulo: "VINCULO", modelo: VZ_MODELO, ms: Date.now() - t0, tkIn: Math.ceil(lote.join(" ").length / 4), estimado: true }, ev)); } catch (e) {} };
+    let r = null;
+    try {
+      r = await buscar(vzUrlLote(chave), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+    } catch (e) { anota({ ok: false, status: 0, erro: "rede", tkIn: 0 }); throw e; }
+    anota(r && r.ok ? { ok: true, status: r.status || 200 } : { ok: false, status: (r && r.status) || 0, erro: r && r.status === 429 ? "cota" : "rede", tkIn: 0 });
     if (!r || !r.ok) {
       /* O MOTIVO, NÃO SÓ "DEU ERRO". Chave recusada, cota estourada e
        * rede caída pedem coisas diferentes de quem está na frente da

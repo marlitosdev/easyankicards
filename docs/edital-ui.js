@@ -5926,7 +5926,7 @@ function vzPintarChave() {
     : t("vz_chave_falta");
 }
 
-function vzAbrirChave() {
+function vzAbrirChave(aba) {
   if ($("vzChaveCampo")) $("vzChaveCampo").value = "";
   const agora = $("vzChaveAgora");
   const c = vzChaveApi();
@@ -5936,6 +5936,8 @@ function vzAbrirChave() {
   }
   /* (v18.97.0) usar a chave também na jurisprudência: escolha da pessoa, desligada por padrão */
   if ($("chkVzJurIa")) $("chkVzJurIa").checked = typeof jurIaLigada === "function" && jurIaLigada();
+  /* (v18.99.0) as abas: chave · consumo · faturas (o selo do cabeçalho e a jurisprudência abrem no consumo) */
+  if (typeof iacAba === "function") iacAba(aba === "consumo" || aba === "faturas" ? aba : "chave");
   abrirModal("dlgVzChave");
 }
 
@@ -7251,6 +7253,7 @@ function vkIniciarTela() {
     $("dlgVzChave").close();
     vzPintarChave();
     vkChavePintar();
+    try { if (typeof iacPintarSelo === "function") iacPintarSelo(); } catch (e) {}
   };
   if ($("btnVzChaveApagar")) $("btnVzChaveApagar").onclick = async () => {
     if (!(await uiConfirm(t("vz_chave_apagar_conf")))) return;
@@ -7259,6 +7262,7 @@ function vkIniciarTela() {
     $("dlgVzChave").close();
     vzPintarChave();
     vkChavePintar();
+    try { if (typeof iacPintarSelo === "function") iacPintarSelo(); } catch (e) {}
   };
   ["vkDeEdital", "vkParaEdital"].forEach((id) => {
     /* trocar de edital refaz as listas de disciplina: mantê-las seria
