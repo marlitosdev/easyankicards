@@ -95,9 +95,12 @@ async function testes() {
     api.leiAbrir("", "", "ctn");
     api.$("dlgLeiSeca").close();
     api.leiBibAbrir();
+    /* (v19.2.0) o botão abre o assistente "Incluir lei"; o leitor vazio é o "editor completo" (leiBibNovaEditor) */
     api.$("btnLeiBibNova").onclick();
-    ok(api.$("dlgLeiBib").open === false && api.$("dlgLeiSeca").open === true && api.$("leiTexto").value === "" && api.leiIdAtualValor() === "",
-       "V6 abre o leitor VAZIO para a lei nova (não a última aberta)");
+    ok(api.$("dlgLeiBib").open === false && api.$("dlgLeiNova").open === true, "V6 '＋ Nova lei' abre o assistente de inclusão");
+    api.$("btnLeiNovaEditor").onclick();
+    ok(api.$("dlgLeiNova").open === false && api.$("dlgLeiSeca").open === true && api.$("leiTexto").value === "" && api.leiIdAtualValor() === "",
+       "V6 o editor completo abre o leitor VAZIO para a lei nova (não a última aberta)");
     api.$("leiTexto").value = "LEI Nº 9.999, DE 2 DE JANEIRO DE 2020\nArt. 1º Primeira regra.\nArt. 2º Segunda regra.";
     const p = Promise.resolve(api.leiGravar());
     for (let i = 0; i < 6; i++) { await tique(); try { api.uiModalResponder(true); } catch (e) {} }

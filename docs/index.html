@@ -1234,6 +1234,25 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-dup-forca.fraca{color:var(--atencao);border-color:var(--atencao)}
 .lei-dup-grupo.media{border-color:var(--info)}
 .lei-dup-forca.media{color:var(--info);border-color:var(--info)}
+/* (v19.2.0) incluir lei em 3 passos */
+dialog.lei-nova-dlg[open]{max-width:min(640px,96vw)}
+.lei-nova-passos{display:flex;gap:6px;list-style:none;padding:0;margin:4px 0 10px;flex-wrap:wrap}
+.lei-nova-passo{flex:1 1 0;min-width:120px;padding:6px 8px;border-radius:8px;border:1px solid var(--borda);color:var(--sutil);font-size:12.5px;text-align:center}
+.lei-nova-passo.atual{border-color:var(--info);color:var(--texto);font-weight:700}
+.lei-nova-passo.feito{color:var(--ok);border-color:var(--ok)}
+.lei-nova-entrada{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.lei-nova-colar textarea{width:100%;box-sizing:border-box}
+.lei-nova-card{border:1px solid var(--borda);border-radius:10px;padding:10px 12px;margin:8px 0}
+.lei-nova-card-tit{font-weight:700}
+.lei-nova-aviso{color:var(--atencao);font-size:12.5px;margin-top:4px}
+.lei-nova-alts{padding-left:20px}
+.lei-nova-alt{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:4px 0}
+.lei-nova-alt.suspeita span{color:var(--atencao)}
+.lei-nova-faixa{border:1px solid var(--info);border-radius:10px;padding:6px 10px;margin:4px 0 8px;font-size:12.5px}
+.lei-nova-faixa-tit{font-weight:700;margin-bottom:4px}
+.lei-nova-faixa-chips{display:flex;flex-wrap:wrap;gap:4px 10px}
+.lei-nova-chip.feito{color:var(--ok)} .lei-nova-chip.agora{color:var(--info);font-weight:700}
+.lei-nova-chip.depois,.lei-nova-chip.pulada{color:var(--sutil)}
 .lei-dup-op{display:block;border:1px solid var(--borda);border-radius:8px;padding:7px 9px;margin:6px 0;cursor:pointer}
 .lei-dup-op.sel{border-color:var(--acao,#1d4ed8);background:rgba(37,99,235,.10)}
 .lei-dup-op.sug{box-shadow:inset 4px 0 0 #22c55e}
@@ -8924,6 +8943,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
      por este fluxo. -->
 <dialog id="dlgLeiAtualizar" class="ui-modal diag-modal">
   <h3 data-i18n="lei_upd_titulo"></h3>
+  <div class="lei-nova-faixa" id="leiNovaFaixaUpd" role="status" hidden></div>
   <!-- (v18.67.0) a fila das leis que alteram: qual é esta, quais vêm depois -->
   <div class="lei-upd-fila" id="leiUpdFilaFaixa" role="status" hidden>
     <p id="leiUpdFilaTxt"></p>
@@ -9010,6 +9030,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <h3 id="leiDupTitulo"></h3>
     <button type="button" class="dlg-x" id="btnLeiDupX" data-i18n-title="lei_dup_cancelar">✖</button>
   </div>
+  <div class="lei-nova-faixa" id="leiNovaFaixaDup" role="status" hidden></div>
   <p class="nota" id="leiDupAjuda"></p>
   <div class="lei-dup-topo">
     <span class="nota" id="leiDupResumo"></span>
@@ -9098,6 +9119,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <h3 id="leiPreTitulo"></h3>
     <button type="button" class="dlg-x" id="btnLeiPreX" data-i18n-title="lei_pre_voltar">✖</button>
   </div>
+  <div class="lei-nova-faixa" id="leiNovaFaixaPre" role="status" hidden></div>
   <p class="nota" id="leiPreAjuda"></p>
   <!-- FIXO NO TOPO: o contador e a frase do que acabou de acontecer ficam à vista mesmo com a lista rolada -->
   <div class="lei-pre-sticky">
@@ -9228,6 +9250,57 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div id="leiBibLista" class="lei-dup-lista"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiBibFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- (v19.2.0) INCLUIR LEI EM 3 PASSOS (lei-nova.js) -->
+<dialog id="dlgLeiNova" class="ui-modal diag-modal lei-nova-dlg">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_nova_titulo"></h3>
+    <button type="button" class="dlg-x" id="btnLeiNovaX" data-i18n-title="help_close">✖</button>
+  </div>
+  <ol class="lei-nova-passos">
+    <li id="leiNovaP1" data-i18n="lei_nova_p1"></li>
+    <li id="leiNovaP2" data-i18n="lei_nova_p2"></li>
+    <li id="leiNovaP3" data-i18n="lei_nova_p3"></li>
+  </ol>
+  <section id="leiNovaS1">
+    <p class="nota" data-i18n="lei_nova_s1_aj"></p>
+    <div class="lei-nova-entrada">
+      <button type="button" class="btn btn-azul" id="btnLeiNovaArq" data-i18n="lei_nova_arq"></button>
+      <input type="file" id="leiNovaArq" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+      <button type="button" class="btn-min" id="btnLeiNovaColar" data-i18n="lei_nova_colar"></button>
+    </div>
+    <div id="leiNovaColarCx" class="lei-nova-colar" hidden>
+      <textarea id="leiNovaTexto" rows="8" data-i18n-ph="lei_nova_colar_ph"></textarea>
+      <button type="button" class="btn-min btn-min-ok" id="btnLeiNovaColarOk" data-i18n="lei_nova_colar_ok"></button>
+    </div>
+    <div class="lei-nova-card" id="leiNovaPrinc" hidden></div>
+    <p class="nota"><button type="button" class="btn-link" id="btnLeiNovaEditor" data-i18n="lei_nova_editor"></button></p>
+  </section>
+  <section id="leiNovaS2" hidden>
+    <p class="nota" data-i18n="lei_nova_s2_aj"></p>
+    <div class="lei-nova-entrada">
+      <button type="button" class="btn btn-azul" id="btnLeiNovaAltArq" data-i18n="lei_nova_alt_arq"></button>
+      <input type="file" id="leiNovaAltArq" multiple accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+      <button type="button" class="btn-min" id="btnLeiNovaAltColar" data-i18n="lei_nova_colar"></button>
+    </div>
+    <div id="leiNovaAltColarCx" class="lei-nova-colar" hidden>
+      <textarea id="leiNovaAltTexto" rows="6" data-i18n-ph="lei_nova_alt_colar_ph"></textarea>
+      <button type="button" class="btn-min btn-min-ok" id="btnLeiNovaAltColarOk" data-i18n="lei_nova_alt_colar_ok"></button>
+    </div>
+    <p class="nota" id="leiNovaAltsVazio" data-i18n="lei_nova_alts_vazio"></p>
+    <ol class="lei-nova-alts" id="leiNovaAlts"></ol>
+  </section>
+  <section id="leiNovaS3" hidden>
+    <div class="lei-nova-card" id="leiNovaResumo"></div>
+    <p class="nota" data-i18n="lei_nova_s3_aj"></p>
+  </section>
+  <p class="nota" id="leiNovaMsg" role="status"></p>
+  <div class="dlg-rodape">
+    <button type="button" class="btn btn-cinza" id="btnLeiNovaVoltar" data-i18n="lei_nova_voltar"></button>
+    <button type="button" class="btn btn-azul" id="btnLeiNovaAvancar" data-i18n="lei_nova_avancar"></button>
+    <button type="button" class="btn btn-verde" id="btnLeiNovaCriar" data-i18n="lei_nova_criar" hidden></button>
   </div>
 </dialog>
 
@@ -10648,6 +10721,7 @@ window.__sqlPromise = initSqlJs({
 <script src="idb-leis.js"></script>
 <script src="lei-seca.js"></script>
 <script src="lei-ui.js"></script>
+<script src="lei-nova.js"></script>
 <script src="questoes.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
@@ -10726,6 +10800,7 @@ try { cmIniciarTela(); } catch (e) { console.error(e);
 try { jurIniciarTela(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar jurIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { iacIniciarTela(); } catch (e) { console.error(e); }
+try { leiNovaIniciarTela(); } catch (e) { console.error(e); }
 try { vkIniciarTela(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar vkIniciarTela: " + (e && e.message)); } catch (x) {} }
 try { hubIniciar(); } catch (e) { console.error(e);
