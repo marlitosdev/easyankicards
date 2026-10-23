@@ -10711,6 +10711,8 @@ try { gerLogIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar gerLogIniciar: " + (e && e.message), ""); } catch (x) {} }
 try { qsUiIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar qsUiIniciar: " + (e && e.message), ""); } catch (x) {} }
+/* (v19.0.0) arquivo que não carregou: avisa na tela, em vez de o app abrir pela metade, calado */
+try { if (window.__eacArquivosFalhos && window.__eacArquivosFalhos.length) uiAlert(t("carga_falhou", { lista: window.__eacArquivosFalhos.join(", ") })); } catch (e) {}
 try { matIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar matIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }

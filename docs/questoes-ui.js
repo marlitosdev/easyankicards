@@ -1054,6 +1054,8 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
       f: retomavel.feitas, n: retomavel.total,
       c: retomavel.certas,
       pct: retomavel.feitas ? Math.round((retomavel.certas / retomavel.feitas) * 100) : 0,
+      /* (v19.0.0) a DATA da rodada: sem ela, uma rodada de dias atrás parecia a de agora */
+      d: retomavel.comecou ? new Date(retomavel.comecou).toLocaleDateString() : "—",
     };
     if (retomavel.terminada) {
       const r = await uiEscolha(t("qs_terminada_perg", dados), [
@@ -3205,21 +3207,60 @@ function qsUiRepescar() {
   return true;
 }
 
-function qsUiRegistrarEstudo() {
+async function qsUiRegistrarEstudo() {
   const s = qsSessaoAtual();
   if (!s || !s.respondidas.length) { uiAlert(t("qs_registrar_nada")); return; }
-  const p = qsPlacar();
+  let p = qsPlacar();
 
   /* de qual tópico foi esta sessão? Se ela misturou tópicos, não há um
-   * lugar honesto para lançar as horas — e inventar um seria pior. */
+   * lugar honesto para lançar as horas — e inventar um seria pior.
+   * (v19.0.0) O TÓPICO PELA CHAVE NORMALIZADA, a mesma regra de qsFiltrar: a lista do tópico junta
+   * "…›sujeito passivo" e "…›Sujeito Passivo", e o registro contava as duas grafias como dois tópicos — a
+   * rodada nunca era lançada e voltava, toda respondida, na revisão seguinte. */
   const chaves = {};
-  s.fila.forEach((q) => { if (q.chave) chaves[q.chave] = q; });
+  s.fila.forEach((q) => { if (q.chave) (chaves[qsChaveNormal(q.chave)] = chaves[qsChaveNormal(q.chave)] || []).push(q); });
   const nomes = Object.keys(chaves);
+  let principal = nomes[0];
   if (nomes.length !== 1) {
-    uiAlert(t("qs_registrar_varios", { n: nomes.length }));
-    return;
+    const lista = nomes.map((k) => chaves[k][0].topico || chaves[k][0].chave).join(" · ");
+    /* a recusa deixa a PROVA no registro: as chaves cruas e quantas questões de cada — era isto que faltava para
+     * não ter de deduzir o defeito das duas grafias */
+    try {
+      const cruas = {};
+      s.fila.forEach((q) => { cruas[q.chave || "(sem chave)"] = (cruas[q.chave || "(sem chave)"] || 0) + 1; });
+      reg("QUESTOES", "registro recusado: a rodada tem " + nomes.length + " tópicos",
+        "escopo=" + (s.escopo || "—") + " · " + Object.keys(cruas).map((k) => k + " ×" + cruas[k]).join(" · "));
+    } catch (e) {}
+    /* (v19.0.0) NÃO É UM BECO. Recusar e só recusar deixava a rodada sem lançamento para sempre — e ela voltava,
+     * toda respondida, a cada revisão do tópico. Uma saída: lançar SÓ as do tópico principal (o de onde a rodada foi
+     * aberta; sem ele, o de mais questões), dizendo quantas ficam de fora. */
+    const daRodada = /^topico:/.test(s.escopo || "") ? qsChaveNormal(String(s.escopo).slice(7).split("#")[0]) : "";
+    principal = chaves[daRodada] ? daRodada : nomes.slice().sort((a, b) => chaves[b].length - chaves[a].length)[0];
+    const tp = chaves[principal][0].topico || principal;
+    const k = chaves[principal].length;
+    const r = await uiEscolha(t("qs_registrar_varios", { n: nomes.length, lista }) + "\n\n"
+      + t("qs_registrar_parte", { k, tp, o: s.fila.length - k }), [
+      { valor: "parte", rot: t("qs_registrar_parte_btn", { k }), classe: "btn-verde" },
+      { valor: "sair", rot: t("cancel_btn") },
+    ]);
+    if (r !== "parte") return;
+    const ids = {};
+    chaves[principal].forEach((q) => { ids[q.id] = 1; });
+    const resp = s.respondidas.filter((x) => ids[x.id]);
+    if (!resp.length) { uiAlert(t("qs_registrar_nada")); return; }
+    const certas = resp.filter((x) => x.acertou).length;
+    p = { feitas: resp.length, certas, pct: Math.round((certas / resp.length) * 100), total: k };
+    try { reg("QUESTOES", "rodada misturada lançada só no tópico principal", tp + " · " + certas + "/" + resp.length + " · " + (s.fila.length - k) + " de fora"); } catch (e) {}
   }
-  const modelo = chaves[nomes[0]];
+  /* qualquer grafia serve: o registro acha o tópico do edital tolerando acento e caixa */
+  const grupo = chaves[principal];
+  const modelo = grupo[0];
+  const conta = {};
+  grupo.forEach((q) => { conta[q.chave] = (conta[q.chave] || 0) + 1; });
+  if (Object.keys(conta).length > 1) {
+    try { reg("QUESTOES", "rodada com o mesmo tópico em grafias diferentes — lançada como um só",
+      Object.keys(conta).map((k) => k + " ×" + conta[k]).join(" · ")); } catch (e) {}
+  }
 
   /* (v18.58.0) o tempo ATIVO da rodada (intervalos entre respostas, pausa longa conta só o teto) — não o relógio desde
    * o começo, que contava intervalos e até o dia seguinte como estudo */

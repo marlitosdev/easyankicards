@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "18.99.0";
+const VERSAO = "19.0.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -293,6 +293,16 @@ window.addEventListener("error", (e) => {
   reg("ERRO", (e.message || "erro") + " @ "
     + String(e.filename || "").split("/").pop() + ":" + (e.lineno || "?"));
 });
+/* (v19.0.0) ARQUIVO DO APP QUE NÃO CARREGOU. Um .js recusado (404 no meio de uma publicação, HTML no lugar do
+ * script) não dispara o erro acima — só o efeito dele aparecia depois ("qsCarregar is not defined"), e a causa
+ * tinha de ser deduzida. Na fase de captura o <script> que falhou chega aqui com o nome do arquivo. */
+window.addEventListener("error", (e) => {
+  const el = e && e.target;
+  if (!el || el === window || el.tagName !== "SCRIPT") return;
+  const arq = String(el.src || "").split("/").pop().split("?")[0] || "?";
+  (window.__eacArquivosFalhos = window.__eacArquivosFalhos || []).push(arq);
+  reg("ERRO", "arquivo do app não carregou: " + arq, "parte do app fica sem funcionar até recarregar a página");
+}, true);
 window.addEventListener("unhandledrejection", (e) => {
   reg("ERRO", "promessa rejeitada: " + ((e.reason && e.reason.message) || e.reason));
 });

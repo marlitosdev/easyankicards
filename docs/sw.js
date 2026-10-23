@@ -25,8 +25,8 @@
  *
  * Agora os três andam juntos, e o invariante E16 (tests/estrutura.js)
  * derruba a suíte se um deles ficar para trás. */
-const CACHE = "easyankicards-v18.99.0";
-const SW_VERSION = "18.99.0";
+const CACHE = "easyankicards-v19.0.0";
+const SW_VERSION = "19.0.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
   "edital.js", "edital-vert.js", "edital-vert-ui.js", "editais.js", "vinculos.js", "vizinhos.js", "idb-juris.js", "juris.js", "juris-catalogo.js", "juris-ia.js", "ia-consumo.js", "juris-ui.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",
@@ -81,11 +81,18 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     /* "no-cache" = revalida com o servidor a cada pedido. Sem isso o cache HTTP do navegador (GitHub Pages: 10 min)
      * podia entregar o index.html novo com um .js antigo, e a tela nova rodava com o código velho. */
+    /* (v19.0.0) SÓ GUARDA RESPOSTA BOA. Um 404/500 (o GitHub Pages no meio de uma publicação) era guardado por cima
+     * da cópia boa e devolvido como se fosse o arquivo: o questoes.js não rodava e o app abria "sem questões"
+     * (qsCarregar is not defined). Com erro do servidor, vale a cópia guardada; e o index.html só entra no lugar de
+     * uma PÁGINA — servido no lugar de um .js, o navegador recusa e o módulo some calado. */
     fetch(req, { cache: "no-cache" }).then((resp) => {
-      const cp = resp.clone();
-      caches.open(CACHE).then((c) => c.put(req, cp));
-      return resp;
+      if (resp && resp.ok) {
+        const cp = resp.clone();
+        caches.open(CACHE).then((c) => c.put(req, cp));
+        return resp;
+      }
+      return caches.match(req, { ignoreSearch: true }).then((hit) => hit || resp);
     }).catch(() => caches.match(req, { ignoreSearch: true })
-      .then((hit) => hit || caches.match("index.html")))
+      .then((hit) => hit || (req.mode === "navigate" ? caches.match("index.html") : Response.error())))
   );
 });
