@@ -4963,7 +4963,7 @@ function leiDupSugestoes() {
   if (!c) return;
   c.decisoes = {};
   c.grupos.forEach((g) => {
-    if (g.confianca === "forte") {
+    if (g.confianca === "forte" || g.confianca === "media") {
       c.decisoes[g.num] = { manter: g.sugerido, original: leiDupPodeOriginal(g, g.sugerido) };
     } else if (leiDupSoConferir(g, c.modo)) {
       c.decisoes[g.num] = { manter: "todas", original: false, auto: true };
@@ -4997,10 +4997,12 @@ function leiDupPintar() {
   $("leiDupAjuda").textContent = t(atualizar ? "lei_dup_ajuda_upd"
     : (revisar ? "lei_dup_ajuda_rev" : "lei_dup_ajuda"));
   const fortes = c.grupos.filter((g) => g.confianca === "forte").length;
+  const medias = c.grupos.filter((g) => g.confianca === "media").length;
   const soConf = c.grupos.filter((g) => leiDupSoConferir(g, c.modo)).length;
-  $("leiDupResumo").textContent = soConf
-    ? t("lei_dup_resumo_conf", { n: c.grupos.length, f: fortes, d: c.grupos.length - fortes - soConf, c: soConf })
-    : t("lei_dup_resumo", { n: c.grupos.length, f: fortes, c: c.grupos.length - fortes });
+  $("leiDupResumo").textContent = (soConf
+    ? t("lei_dup_resumo_conf", { n: c.grupos.length, f: fortes, d: c.grupos.length - fortes - medias - soConf, c: soConf })
+    : t("lei_dup_resumo", { n: c.grupos.length, f: fortes, c: c.grupos.length - fortes - medias }))
+    + (medias ? " " + t("lei_dup_resumo_media", { m: medias }) : "");
 
   const cx = $("leiDupLista");
   cx.innerHTML = "";
@@ -5017,11 +5019,12 @@ function leiDupPintar() {
     tit.textContent = t("lei_dup_grupo", { a: g.numCru, n: g.candidatos.length });
     const forca = document.createElement("span");
     forca.className = "lei-dup-forca " + g.confianca;
-    forca.textContent = t(g.confianca === "forte" ? "lei_dup_forte" : (conf ? "lei_dup_fraca_conf" : "lei_dup_fraca"));
+    forca.textContent = t(g.confianca === "forte" ? "lei_dup_forte" : g.confianca === "media" ? "lei_dup_media"
+      : (conf ? "lei_dup_fraca_conf" : "lei_dup_fraca"));
     cab.append(tit, forca);
     card.append(cab);
 
-    if (g.confianca === "forte") {
+    if (g.confianca === "forte" || g.confianca === "media") {
       const mo = document.createElement("div");
       mo.className = "lei-dup-motivo";
       mo.textContent = t("lei_dup_m_" + g.motivo, { f: g.fonte });
@@ -5040,7 +5043,7 @@ function leiDupPintar() {
       const marcada = dec && dec.manter === cand.indice;
       const op = document.createElement("label");
       op.className = "lei-dup-op" + (marcada ? " sel" : "")
-        + (g.confianca === "forte" && g.sugerido === cand.indice ? " sug" : "");
+        + ((g.confianca === "forte" || g.confianca === "media") && g.sugerido === cand.indice ? " sug" : "");
       const r = document.createElement("input");
       r.type = "radio";
       r.name = "leiDup_" + g.num;
@@ -5054,7 +5057,7 @@ function leiDupPintar() {
       nome.className = "lei-dup-op-tit";
       nome.textContent = t("lei_dup_ocorrencia", { i: cand.pos + 1, l: cand.linha });
       op.append(r, nome);
-      if (g.confianca === "forte" && g.sugerido === cand.indice) {
+      if ((g.confianca === "forte" || g.confianca === "media") && g.sugerido === cand.indice) {
         const sug = document.createElement("span");
         sug.className = "lei-dup-chip sug";
         sug.textContent = t("lei_dup_sugerido");

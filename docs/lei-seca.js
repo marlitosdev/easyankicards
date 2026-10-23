@@ -701,7 +701,44 @@ function leiDuplicados(texto, ignorar, opc) {
   });
   /* + o mesmo rótulo de parágrafo duas vezes no MESMO artigo */
   leiRepetidosNoArtigo(texto, ignorar, opc).forEach((g) => grupos.push(g));
+  leiSugerirCompilada(grupos);
   return grupos.sort((x, y) => x.ordem - y.ordem);
+}
+
+/* (v19.1.0) LEI COMPILADA. Um texto compilado traz a redação antiga e a nova uma depois da outra; quando o risco do
+ * tachado se perdeu (PDF, cópia), cada artigo alterado vira um "repetido". Muitos trazem "(Redação dada…)" e já têm
+ * sugestão segura; os que perderam a nota pediam escolha um a um (LC 15/2009 de Caruaru: dezenas). Se o texto É
+ * compilado — 5 ou mais grupos resolvidos pela nota de redação —, o artigo inteiro repetido, sem indício, de texto
+ * PARECIDO (é o mesmo artigo reescrito) ganha a sugestão "a última redação", marcada como PROVÁVEL ("media"): vem
+ * escolhida, mas a tela pede para conferir. Texto diferente (outro artigo com o mesmo número) continua para decidir. */
+function leiPalavrasDoArtigo(s) {
+  const out = {};
+  String(s || "").toLowerCase().replace(/^\s*art(?:\.|igo)?\s*\S+/, "").split(/[^a-z0-9à-ú]+/i)
+    .forEach((w) => { if (w.length >= 3) out[w] = 1; });
+  return out;
+}
+function leiSemelhancaDeTexto(a, b) {
+  const A = leiPalavrasDoArtigo(a), B = leiPalavrasDoArtigo(b);
+  const ka = Object.keys(A), kb = Object.keys(B);
+  if (!ka.length || !kb.length) return 0;
+  /* quanto do texto MENOR está no maior: a redação nova costuma AMPLIAR a antiga ("Sujeito ativo … é o Município"
+   * × "… é o Município, ou aqueles definidos pela legislação…"), e uma medida simétrica a dava por diferente */
+  const inter = ka.filter((w) => B[w]).length;
+  return inter / Math.min(ka.length, kb.length);
+}
+function leiSugerirCompilada(grupos) {
+  const porNota = (grupos || []).filter((g) => !g.intra && g.confianca === "forte" && g.motivo === "redacao").length;
+  if (porNota < 5) return 0;
+  let n = 0;
+  grupos.forEach((g) => {
+    if (g.intra || g.confianca !== "fraca" || g.motivo !== "posicao") return;
+    const c = g.candidatos;
+    const ult = c[c.length - 1];
+    if (!c.slice(0, -1).every((x) => leiSemelhancaDeTexto(x.texto, ult.texto) >= 0.6)) return;
+    g.sugerido = ult.indice; g.confianca = "media"; g.motivo = "compilada"; g.fonte = "";
+    n++;
+  });
+  return n;
 }
 
 /* SUGESTÃO. Primeiro o que o TEXTO diz; a posição só desempata. */
@@ -1441,6 +1478,12 @@ function leiGrafiaDaLinha(linha, opc) {
     (m0, ini, n, ord, letra) => ini + "Art. " + n + ord + "-" + letra + ". ");
   /* "Parágra único" */
   s = s.replace(/^(\s*)Par[áa]gra\s+([úu]nico)/i, "$1Parágrafo $2");
+  /* (v19.1.0) "Art. 3 49 – …" => "Art. 349 – …": o número PARTIDO por quem converteu o PDF (cada pedaço de texto
+   * virou uma palavra). Na LC 15/2009 de Caruaru foram ~30 artigos lidos como "Art. 3"/"Art. 4" — numeração fora de
+   * sequência e grupos falsos de repetidos (Art. 3º ×8). Só no cabeçalho, com o fecho do número logo depois
+   * (º . – : ou fim) e no máximo 4 algarismos: "Art. 12 e 13" e remissões no meio da frase não mudam. */
+  s = s.replace(/^(\s*)Art(?:\.|igo)?\s*(\d{1,3}) (\d{1,3})(?=\s*[ºo°ª]|\s*[.\-–—:](?:\s|$)|\s*$)/i,
+    (m0, ini, a, b) => ((a + b).length <= 4 ? ini + "Art. " + a + b : m0));
   return s === orig ? null : s;
 }
 
