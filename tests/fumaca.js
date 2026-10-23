@@ -605,7 +605,8 @@ function rodar() {
     },
     clearTimeout() {}, setInterval: () => 0, clearInterval() {},
     requestAnimationFrame: (f) => { try { f(0); } catch (e) {} return 0; },
-    addEventListener() {}, removeEventListener() {},
+    /* (v19.0.0) os ouvintes da JANELA ficam guardados (__ouv), para o teste disparar o erro de carga de um <script> */
+    addEventListener(tipo, fn) { this.__ouv = this.__ouv || {}; (this.__ouv[tipo] = this.__ouv[tipo] || []).push(fn); }, removeEventListener() {},
     alert() {}, confirm: () => true, prompt: () => null,
     fetch: async () => ({ ok: false, text: async () => "" }),
     URL: { createObjectURL: () => "blob:", revokeObjectURL() {} },
@@ -886,7 +887,7 @@ function rodar() {
     qsUiMelhorarAbrir, qsUiMelhorarConferir, qsUiMelhorarAplicar,
     qsFiltroFalhas, qsFiltroFalhasLigado, qsQuantasFalhas, qsInteressaNoFiltro,
     regFormasAtual: () => regFormas,
-    regTipoAtual: () => regTipo, regTipoTrocar, regTipoPadrao, regAlvoNuncaEstudado, regPintarTempo, regPintarAtalhos, abrirRegistro, regPintarBotoes,
+    regTipoAtual: () => regTipo, regAtualLer: () => regAtual, regTipoTrocar, regTipoPadrao, regAlvoNuncaEstudado, regPintarTempo, regPintarAtalhos, abrirRegistro, regPintarBotoes,
     edAvisarMudanca, hubPiscarLinha,
     edProgressoPor: (o) => { edProgresso = o; },
     regTipoAtual: () => regTipo, regTipoTrocar, regTipoPadrao, abrirRegistro, confirmarRegistro,
