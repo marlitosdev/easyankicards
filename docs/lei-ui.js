@@ -4576,8 +4576,9 @@ function leiGravar(opc) {
   /* (v18.67.0) o fluxo único: as leis que alteram, juntadas na criação, começam a ser aplicadas */
   if (leiNova && leiAltFilaNova.length) {
     const lc = leiDe(leiIdAtual);
+    if (typeof leiNovaEtapa === "function") leiNovaEtapa("criar");
     if (leiAltFilaDaCriacao(lc)) setTimeout(() => { try { leiAltFilaComecar(); } catch (e) {} }, 0);
-  }
+  } else if (leiNova && typeof leiNovaFim === "function") leiNovaFim("criada sem leis que alteram");
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
   leiPintar();
   toast("lei_salva");
@@ -4973,6 +4974,7 @@ function leiDupSugestoes() {
 
 function leiDuplicadosAbrir(ctx) {
   leiDupCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  if (leiDupCtx.modo === "criar" && typeof leiNovaEtapa === "function") leiNovaEtapa("repetidos");
   leiDupConferAberto = false;
   leiDupSugestoes();
   leiDupPintar();
@@ -5656,6 +5658,7 @@ function leiAltFilaProxima() {
     if ($("dlgLeiAtualizar") && $("dlgLeiAtualizar").open) $("dlgLeiAtualizar").close();
     try { leiFluxoEtapa("fila", t("lei_fx_r_fila_fim", { a: c.feitas, p: lista.length }), []); } catch (e) {}
     leiAltFilaPintar();
+    if (typeof leiNovaFim === "function") leiNovaFim("fila terminada: " + c.feitas + " aplicada(s)");
     uiAlert(t(lista.length ? "lei_altfila_fim_pend" : "lei_altfila_fim", { a: c.feitas, p: lista.length }));
     return false;
   }
@@ -5668,6 +5671,7 @@ function leiAltFilaProxima() {
   $("leiUpdFonte").value = it.nome;
   $("leiUpdTexto").value = it.texto;
   leiAltFilaFaixa();
+  if (typeof leiNovaEtapa === "function") leiNovaEtapa("alt:" + it.id);
   try { leiReg("atualizacao", "fila: próxima lei que altera", it.nome + " · " + (lista.indexOf(it) + 1) + " de " + lista.length); } catch (e) {}
   return true;
 }
@@ -5701,6 +5705,7 @@ function leiAltFilaParar() {
   if ($("dlgLeiAtualizar") && $("dlgLeiAtualizar").open) $("dlgLeiAtualizar").close();
   try { leiFluxoEtapa("fila", t("lei_fx_r_fila_parou", { a: c ? c.feitas : 0, p: leiAltFilaLista().length }), []); } catch (e) {}
   leiAltFilaPintar();
+  if (typeof leiNovaFim === "function") leiNovaFim("parou com " + leiAltFilaLista().length + " na fila");
   toastMsg(t("lei_altfila_parou", { p: leiAltFilaLista().length }), 6000);
   return true;
 }
@@ -5716,6 +5721,12 @@ function leiAltFilaAplicada(aviso) {
   leiAltFilaPintar();
   Promise.resolve(aviso).then(() => leiAltFilaProxima());
   return true;
+}
+/* (v19.2.0) o assistente "Incluir lei" entrega a fila da criação de uma vez */
+function leiAltFilaNovaDefinir(lista) {
+  leiAltFilaNova = leiFilaOrdenar(lista || []);
+  leiAltFilaPintar();
+  return leiAltFilaNova.length;
 }
 /* criada a lei, a fila da criação vai com ela e começa sozinha (o fluxo único) */
 function leiAltFilaDaCriacao(l) {
@@ -5919,7 +5930,13 @@ function leiBibLista() {
 
 /* (v18.47.0) "＋ Nova lei": colar uma lei na biblioteca sem ligá-la a tópico nenhum (liga-se depois, por "ligar a um
  * tópico…"). O leitor abre vazio, no modo editar; gravar cria a lei com topicos = []. */
+/* (v19.2.0) "＋ Nova lei" abre o assistente de 3 passos (lei-nova.js); o leitor no modo editar continua a um link
+ * ("prefiro o editor completo") e é o que o assistente usa por baixo, no passo 3 */
 function leiBibNova() {
+  if (typeof leiNovaAbrir === "function") return leiNovaAbrir();
+  return leiBibNovaEditor();
+}
+function leiBibNovaEditor() {
   if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
   leiIdAtual = "";
   leiAbrir("", "", null, { nova: true, semRetomar: true });
@@ -6304,6 +6321,7 @@ function leiNumeracaoLinhas(problemas) {
 
 function leiRevisarColagemAbrir(ctx) {
   leiPreCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  if (leiPreCtx.modo === "criar" && typeof leiNovaEtapa === "function") leiNovaEtapa("limpeza");
   leiPreAvisar("");
   leiPreCtx.texto = String(leiPreCtx.texto == null ? "" : leiPreCtx.texto).replace(/\r\n?/g, "\n");
   leiPreSugestoes();
