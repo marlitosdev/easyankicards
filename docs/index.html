@@ -734,6 +734,13 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-cita-link{background:none;border:none;padding:0;margin:0;font:inherit;
   color:var(--info);text-decoration:underline dotted;cursor:pointer}
 .lei-cita-link:hover{text-decoration-style:solid}
+/* (v19.5.0) o trecho citado em destaque e marcado no artigo; a citação dentro da própria lei */
+.lei-cita-trecho{border-left:5px solid var(--info);background:rgba(59,130,246,.14);border-radius:10px;padding:10px 12px;margin:8px 0 10px}
+.lei-cita-trecho-cab{font-size:12px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--info);margin-bottom:4px}
+.lei-cita-trecho-rev{font-size:12.5px;color:var(--atencao);font-weight:700;margin-bottom:4px}
+.lei-cita-trecho-txt{white-space:pre-wrap;font-size:16px;line-height:1.55;font-weight:600;color:var(--texto)}
+.lei-cita-preview-txt mark.lei-cita-alvo{background:rgba(59,130,246,.22);color:inherit;border-radius:4px;padding:0 2px;box-shadow:inset 3px 0 0 var(--info)}
+.lei-cita-link.lei-cita-interna{text-decoration-style:dotted}
 .lei-cita-preview-txt{white-space:pre-wrap;max-height:40vh;overflow:auto;
   border:1px solid var(--borda);border-radius:6px;padding:8px 10px}
 /* DICA incorporada ao resumo: precisa ser reconhecível de relance como
@@ -8848,6 +8855,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="leiCitaPreviewArtigo"></p>
   <!-- (v18.49.0) o vínculo é seu: desde quando e onde vale -->
   <p class="nota lei-cita-vinc-info" id="leiCitaVincInfo" hidden></p>
+  <!-- (v19.5.0) o trecho citado, em destaque, no topo -->
+  <div class="lei-cita-trecho" id="leiCitaPreviewTrecho" role="note" hidden>
+    <div class="lei-cita-trecho-cab" id="leiCitaPreviewTrechoCab"></div>
+    <div class="lei-cita-trecho-rev" id="leiCitaPreviewTrechoRev" hidden></div>
+    <div class="lei-cita-trecho-txt" id="leiCitaPreviewTrechoTxt"></div>
+  </div>
   <!-- A NOTA DO ARTIGO (v18.31.0): a mesma do leitor da lei; escrita aqui, aparece ao lado de cada citação dele -->
   <div class="lei-cita-nota" id="leiCitaNotaBox" hidden>
     <div class="lei-cita-nota-ver" id="leiCitaNotaVer">

@@ -2147,7 +2147,7 @@ function leiPintarLeitura() {
     /* CITAÇÃO DENTRO DA PRÓPRIA LEI TAMBÉM VIRA LINK — "nos termos do
      * art. 5º da Lei 8.666" passa a abrir um preview daquele artigo,
      * sem sair da leitura atual (ver leiLigarCitacoesEm). */
-    leiLigarCitacoesEm(corpo, a.num);
+    leiLigarCitacoesEm(corpo, a.num, false, l);
 
     bloco.append(cab);
     if (chips) bloco.append(chips);
@@ -2459,7 +2459,8 @@ function leiPinturaProgressiva(arts, desenhar, preparar, nome, aoTerminar) {
  * escrito à mão (não document.createTreeWalker) porque childNodes/
  * nodeType já são o que o simulador dos testes sabe navegar; a API mais
  * nova não tinha por que existir ali. */
-function leiLigarCitacoesEm(el, origemNum, dentro) {
+/* lei (v19.5.0): a lei que está sendo desenhada — para a citação interna sem reler a biblioteca a cada nó */
+function leiLigarCitacoesEm(el, origemNum, dentro, lei) {
   if (!el || !el.childNodes) return;
   /* (v18.53.0) na chamada de fora: o vínculo manual que atravessa um grifo ou uma formatação (citLigarAtravessando) */
   if (!dentro) {
@@ -2471,16 +2472,16 @@ function leiLigarCitacoesEm(el, origemNum, dentro) {
   }
   Array.from(el.childNodes).forEach((no) => {
     if (no.nodeType === 3) {                       // nó de texto
-      leiCitarNoTexto(no, origemNum);
+      leiCitarNoTexto(no, origemNum, lei);
     } else if (no.nodeType === 1) {                 // elemento — desce
       /* botão já feito (o link de um vínculo atravessado) não se mexe */
       if (String(no.tagName || "").toUpperCase() === "BUTTON") return;
-      leiLigarCitacoesEm(no, origemNum, true);
+      leiLigarCitacoesEm(no, origemNum, true, lei);
     }
   });
 }
 
-function leiCitarNoTexto(noTexto, origemNum) {
+function leiCitarNoTexto(noTexto, origemNum, lei) {
   /* textContent, não nodeValue: os dois valem o mesmo num nó de texto de
    * verdade, mas o texto que nasce do innerHTML (matParaHtml) só ganha
    * textContent no simulador dos testes — nodeValue ficava vazio ali. */
@@ -2492,7 +2493,22 @@ function leiCitarNoTexto(noTexto, origemNum) {
    * PRÓPRIO artigo começa (o texto guardado carrega o número junto — ver
    * leiArtigoAlterar) batia como citação de rótulo vazio e virava um
    * link morto em cima do próprio título de cada artigo, em toda lei. */
-  cits = cits.filter((c) => c && c.rotulo);
+  /* (v19.5.0) A CITAÇÃO SEM LEI NOMEADA, NO TEXTO DA LEI, É DESTA LEI ("conforme o art. 32 desta Lei", "nos termos do
+   * art. 15"): vira link para a prévia do artigo, sem rolar a lei até lá e voltar. Fora: o "Art. 5º." com que o próprio
+   * artigo começa; artigo que não existe nesta lei (link morto); e a lei que ALTERA outra (dentro das aspas o "art. 9º"
+   * é da lei alterada). "arts. 7º e 8º da CF": a sem nome herda a lei da citação logo seguinte. */
+  const mesma = leiMesmaLeiCtx(lei);
+  cits = cits.filter((c, i) => {
+    if (!c) return false;
+    if (c.rotulo) return true;
+    const prox = cits[i + 1];
+    if (prox && prox.rotulo && /^\s*(?:,|e|ou)?\s*(?:[dn]?[oa]s?\s+)?$/i.test(txt.slice(c.fim, prox.ini))) { c.rotulo = prox.rotulo; return true; }
+    if (!mesma) return false;
+    if (!txt.slice(0, c.ini).trim() && /^Art/i.test(c.texto)) return false;
+    if (!mesma.nums.has(c.num)) return false;
+    c.mesmaLei = true;
+    return true;
+  });
   /* (v18.47.0) OS VÍNCULOS MANUAIS valem aqui também (eac_cit_vinculos): o trecho ligado à mão vira link, o desligado
    * deixa de ser. Do tópico aberto; aberta pela Biblioteca (sem tópico), só os de todo o app. */
   try {
@@ -2525,9 +2541,27 @@ function leiCitacaoBotao(c, origemNum) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     /* (v18.47.0) com o contexto DE DENTRO do leitor: a prévia oferece "desligar" e "ligar a outro", e a volta repinta a
      * leitura (o "abrir a lei inteira" continua o de dentro: volta para esta lei) */
-    leiCitacaoPreviewAbrir(c, origemNum, { ctx: leiCtxDoLeitor() });
+    leiCitacaoPreviewAbrir(c, origemNum, { ctx: leiCtxDoLeitor(), lei: c.mesmaLei ? leiDe(leiIdAtual) : undefined });
   };
+  if (c.mesmaLei) { b.className += " lei-cita-interna"; b.title = t("lei_cita_interna_ajuda", { a: c.numCru || c.num }); }
   return b;
+}
+/* (v19.5.0) a lei aberta, para a citação interna: os números de artigo que existem nela (uma vez por versão do texto) */
+let leiMesmaLeiCache = null;
+function leiMesmaLeiCtx(lei) {
+  /* a lei vem de quem desenha (uma leitura por abertura, não uma por nó de texto — ler a biblioteca é caro) */
+  const l = lei || null;
+  if (!l || !l.texto) return null;
+  const k = l.id + "|" + l.texto.length + "|" + Object.keys(l.alteracoes || {}).length;
+  if (leiMesmaLeiCache && leiMesmaLeiCache.k === k) return leiMesmaLeiCache.v;
+  let v = null;
+  try {
+    if (!(typeof leiPareceAlteradora === "function" && leiPareceAlteradora(l.texto).sim)) {
+      v = { lei: l, nums: new Set(leiArtigosEfetivos(l).map((a) => a.num)) };
+    }
+  } catch (e) { v = null; }
+  leiMesmaLeiCache = { k, v };
+  return v;
 }
 function leiCtxDoLeitor() {
   return { dentro: true, disciplina: (leiAtual && leiAtual.disciplina) || "", topico: (leiAtual && leiAtual.topico) || "",
@@ -2565,6 +2599,7 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; }
   }
 
+  if ($("leiCitaPreviewTrecho")) $("leiCitaPreviewTrecho").hidden = true;
   if (!lei) {
     $("leiCitaPreviewTitulo").textContent = c.rotulo
       ? t("lei_cita_nao_achou_rotulo", { l: c.rotulo }) : t("lei_cita_nao_achou");
@@ -2590,26 +2625,50 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
       + (art.alterado ? " " + t("lei_selo_alterado_curto", { f: art.fonteAlteracao || "?" }) : "")
       + (art.revogado ? " " + t("lei_selo_revogado", { f: art.fonteAlteracao || "?" }) : "")
       + (!art.revogado && art.revogacao ? " · " + t("lei_selo_txt_" + art.revogacao.tipo) + (art.revogacao.fonte ? " · " + art.revogacao.fonte : "") : "");
-    let texto = art.texto;
-    /* o trecho CITADO (inciso, parágrafo), separado embaixo do artigo */
-    try {
-      const un = leiAcharUnidades(art.texto, c);
-      if (un.length) {
-        /* o trecho que a questão cita consta como revogado/vetado: o aviso vem ANTES do texto */
-        const avisoRev = un.some((u) => leiRevogacaoDoArtigo(art.texto.split("\n").slice(u.linha, u.linhaFim + 1))) ? t("lei_cita_trecho_rev") + "\n" : "";
-        texto += "\n\n▶ " + t("lei_cita_trecho") + ":\n" + avisoRev + un.map((u) => leiRotuloDaUnidade(u) + " — "
-          + art.texto.split("\n").slice(u.linha, u.linhaFim + 1).join(" ").trim()).join("\n");
-      }
-    } catch (e) {}
-    $("leiCitaPreviewTexto").textContent = texto;
+    /* (v19.5.0) O TRECHO CITADO NO TOPO, EM DESTAQUE, e marcado no artigo inteiro logo abaixo. Antes ele vinha no fim,
+     * em texto corrido e com o rótulo repetido ("inciso II — II - a transmissão…"); e as marcas de estudo da lei
+     * ("==texto==") apareciam cruas na prévia. Agora: o cabeçalho diz qual parte é (art. 156 · inciso II), o texto
+     * aparece uma vez, e as marcas saem (a prévia mostra a LEI; as marcas continuam no leitor). */
+    const linhas = leiSemMarcasDeEstudo(art.texto).split("\n");
+    const alvo = new Set();
+    let un = [];
+    try { un = leiAcharUnidades(art.texto, c) || []; } catch (e) { un = []; }
+    un.forEach((u) => { for (let i = u.linha; i <= u.linhaFim; i++) alvo.add(i); });
+    leiCitaTrechoPintar(art, un, linhas);
+    const p = $("leiCitaPreviewTexto");
+    p.textContent = "";
+    linhas.forEach((l, i) => {
+      if (alvo.has(i)) { const m = document.createElement("mark"); m.className = "lei-cita-alvo"; m.textContent = l; p.append(m); }
+      else p.append(document.createTextNode(l));
+      if (i < linhas.length - 1) p.append(document.createTextNode("\n"));
+    });
   }
   leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null, art: art || null };
   if (art) leiCitaNotaPintar();
   leiCitaBotoesDoLink();
   $("btnLeiCitaPreviewAbrir").hidden = false;
   abrirModal("dlgLeiCitaPreview");
-  try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru); }
+  /* o artigo inteiro rola até a parte citada */
+  try { const m = $("leiCitaPreviewTexto").querySelector("mark.lei-cita-alvo"); if (m && m.scrollIntoView) m.scrollIntoView({ block: "center" }); } catch (e) {}
+  try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru + (c.mesmaLei ? " (desta lei)" : "")); }
   catch (e) {}
+}
+
+/* (v19.5.0) o texto da lei SEM as marcas de estudo (==…==, ==!…==, ==?…==, ==§…==, ==*…==, ==~…==, ==@…==): a prévia
+ * mostra a lei; destacar e anotar continua no leitor */
+function leiSemMarcasDeEstudo(s) { return String(s == null ? "" : s).replace(/==[!?§*~@]?/g, ""); }
+
+/* (v19.5.0) a caixa do trecho citado: "Trecho citado · Art. 156 · inciso II" e o texto, uma vez só */
+function leiCitaTrechoPintar(art, un, linhas) {
+  const box = $("leiCitaPreviewTrecho");
+  if (!box) return;
+  box.hidden = !un.length;
+  if (!un.length) return;
+  const rev = un.some((u) => { try { return leiRevogacaoDoArtigo(String(art.texto).split("\n").slice(u.linha, u.linhaFim + 1)); } catch (e) { return false; } });
+  $("leiCitaPreviewTrechoCab").textContent = t("lei_cita_trecho_cab", { a: art.rotulo, u: un.map(leiRotuloDaUnidade).join(" · ") });
+  $("leiCitaPreviewTrechoRev").hidden = !rev;
+  $("leiCitaPreviewTrechoRev").textContent = rev ? t("lei_cita_trecho_rev") : "";
+  $("leiCitaPreviewTrechoTxt").textContent = un.map((u) => linhas.slice(u.linha, u.linhaFim + 1).join(" ").replace(/\s+/g, " ").trim()).join("\n");
 }
 
 /* =====================================================================
