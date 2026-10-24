@@ -3986,7 +3986,7 @@ function matIniciar() {
       const html = ev.clipboardData && ev.clipboardData.getData("text/html");
       if (!html) return;
       ev.preventDefault();
-      $("matColarTexto").value = matHtmlParaMarcas(html);
+      $("matColarTexto").value = typeof semInvisiveis === "function" ? semInvisiveis(matHtmlParaMarcas(html)) : matHtmlParaMarcas(html);
     });
   }
   $("btnMatColarOk").onclick = () => matAplicarColagem($("matColarTexto").value);

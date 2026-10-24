@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.9.0";
+const VERSAO = "19.10.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -614,6 +614,38 @@ function uiEscolhaLimpar() {
 }
 
 function uiConfirm(texto, opc) { return uiDialog(String(texto), true, opc); }
+
+/* =====================================================================
+ * CARACTERES INVISÍVEIS AO COLAR (v19.10.0)
+ *
+ * O CASO: o caderno de questões da Literalidade espalha caracteres de largura zero no enunciado (U+200B, U+200C,
+ * U+200D, U+2060 — uma marca d'água para rastrear cópias). Copiado de lá e colado aqui, o texto PARECE igual, mas a
+ * busca não acha "base de cálculo" (há um invisível no meio), e a mesma questão colada duas vezes não é vista como
+ * repetida. O hífen "mole" (U+00AD) dos PDFs de lei faz o mesmo estrago.
+ *
+ * NÃO SE INTERCEPTA A COLAGEM: quatro caixas já tratam o "paste" do seu jeito (lei com tachado, resumo com HTML,
+ * edital, julgado) e inserir antes delas colaria duas vezes. Limpa-se DEPOIS: no "input" de colagem (o campo já tem o
+ * texto), e nos leitores que recebem texto colado por outro caminho (questões, resumo em HTML).
+ * ===================================================================== */
+const INVISIVEIS_RE = /[\u200B-\u200D\u2060-\u2064\uFEFF\u180E\u00AD]/g;
+function semInvisiveis(s) { return String(s == null ? "" : s).replace(INVISIVEIS_RE, ""); }
+function limparInvisiveisNoCampo(el) {
+  if (!el || typeof el.value !== "string") return 0;
+  const v = el.value;
+  const limpo = semInvisiveis(v);
+  const n = v.length - limpo.length;
+  if (!n) return 0;
+  const pos = typeof el.selectionStart === "number" ? semInvisiveis(v.slice(0, el.selectionStart)).length : limpo.length;
+  el.value = limpo;
+  try { if (el.setSelectionRange) el.setSelectionRange(pos, pos); } catch (e) {}
+  try { reg("APP", "colagem: caracteres invisíveis removidos", n + " · " + (el.id || el.tagName || "")); } catch (e) {}
+  return n;
+}
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("input", (ev) => {
+    if (ev && ev.inputType === "insertFromPaste") limparInvisiveisNoCampo(ev.target);
+  }, true);
+}
 
 /* ligações dos botões do modal */
 _uiLigarPadrao();

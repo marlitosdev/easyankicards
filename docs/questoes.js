@@ -246,7 +246,8 @@ function qsLerResposta(txt, ctx) {
   const c = ctx || {};
   const achados = [];
   const ignoradas = [];
-  const linhas = qsAbrirCampos(txt).split("\n");
+  /* (v19.10.0) os invisíveis de quem copia de outro site saem antes de ler (ver semInvisiveis, app.js) */
+  const linhas = qsAbrirCampos(typeof semInvisiveis === "function" ? semInvisiveis(txt) : txt).split("\n");
   let atual = null;
 
   const fechar = () => {

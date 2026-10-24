@@ -1531,6 +1531,13 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .tn-perigo{color:var(--erro,#d1495b)}
 .tn-sep{width:1px;height:22px;background:var(--borda);margin:0 2px}
 .tn-esp{width:84px}
+/* (v19.10.0) origem escondida e histórico das tentativas */
+.qs-de-escondida{cursor:pointer;font-style:italic}
+.qs-hist-toque{cursor:pointer}
+.qs-hist-toque::after{content:" ▾";color:var(--sutil)}
+.qs-hist-tent{margin:-6px 0 10px;padding:6px 11px;border:1px solid var(--borda);border-radius:10px;font-size:12.5px}
+.qs-hist-tent-li.ok{color:var(--verde-txt,#2f9e6e)}
+.qs-hist-tent-li.nao{color:var(--vermelho-txt,#d1495b)}
 /* (v19.8.0) a questão tem marcas: um ponto no ✏️ */
 .qs-fer-tinta.tn-tem{position:relative}
 .qs-fer-tinta.tn-tem::after{content:"";position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--laranja,#e8a33d)}

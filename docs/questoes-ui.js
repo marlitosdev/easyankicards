@@ -1401,6 +1401,16 @@ function qsUiPintarSessao() {
   de.className = "qs-de";
   de.textContent = [q.concurso, q.banca, q.disciplina, q.topico]
     .filter(Boolean).join(" · ");
+  /* (v19.10.0) A ORIGEM PODE ENTREGAR A RESPOSTA ("Imunidades" no tópico de uma questão sobre imunidade): escondida
+   * por preferência, aparece com um toque — só nesta questão — e sempre depois de responder */
+  if (qsOrigemEscondida() && !qsOrigemVista[q.id] && !qsJaRespondida()) {
+    de.textContent = t("qs_origem_escondida");
+    de.className = "qs-de qs-de-escondida";
+    de.title = t("qs_origem_mostrar");
+    de.setAttribute("role", "button");
+    de.tabIndex = 0;
+    de.onclick = () => { qsOrigemVista[q.id] = true; qsUiPintarSessao(); };
+  }
   const en = document.createElement("div");
   en.className = "qs-enunciado" + (qsEnunColapsado ? " qs-enun-colapsado" : "");
   en.textContent = q.enunciado;
@@ -1437,7 +1447,14 @@ function qsUiPintarSessao() {
       quando: dias <= 0 ? t("qs_hist_hoje") : t("qs_hist_dias", { d: dias }),
     });
     hs.title = t("qs_hist_ajuda");
+    /* (v19.10.0) O HISTÓRICO DA QUESTÃO: tocar abre as tentativas, uma por linha (dia, certo/errado, chute). A LETRA
+     * marcada só aparece depois de responder esta passagem — antes, seria contar o gabarito. */
+    hs.setAttribute("role", "button");
+    hs.tabIndex = 0;
+    hs.classList.add("qs-hist-toque");
+    hs.onclick = () => { qsHistAberto[q.id] = !qsHistAberto[q.id]; qsUiPintarSessao(); };
     corpo.append(hs);
+    if (qsHistAberto[q.id]) corpo.append(qsUiHistTentativas(q, !!qsJaRespondida()));
   }
 
   /* (v18.81.0) A IRMÃ: de onde veio, antes de responder */
@@ -4674,6 +4691,17 @@ function qsUiFerramentas(q) {
     const bDes = qsUiMoverDesfazerBotao(q, () => { qsFerFechar(); qsUiPintarSessao(); });
     if (bDes) menu.append(bDes);
   }
+  /* (v19.10.0) esconder a origem (disciplina, tópico) das próximas questões */
+  {
+    const bo = document.createElement("button");
+    bo.type = "button";
+    bo.className = "btn-min" + (qsOrigemEscondida() ? " qs-filtro-on" : "");
+    bo.id = "btnQsOrigem";
+    bo.textContent = t(qsOrigemEscondida() ? "qs_origem_mostrar_todas" : "qs_origem_esconder");
+    bo.title = t("qs_origem_aj");
+    bo.onclick = () => { qsFerFechar(); qsOrigemEsconder(!qsOrigemEscondida()); qsUiPintarSessao(); };
+    menu.append(bo);
+  }
   /* (v19.8.0) as marcas do lápis guardadas: quanto ocupam, backup sim/não, apagar todas */
   try { menu.append(tnGuardadasBotao()); } catch (e) {}
   const dQ = qsDefeitos(q);
@@ -4975,6 +5003,32 @@ function qsUiChuteAlternar() {
   try { matReg("questao", sim ? "acerto marcado como chute" : "chute desmarcado", ""); } catch (e) {}
   qsUiPintarSessao();
   return sim;
+}
+
+/* (v19.10.0) a origem escondida (preferência deste aparelho) e as questões em que se pediu para ver */
+const QS_PREF_ORIGEM = "eac_qs_esconder_origem";
+const qsOrigemVista = {};
+const qsHistAberto = {};
+function qsOrigemEscondida() { try { return localStorage.getItem(QS_PREF_ORIGEM) === "1"; } catch (e) { return false; } }
+function qsOrigemEsconder(sim) {
+  try { if (sim) localStorage.setItem(QS_PREF_ORIGEM, "1"); else localStorage.removeItem(QS_PREF_ORIGEM); } catch (e) {}
+  return qsOrigemEscondida();
+}
+/* as tentativas, da mais nova para a mais velha */
+function qsUiHistTentativas(q, comLetra) {
+  const cx = document.createElement("div");
+  cx.className = "qs-hist-tent";
+  (q.tentativas || []).slice().reverse().forEach((x) => {
+    const d = new Date(x.q);
+    const li = document.createElement("div");
+    li.className = "qs-hist-tent-li " + (x.acertou ? "ok" : "nao");
+    const dia = isNaN(d.getTime()) ? "—" : String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
+    li.textContent = dia + " · " + t(x.acertou ? "qs_hist_t_certa" : "qs_hist_t_errada")
+      + (x.chute ? " · " + t("qs_hist_t_chute") : "") + (comLetra && x.resp ? " · " + t("qs_hist_t_marcou", { l: x.resp }) : "");
+    cx.append(li);
+  });
+  if (!comLetra) { const n = document.createElement("div"); n.className = "nota"; n.textContent = t("qs_hist_t_sem_letra"); cx.append(n); }
+  return cx;
 }
 
 function qsTeclaResponder(ev) {
