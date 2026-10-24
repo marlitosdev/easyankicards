@@ -185,9 +185,12 @@ async function testes() {
     const api = iniciar();
     api.leiGuardar({ id: "lei_cf", nome: "Constituição Federal de 1988", apelido: "CF/88", especie: "Constituição", numero: "",
       texto: ["Art. 152. Texto.", "Art. 153. Compete à União instituir impostos sobre:", "I - importação;", "II - (VETADO);", "III - renda;", "§ 1º Texto.", "§ 2º (Revogado).", "Art. 154. (Revogado pela EC 9)"].join("\n") });
-    const prev = (txt) => { const c0 = api.leiCitacoesNoTexto(txt)[0]; api.leiCitacaoPreviewAbrir(c0, ""); return { t: api.$("leiCitaPreviewTexto").textContent || "", a: api.$("leiCitaPreviewArtigo").textContent || "" }; };
+    /* (v19.5.0) o trecho citado mora na caixa em destaque: cabeçalho, aviso (se houver) e o texto, nesta ordem */
+    const caixa = () => api.$("leiCitaPreviewTrecho").hidden ? "" : [api.$("leiCitaPreviewTrechoCab").textContent,
+      api.$("leiCitaPreviewTrechoRev").hidden ? "" : api.$("leiCitaPreviewTrechoRev").textContent, api.$("leiCitaPreviewTrechoTxt").textContent].join("\n");
+    const prev = (txt) => { const c0 = api.leiCitacoesNoTexto(txt)[0]; api.leiCitacaoPreviewAbrir(c0, ""); return { t: caixa(), a: api.$("leiCitaPreviewArtigo").textContent || "" }; };
     const r1 = prev("art. 153, II, da CF/88");
-    ok(/Trecho citado/.test(r1.t) && /⚠ Este trecho consta como revogado, vetado ou suprimido no próprio texto\./.test(r1.t) && r1.t.indexOf("⚠") < r1.t.indexOf("inciso II"), "Q1 o inciso citado e' vetado: o aviso vem ANTES do texto do trecho: " + r1.t.slice(-200));
+    ok(/Trecho citado/.test(r1.t) && /⚠ Este trecho consta como revogado, vetado ou suprimido no próprio texto\./.test(r1.t) && r1.t.indexOf("⚠") < r1.t.indexOf("II - (VETADO)") && /inciso II/.test(r1.t), "Q1 o inciso citado e' vetado: o aviso vem ANTES do texto do trecho: " + r1.t.slice(-200));
     const r2 = prev("art. 153, III, da CF/88");
     ok(/Trecho citado/.test(r2.t) && r2.t.indexOf("⚠") < 0, "Q2 o inciso citado vigente: sem aviso");
     const r3 = prev("art. 153, § 2º, da CF/88");

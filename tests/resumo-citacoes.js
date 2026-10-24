@@ -103,8 +103,8 @@ async function testes() {
       "R6 a prévia não mostra a lei certa: " + api.$("leiCitaPreviewTitulo").textContent);
     const prev = api.$("leiCitaPreviewTexto").textContent || "";
     ok(/principal ou acessória/.test(prev), "R6a a prévia não mostra o art. 113: " + prev.slice(0, 120));
-    ok(/§ 1º[^\n]*surge com a ocorrência/.test(prev),
-      "R7 a prévia não separa o trecho citado (§ 1º): " + JSON.stringify(prev.slice(-200)));
+    ok(/§ 1º[^\n]*surge com a ocorrência/.test(api.$("leiCitaPreviewTrechoTxt").textContent) && !api.$("leiCitaPreviewTrecho").hidden,
+      "R7 a prévia não separa o trecho citado (§ 1º): " + JSON.stringify(api.$("leiCitaPreviewTrechoTxt").textContent));
     const alvo = api.leiCitaPreviewAlvoAtual();
     ok(alvo && alvo.ctx && alvo.ctx.topico === TOP, "R7a a prévia não sabe que veio do resumo");
     /* a citação SEM "do CTN" (lei única do tópico) abre a prévia na lei do tópico */
@@ -354,9 +354,9 @@ async function testes() {
     const perm = links(api).filter((b) => b.textContent === "regra de acessoriedade")[0];
     ok(!!perm && /qs-lei-link-perm/.test(cls(perm)), "V8a depois de gravar, o trecho não virou link no resumo");
     perm.onclick({ stopPropagation() {} });
-    ok(/Trecho citado/.test(api.$("leiCitaPreviewTexto").textContent || "")
-      && /§ 2º[^\n]*acessória decorre/.test(api.$("leiCitaPreviewTexto").textContent || ""),
-      "V8b o vínculo não leva à parte escolhida (§ 2º): " + (api.$("leiCitaPreviewTexto").textContent || "").slice(-160));
+    ok(/Trecho citado/.test((api.$("leiCitaPreviewTrechoCab").textContent + "\n" + api.$("leiCitaPreviewTrechoTxt").textContent))
+      && /§ 2º[^\n]*acessória decorre/.test(api.$("leiCitaPreviewTrechoTxt").textContent),
+      "V8b o vínculo não leva à parte escolhida (§ 2º): " + (api.$("leiCitaPreviewTrechoCab").textContent + "\n" + api.$("leiCitaPreviewTrechoTxt").textContent));
     api.$("dlgLeiCitaPreview").close();
     /* o "só neste tópico" não vale em outro tópico */
     const el = api.document.createElement("div");
@@ -440,7 +440,7 @@ async function testes() {
     ls.filter((b) => b.textContent === "art. 113, § 1º, do CTN")[0].onclick({ stopPropagation() {} });
     ok(api.$("dlgLeiCitaPreview").open === true && /Código Tributário/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
       "K3 tocar na citação do cartão não abriu a prévia no CTN");
-    ok(/§ 1º[^\n]*surge com a ocorrência/.test(api.$("leiCitaPreviewTexto").textContent || ""), "K3a a prévia não separa o § 1º");
+    ok(/§ 1º[^\n]*surge com a ocorrência/.test(api.$("leiCitaPreviewTrechoTxt").textContent), "K3a a prévia não separa o § 1º");
     ok(api.$("dlgGerEstudo").open === true, "K3b a prévia fechou o estudo");
     api.$("dlgLeiCitaPreview").close();
     /* a prévia da Biblioteca de cartões também liga */
@@ -542,7 +542,7 @@ async function testes() {
     if (api.$("dlgLeiSeca").open) api.$("dlgLeiSeca").close();
     kids[iLk].onclick({ stopPropagation() {} });
     ok(api.$("dlgLeiCitaPreview").open === true && !api.$("dlgLeiSeca").open, "Q1 a citação da questão devia abrir a prévia (e não a lei inteira)");
-    ok(/§ 3º[^\n]*converte-se/.test(api.$("leiCitaPreviewTexto").textContent || ""), "Q1a a prévia da questão não separa o trecho citado (§ 3º)");
+    ok(/§ 3º[^\n]*converte-se/.test(api.$("leiCitaPreviewTrechoTxt").textContent), "Q1a a prévia da questão não separa o trecho citado (§ 3º)");
     ok(/principal × acessória/.test(api.$("leiCitaNotaTxt").textContent || ""), "Q1b a prévia da questão não mostra a nota do artigo");
     const al = api.leiCitaPreviewAlvoAtual();
     ok(al && al.ctx && al.ctx.topico === TOP && typeof al.ctx.aoVoltar === "function", "Q1c a prévia não sabe de qual questão veio");

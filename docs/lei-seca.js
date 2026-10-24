@@ -3901,7 +3901,10 @@ function leiCitacoesNoTexto(texto) {
  * "§ 4º-A", "§ 2º, II", "II, b)". Devolve as unidades da estrutura. */
 function leiAcharUnidades(textoArtigo, sub) {
   const S = sub || {};
-  const est = leiEstruturaArtigo(textoArtigo);
+  /* (v19.5.0) SEM AS MARCAS DE ESTUDO: o inciso marcado no começo da linha ("==*II - excluir…") deixava de ser lido
+   * como inciso, e a citação "art. 156, § 3º, II" não achava a parte citada. Tirar "==", "==*"… não muda o número
+   * das linhas: quem chama continua cortando o texto original pelas mesmas linhas. */
+  const est = leiEstruturaArtigo(String(textoArtigo == null ? "" : textoArtigo).replace(/==[!?§*~@]?/g, ""));
   const achadas = [];
   const semOrd = (x) => String(x).replace(/[ºo°]/g, "");
   const chavePar = (x) => {

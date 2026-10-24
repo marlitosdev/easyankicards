@@ -215,8 +215,8 @@ async function testes() {
     /* o preview mostra o trecho citado */
     const c0 = api.leiCitacoesNoTexto("art. 153, II, da CF/88")[0];
     api.leiCitacaoPreviewAbrir(c0, "");
-    ok(/Trecho citado/.test(api.$("leiCitaPreviewTexto").textContent || "") && /inciso II/.test(api.$("leiCitaPreviewTexto").textContent || ""),
-       "U3b o preview nao separa o trecho citado: " + (api.$("leiCitaPreviewTexto").textContent || "").slice(-160));
+    ok(!api.$("leiCitaPreviewTrecho").hidden && /Trecho citado/.test(api.$("leiCitaPreviewTrechoCab").textContent) && /inciso II/.test(api.$("leiCitaPreviewTrechoCab").textContent),
+       "U3b o preview nao separa o trecho citado: " + api.$("leiCitaPreviewTrechoCab").textContent + " | " + api.$("leiCitaPreviewTrechoTxt").textContent);
   }
   {
     /* "este vínculo está errado": corrigir a lei e fixar */
