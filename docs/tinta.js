@@ -188,6 +188,7 @@ const TN_GEO_NAVEGADOR = {
     });
     return out;
   },
+  texto(el) { return el.textContent || ""; },
   caixa(el) { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; },
   em(el) {
     try { const v = parseFloat(getComputedStyle(el).fontSize); return v > 0 ? v : 16; } catch (e) { return 16; }
@@ -391,7 +392,7 @@ function tnSoltar() {
   tnMarcarDesfazer();
   const lista = tnTracos().slice();
   const novo = { f: a.f, cor: a.cor, larg: tnArred((a.larg / 16)), anc: an.anc, pts: tnRelativos(pts, an.org, an.em) };
-  const lin = tnComoLinha(a.f, pts, an);
+  const lin = tnComoLinha(a.f, pts, an) || tnComoContorno(a.f, pts, an);
   if (lin) Object.assign(novo, lin);
   lista.push(novo);
   tnGuardarTracos(tnQid, lista);
@@ -421,6 +422,67 @@ function tnComoLinha(f, pts, an) {
   const yMed = ys.reduce((s, v) => s + v, 0) / ys.length;
   return { anc: { b: an.anc.b, i }, fim: j, dy: tnArred((yMed - a.org.y) / em), pts: [] };
 }
+/* =====================================================================
+ * O CÍRCULO VIRA "CONTORNO DAS LETRAS i A j" (v19.9.0)
+ *
+ * Preso só à letra do começo, o círculo guardava a FORMA em que foi feito: a frase circulada passava a quebrar de
+ * linha e ele ficava torto, cercando metade das palavras e o vazio. O traço FECHADO (as pontas se encontram) que cerca
+ * texto guarda as letras de dentro; a pintura desenha uma elipse em volta de cada linha dessas letras — refluiu, as
+ * elipses acompanham. Seta, número, rabisco: continuam como desenhados.
+ * ===================================================================== */
+function tnComoContorno(f, pts, an) {
+  if (f !== "lapis" || !an || an.anc.b === "corpo" || !pts || pts.length < 4) return null;
+  const em = an.em || 16;
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+  const w = x1 - x0, h = y1 - y0;
+  if (w < em * 1.5 || h < em * 0.9) return null;
+  const a = pts[0], z = pts[pts.length - 1];
+  /* fechado: as pontas se encontram (perto, em relação ao tamanho do desenho) */
+  if (Math.hypot(a[0] - z[0], a[1] - z[1]) > Math.max(em * 1.5, 0.35 * Math.max(w, h))) return null;
+  /* AS LETRAS DE DENTRO: pontos de uma grade que caem DENTRO do traço — encolhido em volta do centro (o alto e o
+   * baixo de um círculo passam no vão entre as linhas, e o canto da caixa em volta fica fora dele, na linha vizinha) */
+  const bl = tnGeo.blocos(tnCorpo).filter((b) => b.id === an.anc.b)[0];
+  if (!bl) return null;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const enc = pts.map((p) => [cx + (p[0] - cx) * 0.85, cy + (p[1] - cy) * 0.6]);
+  const passo = Math.max(2, em * 0.5);
+  let i = Infinity, j = -1;
+  for (let y = y0; y <= y1; y += passo) {
+    for (let x = x0; x <= x1; x += passo) {
+      if (!tnDentro([x, y], enc)) continue;
+      const k = tnGeo.letraEm(bl.el, x, y);
+      if (k >= 0) { if (k < i) i = k; if (k > j) j = k; }
+    }
+  }
+  if (!(j > i)) return null;
+  /* PALAVRAS INTEIRAS: circula-se palavra, não meia palavra — o encolhimento corta as pontas ("sprudência … Feder") */
+  const tx = tnGeo.texto ? String(tnGeo.texto(bl.el) || "") : "";
+  if (tx) {
+    while (i < j && /\s/.test(tx[i] || "")) i++;
+    while (j > i && /\s/.test(tx[j] || "")) j--;
+    while (i > 0 && /\S/.test(tx[i - 1] || "")) i--;
+    while (j < tx.length - 1 && /\S/.test(tx[j + 1] || "")) j++;
+  }
+  return { forma: "contorno", anc: { b: an.anc.b, i }, fim: j, pts: [] };
+}
+/* o ponto está dentro do polígono? (raio que cruza as arestas) */
+function tnDentro(p, poli) {
+  let dentro = false;
+  for (let a = 0, b = poli.length - 1; a < poli.length; b = a++) {
+    const [xa, ya] = poli[a], [xb, yb] = poli[b];
+    if ((ya > p[1]) !== (yb > p[1]) && p[0] < ((xb - xa) * (p[1] - ya)) / (yb - ya) + xa) dentro = !dentro;
+  }
+  return dentro;
+}
+/* uma elipse (em pontos) em volta de uma caixa de linha */
+function tnElipse(r, em) {
+  const cx = (r.l + r.r) / 2, cy = (r.t + r.b) / 2;
+  const rx = (r.r - r.l) / 2 + em * 0.45, ry = (r.b - r.t) / 2 + em * 0.3;
+  const out = [];
+  for (let k = 0; k <= 32; k++) { const a = Math.PI + (k / 32) * Math.PI * 2; out.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); }
+  return out;
+}
 /* as retas (na tela) de um traço: o desenhado, ou uma por linha de texto do "da letra i até j" */
 function tnSegmentos(tr) {
   const o = tnOrigem(tr.anc);
@@ -429,6 +491,7 @@ function tnSegmentos(tr) {
   const bl = tnGeo.blocos(tnCorpo).filter((b) => b.id === tr.anc.b)[0];
   const ls = bl && tnGeo.linhas ? tnGeo.linhas(bl.el, tr.anc.i, tr.fim) : [];
   if (!ls.length) return null;
+  if (tr.forma === "contorno") return { em: o.em, polis: ls.map((r) => tnElipse(r, o.em)) };
   const y = (r) => r.t + (tr.dy || 0) * o.em;
   return { em: o.em, polis: ls.map((r) => [[r.l, y(r)], [r.r, y(r)]]) };
 }

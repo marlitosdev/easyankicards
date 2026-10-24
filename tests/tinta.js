@@ -62,6 +62,8 @@ async function testes() {
       blocos: (corpo) => { const en = corpo.querySelectorAll(".qs-enunciado")[0]; return en ? [{ id: "en", el: en }] : []; },
       caixa: () => ({ l: g.dx, t: 100 + g.dy, r: g.dx + g.n * cw(), b: 100 + g.dy + 4 * lh() }),
       em: () => g.em,
+      /* palavras de 4 letras e um espaço: "abcd abcd …" (a letra 10 é começo de palavra; a 28, fim) */
+      texto: () => "abcd ".repeat(60),
       letraEm: (el, x, y) => Math.max(0, Math.floor((y - 100 - g.dy) / lh())) * g.n + Math.min(g.n - 1, Math.max(0, Math.floor((x - g.dx) / cw()))),
       letraCaixa: (el, i) => ({ x: (i % g.n) * cw() + g.dx, y: 100 + g.dy + Math.floor(i / g.n) * lh() }),
       linhas: (el, i, j) => {
@@ -124,6 +126,45 @@ async function testes() {
     g.n = 50;
     api.tnFerramenta("lapis");
     ok(api.tnContar() === 1, "L4 de volta ao traço torto só");
+    /* O CÍRCULO vira "contorno das letras 9 a 27": a frase quebra em duas linhas e ele vira duas elipses em volta delas */
+    const circ = (cx, cy, rx, ry, aberto) => {
+      const n = aberto ? 14 : 24;
+      const p = (k) => ev(cx + rx * Math.cos(Math.PI + k / 24 * Math.PI * 2), cy + ry * Math.sin(Math.PI + k / 24 * Math.PI * 2));
+      api.tnComecar(p(0)); for (let k = 1; k <= n; k++) api.tnMover(p(k)); api.tnSoltar();
+    };
+    circ(150, 112, 80, 18);
+    const ct = api.tnTracos()[1];
+    ok(ct && ct.forma === "contorno" && ct.anc.i === 10 && ct.fim === 28 && ct.pts.length === 0, "O1 o círculo guarda as letras de dentro, em palavras inteiras (10 a 28): " + JSON.stringify(ct));
+    ok(ds().length === 2 && /^M/.test(ds()[1]), "O1a desenhado como elipse");
+    /* o mesmo círculo um pouco à direita: por dentro, começa no MEIO da palavra (letra 11) — o contorno volta ao começo dela */
+    api.tnDesfazer();
+    circ(158, 112, 80, 18);
+    ok(api.tnTracos()[1] && api.tnTracos()[1].anc.i === 10 && api.tnTracos()[1].fim === 28, "O1b começou no meio da palavra: o contorno pega a palavra inteira: " + JSON.stringify(api.tnTracos()[1] && [api.tnTracos()[1].anc.i, api.tnTracos()[1].fim]));
+    g.n = 20;
+    api.tnPintar();
+    ok(ds().length === 3, "O2 a frase quebrou: duas elipses, uma por linha: " + ds().length);
+    api.tnFerramenta("borracha");
+    api.tnComecar(ev(70, 112)); api.tnSoltar();
+    ok(api.tnContar() === 1 && !api.tnTracos().some((x) => x.forma), "O3 a borracha tira o contorno inteiro");
+    api.tnDesfazer(); api.tnDesfazer();
+    g.n = 50;
+    api.tnFerramenta("lapis");
+    /* um arco ABERTO (seta, meia-volta) não é contorno: fica como desenhado */
+    circ(150, 112, 80, 18, true);
+    ok(api.tnTracos()[1] && !api.tnTracos()[1].forma && api.tnTracos()[1].fim === undefined && api.tnTracos()[1].pts.length > 3, "O4 traço aberto continua desenho livre");
+    api.tnDesfazer();
+    ok(api.tnContar() === 1, "O5 de volta ao traço torto só");
+    /* O DEFEITO VISTO NO NAVEGADOR: circular a 2ª linha, com a borda de cima do círculo no vão entre as linhas — o canto
+     * da caixa em volta caía na 1ª linha e o contorno pegava letras dela. Só as de dentro contam. */
+    circ(150, 136, 80, 18);
+    const c2 = api.tnTracos()[1];
+    ok(c2 && c2.forma === "contorno" && c2.anc.i >= 50 && c2.fim <= 99, "O7 o contorno da 2ª linha não pega letras da 1ª: " + JSON.stringify(c2 && [c2.anc.i, c2.fim]));
+    api.tnDesfazer();
+    ok(api.tnDentro([5, 5], [[0, 0], [10, 0], [10, 10], [0, 10]]) && !api.tnDentro([15, 5], [[0, 0], [10, 0], [10, 10], [0, 10]]), "O8 dentro/fora do polígono");
+    /* um laço pequeno (uma letra "o" escrita à mão, um ponto caprichado) não é contorno */
+    circ(150, 112, 11.5, 8);
+    ok(api.tnTracos()[1] && !api.tnTracos()[1].forma, "O6 laço pequeno continua desenho livre");
+    api.tnDesfazer();
     /* a mão não desenha */
     api.tnFerramenta("mao");
     ok(api.tnComecar(ev(10, 110)) === false && !/tn-ativa/.test(svg().getAttribute("class")), "Q5 a mão não desenha e devolve o toque à página");
