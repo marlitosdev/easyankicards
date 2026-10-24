@@ -30,7 +30,7 @@ let jurValoresLidos = {};
 let jurParafraseColada = false;
 /* os campos do formulário (o relator existe no julgado, não na entrada) */
 const JUR_CAMPOS_FORM = { tribunal: "jurTribunal", classe: "jurClasse",
-  numero: "jurNumero", data: "jurData", orgao: "jurOrgao", fonte: "jurFonte",
+  numero: "jurNumero", tema: "jurTema", data: "jurData", orgao: "jurOrgao", fonte: "jurFonte",
   precedentes: "jurPrecedentes" };
 let jurFiltroTag = "";          /* etiqueta escolhida na lista */
 /* "ler" ou "incluir" — ver jurPintarModo */
@@ -162,7 +162,7 @@ function jurTrocarModo(m) {
 }
 
 function jurLimparForm() {
-  ["jurColar", "jurTese", "jurResumo", "jurTribunal", "jurClasse", "jurNumero",
+  ["jurColar", "jurTese", "jurResumo", "jurTribunal", "jurClasse", "jurNumero", "jurTema",
    "jurData", "jurOrgao", "jurFonte", "jurPrecedentes"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
@@ -404,7 +404,7 @@ function jurPintarPrincipal() {
 function jurPassoAtual() {
   if (jurLoteAtivo()) return 3;
   const tem = (id) => !!String(($(id) || {}).value || "").trim();
-  if (["jurTese", "jurTribunal", "jurClasse", "jurNumero", "jurResumo"].some(tem)) return 3;
+  if (["jurTese", "jurTribunal", "jurClasse", "jurNumero", "jurTema", "jurResumo"].some(tem)) return 3;
   return jurEstadoDaCaixa() === "vazia" ? 1 : 2;
 }
 
@@ -557,6 +557,7 @@ function jurColar() {
   põe("jurTribunal", a.tribunal);
   põe("jurClasse", a.classe);
   põe("jurNumero", a.numero);
+  põe("jurTema", a.tema);
   põe("jurData", a.data);
   põe("jurOrgao", a.orgao);
   põe("jurFonte", a.fonte);
@@ -687,7 +688,7 @@ async function jurSalvar() {
   /* (v18.52.0) ANTES DE CRIAR: já existe igual ou parecido? A pessoa vê e decide (usar o que existe, criar, voltar) */
   const eraNovo = !jurEditando;
   if (eraNovo && typeof jurParecidos === "function") {
-    const novo = { tribunal: v("jurTribunal"), classe: v("jurClasse"), numero: v("jurNumero"), tese, resumo: v("jurResumo") };
+    const novo = { tribunal: v("jurTribunal"), classe: v("jurClasse"), numero: v("jurNumero"), tema: v("jurTema"), tese, resumo: v("jurResumo") };
     const par = jurParecidos(novo);
     if (par.length) {
       const r = await jurConfirmarParecidos(novo, par, jurTopicoAtual.chave);
@@ -713,7 +714,7 @@ async function jurSalvar() {
     id: jurEditando || undefined,
     concurso: concursoJ,
     tribunal: v("jurTribunal"), classe: v("jurClasse"),
-    numero: v("jurNumero"), data: v("jurData"), orgao: v("jurOrgao"),
+    numero: v("jurNumero"), tema: v("jurTema"), data: v("jurData"), orgao: v("jurOrgao"),
     fonte: v("jurFonte"), precedentes: v("jurPrecedentes"),
     tese, texto, resumo: v("jurResumo"),
     /* a categoria vem da colagem ou é deduzida da classe na hora de
@@ -743,7 +744,10 @@ async function jurSalvar() {
   }
   /* Q3 — guardado pela ficha de um ramo: já fica ligado a ele (só o novo; editar não troca o ramo) */
   if (jurRamoAlvo && !jurEditando) jurLigarRamo(j.id, jurTopicoAtual.chave, jurRamoAlvo.id, jurRamoAlvo.nome);
-  if (eraNovo && jurLigarAoSalvar) jurLigarTrechoA(jurLigarAoSalvar, j);
+  if (eraNovo && jurLigarAoSalvar) {
+    if (jurLigarAoSalvar.cit) jurCitGarantirLink(jurLigarAoSalvar.cit, { chave: jurLigarAoSalvar.chave }, j);
+    else jurLigarTrechoA(jurLigarAoSalvar, j);
+  }
   jurLigarAoSalvar = null;
 
   reg("JURIS", jurEditando ? "julgado editado" : "julgado guardado",
@@ -868,8 +872,10 @@ function jurEditar(id) {
   /* editar é outro julgado: o selo da leitura anterior não vale mais */
   jurPilulaLimpar();
   const põe = (idc, v) => { if ($(idc)) $(idc).value = v || ""; };
-  põe("jurTribunal", j.tribunal); põe("jurClasse", j.classe);
-  põe("jurNumero", j.numero); põe("jurData", j.data);
+  /* (v19.6.0) o tema e o processo em campos separados: guardado à moda antiga, num campo só, já abre separado */
+  const sep = typeof jurSepararTemaProcesso === "function" ? jurSepararTemaProcesso(j) : null;
+  põe("jurTribunal", j.tribunal); põe("jurClasse", sep ? sep.classe : j.classe);
+  põe("jurNumero", sep ? sep.numero : j.numero); põe("jurTema", sep ? sep.tema : j.tema); põe("jurData", j.data);
   põe("jurOrgao", j.orgao); põe("jurFonte", j.fonte);
   põe("jurPrecedentes", j.precedentes);
   põe("jurTese", j.tese); põe("jurResumo", j.resumo); põe("jurColar", j.texto);
@@ -892,11 +898,18 @@ function jurEditar(id) {
   jurMeta(true);
   jurConteudoVisivel(true);
   jurBotaoSalvar();
+  /* (v19.6.0) o guardado num campo só abriu separado: dito, para a pessoa conferir antes de guardar */
+  if (sep && $("jurColarAviso")) {
+    $("jurColarAviso").hidden = false;
+    $("jurColarAviso").className = "ed-mud";
+    $("jurColarAviso").textContent = t("jur_ed_separado", { a: [j.classe, j.numero].join(" "), p: sep.classe + " " + sep.numero, t: sep.tema });
+  }
   /* (v18.36.0) a tese deste julgado veio da memória da IA: dito na hora de editar */
   if (j.deMemoria && $("jurColarAviso")) {
     $("jurColarAviso").hidden = false;
     $("jurColarAviso").className = "ed-mud";
-    $("jurColarAviso").textContent = t("jur_mem_editar_aviso", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
+    /* os dois avisos juntos: o de campos separados não pode sumir debaixo deste */
+    $("jurColarAviso").textContent = (sep ? $("jurColarAviso").textContent + " " : "") + t("jur_mem_editar_aviso", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
   }
   if ($("jurTese") && $("jurTese").focus) $("jurTese").focus();
 }
@@ -1536,8 +1549,9 @@ function jurPintarLista() {
     /* Q3 — o ramo deste julgado neste tópico */
     const rJ = jurRamoDe(j, jurTopicoAtual.chave);
     if (rJ) sel(t("qs_ramo_tag", { r: rJ.nome || rJ.id }), "ramo");
-    const proc = [j.classe, j.numero].filter(Boolean).join(" ");
-    if (proc) sel(proc, "proc");
+    const idp = jurIdentPartes(j);
+    if (idp.proc) sel(idp.proc, "proc");
+    if (idp.tema) sel("Tema " + idp.tema, "proc jur-sel-tema").title = t("jur_sel_tema_aj");
     /* DOIS PROCESSOS NUMA FICHA SÓ. Só aponta — dividir é decisão de
      * quem estuda, a mesma regra dos outros avisos desta tela. */
     if (typeof jurPareceDoisProcessos === "function" && jurPareceDoisProcessos(j)) {
@@ -1861,7 +1875,7 @@ function jurPintarLista() {
  * ------------------------------------------------------------------ */
 function jurCartaoDe(j, topico) {
   if (!j || !String(j.tese || "").trim()) return null;
-  const quem = [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")]
+  const quem = [j.tribunal, jurIdentTexto(j)]
     .filter(Boolean).join(" ");
   const frente = t("jur_card_frente", {
     q: quem ? "do " + quem : "do tribunal", tp: topico });
@@ -1936,7 +1950,7 @@ function jurCitPontoDeDiferenca(textos) {
   return i;
 }
 function jurCitNome(j) {
-  return [String(j.tribunal || "").trim(), [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  return [String(j.tribunal || "").trim(), jurIdentTexto(j)].filter(Boolean).join(" · ");
 }
 function jurCitTrecho(s, n) {
   const x = String(s || "").replace(/\s+/g, " ").trim();
@@ -1959,6 +1973,81 @@ function jurCitLink(c, base) {
     jurCitIr(c, base);
   };
   return b;
+}
+
+/* =====================================================================
+ * O JULGADO NASCIDO DE UMA CITAÇÃO, COM TEMA E PROCESSO (v19.6.0)
+ *
+ * O RELATO: "o ARE está com vínculo mas o tema aparece para preencher; ao tentar vincular não consigo". Criar pelo "Tema
+ * 1140" gravava o processo que a IA devolveu e perdia o tema — e o link do tema continuava "não guardado". Aqui:
+ *  · a identidade do novo junta o que a citação diz, o que a vizinha diz ("Tema 1140 (RE 1320054)") e o que a IA trouxe;
+ *  · depois de guardar, se a citação ainda não chega ao julgado sozinha, o trecho fica ligado a ele (nunca "não guardado"
+ *    logo depois de criar).
+ * ===================================================================== */
+function jurCitIdentidadeDe(c, ach) {
+  const a = ach || {};
+  const temaDe = (x) => (x && x.classe && jurEhTemaClasse(x.classe) ? jurNumChave(x.numero) : "");
+  const procDe = (x) => (x && x.classe && jurEhProcessoClasse(x.classe) ? x : null);
+  const citTema = temaDe(c) || temaDe(c && c._par);
+  const citProc = procDe(c) || procDe(c && c._par);
+  let classe = String(a.classe || "").trim() || (citProc ? citProc.classe : String((c && c.classe) || ""));
+  let numero = String(a.numero || "").trim() || (citProc ? String(citProc.numero) : jurSoDigitos(c && c.numero));
+  let tema = String(a.tema || "").trim();
+  if (jurEhTemaClasse(classe)) {
+    const tn = jurTemaNums(numero);
+    if (citProc && tn.length === 1) { tema = tn[0]; classe = citProc.classe; numero = String(citProc.numero); }
+    else tema = "";
+  } else if (jurEhProcessoClasse(classe) && !tema && citTema) tema = citTema;
+  return { classe, numero, tema };
+}
+/* a citação chega ao julgado j? Se não (outro número guardado, a IA trocou o processo), liga o trecho a ele */
+function jurCitGarantirLink(c, base, j) {
+  if (!c || !j || !String(c.texto || "").trim()) return null;
+  const ch = jurCitChave(base);
+  let ach = {};
+  try { ach = jurAcharCitado(Object.assign({}, c, { jurId: "" }), null, ch) || {}; } catch (e) { ach = {}; }
+  if (ach.julgado && ach.julgado.id === j.id) return null;
+  return jurLigarTrechoA({ trecho: c.texto, chave: ch }, j);
+}
+/* o catálogo oficial liga este tema a OUTRO processo? (aviso antes de juntar) — "" quando não sabe ou quando confere */
+function jurCitParConflito(temaCit, procCit, tribunal) {
+  try {
+    if (typeof jurCatPronto !== "function" || !jurCatPronto() || typeof jurCatEquivalentes !== "function") return "";
+    const eq = jurCatEquivalentes({ cc: "tema", numero: jurNumChave(temaCit.numero), tribunal: tribunal || temaCit.tribunal || "" })
+      .filter((e) => e.cc !== "tema");
+    if (!eq.length) return "";
+    const pc = jurClasseChave(procCit.classe), pn = jurNumChave(procCit.numero);
+    if (eq.some((e) => e.cc === pc && e.numero === pn)) return "";
+    return eq.map((e) => (e.classe || e.cc.toUpperCase()) + " " + e.numero).join(", ");
+  } catch (e) { return ""; }
+}
+/* JUNTAR na prévia: a citação "cit" passa a ser identidade do julgado j (o tema no campo tema, ou o processo) */
+function jurCitJuntarPar(cit, j, cOrig, base) {
+  if (!cit || !j) return false;
+  let r = { ok: false, motivo: "sem_dados" };
+  try { r = jurJuntarIdentidade(j.id, cit); } catch (e) { r = { ok: false, motivo: "gravar" }; }
+  if (!r.ok) {
+    const m = t("jur_cit_par_m_" + (["outro_tema", "tribunal", "ja_tem_processo", "varios_temas"].indexOf(r.motivo) >= 0 ? r.motivo : "outro"), { t: r.tema || "" });
+    try { toastMsg(t("jur_cit_par_falhou", { m }), 6000); } catch (e) {}
+    try { reg("JURIS", "juntar tema e processo recusado", (cit.texto || "") + " → " + jurCitNome(j) + " · " + r.motivo); } catch (e) {}
+    return false;
+  }
+  const jj = jurDe(j.id) || r.j;
+  try { reg("JURIS", "tema e processo juntados no mesmo julgado", (cit.texto || "") + " → " + jurCitNome(jj)); } catch (e) {}
+  const c0 = cOrig || cit;
+  let ach = { julgado: jj };
+  try { ach = jurAcharCitado(Object.assign({}, c0, { jurId: c0.jurId || "" }), null, jurCitChave(base)); } catch (e) {}
+  jurCitPreviewAbrir(c0, ach && ach.julgado ? ach : { julgado: jj }, base);
+  try { if (base && typeof base.aoVoltar === "function") base.aoVoltar(); } catch (e) {}
+  try { toastMsg(t("jur_cit_par_feito", { c: jurCitTitulo(cit), j: jurCitNome(jj) }), 6000); } catch (e) {}
+  return true;
+}
+/* o par desta citação ("Tema 1140" ao lado de "RE 1320054"): o que ele é e se está guardado */
+function jurCitParInfo(c, chave) {
+  if (!c || !c._par) return null;
+  let ach = { julgado: null };
+  try { ach = jurAcharCitado(c._par, null, chave) || { julgado: null }; } catch (e) {}
+  return { par: c._par, j: ach.julgado || null, amb: !!(ach.ambiguos && ach.ambiguos.length) };
 }
 
 let jurCitaAlvo = null;
@@ -2007,6 +2096,26 @@ function jurCitPreviewAbrir(c, ach, base) {
       if (lk) { const a = document.createElement("a"); a.href = lk.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "jur-oficial-lnk"; a.textContent = "↗ " + lk.nome; linha.append(" ", a); }
       corpo.append(linha);
     }
+    /* (v19.6.0) o vizinho citado junto ("Tema 1140" ao lado deste RE) ainda não abre este julgado: juntar num toque */
+    {
+      const pi = jurCitParInfo(c, jurCitChave(base));
+      const compl = pi && !pi.j && !pi.amb && ((jurEhTemaClasse(pi.par.classe) && jurEhProcessoClasse(j.classe) && !jurTemaNums(j.tema).length)
+        || (jurEhProcessoClasse(pi.par.classe) && jurEhTemaClasse(j.classe) && !jurIdentidadesDe(j).some((x) => x.paradigma)));
+      if (compl) {
+        bloco("", t("jur_cit_par_neste", { p: jurCitTitulo(pi.par), j: jurCitNome(j) }), "jur-cita-dica jur-cita-par");
+        const tm = jurEhTemaClasse(pi.par.classe) ? pi.par : c, pr = jurEhTemaClasse(pi.par.classe) ? c : pi.par;
+        const conf = jurCitParConflito(tm, pr, j.tribunal);
+        if (conf) bloco("", t("jur_cit_par_catalogo", { c: jurCitTitulo(tm), l: conf, p: jurCitTitulo(pr) }), "jur-cita-fora");
+        const bt = document.createElement("button");
+        bt.type = "button";
+        bt.className = "btn-min btn-min-ok";
+        bt.id = "btnJurCitaJuntar";
+        bt.textContent = t("jur_cit_par_juntar_neste", { p: jurCitTitulo(pi.par) });
+        bt.title = t("jur_cit_par_juntar_aj", { c: jurCitTitulo(pi.par), j: jurCitNome(j) });
+        bt.onclick = () => jurCitJuntarPar(pi.par, j, c, base);
+        corpo.append(bt);
+      }
+    }
     if (ach && ach.via === "paradigma") bloco("", t("jur_cit_via_paradigma", { c: $("jurCitaTit").textContent, j: jurCitNome(j) }), "jur-cita-dica");
     else if (ach && ach.via === "catalogo") bloco("", t("jur_cit_via_catalogo", { c: $("jurCitaTit").textContent, j: jurCitNome(j) }), "jur-cita-dica");
     else if (ach && ach.via === "cita") bloco("", t("jur_cit_via_cita", { c: $("jurCitaTit").textContent, j: jurCitNome(j) }), "jur-cita-dica");
@@ -2052,6 +2161,29 @@ function jurCitPreviewAbrir(c, ach, base) {
   } else {
     $("jurCitaMeta").textContent = "";
     bloco("", t("jur_cit_nao_guardado", { j: $("jurCitaTit").textContent }));
+    /* (v19.6.0) "Tema 1140 (RE 1320054)": o vizinho está guardado — é o mesmo precedente? juntar, em vez de criar outro */
+    const pi = jurCitParInfo(c, jurCitChave(base));
+    if (pi && pi.j) {
+      const pj = pi.j;
+      const compl = (jurEhTemaClasse(c.classe) && jurEhProcessoClasse(pj.classe) && !jurTemaNums(pj.tema).length)
+        || (jurEhProcessoClasse(c.classe) && jurEhTemaClasse(pj.classe) && !jurIdentidadesDe(pj).some((x) => x.paradigma));
+      if (compl) {
+        bloco("", t("jur_cit_par_dica", { c: $("jurCitaTit").textContent, p: jurCitTitulo(pi.par), j: jurCitNome(pj) }), "jur-cita-dica jur-cita-par");
+        const tm = jurEhTemaClasse(c.classe) ? c : pi.par, pr = jurEhTemaClasse(c.classe) ? pi.par : c;
+        const conf = jurCitParConflito(tm, pr, pj.tribunal);
+        if (conf) bloco("", t("jur_cit_par_catalogo", { c: jurCitTitulo(tm), l: conf, p: jurCitTitulo(pr) }), "jur-cita-fora");
+        const bt = document.createElement("button");
+        bt.type = "button";
+        bt.className = "btn-min btn-min-ok";
+        bt.id = "btnJurCitaJuntar";
+        bt.textContent = t("jur_cit_par_juntar");
+        bt.title = t("jur_cit_par_juntar_aj", { c: $("jurCitaTit").textContent, j: jurCitNome(pj) });
+        bt.onclick = () => jurCitJuntarPar(c, pj, c, base);
+        corpo.append(bt);
+      }
+    } else if (pi && !pi.amb) {
+      bloco("", t("jur_cit_par_ambos", { c: $("jurCitaTit").textContent, p: jurCitTitulo(pi.par) }), "jur-cita-dica jur-cita-par");
+    }
     /* (v18.94.0) o mesmo processo guardado em outra decisão ("REsp 123" × "AgRg no REsp 123"): não é ele, mas existe */
     if (ach && ach.parentes && ach.parentes.length) bloco("", t("jur_cit_parentes", { c: $("jurCitaTit").textContent, j: ach.parentes.map(jurCitNome).join("; ") }), "jur-cita-dica");
     const temTopico = !!(base && base.disciplina && base.topico);
@@ -2102,11 +2234,16 @@ function jurCitCriarNaGaveta() {
   if (!a || !a.base || !a.base.disciplina || !a.base.topico) return false;
   $("dlgJurCitaPreview").close();
   jurAbrir(a.base.disciplina, a.base.topico, "incluir");
-  if (a.base.ligarTrecho) jurLigarAoSalvar = { trecho: a.base.ligarTrecho, chave: jurCitChave(a.base) };
   const c = a.c;
-  if ($("jurTribunal")) $("jurTribunal").value = c.tribunal || JUR_CASA[c.classe] || "";
-  if ($("jurClasse")) $("jurClasse").value = c.classe || "";
-  if ($("jurNumero")) $("jurNumero").value = jurSoDigitos(c.numero);
+  /* (v19.6.0) o julgado que nasce de uma citação sempre abre por ela: se a identidade sozinha não chegar (a pessoa
+   * guardou outro número), o trecho fica ligado ao novo */
+  jurLigarAoSalvar = a.base.ligarTrecho ? { trecho: a.base.ligarTrecho, chave: jurCitChave(a.base) }
+    : { trecho: c.texto, chave: jurCitChave(a.base), cit: c };
+  const idc = jurCitIdentidadeDe(c, null);
+  if ($("jurTribunal")) $("jurTribunal").value = c.tribunal || JUR_CASA[idc.classe] || JUR_CASA[c.classe] || "";
+  if ($("jurClasse")) $("jurClasse").value = idc.classe || "";
+  if ($("jurNumero")) $("jurNumero").value = jurEhTemaClasse(idc.classe) ? jurSoDigitos(idc.numero) : String(idc.numero || "").trim();
+  if ($("jurTema")) $("jurTema").value = idc.tema || "";
   /* a identidade preenchida fica À VISTA (os campos moram numa parte recolhida), e o aviso diz de onde veio */
   if (typeof jurMeta === "function") jurMeta(true);
   const av = $("jurColarAviso");
@@ -2175,6 +2312,7 @@ function jurCitaPedido(a, ementa) {
     ctx: String(c._frase || c.texto || "").trim().slice(0, 1200),
     ementa_bloco: ementa ? t("jur_cn_ementa_bloco").replace("{ementa}", String(ementa).slice(0, 6000)) : "",
     regra_tese: t(ementa ? "jur_cn_regra_com_ementa" : "jur_cn_regra_sem_ementa"),
+    par: c._par ? t("jur_cn_par_bloco", { p: jurCitTitulo(c._par) }) : "",
   };
   return t("jur_prompt_citado").replace(/\{(\w+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vals, k) ? vals[k] : m));
 }
@@ -2241,10 +2379,13 @@ function jurCitaGuardar() {
   const resumo = String($("jurCitaResumo").value || "").trim();
   if (!tese && !resumo) return null;
   const ementa = String($("jurCitaEmenta").value || "").trim();
+  /* (v19.6.0) A IA DEVOLVEU O PROCESSO E A CITAÇÃO ERA O TEMA (ou o contrário): o julgado guarda os dois */
+  const idc = jurCitIdentidadeDe(c, ach);
   const dados = {
-    tribunal: ach.tribunal || c.tribunal || JUR_CASA[c.classe] || "",
-    classe: ach.classe || c.classe || "",
-    numero: ach.numero || jurSoDigitos(c.numero),
+    tribunal: ach.tribunal || c.tribunal || JUR_CASA[idc.classe] || JUR_CASA[c.classe] || "",
+    classe: idc.classe,
+    numero: idc.numero,
+    tema: idc.tema,
     tese, resumo, texto: ach.texto || ementa,
     data: ach.data || "", orgao: ach.orgao || "", relator: ach.relator || "",
     fonte: ach.fonte || "", precedentes: ach.precedentes || "", categoria: ach.categoria || "",
@@ -2259,7 +2400,7 @@ function jurCitaGuardar() {
   const par = typeof jurParecidos === "function" ? jurParecidos(dados) : [];
   if (par.length) {
     return jurConfirmarParecidos(dados, par, jurCitChave(a.base)).then((r) => {
-      if (r.acao === "usar") return jurCitaUsarExistente(r.id);
+      if (r.acao === "usar") return jurCitaUsarExistente(r.id, (par.filter((p) => p.j.id === r.id)[0] || {}).motivo);
       if (r.acao === "criar") return jurCitaGuardarFim(dados);
       return null;
     });
@@ -2267,12 +2408,19 @@ function jurCitaGuardar() {
   return jurCitaGuardarFim(dados);
 }
 
-function jurCitaUsarExistente(id) {
+function jurCitaUsarExistente(id, motivo) {
   const a = jurCitaAlvo;
   const j = jurDe(id);
   if (!a || !a.base || !j) return null;
   jurLigar(j.id, jurCitChave(a.base), a.base.disciplina, a.base.topico);
-  jurLigarTrechoA({ trecho: a.base.ligarTrecho || a.c.texto, chave: jurCitChave(a.base) }, j);
+  /* (v19.6.0) É O MESMO PRECEDENTE (mesma identidade): a citação que faltava — o tema, ou o processo — entra no julgado,
+   * e passa a abri-lo em todo o material, não só neste trecho. Parecido só pela tese não junta: só liga o trecho. */
+  if (!a.base.ligarTrecho && (motivo === "mesmo" || motivo === "numero")) {
+    try { jurJuntarIdentidade(j.id, a.c); } catch (e) {}
+    if (a.c._par) try { jurJuntarIdentidade(j.id, a.c._par); } catch (e) {}
+  }
+  if (a.base.ligarTrecho) jurLigarTrechoA({ trecho: a.base.ligarTrecho, chave: jurCitChave(a.base) }, j);
+  else jurCitGarantirLink(a.c, a.base, jurDe(j.id));
   try { reg("JURIS", "julgado já guardado reaproveitado pela citação", jurCitNome(j)); } catch (e) {}
   jurCitaLido = null;
   jurCitPreviewAbrir(a.c, { julgado: jurDe(j.id) }, a.base);
@@ -2288,6 +2436,7 @@ function jurCitaGuardarFim(dados) {
   if (!j) { $("jurCitaSem").textContent = t("qs_vinc_erro_gravar"); return null; }
   jurLigar(j.id, jurCitChave(a.base), a.base.disciplina, a.base.topico);
   if (a.base.ligarTrecho) jurLigarTrechoA({ trecho: a.base.ligarTrecho, chave: jurCitChave(a.base) }, j);
+  else jurCitGarantirLink(c, a.base, j);
   try { reg("JURIS", "julgado criado pela citação", jurCitNome(j) + (dados.deMemoria ? " · de memória (" + (dados.certeza || "?") + ")" : " · com ementa")); } catch (e) {}
   jurCitaLido = null;
   /* a prévia passa a mostrar o julgado; quem está atrás repinta (o link acha o julgado) */
@@ -2326,15 +2475,18 @@ function jurCitPendentes(txt, chave) {
     let ach = { julgado: null };
     try { ach = jurAcharCitado(c, null, chave); } catch (e) {}
     if (ach.julgado || (ach.ambiguos && ach.ambiguos.length)) return false;
+    const pi = jurCitParInfo(c, chave);
+    if (pi && pi.j) return false;
     const k = [c.tribunal, jurClasseChave(c.classe), jurNumChave(c.numero)].join("|");
     if (vistos[k]) return false;
     vistos[k] = true;
+    if (pi) vistos[[pi.par.tribunal || c.tribunal, jurClasseChave(pi.par.classe), jurNumChave(pi.par.numero)].join("|")] = true;
     return true;
   });
 }
 
 function jurCitLotePedido(pend, base) {
-  const lista = pend.map((c, i) => (i + 1) + ". " + jurCitTitulo(c) + (c.tribunal && jurCitTitulo(c).indexOf(c.tribunal) < 0 ? " (" + c.tribunal + ")" : "")
+  const lista = pend.map((c, i) => (i + 1) + ". " + jurCitTitulo(c) + (c._par ? " = " + jurCitTitulo(c._par) : "") + (c.tribunal && jurCitTitulo(c).indexOf(c.tribunal) < 0 ? " (" + c.tribunal + ")" : "")
     + " — " + t("jur_cl_trecho") + ": \"" + String(c._frase || c.texto || "").replace(/\s+/g, " ").trim().slice(0, 500) + "\"").join("\n");
   return t("jur_prompt_citados_lote").replace(/\{(\w+)\}/g, (m, k) => ({ tp: (base && base.topico) || "", lista, n: String(pend.length) }[k] !== undefined
     ? { tp: (base && base.topico) || "", lista, n: String(pend.length) }[k] : m));
@@ -2409,7 +2561,7 @@ function jurEscPintar() {
   const doT = (j) => !!k && (j.topicos || []).some((x) => jurChaveComparavel(x) === k);
   const q = jurSemAcento(String($("jurEscBusca").value || "")).toLowerCase().trim();
   let L = jurLista();
-  if (q) L = L.filter((j) => jurSemAcento([j.tribunal, j.classe, j.numero, j.tese, j.resumo, (j.tags || []).join(" ")].join(" ")).toLowerCase().indexOf(q) >= 0);
+  if (q) L = L.filter((j) => jurSemAcento([j.tribunal, j.classe, j.numero, j.tema ? "tema " + j.tema : "", j.tese, j.resumo, (j.tags || []).join(" ")].join(" ")).toLowerCase().indexOf(q) >= 0);
   L = L.filter(doT).concat(L.filter((j) => !doT(j))).slice(0, 40);
   const cx = $("jurEscLista");
   cx.innerHTML = "";
@@ -2485,6 +2637,7 @@ function citJuntarJulgados(txt, cits, chave) {
   let jcs = [];
   try { if (typeof jurTemCitacao === "function" && jurTemCitacao(txt)) jcs = jurCitacoesNoTexto(txt); } catch (e) { jcs = []; }
   try { if (typeof citVinculosAplicarJur === "function") jcs = citVinculosAplicarJur(txt, jcs, chave); } catch (e) {}
+  try { if (typeof jurParesTemaProcesso === "function") jurParesTemaProcesso(txt, jcs); } catch (e) {}
   jcs = jcs.map((j) => Object.assign(j, { _jur: true,
     _frase: String(txt || "").slice(Math.max(0, j.ini - 240), Math.min(String(txt || "").length, j.fim + 240)).trim() }));
   const sobre = (a, b) => a.ini < b.fim && b.ini < a.fim;
@@ -2987,7 +3140,7 @@ function jurBibFiltrados() {
     if (jurBib.sit === "rever" && !jurPrecisaRever(j)) return false;
     if (jurBib.sit === "fora" && !jurForaDeVigor(j)) return false;
     if (!q) return true;
-    const alvo = [j.tribunal, j.classe, j.numero, j.tese, j.resumo, (j.tags || []).join(" "),
+    const alvo = [j.tribunal, j.classe, j.numero, j.tema ? "tema " + j.tema : "", j.tese, j.resumo, (j.tags || []).join(" "),
       jurBibTopicosDe(j).map((x) => x.disciplina + " " + x.topico).join(" ")].join(" ");
     return jurSemAcento(alvo).toLowerCase().indexOf(q) >= 0;
   });
@@ -3107,8 +3260,9 @@ function jurBibLinha(j) {
   cab.className = "jur-cab";
   const sel = (txt, cls) => { const s = document.createElement("span"); s.className = "jur-sel " + cls; s.textContent = txt; cab.append(s); return s; };
   if (j.tribunal) sel(j.tribunal, "trib");
-  const proc = [j.classe, j.numero].filter(Boolean).join(" ");
-  if (proc) sel(proc, "proc");
+  const idp = jurIdentPartes(j);
+  if (idp.proc) sel(idp.proc, "proc");
+  if (idp.tema) sel("Tema " + idp.tema, "proc jur-sel-tema").title = t("jur_sel_tema_aj");
   const cat = j.categoria || (typeof jurCategoria === "function" ? jurCategoria(j.classe) : "");
   if (cat) sel(cat, "cat");
   cab.append(jurQualidadeChip(jurQualidade(j)));
@@ -3250,7 +3404,7 @@ function jurBibPintarEstudo() {
   if (!j) { jurBibEstudoSair(); return; }
   $("jurBibEstPos").textContent = t("jur_bib_est_pos", { i: e.i + 1, n: e.ids.length });
   if ($("jurBibEstProg")) $("jurBibEstProg").value = Math.round((e.i + 1) / e.ids.length * 100);
-  const quem = [j.tribunal, [j.classe, j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  const quem = [j.tribunal, jurIdentTexto(j)].filter(Boolean).join(" · ");
   $("jurBibEstFrente").textContent = t("jur_bib_est_frente", { q: quem || "?" });
   /* a frente: selo, categoria e os dados que não entregam a tese */
   const cab = $("jurBibEstCab");
@@ -3534,7 +3688,7 @@ function jurBibAtualPintar() {
     ck.disabled = x.situacao === "nao_sei";
     ck.onchange = () => { x.marcado = ck.checked; jurBibAtualPintarAplicar(); };
     const nome = document.createElement("b");
-    nome.textContent = [x.j.tribunal, [x.j.classe, x.j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ");
+    nome.textContent = [x.j.tribunal, jurIdentTexto(x.j)].filter(Boolean).join(" ");
     const s = document.createElement("span");
     s.className = "jur-sel jur-sit sit-" + x.situacao;
     s.textContent = t("jur_sit_" + x.situacao);
@@ -3627,7 +3781,7 @@ function jurBibCorrigirPintar() {
     ck.disabled = !x.mudancas.length;
     ck.onchange = () => { x.marcado = ck.checked; jurBibAtualPintarAplicar(); };
     const nome = document.createElement("b");
-    nome.textContent = [x.j.tribunal, [x.j.classe, x.j.numero].filter(Boolean).join(" ")].filter(Boolean).join(" ");
+    nome.textContent = [x.j.tribunal, jurIdentTexto(x.j)].filter(Boolean).join(" ");
     const s = document.createElement("span");
     s.className = "jur-sel jur-corr-conf conf-" + x.confere;
     s.textContent = t("jur_corrigir_conf_" + x.confere) + (x.certeza ? " · " + t("jur_cn_certeza_" + x.certeza) : "");

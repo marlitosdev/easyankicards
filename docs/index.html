@@ -1504,6 +1504,9 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .ger-criar-tag{font-size:11px;color:var(--atencao);white-space:nowrap}
 .ger-criar .nota{font-size:12px;margin:2px 0}
 #dlgJurCitaPreview.criando .jur-cita-dica{display:none}
+#dlgJurCitaPreview.criando #btnJurCitaJuntar{display:none}
+.jur-cita-par{border-left:3px solid var(--azul,#2563eb);padding-left:8px}
+#btnJurCitaJuntar{margin:0 0 10px}
 .jur-cita-bloco{margin:0 0 10px}
 .jur-cita-rot{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin-bottom:2px}
 .jur-cita-txt{white-space:pre-wrap;font-size:14px;line-height:1.45}
@@ -4024,6 +4027,8 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
   color:var(--atencao,#f59e0b);font-weight:700;cursor:help}
 .jur-sel.proc{background:var(--campo);color:var(--texto);
   border:1px solid var(--borda);font-weight:600}
+/* (v19.6.0) o tema ao lado do processo: o mesmo selo, com a borda da cor de destaque */
+.jur-sel.jur-sel-tema{border-color:var(--azul,#2563eb);color:var(--azul,#2563eb)}
 /* A TESE É O CONTEÚDO — e como citação, para não se confundir com a
    ementa logo abaixo, que tem a mesma tipografia. */
 .jur-tese{font-size:12.5px;line-height:1.55;margin:7px 0 2px;
@@ -7261,6 +7266,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <input type="text" id="jurClasse" placeholder="RE"></label>
     <label class="vk-lado"><span data-i18n="jur_c_numero"></span><em class="jur-origem" id="jurOrigem_numero"></em>
       <input type="text" id="jurNumero" placeholder="574706"></label>
+    <!-- (v19.6.0) o tema fixado neste processo: "RE 1320054" + "Tema 1140" é UM julgado, achado pelos dois -->
+    <label class="vk-lado" data-i18n-title="jur_c_tema_aj"><span data-i18n="jur_c_tema"></span><em class="jur-origem" id="jurOrigem_tema"></em>
+      <input type="text" id="jurTema" placeholder="1140"></label>
     <label class="vk-lado"><span data-i18n="jur_c_data" id="jurRotData"></span><em class="jur-origem" id="jurOrigem_data"></em>
       <input type="date" id="jurData"></label>
     <label class="vk-lado"><span data-i18n="jur_c_orgao"></span><em class="jur-origem" id="jurOrigem_orgao"></em>

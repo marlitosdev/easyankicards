@@ -254,7 +254,7 @@ function jurAchatar(o) {
 
 /* O QUE A IA DISSE DE MEMÓRIA, só as chaves que o app sabe usar. Nunca vem
  * tese aqui: a tese é do texto ou é da pessoa. */
-const JUR_CAMPOS_VERIFICAVEIS = ["tribunal", "classe", "numero", "data", "orgao",
+const JUR_CAMPOS_VERIFICAVEIS = ["tribunal", "classe", "numero", "tema", "data", "orgao",
   "relator", "fonte", "precedentes"];
 
 function jurDeMemoria(o) {
@@ -268,7 +268,7 @@ function jurDeMemoria(o) {
   };
   return {
     tribunal: pega("tribunal").toUpperCase(), classe: pega("classe"),
-    numero: pega("numero", "número"),
+    numero: pega("numero", "número"), tema: pega("tema"),
     data: pega("data_julgamento", "data"), orgao: pega("orgao", "órgao"),
     relator: pega("relator"), fonte: pega("fonte"),
     precedentes: (function () {
@@ -328,6 +328,9 @@ function jurAchadoDeObjeto(o) {
       if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean).join("; ");
       return v === undefined || v === null ? "" : String(v).trim();
     })(),
+    /* (v19.6.0) o tema fixado neste processo, ou o processo que fixou este tema */
+    tema: pega("tema", "tema_repercussao_geral", "tema_repetitivo", "numero_do_tema").replace(/^\s*tema\s*(?:n[º°o.]?\s*)?/i, ""),
+    paradigma: pega("processo_paradigma", "paradigma", "processo_que_fixou"),
     tese: pega("tese_curta", "tese", "ementa"),
     resumo: pega("resumo_prova", "resumo", "resumo_curto", "explicacao"),
     /* A EMENTA LIMPA, quando a IA a devolveu. É ela que vai para o
@@ -371,6 +374,14 @@ function jurAchadoDeObjeto(o) {
     compartilhado: o.texto_compartilhado === true,
   };
   if (!achado.texto && achado.trecho) achado.texto = achado.trecho;
+  /* (v19.6.0) "classe: Tema, numero: 1140, processo_paradigma: RE 1.320.054" → o processo na classe/número e o tema no
+   * campo dele: os dois nítidos, como a pessoa os cita */
+  if (jurEhTemaClasse(achado.classe) && achado.paradigma) {
+    const pp = jurProcessosNoTexto(achado.paradigma)[0];
+    const tn = jurTemaNums(achado.numero);
+    if (pp && tn.length === 1) { achado.tema = tn[0]; achado.classe = pp.classe; achado.numero = pp.numero; }
+  }
+  if (achado.tema && jurEhTemaClasse(achado.classe)) achado.tema = "";
   /* DATA SÓ SE FOR DATA: a caixa da tela é <input type="date"> e só
    * entende aaaa-mm-dd. Um ano solto vai para o campo do ano. */
   if (!/^\d{4}-\d{2}-\d{2}$/.test(achado.data)) {
@@ -456,7 +467,7 @@ function jurValorNoTexto(campo, valor, base) {
       + JUR_MESES[Number(m[2]) - 1] + "\\s*(?:de|do)?\\s*" + ano);
     return extenso.test(bn);
   }
-  if (campo === "numero") {
+  if (campo === "numero" || campo === "tema") {
     const d = v.replace(/\D+/g, "");
     if (!d) return bn.indexOf(jurSemAcento(v)) >= 0;
     /* por FICHAS numéricas do texto ("574.706/PR" -> 574706): remover os
@@ -753,7 +764,8 @@ function jurSemMarcacao(txt) {
 function jurTitulo(j) {
   if (!j) return "";
   const partes = [j.tribunal, j.classe, j.numero].filter(Boolean);
-  if (partes.length) return partes.join(" ");
+  /* (v19.6.0) com o tema fixado no processo: "STF RE 1320054 · Tema 1140" */
+  if (partes.length) return partes.join(" ") + (String(j.tema || "").trim() && !jurEhTemaClasse(j.classe) ? " · Tema " + String(j.tema).trim() : "");
   return String(j.tese || j.texto || "").replace(/\s+/g, " ").slice(0, 60)
     || "(sem identificação)";
 }
@@ -776,7 +788,7 @@ function jurGravar(dados0) {
   const id = dados.id || jurId(dados);
   const antigo = tudo[id] || {};
   const r = Object.assign({
-    id, tribunal: "", classe: "", numero: "", orgao: "", relator: "",
+    id, tribunal: "", classe: "", numero: "", tema: "", orgao: "", relator: "",
     data: "", tese: "", texto: "", fonte: "", precedentes: "", concurso: "", topicos: [], tags: [],
     /* O RESUMO É UM CAMPO À PARTE, e essa separação é o ponto.
      *
@@ -946,6 +958,13 @@ function jurPalavrasTese(j) {
   const s = jurSemAcento(String([j && j.tese, j && j.resumo].filter(Boolean).join(" "))).toLowerCase();
   return new Set(s.replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 3 && !JUR_PAL_VAZIAS.has(w)));
 }
+function jurMesmaIdentidade(a, b) {
+  const ka = jurIdentidadesDe(a).map((x) => x.cc + "|" + x.numero);
+  if (!ka.length) return false;
+  if (jurIdentidadesDe(b).some((x) => ka.indexOf(x.cc + "|" + x.numero) >= 0)) return true;
+  try { if (typeof jurRepetidosDe === "function" && typeof jurCatPronto === "function" && jurCatPronto()) return jurRepetidosDe(a, [b]).length > 0; } catch (e) {}
+  return false;
+}
 function jurParecidos(novo, lista, opc) {
   if (!novo) return [];
   const L = (lista || jurLista()).filter((j) => j && j.id && j.id !== novo.id);
@@ -959,6 +978,8 @@ function jurParecidos(novo, lista, opc) {
     const triOk = !triN || !triJ || triN === triJ;
     let motivo = "", pct = 0;
     if (numN && numN === numJ && clsN && clsN === clsJ && triOk) { motivo = "mesmo"; pct = 100; }
+    /* (v19.6.0) "Tema 1140" × o "RE 1320054" guardado com o tema 1140 (ou o catálogo dizendo que são o mesmo) */
+    else if (triOk && jurMesmaIdentidade(novo, j)) { motivo = "mesmo"; pct = 100; }
     else if (numN.length >= 3 && numN === numJ && (!clsN || !clsJ) && triOk) { motivo = "numero"; pct = 95; }
     else {
       const pJ = jurPalavrasTese(j);
@@ -1625,6 +1646,9 @@ function jurIdentidadesDe(j) {
     vistos[cc + "|" + n] = true;
     out.push({ classe, numero: n, cc, paradigma: !!paradigma });
   };
+  /* (v19.6.0) O TEMA FIXADO NESTE PROCESSO, num campo próprio: "ARE 1.234.567" que fixou o "Tema 1140" é UM julgado com
+   * DUAS identidades — quem cita o tema e quem cita o processo chegam ao mesmo lugar */
+  jurTemaNums(j.tema).forEach((x) => poe("Tema", x));
   const classe = String(j.classe || "").trim();
   const numero = String(j.numero || "").trim();
   const cc = jurClasseChave(classe);
@@ -1650,6 +1674,104 @@ function jurIdentidadesDe(j) {
   return out;
 }
 function jurNumChave(n) { return jurSoDigitos(n).replace(/^0+/, ""); }
+
+/* =====================================================================
+ * TEMA + PROCESSO NO MESMO JULGADO (v19.6.0)
+ *
+ * O RELATO: "o ARE está com vínculo mas o tema aparece para preencher; ao tentar vincular não consigo". O julgado guardado
+ * era o processo (ARE, RE, REsp) e o tema que ele fixou não estava em lugar nenhum — a citação "Tema 1140" não achava
+ * nada, e criar a partir dela gravava o processo que a IA devolveu e perdia o tema: o link continuava "não guardado".
+ * Agora o julgado tem o campo TEMA ao lado de classe e número, e os dois são identidade.
+ * ===================================================================== */
+/* "1140", "Tema 1.140", "863 / 827" → ["1140"], ["863", "827"] */
+function jurTemaNums(s) {
+  return String(s || "").replace(/\([^)]*\)/g, " ").replace(/^\s*tema\s*(?:n[º°o.]?\s*)?/i, "")
+    .split(/\s*(?:\/|;|,|\be\b)\s*/).map((x) => x.replace(/^\s*tema\s*/i, "").trim())
+    .filter((x) => /^\d[\d.]*$/.test(x)).map(jurNumChave).filter(Boolean);
+}
+function jurEhTemaClasse(classe) { return jurClasseChave(classe) === "tema"; }
+/* um processo (não súmula, não tema): é o que pode carregar um tema */
+function jurEhProcessoClasse(classe) {
+  const cc = jurClasseChave(classe);
+  return !!cc && cc !== "tema" && cc !== "sumula" && cc !== "sumula vinculante";
+}
+/* o julgado guardado como "Tema 1134 (REsp 1.914.902/SP)" — tudo num campo — vira os dois campos nítidos:
+ * {tema: "1134", classe: "REsp", numero: "1.914.902/SP"}. Só com UM tema e UM processo; senão null (fica como está). */
+function jurSepararTemaProcesso(j) {
+  if (!j || !jurEhTemaClasse(j.classe) || String(j.tema || "").trim()) return null;
+  const num = String(j.numero || "");
+  const temas = jurTemaNums(num);
+  const dentro = (num.match(/\(([^)]*)\)/g) || []).join(" ");
+  const procs = dentro ? jurProcessosNoTexto(dentro) : [];
+  if (temas.length !== 1 || procs.length !== 1) return null;
+  const uf = (dentro.match(new RegExp(procs[0].numero.replace(/[.*+?^$(){}|[\]\\]/g, "\\$&") + "\\s*(\\/\\s*[A-Z]{2})(?![A-Za-z])")) || [])[1] || "";
+  return { tema: temas[0], classe: procs[0].classe, numero: procs[0].numero + uf.replace(/\s+/g, "") };
+}
+/* a identidade para LER, em duas partes nítidas: {proc: "RE 1320054", tema: "1140"}. O guardado à moda antiga — "Tema 1134
+ * (REsp 1.914.902/SP)" num campo só — também sai separado. */
+function jurIdentPartes(j) {
+  if (!j) return { proc: "", tema: "" };
+  const sp = jurSepararTemaProcesso(j);
+  const x = sp ? Object.assign({}, j, sp) : j;
+  const proc = [x.classe, x.numero].filter((v) => String(v || "").trim()).join(" ");
+  const tm = String(x.tema || "").trim() && !jurEhTemaClasse(x.classe) ? (jurTemaNums(x.tema).join(" / ") || String(x.tema).trim()) : "";
+  return { proc, tema: tm };
+}
+/* "RE 1320054 · Tema 1140" (os dois, quando há os dois) */
+function jurIdentTexto(j) {
+  const p = jurIdentPartes(j);
+  return [p.proc, p.tema ? "Tema " + p.tema : ""].filter(Boolean).join(" · ");
+}
+
+/* O TEMA E O PROCESSO CITADOS JUNTOS: "Tema 1140 (RE 1320054)", "Tema 211 do STF - RE 648.245", "RE 688.223 / Tema 590".
+ * Cada citação de julgado ganha _par: a vizinha COMPLEMENTAR (um é tema, o outro é processo) separada só por pontuação —
+ * é o mesmo precedente escrito duas vezes. Tema ao lado de tema, ou súmula, não formam par. */
+const JUR_PAR_ENTRE = /^[\s\-–—\/,:;()]*(?:(?:d[ae]\s+)?(?:repercuss[ãa]o\s+geral|rg)\b[\s\-–—\/,:;()]*)?(?:(?:fixado|firmado|julgado)\s+no\s*)?$/i;
+function jurParesTemaProcesso(txt, jcs) {
+  const s = String(txt || "");
+  const L = (jcs || []).filter((c) => c && c.classe && c.numero && !c.jurId).slice().sort((a, b) => a.ini - b.ini);
+  const tipo = (c) => jurEhTemaClasse(c.classe) ? "tema" : jurEhProcessoClasse(c.classe) ? "proc" : "";
+  for (let i = 0; i + 1 < L.length; i++) {
+    const a = L[i], b = L[i + 1];
+    const ta = tipo(a), tb = tipo(b);
+    if (!ta || !tb || ta === tb) continue;
+    if (a.tribunal && b.tribunal && a.tribunal !== b.tribunal) continue;
+    if (!JUR_PAR_ENTRE.test(s.slice(a.fim, b.ini))) continue;
+    const par = (x) => ({ classe: x.classe, numero: x.numero, tribunal: x.tribunal || "", texto: x.texto, ini: x.ini, fim: x.fim });
+    if (!a._par) a._par = par(b);
+    if (!b._par) b._par = par(a);
+  }
+  return jcs;
+}
+
+/* JUNTAR no julgado guardado a outra identidade do MESMO precedente, citada junto:
+ *  · o julgado é o processo e a citação é o tema → o tema vai para o campo "tema";
+ *  · o julgado é o tema e a citação é o processo → o processo vai para classe/número e o tema para o campo "tema".
+ * Devolve {ok, j} ou {ok:false, motivo}. Nada é apagado: só se preenche o que faltava. */
+function jurJuntarIdentidade(id, cit) {
+  const j = jurDe(id);
+  if (!j || !cit || !cit.numero) return { ok: false, motivo: "sem_dados" };
+  if (cit.tribunal && j.tribunal && String(j.tribunal).toUpperCase() !== String(cit.tribunal).toUpperCase()) return { ok: false, motivo: "tribunal" };
+  const n = jurNumChave(cit.numero);
+  if (jurEhTemaClasse(cit.classe)) {
+    if (!jurEhProcessoClasse(j.classe)) return { ok: false, motivo: "nao_e_processo" };
+    const tem = jurTemaNums(j.tema);
+    if (tem.indexOf(n) >= 0) return { ok: true, j, ja: true };
+    if (tem.length) return { ok: false, motivo: "outro_tema", tema: String(j.tema) };
+    const r = jurGravar({ id: j.id, tema: n });
+    return r ? { ok: true, j: r } : { ok: false, motivo: "gravar" };
+  }
+  if (jurEhProcessoClasse(cit.classe)) {
+    if (!jurEhTemaClasse(j.classe)) return { ok: false, motivo: "nao_e_tema" };
+    const temas = jurTemaNums(j.numero);
+    if (temas.length !== 1) return { ok: false, motivo: "varios_temas" };
+    if (jurIdentidadesDe(j).some((x) => x.paradigma)) return { ok: false, motivo: "ja_tem_processo" };
+    const r = jurGravar({ id: j.id, tema: temas[0], classe: cit.classe, numero: String(cit.numero).trim(),
+      tribunal: j.tribunal || cit.tribunal || JUR_CASA[cit.classe] || "" });
+    return r ? { ok: true, j: r } : { ok: false, motivo: "gravar" };
+  }
+  return { ok: false, motivo: "nao_complementar" };
+}
 
 function jurCitacoesNoTexto(texto) {
   const s = String(texto || "");
