@@ -5933,6 +5933,8 @@ function leiUsarExistente(igual, txt, comparar) {
  * ===================================================================== */
 let leiBibFiltro = "todas";
 let leiBibTexto = "";
+/* (v19.12.0) a pasta escolhida na fileira (pastas.js): "" = todas; "ed:<concurso>" = a do edital; senão, a livre */
+let leiBibPasta = "";
 let leiBibMeta = {};
 
 function leiConcursoAtualNome() {
@@ -5978,6 +5980,7 @@ function leiBibLista() {
   const atual = leiConcursoAtualNome();
   const q = leiTxtChave(leiBibTexto);
   return leisLista().map((l) => ({ l, usos: leiUsosDaLei(l, idx) })).filter(({ l, usos }) => {
+    if (leiBibPasta && typeof pasContem === "function" && !pasContem(leiBibPasta, { t: "lei", id: l.id, topicos: l.topicos || [] }, idx)) return false;
     if (leiBibFiltro === "sem" && usos.length) return false;
     if (leiBibFiltro === "concurso" && !(atual && usos.some((u) => u.concurso === atual))) return false;
     if (!q) return true;
@@ -6024,6 +6027,13 @@ function leiBibPintar() {
     if (f === "concurso") b.title = atual ? t("lei_bib_f_concurso_aj", { c: atual }) : t("lei_bib_f_concurso_sem");
   });
   const todas = leisLista();
+  /* (v19.12.0) as pastas: a fileira acima da lista (uma pasta apagada deixa de estar escolhida) */
+  if (typeof pasFileira === "function" && $("leiBibPastas")) {
+    const idxP = typeof pasIndice === "function" ? pasIndice() : null;
+    if (leiBibPasta && !pasTodas(idxP).some((p) => p.id === leiBibPasta)) leiBibPasta = "";
+    pasFileira({ cx: $("leiBibPastas"), idx: idxP, itens: todas.map((l) => ({ t: "lei", id: l.id, topicos: l.topicos || [] })), sel: leiBibPasta,
+      escolher: (id) => { leiBibPasta = id; leiBibPintar(); } });
+  }
   const lista = leiBibLista();
   const semVinculo = todas.filter((l) => !(l.topicos || []).length).length;
   $("leiBibResumo").textContent = t("lei_bib_resumo", { n: lista.length, v: semVinculo });
@@ -6120,6 +6130,8 @@ function leiBibCartao({ l, usos }) {
   }
   mk("btnLeiBibMapa", "lei_mapa_btn", () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); leiMapaAbrir(); });
   mk("btnLeiBibLigar", "lei_bib_vincular", () => leiTopicoAbrir(l));
+  /* (v19.12.0) em que pastas está (e pôr/tirar) */
+  if (typeof pasBotaoItem === "function") acoes.append(pasBotaoItem("lei", l.id, l.nome, () => leiBibPintar()));
   mk("btnLeiBibApagar", "lei_bib_apagar", () => leiBibApagar(l), "btn-min-perigo");
   card.append(acoes);
   return card;

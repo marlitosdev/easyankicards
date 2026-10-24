@@ -3123,6 +3123,8 @@ function jurBibFiltrados() {
     /* (v18.95.0) pelo selo de qualidade */
     if (/^q_/.test(jurBib.sit || "") && jurQualidade(j, { lista: todos }).nivel !== jurBib.sit.slice(2)) return false;
     if (jurBib.trib && String(j.tribunal || "") !== jurBib.trib) return false;
+    /* (v19.12.0) a pasta escolhida (pastas.js) */
+    if (jurBib.pasta && typeof pasContem === "function" && !pasContem(jurBib.pasta, { t: "jur", id: j.id, topicos: j.topicos || [] }, jurBib._idx)) return false;
     /* (v18.96.0) pelo assunto: "d:<disciplina>" (todos os tópicos dela) ou "t:<chave do tópico>" */
     if (jurBib.assunto) {
       const tops = jurBibTopicosDe(j);
@@ -3149,7 +3151,8 @@ function jurBibFiltrados() {
 function jurBibAbrir(opc) {
   if (!$("dlgJurBib")) return false;
   const o = opc || {};
-  jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", assunto: o.assunto || "", tag: o.tag || "", grupo: "topico", estudo: null, ligando: "", atual: false };
+  jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", assunto: o.assunto || "", tag: o.tag || "", grupo: "topico", estudo: null, ligando: "", atual: false,
+    pasta: o.pasta || (jurBib && jurBib.pasta) || "" };
   /* (v18.96.0) tela cheia por padrão (a escolha é lembrada) */
   jurBibCheiaTrocar(jurBibCheiaPreferida(), false);
   $("jurBibBusca").value = jurBib.busca;
@@ -3166,6 +3169,13 @@ function jurBibAbrir(opc) {
 function jurBibPintar() {
   if (!$("dlgJurBib")) return;
   const todos = jurLista();
+  /* (v19.12.0) as pastas: a fileira acima da lista */
+  if (typeof pasFileira === "function" && $("jurBibPastas")) {
+    jurBib._idx = typeof pasIndice === "function" ? pasIndice() : null;
+    if (jurBib.pasta && !pasTodas(jurBib._idx).some((p) => p.id === jurBib.pasta)) jurBib.pasta = "";
+    pasFileira({ cx: $("jurBibPastas"), idx: jurBib._idx, itens: todos.map((j) => ({ t: "jur", id: j.id, topicos: j.topicos || [] })), sel: jurBib.pasta,
+      escolher: (id) => { jurBib.pasta = id; jurBibPintar(); } });
+  }
   /* tribunais: só os que existem */
   const st = $("jurBibTrib");
   const tribs = [...new Set(todos.map((j) => String(j.tribunal || "").trim()).filter(Boolean))].sort();
@@ -3318,6 +3328,8 @@ function jurBibLinha(j) {
   bL.title = t("jur_bib_ligar_aj");
   bL.onclick = () => { jurBib.ligando = jurBib.ligando === j.id ? "" : j.id; jurBibPintar(); };
   tps.append(bL);
+  /* (v19.12.0) em que pastas está (e pôr/tirar) */
+  if (typeof pasBotaoItem === "function") tps.append(pasBotaoItem("jur", j.id, jurTitulo(j), () => jurBibPintar()));
   if (jurBib.ligando === j.id) {
     const ja = new Set((j.topicos || []).map(jurChaveComparavel));
     const op = (typeof matListaCheia === "function" ? matListaCheia() : [])

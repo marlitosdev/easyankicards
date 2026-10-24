@@ -65,7 +65,9 @@ const BK_CHAVES = {
              /* (v19.8.0) as marcas do lápis: moram no IndexedDB e só entram com a opção ligada (tnParaBackup) */
              "eac_tinta",
              /* (v19.11.0) as seções do resumo já lidas: o trabalho de saber o que falta ler */
-             "eac_mat_lidas"],
+             "eac_mat_lidas",
+             /* (v19.12.0) as pastas livres de leis e julgados (só nomes e atalhos) */
+             "eac_pastas"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
    *
    * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de

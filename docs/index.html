@@ -1531,6 +1531,17 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .tn-perigo{color:var(--erro,#d1495b)}
 .tn-sep{width:1px;height:22px;background:var(--borda);margin:0 2px}
 .tn-esp{width:84px}
+/* (v19.12.0) PASTAS */
+.pas-fileira{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+.pas-fileira:empty{display:none}
+.pas-chip.pas-edital{border-style:dashed}
+.pas-chip.pas-nova{color:var(--acao,#2563eb)}
+.pas-lista{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.pas-li{display:flex;align-items:center;gap:6px}
+.pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
+.pas-ren{flex:1}
+.pas-nova{display:flex;gap:6px;margin:8px 0}
+.pas-nova input{flex:1}
 /* (v19.11.0) SEÇÕES JÁ LIDAS: ○ ✓ ↻ ao lado do título e a faixa do topo */
 .rls-bt{margin-left:8px;font-size:12px;font-weight:600;vertical-align:middle;border:1px solid var(--borda);background:var(--campo);
   color:var(--sutil);border-radius:999px;min-width:26px;height:22px;padding:0 7px;cursor:pointer;line-height:1}
@@ -8791,6 +8802,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- (v18.95.0) a qualidade da coleção: um botão por selo, com a contagem (tocar filtra) -->
     <div id="jurBibQualidade" class="jur-bib-qualidade"></div>
     <p class="nota" id="jurBibMsg" role="status"></p>
+    <!-- (v19.12.0) as pastas: de edital (automáticas) e livres -->
+    <div id="jurBibPastas" class="pas-fileira" role="group"></div>
   </div>
   <div id="jurBibLista" class="jur-bib-lista"></div>
   <!-- JM4: a jurisprudência continua valendo? -->
@@ -9296,6 +9309,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <button class="btn-min" id="btnLixVer" data-i18n="lix_ver"></button>
 </div>
 
+<!-- (v19.12.0) AS PASTAS DE UM ITEM: marcar em quais pastas livres ele está; criar, renomear, apagar pasta -->
+<dialog id="dlgPastas" class="ui-modal">
+  <h3 id="pasTit"></h3>
+  <p class="nota" data-i18n="pas_dlg_exp"></p>
+  <div id="pasLista" class="pas-lista"></div>
+  <div class="pas-nova">
+    <input type="text" id="pasNovaNome" maxlength="60" data-i18n-ph="pas_nova_ph">
+    <button type="button" class="btn-min btn-min-ok" id="btnPasCriar" data-i18n="pas_criar"></button>
+  </div>
+  <p class="nota" id="pasEditais"></p>
+  <p class="nota" id="pasMsg" role="status"></p>
+  <div class="dlg-rodape"><button type="button" class="btn btn-cinza" id="btnPasFechar" data-i18n="pas_fechar"></button></div>
+</dialog>
 <dialog id="dlgLeiBib" class="ui-modal diag-modal">
   <div class="vka-cab">
     <h3 data-i18n="lei_bib_titulo"></h3>
@@ -9312,6 +9338,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min" id="btnLeiBibDecisoes" data-i18n="dec_botao" data-i18n-title="dec_botao_aj"></button>
     </span>
   </div>
+  <!-- (v19.12.0) as pastas: de edital (automáticas) e livres -->
+  <div id="leiBibPastas" class="pas-fileira" role="group"></div>
   <p class="nota" id="leiBibResumo"></p>
   <div id="leiBibDup" hidden>
     <button class="btn-min btn-min-perigo" id="btnLeiBibDup"></button>
@@ -10834,6 +10862,7 @@ window.__sqlPromise = initSqlJs({
 <script src="juris-ia.js"></script>
 <script src="ia-consumo.js"></script>
 <script src="juris-ui.js"></script>
+<script src="pastas.js"></script>
 <script src="pre-edital.js"></script>
 <script src="prompts-cartao.js"></script>
 <script src="cartoes-material.js"></script>
