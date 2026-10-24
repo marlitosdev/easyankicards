@@ -60,6 +60,22 @@ function plTextoDaQuestao(q, opc) {
   return L.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/* (v19.4.0) O PEDIDO PARA UMA IA COMENTAR A QUESTÃO — no mesmo molde do "copiar": a questão com o gabarito (e o
+ * comentário, se houver, para a IA não contradizê-lo sem dizer), mais as regras do comentário. A citação de lei é
+ * pedida no formato que o app reconhece ("art. 113, § 3º, do CTN"): colada como dica, ela vira link para a lei. */
+function plPromptComentar(q) {
+  if (!q) return "";
+  const alvo = [q.concurso, q.banca].filter(Boolean).join(" · ");
+  return [
+    t("pl_ia_cab", { a: alvo || t("pl_ia_sem_alvo") }),
+    "",
+    t("pl_ia_regras"),
+    "",
+    "=== " + t("pl_ia_questao") + " ===",
+    plTextoDaQuestao(q, { gabarito: true, dica: false }),
+  ].join("\n");
+}
+
 /* A barra de copiar: o botão e as duas caixas, lado a lado. As caixas
  * ficam VISÍVEIS, não escondidas atrás de um menu — a escolha muda o que
  * vai para a área de transferência, e escolha invisível vira surpresa. */
@@ -108,5 +124,5 @@ function plBarraCopiar(q) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { plBarraCopiar, plTextoDaQuestao };
+  module.exports = { plBarraCopiar, plTextoDaQuestao, plPromptComentar };
 }
