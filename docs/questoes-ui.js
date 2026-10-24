@@ -4674,6 +4674,8 @@ function qsUiFerramentas(q) {
     const bDes = qsUiMoverDesfazerBotao(q, () => { qsFerFechar(); qsUiPintarSessao(); });
     if (bDes) menu.append(bDes);
   }
+  /* (v19.8.0) as marcas do lápis guardadas: quanto ocupam, backup sim/não, apagar todas */
+  try { menu.append(tnGuardadasBotao()); } catch (e) {}
   const dQ = qsDefeitos(q);
   const bMelhorar = document.createElement("button");
   bMelhorar.type = "button";

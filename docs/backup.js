@@ -61,7 +61,9 @@ const BK_CHAVES = {
    * perda, porque a tela depois parece apenas "vazia", não quebrada. */
   material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
              "eac_leis", "eac_cit_vinculos", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei", "eac_lixeira",
-             "eac_decisoes", "eac_decisoes_resumo"],
+             "eac_decisoes", "eac_decisoes_resumo",
+             /* (v19.8.0) as marcas do lápis: moram no IndexedDB e só entram com a opção ligada (tnParaBackup) */
+             "eac_tinta"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
    *
    * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de
@@ -118,6 +120,7 @@ function bkAguardarGravacoes() {
   const p = [];
   try { if (typeof _leisGravando !== "undefined" && _leisGravando) p.push(_leisGravando); } catch (e) {}
   try { if (typeof _decGravando !== "undefined" && _decGravando) p.push(_decGravando); } catch (e) {}
+  try { if (typeof _tnGravando !== "undefined" && _tnGravando) p.push(_tnGravando); } catch (e) {}
   try { if (typeof _jurGravando !== "undefined" && _jurGravando) p.push(_jurGravando); } catch (e) {}
   return Promise.all(p).then(() => p.length, () => p.length);
 }
@@ -127,7 +130,8 @@ function montarBackup() {
   Object.keys(BK_CHAVES).forEach((grupo) => {
     dados[grupo] = {};
     BK_CHAVES[grupo].forEach((k) => {
-      const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : k === "eac_juris" ? bkLerJuris() : bkLer(k);
+      const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : k === "eac_juris" ? bkLerJuris()
+        : k === "eac_tinta" ? (typeof tnParaBackup === "function" ? tnParaBackup() : null) : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
   });
@@ -270,6 +274,10 @@ function restaurarBackup(bk) {
     /* (JM6) os julgados também passam pela função (que sabe gravar no IndexedDB, se já migrou) */
     if (k === "eac_juris" && typeof jurGravarTudo === "function") {
       try { const o = JSON.parse(v) || {}; if (o && typeof o === "object" && !Array.isArray(o)) jurGravarTudo(o); } catch (e) {}
+      return;
+    }
+    if (k === "eac_tinta") {
+      try { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(JSON.parse(v) || {}); } catch (e) {}
       return;
     }
     if (k === "eac_decisoes" && typeof decDefinirTudo === "function") {

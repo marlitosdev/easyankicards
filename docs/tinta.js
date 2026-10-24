@@ -22,8 +22,9 @@
  * (Um sublinhado que atravessa duas linhas ainda pode ficar torto depois de
  * um refluxo grande: virar marca de texto de verdade é a fase seguinte.)
  *
- * QUANTO DURA: como o grifo — por questão, enquanto a sessão dura (ir e
- * voltar entre questões mantém os traços). Guardar para sempre é outra fase.
+ * QUANTO DURA: por questão, enquanto a sessão dura (ir e voltar entre questões
+ * mantém os traços). DESDE A v19.8.0, alguns ficam guardados — ver "GUARDAR NA
+ * QUESTÃO", abaixo.
  *
  * CANETA DE TABLET: quando o app vê uma caneta (pointerType "pen"), a mão
  * apoiada na tela deixa de riscar e o dedo volta a rolar a página.
@@ -306,18 +307,28 @@ function tnOrigem(anc) {
 
 /* ---------- modelo por questão ---------- */
 function tnTracos(qid) { return tnPorQuestao[qid || tnQid] || []; }
-function tnGuardarTracos(qid, lista) { if (qid) tnPorQuestao[qid] = lista || []; }
+function tnGuardarTracos(qid, lista, opc) {
+  if (!qid) return;
+  tnPorQuestao[qid] = lista || [];
+  if (!(opc && opc.semSinc)) tnSincronizar(qid, tnQuestaoDe(qid));
+}
 function tnContar(qid) { return tnTracos(qid).length; }
 function tnMarcarDesfazer() {
   if (!tnQid) return;
   const h = tnHist[tnQid] || (tnHist[tnQid] = []);
-  h.push(JSON.stringify(tnTracos()));
+  /* junto com os traços, se a questão estava GUARDADA: apagar tudo e desfazer tem de devolver as duas coisas */
+  const rec = typeof tnSalvos !== "undefined" ? tnSalvos[tnQid] : null;
+  h.push(JSON.stringify({ t: tnTracos(), r: rec || null }));
   if (h.length > TN_HIST_MAX) h.shift();
 }
 function tnDesfazer() {
   const h = tnHist[tnQid] || [];
   if (!h.length) return false;
-  tnGuardarTracos(tnQid, JSON.parse(h.pop()));
+  const o = JSON.parse(h.pop());
+  /* estava guardada e deixou de estar (apagar tudo): volta a ser — GRAVANDO de novo, não só na memória */
+  const volta = o && o.r && !tnSalvos[tnQid] ? o.r.motivo : "";
+  tnGuardarTracos(tnQid, (o && o.t) || [], { semSinc: !!volta });
+  if (volta) { delete tnRecusadas[tnQid]; tnGravarRec(tnQid, volta); }
   tnPintar();
   tnPintarBarra();
   return true;
@@ -503,6 +514,7 @@ function tnMontar(corpo, qid) {
   tnAtual = null;
   tnApagando = false;
   if (!corpo) { tnSvg = null; return null; }
+  if (qid) { tnTrazerGuardados(qid); tnSincronizar(qid, tnQuestaoDe(qid)); }
   if (corpo.classList) corpo.classList.add("tn-com");
   const svg = document.createElementNS(TN_NS, "svg");
   svg.setAttribute("class", "tn-camada");
@@ -523,8 +535,226 @@ function tnMontar(corpo, qid) {
     if (typeof ResizeObserver === "function") { tnObs = new ResizeObserver(() => tnPintarLogo()); tnObs.observe(corpo); }
   } catch (e) {}
   tnPintar();
+  /* A JANELA PODE AINDA NÃO ESTAR ABERTA (nem medida) nesta hora: com traços guardados que voltam ao abrir a questão, a
+   * pintura de agora não acha as linhas do texto e não desenha nada. Pinta de novo no próximo quadro e depois da
+   * animação de abrir. */
+  if (tnContar()) { tnPintarLogo(); try { setTimeout(() => { if (tnSvg === svg) tnPintar(); }, 300); } catch (e) {} }
   tnPintarBarra();
   return svg;
+}
+
+/* =====================================================================
+ * GUARDAR NA QUESTÃO (v19.8.0)
+ *
+ * A DÚVIDA: guardar traços ocupa espaço? Medido: sublinhado/marca-texto ≈ 0,1 KB, círculo à mão ≈ 0,4 KB; uma questão
+ * bem marcada ≈ 0,7 KB; as 438 questões marcadas ≈ 300 KB. O problema não é o tamanho, é o LUGAR: o localStorage tem
+ * teto de ~5 MB e já passa de 3,5 MB. Por isso:
+ *  · mora no IndexedDB (eac_idb_tinta), como leis, decisões e julgados — nunca no localStorage;
+ *  · guarda SOZINHO só a questão que você ERROU ou CHUTOU (a que vai rever), e as que você pedir (📌);
+ *  · LIMPA SOZINHO: a errada/chutada some quando você a acerta numa revisão; qualquer uma some depois de 90 dias sem
+ *    abrir; tirar o 📌 deixa de guardar (e o automático não volta a guardar aquela questão nesta sessão);
+ *  · fica FORA do backup por padrão (opção para incluir, no ⋮ da questão).
+ * A decisão (tnDecidir) é pura; o IndexedDB é gravado em segundo plano, numa fila.
+ * ===================================================================== */
+const TN_IDB_NOME = "eac_idb_tinta";
+const TN_IDB_LOJA = "q";
+const TN_VENCE_DIAS = 90;
+const TN_PREF_BACKUP = "eac_tinta_backup";
+let tnSalvos = {};
+let tnRecusadas = {};
+let _tnIdb = null;
+let _tnGravando = null;
+
+function tnIdbSuportado() { try { return typeof indexedDB !== "undefined" && indexedDB !== null; } catch (e) { return false; } }
+function tnIdbAbrir() {
+  if (_tnIdb) return Promise.resolve(_tnIdb);
+  if (!tnIdbSuportado()) return Promise.reject(new Error("sem indexedDB"));
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open(TN_IDB_NOME, 1); } catch (e) { reject(e); return; }
+    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(TN_IDB_LOJA)) db.createObjectStore(TN_IDB_LOJA); };
+    req.onsuccess = () => { _tnIdb = req.result; resolve(_tnIdb); };
+    req.onerror = () => reject(req.error || new Error("erro ao abrir o indexedDB do lápis"));
+    req.onblocked = () => reject(new Error("indexedDB do lápis bloqueado"));
+  });
+}
+function tnIdbTx(fn) {
+  return tnIdbAbrir().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction([TN_IDB_LOJA], "readwrite");
+    fn(tx.objectStore(TN_IDB_LOJA));
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  }));
+}
+function tnIdbLerTudo() {
+  return tnIdbAbrir().then((db) => new Promise((resolve, reject) => {
+    const out = {};
+    const req = db.transaction([TN_IDB_LOJA], "readonly").objectStore(TN_IDB_LOJA).openCursor();
+    req.onsuccess = () => { const c = req.result; if (c) { out[c.key] = c.value; c.continue(); } else resolve(out); };
+    req.onerror = () => reject(req.error);
+  }));
+}
+/* uma gravação de cada vez, na ordem: guardar e apagar a mesma questão em seguida não podem se cruzar */
+function tnFila(fn) {
+  if (!tnIdbSuportado()) return Promise.resolve(false);
+  _tnGravando = (_tnGravando || Promise.resolve()).then(fn).catch((e) => {
+    try { reg("ERRO", "lápis: gravação no indexedDB falhou", String((e && e.message) || e)); } catch (x) {}
+  });
+  return _tnGravando;
+}
+
+/* o que a ÚLTIMA tentativa diz da questão: "errou" | "chute" | "acertou" | "" (ainda não respondida) */
+function tnMotivoAuto(q) {
+  const ts = (q && q.tentativas) || [];
+  const u = ts[ts.length - 1];
+  if (!u) return "";
+  if (u.chute) return "chute";
+  return u.acertou ? "acertou" : "errou";
+}
+/* a regra, pura: "guardar" | "apagar" | "nada" */
+function tnDecidir(rec, motivoAuto, temTracos, recusada) {
+  if (rec && rec.motivo !== "pedido" && motivoAuto === "acertou") return "apagar";
+  if (!temTracos) return rec ? "apagar" : "nada";
+  if (rec) return "guardar";
+  if (!recusada && (motivoAuto === "errou" || motivoAuto === "chute")) return "guardar";
+  return "nada";
+}
+/* as guardadas há mais de "dias" sem abrir */
+function tnVencidos(salvos, agoraMs, dias) {
+  const lim = (agoraMs || Date.now()) - (dias || TN_VENCE_DIAS) * 86400000;
+  return Object.keys(salvos || {}).filter((k) => {
+    const d = Date.parse((salvos[k] && (salvos[k].aberto || salvos[k].salvo)) || "");
+    return !isNaN(d) && d < lim;
+  });
+}
+function tnQuestaoDe(qid) {
+  try {
+    const a = typeof qsAtual === "function" ? qsAtual() : null;
+    if (a && a.id === qid) return a;
+    return (typeof qsTodas === "function" ? qsTodas() : []).filter((x) => x.id === qid)[0] || null;
+  } catch (e) { return null; }
+}
+function tnGravarRec(qid, motivo) {
+  const tr = JSON.stringify(tnTracos(qid));
+  const ant = tnSalvos[qid];
+  if (ant && ant.motivo === motivo && JSON.stringify(ant.tracos) === tr) return false;
+  const agora = new Date().toISOString();
+  const rec = { tracos: JSON.parse(tr), motivo, salvo: agora, aberto: (ant && ant.aberto) || agora };
+  tnSalvos[qid] = rec;
+  tnFila(() => tnIdbTx((l) => l.put(rec, qid)));
+  if (!ant) { try { reg("QUESTOES", "lápis: marcas guardadas na questão", qid + " · " + motivo); } catch (e) {} }
+  return true;
+}
+function tnApagarRec(qid) {
+  if (!tnSalvos[qid]) return false;
+  delete tnSalvos[qid];
+  tnFila(() => tnIdbTx((l) => l.delete(qid)));
+  try { reg("QUESTOES", "lápis: marcas guardadas apagadas", String(qid)); } catch (e) {}
+  return true;
+}
+function tnSincronizar(qid, q) {
+  if (!qid) return "nada";
+  const rec = tnSalvos[qid];
+  const d = tnDecidir(rec, tnMotivoAuto(q), tnContar(qid) > 0, !!tnRecusadas[qid]);
+  if (d === "guardar") tnGravarRec(qid, rec ? rec.motivo : tnMotivoAuto(q));
+  else if (d === "apagar") tnApagarRec(qid);
+  return d;
+}
+/* o 📌: guardar a pedido, ou deixar de guardar */
+function tnGuardarAlternar() {
+  const qid = tnQid;
+  if (!qid) return false;
+  if (tnSalvos[qid]) {
+    tnApagarRec(qid);
+    tnRecusadas[qid] = true;
+    try { toastMsg(t("tn_desguardou"), 4500); } catch (e) {}
+  } else if (tnContar(qid)) {
+    delete tnRecusadas[qid];
+    tnGravarRec(qid, "pedido");
+    try { toastMsg(t("tn_guardou"), 3500); } catch (e) {}
+  } else {
+    try { toastMsg(t("tn_guardar_vazio"), 3500); } catch (e) {}
+    return false;
+  }
+  tnPintarBarra();
+  return true;
+}
+/* a questão aberta tem traços guardados e ainda nenhum nesta sessão: eles voltam (e "aberto" vira hoje) */
+function tnTrazerGuardados(qid) {
+  const rec = qid && tnSalvos[qid];
+  if (!rec || tnPorQuestao[qid] !== undefined) return false;
+  tnPorQuestao[qid] = JSON.parse(JSON.stringify(rec.tracos || []));
+  rec.aberto = new Date().toISOString();
+  tnFila(() => tnIdbTx((l) => l.put(rec, qid)));
+  return true;
+}
+function tnCarregarSalvos() {
+  if (!tnIdbSuportado()) return Promise.resolve(0);
+  return tnIdbLerTudo().then((o) => {
+    tnSalvos = Object.assign({}, o || {}, tnSalvos);
+    const venc = tnVencidos(tnSalvos, Date.now(), TN_VENCE_DIAS);
+    venc.forEach((k) => tnApagarRec(k));
+    if (venc.length) { try { reg("QUESTOES", "lápis: marcas vencidas apagadas (90 dias sem abrir)", String(venc.length)); } catch (e) {} }
+    if (tnTrazerGuardados(tnQid)) { tnPintar(); tnPintarBarra(); }
+    return Object.keys(tnSalvos).length;
+  }).catch(() => 0);
+}
+function tnEspaco() {
+  const ks = Object.keys(tnSalvos);
+  return { n: ks.length, kb: Math.max(ks.length ? 1 : 0, Math.round(JSON.stringify(tnSalvos).length / 1024)) };
+}
+function tnBackupLigado() { try { return localStorage.getItem(TN_PREF_BACKUP) === "1"; } catch (e) { return false; } }
+function tnBackupDefinir(sim) { try { if (sim) localStorage.setItem(TN_PREF_BACKUP, "1"); else localStorage.removeItem(TN_PREF_BACKUP); } catch (e) {} return tnBackupLigado(); }
+/* o que vai para o backup: só com a opção ligada (null = fica de fora) */
+function tnParaBackup() { return tnBackupLigado() ? JSON.stringify(tnSalvos) : null; }
+function tnRestaurarTudo(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return 0;
+  tnSalvos = JSON.parse(JSON.stringify(o));
+  tnFila(() => tnIdbTx((l) => { l.clear(); Object.keys(tnSalvos).forEach((k) => l.put(tnSalvos[k], k)); }));
+  return Object.keys(tnSalvos).length;
+}
+function tnApagarTodasGuardadas() {
+  const n = Object.keys(tnSalvos).length;
+  tnSalvos = {};
+  tnFila(() => tnIdbTx((l) => l.clear()));
+  try { reg("QUESTOES", "lápis: todas as marcas guardadas apagadas", String(n)); } catch (e) {}
+  tnPintarBarra();
+  return n;
+}
+/* o ⋮ da questão: quanto ocupa, apagar todas, backup sim/não */
+function tnGuardadasBotao() {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn-min";
+  b.id = "btnTnGuardadas";
+  const e = tnEspaco();
+  b.textContent = t("tn_ger_btn", { n: e.n, kb: e.kb });
+  b.title = t("tn_ger_aj");
+  b.onclick = () => { try { if (typeof qsFerFechar === "function") qsFerFechar(); } catch (x) {} tnGuardadasAbrir(); };
+  return b;
+}
+async function tnGuardadasAbrir() {
+  const e = tnEspaco();
+  const bk = tnBackupLigado();
+  const r = await uiEscolha(t("tn_ger_txt", { n: e.n, kb: e.kb, bk: t(bk ? "tn_ger_bk_sim" : "tn_ger_bk_nao") }), [
+    { rot: t(bk ? "tn_ger_bk_off" : "tn_ger_bk_on"), valor: "backup", classe: "btn-cinza" },
+    { rot: t("tn_ger_fechar"), valor: false, classe: "btn-cinza" },
+    e.n ? { rot: t("tn_ger_apagar"), valor: "apagar", classe: "btn-perigo" } : null,
+  ].filter(Boolean));
+  if (r === "backup") {
+    tnBackupDefinir(!bk);
+    try { reg("QUESTOES", "lápis: marcas " + (bk ? "fora do" : "incluídas no") + " backup", ""); } catch (x) {}
+    try { toastMsg(t(bk ? "tn_ger_bk_tirou" : "tn_ger_bk_pos"), 4500); } catch (x) {}
+    return "backup";
+  }
+  if (r === "apagar") {
+    if (!(await uiConfirm(t("tn_ger_apagar_conf", { n: e.n }), { perigo: true, ok: t("tn_ger_apagar") }))) return "";
+    tnApagarTodasGuardadas();
+    try { toastMsg(t("tn_ger_apagado"), 3500); } catch (x) {}
+    return "apagar";
+  }
+  return "";
 }
 
 /* ---------- a barra ---------- */
@@ -567,12 +797,20 @@ function tnBarraMontar() {
   sep();
   bt("btnTnDesfazer", "↶", t("tn_desfazer"), () => tnDesfazer());
   bt("btnTnLimpar", "🗑", t("tn_limpar"), () => tnLimpar(), "tn-perigo");
+  bt("btnTnGuardar", "📌", t("tn_guardar_off"), () => tnGuardarAlternar());
   sep();
   bt("btnTnFechar", "✕", t("tn_fechar"), () => tnFechar());
   dlg.append(b);
   return b;
 }
 function tnPintarBarra() {
+  /* o ✏️ da questão primeiro: ele existe mesmo sem a barra ter sido aberta nesta sessão */
+  const g = $("btnQsTinta");
+  if (g && g.classList) {
+    g.classList.toggle("btn-min-ok", tnAberta); g.setAttribute("aria-pressed", tnAberta ? "true" : "false");
+    /* a questão tem marcas (desta sessão ou guardadas): um ponto no ✏️, para lembrar que há algo ali */
+    g.classList.toggle("tn-tem", tnContar() > 0);
+  }
   const b = $("tnBarra");
   if (!b) return;
   b.hidden = !tnAberta;
@@ -593,8 +831,14 @@ function tnPintarBarra() {
   }
   if ($("btnTnDesfazer")) $("btnTnDesfazer").disabled = !(tnHist[tnQid] || []).length;
   if ($("btnTnLimpar")) $("btnTnLimpar").disabled = !tnContar();
-  const g = $("btnQsTinta");
-  if (g && g.classList) { g.classList.toggle("btn-min-ok", tnAberta); g.setAttribute("aria-pressed", tnAberta ? "true" : "false"); }
+  const gd = $("btnTnGuardar");
+  if (gd) {
+    const rec = tnSalvos[tnQid];
+    if (gd.classList) gd.classList.toggle("on", !!rec);
+    gd.setAttribute("aria-pressed", rec ? "true" : "false");
+    gd.title = rec ? t("tn_guardar_on_" + (rec.motivo === "pedido" ? "pedido" : rec.motivo === "chute" ? "chute" : "errou")) : t("tn_guardar_off");
+    gd.setAttribute("aria-label", gd.title);
+  }
 }
 function tnFerramenta(f) {
   if (TN_FERRAMENTAS.indexOf(f) < 0) return false;
@@ -675,6 +919,7 @@ function tnTecla(ev) {
 
 function tnIniciar() {
   tnPrefLer();
+  try { tnCarregarSalvos(); } catch (e) {}
   const dlg = typeof document !== "undefined" ? $("dlgQsResponder") : null;
   if (dlg && dlg.addEventListener) {
     dlg.addEventListener("close", () => { tnFechar(); });

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.7.0";
+const VERSAO = "19.8.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4425,6 +4425,7 @@ async function medirArmazenamento() {
     p.push("localStorage: " + Math.round(n / 1024) + " KB em " + localStorage.length + " chaves");
   } catch (e) { p.push("localStorage: sem acesso"); }
   p.push("histórico: " + (typeof historico !== "undefined" ? historico.length : "?") + " versões");
+  try { if (typeof tnEspaco === "function") { const e = tnEspaco(); p.push("marcas do lápis (IndexedDB): " + e.n + " questões, " + e.kb + " KB" + (tnBackupLigado() ? " — no backup" : " — fora do backup")); } } catch (e) {}
   /* A linha mais importante deste bloco: gravação recusada é o problema que
    * não aparece na tela. Sem ela, o diagnóstico de um app que parou de
    * salvar fica idêntico ao de um app saudável. */
