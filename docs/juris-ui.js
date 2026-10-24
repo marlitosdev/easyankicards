@@ -863,6 +863,12 @@ function jurRepintarTelas() {
   try { if (typeof edRender === "function") edRender(); } catch (e) {}
   try { if (typeof matRender === "function") matRender(); } catch (e) {}
   try { if (typeof hubPintarAgenda === "function") hubPintarAgenda(); } catch (e) {}
+  /* (v19.12.1) O RESUMO ABERTO TAMBÉM. Os julgados chegam do IndexedDB DEPOIS do primeiro desenho; um resumo aberto
+   * nesse primeiro instante desenhava os links de julgado como "não guardado" e ficava assim até ser reaberto. A
+   * leitura volta ao mesmo lugar (matRolDepoisDeDesenhar). */
+  try {
+    if ($("dlgMaterial") && $("dlgMaterial").open && typeof matModo !== "undefined" && matModo === "ler" && typeof matTrocarModo === "function") matTrocarModo("ler");
+  } catch (e) {}
 }
 
 function jurEditar(id) {
