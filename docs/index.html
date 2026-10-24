@@ -1516,6 +1516,8 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .tn-camada.tn-ativa.tn-caneta{touch-action:pan-x pan-y pinch-zoom}
 .tn-camada.tn-apagar{cursor:cell}
 .tn-traco.tn-marca{opacity:.38}
+/* (v19.12.2) os traços não recebem toque: o alvo é sempre a camada (onde o ponteiro fica preso) */
+.tn-traco{pointer-events:none}
 /* centrada SEM left:50% — com ele, a largura disponível para a barra encolher era a metade da tela, e ela quebrava em duas
    linhas com espaço sobrando */
 .tn-barra{position:fixed;top:max(8px,env(safe-area-inset-top));left:0;right:0;margin:0 auto;width:max-content;z-index:60;display:flex;flex-wrap:wrap;

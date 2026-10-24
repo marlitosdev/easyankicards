@@ -192,6 +192,27 @@ async function testes() {
     api.$("btnQsPular").onclick();
     ok(api.qsAtual().id !== q1 && api.tnContar() === 0, "Q11 a próxima questão começa sem traços");
     ok(api.tnTracos(q1).length === 2, "Q11a os da anterior ficam guardados");
+    /* (v19.12.2) O RELATO: "só o primeiro risco é mantido completo; os próximos só funcionam no início". O 2º traço
+     * começava EM CIMA do 1º: o ponteiro ficava preso no desenho dele, que a pintura seguinte destruía. */
+    {
+      const camada = api.tnSvgAtual();
+      const presos = [];
+      camada.setPointerCapture = (id) => presos.push("camada:" + id);
+      const desenho = { tagName: "path", setPointerCapture: (id) => presos.push("traço:" + id) };
+      api.tnFerramenta("lapis");
+      api.tnComecar(ev(40, 120, { target: desenho, pointerId: 9 }));
+      ok(presos.join() === "camada:9", "P1 começando em cima de um traço, o ponteiro fica preso na CAMADA, não no traço: " + presos.join());
+      const vivo = api.tnPathVivoAtual();
+      const nAntes = svg().querySelectorAll("path").length;
+      api.tnMover(ev(90, 160, { pointerId: 9 }));
+      api.tnMover(ev(140, 125, { pointerId: 9 }));
+      ok(vivo && api.tnPathVivoAtual() === vivo && svg().querySelectorAll("path").length === nAntes && /L140 125|140 125/.test(vivo.getAttribute("d")),
+        "P2 o traço em andamento é o MESMO elemento, atualizado no lugar (nada sob o ponteiro é destruído): " + (vivo && vivo.getAttribute("d")));
+      api.tnSoltar();
+      api.tnDesfazer();
+      ok(/\.tn-traco\{pointer-events:none\}/.test(require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8")),
+        "P3 os traços não recebem toque (CSS): o alvo é sempre a camada");
+    }
     /* teclado com a barra aberta */
     api.tnFerramenta("lapis");
     const tecla = (k, extra) => api.qsTeclaResponder(Object.assign({ key: k, target: {}, preventDefault() {} }, extra || {}));

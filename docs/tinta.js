@@ -62,6 +62,8 @@ let tnApagando = false;
 let tnCanetaVista = false;
 let tnObs = null;
 let tnPintarPedido = false;
+/* o traço em andamento: UM elemento, atualizado a cada movimento (ver tnMover) */
+let tnPathVivo = null;
 
 /* ---------- preferências (só conveniência deste aparelho) ---------- */
 function tnPrefLer() {
@@ -351,7 +353,16 @@ function tnPonto(ev) { return [Number(ev.clientX) || 0, Number(ev.clientY) || 0]
 function tnComecar(ev) {
   if (!tnAberta || !tnQid || tnFerr === "mao") return false;
   if (!tnAceitaPonteiro(ev)) return false;
-  try { if (ev.target && ev.target.setPointerCapture && ev.pointerId !== undefined) ev.target.setPointerCapture(ev.pointerId); } catch (e) {}
+  /* (v19.12.2) O PONTEIRO FICA PRESO NA CAMADA, NUNCA NO TRAÇO. O relato: "só o primeiro risco é mantido completo; os
+   * próximos só funcionam no início" — com caneta, dedo e mouse. O segundo traço começava EM CIMA do primeiro: o alvo
+   * do toque era o desenho dele (<path>), e era nele que o ponteiro ficava preso; a pintura seguinte apagava e
+   * recriava os desenhos, o elemento preso sumia, a captura se perdia — e fora da camada (que só cobre o conteúdo da
+   * questão) o resto do gesto ia para outro lugar (no toque, virava rolagem). Agora: preso sempre na camada (tnSvg), os
+   * traços não recebem toque (CSS .tn-traco) e o traço em andamento é atualizado no lugar. */
+  try {
+    const alvo = tnSvg || ev.currentTarget || ev.target;
+    if (alvo && alvo.setPointerCapture && ev.pointerId !== undefined) alvo.setPointerCapture(ev.pointerId);
+  } catch (e) {}
   if (ev.preventDefault) ev.preventDefault();
   const p = tnPonto(ev);
   if (tnFerr === "borracha") {
@@ -377,7 +388,12 @@ function tnMover(ev) {
     if (!u || Math.abs(u[0] - p[0]) >= 1 || Math.abs(u[1] - p[1]) >= 1) tnAtual.pts.push(p);
   });
   if (ev.preventDefault) ev.preventDefault();
-  tnPintarLogo();
+  /* o traço em andamento muda NO LUGAR (o mesmo elemento): redesenhar tudo a cada movimento destruía o que estava sob
+   * o ponteiro e custava mais a cada traço já feito */
+  if (tnPathVivo && tnSvg && tnPathVivo.parentNode === tnSvg) {
+    const base = tnGeo.base(tnCorpo);
+    tnPathVivo.setAttribute("d", tnCaminho(tnAtual.pts.map((q) => [q[0] - base.x, q[1] - base.y])));
+  } else tnPintarLogo();
   return true;
 }
 function tnSoltar() {
@@ -560,7 +576,8 @@ function tnPintar() {
     sg.polis.forEach((p) => svg.appendChild(tnPath(p, tr, sg.em, base)));
     n++;
   });
-  if (tnAtual) svg.appendChild(tnPath(tnAtual.pts, { f: tnAtual.f, cor: tnAtual.cor, larg: tnAtual.larg / 16 }, 16, base));
+  tnPathVivo = null;
+  if (tnAtual) { tnPathVivo = tnPath(tnAtual.pts, { f: tnAtual.f, cor: tnAtual.cor, larg: tnAtual.larg / 16 }, 16, base); svg.appendChild(tnPathVivo); }
   return n;
 }
 function tnPintarClasse() {
@@ -588,6 +605,8 @@ function tnMontar(corpo, qid) {
     svg.addEventListener("pointermove", (ev) => { tnMover(ev); });
     svg.addEventListener("pointerup", () => { tnSoltar(); });
     svg.addEventListener("pointercancel", () => { tnSoltar(); });
+    /* a captura se perdeu por outro motivo (a janela trocou, o sistema tomou o gesto): termina o traço, não o deixa pendurado */
+    svg.addEventListener("lostpointercapture", () => { if (tnAtual || tnApagando) tnSoltar(); });
   }
   corpo.appendChild(svg);
   tnSvg = svg;
