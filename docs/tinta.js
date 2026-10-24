@@ -1,0 +1,685 @@
+/* =====================================================================
+ * TINTA — o lápis por cima da questão (v19.7.0)
+ *
+ * O PEDIDO: um lápis como o do caderno da Literalidade — lápis, marca-texto,
+ * borracha, mão, cores, espessura, desfazer, apagar — para sublinhar,
+ * circular e marcar DIRETO em cima do enunciado e das alternativas.
+ *
+ * O QUE NÃO PODIA VOLTAR. O app já teve um canvas por cima do enunciado e
+ * o tirou (ver grifo.js): girar o aparelho, aumentar a letra ou mudar a
+ * largura da caixa faz o texto refluir, e os riscos ficavam onde estavam,
+ * apontando para palavras que já não estavam ali. Aqui o traço NÃO é
+ * guardado em pixels da tela: é guardado PRESO A UMA LETRA do texto.
+ *
+ *  · ao soltar, o app acha a letra mais próxima do começo do traço (no
+ *    enunciado ou numa alternativa) e guarda os pontos RELATIVOS a ela, em
+ *    "em" (tamanho da letra) — {anc: {b: "en", i: 214}, pts: [[0.1, 1.2], …]};
+ *  · a cada pintura, a letra é procurada de novo e o traço é redesenhado a
+ *    partir dela: refluiu, girou, aumentou a letra — o traço anda junto com
+ *    a palavra em que foi feito;
+ *  · traço feito longe de qualquer texto (na margem) fica preso ao topo da
+ *    questão.
+ * (Um sublinhado que atravessa duas linhas ainda pode ficar torto depois de
+ * um refluxo grande: virar marca de texto de verdade é a fase seguinte.)
+ *
+ * QUANTO DURA: como o grifo — por questão, enquanto a sessão dura (ir e
+ * voltar entre questões mantém os traços). Guardar para sempre é outra fase.
+ *
+ * CANETA DE TABLET: quando o app vê uma caneta (pointerType "pen"), a mão
+ * apoiada na tela deixa de riscar e o dedo volta a rolar a página.
+ *
+ * A GEOMETRIA mora em tnGeo, trocável: os testes não têm motor de layout e
+ * injetam caixas de letra conhecidas; o navegador usa Range e caret.
+ * ===================================================================== */
+
+const TN_CORES = [
+  { id: "grafite", cor: "#3f4451" },
+  { id: "vermelho", cor: "#d1495b" },
+  { id: "azul", cor: "#5b7cfa" },
+  { id: "verde", cor: "#4f9d6e" },
+  { id: "laranja", cor: "#e8a33d" },
+  { id: "roxo", cor: "#9b5de5" },
+];
+const TN_FERRAMENTAS = ["lapis", "marca", "borracha", "mao"];
+/* espessura em px para letra de 16px, por ferramenta (a borracha é o raio) */
+const TN_LARG_PADRAO = { lapis: 3, marca: 16, borracha: 14 };
+const TN_LARG_LIMITE = { lapis: [1, 12], marca: [6, 32], borracha: [6, 40] };
+const TN_PREF = "eac_tinta_pref";
+const TN_HIST_MAX = 60;
+
+let tnAberta = false;
+let tnFerr = "lapis";
+let tnCor = "laranja";
+let tnLarg = Object.assign({}, TN_LARG_PADRAO);
+let tnPorQuestao = {};
+let tnHist = {};
+let tnQid = null;
+let tnCorpo = null;
+let tnSvg = null;
+let tnAtual = null;
+let tnApagando = false;
+let tnCanetaVista = false;
+let tnObs = null;
+let tnPintarPedido = false;
+
+/* ---------- preferências (só conveniência deste aparelho) ---------- */
+function tnPrefLer() {
+  try {
+    const p = JSON.parse(localStorage.getItem(TN_PREF) || "{}") || {};
+    if (TN_FERRAMENTAS.indexOf(p.f) >= 0 && p.f !== "borracha") tnFerr = p.f;
+    if (TN_CORES.some((c) => c.id === p.c)) tnCor = p.c;
+    Object.keys(TN_LARG_LIMITE).forEach((k) => {
+      const v = Number(p.l && p.l[k]);
+      if (v >= TN_LARG_LIMITE[k][0] && v <= TN_LARG_LIMITE[k][1]) tnLarg[k] = v;
+    });
+  } catch (e) {}
+}
+function tnPrefGravar() {
+  try { localStorage.setItem(TN_PREF, JSON.stringify({ f: tnFerr, c: tnCor, l: tnLarg })); } catch (e) {}
+}
+
+/* ---------- matemática pura (testável sem layout) ---------- */
+function tnArred(v) { return Math.round(v * 100) / 100; }
+function tnRelativos(pts, org, em) {
+  const e = em > 0 ? em : 16;
+  return (pts || []).map((p) => [tnArred((p[0] - org.x) / e), tnArred((p[1] - org.y) / e)]);
+}
+function tnAbsolutos(rel, org, em) {
+  const e = em > 0 ? em : 16;
+  return (rel || []).map((p) => [org.x + p[0] * e, org.y + p[1] * e]);
+}
+/* menos pontos, o mesmo desenho (Ramer–Douglas–Peucker): um traço de 2 s tem centenas de eventos */
+function tnSimplificar(pts, tol) {
+  const P = pts || [];
+  if (P.length < 3) return P.slice();
+  const t2 = (tol || 0.8) * (tol || 0.8);
+  const dist2 = (p, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const L = dx * dx + dy * dy;
+    let u = L ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L : 0;
+    u = Math.max(0, Math.min(1, u));
+    const x = a[0] + u * dx - p[0], y = a[1] + u * dy - p[1];
+    return x * x + y * y;
+  };
+  const manter = new Array(P.length).fill(false);
+  manter[0] = manter[P.length - 1] = true;
+  const pilha = [[0, P.length - 1]];
+  while (pilha.length) {
+    const [i, j] = pilha.pop();
+    let maior = -1, k = -1;
+    for (let m = i + 1; m < j; m++) { const d = dist2(P[m], P[i], P[j]); if (d > maior) { maior = d; k = m; } }
+    if (maior > t2 && k > 0) { manter[k] = true; pilha.push([i, k], [k, j]); }
+  }
+  return P.filter((_, i) => manter[i]);
+}
+/* a borracha: os pontos dentro do raio saem e o que sobra de cada lado vira traço próprio (como no rascunho) */
+function tnPartir(pts, x, y, raio) {
+  const r2 = raio * raio;
+  const partes = [];
+  let atual = [];
+  (pts || []).forEach((p) => {
+    const dx = p[0] - x, dy = p[1] - y;
+    if (dx * dx + dy * dy <= r2) { if (atual.length) partes.push(atual); atual = []; }
+    else atual.push(p);
+  });
+  if (atual.length) partes.push(atual);
+  return partes.filter((p) => p.length >= 2);
+}
+/* pontos a cada "passo" ao longo do traço: o simplificado guarda só as pontas de uma reta, e a borracha que passa no
+ * meio dela precisa de pontos ali para ter o que apagar */
+function tnDensificar(pts, passo) {
+  const P = pts || [], out = [];
+  const d = passo > 0 ? passo : 4;
+  P.forEach((p, i) => {
+    if (i) {
+      const a = P[i - 1], n = Math.floor(Math.hypot(p[0] - a[0], p[1] - a[1]) / d);
+      for (let k = 1; k < n; k++) out.push([a[0] + (p[0] - a[0]) * k / n, a[1] + (p[1] - a[1]) * k / n]);
+    }
+    out.push(p);
+  });
+  return out;
+}
+/* o caminho SVG, suavizado pelos pontos médios */
+function tnCaminho(pts) {
+  const P = pts || [];
+  if (!P.length) return "";
+  const f = (v) => Math.round(v * 10) / 10;
+  if (P.length === 1) return "M" + f(P[0][0]) + " " + f(P[0][1]) + "l0.1 0.1";
+  let d = "M" + f(P[0][0]) + " " + f(P[0][1]);
+  for (let i = 1; i < P.length - 1; i++) {
+    const mx = (P[i][0] + P[i + 1][0]) / 2, my = (P[i][1] + P[i + 1][1]) / 2;
+    d += "Q" + f(P[i][0]) + " " + f(P[i][1]) + " " + f(mx) + " " + f(my);
+  }
+  const u = P[P.length - 1];
+  return d + "L" + f(u[0]) + " " + f(u[1]);
+}
+/* palma da mão: depois de ver uma caneta, o toque do dedo não risca (rola) */
+function tnAceitaPonteiro(ev) {
+  if (!ev) return false;
+  if (ev.pointerType === "pen") { if (!tnCanetaVista) { tnCanetaVista = true; tnPintarClasse(); } return true; }
+  if (ev.pointerType === "touch" && tnCanetaVista) return false;
+  if (ev.button !== undefined && ev.button !== 0 && ev.button !== -1) return false;
+  return true;
+}
+
+/* ---------- geometria (o navegador; os testes trocam) ---------- */
+function tnTextos(el) {
+  const out = [];
+  if (!el || typeof document === "undefined" || !document.createTreeWalker) return out;
+  const w = document.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
+  let n;
+  while ((n = w.nextNode())) out.push(n);
+  return out;
+}
+const TN_GEO_NAVEGADOR = {
+  /* o canto da área de conteúdo do corpo, na tela (o que rola junto) */
+  base(corpo) {
+    const r = corpo.getBoundingClientRect();
+    return { x: r.left - (corpo.scrollLeft || 0), y: r.top - (corpo.scrollTop || 0) };
+  },
+  blocos(corpo) {
+    const out = [];
+    const en = corpo.querySelector(".qs-enunciado");
+    if (en) out.push({ id: "en", el: en });
+    Array.from(corpo.querySelectorAll(".qs-op")).forEach((b, i) => {
+      const l = b.querySelector(".qs-op-l");
+      out.push({ id: "op:" + ((l && l.textContent.trim()) || i), el: b });
+    });
+    return out;
+  },
+  caixa(el) { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; },
+  em(el) {
+    try { const v = parseFloat(getComputedStyle(el).fontSize); return v > 0 ? v : 16; } catch (e) { return 16; }
+  },
+  /* a letra sob o ponto (posição no texto do bloco), ou -1 */
+  letraEm(el, x, y) {
+    let no = null, off = 0;
+    /* a própria camada do lápis está POR CIMA do texto: o caret acharia o SVG, não a letra — sai do caminho um instante */
+    const cam = document.getElementById("tnCamada");
+    const antes = cam && cam.style ? cam.style.pointerEvents : "";
+    if (cam && cam.style) cam.style.pointerEvents = "none";
+    try {
+      if (document.caretPositionFromPoint) { const c = document.caretPositionFromPoint(x, y); if (c) { no = c.offsetNode; off = c.offset; } }
+      else if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(x, y); if (r) { no = r.startContainer; off = r.startOffset; } }
+    } catch (e) { no = null; }
+    if (cam && cam.style) cam.style.pointerEvents = antes;
+    if (!no || !el.contains(no)) return -1;
+    let soma = 0;
+    for (const t of tnTextos(el)) {
+      if (t === no) return soma + off;
+      soma += t.length;
+    }
+    return -1;
+  },
+  /* o canto de cima, à esquerda, da letra i do bloco (na tela) */
+  letraCaixa(el, i) {
+    const ts = tnTextos(el);
+    let resto = Math.max(0, i);
+    for (let k = 0; k < ts.length; k++) {
+      const t = ts[k];
+      if (resto < t.length || k === ts.length - 1) {
+        const o = Math.min(resto, Math.max(0, t.length - 1));
+        try {
+          const r = document.createRange();
+          r.setStart(t, o); r.setEnd(t, Math.min(t.length, o + 1));
+          const q = (r.getClientRects && r.getClientRects()[0]) || r.getBoundingClientRect();
+          if (q && (q.width || q.height)) return { x: q.left, y: q.top };
+        } catch (e) {}
+        return null;
+      }
+      resto -= t.length;
+    }
+    return null;
+  },
+};
+/* (o nó de texto e a posição dentro dele da letra i do bloco) */
+function tnPosNo(el, i) {
+  const ts = tnTextos(el);
+  let resto = Math.max(0, i);
+  for (let k = 0; k < ts.length; k++) {
+    if (resto < ts[k].length || k === ts.length - 1) return { no: ts[k], o: Math.min(resto, ts[k].length) };
+    resto -= ts[k].length;
+  }
+  return null;
+}
+/* as linhas (uma caixa por linha de texto) das letras i..j do bloco: é por elas que o sublinhado se redesenha */
+TN_GEO_NAVEGADOR.linhas = function (el, i, j) {
+  const a = tnPosNo(el, i), b = tnPosNo(el, j + 1);
+  if (!a || !b) return [];
+  const out = [];
+  try {
+    const r = document.createRange();
+    r.setStart(a.no, a.o); r.setEnd(b.no, b.o);
+    Array.from(r.getClientRects()).forEach((q) => {
+      if (!q.width || !q.height) return;
+      const mesma = out.filter((x) => Math.abs(x.t - q.top) < q.height / 2)[0];
+      if (mesma) { mesma.l = Math.min(mesma.l, q.left); mesma.r = Math.max(mesma.r, q.right); mesma.b = Math.max(mesma.b, q.bottom); }
+      else out.push({ l: q.left, t: q.top, r: q.right, b: q.bottom });
+    });
+  } catch (e) { return []; }
+  return out.sort((x, y) => x.t - y.t || x.l - y.l);
+};
+let tnGeo = TN_GEO_NAVEGADOR;
+function tnGeoDefinir(g) { tnGeo = g || TN_GEO_NAVEGADOR; }
+
+/* ---------- âncora ---------- */
+/* o ponto (na tela) → {b, i} e a origem (na tela) + em. Longe de texto (mais de 2 letras), preso ao corpo. */
+function tnAncorar(x, y) {
+  const corpo = tnCorpo;
+  if (!corpo) return null;
+  const bs = tnGeo.blocos(corpo);
+  let melhor = null;
+  bs.forEach((b) => {
+    const c = tnGeo.caixa(b.el);
+    const dx = x < c.l ? c.l - x : x > c.r ? x - c.r : 0;
+    const dy = y < c.t ? c.t - y : y > c.b ? y - c.b : 0;
+    const d = Math.hypot(dx, dy);
+    if (!melhor || d < melhor.d) melhor = { b, d, c };
+  });
+  if (melhor) {
+    const em = tnGeo.em(melhor.b.el);
+    if (melhor.d <= em * 2) {
+      const cx = Math.min(Math.max(x, melhor.c.l + 1), melhor.c.r - 1), cy = Math.min(Math.max(y, melhor.c.t + 1), melhor.c.b - 1);
+      /* um pouco ACIMA do começo do traço: o sublinhado mora abaixo das letras que marca, e a letra mais próxima dele
+       * seria a da linha de baixo (depois de refluir, ele iria parar sob outras palavras). No marca-texto e no círculo,
+       * 0,35 letra acima ainda é a mesma linha. */
+      const cyq = Math.max(melhor.c.t + 1, cy - em * 0.35);
+      let i = tnGeo.letraEm(melhor.b.el, cx, cyq);
+      if (i < 0) i = 0;
+      const org = tnGeo.letraCaixa(melhor.b.el, i);
+      if (org) return { anc: { b: melhor.b.id, i }, org, em };
+    }
+  }
+  const base = tnGeo.base(corpo);
+  return { anc: { b: "corpo", i: 0 }, org: { x: base.x, y: base.y }, em: 16 };
+}
+/* a origem atual (na tela) de uma âncora guardada; null se o bloco sumiu (a alternativa não existe mais) */
+function tnOrigem(anc) {
+  const corpo = tnCorpo;
+  if (!corpo || !anc) return null;
+  if (anc.b === "corpo") { const b = tnGeo.base(corpo); return { org: { x: b.x, y: b.y }, em: 16 }; }
+  const bl = tnGeo.blocos(corpo).filter((b) => b.id === anc.b)[0];
+  if (!bl) return null;
+  const org = tnGeo.letraCaixa(bl.el, anc.i);
+  return org ? { org, em: tnGeo.em(bl.el) } : null;
+}
+
+/* ---------- modelo por questão ---------- */
+function tnTracos(qid) { return tnPorQuestao[qid || tnQid] || []; }
+function tnGuardarTracos(qid, lista) { if (qid) tnPorQuestao[qid] = lista || []; }
+function tnContar(qid) { return tnTracos(qid).length; }
+function tnMarcarDesfazer() {
+  if (!tnQid) return;
+  const h = tnHist[tnQid] || (tnHist[tnQid] = []);
+  h.push(JSON.stringify(tnTracos()));
+  if (h.length > TN_HIST_MAX) h.shift();
+}
+function tnDesfazer() {
+  const h = tnHist[tnQid] || [];
+  if (!h.length) return false;
+  tnGuardarTracos(tnQid, JSON.parse(h.pop()));
+  tnPintar();
+  tnPintarBarra();
+  return true;
+}
+function tnLimpar() {
+  if (!tnContar()) return false;
+  tnMarcarDesfazer();
+  tnGuardarTracos(tnQid, []);
+  tnPintar();
+  tnPintarBarra();
+  try { reg("QUESTOES", "lápis: traços apagados", String(tnQid)); } catch (e) {}
+  try { toastMsg(t("tn_limpou"), 3500); } catch (e) {}
+  return true;
+}
+function tnEsquecerTudo() { tnPorQuestao = {}; tnHist = {}; }
+
+/* ---------- desenhar ---------- */
+function tnPonto(ev) { return [Number(ev.clientX) || 0, Number(ev.clientY) || 0]; }
+function tnComecar(ev) {
+  if (!tnAberta || !tnQid || tnFerr === "mao") return false;
+  if (!tnAceitaPonteiro(ev)) return false;
+  try { if (ev.target && ev.target.setPointerCapture && ev.pointerId !== undefined) ev.target.setPointerCapture(ev.pointerId); } catch (e) {}
+  if (ev.preventDefault) ev.preventDefault();
+  const p = tnPonto(ev);
+  if (tnFerr === "borracha") {
+    tnMarcarDesfazer();
+    tnApagando = true;
+    tnApagarEm(p[0], p[1]);
+    return true;
+  }
+  tnAtual = { f: tnFerr, cor: tnCor, larg: tnLarg[tnFerr], pts: [p], id: ev.pointerId };
+  tnPintar();
+  return true;
+}
+function tnMover(ev) {
+  if (tnApagando) { const p = tnPonto(ev); tnApagarEm(p[0], p[1]); return true; }
+  if (!tnAtual) return false;
+  if (ev.pointerId !== undefined && tnAtual.id !== undefined && ev.pointerId !== tnAtual.id) return false;
+  /* os eventos agrupados pelo navegador (traço mais liso); lista vazia (evento sintético) = o próprio evento */
+  const co = ev.getCoalescedEvents ? ev.getCoalescedEvents() : null;
+  const evs = co && co.length ? co : [ev];
+  evs.forEach((e) => {
+    const p = tnPonto(e);
+    const u = tnAtual.pts[tnAtual.pts.length - 1];
+    if (!u || Math.abs(u[0] - p[0]) >= 1 || Math.abs(u[1] - p[1]) >= 1) tnAtual.pts.push(p);
+  });
+  if (ev.preventDefault) ev.preventDefault();
+  tnPintarLogo();
+  return true;
+}
+function tnSoltar() {
+  if (tnApagando) { tnApagando = false; tnPintarBarra(); return true; }
+  const a = tnAtual;
+  tnAtual = null;
+  if (!a) return false;
+  let pts = tnSimplificar(a.pts, 0.8);
+  if (pts.length === 1) pts = [pts[0], [pts[0][0] + 0.6, pts[0][1] + 0.6]];
+  const an = tnAncorar(pts[0][0], pts[0][1]);
+  if (!an) { tnPintar(); return false; }
+  tnMarcarDesfazer();
+  const lista = tnTracos().slice();
+  const novo = { f: a.f, cor: a.cor, larg: tnArred((a.larg / 16)), anc: an.anc, pts: tnRelativos(pts, an.org, an.em) };
+  const lin = tnComoLinha(a.f, pts, an);
+  if (lin) Object.assign(novo, lin);
+  lista.push(novo);
+  tnGuardarTracos(tnQid, lista);
+  tnPintar();
+  tnPintarBarra();
+  return true;
+}
+/* =====================================================================
+ * O SUBLINHADO E O MARCA-TEXTO VIRAM "DA LETRA i ATÉ A LETRA j"
+ *
+ * Preso só ao começo, um sublinhado longo guardava o COMPRIMENTO em que foi feito: a frase refluía para duas linhas e
+ * ele saía pela borda, sob palavras que não eram as dele. O traço quase horizontal (altura até 0,9 letra, largura de
+ * mais de uma letra) guarda as duas pontas no texto e a altura em relação à linha (dy, em "em"); a pintura o refaz
+ * sob as MESMAS letras, uma reta por linha de texto. Traço torto, círculo, seta: continuam como desenhados.
+ * ===================================================================== */
+function tnComoLinha(f, pts, an) {
+  if ((f !== "lapis" && f !== "marca") || !an || an.anc.b === "corpo" || !pts || pts.length < 2) return null;
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const em = an.em || 16;
+  const w = Math.max.apply(null, xs) - Math.min.apply(null, xs), h = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+  if (h > em * 0.9 || w < em * 1.2) return null;
+  const esq = pts[xs.indexOf(Math.min.apply(null, xs))], dir = pts[xs.indexOf(Math.max.apply(null, xs))];
+  const a = tnAncorar(esq[0], esq[1]), b = tnAncorar(dir[0], dir[1]);
+  if (!a || !b || a.anc.b !== an.anc.b || b.anc.b !== an.anc.b) return null;
+  const i = Math.min(a.anc.i, b.anc.i), j = Math.max(a.anc.i, b.anc.i);
+  if (j <= i) return null;
+  const yMed = ys.reduce((s, v) => s + v, 0) / ys.length;
+  return { anc: { b: an.anc.b, i }, fim: j, dy: tnArred((yMed - a.org.y) / em), pts: [] };
+}
+/* as retas (na tela) de um traço: o desenhado, ou uma por linha de texto do "da letra i até j" */
+function tnSegmentos(tr) {
+  const o = tnOrigem(tr.anc);
+  if (!o) return null;
+  if (tr.fim === undefined) return { em: o.em, polis: [tnAbsolutos(tr.pts, o.org, o.em)] };
+  const bl = tnGeo.blocos(tnCorpo).filter((b) => b.id === tr.anc.b)[0];
+  const ls = bl && tnGeo.linhas ? tnGeo.linhas(bl.el, tr.anc.i, tr.fim) : [];
+  if (!ls.length) return null;
+  const y = (r) => r.t + (tr.dy || 0) * o.em;
+  return { em: o.em, polis: ls.map((r) => [[r.l, y(r)], [r.r, y(r)]]) };
+}
+function tnApagarEm(x, y) {
+  const raio = tnLarg.borracha;
+  let mudou = false;
+  const nova = [];
+  tnTracos().forEach((tr) => {
+    const o = tnOrigem(tr.anc);
+    if (!o) { nova.push(tr); return; }
+    /* a reta "da letra i até j" sai inteira quando a borracha encosta nela (partir mudaria as letras que ela marca) */
+    if (tr.fim !== undefined) {
+      const sg = tnSegmentos(tr);
+      const alcance = raio + (tr.larg * o.em) / 2;
+      const toca = !!sg && sg.polis.some((p) => tnDensificar(p, Math.max(2, raio / 2)).some((q) => Math.hypot(q[0] - x, q[1] - y) <= alcance));
+      if (toca) mudou = true; else nova.push(tr);
+      return;
+    }
+    const abs = tnDensificar(tnAbsolutos(tr.pts, o.org, o.em), Math.max(2, raio / 2));
+    const partes = tnPartir(abs, x, y, raio + (tr.larg * o.em) / 2);
+    if (partes.length === 1 && partes[0].length === abs.length) { nova.push(tr); return; }
+    mudou = true;
+    partes.forEach((p) => nova.push(Object.assign({}, tr, { pts: tnRelativos(tnSimplificar(p, 0.8), o.org, o.em) })));
+  });
+  if (mudou) { tnGuardarTracos(tnQid, nova); tnPintar(); }
+  return mudou;
+}
+
+/* ---------- pintar ---------- */
+const TN_NS = "http://www.w3.org/2000/svg";
+function tnPintarLogo() {
+  if (tnPintarPedido) return;
+  tnPintarPedido = true;
+  const f = () => { tnPintarPedido = false; tnPintar(); };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(f); else f();
+}
+function tnCorDe(id) { return (TN_CORES.filter((c) => c.id === id)[0] || TN_CORES[0]).cor; }
+function tnPath(pts, tr, em, base) {
+  const p = document.createElementNS(TN_NS, "path");
+  const rel = pts.map((q) => [q[0] - base.x, q[1] - base.y]);
+  p.setAttribute("d", tnCaminho(rel));
+  p.setAttribute("fill", "none");
+  p.setAttribute("stroke", tnCorDe(tr.cor));
+  p.setAttribute("stroke-width", String(Math.max(0.8, (tr.larg || 0.2) * em)));
+  p.setAttribute("stroke-linecap", tr.f === "marca" ? "butt" : "round");
+  p.setAttribute("stroke-linejoin", "round");
+  p.setAttribute("class", "tn-traco tn-" + (tr.f || "lapis"));
+  return p;
+}
+function tnPintar() {
+  const svg = tnSvg, corpo = tnCorpo;
+  if (!svg || !corpo) return 0;
+  svg.innerHTML = "";
+  const base = tnGeo.base(corpo);
+  /* MEDIR SEM A CAMADA: com ela dentro, scrollWidth/Height contavam o próprio SVG — e ele nunca encolhia depois que a
+   * tela estreitava (o texto do celular saía cortado à direita). Zera, mede, aplica; a largura é a visível. */
+  if (svg.style) { svg.style.width = "0px"; svg.style.height = "0px"; }
+  const w = corpo.clientWidth || corpo.scrollWidth || 0, h = Math.max(corpo.scrollHeight || 0, corpo.clientHeight || 0);
+  svg.setAttribute("width", String(w));
+  svg.setAttribute("height", String(h));
+  if (svg.style) { svg.style.width = w + "px"; svg.style.height = h + "px"; }
+  let n = 0;
+  tnTracos().forEach((tr) => {
+    const sg = tnSegmentos(tr);
+    if (!sg) return;
+    sg.polis.forEach((p) => svg.appendChild(tnPath(p, tr, sg.em, base)));
+    n++;
+  });
+  if (tnAtual) svg.appendChild(tnPath(tnAtual.pts, { f: tnAtual.f, cor: tnAtual.cor, larg: tnAtual.larg / 16 }, 16, base));
+  return n;
+}
+function tnPintarClasse() {
+  if (!tnSvg || !tnSvg.setAttribute) return;
+  const ativa = tnAberta && tnFerr !== "mao";
+  /* no SVG, a classe vai pelo atributo (className é um objeto, não texto) */
+  tnSvg.setAttribute("class", ["tn-camada", ativa ? "tn-ativa" : "", tnCanetaVista ? "tn-caneta" : "", ativa && tnFerr === "borracha" ? "tn-apagar" : ""].filter(Boolean).join(" "));
+}
+
+/* ---------- a camada na questão (a cada repintura do corpo) ---------- */
+function tnMontar(corpo, qid) {
+  tnCorpo = corpo || null;
+  tnQid = qid || null;
+  tnAtual = null;
+  tnApagando = false;
+  if (!corpo) { tnSvg = null; return null; }
+  if (corpo.classList) corpo.classList.add("tn-com");
+  const svg = document.createElementNS(TN_NS, "svg");
+  svg.setAttribute("class", "tn-camada");
+  svg.setAttribute("aria-hidden", "true");
+  svg.id = "tnCamada";
+  if (svg.addEventListener) {
+    svg.addEventListener("pointerdown", (ev) => { tnComecar(ev); });
+    svg.addEventListener("pointermove", (ev) => { tnMover(ev); });
+    svg.addEventListener("pointerup", () => { tnSoltar(); });
+    svg.addEventListener("pointercancel", () => { tnSoltar(); });
+  }
+  corpo.appendChild(svg);
+  tnSvg = svg;
+  tnPintarClasse();
+  /* o texto refluiu (girou, mudou a letra, a caixa): redesenha a partir das letras */
+  try {
+    if (tnObs) tnObs.disconnect();
+    if (typeof ResizeObserver === "function") { tnObs = new ResizeObserver(() => tnPintarLogo()); tnObs.observe(corpo); }
+  } catch (e) {}
+  tnPintar();
+  tnPintarBarra();
+  return svg;
+}
+
+/* ---------- a barra ---------- */
+function tnBarraMontar() {
+  if (typeof document === "undefined") return null;
+  let b = $("tnBarra");
+  if (b) return b;
+  const dlg = $("dlgQsResponder");
+  if (!dlg) return null;
+  b = document.createElement("div");
+  b.id = "tnBarra";
+  b.className = "tn-barra";
+  b.hidden = true;
+  b.setAttribute("role", "toolbar");
+  b.setAttribute("aria-label", t("tn_barra"));
+  const bt = (id, txt, tit, fn, cls) => {
+    const x = document.createElement("button");
+    x.type = "button"; x.id = id; x.className = "tn-bt" + (cls ? " " + cls : "");
+    x.textContent = txt; x.title = tit; x.setAttribute("aria-label", tit);
+    x.onclick = fn;
+    b.append(x);
+    return x;
+  };
+  const sep = () => { const s = document.createElement("span"); s.className = "tn-sep"; b.append(s); };
+  bt("btnTnLapis", "✏️", t("tn_lapis"), () => tnFerramenta("lapis"));
+  bt("btnTnMarca", "🖍️", t("tn_marca"), () => tnFerramenta("marca"));
+  bt("btnTnBorracha", "🧽", t("tn_borracha"), () => tnFerramenta("borracha"));
+  bt("btnTnMao", "✋", t("tn_mao"), () => tnFerramenta("mao"));
+  sep();
+  TN_CORES.forEach((c) => {
+    const x = bt("btnTnCor_" + c.id, "", t("tn_cor_" + c.id), () => tnCorEscolher(c.id), "tn-cor");
+    if (x.style) x.style.background = c.cor;
+  });
+  sep();
+  const r = document.createElement("input");
+  r.type = "range"; r.id = "tnEspessura"; r.className = "tn-esp";
+  r.title = t("tn_espessura"); r.setAttribute("aria-label", t("tn_espessura"));
+  r.oninput = () => tnEspessura(Number(r.value));
+  b.append(r);
+  sep();
+  bt("btnTnDesfazer", "↶", t("tn_desfazer"), () => tnDesfazer());
+  bt("btnTnLimpar", "🗑", t("tn_limpar"), () => tnLimpar(), "tn-perigo");
+  sep();
+  bt("btnTnFechar", "✕", t("tn_fechar"), () => tnFechar());
+  dlg.append(b);
+  return b;
+}
+function tnPintarBarra() {
+  const b = $("tnBarra");
+  if (!b) return;
+  b.hidden = !tnAberta;
+  TN_FERRAMENTAS.forEach((f) => {
+    const x = $("btnTn" + f.charAt(0).toUpperCase() + f.slice(1));
+    if (x && x.classList) { x.classList.toggle("on", tnFerr === f); x.setAttribute("aria-pressed", tnFerr === f ? "true" : "false"); }
+  });
+  TN_CORES.forEach((c) => {
+    const x = $("btnTnCor_" + c.id);
+    if (x && x.classList) { x.classList.toggle("on", tnCor === c.id); x.setAttribute("aria-pressed", tnCor === c.id ? "true" : "false"); }
+  });
+  const r = $("tnEspessura");
+  if (r) {
+    const k = tnFerr === "mao" ? "lapis" : tnFerr;
+    r.min = String(TN_LARG_LIMITE[k][0]); r.max = String(TN_LARG_LIMITE[k][1]);
+    r.value = String(tnLarg[k]);
+    r.disabled = tnFerr === "mao";
+  }
+  if ($("btnTnDesfazer")) $("btnTnDesfazer").disabled = !(tnHist[tnQid] || []).length;
+  if ($("btnTnLimpar")) $("btnTnLimpar").disabled = !tnContar();
+  const g = $("btnQsTinta");
+  if (g && g.classList) { g.classList.toggle("btn-min-ok", tnAberta); g.setAttribute("aria-pressed", tnAberta ? "true" : "false"); }
+}
+function tnFerramenta(f) {
+  if (TN_FERRAMENTAS.indexOf(f) < 0) return false;
+  tnFerr = f;
+  tnPrefGravar();
+  tnPintarClasse();
+  tnPintarBarra();
+  return true;
+}
+function tnCorEscolher(id) {
+  if (!TN_CORES.some((c) => c.id === id)) return false;
+  tnCor = id;
+  if (tnFerr === "borracha" || tnFerr === "mao") tnFerr = "lapis";
+  tnPrefGravar();
+  tnPintarClasse();
+  tnPintarBarra();
+  return true;
+}
+function tnEspessura(v) {
+  const k = tnFerr === "mao" ? "lapis" : tnFerr;
+  const [a, z] = TN_LARG_LIMITE[k];
+  tnLarg[k] = Math.max(a, Math.min(z, Number(v) || TN_LARG_PADRAO[k]));
+  tnPrefGravar();
+  return tnLarg[k];
+}
+function tnAbrir() {
+  if (!tnQid) return false;
+  tnBarraMontar();
+  tnAberta = true;
+  if (tnFerr === "borracha") tnFerr = "lapis";
+  tnPintarClasse();
+  tnPintarBarra();
+  try { reg("QUESTOES", "lápis aberto", String(tnQid)); } catch (e) {}
+  return true;
+}
+function tnFechar() {
+  if (!tnAberta) return false;
+  tnAberta = false;
+  tnAtual = null;
+  tnApagando = false;
+  tnPintarClasse();
+  tnPintarBarra();
+  tnPintar();
+  return true;
+}
+function tnAlternar() { return tnAberta ? !tnFechar() : tnAbrir(); }
+function tnAbertaAgora() { return tnAberta; }
+
+/* o botão da linha de cima da questão (ao lado do ⋮) */
+function tnBotaoQuestao() {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "btnQsTinta";
+  b.className = "btn-min qs-fer-tinta" + (tnAberta ? " btn-min-ok" : "");
+  b.textContent = "✏️";
+  b.title = t("tn_abrir_aj");
+  b.setAttribute("aria-label", t("tn_abrir_aj"));
+  b.setAttribute("aria-pressed", tnAberta ? "true" : "false");
+  b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); tnAlternar(); };
+  return b;
+}
+
+/* o teclado com a barra aberta: P lápis · M marca-texto · R borracha · H mão · Ctrl+Z desfazer (Esc fecha a barra,
+ * pelo "cancel" da janela — ver tnIniciar). As letras das alternativas (A–E) e os números continuam respondendo:
+ * por isso a borracha é R, não B nem E. */
+function tnTecla(ev) {
+  if (!tnAberta || !ev) return false;
+  const alvo = ev.target;
+  const tag = String((alvo && alvo.tagName) || "").toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (alvo && alvo.isContentEditable)) return false;
+  const k = String(ev.key || "");
+  if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && k.toLowerCase() === "z") { tnDesfazer(); return true; }
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+  const mapa = { p: "lapis", m: "marca", r: "borracha", h: "mao" };
+  if (mapa[k.toLowerCase()]) return tnFerramenta(mapa[k.toLowerCase()]);
+  return false;
+}
+
+function tnIniciar() {
+  tnPrefLer();
+  const dlg = typeof document !== "undefined" ? $("dlgQsResponder") : null;
+  if (dlg && dlg.addEventListener) {
+    dlg.addEventListener("close", () => { tnFechar(); });
+    /* Esc com a barra aberta fecha a barra, não a sessão */
+    dlg.addEventListener("cancel", (ev) => { if (tnAberta) { if (ev.preventDefault) ev.preventDefault(); tnFechar(); } });
+  }
+}
+if (typeof document !== "undefined") { try { tnIniciar(); } catch (e) {} }

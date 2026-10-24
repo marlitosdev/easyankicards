@@ -1147,6 +1147,9 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 /* a linha de cima da questão: de onde ela é, e o ⋮ das ferramentas no canto */
 .qs-de-linha{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .qs-de-linha .qs-de{flex:1 1 auto;min-width:0}
+/* (v19.7.0) a regra "#dlgQsResponder .qs-de{flex:0 0 auto}" vencia esta: no celular a origem não encolhia e empurrava o ✏️ e
+   o ⋮ para FORA da tela (o corpo rolava de lado e o texto parecia cortado) */
+#dlgQsResponder .qs-de-linha .qs-de{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .qs-de-linha .qs-fer{margin:0;flex:0 0 auto}
 @media (max-width:760px){
   #dlgQsResponder[open]{padding-left:12px!important;padding-right:12px!important}
@@ -1505,6 +1508,30 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .ger-criar .nota{font-size:12px;margin:2px 0}
 #dlgJurCitaPreview.criando .jur-cita-dica{display:none}
 #dlgJurCitaPreview.criando #btnJurCitaJuntar{display:none}
+/* (v19.7.0) O LÁPIS POR CIMA DA QUESTÃO: a camada cobre o corpo e rola com ele; só pega o ponteiro com uma ferramenta de
+   desenho escolhida (a mão devolve o toque à página: rolar, responder, selecionar) */
+#qsSessCorpo.tn-com{position:relative}
+.tn-camada{position:absolute;left:0;top:0;pointer-events:none;z-index:6;overflow:visible}
+.tn-camada.tn-ativa{pointer-events:auto;touch-action:none;cursor:crosshair}
+.tn-camada.tn-ativa.tn-caneta{touch-action:pan-x pan-y pinch-zoom}
+.tn-camada.tn-apagar{cursor:cell}
+.tn-traco.tn-marca{opacity:.38}
+/* centrada SEM left:50% — com ele, a largura disponível para a barra encolher era a metade da tela, e ela quebrava em duas
+   linhas com espaço sobrando */
+.tn-barra{position:fixed;top:max(8px,env(safe-area-inset-top));left:0;right:0;margin:0 auto;width:max-content;z-index:60;display:flex;flex-wrap:wrap;
+  align-items:center;justify-content:center;gap:4px;max-width:calc(100% - 16px);box-sizing:border-box;padding:5px 10px;
+  background:var(--panel);color:var(--texto);border:1px solid var(--borda);border-radius:22px;box-shadow:0 6px 22px rgba(0,0,0,.22)}
+.tn-barra[hidden]{display:none}
+.tn-bt{min-width:34px;height:34px;border:1px solid transparent;border-radius:10px;background:none;color:inherit;font:inherit;font-size:16px;cursor:pointer;padding:0 6px}
+.tn-bt:hover{background:var(--campo)}
+.tn-bt.on{background:var(--acao,#2563eb);color:#fff}
+.tn-bt:disabled{opacity:.4;cursor:default}
+.tn-bt.tn-cor{min-width:24px;width:24px;height:24px;border-radius:50%;padding:0;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--borda)}
+.tn-bt.tn-cor.on{box-shadow:0 0 0 2px var(--texto)}
+.tn-perigo{color:var(--erro,#d1495b)}
+.tn-sep{width:1px;height:22px;background:var(--borda);margin:0 2px}
+.tn-esp{width:84px}
+@media (max-width:520px){.tn-barra{border-radius:14px;gap:2px;padding:4px 6px}.tn-bt{min-width:30px;height:30px;font-size:15px}.tn-esp{width:64px}}
 .jur-cita-par{border-left:3px solid var(--azul,#2563eb);padding-left:8px}
 #btnJurCitaJuntar{margin:0 0 10px}
 .jur-cita-bloco{margin:0 0 10px}
@@ -10749,6 +10776,7 @@ window.__sqlPromise = initSqlJs({
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>
+<script src="tinta.js"></script>
 <script src="geracao-log.js"></script>
 <script src="registro-tudo.js"></script>
 <script src="idb-decisoes.js"></script>

@@ -1388,6 +1388,8 @@ function qsUiPintarSessao() {
     try { rsPrepararPara(null); } catch (e) {}
     qsNavFlutPintar();
     qsGrBolhaEsconder();
+    /* (v19.7.0) acabou a rodada: o lápis não tem questão onde desenhar */
+    try { tnFechar(); tnMontar(null, null); } catch (e) {}
     return;
   }
   /* O rascunho pertence A QUESTAO: trocar de questao troca o papel.
@@ -1769,6 +1771,8 @@ function qsUiPintarSessao() {
    * mesmo caso de "melhorar esta questão", acima. */
   qsRodapePintar();
   qsNavFlutPintar();
+  /* (v19.7.0) O LÁPIS POR CIMA: a camada volta a cada repintura, com os traços desta questão presos às letras */
+  try { tnMontar(corpo, q.id); } catch (e) {}
   if ($("btnQsEnunAlternar")) {
     const be = $("btnQsEnunAlternar");
     be.hidden = !q;
@@ -4559,6 +4563,8 @@ function qsUiFerramentas(q) {
 
   /* (v18.54.0) AS CORES SAÍRAM DAQUI: moram no balão que sobe ao selecionar um trecho (qsGrBolhaMontar). */
 
+  /* (v19.7.0) o lápis, à vista (não dentro do ⋮): é gesto de leitura, como o grifo */
+  try { barra.append(tnBotaoQuestao()); } catch (e) {}
   /* o ⋮ com o que não é gesto de leitura */
   const mais = document.createElement("span");
   mais.className = "qs-fer-mais";
@@ -4970,6 +4976,11 @@ function qsUiChuteAlternar() {
 }
 
 function qsTeclaResponder(ev) {
+  /* (v19.7.0) com o lápis aberto, P/M/R/H e Ctrl+Z são dele (as letras das alternativas continuam respondendo) */
+  if (ev && typeof tnTecla === "function" && $("dlgQsResponder") && $("dlgQsResponder").open && tnTecla(ev)) {
+    if (ev.preventDefault) ev.preventDefault();
+    return true;
+  }
   if (!ev || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
   const dlg = $("dlgQsResponder");
   if (!dlg || !dlg.open) return false;
