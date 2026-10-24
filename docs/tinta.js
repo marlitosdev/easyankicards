@@ -156,12 +156,53 @@ function tnCaminho(pts) {
   const u = P[P.length - 1];
   return d + "L" + f(u[0]) + " " + f(u[1]);
 }
-/* palma da mão: depois de ver uma caneta, o toque do dedo não risca (rola) */
+/* =====================================================================
+ * PALMA DA MÃO (v19.12.3)
+ *
+ * O RELATO (notebook com tela de toque): "só o primeiro risco é mantido completo; os próximos só funcionam no início",
+ * com caneta, dedo e mouse. A CAUSA: ao ver a caneta, a camada passava a "touch-action: pan-x pan-y" para o dedo poder
+ * rolar — e no Windows o navegador aplica isso também à CANETA. O touch-action é lido quando o traço COMEÇA: o 1º traço
+ * (antes de ver a caneta) saía inteiro; a partir do 2º, depois de poucos pixels o navegador tomava o gesto como
+ * rolagem e cancelava o traço (pointercancel).
+ *
+ * AGORA: a camada é SEMPRE touch-action: none com ferramenta de desenho. A palma é ignorada só ENQUANTO a caneta está
+ * em uso (1,5 s depois do último sinal dela — ao pairar perto da tela ela também dá sinal); fora disso o dedo desenha
+ * (celular, tablet, notebook sem caneta). O toque ignorado como palma ROLA a questão pelo próprio app (tnRolar*).
+ * ===================================================================== */
+const TN_PALMA_MS = 1500;
+let tnUltimaCaneta = -Infinity;
+let tnRelogio = () => Date.now();
+function tnRelogioDefinir(fn) { tnRelogio = typeof fn === "function" ? fn : () => Date.now(); }
 function tnAceitaPonteiro(ev) {
   if (!ev) return false;
-  if (ev.pointerType === "pen") { if (!tnCanetaVista) { tnCanetaVista = true; tnPintarClasse(); } return true; }
-  if (ev.pointerType === "touch" && tnCanetaVista) return false;
+  if (ev.pointerType === "pen") { tnUltimaCaneta = tnRelogio(); tnCanetaVista = true; return true; }
+  if (ev.pointerType === "touch" && tnRelogio() - tnUltimaCaneta < TN_PALMA_MS) return false;
   if (ev.button !== undefined && ev.button !== 0 && ev.button !== -1) return false;
+  return true;
+}
+/* ---------- o toque ignorado (palma, ou dedo com a caneta em uso) rola a questão ---------- */
+let tnRolando = null;
+function tnRolavel(el) {
+  let e = el;
+  while (e && e.parentElement) {
+    try {
+      const oy = getComputedStyle(e).overflowY;
+      if ((oy === "auto" || oy === "scroll") && e.scrollHeight > e.clientHeight + 1) return e;
+    } catch (x) { break; }
+    e = e.parentElement;
+  }
+  return (typeof document !== "undefined" && document.scrollingElement) || el || null;
+}
+function tnRolarComecar(ev) {
+  const alvo = tnRolavel(tnCorpo);
+  if (!alvo) return false;
+  tnRolando = { id: ev.pointerId, y0: Number(ev.clientY) || 0, topo0: alvo.scrollTop || 0, alvo };
+  try { if (tnSvg && tnSvg.setPointerCapture && ev.pointerId !== undefined) tnSvg.setPointerCapture(ev.pointerId); } catch (e) {}
+  return true;
+}
+function tnRolarMover(ev) {
+  if (!tnRolando || (ev.pointerId !== undefined && ev.pointerId !== tnRolando.id)) return false;
+  tnRolando.alvo.scrollTop = tnRolando.topo0 - ((Number(ev.clientY) || 0) - tnRolando.y0);
   return true;
 }
 
@@ -352,7 +393,11 @@ function tnEsquecerTudo() { tnPorQuestao = {}; tnHist = {}; }
 function tnPonto(ev) { return [Number(ev.clientX) || 0, Number(ev.clientY) || 0]; }
 function tnComecar(ev) {
   if (!tnAberta || !tnQid || tnFerr === "mao") return false;
-  if (!tnAceitaPonteiro(ev)) return false;
+  if (!tnAceitaPonteiro(ev)) {
+    /* a palma (ou o dedo com a caneta em uso): não risca — rola a questão */
+    if (ev && ev.pointerType === "touch") tnRolarComecar(ev);
+    return false;
+  }
   /* (v19.12.2) O PONTEIRO FICA PRESO NA CAMADA, NUNCA NO TRAÇO. O relato: "só o primeiro risco é mantido completo; os
    * próximos só funcionam no início" — com caneta, dedo e mouse. O segundo traço começava EM CIMA do primeiro: o alvo
    * do toque era o desenho dele (<path>), e era nele que o ponteiro ficava preso; a pintura seguinte apagava e
@@ -376,6 +421,9 @@ function tnComecar(ev) {
   return true;
 }
 function tnMover(ev) {
+  /* a caneta pairando perto da tela também conta como "caneta em uso" (a palma apoiada não risca) */
+  if (ev && ev.pointerType === "pen") tnUltimaCaneta = tnRelogio();
+  if (tnRolarMover(ev)) return true;
   if (tnApagando) { const p = tnPonto(ev); tnApagarEm(p[0], p[1]); return true; }
   if (!tnAtual) return false;
   if (ev.pointerId !== undefined && tnAtual.id !== undefined && ev.pointerId !== tnAtual.id) return false;
@@ -584,7 +632,7 @@ function tnPintarClasse() {
   if (!tnSvg || !tnSvg.setAttribute) return;
   const ativa = tnAberta && tnFerr !== "mao";
   /* no SVG, a classe vai pelo atributo (className é um objeto, não texto) */
-  tnSvg.setAttribute("class", ["tn-camada", ativa ? "tn-ativa" : "", tnCanetaVista ? "tn-caneta" : "", ativa && tnFerr === "borracha" ? "tn-apagar" : ""].filter(Boolean).join(" "));
+  tnSvg.setAttribute("class", ["tn-camada", ativa ? "tn-ativa" : "", ativa && tnFerr === "borracha" ? "tn-apagar" : ""].filter(Boolean).join(" "));
 }
 
 /* ---------- a camada na questão (a cada repintura do corpo) ---------- */
@@ -603,8 +651,13 @@ function tnMontar(corpo, qid) {
   if (svg.addEventListener) {
     svg.addEventListener("pointerdown", (ev) => { tnComecar(ev); });
     svg.addEventListener("pointermove", (ev) => { tnMover(ev); });
-    svg.addEventListener("pointerup", () => { tnSoltar(); });
-    svg.addEventListener("pointercancel", () => { tnSoltar(); });
+    svg.addEventListener("pointerup", (ev) => { if (tnRolando && ev && ev.pointerId === tnRolando.id) { tnRolando = null; return; } tnSoltar(); });
+    svg.addEventListener("pointercancel", (ev) => {
+      if (tnRolando && ev && ev.pointerId === tnRolando.id) { tnRolando = null; return; }
+      /* o navegador tomou o gesto: fica no registro (com o tipo de ponteiro e quantos pontos o traço tinha) */
+      if (tnAtual) { try { reg("QUESTOES", "lápis: traço cancelado pelo navegador", (ev && ev.pointerType) + " · " + tnAtual.pts.length + " pontos"); } catch (e) {} }
+      tnSoltar();
+    });
     /* a captura se perdeu por outro motivo (a janela trocou, o sistema tomou o gesto): termina o traço, não o deixa pendurado */
     svg.addEventListener("lostpointercapture", () => { if (tnAtual || tnApagando) tnSoltar(); });
   }

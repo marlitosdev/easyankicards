@@ -1513,7 +1513,8 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 #qsSessCorpo.tn-com{position:relative}
 .tn-camada{position:absolute;left:0;top:0;pointer-events:none;z-index:6;overflow:visible}
 .tn-camada.tn-ativa{pointer-events:auto;touch-action:none;cursor:crosshair}
-.tn-camada.tn-ativa.tn-caneta{touch-action:pan-x pan-y pinch-zoom}
+/* (v19.12.3) SEM liberar a rolagem quando há caneta: no Windows o navegador aplicava o "pan" também à caneta e
+   cancelava o traço depois de poucos pixels. O dedo que é palma rola pela própria camada (tnRolar*, tinta.js). */
 .tn-camada.tn-apagar{cursor:cell}
 .tn-traco.tn-marca{opacity:.38}
 /* (v19.12.2) os traços não recebem toque: o alvo é sempre a camada (onde o ponteiro fica preso) */

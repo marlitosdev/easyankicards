@@ -37,10 +37,18 @@ async function testes() {
     ok(pt.length === 2 && pt[0][pt[0].length - 1][0] < 15 && pt[1][0][0] > 25, "M3a a borracha parte a reta em duas");
     ok(/^M0 0Q/.test(api.tnCaminho([[0, 0], [5, 5], [10, 0]])) && /^M1 1l/.test(api.tnCaminho([[1, 1]])), "M4 caminho SVG");
     api.tnCanetaReset();
+    let agora = 10000;
+    api.tnRelogioDefinir(() => agora);
     ok(api.tnAceitaPonteiro({ pointerType: "touch", button: 0 }) === true, "M5 sem caneta, o dedo desenha");
     ok(api.tnAceitaPonteiro({ pointerType: "pen", button: 0 }) === true && api.tnAceitaPonteiro({ pointerType: "touch", button: 0 }) === false,
-      "M5a depois de ver a caneta, o dedo (a palma) não risca");
+      "M5a com a caneta em uso, o dedo (a palma) não risca");
+    agora += 1400;
+    ok(api.tnAceitaPonteiro({ pointerType: "touch", button: 0 }) === false, "M5c ainda dentro de 1,5 s da caneta: palma");
+    agora += 200;
+    ok(api.tnAceitaPonteiro({ pointerType: "touch", button: 0 }) === true,
+      "M5d (v19.12.3) passado 1,5 s sem sinal da caneta, o dedo VOLTA a desenhar — antes, ver a caneta uma vez bloqueava o dedo para sempre");
     ok(api.tnAceitaPonteiro({ pointerType: "mouse", button: 2 }) === false, "M5b botão direito não desenha");
+    api.tnRelogioDefinir(null);
     api.tnCanetaReset();
   }
 
@@ -231,13 +239,38 @@ async function testes() {
     ok(api.tnContar() === 0, "K5 Ctrl+Z desfaz");
     /* caneta: a palma não risca */
     api.tnCanetaReset();
-    api.tnComecar(ev(40, 120, { pointerType: "pen" })); api.tnSoltar();
-    ok(api.tnComecar(ev(40, 120, { pointerType: "touch" })) === false, "C1 depois da caneta, o toque da palma não começa traço");
-    ok(/tn-caneta/.test(svg().getAttribute("class")), "C1a e a camada deixa o dedo rolar");
+    let t1 = 50000;
+    api.tnRelogioDefinir(() => t1);
+    const nC = api.tnContar();
+    /* (v19.12.3) O RELATO: com caneta, "só o primeiro risco é mantido completo". Vários traços de caneta seguidos: todos
+     * entram, e a camada NUNCA passa a liberar a rolagem (no Windows isso valia para a caneta e cancelava o traço) */
+    for (let k = 0; k < 3; k++) {
+      api.tnComecar(ev(40 + k * 5, 120, { pointerType: "pen", pointerId: 20 + k }));
+      api.tnMover(ev(90 + k * 5, 150, { pointerType: "pen", pointerId: 20 + k }));
+      api.tnMover(ev(140 + k * 5, 125, { pointerType: "pen", pointerId: 20 + k }));
+      api.tnSoltar();
+      api.tnFerramenta("lapis");   /* recalcula a classe da camada */
+      ok(/tn-ativa/.test(svg().getAttribute("class")) && !/tn-caneta/.test(svg().getAttribute("class")), "C0 depois do traço " + (k + 1) + " de caneta, a camada continua sem liberar a rolagem: " + svg().getAttribute("class"));
+    }
+    ok(api.tnContar() === nC + 3, "C0a três traços de caneta seguidos, os três inteiros");
+    ok(!/touch-action:\s*pan/.test((require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8").match(/\.tn-camada[^{]*\{[^}]*\}/g) || []).join(" ")),
+      "C0b nenhuma regra da camada libera a rolagem (touch-action: pan)");
+    /* a palma com a caneta em uso: não risca — rola a questão */
+    ok(api.tnComecar(ev(40, 120, { pointerType: "touch", pointerId: 40 })) === false && api.tnRolandoAtual() && api.tnRolandoAtual().id === 40,
+      "C1 com a caneta em uso, o toque (palma) não risca: rola a questão");
+    api.tnMover(ev(40, 90, { pointerType: "touch", pointerId: 40 }));
+    ok(api.tnContar() === nC + 3, "C1a rolar não cria traço");
+    api.tnCanetaReset();
+    /* passado o tempo da caneta, o dedo desenha */
+    t1 += 2000;
+    ok(api.tnComecar(ev(40, 120, { pointerType: "touch", pointerId: 41 })) === true, "C2 sem caneta em uso, o dedo desenha (celular, tablet, notebook)");
+    api.tnSoltar();
+    api.tnRelogioDefinir(null);
     api.tnCanetaReset();
     /* fechar o lápis */
+    const nAntesFechar = api.tnContar();
     api.$("btnTnFechar").onclick();
-    ok(!api.tnAbertaAgora() && api.$("tnBarra").hidden && !/tn-ativa/.test(svg().getAttribute("class")) && api.tnContar() === 1,
+    ok(!api.tnAbertaAgora() && api.$("tnBarra").hidden && !/tn-ativa/.test(svg().getAttribute("class")) && nAntesFechar > 0 && api.tnContar() === nAntesFechar,
       "F1 fechar esconde a barra, devolve o toque e mantém os traços");
     ok(api.tnTecla({ key: "m", target: {} }) === false, "F1a fechado, as teclas não são do lápis");
     /* preferências: a cor escolhida fica */
