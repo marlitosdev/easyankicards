@@ -1057,12 +1057,19 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
       /* (v19.0.0) a DATA da rodada: sem ela, uma rodada de dias atrás parecia a de agora */
       d: retomavel.comecou ? new Date(retomavel.comecou).toLocaleDateString() : "—",
     };
+    /* (v19.4.0) A OPÇÃO QUE APAGA A RODADA fica em VERMELHO e pede SEGUNDA confirmação: as duas pareciam iguais
+     * (verde e azul, lado a lado), e um toque errado jogava fora o placar da lista sem volta */
+    const confirmarDescarte = () => uiConfirm(t("qs_descartar_conf", dados), { perigo: true, ok: t("qs_descartar_ok") });
     if (retomavel.terminada) {
-      const r = await uiEscolha(t("qs_terminada_perg", dados), [
-        { valor: "registrar", rot: t("qs_terminada_reg"), classe: "btn-verde" },
-        { valor: "recomecar", rot: t("qs_terminada_nova"), classe: "btn-azul" },
-        { valor: "sair", rot: t("cancel_btn") },
-      ]);
+      let r;
+      for (;;) {
+        r = await uiEscolha(t("qs_terminada_perg", dados) + "\n\n" + t("qs_terminada_efeitos", dados), [
+          { valor: "registrar", rot: t("qs_terminada_reg"), classe: "btn-verde" },
+          { valor: "recomecar", rot: t("qs_terminada_nova"), classe: "btn-perigo" },
+          { valor: "sair", rot: t("cancel_btn") },
+        ]);
+        if (r !== "recomecar" || await confirmarDescarte()) break;
+      }
       if (r === "sair" || r === null) return;
       if (r === "registrar") {
         if (qsSessaoRetomar(esc)) {
@@ -1080,11 +1087,15 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
       } catch (e) {}
       try { qsSessaoApagar(); } catch (e) {}
     } else {
-      const r = await uiEscolha(t("qs_retomar_perg", dados), [
-        { valor: "continuar", rot: t("qs_retomar_sim"), classe: "btn-verde" },
-        { valor: "recomecar", rot: t("qs_retomar_nao"), classe: "btn-azul" },
-        { valor: "sair", rot: t("cancel_btn") },
-      ]);
+      let r;
+      for (;;) {
+        r = await uiEscolha(t("qs_retomar_perg", dados) + "\n\n" + t("qs_retomar_efeitos", dados), [
+          { valor: "continuar", rot: t("qs_retomar_sim"), classe: "btn-verde" },
+          { valor: "recomecar", rot: t("qs_retomar_nao"), classe: "btn-perigo" },
+          { valor: "sair", rot: t("cancel_btn") },
+        ]);
+        if (r !== "recomecar" || await confirmarDescarte()) break;
+      }
       if (r === "sair" || r === null) return;
       if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
     }
@@ -1325,7 +1336,7 @@ function qsUiPintarSessao() {
         bd.onclick = async () => {
           const txt = await uiTexto(
             t("qs_dica_tit", { e: x.q.enunciado.slice(0, 90) }), minha,
-            null, qsUiCopiarNaDica(x.q));
+            null, qsUiExtrasDaDica(x.q));
           if (txt === null) return;
           qsGravarDica(x.q.id, txt);
           matReg("questao", "dica escrita na revisão dos erros",
@@ -1556,7 +1567,7 @@ function qsUiPintarSessao() {
     bd.title = t("qs_dica_ajuda");
     bd.onclick = async () => {
       const txt = await uiTexto(t("qs_dica_tit", { e: q.enunciado.slice(0, 90) }),
-        minha, null, qsUiCopiarNaDica(q));
+        minha, null, qsUiExtrasDaDica(q));
       if (txt === null) return;
       qsGravarDica(q.id, txt);
       matReg("questao", txt.trim() ? "dica da questão guardada" : "dica da questão apagada",
@@ -1584,6 +1595,8 @@ function qsUiPintarSessao() {
         el.className = "qs-minha-dica";
         try { el.innerHTML = matParaHtml(String(minha)); }
         catch (e) { el.textContent = String(minha); }
+        /* (v19.4.0) as citações de lei da DICA viram links, como no comentário (a prévia abre por cima da questão) */
+        try { if (typeof citLigarEm === "function") citLigarEm(el, qsUiCitBase(q)); } catch (e) {}
       }));
     }
     corpo.append(depois);
@@ -4431,6 +4444,29 @@ function qsUiIniciar() {
  * mandar para a IA o rascunho da própria resposta é pedir que ela
  * concorde com você. Gabarito e comentário vão, porque são o que
  * permite à IA explicar em vez de chutar. */
+/* (v19.4.0) de onde vem a questão, para a citação saber o tópico (e quais leis ele tem) */
+function qsUiCitBase(q) {
+  const ch = (typeof matChave === "function" && q && q.disciplina && q.topico) ? matChave(q.disciplina, q.topico) : "";
+  return { disciplina: (q && q.disciplina) || "", topico: (q && q.topico) || "", chave: ch, onde: "questao",
+    aoVoltar: () => { try { const d = $("dlgQsResponder"); if (d && !d.open && qsSessaoAtual()) qsUiVoltarASessao(); } catch (e) {} } };
+}
+
+/* (v19.4.0) o segundo botão da caixa da dica: o pedido para uma IA comentar a questão */
+function qsUiPromptNaDica(q) {
+  if (!q || typeof plPromptComentar !== "function") return null;
+  return {
+    rotulo: t("dic_prompt_ia"),
+    dica: t("dic_prompt_ia_ajuda"),
+    faz: () => {
+      const txt = plPromptComentar(q);
+      try { navigator.clipboard.writeText(txt); } catch (e) {}
+      try { matReg("questao", "prompt para a IA comentar a questão copiado", String(q.enunciado || "").slice(0, 60)); } catch (e) {}
+      return txt;
+    },
+  };
+}
+function qsUiExtrasDaDica(q) { return [qsUiCopiarNaDica(q), qsUiPromptNaDica(q)].filter(Boolean); }
+
 function qsUiCopiarNaDica(q) {
   if (!q || typeof plTextoDaQuestao !== "function") return null;
   return {

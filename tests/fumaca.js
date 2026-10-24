@@ -1110,7 +1110,7 @@ function rodar() {
     get vkRevAbaAtual() { return vkRevAba; },
     vkRevMarcadosAtual: () => vkRevMarcados,
     qsTamanhoAtual, qsTamanhoTrocar, qsTamanhoPintar, qsTamanhoPor,
-    qsUiCopiarNaDica, uiTexto,
+    qsUiCopiarNaDica, qsUiPromptNaDica, qsUiExtrasDaDica, qsUiCitBase, plPromptComentar, uiTexto, uiPrompt,
     vkRevDadosAtual: () => vkRevDados,
     vkRevDadosPara: (d) => { vkRevDados = d; },
     vkPintarPares, vkMarcarTodos, vkCopiarLog,

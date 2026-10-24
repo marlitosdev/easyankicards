@@ -1009,6 +1009,9 @@ async function testes() {
     const p2 = aD.qsUiResponderDoTopico();
     await Promise.resolve();
     aD._uiFechar("recomecar");
+    /* (v19.4.0) recomeçar pede a SEGUNDA confirmação (descarta o placar da rodada) */
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    aD._uiFechar(true);
     await p2;
     ok(aD.qsPlacar().feitas === 0, "E1i recomecar manteve as respostas antigas");
     /* numero RELATIVO, nao fixo: uma resposta a mais em qualquer teste

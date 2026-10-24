@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.3.0";
+const VERSAO = "19.4.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -383,7 +383,7 @@ function _uiFechar(valor) {
   if (r) r(valor);
 }
 
-function uiDialog(texto, comCancelar) {
+function uiDialog(texto, comCancelar, opc) {
   return new Promise((resolve) => {
     // se já houver um aberto, encerra o anterior sem valor
     if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(false); }
@@ -397,8 +397,15 @@ function uiDialog(texto, comCancelar) {
     _uiLigarPadrao();
     const t3 = document.getElementById("uiModalTerceiro");
     if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
-    document.getElementById("uiModalOk").textContent = "OK";
+    /* (v19.4.0) AS CORES VOLTAM AO PADRÃO a cada abertura: uma pergunta de escolha (uiEscolha) pinta estes mesmos
+     * botões, e a confirmação seguinte herdava — o "Cancelar" saía vermelho e o "OK" azul. opc.perigo: o OK é a
+     * ação destrutiva (vermelho), com rótulo próprio (opc.ok). */
+    const o = opc || {};
+    const okB = document.getElementById("uiModalOk");
+    okB.className = "btn " + (o.perigo ? "btn-perigo" : "btn-verde");
+    okB.textContent = o.ok || "OK";
     const cancel = document.getElementById("uiModalCancel");
+    cancel.className = "btn btn-cinza";
     cancel.textContent = t("cancel_btn");
     cancel.style.display = comCancelar ? "" : "none";
     // showModal() põe o aviso na camada de topo: ele aparece mesmo com
@@ -443,11 +450,16 @@ function uiTexto(titulo, valor, dois, extra) {
       document.getElementById("txtLivreRot2").textContent = (dois && dois.rotulo2) || "";
       campo2.value = (dois && dois.valor2) || "";
     }
-    const bEx = document.getElementById("btnTxtLivreExtra");
+    /* (v19.4.0) até DOIS botões extras (ex.: "copiar a questão" e "prompt para a IA comentar"): "extra" pode ser
+     * um objeto { rotulo, dica, faz } ou uma lista deles */
+    const extras = Array.isArray(extra) ? extra : [extra];
+    ["btnTxtLivreExtra", "btnTxtLivreExtra2"].forEach((idEx, k) => {
+    const ex = extras[k];
+    const bEx = document.getElementById(idEx);
     if (bEx) {
-      bEx.hidden = !(extra && typeof extra.faz === "function");
-      bEx.textContent = (extra && extra.rotulo) || "";
-      bEx.title = (extra && extra.dica) || "";
+      bEx.hidden = !(ex && typeof ex.faz === "function");
+      bEx.textContent = (ex && ex.rotulo) || "";
+      bEx.title = (ex && ex.dica) || "";
       /* LIMPAR SEMPRE, na abertura.
        *
        * Havia esta limpeza aqui E outra no fechamento, e cada uma
@@ -458,7 +470,7 @@ function uiTexto(titulo, valor, dois, extra) {
       bEx.onclick = null;
       if (!bEx.hidden) {
         bEx.onclick = () => {
-          extra.faz();
+          ex.faz();
           /* REAÇÃO NO PRÓPRIO BOTÃO: copiar não muda nada na tela, e sem
            * confirmação a pessoa aperta de novo achando que falhou. */
           const antes = bEx.textContent;
@@ -467,6 +479,7 @@ function uiTexto(titulo, valor, dois, extra) {
         };
       }
     }
+    });
     const fim = (v) => {
       document.getElementById("btnTxtLivreOk").onclick = null;
       document.getElementById("btnTxtLivreNao").onclick = null;
@@ -600,7 +613,7 @@ function uiEscolhaLimpar() {
   _uiLigarPadrao();
 }
 
-function uiConfirm(texto) { return uiDialog(String(texto), true); }
+function uiConfirm(texto, opc) { return uiDialog(String(texto), true, opc); }
 
 /* ligações dos botões do modal */
 _uiLigarPadrao();
@@ -2231,7 +2244,9 @@ function uiPrompt(rotulo, valorInicial) {
     inp.style.display = "";
     inp.value = valorInicial || "";
     document.getElementById("uiModalOk").textContent = "OK";
+    document.getElementById("uiModalOk").className = "btn btn-verde";
     const cancel = document.getElementById("uiModalCancel");
+    cancel.className = "btn btn-cinza";
     cancel.textContent = t("cancel_btn"); cancel.style.display = "";
     _uiResolve = (ok) => { inp.style.display = "none"; resolve(ok ? inp.value : null); };
     m.classList.add("on");
