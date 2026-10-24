@@ -16,8 +16,6 @@
  * ===================================================================== */
 let leiNovaCtx = null;
 
-const LEI_NOVA_ACCEPT = ".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
 function leiNovaAbrir() {
   if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
   leiNovaIniciarTela();   /* idempotente: os botões ficam ligados mesmo se a partida não ligou */

@@ -3041,7 +3041,16 @@ function leiForaDaSequencia(artigos) {
 function leiPareceAlteradora(texto) {
   const s = String(texto || "");
   const sinais = [];
-  if ((s.match(new RegExp(LEI_RE_OMISSAO.source, "g")) || []).length >= 2) sinais.push("omitidos");
+  /* (v19.3.0) a fileira de pontos só é TRECHO OMITIDO logo depois da marca do dispositivo ("“Art. 9º ……", "§ 1º ……",
+   * "I – ……") ou numa linha só de pontos; a GUIA DE TABELA, com palavras antes dos pontos ("Armazéns e Frigoríficos
+   * ........ 86,0", "1. Acupunturista ......", "a) Profissionais autônomos......200,00 UFM"), não é — nos anexos do
+   * Código Tributário de Caruaru lido do PDF ela fazia a lei consolidada "parecer uma lei que altera". "[...]" e "(...)"
+   * contam sempre. */
+  const ehOmissao = (l) => /\[\s*(?:\.{3}|…)\s*\]|\(\s*(?:\.{3}|…)\s*\)/.test(l)
+    || /^\s*["“”«]?\s*(?:Art(?:\.|igo)?\s*\d+[ºo°]?(?:\s*-\s*[A-Z])?\.?|§\s*\d+[ºo°]?\.?|Par[áa]grafo\s+[úu]nico\.?|[IVXLCDM]+\s*[-–—.]|[a-z]\s*\)|\d+\s*[-–—.)])\s*(?:\.{5,}|…)/i.test(l)
+    || /^[.…\s"“”»]*\.{5,}[.…\s"“”»]*(?:\(\s*(?:NR|AC)\s*\))?\s*$/i.test(l);
+  const marcas = s.split("\n").filter(ehOmissao).reduce((n, l) => n + (l.match(new RegExp(LEI_RE_OMISSAO.source, "g")) || []).length, 0);
+  if (marcas >= 2) sinais.push("omitidos");
   if ((s.match(/\(\s*(?:NR|AC)\s*\)/g) || []).length >= 3) sinais.push("nr_ac");
   if (/passa(?:m)?\s+a\s+vigorar\s+com\s+as?\s+seguintes?\s+(?:altera[çc][õo]es|reda[çc][ãa]o)/i.test(s)) {
     sinais.push("passa_a_vigorar");
