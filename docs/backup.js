@@ -63,7 +63,9 @@ const BK_CHAVES = {
              "eac_leis", "eac_cit_vinculos", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei", "eac_lixeira",
              "eac_decisoes", "eac_decisoes_resumo",
              /* (v19.8.0) as marcas do lápis: moram no IndexedDB e só entram com a opção ligada (tnParaBackup) */
-             "eac_tinta"],
+             "eac_tinta",
+             /* (v19.11.0) as seções do resumo já lidas: o trabalho de saber o que falta ler */
+             "eac_mat_lidas"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
    *
    * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de

@@ -1215,6 +1215,8 @@ function matTrocarModo(modo) {
       || "<p class='nota'>" + t(txtEsc === null ? "mat_secao_vazia" : "mat_vazio_leitura") + "</p>";
     /* as citações de lei viram links DEPOIS do desenho: as marcas já estão no lugar */
     try { matCitacoesLigar($("matLeitura")); } catch (e) {}
+    /* (v19.11.0) ○/✓ ao lado de cada título e a faixa "seções lidas" (resumo-lidas.js) */
+    try { if (typeof rlsPintar === "function") rlsPintar($("matLeitura")); } catch (e) {}
     try { matPintarJurLote(); } catch (e) {}
     try { matRolDepoisDeDesenhar(); } catch (e) {}
   } else matRolMostrado = null;
