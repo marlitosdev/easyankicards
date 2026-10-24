@@ -8454,7 +8454,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="leiTextoTravado" hidden></p>
   <div class="lei-arq" id="leiArquivoBox">
     <button type="button" class="btn-min" id="btnLeiArquivo" data-i18n="lei_arq_btn"></button>
-    <input type="file" id="leiArquivoHtml" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+    <input type="file" id="leiArquivoHtml" accept=".pdf,.docx,.htm,.html,application/pdf,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
     <span class="nota" data-i18n="lei_arq_ajuda"></span>
     <button type="button" class="btn-min lei-arq-dica" id="btnLeiArqDica" data-i18n="lei_arq_dica_btn" data-i18n-title="lei_arq_dica_tip"></button>
     <button type="button" class="btn-min lei-fx-btn" id="btnLeiFxReg" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
@@ -8467,7 +8467,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <p class="lei-altfila-tit" id="leiAltFilaTit"></p>
     <div class="lei-altfila-acoes">
       <button type="button" class="btn-min" id="btnLeiAltFilaArq" data-i18n="lei_altfila_arq" data-i18n-title="lei_altfila_arq_tip"></button>
-      <input type="file" id="leiAltFilaArquivo" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+      <input type="file" id="leiAltFilaArquivo" accept=".pdf,.docx,.htm,.html,application/pdf,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
       <button type="button" class="btn-min" id="btnLeiAltFilaColar" data-i18n="lei_altfila_colar" data-i18n-title="lei_altfila_colar_tip"></button>
       <button type="button" class="btn-min btn-min-ok" id="btnLeiAltFilaComecar" data-i18n-title="lei_altfila_comecar_tip" hidden></button>
     </div>
@@ -8968,7 +8968,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <label class="nota" data-i18n="lei_upd_colar_rot"></label>
     <div class="lei-arq" id="leiUpdArquivoBox">
       <button type="button" class="btn-min" id="btnLeiUpdArquivo" data-i18n="lei_arq_btn"></button>
-      <input type="file" id="leiUpdArquivoHtml" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+      <input type="file" id="leiUpdArquivoHtml" accept=".pdf,.docx,.htm,.html,application/pdf,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
       <span class="nota" data-i18n="lei_arq_ajuda"></span>
       <button type="button" class="btn-min lei-arq-dica" id="btnLeiUpdArqDica" data-i18n="lei_arq_dica_btn" data-i18n-title="lei_arq_dica_tip"></button>
     </div>
@@ -9268,7 +9268,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <p class="nota" data-i18n="lei_nova_s1_aj"></p>
     <div class="lei-nova-entrada">
       <button type="button" class="btn btn-azul" id="btnLeiNovaArq" data-i18n="lei_nova_arq"></button>
-      <input type="file" id="leiNovaArq" accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+      <input type="file" id="leiNovaArq" accept=".pdf,.docx,.htm,.html,application/pdf,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
       <button type="button" class="btn-min" id="btnLeiNovaColar" data-i18n="lei_nova_colar"></button>
     </div>
     <div id="leiNovaColarCx" class="lei-nova-colar" hidden>
@@ -9282,7 +9282,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <p class="nota" data-i18n="lei_nova_s2_aj"></p>
     <div class="lei-nova-entrada">
       <button type="button" class="btn btn-azul" id="btnLeiNovaAltArq" data-i18n="lei_nova_alt_arq"></button>
-      <input type="file" id="leiNovaAltArq" multiple accept=".docx,.htm,.html,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+      <input type="file" id="leiNovaAltArq" multiple accept=".pdf,.docx,.htm,.html,application/pdf,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
       <button type="button" class="btn-min" id="btnLeiNovaAltColar" data-i18n="lei_nova_colar"></button>
     </div>
     <div id="leiNovaAltColarCx" class="lei-nova-colar" hidden>
@@ -10722,6 +10722,7 @@ window.__sqlPromise = initSqlJs({
 <script src="lei-seca.js"></script>
 <script src="lei-ui.js"></script>
 <script src="lei-nova.js"></script>
+<script src="lei-pdf.js"></script>
 <script src="questoes.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>

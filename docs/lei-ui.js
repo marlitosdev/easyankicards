@@ -6884,19 +6884,31 @@ function leiInserirNoCampo(ta, texto) {
 /* ABRIR O ARQUIVO .htm SALVO DA PÁGINA da lei: o risco do texto antigo, as tabelas e os acentos vêm completos, sem
  * depender da área de transferência. Vai para o campo como o colar com formatação: os trechos riscados entram com
  * ~~ e a revisão da colagem pergunta o que fazer com eles. */
-/* (v18.67.0) ler um arquivo de lei (.docx ou .htm) → { r, tipo } ou null, avisando o motivo quando não dá */
+/* (v18.67.0) ler um arquivo de lei (.docx, .htm ou — v19.3.0 — .pdf) → { r, tipo } ou null, avisando o motivo quando não dá */
 async function leiLerArquivoLei(file) {
   let r = null, tipo = "htm";
   try {
     const bytes = await file.arrayBuffer();
     tipo = leiTipoDeArquivo(file.name, bytes);
-    /* (v18.63.0) PDF, .doc antigo e companhia: não se lê — diz o caminho em vez de "não foi possível" */
-    if (tipo !== "htm" && tipo !== "docx") {
+    /* (v19.3.0) PDF: lido direto (lei-pdf.js), com o risco do texto revogado. Sem texto (escaneado) ou sem o leitor
+     * (primeira vez sem internet), diz o motivo. */
+    if (tipo === "pdf" && typeof leiTextoDePdf === "function") {
+      let ultimo = 0;
+      r = await leiTextoDePdf(bytes, { onProgresso: (p, n) => {
+        if (n >= 10 && (p === 1 || p - ultimo >= 25)) { ultimo = p; toastMsg(t("lei_pdf_lendo", { p, n }), 4000); }
+      } });
+      if (r && /^pdf_/.test(r.motivo || "")) {
+        toastMsg(t("lei_" + r.motivo), 12000);
+        try { leiReg("gravar", "arquivo .pdf: " + r.motivo, String(file.name || "") + " · " + (r.paginas || 0) + " página(s)"); } catch (e) {}
+        return null;
+      }
+      try { leiReg("gravar", "arquivo .pdf convertido: " + r.paginas + " página(s), " + (r.n || 0) + " trecho(s) riscado(s)", String(file.name || "")); } catch (e) {}
+    } else if (tipo !== "htm" && tipo !== "docx") {
       toastMsg(t(tipo === "pdf" ? "lei_arq_pdf" : "lei_arq_tipo", { x: "." + tipo }), 12000);
       try { leiReg("gravar", "arquivo ." + tipo + ": tipo que o app não lê", String(file.name || "")); } catch (e) {}
       return null;
     }
-    r = tipo === "docx" ? await leiTextoDeDocx(bytes) : leiTextoDeArquivoHtml(bytes);
+    if (tipo !== "pdf") r = tipo === "docx" ? await leiTextoDeDocx(bytes) : leiTextoDeArquivoHtml(bytes);
   } catch (e) { r = null; }
   if (!r || !String(r.texto || "").trim()) {
     toastMsg(t(!r || r.motivo === "nao_docx" || r.motivo === "sem_zip" ? (tipo === "docx" ? "lei_arq_erro_docx" : "lei_arq_erro") : "lei_arq_vazio"), 8000);

@@ -71,15 +71,18 @@ async function testes() {
 
   /* ---- 4: a tela: abrir o arquivo ---- */
   {
-    const api = iniciar();
+    const rr = rodar(); rr.api.matIniciar(); rr.api.leiIniciar();
+    const api = rr.api;
     const ta = api.$("leiTexto");
     ta.value = "";
     const toasts = [];
     const arq = (nome, bytes) => ({ name: nome, arrayBuffer: async () => bytes });
-    /* PDF: diz o caminho e não mexe no campo */
+    /* (v19.3.0) o PDF agora é LIDO (lei-pdf.js): um PDF danificado é recusado com o motivo, sem mexer no campo */
+    rr.janela.pdfjsLib = { OPS: {}, getDocument: () => ({ promise: Promise.reject(new Error("danificado")) }) };
     const r1 = await api.leiArquivoHtmlLido(arq("CTM Caruaru.pdf", new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer), "leiTexto");
-    ok(r1 === false && ta.value === "", "T1 PDF não é lido e o campo fica como estava");
-    ok(/Google Documentos/.test(api.t("lei_arq_pdf")) && /\.docx/.test(api.t("lei_arq_pdf")), "T1a a mensagem do PDF diz o caminho (.docx pelo Google Documentos ou Word)");
+    ok(r1 === false && ta.value === "", "T1 PDF danificado não é lido e o campo fica como estava");
+    ok(/arquivo \.pdf: pdf_invalido/.test(api.registroTexto()) && /danificado/.test(api.t("lei_pdf_invalido")), "T1a o motivo fica no registro e a mensagem diz o que houve");
+    delete rr.janela.pdfjsLib;
     const r2 = await api.leiArquivoHtmlLido(arq("velho.doc", new ArrayBuffer(4)), "leiTexto");
     ok(r2 === false && ta.value === "", "T2 .doc antigo também não");
     /* .htm continua lendo como antes */
@@ -93,14 +96,17 @@ async function testes() {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
     ok(/id="btnLeiArqDica"[^>]*data-i18n="lei_arq_dica_btn"/.test(html) && /id="btnLeiUpdArqDica"[^>]*data-i18n="lei_arq_dica_btn"/.test(html), "B1 o botão '💡 Está em PDF?' está na criação e na atualização");
     /* (v18.67.0) três: criar a lei, atualizar a lei e a fila das leis que alteram */
-    ok(["leiArquivoHtml", "leiUpdArquivoHtml", "leiAltFilaArquivo"].every((id) => new RegExp('id="' + id + '" accept="\\.docx,\\.htm').test(html)), "B2 os seletores de arquivo (criar, atualizar, fila) aceitam .docx");
+    /* (v19.3.0) e o .pdf, também no assistente "Incluir lei" */
+    ok(["leiArquivoHtml", "leiUpdArquivoHtml", "leiAltFilaArquivo", "leiNovaArq", "leiNovaAltArq"].every((id) => new RegExp('id="' + id + '"[^>]*accept="\\.pdf,\\.docx,\\.htm[^"]*application/pdf').test(html)),
+      "B2 os seletores de arquivo (criar, atualizar, fila, assistente) aceitam .pdf e .docx");
     const api = iniciar();
     let visto = null;
     const orig = api.dicaMostrar;
     ok(typeof api.$("btnLeiArqDica").onclick === "function" && typeof api.$("btnLeiUpdArqDica").onclick === "function", "B3 os dois botões estão ligados");
     void orig; void visto;
     const txt = api.t("lei_arq_dica_txt"), upd = api.t("lei_arq_dica_txt_upd");
-    ok(/Documentos Google/.test(txt) && /\.docx/.test(txt) && /1\./.test(txt) && /3\./.test(txt) && txt.length < 700, "B4 a dica é curta e em passos: " + txt.length + " caracteres");
+    /* (v19.3.0) a dica agora diz que o PDF abre direto; o caminho pelo Google Documentos fica só para o PDF escaneado */
+    ok(/Abra o PDF direto/.test(txt) && /escaneado/.test(txt) && /Documentos Google/.test(txt) && /RISCO/.test(txt) && txt.length < 700, "B4 a dica é curta e diz que o PDF abre direto: " + txt.length + " caracteres");
     ok(/ALTERA esta/.test(upd), "B5 na atualização, a dica diz qual opção marcar para a lei que altera");
     ["lei_arq_btn", "lei_arq_ajuda", "lei_arq_dica_btn", "lei_arq_dica_tip", "lei_arq_dica_txt", "lei_arq_dica_txt_upd", "lei_arq_pdf", "lei_arq_tipo", "lei_arq_erro_docx", "lei_arq_ok0_docx"].forEach((k) => {
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "B6 falta " + k + " em " + l); });
