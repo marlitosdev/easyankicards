@@ -75,6 +75,17 @@ function atualizarSeloBase() {
    * "salva há 2 dias" vs um nome de arquivo comprido no title) e pode
    * mudar quantas linhas o cabeçalho ocupa — sem remedir aqui, a barra
    * de modos ficaria por cima do selo ou com um vão embaixo dele. */
+  /* (v19.17.0) O BACKUP AUTOMÁTICO TOMA O SELO quando há algo a resolver (pausado, falhou, permissão vencida, backup
+   * mais novo de outro aparelho): é o único lugar sempre visível. Tocar abre o painel, onde está o botão que resolve. */
+  try {
+    const av = typeof bkaAvisoDoSelo === "function" ? bkaAvisoDoSelo() : null;
+    if (av) {
+      el.textContent = av.txt;
+      el.className = "selo-base " + av.cls + " selo-clicavel";
+      el.title = av.txt;
+      el.onclick = bkAbrirPainel;
+    } else el.onclick = null;
+  } catch (e) {}
   if (typeof medirCabecalho === "function") {
     try { medirCabecalho(); } catch (e) {}
   }
@@ -340,6 +351,8 @@ async function bkConfirmarRestauro() {
   try {
     const gerado = bkPendente.gerado;
     const n = restaurarBackup(bkPendente, bkPendenteExato ? { exato: bkPendenteExato } : null);
+    /* (v19.17.0) o automático passa a comparar com o que veio do arquivo */
+    try { if (typeof bkaDepoisDeRestaurar === "function") bkaDepoisDeRestaurar(bkPendente); } catch (x) {}
     /* A DATA DA BASE VEM DO ARQUIVO.
      * "eac_backup_em" só era escrito ao SALVAR. Quem restaurava uma base
      * num aparelho novo via "sem base" logo depois de carregar uma — e o
@@ -457,6 +470,7 @@ function bkPintarPainel() {
   }
   bkPintarHistorico();
   bkPintarAntes().catch(() => {});
+  try { if (typeof bkaPintar === "function") bkaPintar(); } catch (e) {}
   bkPintarBotoes();
 }
 

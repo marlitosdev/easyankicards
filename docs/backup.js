@@ -216,6 +216,17 @@ function resumoAtual() { return resumirBackup(montarBackup().dados); }
 
 /* Compara o backup com o que está no app AGORA. É o que a tela mostra antes
  * de perguntar "substituir?" — sem isto o usuário decide no escuro. */
+/* o nome de cada linha da conferência (também usado pelo backup automático para dizer o que encolheu) */
+const BK_ROTULOS = {
+  cartoes: "cartões", bandeja: "cartões na bandeja",
+  editais: "editais cadastrados",
+  disciplinas: "disciplinas", topicos: "tópicos do edital",
+  progresso: "tópicos marcados", diario: "registros de estudo",
+  resumos: "resumos",
+  /* os três que a tabela calava — ver resumirBackup */
+  questoes: "questões", leis: "leis guardadas",
+  artigos: "artigos de lei", juris: "julgados",
+};
 function compararBackup(bk) {
   const agora = resumoAtual();
   /* CONTA O QUE ESTÁ NO ARQUIVO, e não o que ele diz de si mesmo.
@@ -235,16 +246,7 @@ function compararBackup(bk) {
     ? resumirBackup(bk.dados)
     : ((bk && bk.resumo) || resumirBackup({}));
   const linhas = [];
-  const rotulos = {
-    cartoes: "cartões", bandeja: "cartões na bandeja",
-    editais: "editais cadastrados",
-    disciplinas: "disciplinas", topicos: "tópicos do edital",
-    progresso: "tópicos marcados", diario: "registros de estudo",
-    resumos: "resumos",
-    /* os três que a tabela calava — ver resumirBackup */
-    questoes: "questões", leis: "leis guardadas",
-    artigos: "artigos de lei", juris: "julgados",
-  };
+  const rotulos = BK_ROTULOS;
   Object.keys(rotulos).forEach((k) => {
     const a = agora[k] || 0, b = dele[k] || 0;
     if (!a && !b) return;
@@ -414,28 +416,39 @@ const BK_ANTES_IDB = "eac_idb_backup";
 const BK_ANTES_LOJA = "antes";
 let bkAntesLojaUsada = null;   /* {ler(): Promise<lista>, gravar(lista): Promise} — trocável nos testes */
 
-function bkAntesLojaIdb() {
-  const abrir = () => new Promise((resolve, reject) => {
+/* (v19.17.0) um IndexedDB só para o backup, com duas lojas: "antes" (as cópias de antes do restauro) e "pasta" (a pasta
+ * do backup automático — o navegador só deixa guardar a ALÇA da pasta no IndexedDB). Versão 2 cria as duas: quem já
+ * tinha a versão 1 (só "antes") ganha a "pasta" sem perder as cópias. */
+const BK_IDB_VERSAO = 2;
+function bkIdbAbrir() {
+  return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined" || !indexedDB) { reject(new Error("sem indexedDB")); return; }
     let req;
-    try { req = indexedDB.open(BK_ANTES_IDB, 1); } catch (e) { reject(e); return; }
-    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(BK_ANTES_LOJA)) db.createObjectStore(BK_ANTES_LOJA); };
+    try { req = indexedDB.open(BK_ANTES_IDB, BK_IDB_VERSAO); } catch (e) { reject(e); return; }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      [BK_ANTES_LOJA, "pasta"].forEach((n) => { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n); });
+    };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error("erro ao abrir o indexedDB das cópias"));
+    req.onerror = () => reject(req.error || new Error("erro ao abrir o indexedDB do backup"));
     req.onblocked = () => reject(new Error("indexedDB bloqueado"));
   });
-  const tx = (modo, fn) => abrir().then((db) => new Promise((resolve, reject) => {
-    const x = db.transaction([BK_ANTES_LOJA], modo);
+}
+function bkIdbTx(loja, modo, fn) {
+  return bkIdbAbrir().then((db) => new Promise((resolve, reject) => {
+    const x = db.transaction([loja], modo);
     let out;
-    const req = fn(x.objectStore(BK_ANTES_LOJA));
+    const req = fn(x.objectStore(loja));
     if (req) req.onsuccess = () => { out = req.result; };
     x.oncomplete = () => { db.close(); resolve(out); };
-    x.onerror = () => { db.close(); reject(x.error || new Error("erro no indexedDB das cópias")); };
-    x.onabort = () => { db.close(); reject(x.error || new Error("gravação da cópia abortada (sem espaço?)")); };
+    x.onerror = () => { db.close(); reject(x.error || new Error("erro no indexedDB do backup")); };
+    x.onabort = () => { db.close(); reject(x.error || new Error("gravação abortada (sem espaço?)")); };
   }));
+}
+function bkAntesLojaIdb() {
   return {
-    ler: () => tx("readonly", (l) => l.get("lista")).then((v) => (Array.isArray(v) ? v : [])),
-    gravar: (lista) => tx("readwrite", (l) => { l.put(lista, "lista"); return null; }),
+    ler: () => bkIdbTx(BK_ANTES_LOJA, "readonly", (l) => l.get("lista")).then((v) => (Array.isArray(v) ? v : [])),
+    gravar: (lista) => bkIdbTx(BK_ANTES_LOJA, "readwrite", (l) => { l.put(lista, "lista"); return null; }),
   };
 }
 function bkAntesLoja() { return bkAntesLojaUsada || (bkAntesLojaUsada = bkAntesLojaIdb()); }

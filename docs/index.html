@@ -1553,6 +1553,11 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .pas-li{display:flex;align-items:center;gap:6px}
 .pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
 .pas-ren{flex:1}
+/* (v19.17.0) backup automático numa pasta */
+.bka-bloco #bkaCorpo{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.bka-pausado{white-space:pre-line}
+.bka-mais-novo{border-color:var(--info,#3b82f6)}
+.bka-ultimo{font-size:12px}
 /* (v19.16.0) o .json sem compactar, discreto embaixo dos botões de guardar */
 .bk-json{display:inline-block;margin-top:6px}
 /* (v19.15.0) cópias de antes do restauro */
@@ -3025,6 +3030,8 @@ dialog.mat-amplo{max-height:96vh}
   border:1px solid var(--borda);background:var(--campo);color:var(--sutil)}
 .sb-ok{border-color:rgba(34,197,94,.5);color:var(--ok)}
 .sb-aviso{border-color:rgba(245,158,11,.5);color:var(--atencao)}
+/* (v19.17.0) o selo vira botão quando o backup automático tem algo a resolver */
+.selo-clicavel{cursor:pointer;text-decoration:underline dotted}
 .sb-alerta{border-color:rgba(220,38,38,.5);color:var(--erro)}
 :root[data-theme="light"] .sb-alerta{color:var(--erro)}
 .selo-ajuda{all:unset;cursor:help;width:15px;height:15px;border-radius:50%;
@@ -10490,6 +10497,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- (v19.16.0) o backup sai compactado (.json.gz); o .json de sempre continua à mão -->
     <button type="button" class="btn-link bk-json" id="btnBkBaixarJson" data-i18n="bk_baixar_json" data-i18n-title="bk_baixar_json_tip" hidden></button>
   </div>
+  <!-- (v19.17.0) BACKUP AUTOMÁTICO NUMA PASTA — um caminho A MAIS; os botões de guardar acima continuam iguais.
+       O conteúdo é pintado por bkaPintar (backup-auto.js) conforme o estado: sem suporte, desligado, ligado, pausado. -->
+  <div class="bk-passo bka-bloco" id="bkaBloco">
+    <b data-i18n="bka_tit"></b>
+    <div id="bkaCorpo"></div>
+  </div>
   <div class="bk-passo">
     <b data-i18n="bk_p2_tit"></b>
     <span class="nota" data-i18n="bk_p2_txt"></span>
@@ -10857,6 +10870,7 @@ window.__sqlPromise = initSqlJs({
 <script src="app.js"></script>
 <script src="backup.js"></script>
 <script src="backup-ui.js"></script>
+<script src="backup-auto.js"></script>
 <script src="material.js"></script>
 <script src="cartao-melhorar.js"></script>
 <script src="idb-leis.js"></script>
@@ -10954,6 +10968,7 @@ try { hubIniciar(); } catch (e) { console.error(e);
 try { bkIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar bkIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
+try { bkaIniciar().catch((e) => { try { reg("ERRO", "falha ao iniciar o backup automático: " + (e && e.message)); } catch (x) {} }); } catch (e) { console.error(e); }
 try { montarBarraModos(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar montarBarraModos: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
