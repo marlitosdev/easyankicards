@@ -86,7 +86,10 @@ async function testes() {
     ok(api.$("btnJurCitaCriar").hidden && !api.$("btnJurCitaAbrir").hidden, "J4c julgado guardado: 'abrir na gaveta' sim, 'criar' não");
     ok(api.$("dlgMaterial").open === true, "J4d a prévia fechou o resumo");
     api.$("btnJurCitaAbrir").onclick();
-    ok(api.$("dlgJuris").open === true && api.$("jurTese").value === s430.tese, "J4e 'abrir na gaveta' não abriu este julgado");
+    /* (v19.22.0) abrir é para LER: a gaveta em leitura, com o julgado em destaque (editar é passo à parte) */
+    const card = api.$("jurItem_" + s430.id);
+    ok(api.$("dlgJuris").open === true && card && /jur-foco/.test(card.className) && /aberto/.test(card.textContent || "") && /sócio-gerente/.test(card.textContent || "") && api.$("jurForm").hidden === true,
+      "J4e 'abrir na gaveta' devia abrir a gaveta em leitura, com este julgado em destaque (fixo) na lista");
     api.$("dlgJuris").close(); api.jurVoltarPara();
     /* a não guardada: criar agora */
     jl()[1].onclick({ stopPropagation() {} });

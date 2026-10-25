@@ -4282,9 +4282,33 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .jur-rep-copia{color:var(--sutil);line-height:1.45;margin-top:2px;
   padding-left:10px;border-left:2px solid var(--borda)}
 .jur-rep-li span{flex:1 1 180px}
-/* o rodapé grudado embaixo da caixa */
-.jur-rodape{position:sticky;bottom:0;background:var(--bg);
-  padding-top:8px;margin-top:4px;border-top:1px solid var(--borda);z-index:2}
+/* o rodapé grudado embaixo da caixa.
+   (v19.22.0) Vai até a BORDA da janela: com bottom:0 ele parava no recuo de 18px do diálogo, e o texto rolado
+   aparecia por baixo dele ("A TESE — O QUE VOCÊ…" cortado sob os botões). A ação principal fica à direita, por último. */
+.jur-rodape{position:sticky;bottom:-18px;background:var(--panel);margin:6px -18px -18px;padding:12px 18px 16px;
+  border-top:1px solid var(--borda);z-index:2;justify-content:flex-end;box-shadow:0 -6px 14px rgba(0,0,0,.18)}
+.jur-rodape #btnJurSalvar{order:3}
+.jur-rodape #btnJurCancelarEd,.jur-rodape #btnJurFechar{order:1}
+/* (v19.22.0) EDITANDO UM JULGADO GUARDADO não é criar: sem passos, sem caixa de colar no topo, sem "separar
+   julgados" nem "ler e preencher"; a identificação primeiro, depois tese e resumo, e a ementa como campo opcional no fim */
+.jur-ed-so{display:none}
+#dlgJuris.jur-editando .jur-ed-so{display:block}
+#dlgJuris.jur-editando #jurComecar,#dlgJuris.jur-editando #jurPassos,#dlgJuris.jur-editando #jurPassoAjuda,
+#dlgJuris.jur-editando #jurClPedidoTxt,#dlgJuris.jur-editando #jurOficial,#dlgJuris.jur-editando #jurSem,
+#dlgJuris.jur-editando #jurSepararLin,#dlgJuris.jur-editando .jur-colar-lin,#dlgJuris.jur-editando #jurLote,
+#dlgJuris.jur-editando #btnJurMeta{display:none}
+#dlgJuris.jur-editando #jurForm:not([hidden]){display:flex;flex-direction:column;gap:6px}
+#dlgJuris.jur-editando #jurColarAviso{order:1;align-self:flex-start}
+#dlgJuris.jur-editando #jurEdRotIdent{order:2;margin-top:4px}
+#dlgJuris.jur-editando #jurMetaCampos{order:3}
+#dlgJuris.jur-editando #jurConteudo{order:4;margin-top:8px}
+#dlgJuris.jur-editando #jurColarRot{order:5;margin-top:10px}
+#dlgJuris.jur-editando #jurColar{order:6;min-height:90px}
+/* o julgado aberto: em DESTAQUE fixo no meio dos outros (borda e fundo), com o selo "▶ aberto" / "✏️ editando" */
+.jur-item.jur-foco{outline:2px solid var(--info,#3b82f6);outline-offset:2px;background:rgba(59,130,246,.08)}
+.jur-sel.jur-foco-selo{background:var(--info,#3b82f6);color:#fff;border-color:transparent;font-weight:700}
+.jur-visit-nota{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:8px;padding-top:8px;
+  border-top:1px dashed var(--borda);font-size:12.5px;color:var(--sutil)}
 /* A PÍLULA DO QUE FOI DETECTADO, colada na caixa de colar. */
 .jur-pilula{font-size:11.5px;line-height:1.45;margin:7px 0 0;
   padding:6px 11px;border-radius:999px;display:inline-block;
@@ -7229,7 +7253,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <span class="jur-passo" id="jurPasso3" data-i18n="jur_passo_3"></span>
   </div>
   <p class="nota jur-passo-ajuda" id="jurPassoAjuda"></p>
-  <label class="nd-rot" data-i18n="jur_colar_rot"></label>
+  <label class="nd-rot" id="jurColarRot" data-i18n="jur_colar_rot"></label>
   <textarea id="jurColar" rows="4" style="width:100%;box-sizing:border-box"
     placeholder="RE 574706 / PR — PARANÁ&#10;Relator(a): Min. CÁRMEN LÚCIA&#10;Julgamento: 15/03/2017 — Tribunal Pleno&#10;Tese: O ICMS não compõe a base de cálculo para fins de incidência do PIS e da COFINS."></textarea>
   <!-- A PÍLULA FICA COLADA NA CAIXA, não lá embaixo junto dos campos.
@@ -7356,6 +7380,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        aqui atrás, e a pílula acima diz o que há dentro. -->
   <button type="button" class="btn-min jur-meta-btn" id="btnJurMeta"
     data-i18n="jur_meta_ver" data-i18n-title="jur_b_meta"></button>
+  <!-- (v19.22.0) editando um julgado guardado, a identificação vem PRIMEIRO e com título (ver #dlgJuris.jur-editando) -->
+  <div class="nd-rot jur-ed-so" id="jurEdRotIdent" data-i18n="jur_ed_ident"></div>
   <div class="jur-campos" id="jurMetaCampos" hidden>
     <label class="vk-lado"><span data-i18n="jur_c_tribunal"></span><em class="jur-origem" id="jurOrigem_tribunal"></em>
       <input type="text" id="jurTribunal" placeholder="STF"></label>
@@ -7400,8 +7426,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <!-- A AÇÃO PRINCIPAL PRIMEIRO, e sempre visível: é ela que se
          procura depois de escrever. Some no modo leitura, onde não há
          formulário para salvar. -->
+    <!-- (v19.22.0) a ação principal fica À DIREITA, por último (a ordem visual vem do CSS): editando, "Cancelar" volta
+         ao julgado sem mudar nada; criando ou lendo, "Fechar" fecha a gaveta. -->
     <button class="btn btn-verde" id="btnJurSalvar"
       data-i18n-title="jur_b_salvar"></button>
+    <button class="btn btn-cinza" id="btnJurCancelarEd" hidden data-i18n="jur_ed_cancelar" data-i18n-title="jur_ed_cancelar_aj"></button>
     <button class="btn btn-cinza" id="btnJurFechar" data-i18n="help_close" data-i18n-title="jur_b_fechar"></button>
   </div>
 </dialog>

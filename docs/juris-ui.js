@@ -12,6 +12,7 @@
 
 let jurTopicoAtual = null;      /* {disciplina, nome, chave} */
 let jurEditando = "";           /* id em edição, "" para novo */
+let jurFoco = "";               /* (v19.22.0) o julgado aberto: fica em DESTAQUE na lista enquanto a gaveta está aberta */
 let jurCategoriaColada = "";    /* categoria vinda da colagem/JSON */
 let jurTagsColadas = [];        /* etiquetas de assunto vindas do JSON */
 /* CAMPOS QUE A IA TROUXE E O TEXTO NÃO CONFIRMA: { campo: valor }. O valor
@@ -55,6 +56,7 @@ function jurRamoVerTodos() { jurRamoAlvo = null; jurPintarLista(); }
 /* (v18.52.0) criando pela gaveta a partir de "ligar a outro…": ao guardar, o trecho fica ligado ao julgado novo */
 let jurLigarAoSalvar = null;
 function jurAbrir(disciplina, topico, modo, opc) {
+  jurFoco = "";
   jurLigarAoSalvar = null;
   try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("juris", disciplina, topico); } catch (e) {}
   const chave = (typeof matChave === "function")
@@ -126,19 +128,32 @@ function jurVoltarPara() {
 
 function jurPintarModo() {
   const lendo = jurModo === "ler";
+  /* (v19.22.0) editar um julgado guardado tem tela própria (#dlgJuris.jur-editando): ver o CSS */
+  const editando = jurModo === "editar";
+  const dlg = $("dlgJuris");
+  if (dlg && dlg.classList) { if (editando) dlg.classList.add("jur-editando"); else dlg.classList.remove("jur-editando"); }
+  if ($("btnJurCancelarEd")) $("btnJurCancelarEd").hidden = !editando;
+  if ($("btnJurFechar")) $("btnJurFechar").hidden = editando;
+  const cx = $("jurColar");
+  if (cx) {
+    if (cx.dataset && cx.dataset.phOrig === undefined) cx.dataset.phOrig = cx.placeholder || "";
+    cx.placeholder = editando ? t("jur_ed_colar_ph") : ((cx.dataset && cx.dataset.phOrig) || "");
+  }
+  if ($("jurColarRot")) $("jurColarRot").textContent = t(editando ? "jur_ed_colar_rot" : "jur_colar_rot");
   const quantos = jurTopicoAtual ? jurDoTopico(jurTopicoAtual.chave).length : 0;
   if ($("jurForm")) $("jurForm").hidden = lendo;
   /* O GUARDAR VIVE NO RODAPÉ FIXO, fora do formulário — então é ele que
    * precisa saber que no modo leitura não há o que salvar. */
   if ($("btnJurSalvar")) $("btnJurSalvar").hidden = lendo;
   if ($("jurLerAcoes")) $("jurLerAcoes").hidden = !lendo;
-  /* voltar para a leitura só existe quando há o que ler */
-  if ($("btnJurVoltarLer")) $("btnJurVoltarLer").hidden = !quantos;
+  /* voltar para a leitura só existe quando há o que ler (também o aberto de outro tópico) */
+  if ($("btnJurVoltarLer")) $("btnJurVoltarLer").hidden = !quantos && !jurFoco;
   if ($("jurTitulo")) {
-    $("jurTitulo").textContent = t(lendo ? "jur_titulo_ler" : "jur_titulo_novo");
+    const je = editando && jurEditando ? jurDe(jurEditando) : null;
+    $("jurTitulo").textContent = editando ? t("jur_titulo_editar", { j: je ? jurTitulo(je) : "" }) : t(lendo ? "jur_titulo_ler" : "jur_titulo_novo");
   }
   const aj = $("jurAjuda");
-  if (aj) aj.textContent = t(lendo ? "jur_ajuda_ler" : "jur_ajuda");
+  if (aj) aj.textContent = t(editando ? "jur_ajuda_editar" : (lendo ? "jur_ajuda_ler" : "jur_ajuda"));
 }
 
 function jurTrocarModo(m) {
@@ -759,6 +774,8 @@ async function jurSalvar() {
   jurPintarModo();
   jurPintarLista();
   jurRepintarTelas();
+  /* (v19.22.0) e mostra ONDE: a lista vai até o julgado salvo, em destaque */
+  try { jurFocarJulgado(j.id); } catch (e) {}
   jurReagirBtn("btnJurSalvar", t("jur_salvou"));
 }
 
@@ -875,6 +892,7 @@ function jurEditar(id) {
   const j = jurDe(id);
   if (!j) return;
   jurEditando = id;
+  jurFoco = id;
   /* editar é outro julgado: o selo da leitura anterior não vale mais */
   jurPilulaLimpar();
   const põe = (idc, v) => { if ($(idc)) $(idc).value = v || ""; };
@@ -893,9 +911,9 @@ function jurEditar(id) {
     if (JUR_CAMPOS_FORM[k]) jurConferirForm[k] = String(j[k] || "").trim();
   });
   jurPintarTagsForm();
-  /* editar é incluir com os campos preenchidos: sem trocar de modo, o
-   * formulário ficaria escondido e o clique não faria nada visível */
-  jurModo = "incluir";
+  /* editar tem modo PRÓPRIO (v19.22.0): o formulário de criar — passos, caixa de colar no topo, "separar julgados" —
+   * não fazia sentido para um julgado já guardado e confundia (relato do usuário). Ver jurPintarModo e o CSS. */
+  jurModo = "editar";
   jurPintarModo();
   /* os outros julgados saem de cena enquanto este é editado (e o botão os traz de volta) */
   jurOutrosAberto = false;
@@ -917,7 +935,36 @@ function jurEditar(id) {
     /* os dois avisos juntos: o de campos separados não pode sumir debaixo deste */
     $("jurColarAviso").textContent = (sep ? $("jurColarAviso").textContent + " " : "") + t("jur_mem_editar_aviso", { c: j.certeza ? t("jur_cn_certeza_" + j.certeza) : "?" });
   }
+  /* o retrato do formulário recém-aberto: "Cancelar" só pergunta se algo mudou */
+  jurEdFoto = jurFotoForm();
   if ($("jurTese") && $("jurTese").focus) $("jurTese").focus();
+}
+
+/* (v19.22.0) CANCELAR A EDIÇÃO: volta ao julgado (na lista, em destaque) sem mudar nada; com alterações, pergunta */
+let jurEdFoto = "";
+function jurFotoForm() {
+  const v = (id) => String(($(id) || {}).value || "");
+  return JSON.stringify(["jurTese", "jurResumo", "jurColar", "jurTribunal", "jurClasse", "jurNumero", "jurTema", "jurData",
+    "jurOrgao", "jurFonte", "jurPrecedentes"].map(v).concat([JSON.stringify(jurTagsColadas || [])]));
+}
+async function jurCancelarEdicao() {
+  const id = jurEditando;
+  if (jurFotoForm() !== jurEdFoto && !(await uiConfirm(t("jur_ed_descartar"), { perigo: true, ok: t("jur_ed_descartar_ok") }))) return false;
+  jurLimparForm();
+  jurTrocarModo("ler");
+  if (id) jurFocarJulgado(id);
+  return true;
+}
+/* leva a lista até o julgado e o destaca por um instante (false = não está nesta lista) */
+function jurFocarJulgado(id) {
+  if (!jurDe(id)) return false;
+  jurFoco = id;
+  /* tópico sem julgado abre em "incluir": para LER o aberto (que é de outro tópico), a gaveta fica em leitura */
+  if (jurModo === "incluir" && !jurEditando) { jurModo = "ler"; jurPintarModo(); }
+  jurPintarLista();
+  const el = $("jurItem_" + id);
+  try { if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" }); } catch (e) {}
+  return !!el;
 }
 
 async function jurTirar(id) {
@@ -1500,7 +1547,8 @@ function jurPintarLista() {
   const conta = $("jurConta");
   if (conta) {
     conta.textContent = lista.length
-      ? t("jur_conta", { n: lista.length }) : t("jur_conta_zero");
+      ? t("jur_conta", { n: lista.length })
+      : t(jurFoco && jurDe(jurFoco) ? "jur_conta_zero_visit" : "jur_conta_zero");
   }
   jurPintarRepetidos();
   /* CRIANDO OU EDITANDO, A LISTA FICA RECOLHIDA (e os avisos de repetidos junto): é do que se escreve, não dos outros,
@@ -1529,11 +1577,21 @@ function jurPintarLista() {
     /* (v18.96.0) o mesmo fluxo único da biblioteca, só com os pendentes deste tópico: catálogo → repetidos → IA */
     $("btnJurCorrigirIA").onclick = () => { $("dlgJuris").close(); jurBibAbrir(); return jurAudAbrir(pend.map((j) => j.id)); };
   }
-  if (!lista.length) return;
+  /* (v19.22.0) O ABERTO QUE É DE OUTRO TÓPICO. A citação de um resumo aponta para um julgado guardado onde quer que
+   * esteja (no backup real, as súmulas citadas em "Administração tributária municipal" estavam ligadas a outros tópicos):
+   * ele entra NO TOPO da lista, em destaque, dizendo onde está guardado e oferecendo ligá-lo a este — e os julgados
+   * deste tópico seguem logo abaixo. A contagem acima continua sendo a do tópico. */
+  const visitante = jurFoco && !lista.some((x) => x.id === jurFoco) ? jurDe(jurFoco) : null;
+  if (!lista.length && !visitante) return;
 
-  lista.forEach((j) => {
+  (visitante ? [visitante] : []).concat(lista).forEach((j) => {
     const li = document.createElement("div");
-    li.className = "jur-item";
+    li.className = "jur-item" + (j === visitante ? " jur-visitante" : "");
+    li.id = "jurItem_" + j.id;   /* "abrir na gaveta" leva a lista até aqui (jurFocarJulgado) */
+    /* (v19.22.0) O ABERTO FICA EM DESTAQUE no meio dos outros (pedido do usuário): ver a lista inteira sem perder de
+     * vista qual é o que se está olhando — ou editando */
+    const emFoco = jurFoco && j.id === jurFoco;
+    if (emFoco) li.className += " jur-foco";
 
     const cab = document.createElement("div");
     cab.className = "jur-cab";
@@ -1551,6 +1609,7 @@ function jurPintarLista() {
       cab.append(b);
       return b;
     };
+    if (emFoco) sel(t(jurModo === "editar" ? "jur_foco_editando" : "jur_foco_aberto"), "jur-foco-selo");
     if (j.tribunal) sel(j.tribunal, "trib");
     /* Q3 — o ramo deste julgado neste tópico */
     const rJ = jurRamoDe(j, jurTopicoAtual.chave);
@@ -1729,7 +1788,7 @@ function jurPintarLista() {
     });
     /* Q3 — escolher o ramo deste julgado (quando o tópico tem ramos): dentro do ⋯, e não uma linha em todo julgado */
     const ramosT = typeof qsUiRamosDoTopico === "function" ? qsUiRamosDoTopico(jurTopicoAtual.chave, jurPintarLista._memo || (jurPintarLista._memo = {})) : [];
-    if (ramosT.length) {
+    if (ramosT.length && j !== visitante) {
       const lb = document.createElement("label");
       lb.className = "jur-ramo-sel";
       const sp = document.createElement("span");
@@ -1748,7 +1807,8 @@ function jurPintarLista() {
       mais.append(lb);
     }
     item("🛡 " + t("jur_q_menu"), t("jur_q_menu_aj"), "", () => { qPainel.hidden = false; });
-    item("🗑️ " + t("jur_mais_excluir"), t("jur_tr"), "jur-mais-perigo", () => jurTirar(j.id));
+    /* (v19.22.0) o aberto de outro tópico não está ligado a este: "excluir deste tópico" não teria o que tirar */
+    if (j !== visitante) item("🗑️ " + t("jur_mais_excluir"), t("jur_tr"), "jur-mais-perigo", () => jurTirar(j.id));
     /* (v18.95.0) O SELO DE QUALIDADE: um veredito só (oficial · conferido · a conferir · problema · vencido), com o
      * porquê e as ações num painel que abre no próprio cartão */
     const q = jurQualidade(j, { lista: todosQ });
@@ -1858,6 +1918,28 @@ function jurPintarLista() {
       li.append(bVer, cheia);
     }
 
+    if (j === visitante) {
+      const nota = document.createElement("div");
+      nota.className = "jur-visit-nota";
+      const onde = (typeof jurBibTopicosDe === "function" ? jurBibTopicosDe(j) : []).map((x) => x.topico).filter(Boolean);
+      const tx = document.createElement("span");
+      tx.textContent = onde.length ? t("jur_visit_onde", { t: onde.join(", ") }) : t("jur_visit_sem");
+      const bl = document.createElement("button");
+      bl.type = "button";
+      bl.className = "btn-min btn-min-ok";
+      bl.id = "btnJurVisitLigar";
+      bl.textContent = t("jur_visit_ligar");
+      bl.title = t("jur_visit_ligar_aj", { t: jurTopicoAtual.nome });
+      bl.onclick = () => {
+        jurLigar(j.id, jurTopicoAtual.chave, jurTopicoAtual.disciplina, jurTopicoAtual.nome);
+        try { reg("JURIS", "julgado aberto pela citação ligado a este tópico", jurTitulo(j) + " · " + jurTopicoAtual.nome); } catch (e) {}
+        jurPintarModo();
+        jurPintarLista();
+        try { jurRepintarTelas(); } catch (e) {}
+      };
+      nota.append(tx, " ", bl);
+      li.append(nota);
+    }
     box.append(li);
   });
 }
@@ -2264,7 +2346,10 @@ function jurCitAbrirGaveta() {
   if (!a || !a.j || !a.base || !a.base.disciplina || !a.base.topico) return false;
   $("dlgJurCitaPreview").close();
   jurAbrir(a.base.disciplina, a.base.topico, "ler");
-  jurEditar(a.j.id);
+  /* (v19.22.0) ABRIR É PARA LER: a gaveta em leitura, levada até o julgado e com ele em destaque — editar é um passo
+   * à parte (⋯ › editar). Antes caía direto no formulário de criar, preenchido: difícil de entender. Se o julgado não
+   * está na lista deste tópico, abre a edição (tela própria), para não ficar sem ele. */
+  if (!jurFocarJulgado(a.j.id)) jurEditar(a.j.id);
   jurVoltaPara = a.base.aoVoltar || null;
   return true;
 }
@@ -3067,6 +3152,7 @@ function jurIniciarTela() {
   });
   jurPintarPrincipal();
   liga("btnJurVoltarLer", () => jurTrocarModo("ler"));
+  liga("btnJurCancelarEd", () => jurCancelarEdicao());
   /* ESCOLHEU UM ITEM DO "MAIS", O MENU FECHA — senão ele ficaria aberto por
    * cima do que o item acabou de mostrar. A caixa de "sugerir de memória"
    * não fecha: é uma opção, não uma ação, e quem a marca ainda vai pedir. */
