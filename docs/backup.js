@@ -18,7 +18,14 @@ const BK_FORMATO = "backup/1";
  * propósito: varrer o localStorage inteiro levaria junto lixo de outras
  * origens e qualquer coisa que um dia alguém guardar sem pensar. */
 const BK_CHAVES = {
-  cartoes: ["eac_texto", "eac_recortes", "eac_revisados", "eac_hist"],
+  /* (v19.16.0) "eac_hist" FICA DE FORA, de propósito.
+   *
+   * É o histórico de desfazer da bancada DESTE aparelho (até 12 versões do texto inteiro, teto de 1,2 milhão de
+   * caracteres) — 1,1 MB num backup de 7,4 MB. Levado a outro aparelho, deixa "desfazer" para um texto que nunca existiu
+   * ali. E fazia pior: o restauro gravava o histórico do ARQUIVO por cima do local, apagando a versão "antes de
+   * restaurar backup" que acabara de ser guardada. A mesma lógica de "eac_backup_hist": histórico local não viaja.
+   * Backup antigo que traz "eac_hist" é restaurado normalmente — a chave só não é lida. */
+  cartoes: ["eac_texto", "eac_recortes", "eac_revisados"],
   /* "eac_editais" é a lista nova; os dois "eac_edital_*" continuam no backup
    * porque um arquivo gerado antes da v8.68 os traz, e restaurá-lo tem de
    * reconstituir o edital único — que a migração então converte na lista. */

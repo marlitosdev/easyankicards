@@ -111,6 +111,62 @@ function bkOndeTexto(o) {
   const tx = t("bk_onde_" + c);
   return tx && tx !== "bk_onde_" + c ? tx : String(c);
 }
+/* =====================================================================
+ * (v19.16.0) O ARQUIVO COMPACTADO
+ *
+ * O backup de 24/10 tinha 7,4 MB; texto (lei, resumo, questão) comprime muito: com gzip vira ~1,2 MB. A compressão é a
+ * do próprio navegador (CompressionStream), sem biblioteca. O CONTEÚDO não muda — é o mesmo JSON, o mesmo formato
+ * "backup/1" —, só o embrulho. Por isso:
+ *  · RESTAURAR reconhece o arquivo pela ASSINATURA (os 2 primeiros bytes do gzip, 1f 8b), não pela extensão — a
+ *    extensão se perde no e-mail, no WhatsApp, num "renomear"; .json antigo continua abrindo como sempre;
+ *  · navegador sem CompressionStream grava o .json de sempre (o botão nunca some, só muda o embrulho);
+ *  · "baixar sem compactar (.json)" fica à mão: um app velho só abre .json.
+ * Nada aqui usa Blob para LER o conteúdo (Response basta) — o mesmo código roda nos testes.
+ * ===================================================================== */
+function bkPodeCompactar() {
+  return typeof CompressionStream === "function" && typeof Response === "function";
+}
+function bkPodeDescompactar() {
+  return typeof DecompressionStream === "function" && typeof Response === "function";
+}
+/* texto → bytes gzip (Uint8Array) */
+async function bkGzip(texto) {
+  const st = new Response(String(texto)).body.pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+function bkEhGzip(bytes) { return !!bytes && bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b; }
+/* bytes do arquivo → texto do backup (descompacta se for gzip; senão lê como UTF-8, como sempre) */
+async function bkTextoDosBytes(bytes) {
+  if (bkEhGzip(bytes)) {
+    if (!bkPodeDescompactar()) { const e = new Error("sem_gzip"); e.semGzip = true; throw e; }
+    const st = new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"));
+    return new Response(st).text();
+  }
+  return new Response(bytes).text();
+}
+/* o arquivo escolhido → texto. Arquivo sem arrayBuffer (só text) é lido como texto. */
+async function bkTextoDoArquivo(file) {
+  if (file && typeof file.arrayBuffer === "function") return bkTextoDosBytes(new Uint8Array(await file.arrayBuffer()));
+  return file.text();
+}
+/* o backup de agora, embrulhado: {dados (string ou Uint8Array), nome, tipo, gz} */
+async function bkEmbrulhar(semCompactar) {
+  const json = bkTextoJson();
+  const nome = nomeArquivoBackup();
+  if (!semCompactar && bkPodeCompactar()) {
+    try { return { dados: await bkGzip(json), nome: nome + ".gz", tipo: "application/gzip", gz: true }; }
+    catch (e) { reg("BACKUP", "compactar falhou — vai .json", (e && e.message) || ""); }
+  }
+  return { dados: json, nome, tipo: "application/json", gz: false };
+}
+function bkEntregarDownload(emb) {
+  const url = URL.createObjectURL(new Blob([emb.dados], { type: emb.tipo }));
+  const a = document.createElement("a");
+  a.href = url; a.download = emb.nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 function bkTextoJson() { return JSON.stringify(montarBackup(), null, 1); }
 
 /* =====================================================================
@@ -148,19 +204,25 @@ function bkPastaNome() { return bkPasta ? (bkPasta.name || "") : ""; }
 /* ---------- guardar ---------- */
 
 async function bkSalvarNaNuvem() {
-  const json = bkTextoJson();
-  const nome = nomeArquivoBackup();
+  const emb = await bkEmbrulhar();
+  const nome = emb.nome;
 
   /* Celular: a folha de compartilhamento do sistema já lista Drive, OneDrive,
    * Dropbox e o que mais estiver instalado. Nenhuma credencial, nenhuma conta,
    * e funciona com a nuvem que a pessoa já usa. */
+  /* (v19.16.0) a folha de compartilhamento aceita poucos tipos de arquivo, e a lista muda de sistema para sistema: se
+   * recusar o .gz, vai o .json de sempre — nunca menos do que antes */
   try {
-    const arq = new File([json], nome, { type: "application/json" });
-    if (navigator.canShare && navigator.canShare({ files: [arq] })) {
-      await navigator.share({ files: [arq], title: "Backup EasyAnkiCards" });
-      bkMarcarSalvo("compartilhado", nome);
-      reg("BACKUP", "compartilhado pelo sistema", nome);
-      return;
+    const opcoes = [emb];
+    if (emb.gz) opcoes.push({ dados: bkTextoJson(), nome: nomeArquivoBackup(), tipo: "application/json", gz: false });
+    for (const o of opcoes) {
+      const arq = new File([o.dados], o.nome, { type: o.tipo });
+      if (navigator.canShare && navigator.canShare({ files: [arq] })) {
+        await navigator.share({ files: [arq], title: "Backup EasyAnkiCards" });
+        bkMarcarSalvo("compartilhado", o.nome);
+        reg("BACKUP", "compartilhado pelo sistema", o.nome);
+        return;
+      }
     }
   } catch (e) { if (e && e.name === "AbortError") return; }
 
@@ -171,10 +233,10 @@ async function bkSalvarNaNuvem() {
       const h = await window.showSaveFilePicker({
         suggestedName: nome,
         types: [{ description: "Backup EasyAnkiCards",
-                  accept: { "application/json": [".json"] } }],
+                  accept: emb.gz ? { "application/gzip": [".gz"] } : { "application/json": [".json"] } }],
       });
       const w = await h.createWritable();   /* grava em temporário */
-      await w.write(json);
+      await w.write(emb.dados);
       await w.close();                      /* e só aqui troca pelo bom */
       bkPasta = h;
       bkMarcarSalvo("pasta", h.name || nome);
@@ -184,17 +246,14 @@ async function bkSalvarNaNuvem() {
     } catch (e) { if (e && e.name === "AbortError") return; }
   }
 
-  bkBaixar();
+  return bkBaixar();
 }
 
-function bkBaixar() {
-  const json = bkTextoJson();
-  const nome = nomeArquivoBackup();
-  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = nome;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+/* semCompactar: o link "baixar sem compactar (.json)" */
+async function bkBaixar(semCompactar) {
+  const emb = await bkEmbrulhar(semCompactar === true);
+  const nome = emb.nome;
+  bkEntregarDownload(emb);
   bkMarcarSalvo("download", nome);
   reg("BACKUP", "baixado", nome);
   uiAlert(t("bk_baixado", { n: nome }));
@@ -207,8 +266,8 @@ function bkAbrirArquivo() { $("bkArquivo").click(); }
 async function bkLerArquivo(file) {
   if (!file) return;
   let obj = null;
-  try { obj = JSON.parse(await file.text()); }
-  catch (e) { uiAlert(t("bk_erro_json")); return; }
+  try { obj = JSON.parse(await bkTextoDoArquivo(file)); }
+  catch (e) { uiAlert(t(e && e.semGzip ? "bk_erro_sem_gzip" : "bk_erro_json")); return; }
   const erro = validarBackup(obj);
   if (erro) { uiAlert(t("bk_erro_valido", { e: erro })); return; }
   bkPendente = obj;
@@ -470,6 +529,8 @@ function bkPintarBotoes() {
     bn.textContent = t(modo === "compartilhar" ? "bk_nuvem" : "bk_pasta");
   }
   if (bb) bb.textContent = t("bk_baixar");
+  const bj = $("btnBkBaixarJson");
+  if (bj) bj.hidden = !bkPodeCompactar();
   if (exp) exp.textContent = t("bk_guardar_exp_" + modo);
   if (bre) {
     /* REGRAVAR NA MESMA PASTA: existe só depois de haver uma pasta
@@ -484,8 +545,11 @@ function bkPintarBotoes() {
 async function bkRegravar() {
   if (!bkPasta) return;
   try {
+    /* o arquivo escolhido é .json.gz ou .json: regravar no mesmo formato do NOME (um .json com gzip dentro
+     * enganaria quem abre o arquivo) */
+    const emb = await bkEmbrulhar(!/\.gz$/i.test(bkPasta.name || ""));
     const w = await bkPasta.createWritable();
-    await w.write(bkTextoJson());
+    await w.write(emb.dados);
     await w.close();
     bkMarcarSalvo("pasta", bkPasta.name || "");
     bkPintarPainel();
@@ -505,7 +569,8 @@ function bkIniciar() {
   if (!b) return;
   b.onclick = bkAbrirPainel;
   $("btnBkSalvarNuvem").onclick = bkSalvarNaNuvem;
-  $("btnBkBaixar").onclick = bkBaixar;
+  $("btnBkBaixar").onclick = () => bkBaixar();
+  if ($("btnBkBaixarJson")) $("btnBkBaixarJson").onclick = () => bkBaixar(true);
   if ($("btnBkRegravar")) $("btnBkRegravar").onclick = bkRegravar;
   $("btnBkCarregar").onclick = bkAbrirArquivo;
   $("btnBkFechar").onclick = () => $("dlgBackup").close();

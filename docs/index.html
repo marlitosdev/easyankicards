@@ -1553,6 +1553,8 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .pas-li{display:flex;align-items:center;gap:6px}
 .pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
 .pas-ren{flex:1}
+/* (v19.16.0) o .json sem compactar, discreto embaixo dos botões de guardar */
+.bk-json{display:inline-block;margin-top:6px}
 /* (v19.15.0) cópias de antes do restauro */
 .bk-antes{margin-top:10px}
 .bk-antes .nota{font-size:12px;margin:2px 0 6px;line-height:1.35}
@@ -10485,6 +10487,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
            arquivo só, sempre o mesmo. -->
       <button class="btn btn-cinza" id="btnBkRegravar" hidden></button>
     </div>
+    <!-- (v19.16.0) o backup sai compactado (.json.gz); o .json de sempre continua à mão -->
+    <button type="button" class="btn-link bk-json" id="btnBkBaixarJson" data-i18n="bk_baixar_json" data-i18n-title="bk_baixar_json_tip" hidden></button>
   </div>
   <div class="bk-passo">
     <b data-i18n="bk_p2_tit"></b>
@@ -10492,7 +10496,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="btn-linha">
       <button class="btn btn-azul" id="btnBkCarregar" data-i18n="bk_carregar"></button>
     </div>
-    <input type="file" id="bkArquivo" accept="application/json,.json" style="display:none">
+    <!-- (v19.16.0) sem filtro de tipo: o arquivo vem como .json, .json.gz ou sem extensão (e-mail, WhatsApp) — quem decide
+         é a assinatura do conteúdo, e um arquivo que não serve é recusado com a mensagem de sempre -->
+    <input type="file" id="bkArquivo" style="display:none">
   </div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnBkFechar" data-i18n="help_close"></button>

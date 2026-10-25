@@ -673,7 +673,7 @@ function rodar() {
     },
     edRevisaoAbrir, abrirRegistro, confirmarRegistro, completarDiario,
     abrirDisciplina, edAbrirDisciplinaDaLinha, edPintarRitmo,
-    montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual, bkGuardarAntes, bkAntesLer, bkAntesLojaDefinir, bkCopiaCompleta, bkPintarAntes, bkVoltarACopia, bkConfirmarRestauro, bkLerArquivo, bkAntesLojaIdb, BK_ESPECIAIS, bkOndeTexto, bkPintarPainel,
+    montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual, bkGuardarAntes, bkAntesLer, bkAntesLojaDefinir, bkCopiaCompleta, bkPintarAntes, bkVoltarACopia, bkConfirmarRestauro, bkLerArquivo, bkAntesLojaIdb, BK_ESPECIAIS, bkOndeTexto, bkPintarPainel, bkEmbrulhar, bkTextoDoArquivo, bkTextoDosBytes, bkGzip, bkEhGzip, bkPodeCompactar, bkSalvarNaNuvem, bkBaixar, carregarHistorico,
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
     matChaveViva, matChaveNormal, leiJurLadoALado,
