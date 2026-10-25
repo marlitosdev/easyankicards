@@ -5,10 +5,8 @@
  * lida". O "onde parei" (v18.74.0) guarda UM lugar por ramo — serve para continuar, não para saber o que falta: quem
  * lê fora de ordem (pula para a seção que caiu na prova) perde a conta.
  *
- * A SEÇÃO É O TÍTULO (# a ######) e o texto até o próximo título. Ao lado de cada título, na leitura:
- *  ○ não lida · ✓ lida (com a data) · ↻ lida, mas o texto MUDOU depois (vale reler);
- * um título que só agrupa (o do ramo, logo seguido de subtítulos) mostra "2/3" das seções de baixo. No topo,
- * "Seções lidas: 3 de 7 · próxima não lida: «…» ↓".
+ * A SEÇÃO É O TÍTULO (# a ######) e o texto até o próximo título. Estados: não lida · lida (com a data) · lida, mas o
+ * texto MUDOU depois (vale reler). Como se mostra: ver "COMO SE MOSTRA (v19.14.0)", abaixo.
  *
  * QUEM É A SEÇÃO: o texto do título (sem marcas, sem acento) + a vez em que ele aparece no resumo ("Conceito" do ramo
  * A e "Conceito" do ramo B são duas). O "mudou" compara uma impressão do corpo SEM as marcas de estudo — grifar e
@@ -103,75 +101,116 @@ function rlsContexto() {
   } catch (e) { base = 0; }
   return { chave: matAtual.chave, tudo, base, secoes: rlsSecoes(tudo) };
 }
-/* desenha os marcadores ao lado dos títulos e a faixa do topo (depois do matParaHtml) */
+/* =====================================================================
+ * COMO SE MOSTRA (v19.14.0)
+ *
+ * O RELATO: "o marcador está confuso; o usuário não entende o que se pretende fazer com ele, nem o que indica". Era um
+ * "○" sem rótulo colado ao título — não dizia que era um botão, nem o que fazia, nem por quê; e a faixa "Seções lidas:
+ * 0 de 1 · próxima não lida" apontava para a seção que já estava na tela. Agora, como nas plataformas de curso:
+ *  · A AÇÃO MORA ONDE A LEITURA ACABA: no fim de cada seção, um botão com rótulo — "✓ Terminei de ler esta seção";
+ *    depois, "✓ Lida em 24/10 · desmarcar"; se o texto mudou depois, "↻ … marcar como lida de novo";
+ *  · O TÍTULO SÓ FALA QUANDO HÁ O QUE DIZER: "✓ lida" ou "↻ mudou" (não lida = sem marca nenhuma);
+ *  · NO TOPO, UM SUMÁRIO DE LEITURA (recolhido): barra de progresso e "3 de 7 seções lidas"; aberto, a lista das seções
+ *    (tocar leva até ela) e "→ Ir para a próxima não lida". Com UMA seção na tela, não há sumário.
+ * ===================================================================== */
+function rlsBotao(txt, cls, fn, tit) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn-min " + (cls || "");
+  b.textContent = txt;
+  if (tit) { b.title = tit; b.setAttribute("aria-label", tit); }
+  b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); fn(); };
+  return b;
+}
+function rlsIrPara(p, cx, sec) {
+  const alvo = Array.from(p.querySelectorAll("h3, h4")).filter((h) => cx.base + Number(h.getAttribute("data-l")) === sec.l)[0];
+  if (!alvo) return false;
+  /* a mesma rolagem do "onde parei" (conta a escala da leitura); scrollIntoView não movia este painel */
+  if (typeof matRolAplicar === "function") matRolAplicar(p, { l: Number(alvo.getAttribute("data-l")), d: 0 });
+  else if (alvo.scrollIntoView) alvo.scrollIntoView({ block: "start" });
+  return true;
+}
+/* desenha as marcas dos títulos, o botão do fim de cada seção e o sumário (depois do matParaHtml) */
 function rlsPintar(painel) {
   const p = painel || (typeof $ === "function" ? $("matLeitura") : null);
   if (!p || !p.querySelectorAll) return 0;
   const cx = rlsContexto();
-  Array.from(p.querySelectorAll(".rls-faixa")).forEach((x) => { if (x.parentNode) x.parentNode.removeChild(x); });
+  Array.from(p.querySelectorAll(".rls-sumario, .rls-fim, .rls-tag")).forEach((x) => { if (x.parentNode) x.parentNode.removeChild(x); });
   if (!cx || !cx.secoes.length) return 0;
   const marcas = rlsMarcasDe(cx.chave);
   const porLinha = {};
   cx.secoes.forEach((s) => { porLinha[s.l] = s; });
-  const naTela = [];
-  Array.from(p.querySelectorAll("h3, h4")).forEach((h) => {
+  const titulos = Array.from(p.querySelectorAll("h3, h4")).filter((h) => {
     const dl = h.getAttribute ? h.getAttribute("data-l") : null;
-    if (dl === null || dl === undefined || dl === "") return;
-    const s = porLinha[cx.base + Number(dl)];
-    if (!s) return;
-    Array.from(h.querySelectorAll(".rls-bt")).forEach((x) => h.removeChild(x));
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "rls-bt";
-    if (s.vazia) {
-      /* o título que só agrupa: o placar das de baixo, sem botão de marcar */
-      const nL = s.filhas.filter((k) => { const f = cx.secoes.find((y) => y.k === k); return f && rlsEstado(marcas[k], f.h) === "lida"; }).length;
-      if (!s.filhas.length) return;
-      b.className += " rls-grupo" + (nL === s.filhas.length ? " lida" : "");
-      b.textContent = (nL === s.filhas.length ? "✓ " : "") + nL + "/" + s.filhas.length;
-      b.title = t("rls_grupo_tip", { n: nL, t: s.filhas.length });
-      b.disabled = true;
-    } else {
-      const e = rlsEstado(marcas[s.k], s.h);
-      b.className += " " + e;
-      b.textContent = e === "lida" ? "✓" : e === "mudou" ? "↻" : "○";
-      b.title = e === "lida" ? t("rls_lida_tip", { d: rlsDataBr(marcas[s.k].em) }) : e === "mudou" ? t("rls_mudou_tip", { d: rlsDataBr(marcas[s.k].em) }) : t("rls_nao_tip");
-      b.setAttribute("aria-label", b.title);
-      b.setAttribute("aria-pressed", e === "lida" ? "true" : "false");
-      b.onclick = (ev) => {
-        if (ev && ev.stopPropagation) ev.stopPropagation();
-        rlsMarcar(cx.chave, s, e !== "lida");
-        try { reg("MATERIAL", e !== "lida" ? "seção marcada como lida" : "seção desmarcada", s.titulo); } catch (x) {}
-        rlsPintar(p);
-      };
-      naTela.push(s);
-    }
-    h.appendChild(b);
+    return dl !== null && dl !== undefined && dl !== "" && porLinha[cx.base + Number(dl)];
   });
-  /* a faixa do topo: o que falta NO QUE ESTÁ NA TELA (o escopo), e o atalho para a próxima */
-  if (naTela.length) {
-    const r = rlsResumo(naTela, marcas);
-    const f = document.createElement("div");
-    f.className = "rls-faixa" + (r.lidas === r.total ? " completa" : "");
-    const tx = document.createElement("span");
-    tx.textContent = r.lidas === r.total ? t("rls_todas", { n: r.total }) : t("rls_placar", { l: r.lidas, n: r.total }) + (r.mudou ? " · " + t("rls_mudaram", { n: r.mudou }) : "");
-    f.append(tx);
-    if (r.proxima) {
-      const ir = document.createElement("button");
-      ir.type = "button";
-      ir.className = "btn-min rls-ir";
-      ir.textContent = t("rls_proxima", { s: r.proxima.titulo.length > 48 ? r.proxima.titulo.slice(0, 47) + "…" : r.proxima.titulo });
-      ir.title = t("rls_proxima_tip");
-      ir.onclick = () => {
-        const alvo = Array.from(p.querySelectorAll("h3, h4")).filter((h) => cx.base + Number(h.getAttribute("data-l")) === r.proxima.l)[0];
-        if (!alvo) return;
-        /* a mesma rolagem do "onde parei" (conta a escala da leitura); scrollIntoView não movia este painel */
-        if (typeof matRolAplicar === "function") matRolAplicar(p, { l: Number(alvo.getAttribute("data-l")), d: 0 });
-        else if (alvo.scrollIntoView) alvo.scrollIntoView({ block: "start" });
-      };
-      f.append(" ", ir);
+  const repintar = () => rlsPintar(p);
+  const naTela = [];
+  titulos.forEach((h, k) => {
+    const s = porLinha[cx.base + Number(h.getAttribute("data-l"))];
+    const tag = (txt, cls, tit) => { const x = document.createElement("span"); x.className = "rls-tag " + cls; x.textContent = txt; if (tit) x.title = tit; h.appendChild(x); };
+    if (s.vazia) {
+      /* o título que só agrupa: quantas das de baixo já foram lidas (texto, não botão) */
+      const nL = s.filhas.filter((kf) => { const f = cx.secoes.find((y) => y.k === kf); return f && rlsEstado(marcas[kf], f.h) === "lida"; }).length;
+      if (s.filhas.length && nL) tag(t("rls_tag_grupo", { n: nL, t: s.filhas.length }), nL === s.filhas.length ? "lida" : "", t("rls_grupo_tip", { n: nL, t: s.filhas.length }));
+      return;
     }
-    p.insertBefore(f, p.firstChild);
+    naTela.push(s);
+    const e = rlsEstado(marcas[s.k], s.h);
+    const d = marcas[s.k] ? rlsDataBr(marcas[s.k].em) : "";
+    if (e === "lida") tag(t("rls_tag_lida"), "lida", t("rls_lida_tip", { d }));
+    if (e === "mudou") tag(t("rls_tag_mudou"), "mudou", t("rls_mudou_tip", { d }));
+    /* o fim da seção: logo antes do próximo título (ou no fim da leitura) */
+    const fim = document.createElement("div");
+    fim.className = "rls-fim " + e;
+    const marcar = (sim) => () => {
+      rlsMarcar(cx.chave, s, sim);
+      try { reg("MATERIAL", sim ? "seção marcada como lida" : "seção desmarcada", s.titulo); } catch (x) {}
+      repintar();
+    };
+    if (e === "nao") fim.append(rlsBotao(t("rls_fim_marcar"), "btn-min-ok rls-marcar", marcar(true), t("rls_fim_marcar_aj")));
+    else if (e === "lida") {
+      const tx = document.createElement("span"); tx.className = "rls-fim-txt"; tx.textContent = t("rls_fim_lida", { d });
+      fim.append(tx, " ", rlsBotao(t("rls_fim_desmarcar"), "rls-desmarcar", marcar(false), t("rls_fim_desmarcar_aj")));
+    } else {
+      const tx = document.createElement("span"); tx.className = "rls-fim-txt"; tx.textContent = t("rls_fim_mudou", { d });
+      fim.append(tx, " ", rlsBotao(t("rls_fim_reler"), "btn-min-ok rls-marcar", marcar(true), t("rls_fim_marcar_aj")));
+    }
+    let prox = null;
+    for (let n = h.nextSibling; n; n = n.nextSibling) { if (n.tagName && /^H[3-4]$/i.test(n.tagName) && titulos.indexOf(n) > k) { prox = n; break; } }
+    if (prox && prox.parentNode) prox.parentNode.insertBefore(fim, prox);
+    else if (h.parentNode) h.parentNode.appendChild(fim);
+  });
+  /* o sumário: só com DUAS ou mais seções na tela (com uma, "próxima" seria ela mesma) */
+  if (naTela.length >= 2) {
+    const r = rlsResumo(naTela, marcas);
+    const sum = document.createElement("details");
+    sum.className = "rls-sumario" + (r.lidas === r.total ? " completa" : "");
+    const sm = document.createElement("summary");
+    const tit = document.createElement("span");
+    tit.className = "rls-sum-tit";
+    tit.textContent = r.lidas === r.total ? t("rls_sum_todas", { n: r.total }) : t("rls_sum", { l: r.lidas, n: r.total }) + (r.mudou ? t("rls_sum_mudaram", { n: r.mudou }) : "");
+    const barra = document.createElement("span");
+    barra.className = "rls-barra";
+    const ench = document.createElement("span");
+    ench.className = "rls-barra-ench";
+    if (ench.style) ench.style.width = Math.round((r.lidas / r.total) * 100) + "%";
+    barra.append(ench);
+    sm.append(tit, barra);
+    sum.append(sm);
+    const exp = document.createElement("p");
+    exp.className = "nota rls-sum-exp";
+    exp.textContent = t("rls_sum_aj");
+    sum.append(exp);
+    if (r.proxima) sum.append(rlsBotao(t("rls_ir_proxima", { s: r.proxima.titulo.length > 48 ? r.proxima.titulo.slice(0, 47) + "…" : r.proxima.titulo }), "btn-min-ok rls-ir", () => rlsIrPara(p, cx, r.proxima), t("rls_proxima_tip")));
+    const lista = document.createElement("div");
+    lista.className = "rls-sum-lista";
+    naTela.forEach((s) => {
+      const e = rlsEstado(marcas[s.k], s.h);
+      lista.append(rlsBotao((e === "lida" ? "✓ " : e === "mudou" ? "↻ " : "○ ") + s.titulo, "rls-sum-item " + e, () => rlsIrPara(p, cx, s), t("rls_sum_item_aj")));
+    });
+    sum.append(lista);
+    p.insertBefore(sum, p.firstChild);
   }
   return naTela.length;
 }

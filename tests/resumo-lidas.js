@@ -6,8 +6,11 @@
  * O QUE PRECISA SER VERDADE:
  *  1. cada título (# a ######) é uma seção; títulos iguais em lugares diferentes são seções diferentes; o título
  *     que só agrupa (seguido de subtítulos) não se marca — mostra o placar das de baixo;
- *  2. ○ → ✓ ao tocar (com a data); tocar de novo desmarca; o texto da seção mudou depois → ↻; grifar NÃO é mudar;
- *  3. a faixa do topo diz "Seções lidas: L de N" e leva à próxima não lida; tudo lido → "todas lidas";
+ *  2. (v19.14.0) no FIM de cada seção, um botão com rótulo: "✓ Terminei de ler esta seção" → "✓ Lida em DD/MM · desmarcar";
+ *     o texto mudou depois → aviso e "marcar como lida de novo"; grifar NÃO é mudar; o título só ganha marca quando há
+ *     estado ("✓ lida" / "↻ mudou"), nunca um "○" mudo;
+ *  3. no topo, o sumário de leitura (recolhido) só com DUAS ou mais seções na tela: "L de N seções lidas", a lista e a
+ *     próxima não lida; com uma seção só, nada no topo (a "próxima" seria ela mesma);
  *  4. vai no backup.
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
@@ -44,36 +47,54 @@ async function testes() {
     api.matGravar(ch, TXT, { disciplina: "D", topico: "T" });
     api.matAbrirEditor({ disciplina: "D", nome: "T" }, true);
     const L = () => api.$("matLeitura");
-    const faixa = () => L().querySelectorAll(".rls-faixa")[0];
-    const bts = () => L().querySelectorAll(".rls-bt");
-    ok(faixa() && /Seções lidas: 0 de 4/.test(faixa().textContent) && /«Visão geral»/.test(faixa().textContent), "L1 a faixa: 0 de 4, próxima = a primeira: " + (faixa() && faixa().textContent));
-    ok(bts().length === 6 && bts().filter((b) => /rls-grupo/.test(b.className)).length === 2, "L2 seis títulos: quatro com ○ e dois de grupo (os ramos)");
-    const deSecao = () => bts().filter((b) => !/rls-grupo/.test(b.className));
-    ok(deSecao().every((b) => b.textContent === "○"), "L2a todas ○");
-    deSecao()[0].onclick({ stopPropagation() {} });
-    ok(deSecao()[0].textContent === "✓" && /Lida em \d\d\/\d\d\/\d{4}/.test(deSecao()[0].title), "L3 tocar marca ✓ (com a data): " + deSecao()[0].title);
-    ok(/Seções lidas: 1 de 4/.test(faixa().textContent) && /«Conceito»/.test(faixa().textContent), "L3a a faixa anda: 1 de 4, próxima 'Conceito'");
-    ok(JSON.parse(api.localStorage ? "{}" : "{}") && Object.keys(api.rlsMarcasDe(ch)).length === 1, "L3b guardado por tópico");
-    deSecao()[1].onclick({ stopPropagation() {} });
-    deSecao()[2].onclick({ stopPropagation() {} });
-    const grupoImun = bts().filter((b) => /rls-grupo/.test(b.className))[0];
-    ok(grupoImun && grupoImun.textContent === "✓ 2/2", "L4 o ramo com as duas lidas: ✓ 2/2: " + (grupoImun && grupoImun.textContent));
-    deSecao()[3].onclick({ stopPropagation() {} });
-    ok(/Todas as 4 seções lidas/.test(faixa().textContent) && !L().querySelectorAll(".rls-ir").length, "L5 tudo lido: a faixa diz, sem 'próxima'");
-    deSecao()[3].onclick({ stopPropagation() {} });
-    ok(deSecao()[3].textContent === "○" && /3 de 4/.test(faixa().textContent), "L6 tocar de novo desmarca");
-    /* grifar não é mudar; mudar o texto é */
-    /* editar o texto como a pessoa edita: no editor, e voltar a ler */
+    const fins = () => L().querySelectorAll(".rls-fim");
+    const tags = () => L().querySelectorAll(".rls-tag");
+    const sum = () => L().querySelectorAll(".rls-sumario")[0];
+    const toque = (n) => fins()[n].querySelectorAll("button")[0].onclick({ stopPropagation() {} });
+    ok(fins().length === 4 && fins().every((f) => /Terminei de ler esta seção/.test(f.textContent)), "L1 no fim de cada uma das 4 seções, o botão com rótulo: " + fins().map((f) => f.textContent).join(" | "));
+    ok(!L().querySelectorAll(".rls-bt").length && tags().length === 0, "L1a nenhum '○' mudo no título; sem estado, o título fica limpo");
+    const b0 = fins()[0].querySelectorAll("button")[0];
+    ok(/já leu esta seção/.test(b0.title) && /falta ler/.test(b0.title), "L1b o botão explica para que serve: " + b0.title);
+    /* o botão fica onde a seção ACABA: logo antes do título seguinte */
+    const prox0 = fins()[0].nextSibling;
+    ok(prox0 && /^H/i.test(prox0.tagName || "") && /Imunidades/.test(prox0.textContent), "L1c o botão da 1ª seção fica logo antes do título seguinte: " + (prox0 && prox0.textContent));
+    ok(L().children[0] === sum(), "L1g o sumário fica no TOPO da leitura");
+    ok(sum() && /0 de 4 seções lidas/.test(sum().textContent) && sum().open !== true, "L1d no topo, o sumário (recolhido): 0 de 4: " + (sum() && sum().textContent.slice(0, 80)));
+    ok(/próxima não lida: Visão geral/.test(sum().textContent) && sum().querySelectorAll(".rls-sum-item").length === 4, "L1e o sumário lista as 4 seções e leva à próxima não lida");
+    ok(/Terminei de ler esta seção/.test(sum().querySelectorAll(".rls-sum-exp")[0].textContent), "L1f o sumário diz como marcar");
+    toque(0);
+    ok(/✓ Lida em \d\d\/\d\d\/\d{4}/.test(fins()[0].textContent) && /desmarcar/.test(fins()[0].textContent), "L3 marcar: o fim da seção diz 'Lida em …' e 'desmarcar': " + fins()[0].textContent);
+    ok(tags().length === 1 && tags()[0].textContent === "✓ lida", "L3a o título da seção lida ganha '✓ lida' (só ele)");
+    ok(/1 de 4 seções lidas/.test(sum().textContent) && /próxima não lida: Conceito/.test(sum().textContent), "L3b o sumário anda: 1 de 4, próxima 'Conceito'");
+    ok(Object.keys(api.rlsMarcasDe(ch)).length === 1, "L3c guardado por tópico");
+    toque(1);
+    toque(2);
+    const grupo = tags().filter((x) => /de 2 lidas/.test(x.textContent))[0];
+    ok(grupo && grupo.textContent === "2 de 2 lidas" && /lida/.test(grupo.className), "L4 o ramo com as duas lidas: '2 de 2 lidas': " + tags().map((x) => x.textContent).join(" | "));
+    toque(3);
+    ok(/Leitura completa: as 4 seções lidas/.test(sum().textContent) && !L().querySelectorAll(".rls-ir").length && /completa/.test(sum().className), "L5 tudo lido: o sumário diz, sem 'próxima'");
+    fins()[3].querySelectorAll("button")[0].onclick({ stopPropagation() {} });
+    ok(/Terminei de ler/.test(fins()[3].textContent) && /3 de 4/.test(sum().textContent), "L6 'desmarcar' volta a 'não lida'");
+    /* grifar não é mudar; mudar o texto é — editar como a pessoa edita: no editor, e voltar a ler */
     const editar = (novo) => { api.$("matTexto").value = novo; api.matTrocarModo("ler"); };
     editar(TXT.replace("Taxas não são alcançadas.", "Taxas não são ==!alcançadas==."));
-    ok(deSecao()[2].textContent === "✓", "L7 grifar a seção lida: continua ✓");
+    ok(/✓ Lida em/.test(fins()[2].textContent), "L7 grifar a seção lida: continua lida");
     editar(TXT.replace("Taxas não são alcançadas.", "Taxas e contribuições não são alcançadas."));
-    ok(deSecao()[2].textContent === "↻" && /mudou depois/.test(deSecao()[2].title) && /1 mudaram/.test(faixa().textContent), "L8 o texto mudou depois de lida: ↻ e a faixa conta");
-    deSecao()[2].onclick({ stopPropagation() {} });
-    ok(deSecao()[2].textContent === "✓", "L9 tocar no ↻ marca como lida de novo");
+    ok(/mudou depois que você a leu/.test(fins()[2].textContent) && /marcar como lida de novo/.test(fins()[2].textContent) && /1 mudaram/.test(sum().textContent),
+      "L8 o texto mudou depois de lida: o fim avisa e oferece reler; o sumário conta: " + fins()[2].textContent);
+    ok(tags().some((x) => x.textContent === "↻ mudou"), "L8a o título diz '↻ mudou'");
+    toque(2);
+    ok(/✓ Lida em/.test(fins()[2].textContent), "L9 'marcar como lida de novo'");
     /* grifar o PRÓPRIO TÍTULO não troca a seção (a chave é o título sem as marcas) */
     editar(TXT.replace("Taxas não são alcançadas.", "Taxas e contribuições não são alcançadas.").replace("### Exceções", "### ==!Exceções=="));
-    ok(deSecao()[2].textContent === "✓", "L10 grifar o título não faz a seção perder o ✓");
+    ok(/✓ Lida em/.test(fins()[2].textContent), "L10 grifar o título não faz a seção perder a marca");
+    /* repintar não duplica */
+    api.matTrocarModo("ler");
+    ok(fins().length === 4 && L().querySelectorAll(".rls-sumario").length === 1, "L11 repintar não duplica os botões nem o sumário");
+    /* ir até uma seção (pelo sumário) não quebra */
+    let erro = null;
+    try { sum().querySelectorAll(".rls-sum-item")[1].onclick({ stopPropagation() {} }); } catch (e) { erro = e; }
+    ok(!erro, "L12 tocar numa seção do sumário leva até ela sem erro: " + erro);
     /* backup */
     ok(api.montarBackup().dados.material.eac_mat_lidas, "B1 vai no backup");
   }
@@ -87,19 +108,24 @@ async function testes() {
     const tx = ["Geral do tópico.", "", "## Ramo — Imunidades", "### Conceito", "Imunidade é limitação.", "", "## Ramo — Isenções", "### Conceito", "Isenção é dispensa legal.", "### Revogação", "Pode ser revogada."].join(NL);
     api.matGravar(ch, tx, { disciplina: "D", topico: "R" });
     api.matAbrirEditor({ disciplina: "D", nome: "R", chave: ch }, "ler", { ramos, ramo: "isencoes" });
-    const bts = () => api.$("matLeitura").querySelectorAll(".rls-bt").filter((b) => !/rls-grupo/.test(b.className));
-    ok(bts().length === 2, "E1 no ramo Isenções, duas seções: " + bts().length);
-    bts()[0].onclick({ stopPropagation() {} });
+    const fins = () => api.$("matLeitura").querySelectorAll(".rls-fim");
+    ok(fins().length === 2 && api.$("matLeitura").querySelectorAll(".rls-sumario").length === 1, "E1 no ramo Isenções, duas seções (e o sumário): " + fins().length);
+    fins()[0].querySelectorAll("button")[0].onclick({ stopPropagation() {} });
     ok(Object.keys(api.rlsMarcasDe(ch)).join() === "conceito#2", "E2 marcar o 'Conceito' do ramo Isenções marca o 2º 'Conceito' do texto (não o do ramo Imunidades): " + Object.keys(api.rlsMarcasDe(ch)).join());
     api.matEscopoEscolher("*");
-    const todos = api.$("matLeitura").querySelectorAll(".rls-bt").filter((b) => !/rls-grupo/.test(b.className));
-    ok(todos.length === 3 && todos.map((b) => b.textContent).join(" ") === "○ ✓ ○", "E3 no texto inteiro, a marca aparece na seção certa: " + todos.map((b) => b.textContent).join(" "));
+    const est = fins().map((f) => (/Lida em/.test(f.textContent) ? "✓" : "○")).join(" ");
+    ok(fins().length === 3 && est === "○ ✓ ○", "E3 no texto inteiro, a marca aparece na seção certa: " + est);
+    /* o caso do relato: um ramo com UMA seção só — sem sumário e sem "próxima" (seria ela mesma) */
+    api.matEscopoEscolher("imunidades");
+    ok(fins().length === 1 && /Terminei de ler/.test(fins()[0].textContent), "E4 ramo com uma seção: só o botão no fim dela");
+    ok(!api.$("matLeitura").querySelectorAll(".rls-sumario").length && !api.$("matLeitura").querySelectorAll(".rls-ir").length, "E5 ramo com uma seção: nada no topo (nem 'próxima não lida')");
   }
 
   /* ---- textos ---- */
   {
     const { api } = rodar();
-    ["rls_nao_tip", "rls_lida_tip", "rls_mudou_tip", "rls_grupo_tip", "rls_placar", "rls_mudaram", "rls_todas", "rls_proxima", "rls_proxima_tip"].forEach((k) =>
+    ["rls_lida_tip", "rls_mudou_tip", "rls_grupo_tip", "rls_proxima_tip", "rls_tag_lida", "rls_tag_mudou", "rls_tag_grupo", "rls_fim_marcar", "rls_fim_marcar_aj",
+      "rls_fim_lida", "rls_fim_desmarcar", "rls_fim_desmarcar_aj", "rls_fim_mudou", "rls_fim_reler", "rls_sum", "rls_sum_todas", "rls_sum_mudaram", "rls_sum_aj", "rls_ir_proxima", "rls_sum_item_aj"].forEach((k) =>
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "X falta " + k + " em " + l); }));
     api.setLanguage("pt");
   }

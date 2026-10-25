@@ -174,12 +174,16 @@ function novoEl(id, tag, registro) {
      * media "escondido" com `!== false` e falhava por uma diferença de
      * `undefined` que não existe fora do simulador. */
     checked: false, disabled: false, readOnly: false, open: false, hidden: false,
-    children: colecao(), dataset: {}, _attrs: {}, options: [], files: [], firstChild: null, parentNode: null, scrollTop: 0, selectionStart: 0, selectionEnd: 0,
+    children: colecao(), dataset: {}, _attrs: {}, options: [], files: [], parentNode: null, scrollTop: 0, selectionStart: 0, selectionEnd: 0,
     /* "childNodes" É O NOME QUE O NAVEGADOR USA para andar a árvore
      * incluindo os nós de texto. Sem ele, quem converte uma seleção em
      * posição de caractere não descia nível nenhum e o caminho passava
      * verde sem visitar nada. Aqui é a mesma lista de "children". */
     get childNodes() { return el.children; },
+    /* (v19.14.0) irmãos e primeiro filho DE VERDADE: o botão do fim da seção entra "antes do próximo título" e o sumário
+     * "antes do primeiro filho" — com firstChild sempre nulo, tudo ia parar no fim, calado */
+    get firstChild() { return el.children[0] || null; },
+    get nextSibling() { const pai = el.parentNode; if (!pai || !pai.children) return null; const i = pai.children.indexOf(el); return i >= 0 ? pai.children[i + 1] || null : null; },
     // style aceita leitura, escrita e os métodos de CSS custom property
     style: new Proxy({ setProperty() {}, removeProperty() {}, getPropertyValue: () => "" },
       { get: (o, k) => (k in o ? o[k] : ""), set: (o, k, v) => { o[k] = v; return true; } }),

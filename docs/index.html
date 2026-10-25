@@ -1555,16 +1555,26 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .pas-ren{flex:1}
 .pas-nova{display:flex;gap:6px;margin:8px 0}
 .pas-nova input{flex:1}
-/* (v19.11.0) SEÇÕES JÁ LIDAS: ○ ✓ ↻ ao lado do título e a faixa do topo */
-.rls-bt{margin-left:8px;font-size:12px;font-weight:600;vertical-align:middle;border:1px solid var(--borda);background:var(--campo);
-  color:var(--sutil);border-radius:999px;min-width:26px;height:22px;padding:0 7px;cursor:pointer;line-height:1}
-.rls-bt.lida{color:var(--verde-txt,#2f9e6e);border-color:currentColor}
-.rls-bt.mudou{color:var(--laranja-txt,#b7791f);border-color:currentColor}
-.rls-bt.rls-grupo{cursor:default;opacity:.9}
-.rls-bt.rls-grupo.lida{color:var(--verde-txt,#2f9e6e)}
-.rls-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;margin:0 0 12px;padding:6px 10px;
-  border:1px solid var(--borda);border-radius:10px;background:var(--campo)}
-.rls-faixa.completa{color:var(--verde-txt,#2f9e6e)}
+/* (v19.14.0) SEÇÕES JÁ LIDAS: o botão com rótulo no fim de cada seção, a marca do título só quando há estado, o sumário */
+.rls-tag{margin-left:8px;font-size:12px;font-weight:600;vertical-align:middle;color:var(--sutil);white-space:nowrap}
+.rls-tag.lida{color:var(--verde-txt,#2f9e6e)}
+.rls-tag.mudou{color:var(--laranja-txt,#b7791f)}
+.rls-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:10px 0 18px;padding-top:8px;border-top:1px dashed var(--borda);font-size:13px}
+.rls-fim.lida .rls-fim-txt{color:var(--verde-txt,#2f9e6e);font-weight:600}
+.rls-fim.mudou .rls-fim-txt{color:var(--laranja-txt,#b7791f);font-weight:600}
+.rls-fim .rls-desmarcar{background:none;border:0;color:var(--sutil);text-decoration:underline;padding:2px 4px;cursor:pointer}
+.rls-sumario{margin:0 0 12px;border:1px solid var(--borda);border-radius:10px;background:var(--campo);font-size:13px}
+.rls-sumario>summary{cursor:pointer;padding:7px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.rls-sumario.completa .rls-sum-tit{color:var(--verde-txt,#2f9e6e)}
+.rls-barra{flex:1 1 120px;max-width:220px;height:6px;border-radius:99px;background:var(--borda);overflow:hidden}
+.rls-barra-ench{display:block;height:100%;background:var(--verde-txt,#2f9e6e)}
+.rls-sumario .rls-sum-exp{margin:0 10px 8px}
+.rls-sumario .rls-ir{margin:0 10px 8px}
+.rls-sum-lista{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px}
+.rls-sum-item{text-align:left;background:none;border:0;padding:4px 6px;border-radius:6px;cursor:pointer;color:inherit}
+.rls-sum-item:hover{background:var(--fundo,rgba(0,0,0,.04))}
+.rls-sum-item.lida{color:var(--verde-txt,#2f9e6e)}
+.rls-sum-item.mudou{color:var(--laranja-txt,#b7791f)}
 /* (v19.10.0) origem escondida e histórico das tentativas */
 .qs-de-escondida{cursor:pointer;font-style:italic}
 .qs-hist-toque{cursor:pointer}
