@@ -332,8 +332,9 @@ async function main() {
   const iqsP = await comVigia(Promise.resolve(require("./idb-questoes.js").testes()), "idb-questoes");
   const ijaP = await comVigia(Promise.resolve(require("./idb-janela.js").testes()), "idb-janela");
   const irsP = await comVigia(Promise.resolve(require("./idb-resumos.js").testes()), "idb-resumos");
+  const ircP = await comVigia(Promise.resolve(require("./idb-recibo.js").testes()), "idb-recibo");
   const rlidP = await comVigia(Promise.resolve(require("./resumo-lidas.js").testes()), "resumo-lidas");
-  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP, cmP, lsP, luP, teP, vrP, dfP, mnP, rgP, arP, qhP, glP, etP, mkP, bgP, ecP, escP, rpP, rvP, enP, rxP, dfcP, bqP, cpP, apP, d2P, baP, vzP, rxTP, vrP2, clP, mzP, urP, juP, dbP, aqP, cqP, grP, bkqP, entP, rtP, ctP, atzP, jmP, mfP, ldlP, rnsP, cvlP, mnlP, cdlP, lcgP, lbbP, lclP, lalP, lanP, lesP, lmpP, lcpP, lexP, lmcP, lrtP, lcfP, decP, ajsP, lixP, emdP, cverP, citP, bfbP, lrcP, lrvP, ltcP, lreP, lahP, larP, lasP, lldP, pcaP, cqlP, celP, gerP, pacP, lxiP, banP, lotP, ramP, vtP, vuP, wgP, wdP, wlP, dcP, rcP, rbP, jcP, bcP, mcoP, jgvP, jbbP, jatP, jinP, jidP, mprP, mlaP, llvP, mhiP, vfbP, vmnP, jprP, vatP, qteP, qmvP, qcaP, rtpP, dtpP, jamP, jcoP, ldxP, lscP, lapP, lfxP, lafP, gmtP, cobLP, rleP, calP, chuP, irmP, lmsP, lnvP, qcrP, dtlP, lctP, p91P, rlsP, rcoP, jiqP, jctP, jb6P, jiaP, lsdP, iacP, qrgP, lc9P, ln3P, lpdP, qdiP, lcvP, jtpP, tntP, tngP, qexP, rlidP, pastP, jrepP, ceoP, bkrP, bkgP, bkaP, iqsP, ijaP, irsP]).then(([tela,marcas, registroT, dqT, qsT, quT, rsT, faT, cmT, lsT, luT, teT, vrT, dfT, mnT, rgT, arT, qhT, glT, etT, mkT, bgT, ecT, escT, rpT, rvT, enT, rxT, dfcT, bqT, cpT, apT, d2T, baT, vzT, rxTT, vrT2, clT, mzT, urT, juT, dbT, aqT, cqT, grT, bkqT, entT, rtT, ctT, atzT, jmT, mfT, ldlT, rnsT, cvlT, mnlT, cdlT, lcgT, lbbT, lclT, lalT, lanT, lesT, lmpT, lcpT, lexT, lmcT, lrtT, lcfT, decT, ajsT, lixT, emdT, cverT, citT, bfbT, lrcT, lrvT, ltcT, lreT, lahT, larT, lasT, lldT, pcaT, cqlT, celT, gerT, pacT, lxiT, banT, lotT, ramT, vtT, vuT, wgT, wdT, wlT, dcT, rcT, rbT, jcT, bcT, mcoT, jgvT, jbbT, jatT, jinT, jidT, mprT, mlaT, llvT, mhiT, vfbT, vmnT, jprT, vatT, qteT, qmvT, qcaT, rtpT, dtpT, jamT, jcoT, ldxT, lscT, lapT, lfxT, lafT, gmtT, cobLT, rleT, calT, chuT, irmT, lmsT, lnvT, qcrT, dtlT, lctT, p91T, rlsT, rcoT, jiqT, jctT, jb6T, jiaT, lsdT, iacT, qrgT, lc9T, ln3T, lpdT, qdiT, lcvT, jtpT, tntT, tngT, qexT, rlidT, pastT, jrepT, ceoT, bkrT, bkgT, bkaT, iqsT, ijaT, irsT]) => {
+  return Promise.all([require("./tela.js").testes(), marcasP, regP, dqP, qsP, quP, rsP, faP, cmP, lsP, luP, teP, vrP, dfP, mnP, rgP, arP, qhP, glP, etP, mkP, bgP, ecP, escP, rpP, rvP, enP, rxP, dfcP, bqP, cpP, apP, d2P, baP, vzP, rxTP, vrP2, clP, mzP, urP, juP, dbP, aqP, cqP, grP, bkqP, entP, rtP, ctP, atzP, jmP, mfP, ldlP, rnsP, cvlP, mnlP, cdlP, lcgP, lbbP, lclP, lalP, lanP, lesP, lmpP, lcpP, lexP, lmcP, lrtP, lcfP, decP, ajsP, lixP, emdP, cverP, citP, bfbP, lrcP, lrvP, ltcP, lreP, lahP, larP, lasP, lldP, pcaP, cqlP, celP, gerP, pacP, lxiP, banP, lotP, ramP, vtP, vuP, wgP, wdP, wlP, dcP, rcP, rbP, jcP, bcP, mcoP, jgvP, jbbP, jatP, jinP, jidP, mprP, mlaP, llvP, mhiP, vfbP, vmnP, jprP, vatP, qteP, qmvP, qcaP, rtpP, dtpP, jamP, jcoP, ldxP, lscP, lapP, lfxP, lafP, gmtP, cobLP, rleP, calP, chuP, irmP, lmsP, lnvP, qcrP, dtlP, lctP, p91P, rlsP, rcoP, jiqP, jctP, jb6P, jiaP, lsdP, iacP, qrgP, lc9P, ln3P, lpdP, qdiP, lcvP, jtpP, tntP, tngP, qexP, rlidP, pastP, jrepP, ceoP, bkrP, bkgP, bkaP, iqsP, ijaP, irsP, ircP]).then(([tela,marcas, registroT, dqT, qsT, quT, rsT, faT, cmT, lsT, luT, teT, vrT, dfT, mnT, rgT, arT, qhT, glT, etT, mkT, bgT, ecT, escT, rpT, rvT, enT, rxT, dfcT, bqT, cpT, apT, d2T, baT, vzT, rxTT, vrT2, clT, mzT, urT, juT, dbT, aqT, cqT, grT, bkqT, entT, rtT, ctT, atzT, jmT, mfT, ldlT, rnsT, cvlT, mnlT, cdlT, lcgT, lbbT, lclT, lalT, lanT, lesT, lmpT, lcpT, lexT, lmcT, lrtT, lcfT, decT, ajsT, lixT, emdT, cverT, citT, bfbT, lrcT, lrvT, ltcT, lreT, lahT, larT, lasT, lldT, pcaT, cqlT, celT, gerT, pacT, lxiT, banT, lotT, ramT, vtT, vuT, wgT, wdT, wlT, dcT, rcT, rbT, jcT, bcT, mcoT, jgvT, jbbT, jatT, jinT, jidT, mprT, mlaT, llvT, mhiT, vfbT, vmnT, jprT, vatT, qteT, qmvT, qcaT, rtpT, dtpT, jamT, jcoT, ldxT, lscT, lapT, lfxT, lafT, gmtT, cobLT, rleT, calT, chuT, irmT, lmsT, lnvT, qcrT, dtlT, lctT, p91T, rlsT, rcoT, jiqT, jctT, jb6T, jiaT, lsdT, iacT, qrgT, lc9T, ln3T, lpdT, qdiT, lcvT, jtpT, tntT, tngT, qexT, rlidT, pastT, jrepT, ceoT, bkrT, bkgT, bkaT, iqsT, ijaT, irsT, ircT]) => {
     const extras = [["estrutura do HTML", estrutura],
                     ["carregamento do app", fumaca], ["prompt e colagem parcial", parcial],
                     ["tela: revisão, correção e registro", tela],
@@ -510,6 +511,7 @@ async function main() {
                     ["questões no IndexedDB: migração conferida, gravar recusado enquanto não chegam, falha de gravar avisa", iqsT],
                     ["leis, julgados e decisões: gravar recusado enquanto chegam do IndexedDB; sobra antiga é juntada, não copiada por cima", ijaT],
                     ["resumos no IndexedDB: migração conferida, gravar recusado enquanto chegam, consertos de arranque depois", irsT],
+                    ["recibo do Salvar no material no IndexedDB: migra conferido, leitura atrasada não troca o novo, recusa cai no localStorage", ircT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];
@@ -540,8 +542,18 @@ async function main() {
   }
 }
 
+/* (v19.21.0) UMA PROMESSA QUE NUNCA RESOLVE também esvazia o Node: ele sai com código 0, sem "Tudo certo" e sem
+ * falha nenhuma (visto: um diálogo respondido cedo demais deixou um teste esperando para sempre). Sair sem ter
+ * chegado ao fim é falha. */
+let suiteTerminou = false;
+process.on("exit", (c) => {
+  if (!suiteTerminou && c === 0) {
+    console.log("A SUÍTE NÃO TERMINOU: algum teste ficou esperando uma promessa que nunca resolve.");
+    process.exitCode = 1;
+  }
+});
 Promise.resolve(main())
-  .then((c) => process.exit(c))
+  .then((c) => { suiteTerminou = true; process.exit(c); })
   /* sem este catch, uma suíte que TRAVA saía com código 0 e sem imprimir
    * nada — o vigia levanta a mão, mas alguém precisa escutá-lo */
   .catch((e) => { console.log("\n  " + (e && e.stack ? e.stack : e.message) + "\n"); process.exit(1); });

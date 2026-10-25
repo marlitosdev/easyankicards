@@ -44,10 +44,14 @@ function criarIdbFalso() {
     const escrita = modo === "readwrite";
     /* as mudanças valem só no fim (tudo-ou-nada, como no navegador) */
     const copia = {};
+    /* como no navegador: uma leitura que COMEÇOU antes de uma gravação vê o que havia quando começou (mesmo que só
+     * termine depois) — sem isto, "a leitura atrasada trouxe o valor velho" nunca acontecia em teste */
+    const foto = {};
+    if (!escrita) Object.keys(b.lojas).forEach((n) => { foto[n] = new Map(b.lojas[n]); });
     const lojaDe = (n) => {
       if (!(n in b.lojas)) throw new Error("NotFoundError: " + n);
       if (escrita && !copia[n]) copia[n] = new Map(b.lojas[n]);
-      return escrita ? copia[n] : b.lojas[n];
+      return escrita ? copia[n] : (foto[n] || b.lojas[n]);
     };
     tx.objectStore = (n) => {
       const L = () => lojaDe(n);

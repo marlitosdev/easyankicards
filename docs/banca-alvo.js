@@ -95,8 +95,7 @@ async function bancAlvoSalvar() {
   const destino = { disciplina: bancAlvo.disciplina, topico: bancAlvo.topico };
   if (!(await uiConfirm(t("banc_alvo_conf", { n: r.cards.length, t: bancAlvo.disciplina + " › " + bancAlvo.topico })))) return;
   const rec = cmAplicar(r.cards.map((c) => ({ card: c, destino })), bancAlvo.concurso || "", matGravarCartoes);
-  cmUltimoRecibo = rec;
-  try { guardar("eac_cm_recibo", JSON.stringify(rec)); } catch (e) {}
+  cmReciboGuardar(rec);
   try { matReg("cartoes", "cartões da bancada salvos no tópico", bancAlvo.topico + " · " + rec.novos + " novos, " + rec.repetidos + " já existiam"); } catch (e) {}
   if (typeof matRenderLista === "function") { try { matRenderLista(); } catch (e) {} }
   bancAlvoPintar();

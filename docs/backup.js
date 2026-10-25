@@ -136,6 +136,7 @@ function bkAguardarGravacoes() {
   try { if (typeof _jurGravando !== "undefined" && _jurGravando) p.push(_jurGravando); } catch (e) {}
   try { if (typeof _qsGravando !== "undefined" && _qsGravando) p.push(_qsGravando); } catch (e) {}
   try { if (typeof _matGravando !== "undefined" && _matGravando) p.push(_matGravando); } catch (e) {}
+  try { if (typeof _cmReciboGravando !== "undefined" && _cmReciboGravando) p.push(_cmReciboGravando); } catch (e) {}
   return Promise.all(p).then(() => p.length, () => p.length);
 }
 
@@ -147,6 +148,7 @@ function montarBackup() {
       const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : k === "eac_juris" ? bkLerJuris()
         : k === "eac_questoes" ? (typeof qsParaBackup === "function" ? qsParaBackup() : bkLer(k))
         : k === "eac_resumos" ? (typeof matParaBackup === "function" ? matParaBackup() : bkLer(k))
+        : k === "eac_cm_recibo" ? (typeof cmReciboParaBackup === "function" ? cmReciboParaBackup() : bkLer(k))
         : k === "eac_tinta" ? (typeof tnParaBackup === "function" ? tnParaBackup() : null) : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
@@ -305,6 +307,9 @@ const BK_ESPECIAIS = {
       matResumos = o;
       matIdbGravar(JSON.stringify(o));
     } },
+  /* (v19.21.0) o recibo do "Salvar no material", quando há IndexedDB (idb-recibo.js); "null" = nenhum recibo */
+  eac_cm_recibo: { pode: () => typeof cmReciboSuportado === "function" && cmReciboSuportado(), ler: () => cmReciboParaBackup(), vazio: () => null,
+    serve: (o) => o === null || bkEhObjeto(o), gravar: (o) => { cmReciboGuardar(o); } },
   /* as marcas do lápis nunca vão ao localStorage; o "ler" pega as guardadas mesmo com a opção de backup desligada */
   eac_tinta: { pode: () => true, ler: () => bkLerTintaToda(), gravar: (o) => { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(o); }, vazio: () => ({}), serve: bkEhObjeto },
 };

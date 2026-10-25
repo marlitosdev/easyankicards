@@ -2394,8 +2394,7 @@ function gerCriarGuardar() {
   if (!marcados.length) return null;
   const destino = { disciplina: c.disciplina, topico: c.topico };
   const rec = cmAplicar(marcados.map((x) => ({ card: x.card, destino })), gerCriarConcurso(c), matGravarCartoes);
-  try { cmUltimoRecibo = rec; } catch (e) {}
-  try { guardar("eac_cm_recibo", JSON.stringify(rec)); } catch (e) {}
+  try { cmReciboGuardar(rec); } catch (e) {}
   try { matReg("cartoes", "cartões criados na Biblioteca", c.topico + " · " + rec.novos + " novos, " + rec.repetidos + " já existiam"); } catch (e) {}
   const frentes = new Set(marcados.map((x) => cqNormal(cqRevelado(x.card))));
   gerCalcular();

@@ -7591,8 +7591,7 @@ async function cmGravarTudo() {
   }
 
   const r = cmAplicar(comDestino, ed ? ed.nome : "", matGravarCartoes);
-  cmUltimoRecibo = r;
-  try { guardar("eac_cm_recibo", JSON.stringify(r)); } catch (e) {}
+  cmReciboGuardar(r);
   reg("CARTAO-MATERIAL", "gravados no material",
       r.novos + " cartões em " + r.topicos + " tópicos, " + r.repetidos + " já existiam");
   if ($("btnCmDesfazer")) $("btnCmDesfazer").hidden = false;
@@ -7623,6 +7622,8 @@ let cmUltimoRecibo = null;
  * depois. Sem isto, o primeiro erro é permanente: foi o que aconteceu com
  * 843 cartões no uso real, e não havia caminho de volta. */
 async function cmDesfazerUltimo() {
+  /* (v19.21.0) o recibo mora no IndexedDB (idb-recibo.js): sem ele na memória, espera chegar */
+  if (!cmUltimoRecibo && typeof cmReciboPronto === "function") { try { await cmReciboPronto(); } catch (e) {} }
   if (!cmUltimoRecibo) {
     try { cmUltimoRecibo = JSON.parse(localStorage.getItem("eac_cm_recibo") || "null"); }
     catch (e) { cmUltimoRecibo = null; }
@@ -7640,13 +7641,13 @@ async function cmDesfazerUltimo() {
     (ch) => (matResumos[ch] && matResumos[ch].cartoes) || "");
   reg("CARTAO-MATERIAL", "gravação desfeita",
       d.removidas + " cartões retirados de " + d.topicos + " tópicos");
-  cmUltimoRecibo = null;
-  try { localStorage.removeItem("eac_cm_recibo"); } catch (e) {}
+  cmReciboApagar();
   if ($("btnCmDesfazer")) $("btnCmDesfazer").hidden = true;
   await uiAlert(t("cm_desfeito", { n: d.removidas, t: d.topicos }));
 }
 
 function cmIniciarTela() {
+  try { cmReciboCarregar(); } catch (e) {}
   if ($("btnSalvarMaterial")) $("btnSalvarMaterial").onclick = cmAbrir;
   if ($("btnCmFechar")) $("btnCmFechar").onclick = () => $("dlgCartaoMat").close();
   if ($("btnCmGravar")) $("btnCmGravar").onclick = cmGravarTudo;

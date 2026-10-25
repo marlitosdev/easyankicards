@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.20.0";
+const VERSAO = "19.21.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1608,6 +1608,9 @@ function autoSalvar() {
   vigiarEncolhimento(textoAnterior, atual);
   textoAnterior = atual;
   clearTimeout(saveTimer);
+  /* (v19.21.0) O TEXTO DA BANCADA FICA NO localStorage, de propósito (as outras gavetas grandes foram para o
+   * IndexedDB): aqui a gravação é IMEDIATA — o que foi digitado sobrevive mesmo se a aba fechar logo em seguida; no
+   * IndexedDB ela é em segundo plano e a última linha poderia se perder. Ver idb-recibo.js. */
   saveTimer = setTimeout(() => {
     guardar("eac_texto", atual);
   }, 400);

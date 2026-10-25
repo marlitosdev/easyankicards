@@ -3379,8 +3379,7 @@ async function jurBibCartoes() {
   if (!destinos.length) return null;
   if (!(await uiConfirm(t("jur_bib_cartoes_conf", { n: destinos.length })))) return null;
   const rec = cmAplicar(destinos, "", matGravarCartoes);
-  try { cmUltimoRecibo = rec; } catch (e) {}
-  try { guardar("eac_cm_recibo", JSON.stringify(rec)); } catch (e) {}
+  try { cmReciboGuardar(rec); } catch (e) {}
   try { reg("JURIS", "cartões das teses (biblioteca de julgados)", rec.novos + " novos, " + rec.repetidos + " já existiam"); } catch (e) {}
   $("jurBibMsg").textContent = t("jur_bib_cartoes_feito", { n: rec.novos, r: rec.repetidos });
   $("btnJurBibDesfazer").hidden = !rec.novos;
