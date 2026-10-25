@@ -135,6 +135,7 @@ function bkAguardarGravacoes() {
   try { if (typeof _tnGravando !== "undefined" && _tnGravando) p.push(_tnGravando); } catch (e) {}
   try { if (typeof _jurGravando !== "undefined" && _jurGravando) p.push(_jurGravando); } catch (e) {}
   try { if (typeof _qsGravando !== "undefined" && _qsGravando) p.push(_qsGravando); } catch (e) {}
+  try { if (typeof _matGravando !== "undefined" && _matGravando) p.push(_matGravando); } catch (e) {}
   return Promise.all(p).then(() => p.length, () => p.length);
 }
 
@@ -145,6 +146,7 @@ function montarBackup() {
     BK_CHAVES[grupo].forEach((k) => {
       const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : k === "eac_juris" ? bkLerJuris()
         : k === "eac_questoes" ? (typeof qsParaBackup === "function" ? qsParaBackup() : bkLer(k))
+        : k === "eac_resumos" ? (typeof matParaBackup === "function" ? matParaBackup() : bkLer(k))
         : k === "eac_tinta" ? (typeof tnParaBackup === "function" ? tnParaBackup() : null) : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
@@ -295,6 +297,13 @@ const BK_ESPECIAIS = {
       if (qsEsperandoIdb || qsFalhouLer) throw new Error("as questões ainda não carregaram");
       qsBanco = o;
       qsIdbGravar(JSON.stringify(o));
+    } },
+  /* (v19.20.0) os resumos, quando já moram no IndexedDB (idb-resumos.js); antes disso, são uma chave comum */
+  eac_resumos: { pode: () => typeof matNoIdb === "function" && matNoIdb(), ler: () => matParaBackup(), vazio: () => ({}), serve: bkEhObjeto,
+    gravar: (o) => {
+      if (!idbGuardaPodeGravar("resumos")) throw new Error("os resumos ainda não carregaram");
+      matResumos = o;
+      matIdbGravar(JSON.stringify(o));
     } },
   /* as marcas do lápis nunca vão ao localStorage; o "ler" pega as guardadas mesmo com a opção de backup desligada */
   eac_tinta: { pode: () => true, ler: () => bkLerTintaToda(), gravar: (o) => { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(o); }, vazio: () => ({}), serve: bkEhObjeto },

@@ -105,7 +105,7 @@ function bkSemearData() {
         .forEach((e) => { olha(e.tocado); olha(e.criado); });
     } catch (x) {}
     try {
-      const mat = JSON.parse(localStorage.getItem("eac_resumos") || "{}") || {};
+      const mat = (typeof matResumos !== "undefined" && matResumos) || JSON.parse(localStorage.getItem("eac_resumos") || "{}") || {};
       Object.keys(mat).forEach((k) => olha(mat[k] && mat[k].tocado));
     } catch (x) {}
     if (!maisNovo) return;

@@ -13,9 +13,16 @@ let matResumos = {};
 let matAtual = null;      /* chave em edição */
 
 function matCarregar() {
+  /* (v19.20.0) moram no IndexedDB (idb-resumos.js): chegam em segundo plano — até lá, gravar é recusado */
+  if (typeof matNoIdb === "function" && matNoIdb()) {
+    if (!_matCarregando) { matResumos = {}; matIdbCarregar((o) => { matResumos = o; }); }
+    return;
+  }
   try { matResumos = JSON.parse(localStorage.getItem("eac_resumos") || "{}"); }
   catch (e) { matResumos = {}; }
   if (!matResumos || typeof matResumos !== "object") matResumos = {};
+  /* ainda no localStorage, e o navegador tem IndexedDB: muda de casa em segundo plano (só apaga daqui conferido) */
+  if (typeof matIdbMigrar === "function" && matIdbSuportado()) matIdbMigrar();
 }
 
 /* Carrega AGORA, no carregamento do arquivo, e não só no matIniciar(): a
@@ -25,8 +32,14 @@ function matCarregar() {
 try { matCarregar(); } catch (e) {}
 
 function matSalvar(chave) {
-  try { guardar("eac_resumos", JSON.stringify(matResumos)); }
-  catch (e) {}
+  if (typeof matNoIdb === "function" && matNoIdb()) {
+    /* (v19.20.0) ainda chegando do IndexedDB: gravar agora trocaria TODOS os resumos pelos da memória (idb-guarda.js) */
+    if (!idbGuardaPodeGravar("resumos")) return false;
+    matIdbGravar(JSON.stringify(matResumos));
+  } else {
+    try { guardar("eac_resumos", JSON.stringify(matResumos)); }
+    catch (e) {}
+  }
   /* GRAVAR E DESENHAR ERAM DOIS MUNDOS SEM PONTE: criar um cartão
    * gravava certo e a agenda só mostrava depois de um F5. Quem não sabe
    * disso conclui que a gravação falhou e refaz o trabalho. */
