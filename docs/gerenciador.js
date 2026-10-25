@@ -1958,8 +1958,10 @@ function gerAcaoSalvarEdicao() {
 function gerAcaoMelhorar() {
   const ms = gerMarcados();
   if (!ms.length) return;
+  const pasta = gerPasta;
   $("dlgGerCartoes").close();
-  ceAbrir({ notas: ms.slice(0, CE_LIM.lote) });
+  /* (v19.13.0) fechar o Melhorar volta para cá, na mesma pasta */
+  ceAbrir({ notas: ms.slice(0, CE_LIM.lote), volta: { pasta } });
 }
 
 async function gerAcaoDesfazer() {

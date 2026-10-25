@@ -1534,6 +1534,16 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .tn-perigo{color:var(--erro,#d1495b)}
 .tn-sep{width:1px;height:22px;background:var(--borda);margin:0 2px}
 .tn-esp{width:84px}
+/* (v19.13.0) MELHORAR CARTÕES: a origem, os grupos de tópico e as opções recolhidas */
+.ce-origem{margin:6px 0 8px;padding:8px 12px;border:1px solid var(--borda);border-left:4px solid var(--acao,#2563eb);border-radius:10px;background:var(--campo)}
+.ce-origem-feita{border-left-color:var(--verde-txt,#2f9e6e)}
+.ce-origem .ce-ori-txt{margin:0;font-weight:600}
+.ce-origem .ce-ori-fora{margin:4px 0 0}
+.ce-origem .qm-bts{margin-top:6px}
+.ce-opcoes{margin:0 0 8px}
+.ce-opcoes > summary{cursor:pointer;font-size:13px;color:var(--sutil)}
+.ce-grupo{margin:10px 0 4px;padding:3px 8px;font-size:12.5px;font-weight:700;color:var(--sutil);border-bottom:1px solid var(--borda)}
+.ce-grupo.ce-grupo-origem{color:var(--acao,#2563eb)}
 /* (v19.12.0) PASTAS */
 .pas-fileira{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
 .pas-fileira:empty{display:none}
@@ -9762,21 +9772,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <li id="cePasso3" class="ce-passo"><b>3</b> <span data-i18n="ce_p3"></span></li>
   </ol>
   <p class="ce-msg" id="ceMsg" role="status" aria-live="polite"></p>
+  <!-- (v19.13.0) de onde vieram os cartões: o tópico escolhido, o que falta nele, os outros tópicos e a volta -->
+  <div id="ceOrigem" class="ce-origem" hidden></div>
   <div class="ce-rola">
-    <label class="nota" style="display:block"><span data-i18n="ce_obj_rot"></span> <select id="ceObjetivo"></select></label>
-    <label class="nota" style="display:block"><span data-i18n="ce_esc_rot"></span> <select id="ceEscopo"></select>
-      <input type="search" id="ceBusca" maxlength="80" data-i18n-ph="ce_busca_ph" style="min-width:12em"></label>
-    <label class="nota" style="display:block"><input type="checkbox" id="ceCurto"> <span data-i18n="ce_curto"></span></label>
-    <p class="nota" id="ceResumo"></p>
-    <details id="ceEscolha" open>
-      <summary id="ceEscolhaTit"></summary>
+    <!-- (v19.13.0) as opções da fila ficam recolhidas: à vista só o que se usa a cada rodada -->
+    <details id="ceOpcoes" class="ce-opcoes">
+      <summary data-i18n="ce_opcoes"></summary>
+      <label class="nota" style="display:block"><span data-i18n="ce_obj_rot"></span> <select id="ceObjetivo"></select></label>
+      <label class="nota" style="display:block"><span data-i18n="ce_esc_rot"></span> <select id="ceEscopo"></select>
+        <input type="search" id="ceBusca" maxlength="80" data-i18n-ph="ce_busca_ph" style="min-width:12em"></label>
+      <label class="nota" style="display:block"><input type="checkbox" id="ceCurto"> <span data-i18n="ce_curto"></span></label>
       <p class="nota" data-i18n="ce_ajuda"></p>
-      <div class="qm-bts">
-        <button type="button" class="btn-min" id="btnCeMarcar" data-i18n="ce_marcar"></button>
-        <button type="button" class="btn-min" id="btnCeLimpar" data-i18n="ce_limpar"></button>
-        <button type="button" class="btn-min" id="btnCeMostrarRev" data-i18n="ce_mostrar_rev" hidden></button>
-        <span class="nota" id="ceSel"></span>
-      </div>
       <div class="qm-bts ce-atalhos" id="ceAtalhos">
         <span class="nota" data-i18n="ce_at_rot"></span>
         <button type="button" class="btn-min" id="btnCeAtTodos" data-i18n="ce_at_todos"></button>
@@ -9786,6 +9792,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min" id="btnCeAtLongos" data-i18n="ce_at_longos"></button>
         <button type="button" class="btn-min" id="btnCeAtRisco" data-i18n="ce_at_risco"></button>
         <button type="button" class="btn-min" id="btnCeAtRepetidos" data-i18n="ce_at_repetidos"></button>
+      </div>
+    </details>
+    <p class="nota" id="ceResumo"></p>
+    <details id="ceEscolha" open>
+      <summary id="ceEscolhaTit"></summary>
+      <div class="qm-bts">
+        <button type="button" class="btn-min" id="btnCeMarcar" data-i18n="ce_marcar"></button>
+        <button type="button" class="btn-min" id="btnCeLimpar" data-i18n="ce_limpar"></button>
+        <button type="button" class="btn-min" id="btnCeMostrarRev" data-i18n="ce_mostrar_rev" hidden></button>
+        <span class="nota" id="ceSel"></span>
       </div>
       <div id="ceLista" class="cq-lista"></div>
       <div class="qm-bts"><button type="button" class="btn-min" id="btnCeMais" data-i18n="ce_mais" hidden></button></div>

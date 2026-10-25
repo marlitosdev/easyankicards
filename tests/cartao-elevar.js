@@ -830,7 +830,7 @@ async function testes() {
     ok(a.matResumosAtual()[c1].cartoes === antes && a.cePassoAtual() === 3, "E8l dizer NAO nao devia mexer em nada (e a rodada continua)");
     await conduzir(a, a.$("btnCeAplicar").onclick());
     ok(/A prestação de serviços constantes/.test(a.matResumosAtual()[c1].cartoes), "E8m aplicar troca o cartao");
-    ok(/Rodada 2 · 2 fracos/.test(a.$("ceResumo").textContent) && /Rodada 1 aplicada: 1 trocado\(s\)/.test(a.$("ceMsg").textContent) && /Rodada 2 pronta: 2 cartões/.test(a.$("ceMsg").textContent), `E8n a tela atualiza e ja deixa a proxima rodada pronta: ${a.$("ceResumo").textContent} | ${a.$("ceMsg").textContent}`);
+    ok(/Rodada 2 · 2 fracos/.test(a.$("ceResumo").textContent) && /Rodada 1 aplicada: 1 cartão\(ões\) melhorado/.test(a.$("ceMsg").textContent) && !/não encontrado/.test(a.$("ceMsg").textContent) && /Rodada 2 pronta: 2 cartões/.test(a.$("ceMsg").textContent), `E8n a tela atualiza e ja deixa a proxima rodada pronta: ${a.$("ceResumo").textContent} | ${a.$("ceMsg").textContent}`);
     ok(a.cePassoAtual() === 1 && a.ceSelAtual().size === 2 && a.$("ceColar").value === "" && a.$("cePrompt").value === "", "E8n2 depois de aplicar volta ao passo 1 com a rodada seguinte escolhida e as caixas limpas");
     ok(vis("btnCeDesfazer") && a.$("ceComparar").hidden === true, "E8o depois de aplicar aparece 'desfazer' e a comparacao some");
     await conduzir(a, a.$("btnCeDesfazer").onclick());

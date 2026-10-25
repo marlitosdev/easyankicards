@@ -386,7 +386,7 @@ function estcMenuMontar() {
     item(t("est_m_editar"), () => { estcFechar(); gerFoco = u.pos; if (gerEhCelular()) gerVista("previa"); gerAcaoEditar(); });
     item(t("est_m_apagar"), estcApagar);
   }
-  item(t("est_m_melhorar"), () => { estcFechar(); $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota] }); });
+  item(t("est_m_melhorar"), () => { estcFechar(); const pasta = typeof gerPasta !== "undefined" ? gerPasta : null; $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota], volta: { pasta } }); });
   if (u.nota.chave !== CQ_BANCADA) {
     /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
     item(t("est_m_criar"), () => { estcFechar(); bancAlvoDefinir(u.nota.disciplina, u.nota.topico); });

@@ -400,6 +400,18 @@ function ceDesfazerLote() {
  * na hora o que fez, e nada da rodada em andamento se perde por um clique repetido. */
 let ceForcadas = null, ceNotas = [], ceSel = new Set(), ceMostrando = CE_LIM.visiveis, ceConf = null, cePedido = null;
 let cePasso = 1, ceRodada = 1, ceStats = { total: 0, fracos: 0, medios: 0, bons: 0, escondidos: 0 }, ceIncluirMedios = false;
+/* =====================================================================
+ * DE ONDE VEIO A ESCOLHA (v19.13.0)
+ *
+ * O RELATO: "o tópico Administração tributária tinha 12 cartões restantes; melhorei os 12; depois apareceram centenas
+ * de outros que não estavam naquele tópico". A 1ª rodada eram os cartões marcados na Biblioteca; ao aplicar, a 2ª
+ * passava a ser a fila da biblioteca INTEIRA (415 fracos, de todos os tópicos), sem aviso. E "Fechar" não voltava à
+ * Biblioteca. Agora a escolha tem ORIGEM: as rodadas seguintes ficam nos tópicos de onde os cartões vieram; a janela
+ * diz quantos ainda faltam ali e que os outros são de outros tópicos; ir além é um botão. A fila larga vem agrupada por
+ * tópico (o pior tópico primeiro). Fechar (e "← Voltar à Biblioteca") reabre a Biblioteca na mesma pasta.
+ * ceOrigem = { chaves: [tópicos], nome, volta: {pasta} | null, fora: false }
+ * ===================================================================== */
+let ceOrigem = null;
 
 /* A explicação de cada botão desta janela: id → chave do texto (o teste confere que nenhum fica de fora). */
 /* ATALHOS DE MARCAÇÃO (vieram da revisão manual antiga): marcam de uma vez os cartões que atendem a um critério.
@@ -574,10 +586,105 @@ function ceCalcular() {
       base = todas.filter((n) => (n.nivel === "fraco" || (ceIncluirMedios && n.nivel === "medio")) && !n.revisado).sort(cePiores);
     }
     if (ceEscopo === "bancada") base = base.filter((n) => cqEhBancada(n.chave));
-    ceNotas = ceFiltrarBusca(base);
+    ceStats.foraFila = 0; ceStats.foraTopicos = 0; ceStats.origemMedios = 0;
+    if (ceOrigem) {
+      const dentro = (n) => ceOrigem.chaves.indexOf(n.chave) >= 0;
+      const fora = base.filter((n) => !dentro(n));
+      ceStats.foraFila = fora.length;
+      ceStats.foraTopicos = new Set(fora.map((n) => n.chave)).size;
+      ceStats.origemMedios = todas.filter((n) => dentro(n) && n.nivel === "medio").length;
+      if (!ceOrigem.fora) base = base.filter(dentro);
+    }
+    ceNotas = ceFiltrarBusca(ceAgrupar(base));
   }
   ceSel = new Set([...ceSel].filter((i) => i < ceNotas.length));
   return ceNotas;
+}
+
+/* a fila em GRUPOS de tópico: os da origem primeiro, depois o tópico com o pior cartão; dentro, os piores primeiro */
+function ceAgrupar(lista) {
+  const L = (lista || []).slice();
+  const pior = {};
+  L.forEach((n) => { if (pior[n.chave] === undefined || n.nota < pior[n.chave]) pior[n.chave] = n.nota; });
+  const naOrigem = (n) => (ceOrigem && ceOrigem.chaves.indexOf(n.chave) >= 0 ? 0 : 1);
+  return L.sort((a, b) => naOrigem(a) - naOrigem(b) || pior[a.chave] - pior[b.chave]
+    || String(a.chave).localeCompare(String(b.chave)) || a.nota - b.nota);
+}
+/* o nome do tópico de um cartão (a Bancada tem nome próprio) */
+function ceNomeTopico(n) {
+  if (!n) return "";
+  if (typeof cqEhBancada === "function" && cqEhBancada(n.chave)) return t("ce_bancada_nome");
+  return [n.disciplina, n.topico].filter(Boolean).join(" › ") || String(n.chave || "");
+}
+/* a faixa da origem: o tópico escolhido, o que falta nele, e o caminho para os outros */
+function cePintarOrigem() {
+  const cx = $("ceOrigem");
+  if (!cx) return;
+  cx.innerHTML = "";
+  cx.hidden = !ceOrigem || !!ceForcadas;
+  if (cx.hidden) return;
+  const o = ceOrigem, s = ceStats;
+  const nNaOrigem = ceNotas.filter((n) => o.chaves.indexOf(n.chave) >= 0).length;
+  const p = ceEl("p", "ce-ori-txt");
+  if (!o.fora) {
+    p.textContent = (nNaOrigem ? t("ce_ori_fila", { t: o.nome, n: nNaOrigem }) : t("ce_ori_feito", { t: o.nome }))
+      + (s.origemMedios ? t("ce_ori_quase", { n: s.origemMedios }) : "");
+    cx.className = "ce-origem" + (nNaOrigem ? "" : " ce-origem-feita");
+  } else {
+    p.textContent = t("ce_ori_todos", { n: ceNotas.length, k: new Set(ceNotas.map((n) => n.chave)).size });
+    cx.className = "ce-origem ce-origem-larga";
+  }
+  cx.append(p);
+  const bts = ceEl("div", "qm-bts");
+  if (!o.fora && s.foraFila) {
+    const fora = ceEl("p", "nota ce-ori-fora", t("ce_ori_fora", { n: s.foraFila, k: s.foraTopicos }));
+    cx.append(fora);
+    const b = ceEl("button", "btn-min", t("ce_b_outros", { n: s.foraFila })); b.type = "button"; b.id = "btnCeOutros"; b.title = t("ce_tip_outros");
+    b.disabled = cePasso > 1;
+    b.onclick = () => ceIrOutros(true);
+    bts.append(b);
+  }
+  if (o.fora) {
+    const b = ceEl("button", "btn-min", t("ce_b_so_origem", { t: o.nome })); b.type = "button"; b.id = "btnCeSoOrigem"; b.title = t("ce_tip_so_origem");
+    b.disabled = cePasso > 1;
+    b.onclick = () => ceIrOutros(false);
+    bts.append(b);
+  }
+  if (o.volta) {
+    const b = ceEl("button", "btn-min", t("ce_b_voltar_bib")); b.type = "button"; b.id = "btnCeVoltarBib"; b.title = t("ce_tip_voltar_bib");
+    b.onclick = () => ceFecharEVoltar();
+    bts.append(b);
+  }
+  if (bts.children.length) cx.append(bts);
+}
+/* sair da origem para a fila de todos os tópicos (ou voltar a ela) — só antes de gerar o prompt */
+function ceIrOutros(sim) {
+  if (!ceOrigem || cePasso > 1) return false;
+  ceOrigem.fora = !!sim;
+  ceForcadas = null;
+  ceMostrando = CE_LIM.visiveis; ceSel = new Set(); ceConf = null; cePedido = null;
+  ceCalcular(); ceMarcarPiores();
+  ceStatus(ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada"), ceNotas.length ? "" : "ok");
+  try { matReg("cartoes", sim ? "melhorar cartões: outros tópicos" : "melhorar cartões: de volta ao tópico", ceOrigem.nome); } catch (e) {}
+  return true;
+}
+/* fechar e, se veio da Biblioteca, voltar a ela (na mesma pasta) */
+async function ceFecharEVoltar() {
+  if (cePasso > 1 && !(await uiConfirm(t("ce_conf_fechar")))) return false;
+  $("dlgCartElevar").close();
+  const v = ceOrigem && ceOrigem.volta;
+  if (v && typeof gerAbrir === "function") {
+    try {
+      gerAbrir();
+      if (v.pasta) {
+        gerPasta = v.pasta;
+        if (v.pasta.chave && typeof gerAbrirCaminho === "function") gerAbrirCaminho(v.pasta.chave);
+        gerRefiltrar(); gerPintar();
+      }
+    } catch (e) {}
+    try { matReg("cartoes", "melhorar cartões: de volta à Biblioteca", ceOrigem.nome); } catch (e) {}
+  }
+  return true;
 }
 
 function ceContarSel() {
@@ -645,7 +752,18 @@ function cePintar() {
   const cx = $("ceLista");
   cx.innerHTML = "";
   if (r.total && !ceNotas.length) cx.append(ceEl("p", "nota", t(ceForcadas ? "ce_nenhum" : "ce_nada_fila")));
+  const nPorTopico = {};
+  ceNotas.forEach((n) => { nPorTopico[n.chave] = (nPorTopico[n.chave] || 0) + 1; });
+  const variosTopicos = Object.keys(nPorTopico).length > 1;
+  let topicoAnt = null;
   ceNotas.slice(0, ceMostrando).forEach((n, i) => {
+    /* (v19.13.0) o tópico como cabeçalho: dá para ver de onde é cada grupo de cartões (o da origem sinalizado) */
+    if (variosTopicos && n.chave !== topicoAnt) {
+      topicoAnt = n.chave;
+      const daOrigem = ceOrigem && ceOrigem.chaves.indexOf(n.chave) >= 0;
+      cx.append(ceEl("div", "ce-grupo" + (daOrigem ? " ce-grupo-origem" : ""),
+        ceNomeTopico(n) + " · " + nPorTopico[n.chave] + (daOrigem ? " · " + t("ce_grupo_origem") : "")));
+    }
     const lin = ceEl("label", "ce-item");
     const ck = ceEl("input"); ck.type = "checkbox"; ck.checked = ceSel.has(i); ck.disabled = cePasso > 1;
     ck.onchange = () => {
@@ -662,7 +780,8 @@ function cePintar() {
     corpo.append(topo);
     const falta = n.defeitos.length ? t("ce_falta", { x: n.defeitos.map((d) => t("ce_def_" + d)).join(" · ") }) : "";
     if (falta) corpo.append(ceEl("span", "ce-def", falta));
-    corpo.append(ceEl("span", "cq-onde", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
+    /* o tópico na linha só quando nada mais o diz: nem cabeçalho (vários tópicos) nem a faixa da origem */
+    if (!variosTopicos && !(ceOrigem && !ceOrigem.fora && !ceForcadas)) corpo.append(ceEl("span", "cq-onde", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
     /* prévia do cartão inteiro, como ele fica no baralho (a lista mostra só um trecho) */
     const acoesI = ceEl("span", "ce-acoes-item");
     const previa = ceEl("div", "ce-previa"); previa.hidden = true;
@@ -685,6 +804,9 @@ function cePintar() {
     cx.append(lin);
   });
   $("btnCeMais").hidden = ceNotas.length <= ceMostrando;
+  /* com origem, o placar da biblioteca inteira só confunde: a faixa da origem diz o que importa */
+  $("ceResumo").hidden = !!(ceOrigem && !ceForcadas);
+  cePintarOrigem();
   ceContarSel();
   cePintarRodape();
 }
@@ -842,7 +964,8 @@ async function ceAplicar() {
   try { ceMarcarTentativa(naoAceitos); } catch (e) {}
   ceProximaRodada();
   try { matRender(); } catch (e) {}
-  ceStatus(t("ce_msg_aplicada", { r: ceRodada - 1, n: r.trocados, m: r.naoAchou }) + " " + (ceNotas.length ? t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : t("ce_msg_nada")), "ok");
+  ceStatus(t("ce_msg_aplicada2", { r: ceRodada - 1, n: r.trocados }) + (r.naoAchou ? " " + t("ce_msg_nao_achou", { m: r.naoAchou }) : "")
+    + (ceNotas.length ? " " + t("ce_msg_rodada", { r: ceRodada, n: ceSel.size }) : ""), "ok");
 }
 
 /* limpa a rodada e escolhe a seguinte */
@@ -883,6 +1006,12 @@ async function ceDesfazer() {
 /* opc.notas: abre com ESTES cartões (vindos do gerenciador), fracos ou não. */
 function ceAbrir(opc) {
   ceForcadas = opc && Array.isArray(opc.notas) ? opc.notas : null;
+  ceOrigem = null;
+  if (ceForcadas && ceForcadas.length) {
+    const chs = [...new Set(ceForcadas.map((n) => n.chave))];
+    ceOrigem = { chaves: chs, nome: chs.length === 1 ? ceNomeTopico(ceForcadas[0]) : t("ce_origem_n", { n: chs.length }),
+      volta: (opc && opc.volta) || null, fora: false };
+  }
   ceObjetivo = opc && CE_OBJETIVOS.indexOf(opc.objetivo) >= 0 ? opc.objetivo : "completar";
   ceEscopo = opc && CE_ESCOPOS.indexOf(opc.escopo) >= 0 ? opc.escopo : "fila";
   ceBusca = ""; ceCurto = false;
@@ -909,10 +1038,7 @@ if (typeof document !== "undefined" && $("btnCartElevar")) {
   if ($("ceCurto")) $("ceCurto").onchange = () => { if (!ceMudarFiltro("curto", $("ceCurto").checked)) $("ceCurto").checked = ceCurto; };
   Object.keys(CE_ATALHOS).forEach((id) => { if ($(id)) $(id).onclick = () => { ceMarcarPor(CE_ATALHOS[id]); }; });
   if ($("cePrompt")) $("cePrompt").oninput = () => { try { mostrarTamanho("cePromptTam", $("cePrompt").value); } catch (e) {} };
-  if ($("btnCeFechar")) $("btnCeFechar").onclick = async () => {
-    if (cePasso > 1 && !(await uiConfirm(t("ce_conf_fechar")))) return;
-    $("dlgCartElevar").close();
-  };
+  if ($("btnCeFechar")) $("btnCeFechar").onclick = () => ceFecharEVoltar();
   if ($("btnCeMais")) $("btnCeMais").onclick = () => { ceMostrando += CE_LIM.visiveis; cePintar(); flashBotao($("btnCeMais")); };
   if ($("btnCeMarcar")) $("btnCeMarcar").onclick = () => { ceMarcarPiores(); if (cePasso === 1) flashBotao($("btnCeMarcar")); };
   if ($("btnCeLimpar")) $("btnCeLimpar").onclick = () => { if (cePasso > 1) return; ceSel = new Set(); cePintar(); flashBotao($("btnCeLimpar")); };
