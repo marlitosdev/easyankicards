@@ -58,7 +58,7 @@ function decRecarregar() { decLista = null; decResumo = null; decCarregar(); }
  * direto, que pode já não ser onde elas moram. */
 function decDefinirTudo(lista) {
   decLista = Array.isArray(lista) ? lista : [];
-  decGravar();
+  return decGravar();
 }
 
 function decCortar(s, n) { return String(s == null ? "" : s).replace(/\s+$/, "").slice(0, n); }
@@ -108,6 +108,9 @@ function decPodar() {
 }
 
 function decGravar() {
+  /* (v19.19.0) ainda chegando do IndexedDB: recusa em silêncio (fica no registro) — gravar agora trocaria o histórico
+   * inteiro pelo que está na memória */
+  if (typeof idbGuardaPodeGravar === "function" && !idbGuardaPodeGravar("decisoes", true)) return false;
   /* "eac_decisoes_resumo" não migrou (fica pequeno para sempre, ver idb-decisoes.js) — sempre no
    * localStorage. "eac_decisoes" (decLista), depois de migrado, grava em memória na hora e manda a
    * gravação de verdade para o IndexedDB em segundo plano, sem que quem chamou espere por ela. */

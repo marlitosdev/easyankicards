@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js",
                   "backup.js", "backup-ui.js", "backup-auto.js", "material.js",
-                  "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "lei-nova.js", "lei-pdf.js", "idb-questoes.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "tinta.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "edital-vert-ui.js", "dominio-evolucao.js", "banca-alvo.js", "horas-assunto.js", "ramos.js", "resumo-ia.js", "resumo-paragrafo.js", "resumo-lidas.js", "pacote.js",
+                  "cartao-melhorar.js", "idb-guarda.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "lei-nova.js", "lei-pdf.js", "idb-questoes.js", "questoes.js", "rascunho.js", "copiar-questao.js", "grifo.js", "tinta.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "edital-vert-ui.js", "dominio-evolucao.js", "banca-alvo.js", "horas-assunto.js", "ramos.js", "resumo-ia.js", "resumo-paragrafo.js", "resumo-lidas.js", "pacote.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "edital-vert.js", "editais.js", "vinculos.js", "vizinhos.js", "idb-juris.js", "juris.js", "juris-catalogo.js", "juris-ia.js", "ia-consumo.js", "juris-ui.js", "pastas.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "modos.js"];
@@ -552,7 +552,11 @@ function diasAtras(n) {
 
 let _adiados = null;
 
-function rodar() {
+/* (v19.19.0) opc.indexedDB: um IndexedDB (de mentira, tests/idb-falso.js) já presente quando os scripts do app rodam,
+ * como no navegador — as migrações que começam no carregamento correm de verdade. opc.lojaInicial: o localStorage com
+ * que a "página" abre (para simular recarregar: mesma loja, mesmo IndexedDB, app novo). */
+function rodar(opc) {
+  const O = opc || {};
   const html = fs.readFileSync(path.join(RAIZ, "docs", "index.html"), "utf8");
   const { doc, ids } = montarDocumento(html);
   const falhas = [];
@@ -564,7 +568,7 @@ function rodar() {
      * depende de persistência passava no teste sem nunca ser exercido — e
      * agora backup, resumos e progresso do edital dependem dele. */
     localStorage: (() => {
-      const loja = {};
+      const loja = Object.assign({}, O.lojaInicial || {});
       return {
         get length() { return Object.keys(loja).length; },
         key: (i) => Object.keys(loja)[i] || null,
@@ -629,6 +633,7 @@ function rodar() {
       ? console
       : { log() {}, warn() {}, error() {}, info() {} },
   });
+  if (O.indexedDB) janela.indexedDB = O.indexedDB;
   janela.window = janela;
   janela.self = janela;
 
@@ -673,7 +678,7 @@ function rodar() {
     },
     edRevisaoAbrir, abrirRegistro, confirmarRegistro, completarDiario,
     abrirDisciplina, edAbrirDisciplinaDaLinha, edPintarRitmo,
-    montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual, bkGuardarAntes, bkAntesLer, bkAntesLojaDefinir, bkCopiaCompleta, bkPintarAntes, bkVoltarACopia, bkConfirmarRestauro, bkLerArquivo, bkAntesLojaIdb, BK_ESPECIAIS, bkOndeTexto, bkPintarPainel, bkEmbrulhar, bkTextoDoArquivo, bkTextoDosBytes, bkGzip, bkEhGzip, bkPodeCompactar, bkSalvarNaNuvem, bkBaixar, carregarHistorico, qsSalvar, qsIdbLojaDefinir, qsIdbMigrar, qsIdbEstado, qsIdbEsquecer, qsPronto, qsParaBackup, bkEsperarDados, bkAguardarGravacoes, qsBancoForcar: (v) => { qsBanco = v; }, qsGravandoAtual: () => _qsGravando, qsAvisouFalhaZerar: () => { qsAvisouFalha = false; }, bkaGravarAgora, bkaConectar, bkaReconectar, bkaAceitarEncolhido, bkaDesligar, bkaProcurarMaisNovo, bkaVerMaisNovo, bkaPintar, bkaAvisoDoSelo, bkaEstado, bkaEncolheu, bkaNome, bkaLerNome, bkaSlug, bkaAparelho, bkaAparelhoDefinir, bkaRelogioDefinir, bkaPastaLojaDefinir, bkaIniciar, bkaHash, bkaPastaForcar: (h, p) => { bkaPasta = h; bkaPermissao = p || "granted"; }, bkaPermissaoAtual: () => bkaPermissao, bkaMaisNovoAtual: () => bkaMaisNovo, atualizarSeloBase,
+    montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual, bkGuardarAntes, bkAntesLer, bkAntesLojaDefinir, bkCopiaCompleta, bkPintarAntes, bkVoltarACopia, bkConfirmarRestauro, bkLerArquivo, bkAntesLojaIdb, BK_ESPECIAIS, bkOndeTexto, bkPintarPainel, bkEmbrulhar, bkTextoDoArquivo, bkTextoDosBytes, bkGzip, bkEhGzip, bkPodeCompactar, bkSalvarNaNuvem, bkBaixar, carregarHistorico, qsSalvar, qsIdbLojaDefinir, qsIdbMigrar, qsIdbEstado, qsIdbEsquecer, qsPronto, qsParaBackup, bkEsperarDados, bkAguardarGravacoes, idbGuardaPendencias, idbJuntarMapas, idbJuntarListas, qsBancoForcar: (v) => { qsBanco = v; }, qsGravandoAtual: () => _qsGravando, qsAvisouFalhaZerar: () => { qsAvisouFalha = false; }, bkaGravarAgora, bkaConectar, bkaReconectar, bkaAceitarEncolhido, bkaDesligar, bkaProcurarMaisNovo, bkaVerMaisNovo, bkaPintar, bkaAvisoDoSelo, bkaEstado, bkaEncolheu, bkaNome, bkaLerNome, bkaSlug, bkaAparelho, bkaAparelhoDefinir, bkaRelogioDefinir, bkaPastaLojaDefinir, bkaIniciar, bkaHash, bkaPastaForcar: (h, p) => { bkaPasta = h; bkaPermissao = p || "granted"; }, bkaPermissaoAtual: () => bkaPermissao, bkaMaisNovoAtual: () => bkaMaisNovo, atualizarSeloBase,
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
     matChaveViva, matChaveNormal, leiJurLadoALado,

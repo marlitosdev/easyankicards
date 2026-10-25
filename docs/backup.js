@@ -284,10 +284,11 @@ function validarBackup(obj) {
  * O erro diz se o desfazer deu certo ("desfeito") — se não deu, a pessoa precisa saber que há a cópia de antes.
  * ===================================================================== */
 const BK_ESPECIAIS = {
-  eac_leis: { pode: () => typeof leisGravarTudo === "function", ler: () => bkLerLeis(), gravar: (o) => leisGravarTudo(o), vazio: () => ({}), serve: bkEhObjeto },
+  /* (v19.19.0) "false" = gravação recusada (a gaveta ainda chegando do IndexedDB, ou sem espaço): é falha — desfaz tudo */
+  eac_leis: { pode: () => typeof leisGravarTudo === "function", ler: () => bkLerLeis(), gravar: (o) => bkExigir(leisGravarTudo(o), "eac_leis"), vazio: () => ({}), serve: bkEhObjeto },
   /* (JM6) os julgados também passam pela função (que sabe gravar no IndexedDB, se já migrou) */
-  eac_juris: { pode: () => typeof jurGravarTudo === "function", ler: () => bkLerJuris(), gravar: (o) => jurGravarTudo(o), vazio: () => ({}), serve: bkEhObjeto },
-  eac_decisoes: { pode: () => typeof decDefinirTudo === "function", ler: () => bkLerDecisoes(), gravar: (o) => decDefinirTudo(o), vazio: () => [], serve: Array.isArray },
+  eac_juris: { pode: () => typeof jurGravarTudo === "function", ler: () => bkLerJuris(), gravar: (o) => bkExigir(jurGravarTudo(o), "eac_juris"), vazio: () => ({}), serve: bkEhObjeto },
+  eac_decisoes: { pode: () => typeof decDefinirTudo === "function", ler: () => bkLerDecisoes(), gravar: (o) => bkExigir(decDefinirTudo(o), "eac_decisoes"), vazio: () => [], serve: Array.isArray },
   /* (v19.18.0) as questões, quando já moram no IndexedDB (idb-questoes.js); antes disso, são uma chave comum */
   eac_questoes: { pode: () => typeof qsNoIdb === "function" && qsNoIdb(), ler: () => qsParaBackup(), vazio: () => [], serve: Array.isArray,
     gravar: (o) => {
@@ -298,6 +299,7 @@ const BK_ESPECIAIS = {
   /* as marcas do lápis nunca vão ao localStorage; o "ler" pega as guardadas mesmo com a opção de backup desligada */
   eac_tinta: { pode: () => true, ler: () => bkLerTintaToda(), gravar: (o) => { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(o); }, vazio: () => ({}), serve: bkEhObjeto },
 };
+function bkExigir(r, k) { if (r === false) throw new Error("gravação recusada: " + k); return r; }
 function bkEhObjeto(o) { return !!o && typeof o === "object" && !Array.isArray(o); }
 function bkLerTintaToda() {
   try { return typeof tnSalvos !== "undefined" && tnSalvos ? JSON.stringify(tnSalvos) : null; } catch (e) { return null; }
@@ -477,6 +479,10 @@ function bkAntesLer() { return bkAntesLoja().ler().catch(() => []); }
  * cópia do que uma que parece completa e não é. */
 async function bkEsperarDados() {
   try { if (typeof qsPronto === "function") await qsPronto(); } catch (e) {}
+  /* (v19.19.0) e leis, julgados e decisões (idb-guarda.js) */
+  let pend = [];
+  try { if (typeof idbGuardaPronto === "function") pend = await idbGuardaPronto(); } catch (e) {}
+  if (pend && pend.length) throw new Error((typeof t === "function" ? t("bk_err_gaveta_nao_chegou", { g: pend.map(idbGuardaRotulo).join(", ") }) : "não carregaram: " + pend.join(", ")));
   if (typeof qsIdbEstado === "function") {
     const e = qsIdbEstado();
     if (e.noIdb && (e.esperando || e.falhou)) throw new Error(typeof t === "function" ? t("bk_err_qs_nao_chegou") : "as questões não carregaram");

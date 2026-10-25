@@ -75,6 +75,8 @@ function jurLerTudo() {
 }
 
 function jurGravarTudo(tudo) {
+  /* (v19.19.0) os julgados ainda estão chegando do IndexedDB: gravar agora trocaria todos pelos da memória */
+  if (typeof idbGuardaPodeGravar === "function" && !idbGuardaPodeGravar("juris")) return false;
   jurEsquecerChaves();
   try {
     const s = JSON.stringify(tudo || {});

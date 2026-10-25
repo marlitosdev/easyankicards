@@ -81,23 +81,34 @@ function decIdbGravarTudo(lista) {
 function decIdbMigrar() {
   if (_decMigrando) return _decMigrando;
   if (!decIdbSuportado()) { _decMigrando = Promise.resolve(); return _decMigrando; }
+  let brutoAntes = null;
+  try { brutoAntes = localStorage.getItem(DEC_CHAVE); } catch (e) {}
+  /* (v19.19.0) a JANELA DO CARREGAMENTO (idb-guarda.js): enquanto não chegam, gravar é recusado — em silêncio (o
+   * histórico grava sozinho a toda hora); sobra no localStorage com decisões também no IndexedDB → junta */
+  if (brutoAntes == null) {
+    const marcada = idbMarcaTem(DEC_CHAVE);
+    _decMigrando = idbGuardaComecar("decisoes", async () => {
+      const idb = await decIdbLerTudo();
+      if (marcada || (idb && idb.length)) { _decCache = idb || []; idbMarcaPor(DEC_CHAVE); }
+    }, marcada);
+    return _decMigrando;
+  }
   _decMigrando = (async () => {
-    let brutoAntes = null;
-    try { brutoAntes = localStorage.getItem(DEC_CHAVE); } catch (e) {}
-    if (brutoAntes == null) {
-      const idb = await decIdbLerTudo().catch(() => null);
-      if (idb) _decCache = idb;
-      return;
-    }
     let lista = [];
     try { lista = JSON.parse(brutoAntes) || []; } catch (e) { lista = []; }
     if (!Array.isArray(lista)) lista = [];
-    await decIdbGravarTudo(lista);
+    let idb;
+    try { idb = await decIdbLerTudo(); } catch (e) { return; }
+    const sobra = !!(idb && idb.length);
+    const final = sobra ? idbJuntarListas(idb, lista) : lista;
+    await decIdbGravarTudo(final);
     let brutoDepois = null;
     try { brutoDepois = localStorage.getItem(DEC_CHAVE); } catch (e) {}
     if (brutoDepois !== brutoAntes) return;
+    if (!idbMarcaPor(DEC_CHAVE)) return;
     try { localStorage.removeItem(DEC_CHAVE); } catch (e) {}
-    _decCache = lista;
+    _decCache = final;
+    if (sobra) { try { reg("ARMAZEN", "decisões: sobra do localStorage juntada ao IndexedDB", lista.length + " + " + idb.length + " → " + final.length); } catch (e) {} }
   })().catch(() => {});
   return _decMigrando;
 }

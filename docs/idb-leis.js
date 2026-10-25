@@ -85,27 +85,40 @@ function leisIdbGravarTudo(o) {
 /* Migração única e silenciosa. Só apaga o localStorage depois de confirmar que a
  * gravação no IndexedDB terminou — e só se o localStorage não tiver mudado no meio
  * do caminho (alguém gravando uma lei nos poucos milissegundos da migração): se
- * mudou, não apaga nada e tenta de novo na próxima abertura, com o valor mais novo. */
+ * mudou, não apaga nada e tenta de novo na próxima abertura, com o valor mais novo.
+ *
+ * (v19.19.0) A JANELA DO CARREGAMENTO (ver idb-guarda.js): sem nada no localStorage, as leis moram no IndexedDB e
+ * levam alguns milissegundos para chegar — até lá, gravar é RECUSADO. E se o localStorage tem leis mas o IndexedDB
+ * TAMBÉM tem, o localStorage é uma sobra de uma gravação nessa janela (de uma versão anterior): JUNTA as duas, em vez
+ * de copiar a sobra por cima (era assim que três leis viravam uma). */
 function leisIdbMigrar() {
   if (_leisMigrando) return _leisMigrando;
   if (!leisIdbSuportado()) { _leisMigrando = Promise.resolve(); return _leisMigrando; }
+  let brutoAntes = null;
+  try { brutoAntes = localStorage.getItem(LEIS_CHAVE); } catch (e) {}
+  if (brutoAntes == null) {
+    const marcada = idbMarcaTem(LEIS_CHAVE);
+    _leisMigrando = idbGuardaComecar("leis", async () => {
+      const idb = await leisIdbLerTudo();
+      if (marcada || Object.keys(idb || {}).length) { _leisCache = idb || {}; idbMarcaPor(LEIS_CHAVE); }
+    }, marcada);
+    return _leisMigrando;
+  }
   _leisMigrando = (async () => {
-    let brutoAntes = null;
-    try { brutoAntes = localStorage.getItem(LEIS_CHAVE); } catch (e) {}
-    if (brutoAntes == null) {
-      /* nada no localStorage: ou nunca houve lei, ou já migrou antes — lê o que já está no IndexedDB */
-      const idb = await leisIdbLerTudo().catch(() => null);
-      if (idb) _leisCache = idb;
-      return;
-    }
     let o = {};
     try { o = JSON.parse(brutoAntes) || {}; } catch (e) { o = {}; }
-    await leisIdbGravarTudo(o);
+    let idb;
+    try { idb = await leisIdbLerTudo(); } catch (e) { return; }   /* sem saber o que há lá, não grava por cima */
+    const sobra = Object.keys(idb || {}).length > 0;
+    const final = sobra ? idbJuntarMapas(idb, o) : o;
+    await leisIdbGravarTudo(final);
     let brutoDepois = null;
     try { brutoDepois = localStorage.getItem(LEIS_CHAVE); } catch (e) {}
     if (brutoDepois !== brutoAntes) return; /* mudou durante a migração: não apaga, não usa cache ainda */
+    if (!idbMarcaPor(LEIS_CHAVE)) return;
     try { localStorage.removeItem(LEIS_CHAVE); } catch (e) {}
-    _leisCache = o;
+    _leisCache = final;
+    if (sobra) { try { reg("ARMAZEN", "leis: sobra do localStorage juntada ao IndexedDB", Object.keys(o).length + " + " + Object.keys(idb).length + " → " + Object.keys(final).length); } catch (e) {} }
   })().catch(() => {});
   return _leisMigrando;
 }

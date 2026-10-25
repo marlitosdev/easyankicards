@@ -70,34 +70,45 @@ function jurIdbGravarTudo(o) {
 }
 
 /* Migração única e silenciosa, com a mesma proteção contra corrida das leis: só apaga o localStorage se ele não mudou
- * durante a cópia (se mudou, tenta de novo no próximo carregamento, com o valor mais novo). */
+ * durante a cópia (se mudou, tenta de novo no próximo carregamento, com o valor mais novo).
+ * (v19.19.0) e a mesma proteção da JANELA DO CARREGAMENTO das leis (idb-guarda.js): enquanto não chegam, gravar é
+ * recusado; sobra no localStorage com julgados também no IndexedDB → junta, não copia por cima. */
 function jurIdbMigrar() {
   if (_jurMigrando) return _jurMigrando;
   if (!jurIdbSuportado()) { _jurMigrando = Promise.resolve(); return _jurMigrando; }
-  _jurMigrando = (async () => {
-    let brutoAntes = null;
-    try { brutoAntes = localStorage.getItem(JUR_CHAVE); } catch (e) {}
-    if (brutoAntes == null) {
+  let brutoAntes = null;
+  try { brutoAntes = localStorage.getItem(JUR_CHAVE); } catch (e) {}
+  if (brutoAntes == null) {
+    const marcada = idbMarcaTem(JUR_CHAVE);
+    _jurMigrando = idbGuardaComecar("juris", async () => {
       /* nada no localStorage: ou nunca houve julgado, ou já migrou antes — lê o que está no IndexedDB */
-      const idb = await jurIdbLerTudo().catch(() => null);
-      if (idb) _jurCache = JSON.stringify(idb);
+      const idb = await jurIdbLerTudo();
+      if (marcada || Object.keys(idb || {}).length) { _jurCache = JSON.stringify(idb || {}); idbMarcaPor(JUR_CHAVE); }
       /* a tela foi desenhada ANTES desta leitura (que é assíncrona) e mostrou zero julgados: com julgados de verdade,
        * desenha de novo (estante, agenda e edital) — senão "sumiram" até a próxima repintura */
       if (idb && Object.keys(idb).length) {
         try { if (typeof jurEsquecerChaves === "function") jurEsquecerChaves(); } catch (e) {}
         try { if (typeof jurRepintarTelas === "function") jurRepintarTelas(); } catch (e) {}
       }
-      return;
-    }
+    }, marcada);
+    return _jurMigrando;
+  }
+  _jurMigrando = (async () => {
     let o = {};
     try { o = JSON.parse(brutoAntes) || {}; } catch (e) { o = {}; }
     if (!o || typeof o !== "object" || Array.isArray(o)) o = {};
-    await jurIdbGravarTudo(o);
+    let idb;
+    try { idb = await jurIdbLerTudo(); } catch (e) { return; }
+    const sobra = Object.keys(idb || {}).length > 0;
+    const final = sobra ? idbJuntarMapas(idb, o) : o;
+    await jurIdbGravarTudo(final);
     let brutoDepois = null;
     try { brutoDepois = localStorage.getItem(JUR_CHAVE); } catch (e) {}
     if (brutoDepois !== brutoAntes) return;
+    if (!idbMarcaPor(JUR_CHAVE)) return;
     try { localStorage.removeItem(JUR_CHAVE); } catch (e) {}
-    _jurCache = JSON.stringify(o);
+    _jurCache = JSON.stringify(final);
+    if (sobra) { try { reg("ARMAZEN", "julgados: sobra do localStorage juntada ao IndexedDB", Object.keys(o).length + " + " + Object.keys(idb).length + " → " + Object.keys(final).length); } catch (e) {} }
     try { if (typeof jurEsquecerChaves === "function") jurEsquecerChaves(); } catch (e) {}
   })().catch(() => {});
   return _jurMigrando;

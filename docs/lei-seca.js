@@ -4627,6 +4627,8 @@ function leisLerTudo() {
 }
 
 function leisGravarTudo(o) {
+  /* (v19.19.0) as leis ainda estão chegando do IndexedDB: gravar agora trocaria todas pelas da memória (ver idb-guarda.js) */
+  if (typeof idbGuardaPodeGravar === "function" && !idbGuardaPodeGravar("leis")) return false;
   if (_leisCache) {
     _leisCache = o || {};
     _leisGravando = leisIdbGravarTudo(_leisCache).catch(() => {
