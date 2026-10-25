@@ -38,6 +38,12 @@ function qsNormal(s) {
 }
 
 function qsCarregar(lerLoja) {
+  /* (v19.18.0) moram no IndexedDB: chegam em segundo plano — até lá, gravar é recusado (ver idb-questoes.js) */
+  if (!lerLoja && typeof qsNoIdb === "function" && qsNoIdb()) {
+    qsBanco = [];
+    qsIdbCarregar((v) => { qsBanco = v; });
+    return qsBanco;
+  }
   let cru = null;
   if (lerLoja) cru = lerLoja(QS_CHAVE_LOJA);
   else { try { cru = localStorage.getItem(QS_CHAVE_LOJA); } catch (e) { cru = null; } }
@@ -45,17 +51,36 @@ function qsCarregar(lerLoja) {
     const v = JSON.parse(cru || "[]");
     qsBanco = Array.isArray(v) ? v : [];
   } catch (e) { qsBanco = []; }
+  /* ainda no localStorage, e o navegador tem IndexedDB: muda de casa em segundo plano (só apaga daqui conferido) */
+  if (!lerLoja && typeof qsIdbMigrar === "function" && qsIdbSuportado()) qsIdbMigrar();
   return qsBanco;
 }
 
+/* (v19.18.0) GRAVAR NÃO FALHA MAIS CALADO. O catch vazio daqui deixava sumir, sem aviso, a questão nova ou a resposta
+ * quando o localStorage enchia. Agora a falha vai ao registro e avisa (uma vez por sessão, para não virar enxurrada). */
+let qsAvisouFalha = false;
+function qsAvisarFalha(chaveI18n, detalhe) {
+  try { reg("ERRO", "questões: gravação não feita", detalhe || chaveI18n); } catch (e) {}
+  if (qsAvisouFalha) return;
+  qsAvisouFalha = true;
+  try { uiAlert(t(chaveI18n)); } catch (e) {}
+}
 function qsSalvar(gravar, chave) {
   const txt = JSON.stringify(qsBanco);
-  if (gravar) { gravar(QS_CHAVE_LOJA, txt); return; }
-  try { localStorage.setItem(QS_CHAVE_LOJA, txt); } catch (e) {}
+  if (gravar) { gravar(QS_CHAVE_LOJA, txt); return true; }
+  if (typeof qsNoIdb === "function" && qsNoIdb()) {
+    /* ainda não chegaram do IndexedDB: gravar agora trocaria TODAS as questões pelas poucas que estão na memória */
+    if (qsEsperandoIdb || qsFalhouLer) { qsAvisarFalha("qs_ainda_carregando", "ainda carregando do IndexedDB"); return false; }
+    qsIdbGravar(txt);
+  } else {
+    try { localStorage.setItem(QS_CHAVE_LOJA, txt); }
+    catch (e) { qsAvisarFalha("qs_sem_espaco", (e && e.name) || "erro"); return false; }
+  }
   /* mesma ponte do material: sem ela, a questão recém-criada só aparecia
    * na agenda depois de recarregar a página */
   try { if (typeof edAvisarMudanca === "function") edAvisarMudanca(chave); }
   catch (e) {}
+  return true;
 }
 
 function qsTodas() { return qsBanco; }

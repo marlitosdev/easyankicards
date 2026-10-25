@@ -134,6 +134,7 @@ function bkAguardarGravacoes() {
   try { if (typeof _decGravando !== "undefined" && _decGravando) p.push(_decGravando); } catch (e) {}
   try { if (typeof _tnGravando !== "undefined" && _tnGravando) p.push(_tnGravando); } catch (e) {}
   try { if (typeof _jurGravando !== "undefined" && _jurGravando) p.push(_jurGravando); } catch (e) {}
+  try { if (typeof _qsGravando !== "undefined" && _qsGravando) p.push(_qsGravando); } catch (e) {}
   return Promise.all(p).then(() => p.length, () => p.length);
 }
 
@@ -143,6 +144,7 @@ function montarBackup() {
     dados[grupo] = {};
     BK_CHAVES[grupo].forEach((k) => {
       const v = k === "eac_leis" ? bkLerLeis() : k === "eac_decisoes" ? bkLerDecisoes() : k === "eac_juris" ? bkLerJuris()
+        : k === "eac_questoes" ? (typeof qsParaBackup === "function" ? qsParaBackup() : bkLer(k))
         : k === "eac_tinta" ? (typeof tnParaBackup === "function" ? tnParaBackup() : null) : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
@@ -286,6 +288,13 @@ const BK_ESPECIAIS = {
   /* (JM6) os julgados também passam pela função (que sabe gravar no IndexedDB, se já migrou) */
   eac_juris: { pode: () => typeof jurGravarTudo === "function", ler: () => bkLerJuris(), gravar: (o) => jurGravarTudo(o), vazio: () => ({}), serve: bkEhObjeto },
   eac_decisoes: { pode: () => typeof decDefinirTudo === "function", ler: () => bkLerDecisoes(), gravar: (o) => decDefinirTudo(o), vazio: () => [], serve: Array.isArray },
+  /* (v19.18.0) as questões, quando já moram no IndexedDB (idb-questoes.js); antes disso, são uma chave comum */
+  eac_questoes: { pode: () => typeof qsNoIdb === "function" && qsNoIdb(), ler: () => qsParaBackup(), vazio: () => [], serve: Array.isArray,
+    gravar: (o) => {
+      if (qsEsperandoIdb || qsFalhouLer) throw new Error("as questões ainda não carregaram");
+      qsBanco = o;
+      qsIdbGravar(JSON.stringify(o));
+    } },
   /* as marcas do lápis nunca vão ao localStorage; o "ler" pega as guardadas mesmo com a opção de backup desligada */
   eac_tinta: { pode: () => true, ler: () => bkLerTintaToda(), gravar: (o) => { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(o); }, vazio: () => ({}), serve: bkEhObjeto },
 };
@@ -463,8 +472,19 @@ function bkCopiaCompleta() {
   return b;
 }
 function bkAntesLer() { return bkAntesLoja().ler().catch(() => []); }
+/* (v19.18.0) QUEM LÊ O APP INTEIRO ESPERA AS QUESTÕES. Moram no IndexedDB e chegam alguns milissegundos depois de a
+ * página abrir; uma cópia tirada antes sairia SEM elas. Se não chegaram de jeito nenhum, recusa — melhor nenhuma
+ * cópia do que uma que parece completa e não é. */
+async function bkEsperarDados() {
+  try { if (typeof qsPronto === "function") await qsPronto(); } catch (e) {}
+  if (typeof qsIdbEstado === "function") {
+    const e = qsIdbEstado();
+    if (e.noIdb && (e.esperando || e.falhou)) throw new Error(typeof t === "function" ? t("bk_err_qs_nao_chegou") : "as questões não carregaram");
+  }
+}
 /* guarda a cópia; devolve a cópia guardada (ou a que já era igual). Rejeita se não conseguiu — quem chama decide. */
 async function bkGuardarAntes(motivo) {
+  await bkEsperarDados();
   const bk = bkCopiaCompleta();
   const lista = await bkAntesLoja().ler();
   const ult = lista[0];

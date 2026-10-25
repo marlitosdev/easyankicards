@@ -179,7 +179,7 @@ async function bkaGravarDeVerdade(motivo, o) {
   bkaUltimaTentativa = bkaRelogio();
   if ((await bkaPermitido(!!o.gesto)) !== "granted") { bkaPintarTudo(); return { ok: false, razao: "permissao" }; }
   let bk;
-  try { bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
+  try { await bkEsperarDados(); bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
   const hash = bkaHash(JSON.stringify(bk.dados));
   if (!o.forcar && est.ultimo && est.ultimo.hash === hash) return { ok: true, igual: true };
   /* a mesma situação que já pausou: não grava outro "encolheu" a cada 30 minutos */

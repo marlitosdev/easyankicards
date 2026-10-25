@@ -162,6 +162,7 @@ async function bkTextoDoArquivo(file) {
 }
 /* o backup de agora, embrulhado: {dados (string ou Uint8Array), nome, tipo, gz} */
 async function bkEmbrulhar(semCompactar) {
+  await bkEsperarDados();
   const json = bkTextoJson();
   const nome = nomeArquivoBackup();
   if (!semCompactar && bkPodeCompactar()) {
@@ -215,7 +216,8 @@ function bkPastaNome() { return bkPasta ? (bkPasta.name || "") : ""; }
 /* ---------- guardar ---------- */
 
 async function bkSalvarNaNuvem() {
-  const emb = await bkEmbrulhar();
+  let emb;
+  try { emb = await bkEmbrulhar(); } catch (e) { await uiAlert(t("bk_erro_montar", { e: (e && e.message) || "?" })); return; }
   const nome = emb.nome;
 
   /* Celular: a folha de compartilhamento do sistema já lista Drive, OneDrive,
@@ -262,7 +264,8 @@ async function bkSalvarNaNuvem() {
 
 /* semCompactar: o link "baixar sem compactar (.json)" */
 async function bkBaixar(semCompactar) {
-  const emb = await bkEmbrulhar(semCompactar === true);
+  let emb;
+  try { emb = await bkEmbrulhar(semCompactar === true); } catch (e) { await uiAlert(t("bk_erro_montar", { e: (e && e.message) || "?" })); return; }
   const nome = emb.nome;
   bkEntregarDownload(emb);
   bkMarcarSalvo("download", nome);
@@ -558,10 +561,13 @@ function bkPintarBotoes() {
 
 async function bkRegravar() {
   if (!bkPasta) return;
+  /* o arquivo escolhido é .json.gz ou .json: regravar no mesmo formato do NOME (um .json com gzip dentro
+   * enganaria quem abre o arquivo). Montar o backup falhar (as questões não chegaram) não é perder a permissão:
+   * avisa e mantém a pasta. */
+  let emb;
+  try { emb = await bkEmbrulhar(!/\.gz$/i.test(bkPasta.name || "")); }
+  catch (e) { await uiAlert(t("bk_erro_montar", { e: (e && e.message) || "?" })); return; }
   try {
-    /* o arquivo escolhido é .json.gz ou .json: regravar no mesmo formato do NOME (um .json com gzip dentro
-     * enganaria quem abre o arquivo) */
-    const emb = await bkEmbrulhar(!/\.gz$/i.test(bkPasta.name || ""));
     const w = await bkPasta.createWritable();
     await w.write(emb.dados);
     await w.close();
