@@ -1553,6 +1553,13 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .pas-li{display:flex;align-items:center;gap:6px}
 .pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
 .pas-ren{flex:1}
+/* (v19.15.0) cópias de antes do restauro */
+.bk-antes{margin-top:10px}
+.bk-antes .nota{font-size:12px;margin:2px 0 6px;line-height:1.35}
+.bk-antes-li .bk-hist-arq{font-family:inherit;white-space:nowrap}
+.bk-antes-li{flex-wrap:wrap;align-items:center}
+.bk-antes-li .btn-min{margin-left:auto}
+.bk-antes-li .bk-antes-baixar{margin-left:4px}
 .pas-nova{display:flex;gap:6px;margin:8px 0}
 .pas-nova input{flex:1}
 /* (v19.14.0) SEÇÕES JÁ LIDAS: o botão com rótulo no fim de cada seção, a marca do título só quando há estado, o sumário */
@@ -10461,6 +10468,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- AS ÚLTIMAS CÓPIAS. Só aparece quando há mais de uma: com uma só,
        a linha do "último backup" acima já disse tudo. -->
   <div id="bkHist" class="bk-hist" hidden></div>
+  <!-- (v19.15.0) AS CÓPIAS DE ANTES DO RESTAURO: cada restauro guarda antes o que havia; daqui dá para voltar. -->
+  <div id="bkAntes" class="bk-hist bk-antes" hidden></div>
   <div class="bk-passo">
     <b data-i18n="bk_p1_tit"></b>
     <!-- O TEXTO DIZ O QUE ESTE NAVEGADOR FAZ, e é pintado pelo JS: numa

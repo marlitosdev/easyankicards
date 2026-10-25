@@ -8,6 +8,8 @@
  * ===================================================================== */
 
 let bkPendente = null;      /* backup carregado, à espera de confirmação */
+let bkPendenteExato = null; /* voltar a uma cópia de antes do restauro: as chaves que ela conhecia (restauro exato) */
+let bkPendenteNome = "";   /* o nome do arquivo (ou da cópia) — vai no motivo da cópia de antes do restauro */
 let bkPasta = null;         /* handle da pasta escolhida (File System Access) */
 
 function bkMarcarSalvo(onde, nome) {
@@ -97,11 +99,18 @@ function bkSemearData() {
     } catch (x) {}
     if (!maisNovo) return;
     localStorage.setItem("eac_backup_em", maisNovo);
-    localStorage.setItem("eac_backup_onde", t("bk_onde_local"));
+    localStorage.setItem("eac_backup_onde", "local");
     reg("BACKUP", "idade da base deduzida dos dados", maisNovo.slice(0, 10));
   } catch (e) {}
 }
 
+/* (v19.15.0) ONDE FICOU A BASE: guarda-se o CÓDIGO ("arquivo", "local"…). O restauro e a data deduzida gravavam o texto
+ * já traduzido, e a tela traduzia de novo: "em bk_onde_restaurada de arquivo". Quem já tem o texto gravado o vê como está. */
+function bkOndeTexto(o) {
+  const c = o || "download";
+  const tx = t("bk_onde_" + c);
+  return tx && tx !== "bk_onde_" + c ? tx : String(c);
+}
 function bkTextoJson() { return JSON.stringify(montarBackup(), null, 1); }
 
 /* =====================================================================
@@ -203,12 +212,14 @@ async function bkLerArquivo(file) {
   const erro = validarBackup(obj);
   if (erro) { uiAlert(t("bk_erro_valido", { e: erro })); return; }
   bkPendente = obj;
+  bkPendenteExato = null;
   bkMostrarConferencia(file.name);
 }
 
 /* O passo que não pode faltar: mostrar, item por item, o que o app tem AGORA
  * e o que o backup traz — e destacar em vermelho o que vai encolher. */
 function bkMostrarConferencia(nomeArq) {
+  bkPendenteNome = nomeArq || "";
   const cmp = compararBackup(bkPendente);
   const g = new Date(bkPendente.gerado || Date.now());
   $("bkConfArquivo").textContent = t("bk_conf_arquivo", {
@@ -259,12 +270,17 @@ async function bkConfirmarRestauro() {
   if (!bkPendente) return;
   const cmp = compararBackup(bkPendente);
   if (cmp.perdeAlgo && !(await uiConfirm(t("bk_conf_confirma")))) return;
-  /* o estado atual vira uma versão no histórico ANTES de qualquer troca:
-   * restaurar o backup errado não pode ser o fim da linha */
+  /* (v19.15.0) A CÓPIA COMPLETA DE ANTES. Restaurar o arquivo errado não pode ser o fim da linha — e a versão da
+   * bancada (abaixo) só cobria o texto dos cartões. Sem conseguir guardar a cópia, a pessoa decide sabendo disso. */
+  try { await bkGuardarAntes(t("bk_antes_motivo", { a: bkPendenteNome || "?" })); }
+  catch (e) {
+    reg("BACKUP", "cópia de antes do restauro falhou", (e && e.message) || "");
+    if (!(await uiConfirm(t("bk_antes_falhou", { e: (e && e.message) || "?" }), { perigo: true, ok: t("bk_antes_falhou_ok") }))) return;
+  }
   try { guardarVersao("antes de restaurar backup"); } catch (e) {}
   try {
     const gerado = bkPendente.gerado;
-    const n = restaurarBackup(bkPendente);
+    const n = restaurarBackup(bkPendente, bkPendenteExato ? { exato: bkPendenteExato } : null);
     /* A DATA DA BASE VEM DO ARQUIVO.
      * "eac_backup_em" só era escrito ao SALVAR. Quem restaurava uma base
      * num aparelho novo via "sem base" logo depois de carregar uma — e o
@@ -273,10 +289,11 @@ async function bkConfirmarRestauro() {
      * resposta certa: a base é daquele momento, não de agora. */
     try {
       localStorage.setItem("eac_backup_em", gerado || new Date().toISOString());
-      localStorage.setItem("eac_backup_onde", t("bk_onde_arquivo"));
+      localStorage.setItem("eac_backup_onde", "arquivo");
     } catch (x) {}
     reg("BACKUP", "restaurado", n + " chaves, de " + (gerado || "?"));
     bkPendente = null;
+    bkPendenteExato = null;
     $("dlgBkConf").close();
     /* leis, decisões e julgados vão para o IndexedDB em segundo plano: recarregar antes de terminar perderia o que veio do
      * arquivo — espera (é rápido) */
@@ -284,8 +301,79 @@ async function bkConfirmarRestauro() {
     await uiAlert(t("bk_restaurado"));
     location.reload();     /* recarregar é o jeito honesto: tudo relê do zero */
   } catch (e) {
-    uiAlert(t("bk_erro_restaurar", { e: e.message }));
+    /* tudo-ou-nada (restaurarBackup): o normal é ter desfeito tudo; se nem o desfazer deu certo, a pessoa precisa
+     * saber que o app ficou misturado — e onde está a volta */
+    reg("BACKUP", "restauro recusado", ((e && e.chave) || "") + " · " + ((e && e.message) || ""));
+    try { bkPintarPainel(); } catch (x) {}
+    uiAlert(t(e && e.desfeito === false ? "bk_erro_restaurar_parcial" : "bk_erro_restaurar", { e: (e && e.message) || "?" }));
   }
+}
+
+/* ---------------------------------------------------------------------
+ * (v19.15.0) AS CÓPIAS DE ANTES DO RESTAURO
+ * "Voltar" passa pela MESMA tabela de conferência de um arquivo (e o estado de agora também ganha a sua cópia).
+ * "Baixar" entrega a cópia como um backup comum — sem marcar como "salvo": não é o estado de agora.
+ * ------------------------------------------------------------------ */
+function bkCarimbo(iso) {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+}
+function bkBaixarCopia(c) {
+  const nome = "easyankicards-antes-de-restaurar-" + bkCarimbo(c.quando) + ".json";
+  const url = URL.createObjectURL(new Blob([JSON.stringify(c.bk, null, 1)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  reg("BACKUP", "cópia de antes do restauro baixada", nome);
+  return nome;
+}
+function bkVoltarACopia(c) {
+  bkPendente = c.bk;
+  bkPendenteExato = Array.isArray(c.chaves) ? c.chaves : null;
+  const d = new Date(c.quando);
+  bkMostrarConferencia(t("bk_antes_nome", { d: d.toLocaleDateString([], { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
+}
+async function bkPintarAntes() {
+  const cx = $("bkAntes");
+  if (!cx) return 0;
+  const L = await bkAntesLer();
+  cx.innerHTML = "";
+  cx.hidden = !L.length;
+  if (!L.length) return 0;
+  const tit = document.createElement("div");
+  tit.className = "bk-rot";
+  tit.textContent = t("bk_antes_rot");
+  const exp = document.createElement("div");
+  exp.className = "nota";
+  exp.textContent = t("bk_antes_exp");
+  cx.append(tit, exp);
+  L.forEach((c) => {
+    const li = document.createElement("div");
+    li.className = "bk-hist-li bk-antes-li";
+    const d = new Date(c.quando);
+    const quando = document.createElement("b");
+    quando.textContent = d.toLocaleDateString([], { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const motivo = document.createElement("span");
+    motivo.className = "bk-hist-onde";
+    motivo.textContent = c.motivo || "";
+    const r = resumirBackup((c.bk && c.bk.dados) || {});
+    const conta = document.createElement("span");
+    conta.className = "bk-hist-arq";
+    conta.textContent = t("bk_antes_conta", { c: r.cartoes, q: r.questoes, r: r.resumos });
+    const bv = document.createElement("button");
+    bv.type = "button"; bv.className = "btn-min btn-min-ok bk-antes-voltar";
+    bv.textContent = t("bk_antes_voltar"); bv.title = t("bk_antes_tip_voltar");
+    bv.onclick = () => bkVoltarACopia(c);
+    const bb = document.createElement("button");
+    bb.type = "button"; bb.className = "btn-min bk-antes-baixar";
+    bb.textContent = t("bk_antes_baixar"); bb.title = t("bk_antes_tip_baixar");
+    bb.onclick = () => bkBaixarCopia(c);
+    li.append(quando, motivo, conta, bv, bb);
+    cx.append(li);
+  });
+  return L.length;
 }
 
 function bkPintarPainel() {
@@ -304,11 +392,12 @@ function bkPintarPainel() {
     $("bkUltimo").textContent = i
       ? t(arq ? "bk_ultimo_arq" : "bk_ultimo", {
           d: bkQuandoCurto(i.quando, i.dias),
-          o: t("bk_onde_" + (localStorage.getItem("eac_backup_onde") || "download")),
+          o: bkOndeTexto(localStorage.getItem("eac_backup_onde")),
           a: arq })
       : t("bk_ultimo_nunca");
   }
   bkPintarHistorico();
+  bkPintarAntes().catch(() => {});
   bkPintarBotoes();
 }
 
@@ -343,7 +432,7 @@ function bkPintarHistorico() {
     li.append(quando);
     const onde = document.createElement("span");
     onde.className = "bk-hist-onde";
-    onde.textContent = t("bk_onde_" + (x.onde || "download"));
+    onde.textContent = bkOndeTexto(x.onde);
     li.append(onde);
     if (x.nome) {
       const nm = document.createElement("span");
@@ -422,7 +511,7 @@ function bkIniciar() {
   $("btnBkFechar").onclick = () => $("dlgBackup").close();
   $("bkArquivo").onchange = (e) => bkLerArquivo(e.target.files && e.target.files[0]);
   $("btnBkConfAplicar").onclick = bkConfirmarRestauro;
-  $("btnBkConfCancelar").onclick = () => { bkPendente = null; $("dlgBkConf").close(); };
+  $("btnBkConfCancelar").onclick = () => { bkPendente = null; bkPendenteExato = null; $("dlgBkConf").close(); };
   dicaLigar("btnSeloAjuda", "bk_selo_ajuda");
   atualizarSeloBase();
 }

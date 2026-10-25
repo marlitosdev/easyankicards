@@ -599,7 +599,8 @@ function rodar() {
       matches: false, addListener() {}, removeListener() {},
       addEventListener() {}, removeEventListener() {},
     }),
-    location: { href: "https://exemplo.test/", origin: "https://exemplo.test" },
+    /* (v19.15.0) reload conta as vezes: o restauro termina recarregando, e sem ele o fim do fluxo virava um erro */
+    location: { href: "https://exemplo.test/", origin: "https://exemplo.test", recargas: 0, reload() { this.recargas++; } },
     // executa o callback na hora: o objetivo é justamente percorrer o código
     /* setTimeout do stub rodava SEMPRE na hora, e com isso "faz agora" e
      * "faz daqui a pouco" ficavam indistinguíveis: uma sabotagem que adiava
@@ -672,7 +673,7 @@ function rodar() {
     },
     edRevisaoAbrir, abrirRegistro, confirmarRegistro, completarDiario,
     abrirDisciplina, edAbrirDisciplinaDaLinha, edPintarRitmo,
-    montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual,
+    montarBackup, restaurarBackup, compararBackup, validarBackup, resumoAtual, bkGuardarAntes, bkAntesLer, bkAntesLojaDefinir, bkCopiaCompleta, bkPintarAntes, bkVoltarACopia, bkConfirmarRestauro, bkLerArquivo, bkAntesLojaIdb, BK_ESPECIAIS, bkOndeTexto, bkPintarPainel,
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
     matChaveViva, matChaveNormal, leiJurLadoALado,
