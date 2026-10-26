@@ -1446,8 +1446,52 @@ function leiLinhaSoIdentificadorRiscado(linhas, i) {
   return LEI_RE_NOTA_REV_INI.test(nota);
 }
 
+/* (v19.24.0) O ARTIGO INTEIRO RISCADO, com o número dentro do risco: "~~Art. 72. Será sempre de trinta dias…~~". Tirar
+ * o trecho tirava o "Art. 72." junto — o artigo sumia, a crítica da numeração acusava "depois do 71 vem o 75" e a lei
+ * perdia o registro de que o 72 existiu e foi revogado (LC 15/2009 de Caruaru: 72–74, 219, 261–262, 298, 349, 351,
+ * 486–491). Agora o cabeçalho fica e o texto vira "(Revogado)": "Art. 72. (Revogado)". Só quando esse número NÃO
+ * aparece de novo sem risco — se aparece, o riscado é a redação antiga de um artigo que continua, e sai inteiro. */
+function leiCabecalhoRiscado(linha) {
+  const x = String(linha == null ? "" : linha);
+  const m = x.match(/^\s*~~([^~\n]+?)~~/);
+  if (!m) return null;
+  const a = leiCasarArtigo(m[1].replace(/^\s+/, ""));
+  if (!a) return null;
+  return { num: leiNumNormal(a[1]), rotulo: a[0].trim().replace(/\s*[-–—:]?\s*$/, "").replace(/([^.])$/, "$1.") };
+}
+function leiNumerosVivos(linhas) {
+  const vivos = new Set();
+  const posicoes = [];
+  linhas.forEach((x, i) => {
+    const a = leiCasarArtigo(leiTirarTachado(x, true).replace(/^\s+/, ""));
+    if (a) { vivos.add(leiNumNormal(a[1])); posicoes.push({ i, ord: leiNumOrdem(a[1]) }); }
+  });
+  vivos.posicoes = posicoes;
+  return vivos;
+}
+/* ONDE o cabeçalho revogado deve ficar: no lugar, se cabe na sequência dos artigos vivos; senão, antes do primeiro
+ * artigo vivo de número maior (LC 15/2009: os 478–491 riscados vêm antes da redação nova do 478–485 — o 486–491
+ * revogados vão para antes do Art. 492). Devolve a linha (índice) de destino, ou -1 = fica onde está. */
+function leiDestinoDoRevogado(vivos, i, num) {
+  const ord = leiNumOrdem(num);
+  const P = vivos.posicoes || [];
+  let ant = null, prox = null;
+  P.forEach((p) => { if (p.i < i) ant = p; else if (!prox && p.i > i) prox = p; });
+  if ((!ant || ant.ord < ord) && (!prox || prox.ord > ord)) return -1;
+  const alvo = P.filter((p) => p.ord > ord)[0];
+  return alvo ? alvo.i : -1;
+}
+/* a linha depois de tirar o riscado, com o cabeçalho de volta (e a nota "(Revogado pela …)" que já houver) */
+function leiTirarTachadoComCabecalho(linha, rotulo) {
+  const resto = leiTirarTachado(linha, true).trim();
+  /* "(~~Revogado pela …)": o parêntese de abertura foi junto com o risco */
+  if (/^\(?\s*revogad/i.test(resto)) return rotulo + " " + (resto[0] === "(" ? resto : "(" + resto);
+  return rotulo + " (Revogado)" + (resto ? " " + resto : "");
+}
+
 /* os itens da revisão: cada corrida de linhas com trecho riscado (linhas em branco no meio não a quebram) */
 function leiAcharTachados(linhas) {
+  const vivos = leiNumerosVivos(linhas);
   const marcadas = [];
   linhas.forEach((x, i) => {
     const m = String(x).match(LEI_RE_TCH_G);
@@ -1481,8 +1525,18 @@ function leiAcharTachados(linhas) {
       const a = Math.max(0, ini - 40);
       return (a ? "…" : "") + x.slice(a, a + 150) + (a + 150 < x.length ? "…" : "");
     };
-    return { id: "tch:" + (c[0].i + 1), grupo: "tachado", linhas: nums, ocorrencias: c.reduce((a, x) => a + x.n, 0), tipo, mantido: ident,
-      antes: previa(leiTirarTachado(primeira, false)), depois: previa(leiTirarTachado(primeira, true)) };
+    /* os artigos revogados inteiros desta corrida: linha → "Art. 72." (o cabeçalho fica) */
+    const cabecalhos = {}, mover = {};
+    if (!ident) c.forEach((x) => {
+      const h = leiCabecalhoRiscado(linhas[x.i]);
+      if (!h || vivos.has(h.num)) return;
+      cabecalhos[x.i + 1] = h.rotulo;
+      const d = leiDestinoDoRevogado(vivos, x.i, h.num);
+      if (d >= 0) mover[x.i + 1] = d + 1;
+    });
+    const cab1 = cabecalhos[c[0].i + 1];
+    return { id: "tch:" + (c[0].i + 1), grupo: "tachado", linhas: nums, ocorrencias: c.reduce((a, x) => a + x.n, 0), tipo, mantido: ident, cabecalhos, mover,
+      antes: previa(leiTirarTachado(primeira, false)), depois: previa(cab1 ? leiTirarTachadoComCabecalho(primeira, cab1) : leiTirarTachado(primeira, true)) };
   });
 }
 
@@ -1728,7 +1782,7 @@ function leiPreprocessar(texto, opc) {
     if (d && !falso && j >= 0 && listaAberta && listaAberta.j === j && listaAberta.tipo === leiTipoDivisao(x)) { falso = true; motivo = "divisao_ultimo"; }
     listaAberta = falso && (motivo === "divisao" || motivo === "divisao_ultimo") ? { j: i, tipo: leiTipoDivisao(x) } : null;
     if (falso) {
-      mudancas.push({ id: "rem:" + (i + 1), grupo: "remissao", linhas: [i + 1], motivo,
+      mudancas.push({ id: "rem:" + (i + 1), grupo: "remissao", linhas: [i + 1], motivo, ancora: j + 1,
         contexto: cola(efetiva[j], 110),
         antes: trilha(x).slice(0, 160),
         depois: cola(efetiva[j], 110) + " " + trilha(x).slice(0, 160) });
@@ -1790,6 +1844,7 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
     : (dec[c.id] === undefined ? !c.mantido : !!dec[c.id]));
   let mexeu = false;
   let tachadoRemovido = 0;
+  const realocar = [];
 
   /* os trechos riscados: aceitar = o trecho sai (a linha some se era só ele); recusar = fica como texto comum,
    * sem as marcas. Nenhuma marca ~~ sai daqui. */
@@ -1799,7 +1854,28 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
     c.linhas.forEach((ln) => {
       const o = cur[ln - 1];
       if (!o) return;
-      const novo = leiTirarTachado(o.t, tirar);
+      const cab = tirar && c.cabecalhos && c.cabecalhos[ln];
+      let novo = cab ? leiTirarTachadoComCabecalho(o.t, cab) : leiTirarTachado(o.t, tirar);
+      if (cab && /\(Revogado\)$/.test(novo)) {
+        /* a nota de revogação na linha de baixo, sem risco ("Revogado pela lei complementar nº 018 de 2009)"):
+         * entra no cabeçalho, com o parêntese que o risco engoliu */
+        /* pula o resto do artigo riscado (as linhas seguintes desta mesma corrida, todas riscadas) */
+        let k = ln;
+        while (k < cur.length && (cur[k].x || !cur[k].t.trim()
+          || (c.linhas.indexOf(k + 1) >= 0 && !leiTirarTachado(cur[k].t, true).trim()))) k++;
+        /* a nota pode vir com o "(" riscado ("~~(~~Revogado pela …)"): olha o que sobra sem o risco */
+        const nota = k < cur.length ? leiTirarTachado(cur[k].t, c.linhas.indexOf(k + 1) >= 0).trim() : "";
+        if (nota.length <= 160 && /^\(?\s*revogad[^~]*\)\s*\.?$/i.test(nota)) {
+          novo = novo.replace(/\(Revogado\)$/, "(" + nota.replace(/^\(\s*/, "").replace(/\s*\.$/, ""));
+          cur[k].x = true;
+        }
+      }
+      if (cab && c.mover && c.mover[ln]) {
+        realocar.push({ antes: c.mover[ln], t: novo });
+        o.x = true;
+        mexeu = true;
+        return;
+      }
       if (novo === o.t) return;
       if (tirar && o.t.trim() && !novo.trim()) o.x = true;
       o.t = novo;
@@ -1862,6 +1938,18 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
   });
 
   cur.forEach((o) => { if (o.t.indexOf("~~") >= 0) { const s = leiTirarMarcasTachado(o.t); if (s !== o.t) { o.t = s; mexeu = true; } } });
+  /* os cabeçalhos revogados fora de ordem entram antes do artigo vivo de número maior (no fim, para nenhuma outra
+   * limpeza — grafia, remissão — tropeçar no que foi acrescentado à linha) */
+  const porDestino = new Map();
+  realocar.forEach((r) => {
+    let k = r.antes - 1;
+    while (k < cur.length && cur[k].x) k++;
+    if (!porDestino.has(k)) porDestino.set(k, []);
+    porDestino.get(k).push(r.t);
+  });
+  porDestino.forEach((ts, k) => {
+    if (k < cur.length) cur[k].t = ts.join("\n\n") + "\n\n" + cur[k].t; else cur.push({ t: ts.join("\n\n"), x: false });
+  });
   let saida = cur.filter((o) => !o.x).map((o) => o.t).join("\n");
   if (mexeu) saida = saida.replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
   if (anexosRevogados) resumo.anexosRevogados = anexosRevogados;
@@ -2794,6 +2882,74 @@ function leiTrechosDaLei(artigos) {
     else trechos.push({ chave, rotulo: ato ? String((a.caminho || [])[0] || "") : "", artigos: [a] });
   });
   return trechos;
+}
+
+/* =====================================================================
+ * COMO A LEI VAI FICAR (v19.24.0)
+ *
+ * O PEDIDO: "destaque visual mais claro das divergências". A revisão da colagem mostrava o que ia MUDAR, linha a
+ * linha, mas não o RESULTADO — e era no resultado que o erro da LC 15/2009 de Caruaru se via: o último artigo com 11
+ * mil linhas de tabela dentro, 8 anexos onde havia 16. Esta função lê o texto como ficaria (com as escolhas de agora)
+ * e devolve a estrutura e as conferências, cada uma com gravidade:
+ *  · grave  — artigo GIGANTE (mais de 15 mil caracteres e 12× a mediana): quase sempre engoliu tabela ou anexo;
+ *  · aviso  — anexo REPETIDO (o mesmo número duas vezes);
+ *  · leve   — anexo FALTANDO na sequência (pode ser revogado — confira), linhas de LETRAS ESPAÇADAS que sobraram.
+ * A numeração dos artigos continua com a crítica própria (leiNumeracao). Pura: não mexe em nada.
+ * ===================================================================== */
+function leiRomanoInt(r) {
+  const v = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+  const x = String(r || "").toUpperCase();
+  if (/^\d+$/.test(x)) return Number(x);
+  if (!/^[IVXLCDM]+$/.test(x)) return 0;
+  let t = 0;
+  for (let i = 0; i < x.length; i++) { const a = v[x[i]], b = v[x[i + 1]] || 0; t += a < b ? -a : a; }
+  return t;
+}
+function leiIntRomano(n) {
+  const T = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let r = "", k = n;
+  T.forEach(([v, sy]) => { while (k >= v) { r += sy; k -= v; } });
+  return r;
+}
+function leiComoVaiFicar(texto, anexos, artsProntos) {
+  const tx = String(texto || "");
+  const arts = artsProntos || leiArtigos(tx);
+  const divisoes = {};
+  tx.split("\n").forEach((x) => {
+    const m = x.match(LEI_RE_DIVISAO);
+    if (m) { const k = leiTipoDivisao(m[1]); divisoes[k] = (divisoes[k] || 0) + 1; }
+  });
+  const conferir = [];
+  const tams = arts.map((a) => String(a.texto || "").length).sort((x, y) => x - y);
+  const mediana = tams.length ? tams[Math.floor(tams.length / 2)] : 0;
+  const limite = Math.max(15000, mediana * 12);
+  /* GRAVE só no exagero (o Art. 523 da LC 15/2009 com o Anexo VI inteiro dentro: 160 mil); entre um e outro é AVISO —
+   * o Art. 518 da mesma lei tem 16 mil de verdade (a tabela de multas é dele) */
+  const limiteGrave = Math.max(40000, mediana * 30);
+  arts.forEach((a) => {
+    const n = String(a.texto || "").length;
+    if (n > limiteGrave) conferir.push({ gravidade: "grave", tipo: "gigante", num: a.num, n });
+    else if (n > limite) conferir.push({ gravidade: "aviso", tipo: "longo", num: a.num, n });
+  });
+  const ax = (anexos || []).map((a) => ({ titulo: String(a.titulo || ""), rom: leiRomanoDoAnexo(a.titulo), revogado: !!a.revogado,
+    n: String(a.texto || "").length }));
+  const conta = {};
+  ax.forEach((a) => { if (a.rom) conta[a.rom] = (conta[a.rom] || 0) + 1; });
+  Object.keys(conta).filter((r) => conta[r] > 1).forEach((r) => conferir.push({ gravidade: "aviso", tipo: "anexo_repetido", rom: r, n: conta[r] }));
+  const nums = Object.keys(conta).map(leiRomanoInt).filter(Boolean);
+  if (nums.length >= 2) {
+    const max = Math.max.apply(null, nums);
+    const faltam = [];
+    for (let i = 1; i <= max; i++) if (nums.indexOf(i) < 0) faltam.push(leiIntRomano(i));
+    if (faltam.length && faltam.length <= 12) conferir.push({ gravidade: "leve", tipo: "anexo_faltando", lista: faltam });
+  }
+  const espacadas = (tx + "\n" + (anexos || []).map((a) => a.texto || "").join("\n")).split("\n")
+    .filter((x) => /^\s*(?:\S ){6,}\S\s*$/.test(x)).length;
+  if (espacadas) conferir.push({ gravidade: "leve", tipo: "espacado", n: espacadas });
+  const ordem = { grave: 0, aviso: 1, leve: 2 };
+  conferir.sort((x, y) => ordem[x.gravidade] - ordem[y.gravidade]);
+  return { artigos: arts.length, primeiro: arts.length ? arts[0].num : "", ultimo: arts.length ? arts[arts.length - 1].num : "",
+    divisoes, anexos: ax, conferir };
 }
 
 function leiNumeracao(artigos) {

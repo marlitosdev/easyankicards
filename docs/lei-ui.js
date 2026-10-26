@@ -5323,13 +5323,61 @@ function leiRelatorioFluxo(tela, opc) {
   if (leiPreCtx) {
     const c = leiPreCtx;
     p.push("— Revisão da colagem (" + c.modo + "): " + c.pre.mudancas.length + " mudança(s) sugerida(s)");
-    LEI_PRE_GRUPOS.forEach((g) => {
+    {
+      const tx = String(c.texto || "");
+      p.push("  texto colado: " + tx.length + " caracteres · " + tx.split("\n").length + " linhas · " + leiArtigos(tx).length + " artigos antes da limpeza · começa com: " + cortar(tx, 120));
+    }
+    /* (v19.24.0) PRIMEIRO, O QUE PRECISA DE ATENÇÃO: as conferências do texto como ficaria e os grupos que apagam ou
+     * mudam a estrutura — o resto (a lista técnica) vem depois */
+    try {
+      const resR = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
+      const artsR = leiArtigos(resR.texto);
+      const comoR = leiComoConferencias(c, resR, artsR);
+      p.push("  PONTOS PARA CONFERIR (" + comoR.conferir.length + "):" + (comoR.conferir.length ? "" : " nenhum"));
+      comoR.conferir.forEach((q) => p.push("    " + (q.gravidade === "grave" ? "✖ GRAVE" : q.gravidade === "aviso" ? "⚠ AVISO" : "· leve") + " — " + leiComoTexto(q)));
+      p.push("  COMO VAI FICAR: " + artsR.length + " artigos (" + comoR.primeiro + " a " + comoR.ultimo + ") · " + comoR.anexos.length + " anexo(s)"
+        + Object.keys(comoR.divisoes).map((k) => " · " + k + " " + comoR.divisoes[k]).join(""));
+      /* (v19.24.0) MAIS DO QUE A TELA MOSTRA, para relatar erro com precisão: os maiores artigos (um artigo que engoliu
+       * tabela aparece aqui), os anexos como vão ficar, linhas de letras espaçadas e a numeração escrita por extenso */
+      const maiores = artsR.map((a) => ({ num: a.num, n: String(a.texto || "").length })).sort((x, y) => y.n - x.n).slice(0, 3);
+      if (maiores.length) p.push("  maiores artigos: " + maiores.map((a) => "Art. " + a.num + " " + a.n + " car.").join(" · "));
+      if (comoR.anexos.length) p.push("  anexos como vão ficar: " + comoR.anexos.map((a) => (a.rom || "?") + (a.revogado ? " (revogado)" : "") + " " + a.n + " car.").join(" · "));
+      const esp = resR.texto.split("\n").map((x, i) => ({ x, i })).filter((o) => /^\s*(?:\S ){6,}\S\s*$/.test(o.x)).slice(0, 3);
+      if (esp.length) p.push("  exemplos de letras espaçadas: " + esp.map((o) => "«" + cortar(o.x, 60) + "»").join(" · "));
+      if (artsR.length >= LEI_NUMERACAO_MIN_ARTIGOS && !c.semNumeracao && !leiEhAlteradora(c.texto)) {
+        const numR = leiNumeracao(artsR);
+        leiNumeracaoLinhas(numR.problemas).slice(0, 12).forEach((q) => p.push("    numeração [" + q.gravidade + "]: " + q.texto));
+        if (numR.problemas.length > 12) p.push("    …e mais " + (numR.problemas.length - 12) + " ponto(s) de numeração");
+      }
+    } catch (e) { p.push("  (conferência indisponível: " + (e && e.message) + ")"); }
+    LEI_PRE_GRUPOS.slice().sort((a, b) => (leiPreGravidade(a) === "segura") - (leiPreGravidade(b) === "segura")).forEach((g) => {
       const it = c.pre.mudancas.filter((m) => m.grupo === g);
       if (!it.length) return;
-      p.push("  · " + g + ": " + it.length + " (aceitas " + it.filter((m) => leiPreAceita(c, m)).length + ")");
+      const gv = leiPreGravidade(g);
+      p.push("  · " + (gv === "apaga" ? "[APAGA LINHAS] " : gv === "estrutura" ? "[MUDA A ESTRUTURA] " : "[limpeza segura] ") + g + ": " + it.length + " (aceitas " + it.filter((m) => leiPreAceita(c, m)).length + ")");
+      if (g === "anexo") {
+        /* todos os anexos, com a escolha de cada um (a tela pede uma decisão por anexo) */
+        it.slice(0, 40).forEach((m) => p.push("      " + m.titulo + " · linhas " + m.linhas[0] + "-" + m.linhas[1] + " · " + m.tamanho + " car."
+          + (m.revogado ? " · revogado" : "") + " · escolha: " + (c.decisoes[m.id] || "—")));
+        if (it.length > 40) p.push("      …e mais " + (it.length - 40));
+        return;
+      }
+      if (g === "remissao") {
+        /* as listas como a tela as mostra: um cartão por lista, com o artigo como vai ficar */
+        leiPreCadeias(it).slice(0, 20).forEach((k) => p.push("      " + (k.length > 1 ? "lista " : "") + "linha(s) " + k.map((m) => m.linhas[0]).join(",")
+          + " [" + k.map((m) => m.motivo).join(",") + "] aceitas " + k.filter((m) => leiPreAceita(c, m)).length + "/" + k.length
+          + "  =>  " + leiPreCadeiaResultado(c, k).map((x) => cortar(x, 160)).join("  ||  ")));
+        return;
+      }
       it.slice(0, 6).forEach((m) => p.push("      " + m.id + " linha(s) " + (m.linhas || []).slice(0, 4).join(",")
         + " · " + cortar(m.antes, 110) + (m.depois ? "  =>  " + cortar(m.depois, 110) : "")));
+      if (it.length > 6) p.push("      …e mais " + (it.length - 6));
     });
+    /* o que a pessoa RECUSOU: é aí que mora a divergência entre o que o app sugeriu e o que ela viu */
+    const recusadas = c.pre.mudancas.filter((m) => m.grupo !== "anexo" && !leiPreAceita(c, m));
+    p.push("  recusadas por você: " + (recusadas.length ? recusadas.length : "nenhuma"));
+    recusadas.slice(0, 30).forEach((m) => p.push("      " + m.grupo + " linha(s) " + (m.linhas || []).slice(0, 4).join(",") + " · " + cortar(m.antes, 120)));
+    if (recusadas.length > 30) p.push("      …e mais " + (recusadas.length - 30));
     if ((c.pre.identificadores || []).length) {
       p.push("  · identificadores revogados mantidos (informativo, sem decisão — nunca são removidos): " + c.pre.identificadores.length);
     }
@@ -6369,6 +6417,15 @@ function leiMesFechar() {
 const LEI_PRE_GRUPOS = ["tachado", "invisiveis", "cabecalho", "pagina", "grafia", "remissao", "anexo"];
 /* trecho colado com poucos artigos não tem sequência a criticar */
 const LEI_NUMERACAO_MIN_ARTIGOS = 8;
+/* (v19.24.0) A GRAVIDADE DE CADA GRUPO, a mesma cor na tela inteira e no relatório:
+ *  · "apaga"     (vermelho) — linhas inteiras saem do texto: se o app errou, some conteúdo;
+ *  · "estrutura" (amarelo)  — muda onde as coisas ficam: une linhas, separa anexos;
+ *  · "segura"    (cinza)    — limpeza que não muda o conteúdo (riscado = texto revogado, que fica no histórico;
+ *    número de página; caractere invisível; grafia de cabeçalho de artigo).
+ * Os dois primeiros PRECISAM DO SEU OLHO e vêm primeiro; as limpezas seguras ficam recolhidas, já aceitas. */
+const LEI_PRE_GRAVIDADE = { cabecalho: "apaga", remissao: "estrutura", anexo: "estrutura",
+  tachado: "segura", invisiveis: "segura", pagina: "segura", grafia: "segura" };
+function leiPreGravidade(g) { return LEI_PRE_GRAVIDADE[g] || "segura"; }
 let leiPreCtx = null;
 
 /* Há o que limpar OU a numeração está fora de sequência? */
@@ -6648,15 +6705,159 @@ function leiPreIdentificadoresEl(c) {
   return card;
 }
 
+/* (v19.24.0) O TEXTO DE UMA CONFERÊNCIA de leiComoVaiFicar — o mesmo na tela e no relatório */
+function leiComoTexto(p) {
+  if (p.tipo === "gigante") return t("lei_como_gigante", { a: p.num, n: Math.round(p.n / 1000) });
+  if (p.tipo === "longo") return t("lei_como_longo", { a: p.num, n: Math.round(p.n / 1000) });
+  if (p.tipo === "anexo_repetido") return t("lei_como_anexo_rep", { r: p.rom, n: p.n });
+  if (p.tipo === "anexo_faltando") return t("lei_como_anexo_falta", { l: p.lista.join(", ") });
+  if (p.tipo === "espacado") return t("lei_como_espacado", { n: p.n });
+  if (p.tipo === "numeracao") return t("lei_como_num", { n: p.n });
+  return p.tipo;
+}
+/* a lista de conferências do texto como ficaria (a numeração entra como uma linha que aponta o painel de baixo) */
+function leiComoConferencias(c, res, arts) {
+  const como = leiComoVaiFicar(res.texto, res.anexos, arts);
+  if (arts.length >= LEI_NUMERACAO_MIN_ARTIGOS && !c.semNumeracao && !leiEhAlteradora(c.texto)) {
+    const num = leiNumeracao(arts);
+    if (num.problemas.length) como.conferir.push({ gravidade: num.graves.length ? "grave" : "leve", tipo: "numeracao", n: num.problemas.length });
+    const ordem = { grave: 0, aviso: 1, leve: 2 };
+    como.conferir.sort((x, y) => ordem[x.gravidade] - ordem[y.gravidade]);
+  }
+  return como;
+}
+/* O PAINEL "COMO A LEI VAI FICAR", no topo da revisão: a estrutura que vai ser criada e o que nela parece errado */
+function leiPreComoPintar(c, res, arts) {
+  const box = $("leiPreComo");
+  if (!box) return null;
+  box.innerHTML = "";
+  if (!arts.length || leiEhAlteradora(c.texto)) { box.hidden = true; return null; }
+  const como = leiComoConferencias(c, res, arts);
+  box.hidden = false;
+  box.className = "lei-pre-como" + (como.conferir.some((p) => p.gravidade === "grave") ? " grave" : como.conferir.length ? " aviso" : " ok");
+  const cab = document.createElement("div");
+  cab.className = "lei-pre-cab";
+  cab.textContent = t("lei_como_tit") + " — " + (como.conferir.length ? t("lei_como_n", { n: como.conferir.length }) : t("lei_como_ok"));
+  const est = document.createElement("div");
+  est.className = "lei-pre-como-est";
+  const div = como.divisoes;
+  const partes = [t("lei_como_artigos", { n: como.artigos, p: como.primeiro, u: como.ultimo })];
+  [["livro", "lei_como_livros"], ["titulo", "lei_como_titulos"], ["capitulo", "lei_como_capitulos"], ["secao", "lei_como_secoes"]]
+    .forEach(([k, ch]) => { if (div[k]) partes.push(t(ch, { n: div[k] })); });
+  if (como.anexos.length) {
+    const roms = como.anexos.map((a) => a.rom).filter(Boolean);
+    partes.push(t("lei_como_anexos", { n: como.anexos.length, f: roms.length ? roms[0] + (roms.length > 1 ? "–" + roms[roms.length - 1] : "") : "" }));
+  }
+  est.textContent = partes.join(" · ");
+  box.append(cab, est);
+  if (como.conferir.length) {
+    const ul = document.createElement("ul");
+    como.conferir.forEach((p) => {
+      const li = document.createElement("li");
+      li.className = "lei-como-" + p.gravidade;
+      li.textContent = (p.gravidade === "grave" ? "✖ " : p.gravidade === "aviso" ? "⚠ " : "· ") + leiComoTexto(p);
+      ul.append(li);
+    });
+    box.append(ul);
+  }
+  return como;
+}
+
+/* (v19.24.0) OS ITENS DE UMA MESMA LISTA, NUM CARTÃO SÓ. "Art. 2º … assim distribuída:" e, cada um na sua linha,
+ * "LIVRO I – …;", "LIVRO II – …;", "LIVRO III – …;", "LIVRO IV – … ." viravam QUATRO cartões, e o "ficará" de cada um
+ * mostrava só a linha de cima mais a sua — o segundo dizia "LIVRO I …; LIVRO II …", como se o LIVRO I não fosse
+ * parar dentro do Art. 2º. A pessoa não via o resultado em lugar nenhum. Uma CADEIA é a sequência de remissões em
+ * que cada uma se une à anterior (a âncora de uma é a linha da outra); ela vira um cartão com o artigo inteiro como
+ * vai ficar. Uma caixa decide a cadeia toda; "escolher item a item" continua lá dentro. */
+function leiPreCadeias(itens) {
+  const ord = itens.slice().sort((a, b) => a.linhas[0] - b.linhas[0]);
+  const out = [];
+  ord.forEach((m) => {
+    const ult = out.length ? out[out.length - 1] : null;
+    if (ult && m.ancora && m.ancora === ult[ult.length - 1].linhas[0]) ult.push(m);
+    else out.push([m]);
+  });
+  return out;
+}
+/* o texto como fica, com as escolhas de agora: cada item aceito entra na frase de cima; um recusado começa outra */
+function leiPreCadeiaResultado(c, cadeia) {
+  const partes = [cadeia[0].contexto];
+  cadeia.forEach((m) => {
+    if (leiPreAceita(c, m)) partes[partes.length - 1] += " " + m.antes;
+    else partes.push(m.antes);
+  });
+  return partes;
+}
+function leiPreCadeiaEl(c, cadeia) {
+  const nAce = cadeia.filter((m) => leiPreAceita(c, m)).length;
+  const el = document.createElement("div");
+  el.className = "lei-pre-item lei-pre-cadeia" + (nAce ? "" : " off");
+  el.id = "leiPreCadeia_" + cadeia[0].id;
+  const linha = (cls, txt) => { const s = document.createElement("span"); s.className = cls; s.textContent = txt; return s; };
+  const ini = cadeia[0].linhas[0], fim = cadeia[cadeia.length - 1].linhas[0];
+  const lb = document.createElement("label");
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = nAce === cadeia.length;
+  cb.indeterminate = nAce > 0 && nAce < cadeia.length;
+  cb.onchange = () => {
+    cadeia.forEach((m) => { c.decisoes[m.id] = cb.checked; });
+    leiPrePintar();
+    leiPreAvisar(t(cb.checked ? "lei_pre_av_sim" : "lei_pre_av_nao", { g: t("lei_pre_g_remissao"), l: leiDecRefLinhas(cadeia.map((m) => m.linhas[0])) }));
+  };
+  const corpo = document.createElement("span");
+  corpo.append(linha("lei-pre-ctx", t("lei_pre_cadeia_tit", { n: cadeia.length, a: ini, b: fim })));
+  corpo.append(linha("lei-pre-ctx", "… " + cadeia[0].contexto));
+  const antes = document.createElement("span");
+  antes.className = "lei-pre-cadeia-antes";
+  cadeia.forEach((m) => antes.append(linha("lei-pre-antes", m.antes)));
+  corpo.append(antes);
+  corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
+  leiPreCadeiaResultado(c, cadeia).forEach((p) => corpo.append(linha("lei-pre-depois", p)));
+  lb.append(cb, corpo);
+  el.append(lb);
+  /* item a item, para quem precisar recusar um só (recolhido; continua aberto ao repintar) */
+  const det = document.createElement("details");
+  det.className = "lei-pre-cadeia-itens";
+  c.cadeiaAberta = c.cadeiaAberta || {};
+  det.open = !!c.cadeiaAberta[cadeia[0].id];
+  det.ontoggle = () => { c.cadeiaAberta[cadeia[0].id] = det.open; };
+  const sm = document.createElement("summary");
+  sm.textContent = t("lei_pre_cadeia_um_a_um", { a: nAce, n: cadeia.length });
+  det.append(sm);
+  cadeia.forEach((m) => {
+    const l2 = document.createElement("label");
+    l2.className = "lei-pre-cadeia-um";
+    const c2 = document.createElement("input");
+    c2.type = "checkbox";
+    c2.id = "leiPreUm_" + m.id;
+    c2.checked = leiPreAceita(c, m);
+    c2.onchange = () => {
+      c.decisoes[m.id] = c2.checked;
+      leiPrePintar();
+      leiPreAvisar(t(c2.checked ? "lei_pre_av_sim" : "lei_pre_av_nao", { g: t("lei_pre_g_remissao"), l: leiDecRefLinhas(m.linhas) }));
+    };
+    l2.append(c2, linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] }) + " — " + m.antes));
+    det.append(l2);
+  });
+  el.append(det);
+  el.append(leiDupContextoEl(c.texto, { linha: cadeia[0].ancora || ini, linhaFim: fim }));
+  return el;
+}
+
 function leiPreGrupoEl(c, g, itens) {
   const card = document.createElement("div");
-  card.className = "lei-pre-grupo";
+  const grav = leiPreGravidade(g);
+  card.className = "lei-pre-grupo lei-pre-grav-" + grav;
   card.id = "leiPreGrupo_" + g;
   const cab = document.createElement("div");
   cab.className = "lei-pre-cab";
   const tit = document.createElement("span");
   tit.textContent = t("lei_pre_g_" + g) + " (" + itens.length + ")";
-  cab.append(tit);
+  const selo = document.createElement("span");
+  selo.className = "lei-pre-grav-selo " + grav;
+  selo.textContent = t("lei_pre_grav_" + grav);
+  cab.append(selo, tit);
   if (g !== "anexo") {
     /* O ESTADO DO GRUPO, sempre à vista: quantas estão aceitas, e qual dos dois botões descreve o grupo agora
      * (todas aceitas → "aceitar todos" ligado; nenhuma → "recusar todos" ligado; misto → nenhum dos dois).
@@ -6699,7 +6900,8 @@ function leiPreGrupoEl(c, g, itens) {
     card.append(det);
     lista = det;
   }
-  itens.forEach((m) => lista.append(leiPreItemEl(c, m)));
+  if (g === "remissao") leiPreCadeias(itens).forEach((k) => lista.append(k.length > 1 ? leiPreCadeiaEl(c, k) : leiPreItemEl(c, k[0])));
+  else itens.forEach((m) => lista.append(leiPreItemEl(c, m)));
 
   if (itens.some((m) => !leiPreAceita(c, m))) {
     const co = document.createElement("div");
@@ -6721,15 +6923,55 @@ function leiPrePintar() {
     : (atualizar ? "lei_pre_titulo_upd" : "lei_pre_titulo_criar"));
   $("leiPreAjuda").textContent = t(soNum ? "lei_pre_ajuda_num" : "lei_pre_ajuda");
   const aceitas = c.pre.mudancas.filter((m) => leiPreAceita(c, m)).length;
-  $("leiPreResumo").textContent = soNum ? "" : t("lei_pre_resumo", { n: c.pre.mudancas.length, a: aceitas });
+  const grupos = LEI_PRE_GRUPOS.map((g) => ({ g, itens: c.pre.mudancas.filter((m) => m.grupo === g) })).filter((x) => x.itens.length);
+  const rever = grupos.filter((x) => leiPreGravidade(x.g) !== "segura");
+  const seguras = grupos.filter((x) => leiPreGravidade(x.g) === "segura");
+  const nRever = rever.reduce((a, x) => a + x.itens.length, 0);
+  $("leiPreResumo").textContent = soNum ? "" : t("lei_pre_resumo", { n: c.pre.mudancas.length, a: aceitas })
+    + (nRever ? " · " + t("lei_pre_resumo_rever", { r: nRever }) : "");
   $("btnLeiPreOriginal").hidden = soNum;
+
+  /* (v19.24.0) OS ATALHOS: um por grupo, na cor da gravidade — "o que precisa do seu olho" à vista e a um toque */
+  const chips = $("leiPreChips");
+  if (chips) {
+    chips.innerHTML = "";
+    chips.hidden = soNum || grupos.length < 2;
+    rever.concat(seguras).forEach((x) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "lei-pre-chip " + leiPreGravidade(x.g);
+      b.id = "btnLeiPreChip_" + x.g;
+      b.textContent = t("lei_pre_curto_" + x.g) + " " + x.itens.length;
+      b.title = t("lei_pre_grav_" + leiPreGravidade(x.g)) + " — " + t("lei_pre_g_" + x.g);
+      b.onclick = () => {
+        if (leiPreGravidade(x.g) === "segura" && rever.length) { c.segurasAbertas = true; if ($("leiPreSeguras")) $("leiPreSeguras").open = true; }
+        const alvo = $("leiPreGrupo_" + x.g);
+        try { if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: "start" }); } catch (e) {}
+      };
+      chips.append(b);
+    });
+  }
 
   const cx = $("leiPreLista");
   cx.innerHTML = "";
-  LEI_PRE_GRUPOS.forEach((g) => {
-    const itens = c.pre.mudancas.filter((m) => m.grupo === g);
-    if (itens.length) cx.append(leiPreGrupoEl(c, g, itens));
-  });
+  if (rever.length && seguras.length) {
+    /* o que precisa do seu olho primeiro; as limpezas seguras num bloco recolhido (já aceitas) */
+    rever.forEach((x) => cx.append(leiPreGrupoEl(c, x.g, x.itens)));
+    const det = document.createElement("details");
+    det.className = "lei-pre-seguras";
+    det.id = "leiPreSeguras";
+    det.open = !!c.segurasAbertas;
+    det.ontoggle = () => { c.segurasAbertas = det.open; };
+    const sm = document.createElement("summary");
+    const nSeg = seguras.reduce((a, x) => a + x.itens.length, 0);
+    const aSeg = seguras.reduce((a, x) => a + x.itens.filter((m) => leiPreAceita(c, m)).length, 0);
+    sm.textContent = t("lei_pre_seguras", { n: nSeg, a: aSeg });
+    det.append(sm);
+    seguras.forEach((x) => det.append(leiPreGrupoEl(c, x.g, x.itens)));
+    cx.append(det);
+  } else {
+    grupos.forEach((x) => cx.append(leiPreGrupoEl(c, x.g, x.itens)));
+  }
   if (((c.pre && c.pre.blocos) || []).length) cx.append(leiPreBlocosEl(c));
   if (((c.pre && c.pre.identificadores) || []).length) cx.append(leiPreIdentificadoresEl(c));
 
@@ -6737,6 +6979,7 @@ function leiPrePintar() {
    * agora: recusar uma limpeza pode fazer aparecer (ou sumir) um salto */
   const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
   const arts = leiArtigos(res.texto);
+  leiPreComoPintar(c, res, arts);
   const pn = $("leiPreNumeracao");
   pn.innerHTML = "";
   if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao || leiEhAlteradora(c.texto)) {

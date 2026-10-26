@@ -1381,6 +1381,39 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-pre-ctx{display:block;font-size:11.5px;color:var(--sutil);overflow-wrap:anywhere}
 .lei-pre-consequencia{font-size:11.5px;color:var(--atencao);margin:4px 0 0}
 .lei-pre-num{border:1px solid var(--laranja-borda,#e8940a);border-radius:10px;padding:9px 11px;background:var(--panel);margin-top:10px}
+/* (v19.24.0) gravidade: vermelho apaga linhas · amarelo muda a estrutura · cinza limpeza segura */
+.lei-pre-grupo.lei-pre-grav-apaga{border-left:4px solid var(--erro,#e5484d)}
+.lei-pre-grupo.lei-pre-grav-estrutura{border-left:4px solid var(--atencao,#e8940a)}
+.lei-pre-grupo.lei-pre-grav-segura{border-left:4px solid var(--borda)}
+.lei-pre-grav-selo{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:999px;margin-right:6px;white-space:nowrap}
+.lei-pre-grav-selo.apaga{background:rgba(229,72,77,.16);color:var(--erro,#e5484d)}
+.lei-pre-grav-selo.estrutura{background:rgba(232,148,10,.16);color:var(--atencao,#e8940a)}
+.lei-pre-grav-selo.segura{background:rgba(128,128,128,.14);color:var(--sutil)}
+.lei-pre-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.lei-pre-chip{border:1px solid var(--borda);background:var(--campo);color:var(--texto);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer}
+.lei-pre-chip.apaga{border-color:var(--erro,#e5484d);color:var(--erro,#e5484d)}
+.lei-pre-chip.estrutura{border-color:var(--atencao,#e8940a);color:var(--atencao,#e8940a)}
+.lei-pre-chip.segura{color:var(--sutil)}
+/* o atalho leva ao grupo sem escondê-lo debaixo do topo fixo da revisão */
+.lei-pre-grupo,.lei-pre-seguras{scroll-margin-top:150px}
+/* (v19.24.0) os itens de uma mesma lista num cartão só */
+.lei-pre-cadeia-antes{display:block}
+.lei-pre-cadeia-antes>.lei-pre-antes{margin:2px 0}
+.lei-pre-cadeia-itens{margin:4px 0 0 26px;font-size:12px}
+.lei-pre-cadeia-itens>summary{cursor:pointer;color:var(--sutil)}
+.lei-pre-cadeia-um{display:flex;gap:6px;align-items:flex-start;margin:3px 0}
+.lei-pre-seguras{border:1px dashed var(--borda);border-radius:10px;padding:6px 10px;margin-top:8px}
+.lei-pre-seguras>summary{cursor:pointer;font-size:13px;color:var(--sutil);padding:2px 0}
+.lei-pre-seguras>.lei-pre-grupo{margin-top:8px}
+.lei-pre-como{border:1px solid var(--borda);border-left-width:4px;border-radius:10px;padding:9px 11px;background:var(--panel);margin:8px 0}
+.lei-pre-como.ok{border-left-color:rgba(34,197,94,.75)}
+.lei-pre-como.aviso{border-left-color:var(--atencao,#e8940a)}
+.lei-pre-como.grave{border-left-color:var(--erro,#e5484d)}
+.lei-pre-como-est{font-size:12.5px;color:var(--sutil);margin-top:3px}
+.lei-pre-como ul{margin:6px 0 0 4px;padding:0;list-style:none;font-size:12.5px;line-height:1.55}
+.lei-pre-como li.lei-como-grave{color:var(--erro,#e5484d);font-weight:600}
+.lei-pre-como li.lei-como-aviso{color:var(--atencao,#e8940a)}
+.lei-pre-como li.lei-como-leve{color:var(--sutil)}
 .lei-pre-num.ok{border-color:rgba(34,197,94,.55)}
 .lei-pre-num ul{margin:4px 0 0 18px;padding:0;font-size:12px;line-height:1.5}
 .lei-pre-num li.grave{color:var(--erro)}
@@ -9280,7 +9313,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
     </div>
     <p class="lei-pre-aviso" id="leiPreAviso" role="status" aria-live="polite" hidden></p>
+    <!-- (v19.24.0) um atalho por grupo, na cor da gravidade -->
+    <div class="lei-pre-chips" id="leiPreChips" hidden></div>
   </div>
+  <!-- (v19.24.0) COMO A LEI VAI FICAR: a estrutura que vai ser criada e o que nela parece errado (artigo gigante, anexo
+       repetido ou faltando…) — é no resultado que o erro aparece -->
+  <div id="leiPreComo" class="lei-pre-como" hidden></div>
   <div id="leiPreLista" class="lei-dup-lista"></div>
   <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>
   <p class="nota" id="leiPreFim"></p>
