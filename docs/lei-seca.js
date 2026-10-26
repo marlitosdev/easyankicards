@@ -2984,11 +2984,27 @@ function leiComoVaiFicar(texto, anexos, artsProntos) {
   const tx = String(texto || "");
   const arts = artsProntos || leiArtigos(tx);
   const divisoes = {};
+  /* (v19.26.0) LIVRO e PARTE são o nível de cima: o mesmo número duas vezes é quase sempre a lista do artigo que os
+   * apresenta ("O Código é constituído de 4 Livros: LIVRO I – …;") virando divisão de verdade — e o artigo cortado.
+   * Guarda onde cada um aparece (depois de qual artigo) para a pessoa achar. */
+  const topo = {};
+  let ultimoArt = "";
   tx.split("\n").forEach((x) => {
+    const a = leiCasarArtigo(x);
+    if (a) { ultimoArt = leiNumNormal(a[1]); return; }
     const m = x.match(LEI_RE_DIVISAO);
-    if (m) { const k = leiTipoDivisao(m[1]); divisoes[k] = (divisoes[k] || 0) + 1; }
+    if (!m) return;
+    const k = leiTipoDivisao(m[1]);
+    divisoes[k] = (divisoes[k] || 0) + 1;
+    if (k === "livro" || k === "parte") {
+      const ch = m[1].toUpperCase() + " " + m[2].toUpperCase();
+      (topo[ch] = topo[ch] || []).push(ultimoArt);
+    }
   });
   const conferir = [];
+  /* um aviso só, com todas as repetidas (recusar a lista dos 4 LIVROs repetia o mesmo parágrafo 4 vezes) */
+  const repetidas = Object.keys(topo).filter((ch) => topo[ch].length > 1).map((ch) => ({ div: ch, n: topo[ch].length, depoisDe: topo[ch] }));
+  if (repetidas.length) conferir.push({ gravidade: "aviso", tipo: "divisao_repetida", itens: repetidas });
   const tams = arts.map((a) => String(a.texto || "").length).sort((x, y) => x - y);
   const mediana = tams.length ? tams[Math.floor(tams.length / 2)] : 0;
   const limite = Math.max(15000, mediana * 12);

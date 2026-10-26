@@ -6710,6 +6710,8 @@ function leiPreIdentificadoresEl(c) {
 function leiComoTexto(p) {
   if (p.tipo === "gigante") return t("lei_como_gigante", { a: p.num, n: Math.round(p.n / 1000) });
   if (p.tipo === "longo") return t("lei_como_longo", { a: p.num, n: Math.round(p.n / 1000) });
+  if (p.tipo === "divisao_repetida") return t("lei_como_div_rep", { lista: p.itens.map((r) => r.div + " ×" + r.n + " ("
+    + r.depoisDe.map((x) => (x ? t("lei_como_onde_art", { a: x }) : t("lei_como_onde_inicio"))).join("; ") + ")").join(" · ") });
   if (p.tipo === "anexo_vazio") return t("lei_como_anexo_vazio", { r: p.rom, k: p.pos });
   if (p.tipo === "anexo_repetido") return t("lei_como_anexo_rep", { r: p.rom, n: p.n });
   if (p.tipo === "anexo_faltando") return t("lei_como_anexo_falta", { l: p.lista.join(", ") });

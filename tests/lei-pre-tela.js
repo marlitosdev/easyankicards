@@ -174,6 +174,40 @@ async function testes() {
     ok(a2.$("leiPreItem_rem:2") && !achar(a2.$("leiPreGrupo_remissao"), (c) => /lei-pre-cadeia/.test(c.className || "")).length, "K6 remissão sozinha: o cartão de sempre");
   }
 
+  /* ---- D (v19.26.0): recusar a lista do Art. 2º cria um segundo "LIVRO I" — o relatório de 26/10 dizia "livro 8"
+   * (4 de verdade + os 4 itens da lista), sem nenhum aviso ---- */
+  {
+    const { api } = rodar();
+    const pre = api.leiPreprocessar(texto);
+    const rem = pre.mudancas.filter((m) => m.grupo === "remissao");
+    const dec = {};
+    rem.forEach((m) => { dec[m.id] = false; });
+    const ap = api.leiAplicarPreprocesso(texto, pre.mudancas, dec);
+    const como = api.leiComoVaiFicar(ap.texto, ap.anexos);
+    const rep = como.conferir.filter((p) => p.tipo === "divisao_repetida");
+    ok(rep.length === 1 && rep[0].itens.length === 1 && rep[0].itens[0].div === "LIVRO I" && rep[0].itens[0].n === 2 && rep[0].itens[0].depoisDe.join("|") === "|2" && rep[0].gravidade === "aviso",
+      "D1 o LIVRO I repetido é apontado, com onde aparece: " + JSON.stringify(como.conferir));
+    api.setLanguage("pt");
+    ok(/^Divisão repetida: LIVRO I ×2 \(no início; depois do Art\. 2\)\. Quase sempre/.test(api.leiComoTexto(rep[0])), "D2 o texto do aviso: " + api.leiComoTexto(rep[0]));
+    /* várias repetidas: UM aviso só, com todas */
+    const varias = api.leiComoVaiFicar("LIVRO I\nArt. 1. A.\nArt. 2. Livros:\nLIVRO I - um;\nLIVRO II - dois.\nArt. 3. B.\nLIVRO II\nArt. 4. C.").conferir.filter((p) => p.tipo === "divisao_repetida");
+    ok(varias.length === 1 && varias[0].itens.map((r) => r.div).join(",") === "LIVRO I,LIVRO II"
+      && /LIVRO I ×2 \(no início; depois do Art\. 2\) · LIVRO II ×2 \(depois do Art\. 2; depois do Art\. 3\)/.test(api.leiComoTexto(varias[0])),
+      "D2a várias repetidas num aviso só: " + JSON.stringify(varias));
+    const ap2 = api.leiAplicarPreprocesso(texto, pre.mudancas, {});
+    ok(!api.leiComoVaiFicar(ap2.texto, ap2.anexos).conferir.some((p) => p.tipo === "divisao_repetida"), "D3 aceitando a lista, nenhum LIVRO repetido");
+    ok(!api.leiComoVaiFicar("CAPÍTULO I\nArt. 1. A.\nTÍTULO II\nCAPÍTULO I\nArt. 2. B.").conferir.some((p) => p.tipo === "divisao_repetida"), "D4 capítulo I de novo em outro título é normal: não avisa");
+    /* na tela: recusar a lista faz o aviso aparecer no painel */
+    api.leiRevisarColagemAbrir({ modo: "criar", texto, pre, aoConfirmar: () => {} });
+    const ctx = api.leiPreCtxAtual();
+    rem.forEach((m) => { ctx.decisoes[m.id] = false; });
+    api.leiPrePintar();
+    ok(/Divisão repetida: LIVRO I ×2/.test(api.$("leiPreComo").textContent), "D5 o painel mostra o aviso assim que a lista é recusada");
+    ["lei_como_div_rep", "lei_como_onde_inicio", "lei_como_onde_art"].forEach((k) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "X falta " + k + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
   /* ---- V: artigo inteiro riscado, com o número dentro do risco (o relato: "faltam 72, 73, 74 … 486 a 491") ---- */
   {
     const { api } = rodar();
