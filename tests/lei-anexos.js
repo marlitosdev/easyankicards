@@ -297,6 +297,43 @@ async function testes() {
     ok(achar(cx(), (c) => c.tag === "details" || c.tagName === "DETAILS").length === 2 && api.lojaLer("eac_lei_anexos_ocultos") === "0", "V5 clicar de novo mostra tudo outra vez");
   }
 
+  /* ==============================================================
+   * CR: FUTURO E ANEXO PARCIAL JUNTO DAS SUBSTITUIÇÕES (PDFs REAIS)
+   * LC 145: "passará a vigorar". LC 95: o Anexo I traz só um subitem,
+   * enquanto VII, VIII, X, XIII, XV e XVI trazem a tabela integral.
+   * ============================================================== */
+  {
+    const fut = p.leiOrdemDeAnexo("O anexo VI da Lei Complementar nº 15 passará a vigorar conforme o Anexo I desta Lei Complementar");
+    ok(fut && fut.acao === "substituir" && fut.alvos.join() === "VI", "CR1 'passará a vigorar' também é substituição: " + JSON.stringify(fut));
+    const futPlural = p.leiOrdemDeAnexo("Os anexos VI e VII passarão a vigorar conforme os anexos desta Lei");
+    ok(futPlural && futPlural.acao === "substituir" && futPlural.alvos.join() === "VI,VII", "CR2 'passarão a vigorar' também é substituição");
+    const l = lei();
+    const t = CAB.concat(["“ Art. 162 [...]", "§4º Novo. (AC)",
+      "Art. 2º O anexo VI da Lei Complementar nº 15 passará a vigorar conforme o Anexo I desta Lei Complementar:",
+      "Art. 3º O anexo VII da Lei Complementar nº 15 passará a vigorar conforme o Anexo II desta Lei Complementar:",
+      "Art. 4º Fica revogado o Anexo XI da Lei Complementar nº 15/2009.", "Art. 5º Vigência."], ANEXOS).join("\n");
+    const it = p.leiItensDaAlteradora(l, p.leiLerAlteradora(t, l));
+    ok(it.some((x) => x.num === "ANEXO:VI" && x.tipo === "anexo_subst") && it.some((x) => x.num === "ANEXO:VII" && x.tipo === "anexo_subst"),
+      "CR3 as ordens no futuro geram os itens de substituição: " + it.map((x) => x.num));
+  }
+  {
+    const l = lei({ anexos: [] });
+    const t = ["LEI COMPLEMENTAR Nº 95, DE 28 DE SETEMBRO DE 2022.",
+      "Art. 1º A Lei Complementar nº 015 passa a vigorar com as seguintes alterações:",
+      "Art. 2º Fica incluído o subitem 11.05 na Lista de Serviços constante no Anexo I da Lei Complementar nº 015, com a seguinte redação:",
+      "Art. 3º Os Anexos VII e VIII da Lei Complementar nº 015 passam a vigorar com a seguinte redação:",
+      "Art. 4º Esta Lei entra em vigor na data de sua publicação.",
+      "ANEXO I", "11.05 - Serviço parcial novo",
+      "ANEXO VII (NR)", "TABELA VII NOVA", "Serviço VII    2,00%",
+      "ANEXO VIII (NR)", "TABELA VIII NOVA", "Serviço VIII    3,00%"].join("\n");
+    const it = p.leiItensDaAlteradora(l, p.leiLerAlteradora(t, l));
+    const vii = it.filter((x) => x.num === "ANEXO:VII")[0], viii = it.filter((x) => x.num === "ANEXO:VIII")[0];
+    ok(vii && /TABELA VII NOVA/.test(vii.novo) && viii && /TABELA VIII NOVA/.test(viii.novo),
+      "CR4 o anexo parcial não desloca a associação das tabelas integrais: " + JSON.stringify(it.map((x) => [x.num, x.novo])));
+    ok(!it.avisos.some((x) => x.k === "anexo_sem_texto") && it.avisos.some((x) => x.k === "anexo" && /subitem 11.05/.test(x.texto)),
+      "CR5 só a alteração parcial do Anexo I fica como aviso: " + JSON.stringify(it.avisos));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

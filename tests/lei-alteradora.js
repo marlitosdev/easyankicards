@@ -628,6 +628,100 @@ async function testes() {
     ok(clsTem(lados[0], "qm-antes") && !clsTem(lados[0], "nota"), "T4b o lado 'como esta' continua mostrando o texto real, sem a nota");
   }
 
+  /* ==============================================================
+   * CR: REVOGAÇÕES E REDAÇÃO MISTA DOS PDFs REAIS DE CARUARU
+   *
+   * LC 95/2022, art. 27: artigos inteiros e unidades na mesma frase; a alínea
+   * "i" não pode virar a revogação do inciso I inteiro. LC 145/2024, art. 248:
+   * acréscimos e revogações no mesmo dispositivo; a redação antiga é revogada
+   * antes de os novos parágrafos entrarem, e III–XX continuam no caput.
+   * ============================================================== */
+  const ROMANOS_CR = ["III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"];
+  const BASE_CR = [
+    "Art. 174. Antes do encaminhamento da Certidão, cabe à Secretaria buscar a cobrança amigável.",
+    "Art. 203. Fica impedido de desempenhar suas funções o servidor nomeado para o cargo de Conselheiro.",
+    "Art. 248. São responsáveis, na qualidade de substituto tributário:",
+    "I. pelo imposto incidente nos serviços:",
+    "a) órgãos públicos;",
+    "b) entidades da administração indireta;",
+    "c) concessionárias;",
+    "d) serviços sociais autônomos;",
+    "e) estabelecimentos bancários;",
+    "f) seguradoras antigas;",
+    "g) administradoras antigas;",
+    "h) consórcios antigos;",
+    "i) os prestadores de serviços antigos;",
+    "j) os prestadores de rádio.",
+    "II. os incorporadores, construtores e empreiteiros.",
+  ].concat(ROMANOS_CR.map((r) => r + ". texto antigo do inciso " + r + ";"), [
+    "§ 1º Texto antigo do parágrafo primeiro.",
+    "§ 2º Texto antigo do parágrafo segundo.",
+    "§ 3º Texto antigo do parágrafo terceiro.",
+    "§ 4º Texto antigo do parágrafo quarto.",
+    "Art. 273-B. As sociedades profissionais observam o seguinte:",
+    "§ 1º O imposto será calculado por profissional.",
+    "§ 2º Parágrafo antigo a revogar.",
+  ]).join("\n");
+  const LC95_REV = ["LEI COMPLEMENTAR Nº 95, DE 28 DE SETEMBRO DE 2022.",
+    "Art. 1º A Lei Complementar nº 015 de 05 de janeiro de 2009 passa a vigorar com as seguintes alterações:",
+    "Art. 2º Revogam-se as disposições em contrário, em especial o art. 174, art. 203, a alínea \"i\", do inciso I do art. 248 e §2º do art. 273-B, todos da Lei Complementar nº 015, de 05 de janeiro de 2009.",
+    "Art. 3º Esta Lei Complementar entra em vigor na data de sua publicação."].join("\n");
+  const LC145_248 = CAB145.concat([
+    "“ Art. 248", "[...]", "I. [...]",
+    "f) companhias aéreas ou seus representantes; (NR)",
+    "g) empresas de plano de saúde; (NR)",
+    "h) empresas que explorem as atividades de rádio, jornal e televisão; (NR)",
+    "i) a empresa ou clube de seguro e capitalização; (AC)",
+    "II - São solidariamente responsáveis pela retenção e recolhimento do ISSQN: (NR)",
+    "§ 1º Novo parágrafo primeiro. (AC)", "§ 2º Novo parágrafo segundo. (AC)",
+    "§ 3º Novo parágrafo terceiro. (AC)", "§ 4º Novo parágrafo quarto. (AC)",
+    "§ 5º Novo parágrafo quinto. (AC)", "§ 6º Novo parágrafo sexto. (AC)",
+  ], ROMANOS_CR.map((r) => r + " - (Revogado)"), [
+    "§ 1º (Revogado)", "§ 2º (Revogado)", "§ 3º (Revogado)", "§ 4º (Revogado)",
+    "§ 5º (Revogado)", "§ 6º (Revogado)", "§ 7º (Revogado)", "§ 8º (Revogado)",
+    "Art. 2º Esta Lei Complementar entrará em vigor na data de sua publicação.",
+  ]).join("\n");
+  {
+    const l95 = lei({ texto: BASE_CR });
+    const par95 = p.leiLerAlteradora(LC95_REV, l95);
+    ok(par95.revogacoes.length === 4 && par95.revogacoes.map((r) => r.num).sort().join() === "174,203,248,273-B",
+      "CR1 a mesma frase produz as quatro revogações: " + JSON.stringify(par95.revogacoes));
+    const rv248 = par95.revogacoes.filter((r) => r.num === "248")[0];
+    ok(rv248 && rv248.unidade && rv248.unidade.incisos.join() === "I" && rv248.unidade.alineas.join() === "i",
+      "CR2 o endereço contém inciso I E alínea i: " + JSON.stringify(rv248));
+    const it95 = p.leiItensDaAlteradora(l95, par95);
+    const por95 = {}; it95.forEach((x) => { por95[x.num] = x; });
+    ok(por95["174"] && por95["174"].tipo === "revogado" && por95["203"] && por95["203"].tipo === "revogado",
+      "CR3 os artigos 174 e 203 são revogados por inteiro");
+    ok(/^I\. pelo imposto incidente nos serviços:$/m.test(por95["248"].novo)
+      && /^i\) \(Revogado por LC 95\/2022\)$/m.test(por95["248"].novo)
+      && !/^I\. \(Revogado/m.test(por95["248"].novo),
+      "CR4 só a alínea i é revogada; o inciso I e as demais alíneas ficam: " + por95["248"].novo);
+    ok(/^§ 2º \(Revogado por LC 95\/2022\)$/m.test(por95["273-B"].novo) && /§ 1º O imposto/.test(por95["273-B"].novo),
+      "CR5 o §2º do 273-B é revogado sem tocar no §1º");
+
+    const alteracoes = {};
+    it95.forEach((x) => { alteracoes[x.num] = { texto: x.novo, fonteAlteracao: "LC 95/2022", dataLei: "2022-09-28" }; });
+    const l145 = lei({ texto: BASE_CR, alteracoes });
+    const par145 = p.leiLerAlteradora(LC145_248, l145);
+    const un248 = par145.blocos[0].bloco.unidades;
+    ok(un248.filter((u) => u.acao === "rev" && u.tipo === "inciso").every((u) => u.chave.indexOf(">") < 0),
+      "CR6 III–XX revogados pertencem ao caput, não ao §6º: " + un248.map((u) => u.chave + "/" + u.acao).join(","));
+    const i248 = p.leiItensDaAlteradora(l145, par145).filter((x) => x.num === "248")[0];
+    const falta248 = i248.problemas.filter((x) => x.k === "nao_achou").map((x) => x.unidade);
+    ok(falta248.join() === "§7º,§8º" && !i248.problemas.some((x) => x.k === "ja_existia"),
+      "CR7 só §7º/§8º, ausentes da base, continuam como alerta: " + JSON.stringify(i248.problemas));
+    for (let k = 1; k <= 6; k++) {
+      const linha = i248.novo.split("\n").filter((x) => new RegExp("^§ ?" + k + "º").test(x))[0] || "";
+      ok(linha.indexOf("Novo parágrafo") >= 0 && linha.indexOf("Incluído por LC 145/2024") >= 0 && !/\(Revogado/.test(linha),
+        "CR8." + k + " o novo §" + k + "º substitui a redação antiga revogada: " + linha);
+    }
+    ok(/^III\. \(Revogado por LC 145\/2024\)$/m.test(i248.novo) && /^XX\. \(Revogado por LC 145\/2024\)$/m.test(i248.novo),
+      "CR9 os incisos III e XX são revogados no caput");
+    ok(/^i\) a empresa ou clube de seguro e capitalização; \(Incluído por LC 145\/2024\)$/m.test(i248.novo),
+      "CR10 a alínea i, revogada pela LC 95, pode ser incluída de novo pela LC 145");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
