@@ -6414,7 +6414,7 @@ function leiMesFechar() {
  * numeração (leiNumeracao): artigos fora de sequência quase sempre são o
  * leitor errando, e a pessoa vê onde antes de seguir.
  * ===================================================================== */
-const LEI_PRE_GRUPOS = ["tachado", "invisiveis", "cabecalho", "pagina", "grafia", "remissao", "anexo"];
+const LEI_PRE_GRUPOS = ["tachado", "invisiveis", "cabecalho", "pagina", "grafia", "letras", "remissao", "anexo"];
 /* trecho colado com poucos artigos não tem sequência a criticar */
 const LEI_NUMERACAO_MIN_ARTIGOS = 8;
 /* (v19.24.0) A GRAVIDADE DE CADA GRUPO, a mesma cor na tela inteira e no relatório:
@@ -6424,7 +6424,7 @@ const LEI_NUMERACAO_MIN_ARTIGOS = 8;
  *    número de página; caractere invisível; grafia de cabeçalho de artigo).
  * Os dois primeiros PRECISAM DO SEU OLHO e vêm primeiro; as limpezas seguras ficam recolhidas, já aceitas. */
 const LEI_PRE_GRAVIDADE = { cabecalho: "apaga", remissao: "estrutura", anexo: "estrutura",
-  tachado: "segura", invisiveis: "segura", pagina: "segura", grafia: "segura" };
+  tachado: "segura", invisiveis: "segura", pagina: "segura", grafia: "segura", letras: "segura" };
 function leiPreGravidade(g) { return LEI_PRE_GRAVIDADE[g] || "segura"; }
 let leiPreCtx = null;
 
@@ -6536,7 +6536,8 @@ function leiPreItemEl(c, m) {
      * AUTÔNOMOS" (as duas em maiúsculas, a de cima sem pontuação no fim) ou a de baixo começando em minúscula; título e
      * primeira linha da tabela ("…POR PRODUTO" + "Produto A 10%") continuam separados por " · " */
     const continua = (a, x) => !/[.:;!?)]$/.test(a) && (/^[a-zà-ÿ]/.test(x) || (a === a.toUpperCase() && x === x.toUpperCase() && /[A-ZÀ-Ú]{3}/.test(x)));
-    const amostra = leiPreLinhasDaColagem(c).slice(m.linhas[0], m.linhas[1]).map((x) => String(x).replace(/\s+/g, " ").trim())
+    /* (v19.25.0) a amostra já com as letras dobradas/espaçadas desfeitas (como o anexo vai ficar) */
+    const amostra = leiPreLinhasDaColagem(c).slice(m.linhas[0], m.linhas[1]).map((x) => leiDesdobrarLetras(x) || leiDesespacarNota(x) || x).map((x) => String(x).replace(/\s+/g, " ").trim())
       .filter(Boolean).slice(0, 2).reduce((a, x) => (!a ? x : a + (continua(a, x) ? " " : " · ") + x), "").slice(0, 200);
     if (amostra) { const am = document.createElement("div"); am.className = "lei-pre-anexo-amostra"; am.textContent = "» " + amostra; el.append(am); }
     el.append(leiPreAnexoVerEl(c, m));
@@ -6587,7 +6588,7 @@ function leiPreItemEl(c, m) {
     corpo.append(linha("lei-pre-antes", m.antes));
     corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
     corpo.append(linha("lei-pre-depois", m.depois || t("lei_pre_tch_vazio")));
-  } else if (m.grupo === "grafia") {
+  } else if (m.grupo === "grafia" || m.grupo === "letras") {
     corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] })));
     corpo.append(linha("lei-pre-antes", m.antes));
     corpo.append(linha("lei-pre-depois", m.depois));
@@ -6709,6 +6710,7 @@ function leiPreIdentificadoresEl(c) {
 function leiComoTexto(p) {
   if (p.tipo === "gigante") return t("lei_como_gigante", { a: p.num, n: Math.round(p.n / 1000) });
   if (p.tipo === "longo") return t("lei_como_longo", { a: p.num, n: Math.round(p.n / 1000) });
+  if (p.tipo === "anexo_vazio") return t("lei_como_anexo_vazio", { r: p.rom, k: p.pos });
   if (p.tipo === "anexo_repetido") return t("lei_como_anexo_rep", { r: p.rom, n: p.n });
   if (p.tipo === "anexo_faltando") return t("lei_como_anexo_falta", { l: p.lista.join(", ") });
   if (p.tipo === "espacado") return t("lei_como_espacado", { n: p.n });
@@ -7012,7 +7014,7 @@ function leiPrePintar() {
 
   const r = res.resumo;
   $("leiPreFim").textContent = t("lei_pre_res", { cab: r.cabecalho + r.pagina, gra: r.grafia,
-    rem: r.remissao, anx: r.anexosSeparados, inv: r.invisiveis }) + " " + t("lei_pre_fim");
+    rem: r.remissao, anx: r.anexosSeparados, inv: r.invisiveis }) + (r.letras ? " " + t("lei_pre_res_letras", { n: r.letras }) : "") + " " + t("lei_pre_fim");
   $("btnLeiPreConfirmar").textContent = t(atualizar ? "lei_pre_confirmar_upd" : "lei_pre_confirmar_criar");
   if (dlg && rolagem) dlg.scrollTop = rolagem;
 }
@@ -7054,7 +7056,7 @@ function leiDecColagem(c, original) {
       let nums = m.linhas || [];
       if (anexo) { nums = []; for (let k = m.linhas[0]; k <= m.linhas[1] && nums.length < 60; k++) nums.push(k); }
       const linhas = sai ? nums.slice(0, 60).map((k) => ({ linha: k, texto: L[k - 1] || "" })) : [];
-      const risco = m.grupo === "grafia" || m.grupo === "invisiveis" ? "baixo"
+      const risco = m.grupo === "grafia" || m.grupo === "letras" || m.grupo === "invisiveis" ? "baixo"
         : m.grupo === "remissao" || m.grupo === "tachado" ? "medio"
         : anexo ? (d === "descartar" ? "alto" : "medio")
         : decRiscoDoTexto(linhas.map((x) => x.texto));

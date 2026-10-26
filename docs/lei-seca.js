@@ -1435,7 +1435,9 @@ function leiTirarMarcasTachado(texto) { return String(texto == null ? "" : texto
  * "(Revogado pela …)" fica ao lado, sem risco: é assim que o Planalto mostra um dispositivo revogado. Tirar o
  * número apagaria QUAL dispositivo foi revogado e deixaria a nota solta (o título do anexo XIV sumiria e a nota
  * iria parar no fim do anexo anterior). Por isso esse trecho vem com padrão "manter" (como texto comum). */
-const LEI_RE_IDENT_RISCADO = /^(?:ANEXO\s+[IVXLCDM]+|Art(?:igos?|s?\.?)\s*\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?(?:-[A-Z])?\s*\.?|§+\s*\d{1,3}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|Par[áa]grafo\s+[úu]nico\s*\.?|[IVXLCDM]{1,8}(?:\s*-\s*[A-Z])?\s*[-–—]?|[a-z]\)|\d{1,3}\s*[.)])$/;
+/* (v19.25.0) também o título de anexo com as letras espaçadas pelo PDF: "~~A N E X O V~~" (o Anexo V revogado da
+ * LC 15/2009, com a nota "( R e v o g a d o p e l a … )" também espaçada) */
+const LEI_RE_IDENT_RISCADO = /^(?:A\s?N\s?E\s?X\s?O\s+(?:[IVXLCDM]\s?)*[IVXLCDM]|Art(?:igos?|s?\.?)\s*\d{1,4}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?(?:-[A-Z])?\s*\.?|§+\s*\d{1,3}\s*[ºo°ª]?(?:\s*-\s*[A-Z])?\s*\.?|Par[áa]grafo\s+[úu]nico\s*\.?|[IVXLCDM]{1,8}(?:\s*-\s*[A-Z])?\s*[-–—]?|[a-z]\)|\d{1,3}\s*[.)])$/;
 const LEI_RE_NOTA_REV_INI = /^\s*\(\s*(?:Revogad|REVOGAD|Vetad|VETAD|Suprimid)/;
 function leiLinhaSoIdentificadorRiscado(linhas, i) {
   const x = String(linhas[i]);
@@ -1443,7 +1445,59 @@ function leiLinhaSoIdentificadorRiscado(linhas, i) {
   if (!segs.length || !segs.every((s) => LEI_RE_IDENT_RISCADO.test(s.slice(2, -2).trim()))) return false;
   let nota = leiTirarTachado(x, true).trim();
   for (let k = i + 1; !nota && k < linhas.length && k < i + 4; k++) nota = String(linhas[k]).trim();
-  return LEI_RE_NOTA_REV_INI.test(nota);
+  return LEI_RE_NOTA_REV_INI.test(nota) || LEI_RE_NOTA_REV_INI.test(leiDesespacarNota(nota) || "");
+}
+
+/* =====================================================================
+ * LETRAS DOBRADAS OU ESPAÇADAS PELO PDF (v19.25.0)
+ *
+ * Dois defeitos do PDF da LC 15/2009 de Caruaru que chegavam assim à lei:
+ *  · o negrito simulado imprimindo cada letra duas vezes: "AAPPUURRAAÇÇÃÃOO DDOO VVAALLOORR VVEENNAALL";
+ *  · a nota com as letras espaçadas e SEM o espaço entre as palavras: "( R e v o g a d o p e l a L e i … 0 1 8 / 0 9 )".
+ * O primeiro se desfaz com segurança (TODA palavra da linha tem de ser letra-letra repetida). O segundo só quando a
+ * linha inteira se explica por palavras de nota de alteração (redação, dada, pela, lei, complementar, revogado…),
+ * números e pontuação: aí a separação é certa. Linha que não se explica fica como veio.
+ * ===================================================================== */
+function leiDesdobrarLetras(linha) {
+  const s = String(linha == null ? "" : linha);
+  const toks = s.trim().split(/\s+/).filter(Boolean);
+  if (toks.length < 2 || toks.join("").length < 8) return null;
+  const dobrado = (t) => t.length >= 2 && t.length % 2 === 0 && Array.from({ length: t.length / 2 }, (_, k) => t[2 * k] === t[2 * k + 1]).every(Boolean);
+  if (!toks.every(dobrado)) return null;
+  if (!toks.some((t) => /[A-Za-zÀ-ÿ]{2}/.test(t))) return null;
+  return (s.match(/^\s*/) || [""])[0] + toks.map((t) => t.replace(/(.)\1/g, "$1")).join(" ");
+}
+const LEI_PALAVRAS_DE_NOTA = ["redação", "redacao", "dada", "dado", "dadas", "dados", "pela", "pelo", "pelas", "pelos", "lei", "leis",
+  "complementar", "complementares", "ordinária", "municipal", "estadual", "federal", "decreto", "revogado", "revogada", "revogados",
+  "revogadas", "incluído", "incluída", "incluídos", "incluídas", "acrescido", "acrescida", "acrescentado", "acrescentada", "alterado",
+  "alterada", "nova", "novo", "vetado", "vetada", "suprimido", "suprimida", "emenda", "constitucional", "anexo", "conforme", "art",
+  "arts", "artigo", "parágrafo", "inciso", "alínea", "de", "do", "da", "dos", "das", "e", "em", "nº", "n°", "no", "n", "janeiro",
+  "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+function leiDesespacarNota(linha) {
+  const s = String(linha == null ? "" : linha);
+  if (!/^\s*(?:\S ){6,}\S\s*$/.test(s)) return null;
+  const junto = s.replace(/\s+/g, "");
+  const baixo = junto.toLowerCase();
+  const n = junto.length;
+  /* melhor[i] = a separação de junto[0..i) com menos pedaços (palavra de nota, número ou pontuação) */
+  const melhor = new Array(n + 1).fill(null);
+  melhor[0] = [];
+  for (let i = 0; i < n; i++) {
+    if (!melhor[i]) continue;
+    const prox = [];
+    LEI_PALAVRAS_DE_NOTA.forEach((w) => { if (baixo.startsWith(w, i)) prox.push(i + w.length); });
+    const num = junto.slice(i).match(/^\d+(?:[.,/]\d+)*/);
+    if (num) prox.push(i + num[0].length);
+    if (/[()\[\].,;:\/–\-ºª°]/.test(junto[i])) prox.push(i + 1);
+    prox.forEach((j) => { const c = melhor[i].concat([junto.slice(i, j)]); if (!melhor[j] || melhor[j].length > c.length) melhor[j] = c; });
+  }
+  if (!melhor[n]) return null;
+  let out = "";
+  melhor[n].forEach((p) => {
+    if (!out || /^[).,;:]/.test(p) || /[(\/]$/.test(out) || (p === "/" )) out += p;
+    else out += " " + p;
+  });
+  return (s.match(/^\s*/) || [""])[0] + out;
 }
 
 /* (v19.24.0) O ARTIGO INTEIRO RISCADO, com o número dentro do risco: "~~Art. 72. Será sempre de trinta dias…~~". Tirar
@@ -1735,6 +1789,15 @@ function leiPreprocessar(texto, opc) {
     mudancas.push({ id: "gra:" + (i + 1), grupo: "grafia", linhas: [i + 1], manterAspas: !!(opc && opc.manterAspas),
       antes: trilha(x).slice(0, 160), depois: trilha(g).slice(0, 160) });
   });
+  /* 2b. (v19.25.0) letras dobradas ou espaçadas pelo PDF — ver leiDesdobrarLetras */
+  sem.forEach((x, i) => {
+    if (remover[i + 1] || protegidas.has(i + 1) || efetiva[i] !== x) return;
+    const g = leiDesdobrarLetras(x) || leiDesespacarNota(x);
+    if (g === null) return;
+    efetiva[i] = g;
+    mudancas.push({ id: "let:" + (i + 1), grupo: "letras", linhas: [i + 1],
+      antes: trilha(x).slice(0, 160), depois: trilha(g).slice(0, 160) });
+  });
 
   /* 3. cabeçalho FALSO: remissão ou divisão que a quebra de linha pôs no
    * começo da linha. */
@@ -1821,7 +1884,7 @@ function leiPreprocessar(texto, opc) {
     mudancas.push(anxMud);
   });
 
-  const ordem = { tachado: -1, invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, remissao: 4, anexo: 5 };
+  const ordem = { tachado: -1, invisiveis: 0, cabecalho: 1, pagina: 2, grafia: 3, letras: 3.5, remissao: 4, anexo: 5 };
   mudancas.sort((x, y) => (ordem[x.grupo] - ordem[y.grupo]) || (x.linhas[0] - y.linhas[0]));
   return { mudancas, linhas: linhas.length, blocos: cit.blocos, protegidas: protegidas.size, identificadores };
 }
@@ -1836,7 +1899,7 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
   const dec = decisoes || {};
   const cur = bruto.split("\n").map((t) => ({ t, x: false }));
   const anexos = [];
-  const resumo = { invisiveis: 0, cabecalho: 0, pagina: 0, grafia: 0, remissao: 0,
+  const resumo = { invisiveis: 0, cabecalho: 0, pagina: 0, grafia: 0, letras: 0, remissao: 0,
     anexosSeparados: 0, anexosDescartados: 0 };
   let anexosRevogados = 0;
   const vale = (c) => (c.grupo === "anexo"
@@ -1898,8 +1961,14 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
   });
   (mudancas || []).forEach((c) => {
     if (c.grupo === "grafia" && vale(c) && cur[c.linhas[0] - 1] && !cur[c.linhas[0] - 1].x) {
-      const g = leiGrafiaDaLinha(cur[c.linhas[0] - 1].t, { manterAspas: c.manterAspas });
+      /* o título de anexo riscado que é só identificador ("~~A N E X O V~~") fica sem as marcas no fim: corrige já sem elas */
+      const g = leiGrafiaDaLinha(leiTirarMarcasTachado(cur[c.linhas[0] - 1].t), { manterAspas: c.manterAspas });
       if (g !== null) { cur[c.linhas[0] - 1].t = g; resumo.grafia++; mexeu = true; }
+    }
+    if (c.grupo === "letras" && vale(c) && cur[c.linhas[0] - 1] && !cur[c.linhas[0] - 1].x) {
+      const o = cur[c.linhas[0] - 1];
+      const g = leiDesdobrarLetras(leiTirarMarcasTachado(o.t)) || leiDesespacarNota(leiTirarMarcasTachado(o.t));
+      if (g !== null) { o.t = g; resumo.letras++; mexeu = true; }
     }
   });
   (mudancas || []).forEach((c) => {
@@ -1920,7 +1989,7 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
     const partes = [];
     for (let ln = c.linhas[0]; ln <= c.linhas[1]; ln++) {
       const o = cur[ln - 1];
-      if (o && !o.x) { partes.push(o.t); o.x = true; }
+      if (o && !o.x) { partes.push(leiTirarMarcasTachado(o.t)); o.x = true; }
     }
     if (v === "separar") {
       const novo = { titulo: c.titulo, texto: partes.join("\n").replace(/^\s+|\s+$/g, "") };
@@ -2932,7 +3001,10 @@ function leiComoVaiFicar(texto, anexos, artsProntos) {
     else if (n > limite) conferir.push({ gravidade: "aviso", tipo: "longo", num: a.num, n });
   });
   const ax = (anexos || []).map((a) => ({ titulo: String(a.titulo || ""), rom: leiRomanoDoAnexo(a.titulo), revogado: !!a.revogado,
-    n: String(a.texto || "").length }));
+    n: String(a.texto || "").length,
+    /* só o título, sem conteúdo (LC 15/2009: a página 295 traz só "ANEXO XVII" — a tabela é imagem no PDF) */
+    vazio: !a.revogado && String(a.texto || "").split("\n").slice(1).join(" ").replace(/\s+/g, "").length < 20 }));
+  ax.forEach((a, k) => { if (a.vazio) conferir.push({ gravidade: "aviso", tipo: "anexo_vazio", rom: a.rom || "?", pos: k + 1 }); });
   const conta = {};
   ax.forEach((a) => { if (a.rom) conta[a.rom] = (conta[a.rom] || 0) + 1; });
   Object.keys(conta).filter((r) => conta[r] > 1).forEach((r) => conferir.push({ gravidade: "aviso", tipo: "anexo_repetido", rom: r, n: conta[r] }));
