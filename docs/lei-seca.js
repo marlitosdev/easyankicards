@@ -701,8 +701,28 @@ function leiDuplicados(texto, ignorar, opc) {
   });
   /* + o mesmo rótulo de parágrafo duas vezes no MESMO artigo */
   leiRepetidosNoArtigo(texto, ignorar, opc).forEach((g) => grupos.push(g));
+  leiSequenciaRepetida(grupos);
   leiSugerirCompilada(grupos);
   return grupos.sort((x, y) => x.ordem - y.ordem);
+}
+
+/* (v19.27.0) UMA SEQUÊNCIA INTEIRA REPETIDA no mesmo artigo — §1º…§5º e, depois, §1º…§5º de novo — não é redação
+ * antiga × nova: é OUTRO ARTIGO cujo cabeçalho o leitor não viu (LC 15/2009: "210-A." sem o "Art."; os §§ do 210-A
+ * caíram no 210, e a nota "(Redação dada…)" dos §§ do 210 fazia a tela sugerir apagar os do 210-A). Com 3 ou mais
+ * repetições no mesmo artigo e a segunda leva toda DEPOIS da primeira, nenhuma sugestão de apagar: as duas ficam. */
+function leiSequenciaRepetida(grupos) {
+  const porArt = {};
+  (grupos || []).forEach((g) => { if (g.intra && g.candidatos.length === 2) { const k = String(g.num).split("#")[0]; (porArt[k] = porArt[k] || []).push(g); } });
+  let n = 0;
+  Object.keys(porArt).forEach((num) => {
+    const G = porArt[num];
+    if (G.length < 3) return;
+    const fimPrimeira = Math.max.apply(null, G.map((g) => g.candidatos[0].linha));
+    const iniSegunda = Math.min.apply(null, G.map((g) => g.candidatos[1].linha));
+    if (fimPrimeira >= iniSegunda) return;
+    G.forEach((g) => { g.confianca = "fraca"; g.motivo = "sequencia"; g.fonte = ""; g.sugerido = g.candidatos[g.candidatos.length - 1].indice; n++; });
+  });
+  return n;
 }
 
 /* (v19.1.0) LEI COMPILADA. Um texto compilado traz a redação antiga e a nova uma depois da outra; quando o risco do
@@ -1776,6 +1796,24 @@ function leiPreprocessar(texto, opc) {
     mudancas.push({ id: "pag", grupo: "pagina", linhas: pagFim, ocorrencias: pagFim.length,
       antes: pagFim.slice(0, 4).map((ln) => trilha(sem[ln - 1])).join(" · "), depois: "" });
   }
+  /* 1e. (v19.27.0) O RODAPÉ DA IMPRESSÃO DO NAVEGADOR: o endereço da página e o contador "9/20"
+   * ("https://leis.org/municipais/pe/caruaru/lei/…-de-… 9/20", LC 95/2022). Muda de página para página só no contador,
+   * então o detector de cabeçalho repetido não o via — e ficava colado no artigo seguinte (a remissão juntava o
+   * "Art. 16. O art. 433-E…" da LC 95 a ele). Endereço + "N/M" com o mesmo M em pelo menos 2 linhas. */
+  {
+    const rod = {};
+    sem.forEach((x, i) => {
+      if (remover[i + 1] || protegidas.has(i + 1)) return;
+      const m = String(x).match(/^\s*(?:https?:\/\/|www\.)\S.*?\s(\d{1,3})\s*\/\s*(\d{1,3})\s*$/);
+      if (m && Number(m[1]) <= Number(m[2])) (rod[m[2]] = rod[m[2]] || []).push(i + 1);
+    });
+    Object.keys(rod).filter((tot) => rod[tot].length >= 2).forEach((tot) => {
+      const L = rod[tot];
+      L.forEach((ln) => { remover[ln] = true; });
+      mudancas.push({ id: "cab:url" + tot, grupo: "cabecalho", linhas: L, ocorrencias: L.length, motivo: "endereco",
+        antes: trilha(sem[L[0] - 1]).slice(0, 160), depois: "" });
+    });
+  }
 
   /* 2. cabeçalho de artigo escrito de um jeito que o leitor não reconhece.
    * Daqui em diante trabalha-se sobre a linha JÁ corrigida, para que a
@@ -1789,6 +1827,24 @@ function leiPreprocessar(texto, opc) {
     mudancas.push({ id: "gra:" + (i + 1), grupo: "grafia", linhas: [i + 1], manterAspas: !!(opc && opc.manterAspas),
       antes: trilha(x).slice(0, 160), depois: trilha(g).slice(0, 160) });
   });
+  /* 2a. (v19.27.0) ARTIGO SEM O "Art.": na LC 15/2009 o Art. 210-A vem escrito "210-A. A reunião de processos…". O
+   * leitor não via o artigo novo, os §§ 1º a 5º dele caíam dentro do Art. 210 (repetindo os do 210) e a conferência de
+   * repetidos sugeria apagar os do 210-A. Só vale com sufixo de letra ("NNN-A.") seguido de maiúscula E com o número
+   * base igual ao do artigo de cima — item numerado de tabela ("1. Comércio…") nunca casa. */
+  {
+    let base = null;
+    efetiva.forEach((x, i) => {
+      if (remover[i + 1] || protegidas.has(i + 1)) return;
+      const a = leiCasarArtigo(x);
+      if (a) { base = parseInt(leiNumNormal(a[1]), 10); return; }
+      const m = x.match(/^(\s*)(\d{1,4})\s*-\s*([A-Z])\s*\.\s+(?=[A-ZÀ-Ú])/);
+      if (!m || base === null || Number(m[2]) !== base) return;
+      const g = m[1] + "Art. " + m[2] + "-" + m[3] + ". " + x.slice(m[0].length);
+      efetiva[i] = g;
+      mudancas.push({ id: "gra:" + (i + 1), grupo: "grafia", linhas: [i + 1], novo: g, motivo: "sem_art",
+        antes: trilha(x).slice(0, 160), depois: trilha(g).slice(0, 160) });
+    });
+  }
   /* 2b. (v19.25.0) letras dobradas ou espaçadas pelo PDF — ver leiDesdobrarLetras */
   sem.forEach((x, i) => {
     if (remover[i + 1] || protegidas.has(i + 1) || efetiva[i] !== x) return;
@@ -1962,7 +2018,7 @@ function leiAplicarPreprocesso(texto, mudancas, decisoes) {
   (mudancas || []).forEach((c) => {
     if (c.grupo === "grafia" && vale(c) && cur[c.linhas[0] - 1] && !cur[c.linhas[0] - 1].x) {
       /* o título de anexo riscado que é só identificador ("~~A N E X O V~~") fica sem as marcas no fim: corrige já sem elas */
-      const g = leiGrafiaDaLinha(leiTirarMarcasTachado(cur[c.linhas[0] - 1].t), { manterAspas: c.manterAspas });
+      const g = c.novo != null ? c.novo : leiGrafiaDaLinha(leiTirarMarcasTachado(cur[c.linhas[0] - 1].t), { manterAspas: c.manterAspas });
       if (g !== null) { cur[c.linhas[0] - 1].t = g; resumo.grafia++; mexeu = true; }
     }
     if (c.grupo === "letras" && vale(c) && cur[c.linhas[0] - 1] && !cur[c.linhas[0] - 1].x) {

@@ -5093,7 +5093,7 @@ function leiDupPintar() {
     } else if (g.intra) {
       const mo = document.createElement("div");
       mo.className = "lei-dup-motivo";
-      mo.textContent = t("lei_dup_fraca_intra");
+      mo.textContent = t(g.motivo === "sequencia" ? "lei_dup_seq_intra" : "lei_dup_fraca_intra");
       card.append(mo);
     }
 
