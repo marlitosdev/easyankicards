@@ -1148,6 +1148,12 @@ const LEI_RE_INCISO = /^\s*[IVXLCDM]{1,7}\s*[-–—.)]\s/;
 const LEI_RE_ALINEA = /^\s*[a-z]\)\s/;
 const LEI_RE_ANEXO_MAIUSCULO = /^\s*ANEXO\s+([IVXLCDM]+|\d{1,3}|[ÚU]NICO)\b(.*)$/;
 const LEI_RE_ANEXO_SOZINHO = /^\s*Anexo\s+([IVXLCDM]+|\d{1,3}|[úu]nico)\s*$/;
+/* (v19.23.0) "A N E X O I I": o PDF da LC 15/2009 de Caruaru traz os títulos dos Anexos I a IX com as letras
+ * espaçadas — não reconhecidos, as ~11 mil linhas de tabela iam parar dentro do último artigo */
+const LEI_RE_ANEXO_ESPACADO = /^(\s*)A\s+N\s+E\s+X\s+O\s+((?:[IVXLCDM]\s*)+|Ú\s*N\s*I\s*C\s*O|\d(?:\s*\d){0,2})\s*$/;
+function leiEhTituloDeAnexo(x) {
+  return LEI_RE_ANEXO_MAIUSCULO.test(x) || LEI_RE_ANEXO_SOZINHO.test(x) || LEI_RE_ANEXO_ESPACADO.test(x);
+}
 const LEI_RE_INVISIVEIS = /[­​-‍⁠﻿]/g;
 
 /* A linha tem cara de ESTRUTURA da lei (e por isso não pode ser tomada por
@@ -1160,6 +1166,23 @@ const LEI_RE_ITEM_NUMERADO = /^\s*\d{1,3}\s*[.)]\s+\S/;
 function leiLinhaDeConteudo(linha) {
   const s = String(linha || "").trim();
   return LEI_RE_ITEM_NUMERADO.test(s) || /[;:]\s*$/.test(s) || /[;,]\s*(?:e|ou)\s*$/i.test(s);
+}
+
+/* (v19.23.0) UM PEDAÇO DE FRASE NÃO É CABEÇALHO DE PÁGINA: começa em minúscula ("de 09 de outubro de 2009)"), começa
+ * com número e segue frase ("018, de 09 de…"), ou fecha um parêntese que não abriu na mesma linha — o fim de uma nota
+ * "(Redação dada pela Lei Complementar nº 018, de 09 de outubro de 2009)" partida pela quebra de linha do PDF */
+/* a palavra da divisão ("livro", "titulo", "capitulo"…), sem acento, para comparar itens da mesma lista */
+function leiTipoDivisao(x) {
+  const m = String(x || "").trim().match(/^[\s>*]*([A-Za-zÀ-ú]+)/);
+  return m ? m[1].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+}
+
+function leiPedacoDeFrase(linha) {
+  const s = String(linha || "").trim();
+  if (/^[a-zà-ÿ]/.test(s)) return true;
+  if (/^\d+[,.]?\s+[a-zà-ÿ]/.test(s)) return true;
+  if (/\)\.?\s*$/.test(s) && s.indexOf("(") < 0) return true;
+  return false;
 }
 
 function leiLinhaEstrutural(linha) {
@@ -1476,6 +1499,8 @@ function leiGrafiaDaLinha(linha, opc) {
   /* "Art. 356. A - texto"  =>  "Art. 356-A. texto" */
   s = s.replace(/^(\s*)Art(?:\.|igo)?\s*(\d{1,4})\s*([ºo°ª]?)(?:\.\s*|\s+)([A-Z])\s*[-–—]\s*(?=\S)/,
     (m0, ini, n, ord, letra) => ini + "Art. " + n + ord + "-" + letra + ". ");
+  /* (v19.23.0) "A N E X O I I" => "ANEXO II" */
+  s = s.replace(LEI_RE_ANEXO_ESPACADO, (m0, ini, num) => ini + "ANEXO " + num.replace(/\s+/g, ""));
   /* "Parágra único" */
   s = s.replace(/^(\s*)Par[áa]gra\s+([úu]nico)/i, "$1Parágrafo $2");
   /* (v19.1.0) "Art. 3 49 – …" => "Art. 349 – …": o número PARTIDO por quem converteu o PDF (cada pedaço de texto
@@ -1524,40 +1549,18 @@ function leiPreprocessar(texto, opc) {
     let dentroAx = false;
     sem.forEach((x, i) => {
       if (protegidas.has(i + 1)) return;
-      if (LEI_RE_ANEXO_MAIUSCULO.test(x) || LEI_RE_ANEXO_SOZINHO.test(x)) dentroAx = true;
+      if (leiEhTituloDeAnexo(x)) dentroAx = true;
       else if (dentroAx && LEI_RE_ARTIGO.test(x) && /^[\s>*]*Art/.test(x)) dentroAx = false;
       if (dentroAx) emAnexo[i + 1] = true;
     });
   }
 
-  /* 1b. cabeçalho e rodapé repetidos a cada página */
-  const ondeEsta = {};
-  sem.forEach((x, i) => {
-    if (protegidas.has(i + 1) || emAnexo[i + 1]) return;
-    const k = trilha(x);
-    if (k.length < 20) return;
-    (ondeEsta[k] = ondeEsta[k] || []).push(i + 1);
-  });
-  const remover = {};                 /* linha (1..) já destinada a sair */
-  let n = 0;
-  Object.keys(ondeEsta).forEach((k) => {
-    const L = ondeEsta[k];
-    if (L.length < 3) return;
-    if (leiLinhaEstrutural(k) || leiLinhaDeConteudo(k)) return;
-    if (/^[\d\s.,;:()\-–—/%R$]+$/.test(k)) return;       /* linha de tabela, só números */
-    /* cabeçalho de página se repete ESPAÇADO; a mesma linha três vezes num
-     * trecho curto é linha de tabela ou frase repetida de verdade */
-    if ((L[L.length - 1] - L[0]) / (L.length - 1) < 5) return;
-    L.forEach((ln) => { remover[ln] = true; });
-    mudancas.push({ id: "cab:" + (n++), grupo: "cabecalho", linhas: L, ocorrencias: L.length,
-      antes: k.slice(0, 160), depois: "" });
-  });
-
-  /* 1c. número de página */
+  /* 1b. NÚMEROS DE PÁGINA, ACHADOS PRIMEIRO (v19.23.0): são a âncora do cabeçalho.
+   * Clara ("Página 3 de 296") ou solta ("177") em SEQUÊNCIA +1 com 5 ou mais — fora dos anexos, como sempre (um número
+   * de item de tabela não é número de página: na LC 214 eram 445 linhas). Os de dentro dos anexos vêm em 1d, pelo
+   * lugar que ocupam junto do rodapé. */
   const pag = [];
-  /* (um número de item de tabela de anexo — 1, 2, 3, 4… — não é número de página: na LC 214 eram 445 linhas) */
   sem.forEach((x, i) => { if (!emAnexo[i + 1] && LEI_RE_PAGINA_CLARA.test(x)) pag.push(i + 1); });
-  /* número solto: só a SEQUÊNCIA +1, com 5 ou mais */
   let cadeia = [];
   const fechaCadeia = () => { if (cadeia.length >= 5) cadeia.forEach((c) => pag.push(c.ln)); cadeia = []; };
   sem.forEach((x, i) => {
@@ -1568,7 +1571,98 @@ function leiPreprocessar(texto, opc) {
     else { fechaCadeia(); cadeia = [{ v, ln: i + 1 }]; }
   });
   fechaCadeia();
-  const pagFim = Array.from(new Set(pag)).filter((ln) => !remover[ln]).sort((a, b) => a - b);
+  const ancoras = Array.from(new Set(pag)).sort((a, b) => a - b);
+
+  /* 1c. cabeçalho e rodapé repetidos a cada página.
+   * (v19.23.0) O DETECTOR ACERTAVA 1 EM 102 na LC 15/2009 de Caruaru: tomava por cabeçalho toda linha repetida e
+   * espaçada — títulos de seção ("DAS DISPOSIÇÕES GERAIS" ×16), pedaços de nota partida pela quebra de linha
+   * ("Complementar nº 018, de 09 de outubro de 2009)" ×21), frases que a lei repete e linhas de tabela. Aceitar
+   * apagava títulos e cortava as notas ao meio. Agora:
+   *  · com números de página no texto, cabeçalho/rodapé é a linha que mora JUNTO deles, página após página (60%
+   *    das vezes a até 6 linhas de um número de página) — e então sai em todo lugar, também dentro dos anexos;
+   *  · sem números de página, a regra de antes (fora dos anexos, espaçada) mais espaçamento REGULAR;
+   *  · nunca um pedaço de frase (começa em minúscula, "018, de…", ou fecha um parêntese que não abriu). */
+  const ondeEsta = {};
+  sem.forEach((x, i) => {
+    if (protegidas.has(i + 1)) return;
+    const k = trilha(x);
+    if (k.length < 20) return;
+    (ondeEsta[k] = ondeEsta[k] || []).push(i + 1);
+  });
+  const remover = {};                 /* linha (1..) já destinada a sair */
+  const comAncoras = ancoras.length >= 5;
+  const posicoesDoNumero = [];   /* {linhas do cabeçalho/rodapé, d: distância até o número de página} */
+  const aceitos = {};
+  let n = 0;
+  const pertoDe = (ancs) => (ln) => {
+    let lo = 0, hi = ancs.length - 1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (ancs[mid] < ln) lo = mid + 1; else hi = mid - 1; }
+    const d1 = lo < ancs.length ? Math.abs(ancs[lo] - ln) : Infinity;
+    const d2 = lo > 0 ? Math.abs(ancs[lo - 1] - ln) : Infinity;
+    return Math.min(d1, d2) <= 6;
+  };
+  /* uma passada de aceitar cabeçalhos com as âncoras dadas (com âncoras) ou pela regularidade (sem) */
+  /* soFora: na primeira passada só há números de página FORA dos anexos — a proporção conta só as ocorrências de fora
+   * (na LC 15/2009, 120 das 296 vezes do rodapé estão nas páginas de tabela: contadas, derrubavam um rodapé de verdade) */
+  const passada = (ancs, soFora) => Object.keys(ondeEsta).forEach((k) => {
+    if (aceitos[k]) return;
+    const todas = ondeEsta[k];
+    if (leiLinhaEstrutural(k) || leiLinhaDeConteudo(k)) return;
+    if (/^[\d\s.,;:()\-–—/%R$]+$/.test(k)) return;       /* linha de tabela, só números */
+    if (leiPedacoDeFrase(k)) return;
+    /* o NOME de uma divisão: vem logo depois de "CAPÍTULO II"/"SEÇÃO I" SOZINHO (sem o nome na mesma linha) — mesmo que
+     * caia no topo da página, é título. ("CAPÍTULO I DAS DISPOSIÇÕES GERAIS" já traz o nome: a linha de baixo pode ser rodapé.) */
+    const depoisDeDivisao = todas.filter((ln) => {
+      for (let q = ln - 2; q >= 0; q--) { const y = sem[q].trim(); if (y) return LEI_RE_DIVISAO.test(y) && /^[\s>*]*[A-Za-zÀ-ú]+\s+[IVXLCDM\d]+[ºo°ª]?\s*[-–—.:]?\s*$/.test(y); }
+      return false;
+    }).length;
+    if (depoisDeDivisao >= todas.length / 2) return;
+    let L;
+    if (comAncoras) {
+      const base = soFora ? todas.filter((ln) => !emAnexo[ln]) : todas;
+      const perto = base.filter(pertoDe(ancs)).length;
+      if (perto < 3 || perto < base.length * 0.6) return;
+      L = todas;
+      /* onde o número de página costuma ficar em relação a esta linha ("Prefeitura…" e, 2 linhas abaixo, "177") */
+      const conta = {};
+      todas.forEach((ln) => { ancs.forEach((a) => { const d = a - ln; if (Math.abs(d) <= 6) conta[d] = (conta[d] || 0) + 1; }); });
+      const melhor = Object.keys(conta).sort((a, b) => conta[b] - conta[a])[0];
+      if (melhor !== undefined && conta[melhor] >= perto * 0.6) posicoesDoNumero.push({ linhas: todas, d: Number(melhor) });
+    } else {
+      L = todas.filter((ln) => !emAnexo[ln]);
+      if (L.length < 3) return;
+      /* cabeçalho de página se repete ESPAÇADO e REGULAR; a mesma linha três vezes num trecho curto é linha de
+       * tabela ou frase repetida de verdade, e a espalhada ao acaso pelo texto também é frase */
+      const gaps = L.slice(1).map((ln, q) => ln - L[q]);
+      const media = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      if (media < 5) return;
+      const dp = Math.sqrt(gaps.reduce((a, g) => a + (g - media) * (g - media), 0) / gaps.length);
+      if (dp / media > 0.6) return;
+    }
+    aceitos[k] = true;
+    L.forEach((ln) => { remover[ln] = true; });
+    mudancas.push({ id: "cab:" + (n++), grupo: "cabecalho", linhas: L, ocorrencias: L.length,
+      antes: k.slice(0, 160), depois: "" });
+  });
+  /* os números de página DENTRO DOS ANEXOS: o número solto que fica exatamente onde o número costuma ficar em relação
+   * ao rodapé (na LC 15/2009 de Caruaru, 2 linhas abaixo do "Prefeitura…"). Pela posição, e não pela sequência: a
+   * numeração de uma tabela (1, 2, 3…) chega aos mesmos números e não pode ser confundida. */
+  const pagTodos = ancoras.slice();
+  const numerosDosAnexos = () => posicoesDoNumero.forEach((p) => p.linhas.forEach((ln) => {
+    const alvo = ln + p.d;
+    if (emAnexo[alvo] && sem[alvo - 1] !== undefined && LEI_RE_PAGINA_SOLTA.test(sem[alvo - 1])) pagTodos.push(alvo);
+  }));
+  passada(ancoras, true);
+  if (comAncoras) {
+    /* SEGUNDA PASSADA: com os números de página dos anexos, o cabeçalho que só existe nas páginas de anexo
+     * ("LEI COMPLEMENTAR Nº 015, 05 DE JANEIRO DE 2009", no topo de cada página das tabelas) também é achado */
+    numerosDosAnexos();
+    passada(Array.from(new Set(pagTodos)).sort((a, b) => a - b));
+    numerosDosAnexos();
+  }
+
+  /* 1d. número de página: os de fora dos anexos (1b) e os de dentro (pela posição junto do rodapé) */
+  const pagFim = Array.from(new Set(pagTodos)).sort((a, b) => a - b).filter((ln) => !remover[ln]);
   if (pagFim.length) {
     pagFim.forEach((ln) => { remover[ln] = true; });
     mudancas.push({ id: "pag", grupo: "pagina", linhas: pagFim, ocorrencias: pagFim.length,
@@ -1595,6 +1689,7 @@ function leiPreprocessar(texto, opc) {
     return -1;
   };
   let ultimaOrdem = null;
+  let listaAberta = null;   /* o último item de lista marcado ({j: linha, tipo: "livro"…}) */
   efetiva.forEach((x, i) => {
     if (remover[i + 1] || protegidas.has(i + 1)) return;
     const a = leiCasarArtigo(x);
@@ -1627,6 +1722,11 @@ function leiPreprocessar(texto, opc) {
       else if (!fechou && !cabe) { falso = true; motivo = "sequencia"; }
     }
     if (d && j >= 0 && /[;,]\s*$/.test(x)) { falso = true; motivo = "divisao"; }
+    /* (v19.23.0) O ÚLTIMO ITEM DA MESMA LISTA termina em ponto: "LIVRO III – …;" (marcado) e, na linha seguinte,
+     * "LIVRO IV – Estabelece as Disposições Gerais, Transitórias e Finais." — sem isto, o último item virava um
+     * LIVRO de verdade, cortando o Art. 2º e pondo os artigos seguintes debaixo dele */
+    if (d && !falso && j >= 0 && listaAberta && listaAberta.j === j && listaAberta.tipo === leiTipoDivisao(x)) { falso = true; motivo = "divisao_ultimo"; }
+    listaAberta = falso && (motivo === "divisao" || motivo === "divisao_ultimo") ? { j: i, tipo: leiTipoDivisao(x) } : null;
     if (falso) {
       mudancas.push({ id: "rem:" + (i + 1), grupo: "remissao", linhas: [i + 1], motivo,
         contexto: cola(efetiva[j], 110),

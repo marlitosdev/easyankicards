@@ -6475,8 +6475,12 @@ function leiPreItemEl(c, m) {
       el.append(rv);
     }
     /* uma amostra do que é: as primeiras linhas depois do título */
+    /* (v19.23.0) o TÍTULO partido em duas linhas se junta com espaço: "…SERVIÇOS DE QUALQUER" + "NATUREZA PARA OS
+     * AUTÔNOMOS" (as duas em maiúsculas, a de cima sem pontuação no fim) ou a de baixo começando em minúscula; título e
+     * primeira linha da tabela ("…POR PRODUTO" + "Produto A 10%") continuam separados por " · " */
+    const continua = (a, x) => !/[.:;!?)]$/.test(a) && (/^[a-zà-ÿ]/.test(x) || (a === a.toUpperCase() && x === x.toUpperCase() && /[A-ZÀ-Ú]{3}/.test(x)));
     const amostra = leiPreLinhasDaColagem(c).slice(m.linhas[0], m.linhas[1]).map((x) => String(x).replace(/\s+/g, " ").trim())
-      .filter(Boolean).slice(0, 2).join(" · ").slice(0, 200);
+      .filter(Boolean).slice(0, 2).reduce((a, x) => (!a ? x : a + (continua(a, x) ? " " : " · ") + x), "").slice(0, 200);
     if (amostra) { const am = document.createElement("div"); am.className = "lei-pre-anexo-amostra"; am.textContent = "» " + amostra; el.append(am); }
     el.append(leiPreAnexoVerEl(c, m));
     const op = document.createElement("div");
